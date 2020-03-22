@@ -139,7 +139,7 @@ abstract module TriState {
 
   predicate ForgetOld(k: Constants, s: Variables, s': Variables, vop: VOp)
   {
-    && vop.ForgetOldOp?
+    && vop.CleanUpOp?
 
     && s'.disk == s.disk 
     && s'.persistentLoc == s.frozenLoc

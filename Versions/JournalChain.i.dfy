@@ -3,6 +3,7 @@ include "../MapSpec/Journal.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Maps.s.dfy"
 include "VOp.i.dfy"
+include "../MapSpec/ThreeStateVersioned.s.dfy"
 
 module JournalChain {
   import UI
@@ -10,49 +11,61 @@ module JournalChain {
   import opened VersionOp
   import opened Journal
   import opened Maps
+  import opened ThreeStateTypes
 
-  type Version = int
   type SyncReqId = int
+
+  // s1 -------> t1
+  //       j1
+  //
+  //                   s2 -------> t2
+  //                         j2
+  //
+  //                                      s3 -------> t3
+  //                                            j3
+  //
+  //   -------------------------->  ---------------->
+  //              gamma                   delta
 
   datatype Constants = Constants
   datatype Variables = Variables(
-      startVersion: Version,
-      journal: seq<JournalEntry>,
+      j1: seq<JournalEntry>,
+      j2: seq<JournalEntry>,
+      j3: seq<JournalEntry>,
+      j_gamma: seq<JournalEntry>,
+      j_delta: seq<JournalEntry>,
 
-      persistentStateIndex: Version,
-      persistentJournalIndex: Version,
       persistentLoc: Location,
-
-      frozenStateIndex: Option<Version>,
       frozenLoc: Option<Location>,
 
-      ephemeralStateIndex: int,
-
-      syncReqs: map<SyncReqId, Version>
+      ghost syncReqs: map<SyncReqId, SyncReqStatus>
   )
 
   predicate Init(k: Constants, s: Variables)
   {
-    && s.startVersion == 0
-    && s.journal == []
-    && s.persistentStateIndex == 0
-    && s.persistentJournalIndex == 0
+    && s.j1 == []
+    && s.j2 == []
+    && s.j3 == []
+    && s.j_gamma == []
+    && s.j_delta == []
+
     && s.persistentLoc == Loc1
-    && s.frozenStateIndex == None
     && s.frozenLoc == None
-    && s.ephemeralStateIndex == 0
-    && s.syncReqs == map[]
   }
 
   datatype Step =
     | PresentPersistentLocStep
-    | AdvanceEphemeralStep
-    | ReplayStep
-    | CrashStep
-    | AdvancePersistentStep
-    | CleanUpStep
     | ObtainFrozenLocStep
-    | ForgetOldStep
+    | CleanUpStep
+
+    | CrashStep
+    | Move1to2Step
+    | Move2to3Step
+    | ExtendLog1Step
+    | ExtendLog2Step
+    | Move3Step
+    | ReplayStep
+
     | PushSyncStep
     | PopSyncStep
     | StutterStep
@@ -62,149 +75,125 @@ module JournalChain {
     && vop.SendPersistentLocOp?
     && vop.loc == s.persistentLoc
 
-    && s'.startVersion == s.startVersion
-    && s'.journal == s.journal
-    && s'.persistentStateIndex == s.persistentStateIndex
-    && s'.persistentJournalIndex == s.persistentJournalIndex
-    && s'.persistentLoc == s.persistentLoc
-    && s'.frozenStateIndex == s.frozenStateIndex
-    && s'.frozenLoc == s.frozenLoc
-    && s'.ephemeralStateIndex == s.ephemeralStateIndex
-    && s'.syncReqs == s.syncReqs
-  }
-
-  predicate AdvanceEphemeral(k: Constants, s: Variables, s': Variables, vop: VOp)
-  {
-    && vop.AdvanceOp?
-    && !vop.replay
-
-    && s.ephemeralStateIndex == s.startVersion + |s.journal|
-    && var jes := JournalEntriesForUIOp(vop.uiop);
-
-    && s'.startVersion == s.startVersion
-    && s'.journal == s.journal + jes
-    && s'.persistentStateIndex == s.persistentStateIndex
-    && s'.persistentJournalIndex == s.persistentJournalIndex
-    && s'.persistentLoc == s.persistentLoc
-    && s'.frozenStateIndex == s.frozenStateIndex
-    && s'.frozenLoc == s.frozenLoc
-    && s'.ephemeralStateIndex == s.ephemeralStateIndex + |jes|
-    && s'.syncReqs == s.syncReqs
-  }
-
-  predicate Replay(k: Constants, s: Variables, s': Variables, vop: VOp)
-  {
-    && vop.AdvanceOp?
-    && vop.replay
-
-    && var jes := JournalEntriesForUIOp(vop.uiop);
-    && s.ephemeralStateIndex + |jes| <= s.startVersion + |s.journal|
-    && 0 <= s.ephemeralStateIndex - s.startVersion <= |s.journal|
-    && jes == s.journal[
-                 s.ephemeralStateIndex - s.startVersion
-              .. s.ephemeralStateIndex - s.startVersion + |jes|]
-
-    && s'.startVersion == s.startVersion
-    && s'.journal == s.journal
-    && s'.persistentStateIndex == s.persistentStateIndex
-    && s'.persistentJournalIndex == s.persistentJournalIndex
-    && s'.persistentLoc == s.persistentLoc
-    && s'.frozenStateIndex == s.frozenStateIndex
-    && s'.frozenLoc == s.frozenLoc
-    && s'.ephemeralStateIndex == s.ephemeralStateIndex + |jes|
-    && s'.syncReqs == s.syncReqs
-  }
-
-  predicate Crash(k: Constants, s: Variables, s': Variables, vop: VOp)
-  {
-    && vop.CrashOp?
-
-    && s'.startVersion == 0
-    && 0 <= s.persistentStateIndex - s.startVersion <= |s.journal|
-    && s'.journal
-        == s.journal[s.persistentStateIndex - s.startVersion
-                  .. s.persistentJournalIndex - s.startVersion]
-    && s'.persistentStateIndex == 0
-    && s'.persistentJournalIndex
-        == s.persistentJournalIndex - s.persistentStateIndex
-    && s'.persistentLoc == s.persistentLoc
-    && s'.frozenStateIndex == None
-    && s'.frozenLoc == None
-    && s'.ephemeralStateIndex == 0
-    && s'.syncReqs == map[]
-  }
-
-  predicate AdvancePersistent(k: Constants, s: Variables, s': Variables, vop: VOp)
-  {
-    && vop.JournalInternalOp?
-
-    && s.frozenStateIndex.Some?
-    && s.frozenLoc.Some?
-
-    && s'.startVersion == s.startVersion
-    && s'.journal == s.journal
-    && s'.persistentStateIndex == s.frozenStateIndex.value
-    && s'.persistentJournalIndex == (
-      if s.persistentJournalIndex < s.frozenStateIndex.value then
-        s.frozenStateIndex.value
-      else
-        s.persistentJournalIndex
-    )
-    && s'.persistentLoc == s.frozenLoc.value
-    && s'.frozenStateIndex == s.frozenStateIndex
-    && s'.frozenLoc == s.frozenLoc
-    && s'.ephemeralStateIndex == s.ephemeralStateIndex
-    && s'.syncReqs == s.syncReqs
-  }
-
-  predicate CleanUp(k: Constants, s: Variables, s': Variables, vop: VOp)
-  {
-    && vop.JournalInternalOp?
-
-    && 0 <= s'.startVersion - s.startVersion <= |s.journal|
-
-    && s'.startVersion <= s'.persistentStateIndex
-    && s'.journal == s.journal[s'.startVersion - s.startVersion ..]
-    && s'.persistentStateIndex == s.persistentStateIndex
-    && s'.persistentJournalIndex == s.persistentJournalIndex
-    && s'.persistentLoc == s.persistentLoc
-    && s'.frozenStateIndex == s.frozenStateIndex
-    && s'.frozenLoc == s.frozenLoc
-    && s'.ephemeralStateIndex == s.ephemeralStateIndex
-    && s'.syncReqs == s.syncReqs
+    && s' == s
   }
 
   predicate ObtainFrozenLoc(k: Constants, s: Variables, s': Variables, vop: VOp)
   {
     && vop.SendFrozenLocOp?
 
-    && s'.startVersion == s.startVersion
-    && s'.journal == s.journal
-    && s'.persistentStateIndex == s.persistentStateIndex
-    && s'.persistentJournalIndex == s.persistentJournalIndex
-    && s'.persistentLoc == s.persistentLoc
-    && s'.frozenStateIndex == s.frozenStateIndex
-    && s'.frozenLoc == Some(vop.loc)
-    && s'.ephemeralStateIndex == s.ephemeralStateIndex
-    && s'.syncReqs == s.syncReqs
+    && s' == s.(frozenLoc := Some(vop.loc))
   }
 
-  predicate ForgetOld(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate CleanUp(k: Constants, s: Variables, s': Variables, vop: VOp)
   {
-    && vop.ForgetOldOp?
+    && vop.CleanUpOp?
+    && s.j2 == s.j_gamma
+    && s' == s.(frozenLoc := None)
+  }
 
-    && s.frozenStateIndex == Some(s.persistentStateIndex)
-    && s.frozenLoc.Some?
+  predicate Crash(k: Constants, s: Variables, s': Variables, vop: VOp)
+  {
+    && vop.CrashOp?
 
-    && s'.startVersion == s.startVersion
-    && s'.journal == s.journal
-    && s'.persistentStateIndex == s.persistentStateIndex
-    && s'.persistentJournalIndex == s.persistentJournalIndex
-    && s'.persistentLoc == s.frozenLoc.value
-    && s'.frozenStateIndex == None
+    && s'.j1 == s.j1
+    && s'.j2 == s.j1
+    && s'.j3 == s.j1
+    && s'.j_gamma == s.j1
+    && s'.j_delta == []
+    && s'.persistentLoc == s.persistentLoc
     && s'.frozenLoc == None
-    && s'.ephemeralStateIndex == s.ephemeralStateIndex
-    && s'.syncReqs == s.syncReqs
+    && s'.syncReqs == map[]
+  }
+
+  predicate Move1to2(k: Constants, s: Variables, s': Variables, vop: VOp)
+  {
+    && vop.JournalInternalOp?
+    && s.frozenLoc.Some?
+    && s' == Variables(
+      s.j2,
+      s.j2,
+      s.j3,
+      s.j2,
+      s.j_delta,
+      s.frozenLoc.value,
+      s.frozenLoc,
+      SyncReqs2to1(s.syncReqs))
+  }
+
+  predicate Move2to3(k: Constants, s: Variables, s': Variables, vop: VOp)
+  {
+    && vop.FreezeOp?
+    && s' == Variables(
+      s.j1,
+      s.j3,
+      s.j3,
+      s.j_gamma + s.j_delta,
+      [],
+      s.persistentLoc,
+      None,
+      SyncReqs3to2(s.syncReqs))
+  }
+
+  predicate ExtendLog1(k: Constants, s: Variables, s': Variables, vop: VOp)
+  {
+    && vop.JournalInternalOp?
+    && s' == Variables(
+      s.j_gamma,
+      s.j2,
+      s.j3,
+      s.j_gamma,
+      s.j_delta,
+      s.persistentLoc,
+      s.frozenLoc,
+      SyncReqs2to1(s.syncReqs))
+  }
+
+  predicate ExtendLog2(k: Constants, s: Variables, s': Variables, vop: VOp)
+  {
+    && vop.JournalInternalOp?
+    && s' == Variables(
+      s.j1,
+      s.j2 + s.j_delta,
+      s.j3,
+      s.j_gamma + s.j_delta,
+      [],
+      s.persistentLoc,
+      s.frozenLoc,
+      SyncReqs3to2(s.syncReqs))
+  }
+
+  predicate Move3(k: Constants, s: Variables, s': Variables, vop: VOp)
+  {
+    && vop.AdvanceOp?
+    && !vop.replay
+    && var new_je := JournalEntriesForUIOp(vop.uiop);
+    && s.j3 == []
+    && s' == Variables(
+      s.j1,
+      s.j2,
+      s.j3,
+      s.j_gamma,
+      s.j_delta + new_je,
+      s.persistentLoc,
+      s.frozenLoc,
+      s.syncReqs)
+  }
+
+  predicate Replay(k: Constants, s: Variables, s': Variables, vop: VOp)
+  {
+    && vop.AdvanceOp?
+    && vop.replay
+    && s.j3 == JournalEntriesForUIOp(vop.uiop) + s'.j3
+    && s' == Variables(
+      s.j1,
+      s.j2,
+      s'.j3,
+      s.j_gamma,
+      s.j_delta,
+      s.persistentLoc,
+      s.frozenLoc,
+      s.syncReqs)
   }
 
   predicate PushSync(k: Constants, s: Variables, s': Variables, vop: VOp)
@@ -212,16 +201,7 @@ module JournalChain {
     && vop.PushSyncOp?
 
     && vop.id !in s.syncReqs
-    
-    && s'.startVersion == s.startVersion
-    && s'.journal == s.journal
-    && s'.persistentStateIndex == s.persistentStateIndex
-    && s'.persistentJournalIndex == s.persistentJournalIndex
-    && s'.persistentLoc == s.persistentLoc
-    && s'.frozenStateIndex == s.frozenStateIndex
-    && s'.frozenLoc == s.frozenLoc
-    && s'.ephemeralStateIndex == s.ephemeralStateIndex
-    && s'.syncReqs == s.syncReqs[vop.id := s.startVersion + |s.journal|]
+    && s' == s.(syncReqs := s.syncReqs[vop.id := State3])
   }
 
   predicate PopSync(k: Constants, s: Variables, s': Variables, vop: VOp)
@@ -229,17 +209,8 @@ module JournalChain {
     && vop.PopSyncOp?
 
     && vop.id in s.syncReqs
-    && s.syncReqs[vop.id] <= s.persistentJournalIndex
-    
-    && s'.startVersion == s.startVersion
-    && s'.journal == s.journal
-    && s'.persistentStateIndex == s.persistentStateIndex
-    && s'.persistentJournalIndex == s.persistentJournalIndex
-    && s'.persistentLoc == s.persistentLoc
-    && s'.frozenStateIndex == s.frozenStateIndex
-    && s'.frozenLoc == s.frozenLoc
-    && s'.ephemeralStateIndex == s.ephemeralStateIndex
-    && s'.syncReqs == MapRemove1(s.syncReqs, vop.id)
+    && s.syncReqs[vop.id] == State1
+    && s' == s.(syncReqs := MapRemove1(s.syncReqs, vop.id))
   }
 
   predicate Stutter(k: Constants, s: Variables, s': Variables, vop: VOp)
@@ -252,13 +223,15 @@ module JournalChain {
   {
     match step {
       case PresentPersistentLocStep => PresentPersistentLoc(k, s, s', vop)
-      case AdvanceEphemeralStep => AdvanceEphemeral(k, s, s', vop)
-      case ReplayStep => Replay(k, s, s', vop)
-      case CrashStep => Crash(k, s, s', vop)
-      case AdvancePersistentStep => AdvancePersistent(k, s, s', vop)
-      case CleanUpStep => CleanUp(k, s, s', vop)
       case ObtainFrozenLocStep => ObtainFrozenLoc(k, s, s', vop)
-      case ForgetOldStep => ForgetOld(k, s, s', vop)
+      case CleanUpStep => CleanUp(k, s, s', vop)
+      case CrashStep => Crash(k, s, s', vop)
+      case Move1to2Step => Move1to2(k, s, s', vop)
+      case Move2to3Step => Move2to3(k, s, s', vop)
+      case ExtendLog1Step => ExtendLog1(k, s, s', vop)
+      case ExtendLog2Step => ExtendLog2(k, s, s', vop)
+      case Move3Step => Move3(k, s, s', vop)
+      case ReplayStep => Replay(k, s, s', vop)
       case PushSyncStep => PushSync(k, s, s', vop)
       case PopSyncStep => PopSync(k, s, s', vop)
       case StutterStep => Stutter(k, s, s', vop)

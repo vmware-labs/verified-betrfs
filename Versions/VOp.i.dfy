@@ -13,7 +13,7 @@ module VersionOp {
     | TristateInternalOp
     | JournalInternalOp
     | SendFrozenLocOp(loc: Location)
-    | ForgetOldOp
+    | CleanUpOp
     | PushSyncOp(ghost id: int)
     | PopSyncOp(ghost id: int)
 
@@ -29,7 +29,7 @@ module VersionOp {
     && (vop.TristateInternalOp? ==> uiop.NoOp?)
     && (vop.JournalInternalOp? ==> uiop.NoOp?)
     && (vop.SendFrozenLocOp? ==> uiop.NoOp?)
-    && (vop.ForgetOldOp? ==> uiop.NoOp?)
+    && (vop.CleanUpOp? ==> uiop.NoOp?)
     && (vop.PushSyncOp? ==>
       && uiop.PushSyncOp?
       && uiop.id == vop.id

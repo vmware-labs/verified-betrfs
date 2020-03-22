@@ -42,105 +42,91 @@ module Bookmarker {
     exists step: Step :: NextStep(k, s, s', step.vop, uiop)
   }
 
-  ////
-  //// Lemmas about applying stuff to states.
+  /// Invariant definition
 
-  function Apply(m: SM.Variables, je: JournalEntry) : SM.Variables
+  predicate IsPath(
+      k: SM.Constants,
+      s: SM.Variables,
+      uiops: seq<SM.UIOp>,
+      s': SM.Variables,
+      states: seq<SM.Variables>)
   {
-    SM.Variables(m.view[je.key := je.value])
+    && |states| == |uiops| + 1
+    && states[0] == s
+    && states[|states|-1] == s'
+    && forall i | 0 <= i < |uiops| ::
+        SM.Next(k, states[i], states[i+1], uiops[i])
   }
 
-  function ApplySeq(m: SM.Variables, jes: seq<JournalEntry>) : SM.Variables
+  predicate path(
+      k: SM.Constants,
+      s: SM.Variables,
+      jes: seq<JournalEntry>,
+      s': SM.Variables)
   {
-    if jes == [] then
-      m
+    exists states, uiops ::
+        && jes == JournalEntriesForUIOps(uiops)
+        && IsPath(k, s, uiops, s', states)
+  }
+
+  predicate IsSuffix<T>(s: seq<T>, t: seq<T>)
+  {
+    && |t| <= |s|
+    && s[|s| - |t| ..] == t
+  }
+
+  // Sequence subtraction s-t
+  // Only makes sense when t is a suffix of s.
+  // Result is that s-t+t == s for the usual notion
+  // of sequence addition.
+  function {:opaque} SeqSub<T>(s: seq<T>, t: seq<T>) : seq<T>
+  requires IsSuffix(s, t)
+  ensures SeqSub(s, t) + t == s
+  {
+    s[.. |s| - |t|]
+  }
+
+  lemma SeqSubAdd<T>(a: seq<T>, b: seq<T>, c: seq<T>, d: seq<T>)
+  requires IsSuffix(a, b)
+  requires IsSuffix(b + c, d)
+  ensures SeqSub(a, b) + SeqSub(b + c, d)
+      == SeqSub(a + c, d)
+  {
+    reveal_SeqSub();
+  }
+
+  predicate advances(k: SM.Constants,
+      s: SM.Variables,
+      jes: seq<JournalEntry>, 
+      s': SM.Variables,
+      jes2: seq<JournalEntry>)
+  {
+    && IsSuffix(jes, jes2)
+    && path(k, s, SeqSub(jes, jes2), s')
+  }
+
+  function s1(s: Variables) : SM.Variables
+  requires s.jc.persistentLoc in s.tsm.disk
+  {
+    s.tsm.disk[s.jc.persistentLoc]
+  }
+
+  function s2(s: Variables) : SM.Variables
+  requires s.jc.persistentLoc in s.tsm.disk
+  {
+    if s.tsm.frozenState.Some? then
+      s.tsm.frozenState.value
     else
-      Apply(ApplySeq(m, DropLast(jes)), Last(jes))
+      s1(s)
   }
 
-  lemma ApplySeqAdditive(m: SM.Variables, a: seq<JournalEntry>,
-      b: seq<JournalEntry>)
-  ensures ApplySeq(m, a+b) == ApplySeq(ApplySeq(m, a), b)
+  function s3(s: Variables) : SM.Variables
+  requires s.jc.persistentLoc in s.tsm.disk
   {
-    if b == [] {
-      calc {
-        ApplySeq(m, a+b);
-        { assert a + b == a; }
-        ApplySeq(m, a);
-        ApplySeq(ApplySeq(m, a), []);
-        ApplySeq(ApplySeq(m, a), b);
-      }
-    } else {
-      calc {
-        ApplySeq(m, a+b);
-        Apply(ApplySeq(m, DropLast(a + b)), Last(a + b));
-        {
-          assert DropLast(a + b) == a + DropLast(b);
-          assert Last(a + b) == Last(b);
-        }
-        Apply(ApplySeq(m, a + DropLast(b)), Last(b));
-        {
-          ApplySeqAdditive(m, a, DropLast(b));
-        }
-        Apply(ApplySeq(ApplySeq(m, a), DropLast(b)), Last(b));
-        ApplySeq(ApplySeq(m, a), b);
-      }
-    }
-  }
-
-  lemma ApplySeqPrepend(k: SM.Constants, m: SM.Variables, uiop: UI.Op, m': SM.Variables, j: seq<JournalEntry>)
-  requires SM.Next(k, m, m', uiop)
-  ensures ApplySeq(m, JournalEntriesForUIOp(uiop) + j)
-       == ApplySeq(m', j)
-  {
-    assert m' == ApplySeq(m, JournalEntriesForUIOp(uiop));
-    ApplySeqAdditive(m, JournalEntriesForUIOp(uiop), j);
-  }
-
-  lemma ApplySeqAppend(k: SM.Constants, m: SM.Variables, j: seq<JournalEntry>, uiop: UI.Op, m': SM.Variables)
-  requires SM.Next(k, ApplySeq(m, j), m', uiop)
-  ensures ApplySeq(m, j + JournalEntriesForUIOp(uiop)) == m'
-
-  //// Inv definition
-
-  function {:opaque} JournalSlice(s: Variables, a: int, b: int) : (res : seq<JournalEntry>)
-  requires 0 <= a - s.jc.startVersion <= |s.jc.journal|
-  requires 0 <= b - s.jc.startVersion <= |s.jc.journal|
-  requires a <= b
-  ensures |res| == b - a
-  {
-    s.jc.journal[a - s.jc.startVersion .. b - s.jc.startVersion]
-  }
-
-  function {:opaque} JournalSuffix(s: Variables, a: int) : (res : seq<JournalEntry>)
-  requires 0 <= a - s.jc.startVersion <= |s.jc.journal|
-  ensures |res| == |s.jc.journal| - (a - s.jc.startVersion)
-  {
-    s.jc.journal[a - s.jc.startVersion ..]
-  }
-
-  function AllJournalFromPersistentState(s: Variables) : seq<JournalEntry>
-  requires 0 <= s.jc.persistentStateIndex - s.jc.startVersion <= |s.jc.journal|
-  {
-    JournalSuffix(s, s.jc.persistentStateIndex)
-  }
-
-  function PersistentJournal(s: Variables) : seq<JournalEntry>
-  requires 0 <= s.jc.persistentStateIndex - s.jc.startVersion <= |s.jc.journal|
-  {
-    JournalSlice(s, s.jc.persistentStateIndex, s.jc.persistentJournalIndex)
-  }
-
-  predicate StatesConsistent(
-      s: Variables,
-      m: SM.Variables,
-      m': SM.Variables,
-      v1: int, v2: int)
-  requires 0 <= v1 - s.jc.startVersion <= |s.jc.journal|
-  requires 0 <= v2 - s.jc.startVersion <= |s.jc.journal|
-  requires v1 <= v2
-  {
-    ApplySeq(m, JournalSlice(s, v1, v2)) == m'
+    if s.tsm.ephemeralState.Some? then
+      s.tsm.ephemeralState.value
+    else
+      s1(s)
   }
 
   predicate Inv(k: Constants, s: Variables)
@@ -158,7 +144,6 @@ module Bookmarker {
       && s.tsm.disk[s.tsm.frozenLoc.value]
           == s.tsm.frozenState.value
     )
-    && (s.jc.frozenStateIndex.Some? <==> s.tsm.frozenState.Some?)
     && (s.tsm.frozenState.Some? ==>
       s.tsm.ephemeralState.Some?
     )
@@ -166,116 +151,152 @@ module Bookmarker {
       s.tsm.persistentLoc.Some?
     )
     && s.jc.persistentLoc in s.tsm.disk
-    && s.jc.startVersion <= s.jc.persistentStateIndex
-    && s.jc.persistentStateIndex <= s.jc.persistentJournalIndex
-    && s.jc.persistentStateIndex <= s.jc.ephemeralStateIndex
-    && (s.jc.frozenStateIndex.Some? ==> (
-      s.jc.persistentStateIndex
-        <= s.jc.frozenStateIndex.value
-        <= s.jc.ephemeralStateIndex
-    ))
-    && s.jc.persistentJournalIndex <= s.jc.startVersion + |s.jc.journal|
-    && s.jc.ephemeralStateIndex <= s.jc.startVersion + |s.jc.journal|
 
-    && var persistentState := s.tsm.disk[s.jc.persistentLoc];
-    && (s.tsm.ephemeralState.Some? ==>
-      StatesConsistent(s,
-          persistentState, s.tsm.ephemeralState.value,
-          s.jc.persistentStateIndex, s.jc.ephemeralStateIndex)
-    )
-    && (s.jc.frozenStateIndex.Some? ==>
-      && StatesConsistent(s,
-          persistentState, s.tsm.frozenState.value,
-          s.jc.persistentStateIndex, s.jc.frozenStateIndex.value)
-      && StatesConsistent(s,
-          s.tsm.frozenState.value, s.tsm.ephemeralState.value,
-          s.jc.frozenStateIndex.value, s.jc.ephemeralStateIndex)
-    )
+    && SM.Inv(k.tsm.k, s1(s))
+    && SM.Inv(k.tsm.k, s2(s))
+    && SM.Inv(k.tsm.k, s3(s))
+
+    && advances(k.tsm.k, s1(s), s.jc.j_gamma, s2(s), s.jc.j2)
+    && advances(k.tsm.k, s2(s), s.jc.j2 + s.jc.j_delta, s3(s), s.jc.j3)
+  }
+
+  lemma path_empty(k: SM.Constants, s: SM.Variables)
+  ensures path(k, s, [], s)
+  {
+    var states := [s];
+    var uiops := [];
+    assert [] == JournalEntriesForUIOps(uiops);
+    assert IsPath(k, s, uiops, s, states);
+  }
+
+  lemma paths_compose(k: SM.Constants, s1: SM.Variables, jes1: seq<JournalEntry>, s2: SM.Variables, jes2: seq<JournalEntry>, s3: SM.Variables)
+  requires path(k, s1, jes1, s2)
+  requires path(k, s2, jes2, s3)
+  ensures path(k, s1, jes1 + jes2, s3)
+  {
+    var states1, uiops1 :|
+        && jes1 == JournalEntriesForUIOps(uiops1)
+        && IsPath(k, s1, uiops1, s2, states1);
+    var states2, uiops2 :|
+        && jes2 == JournalEntriesForUIOps(uiops2)
+        && IsPath(k, s2, uiops2, s3, states2);
+
+    var states := states1 + states2[1..];
+    var uiops := uiops1 + uiops2;
+
+    JournalEntriesForUIOpsAdditive(uiops1, uiops2);
+    assert jes1 + jes2 == JournalEntriesForUIOps(uiops);
+
+    forall i | 0 <= i < |uiops|
+    ensures SM.Next(k, states[i], states[i+1], uiops[i]);
+    {
+      if i < |uiops1| {
+        assert states[i] == states1[i];
+        assert states[i+1] == states1[i+1];
+        assert uiops[i] == uiops1[i];
+        assert SM.Next(k, states1[i], states1[i+1], uiops1[i]);
+      } else {
+        assert states[i] == states2[i - |uiops1|];
+        assert states[i+1] == states2[i - |uiops1| + 1];
+        assert uiops[i] == uiops2[i - |uiops1|];
+        assert SM.Next(k, states2[i - |uiops1|],
+            states2[i - |uiops1| + 1], uiops2[i - |uiops1|]);
+      }
+    }
+    assert IsPath(k, s1, uiops, s3, states);
+  }
+
+  lemma path_append(k: SM.Constants, s1: SM.Variables, jes: seq<JournalEntry>, s2: SM.Variables, uiop: SM.UIOp, s3: SM.Variables)
+  requires path(k, s1, jes, s2)
+  requires SM.Next(k, s2, s3, uiop)
+  ensures path(k, s1, jes + JournalEntriesForUIOp(uiop), s3)
+  {
+    var jes2 := JournalEntriesForUIOp(uiop);
+    assert jes2 == JournalEntriesForUIOps([uiop]);
+    assert IsPath(k, s2, [uiop], s3, [s2, s3]);
+    assert path(k, s2, jes2, s3);
+    paths_compose(k, s1, jes, s2, jes2, s3);
   }
 
   lemma InitImpliesInv(k: Constants, s: Variables, s': Variables)
   requires Init(k, s)
   ensures Inv(k, s)
   {
+    SM.InitImpliesInv(k.tsm.k, s1(s));
+    path_empty(k.tsm.k, s1(s));
   }
 
-  lemma JournalSliceAppend(k: Constants, s: Variables, s': Variables, vop: VOp, i: int)
-  requires Inv(k, s)
-  requires JournalChain.Next(k.jc, s.jc, s'.jc, vop)
+  lemma Move3PreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
   requires vop.AdvanceOp?
-  requires 0 <= i - s.jc.startVersion <= |s.jc.journal|
-  requires 0 <= s.jc.ephemeralStateIndex - s.jc.startVersion <= |s.jc.journal|
-  requires i <= s.jc.ephemeralStateIndex
-  ensures JournalSlice(s', i, s'.jc.ephemeralStateIndex)
-        == JournalSlice(s, i, s.jc.ephemeralStateIndex)
-            + JournalEntriesForUIOp(vop.uiop)
+  requires JournalChain.Move3(k.jc, s.jc, s'.jc, vop)
+  requires TriStateMap.Advance(k.tsm, s.tsm, s'.tsm, vop)
+  requires Inv(k, s)
+  ensures Inv(k, s')
   {
-    reveal_JournalSlice();
-    if JournalChain.AdvanceEphemeral(k.jc, s.jc, s'.jc, vop) {
-      assert JournalSlice(s', i, s'.jc.ephemeralStateIndex)
-            == JournalSlice(s, i, s.jc.ephemeralStateIndex)
-                + JournalEntriesForUIOp(vop.uiop);
-    } else if JournalChain.Replay(k.jc, s.jc, s'.jc, vop) {
-      assert JournalSlice(s', i, s'.jc.ephemeralStateIndex)
-            == JournalSlice(s, i, s.jc.ephemeralStateIndex)
-                + JournalEntriesForUIOp(vop.uiop);
-    }
+    SM.NextPreservesInv(k.tsm.k, s3(s), s3(s'), vop.uiop);
+    var new_je := JournalEntriesForUIOp(vop.uiop);
+    path_append(k.tsm.k, s2(s), s.jc.j2 + s.jc.j_delta, s3(s), vop.uiop, s3(s'));
+
+    assert s1(s) == s1(s');
+    assert s2(s) == s2(s');
+
+    assert s.jc.j3 == [];
+    assert SeqSub(s.jc.j2 + s.jc.j_delta, s.jc.j3)
+        == s.jc.j2 + s.jc.j_delta;
+    assert SeqSub(s.jc.j2 + s.jc.j_delta + JournalEntriesForUIOp(vop.uiop), s.jc.j3)
+        == s.jc.j2 + s.jc.j_delta + JournalEntriesForUIOp(vop.uiop);
+
+    assert path(k.tsm.k, s2(s), s.jc.j2 + s.jc.j_delta + new_je, s3(s'));
+    assert path(k.tsm.k, s2(s'), SeqSub(s'.jc.j2 + s'.jc.j_delta, s'.jc.j3), s3(s'));
+    assert advances(k.tsm.k, s2(s'), s'.jc.j2 + s'.jc.j_delta, s3(s'), s'.jc.j3);
+
+    assert Inv(k, s');
   }
 
-  lemma JournalSliceAppendPersistent(k: Constants, s: Variables, s': Variables, vop: VOp)
-  requires Inv(k, s)
-  requires JournalChain.Next(k.jc, s.jc, s'.jc, vop)
+  lemma ReplayPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
   requires vop.AdvanceOp?
-  ensures JournalSlice(s', s'.jc.persistentStateIndex, s'.jc.ephemeralStateIndex)
-        == JournalSlice(s, s.jc.persistentStateIndex, s.jc.ephemeralStateIndex)
-            + JournalEntriesForUIOp(vop.uiop)
+  requires JournalChain.Replay(k.jc, s.jc, s'.jc, vop)
+  requires TriStateMap.Advance(k.tsm, s.tsm, s'.tsm, vop)
+  requires Inv(k, s)
+  ensures Inv(k, s')
   {
-    JournalSliceAppend(k, s, s', vop, s.jc.persistentStateIndex);
+    SM.NextPreservesInv(k.tsm.k, s3(s), s3(s'), vop.uiop);
+    path_append(k.tsm.k, s2(s), SeqSub(s.jc.j2 + s.jc.j_delta, s.jc.j3), s3(s), vop.uiop, s3(s'));
+    assert SeqSub(s.jc.j2 + s.jc.j_delta, s.jc.j3) + JournalEntriesForUIOp(vop.uiop)
+        == SeqSub(s.jc.j2 + s.jc.j_delta, s'.jc.j3);
+    assert Inv(k, s');
   }
 
-  lemma JournalSliceAppendFrozen(k: Constants, s: Variables, s': Variables, vop: VOp)
-  requires Inv(k, s)
-  requires JournalChain.Next(k.jc, s.jc, s'.jc, vop)
-  requires vop.AdvanceOp?
-  requires s'.jc.frozenStateIndex.Some?
-  ensures JournalSlice(s', s'.jc.frozenStateIndex.value, s'.jc.ephemeralStateIndex)
-        == JournalSlice(s, s.jc.frozenStateIndex.value, s.jc.ephemeralStateIndex)
-            + JournalEntriesForUIOp(vop.uiop)
-  {
-    JournalSliceAppend(k, s, s', vop, s.jc.frozenStateIndex.value);
-  }
-  
   lemma AdvancePreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
   requires NextStep(k, s, s', vop, uiop)
   requires vop.AdvanceOp?
   requires Inv(k, s)
   ensures Inv(k, s')
   {
-    var tsm_step :| TriStateMap.NextStep(k.tsm, s.tsm, s'.tsm, vop, tsm_step);
-    var jc_step :| JournalChain.NextStep(k.jc, s.jc, s'.jc, vop, jc_step);
-    var persistentState := s.tsm.disk[s.jc.persistentLoc];
-
-    ApplySeqAppend(k.tsm.k, persistentState, 
-        JournalSlice(s, s.jc.persistentStateIndex, s.jc.ephemeralStateIndex),
-        vop.uiop, s'.tsm.ephemeralState.value);
-    JournalSliceAppendPersistent(k, s, s', vop);
-
-    if s.jc.frozenStateIndex.Some? {
-      assert JournalSlice(s', s'.jc.persistentStateIndex, s'.jc.frozenStateIndex.value)
-          == JournalSlice(s, s.jc.persistentStateIndex, s.jc.frozenStateIndex.value)
-              by { reveal_JournalSlice(); }
-
-      ApplySeqAppend(k.tsm.k, s.tsm.frozenState.value, 
-          JournalSlice(s, s.jc.frozenStateIndex.value, s.jc.ephemeralStateIndex),
-          vop.uiop, s'.tsm.ephemeralState.value);
-      JournalSliceAppendFrozen(k, s, s', vop);
-    }
-
-    if JournalChain.AdvanceEphemeral(k.jc, s.jc, s'.jc, vop) {
-      assert Inv(k, s');
+    if JournalChain.Move3(k.jc, s.jc, s'.jc, vop) {
+      Move3PreservesInv(k, s, s', vop, uiop);
     } else if JournalChain.Replay(k.jc, s.jc, s'.jc, vop) {
-      assert Inv(k, s');
+      ReplayPreservesInv(k, s, s', vop, uiop);
     }
+  }
+
+  lemma FreezePreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
+  requires NextStep(k, s, s', vop, uiop)
+  requires vop.FreezeOp?
+  requires Inv(k, s)
+  ensures Inv(k, s')
+  {
+    path_empty(k.tsm.k, s2(s));
+    path_empty(k.tsm.k, s3(s));
+    paths_compose(k.tsm.k, s1(s),
+        SeqSub(s.jc.j_gamma, s.jc.j2),
+        s2(s),
+        SeqSub(s.jc.j2 + s.jc.j_delta, s.jc.j3),
+        s3(s));
+    SeqSubAdd(s.jc.j_gamma, s.jc.j2, s.jc.j_delta, s.jc.j3);
+    assert SeqSub(s.jc.j_gamma, s.jc.j2) + SeqSub(s.jc.j2 + s.jc.j_delta, s.jc.j3)
+        == SeqSub(s.jc.j_gamma + s.jc.j_delta, s.jc.j3);
+    assert advances(k.tsm.k, s1(s), s.jc.j_gamma + s.jc.j_delta, s3(s), s.jc.j3);
   }
 
   lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
@@ -283,12 +304,8 @@ module Bookmarker {
   requires Inv(k, s)
   ensures Inv(k, s')
   {
-    reveal_JournalSlice();
-
     var tsm_step :| TriStateMap.NextStep(k.tsm, s.tsm, s'.tsm, vop, tsm_step);
     var jc_step :| JournalChain.NextStep(k.jc, s.jc, s'.jc, vop, jc_step);
-
-    var persistentState := s.tsm.disk[s.jc.persistentLoc];
 
     match vop {
       case SendPersistentLocOp(loc) => { }
@@ -296,17 +313,24 @@ module Bookmarker {
         AdvancePreservesInv(k, s, s', vop, uiop);
       }
       case CrashOp => {
+        path_empty(k.tsm.k, s1(s));
+        assert s1(s) == s1(s') == s2(s') == s3(s');
         assert JournalChain.Crash(k.jc, s.jc, s'.jc, vop);
         assert TriStateMap.Crash(k.tsm, s.tsm, s'.tsm, vop);
       }
-      case FreezeOp => { }
+      case FreezeOp => {
+        FreezePreservesInv(k, s, s', vop, uiop);
+      }
       case TristateInternalOp => { }
       case JournalInternalOp => {
         assert s.tsm == s'.tsm;
-        if JournalChain.AdvancePersistent(k.jc, s.jc, s'.jc, vop) {
+        if JournalChain.Move1to2(k.jc, s.jc, s'.jc, vop) {
           assert Inv(k, s');
         }
-        else if JournalChain.CleanUpStep(k.jc, s.jc, s'.jc, vop) {
+        else if JournalChain.ExtendLog1(k.jc, s.jc, s'.jc, vop) {
+          assert Inv(k, s');
+        }
+        else if JournalChain.ExtendLog2(k.jc, s.jc, s'.jc, vop) {
           assert Inv(k, s');
         }
         else {
@@ -314,8 +338,8 @@ module Bookmarker {
         }
       }
       case SendFrozenLocOp(loc) => { }
-      case ForgetOldOp => {
-        assert JournalChain.ForgetOld(k.jc, s.jc, s'.jc, vop);
+      case CleanUpOp => {
+        assert JournalChain.CleanUp(k.jc, s.jc, s'.jc, vop);
         assert TriStateMap.ForgetOld(k.tsm, s.tsm, s'.tsm, vop);
         assert Inv(k, s');
       }

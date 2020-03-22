@@ -327,7 +327,7 @@ module Bookmarker_Refines_FullVersionedMap {
         [s'.jc.persistentJournalIndex - s'.jc.persistentStateIndex ..];
 
       
-      statesOf(s.tsm.frozenState.value, Bookmarker.AllJournalFromPersistentState(s))
+      statesOf(persistentState(k, s), Bookmarker.AllJournalFromPersistentState(s))
         [s'.jc.persistentJournalIndex - s.jc.persistentStateIndex ..];
       statesOf(persistentState(k, s), Bookmarker.AllJournalFromPersistentState(s))
         [s'.jc.persistentJournalIndex - s.jc.persistentStateIndex ..];
