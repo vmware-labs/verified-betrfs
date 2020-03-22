@@ -67,6 +67,7 @@ abstract module TSJ {
     | ReplayStep(replayedUIOp: SM.UIOp)
     | PushSyncStep(ghost id: int)
     | PopSyncStep(ghost id: int)
+    | StutterStep
 
   predicate Crash(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp)
   {
@@ -204,6 +205,7 @@ abstract module TSJ {
       case ReplayStep(replayedUIOp) => Replay(k, s, s', uiop, replayedUIOp)
       case PushSyncStep(id) => PushSync(k, s, s', uiop, id)
       case PopSyncStep(id) => PopSync(k, s, s', uiop, id)
+      case StutterStep => s == s'
     }
   }
 

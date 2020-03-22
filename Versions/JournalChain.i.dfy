@@ -51,6 +51,8 @@ module JournalChain {
 
     && s.persistentLoc == Loc1
     && s.frozenLoc == None
+
+    && s.syncReqs == map[]
   }
 
   datatype Step =
@@ -88,7 +90,7 @@ module JournalChain {
   predicate CleanUp(k: Constants, s: Variables, s': Variables, vop: VOp)
   {
     && vop.CleanUpOp?
-    && s.j2 == s.j_gamma
+    && s.frozenLoc == Some(s.persistentLoc)
     && s' == s.(frozenLoc := None)
   }
 
@@ -124,6 +126,7 @@ module JournalChain {
   predicate Move2to3(k: Constants, s: Variables, s': Variables, vop: VOp)
   {
     && vop.FreezeOp?
+    && s.frozenLoc != Some(s.persistentLoc)
     && s' == Variables(
       s.j1,
       s.j3,
