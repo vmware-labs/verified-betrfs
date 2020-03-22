@@ -291,6 +291,15 @@ module TSJMap_Refines_ThreeStateVersionedMap {
         TSV.PopSyncStep(id));
   }
 
+  lemma RefinesStutter(k: TSJ.Constants, s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
+    requires TSJ.Inv(k, s)
+    requires TSJ.Stutter(k, s, s', uiop)
+    ensures TSV.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  {
+    assert MapSpec.NextStep(Ik(k).k, I(k, s).s3, I(k, s').s3, uiop, MapSpec.StutterStep);
+    assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.Move3Step);
+  }
+
   lemma RefinesNextStep(k: TSJ.Constants, s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op, step: TSJ.Step)
     requires TSJ.Inv(k, s)
     requires TSJ.NextStep(k, s, s', uiop, step)
@@ -306,6 +315,7 @@ module TSJMap_Refines_ThreeStateVersionedMap {
       case ReplayStep(replayedUIOp) => RefinesReplay(k, s, s', uiop, replayedUIOp);
       case PushSyncStep(id) => RefinesPushSync(k, s, s', uiop, id);
       case PopSyncStep(id) => RefinesPopSync(k, s, s', uiop, id);
+      case StutterStep => RefinesStutter(k, s, s', uiop);
     }
   }
 

@@ -193,6 +193,12 @@ abstract module TSJ {
     && s' == Variables(s.s1, s.s2, s.s3, s.j1, s.j2, s.j3, s.j_gamma, s.j_delta, MapRemove1(s.outstandingSyncReqs, id))
   }
 
+  predicate Stutter(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp)
+  {
+    && uiop.NoOp?
+    && s == s'
+  }
+
   predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: SM.UIOp, step: Step)
   {
     match step {
@@ -205,7 +211,7 @@ abstract module TSJ {
       case ReplayStep(replayedUIOp) => Replay(k, s, s', uiop, replayedUIOp)
       case PushSyncStep(id) => PushSync(k, s, s', uiop, id)
       case PopSyncStep(id) => PopSync(k, s, s', uiop, id)
-      case StutterStep => s == s'
+      case StutterStep => Stutter(k, s, s', uiop)
     }
   }
 
@@ -456,6 +462,7 @@ abstract module TSJ {
       case ReplayStep(replayedUIOp) => ReplayStepPreservesInv(k, s, s', uiop, replayedUIOp);
       case PushSyncStep(id) => PushSyncStepPreservesInv(k, s, s', uiop, id);
       case PopSyncStep(id) => PopSyncStepPreservesInv(k, s, s', uiop, id);
+      case StutterStep => { }
     }
   }
 
