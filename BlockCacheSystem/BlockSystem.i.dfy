@@ -200,6 +200,18 @@ module BlockSystem {
       None
   }
 
+  protected predicate WFLoadingGraph(k: Constants, s: Variables)
+  {
+    && s.machine.LoadingIndirectionTable?
+    && WFDiskGraphOfLoc(k, s, s.machine.indirectionTableLoc)
+  }
+
+  protected function LoadingGraph(k: Constants, s: Variables) : map<Reference, Node>
+  requires WFLoadingGraph(k, s)
+  {
+    DiskGraphOfLoc(k, s, s.machine.indirectionTableLoc)
+  }
+
   protected predicate WFEphemeralGraph(k: Constants, s: Variables)
   {
     && s.machine.Ready?
@@ -216,6 +228,8 @@ module BlockSystem {
   {
     if WFEphemeralGraph(k, s) then
       Some(EphemeralGraph(k, s))
+    else if WFLoadingGraph(k, s) then
+      Some(LoadingGraph(k, s))
     else
       None
   }
@@ -467,6 +481,8 @@ module BlockSystem {
     )
     && (s.machine.LoadingIndirectionTable? ==>
       && CorrectInflightIndirectionTableReads(k, s)
+      && WFLoadingGraph(k, s)
+      && WFSuccs(k, s, s.machine.indirectionTableLoc)
     )
     && WriteRequestsDontOverlap(s.disk.reqWriteNodes)
     && WriteRequestsAreDistinct(s.disk.reqWriteNodes)
@@ -1118,6 +1134,8 @@ module BlockSystem {
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
     ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
   {
+    assert LoadingGraph(k, s)
+        == EphemeralGraph(k, s');
   }
 
   lemma PageInIndirectionTableRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -1127,6 +1145,41 @@ module BlockSystem {
     ensures Inv(k, s')
   {
     PageInIndirectionTableRespStepPreservesGraphs(k, s, s', dop);
+  }
+
+  ////////////////////////////////////////////////////
+  ////////////////////// ReceiveLoc
+  //////////////////////
+
+  lemma ReceiveLocStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.ReceiveLoc(k.machine, s.machine, s'.machine, dop)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+
+    ensures DiskGraphMap(k, s') == DiskGraphMap(k, s)
+    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures PersistentLoc(k, s') == Some(vop.loc)
+    ensures vop.loc in DiskGraphMap(k, s)
+    ensures EphemeralGraphOpt(k, s') ==
+        DiskGraphMap(k, s)[vop.loc]
+  {
+    if (s.machine.Ready?) {
+      assert DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.ephemeralIndirectionTable, s'.disk, s'.machine.cache);
+    }
+    if (UseFrozenGraph(k, s)) {
+      assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
+    }
+  }
+
+  lemma ReceiveLocStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+    requires Inv(k, s)
+    requires M.ReceiveLoc(k.machine, s.machine, s'.machine, dop)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    ReceiveLocStepPreservesGraphs(k, s, s', dop);
   }
 
   ////////////////////////////////////////////////////
@@ -1142,6 +1195,10 @@ module BlockSystem {
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
     ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
   {
+    if (s.machine.Ready?) {
+      assert DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.ephemeralIndirectionTable, s'.disk, s'.machine.cache);
+    }
     if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
           == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
@@ -1194,9 +1251,17 @@ module BlockSystem {
     requires D.Next(k.disk, s.disk, s'.disk, dop);
 
     ensures DiskGraphMap(k, s') == DiskGraphMap(k, s)
-    ensures FrozenGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+    ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
     ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
   {
+    if (s.machine.Ready?) {
+      assert DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.ephemeralIndirectionTable, s'.disk, s'.machine.cache);
+    }
+    if (UseFrozenGraph(k, s)) {
+      assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
+          == DiskCacheGraph(s'.machine.frozenIndirectionTable.value, s'.disk, s'.machine.cache);
+    }
   }
 
   lemma NoOpStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -1227,6 +1292,7 @@ module BlockSystem {
       case PageInNodeRespStep => PageInNodeRespStepPreservesInv(k, s, s', dop);
       case PageInIndirectionTableReqStep => PageInIndirectionTableReqStepPreservesInv(k, s, s', dop);
       case PageInIndirectionTableRespStep => PageInIndirectionTableRespStepPreservesInv(k, s, s', dop);
+      case ReceiveLocStep => ReceiveLocStepPreservesInv(k, s, s', dop);
       case EvictStep(ref) => EvictStepPreservesInv(k, s, s', dop, ref);
       case FreezeStep => FreezeStepPreservesInv(k, s, s', dop);
       case NoOpStep => { NoOpStepPreservesInv(k, s, s', dop); }

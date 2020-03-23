@@ -573,7 +573,7 @@ module BlockCache refines Transactable {
   {
     && (s.Ready? ==> InvReady(k, s))
     && (s.LoadingIndirectionTable? ==>
-      ValidIndirectionTableLocation(s.indirectionTableLoc)
+      && ValidIndirectionTableLocation(s.indirectionTableLoc)
     )
   }
 
