@@ -797,6 +797,6 @@ abstract module BlockCache refines Transactable {
   }
 }
 
-module {:compileName "BetreeGraphBlockCache"} BetreeGraphBlockCache refines BlockCache {
+module BetreeGraphBlockCache refines BlockCache {
   import G = PivotBetreeGraph
 }

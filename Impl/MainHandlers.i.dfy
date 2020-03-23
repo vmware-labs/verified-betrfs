@@ -15,7 +15,7 @@ include "../ByteBlockCacheSystem/ByteBetreeBlockCacheSystem_Refines_ThreeStateVe
 // Implements the application-API-handler obligations laid out by Main.s.dfy. TODO rename in a way that emphasizes that this is a module-refinement of the abstract Main that satisfies its obligations.
 //
 
-module {:compileName "MainHandlers"} MainHandlers refines Main { 
+module MainHandlers refines Main { 
   import DebugAccumulator
   import SM = StateModel
   import SI = StateImpl

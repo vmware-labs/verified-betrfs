@@ -9,7 +9,7 @@ include "CacheImpl.i.dfy"
 include "IndirectionTableImpl.i.dfy"
 include "BlockAllocatorImpl.i.dfy"
 
-module {:compileName "StateImpl"} StateImpl {
+module StateImpl {
   import DebugAccumulator
   import opened Options
   import opened Sequences

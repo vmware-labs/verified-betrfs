@@ -1,15 +1,15 @@
 #include "BundleWrapper.h"
 #include "Bundle.cpp"
 
-using namespace MainHandlers;
+using namespace MainHandlers_Compile;
 
 std::pair<Constants, Variables> handle_InitState()
 {
   auto tup2 = __default::InitState();
   Constants k;
   malloc_accounting_set_scope("BundleWrapper::handle_InitState");
-  k.k = std::shared_ptr<BetreeGraphBlockCache::Constants>(
-      new BetreeGraphBlockCache::Constants(tup2.t0));
+  k.k = std::shared_ptr<BetreeGraphBlockCache_Compile::Constants>(
+      new BetreeGraphBlockCache_Compile::Constants(tup2.t0));
   malloc_accounting_default_scope();
   Variables hs;
   hs.hs = tup2.t1;
@@ -18,7 +18,7 @@ std::pair<Constants, Variables> handle_InitState()
 
 DafnyMap<uint64, DafnySequence<uint8>> handle_Mkfs()
 {
-  return MkfsImpl::__default::Mkfs();
+  return MkfsImpl_Compile::__default::Mkfs();
 }
 
 void handle_EvictEverything(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
@@ -74,10 +74,10 @@ void handle_WriteResponse(Constants k, Variables hs, std::shared_ptr<MainDiskIOH
 
 uint64 MaxKeyLen()
 {
-  return KeyType::__default::MaxLen();
+  return KeyType_Compile::__default::MaxLen();
 }
 
 uint64 MaxValueLen()
 {
-  return ValueType::__default::MaxLen();
+  return ValueType_Compile::__default::MaxLen();
 }
