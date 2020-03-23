@@ -814,6 +814,17 @@ void __default::sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> n
       type = "kvl";
     } else if ((((bucket->format)).is_BucketFormat_BFPkv())) {
       type = "pkv";
+      auto pkv = bucket->pkv;
+      for (size_t i=0; i<pkv.keys.offsets.len; i++) {
+        auto key = PackedKV_Compile::__default::GetKey(pkv, i);
+        visit_uptr(&observed_ptrs, key);
+      }
+      for (size_t i=0; i<pkv.messages.offsets.len; i++) {
+        auto message = PackedKV_Compile::__default::GetMessage(pkv, i);
+        assert(message.is_Message_Define());
+        DafnySequence<uint8> value_message = message.dtor_value();
+        visit_uptr(&observed_ptrs, value_message);
+      }
     }
   }
 

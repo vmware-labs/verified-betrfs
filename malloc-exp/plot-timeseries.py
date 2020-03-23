@@ -187,7 +187,7 @@ def parse(filename):
     ys = [scopes["in_amass.[T = unsigned char]"][t].open_count for t in xs]
     line, = axes[5].plot(xs, ys)
     line.set_label("amass live alloc count")
-    axes[4].legend()
+    axes[5].legend()
     axes[5].set_title("amass live allocs vs reachable underlying allocs")
 
     def cdf(axis, data):

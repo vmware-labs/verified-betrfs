@@ -408,11 +408,44 @@ Finally, we see most of what we want: the reachable-underlying count eventually 
 to amass live allocs, and the overall malloc is 0.8GB, what we'd hope.
 
 Some mysteries survive:
-- Why isn't live amass allocs exactly equal to underlying alloc count? (graph 6)
-- What are we counting in graph 5? pkvs? I thought my counting code didn't touch those.
+(a) Why isn't live amass allocs exactly equal to underlying alloc count? (graph 6)
+(b) What are we counting in graph 5? pkvs? I thought my counting code didn't touch those.
   ...maybe they're being accessed by way of pivot keys, now that we're counting those.
-- OS/mmap ratio is still creeping up (graph 2). Maybe we should still use a big-pool policy?
+(c) OS/mmap ratio is still creeping up (graph 2). Maybe we should still use a big-pool policy?
 
 And open questions:
-- Do we really need to amass splits? flushes? Maybe the pivots were the ony
+(d) Do we really need to amass splits? flushes? Maybe the pivots were the ony
   thing causing the real trouble.
+
+[malloc-exp/wprofile-amass-nosplit-timeseries.png]
+Tried turning off amass during split, to see if it matters (open question d). Doesn't seem to.
+
+[malloc-exp/wprofile-amass-countpkv-timeseries.png]
+Chasing down the pkvs. (split still disabled, which reduces fidelity, but doesn't seem to be
+a big factor.) Taught sampleNode to walk the pkvs, and now underlying_sum.bytes (graph 5)
+correctly
+split is back on (for high fidelity counting), and I'm now chasing down the pkvs
+as well, to try to address mystery (a).
+Conclusions: the underlying_sum.bytes curve (graph 5) now counts up the pkvs,
+so it includes everything, and pretty much looks like the malloc_total. So the places in the
+previous graph where underlying.bytes exceeded amass were likely places where the counter
+managed to cross into pkv-space and count up those allocations. Weird that it didn't count all of
+them, but I think we're going to not worry about that graph anymore.
+
+Observations on mystery a: the 'amass live alloc count' (orange line) is definitely *only* stuff
+allocated in AmassKvl (KVList.i).
+One crazy possibility: the root pivots don't come from there. But that's like, 8 allocations.
+We're undercounting 100.
+Amass happens at tree_to_kvl, flush, and split.
+And why, if we're not reaching 100 allocations, aren't there lots of bytes associated with the
+"missing" count? Are there small amass-ments that are being selectively reachable by some
+non-Node path!?
+[malloc-exp/wprofile-amass-countpkv-head]
+So here's the same file truncated to ~340s, where the two have diverged pretty well.
+As we'd expect, a single node (the root) is type 'tree'; the rest are kvl.
+Underlying counts 283 (674MB).
+in_amass is 378 (669MB).
+
+[malloc-exp/wprofile-amass-parent-pivot]
+Only parent amass & pivot copy-key in place; child amass and split amass disabled.
+Oh yeah, that's a disaster. Wish I had my ulimit on.

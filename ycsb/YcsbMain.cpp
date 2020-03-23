@@ -171,8 +171,8 @@ void ycsbRun(
 #define HACK_PROBE_PERIODIC 1
 #if HACK_PROBE_PERIODIC
 // An experiment to periodically study how the kv allocations are distributed
-    int probe_interval_ms = 10000;
-    int next_probe_ms = /*probe_interval_ms*/ 10000;
+    int probe_interval_ms = 50000;
+    int next_probe_ms = probe_interval_ms;
 #endif // HACK_PROBE_PERIODIC
 
     for (int i = 0; i < num_ops; ++i) {
