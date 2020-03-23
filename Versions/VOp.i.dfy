@@ -1,9 +1,9 @@
 include "../MapSpec/UI.s.dfy"
+include "../BlockCacheSystem/DiskLayout.i.dfy"
 
 module VersionOp {
   import UI
-
-  datatype Location = Loc1 | Loc2
+  import opened DiskLayout
 
   datatype VOp =
     | SendPersistentLocOp(loc: Location)
