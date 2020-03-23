@@ -771,6 +771,7 @@ void __default::start() {
   sptr_to_len.clear();
 }
 
+#if TRACK_DOWN_UNDERLYING_ALLOCATIONS
 static void visit_uptr(std::set<uint64_t>* observed_ptrs, const DafnySequence<uint8>& ref) {
   uint64_t uptr = (uint64_t) ref.sptr.get();
   observed_ptrs->insert(uptr);
@@ -831,6 +832,10 @@ void __default::sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> n
   count = observed_ptrs.size();
   printf("allocationreport ref %lu type %s observed_sptr_count %d\n", ref, type, count);
 }
+#else // TRACK_DOWN_UNDERLYING_ALLOCATIONS
+void __default::sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node) {
+}
+#endif // TRACK_DOWN_UNDERLYING_ALLOCATIONS
 
 void __default::stop() {
   uint64_t total_underlying = 0;

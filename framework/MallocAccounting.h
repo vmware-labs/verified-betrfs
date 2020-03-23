@@ -16,6 +16,9 @@ inline void init_malloc_accounting() {}
 inline void malloc_accounting_status() {}
 inline void malloc_accounting_display(const char* label) {}
 inline void fini_malloc_accounting() {}
+// You don't need scopes if you've turned off the main MALLOC_ACCOUNTING knob.
+#undef MALLOC_ACCOUNTING_ENABLE_SCOPES
+#define MALLOC_ACCOUNTING_ENABLE_SCOPES 0
 #endif // MALLOC_ACCOUNTING
 
 #if MALLOC_ACCOUNTING_ENABLE_SCOPES
