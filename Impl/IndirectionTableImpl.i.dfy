@@ -57,7 +57,7 @@ module IndirectionTableImpl {
       a := new DebugAccumulator.AccRec.Index(r);
       acc := DebugAccumulator.AccPut(acc, "garbageQueue", a);
     }
-    
+
     protected predicate Inv()
     reads this, Repr
     ensures Inv() ==> this in Repr

@@ -4,7 +4,6 @@
 #include <string>
 
 #if MALLOC_ACCOUNTING
-// TODO switcha all this stuff off with macros (or inline empty methods)
 void init_malloc_accounting();
 void fini_malloc_accounting();
 void malloc_accounting_set_scope(const char* scope);

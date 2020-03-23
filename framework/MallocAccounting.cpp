@@ -40,7 +40,7 @@ static inline void remove_hooks() {
   __malloc_hook = old_malloc_hook;
   __free_hook = old_free_hook;
 }
-  
+
 #define ACCOUNTING_MAGIC 0x1badf00f
 
 struct ARow;
