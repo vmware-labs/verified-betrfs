@@ -183,6 +183,11 @@ module BlockCache refines Transactable {
     && ValidIndirectionTableLocation(loc)
     && dop.reqWriteIndirectionTable.indirectionTable == s.frozenIndirectionTable.value
     && s.frozenIndirectionTable.value.graph.Keys <= s.frozenIndirectionTable.value.locs.Keys
+
+    // TODO This actually isn't necessary - we could write indirection
+    // table and nodes in parallel
+    && s.outstandingBlockWrites == map[]
+
     && s.frozenIndirectionTableLoc.None?
     && !overlap(
           loc,

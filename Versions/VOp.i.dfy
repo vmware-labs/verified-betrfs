@@ -5,14 +5,16 @@ module VersionOp {
   import UI
   import opened DiskLayout
 
+  type Loc = DiskLayout.Location
+
   datatype VOp =
-    | SendPersistentLocOp(loc: Location)
+    | SendPersistentLocOp(loc: Loc)
     | AdvanceOp(uiop: UI.Op, replay: bool)
     | CrashOp
     | FreezeOp
     | TristateInternalOp
     | JournalInternalOp
-    | SendFrozenLocOp(loc: Location)
+    | SendFrozenLocOp(loc: Loc)
     | CleanUpOp
     | PushSyncOp(ghost id: int)
     | PopSyncOp(ghost id: int)

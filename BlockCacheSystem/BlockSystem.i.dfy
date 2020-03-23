@@ -162,11 +162,17 @@ module BlockSystem {
 
   predicate DiskChangesPreservesPersistentAndFrozen(k: Constants, s: Variables, s': Variables)
   {
-    && PersistentLoc(k, s).Some?
-    && PersistentLoc(k, s).value in DiskGraphMap(k, s)
-    && PersistentLoc(k, s).value in DiskGraphMap(k, s')
-    && DiskGraphMap(k, s')[PersistentLoc(k, s).value]
-        == DiskGraphMap(k, s)[PersistentLoc(k, s).value]
+    && (PersistentLoc(k, s).None? ==>
+      && forall loc | loc in DiskGraphMap(k, s) ::
+          && loc in DiskGraphMap(k, s')
+          && DiskGraphMap(k, s')[loc] == DiskGraphMap(k, s)[loc]
+    )
+    && (PersistentLoc(k, s).Some? ==>
+      && PersistentLoc(k, s).value in DiskGraphMap(k, s)
+      && PersistentLoc(k, s).value in DiskGraphMap(k, s')
+      && DiskGraphMap(k, s')[PersistentLoc(k, s).value]
+          == DiskGraphMap(k, s)[PersistentLoc(k, s).value]
+    )
     && (FrozenLoc(k, s).Some? ==>
       && FrozenLoc(k, s).value in DiskGraphMap(k, s)
       && FrozenLoc(k, s).value in DiskGraphMap(k, s')
@@ -354,12 +360,18 @@ module BlockSystem {
     && (forall r | r in s.machine.ephemeralIndirectionTable.locs ::
         s.machine.ephemeralIndirectionTable.locs[r].addr == loc.addr ==> r == ref)
 
+
     && (s.machine.frozenIndirectionTable.Some? ==>
-        forall r | r in s.machine.frozenIndirectionTable.value.locs ::
-        s.machine.frozenIndirectionTable.value.locs[r].addr == loc.addr ==> r == ref)
+        && (forall r | r in s.machine.frozenIndirectionTable.value.locs ::
+          s.machine.frozenIndirectionTable.value.locs[r].addr == loc.addr ==> r == ref)
+        && (s.machine.frozenIndirectionTableLoc.Some? ==>
+          && (forall r | r in s.machine.frozenIndirectionTable.value.locs ::
+            s.machine.frozenIndirectionTable.value.locs[r].addr != loc.addr)
+        )
+      )
 
     && (forall r | r in s.machine.persistentIndirectionTable.locs ::
-        s.machine.persistentIndirectionTable.locs[r].addr == loc.addr ==> r == ref)
+        s.machine.persistentIndirectionTable.locs[r].addr != loc.addr)
 
     && (id in s.disk.reqWriteNodes ==>
       && s.disk.reqWriteNodes[id] == loc
@@ -1323,6 +1335,61 @@ module BlockSystem {
     ensures FrozenGraphOpt(k, s') == None
     ensures EphemeralGraphOpt(k, s') == None
   {
+    if PersistentLoc(k, s).Some? {
+      var persistentLoc := PersistentLoc(k, s).value;
+      if !D.UntouchedLoc(persistentLoc, s.disk.reqWriteIndirectionTables) {
+        var id :| id in s.disk.reqWriteIndirectionTables && overlap(persistentLoc, s.disk.reqWriteIndirectionTables[id]);
+        overlappingIndirectionTablesSameAddr(
+            persistentLoc, s.disk.reqWriteIndirectionTables[id]);
+      }
+      var indirectionTable := s.disk.indirectionTables[persistentLoc];
+      //assert M.WFCompleteIndirectionTable(indirectionTable);
+      forall ref | ref in indirectionTable.locs
+      ensures indirectionTable.locs[ref] in s.disk.nodes
+      ensures indirectionTable.locs[ref] in s'.disk.nodes
+      ensures s.disk.nodes[indirectionTable.locs[ref]] == s'.disk.nodes[indirectionTable.locs[ref]]
+      {
+        var loc := indirectionTable.locs[ref];
+        //assert loc in indirectionTable.locs.Values;
+        //assert ValidNodeLocation(loc);
+        if !D.UntouchedLoc(loc, s.disk.reqWriteNodes) {
+          var id :| id in s.disk.reqWriteNodes && overlap(loc, s.disk.reqWriteNodes[id]);
+          overlappingNodesSameAddr(
+              loc, s.disk.reqWriteNodes[id]);
+          assert false;
+        }
+        //assert loc in s'.disk.nodes;
+        //assert s.disk.nodes[loc] == s'.disk.nodes[loc];
+      }
+    }
+    if FrozenLoc(k, s).Some? {
+      var frozenLoc := FrozenLoc(k, s).value;
+      if !D.UntouchedLoc(frozenLoc, s.disk.reqWriteIndirectionTables) {
+        var id :| id in s.disk.reqWriteIndirectionTables && overlap(frozenLoc, s.disk.reqWriteIndirectionTables[id]);
+        overlappingIndirectionTablesSameAddr(
+            frozenLoc, s.disk.reqWriteIndirectionTables[id]);
+      }
+      var indirectionTable := s.disk.indirectionTables[frozenLoc];
+      //assert M.WFCompleteIndirectionTable(indirectionTable);
+      forall ref | ref in indirectionTable.locs
+      ensures indirectionTable.locs[ref] in s.disk.nodes
+      ensures indirectionTable.locs[ref] in s'.disk.nodes
+      ensures s.disk.nodes[indirectionTable.locs[ref]] == s'.disk.nodes[indirectionTable.locs[ref]]
+      {
+        var loc := indirectionTable.locs[ref];
+        //assert loc in indirectionTable.locs.Values;
+        //assert ValidNodeLocation(loc);
+        if !D.UntouchedLoc(loc, s.disk.reqWriteNodes) {
+          var id :| id in s.disk.reqWriteNodes && overlap(loc, s.disk.reqWriteNodes[id]);
+          overlappingNodesSameAddr(
+              loc, s.disk.reqWriteNodes[id]);
+          assert false;
+        }
+        //assert loc in s'.disk.nodes;
+        //assert s.disk.nodes[loc] == s'.disk.nodes[loc];
+      }
+
+    }
   }
 
   lemma CrashStepPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp)

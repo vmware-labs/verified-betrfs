@@ -11,17 +11,17 @@ abstract module TriState {
 
   datatype Constants = Constants(k: SM.Constants)
   datatype Variables = Variables(
-      disk: map<Location, SM.Variables>,
-      persistentLoc: Option<Location>,
-      frozenLoc: Option<Location>,
+      disk: map<Loc, SM.Variables>,
+      persistentLoc: Option<Loc>,
+      frozenLoc: Option<Loc>,
       frozenState: Option<SM.Variables>,
       ephemeralState: Option<SM.Variables>
   )
 
-  predicate Init(k: Constants, s: Variables)
+  predicate Init(k: Constants, s: Variables, loc: Loc)
   {
-    && Loc1 in s.disk
-    && SM.Init(k.k, s.disk[Loc1])
+    && loc in s.disk
+    && SM.Init(k.k, s.disk[loc])
     && s.persistentLoc == None
     && s.frozenLoc == None
     && s.frozenState == None
@@ -70,10 +70,16 @@ abstract module TriState {
     // We can modify `disk` in any way as we long as we don't
     // interfere with the state defined by persistentLoc
     // or frozenLoc.
-    && s.persistentLoc.Some?
-    && s.persistentLoc.value in s.disk
-    && s.persistentLoc.value in s'.disk
-    && s'.disk[s.persistentLoc.value] == s.disk[s.persistentLoc.value]
+    && (s.persistentLoc.None? ==>
+      forall loc | loc in s.disk ::
+          loc in s'.disk && s'.disk[loc] == s.disk[loc]
+    )
+    && (s.persistentLoc.Some? ==>
+      && s.persistentLoc.Some?
+      && s.persistentLoc.value in s.disk
+      && s.persistentLoc.value in s'.disk
+      && s'.disk[s.persistentLoc.value] == s.disk[s.persistentLoc.value]
+    )
     && (s.frozenLoc.Some? ==>
       && s.frozenLoc.value in s.disk
       && s.frozenLoc.value in s'.disk

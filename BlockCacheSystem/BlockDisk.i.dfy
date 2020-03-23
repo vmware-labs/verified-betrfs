@@ -187,11 +187,11 @@ module BlockDisk {
 
   predicate Crash(k: Constants, s: Variables, s': Variables)
   {
-    && s.reqReadIndirectionTables == map[]
-    && s.reqReadNodes == map[]
+    && s'.reqReadIndirectionTables == map[]
+    && s'.reqReadNodes == map[]
 
-    && s.reqWriteIndirectionTables == map[]
-    && s.reqWriteNodes == map[]
+    && s'.reqWriteIndirectionTables == map[]
+    && s'.reqWriteNodes == map[]
 
     && havocMap(s.indirectionTables, s'.indirectionTables, s.reqWriteIndirectionTables)
     && havocMap(s.nodes, s'.nodes, s.reqWriteNodes)

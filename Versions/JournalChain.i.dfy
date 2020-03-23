@@ -35,13 +35,13 @@ module JournalChain {
       j_gamma: seq<JournalEntry>,
       j_delta: seq<JournalEntry>,
 
-      persistentLoc: Location,
-      frozenLoc: Option<Location>,
+      persistentLoc: Loc,
+      frozenLoc: Option<Loc>,
 
       ghost syncReqs: map<SyncReqId, SyncReqStatus>
   )
 
-  predicate Init(k: Constants, s: Variables)
+  predicate Init(k: Constants, s: Variables, loc: Loc)
   {
     && s.j1 == []
     && s.j2 == []
@@ -49,7 +49,7 @@ module JournalChain {
     && s.j_gamma == []
     && s.j_delta == []
 
-    && s.persistentLoc == Loc1
+    && s.persistentLoc == loc
     && s.frozenLoc == None
 
     && s.syncReqs == map[]

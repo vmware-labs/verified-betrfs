@@ -26,8 +26,9 @@ module Bookmarker {
 
   predicate Init(k: Constants, s: Variables)
   {
-    && TriStateMap.Init(k.tsm, s.tsm)
-    && JournalChain.Init(k.jc, s.jc)
+    exists loc ::
+      && TriStateMap.Init(k.tsm, s.tsm, loc)
+      && JournalChain.Init(k.jc, s.jc, loc)
   }
 
   predicate NextStep(k: Constants, s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
