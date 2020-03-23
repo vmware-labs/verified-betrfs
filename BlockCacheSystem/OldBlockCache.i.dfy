@@ -770,6 +770,7 @@ module BlockCache refines Transactable {
          .(inMemoryJournalFrozen := s.inMemoryJournalFrozen + s.inMemoryJournal)
          .(inMemoryJournal := [])
          .(frozenJournalPosition := s.writtenJournalLen)
+         .(isFrozen := true)
          .(syncReqs := syncReqs3to2(s.syncReqs))
   }
 
