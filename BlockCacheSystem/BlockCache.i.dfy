@@ -111,8 +111,8 @@ module BlockCache refines Transactable {
     | WriteBackIndirectionTableReqStep
     | WriteBackIndirectionTableRespStep
     | UnallocStep(ref: Reference)
-    | PageInReqStep(ref: Reference)
-    | PageInRespStep
+    | PageInNodeReqStep(ref: Reference)
+    | PageInNodeRespStep
     | PageInIndirectionTableReqStep
     | PageInIndirectionTableRespStep
     | ReceiveLocStep
@@ -181,7 +181,7 @@ module BlockCache refines Transactable {
     && ValidIndirectionTableLocation(loc)
     && dop.reqWriteIndirectionTable.indirectionTable == s.frozenIndirectionTable.value
     && s.frozenIndirectionTable.value.graph.Keys <= s.frozenIndirectionTable.value.locs.Keys
-    && s.outstandingIndirectionTableWrite.None?
+    && s.frozenIndirectionTableLoc.None?
     && !overlap(
           loc,
           s.persistentIndirectionTableLoc)
@@ -232,19 +232,19 @@ module BlockCache refines Transactable {
     && s'.persistentIndirectionTableLoc == s.persistentIndirectionTableLoc
   }
 
-  predicate PageInReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+  predicate PageInNodeReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
   {
     && dop.ReqReadNodeOp?
     && s.Ready?
     && IsAllocated(s, ref)
     && ref in s.ephemeralIndirectionTable.locs
     && ref !in s.cache
-    && s.ephemeralIndirectionTable.locs[ref] == dop.reqReadNode.loc
+    && s.ephemeralIndirectionTable.locs[ref] == dop.loc
     && OutstandingRead(ref) !in s.outstandingBlockReads.Values
     && s' == s.(outstandingBlockReads := s.outstandingBlockReads[dop.id := OutstandingRead(ref)])
   }
 
-  predicate PageInResp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate PageInNodeResp(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.RespReadNodeOp?
     && s.Ready?
@@ -265,6 +265,7 @@ module BlockCache refines Transactable {
     && s.LoadingIndirectionTable?
 
     && s.indirectionTableRead.None?
+    && dop.loc == s.indirectionTableLoc
     && s' == s.(indirectionTableRead := Some(dop.id))
   }
 
@@ -439,8 +440,8 @@ module BlockCache refines Transactable {
       case WriteBackIndirectionTableReqStep => WriteBackIndirectionTableReq(k, s, s', dop)
       case WriteBackIndirectionTableRespStep => WriteBackIndirectionTableResp(k, s, s', dop)
       case UnallocStep(ref) => Unalloc(k, s, s', dop, ref)
-      case PageInReqStep(ref) => PageInReq(k, s, s', dop, ref)
-      case PageInRespStep => PageInResp(k, s, s', dop)
+      case PageInNodeReqStep(ref) => PageInNodeReq(k, s, s', dop, ref)
+      case PageInNodeRespStep => PageInNodeResp(k, s, s', dop)
       case PageInIndirectionTableReqStep => PageInIndirectionTableReq(k, s, s', dop)
       case PageInIndirectionTableRespStep => PageInIndirectionTableResp(k, s, s', dop)
       case ReceiveLocStep => ReceiveLoc(k, s, s', dop)
@@ -689,9 +690,9 @@ module BlockCache refines Transactable {
     }
   }
 
-  lemma PageInReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
+  lemma PageInNodeReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, ref: Reference)
     requires Inv(k, s)
-    requires PageInReq(k, s, s', dop, ref)
+    requires PageInNodeReq(k, s, s', dop, ref)
     ensures Inv(k, s')
   {
     if (s'.Ready?) {
@@ -699,9 +700,9 @@ module BlockCache refines Transactable {
     }
   }
 
-  lemma PageInRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  lemma PageInNodeRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp)
     requires Inv(k, s)
-    requires PageInResp(k, s, s', dop)
+    requires PageInNodeResp(k, s, s', dop)
     ensures Inv(k, s')
   {
     if (s'.Ready?) {
@@ -770,8 +771,8 @@ module BlockCache refines Transactable {
       case WriteBackIndirectionTableReqStep => WriteBackIndirectionTableReqStepPreservesInv(k, s, s', dop);
       case WriteBackIndirectionTableRespStep => WriteBackIndirectionTableRespStepPreservesInv(k, s, s', dop);
       case UnallocStep(ref) => UnallocStepPreservesInv(k, s, s', dop, ref);
-      case PageInReqStep(ref) => PageInReqStepPreservesInv(k, s, s', dop, ref);
-      case PageInRespStep => PageInRespStepPreservesInv(k, s, s', dop);
+      case PageInNodeReqStep(ref) => PageInNodeReqStepPreservesInv(k, s, s', dop, ref);
+      case PageInNodeRespStep => PageInNodeRespStepPreservesInv(k, s, s', dop);
       case PageInIndirectionTableReqStep => PageInIndirectionTableReqStepPreservesInv(k, s, s', dop);
       case PageInIndirectionTableRespStep => PageInIndirectionTableRespStepPreservesInv(k, s, s', dop);
       case ReceiveLocStep => ReceiveLocStepPreservesInv(k, s, s', dop);

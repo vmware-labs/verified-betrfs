@@ -24,15 +24,12 @@ module BlockDisk {
 
   type ReqId = uint64
 
-  datatype ReqReadIndirectionTable = ReqReadIndirectionTable(loc: Location)
-  datatype ReqReadNode = ReqReadNode(loc: Location)
-
   datatype ReqWriteIndirectionTable = ReqWriteIndirectionTable(loc: Location, indirectionTable: IndirectionTable)
   datatype ReqWriteNode = ReqWriteNode(loc: Location, node: Node)
 
   datatype DiskOp =
-    | ReqReadIndirectionTableOp(id: ReqId, reqReadIndirectionTable: ReqReadIndirectionTable)
-    | ReqReadNodeOp(id: ReqId, reqReadNode: ReqReadNode)
+    | ReqReadIndirectionTableOp(id: ReqId, loc: Location)
+    | ReqReadNodeOp(id: ReqId, loc: Location)
 
     | ReqWriteIndirectionTableOp(id: ReqId, reqWriteIndirectionTable: ReqWriteIndirectionTable)
     | ReqWriteNodeOp(id: ReqId, reqWriteNode: ReqWriteNode)
@@ -47,8 +44,8 @@ module BlockDisk {
 
   datatype Constants = Constants()
   datatype Variables = Variables(
-    reqReadIndirectionTables: map<ReqId, ReqReadIndirectionTable>,
-    reqReadNodes: map<ReqId, ReqReadNode>,
+    reqReadIndirectionTables: map<ReqId, Location>,
+    reqReadNodes: map<ReqId, Location>,
 
     reqWriteIndirectionTables: map<ReqId, Location>,
     reqWriteNodes: map<ReqId, Location>,
@@ -73,14 +70,14 @@ module BlockDisk {
   {
     && dop.ReqReadIndirectionTableOp?
     && dop.id !in s.reqReadIndirectionTables
-    && s' == s.(reqReadIndirectionTables := s.reqReadIndirectionTables[dop.id := dop.reqReadIndirectionTable])
+    && s' == s.(reqReadIndirectionTables := s.reqReadIndirectionTables[dop.id := dop.loc])
   }
 
   predicate RecvReadNode(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.ReqReadNodeOp?
     && dop.id !in s.reqReadNodes
-    && s' == s.(reqReadNodes := s.reqReadNodes[dop.id := dop.reqReadNode])
+    && s' == s.(reqReadNodes := s.reqReadNodes[dop.id := dop.loc])
   }
 
   ///////// RecvWrite
@@ -117,9 +114,9 @@ module BlockDisk {
   {
     && dop.RespReadIndirectionTableOp?
     && dop.id in s.reqReadIndirectionTables
-    && var req := s.reqReadIndirectionTables[dop.id];
+    && var loc := s.reqReadIndirectionTables[dop.id];
     && (dop.indirectionTable.Some? ==>
-      dop.indirectionTable == ImapLookupOption(s.indirectionTables, req.loc))
+      dop.indirectionTable == ImapLookupOption(s.indirectionTables, loc))
     && s' == s.(reqReadIndirectionTables := MapRemove1(s.reqReadIndirectionTables, dop.id))
   }
 
@@ -127,9 +124,9 @@ module BlockDisk {
   {
     && dop.RespReadNodeOp?
     && dop.id in s.reqReadNodes
-    && var req := s.reqReadNodes[dop.id];
+    && var loc := s.reqReadNodes[dop.id];
     && (dop.node.Some? ==>
-      dop.node == ImapLookupOption(s.nodes, req.loc))
+      dop.node == ImapLookupOption(s.nodes, loc))
     && s' == s.(reqReadNodes := MapRemove1(s.reqReadNodes, dop.id))
   }
 
