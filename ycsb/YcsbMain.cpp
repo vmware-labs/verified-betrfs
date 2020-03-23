@@ -7,6 +7,7 @@
 #include "core_workload.h"
 #include "ycsbwrappers.h"
 #include "leakfinder.h"
+#include "MallocAccounting.h"
 
 #include "hdrhist.hpp"
 
@@ -89,7 +90,8 @@ void ycsbLoad(DB db, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
         if (std::chrono::duration_cast<std::chrono::milliseconds>(
             clock_op_completed - clock_last_report).count() > report_interval_ms) {
 
-            cerr << db.name << " (completed " << i << " ops)" << endl;
+            cout << db.name << " (completed " << i << " ops)" << endl;
+            malloc_accounting_status();
             auto report_completed = chrono::steady_clock::now();
             clock_last_report = report_completed;
         }
@@ -153,6 +155,25 @@ void ycsbRun(
     auto clock_start = chrono::steady_clock::now();
     auto clock_prev = clock_start;
     auto clock_last_sync = clock_start;
+    int next_sync_ms = sync_interval_ms;
+    int display_interval_ms = 10000;
+    int next_display_ms = display_interval_ms;
+
+#define HACK_EVICT_PERIODIC 0
+#if HACK_EVICT_PERIODIC
+// An experiment that demonstrated that the heap was filling with small
+// junk ("heap Kessler syndrome"?): by evicting periodically, we freed
+// most of the small junk and kept the heap waste down. TODO okay to clean up.
+    int evict_interval_ms = 100000;
+    int next_evict_ms = evict_interval_ms;
+#endif // HACK_EVICT_PERIODIC
+
+#define HACK_PROBE_PERIODIC 1
+#if HACK_PROBE_PERIODIC
+// An experiment to periodically study how the kv allocations are distributed
+    int probe_interval_ms = 50000;
+    int next_probe_ms = probe_interval_ms;
+#endif // HACK_PROBE_PERIODIC
 
     for (int i = 0; i < num_ops; ++i) {
         auto next_operation = workload.NextOperation();
@@ -184,9 +205,33 @@ void ycsbRun(
             clock_op_completed - clock_prev).count();
         latency_hist[next_operation]->add_value(duration);
 
-        if (std::chrono::duration_cast<std::chrono::milliseconds>(
-            clock_op_completed - clock_last_sync).count() > sync_interval_ms) {
+        int elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            clock_op_completed - clock_start).count();
 
+#if HACK_EVICT_PERIODIC
+        if (elapsed_ms >= next_evict_ms) {
+            printf("evict.");
+            db.sync();
+            db.evictEverything();
+            next_evict_ms += evict_interval_ms;
+        }
+#endif // HACK_EVICT_PERIODIC
+#if HACK_PROBE_PERIODIC
+        if (elapsed_ms >= next_probe_ms) {
+            printf("probe.");
+            db.CountAmassAllocations();
+            next_probe_ms += probe_interval_ms;
+        }
+#endif // HACK_PROBE_PERIODIC
+
+        if (elapsed_ms >= next_display_ms) {
+            malloc_accounting_display("periodic");
+            printf("elapsed %d next %d int %d\n",
+                elapsed_ms, next_display_ms, display_interval_ms);
+            next_display_ms += display_interval_ms;
+        }
+
+        if (elapsed_ms >= next_sync_ms) {
             db.sync();
 
             /*
@@ -199,7 +244,8 @@ void ycsbRun(
             */
             auto sync_completed = chrono::steady_clock::now();
 
-            cerr << db.name << " [op] sync (completed " << i << " ops)" << endl;
+            cout << db.name << " [op] sync (completed " << i << " ops)" << endl;
+            malloc_accounting_status();
 
             #ifdef _YCSB_VERIBETRFS
             #ifdef LOG_QUERY_STATS
@@ -216,6 +262,9 @@ void ycsbRun(
 
             clock_last_sync = sync_completed;
             clock_prev = sync_completed;
+            next_sync_ms += sync_interval_ms;
+
+            fflush(stdout);
         } else {
             clock_prev = clock_op_completed;
         }
@@ -278,6 +327,10 @@ public:
 
     inline void evictEverything() {
         app.EvictEverything();
+    }
+
+    inline void CountAmassAllocations() {
+        app.CountAmassAllocations();
     }
 };
 
@@ -353,6 +406,10 @@ public:
     inline void evictEverything() {
         asm volatile ("nop");
     }
+
+    inline void CountAmassAllocations() {
+        asm volatile ("nop");
+    }
 };
 
 const string NopFacade::name = string("nop");
@@ -368,6 +425,7 @@ void ycsbLoadAndRun(
 
     ycsbLoad(db, workload, record_count, verbose);
     ycsbRun(db, workload, num_ops, sync_interval_ms, verbose);
+    malloc_accounting_display("after experiment before teardown");
 }
 
 int main(int argc, char* argv[]) {
@@ -382,7 +440,7 @@ int main(int argc, char* argv[]) {
 //    for (int i=0; i<15; i++) {
 //      leakfinder_mark(1);
 //    }
-    leakfinder_report(0);
+//    leakfinder_report(0);
 
     std::string workload_filename(argv[1]);
     std::string base_directory(argv[2]);

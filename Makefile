@@ -350,6 +350,7 @@ build/YcsbMain.o: ycsb/YcsbMain.cpp
 			-Winline -std=c++17 $(O3FLAG) \
 			-D_YCSB_VERIBETRFS \
 			$(POUND_DEFINES) \
+			$(MALLOC_ACCOUNTING_DEFINE) \
 			$(DBG_SYMBOLS_FLAG) \
 			$(GPROF_FLAGS) \
 			$^

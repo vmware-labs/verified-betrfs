@@ -561,6 +561,10 @@ module MutableMap {
       }
     }
 
+    method wtf()
+    {
+    }
+
     method SimpleIterStart() returns (it' : SimpleIterator)
     requires Inv()
     ensures it' == MutableMapModel.SimpleIterStart(I())

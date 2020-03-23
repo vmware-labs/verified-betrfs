@@ -1,0 +1,451 @@
+http://euccas.github.io/blog/20170827/cpu-profiling-tools-on-linux.html
+
+prof
+------------------------------------------------------------------------------
+AAargh.
+So I captured a trace with Linux Perf. I rebuilt with -g so I could have symbols in the trace.
+'perf report' seems to be able to see the symbols, but its UI is ... poor.
+So I tried hotspot https://github.com/KDAB/hotspot#on-debianubuntu, which has a nice UI,
+but can't seem to find my Elf file. I tried it via AppImage, so I'm wondering if the problem
+is that AppImage can't see out to find my perf.data file.
+So I tried strace on hotspot, but it can't see past some boundary used by AppImage; probably a
+chroot-y thing.
+Fine, I'll build hotspot from source and use that.
+Hmm, it needs Qt>=5.10, and my ubuntu has 5.9.5.
+No problem, I'll download the Qt installer. But wait, it requires you to LOG INTO A Qt ACCOUNT.
+What the heck? Open $ource? Ugh. I give up. Gonna go try to find another profiler.
+
+Okay. Turns out hotspot is getting symbols just fine; we're getting lost because we're not seeing
+the libc stuff. How about getting at them?
+
+apt install libc6-dbg
+https://github.com/KDAB/hotspot/issues/128
+... and we also didn't have symbols in YcsbMain.cpp, I think, due to Makefile.
+
+rm -rf /tmp/data ; mkdir /tmp/data; perf record -g build/VeribetrfsYcsb ycsb/workload-profile.spec /tmp/data/ --veribetrkv
+~/appimage/hotspot-v1.2.0-x86_64.AppImage --debugPaths /usr/lib/debug
+
+http://www.brendangregg.com/perf.html
+rm -rf /tmp/data ; mkdir /tmp/data; perf record -g --call-graph dwarf build/VeribetrfsYcsb ycsb/workload-profile.spec /tmp/data/ --veribetrkv
+
+YYYAAAY! --call-graph dwarf was the answer!
+
+rm -rf /tmp/data ; mkdir /tmp/data; build/VeribetrfsYcsb ycsb/workload-profile.spec /tmp/data/ --veribetrkv
+After load phase,
+perf record -g --call-graph dwarf -p 14148 sleep 10
+
+Bottom-up flame:
+====================
+1.86% Bucket refcounts
+2.8% refcount
+4.8 + 1 +1+2 = 8.8% release_shared, ~shared_ptr, ::shared_ptr
+1.55% shared pointer deletion?
+
+3.3+13.8+2.5+1.4 = 21% in malloc, free
+2% PartialFlush
+6.5% malloc_consolidate
+
+Top-down flame:
+====================
+16% ?? -- aargh symbols
+7% Bucket assignment
+5% deleting SuccResult calls Realloc!?
+5% deleting KVLists
+2.7% flush
+4% top-level free !?
+12.6% top-level malloc !?
+4% rehashing something
+
+Sure wish I understood why ??
+Yeah. YcsbMain had no symbols. Change makefile to build .os and then link into executables!
+
+gprof
+------------------------------------------------------------------------------
+Need -pg on link line as well as all compile lines, I guess.
+gmon.out isn't emitted until exit() is called gracefully.
+Ugh, 'gprof' barfs a pile of ugly text output and that's it. The only gui is
+gprof2dot. Shudder.
+
+callgrind/kcachegrind
+------------------------------------------------------------------------------
+sudo apt install valgrind kcachegrind
+valgrind --tool=callgrind build/VeribetrfsYcsb ycsb/workload-profile.spec /tmp/data/ --veribetrkv
+Oh yuck, it's not a sampling profiler, so it dramatically distorts runtime. :v(
+
+
+==============================================================================
+Travis' leak study
+==============================================================================
+./tools/run-veri-config-experiment.py workload=a device=disk ram=50gb config-8mb MaxCacheSizeUint64=512
+
+> note that script only works on rob's machine on my user account
+> because it hardcodes the mapping from device=disk to paths that only make sense there
+> you should also probably note that the script builds Bundle.cpp, modifies it, and then builds the exe
+
+> i also tried removing the subsequence-sharing optimizingin DafnyRuntime.h
+> this helped, but mem usage was still at 6gb or so
+> you can check out the branch ' dont-copy-for-subseq'
+> if you want to see that
+> also the branch is named wrong
+> it should be copy-for-subseq
+> because it does more copies
+
+sudo apt install cgroup-tools
+tools/create-cgroups.sh
+tools/setup-clear-os-page-cache-binary.sh
+
+./tools/run-veri-config-experiment.py workload=a device=disk ram=4gb config-8mb MaxCacheSizeUint64=512
+./tools/run-veri-config-experiment.py workload=a device=disk ram=6gb config-8mb MaxCacheSizeUint64=512
+  -- eventually killed by ulimit (cgroups?) After swapping laptop to pieces. 14m real 5m user 3m sys
+
+./tools/run-veri-config-experiment.py workload=a device=disk ram=3gb config-8mb MaxCacheSizeUint64=256
+Added heaptrack.
+
+Proposed experiment: at op #3,000,000:
+- count up how much stuff Dafny thinks vbfs has allocated.
+- count up how much /proc/stat thinks vbfs has allocated
+- count up how much malloc thinks vbfs has allocated
+Then sync/evictEverything, and produce the same report.
+
+rm -rf /tmp/data; mkdir /tmp/data
+bash
+ulimit -m 4000000
+build/VeribetrfsYcsb ycsb/workload-profile.spec /tmp/data/ --veribetrkv > exp/x-20m
+
+make build/VeribetrfsYcsb
+
+After 17m, we blew through ulimit m=4000000
+OS says we have used 3.27e9 bytes,
+malloc counts 2.71e9 bytes -- maintaining the 20% probably-fragmentation
+overhead. Willing to believe that.
+
+At the point of the crash, 88% of the memory is allocated as 150-byte
+seq<unsigned char> (15,989,114 allocations).
+The Node count has grown to 350, maintaining a ratio of ~45k records per node.
+(That's right for a 150-byte value plus about 25 more bytes -- the key?)
+
+The next 6% (176MB) are 1198 seq<Message> arrays, these must be the containers
+holding all the inserts. That's 11 bytes per allocated value; plausible.
+
+The next 5% (141MB) are 1198 seq<unsigned char>, 9 bytes per allocated value. I
+guess these are the packed byte arrays that the messages point into.
+
+And now we've accounted for 99% of the allocated memory. Doesn't smell leaky.
+So the gaps are in two places:
+
+1. There's a 20% gap between what we've received from malloc and what we get
+billed by the OS in the /proc heap. I'm guessing malloc fragmentation. It's
+conceivable that we could choose a tuned allocator. We could also just discount
+our cache constants by 20% (use 425 blocks instead of 512) for now.
+
+2. There's a 20% (727MB) gap between what we see in the /proc/maps [heap]
+and the point where the ulimit of 4e9 fired. I don't have a hypothesis about
+this.
+
+Next ideas:
+- drop ulimit to 1GB, to make the experiment 4m long
+- cat /proc/maps for easier postmortem.
+
+
+rm -rf /tmp/data; mkdir /tmp/data
+bash
+ulimit -m 1000000
+time build/VeribetrfsYcsb ycsb/workload-profile.spec /tmp/data/ --veribetrkv > exp/x-20m-u1gb
+Well that's pretty freakin' weird. it happily blew past 1.2g rss in top.
+I'll just run the original experiment again.
+
+next -m4000000 try died at 2963599360, which is a 34% overhead.
+
+heap was 2938056704, every page in /proc/maps was 2962866176,
+a 23MB (a 1% offset). So THAT ain't it.
+
+Let's try ulimit -v?
+2962866176
+
+Okay, -v hit pretty hard at 970825728.
+And with 2gb, at 1975689216. (1999806464 with 23MB overhead!)
+
+
+Next experiment: run MaxCacheSize down to 400 (by manually editing Bundle.cpp).
+Run again with -v 4000000, and expect the proc size to stay below 3.75gb
+(400/512*4*1.2).
+
+9.5 minutes got through 4.8M ops, so this is at least a 40-minute experiment.
+(Maybe longer since the tree is growing a bit.)
+
+And so it crashed in 15 minutes. 
+
+Travis saw stabilization on an intended-4GB config at around 7GB,
+and we want to see some cache stabilization. So we decided to set
+MaxCacheSizeUint64 = 200 and run to stable memory consumption.
+exp/x-20m-uv4gb-200count
+
+Okay, it was consistently dying at 15m30s *real* time. Because that's about
+1000s; I was running out of the 1024-file-handle ulimit. Because my profiler
+was opening /proc/self/maps and not closing it.
+
+Summary of what we learned.
+The problem we set out to solve is that our actual memory consumption would
+greatly exceed our predicted size (e.g. 8MB * MaxCacheSize), causing the
+program to swap, creating orders of magnitude penalty on query performance.
+
+[malloc-exp/heap-to-malloc.png]
+We discovered that, during the growth phase (0-400s in the figure), we see
+a pretty consistent 1.2x overhead on malloc. The interesting observation
+is that, once the we hit cache pressure and start evicting blocks, the
+malloc behavior changes dramatically, converging on a 2.34x overhead.
+Apparently our memory freeing patterns change once we start evicting.
+
+The good news is that there does seem to be a kinda-stable constant there.
+So the proposed actions:
+* We can solve the swapping problem by discounting the memory by around 2.4x.
+* It may be worth looking at the allocation-size distribution. If it's super
+modal, maybe we can tune the allocator.
+* It may be worth understanding whether rocks is paying a similar price.
+Perhaps Jon's malloc investigator can be made to work there.
+
+
+Okay, we've learned something!
+I used the mmap pool to separate big (>1MB) allocations from little.
+The problem was that the heap that grew during the warmup phase never
+got cleaned up, and stayed sprayed out, so it hurt RSSz as well as VMSz.
+
+So the next experiment was to try evicting everything every so often (100s),
+thinking that maybe we can zero out that heap before it gets too big.
+[malloc-exp/evictions-truncated-heapmallocplot.png]
+And viola! the heap basically stops growing at the first evict-everything!
+The overall memory usage is about 1.9GB, which is about 1.6GB
+(expected, 200 blocks * 8MB) times the 20% malloc overhead. Liveable!
+
+Because mmap-pool is enabled, the paged-in blocks show up on the graph (in
+orange) -- so you can see that as we recover from the first eviction, the
+malloc line jumps right back up to its trendline, but now it's backed by a
+vertical blast of orange block page-ins (of the top of the tree) replacing the
+original red stuff.
+
+I'm trying the same experiment now with mmap pool disabled to see if it's
+actually necessary.
+
+I should also try varying the period between the evictions.
+
+Now this definitely slowed things down overall, because the inflection
+point doesn't happen until about 570s, which is about 100s later.
+
+Hmm, maybe there's a less-destructive way to accomplish this.
+We could mark blocks by how they were built, and if they're built out of
+little allocations, replace them with a new block (marshall/unmarshall?)
+with equivalent semantics but with a clean allocation representation.
+The idea would be that eventually all the startup-phase cruft would get
+cleaned out, reopening lots of contiguous memory.
+
+So here's a cute little experiment: First evcition at 25s, then 50s intervals
+thereafter.
+[malloc-exp/evictions-nommap-25s50s-heapmallocplot.png]
+We made room for 25s worth of inserts with the eviction, reused that memory
+during [25-50s], then had to grow the heap more during [50-75s].
+
+This suggests that one strategy would be to hold the first eviction until
+the inflection point -- that is, do a full eviction at the first point we
+have to evict a single block. That'll reset the heap from the small-objects
+phase. After that, if the workload isn't phasic, we may not even need to
+do anything else!
+
+Okay, so I tried to simulate that strategy with another experiment.  Here, I
+did the first eviction at 450s, then 200s intervals.  Look at 450s on the
+graph: we empty most of memory (blue line drops near zero), but when we page
+the blocks back in (blue line climbs), the orange line (os-map-total) climbs,
+too, about the same amount -- apparently even though we emptied most of memory,
+the allocator still had to go buy fresh pages to host big 8MB blocks.
+
+That indicates that what was left in memory was enough and well-enough
+fragmented that it managed to keep all the holes small.  So the
+periodic-eviction works in part because it's recycling those small holes, using
+them for more small allocation demands.
+
+Note that the 1.5GB gap between blue and orange is essentially permanently
+lost, just as it was when we didn't do the eviction at all. And so the overall
+memory demands converge to >3.4GB: the 1.9GB we need in the previous successful
+run, plus the 1.5GB we "broke".
+
+So here's a run with MaxCacheSize=400, evicting everything every 100s.
+That's 3.2GB of live data; 3.2*1.25=4GB. ulimit -v 4000000.
+[malloc-exp/evictions-nommap-100s100s-cache400blocks-heapmallocplot.png]
+It successfully completes 20m operations, which I guess is a first for us?
+--      throughput      duration(ns)    operations      ops/s
+veribetrkv      throughput      2799068554254   20000000        7145.23
+Even after 20m ops the memory profile hasn't yet converged, but it indeed
+is below the forecast 4GB.
+
+
+tools/run-veri-config-experiment.py workload=b device=disk ram=4gb config-8mb > malloc-exp/cgroups-veri
+tools/run-veri-config-experiment.py workloab device=disk ram=4gb rocks > malloc-exp/cgroups-rocks
+
+
+Okay, some actual legit cgroups-enforced results, on workloadb (95% read):
+  --	throughput	duration(ns)	operations	ops/s
+  rocksdb	throughput	100483121524	5000000	49759.6
+  veribetrkv	throughput	493813475855	5000000	10125.3
+So in this example we're 5X behind.  That's a lot better than 100X behind,
+though! And we have all of the following limitations:
+
+- my abusive evict-everything-every-100s policy
+- my malloc thingy interposing on every allocation (because that's the same
+  branch where my eviction policy is)
+- we're still not exploiting the full cache; after 5M ops, veri only got to
+  1.7GB. So we're not getting as much benefit from the cache as rocks is.
+  Maybe I should run for longer.
+
+So we blew through memory. But looking at the malloc scopes, we have about
+10M bytes allocated per Node, and that number stays pretty stable for the
+short life of that experiment. 343*10M = 3.4GB, so we're not way off. In
+fact, we predicted about a 25% cost at the fringe (although I forget the
+reasoning), and 10M = 8M * 1.25. So maybe we just need to discount the Node
+count a bit more.
+
+[malloc-exp/wprofile-amass-discount]
+Nodes=300, with tree->kvlist repacking
+200 should have worked (using about 2GB), but it just blew right on past.
+Bytes/node climbed enthusiastically once the cache filled. Trying again with 50.
+
+[malloc-exp/wprofile-amass-discount-50]
+Okay, well, that did stabilize, with 600MB in [byte], 0.9GB in large
+allocations, and 1.2GB of OS. (Quite a lot of malloc still; now in the large
+region?)
+This suggests we can probably push up to at least 150 nodes.
+Will that stabilize nicely?
+
+[malloc-exp/wprofile-amass-discount-150]
+Okay, so 150 blows out.
+[malloc-exp/wprofile-amass-discount-100]
+Okay, so 100 fits.
+Things we know, from the runs that complete:
+- before the cache fills, the byte[]:Node ratio is a plausible 8-8MB
+- after the cache fills, the ratio climbs up to (14, 24) before settling in.
+  Ouch!
+- The byte[]s explain about 0.7-1.0 of the malloced space.
+- At the end of discount-100, that ratio is 76%. The next 23% is
+  explicit-seq<byte>. Where does that come from?
+I think that's really the burning question.
+-- a bunch are 512-byte allocations from ycsb
+-- and then, after 2.4Mops, we see page-in events.
+-- and then two 7k allocations from the parser
+
+[malloc-exp/wprofile-amass-discount-100-timeseries.png]
+Discovery: Amassing doesn't work, because the amassed objects seem to get
+hung-onto by a thread. In the middle graph, note we have 100 Nodes in
+this experiment. In steady state, once we start page-in at 250s, there are
+also 100 faulted-in large (8M-ish) blocks. But then we have some 600
+"amass"ed blocks: 6-ish per Node.
+So, hypothesis: the data getting inserted gets amassed. The amassed blocks
+get pushed down the tree, data spread out across the leaves. Leaves get
+evicted. Some of the amassed data lands in a frontier Node, and the rest
+gets evicted. But the frontier nodes are enough to keep that amassed allocation
+around for a long time. The amassed data was a single bucket when it started,
+destined for a single Node at the second level of the tree. But it's
+spread across ~8 nodes at the third level, which is where the frontier of
+a 50-node tree lands. If our tree got deeper, the amassed nodes would hang
+on by even smaller threads, and we'd see a 64:1 ratio, I bet!
+
+I'm not entirely sure why the pagein blocks don't have the same behavior.
+Wouldn't they get pushed down the tree? I guess pageins for tree-top Nodes
+are never stranded (because treetop nodes are evicted), and pageins for
+evicted nodes are GCd, because they can only be referenced by Nodes below,
+which in general are also evicted.
+
+
+[malloc-exp/wprofile-amassparent-100-timeseries.png]
+Next idea: amass on the way down the tree.
+First variant because I'm lazy (and maybe it'll improve perf): only amass
+the parent bucket. Idea is that children will eventually get freed; we fix
+the problem where a parent hangs onto one stray allocation even after most
+of the messages have been pushed below. Children are evicted, ancestors are
+not. On the other hand, this may fail if *siblings* hang on to those apron
+strings.
+Yeah, we're already at 2X amass vs Node. Well, actually that would be
+fine if they're smaller (1MB) allocations. Hmm. I guess I need
+amass-bytes/Node? Overheads are staying pretty tight, which is good. Oh,
+but they don't suck until page-in time anyway.
+Didn't really work; overall allocations are still pretty high.
+
+[malloc-exp/wprofile-amassflush-100-timeseries.png]
+Okay, so let's amass both parent and children on flush. This may still
+not work, since the root still has an 8MB allocation that hangs around until
+flushed to each child -- but that's only a single Node.
+
+
+Okay, one totally reasonable possibility:
+With the current strategy, replacing a bucket at a time, the worst case
+is that each node is paged-in (8MB); perhaps
+the paged-in seq is never deallocated because of refs to keys as pivots.
+Then each bucket gets reassembled with amass. This would explain a 2x
+factor - it would explain amass not dropping off once page-in starts.
+(I mean, it eventually does, but not apparenttly as an effect of page-in.)
+But that's not the whole story.
+
+Okay, so it would be NICE to keep track of all the amass allocations and
+then check in later and look at the sptr ref counts. But I fought gdb for
+a couple hours trying to look into the shared pointers. The _M_ptr technique
+I used once doesn't seem to be in play; we're now using different
+header (/usr/include/c++/v1/memory). I used clang++ -E to ensure I was
+looking at the right guts, and a sptr should have a __cntrl_.__shared_count
+field, but for some reason gdb can't see it.
+The use_count() method is available, but if I'm going to do this at the
+source level (instead of the debugger level), I'm gonna have to use
+weak refs, too. Blearggh.
+
+
+Next question is: are we really sure that the 'amass' allocation microscope
+is finding the allocations we think it is? Andrea suggested walking through
+the underlying sptrs and adding up all of their usage as viewed from inside
+C++.
+
+
+[malloc-exp/wprofile-amass-countpivots-timeseries.png]
+Okay, we're amassing all the children on the way out of flush (yay), and we're
+amassing in Split, and we're CopyKey-ing pivot keys.
+We also added a special hack to label amass allocations very precisely.
+Finally, we see most of what we want: the reachable-underlying count eventually converges
+to amass live allocs, and the overall malloc is 0.8GB, what we'd hope.
+
+Some mysteries survive:
+(a) Why isn't live amass allocs exactly equal to underlying alloc count? (graph 6)
+(b) What are we counting in graph 5? pkvs? I thought my counting code didn't touch those.
+  ...maybe they're being accessed by way of pivot keys, now that we're counting those.
+(c) OS/mmap ratio is still creeping up (graph 2). Maybe we should still use a big-pool policy?
+
+And open questions:
+(d) Do we really need to amass splits? flushes? Maybe the pivots were the ony
+  thing causing the real trouble.
+
+[malloc-exp/wprofile-amass-nosplit-timeseries.png]
+Tried turning off amass during split, to see if it matters (open question d). Doesn't seem to.
+
+[malloc-exp/wprofile-amass-countpkv-timeseries.png]
+Chasing down the pkvs. (split still disabled, which reduces fidelity, but doesn't seem to be
+a big factor.) Taught sampleNode to walk the pkvs, and now underlying_sum.bytes (graph 5)
+correctly
+split is back on (for high fidelity counting), and I'm now chasing down the pkvs
+as well, to try to address mystery (a).
+Conclusions: the underlying_sum.bytes curve (graph 5) now counts up the pkvs,
+so it includes everything, and pretty much looks like the malloc_total. So the places in the
+previous graph where underlying.bytes exceeded amass were likely places where the counter
+managed to cross into pkv-space and count up those allocations. Weird that it didn't count all of
+them, but I think we're going to not worry about that graph anymore.
+
+Observations on mystery a: the 'amass live alloc count' (orange line) is definitely *only* stuff
+allocated in AmassKvl (KVList.i).
+One crazy possibility: the root pivots don't come from there. But that's like, 8 allocations.
+We're undercounting 100.
+Amass happens at tree_to_kvl, flush, and split.
+And why, if we're not reaching 100 allocations, aren't there lots of bytes associated with the
+"missing" count? Are there small amass-ments that are being selectively reachable by some
+non-Node path!?
+[malloc-exp/wprofile-amass-countpkv-head]
+So here's the same file truncated to ~340s, where the two have diverged pretty well.
+As we'd expect, a single node (the root) is type 'tree'; the rest are kvl.
+Underlying counts 283 (674MB).
+in_amass is 378 (669MB).
+
+[malloc-exp/wprofile-amass-parent-pivot]
+Only parent amass & pivot copy-key in place; child amass and split amass disabled.
+Oh yeah, that's a disaster. Wish I had my ulimit on.

@@ -235,8 +235,9 @@ module KVListPartialFlush {
       var child := children[childrenIdx];
       if parentIdx == |parent.keys| as uint64 {
         if childIdx == |child.keys| as uint64 {
+          var newChildBucket := Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]);
           var bucket := new MutBucket.InitWithWeight(
-            Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]),
+            newChildBucket,
             childrenMutBuckets[childrenIdx].Weight + bucketStartWeightSlack - weightSlack);
           bucketStartWeightSlack := weightSlack;
           childrenIdx := childrenIdx + 1;
@@ -297,6 +298,7 @@ module KVListPartialFlush {
 //assert partialFlushIterate(parent, children, pivots, parentIdx as int, childrenIdx as int, childIdx as int, acc, Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]), Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]), weightSlack as int) == partialFlush(parent, children, pivots);
               }
             } else {
+              // XXX here's another Kvl allocation
               var bucket := new MutBucket.InitWithWeight(
                 Kvl(cur_keys[..cur_idx], cur_messages[..cur_idx]),
                 childrenMutBuckets[childrenIdx].Weight + bucketStartWeightSlack - weightSlack);
@@ -380,10 +382,21 @@ module KVListPartialFlush {
       }
     }
 
+    var bi:uint64 := 0;
+    var amassedAcc := [];
+    while (bi < |acc| as uint64) {
+      var origKvl := acc[bi].GetKvl();
+      var amassedKvl := AmassKvl(origKvl);
+      var newAcc := new MutBucket(amassedKvl);
+      amassedAcc := amassedAcc + [newAcc];  // quadratic ftw
+      bi := bi + 1;
+    }
+
     newChildren := acc;
-    newParent := new MutBucket(
-      Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx])
-    );
+//    newChildren := amassedAcc;
+//    var newParentKvl := Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]);
+    var newParentKvl := AmassKvl(Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]));
+    newParent := new MutBucket(newParentKvl);
   }
 
   /*method MutBucketPartialFlush(parent: MutBucket, children: seq<MutBucket>, pivots: seq<Key>)

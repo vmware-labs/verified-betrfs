@@ -11,6 +11,7 @@ include "QueryModel.i.dfy"
 include "SyncModel.i.dfy"
 include "Mkfs.i.dfy"
 include "../ByteBlockCacheSystem/ByteBetreeBlockCacheSystem_Refines_ThreeStateVersionedMap.i.dfy"
+include "AllocationReport.i.dfy"
 //
 // Implements the application-API-handler obligations laid out by Main.s.dfy. TODO rename in a way that emphasizes that this is a module-refinement of the abstract Main that satisfies its obligations.
 //
@@ -38,6 +39,7 @@ module MainHandlers refines Main {
   import ADM = ByteBetreeBlockCacheSystem
 
   import System_Ref = ByteBetreeBlockCacheSystem_Refines_ThreeStateVersionedMap
+  import AllocationReport
 
   type Constants = SI.ImplConstants
   type Variables = SI.ImplVariables
@@ -110,6 +112,36 @@ module MainHandlers refines Main {
     print "\nAfter\n";
     acc := s.DebugAccumulate();
     DebugAccumulator.Display(acc, 0);
+    assume false;
+  }
+
+  // jonh hack UNVERIFIED DEBUG ONLY
+  method handleCountAmassAllocations(k: Constants, hs: HeapState, io: DiskIOHandler)
+  {
+    AllocationReport.start();
+    var s := hs.s;
+
+    var cache := s.cache.cache;
+    var iter := cache.SimpleIterStart();
+    var output := cache.SimpleIterOutput(iter);
+    while (!output.Done?) {
+      var node := output.value;
+
+      AllocationReport.sampleNode(0, node);
+      /*
+      var bi:uint64 := 0;
+      while (bi < |node.buckets| as uint64) {
+        var bucket := node.buckets[bi];
+        AllocationReport.sampleBucket(0, bucket);
+        bi := bi + 1;
+      }
+      */
+
+      iter := cache.SimpleIterInc(iter);
+      output := cache.SimpleIterOutput(iter);
+    }
+
+    AllocationReport.stop();
     assume false;
   }
 

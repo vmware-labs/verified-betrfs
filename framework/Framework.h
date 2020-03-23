@@ -4,6 +4,7 @@
 #include "MallocAccounting.h"
 
 #include <map>
+#include <unordered_map>
 #include <cstring>
 
 namespace Maps_Compile {
@@ -203,6 +204,26 @@ namespace NativeBenchmarking_Compile {
   public:
     static void start(DafnySequence<char> dafnyName);
     static void end(DafnySequence<char> dafnyName);
+  };
+}
+
+namespace MallocAccounting_Compile {
+  class __default {
+  public:
+    static void set_amass_mode(bool b);
+  };
+}
+
+namespace NodeImpl_Compile {
+class Node;
+}
+
+namespace AllocationReport_Compile {
+  class __default {
+  public:
+    static void start();
+    static void sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node);
+    static void stop();
   };
 }
 
