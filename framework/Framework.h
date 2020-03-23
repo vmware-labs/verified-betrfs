@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DafnyRuntime.h"
+#include "MallocAccounting.h"
 
 #include <map>
 #include <cstring>
