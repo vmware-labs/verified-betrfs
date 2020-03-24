@@ -325,13 +325,6 @@ module MarshallingImpl {
     v := VKeyArray(keys);
   }
 
-  method packedStringArrayToVal(psa: PSA.Psa)
-    returns (v: V)
-    requires PSA.WF(psa)
-  {
-    v := VTuple([VUint32Array(psa.offsets), VByteArray(psa.data)]);
-  }
-  
   lemma KeyInPivotsIsNonempty(pivots: seq<Key>)
   requires Pivots.WFPivots(pivots)
   requires |pivots| > 0

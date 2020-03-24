@@ -37,10 +37,28 @@ module Marshalling {
 
   /////// Grammar
 
+  function method PSAGrammar() : G
+  ensures ValidGrammar(PSAGrammar())
+  {
+    GTuple([
+      GUint32Array, // offsets
+      GbyteArray,   // string bytes
+    ])
+  }
+
+  function method PackedKVGrammar() : G
+  ensures ValidGrammar(PackedKVGrammar())
+  {
+    GTuple([
+      PSAGrammar(),  // keys
+      PSAGrammar(),  // values
+    ])
+  }
+
   function method BucketGrammar() : G
   ensures ValidGrammar(BucketGrammar())
   {
-    GPackedKV
+    PackedKVGrammar()
   }
 
   function method PivotNodeGrammar() : G
