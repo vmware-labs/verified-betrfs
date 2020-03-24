@@ -1,12 +1,13 @@
 
 // module LinearMaybe {
   type maybe<A>
+  // andrea: I don't like has as a name, I can't quite say it right
   predicate has<A>(m:maybe<A>)
   function read<A>(m:maybe<A>):A
   function method peek<A>(shared m:maybe<A>):(shared a:A)
       requires has(m)
       ensures a == read(m)
-  function method take<A>(linear m:maybe<A>):(linear a:A)
+  function method unwrap<A>(linear m:maybe<A>):(linear a:A)
       requires has(m)
       ensures a == read(m)
   function method give<A>(linear a:A):(linear m:maybe<A>)

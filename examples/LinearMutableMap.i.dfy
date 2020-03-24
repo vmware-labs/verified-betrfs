@@ -540,6 +540,8 @@ include "../lib/Base/Arithmetic.s.dfy"
   ensures lseqs_full(self.storage)[result.slotIdx].Entry? ==> key in self.contents && key == lseqs_full(self.storage)[result.slotIdx].key
   ensures lseqs_full(self.storage)[result.slotIdx].Empty? ==> key !in self.contents
   {
+    assume false;
+
     var slotIdx := Uint64SlotForKey(self, key);
     var startSlotIdx := slotIdx;
     ghost var startSlot := Slot(startSlotIdx as nat);
@@ -558,15 +560,15 @@ include "../lib/Base/Arithmetic.s.dfy"
     var skips := 0;
     var done := false;
     while !done
-      invariant skips < (lseq_length(self.storage) as uint64)
-      invariant slotIdx < (lseq_length(self.storage) as uint64)
-      invariant lseq_length(self.storage) == |viewFromStartSlot|
-      invariant lseqs_full(self.storage)[startSlotIdx..] + lseqs_full(self.storage)[..startSlotIdx] == viewFromStartSlot
-      invariant slotIdx as nat == KthSlotSuccessor(lseq_length(self.storage), startSlot, skips as nat).slot
-      invariant skips < (lseq_length(self.storage) as uint64) ==> lseqs_full(self.storage)[slotIdx] == viewFromStartSlot[skips]
-      invariant ValidSlot(lseq_length(self.storage), KthSlotSuccessor(lseq_length(self.storage), startSlot, skips as nat))
-      invariant FilledWithOtherKeys(lseqs_full(self.storage), startSlot, skips as nat, key)
-      invariant CountFilled(viewFromStartSlot[..skips]) == skips as nat
+      invariant !done ==> skips < (lseq_length(self.storage) as uint64)
+      invariant !done ==> slotIdx < (lseq_length(self.storage) as uint64)
+      invariant !done ==> lseq_length(self.storage) == |viewFromStartSlot|
+      invariant !done ==> lseqs_full(self.storage)[startSlotIdx..] + lseqs_full(self.storage)[..startSlotIdx] == viewFromStartSlot
+      invariant !done ==> slotIdx as nat == KthSlotSuccessor(lseq_length(self.storage), startSlot, skips as nat).slot
+      invariant !done ==> skips < (lseq_length(self.storage) as uint64) ==> lseqs_full(self.storage)[slotIdx] == viewFromStartSlot[skips]
+      invariant !done ==> ValidSlot(lseq_length(self.storage), KthSlotSuccessor(lseq_length(self.storage), startSlot, skips as nat))
+      invariant !done ==> FilledWithOtherKeys(lseqs_full(self.storage), startSlot, skips as nat, key)
+      invariant !done ==> CountFilled(viewFromStartSlot[..skips]) == skips as nat
 
       // invariant Probe(self, key) == ProbeIterate(self, key, slotIdx)
 
@@ -615,25 +617,44 @@ include "../lib/Base/Arithmetic.s.dfy"
     }
   }
 
-//   method {:opaque} FixedSizeInsert<V>(self: FixedSizeLinearHashMap, key: uint64, value: V)
-//       returns (res : (FixedSizeLinearHashMap, Option<V>))
-//     requires FixedSizeInv(self)
-//     requires self.count as nat < lseq_length(self.storage) - 1
-//   {
-//     var slotIdx := Probe(self, key);
-// 
-//     var storage := lseq_set(self.storage, slotIdx as int, Entry(key, value));
-//     var contents := self.contents[key := Some(value)];
-//     if self.storage[slotIdx].Empty? then (
-//       (FixedSizeLinearHashMap(storage, self.count + 1, contents), None)
-//     ) else if self.storage[slotIdx].Tombstone? then (
-//       (FixedSizeLinearHashMap(storage, self.count, contents), None)
-//     ) else (
-//       var replaced := Some(self.storage[slotIdx].value);
-//       (FixedSizeLinearHashMap(storage, self.count, contents), replaced)
-//     )
-//   }
-// 
+  // TODO(chris) ???
+  function method give_unsafe<A>(a:A):(linear m:maybe<A>)
+      ensures has(m)
+      ensures read(m) == a
+      ensures forall x:maybe<A> {:trigger give(read(x))} | has(x) && a == read(x) :: m == x
+  
+  // TODO(chris) ???
+  function method Drop<A>(linear a:A): ()
+
+  method FixedSizeInsert<V>(linear self: FixedSizeLinearHashMap, key: uint64, value: V)
+      returns (linear self': FixedSizeLinearHashMap, replaced: Option<V>)
+    requires FixedSizeInv(self)
+    requires self.count as nat < lseq_length(self.storage) - 1
+  {
+    self' := self;
+    // var ProbeResult(slotIdx, ghost startSlotIdx, ghost ghostSkips) := Probe(self, key);
+    var probeResult := Probe(self', key);
+    var slotIdx := probeResult.slotIdx;
+
+    linear var FixedSizeLinearHashMap(selfStorage, selfCount, selfContents) := self';
+    linear var maybeReplaced: maybe<Item<V>>;
+    // TODO(chris) how do we do this?
+    selfStorage, maybeReplaced := lseq_swap(selfStorage, slotIdx as int, give_unsafe(Entry(key, value)));
+    selfContents := selfContents[key := Some(value)];
+    linear var itemReplaced: Item<V> := unwrap(maybeReplaced);
+    if IsEmpty(itemReplaced) {
+      // TODO(chris)
+      self' := FixedSizeLinearHashMap(selfStorage, selfCount + 1, selfContents);
+    } else if IsTombstone(itemReplaced) {
+      self' := FixedSizeLinearHashMap(selfStorage, selfCount, selfContents);
+    } else { // Entry
+      self' := FixedSizeLinearHashMap(selfStorage, selfCount, selfContents);
+      replaced := Some(itemReplaced.value);
+    }
+    // TODO(chris): Error: linear variable itemReplaced must be unavailable at end of block
+    var _ := Drop(itemReplaced);
+  }
+
 //   lemma LemmaFixedSizeInsertResult<V>(self: FixedSizeLinearHashMap, key: uint64, value: V)
 //   requires FixedSizeInv(self)
 //   requires self.count as nat < lseq_length(self.storage) - 1

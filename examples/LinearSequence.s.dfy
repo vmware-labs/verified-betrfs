@@ -46,7 +46,7 @@ import opened Sequences
       linear var x1:maybe<A> := empty();
       linear var x2:maybe<A>;
       s2, x2 := lseq_swap(s1, i, x1);
-      a := take(x2);
+      a := unwrap(x2);
   }
 
   method lseq_set<A>(linear s1:lseq<A>, i:nat, linear a:A) returns(linear s2:lseq<A>)
