@@ -298,22 +298,37 @@ module Sequences {
     else FlattenShape(DropLast(seqs)) + [|Last(seqs)|]
   }
 
+  lemma FlattenShapeAdditive<A>(seqs1: seq<seq<A>>, seqs2: seq<seq<A>>)
+    ensures FlattenShape(seqs1 + seqs2) == FlattenShape(seqs1) + FlattenShape(seqs2)
+  {
+  }
+  
   function {:opaque} FlattenLength(shape: seq<nat>) : nat
+    ensures |shape| == 0 ==> FlattenLength(shape) == 0
   {
     if |shape| == 0 then 0
     else FlattenLength(DropLast(shape)) + Last(shape)
   }
-  
-  lemma FlattenLengthMonotonic(shape: seq<nat>, prefix: nat)
-    requires prefix < |shape|
-    ensures FlattenLength(shape[..prefix]) <= FlattenLength(shape)
+
+
+  lemma FlattenLengthAdditive(shape1: seq<nat>, shape2: seq<nat>)
+    ensures FlattenLength(shape1 + shape2) == FlattenLength(shape1) + FlattenLength(shape2)
   {
-    reveal_FlattenLength();
-    if prefix == |shape|-1 {
+    if |shape2| == 0 {
+      assert shape1 + shape2 == shape1;
     } else {
-      FlattenLengthMonotonic(DropLast(shape), prefix);
-      assert DropLast(shape)[..prefix] == shape[..prefix];
+      reveal_FlattenLength();
+      assert shape1 + shape2 == (shape1 + DropLast(shape2)) + [Last(shape2)];
     }
+  }
+  
+  lemma FlattenLengthSubSeq(shape: seq<nat>, from: nat, to: nat)
+    requires from <= to <= |shape|
+    ensures FlattenLength(shape[from..to]) <= FlattenLength(shape)
+  {
+    assert shape == shape[..from] + shape[from..to] + shape[to..];
+    FlattenLengthAdditive(shape[..from] + shape[from..to], shape[to..]);
+    FlattenLengthAdditive(shape[..from], shape[from..to]);
   }
 
   function {:opaque} Flatten<A>(seqs: seq<seq<A>>) : seq<A>
@@ -403,7 +418,7 @@ module Sequences {
     reveal_FlattenLength();
     if il < jl-1 {
       assert shape[..il] == shape[..il+1][..il];
-      FlattenLengthMonotonic(shape[..jl], il+1);
+      FlattenLengthSubSeq(shape[..jl], 0, il+1);
       assert shape[..jl][..il+1] == shape[..il+1];
     } else if il == jl - 1 {
       assert shape[..il] == shape[..il+1][..il];
@@ -462,4 +477,5 @@ module Sequences {
       }
     }
   }
+
 }
