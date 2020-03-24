@@ -166,7 +166,6 @@ module KVList {
   decreases |kvl.keys|
   {
     reveal_IMap();
-    reveal_WFBucket();
     if |kvl.keys| == 0 {
     } else {
       ghost var km' := Kvl(DropLast(kvl.keys), DropLast(kvl.messages));
@@ -1347,7 +1346,6 @@ module KVList {
   {
     reveal_IMap();
     reveal_IsStrictlySorted();
-    reveal_WFBucket();
     assume false;
 
     if bucket.b.Keys == {} then (
