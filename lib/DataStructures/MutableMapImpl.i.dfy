@@ -21,10 +21,19 @@ module MutableMap {
   // TODO having a separate FixedSizeHashMap isn't really necessary;
   // things might be clearer if we just combine them.
 
+  // FixedSizeHashMap is an internal data structure; the ResizingHashMap
+  // (below) uses it in its implementation. FixedSizeHashMap is a
+  // linear-probing hash map that uses tombstones to keep probes valid in the
+  // presence of deletion.
   class FixedSizeHashMap<V> {
     var Storage: array<Item<V>>;
     var Count: uint64;
 
+    // If a key appears in contents but maps to None, that's equivalent to the
+    // key being absent from contents.Keys. This redundant notation is easier
+    // to reason about at this layer (where we're fiddling with tombstones).
+    // The ResizingHashMap interface, which is the real user-visible API, hides
+    // it.
     ghost var Contents: map<uint64, Option<V>>;
     ghost var Repr: set<object>;
 
