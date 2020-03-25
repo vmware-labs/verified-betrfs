@@ -177,6 +177,8 @@ def parse(filename):
         line.set_label("pagein count")
         a2twin.legend(loc="lower left")
 
+    plotAmass(axes[2])
+    plotNodes(axes[2])
     try: plotAmass(axes[2])
     except: pass
     try: plotNodes(axes[2])
