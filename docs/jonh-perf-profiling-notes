@@ -449,3 +449,18 @@ in_amass is 378 (669MB).
 [malloc-exp/wprofile-amass-parent-pivot]
 Only parent amass & pivot copy-key in place; child amass and split amass disabled.
 Oh yeah, that's a disaster. Wish I had my ulimit on.
+
+------------------------------------------------------------------------------
+Okay, amass is in. Let's run some experiments.
+tools/run-veri-config-experiment.py workload=b device=disk ram=4gb config-8mb > malloc-exp/cgroups-veri-wkb.data
+-- happy as a clam because it doesn't insert much.
+tools/run-veri-config-experiment.py workload=a device=disk ram=4gb config-8mb > malloc-exp/cgroups-veri-wka.data
+... killed even with cache size 343 (malloc overhead 1.5)
+time build/VeribetrfsYcsb ycsb/workloada-onefield.spec /tmp/data/ --veribetrkv > malloc-exp/manual-wka-100.data
+100 blocks settles in at about 1.7GB, or 17MB per node. At 4GB, we can afford about 240 such nodes,
+so MALLOC_OVERHEAD should be set to 2.2.
+...that makes nodes=232, which crashes.
+200 nodes seemed to squeak by (4.2GB after 3500), so let's try that. overhead=2.56. Erk. This sucks.
+need to turn malloc stuff back on.
+
+So what the heck. I guess I need to turn malloc back on so I can understand why the overhead is 2.56 now.
