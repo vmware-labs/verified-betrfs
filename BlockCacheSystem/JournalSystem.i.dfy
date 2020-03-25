@@ -1198,6 +1198,103 @@ module JournalCacheSystem {
   }
 
   ////////////////////////////////////////////////////
+  ////////////////////// ReceiveFrozenLoc
+  //////////////////////
+
+  lemma ReceiveFrozenLocStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(k, s)
+    requires M.ReceiveFrozenLoc(k.machine, s.machine, s'.machine, dop, vop)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
+    ensures DeltaJournal(s') == DeltaJournal(s)
+  {
+  }
+
+  lemma ReceiveFrozenLocStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(k, s)
+    requires M.ReceiveFrozenLoc(k.machine, s.machine, s'.machine, dop, vop)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    ReceiveFrozenLocStepPreservesJournals(k, s, s', dop, vop);
+    if s'.disk.reqWriteSuperblock2.Some? {
+      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+    }
+  }
+
+  ////////////////////////////////////////////////////
+  ////////////////////// Advance
+  //////////////////////
+
+  lemma AdvanceStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(k, s)
+    requires M.Advance(k.machine, s.machine, s'.machine, dop, vop)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures EphemeralJournal(s) == []
+    ensures EphemeralJournal(s') == []
+    ensures GammaJournal(s') == GammaJournal(s)
+    ensures DeltaJournal(s') == DeltaJournal(s) + JournalEntriesForUIOp(vop.uiop)
+  {
+  }
+
+  lemma AdvanceStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(k, s)
+    requires M.Advance(k.machine, s.machine, s'.machine, dop, vop)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    AdvanceStepPreservesJournals(k, s, s', dop, vop);
+    if s'.disk.reqWriteSuperblock2.Some? {
+      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+    }
+  }
+
+  ////////////////////////////////////////////////////
+  ////////////////////// Replay
+  //////////////////////
+
+  lemma ReplayStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(k, s)
+    requires M.Replay(k.machine, s.machine, s'.machine, dop, vop)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures WFPersistentJournal(s')
+    ensures WFFrozenJournal(s')
+    ensures WFEphemeralJournal(s')
+    ensures WFGammaJournal(s')
+    ensures PersistentJournal(s') == PersistentJournal(s)
+    ensures FrozenJournal(s') == FrozenJournal(s)
+    ensures JournalEntriesForUIOp(vop.uiop) + EphemeralJournal(s') == EphemeralJournal(s)
+    ensures GammaJournal(s') == GammaJournal(s)
+    ensures DeltaJournal(s') == DeltaJournal(s)
+  {
+  }
+
+  lemma ReplayStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(k, s)
+    requires M.Replay(k.machine, s.machine, s'.machine, dop, vop)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    ReplayStepPreservesJournals(k, s, s', dop, vop);
+    if s'.disk.reqWriteSuperblock2.Some? {
+      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+    }
+  }
+
+  ////////////////////////////////////////////////////
   ////////////////////// PushSync
   //////////////////////
 
@@ -1319,6 +1416,9 @@ module JournalCacheSystem {
       case FinishLoadingSuperblockPhaseStep => FinishLoadingSuperblockPhaseStepPreservesInv(k, s, s', dop, vop);
       case FinishLoadingOtherPhaseStep => FinishLoadingOtherPhaseStepPreservesInv(k, s, s', dop, vop);
       case FreezeStep => FreezeStepPreservesInv(k, s, s', dop, vop);
+      case ReceiveFrozenLocStep => ReceiveFrozenLocStepPreservesInv(k, s, s', dop, vop);
+      case AdvanceStep => AdvanceStepPreservesInv(k, s, s', dop, vop);
+      case ReplayStep => ReplayStepPreservesInv(k, s, s', dop, vop);
       case PushSyncReqStep(id) => PushSyncReqStepPreservesInv(k, s, s', dop, vop, id);
       case PopSyncReqStep(id) => PopSyncReqStepPreservesInv(k, s, s', dop, vop, id);
       case NoOpStep => { NoOpStepPreservesInv(k, s, s', dop, vop); }

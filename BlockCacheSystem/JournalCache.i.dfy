@@ -171,12 +171,17 @@ module JournalCache {
     | FinishLoadingSuperblockPhaseStep
     | FinishLoadingOtherPhaseStep
     | FreezeStep
+    | ReceiveFrozenLocStep
+    | AdvanceStep
+    | ReplayStep
     | PushSyncReqStep(id: uint64)
     | PopSyncReqStep(id: uint64)
     | NoOpStep
 
   predicate WriteBackJournalReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, jr: JournalRange)
   {
+    && vop.JournalInternalOp?
+
     && s.Ready?
 
     && var j :=
@@ -232,6 +237,8 @@ module JournalCache {
 
   predicate WriteBackJournalResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
+    && vop.JournalInternalOp?
+
     && s.Ready?
     && dop.RespWriteJournalOp?
     && dop.id in s.outstandingJournalWrites
@@ -241,6 +248,8 @@ module JournalCache {
 
   predicate WriteBackSuperblockReq_AdvanceLog(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
+    && vop.JournalInternalOp?
+
     && s.Ready?
     && dop.ReqWriteSuperblockOp?
     && s.commitStatus.CommitNone?
@@ -263,6 +272,8 @@ module JournalCache {
 
   predicate WriteBackSuperblockReq_AdvanceLocation(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
+    && vop.JournalInternalOp?
+
     && s.Ready?
     && dop.ReqWriteSuperblockOp?
     && s.frozenLoc.Some?
@@ -297,6 +308,7 @@ module JournalCache {
     && s.newSuperblock.Some?
     && s'.Ready?
     && (s.commitStatus.CommitAdvanceLocation? ==>
+      && vop.CleanUpOp?
       && s' == s
           .(superblockWrite := None)
           .(superblock := s.newSuperblock.value)
@@ -310,6 +322,7 @@ module JournalCache {
           .(commitStatus := CommitNone)
     )
     && (s.commitStatus.CommitAdvanceLog? ==>
+      && vop.JournalInternalOp?
       && s' == s
           .(superblockWrite := None)
           .(superblock := s.newSuperblock.value)
@@ -322,6 +335,8 @@ module JournalCache {
 
   predicate PageInJournalReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
   {
+    && vop.JournalInternalOp?
+
     && dop.ReqReadJournalOp?
     && s.LoadingOther?
     && (which == 0 || which == 1)
@@ -347,6 +362,8 @@ module JournalCache {
 
   predicate PageInJournalResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
   {
+    && vop.JournalInternalOp?
+
     && dop.RespReadJournalOp?
     && s.LoadingOther?
     && dop.journal.Some?
@@ -367,6 +384,8 @@ module JournalCache {
 
   predicate PageInSuperblockReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
   {
+    && vop.JournalInternalOp?
+
     && dop.ReqReadSuperblockOp?
     && s.LoadingSuperblock?
     && dop.which == which
@@ -385,6 +404,8 @@ module JournalCache {
 
   predicate PageInSuperblockResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
   {
+    && vop.JournalInternalOp?
+
     && dop.RespReadSuperblockOp?
     && s.LoadingSuperblock?
     && var sup := (
@@ -411,6 +432,8 @@ module JournalCache {
 
   predicate FinishLoadingSuperblockPhase(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
+    && vop.SendPersistentLocOp?
+
     && dop.NoDiskOp?
     && s.LoadingSuperblock?
     // TODO account for case where one superblock or the other is corrupt
@@ -425,6 +448,8 @@ module JournalCache {
         None, None,
         None, None,
         s.syncReqs)
+    && vop.loc == 
+        SelectSuperblock(s.superblock1.value, s.superblock2.value).indirectionTableLoc
     /*)
     && (s.superblock1.SuperblockCorruption? ==>
       s' == LoadingOther(
@@ -446,6 +471,8 @@ module JournalCache {
 
   predicate FinishLoadingOtherPhase(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
+    && vop.JournalInternalOp?
+
     && dop.NoDiskOp?
     && s.LoadingOther?
     && s.superblock.journalStart < NumJournalBlocks()
@@ -480,6 +507,8 @@ module JournalCache {
 
   predicate Freeze(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
+    && vop.FreezeOp?
+
     && s.Ready?
     && dop.NoDiskOp?
     && s.superblockWrite.None?
@@ -493,8 +522,43 @@ module JournalCache {
          .(isFrozen := true)
   }
 
+  predicate ReceiveFrozenLoc(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  {
+    && vop.SendFrozenLocOp?
+    && dop.NoDiskOp?
+    && s.Ready?
+    && s.isFrozen
+    && !s.frozenLoc.Some?
+    && ValidIndirectionTableLocation(vop.loc)
+    && s' == s.(frozenLoc := Some(vop.loc))
+  }
+
+  predicate Advance(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  {
+    && vop.AdvanceOp?
+    && !vop.replay
+    && dop.NoDiskOp?
+    && var new_je := JournalEntriesForUIOp(vop.uiop);
+    && s.Ready?
+    && s.replayJournal == []
+    && s' == s.(inMemoryJournal := s.inMemoryJournal + new_je)
+  }
+
+  predicate Replay(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  {
+    && vop.AdvanceOp?
+    && vop.replay
+    && dop.NoDiskOp?
+    && var replayed_je := JournalEntriesForUIOp(vop.uiop);
+    && s.Ready?
+    && s' == s.(replayJournal := s'.replayJournal)
+    && s.replayJournal == replayed_je + s'.replayJournal
+  }
+
   predicate PushSyncReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
   {
+    && vop.JournalInternalOp?
+
     && dop.NoDiskOp?
     && id !in s.syncReqs
     && s' == s.(syncReqs := s.syncReqs[id := State3])
@@ -502,6 +566,8 @@ module JournalCache {
 
   predicate PopSyncReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
   {
+    && vop.JournalInternalOp?
+
     && dop.NoDiskOp?
     && id in s.syncReqs
     && s.syncReqs[id] == State1
@@ -510,6 +576,8 @@ module JournalCache {
 
   predicate NoOp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
+    && vop.JournalInternalOp?
+
     && (
       || dop.NoDiskOp?
       || (
@@ -577,6 +645,9 @@ module JournalCache {
       case FinishLoadingSuperblockPhaseStep => FinishLoadingSuperblockPhase(k, s, s', dop, vop)
       case FinishLoadingOtherPhaseStep => FinishLoadingOtherPhase(k, s, s', dop, vop)
       case FreezeStep => Freeze(k, s, s', dop, vop)
+      case ReceiveFrozenLocStep => ReceiveFrozenLoc(k, s, s', dop, vop)
+      case AdvanceStep => Advance(k, s, s', dop, vop)
+      case ReplayStep => Replay(k, s, s', dop, vop)
       case PushSyncReqStep(id: uint64) => PushSyncReq(k, s, s', dop, vop, id)
       case PopSyncReqStep(id: uint64) => PopSyncReq(k, s, s', dop, vop, id)
       case NoOpStep => NoOp(k, s, s', dop, vop)
@@ -823,6 +894,36 @@ module JournalCache {
     }
   }
 
+  lemma ReceiveFrozenLocStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(k, s)
+    requires ReceiveFrozenLoc(k, s, s', dop, vop)
+    ensures Inv(k, s')
+  {
+    if (s'.Ready?) {
+      assert InvReady(k, s');
+    }
+  }
+
+  lemma AdvanceStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(k, s)
+    requires Advance(k, s, s', dop, vop)
+    ensures Inv(k, s')
+  {
+    if (s'.Ready?) {
+      assert InvReady(k, s');
+    }
+  }
+
+  lemma ReplayStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(k, s)
+    requires Replay(k, s, s', dop, vop)
+    ensures Inv(k, s')
+  {
+    if (s'.Ready?) {
+      assert InvReady(k, s');
+    }
+  }
+
   lemma PushSyncReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
     requires Inv(k, s)
     requires PushSyncReq(k, s, s', dop, vop, id)
@@ -861,6 +962,9 @@ module JournalCache {
       case FinishLoadingSuperblockPhaseStep => FinishLoadingSuperblockPhaseStepPreservesInv(k, s, s', dop, vop);
       case FinishLoadingOtherPhaseStep => FinishLoadingOtherPhaseStepPreservesInv(k, s, s', dop, vop);
       case FreezeStep => FreezeStepPreservesInv(k, s, s', dop, vop);
+      case ReceiveFrozenLocStep => ReceiveFrozenLocStepPreservesInv(k, s, s', dop, vop);
+      case AdvanceStep => AdvanceStepPreservesInv(k, s, s', dop, vop);
+      case ReplayStep => ReplayStepPreservesInv(k, s, s', dop, vop);
       case PushSyncReqStep(id) => PushSyncReqStepPreservesInv(k, s, s', dop, vop, id);
       case PopSyncReqStep(id) => PopSyncReqStepPreservesInv(k, s, s', dop, vop, id);
       case NoOpStep => { }

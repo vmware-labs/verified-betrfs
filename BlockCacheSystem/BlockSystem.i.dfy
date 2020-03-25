@@ -1260,8 +1260,33 @@ module BlockSystem {
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
-    M.FreezeStepPreservesInv(k.machine, s.machine, s'.machine, dop, vop);
     FreezeStepPreservesGraphs(k, s, s', dop, vop);
+  }
+
+  ////////////////////////////////////////////////////
+  ////////////////////// CleanUp
+  //////////////////////
+
+  lemma CleanUpStepPreservesGraphs(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(k, s)
+    requires M.CleanUp(k.machine, s.machine, s'.machine, dop, vop)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures M.Inv(k.machine, s'.machine);
+
+    ensures DiskGraphMap(k, s') == DiskGraphMap(k, s)
+    ensures FrozenGraphOpt(k, s') == None
+    ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+  {
+  }
+
+  lemma CleanUpStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(k, s)
+    requires M.CleanUp(k.machine, s.machine, s'.machine, dop, vop)
+    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+    ensures Inv(k, s')
+  {
+    M.CleanUpStepPreservesInv(k.machine, s.machine, s'.machine, dop, vop);
+    CleanUpStepPreservesGraphs(k, s, s', dop, vop);
   }
 
   ////////////////////////////////////////////////////
@@ -1318,6 +1343,7 @@ module BlockSystem {
       case ReceiveLocStep => ReceiveLocStepPreservesInv(k, s, s', dop, vop);
       case EvictStep(ref) => EvictStepPreservesInv(k, s, s', dop, vop, ref);
       case FreezeStep => FreezeStepPreservesInv(k, s, s', dop, vop);
+      case CleanUpStep => CleanUpStepPreservesInv(k, s, s', dop, vop);
       case NoOpStep => { NoOpStepPreservesInv(k, s, s', dop, vop); }
       case TransactionStep(ops) => TransactionStepPreservesInv(k, s, s', dop, vop, ops);
     }

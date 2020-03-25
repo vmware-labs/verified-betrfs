@@ -120,6 +120,7 @@ module BlockCache refines Transactable {
     | ReceiveLocStep
     | EvictStep(ref: Reference)
     | FreezeStep
+    | CleanUpStep
     | NoOpStep
     | TransactionStep(ops: seq<Op>)
 
@@ -138,6 +139,8 @@ module BlockCache refines Transactable {
 
   predicate WriteBackNodeReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
   {
+    && vop.TristateInternalOp?
+
     && dop.ReqWriteNodeOp?
     && s.Ready?
     && ref in s.cache
@@ -168,6 +171,8 @@ module BlockCache refines Transactable {
 
   predicate WriteBackNodeResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
+    && vop.TristateInternalOp?
+
     && dop.RespWriteNodeOp?
     && s.Ready?
     && dop.id in s.outstandingBlockWrites
@@ -176,6 +181,8 @@ module BlockCache refines Transactable {
 
   predicate WriteBackIndirectionTableReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
+    && vop.TristateInternalOp?
+
     && dop.ReqWriteIndirectionTableOp?
     && s.Ready?
     && s.frozenIndirectionTable.Some?
@@ -199,8 +206,12 @@ module BlockCache refines Transactable {
 
   predicate WriteBackIndirectionTableResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
-    && dop.RespWriteIndirectionTableOp?
     && s.Ready?
+
+    && vop.SendFrozenLocOp?
+    && Some(vop.loc) == s.frozenIndirectionTableLoc
+
+    && dop.RespWriteIndirectionTableOp?
     && s.outstandingIndirectionTableWrite == Some(dop.id)
     && s' == s.(outstandingIndirectionTableWrite := None)
   }
@@ -212,6 +223,8 @@ module BlockCache refines Transactable {
 
   predicate Unalloc(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
   {
+    && vop.TristateInternalOp?
+
     && dop.NoDiskOp?
     && s.Ready?
 
@@ -241,6 +254,8 @@ module BlockCache refines Transactable {
 
   predicate PageInNodeReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
   {
+    && vop.TristateInternalOp?
+
     && dop.ReqReadNodeOp?
     && s.Ready?
     && IsAllocated(s, ref)
@@ -253,6 +268,8 @@ module BlockCache refines Transactable {
 
   predicate PageInNodeResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
+    && vop.TristateInternalOp?
+
     && dop.RespReadNodeOp?
     && s.Ready?
     && dop.id in s.outstandingBlockReads
@@ -268,6 +285,8 @@ module BlockCache refines Transactable {
 
   predicate PageInIndirectionTableReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
+    && vop.TristateInternalOp?
+
     && dop.ReqReadIndirectionTableOp?
     && s.LoadingIndirectionTable?
 
@@ -278,6 +297,8 @@ module BlockCache refines Transactable {
 
   predicate PageInIndirectionTableResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
+    && vop.TristateInternalOp?
+
     && dop.RespReadIndirectionTableOp?
     && s.LoadingIndirectionTable?
     && dop.indirectionTable.Some?
@@ -313,6 +334,8 @@ module BlockCache refines Transactable {
 
   predicate Evict(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
   {
+    && vop.TristateInternalOp?
+
     && s.Ready?
     && dop.NoDiskOp?
     && ref in s.cache
@@ -327,6 +350,8 @@ module BlockCache refines Transactable {
 
   predicate Freeze(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
+    && vop.FreezeOp?
+
     && s.Ready?
     && dop.NoDiskOp?
     && s.outstandingIndirectionTableWrite.None?
@@ -335,8 +360,25 @@ module BlockCache refines Transactable {
          .(frozenIndirectionTableLoc := None)
   }
 
+  predicate CleanUp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  {
+    && vop.CleanUpOp?
+
+    && s.Ready?
+    && dop.NoDiskOp?
+    && s.outstandingIndirectionTableWrite.None?
+    && s.frozenIndirectionTableLoc.Some?
+    && s.frozenIndirectionTable.Some?
+    && s' == s.(persistentIndirectionTable := s.frozenIndirectionTable.value)
+              .(persistentIndirectionTableLoc := s.frozenIndirectionTableLoc.value)
+              .(frozenIndirectionTable := None)
+              .(frozenIndirectionTableLoc := None)
+  }
+
   predicate NoOp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
+    && vop.TristateInternalOp?
+
     && (
       || dop.NoDiskOp?
       || (
@@ -436,6 +478,8 @@ module BlockCache refines Transactable {
 
   predicate Transaction(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ops: seq<Op>)
   {
+    && vop.AdvanceOp?
+
     && dop.NoDiskOp?
     && OpTransaction(k, s, s', ops)
   }
@@ -459,6 +503,7 @@ module BlockCache refines Transactable {
       case ReceiveLocStep => ReceiveLoc(k, s, s', dop, vop)
       case EvictStep(ref) => Evict(k, s, s', dop, vop, ref)
       case FreezeStep => Freeze(k, s, s', dop, vop)
+      case CleanUpStep => CleanUp(k, s, s', dop, vop)
       case NoOpStep => NoOp(k, s, s', dop, vop)
       case TransactionStep(ops) => Transaction(k, s, s', dop, vop, ops)
     }
@@ -772,6 +817,16 @@ module BlockCache refines Transactable {
     }
   }
 
+  lemma CleanUpStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(k, s)
+    requires CleanUp(k, s, s', dop, vop)
+    ensures Inv(k, s')
+  {
+    if (s'.Ready?) {
+      assert InvReady(k, s');
+    }
+  }
+
   lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: Step)
     requires Inv(k, s)
     requires NextStep(k, s, s', dop, vop, step)
@@ -790,6 +845,7 @@ module BlockCache refines Transactable {
       case ReceiveLocStep => ReceiveLocStepPreservesInv(k, s, s', dop, vop);
       case EvictStep(ref) => EvictStepPreservesInv(k, s, s', dop, vop, ref);
       case FreezeStep => FreezeStepPreservesInv(k, s, s', dop, vop);
+      case CleanUpStep => CleanUpStepPreservesInv(k, s, s', dop, vop);
       case NoOpStep => { }
       case TransactionStep(ops) => TransactionStepPreservesInv(k, s, s', dop, vop, ops);
     }

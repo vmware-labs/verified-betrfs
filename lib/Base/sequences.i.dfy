@@ -188,7 +188,9 @@ module Sequences {
   requires 0 <= i < |a|
   ensures |concatSeq(a)| >= |a[i]|
 
-  predicate {:opaque} IsPrefix<A(==)>(a: seq<A>, b: seq<A>) {
+  predicate {:opaque} IsPrefix<A(==)>(a: seq<A>, b: seq<A>)
+  ensures IsPrefix(a, b) ==> |a| <= |b|
+  {
     && |a| <= |b|
     && a == b[..|a|]
   }
