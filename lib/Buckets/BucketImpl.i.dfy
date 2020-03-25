@@ -216,7 +216,7 @@ module BucketImpl {
       } else if (format.BFKvl?) {
         kv := kvl;
       } else {
-        var isSorted := PackedKV.ComputeIsSorted(pkv);
+        var isSorted := *; //PackedKV.ComputeIsSorted(pkv);
         if (!isSorted) {
           // TODO need to sort
           print "pkv is not sorted\n";

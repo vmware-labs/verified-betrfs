@@ -11,7 +11,8 @@ module PackedKV {
   import opened ValueMessage
   import opened BucketsLib
   import opened Options
-
+  import opened Sequences
+  
   datatype Pkv = Pkv(
       keys: PSA.Psa,
       messages: PSA.Psa)
@@ -41,21 +42,6 @@ module PackedKV {
     ValidStringLens(strs, ValueType.MaxLen() as nat)
   }
 
-  predicate WF(pkv: Pkv) {
-    && PSA.WF(pkv.keys)
-    && PSA.WF(pkv.messages)
-    && ValidStringLens(PSA.I(pkv.keys), KeyType.MaxLen() as nat)
-    && ValidStringLens(PSA.I(pkv.messages), ValueType.MaxLen() as nat)
-    && |pkv.keys.offsets| == |pkv.messages.offsets|
-  }
-
-  function IKeys(psa: PSA.Psa) : (res : seq<Key>)
-  requires PSA.WF(psa)
-  requires ValidStringLens(PSA.I(psa), KeyType.MaxLen() as nat)
-  {
-    PSA.I(psa)
-  }
-
   function method byteString_to_Message(s: seq<byte>) : Message
   requires |s| < 0x1_0000_0000
   {
@@ -67,6 +53,13 @@ module PackedKV {
       // we just do this if the byte string is invalid.
       Define(ValueType.DefaultValue())
     )
+  }
+
+  function IKeys(psa: PSA.Psa) : (res : seq<Key>)
+  requires PSA.WF(psa)
+  requires ValidStringLens(PSA.I(psa), KeyType.MaxLen() as nat)
+  {
+    PSA.I(psa)
   }
 
   function {:opaque} psaSeq_Messages(psa: PSA.Psa, i: int) : (res : seq<Message>)
@@ -85,10 +78,20 @@ module PackedKV {
     psaSeq_Messages(psa, |psa.offsets|)
   }
 
+  predicate WF(pkv: Pkv) {
+    && PSA.WF(pkv.keys)
+    && PSA.WF(pkv.messages)
+    && |pkv.keys.offsets| == |pkv.messages.offsets|
+    && ValidStringLens(PSA.I(pkv.keys), KeyType.MaxLen() as nat)
+    && ValidStringLens(PSA.I(pkv.messages), ValueType.MaxLen() as nat)
+    && IdentityMessage() !in IMessages(pkv.messages)
+  }
+
   function IMap(pkv: Pkv) : (bucket : BucketMap)
   requires WF(pkv)
   ensures WFBucketMap(bucket)
   {
+    assert IdentityMessage() !in Set(IMessages(pkv.messages));
     BucketMapOfSeq(IKeys(pkv.keys), IMessages(pkv.messages))
   }
 
@@ -208,6 +211,7 @@ module PackedKV {
   requires WF(pkv)
   requires |pkv.keys.offsets| > 0
   {
+    assert PSA.FirstElement(pkv.keys) == PSA.I(pkv.keys)[0];
     PSA.FirstElement(pkv.keys)
   }
 
@@ -215,6 +219,7 @@ module PackedKV {
   requires WF(pkv)
   requires |pkv.keys.offsets| > 0
   {
+    assert PSA.LastElement(pkv.keys) == Last(PSA.I(pkv.keys));
     PSA.LastElement(pkv.keys)
   }
 
@@ -222,6 +227,7 @@ module PackedKV {
   requires WF(pkv)
   requires 0 <= i as int < |pkv.keys.offsets|
   {
+    assert PSA.psaElement(pkv.keys, i) == PSA.I(pkv.keys)[i];
     PSA.psaElement(pkv.keys, i)
   }
 
@@ -232,15 +238,29 @@ module PackedKV {
     byteString_to_Message(PSA.psaElement(pkv.messages, i))
   }
 
+  function binarySearchPostProc(lo: nat, sub: Option<nat>) : Option<nat>
+  {
+    if sub.Some? then
+      Some(lo + sub.value)
+    else
+      None
+  }
+  
   method BinarySearchQuery(pkv: Pkv, key: Key)
   returns (msg: Option<Message>)
   requires WF(pkv)
   ensures msg == bucketBinarySearchLookup(I(pkv), key)
   {
+    ghost var keys := I(pkv).keys;
+    
     var lo: uint64 := 0;
     var hi: uint64 := |pkv.keys.offsets| as uint64;
 
+    assert keys == keys[lo..hi];
+    
     while lo < hi
+      invariant lo <= hi <= |pkv.keys.offsets| as uint64
+      invariant binarySearch(keys, key) == binarySearchPostProc(lo as nat, binarySearch(keys[lo..hi], key))
     {
       var mid: uint64 := (lo + hi) / 2;
       var c := Keyspace.cmp(key, GetKey(pkv, mid));
@@ -248,28 +268,15 @@ module PackedKV {
         msg := Some(GetMessage(pkv, mid));
         return;
       } else if (c < 0) {
+        ghost var rkeys := keys[lo..hi];
+        ghost var rmid := |rkeys| / 2;
         hi := mid;
+        assert keys[lo..hi] == rkeys[..rmid];
       } else {
         lo := mid + 1;
       }
     }
 
     msg := None;
-  }
-
-  method ComputeIsSorted(pkv: Pkv)
-  returns (b: bool)
-  {
-    assume false;
-    var i: uint64 := 1;
-    while i < |pkv.keys.offsets| as uint64
-    {
-      var c := Keyspace.cmp(GetKey(pkv, i-1), GetKey(pkv, i));
-      if c >= 0 {
-        return false;
-      }
-      i := i + 1;
-    }
-    return true;
   }
 }
