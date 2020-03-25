@@ -23,7 +23,7 @@ module Marshalling {
   import M = ValueMessage`Internal
   import Pivots = PivotsLib
   import KVList
-  import Keyspace = Lexicographic_Byte_Order
+  import Keyspace = Lexicographic_Byte_Order_Impl
   import SeqComparison
   import opened Bounds
   import LBAType
@@ -42,7 +42,7 @@ module Marshalling {
   {
     GTuple([
       GUint32Array, // offsets
-      GbyteArray,   // string bytes
+      GByteArray    // string bytes
     ])
   }
 
@@ -51,7 +51,7 @@ module Marshalling {
   {
     GTuple([
       PSAGrammar(),  // keys
-      PSAGrammar(),  // values
+      PSAGrammar()   // values
     ])
   }
 
@@ -89,14 +89,14 @@ module Marshalling {
   predicate isStrictlySortedKeySeqIterate(a: seq<Key>, i: int)
   requires 1 <= i <= |a|
   decreases |a| - i
-  ensures isStrictlySortedKeySeqIterate(a, i) <==> Keyspace.IsStrictlySorted(a[i-1..])
+  ensures isStrictlySortedKeySeqIterate(a, i) <==> Keyspace.Ord.IsStrictlySorted(a[i-1..])
   {
-    Keyspace.reveal_IsStrictlySorted();
+    Keyspace.Ord.reveal_IsStrictlySorted();
 
     if i == |a| then (
       true
     ) else (
-      if (Keyspace.lt(a[i-1], a[i])) then (
+      if (Keyspace.Ord.lt(a[i-1], a[i])) then (
         isStrictlySortedKeySeqIterate(a, i+1)
       ) else (
         false
@@ -106,9 +106,9 @@ module Marshalling {
 
 
   predicate {:opaque} isStrictlySortedKeySeq(a: seq<Key>)
-  ensures isStrictlySortedKeySeq(a) <==> Keyspace.IsStrictlySorted(a)
+  ensures isStrictlySortedKeySeq(a) <==> Keyspace.Ord.IsStrictlySorted(a)
   {
-    Keyspace.reveal_IsStrictlySorted();
+    Keyspace.Ord.reveal_IsStrictlySorted();
 
     if |a| >= 2 then (
       isStrictlySortedKeySeqIterate(a, 1)
@@ -120,7 +120,7 @@ module Marshalling {
   function valToStrictlySortedKeySeq(v: V) : (s : Option<seq<Key>>)
   requires ValidVal(v)
   requires ValInGrammar(v, GKeyArray)
-  ensures s.Some? ==> Keyspace.IsStrictlySorted(s.value)
+  ensures s.Some? ==> Keyspace.Ord.IsStrictlySorted(s.value)
   ensures s.Some? ==> |s.value| == |v.ka|
   decreases |v.ka|
   {
@@ -141,7 +141,7 @@ module Marshalling {
     if s.Some? && (|s.value| > 0 ==> |s.value[0]| != 0) then (
       if |s.value| > 0 then (
         SeqComparison.reveal_lte();
-        Keyspace.IsNotMinimum([], s.value[0]);
+        Keyspace.Ord.IsNotMinimum([], s.value[0]);
         s
       ) else (
         s

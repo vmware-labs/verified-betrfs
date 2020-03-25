@@ -15,7 +15,7 @@ module SuccImpl {
   import BookkeepingModel
   import opened StateImpl
   import opened BucketImpl
-  import opened Lexicographic_Byte_Order
+  import opened Lexicographic_Byte_Order_Impl
   import opened NodeImpl
   import BucketSuccessorLoopImpl
   import BucketSuccessorLoopModel

@@ -48,7 +48,7 @@ module MarshallingImpl {
 
   import Pivots = PivotsLib
   import MS = MapSpec
-  import Keyspace = Lexicographic_Byte_Order
+  import Keyspace = Lexicographic_Byte_Order_Impl
 
   type Reference = IMM.Reference
   type Sector = SI.Sector
@@ -310,7 +310,7 @@ module MarshallingImpl {
 
   method strictlySortedKeySeqToVal(keys: seq<Key>)
   returns (v : V)
-  requires Keyspace.IsStrictlySorted(keys)
+  requires Keyspace.Ord.IsStrictlySorted(keys)
   requires |keys| < 0x1_0000_0000_0000_0000
   ensures ValidVal(v)
   ensures ValInGrammar(v, GKeyArray)
@@ -330,7 +330,7 @@ module MarshallingImpl {
   requires |pivots| > 0
   ensures |pivots[0]| != 0;
   {
-    var e := Keyspace.SmallerElement(pivots[0]);
+    var e := Keyspace.Ord.SmallerElement(pivots[0]);
     SeqComparison.reveal_lte();
   }
 

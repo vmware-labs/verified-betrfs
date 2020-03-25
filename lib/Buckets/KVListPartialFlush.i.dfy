@@ -10,7 +10,7 @@ include "BucketImpl.i.dfy"
 
 module KVListPartialFlush {
   import opened KVList
-  import opened Lexicographic_Byte_Order
+  import opened Lexicographic_Byte_Order_Impl
   import opened ValueMessage`Internal
   import opened BucketWeights
   import opened BucketsLib
@@ -55,7 +55,7 @@ module KVListPartialFlush {
               partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, cur, append(newParent, parent.keys[parentIdx], parent.messages[parentIdx]), weightSlack)
             )
           ) else (
-            if lt(parent.keys[parentIdx], pivots[childrenIdx]) then (
+            if Ord.lt(parent.keys[parentIdx], pivots[childrenIdx]) then (
               var w := WeightKey(parent.keys[parentIdx]) + WeightMessage(parent.messages[parentIdx]);
               if w <= weightSlack then (
                 partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.messages[parentIdx]), newParent, weightSlack - w)
@@ -78,7 +78,7 @@ module KVListPartialFlush {
                 partialFlushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], child.messages[childIdx]), append(newParent, parent.keys[parentIdx], parent.messages[parentIdx]), weightSlack)
               )
             )
-          ) else if lt(child.keys[childIdx], parent.keys[parentIdx]) then (
+          ) else if Ord.lt(child.keys[childIdx], parent.keys[parentIdx]) then (
             partialFlushIterate(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], child.messages[childIdx]), newParent, weightSlack)
           ) else (
             var w := WeightKey(parent.keys[parentIdx]) + WeightMessage(parent.messages[parentIdx]);

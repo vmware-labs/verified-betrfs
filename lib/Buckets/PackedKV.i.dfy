@@ -1,12 +1,12 @@
 include "PackedStringArray.i.dfy"
-include "../Base/total_order.i.dfy"
+include "../Base/total_order_impl.i.dfy"
 include "KVList.i.dfy"
 
 module PackedKV {
   import PackedStringArray
   import KVList
   import opened NativeTypes
-  import Keyspace = Lexicographic_Byte_Order
+  import Keyspace = Lexicographic_Byte_Order_Impl
   import opened KeyType
   import opened ValueType`Internal
   import opened ValueMessage
@@ -109,7 +109,7 @@ module PackedKV {
   predicate SortedKeys(pkv: Pkv)
   requires WF(pkv)
   {
-    Keyspace.IsStrictlySorted(IKeys(pkv.keys))
+    Keyspace.Ord.IsStrictlySorted(IKeys(pkv.keys))
   }
 
   function I(pkv: Pkv) : (bucket : Bucket)

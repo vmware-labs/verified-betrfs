@@ -196,6 +196,14 @@ module BucketImpl {
       assume false;
     }
     
+    method GetPkv() returns (pkv: PackedKV.Pkv)
+    requires Inv()
+    ensures PackedKV.WF(pkv)
+    ensures PackedKV.I(pkv) == Bucket
+    {
+      assume false;
+    }
+    
     method GetKvl() returns (kv: KVList.Kvl)
     requires Inv()
     ensures KVList.WF(kv)

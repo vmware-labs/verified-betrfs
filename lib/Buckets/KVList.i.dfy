@@ -17,7 +17,7 @@ include "../Base/MallocAccounting.i.dfy"
 
 module KVList {
   import opened ValueMessage`Internal
-  import opened Lexicographic_Byte_Order
+  import opened Lexicographic_Byte_Order_Impl
   import opened Sequences
   import opened Options
   import opened Maps
@@ -34,7 +34,7 @@ module KVList {
 
   predicate WF(kvl: Kvl) {
     && |kvl.keys| == |kvl.messages|
-    && IsStrictlySorted(kvl.keys)
+    && Ord.IsStrictlySorted(kvl.keys)
     && (forall i | 0 <= i < |kvl.messages| :: kvl.messages[i] != IdentityMessage())
   }
 
@@ -127,7 +127,7 @@ module KVList {
   requires 0 <= i <= |kvl.keys|
   ensures WF(prefix(kvl, i))
   {
-    reveal_IsStrictlySorted();
+    Ord.reveal_IsStrictlySorted();
   }
 
   lemma IndexOfKey(kvl: Kvl, key: Key) returns (i : int)
@@ -154,7 +154,7 @@ module KVList {
     reveal_IMap();
     if (i == |kvl.keys| - 1) {
     } else {
-      reveal_IsStrictlySorted();
+      Ord.reveal_IsStrictlySorted();
       Imaps(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)), i);
       assert kvl.keys[|kvl.keys| - 1] != kvl.keys[i];
     }
@@ -230,7 +230,7 @@ module KVList {
           if childrenIdx == |children| - 1 then (
             flushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.messages[parentIdx]))
           ) else (
-            if lt(parent.keys[parentIdx], pivots[childrenIdx]) then (
+            if Ord.lt(parent.keys[parentIdx], pivots[childrenIdx]) then (
               flushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.messages[parentIdx]))
             ) else (
               flushIterate(parent, children, pivots, parentIdx, childrenIdx + 1, 0, acc + [cur], Kvl([], []))
@@ -244,7 +244,7 @@ module KVList {
             ) else (
               flushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], m))
             )
-          ) else if lt(child.keys[childIdx], parent.keys[parentIdx]) then (
+          ) else if Ord.lt(child.keys[childIdx], parent.keys[parentIdx]) then (
             flushIterate(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], child.messages[childIdx]))
           ) else (
             flushIterate(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.messages[parentIdx]))
@@ -277,18 +277,18 @@ module KVList {
     && ISeq(acc) == BucketListFlushPartial(I(parent), ISeq(children), pivots, childrenIdx)
     && WF(cur)
     && (childrenIdx < |children| ==> I(cur) == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx))
-    && (childrenIdx < |children| && childIdx > 0 && parentIdx < |parent.keys| ==> lt(children[childrenIdx].keys[childIdx - 1], parent.keys[parentIdx]))
-    && (childrenIdx > 0 && childrenIdx - 1 < |pivots| && parentIdx < |parent.keys| ==> lte(pivots[childrenIdx - 1], parent.keys[parentIdx]))
-    && (parentIdx > 0 && childrenIdx < |children| && childIdx < |children[childrenIdx].keys| ==> lt(parent.keys[parentIdx - 1], children[childrenIdx].keys[childIdx]))
-    && (parentIdx > 0 && childrenIdx < |pivots| ==> lt(parent.keys[parentIdx - 1], pivots[childrenIdx]))
+    && (childrenIdx < |children| && childIdx > 0 && parentIdx < |parent.keys| ==> Ord.lt(children[childrenIdx].keys[childIdx - 1], parent.keys[parentIdx]))
+    && (childrenIdx > 0 && childrenIdx - 1 < |pivots| && parentIdx < |parent.keys| ==> Ord.lte(pivots[childrenIdx - 1], parent.keys[parentIdx]))
+    && (parentIdx > 0 && childrenIdx < |children| && childIdx < |children[childrenIdx].keys| ==> Ord.lt(parent.keys[parentIdx - 1], children[childrenIdx].keys[childIdx]))
+    && (parentIdx > 0 && childrenIdx < |pivots| ==> Ord.lt(parent.keys[parentIdx - 1], pivots[childrenIdx]))
   }
 
   lemma flushIterateCurLastLt(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>,
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl)
   requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
   requires childrenIdx < |children|
-  ensures |cur.keys| > 0 && parentIdx < |parent.keys| ==> lt(cur.keys[|cur.keys| - 1], parent.keys[parentIdx])
-  ensures |cur.keys| > 0 && childIdx < |children[childrenIdx].keys| ==> lt(cur.keys[|cur.keys| - 1], children[childrenIdx].keys[childIdx])
+  ensures |cur.keys| > 0 && parentIdx < |parent.keys| ==> Ord.lt(cur.keys[|cur.keys| - 1], parent.keys[parentIdx])
+  ensures |cur.keys| > 0 && childIdx < |children[childrenIdx].keys| ==> Ord.lt(cur.keys[|cur.keys| - 1], children[childrenIdx].keys[childIdx])
   {
     reveal_IMap();
     if (|cur.keys| > 0) {
@@ -299,19 +299,19 @@ module KVList {
         var i := IndexOfKey(prefix(parent, parentIdx), lastCurKey);
         assert parent.keys[i] == lastCurKey;
         if parentIdx < |parent.keys| {
-          IsStrictlySortedImpliesLt(parent.keys, i, parentIdx);
+          Ord.IsStrictlySortedImpliesLt(parent.keys, i, parentIdx);
         }
         if childIdx < |children[childrenIdx].keys| {
-          IsStrictlySortedImpliesLte(parent.keys, i, parentIdx - 1);
+          Ord.IsStrictlySortedImpliesLte(parent.keys, i, parentIdx - 1);
         }
       } else {
         var i := IndexOfKey(prefix(children[childrenIdx], childIdx), lastCurKey);
         assert children[childrenIdx].keys[i] == lastCurKey;
         if parentIdx < |parent.keys| {
-          IsStrictlySortedImpliesLte(children[childrenIdx].keys, i, childIdx - 1);
+          Ord.IsStrictlySortedImpliesLte(children[childrenIdx].keys, i, childIdx - 1);
         }
         if childIdx < |children[childrenIdx].keys| {
-          IsStrictlySortedImpliesLt(children[childrenIdx].keys, i, childIdx);
+          Ord.IsStrictlySortedImpliesLt(children[childrenIdx].keys, i, childIdx);
         }
       }
     }
@@ -328,19 +328,19 @@ module KVList {
   {
     if parentIdx < |parent.keys| && parent.keys[parentIdx] in IMap(prefix(parent, parentIdx)) {
       var i := IndexOfKey(prefix(parent, parentIdx), parent.keys[parentIdx]);
-      IsStrictlySortedImpliesLt(parent.keys, i, parentIdx);
+      Ord.IsStrictlySortedImpliesLt(parent.keys, i, parentIdx);
     }
     if parentIdx < |parent.keys| && parent.keys[parentIdx] in IMap(prefix(children[childrenIdx], childIdx)) {
       var i := IndexOfKey(prefix(children[childrenIdx], childIdx), parent.keys[parentIdx]);
-      IsStrictlySortedImpliesLte(children[childrenIdx].keys, i, childIdx - 1);
+      Ord.IsStrictlySortedImpliesLte(children[childrenIdx].keys, i, childIdx - 1);
     }
     if childIdx < |children[childrenIdx].keys| && children[childrenIdx].keys[childIdx] in IMap(prefix(parent, parentIdx)) {
       var i := IndexOfKey(prefix(parent, parentIdx), children[childrenIdx].keys[childIdx]);
-      IsStrictlySortedImpliesLte(parent.keys, i, parentIdx - 1);
+      Ord.IsStrictlySortedImpliesLte(parent.keys, i, parentIdx - 1);
     }
     if childIdx < |children[childrenIdx].keys| && children[childrenIdx].keys[childIdx] in IMap(prefix(children[childrenIdx], childIdx)) {
       var i := IndexOfKey(prefix(children[childrenIdx], childIdx), children[childrenIdx].keys[childIdx]);
-      IsStrictlySortedImpliesLt(children[childrenIdx].keys, i, childIdx);
+      Ord.IsStrictlySortedImpliesLt(children[childrenIdx].keys, i, childIdx);
     }
   }
 
@@ -349,14 +349,14 @@ module KVList {
   requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
   requires 0 <= childrenIdx < |children|
   requires 0 <= parentIdx < |parent.keys|
-  requires childrenIdx < |pivots| ==> lt(parent.keys[parentIdx], pivots[childrenIdx])
+  requires childrenIdx < |pivots| ==> Ord.lt(parent.keys[parentIdx], pivots[childrenIdx])
   ensures WF(append(cur, parent.keys[parentIdx], parent.messages[parentIdx]))
   ensures I(append(cur, parent.keys[parentIdx], parent.messages[parentIdx]))
       == BucketListItemFlush(I(prefix(parent, parentIdx + 1)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx)
   {
     flushIterateCurLastLt(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
     flushIterateNextsNotInPrefixes(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-    StrictlySortedAugment(cur.keys, parent.keys[parentIdx]);
+    Ord.StrictlySortedAugment(cur.keys, parent.keys[parentIdx]);
     BucketListItemFlushAddParentKey(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, parent.keys[parentIdx], parent.messages[parentIdx]);
 
     P.RouteIs(pivots, parent.keys[parentIdx], childrenIdx);
@@ -383,7 +383,7 @@ module KVList {
     var child := children[childrenIdx];
     flushIterateCurLastLt(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
     flushIterateNextsNotInPrefixes(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-    StrictlySortedAugment(cur.keys, child.keys[childIdx]);
+    Ord.StrictlySortedAugment(cur.keys, child.keys[childIdx]);
     BucketListItemFlushAddChildKey(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, child.keys[childIdx], child.messages[childIdx]);
 
     assert WFBucketAt(I(children[childrenIdx]), pivots, childrenIdx);
@@ -418,7 +418,7 @@ module KVList {
     var child := children[childrenIdx];
     flushIterateCurLastLt(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
     flushIterateNextsNotInPrefixes(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-    StrictlySortedAugment(cur.keys, child.keys[childIdx]);
+    Ord.StrictlySortedAugment(cur.keys, child.keys[childIdx]);
     BucketListItemFlushAddParentAndChildKey(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, child.keys[childIdx], parent.messages[parentIdx], child.messages[childIdx]);
 
     assert WFBucketAt(I(children[childrenIdx]), pivots, childrenIdx);
@@ -442,7 +442,7 @@ module KVList {
   requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
   requires childrenIdx < |children|
   requires childIdx == |children[childrenIdx].keys|
-  requires parentIdx < |parent.keys| ==> childrenIdx < |pivots| && lte(pivots[childrenIdx], parent.keys[parentIdx])
+  requires parentIdx < |parent.keys| ==> childrenIdx < |pivots| && Ord.lte(pivots[childrenIdx], parent.keys[parentIdx])
   ensures I(cur) == BucketListItemFlush(I(parent), I(children[childrenIdx]), pivots, childrenIdx)
   {
     forall key | P.Route(pivots, key) == childrenIdx
@@ -459,9 +459,9 @@ module KVList {
           Imaps(parent, i);
           Imaps(prefix(parent, parentIdx), i);
         } else {
-          assert lt(parent.keys[i], pivots[childrenIdx]);
-          assert lte(pivots[childrenIdx], parent.keys[parentIdx]);
-          IsStrictlySortedImpliesLte(parent.keys, parentIdx, i);
+          assert Ord.lt(parent.keys[i], pivots[childrenIdx]);
+          assert Ord.lte(pivots[childrenIdx], parent.keys[parentIdx]);
+          Ord.IsStrictlySortedImpliesLte(parent.keys, parentIdx, i);
           assert false;
         }
       }
@@ -473,7 +473,7 @@ module KVList {
   lemma flushIteratepivotLteChildKey0(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>,
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl)
   requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
-  ensures childrenIdx < |pivots| && |children[childrenIdx + 1].keys| > 0 ==> lte(pivots[childrenIdx], children[childrenIdx + 1].keys[0])
+  ensures childrenIdx < |pivots| && |children[childrenIdx + 1].keys| > 0 ==> Ord.lte(pivots[childrenIdx], children[childrenIdx + 1].keys[0])
   {
     if childrenIdx < |pivots| && |children[childrenIdx + 1].keys| > 0 {
       Imaps(children[childrenIdx + 1], 0);
@@ -484,7 +484,7 @@ module KVList {
   lemma flushIterateIEmptyEqBucketListItemFlush(parent: Kvl, children: seq<Kvl>, pivots: seq<Key>,
       parentIdx: int, childrenIdx: int, childIdx: int, acc: seq<Kvl>, cur: Kvl)
   requires flushIterateInv(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur)
-  requires childrenIdx + 1 < |children| && parentIdx > 0 ==> lt(parent.keys[parentIdx - 1], pivots[childrenIdx])
+  requires childrenIdx + 1 < |children| && parentIdx > 0 ==> Ord.lt(parent.keys[parentIdx - 1], pivots[childrenIdx])
   ensures childrenIdx + 1 < |children| ==>
          I(Kvl([],[])).b
       == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx + 1], 0)), pivots, childrenIdx + 1).b
@@ -494,7 +494,7 @@ module KVList {
     ensures P.Route(pivots, key) != childrenIdx + 1
     {
       var i := IndexOfKey(prefix(parent, parentIdx), key);
-      IsStrictlySortedImpliesLte(parent.keys, i, parentIdx - 1);
+      Ord.IsStrictlySortedImpliesLte(parent.keys, i, parentIdx - 1);
     }
   }
 
@@ -513,13 +513,13 @@ module KVList {
       var child := children[childrenIdx];
 
       if parentIdx + 1 < |parent.keys| {
-        IsStrictlySortedImpliesLt(parent.keys, parentIdx, parentIdx + 1);
+        Ord.IsStrictlySortedImpliesLt(parent.keys, parentIdx, parentIdx + 1);
       }
       if childrenIdx + 1 < |pivots| {
-        IsStrictlySortedImpliesLt(pivots, childrenIdx, childrenIdx + 1);
+        Ord.IsStrictlySortedImpliesLt(pivots, childrenIdx, childrenIdx + 1);
       }
       if childIdx + 1 < |child.keys| {
-        IsStrictlySortedImpliesLt(child.keys, childIdx, childIdx + 1);
+        Ord.IsStrictlySortedImpliesLt(child.keys, childIdx, childIdx + 1);
       }
       if childIdx < |child.keys| {
         Imaps(child, childIdx);
@@ -544,7 +544,7 @@ module KVList {
             flushIterateAppendParent(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
             flushIterateRes(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.messages[parentIdx]));
           } else {
-            if lt(parent.keys[parentIdx], pivots[childrenIdx]) {
+            if Ord.lt(parent.keys[parentIdx], pivots[childrenIdx]) {
               flushIterateAppendParent(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
               flushIterateRes(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx, acc, append(cur, parent.keys[parentIdx], parent.messages[parentIdx]));
             } else {
@@ -563,7 +563,7 @@ module KVList {
               flushIterateAppendParentAndChild(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
               flushIterateRes(parent, children, pivots, parentIdx + 1, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], m));
             }
-          } else if lt(child.keys[childIdx], parent.keys[parentIdx]) {
+          } else if Ord.lt(child.keys[childIdx], parent.keys[parentIdx]) {
             flushIterateAppendChild(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
             flushIterateRes(parent, children, pivots, parentIdx, childrenIdx, childIdx + 1, acc, append(cur, child.keys[childIdx], child.messages[childIdx]));
           } else {
@@ -726,8 +726,8 @@ module KVList {
     while lo < hi
     invariant 0 <= lo as int <= |kvl.keys|
     invariant 0 <= hi as int <= |kvl.keys|
-    invariant lo > 0 ==> lt(kvl.keys[lo-1], key)
-    invariant hi as int < |kvl.keys| ==> lt(key, kvl.keys[hi])
+    invariant lo > 0 ==> Ord.lt(kvl.keys[lo-1], key)
+    invariant hi as int < |kvl.keys| ==> Ord.lt(key, kvl.keys[hi])
     decreases hi as int - lo as int
     {
       var mid: uint64 := (lo + hi) / 2;
@@ -745,8 +745,8 @@ module KVList {
 
     if (key in IMap(kvl)) {
       ghost var j := IndexOfKey(kvl, key);
-      if (lo > 0) { IsStrictlySortedImpliesLtIndices(kvl.keys, lo as int - 1, j as int); }
-      if (hi as int < |kvl.keys|) { IsStrictlySortedImpliesLtIndices(kvl.keys, j as int, hi as int); }
+      if (lo > 0) { Ord.IsStrictlySortedImpliesLtIndices(kvl.keys, lo as int - 1, j as int); }
+      if (hi as int < |kvl.keys|) { Ord.IsStrictlySortedImpliesLtIndices(kvl.keys, j as int, hi as int); }
     }
 
     m := None;
@@ -761,8 +761,8 @@ module KVList {
   requires WF(kvl)
   requires |kvl.keys| < 0x8000_0000_0000_0000
   ensures 0 <= idx as int <= |kvl.keys|
-  ensures forall i | 0 <= i < idx as int :: lt(kvl.keys[i], key)
-  ensures forall i | idx as int <= i as int < |kvl.keys| :: lte(key, kvl.keys[i])
+  ensures forall i | 0 <= i < idx as int :: Ord.lt(kvl.keys[i], key)
+  ensures forall i | idx as int <= i as int < |kvl.keys| :: Ord.lte(key, kvl.keys[i])
   {
     var lo: uint64 := 0;
     var hi: uint64 := |kvl.keys| as uint64;
@@ -770,11 +770,11 @@ module KVList {
     while lo < hi
     invariant 0 <= lo as int <= |kvl.keys|
     invariant 0 <= hi as int <= |kvl.keys|
-    invariant forall i | 0 <= i < lo as int :: lt(kvl.keys[i], key)
-    invariant forall i | hi as int <= i < |kvl.keys| :: lte(key, kvl.keys[i])
+    invariant forall i | 0 <= i < lo as int :: Ord.lt(kvl.keys[i], key)
+    invariant forall i | hi as int <= i < |kvl.keys| :: Ord.lte(key, kvl.keys[i])
     decreases hi as int - lo as int
     {
-      reveal_IsStrictlySorted();
+      Ord.reveal_IsStrictlySorted();
 
       var mid: uint64 := (lo + hi) / 2;
       var c := cmp(key, kvl.keys[mid]);
@@ -793,8 +793,8 @@ module KVList {
   requires WF(kvl)
   requires |kvl.keys| < 0x8000_0000_0000_0000
   ensures 0 <= idx as int <= |kvl.keys|
-  ensures forall i | 0 <= i < idx as int :: lte(kvl.keys[i], key)
-  ensures forall i | idx as int <= i as int < |kvl.keys| :: lt(key, kvl.keys[i])
+  ensures forall i | 0 <= i < idx as int :: Ord.lte(kvl.keys[i], key)
+  ensures forall i | idx as int <= i as int < |kvl.keys| :: Ord.lt(key, kvl.keys[i])
   {
     var lo: uint64 := 0;
     var hi: uint64 := |kvl.keys| as uint64;
@@ -802,11 +802,11 @@ module KVList {
     while lo < hi
     invariant 0 <= lo as int <= |kvl.keys|
     invariant 0 <= hi as int <= |kvl.keys|
-    invariant forall i | 0 <= i < lo as int :: lte(kvl.keys[i], key)
-    invariant forall i | hi as int <= i < |kvl.keys| :: lt(key, kvl.keys[i])
+    invariant forall i | 0 <= i < lo as int :: Ord.lte(kvl.keys[i], key)
+    invariant forall i | hi as int <= i < |kvl.keys| :: Ord.lt(key, kvl.keys[i])
     decreases hi as int - lo as int
     {
-      reveal_IsStrictlySorted();
+      Ord.reveal_IsStrictlySorted();
 
       var mid: uint64 := (lo + hi) / 2;
       var c := cmp(key, kvl.keys[mid]);
@@ -835,7 +835,7 @@ module KVList {
     var idx := IndexOfFirstKeyGte(kvl, pivot);
     left := Kvl(kvl.keys[..idx], kvl.messages[..idx]);
 
-    reveal_IsStrictlySorted();
+    Ord.reveal_IsStrictlySorted();
 
     ghost var a := IMap(left);
     ghost var b := SplitBucketLeft(I(kvl), pivot).b;
@@ -871,7 +871,7 @@ module KVList {
     var idx := IndexOfFirstKeyGte(kvl, pivot);
     right := Kvl(kvl.keys[idx..], kvl.messages[idx..]);
 
-    reveal_IsStrictlySorted();
+    Ord.reveal_IsStrictlySorted();
 
     ghost var a := IMap(right);
     ghost var b := SplitBucketRight(I(kvl), pivot).b;
@@ -1086,7 +1086,7 @@ module KVList {
   method IsWF(kvl: Kvl) returns (b: bool)
   requires |kvl.keys| < 0x1_0000_0000_0000_0000
   requires |kvl.messages| < 0x1_0000_0000_0000_0000
-  requires IsStrictlySorted(kvl.keys)
+  requires Ord.IsStrictlySorted(kvl.keys)
   requires forall i | 0 <= i < |kvl.messages| :: kvl.messages[i] != IdentityMessage()
   ensures b == WF(kvl)
   {
@@ -1096,12 +1096,12 @@ module KVList {
     }
 
     /*
-    reveal_IsStrictlySorted();
+    Ord.reveal_IsStrictlySorted();
 
     var k: uint64 := 1;
     while k < |kvl.keys| as uint64
     invariant |kvl.keys| > 0 ==> 0 <= k as int <= |kvl.keys|
-    invariant |kvl.keys| > 0 ==> forall i, j :: 0 <= i < j < k as int ==> lt(kvl.keys[i], kvl.keys[j])
+    invariant |kvl.keys| > 0 ==> forall i, j :: 0 <= i < j < k as int ==> Ord.lt(kvl.keys[i], kvl.keys[j])
     {
       var c := cmp(kvl.keys[k-1], kvl.keys[k]);
       if (c >= 0) {
@@ -1231,7 +1231,7 @@ module KVList {
       kvlWeightEq(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)));
       if Last(kvl.keys) in IMap(Kvl(DropLast(kvl.keys), DropLast(kvl.messages))) {
         var i := IndexOfKey(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)), Last(kvl.keys));
-        reveal_IsStrictlySorted();
+        Ord.reveal_IsStrictlySorted();
       }
       WeightBucketInduct(I(Kvl(DropLast(kvl.keys), DropLast(kvl.messages))), Last(kvl.keys), Last(kvl.messages));
       assert WeightKvl(kvl)
@@ -1345,15 +1345,15 @@ module KVList {
   decreases bucket.b
   {
     reveal_IMap();
-    reveal_IsStrictlySorted();
+    Ord.reveal_IsStrictlySorted();
     assume false;
 
     if bucket.b.Keys == {} then (
       Kvl([], [])
     ) else (
-      var key := maximum(bucket.b.Keys);
+      var key := Ord.maximum(bucket.b.Keys);
       var kvl1 := toKvl(B(MapRemove1(bucket.b, key)));
-      StrictlySortedAugment(kvl1.keys, key);
+      Ord.StrictlySortedAugment(kvl1.keys, key);
       Kvl(kvl1.keys + [key], kvl1.messages + [bucket.b[key]])
     )
   }
@@ -1375,15 +1375,15 @@ module KVList {
   lemma lastIsMax(kvl: Kvl)
   requires WF(kvl)
   requires |kvl.keys| > 0
-  ensures maximumOpt(I(kvl).b.Keys) == Some(Last(kvl.keys))
+  ensures Ord.maximumOpt(I(kvl).b.Keys) == Some(Last(kvl.keys))
   {
     Imaps(kvl, |kvl.keys| - 1);
     assert Last(kvl.keys) in IMap(kvl).Keys;
     forall key | key in IMap(kvl).Keys
-    ensures lte(key, Last(kvl.keys))
+    ensures Ord.lte(key, Last(kvl.keys))
     {
       var i := IndexOfKey(kvl, key);
-      reveal_IsStrictlySorted();
+      Ord.reveal_IsStrictlySorted();
     }
   }
 
@@ -1397,7 +1397,7 @@ module KVList {
     if Last(kvl.keys) in IMap(Kvl(DropLast(kvl.keys), DropLast(kvl.messages))) {
       var i := IndexOfKey(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)), Last(kvl.keys));
       assert kvl.keys[i] == Last(kvl.keys);
-      reveal_IsStrictlySorted();
+      Ord.reveal_IsStrictlySorted();
     }
   }
 
@@ -1409,14 +1409,14 @@ module KVList {
   decreases |kvl1.keys|
   {
     reveal_IMap();
-    reveal_IsStrictlySorted();
+    Ord.reveal_IsStrictlySorted();
     if |kvl1.keys| == 0 {
     } else {
       lastIsMax(kvl1);
       lastIsMax(kvl2);
       assert Some(Last(kvl1.keys))
-          == maximumOpt(IMap(kvl1).Keys)
-          == maximumOpt(IMap(kvl2).Keys)
+          == Ord.maximumOpt(IMap(kvl1).Keys)
+          == Ord.maximumOpt(IMap(kvl2).Keys)
           == Some(Last(kvl2.keys));
 
       var key := Last(kvl1.keys);
@@ -1450,8 +1450,8 @@ module KVList {
   requires WFBucket(bucket)
   ensures P.WFPivots([getMiddleKey(bucket)])
   {
-    reveal_IsStrictlySorted();
+    Ord.reveal_IsStrictlySorted();
     SeqComparison.reveal_lte();
-    IsNotMinimum([], getMiddleKey(bucket));
+    Ord.IsNotMinimum([], getMiddleKey(bucket));
   }
 }
