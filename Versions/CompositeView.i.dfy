@@ -1,13 +1,13 @@
-include "TristateMap.i.dfy"
-include "JournalChain.i.dfy"
+include "StatesViewMap.i.dfy"
+include "JournalView.i.dfy"
 
-// Combine TriStateMap and JournalChain.
+// Combine StatesView and JournalView.
 
-module Bookmarker {
-  import TriStateMap
-  import JournalChain
+module CompositeView {
+  import StatesViewMap
+  import JournalView
   import SM = MapSpec
-  import opened VersionOp
+  import opened ViewOp
   import opened Options
   import opened Journal
   import opened Sequences
@@ -15,26 +15,26 @@ module Bookmarker {
   import UI
 
   datatype Constants = Constants(
-      tsm: TriStateMap.Constants,
-      jc: JournalChain.Constants)
+      tsm: StatesViewMap.Constants,
+      jc: JournalView.Constants)
 
   datatype Variables = Variables(
-      tsm: TriStateMap.Variables,
-      jc: JournalChain.Variables)
+      tsm: StatesViewMap.Variables,
+      jc: JournalView.Variables)
 
   datatype Step = Step(vop: VOp) 
 
   predicate Init(k: Constants, s: Variables)
   {
     exists loc ::
-      && TriStateMap.Init(k.tsm, s.tsm, loc)
-      && JournalChain.Init(k.jc, s.jc, loc)
+      && StatesViewMap.Init(k.tsm, s.tsm, loc)
+      && JournalView.Init(k.jc, s.jc, loc)
   }
 
   predicate NextStep(k: Constants, s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
   {
-    && TriStateMap.Next(k.tsm, s.tsm, s'.tsm, vop)
-    && JournalChain.Next(k.jc, s.jc, s'.jc, vop)
+    && StatesViewMap.Next(k.tsm, s.tsm, s'.tsm, vop)
+    && JournalView.Next(k.jc, s.jc, s'.jc, vop)
     && VOpAgreesUIOp(vop, uiop)
   }
 
@@ -109,8 +109,8 @@ module Bookmarker {
 
   lemma Move3PreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
   requires vop.AdvanceOp?
-  requires JournalChain.Move3(k.jc, s.jc, s'.jc, vop)
-  requires TriStateMap.Advance(k.tsm, s.tsm, s'.tsm, vop)
+  requires JournalView.Move3(k.jc, s.jc, s'.jc, vop)
+  requires StatesViewMap.Advance(k.tsm, s.tsm, s'.tsm, vop)
   requires Inv(k, s)
   ensures Inv(k, s')
   {
@@ -118,8 +118,8 @@ module Bookmarker {
 
   lemma ReplayPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
   requires vop.AdvanceOp?
-  requires JournalChain.Replay(k.jc, s.jc, s'.jc, vop)
-  requires TriStateMap.Advance(k.tsm, s.tsm, s'.tsm, vop)
+  requires JournalView.Replay(k.jc, s.jc, s'.jc, vop)
+  requires StatesViewMap.Advance(k.tsm, s.tsm, s'.tsm, vop)
   requires Inv(k, s)
   ensures Inv(k, s')
   {
@@ -131,9 +131,9 @@ module Bookmarker {
   requires Inv(k, s)
   ensures Inv(k, s')
   {
-    if JournalChain.Move3(k.jc, s.jc, s'.jc, vop) {
+    if JournalView.Move3(k.jc, s.jc, s'.jc, vop) {
       Move3PreservesInv(k, s, s', vop, uiop);
-    } else if JournalChain.Replay(k.jc, s.jc, s'.jc, vop) {
+    } else if JournalView.Replay(k.jc, s.jc, s'.jc, vop) {
       ReplayPreservesInv(k, s, s', vop, uiop);
     }
   }
@@ -144,8 +144,8 @@ module Bookmarker {
   requires Inv(k, s)
   ensures Inv(k, s')
   {
-    assert JournalChain.Move2to3(k.jc, s.jc, s'.jc, vop);
-    assert TriStateMap.Freeze(k.tsm, s.tsm, s'.tsm, vop);
+    assert JournalView.Move2to3(k.jc, s.jc, s'.jc, vop);
+    assert StatesViewMap.Freeze(k.tsm, s.tsm, s'.tsm, vop);
 
     /*assert s.jc.frozenLoc != Some(s.jc.persistentLoc);
     if s.tsm.persistentLoc.Some? {
@@ -161,8 +161,8 @@ module Bookmarker {
   requires Inv(k, s)
   ensures Inv(k, s')
   {
-    var tsm_step :| TriStateMap.NextStep(k.tsm, s.tsm, s'.tsm, vop, tsm_step);
-    var jc_step :| JournalChain.NextStep(k.jc, s.jc, s'.jc, vop, jc_step);
+    var tsm_step :| StatesViewMap.NextStep(k.tsm, s.tsm, s'.tsm, vop, tsm_step);
+    var jc_step :| JournalView.NextStep(k.jc, s.jc, s'.jc, vop, jc_step);
 
     match vop {
       case SendPersistentLocOp(loc) => { }
@@ -171,22 +171,22 @@ module Bookmarker {
       }
       case CrashOp => {
         assert s1(s) == s1(s') == s2(s') == s3(s');
-        assert JournalChain.Crash(k.jc, s.jc, s'.jc, vop);
-        assert TriStateMap.Crash(k.tsm, s.tsm, s'.tsm, vop);
+        assert JournalView.Crash(k.jc, s.jc, s'.jc, vop);
+        assert StatesViewMap.Crash(k.tsm, s.tsm, s'.tsm, vop);
       }
       case FreezeOp => {
         FreezePreservesInv(k, s, s', vop, uiop);
       }
-      case TristateInternalOp => { }
+      case StatesInternalOp => { }
       case JournalInternalOp => {
         assert s.tsm == s'.tsm;
-        if JournalChain.Move1to2(k.jc, s.jc, s'.jc, vop) {
+        if JournalView.Move1to2(k.jc, s.jc, s'.jc, vop) {
           assert Inv(k, s');
         }
-        else if JournalChain.ExtendLog1(k.jc, s.jc, s'.jc, vop) {
+        else if JournalView.ExtendLog1(k.jc, s.jc, s'.jc, vop) {
           assert Inv(k, s');
         }
-        else if JournalChain.ExtendLog2(k.jc, s.jc, s'.jc, vop) {
+        else if JournalView.ExtendLog2(k.jc, s.jc, s'.jc, vop) {
           assert Inv(k, s');
         }
         else {
@@ -195,8 +195,8 @@ module Bookmarker {
       }
       case SendFrozenLocOp(loc) => { }
       case CleanUpOp => {
-        assert JournalChain.CleanUp(k.jc, s.jc, s'.jc, vop);
-        assert TriStateMap.ForgetOld(k.tsm, s.tsm, s'.tsm, vop);
+        assert JournalView.CleanUp(k.jc, s.jc, s'.jc, vop);
+        assert StatesViewMap.ForgetOld(k.tsm, s.tsm, s'.tsm, vop);
         assert Inv(k, s');
       }
       case PushSyncOp(id) => { }

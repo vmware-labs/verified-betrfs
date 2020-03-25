@@ -2,12 +2,12 @@ include "../MapSpec/UIStateMachine.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "VOp.i.dfy"
 
-abstract module TriState {
+abstract module StatesView {
   import SM : UIStateMachine
 
   import UI
   import opened Options
-  import opened VersionOp
+  import opened ViewOp
 
   datatype Constants = Constants(k: SM.Constants)
   datatype Variables = Variables(
@@ -111,7 +111,7 @@ abstract module TriState {
 
   predicate DiskChange(k: Constants, s: Variables, s': Variables, vop: VOp)
   {
-    && vop.TristateInternalOp?
+    && vop.StatesInternalOp?
 
     && DiskChangesPreservesPersistentAndFrozen(s, s')
     && s'.persistentLoc == s.persistentLoc
@@ -122,7 +122,7 @@ abstract module TriState {
 
   predicate SetFrozenLoc(k: Constants, s: Variables, s': Variables, vop: VOp)
   {
-    && vop.TristateInternalOp?
+    && vop.StatesInternalOp?
 
     && s'.disk == s.disk 
     && s'.persistentLoc == s.persistentLoc
@@ -156,7 +156,7 @@ abstract module TriState {
 
   predicate Stutter(k: Constants, s: Variables, s': Variables, vop: VOp)
   {
-    && (vop.JournalInternalOp? || vop.TristateInternalOp?)
+    && (vop.JournalInternalOp? || vop.StatesInternalOp?)
     && s' == s
   }
 

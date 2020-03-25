@@ -5,10 +5,10 @@ include "../lib/Base/Maps.s.dfy"
 include "VOp.i.dfy"
 include "../MapSpec/ThreeStateVersioned.s.dfy"
 
-module JournalChain {
+module JournalView {
   import UI
   import opened Options
-  import opened VersionOp
+  import opened ViewOp
   import opened Journal
   import opened Maps
   import opened ThreeStateTypes
@@ -218,7 +218,7 @@ module JournalChain {
 
   predicate Stutter(k: Constants, s: Variables, s': Variables, vop: VOp)
   {
-    && (vop.JournalInternalOp? || vop.TristateInternalOp?)
+    && (vop.JournalInternalOp? || vop.StatesInternalOp?)
     && s' == s
   }
 
