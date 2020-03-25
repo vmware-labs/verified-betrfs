@@ -23,7 +23,7 @@ module BlockCache refines Transactable {
   import opened NativeTypes
   import opened DiskLayout
   import opened SectorType
-  import opened VersionOp
+  import opened ViewOp
 
   import Disk = BlockDisk
 

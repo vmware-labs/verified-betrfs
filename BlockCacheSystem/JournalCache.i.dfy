@@ -15,7 +15,7 @@ module JournalCache {
   import opened JournalRanges
   import opened JournalIntervals
   import opened SectorType
-  import opened VersionOp
+  import opened ViewOp
 
   import Disk = JournalDisk
 

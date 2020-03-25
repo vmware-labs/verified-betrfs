@@ -16,7 +16,7 @@ module BlockSystem {
   import opened NativeTypes
   import opened DiskLayout
   import opened SectorType
-  import opened VersionOp
+  import opened ViewOp
 
   type DiskOp = M.DiskOp
 
