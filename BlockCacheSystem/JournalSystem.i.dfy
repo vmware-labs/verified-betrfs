@@ -469,13 +469,11 @@ module JournalCacheSystem {
       )
       && CorrectInflightJournalWrites(k, s)
       && CorrectInflightSuperblockWrites(k, s)
-      && (s.machine.newSuperblock.None? ==> (
-        && (s.machine.whichSuperblock == 0 ==> (
-          && s.disk.superblock1 == Some(s.machine.superblock)
-        ))
-        && (s.machine.whichSuperblock == 1 ==> (
-          && s.disk.superblock2 == Some(s.machine.superblock)
-        ))
+      && (s.machine.whichSuperblock == 0 ==> (
+        && s.disk.superblock1 == Some(s.machine.superblock)
+      ))
+      && (s.machine.whichSuperblock == 1 ==> (
+        && s.disk.superblock2 == Some(s.machine.superblock)
       ))
     )
     && (s.machine.LoadingSuperblock? ==>
@@ -533,6 +531,7 @@ module JournalCacheSystem {
     && WFFrozenJournal(s)
     && WFEphemeralJournal(s)
     && WFGammaJournal(s)
+    && |s.disk.journal| == NumJournalBlocks() as int
   }
 
   ////// Proofs
@@ -1111,14 +1110,14 @@ module JournalCacheSystem {
     ensures DeltaJournal(s') == DeltaJournal(s)
   {
     if M.JournalBackIntervalOfSuperblock(s.machine.superblock).Some? {
-      //Disk_Journal_Read2(s.disk,
-      //    s.machine.superblock.journalStart as int,
-      //    s.machine.superblock.journalLen as int);
+      Disk_Journal_Read2(s.disk.journal, JournalInterval(
+          s.machine.superblock.journalStart as int,
+          s.machine.superblock.journalLen as int));
       assert EphemeralJournal(s') == EphemeralJournal(s);
     } else if M.JournalFrontIntervalOfSuperblock(s.machine.superblock).Some? {
-      //Disk_Journal_Read1(s.disk,
-      //    s.machine.superblock.journalStart as int,
-      //    s.machine.superblock.journalLen as int);
+      Disk_Journal_Read(s.disk.journal, JournalInterval(
+          s.machine.superblock.journalStart as int,
+          s.machine.superblock.journalLen as int));
       assert EphemeralJournal(s') == EphemeralJournal(s);
     } else {
       parseJournalRangeEmpty();
@@ -1135,6 +1134,9 @@ module JournalCacheSystem {
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
+    if s'.disk.reqWriteSuperblock2.Some? {
+      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+    }
   }
 
   ////////////////////////////////////////////////////
@@ -1189,6 +1191,10 @@ module JournalCacheSystem {
   {
     M.FreezeStepPreservesInv(k.machine, s.machine, s'.machine, dop, vop);
     FreezeStepPreservesJournals(k, s, s', dop, vop);
+
+    if s'.disk.reqWriteSuperblock2.Some? {
+      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+    }
   }
 
   ////////////////////////////////////////////////////
@@ -1217,6 +1223,9 @@ module JournalCacheSystem {
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
+    if s'.disk.reqWriteSuperblock2.Some? {
+      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+    }
   }
 
   ////////////////////////////////////////////////////
@@ -1245,6 +1254,9 @@ module JournalCacheSystem {
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
     ensures Inv(k, s')
   {
+    if s'.disk.reqWriteSuperblock2.Some? {
+      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+    }
   }
 
   ////////////////////////////////////////////////////
@@ -1346,6 +1358,19 @@ module JournalCacheSystem {
     ensures DeltaJournal(s') == DeltaJournal(s)
   {
     assert s.machine.newSuperblock.Some?;
+    /*if which == 0 {
+      assert s.machine.whichSuperblock == 1;
+      assert s.machine.superblock == s.disk.superblock2.value;
+      assert SuperblockOfDisk(s'.disk)
+          == s'.disk.superblock1.value
+          == s.disk.reqWriteSuperblock1.value.req.superblock
+          == s.machine.newSuperblock.value;
+    } else {
+      assert SuperblockOfDisk(s'.disk)
+          == s'.disk.superblock2.value
+          == s.disk.reqWriteSuperblock2.value.req.superblock
+          == s.machine.newSuperblock.value;
+    }*/
     assert SuperblockOfDisk(s'.disk)
         == s.machine.newSuperblock.value;
     if ProcessWriteIsGraphUpdate(k, s) {
@@ -1420,6 +1445,13 @@ module JournalCacheSystem {
     ensures GammaJournal(s') == PersistentJournal(s)
     ensures DeltaJournal(s') == []
   {
+    assert SuperblockOfDisk(s.disk)
+        == SuperblockOfDisk(s'.disk);
+
+    var interval := JournalInterval(
+        SuperblockOfDisk(s.disk).journalStart as int,
+        SuperblockOfDisk(s.disk).journalLen as int);
+    Disk_Journal_Preserves(s.disk.journal, s'.disk.journal, interval);
   }
 
   lemma CrashStepPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp)

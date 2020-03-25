@@ -292,16 +292,16 @@ module JournalDisk {
 
   predicate Crash(k: Constants, s: Variables, s': Variables)
   {
-    && s.reqReadSuperblock1 == None
-    && s.reqReadSuperblock2 == None
-    && s.reqReadJournals == map[]
+    && s'.reqReadSuperblock1 == None
+    && s'.reqReadSuperblock2 == None
+    && s'.reqReadJournals == map[]
 
-    && s.reqWriteSuperblock1 == None
-    && s.reqWriteSuperblock2 == None
-    && s.reqWriteJournals == map[]
+    && s'.reqWriteSuperblock1 == None
+    && s'.reqWriteSuperblock2 == None
+    && s'.reqWriteJournals == map[]
 
-    && s.superblock1 == s'.superblock1
-    && s.superblock2 == s'.superblock2
+    && s'.superblock1 == s.superblock1
+    && s'.superblock2 == s.superblock2
     && havocJournal(s.journal, s'.journal, s.reqWriteJournals)
   }
 }

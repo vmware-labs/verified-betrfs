@@ -162,6 +162,43 @@ module JournalIntervals {
       concatFold(DropLast(s)) + [Last(s).value]
   }
 
+  lemma concatFoldAdditive(
+      a: seq<Option<JournalBlock>>,
+      b: seq<Option<JournalBlock>>)
+  requires fullRange(a)
+  requires fullRange(b)
+  ensures fullRange(a + b)
+  ensures concatFold(a + b)
+      == JournalRangeConcat(concatFold(a), concatFold(b))
+  {
+    if |b| == 0 {
+      assert b == [];
+      assert a + b == a;
+      calc {
+        concatFold(a + b);
+        concatFold(a);
+        {
+          JournalRangeConcatEmpty(concatFold(a));
+        }
+        JournalRangeConcat(concatFold(a), JournalRangeEmpty());
+        JournalRangeConcat(concatFold(a), concatFold(b));
+      }
+    } else {
+      concatFoldAdditive(a, b[..|b|-1]);
+      assert (a + b)[..|a+b|-1] == a + b[..|b|-1];
+      assert (a+b)[|a+b|-1] == b[|b|-1];
+      //JournalRangeConcatAssoc(concatFold(a), concatFold(b[..|b|-1]), b[|b|-1].value);
+      calc {
+        concatFold(a + b);
+        concatFold((a + b)[..|a+b|-1]) + [(a+b)[|a+b|-1].value];
+        concatFold(a + b[..|b|-1]) + [b[|b|-1].value];
+        concatFold(a) + concatFold(b[..|b|-1]) + [b[|b|-1].value];
+        concatFold(a) + concatFold(b);
+      }
+    }
+  }
+
+
   protected predicate Disk_HasJournalRange(journal: seq<Option<JournalBlock>>, interval: JournalInterval)
   requires ValidJournalInterval(interval)
   {
@@ -331,10 +368,63 @@ module JournalIntervals {
       interval: JournalInterval)
   requires ContiguousJournalInterval(interval)
   requires Disk_HasJournalRange(journal, interval)
-  requires parseJournalRange(journal, Disk_JournalRange(journal, interval)).Some?
+  requires parseJournalRange(Disk_JournalRange(journal, interval)).Some?
   ensures Disk_HasJournal(journal, interval)
   ensures Disk_Journal(journal, interval)
       == parseJournalRange(Disk_JournalRange(journal, interval)).value
   {
+  }
+
+  lemma Disk_Journal_Read2(
+      journal: seq<Option<JournalBlock>>,
+      interval: JournalInterval)
+  requires ValidJournalInterval(interval)
+  requires interval.start + interval.len > NumJournalBlocks() as int
+  requires Disk_HasJournalRange(journal, JournalFrontInterval(interval.start, interval.len).value)
+  requires Disk_HasJournalRange(journal, JournalBackInterval(interval.start, interval.len).value)
+  requires parseJournalRange(Disk_JournalRange(journal, JournalFrontInterval(interval.start, interval.len).value)
+                         + Disk_JournalRange(journal, JournalBackInterval(interval.start, interval.len).value)).Some?
+  ensures Disk_HasJournal(journal, interval)
+  ensures Disk_Journal(journal, interval)
+      == parseJournalRange(Disk_JournalRange(journal, JournalFrontInterval(interval.start, interval.len).value)
+                         + Disk_JournalRange(journal, JournalBackInterval(interval.start, interval.len).value)).value
+  {
+
+    var front := JournalFrontInterval(interval.start, interval.len).value;
+    var back := JournalBackInterval(interval.start, interval.len).value;
+
+    assert CyclicSlice(journal, interval)
+        == CyclicSlice(journal, front)
+          + CyclicSlice(journal, back)
+      by { reveal_CyclicSlice(); }
+
+    concatFoldAdditive(
+        CyclicSlice(journal, front),
+        CyclicSlice(journal, back));
+  }
+
+  lemma Disk_Journal_Preserves(
+      journal: seq<Option<JournalBlock>>,
+      journal': seq<Option<JournalBlock>>,
+      interval: JournalInterval)
+  requires ValidJournalInterval(interval)
+  requires Disk_HasJournal(journal, interval)
+  requires |journal| == NumJournalBlocks() as int
+  requires |journal'| == NumJournalBlocks() as int
+  requires forall i | 0 <= i < NumJournalBlocks() as int
+      :: InCyclicRange(i, interval) ==> journal[i] == journal'[i]
+  ensures Disk_HasJournal(journal', interval)
+  ensures Disk_Journal(journal, interval)
+       == Disk_Journal(journal', interval)
+  {
+    var c1 := CyclicSlice(journal, interval);
+    var c2 := CyclicSlice(journal', interval);
+    reveal_CyclicSlice();
+    assert |c1| == |c2|;
+    forall i | 0 <= i < |c1|
+    ensures c1[i] == c2[i]
+    {
+    }
+    assert c1 == c2;
   }
 }
