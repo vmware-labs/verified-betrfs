@@ -222,7 +222,7 @@ module JournalCache {
     && dop.reqWriteJournal.journal == jr
     && dop.reqWriteJournal.start == startPos
     && s' == s
-        .(outstandingJournalWrites := s.outstandingJournalWrites + {dop.id})
+        .(outstandingJournalWrites := s.outstandingJournalWrites + (if dop.id2.Some? then {dop.id1, dop.id2.value} else {dop.id1}))
         .(writtenJournalLen := writtenJournalLen')
         .(frozenJournalPosition := frozenJournalPosition')
         .(inMemoryJournal := inMemoryJournal')
@@ -490,6 +490,7 @@ module JournalCache {
          .(inMemoryJournal := [])
          .(frozenJournalPosition := s.writtenJournalLen)
          .(syncReqs := syncReqs3to2(s.syncReqs))
+         .(isFrozen := true)
   }
 
   predicate PushSyncReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
@@ -669,6 +670,7 @@ module JournalCache {
     )
     && (s.inMemoryJournalFrozen != [] ==>
       && s.frozenJournalPosition == s.writtenJournalLen
+      && s.isFrozen
     )
   }
 

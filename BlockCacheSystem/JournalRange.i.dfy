@@ -3,8 +3,8 @@ include "../lib/Base/Option.s.dfy"
 include "../lib/Base/PackedInts.s.dfy"
 
 module JournalRanges {
-  export Spec provides KeyType, Options, ValueMessage, Journal, JournalBlock, parseJournalRange, JournalRangeLen, JournalRangePrefix, JournalRangeSuffix, JournalRangeConcat, JournalRangeEmpty, JournalBlocks, parseJournalRangeEmpty, parseJournalRangeAdditive, JournalRangeConcatAssoc, JournalRangeConcatEmpty, JournalRangeConcatEmpty', JournalRangePrefixGet, JournalRangeSuffixGet
-              reveals JournalRangeParses, JournalBlockGet, JournalRange
+  export Spec provides KeyType, Options, ValueMessage, Journal, JournalBlock, parseJournalRange, JournalRangePrefix, JournalRangeSuffix, JournalBlocks, parseJournalRangeEmpty, parseJournalRangeAdditive, JournalRangeConcatAssoc, JournalRangeConcatEmpty, JournalRangeConcatEmpty', JournalRangePrefixGet, JournalRangeSuffixGet
+              reveals JournalRangeParses, JournalBlockGet, JournalRange, JournalRangeConcat, JournalRangeEmpty, JournalRangeLen
   export Internal reveals *
 
   export extends Spec // Default export-style is Spec

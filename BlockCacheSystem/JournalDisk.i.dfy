@@ -4,11 +4,7 @@ include "../PivotBetree/Bounds.i.dfy"
 include "DiskLayout.i.dfy"
 include "SectorType.i.dfy"
 include "JournalInterval.i.dfy"
-
-module AsyncSectorDiskModelTypes {
-  datatype AsyncSectorDiskModelConstants<M,D> = AsyncSectorDiskModelConstants(machine: M, disk: D)
-  datatype AsyncSectorDiskModelVariables<M,D> = AsyncSectorDiskModelVariables(machine: M, disk: D)
-}
+include "AsyncSectorDiskModelTypes.i.dfy"
 
 // A disk, processing stuff in its queue, doing its thing.
 module JournalDisk {
@@ -34,7 +30,7 @@ module JournalDisk {
     | ReqReadJournalOp(id: ReqId, interval: JournalInterval)
 
     | ReqWriteSuperblockOp(id: ReqId, which: int, reqWriteSuperblock: ReqWriteSuperblock)
-    | ReqWriteJournalOp(id: ReqId, reqWriteJournal: ReqWriteJournal)
+    | ReqWriteJournalOp(id1: ReqId, id2: Option<ReqId>, reqWriteJournal: ReqWriteJournal)
 
     | RespReadSuperblockOp(id: ReqId, which: int, superblock: Option<Superblock>)
     | RespReadJournalOp(id: ReqId, journal: Option<JournalRange>)
@@ -69,6 +65,8 @@ module JournalDisk {
     && s.reqWriteSuperblock1 == None
     && s.reqWriteSuperblock2 == None
     && s.reqWriteJournals == map[]
+
+    && |s.journal| == NumJournalBlocks() as int
   }
 
   ///////// RecvRead
@@ -118,11 +116,24 @@ module JournalDisk {
   predicate RecvWriteJournal(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.ReqWriteJournalOp?
-    && dop.id !in s.reqWriteJournals
+    && dop.id1 !in s.reqWriteJournals.Keys
+    && (dop.id2.Some? ==> dop.id2.value !in s.reqWriteJournals.Keys)
     && var interval := JournalInterval(dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
     && JournalUpdate(s.journal, s'.journal, interval, dop.reqWriteJournal.journal)
-    && s' == s.(reqWriteJournals := s.reqWriteJournals[dop.id := interval])
-              .(journal := s'.journal)
+    && interval.start > 0
+    && (interval.start + interval.len <= NumJournalBlocks() as int ==>
+      && dop.id2.None?
+      && s' == s.(reqWriteJournals := s.reqWriteJournals[dop.id1 := interval])
+                .(journal := s'.journal)
+    )
+    && (interval.start + interval.len > NumJournalBlocks() as int ==>
+      && dop.id2.Some?
+      && dop.id2.value != dop.id1
+      && var interval1 := JournalInterval(interval.start, NumJournalBlocks() as int - interval.start);
+      && var interval2 := JournalInterval(0, interval.len - (NumJournalBlocks() as int - interval.start));
+      && s' == s.(reqWriteJournals := s.reqWriteJournals[dop.id1 := interval1][dop.id2.value := interval2])
+                .(journal := s'.journal)
+    )
   }
 
   predicate DiskMapUpdate<T>(disk: imap<Location, T>, disk': imap<Location, T>, updateLoc: Location, t: T)
@@ -153,25 +164,16 @@ module JournalDisk {
     )
   }
 
-  function {:opaque} journalRead(a: seq<Option<JournalBlock>>) : Option<seq<JournalBlock>>
-  {
-    if a == [] then Some([]) else (
-      var p := journalRead(DropLast(a));
-      if p.Some? && Last(a).Some? then
-        Some(p.value + [Last(a).value])
-      else
-        None
-    )
-  }
-
   predicate AckReadJournal(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.RespReadJournalOp?
     && dop.id in s.reqReadJournals
     && var ind := s.reqReadJournals[dop.id];
-    && 0 <= ind.start <= ind.start + ind.len <= |s.journal|
+    && 0 <= ind.start < ind.start + ind.len <= NumJournalBlocks() as int
     && (dop.journal.Some? ==>
-      dop.journal == journalRead(s.journal[ind.start .. ind.start + ind.len]))
+      && Disk_HasJournalRange(s.journal, ind)
+      && dop.journal.value == Disk_JournalRange(s.journal, ind)
+    )
     && s' == s.(reqReadJournals := MapRemove1(s.reqReadJournals, dop.id))
   }
 
