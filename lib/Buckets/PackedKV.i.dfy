@@ -1,10 +1,9 @@
 include "PackedStringArray.i.dfy"
 include "../Base/total_order_impl.i.dfy"
-include "KVList.i.dfy"
+include "BucketsLib.i.dfy"
 
 module PackedKV {
-  import PackedStringArray
-  import KVList
+  import PSA = PackedStringArray
   import opened NativeTypes
   import Keyspace = Lexicographic_Byte_Order_Impl
   import opened KeyType
@@ -14,8 +13,8 @@ module PackedKV {
   import opened Options
 
   datatype Pkv = Pkv(
-      keys: PackedStringArray.Psa,
-      messages: PackedStringArray.Psa)
+      keys: PSA.Psa,
+      messages: PSA.Psa)
 
   predicate ValidKeyByteString(s: seq<byte>)
   {
@@ -27,35 +26,34 @@ module PackedKV {
     |s| <= ValueType.MaxLen() as int
   }
 
-  predicate ValidKeyLens(psa: PackedStringArray.Psa)
-  requires PackedStringArray.WF(psa)
+  predicate ValidStringLens<A>(strs: seq<seq<A>>, upper_bound: nat)
   {
-    forall i | 0 <= i < |psa.offsets| ::
-        PackedStringArray.psaEnd(psa, i as uint64) as int - PackedStringArray.psaStart(psa, i as uint64) as int <= KeyType.MaxLen() as int
+    forall i | 0 <= i < |strs| :: |strs[i]| <= upper_bound
+  }
+
+  predicate ValidKeyLens<A>(strs: seq<seq<A>>)
+  {
+    ValidStringLens(strs, KeyType.MaxLen() as nat)
+  }
+
+  predicate ValidMessageLens<A>(strs: seq<seq<A>>)
+  {
+    ValidStringLens(strs, ValueType.MaxLen() as nat)
   }
 
   predicate WF(pkv: Pkv) {
-    && PackedStringArray.WF(pkv.keys)
-    && PackedStringArray.WF(pkv.messages)
-    && ValidKeyLens(pkv.keys)
+    && PSA.WF(pkv.keys)
+    && PSA.WF(pkv.messages)
+    && ValidStringLens(PSA.I(pkv.keys), KeyType.MaxLen() as nat)
+    && ValidStringLens(PSA.I(pkv.messages), ValueType.MaxLen() as nat)
     && |pkv.keys.offsets| == |pkv.messages.offsets|
   }
 
-  function {:opaque} psaSeq_Keys(psa: PackedStringArray.Psa, i: int) : (res : seq<Key>)
-  requires PackedStringArray.WF(psa)
-  requires ValidKeyLens(psa)
-  requires 0 <= i <= |psa.offsets|
-  ensures |res| == i
-  ensures forall j | 0 <= j < i :: res[j] == PackedStringArray.psaElement(psa, j as uint64)
+  function IKeys(psa: PSA.Psa) : (res : seq<Key>)
+  requires PSA.WF(psa)
+  requires ValidStringLens(PSA.I(psa), KeyType.MaxLen() as nat)
   {
-    if i == 0 then [] else psaSeq_Keys(psa, i-1) + [PackedStringArray.psaElement(psa, (i-1) as uint64)]
-  }
-
-  function IKeys(psa: PackedStringArray.Psa) : (res : seq<Key>)
-  requires PackedStringArray.WF(psa)
-  requires ValidKeyLens(psa)
-  {
-    psaSeq_Keys(psa, |psa.offsets|)
+    PSA.I(psa)
   }
 
   function method byteString_to_Message(s: seq<byte>) : Message
@@ -71,39 +69,27 @@ module PackedKV {
     )
   }
 
-  function {:opaque} psaSeq_Messages(psa: PackedStringArray.Psa, i: int) : (res : seq<Message>)
-  requires PackedStringArray.WF(psa)
+  function {:opaque} psaSeq_Messages(psa: PSA.Psa, i: int) : (res : seq<Message>)
+  requires PSA.WF(psa)
   requires 0 <= i <= |psa.offsets|
   ensures |res| == i
-  ensures forall j | 0 <= j < i :: res[j] == byteString_to_Message(PackedStringArray.psaElement(psa, j as uint64))
+  ensures forall j | 0 <= j < i :: res[j] == byteString_to_Message(PSA.psaElement(psa, j as uint64))
   {
     if i == 0 then [] else psaSeq_Messages(psa, i-1) + [
-        byteString_to_Message(PackedStringArray.psaElement(psa, (i-1) as uint64))]
+        byteString_to_Message(PSA.psaElement(psa, (i-1) as uint64))]
   }
 
-  function IMessages(psa: PackedStringArray.Psa) : (res : seq<Message>)
-  requires PackedStringArray.WF(psa)
+  function IMessages(psa: PSA.Psa) : (res : seq<Message>)
+  requires PSA.WF(psa)
   {
     psaSeq_Messages(psa, |psa.offsets|)
-  }
-
-  function IMapi(pkv: Pkv, i: int) : (bucket : BucketMap)
-  requires WF(pkv)
-  requires 0 <= i <= |pkv.keys.offsets|
-  ensures WFBucketMap(bucket)
-  {
-    if i == 0 then map[] else (
-      var key : Key := PackedStringArray.psaElement(pkv.keys, (i-1) as uint64);
-      var msg : Message := byteString_to_Message(PackedStringArray.psaElement(pkv.keys, (i-1) as uint64));
-      IMapi(pkv, i-1)[key := msg]
-    )
   }
 
   function IMap(pkv: Pkv) : (bucket : BucketMap)
   requires WF(pkv)
   ensures WFBucketMap(bucket)
   {
-    IMapi(pkv, |pkv.keys.offsets|)
+    BucketMapOfSeq(IKeys(pkv.keys), IMessages(pkv.messages))
   }
 
   predicate SortedKeys(pkv: Pkv)
@@ -117,45 +103,40 @@ module PackedKV {
   ensures WFBucket(bucket)
   {
     // Note that this might not be WellMarshalled
-    assume false;
     BucketMapWithSeq(IMap(pkv), IKeys(pkv.keys), IMessages(pkv.messages))
   }
 
-  method ComputeValidKeyLens(psa: PackedStringArray.Psa)
+  method ComputeValidStringLens(psa: PSA.Psa, upper_bound: uint64)
   returns (b: bool)
-  requires PackedStringArray.WF(psa)
-  ensures b == ValidKeyLens(psa)
+  requires PSA.WF(psa)
+  ensures b == ValidStringLens(PSA.I(psa), upper_bound as nat)
   {
-    assume false; 
+    var i: uint64 := 0;
 
-    if |psa.offsets| as uint64 == 0 {
-      return true;
-    }
-    if psa.offsets[0 as uint64] as uint64 > KeyType.MaxLen() {
-      return false;
-    }
-
-    var i: uint64 := 1;
-    while i < |psa.offsets| as uint64
+    while i < PSA.psaNumStrings(psa)
+      invariant i <= PSA.psaNumStrings(psa)
+      invariant forall j | 0 <= j < i :: |PSA.I(psa)[j]| <= upper_bound as nat
     {
-      if psa.offsets[i] as uint64 - psa.offsets[i-1] as uint64 > KeyType.MaxLen() {
-        return false;
+      assert |PSA.I(psa)[i]| == PSA.psaEnd(psa, i) as nat - PSA.psaStart(psa, i) as nat;
+      if upper_bound < PSA.psaEnd(psa, i) as uint64 - PSA.psaStart(psa, i) as uint64 {
+        b := false;
+        return;
       }
       i := i + 1;
     }
-
+    
     return true;
   }
 
   function SizeOfPkv(pkv: Pkv) : int
   {
-    PackedStringArray.SizeOfPsa(pkv.keys) + PackedStringArray.SizeOfPsa(pkv.messages)
+    PSA.SizeOfPsa(pkv.keys) + PSA.SizeOfPsa(pkv.messages)
   }
 
   function method SizeOfPkvUint64(pkv: Pkv) : uint64
   requires WF(pkv)
   {
-    PackedStringArray.SizeOfPsaUint64(pkv.keys) + PackedStringArray.SizeOfPsaUint64(pkv.messages)
+    PSA.SizeOfPsaUint64(pkv.keys) + PSA.SizeOfPsaUint64(pkv.messages)
   }
 
   function method WeightPkv(pkv: Pkv) : uint64
@@ -165,88 +146,90 @@ module PackedKV {
     4 * |pkv.messages.offsets| as uint64 + |pkv.messages.data| as uint64
   }
 
-  function parse_Pkv(data: seq<byte>) : (res : (Option<Pkv>, seq<byte>))
-  ensures res.0.Some? ==> WF(res.0.value)
-  {
-    var (keys, rest1) := PackedStringArray.parse_Psa(data);
-    if keys.Some? then (
-      if ValidKeyLens(keys.value) then (
-        var (messages, rest2) := PackedStringArray.parse_Psa(rest1);
-        if messages.Some?
-            && |keys.value.offsets| == |messages.value.offsets| then (
-          var res := Pkv(keys.value, messages.value);
-          (Some(res), rest2)
-        ) else (
-          (None, [])
-        )
-      ) else (
-        (None, [])
-      )
-    ) else (
-      (None, [])
-    )
-  }
+  // I don't think we need these if we use the generic marshaling code. -- rob
+  
+  // function parse_Pkv(data: seq<byte>) : (res : (Option<Pkv>, seq<byte>))
+  // ensures res.0.Some? ==> WF(res.0.value)
+  // {
+  //   var (keys, rest1) := PSA.parse_Psa(data);
+  //   if keys.Some? then (
+  //     if ValidKeyLens(PSA.I(keys.value)) then (
+  //       var (messages, rest2) := PSA.parse_Psa(rest1);
+  //       if messages.Some?
+  //           && |keys.value.offsets| == |messages.value.offsets| then (
+  //         var res := Pkv(keys.value, messages.value);
+  //         (Some(res), rest2)
+  //       ) else (
+  //         (None, [])
+  //       )
+  //     ) else (
+  //       (None, [])
+  //     )
+  //   ) else (
+  //     (None, [])
+  //   )
+  // }
 
-  method Parse_Pkv(data: seq<byte>, index:uint64)
-  returns (pkv: Option<Pkv>, rest_index: uint64)
-  requires index as int <= |data|
-  requires |data| < 0x1_0000_0000_0000_0000
-  ensures rest_index as int <= |data|
-  ensures var (pkv', rest') := parse_Pkv(data[index..]);
-      && pkv == pkv'
-      && data[rest_index..] == rest'
-  {
-    var keys, rest1 := PackedStringArray.Parse_Psa(data, index);
-    if keys.Some? {
-      // TODO we iterate twice, once to check sortedness, another
-      // to check lengths, we could consolidate.
-      var isValidKeyLens := ComputeValidKeyLens(keys.value);
-      if isValidKeyLens {
-        var messages, rest2 := PackedStringArray.Parse_Psa(data, rest1);
-        if messages.Some?
-            && |keys.value.offsets| as uint64 == |messages.value.offsets| as uint64 {
-          pkv := Some(Pkv(keys.value, messages.value));
-          rest_index := rest2;
-        } else {
-          pkv := None;
-          rest_index := |data| as uint64;
-        }
-      } else {
-        pkv := None;
-        rest_index := |data| as uint64;
-      }
-    } else {
-      pkv := None;
-      rest_index := |data| as uint64;
-    }
-  }
+  // method Parse_Pkv(data: seq<byte>, index:uint64)
+  // returns (pkv: Option<Pkv>, rest_index: uint64)
+  // requires index as int <= |data|
+  // requires |data| < 0x1_0000_0000_0000_0000
+  // ensures rest_index as int <= |data|
+  // ensures var (pkv', rest') := parse_Pkv(data[index..]);
+  //     && pkv == pkv'
+  //     && data[rest_index..] == rest'
+  // {
+  //   var keys, rest1 := PSA.Parse_Psa(data, index);
+  //   if keys.Some? {
+  //     // TODO we iterate twice, once to check sortedness, another
+  //     // to check lengths, we could consolidate.
+  //     var isValidKeyLens := ComputeValidStringLens(keys.value, KeyType.MaxLen());
+  //     if isValidKeyLens {
+  //       var messages, rest2 := PSA.Parse_Psa(data, rest1);
+  //       if messages.Some?
+  //           && |keys.value.offsets| as uint64 == |messages.value.offsets| as uint64 {
+  //         pkv := Some(Pkv(keys.value, messages.value));
+  //         rest_index := rest2;
+  //       } else {
+  //         pkv := None;
+  //         rest_index := |data| as uint64;
+  //       }
+  //     } else {
+  //       pkv := None;
+  //       rest_index := |data| as uint64;
+  //     }
+  //   } else {
+  //     pkv := None;
+  //     rest_index := |data| as uint64;
+  //   }
+  // }
 
   function method FirstKey(pkv: Pkv) : Key
   requires WF(pkv)
   requires |pkv.keys.offsets| > 0
   {
-    PackedStringArray.FirstElement(pkv.keys)
+    PSA.FirstElement(pkv.keys)
   }
 
   function method LastKey(pkv: Pkv) : Key
   requires WF(pkv)
   requires |pkv.keys.offsets| > 0
   {
-    PackedStringArray.LastElement(pkv.keys)
+    PSA.LastElement(pkv.keys)
   }
 
   function method GetKey(pkv: Pkv, i: uint64) : Key
   requires WF(pkv)
   requires 0 <= i as int < |pkv.keys.offsets|
   {
-    PackedStringArray.psaElement(pkv.keys, i)
+    PSA.psaElement(pkv.keys, i)
   }
 
   function method GetMessage(pkv: Pkv, i: uint64) : Message
   requires WF(pkv)
   requires 0 <= i as int < |pkv.messages.offsets|
   {
-    byteString_to_Message(PackedStringArray.psaElement(pkv.messages, i))
+    byteString_to_Message(PSA.psaElement(pkv.messages, i))
   }
 
   method BinarySearchQuery(pkv: Pkv, key: Key)
@@ -254,8 +237,6 @@ module PackedKV {
   requires WF(pkv)
   ensures msg == bucketBinarySearchLookup(I(pkv), key)
   {
-    assume false;
-
     var lo: uint64 := 0;
     var hi: uint64 := |pkv.keys.offsets| as uint64;
 

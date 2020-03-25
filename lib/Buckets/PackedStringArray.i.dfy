@@ -110,7 +110,8 @@ module PackedStringArray {
     Psa([], [])
   }
   
-  function SizeOfPsa(psa: Psa) : int {
+  function SizeOfPsa(psa: Psa) : int
+  {
     4 + 4 * |psa.offsets| + |psa.data|
   }
 
@@ -120,6 +121,7 @@ module PackedStringArray {
     4 + 4 * |psa.offsets| as uint64 + |psa.data| as uint64
   }
 
+  // I don't think we need this if we use the generic marshaling. -- rob
   function parse_Psa(data: seq<byte>) : (res : (Option<Psa>, seq<byte>))
   ensures res.0.Some? ==> WF(res.0.value)
   {
@@ -225,85 +227,87 @@ module PackedStringArray {
   {
   }
 
-  method Parse_Psa(data: seq<byte>, index:uint64)
-  returns (psa: Option<Psa>, rest_index: uint64)
-  requires index as int <= |data|
-  requires |data| < 0x1_0000_0000_0000_0000
-  ensures rest_index as int <= |data|
-  ensures var (psa', rest') := parse_Psa(data[index..]);
-      && psa == psa'
-      && data[rest_index..] == rest'
-  {
-    if |data| as uint64 - index >= 4 {
-      var len_uint32 := Unpack_LittleEndian_Uint32(data, index);
-      var len := len_uint32 as uint64;
-      lemma_seq_suffix_slice(data, index as int, 0, 4);
-      if (|data| as uint64 - 4 - index) / 4 >= len {
-        lemma_seq_suffix_slice(data, index as int, 4, (4+4*len) as int);
-        var offsets := Unpack_LittleEndian_Uint32_Seq(data, index + 4, len);
-        var dataLen := if len == 0 then 0 else offsets[len-1] as uint64;
-        var is_sorted := CheckIsSorted(offsets);
-        if is_sorted && |data| as uint64 - index - 4 - len * 4 >= dataLen {
-          lemma_seq_suffix_slice(data, index as int, (4+4*len) as int, (4+4*len+dataLen) as int);
-          psa := Some(Psa(offsets, data[index + 4 + len * 4 .. index + 4 + len * 4 + dataLen]));
-          rest_index := index + 4 + len * 4 + dataLen;
-        } else {
-          psa := None; 
-          rest_index := |data| as uint64;
-        }
-      } else {
-        psa := None; 
-        rest_index := |data| as uint64;
-      }
-    } else {
-      psa := None; 
-      rest_index := |data| as uint64;
-    }
-  }
+  // I don't think we need this if we use the generic marshaling. -- rob
 
-  method Marshall_Psa(data: array<byte>, index: uint64, psa: Psa)
-  requires 0 <= index
-  requires index as int + SizeOfPsa(psa) <= data.Length
-  requires data.Length < 0x1_0000_0000_0000_0000
-  requires WF(psa)
-  modifies data
-  ensures forall i | 0 <= i < index as int :: data[i] == old(data[i])
-  ensures forall i | index as int + SizeOfPsa(psa) <= i < data.Length :: data[i] == old(data[i])
-  ensures parse_Psa(data[index .. index as int + SizeOfPsa(psa)]).0
-       == Some(psa)
-  {
-    ghost var len := |psa.offsets| as uint64;
-    ghost var dataLen := |psa.data| as uint64;
-    ghost var data_seq0 := data[index .. index as int + SizeOfPsa(psa)];
+  // method Parse_Psa(data: seq<byte>, index:uint64)
+  // returns (psa: Option<Psa>, rest_index: uint64)
+  // requires index as int <= |data|
+  // requires |data| < 0x1_0000_0000_0000_0000
+  // ensures rest_index as int <= |data|
+  // ensures var (psa', rest') := parse_Psa(data[index..]);
+  //     && psa == psa'
+  //     && data[rest_index..] == rest'
+  // {
+  //   if |data| as uint64 - index >= 4 {
+  //     var len_uint32 := Unpack_LittleEndian_Uint32(data, index);
+  //     var len := len_uint32 as uint64;
+  //     lemma_seq_suffix_slice(data, index as int, 0, 4);
+  //     if (|data| as uint64 - 4 - index) / 4 >= len {
+  //       lemma_seq_suffix_slice(data, index as int, 4, (4+4*len) as int);
+  //       var offsets := Unpack_LittleEndian_Uint32_Seq(data, index + 4, len);
+  //       var dataLen := if len == 0 then 0 else offsets[len-1] as uint64;
+  //       var is_sorted := CheckIsSorted(offsets);
+  //       if is_sorted && |data| as uint64 - index - 4 - len * 4 >= dataLen {
+  //         lemma_seq_suffix_slice(data, index as int, (4+4*len) as int, (4+4*len+dataLen) as int);
+  //         psa := Some(Psa(offsets, data[index + 4 + len * 4 .. index + 4 + len * 4 + dataLen]));
+  //         rest_index := index + 4 + len * 4 + dataLen;
+  //       } else {
+  //         psa := None; 
+  //         rest_index := |data| as uint64;
+  //       }
+  //     } else {
+  //       psa := None; 
+  //       rest_index := |data| as uint64;
+  //     }
+  //   } else {
+  //     psa := None; 
+  //     rest_index := |data| as uint64;
+  //   }
+  // }
 
-    // Write number of offsets
-    Pack_LittleEndian_Uint32_into_Array(|psa.offsets| as uint32, data, index);
+  // method Marshall_Psa(data: array<byte>, index: uint64, psa: Psa)
+  // requires 0 <= index
+  // requires index as int + SizeOfPsa(psa) <= data.Length
+  // requires data.Length < 0x1_0000_0000_0000_0000
+  // requires WF(psa)
+  // modifies data
+  // ensures forall i | 0 <= i < index as int :: data[i] == old(data[i])
+  // ensures forall i | index as int + SizeOfPsa(psa) <= i < data.Length :: data[i] == old(data[i])
+  // ensures parse_Psa(data[index .. index as int + SizeOfPsa(psa)]).0
+  //      == Some(psa)
+  // {
+  //   ghost var len := |psa.offsets| as uint64;
+  //   ghost var dataLen := |psa.data| as uint64;
+  //   ghost var data_seq0 := data[index .. index as int + SizeOfPsa(psa)];
 
-    lemma_array_slice_slice(data, index as int, index as int + SizeOfPsa(psa), 0, 4);
-    ghost var data_seq1 := data[index .. index as int + SizeOfPsa(psa)];
-    assert unpack_LittleEndian_Uint32(data_seq1[0..4]) as int == |psa.offsets|;
+  //   // Write number of offsets
+  //   Pack_LittleEndian_Uint32_into_Array(|psa.offsets| as uint32, data, index);
 
-    // Write offsets
-    Pack_LittleEndian_Uint32_Seq_into_Array(psa.offsets, data, index + 4);
+  //   lemma_array_slice_slice(data, index as int, index as int + SizeOfPsa(psa), 0, 4);
+  //   ghost var data_seq1 := data[index .. index as int + SizeOfPsa(psa)];
+  //   assert unpack_LittleEndian_Uint32(data_seq1[0..4]) as int == |psa.offsets|;
 
-    lemma_array_slice_slice(data, index as int, index as int + SizeOfPsa(psa), 4, (4+4*len) as int);
-    ghost var data_seq2 := data[index .. index as int + SizeOfPsa(psa)];
-    lemma_seq_extensionality(data_seq1[0..4], data_seq2[0..4]);
-    assert unpack_LittleEndian_Uint32(data_seq2[0..4]) as int == |psa.offsets|;
-    assert unpack_LittleEndian_Uint32_Seq(data_seq2[4..4+4*len], len as int) == psa.offsets;
+  //   // Write offsets
+  //   Pack_LittleEndian_Uint32_Seq_into_Array(psa.offsets, data, index + 4);
 
-    // Write byte data
-    CopySeqIntoArray(psa.data, 0, data,
-        index + 4 + 4 * |psa.offsets| as uint64, |psa.data| as uint64);
+  //   lemma_array_slice_slice(data, index as int, index as int + SizeOfPsa(psa), 4, (4+4*len) as int);
+  //   ghost var data_seq2 := data[index .. index as int + SizeOfPsa(psa)];
+  //   lemma_seq_extensionality(data_seq1[0..4], data_seq2[0..4]);
+  //   assert unpack_LittleEndian_Uint32(data_seq2[0..4]) as int == |psa.offsets|;
+  //   assert unpack_LittleEndian_Uint32_Seq(data_seq2[4..4+4*len], len as int) == psa.offsets;
 
-    ghost var data_seq3 := data[index .. index as int + SizeOfPsa(psa)];
-    lemma_seq_extensionality(data_seq2[0..4], data_seq3[0..4]);
-    lemma_seq_extensionality_slice(data_seq2, data_seq3, 4, (4+4*len) as int);
-    assert unpack_LittleEndian_Uint32(data_seq3[0..4]) as int == |psa.offsets|;
-    assert unpack_LittleEndian_Uint32_Seq(data_seq3[4..4+4*len], len as int) == psa.offsets;
-    lemma_array_slice_slice(data, index as int, index as int + SizeOfPsa(psa), (4+4*len) as int, (4+4*len+dataLen) as int);
-    assert data_seq3[4+4*len..4+4*len+dataLen] == psa.data;
-  }
+  //   // Write byte data
+  //   CopySeqIntoArray(psa.data, 0, data,
+  //       index + 4 + 4 * |psa.offsets| as uint64, |psa.data| as uint64);
+
+  //   ghost var data_seq3 := data[index .. index as int + SizeOfPsa(psa)];
+  //   lemma_seq_extensionality(data_seq2[0..4], data_seq3[0..4]);
+  //   lemma_seq_extensionality_slice(data_seq2, data_seq3, 4, (4+4*len) as int);
+  //   assert unpack_LittleEndian_Uint32(data_seq3[0..4]) as int == |psa.offsets|;
+  //   assert unpack_LittleEndian_Uint32_Seq(data_seq3[4..4+4*len], len as int) == psa.offsets;
+  //   lemma_array_slice_slice(data, index as int, index as int + SizeOfPsa(psa), (4+4*len) as int, (4+4*len+dataLen) as int);
+  //   assert data_seq3[4+4*len..4+4*len+dataLen] == psa.data;
+  // }
 
   function method FirstElement(psa: Psa) : seq<byte>
   requires WF(psa)

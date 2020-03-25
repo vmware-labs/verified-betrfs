@@ -114,39 +114,40 @@ abstract module Total_Order {
     elt := run[index];
   }*/
   
-  predicate {:opaque} IsSorted(run: seq<Element>) {
+  predicate {:opaque} IsSorted(run: seq<Element>)
+    ensures |run| == 0 ==> IsSorted(run)
+    ensures |run| == 1 ==> IsSorted(run)
+  {
     forall i, j :: 0 <= i <= j < |run| ==> lte(run[i], run[j])
   }
 
-  /*method ComputeIsSorted(run: seq<Element>)
-  returns (b: bool)
-  ensures b == IsSorted(run)
+  predicate IsStrictlySortedInternal(run: seq<Element>)
   {
-    reveal_IsSorted();
-    var k := 1;
-    while k < |run|
-    invariant |run| > 0 ==> 0 <= k <= |run|
-    invariant |run| > 0 ==> forall i, j :: 0 <= i <= j < k ==> lte(run[i], run[j])
-    {
-      if (!lte(run[k-1], run[k])) {
-        return false;
-      }
-      k := k + 1;
-    }
-    return true;
-  }*/
+    forall i, j :: 0 <= i < j < |run| ==> lt(run[i], run[j])
+  }
 
-  predicate {:opaque} IsStrictlySorted(run: seq<Element>)
-  ensures IsStrictlySorted(run) ==> IsSorted(run)
-  ensures |run| == 0 ==> IsStrictlySorted(run)
-  ensures |run| == 1 ==> IsStrictlySorted(run)
+  lemma StrictlySortedImpliesSorted(run: seq<Element>)
+    requires IsStrictlySortedInternal(run)
+    ensures IsSorted(run)
   {
-    var b := forall i, j :: 0 <= i < j < |run| ==> lt(run[i], run[j]);
-    assert b ==> IsSorted(run) by {
-       reveal_IsSorted();
+    forall i, j | 0 <= i <= j < |run|
+      ensures lte(run[i], run[j])
+    {
     }
-    b
-    //forall i, j :: 0 <= i < j < |run| ==> lt(run[i], run[j])
+    reveal_IsSorted();
+  }
+  
+  predicate {:opaque} IsStrictlySorted(run: seq<Element>)
+    ensures |run| == 0 ==> IsStrictlySortedInternal(run)
+    ensures |run| == 1 ==> IsStrictlySortedInternal(run)
+    ensures IsStrictlySorted(run) ==> IsSorted(run)
+  {
+    var b := IsStrictlySortedInternal(run);
+    if b then
+      StrictlySortedImpliesSorted(run);
+      b
+    else
+      b
   }
 
   lemma IsStrictlySortedImpliesLt(run: seq<Element>, i: int, j: int)
