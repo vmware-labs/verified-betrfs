@@ -1,5 +1,6 @@
 include "../Base/sequences.i.dfy"
 include "../Base/total_order.i.dfy"
+include "../Base/total_order_impl.i.dfy"
 //
 // Provides definitions and libraries for pivot tables. A pivot
 // table is a sorted list of *pivot* keys that divides the keyspace into
@@ -12,7 +13,8 @@ module PivotsLib {
   import opened KeyType
 
   import Keyspace = Lexicographic_Byte_Order
-
+  import KSI = Lexicographic_Byte_Order_Impl
+  
   // A PivotTable of length n breaks the keyspace into n "buckets"
   // If the pivots are (a_1,...,a_n) then the buckets are
   // (-infinity, a_1)
@@ -46,7 +48,7 @@ module PivotsLib {
   requires WFPivots(pt)
   ensures i as int == Route(pt, key)
   {
-    var j := Keyspace.ComputeLargestLte(pt, key);
+    var j := KSI.ComputeLargestLte(pt, key);
     i := (j + 1) as uint64;
   }
 
@@ -238,7 +240,7 @@ module PivotsLib {
   ensures i as int == CutoffForLeft(pivots, pivot)
   {
     reveal_CutoffForLeft();
-    var j := Keyspace.ComputeLargestLt(pivots, pivot);
+    var j := KSI.ComputeLargestLt(pivots, pivot);
     i := (j + 1) as uint64;
   }
 
