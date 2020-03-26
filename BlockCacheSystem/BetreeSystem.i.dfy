@@ -12,7 +12,13 @@ include "../BlockCacheSystem/BlockSystem_Refines_StatesView.i.dfy"
 
 // TODO(jonh): Rename PivotBetreeBlockCacheSystem. [approved by thance]
 
-module BetreeBlockCacheSystem refines BlockSystemModel {
+module BetreeSystem {
+  import D = BlockDisk
+  import M = BetreeCache
+  import AsyncSectorDiskModelTypes
+  import opened SectorType
+  import opened ViewOp
+  import opened DiskLayout
   import opened Maps
   import opened Sequences
   import opened Options
@@ -24,7 +30,43 @@ module BetreeBlockCacheSystem refines BlockSystemModel {
   import BI = PivotBetreeBlockInterface
   import Ref = BlockSystem_Refines_StatesView
 
-  import M = BetreeCache
+  type Constants = AsyncSectorDiskModelTypes.AsyncSectorDiskModelConstants<M.Constants, D.Constants>
+  type Variables = AsyncSectorDiskModelTypes.AsyncSectorDiskModelVariables<M.Variables, D.Variables>
+
+  datatype Step =
+    | MachineStep(dop: D.DiskOp)
+    | CrashStep
+  
+  predicate Machine(k: Constants, s: Variables, s': Variables, dop: D.DiskOp, vop: VOp)
+  {
+    && M.Next(k.machine, s.machine, s'.machine, dop, vop)
+    && D.Next(k.disk, s.disk, s'.disk, dop)
+    && (vop.SendPersistentLocOp? ==>
+      BCS.Inv(k, s) ==>
+        && BCS.WFSuccs(k, s, vop.loc)
+        && vop.loc in Ref.DiskGraphMap(k, s)
+        && BT.Inv(Ik(k), BT.Variables(BI.Variables(Ref.DiskGraphMap(k, s)[vop.loc])))
+    )
+  }
+
+  predicate Crash(k: Constants, s: Variables, s': Variables, vop: VOp)
+  {
+    && vop.CrashOp?
+    && M.Init(k.machine, s'.machine)
+    && D.Crash(k.disk, s.disk, s'.disk)
+  }
+
+  predicate NextStep(k: Constants, s: Variables, s': Variables, vop: VOp, step: Step)
+  {
+    match step {
+      case MachineStep(dop) => Machine(k, s, s', dop, vop)
+      case CrashStep => Crash(k, s, s', vop)
+    }
+  }
+
+  predicate Next(k: Constants, s: Variables, s': Variables, vop: VOp) {
+    exists step :: NextStep(k, s, s', vop, step)
+  }
 
   function Ik(k: Constants) : BT.Constants
   {
@@ -86,9 +128,8 @@ module BetreeBlockCacheSystem refines BlockSystemModel {
   // Proofs
 
   lemma InitImpliesInv(k: Constants, s: Variables, loc: Location)
-    // pre and post conditions are inherited
-    //requires Init(k, s)
-    //ensures Inv(k, s)
+    requires Init(k, s, loc)
+    ensures Inv(k, s)
   {
     BCS.InitImpliesInv(k, s, loc);
     BT.InitImpliesInv(Ik(k), BetreeDisk(k, s)[loc]);
@@ -187,10 +228,9 @@ module BetreeBlockCacheSystem refines BlockSystemModel {
   }
 
   lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp)
-    // pre and post conditions are inherited
-    //requires Inv(k, s)
-    //requires Next(k, s, s', vop)
-    //ensures Inv(k, s')
+  requires Inv(k, s)
+  requires Next(k, s, s', vop)
+  ensures Inv(k, s')
   {
     var step :| NextStep(k, s, s', vop, step);
     NextStepPreservesInv(k, s, s', vop, step);
