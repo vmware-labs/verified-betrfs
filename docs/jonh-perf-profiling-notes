@@ -464,3 +464,16 @@ so MALLOC_OVERHEAD should be set to 2.2.
 need to turn malloc stuff back on.
 
 So what the heck. I guess I need to turn malloc back on so I can understand why the overhead is 2.56 now.
+
+So the page fault was just malloc_accounting tripping on the null return from underlying malloc,
+due to blowing through 4GB.
+
+With 200 blocks. I see a 33% overhead in the malloc graphs: OS mapping is 4GB,
+malloc total is 3GB. That's 15MB/node. What broke!?  CopyKey is enabled. Only
+thing disabled was left/right splitting. Let's re-enable it.
+
+[malloc-exp/manual-wka-200-amasssplit.data]
+
+Okay, so amassing split was indeed relevant. We're still at an overhead factor of 2X.
+A hypothesis: pkvs hanging around? But Amass should cure that.
+Oh, no, amass on the parent only replaces one bucket.

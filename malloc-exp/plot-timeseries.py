@@ -5,6 +5,7 @@ import numpy as np
 import re
 import sys
 import operator
+import bisect
 
 class ARow:
     def __init__(self, total_count, open_count, total_byte, open_byte):
@@ -42,7 +43,9 @@ def parse(filename):
     scopes = {}
     kvl_underlying = {}
     kvl_underlying_count = {}
+    line_num = 0
     for line in open(filename, "r").readlines():
+        line_num += 1
         line = line.strip()
         fields = line.split()
         if line.startswith("os-map-total"):
@@ -73,11 +76,26 @@ def parse(filename):
             kvl_underlying_count[t] = int(fields[3])
             kvl_underlying[t] = int(fields[5])
 
-    numPlots = 3
+    numPlots = 4
     fig, axes = plt.subplots(numPlots, 1, figsize=(5,numPlots*2))
     plt.subplots_adjust(left=0.10, right=0.90, hspace=0.4, top=0.95, bottom=0.05);
 
     t_end = max(os_map_total.keys())
+
+    Kilo = 1000
+    MB = float(1<<20)
+    GB = float(1<<30)
+
+    def timeToOp(t):
+        try:
+            return ops_completed[t]/Kilo
+        except KeyError:
+            return 0
+
+    def timesToOp(ts):
+        return [timeToOp(t) for t in ts]
+
+    op_end = timeToOp(t_end)
 
     def makePlot(xSource, lam):
         xs = []
@@ -89,11 +107,8 @@ def parse(filename):
                 ys.append(y)
             except KeyError:
                 pass
-        return xs,ys
+        return timesToOp(xs),ys
 
-    Kilo = 1000
-    MB = float(1<<20)
-    GB = float(1<<30)
 
     def smoothedThroughput(ax, window):
         xs,ys = makePlot(ops_completed, lambda t: (ops_completed[t] - ops_completed[t-window])/float(window)/Kilo)
@@ -102,19 +117,26 @@ def parse(filename):
     def plotThroughput(ax):
         smoothedThroughput(ax, 10)
         smoothedThroughput(ax, 100)
-        ax.set_xlim(left = 0, right=t_end)
+        ax.set_xlim(left = 0, right=op_end)
         ax.set_ylim(bottom = 0)
         ax.set_title("op throughput")
         ax.set_ylabel("Kops/sec")
+        ax.set_xlabel("op num (K)")
 
         xs = [t for t in ops_completed]
         def aggregateAt(time, label):
             if time > xs[-1]:
                 return
             aggregate = (ops_completed[time] - ops_completed[xs[0]])/float(time-xs[0])/Kilo
-            ax.text(time, aggregate, "mean %.1f" % aggregate, horizontalalignment="right")
+            ax.text(timeToOp(time), aggregate, "mean %.1f" % aggregate, horizontalalignment="right")
         aggregateAt(xs[-1], "end")
         aggregateAt(1000, "1000s")
+        
+        axtwin = ax.twinx()
+        ts = [t for t in ops_completed]
+        ops = [ops_completed[t]/Kilo for t in xs]
+        axtwin.plot(ops,ts, "g")
+        axtwin.set_ylabel("time (s)")
 
     try: plotThroughput(axes[0])
     except: pass
@@ -136,49 +158,37 @@ def parse(filename):
         maxX, maxY = max(os_map_total.items(), key=operator.itemgetter(1))
         ax.text(maxX, maxY/GB, "max %.1fGB" % (maxY/GB), horizontalalignment="right")
 
-        ax.set_xlim(left = 0, right=t_end)
+        ax.set_xlim(left = 0, right=op_end)
         ax.legend()
         ax.set_title("allocations")
         ax.set_ylabel("GB")
     plotOSvsMalloc(axes[1])
 
     def plotAmass(ax):
-        #label_bytearys = "seq-from-array.[T = unsigned char]"
-        label_bytearys = "in_amass.[T = unsigned char]"
-        focus_bytearys = scopes[label_bytearys]
-        xs_bytearys = [t for t in focus_bytearys]
-        ys_bytearys = [focus_bytearys[t].open_byte/GB for t in xs_bytearys]
-        line, = ax.plot(xs_bytearys, ys_bytearys)
+        focus_bytearys = scopes["in_amass.[T = unsigned char]"]
+        line, = ax.plot(*makePlot(focus_bytearys, lambda t: focus_bytearys[t].open_byte/GB))
         line.set_label("[byte] bytes");
-        ax.set_title(label_bytearys)
         ax.set_ylabel("GB")
         ax.legend()
-
-        a2twin = ax.twinx()
-        ys_bytearys = [focus_bytearys[t].open_count for t in xs_bytearys]
-        line, = a2twin.plot(xs_bytearys, ys_bytearys)
-        line, = a2twin.plot(*makePlot(focus_bytearys, focus_bytearys[t].open_count))
-        line.set_label("[byte] count");
-        a2twin.set_ylabel("count")
+        ax.set_xlim(left = 0, right=op_end)
 
     def plotNodes(ax):
         a2twin = ax.twinx()
         a2twin.set_ylabel("count")
 
-        label_nodes = ".NodeImpl_Compile::Node"
-        focus_nodes = scopes[label_nodes]
-        xs_nodes = [t for t in focus_nodes]
-        ys_nodes = [focus_nodes[t].open_count for t in xs_nodes]
-        line, = a2twin.plot(xs_nodes, ys_nodes)
+        focus_bytearys = scopes["in_amass.[T = unsigned char]"]
+        line, = a2twin.plot(*makePlot(focus_bytearys, lambda t: focus_bytearys[t].open_count))
+        line.set_label("[byte] count");
+
+        focus_nodes = scopes[".NodeImpl_Compile::Node"]
+        line, = a2twin.plot(*makePlot(focus_nodes, lambda t: focus_nodes[t].open_count))
         line.set_label("Node count")
-        line, = a2twin.plot(xs_nodes, [microscopes["sfaLarge"][t].open_count for t in xs])
+        line, = a2twin.plot(*makePlot(microscopes["sfaLarge"], lambda t: microscopes["sfaLarge"][t].open_count))
         line.set_label("amass count")
-        line, = a2twin.plot(xs_nodes, [microscopes["esLarge"][t].open_count for t in xs])
+        line, = a2twin.plot(*makePlot(microscopes["esLarge"], lambda t: microscopes["esLarge"][t].open_count))
         line.set_label("pagein count")
         a2twin.legend(loc="lower left")
 
-    plotAmass(axes[2])
-    plotNodes(axes[2])
     try: plotAmass(axes[2])
     except: pass
     try: plotNodes(axes[2])
@@ -191,24 +201,32 @@ def parse(filename):
 ##    axes[3].set_title("bytes in byte[] per Node")
 ##    axes[3].set_ylabel("MB")
 ##    axes[3].set_ylim(bottom = 0)
-#    # stack chart of...
-#    stack = [
-#              (microscopes["esLarge"], "pagein"),
-#              (microscopes["sfaLarge"], "amass"),
-#              (scopes["in_amass.[T = unsigned char]"], "in_amass"),
-#            ]
-#    xs = [t for t in stack[0][0]]
-#    prev = [0 for t in xs]
-#    for i in range(len(stack)):
-#        (item,label) = stack[i]
-#        ys = [(item[xs[i]].open_byte + prev[i])/GB for i in range(len(xs))]
-#        line, = axes[3].plot(xs, ys)
-#        line.set_label(label)
-#        prev = ys
-#    line, = axes[3].plot(xs, [microscopes["total"][t].open_byte/GB for t in xs])
-#    line.set_label("malloc total")
-#    axes[3].legend()
-#
+
+    def plotMemStackChart(ax):
+        # stack chart of...
+        stack = [
+                  (microscopes["esLarge"], "pagein"),
+                  (microscopes["sfaLarge"], "amass"),
+                  (scopes["in_amass.[T = unsigned char]"], "in_amass"),
+                ]
+        xs = [t for t in stack[0][0]]
+        prev = [0 for t in xs]
+        for i in range(len(stack)):
+            (item,label) = stack[i]
+            ys = [(item[xs[i]].open_byte + prev[i]) for i in range(len(xs))]
+            line, = ax.plot(timesToOp(xs), [v/GB for v in ys])
+            line.set_label(label)
+            prev = ys
+            #prev = [0 for t in xs]
+        line, = ax.plot(timesToOp(xs), [microscopes["total"][t].open_byte/GB for t in xs])
+        line.set_label("malloc total")
+        ax.legend()
+        ax.set_ylabel("GB")
+        ax.set_title("memory consumption, stacked")
+        ax.set_xlim(left = 0, right=op_end)
+    try: plotMemStackChart(axes[3])
+    except: pass
+
 #    xs = [t for t in kvl_underlying]
 #    ys = [kvl_underlying[t]/GB for t in xs]
 #    line, = axes[4].plot(xs, ys)

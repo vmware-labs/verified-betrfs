@@ -487,6 +487,9 @@ void fini_malloc_accounting() {
 
 #if MALLOC_ACCOUNTING_ENABLE_SCOPES
 void malloc_accounting_set_scope(const char* scope, const char* subscope) {
+  if (horrible_amass_label != NULL) {
+    subscope = horrible_amass_label;
+  }
   atable.scope_map.set_active_label(Label(scope, subscope));
 }
 
