@@ -189,8 +189,8 @@ module BlockSystem_Refines_StatesView {
     s: System.Variables,
     s': System.Variables,
     step: System.Step)
-  requires IsTransactionStep(step)
   {
+    && IsTransactionStep(step)
     && System.Inv(k, s)
     && System.Inv(k, s')
 
