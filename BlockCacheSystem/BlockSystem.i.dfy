@@ -1214,6 +1214,7 @@ module BlockSystem {
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
     requires WFSuccs(k, s, vop.loc);
 
+    ensures PersistentLoc(k, s) == None
     ensures DiskGraphMap(k, s') == DiskGraphMap(k, s)
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
     ensures PersistentLoc(k, s') == Some(vop.loc)

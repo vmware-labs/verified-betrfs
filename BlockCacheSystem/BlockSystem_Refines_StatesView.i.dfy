@@ -94,6 +94,7 @@ module BlockSystem_Refines_StatesView {
     && vop.SendPersistentLocOp?
     && System.Inv(k, s)
     && System.Inv(k, s')
+    && PersistentLoc(k, s) == None
     && DiskGraphMap(k, s') == DiskGraphMap(k, s)
     && FrozenGraph(k, s') == FrozenGraph(k, s)
     && vop.loc in DiskGraphMap(k, s)
@@ -348,13 +349,13 @@ module BlockSystem_Refines_StatesView {
   ensures vop.CleanUpOp? ==>
       UpdateForgetOld(k, s, s')
 
-  ensures IsTransactionStep(step) ==>
-        UpdateTransaction(k, s, s', step)
+  ensures vop.AdvanceOp? ==>
+      || UpdateTransaction(k, s, s', step)
+      || UpdateUnalloc(k, s, s', step)
 
   ensures vop.StatesInternalOp? ==> (
       || UpdateAllEq(k, s, s')
       || UpdateDiskChange(k, s, s')
-      || UpdateUnalloc(k, s, s', step)
     )
   {
     System.NextStepPreservesInv(k, s, s', vop, step);

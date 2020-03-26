@@ -223,7 +223,8 @@ module BlockCache refines Transactable {
 
   predicate Unalloc(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
   {
-    && vop.StatesInternalOp?
+    && vop.AdvanceOp?
+    && vop.uiop.NoOp?
 
     && dop.NoDiskOp?
     && s.Ready?

@@ -11,7 +11,7 @@ abstract module StatesView {
 
   datatype Constants = Constants(k: SM.Constants)
   datatype Variables = Variables(
-      disk: map<Loc, SM.Variables>,
+      disk: imap<Loc, SM.Variables>,
       persistentLoc: Option<Loc>,
       frozenLoc: Option<Loc>,
       frozenState: Option<SM.Variables>,
@@ -42,11 +42,14 @@ abstract module StatesView {
   {
     && vop.SendPersistentLocOp?
 
+    && s.persistentLoc.None?
+
     && s'.disk == s.disk
     && s'.persistentLoc == Some(vop.loc)
     && s'.frozenLoc == s.frozenLoc
     && s'.frozenState == s.frozenState
-    && s'.ephemeralState == s.ephemeralState
+    && vop.loc in s.disk
+    && s'.ephemeralState == Some(s.disk[vop.loc])
   }
 
   predicate Advance(k: Constants, s: Variables, s': Variables, vop: VOp)
