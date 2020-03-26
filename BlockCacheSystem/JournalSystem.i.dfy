@@ -5,7 +5,7 @@ include "../MapSpec/ThreeStateVersioned.s.dfy"
 // Attach a BlockCache to a Disk
 //
 
-module JournalCacheSystem {
+module JournalSystem {
   import M = JournalCache
   import D = JournalDisk
 
@@ -290,10 +290,11 @@ module JournalCacheSystem {
     && D.Next(k.disk, s.disk, s'.disk, dop)
   }
 
-  predicate DiskInternal(k: Constants, s: Variables, s': Variables, step: D.InternalStep)
+  predicate DiskInternal(k: Constants, s: Variables, s': Variables, step: D.InternalStep, vop: VOp)
   {
     && s.machine == s'.machine
     && D.NextInternalStep(k.disk, s.disk, s'.disk, step)
+    && vop.JournalInternalOp?
   }
 
   predicate Crash(k: Constants, s: Variables, s': Variables, vop: VOp)
@@ -307,7 +308,7 @@ module JournalCacheSystem {
   {
     match step {
       case MachineStep(dop, machineStep) => Machine(k, s, s', dop, vop, machineStep)
-      case DiskInternalStep(step) => DiskInternal(k, s, s', step)
+      case DiskInternalStep(step) => DiskInternal(k, s, s', step, vop)
       case CrashStep => Crash(k, s, s', vop)
     }
   }
@@ -501,6 +502,8 @@ module JournalCacheSystem {
     && WFFrozenJournal(s)
     && WFEphemeralJournal(s)
     && WFGammaJournal(s)
+    && WFPersistentLoc(s)
+    && M.Inv(k.machine, s.machine)
   {
     && M.Inv(k.machine, s.machine)
     && WFDisk(s.disk)
@@ -860,6 +863,11 @@ module JournalCacheSystem {
     ensures EphemeralJournal(s') == EphemeralJournal(s)
     ensures GammaJournal(s') == GammaJournal(s)
     ensures DeltaJournal(s') == DeltaJournal(s)
+
+    ensures WFPersistentLoc(s')
+    ensures PersistentLoc(s') == PersistentLoc(s)
+    ensures FrozenLoc(s') == FrozenLoc(s)
+    ensures SyncReqs(s') == SyncReqs(s)
   {
   }
 
@@ -926,7 +934,7 @@ module JournalCacheSystem {
 
   ensures WFPersistentLoc(s')
   ensures PersistentLoc(s') == PersistentLoc(s)
-  ensures vop.CleanUpOp?         ==> FrozenLoc(s') == None
+  ensures vop.CleanUpOp?         ==> FrozenLoc(s') == None && FrozenLoc(s) == Some(PersistentLoc(s))
   ensures vop.JournalInternalOp? ==> FrozenLoc(s') == FrozenLoc(s)
   ensures SyncReqs(s') == SyncReqs(s)
   {
@@ -1178,6 +1186,9 @@ module JournalCacheSystem {
     ensures PersistentLoc(s') == PersistentLoc(s)
     ensures FrozenLoc(s') == FrozenLoc(s)
     ensures SyncReqs(s') == SyncReqs(s)
+
+    ensures vop.loc == PersistentLoc(s)
+
   {
   }
 
@@ -1263,6 +1274,8 @@ module JournalCacheSystem {
     ensures GammaJournal(s')
         == GammaJournal(s) + DeltaJournal(s)
     ensures DeltaJournal(s') == []
+
+    ensures FrozenLoc(s) != Some(PersistentLoc(s))
 
     ensures WFPersistentLoc(s')
     ensures PersistentLoc(s') == PersistentLoc(s)
@@ -1441,8 +1454,8 @@ module JournalCacheSystem {
     ensures WFPersistentLoc(s')
     ensures PersistentLoc(s') == PersistentLoc(s)
     ensures FrozenLoc(s') == FrozenLoc(s)
-    ensures id as int !in SyncReqs(s)
-    ensures SyncReqs(s') == SyncReqs(s)[id as int := ThreeStateTypes.State3]
+    ensures vop.id !in SyncReqs(s)
+    ensures SyncReqs(s') == SyncReqs(s)[vop.id := ThreeStateTypes.State3]
   {
   }
 
@@ -1478,8 +1491,9 @@ module JournalCacheSystem {
     ensures WFPersistentLoc(s')
     ensures PersistentLoc(s') == PersistentLoc(s)
     ensures FrozenLoc(s') == FrozenLoc(s)
-    ensures id as int in SyncReqs(s)
-    ensures SyncReqs(s') == MapRemove1(SyncReqs(s), id as int)
+    ensures vop.id in SyncReqs(s)
+    ensures SyncReqs(s)[vop.id] == ThreeStateTypes.State1
+    ensures SyncReqs(s') == MapRemove1(SyncReqs(s), vop.id)
   {
   }
 
@@ -1586,6 +1600,8 @@ module JournalCacheSystem {
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
     ensures WFGammaJournal(s')
+    ensures WFPersistentLoc(s')
+
     ensures FrozenJournal(s') == FrozenJournal(s)
     ensures EphemeralJournal(s') == EphemeralJournal(s)
 
@@ -1593,12 +1609,17 @@ module JournalCacheSystem {
         if ProcessWriteIsGraphUpdate(k, s) then (
           && GammaJournal(s') == FrozenJournal(s)
           && PersistentJournal(s') == FrozenJournal(s)
+          && FrozenLoc(s).Some?
+          && PersistentLoc(s') == FrozenLoc(s).value
         ) else (
           && GammaJournal(s') == GammaJournal(s)
           && PersistentJournal(s') == GammaJournal(s)
+          && PersistentLoc(s') == PersistentLoc(s)
         )
 
     ensures DeltaJournal(s') == DeltaJournal(s)
+    ensures FrozenLoc(s') == FrozenLoc(s)
+    ensures SyncReqs(s') == SyncReqs2to1(SyncReqs(s))
   {
     assert s.machine.newSuperblock.Some?;
     /*if which == 0 {
@@ -1648,7 +1669,7 @@ module JournalCacheSystem {
     }
   }
 
-  lemma ProcessWritePreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, which: int)
+  lemma ProcessWriteSuperblockPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, which: int)
     requires Inv(k, s)
     requires s.machine == s'.machine
     requires D.ProcessWriteSuperblock(k.disk, s.disk, s'.disk, which)
@@ -1663,11 +1684,11 @@ module JournalCacheSystem {
 
   lemma DiskInternalStepPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, step: D.InternalStep)
     requires Inv(k, s)
-    requires DiskInternal(k, s, s', step)
+    requires DiskInternal(k, s, s', step, vop)
     ensures Inv(k, s')
   {
     match step {
-      case ProcessWriteSuperblockStep(which) => ProcessWritePreservesInv(k, s, s', vop, which);
+      case ProcessWriteSuperblockStep(which) => ProcessWriteSuperblockPreservesInv(k, s, s', vop, which);
     }
   }
 
@@ -1687,6 +1708,11 @@ module JournalCacheSystem {
     ensures EphemeralJournal(s') == PersistentJournal(s)
     ensures GammaJournal(s') == PersistentJournal(s)
     ensures DeltaJournal(s') == []
+
+    ensures WFPersistentLoc(s')
+    ensures PersistentLoc(s') == PersistentLoc(s)
+    ensures FrozenLoc(s') == None
+    ensures SyncReqs(s') == map[]
   {
     assert SuperblockOfDisk(s.disk)
         == SuperblockOfDisk(s'.disk);

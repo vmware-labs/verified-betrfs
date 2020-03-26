@@ -34,7 +34,6 @@ abstract module StatesView {
     | CrashStep
     | FreezeStep
     | DiskChangeStep
-    | SetFrozenLocStep
     | ProvideFrozenLocStep
     | ForgetOldStep
     | StutterStep
@@ -120,25 +119,19 @@ abstract module StatesView {
     && s'.ephemeralState == s.ephemeralState
   }
 
-  predicate SetFrozenLoc(k: Constants, s: Variables, s': Variables, vop: VOp)
-  {
-    && vop.StatesInternalOp?
-
-    && s'.disk == s.disk 
-    && s'.persistentLoc == s.persistentLoc
-    && s'.frozenLoc == s.frozenLoc
-    && s'.frozenState == s.frozenState
-    && s'.ephemeralState == s.ephemeralState
-  }
-
   predicate ProvideFrozenLoc(k: Constants, s: Variables, s': Variables, vop: VOp)
   {
     && vop.SendFrozenLocOp?
-    && s.frozenLoc == Some(vop.loc)
+
+    && s.frozenLoc == None
+    && s'.frozenLoc == Some(vop.loc)
+
+    && s'.frozenState.Some?
+    && s'.frozenLoc.value in s.disk
+    && s.disk[s'.frozenLoc.value] == s'.frozenState.value
 
     && s'.disk == s.disk 
     && s'.persistentLoc == s.persistentLoc
-    && s'.frozenLoc == s.frozenLoc
     && s'.frozenState == s.frozenState
     && s'.ephemeralState == s.ephemeralState
   }
@@ -168,7 +161,6 @@ abstract module StatesView {
       case CrashStep => Crash(k, s, s', vop)
       case FreezeStep => Freeze(k, s, s', vop)
       case DiskChangeStep => DiskChange(k, s, s', vop)
-      case SetFrozenLocStep => SetFrozenLoc(k, s, s', vop)
       case ProvideFrozenLocStep => ProvideFrozenLoc(k, s, s', vop)
       case ForgetOldStep => ForgetOld(k, s, s', vop)
       case StutterStep => Stutter(k, s, s', vop)

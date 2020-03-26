@@ -139,7 +139,7 @@ module BlockCache refines Transactable {
 
   predicate WriteBackNodeReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
   {
-    && vop.TristateInternalOp?
+    && vop.StatesInternalOp?
 
     && dop.ReqWriteNodeOp?
     && s.Ready?
@@ -171,7 +171,7 @@ module BlockCache refines Transactable {
 
   predicate WriteBackNodeResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
-    && vop.TristateInternalOp?
+    && vop.StatesInternalOp?
 
     && dop.RespWriteNodeOp?
     && s.Ready?
@@ -181,7 +181,7 @@ module BlockCache refines Transactable {
 
   predicate WriteBackIndirectionTableReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
-    && vop.TristateInternalOp?
+    && vop.StatesInternalOp?
 
     && dop.ReqWriteIndirectionTableOp?
     && s.Ready?
@@ -223,7 +223,7 @@ module BlockCache refines Transactable {
 
   predicate Unalloc(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
   {
-    && vop.TristateInternalOp?
+    && vop.StatesInternalOp?
 
     && dop.NoDiskOp?
     && s.Ready?
@@ -254,7 +254,7 @@ module BlockCache refines Transactable {
 
   predicate PageInNodeReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
   {
-    && vop.TristateInternalOp?
+    && vop.StatesInternalOp?
 
     && dop.ReqReadNodeOp?
     && s.Ready?
@@ -268,7 +268,7 @@ module BlockCache refines Transactable {
 
   predicate PageInNodeResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
-    && vop.TristateInternalOp?
+    && vop.StatesInternalOp?
 
     && dop.RespReadNodeOp?
     && s.Ready?
@@ -285,7 +285,7 @@ module BlockCache refines Transactable {
 
   predicate PageInIndirectionTableReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
-    && vop.TristateInternalOp?
+    && vop.StatesInternalOp?
 
     && dop.ReqReadIndirectionTableOp?
     && s.LoadingIndirectionTable?
@@ -297,7 +297,7 @@ module BlockCache refines Transactable {
 
   predicate PageInIndirectionTableResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
-    && vop.TristateInternalOp?
+    && vop.StatesInternalOp?
 
     && dop.RespReadIndirectionTableOp?
     && s.LoadingIndirectionTable?
@@ -334,7 +334,7 @@ module BlockCache refines Transactable {
 
   predicate Evict(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
   {
-    && vop.TristateInternalOp?
+    && vop.StatesInternalOp?
 
     && s.Ready?
     && dop.NoDiskOp?
@@ -377,7 +377,7 @@ module BlockCache refines Transactable {
 
   predicate NoOp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
-    && vop.TristateInternalOp?
+    && vop.StatesInternalOp?
 
     && (
       || dop.NoDiskOp?
@@ -479,8 +479,8 @@ module BlockCache refines Transactable {
   predicate Transaction(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ops: seq<Op>)
   {
     && vop.AdvanceOp?
-
     && dop.NoDiskOp?
+    && s.Ready?
     && OpTransaction(k, s, s', ops)
   }
 

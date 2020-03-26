@@ -512,6 +512,7 @@ module JournalCache {
     && s.Ready?
     && dop.NoDiskOp?
     && s.superblockWrite.None?
+    && s.frozenLoc != Some(s.superblock.indirectionTableLoc)
     && s.replayJournal == []
     && s' ==
         s.(frozenLoc := None)
@@ -557,7 +558,8 @@ module JournalCache {
 
   predicate PushSyncReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
   {
-    && vop.JournalInternalOp?
+    && vop.PushSyncOp?
+    && vop.id == id as int
 
     && dop.NoDiskOp?
     && id !in s.syncReqs
@@ -566,7 +568,8 @@ module JournalCache {
 
   predicate PopSyncReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
   {
-    && vop.JournalInternalOp?
+    && vop.PopSyncOp?
+    && vop.id == id as int
 
     && dop.NoDiskOp?
     && id in s.syncReqs

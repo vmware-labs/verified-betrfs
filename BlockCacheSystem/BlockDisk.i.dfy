@@ -1,6 +1,7 @@
 include "../MapSpec/MapSpec.s.dfy"
 include "../lib/Base/Maps.s.dfy"
 include "../PivotBetree/Bounds.i.dfy"
+include "../Versions/VOp.i.dfy"
 include "DiskLayout.i.dfy"
 include "SectorType.i.dfy"
 include "AsyncSectorDiskModelTypes.i.dfy"
@@ -206,10 +207,10 @@ abstract module BlockMachine {
   type Constants
   type Location(==)
   type Sector
-  type UIOp = UI.Op
+  import opened ViewOp
 
   predicate Init(k: Constants, s: Variables)
-  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: D.DiskOp)
+  predicate Next(k: Constants, s: Variables, s': Variables, dop: D.DiskOp, vop: VOp)
 }
 
 // A disk attached to a program ("Machine"), modeling the nondeterministic crashes that reset the
@@ -220,49 +221,50 @@ abstract module BlockSystemModel {
   import M : BlockMachine
   import AsyncSectorDiskModelTypes
   import opened SectorType
+  import opened ViewOp
+  import opened DiskLayout
 
   type Constants = AsyncSectorDiskModelTypes.AsyncSectorDiskModelConstants<M.Constants, D.Constants>
   type Variables = AsyncSectorDiskModelTypes.AsyncSectorDiskModelVariables<M.Variables, D.Variables>
-  type UIOp = M.UIOp
 
   datatype Step =
     | MachineStep(dop: D.DiskOp)
     | CrashStep
   
-  predicate Machine(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: D.DiskOp)
+  predicate Machine(k: Constants, s: Variables, s': Variables, dop: D.DiskOp, vop: VOp)
   {
-    && M.Next(k.machine, s.machine, s'.machine, uiop, dop)
+    && M.Next(k.machine, s.machine, s'.machine, dop, vop)
     && D.Next(k.disk, s.disk, s'.disk, dop)
   }
 
-  predicate Crash(k: Constants, s: Variables, s': Variables, uiop: UIOp)
+  predicate Crash(k: Constants, s: Variables, s': Variables, vop: VOp)
   {
-    && uiop.CrashOp?
+    && vop.CrashOp?
     && M.Init(k.machine, s'.machine)
     && D.Crash(k.disk, s.disk, s'.disk)
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: Step)
+  predicate NextStep(k: Constants, s: Variables, s': Variables, vop: VOp, step: Step)
   {
     match step {
-      case MachineStep(dop) => Machine(k, s, s', uiop, dop)
-      case CrashStep => Crash(k, s, s', uiop)
+      case MachineStep(dop) => Machine(k, s, s', dop, vop)
+      case CrashStep => Crash(k, s, s', vop)
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp) {
-    exists step :: NextStep(k, s, s', uiop, step)
+  predicate Next(k: Constants, s: Variables, s': Variables, vop: VOp) {
+    exists step :: NextStep(k, s, s', vop, step)
   }
 
-  predicate Init(k: Constants, s: Variables)
+  predicate Init(k: Constants, s: Variables, loc: Location)
   predicate Inv(k: Constants, s: Variables)
 
-  lemma InitImpliesInv(k: Constants, s: Variables)
-    requires Init(k, s)
+  lemma InitImpliesInv(k: Constants, s: Variables, loc: Location)
+    requires Init(k, s, loc)
     ensures Inv(k, s)
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp)
     requires Inv(k, s)
-    requires Next(k, s, s', uiop)
+    requires Next(k, s, s', vop)
     ensures Inv(k, s')
 }

@@ -60,10 +60,10 @@ module BlockSystem {
     map ref | ref in indirectionTable.locs :: blocks[indirectionTable.locs[ref]]
   }
 
-  function Graph(refs: set<Reference>, refmap: map<Reference, Node>) : map<Reference, Node>
+  function Graph(refs: set<Reference>, refmap: map<Reference, Node>) : imap<Reference, Node>
   requires refs <= refmap.Keys
   {
-    map ref | ref in refs :: refmap[ref]
+    imap ref | ref in refs :: refmap[ref]
   }
 
   predicate WFDiskGraph(indirectionTable: IndirectionTable, blocks: imap<Location, Node>)
@@ -72,7 +72,7 @@ module BlockSystem {
     && WFIndirectionTableWrtDisk(indirectionTable, blocks)
   }
 
-  function DiskGraph(indirectionTable: IndirectionTable, blocks: imap<Location, Node>) : map<Reference, Node>
+  function DiskGraph(indirectionTable: IndirectionTable, blocks: imap<Location, Node>) : imap<Reference, Node>
   requires WFDiskGraph(indirectionTable, blocks)
   {
     Graph(indirectionTable.graph.Keys, RefMapOfDisk(indirectionTable, blocks))
@@ -103,10 +103,10 @@ module BlockSystem {
       HasDiskCacheLookup(indirectionTable, disk, cache, ref))
   }
 
-  function DiskCacheGraph(indirectionTable: IndirectionTable, disk: D.Variables, cache: map<Reference, Node>) : map<Reference, Node>
+  function DiskCacheGraph(indirectionTable: IndirectionTable, disk: D.Variables, cache: map<Reference, Node>) : imap<Reference, Node>
   requires WFDiskCacheGraph(indirectionTable, disk, cache)
   {
-    map ref | ref in indirectionTable.graph :: DiskCacheLookup(indirectionTable, disk, cache, ref)
+    imap ref | ref in indirectionTable.graph :: DiskCacheLookup(indirectionTable, disk, cache, ref)
   }
 
   predicate WFDiskGraphOfLoc(
@@ -126,7 +126,7 @@ module BlockSystem {
   function DiskGraphOfLoc(
       k: Constants,
       s: Variables,
-      loc: Location) : map<Reference, Node>
+      loc: Location) : imap<Reference, Node>
   requires WFDiskGraphOfLoc(k, s, loc)
   {
     DiskGraph(s.disk.indirectionTables[loc], s.disk.nodes)
@@ -134,7 +134,7 @@ module BlockSystem {
 
   protected function DiskGraphMap(
       k: Constants,
-      s: Variables) : imap<Location, map<Reference, Node>>
+      s: Variables) : imap<Location, imap<Reference, Node>>
   {
     imap loc | WFDiskGraphOfLoc(k, s, loc)
         :: DiskGraphOfLoc(k, s, loc)
@@ -177,7 +177,7 @@ module BlockSystem {
       && FrozenLoc(k, s).value in DiskGraphMap(k, s)
       && FrozenLoc(k, s).value in DiskGraphMap(k, s')
       && DiskGraphMap(k, s')[FrozenLoc(k, s).value]
-          == DiskGraphMap(k, s')[FrozenLoc(k, s).value]
+          == DiskGraphMap(k, s)[FrozenLoc(k, s).value]
     )
   }
 
@@ -188,7 +188,7 @@ module BlockSystem {
     && WFDiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
   }
 
-  protected function FrozenGraph(k: Constants, s: Variables) : map<Reference, Node>
+  protected function FrozenGraph(k: Constants, s: Variables) : imap<Reference, Node>
   requires WFFrozenGraph(k, s)
   {
     DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
@@ -199,7 +199,7 @@ module BlockSystem {
     s.machine.Ready? && s.machine.frozenIndirectionTable.Some?
   }
 
-  protected function FrozenGraphOpt(k: Constants, s: Variables) : Option<map<Reference, Node>>
+  protected function FrozenGraphOpt(k: Constants, s: Variables) : Option<imap<Reference, Node>>
   {
     if WFFrozenGraph(k, s) then
       Some(FrozenGraph(k, s))
@@ -213,7 +213,7 @@ module BlockSystem {
     && WFDiskGraphOfLoc(k, s, s.machine.indirectionTableLoc)
   }
 
-  protected function LoadingGraph(k: Constants, s: Variables) : map<Reference, Node>
+  protected function LoadingGraph(k: Constants, s: Variables) : imap<Reference, Node>
   requires WFLoadingGraph(k, s)
   {
     DiskGraphOfLoc(k, s, s.machine.indirectionTableLoc)
@@ -225,13 +225,13 @@ module BlockSystem {
     && WFDiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
   }
 
-  protected function EphemeralGraph(k: Constants, s: Variables) : map<Reference, Node>
+  protected function EphemeralGraph(k: Constants, s: Variables) : imap<Reference, Node>
   requires WFEphemeralGraph(k, s)
   {
     DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
   }
 
-  protected function EphemeralGraphOpt(k: Constants, s: Variables) : Option<map<Reference, Node>>
+  protected function EphemeralGraphOpt(k: Constants, s: Variables) : Option<imap<Reference, Node>>
   {
     if WFEphemeralGraph(k, s) then
       Some(EphemeralGraph(k, s))
@@ -241,16 +241,17 @@ module BlockSystem {
       None
   }
 
-  predicate NoDanglingPointers(graph: map<Reference, Node>)
+  predicate NoDanglingPointers(graph: imap<Reference, Node>)
   {
     forall r1, r2 {:trigger r2 in M.G.Successors(graph[r1])}
       | r1 in graph && r2 in M.G.Successors(graph[r1])
       :: r2 in graph
   }
 
-  predicate SuccessorsAgree(succGraph: map<Reference, seq<Reference>>, graph: map<Reference, Node>)
+  predicate SuccessorsAgree(succGraph: map<Reference, seq<Reference>>, graph: imap<Reference, Node>)
   {
-    && succGraph.Keys == graph.Keys
+    && (forall key | key in succGraph :: key in graph)
+    && (forall key | key in graph :: key in succGraph)
     && forall ref | ref in succGraph :: (iset r | r in succGraph[ref]) == M.G.Successors(graph[ref])
   }
 
@@ -265,10 +266,15 @@ module BlockSystem {
 
   ///// Init
 
-  predicate Init(k: Constants, s: Variables)
+  predicate Init(k: Constants, s: Variables, loc: Location)
   {
     && M.Init(k.machine, s.machine)
     && D.Init(k.disk, s.disk)
+    && WFDiskGraphOfLoc(k, s, loc)
+    && SuccessorsAgree(s.disk.indirectionTables[loc].graph, DiskGraphOfLoc(k, s, loc))
+    && NoDanglingPointers(DiskGraphOfLoc(k, s, loc))
+    && DiskGraphOfLoc(k, s, loc).Keys == iset{M.G.Root()}
+    && M.G.Successors(DiskGraphOfLoc(k, s, loc)[M.G.Root()]) == iset{}
   }
 
   ////// Next
@@ -472,6 +478,9 @@ module BlockSystem {
   }
 
   protected predicate Inv(k: Constants, s: Variables)
+  ensures Inv(k, s) ==>
+    && (s.machine.Ready? ==> EphemeralGraphOpt(k, s).Some?)
+    && M.Inv(k.machine, s.machine)
   {
     && M.Inv(k.machine, s.machine)
     && (s.machine.Ready? ==>
@@ -522,19 +531,21 @@ module BlockSystem {
   ////////////////////// Init
   //////////////////////
 
-  /*lemma InitGraphs(k: Constants, s: Variables)
-    requires Init(k, s)
-    ensures PersistentGraph(k, s)
-         == FrozenGraph(k, s)
-         == EphemeralGraph(k, s)
+  lemma InitGraphs(k: Constants, s: Variables, loc: Location)
+    requires Init(k, s, loc)
+    ensures loc in DiskGraphMap(k, s)
+    ensures PersistentLoc(k, s) == None
+    ensures FrozenLoc(k, s) == None
+    ensures EphemeralGraphOpt(k, s) == None
+    ensures FrozenGraphOpt(k, s) == None
   {
-  }*/
+  }
 
-  lemma InitImpliesInv(k: Constants, s: Variables)
-    requires Init(k, s)
+  lemma InitImpliesInv(k: Constants, s: Variables, loc: Location)
+    requires Init(k, s, loc)
     ensures Inv(k, s)
   {
-    //InitGraphs(k, s);
+    InitGraphs(k, s, loc);
   }
 
   ////////////////////////////////////////////////////
@@ -690,6 +701,8 @@ module BlockSystem {
     ensures DiskChangesPreservesPersistentAndFrozen(k, s, s')
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
     ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+    ensures FrozenLoc(k, s') == FrozenLoc(k, s)
+    ensures PersistentLoc(k, s') == PersistentLoc(k, s)
   {
     WriteBackNodeReqStepPreservesDiskGraph(k, s, s', dop, vop, ref, s.machine.persistentIndirectionTable);
     WriteBackNodeReqStepPreservesDiskCacheGraph(k, s, s', dop, vop, ref, s.machine.ephemeralIndirectionTable, s'.machine.ephemeralIndirectionTable);
@@ -754,6 +767,8 @@ module BlockSystem {
     ensures DiskGraphMap(k, s') == DiskGraphMap(k, s)
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
     ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+    ensures FrozenLoc(k, s') == FrozenLoc(k, s)
+    ensures PersistentLoc(k, s') == PersistentLoc(k, s)
   {
     if (s.machine.Ready?) {
       assert DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
@@ -786,6 +801,8 @@ module BlockSystem {
     ensures DiskChangesPreservesPersistentAndFrozen(k, s, s')
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
     ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+    ensures FrozenLoc(k, s') == FrozenLoc(k, s)
+    ensures PersistentLoc(k, s') == PersistentLoc(k, s)
   {
     assert forall id | id in s.disk.reqWriteIndirectionTables :: id in s'.disk.reqWriteIndirectionTables;
 
@@ -860,9 +877,17 @@ module BlockSystem {
     requires M.WriteBackIndirectionTableResp(k.machine, s.machine, s'.machine, dop, vop)
     requires D.AckWriteIndirectionTable(k.disk, s.disk, s'.disk, dop);
 
+    ensures FrozenLoc(k, s) == None
+    ensures FrozenLoc(k, s') == Some(vop.loc)
+
+    ensures FrozenGraphOpt(k, s).Some?
+    ensures FrozenLoc(k, s').value in DiskGraphMap(k, s)
+    ensures DiskGraphMap(k, s)[FrozenLoc(k, s').value] == FrozenGraphOpt(k, s).value
+
     ensures DiskGraphMap(k, s') == DiskGraphMap(k, s)
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
     ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+    ensures PersistentLoc(k, s') == PersistentLoc(k, s)
   {
     M.WriteBackIndirectionTableRespStepPreservesInv(k.machine, s.machine, s'.machine, dop, vop);
     if (s.machine.Ready?) {
@@ -896,6 +921,8 @@ module BlockSystem {
 
     ensures DiskGraphMap(k, s') == DiskGraphMap(k, s)
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures FrozenLoc(k, s') == FrozenLoc(k, s);
+    ensures PersistentLoc(k, s') == PersistentLoc(k, s);
 
     ensures EphemeralGraphOpt(k, s).Some?
     ensures EphemeralGraphOpt(k, s').Some?
@@ -929,6 +956,8 @@ module BlockSystem {
 
     ensures DiskGraphMap(k, s') == DiskGraphMap(k, s)
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures FrozenLoc(k, s') == FrozenLoc(k, s);
+    ensures PersistentLoc(k, s') == PersistentLoc(k, s);
 
     ensures EphemeralGraphOpt(k, s).Some?
     ensures ref !in EphemeralGraphOpt(k, s).value
@@ -1004,10 +1033,12 @@ module BlockSystem {
 
     ensures DiskGraphMap(k, s') == DiskGraphMap(k, s)
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
+    ensures PersistentLoc(k, s') == PersistentLoc(k, s);
+    ensures FrozenLoc(k, s') == FrozenLoc(k, s);
 
     ensures EphemeralGraphOpt(k, s).Some?
     ensures EphemeralGraphOpt(k, s').Some?
-    ensures EphemeralGraphOpt(k, s').value == MapRemove1(EphemeralGraphOpt(k, s).value, ref)
+    ensures EphemeralGraphOpt(k, s').value == IMapRemove1(EphemeralGraphOpt(k, s).value, ref)
     ensures ref in EphemeralGraphOpt(k, s).value
     ensures forall r | r in EphemeralGraphOpt(k, s).value ::
         ref !in M.G.Successors(EphemeralGraphOpt(k, s).value[r])
@@ -1044,6 +1075,8 @@ module BlockSystem {
     ensures DiskGraphMap(k, s') == DiskGraphMap(k, s)
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
     ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+    ensures FrozenLoc(k, s') == FrozenLoc(k, s)
+    ensures PersistentLoc(k, s') == PersistentLoc(k, s)
   {
     if (s.machine.Ready?) {
       assert DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
@@ -1091,6 +1124,8 @@ module BlockSystem {
     ensures DiskGraphMap(k, s') == DiskGraphMap(k, s)
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
     ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+    ensures FrozenLoc(k, s') == FrozenLoc(k, s)
+    ensures PersistentLoc(k, s') == PersistentLoc(k, s)
   {
     if (s.machine.Ready?) {
       assert DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
@@ -1123,6 +1158,8 @@ module BlockSystem {
     ensures DiskGraphMap(k, s') == DiskGraphMap(k, s)
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
     ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+    ensures FrozenLoc(k, s') == FrozenLoc(k, s)
+    ensures PersistentLoc(k, s') == PersistentLoc(k, s)
   {
     if (UseFrozenGraph(k, s)) {
       assert DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
@@ -1151,6 +1188,8 @@ module BlockSystem {
     ensures DiskGraphMap(k, s') == DiskGraphMap(k, s)
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
     ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+    ensures FrozenLoc(k, s') == FrozenLoc(k, s)
+    ensures PersistentLoc(k, s') == PersistentLoc(k, s)
   {
     assert LoadingGraph(k, s)
         == EphemeralGraph(k, s');
@@ -1179,8 +1218,10 @@ module BlockSystem {
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
     ensures PersistentLoc(k, s') == Some(vop.loc)
     ensures vop.loc in DiskGraphMap(k, s)
+    ensures EphemeralGraphOpt(k, s').Some?
     ensures EphemeralGraphOpt(k, s').value ==
         DiskGraphMap(k, s)[vop.loc]
+    ensures FrozenLoc(k, s') == FrozenLoc(k, s)
   {
     assert WFSuccs(k, s, vop.loc);
     assert WFDiskGraphOfLoc(k, s, vop.loc);
@@ -1217,6 +1258,8 @@ module BlockSystem {
     ensures DiskGraphMap(k, s') == DiskGraphMap(k, s)
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
     ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+    ensures FrozenLoc(k, s') == FrozenLoc(k, s)
+    ensures PersistentLoc(k, s') == PersistentLoc(k, s)
   {
     if (s.machine.Ready?) {
       assert DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
@@ -1250,6 +1293,8 @@ module BlockSystem {
     ensures DiskGraphMap(k, s') == DiskGraphMap(k, s)
     ensures FrozenGraphOpt(k, s') == EphemeralGraphOpt(k, s);
     ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+    ensures FrozenLoc(k, s') == None
+    ensures PersistentLoc(k, s') == PersistentLoc(k, s)
   {
     M.FreezeStepPreservesInv(k.machine, s.machine, s'.machine, dop, vop);
   }
@@ -1276,6 +1321,8 @@ module BlockSystem {
     ensures DiskGraphMap(k, s') == DiskGraphMap(k, s)
     ensures FrozenGraphOpt(k, s') == None
     ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+    ensures FrozenLoc(k, s') == None
+    ensures PersistentLoc(k, s') == FrozenLoc(k, s)
   {
   }
 
@@ -1301,6 +1348,8 @@ module BlockSystem {
     ensures DiskGraphMap(k, s') == DiskGraphMap(k, s)
     ensures FrozenGraphOpt(k, s') == FrozenGraphOpt(k, s);
     ensures EphemeralGraphOpt(k, s') == EphemeralGraphOpt(k, s);
+    ensures FrozenLoc(k, s') == FrozenLoc(k, s)
+    ensures PersistentLoc(k, s') == PersistentLoc(k, s)
   {
     if (s.machine.Ready?) {
       assert DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
@@ -1360,6 +1409,8 @@ module BlockSystem {
     ensures DiskChangesPreservesPersistentAndFrozen(k, s, s')
     ensures FrozenGraphOpt(k, s') == None
     ensures EphemeralGraphOpt(k, s') == None
+    ensures FrozenLoc(k, s') == None
+    ensures PersistentLoc(k, s') == None
   {
     if PersistentLoc(k, s).Some? {
       var persistentLoc := PersistentLoc(k, s).value;
