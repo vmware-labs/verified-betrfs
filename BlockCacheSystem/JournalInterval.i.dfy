@@ -354,6 +354,21 @@ module JournalIntervals {
           }
         }
       } else {
+        if interval.start + i < NumJournalBlocks() as int {
+          calc {
+            b[i];
+            journal'[i + interval.start].value;
+            slice'[i].value;
+            a[i];
+          }
+        } else {
+          calc {
+            b[i];
+            journal'[i + interval.start - NumJournalBlocks() as int].value;
+            slice'[i].value;
+            a[i];
+          }
+        }
       }
     }
 

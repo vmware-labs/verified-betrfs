@@ -552,6 +552,7 @@ module JournalCache {
     && dop.NoDiskOp?
     && var replayed_je := JournalEntriesForUIOp(vop.uiop);
     && s.Ready?
+    && s'.Ready?
     && s' == s.(replayJournal := s'.replayJournal)
     && s.replayJournal == replayed_je + s'.replayJournal
   }
