@@ -270,8 +270,13 @@ module IOImpl {
         assert sector.Some? ==> SI.WFSector(sector.value);
         assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
 
+        var node := sector.value.block;
+        // Shake loose all the pointers to the memory underlying the PKV we just read in.
+        node.AmassBuckets();
+        node.RecopyPivots();
+
         assert |s.cache.I()| <= MaxCacheSize();
-        s.cache.Insert(ref, sector.value.block);
+        s.cache.Insert(ref, node);
 
         s.outstandingBlockReads := ComputeMapRemove1(s.outstandingBlockReads, id);
       } else {

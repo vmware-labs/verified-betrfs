@@ -477,3 +477,46 @@ thing disabled was left/right splitting. Let's re-enable it.
 Okay, so amassing split was indeed relevant. We're still at an overhead factor of 2X.
 A hypothesis: pkvs hanging around? But Amass should cure that.
 Oh, no, amass on the parent only replaces one bucket.
+
+[malloc-exp/manual-wka-200-amassspagein.data]
+...does an amass on page-in to break the pkv into buckets, and also recopies the pivots, to shake
+loose any connection to the underlying pagein pkv.
+
+Hooray. I think I've finally gotten a handle on the memory situation.
+
+Wednesday I thought I had everything tied up, and it was "just a matter of" measuring.
+Then I ran the thing, and found that 200 8MB nodes were gobbling 3.2GB of malloc. That's 100% overhead.
+I realized the problem: once we start paging in, we pull in a monolithic 8MB block, then as we flush changes
+through it, we replace some of the buckets with new 1MB (isolated "amassed") allocations. I think that,
+in steady state, the cached blocks are responsible for 8 1MB buckets, plus they hang onto the original
+8MB PKV paged-in block via at least a pivot key. (Or maybe they have 7 buckets and one bucket referencing
+the PKV allocation.)
+
+So I added code to, upon page-in, copy out the keys, and re-copy (using the same bucket-amass method)
+the buckets into fresh buckets. From the memory perspective, this seems to be mostly working.
+The amassed memory adds up to about 2GB (perfect!). The total malloc is about the same.
+The OS allocations, once page-in begins, show about a 500MB overhead. I'd guess this is a swiss-cheese
+memory layout problem (since page-ins ask for 8MB allocations), except that now we should only ever have
+about one 8MB unit in memory at a time. So why a 500MB tax?
+
+But these results aren't really final:
+- the total allocations continue to climb. Will they level off?
+- it's hella-slow. Perf dropped to 1Kop/sec. I could imagine a 2x drop, since
+  we're recopying all of the memory on every page-in. But perhaps my copies are
+  slower than the memcpys in the natively-supported IO ops? So my experiment has only reached op #3000;
+  it'll be at least an hour before it reaches op 7,000.
+
+Takeaways:
+- it would be nice to understand why the OS allocation jumps up so high after page-in time. But maybe
+  unnecessary, depending on the ultimate fix.
+- the ultimate fix is probably to store the nodes on disk as a set of 8 PKVs, so that we don't need to
+  recopy them. And when we page them in, recopy the pivot keys. (Or are the pivots represented separately
+  in the marshalled representation? The pivot recopy might have been a waste of time.)
+- also: Reprs will turn me into a supervillian. Horrible.
+
+Rob suggests that os-vs-malloc gap may be libasyncio stacks.
+Try disabling stupid sequence-copy optimization.
+Try measuring memory usage from the inside (dafny view).
+  -- how are we still seeing amass @ 2GB, expecting 1.6GB.
+Graph read, write I/O rates.
+Cache hit rate.

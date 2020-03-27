@@ -113,10 +113,11 @@ def parse(filename):
     def smoothedThroughput(ax, window):
         xs,ys = makePlot(ops_completed, lambda t: (ops_completed[t] - ops_completed[t-window])/float(window)/Kilo)
         ax.plot(xs, ys)
+        return ys[-1]
 
     def plotThroughput(ax):
         smoothedThroughput(ax, 10)
-        smoothedThroughput(ax, 100)
+        cur = smoothedThroughput(ax, 100)
         ax.set_xlim(left = 0, right=op_end)
         ax.set_ylim(bottom = 0)
         ax.set_title("op throughput")
@@ -128,7 +129,10 @@ def parse(filename):
             if time > xs[-1]:
                 return
             aggregate = (ops_completed[time] - ops_completed[xs[0]])/float(time-xs[0])/Kilo
-            ax.text(timeToOp(time), aggregate, "mean %.1f" % aggregate, horizontalalignment="right")
+            msg = "mean %.1f" % aggregate
+            if label == "end":
+                msg += "\ncur %.2f" % cur
+            ax.text(timeToOp(time), aggregate, msg, horizontalalignment="right")
         aggregateAt(xs[-1], "end")
         aggregateAt(1000, "1000s")
         
@@ -143,15 +147,16 @@ def parse(filename):
 
     def plotOSvsMalloc(ax):
         try:
-            line, = ax.plot(*makePlot(microscopes["total"], microscopes["total"][t].open_byte/GB))
+            line, = ax.plot(*makePlot(microscopes["total"], lambda t: microscopes["total"][t].open_byte/GB))
             line.set_label("malloc total")
-            line, = ax.plot(*makePlot(microscopes["coarse-small"], microscopes["coarse-small"][t].open_byte/GB))
+            line, = ax.plot(*makePlot(microscopes["coarse-small"], lambda t: microscopes["coarse-small"][t].open_byte/GB))
             line.set_label("malloc small")
-            line, = ax.plot(*makePlot(microscopes["coarse-small"],
+            line, = ax.plot(*makePlot(microscopes["coarse-small"], lambda t:
                 (microscopes["coarse-small"][t].open_byte + microscopes["coarse-large"][t].open_byte)/GB))
             line.set_label("malloc large")
         except:
-            pass    # sorry, no microscopes
+            #pass    # sorry, no microscopes
+            raise
         line, = ax.plot(*makePlot(os_map_total, lambda t: os_map_total[t]/GB))
         line.set_label("OS mapping")
 
@@ -166,11 +171,12 @@ def parse(filename):
 
     def plotAmass(ax):
         focus_bytearys = scopes["in_amass.[T = unsigned char]"]
-        line, = ax.plot(*makePlot(focus_bytearys, lambda t: focus_bytearys[t].open_byte/GB))
-        line.set_label("[byte] bytes");
+        line, = ax.plot(*makePlot(focus_bytearys, lambda t: focus_bytearys[t].open_byte/GB), linestyle="dotted")
+        line.set_label("in_amass");
         ax.set_ylabel("GB")
         ax.legend()
         ax.set_xlim(left = 0, right=op_end)
+    plotAmass(axes[1])
 
     def plotNodes(ax):
         a2twin = ax.twinx()
@@ -224,6 +230,7 @@ def parse(filename):
         ax.set_ylabel("GB")
         ax.set_title("memory consumption, stacked")
         ax.set_xlim(left = 0, right=op_end)
+        ax.grid(axis="y", both=True, b=True)
     try: plotMemStackChart(axes[3])
     except: pass
 
