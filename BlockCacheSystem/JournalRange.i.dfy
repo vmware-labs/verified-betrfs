@@ -281,7 +281,8 @@ module JournalRanges {
       SumJournalEntries(DropLast(s)) + WeightJournalEntry(Last(s))
   }
 
-  function WeightJournalEntries(s: seq<JournalEntry>) : int
+  function {:opaque} WeightJournalEntries(s: seq<JournalEntry>) : int
+  ensures WeightJournalEntries(s) >= 0
   {
     if |s| == 0 then
       0
@@ -289,4 +290,7 @@ module JournalRanges {
       // Account 8 bytes for the header.
       SumJournalEntries(s) + 8
   }
+
+  lemma lenTimes8LeWeight(s: seq<JournalEntry>)
+  ensures 8 * |s| <= WeightJournalEntries(s)
 }

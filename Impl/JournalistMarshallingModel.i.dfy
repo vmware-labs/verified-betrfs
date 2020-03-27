@@ -14,7 +14,7 @@ module JournalistMarshallingModel {
   function {:opaque} cyclicSlice<T>(t: seq<T>, start: uint64, l: uint64) : (res: seq<T>)
   requires 0 <= start as int < |t|
   requires 0 <= l as int <= |t|
-  ensures l == 0 <==> res == []
+  ensures |res| == l as int
   {
     if start as int + l as int <= |t| then
       t[start .. start as int + l as int]
