@@ -364,7 +364,11 @@ module DynamicPkv {
     predicate WF()
       reads this, this.Repr
     {
-      && Repr == {this} + keys.Repr + messages.Repr
+      && this in Repr
+      && keys in Repr
+      && keys.Repr <= Repr
+      && messages in Repr
+      && messages.Repr <= Repr
       && {this} !! keys.Repr !! messages.Repr 
       && keys.WF()
       && messages.WF()
@@ -380,6 +384,8 @@ module DynamicPkv {
 
     method Append(key: Key, msg: Message)
       requires WF()
+      requires msg.Define?
+      requires PKV.canAppend(toPkv(), key, msg)
       ensures WF()
       ensures toPkv() == PKV.Append(old(toPkv()), key, msg)
       ensures fresh(Repr - old(Repr))
@@ -388,14 +394,17 @@ module DynamicPkv {
       keys.Append(key);
       messages.Append(PKV.Message_to_bytestring(msg));
       Repr := {this} + keys.Repr + messages.Repr;
+      assert PKV.Pkv(keys.toPsa(), messages.toPsa()) == PKV.Append(old(toPkv()), key, msg);
     }
 
     predicate hasCapacity(cap: Capacity)
+      requires WF()
+      reads Repr
     {
-      && cap.num_kv_pairs <= keys.offsets.Length as uint32
-      && cap.total_key_len <= keys.data.Length as uint32
-      && cap.num_kv_pairs <= messages.offsets.Length as uint32
-      && cap.total_message_len <= messages.data.Length as uint32
+      && cap.num_kv_pairs as int <= keys.offsets.Length
+      && cap.total_key_len as int <= keys.data.Length
+      && cap.num_kv_pairs as int <= messages.offsets.Length
+      && cap.total_message_len as int <= messages.data.Length
     }
 
     constructor PreSized(capacity: Capacity)
