@@ -65,9 +65,4 @@ module JournalBytes {
       //    == JournalRangeOfByteSeq(a'[4096*(i-1) .. 4096*i]);
     }
   }
-
-  //predicate ValidJournalBytes(bytes: seq<byte>)
-  //{
-   // && JournalRangeOfByteSeq(bytes).Some?
-  //}
 }

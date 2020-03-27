@@ -514,4 +514,10 @@ module Sequences {
   {
   }
 
+  function {:opaque} fill<T>(n: int, t: T) : (res: seq<T>)
+  ensures |res| == n
+  ensures forall i | 0 <= i < n :: res[i] == t
+  {
+    if n == 0 then [] else fill(n-1, t) + [t]
+  }
 }

@@ -266,4 +266,27 @@ module JournalRanges {
       == JournalBlockGet(JournalRangeSuffix(jr, i), j)
   {
   }
+
+  function WeightJournalEntry(s: JournalEntry) : int
+  {
+    8 + |s.key| + |s.value|
+  }
+
+  function SumJournalEntries(s: seq<JournalEntry>) : int
+  ensures SumJournalEntries(s) >= 0
+  {
+    if |s| == 0 then
+      0
+    else
+      SumJournalEntries(DropLast(s)) + WeightJournalEntry(Last(s))
+  }
+
+  function WeightJournalEntries(s: seq<JournalEntry>) : int
+  {
+    if |s| == 0 then
+      0
+    else
+      // Account 8 bytes for the header.
+      SumJournalEntries(s) + 8
+  }
 }
