@@ -17,6 +17,8 @@ module PackedKV {
       keys: PSA.Psa,
       messages: PSA.Psa)
 
+  // TODO(robj): Ideally these constraints would be moved out of this
+  // "pure" data structure.
   predicate ValidKeyByteString(s: seq<byte>)
   {
     |s| <= KeyType.MaxLen() as int
@@ -55,6 +57,12 @@ module PackedKV {
     )
   }
 
+  function method Message_to_bytestring(msg: Message) : seq<byte>
+    requires msg.Define?
+  {
+    msg.value
+  }
+  
   function IKeys(psa: PSA.Psa) : (res : seq<Key>)
   requires PSA.WF(psa)
   requires ValidStringLens(PSA.I(psa), KeyType.MaxLen() as nat)
@@ -109,6 +117,13 @@ module PackedKV {
     BucketMapWithSeq(IMap(pkv), IKeys(pkv.keys), IMessages(pkv.messages))
   }
 
+  function EmptyPkv() : (result: Pkv)
+    ensures WF(result)
+    ensures IMap(result) == map[]
+  {
+    Pkv(PSA.EmptyPsa(), PSA.EmptyPsa())
+  }
+  
   method ComputeValidStringLens(psa: PSA.Psa, upper_bound: uint64)
   returns (b: bool)
   requires PSA.WF(psa)
@@ -278,5 +293,143 @@ module PackedKV {
     }
 
     msg := None;
+  }
+
+  predicate canAppend(pkv: Pkv, key: Key, msg: Message)
+    requires WF(pkv)
+    requires msg.Define?
+  {
+    && PSA.psaCanAppend(pkv.keys, key)
+    && PSA.psaCanAppend(pkv.messages, Message_to_bytestring(msg))
+  }
+
+  function Append(pkv: Pkv, key: Key, msg: Message) : (result: Pkv)
+    requires WF(pkv)
+    requires msg.Define?
+    requires canAppend(pkv, key, msg)
+    ensures WF(result)
+  {
+    PSA.psaAppendIAppend(pkv.keys, key);
+    PSA.psaAppendIAppend(pkv.messages, Message_to_bytestring(msg));
+    Pkv(PSA.psaAppend(pkv.keys, key), PSA.psaAppend(pkv.messages, Message_to_bytestring(msg)))
+  }
+
+  lemma IMapAppend(pkv: Pkv, key: Key, msg: Message)
+    requires WF(pkv)
+    requires msg.Define?
+    requires canAppend(pkv, key, msg)
+    ensures IMap(Append(pkv, key, msg)) == IMap(pkv)[key := msg]
+  {
+    PSA.psaAppendIAppend(pkv.keys, key);
+    PSA.psaAppendIAppend(pkv.messages, Message_to_bytestring(msg));
+    var newpkv := Append(pkv, key, msg);
+    var keys := PSA.I(pkv.keys);
+    var messages := IMessages(pkv.messages);
+    var newkeys := PSA.I(newpkv.keys);
+    var newmessages := IMessages(newpkv.messages);
+
+    assert DropLast(newkeys) == keys;
+    assert Last(newkeys) == key;
+
+    assert forall i | 0 <= i < |messages| :: PSA.psaElement(pkv.messages, i as uint64) == PSA.I(pkv.messages)[i];
+    assert DropLast(newmessages) == messages;
+    assert Last(newmessages) == msg;
+
+    assert byteString_to_Message(Message_to_bytestring(msg)) == msg;
+
+    assert newkeys == keys + [key];
+    assert newmessages == messages + [msg];
+    
+    reveal_BucketMapOfSeq();
+
+    var oldmap := IMap(pkv);
+    var newmap := IMap(newpkv);
+    assert newmap.Keys == oldmap.Keys + {key};
+
+    var r' := BucketMapOfSeq(DropLast(keys), DropLast(messages));
+    var r := r'[Last(keys) := Last(messages)];
+    assert r.Values <= r'.Values + {Last(messages)};
+    assert r' == IMap(pkv);
+    assert r == IMap(newpkv);
+    
+    forall key' | key' in oldmap
+      ensures newmap[key'] == oldmap[key']
+    {
+      if key' == key {
+        assert newmap[key'] == oldmap[key'];
+      } else {
+        assert newmap[key'] == oldmap[key'];
+      }
+    }
+  }
+}
+
+module DynamicPkv {
+  import PKV = PackedKV
+  import opened KeyType
+  import opened ValueType`Internal
+  import opened ValueMessage
+  import opened NativeTypes
+
+  datatype Capacity = Capacity(num_kv_pairs: uint32, total_key_len: uint32, total_message_len: uint32)
+
+  function method DefaultCapacity() : Capacity
+  {
+    Capacity(0, 0, 0)
+  }
+    
+  class DynamicPkv {
+    var keys: PKV.PSA.DynamicPsa
+    var messages: PKV.PSA.DynamicPsa
+    ghost var Repr: set<object>
+
+    predicate WF()
+      reads this, this.Repr
+    {
+      && Repr == {this} + keys.Repr + messages.Repr
+      && {this} !! keys.Repr !! messages.Repr 
+      && keys.WF()
+      && messages.WF()
+      && PKV.WF(PKV.Pkv(keys.toPsa(), messages.toPsa()))
+    }
+
+    function method toPkv() : PKV.Pkv
+      requires WF()
+      reads this, this.Repr
+    {
+      PKV.Pkv(keys.toPsa(), messages.toPsa())
+    }
+
+    method Append(key: Key, msg: Message)
+      requires WF()
+      ensures WF()
+      ensures toPkv() == PKV.Append(old(toPkv()), key, msg)
+      ensures fresh(Repr - old(Repr))
+      modifies this, Repr
+    {
+      keys.Append(key);
+      messages.Append(PKV.Message_to_bytestring(msg));
+      Repr := {this} + keys.Repr + messages.Repr;
+    }
+
+    predicate hasCapacity(cap: Capacity)
+    {
+      && cap.num_kv_pairs <= keys.offsets.Length as uint32
+      && cap.total_key_len <= keys.data.Length as uint32
+      && cap.num_kv_pairs <= messages.offsets.Length as uint32
+      && cap.total_message_len <= messages.data.Length as uint32
+    }
+
+    constructor PreSized(capacity: Capacity)
+      ensures WF()
+      ensures hasCapacity(capacity)
+      ensures toPkv() == PKV.EmptyPkv()
+      ensures fresh(Repr)
+    {
+      keys := new PKV.PSA.DynamicPsa.PreSized(capacity.num_kv_pairs, capacity.total_key_len);
+      messages := new PKV.PSA.DynamicPsa.PreSized(capacity.num_kv_pairs, capacity.total_message_len);
+      new;
+      Repr := {this} + keys.Repr + messages.Repr;
+    }
   }
 }
