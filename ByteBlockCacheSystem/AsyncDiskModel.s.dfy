@@ -28,6 +28,7 @@ module AsyncDisk {
   datatype DiskOp =
     | ReqReadOp(id: ReqId, reqRead: ReqRead)
     | ReqWriteOp(id: ReqId, reqWrite: ReqWrite)
+    | ReqWrite2Op(id1: ReqId, id2: ReqId, reqWrite: ReqWrite)
     | RespReadOp(id: ReqId, respRead: RespRead)
     | RespWriteOp(id: ReqId, respWrite: RespWrite)
     | NoDiskOp
