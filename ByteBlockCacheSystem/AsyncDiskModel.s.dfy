@@ -22,8 +22,8 @@ module AsyncDisk {
 
   datatype ReqRead = ReqRead(addr: uint64, len: uint64)
   datatype ReqWrite = ReqWrite(addr: uint64, bytes: seq<byte>)
-  datatype RespRead = RespRead(addr: uint64, len: uint64, bytes: seq<byte>)
-  datatype RespWrite = RespWrite
+  datatype RespRead = RespRead(addr: uint64, bytes: seq<byte>)
+  datatype RespWrite = RespWrite(addr: uint64, len: uint64)
 
   datatype DiskOp =
     | ReqReadOp(id: ReqId, reqRead: ReqRead)
@@ -124,7 +124,7 @@ module AsyncDisk {
     && var req := s.reqReads[id];
     && 0 <= req.addr as int <= req.addr as int + req.len as int <= |s.contents|
     && s' == s.(reqReads := MapRemove1(s.reqReads, id))
-              .(respReads := s.respReads[id := RespRead(req.addr, req.len, s.contents[req.addr .. req.addr as int + req.len as int])])
+              .(respReads := s.respReads[id := RespRead(req.addr, s.contents[req.addr .. req.addr as int + req.len as int])])
   }
 
   predicate {:opaque} ChecksumChecksOut(s: seq<byte>) {
@@ -168,7 +168,7 @@ module AsyncDisk {
     && AllChecksumsCheckOut(realContents, fakeContents)
 
     && s' == s.(reqReads := MapRemove1(s.reqReads, id))
-              .(respReads := s.respReads[id := RespRead(req.addr, req.len, fakeContents)])
+              .(respReads := s.respReads[id := RespRead(req.addr, fakeContents)])
   }
 
   function {:opaque} splice(bytes: seq<byte>, start: int, ins: seq<byte>) : seq<byte>
@@ -183,9 +183,10 @@ module AsyncDisk {
     && id in s.reqWrites
     && var req := s.reqWrites[id];
     && 0 <= req.addr
+    && |req.bytes| < 0x1_0000_0000_0000_0000
     && req.addr as int + |req.bytes| <= |s.contents|
     && s' == s.(reqWrites := MapRemove1(s.reqWrites, id))
-              .(respWrites := s.respWrites[id := RespWrite])
+              .(respWrites := s.respWrites[id := RespWrite(req.addr, |req.bytes| as uint64)])
               .(contents := splice(s.contents, req.addr as int, req.bytes))
   }
 

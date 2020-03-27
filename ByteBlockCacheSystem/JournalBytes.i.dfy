@@ -7,7 +7,16 @@ module JournalBytes {
   import opened Options
   import D = AsyncDisk
 
-  function {:opaque} JournalRangeOfByteSeq(s: seq<byte>): Option<JournalRange>
+  function {:opaque} JournalBlockOfByteSeq(s: seq<byte>): Option<JournalBlock>
+  {
+    if |s| == 4096 then
+      Some(s[32..4096])
+    else
+      None
+  }
+
+  function {:opaque} JournalRangeOfByteSeq(s: seq<byte>): (res : Option<JournalRange>)
+  ensures res.Some? ==> |res.value| * 4096 == |s|
   {
     if s == [] then
       Some([])
@@ -57,8 +66,8 @@ module JournalBytes {
     }
   }
 
-  predicate ValidJournalBytes(bytes: seq<byte>)
-  {
-    && JournalRangeOfByteSeq(bytes).Some?
-  }
+  //predicate ValidJournalBytes(bytes: seq<byte>)
+  //{
+   // && JournalRangeOfByteSeq(bytes).Some?
+  //}
 }

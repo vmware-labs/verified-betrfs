@@ -22,7 +22,6 @@ module SectorType {
 
   datatype Sector =
     | SectorSuperblock(superblock: Superblock)
-    | SectorJournal(journal: JournalRange)
-    | SectorNode(block: Node)
+    | SectorNode(node: Node)
     | SectorIndirectionTable(indirectionTable: IndirectionTable)
 }

@@ -7,6 +7,7 @@ module JournalIntervals {
   import opened Journal
   import opened Options
   import opened Sequences
+  import opened NativeTypes
 
   datatype JournalInterval = JournalInterval(start: int, len: int)
 
@@ -442,4 +443,9 @@ module JournalIntervals {
     }
     assert c1 == c2;
   }
+
+  protected function JournalIntervalOfLocation(loc: Location) : (interval : JournalInterval)
+  requires ValidJournalLocation(loc)
+  ensures ContiguousJournalInterval(interval)
+  ensures JournalRangeLocation(interval.start as uint64, interval.len as uint64) == loc
 }

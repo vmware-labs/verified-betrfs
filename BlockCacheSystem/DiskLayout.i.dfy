@@ -108,6 +108,12 @@ module DiskLayout {
     loc == Superblock2Location()
   }
 
+  predicate method ValidSuperblockLocation(loc: Location)
+  {
+    || loc == Superblock1Location()
+    || loc == Superblock2Location()
+  }
+
   predicate method ValidLocation(loc: Location)
   {
     || ValidSuperblock1Location(loc)

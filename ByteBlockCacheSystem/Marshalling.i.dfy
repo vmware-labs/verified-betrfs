@@ -4,6 +4,7 @@ include "../lib/Base/Message.i.dfy"
 include "../lib/Base/Crypto.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../BlockCacheSystem/BlockCache.i.dfy"
+include "../BlockCacheSystem/JournalCache.i.dfy"
 include "../lib/Buckets/KVList.i.dfy"
 
 //
@@ -19,6 +20,7 @@ module Marshalling {
   import opened BucketsLib
   import opened BucketWeights
   import BC = BlockCache
+  import JC = JournalCache
   import BT = PivotBetreeSpec`Internal
   import M = ValueMessage`Internal
   import Pivots = PivotsLib
@@ -304,7 +306,7 @@ module Marshalling {
     var itlocLen := v.t[4].u;
     var sup := Superblock(counter, journalStart, journalLen,
         DiskLayout.Location(itlocAddr, itlocLen));
-    if BC.WFSuperblock(sup) then
+    if JC.WFSuperblock(sup) then
       Some(sup)
     else
       None
