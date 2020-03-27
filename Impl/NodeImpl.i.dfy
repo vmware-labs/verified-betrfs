@@ -71,6 +71,53 @@ module NodeImpl {
       )
     }
 
+    method AmassBuckets()
+    requires Inv()
+    modifies Repr
+    ensures Inv()
+    ensures I() == old(I())
+    ensures forall o | o in Repr :: o in old(Repr) || fresh(o);
+    {
+      var newBuckets:seq<BucketImpl.MutBucket> := [];
+      assert MutBucket.ReprSeqDisjoint(newBuckets) by { MutBucket.reveal_ReprSeqDisjoint(); }
+      assert MutBucket.ReprSeq(newBuckets) !! Repr by { MutBucket.reveal_ReprSeq(); }
+      var i:uint64 := 0;
+      assume 0 <= |buckets| < Uint64UpperBound();
+      while i < (|buckets| as uint64)
+        invariant buckets == old(buckets)
+        invariant Inv()
+        invariant i as int <= |buckets|
+        invariant i as int == |newBuckets|
+        invariant forall j :: 0<=j<i ==> newBuckets[j].Inv()
+        invariant forall j :: 0<=j<i ==> buckets[j].I() == newBuckets[j].I()
+        invariant MutBucket.ReprSeqDisjoint(newBuckets)
+        invariant MutBucket.ReprSeq(newBuckets) !! Repr
+      {
+        assert old(buckets[i].Inv());
+        assert buckets[i].Inv();
+        var oldKvl := buckets[i].GetKvl();
+        var newKvl := KVList.AmassKvl(oldKvl);
+        var newBucket := new MutBucket(newKvl);
+        newBuckets := newBuckets + [newBucket];
+        assert MutBucket.ReprSeqDisjoint(newBuckets) by { MutBucket.reveal_ReprSeqDisjoint(); }
+        assert MutBucket.ReprSeq(newBuckets) !! Repr by { MutBucket.reveal_ReprSeq(); }
+        i := i + 1;
+      }
+      this.buckets := newBuckets;
+
+      Repr := {this} + MutBucket.ReprSeq(buckets);
+      assume (forall i | 0 <= i < |buckets| :: buckets[i] in Repr); // This and the next line of Inv contradict each other.
+
+      assert Inv() by { MutBucket.reveal_ReprSeq(); }
+
+      assert BucketImpl.MutBucket.ISeq(buckets) == BucketImpl.MutBucket.ISeq(old(buckets));
+      assert I() == old(I());
+
+      forall o | o in Repr ensures o in old(Repr) || fresh(o)
+      {
+      }
+    }
+
     lemma LemmaRepr()
     requires Inv()
     ensures Repr == {this} + MutBucket.ReprSeq(buckets)
