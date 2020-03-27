@@ -322,44 +322,22 @@ module PackedKV {
   {
     PSA.psaAppendIAppend(pkv.keys, key);
     PSA.psaAppendIAppend(pkv.messages, Message_to_bytestring(msg));
-    var newpkv := Append(pkv, key, msg);
     var keys := PSA.I(pkv.keys);
     var messages := IMessages(pkv.messages);
+    var newpkv := Append(pkv, key, msg);
     var newkeys := PSA.I(newpkv.keys);
     var newmessages := IMessages(newpkv.messages);
 
-    assert DropLast(newkeys) == keys;
-    assert Last(newkeys) == key;
-
-    assert forall i | 0 <= i < |messages| :: PSA.psaElement(pkv.messages, i as uint64) == PSA.I(pkv.messages)[i];
+    assert forall i | 0 <= i < |messages| :: DropLast(newmessages)[i] == byteString_to_Message(PSA.I(newpkv.messages)[i]);
     assert DropLast(newmessages) == messages;
     assert Last(newmessages) == msg;
 
-    assert byteString_to_Message(Message_to_bytestring(msg)) == msg;
-
-    assert newkeys == keys + [key];
-    assert newmessages == messages + [msg];
-    
-    reveal_BucketMapOfSeq();
-
-    var oldmap := IMap(pkv);
-    var newmap := IMap(newpkv);
-    assert newmap.Keys == oldmap.Keys + {key};
-
-    var r' := BucketMapOfSeq(DropLast(keys), DropLast(messages));
-    var r := r'[Last(keys) := Last(messages)];
-    assert r.Values <= r'.Values + {Last(messages)};
-    assert r' == IMap(pkv);
-    assert r == IMap(newpkv);
-    
-    forall key' | key' in oldmap
-      ensures newmap[key'] == oldmap[key']
-    {
-      if key' == key {
-        assert newmap[key'] == oldmap[key'];
-      } else {
-        assert newmap[key'] == oldmap[key'];
-      }
+    calc {
+      IMap(newpkv);
+      { reveal_BucketMapOfSeq(); }
+      BucketMapOfSeq(keys, messages)[key := msg];
+      { reveal_BucketMapOfSeq(); }
+      IMap(pkv)[key := msg];
     }
   }
 }
