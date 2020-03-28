@@ -109,6 +109,8 @@ module DiskLayout {
   }
 
   predicate method ValidSuperblockLocation(loc: Location)
+  ensures ValidSuperblockLocation(loc) ==>
+      (ValidSuperblock1Location(loc) || ValidSuperblock2Location(loc))
   {
     || loc == Superblock1Location()
     || loc == Superblock2Location()

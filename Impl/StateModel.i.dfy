@@ -88,8 +88,9 @@ module StateModel {
     jc: CommitterModel.CommitterModel)
 
   datatype Sector =
-    | SectorBlock(block: Node)
+    | SectorNode(node: Node)
     | SectorIndirectionTable(indirectionTable: IndirectionTable)
+    | SectorSuperblock(superblock: SectorType.Superblock)
 
   predicate IsLocAllocIndirectionTable(indirectionTable: IndirectionTable, i: int)
   {
@@ -166,11 +167,13 @@ module StateModel {
   predicate WFSector(sector: Sector)
   {
     match sector {
-      case SectorBlock(node) => WFNode(node)
+      case SectorNode(node) => WFNode(node)
       case SectorIndirectionTable(indirectionTable) => (
         && IndirectionTableModel.Inv(indirectionTable)
         && BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
       )
+      case SectorSuperblock(superblock) =>
+        JC.WFSuperblock(superblock)
     }
   }
 
@@ -209,8 +212,9 @@ module StateModel {
   requires WFSector(sector)
   {
     match sector {
-      case SectorBlock(node) => SectorType.SectorNode(INode(node))
+      case SectorNode(node) => SectorType.SectorNode(INode(node))
       case SectorIndirectionTable(indirectionTable) => SectorType.SectorIndirectionTable(IIndirectionTable(indirectionTable))
+      case SectorSuperblock(superblock) => SectorType.SectorSuperblock(superblock)
     }
   }
 

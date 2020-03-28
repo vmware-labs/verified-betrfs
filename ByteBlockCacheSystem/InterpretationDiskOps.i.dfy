@@ -156,7 +156,7 @@ module InterpretationDiskOps {
   {
     && |respRead.bytes| < 0x1_0000_0000_0000_0000
     && var loc := LocOfRespRead(respRead);
-    && |respRead.bytes| == loc.len as int
+    //&& |respRead.bytes| == loc.len as int
     && ValidLocation(loc)
   }
 
@@ -167,13 +167,10 @@ module InterpretationDiskOps {
 
   predicate ValidDiskOp(dop: D.DiskOp)
   {
-    match dop {
-      case ReqReadOp(id, reqRead) => ValidReqRead(reqRead)
-      case ReqWriteOp(id, reqWrite) => ValidReqWrite(reqWrite)
-      case RespReadOp(id, respRead) => ValidRespRead(respRead)
-      case RespWriteOp(id, respWrite) => ValidRespWrite(respWrite)
-      case NoDiskOp => true
-    }
+    && (dop.ReqReadOp? ==> ValidReqRead(dop.reqRead))
+    && (dop.ReqWriteOp? ==> ValidReqWrite(dop.reqWrite))
+    && (dop.RespReadOp? ==> ValidRespRead(dop.respRead))
+    && (dop.RespWriteOp? ==> ValidRespWrite(dop.respWrite))
   }
 
   //
@@ -195,7 +192,7 @@ module InterpretationDiskOps {
   {
     if ValidSuperblock1Location(LocOfReqRead(reqRead)) then
       JournalDisk.ReqReadSuperblockOp(id, 0)
-    else if ValidSuperblock1Location(LocOfReqRead(reqRead)) then
+    else if ValidSuperblock2Location(LocOfReqRead(reqRead)) then
       JournalDisk.ReqReadSuperblockOp(id, 1)
     else if ValidJournalLocation(LocOfReqRead(reqRead)) then
       JournalDisk.ReqReadJournalOp(id, JournalIntervalOfLocation(LocOfReqRead(reqRead)))
@@ -236,7 +233,7 @@ module InterpretationDiskOps {
     if ValidSuperblock1Location(LocOfReqWrite(reqWrite)) then
       JournalDisk.ReqWriteSuperblockOp(id, 0,
         JournalDisk.ReqWriteSuperblock(SuperblockOfBytes(reqWrite.bytes)))
-    else if ValidSuperblock1Location(LocOfReqWrite(reqWrite)) then
+    else if ValidSuperblock2Location(LocOfReqWrite(reqWrite)) then
       JournalDisk.ReqWriteSuperblockOp(id, 1,
         JournalDisk.ReqWriteSuperblock(SuperblockOfBytes(reqWrite.bytes)))
     else if ValidJournalLocation(LocOfReqWrite(reqWrite)) then
@@ -281,7 +278,7 @@ module InterpretationDiskOps {
     if ValidSuperblock1Location(LocOfRespRead(respRead)) then
       JournalDisk.RespReadSuperblockOp(id, 0,
         SuperblockOptOfBytes(respRead.bytes))
-    else if ValidSuperblock1Location(LocOfRespRead(respRead)) then
+    else if ValidSuperblock2Location(LocOfRespRead(respRead)) then
       JournalDisk.RespReadSuperblockOp(id, 1,
         SuperblockOptOfBytes(respRead.bytes))
     else if ValidJournalLocation(LocOfRespRead(respRead)) then
@@ -320,7 +317,7 @@ module InterpretationDiskOps {
   {
     if ValidSuperblock1Location(LocOfRespWrite(respWrite)) then
       JournalDisk.RespWriteSuperblockOp(id, 0)
-    else if ValidSuperblock1Location(LocOfRespWrite(respWrite)) then
+    else if ValidSuperblock2Location(LocOfRespWrite(respWrite)) then
       JournalDisk.RespWriteSuperblockOp(id, 1)
     else if ValidJournalLocation(LocOfRespWrite(respWrite)) then
       JournalDisk.RespWriteJournalOp(id)
