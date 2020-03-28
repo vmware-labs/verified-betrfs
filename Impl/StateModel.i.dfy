@@ -85,7 +85,7 @@ module StateModel {
 
   datatype Variables = Variables(
     bc: BCVariables,
-    jc: CommitterModel.CommitterModel)
+    jc: CommitterModel.CM)
 
   datatype Sector =
     | SectorNode(node: Node)

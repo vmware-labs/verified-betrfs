@@ -488,6 +488,7 @@ module IOModel {
 
   lemma PageInNodeRespCorrect(k: Constants, s: BCVariables, io: IO)
   requires diskOp(io).RespReadOp?
+  requires ValidDiskOp(diskOp(io))
   requires s.Ready?
   requires WFBCVars(s)
   requires BBC.Inv(Ik(k).bc, IBlockCache(s))
@@ -556,6 +557,7 @@ module IOModel {
 
   lemma readResponseCorrect(k: Constants, s: Variables, io: IO)
   requires diskOp(io).RespReadOp?
+  requires ValidDiskOp(diskOp(io))
   requires Inv(k, s)
   ensures var s' := readResponse(k, s, io);
     && WFVars(s')

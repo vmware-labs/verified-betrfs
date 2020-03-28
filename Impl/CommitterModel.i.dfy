@@ -18,7 +18,7 @@ module CommitterModel {
     | StatusLoadingOther
     | StatusReady
 
-  datatype CommitterModel = CommitterModel(
+  datatype CM = CM(
     status: Status,
 
     journalist: JournalistModel.JournalistModel,
@@ -45,13 +45,13 @@ module CommitterModel {
     syncReqs: MutableMapModel.LinearHashMap<JC.SyncReqStatus>
   )
 
-  predicate WF(cm: CommitterModel)
+  predicate WF(cm: CM)
   {
     && MutableMapModel.Inv(cm.syncReqs)
     && JournalistModel.Inv(cm.journalist)
   }
 
-  function I(cm: CommitterModel) : JC.Variables
+  function I(cm: CM) : JC.Variables
   requires WF(cm)
   {
     match cm.status {

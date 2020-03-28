@@ -384,11 +384,9 @@ module BlockCache refines Transactable {
       || dop.NoDiskOp?
       || (
         && dop.RespReadIndirectionTableOp?
-        && !(s.LoadingIndirectionTable? && s.indirectionTableRead == Some(dop.id))
       )
       || (
         && dop.RespReadNodeOp?
-        && !(s.Ready? && dop.id in s.outstandingBlockReads)
       )
       || (
         && dop.RespWriteIndirectionTableOp?
