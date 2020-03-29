@@ -263,8 +263,6 @@ module JournalistModel {
 
   function {:opaque} freeze(jm: JournalistModel) : (jm' : JournalistModel)
   requires Inv(jm)
-  requires I(jm).inMemoryJournalFrozen == []
-  requires I(jm).inMemoryJournal != []
   ensures
     && Inv(jm')
     && I(jm') == I(jm)
@@ -272,11 +270,21 @@ module JournalistModel {
           .(inMemoryJournalFrozen :=
               I(jm).inMemoryJournalFrozen + I(jm).inMemoryJournal)
   {
-    reveal_WeightJournalEntries();
-    jm.(len1 := jm.len1 + jm.len2)
+    var jm' := jm.(len1 := jm.len1 + jm.len2)
       .(len2 := 0)
       .(frozenJournalBlocks := jm.frozenJournalBlocks + (jm.inMemoryWeight + 4064 - 1) / 4064)
-      .(inMemoryWeight := 0)
+      .(inMemoryWeight := 0);
+
+    reveal_WeightJournalEntries();
+    assert I(jm').inMemoryJournalFrozen ==
+        I(jm).inMemoryJournalFrozen + I(jm).inMemoryJournal
+      by { reveal_cyclicSlice(); }
+
+    WeightJournalEntriesSum(I(jm).inMemoryJournalFrozen, I(jm).inMemoryJournal);
+    //roundUpOkay(jm.inMemoryWeight as int,
+    //  NumJournalBlocks() as int - (jm.writtenJournalBlocks + jm.frozenJournalBlocks) as int);
+
+    jm'
   }
 
   predicate {:opaque} canAppend(jm: JournalistModel, je: JournalEntry)
