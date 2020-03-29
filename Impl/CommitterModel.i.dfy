@@ -112,4 +112,10 @@ module CommitterModel {
         )
     }
   }
+
+  predicate Inv(cm: CM)
+  {
+    && WF(cm)
+    && JC.Inv(JC.Constants(), I(cm))
+  }
 }
