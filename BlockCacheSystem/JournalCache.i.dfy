@@ -85,7 +85,7 @@ module JournalCache {
         syncReqs: map<uint64, SyncReqStatus>
       )
 
-  function IncrementSuperblockCounter(i: uint64) : uint64
+  function method IncrementSuperblockCounter(i: uint64) : uint64
   {
     if i == 0xffff_ffff_ffff_ffff then
       0
@@ -93,7 +93,7 @@ module JournalCache {
       i + 1
   }
 
-  predicate increments1(i: uint64, j: uint64) {
+  predicate method increments1(i: uint64, j: uint64) {
     j == IncrementSuperblockCounter(i)
   }
 
@@ -348,6 +348,7 @@ module JournalCache {
           == JournalFrontIntervalOfSuperblock(s.superblock).value
       && s.journalFrontRead.None?
       && s.journalFront.None?
+      && Some(dop.id) != s.journalBackRead
       && s' == s.(journalFrontRead := Some(dop.id))
     )
     && (which == 1 ==>
@@ -356,6 +357,7 @@ module JournalCache {
           == JournalBackIntervalOfSuperblock(s.superblock).value
       && s.journalBackRead.None?
       && s.journalBack.None?
+      && Some(dop.id) != s.journalFrontRead
       && s' == s.(journalBackRead := Some(dop.id))
     )
   }
@@ -415,6 +417,7 @@ module JournalCache {
         else
           SuperblockCorruption
     );
+    && which == dop.which
     && (which == 0 || which == 1)
     && (which == 0 ==> 
       && s.outstandingSuperblock1Read == Some(dop.id)
@@ -586,13 +589,9 @@ module JournalCache {
       || dop.NoDiskOp?
       || (
         && dop.RespReadSuperblockOp?
-        && !(s.LoadingSuperblock? && s.outstandingSuperblock1Read == Some(dop.id))
-        && !(s.LoadingSuperblock? && s.outstandingSuperblock2Read == Some(dop.id))
       )
       || (
         && dop.RespReadJournalOp?
-        && !(s.LoadingOther? && s.journalFrontRead == Some(dop.id))
-        && !(s.LoadingOther? && s.journalBackRead == Some(dop.id))
       )
       || (
         && dop.RespWriteSuperblockOp?

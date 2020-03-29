@@ -363,13 +363,22 @@ module IOModel {
   requires diskOp(io).RespReadOp?
   requires ValidDiskOp(diskOp(io))
   ensures var (id, sector) := ReadSector(io);
-    && sector.Some? ==> (
+    && (sector.Some? ==> (
       && WFSector(sector.value)
       && ValidDiskOp(diskOp(io))
       && (sector.value.SectorNode? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadNodeOp(id, Some(INode(sector.value.node))), JournalDisk.NoDiskOp))
       && (sector.value.SectorIndirectionTable? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadIndirectionTableOp(id, Some(IIndirectionTable(sector.value.indirectionTable))), JournalDisk.NoDiskOp))
-      //&& (sector.value.SectorSuperblock? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.NoDiskOp, JournalDisk.RespReadSuperblockOp(id, Some(sector.value.superblock))))
-    )
+      && (sector.value.SectorSuperblock? ==>
+        && IDiskOp(diskOp(io)).bdop == BlockDisk.NoDiskOp
+        && IDiskOp(diskOp(io)).jdop.RespReadSuperblockOp?
+        && IDiskOp(diskOp(io)).jdop.id == id
+        && IDiskOp(diskOp(io)).jdop.superblock == Some(sector.value.superblock)
+      )
+    ))
+    && ((IDiskOp(diskOp(io)).jdop.RespReadSuperblockOp? && IDiskOp(diskOp(io)).jdop.superblock.Some?) ==> (
+      && sector.Some?
+      && sector.value.SectorSuperblock?
+    ))
   {
     IMM.reveal_parseCheckedSector();
     Marshalling.reveal_parseSector();

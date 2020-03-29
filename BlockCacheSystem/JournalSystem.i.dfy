@@ -330,21 +330,24 @@ module JournalSystem {
     && (s.machine.journalFrontRead.Some? ==> (
       && var reqId := s.machine.journalFrontRead.value;
       && M.JournalFrontIntervalOfSuperblock(s.machine.superblock).Some?
-      && reqId in s.disk.reqReadJournals
-      && s.disk.reqReadJournals[reqId] == M.JournalFrontIntervalOfSuperblock(s.machine.superblock).value
+      && (reqId in s.disk.reqReadJournals ==>
+          s.disk.reqReadJournals[reqId] == M.JournalFrontIntervalOfSuperblock(s.machine.superblock).value
+      )
     ))
     && (s.machine.journalBackRead.Some? ==> (
       && var reqId := s.machine.journalBackRead.value;
       && M.JournalBackIntervalOfSuperblock(s.machine.superblock).Some?
-      && reqId in s.disk.reqReadJournals
-      && s.disk.reqReadJournals[reqId] == M.JournalBackIntervalOfSuperblock(s.machine.superblock).value
+      && (reqId in s.disk.reqReadJournals ==>
+          s.disk.reqReadJournals[reqId] == M.JournalBackIntervalOfSuperblock(s.machine.superblock).value
+      )
     ))
   }
 
   predicate CorrectInflightSuperblockReads(k: Constants, s: Variables)
   requires s.machine.LoadingSuperblock?
   {
-    && (s.machine.outstandingSuperblock1Read.Some?
+    true
+    /*&& (s.machine.outstandingSuperblock1Read.Some?
       && s.machine.outstandingSuperblock2Read.Some? ==>
         s.machine.outstandingSuperblock1Read.value !=
         s.machine.outstandingSuperblock2Read.value
@@ -356,7 +359,7 @@ module JournalSystem {
     && (s.machine.outstandingSuperblock2Read.Some? ==> (
       && var reqId := s.machine.outstandingSuperblock2Read.value;
       && s.disk.reqReadSuperblock2 == Some(reqId)
-    ))
+    ))*/
   }
 
   // Any outstanding write we have recorded should be consistent with
@@ -1549,6 +1552,9 @@ module JournalSystem {
     ensures Inv(k, s')
   {
     NoOpStepPreservesJournals(k, s, s', dop, vop);
+    if s'.disk.reqWriteSuperblock2.Some? {
+      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id);
+    }
   }
 
   ////////////////////////////////////////////////////

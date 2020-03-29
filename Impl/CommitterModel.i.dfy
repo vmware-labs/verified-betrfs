@@ -49,6 +49,18 @@ module CommitterModel {
   {
     && MutableMapModel.Inv(cm.syncReqs)
     && JournalistModel.Inv(cm.journalist)
+    && (cm.status == StatusLoadingSuperblock ==>
+      && JournalistModel.I(cm.journalist).inMemoryJournalFrozen == []
+      && JournalistModel.I(cm.journalist).inMemoryJournal == []
+      && JournalistModel.I(cm.journalist).replayJournal == []
+      && JournalistModel.I(cm.journalist).journalFront == None
+      && JournalistModel.I(cm.journalist).journalBack == None
+    )
+    && (cm.status == StatusLoadingOther ==>
+      && JournalistModel.I(cm.journalist).inMemoryJournalFrozen == []
+      && JournalistModel.I(cm.journalist).inMemoryJournal == []
+      && JournalistModel.I(cm.journalist).replayJournal == []
+    )
   }
 
   function I(cm: CM) : JC.Variables
