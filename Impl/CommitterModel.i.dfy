@@ -55,11 +55,16 @@ module CommitterModel {
       && JournalistModel.I(cm.journalist).replayJournal == []
       && JournalistModel.I(cm.journalist).journalFront == None
       && JournalistModel.I(cm.journalist).journalBack == None
+      && (cm.superblock1.SuperblockSuccess? ==>
+          JC.WFSuperblock(cm.superblock1.value))
+      && (cm.superblock2.SuperblockSuccess? ==>
+          JC.WFSuperblock(cm.superblock2.value))
     )
     && (cm.status == StatusLoadingOther ==>
       && JournalistModel.I(cm.journalist).inMemoryJournalFrozen == []
       && JournalistModel.I(cm.journalist).inMemoryJournal == []
       && JournalistModel.I(cm.journalist).replayJournal == []
+      && JC.WFSuperblock(cm.superblock)
     )
   }
 

@@ -2,7 +2,7 @@ include "CommitterModel.i.dfy"
 include "StateModel.i.dfy"
 include "IOModel.i.dfy"
 
-module CommitterInitModel {
+module CommitterAppendModel {
   import opened NativeTypes
   import opened Options
 
@@ -15,35 +15,18 @@ module CommitterInitModel {
   import opened StateModel
   import opened IOModel
 
-  function {:opaque} PageInSuperblockReq(k: Constants, cm: CM, io: IO, which: uint64) : (res : (CM, IO))
-  requires which == 0 || which == 1
-  requires which == 0 ==> cm.superblock1.SuperblockUnfinished?
-  requires which == 1 ==> cm.superblock2.SuperblockUnfinished?
-  requires io.IOInit?
-  requires cm.status.StatusLoadingSuperblock?
+  function {:opaque} JournalAppend(k: Constants, cm: CM,
+      key: Key, value: Value) : (cm' : CM)
+  requires CommitterModel.Inv(cm)
+  requires cm.status == StatusReady
+  requires JournalistModel.canAppend(cm.journalist, JournalInsert(key, value))
   {
-    if which == 0 then (
-      if cm.superblock1Read.None? then (
-        var loc := Superblock1Location();
-        var (id, io') := RequestRead(io, loc);
-        var cm' := cm.(superblock1Read := Some(id));
-        (cm', io')
-      ) else (
-        (cm, io)
-      )
-    ) else (
-      if cm.superblock2Read.None? then (
-        var loc := Superblock2Location();
-        var (id, io') := RequestRead(io, loc);
-        var cm' := cm.(superblock2Read := Some(id));
-        (cm', io')
-      ) else (
-        (cm, io)
-      )
-    )
+    var je := JournalInsert(key, value);
+    var journalist' := JournalistModel.append(cm.journalist, je);
+    cm.(journalist := journalist')
   }
 
-  lemma PageInSuperblockReqCorrect(k: Constants,
+/*  lemma PageInSuperblockReqCorrect(k: Constants,
       cm: CM, io: IO, which: uint64)
   requires CommitterModel.WF(cm)
   requires PageInSuperblockReq.requires(k, cm, io, which)
@@ -332,4 +315,5 @@ module CommitterInitModel {
           JournalCache.NoOpStep);
     }
   }
+  */
 }
