@@ -14,10 +14,11 @@ module BookkeepingModel {
   import opened BucketWeights
   import opened Bounds
   import LruModel
+  import DiskLayout
 
   import opened NativeTypes
 
-  predicate RefAvailable(s: Variables, ref: Reference)
+  predicate RefAvailable(s: BCVariables, ref: Reference)
   {
     && s.Ready?
     && ref !in s.ephemeralIndirectionTable.graph
@@ -25,7 +26,7 @@ module BookkeepingModel {
     && ref != BT.G.Root()
   }
 
-  function getFreeRefIterate(s: Variables, i: uint64) 
+  function getFreeRefIterate(s: BCVariables, i: uint64) 
   : (ref : Option<BT.G.Reference>)
   requires s.Ready?
   requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
@@ -47,7 +48,7 @@ module BookkeepingModel {
     )
   }
 
-  function {:opaque} getFreeRef(s: Variables)
+  function {:opaque} getFreeRef(s: BCVariables)
   : (ref : Option<BT.G.Reference>)
   requires s.Ready?
   requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
@@ -62,7 +63,7 @@ module BookkeepingModel {
     )
   }
 
-  function getFreeRef2Iterate(s: Variables, avoid: BT.G.Reference, i: uint64) 
+  function getFreeRef2Iterate(s: BCVariables, avoid: BT.G.Reference, i: uint64) 
   : (ref : Option<BT.G.Reference>)
   requires s.Ready?
   requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
@@ -81,7 +82,7 @@ module BookkeepingModel {
     )
   }
 
-  function {:opaque} getFreeRef2(s: Variables, avoid: BT.G.Reference)
+  function {:opaque} getFreeRef2(s: BCVariables, avoid: BT.G.Reference)
   : (ref : Option<BT.G.Reference>)
   requires s.Ready?
   requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
@@ -98,14 +99,14 @@ module BookkeepingModel {
   }
 
   // Conditions that will hold intermediately between writes and allocs
-  predicate WriteAllocConditions(k: Constants, s: Variables)
+  predicate WriteAllocConditions(k: Constants, s: BCVariables)
   {
     && s.Ready?
     && IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
     && IndirectionTableModel.TrackingGarbage(s.ephemeralIndirectionTable)
     && (forall loc |
         loc in IIndirectionTable(s.ephemeralIndirectionTable).locs.Values :: 
-          BC.ValidLocationForNode(loc))
+          DiskLayout.ValidNodeLocation(loc))
     && ConsistentBitmap(s.ephemeralIndirectionTable, s.frozenIndirectionTable,
         s.persistentIndirectionTable, s.outstandingBlockWrites, s.blockAllocator)
     && BlockAllocatorModel.Inv(s.blockAllocator)
@@ -113,7 +114,7 @@ module BookkeepingModel {
         IIndirectionTable(s.ephemeralIndirectionTable))
   }
 
-  predicate ChildrenConditions(k: Constants, s: Variables, succs: Option<seq<BT.G.Reference>>)
+  predicate ChildrenConditions(k: Constants, s: BCVariables, succs: Option<seq<BT.G.Reference>>)
   requires s.Ready?
   {
     succs.Some? ==> (
@@ -122,7 +123,7 @@ module BookkeepingModel {
     )
   }
 
-  lemma lemmaIndirectionTableLocIndexValid(k: Constants, s: Variables, ref: BT.G.Reference)
+  lemma lemmaIndirectionTableLocIndexValid(k: Constants, s: BCVariables, ref: BT.G.Reference)
   requires WriteAllocConditions(k, s)
   ensures ref in s.ephemeralIndirectionTable.locs ==>
     (
@@ -136,8 +137,8 @@ module BookkeepingModel {
       var i := loc.addr as int / NodeBlockSize();
       assert IIndirectionTable(s.ephemeralIndirectionTable).locs[ref] == loc;
       assert loc in IIndirectionTable(s.ephemeralIndirectionTable).locs.Values;
-      assert BC.ValidLocationForNode(loc);
-      LBAType.reveal_ValidAddr();
+      assert DiskLayout.ValidNodeLocation(loc);
+      DiskLayout.reveal_ValidNodeAddr();
       assert i * NodeBlockSize() == loc.addr as int;
       assert IsLocAllocBitmap(s.blockAllocator.ephemeral, i);
     }
@@ -146,8 +147,8 @@ module BookkeepingModel {
   // Bookkeeping only - we update the cache with the Node separately.
   // This turns out to be easier to do.
 
-  function {:opaque} writeBookkeeping(k: Constants, s: Variables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
-  : (s': Variables)
+  function {:opaque} writeBookkeeping(k: Constants, s: BCVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
+  : (s': BCVariables)
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, children)
   requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
@@ -175,8 +176,8 @@ module BookkeepingModel {
     s'
   }
 
-  function {:opaque} writeBookkeepingNoSuccsUpdate(k: Constants, s: Variables, ref: BT.G.Reference)
-  : (s': Variables)
+  function {:opaque} writeBookkeepingNoSuccsUpdate(k: Constants, s: BCVariables, ref: BT.G.Reference)
+  : (s': BCVariables)
   requires WriteAllocConditions(k, s)
   requires ref in s.ephemeralIndirectionTable.graph
   ensures s'.Ready?
@@ -203,8 +204,8 @@ module BookkeepingModel {
   }
 
 
-  function {:opaque} allocBookkeeping(k: Constants, s: Variables, children: Option<seq<BT.G.Reference>>)
-  : (p: (Variables, Option<Reference>))
+  function {:opaque} allocBookkeeping(k: Constants, s: BCVariables, children: Option<seq<BT.G.Reference>>)
+  : (p: (BCVariables, Option<Reference>))
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, children)
   requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
@@ -227,8 +228,8 @@ module BookkeepingModel {
   // because it turns out to be easier to do the cache updates separately. However, for the proofs
   // it is easier to use the below.
 
-  function writeWithNode(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
-  : (s': Variables)
+  function writeWithNode(k: Constants, s: BCVariables, ref: BT.G.Reference, node: Node)
+  : (s': BCVariables)
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, node.children)
   requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
@@ -254,8 +255,8 @@ module BookkeepingModel {
     s'
   }
 
-  function allocWithNode(k: Constants, s: Variables, node: Node)
-  : (p: (Variables, Option<Reference>))
+  function allocWithNode(k: Constants, s: BCVariables, node: Node)
+  : (p: (BCVariables, Option<Reference>))
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, node.children)
   requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
@@ -272,7 +273,7 @@ module BookkeepingModel {
   }
 
   lemma freeIndirectionTableLocCorrect(
-      k: Constants, s: Variables, s': Variables, ref: BT.G.Reference, j: Option<int>)
+      k: Constants, s: BCVariables, s': BCVariables, ref: BT.G.Reference, j: Option<int>)
   requires WriteAllocConditions(k, s)
   requires s'.Ready?
   requires forall r | r != ref ::
@@ -294,7 +295,7 @@ module BookkeepingModel {
         IIndirectionTable(s'.ephemeralIndirectionTable))
   ensures (forall loc |
         loc in IIndirectionTable(s'.ephemeralIndirectionTable).locs.Values :: 
-          BC.ValidLocationForNode(loc))
+          DiskLayout.ValidNodeLocation(loc))
   {
     reveal_ConsistentBitmap();
     BitmapModel.reveal_IsSet();
@@ -309,16 +310,16 @@ module BookkeepingModel {
     }
 
     forall loc | loc in IIndirectionTable(s'.ephemeralIndirectionTable).locs.Values
-    ensures BC.ValidLocationForNode(loc)
+    ensures DiskLayout.ValidNodeLocation(loc)
     {
       var r :| r in IIndirectionTable(s'.ephemeralIndirectionTable).locs && IIndirectionTable(s'.ephemeralIndirectionTable).locs[r] == loc;
       assert MapsAgreeOnKey(IIndirectionTable(s.ephemeralIndirectionTable).locs, IIndirectionTable(s'.ephemeralIndirectionTable).locs, r);
     }
 
     if j.Some? {
-      assert BC.ValidLocationForNode(IIndirectionTable(s.ephemeralIndirectionTable).locs[ref]);
+      assert DiskLayout.ValidNodeLocation(IIndirectionTable(s.ephemeralIndirectionTable).locs[ref]);
       assert j.value >= MinNodeBlockIndex() by {
-        LBAType.reveal_ValidAddr();
+        DiskLayout.reveal_ValidNodeAddr();
       }
     }
 
@@ -416,7 +417,7 @@ module BookkeepingModel {
     }
   }
 
-  lemma writeBookkeepingBitmapCorrect(k: Constants, s: Variables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
+  lemma writeBookkeepingBitmapCorrect(k: Constants, s: BCVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, children)
   requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
@@ -439,16 +440,16 @@ module BookkeepingModel {
     reveal_ConsistentBitmap();*/
   }
 
-  lemma allocCorrect(k: Constants, s: Variables, node: Node)
-  requires WFVars(s)
+  lemma allocCorrect(k: Constants, s: BCVariables, node: Node)
+  requires WFBCVars(s)
   requires WriteAllocConditions(k, s)
   requires BC.BlockPointsToValidReferences(INode(node), IIndirectionTable(s.ephemeralIndirectionTable).graph)
   requires TotalCacheSize(s) <= MaxCacheSize() - 1
   requires WFNode(node)
   requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
   ensures var (s', ref) := allocWithNode(k, s, node);
-    && WFVars(s')
-    && (ref.Some? ==> BC.Alloc(Ik(k), IVars(s), IVars(s'), ref.value, INode(node)))
+    && WFBCVars(s')
+    && (ref.Some? ==> BC.Alloc(Ik(k).bc, IBlockCache(s), IBlockCache(s'), ref.value, INode(node)))
     && (ref.None? ==> s' == s)
     && (ref.Some? ==> TotalCacheSize(s') == TotalCacheSize(s) + 1)
     && WriteAllocConditions(k, s')
@@ -464,9 +465,9 @@ module BookkeepingModel {
     }
   }
   
-  lemma writeCorrect(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
+  lemma writeCorrect(k: Constants, s: BCVariables, ref: BT.G.Reference, node: Node)
   requires s.Ready?
-  requires WFVars(s)
+  requires WFBCVars(s)
   requires WriteAllocConditions(k, s)
   requires ref in IIndirectionTable(s.ephemeralIndirectionTable).graph
   requires ref in s.cache
@@ -475,8 +476,8 @@ module BookkeepingModel {
   requires s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.locs
   requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
   ensures var s' := writeWithNode(k, s, ref, node);
-    && WFVars(s')
-    && BC.Dirty(Ik(k), IVars(s), IVars(s'), ref, INode(node))
+    && WFBCVars(s')
+    && BC.Dirty(Ik(k).bc, IBlockCache(s), IBlockCache(s'), ref, INode(node))
     && TotalCacheSize(s') == TotalCacheSize(s)
     && WriteAllocConditions(k, s')
   {
@@ -489,12 +490,12 @@ module BookkeepingModel {
     reveal_writeBookkeeping();
 
     var s' := writeWithNode(k, s, ref, node);
-    assert WFVars(s');
+    assert WFBCVars(s');
   }
  
-  lemma writeNewRefIsAlloc(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
+  lemma writeNewRefIsAlloc(k: Constants, s: BCVariables, ref: BT.G.Reference, node: Node)
   requires s.Ready?
-  requires WFVars(s)
+  requires WFBCVars(s)
   requires WriteAllocConditions(k, s)
   requires RefAvailable(s, ref)
   requires WFNode(node)
@@ -502,8 +503,8 @@ module BookkeepingModel {
   requires BC.BlockPointsToValidReferences(INode(node), IIndirectionTable(s.ephemeralIndirectionTable).graph)
   requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
   ensures var s' := writeWithNode(k, s, ref, node);
-    && WFVars(s')
-    && BC.Alloc(Ik(k), IVars(s), IVars(s'), ref, INode(node))
+    && WFBCVars(s')
+    && BC.Alloc(Ik(k).bc, IBlockCache(s), IBlockCache(s'), ref, INode(node))
     && TotalCacheSize(s') == TotalCacheSize(s) + 1
     && WriteAllocConditions(k, s')
   {
@@ -513,9 +514,9 @@ module BookkeepingModel {
     reveal_writeBookkeeping();
   }
 
-  lemma lemmaChildInGraph(k: Constants, s: Variables, ref: BT.G.Reference, childref: BT.G.Reference)
+  lemma lemmaChildInGraph(k: Constants, s: BCVariables, ref: BT.G.Reference, childref: BT.G.Reference)
   requires s.Ready?
-  requires Inv(k, s)
+  requires BCInv(k, s)
   requires ref in s.cache
   requires ref in s.ephemeralIndirectionTable.graph
   requires childref in BT.G.Successors(INode(s.cache[ref]))
@@ -524,8 +525,8 @@ module BookkeepingModel {
     assert childref in IIndirectionTable(s.ephemeralIndirectionTable).graph[ref];
   }
 
-  lemma lemmaBlockPointsToValidReferences(k: Constants, s: Variables, ref: BT.G.Reference)
-  requires Inv(k, s)
+  lemma lemmaBlockPointsToValidReferences(k: Constants, s: BCVariables, ref: BT.G.Reference)
+  requires BCInv(k, s)
   requires s.Ready?
   requires ref in s.cache
   requires ref in s.ephemeralIndirectionTable.graph
@@ -539,7 +540,7 @@ module BookkeepingModel {
     }
   }
 
-  lemma getFreeRefIterateDoesntEqual(s: Variables, i: uint64, ref: BT.G.Reference)
+  lemma getFreeRefIterateDoesntEqual(s: BCVariables, i: uint64, ref: BT.G.Reference)
   requires s.Ready?
   requires ref in s.cache
   requires i >= 1
@@ -555,7 +556,7 @@ module BookkeepingModel {
     }
   }
 
-  lemma getFreeRefDoesntEqual(s: Variables, ref: BT.G.Reference)
+  lemma getFreeRefDoesntEqual(s: BCVariables, ref: BT.G.Reference)
   requires s.Ready?
   requires ref in s.cache
   requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
@@ -570,7 +571,7 @@ module BookkeepingModel {
     }
   }
 
-  lemma getFreeRef2IterateDoesntEqual(s: Variables, avoid: BT.G.Reference, i: uint64, ref: BT.G.Reference)
+  lemma getFreeRef2IterateDoesntEqual(s: BCVariables, avoid: BT.G.Reference, i: uint64, ref: BT.G.Reference)
   requires s.Ready?
   requires ref in s.cache
   requires i >= 1
@@ -586,7 +587,7 @@ module BookkeepingModel {
     }
   }
 
-  lemma getFreeRef2DoesntEqual(s: Variables, avoid: BT.G.Reference, ref: BT.G.Reference)
+  lemma getFreeRef2DoesntEqual(s: BCVariables, avoid: BT.G.Reference, ref: BT.G.Reference)
   requires s.Ready?
   requires ref in s.cache
   requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
@@ -601,7 +602,7 @@ module BookkeepingModel {
     }
   }
 
-  lemma allocRefDoesntEqual(k: Constants, s: Variables, children: Option<seq<BT.G.Reference>>, ref: BT.G.Reference)
+  lemma allocRefDoesntEqual(k: Constants, s: BCVariables, children: Option<seq<BT.G.Reference>>, ref: BT.G.Reference)
   requires allocBookkeeping.requires(k, s, children);
   requires ref in s.cache
   ensures allocBookkeeping(k, s, children).1 != Some(ref)
@@ -611,9 +612,9 @@ module BookkeepingModel {
   }
 
   lemma lemmaChildrenConditionsOfNode(
-      k: Constants, s: Variables, ref: BT.G.Reference)
+      k: Constants, s: BCVariables, ref: BT.G.Reference)
   requires s.Ready?
-  requires Inv(k, s)
+  requires BCInv(k, s)
   requires ref in s.cache
   requires ref in s.ephemeralIndirectionTable.graph
   ensures ChildrenConditions(k, s, s.cache[ref].children)
@@ -630,7 +631,7 @@ module BookkeepingModel {
   }
 
   lemma lemmaChildrenConditionsSingleOfAllocBookkeeping(
-      k: Constants, s: Variables, children: Option<seq<BT.G.Reference>>)
+      k: Constants, s: BCVariables, children: Option<seq<BT.G.Reference>>)
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, children)
   requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
@@ -643,7 +644,7 @@ module BookkeepingModel {
   }
 
   lemma lemmaChildrenConditionsUpdateOfAllocBookkeeping(
-      k: Constants, s: Variables, children: Option<seq<BT.G.Reference>>,
+      k: Constants, s: BCVariables, children: Option<seq<BT.G.Reference>>,
           children1: seq<BT.G.Reference>, i: int)
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, children)
@@ -658,7 +659,7 @@ module BookkeepingModel {
   }
 
   lemma lemmaChildrenConditionsPreservedWriteBookkeeping(
-      k: Constants, s: Variables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>,
+      k: Constants, s: BCVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>,
       children1: Option<seq<BT.G.Reference>>)
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, children)
@@ -671,7 +672,7 @@ module BookkeepingModel {
   }
 
   lemma lemmaChildrenConditionsOfReplace1With2(
-      k: Constants, s: Variables,
+      k: Constants, s: BCVariables,
       children: seq<BT.G.Reference>,
       i: int, a: BT.G.Reference, b: BT.G.Reference)
   requires s.Ready?
@@ -685,7 +686,7 @@ module BookkeepingModel {
     reveal_replace1with2();
   }
 
-  lemma lemmaRefInGraphOfWriteBookkeeping(k: Constants, s: Variables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
+  lemma lemmaRefInGraphOfWriteBookkeeping(k: Constants, s: BCVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, children)
   requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()
@@ -695,7 +696,7 @@ module BookkeepingModel {
     reveal_writeBookkeeping();
   }
 
-  lemma lemmaRefInGraphPreservedWriteBookkeeping(k: Constants, s: Variables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>, ref2: BT.G.Reference)
+  lemma lemmaRefInGraphPreservedWriteBookkeeping(k: Constants, s: BCVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>, ref2: BT.G.Reference)
   requires WriteAllocConditions(k, s)
   requires ChildrenConditions(k, s, children)
   requires |s.ephemeralIndirectionTable.graph| < IndirectionTableModel.MaxSize()

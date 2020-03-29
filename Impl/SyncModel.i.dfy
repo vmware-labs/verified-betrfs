@@ -17,14 +17,14 @@ module SyncModel {
   import opened Maps
   import opened Sequences
   import opened Sets
-  import opened LBAType
+  import opened DiskLayout
 
   import opened BucketsLib
 
   import opened NativeTypes
 
-  lemma lemmaRefHasLoc(k: Constants, s: Variables, ref: BT.G.Reference)
-  requires Inv(k, s)
+  lemma lemmaRefHasLoc(k: Constants, s: BCVariables, ref: BT.G.Reference)
+  requires BCInv(k, s)
   requires s.Ready?
   requires ref !in s.cache
   requires ref in s.ephemeralIndirectionTable.graph
@@ -36,7 +36,7 @@ module SyncModel {
     assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs.Keys;*/
   }
 
-  function {:opaque} AssignRefToLocEphemeral(k: Constants, s: Variables, ref: BT.G.Reference, loc: Location) : (s' : Variables)
+  function {:opaque} AssignRefToLocEphemeral(k: Constants, s: BCVariables, ref: BT.G.Reference, loc: Location) : (s' : BCVariables)
   requires s.Ready?
   requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
   requires BlockAllocatorModel.Inv(s.blockAllocator)
@@ -58,7 +58,7 @@ module SyncModel {
     )
   }
 
-  function {:opaque} AssignRefToLocFrozen(k: Constants, s: Variables, ref: BT.G.Reference, loc: Location) : (s' : Variables)
+  function {:opaque} AssignRefToLocFrozen(k: Constants, s: BCVariables, ref: BT.G.Reference, loc: Location) : (s' : BCVariables)
   requires s.Ready?
   requires s.frozenIndirectionTable.Some? ==> IndirectionTableModel.Inv(s.frozenIndirectionTable.value)
   requires s.frozenIndirectionTable.Some? ==> s.blockAllocator.frozen.Some?
@@ -83,7 +83,7 @@ module SyncModel {
     )
   }
 
-  function {:opaque} AssignIdRefLocOutstanding(k: Constants, s: Variables, id: D.ReqId, ref: BT.G.Reference, loc: Location) : (s' : Variables)
+  function {:opaque} AssignIdRefLocOutstanding(k: Constants, s: BCVariables, id: D.ReqId, ref: BT.G.Reference, loc: Location) : (s' : BCVariables)
   requires s.Ready?
   requires BlockAllocatorModel.Inv(s.blockAllocator)
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
@@ -105,15 +105,15 @@ module SyncModel {
       .(blockAllocator := blockAllocator')
   }
 
-  lemma LemmaAssignIdRefLocOutstandingCorrect(k: Constants, s: Variables, id: D.ReqId, ref: BT.G.Reference, loc: Location)
+  lemma LemmaAssignIdRefLocOutstandingCorrect(k: Constants, s: BCVariables, id: D.ReqId, ref: BT.G.Reference, loc: Location)
   requires s.Ready?
   requires (forall i: int :: IsLocAllocOutstanding(s.outstandingBlockWrites, i)
           <==> IsLocAllocBitmap(s.blockAllocator.outstanding, i))
   requires BlockAllocatorModel.Inv(s.blockAllocator)
-  requires BC.ValidLocationForNode(loc);
+  requires ValidNodeLocation(loc);
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   requires BC.AllOutstandingBlockWritesDontOverlap(s.outstandingBlockWrites)
-  requires BC.OutstandingWriteValidLocation(s.outstandingBlockWrites)
+  requires BC.OutstandingWriteValidNodeLocation(s.outstandingBlockWrites)
   ensures var s' := AssignIdRefLocOutstanding(k, s, id, ref, loc);
       && s'.Ready?
       && (forall i: int :: IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
@@ -128,7 +128,7 @@ module SyncModel {
     var s' := AssignIdRefLocOutstanding(k, s, id, ref, loc);
 
     var j := loc.addr as int / NodeBlockSize();
-    LBAType.reveal_ValidAddr();
+    reveal_ValidNodeAddr();
     assert j != 0;
     assert j * NodeBlockSize() == loc.addr as int;
 
@@ -141,8 +141,8 @@ module SyncModel {
           assert IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
         } else {
           var id0 :| id0 in s'.outstandingBlockWrites && s'.outstandingBlockWrites[id0].loc.addr as int == i * NodeBlockSize() as int;
-          assert LBAType.ValidAddr(s.outstandingBlockWrites[id0].loc.addr);
-          assert LBAType.ValidAddr(s.outstandingBlockWrites[id].loc.addr);
+          assert ValidNodeAddr(s.outstandingBlockWrites[id0].loc.addr);
+          assert ValidNodeAddr(s.outstandingBlockWrites[id].loc.addr);
           assert s.outstandingBlockWrites[id0].loc.addr as int
               == i * NodeBlockSize() as int
               == s.outstandingBlockWrites[id].loc.addr as int;
@@ -189,7 +189,7 @@ module SyncModel {
   requires IndirectionTableModel.Inv(indirectionTable)
   requires (forall i: int :: IsLocAllocIndirectionTable(indirectionTable, i)
           <==> IsLocAllocBitmap(bm, i))
-  requires BC.ValidLocationForNode(loc);
+  requires ValidNodeLocation(loc);
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   requires ref in indirectionTable.graph
   requires ref !in indirectionTable.locs
@@ -207,7 +207,7 @@ module SyncModel {
     //assert indirectionTable'.contents == indirectionTable.contents[ref := (Some(loc), indirectionTable.contents[ref].1)];
 
     var j := loc.addr as int / NodeBlockSize();
-    LBAType.reveal_ValidAddr();
+    reveal_ValidNodeAddr();
     assert j != 0;
     assert j * NodeBlockSize() == loc.addr as int;
 
@@ -247,13 +247,13 @@ module SyncModel {
     }
   }
 
-  lemma LemmaAssignRefToLocEphemeralCorrect(k: Constants, s: Variables, ref: BT.G.Reference, loc: Location)
+  lemma LemmaAssignRefToLocEphemeralCorrect(k: Constants, s: BCVariables, ref: BT.G.Reference, loc: Location)
   requires s.Ready?
   requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
   requires (forall i: int :: IsLocAllocIndirectionTable(s.ephemeralIndirectionTable, i)
           <==> IsLocAllocBitmap(s.blockAllocator.ephemeral, i))
   requires BlockAllocatorModel.Inv(s.blockAllocator)
-  requires BC.ValidLocationForNode(loc);
+  requires ValidNodeLocation(loc);
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   ensures var s' := AssignRefToLocEphemeral(k, s, ref, loc);
       && s'.Ready?
@@ -305,7 +305,7 @@ module SyncModel {
     }
   }
 
-  lemma LemmaAssignRefToLocFrozenCorrect(k: Constants, s: Variables, ref: BT.G.Reference, loc: Location)
+  lemma LemmaAssignRefToLocFrozenCorrect(k: Constants, s: BCVariables, ref: BT.G.Reference, loc: Location)
   requires s.Ready?
   requires s.frozenIndirectionTable.Some? ==> IndirectionTableModel.Inv(s.frozenIndirectionTable.value)
   requires s.frozenIndirectionTable.Some? ==> s.blockAllocator.frozen.Some?
@@ -313,7 +313,7 @@ module SyncModel {
         (forall i: int :: IsLocAllocIndirectionTable(s.frozenIndirectionTable.value, i)
           <==> IsLocAllocBitmap(s.blockAllocator.frozen.value, i))
   requires BlockAllocatorModel.Inv(s.blockAllocator)
-  requires BC.ValidLocationForNode(loc);
+  requires ValidNodeLocation(loc);
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   ensures var s' := AssignRefToLocFrozen(k, s, ref, loc);
       && s'.Ready?
@@ -374,10 +374,10 @@ module SyncModel {
   }
 
   function {:fuel BC.GraphClosed,0} {:fuel BC.CacheConsistentWithSuccessors,0}
-  syncNotFrozen(k: Constants, s: Variables, io: IO)
-  : (res: (Variables, IO))
+  maybeFreeze(k: Constants, s: BCVariables, io: IO)
+  : (res: (BCVariables, IO))
   requires io.IOInit?
-  requires Inv(k, s)
+  requires BCInv(k, s)
   requires s.Ready?
   requires s.outstandingIndirectionTableWrite.None?
   requires s.frozenIndirectionTable.None?
@@ -390,25 +390,24 @@ module SyncModel {
     ) else (
       var s' := s
           .(frozenIndirectionTable := Some(IndirectionTableModel.clone(s.ephemeralIndirectionTable)))
-          .(syncReqs := IOModel.SyncReqs3to2(s.syncReqs))
           .(blockAllocator := BlockAllocatorModel.CopyEphemeralToFrozen(s.blockAllocator));
       (s', io)
     )
   }
 
   lemma {:fuel BC.GraphClosed,0} {:fuel BC.CacheConsistentWithSuccessors,0}
-  syncNotFrozenCorrect(k: Constants, s: Variables, io: IO)
+  maybeFreezeCorrect(k: Constants, s: BCVariables, io: IO)
   requires io.IOInit?
-  requires Inv(k, s)
+  requires BCInv(k, s)
   requires s.Ready?
   requires s.outstandingIndirectionTableWrite.None?
   requires s.frozenIndirectionTable.None?
 
-  ensures var (s', io') := syncNotFrozen(k, s, io);
+  ensures var (s', io') := maybeFreeze(k, s, io);
     && WFVars(s')
-    && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
+    && BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), UI.NoOp, diskOp(io'))
   {
-    var (s', io') := syncNotFrozen(k, s, io);
+    var (s', io') := maybeFreeze(k, s, io);
 
     var foundDeallocable := FindDeallocable(s);
     FindDeallocableCorrect(s);
@@ -423,16 +422,16 @@ module SyncModel {
     reveal_ConsistentBitmap();
     assert WFVars(s');
 
-    assert BC.Freeze(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io')));
-    assert BBC.BlockCacheMove(Ik(k), IVars(s), IVars(s'), UI.NoOp, M.IDiskOp(diskOp(io')), BC.FreezeStep);
-    assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io, BC.FreezeStep);
+    assert BC.Freeze(Ik(k).bc, IBlockCache(s), IBlockCache(s'), M.IDiskOp(diskOp(io')));
+    assert BBC.BlockCacheMove(Ik(k).bc, IBlockCache(s), IBlockCache(s'), UI.NoOp, M.IDiskOp(diskOp(io')), BC.FreezeStep);
+    assert stepsBC(k, IBlockCache(s), IBlockCache(s'), UI.NoOp, io, BC.FreezeStep);
     return;
   }
 
-  predicate WriteBlockUpdateState(k: Constants, s: Variables, ref: BT.G.Reference,
-      id: Option<D.ReqId>, loc: Option<LBAType.Location>, s': Variables)
+  predicate WriteBlockUpdateState(k: Constants, s: BCVariables, ref: BT.G.Reference,
+      id: Option<D.ReqId>, loc: Option<Location>, s': BCVariables)
   requires s.Ready?
-  requires Inv(k, s)
+  requires BCInv(k, s)
   requires loc.Some? ==> 0 <= loc.value.addr as int / NodeBlockSize() < NumBlocks()
   requires ref in s.cache
   {
@@ -448,32 +447,32 @@ module SyncModel {
     )
   }
 
-  predicate TryToWriteBlock(k: Constants, s: Variables, io: IO, ref: BT.G.Reference,
-      s': Variables, io': IO)
+  predicate TryToWriteBlock(k: Constants, s: BCVariables, io: IO, ref: BT.G.Reference,
+      s': BCVariables, io': IO)
   requires s.Ready?
-  requires Inv(k, s)
+  requires BCInv(k, s)
   requires io.IOInit?
   requires ref in s.cache
   {
     exists id, loc ::
-      && FindLocationAndRequestWrite(io, s, SectorBlock(s.cache[ref]), id, loc, io')
+      && FindLocationAndRequestWrite(io, s, SectorNode(s.cache[ref]), id, loc, io')
       && WriteBlockUpdateState(k, s, ref, id, loc, s')
   }
 
-  lemma TryToWriteBlockCorrect(k: Constants, s: Variables, io: IO, ref: BT.G.Reference,
-      s': Variables, io': IO)
+  lemma TryToWriteBlockCorrect(k: Constants, s: BCVariables, io: IO, ref: BT.G.Reference,
+      s': BCVariables, io': IO)
   requires io.IOInit?
   requires TryToWriteBlock.requires(k, s, io, ref, s', io')
   requires TryToWriteBlock(k, s, io, ref, s', io')
   requires s.outstandingIndirectionTableWrite.None?
   ensures WFVars(s')
-  ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
+  ensures M.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), UI.NoOp, diskOp(io'))
   {
     var id, loc :| 
-      && FindLocationAndRequestWrite(io, s, SectorBlock(s.cache[ref]), id, loc, io')
+      && FindLocationAndRequestWrite(io, s, SectorNode(s.cache[ref]), id, loc, io')
       && WriteBlockUpdateState(k, s, ref, id, loc, s');
 
-    FindLocationAndRequestWriteCorrect(io, s, SectorBlock(s.cache[ref]), id, loc, io');
+    FindLocationAndRequestWriteCorrect(io, s, SectorNode(s.cache[ref]), id, loc, io');
 
     if id.Some? {
       reveal_ConsistentBitmap();
@@ -493,19 +492,19 @@ module SyncModel {
           == BC.assignRefToLocation(IIndirectionTable(s.frozenIndirectionTable.value), ref, loc.value);
       }
 
-      assert BC.ValidLocationForNode(M.IDiskOp(diskOp(io')).reqWrite.loc);
-      assert BC.WriteBackReq(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io')), ref);
-      assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io', BC.WriteBackReqStep(ref));
+      assert ValidNodeLocation(M.IDiskOp(diskOp(io')).reqWrite.loc);
+      assert BC.WriteBackReq(Ik(k).bc, IBlockCache(s), IBlockCache(s'), M.IDiskOp(diskOp(io')), ref);
+      assert stepsBC(k, IBlockCache(s), IBlockCache(s'), UI.NoOp, io', BC.WriteBackReqStep(ref));
     } else {
       assert io == io';
-      assert noop(k, IVars(s), IVars(s));
+      assert noop(k, IBlockCache(s), IBlockCache(s));
     }
   }
 
-  predicate {:fuel BC.GraphClosed,0} syncFoundInFrozen(k: Constants, s: Variables, io: IO, ref: Reference,
-      s': Variables, io': IO)
+  predicate {:fuel BC.GraphClosed,0} syncFoundInFrozen(k: Constants, s: BCVariables, io: IO, ref: Reference,
+      s': BCVariables, io': IO)
   requires io.IOInit?
-  requires Inv(k, s)
+  requires BCInv(k, s)
   requires s.Ready?
   requires s.outstandingIndirectionTableWrite.None?
   requires s.frozenIndirectionTable.Some?
@@ -524,10 +523,10 @@ module SyncModel {
     )
   }
 
-  lemma {:fuel BC.GraphClosed,0} syncFoundInFrozenCorrect(k: Constants, s: Variables, io: IO, ref: Reference,
-      s': Variables, io': IO)
+  lemma {:fuel BC.GraphClosed,0} syncFoundInFrozenCorrect(k: Constants, s: BCVariables, io: IO, ref: Reference,
+      s': BCVariables, io': IO)
   requires io.IOInit?
-  requires Inv(k, s)
+  requires BCInv(k, s)
   requires s.Ready?
   requires s.outstandingIndirectionTableWrite.None?
   requires s.frozenIndirectionTable.Some?
@@ -537,23 +536,23 @@ module SyncModel {
   requires syncFoundInFrozen(k, s, io, ref, s', io')
 
   ensures WFVars(s')
-  ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
+  ensures M.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), UI.NoOp, diskOp(io'))
   {
     assert ref in IIndirectionTable(s.frozenIndirectionTable.value).graph;
     assert ref !in IIndirectionTable(s.frozenIndirectionTable.value).locs;
 
     if ref in s.ephemeralIndirectionTable.locs {
       assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs;
-      assert noop(k, IVars(s), IVars(s));
+      assert noop(k, IBlockCache(s), IBlockCache(s));
     } else {
       TryToWriteBlockCorrect(k, s, io, ref, s', io');
     }
   }
 
-  predicate {:opaque} {:fuel BC.GraphClosed,0} sync(k: Constants, s: Variables, io: IO,
-      s': Variables, io': IO)
+  predicate {:opaque} {:fuel BC.GraphClosed,0} sync(k: Constants, s: BCVariables, io: IO,
+      s': BCVariables, io': IO)
   requires io.IOInit?
-  requires Inv(k, s)
+  requires BCInv(k, s)
   {
     if (s.Unready?) then (
       // TODO we could just do nothing here instead
@@ -571,7 +570,7 @@ module SyncModel {
         //    - Write the frozenIndirectionTable to disk
 
         if (s.frozenIndirectionTable.None?) then (
-          (s', io') == syncNotFrozen(k, s, io)
+          (s', io') == maybeFreeze(k, s, io)
         ) else (
           var (frozen0, ref) := IndirectionTableModel.FindRefWithNoLoc(s.frozenIndirectionTable.value);
           var s0 := s.(frozenIndirectionTable := Some(frozen0));
@@ -596,42 +595,42 @@ module SyncModel {
     )
   }
 
-  lemma {:fuel BC.GraphClosed,0} syncCorrect(k: Constants, s: Variables, io: IO,
-      s': Variables, io': IO)
+  lemma {:fuel BC.GraphClosed,0} syncCorrect(k: Constants, s: BCVariables, io: IO,
+      s': BCVariables, io': IO)
   requires io.IOInit?
-  requires Inv(k, s)
+  requires BCInv(k, s)
 
   requires sync(k, s, io, s', io')
 
   ensures WFVars(s')
-  ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
+  ensures M.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), UI.NoOp, diskOp(io'))
   {
     reveal_sync();
     if (s.Unready?) {
       PageInIndirectionTableReqCorrect(k, s, io);
     } else {
       if (s.outstandingIndirectionTableWrite.Some?) {
-        assert noop(k, IVars(s), IVars(s));
+        assert noop(k, IBlockCache(s), IBlockCache(s));
       } else {
         if (s.frozenIndirectionTable.None?) {
-          syncNotFrozenCorrect(k, s, io);
+          maybeFreezeCorrect(k, s, io);
         } else {
           var (frozen0, ref) := IndirectionTableModel.FindRefWithNoLoc(s.frozenIndirectionTable.value);
           var s0 := s.(frozenIndirectionTable := Some(frozen0));
-          assert Inv(k, s0) by { reveal_ConsistentBitmap(); }
+          assert BCInv(k, s0) by { reveal_ConsistentBitmap(); }
           if ref.Some? {
             syncFoundInFrozenCorrect(k, s0, io, ref.value, s', io');
           } else if (s0.outstandingBlockWrites != map[]) {
-            assert noop(k, IVars(s), IVars(s0));
+            assert noop(k, IBlockCache(s), IBlockCache(s0));
           } else {
             if (diskOp(io').ReqWriteOp?) {
               var id := Some(diskOp(io').id);
-              LBAType.reveal_ValidAddr();
+              reveal_ValidNodeAddr();
               RequestWriteCorrect(io, IndirectionTableLocation(), SectorIndirectionTable(s0.frozenIndirectionTable.value), id, io');
-              assert BC.WriteBackIndirectionTableReq(Ik(k), IVars(s), IVars(s'), M.IDiskOp(diskOp(io')));
-              assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io', BC.WriteBackIndirectionTableReqStep);
+              assert BC.WriteBackIndirectionTableReq(Ik(k).bc, IBlockCache(s), IBlockCache(s'), M.IDiskOp(diskOp(io')));
+              assert stepsBC(k, IBlockCache(s), IBlockCache(s'), UI.NoOp, io', BC.WriteBackIndirectionTableReqStep);
             } else {
-              assert noop(k, IVars(s), IVars(s));
+              assert noop(k, IBlockCache(s), IBlockCache(s));
             }
           }
         }
@@ -641,6 +640,7 @@ module SyncModel {
 
   // == pushSync ==
 
+/*
   function {:opaque} freeId<A>(syncReqs: MutableMapModel.LinearHashMap<A>) : (id: uint64)
   requires MutableMapModel.Inv(syncReqs)
   ensures id != 0 ==> id !in syncReqs.contents
@@ -653,8 +653,8 @@ module SyncModel {
     )
   }
 
-  function pushSync(k: Constants, s: Variables)
-  : (Variables, uint64)
+  function pushSync(k: Constants, s: BCVariables)
+  : (BCVariables, uint64)
   requires Inv(k, s)
   {
     var id := freeId(s.syncReqs);
@@ -666,26 +666,26 @@ module SyncModel {
     )
   }
 
-  lemma pushSyncCorrect(k: Constants, s: Variables)
+  lemma pushSyncCorrect(k: Constants, s: BCVariables)
   requires Inv(k, s)
   ensures var (s', id) := pushSync(k, s);
     && WFVars(s')
-    && M.Next(Ik(k), IVars(s), IVars(s'),
+    && M.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'),
         if id == 0 then UI.NoOp else UI.PushSyncOp(id as int),
         D.NoDiskOp)
   {
     var (s', id) := pushSync(k, s);
     if id == 0 || s.syncReqs.count as int >= 0x1_0000_0000_0000_0000 / 8 {
-      assert noop(k, IVars(s), IVars(s'));
+      assert noop(k, IBlockCache(s), IBlockCache(s'));
     } else {
-      assert M.NextStep(Ik(k), IVars(s), IVars(s'), UI.PushSyncOp(id as int), D.NoDiskOp, M.Step(BBC.BlockCacheMoveStep(BC.PushSyncReqStep(id))));
+      assert M.NextStep(Ik(k).bc, IBlockCache(s), IBlockCache(s'), UI.PushSyncOp(id as int), D.NoDiskOp, M.Step(BBC.BlockCacheMoveStep(BC.PushSyncReqStep(id))));
     }
   }
 
   // == popSync ==
 
-  predicate popSync(k: Constants, s: Variables, io: IO, id: uint64,
-      s': Variables, success: bool, io': IO)
+  predicate popSync(k: Constants, s: BCVariables, io: IO, id: uint64,
+      s': BCVariables, success: bool, io': IO)
   requires io.IOInit?
   requires Inv(k, s)
   {
@@ -699,18 +699,19 @@ module SyncModel {
     )
   }
 
-  lemma popSyncCorrect(k: Constants, s: Variables, io: IO, id: uint64,
-      s': Variables, success: bool, io': IO)
+  lemma popSyncCorrect(k: Constants, s: BCVariables, io: IO, id: uint64,
+      s': BCVariables, success: bool, io': IO)
   requires io.IOInit?
   requires Inv(k, s)
   requires popSync(k, s, io, id, s', success, io')
   ensures WFVars(s')
-  ensures M.Next(Ik(k), IVars(s), IVars(s'), if success then UI.PopSyncOp(id as int) else UI.NoOp, diskOp(io'))
+  ensures M.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), if success then UI.PopSyncOp(id as int) else UI.NoOp, diskOp(io'))
   {
     if (id in s.syncReqs.contents && s.syncReqs.contents[id] == BC.State1) {
-      assert stepsBC(k, IVars(s), IVars(s'), UI.PopSyncOp(id as int), io', BC.PopSyncReqStep(id));
+      assert stepsBC(k, IBlockCache(s), IBlockCache(s'), UI.PopSyncOp(id as int), io', BC.PopSyncReqStep(id));
     } else {
       syncCorrect(k, s, io, s', io');
     }
   }
+  */
 }
