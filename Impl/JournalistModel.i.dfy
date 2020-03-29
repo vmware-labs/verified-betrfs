@@ -171,9 +171,16 @@ module JournalistModel {
 
   function {:opaque} hasFrozenJournal(jm: JournalistModel) : (b: bool)
   requires Inv(jm)
-  ensures b == (I(jm).inMemoryJournalFrozen == [])
+  ensures b == (I(jm).inMemoryJournalFrozen != [])
   {
-    jm.len1 == 0    
+    jm.len1 != 0
+  }
+
+  function {:opaque} hasInMemoryJournal(jm: JournalistModel) : (b: bool)
+  requires Inv(jm)
+  ensures b == (I(jm).inMemoryJournal != [])
+  {
+    jm.len2 != 0
   }
 
   function {:opaque} packageFrozenJournal(jm: JournalistModel)
@@ -188,6 +195,8 @@ module JournalistModel {
           .(inMemoryJournalFrozen := [])
           .(writtenJournalLen := I(jm).writtenJournalLen
                 + |JournalRangeOfByteSeq(s).value|)
+    && |JournalRangeOfByteSeq(s).value| + I(jm).writtenJournalLen as int
+        <= NumJournalBlocks() as int
   {
     reveal_WeightJournalEntries();
     var s := marshallJournalEntries(jm.journalEntries, jm.start, jm.len1, jm.frozenJournalBlocks);
@@ -211,6 +220,8 @@ module JournalistModel {
           .(inMemoryJournal := [])
           .(writtenJournalLen := I(jm).writtenJournalLen
                 + |JournalRangeOfByteSeq(s).value|)
+    && |JournalRangeOfByteSeq(s).value| + I(jm).writtenJournalLen as int
+        <= NumJournalBlocks() as int
   {
     reveal_WeightJournalEntries();
     var numBlocks := (jm.inMemoryWeight + 4064 - 1) / 4064;

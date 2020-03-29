@@ -66,6 +66,9 @@ module CommitterModel {
       && JournalistModel.I(cm.journalist).replayJournal == []
       && JC.WFSuperblock(cm.superblock)
     )
+    && (cm.status == StatusReady ==>
+      && JC.WFSuperblock(cm.superblock)
+    )
   }
 
   function I(cm: CM) : JC.Variables

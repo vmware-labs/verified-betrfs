@@ -28,7 +28,8 @@ module AsyncDisk {
   datatype DiskOp =
     | ReqReadOp(id: ReqId, reqRead: ReqRead)
     | ReqWriteOp(id: ReqId, reqWrite: ReqWrite)
-    | ReqWrite2Op(id1: ReqId, id2: ReqId, reqWrite: ReqWrite)
+    | ReqWrite2Op(id1: ReqId, id2: ReqId,
+        reqWrite1: ReqWrite, reqWrite2: ReqWrite)
     | RespReadOp(id: ReqId, respRead: RespRead)
     | RespWriteOp(id: ReqId, respWrite: RespWrite)
     | NoDiskOp
@@ -56,6 +57,7 @@ module AsyncDisk {
   datatype Step =
     | RecvReadStep
     | RecvWriteStep
+    | RecvWrite2Step
     | AckReadStep
     | AckWriteStep
     | StutterStep
@@ -74,6 +76,20 @@ module AsyncDisk {
     && dop.id !in s.reqWrites
     && dop.id !in s.respWrites
     && s' == s.(reqWrites := s.reqWrites[dop.id := dop.reqWrite])
+  }
+
+  predicate RecvWrite2(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  {
+    && dop.ReqWrite2Op?
+    && dop.id1 !in s.reqWrites
+    && dop.id1 !in s.respWrites
+    && dop.id2 !in s.reqWrites
+    && dop.id2 !in s.respWrites
+    && dop.id1 != dop.id2
+    && s' == s.(reqWrites :=
+        s.reqWrites[dop.id1 := dop.reqWrite1]
+                   [dop.id2 := dop.reqWrite2]
+       )
   }
 
   predicate AckRead(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -102,6 +118,7 @@ module AsyncDisk {
     match step {
       case RecvReadStep => RecvRead(k, s, s', dop)
       case RecvWriteStep => RecvWrite(k, s, s', dop)
+      case RecvWrite2Step => RecvWrite2(k, s, s', dop)
       case AckReadStep => AckRead(k, s, s', dop)
       case AckWriteStep => AckWrite(k, s, s', dop)
       case StutterStep => Stutter(k, s, s', dop)

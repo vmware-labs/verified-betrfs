@@ -141,6 +141,11 @@ module IOModel {
   ensures ValidDiskOp(diskOp(io'))
   ensures sector.SectorNode? ==> id.Some? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteNodeOp(id.value, BlockDisk.ReqWriteNode(loc, ISector(sector).node)), JournalDisk.NoDiskOp)
   ensures sector.SectorIndirectionTable? ==> id.Some? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteIndirectionTableOp(id.value, BlockDisk.ReqWriteIndirectionTable(loc, ISector(sector).indirectionTable)), JournalDisk.NoDiskOp)
+  ensures sector.SectorSuperblock? ==> id.Some? ==> ValidSuperblock1Location(loc) ==>
+    IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.NoDiskOp, JournalDisk.ReqWriteSuperblockOp(id.value, 0, JournalDisk.ReqWriteSuperblock(sector.superblock)))
+  ensures sector.SectorSuperblock? ==> id.Some? ==> ValidSuperblock2Location(loc) ==>
+    IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.NoDiskOp, JournalDisk.ReqWriteSuperblockOp(id.value, 1, JournalDisk.ReqWriteSuperblock(sector.superblock)))
+
   ensures id.None? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.NoDiskOp, JournalDisk.NoDiskOp)
   {
     reveal_RequestWrite();

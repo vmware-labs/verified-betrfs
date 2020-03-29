@@ -152,6 +152,21 @@ module InterpretationDiskOps {
     && (ValidNodeLocation(loc) ==> ValidNodeBytes(reqWrite.bytes))
   }
 
+  // There's only one case where we ever use this.
+  // It's for journals.
+  predicate ValidReqWrite2(reqWrite1: D.ReqWrite, reqWrite2: D.ReqWrite)
+  {
+    && ValidReqWrite(reqWrite1)
+    && ValidReqWrite(reqWrite2)
+    && ValidJournalLocation(LocOfReqWrite(reqWrite1))
+    && ValidJournalLocation(LocOfReqWrite(reqWrite2))
+    && var int1 := JournalIntervalOfLocation(LocOfReqWrite(reqWrite1));
+    && var int2 := JournalIntervalOfLocation(LocOfReqWrite(reqWrite2));
+    && int1.start + int1.len == NumJournalBlocks() as int
+    && int2.start == 0
+    && int1.len + int2.len <= NumJournalBlocks() as int
+  }
+
   predicate ValidRespRead(respRead: D.RespRead)
   {
     && |respRead.bytes| < 0x1_0000_0000_0000_0000
@@ -169,6 +184,7 @@ module InterpretationDiskOps {
   {
     && (dop.ReqReadOp? ==> ValidReqRead(dop.reqRead))
     && (dop.ReqWriteOp? ==> ValidReqWrite(dop.reqWrite))
+    && (dop.ReqWrite2Op? ==> ValidReqWrite2(dop.reqWrite1, dop.reqWrite2))
     && (dop.RespReadOp? ==> ValidRespRead(dop.respRead))
     && (dop.RespWriteOp? ==> ValidRespWrite(dop.respWrite))
   }
@@ -257,6 +273,33 @@ module InterpretationDiskOps {
   }
 
   //
+  // Interpretation of ReqWrite2
+
+  function JournalDiskOp_of_ReqWrite2(id1: D.ReqId, id2: D.ReqId, reqWrite1: D.ReqWrite, reqWrite2: D.ReqWrite) : JournalDisk.DiskOp
+  requires ValidReqWrite2(reqWrite1, reqWrite2)
+  {
+    var int1 := JournalIntervalOfLocation(LocOfReqWrite(reqWrite1));
+    var int2 := JournalIntervalOfLocation(LocOfReqWrite(reqWrite2));
+    JournalDisk.ReqWriteJournalOp(id1, Some(id2),
+        JournalDisk.ReqWriteJournal(
+          int1.start,
+          JournalBytes.JournalRangeOfByteSeq(reqWrite1.bytes).value
+            + JournalBytes.JournalRangeOfByteSeq(reqWrite2.bytes).value
+        )
+      )
+  }
+
+  function DiskOp_of_ReqWrite2(id1: D.ReqId, id2: D.ReqId, reqWrite1: D.ReqWrite, reqWrite2: D.ReqWrite) : BJD.DiskOp
+  requires ValidReqWrite2(reqWrite1, reqWrite2)
+  {
+    BJD.DiskOp(
+      BlockDisk.NoDiskOp,
+      JournalDiskOp_of_ReqWrite2(id1, id2, reqWrite1, reqWrite2)
+    )
+  }
+
+
+  //
   // Interpretation of RespRead
 
   function BlockDiskOp_of_RespRead(id: D.ReqId, respRead: D.RespRead) : BlockDisk.DiskOp
@@ -340,6 +383,7 @@ module InterpretationDiskOps {
     match diskOp {
       case ReqReadOp(id, reqRead) => DiskOp_of_ReqRead(id, reqRead)
       case ReqWriteOp(id, reqWrite) => DiskOp_of_ReqWrite(id, reqWrite)
+      case ReqWrite2Op(id1, id2, reqWrite1, reqWrite2) => DiskOp_of_ReqWrite2(id1, id2, reqWrite1, reqWrite2)
       case RespReadOp(id, respRead) => DiskOp_of_RespRead(id, respRead)
       case RespWriteOp(id, respWrite) => DiskOp_of_RespWrite(id, respWrite)
       case NoDiskOp => BJD.DiskOp(BlockDisk.NoDiskOp, JournalDisk.NoDiskOp)

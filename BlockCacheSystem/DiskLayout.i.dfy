@@ -36,10 +36,20 @@ module DiskLayout {
     IndirectionTable1Addr() + IndirectionTableMaxLength()
   }
 
+  function method JournalStartAddr() : uint64
+  {
+    2 * 4096
+  }
+
+  function method JournalEndAddr() : uint64
+  {
+    JournalStartAddr() + NumJournalBlocks() * 4096
+  }
+
   function method JournalPoint(point: uint64) : uint64
   requires point <= NumJournalBlocks()
   {
-    2 * 4096 + point * 4096
+    JournalStartAddr() + point * 4096
   }
 
   function method JournalRangeLocation(start: uint64, len: uint64) : (loc : Location)

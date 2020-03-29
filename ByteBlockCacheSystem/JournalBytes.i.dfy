@@ -33,6 +33,16 @@ module JournalBytes {
     )
   }
 
+  lemma JournalBytesSplit(a: seq<byte>, numBlocks: int, split: int)
+  requires JournalRangeOfByteSeq(a).Some?
+  requires |JournalRangeOfByteSeq(a).value| == numBlocks
+  requires 0 <= split <= numBlocks
+  ensures JournalRangeOfByteSeq(a[.. split*4096]).Some?
+  ensures JournalRangeOfByteSeq(a[split*4096 ..]).Some?
+  ensures JournalRangeOfByteSeq(a).value
+    == JournalRangeOfByteSeq(a[.. split*4096]).value
+     + JournalRangeOfByteSeq(a[split*4096 ..]).value
+
   lemma JournalRangeOfByteSeqAdditive(a: seq<byte>, b: seq<byte>)
   requires JournalRangeOfByteSeq(a).Some?
   requires JournalRangeOfByteSeq(b).Some?

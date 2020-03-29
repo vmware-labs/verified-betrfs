@@ -279,12 +279,12 @@ module JournalCache {
     && s.frozenLoc.Some?
     && s.commitStatus.CommitNone?
     && s.outstandingJournalWrites == {}
+    && s.inMemoryJournalFrozen == []
     && dop.which == (if s.whichSuperblock == 0 then 1 else 0)
     && 0 <= s.superblock.journalStart < NumJournalBlocks()
     && 0 <= s.frozenJournalPosition
          <= s.writtenJournalLen
          <= NumJournalBlocks() as int
-    && s.inMemoryJournalFrozen == []
     && var newSuperblock := Superblock(
       IncrementSuperblockCounter(s.superblock.counter),
       JournalPosAdd(
