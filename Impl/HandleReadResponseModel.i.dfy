@@ -1,4 +1,5 @@
 include "IOModel.i.dfy"
+include "CoordinationModel.i.dfy"
 
 module HandleReadResponseModel {
   import opened NativeTypes
@@ -9,6 +10,7 @@ module HandleReadResponseModel {
   import opened Options
   import IOModel
   import CommitterModel
+  import MarshallingModel
 
   function {:opaque} readSuperblockResp(
       k: Constants,
@@ -34,6 +36,57 @@ module HandleReadResponseModel {
       else
         cm
     )
+  }
+
+  lemma jcNoOp_respread(k: Constants, s: Variables, s': Variables, vop: VOp, io: IO)
+  requires CommitterModel.WF(s.jc)
+  requires ValidDiskOp(diskOp(io))
+  requires diskOp(io).RespReadOp?
+  requires s.jc == s'.jc
+  requires vop.StatesInternalOp? || vop.JournalInternalOp?
+  ensures JC.Next(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
+      IDiskOp(diskOp(io)).jdop, vop);
+  {
+    assert JC.NoOp(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
+        IDiskOp(diskOp(io)).jdop, vop);
+    assert JC.NextStep(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
+        IDiskOp(diskOp(io)).jdop, vop, JC.NoOpStep);
+  }
+
+  lemma bcNoOp_respread(k: Constants, s: Variables, s': Variables, vop: VOp, io: IO)
+  requires WFBCVars(s.bc)
+  requires s.bc == s'.bc
+  requires ValidDiskOp(diskOp(io))
+  requires diskOp(io).RespReadOp?
+  requires vop.StatesInternalOp? || vop.JournalInternalOp?
+  ensures BBC.Next(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc),
+    IDiskOp(diskOp(io)).bdop, vop);
+  {
+    reveal_Parse();
+    MarshallingModel.reveal_parseCheckedSector();
+    Marshalling.reveal_parseSector();
+    MarshallingModel.reveal_parseSector();
+    reveal_SectorOfBytes();
+    reveal_ValidCheckedBytes();
+    reveal_Parse();
+
+    assert BC.NoOp(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc),
+      IDiskOp(diskOp(io)).bdop, vop);
+    assert BC.NextStep(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc),
+      IDiskOp(diskOp(io)).bdop, vop, BC.NoOpStep);
+    assert BBC.NextStep(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc),
+      IDiskOp(diskOp(io)).bdop, vop, BBC.BlockCacheMoveStep(BC.NoOpStep));
+  }
+
+  lemma noop_respread(k: Constants, s: Variables, io: IO)
+  requires WFVars(s)
+  requires ValidDiskOp(diskOp(io))
+  requires diskOp(io).RespReadOp?
+  ensures M.Next(Ik(k), IVars(s), IVars(s), UI.NoOp, diskOp(io))
+  {
+    jcNoOp_respread(k, s, s, StatesInternalOp, io);
+    bcNoOp_respread(k, s, s, StatesInternalOp, io);
+    assert BJC.NextStep(Ik(k), IVars(s), IVars(s), UI.NoOp, IDiskOp(diskOp(io)), StatesInternalOp);
   }
 
   lemma readSuperblockRespCorrect(
@@ -94,7 +147,7 @@ module HandleReadResponseModel {
     }
   }
 
-  function readResponse(k: Constants, s: Variables, io: IO)
+  function {:opaque} readResponse(k: Constants, s: Variables, io: IO)
       : Variables
   requires Inv(k, s)
   requires diskOp(io).RespReadOp?
@@ -118,8 +171,70 @@ module HandleReadResponseModel {
       ) else (
         s
       )
+    ) else if loc == Superblock1Location() then (
+      var jc' := readSuperblockResp(k, s.jc, io, 0);
+      s.(jc := jc')
+    ) else if loc == Superblock2Location() then (
+      var jc' := readSuperblockResp(k, s.jc, io, 1);
+      s.(jc := jc')
     ) else (
       s
     )
+  }
+
+  lemma readResponseCorrect(k: Constants, s: Variables, io: IO)
+  requires diskOp(io).RespReadOp?
+  requires ValidDiskOp(diskOp(io))
+  requires Inv(k, s)
+  ensures var s' := readResponse(k, s, io);
+    && WFVars(s')
+    && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
+  {
+    var loc := DiskLayout.Location(
+        io.respRead.addr,
+        |io.respRead.bytes| as uint64);
+
+    reveal_readResponse();
+    var s' := readResponse(k, s, io);
+
+    if ValidNodeLocation(loc) {
+      if s.bc.Ready? {
+        IOModel.PageInNodeRespCorrect(k, s.bc, io);
+
+        jcNoOp_respread(k, s, s', StatesInternalOp, io);
+        assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), StatesInternalOp);
+        assert BJC.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
+        assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io));
+      } else {
+        noop_respread(k, s, io);
+      }
+    } else if ValidIndirectionTableLocation(loc) {
+      if s.bc.LoadingIndirectionTable? {
+        IOModel.PageInIndirectionTableRespCorrect(k, s.bc, io);
+
+        jcNoOp_respread(k, s, s', StatesInternalOp, io);
+        assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), StatesInternalOp);
+        assert BJC.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
+        assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io));
+      } else {
+        noop_respread(k, s, io);
+      }
+    } else if loc == Superblock1Location() {
+      readSuperblockRespCorrect(k, s.jc, io, 0);
+
+      bcNoOp_respread(k, s, s', JournalInternalOp, io);
+      assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), JournalInternalOp);
+      assert BJC.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
+      assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io));
+    } else if loc == Superblock2Location() {
+      readSuperblockRespCorrect(k, s.jc, io, 1);
+
+      bcNoOp_respread(k, s, s', JournalInternalOp, io);
+      assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), JournalInternalOp);
+      assert BJC.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
+      assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io));
+    } else {
+      noop_respread(k, s, io);
+    }
   }
 }

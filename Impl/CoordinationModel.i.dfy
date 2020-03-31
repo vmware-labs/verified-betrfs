@@ -2,7 +2,7 @@ include "SyncModel.i.dfy"
 include "CommitterCommitModel.i.dfy"
 include "CommitterInitModel.i.dfy"
 
-module CoordinatorModel {
+module CoordinationModel {
   import opened StateModel
   import opened Options
   import CommitterModel
