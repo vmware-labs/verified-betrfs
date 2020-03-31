@@ -307,6 +307,14 @@ module DiskLayout {
   {
   }
 
+  function method otherIndirectionTableAddr(addr: uint64) : uint64
+  {
+    if addr == IndirectionTable1Addr() then
+      IndirectionTable2Addr()
+    else
+      IndirectionTable1Addr()
+  }
+
   //export S provides LBA, IndirectionTableLBA, toLBA, toUint64, NativeTypes, ValidNodeAddr
   //    reveals BlockSize
   //export extends S

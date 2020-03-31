@@ -227,6 +227,69 @@ module IOModel {
     }
   }
 
+  predicate {:opaque} FindIndirectionTableLocationAndRequestWrite(io: IO, s: BCVariables, sector: Sector,
+      id: Option<D.ReqId>, loc: Option<DiskLayout.Location>, io': IO)
+  requires s.Ready?
+  requires WFBCVars(s)
+  ensures FindIndirectionTableLocationAndRequestWrite(io, s, sector, id, loc, io') ==>
+      loc.Some? ==> 0 <= loc.value.addr as int / NodeBlockSize() < NumBlocks()
+  {
+    && var dop := diskOp(io');
+    && (dop.NoDiskOp? || dop.ReqWriteOp?)
+    && (dop.NoDiskOp? ==> (
+      && id == None
+      && loc == None
+      && io' == io
+    ))
+    && (dop.ReqWriteOp? ==> (
+      var bytes: seq<byte> := dop.reqWrite.bytes;
+      && |bytes| <= IndirectionTableMaxLength() as int
+      && 32 <= |bytes|
+      && IMM.parseCheckedSector(bytes).Some?
+      && WFSector(sector)
+      && ISector(IMM.parseCheckedSector(bytes).value) == ISector(sector)
+
+      && var len := |bytes| as uint64;
+      && loc == Some(DiskLayout.Location(
+        otherIndirectionTableAddr(s.persistentIndirectionTableLoc.addr),
+        len))
+
+      && id == Some(dop.id)
+      && dop == D.ReqWriteOp(id.value, D.ReqWrite(loc.value.addr, bytes))
+      && io' == IOReqWrite(id.value, dop.reqWrite)
+    ))
+  }
+
+  lemma FindIndirectionTableLocationAndRequestWriteCorrect(io: IO, s: BCVariables, sector: Sector, id: Option<D.ReqId>, loc: Option<DiskLayout.Location>, io': IO)
+  requires WFBCVars(s)
+  requires s.Ready?
+  requires WFSector(sector)
+  requires sector.SectorIndirectionTable?
+  requires FindIndirectionTableLocationAndRequestWrite(io, s, sector, id, loc, io')
+  ensures ValidDiskOp(diskOp(io'))
+  ensures id.Some? ==> loc.Some?
+  ensures id.Some? ==> DiskLayout.ValidIndirectionTableLocation(loc.value)
+  ensures id.Some? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteIndirectionTableOp(id.value, BlockDisk.ReqWriteIndirectionTable(loc.value, ISector(sector).indirectionTable)), JournalDisk.NoDiskOp)
+  ensures loc.Some? ==> !overlap(loc.value, s.persistentIndirectionTableLoc)
+  ensures id.None? ==> io' == io
+  {
+    reveal_FindIndirectionTableLocationAndRequestWrite();
+    IMM.reveal_parseSector();
+    IMM.reveal_parseCheckedSector();
+    Marshalling.reveal_parseSector();
+    reveal_SectorOfBytes();
+    reveal_ValidCheckedBytes();
+    reveal_Parse();
+    D.reveal_ChecksumChecksOut();
+    Marshalling.reveal_parseSector();
+
+    var dop := diskOp(io');
+    if dop.ReqWriteOp? {
+      var bytes: seq<byte> := dop.reqWrite.bytes;
+      var len := |bytes| as uint64;
+    }
+  }
+
   function RequestRead(io: IO, loc: DiskLayout.Location)
   : (res : (D.ReqId, IO))
   requires io.IOInit?
