@@ -37,6 +37,7 @@ module StateModel {
   import BJD = BlockJournalDisk
   import BJC = BlockJournalCache
   import D = AsyncDisk
+  import M = ByteCache
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
@@ -251,6 +252,9 @@ module StateModel {
   {
     && WFVars(s)
     && BCInv(k, s.bc)
+    && CommitterModel.Inv(s.jc)
+    && (s.jc.status.StatusLoadingSuperblock? ==> s.bc.Unready?)
+    && (s.jc.isFrozen ==> s.bc.Ready? && s.bc.frozenIndirectionTable.Some?)
   }
 
   // Functional model of the DiskIOHandler

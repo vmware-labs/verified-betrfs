@@ -583,7 +583,7 @@ module JournalCache {
 
   predicate NoOp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
-    && vop.JournalInternalOp?
+    && (vop.JournalInternalOp? || vop.StatesInternalOp?)
 
     && (
       || dop.NoDiskOp?
@@ -691,6 +691,7 @@ module JournalCache {
   requires s.Ready?
   {
     && (s.superblockWrite.Some? <==> s.newSuperblock.Some?)
+    && (s.superblockWrite.None? <==> s.commitStatus.CommitNone?)
 
     && (s.whichSuperblock == 0 || s.whichSuperblock == 1)
 

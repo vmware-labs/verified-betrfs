@@ -50,6 +50,7 @@ module CommitterInitModel {
   ensures var (cm', io') := PageInSuperblockReq(k, cm, io, which);
     && CommitterModel.WF(cm')
     && ValidDiskOp(diskOp(io'))
+    && IDiskOp(diskOp(io')).bdop.NoDiskOp?
     && JournalCache.Next(Ik(k).jc,
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
@@ -139,6 +140,7 @@ module CommitterInitModel {
   ensures var cm' := PageInSuperblockResp(k, cm, io, which);
     && CommitterModel.WF(cm')
     && ValidDiskOp(diskOp(io))
+    && IDiskOp(diskOp(io)).bdop.NoDiskOp?
     && JournalCache.Next(Ik(k).jc,
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
@@ -331,5 +333,11 @@ module CommitterInitModel {
           JournalInternalOp,
           JournalCache.NoOpStep);
     }
+  }
+
+  function {:opaque} isReplayEmpty(cm: CM) : bool
+  requires JournalistModel.Inv(cm.journalist)
+  {
+    JournalistModel.isReplayEmpty(cm.journalist)
   }
 }

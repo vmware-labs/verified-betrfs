@@ -620,11 +620,14 @@ module SyncModel {
 
   ensures WFBCVars(s')
   ensures ValidDiskOp(diskOp(io'))
+  ensures IDiskOp(diskOp(io')).jdop.NoDiskOp?
 
   ensures (froze ==> BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, FreezeOp))
   ensures (!froze ==>
     || BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp))
     || BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, AdvanceOp(UI.NoOp, false))
+
+  ensures froze ==> s.frozenIndirectionTable.None?
   {
     reveal_sync();
     if s.frozenIndirectionTableLoc.Some? {

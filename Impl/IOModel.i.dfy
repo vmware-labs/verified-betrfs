@@ -332,6 +332,7 @@ module IOModel {
   ensures var (s', io') := PageInIndirectionTableReq(k, s, io);
     && WFBCVars(s')
     && ValidDiskOp(diskOp(io'))
+    && IDiskOp(diskOp(io')).jdop.NoDiskOp?
     && BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp)
   {
     reveal_PageInIndirectionTableReq();
@@ -488,6 +489,7 @@ module IOModel {
   ensures var s' := PageInIndirectionTableResp(k, s, io);
     && WFBCVars(s')
     && ValidDiskOp(diskOp(io))
+    && IDiskOp(diskOp(io)).jdop.NoDiskOp?
     && BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop, StatesInternalOp)
   {
     var (id, sector) := ReadSector(io);
@@ -572,6 +574,7 @@ module IOModel {
   ensures var s' := PageInNodeResp(k, s, io);
     && WFBCVars(s')
     && ValidDiskOp(diskOp(io))
+    && IDiskOp(diskOp(io)).jdop.NoDiskOp?
     && BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop, StatesInternalOp)
   {
     var s' := PageInNodeResp(k, s, io);
@@ -620,33 +623,6 @@ module IOModel {
     }
   }
 
-  /*function readResponse(k: Constants, s: Variables, io: IO)
-  : (s': Variables)
-  requires diskOp(io).RespReadOp?
-  requires s.Ready? ==> IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
-  {
-    if (s.Unready?) then (
-      PageInIndirectionTableResp(k, s, io)
-    ) else (
-      PageInNodeResp(k, s, io)
-    )
-  }
-
-  lemma readResponseCorrect(k: Constants, s: Variables, io: IO)
-  requires diskOp(io).RespReadOp?
-  requires ValidDiskOp(diskOp(io))
-  requires Inv(k, s)
-  ensures var s' := readResponse(k, s, io);
-    && WFVars(s')
-    && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
-  {
-    if (s.Unready?) {
-      PageInIndirectionTableRespCorrect(k, s, io);
-    } else {
-      PageInNodeRespCorrect(k, s, io);
-    }
-  }*/
-
   // == writeResponse ==
 
   /*lemma lemmaOutstandingLocIndexValid(k: Constants, s: BCVariables, id: uint64)
@@ -669,128 +645,6 @@ module IOModel {
       ==> s.blockAllocator.frozen.Some?
   {
     reveal_ConsistentBitmap();
-  }*/
-
-  /*function SyncReqs2to1Iterate(
-      m: MutableMapModel.LinearHashMap<BC.SyncReqStatus>,
-      it: MutableMapModel.Iterator<BC.SyncReqStatus>,
-      m0: MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
-    : (m' : MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
-  requires MutableMapModel.Inv(m)
-  requires MutableMapModel.WFIter(m, it)
-  requires MutableMapModel.Inv(m0)
-  requires m0.contents.Keys == it.s
-  ensures MutableMapModel.Inv(m')
-  decreases it.decreaser
-  {
-    if it.next.Done? then
-      m0
-    else (
-      MutableMapModel.LemmaIterIndexLtCount(m, it);
-      MutableMapModel.CountBound(m);
-      SyncReqs2to1Iterate(
-        m,
-        MutableMapModel.IterInc(m, it),
-        MutableMapModel.Insert(m0, it.next.key,
-            (if it.next.value == BC.State2 then BC.State1 else it.next.value))
-      )
-    )
-  }
-
-  function {:opaque} SyncReqs2to1(m: MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
-      : (m' : MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
-  requires MutableMapModel.Inv(m)
-  ensures MutableMapModel.Inv(m')
-  {
-    SyncReqs2to1Iterate(m,
-      MutableMapModel.IterStart(m),
-      MutableMapModel.Constructor(128))
-  }
-
-  lemma SyncReqs2to1Correct(m: MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
-  requires MutableMapModel.Inv(m)
-  ensures SyncReqs2to1(m).contents == BC.syncReqs2to1(m.contents)
-  {
-    reveal_SyncReqs2to1();
-    var it := MutableMapModel.IterStart(m);
-    var m0 := MutableMapModel.Constructor(128);
-    while !it.next.Done?
-    invariant MutableMapModel.Inv(m)
-    invariant MutableMapModel.WFIter(m, it)
-    invariant MutableMapModel.Inv(m0)
-    invariant m0.contents.Keys == it.s
-    invariant forall id | id in it.s ::
-        m0.contents[id] == (if m.contents[id] == BC.State2 then BC.State1 else m.contents[id])
-    invariant SyncReqs2to1(m) == SyncReqs2to1Iterate(m, it, m0)
-    decreases it.decreaser
-    {
-      MutableMapModel.LemmaIterIndexLtCount(m, it);
-      MutableMapModel.CountBound(m);
-      m0 := MutableMapModel.Insert(m0, it.next.key,
-          (if it.next.value == BC.State2 then BC.State1 else it.next.value));
-      it := MutableMapModel.IterInc(m, it);
-    }
-  }
-
-  function SyncReqs3to2Iterate(
-      m: MutableMapModel.LinearHashMap<BC.SyncReqStatus>,
-      it: MutableMapModel.Iterator<BC.SyncReqStatus>,
-      m0: MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
-    : (m' : MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
-  requires MutableMapModel.Inv(m)
-  requires MutableMapModel.WFIter(m, it)
-  requires MutableMapModel.Inv(m0)
-  requires m0.contents.Keys == it.s
-  ensures MutableMapModel.Inv(m')
-  decreases it.decreaser
-  {
-    if it.next.Done? then
-      m0
-    else (
-      MutableMapModel.LemmaIterIndexLtCount(m, it);
-      MutableMapModel.CountBound(m);
-      SyncReqs3to2Iterate(
-        m,
-        MutableMapModel.IterInc(m, it),
-        MutableMapModel.Insert(m0, it.next.key,
-            (if it.next.value == BC.State3 then BC.State2 else it.next.value))
-      )
-    )
-  }
-
-  function {:opaque} SyncReqs3to2(m: MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
-      : (m' : MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
-  requires MutableMapModel.Inv(m)
-  ensures MutableMapModel.Inv(m')
-  {
-    SyncReqs3to2Iterate(m,
-      MutableMapModel.IterStart(m),
-      MutableMapModel.Constructor(128))
-  }
-
-  lemma SyncReqs3to2Correct(m: MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
-  requires MutableMapModel.Inv(m)
-  ensures SyncReqs3to2(m).contents == BC.syncReqs3to2(m.contents)
-  {
-    reveal_SyncReqs3to2();
-    var it := MutableMapModel.IterStart(m);
-    var m0 := MutableMapModel.Constructor(128);
-    while !it.next.Done?
-    invariant MutableMapModel.Inv(m)
-    invariant MutableMapModel.WFIter(m, it)
-    invariant MutableMapModel.Inv(m0)
-    invariant m0.contents.Keys == it.s
-    invariant forall id | id in it.s ::
-        m0.contents[id] == (if m.contents[id] == BC.State3 then BC.State2 else m.contents[id])
-    invariant SyncReqs3to2(m) == SyncReqs3to2Iterate(m, it, m0)
-    decreases it.decreaser
-    {
-      MutableMapModel.LemmaIterIndexLtCount(m, it);
-      MutableMapModel.CountBound(m);
-      m0 := MutableMapModel.Insert(m0, it.next.key,
-          (if it.next.value == BC.State3 then BC.State2 else it.next.value));
-      it := MutableMapModel.IterInc(m, it);
-    }
   }*/
 
   /*function writeResponse(k: Constants, s: Variables, io: IO)

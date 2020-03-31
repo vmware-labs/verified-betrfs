@@ -378,7 +378,8 @@ module BlockCache refines Transactable {
 
   predicate NoOp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
-    && vop.StatesInternalOp?
+    && (vop.StatesInternalOp? || vop.JournalInternalOp?
+        || vop.PushSyncOp? || vop.PopSyncOp?)
 
     && (
       || dop.NoDiskOp?
