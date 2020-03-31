@@ -25,18 +25,18 @@ import opened Sequences
       }
   }
 
-  function operator(| |)<A>(s:lseq<A>):nat
+  function{:inline true} operator(| |)<A>(s:lseq<A>):nat
   {
       |lseqs(s)|
   }
 
-  function operator([])<A>(s:lseq<A>, i:nat):A
+  function{:inline true} operator([])<A>(s:lseq<A>, i:nat):A
       requires i < |s|
   {
       read(lseqs(s)[i])
   }
 
-  function operator(in)<A>(s:lseq<A>, i:nat):bool
+  function{:inline true} operator(in)<A>(s:lseq<A>, i:nat):bool
       requires i < |s|
   {
       has(lseqs(s)[i])
@@ -45,7 +45,7 @@ import opened Sequences
   function method lseq_peek<A>(shared s:lseq<A>, i:nat):(shared a:A)
       requires i < |s|
       requires i in s
-      ensures a == peek(lseqs(s)[i])
+      ensures a == s[i]
   {
       peek(lseq_share(s, i))
   }
@@ -75,13 +75,13 @@ import opened Sequences
 
   predicate lseq_full<A>(s: lseq<A>)
   {
-      && (forall i | 0 <= i < |s| :: has(lseqs(s)[i]))
+      && (forall i | 0 <= i < |s| :: i in s)
   }
 
   function{:opaque} lseqs_full<A>(s: lseq<A>): (result: seq<A>)
       requires lseq_full(s)
       ensures |result| == |s|
-      ensures forall i | 0 <= i < |s| :: result[i] == peek(lseqs(s)[i])
+      ensures forall i | 0 <= i < |s| :: result[i] == s[i]
   {
       Apply(x requires has(x) => peek(x), lseqs(s))
   }

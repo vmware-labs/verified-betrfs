@@ -496,6 +496,9 @@ include "../lib/Base/Arithmetic.s.dfy"
   function method ExtractItemKey<V>(item: Item<V>) : uint64
     requires item.Tombstone? || item.Entry?
     ensures ExtractItemKey(item) == item.key
+  {
+    item.key
+  }
   function method IsEmpty<V>(item: Item<V>) : bool {
     item.Empty?
   }
@@ -513,12 +516,6 @@ include "../lib/Base/Arithmetic.s.dfy"
       slotIdx: uint64,
       ghost startSlotIdx: uint64,
       ghost ghostSkips: uint64)
-
-  // TODO(chris): |ls| and ls[x] are really common (of course). It would be
-//
-  // glorious if |ls| got internally translated to "lseq_len(ls)", and
-// ls[x]
-  // got internally translated to "assert lseq_full(ls); lseqs_full(ls)".
 
   method Probe<V>(shared self: FixedSizeLinearHashMap<V>, key: uint64)
   returns (result : ProbeResult<V>)
@@ -570,11 +567,11 @@ include "../lib/Base/Arithmetic.s.dfy"
           then wit as int - slotIdx as int + StorageLength(self)
           else wit as int - slotIdx as int
     {
-      // TODO(chris) this used to be a nice expression, and now it's a bunch of external function definitions
-      if IsEmpty(seq_get(self.storage, slotIdx as nat)) || IsTombstoneForKey(seq_get(self.storage, slotIdx as nat), key) {
+      var item := seq_get(self.storage, slotIdx as nat);
+      if item.Empty? || IsTombstoneForKey(item, key) {
         result := ProbeResult(slotIdx, startSlotIdx, skips);
         done := true;
-      } else if ExtractItemKey(seq_get(self.storage, slotIdx as nat)) == key {
+      } else if item.key == key {
         assert EntryInSlotMatchesContents(self.storage, Slot(slotIdx as nat), self.contents); // observe
         result := ProbeResult(slotIdx, startSlotIdx, skips);
         done := true;
@@ -625,7 +622,6 @@ include "../lib/Base/Arithmetic.s.dfy"
     selfStorage := seq_set(selfStorage, slotIdx as int, Entry(key, value));
     selfContents := selfContents[key := Some(value)];
     if IsEmpty(itemReplaced) {
-      // TODO(chris)
       self' := FixedSizeLinearHashMap(selfStorage, selfCount + 1, selfContents);
     } else if IsTombstone(itemReplaced) {
       self' := FixedSizeLinearHashMap(selfStorage, selfCount, selfContents);

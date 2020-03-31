@@ -17,6 +17,9 @@ include "LinearMaybe.s.dfy"
 
   method seq_free<A>(linear s:seq<A>)
 
+  method seq_unleash<A>(linear s1:seq<A>) returns(s2:seq<A>)
+      ensures s1 == s2
+
   type lseq<A>
   function lseqs<A>(s:lseq<A>):seq<maybe<A>> // contents of an lseq, as ghost seq
   function method lseq_length<A>(shared s:lseq<A>):(n:nat)
