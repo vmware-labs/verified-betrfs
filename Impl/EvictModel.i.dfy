@@ -7,6 +7,8 @@ module EvictModel {
   import opened BookkeepingModel
   import opened DeallocModel
   import opened SyncModel
+  import opened InterpretationDiskOps
+  import opened ViewOp
 
   import opened Options
   import opened Maps
@@ -19,7 +21,7 @@ module EvictModel {
 
   import LruModel
 
-  function Evict(k: Constants, s: Variables, ref: BT.G.Reference) : (s' : Variables)
+  function Evict(k: Constants, s: BCVariables, ref: BT.G.Reference) : (s' : BCVariables)
   requires s.Ready?
   requires ref in s.cache
   {
@@ -27,7 +29,7 @@ module EvictModel {
      .(lru := LruModel.Remove(s.lru, ref))
   }
 
-  predicate NeedToWrite(s: Variables, ref: BT.G.Reference)
+  predicate NeedToWrite(s: BCVariables, ref: BT.G.Reference)
   requires s.Ready?
   {
     || (
@@ -41,7 +43,7 @@ module EvictModel {
     )
   }
 
-  predicate CanEvict(s: Variables, ref: BT.G.Reference)
+  predicate CanEvict(s: BCVariables, ref: BT.G.Reference)
   requires s.Ready?
   requires ref in s.ephemeralIndirectionTable.graph ==>
       ref in s.ephemeralIndirectionTable.locs
@@ -51,9 +53,9 @@ module EvictModel {
     )
   }
 
-  predicate EvictOrDealloc(k: Constants, s: Variables, io: IO,
-      s': Variables, io': IO)
-  requires Inv(k, s)
+  predicate EvictOrDealloc(k: Constants, s: BCVariables, io: IO,
+      s': BCVariables, io': IO)
+  requires BCInv(k, s)
   requires s.Ready?
   requires io.IOInit?
   requires |s.cache| > 0
@@ -86,12 +88,15 @@ module EvictModel {
     )
   }
 
-  lemma EvictOrDeallocCorrect(k: Constants, s: Variables, io: IO,
-      s': Variables, io': IO)
+  lemma EvictOrDeallocCorrect(k: Constants, s: BCVariables, io: IO,
+      s': BCVariables, io': IO)
   requires EvictOrDealloc.requires(k, s, io, s', io')
   requires EvictOrDealloc(k, s, io, s', io')
-  ensures WFVars(s')
-  ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
+  ensures WFBCVars(s')
+  ensures ValidDiskOp(diskOp(io'))
+  ensures
+    || BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp)
+    || BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, AdvanceOp(UI.NoOp, false))
   {
     var ref := FindDeallocable(s);
     FindDeallocableCorrect(s);
@@ -101,34 +106,34 @@ module EvictModel {
     } else {
       var ref := LruModel.Next(s.lru);
       if ref == BT.G.Root() {
-        assert noop(k, IVars(s), IVars(s));
+        assert noop(k, IBlockCache(s), IBlockCache(s));
       } else if (NeedToWrite(s, ref)) {
         if s.outstandingIndirectionTableWrite.None? {
           TryToWriteBlockCorrect(k, s, io, ref, s', io');
         } else {
-          assert noop(k, IVars(s), IVars(s));
+          assert noop(k, IBlockCache(s), IBlockCache(s));
         }
       } else if CanEvict(s, ref) {
         LruModel.LruRemove(s.lru, ref);
-        assert WFVars(s');
-        assert stepsBC(k, IVars(s), IVars(s'), UI.NoOp, io', BC.EvictStep(ref));
+        assert WFBCVars(s');
+        assert stepsBC(k, IBlockCache(s), IBlockCache(s'), StatesInternalOp, io', BC.EvictStep(ref));
       } else {
-        assert noop(k, IVars(s), IVars(s));
+        assert noop(k, IBlockCache(s), IBlockCache(s));
       }
     }
   }
 
-  predicate {:opaque} PageInReqOrMakeRoom(
-      k: Constants, s: Variables, io: IO, ref: BT.G.Reference,
-      s': Variables, io': IO)
-  requires Inv(k, s)
+  predicate {:opaque} PageInNodeReqOrMakeRoom(
+      k: Constants, s: BCVariables, io: IO, ref: BT.G.Reference,
+      s': BCVariables, io': IO)
+  requires BCInv(k, s)
   requires s.Ready?
   requires io.IOInit?
   requires ref in s.ephemeralIndirectionTable.graph
   requires ref !in s.cache
   {
     if TotalCacheSize(s) <= MaxCacheSize() - 1 then (
-      (s', io') == PageInReq(k, s, io, ref)
+      (s', io') == PageInNodeReq(k, s, io, ref)
     ) else if |s.cache| > 0 then (
       EvictOrDealloc(k, s, io, s', io')
     ) else (
@@ -136,22 +141,25 @@ module EvictModel {
     )
   }
 
-  lemma PageInReqOrMakeRoomCorrect(
-      k: Constants, s: Variables, io: IO, ref: BT.G.Reference,
-      s': Variables, io': IO)
-  requires PageInReqOrMakeRoom.requires(k, s, io, ref, s', io')
-  requires PageInReqOrMakeRoom(k, s, io, ref, s', io')
-  ensures WFVars(s')
-  ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
+  lemma PageInNodeReqOrMakeRoomCorrect(
+      k: Constants, s: BCVariables, io: IO, ref: BT.G.Reference,
+      s': BCVariables, io': IO)
+  requires PageInNodeReqOrMakeRoom.requires(k, s, io, ref, s', io')
+  requires PageInNodeReqOrMakeRoom(k, s, io, ref, s', io')
+  ensures WFBCVars(s')
+  ensures ValidDiskOp(diskOp(io'))
+  ensures
+    || BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp)
+    || BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, AdvanceOp(UI.NoOp, false))
   {
-    reveal_PageInReqOrMakeRoom();
+    reveal_PageInNodeReqOrMakeRoom();
 
     if TotalCacheSize(s) <= MaxCacheSize() - 1 {
-      PageInReqCorrect(k, s, io, ref);
+      PageInNodeReqCorrect(k, s, io, ref);
     } else if |s.cache| > 0 {
       EvictOrDeallocCorrect(k, s, io, s', io');
     } else {
-      assert noop(k, IVars(s), IVars(s));
+      assert noop(k, IBlockCache(s), IBlockCache(s));
     }
   }
 }
