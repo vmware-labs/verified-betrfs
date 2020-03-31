@@ -25,18 +25,35 @@ import opened Sequences
       }
   }
 
+  function operator(| |)<A>(s:lseq<A>):nat
+  {
+      |lseqs(s)|
+  }
+
+  function operator([])<A>(s:lseq<A>, i:nat):A
+      requires i < |s|
+  {
+      read(lseqs(s)[i])
+  }
+
+  function operator(in)<A>(s:lseq<A>, i:nat):bool
+      requires i < |s|
+  {
+      has(lseqs(s)[i])
+  }
+
   function method lseq_peek<A>(shared s:lseq<A>, i:nat):(shared a:A)
-      requires i < |lseqs(s)|
-      requires has(lseqs(s)[i])
+      requires i < |s|
+      requires i in s
       ensures a == peek(lseqs(s)[i])
   {
       peek(lseq_share(s, i))
   }
 
   method lseq_take<A>(linear s1:lseq<A>, i:nat) returns(linear s2:lseq<A>, linear a:A)
-      requires i < |lseqs(s1)|
-      requires has(lseqs(s1)[i])
-      ensures a == read(lseqs(s1)[i])
+      requires i < |s1|
+      requires i in s1
+      ensures a == s1[i]
       ensures lseqs(s2) == lseqs(s1)[i := empty()]
   {
       linear var x1:maybe<A> := empty();
@@ -46,8 +63,8 @@ import opened Sequences
   }
 
   method lseq_give<A>(linear s1:lseq<A>, i:nat, linear a:A) returns(linear s2:lseq<A>)
-      requires i < |lseqs(s1)|
-      requires !has(lseqs(s1)[i])
+      requires i < |s1|
+      requires !(i in s1)
       ensures lseqs(s2) == lseqs(s1)[i := give(a)]
   {
       linear var x1:maybe<A> := give(a);
@@ -58,13 +75,13 @@ import opened Sequences
 
   predicate lseq_full<A>(s: lseq<A>)
   {
-      && (forall i | 0 <= i < lseq_length(s) :: has(lseqs(s)[i]))
+      && (forall i | 0 <= i < |s| :: has(lseqs(s)[i]))
   }
 
   function{:opaque} lseqs_full<A>(s: lseq<A>): (result: seq<A>)
       requires lseq_full(s)
-      ensures |result| == lseq_length(s)
-      ensures forall i | 0 <= i < lseq_length(s) :: result[i] == peek(lseqs(s)[i])
+      ensures |result| == |s|
+      ensures forall i | 0 <= i < |s| :: result[i] == peek(lseqs(s)[i])
   {
       Apply(x requires has(x) => peek(x), lseqs(s))
   }
