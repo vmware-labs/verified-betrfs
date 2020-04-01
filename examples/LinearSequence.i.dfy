@@ -83,7 +83,7 @@ module LinearSequence_i {
       requires forall i:nat | i < |s| :: i !in s
   {
       assert forall i:nat {:trigger lseqs_raw(s)[i]} | i < |lseqs_raw(s)| :: i !in s;
-      lseq_free_raw(s);
+      var _ := lseq_free_raw(s);
   }
 
   // can be implemented as in-place swap
