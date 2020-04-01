@@ -61,7 +61,7 @@ module DeallocModel {
   ensures var (s', io') := Dealloc(k, s, io, ref);
       && WFBCVars(s')
       && ValidDiskOp(diskOp(io'))
-      && BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, AdvanceOp(UI.NoOp, false))
+      && BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, AdvanceOp(UI.NoOp, true))
   {
     reveal_Dealloc();
     var (s', io') := Dealloc(k, s, io, ref);
@@ -100,10 +100,10 @@ module DeallocModel {
     assert WFBCVars(s');
 
     var iDiskOp := IDiskOp(diskOp(io)).bdop;
-    assert BC.Unalloc(Ik(k).bc, IBlockCache(s), IBlockCache(s'), iDiskOp, AdvanceOp(UI.NoOp, false), ref);
-    assert BBC.BlockCacheMove(Ik(k).bc, IBlockCache(s), IBlockCache(s'), iDiskOp, AdvanceOp(UI.NoOp, false), BC.UnallocStep(ref));
-    //assert stepsBC(k, IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, false), io, BC.UnallocStep(ref));
-    assert BBC.NextStep(Ik(k).bc, IBlockCache(s), IBlockCache(s'), iDiskOp, AdvanceOp(UI.NoOp, false), BBC.BlockCacheMoveStep(BC.UnallocStep(ref)));
+    assert BC.Unalloc(Ik(k).bc, IBlockCache(s), IBlockCache(s'), iDiskOp, AdvanceOp(UI.NoOp, true), ref);
+    assert BBC.BlockCacheMove(Ik(k).bc, IBlockCache(s), IBlockCache(s'), iDiskOp, AdvanceOp(UI.NoOp, true), BC.UnallocStep(ref));
+    //assert stepsBC(k, IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), io, BC.UnallocStep(ref));
+    assert BBC.NextStep(Ik(k).bc, IBlockCache(s), IBlockCache(s'), iDiskOp, AdvanceOp(UI.NoOp, true), BBC.BlockCacheMoveStep(BC.UnallocStep(ref)));
   }
 
   function {:opaque} FindDeallocable(s: BCVariables)

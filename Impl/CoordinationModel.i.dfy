@@ -305,7 +305,7 @@ module CoordinationModel {
           assert BJC.Next(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
           assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'));
         } else {
-          var vop := AdvanceOp(UI.NoOp, false);
+          var vop := AdvanceOp(UI.NoOp, true);
           assert BBC.Next(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io')).bdop, vop);
           jcNoOp(k, s, s', vop);
           assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);
@@ -338,7 +338,7 @@ module CoordinationModel {
               assert BJC.Next(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
               assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'));
             } else {
-              var vop := AdvanceOp(UI.NoOp, false);
+              var vop := AdvanceOp(UI.NoOp, true);
               assert BBC.Next(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io')).bdop, vop);
               jcNoOp(k, s, s', vop);
               assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);

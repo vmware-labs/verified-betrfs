@@ -6,6 +6,7 @@ module SplitModel {
   import opened IOModel
   import opened BookkeepingModel
   import opened NodeModel
+  import opened ViewOp
 
   import opened Options
   import opened Maps
@@ -20,7 +21,7 @@ module SplitModel {
 
   import opened NativeTypes
 
-  lemma lemmaChildrenConditionsCutoffNode(k: Constants, s: Variables, 
+  lemma lemmaChildrenConditionsCutoffNode(k: Constants, s: BCVariables, 
       node: Node, lbound: Option<Key>, rbound: Option<Key>)
   requires WFNode(node)
   requires s.Ready?
@@ -33,7 +34,7 @@ module SplitModel {
   }
 
   lemma lemmaChildrenConditionsSplitChild(
-      k: Constants, s: Variables, child: Node, num_children_left: int)
+      k: Constants, s: BCVariables, child: Node, num_children_left: int)
   requires SplitChildLeft.requires(child, num_children_left)
   requires SplitChildRight.requires(child, num_children_left)
   requires s.Ready?
@@ -89,7 +90,7 @@ module SplitModel {
     }
   }
 
-  function {:opaque} splitBookkeeping(k: Constants, s: Variables, left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference, fused_parent_children: seq<BT.G.Reference>, left_child: Node, right_child: Node, slot: int) : (s': Variables)
+  function {:opaque} splitBookkeeping(k: Constants, s: BCVariables, left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference, fused_parent_children: seq<BT.G.Reference>, left_child: Node, right_child: Node, slot: int) : (s': BCVariables)
   requires 0 <= slot < |fused_parent_children|
   requires s.Ready?
   requires WriteAllocConditions(k, s)
@@ -120,8 +121,8 @@ module SplitModel {
     s3
   }
 
-  function {:opaque} splitCacheChanges(s: Variables, left_childref: BT.G.Reference,
-      right_childref: BT.G.Reference, parentref: BT.G.Reference, slot: int, num_children_left: int, pivot: Key, left_child: Node, right_child: Node) : (s': Variables)
+  function {:opaque} splitCacheChanges(s: BCVariables, left_childref: BT.G.Reference,
+      right_childref: BT.G.Reference, parentref: BT.G.Reference, slot: int, num_children_left: int, pivot: Key, left_child: Node, right_child: Node) : (s': BCVariables)
   requires s.Ready?
   requires parentref in s.cache
   requires WFNode(s.cache[parentref]);
@@ -136,9 +137,9 @@ module SplitModel {
         [parentref := split_parent])
   }
 
-  function {:opaque} splitDoChanges(k: Constants, s: Variables, child: Node,
+  function {:opaque} splitDoChanges(k: Constants, s: BCVariables, child: Node,
       left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference,
-      fused_parent_children: seq<BT.G.Reference>, slot: int) : (s': Variables)
+      fused_parent_children: seq<BT.G.Reference>, slot: int) : (s': BCVariables)
   requires s.Ready?
   requires parentref in s.cache
   requires WFNode(s.cache[parentref]);
@@ -166,10 +167,10 @@ module SplitModel {
     s'
   }
 
-  function {:opaque} doSplit(k: Constants, s: Variables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
-  : (s': Variables)
+  function {:opaque} doSplit(k: Constants, s: BCVariables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
+  : (s': BCVariables)
   requires s.Ready?
-  requires Inv(k, s)
+  requires BCInv(k, s)
   requires childref in s.ephemeralIndirectionTable.graph
   requires parentref in s.ephemeralIndirectionTable.graph
   requires childref in s.cache
@@ -221,9 +222,9 @@ module SplitModel {
     )
   }
 
-  lemma doSplitCorrect(k: Constants, s: Variables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
+  lemma doSplitCorrect(k: Constants, s: BCVariables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
   requires s.Ready?
-  requires Inv(k, s)
+  requires BCInv(k, s)
   requires childref in s.ephemeralIndirectionTable.graph
   requires parentref in s.ephemeralIndirectionTable.graph
   requires childref in s.cache
@@ -235,8 +236,8 @@ module SplitModel {
   requires TotalCacheSize(s) <= MaxCacheSize() - 2
   requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
   ensures var s' := doSplit(k, s, parentref, childref, slot);
-    && WFVars(s')
-    && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, D.NoDiskOp)
+    && WFBCVars(s')
+    && betree_next(k, IBlockCache(s), IBlockCache(s'))
   {
     var s' := doSplit(k, s, parentref, childref, slot);
     reveal_doSplit();
@@ -245,7 +246,7 @@ module SplitModel {
       && s.frozenIndirectionTable.Some?
       && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, parentref)
     ) {
-      assert noop(k, IVars(s), IVars(s));
+      assert noop(k, IBlockCache(s), IBlockCache(s));
     } else {
       var fused_parent := s.cache[parentref];
       var fused_child := s.cache[childref];
@@ -262,15 +263,15 @@ module SplitModel {
       if (|child.pivotTable| == 0) {
         // TODO there should be an operation which just
         // cuts off the node and doesn't split it.
-        assert noop(k, IVars(s), IVars(s));
+        assert noop(k, IBlockCache(s), IBlockCache(s));
       } else {
         var left_childref := getFreeRef(s);
         if left_childref.None? {
-          assert noop(k, IVars(s), IVars(s));
+          assert noop(k, IBlockCache(s), IBlockCache(s));
         } else {
           var right_childref := getFreeRef2(s, left_childref.value);
           if right_childref.None? {
-            assert noop(k, IVars(s), IVars(s));
+            assert noop(k, IBlockCache(s), IBlockCache(s));
           } else {
             var num_children_left := |child.buckets| / 2;
             var pivot := child.pivotTable[num_children_left - 1];
@@ -353,8 +354,8 @@ module SplitModel {
               BT.G.WriteOp(parentref, inodeSplitParent)
             ];
             assert ops == BT.BetreeStepOps(step);
-            BC.MakeTransaction3(Ik(k), IVars(s), IVars(s1), IVars(s2), IVars(s'), ops);
-            assert stepsBetree(k, IVars(s), IVars(s'), UI.NoOp, step);
+            BC.MakeTransaction3(Ik(k).bc, IBlockCache(s), IBlockCache(s1), IBlockCache(s2), IBlockCache(s'), ops);
+            assert stepsBetree(k, IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), step);
           }
         }
       }

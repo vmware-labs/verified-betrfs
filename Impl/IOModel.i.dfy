@@ -49,6 +49,18 @@ module IOModel {
     BBC.NextStep(Ik(k).bc, s, s', BlockDisk.NoDiskOp, StatesInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep))
   }
 
+  predicate betree_next(k: Constants, s: BBC.Variables, s': BBC.Variables)
+  {
+    || BBC.Next(Ik(k).bc, s, s', BlockDisk.NoDiskOp, StatesInternalOp)
+    || BBC.Next(Ik(k).bc, s, s', BlockDisk.NoDiskOp, AdvanceOp(UI.NoOp, true))
+  }
+
+  predicate betree_next_dop(k: Constants, s: BBC.Variables, s': BBC.Variables, dop: BlockDisk.DiskOp)
+  {
+    || BBC.Next(Ik(k).bc, s, s', dop, StatesInternalOp)
+    || BBC.Next(Ik(k).bc, s, s', dop, AdvanceOp(UI.NoOp, true))
+  }
+
   // models of IO-related methods
 
   predicate LocAvailable(s: BCVariables, loc: Location, len: uint64)
