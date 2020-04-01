@@ -667,104 +667,81 @@ include "../lib/Base/Arithmetic.s.dfy"
     }
   }
 
-// 
-//   function FixedSizeUpdateBySlot<V>(self: FixedSizeLinearHashMap<V>, slotIdx: uint64, value: V) : FixedSizeLinearHashMap<V>
-//   requires 0 <= slotIdx as int < StorageLength(self)
-//   requires self.storage[slotIdx].Entry?
-//   {
-//     var storage' := self.storage[slotIdx as int := self.storage[slotIdx].(value := value)];
-//     var contents' := self.contents[self.storage[slotIdx].key := Some(value)];
-//     FixedSizeLinearHashMap(storage', self.count, contents')
-//   }
-// 
-//   function {:opaque} FixedSizeGet<V>(self: FixedSizeLinearHashMap<V>, key: uint64)
-//     : (found : Option<V>)
-//   requires FixedSizeInv(self)
-//   {
-//     var slotIdx := Probe(self, key);
-// 
-//     if self.storage[slotIdx].Entry? then
-//       Some(self.storage[slotIdx].value)
-//     else
-//       None
-//   }
-// 
-//   lemma LemmaFixedSizeGetResult<V>(self: FixedSizeLinearHashMap<V>, key: uint64)
-//   requires FixedSizeInv(self)
-//   ensures var found := FixedSizeGet(self, key);
-//     && if key in self.contents && self.contents[key].Some? then found == Some(self.contents[key].value) else found.None?
-//   {
-//     reveal_FixedSizeGet();
-//     var _ := LemmaProbeResult(self, key);
-//   }
-// 
-//   function {:opaque} FixedSizeRemove<V>(self: FixedSizeLinearHashMap<V>, key: uint64)
-//     : (res : (FixedSizeLinearHashMap<V>, Option<V>))
-//   requires FixedSizeInv(self)
-//   {
-//     var slotIdx := Probe(self, key);
-// 
-//     if self.storage[slotIdx].Entry? then (
-//       var removed := Some(self.storage[slotIdx].value);
-//       var self' := FixedSizeLinearHashMap(
-//           self.storage[slotIdx as int := Tombstone(key)],
-//           self.count,
-//           self.contents[key := None]);
-//       (self', removed)
-//     ) else (
-//       (self, None)
-//     )
-//   }
-// 
-//   lemma LemmaFixedSizeRemoveResult<V>(self: FixedSizeLinearHashMap<V>, key: uint64)
-//   requires FixedSizeInv(self)
-//   ensures var (self', removed) := FixedSizeRemove(self, key);
-//     && FixedSizeInv(self')
-//     && (self'.contents == if key in self.contents
-//       then self.contents[key := None]
-//       else self.contents)
-//     && (removed == if key in self.contents && self.contents[key].Some?
-//       then Some(self.contents[key].value)
-//       else None)
-//     && (removed.Some? <==> (key in self.contents && self.contents[key].Some?))
-//     && (self'.count == self.count)
-//   {
-//     reveal_FixedSizeRemove();
-//     var (self', removed) := FixedSizeRemove(self, key);
-// 
-//     var probeRes := LemmaProbeResult(self, key);
-//     var slotIdx := probeRes.slotIdx;
-//     var probeStartSlotIdx := probeRes.startSlotIdx;
-//     var probeSkips := probeRes.ghostSkips;
-// 
-//     if self.storage[slotIdx].Entry? {
-//       forall explainedKey | explainedKey in self'.contents
-//       ensures exists skips :: SlotExplainsKey(self'.storage, skips, explainedKey)
-//       {
-//         if key == explainedKey {
-//           assert SlotExplainsKey(self'.storage, probeSkips as nat, key);
-//         } else {
-//           var oldSkips :| SlotExplainsKey(self.storage, oldSkips, explainedKey);
-//           assert SlotExplainsKey(self'.storage, oldSkips, explainedKey);
-//         }
-//       }
-// 
-//       forall slot | ValidSlot(|self'.storage|, slot) && self'.storage[slot.slot].Entry?
-//       ensures && var item := self'.storage[slot.slot];
-//               && self'.contents[item.key] == Some(item.value)
-//       {
-//         var item := self'.storage[slot.slot];
-//         if slot != Slot(slotIdx as nat) {
-//           if item.key == key {
-//             assert CantEquivocateStorageKey(self'.storage);
-//             assert TwoNonEmptyValidSlotsWithSameKey(self'.storage, slot, Slot(slotIdx as nat));
-//             assert false;
-//           }
-//         }
-//       }
-//     } else {
-//     }
-//   }
+  method FixedSizeGet<V>(shared self: FixedSizeLinearHashMap<V>, key: uint64) returns (found : Option<V>)
+  requires FixedSizeInv(self)
+  ensures if key in self.contents && self.contents[key].Some? then found == Some(self.contents[key].value) else found.None?
+  {
+    var probeResult := Probe(self, key);
+    var slotIdx := probeResult.slotIdx;
+
+    // TODO (chris) we had to break this out to a separate assignment, instead of inline expr
+    //     if seq_get(self.storage, slotIdx as nat).Entry? {
+    //     Error: expected ordinary expression, found shared expression
+    var item := seq_get(self.storage, slotIdx as nat);
+    if item.Entry? {
+      found := Some(item.value);
+    } else {
+      found := None;
+    }
+  }
+
+  method FixedSizeRemove<V>(linear self: FixedSizeLinearHashMap<V>, key: uint64) returns (linear self': FixedSizeLinearHashMap<V>, removed: Option<V>)
+  requires FixedSizeInv(self)
+  ensures FixedSizeInv(self')
+  ensures (self'.contents == if key in self.contents
+    then self.contents[key := None]
+    else self.contents)
+  ensures (removed == if key in self.contents && self.contents[key].Some?
+    then Some(self.contents[key].value)
+    else None)
+  ensures (removed.Some? <==> (key in self.contents && self.contents[key].Some?))
+  ensures (self'.count == self.count)
+  {
+    self' := self;
+
+    var probeResult := Probe(self', key);
+    var slotIdx := probeResult.slotIdx;
+    ghost var probeStartSlotIdx := probeResult.startSlotIdx;
+    ghost var probeSkips := probeResult.ghostSkips;
+
+    var item := seq_get(self'.storage, slotIdx as nat);
+    if item.Entry? {
+      removed := Some(item.value);
+      linear var FixedSizeLinearHashMap(selfStorage, selfCount, selfContents) := self';
+      linear var newStorage := seq_set(selfStorage, slotIdx as nat, Tombstone(key));
+      self' := FixedSizeLinearHashMap(
+          newStorage,
+          selfCount,
+          selfContents[key := None]);
+
+      forall explainedKey | explainedKey in self'.contents
+      ensures exists skips :: SlotExplainsKey(self'.storage, skips, explainedKey)
+      {
+        if key == explainedKey {
+          assert SlotExplainsKey(self'.storage, probeSkips as nat, key);
+        } else {
+          var oldSkips :| SlotExplainsKey(self.storage, oldSkips, explainedKey);
+          assert SlotExplainsKey(self'.storage, oldSkips, explainedKey);
+        }
+      }
+ 
+      forall slot | ValidSlot(|self'.storage|, slot) && self'.storage[slot.slot].Entry?
+      ensures && var item := self'.storage[slot.slot];
+              && self'.contents[item.key] == Some(item.value)
+      {
+        var item := self'.storage[slot.slot];
+        if slot != Slot(slotIdx as nat) {
+          if item.key == key {
+            assert CantEquivocateStorageKey(self'.storage);
+            assert TwoNonEmptyValidSlotsWithSameKey(self'.storage, slot, Slot(slotIdx as nat));
+            assert false;
+          }
+        }
+      }
+    } else {
+      removed := None;
+    }
+  }
 
 //   //////// Resizing Hash Map
 // 
