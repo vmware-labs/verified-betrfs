@@ -28,6 +28,8 @@ include "../lib/Base/Arithmetic.s.dfy"
   import opened Maps
   import opened SetBijectivity
   import opened NativeArithmetic
+  import opened LinearSequence_s
+  import opened LinearSequence_i
 
   function method {:opaque} lshift(a: uint64, b: uint32) : uint64
   requires 0 <= b < 64

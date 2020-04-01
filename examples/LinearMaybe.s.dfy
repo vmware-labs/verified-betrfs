@@ -1,6 +1,6 @@
 
-// module LinearMaybe {
-  type maybe<A>
+module LinearMaybe {
+  type maybe(!new)<A>
   // andrea: I don't like has as a name, I can't quite say it right
   predicate has<A>(m:maybe<A>)
   function read<A>(m:maybe<A>):A
@@ -18,4 +18,4 @@
       ensures !has(m)
   function method discard<A>(linear m:maybe<A>):()
       requires !has(m)
-// } // module
+} // module

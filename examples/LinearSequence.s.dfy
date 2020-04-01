@@ -1,7 +1,7 @@
 include "LinearMaybe.s.dfy"
 
-// module LinearSequence {
-  // import opened LinearMaybe
+module LinearSequence_s {
+  import opened LinearMaybe
 
   function method seq_get<A>(shared s:seq<A>, i:nat):(a:A)
       requires i < |s|
@@ -21,25 +21,25 @@ include "LinearMaybe.s.dfy"
       ensures s1 == s2
 
   type lseq<A>
-  function lseqs<A>(s:lseq<A>):seq<maybe<A>> // contents of an lseq, as ghost seq
-  function method lseq_length<A>(shared s:lseq<A>):(n:nat)
-      ensures n == |lseqs(s)|
+  function lseqs_raw<A>(s:lseq<A>):seq<maybe<A>> // contents of an lseq, as ghost seq
+  function method lseq_length_raw<A>(shared s:lseq<A>):(n:nat)
+      ensures n == |lseqs_raw(s)|
 
-  method lseq_alloc<A>(length:nat) returns(linear s:lseq<A>)
-      ensures |lseqs(s)| == length
-      ensures forall i:nat | i < length :: !has(lseqs(s)[i])
+  method lseq_alloc_raw<A>(length:nat) returns(linear s:lseq<A>)
+      ensures |lseqs_raw(s)| == length
+      ensures forall i:nat | i < length :: !has(lseqs_raw(s)[i])
 
-  method lseq_free<A>(linear s:lseq<A>)
-      requires forall i:nat | i < |lseqs(s)| :: !has(lseqs(s)[i])
+  method lseq_free_raw<A>(linear s:lseq<A>)
+      requires forall i:nat | i < |lseqs_raw(s)| :: !has(lseqs_raw(s)[i])
 
   // can be implemented as in-place swap
-  method lseq_swap<A>(linear s1:lseq<A>, i:nat, linear a1:maybe<A>) returns(linear s2:lseq<A>, linear a2:maybe<A>)
-      requires i < |lseqs(s1)|
-      ensures a2 == lseqs(s1)[i]
-      ensures lseqs(s2) == lseqs(s1)[i := a1]
+  method lseq_swap_raw<A>(linear s1:lseq<A>, i:nat, linear a1:maybe<A>) returns(linear s2:lseq<A>, linear a2:maybe<A>)
+      requires i < |lseqs_raw(s1)|
+      ensures a2 == lseqs_raw(s1)[i]
+      ensures lseqs_raw(s2) == lseqs_raw(s1)[i := a1]
 
-  function method lseq_share<A>(shared s:lseq<A>, i:nat):(shared a:maybe<A>)
-      requires i < |lseqs(s)|
-      ensures a == lseqs(s)[i]
+  function method lseq_share_raw<A>(shared s:lseq<A>, i:nat):(shared a:maybe<A>)
+      requires i < |lseqs_raw(s)|
+      ensures a == lseqs_raw(s)[i]
 
-// } // module
+} // module

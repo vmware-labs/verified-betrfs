@@ -28,6 +28,8 @@ include "../lib/Base/Arithmetic.s.dfy"
   import opened Maps
   import opened SetBijectivity
   import opened NativeArithmetic
+  import opened LinearSequence_s
+  import opened LinearSequence_i
 
   function method {:opaque} lshift(a: uint64, b: uint32) : uint64
   requires 0 <= b < 64
@@ -299,9 +301,9 @@ include "../lib/Base/Arithmetic.s.dfy"
     && lseq_full(self.storage)
 
     && |self.contents| == (self.count as nat)
-    && SeqMatchesContentKeys(lseqs_full(self.storage), self.contents)
-    && EntriesMatchContentValue(lseqs_full(self.storage), self.contents)
-    && TombstonesMatchContentValue(lseqs_full(self.storage), self.contents)
+    && SeqMatchesContentKeys(lseqs(self.storage), self.contents)
+    && EntriesMatchContentValue(lseqs(self.storage), self.contents)
+    && TombstonesMatchContentValue(lseqs(self.storage), self.contents)
   }
 
   function IndexSetThrough<V>(elements: seq<Item<V>>, through: nat): set<int>
@@ -377,7 +379,7 @@ include "../lib/Base/Arithmetic.s.dfy"
   method ConstructorFromSize<V>(size: uint64) returns (linear self: FixedSizeLinearHashMap<V>)
   requires 128 <= size
   ensures FixedSizeInv(self)
-  ensures forall slot :: ValidSlot(StorageLength(self), slot) ==> SlotIsEmpty(lseqs_full(self.storage), slot)
+  ensures forall slot :: ValidSlot(StorageLength(self), slot) ==> SlotIsEmpty(lseqs(self.storage), slot)
   ensures self.contents == map[]
   ensures size as nat == StorageLength(self)
   {
@@ -405,7 +407,7 @@ include "../lib/Base/Arithmetic.s.dfy"
 //   // function ConstructorFromStorage<V>(storage: seq<Item<V>>, count: uint64) 
 //   // : (self: FixedSizeLinearHashMap<V>)
 //   // requires 128 <= |storage|
-//   // ensures lseqs_full(self.storage) == storage
+//   // ensures lseqs(self.storage) == storage
 //   // ensures forall slot :: ValidSlot(StorageLength(self), slot) ==>
 //   //   self.storage[slot.slot] == storage[slot.slot]
 //   // ensures self.count == count
@@ -456,9 +458,9 @@ include "../lib/Base/Arithmetic.s.dfy"
     var elements: lseq<Item<V>> := self.storage;
     if forall j | 0 <= j < StorageLength(self) :: !elements[j].Empty? {
       var elementIndices := set i | 0 <= i < StorageLength(self);
-      assert IndexSetThrough(lseqs_full(elements), StorageLength(self)) == elementIndices; // trigger
-      CardinalityOfSetsOfSequenceIndices(lseqs_full(elements), elementIndices);
-      IndexSetMatchesContents(lseqs_full(elements), self.contents);
+      assert IndexSetThrough(lseqs(elements), StorageLength(self)) == elementIndices; // trigger
+      CardinalityOfSetsOfSequenceIndices(lseqs(elements), elementIndices);
+      IndexSetMatchesContents(lseqs(elements), self.contents);
     }
   }
 
@@ -493,7 +495,7 @@ include "../lib/Base/Arithmetic.s.dfy"
 //      else wit as int - slotIdx as int
 //
 //  {
-//    if lseqs_full(self.storage)[slotIdx].Empty? || lseqs_full(self.storage)[slotIdx].key == key then
+//    if lseqs(self.storage)[slotIdx].Empty? || lseqs(self.storage)[slotIdx].key == key then
 //      slotIdx
 //    else
 //      ProbeIterate(self, key, Uint64SlotSuccessor(StorageLength(self), slotIdx))
@@ -539,9 +541,9 @@ include "../lib/Base/Arithmetic.s.dfy"
   ensures Slot(result.startSlotIdx as nat) == SlotForKey(StorageLength(self), key)
   ensures 0 <= result.ghostSkips
   ensures result.slotIdx as nat == KthSlotSuccessor(StorageLength(self), Slot(result.startSlotIdx as nat), result.ghostSkips as nat).slot
-  ensures key in self.contents ==> SlotExplainsKey(lseqs_full(self.storage), result.ghostSkips as nat, key)
-  ensures key !in self.contents ==> FilledWithOtherKeys(lseqs_full(self.storage), Slot(result.startSlotIdx as nat), result.ghostSkips as nat, key) && (lseqs_full(self.storage)[result.slotIdx].Empty? || (lseqs_full(self.storage)[result.slotIdx].Tombstone? && lseqs_full(self.storage)[result.slotIdx].key == key))
-  ensures self.storage[result.slotIdx as nat].Entry? ==> key in self.contents && key == lseqs_full(self.storage)[result.slotIdx].key
+  ensures key in self.contents ==> SlotExplainsKey(lseqs(self.storage), result.ghostSkips as nat, key)
+  ensures key !in self.contents ==> FilledWithOtherKeys(lseqs(self.storage), Slot(result.startSlotIdx as nat), result.ghostSkips as nat, key) && (lseqs(self.storage)[result.slotIdx].Empty? || (lseqs(self.storage)[result.slotIdx].Tombstone? && lseqs(self.storage)[result.slotIdx].key == key))
+  ensures self.storage[result.slotIdx as nat].Entry? ==> key in self.contents && key == lseqs(self.storage)[result.slotIdx].key
   ensures self.storage[result.slotIdx as nat].Empty? ==> key !in self.contents
   {
     assume false;
@@ -550,10 +552,10 @@ include "../lib/Base/Arithmetic.s.dfy"
     var startSlotIdx := slotIdx;
     ghost var startSlot := Slot(startSlotIdx as nat);
 
-    ghost var viewFromStartSlot := View(lseqs_full(self.storage), startSlotIdx as nat);
-    ViewsHaveConsistentCounts(lseqs_full(self.storage), viewFromStartSlot, startSlotIdx as nat);
-    CountFilledMatchesIndexSet(lseqs_full(self.storage));
-    IndexSetMatchesContents(lseqs_full(self.storage), self.contents);
+    ghost var viewFromStartSlot := View(lseqs(self.storage), startSlotIdx as nat);
+    ViewsHaveConsistentCounts(lseqs(self.storage), viewFromStartSlot, startSlotIdx as nat);
+    CountFilledMatchesIndexSet(lseqs(self.storage));
+    IndexSetMatchesContents(lseqs(self.storage), self.contents);
 
     forall dist: nat | dist < StorageLength(self)
     ensures self.storage[KthSlotSuccessor(StorageLength(self), startSlot, dist).slot] == viewFromStartSlot[dist]
@@ -567,11 +569,11 @@ include "../lib/Base/Arithmetic.s.dfy"
       invariant !done ==> skips < (StorageLength(self) as uint64)
       invariant !done ==> slotIdx < (StorageLength(self) as uint64)
       invariant !done ==> StorageLength(self) == |viewFromStartSlot|
-      invariant !done ==> lseqs_full(self.storage)[startSlotIdx..] + lseqs_full(self.storage)[..startSlotIdx] == viewFromStartSlot
+      invariant !done ==> lseqs(self.storage)[startSlotIdx..] + lseqs(self.storage)[..startSlotIdx] == viewFromStartSlot
       invariant !done ==> slotIdx as nat == KthSlotSuccessor(StorageLength(self), startSlot, skips as nat).slot
       invariant !done ==> skips < (StorageLength(self) as uint64) ==> self.storage[slotIdx as nat] == viewFromStartSlot[skips]
       invariant !done ==> ValidSlot(StorageLength(self), KthSlotSuccessor(StorageLength(self), startSlot, skips as nat))
-      invariant !done ==> FilledWithOtherKeys(lseqs_full(self.storage), startSlot, skips as nat, key)
+      invariant !done ==> FilledWithOtherKeys(lseqs(self.storage), startSlot, skips as nat, key)
       invariant !done ==> CountFilled(viewFromStartSlot[..skips]) == skips as nat
 
       // invariant Probe(self, key) == ProbeIterate(self, key, slotIdx)
@@ -586,7 +588,7 @@ include "../lib/Base/Arithmetic.s.dfy"
         result := ProbeResult(slotIdx, startSlotIdx, skips);
         done := true;
       } else if ExtractItemKey(item) == key {
-        assert EntryInSlotMatchesContents(lseqs_full(self.storage), Slot(slotIdx as nat), self.contents); // observe
+        assert EntryInSlotMatchesContents(lseqs(self.storage), Slot(slotIdx as nat), self.contents); // observe
         result := ProbeResult(slotIdx, startSlotIdx, skips);
         done := true;
       } else {
@@ -634,10 +636,9 @@ include "../lib/Base/Arithmetic.s.dfy"
     var slotIdx := probeResult.slotIdx;
 
     linear var FixedSizeLinearHashMap(selfStorage, selfCount, selfContents) := self';
-    linear var maybeReplaced: maybe<Item<V>> := give(Entry(key, value));
-    selfStorage, maybeReplaced := lseq_swap(selfStorage, slotIdx as int, maybeReplaced);
+    linear var itemReplaced: Item<V> := Entry(key, value);
+    selfStorage, itemReplaced := lseq_swap(selfStorage, slotIdx as int, itemReplaced);
     selfContents := selfContents[key := Some(value)];
-    linear var itemReplaced: Item<V> := unwrap(maybeReplaced);
     linear match itemReplaced {
       case Empty =>
         self' := FixedSizeLinearHashMap(selfStorage, selfCount + 1, selfContents);
