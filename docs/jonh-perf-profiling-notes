@@ -515,8 +515,222 @@ Takeaways:
 - also: Reprs will turn me into a supervillian. Horrible.
 
 Rob suggests that os-vs-malloc gap may be libasyncio stacks.
+  - well, it ain't stacks. All of the mapped bytes are in the heap mapping.
 Try disabling stupid sequence-copy optimization.
 Try measuring memory usage from the inside (dafny view).
   -- how are we still seeing amass @ 2GB, expecting 1.6GB.
-Graph read, write I/O rates.
-Cache hit rate.
+Graph read, write I/O rates.  Cache hit rate.
+
+[malloc-exp/manual-wka-200-amassspagein-4.data-timeseries.png]
+Looking from the inside!
+- tree-node-count I'd have expected to be 1. It gets up to 12, 7 during the
+  startup phase.
+  = What's going on there!?
+  - Nothing. Those are buckets. They're all in the root node. Data labeling corrected.
+
+- Most of the GB are in message bytes (yay!). Keys seem to be about 24 bytes.
+  = check in YCSB.
+  - yep. Dropped into the debugger, and saw a key 'user181211450603064119781\002', which is 27 bytes long.
+
+- There are only 3758 bytes in Pivot keys across 200 nodes? That's 19 bytes per node,
+  or less than one key per node. That feels wrong!
+  = count pivots, keys, and messages.
+  - sure enough, At 158 Nodes, there are 123 pivot keys!
+  - average buckets/node is below 2!
+  - turns out that's expected, because all of the leaves have 1 bucket.
+
+- The messages (95% of the data) get up to about 1GB at op2500; at the same
+  time, malloc is already around 1.8GB! This is all before we even begin page-in!
+  # How is that possible?
+  # Next step: turn the underlying allocation counter back on; see who it agrees with.
+
+[malloc-exp/manual-wka-200-noseqopt-1.data]
+Re-enables dbg_underlying_len walk.
+Disables subsequence optimization.
+...was a disaster. Load took forever; was running at 343 ops/sec.
+
+[malloc-exp/manual-wka-200-underlying-1.data]
+Re-enables dbg_underlying_len walk.
+Leaves subsequence optimization enabled.
+  yeah, that's loading at 7.9 Kops/sec.
+Okay, so yeah, underlying is seeing pretty much all the malloc mass.
+
+So we *know* (due to underlying allocations; Framework.cpp/sampleNode) that
+we're reaching all that extra memory, just in kvl & pkv keys & messages. That's
+surprising, since we're amassing the crap out of everything. Job 1 is to get
+underlying to match internal-bucket-message-bytes.
+
+Next question: Do particular nodes or buckets have the overage disproportionately?
+Would it be useful to print out, for each node, the disagreement between underlying
+and internal, and then sort them by ... depth in the tree?
+
+First thing: let's associate each underlying with the referrers and size-of-reference.
+
+[malloc-exp/manual-wka-200-underlying-2.data]
+Adds map from underlying reference to the set of nodes that mention it. Prints counts.
+Okay, so the counting is working. I'd next want to know:
+- I see some refs being pointed at by 16 unique noderefs! Why?
+- More importantly, do the pointers at noderefs use all the data in the ref?
+  - could use a conservative count, assuming nobody uses the same data twice, to avoid
+  having to track intervalsets.
+
+Okay, so we can, in fact, see the leaks from this vantage.
+Sorting ref_used rows by how much was leaked, I find:
+- some negative leakage: these are places where the sequence really is in play
+  in two places at once, and my conservative count was wrong. There were seven such
+  sequences. Probably in the write queue or something; not going to get too worked up.
+- about half of the refs were precise (zero leak)
+- the other half were leaky.
+  The distribution of original allocations isn't obviously bimodal; there's a hop near 4MB.
+
+Okay, so wtf. We know that there are exactly 1 tree nodes and exactly 0 pkv nodes, so these
+all have got to be coming from kvl nodes. Don't we amass on every split & flush?
+
+So now I've caught it in the debugger with 7 nodes, a grand total of 5 pivot keys
+(root, and 5 to separate the six kids).
+I think we need to label the buckets to understand which code path is generating each one.
+I'd have thought every one of these children would have come from the root via flush.
+
+BucketImpl ctor invocations:
+- ctor -- mkfs
+- pkv -- pagein the mkfs
+- kvl -- amass (after page-in)
+- ctor -- runFlushPolicy / grow
+- ctor -- splitLeftRight
+- ctor -- amass left
+- ctor -- amass right
+- InitWithWeight -- MutBucket::CloneA (SplitChildLeft)
+  ** this looks pretty suspicious! NodeImpl.SplitChildLeft (and Right).
+  -- except those don't split byte seqs.
+
+Hard to find the subsequence leaks with the debugger, because the Amass code takes its
+own subsequences of the array on purpose.
+
+Hey, here's a neat trick for a gdb condition variable. I want to skip cases where
+a particular frame is on the stack, two above the breakpoint:
+
+cond 5 dbg_underlying_len - (hi - lo) > 50000 && hi-lo > 50000 && ((void***)$rbp)[0][1]!=0x40dffb
+So, if we want to look N frames up for pc address 0x40dffb, use N+1 *'s and N-1 [0]'s.
+
+Well, THAT'S interesting: the only code *generating* big subsequence references
+is the Amass code!  So somehow those subsequences are escaping. Each Amass
+should be glued to a Node; perhaps we can set a Node association during the
+Amass step and then get angry if it ever parts?
+
+So maybe I can track this down from the instrumentation: any two nodes talking
+to the same underlying allocation represent an amassed allocation that was
+supposed to stay with its original owner, but leaked.
+
+Looks like the first PartialFlush happens at op num 59368 (in the current workload-profile config).
+So I can run a trace before and after it to confirm my suspicions.
+
+back at ~26k
+grow
+
+repivot
+  - some leaf node gets cut in half. Is that ... the root? Nope, it's node 1: the first pkv-lookin' node.
+split
+  - parent=0 and child=0. Constructs a new pair of children, and replaces the single child ptr in the
+  parent with two.
+  - and SplitChildLeft does call MutBucket.CloneSeq, which is the only place where we take a subsequence,
+  but it's a subseq of buckets, not of bytes. Arrgh.
+  - MutableBucket.CloneSeq calls .Clone, which copies the kvl into place.
+flush
+  - pushes writes from the parent down to buckets in the children.
+
+so which one is guilty?
+I mean, split makes new nodes -- which should be clean,
+and then flush flushes new buckets into those nodes -- 
+ah. So say we Split, and then only flush onto one side. Would that do it?
+Well, we can at least rule that out by adding an Amass in the Clone.
+
+And that worked. We went from:
+allocationreport refset ref 39192832 refd by 2 noderefs
+allocationreport refset ref 70288656 refd by 3 noderefs
+allocationreport refset ref 74408624 refd by 1 noderefs
+allocationreport refset ref 23808784 refd by 1 noderefs
+allocationreport refset ref 39184688 refd by 2 noderefs
+
+To:
+allocationreport ref_used ref 53160256 underlying 4112868 used_total 4112868 refd_by_nodes 1
+allocationreport ref_used ref 39200944 underlying 4112868 used_total 4112868 refd_by_nodes 1
+allocationreport ref_used ref 70296768 underlying 4119920 used_total 4119920 refd_by_nodes 1
+allocationreport ref_used ref 49040288 underlying 4119920 used_total 8239840 refd_by_nodes 2
+  -- this is a bunch of alternated keys/values.
+allocationreport ref_used ref 82649600 underlying 4137044 used_total 4112934 refd_by_nodes 1
+allocationreport ref_used ref 38787360 underlying 24110 used_total 24110 refd_by_nodes 1
+
+Which kinda looks better.
+
+So which nodes are taking those duplicate references?
+Debugging slowly, it's nodes 4 & 2.
+
+Yup, let's just print that stuff out:
+
+allocationreport refset ref 39196976 refd by 1 noderefs
+    1
+allocationreport refset ref 70292800 refd by 1 noderefs
+    1
+allocationreport refset ref 20797824 refd by 1 noderefs
+    0
+allocationreport refset ref 49036320 refd by 2 noderefs
+    2  4
+allocationreport refset ref 53156288 refd by 1 noderefs
+    3
+allocationreport refset ref 61406288 refd by 1 noderefs
+    4
+allocationreport refset ref 39188832 refd by 2 noderefs
+    0  1
+
+Node 0 -> child 4
+Node 0 -> child 3
+So if we treat nodes 1 and 2 as dead nodes (need eviction), we're okay.
+That's annoying. Well, maybe we've fixed the problem (run a bigger experiment
+outside the debugger), or maybe we need to clean old crap out of the cache?
+Need some way to account for that stuff. How long does it linger?
+
+[malloc-exp/manual-wka-200-amassclone.data]
+...full experiment with Clone amass turned on.
+Nope. Still leaky.
+
+Is this stuff Frozen?
+
+Okay wait this is stupid. If we're amassing correctly, nothing should be
+shared. 0 shouldn't be sharing with 1, and 2 shouldn't be sharing with 4.
+
+Wait, somehow before the splitasaurus, we have 0->1, both *tree* nodes! How
+is that even possible? Okay, Grow is sort of simple; it just make a new node
+with no pivots, a single newly-minted emptyKvl bucket, and a single pointer to
+the child, which is the same tree-node representation. No carried-over
+pointers.
+
+Okay, so the first crime is definitely being committed in the repivot-split-flush
+sequence. Sure would be nice to call allocationreport on those suckers.
+We're looking for sharing between 2,4 and 0,1 (24 bytes -- just a key!)
+
+Pretty confident repivot is not it, since it replaces refs to a bucket with
+new buckets in a replacement node. (The other node *might* be loitering in the
+Frozen table, but that's okay.) And we Amass on top of that! Could confirm,
+but I don't think it's here.
+
+doSplit(0, 1, slot 0)
+  splitDoChanges has left__childref=2, right__childref=3, parentref=0.
+...and indeed there was a not-CopyKey'd pivot in splitDoChanges.
+Patching it eliminated the 24-byte (single-key) shared between 0,1, **FIXED**
+leaving only the 2,4 sharing.
+
+So the guilty party must be Flush.
+Flush is called on (0, 2), but the leak is 2,4. Where does 4 come from? It's newchildref.
+Oh baby we're onto something hot now.
+
+child.pivotTable -- carted over from the input child node. Oops; pivotTable needs to be copied. **FIXED**
+child.children -- same as before and that's fine.
+child.newbuckets -- well damn, we left the new child buckets amass in place but
+  the assignment to the return variable commented out. Aaiieee. **FIXED**
+
+Okay, yay! internal-bucket-message-bytes now agrees with underlying!
+There are still ~25MB of seq-from-array stuff (Messages, seq<char>); ~20%. Not sure
+how we lost track of that. But let's worry about that later.
+And we ARE under 1.6GB total now!
+
+Next thing to fix: lazily amass pkvs.
