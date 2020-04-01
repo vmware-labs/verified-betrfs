@@ -383,7 +383,7 @@ include "../lib/Base/Arithmetic.s.dfy"
   ensures self.contents == map[]
   ensures size as nat == StorageLength(self)
   {
-    linear var storage:lseq<Item<V>> := lseq_alloc(size as nat);
+    linear var storage := lseq_alloc<Item<V>>(size as nat);
 
     // TODO(linear): there should be an efficient way of doing this in the tcb
     var i: uint64 := 0;
@@ -455,7 +455,7 @@ include "../lib/Base/Arithmetic.s.dfy"
   ensures (forall j | 0 <= j < StorageLength(self) :: !self.storage[j].Empty?)
       ==> self.count as int == StorageLength(self)
   {
-    var elements: lseq<Item<V>> := self.storage;
+    var elements := self.storage;
     if forall j | 0 <= j < StorageLength(self) :: !elements[j].Empty? {
       var elementIndices := set i | 0 <= i < StorageLength(self);
       assert IndexSetThrough(lseqs(elements), StorageLength(self)) == elementIndices; // trigger
@@ -509,20 +509,8 @@ include "../lib/Base/Arithmetic.s.dfy"
 //    ProbeIterate(self, key, Uint64SlotForKey(self, key))
 //  }
 
-  function method ExtractItemKey<V>(shared item: Item<V>) : uint64
-    requires item.Tombstone? || item.Entry?
-    ensures ExtractItemKey(item) == item.key
-  {
-    shared match item {
-      case Entry(key, _) => key
-      case Tombstone(key) => key
-    }
-  }
-  function method IsEmpty<V>(shared item: Item<V>) : bool {
-    item.Empty?
-  }
   function method IsTombstoneForKey<V>(shared item: Item<V>, key: uint64) : bool {
-    item.Tombstone? && ExtractItemKey(item) == key
+    item.Tombstone? && item.key == key
   }
 
   // function method IsValueForKey<V>(shared item: Item<V>) : bool {
@@ -587,7 +575,7 @@ include "../lib/Base/Arithmetic.s.dfy"
       if item.Empty? || IsTombstoneForKey(item, key) {
         result := ProbeResult(slotIdx, startSlotIdx, skips);
         done := true;
-      } else if ExtractItemKey(item) == key {
+      } else if item.key == key {
         assert EntryInSlotMatchesContents(lseqs(self.storage), Slot(slotIdx as nat), self.contents); // observe
         result := ProbeResult(slotIdx, startSlotIdx, skips);
         done := true;

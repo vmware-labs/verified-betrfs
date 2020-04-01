@@ -495,20 +495,8 @@ include "../lib/Base/Arithmetic.s.dfy"
 //    ProbeIterate(self, key, Uint64SlotForKey(self, key))
 //  }
 
-  function method ExtractItemKey<V>(item: Item<V>) : uint64
-    requires item.Tombstone? || item.Entry?
-    ensures ExtractItemKey(item) == item.key
-  {
-    item.key
-  }
-  function method IsEmpty<V>(item: Item<V>) : bool {
-    item.Empty?
-  }
-  function method IsTombstone<V>(item: Item<V>) : bool {
-    item.Tombstone?
-  }
   function method IsTombstoneForKey<V>(item: Item<V>, key: uint64) : bool {
-    IsTombstone(item) && ExtractItemKey(item) == key
+    item.Tombstone? && item.key == key
   }
 
   // function method IsValueForKey<V>(shared item: Item<V>) : bool {
@@ -623,9 +611,9 @@ include "../lib/Base/Arithmetic.s.dfy"
     var itemReplaced: Item<V> := seq_get(selfStorage, slotIdx as int);
     selfStorage := seq_set(selfStorage, slotIdx as int, Entry(key, value));
     selfContents := selfContents[key := Some(value)];
-    if IsEmpty(itemReplaced) {
+    if itemReplaced.Empty? {
       self' := FixedSizeLinearHashMap(selfStorage, selfCount + 1, selfContents);
-    } else if IsTombstone(itemReplaced) {
+    } else if itemReplaced.Tombstone? {
       self' := FixedSizeLinearHashMap(selfStorage, selfCount, selfContents);
     } else { // Entry
       self' := FixedSizeLinearHashMap(selfStorage, selfCount, selfContents);
