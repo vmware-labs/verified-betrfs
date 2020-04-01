@@ -116,6 +116,14 @@ module MainHandlers refines Main {
   }
 
   // jonh hack UNVERIFIED DEBUG ONLY
+  method handleDebugAccumulator(k: Constants, hs: HeapState, io: DiskIOHandler)
+  {
+    var s := hs.s;
+    var acc := s.DebugAccumulate();
+    DebugAccumulator.Display(acc, 0);
+  }
+
+  // jonh hack UNVERIFIED DEBUG ONLY
   method handleCountAmassAllocations(k: Constants, hs: HeapState, io: DiskIOHandler)
   {
     AllocationReport.start();
@@ -125,9 +133,10 @@ module MainHandlers refines Main {
     var iter := cache.SimpleIterStart();
     var output := cache.SimpleIterOutput(iter);
     while (!output.Done?) {
+      var ref := output.key;
       var node := output.value;
 
-      AllocationReport.sampleNode(0, node);
+      AllocationReport.sampleNode(ref, node);
       /*
       var bi:uint64 := 0;
       while (bi < |node.buckets| as uint64) {

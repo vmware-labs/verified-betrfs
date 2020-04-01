@@ -54,6 +54,7 @@ public:
 
   void Sync();
   void EvictEverything();
+  void DebugAccumulator();
   void CountAmassAllocations();
   void Insert(ByteString key, ByteString val);
   ByteString Query(ByteString key);

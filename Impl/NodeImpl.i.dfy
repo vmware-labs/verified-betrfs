@@ -7,6 +7,7 @@ include "NodeModel.i.dfy"
 //
 
 module NodeImpl {
+  import DebugAccumulator
   import opened Options
   import opened Sequences
   import opened NativeTypes
@@ -31,6 +32,51 @@ module NodeImpl {
     var children: Option<seq<BT.G.Reference>>;
     var buckets: seq<BucketImpl.MutBucket>;
     ghost var Repr: set<object>;
+
+    method DebugCountBytes(acc:DebugAccumulator.DebugCounter) {
+      var i:uint64 := 0;
+      //print("pivots-one-node ", |pivotTable| as uint64, " buckets ", |buckets| as uint64, "\n");
+      while i < |pivotTable| as uint64 {
+        acc.pivotCount := acc.pivotCount + 1;
+        acc.pivotWeight := acc.pivotWeight + |pivotTable[i]| as uint64;
+        i := i + 1;
+      }
+      var hasTreeBucket := false;
+      i:=0;
+      while i < |buckets| as uint64 {
+        var bucket := buckets[i];
+        if bucket.format.BFKvl?
+        {
+          acc.kvlBuckets := acc.kvlBuckets + 1;
+          var kvl := bucket.kvl;
+          var j:uint64 := 0;
+          while j < |kvl.keys| as uint64 {
+            acc.keyCount := acc.keyCount + 1;
+            acc.keyWeight := acc.keyWeight + |kvl.keys[j]| as uint64;
+            j := j + 1;
+          }
+          j:=0;
+          while j < |kvl.messages| as uint64 {
+            acc.messageCount := acc.messageCount + 1;
+            acc.messageWeight := acc.messageWeight + |kvl.messages[j].value| as uint64;
+            j := j + 1;
+          }
+        }
+        else if bucket.format.BFTree? {
+          acc.treeBuckets := acc.treeBuckets + 1;
+          hasTreeBucket := true;
+        }
+        else if bucket.format.BFPkv? {
+          acc.pkvBuckets := acc.pkvBuckets + 1;
+        } else {
+          acc.weirdBuckets := acc.weirdBuckets + 1;
+        }
+        i := i + 1;
+      }  // while buckets
+      if hasTreeBucket {
+        acc.treeNodes := acc.treeNodes + 1;
+      }
+    }
 
     constructor(
       pivotTable: Pivots.PivotTable,

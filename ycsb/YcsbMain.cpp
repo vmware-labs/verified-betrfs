@@ -76,6 +76,17 @@ inline void performYcsbUpdate(DB db, ycsbc::CoreWorkload& workload, bool verbose
     db.update(txupdate.key, value);
 }
 
+static int i=0;
+template< class DB >
+void periodicReport(DB db) {
+    malloc_accounting_status();
+    MainDiskIOHandler_Compile::iostats_display_report();
+    i += 1;
+    if (i%10 == 0) {
+      db.debugAccumulator();
+    }
+}
+
 template< class DB >
 void ycsbLoad(DB db, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
     cerr << db.name << " [step] loading (num ops: " << num_ops << ")" << endl;
@@ -91,7 +102,8 @@ void ycsbLoad(DB db, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
             clock_op_completed - clock_last_report).count() > report_interval_ms) {
 
             cout << db.name << " (completed " << i << " ops)" << endl;
-            malloc_accounting_status();
+            periodicReport(db);
+
             auto report_completed = chrono::steady_clock::now();
             clock_last_report = report_completed;
         }
@@ -121,6 +133,11 @@ void print_summary(HDRHistQuantiles& summary, const string db_name, const string
             std::cout << db_name << "\tlatency_ccdf\t" << op << "\t" << summary_el->quantile << "\t" << summary_el->upper_bound << std::endl;
         }
     }
+}
+
+bool importantStep(uint64_t i) {
+  return false;
+  // return (i%10000==0) || (i==59367 || i==59368 || i==74652 || i==74653 || i==90107 || i==90108 || i == 102197 || i == 102198);
 }
 
 template< class DB >
@@ -171,7 +188,7 @@ void ycsbRun(
 #define HACK_PROBE_PERIODIC 1
 #if HACK_PROBE_PERIODIC
 // An experiment to periodically study how the kv allocations are distributed
-    int probe_interval_ms = 50000;
+    int probe_interval_ms = 10000;
     int next_probe_ms = probe_interval_ms;
 #endif // HACK_PROBE_PERIODIC
 
@@ -217,8 +234,12 @@ void ycsbRun(
         }
 #endif // HACK_EVICT_PERIODIC
 #if HACK_PROBE_PERIODIC
-        if (elapsed_ms >= next_probe_ms) {
-            printf("probe.");
+        if (importantStep(i)) {
+          printf("****************** Action! %d\n", i);
+        }
+
+        if (elapsed_ms >= next_probe_ms || importantStep(i)) {
+            //printf("probe.\n");
             db.CountAmassAllocations();
             next_probe_ms += probe_interval_ms;
         }
@@ -245,7 +266,7 @@ void ycsbRun(
             auto sync_completed = chrono::steady_clock::now();
 
             cout << db.name << " [op] sync (completed " << i << " ops)" << endl;
-            malloc_accounting_status();
+            periodicReport(db);
 
             #ifdef _YCSB_VERIBETRFS
             #ifdef LOG_QUERY_STATS
@@ -329,6 +350,12 @@ public:
         app.EvictEverything();
     }
 
+    inline void debugAccumulator() {
+        printf("debug-accumulator start\n");
+        app.DebugAccumulator();
+        printf("debug-accumulator finish\n");
+    }
+
     inline void CountAmassAllocations() {
         app.CountAmassAllocations();
     }
@@ -376,6 +403,10 @@ public:
 
     inline void evictEverything() {
     }
+
+    inline void debugAccumulator() {
+    }
+
 };
 
 const string RocksdbFacade::name = string("rocksdb");
@@ -404,6 +435,10 @@ public:
     }
 
     inline void evictEverything() {
+        asm volatile ("nop");
+    }
+
+    inline void debugAccumulator() {
         asm volatile ("nop");
     }
 

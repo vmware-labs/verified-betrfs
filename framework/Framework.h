@@ -197,6 +197,8 @@ namespace MainDiskIOHandler_Compile {
     std::map<uint64, std::shared_ptr<WriteTask>> writeReqs;
     std::map<uint64, ReadTask> readReqs;
   };
+
+  void iostats_display_report();
 }
 
 namespace NativeBenchmarking_Compile {

@@ -51,6 +51,24 @@ void fail(std::string err)
 constexpr int MAX_WRITE_REQS_OUT = 8;
 
 namespace MainDiskIOHandler_Compile {
+  class IOStats {
+    public:
+      uint64_t nReadReqs_started;
+      uint64_t nReadReqs_completed;
+      uint64_t nWriteReqs_started;
+      uint64_t nWriteReqs_completed;
+
+    void display_report() {
+      printf("iostats %ld reads_started %ld reads_completed %ld writes_started %ld writes_completed\n",
+        nReadReqs_started, nReadReqs_completed, nWriteReqs_started, nWriteReqs_completed);
+    }
+  };
+  static IOStats iostats;
+
+  void iostats_display_report() {
+    iostats.display_report();
+  }
+
 #if USE_DIRECT
   uint8_t *aligned_copy(uint8_t* buf, size_t len, size_t *aligned_len) {
     uint8_t *aligned_bytes;
@@ -153,6 +171,7 @@ namespace MainDiskIOHandler_Compile {
             fail("write did not write all bytes");
           }
           done = true;
+          iostats.nWriteReqs_completed += 1;
           nWriteReqsOut--;
         } else if (status != EINPROGRESS) {
           fail("aio_error returned that write has failed");
@@ -173,7 +192,9 @@ namespace MainDiskIOHandler_Compile {
     auto t1 = chrono::high_resolution_clock::now();
     #endif
 
+    iostats.nReadReqs_started += 1;
     ssize_t count = pread(fd, res, len, addr);
+    iostats.nReadReqs_completed += 1;
 
     #ifdef LOG_QUERY_STATS
     auto t2 = chrono::high_resolution_clock::now();
@@ -250,6 +271,7 @@ namespace MainDiskIOHandler_Compile {
   {
     size_t len = bytes.size();
 
+    iostats.nWriteReqs_started += 1;
     malloc_accounting_set_scope("DiskIOHandler::write.WriteTask");
     shared_ptr<WriteTask> writeTask { new WriteTask(fd, addr, &bytes.at(0), len) };
     malloc_accounting_default_scope();
@@ -454,6 +476,10 @@ void Application::crash() {
 
 void Application::EvictEverything() {
   handle_EvictEverything(k, hs, io);
+}
+
+void Application::DebugAccumulator() {
+  handle_DebugAccumulator(k, hs, io);
 }
 
 void Application::CountAmassAllocations() {
@@ -764,35 +790,93 @@ void __default::set_amass_mode(bool b) {
 }
 
 namespace AllocationReport_Compile {
-static std::unordered_map<uint64_t, uint64_t> sptr_to_len;
 
-void __default::start() {
+class Observation {
+private:
+  std::set<uint64_t> observed_ptrs;
+  std::unordered_map<uint64_t, uint64_t> sptr_to_len;
+  std::unordered_map<uint64_t, std::set<uint64_t>> sptr_to_ref_set;
+  std::unordered_map<uint64_t, uint64_t> sptr_to_used_sizes;
+  void visit_uptr(uint64 noderef, const DafnySequence<uint8>& seqref);
+
+public:
+  void start();
+  void sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node);
+  void stop();
+};
+static Observation g_observation;
+
+void Observation::start() {
   printf("allocationreport start\n");
   sptr_to_len.clear();
+  sptr_to_ref_set.clear();
+  sptr_to_used_sizes.clear();
 }
 
-#if TRACK_DOWN_UNDERLYING_ALLOCATIONS
-static void visit_uptr(std::set<uint64_t>* observed_ptrs, const DafnySequence<uint8>& ref) {
-  uint64_t uptr = (uint64_t) ref.sptr.get();
-  observed_ptrs->insert(uptr);
-  uint64_t underlying_size = ref.dbg_underlying_len;
+void Observation::stop() {
+  uint64_t total_underlying = 0;
+  for (auto it : sptr_to_len) {
+    total_underlying += it.second;
+  }
+  printf("allocationreport stop underyling_count %lu total_underlying %lu\n",
+       sptr_to_len.size(), total_underlying);
+
+  for (auto it : sptr_to_ref_set) {
+    printf("allocationreport refset ref %lu refd by %lu noderefs\n  ",
+        it.first, it.second.size());
+    for (auto it2 : it.second) {
+       printf("  %lu", it2);
+    }
+    printf("\n");
+  }
+  
+  for (auto it : sptr_to_used_sizes) {
+    size_t used = sptr_to_len[it.first];
+    size_t refcount = sptr_to_ref_set[it.first].size();
+    printf("allocationreport ref_used ref %lu underlying %lu used_total %lu refd_by_nodes %lu\n",
+        it.first, used, it.second, refcount);
+  }
+}
+
+void Observation::visit_uptr(uint64 noderef, const DafnySequence<uint8>& seqref) {
+  uint64_t uptr = (uint64_t) seqref.sptr.get();
+  observed_ptrs.insert(uptr);
+  uint64_t seq_size = seqref.len;
+  uint64_t underlying_size = seqref.dbg_underlying_len;
   if (sptr_to_len.find(uptr) != sptr_to_len.end()) {
     assert(sptr_to_len.at(uptr) == underlying_size);
   } else {
     sptr_to_len.insert(std::make_pair(uptr, underlying_size));
   }
+
+  auto emplaced = sptr_to_ref_set.emplace(uptr, std::set<uint64_t>{});
+  emplaced.first->second.insert(noderef);
+
+  auto used_emplaced = sptr_to_used_sizes.emplace(uptr, 0);
+  used_emplaced.first->second += seq_size;
 }
 
-void __default::sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node) {
+void Observation::sampleNode(uint64 noderef, std::shared_ptr<NodeImpl_Compile::Node> node) {
   const char* type = "unpossible";
   int count = -1;
 
-  std::set<uint64_t> observed_ptrs;
-  for (size_t i=0; i<node->pivotTable.len; i++) {
-    DafnySequence<uint8> pivot = node->pivotTable.start[i];
-    visit_uptr(&observed_ptrs, pivot);
+  observed_ptrs.clear();
+
+  // Print the children
+  if (node->children.is_Option_Some()) {
+    auto children = node->children.dtor_value();
+    for (size_t i=0; i<children.len; i++) {
+      printf("Node %lu -> child %lu\n", noderef, children.start[i]);
+    }
   }
 
+  // Keys in the pivot table
+  for (size_t i=0; i<node->pivotTable.len; i++) {
+    DafnySequence<uint8> pivot = node->pivotTable.start[i];
+    visit_uptr(noderef, pivot);
+  }
+
+  // Keys & messages in buckets
   for (size_t i=0; i<node->buckets.len; i++) {
     std::shared_ptr<BucketImpl_Compile::MutBucket> bucket = node->buckets.start[i];
 
@@ -803,14 +887,14 @@ void __default::sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> n
       DafnySequence<DafnySequence<uint8>> keys = kvl.keys;
       for (size_t i=0; i<keys.len; i++) {
         DafnySequence<uint8> key = keys.start[i];
-        visit_uptr(&observed_ptrs, key);
+        visit_uptr(noderef, key);
       }
       DafnySequence<ValueMessage_Compile::Message> messages = kvl.messages;
       for (size_t i=0; i<messages.len; i++) {
         auto message = messages.start[i];
         assert(message.is_Message_Define());
         DafnySequence<uint8> value_message = message.dtor_value();
-        visit_uptr(&observed_ptrs, value_message);
+        visit_uptr(noderef, value_message);
       }
       type = "kvl";
     } else if ((((bucket->format)).is_BucketFormat_BFPkv())) {
@@ -818,32 +902,38 @@ void __default::sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> n
       auto pkv = bucket->pkv;
       for (size_t i=0; i<pkv.keys.offsets.len; i++) {
         auto key = PackedKV_Compile::__default::GetKey(pkv, i);
-        visit_uptr(&observed_ptrs, key);
+        visit_uptr(noderef, key);
       }
       for (size_t i=0; i<pkv.messages.offsets.len; i++) {
         auto message = PackedKV_Compile::__default::GetMessage(pkv, i);
         assert(message.is_Message_Define());
         DafnySequence<uint8> value_message = message.dtor_value();
-        visit_uptr(&observed_ptrs, value_message);
+        visit_uptr(noderef, value_message);
       }
     }
   }
 
   count = observed_ptrs.size();
-  printf("allocationreport ref %lu type %s observed_sptr_count %d\n", ref, type, count);
+  printf("allocationreport noderef %lu type %s observed_sptr_count %d\n", noderef, type, count);
 }
-#else // TRACK_DOWN_UNDERLYING_ALLOCATIONS
-void __default::sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node) {
-}
+
+#define TRACK_DOWN_UNDERLYING_ALLOCATIONS 1
+void __default::start() {
+#if TRACK_DOWN_UNDERLYING_ALLOCATIONS
+  g_observation.start();
 #endif // TRACK_DOWN_UNDERLYING_ALLOCATIONS
+}
+
+void __default::sampleNode(uint64 noderef, std::shared_ptr<NodeImpl_Compile::Node> node) {
+#if TRACK_DOWN_UNDERLYING_ALLOCATIONS
+  g_observation.sampleNode(noderef, node);
+#endif // TRACK_DOWN_UNDERLYING_ALLOCATIONS
+}
 
 void __default::stop() {
-  uint64_t total_underlying = 0;
-  for (auto it : sptr_to_len) {
-    total_underlying += it.second;
-  }
-  printf("allocationreport stop underyling_count %lu total_underlying %lu\n",
-       sptr_to_len.size(), total_underlying);
+#if TRACK_DOWN_UNDERLYING_ALLOCATIONS
+  g_observation.stop();
+#endif // TRACK_DOWN_UNDERLYING_ALLOCATIONS
 }
 
 } // AllocationReport_Compile
