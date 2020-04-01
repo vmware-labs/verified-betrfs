@@ -13,6 +13,8 @@ module QueryModel {
   import opened BookkeepingModel
   import opened EvictModel
   import opened KeyType
+  import opened ViewOp
+  import opened InterpretationDiskOps
   import ValueType
   import opened ValueMessage
 
@@ -31,10 +33,10 @@ module QueryModel {
 
   // == query ==
 
-  predicate {:opaque} queryIterate(k: Constants, s: Variables, key: Key, msg: Message, ref: BT.G.Reference, io: IO, counter: uint64,
-      s': Variables, result: Option<Value>, io': IO)    
+  predicate {:opaque} queryIterate(k: Constants, s: BCVariables, key: Key, msg: Message, ref: BT.G.Reference, io: IO, counter: uint64,
+      s': BCVariables, result: Option<Value>, io': IO)    
   requires s.Ready?
-  requires Inv(k, s)
+  requires BCInv(k, s)
   requires io.IOInit?
   requires ref in s.ephemeralIndirectionTable.graph
   requires counter >= 0
@@ -46,14 +48,14 @@ module QueryModel {
       && io' == io
     ) else (
       if (ref !in s.cache) then (
-        && PageInReqOrMakeRoom(k, s, io, ref, s', io')
+        && PageInNodeReqOrMakeRoom(k, s, io, ref, s', io')
         && result == None
       ) else (
         var node := s.cache[ref];
 
         var s0 := s.(lru := LruModel.Use(s.lru, ref));
         LruModel.LruUse(s.lru, ref);
-        assert IVars(s0) == IVars(s);
+        assert IBlockCache(s0) == IBlockCache(s);
 
         var r := Pivots.Route(node.pivotTable, key);
         var bucket := node.buckets[r];
@@ -77,23 +79,19 @@ module QueryModel {
     )
   }
 
-  predicate {:opaque} query(k: Constants, s: Variables, io: IO, key: Key,
-      s': Variables, result: Option<Value>, io': IO)
+  predicate {:opaque} query(k: Constants, s: BCVariables, io: IO, key: Key,
+      s': BCVariables, result: Option<Value>, io': IO)
   requires io.IOInit?
-  requires Inv(k, s)
+  requires s.Ready?
+  requires BCInv(k, s)
   {
-    if (s.Unready?) then (
-      && (s', io') == PageInIndirectionTableReq(k, s, io)
-      && result == None
-    ) else (
-      queryIterate(k, s, key, Messages.IdentityMessage(), BT.G.Root(), io, 40, s', result, io')
-    )
+    queryIterate(k, s, key, Messages.IdentityMessage(), BT.G.Root(), io, 40, s', result, io')
   }
 
-  predicate queryInv(k: Constants, s: Variables, key: Key, msg: Message, ref: BT.G.Reference, io: IO, counter: uint64, lookup: seq<BT.G.ReadOp>)
+  predicate queryInv(k: Constants, s: BCVariables, key: Key, msg: Message, ref: BT.G.Reference, io: IO, counter: uint64, lookup: seq<BT.G.ReadOp>)
   {
     && s.Ready?
-    && Inv(k, s)
+    && BCInv(k, s)
     && io.IOInit?
     && ref in s.ephemeralIndirectionTable.graph
     && counter >= 0
@@ -142,30 +140,35 @@ module QueryModel {
     assert BT.LookupFollowsChildRefs(key, lookup');
   }
 
-  lemma queryIterateCorrect(k: Constants, s: Variables, key: Key, msg: Message, ref: BT.G.Reference, io: IO, counter: uint64, lookup: seq<BT.G.ReadOp>,
-      s': Variables, res: Option<Value>, io': IO)
+  lemma queryIterateCorrect(k: Constants, s: BCVariables, key: Key, msg: Message, ref: BT.G.Reference, io: IO, counter: uint64, lookup: seq<BT.G.ReadOp>,
+      s': BCVariables, res: Option<Value>, io': IO)
   requires queryInv(k, s, key, msg, ref, io, counter, lookup)
   requires !msg.Define?
   requires queryIterate(k, s, key, msg, ref, io, counter, s', res, io');
-  ensures WFVars(s')
-  ensures M.Next(Ik(k), IVars(s), IVars(s'),
-          if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
-          diskOp(io'))
+  ensures WFBCVars(s')
+  ensures ValidDiskOp(diskOp(io'))
+  ensures res.Some? ==>
+      BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'),
+          IDiskOp(diskOp(io')).bdop,
+          AdvanceOp(UI.GetOp(key, res.value), false));
+  ensures res.None? ==>
+      betree_next_dop(k, IBlockCache(s), IBlockCache(s'),
+          IDiskOp(diskOp(io')).bdop)
   decreases counter
   {
     reveal_queryIterate();
 
     if counter == 0 {
-      assert noop(k, IVars(s), IVars(s));
+      assert noop(k, IBlockCache(s), IBlockCache(s));
     } else {
       if (ref !in s.cache) {
-        PageInReqOrMakeRoomCorrect(k, s, io, ref, s', io');
+        PageInNodeReqOrMakeRoomCorrect(k, s, io, ref, s', io');
       } else {
         var node := s.cache[ref];
 
         var s0 := s.(lru := LruModel.Use(s.lru, ref));
         LruModel.LruUse(s.lru, ref);
-        assert IVars(s0) == IVars(s);
+        assert IBlockCache(s0) == IBlockCache(s);
 
         var r := Pivots.Route(node.pivotTable, key);
         var bucket := node.buckets[r];
@@ -186,12 +189,12 @@ module QueryModel {
 
         if newmsg.Define? {
           assert BT.ValidQuery(BT.LookupQuery(key, res.value, newlookup));
-          assert BBC.BetreeMove(Ik(k), IVars(s), IVars(s0),
-            UI.GetOp(key, res.value),
-            M.IDiskOp(diskOp(io)),
+          assert BBC.BetreeMove(Ik(k).bc, IBlockCache(s), IBlockCache(s0),
+            IDiskOp(diskOp(io)).bdop,
+            AdvanceOp(UI.GetOp(key, res.value), false),
             BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
-          assert stepsBetree(k, IVars(s), IVars(s0),
-            if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
+          assert stepsBetree(k, IBlockCache(s), IBlockCache(s0),
+            AdvanceOp(UI.GetOp(key, res.value), false),
             BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
         } else {
           if node.children.Some? {
@@ -199,16 +202,16 @@ module QueryModel {
             queryIterateCorrect(k, s0, key, newmsg, node.children.value[r], io, counter - 1,
                 newlookup, s', res, io');
           } else {
-            assert BC.OpTransaction(Ik(k), IVars(s), IVars(s0),
+            assert BC.OpTransaction(Ik(k).bc, IBlockCache(s), IBlockCache(s0),
               PBS.BetreeStepOps(BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup))));
 
-            assert BBC.BetreeMove(Ik(k), IVars(s), IVars(s0),
-              if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
-              M.IDiskOp(diskOp(io)),
+            assert BBC.BetreeMove(Ik(k).bc, IBlockCache(s), IBlockCache(s0),
+              IDiskOp(diskOp(io)).bdop,
+              AdvanceOp(UI.GetOp(key, res.value), false),
               BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
 
-            assert stepsBetree(k, IVars(s), IVars(s0),
-              if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
+            assert stepsBetree(k, IBlockCache(s), IBlockCache(s0),
+              AdvanceOp(UI.GetOp(key, res.value), false),
               BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
           }
         }
@@ -216,21 +219,25 @@ module QueryModel {
     }
   }
 
-  lemma queryCorrect(k: Constants, s: Variables, io: IO, key: Key,
-      s': Variables, res: Option<Value>, io': IO)
+  lemma queryCorrect(k: Constants, s: BCVariables, io: IO, key: Key,
+      s': BCVariables, res: Option<Value>, io': IO)
   requires io.IOInit?
-  requires Inv(k, s)
+  requires BCInv(k, s)
+  requires s.Ready?
   requires query(k, s, io, key, s', res, io');
-  ensures WFVars(s')
-  ensures M.Next(Ik(k), IVars(s), IVars(s'),
-          if res.Some? then UI.GetOp(key, res.value) else UI.NoOp,
-          diskOp(io'))
+  ensures WFBCVars(s')
+  ensures ValidDiskOp(diskOp(io'))
+  ensures IDiskOp(diskOp(io')).jdop.NoDiskOp?
+  ensures res.Some? ==>
+      BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'),
+          IDiskOp(diskOp(io')).bdop,
+          AdvanceOp(UI.GetOp(key, res.value), false));
+  ensures res.None? ==>
+      betree_next_dop(k, IBlockCache(s), IBlockCache(s'),
+          IDiskOp(diskOp(io')).bdop)
+
   {
     reveal_query();
-    if (s.Unready?) {
-      PageInIndirectionTableReqCorrect(k, s, io);
-    } else {
-      queryIterateCorrect(k, s, key, Messages.IdentityMessage(), BT.G.Root(), io, 40, [], s', res, io');
-    }
+    queryIterateCorrect(k, s, key, Messages.IdentityMessage(), BT.G.Root(), io, 40, [], s', res, io');
   }
 }
