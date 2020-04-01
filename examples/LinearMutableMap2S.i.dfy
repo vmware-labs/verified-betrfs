@@ -520,8 +520,6 @@ include "../lib/Base/Arithmetic.s.dfy"
   ensures self.storage[result.slotIdx].Entry? ==> key in self.contents && key == self.storage[result.slotIdx].key
   ensures self.storage[result.slotIdx].Empty? ==> key !in self.contents
   {
-    assume false;
-
     var slotIdx := Uint64SlotForKey(self, key);
     var startSlotIdx := slotIdx;
     ghost var startSlot := Slot(startSlotIdx as nat);
@@ -538,17 +536,16 @@ include "../lib/Base/Arithmetic.s.dfy"
     }
 
     var skips := 0;
-    var done := false;
-    while !done
-      invariant !done ==> skips < (StorageLength(self) as uint64)
-      invariant !done ==> slotIdx < (StorageLength(self) as uint64)
-      invariant !done ==> StorageLength(self) == |viewFromStartSlot|
-      invariant !done ==> self.storage[startSlotIdx..] + self.storage[..startSlotIdx] == viewFromStartSlot
-      invariant !done ==> slotIdx as nat == KthSlotSuccessor(StorageLength(self), startSlot, skips as nat).slot
-      invariant !done ==> skips < (StorageLength(self) as uint64) ==> self.storage[slotIdx] == viewFromStartSlot[skips]
-      invariant !done ==> ValidSlot(StorageLength(self), KthSlotSuccessor(StorageLength(self), startSlot, skips as nat))
-      invariant !done ==> FilledWithOtherKeys(self.storage, startSlot, skips as nat, key)
-      invariant !done ==> CountFilled(viewFromStartSlot[..skips]) == skips as nat
+    while true
+      invariant skips < (StorageLength(self) as uint64)
+      invariant slotIdx < (StorageLength(self) as uint64)
+      invariant StorageLength(self) == |viewFromStartSlot|
+      invariant self.storage[startSlotIdx..] + self.storage[..startSlotIdx] == viewFromStartSlot
+      invariant slotIdx as nat == KthSlotSuccessor(StorageLength(self), startSlot, skips as nat).slot
+      invariant skips < (StorageLength(self) as uint64) ==> self.storage[slotIdx] == viewFromStartSlot[skips]
+      invariant ValidSlot(StorageLength(self), KthSlotSuccessor(StorageLength(self), startSlot, skips as nat))
+      invariant FilledWithOtherKeys(self.storage, startSlot, skips as nat, key)
+      invariant CountFilled(viewFromStartSlot[..skips]) == skips as nat
 
       // invariant Probe(self, key) == ProbeIterate(self, key, slotIdx)
 
@@ -560,11 +557,11 @@ include "../lib/Base/Arithmetic.s.dfy"
       var item := seq_get(self.storage, slotIdx as nat);
       if item.Empty? || IsTombstoneForKey(item, key) {
         result := ProbeResult(slotIdx, startSlotIdx, skips);
-        done := true;
+        return;
       } else if item.key == key {
         assert EntryInSlotMatchesContents(self.storage, Slot(slotIdx as nat), self.contents); // observe
         result := ProbeResult(slotIdx, startSlotIdx, skips);
-        done := true;
+        return;
       } else {
         ghost var skipsBefore := skips;
 
@@ -575,8 +572,6 @@ include "../lib/Base/Arithmetic.s.dfy"
 
         assert viewFromStartSlot[..skips] == viewFromStartSlot[..skipsBefore] + [viewFromStartSlot[skipsBefore]]; // observe
         CountFilledAdditive(viewFromStartSlot[..skipsBefore], [viewFromStartSlot[skipsBefore]]);
-
-        // assert Probe(self, key) == ProbeIterate(self, key, slotIdx);
 
         if skips == StorageLength(self) as uint64 {
           forall ensures false
@@ -601,16 +596,25 @@ include "../lib/Base/Arithmetic.s.dfy"
       returns (linear self': FixedSizeLinearHashMap, replaced: Option<V>)
     requires FixedSizeInv(self)
     requires self.count as nat < StorageLength(self) - 1
+    ensures FixedSizeInv(self')
+    ensures self'.contents == self.contents[key := Some(value)]
+    ensures (key in self.contents ==> replaced == self.contents[key])
+    ensures (replaced.Some? ==> key in self.contents)
+    ensures (key !in self.contents ==> replaced.None?)
+    ensures |self'.storage| == StorageLength(self)
   {
     self' := self;
     // var ProbeResult(slotIdx, ghost startSlotIdx, ghost ghostSkips) := Probe(self, key);
     var probeResult := Probe(self', key);
     var slotIdx := probeResult.slotIdx;
+    ghost var probeSkips := probeResult.ghostSkips;
 
     linear var FixedSizeLinearHashMap(selfStorage, selfCount, selfContents) := self';
     var itemReplaced: Item<V> := seq_get(selfStorage, slotIdx as int);
     selfStorage := seq_set(selfStorage, slotIdx as int, Entry(key, value));
     selfContents := selfContents[key := Some(value)];
+
+    replaced := None;
     if itemReplaced.Empty? {
       self' := FixedSizeLinearHashMap(selfStorage, selfCount + 1, selfContents);
     } else if itemReplaced.Tombstone? {
@@ -619,66 +623,50 @@ include "../lib/Base/Arithmetic.s.dfy"
       self' := FixedSizeLinearHashMap(selfStorage, selfCount, selfContents);
       replaced := Some(itemReplaced.value);
     }
+
+    forall explainedKey | explainedKey in self'.contents
+    ensures exists skips :: SlotExplainsKey(self'.storage, skips, explainedKey)
+    {
+      if key == explainedKey {
+        assert SlotExplainsKey(self'.storage, probeSkips as nat, key); // observe
+      } else {
+        var oldSkips :| SlotExplainsKey(self.storage, oldSkips, explainedKey);
+        assert SlotExplainsKey(self'.storage, oldSkips, explainedKey); // observe
+      }
+    }
+
+    forall slot | ValidSlot(|self'.storage|, slot) && self'.storage[slot.slot].Entry?
+    ensures && var item := self'.storage[slot.slot];
+            && self'.contents[item.key] == Some(item.value)
+    {
+      var item := self'.storage[slot.slot];
+      if slot != Slot(slotIdx as nat) {
+        if item.key == key {
+          assert TwoNonEmptyValidSlotsWithSameKey(self'.storage, slot, Slot(slotIdx as nat)); // observe
+          assert SameSlot(|self'.storage|, slot, Slot(slotIdx as nat)); // observe
+          assert false;
+        }
+      }
+    }
+
+    // TODO (chris): commenting out the body of this forall causes >30s verification time
+    //               with nothing being instantiated more than 500 times (as shown by the profiler)
+    //               it's not heap reasoning but it's still extremely unpleasant
+    forall slot | ValidSlot(|self'.storage|, slot) && self'.storage[slot.slot].Tombstone?
+    ensures && var item := self'.storage[slot.slot];
+            && self'.contents[item.key].None?
+    {
+      ghost var item := self'.storage[slot.slot];
+      if slot != Slot(slotIdx as nat) {
+        if item.key == key {
+          assert TwoNonEmptyValidSlotsWithSameKey(self'.storage, slot, Slot(slotIdx as nat)); // observe
+          assert SameSlot(|self'.storage|, slot, Slot(slotIdx as nat)); // observe
+          assert false;
+        }
+      }
+    }
   }
 
-//   lemma LemmaFixedSizeInsertResult<V>(self: FixedSizeLinearHashMap, key: uint64, value: V)
-//   requires FixedSizeInv(self)
-//   requires self.count as nat < StorageLength(self) - 1
-//   ensures var (self', replaced) := FixedSizeInsert(self, key, value);
-//     && FixedSizeInv(self')
-//     && self'.contents == self.contents[key := Some(value)]
-//     && (key in self.contents ==> replaced == self.contents[key])
-//     && (replaced.Some? ==> key in self.contents)
-//     && (key !in self.contents ==> replaced.None?)
-//     && |self'.storage| == StorageLength(self)
-//   {
-//     reveal_FixedSizeInsert();
-//     var self' := FixedSizeInsert(self, key, value).0;
-//     var replaced := FixedSizeInsert(self, key, value).1;
-// 
-//     var probeRes := LemmaProbeResult(self, key);
-//     var slotIdx := probeRes.slotIdx;
-//     var probeStartSlotIdx := probeRes.startSlotIdx;
-//     var probeSkips := probeRes.ghostSkips;
-// 
-//     forall explainedKey | explainedKey in self'.contents
-//     ensures exists skips :: SlotExplainsKey(self'.storage, skips, explainedKey)
-//     {
-//       if key == explainedKey {
-//         assert SlotExplainsKey(self'.storage, probeSkips as nat, key); // observe
-//       } else {
-//         var oldSkips :| SlotExplainsKey(self.storage, oldSkips, explainedKey);
-//         assert SlotExplainsKey(self'.storage, oldSkips, explainedKey); // observe
-//       }
-//     }
-// 
-//     forall slot | ValidSlot(|self'.storage|, slot) && self'.storage[slot.slot].Entry?
-//     ensures && var item := self'.storage[slot.slot];
-//             && self'.contents[item.key] == Some(item.value)
-//     {
-//       var item := self'.storage[slot.slot];
-//       if slot != Slot(slotIdx as nat) {
-//         if item.key == key {
-//           assert TwoNonEmptyValidSlotsWithSameKey(self'.storage, slot, Slot(slotIdx as nat)); // observe
-//           assert SameSlot(|self'.storage|, slot, Slot(slotIdx as nat)); // observe
-//           assert false;
-//         }
-//       }
-//     }
-//     forall slot | ValidSlot(|self'.storage|, slot) && self'.storage[slot.slot].Tombstone?
-//     ensures && var item := self'.storage[slot.slot];
-//             && self'.contents[item.key].None?
-//     {
-//       var item := self'.storage[slot.slot];
-//       if slot != Slot(slotIdx as nat) {
-//         if item.key == key {
-//           assert TwoNonEmptyValidSlotsWithSameKey(self'.storage, slot, Slot(slotIdx as nat)); // observe
-//           assert SameSlot(|self'.storage|, slot, Slot(slotIdx as nat)); // observe
-//           assert false;
-//         }
-//       }
-//     }
-//   }
 // 
 //   function FixedSizeUpdateBySlot<V>(self: FixedSizeLinearHashMap<V>, slotIdx: uint64, value: V) : FixedSizeLinearHashMap<V>
 //   requires 0 <= slotIdx as int < StorageLength(self)
