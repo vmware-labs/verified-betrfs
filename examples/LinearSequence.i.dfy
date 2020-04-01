@@ -47,17 +47,15 @@ module LinearSequence_i {
       lseq_length_raw(s)
   }
 
-  function method lseq_peek<A>(shared s:lseq<A>, i:nat):(shared a:A)
-      requires i < |lseqs(s)|
-      requires lseq_has(s)[i]
-      ensures a == lseqs(s)[i]
-  {
-      peek(lseq_share_raw(s, i))
-  }
-
   function method{:inline true} operator(| |)<A>(shared s:lseq<A>):nat
   {
       lseq_length(s)
+  }
+
+  function{:inline true} operator([])<A>(s:lseq<A>, i:nat):A
+      requires i < |s|
+  {
+      lseqs(s)[i]
   }
 
   function{:inline true} operator(in)<A>(s:lseq<A>, i:nat):bool
@@ -66,10 +64,11 @@ module LinearSequence_i {
       lseq_has(s)[i]
   }
 
-  function{:inline true} operator([])<A>(s:lseq<A>, i:nat):A
-      requires i < |s|
+  function method lseq_peek<A>(shared s:lseq<A>, i:nat):(shared a:A)
+      requires i < |s| && i in s
+      ensures a == s[i]
   {
-      lseqs(s)[i]
+      peek(lseq_share_raw(s, i))
   }
 
   method lseq_alloc<A>(length:nat) returns(linear s:lseq<A>)
@@ -128,19 +127,3 @@ module LinearSequence_i {
       && (forall i | 0 <= i < |s| :: i in s)
   }
 } // module
-
-module Test
-{
-  import opened LinearMaybe
-  import opened LinearSequence_s
-  import opened LinearSequence_i
-  method T(linear l:lseq<int>)
-      requires |l| > 0
-      requires forall i:nat | i < |l| :: i !in l
-  {
-      assert 0 !in l;
-      assert !lseq_has(l)[0];
-      // should fail: assert !has(lseqs_raw(l)[0]);
-      lseq_free(l);
-  }
-}

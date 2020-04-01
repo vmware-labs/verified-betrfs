@@ -23,7 +23,9 @@ module LinearSequence_s {
   linear datatype lpair<A, B> = LPair(linear a:A, linear b:B)
 
   type lseq<A>
+
   function lseqs_raw<A>(s:lseq<A>):seq<maybe<A>> // contents of an lseq, as ghost seq
+
   function method lseq_length_raw<A>(shared s:lseq<A>):(n:nat)
       ensures n == |lseqs_raw(s)|
 
