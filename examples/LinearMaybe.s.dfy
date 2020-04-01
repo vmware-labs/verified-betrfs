@@ -4,6 +4,7 @@ module LinearMaybe {
   // andrea: I don't like has as a name, I can't quite say it right
   predicate has<A>(m:maybe<A>)
   function read<A>(m:maybe<A>):A
+  // TODO (chris) surely this must require has(m)
   function method peek<A>(shared m:maybe<A>):(shared a:A)
       requires has(m)
       ensures a == read(m)
