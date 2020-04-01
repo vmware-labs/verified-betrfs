@@ -94,20 +94,27 @@ module JournalRanges {
   function parseEntries(s: seq<byte>, len: int, idx: int)
       : Option<seq<JournalEntry>>
   requires 0 <= idx <= |s|
-  decreases |s| - idx
+  requires 0 <= len
+  decreases len
   {
-    if idx + 4 <= |s| then (
-      var keyLen := unpack_LittleEndian_Uint32(s[idx..idx+4]) as int;
-      if idx + 4 + keyLen + 4 <= |s| && keyLen <= KeyType.MaxLen() as int then (
-        var key: Key := s[idx+4..idx+4+keyLen];
-        var valueLen := unpack_LittleEndian_Uint32(s[idx+4+keyLen..idx+4+keyLen+4]) as int;
-        if idx + 4 + keyLen + 4 + valueLen <= |s| && valueLen <= ValueType.MaxLen() as int then (
-          var value: Value := s[idx+4+keyLen+4 .. idx+4+keyLen+4+valueLen];
-          var je := JournalInsert(key, value);
+    if len == 0 then
+      Some([])
+    else (
+      if idx + 4 <= |s| then (
+        var keyLen := unpack_LittleEndian_Uint32(s[idx..idx+4]) as int;
+        if idx + 4 + keyLen + 4 <= |s| && keyLen <= KeyType.MaxLen() as int then (
+          var key: Key := s[idx+4..idx+4+keyLen];
+          var valueLen := unpack_LittleEndian_Uint32(s[idx+4+keyLen..idx+4+keyLen+4]) as int;
+          if idx + 4 + keyLen + 4 + valueLen <= |s| && valueLen <= ValueType.MaxLen() as int then (
+            var value: Value := s[idx+4+keyLen+4 .. idx+4+keyLen+4+valueLen];
+            var je := JournalInsert(key, value);
 
-          var rest := parseEntries(s, len, idx + 4 + keyLen + 4 + valueLen);
-          if rest.Some? then (
-            Some([je] + rest.value)
+            var rest := parseEntries(s, len-1, idx + 4 + keyLen + 4 + valueLen);
+            if rest.Some? then (
+              Some([je] + rest.value)
+            ) else (
+              None
+            )
           ) else (
             None
           )
@@ -117,14 +124,13 @@ module JournalRanges {
       ) else (
         None
       )
-    ) else (
-      None
     )
   }
 
   function parseJournalRangeOfBytes(s: seq<byte>, len: int)
       : Option<seq<JournalEntry>>
   requires |s| >= 8
+  requires 0 <= len
   {
     parseEntries(s, len, 8)
   }
@@ -136,7 +142,7 @@ module JournalRanges {
     else (
       if |jr[0]| >= 8 then (
         var header := parseHeader(jr[0]);
-        if 1 <= header.nblocks <= |jr| then (
+        if 0 <= header.nentries && 1 <= header.nblocks <= |jr| then (
           lemma_concatSeqLen_ge_elemLen(jr[.. header.nblocks], 0);
           var p1 := parseJournalRangeOfBytes(
               concatSeq(jr[.. header.nblocks]),

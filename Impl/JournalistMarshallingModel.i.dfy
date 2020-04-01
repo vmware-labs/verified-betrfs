@@ -635,6 +635,7 @@ module JournalistMarshallingModel {
   requires fillInChecksums.requires(buf, numBlocks, i)
   ensures withoutChecksums(fillInChecksums(buf, numBlocks, i), numBlocks)
       == withoutChecksums(buf, numBlocks)
+  decreases numBlocks - i
   {
     reveal_fillInChecksums();
     if i == numBlocks {
@@ -720,21 +721,149 @@ module JournalistMarshallingModel {
     }
   }
 
-  /*lemma withoutChecksumsOfWriteJournalEntries(buf: seq<byte>, numBlocks: uint64, len: uint64,
-      entries: seq<JournalEntry>, start: uint64,
-      buf1: seq<byte>, buf2: seq<byte>)
-  requires 0 <= start as int < |entries|
-  requires 0 <= len as int <= |entries|
-  requires |entries| <= 0xffff_ffff
-  requires 1 <= numBlocks <= NumJournalBlocks()
-  requires |buf| == 4096 * numBlocks as int
-  requires 8 + SumJournalEntries(cyclicSlice(entries, start, len)) <= 4064 * numBlocks as int
-  requires buf1 == writeHeader(buf, numBlocks, len);
-  requires buf2 == writeJournalEntries(buf1, numBlocks, 8, entries, start, len);
-  ensures parseHeader(withoutChecksums(buf2, numBlocks)) == Header(len, numBlocks)
-  ensures parseJournalRangeOfBytes(withoutChecksums(buf2, numBlocks))
-       == Some(cyclicSlice(entries, start, len))*/
+  lemma journalRangeFromHasChecksums(
+      buf: seq<byte>, numBlocks: uint64)
+  requires |buf| == numBlocks as int * 4096
+  requires hasChecksums(buf, numBlocks as int)
+  ensures JournalRangeOfByteSeq(buf).Some?
+  ensures concatSeq(JournalRangeOfByteSeq(buf).value)
+      == withoutChecksums(buf, numBlocks)
+  {
+    reveal_JournalRangeOfByteSeq();
+    if numBlocks == 0 {
+      assert concatSeq(JournalRangeOfByteSeq(buf).value) == []
+          by { reveal_concatSeq(); }
+      assert withoutChecksums(buf, numBlocks) == []
+          by { reveal_withoutChecksums(); }
+    } else {
+      assert D.ChecksumChecksOut(buf[0..4096]) by {
+        assert hasChecksumAt(buf, 0);
+        D.reveal_ChecksumChecksOut();
+      }
 
+      var suffix := buf[4096..];
+
+      forall i | 0 <= i < numBlocks as int - 1
+      ensures hasChecksumAt(suffix, i)
+      {
+        assert suffix[4096*i + 32 .. 4096*i + 4096]
+            == buf[4096*(i+1) + 32 .. 4096*(i+1) + 4096];
+        assert suffix[4096*i .. 4096*i + 32]
+            == buf[4096*(i+1) .. 4096*(i+1) + 32];
+        assert hasChecksumAt(buf, i+1);
+      }
+      assert hasChecksums(suffix, numBlocks as int - 1);
+
+      journalRangeFromHasChecksums(buf[4096..], numBlocks - 1);
+      var rest := JournalRangeOfByteSeq(buf[4096..]).value;
+
+      calc {
+        concatSeq(JournalRangeOfByteSeq(buf).value);
+        concatSeq([buf[32..4096]] + rest);
+          { concatSeqAdditive([buf[32..4096]], rest); }
+        concatSeq([buf[32..4096]]) + concatSeq(rest);
+          { reveal_concatSeq(); }
+        buf[32..4096] + concatSeq(rest);
+          { reveal_withoutChecksums(); }
+        withoutChecksums(buf, numBlocks);
+      }
+    }
+  }
+
+  lemma parseHeaderFromHasHeader(buf: seq<byte>, header: Header)
+  requires |buf| >= 8
+  requires hasHeader(buf, header)
+  ensures parseHeader(buf) == header
+  {
+    reveal_hasHeader();
+    reveal_parseHeader();
+  }
+
+  lemma parseEntriesFromHasEntriesI(buf: seq<byte>, entries: seq<JournalEntry>, i: int, idx: int)
+  requires 0 <= idx <= |buf|
+  requires 0 <= i <= |entries|
+  requires idx == 8 + SumJournalEntries(entries[..i])
+  requires hasEntries(buf, entries, |entries|)
+  ensures parseEntries(buf, |entries| - i, idx).Some?
+  ensures parseEntries(buf, |entries| - i, idx).value == entries[i..]
+  decreases |entries| - i
+  {
+    if i == |entries| {
+    } else {
+      assert hasEntry(buf, entries, i);
+      var idx' := idx + WeightJournalEntry(entries[i]);
+      assert idx' == 8 + SumJournalEntries(entries[..i+1]) by {
+        assert DropLast(entries[..i+1]) == entries[..i];
+        assert Last(entries[..i+1]) == entries[i];
+      }
+      parseEntriesFromHasEntriesI(buf, entries, i+1, idx');
+      calc {
+        parseEntries(buf, |entries| - i, idx).value;
+        [entries[i]] + parseEntries(buf, |entries| - i - 1, idx').value;
+        [entries[i]] + entries[i+1..];
+        entries[i..];
+      }
+    }
+  }
+
+  lemma parseEntriesFromHasEntries(buf: seq<byte>, entries: seq<JournalEntry>)
+  requires 8 <= |buf|
+  requires hasEntries(buf, entries, |entries|)
+  ensures parseEntries(buf, |entries|, 8).Some?
+  ensures parseEntries(buf, |entries|, 8).value == entries
+  {
+    parseEntriesFromHasEntriesI(buf, entries, 0, 8);
+    assert entries[0..] == entries;
+  }
+
+  lemma parsesFromStuff(buf: seq<byte>, numBlocks: uint64, entries: seq<JournalEntry>)
+  requires |buf| == numBlocks as int * 4096
+  requires hasStuff(withoutChecksums(buf, numBlocks), numBlocks as int, entries)
+  requires hasChecksums(buf, numBlocks as int)
+
+  ensures JournalRangeOfByteSeq(buf).Some?
+  ensures parseJournalRange(JournalRangeOfByteSeq(buf).value)
+      == Some(entries)
+  {
+    assert 8 <= |buf| by { reveal_hasHeader(); }
+
+    journalRangeFromHasChecksums(buf, numBlocks);
+    parseHeaderFromHasHeader(withoutChecksums(buf, numBlocks), Header(|entries|, numBlocks as int));
+    parseEntriesFromHasEntries(withoutChecksums(buf, numBlocks), entries);
+
+    var jr := JournalRangeOfByteSeq(buf).value;
+    assert |jr| == numBlocks as int;
+
+    assert |jr[0]| >= 8 by { reveal_JournalRangeOfByteSeq(); }
+    assert parseHeader(concatSeq(jr)) == parseHeader(jr[0])
+    by {
+      calc {
+        concatSeq(jr);
+        { assert jr == [jr[0]] + jr[1..]; }
+        concatSeq([jr[0]] + jr[1..]);
+        { concatSeqAdditive([jr[0]], jr[1..]); }
+        concatSeq([jr[0]]) + concatSeq(jr[1..]);
+        {
+          reveal_concatSeq();
+          assert concatSeq([jr[0]]) == jr[0];
+        }
+        jr[0] + concatSeq(jr[1..]);
+      }
+      reveal_parseHeader();
+      assert concatSeq(jr)[0..4] == jr[0][0..4];
+      assert concatSeq(jr)[4..8] == jr[0][4..8];
+    }
+
+    calc {
+      parseJournalRange(jr);
+        { assert jr[..numBlocks] == jr; }
+      Some(entries + parseJournalRange(jr[numBlocks..]).value);
+      Some(entries + parseJournalRange([]).value);
+      Some(entries + []);
+        { assert entries + [] == entries; }
+      Some(entries);
+    }
+  }
 
   lemma parseOfWriteJournalEntries(buf: seq<byte>, numBlocks: uint64, len: uint64,
       entries: seq<JournalEntry>, start: uint64,
@@ -751,6 +880,25 @@ module JournalistMarshallingModel {
   ensures JournalRangeOfByteSeq(buf3).Some?
   ensures parseJournalRange(JournalRangeOfByteSeq(buf3).value)
        == Some(cyclicSlice(entries, start, len))
+  {
+    assert hasHeader(withoutChecksums(buf1, numBlocks),
+        Header(len as int, numBlocks as int))
+    by {
+      var b0 := buf;
+      var b1 := writeIntOnto(b0, numBlocks, 0, len as uint32);
+      var b2 := writeIntOnto(b1, numBlocks, 4, numBlocks as uint32);
+
+      writeIntOntoMakesSlice(b0, numBlocks, 0, len as uint32);
+      writeIntOntoMakesSlice(b1, numBlocks, 4, numBlocks as uint32);
+      writeIntOntoPreservesSlice(b1, numBlocks, 4, numBlocks as uint32, 0, 4);
+      reveal_hasHeader();
+    }
+
+    lemma_writeJournalEntries(buf1, numBlocks, 8, entries, start, len, start, len);
+    fillInChecksumsPreserves(buf2, numBlocks, 0);
+    fillInChecksumsHasChecksums(buf2, numBlocks, 0);
+    parsesFromStuff(buf3, numBlocks, cyclicSlice(entries, start, len));
+  }
 
 
   function {:opaque} marshallJournalEntries(entries: seq<JournalEntry>,

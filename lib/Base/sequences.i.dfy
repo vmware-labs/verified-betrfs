@@ -184,6 +184,9 @@ module Sequences {
     if |a| == 0 then [] else concatSeq(DropLast(a)) + Last(a)
   }
 
+  lemma concatSeqAdditive<A>(a: seq<seq<A>>, b: seq<seq<A>>)
+  ensures concatSeq(a + b) == concatSeq(a) + concatSeq(b)
+
   lemma lemma_concatSeqLen_ge_elemLen<A>(a: seq<seq<A>>, i: int)
   requires 0 <= i < |a|
   ensures |concatSeq(a)| >= |a[i]|
