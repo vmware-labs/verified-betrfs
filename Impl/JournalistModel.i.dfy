@@ -255,6 +255,17 @@ module JournalistModel {
       .(frozenJournalBlocks := 0)
   }
 
+  function updateWrittenJournalLen(jm: JournalistModel, len: uint64)
+      : (jm' : JournalistModel)
+  requires Inv(jm)
+  requires len as int <= I(jm).writtenJournalLen
+  ensures Inv(jm')
+  ensures I(jm') == I(jm).(writtenJournalLen := len as int)
+  {
+    reveal_WeightJournalEntries();
+    jm.(writtenJournalBlocks := len)
+  }
+
   /*lemma roundUpOkay(a: int, b: int)
   requires a <= 4064 * b
   ensures ((a + 4064 - 1) / 4064) * 4064 <= 4064 * b

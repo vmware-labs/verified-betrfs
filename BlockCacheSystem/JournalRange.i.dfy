@@ -294,7 +294,16 @@ module JournalRanges {
   lemma lenTimes8LeWeight(s: seq<JournalEntry>)
   ensures 8 * |s| <= WeightJournalEntries(s)
 
+  lemma SumJournalEntriesSum(s: seq<JournalEntry>, t: seq<JournalEntry>)
+  ensures SumJournalEntries(s + t)
+      == SumJournalEntries(s) + SumJournalEntries(t)
+
   lemma WeightJournalEntriesSum(s: seq<JournalEntry>, t: seq<JournalEntry>)
   ensures WeightJournalEntries(s + t)
       <= WeightJournalEntries(s) + WeightJournalEntries(t)
+
+  lemma JournalEntriesSumPrefix(s: seq<JournalEntry>, i: int)
+  requires 0 <= i <= |s|
+  ensures SumJournalEntries(s[..i]) <= SumJournalEntries(s)
+
 }

@@ -718,6 +718,7 @@ module JournalCache {
     )
     && (s.commitStatus.CommitAdvanceLocation? ==>
       && s.isFrozen
+      && s.frozenLoc.Some?
       && s.newSuperblock.Some?
       && s.newSuperblock.value.journalStart as int == JournalPosAdd(s.superblock.journalStart as int, s.frozenJournalPosition)
       && s.newSuperblock.value.journalLen as int == s.writtenJournalLen - s.frozenJournalPosition

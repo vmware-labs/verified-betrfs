@@ -625,8 +625,8 @@ module IOModel {
 
   // == writeResponse ==
 
-  /*lemma lemmaOutstandingLocIndexValid(k: Constants, s: BCVariables, id: uint64)
-  requires Inv(k, s)
+  lemma lemmaOutstandingLocIndexValid(k: Constants, s: BCVariables, id: uint64)
+  requires BCInv(k, s)
   requires s.Ready?
   requires id in s.outstandingBlockWrites
   ensures 0 <= s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize() < NumBlocks()
@@ -638,124 +638,190 @@ module IOModel {
     assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
   }
 
-  lemma lemmaBlockAllocatorFrozenSome(k: Constants, s: Variables)
-  requires Inv(k, s)
+  lemma lemmaBlockAllocatorFrozenSome(k: Constants, s: BCVariables)
+  requires BCInv(k, s)
   requires s.Ready?
-  ensures s.outstandingIndirectionTableWrite.Some?
+  ensures s.frozenIndirectionTable.Some?
       ==> s.blockAllocator.frozen.Some?
   {
     reveal_ConsistentBitmap();
-  }*/
+  }
 
-  /*function writeResponse(k: Constants, s: Variables, io: IO)
-  : (s': Variables)
-  requires Inv(k, s)
+  function writeNodeResponse(k: Constants, s: BCVariables, io: IO)
+    : BCVariables
+  requires BCInv(k, s)
+  requires ValidDiskOp(diskOp(io))
   requires diskOp(io).RespWriteOp?
-  requires s.Ready? && s.outstandingIndirectionTableWrite.Some? ==> s.frozenIndirectionTable.Some?
+  requires s.Ready? && io.id in s.outstandingBlockWrites
   {
     var id := io.id;
 
-    if (s.Ready? && s.outstandingIndirectionTableWrite == Some(id)) then (
-      lemmaBlockAllocatorFrozenSome(k, s);
-      s.(outstandingIndirectionTableWrite := None)
-             .(frozenIndirectionTable := None) // frozenIndirectiontable is moved to persistentIndirectionTable
-             .(persistentIndirectionTable := s.frozenIndirectionTable.value)
-             .(syncReqs := SyncReqs2to1(s.syncReqs))
-             .(blockAllocator := BlockAllocatorModel.MoveFrozenToPersistent(s.blockAllocator))
-    ) else if (s.Ready? && id in s.outstandingBlockWrites) then (
-      lemmaOutstandingLocIndexValid(k, s, id);
-      s.(outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id))
-       .(blockAllocator := BlockAllocatorModel.MarkFreeOutstanding(s.blockAllocator, s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize()))
-    ) else (
-      s
-    )
+    lemmaOutstandingLocIndexValid(k, s, id);
+    var s' := s.(outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id))
+     .(blockAllocator := BlockAllocatorModel.MarkFreeOutstanding(s.blockAllocator, s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize()));
+    s'
   }
 
-  lemma writeResponseCorrect(k: Constants, s: Variables, io: IO)
-  requires Inv(k, s)
+  lemma writeNodeResponseCorrect(k: Constants, s: BCVariables, io: IO)
+  requires BCInv(k, s)
   requires diskOp(io).RespWriteOp?
-  ensures var s' := writeResponse(k, s, io);
-    && WFVars(s')
-    && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
+  requires ValidDiskOp(diskOp(io))
+  requires ValidNodeLocation(LocOfRespWrite(diskOp(io).respWrite))
+  requires s.Ready? && io.id in s.outstandingBlockWrites
+  ensures var s' := writeNodeResponse(k, s, io);
+    && WFBCVars(s')
+    && BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
+        StatesInternalOp)
   {
     reveal_ConsistentBitmap();
     var id := io.id;
-    var s' := writeResponse(k, s, io);
-    if (s.Ready? && s.outstandingIndirectionTableWrite == Some(id)) {
-      lemmaBlockAllocatorFrozenSome(k, s);
-      SyncReqs2to1Correct(s.syncReqs);
-      assert WFVars(s');
-      assert stepsBC(k, IBlockCache(s), IBlockCache(s'), UI.NoOp, io, BC.WriteBackIndirectionTableRespStep);
-    } else if (s.Ready? && id in s.outstandingBlockWrites) {
-      var locIdx := s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize();
-      lemmaOutstandingLocIndexValid(k, s, id);
+    var s' := writeNodeResponse(k, s, io);
 
-      DiskLayout.reveal_ValidNodeAddr();
-      assert locIdx * NodeBlockSize() == s.outstandingBlockWrites[id].loc.addr as int;
+    var locIdx := s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize();
+    lemmaOutstandingLocIndexValid(k, s, id);
 
-      BitmapModel.reveal_BitUnset();
-      BitmapModel.reveal_IsSet();
+    DiskLayout.reveal_ValidNodeAddr();
+    assert locIdx * NodeBlockSize() == s.outstandingBlockWrites[id].loc.addr as int;
 
-      /*forall i | 0 <= i < NumBlocks()
-      ensures Bitmap.IsSet(s'.blockAllocator.full, i) == (
-          || Bitmap.IsSet(s'.blockAllocator.ephemeral, i)
-          || (s'.blockAllocator.frozen.Some? && Bitmap.IsSet(s'.blockAllocator.frozen.value, i))
-          || Bitmap.IsSet(s'.blockAllocator.persistent, i)
-          || Bitmap.IsSet(s'.blockAllocator.full, i)
-        )
-      {
-        if i == locIdx {
-          assert Bitmap.IsSet(s'.blockAllocator.full, i) == (
-              || Bitmap.IsSet(s'.blockAllocator.ephemeral, i)
-              || (s'.blockAllocator.frozen.Some? && Bitmap.IsSet(s'.blockAllocator.frozen.value, i))
-              || Bitmap.IsSet(s'.blockAllocator.persistent, i)
-              || Bitmap.IsSet(s'.blockAllocator.full, i)
-          );
-        } else {
-          assert Bitmap.IsSet(s'.blockAllocator.full, i) == Bitmap.IsSet(s.blockAllocator.full, i);
-          assert Bitmap.IsSet(s'.blockAllocator.ephemeral, i) == Bitmap.IsSet(s.blockAllocator.ephemeral, i);
-          assert s'.blockAllocator.frozen.Some? ==> Bitmap.IsSet(s'.blockAllocator.frozen.value, i) == Bitmap.IsSet(s.blockAllocator.frozen.value, i);
-          assert Bitmap.IsSet(s'.blockAllocator.persistent, i) == Bitmap.IsSet(s.blockAllocator.persistent, i);
-          assert Bitmap.IsSet(s'.blockAllocator.outstanding, i) == Bitmap.IsSet(s.blockAllocator.outstanding, i);
-        }
-      }*/
+    BitmapModel.reveal_BitUnset();
+    BitmapModel.reveal_IsSet();
 
-      forall i: int
-      | IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
-      ensures IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
-      {
-        if i != locIdx {
-          assert IsLocAllocOutstanding(s.outstandingBlockWrites, i);
-          assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
-          assert IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
-        } else {
-          var id1 :| id1 in s'.outstandingBlockWrites && s'.outstandingBlockWrites[id1].loc.addr as int == i * NodeBlockSize() as int;
-          assert BC.OutstandingBlockWritesDontOverlap(s.outstandingBlockWrites, id, id1);
-          /*assert s.outstandingBlockWrites[id1].loc.addr as int
-              == s'.outstandingBlockWrites[id1].loc.addr as int
-              == i * NodeBlockSize() as int;
-          assert id == id1;
-          assert id !in s'.outstandingBlockWrites;
-          assert false;*/
-        }
+    /*forall i | 0 <= i < NumBlocks()
+    ensures Bitmap.IsSet(s'.blockAllocator.full, i) == (
+        || Bitmap.IsSet(s'.blockAllocator.ephemeral, i)
+        || (s'.blockAllocator.frozen.Some? && Bitmap.IsSet(s'.blockAllocator.frozen.value, i))
+        || Bitmap.IsSet(s'.blockAllocator.persistent, i)
+        || Bitmap.IsSet(s'.blockAllocator.full, i)
+      )
+    {
+      if i == locIdx {
+        assert Bitmap.IsSet(s'.blockAllocator.full, i) == (
+            || Bitmap.IsSet(s'.blockAllocator.ephemeral, i)
+            || (s'.blockAllocator.frozen.Some? && Bitmap.IsSet(s'.blockAllocator.frozen.value, i))
+            || Bitmap.IsSet(s'.blockAllocator.persistent, i)
+            || Bitmap.IsSet(s'.blockAllocator.full, i)
+        );
+      } else {
+        assert Bitmap.IsSet(s'.blockAllocator.full, i) == Bitmap.IsSet(s.blockAllocator.full, i);
+        assert Bitmap.IsSet(s'.blockAllocator.ephemeral, i) == Bitmap.IsSet(s.blockAllocator.ephemeral, i);
+        assert s'.blockAllocator.frozen.Some? ==> Bitmap.IsSet(s'.blockAllocator.frozen.value, i) == Bitmap.IsSet(s.blockAllocator.frozen.value, i);
+        assert Bitmap.IsSet(s'.blockAllocator.persistent, i) == Bitmap.IsSet(s.blockAllocator.persistent, i);
+        assert Bitmap.IsSet(s'.blockAllocator.outstanding, i) == Bitmap.IsSet(s.blockAllocator.outstanding, i);
       }
+    }*/
 
-      forall i: int
-      | IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
-      ensures IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
-      {
-        if i != locIdx {
-          assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
-          assert IsLocAllocOutstanding(s'.outstandingBlockWrites, i);
-        } else {
-          assert IsLocAllocOutstanding(s'.outstandingBlockWrites, i);
-        }
+    forall i: int
+    | IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
+    ensures IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
+    {
+      if i != locIdx {
+        assert IsLocAllocOutstanding(s.outstandingBlockWrites, i);
+        assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
+        assert IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
+      } else {
+        var id1 :| id1 in s'.outstandingBlockWrites && s'.outstandingBlockWrites[id1].loc.addr as int == i * NodeBlockSize() as int;
+        assert BC.OutstandingBlockWritesDontOverlap(s.outstandingBlockWrites, id, id1);
+        /*assert s.outstandingBlockWrites[id1].loc.addr as int
+            == s'.outstandingBlockWrites[id1].loc.addr as int
+            == i * NodeBlockSize() as int;
+        assert id == id1;
+        assert id !in s'.outstandingBlockWrites;
+        assert false;*/
       }
-
-      assert WFVars(s');
-      assert stepsBC(k, IBlockCache(s), IBlockCache(s'), UI.NoOp, io, BC.WriteBackRespStep);
-    } else {
-      assert stepsBC(k, IBlockCache(s), IBlockCache(s'), UI.NoOp, io, BC.NoOpStep);
     }
-  }*/
+
+    forall i: int
+    | IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
+    ensures IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
+    {
+      if i != locIdx {
+        assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
+        assert IsLocAllocOutstanding(s'.outstandingBlockWrites, i);
+      } else {
+        assert IsLocAllocOutstanding(s'.outstandingBlockWrites, i);
+      }
+    }
+
+    assert WFBCVars(s');
+    assert stepsBC(k, IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.WriteBackNodeRespStep);
+  }
+
+  function writeIndirectionTableResponse(k: Constants, s: BCVariables, io: IO)
+    : (BCVariables, Location)
+  requires BCInv(k, s)
+  requires ValidDiskOp(diskOp(io))
+  requires diskOp(io).RespWriteOp?
+  requires s.Ready?
+  requires s.outstandingIndirectionTableWrite.Some?
+  requires s.frozenIndirectionTable.Some?
+  {
+    var id := io.id;
+
+    var s' := s.(outstandingIndirectionTableWrite := None);
+    (s', s.frozenIndirectionTableLoc.value)
+  }
+
+  lemma writeIndirectionTableResponseCorrect(k: Constants, s: BCVariables, io: IO)
+  requires BCInv(k, s)
+  requires diskOp(io).RespWriteOp?
+  requires ValidDiskOp(diskOp(io))
+  requires s.Ready? && s.outstandingIndirectionTableWrite == Some(io.id)
+  requires ValidIndirectionTableLocation(LocOfRespWrite(diskOp(io).respWrite))
+  ensures var (s', loc) := writeIndirectionTableResponse(k, s, io);
+    && WFBCVars(s')
+    && BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
+        SendFrozenLocOp(loc))
+  {
+    reveal_ConsistentBitmap();
+    var id := io.id;
+    var (s', loc) := writeIndirectionTableResponse(k, s, io);
+    assert WFBCVars(s');
+    assert BC.WriteBackIndirectionTableResp(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
+      SendFrozenLocOp(loc));
+    assert BC.NextStep(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
+      SendFrozenLocOp(loc), BC.WriteBackIndirectionTableRespStep);
+    assert BBC.NextStep(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
+      SendFrozenLocOp(loc), BBC.BlockCacheMoveStep(BC.WriteBackIndirectionTableRespStep));
+    assert BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
+      SendFrozenLocOp(loc));
+  }
+
+  function cleanUp(k: Constants, s: BCVariables) : BCVariables
+  requires BCInv(k, s)
+  requires s.Ready?
+  requires s.frozenIndirectionTable.Some?
+  requires s.frozenIndirectionTableLoc.Some?
+  {
+    lemmaBlockAllocatorFrozenSome(k, s);
+    var s' := s
+           .(frozenIndirectionTable := None)
+           .(frozenIndirectionTableLoc := None)
+           .(persistentIndirectionTableLoc := s.frozenIndirectionTableLoc.value)
+           .(persistentIndirectionTable := s.frozenIndirectionTable.value)
+           .(persistentIndirectionTable := s.frozenIndirectionTable.value)
+           .(blockAllocator := BlockAllocatorModel.MoveFrozenToPersistent(s.blockAllocator));
+    s'
+  }
+
+  lemma cleanUpCorrect(k: Constants, s: BCVariables)
+  requires BCInv(k, s)
+  requires s.Ready?
+  requires s.frozenIndirectionTable.Some?
+  requires s.outstandingIndirectionTableWrite.None?
+  requires s.frozenIndirectionTableLoc.Some?
+  ensures var s' := cleanUp(k, s);
+    && WFBCVars(s')
+    && BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, CleanUpOp)
+  {
+    reveal_ConsistentBitmap();
+    var s' := cleanUp(k, s);
+    lemmaBlockAllocatorFrozenSome(k, s);
+    assert WFBCVars(s');
+    assert BC.CleanUp(Ik(k).bc, IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, CleanUpOp);
+    assert BC.NextStep(Ik(k).bc, IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp,
+      CleanUpOp, BC.CleanUpStep);
+    assert BBC.NextStep(Ik(k).bc, IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp,
+      CleanUpOp, BBC.BlockCacheMoveStep(BC.CleanUpStep));
+    assert BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, CleanUpOp);
+  }
 }
