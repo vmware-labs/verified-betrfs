@@ -392,8 +392,8 @@ module KVListPartialFlush {
       bi := bi + 1;
     }
 
-    newChildren := acc;
-//    newChildren := amassedAcc;
+//    newChildren := acc;
+    newChildren := amassedAcc;
 //    var newParentKvl := Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]);
     var newParentKvl := AmassKvl(Kvl(newParent_keys[..newParent_idx], newParent_messages[..newParent_idx]));
     newParent := new MutBucket(newParentKvl);

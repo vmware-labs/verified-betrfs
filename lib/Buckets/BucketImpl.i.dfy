@@ -655,7 +655,8 @@ module BucketImpl {
         assume false; // NumElements issue
         kv := tree_to_kvl(tree);
       } else {
-        kv := kvl;
+        // kv := kvl;
+        kv := KVList.AmassKvl(kvl);
       }
       bucket' := new MutBucket.InitWithWeight(kv, this.Weight);
     }

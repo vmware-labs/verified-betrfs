@@ -81,6 +81,8 @@ module FlushImpl {
     var newparentBucket, newbuckets := KVListPartialFlush.PartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
     var newchild := new Node(child.pivotTable, child.children, newbuckets);
 
+    newchild.RecopyPivots();  // amassy sort of thing.
+
     assert Some(parent) == s.cache.ptr(parentref);
 
     BookkeepingModel.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
@@ -89,7 +91,7 @@ module FlushImpl {
     BookkeepingModel.allocRefDoesntEqual(Ic(k), s.I(), newchild.children, parentref);
     var newchildref := allocBookkeeping(k, s, newchild.children);
     if newchildref.None? {
-      print "giving up; could not get parentref\n";
+      print "giving up; could not get newchildref\n";
       return;
     }
 

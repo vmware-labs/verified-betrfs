@@ -124,6 +124,7 @@ module SplitImpl {
   {
     var num_children_left := |child.buckets| as uint64 / 2;
     var pivot := child.pivotTable[num_children_left - 1];
+    pivot := child.CopyKey(pivot);
 
     SplitModel.lemmaChildrenConditionsSplitChild(Ic(k), s.I(), child.I(), num_children_left as int);
 

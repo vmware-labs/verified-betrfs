@@ -272,8 +272,12 @@ module IOImpl {
 
         var node := sector.value.block;
         // Shake loose all the pointers to the memory underlying the PKV we just read in.
+        // Doing this eagerly is a terrible idea, since, in the common case we page in
+        // a block and throw it away before ever copying it out.
+        /*
         node.AmassBuckets();
         node.RecopyPivots();
+        */
 
         assert |s.cache.I()| <= MaxCacheSize();
         s.cache.Insert(ref, node);
