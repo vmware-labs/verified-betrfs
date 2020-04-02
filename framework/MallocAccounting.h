@@ -6,7 +6,6 @@
 #define MALLOC_ACCOUNTING_ENABLE_SCOPES 1
 #define MALLOC_ACCOUNTING_ENABLE_FULL_HISTOGRAM 0
 
-void malloc_accounting_status();  // short status comparing tot bytes to proc maps heap
 #if MALLOC_ACCOUNTING
 void init_malloc_accounting();
 void malloc_accounting_display(const char* label); // full accounting

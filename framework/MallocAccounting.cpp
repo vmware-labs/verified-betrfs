@@ -12,13 +12,6 @@
 
 #include "MallocAccounting.h"
 
-bool cstr_ends_with(const char* haystack, const char* needle) {
-  int haystack_len = strlen(haystack);
-  int needle_len = strlen(needle);
-  if (haystack_len < needle_len) { return false; }
-  return strcmp(&haystack[haystack_len - needle_len], needle) == 0;
-}
-
 #if MALLOC_ACCOUNTING
 
 #pragma clang diagnostic push
@@ -504,53 +497,5 @@ void malloc_accounting_default_scope() {
 #else // MALLOC_ACCOUNTING
 // implementations are empty inlines in .h
 #endif // MALLOC_ACCOUNTING
-
-// OS view of heap size
-void external_heap_size(size_t* heap, size_t* all_maps) {
-  size_t result = -1;
-  FILE* fp = fopen("/proc/self/maps", "r");
-  size_t total = 0;
-  while (true) {
-    char space[1000];
-    char* line = fgets(space, sizeof(space), fp);
-    if (line==NULL) { break; }
-    char* remainder;
-    size_t base = strtol(line, &remainder, 16);
-    size_t end = strtol(&remainder[1], NULL, 16);
-    result = end - base;
-    total += result;
-
-    if (cstr_ends_with(line, "[heap]\n")) {
-      *heap = result;
-    }
-  }
-  fclose(fp);
-  *all_maps = total;
-}
-  
-// This is here to confirm that malloc accounting indeed finds
-// all of the memory that the OS is giving us. When I studied this,
-// I found that the OS heap accounting was about 20% more than what
-// we used in malloc -- probably fragmentation. It stayed fairly
-// proportional, giving me confidence that malloc is gettingt a
-// complete view.
-// (Note that there could also be other ways to gobble process memory,
-// like mmap, but we're not doing that; /proc/maps only shows
-// text segments and other ordinary features.)
-// Finally, we could also be gobbling up other cgroup-y memory -- maybe
-// space in the buffer cache? Not worrying about that here.
-void malloc_accounting_status() {
-#if MALLOC_ACCOUNTING
-  size_t malloc_open_bytes = atable.total_open_bytes();
-#else // MALLOC_ACCOUNTING
-  size_t malloc_open_bytes = 0;
-#endif // MALLOC_ACCOUNTING
-  size_t heap, all_maps;
-  external_heap_size(&heap, &all_maps);
-  printf("os-map-total %8ld os-map-heap %8ld malloc-accounting-total %8ld\n",
-    all_maps,
-    heap,
-    malloc_open_bytes);
-}
 
 const char* horrible_amass_label = NULL;

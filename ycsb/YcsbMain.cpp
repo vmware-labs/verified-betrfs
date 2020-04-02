@@ -76,15 +76,48 @@ inline void performYcsbUpdate(DB db, ycsbc::CoreWorkload& workload, bool verbose
     db.update(txupdate.key, value);
 }
 
+bool cstr_ends_with(const char* haystack, const char* needle) {
+  int haystack_len = strlen(haystack);
+  int needle_len = strlen(needle);
+  if (haystack_len < needle_len) { return false; }
+  return strcmp(&haystack[haystack_len - needle_len], needle) == 0;
+}
+
+// OS view of heap size
+void external_heap_size(size_t* heap, size_t* all_maps) {
+  size_t result = -1;
+  FILE* fp = fopen("/proc/self/maps", "r");
+  size_t total = 0;
+  while (true) {
+    char space[1000];
+    char* line = fgets(space, sizeof(space), fp);
+    if (line==NULL) { break; }
+    char* remainder;
+    size_t base = strtol(line, &remainder, 16);
+    size_t end = strtol(&remainder[1], NULL, 16);
+    result = end - base;
+    total += result;
+
+    if (cstr_ends_with(line, "[heap]\n")) {
+      *heap = result;
+    }
+  }
+  fclose(fp);
+  *all_maps = total;
+}
+
 static int i=0;
 template< class DB >
 void periodicReport(DB db) {
-    malloc_accounting_status();
-    MainDiskIOHandler_Compile::iostats_display_report();
+    db.memDebugFrequent();
     i += 1;
     if (i%10 == 0) {
-      db.debugAccumulator();
+      db.memDebugInfrequent();
     }
+
+    size_t heap, all_maps;
+    external_heap_size(&heap, &all_maps);
+    printf("os-map-total %8ld os-map-heap %8ld\n", all_maps, heap);
 }
 
 template< class DB >
@@ -185,13 +218,6 @@ void ycsbRun(
     int next_evict_ms = evict_interval_ms;
 #endif // HACK_EVICT_PERIODIC
 
-#define HACK_PROBE_PERIODIC 1
-#if HACK_PROBE_PERIODIC
-// An experiment to periodically study how the kv allocations are distributed
-    int probe_interval_ms = 10000;
-    int next_probe_ms = probe_interval_ms;
-#endif // HACK_PROBE_PERIODIC
-
     for (int i = 0; i < num_ops; ++i) {
         auto next_operation = workload.NextOperation();
         switch (next_operation) {
@@ -233,17 +259,6 @@ void ycsbRun(
             next_evict_ms += evict_interval_ms;
         }
 #endif // HACK_EVICT_PERIODIC
-#if HACK_PROBE_PERIODIC
-        if (importantStep(i)) {
-          printf("****************** Action! %d\n", i);
-        }
-
-        if (elapsed_ms >= next_probe_ms || importantStep(i)) {
-            //printf("probe.\n");
-            db.CountAmassAllocations();
-            next_probe_ms += probe_interval_ms;
-        }
-#endif // HACK_PROBE_PERIODIC
 
         if (elapsed_ms >= next_display_ms) {
             malloc_accounting_display("periodic");
@@ -350,14 +365,15 @@ public:
         app.EvictEverything();
     }
 
-    inline void debugAccumulator() {
-        printf("debug-accumulator start\n");
-        app.DebugAccumulator();
-        printf("debug-accumulator finish\n");
+    inline void memDebugFrequent() {
+      MainDiskIOHandler_Compile::iostats_display_report();
     }
 
-    inline void CountAmassAllocations() {
+    inline void memDebugInfrequent() {
+        printf("debug-accumulator start\n");
+        app.DebugAccumulator();
         app.CountAmassAllocations();
+        printf("debug-accumulator finish\n");
     }
 };
 
@@ -404,8 +420,8 @@ public:
     inline void evictEverything() {
     }
 
-    inline void debugAccumulator() {
-    }
+    inline void memDebugFrequent() {}
+    inline void memDebugInfrequent() { }
 
 };
 
@@ -438,11 +454,11 @@ public:
         asm volatile ("nop");
     }
 
-    inline void debugAccumulator() {
+    inline void memDebugFrequent() {
         asm volatile ("nop");
     }
 
-    inline void CountAmassAllocations() {
+    inline void memDebugInfrequent() {
         asm volatile ("nop");
     }
 };

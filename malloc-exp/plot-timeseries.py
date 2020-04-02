@@ -53,14 +53,16 @@ def parse(filename):
         line_num += 1
         line = line.strip()
         fields = line.split()
-        if line.startswith("os-map-total"):
-            os_map_total[t] = int(fields[1])
-            os_map_heap[t] = int(fields[3])
-            t += 1
-        if line.startswith("veribetrkv [op] sync"):
+
+        if line.startswith("veribetrkv [op] sync") or line.startswith("rocksdb [op] sync"):
             if first_op_completed_t == None:
                 first_op_completed_t = t - 2
             ops_completed[t] = int(fields[4])
+            t += 1
+
+        if line.startswith("os-map-total"):
+            os_map_total[t] = int(fields[1])
+            os_map_heap[t] = int(fields[3])
 
         if line.startswith("iostats "):
             reads_started[t] = int(fields[1])
@@ -112,7 +114,7 @@ def parse(filename):
             return axes[ret]
     axisAllocator = AxisAllocator()
 
-    t_end = max(os_map_total.keys())
+    t_end = max(ops_completed.keys())
 
     Kilo = 1000
     MB = float(1<<20)
@@ -123,6 +125,14 @@ def parse(filename):
             return ops_completed[t]
         except KeyError:
             return 0
+
+    opValues = list(ops_completed.values())
+    opValues.sort()
+    opTimes = list(ops_completed.keys())
+    opTimes.sort()
+    def opToTime(op):
+        idx = bisect.bisect(opValues, op)
+        return opTimes[idx]
 
     def timeToKiloOp(t):
         return timeToOp(t) / Kilo
@@ -152,11 +162,11 @@ def parse(filename):
         return ys[-1]
 
     def plotThroughput(ax):
+        ax.set_title("op throughput")
         smoothedThroughput(ax, 10)
         cur = smoothedThroughput(ax, 100)
         ax.set_xlim(left = 0, right=op_end)
         ax.set_ylim(bottom = 0)
-        ax.set_title("op throughput")
         ax.set_ylabel("Kops/sec")
         ax.set_xlabel("op num (K)")
 
@@ -170,7 +180,8 @@ def parse(filename):
                 msg += "\ncur %.2f" % cur
             ax.text(timeToKiloOp(time), aggregate, msg, horizontalalignment="right")
         aggregateAt(xs[-1], "end")
-        aggregateAt(1000, "1000s")
+        t1m = opToTime(2000000)
+        aggregateAt(t1m, "op1000k")
         
         axtwin = ax.twinx()
         ts = [t for t in ops_completed]
@@ -179,7 +190,7 @@ def parse(filename):
         axtwin.set_ylabel("time (s)")
 
     try: plotThroughput(axisAllocator.get())
-    except: pass
+    except: raise
 
     def plotOSvsMalloc(ax):
         try:
@@ -205,7 +216,8 @@ def parse(filename):
         ax.set_title("allocations")
         ax.set_ylabel("GB")
     osVsMallocAxis = axisAllocator.get()
-    plotOSvsMalloc(osVsMallocAxis)
+    try: plotOSvsMalloc(osVsMallocAxis)
+    except: pass
 
     def plotAmass(ax):
         focus_bytearys = scopes["in_amass.[T = unsigned char]"]
@@ -234,7 +246,7 @@ def parse(filename):
         line.set_label("pagein count")
         a2twin.legend(loc="lower left")
 
-    amassAxis = axes[2]
+    amassAxis = axisAllocator.get()
     try: plotAmass(amassAxis)
     except: pass
     try: plotNodes(amassAxis)
@@ -249,6 +261,7 @@ def parse(filename):
 ##    axes[3].set_ylim(bottom = 0)
 
     def plotMemStackChart(ax):
+        ax.set_title("memory consumption, stacked")
         # stack chart of...
         stack = [
                   (microscopes["esLarge"], "pagein"),
@@ -268,7 +281,6 @@ def parse(filename):
         line.set_label("malloc total")
         ax.legend()
         ax.set_ylabel("GB")
-        ax.set_title("memory consumption, stacked")
         ax.set_xlim(left = 0, right=op_end)
         ax.grid(axis="y", which="both", b=True)
     try: plotMemStackChart(axisAllocator.get())
@@ -316,9 +328,10 @@ def parse(filename):
         last_sum = sum([accum[c][last_t] for c in ["bucket-message-bytes", "bucket-key-bytes", "pivot-key-bytes"]])/GB
         msg = "total: %.1fGB" % last_sum
         bucketBytesAxis.text(timeToKiloOp(last_t), last_sum, msg, horizontalalignment="right")
-    except: raise
+    except: pass
 
     def plotPivotRate(ax):
+        ax.set_title("buckets per node")
         nodeTimes = list(scopes[".NodeImpl_Compile::Node"].keys())
         def nodeCountAt(t):
             idx = bisect.bisect(nodeTimes, t)
@@ -326,7 +339,6 @@ def parse(filename):
             return scopes[".NodeImpl_Compile::Node"][t]
         line, = ax.plot(*makePlot(accum["pivot-key-count"], lambda t: (accum["pivot-key-count"][t]+nodeCountAt(t).open_count)/nodeCountAt(t).open_count))
         line.set_label("buckets/node")
-        ax.set_title("buckets per node")
         ax.set_ylabel("buckets/node")
         ax.yaxis.set_major_locator(matplotlib.ticker.MultipleLocator(1.0))
         ax.yaxis.set_minor_locator(matplotlib.ticker.MultipleLocator(0.5))
@@ -336,8 +348,14 @@ def parse(filename):
     except: pass
 
     def plotMemViews(ax):
+        ax.set_title("all memory views in one place")
+        ax.set_ylabel("GB")
+
         line, = ax.plot(*makePlot(os_map_total, lambda t: os_map_total[t]/GB))
         line.set_label("OS mapping")
+
+        line, = ax.plot(*makePlot(kvl_underlying, lambda t: kvl_underlying[t]/GB))
+        line.set_label("underlying")
 
         line, = ax.plot(*makePlot(microscopes["total"], lambda t: microscopes["total"][t].open_byte/GB))
         line.set_label("malloc total")
@@ -345,14 +363,8 @@ def parse(filename):
         line, = ax.plot(*makePlot(scopes["in_amass.[T = unsigned char]"], lambda t: scopes["in_amass.[T = unsigned char]"][t].open_byte/GB))
         line.set_label("malloc in_amass")
 
-        line, = ax.plot(*makePlot(kvl_underlying, lambda t: kvl_underlying[t]/GB))
-        line.set_label("underlying")
-
         line, = ax.plot(*makePlot(accum["bucket-message-bytes"], lambda t: accum["bucket-message-bytes"][t]/GB))
         line.set_label("internal-bucket-message-bytes")
-
-        ax.set_title("all memory views in one place")
-        ax.set_ylabel("GB")
         ax.legend()
 
     try: plotMemViews(axisAllocator.get())

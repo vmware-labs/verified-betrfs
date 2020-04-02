@@ -16,11 +16,15 @@ def autoconfig(config, memlimit):
 
   itable_size = 8*1024*1024
 
-  MALLOC_OVERHEAD=2.56
+  MALLOC_OVERHEAD=1.46
   if config == "8mb":
     node_size = 8*1024*1024
     bucket_weight = 8356168
     cache_size = int(memlimit // ((8*1024*1024)*MALLOC_OVERHEAD))
+  elif config == "1mb":
+    node_size = 1*1024*1024
+    bucket_weight = 1016136 # jonh has no idea where this number comes from, so I subtracted 32000 because that looks like a popular choice.
+    cache_size = int(memlimit // ((1*1024*1024)*MALLOC_OVERHEAD))
   elif config == "64kb":
     node_size = 98304
     bucket_weight = 64220
@@ -114,6 +118,8 @@ def main():
       value_updates.append((name, value))
     elif arg == "config-64kb":
       config = "64kb"
+    elif arg == "config-1mb":
+      config = "1mb"
     elif arg == "config-8mb":
       config = "8mb"
     elif arg == "rocks":

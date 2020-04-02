@@ -734,3 +734,8 @@ how we lost track of that. But let's worry about that later.
 And we ARE under 1.6GB total now!
 
 Next thing to fix: lazily amass pkvs.
+
+---
+Okay, so veri-8mb was much slower than manual-wka-opt-350 (also 8mb).
+That's weird.
+
