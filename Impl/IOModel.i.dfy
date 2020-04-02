@@ -765,11 +765,8 @@ module IOModel {
   requires ValidDiskOp(diskOp(io))
   requires diskOp(io).RespWriteOp?
   requires s.Ready?
-  requires s.outstandingIndirectionTableWrite.Some?
   requires s.frozenIndirectionTable.Some?
   {
-    var id := io.id;
-
     var s' := s.(outstandingIndirectionTableWrite := None);
     (s', s.frozenIndirectionTableLoc.value)
   }

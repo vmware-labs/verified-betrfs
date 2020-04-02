@@ -131,7 +131,7 @@ module {:extern} StateImpl {
     var indirectionTableRead: Option<BC.ReqId>;
 
     // Unready
-    var outstandingIndirectionTableRead: Option<D.ReqId>;
+    // no fields
 
     function Repr() : set<object>
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
@@ -222,11 +222,9 @@ module {:extern} StateImpl {
 
     constructor()
     ensures !ready
-    ensures outstandingIndirectionTableRead == None
     ensures WF()
     {
       ready := false;
-      outstandingIndirectionTableRead := None;
 
       // Unused for the `ready = false` state but we need to initialize them.
       // (could make them nullable instead).

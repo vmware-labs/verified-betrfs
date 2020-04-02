@@ -610,7 +610,7 @@ module MarshallingImpl {
   requires |data| < 0x1_0000_0000_0000_0000;
   ensures s.Some? ==> StateImpl.WFSector(s.value)
   ensures s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
-  ensures ISectorOpt(s) == IMM.parseCheckedSector(data[..])
+  ensures ISectorOpt(s) == IMM.parseCheckedSector(data)
   ensures s.Some? && s.value.SectorNode? ==> IM.WFNode(s.value.node.I())
   ensures s.Some? && s.value.SectorNode? ==> BT.WFNode(IM.INode(s.value.node.I()))
   ensures s.Some? ==> fresh(SI.SectorRepr(s.value))

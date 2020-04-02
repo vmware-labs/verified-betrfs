@@ -25,7 +25,7 @@ module DiskLayout {
   }
 
   function method IndirectionTableMaxLength() : uint64 {
-    24 * 1024 * 1024
+    IndirectionTableBlockSizeUint64()
   }
 
   function method IndirectionTable1Addr() : Addr {

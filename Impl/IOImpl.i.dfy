@@ -9,8 +9,10 @@ module IOImpl {
   import opened Maps
   import opened NodeImpl
   import opened CacheImpl
-  import opened LBAType
+  import opened DiskLayout
+  import opened DiskOpImpl
   import StateModel
+  import opened InterpretationDiskOps
   import MarshallingImpl
   import IOModel
   import BucketsLib
@@ -33,13 +35,13 @@ module IOImpl {
     IOModel.reveal_getFreeLoc();
     var i := s.blockAllocator.Alloc();
     if i.Some? {
-      loc := Some(LBAType.Location((i.value * NodeBlockSizeUint64()), len));
+      loc := Some(Location((i.value * NodeBlockSizeUint64()), len));
     } else {
       loc := None;
     }
   }
 
-  method RequestWrite(io: DiskIOHandler, loc: LBAType.Location, sector: SI.Sector)
+  method RequestWrite(io: DiskIOHandler, loc: Location, sector: SI.Sector)
   returns (id: Option<D.ReqId>)
   requires SI.WFSector(sector)
   requires IM.WFSector(SI.ISector(sector))
@@ -55,20 +57,20 @@ module IOImpl {
     if (bytes == null || bytes.Length as uint64 != loc.len) {
       id := None;
     } else {
-      var i := io.write(loc.addr, bytes);
+      var i := io.write(loc.addr, bytes[..]);
       id := Some(i);
     }
   }
 
   method FindLocationAndRequestWrite(io: DiskIOHandler, s: ImplVariables, sector: SI.Sector)
-  returns (id: Option<D.ReqId>, loc: Option<LBAType.Location>)
+  returns (id: Option<D.ReqId>, loc: Option<Location>)
   requires s.WF()
   requires s.ready
   requires SI.WFSector(sector)
   requires IM.WFSector(SI.ISector(sector))
   requires io.initialized()
   requires io !in s.Repr()
-  requires sector.SectorBlock?
+  requires sector.SectorNode?
   modifies io
   ensures s.W()
   ensures IOModel.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(ISector(sector)), id, loc, IIO(io))
@@ -86,7 +88,7 @@ module IOImpl {
       var len := bytes.Length as uint64;
       loc := getFreeLoc(s, len);
       if (loc.Some?) {
-        var i := io.write(loc.value.addr, bytes);
+        var i := io.write(loc.value.addr, bytes[..]);
         id := Some(i);
       } else {
         id := None;
@@ -94,7 +96,7 @@ module IOImpl {
     }
   }
 
-  method RequestRead(io: DiskIOHandler, loc: LBAType.Location)
+  method RequestRead(io: DiskIOHandler, loc: Location)
   returns (id: D.ReqId)
   requires io.initialized()
   modifies io
@@ -107,23 +109,26 @@ module IOImpl {
   requires s.WF()
   requires io.initialized();
   requires !s.ready
+  requires s.loading
   requires io !in s.Repr()
+  requires ValidIndirectionTableLocation(s.indirectionTableLoc)
   modifies io
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures (s.I(), IIO(io)) == IOModel.PageInIndirectionTableReq(Ic(k), old(s.I()), old(IIO(io)))
+  ensures (s.I(), IIO(io)) == IOModel.PageInIndirectionTableReq(
+      Ic(k), old(s.I()), old(IIO(io)))
   {
     IOModel.reveal_PageInIndirectionTableReq();
 
-    if (s.outstandingIndirectionTableRead.None?) {
-      var id := RequestRead(io, IndirectionTableLocation());
-      s.outstandingIndirectionTableRead := Some(id);
+    if (s.indirectionTableRead.None?) {
+      var id := RequestRead(io, s.indirectionTableLoc);
+      s.indirectionTableRead := Some(id);
     } else {
       print "PageInIndirectionTableReq: request already out\n";
     }
   }
 
-  method PageInReq(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BC.Reference)
+  method PageInNodeReq(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BC.Reference)
   requires io.initialized();
   requires s.ready
   requires s.WF()
@@ -133,7 +138,7 @@ module IOImpl {
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
-  ensures (s.I(), IIO(io)) == IOModel.PageInReq(Ic(k), old(s.I()), old(IIO(io)), ref)
+  ensures (s.I(), IIO(io)) == IOModel.PageInNodeReq(Ic(k), old(s.I()), old(IIO(io)), ref)
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       print "giving up; already an outstanding read for this ref\n";
@@ -166,11 +171,20 @@ module IOImpl {
   ensures sector.Some? ==> fresh(SectorRepr(sector.value))
   ensures (id, ISectorOpt(sector)) == IOModel.ReadSector(old(IIO(io)))
   {
-    var id1, bytes := io.getReadResult();
+    var id1, addr, bytes := io.getReadResult();
     id := id1;
     if |bytes| as uint64 <= IndirectionTableBlockSizeUint64() {
+      var loc := DiskLayout.Location(addr, |bytes| as uint64);
       var sectorOpt := MarshallingImpl.ParseCheckedSector(bytes);
-      sector := sectorOpt;
+      if sectorOpt.Some? && (
+        || (ValidNodeLocation(loc) && sectorOpt.value.SectorNode?)
+        || (ValidSuperblockLocation(loc) && sectorOpt.value.SectorSuperblock?)
+        || (ValidIndirectionTableLocation(loc) && sectorOpt.value.SectorIndirectionTable?)
+      ) {
+        sector := sectorOpt;
+      } else {
+        sector := None;
+      }
     } else {
       sector := None;
     }
@@ -180,13 +194,14 @@ module IOImpl {
   requires s.W()
   requires io.diskOp().RespReadOp?
   requires !s.ready
+  requires s.loading
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.I() == IOModel.PageInIndirectionTableResp(Ic(k), old(s.I()), old(IIO(io)))
   {
     var id, sector := ReadSector(io);
-    if (Some(id) == s.outstandingIndirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
+    if (Some(id) == s.indirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
       var ephemeralIndirectionTable := sector.value.indirectionTable;
       //assert fresh(SectorRepr(sector.value));
       assert SectorRepr(sector.value) == {ephemeralIndirectionTable} + ephemeralIndirectionTable.Repr; // why is this needed??
@@ -203,6 +218,8 @@ module IOImpl {
         s.ready := true;
         s.persistentIndirectionTable := persistentIndirectionTable;
         s.frozenIndirectionTable := null;
+        s.persistentIndirectionTableLoc := s.indirectionTableLoc;
+        s.frozenIndirectionTableLoc := None;
         s.ephemeralIndirectionTable := ephemeralIndirectionTable;
         s.outstandingIndirectionTableWrite := None;
         s.outstandingBlockWrites := map[];
@@ -218,7 +235,7 @@ module IOImpl {
     }
   }
 
-  method PageInResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  method PageInNodeResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   requires s.W()
   requires s.WF()
   requires io.diskOp().RespReadOp?
@@ -226,14 +243,14 @@ module IOImpl {
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures s.I() == IOModel.PageInResp(Ic(k), old(s.I()), old(IIO(io)))
+  ensures s.I() == IOModel.PageInNodeResp(Ic(k), old(s.I()), old(IIO(io)))
   {
     var id, sector := ReadSector(io);
     assert sector.Some? ==> SI.WFSector(sector.value);
     assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
 
     if (id !in s.outstandingBlockReads) {
-      print "PageInResp: unrecognized id from Read\n";
+      print "PageInNodeResp: unrecognized id from Read\n";
       return;
     }
 
@@ -244,12 +261,12 @@ module IOImpl {
 
     var lbaGraph := s.ephemeralIndirectionTable.GetEntry(ref);
     if (lbaGraph.None? || lbaGraph.value.loc.None?) {
-      print "PageInResp: ref !in lbas\n";
+      print "PageInNodeResp: ref !in lbas\n";
       return;
     }
     var cacheLookup := s.cache.GetOpt(ref);
     if cacheLookup.Some? {
-      print "PageInResp: ref in s.cache\n";
+      print "PageInNodeResp: ref in s.cache\n";
       return;
     }
 
@@ -259,8 +276,8 @@ module IOImpl {
     var lba := lbaGraph.value.loc.value;
     var graph := lbaGraph.value.succs;
 
-    if (sector.Some? && sector.value.SectorBlock?) {
-      var node := sector.value.block;
+    if (sector.Some? && sector.value.SectorNode?) {
+      var node := sector.value.node;
       if (graph == (if node.children.Some? then node.children.value else [])) {
         assert|LruModel.I(s.lru.Queue)| <= 0x10000;
         assert sector.Some? ==> SI.WFSector(sector.value);
@@ -271,7 +288,7 @@ module IOImpl {
         assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
 
         assert |s.cache.I()| <= MaxCacheSize();
-        s.cache.Insert(ref, sector.value.block);
+        s.cache.Insert(ref, sector.value.node);
 
         s.outstandingBlockReads := ComputeMapRemove1(s.outstandingBlockReads, id);
       } else {
@@ -282,49 +299,56 @@ module IOImpl {
     }
   }
 
-
-  method readResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  requires io.diskOp().RespReadOp?
-  requires s.W()
-  requires s.WF()
-  requires io !in s.Repr()
-  modifies s.Repr()
-  ensures WellUpdated(s)
-  ensures s.I() == IOModel.readResponse(Ic(k), old(s.I()), IIO(io))
-  {
-    if (!s.ready) {
-      PageInIndirectionTableResp(k, s, io);
-    } else {
-      PageInResp(k, s, io);
-    }
-  }
-
   // == writeResponse ==
 
-  method writeResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  method writeNodeResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
   requires io.diskOp().RespWriteOp?
+  requires ValidDiskOp(io.diskOp())
   requires SI.Inv(k, s)
+  requires s.ready && IIO(io).id in s.outstandingBlockWrites
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures s.I() == IOModel.writeResponse(Ic(k), old(s.I()), IIO(io))
+  ensures s.I() == IOModel.writeNodeResponse(Ic(k), old(s.I()), IIO(io))
   {
-    var id := io.getWriteResult();
-    if (s.ready && s.outstandingIndirectionTableWrite == Some(id)) {
-      IOModel.lemmaBlockAllocatorFrozenSome(Ic(k), s.I());
+    var id, addr, len := io.getWriteResult();
+    IOModel.lemmaOutstandingLocIndexValid(Ic(k), s.I(), id);
 
-      s.outstandingIndirectionTableWrite := None;
-      s.persistentIndirectionTable := s.frozenIndirectionTable;
-      s.frozenIndirectionTable := null;
-      s.syncReqs := SyncReqs2to1(s.syncReqs);
-
-      s.blockAllocator.MoveFrozenToPersistent();
-    } else if (s.ready && id in s.outstandingBlockWrites) {
-      IOModel.lemmaOutstandingLocIndexValid(Ic(k), s.I(), id);
-
-      s.blockAllocator.MarkFreeOutstanding(s.outstandingBlockWrites[id].loc.addr / NodeBlockSizeUint64());
-      s.outstandingBlockWrites := ComputeMapRemove1(s.outstandingBlockWrites, id);
-    } else {
-    }
+    s.blockAllocator.MarkFreeOutstanding(s.outstandingBlockWrites[id].loc.addr / NodeBlockSizeUint64());
+    s.outstandingBlockWrites := ComputeMapRemove1(s.outstandingBlockWrites, id);
   }
+
+  method writeIndirectionTableResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  returns (loc: Location)
+  requires io.diskOp().RespWriteOp?
+  requires ValidDiskOp(io.diskOp())
+  requires SI.Inv(k, s)
+  requires s.ready
+  requires s.frozenIndirectionTable != null
+  requires io !in s.Repr()
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures (s.I(), loc) == IOModel.writeIndirectionTableResponse(
+      Ic(k), old(s.I()), IIO(io))
+  {
+    s.outstandingIndirectionTableWrite := None;
+    loc := s.frozenIndirectionTableLoc.value;
+  }
+
+  /*method cleanUp(k: Constants, s: BCVariables)
+  requires BCInv(k, s)
+  requires s.Ready?
+  requires s.frozenIndirectionTable.Some?
+  requires s.frozenIndirectionTableLoc.Some?
+  {
+    lemmaBlockAllocatorFrozenSome(k, s);
+    var s' := s
+           .(frozenIndirectionTable := None)
+           .(frozenIndirectionTableLoc := None)
+           .(persistentIndirectionTableLoc := s.frozenIndirectionTableLoc.value)
+           .(persistentIndirectionTable := s.frozenIndirectionTable.value)
+           .(persistentIndirectionTable := s.frozenIndirectionTable.value)
+           .(blockAllocator := BlockAllocatorModel.MoveFrozenToPersistent(s.blockAllocator));
+    s'
+  }*/
 }
