@@ -129,7 +129,7 @@ module JournalistModel {
     jm.writtenJournalBlocks as int
   }
 
-  protected function I(jm: JournalistModel) : JournalInfo
+  function Iprivate(jm: JournalistModel) : JournalInfo
   requires WF(jm)
   {
     JournalInfo(
@@ -141,6 +141,16 @@ module JournalistModel {
       WrittenJournalLen(jm)
     )
   }
+
+  protected function I(jm: JournalistModel) : JournalInfo
+  requires WF(jm)
+  {
+    Iprivate(jm)
+  }
+
+  lemma reveal_I(jm: JournalistModel)
+  requires WF(jm)
+  ensures I(jm) == Iprivate(jm)
 
   predicate Inv(jm: JournalistModel)
   {

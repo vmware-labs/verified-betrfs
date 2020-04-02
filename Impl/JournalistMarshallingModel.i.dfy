@@ -1,5 +1,6 @@
 include "../ByteBlockCacheSystem/JournalBytes.i.dfy"
 include "../BlockCacheSystem/DiskLayout.i.dfy"
+include "../lib/Base/PackedIntsLib.i.dfy"
 
 module JournalistMarshallingModel {
   import opened JournalRanges`Internal
@@ -11,6 +12,7 @@ module JournalistMarshallingModel {
   import opened Sequences
   import opened Crypto
   import opened NativePackedInts
+  import opened PackedIntsLib
 
   function {:opaque} cyclicSlice<T>(t: seq<T>, start: uint64, l: uint64) : (res: seq<T>)
   requires 0 <= start as int < |t|
@@ -195,12 +197,7 @@ module JournalistMarshallingModel {
   requires idx as int + 4 <= numBlocks as int * 4064
   ensures |buf'| == |buf|
   {
-    var t := [
-      (val % 256) as byte,
-      ((val / 256) % 256) as byte,
-      ((val / (256*256)) % 256) as byte,
-      ((val / (256*256*256)) % 256) as byte
-    ];
+    var t := pack_LittleEndian_Uint32(val);
     writeOnto(buf, numBlocks, idx, t)
   }
 
@@ -278,12 +275,7 @@ module JournalistMarshallingModel {
   ensures forall i | 0 <= i < start as int :: writeIntOntoAgrees(buf, numBlocks, start, val, i)
   {
     reveal_writeIntOnto();
-    var bytes := [
-      (val % 256) as byte,
-      ((val / 256) % 256) as byte,
-      ((val / (256*256)) % 256) as byte,
-      ((val / (256*256*256)) % 256) as byte
-    ];
+    var bytes := pack_LittleEndian_Uint32(val);
     writeOntoPreserves(buf, numBlocks, start, bytes);
     forall i | 0 <= i < start as int
     ensures writeIntOntoAgrees(buf, numBlocks, start, val, i)
@@ -326,13 +318,7 @@ module JournalistMarshallingModel {
         [start .. start as int + 4]
       ) == val
   {
-    var t := [
-      (val % 256) as byte,
-      ((val / 256) % 256) as byte,
-      ((val / (256*256)) % 256) as byte,
-      ((val / (256*256*256)) % 256) as byte
-    ];
-    assume unpack_LittleEndian_Uint32(t) == val;
+    var t := pack_LittleEndian_Uint32(val);
     //assert unpack_LittleEndian_Uint32(t) == val by {
     //  reveal_unpack_LittleEndian_Uint32();
     //}
@@ -899,7 +885,6 @@ module JournalistMarshallingModel {
     fillInChecksumsHasChecksums(buf2, numBlocks, 0);
     parsesFromStuff(buf3, numBlocks, cyclicSlice(entries, start, len));
   }
-
 
   function {:opaque} marshallJournalEntries(entries: seq<JournalEntry>,
       start: uint64, len: uint64, numBlocks: uint64)

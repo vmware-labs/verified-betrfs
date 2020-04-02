@@ -273,6 +273,11 @@ module JournalRanges {
   {
   }
 
+  function method WeightJournalEntryUint64(s: JournalEntry) : uint64
+  {
+    8 + |s.key| as uint64 + |s.value| as uint64
+  }
+
   function WeightJournalEntry(s: JournalEntry) : int
   {
     8 + |s.key| + |s.value|
