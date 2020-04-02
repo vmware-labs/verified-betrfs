@@ -2,6 +2,7 @@ include "SyncModel.i.dfy"
 include "CommitterCommitModel.i.dfy"
 include "CommitterInitModel.i.dfy"
 include "QueryModel.i.dfy"
+include "SuccModel.i.dfy"
 
 module CoordinationModel {
   import opened StateModel
@@ -12,6 +13,7 @@ module CoordinationModel {
   import CommitterCommitModel
   import CommitterInitModel
   import QueryModel
+  import SuccModel
   import opened InterpretationDiskOps
   import opened ViewOp
   import opened NativeTypes
@@ -405,6 +407,71 @@ module CoordinationModel {
       QueryModel.queryCorrect(k, s.bc, io, key, s'.bc, result, io');
       if result.Some? {
         var uiop := UI.GetOp(key, result.value);
+        var vop := AdvanceOp(uiop, false);
+
+        assert JC.Advance(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
+        assert JC.NextStep(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop, JC.AdvanceStep);
+        assert JC.Next(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
+
+        assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);
+        assert BJC.Next(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
+      } else {
+        var uiop := UI.NoOp;
+        if BBC.Next(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io')).bdop, StatesInternalOp) {
+          var vop := StatesInternalOp;
+          assert JC.NoOp(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
+          assert JC.NextStep(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop, JC.NoOpStep);
+          assert JC.Next(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
+          assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);
+          assert BJC.Next(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
+        } else {
+          var vop := AdvanceOp(uiop, true);
+          // Not a true replay (empty journal entry list).
+          assert JC.Replay(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
+          assert JC.NextStep(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop, JC.ReplayStep);
+          assert JC.Next(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
+          assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);
+          assert BJC.Next(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
+        }
+      }
+    }
+  }
+
+  predicate {:opaque} succ(
+      k: Constants, s: Variables, io: IO, start: UI.RangeStart, maxToFind: int,
+      s': Variables, result: Option<UI.SuccResultList>, io': IO)
+  requires io.IOInit?
+  requires Inv(k, s)
+  requires maxToFind >= 1
+  {
+    if !isInitialized(s) then (
+      && (s', io') == initialization(k, s, io)
+      && result == None
+    ) else (
+      && (s'.bc, io', result) == SuccModel.doSucc(k, s.bc, io, start, maxToFind)
+      && s.jc == s'.jc
+    )
+  }
+
+  lemma succCorrect(k: Constants, s: Variables, io: IO, start: UI.RangeStart, maxToFind: int,
+      s': Variables, result: Option<UI.SuccResultList>, io': IO)
+  requires io.IOInit?
+  requires Inv(k, s)
+  requires maxToFind >= 1
+  requires succ(k, s, io, start, maxToFind, s', result, io')
+  ensures WFVars(s')
+  ensures M.Next(Ik(k), IVars(s), IVars(s'),
+          if result.Some? then UI.SuccOp(start, result.value.results, result.value.end) else UI.NoOp,
+          diskOp(io'))
+  {
+    reveal_succ();
+    CommitterInitModel.reveal_isReplayEmpty();
+    if !isInitialized(s) {
+      initializationCorrect(k, s, io);
+    } else {
+      SuccModel.doSuccCorrect(k, s.bc, io, start, maxToFind);
+      if result.Some? {
+        var uiop := UI.SuccOp(start, result.value.results, result.value.end);
         var vop := AdvanceOp(uiop, false);
 
         assert JC.Advance(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);

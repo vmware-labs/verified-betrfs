@@ -12,6 +12,8 @@ module SuccModel {
   import opened IOModel
   import opened BookkeepingModel
   import opened KeyType
+  import opened ViewOp
+  import opened InterpretationDiskOps
 
   import opened Options
   import opened Maps
@@ -33,7 +35,7 @@ module SuccModel {
 
   function {:opaque} getPathInternal(
       k: Constants,
-      s: Variables,
+      s: BCVariables,
       io: IO,
       key: Key,
       acc: seq<Bucket>,
@@ -43,8 +45,8 @@ module SuccModel {
       ref: BT.G.Reference,
       counter: uint64,
       node: Node)
-  : (res : (Variables, IO, Option<UI.SuccResultList>))
-  requires Inv(k, s)
+  : (res : (BCVariables, IO, Option<UI.SuccResultList>))
+  requires BCInv(k, s)
   requires s.Ready?
   requires io.IOInit?
   requires WFNode(node)
@@ -54,7 +56,7 @@ module SuccModel {
   requires maxToFind >= 1
   ensures var (s', io, sr) := res;
     && s'.Ready?
-    && WFVars(s')
+    && WFBCVars(s')
     && s'.cache == s.cache
   decreases counter, 0
   {
@@ -90,7 +92,7 @@ module SuccModel {
 
   function {:opaque} getPath(
       k: Constants,
-      s: Variables,
+      s: BCVariables,
       io: IO,
       key: Key,
       acc: seq<Bucket>,
@@ -99,15 +101,15 @@ module SuccModel {
       maxToFind: int,
       ref: BT.G.Reference,
       counter: uint64)
-  : (res : (Variables, IO, Option<UI.SuccResultList>))
-  requires Inv(k, s)
+  : (res : (BCVariables, IO, Option<UI.SuccResultList>))
+  requires BCInv(k, s)
   requires s.Ready?
   requires io.IOInit?
   requires maxToFind >= 1
   requires ref in s.ephemeralIndirectionTable.graph
   ensures var (s', io, sr) := res;
     && s'.Ready?
-    && WFVars(s')
+    && WFBCVars(s')
     && s'.cache == s.cache
   decreases counter, 1
   {
@@ -118,12 +120,12 @@ module SuccModel {
       LruModel.LruUse(s0.lru, ref);
       var s' := s0.(lru := LruModel.Use(s0.lru, ref));
 
-      assert WFVars(s');
+      assert WFBCVars(s');
       (s', io', pr)
     ) else (
       if TotalCacheSize(s) <= MaxCacheSize() - 1 then (
-        var (s', io') := PageInReq(k, s, io, ref);
-        assert WFVars(s');
+        var (s', io') := PageInNodeReq(k, s, io, ref);
+        assert WFBCVars(s');
         (s', io', None)
       ) else (
         (s, io, None)
@@ -131,19 +133,15 @@ module SuccModel {
     )
   }
 
-  function {:opaque} doSucc(k: Constants, s: Variables, io: IO, start: UI.RangeStart, maxToFind: int)
-  : (res : (Variables, IO, Option<UI.SuccResultList>))
-  requires Inv(k, s)
+  function {:opaque} doSucc(k: Constants, s: BCVariables, io: IO, start: UI.RangeStart, maxToFind: int)
+  : (res : (BCVariables, IO, Option<UI.SuccResultList>))
+  requires BCInv(k, s)
   requires io.IOInit?
+  requires s.Ready?
   requires maxToFind >= 1
   {
-    if (s.Unready?) then (
-      var (s', io') := PageInIndirectionTableReq(k, s, io);
-      (s', io', None)
-    ) else (
-      var startKey := if start.NegativeInf? then [] else start.key;
-      getPath(k, s, io, startKey, [], start, None, maxToFind, BT.G.Root(), 40)
-    )
+    var startKey := if start.NegativeInf? then [] else start.key;
+    getPath(k, s, io, startKey, [], start, None, maxToFind, BT.G.Root(), 40)
   }
 
   /////////////////////////////////
@@ -161,9 +159,9 @@ module SuccModel {
     && (forall i | 0 <= i < |lookup| :: buckets[i] == lookup[i].node.buckets[Pivots.Route(lookup[i].node.pivotTable, startKey)])
   }
 
-  lemma SatisfiesSuccBetreeStep(k: Constants, s: Variables, io: IO, start: UI.RangeStart,
+  lemma SatisfiesSuccBetreeStep(k: Constants, s: BCVariables, io: IO, start: UI.RangeStart,
       res: UI.SuccResultList, buckets: seq<Bucket>, lookup: PBS.Lookup, maxToFind: int, startKey: Key, upTo: Option<Key>)
-  requires Inv(k, s)
+  requires BCInv(k, s)
   requires s.Ready?
   requires io.IOInit?
   requires maxToFind >= 1
@@ -175,9 +173,10 @@ module SuccModel {
   requires res == 
      BucketSuccessorLoopModel.GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);
 
-  ensures M.Next(Ik(k), IVars(s), IVars(s),
-      UI.SuccOp(start, res.results, res.end),
-      diskOp(io))
+  ensures ValidDiskOp(diskOp(io))
+  ensures BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s),
+      IDiskOp(diskOp(io)).bdop,
+      AdvanceOp(UI.SuccOp(start, res.results, res.end), false));
   {
     if (BucketListWellMarshalled(buckets)) {
       BucketSuccessorLoopModel.GetSuccessorInBucketStackResult(buckets, maxToFind, start, upTo);
@@ -187,21 +186,17 @@ module SuccModel {
     assert BT.ValidSuccQuery(succStep);
     var step := BT.BetreeSuccQuery(succStep);
 
-    assert BBC.BetreeMove(Ik(k), IVars(s), IVars(s),
-      UI.SuccOp(start, res.results, res.end),
-      M.IDiskOp(diskOp(io)),
+    assert BBC.BetreeMove(Ik(k).bc, IBlockCache(s), IBlockCache(s),
+      IDiskOp(diskOp(io)).bdop,
+      AdvanceOp(UI.SuccOp(start, res.results, res.end), false),
       step);
-    assert stepsBetree(k, IVars(s), IVars(s),
-      UI.SuccOp(start, res.results, res.end),
+    assert stepsBetree(k, IBlockCache(s), IBlockCache(s),
+      AdvanceOp(UI.SuccOp(start, res.results, res.end), false),
       step);
-
-    assert M.Next(Ik(k), IVars(s), IVars(s),
-      UI.SuccOp(start, res.results, res.end),
-      diskOp(io));
   }
 
-  lemma lemmaGetPathResult(k: Constants, s: Variables, io: IO, startKey: Key, acc: seq<Bucket>, lookup: PBS.Lookup, start: UI.RangeStart, upTo: Option<Key>, maxToFind: int, ref: BT.G.Reference, counter: uint64)
-  requires Inv(k, s)
+  lemma lemmaGetPathResult(k: Constants, s: BCVariables, io: IO, startKey: Key, acc: seq<Bucket>, lookup: PBS.Lookup, start: UI.RangeStart, upTo: Option<Key>, maxToFind: int, ref: BT.G.Reference, counter: uint64)
+  requires BCInv(k, s)
   requires s.Ready?
   requires io.IOInit?
   requires maxToFind >= 1
@@ -219,11 +214,14 @@ module SuccModel {
   requires startKey == (if start.NegativeInf? then [] else start.key)
   decreases counter
   ensures var (s', io', res) := getPath(k, s, io, startKey, acc, start, upTo, maxToFind, ref, counter);
-      && WFVars(s')
-      && M.Next(Ik(k), IVars(s), IVars(s'),
-          if res.Some? then UI.SuccOp(start, res.value.results, res.value.end) else UI.NoOp,
-          diskOp(io'))
-    /*  && IVars(s1) == IVars(s)
+      && WFBCVars(s')
+      && ValidDiskOp(diskOp(io'))
+      && (res.Some? ==> BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'),
+            IDiskOp(diskOp(io')).bdop,
+            AdvanceOp(UI.SuccOp(start, res.value.results, res.value.end), false)))
+      && (res.None? ==>
+            betree_next_dop(k, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop))
+    /*  && IBlockCache(s1) == IBlockCache(s)
       && s1.ephemeralIndirectionTable == s.ephemeralIndirectionTable
       && (pr.Fetch? ==> pr.ref in s.ephemeralIndirectionTable.locs)
       && (pr.Fetch? ==> pr.ref !in s.cache)
@@ -274,7 +272,7 @@ module SuccModel {
 
       if node.children.Some? {
         if counter == 0 {
-          assert noop(k, IVars(s), IVars(s));
+          assert noop(k, IBlockCache(s), IBlockCache(s));
         } else {
           lemmaChildInGraph(k, s, ref, node.children.value[r]);
 
@@ -289,30 +287,32 @@ module SuccModel {
       if TotalCacheSize(s) <= MaxCacheSize() - 1 {
         assert ref in s.ephemeralIndirectionTable.graph;
         assert ref in s.ephemeralIndirectionTable.locs;
-        PageInReqCorrect(k, s, io, ref);
+        PageInNodeReqCorrect(k, s, io, ref);
       } else {
-        assert noop(k, IVars(s), IVars(s));
+        assert noop(k, IBlockCache(s), IBlockCache(s));
       }
     }
   }
 
-  lemma doSuccCorrect(k: Constants, s: Variables, io: IO, start: UI.RangeStart, maxToFind: int)
-  requires Inv(k, s)
+  lemma doSuccCorrect(k: Constants, s: BCVariables, io: IO, start: UI.RangeStart, maxToFind: int)
+  requires BCInv(k, s)
   requires io.IOInit?
   requires maxToFind >= 1
+  requires s.Ready?
   ensures var (s', io', res) := doSucc(k, s, io, start, maxToFind);
-    && WFVars(s')
-    && M.Next(Ik(k), IVars(s), IVars(s'),
-        if res.Some? then UI.SuccOp(start, res.value.results, res.value.end) else UI.NoOp,
-        diskOp(io'))
+    && WFBCVars(s')
+    && ValidDiskOp(diskOp(io'))
+    && IDiskOp(diskOp(io')).jdop.NoDiskOp?
+    && (res.Some? ==> BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'),
+            IDiskOp(diskOp(io')).bdop,
+            AdvanceOp(UI.SuccOp(start, res.value.results, res.value.end), false)))
+    && (res.None? ==>
+            betree_next_dop(k, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop))
+
   {
     reveal_doSucc();
-    if (s.Unready?) {
-      IOModel.PageInIndirectionTableReqCorrect(k, s, io);
-    } else {
-      PBS.reveal_LookupUpperBound();
-      var startKey := if start.NegativeInf? then [] else start.key;
-      lemmaGetPathResult(k, s, io, startKey, [], [], start, None, maxToFind, BT.G.Root(), 40);
-    }
+    PBS.reveal_LookupUpperBound();
+    var startKey := if start.NegativeInf? then [] else start.key;
+    lemmaGetPathResult(k, s, io, startKey, [], [], start, None, maxToFind, BT.G.Root(), 40);
   }
 }
