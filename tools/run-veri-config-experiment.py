@@ -16,14 +16,15 @@ def autoconfig(config, memlimit):
 
   itable_size = 8*1024*1024
 
+  MALLOC_OVERHEAD=1.3
   if config == "8mb":
     node_size = 8*1024*1024
     bucket_weight = 8356168
-    cache_size = memlimit // (8*1024*1024)
+    cache_size = int(memlimit // ((8*1024*1024)*MALLOC_OVERHEAD))
   elif config == "64kb":
     node_size = 98304
     bucket_weight = 64220
-    cache_size = memlimit // (64*1024)
+    cache_size = int(memlimit // ((64*1024)*MALLOC_OVERHEAD))
   else:
     assert False
 
@@ -64,20 +65,26 @@ def clear_page_cache():
   assert ret == 0
 
 def splice_value_into_bundle(name, value):
+  splice_successful = False
   with open("build/Bundle.cpp") as f:
+    lineNum = 0
     c = 0
     lines = []
     for line in f:
+      lineNum += 1
       if line.strip() == "uint64 __default::" + name + "()":
         c = 1
       else:
         if c == 1:
           c = 2
         elif c == 2:
-          line = "    return (uint64)" + value + ";\n"
+          line = "    return (uint64)" + value + "; /*hi mom*/\n"
+          splice_successful = True
+          #print("Splicing %s = %s at line %d" % (name, value, lineNum))
           c = 0
       lines.append(line)
     cpp = "".join(lines)
+  assert splice_successful
 
   with open("build/Bundle.cpp","w") as f:
     f.write(cpp)
@@ -116,13 +123,13 @@ def main():
     else:
       assert False, "unrecognized argument: " + arg
 
-  assert workload != None
-  assert device != None
-
   if config != None:
     assert not rocks
     assert ram != None
     value_updates = autoconfig(config, ram) + value_updates
+
+  assert workload != None
+  assert device != None
 
   cgroup_defaults()
   if ram != None:
@@ -153,8 +160,9 @@ def main():
     make_options = "LOG_QUERY_STATS=1 "
 
   print("Building executable...")
-  ret = os.system(make_options + "make " +
-      exe + " -s -j4 > /dev/null 2> /dev/null")
+  cmd = make_options + "make " + exe + " -s -j4 > /dev/null 2> /dev/null"
+  print(cmd)
+  ret = os.system(cmd)
   assert ret == 0
 
   wl = "ycsb/workload" + workload + "-onefield.spec"
@@ -163,7 +171,8 @@ def main():
   if device == "optane":
     loc = "/scratch0/tjhance/ycsb/"
   elif device == "disk":
-    loc = "/home/tjhance/ycsb/"
+    #loc = "/home/tjhance/ycsb/"
+    loc = "/tmp/veribetrfs/"
   else:
     assert False
 

@@ -43,6 +43,7 @@ module BucketImpl {
   {
     var s := KMBBOps.ToSeq(tree);
     kvl := KVList.Kvl(s.0[..], s.1[..]);
+    kvl := KVList.AmassKvl(kvl);  // TODO skip a seq-assembly step here
     assume false;
   }
 
@@ -464,6 +465,7 @@ module BucketImpl {
       WeightSplitBucketLeft(Bucket, pivot);
       KVList.lenKeysLeWeightOver4(kv);
       var kvlLeft := KVList.SplitLeft(kv, pivot);
+//      kvlLeft := KVList.AmassKvl(kvlLeft);
       left := new MutBucket(kvlLeft);
     }
 
@@ -479,6 +481,7 @@ module BucketImpl {
       WeightSplitBucketRight(Bucket, pivot);
       KVList.lenKeysLeWeightOver4(kv);
       var kvlRight := KVList.SplitRight(kv, pivot);
+//      kvlRight := KVList.AmassKvl(kvlRight);
       right := new MutBucket(kvlRight);
     }
 

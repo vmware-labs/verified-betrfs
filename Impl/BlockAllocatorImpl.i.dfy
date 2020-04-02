@@ -1,3 +1,4 @@
+include "../lib/Base/DebugAccumulator.i.dfy"
 include "BlockAllocatorModel.i.dfy"
 include "../lib/DataStructures/BitmapImpl.i.dfy"
 //
@@ -6,6 +7,7 @@ include "../lib/DataStructures/BitmapImpl.i.dfy"
 //
 
 module BlockAllocatorImpl {
+  import DebugAccumulator
   import BitmapModel
   import BitmapImpl
   import opened Bounds
@@ -19,6 +21,29 @@ module BlockAllocatorImpl {
     var persistent: BitmapImpl.Bitmap;
     var outstanding: BitmapImpl.Bitmap;
     var full: BitmapImpl.Bitmap;
+
+    method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator) {
+      acc := DebugAccumulator.EmptyAccumulator();
+      var r := ephemeral.DebugAccumulate();
+      var a := new DebugAccumulator.AccRec.Index(r);
+      acc := DebugAccumulator.AccPut(acc, "ephemeral", a);
+      if frozen != null {
+        r := frozen.DebugAccumulate();
+      } else {
+        r := DebugAccumulator.EmptyAccumulator();
+      }
+      a := new DebugAccumulator.AccRec.Index(r);
+      acc := DebugAccumulator.AccPut(acc, "frozen", a);
+      r := persistent.DebugAccumulate();
+      a := new DebugAccumulator.AccRec.Index(r);
+      acc := DebugAccumulator.AccPut(acc, "persistent", a);
+      r := outstanding.DebugAccumulate();
+      a := new DebugAccumulator.AccRec.Index(r);
+      acc := DebugAccumulator.AccPut(acc, "outstanding", a);
+      r := full.DebugAccumulate();
+      a := new DebugAccumulator.AccRec.Index(r);
+      acc := DebugAccumulator.AccPut(acc, "full", a);
+    }
 
     ghost var Repr: set<object>
 

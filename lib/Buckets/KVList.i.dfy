@@ -4,6 +4,7 @@ include "../Base/Maps.s.dfy"
 include "../Base/NativeArrays.s.dfy"
 include "BucketsLib.i.dfy"
 include "BucketWeights.i.dfy"
+include "../Base/MallocAccounting.i.dfy"
 //
 // A list of key-message pairs, with unique, sorted keys.
 // TODO(robj,thance): How is it used... in BucketImpl?
@@ -27,6 +28,7 @@ module KVList {
   import P = PivotsLib
   import SeqComparison
   import opened KeyType
+  import MallocAccounting
 
   datatype Kvl = Kvl(keys: seq<Key>, messages: seq<Message>)
 
@@ -34,6 +36,59 @@ module KVList {
     && |kvl.keys| == |kvl.messages|
     && IsStrictlySorted(kvl.keys)
     && (forall i | 0 <= i < |kvl.messages| :: kvl.messages[i] != IdentityMessage())
+  }
+
+  // Reallocate the bytes of a kvl into contiguous memory.
+  method AmassKvl(kvl: Kvl) returns (amassed: Kvl)
+    requires WF(kvl)
+    ensures WF(amassed)
+    ensures I(kvl) == I(amassed)
+  {
+    // Count how much space we'll need
+    var i : uint64 := 0;
+    var cumKeyLen:uint64 := 0;
+    var cumMessageLen:uint64 := 0;
+    while (i < |kvl.keys| as uint64)
+    {
+      cumKeyLen := cumKeyLen + |kvl.keys[i]| as uint64;
+      cumMessageLen := cumMessageLen + |kvl.messages[i].value| as uint64;
+      i := i + 1;
+    }
+
+    // String together the bytes
+    var ary := new byte[cumKeyLen + cumMessageLen];
+    var ptr:uint64 := 0;
+    i := 0;
+    while (i < |kvl.keys| as uint64)
+    {
+      NativeArrays.CopySeqIntoArray(kvl.keys[i], 0, ary, ptr, |kvl.keys[i]| as uint64);
+      ptr := ptr + |kvl.keys[i]| as uint64;
+      NativeArrays.CopySeqIntoArray<byte>(kvl.messages[i].value, 0, ary, ptr, |kvl.messages[i].value| as uint64);
+      ptr := ptr + |kvl.messages[i].value| as uint64;
+      i := i + 1;
+    }
+
+    // Glue into a seq
+    MallocAccounting.set_amass_mode(true);
+    var amassedSeq := ary[..];
+    MallocAccounting.set_amass_mode(false);
+
+    // String together the refs to the bytes, pointing into the amassed seq
+    var keyAry := new Key[|kvl.keys| as uint64];
+    var messageAry := new Message[|kvl.messages| as uint64];
+    ptr := 0;
+    i := 0;
+    while (i < |kvl.keys| as uint64)
+    {
+      keyAry[i] := amassedSeq[ptr .. ptr+|kvl.keys[i]| as uint64];
+      ptr := ptr + |kvl.keys[i]| as uint64;
+      messageAry[i] := Message.Define(amassedSeq[ptr .. ptr+|kvl.messages[i].value| as uint64]);
+      ptr := ptr + |kvl.messages[i].value| as uint64;
+      i := i + 1;
+    }
+
+    // And finally glue the array of seq slice refs into seqs
+    amassed := Kvl(keyAry[..], messageAry[..]);
   }
 
   function {:opaque} IMap(kvl: Kvl) : BucketMap

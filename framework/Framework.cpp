@@ -3,6 +3,8 @@
 
 #include "Bundle.i.h"
 
+#include "MallocAccounting.h"
+
 //#include <filesystem> // c++17 lol
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -11,6 +13,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <chrono>
+#include <set>
 
 using namespace std;
 
@@ -247,8 +250,9 @@ namespace MainDiskIOHandler_Compile {
   {
     size_t len = bytes.size();
 
-    shared_ptr<WriteTask> writeTask {
-      new WriteTask(fd, addr, &bytes.at(0), len) };
+    malloc_accounting_set_scope("DiskIOHandler::write.WriteTask");
+    shared_ptr<WriteTask> writeTask { new WriteTask(fd, addr, &bytes.at(0), len) };
+    malloc_accounting_default_scope();
 
     if (nWriteReqsOut < MAX_WRITE_REQS_OUT) {
       writeTask->start();
@@ -257,7 +261,9 @@ namespace MainDiskIOHandler_Compile {
     uint64 id = this->curId;
     this->curId++;
 
+    malloc_accounting_set_scope("DiskIOHandler::write.insert");
     writeReqs.insert(std::make_pair(id, writeTask));
+    malloc_accounting_default_scope();
 
     return id;
   }
@@ -298,7 +304,9 @@ namespace MainDiskIOHandler_Compile {
     uint64 id = this->curId;
     this->curId++;
 
+    malloc_accounting_set_scope("DiskIOHandler::ReadTask");
     readReqs.insert(std::make_pair(id, ReadTask(bytes)));
+    malloc_accounting_default_scope();
 
     #ifdef LOG_QUERY_STATS
     //benchmark_end("DiskIOHandler::read finish");
@@ -386,7 +394,9 @@ namespace MainDiskIOHandler_Compile {
   }
   void DiskIOHandler::waitForOne() {
     std::vector<aiocb*> tasks;
+    malloc_accounting_set_scope("waitForOne.resize");
     tasks.resize(this->writeReqs.size());
+    malloc_accounting_default_scope();
     int i = 0;
     for (auto p : this->writeReqs) {
       if (p.second->done) {
@@ -420,16 +430,34 @@ Application::Application(string filename) {
 }
 
 void Application::initialize() {
+  init_malloc_accounting();
   auto tup2 = handle_InitState();
   this->k = tup2.first;
   this->hs = tup2.second;
+  malloc_accounting_set_scope("Application::initialize DiskIOHandler");
   this->io = make_shared<DiskIOHandler>(this->filename);
+  malloc_accounting_default_scope();
+}
+
+Application::~Application()
+{
+  Sync();
+  EvictEverything();
+  fini_malloc_accounting();
 }
 
 void Application::crash() {
   LOG("'crashing' and reinitializing");
   LOG("");
   initialize();
+}
+
+void Application::EvictEverything() {
+  handle_EvictEverything(k, hs, io);
+}
+
+void Application::CountAmassAllocations() {
+  handle_CountAmassAllocations(k, hs, io);
 }
 
 void Application::Sync() {
@@ -729,3 +757,93 @@ void Mkfs(string filename) {
   close(fd);
 }
 
+namespace MallocAccounting_Compile {
+void __default::set_amass_mode(bool b) {
+  horrible_amass_label = b ? "in_amass" : NULL;
+}
+}
+
+namespace AllocationReport_Compile {
+static std::unordered_map<uint64_t, uint64_t> sptr_to_len;
+
+void __default::start() {
+  printf("allocationreport start\n");
+  sptr_to_len.clear();
+}
+
+#if TRACK_DOWN_UNDERLYING_ALLOCATIONS
+static void visit_uptr(std::set<uint64_t>* observed_ptrs, const DafnySequence<uint8>& ref) {
+  uint64_t uptr = (uint64_t) ref.sptr.get();
+  observed_ptrs->insert(uptr);
+  uint64_t underlying_size = ref.dbg_underlying_len;
+  if (sptr_to_len.find(uptr) != sptr_to_len.end()) {
+    assert(sptr_to_len.at(uptr) == underlying_size);
+  } else {
+    sptr_to_len.insert(std::make_pair(uptr, underlying_size));
+  }
+}
+
+void __default::sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node) {
+  const char* type = "unpossible";
+  int count = -1;
+
+  std::set<uint64_t> observed_ptrs;
+  for (size_t i=0; i<node->pivotTable.len; i++) {
+    DafnySequence<uint8> pivot = node->pivotTable.start[i];
+    visit_uptr(&observed_ptrs, pivot);
+  }
+
+  for (size_t i=0; i<node->buckets.len; i++) {
+    std::shared_ptr<BucketImpl_Compile::MutBucket> bucket = node->buckets.start[i];
+
+    if ((((bucket->format)).is_BucketFormat_BFTree())) {
+      type = "tree";
+    } else if ((((bucket->format)).is_BucketFormat_BFKvl())) {
+      KVList_Compile::Kvl kvl = bucket->GetKvl();
+      DafnySequence<DafnySequence<uint8>> keys = kvl.keys;
+      for (size_t i=0; i<keys.len; i++) {
+        DafnySequence<uint8> key = keys.start[i];
+        visit_uptr(&observed_ptrs, key);
+      }
+      DafnySequence<ValueMessage_Compile::Message> messages = kvl.messages;
+      for (size_t i=0; i<messages.len; i++) {
+        auto message = messages.start[i];
+        assert(message.is_Message_Define());
+        DafnySequence<uint8> value_message = message.dtor_value();
+        visit_uptr(&observed_ptrs, value_message);
+      }
+      type = "kvl";
+    } else if ((((bucket->format)).is_BucketFormat_BFPkv())) {
+      type = "pkv";
+      auto pkv = bucket->pkv;
+      for (size_t i=0; i<pkv.keys.offsets.len; i++) {
+        auto key = PackedKV_Compile::__default::GetKey(pkv, i);
+        visit_uptr(&observed_ptrs, key);
+      }
+      for (size_t i=0; i<pkv.messages.offsets.len; i++) {
+        auto message = PackedKV_Compile::__default::GetMessage(pkv, i);
+        assert(message.is_Message_Define());
+        DafnySequence<uint8> value_message = message.dtor_value();
+        visit_uptr(&observed_ptrs, value_message);
+      }
+    }
+  }
+
+  count = observed_ptrs.size();
+  printf("allocationreport ref %lu type %s observed_sptr_count %d\n", ref, type, count);
+}
+#else // TRACK_DOWN_UNDERLYING_ALLOCATIONS
+void __default::sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node) {
+}
+#endif // TRACK_DOWN_UNDERLYING_ALLOCATIONS
+
+void __default::stop() {
+  uint64_t total_underlying = 0;
+  for (auto it : sptr_to_len) {
+    total_underlying += it.second;
+  }
+  printf("allocationreport stop underyling_count %lu total_underlying %lu\n",
+       sptr_to_len.size(), total_underlying);
+}
+
+} // AllocationReport_Compile
