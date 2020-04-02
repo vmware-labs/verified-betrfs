@@ -280,7 +280,6 @@ module CommitterCommitImpl {
   returns (id: uint64)
   requires cm.Inv()
   modifies cm.Repr
-  modifies cm.Repr
   ensures cm.W()
   ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
   ensures (cm.I(), id) == CommitterCommitModel.pushSync(
@@ -299,9 +298,123 @@ module CommitterCommitImpl {
     cm.reveal_ReprInv();
   }
 
-  lemma popSync(k: Constants, cm: CM, id: uint64) : (cm' : CM)
-  requires CommitterModel.WF(cm)
+  // == popSync ==
+
+  method popSync(k: ImplConstants, cm: Committer, id: uint64)
+  requires cm.Inv()
+  modifies cm.Repr
+  ensures cm.W()
+  ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
+  ensures cm.I() == CommitterCommitModel.popSync(
+      Ic(k), old(cm.I()), id)
   {
-    cm.(syncReqs := MutableMapModel.Remove(cm.syncReqs, id))
+    CommitterCommitModel.reveal_popSync();
+    cm.reveal_ReprInv();
+
+    cm.syncReqs.Remove(id);
+
+    cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
+    cm.reveal_ReprInv();
+  }
+
+  // == AdvanceLog ==
+
+  method tryAdvanceLog(k: ImplConstants, cm: Committer, io: DiskIOHandler)
+  requires cm.Inv()
+  requires io.initialized()
+  requires io !in cm.Repr
+  requires cm.status == CommitterModel.StatusReady
+  modifies cm.Repr
+  modifies io
+  ensures cm.W()
+  ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
+  ensures CommitterCommitModel.tryAdvanceLog(
+      Ic(k), old(cm.I()), old(IIO(io)), cm.I(), IIO(io))
+  {
+    CommitterCommitModel.reveal_tryAdvanceLog();
+
+    var hasFrozen := cm.journalist.hasFrozenJournal();
+    var hasInMem := cm.journalist.hasInMemoryJournal();
+    if cm.superblockWrite.None? {
+      if hasFrozen || hasInMem {
+        WriteOutJournal(k, cm, io);
+      } else if (cm.outstandingJournalWrites == {}) {
+        writeOutSuperblockAdvanceLog(k, cm, io);
+      } else {
+        print "tryAdvanceLog: doing nothing, has outstanding journal writes\n";
+      }
+    } else {
+      print "tryAdvanceLog: doing nothing, has outstanding journal writes\n";
+    }
+  }
+
+  method tryAdvanceLocation(k: ImplConstants, cm: Committer, io: DiskIOHandler)
+  requires cm.Inv()
+  requires io.initialized()
+  requires io !in cm.Repr
+  requires cm.status == CommitterModel.StatusReady
+  requires cm.frozenLoc.Some?
+  modifies cm.Repr
+  modifies io
+  ensures cm.W()
+  ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
+  ensures CommitterCommitModel.tryAdvanceLocation(
+      Ic(k), old(cm.I()), old(IIO(io)), cm.I(), IIO(io))
+  {
+    CommitterCommitModel.reveal_tryAdvanceLocation();
+
+    var hasFrozen := cm.journalist.hasFrozenJournal();
+    var hasInMem := cm.journalist.hasInMemoryJournal();
+    if cm.superblockWrite.None? {
+      if hasFrozen || hasInMem {
+        WriteOutJournal(k, cm, io);
+      } else if (cm.outstandingJournalWrites == {}) {
+        writeOutSuperblockAdvanceLocation(k, cm, io);
+      } else {
+        print "tryAdvanceLocation: doing nothing, has outstanding journal writes\n";
+      }
+    } else {
+      print "tryAdvanceLocation: doing nothing, has outstanding journal writes\n";
+    }
+  }
+
+  method writeBackSuperblockResp(k: ImplConstants, cm: Committer)
+  requires cm.Inv()
+  modifies cm.Repr
+  ensures cm.W()
+  ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
+  ensures cm.I() == CommitterCommitModel.writeBackSuperblockResp(
+      Ic(k), old(cm.I()));
+  {
+    CommitterCommitModel.reveal_writeBackSuperblockResp();
+    cm.reveal_ReprInv();
+
+    if cm.status.StatusReady? && cm.commitStatus.CommitAdvanceLocation? {
+      var writtenJournalLen := cm.journalist.getWrittenJournalLen();
+
+      cm.superblockWrite := None;
+      cm.superblock := cm.newSuperblock.value;
+      cm.newSuperblock := None;
+      cm.whichSuperblock := if cm.whichSuperblock == 0 then 1 else 0;
+      cm.syncReqs := SyncReqs2to1(cm.syncReqs);
+      cm.journalist.updateWrittenJournalLen(
+            writtenJournalLen - cm.frozenJournalPosition);
+      cm.frozenJournalPosition := 0;
+      cm.frozenLoc := None;
+      cm.isFrozen := false;
+      cm.commitStatus := JC.CommitNone;
+    } else if cm.status.StatusReady? && cm.commitStatus.CommitAdvanceLog? {
+      cm.superblockWrite := None;
+      cm.superblock := cm.newSuperblock.value;
+      cm.newSuperblock := None;
+      cm.whichSuperblock := if cm.whichSuperblock == 0 then 1 else 0;
+      cm.syncReqs := SyncReqs2to1(cm.syncReqs);
+      cm.commitStatus := JC.CommitNone;
+    } else {
+      print "writeBackSuperblockResp: didn't do anything\n";
+    }
+
+    cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
+    cm.reveal_ReprInv();
   }
 }
