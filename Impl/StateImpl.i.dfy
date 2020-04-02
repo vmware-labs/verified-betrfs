@@ -109,6 +109,7 @@ module {:extern} StateImpl {
     }
   }
 
+  // TODO rename to like... BlockCache variables or smthn
   class Variables {
     var loading: bool;
     var ready: bool;
