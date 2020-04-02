@@ -7,6 +7,7 @@ module SplitModel {
   import opened BookkeepingModel
   import opened NodeModel
   import opened ViewOp
+  import opened DiskOpModel
 
   import opened Options
   import opened Maps

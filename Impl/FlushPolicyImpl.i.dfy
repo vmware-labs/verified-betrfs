@@ -16,6 +16,7 @@ module FlushPolicyImpl {
   import FlushPolicyModel
   import opened StateImpl
   import opened BucketImpl
+  import opened DiskOpImpl
 
   import opened Sequences
 
@@ -166,14 +167,14 @@ module FlushPolicyImpl {
 
     LruModel.LruUse(s.lru.Queue, BT.G.Root());
     s.lru.Use(BT.G.Root());
-    assert SM.IVars(s.I()) == SM.IVars(old(s.I()));
+    assert SM.IBlockCache(s.I()) == SM.IBlockCache(old(s.I()));
 
     FlushPolicyModel.getActionToFlushValidAction(Ic(k), s.I(), [BT.G.Root()], []);
     var action := getActionToFlush(k, s, [BT.G.Root()], []);
 
     match action {
       case ActionPageIn(ref) => {
-        PageInReq(k, s, io, ref);
+        PageInNodeReq(k, s, io, ref);
       }
       case ActionSplit(parentref, slot) => {
         var parent := s.cache.GetOpt(parentref);

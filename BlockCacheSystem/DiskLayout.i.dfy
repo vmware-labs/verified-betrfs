@@ -64,8 +64,8 @@ module DiskLayout {
 
   predicate method ValidIndirectionTableAddr(addr: Addr) {
     && (
-      || addr == 2 * 1024
-      || addr == 2 * 1024 + IndirectionTableMaxLength()
+      || addr == IndirectionTable1Addr()
+      || addr == IndirectionTable2Addr()
     )
   }
 

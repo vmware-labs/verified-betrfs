@@ -5,6 +5,7 @@ module GrowModel {
   import opened IOModel
   import opened BookkeepingModel
   import opened ViewOp
+  import opened DiskOpModel
 
   import opened Options
   import opened Maps

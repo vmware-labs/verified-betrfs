@@ -295,7 +295,7 @@ module CommitterCommitModel {
     && var id := cm'.superblockWrite.value;
 
     && RequestWrite(io, loc, SectorSuperblock(newSuperblock),
-        Some(id), io')
+        id, io')
     && cm' == cm
       .(newSuperblock := Some(newSuperblock))
       .(superblockWrite := Some(id))
@@ -335,7 +335,7 @@ module CommitterCommitModel {
     var id := cm'.superblockWrite.value;
 
     RequestWriteCorrect(io, loc, SectorSuperblock(newSuperblock),
-        Some(id), io');
+        id, io');
 
     assert ValidDiskOp(diskOp(io'));
 
@@ -366,7 +366,7 @@ module CommitterCommitModel {
       start_pos_add(
           cm.superblock.journalStart,
           cm.frozenJournalPosition),
-      (writtenJournalLen - cm.frozenJournalPosition) as uint64,
+      writtenJournalLen - cm.frozenJournalPosition,
       cm.frozenLoc.value
     );
 
@@ -376,7 +376,7 @@ module CommitterCommitModel {
     && var id := cm'.superblockWrite.value;
 
     && RequestWrite(io, loc, SectorSuperblock(newSuperblock),
-        Some(id), io')
+        id, io')
     && cm' == cm
       .(newSuperblock := Some(newSuperblock))
       .(superblockWrite := Some(id))
@@ -421,7 +421,7 @@ module CommitterCommitModel {
     var id := cm'.superblockWrite.value;
 
     RequestWriteCorrect(io, loc, SectorSuperblock(newSuperblock),
-        Some(id), io');
+        id, io');
 
     assert ValidDiskOp(diskOp(io'));
 

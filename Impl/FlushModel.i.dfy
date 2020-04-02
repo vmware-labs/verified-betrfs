@@ -8,6 +8,7 @@ module FlushModel {
   import opened IOModel
   import opened BookkeepingModel
   import opened ViewOp
+  import opened DiskOpModel
   import KVListPartialFlush
 
   import opened Options

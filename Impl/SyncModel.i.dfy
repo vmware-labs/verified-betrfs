@@ -11,6 +11,7 @@ module SyncModel {
   import opened IOModel
   import opened BookkeepingModel
   import opened DeallocModel
+  import opened DiskOpModel
   import opened Bounds
   import opened ViewOp
   import opened InterpretationDiskOps
@@ -409,6 +410,7 @@ module SyncModel {
   ensures var (s', io', froze) := maybeFreeze(k, s, io);
     && WFBCVars(s')
     && ValidDiskOp(diskOp(io'))
+    && IDiskOp(diskOp(io')).jdop.NoDiskOp?
     && (froze ==> BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, FreezeOp))
     && (!froze ==>
       || BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp)
@@ -473,6 +475,7 @@ module SyncModel {
   requires s.outstandingIndirectionTableWrite.None?
   ensures WFBCVars(s')
   ensures ValidDiskOp(diskOp(io'))
+  ensures IDiskOp(diskOp(io')).jdop.NoDiskOp?
   ensures BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp)
   {
     var id, loc :| 
@@ -544,6 +547,7 @@ module SyncModel {
 
   ensures WFBCVars(s')
   ensures ValidDiskOp(diskOp(io'))
+  ensures IDiskOp(diskOp(io')).jdop.NoDiskOp?
   ensures BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp)
   {
     assert ref in IIndirectionTable(s.frozenIndirectionTable.value).graph;
@@ -592,13 +596,14 @@ module SyncModel {
           if (diskOp(io').ReqWriteOp?) then (
             && s'.Ready?
             && var id := Some(diskOp(io').id);
-            && var loc := Some(s'.persistentIndirectionTableLoc);
+            && var loc := s'.frozenIndirectionTableLoc;
             && FindIndirectionTableLocationAndRequestWrite(
-                io, s, SectorIndirectionTable(s0.frozenIndirectionTable.value),
+                io, s0, SectorIndirectionTable(s0.frozenIndirectionTable.value),
                 id, loc, io')
+            && loc.Some?
             && s' ==
                 s0.(outstandingIndirectionTableWrite := id)
-                  .(frozenIndirectionTableLoc := Some(loc.value))
+                  .(frozenIndirectionTableLoc := loc)
             && froze == false
           ) else (
             && s' == s0
@@ -646,8 +651,8 @@ module SyncModel {
         } else {
           if (diskOp(io').ReqWriteOp?) {
             var id := Some(diskOp(io').id);
-            var loc := Some(s'.persistentIndirectionTableLoc);
-            FindIndirectionTableLocationAndRequestWriteCorrect(
+            var loc := s'.frozenIndirectionTableLoc;
+            FindIndirectionTableLocationAndRequestWriteCorrect(k,
                 io, s, SectorIndirectionTable(s0.frozenIndirectionTable.value),
                 id, loc, io');
             assert BC.WriteBackIndirectionTableReq(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp);

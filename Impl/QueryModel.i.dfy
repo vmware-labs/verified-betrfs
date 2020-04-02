@@ -17,6 +17,7 @@ module QueryModel {
   import opened InterpretationDiskOps
   import ValueType
   import opened ValueMessage
+  import opened DiskOpModel
 
   import opened Options
   import opened Maps

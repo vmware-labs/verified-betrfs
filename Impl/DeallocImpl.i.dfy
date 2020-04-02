@@ -4,6 +4,7 @@ include "DeallocModel.i.dfy"
 module DeallocImpl { 
   import opened IOImpl
   import opened BookkeepingImpl
+  import opened DiskOpImpl
   import DeallocModel
   import opened StateImpl
   import opened Bounds

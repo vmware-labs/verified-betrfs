@@ -13,11 +13,12 @@ module SyncImpl {
   import opened BookkeepingImpl
   import opened DeallocImpl
   import opened Bounds
-  import opened LBAType
+  import opened DiskLayout
   import SyncModel
   import BookkeepingModel
   import DeallocModel
   import BlockAllocatorModel
+  import opened DiskOpImpl
   import opened StateImpl
 
   import opened Options
@@ -93,7 +94,8 @@ module SyncImpl {
   }
 
   method {:fuel BC.GraphClosed,0} {:fuel BC.CacheConsistentWithSuccessors,0}
-  syncNotFrozen(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  maybeFreeze(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  returns (froze: bool)
   requires io.initialized()
   modifies io
   requires Inv(k, s)
@@ -103,22 +105,22 @@ module SyncImpl {
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures (s.I(), IIO(io)) == SyncModel.syncNotFrozen(Ic(k), old(s.I()), old(IIO(io)))
+  ensures (s.I(), IIO(io), froze) == SyncModel.maybeFreeze(
+      Ic(k), old(s.I()), old(IIO(io)))
   {
     var foundDeallocable := FindDeallocable(s);
     DeallocModel.FindDeallocableCorrect(s.I());
     if foundDeallocable.Some? {
       Dealloc(k, s, io, foundDeallocable.value);
-      return;
+      return false;
     }
 
     var clonedEphemeralIndirectionTable := s.ephemeralIndirectionTable.Clone();
 
     s.frozenIndirectionTable := clonedEphemeralIndirectionTable;
-    s.syncReqs := SyncReqs3to2(s.syncReqs);
     s.blockAllocator.CopyEphemeralToFrozen();
 
-    return;
+    return true;
   }
 
   method TryToWriteBlock(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
@@ -137,7 +139,7 @@ module SyncImpl {
     var node := nodeOpt.value;
 
     assert node.I() == s.cache.I()[ref];
-    var id, loc := FindLocationAndRequestWrite(io, s, SectorBlock(node));
+    var id, loc := FindLocationAndRequestWrite(io, s, SectorNode(node));
 
     if (id.Some?) {
       SM.reveal_ConsistentBitmap();
@@ -149,7 +151,7 @@ module SyncImpl {
       print "sync: giving up; write req failed\n";
     }
 
-    assert IOModel.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(SM.SectorBlock(s.cache.I()[ref])), id, loc, IIO(io));
+    assert IOModel.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(SM.SectorNode(s.cache.I()[ref])), id, loc, IIO(io));
     assert SyncModel.WriteBlockUpdateState(Ic(k), old(s.I()), ref, id, loc, s.I());
   }
 
@@ -182,32 +184,28 @@ module SyncImpl {
   }
 
   method {:fuel BC.GraphClosed,0} sync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  returns (wait: bool)
+  returns (froze: bool, wait: bool)
   requires Inv(k, s)
   requires io.initialized()
   requires io !in s.Repr()
+  requires s.ready
   modifies io
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures SyncModel.sync(Ic(k), old(s.I()), old(IIO(io)), s.I(), IIO(io))
+  ensures SyncModel.sync(Ic(k), old(s.I()), old(IIO(io)), s.I(), IIO(io), froze)
   {
     SyncModel.reveal_sync();
     wait := false;
+    froze := false;
 
-    if (!s.ready) {
-      // TODO we could just do nothing here instead
-      PageInIndirectionTableReq(k, s, io);
-      return;
-    }
-
-    if (s.outstandingIndirectionTableWrite.Some?) {
+    if s.frozenIndirectionTableLoc.Some? {
       //print "sync: waiting; frozen table is currently being written\n";
       wait := true;
       return;
     }
 
     if (s.frozenIndirectionTable == null) {
-      syncNotFrozen(k, s, io);
+      froze := maybeFreeze(k, s, io);
       return;
     }
     var foundInFrozen := s.frozenIndirectionTable.FindRefWithNoLoc();
@@ -222,67 +220,18 @@ module SyncImpl {
       wait := true;
       return;
     } else {
-      var id := RequestWrite(io, IndirectionTableLocation(), SectorIndirectionTable(s.frozenIndirectionTable));
+      var id, loc := FindIndirectionTableLocationAndRequestWrite(
+          io, s, SectorIndirectionTable(s.frozenIndirectionTable));
+    
       if (id.Some?) {
         s.outstandingIndirectionTableWrite := id;
+        s.frozenIndirectionTableLoc := loc;
+
         return;
       } else {
         print "sync: giving up; write back indirection table failed (no id)\n";
         return;
       }
-    }
-  }
-
-  // == pushSync ==
-
-  method freeId<A>(syncReqs: MutableMap.ResizingHashMap<A>) returns (id: uint64)
-  requires syncReqs.Inv()
-  ensures id == SyncModel.freeId(syncReqs.I())
-  {
-    SyncModel.reveal_freeId();
-    var maxId := syncReqs.MaxKey();
-    if maxId == 0xffff_ffff_ffff_ffff {
-      return 0;
-    } else {
-      return maxId + 1;
-    }
-  }
-
-  method pushSync(k: ImplConstants, s: ImplVariables)
-  returns (id: uint64)
-  requires Inv(k, s)
-  modifies s.Repr()
-  ensures WellUpdated(s)
-  ensures (s.I(), id) == SyncModel.pushSync(Ic(k), old(s.I()))
-  {
-    id := freeId(s.syncReqs);
-    if id != 0 && s.syncReqs.Count < 0x2000_0000_0000_0000 {
-      s.syncReqs.Insert(id, BC.State3);
-    } else {
-      id := 0;
-    }
-  }
-
-  // == popSync ==
-
-  method popSync(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, id: uint64)
-  returns (wait: bool, success: bool)
-  requires Inv(k, s)
-  requires io.initialized()
-  requires io !in s.Repr()
-  modifies io
-  modifies s.Repr()
-  ensures WellUpdated(s)
-  ensures SyncModel.popSync(Ic(k), old(s.I()), old(IIO(io)), id, s.I(), success, IIO(io))
-  {
-    var g := s.syncReqs.Get(id);
-    if (g.Some? && g.value == BC.State1) {
-      success := true;
-      wait := false;
-      s.syncReqs.Remove(id);
-    } else {
-      success := false;
-      wait := sync(k, s, io);
     }
   }
 }

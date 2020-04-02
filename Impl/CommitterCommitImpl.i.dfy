@@ -1,6 +1,7 @@
 include "CommitterImpl.i.dfy"
 include "CommitterCommitModel.i.dfy"
 include "DiskOpImpl.i.dfy"
+include "IOImpl.i.dfy"
 
 module CommitterCommitImpl {
   import opened NativeTypes
@@ -12,6 +13,8 @@ module CommitterCommitImpl {
   import opened JournalBytes
   import opened DiskOpImpl
   import opened MainDiskIOHandler
+  import opened IOImpl
+  import StateImpl
   import SectorType
   import MutableMapModel
 
@@ -142,13 +145,15 @@ module CommitterCommitImpl {
   requires io.initialized()
   requires cm.Inv()
   requires io !in cm.Repr
+  requires cm.status == CommitterModel.StatusReady
   modifies cm.Repr
   modifies io
+  ensures cm.W()
   ensures cm.Repr == old(cm.Repr)
   ensures CommitterCommitModel.writeOutSuperblockAdvanceLog(
       Ic(k), old(cm.I()), old(IIO(io)), cm.I(), IIO(io))
   {
-    CommitterCommitModel.reveal_writeOutSuperblockAdvanceLog();
+    //CommitterCommitModel.reveal_writeOutSuperblockAdvanceLog();
     cm.reveal_ReprInv();
 
     var writtenJournalLen := cm.journalist.getWrittenJournalLen();
@@ -160,23 +165,143 @@ module CommitterCommitImpl {
       cm.superblock.indirectionTableLoc
     );
 
+    assert JC.WFSuperblock(newSuperblock);
+
     var loc := if cm.whichSuperblock == 0 then Superblock2Location() else Superblock1Location();
+    var id := RequestWrite(io, loc,
+        StateImpl.SectorSuperblock(newSuperblock));
 
-    var id := RequestWrite(io, loc, SectorSuperblock(newSuperblock));
-
-    && cm'.superblockWrite.Some?
-    && var id := cm'.superblockWrite.value;
-
-    && RequestWrite(io, loc, SectorSuperblock(newSuperblock),
-        Some(id), io')
-    && cm' == cm
-      .(newSuperblock := Some(newSuperblock))
-      .(superblockWrite := Some(id))
-      .(commitStatus := JC.CommitAdvanceLog)
-
+    cm.newSuperblock := Some(newSuperblock);
+    cm.superblockWrite := Some(id);
+    cm.commitStatus := JC.CommitAdvanceLog;
 
     cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
     cm.reveal_ReprInv();
   }
   
+  method writeOutSuperblockAdvanceLocation(
+      k: ImplConstants, cm: Committer, io: DiskIOHandler)
+  requires io.initialized()
+  requires cm.Inv()
+  requires io !in cm.Repr
+  requires cm.status == CommitterModel.StatusReady
+  requires cm.frozenLoc.Some?
+  modifies cm.Repr
+  modifies io
+  ensures cm.W()
+  ensures cm.Repr == old(cm.Repr)
+  ensures CommitterCommitModel.writeOutSuperblockAdvanceLocation(
+      Ic(k), old(cm.I()), old(IIO(io)), cm.I(), IIO(io))
+  {
+    CommitterCommitModel.reveal_writeOutSuperblockAdvanceLocation();
+    cm.reveal_ReprInv();
+
+    var writtenJournalLen := cm.journalist.getWrittenJournalLen();
+
+    var newSuperblock := SectorType.Superblock(
+      JC.IncrementSuperblockCounter(cm.superblock.counter),
+      CommitterCommitModel.start_pos_add(
+          cm.superblock.journalStart,
+          cm.frozenJournalPosition),
+      writtenJournalLen - cm.frozenJournalPosition,
+      cm.frozenLoc.value
+    );
+
+    assert JC.WFSuperblock(newSuperblock);
+
+    var loc := if cm.whichSuperblock == 0 then Superblock2Location() else Superblock1Location();
+    var id := RequestWrite(io, loc,
+        StateImpl.SectorSuperblock(newSuperblock));
+
+    cm.newSuperblock := Some(newSuperblock);
+    cm.superblockWrite := Some(id);
+    cm.commitStatus := JC.CommitAdvanceLocation;
+
+    cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
+    cm.reveal_ReprInv();
+  }
+
+  method freeze(k: ImplConstants, cm: Committer)
+  requires cm.WF()
+  modifies cm.Repr
+  ensures cm.W()
+  ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
+  ensures cm.I() == CommitterCommitModel.freeze(Ic(k), old(cm.I()))
+  {
+    CommitterCommitModel.reveal_freeze();
+    cm.reveal_ReprInv();
+
+    var writtenJournalLen := cm.journalist.getWrittenJournalLen();
+
+    cm.journalist.freeze();
+
+    cm.frozenLoc := None;
+    cm.frozenJournalPosition := writtenJournalLen;
+    cm.isFrozen := true;
+    cm.syncReqs := SyncReqs3to2(cm.syncReqs);
+
+    cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
+    cm.reveal_ReprInv();
+  }
+
+  method receiveFrozenLoc(
+      k: ImplConstants, cm: Committer, loc: Location)
+  requires cm.W()
+  modifies cm.Repr
+  ensures cm.W()
+  ensures cm.Repr == old(cm.Repr)
+  ensures cm.I() == CommitterCommitModel.receiveFrozenLoc(
+        Ic(k), old(cm.I()), loc)
+  {
+    CommitterCommitModel.reveal_receiveFrozenLoc();
+    cm.reveal_ReprInv();
+
+    cm.frozenLoc := Some(loc);
+
+    cm.reveal_ReprInv();
+  }
+
+  // == pushSync ==
+
+  method freeId<A>(syncReqs: MutableMap.ResizingHashMap<A>) returns (id: uint64)
+  requires syncReqs.Inv()
+  ensures id == CommitterCommitModel.freeId(syncReqs.I())
+  {
+    CommitterCommitModel.reveal_freeId();
+    var maxId := syncReqs.MaxKey();
+    if maxId == 0xffff_ffff_ffff_ffff {
+      return 0;
+    } else {
+      return maxId + 1;
+    }
+  }
+
+  method pushSync(k: ImplConstants, cm: Committer)
+  returns (id: uint64)
+  requires cm.Inv()
+  modifies cm.Repr
+  modifies cm.Repr
+  ensures cm.W()
+  ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
+  ensures (cm.I(), id) == CommitterCommitModel.pushSync(
+      Ic(k), old(cm.I()))
+  {
+    cm.reveal_ReprInv();
+
+    id := freeId(cm.syncReqs);
+    if id != 0 && cm.syncReqs.Count < 0x2000_0000_0000_0000 {
+      cm.syncReqs.Insert(id, JC.State3);
+    } else {
+      id := 0;
+    }
+
+    cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
+    cm.reveal_ReprInv();
+  }
+
+  lemma popSync(k: Constants, cm: CM, id: uint64) : (cm' : CM)
+  requires CommitterModel.WF(cm)
+  {
+    cm.(syncReqs := MutableMapModel.Remove(cm.syncReqs, id))
+  }
 }

@@ -9,6 +9,7 @@ module InsertModel {
   import opened NodeModel
   import opened InterpretationDiskOps
   import opened ViewOp
+  import opened DiskOpModel
 
   import opened Options
   import opened Maps

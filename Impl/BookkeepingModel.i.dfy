@@ -5,6 +5,7 @@ include "../lib/Base/Sets.i.dfy"
 module BookkeepingModel { 
   import opened StateModel
   import opened IOModel
+  import opened DiskOpModel
 
   import opened Options
   import opened Maps

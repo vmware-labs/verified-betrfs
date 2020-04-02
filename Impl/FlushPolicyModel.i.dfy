@@ -15,6 +15,7 @@ module FlushPolicyModel {
   import opened LeafModel
   import opened EvictModel
   import opened InterpretationDiskOps
+  import opened DiskOpModel
 
   import opened Sequences
 

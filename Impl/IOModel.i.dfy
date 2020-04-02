@@ -113,53 +113,41 @@ module IOModel {
     }
   }
 
-  predicate {:opaque} RequestWrite(io: IO, loc: DiskLayout.Location, sector: Sector,
-      id: Option<D.ReqId>, io': IO)
+  predicate {:opaque} RequestWrite(
+      io: IO, loc: DiskLayout.Location, sector: Sector,
+      id: D.ReqId, io': IO)
   {
-    var dop := diskOp(io');
-    && (dop.NoDiskOp? || dop.ReqWriteOp?)
-    && (dop.NoDiskOp? ==>
-      && id == None
-      && io' == io
-    )
-    && (dop.ReqWriteOp? ==> (
-      var bytes: seq<byte> := dop.reqWrite.bytes;
-      && |bytes| <= IndirectionTableBlockSize() as int
-      && 32 <= |bytes|
-      && IMM.parseCheckedSector(bytes).Some?
-      && WFSector(sector)
-      // Note: we have to say this instead of just
-      //     IMM.parseCheckedSector(bytes).value == sector
-      // because the indirection table might not parse to an indirection table
-      // with exactly the same internals.
-      && ISector(IMM.parseCheckedSector(bytes).value) == ISector(sector)
+    && var dop := diskOp(io');
+    && dop.ReqWriteOp?
+    && var bytes: seq<byte> := dop.reqWrite.bytes;
+    && |bytes| == 4096
+    && IMM.parseCheckedSector(bytes).Some?
+    && WFSector(sector)
+    // Note: we have to say this instead of just
+    //     IMM.parseCheckedSector(bytes).value == sector
+    // because the indirection table might not parse to an indirection table
+    // with exactly the same internals.
+    && ISector(IMM.parseCheckedSector(bytes).value) == ISector(sector)
 
-      && |bytes| == loc.len as int
-      && id == Some(dop.id)
-      && dop == D.ReqWriteOp(id.value, D.ReqWrite(loc.addr, bytes))
-      && io' == IOReqWrite(id.value, dop.reqWrite)
-    ))
+    && |bytes| == loc.len as int
+    && id == dop.id
+    && dop == D.ReqWriteOp(id, D.ReqWrite(loc.addr, bytes))
+    && io' == IOReqWrite(id, dop.reqWrite)
   }
 
   lemma RequestWriteCorrect(io: IO, loc: DiskLayout.Location, sector: Sector,
-      id: Option<D.ReqId>, io': IO)
+      id: D.ReqId, io': IO)
   requires WFSector(sector)
   requires sector.SectorNode? ==> BT.WFNode(INode(sector.node))
   requires DiskLayout.ValidLocation(loc)
-  requires DiskLayout.ValidNodeLocation(loc) ==> sector.SectorNode?
-  requires DiskLayout.ValidIndirectionTableLocation(loc) ==> sector.SectorIndirectionTable?
-  requires DiskLayout.ValidSuperblockLocation(loc) ==> sector.SectorSuperblock?
-  requires DiskLayout.ValidJournalLocation(loc) ==> false
+  requires DiskLayout.ValidSuperblockLocation(loc)
+  requires sector.SectorSuperblock?
   requires RequestWrite(io, loc, sector, id, io');
   ensures ValidDiskOp(diskOp(io'))
-  ensures sector.SectorNode? ==> id.Some? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteNodeOp(id.value, BlockDisk.ReqWriteNode(loc, ISector(sector).node)), JournalDisk.NoDiskOp)
-  ensures sector.SectorIndirectionTable? ==> id.Some? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteIndirectionTableOp(id.value, BlockDisk.ReqWriteIndirectionTable(loc, ISector(sector).indirectionTable)), JournalDisk.NoDiskOp)
-  ensures sector.SectorSuperblock? ==> id.Some? ==> ValidSuperblock1Location(loc) ==>
-    IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.NoDiskOp, JournalDisk.ReqWriteSuperblockOp(id.value, 0, JournalDisk.ReqWriteSuperblock(sector.superblock)))
-  ensures sector.SectorSuperblock? ==> id.Some? ==> ValidSuperblock2Location(loc) ==>
-    IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.NoDiskOp, JournalDisk.ReqWriteSuperblockOp(id.value, 1, JournalDisk.ReqWriteSuperblock(sector.superblock)))
-
-  ensures id.None? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.NoDiskOp, JournalDisk.NoDiskOp)
+  ensures ValidSuperblock1Location(loc) ==>
+    IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.NoDiskOp, JournalDisk.ReqWriteSuperblockOp(id, 0, JournalDisk.ReqWriteSuperblock(sector.superblock)))
+  ensures ValidSuperblock2Location(loc) ==>
+    IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.NoDiskOp, JournalDisk.ReqWriteSuperblockOp(id, 1, JournalDisk.ReqWriteSuperblock(sector.superblock)))
   {
     reveal_RequestWrite();
     IMM.reveal_parseCheckedSector();
@@ -273,8 +261,8 @@ module IOModel {
     ))
   }
 
-  lemma FindIndirectionTableLocationAndRequestWriteCorrect(io: IO, s: BCVariables, sector: Sector, id: Option<D.ReqId>, loc: Option<DiskLayout.Location>, io': IO)
-  requires WFBCVars(s)
+  lemma FindIndirectionTableLocationAndRequestWriteCorrect(k: Constants, io: IO, s: BCVariables, sector: Sector, id: Option<D.ReqId>, loc: Option<DiskLayout.Location>, io': IO)
+  requires BCInv(k, s)
   requires s.Ready?
   requires WFSector(sector)
   requires sector.SectorIndirectionTable?
@@ -298,6 +286,12 @@ module IOModel {
 
     var dop := diskOp(io');
     if dop.ReqWriteOp? {
+      if overlap(loc.value, s.persistentIndirectionTableLoc) {
+        overlappingIndirectionTablesSameAddr(
+            loc.value, s.persistentIndirectionTableLoc);
+        assert false;
+      }
+
       var bytes: seq<byte> := dop.reqWrite.bytes;
       var len := |bytes| as uint64;
     }
@@ -587,7 +581,6 @@ module IOModel {
   ensures var s' := PageInNodeResp(k, s, io);
     && WFBCVars(s')
     && ValidDiskOp(diskOp(io))
-    && IDiskOp(diskOp(io)).jdop.NoDiskOp?
     && BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop, StatesInternalOp)
   {
     var s' := PageInNodeResp(k, s, io);

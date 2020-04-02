@@ -14,6 +14,7 @@ module SuccModel {
   import opened KeyType
   import opened ViewOp
   import opened InterpretationDiskOps
+  import opened DiskOpModel
 
   import opened Options
   import opened Maps

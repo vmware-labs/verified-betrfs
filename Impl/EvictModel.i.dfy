@@ -7,6 +7,7 @@ module EvictModel {
   import opened BookkeepingModel
   import opened DeallocModel
   import opened SyncModel
+  import opened DiskOpModel
   import opened InterpretationDiskOps
   import opened ViewOp
 

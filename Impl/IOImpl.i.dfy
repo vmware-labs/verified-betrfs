@@ -3,7 +3,7 @@ include "IOModel.i.dfy"
 include "MarshallingImpl.i.dfy"
 
 module IOImpl { 
-  import MainDiskIOHandler
+  import opened MainDiskIOHandler
   import opened NativeTypes
   import opened Options
   import opened Maps
@@ -21,8 +21,6 @@ module IOImpl {
   import opened Bounds
   import opened SI = StateImpl
   import MutableMapModel
-
-  type DiskIOHandler = MainDiskIOHandler.DiskIOHandler
 
   // TODO does ImplVariables make sense? Should it be a Variables? Or just the fields of a class we live in?
   method getFreeLoc(s: ImplVariables, len: uint64)
@@ -42,24 +40,20 @@ module IOImpl {
   }
 
   method RequestWrite(io: DiskIOHandler, loc: Location, sector: SI.Sector)
-  returns (id: Option<D.ReqId>)
+  returns (id: D.ReqId)
   requires SI.WFSector(sector)
   requires IM.WFSector(SI.ISector(sector))
   requires io.initialized()
+  requires sector.SectorSuperblock?
+  requires ValidSuperblockLocation(loc)
   modifies io
   ensures IOModel.RequestWrite(old(IIO(io)), loc, old(ISector(sector)), id, IIO(io))
-  ensures id.Some? ==> io.diskOp().ReqWriteOp? && io.diskOp().id == id.value
-  ensures id.None? ==> old(IIO(io)) == IIO(io)
+  ensures io.diskOp().ReqWriteOp? && io.diskOp().id == id
   {
     IOModel.reveal_RequestWrite();
 
     var bytes := MarshallingImpl.MarshallCheckedSector(sector);
-    if (bytes == null || bytes.Length as uint64 != loc.len) {
-      id := None;
-    } else {
-      var i := io.write(loc.addr, bytes[..]);
-      id := Some(i);
-    }
+    id := io.write(loc.addr, bytes[..]);
   }
 
   method FindLocationAndRequestWrite(io: DiskIOHandler, s: ImplVariables, sector: SI.Sector)
@@ -93,6 +87,40 @@ module IOImpl {
       } else {
         id := None;
       }
+    }
+  }
+
+  method FindIndirectionTableLocationAndRequestWrite(
+      io: DiskIOHandler, s: ImplVariables, sector: SI.Sector)
+  returns (id: Option<D.ReqId>, loc: Option<Location>)
+  requires s.WF()
+  requires s.ready
+  requires SI.WFSector(sector)
+  requires IM.WFSector(SI.ISector(sector))
+  requires io.initialized()
+  requires io !in s.Repr()
+  requires sector.SectorIndirectionTable?
+  modifies io
+  ensures id.Some? ==> id.value == old(io.reservedId())
+  ensures s.W()
+  ensures IOModel.FindIndirectionTableLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(ISector(sector)), id, loc, IIO(io))
+  ensures old(s.I()) == s.I();
+  ensures id.Some? ==> loc.Some? && io.diskOp().ReqWriteOp? && io.diskOp().id == id.value
+  ensures id.None? ==> IIO(io) == old(IIO(io))
+  {
+    IOModel.reveal_FindIndirectionTableLocationAndRequestWrite();
+
+    var bytes := MarshallingImpl.MarshallCheckedSector(sector);
+    if (bytes == null) {
+      id := None;
+      loc := None;
+    } else {
+      var len := bytes.Length as uint64;
+      loc := Some(DiskLayout.Location(
+        otherIndirectionTableAddr(s.persistentIndirectionTableLoc.addr),
+        len));
+      var i := io.write(loc.value.addr, bytes[..]);
+      id := Some(i);
     }
   }
 
