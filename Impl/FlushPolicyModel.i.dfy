@@ -334,6 +334,7 @@ module FlushPolicyModel {
   requires runFlushPolicy(k, s, io, s', io')
   ensures WFBCVars(s')
   ensures ValidDiskOp(diskOp(io'))
+  ensures IDiskOp(diskOp(io')).jdop.NoDiskOp?
   ensures betree_next_dop(k, IBlockCache(s), IBlockCache(s'),
       IDiskOp(diskOp(io')).bdop)
   {
