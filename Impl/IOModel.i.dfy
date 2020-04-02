@@ -765,7 +765,7 @@ module IOModel {
   requires ValidDiskOp(diskOp(io))
   requires diskOp(io).RespWriteOp?
   requires s.Ready?
-  requires s.frozenIndirectionTable.Some?
+  requires s.frozenIndirectionTableLoc.Some?
   {
     var s' := s.(outstandingIndirectionTableWrite := None);
     (s', s.frozenIndirectionTableLoc.value)
@@ -807,7 +807,6 @@ module IOModel {
            .(frozenIndirectionTable := None)
            .(frozenIndirectionTableLoc := None)
            .(persistentIndirectionTableLoc := s.frozenIndirectionTableLoc.value)
-           .(persistentIndirectionTable := s.frozenIndirectionTable.value)
            .(persistentIndirectionTable := s.frozenIndirectionTable.value)
            .(blockAllocator := BlockAllocatorModel.MoveFrozenToPersistent(s.blockAllocator));
     s'

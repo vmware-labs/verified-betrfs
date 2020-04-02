@@ -324,7 +324,7 @@ module IOImpl {
   requires ValidDiskOp(io.diskOp())
   requires SI.Inv(k, s)
   requires s.ready
-  requires s.frozenIndirectionTable != null
+  requires s.frozenIndirectionTableLoc.Some?
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)
@@ -335,20 +335,20 @@ module IOImpl {
     loc := s.frozenIndirectionTableLoc.value;
   }
 
-  /*method cleanUp(k: Constants, s: BCVariables)
-  requires BCInv(k, s)
-  requires s.Ready?
-  requires s.frozenIndirectionTable.Some?
+  method cleanUp(k: ImplConstants, s: ImplVariables)
+  requires SI.Inv(k, s)
+  requires s.ready
+  requires s.frozenIndirectionTable != null
   requires s.frozenIndirectionTableLoc.Some?
+  modifies s.Repr()
+  ensures WellUpdated(s)
+  ensures s.I() == IOModel.cleanUp(Ic(k), old(s.I()))
   {
-    lemmaBlockAllocatorFrozenSome(k, s);
-    var s' := s
-           .(frozenIndirectionTable := None)
-           .(frozenIndirectionTableLoc := None)
-           .(persistentIndirectionTableLoc := s.frozenIndirectionTableLoc.value)
-           .(persistentIndirectionTable := s.frozenIndirectionTable.value)
-           .(persistentIndirectionTable := s.frozenIndirectionTable.value)
-           .(blockAllocator := BlockAllocatorModel.MoveFrozenToPersistent(s.blockAllocator));
-    s'
-  }*/
+    IOModel.lemmaBlockAllocatorFrozenSome(Ic(k), s.I());
+    s.persistentIndirectionTableLoc := s.frozenIndirectionTableLoc.value;
+    s.persistentIndirectionTable := s.frozenIndirectionTable;
+    s.frozenIndirectionTable := null;
+    s.frozenIndirectionTableLoc := None;
+    s.blockAllocator.MoveFrozenToPersistent();
+  }
 }
