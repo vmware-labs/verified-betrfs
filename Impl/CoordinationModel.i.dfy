@@ -1,8 +1,10 @@
 include "SyncModel.i.dfy"
 include "CommitterCommitModel.i.dfy"
 include "CommitterInitModel.i.dfy"
+include "CommitterAppendModel.i.dfy"
 include "QueryModel.i.dfy"
 include "SuccModel.i.dfy"
+include "InsertModel.i.dfy"
 
 module CoordinationModel {
   import opened StateModel
@@ -12,8 +14,12 @@ module CoordinationModel {
   import SyncModel
   import CommitterCommitModel
   import CommitterInitModel
+  import CommitterAppendModel
   import QueryModel
   import SuccModel
+  import InsertModel
+  import JournalistModel
+  import Journal
   import opened InterpretationDiskOps
   import opened ViewOp
   import opened NativeTypes
@@ -207,84 +213,52 @@ module CoordinationModel {
     }
   }
 
-  predicate {:opaque} popSync(
-      k: Constants, s: Variables, io: IO, id: uint64, graphSync: bool,
-      s': Variables, io': IO, success: bool)
+  predicate {:opaque} doSync(
+      k: Constants, s: Variables, io: IO, graphSync: bool,
+      s': Variables, io': IO)
   requires Inv(k, s)
   requires io.IOInit?
+  requires s.bc.Ready?
   {
-    if id in s.jc.syncReqs.contents && s.jc.syncReqs.contents[id] == JC.State1 then (
-      var jc' := CommitterCommitModel.popSync(k, s.jc, id);
-      && s' == s.(jc := jc')
-      && io' == io
-      && success == true
-    ) else if !s.bc.Ready? || !s.jc.status.StatusReady? then (
-      && (s', io') == initialization(k, s, io)
-      && success == false
-    ) else if !CommitterInitModel.isReplayEmpty(s.jc) then (
-      && s' == s
-      && io' == io
-      && success == false
-    ) else if s.jc.isFrozen then (
+    if s.jc.isFrozen then (
       if s.jc.frozenLoc.Some? then (
         && CommitterCommitModel.tryAdvanceLocation(k, s.jc, io, s'.jc, io')
         && s.bc == s'.bc
-        && success == false
       ) else (
         exists froze ::
           && SyncModel.sync(k, s.bc, io, s'.bc, io', froze)
           && s.jc == s'.jc
-          && success == false
       )
     ) else if s.jc.superblockWrite.Some? then (
       && s' == s
       && io' == io
-      && success == false
     ) else (
       if graphSync then (
         exists froze ::
           && SyncModel.sync(k, s.bc, io, s'.bc, io', froze)
           && (froze ==> s'.jc == CommitterCommitModel.freeze(k, s.jc))
           && (!froze ==> s'.jc == s.jc)
-          && success == false
       ) else (
         && CommitterCommitModel.tryAdvanceLog(k, s.jc, io, s'.jc, io')
         && s.bc == s'.bc
-        && success == false
       )
     )
   }
 
-  lemma popSyncCorrect(
-      k: Constants, s: Variables, io: IO, id: uint64, graphSync: bool,
-      s': Variables, io': IO, success: bool)
+  lemma doSyncCorrect(
+      k: Constants, s: Variables, io: IO, graphSync: bool,
+      s': Variables, io': IO)
   requires Inv(k, s)
   requires io.IOInit?
-  requires popSync(k, s, io, id, graphSync, s', io', success)
-
+  requires s.bc.Ready?
+  requires JournalistModel.I(s.jc.journalist).replayJournal == []
+  requires doSync(k, s, io, graphSync, s', io')
   ensures WFVars(s')
   ensures M.Next(Ik(k), IVars(s), IVars(s'),
-        if success then UI.PopSyncOp(id as int) else UI.NoOp,
-        diskOp(io'))
+        UI.NoOp, diskOp(io'))
   {
-    reveal_popSync();
-    CommitterInitModel.reveal_isReplayEmpty();
-    if id in s.jc.syncReqs.contents && s.jc.syncReqs.contents[id] == JC.State1 {
-      CommitterCommitModel.popSyncCorrect(k, s.jc, id);
-
-      var uiop := if success then UI.PopSyncOp(id as int) else UI.NoOp;
-      var vop := if success then PopSyncOp(id as int) else JournalInternalOp;
-      bcNoOp(k, s, s', vop);
-      assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);
-      assert BJC.Next(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
-      assert M.Next(Ik(k), IVars(s), IVars(s'), uiop, diskOp(io'));
-
-    } else if !s.bc.Ready? || !s.jc.status.StatusReady? {
-      initializationCorrect(k, s, io);
-      assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'));
-    } else if !CommitterInitModel.isReplayEmpty(s.jc) {
-      noop(k, s);
-    } else if s.jc.isFrozen {
+    reveal_doSync();
+    if s.jc.isFrozen {
       if s.jc.frozenLoc.Some? {
         CommitterCommitModel.tryAdvanceLocationCorrect(k, s.jc, io, s'.jc, io');
 
@@ -297,8 +271,7 @@ module CoordinationModel {
       } else {
         var froze :|
           && SyncModel.sync(k, s.bc, io, s'.bc, io', froze)
-          && s.jc == s'.jc
-          && success == false;
+          && s.jc == s'.jc;
         SyncModel.syncCorrect(k, s.bc, io, s'.bc, io', froze);
 
         assert !froze;
@@ -326,8 +299,7 @@ module CoordinationModel {
         var froze :|
           && SyncModel.sync(k, s.bc, io, s'.bc, io', froze)
           && (froze ==> s'.jc == CommitterCommitModel.freeze(k, s.jc))
-          && (!froze ==> s'.jc == s.jc)
-          && success == false;
+          && (!froze ==> s'.jc == s.jc);
 
           SyncModel.syncCorrect(k, s.bc, io, s'.bc, io', froze);
           if froze {
@@ -364,6 +336,64 @@ module CoordinationModel {
         assert BJC.Next(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
         assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'));
       }
+    }
+  }
+
+  predicate {:opaque} popSync(
+      k: Constants, s: Variables, io: IO, id: uint64, graphSync: bool,
+      s': Variables, io': IO, success: bool)
+  requires Inv(k, s)
+  requires io.IOInit?
+  {
+    if id in s.jc.syncReqs.contents && s.jc.syncReqs.contents[id] == JC.State1 then (
+      var jc' := CommitterCommitModel.popSync(k, s.jc, id);
+      && s' == s.(jc := jc')
+      && io' == io
+      && success == true
+    ) else if !s.bc.Ready? || !s.jc.status.StatusReady? then (
+      && (s', io') == initialization(k, s, io)
+      && success == false
+    ) else if !CommitterInitModel.isReplayEmpty(s.jc) then (
+      && s' == s
+      && io' == io
+      && success == false
+    ) else (
+      doSync(k, s, io, graphSync, s', io')
+      && success == false
+    )
+  }
+
+  lemma popSyncCorrect(
+      k: Constants, s: Variables, io: IO, id: uint64, graphSync: bool,
+      s': Variables, io': IO, success: bool)
+  requires Inv(k, s)
+  requires io.IOInit?
+  requires popSync(k, s, io, id, graphSync, s', io', success)
+
+  ensures WFVars(s')
+  ensures M.Next(Ik(k), IVars(s), IVars(s'),
+        if success then UI.PopSyncOp(id as int) else UI.NoOp,
+        diskOp(io'))
+  {
+    reveal_popSync();
+    CommitterInitModel.reveal_isReplayEmpty();
+    if id in s.jc.syncReqs.contents && s.jc.syncReqs.contents[id] == JC.State1 {
+      CommitterCommitModel.popSyncCorrect(k, s.jc, id);
+
+      var uiop := if success then UI.PopSyncOp(id as int) else UI.NoOp;
+      var vop := if success then PopSyncOp(id as int) else JournalInternalOp;
+      bcNoOp(k, s, s', vop);
+      assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);
+      assert BJC.Next(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
+      assert M.Next(Ik(k), IVars(s), IVars(s'), uiop, diskOp(io'));
+
+    } else if !s.bc.Ready? || !s.jc.status.StatusReady? {
+      initializationCorrect(k, s, io);
+      assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'));
+    } else if !CommitterInitModel.isReplayEmpty(s.jc) {
+      noop(k, s);
+    } else {
+      doSyncCorrect(k, s, io, graphSync, s', io');
     }
   }
 
@@ -499,6 +529,79 @@ module CoordinationModel {
           assert BJC.Next(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
         }
       }
+    }
+  }
+
+  predicate {:opaque} insert(
+      k: Constants, s: Variables, io: IO, key: Key, value: Value,
+      s': Variables, success: bool, io': IO)
+  requires io.IOInit?
+  requires Inv(k, s)
+  {
+    if !isInitialized(s) then (
+      && (s', io') == initialization(k, s, io)
+      && success == false
+    ) else if JournalistModel.canAppend(s.jc.journalist,
+        Journal.JournalInsert(key, value))
+    then (
+      && InsertModel.insert(k, s.bc, io, key, value,
+              s'.bc, success, io')
+      && (!success ==> s.jc == s'.jc)
+      && (success ==>
+          s'.jc == CommitterAppendModel.JournalAppend(
+              k, s.jc, key, value)
+      )
+    ) else (
+      && doSync(k, s, io, true /* graphSync */, s', io')
+      && success == false
+    )
+  }
+
+  lemma insertCorrect(k: Constants, s: Variables, io: IO, key: Key, value: Value,
+      s': Variables, success: bool, io': IO)
+  requires io.IOInit?
+  requires Inv(k, s)
+  requires insert(k, s, io, key, value, s', success, io')
+  ensures WFVars(s')
+  ensures M.Next(Ik(k), IVars(s), IVars(s'),
+          if success then UI.PutOp(key, value) else UI.NoOp,
+          diskOp(io'))
+  {
+    reveal_insert();
+    CommitterInitModel.reveal_isReplayEmpty();
+    if !isInitialized(s) {
+      initializationCorrect(k, s, io);
+    } else if JournalistModel.canAppend(s.jc.journalist, Journal.JournalInsert(key, value)) {
+      InsertModel.insertCorrect(k, s.bc, io, key, value, s'.bc, success, io', false /* replay */);
+      if success {
+        var uiop := UI.PutOp(key, value);
+        var vop := AdvanceOp(uiop, false);
+
+         CommitterAppendModel.JournalAppendCorrect(k, s.jc, key, value);
+
+        assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);
+        assert BJC.Next(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
+      } else {
+        var uiop := UI.NoOp;
+        if BBC.Next(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io')).bdop, StatesInternalOp) {
+          var vop := StatesInternalOp;
+          assert JC.NoOp(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
+          assert JC.NextStep(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop, JC.NoOpStep);
+          assert JC.Next(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
+          assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);
+          assert BJC.Next(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
+        } else {
+          var vop := AdvanceOp(uiop, true);
+          // Not a true replay (empty journal entry list).
+          assert JC.Replay(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
+          assert JC.NextStep(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop, JC.ReplayStep);
+          assert JC.Next(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
+          assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);
+          assert BJC.Next(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
+        }
+      }
+    } else {
+      doSyncCorrect(k, s, io, true, s', io');
     }
   }
 }
