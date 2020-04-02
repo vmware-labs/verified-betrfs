@@ -1,5 +1,6 @@
 include "CommitterAppendModel.i.dfy"
 include "CommitterImpl.i.dfy"
+include "DiskOpImpl.i.dfy"
 
 module CommitterAppendImpl {
   import opened NativeTypes
@@ -10,6 +11,7 @@ module CommitterAppendImpl {
   import opened ValueType
   import opened Journal
 
+  import opened DiskOpImpl
   import opened CommitterModel
   import opened StateModel
   import opened IOModel
@@ -18,7 +20,7 @@ module CommitterAppendImpl {
   import JournalistImpl
 
   method JournalAppend(
-      k: Constants, cm: Committer,
+      k: ImplConstants, cm: Committer,
       key: Key, value: Value)
   requires cm.Inv()
   requires cm.status == CommitterModel.StatusReady
@@ -28,7 +30,7 @@ module CommitterAppendImpl {
   ensures cm.Inv()
   ensures cm.Repr == old(cm.Repr)
   ensures cm.I() == CommitterAppendModel.JournalAppend(
-      k, old(cm.I()), key, value)
+      Ic(k), old(cm.I()), key, value)
   {
     CommitterAppendModel.reveal_JournalAppend();
     cm.reveal_ReprInv();

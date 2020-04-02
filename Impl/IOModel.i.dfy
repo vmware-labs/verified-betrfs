@@ -13,6 +13,7 @@ include "MarshallingModel.i.dfy"
 
 module IOModel { 
   import opened StateModel
+  import opened DiskOpModel
   import opened NativeTypes
   import opened Options
   import opened Maps

@@ -289,7 +289,7 @@ module Marshalling {
     )
   }
 
-  function valToSuperblock(v: V) : (s: Option<Superblock>)
+  function method valToSuperblock(v: V) : (s: Option<Superblock>)
   requires ValidVal(v)
   requires ValInGrammar(v, SuperblockGrammar())
   {

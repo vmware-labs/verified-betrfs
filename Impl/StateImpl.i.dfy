@@ -6,6 +6,7 @@ include "../lib/Buckets/BucketImpl.i.dfy"
 include "CacheImpl.i.dfy"
 include "IndirectionTableImpl.i.dfy"
 include "BlockAllocatorImpl.i.dfy"
+include "DiskOpImpl.i.dfy"
 
 module {:extern} StateImpl {
   import opened Options
@@ -22,15 +23,18 @@ module {:extern} StateImpl {
   import MutableMapModel
 
   import BT = PivotBetreeSpec`Internal
-  import BC = BetreeGraphBlockCache
-  import M = BetreeBlockCache
-  import D = AsyncSectorDisk
-  import LBAType = LBAType
+  import BC = BlockCache
+  import JC = JournalCache
+  import M = BetreeCache
+  import D = AsyncDisk
   import MainDiskIOHandler
   import LruImpl
   import BucketImpl
   import opened Bounds
   import opened BucketsLib
+  import DiskLayout
+  import SectorType
+  import opened DiskOpImpl
 
   import MM = MutableMap
   import ReferenceType`Internal
@@ -43,23 +47,26 @@ module {:extern} StateImpl {
   type MutIndirectionTableNullable = IndirectionTableImpl.IndirectionTable?
 
   datatype Sector =
-    | SectorBlock(block: Node)
+    | SectorNode(node: Node)
+    | SectorSuperblock(superblock: SectorType.Superblock)
     | SectorIndirectionTable(indirectionTable: MutIndirectionTable)
 
   function SectorObjectSet(sector: Sector) : set<object>
   {
     match sector {
       case SectorIndirectionTable(indirectionTable) => {indirectionTable}
-      case SectorBlock(block) => {block}
+      case SectorNode(block) => {block}
+      case SectorSuperblock(superblock) => {}
     }
   }
 
   function SectorRepr(sector: Sector) : set<object>
-  reads if sector.SectorIndirectionTable? then {sector.indirectionTable} else {sector.block}
+  reads SectorObjectSet(sector)
   {
     match sector {
       case SectorIndirectionTable(indirectionTable) => {indirectionTable} + indirectionTable.Repr
-      case SectorBlock(block) => block.Repr
+      case SectorNode(block) => block.Repr
+      case SectorSuperblock(superblock) => {}
     }
   }
  
@@ -68,7 +75,8 @@ module {:extern} StateImpl {
   reads SectorRepr(sector)
   {
     && (sector.SectorIndirectionTable? ==> sector.indirectionTable.Inv())
-    && (sector.SectorBlock? ==> sector.block.Inv())
+    && (sector.SectorNode? ==> sector.node.Inv())
+    && (sector.SectorSuperblock? ==> JC.WFSuperblock(sector.superblock))
   }
 
   // TODO remove this and just replace with .I() because it's easier
@@ -91,22 +99,26 @@ module {:extern} StateImpl {
  
   function ISector(sector: Sector) : SM.Sector
   requires WFSector(sector)
-  reads if sector.SectorIndirectionTable? then {sector.indirectionTable} else {sector.block}
+  reads SectorObjectSet(sector)
   reads SectorRepr(sector)
   {
     match sector {
-      case SectorBlock(node) => SM.SectorBlock(node.I())
+      case SectorSuperblock(superblock) => SM.SectorSuperblock(superblock)
+      case SectorNode(node) => SM.SectorNode(node.I())
       case SectorIndirectionTable(indirectionTable) => SM.SectorIndirectionTable(IIndirectionTable(indirectionTable))
     }
   }
 
   class Variables {
+    var loading: bool;
     var ready: bool;
 
     // Ready
     var persistentIndirectionTable: MutIndirectionTable;
     var frozenIndirectionTable: MutIndirectionTableNullable;
     var ephemeralIndirectionTable: MutIndirectionTable;
+    var persistentIndirectionTableLoc: DiskLayout.Location;
+    var frozenIndirectionTableLoc: Option<DiskLayout.Location>;
     var outstandingIndirectionTableWrite: Option<BC.ReqId>;
     var outstandingBlockWrites: map<D.ReqId, BC.OutstandingWrite>;
     var outstandingBlockReads: map<D.ReqId, BC.OutstandingRead>;
@@ -114,12 +126,16 @@ module {:extern} StateImpl {
     var lru: LruImpl.LruImplQueue;
     var blockAllocator: BlockAllocatorImpl.BlockAllocator;
 
+    // Loading
+    var indirectionTableLoc: DiskLayout.Location;
+    var indirectionTableRead: Option<BC.ReqId>;
+
     // Unready
     var outstandingIndirectionTableRead: Option<D.ReqId>;
 
     function Repr() : set<object>
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache, blockAllocator, syncReqs
+        frozenIndirectionTable, lru, cache, blockAllocator
     {
       {this} +
       persistentIndirectionTable.Repr +
@@ -127,24 +143,22 @@ module {:extern} StateImpl {
       (if frozenIndirectionTable != null then frozenIndirectionTable.Repr else {}) +
       lru.Repr +
       cache.Repr +
-      blockAllocator.Repr +
-      syncReqs.Repr
+      blockAllocator.Repr
     }
 
     predicate ReprInv()
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache, blockAllocator, syncReqs
+        frozenIndirectionTable, lru, cache, blockAllocator
     reads Repr()
     {
         // NOALIAS statically enforced no-aliasing would probably help here
-        && persistentIndirectionTable.Repr !! ephemeralIndirectionTable.Repr !! lru.Repr !! cache.Repr !! blockAllocator.Repr !! syncReqs.Repr
+        && persistentIndirectionTable.Repr !! ephemeralIndirectionTable.Repr !! lru.Repr !! cache.Repr !! blockAllocator.Repr
         && (frozenIndirectionTable != null ==>
             && frozenIndirectionTable.Repr !! persistentIndirectionTable.Repr
             && frozenIndirectionTable.Repr !! ephemeralIndirectionTable.Repr
             && frozenIndirectionTable.Repr !! lru.Repr
             && frozenIndirectionTable.Repr !! cache.Repr
             && frozenIndirectionTable.Repr !! blockAllocator.Repr
-            && frozenIndirectionTable.Repr !! syncReqs.Repr
         )
 
         && this !in ephemeralIndirectionTable.Repr
@@ -153,12 +167,11 @@ module {:extern} StateImpl {
         && this !in lru.Repr
         && this !in cache.Repr
         && this !in blockAllocator.Repr
-        && this !in syncReqs.Repr
     }
 
     predicate W()
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache, blockAllocator, syncReqs
+        frozenIndirectionTable, lru, cache, blockAllocator
     reads Repr()
     {
       && ReprInv()
@@ -168,40 +181,51 @@ module {:extern} StateImpl {
       && lru.Inv()
       && cache.Inv()
       && blockAllocator.Inv()
-      && syncReqs.Inv()
     }
 
-    function I() : SM.Variables
+    function I() : SM.BCVariables
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache, blockAllocator, syncReqs
+        frozenIndirectionTable, lru, cache, blockAllocator
     reads Repr()
     requires W()
     {
       if ready then (
-        SM.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, outstandingBlockWrites, outstandingBlockReads, syncReqs.I(), cache.I(), lru.Queue, blockAllocator.I())
+        SM.Ready(
+          IIndirectionTable(persistentIndirectionTable),
+          IIndirectionTableOpt(frozenIndirectionTable),
+          IIndirectionTable(ephemeralIndirectionTable),
+          persistentIndirectionTableLoc,
+          frozenIndirectionTableLoc,
+          outstandingIndirectionTableWrite,
+          outstandingBlockWrites,
+          outstandingBlockReads,
+          cache.I(),
+          lru.Queue,
+          blockAllocator.I())
+      ) else if loading then (
+        SM.LoadingIndirectionTable(
+          indirectionTableLoc,
+          indirectionTableRead)
       ) else (
-        SM.Unready(outstandingIndirectionTableRead, syncReqs.I())
+        SM.Unready
       )
     }
 
     predicate WF()
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache, blockAllocator, syncReqs
+        frozenIndirectionTable, lru, cache, blockAllocator
     reads Repr()
     {
       && W()
-      && SM.WFVars(I())
+      && SM.WFBCVars(I())
     }
 
     constructor()
     ensures !ready
-    ensures syncReqs.Inv()
-    ensures syncReqs.I() == MutableMapModel.Constructor(128)
     ensures outstandingIndirectionTableRead == None
     ensures WF()
     {
       ready := false;
-      syncReqs := new MutableMap.ResizingHashMap(128);
       outstandingIndirectionTableRead := None;
 
       // Unused for the `ready = false` state but we need to initialize them.
@@ -217,19 +241,18 @@ module {:extern} StateImpl {
     }
   }
 
-  predicate Inv(k: M.Constants, s: Variables)
+  predicate Inv(k: ImplConstants, s: Variables)
   reads s, s.persistentIndirectionTable, s.ephemeralIndirectionTable,
-        s.frozenIndirectionTable, s.lru, s.cache, s.blockAllocator, s.syncReqs
+        s.frozenIndirectionTable, s.lru, s.cache, s.blockAllocator
   reads s.Repr()
   {
     && s.W()
-    && SM.Inv(Ic(k), s.I())
+    && SM.BCInv(Ic(k), s.I())
   }
-
 
   twostate predicate WellUpdated(s: Variables)
   reads s, s.persistentIndirectionTable, s.ephemeralIndirectionTable,
-      s.frozenIndirectionTable, s.lru, s.cache, s.blockAllocator, s.syncReqs
+      s.frozenIndirectionTable, s.lru, s.cache, s.blockAllocator
   reads s.Repr()
   {
     && s.W()

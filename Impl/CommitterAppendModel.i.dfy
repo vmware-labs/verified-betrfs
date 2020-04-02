@@ -1,5 +1,4 @@
 include "CommitterModel.i.dfy"
-include "StateModel.i.dfy"
 include "IOModel.i.dfy"
 
 module CommitterAppendModel {
@@ -15,10 +14,10 @@ module CommitterAppendModel {
   import opened Journal
 
   import opened CommitterModel
-  import opened StateModel
   import opened IOModel
+  import opened DiskOpModel
 
-  function {:opaque} JournalAppend(k: ImplConstants, cm: CM,
+  function {:opaque} JournalAppend(k: Constants, cm: CM,
       key: Key, value: Value) : (cm' : CM)
   requires CommitterModel.WF(cm)
   requires cm.status == StatusReady
@@ -29,7 +28,7 @@ module CommitterAppendModel {
     cm.(journalist := journalist')
   }
 
-  lemma JournalAppendCorrect(k: ImplConstants,
+  lemma JournalAppendCorrect(k: Constants,
       cm: CM, key: Key, value: Value)
   requires CommitterModel.WF(cm)
   requires cm.status == StatusReady

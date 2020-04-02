@@ -12,6 +12,7 @@ module CommitterCommitModel {
   import JC = JournalCache
   import opened Journal
   import opened JournalBytes
+  import opened DiskOpModel
   import SectorType
 
   import opened CommitterModel

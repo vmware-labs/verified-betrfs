@@ -147,7 +147,7 @@ module JournalCache {
       superblock.journalLen as int)
   }
 
-  predicate WFSuperblock(superblock: Superblock)
+  predicate method WFSuperblock(superblock: Superblock)
   {
     && superblock.journalStart < NumJournalBlocks()
     && superblock.journalLen <= NumJournalBlocks()

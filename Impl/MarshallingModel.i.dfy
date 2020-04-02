@@ -169,6 +169,11 @@ module MarshallingModel {
   requires ValInGrammar(v, Marshalling.SectorGrammar())
   {
     if v.c == 0 then (
+      match Marshalling.valToSuperblock(v.val) {
+        case Some(s) => Some(SM.SectorSuperblock(s))
+        case None => None
+      }
+    ) else if v.c == 1 then (
       match IndirectionTableModel.valToIndirectionTable(v.val) {
         case Some(s) => Some(SM.SectorIndirectionTable(s))
         case None => None

@@ -13,6 +13,7 @@ include "CommitterModel.i.dfy"
 include "../BlockCacheSystem/BlockJournalDisk.i.dfy"
 include "../BlockCacheSystem/BlockJournalCache.i.dfy"
 include "../ByteBlockCacheSystem/ByteCache.i.dfy"
+include "DiskOpModel.i.dfy"
 //
 // This file represents immutability's last stand.
 // It is the highest-fidelity representation of the implementation
@@ -230,11 +231,6 @@ module StateModel {
   requires WFVars(vars)
   {
     BJC.Variables(IBlockCache(vars.bc), CommitterModel.I(vars.jc))
-  }
-
-  function Ik(k: Constants) : BJC.Constants
-  {
-    BJC.Constants(BC.Constants(), JC.Constants())
   }
 
   function I(k: Constants, s: Variables) : BJC.Variables

@@ -67,7 +67,7 @@ module CommitterImpl {
     {
     }
 
-    predicate WF()
+    predicate W()
     reads this, this.Repr
     {
       && ReprInv()
@@ -77,7 +77,7 @@ module CommitterImpl {
 
     function I() : CommitterModel.CM
     reads this, this.Repr
-    requires WF()
+    requires W()
     {
       CommitterModel.CM(
         status,
@@ -101,10 +101,17 @@ module CommitterImpl {
       )
     }
 
+    predicate WF()
+    reads this, this.Repr
+    {
+      && W()
+      && CommitterModel.WF(I())
+    }
+
     predicate Inv()
     reads this, this.Repr
     {
-      && WF()
+      && W()
       && CommitterModel.Inv(I())
     }
 

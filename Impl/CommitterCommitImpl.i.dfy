@@ -1,5 +1,6 @@
 include "CommitterImpl.i.dfy"
 include "CommitterCommitModel.i.dfy"
+include "DiskOpImpl.i.dfy"
 
 module CommitterCommitImpl {
   import opened NativeTypes
@@ -9,6 +10,8 @@ module CommitterCommitImpl {
   import JC = JournalCache
   import opened Journal
   import opened JournalBytes
+  import opened DiskOpImpl
+  import opened MainDiskIOHandler
   import SectorType
   import MutableMapModel
 
@@ -81,25 +84,28 @@ module CommitterCommitImpl {
   requires cm.Inv()
   requires JournalistModel.I(cm.I().journalist).inMemoryJournalFrozen != []
         || JournalistModel.I(cm.I().journalist).inMemoryJournal != []
+  requires io !in cm.Repr
   modifies cm.Repr
+  modifies io
   ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
-  ensures cm.Inv()
-  ensures cm.I() == CommitterCommitModel.WriteOutJournal(
-      k, old(cm.I()), IIO(io))
-  /*{
-    var writtenJournalLen :=
-        JournalistModel.getWrittenJournalLen(cm.journalist);
+  ensures cm.W()
+  ensures (cm.I(), IIO(io)) == CommitterCommitModel.WriteOutJournal(
+      Ic(k), old(cm.I()), old(IIO(io)))
+  {
+    CommitterCommitModel.reveal_WriteOutJournal();
+    cm.reveal_ReprInv();
 
-    var doingFrozen :=
-      JournalistModel.hasFrozenJournal(cm.journalist);
+    var writtenJournalLen := cm.journalist.getWrittenJournalLen();
+    var doingFrozen := cm.journalist.hasFrozenJournal();
 
-    var (journalist', j) :=
-      if doingFrozen then
-        JournalistModel.packageFrozenJournal(cm.journalist)
-      else
-        JournalistModel.packageInMemoryJournal(cm.journalist);
+    var j;
+    if doingFrozen {
+      j := cm.journalist.packageFrozenJournal();
+    } else {
+      j := cm.journalist.packageInMemoryJournal();
+    }
 
-    var start := start_pos_add(
+    var start := CommitterCommitModel.start_pos_add(
         cm.superblock.journalStart,
         writtenJournalLen);
 
@@ -107,33 +113,70 @@ module CommitterCommitImpl {
 
     var contiguous := start + len <= NumJournalBlocks();
 
-    var io' := if contiguous then
-      IOReqWrite(io.id, D.ReqWrite(JournalPoint(start), j))
-    else (
+    if contiguous {
+      var id := io.write(JournalPoint(start), j);
+      cm.outstandingJournalWrites := cm.outstandingJournalWrites + {id};
+    } else {
       var cut := (NumJournalBlocks() - start) * 4096;
-      IOReqWrite2(io.id, io.id2,
-          D.ReqWrite(JournalPoint(start), j[..cut]),
-          D.ReqWrite(JournalPoint(0), j[cut..]))
+      var id1, id2 := io.write2(
+          JournalPoint(start), j[..cut],
+          JournalPoint(0), j[cut..]);
+      cm.outstandingJournalWrites := cm.outstandingJournalWrites + {id1, id2};
+    }
+
+    if doingFrozen {
+      cm.frozenJournalPosition := cm.journalist.getWrittenJournalLen();
+    } else {
+      cm.syncReqs := SyncReqs3to2(cm.syncReqs);
+    }
+
+    cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
+    cm.reveal_ReprInv();
+
+    assert (cm.I(), IIO(io)) == CommitterCommitModel.WriteOutJournal(
+        Ic(k), old(cm.I()), old(IIO(io)));
+  }
+
+  method writeOutSuperblockAdvanceLog(
+      k: ImplConstants, cm: Committer, io: DiskIOHandler)
+  requires io.initialized()
+  requires cm.Inv()
+  requires io !in cm.Repr
+  modifies cm.Repr
+  modifies io
+  ensures cm.Repr == old(cm.Repr)
+  ensures CommitterCommitModel.writeOutSuperblockAdvanceLog(
+      Ic(k), old(cm.I()), old(IIO(io)), cm.I(), IIO(io))
+  {
+    CommitterCommitModel.reveal_writeOutSuperblockAdvanceLog();
+    cm.reveal_ReprInv();
+
+    var writtenJournalLen := cm.journalist.getWrittenJournalLen();
+
+    var newSuperblock := SectorType.Superblock(
+      JC.IncrementSuperblockCounter(cm.superblock.counter),
+      cm.superblock.journalStart,
+      writtenJournalLen,
+      cm.superblock.indirectionTableLoc
     );
 
-    var outstandingJournalWrites' := if contiguous
-        then cm.outstandingJournalWrites + {io.id}
-        else cm.outstandingJournalWrites + {io.id, io.id2};
+    var loc := if cm.whichSuperblock == 0 then Superblock2Location() else Superblock1Location();
 
-    var frozenJournalPosition' := if doingFrozen
-      then JournalistModel.getWrittenJournalLen(journalist')
-      else cm.frozenJournalPosition;
+    var id := RequestWrite(io, loc, SectorSuperblock(newSuperblock));
 
-    var syncReqs' := if doingFrozen
-      then cm.syncReqs
-      else SyncReqs3to2(cm.syncReqs);
+    && cm'.superblockWrite.Some?
+    && var id := cm'.superblockWrite.value;
 
-    var cm' := cm
-      .(outstandingJournalWrites := outstandingJournalWrites')
-      .(journalist := journalist')
-      .(frozenJournalPosition := frozenJournalPosition')
-      .(syncReqs := syncReqs');
+    && RequestWrite(io, loc, SectorSuperblock(newSuperblock),
+        Some(id), io')
+    && cm' == cm
+      .(newSuperblock := Some(newSuperblock))
+      .(superblockWrite := Some(id))
+      .(commitStatus := JC.CommitAdvanceLog)
 
-    (cm', io')
-  }*/
+
+    cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
+    cm.reveal_ReprInv();
+  }
+  
 }
