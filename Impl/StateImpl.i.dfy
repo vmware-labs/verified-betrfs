@@ -1,4 +1,3 @@
-include "../ByteBlockCacheSystem/ByteBetreeBlockCacheSystem.i.dfy"
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
 include "../lib/DataStructures/LruImpl.i.dfy"
 include "StateModel.i.dfy"
@@ -21,7 +20,6 @@ module {:extern} StateImpl {
   import IndirectionTableModel
   import MutableMap
   import MutableMapModel
-  import ByteBetreeBlockCacheSystem
 
   import BT = PivotBetreeSpec`Internal
   import BC = BetreeGraphBlockCache
@@ -37,7 +35,6 @@ module {:extern} StateImpl {
   import MM = MutableMap
   import ReferenceType`Internal
 
-  type ImplConstants = ByteBetreeBlockCacheSystem.M.Constants
   type ImplVariables = Variables
 
   type Reference = BT.G.Reference
@@ -229,22 +226,6 @@ module {:extern} StateImpl {
     && SM.Inv(Ic(k), s.I())
   }
 
-  function Ic(k: M.Constants) : SM.Constants
-  {
-    SM.Constants()
-  }
-
-  function IIO(io: MainDiskIOHandler.DiskIOHandler) : SM.IO
-  reads io
-  {
-    match io.diskOp() {
-      case NoDiskOp => SM.IOInit(io.reservedId())
-      case ReqReadOp(id, reqRead) => SM.IOReqRead(id, reqRead)
-      case ReqWriteOp(id, reqWrite) => SM.IOReqWrite(id, reqWrite)
-      case RespReadOp(id, respRead) => SM.IORespRead(id, respRead)
-      case RespWriteOp(id, respWrite) => SM.IORespWrite(id, respWrite)
-    }
-  }
 
   twostate predicate WellUpdated(s: Variables)
   reads s, s.persistentIndirectionTable, s.ephemeralIndirectionTable,

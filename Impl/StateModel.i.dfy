@@ -12,6 +12,7 @@ include "IndirectionTableModel.i.dfy"
 include "CommitterModel.i.dfy"
 include "../BlockCacheSystem/BlockJournalDisk.i.dfy"
 include "../BlockCacheSystem/BlockJournalCache.i.dfy"
+include "../ByteBlockCacheSystem/ByteCache.i.dfy"
 //
 // This file represents immutability's last stand.
 // It is the highest-fidelity representation of the implementation
@@ -50,6 +51,7 @@ module StateModel {
   import SectorType
   import DiskLayout
   import CommitterModel
+  import opened DiskOpModel
 
   import ReferenceType`Internal
 
@@ -63,7 +65,6 @@ module StateModel {
       children: Option<seq<Reference>>,
       buckets: seq<Bucket>
     )
-  datatype Constants = Constants()
   datatype BCVariables =
     | Ready(
         persistentIndirectionTable: IndirectionTable, // this lets us keep track of available LBAs
@@ -257,26 +258,5 @@ module StateModel {
     && (s.jc.isFrozen <==> s.bc.Ready? && s.bc.frozenIndirectionTable.Some?)
     && (s.jc.frozenLoc.Some? ==> s.bc.Ready? && s.bc.frozenIndirectionTableLoc == s.jc.frozenLoc && s.bc.outstandingIndirectionTableWrite.None?)
     && (s.bc.Ready? ==> s.jc.status.StatusReady?)
-  }
-
-  // Functional model of the DiskIOHandler
-
-  datatype IO =
-    | IOInit(id: uint64, id2: uint64)
-    | IOReqRead(id: uint64, reqRead: D.ReqRead)
-    | IOReqWrite(id: uint64, reqWrite: D.ReqWrite)
-    | IOReqWrite2(id: uint64, id2: uint64, reqWrite1: D.ReqWrite, reqWrite2: D.ReqWrite)
-    | IORespRead(id: uint64, respRead: D.RespRead)
-    | IORespWrite(id: uint64, respWrite: D.RespWrite)
-
-  function diskOp(io: IO) : D.DiskOp {
-    match io {
-      case IOInit(id, id2) => D.NoDiskOp
-      case IOReqRead(id, reqRead) => D.ReqReadOp(id, reqRead)
-      case IOReqWrite(id, reqWrite) => D.ReqWriteOp(id, reqWrite)
-      case IOReqWrite2(id1, id2, reqWrite1, reqWrite2) => D.ReqWrite2Op(id1, id2, reqWrite1, reqWrite2)
-      case IORespRead(id, respRead) => D.RespReadOp(id, respRead)
-      case IORespWrite(id, respWrite) => D.RespWriteOp(id, respWrite)
-    }
   }
 }

@@ -299,68 +299,6 @@ module IOImpl {
     }
   }
 
-  // == syncReqs manipulations ==
-
-  // TODO we could have these do the modification in-place instead.
-
-  method SyncReqs2to1(m: MutableMap.ResizingHashMap<BC.SyncReqStatus>)
-  returns (m' : MutableMap.ResizingHashMap<BC.SyncReqStatus>)
-  requires m.Inv()
-  ensures fresh(m'.Repr)
-  ensures m'.Inv()
-  ensures m'.I() == IOModel.SyncReqs2to1(m.I())
-  {
-    IOModel.reveal_SyncReqs2to1();
-    var it := m.IterStart();
-    var m0 := new MutableMap.ResizingHashMap(128);
-    while !it.next.Done?
-    invariant m.Inv()
-    invariant fresh(m0.Repr)
-    invariant m0.Inv()
-    invariant MutableMapModel.WFIter(m.I(), it)
-    invariant m0.Inv()
-    invariant m0.I().contents.Keys == it.s
-    invariant IOModel.SyncReqs2to1(m.I()) == IOModel.SyncReqs2to1Iterate(m.I(), it, m0.I())
-
-    decreases it.decreaser
-    {
-      MutableMapModel.LemmaIterIndexLtCount(m.I(), it);
-      MutableMapModel.CountBound(m.I());
-      m0.Insert(it.next.key, (if it.next.value == BC.State2 then BC.State1 else it.next.value));
-      it := m.IterInc(it);
-    }
-    m' := m0;
-  }
-
-  method SyncReqs3to2(m: MutableMap.ResizingHashMap<BC.SyncReqStatus>)
-  returns (m' : MutableMap.ResizingHashMap<BC.SyncReqStatus>)
-  requires m.Inv()
-  ensures fresh(m'.Repr)
-  ensures m'.Inv()
-  ensures m'.I() == IOModel.SyncReqs3to2(m.I())
-  {
-    IOModel.reveal_SyncReqs3to2();
-    var it := m.IterStart();
-    var m0 := new MutableMap.ResizingHashMap(128);
-    while !it.next.Done?
-    invariant m.Inv()
-    invariant fresh(m0.Repr)
-    invariant m0.Inv()
-    invariant MutableMapModel.WFIter(m.I(), it)
-    invariant m0.Inv()
-    invariant m0.I().contents.Keys == it.s
-    invariant IOModel.SyncReqs3to2(m.I()) == IOModel.SyncReqs3to2Iterate(m.I(), it, m0.I())
-
-    decreases it.decreaser
-    {
-      MutableMapModel.LemmaIterIndexLtCount(m.I(), it);
-      MutableMapModel.CountBound(m.I());
-      m0.Insert(it.next.key, (if it.next.value == BC.State3 then BC.State2 else it.next.value));
-      it := m.IterInc(it);
-    }
-    m' := m0;
-  }
-
   // == writeResponse ==
 
   method writeResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)

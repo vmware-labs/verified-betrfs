@@ -18,7 +18,7 @@ module CommitterAppendModel {
   import opened StateModel
   import opened IOModel
 
-  function {:opaque} JournalAppend(k: Constants, cm: CM,
+  function {:opaque} JournalAppend(k: ImplConstants, cm: CM,
       key: Key, value: Value) : (cm' : CM)
   requires CommitterModel.WF(cm)
   requires cm.status == StatusReady
@@ -29,7 +29,7 @@ module CommitterAppendModel {
     cm.(journalist := journalist')
   }
 
-  lemma JournalAppendCorrect(k: Constants,
+  lemma JournalAppendCorrect(k: ImplConstants,
       cm: CM, key: Key, value: Value)
   requires CommitterModel.WF(cm)
   requires cm.status == StatusReady
