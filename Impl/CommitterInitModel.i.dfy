@@ -14,6 +14,7 @@ module CommitterInitModel {
   import opened CommitterModel
   import opened StateModel
   import opened IOModel
+  import opened DiskOpModel
 
   function {:opaque} PageInSuperblockReq(k: Constants, cm: CM, io: IO, which: uint64) : (res : (CM, IO))
   requires which == 0 || which == 1
