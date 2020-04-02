@@ -69,6 +69,7 @@ module JournalistImpl {
 
     protected predicate Inv()
     reads this, this.Repr
+    ensures Inv() ==> ReprInv()
     {
       && ReprInv()
       && JournalistModel.Inv(I())

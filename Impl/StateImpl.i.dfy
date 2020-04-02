@@ -106,8 +106,6 @@ module {:extern} StateImpl {
   class Variables {
     var ready: bool;
 
-    var syncReqs: MutableMap.ResizingHashMap<BC.SyncReqStatus>
-
     // Ready
     var persistentIndirectionTable: MutIndirectionTable;
     var frozenIndirectionTable: MutIndirectionTableNullable;
