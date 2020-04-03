@@ -24,7 +24,8 @@ module FullImpl {
       // so we don't have to do this crap
       && this.bc.persistentIndirectionTable in Repr
       && this.bc.ephemeralIndirectionTable in Repr
-      && this.bc.frozenIndirectionTable in Repr
+      && (this.bc.frozenIndirectionTable != null ==>
+          this.bc.frozenIndirectionTable in Repr)
       && this.bc.lru in Repr
       && this.bc.cache in Repr
       && this.bc.blockAllocator in Repr
@@ -74,8 +75,7 @@ module FullImpl {
     reads this, this.Repr
     {
       && W()
-      && StateImpl.Inv(k, this.bc)
-      && this.jc.Inv()
+      && StateModel.Inv(Ic(k), I())
     }
 
     constructor()

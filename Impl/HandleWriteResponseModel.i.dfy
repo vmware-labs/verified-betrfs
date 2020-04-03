@@ -1,5 +1,6 @@
 include "IOModel.i.dfy"
-include "CoordinationModel.i.dfy"
+include "DiskOpImpl.i.dfy"
+include "CommitterCommitModel.i.dfy"
 
 module HandleWriteResponseModel {
   import opened NativeTypes
@@ -8,6 +9,7 @@ module HandleWriteResponseModel {
   import opened InterpretationDiskOps
   import opened ViewOp
   import opened Options
+  import opened DiskOpModel
   import IOModel
   import CommitterCommitModel
   import CommitterModel
