@@ -11,6 +11,7 @@ module ByteSystem refines AsyncDiskModel {
   import opened DiskLayout
   import opened JournalIntervals
   import opened InterpretationDiskOps
+  import opened SectorType
   import opened Options
 
   function ReqReadWithLoc(reqReads: map<D.ReqId, D.ReqRead>, loc: Location) : Option<D.ReqId>
@@ -23,23 +24,27 @@ module ByteSystem refines AsyncDiskModel {
 
   function ReqWriteWithLoc(reqWrites: map<D.ReqId, D.ReqWrite>, loc: Location) : Option<D.ReqId>
   {
-    if id :| id in reqWrites && LocOfReqWrite(reqWrites[id]) == loc then
+    if id :| id in reqWrites
+        && |reqWrites[id].bytes| < 0x1_0000_0000_0000_0000
+        && LocOfReqWrite(reqWrites[id]) == loc then
       Some(id)
     else
       None
   }
 
-  function RespReadWithLoc(reqReads: map<D.ReqId, D.RespRead>, loc: Location) : Option<D.ReqId>
+  function RespReadWithLoc(respReads: map<D.ReqId, D.RespRead>, loc: Location) : Option<D.ReqId>
   {
-    if id :| id in reqReads && LocOfRespRead(reqReads[id]) == loc then
+    if id :| id in respReads
+        && |respReads[id].bytes| < 0x1_0000_0000_0000_0000
+        && LocOfRespRead(respReads[id]) == loc then
       Some(id)
     else
       None
   }
 
-  function RespWriteWithLoc(reqWrites: map<D.ReqId, D.RespWrite>, loc: Location) : Option<D.ReqId>
+  function RespWriteWithLoc(respWrites: map<D.ReqId, D.RespWrite>, loc: Location) : Option<D.ReqId>
   {
-    if id :| id in reqWrites && LocOfRespWrite(reqWrites[id]) == loc then
+    if id :| id in respWrites && LocOfRespWrite(respWrites[id]) == loc then
       Some(id)
     else
       None
@@ -59,7 +64,7 @@ module ByteSystem refines AsyncDiskModel {
   function SuperblockAtLoc(disk: D.Variables, loc: Location) : Superblock
   requires HasSuperblockAtLoc(disk, loc)
   {
-    && SuperblockOfBytes(
+    SuperblockOfBytes(
         disk.contents[loc.addr .. loc.addr as int + loc.len as int])
   }
 
@@ -82,17 +87,17 @@ module ByteSystem refines AsyncDiskModel {
   {
     var id := ReqWriteWithLoc(disk.reqWrites, loc);
     if id.Some? then
-      JournalDisk.ReqWriteSuperblockId(
+      Some(JournalDisk.ReqWriteSuperblockId(
         id.value,
         JournalDisk.ReqWriteSuperblock(SuperblockOfBytes(disk.reqWrites[id.value].bytes))
-      )
+      ))
     else (
       var id2 := RespWriteWithLoc(disk.respWrites, loc);
       if id2.Some? && HasSuperblockAtLoc(disk, loc) then
-        JournalDisk.ReqWriteSuperblockId(
+        Some(JournalDisk.ReqWriteSuperblockId(
           id2.value,
           JournalDisk.ReqWriteSuperblock(SuperblockAtLoc(disk, loc))
-        )
+        ))
       else
         None
     )
@@ -108,24 +113,24 @@ module ByteSystem refines AsyncDiskModel {
     SuperblockAtLocOpt(disk, Superblock2Location())
   }
 
-  function ReqReadSuperblock1(disk: D.Variables) : Option<JournalDisk.ReqReadSuperblockId>
+  function ReqReadSuperblock1(disk: D.Variables) : Option<JournalDisk.ReqId>
   {
-    ReqReadSuperblock(disk, Superblock1Location())
+    ReqReadSuperblockAtLoc(disk, Superblock1Location())
   }
 
-  function ReqReadSuperblock2(disk: D.Variables) : Option<JournalDisk.ReqReadSuperblockId>
+  function ReqReadSuperblock2(disk: D.Variables) : Option<JournalDisk.ReqId>
   {
-    ReqReadSuperblock(disk, Superblock2Location())
+    ReqReadSuperblockAtLoc(disk, Superblock2Location())
   }
 
   function ReqWriteSuperblock1(disk: D.Variables) : Option<JournalDisk.ReqWriteSuperblockId>
   {
-    ReqWriteSuperblock(disk, Superblock1Location())
+    ReqWriteSuperblockAtLoc(disk, Superblock1Location())
   }
 
   function ReqWriteSuperblock2(disk: D.Variables) : Option<JournalDisk.ReqWriteSuperblockId>
   {
-    ReqWriteSuperblock(disk, Superblock2Location())
+    ReqWriteSuperblockAtLoc(disk, Superblock2Location())
   }
 
   //// Journals

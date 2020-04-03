@@ -1,15 +1,10 @@
 include "Main.s.dfy"
 include "../lib/Base/Sets.i.dfy"
-include "../ByteBlockCacheSystem/ByteBetreeBlockCacheSystem.i.dfy"
-include "../ByteBlockCacheSystem/Marshalling.i.dfy"
-include "InsertImpl.i.dfy"
-include "QueryImpl.i.dfy"
-include "SuccImpl.i.dfy"
-include "InsertModel.i.dfy"
-include "QueryModel.i.dfy"
-include "SyncModel.i.dfy"
+include "CoordinationImpl.i.dfy"
+include "HandleReadResponseImpl.i.dfy"
+include "HandleWriteResponseImpl.i.dfy"
 include "Mkfs.i.dfy"
-include "../ByteBlockCacheSystem/ByteBetreeBlockCacheSystem_Refines_ThreeStateVersionedMap.i.dfy"
+
 //
 // Implements the application-API-handler obligations laid out by Main.s.dfy. TODO rename in a way that emphasizes that this is a module-refinement of the abstract Main that satisfies its obligations.
 //
@@ -17,44 +12,40 @@ include "../ByteBlockCacheSystem/ByteBetreeBlockCacheSystem_Refines_ThreeStateVe
 module {:extern} MainHandlers refines Main { 
   import SM = StateModel
   import SI = StateImpl
-  import IOImpl
-  import opened InsertImpl
-  import opened QueryImpl
-  import opened SyncImpl
-  import opened SuccImpl
-  import IOModel
-  import InsertModel
-  import QueryModel
-  import SyncModel
-  import SuccModel
+  import CoordinationModel
+  import CoordinationImpl
+  import HandleReadResponseImpl
+  import HandleReadResponseModel
+  import HandleWriteResponseImpl
+  import HandleWriteResponseModel
+  import FullImpl
+  import opened DiskOpImpl
+  import opened MainDiskIOHandler
   import MkfsImpl
   import MkfsModel
 
-  import BBC = BetreeBlockCache
-  import BC = BetreeGraphBlockCache
-  import ADM = ByteBetreeBlockCacheSystem
+  import BBC = BetreeCache
+  import BC = BlockCache
+  import ADM = ByteSystem
 
   import System_Ref = ByteBetreeBlockCacheSystem_Refines_ThreeStateVersionedMap
 
-  type Constants = SI.ImplConstants
-  type Variables = SI.ImplVariables
+  type Constants = ImplConstants
+  type Variables = FullImpl.Full
 
   function HeapSet(hs: HeapState) : set<object> { hs.Repr }
 
   predicate Inv(k: Constants, hs: HeapState)
   {
-    // TODO this is gross, what can we do about it?
     && hs.s in HeapSet(hs)
-    && (
-        {hs.s.persistentIndirectionTable, hs.s.ephemeralIndirectionTable, hs.s.lru, hs.s.cache, hs.s.blockAllocator, hs.s.syncReqs} +
-        (if hs.s.frozenIndirectionTable != null then {hs.s.frozenIndirectionTable} else {})
-       ) <= HeapSet(hs)
-    && hs.s.Repr() <= HeapSet(hs)
-    && SI.Inv(k, hs.s)
+    && hs.s.Repr <= HeapSet(hs)
+    && hs.s.Inv(k)
   }
 
   function Ik(k: Constants) : ADM.M.Constants { BC.Constants() }
-  function I(k: Constants, hs: HeapState) : ADM.M.Variables { SM.IVars(hs.s.I()) }
+  function I(k: Constants, hs: HeapState) : ADM.M.Variables {
+    SM.IVars(hs.s.I())
+  }
 
   method InitState() returns (k: Constants, hs: HeapState)
   {
@@ -66,10 +57,10 @@ module {:extern} MainHandlers refines Main {
     BBC.InitImpliesInv(Ik(k), I(k, hs));
   }
 
-  lemma ioAndHsNotInReadSet(s: Variables, io: DiskIOHandler, hs: HeapState)
+  lemma ioAndHsNotInReadSet(s: Full, io: DiskIOHandler, hs: HeapState)
   requires s.W()
-  ensures io !in s.Repr()
-  ensures hs !in s.Repr()
+  ensures io !in s.Repr
+  ensures hs !in s.Repr
   // TODO I think this should just follow from the types of the objects
   // in the Repr
 
@@ -80,8 +71,8 @@ module {:extern} MainHandlers refines Main {
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
-    SyncModel.pushSyncCorrect(SI.Ic(k), s.I());
-    var id1 := pushSync(k, s);
+    CoordinatorModel.pushSyncCorrect(SI.Ic(k), s.I());
+    var id1 := CoordinatorImpl.pushSync(k, s);
     ioAndHsNotInReadSet(s, io, hs);
     id := id1;
     ghost var uiop := if id == 0 then UI.NoOp else UI.PushSyncOp(id as int);
@@ -95,8 +86,8 @@ module {:extern} MainHandlers refines Main {
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
-    var w, succ := popSync(k, s, io, id);
-    SyncModel.popSyncCorrect(SI.Ic(k), old(s.I()), old(SI.IIO(io)), id, s.I(), succ, SI.IIO(io));
+    var w, succ := CoordinatorImpl.popSync(k, s, io, id);
+    CoordinatorModel.popSyncCorrect(SI.Ic(k), old(s.I()), old(SI.IIO(io)), id, s.I(), succ, SI.IIO(io));
     ioAndHsNotInReadSet(s, io, hs);
     success := succ;
     wait := w;
@@ -113,8 +104,8 @@ module {:extern} MainHandlers refines Main {
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
-    var value := query(k, s, io, key);
-    QueryModel.queryCorrect(SI.Ic(k), old(s.I()), old(SI.IIO(io)), key, s.I(), value, SI.IIO(io));
+    var value := CoordinatorImpl.query(k, s, io, key);
+    CoordinatorModel.queryCorrect(SI.Ic(k), old(s.I()), old(SI.IIO(io)), key, s.I(), value, SI.IIO(io));
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := if value.Some? then UI.GetOp(key, value.value) else UI.NoOp;
     BBC.NextPreservesInv(k, SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
@@ -130,8 +121,8 @@ module {:extern} MainHandlers refines Main {
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
-    var succ := insert(k, s, io, key, value);
-    InsertModel.insertCorrect(SI.Ic(k), old(s.I()), old(SI.IIO(io)), key, value, s.I(), succ, SI.IIO(io));
+    var succ := CoordinatorImpl.insert(k, s, io, key, value);
+    CoordinatorModel.insertCorrect(SI.Ic(k), old(s.I()), old(SI.IIO(io)), key, value, s.I(), succ, SI.IIO(io));
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := if succ then UI.PutOp(key, value) else UI.NoOp;
     BBC.NextPreservesInv(k, SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
@@ -147,8 +138,8 @@ module {:extern} MainHandlers refines Main {
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
-    var value := doSucc(k, s, io, start, maxToFind);
-    SuccModel.doSuccCorrect(SI.Ic(k), old(s.I()), old(SI.IIO(io)), start, maxToFind as int);
+    var value := CoordinatorImpl.doSucc(k, s, io, start, maxToFind);
+    CoordinatorModel.doSuccCorrect(SI.Ic(k), old(s.I()), old(SI.IIO(io)), start, maxToFind as int);
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := 
       if value.Some? then UI.SuccOp(start, value.value.results, value.value.end) else UI.NoOp;
@@ -164,8 +155,8 @@ module {:extern} MainHandlers refines Main {
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
-    IOImpl.readResponse(k, s, io);
-    IOModel.readResponseCorrect(SI.Ic(k), old(s.I()), old(SI.IIO(io)));
+    HandleReadResponseImpl.readResponse(k, s, io);
+    HandleReadResponseModel.readResponseCorrect(SI.Ic(k), old(s.I()), old(SI.IIO(io)));
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := UI.NoOp;
     BBC.NextPreservesInv(k, SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
@@ -177,8 +168,8 @@ module {:extern} MainHandlers refines Main {
   {
     var s := hs.s;
     ioAndHsNotInReadSet(s, io, hs);
-    IOImpl.writeResponse(k, s, io);
-    IOModel.writeResponseCorrect(SI.Ic(k), old(s.I()), old(SI.IIO(io)));
+    HandleWriteResponseImpl.writeResponse(k, s, io);
+    HandleWriteResponseModel.writeResponseCorrect(SI.Ic(k), old(s.I()), old(SI.IIO(io)));
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := UI.NoOp;
     BBC.NextPreservesInv(k, SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, ADM.M.IDiskOp(io.diskOp()));
