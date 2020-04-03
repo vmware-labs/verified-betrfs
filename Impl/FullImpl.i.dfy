@@ -33,7 +33,7 @@ module FullImpl {
       && this.Repr == {this} + this.bc.Repr() + this.jc.Repr
       && this !in this.bc.Repr()
       && this !in this.jc.Repr
-      && this.bc.Repr() !! this.jc.Repr
+      && this.syncReqs.Repr !! this.journalist.Repr
     }
 
     protected predicate ReprInv()
@@ -67,7 +67,7 @@ module FullImpl {
     reads this, this.Repr
     {
       && W()
-      && this.bc.WF()
+      && WF(this.bc)
       && this.jc.WF()
     }
 
