@@ -11,6 +11,7 @@ module EvictImpl {
   import opened DiskOpImpl
   import opened StateImpl
   import opened Bounds
+  import opened MainDiskIOHandler
 
   import opened Options
   import opened Maps

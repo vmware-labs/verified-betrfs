@@ -26,6 +26,7 @@ module CoordinationModel {
   import DiskLayout
   import opened KeyType
   import opened ValueType
+  import opened DiskOpModel
 
   lemma jcNoOp(k: Constants, s: Variables, s': Variables, vop: VOp)
   requires CommitterModel.WF(s.jc)

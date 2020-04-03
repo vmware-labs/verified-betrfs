@@ -17,6 +17,7 @@ module FlushPolicyImpl {
   import opened StateImpl
   import opened BucketImpl
   import opened DiskOpImpl
+  import opened MainDiskIOHandler
 
   import opened Sequences
 

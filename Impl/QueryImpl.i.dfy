@@ -17,6 +17,7 @@ module QueryImpl {
   import opened BucketImpl
   import opened EvictImpl
   import opened DiskOpImpl
+  import opened MainDiskIOHandler
 
   import opened Options
   import opened NativeTypes

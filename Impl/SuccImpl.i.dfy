@@ -20,6 +20,7 @@ module SuccImpl {
   import BucketSuccessorLoopImpl
   import BucketSuccessorLoopModel
   import opened DiskOpImpl
+  import opened MainDiskIOHandler
 
   import opened Options
   import opened NativeTypes

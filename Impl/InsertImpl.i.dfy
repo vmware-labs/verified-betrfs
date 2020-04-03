@@ -17,6 +17,7 @@ module InsertImpl {
   import opened FlushPolicyImpl
   import opened BucketImpl
   import opened DiskOpImpl
+  import opened MainDiskIOHandler
 
   import opened Options
   import opened Maps

@@ -20,6 +20,7 @@ module SyncImpl {
   import BlockAllocatorModel
   import opened DiskOpImpl
   import opened StateImpl
+  import opened MainDiskIOHandler
 
   import opened Options
   import opened Maps
