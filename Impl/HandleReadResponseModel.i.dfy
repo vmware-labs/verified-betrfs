@@ -1,5 +1,4 @@
 include "IOModel.i.dfy"
-include "CoordinationModel.i.dfy"
 
 module HandleReadResponseModel {
   import opened NativeTypes
@@ -8,6 +7,7 @@ module HandleReadResponseModel {
   import opened InterpretationDiskOps
   import opened ViewOp
   import opened Options
+  import opened DiskOpModel
   import IOModel
   import CommitterModel
   import MarshallingModel
