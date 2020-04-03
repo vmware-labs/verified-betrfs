@@ -27,12 +27,13 @@ module CoordinationImpl {
   import opened ValueType
   import opened FullImpl
   import opened DiskOpImpl
+  import SyncModel
   import CoordinationModel
   import opened MainDiskIOHandler
 
   method pushSync(k: ImplConstants, s: Full)
   returns (id: uint64)
-  requires s.Inv()
+  requires s.Inv(k)
   modifies s.Repr
   ensures s.W()
   ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
@@ -56,6 +57,7 @@ module CoordinationImpl {
     CoordinationModel.reveal_receiveLoc();
 
     s.loading := true;
+    s.ready := false;
     s.indirectionTableLoc := loc;
     s.indirectionTableRead := None;
   }
@@ -96,6 +98,7 @@ module CoordinationImpl {
       print "initialization: doing nothing\n";
     }
 
+    s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
     s.reveal_ReprInv();
     assert s.ProtectedReprInv();
   }
@@ -114,7 +117,7 @@ module CoordinationImpl {
   ensures CoordinationModel.doSync(
       Ic(k), old(s.I()), old(IIO(io)), graphSync, s.I(), IIO(io))
   {
-    CoordinationModel.reveal_doSync();
+    //CoordinationModel.reveal_doSync();
     s.reveal_ReprInv();
 
     wait := false;
@@ -123,8 +126,14 @@ module CoordinationImpl {
       if s.jc.frozenLoc.Some? {
         CommitterCommitImpl.tryAdvanceLocation(k, s.jc, io);
       } else {
-        var _, wait0 := SyncImpl.sync(k, s.bc, io);
+        var froze, wait0 := SyncImpl.sync(k, s.bc, io);
         wait := wait0;
+
+        /*s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
+        s.reveal_ReprInv();
+        assert 
+          && SyncModel.sync(Ic(k), old(s.I()).bc, old(IIO(io)), s.I().bc, IIO(io), froze)
+          && old(s.I()).jc == s.I().jc;*/
       }
     } else if s.jc.superblockWrite.Some? {
       print "doSync: doing nothing, superblock write out\n";
@@ -140,6 +149,7 @@ module CoordinationImpl {
       }
     }
 
+    s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
     s.reveal_ReprInv();
   }
 
@@ -168,6 +178,10 @@ module CoordinationImpl {
     if syncState == Some(JC.State1) {
       CommitterCommitImpl.popSync(k, s.jc, id);
       success := true;
+
+      s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
+      s.reveal_ReprInv();
+      assert s.ProtectedReprInv();
     } else if !s.bc.ready || !s.jc.status.StatusReady? {
       initialization(k, s, io);
       success := false;
@@ -181,12 +195,10 @@ module CoordinationImpl {
         success := false;
       }
     }
-
-    s.reveal_ReprInv();
   }
 
   method isInitialized(s: Full) returns (b: bool)
-  requires s.W()
+  requires s.WF()
   ensures b == CoordinationModel.isInitialized(s.I())
   {
     if (
@@ -221,9 +233,11 @@ module CoordinationImpl {
       result := None;
     } else {
       result := QueryImpl.query(k, s.bc, io, key);
-    }
 
-    s.reveal_ReprInv();
+      s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
+      s.reveal_ReprInv();
+      assert s.ProtectedReprInv();
+    }
   }
 
   method succ(
@@ -250,9 +264,11 @@ module CoordinationImpl {
       result := None;
     } else {
       result := SuccImpl.doSucc(k, s.bc, io, start, maxToFind);
-    }
 
-    s.reveal_ReprInv();
+      s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
+      s.reveal_ReprInv();
+      assert s.ProtectedReprInv();
+    }
   }
 
   method insert(
@@ -285,12 +301,14 @@ module CoordinationImpl {
         if success {
           CommitterAppendImpl.JournalAppend(k, s.jc, key, value);
         }
+
+        s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
+        s.reveal_ReprInv();
+        assert s.ProtectedReprInv();
       } else {
         var wait := doSync(k, s, io, true /* graphSync */);
         success := false;
       }
     }
-
-    s.reveal_ReprInv();
   }
 }

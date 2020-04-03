@@ -214,7 +214,7 @@ module CoordinationModel {
     }
   }
 
-  predicate {:opaque} doSync(
+  predicate doSync(
       k: Constants, s: Variables, io: IO, graphSync: bool,
       s': Variables, io': IO)
   requires Inv(k, s)
@@ -226,19 +226,25 @@ module CoordinationModel {
         && CommitterCommitModel.tryAdvanceLocation(k, s.jc, io, s'.jc, io')
         && s.bc == s'.bc
       ) else (
-        exists froze ::
-          && SyncModel.sync(k, s.bc, io, s'.bc, io', froze)
-          && s.jc == s'.jc
+        && (
+          || SyncModel.sync(k, s.bc, io, s'.bc, io', true /* froze */)
+          || SyncModel.sync(k, s.bc, io, s'.bc, io', false /* froze */)
+        )
+        && s.jc == s'.jc
       )
     ) else if s.jc.superblockWrite.Some? then (
       && s' == s
       && io' == io
     ) else (
       if graphSync then (
-        exists froze ::
-          && SyncModel.sync(k, s.bc, io, s'.bc, io', froze)
-          && (froze ==> s'.jc == CommitterCommitModel.freeze(k, s.jc))
-          && (!froze ==> s'.jc == s.jc)
+        || (
+          && SyncModel.sync(k, s.bc, io, s'.bc, io', true /* froze */)
+          && (s'.jc == CommitterCommitModel.freeze(k, s.jc))
+        )
+        || (
+          && SyncModel.sync(k, s.bc, io, s'.bc, io', false /* froze */)
+          && (s'.jc == s.jc)
+        )
       ) else (
         && CommitterCommitModel.tryAdvanceLog(k, s.jc, io, s'.jc, io')
         && s.bc == s'.bc
@@ -258,7 +264,7 @@ module CoordinationModel {
   ensures M.Next(Ik(k), IVars(s), IVars(s'),
         UI.NoOp, diskOp(io'))
   {
-    reveal_doSync();
+    //reveal_doSync();
     if s.jc.isFrozen {
       if s.jc.frozenLoc.Some? {
         CommitterCommitModel.tryAdvanceLocationCorrect(k, s.jc, io, s'.jc, io');
