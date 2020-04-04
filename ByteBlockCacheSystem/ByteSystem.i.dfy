@@ -1,5 +1,6 @@
 include "AsyncDiskModel.s.dfy"
 include "ByteCache.i.dfy"
+
 module ByteSystem refines AsyncDiskModel {
   import M = ByteCache
 
@@ -16,32 +17,56 @@ module ByteSystem refines AsyncDiskModel {
 
   ///// reqWrites are correct
 
+  predicate ReqWriteNodeLocation(reqWrite: D.ReqWrite)
+  {
+    && |reqWrite.bytes| < 0x1_0000_0000_0000_0000
+    && ValidNodeLocation(LocOfReqWrite(reqWrite))
+  }
+
+  predicate ReqWriteIndirectionTableLocation(reqWrite: D.ReqWrite)
+  {
+    && |reqWrite.bytes| < 0x1_0000_0000_0000_0000
+    && ValidIndirectionTableLocation(LocOfReqWrite(reqWrite))
+  }
+
+  predicate ReqWriteJournalLocation(reqWrite: D.ReqWrite)
+  {
+    && |reqWrite.bytes| < 0x1_0000_0000_0000_0000
+    && ValidJournalLocation(LocOfReqWrite(reqWrite))
+  }
+
+  predicate ReqWriteSuperblockLocation(reqWrite: D.ReqWrite)
+  {
+    && |reqWrite.bytes| < 0x1_0000_0000_0000_0000
+    && ValidSuperblockLocation(LocOfReqWrite(reqWrite))
+  }
+
   predicate reqWritesHaveValidNodes(reqWrites: map<D.ReqId, D.ReqWrite>)
   {
     forall id | id in reqWrites ::
-        ValidNodeLocation(LocOfReqWrite(reqWrites[id])) ==>
-        ValidNodeBytes(reqWrites[id].bytes)
+        ReqWriteNodeLocation(reqWrites[id]) ==>
+          ValidNodeBytes(reqWrites[id].bytes)
   }
 
   predicate reqWritesHaveValidIndirectionTables(reqWrites: map<D.ReqId, D.ReqWrite>)
   {
     forall id | id in reqWrites ::
-        ValidIndirectionTableLocation(LocOfReqWrite(reqWrites[id])) ==>
-        ValidIndirectionTableBytes(reqWrites[id].bytes)
+        ReqWriteIndirectionTableLocation(reqWrites[id]) ==>
+          ValidIndirectionTableBytes(reqWrites[id].bytes)
   }
 
   predicate reqWritesHaveValidJournals(reqWrites: map<D.ReqId, D.ReqWrite>)
   {
     forall id | id in reqWrites ::
-        ValidJournalLocation(LocOfReqWrite(reqWrites[id])) ==>
-        ValidJournalBytes(reqWrites[id].bytes)
+        ReqWriteJournalLocation(reqWrites[id]) ==>
+          ValidJournalBytes(reqWrites[id].bytes)
   }
 
   predicate reqWritesHaveValidSuperblocks(reqWrites: map<D.ReqId, D.ReqWrite>)
   {
     forall id | id in reqWrites ::
-        ValidSuperblockLocation(LocOfReqWrite(reqWrites[id])) ==>
-        ValidSuperblockBytes(reqWrites[id].bytes)
+        ReqWriteSuperblockLocation(reqWrites[id]) ==>
+          ValidSuperblockBytes(reqWrites[id].bytes)
   }
 
   predicate reqWritesHaveValidData(reqWrites: map<D.ReqId, D.ReqWrite>)
@@ -124,6 +149,8 @@ module ByteSystem refines AsyncDiskModel {
   }
 
   function ReqWriteSuperblockAtLoc(disk: D.Variables, loc: Location) : Option<JournalDisk.ReqWriteSuperblockId>
+  requires ValidSuperblockLocation(loc)
+  requires reqWritesHaveValidSuperblocks(disk.reqWrites)
   {
     var id := ReqWriteWithLoc(disk.reqWrites, loc);
     if id.Some? then
@@ -164,11 +191,13 @@ module ByteSystem refines AsyncDiskModel {
   }
 
   function ReqWriteSuperblock1(disk: D.Variables) : Option<JournalDisk.ReqWriteSuperblockId>
+  requires reqWritesHaveValidSuperblocks(disk.reqWrites)
   {
     ReqWriteSuperblockAtLoc(disk, Superblock1Location())
   }
 
   function ReqWriteSuperblock2(disk: D.Variables) : Option<JournalDisk.ReqWriteSuperblockId>
+  requires reqWritesHaveValidSuperblocks(disk.reqWrites)
   {
     ReqWriteSuperblockAtLoc(disk, Superblock2Location())
   }
@@ -309,5 +338,11 @@ module ByteSystem refines AsyncDiskModel {
     MapUnion(
         ReqWriteNodes_of_reqs(disk), 
         ReqWriteNodes_of_resps(disk))
+  }
+
+  ///////// Interpretation of the disk
+
+  function DiskNodes(disk: D.Variables) : imap<Location, Node>
+  {
   }
 }
