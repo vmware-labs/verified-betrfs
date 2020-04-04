@@ -2,32 +2,20 @@ include "BetreeSystem.i.dfy"
 include "JournalSystem.i.dfy"
 include "BetreeSystem_Refines_StatesViewMap.i.dfy"
 include "JournalSystem_Refines_JournalView.i.dfy"
+include "../Versions/CompositeView.i.dfy"
 
 module BetreeJournalSystem {
   import BS = BetreeSystem
   import JS = JournalSystem
 
-  //import BlockSystemRef = BlockSystem_Refines_StatesView
   import BetreeSystemRef = BetreeSystem_Refines_StatesViewMap
   import JournalSystemRef = JournalSystem_Refines_JournalView
   import CompositeView
+  import opened ViewOp
+  import UI
 
   datatype Constants = Constants(bs: BS.Constants, js: JS.Constants)
   datatype Variables = Variables(bs: BS.Variables, js: JS.Variables)
-
-  predicate Init(k: Constants, s: Variables)
-  {
-    exists loc ::
-      && BS.Init(k.bs, s.bs, loc)
-      && JS.Init(k.js, s.js, loc)
-  }
-
-  predicate Next(k: Constants, s: Variables, s': Variables)
-  {
-    exists vop ::
-      && BS.Next(k.bs, s.bs, s'.bs, vop)
-      && JS.Next(k.js, s.js, s'.js, vop)
-  }
 
   function Ik(k: Constants) : CompositeView.Constants {
     CompositeView.Constants(
@@ -36,11 +24,38 @@ module BetreeJournalSystem {
     )
   }
 
-  function I(k: Constants, s: Variables) : CompositeView.Variables {
+  function I(k: Constants, s: Variables) : CompositeView.Variables
+  requires BS.Inv(k.bs, s.bs)
+  requires JS.Inv(k.js, s.js)
+  {
     CompositeView.Variables(
-      BetreeSystemRef.I(k.bs, s.js),
-      JournalSystemRef.I(k.bs, s.js)
+      BetreeSystemRef.I(k.bs, s.bs),
+      JournalSystemRef.I(k.js, s.js)
     )
+  }
+
+  predicate InitWithLoc(k: Constants, s: Variables, loc: Loc)
+  {
+    && BS.Init(k.bs, s.bs, loc)
+    && JS.Init(k.js, s.js, loc)
+    && (
+      BS.InitImpliesInv(k.bs, s.bs, loc);
+      JS.InitImpliesInv(k.js, s.js, loc);
+      CompositeView.Inv(Ik(k), I(k, s))
+    )
+  }
+
+  predicate Init(k: Constants, s: Variables)
+  {
+    exists loc :: InitWithLoc(k, s, loc)
+  }
+
+  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
+  {
+    exists vop ::
+      && VOpAgreesUIOp(vop, uiop)
+      && BS.Next(k.bs, s.bs, s'.bs, vop)
+      && JS.Next(k.js, s.js, s'.js, vop)
   }
 
   predicate Inv(k: Constants, s: Variables)
@@ -48,7 +63,7 @@ module BetreeJournalSystem {
     && BS.Inv(k.bs, s.bs)
     && JS.Inv(k.js, s.js)
     //&& JS.PersistentLoc(s.js) in BS.BetreeDisk(k.bs, s.bs)
-    && CompositeView.Inv(Ik(k), I(s))
+    && CompositeView.Inv(Ik(k), I(k, s))
   }
 
   lemma InitImpliesInv(k: Constants, s: Variables)
@@ -62,20 +77,23 @@ module BetreeJournalSystem {
     JS.InitImpliesInv(k.js, s.js, loc);
   }
 
-  lemma NextImpliesInv(k: Constants, s: Variables, s': Variables)
+  lemma NextImpliesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
   requires Inv(k, s)
-  requires Next(k, s, s')
+  requires Next(k, s, s', uiop)
   ensures Inv(k, s')
   {
     var vop :|
+      && VOpAgreesUIOp(vop, uiop)
       && BS.Next(k.bs, s.bs, s'.bs, vop)
       && JS.Next(k.js, s.js, s'.js, vop);
     BS.NextPreservesInv(k.bs, s.bs, s'.bs, vop);
     JS.NextPreservesInv(k.js, s.js, s'.js, vop);
-
-    //var step :| BS.NextStep(k.bs, s.bs, s'.bs, vop);
-    //BlockSystemRef.StepGraphs(k.bs, s.bs, s'.bs, vop
-
+    BetreeSystemRef.RefinesNext(k.bs, s.bs, s'.bs, vop);
+    JournalSystemRef.RefinesNext(k.js, s.js, s'.js, vop);
+    var step := CompositeView.Step(vop);
+    assert CompositeView.NextStep(Ik(k), I(k, s), I(k, s'),
+      step.vop, uiop);
+    CompositeView.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
   }
 
   lemma InvImpliesPersistentLocInGraph(k: Constants, s: Variables)
