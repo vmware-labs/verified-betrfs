@@ -43,7 +43,6 @@ module BetreeSystem {
     && D.Next(k.disk, s.disk, s'.disk, dop)
     && (vop.SendPersistentLocOp? ==>
       BCS.Inv(k, s) ==>
-        && BCS.WFSuccs(k, s, vop.loc)
         && vop.loc in Ref.DiskGraphMap(k, s)
         && BT.Inv(Ik(k), BT.Variables(BI.Variables(Ref.DiskGraphMap(k, s)[vop.loc])))
     )
@@ -130,6 +129,7 @@ module BetreeSystem {
   lemma InitImpliesInv(k: Constants, s: Variables, loc: Location)
     requires Init(k, s, loc)
     ensures Inv(k, s)
+    ensures loc in BetreeDisk(k, s)
   {
     BCS.InitImpliesInv(k, s, loc);
     BT.InitImpliesInv(Ik(k), BetreeDisk(k, s)[loc]);
@@ -155,7 +155,6 @@ module BetreeSystem {
     requires M.BlockCacheMove(k.machine, s.machine, s'.machine, dop, vop, step)
     requires D.Next(k.disk, s.disk, s'.disk, dop)
     requires (vop.SendPersistentLocOp? ==>
-      && BCS.WFSuccs(k, s, vop.loc)
       && vop.loc in BetreeDisk(k, s)
       && BT.Inv(Ik(k), BetreeDisk(k, s)[vop.loc])
     )
@@ -198,7 +197,19 @@ module BetreeSystem {
       else {
       }
     }
+    else if vop.JournalInternalOp? {
+      assert Ref.UpdateAllEq(k, s, s');
+    }
+    else if vop.PushSyncOp? {
+      assert Ref.UpdateAllEq(k, s, s');
+    }
+    else if vop.PopSyncOp? {
+      assert Ref.UpdateAllEq(k, s, s');
+    }
+    else if vop.AdvanceOp? {
+    }
     else {
+      assert false;
     }
   }
 

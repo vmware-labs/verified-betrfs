@@ -123,6 +123,29 @@ module BlockSystem {
       s.disk.nodes)
   }
 
+  predicate NoDanglingPointers(graph: imap<Reference, Node>)
+  {
+    forall r1, r2 {:trigger r2 in M.G.Successors(graph[r1])}
+      | r1 in graph && r2 in M.G.Successors(graph[r1])
+      :: r2 in graph
+  }
+
+  predicate SuccessorsAgree(succGraph: map<Reference, seq<Reference>>, graph: imap<Reference, Node>)
+  {
+    && (forall key | key in succGraph :: key in graph)
+    && (forall key | key in graph :: key in succGraph)
+    && forall ref | ref in succGraph :: (iset r | r in succGraph[ref]) == M.G.Successors(graph[ref])
+  }
+
+  protected predicate WFSuccs(k: Constants, s: Variables, loc: Location)
+  {
+    && WFDiskGraphOfLoc(k, s, loc)
+    && SuccessorsAgree(
+      s.disk.indirectionTables[loc].graph,
+      DiskGraphOfLoc(k, s, loc))
+    && NoDanglingPointers(DiskGraphOfLoc(k, s, loc))
+  }
+
   function DiskGraphOfLoc(
       k: Constants,
       s: Variables,
@@ -136,7 +159,7 @@ module BlockSystem {
       k: Constants,
       s: Variables) : imap<Location, imap<Reference, Node>>
   {
-    imap loc | WFDiskGraphOfLoc(k, s, loc)
+    imap loc | WFSuccs(k, s, loc)
         :: DiskGraphOfLoc(k, s, loc)
   }
 
@@ -241,29 +264,6 @@ module BlockSystem {
       None
   }
 
-  predicate NoDanglingPointers(graph: imap<Reference, Node>)
-  {
-    forall r1, r2 {:trigger r2 in M.G.Successors(graph[r1])}
-      | r1 in graph && r2 in M.G.Successors(graph[r1])
-      :: r2 in graph
-  }
-
-  predicate SuccessorsAgree(succGraph: map<Reference, seq<Reference>>, graph: imap<Reference, Node>)
-  {
-    && (forall key | key in succGraph :: key in graph)
-    && (forall key | key in graph :: key in succGraph)
-    && forall ref | ref in succGraph :: (iset r | r in succGraph[ref]) == M.G.Successors(graph[ref])
-  }
-
-  protected predicate WFSuccs(k: Constants, s: Variables, loc: Location)
-  {
-    && WFDiskGraphOfLoc(k, s, loc)
-    && SuccessorsAgree(
-      s.disk.indirectionTables[loc].graph,
-      DiskGraphOfLoc(k, s, loc))
-    && NoDanglingPointers(DiskGraphOfLoc(k, s, loc))
-  }
-
   ///// Init
 
   predicate Init(k: Constants, s: Variables, loc: Location)
@@ -290,7 +290,8 @@ module BlockSystem {
 
     // The composite state machine of BlockSystem and JournalSystem
     // will need to provide this condition.
-    && (vop.SendPersistentLocOp? ==> WFSuccs(k, s, vop.loc))
+    && (vop.SendPersistentLocOp? ==>
+          vop.loc in DiskGraphMap(k, s))
   }
 
   predicate Crash(k: Constants, s: Variables, s': Variables, vop: VOp)
@@ -1212,7 +1213,7 @@ module BlockSystem {
     requires Inv(k, s)
     requires M.ReceiveLoc(k.machine, s.machine, s'.machine, dop, vop)
     requires D.Stutter(k.disk, s.disk, s'.disk, dop);
-    requires WFSuccs(k, s, vop.loc);
+    requires vop.loc in DiskGraphMap(k, s)
 
     ensures PersistentLoc(k, s) == None
     ensures DiskGraphMap(k, s') == DiskGraphMap(k, s)

@@ -617,6 +617,7 @@ module JournalSystem {
   lemma InitImpliesInv(k: Constants, s: Variables, loc: Location)
     requires Init(k, s, loc)
     ensures Inv(k, s)
+    ensures loc == PersistentLoc(s)
   {
     InitJournals(k, s, loc);
   }

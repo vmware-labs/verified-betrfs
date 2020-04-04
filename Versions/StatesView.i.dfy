@@ -49,6 +49,7 @@ abstract module StatesView {
     && s'.frozenLoc == s.frozenLoc
     && s'.frozenState == s.frozenState
     && vop.loc in s.disk
+    && SM.Inv(k.k, s.disk[vop.loc])
     && s'.ephemeralState == Some(s.disk[vop.loc])
   }
 
@@ -152,7 +153,8 @@ abstract module StatesView {
 
   predicate Stutter(k: Constants, s: Variables, s': Variables, vop: VOp)
   {
-    && (vop.JournalInternalOp? || vop.StatesInternalOp?)
+    && (vop.JournalInternalOp? || vop.StatesInternalOp? ||
+        vop.PushSyncOp? || vop.PopSyncOp?)
     && s' == s
   }
 
@@ -172,5 +174,62 @@ abstract module StatesView {
 
   predicate Next(k: Constants, s: Variables, s': Variables, vop: VOp) {
     exists step :: NextStep(k, s, s', vop, step)
+  }
+
+  predicate Inv(k: Constants, s: Variables)
+  {
+    && (s.persistentLoc.Some? ==>
+        && s.persistentLoc.value in s.disk
+        && SM.Inv(k.k, s.disk[s.persistentLoc.value]))
+    && (s.frozenLoc.Some? ==>
+        && s.frozenLoc.value in s.disk
+        && SM.Inv(k.k, s.disk[s.frozenLoc.value]))
+    //&& (forall loc | loc in s.disk :: SM.Inv(k.k, s.disk[loc]))
+    && (s.frozenState.Some? ==> SM.Inv(k.k, s.frozenState.value))
+    && (s.ephemeralState.Some? ==> SM.Inv(k.k, s.ephemeralState.value))
+  }
+
+  lemma InitImpliesInv(k: Constants, s: Variables, loc: Loc)
+  requires Init(k, s, loc)
+  ensures Inv(k, s)
+  {
+  }
+
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp)
+  requires Inv(k, s)
+  requires Next(k, s, s', vop)
+  ensures Inv(k, s')
+  {
+    var step :| NextStep(k, s, s', vop, step);
+    match step {
+      case ObtainPersistentLocStep => {
+        assert Inv(k, s');
+      }
+      case AdvanceStep => {
+        SM.NextPreservesInv(k.k,
+          s.ephemeralState.value,
+          s'.ephemeralState.value,
+          vop.uiop);
+        assert Inv(k, s');
+      }
+      case CrashStep => {
+        assert Inv(k, s');
+      }
+      case FreezeStep => {
+        assert Inv(k, s');
+      }
+      case DiskChangeStep => {
+        assert Inv(k, s');
+      }
+      case ProvideFrozenLocStep => {
+        assert Inv(k, s');
+      }
+      case ForgetOldStep => {
+        assert Inv(k, s');
+      }
+      case StutterStep => {
+        assert Inv(k, s');
+      }
+    }
   }
 }

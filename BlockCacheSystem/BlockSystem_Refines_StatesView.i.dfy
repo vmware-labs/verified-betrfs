@@ -357,6 +357,13 @@ module BlockSystem_Refines_StatesView {
       || UpdateAllEq(k, s, s')
       || UpdateDiskChange(k, s, s')
     )
+
+  ensures vop.JournalInternalOp? ==>
+      UpdateAllEq(k, s, s')
+  ensures vop.PushSyncOp? ==>
+      UpdateAllEq(k, s, s')
+  ensures vop.PopSyncOp? ==>
+      UpdateAllEq(k, s, s')
   {
     System.NextStepPreservesInv(k, s, s', vop, step);
 

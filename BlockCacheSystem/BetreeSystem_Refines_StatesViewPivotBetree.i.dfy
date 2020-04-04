@@ -138,7 +138,20 @@ module BetreeSystem_Refines_StatesViewPivotBetree {
         else {
         }
       }
+      else if vop.JournalInternalOp? {
+        assert Ref.UpdateAllEq(k, s, s');
+        assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.StutterStep);
+      }
+      else if vop.PushSyncOp? {
+        assert Ref.UpdateAllEq(k, s, s');
+        assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.StutterStep);
+      }
+      else if vop.PopSyncOp? {
+        assert Ref.UpdateAllEq(k, s, s');
+        assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.StutterStep);
+      }
       else {
+        assert false;
       }
     }
   }
