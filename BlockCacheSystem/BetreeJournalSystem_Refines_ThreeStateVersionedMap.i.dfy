@@ -1,24 +1,24 @@
-include "CompositeView_Refines_TSJMap.i.dfy"
-include "../MapSpec/TSJMap_Refines_ThreeStateVersionedMap.i.dfy"
+include "BetreeJournalSystem_Refines_CompositeView.i.dfy"
+include "../Versions/CompositeView_Refines_ThreeStateVersionedMap.i.dfy"
 
 //
 // Composes the two refinements:
 //
-//   CompositeView -> TSJMap
-//   TSJMap -> ThreeStateVersioned Map
+//   BetreeJournalSystem -> CompositeView
+//   CompositeView -> ThreeStateVersioned Map
 //
 // To yield
 //
-//   CompositeView -> ThreeStateVersioned Map
+//   BetreeJournalSystem -> ThreeStateVersioned Map
 //
 
-module CompositeView_Refines_ThreeStateVersionedMap {
-  import A = CompositeView
-  import B = TSJMap
+module BetreeJournalSystem_Refines_ThreeStateVersionedMap {
+  import A = BetreeJournalSystem
+  import B = CompositeView
   import C = ThreeStateVersionedMap
 
-  import Ref_A = CompositeView_Refines_TSJMap
-  import Ref_B = TSJMap_Refines_ThreeStateVersionedMap
+  import Ref_A = BetreeJournalSystem_Refines_CompositeView
+  import Ref_B = CompositeView_Refines_ThreeStateVersionedMap
   
   import UI
 
