@@ -14,6 +14,46 @@ module ByteSystem refines AsyncDiskModel {
   import opened SectorType
   import opened Options
 
+  ///// reqWrites are correct
+
+  predicate reqWritesHaveValidNodes(reqWrites: map<D.ReqId, D.ReqWrite>)
+  {
+    forall id | id in reqWrites ::
+        ValidNodeLocation(LocOfReqWrite(reqWrites[id])) ==>
+        ValidNodeBytes(reqWrites[id].bytes)
+  }
+
+  predicate reqWritesHaveValidIndirectionTables(reqWrites: map<D.ReqId, D.ReqWrite>)
+  {
+    forall id | id in reqWrites ::
+        ValidIndirectionTableLocation(LocOfReqWrite(reqWrites[id])) ==>
+        ValidIndirectionTableBytes(reqWrites[id].bytes)
+  }
+
+  predicate reqWritesHaveValidJournals(reqWrites: map<D.ReqId, D.ReqWrite>)
+  {
+    forall id | id in reqWrites ::
+        ValidJournalLocation(LocOfReqWrite(reqWrites[id])) ==>
+        ValidJournalBytes(reqWrites[id].bytes)
+  }
+
+  predicate reqWritesHaveValidSuperblocks(reqWrites: map<D.ReqId, D.ReqWrite>)
+  {
+    forall id | id in reqWrites ::
+        ValidSuperblockLocation(LocOfReqWrite(reqWrites[id])) ==>
+        ValidSuperblockBytes(reqWrites[id].bytes)
+  }
+
+  predicate reqWritesHaveValidData(reqWrites: map<D.ReqId, D.ReqWrite>)
+  {
+    && reqWritesHaveValidNodes(reqWrites)
+    && reqWritesHaveValidIndirectionTables(reqWrites)
+    && reqWritesHaveValidJournals(reqWrites)
+    && reqWritesHaveValidSuperblocks(reqWrites)
+  }
+
+  ///// get operation from Loc
+
   function ReqReadWithLoc(reqReads: map<D.ReqId, D.ReqRead>, loc: Location) : Option<D.ReqId>
   {
     if id :| id in reqReads && LocOfReqRead(reqReads[id]) == loc then
