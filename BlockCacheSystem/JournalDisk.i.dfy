@@ -42,8 +42,8 @@ module JournalDisk {
 
   datatype Constants = Constants()
   datatype Variables = Variables(
-    reqReadSuperblock1: Option<ReqId>,
-    reqReadSuperblock2: Option<ReqId>,
+    reqReadSuperblock1: set<ReqId>,
+    reqReadSuperblock2: set<ReqId>,
     reqReadJournals: map<ReqId, JournalInterval>,
 
     reqWriteSuperblock1: Option<ReqWriteSuperblockId>,
@@ -58,8 +58,8 @@ module JournalDisk {
 
   predicate Init(k: Constants, s: Variables)
   {
-    && s.reqReadSuperblock1 == None
-    && s.reqReadSuperblock2 == None
+    && s.reqReadSuperblock1 == {}
+    && s.reqReadSuperblock2 == {}
     && s.reqReadJournals == map[]
 
     && s.reqWriteSuperblock1 == None
@@ -74,13 +74,13 @@ module JournalDisk {
   predicate RecvReadSuperblock(k: Constants, s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.ReqReadSuperblockOp?
-    && Some(dop.id) != s.reqReadSuperblock1
-    && Some(dop.id) != s.reqReadSuperblock2
+    && dop.id !in s.reqReadSuperblock1
+    && dop.id !in s.reqReadSuperblock2
     && (dop.which == 0 || dop.which == 1)
     && (dop.which == 0 ==>
-      s' == s.(reqReadSuperblock1 := Some(dop.id)))
+      s' == s.(reqReadSuperblock1 := s.reqReadSuperblock1 + {dop.id}))
     && (dop.which == 1 ==>
-      s' == s.(reqReadSuperblock2 := Some(dop.id)))
+      s' == s.(reqReadSuperblock2 := s.reqReadSuperblock2 + {dop.id}))
   }
 
   predicate RecvReadJournal(k: Constants, s: Variables, s': Variables, dop: DiskOp)
@@ -151,16 +151,14 @@ module JournalDisk {
     && dop.RespReadSuperblockOp?
     && (dop.which == 0 || dop.which == 1)
     && (dop.which == 0 ==>
-      && s.reqReadSuperblock1.Some?
-      && dop.id == s.reqReadSuperblock1.value
+      && dop.id in s.reqReadSuperblock1
       && (dop.superblock.Some? ==> dop.superblock == s.superblock1)
-      && s' == s.(reqReadSuperblock1 := None)
+      && s' == s.(reqReadSuperblock1 := s.reqReadSuperblock1 - {dop.id})
     )
     && (dop.which == 1 ==>
-      && s.reqReadSuperblock2.Some?
-      && dop.id == s.reqReadSuperblock2.value
+      && dop.id in s.reqReadSuperblock2
       && (dop.superblock.Some? ==> dop.superblock == s.superblock2)
-      && s' == s.(reqReadSuperblock2 := None)
+      && s' == s.(reqReadSuperblock2 := s.reqReadSuperblock2 - {dop.id})
     )
   }
 
@@ -292,8 +290,8 @@ module JournalDisk {
 
   predicate Crash(k: Constants, s: Variables, s': Variables)
   {
-    && s'.reqReadSuperblock1 == None
-    && s'.reqReadSuperblock2 == None
+    && s'.reqReadSuperblock1 == {}
+    && s'.reqReadSuperblock2 == {}
     && s'.reqReadJournals == map[]
 
     && s'.reqWriteSuperblock1 == None

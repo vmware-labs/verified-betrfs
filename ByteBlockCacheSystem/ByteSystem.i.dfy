@@ -152,11 +152,23 @@ module ByteSystem refines AsyncDiskModel {
       None
   }
 
-  function ReqReadSuperblockAtLoc(disk: D.Variables, loc: Location) : Option<D.ReqId>
+  function ReqReadSuperblockAtLoc_of_reqs(disk: D.Variables, loc: Location) : set<D.ReqId>
   {
-    var id1 := ReqReadWithLoc(disk.reqReads, loc);
-    var id2 := RespReadWithLoc(disk.respReads, loc);
-    if id1.None? then id2 else id1
+    set id | id in disk.reqReads &&
+        LocOfReqRead(disk.reqReads[id]) == loc
+  }
+
+  function ReqReadSuperblockAtLoc_of_resps(disk: D.Variables, loc: Location) : set<D.ReqId>
+  {
+    set id | id in disk.respReads
+        && |disk.respReads[id].bytes| < 0x1_0000_0000_0000_0000
+        && LocOfRespRead(disk.respReads[id]) == loc
+  }
+
+  function ReqReadSuperblockAtLoc(disk: D.Variables, loc: Location) : set<D.ReqId>
+  {
+      ReqReadSuperblockAtLoc_of_reqs(disk, loc)
+    + ReqReadSuperblockAtLoc_of_resps(disk, loc)
   }
 
   function ReqWriteSuperblockAtLoc(disk: D.Variables, loc: Location) : Option<JournalDisk.ReqWriteSuperblockId>
@@ -191,12 +203,12 @@ module ByteSystem refines AsyncDiskModel {
     SuperblockAtLocOpt(disk, Superblock2Location())
   }
 
-  function ReqReadSuperblock1(disk: D.Variables) : Option<JournalDisk.ReqId>
+  function ReqReadSuperblock1(disk: D.Variables) : set<JournalDisk.ReqId>
   {
     ReqReadSuperblockAtLoc(disk, Superblock1Location())
   }
 
-  function ReqReadSuperblock2(disk: D.Variables) : Option<JournalDisk.ReqId>
+  function ReqReadSuperblock2(disk: D.Variables) : set<JournalDisk.ReqId>
   {
     ReqReadSuperblockAtLoc(disk, Superblock2Location())
   }
@@ -487,8 +499,8 @@ module ByteSystem refines AsyncDiskModel {
   function Ik(k: Constants) : BetreeJournalSystem.Constants
   {
     BetreeJournalSystem.Constants(
-      AsyncSectorDiskModelConstants(BC.Constants(), BlockDisk.Constants()),
-      AsyncSectorDiskModelConstants(JournalCache.Constants(), JournalDisk.Constants())
+      AsyncSectorDiskModelConstants(k.machine.bc, BlockDisk.Constants()),
+      AsyncSectorDiskModelConstants(k.machine.jc, JournalDisk.Constants())
     )
   }
 
@@ -720,24 +732,26 @@ module ByteSystem refines AsyncDiskModel {
       }
     }
 
-    assert BlockSystem.Machine(Ik(k).bs, I(k,s).bs, I(k,s').bs, idop.bdop, vop, bcstep);
+   /* assert BlockSystem.Machine(Ik(k).bs, I(k,s).bs, I(k,s').bs, idop.bdop, vop, bcstep);
     assert BlockSystem.NextStep(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop, BlockSystem.MachineStep(idop.bdop, bcstep));
-    assert BlockSystem.Next(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop);
+    assert BlockSystem.Next(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop);*/
+
+    assert BetreeCache.Next(Ik(k).bs.machine, I(k,s).bs.machine, I(k,s').bs.machine, idop.bdop, vop);
+    assert BetreeSystem.Machine(Ik(k).bs, I(k,s).bs, I(k,s').bs, idop.bdop, vop);
+    assert BetreeSystem.NextStep(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop, BetreeSystem.MachineStep(idop.bdop));
     assert BetreeSystem.Next(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop);
 
     if ValidJournalLocation(loc) {
-      assert ReqReadJournals(s'.disk)
+      /*assert ReqReadJournals(s'.disk)
           == ReqReadJournals(s.disk)[dop.id := idop.jdop.interval];
       assert ReqReadSuperblock1(s'.disk)
           == ReqReadSuperblock1(s.disk);
       assert ReqReadSuperblock2(s'.disk)
-          == ReqReadSuperblock2(s.disk);
+          == ReqReadSuperblock2(s.disk);*/
       assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
     } else if ValidSuperblockLocation(loc) {
-      assume false;
       assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
     } else {
-      assume false;
       assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
     }
 
@@ -754,6 +768,82 @@ module ByteSystem refines AsyncDiskModel {
     requires dop.ReqWriteOp?
     ensures Inv(k, s')
   {
+    var idop := IDiskOp(dop);
+    var vop :| BJC.NextStep(k.machine, s.machine, s'.machine,
+        uiop, idop, vop);
+    assert BetreeCache.Next(k.machine.bc, s.machine.bc, s'.machine.bc, idop.bdop, vop);
+    assert JournalCache.Next(k.machine.jc, s.machine.jc, s'.machine.jc, idop.jdop, vop);
+    var bstep :| BetreeCache.NextStep(k.machine.bc, s.machine.bc, s'.machine.bc, idop.bdop, vop, bstep);
+    var jstep :| JournalCache.NextStep(k.machine.jc, s.machine.jc, s'.machine.jc, idop.jdop, vop, jstep);
+    assert bstep.BlockCacheMoveStep?;
+    var bcstep := bstep.blockCacheStep;
+
+    var loc := LocOfReqWrite(dop.reqWrite);
+
+    forall id1 | id1 in s.disk.reqWrites
+      && writesOverlap(s.disk.reqWrites[id1], dop.reqWrite)
+    ensures false
+    {
+      var loc1 := LocOfReqWrite(s.disk.reqWrites[id1]);
+      overlappingLocsSameType(loc1, loc);
+      if ValidNodeLocation(loc) {
+        BlockSystem.NewRequestWriteNodeDoesntOverlap(
+            Ik(k).bs, I(k, s).bs, I(k, s').bs, idop.bdop, vop, bcstep, id1);
+      }
+      else if ValidIndirectionTableLocation(loc) {
+        BlockSystem.NewRequestWriteIndirectionTableDoesntOverlap(
+            Ik(k).bs, I(k, s).bs, I(k, s').bs, idop.bdop, vop, bcstep, id1);
+      }
+      else if ValidJournalLocation(loc) {
+        JournalSystem.NewRequestWriteJournalDoesntOverlap(
+            Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep, id1);
+      }
+      else if ValidSuperblockLocation(loc) {
+        JournalSystem.NewRequestWriteSuperblockDoesntOverlap(
+            Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep);
+      }
+    }
+
+    forall id1 | id1 in s.disk.reqReads
+      && writeReqReadOverlap(dop.reqWrite, s.disk.reqReads[id1])
+    ensures false
+    {
+    }
+
+    forall id1 | id1 in s.disk.respReads
+      && writeRespReadOverlap(dop.reqWrite, s.disk.respReads[id1])
+    ensures false
+    {
+    }
+
+    assert BlockDisk.Next(Ik(k).bs.disk,
+        IBlockDisk(s.disk),
+        IBlockDisk(s'.disk),
+        idop.bdop);
+    assert JournalDisk.Next(Ik(k).js.disk,
+        IJournalDisk(s.disk),
+        IJournalDisk(s'.disk),
+        idop.jdop);
+
+    assert BetreeCache.Next(Ik(k).bs.machine, I(k,s).bs.machine, I(k,s').bs.machine, idop.bdop, vop);
+    assert BetreeSystem.Machine(Ik(k).bs, I(k,s).bs, I(k,s').bs, idop.bdop, vop);
+    assert BetreeSystem.NextStep(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop, BetreeSystem.MachineStep(idop.bdop));
+    assert BetreeSystem.Next(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop);
+
+    if ValidJournalLocation(loc) {
+      assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
+    } else if ValidSuperblockLocation(loc) {
+      assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
+    } else {
+      assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
+    }
+
+    assert JournalSystem.NextStep(Ik(k).js, I(k,s).js, I(k,s').js, vop, JournalSystem.MachineStep(idop.jdop, jstep));
+    assert JournalSystem.Next(Ik(k).js, I(k,s).js, I(k,s').js, vop);
+
+    assert BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop);
+    BetreeJournalSystem.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
+
   }
 
   lemma ReqWrite2StepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)

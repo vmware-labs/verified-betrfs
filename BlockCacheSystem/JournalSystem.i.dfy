@@ -459,17 +459,13 @@ module JournalSystem {
 
   predicate RecordedReadSuperblockRequests(k: Constants, s: Variables)
   {
-    && (s.disk.reqReadSuperblock1.Some? ==>
-      RecordedReadSuperblockRequest(k, s, s.disk.reqReadSuperblock1.value)
+    && (forall id | id in s.disk.reqReadSuperblock1 ::
+      RecordedReadSuperblockRequest(k, s, id)
     )
-    && (s.disk.reqReadSuperblock2.Some? ==>
-      RecordedReadSuperblockRequest(k, s, s.disk.reqReadSuperblock2.value)
+    && (forall id | id in s.disk.reqReadSuperblock2 ::
+      RecordedReadSuperblockRequest(k, s, id)
     )
-    && (s.disk.reqReadSuperblock1.Some? ==>
-        s.disk.reqReadSuperblock2.Some? ==>
-      s.disk.reqReadSuperblock1.value !=
-      s.disk.reqReadSuperblock2.value
-    )
+    && s.disk.reqReadSuperblock1 !! s.disk.reqReadSuperblock2
   }
 
   predicate RecordedWriteJournalRequests(k: Constants, s: Variables)
@@ -1163,8 +1159,9 @@ module JournalSystem {
     if s'.disk.reqWriteSuperblock2.Some? {
       assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
     }
-    if s'.disk.reqReadSuperblock2.Some? {
-      assert RecordedReadSuperblockRequest(k, s', s'.disk.reqReadSuperblock2.value);
+    forall id | id in s'.disk.reqReadSuperblock2
+    ensures RecordedReadSuperblockRequest(k, s', id)
+    {
     }
   }
 
