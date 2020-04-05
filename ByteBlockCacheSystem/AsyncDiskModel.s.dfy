@@ -130,20 +130,20 @@ module AsyncDisk {
   }
 
   datatype InternalStep =
-    | ProcessReadStep(id: ReqId)
+    //| ProcessReadStep(id: ReqId)
     | ProcessReadFailureStep(id: ReqId, fakeContents: seq<byte>)
     | ProcessWriteStep(id: ReqId)
     | HavocConflictingWritesStep(id: ReqId, id': ReqId)
     | HavocConflictingWriteReadStep(id: ReqId, id': ReqId)
 
-  predicate ProcessRead(k: Constants, s: Variables, s': Variables, id: ReqId)
+  /*predicate ProcessRead(k: Constants, s: Variables, s': Variables, id: ReqId)
   {
     && id in s.reqReads
     && var req := s.reqReads[id];
     && 0 <= req.addr as int <= req.addr as int + req.len as int <= |s.contents|
     && s' == s.(reqReads := MapRemove1(s.reqReads, id))
               .(respReads := s.respReads[id := RespRead(req.addr, s.contents[req.addr .. req.addr as int + req.len as int])])
-  }
+  }*/
 
   predicate {:opaque} ChecksumChecksOut(s: seq<byte>) {
     && |s| >= 32
@@ -239,7 +239,7 @@ module AsyncDisk {
   predicate NextInternalStep(k: Constants, s: Variables, s': Variables, step: InternalStep)
   {
     match step {
-      case ProcessReadStep(id) => ProcessRead(k, s, s', id)
+      //case ProcessReadStep(id) => ProcessRead(k, s, s', id)
       case ProcessReadFailureStep(id, fakeContents) => ProcessReadFailure(k, s, s', id, fakeContents)
       case ProcessWriteStep(id) => ProcessWrite(k, s, s', id)
       case HavocConflictingWritesStep(id, id') => HavocConflictingWrites(k, s, s', id, id')

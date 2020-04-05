@@ -264,21 +264,6 @@ module JournalDisk {
             journal[i] == journal'[i]
   }
 
-  predicate UntouchedLoc(loc: Location, reqs: map<ReqId, Location>)
-  {
-    forall id | id in reqs :: !overlap(loc, reqs[id])
-  }
-
-  predicate havocMap<T>(
-    m: imap<Location, T>,
-    m': imap<Location, T>,
-    reqs: map<ReqId, Location>)
-  {
-    forall loc | loc in m ::
-        UntouchedLoc(loc, reqs) ==>
-            loc in m' && m'[loc] == m[loc]
-  }
-
   predicate Crash(k: Constants, s: Variables, s': Variables)
   {
     && s'.reqReadSuperblock1 == {}

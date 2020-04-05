@@ -162,4 +162,66 @@ module InterpretationDiskContents {
   {
     reveal_atLoc();
   }
+
+  lemma onApplyWrite(contents: seq<byte>,
+      reqWrites: map<ReqId, ReqWrite>,
+      start: int, len: int, id: ReqId)
+  requires id in reqWrites
+  requires len >= 0
+  requires reqWrites[id].addr as int + |reqWrites[id].bytes| <= |contents|
+  requires forall id1, id2 | id1 in reqWrites && id2 in reqWrites && id1 != id2
+      :: !reqWritesOverlap(reqWrites[id1], reqWrites[id2])
+  ensures withWrites(contents, reqWrites, start, len)
+      == withWrites(splice(contents,
+            reqWrites[id].addr as int,
+            reqWrites[id].bytes), 
+          MapRemove1(reqWrites, id),
+          start, len)
+  {
+    var contents' := splice(contents,
+            reqWrites[id].addr as int,
+            reqWrites[id].bytes);
+    assert |contents| == |contents'| by { reveal_splice(); }
+    var reqWrites' := MapRemove1(reqWrites, id);
+    var a := withWrites(contents, reqWrites, start, len);
+    var b := withWrites(contents', reqWrites', start, len);
+    assert |a| == |b|;
+    forall i | 0 <= i < |a| ensures a[i] == b[i]
+    {
+      if Covers(reqWrites[id], start+i) {
+        assert reqWrites[id] == getCoveringReq(reqWrites, start+i);
+        assert 0 <= start+i < |contents'|;
+        calc {
+          a[i];
+          byteWithWrites(contents, reqWrites, start + i);
+          reqWrites[id].bytes[start+i - reqWrites[id].addr as int];
+          { reveal_splice(); }
+          contents'[start+i];
+          b[i];
+        }
+      } else {
+        if 0 <= start+i < |contents| {
+          assert contents[start+i] == contents'[start+i] by { reveal_splice(); }
+          calc {
+            a[i];
+            b[i];
+          }
+        } else {
+          assert a[i] == b[i];
+        }
+      }
+    }
+  }
+
+  lemma onCrash(contents: seq<byte>, reqs: map<ReqId, ReqWrite>,
+      start: int, len: int)
+  requires forall id | id in reqs ::
+      || start + len <= reqs[id].addr as int 
+      || reqs[id].addr as int + |reqs[id].bytes| <= start
+  requires len >= 0
+  ensures withWrites(contents, reqs, start, len)
+      == withWrites(contents, map[], start, len)
+  {
+    
+  }
 }
