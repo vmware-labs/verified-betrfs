@@ -82,4 +82,14 @@ module JournalBytes {
   ensures JournalBlockOfByteSeq(a[4096*i..4096*(i+1)]).Some?
   ensures JournalRangeOfByteSeq(a).value[i]
       == JournalBlockOfByteSeq(a[4096*i..4096*(i+1)]).value
+  {
+  }
+
+  lemma JournalRangeOfJournalBlocks(a: seq<byte>, t: int)
+  requires |a| == t*4096
+  requires forall i | 0 <= i < t ::
+      JournalBlockOfByteSeq(a[i*4096..(i+1)*4096]).Some?
+  ensures JournalRangeOfByteSeq(a).Some?
+  {
+  }
 }

@@ -5,9 +5,27 @@ module InterpretationDiskContents {
   import opened AsyncDisk
   import opened NativeTypes
   import opened Maps
+  import DiskLayout
 
   ///// Basic disk interpretation where we imagine all the pending
   ///// writes are already written.
+
+  predicate locInBounds(loc: DiskLayout.Location, contents: seq<byte>)
+  {
+    && loc.addr as int + loc.len as int <= |contents|
+  }
+
+  function {:opaque} atLoc(loc: DiskLayout.Location, contents: seq<byte>) : (res : seq<byte>)
+  requires locInBounds(loc, contents)
+  ensures |res| == loc.len as int
+  {
+    contents[loc.addr .. loc.addr as int + loc.len as int]
+  }
+
+  function atLocWithWrites(loc: DiskLayout.Location, contents: seq<byte>, reqs: map<ReqId, ReqWrite>) : seq<byte>
+  {
+    withWrites(contents, reqs, loc.addr as int, loc.len as int)
+  }
 
   predicate Covers(req: ReqWrite, i: int)
   {
@@ -134,135 +152,14 @@ module InterpretationDiskContents {
     }
   }
 
-  /*lemma onApplyWrite(s: seq<byte>, reqs: map<ReqId, ReqWrite>, id: ReqId)
-  requires id in reqs
-  requires forall id1, id2 | id1 in reqs && id2 in reqs && id1 != id2
-      :: !reqWritesOverlap(reqs[id1], reqs[id2])
-  requires 0 <= reqs[id].addr
-  requires reqs[id].addr as int + |reqs[id].bytes| <= |s|
-  ensures withWrites(s, reqs)
-      == withWrites(
-            splice(s, reqs[id].addr as int, reqs[id].bytes),
-            MapRemove1(reqs, id))
+  lemma atLoc_eq_atLocWithWrites(contents: seq<byte>, reqWrites: map<ReqId, ReqWrite>, loc: DiskLayout.Location)
+  requires locInBounds(loc, contents)
+  requires forall id | id in reqWrites ::
+      |reqWrites[id].bytes| < 0x1_0000_0000_0000_0000
+      && !DiskLayout.overlap(InterpretationDiskOps.LocOfReqWrite(reqWrites[id]), loc)
+  ensures atLoc(loc, contents)
+      == atLocWithWrites(loc, contents, reqWrites);
   {
-    var a := withWrites(s, reqs);
-    var b := withWrites(
-        splice(s, reqs[id].addr as int, reqs[id].bytes),
-        MapRemove1(reqs, id));
-    assert |a| == |b| by { reveal_splice(); }
-
-    forall i | 0 <= i < |a|
-    ensures a[i] == b[i]
-    {
-      if Covers(reqs[id], i) {
-        calc {
-          a[i];
-          reqs[id].bytes[i - reqs[id].addr as int];
-          { reveal_splice(); }
-          splice(s, reqs[id].addr as int, reqs[id].bytes)[i];
-          b[i];
-        }
-      } else {
-        if hasCoveringReqId(reqs, i) {
-          var req' := getCoveringReq(reqs, i);
-          assert req' == getCoveringReq(MapRemove1(reqs, id), i);
-          calc {
-            a[i];
-            req'.bytes[i - req'.addr as int];
-            b[i];
-          }
-        } else {
-          calc {
-            a[i];
-            s[i];
-            { reveal_splice(); }
-            splice(s, reqs[id].addr as int, reqs[id].bytes)[i];
-            b[i];
-          }
-        }
-      }
-    }
+    reveal_atLoc();
   }
-
-  lemma onNewWrite(s: seq<byte>, reqs: map<ReqId, ReqWrite>, id: ReqId, req: ReqWrite)
-  requires id !in reqs
-  requires forall id1, id2 | id1 in reqs && id2 in reqs && id1 != id2
-      :: !reqWritesOverlap(reqs[id1], reqs[id2])
-  requires forall id1 | id1 in reqs
-      :: !reqWritesOverlap(reqs[id1], req)
-  requires 0 <= req.addr
-  requires req.addr as int + |req.bytes| <= |s|
-  ensures withWrites(s, reqs[id := req])
-      == splice(withWrites(s, reqs), req.addr as int, req.bytes)
-  {
-    var a := withWrites(s, reqs[id := req]);
-    var b := splice(withWrites(s, reqs), req.addr as int, req.bytes);
-
-    assert |a| == |b| by { reveal_splice(); }
-
-    forall i | 0 <= i < |a|
-    ensures a[i] == b[i]
-    {
-      if Covers(req, i) {
-        assert Covers(reqs[id := req][id], i);
-        assert hasCoveringReqId(reqs[id := req], i);
-        assert getCoveringReq(reqs[id := req], i) == req;
-        calc {
-          a[i];
-          req.bytes[i - req.addr as int];
-          { reveal_splice(); }
-          b[i];
-        }
-      } else {
-        if hasCoveringReqId(reqs, i) {
-          var id' := getCoveringReqId(reqs, i);
-          var req' := getCoveringReq(reqs, i);
-          assert Covers(reqs[id := req][id'], i);
-          assert req' == getCoveringReq(reqs[id := req], i);
-          calc {
-            a[i];
-            req'.bytes[i - req'.addr as int];
-            { reveal_splice(); }
-            b[i];
-          }
-        } else {
-          calc {
-            a[i];
-            s[i];
-            { reveal_splice(); }
-            b[i];
-          }
-        }
-      }
-    }
-
-    assert a == b;
-  }
-
-  lemma onSplice(s: seq<byte>, reqs: map<ReqId, ReqWrite>, id: ReqId, req: ReqWrite)
-  requires id !in reqs
-  requires forall id1, id2 | id1 in reqs && id2 in reqs && id1 != id2
-      :: !reqWritesOverlap(reqs[id1], reqs[id2])
-  requires forall id1 | id1 in reqs
-      :: !reqWritesOverlap(reqs[id1], req)
-  requires 0 <= req.addr
-  requires req.addr as int + |req.bytes| <= |s|
-  ensures splice(withWrites(s, reqs), req.addr as int, req.bytes)
-      == withWrites(splice(s, req.addr as int, req.bytes), reqs)
-  {
-    calc {
-      splice(withWrites(s, reqs), req.addr as int, req.bytes);
-      { onNewWrite(s, reqs, id, req); }
-      withWrites(s, reqs[id := req]);
-      { onApplyWrite(s, reqs[id := req], id); }
-      withWrites(
-          splice(s, reqs[id := req][id].addr as int, reqs[id := req][id].bytes),
-          MapRemove1(reqs[id := req], id));
-      {
-        assert MapRemove1(reqs[id := req], id) == reqs;
-        assert reqs[id := req][id] == req;
-      }
-      withWrites(splice(s, req.addr as int, req.bytes), reqs);
-    }
-  }*/
 }

@@ -448,4 +448,26 @@ module JournalIntervals {
   requires ValidJournalLocation(loc)
   ensures ContiguousJournalInterval(interval)
   ensures JournalRangeLocation(interval.start as uint64, interval.len as uint64) == loc
+
+  lemma get_Disk_JournalRange(
+    journal: seq<Option<JournalBlock>>,
+    interval: JournalInterval, jr: JournalRange)
+  requires ContiguousJournalInterval(interval)
+  requires |journal| == NumJournalBlocks() as int
+  requires forall i | 0 <= i < interval.len ::
+      journal[interval.start + i] == Some(jr[i])
+  ensures Disk_HasJournalRange(journal, interval)
+  ensures Disk_JournalRange(journal, interval) == jr
+  {
+  }
+
+  lemma block_exists_of_Disk_JournalRange(
+    journal: seq<Option<JournalBlock>>,
+    interval: JournalInterval, i: int)
+  requires ContiguousJournalInterval(interval)
+  requires 0 <= i < interval.len
+  requires Disk_HasJournalRange(journal, interval)
+  ensures journal[interval.start + i].Some?
+  {
+  }
 }

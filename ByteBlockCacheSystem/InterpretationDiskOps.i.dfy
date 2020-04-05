@@ -164,6 +164,7 @@ module InterpretationDiskOps {
     && var int2 := JournalIntervalOfLocation(LocOfReqWrite(reqWrite2));
     && int1.start + int1.len == NumJournalBlocks() as int
     && int2.start == 0
+    && int2.len > 0
     && int1.len + int2.len <= NumJournalBlocks() as int
   }
 
