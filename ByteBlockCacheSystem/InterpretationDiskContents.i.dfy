@@ -1,6 +1,6 @@
 include "InterpretationDiskOps.i.dfy"
 
-module InterpretationDisk {
+module InterpretationDiskContents {
   import InterpretationDiskOps
   import opened AsyncDisk
   import opened NativeTypes
