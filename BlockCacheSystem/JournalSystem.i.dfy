@@ -1785,7 +1785,7 @@ module JournalSystem {
 
   lemma NewRequestReadJournalDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
   requires Inv(k, s)
-  requires Machine(k, s, s', dop, vop, step)
+  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
   requires dop.ReqReadJournalOp?
   requires id in s.disk.reqWriteJournals
   ensures !journalIntervalOverlap(dop.interval, s.disk.reqWriteJournals[id])
@@ -1805,7 +1805,7 @@ module JournalSystem {
 
   lemma NewRequestWriteJournalDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
   requires Inv(k, s)
-  requires Machine(k, s, s', dop, vop, step)
+  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
   requires dop.ReqWriteJournalOp?
   requires var interval := JournalInterval(
           dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
@@ -1828,7 +1828,7 @@ module JournalSystem {
 
   lemma NewRequestReadSuperblockDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
   requires Inv(k, s)
-  requires Machine(k, s, s', dop, vop, step)
+  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
   requires dop.ReqReadSuperblockOp?
   ensures dop.which == 0 ==> s.disk.reqWriteSuperblock1.None?
   ensures dop.which == 1 ==> s.disk.reqWriteSuperblock2.None?
@@ -1844,7 +1844,7 @@ module JournalSystem {
 
   lemma NewRequestWriteSuperblockDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
   requires Inv(k, s)
-  requires Machine(k, s, s', dop, vop, step)
+  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
   requires dop.ReqWriteSuperblockOp?
   ensures dop.which == 0 ==> s.disk.reqWriteSuperblock1.None?
   ensures dop.which == 1 ==> s.disk.reqWriteSuperblock2.None?

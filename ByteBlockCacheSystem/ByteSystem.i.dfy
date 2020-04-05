@@ -720,7 +720,29 @@ module ByteSystem refines AsyncDiskModel {
       }
     }
 
-    assume false;
+    assert BlockSystem.Machine(Ik(k).bs, I(k,s).bs, I(k,s').bs, idop.bdop, vop, bcstep);
+    assert BlockSystem.NextStep(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop, BlockSystem.MachineStep(idop.bdop, bcstep));
+    assert BlockSystem.Next(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop);
+    assert BetreeSystem.Next(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop);
+
+    if ValidJournalLocation(loc) {
+      assert ReqReadJournals(s'.disk)
+          == ReqReadJournals(s.disk)[dop.id := idop.jdop.interval];
+      assert ReqReadSuperblock1(s'.disk)
+          == ReqReadSuperblock1(s.disk);
+      assert ReqReadSuperblock2(s'.disk)
+          == ReqReadSuperblock2(s.disk);
+      assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
+    } else if ValidSuperblockLocation(loc) {
+      assume false;
+      assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
+    } else {
+      assume false;
+      assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
+    }
+
+    assert JournalSystem.NextStep(Ik(k).js, I(k,s).js, I(k,s').js, vop, JournalSystem.MachineStep(idop.jdop, jstep));
+    assert JournalSystem.Next(Ik(k).js, I(k,s).js, I(k,s').js, vop);
 
     assert BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop);
     BetreeJournalSystem.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);

@@ -12,14 +12,6 @@ module DiskLayout {
 
   // Definitions
 
-  function method Superblock1Location() : Location {
-    Location(0, 4096)
-  }
-
-  function method Superblock2Location() : Location {
-    Location(4096, 4096)
-  }
-
   function method NumJournalBlocks() : uint64 {
     2048
   }
@@ -102,6 +94,22 @@ module DiskLayout {
     && loc.len <= NodeBlockSizeUint64()
   }
 
+  function method Superblock1Location() : Location
+  ensures !ValidNodeLocation(Superblock1Location())
+  ensures !ValidIndirectionTableLocation(Superblock1Location())
+  ensures !ValidJournalLocation(Superblock1Location())
+  {
+    Location(0, 4096)
+  }
+
+  function method Superblock2Location() : Location
+  ensures !ValidNodeLocation(Superblock2Location())
+  ensures !ValidIndirectionTableLocation(Superblock2Location())
+  ensures !ValidJournalLocation(Superblock2Location())
+  {
+    Location(4096, 4096)
+  }
+
   predicate method ValidSuperblock1Location(loc: Location)
   ensures ValidSuperblock1Location(loc) ==> !ValidJournalLocation(loc)
   ensures ValidSuperblock1Location(loc) ==> !ValidIndirectionTableLocation(loc)
@@ -117,6 +125,7 @@ module DiskLayout {
   {
     loc == Superblock2Location()
   }
+
 
   predicate method ValidSuperblockLocation(loc: Location)
   ensures ValidSuperblockLocation(loc) ==>
