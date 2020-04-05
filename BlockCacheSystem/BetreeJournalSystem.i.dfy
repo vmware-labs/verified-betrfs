@@ -77,7 +77,7 @@ module BetreeJournalSystem {
     JS.InitImpliesInv(k.js, s.js, loc);
   }
 
-  lemma NextImpliesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
+  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
   requires Inv(k, s)
   requires Next(k, s, s', uiop)
   ensures Inv(k, s')

@@ -1526,12 +1526,69 @@ module BlockSystem {
   ////////////////////// Misc lemma
   //////////////////////
 
-  lemma RequestsDontOverlap(k: Constants, s: Variables)
+  /*lemma RequestsDontOverlap(k: Constants, s: Variables)
   requires Inv(k, s)
   ensures WriteRequestsDontOverlap(s.disk.reqWriteNodes)
   ensures ReadWritesDontOverlap(s.disk.reqReadNodes, s.disk.reqWriteNodes)
   ensures WriteRequestsDontOverlap(s.disk.reqWriteIndirectionTables)
   ensures ReadWritesDontOverlap(s.disk.reqReadIndirectionTables, s.disk.reqWriteIndirectionTables)
   {
+  }*/
+
+  lemma NewRequestReadNodeDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  requires Inv(k, s)
+  requires Machine(k, s, s', dop, vop, step)
+  requires dop.ReqReadNodeOp?
+  requires id in s.disk.reqWriteNodes
+  ensures !overlap(dop.loc, s.disk.reqWriteNodes[id])
+  {
+    MachineStepPreservesInv(k, s, s', dop, vop, step);
+    assert !overlap(
+        s'.disk.reqReadNodes[dop.id],
+        s'.disk.reqWriteNodes[id]);
+    assert !overlap(dop.loc, s'.disk.reqWriteNodes[id]);
   }
+
+  lemma NewRequestReadIndirectionTableDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  requires Inv(k, s)
+  requires Machine(k, s, s', dop, vop, step)
+  requires dop.ReqReadIndirectionTableOp?
+  requires id in s.disk.reqWriteIndirectionTables
+  ensures !overlap(dop.loc, s.disk.reqWriteIndirectionTables[id])
+  {
+    MachineStepPreservesInv(k, s, s', dop, vop, step);
+    assert !overlap(
+        s'.disk.reqReadIndirectionTables[dop.id],
+        s'.disk.reqWriteIndirectionTables[id]);
+    assert !overlap(dop.loc, s'.disk.reqWriteIndirectionTables[id]);
+  }
+
+  lemma NewRequestWriteNodeDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  requires Inv(k, s)
+  requires Machine(k, s, s', dop, vop, step)
+  requires dop.ReqWriteNodeOp?
+  requires id in s.disk.reqWriteNodes
+  ensures !overlap(dop.reqWriteNode.loc, s.disk.reqWriteNodes[id])
+  {
+    MachineStepPreservesInv(k, s, s', dop, vop, step);
+    assert !overlap(
+        s'.disk.reqWriteNodes[dop.id],
+        s'.disk.reqWriteNodes[id]);
+    assert !overlap(dop.reqWriteNode.loc, s'.disk.reqWriteNodes[id]);
+  }
+
+  lemma NewRequestWriteIndirectionTableDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  requires Inv(k, s)
+  requires Machine(k, s, s', dop, vop, step)
+  requires dop.ReqWriteIndirectionTableOp?
+  requires id in s.disk.reqWriteIndirectionTables
+  ensures !overlap(dop.reqWriteNode.loc, s.disk.reqWriteIndirectionTables[id])
+  {
+    MachineStepPreservesInv(k, s, s', dop, vop, step);
+    assert !overlap(
+        s'.disk.reqWriteIndirectionTables[dop.id],
+        s'.disk.reqWriteIndirectionTables[id]);
+    assert !overlap(dop.reqWriteNode.loc, s'.disk.reqWriteIndirectionTables[id]);
+  }
+
 }

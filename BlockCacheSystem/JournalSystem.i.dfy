@@ -1776,10 +1776,86 @@ module JournalSystem {
 
   // Used by ByteBetreeBlockCacheSystem.i.dfy
 
-  lemma RequestsDontOverlap(k: Constants, s: Variables)
+  /*lemma RequestsDontOverlap(k: Constants, s: Variables)
   requires Inv(k, s)
   ensures WriteJournalRequestsDontOverlap(s.disk.reqWriteJournals)
   ensures ReadWritesJournalDontOverlap(s.disk.reqReadJournals, s.disk.reqWriteJournals)
   {
+  }*/
+
+  lemma NewRequestReadJournalDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  requires Inv(k, s)
+  requires Machine(k, s, s', dop, vop, step)
+  requires dop.ReqReadJournalOp?
+  requires id in s.disk.reqWriteJournals
+  ensures !journalIntervalOverlap(dop.interval, s.disk.reqWriteJournals[id])
+  {
+    MachineStepPreservesInv(k, s, s', dop, vop, step);
+    forall id | id in s.disk.reqWriteJournals
+    ensures !journalIntervalOverlap(dop.interval, s.disk.reqWriteJournals[id]);
+    {
+      assert !journalIntervalOverlap(
+          s'.disk.reqReadJournals[dop.id],
+          s'.disk.reqWriteJournals[id]);
+      assert !journalIntervalOverlap(
+          dop.interval,
+          s'.disk.reqWriteJournals[id]);
+    }
   }
+
+  lemma NewRequestWriteJournalDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  requires Inv(k, s)
+  requires Machine(k, s, s', dop, vop, step)
+  requires dop.ReqWriteJournalOp?
+  requires var interval := JournalInterval(
+          dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
+    && ContiguousJournalInterval(interval)
+  requires id in s.disk.reqWriteJournals
+  ensures var interval := JournalInterval(
+          dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
+      !journalIntervalOverlap(interval, s.disk.reqWriteJournals[id])
+  {
+    var interval := JournalInterval(dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
+    MachineStepPreservesInv(k, s, s', dop, vop, step);
+    forall id | id in s.disk.reqWriteJournals
+    ensures !journalIntervalOverlap(interval, s.disk.reqWriteJournals[id]);
+    {
+      assert !journalIntervalOverlap(
+          interval,
+          s'.disk.reqWriteJournals[id]);
+    }
+  }
+
+  lemma NewRequestReadSuperblockDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
+  requires Inv(k, s)
+  requires Machine(k, s, s', dop, vop, step)
+  requires dop.ReqReadSuperblockOp?
+  ensures dop.which == 0 ==> s.disk.reqWriteSuperblock1.None?
+  ensures dop.which == 1 ==> s.disk.reqWriteSuperblock2.None?
+  {
+    MachineStepPreservesInv(k, s, s', dop, vop, step);
+    if dop.which == 1 {
+      if s'.disk.reqWriteSuperblock2.Some? {
+        assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id);
+      }
+      assert s.disk.reqWriteSuperblock2.None?;
+    }
+  }
+
+  lemma NewRequestWriteSuperblockDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
+  requires Inv(k, s)
+  requires Machine(k, s, s', dop, vop, step)
+  requires dop.ReqWriteSuperblockOp?
+  ensures dop.which == 0 ==> s.disk.reqWriteSuperblock1.None?
+  ensures dop.which == 1 ==> s.disk.reqWriteSuperblock2.None?
+  {
+    MachineStepPreservesInv(k, s, s', dop, vop, step);
+    if dop.which == 1 {
+      if s'.disk.reqWriteSuperblock2.Some? {
+        assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id);
+      }
+      assert s.disk.reqWriteSuperblock2.None?;
+    }
+  }
+
 }

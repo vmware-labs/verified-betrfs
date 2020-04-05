@@ -9,9 +9,11 @@ module ByteSystem refines AsyncDiskModel {
   import opened AsyncSectorDiskModelTypes
   import opened Maps
   import BC = BlockCache
-  import JC = JournalCache
+  import JournalCache
+  import BetreeCache
   import BJC = BlockJournalCache
   import BJD = BlockJournalDisk
+  import BlockSystem
   import opened DiskLayout
   import opened JournalIntervals
   import opened InterpretationDisk
@@ -486,7 +488,7 @@ module ByteSystem refines AsyncDiskModel {
   {
     BetreeJournalSystem.Constants(
       AsyncSectorDiskModelConstants(BC.Constants(), BlockDisk.Constants()),
-      AsyncSectorDiskModelConstants(JC.Constants(), JournalDisk.Constants())
+      AsyncSectorDiskModelConstants(JournalCache.Constants(), JournalDisk.Constants())
     )
   }
 
@@ -565,7 +567,7 @@ module ByteSystem refines AsyncDiskModel {
   predicate writeReqReadOverlap(r1: D.ReqWrite, r2: D.ReqRead)
   requires |r1.bytes| < 0x1_0000_0000_0000_0000
   {
-    overlap(LocOfReqWrite(r1), LocOfReqRead(r2))
+    overlap(LocOfReqRead(r2), LocOfReqWrite(r1))
   }
 
   predicate allWritesReqReadsDontOverlap(reqWrites: map<D.ReqId, D.ReqWrite>, reqReads: map<D.ReqId, D.ReqRead>)
@@ -580,7 +582,7 @@ module ByteSystem refines AsyncDiskModel {
   requires |r1.bytes| < 0x1_0000_0000_0000_0000
   requires |r2.bytes| < 0x1_0000_0000_0000_0000
   {
-    overlap(LocOfReqWrite(r1), LocOfRespRead(r2))
+    overlap(LocOfRespRead(r2), LocOfReqWrite(r1))
   }
 
   predicate allWritesRespReadsDontOverlap(reqWrites: map<D.ReqId, D.ReqWrite>, respReads: map<D.ReqId, D.RespRead>)
@@ -634,6 +636,18 @@ module ByteSystem refines AsyncDiskModel {
     && respWritesHaveValidSuperblocks(contents, respWrites)
   }
 
+  predicate writeIdsDistinct(reqWrites: map<D.ReqId, D.ReqWrite>, respWrites: map<D.ReqId, D.RespWrite>)
+  {
+    forall id1, id2 | id1 in reqWrites && id2 in respWrites
+      :: id1 != id2
+  }
+
+  predicate readIdsDistinct(reqReads: map<D.ReqId, D.ReqRead>, respReads: map<D.ReqId, D.RespRead>)
+  {
+    forall id1, id2 | id1 in reqReads && id2 in respReads
+      :: id1 != id2
+  }
+
   ///// Define Inv
 
   predicate Inv(k: Constants, s: Variables)
@@ -648,6 +662,8 @@ module ByteSystem refines AsyncDiskModel {
     && allWritesDontOverlap(s.disk.reqWrites)
     && allWritesReqReadsDontOverlap(s.disk.reqWrites, s.disk.reqReads)
     && allWritesRespReadsDontOverlap(s.disk.reqWrites, s.disk.respReads)
+    && writeIdsDistinct(s.disk.reqWrites, s.disk.respWrites)
+    && readIdsDistinct(s.disk.reqReads, s.disk.respReads)
     && BetreeJournalSystem.Inv(Ik(k), I(k, s))
   }
   
@@ -663,8 +679,51 @@ module ByteSystem refines AsyncDiskModel {
     requires Inv(k, s)
     requires Machine(k, s, s', uiop, dop)
     requires dop.ReqReadOp?
+    ensures BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop)
     ensures Inv(k, s')
   {
+    var idop := IDiskOp(dop);
+    var vop :| BJC.NextStep(k.machine, s.machine, s'.machine,
+        uiop, idop, vop);
+    assert BetreeCache.Next(k.machine.bc, s.machine.bc, s'.machine.bc, idop.bdop, vop);
+    assert JournalCache.Next(k.machine.jc, s.machine.jc, s'.machine.jc, idop.jdop, vop);
+    var bstep :| BetreeCache.NextStep(k.machine.bc, s.machine.bc, s'.machine.bc, idop.bdop, vop, bstep);
+    var jstep :| JournalCache.NextStep(k.machine.jc, s.machine.jc, s'.machine.jc, idop.jdop, vop, jstep);
+    assert bstep.BlockCacheMoveStep?;
+    var bcstep := bstep.blockCacheStep;
+
+    var loc := LocOfReqRead(dop.reqRead);
+
+    forall id1 | id1 in s.disk.reqWrites
+      && writeReqReadOverlap(s.disk.reqWrites[id1], dop.reqRead)
+    ensures false
+    {
+      var loc1 := LocOfReqWrite(s.disk.reqWrites[id1]);
+      overlappingLocsSameType(loc1, loc);
+      if ValidNodeLocation(loc) {
+        BlockSystem.NewRequestReadNodeDoesntOverlap(
+            Ik(k).bs, I(k, s).bs, I(k, s').bs, idop.bdop, vop, bcstep, id1);
+      }
+      else if ValidIndirectionTableLocation(loc) {
+        //assert ReqReadIndirectionTables(s'.disk)
+        //    == ReqReadIndirectionTables(s.disk)[dop.id := loc];
+        BlockSystem.NewRequestReadIndirectionTableDoesntOverlap(
+            Ik(k).bs, I(k, s).bs, I(k, s').bs, idop.bdop, vop, bcstep, id1);
+      }
+      else if ValidJournalLocation(loc) {
+        JournalSystem.NewRequestReadJournalDoesntOverlap(
+            Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep, id1);
+      }
+      else if ValidSuperblockLocation(loc) {
+        JournalSystem.NewRequestReadSuperblockDoesntOverlap(
+            Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep);
+      }
+    }
+
+    assume false;
+
+    assert BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop);
+    BetreeJournalSystem.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
   }
 
   lemma ReqWriteStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
