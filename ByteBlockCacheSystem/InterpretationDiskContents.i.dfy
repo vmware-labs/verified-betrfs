@@ -37,30 +37,32 @@ module InterpretationDiskContents {
 
   function byteWithWrites(
       s: seq<byte>, reqs: map<ReqId, ReqWrite>, i: int) : byte
-  requires 0 <= i < |s|
   {
     if hasCoveringReqId(reqs, i) then
       var req := getCoveringReq(reqs, i);
       req.bytes[i - req.addr as int]
-    else
+    else if 0 <= i < |s| then
       s[i]
+    else
+      0
   }
 
-  function {:opaque} withWritesI(s: seq<byte>, reqs: map<ReqId, ReqWrite>, j: int)
-    : (s': seq<byte>)
-  requires 0 <= j <= |s|
-  ensures |s'| == j
-  ensures forall i | 0 <= i < j :: s'[i] == byteWithWrites(s, reqs, i)
+  function {:opaque} withWritesI(s: seq<byte>, reqs: map<ReqId, ReqWrite>, a: int, len: int)
+    : (res: seq<byte>)
+  requires len >= 0
+  ensures |res| == len
+  ensures forall i | 0 <= i < len :: res[i] == byteWithWrites(s, reqs, a + i)
   {
-    if j == 0 then [] else
-      withWritesI(s, reqs, j-1) + [byteWithWrites(s, reqs, j-1)]
+    if len == 0 then [] else
+      withWritesI(s, reqs, a, len-1) + [byteWithWrites(s, reqs, a+len-1)]
   }
 
-  protected function withWrites(s: seq<byte>, reqs: map<ReqId, ReqWrite>)
-    : (s': seq<byte>)
-  ensures |s'| == |s|
+  protected function withWrites(s: seq<byte>, reqs: map<ReqId, ReqWrite>, a: int, len: int)
+    : (res: seq<byte>)
+  requires len >= 0
+  ensures |res| == len
   {
-    withWritesI(s, reqs, |s|)
+    withWritesI(s, reqs, a, len)
   }
 
   predicate reqWritesOverlap(req1: ReqWrite, req2: ReqWrite)
@@ -69,7 +71,70 @@ module InterpretationDiskContents {
         req2.addr as int, |req2.bytes|)
   }
 
-  lemma onApplyWrite(s: seq<byte>, reqs: map<ReqId, ReqWrite>, id: ReqId)
+  lemma getReqWriteSelf(s: seq<byte>, reqs: map<ReqId, ReqWrite>, id: ReqId)
+  requires id in reqs
+  requires forall id1, id2 | id1 in reqs && id2 in reqs && id1 != id2
+      :: !reqWritesOverlap(reqs[id1], reqs[id2])
+  ensures withWrites(s, reqs, reqs[id].addr as int, |reqs[id].bytes|)
+      == reqs[id].bytes
+  {
+  }
+
+  lemma getReqWriteSelfSub(s: seq<byte>, reqs: map<ReqId, ReqWrite>, id: ReqId, offset: int, len: int)
+  requires id in reqs
+  requires forall id1, id2 | id1 in reqs && id2 in reqs && id1 != id2
+      :: !reqWritesOverlap(reqs[id1], reqs[id2])
+  requires 0 <= offset <= offset + len <= |reqs[id].bytes|
+  ensures withWrites(s, reqs, reqs[id].addr as int + offset, len)
+      == reqs[id].bytes[offset .. offset + len]
+  {
+  }
+
+
+  lemma newReqWritePreserve(
+    s: seq<byte>, reqs: map<ReqId, ReqWrite>,
+    id: ReqId, req: ReqWrite,
+    a: int, len: int)
+  requires id !in reqs
+  requires forall id1, id2 | id1 in reqs && id2 in reqs && id1 != id2
+      :: !reqWritesOverlap(reqs[id1], reqs[id2])
+  requires req.addr as int >= a + len
+        || req.addr as int + |req.bytes| <= a
+  requires len >= 0
+  ensures withWrites(s, reqs, a, len)
+      == withWrites(s, reqs[id := req], a, len)
+  {
+    var x := withWrites(s, reqs, a, len);
+    var y := withWrites(s, reqs[id := req], a, len);
+    assert |x| == |y|;
+    forall i | 0 <= i < |x| ensures x[i] == y[i]
+    {
+      if hasCoveringReqId(reqs, a + i) {
+        var id1 := getCoveringReqId(reqs, a+i);
+        var req1 := getCoveringReq(reqs, a+i);
+        assert id1 in reqs[id := req];
+        assert Covers(reqs[id := req][id1], a+i);
+        assert req1 == getCoveringReq(reqs[id := req], a+i);
+        calc {
+          x[i];
+          byteWithWrites(s, reqs, a + i);
+          byteWithWrites(s, reqs[id := req], a + i);
+          y[i];
+        }
+      } else if 0 <= a + i < |s| {
+        calc {
+          x[i];
+          byteWithWrites(s, reqs, a + i);
+          byteWithWrites(s, reqs[id := req], a + i);
+          y[i];
+        }
+      } else {
+        assert x[i] == y[i];
+      }
+    }
+  }
+
+  /*lemma onApplyWrite(s: seq<byte>, reqs: map<ReqId, ReqWrite>, id: ReqId)
   requires id in reqs
   requires forall id1, id2 | id1 in reqs && id2 in reqs && id1 != id2
       :: !reqWritesOverlap(reqs[id1], reqs[id2])
@@ -199,5 +264,5 @@ module InterpretationDiskContents {
       }
       withWrites(splice(s, req.addr as int, req.bytes), reqs);
     }
-  }
+  }*/
 }

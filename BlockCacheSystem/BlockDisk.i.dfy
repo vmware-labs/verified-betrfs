@@ -88,7 +88,6 @@ module BlockDisk {
     && updateLoc in disk'
     && disk'[updateLoc] == t
     && (forall loc | loc in disk && !overlap(loc, updateLoc) :: loc in disk' && disk'[loc] == disk[loc])
-    && (forall loc | loc in disk' && !overlap(loc, updateLoc) :: loc in disk)
   }
 
   predicate RecvWriteIndirectionTable(k: Constants, s: Variables, s': Variables, dop: DiskOp)

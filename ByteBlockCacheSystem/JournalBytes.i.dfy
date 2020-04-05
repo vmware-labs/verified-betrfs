@@ -9,8 +9,8 @@ module JournalBytes {
 
   function {:opaque} JournalBlockOfByteSeq(s: seq<byte>): Option<JournalBlock>
   {
-    if |s| == 4096 then
-      Some(s[32..4096])
+    if |s| == 4096 && D.ChecksumChecksOut(s) then
+      Some(s[32..])
     else
       None
   }
@@ -20,10 +20,10 @@ module JournalBytes {
   {
     if s == [] then
       Some([])
-    else if |s| >= 4096 && D.ChecksumChecksOut(s[0..4096]) then (
+    else if |s| >= 4096 && JournalBlockOfByteSeq(s[0..4096]).Some? then (
       var rest := JournalRangeOfByteSeq(s[4096..]);
       if rest.Some? then (
-        Some([s[32..4096]] + rest.value)
+        Some([JournalBlockOfByteSeq(s[0..4096]).value] + rest.value)
       ) else (
         None
       )
@@ -75,4 +75,11 @@ module JournalBytes {
       //    == JournalRangeOfByteSeq(a'[4096*(i-1) .. 4096*i]);
     }
   }
+
+  lemma JournalBlockOfJournalRange(a: seq<byte>, i: int)
+  requires JournalRangeOfByteSeq(a).Some?
+  requires 0 <= 4096*i <= 4096*(i+1) <= |a|
+  ensures JournalBlockOfByteSeq(a[4096*i..4096*(i+1)]).Some?
+  ensures JournalRangeOfByteSeq(a).value[i]
+      == JournalBlockOfByteSeq(a[4096*i..4096*(i+1)]).value
 }

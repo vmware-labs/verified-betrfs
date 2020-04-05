@@ -120,7 +120,6 @@ module JournalDisk {
     && (dop.id2.Some? ==> dop.id2.value !in s.reqWriteJournals.Keys)
     && var interval := JournalInterval(dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
     && JournalUpdate(s.journal, s'.journal, interval, dop.reqWriteJournal.journal)
-    && interval.start > 0
     && (interval.start + interval.len <= NumJournalBlocks() as int ==>
       && dop.id2.None?
       && s' == s.(reqWriteJournals := s.reqWriteJournals[dop.id1 := interval])
@@ -134,14 +133,6 @@ module JournalDisk {
       && s' == s.(reqWriteJournals := s.reqWriteJournals[dop.id1 := interval1][dop.id2.value := interval2])
                 .(journal := s'.journal)
     )
-  }
-
-  predicate DiskMapUpdate<T>(disk: imap<Location, T>, disk': imap<Location, T>, updateLoc: Location, t: T)
-  {
-    && updateLoc in disk'
-    && disk'[updateLoc] == t
-    && (forall loc | loc in disk && !overlap(loc, updateLoc) :: loc in disk' && disk'[loc] == disk[loc])
-    && (forall loc | loc in disk' && !overlap(loc, updateLoc) :: loc in disk)
   }
 
   ///////// AckRead
