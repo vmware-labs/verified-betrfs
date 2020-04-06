@@ -738,4 +738,28 @@ Next thing to fix: lazily amass pkvs.
 ---
 Okay, so veri-8mb was much slower than manual-wka-opt-350 (also 8mb).
 That's weird.
+- re-run both experiments; figure out what changed
+- factor out the plotting tool so I can plot comparative graphs with rocks
+- gather os-heap usage info from rocks, just because I'm curious.
 
+[malloc-exp/veri-8mb-wka-3.data]
+tools/run-veri-config-experiment.py workload=a device=disk ram=4gb config-8mb > malloc-exp/veri-8mb-wka-3.data
+...was dribbling along at 320ops/sec. But manual-wka-opt-350 had finished out at
+1360 ops/sec. I think all of the allocation reporting was actually hurting us;
+maybe making a mess of the cache? Surprising, though. Trying again with
+less allocation reporting.
+Argh, the 8mb curve is still dropping well below manual-wka-opt-350. What gives!?
+
+perf record -p XXX
+~/appimage/hotspot-v1.2.0-x86_64.AppImage --debugPaths /usr/lib/debug
+
+
+------------------------------------------------------------------------------
+Next steps:
+- check it what works now.
+- merge back to master...?
+- instrument rocks for:
+  - I/O count, byte count
+  - CPU utilization
+  - cache hit rate (implied by I/O count, I guess)
+Bogus behavior is evident after only 10M ops (45 minutes in veri).

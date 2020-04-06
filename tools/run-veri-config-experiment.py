@@ -8,6 +8,7 @@ import os
 
 def autoconfig(config, memlimit):
   print("using node size roughly: " + config)
+  sys.stdout.flush()
 
   if memlimit.endswith("gb"):
     memlimit = int(float(memlimit[:-2]) * 1024*1024*1024)
@@ -166,6 +167,7 @@ def main():
     make_options = "LOG_QUERY_STATS=1 "
 
   print("Building executable...")
+  sys.stdout.flush()
   cmd = make_options + "make " + exe + " -s -j4 > /dev/null 2> /dev/null"
   print(cmd)
   ret = os.system(cmd)
@@ -173,6 +175,7 @@ def main():
 
   wl = "ycsb/workload" + workload + "-onefield.spec"
   print("workload: " + wl)
+  sys.stdout.flush()
 
   if device == "optane":
     loc = "/scratch0/tjhance/ycsb/"
@@ -198,6 +201,7 @@ def main():
 
   command = taskset_cmd + "cgexec -g memory:VeribetrfsExp ./" + exe + " " + wl + " " + loc + " " + cmdoption
   print(command)
+  sys.stdout.flush()
 
   os.system(command)
   assert ret == 0

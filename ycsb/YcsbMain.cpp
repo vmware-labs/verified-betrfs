@@ -370,10 +370,12 @@ public:
     }
 
     inline void memDebugInfrequent() {
+      /*
         printf("debug-accumulator start\n");
         app.DebugAccumulator();
         app.CountAmassAllocations();
         printf("debug-accumulator finish\n");
+      */
     }
 };
 
