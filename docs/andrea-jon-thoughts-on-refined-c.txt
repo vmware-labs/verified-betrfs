@@ -23,6 +23,7 @@ the power lattice
   - refinement vs dependent types? -- there are decidable dependent type systems
     - WF goes into decidable-dependent type
     - or would this require the user to do type-juggling to dispatch these things?
+  - a foundational proof allows you "to be reckless"
 
 the functional language is Coq
   - which didn't look fun
