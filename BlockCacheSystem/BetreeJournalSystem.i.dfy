@@ -43,7 +43,7 @@ module BetreeJournalSystem {
     && (
       BS.InitImpliesInv(k.bs, s.bs, loc);
       JS.InitImpliesInv(k.js, s.js, loc);
-      CompositeView.Inv(Ik(k), I(k, s))
+      CompositeView.Init(Ik(k), I(k, s))
     )
   }
 

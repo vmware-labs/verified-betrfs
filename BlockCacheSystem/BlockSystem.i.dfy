@@ -541,6 +541,26 @@ module BlockSystem {
     ensures FrozenGraphOpt(k, s) == None
   {
   }
+  
+  lemma InitGraphsValue(k: Constants, s: Variables, loc: Location)
+    requires Init(k, s, loc)
+    ensures loc in DiskGraphMap(k, s)
+    ensures PersistentLoc(k, s) == None
+    ensures FrozenLoc(k, s) == None
+    ensures EphemeralGraphOpt(k, s) == None
+    ensures FrozenGraphOpt(k, s) == None
+    ensures loc in s.disk.indirectionTables
+    ensures M.G.Root() in s.disk.indirectionTables[loc].locs
+    ensures s.disk.indirectionTables[loc].locs[M.G.Root()]
+              in s.disk.nodes
+    ensures DiskGraphMap(k, s)[loc]
+        == imap[M.G.Root() :=
+            s.disk.nodes[
+              s.disk.indirectionTables[loc].locs[M.G.Root()]
+            ]
+           ]
+  {
+  }
 
   lemma InitImpliesInv(k: Constants, s: Variables, loc: Location)
     requires Init(k, s, loc)

@@ -224,4 +224,12 @@ module InterpretationDiskContents {
   {
     
   }
+
+  lemma withEmptyWrites(contents: seq<byte>, loc: DiskLayout.Location)
+  requires locInBounds(loc, contents)
+  ensures atLocWithWrites(loc, contents, map[])
+      == atLoc(loc, contents)
+  {
+    reveal_atLoc();
+  }
 }
