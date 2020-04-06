@@ -1823,6 +1823,42 @@ module JournalSystem {
     }
   }
 
+  lemma NewRequestWrite2JournalDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  requires Inv(k, s)
+  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  requires dop.ReqWriteJournalOp?
+  requires var interval := JournalInterval(
+          dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
+    && ValidJournalInterval(interval)
+    && dop.reqWriteJournal.start + |dop.reqWriteJournal.journal| >= NumJournalBlocks() as int
+  requires id in s.disk.reqWriteJournals
+  ensures var interval1 := JournalInterval(
+          dop.reqWriteJournal.start, NumJournalBlocks() as int - dop.reqWriteJournal.start);
+      !journalIntervalOverlap(interval1, s.disk.reqWriteJournals[id])
+  ensures var interval2 := JournalInterval(
+          0, |dop.reqWriteJournal.journal| - (NumJournalBlocks() as int - dop.reqWriteJournal.start));
+      !journalIntervalOverlap(interval2, s.disk.reqWriteJournals[id])
+  {
+  }
+
+  lemma NewRequestWrite2JournalDoesntOverlapRead(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  requires Inv(k, s)
+  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  requires dop.ReqWriteJournalOp?
+  requires var interval := JournalInterval(
+          dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
+    && ValidJournalInterval(interval)
+    && dop.reqWriteJournal.start + |dop.reqWriteJournal.journal| >= NumJournalBlocks() as int
+  requires id in s.disk.reqReadJournals
+  ensures var interval1 := JournalInterval(
+          dop.reqWriteJournal.start, NumJournalBlocks() as int - dop.reqWriteJournal.start);
+      !journalIntervalOverlap(interval1, s.disk.reqReadJournals[id])
+  ensures var interval2 := JournalInterval(
+          0, |dop.reqWriteJournal.journal| - (NumJournalBlocks() as int - dop.reqWriteJournal.start));
+      !journalIntervalOverlap(interval2, s.disk.reqReadJournals[id])
+  {
+  }
+
   lemma NewRequestReadSuperblockDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
   requires Inv(k, s)
   requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
@@ -1855,4 +1891,43 @@ module JournalSystem {
     }
   }
 
+  lemma NewRequestReadJournalIsValid(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
+  requires Inv(k, s)
+  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  requires dop.ReqReadJournalOp?
+  ensures Disk_HasJournalRange(s.disk.journal, dop.interval)
+  {
+  }
+
+  lemma NewRequestReadSuperblockIsValid(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
+  requires Inv(k, s)
+  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  requires dop.ReqReadSuperblockOp?
+  ensures dop.which == 0 ==> s.disk.superblock1.Some?
+  ensures dop.which == 1 ==> s.disk.superblock2.Some?
+  {
+  }
+
+  lemma NewRequestWriteJournalDoesntOverlapRead(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  requires Inv(k, s)
+  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  requires dop.ReqWriteJournalOp?
+  requires var interval := JournalInterval(
+          dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
+    && ContiguousJournalInterval(interval)
+  requires id in s.disk.reqReadJournals
+  ensures var interval := JournalInterval(
+          dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
+      !journalIntervalOverlap(interval, s.disk.reqReadJournals[id])
+  {
+  }
+
+  lemma NewRequestWriteSuperblockDoesntOverlapRead(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
+  requires Inv(k, s)
+  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  requires dop.ReqWriteSuperblockOp?
+  ensures dop.which == 0 ==> s.disk.reqReadSuperblock1 == {}
+  ensures dop.which == 1 ==> s.disk.reqReadSuperblock2 == {}
+  {
+  }
 }

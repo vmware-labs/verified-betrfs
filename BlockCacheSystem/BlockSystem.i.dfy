@@ -1582,13 +1582,47 @@ module BlockSystem {
   requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
   requires dop.ReqWriteIndirectionTableOp?
   requires id in s.disk.reqWriteIndirectionTables
-  ensures !overlap(dop.reqWriteNode.loc, s.disk.reqWriteIndirectionTables[id])
+  ensures !overlap(dop.reqWriteIndirectionTable.loc, s.disk.reqWriteIndirectionTables[id])
   {
     /*MachineStepPreservesInv(k, s, s', dop, vop, step);
     assert !overlap(
         s'.disk.reqWriteIndirectionTables[dop.id],
         s'.disk.reqWriteIndirectionTables[id]);
     assert !overlap(dop.reqWriteNode.loc, s'.disk.reqWriteIndirectionTables[id]);*/
+  }
+
+  lemma NewRequestWriteNodeDoesntOverlapRead(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  requires Inv(k, s)
+  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  requires dop.ReqWriteNodeOp?
+  requires id in s.disk.reqReadNodes
+  ensures !overlap(dop.reqWriteNode.loc, s.disk.reqReadNodes[id])
+  {
+  }
+
+  lemma NewRequestWriteIndirectionTableDoesntOverlapRead(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  requires Inv(k, s)
+  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  requires dop.ReqWriteIndirectionTableOp?
+  requires id in s.disk.reqReadIndirectionTables
+  ensures !overlap(dop.reqWriteIndirectionTable.loc, s.disk.reqReadIndirectionTables[id])
+  {
+  }
+
+  lemma NewRequestReadNodeIsValid(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
+  requires Inv(k, s)
+  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  requires dop.ReqReadNodeOp?
+  ensures dop.loc in s.disk.nodes
+  {
+  }
+
+  lemma NewRequestReadIndirectionTableIsValid(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
+  requires Inv(k, s)
+  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  requires dop.ReqReadIndirectionTableOp?
+  ensures dop.loc in s.disk.indirectionTables
+  {
   }
 
 }

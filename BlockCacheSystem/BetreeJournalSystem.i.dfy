@@ -13,6 +13,8 @@ module BetreeJournalSystem {
   import CompositeView
   import opened ViewOp
   import UI
+  import BlockDisk
+  import JournalDisk
 
   datatype Constants = Constants(bs: BS.Constants, js: JS.Constants)
   datatype Variables = Variables(bs: BS.Variables, js: JS.Variables)
@@ -100,5 +102,26 @@ module BetreeJournalSystem {
   requires Inv(k, s)
   ensures JS.PersistentLoc(s.js) in BS.BetreeDisk(k.bs, s.bs)
   {
+  }
+
+  lemma OkaySendPersistentLocStep(k: Constants, s: Variables, s': Variables, vop: VOp)
+  requires Inv(k, s)
+  //requires BS.Machine(k.bs, s.bs, s'.bs, BlockDisk.NoDiskOp, vop)
+  //requires BS.M.Next(k.bs.machine, s.bs.machine, s'.bs.machine, BlockDisk.NoDiskOp, vop)
+  //requires BS.D.Next(k.bs.disk, s.bs.disk, s'.bs.disk, BlockDisk.NoDiskOp)
+  requires JS.Next(k.js, s.js, s'.js, vop)
+  ensures
+    (vop.SendPersistentLocOp? ==>
+      BS.Inv(k.bs, s.bs) ==>
+        && vop.loc in BS.Ref.DiskGraphMap(k.bs, s.bs)
+        && BS.BT.Inv(BS.Ik(k.bs), BS.BT.Variables(BS.BI.Variables(BS.Ref.DiskGraphMap(k.bs, s.bs)[vop.loc])))
+    )
+  {
+    if vop.SendPersistentLocOp? {
+      assert I(k,s).jc.persistentLoc in I(k,s).tsm.disk;
+      JS.FinishLoadingSuperblockPhaseStepPreservesJournals(
+          k.js, s.js, s'.js, JournalDisk.NoDiskOp, vop);
+      assert vop.loc == I(k,s).jc.persistentLoc;
+    }
   }
 }

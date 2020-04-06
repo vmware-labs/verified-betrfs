@@ -1306,16 +1306,16 @@ module InterpretationDisk {
 
   lemma RefinesStutterOp(k: D.Constants, disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
   requires Inv(disk)
-  requires dop.RespWriteOp?
+  requires dop.NoDiskOp?
   requires ValidDiskOp(dop)
   requires D.Stutter(k, disk, disk', dop)
   ensures Inv(disk')
   ensures BlockDisk.Next(BlockDisk.Constants(),
       IBlockDisk(disk), IBlockDisk(disk'),
-      BlockDiskOp_of_RespWrite(dop.id, dop.respWrite))
+      BlockDisk.NoDiskOp)
   ensures JournalDisk.Next(JournalDisk.Constants(),
       IJournalDisk(disk), IJournalDisk(disk'),
-      JournalDiskOp_of_RespWrite(dop.id, dop.respWrite))
+      JournalDisk.NoDiskOp)
   {
   }
 
@@ -1524,7 +1524,7 @@ module InterpretationDisk {
   {
   }
 
-  lemma RefinesCrash(k: D.Constants, disk: D.Variables, disk': D.Variables, id: D.ReqId, id': D.ReqId)
+  lemma RefinesCrash(k: D.Constants, disk: D.Variables, disk': D.Variables)
   requires Inv(disk)
   requires D.Crash(k, disk, disk')
   ensures Inv(disk')
