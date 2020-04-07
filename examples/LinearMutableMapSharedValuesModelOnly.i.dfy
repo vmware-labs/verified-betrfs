@@ -955,23 +955,6 @@ module MutableMapModel {
     assert EntryInSlotMatchesContents(self.underlying.storage, Slot(i as nat), self.underlying.contents); // trigger
   }
 
-  // LINEAR: necessary for borrow
-  function method UnderlyingStorageLength<V>(shared underlying: FixedSizeLinearHashMap<V>) : nat {
-    seq_length(underlying.storage)
-  }
-
-  // LINEAR: necessary for borrow
-  function method UnderlyingCount<V>(shared underlying: FixedSizeLinearHashMap<V>) : uint64 {
-    underlying.count
-  }
-
-  // LINEAR: necessary for borrow
-  function method UnderlyingStorageElement<V>(shared underlying: FixedSizeLinearHashMap<V>, index: nat) : Item<V>
-  requires index < |underlying.storage|
-  {
-    seq_get(underlying.storage, index)
-  }
-
   function method ReallocIterate<V>(shared self: LinearHashMap<V>, linear newUnderlying: FixedSizeLinearHashMap<V>, i: uint64) : linear FixedSizeLinearHashMap<V>
     requires Inv(self)
     requires FixedSizeInv(newUnderlying);
@@ -980,10 +963,10 @@ module MutableMapModel {
     requires newUnderlying.contents.Keys <= self.contents.Keys
     decreases |self.underlying.storage| - i as int
   {
-    if i as int == UnderlyingStorageLength(self.underlying) then (
+    if i as int == seq_length(self.underlying.storage) then (
       newUnderlying
     ) else (
-      var item := UnderlyingStorageElement(self.underlying, i as nat);
+      var item := seq_get(self.underlying.storage, i as nat);
       linear var newUnderlying' := if item.Entry? then (
         SetInclusionImpliesSmallerCardinality(newUnderlying.contents.Keys, self.contents.Keys);
         /*assert newUnderlying.count as int
@@ -1232,7 +1215,7 @@ module MutableMapModel {
     var _ := 4;
 
     // -- mutation --
-    linear var self1 := if UnderlyingStorageLength(self.underlying) as uint64 / 2 <= UnderlyingCount(self.underlying) then (
+    linear var self1 := if seq_length(self.underlying.storage) as uint64 / 2 <= self.underlying.count then (
       Realloc(self)
     ) else (
       self
@@ -1473,12 +1456,12 @@ module MutableMapModel {
   requires 0 <= i as int <= |self.underlying.storage|
   requires i as int < |self.underlying.storage| ==> self.underlying.storage[i].Entry?
   {
-    if i as int == UnderlyingStorageLength(self.underlying) then (
+    if i as int == seq_length(self.underlying.storage) then (
       Done
     ) else (
       Next(
-        UnderlyingStorageElement(self.underlying, i as nat).key,
-        UnderlyingStorageElement(self.underlying, i as nat).value)
+        seq_get(self.underlying.storage, i as nat).key,
+        seq_get(self.underlying.storage, i as nat).value)
     )
   }
 
@@ -1536,10 +1519,10 @@ module MutableMapModel {
   ensures i <= res.0
   decreases |self.underlying.storage| - i as int
   {
-    if i as int == UnderlyingStorageLength(self.underlying) then (
+    if i as int == seq_length(self.underlying.storage) then (
       (i, Done)
-    ) else if UnderlyingStorageElement(self.underlying, i as nat).Entry? then (
-      (i, Next(UnderlyingStorageElement(self.underlying, i as nat).key, UnderlyingStorageElement(self.underlying, i as nat).value))
+    ) else if seq_get(self.underlying.storage, i as nat).Entry? then (
+      (i, Next(seq_get(self.underlying.storage, i as nat).key, seq_get(self.underlying.storage, i as nat).value))
     ) else (
       iterToNext(self, i+1)
     )
@@ -1555,9 +1538,9 @@ module MutableMapModel {
   ensures i <= i'
   decreases |self.underlying.storage| - i as int
   {
-    if i as int == UnderlyingStorageLength(self.underlying) then (
+    if i as int == seq_length(self.underlying.storage) then (
       i
-    ) else if UnderlyingStorageElement(self.underlying, i as nat).Entry? then (
+    ) else if seq_get(self.underlying.storage, i as nat).Entry? then (
       i
     ) else (
       simpleIterToNext(self, i+1)
