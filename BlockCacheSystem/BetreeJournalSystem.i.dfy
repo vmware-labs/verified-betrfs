@@ -77,6 +77,7 @@ module BetreeJournalSystem {
       && JS.Init(k.js, s.js, loc);
     BS.InitImpliesInv(k.bs, s.bs, loc);
     JS.InitImpliesInv(k.js, s.js, loc);
+    CompositeView.InitImpliesInv(Ik(k), I(k, s));
   }
 
   lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
