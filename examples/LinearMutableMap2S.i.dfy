@@ -228,7 +228,8 @@ include "LinearFixedSizeMutableMapS.i.dfy"
 
     self' := LinearHashMap(newUnderlying, selfCount, selfContents);
 
-    // linear var _ := selfUnderlying;
+    linear var FixedSizeLinearHashMap(storage, _, _) := selfUnderlying;
+    var _ := seq_free(storage);
   }
 // 
 //   function {:opaque} ReallocInternal<V>(self: LinearHashMap<V>) : (self' : LinearHashMap<V>)
