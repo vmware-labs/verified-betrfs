@@ -800,6 +800,7 @@ abstract module BtreeModel {
       } else {
         Keys.LargestLteIsUnique2(oldindex.pivots, key, llte-1);
       }
+      assume false;
     }
   }
 

@@ -35,8 +35,10 @@ module CompositeView_Refines_TSJMap {
 
   lemma RefinesInit(k: CompositeView.Constants, s: CompositeView.Variables)
     requires CompositeView.Init(k, s)
+    ensures CompositeView.Inv(k, s)
     ensures TSJ.Init(Ik(k), I(k, s))
   {
+    CompositeView.InitImpliesInv(k, s);
   }
 
   lemma SendPersistentLocRefines(k: CompositeView.Constants, s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
@@ -180,6 +182,7 @@ module CompositeView_Refines_TSJMap {
     ensures CompositeView.Inv(k, s')
     ensures TSJ.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
+    CompositeView.NextPreservesInv(k, s, s', uiop);
     var vop :| CompositeView.NextStep(k, s, s', vop, uiop);
     RefinesNextStep(k, s, s', uiop, vop);
   }
