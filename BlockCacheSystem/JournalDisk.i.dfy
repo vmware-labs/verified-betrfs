@@ -159,6 +159,7 @@ module JournalDisk {
     && dop.id in s.reqReadJournals
     && var ind := s.reqReadJournals[dop.id];
     && 0 <= ind.start <= ind.start + ind.len <= NumJournalBlocks() as int
+    && ind.start < NumJournalBlocks() as int
     && (dop.journal.Some? ==>
       && Disk_HasJournalRange(s.journal, ind)
       && dop.journal.value == Disk_JournalRange(s.journal, ind)
