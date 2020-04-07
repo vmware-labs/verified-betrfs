@@ -653,7 +653,7 @@ module SyncModel {
             var id := Some(diskOp(io').id);
             var loc := s'.frozenIndirectionTableLoc;
             FindIndirectionTableLocationAndRequestWriteCorrect(k,
-                io, s, SectorIndirectionTable(s0.frozenIndirectionTable.value),
+                io, s0, SectorIndirectionTable(s0.frozenIndirectionTable.value),
                 id, loc, io');
             assert BC.WriteBackIndirectionTableReq(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp);
             assert stepsBC(k, IBlockCache(s), IBlockCache(s'), StatesInternalOp, io', BC.WriteBackIndirectionTableReqStep);
