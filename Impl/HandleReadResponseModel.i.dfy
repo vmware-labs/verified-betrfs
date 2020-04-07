@@ -80,13 +80,15 @@ module HandleReadResponseModel {
 
   lemma noop_respread(k: Constants, s: Variables, io: IO)
   requires WFVars(s)
-  requires ValidDiskOp(diskOp(io))
+  //requires ValidDiskOp(diskOp(io))
   requires diskOp(io).RespReadOp?
   ensures M.Next(Ik(k), IVars(s), IVars(s), UI.NoOp, diskOp(io))
   {
-    jcNoOp_respread(k, s, s, StatesInternalOp, io);
-    bcNoOp_respread(k, s, s, StatesInternalOp, io);
-    assert BJC.NextStep(Ik(k), IVars(s), IVars(s), UI.NoOp, IDiskOp(diskOp(io)), StatesInternalOp);
+    if ValidDiskOp(diskOp(io)) {
+      jcNoOp_respread(k, s, s, StatesInternalOp, io);
+      bcNoOp_respread(k, s, s, StatesInternalOp, io);
+      assert BJC.NextStep(Ik(k), IVars(s), IVars(s), UI.NoOp, IDiskOp(diskOp(io)), StatesInternalOp);
+    }
   }
 
   lemma readSuperblockRespCorrect(
@@ -186,6 +188,7 @@ module HandleReadResponseModel {
   requires diskOp(io).RespReadOp?
   //requires ValidDiskOp(diskOp(io))
   requires Inv(k, s)
+  requires |io.respRead.bytes| < 0x1_0000_0000_0000_0000
   ensures var s' := readResponse(k, s, io);
     && WFVars(s')
     && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
