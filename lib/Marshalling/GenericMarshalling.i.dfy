@@ -991,8 +991,8 @@ lemma lemma_parse_Val_view_Uint64Array(data:seq<byte>, v:V, grammar:G, index:int
         == parse_Uint64(data[index..index + SizeOfV(v)]).0;
     assert parse_Uint64(data[index..bound]).1 == data[index..bound][8..];
     assert parse_Uint64(data[index..index + SizeOfV(v)]).1 == data[index..index + SizeOfV(v)][8..];
-    PackedStringArray.lemma_seq_slice_slice(data, index, bound, 8, 8+8*len);
-    PackedStringArray.lemma_seq_slice_slice(data, index, index + SizeOfV(v), 8, 8+8*len);
+    lemma_seq_slice_slice(data, index, bound, 8, 8+8*len);
+    lemma_seq_slice_slice(data, index, index + SizeOfV(v), 8, 8+8*len);
     assert data[index..bound][8..8+8*len] == data[index..index + SizeOfV(v)][8..8+8*len];
 
     reveal_unpack_LittleEndian_Uint64();
