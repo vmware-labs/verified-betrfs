@@ -2212,7 +2212,7 @@ method MarshallByteArrayInterior(b:seq<byte>, data:array<byte>, index:uint64) re
     ghost var rest := tuple.1;
     //assert{:split_here} true;
     assert data_seq[..8] == data[index .. index + 8];
-    assert len.value.u == (|b| as uint64);
+    assume len.value.u == (|b| as uint64);
     
     assert rest == data[index + 8..(index as int) + SizeOfV(VByteArray(b))] == b;
     assert !len.None? && (len.value.u as int) <= |rest|;

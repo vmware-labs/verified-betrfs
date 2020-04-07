@@ -81,7 +81,6 @@ module BetreeSystem_Refines_StatesViewPivotBetree {
     requires D.Next(k.disk, s.disk, s'.disk, dop)
     requires (vop.SendPersistentLocOp? ==>
       BCS.Inv(k, s) ==>
-        && BCS.WFSuccs(k, s, vop.loc)
         && vop.loc in Ref.DiskGraphMap(k, s)
         && BT.Inv(Ik(k).k, BT.Variables(BI.Variables(Ref.DiskGraphMap(k, s)[vop.loc])))
     )
