@@ -243,16 +243,16 @@ module JournalIntervals {
     parseJournalRangeEmpty();
   }
 
-  function Endpoint(interval: JournalInterval) : int
+  function NextStartPoint(interval: JournalInterval) : int
   {
-    if interval.start + interval.len <= NumJournalBlocks() as int then
+    if interval.start + interval.len < NumJournalBlocks() as int then
       interval.start + interval.len
     else
       interval.start + interval.len - NumJournalBlocks() as int
   }
 
   function concatIntervals(a: JournalInterval, b: JournalInterval) : JournalInterval
-  requires Endpoint(a) == b.start
+  requires NextStartPoint(a) == b.start
   {
     JournalInterval(a.start, a.len + b.len)
   }
@@ -293,7 +293,7 @@ module JournalIntervals {
   requires Disk_HasJournal(journal, interval)
   requires parseJournalRange(jr).Some?
   requires interval.len + |jr| <= NumJournalBlocks() as int
-  requires interval_write.start == Endpoint(interval)
+  requires interval_write.start == NextStartPoint(interval)
   ensures Disk_HasJournal(journal', concatIntervals(interval, interval_write))
   ensures Disk_Journal(journal', concatIntervals(interval, interval_write))
       == Disk_Journal(journal, interval) + parseJournalRange(jr).value
@@ -454,11 +454,21 @@ module JournalIntervals {
     interval: JournalInterval, jr: JournalRange)
   requires ContiguousJournalInterval(interval)
   requires |journal| == NumJournalBlocks() as int
+  requires |jr| == interval.len
   requires forall i | 0 <= i < interval.len ::
       journal[interval.start + i] == Some(jr[i])
   ensures Disk_HasJournalRange(journal, interval)
   ensures Disk_JournalRange(journal, interval) == jr
   {
+    reveal_CyclicSlice();
+    var slice := CyclicSlice(journal, interval);
+    forall i | 0 <= i < |slice|
+    ensures slice[i].Some?
+    {
+      assert slice[i]
+          == journal[interval.start + i]
+          == Some(jr[i]);
+    }
   }
 
   lemma block_exists_of_Disk_JournalRange(
@@ -469,5 +479,26 @@ module JournalIntervals {
   requires Disk_HasJournalRange(journal, interval)
   ensures journal[interval.start + i].Some?
   {
+    reveal_CyclicSlice();
+  }
+
+  lemma HasJournalRange_of_containedIn(
+    journal: seq<Option<JournalBlock>>,
+    interval: JournalInterval,
+    sub: JournalInterval)
+  requires ValidJournalInterval(interval)
+  requires ValidJournalInterval(sub)
+  requires subinterval(sub, interval)
+  requires Disk_HasJournal(journal, interval)
+  ensures Disk_HasJournalRange(journal, sub)
+  {
+    reveal_CyclicSlice();
+    var slice := CyclicSlice(journal, interval);
+    var subslice := CyclicSlice(journal, sub);
+    var diff := if sub.start >= interval.start then sub.start - interval.start else sub.start - interval.start + NumJournalBlocks() as int;
+    forall i | 0 <= i < |subslice| ensures subslice[i].Some?
+    {
+      assert subslice[i] == slice[i + diff];
+    }
   }
 }

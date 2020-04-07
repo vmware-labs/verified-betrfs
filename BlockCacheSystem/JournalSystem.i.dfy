@@ -1812,15 +1812,6 @@ module JournalSystem {
           dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
       !journalIntervalOverlap(interval, s.disk.reqWriteJournals[id])
   {
-    var interval := JournalInterval(dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
-    MachineStepPreservesInv(k, s, s', dop, vop, step);
-    forall id | id in s.disk.reqWriteJournals
-    ensures !journalIntervalOverlap(interval, s.disk.reqWriteJournals[id]);
-    {
-      assert !journalIntervalOverlap(
-          interval,
-          s'.disk.reqWriteJournals[id]);
-    }
   }
 
   lemma NewRequestWrite2JournalDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
@@ -1866,13 +1857,6 @@ module JournalSystem {
   ensures dop.which == 0 ==> s.disk.reqWriteSuperblock1.None?
   ensures dop.which == 1 ==> s.disk.reqWriteSuperblock2.None?
   {
-    MachineStepPreservesInv(k, s, s', dop, vop, step);
-    if dop.which == 1 {
-      if s'.disk.reqWriteSuperblock2.Some? {
-        assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id);
-      }
-      assert s.disk.reqWriteSuperblock2.None?;
-    }
   }
 
   lemma NewRequestWriteSuperblockDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
@@ -1897,6 +1881,11 @@ module JournalSystem {
   requires dop.ReqReadJournalOp?
   ensures Disk_HasJournalRange(s.disk.journal, dop.interval)
   {
+    HasJournalRange_of_containedIn(s.disk.journal,
+        JournalInterval(
+          SuperblockOfDisk(s.disk).journalStart as int,
+          SuperblockOfDisk(s.disk).journalLen as int) ,
+        dop.interval);
   }
 
   lemma NewRequestReadSuperblockIsValid(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)

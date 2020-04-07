@@ -1562,11 +1562,9 @@ module BlockSystem {
   requires id in s.disk.reqWriteNodes
   ensures !overlap(dop.loc, s.disk.reqWriteNodes[id])
   {
-    /*MachineStepPreservesInv(k, s, s', dop, vop, step);
-    assert !overlap(
-        s'.disk.reqReadNodes[dop.id],
-        s'.disk.reqWriteNodes[id]);
-    assert !overlap(dop.loc, s'.disk.reqWriteNodes[id]);*/
+    if overlap(dop.loc, s.disk.reqWriteNodes[id]) {
+      overlappingNodesSameAddr(dop.loc, s.disk.reqWriteNodes[id]);
+    }
   }
 
   lemma NewRequestReadIndirectionTableDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
@@ -1590,11 +1588,9 @@ module BlockSystem {
   requires id in s.disk.reqWriteNodes
   ensures !overlap(dop.reqWriteNode.loc, s.disk.reqWriteNodes[id])
   {
-    /*MachineStepPreservesInv(k, s, s', dop, vop, step);
-    assert !overlap(
-        s'.disk.reqWriteNodes[dop.id],
-        s'.disk.reqWriteNodes[id]);
-    assert !overlap(dop.reqWriteNode.loc, s'.disk.reqWriteNodes[id]);*/
+    if overlap(dop.reqWriteNode.loc, s.disk.reqWriteNodes[id]) {
+      overlappingNodesSameAddr(dop.reqWriteNode.loc, s.disk.reqWriteNodes[id]);
+    }
   }
 
   lemma NewRequestWriteIndirectionTableDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
@@ -1618,6 +1614,9 @@ module BlockSystem {
   requires id in s.disk.reqReadNodes
   ensures !overlap(dop.reqWriteNode.loc, s.disk.reqReadNodes[id])
   {
+    if overlap(dop.reqWriteNode.loc, s.disk.reqReadNodes[id]) {
+      overlappingNodesSameAddr(dop.reqWriteNode.loc, s.disk.reqReadNodes[id]);
+    }
   }
 
   lemma NewRequestWriteIndirectionTableDoesntOverlapRead(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)

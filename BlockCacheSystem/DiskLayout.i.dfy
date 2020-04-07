@@ -13,7 +13,7 @@ module DiskLayout {
   // Definitions
 
   function method NumJournalBlocks() : uint64 {
-    2048
+    DiskNumJournalBlocksUint64()
   }
 
   function method IndirectionTableMaxLength() : uint64 {
@@ -44,14 +44,6 @@ module DiskLayout {
     JournalStartAddr() + point * 4096
   }
 
-  function method JournalRangeLocation(start: uint64, len: uint64) : (loc : Location)
-  requires start < NumJournalBlocks()
-  requires start as int + len as int <= NumJournalBlocks() as int
-  ensures ValidJournalLocation(loc)
-  {
-    Location(JournalPoint(start), len * 4096)
-  }
-
   // Valididty
 
   predicate method ValidIndirectionTableAddr(addr: Addr) {
@@ -72,24 +64,47 @@ module DiskLayout {
     //exists j: int :: addr == 0 <= j < NumJournalBlocks()
     //    && 2 * 4096 + j * 4096
     && loc.addr % 4096 == 0
+    && loc.len % 4096 == 0
     && loc.addr >= 2*4096
     && 0 <= (loc.addr - 2*4096) / 4096 < NumJournalBlocks()
     && loc.addr <= 0xffff_ffff_ffff_ffff - loc.len
     && loc.addr + loc.len <= (2 + NumJournalBlocks()) * 4096
   }
 
+  lemma lemma_validJournalBounds(loc: Location)
+  ensures ValidJournalLocation(loc) ==>
+    && loc.addr >= 2*4096
+    && loc.addr as int + loc.len as int <= 
+        (2 + NumJournalBlocks() as int) * 4096
+  {
+    reveal_ValidJournalLocation();
+  }
+
   predicate method ValidIndirectionTableLocation(loc: Location)
   ensures ValidIndirectionTableLocation(loc) ==>
       !ValidJournalLocation(loc)
   {
+    lemma_validJournalBounds(loc);
+
     && ValidIndirectionTableAddr(loc.addr) 
     && 0 < loc.len <= IndirectionTableMaxLength()
   }
+
+  lemma lemma_validNodeAddrBounds(addr: uint64)
+  ensures ValidNodeAddr(addr)
+      ==> addr >= IndirectionTable2Addr() + IndirectionTableMaxLength()
+  {
+    reveal_ValidNodeAddr();
+  }
+
 
   predicate method ValidNodeLocation(loc: Location)
   ensures ValidNodeLocation(loc) ==> !ValidJournalLocation(loc)
   ensures ValidNodeLocation(loc) ==> !ValidIndirectionTableLocation(loc)
   {
+    lemma_validJournalBounds(loc);
+    lemma_validNodeAddrBounds(loc.addr);
+
     && ValidNodeAddr(loc.addr)
     && loc.len <= NodeBlockSizeUint64()
   }
@@ -99,6 +114,9 @@ module DiskLayout {
   ensures !ValidIndirectionTableLocation(Superblock1Location())
   ensures !ValidJournalLocation(Superblock1Location())
   {
+    lemma_validJournalBounds(Location(0, 4096));
+    lemma_validNodeAddrBounds(0);
+
     Location(0, 4096)
   }
 
@@ -107,6 +125,9 @@ module DiskLayout {
   ensures !ValidIndirectionTableLocation(Superblock2Location())
   ensures !ValidJournalLocation(Superblock2Location())
   {
+    lemma_validJournalBounds(Location(4096, 4096));
+    lemma_validNodeAddrBounds(4096);
+
     Location(4096, 4096)
   }
 
@@ -115,6 +136,9 @@ module DiskLayout {
   ensures ValidSuperblock1Location(loc) ==> !ValidIndirectionTableLocation(loc)
   ensures ValidSuperblock1Location(loc) ==> !ValidNodeLocation(loc)
   {
+    lemma_validJournalBounds(loc);
+    lemma_validNodeAddrBounds(loc.addr);
+
     loc == Superblock1Location()
   }
 
@@ -123,6 +147,9 @@ module DiskLayout {
   ensures ValidSuperblock2Location(loc) ==> !ValidIndirectionTableLocation(loc)
   ensures ValidSuperblock2Location(loc) ==> !ValidNodeLocation(loc)
   {
+    lemma_validJournalBounds(loc);
+    lemma_validNodeAddrBounds(loc.addr);
+
     loc == Superblock2Location()
   }
 
@@ -178,6 +205,10 @@ module DiskLayout {
   ensures ValidIndirectionTableLocation(loc1) <==> ValidIndirectionTableLocation(loc2)
   ensures ValidNodeLocation(loc1) <==> ValidNodeLocation(loc2)
   {
+    lemma_validJournalBounds(loc1);
+    lemma_validNodeAddrBounds(loc1.addr);
+    lemma_validJournalBounds(loc2);
+    lemma_validNodeAddrBounds(loc2.addr);
   }
 
   lemma overlappingNodesSameAddr(loc1: Location, loc2: Location)
@@ -186,6 +217,7 @@ module DiskLayout {
   requires overlap(loc1, loc2)
   ensures loc1.addr == loc2.addr
   {
+    reveal_ValidNodeAddr();
   }
 
   lemma overlappingIndirectionTablesSameAddr(loc1: Location, loc2: Location)
@@ -194,6 +226,15 @@ module DiskLayout {
   requires overlap(loc1, loc2)
   ensures loc1.addr == loc2.addr
   {
+  }
+
+  function method JournalRangeLocation(start: uint64, len: uint64) : (loc : Location)
+  requires start < NumJournalBlocks()
+  requires start as int + len as int <= NumJournalBlocks() as int
+  ensures ValidJournalLocation(loc)
+  {
+    reveal_ValidJournalLocation();
+    Location(JournalPoint(start), len * 4096)
   }
 
   predicate locContainedInCircularJournalRange(loc: Location, start: uint64, len: uint64)
@@ -225,8 +266,16 @@ module DiskLayout {
       || loc.addr as int + loc.len as int <= JournalPoint(start) as int
       || loc.addr >= JournalPoint(start + len)
     ) else (
-      && loc.addr >= JournalPoint(start + len - NumJournalBlocks())
-      && loc.addr as int + loc.len as int <= JournalPoint(start) as int
+      || (
+        loc.addr as int + loc.len as int <= JournalPoint(0) as int
+      )
+      || (
+        loc.addr as int >= JournalPoint(NumJournalBlocks()) as int
+      )
+      || (
+        && loc.addr >= JournalPoint(start + len - NumJournalBlocks())
+        && loc.addr as int + loc.len as int <= JournalPoint(start) as int
+      )
     )
   }
 
@@ -279,14 +328,20 @@ module DiskLayout {
   ensures 0 <= i < NumJournalBlocks() as int
   ensures loc.addr == JournalPoint(i as uint64)
   {
+    reveal_ValidJournalLocation();
     (loc.addr as int - (2 * 4096)) / 4096
   }
 
   lemma journalLength1OverlapImpliesContained(start: uint64, loc: Location)
+  requires 0 <= start < NumJournalBlocks()
   requires overlap(JournalRangeLocation(start, 1), loc)
   requires ValidLocation(loc)
   ensures LocationSub(JournalRangeLocation(start, 1), loc)
   {
+    var block := JournalRangeLocation(start, 1);
+    overlappingLocsSameType(block, loc);
+    assert ValidJournalLocation(loc);
+    reveal_ValidJournalLocation();
   }
 
   lemma locDisjointFromCircularJournalRangeOfNonJournalLoc(loc: Location, start: uint64, len: uint64)
@@ -296,15 +351,19 @@ module DiskLayout {
   requires 0 <= len <= NumJournalBlocks()
   ensures locDisjointFromCircularJournalRange(loc, start, len)
   {
+    reveal_ValidJournalLocation();
+    reveal_ValidNodeAddr();
   }
 
   lemma ValidJournalLocationConcat(loc1: Location, loc2: Location)
   requires ValidJournalLocation(loc1)
   requires ValidJournalLocation(loc2)
+  requires loc1.addr as int + loc1.len as int == loc2.addr as int
   ensures loc1.len as int + loc2.len as int < 0x1_0000_0000_0000_0000
   ensures ValidJournalLocation(
     Location(loc1.addr, loc1.len + loc2.len))
   {
+    reveal_ValidJournalLocation();
   }
 
   lemma ValidJournalLocationGetI(loc1: Location, i: int)
@@ -314,6 +373,7 @@ module DiskLayout {
   ensures loc1.addr as int + 4096 * i < 0x1_0000_0000_0000_0000
   ensures ValidJournalLocation(Location(loc1.addr + 4096 * i as uint64, 4096))
   {
+    reveal_ValidJournalLocation();
   }
 
   function method otherIndirectionTableAddr(addr: uint64) : uint64
