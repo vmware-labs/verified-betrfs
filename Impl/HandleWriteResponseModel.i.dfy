@@ -160,14 +160,16 @@ module HandleWriteResponseModel {
       }
       assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io));
     } else {
-      assert JC.NextStep(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), IDiskOp(diskOp(io)).jdop, JournalInternalOp, JC.NoOpStep);
-      assert JC.Next(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), IDiskOp(diskOp(io)).jdop, JournalInternalOp);
-      assert BC.NextStep(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp, BC.NoOpStep);
-      assert BBC.NextStep(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep));
-      assert BBC.Next(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp);
+      if ValidDiskOp(diskOp(io)) {
+        assert JC.NextStep(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), IDiskOp(diskOp(io)).jdop, JournalInternalOp, JC.NoOpStep);
+        assert JC.Next(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), IDiskOp(diskOp(io)).jdop, JournalInternalOp);
+        assert BC.NextStep(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp, BC.NoOpStep);
+        assert BBC.NextStep(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep));
+        assert BBC.Next(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp);
 
-      assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), JournalInternalOp);
-      assert BJC.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
+        assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), JournalInternalOp);
+        assert BJC.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
+      }
 
       assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io));
     }
