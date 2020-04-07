@@ -110,6 +110,7 @@ module CoordinationImpl {
   requires io.initialized()
   requires io !in s.Repr
   requires s.bc.ready
+  requires s.jc.status.StatusReady?
   modifies s.Repr
   modifies io
   ensures s.W()
