@@ -148,6 +148,7 @@ module EvictModel {
       s': BCVariables, io': IO)
   requires PageInNodeReqOrMakeRoom.requires(k, s, io, ref, s', io')
   requires PageInNodeReqOrMakeRoom(k, s, io, ref, s', io')
+  ensures IDiskOp(diskOp(io')).jdop.NoDiskOp?
   ensures WFBCVars(s')
   ensures ValidDiskOp(diskOp(io'))
   ensures

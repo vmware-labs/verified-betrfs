@@ -148,6 +148,7 @@ module QueryModel {
   requires queryIterate(k, s, key, msg, ref, io, counter, s', res, io');
   ensures WFBCVars(s')
   ensures ValidDiskOp(diskOp(io'))
+  ensures IDiskOp(diskOp(io')).jdop.NoDiskOp?
   ensures res.Some? ==>
       BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'),
           IDiskOp(diskOp(io')).bdop,
