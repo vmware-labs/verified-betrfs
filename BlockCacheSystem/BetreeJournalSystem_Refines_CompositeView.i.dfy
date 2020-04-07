@@ -28,6 +28,7 @@ module BetreeJournalSystem_Refines_CompositeView {
   ensures BJS.Inv(k, s)
   ensures CompositeView.Init(Ik(k), I(k, s))
   {
+    BJS.InitImpliesInv(k, s);
     var loc :|
       && BS.Init(k.bs, s.bs, loc)
       && JS.Init(k.js, s.js, loc);
@@ -43,6 +44,7 @@ module BetreeJournalSystem_Refines_CompositeView {
   ensures BJS.Inv(k, s')
   ensures CompositeView.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
+    BJS.NextPreservesInv(k, s, s', uiop);
     var vop :|
       && VOpAgreesUIOp(vop, uiop)
       && BS.Next(k.bs, s.bs, s'.bs, vop)
