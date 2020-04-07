@@ -217,6 +217,7 @@ module SuccModel {
   ensures var (s', io', res) := getPath(k, s, io, startKey, acc, start, upTo, maxToFind, ref, counter);
       && WFBCVars(s')
       && ValidDiskOp(diskOp(io'))
+      && IDiskOp(diskOp(io')).jdop.NoDiskOp?
       && (res.Some? ==> BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'),
             IDiskOp(diskOp(io')).bdop,
             AdvanceOp(UI.SuccOp(start, res.value.results, res.value.end), false)))
