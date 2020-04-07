@@ -386,7 +386,7 @@ module MutableMapModel {
   }
 
   // TODO is this necessary in functional land?
-  function ConstructorFromStorage<V>(storage: seq<Item<V>>, count: uint64) 
+  function method ConstructorFromStorage<V>(linear storage: seq<Item<V>>, count: uint64) 
   : (linear self: FixedSizeLinearHashMap<V>)
   requires 128 <= |storage|
   ensures self.storage == storage
