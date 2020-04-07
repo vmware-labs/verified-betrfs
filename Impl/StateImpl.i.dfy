@@ -228,6 +228,7 @@ module {:extern} StateImpl {
     ensures fresh(Repr())
     {
       ready := false;
+      loading := false;
 
       // Unused for the `ready = false` state but we need to initialize them.
       // (could make them nullable instead).
