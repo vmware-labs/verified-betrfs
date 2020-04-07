@@ -464,6 +464,18 @@ module JournalistMarshallingModel {
   {
   }
 
+  lemma DropLastCyclicSlice(
+      entries: seq<JournalEntry>,
+      start: uint64, len: uint64)
+  requires 0 <= start as int < |entries|
+  requires 0 <= len as int < |entries|
+  requires len as int + 1 < 0xffff_ffff_ffff_ffff
+  ensures DropLast(cyclicSlice(entries, start, len + 1))
+      == cyclicSlice(entries, start, len)
+  {
+    reveal_cyclicSlice();
+  }
+
   lemma lemma_writeJournalEntries(
       buf: seq<byte>, numBlocks: uint64, idx: uint64,
       entries: seq<JournalEntry>, start: uint64, len: uint64, start': uint64, len': uint64)
@@ -605,6 +617,7 @@ module JournalistMarshallingModel {
     assert hasEntries(withoutChecksums(buf4, numBlocks), slice, len as int - len' as int + 1);
 
     assert idx4 as int == 8 + SumJournalEntries(cyclicSlice(entries, start, len - len' + 1)) by {
+      DropLastCyclicSlice(entries, start, len - len');
       assert DropLast(cyclicSlice(entries, start, len - len' + 1))
           == cyclicSlice(entries, start, len - len') by { reveal_cyclicSlice(); }
       assert Last(cyclicSlice(entries, start, len - len' + 1))
@@ -723,6 +736,7 @@ module JournalistMarshallingModel {
           by { reveal_withoutChecksums(); }
     } else {
       assert D.ChecksumChecksOut(buf[0..4096]) by {
+        reveal_JournalBlockOfByteSeq();
         assert hasChecksumAt(buf, 0);
         D.reveal_ChecksumChecksOut();
       }
@@ -742,6 +756,8 @@ module JournalistMarshallingModel {
 
       journalRangeFromHasChecksums(buf[4096..], numBlocks - 1);
       var rest := JournalRangeOfByteSeq(buf[4096..]).value;
+
+      reveal_JournalBlockOfByteSeq();
 
       calc {
         concatSeq(JournalRangeOfByteSeq(buf).value);
@@ -820,7 +836,10 @@ module JournalistMarshallingModel {
     var jr := JournalRangeOfByteSeq(buf).value;
     assert |jr| == numBlocks as int;
 
-    assert |jr[0]| >= 8 by { reveal_JournalRangeOfByteSeq(); }
+    assert |jr[0]| >= 8 by {
+      reveal_JournalBlockOfByteSeq();
+      reveal_JournalRangeOfByteSeq();
+    }
     assert parseHeader(concatSeq(jr)) == parseHeader(jr[0])
     by {
       calc {
