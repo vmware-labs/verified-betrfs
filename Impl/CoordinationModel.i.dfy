@@ -32,14 +32,32 @@ module CoordinationModel {
   requires CommitterModel.WF(s.jc)
   requires s.jc == s'.jc
   requires vop.StatesInternalOp? || vop.JournalInternalOp?
-      || (vop.AdvanceOp? && vop.uiop.NoOp?)
+      || (vop.AdvanceOp?
+        && vop.uiop.NoOp?
+        && s.jc.status.StatusReady?
+        && vop.replay
+      )
   ensures JC.Next(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
       JournalDisk.NoDiskOp, vop);
   {
-    assert JC.NoOp(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
-        JournalDisk.NoDiskOp, vop);
-    assert JC.NextStep(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
-        JournalDisk.NoDiskOp, vop, JC.NoOpStep);
+    if vop.AdvanceOp? {
+      //if vop.replay {
+        assert JC.Replay(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
+            JournalDisk.NoDiskOp, vop);
+        assert JC.NextStep(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
+          JournalDisk.NoDiskOp, vop, JC.ReplayStep);
+      /*} else {
+        assert JC.Advance(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
+            JournalDisk.NoDiskOp, vop);
+        assert JC.NextStep(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
+          JournalDisk.NoDiskOp, vop, JC.AdvanceStep);
+      }*/
+    } else {
+      assert JC.NoOp(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
+          JournalDisk.NoDiskOp, vop);
+      assert JC.NextStep(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
+          JournalDisk.NoDiskOp, vop, JC.NoOpStep);
+    }
   }
 
   lemma bcNoOp(k: Constants, s: Variables, s': Variables, vop: VOp)
@@ -220,6 +238,7 @@ module CoordinationModel {
   requires Inv(k, s)
   requires io.IOInit?
   requires s.bc.Ready?
+  requires s.jc.status.StatusReady?
   {
     if s.jc.isFrozen then (
       if s.jc.frozenLoc.Some? then (
@@ -258,6 +277,7 @@ module CoordinationModel {
   requires Inv(k, s)
   requires io.IOInit?
   requires s.bc.Ready?
+  requires s.jc.status.StatusReady?
   requires JournalistModel.I(s.jc.journalist).replayJournal == []
   requires doSync(k, s, io, graphSync, s', io')
   ensures WFVars(s')
@@ -408,6 +428,7 @@ module CoordinationModel {
   {
     && s.bc.Ready?
     && s.jc.status.StatusReady?
+    && JournalistModel.Inv(s.jc.journalist)
     && CommitterInitModel.isReplayEmpty(s.jc)
   }
 
