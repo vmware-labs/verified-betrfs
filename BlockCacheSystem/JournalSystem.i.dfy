@@ -272,6 +272,8 @@ module JournalSystem {
     && M.Init(k.machine, s.machine)
     && D.Init(k.disk, s.disk)
     && WFDisk(s.disk)
+    && s.disk.superblock1.Some?
+    && s.disk.superblock2.Some?
     && SuperblockOfDisk(s.disk).journalStart == 0
     && SuperblockOfDisk(s.disk).journalLen == 0
     && SuperblockOfDisk(s.disk).indirectionTableLoc == loc
@@ -506,6 +508,8 @@ module JournalSystem {
   {
     && M.Inv(k.machine, s.machine)
     && WFDisk(s.disk)
+    && s.disk.superblock1.Some?
+    && s.disk.superblock2.Some?
     && (s.machine.Ready? ==>
       && (
         || s.machine.superblock == SuperblockOfDisk(s.disk)
@@ -1857,6 +1861,9 @@ module JournalSystem {
   ensures dop.which == 0 ==> s.disk.reqWriteSuperblock1.None?
   ensures dop.which == 1 ==> s.disk.reqWriteSuperblock2.None?
   {
+    if s.disk.reqWriteSuperblock2.Some? {
+      assert RecordedWriteSuperblockRequest(k, s, s.disk.reqWriteSuperblock2.value.id);
+    }
   }
 
   lemma NewRequestWriteSuperblockDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
@@ -1866,12 +1873,8 @@ module JournalSystem {
   ensures dop.which == 0 ==> s.disk.reqWriteSuperblock1.None?
   ensures dop.which == 1 ==> s.disk.reqWriteSuperblock2.None?
   {
-    MachineStepPreservesInv(k, s, s', dop, vop, step);
-    if dop.which == 1 {
-      if s'.disk.reqWriteSuperblock2.Some? {
-        assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id);
-      }
-      assert s.disk.reqWriteSuperblock2.None?;
+    if s.disk.reqWriteSuperblock2.Some? {
+      assert RecordedWriteSuperblockRequest(k, s, s.disk.reqWriteSuperblock2.value.id);
     }
   }
 

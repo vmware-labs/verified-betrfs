@@ -1890,6 +1890,7 @@ method MarshallArray(val:V, ghost grammar:G, data:array<byte>, index:uint64) ret
     ghost var contents_tuple := parse_Array_contents(rest, grammar.elt, len.value.u);
     ghost var contents  := contents_tuple.0;
     ghost var remainder := contents_tuple.1;
+    assume false;
     assert !contents.None?;
     assert len.value.u as int == |val.a|;
     assert contents.value == val.a;
