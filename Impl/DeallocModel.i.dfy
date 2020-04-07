@@ -62,7 +62,10 @@ module DeallocModel {
   ensures var (s', io') := Dealloc(k, s, io, ref);
       && WFBCVars(s')
       && ValidDiskOp(diskOp(io'))
-      && BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, AdvanceOp(UI.NoOp, true))
+      && (
+        || BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, AdvanceOp(UI.NoOp, true))
+        || BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp)
+      )
   {
     reveal_Dealloc();
     var (s', io') := Dealloc(k, s, io, ref);
