@@ -104,7 +104,7 @@ module HandleWriteResponseModel {
   lemma writeResponseCorrect(k: Constants, s: Variables, io: IO)
   requires Inv(k, s)
   requires diskOp(io).RespWriteOp?
-  requires ValidDiskOp(diskOp(io))
+  //requires ValidDiskOp(diskOp(io))
 
   ensures var s' := writeResponse(k, s, io);
     && WFVars(s')

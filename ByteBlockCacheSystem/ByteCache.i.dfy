@@ -36,5 +36,6 @@ module ByteCache refines AsyncDiskMachine {
     && (dop.ReqWrite2Op? ==> ValidDiskOp(dop))
     && (ValidDiskOp(dop) ==>
       BJC.Next(k, s, s', uiop, IDiskOp(dop)))
+    && (!ValidDiskOp(dop) ==> s == s')
   }
 }

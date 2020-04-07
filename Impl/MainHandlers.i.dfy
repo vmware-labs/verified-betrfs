@@ -92,7 +92,9 @@ module {:extern} MainHandlers refines Main {
     ioAndHsNotInReadSet(s, io, hs);
     id := id1;
     ghost var uiop := if id == 0 then UI.NoOp else UI.PushSyncOp(id as int);
-    BlockJournalCache.NextPreservesInv(DOM.Ik(Ic(k)), SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+    if ValidDiskOp(io.diskOp()) {
+      BlockJournalCache.NextPreservesInv(DOM.Ik(Ic(k)), SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+    }
     hs.Repr := s.Repr + {s};
     //assert SM.Inv(Ic(k), hs.s.I());
     //assert hs.s.Inv(k);
@@ -111,7 +113,9 @@ module {:extern} MainHandlers refines Main {
     success := succ;
     wait := w;
     ghost var uiop := if succ then UI.PopSyncOp(id as int) else UI.NoOp;
-    BlockJournalCache.NextPreservesInv(DOM.Ik(Ic(k)), SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+    if ValidDiskOp(io.diskOp()) {
+      BlockJournalCache.NextPreservesInv(DOM.Ik(Ic(k)), SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+    }
     hs.Repr := s.Repr + {s};
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), // observe
         uiop,
@@ -127,7 +131,9 @@ module {:extern} MainHandlers refines Main {
     CoordinationModel.queryCorrect(Ic(k), old(s.I()), old(IIO(io)), key, s.I(), value, IIO(io));
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := if value.Some? then UI.GetOp(key, value.value) else UI.NoOp;
-    BlockJournalCache.NextPreservesInv(DOM.Ik(Ic(k)), SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+    if ValidDiskOp(io.diskOp()) {
+      BlockJournalCache.NextPreservesInv(DOM.Ik(Ic(k)), SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+    }
     hs.Repr := s.Repr + {s};
     v := value;
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), // observe
@@ -144,7 +150,9 @@ module {:extern} MainHandlers refines Main {
     CoordinationModel.insertCorrect(Ic(k), old(s.I()), old(IIO(io)), key, value, s.I(), succ, IIO(io));
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := if succ then UI.PutOp(key, value) else UI.NoOp;
-    BlockJournalCache.NextPreservesInv(DOM.Ik(Ic(k)), SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+    if ValidDiskOp(io.diskOp()) {
+      BlockJournalCache.NextPreservesInv(DOM.Ik(Ic(k)), SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+    }
     hs.Repr := s.Repr + {s};
     success := succ;
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), // observe
@@ -162,7 +170,9 @@ module {:extern} MainHandlers refines Main {
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := 
       if value.Some? then UI.SuccOp(start, value.value.results, value.value.end) else UI.NoOp;
-    BlockJournalCache.NextPreservesInv(DOM.Ik(Ic(k)), SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+    if ValidDiskOp(io.diskOp()) {
+      BlockJournalCache.NextPreservesInv(DOM.Ik(Ic(k)), SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+    }
     hs.Repr := s.Repr + {s};
     res := value;
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), // observe
@@ -178,7 +188,9 @@ module {:extern} MainHandlers refines Main {
     HandleReadResponseModel.readResponseCorrect(Ic(k), old(s.I()), old(IIO(io)));
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := UI.NoOp;
-    BlockJournalCache.NextPreservesInv(DOM.Ik(Ic(k)), SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+    if ValidDiskOp(io.diskOp()) {
+      BlockJournalCache.NextPreservesInv(DOM.Ik(Ic(k)), SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+    }
     hs.Repr := s.Repr + {s};
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp()); // observe
   }
@@ -191,7 +203,9 @@ module {:extern} MainHandlers refines Main {
     HandleWriteResponseModel.writeResponseCorrect(Ic(k), old(s.I()), old(IIO(io)));
     ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := UI.NoOp;
-    BlockJournalCache.NextPreservesInv(DOM.Ik(Ic(k)), SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+    if ValidDiskOp(io.diskOp()) {
+      BlockJournalCache.NextPreservesInv(DOM.Ik(Ic(k)), SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+    }
     hs.Repr := s.Repr + {s};
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp()); // observe
   }
