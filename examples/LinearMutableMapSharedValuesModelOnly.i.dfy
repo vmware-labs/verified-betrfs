@@ -955,11 +955,20 @@ module MutableMapModel {
     assert EntryInSlotMatchesContents(self.underlying.storage, Slot(i as nat), self.underlying.contents); // trigger
   }
 
+  // LINEAR: necessary for borrow
   function method UnderlyingStorageLength<V>(shared underlying: FixedSizeLinearHashMap<V>) : nat {
     seq_length(underlying.storage)
   }
 
-  function method UnderlyingStorageElement<V>(shared underlying: FixedSizeLinearHashMap<V>, index: nat) : Item<V> {
+  // LINEAR: necessary for borrow
+  function method UnderlyingCount<V>(shared underlying: FixedSizeLinearHashMap<V>) : uint64 {
+    underlying.count
+  }
+
+  // LINEAR: necessary for borrow
+  function method UnderlyingStorageElement<V>(shared underlying: FixedSizeLinearHashMap<V>, index: nat) : Item<V>
+  requires index < |underlying.storage|
+  {
     seq_get(underlying.storage, index)
   }
 
@@ -1208,19 +1217,22 @@ module MutableMapModel {
     assert Inv(self');
   }
 
-  function {:opaque} InsertAndGetOld<V>(self: LinearHashMap, key: uint64, value: V)
-  : (res: (LinearHashMap, Option<V>))
+  linear datatype InsertAndGetOldResult<V> = InsertAndGetOldResult(linear self': LinearHashMap, replaced: Option<V>)
+  function method {:opaque} InsertAndGetOld<V>(linear self: LinearHashMap, key: uint64, value: V)
+  : (linear res: InsertAndGetOldResult<V>)
     requires Inv(self)
     requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
-    ensures var (self', replaced) := res;
+    ensures var InsertAndGetOldResult(self', replaced) := res;
       && Inv(self')
       && self'.contents == self.contents[key := value]
       && self'.count as nat == self.count as nat + (if replaced.Some? then 0 else 1)
       && (replaced.Some? ==> MapsTo(self.contents, key, replaced.value))
       && (replaced.None? ==> key !in self.contents)
   {
+    var _ := 4;
+
     // -- mutation --
-    var self1 := if |self.underlying.storage| as uint64 / 2 <= self.underlying.count then (
+    linear var self1 := if UnderlyingStorageLength(self.underlying) as uint64 / 2 <= UnderlyingCount(self.underlying) then (
       Realloc(self)
     ) else (
       self
@@ -1231,11 +1243,12 @@ module MutableMapModel {
     //assert self1.underlying.count as nat < |self1.underlying.storage| - 2;
 
     // -- mutation --
-    var FixedSizeInsertResult(underlying', replaced) := FixedSizeInsert(self1.underlying, key, value);
-    var self' := self1
-        .(underlying := underlying')
-        .(contents := self1.contents[key := value])
-        .(count := if replaced.None? then self1.count + 1 else self1.count);
+    linear var LinearHashMap(self1Underlying, self1Count, self1Contents) := self1;
+    linear var FixedSizeInsertResult(underlying', replaced) := FixedSizeInsert(self1Underlying, key, value);
+    var contents' := self1Contents[key := value];
+    linear var self' := LinearHashMap(underlying',
+        if replaced.None? then self1Count + 1 else self1Count,
+        contents');
     // --------------
 
     LemmaFixedSizeInsertResult(self1.underlying, key, value);
@@ -1250,11 +1263,11 @@ module MutableMapModel {
     //assert UnderlyingInv(self', self'.underlying);
     //assert Inv(self');
 
-    (self', replaced)
+    InsertAndGetOldResult(self', replaced)
   }
 
-  function {:opaque} Insert<V>(self: LinearHashMap, key: uint64, value: V)
-  : (self': LinearHashMap)
+  function method {:opaque} Insert<V>(linear self: LinearHashMap, key: uint64, value: V)
+  : (linear self': LinearHashMap)
     requires Inv(self)
     requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
     ensures
@@ -1263,13 +1276,15 @@ module MutableMapModel {
       && (self'.count as nat == self.count as nat ||
          self'.count as nat == self.count as nat + 1)
   {
-    InsertAndGetOld(self, key, value).0
+    linear var InsertAndGetOldResult(self', _) := InsertAndGetOld(self, key, value);
+    self'
   }
 
-  function RemoveInternal<V>(self: LinearHashMap, key: uint64)
-  : (res: (LinearHashMap, Option<V>))
+  linear datatype RemoveResult<V> = RemoveResult(linear self': LinearHashMap, removed: Option<V>)
+  function method RemoveInternal<V>(linear self: LinearHashMap, key: uint64)
+  : (linear res: RemoveResult<V>)
     requires Inv(self)
-    ensures var (self', removed) := res;
+    ensures var RemoveResult(self', removed) := res;
       && FixedSizeRemoveResult(self'.underlying, removed) == FixedSizeRemove(self.underlying, key)
       && FixedSizeInv(self'.underlying)
       && (self'.underlying.contents == if key in self.underlying.contents
@@ -1281,26 +1296,27 @@ module MutableMapModel {
       && (self'.underlying.count == self.underlying.count)
   {
     // -- mutation --
-    var FixedSizeRemoveResult(underlying', removed) := FixedSizeRemove(self.underlying, key);
+    linear var LinearHashMap(selfUnderlying, selfCount, selfContents) := self;
+    linear var FixedSizeRemoveResult(underlying', removed) := FixedSizeRemove(selfUnderlying, key);
     // --------------
 
     LemmaFixedSizeRemoveResult(self.underlying, key);
 
-    var self' := self
-      .(underlying := underlying')
-      .(contents := map k | k in self.contents && k != key :: self.contents[k])
-      .(count := if removed.Some? then self.count - 1 else self.count);
+    linear var self' := LinearHashMap(
+      /* underlying := */ underlying',
+      /* count := */ if removed.Some? then selfCount - 1 else selfCount,
+      /* contents := */ map k | k in selfContents && k != key :: selfContents[k]);
 
-    (self', removed)
+    RemoveResult(self', removed)
   }
 
-  lemma RemoveCountCorrect<V>(self: LinearHashMap, key: uint64, res: (LinearHashMap, Option<V>))
+  lemma RemoveCountCorrect<V>(self: LinearHashMap, key: uint64, res: RemoveResult<V>)
   requires Inv(self)
   requires res == RemoveInternal(self, key)
-  ensures var (self', removed) := res;
+  ensures var RemoveResult(self', removed) := res;
     self'.count as nat == |self'.contents|
   {
-    var (self', removed) := res;
+    var RemoveResult(self', removed) := res;
     if removed.Some? {
       assert key in self.contents;
       assert self'.contents.Keys <= self.contents.Keys;
@@ -1317,10 +1333,10 @@ module MutableMapModel {
     }
   }
 
-  function RemoveAndGet<V>(self: LinearHashMap, key: uint64)
-  : (res: (LinearHashMap, Option<V>))
+  function method RemoveAndGet<V>(linear self: LinearHashMap, key: uint64)
+  : (linear res: RemoveResult<V>)
     requires Inv(self)
-    ensures var (self', removed) := res;
+    ensures var RemoveResult(self', removed) := res;
       && Inv(self')
       && (self'.contents == if key in self.contents
         then map k | k in self.contents && k != key :: self.contents[k]
@@ -1329,17 +1345,17 @@ module MutableMapModel {
         then Some(self.contents[key])
         else None)
   {
-    var (self', removed) := RemoveInternal(self, key);
+    linear var RemoveResult(self', removed) := RemoveInternal(self, key);
 
     LemmaFixedSizeRemoveResult(self.underlying, key);
-    RemoveCountCorrect(self, key, (self', removed));
+    RemoveCountCorrect(self, key, RemoveResult(self', removed));
     UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents); 
 
-    (self', removed)
+    RemoveResult(self', removed)
   }
 
-  function Remove<V>(self: LinearHashMap, key: uint64)
-  : (self': LinearHashMap)
+  function method Remove<V>(linear self: LinearHashMap, key: uint64)
+  : (linear self': LinearHashMap)
     requires Inv(self)
     ensures
       && Inv(self')
@@ -1347,10 +1363,11 @@ module MutableMapModel {
         then map k | k in self.contents && k != key :: self.contents[k]
         else self.contents)
   {
-    RemoveAndGet(self, key).0
+    linear var RemoveResult(self', _) := RemoveAndGet(self, key);
+    self'
   }
 
-  function Get<V>(self: LinearHashMap, key: uint64)
+  function method Get<V>(shared self: LinearHashMap, key: uint64)
   : (found: Option<V>)
     requires Inv(self)
     ensures if key in self.contents then found == Some(self.contents[key]) else found.None?
@@ -1452,20 +1469,20 @@ module MutableMapModel {
     && it.s <= self.contents.Keys
   }
 
-  function indexOutput<V>(self: LinearHashMap<V>, i: uint64) : (next: IteratorOutput<V>)
+  function method indexOutput<V>(shared self: LinearHashMap<V>, i: uint64) : (next: IteratorOutput<V>)
   requires 0 <= i as int <= |self.underlying.storage|
   requires i as int < |self.underlying.storage| ==> self.underlying.storage[i].Entry?
   {
-    if i as int == |self.underlying.storage| then (
+    if i as int == UnderlyingStorageLength(self.underlying) then (
       Done
     ) else (
       Next(
-        self.underlying.storage[i].key,
-        self.underlying.storage[i].value)
+        UnderlyingStorageElement(self.underlying, i as nat).key,
+        UnderlyingStorageElement(self.underlying, i as nat).value)
     )
   }
 
-  protected function SimpleIterOutput<V>(self: LinearHashMap<V>, it: SimpleIterator) : (next: IteratorOutput<V>)
+  protected function method SimpleIterOutput<V>(shared self: LinearHashMap<V>, it: SimpleIterator) : (next: IteratorOutput<V>)
   requires WFSimpleIter(self, it)
   ensures (next.Done? ==> it.s == self.contents.Keys)
   ensures (next.Next? ==>
@@ -1511,7 +1528,7 @@ module MutableMapModel {
     }
   }
 
-  function iterToNext<V>(self: LinearHashMap<V>, i: uint64) : (res: (uint64, IteratorOutput))
+  function method iterToNext<V>(shared self: LinearHashMap<V>, i: uint64) : (res: (uint64, IteratorOutput))
   requires Inv(self)
   requires 0 <= i as int <= |self.underlying.storage|
   ensures NextExplainedByI(self, res.0, res.1)
@@ -1519,16 +1536,16 @@ module MutableMapModel {
   ensures i <= res.0
   decreases |self.underlying.storage| - i as int
   {
-    if i as int == |self.underlying.storage| then (
+    if i as int == UnderlyingStorageLength(self.underlying) then (
       (i, Done)
-    ) else if self.underlying.storage[i].Entry? then (
-      (i, Next(self.underlying.storage[i].key, self.underlying.storage[i].value))
+    ) else if UnderlyingStorageElement(self.underlying, i as nat).Entry? then (
+      (i, Next(UnderlyingStorageElement(self.underlying, i as nat).key, UnderlyingStorageElement(self.underlying, i as nat).value))
     ) else (
       iterToNext(self, i+1)
     )
   }
 
-  function simpleIterToNext<V>(self: LinearHashMap<V>, i: uint64) : (i': uint64)
+  function method simpleIterToNext<V>(shared self: LinearHashMap<V>, i: uint64) : (i': uint64)
   requires Inv(self)
   requires 0 <= i as int <= |self.underlying.storage|
   ensures 0 <= i' as int <= |self.underlying.storage|
@@ -1538,9 +1555,9 @@ module MutableMapModel {
   ensures i <= i'
   decreases |self.underlying.storage| - i as int
   {
-    if i as int == |self.underlying.storage| then (
+    if i as int == UnderlyingStorageLength(self.underlying) then (
       i
-    ) else if self.underlying.storage[i].Entry? then (
+    ) else if UnderlyingStorageElement(self.underlying, i as nat).Entry? then (
       i
     ) else (
       simpleIterToNext(self, i+1)
@@ -1565,7 +1582,7 @@ module MutableMapModel {
     }
   }
 
-  function {:opaque} IterStart<V>(self: LinearHashMap<V>) : (it' : Iterator<V>)
+  function method {:opaque} IterStart<V>(shared self: LinearHashMap<V>) : (it' : Iterator<V>)
   requires Inv(self)
   ensures WFIter(self, it')
   ensures it'.s == {}
@@ -1580,7 +1597,7 @@ module MutableMapModel {
     it'
   }
 
-  function {:opaque} SimpleIterStart<V>(self: LinearHashMap<V>) : (it' : SimpleIterator)
+  function method {:opaque} SimpleIterStart<V>(shared self: LinearHashMap<V>) : (it' : SimpleIterator)
   requires Inv(self)
   ensures WFSimpleIter(self, it')
   ensures it'.s == {}
@@ -1596,7 +1613,7 @@ module MutableMapModel {
     it'
   }
 
-  function {:opaque} IterInc<V>(self: LinearHashMap<V>, it: Iterator) : (it' : Iterator)
+  function method {:opaque} IterInc<V>(shared self: LinearHashMap<V>, it: Iterator) : (it' : Iterator)
   requires Inv(self)
   requires WFIter(self, it)
   requires it.next.Next?
@@ -1621,7 +1638,7 @@ module MutableMapModel {
     it'
   }
 
-  function {:opaque} SimpleIterInc<V>(self: LinearHashMap<V>, it: SimpleIterator) : (it' : SimpleIterator)
+  function method {:opaque} SimpleIterInc<V>(shared self: LinearHashMap<V>, it: SimpleIterator) : (it' : SimpleIterator)
   requires Inv(self)
   requires WFSimpleIter(self, it)
   requires SimpleIterOutput(self, it).Next?
@@ -1654,6 +1671,8 @@ module MutableMapModel {
       ProperSubsetImpliesSmallerCardinality(it.s, self.contents.Keys);
     }
   }
+
+  /*
 
   function MaxKeyIterate<V>(self: LinearHashMap<V>, it: Iterator<V>, m: uint64) : (res : uint64)
   requires Inv(self)
@@ -1718,4 +1737,5 @@ module MutableMapModel {
       SimpleIterator(|self.underlying.storage| as uint64, self.contents.Keys, 0)
     )
   }
+  */
 }
