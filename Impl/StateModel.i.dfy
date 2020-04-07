@@ -250,9 +250,6 @@ module StateModel {
     && WFVars(s)
     && BCInv(k, s.bc)
     && CommitterModel.Inv(s.jc)
-    && (s.jc.status.StatusLoadingSuperblock? ==> s.bc.Unready?)
-    && (s.jc.isFrozen <==> s.bc.Ready? && s.bc.frozenIndirectionTable.Some?)
-    && (s.jc.frozenLoc.Some? ==> s.bc.Ready? && s.bc.frozenIndirectionTableLoc == s.jc.frozenLoc && s.bc.outstandingIndirectionTableWrite.None?)
-    && (s.bc.Ready? ==> s.jc.status.StatusReady?)
+    && BJC.Inv(Ik(k), I(k, s))
   }
 }

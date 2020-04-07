@@ -25,7 +25,7 @@ module HandleWriteResponseModel {
   lemma writeBackJournalRespCorrect(k: Constants, cm: CommitterModel.CM, io: IO)
   requires CommitterModel.Inv(cm)
   requires diskOp(io).RespWriteOp?
-  requires ValidDiskOp(diskOp(io))
+  //requires ValidDiskOp(diskOp(io))
   requires ValidJournalLocation(LocOfRespWrite(diskOp(io).respWrite))
   requires cm.status.StatusReady?
   ensures var cm' := writeBackJournalResp(k, cm, io);

@@ -2,10 +2,13 @@ include "StateImpl.i.dfy"
 include "CommitterImpl.i.dfy"
 
 module FullImpl {
+  import opened Options
   import opened StateImpl
   import opened CommitterImpl
   import opened DiskOpImpl
   import StateModel
+  import CommitterModel
+  import JC = JournalCache
 
   class Full {
     var bc: Variables;
@@ -78,7 +81,16 @@ module FullImpl {
       && StateModel.Inv(Ic(k), I())
     }
 
-    constructor()
+    constructor(k: ImplConstants)
+    ensures Inv(k)
+    ensures fresh(Repr)
+    ensures !bc.ready
+    ensures CommitterModel.I(jc.I())
+        == JC.LoadingSuperblock(
+            None, None,
+            JC.SuperblockUnfinished,
+            JC.SuperblockUnfinished,
+            map[])
     {
       bc := new Variables();
       jc := new Committer();

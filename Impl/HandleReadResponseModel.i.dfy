@@ -184,7 +184,7 @@ module HandleReadResponseModel {
 
   lemma readResponseCorrect(k: Constants, s: Variables, io: IO)
   requires diskOp(io).RespReadOp?
-  requires ValidDiskOp(diskOp(io))
+  //requires ValidDiskOp(diskOp(io))
   requires Inv(k, s)
   ensures var s' := readResponse(k, s, io);
     && WFVars(s')
