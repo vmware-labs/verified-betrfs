@@ -97,6 +97,8 @@ module FullImpl {
 
       new;
       Repr := {this} + this.bc.Repr() + this.jc.Repr;
+
+      assert StateModel.Inv(Ic(k), I());
     }
   }
 }

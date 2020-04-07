@@ -223,7 +223,9 @@ module {:extern} StateImpl {
 
     constructor()
     ensures !ready
+    ensures !loading
     ensures WF()
+    ensures fresh(Repr())
     {
       ready := false;
 
