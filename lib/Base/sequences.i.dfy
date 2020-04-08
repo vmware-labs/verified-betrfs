@@ -1,5 +1,5 @@
 include "Option.s.dfy"
-include "NativeTypes.s.dfy"
+include "../Lang/NativeTypes.s.dfy"
 
 module Sequences {
   import opened Options

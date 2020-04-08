@@ -1,4 +1,4 @@
-include "../Base/NativeTypes.s.dfy"
+include "../Lang/NativeTypes.s.dfy"
 include "../Base/Option.s.dfy"
 include "../Base/BitsetLemmas.i.dfy"
 include "../Base/NativeArrays.s.dfy"

@@ -1,4 +1,4 @@
-include "../lib/Base/NativeTypes.s.dfy"
+include "../lib/Lang/NativeTypes.s.dfy"
 include "../lib/Base/KeyType.s.dfy"
 //
 // Defines bounds on various abstract quantities, such as the number

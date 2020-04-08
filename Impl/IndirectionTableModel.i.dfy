@@ -1,7 +1,7 @@
 include "../lib/Base/Maps.s.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Option.s.dfy"
-include "../lib/Base/NativeTypes.s.dfy"
+include "../lib/Lang/NativeTypes.s.dfy"
 include "../lib/DataStructures/LruModel.i.dfy"
 include "../lib/DataStructures/MutableMapModel.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"

@@ -1,4 +1,4 @@
-include "NativeTypes.s.dfy"
+include "../Lang/NativeTypes.s.dfy"
 
 // Used for counting up instances of objects, while debugging some
 // memory leaks in the GC implementation. (Looking forward to Rust

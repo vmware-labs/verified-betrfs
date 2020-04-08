@@ -1,6 +1,6 @@
 // DiskInterface
 
-include "../lib/Base/NativeTypes.s.dfy"
+include "../lib/Lang/NativeTypes.s.dfy"
 include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
 
 module {:extern "MainDiskIOHandler_Compile"} MainDiskIOHandler {

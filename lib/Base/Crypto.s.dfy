@@ -1,4 +1,4 @@
-include "NativeTypes.s.dfy"
+include "../Lang/NativeTypes.s.dfy"
 
 module {:extern} Crypto {
   import opened NativeTypes

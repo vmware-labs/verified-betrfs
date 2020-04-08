@@ -1,4 +1,4 @@
-include "NativeTypes.s.dfy"
+include "../Lang/NativeTypes.s.dfy"
 include "SeqComparison.s.dfy"
 
 module {:extern} NativeArrays {

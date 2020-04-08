@@ -1,5 +1,5 @@
 include "../lib/Base/sequences.i.dfy"
-include "../lib/Base/NativeTypes.s.dfy"
+include "../lib/Lang/NativeTypes.s.dfy"
 //
 // An abstract graph that tracks dependencies.
 // It is an interface implemented by BetreeGraph (and the refined

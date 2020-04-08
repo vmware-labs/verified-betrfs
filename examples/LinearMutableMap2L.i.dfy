@@ -1,7 +1,7 @@
 include "LinearSequence.s.dfy"
 include "LinearSequence.i.dfy"
 
-include "../lib/Base/NativeTypes.s.dfy"
+include "../lib/Lang/NativeTypes.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Sets.i.dfy"

@@ -1,7 +1,7 @@
 include "../Linear/LinearSequence.i.dfy"
 include "sequences.i.dfy"
 include "Maps.s.dfy"
-include "NativeTypes.s.dfy"
+include "../Lang/NativeTypes.s.dfy"
 include "KeyType.s.dfy"
 include "NativeArrays.s.dfy"
 include "Option.s.dfy"
