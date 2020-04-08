@@ -163,7 +163,11 @@ module JournalBytes {
         assert c[i*4096..(i+1)*4096] == a[i*4096..(i+1)*4096];
         JournalBlockOfJournalRange(a, i);
       } else {
-        assert c[i*4096..(i+1)*4096] == b[(i-ta)*4096..(i-ta+1)*4096];
+        calc {
+          c[i*4096..(i+1)*4096];
+          (a+b)[i*4096..(i+1)*4096];
+          b[(i-ta)*4096..(i-ta+1)*4096];
+        }
         JournalBlockOfJournalRange(b, i-ta);
       }
     }
