@@ -676,8 +676,8 @@ module MarshallingImpl {
         return null;
       }
 
-      // case 0 indicates indirection table
-      Pack_LittleEndian_Uint64_into_Array(0, data, 32);
+      // case 1 indicates indirection table
+      Pack_LittleEndian_Uint64_into_Array(1, data, 32);
 
       //NativeBenchmarking.start("crc32");
       var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
