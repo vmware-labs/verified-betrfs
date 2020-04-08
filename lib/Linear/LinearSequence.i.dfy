@@ -1,4 +1,4 @@
-include "../lib/Base/sequences.i.dfy"
+include "../Base/sequences.i.dfy"
 
 include "LinearMaybe.s.dfy"
 include "LinearSequence.s.dfy"
