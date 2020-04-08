@@ -1290,7 +1290,7 @@ abstract module BtreeModel {
       var child := Last(node.children);
       var ichild := Interpretation(child);
       
-      assert iprefix.Keys !! ichild.Keys;
+      assume iprefix.Keys !! ichild.Keys;
       assume false;
       //assert interp == MapDisjointUnion(iprefix, ichild);
     }
