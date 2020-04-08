@@ -6,9 +6,11 @@ module LinearSequence_s {
   function method seq_get<A>(shared s:seq<A>, i:nat):(a:A)
       requires i < |s|
       ensures a == s[i]
+
   function method seq_set<A>(linear s1:seq<A>, i:nat, a:A):(linear s2:seq<A>) // can be implemented as in-place update
       requires i < |s1|
       ensures s2 == s1[i := a]
+
   function method seq_length<A>(shared s:seq<A>):(n:nat)
       ensures n == |s|
 
@@ -19,8 +21,6 @@ module LinearSequence_s {
 
   function method seq_unleash<A>(linear s1:seq<A>):(s2:seq<A>)
       ensures s1 == s2
-
-  linear datatype lpair<A, B> = LPair(linear a:A, linear b:B)
 
   type lseq<A>
 
@@ -43,10 +43,10 @@ module LinearSequence_s {
       ensures lseqs_raw(s2) == lseqs_raw(s1)[i := a1]
 
   // can be implemented as in-place swap
-  function method lseq_swap_raw_fun<A>(linear s1:lseq<A>, i:nat, linear a1:maybe<A>):(linear p:lpair<lseq<A>, maybe<A>>)
+  function method lseq_swap_raw_fun<A>(linear s1:lseq<A>, i:nat, linear a1:maybe<A>):(linear p:(linear lseq<A>, linear maybe<A>))
       requires i < |lseqs_raw(s1)|
-      ensures p.b == lseqs_raw(s1)[i]
-      ensures lseqs_raw(p.a) == lseqs_raw(s1)[i := a1]
+      ensures p.1 == lseqs_raw(s1)[i]
+      ensures lseqs_raw(p.0) == lseqs_raw(s1)[i := a1]
 
   function method lseq_share_raw<A>(shared s:lseq<A>, i:nat):(shared a:maybe<A>)
       requires i < |lseqs_raw(s)|
