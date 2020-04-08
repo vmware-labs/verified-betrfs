@@ -50,6 +50,18 @@ module Sequences {
     }
   }
 
+  lemma NoDupesSetCardinality<T>(a: seq<T>)
+    requires NoDupes(a)
+    ensures |Set(a)| == |a|
+  {
+    reveal_NoDupes();
+    if |a| == 0 {
+    } else {
+      NoDupesSetCardinality(DropLast(a));
+      assert Set(a) == Set(DropLast(a)) + {Last(a)};
+    }
+  }
+  
   function IndexOf<T>(s: seq<T>, e: T) : int
     requires e in s;
     ensures 0 <= IndexOf(s,e) < |s|;

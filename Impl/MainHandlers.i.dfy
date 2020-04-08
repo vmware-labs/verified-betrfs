@@ -1,3 +1,4 @@
+include "../lib/Base/DebugAccumulator.i.dfy"
 include "Main.s.dfy"
 include "../lib/Base/Sets.i.dfy"
 include "CoordinationImpl.i.dfy"
@@ -5,16 +6,19 @@ include "HandleReadResponseImpl.i.dfy"
 include "HandleWriteResponseImpl.i.dfy"
 include "Mkfs.i.dfy"
 include "CoordinationModel.i.dfy"
+include "AllocationReport.i.dfy"
 include "../ByteBlockCacheSystem/ByteSystem_Refines_ThreeStateVersionedMap.i.dfy"
 
 //
 // Implements the application-API-handler obligations laid out by Main.s.dfy. TODO rename in a way that emphasizes that this is a module-refinement of the abstract Main that satisfies its obligations.
 //
 
-module {:extern} MainHandlers refines Main { 
+module MainHandlers refines Main { 
+  import DebugAccumulator
   import DOM = DiskOpModel
   import SM = StateModel
   import SI = StateImpl
+  import opened EvictImpl // jonh hack
   import CoordinationImpl
   import HandleReadResponseImpl
   import HandleReadResponseModel
@@ -35,6 +39,7 @@ module {:extern} MainHandlers refines Main {
   import opened InterpretationDiskOps
 
   import System_Ref = ByteSystem_Refines_ThreeStateVersionedMap
+  import AllocationReport
 
   type Constants = ImplConstants
   type Variables = FullImpl.Full
@@ -100,6 +105,56 @@ module {:extern} MainHandlers refines Main {
     //assert hs.s.Inv(k);
     //assert Inv(k, hs);
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), uiop, io.diskOp()); // observe
+  }
+
+  // jonh hack UNVERIFIED DEBUG ONLY
+  method handleEvictEverything(k: Constants, hs: HeapState, io: DiskIOHandler)
+  {
+    var s := hs.s;
+    print "\nBefore\n";
+    var acc := s.DebugAccumulate();
+    DebugAccumulator.Display(acc, 0);
+    var count:uint64 := s.cache.cache.Count;
+//    var last_count:uint64 := count;
+//    var last_at_this_count:uint64 = 0;
+    while (count > 0) { // somehow it gets to where we can't get rid of the last few...?
+      EvictOrDealloc(k, s, io);
+      count := s.cache.cache.Count;
+    }
+    print "\nAfter\n";
+    acc := s.DebugAccumulate();
+    DebugAccumulator.Display(acc, 0);
+    assume false;
+  }
+
+  // jonh hack UNVERIFIED DEBUG ONLY
+  method handleCountAmassAllocations(k: Constants, hs: HeapState, io: DiskIOHandler)
+  {
+    AllocationReport.start();
+    var s := hs.s;
+
+    var cache := s.cache.cache;
+    var iter := cache.SimpleIterStart();
+    var output := cache.SimpleIterOutput(iter);
+    while (!output.Done?) {
+      var node := output.value;
+
+      AllocationReport.sampleNode(0, node);
+      /*
+      var bi:uint64 := 0;
+      while (bi < |node.buckets| as uint64) {
+        var bucket := node.buckets[bi];
+        AllocationReport.sampleBucket(0, bucket);
+        bi := bi + 1;
+      }
+      */
+
+      iter := cache.SimpleIterInc(iter);
+      output := cache.SimpleIterOutput(iter);
+    }
+
+    AllocationReport.stop();
+    assume false;
   }
 
   method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: uint64, graphSync: bool)

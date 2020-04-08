@@ -17,7 +17,7 @@ function domain<U(!new), V>(m: map<U,V>): set<U>
 }
 
 function union<U(!new), V>(m: map<U,V>, m': map<U,V>): map<U,V>
-   requires m !! m';
+   requires m.Keys !! m'.Keys;
    ensures forall i :: i in union(m, m') <==> i in m || i in m';
    ensures forall i :: i in m ==> union(m, m')[i] == m[i];
    ensures forall i :: i in m' ==> union(m, m')[i] == m'[i];
@@ -42,7 +42,8 @@ lemma lemma_non_empty_map_has_elements<S,T>(m:map<S,T>)
     ensures exists x :: x in m;
 {
     var dom := domain(m);
-    assert m !! map [];
+    var empty:map<S,T> := map[];
+    assert m.Keys !! empty.Keys;
     assert m != map [];
     assert |dom| > 0;
 }

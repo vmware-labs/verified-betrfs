@@ -19,6 +19,10 @@ module LeafImpl {
 
   import opened NativeTypes
 
+  method CopyKey(k: KeyType.Key) returns (k2: KeyType.Key) {
+    k2 := [] + k;
+  }
+
   method repivotLeaf(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, node: Node)
   requires Inv(k, s)
   requires s.ready
@@ -44,6 +48,7 @@ module LeafImpl {
     }
 
     var pivot := node.buckets[0 as uint64].GetMiddleKey();
+    pivot := CopyKey(pivot);
 
     var pivots := [pivot];
 

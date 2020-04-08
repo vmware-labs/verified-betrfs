@@ -114,7 +114,8 @@ abstract module BtreeModel {
     reveal_Interpretation();
     reveal_AllKeys();
     var interp := Interpretation(node);
-    assume key in AllKeys(node);
+    assert key in AllKeys(node.children[Keys.LargestLte(node.pivots, key)+1]);
+    assert key in AllKeys(node);
     assert key in interp;
   }
   
@@ -790,15 +791,19 @@ abstract module BtreeModel {
       var llte := Keys.LargestLte(newindex.pivots, key);
       if llte + 1 < childidx {
         Keys.LargestLteIsUnique2(oldindex.pivots, key, llte);
+        assert key in oldint;
       } else if llte + 1 == childidx {
         Keys.LargestLteIsUnique2(oldindex.pivots, key, llte);
+        assert key in oldint;
       } else if llte + 1 == childidx + 1 {
         var oldllte := llte - 1;
         Keys.LargestLteIsUnique2(oldindex.pivots, key, oldllte);
         assert oldllte == Keys.LargestLte(oldindex.pivots, key);
         assert key in Interpretation(oldindex.children[Keys.LargestLte(oldindex.pivots, key) + 1]);
+        assert key in oldint;
       } else {
         Keys.LargestLteIsUnique2(oldindex.pivots, key, llte-1);
+        assert key in oldint;
       }
       assume false;
     }
@@ -1257,7 +1262,38 @@ abstract module BtreeModel {
     requires WF(node)
     ensures NumElements(node) == |Interpretation(node)|
   {
-    assume false;
+    var interp := Interpretation(node);
+    reveal_Interpretation();
+    if node.Leaf? {
+      assert NoDupes(node.keys) by {
+        reveal_NoDupes();
+        Keys.reveal_IsStrictlySorted();
+      }
+      NoDupesSetCardinality(node.keys);
+      assert interp.Keys == Set(node.keys);
+    } else if |node.children| == 1 {
+      var child := node.children[0];
+      var ichild := Interpretation(child);
+      forall key | key in ichild
+        ensures MapsTo(interp, key, ichild[key])
+      {
+        AllKeysIsConsistentWithInterpretation(child, key);
+        reveal_AllKeys();
+      }
+      assert interp == Interpretation(child);
+      NumElementsMatchesInterpretation(child);
+      assert NumElementsOfChildren(node.children) == NumElements(child);
+    } else {
+      var prefix := SubIndex(node, 0, |node.children|-1);
+      SubIndexPreservesWF(node, 0, |node.children|-1);
+      var iprefix := Interpretation(prefix);
+      var child := Last(node.children);
+      var ichild := Interpretation(child);
+      
+      assert iprefix.Keys !! ichild.Keys;
+      assume false;
+      //assert interp == MapDisjointUnion(iprefix, ichild);
+    }
   }
   
   lemma NumElementsOfChildrenNotZero(node: Node)

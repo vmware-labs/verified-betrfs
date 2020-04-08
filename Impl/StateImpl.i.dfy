@@ -1,3 +1,4 @@
+include "../lib/Base/DebugAccumulator.i.dfy"
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
 include "../lib/DataStructures/LruImpl.i.dfy"
 include "StateModel.i.dfy"
@@ -8,7 +9,8 @@ include "IndirectionTableImpl.i.dfy"
 include "BlockAllocatorImpl.i.dfy"
 include "DiskOpImpl.i.dfy"
 
-module {:extern} StateImpl {
+module StateImpl {
+  import DebugAccumulator
   import opened Options
   import opened Sequences
   import opened NativeTypes
@@ -133,6 +135,45 @@ module {:extern} StateImpl {
 
     // Unready
     // no fields
+
+    method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator) {
+      acc := DebugAccumulator.EmptyAccumulator();
+      var r := new DebugAccumulator.AccRec(syncReqs.Count, "SyncReqStatus");
+      acc := DebugAccumulator.AccPut(acc, "syncReqs", r);
+      var i := DebugAccumulator.EmptyAccumulator();
+      if persistentIndirectionTable != null {
+        i := persistentIndirectionTable.DebugAccumulate();
+      }
+      var a := new DebugAccumulator.AccRec.Index(i);
+      acc := DebugAccumulator.AccPut(acc, "persistentIndirectionTable", a);
+      i := DebugAccumulator.EmptyAccumulator();
+      if frozenIndirectionTable != null {
+        i := frozenIndirectionTable.DebugAccumulate();
+      }
+      a := new DebugAccumulator.AccRec.Index(i);
+      acc := DebugAccumulator.AccPut(acc, "frozenIndirectionTable", a);
+      i := DebugAccumulator.EmptyAccumulator();
+      if ephemeralIndirectionTable != null {
+        i := ephemeralIndirectionTable.DebugAccumulate();
+      }
+      a := new DebugAccumulator.AccRec.Index(i);
+      acc := DebugAccumulator.AccPut(acc, "ephemeralIndirectionTable", a);
+      r := new DebugAccumulator.AccRec(if outstandingIndirectionTableWrite.Some? then 1 else 0, "ReqId");
+      acc := DebugAccumulator.AccPut(acc, "outstandingIndirectionTableWrite", r);
+      r := new DebugAccumulator.AccRec(|outstandingBlockWrites| as uint64, "OutstandingWrites");
+      acc := DebugAccumulator.AccPut(acc, "outstandingBlockWrites", r);
+      r := new DebugAccumulator.AccRec(|outstandingBlockReads| as uint64, "OutstandingReads");
+      acc := DebugAccumulator.AccPut(acc, "outstandingBlockReads", r);
+      i := cache.DebugAccumulate();
+      a := new DebugAccumulator.AccRec.Index(i);
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
+      i := lru.DebugAccumulate();
+      a := new DebugAccumulator.AccRec.Index(i);
+      acc := DebugAccumulator.AccPut(acc, "lru", a);
+      i := blockAllocator.DebugAccumulate();
+      a := new DebugAccumulator.AccRec.Index(i);
+      acc := DebugAccumulator.AccPut(acc, "blockAllocator", a);
+    }
 
     function Repr() : set<object>
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,

@@ -6,6 +6,8 @@
 
 #include "core_workload.h"
 #include "ycsbwrappers.h"
+#include "leakfinder.h"
+#include "MallocAccounting.h"
 
 #include "hdrhist.hpp"
 
@@ -22,6 +24,7 @@ using namespace std;
 
 template< class DB >
 inline void performYcsbRead(DB db, ycsbc::CoreWorkload& workload, bool verbose) {
+    malloc_accounting_set_scope("performYcsbRead setup");
     ycsbcwrappers::TxRead txread = ycsbcwrappers::TransactionRead(workload);
     if (!workload.read_all_fields()) {
         cerr << db.name << " error: not reading all fields unsupported" << endl;
@@ -30,12 +33,14 @@ inline void performYcsbRead(DB db, ycsbc::CoreWorkload& workload, bool verbose) 
     if (verbose) {
         cerr << db.name << " [op] READ " << txread.table << " " << txread.key << " { all fields }" << endl;
     }
+    malloc_accounting_default_scope();
     // TODO use the table name?
     db.query(txread.key);
 }
 
 template< class DB >
 inline void performYcsbInsert(DB db, ycsbc::CoreWorkload& workload, bool verbose) {
+    malloc_accounting_set_scope("performYcsbInsert setup");
     ycsbcwrappers::TxInsert txinsert = ycsbcwrappers::TransactionInsert(workload);
     if (txinsert.values->size() != 1) {
         cerr << db.name << " error: only fieldcount=1 is supported" << endl;
@@ -45,12 +50,14 @@ inline void performYcsbInsert(DB db, ycsbc::CoreWorkload& workload, bool verbose
     if (verbose) {
         cerr << db.name << " [op] INSERT " << txinsert.table << " " << txinsert.key << " " << value << endl;
     }
+    malloc_accounting_default_scope();
     // TODO use the table name?
     db.insert(txinsert.key, value);
 }
 
 template< class DB >
 inline void performYcsbUpdate(DB db, ycsbc::CoreWorkload& workload, bool verbose) {
+    malloc_accounting_set_scope("performYcsbUpdate setup");
     ycsbcwrappers::TxUpdate txupdate = ycsbcwrappers::TransactionUpdate(workload);
     if (!workload.write_all_fields()) {
         cerr << db.name << " error: not writing all fields unsupported" << endl;
@@ -64,6 +71,7 @@ inline void performYcsbUpdate(DB db, ycsbc::CoreWorkload& workload, bool verbose
     if (verbose) {
         cerr << db.name << " [op] UPDATE " << txupdate.table << " " << txupdate.key << " " << value << endl;
     }
+    malloc_accounting_default_scope();
     // TODO use the table name?
     db.update(txupdate.key, value);
 }
@@ -82,7 +90,8 @@ void ycsbLoad(DB db, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
         if (std::chrono::duration_cast<std::chrono::milliseconds>(
             clock_op_completed - clock_last_report).count() > report_interval_ms) {
 
-            cerr << db.name << " (completed " << i << " ops)" << endl;
+            cout << db.name << " (completed " << i << " ops)" << endl;
+            malloc_accounting_status();
             auto report_completed = chrono::steady_clock::now();
             clock_last_report = report_completed;
         }
@@ -122,6 +131,7 @@ void ycsbRun(
     int sync_interval_ms,
     bool verbose) {
 
+    malloc_accounting_set_scope("ycsbRun.setup");
     vector<pair<ycsbc::Operation, string>> operations = {
         make_pair(ycsbc::READ, "read"),
         make_pair(ycsbc::UPDATE, "update"),
@@ -137,6 +147,7 @@ void ycsbRun(
     }
 
     HDRHist sync_latency_hist;
+    malloc_accounting_default_scope();
 
     cerr << db.name << " [step] running experiment (num ops: " << num_ops << ", sync interval " <<
         sync_interval_ms << "ms)" << endl;
@@ -144,6 +155,25 @@ void ycsbRun(
     auto clock_start = chrono::steady_clock::now();
     auto clock_prev = clock_start;
     auto clock_last_sync = clock_start;
+    int next_sync_ms = sync_interval_ms;
+    int display_interval_ms = 10000;
+    int next_display_ms = display_interval_ms;
+
+#define HACK_EVICT_PERIODIC 0
+#if HACK_EVICT_PERIODIC
+// An experiment that demonstrated that the heap was filling with small
+// junk ("heap Kessler syndrome"?): by evicting periodically, we freed
+// most of the small junk and kept the heap waste down. TODO okay to clean up.
+    int evict_interval_ms = 100000;
+    int next_evict_ms = evict_interval_ms;
+#endif // HACK_EVICT_PERIODIC
+
+#define HACK_PROBE_PERIODIC 1
+#if HACK_PROBE_PERIODIC
+// An experiment to periodically study how the kv allocations are distributed
+    int probe_interval_ms = 50000;
+    int next_probe_ms = probe_interval_ms;
+#endif // HACK_PROBE_PERIODIC
 
     for (int i = 0; i < num_ops; ++i) {
         auto next_operation = workload.NextOperation();
@@ -175,13 +205,47 @@ void ycsbRun(
             clock_op_completed - clock_prev).count();
         latency_hist[next_operation]->add_value(duration);
 
-        if (std::chrono::duration_cast<std::chrono::milliseconds>(
-            clock_op_completed - clock_last_sync).count() > sync_interval_ms) {
+        int elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            clock_op_completed - clock_start).count();
 
+#if HACK_EVICT_PERIODIC
+        if (elapsed_ms >= next_evict_ms) {
+            printf("evict.");
             db.sync();
+            db.evictEverything();
+            next_evict_ms += evict_interval_ms;
+        }
+#endif // HACK_EVICT_PERIODIC
+#if HACK_PROBE_PERIODIC
+        if (elapsed_ms >= next_probe_ms) {
+            printf("probe.");
+            db.CountAmassAllocations();
+            next_probe_ms += probe_interval_ms;
+        }
+#endif // HACK_PROBE_PERIODIC
+
+        if (elapsed_ms >= next_display_ms) {
+            malloc_accounting_display("periodic");
+            printf("elapsed %d next %d int %d\n",
+                elapsed_ms, next_display_ms, display_interval_ms);
+            next_display_ms += display_interval_ms;
+        }
+
+        if (elapsed_ms >= next_sync_ms) {
+            db.sync();
+
+            /*
+            if (i > 3000000) {
+              leakfinder_report(1);
+              db.evictEverything();
+              leakfinder_report(2);
+              exit(0);
+            }
+            */
             auto sync_completed = chrono::steady_clock::now();
 
-            cerr << db.name << " [op] sync (completed " << i << " ops)" << endl;
+            cout << db.name << " [op] sync (completed " << i << " ops)" << endl;
+            malloc_accounting_status();
 
             #ifdef _YCSB_VERIBETRFS
             #ifdef LOG_QUERY_STATS
@@ -198,6 +262,9 @@ void ycsbRun(
 
             clock_last_sync = sync_completed;
             clock_prev = sync_completed;
+            next_sync_ms += sync_interval_ms;
+
+            fflush(stdout);
         } else {
             clock_prev = clock_op_completed;
         }
@@ -219,6 +286,7 @@ void ycsbRun(
     cout << "--\tthroughput\tduration(ns)\toperations\tops/s" << endl;
     cout << db.name << "\tthroughput\t" << bench_ns << "\t" << num_ops << "\t" << ops_per_sec << endl;
 
+    malloc_accounting_set_scope("ycsbRun.summary");
     {
         auto sync_summary = sync_latency_hist.summary();
         print_summary(sync_summary, db.name, "sync");
@@ -228,6 +296,7 @@ void ycsbRun(
             print_summary(op_summary, db.name, op.second);
         }
     }
+    malloc_accounting_default_scope();
 }
 
 #ifdef _YCSB_VERIBETRFS
@@ -254,6 +323,14 @@ public:
 
     inline void sync() {
         app.Sync();
+    }
+
+    inline void evictEverything() {
+        app.EvictEverything();
+    }
+
+    inline void CountAmassAllocations() {
+        app.CountAmassAllocations();
     }
 };
 
@@ -296,6 +373,9 @@ public:
         rocksdb::Status status = db.Flush(foptions);
         assert(status.ok());
     }
+
+    inline void evictEverything() {
+    }
 };
 
 const string RocksdbFacade::name = string("rocksdb");
@@ -322,6 +402,14 @@ public:
     inline void sync() {
         asm volatile ("nop");
     }
+
+    inline void evictEverything() {
+        asm volatile ("nop");
+    }
+
+    inline void CountAmassAllocations() {
+        asm volatile ("nop");
+    }
 };
 
 const string NopFacade::name = string("nop");
@@ -337,6 +425,7 @@ void ycsbLoadAndRun(
 
     ycsbLoad(db, workload, record_count, verbose);
     ycsbRun(db, workload, num_ops, sync_interval_ms, verbose);
+    malloc_accounting_display("after experiment before teardown");
 }
 
 int main(int argc, char* argv[]) {
@@ -346,6 +435,12 @@ int main(int argc, char* argv[]) {
         cerr << "error: expects two arguments: the workload spec, and the persistent data directory" << endl;
         exit(-1);
     }
+
+//    leakfinder_mark(1);
+//    for (int i=0; i<15; i++) {
+//      leakfinder_mark(1);
+//    }
+//    leakfinder_report(0);
 
     std::string workload_filename(argv[1]);
     std::string base_directory(argv[2]);
@@ -402,7 +497,6 @@ int main(int argc, char* argv[]) {
         ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
     #endif 
     }
-
 
     // == rocksdb ==
     if (do_rocks) {

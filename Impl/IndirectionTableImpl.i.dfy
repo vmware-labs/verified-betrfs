@@ -1,3 +1,4 @@
+include "../lib/Base/DebugAccumulator.i.dfy"
 include "../lib/Base/Maps.s.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Option.s.dfy"
@@ -15,6 +16,7 @@ include "IndirectionTableModel.i.dfy"
 //
 
 module IndirectionTableImpl {
+  import DebugAccumulator
   import opened Maps
   import opened Sets
   import opened Options
@@ -44,6 +46,15 @@ module IndirectionTableImpl {
     var refUpperBound: uint64;
     var findLoclessIterator: Option<MutableMapModel.SimpleIterator>;
     ghost var Repr: set<object>;
+
+    method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator) {
+      acc := DebugAccumulator.EmptyAccumulator();
+      var a := new DebugAccumulator.AccRec(t.Count, "IndirectionTableModel.Entry");
+      acc := DebugAccumulator.AccPut(acc, "t", a);
+      var r := garbageQueue.DebugAccumulate();
+      a := new DebugAccumulator.AccRec.Index(r);
+      acc := DebugAccumulator.AccPut(acc, "garbageQueue", a);
+    }
 
     protected predicate Inv()
     reads this, Repr
