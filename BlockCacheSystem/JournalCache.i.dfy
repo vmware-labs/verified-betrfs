@@ -43,19 +43,19 @@ module JournalCache {
         frozenLoc: Option<Location>,
 
         isFrozen: bool,
-        frozenJournalPosition: int,
+        ghost frozenJournalPosition: int,
 
         superblockWrite: Option<ReqId>,
 
         inMemoryJournalFrozen: seq<JournalEntry>,
         inMemoryJournal: seq<JournalEntry>,
         outstandingJournalWrites: set<ReqId>,
-        writtenJournalLen: int,
+        ghost writtenJournalLen: int,
 
         replayJournal: seq<JournalEntry>,
 
         superblock: Superblock,
-        whichSuperblock: int,
+        ghost whichSuperblock: int,
 
         commitStatus: CommitStatus,
         newSuperblock: Option<Superblock>,
@@ -65,7 +65,7 @@ module JournalCache {
 
     | LoadingOther(
         superblock: Superblock,
-        whichSuperblock: int,
+        ghost whichSuperblock: int,
 
         journalFrontRead: Option<ReqId>,
         journalBackRead: Option<ReqId>,
@@ -164,10 +164,10 @@ module JournalCache {
     | WriteBackSuperblockReq_AdvanceLog_Step
     | WriteBackSuperblockReq_AdvanceLocation_Step
     | WriteBackSuperblockRespStep
-    | PageInJournalReqStep(which: int)
-    | PageInJournalRespStep(which: int)
-    | PageInSuperblockReqStep(which: int)
-    | PageInSuperblockRespStep(which: int)
+    | PageInJournalReqStep(ghost which: int)
+    | PageInJournalRespStep(ghost which: int)
+    | PageInSuperblockReqStep(ghost which: int)
+    | PageInSuperblockRespStep(ghost which: int)
     | FinishLoadingSuperblockPhaseStep
     | FinishLoadingOtherPhaseStep
     | FreezeStep

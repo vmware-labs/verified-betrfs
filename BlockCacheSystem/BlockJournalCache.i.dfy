@@ -2,7 +2,7 @@ include "BetreeCache.i.dfy"
 include "JournalCache.i.dfy"
 include "BlockJournalDisk.i.dfy"
 
-module BlockJournalCache {
+module {:extern} BlockJournalCache {
   import BetreeCache
   import JournalCache
   import D = BlockJournalDisk

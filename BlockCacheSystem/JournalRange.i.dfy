@@ -80,7 +80,7 @@ module JournalRanges {
 
   ///// Parsing
 
-  datatype Header = Header(nentries: int, nblocks: int)
+  datatype Header = Header(ghost nentries: int, ghost nblocks: int)
 
   function {:opaque} parseHeader(s: JournalBlock) : Header
   requires |s| >= 8

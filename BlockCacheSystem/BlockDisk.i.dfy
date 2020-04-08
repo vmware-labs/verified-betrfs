@@ -45,15 +45,15 @@ module BlockDisk {
 
   datatype Constants = Constants()
   datatype Variables = Variables(
-    reqReadIndirectionTables: map<ReqId, Location>,
-    reqReadNodes: map<ReqId, Location>,
+    ghost reqReadIndirectionTables: map<ReqId, Location>,
+    ghost reqReadNodes: map<ReqId, Location>,
 
-    reqWriteIndirectionTables: map<ReqId, Location>,
-    reqWriteNodes: map<ReqId, Location>,
+    ghost reqWriteIndirectionTables: map<ReqId, Location>,
+    ghost reqWriteNodes: map<ReqId, Location>,
 
     // The disk:
-    indirectionTables: imap<Location, IndirectionTable>,
-    nodes: imap<Location, Node>
+    ghost indirectionTables: imap<Location, IndirectionTable>,
+    ghost nodes: imap<Location, Node>
   )
 
   predicate Init(k: Constants, s: Variables)

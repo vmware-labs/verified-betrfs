@@ -11,11 +11,11 @@ abstract module StatesView {
 
   datatype Constants = Constants(k: SM.Constants)
   datatype Variables = Variables(
-      disk: imap<Loc, SM.Variables>,
-      persistentLoc: Option<Loc>,
-      frozenLoc: Option<Loc>,
-      frozenState: Option<SM.Variables>,
-      ephemeralState: Option<SM.Variables>
+      ghost disk: imap<Loc, SM.Variables>,
+      ghost persistentLoc: Option<Loc>,
+      ghost frozenLoc: Option<Loc>,
+      ghost frozenState: Option<SM.Variables>,
+      ghost ephemeralState: Option<SM.Variables>
   )
 
   predicate Init(k: Constants, s: Variables, loc: Loc)

@@ -282,8 +282,8 @@ module JournalSystem {
   ////// Next
 
   datatype Step =
-    | MachineStep(dop: DiskOp, machineStep: M.Step)
-    | DiskInternalStep(step: D.InternalStep)
+    | MachineStep(ghost dop: DiskOp, ghost machineStep: M.Step)
+    | DiskInternalStep(ghost step: D.InternalStep)
     | CrashStep
   
   predicate Machine(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, machineStep: M.Step)

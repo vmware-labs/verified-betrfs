@@ -21,39 +21,39 @@ module JournalDisk {
   type ReqId = uint64
 
   datatype ReqWriteSuperblock = ReqWriteSuperblock(superblock: Superblock)
-  datatype ReqWriteJournal = ReqWriteJournal(start: int, journal: JournalRange)
+  datatype ReqWriteJournal = ReqWriteJournal(ghost start: int, journal: JournalRange)
 
   datatype ReqWriteSuperblockId = ReqWriteSuperblockId(id: ReqId, req: ReqWriteSuperblock)
 
   datatype DiskOp =
-    | ReqReadSuperblockOp(id: ReqId, which: int)
+    | ReqReadSuperblockOp(id: ReqId, ghost which: int)
     | ReqReadJournalOp(id: ReqId, interval: JournalInterval)
 
-    | ReqWriteSuperblockOp(id: ReqId, which: int, reqWriteSuperblock: ReqWriteSuperblock)
+    | ReqWriteSuperblockOp(id: ReqId, ghost which: int, reqWriteSuperblock: ReqWriteSuperblock)
     | ReqWriteJournalOp(id1: ReqId, id2: Option<ReqId>, reqWriteJournal: ReqWriteJournal)
 
-    | RespReadSuperblockOp(id: ReqId, which: int, superblock: Option<Superblock>)
+    | RespReadSuperblockOp(id: ReqId, ghost which: int, superblock: Option<Superblock>)
     | RespReadJournalOp(id: ReqId, journal: Option<JournalRange>)
 
-    | RespWriteSuperblockOp(id: ReqId, which: int)
+    | RespWriteSuperblockOp(id: ReqId, ghost which: int)
     | RespWriteJournalOp(id: ReqId)
 
     | NoDiskOp
 
   datatype Constants = Constants()
   datatype Variables = Variables(
-    reqReadSuperblock1: set<ReqId>,
-    reqReadSuperblock2: set<ReqId>,
-    reqReadJournals: map<ReqId, JournalInterval>,
+    ghost reqReadSuperblock1: set<ReqId>,
+    ghost reqReadSuperblock2: set<ReqId>,
+    ghost reqReadJournals: map<ReqId, JournalInterval>,
 
-    reqWriteSuperblock1: Option<ReqWriteSuperblockId>,
-    reqWriteSuperblock2: Option<ReqWriteSuperblockId>,
-    reqWriteJournals: map<ReqId, JournalInterval>,
+    ghost reqWriteSuperblock1: Option<ReqWriteSuperblockId>,
+    ghost reqWriteSuperblock2: Option<ReqWriteSuperblockId>,
+    ghost reqWriteJournals: map<ReqId, JournalInterval>,
 
     // The disk:
-    superblock1: Option<Superblock>,
-    superblock2: Option<Superblock>,
-    journal: seq<Option<JournalBlock>>
+    ghost superblock1: Option<Superblock>,
+    ghost superblock2: Option<Superblock>,
+    ghost journal: seq<Option<JournalBlock>>
   )
 
   predicate Init(k: Constants, s: Variables)
@@ -219,7 +219,7 @@ module JournalDisk {
   }
 
   datatype InternalStep =
-  | ProcessWriteSuperblockStep(which: int)
+  | ProcessWriteSuperblockStep(ghost which: int)
 
   predicate ProcessWriteSuperblock(k: Constants, s: Variables, s': Variables, which: int)
   {

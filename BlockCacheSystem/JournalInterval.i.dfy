@@ -9,7 +9,8 @@ module JournalIntervals {
   import opened Sequences
   import opened NativeTypes
 
-  datatype JournalInterval = JournalInterval(start: int, len: int)
+  datatype JournalInterval = JournalInterval(
+      ghost start: int, ghost len: int)
 
   predicate ValidJournalInterval(indices: JournalInterval)
   {
