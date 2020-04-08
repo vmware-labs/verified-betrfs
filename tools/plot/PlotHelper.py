@@ -21,11 +21,11 @@ class AxisAllocator:
         return self.axes[ret]
 
 class PlotHelper:
-    def __init__(self, numPlots):
+    def __init__(self, numPlots, scale=1):
         self.numPlots = numPlots
         columns = 2 if numPlots > 4 else 1
-        rows = int((numPlots+1)/columns)
-        self.fig, self.axes = plt.subplots(rows, columns, figsize=(6*columns,rows*2))
+        rows = int((numPlots+0.5)/columns)
+        self.fig, self.axes = plt.subplots(rows, columns, figsize=(scale*6*columns, scale*rows*2))
         self.axes = self.axes.transpose().flatten()
         plt.subplots_adjust(left=0.10, right=0.90, hspace=0.4, top=0.95, bottom=0.05);
 

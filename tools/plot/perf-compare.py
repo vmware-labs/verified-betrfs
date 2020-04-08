@@ -10,7 +10,7 @@ from PlotHelper import *
 from TimeSeries import *
 
 def plot_perf_compare(experiments):
-    plotHelper = PlotHelper(3)
+    plotHelper = PlotHelper(2, scale=2)
 
     for e in experiments:
         e.nickname = e.filename.split("/")[-1]
@@ -67,7 +67,7 @@ def plot_perf_compare(experiments):
             row = rows[rowi]
             ax.text(widths[rowi], row, "%.1f" % widths[rowi])
     plotRateBargraph(plotHelper.nextAxis(), 10000)
-    plotRateBargraph(plotHelper.nextAxis(), 17000)
+    #plotRateBargraph(plotHelper.nextAxis(), 17000)
 
     plotHelper.save("compare.png")
 

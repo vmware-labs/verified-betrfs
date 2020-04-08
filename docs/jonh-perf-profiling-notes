@@ -756,7 +756,7 @@ perf record -p XXX
 
 ------------------------------------------------------------------------------
 Next steps:
-- check it what works now.
+X check in what works now.
 - merge back to master...?
 - instrument rocks for:
   - I/O count, byte count
