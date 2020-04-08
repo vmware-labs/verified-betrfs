@@ -442,7 +442,7 @@ void Application::initialize() {
 Application::~Application()
 {
   Sync();
-  EvictEverything();
+//  EvictEverything();  // Used when trying to track down below-Dafny leaks
   fini_malloc_accounting();
 }
 
