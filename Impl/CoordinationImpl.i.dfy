@@ -137,7 +137,8 @@ module CoordinationImpl {
           && old(s.I()).jc == s.I().jc;*/
       }
     } else if s.jc.superblockWrite.Some? {
-      print "doSync: doing nothing, superblock write out\n";
+      //print "doSync: doing nothing, superblock write out\n";
+      wait := true;
     } else {
       if graphSync {
         var froze, wait0 := SyncImpl.sync(k, s.bc, io);
