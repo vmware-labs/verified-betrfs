@@ -536,4 +536,10 @@ module Sequences {
   {
     if n == 0 then [] else fill(n-1, t) + [t]
   }
+
+  lemma sum_slice_second<T>(a: seq<T>, b: seq<T>, i: int, j: int)
+  requires |a| <= i <= j <= |a| + |b|
+  ensures (a+b)[i..j] == b[i-|a| .. j-|a|]
+  {
+  }
 }
