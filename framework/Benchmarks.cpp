@@ -157,7 +157,7 @@ public:
     for (size_t i = 0; i < keys.size(); i++) {
       app.Insert(keys[i], values[i]);
     }
-    app.Sync();
+    app.Sync(false);
   }
 };
 
@@ -199,10 +199,10 @@ public:
 
       app.Insert(key, value);
 
-      if (i % 50000 == 0) app.Sync();
+      if (i % 50000 == 0) app.Sync(false);
     }
 
-    app.Sync();
+    app.Sync(true);
   }
 };
 
@@ -271,7 +271,7 @@ public:
 
       app.Insert(key, value);
     }
-    app.Sync();
+    app.Sync(true);
     app.crash();
   }
 
@@ -310,7 +310,7 @@ public:
     for (size_t i = 0; i < keys.size(); i++) {
       app.Insert(keys[i], values[i]);
     }
-    app.Sync();
+    app.Sync(true);
     app.crash();
   }
   virtual void go(Application& app) override {
@@ -362,7 +362,7 @@ public:
       app.Insert(keys[i], value);
     }
 
-    app.Sync();
+    app.Sync(true);
   }
 
   virtual void go(Application& app) override {
@@ -433,7 +433,7 @@ public:
       app.Insert(keys[i], value);
     }
 
-    app.Sync();
+    app.Sync(true);
   }
 
   virtual void go(Application& app) override {
@@ -518,7 +518,7 @@ public:
       //cout << "Inserting " << to_hex(keys_values[i].first) << " -> " << to_hex(keys_values[i].second) << endl;
       app.Insert(keys_values[i].first, keys_values[i].second);
     }
-    app.Sync();
+    app.Sync(true);
     app.crash();
   }
 
@@ -538,7 +538,7 @@ public:
         fail("Incorrect succ result");
       }
     }
-    app.Sync();
+    app.Sync(true);
   }
 };
 

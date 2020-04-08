@@ -36,9 +36,14 @@ uint64 handle_PushSync(Constants k, Variables hs, std::shared_ptr<MainDiskIOHand
   return __default::handlePushSync(*k.k, hs.hs, io);
 }
 
-std::pair<bool, bool> handle_PopSync(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io, uint64 id)
+std::pair<bool, bool> handle_PopSync(
+  Constants k,
+  Variables hs,
+  std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io,
+  uint64 id,
+  bool graphSync)
 {
-  auto p = __default::handlePopSync(*k.k, hs.hs, io, id, true /* graphSync */);
+  auto p = __default::handlePopSync(*k.k, hs.hs, io, id, graphSync);
   return std::make_pair(p.t0, p.t1);
 }
 

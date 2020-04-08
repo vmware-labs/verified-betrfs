@@ -463,7 +463,7 @@ void Application::initialize() {
 
 Application::~Application()
 {
-  Sync();
+  //Sync(false /* graphSync */);
 //  EvictEverything();  // Used when trying to track down below-Dafny leaks
   fini_malloc_accounting();
 }
@@ -482,7 +482,7 @@ void Application::CountAmassAllocations() {
   handle_CountAmassAllocations(k, hs, io);
 }
 
-void Application::Sync() {
+void Application::Sync(bool graphSync) {
   #ifdef LOG_QUERY_STATS
   currently_doing_action = ACTION_SYNC;
   auto t1 = chrono::high_resolution_clock::now();
@@ -498,7 +498,7 @@ void Application::Sync() {
 
   for (int i = 0; i < 500000; i++) {
     while (this->maybeDoResponse()) { }
-    auto tup2 = handle_PopSync(k, hs, io, id);
+    auto tup2 = handle_PopSync(k, hs, io, id, graphSync);
     bool wait = tup2.first;
     bool success = tup2.second;
     if (success) {
