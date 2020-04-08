@@ -865,8 +865,8 @@ void __default::stop() {
     total_underlying += it.second;
   }
   cout << "allocationreport stop underyling_count "
-      << sptr_to_len.size()
-      << " total_underlying " << total_underlying << endl;
+    << sptr_to_len.size()
+    << " total_underlying " << total_underlying << endl;
 }
 
 } // AllocationReport_Compile
