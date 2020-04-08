@@ -44,6 +44,8 @@ module KVList {
     ensures WF(amassed)
     ensures I(kvl) == I(amassed)
   {
+    assume false; // amass
+
     // Count how much space we'll need
     var i : uint64 := 0;
     var cumKeyLen:uint64 := 0;
