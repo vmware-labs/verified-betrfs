@@ -1,10 +1,12 @@
+include "NativeTypes.s.dfy"
 include "LinearMaybe.s.dfy"
 
 module LinearSequence_s {
+  import opened NativeTypes
   import opened LinearMaybe
 
-  function method seq_get<A>(shared s:seq<A>, i:nat):(a:A)
-      requires i < |s|
+  function method seq_get<A>(shared s:seq<A>, i:uint64):(a:A)
+      requires i as int < |s|
       ensures a == s[i]
 
   function method seq_set<A>(linear s1:seq<A>, i:nat, a:A):(linear s2:seq<A>) // can be implemented as in-place update
@@ -26,9 +28,10 @@ module LinearSequence_s {
 
   function lseqs_raw<A>(s:lseq<A>):seq<maybe<A>> // contents of an lseq, as ghost seq
     ensures |lseqs_raw(s)| == lseq_length_raw(s)
+    // TODO(robj): These ensures are mutually recursive; we're bad people and should feel bad. And should fix the "cannot prove termination" error.
 
   // it's okay to synthesize all the lseqs you want if they're ghosty
-  function imagine_lseq<A>(s:seq<A>):(l:lseq<A>)
+  function imagine_lseq_raw<A>(s:seq<A>):(l:lseq<A>)
     ensures lseq_length_raw(l) == |s|
     ensures forall i :: 0 <= i < |s| ==> s[i] == read(lseqs_raw(l)[i])
 

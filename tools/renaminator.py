@@ -95,6 +95,7 @@ def rename(sourceName, destName):
 #AsyncDiskModel.s.dfy
 #""")
 
-rename("Handlers.i.dfy", "MainHandlers.i.dfy")
+#rename("Handlers.i.dfy", "MainHandlers.i.dfy")
+moveinto("lib/Lang", "NativeTypes.s.dfy")
 
 renaminator.enact()

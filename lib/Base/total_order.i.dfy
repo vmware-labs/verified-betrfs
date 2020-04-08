@@ -1,3 +1,4 @@
+include "../Linear/LinearSequence.i.dfy"
 include "sequences.i.dfy"
 include "Maps.s.dfy"
 include "NativeTypes.s.dfy"
@@ -11,6 +12,7 @@ abstract module Total_Order {
   import opened NativeTypes
   import opened Options
   import NativeArrays
+  import opened LinearSequence_i
   
 	type Element(!new,==)
 
@@ -899,6 +901,10 @@ module Lexicographic_Byte_Order refines Total_Order {
   // But then our c++ backend would not be able to compile
   // Integer_Total_Order which uses the `int` type.
 
+  // Searching for inline elements in a smaller array is faster with linear search
+  // perhaps because the cpu's prefetcher gets the hint.
+  // It turns out we don't have inline elements (we have pointers to keys), so
+  // we don't use this after all.
   method ArrayLargestLtePlus1Linear(run: array<Element>, start: uint64, end: uint64, needle: Element) returns (posplus1: uint64)
     requires 0 <= start as int <= end as int <= run.Length < Uint64UpperBound() / 2
     requires IsSorted(run[start..end]);
@@ -953,6 +959,7 @@ module Lexicographic_Byte_Order refines Total_Order {
       }
     }
     var i: uint64 := lo;
+    // Linear search at end -- no longer used. See comment on ArrayLargestLtePlus1Linear
     /*
     var t;
     if i < hi {
@@ -1003,6 +1010,7 @@ module Lexicographic_Byte_Order refines Total_Order {
       }
     }
     var i: uint64 := lo;
+    // Linear search at end -- no longer used. See comment on ArrayLargestLtePlus1Linear
     /*
     var t;
     if i < hi {
@@ -1023,13 +1031,13 @@ module Lexicographic_Byte_Order refines Total_Order {
     posplus1 := i;
   }
 
-  method ComputeLargestLte(run: seq<Element>, needle: Element) returns (res : int64)
+  method ComputeLargestLte(shared run: seq<Element>, needle: Element) returns (res : int64)
     requires |run| < 0x4000_0000_0000_0000
     requires IsSorted(run)
     ensures res as int == LargestLte(run, needle)
   {
     var lo: int64 := 0;
-    var hi: int64 := |run| as int64;
+    var hi: int64 := LinearSequence_s.seq_length(run) as int64;  // TODO(chris): should there be a non-ghost operator-|| for shared seq?
     while lo < hi
     invariant 0 <= lo as int <= hi as int <= |run|
     invariant 1 <= lo as int ==> lte(run[lo-1], needle)
@@ -1038,7 +1046,7 @@ module Lexicographic_Byte_Order refines Total_Order {
     decreases hi - lo
     {
       var mid := (lo + hi) / 2;
-      var c := cmp(run[mid], needle);
+      var c := cmp(LinearSequence_s.seq_get(run, mid), needle);  // TODO(chris): again, happy with the clumsy non-ghost syntax?
       if (c > 0) {
         hi := mid;
       } else {

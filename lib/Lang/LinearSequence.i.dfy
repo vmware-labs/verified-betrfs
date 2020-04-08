@@ -1,17 +1,14 @@
-include "../Base/sequences.i.dfy"
-
 include "LinearMaybe.s.dfy"
 include "LinearSequence.s.dfy"
 
 module LinearSequence_i {
   import opened LinearMaybe
   import opened LinearSequence_s
-  import opened Sequences
   export
     provides LinearSequence_s
-    provides seq_alloc_init, lseqs, lseq_has, lseq_length_doodle, lseq_length, lseq_peek
+    provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_length, lseq_peek
     provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give
-    reveals lseq_full
+    reveals lseq_full, linLast
     reveals operator'cardinality?lseq, operator'in?lseq, operator'subscript?lseq
 
   // method seq_alloc_init<A>(length:nat, a:A) returns(linear s:seq<A>)
@@ -31,6 +28,12 @@ module LinearSequence_i {
   // }
 
   function method seq_alloc_init_iterate<A>(length:nat, a:A, i:nat, linear sofar:seq<A>) : (linear s:seq<A>)
+    requires i<=length;
+    requires |sofar| == length;
+    requires forall j:nat | j < i :: sofar[j] == a
+    ensures |s| == length;
+    ensures forall j:nat | j < length :: s[j] == a
+    decreases length - i;
   {
     if i == length then
       sofar
@@ -47,25 +50,36 @@ module LinearSequence_i {
 
   function lseqs<A>(l:lseq<A>):(s:seq<A>)
   {
-      Apply(read, lseqs_raw(l))
+      seq(lseq_length_raw(l), i requires 0<=i<lseq_length_raw(l) => read(lseqs_raw(l)[i]))
+  }
+
+  function imagine_lseq<A>(s:seq<A>):(l:lseq<A>)
+    ensures lseqs(l) == s
+  {
+    imagine_lseq_raw(s)
+  }
+
+  function linLast<A>(l:lseq<A>) : A
+    requires 0<|l|
+  {
+    lseqs(l)[|l| - 1]
   }
 
   function lseq_has<A>(l:lseq<A>):(s:seq<bool>)
       ensures |s| == |lseqs(l)|
   {
-      Apply(has, lseqs_raw(l))
-  }
-
-  function lseq_length_doodle<A>(s:lseq<A>):(n:nat) //XXX delete
-      ensures n == |lseqs(s)|
-  {
-      lseq_length_raw(s)
+      seq(lseq_length_raw(l), i requires 0<=i<lseq_length_raw(l) => has(lseqs_raw(l)[i]))
   }
 
   function method lseq_length<A>(shared s:lseq<A>):(n:nat)
       ensures n == |lseqs(s)|
   {
       lseq_length_raw(s)
+  }
+
+  function method{:inline true} operator(| |)<A>(shared s:seq<A>):nat
+  {
+      seq_length(s)
   }
 
   function method{:inline true} operator(| |)<A>(shared s:lseq<A>):nat

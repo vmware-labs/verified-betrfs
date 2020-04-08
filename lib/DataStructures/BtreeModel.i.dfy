@@ -170,28 +170,6 @@ abstract module BtreeModel {
     assert rightleaf.keys == oldleaf.keys[|leftleaf.keys|..|oldleaf.keys|];
   }
 
-// Rob thinks this is vanity code
-//  lemma MergeLeafPreservesWF(oldleaf: Node, leftleaf: Node, rightleaf: Node, pivot: Key)
-//    requires WF(leftleaf)
-//    requires WF(rightleaf)
-//    requires SplitLeaf(oldleaf, leftleaf, rightleaf, pivot)
-//    ensures WF(oldleaf)
-//  {
-//    forall i, j | 0 <= i < j < |oldleaf.keys|
-//      ensures Keys.lt(oldleaf.keys[i], oldleaf.keys[j])
-//    {
-//      if j < |leftleaf.keys| {
-//        Keys.IsStrictlySortedImpliesLt(leftleaf.keys, i, j);
-//      } else if i < |leftleaf.keys| {
-//        Keys.IsStrictlySortedImpliesLte(leftleaf.keys, i, |leftleaf.keys|-1);
-//        Keys.IsStrictlySortedImpliesLte(rightleaf.keys, 0, j - |leftleaf.keys|);
-//      } else {
-//        Keys.IsStrictlySortedImpliesLt(rightleaf.keys, i - |leftleaf.keys|, j - |leftleaf.keys|);
-//      }
-//    }
-//    Keys.reveal_IsStrictlySorted();
-//  }
-
   lemma SplitLeafInterpretation(oldleaf: Node, leftleaf: Node, rightleaf: Node, pivot: Key)
     requires SplitLeaf(oldleaf, leftleaf, rightleaf, pivot)
     requires WF(oldleaf)
@@ -249,23 +227,6 @@ abstract module BtreeModel {
     assume false;
   }
 
-  lemma lseqsUndoesImagine<A>(s:seq<A>)
-    ensures lseqs(imagine_lseq(s)) == s
-  {
-    ByThePowerOfChris();
-    var im := imagine_lseq(s);
-    var stacked := lseqs(im);
-    calc {
-      |stacked|;
-      lseq_length(im);
-      lseq_length_raw(im);
-      |s|;
-    }
-    forall i | 0 <= i < |s| ensures stacked[i] == s[i]
-    {
-    }
-  }
-
   lemma SubIndexPreservesWF(node: Node, from: int, to: int)
     requires WF(node)
     requires node.Index?
@@ -277,28 +238,8 @@ abstract module BtreeModel {
     forall i | 0 <= i < to - from - 1
       ensures AllKeysBelowBound(subindex, i)
     {
-      lseqsUndoesImagine(lseqs(node.children)[from..to]);
-      assert node.pivots[from+i]
-        == subindex.pivots[i];
-      assert |lseqs(node.children)| == |node.children|;
-      assert |lseqs(node.children)[from..to]| == to - from;
-      calc {
-        |imagine_lseq(lseqs(node.children)[from..to])|;
-        lseq_length(imagine_lseq(lseqs(node.children)[from..to]));
-        |lseqs(imagine_lseq(lseqs(node.children)[from..to]))|;
-          { lseqsUndoesImagine(lseqs(node.children)[from..to]); }
-        |lseqs(node.children)[from..to]|;
-        to - from;
-      }
-        
-      assert |subindex.children| == to - from;
-      assert node.children[from+i] == subindex.children[i];
-      forall key | key in AllKeys(node.children[i])
-        ensures Keys.lt(key, node.pivots[i]) {
-      }
       assert AllKeysBelowBound(node, from + i);
     }
-    assume false;
     forall i | 0 < i < to - from
       ensures AllKeysAboveBound(subindex, i)
     {
@@ -308,748 +249,632 @@ abstract module BtreeModel {
     assert WF(subindex);
   }
   
-//  predicate SplitIndex(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
-//  {
-//    && oldindex.Index?
-//    && leftindex.Index?
-//    && rightindex.Index?
-//    && 0 < |leftindex.children| < |oldindex.children|
-//    && |oldindex.children| == |oldindex.pivots| + 1
-//    && leftindex == SubIndex(oldindex, 0, |leftindex.children|)
-//    && rightindex == SubIndex(oldindex, |leftindex.children|, |oldindex.children|)
-//    && (forall key :: key in AllKeys(Last(leftindex.children)) ==> Keys.lt(key, pivot))
-//    && (forall key :: key in AllKeys(rightindex.children[0]) ==> Keys.lte(pivot, key))
-//    && pivot == oldindex.pivots[|leftindex.pivots|]
-//  }
-//
-//  lemma SplitIndexPreservesWF(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
-//    requires WF(oldindex)
-//    requires SplitIndex(oldindex, leftindex, rightindex, pivot)
-//    ensures WF(leftindex)
-//    ensures WF(rightindex)
-//  {
-//    SubIndexPreservesWF(oldindex, 0, |leftindex.children|);
-//    SubIndexPreservesWF(oldindex, |leftindex.children|, |oldindex.children|);
-//  }
-//  
-//  lemma MergeIndexPreservesWF(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
-//    requires WF(leftindex)
-//    requires WF(rightindex)
-//    requires SplitIndex(oldindex, leftindex, rightindex, pivot)
-//    ensures WF(oldindex)
-//  {
-//    forall i, j | 0 <= i < j < |oldindex.pivots|
-//      ensures Keys.lt(oldindex.pivots[i], oldindex.pivots[j])
-//    {
-//      if j < |leftindex.pivots| {
-//        Keys.IsStrictlySortedImpliesLt(leftindex.pivots, i, j);
-//      } else if j == |leftindex.pivots| {
-//        Keys.IsStrictlySortedImpliesLte(leftindex.pivots, i, j-1);
-//        assert AllKeysAboveBound(leftindex, j);
-//      } else if i <  |leftindex.pivots| {
-//        Keys.IsStrictlySortedImpliesLte(leftindex.pivots, i, |leftindex.pivots|-1);
-//        assert AllKeysAboveBound(leftindex, |leftindex.pivots|);
-//        var lwit :| lwit in AllKeys(Last(leftindex.children));
-//        var rwit :| rwit in AllKeys(rightindex.children[0]);
-//        assert AllKeysBelowBound(rightindex, 0);
-//        Keys.IsStrictlySortedImpliesLte(rightindex.pivots, 0, j - |leftindex.children|);
-//      } else if i == |leftindex.pivots| {
-//        assert AllKeysBelowBound(rightindex, 0);
-//        Keys.IsStrictlySortedImpliesLte(rightindex.pivots, 0, j - |leftindex.children|);
-//      } else {
-//        Keys.IsStrictlySortedImpliesLt(rightindex.pivots, i - |leftindex.children|, j - |leftindex.children|);
-//      }
-//    }
-//    Keys.reveal_IsStrictlySorted();
-//
-//    forall i | 0 <= i < |oldindex.children|-1
-//      ensures AllKeysBelowBound(oldindex, i)
-//    {
-//      if i < |leftindex.children|-1 {
-//        assert AllKeysBelowBound(leftindex, i);
-//      } else if i == |leftindex.children|-1 {
-//      } else {
-//        assert AllKeysBelowBound(rightindex, i - |leftindex.children|);
-//      }
-//    }
-//    forall i | 0 < i < |oldindex.children|
-//      ensures AllKeysAboveBound(oldindex, i)
-//    {
-//      if i < |leftindex.children| {
-//        assert AllKeysAboveBound(leftindex, i);
-//      } else if i == |leftindex.children| {
-//      } else {
-//        assert AllKeysAboveBound(rightindex, i - |leftindex.children|);
-//      }
-//    }
-//    assert WF(oldindex);
-//  }
-//  
-//  lemma SplitIndexInterpretation1(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
-//    requires WF(oldindex)
-//    requires WF(leftindex)
-//    requires WF(rightindex)
-//    requires SplitIndex(oldindex, leftindex, rightindex, pivot)
-//    ensures forall key :: key in Interpretation(oldindex) ==>
-//    MapsTo(Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex)), key, Interpretation(oldindex)[key])
-//  {
-//    reveal_Interpretation();
-//    var oldint := Interpretation(oldindex);
-//    var leftint := Interpretation(leftindex);
-//    var rightint := Interpretation(rightindex);
-//    var newint := Keys.MapPivotedUnion(leftint, pivot, rightint);
-//
-//    //Keys.PosEqLargestLte(oldindex.pivots, pivot, |leftindex.pivots|);
-//
-//    forall key | key in oldint
-//      ensures MapsTo(newint, key, oldint[key])
-//    {
-//      AllKeysIsConsistentWithInterpretation(oldindex, key);
-//      var llte := Keys.LargestLte(oldindex.pivots, key);
-//      if Keys.lt(key, pivot) { 
-//        Keys.LargestLteSubsequence(oldindex.pivots, key, 0, |leftindex.pivots|);
-//        assert leftindex.children[llte+1] == oldindex.children[llte+1];
-//      } else {
-//        Keys.LargestLteSubsequence(oldindex.pivots, key, |leftindex.pivots|+1, |oldindex.pivots|);
-//        assert rightindex.children[llte - |leftindex.children| + 1] == oldindex.children[llte + 1];
-//        InterpretationInheritance(oldindex, key);
-//        InterpretationDelegation(rightindex, key);
-//      }
-//      reveal_AllKeys();
-//    }
-//  }
-//  
-//  lemma SplitIndexInterpretation2(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
-//    requires WF(oldindex)
-//    requires WF(leftindex)
-//    requires WF(rightindex)
-//    requires SplitIndex(oldindex, leftindex, rightindex, pivot)
-//    ensures Interpretation(oldindex).Keys >=
-//            Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex)).Keys
-//  {
-//    reveal_Interpretation();
-//    var oldint := Interpretation(oldindex);
-//    var leftint := Interpretation(leftindex);
-//    var rightint := Interpretation(rightindex);
-//    var newint := Keys.MapPivotedUnion(leftint, pivot, rightint);
-//
-//    //Keys.PosEqLargestLte(oldindex.pivots, pivot, |leftindex.pivots|);
-//
-//    forall key | key in newint
-//      ensures key in oldint
-//    {
-//      if Keys.lt(key, pivot) {
-//        AllKeysIsConsistentWithInterpretation(leftindex, key);
-//        var llte := Keys.LargestLte(leftindex.pivots, key);
-//        Keys.LargestLteSubsequence(oldindex.pivots, key, 0, |leftindex.pivots|);
-//        assert oldindex.children[llte+1] == leftindex.children[llte+1];
-//        InterpretationInheritance(leftindex, key);
-//      } else {
-//        AllKeysIsConsistentWithInterpretation(rightindex, key);
-//        var llte := Keys.LargestLte(rightindex.pivots, key);
-//        Keys.LargestLteSubsequence(oldindex.pivots, key, |leftindex.pivots|+1, |oldindex.pivots|);
-//        assert oldindex.children[|leftindex.children| + llte + 1] == rightindex.children[llte+1];
-//      }
-//      reveal_AllKeys();
-//    }
-//  }
-//
-//  lemma SplitIndexInterpretation(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
-//    requires WF(oldindex)
-//    requires WF(leftindex)
-//    requires WF(rightindex)
-//    requires SplitIndex(oldindex, leftindex, rightindex, pivot)
-//    ensures Interpretation(oldindex) ==
-//    Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex))
-//  {
-//    reveal_Interpretation();
-//    SplitIndexInterpretation1(oldindex, leftindex, rightindex, pivot);
-//    SplitIndexInterpretation2(oldindex, leftindex, rightindex, pivot);
-//  }
-//
-//  // TODO: maybe eliminate wit by just requiring pivot to be larger
-//  // than the lower-bounding pivot in SplitChildOfIndex.
-//  predicate SplitNode(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
-//  {
-//    || SplitLeaf(oldnode, leftnode, rightnode, pivot)
-//    || SplitIndex(oldnode, leftnode, rightnode, pivot)
-//  }
-//
-//  lemma SplitNodePreservesWF(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
-//    requires SplitNode(oldnode, leftnode, rightnode, pivot)
-//    requires WF(oldnode)
-//    ensures WF(leftnode)
-//    ensures WF(rightnode)
-//  {
-//    if SplitLeaf(oldnode, leftnode, rightnode, pivot) {
-//      SplitLeafPreservesWF(oldnode, leftnode, rightnode, pivot);
-//    } else {
-//      SplitIndexPreservesWF(oldnode, leftnode, rightnode, pivot);
-//    }
-//  }
-//    
-//  lemma MergeNodePreservesWF(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
-//    requires SplitNode(oldnode, leftnode, rightnode, pivot)
-//    requires WF(leftnode)
-//    requires WF(rightnode)
-//    ensures WF(oldnode)
-//  {
-//    if SplitLeaf(oldnode, leftnode, rightnode, pivot) {
-//      MergeLeafPreservesWF(oldnode, leftnode, rightnode, pivot);
-//    } else {
-//      MergeIndexPreservesWF(oldnode, leftnode, rightnode, pivot);
-//    }
-//  }
-//    
-//  lemma SplitNodeInterpretation(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
-//    requires WF(oldnode)
-//    requires WF(leftnode)
-//    requires WF(rightnode)
-//    requires SplitNode(oldnode, leftnode, rightnode, pivot)
-//    ensures Interpretation(oldnode) == Keys.MapPivotedUnion(Interpretation(leftnode), pivot, Interpretation(rightnode))
-//  {
-//    if SplitLeaf(oldnode, leftnode, rightnode, pivot) {
-//      SplitLeafInterpretation(oldnode, leftnode, rightnode, pivot);
-//    } else {
-//      SplitIndexInterpretation(oldnode, leftnode, rightnode, pivot);
-//    }
-//  }
-//
-//  lemma SplitLeafAllKeys(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
-//    requires WF(oldnode)
-//    requires WF(leftnode)
-//    requires WF(rightnode)
-//    requires SplitLeaf(oldnode, leftnode, rightnode, pivot)
-//    ensures AllKeys(oldnode) == AllKeys(leftnode) + AllKeys(rightnode)
-//    ensures AllKeys(leftnode) != {}
-//    ensures AllKeys(rightnode) != {}
-//    ensures forall key :: key in AllKeys(leftnode) ==> Keys.lt(key, pivot)
-//    ensures forall key :: key in AllKeys(rightnode) ==> Keys.lte(pivot, key)
-//  {
-//    reveal_AllKeys();
-//    assert leftnode.keys[0] in AllKeys(leftnode);
-//    assert rightnode.keys[0] in AllKeys(rightnode);
-//    forall key | key in AllKeys(leftnode)
-//      ensures Keys.lt(key, pivot)
-//    {
-//      var i :| 0 <= i < |leftnode.keys| && key == leftnode.keys[i];
-//      Keys.IsStrictlySortedImpliesLte(oldnode.keys, i, |leftnode.keys|-1);
-//    }
-//    forall key | key in AllKeys(rightnode)
-//      ensures Keys.lte(pivot, key)
-//    {
-//      var i :| 0 <= i < |rightnode.keys| && key == rightnode.keys[i];
-//      Keys.IsSortedImpliesLte(oldnode.keys, |leftnode.keys|, |leftnode.keys| + i);
-//    }
-//  }
-//
-//  lemma SplitIndexAllKeys(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
-//    requires WF(oldnode)
-//    requires WF(leftnode)
-//    requires WF(rightnode)
-//    requires SplitIndex(oldnode, leftnode, rightnode, pivot)
-//    ensures AllKeys(oldnode) == AllKeys(leftnode) + AllKeys(rightnode) + {pivot}
-//    ensures AllKeys(leftnode) != {}
-//    ensures AllKeys(rightnode) != {}
-//    ensures forall key :: key in AllKeys(leftnode) ==> Keys.lt(key, pivot)
-//    ensures forall key :: key in AllKeys(rightnode) ==> Keys.lte(pivot, key)
-//  {
-//    reveal_AllKeys();
-//    var x :| x in AllKeys(leftnode.children[0]);
-//    assert x in AllKeys(leftnode);
-//    forall key | key in AllKeys(leftnode)
-//      ensures Keys.lt(key, pivot)
-//    {
-//      if i :| 0 <= i < |leftnode.pivots| && key == leftnode.pivots[i] {
-//        Keys.IsStrictlySortedImpliesLt(oldnode.pivots, i, |leftnode.pivots|);
-//      } else {
-//        var i :| 0 <= i < |leftnode.children| && key in AllKeys(leftnode.children[i]);
-//        assert AllKeysBelowBound(oldnode, i);
-//        if i < |leftnode.pivots| {
-//          Keys.IsStrictlySortedImpliesLt(oldnode.pivots, i, |leftnode.pivots|);
-//        }
-//      }
-//    }
-//    forall key | key in AllKeys(rightnode)
-//      ensures Keys.lte(pivot, key)
-//    {
-//      if i :| 0 <= i < |rightnode.pivots| && key == rightnode.pivots[i] {
-//        Keys.IsSortedImpliesLte(oldnode.pivots, |leftnode.pivots|, |leftnode.children| + i);
-//      } else {
-//        var i :| 0 <= i < |rightnode.children| && key in AllKeys(rightnode.children[i]);
-//        assert AllKeysAboveBound(oldnode, |leftnode.children| + i);
-//        Keys.IsSortedImpliesLte(oldnode.pivots, |leftnode.pivots|, |leftnode.children| + i - 1);
-//      }
-//    }
-//    assert Last(rightnode.children) == Last(oldnode.children);
-//  }
-//  
-//  lemma SplitNodeAllKeys(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
-//    requires WF(oldnode)
-//    requires WF(leftnode)
-//    requires WF(rightnode)
-//    requires SplitNode(oldnode, leftnode, rightnode, pivot)
-//    ensures AllKeys(oldnode) <= AllKeys(leftnode) + AllKeys(rightnode) + {pivot}
-//    ensures AllKeys(leftnode) + AllKeys(rightnode) <= AllKeys(oldnode)
-//    ensures AllKeys(leftnode) != {}
-//    ensures AllKeys(rightnode) != {}
-//    ensures forall key :: key in AllKeys(leftnode) ==> Keys.lt(key, pivot)
-//    ensures forall key :: key in AllKeys(rightnode) ==> Keys.lte(pivot, key)
-//  {
-//    if SplitLeaf(oldnode, leftnode, rightnode, pivot) {
-//      SplitLeafAllKeys(oldnode, leftnode, rightnode, pivot);
-//    } else {
-//      SplitIndexAllKeys(oldnode, leftnode, rightnode, pivot);
-//    }
-//  }
-//  
-//  predicate SplitChildOfIndex(oldindex: Node, newindex: Node, childidx: int)
-//  {
-//    && oldindex.Index?
-//    && newindex.Index?
-//    && 0 <= childidx < |oldindex.children|
-//    && |newindex.children| == |oldindex.children| + 1 // FIXME: WTF?  Dafny can't get these from WF?
-//    && |newindex.pivots| == |oldindex.pivots| + 1
-//    && |oldindex.pivots| == |oldindex.children| - 1
-//    && SplitNode(oldindex.children[childidx], newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx])
-//    && newindex.pivots == Seq.insert(oldindex.pivots, newindex.pivots[childidx], childidx)
-//    && newindex.children == Seq.replace1with2(oldindex.children, newindex.children[childidx], newindex.children[childidx+1], childidx)
-//  }
-//
-//  lemma SplitChildOfIndexPreservesWF(oldindex: Node, newindex: Node, childidx: int)
-//    requires WF(oldindex)
-//    requires SplitChildOfIndex(oldindex, newindex, childidx)
-//    ensures WF(newindex)
-//  {
-//    var pivot := newindex.pivots[childidx];
-//    var oldchild := oldindex.children[childidx];
-//    var leftchild := newindex.children[childidx];
-//    var rightchild := newindex.children[childidx+1];
-//    SplitNodePreservesWF(oldchild, leftchild, rightchild, pivot);
-//    SplitNodeAllKeys(oldchild, leftchild, rightchild, pivot);
-//    SplitNodePreservesWF(oldchild, leftchild, rightchild, pivot);
-//    assert 0 < childidx ==> AllKeysAboveBound(oldindex, childidx);
-//    assert childidx < |oldindex.pivots| ==> AllKeysBelowBound(oldindex, childidx);
-//    if childidx < |oldindex.pivots| {
-//      assert Keys.lt(pivot, oldindex.pivots[childidx]) by { reveal_AllKeys(); }
-//    }
-//    Keys.strictlySortedInsert2(oldindex.pivots, pivot, childidx);
-//
-//    forall i | 0 <= i < |newindex.children|
-//      ensures WF(newindex.children[i])
-//      ensures AllKeys(newindex.children[i]) != {}
-//    {
-//      if i < childidx {
-//      } else if i == childidx {
-//      } else if i == childidx + 1 {
-//      } else {
-//        assert newindex.children[i] == oldindex.children[i-1];
-//      }
-//    }
-//
-//    forall i, key | 0 <= i < |newindex.children| - 1 && key in AllKeys(newindex.children[i])
-//      ensures Keys.lt(key, newindex.pivots[i])
-//    {
-//      if i < childidx {
-//        assert AllKeysBelowBound(oldindex, i);
-//      } else if i == childidx {
-//      } else if i == childidx + 1 {
-//      } else {
-//        assert newindex.children[i] == oldindex.children[i-1];
-//        assert AllKeysBelowBound(oldindex, i-1);
-//      }      
-//    }
-//
-//    forall i, key | 0 < i < |newindex.children| && key in AllKeys(newindex.children[i])
-//      ensures Keys.lte(newindex.pivots[i-1], key)
-//    {
-//      if i < childidx {
-//        assert AllKeysAboveBound(oldindex, i);
-//      } else if i == childidx {
-//      } else if i == childidx + 1 {
-//        assert Keys.lte(newindex.pivots[i-1], key);
-//      } else {
-//        assert newindex.children[i] == oldindex.children[i-1];
-//        assert AllKeysAboveBound(oldindex, i-1);
-//      }      
-//    }
-//  }
-//
-//  lemma MergeChildOfIndexPreservesWF(oldindex: Node, newindex: Node, childidx: int)
-//    requires WF(newindex)
-//    requires SplitChildOfIndex(oldindex, newindex, childidx)
-//    ensures WF(oldindex)
-//  {
-//    assert Keys.IsStrictlySorted(oldindex.pivots) by { Keys.reveal_IsStrictlySorted(); }
-//    forall i | 0 <= i < |oldindex.children|
-//      ensures WF(oldindex.children[i])
-//    {
-//      if i < childidx {
-//      } else if i == childidx {
-//        MergeNodePreservesWF(oldindex.children[childidx],
-//          newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx]);
-//      } else {
-//      }
-//    }
-//    forall i | 0 <= i < |oldindex.children|-1
-//      ensures AllKeysBelowBound(oldindex, i)
-//    {
-//      if i < childidx {
-//        assert AllKeysBelowBound(newindex, i);
-//      } else if i == childidx {
-//        SplitNodeAllKeys(oldindex.children[childidx],
-//          newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx]);
-//        assert AllKeysBelowBound(newindex, childidx);
-//        assert AllKeysBelowBound(newindex, childidx+1);
-//        Keys.IsStrictlySortedImpliesLt(newindex.pivots, childidx, childidx + 1);
-//      } else {
-//        assert AllKeysBelowBound(newindex, i+1);
-//      }
-//    }
-//    forall i | 0 < i < |oldindex.children|
-//      ensures AllKeysAboveBound(oldindex, i)
-//    {
-//      if i < childidx {
-//        assert AllKeysAboveBound(newindex, i);
-//      } else if i == childidx {
-//        SplitNodeAllKeys(oldindex.children[childidx],
-//          newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx]);
-//        Keys.IsStrictlySortedImpliesLt(newindex.pivots, childidx-1, childidx);
-//        forall key | key in AllKeys(oldindex.children[childidx])
-//          ensures Keys.lte(oldindex.pivots[childidx-1], key)
-//        {
-//          if key in AllKeys(newindex.children[childidx]) {
-//            assert AllKeysAboveBound(newindex, childidx);
-//          } else if key == newindex.pivots[childidx] {
-//            Keys.IsStrictlySortedImpliesLt(newindex.pivots, childidx-1, childidx);
-//          } else {
-//            assert key in AllKeys(newindex.children[childidx+1]);
-//            assert AllKeysAboveBound(newindex, childidx+1);
-//          }
-//        }
-//      } else {
-//        assert AllKeysAboveBound(newindex, i+1);
-//      }
-//    }
-//  }
-//  
-//  lemma SplitChildOfIndexPreservesAllKeys(oldindex: Node, newindex: Node, childidx: int)
-//    requires WF(oldindex)
-//    requires WF(newindex)
-//    requires SplitChildOfIndex(oldindex, newindex, childidx)
-//    ensures AllKeys(newindex) == AllKeys(oldindex) + {newindex.pivots[childidx]}
-//  {
-//    reveal_AllKeys();
-//    SplitChildOfIndexPreservesWF(oldindex, newindex, childidx);
-//    SplitNodeAllKeys(oldindex.children[childidx], newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx]);
-//    
-//    forall key | key in AllKeys(newindex)
-//      ensures key in AllKeys(oldindex) + {newindex.pivots[childidx]}
-//    {
-//      if i :| 0 <= i < |newindex.children| && key in AllKeys(newindex.children[i]) {
-//        if i < childidx {
-//        } else if i == childidx {
-//        } else if i == childidx + 1 {
-//        } else {
-//          assert newindex.children[i] == oldindex.children[i-1];
-//        }
-//      } else {
-//        var i :| 0 <= i < |newindex.pivots| && key == newindex.pivots[i];
-//        if i < childidx {
-//        } else if i == childidx {
-//          assert key in {newindex.pivots[childidx]};
-//        } else if i == childidx + 1 {
-//          assert key == oldindex.pivots[i-1];
-//        } else {
-//          assert key == oldindex.pivots[i-1];
-//        }
-//      }
-//    }
-//  }
-//  
-//  lemma SplitChildOfIndexPreservesInterpretationA(oldindex: Node, newindex: Node, childidx: int)
-//    requires WF(oldindex);
-//    requires WF(newindex);
-//    requires SplitChildOfIndex(oldindex, newindex, childidx)
-//    ensures forall key :: key in Interpretation(oldindex) ==> MapsTo(Interpretation(newindex), key, Interpretation(oldindex)[key])
-//  {
-//    reveal_Interpretation();
-//    var newint := Interpretation(newindex);
-//    var oldint := Interpretation(oldindex);
-//
-//    // WTF?  These speed up verification a bit for god knows why.
-//    assert newint == Interpretation(newindex);
-//    assert oldint == Interpretation(oldindex);
-//    
-//    var oldchild := oldindex.children[childidx];
-//    var leftchild := newindex.children[childidx];
-//    var rightchild := newindex.children[childidx+1];
-//    var pivot := newindex.pivots[childidx];
-//    
-//    SplitChildOfIndexPreservesAllKeys(oldindex, newindex, childidx);
-//    
-//    forall key | key in oldint
-//      ensures MapsTo(newint, key, oldint[key])
-//    {
-//      var llte := Keys.LargestLte(oldindex.pivots, key);
-//      if llte + 1 < childidx {
-//        Keys.LargestLteIsUnique2(newindex.pivots, key, llte);
-//        assert newindex.children[llte+1] == oldindex.children[llte+1];
-//      } else if llte + 1 == childidx {
-//        SplitNodeInterpretation(oldchild, leftchild, rightchild, pivot);
-//        if Keys.lt(key, pivot) {
-//          Keys.LargestLteIsUnique2(newindex.pivots, key, llte);
-//          InterpretationDelegation(newindex, key);
-//          InterpretationDelegation(oldindex, key);
-//        } else {
-//          assert llte+2 < |newindex.pivots| ==> newindex.pivots[llte+2] == oldindex.pivots[llte+1];
-//          Keys.LargestLteIsUnique2(newindex.pivots, key, llte+1);
-//          InterpretationDelegation(newindex, key);
-//          InterpretationDelegation(oldindex, key);
-//        }
-//      } else {
-//        var newllte := llte + 1;
-//        assert newindex.pivots[newllte] == oldindex.pivots[llte];
-//        assert newllte+1 < |newindex.pivots| ==> newindex.pivots[newllte+1] == oldindex.pivots[llte+1];
-//        assert newllte+1 < |newindex.pivots| ==> Keys.lt(key, newindex.pivots[newllte+1]);
-//        assert Keys.lte(newindex.pivots[newllte], key);
-//        Keys.LargestLteIsUnique2(newindex.pivots, key, newllte);
-//        assert newindex.children[newllte+1] == oldindex.children[llte+1];
-//      }
-//    }
-//  }
-//
-//  lemma SplitChildOfIndexPreservesInterpretationB(oldindex: Node, newindex: Node, childidx: int)
-//    requires WF(oldindex);
-//    requires WF(newindex);
-//    requires SplitChildOfIndex(oldindex, newindex, childidx)
-//    ensures forall key :: key in Interpretation(newindex) ==> key in Interpretation(oldindex)
-//      //ensures Interpretation(newindex) == Interpretation(oldindex)
-//  {
-//    reveal_Interpretation();
-//    var newint := Interpretation(newindex);
-//    var oldint := Interpretation(oldindex);
-//
-//    // WTF?  Dafny can't see these (from emacs flycheck mode)
-//    assert WF(oldindex);
-//    assert WF(newindex);
-//    assert oldint == Interpretation(oldindex);
-//    assert newint == Interpretation(newindex);
-//    
-//    var oldchild := oldindex.children[childidx];
-//    var leftchild := newindex.children[childidx];
-//    var rightchild := newindex.children[childidx+1];
-//    var pivot := newindex.pivots[childidx];
-//    SplitNodeInterpretation(oldchild, leftchild, rightchild, pivot);
-//    SplitChildOfIndexPreservesAllKeys(oldindex, newindex, childidx);
-//    
-//
-//    forall key | key in newint
-//      ensures key in oldint
-//    {
-//      reveal_AllKeys();
-//      var llte := Keys.LargestLte(newindex.pivots, key);
-//      if llte + 1 < childidx {
-//        Keys.LargestLteIsUnique2(oldindex.pivots, key, llte);
-//        assert key in oldint;
-//      } else if llte + 1 == childidx {
-//        Keys.LargestLteIsUnique2(oldindex.pivots, key, llte);
-//        assert key in oldint;
-//      } else if llte + 1 == childidx + 1 {
-//        var oldllte := llte - 1;
-//        Keys.LargestLteIsUnique2(oldindex.pivots, key, oldllte);
-//        assert oldllte == Keys.LargestLte(oldindex.pivots, key);
-//        assert key in Interpretation(oldindex.children[Keys.LargestLte(oldindex.pivots, key) + 1]);
-//        assert key in oldint;
-//      } else {
-//        Keys.LargestLteIsUnique2(oldindex.pivots, key, llte-1);
-//        assert key in oldint;
-//      }
-//    }
-//  }
-//
-//  lemma SplitChildOfIndexPreservesInterpretation(oldindex: Node, newindex: Node, childidx: int)
-//    requires WF(oldindex);
-//    requires WF(newindex);
-//    requires SplitChildOfIndex(oldindex, newindex, childidx)
-//    //ensures forall key :: key in Interpretation(newindex) ==> key in Interpretation(oldindex)
-//    ensures Interpretation(newindex) == Interpretation(oldindex)
-//  {
-//    reveal_Interpretation();
-//    SplitChildOfIndexPreservesInterpretationA(oldindex, newindex, childidx);
-//    SplitChildOfIndexPreservesInterpretationB(oldindex, newindex, childidx);
-//  }
-//  
-//  function InsertLeaf(leaf: Node, key: Key, value: Value) : (result: Node)
-//    requires leaf.Leaf?
-//    requires WF(leaf)
-//    ensures result.Leaf?
-//    ensures WF(result)
-//  {
-//    var llte := Keys.LargestLte(leaf.keys, key);
-//    if 0 <= llte && leaf.keys[llte] == key then
-//      Leaf(leaf.keys, leaf.values[llte := value])
-//    else
-//      Keys.strictlySortedInsert(leaf.keys, key, llte);
-//      Leaf(Seq.insert(leaf.keys, key, llte+1), Seq.insert(leaf.values, value, llte+1))
-//  }
-//
-//  lemma InsertLeafIsCorrect(leaf: Node, key: Key, value: Value)
-//    requires leaf.Leaf?
-//    requires WF(leaf)
-//    ensures Interpretation(InsertLeaf(leaf, key, value)) == Interpretation(leaf)[key := value]
-//    ensures AllKeys(InsertLeaf(leaf, key, value)) == AllKeys(leaf) + {key}
-//  {
-//    reveal_AllKeys();
-//    reveal_Interpretation();
-//    var result := InsertLeaf(leaf, key, value);
-//    var llte := Keys.LargestLte(leaf.keys, key);
-//    if 0 <= llte && leaf.keys[llte] == key {
-//      assert Interpretation(result) == Interpretation(leaf)[key := value];
-//    } else {
-//      Keys.reveal_IsStrictlySorted();
-//      forall k | k in Interpretation(result).Keys
-//        ensures k in Interpretation(leaf).Keys + {key}
-//      {
-//        var kpos := IndexOf(result.keys, k);
-//        if llte + 1 < kpos {
-//          assert k == leaf.keys[kpos-1];
-//        }
-//      }
-//      forall k | k in AllKeys(result)
-//        ensures k in AllKeys(leaf) + {key}
-//      {
-//        var i :| 0 <= i < |result.keys| && result.keys[i] == k;
-//        if i < llte+1 {
-//        } else if i == llte+1 {
-//        } else {
-//          assert k == leaf.keys[i-1];
-//        }
-//      }
-//    }
-//  }
-//
-//  lemma RecursiveInsertIsCorrect(node: Node, key: Key, value: Value, pos: int, newnode: Node, newchild: Node)
-//    requires WF(node)
-//    requires node.Index?
-//    requires WF(newchild)
-//    requires pos == Keys.LargestLte(node.pivots, key)+1
-//    requires Interpretation(newchild) == Interpretation(node.children[pos])[key := value]
+  predicate SplitIndex(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
+  {
+    && oldindex.Index?
+    && leftindex.Index?
+    && rightindex.Index?
+    && 0 < |leftindex.children| < |oldindex.children|
+    && |oldindex.children| == |oldindex.pivots| + 1
+
+    && leftindex == SubIndex(oldindex, 0, |leftindex.children|)
+    && rightindex == SubIndex(oldindex, |leftindex.children|, |oldindex.children|)
+    && (forall key :: key in AllKeys(linLast(leftindex.children)) ==> Keys.lt(key, pivot))
+    && (forall key :: key in AllKeys(rightindex.children[0]) ==> Keys.lte(pivot, key))
+    && pivot == oldindex.pivots[|leftindex.pivots|]
+  }
+
+  lemma SplitIndexPreservesWF(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
+    requires WF(oldindex)
+    requires SplitIndex(oldindex, leftindex, rightindex, pivot)
+    ensures WF(leftindex)
+    ensures WF(rightindex)
+  {
+    SubIndexPreservesWF(oldindex, 0, |leftindex.children|);
+    SubIndexPreservesWF(oldindex, |leftindex.children|, |oldindex.children|);
+  }
+  
+  lemma SplitIndexInterpretation1(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
+    requires WF(oldindex)
+    requires WF(leftindex)
+    requires WF(rightindex)
+    requires SplitIndex(oldindex, leftindex, rightindex, pivot)
+    ensures forall key :: key in Interpretation(oldindex) ==>
+    MapsTo(Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex)), key, Interpretation(oldindex)[key])
+  {
+    reveal_Interpretation();
+    var oldint := Interpretation(oldindex);
+    var leftint := Interpretation(leftindex);
+    var rightint := Interpretation(rightindex);
+    var newint := Keys.MapPivotedUnion(leftint, pivot, rightint);
+
+    //Keys.PosEqLargestLte(oldindex.pivots, pivot, |leftindex.pivots|);
+
+    forall key | key in oldint
+      ensures MapsTo(newint, key, oldint[key])
+    {
+      AllKeysIsConsistentWithInterpretation(oldindex, key);
+      var llte := Keys.LargestLte(oldindex.pivots, key);
+      if Keys.lt(key, pivot) { 
+        Keys.LargestLteSubsequence(oldindex.pivots, key, 0, |leftindex.pivots|);
+        assert leftindex.children[llte+1] == oldindex.children[llte+1];
+      } else {
+        Keys.LargestLteSubsequence(oldindex.pivots, key, |leftindex.pivots|+1, |oldindex.pivots|);
+        assert rightindex.children[llte - |leftindex.children| + 1] == oldindex.children[llte + 1];
+        InterpretationInheritance(oldindex, key);
+        InterpretationDelegation(rightindex, key);
+      }
+      reveal_AllKeys();
+    }
+  }
+  
+  lemma SplitIndexInterpretation2(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
+    requires WF(oldindex)
+    requires WF(leftindex)
+    requires WF(rightindex)
+    requires SplitIndex(oldindex, leftindex, rightindex, pivot)
+    ensures Interpretation(oldindex).Keys >=
+            Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex)).Keys
+  {
+    reveal_Interpretation();
+    var oldint := Interpretation(oldindex);
+    var leftint := Interpretation(leftindex);
+    var rightint := Interpretation(rightindex);
+    var newint := Keys.MapPivotedUnion(leftint, pivot, rightint);
+
+    //Keys.PosEqLargestLte(oldindex.pivots, pivot, |leftindex.pivots|);
+
+    forall key | key in newint
+      ensures key in oldint
+    {
+      if Keys.lt(key, pivot) {
+        AllKeysIsConsistentWithInterpretation(leftindex, key);
+        var llte := Keys.LargestLte(leftindex.pivots, key);
+        Keys.LargestLteSubsequence(oldindex.pivots, key, 0, |leftindex.pivots|);
+        assert oldindex.children[llte+1] == leftindex.children[llte+1];
+        InterpretationInheritance(leftindex, key);
+      } else {
+        AllKeysIsConsistentWithInterpretation(rightindex, key);
+        var llte := Keys.LargestLte(rightindex.pivots, key);
+        Keys.LargestLteSubsequence(oldindex.pivots, key, |leftindex.pivots|+1, |oldindex.pivots|);
+        assert oldindex.children[|leftindex.children| + llte + 1] == rightindex.children[llte+1];
+      }
+      reveal_AllKeys();
+    }
+  }
+
+  lemma SplitIndexInterpretation(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
+    requires WF(oldindex)
+    requires WF(leftindex)
+    requires WF(rightindex)
+    requires SplitIndex(oldindex, leftindex, rightindex, pivot)
+    ensures Interpretation(oldindex) ==
+    Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex))
+  {
+    reveal_Interpretation();
+    SplitIndexInterpretation1(oldindex, leftindex, rightindex, pivot);
+    SplitIndexInterpretation2(oldindex, leftindex, rightindex, pivot);
+  }
+
+  predicate SplitNode(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
+  {
+    || SplitLeaf(oldnode, leftnode, rightnode, pivot)
+    || SplitIndex(oldnode, leftnode, rightnode, pivot)
+  }
+
+  lemma SplitNodePreservesWF(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
+    requires SplitNode(oldnode, leftnode, rightnode, pivot)
+    requires WF(oldnode)
+    ensures WF(leftnode)
+    ensures WF(rightnode)
+  {
+    if SplitLeaf(oldnode, leftnode, rightnode, pivot) {
+      SplitLeafPreservesWF(oldnode, leftnode, rightnode, pivot);
+    } else {
+      SplitIndexPreservesWF(oldnode, leftnode, rightnode, pivot);
+    }
+  }
+    
+  lemma SplitNodeInterpretation(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
+    requires WF(oldnode)
+    requires WF(leftnode)
+    requires WF(rightnode)
+    requires SplitNode(oldnode, leftnode, rightnode, pivot)
+    ensures Interpretation(oldnode) == Keys.MapPivotedUnion(Interpretation(leftnode), pivot, Interpretation(rightnode))
+  {
+    if SplitLeaf(oldnode, leftnode, rightnode, pivot) {
+      SplitLeafInterpretation(oldnode, leftnode, rightnode, pivot);
+    } else {
+      SplitIndexInterpretation(oldnode, leftnode, rightnode, pivot);
+    }
+  }
+
+  lemma SplitLeafAllKeys(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
+    requires WF(oldnode)
+    requires WF(leftnode)
+    requires WF(rightnode)
+    requires SplitLeaf(oldnode, leftnode, rightnode, pivot)
+    ensures AllKeys(oldnode) == AllKeys(leftnode) + AllKeys(rightnode)
+    ensures AllKeys(leftnode) != {}
+    ensures AllKeys(rightnode) != {}
+    ensures forall key :: key in AllKeys(leftnode) ==> Keys.lt(key, pivot)
+    ensures forall key :: key in AllKeys(rightnode) ==> Keys.lte(pivot, key)
+  {
+    reveal_AllKeys();
+    assert leftnode.keys[0] in AllKeys(leftnode);
+    assert rightnode.keys[0] in AllKeys(rightnode);
+    forall key | key in AllKeys(leftnode)
+      ensures Keys.lt(key, pivot)
+    {
+      var i :| 0 <= i < |leftnode.keys| && key == leftnode.keys[i];
+      Keys.IsStrictlySortedImpliesLte(oldnode.keys, i, |leftnode.keys|-1);
+    }
+    forall key | key in AllKeys(rightnode)
+      ensures Keys.lte(pivot, key)
+    {
+      var i :| 0 <= i < |rightnode.keys| && key == rightnode.keys[i];
+      Keys.IsSortedImpliesLte(oldnode.keys, |leftnode.keys|, |leftnode.keys| + i);
+    }
+  }
+
+  lemma SplitIndexAllKeys(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
+    requires WF(oldnode)
+    requires WF(leftnode)
+    requires WF(rightnode)
+    requires SplitIndex(oldnode, leftnode, rightnode, pivot)
+    ensures AllKeys(oldnode) == AllKeys(leftnode) + AllKeys(rightnode) + {pivot}
+    ensures AllKeys(leftnode) != {}
+    ensures AllKeys(rightnode) != {}
+    ensures forall key :: key in AllKeys(leftnode) ==> Keys.lt(key, pivot)
+    ensures forall key :: key in AllKeys(rightnode) ==> Keys.lte(pivot, key)
+  {
+    reveal_AllKeys();
+    var x :| x in AllKeys(leftnode.children[0]);
+    assert x in AllKeys(leftnode);
+    forall key | key in AllKeys(leftnode)
+      ensures Keys.lt(key, pivot)
+    {
+      if i :| 0 <= i < |leftnode.pivots| && key == leftnode.pivots[i] {
+        Keys.IsStrictlySortedImpliesLt(oldnode.pivots, i, |leftnode.pivots|);
+      } else {
+        var i :| 0 <= i < |leftnode.children| && key in AllKeys(leftnode.children[i]);
+        assert AllKeysBelowBound(oldnode, i);
+        if i < |leftnode.pivots| {
+          Keys.IsStrictlySortedImpliesLt(oldnode.pivots, i, |leftnode.pivots|);
+        }
+      }
+    }
+    forall key | key in AllKeys(rightnode)
+      ensures Keys.lte(pivot, key)
+    {
+      if i :| 0 <= i < |rightnode.pivots| && key == rightnode.pivots[i] {
+        Keys.IsSortedImpliesLte(oldnode.pivots, |leftnode.pivots|, |leftnode.children| + i);
+      } else {
+        var i :| 0 <= i < |rightnode.children| && key in AllKeys(rightnode.children[i]);
+        assert AllKeysAboveBound(oldnode, |leftnode.children| + i);
+        Keys.IsSortedImpliesLte(oldnode.pivots, |leftnode.pivots|, |leftnode.children| + i - 1);
+      }
+    }
+    assert linLast(rightnode.children) == linLast(oldnode.children);
+  }
+  
+  lemma SplitNodeAllKeys(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
+    requires WF(oldnode)
+    requires WF(leftnode)
+    requires WF(rightnode)
+    requires SplitNode(oldnode, leftnode, rightnode, pivot)
+    ensures AllKeys(oldnode) <= AllKeys(leftnode) + AllKeys(rightnode) + {pivot}
+    ensures AllKeys(leftnode) + AllKeys(rightnode) <= AllKeys(oldnode)
+    ensures AllKeys(leftnode) != {}
+    ensures AllKeys(rightnode) != {}
+    ensures forall key :: key in AllKeys(leftnode) ==> Keys.lt(key, pivot)
+    ensures forall key :: key in AllKeys(rightnode) ==> Keys.lte(pivot, key)
+  {
+    if SplitLeaf(oldnode, leftnode, rightnode, pivot) {
+      SplitLeafAllKeys(oldnode, leftnode, rightnode, pivot);
+    } else {
+      SplitIndexAllKeys(oldnode, leftnode, rightnode, pivot);
+    }
+  }
+  
+  predicate SplitChildOfIndex(oldindex: Node, newindex: Node, childidx: int)
+  {
+    && oldindex.Index?
+    && newindex.Index?
+    && 0 <= childidx < |oldindex.children|
+    && |newindex.children| == |oldindex.children| + 1 // FIXME: WTF?  Dafny can't get these from WF?
+    && |newindex.pivots| == |oldindex.pivots| + 1
+    && |oldindex.pivots| == |oldindex.children| - 1
+    && SplitNode(oldindex.children[childidx], newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx])
+    && newindex.pivots == Seq.insert(oldindex.pivots, newindex.pivots[childidx], childidx)
+    && lseqs(newindex.children) == Seq.replace1with2(lseqs(oldindex.children), newindex.children[childidx], newindex.children[childidx+1], childidx)
+  }
+
+  lemma SplitChildOfIndexPreservesWF(oldindex: Node, newindex: Node, childidx: int)
+    requires WF(oldindex)
+    requires SplitChildOfIndex(oldindex, newindex, childidx)
+    ensures WF(newindex)
+  {
+    var pivot := newindex.pivots[childidx];
+    var oldchild := oldindex.children[childidx];
+    var leftchild := newindex.children[childidx];
+    var rightchild := newindex.children[childidx+1];
+    SplitNodePreservesWF(oldchild, leftchild, rightchild, pivot);
+    SplitNodeAllKeys(oldchild, leftchild, rightchild, pivot);
+    SplitNodePreservesWF(oldchild, leftchild, rightchild, pivot);
+    assert 0 < childidx ==> AllKeysAboveBound(oldindex, childidx);
+    assert childidx < |oldindex.pivots| ==> AllKeysBelowBound(oldindex, childidx);
+    if childidx < |oldindex.pivots| {
+      assert Keys.lt(pivot, oldindex.pivots[childidx]) by { reveal_AllKeys(); }
+    }
+    Keys.strictlySortedInsert2(oldindex.pivots, pivot, childidx);
+
+    forall i | 0 <= i < |newindex.children|
+      ensures WF(newindex.children[i])
+      ensures AllKeys(newindex.children[i]) != {}
+    {
+      if i < childidx {
+      } else if i == childidx {
+      } else if i == childidx + 1 {
+      } else {
+        assert newindex.children[i] == oldindex.children[i-1];
+      }
+    }
+
+    forall i, key | 0 <= i < |newindex.children| - 1 && key in AllKeys(newindex.children[i])
+      ensures Keys.lt(key, newindex.pivots[i])
+    {
+      if i < childidx {
+        assert AllKeysBelowBound(oldindex, i);
+      } else if i == childidx {
+      } else if i == childidx + 1 {
+      } else {
+        assert newindex.children[i] == oldindex.children[i-1];
+        assert AllKeysBelowBound(oldindex, i-1);
+      }      
+    }
+
+    forall i, key | 0 < i < |newindex.children| && key in AllKeys(newindex.children[i])
+      ensures Keys.lte(newindex.pivots[i-1], key)
+    {
+      if i < childidx {
+        assert AllKeysAboveBound(oldindex, i);
+      } else if i == childidx {
+      } else if i == childidx + 1 {
+        assert Keys.lte(newindex.pivots[i-1], key);
+      } else {
+        assert newindex.children[i] == oldindex.children[i-1];
+        assert AllKeysAboveBound(oldindex, i-1);
+      }      
+    }
+  }
+
+  lemma SplitChildOfIndexPreservesAllKeys(oldindex: Node, newindex: Node, childidx: int)
+    requires WF(oldindex)
+    requires WF(newindex)
+    requires SplitChildOfIndex(oldindex, newindex, childidx)
+    ensures AllKeys(newindex) == AllKeys(oldindex) + {newindex.pivots[childidx]}
+  {
+    reveal_AllKeys();
+    SplitChildOfIndexPreservesWF(oldindex, newindex, childidx);
+    SplitNodeAllKeys(oldindex.children[childidx], newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx]);
+    
+    forall key | key in AllKeys(newindex)
+      ensures key in AllKeys(oldindex) + {newindex.pivots[childidx]}
+    {
+      if i :| 0 <= i < |newindex.children| && key in AllKeys(newindex.children[i]) {
+        if i < childidx {
+        } else if i == childidx {
+        } else if i == childidx + 1 {
+        } else {
+          assert newindex.children[i] == oldindex.children[i-1];
+        }
+      } else {
+        var i :| 0 <= i < |newindex.pivots| && key == newindex.pivots[i];
+        if i < childidx {
+        } else if i == childidx {
+          assert key in {newindex.pivots[childidx]};
+        } else if i == childidx + 1 {
+          assert key == oldindex.pivots[i-1];
+        } else {
+          assert key == oldindex.pivots[i-1];
+        }
+      }
+    }
+  }
+  
+  lemma SplitChildOfIndexPreservesInterpretationA(oldindex: Node, newindex: Node, childidx: int)
+    requires WF(oldindex);
+    requires WF(newindex);
+    requires SplitChildOfIndex(oldindex, newindex, childidx)
+    ensures forall key :: key in Interpretation(oldindex) ==> MapsTo(Interpretation(newindex), key, Interpretation(oldindex)[key])
+  {
+    reveal_Interpretation();
+    var newint := Interpretation(newindex);
+    var oldint := Interpretation(oldindex);
+
+    // WTF?  These speed up verification a bit for god knows why.
+    assert newint == Interpretation(newindex);
+    assert oldint == Interpretation(oldindex);
+    
+    var oldchild := oldindex.children[childidx];
+    var leftchild := newindex.children[childidx];
+    var rightchild := newindex.children[childidx+1];
+    var pivot := newindex.pivots[childidx];
+    
+    SplitChildOfIndexPreservesAllKeys(oldindex, newindex, childidx);
+    
+    forall key | key in oldint
+      ensures MapsTo(newint, key, oldint[key])
+    {
+      var llte := Keys.LargestLte(oldindex.pivots, key);
+      if llte + 1 < childidx {
+        Keys.LargestLteIsUnique2(newindex.pivots, key, llte);
+        assert newindex.children[llte+1] == oldindex.children[llte+1];
+      } else if llte + 1 == childidx {
+        SplitNodeInterpretation(oldchild, leftchild, rightchild, pivot);
+        if Keys.lt(key, pivot) {
+          Keys.LargestLteIsUnique2(newindex.pivots, key, llte);
+          InterpretationDelegation(newindex, key);
+          InterpretationDelegation(oldindex, key);
+        } else {
+          assert llte+2 < |newindex.pivots| ==> newindex.pivots[llte+2] == oldindex.pivots[llte+1];
+          Keys.LargestLteIsUnique2(newindex.pivots, key, llte+1);
+          InterpretationDelegation(newindex, key);
+          InterpretationDelegation(oldindex, key);
+        }
+      } else {
+        var newllte := llte + 1;
+        assert newindex.pivots[newllte] == oldindex.pivots[llte];
+        assert newllte+1 < |newindex.pivots| ==> newindex.pivots[newllte+1] == oldindex.pivots[llte+1];
+        assert newllte+1 < |newindex.pivots| ==> Keys.lt(key, newindex.pivots[newllte+1]);
+        assert Keys.lte(newindex.pivots[newllte], key);
+        Keys.LargestLteIsUnique2(newindex.pivots, key, newllte);
+        assert newindex.children[newllte+1] == oldindex.children[llte+1];
+      }
+    }
+  }
+
+  lemma SplitChildOfIndexPreservesInterpretationB(oldindex: Node, newindex: Node, childidx: int)
+    requires WF(oldindex);
+    requires WF(newindex);
+    requires SplitChildOfIndex(oldindex, newindex, childidx)
+    ensures forall key :: key in Interpretation(newindex) ==> key in Interpretation(oldindex)
+      //ensures Interpretation(newindex) == Interpretation(oldindex)
+  {
+    reveal_Interpretation();
+    var newint := Interpretation(newindex);
+    var oldint := Interpretation(oldindex);
+
+    // WTF?  Dafny can't see these (from emacs flycheck mode)
+    assert WF(oldindex);
+    assert WF(newindex);
+    assert oldint == Interpretation(oldindex);
+    assert newint == Interpretation(newindex);
+    
+    var oldchild := oldindex.children[childidx];
+    var leftchild := newindex.children[childidx];
+    var rightchild := newindex.children[childidx+1];
+    var pivot := newindex.pivots[childidx];
+    SplitNodeInterpretation(oldchild, leftchild, rightchild, pivot);
+    SplitChildOfIndexPreservesAllKeys(oldindex, newindex, childidx);
+    
+
+    forall key | key in newint
+      ensures key in oldint
+    {
+      reveal_AllKeys();
+      var llte := Keys.LargestLte(newindex.pivots, key);
+      if llte + 1 < childidx {
+        Keys.LargestLteIsUnique2(oldindex.pivots, key, llte);
+        assert key in oldint;
+      } else if llte + 1 == childidx {
+        Keys.LargestLteIsUnique2(oldindex.pivots, key, llte);
+        assert key in oldint;
+      } else if llte + 1 == childidx + 1 {
+        var oldllte := llte - 1;
+        Keys.LargestLteIsUnique2(oldindex.pivots, key, oldllte);
+        assert oldllte == Keys.LargestLte(oldindex.pivots, key);
+        assert key in Interpretation(oldindex.children[Keys.LargestLte(oldindex.pivots, key) + 1]);
+        InterpretationDelegation(oldindex, key);
+        assert key in oldint;
+      } else {
+        Keys.LargestLteIsUnique2(oldindex.pivots, key, llte-1);
+        assert key in oldint;
+      }
+    }
+  }
+
+  lemma SplitChildOfIndexPreservesInterpretation(oldindex: Node, newindex: Node, childidx: int)
+    requires WF(oldindex);
+    requires WF(newindex);
+    requires SplitChildOfIndex(oldindex, newindex, childidx)
+    //ensures forall key :: key in Interpretation(newindex) ==> key in Interpretation(oldindex)
+    ensures Interpretation(newindex) == Interpretation(oldindex)
+  {
+    reveal_Interpretation();
+    SplitChildOfIndexPreservesInterpretationA(oldindex, newindex, childidx);
+    SplitChildOfIndexPreservesInterpretationB(oldindex, newindex, childidx);
+  }
+  
+  function InsertLeaf(leaf: Node, key: Key, value: Value) : (result: Node)
+    requires leaf.Leaf?
+    requires WF(leaf)
+    ensures result.Leaf?
+    ensures WF(result)
+  {
+    var llte := Keys.LargestLte(leaf.keys, key);
+    if 0 <= llte && leaf.keys[llte] == key then
+      Leaf(leaf.keys, leaf.values[llte := value])
+    else
+      Keys.strictlySortedInsert(leaf.keys, key, llte);
+      Leaf(Seq.insert(leaf.keys, key, llte+1), Seq.insert(leaf.values, value, llte+1))
+  }
+
+  lemma InsertLeafIsCorrect(leaf: Node, key: Key, value: Value)
+    requires leaf.Leaf?
+    requires WF(leaf)
+    ensures Interpretation(InsertLeaf(leaf, key, value)) == Interpretation(leaf)[key := value]
+    ensures AllKeys(InsertLeaf(leaf, key, value)) == AllKeys(leaf) + {key}
+  {
+    reveal_AllKeys();
+    reveal_Interpretation();
+    var result := InsertLeaf(leaf, key, value);
+    var llte := Keys.LargestLte(leaf.keys, key);
+    if 0 <= llte && leaf.keys[llte] == key {
+      assert Interpretation(result) == Interpretation(leaf)[key := value];
+    } else {
+      Keys.reveal_IsStrictlySorted();
+      forall k | k in Interpretation(result).Keys
+        ensures k in Interpretation(leaf).Keys + {key}
+      {
+        var kpos := IndexOf(result.keys, k);
+        if llte + 1 < kpos {
+          assert k == leaf.keys[kpos-1];
+        }
+      }
+      forall k | k in AllKeys(result)
+        ensures k in AllKeys(leaf) + {key}
+      {
+        var i :| 0 <= i < |result.keys| && result.keys[i] == k;
+        if i < llte+1 {
+        } else if i == llte+1 {
+        } else {
+          assert k == leaf.keys[i-1];
+        }
+      }
+    }
+  }
+
+  lemma RecursiveInsertIsCorrect(node: Node, key: Key, value: Value, pos: int, newnode: Node, newchild: Node)
+    requires WF(node)
+    requires node.Index?
+    requires WF(newchild)
+    requires pos == Keys.LargestLte(node.pivots, key)+1
+    requires Interpretation(newchild) == Interpretation(node.children[pos])[key := value]
+
 //    requires newnode == node.(children := node.children[pos := newchild])
-//    requires AllKeys(newchild) <= AllKeys(node.children[pos]) + {key}
-//    ensures WF(newnode)
-//    ensures Interpretation(newnode) == Interpretation(node)[key := value]
-//    ensures AllKeys(newnode) <= AllKeys(node) + {key}
-//  {
-//    reveal_AllKeys();
-//    reveal_Interpretation();
-//    var oldint := Interpretation(node);
-//    AllKeysIsConsistentWithInterpretation(newchild, key);
-//    forall i | 0 <= i < |newnode.children| - 1
-//      ensures AllKeysBelowBound(newnode, i);
-//    {
-//      if i == pos {
-//        forall key' | key' in AllKeys(newchild)
-//          ensures Keys.lt(key', node.pivots[i])
-//        {
-//          if key' == key {
-//          } else {
-//            assert AllKeysBelowBound(node, i);
-//          }
-//        }
-//      } else {
-//        assert AllKeysBelowBound(node, i);
-//      }
-//    }
-//    forall i | 0 < i < |newnode.children|
-//      ensures AllKeysAboveBound(newnode, i);
-//    {
-//      if i == pos {
-//        forall key' | key' in AllKeys(newchild)
-//          ensures Keys.lte(node.pivots[i-1], key')
-//        {
-//          if key' == key {
-//          } else {
-//            assert AllKeysAboveBound(node, i);
-//          }
-//        }
-//      } else {
-//        assert AllKeysAboveBound(node, i);
-//      }
-//    }
-//    var newint := Interpretation(newnode);
-//
-//    forall key' | key' in oldint && key' != key
-//      ensures MapsTo(newint, key', oldint[key'])
-//    {
-//      var llte := Keys.LargestLte(node.pivots, key');
-//      assert key' in Interpretation(node.children[llte+1]);
-//      if llte + 1 < pos {
-//        assert key' in AllKeys(newnode.children[llte+1]);
-//      } else if llte + 1 == pos {
-//        assert Interpretation(newnode.children[llte+1])[key'] == Interpretation(node.children[llte+1])[key'];
-//        assert key' in AllKeys(newchild);
-//      } else {
-//        assert key' in AllKeys(newnode.children[llte+1]);
-//      }
-//    }
-//    forall key' | key' in newint && key' != key
-//      ensures key' in oldint
-//    {
-//      var llte := Keys.LargestLte(node.pivots, key');
-//      assert key' in Interpretation(node.children[llte+1]);
-//      if llte + 1 < pos {
-//        assert key' in AllKeys(node.children[llte+1]);
-//      } else if llte + 1 == pos {
-//        assert Interpretation(newnode.children[llte+1])[key'] == Interpretation(node.children[llte+1])[key'];
-//        assert key' in AllKeys(node.children[llte+1]);
-//      } else {
-//        assert key' in AllKeys(node.children[llte+1]);
-//      }
-//    }
-//
-//    assert key in Interpretation(newchild);
-//    assert key in AllKeys(newchild);
-//    assert newnode.children[Keys.LargestLte(newnode.pivots, key)+1] == newchild;
-//  }
-//
-//  function Grow(node: Node) : Node
-//  {
-//    Index([], [node])
-//  }
-//
-//  lemma GrowPreservesWF(node: Node)
-//    requires WF(node)
-//    requires AllKeys(node) != {}
-//    ensures WF(Grow(node))
-//  {
-//  }
-//
-//  lemma GrowPreservesAllKeys(node: Node)
-//    requires WF(node)
-//    ensures AllKeys(Grow(node)) == AllKeys(node)
-//  {
-//    reveal_AllKeys();
-//    assert forall key :: key in AllKeys(node) ==> key in AllKeys(Grow(node).children[0]);
-//  }
-//  
-//  lemma GrowPreservesInterpretation(node: Node)
-//    requires WF(node)
-//    requires AllKeys(node) != {}
-//    ensures WF(Grow(node))
-//    ensures Interpretation(Grow(node)) == Interpretation(node)
-//  {
-//    reveal_Interpretation();
-//    var interp := Interpretation(node);
-//    var ginterp := Interpretation(Grow(node));
-//    
-//    forall key | key in interp
-//      ensures key in ginterp && ginterp[key] == interp[key]
-//    {
-//      InterpretationDelegation(Grow(node), key);
-//    }
-//  }
-//
+// Can't do update on linear datatype, so instead we'll break out the parts:
+    requires newnode.Index?
+    requires newnode.pivots == node.pivots
+    requires lseqs(newnode.children) == lseqs(node.children)[pos := newchild]
+
+    requires AllKeys(newchild) <= AllKeys(node.children[pos]) + {key}
+    ensures WF(newnode)
+    ensures Interpretation(newnode) == Interpretation(node)[key := value]
+    ensures AllKeys(newnode) <= AllKeys(node) + {key}
+  {
+    reveal_AllKeys();
+    reveal_Interpretation();
+    var oldint := Interpretation(node);
+    AllKeysIsConsistentWithInterpretation(newchild, key);
+    forall i | 0 <= i < |newnode.children| - 1
+      ensures AllKeysBelowBound(newnode, i);
+    {
+      if i == pos {
+        forall key' | key' in AllKeys(newchild)
+          ensures Keys.lt(key', node.pivots[i])
+        {
+          if key' == key {
+          } else {
+            assert AllKeysBelowBound(node, i);
+          }
+        }
+      } else {
+        assert AllKeysBelowBound(node, i);
+      }
+    }
+    forall i | 0 < i < |newnode.children|
+      ensures AllKeysAboveBound(newnode, i);
+    {
+      if i == pos {
+        forall key' | key' in AllKeys(newchild)
+          ensures Keys.lte(node.pivots[i-1], key')
+        {
+          if key' == key {
+          } else {
+            assert AllKeysAboveBound(node, i);
+          }
+        }
+      } else {
+        assert AllKeysAboveBound(node, i);
+      }
+    }
+    var newint := Interpretation(newnode);
+
+    forall key' | key' in oldint && key' != key
+      ensures MapsTo(newint, key', oldint[key'])
+    {
+      var llte := Keys.LargestLte(node.pivots, key');
+      assert key' in Interpretation(node.children[llte+1]);
+      if llte + 1 < pos {
+        assert key' in AllKeys(newnode.children[llte+1]);
+      } else if llte + 1 == pos {
+        assert Interpretation(newnode.children[llte+1])[key'] == Interpretation(node.children[llte+1])[key'];
+        assert key' in AllKeys(newchild);
+      } else {
+        assert key' in AllKeys(newnode.children[llte+1]);
+      }
+    }
+    forall key' | key' in newint && key' != key
+      ensures key' in oldint
+    {
+      var llte := Keys.LargestLte(node.pivots, key');
+      assert key' in Interpretation(node.children[llte+1]);
+      if llte + 1 < pos {
+        assert key' in AllKeys(node.children[llte+1]);
+      } else if llte + 1 == pos {
+        assert Interpretation(newnode.children[llte+1])[key'] == Interpretation(node.children[llte+1])[key'];
+        assert key' in AllKeys(node.children[llte+1]);
+      } else {
+        assert key' in AllKeys(node.children[llte+1]);
+      }
+    }
+
+    assert key in Interpretation(newchild);
+    assert key in AllKeys(newchild);
+    assert newnode.children[Keys.LargestLte(newnode.pivots, key)+1] == newchild;
+  }
+
+  function Grow(node: Node) : Node
+  {
+    Index([], imagine_lseq([node]))
+  }
+
+  lemma GrowPreservesWF(node: Node)
+    requires WF(node)
+    requires AllKeys(node) != {}
+    ensures WF(Grow(node))
+  {
+  }
+
+  lemma GrowPreservesAllKeys(node: Node)
+    requires WF(node)
+    ensures AllKeys(Grow(node)) == AllKeys(node)
+  {
+    reveal_AllKeys();
+    assert forall key :: key in AllKeys(node) ==> key in AllKeys(Grow(node).children[0]);
+  }
+  
+  lemma GrowPreservesInterpretation(node: Node)
+    requires WF(node)
+    requires AllKeys(node) != {}
+    ensures WF(Grow(node))
+    ensures Interpretation(Grow(node)) == Interpretation(node)
+  {
+    reveal_Interpretation();
+    var interp := Interpretation(node);
+    var ginterp := Interpretation(Grow(node));
+    
+    forall key | key in interp
+      ensures key in ginterp && ginterp[key] == interp[key]
+    {
+      InterpretationDelegation(Grow(node), key);
+    }
+  }
+
+// Rob thinks we don't need this; it's for bulk ops that we're not going to use.
+
 //  function ReplacePivot(node: Node, pivotidx: int, pivot: Key) : Node
 //    requires WF(node)
 //    requires node.Index?
