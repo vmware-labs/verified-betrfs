@@ -321,15 +321,9 @@ namespace MainDiskIOHandler_Compile {
     uint64 id = this->curId;
     this->curId++;
 
-<<<<<<< HEAD
-    readReqs.insert(std::make_pair(id, ReadTask(bytes, addr)));
-||||||| merged common ancestors
-    readReqs.insert(std::make_pair(id, ReadTask(bytes)));
-=======
     malloc_accounting_set_scope("DiskIOHandler::ReadTask");
-    readReqs.insert(std::make_pair(id, ReadTask(bytes)));
+    readReqs.insert(std::make_pair(id, ReadTask(bytes, addr)));
     malloc_accounting_default_scope();
->>>>>>> master
 
     #ifdef LOG_QUERY_STATS
     //benchmark_end("DiskIOHandler::read finish");
@@ -870,8 +864,9 @@ void __default::stop() {
   for (auto it : sptr_to_len) {
     total_underlying += it.second;
   }
-  printf("allocationreport stop underyling_count %lu total_underlying %lu\n",
-       sptr_to_len.size(), total_underlying);
+  cout << "allocationreport stop underyling_count "
+      << sptr_to_len.size()
+      << " total_underlying " << total_underlying << endl;
 }
 
 } // AllocationReport_Compile

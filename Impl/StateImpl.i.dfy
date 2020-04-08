@@ -138,8 +138,8 @@ module StateImpl {
 
     method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator) {
       acc := DebugAccumulator.EmptyAccumulator();
-      var r := new DebugAccumulator.AccRec(syncReqs.Count, "SyncReqStatus");
-      acc := DebugAccumulator.AccPut(acc, "syncReqs", r);
+      //var r := new DebugAccumulator.AccRec(syncReqs.Count, "SyncReqStatus");
+      //acc := DebugAccumulator.AccPut(acc, "syncReqs", r);
       var i := DebugAccumulator.EmptyAccumulator();
       if persistentIndirectionTable != null {
         i := persistentIndirectionTable.DebugAccumulate();
@@ -158,12 +158,12 @@ module StateImpl {
       }
       a := new DebugAccumulator.AccRec.Index(i);
       acc := DebugAccumulator.AccPut(acc, "ephemeralIndirectionTable", a);
-      r := new DebugAccumulator.AccRec(if outstandingIndirectionTableWrite.Some? then 1 else 0, "ReqId");
-      acc := DebugAccumulator.AccPut(acc, "outstandingIndirectionTableWrite", r);
-      r := new DebugAccumulator.AccRec(|outstandingBlockWrites| as uint64, "OutstandingWrites");
-      acc := DebugAccumulator.AccPut(acc, "outstandingBlockWrites", r);
-      r := new DebugAccumulator.AccRec(|outstandingBlockReads| as uint64, "OutstandingReads");
-      acc := DebugAccumulator.AccPut(acc, "outstandingBlockReads", r);
+      //r := new DebugAccumulator.AccRec(if outstandingIndirectionTableWrite.Some? then 1 else 0, "ReqId");
+      //acc := DebugAccumulator.AccPut(acc, "outstandingIndirectionTableWrite", r);
+      //r := new DebugAccumulator.AccRec(|outstandingBlockWrites| as uint64, "OutstandingWrites");
+      //acc := DebugAccumulator.AccPut(acc, "outstandingBlockWrites", r);
+      //r := new DebugAccumulator.AccRec(|outstandingBlockReads| as uint64, "OutstandingReads");
+      //acc := DebugAccumulator.AccPut(acc, "outstandingBlockReads", r);
       i := cache.DebugAccumulate();
       a := new DebugAccumulator.AccRec.Index(i);
       acc := DebugAccumulator.AccPut(acc, "cache", a);

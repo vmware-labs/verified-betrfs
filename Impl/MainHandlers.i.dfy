@@ -112,17 +112,17 @@ module MainHandlers refines Main {
   {
     var s := hs.s;
     print "\nBefore\n";
-    var acc := s.DebugAccumulate();
+    var acc := s.bc.DebugAccumulate();
     DebugAccumulator.Display(acc, 0);
-    var count:uint64 := s.cache.cache.Count;
+    var count:uint64 := s.bc.cache.cache.Count;
 //    var last_count:uint64 := count;
 //    var last_at_this_count:uint64 = 0;
     while (count > 0) { // somehow it gets to where we can't get rid of the last few...?
-      EvictOrDealloc(k, s, io);
-      count := s.cache.cache.Count;
+      EvictOrDealloc(k, s.bc, io);
+      count := s.bc.cache.cache.Count;
     }
     print "\nAfter\n";
-    acc := s.DebugAccumulate();
+    acc := s.bc.DebugAccumulate();
     DebugAccumulator.Display(acc, 0);
     assume false;
   }
@@ -133,7 +133,7 @@ module MainHandlers refines Main {
     AllocationReport.start();
     var s := hs.s;
 
-    var cache := s.cache.cache;
+    var cache := s.bc.cache.cache;
     var iter := cache.SimpleIterStart();
     var output := cache.SimpleIterOutput(iter);
     while (!output.Done?) {
