@@ -8,6 +8,7 @@ module LeafImpl {
   import opened StateImpl
   import opened NodeImpl
   import opened BucketImpl
+  import opened DiskOpImpl
 
   import opened Options
   import opened Maps

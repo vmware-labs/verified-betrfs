@@ -5,6 +5,7 @@ module FlushImpl {
   import opened BookkeepingImpl
   import opened StateImpl
   import opened NodeImpl
+  import opened DiskOpImpl
 
   import opened Options
   import opened MainDiskIOHandler

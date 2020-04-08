@@ -2,13 +2,18 @@ include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../lib/Base/Message.i.dfy"
 include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
 include "../lib/Base/Option.s.dfy"
-include "../BlockCacheSystem/BetreeBlockCache.i.dfy"
+include "../BlockCacheSystem/BetreeCache.i.dfy"
 include "../lib/Base/NativeTypes.s.dfy"
 include "../lib/DataStructures/LruModel.i.dfy"
 include "../lib/DataStructures/MutableMapModel.i.dfy"
 include "../lib/DataStructures/BitmapModel.i.dfy"
 include "BlockAllocatorModel.i.dfy"
 include "IndirectionTableModel.i.dfy"
+include "CommitterModel.i.dfy"
+include "../BlockCacheSystem/BlockJournalDisk.i.dfy"
+include "../BlockCacheSystem/BlockJournalCache.i.dfy"
+include "../ByteBlockCacheSystem/ByteCache.i.dfy"
+include "DiskOpModel.i.dfy"
 //
 // This file represents immutability's last stand.
 // It is the highest-fidelity representation of the implementation
@@ -28,10 +33,13 @@ module StateModel {
   import Messages = ValueMessage
   import MS = MapSpec
   import Pivots = PivotsLib
-  import BC = BetreeGraphBlockCache
-  import BBC = BetreeBlockCache
-  import SD = AsyncSectorDisk
+  import BC = BlockCache
+  import JC = JournalCache
+  import BBC = BetreeCache
+  import BJD = BlockJournalDisk
+  import BJC = BlockJournalCache
   import D = AsyncDisk
+  import M = ByteCache
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
@@ -41,11 +49,15 @@ module StateModel {
   import MutableMapModel
   import BlockAllocatorModel
   import IndirectionTableModel
+  import SectorType
+  import DiskLayout
+  import CommitterModel
+  import opened DiskOpModel
 
   import ReferenceType`Internal
 
   type Reference = BT.G.Reference
-  type DiskOp = BBC.DiskOp
+  type DiskOp = BJD.DiskOp
   
   type IndirectionTable = IndirectionTableModel.IndirectionTable
 
@@ -54,32 +66,41 @@ module StateModel {
       children: Option<seq<Reference>>,
       buckets: seq<Bucket>
     )
-  datatype Constants = Constants()
-  datatype Variables =
+  datatype BCVariables =
     | Ready(
         persistentIndirectionTable: IndirectionTable, // this lets us keep track of available LBAs
                                                          // TODO replace with something that only tracks LBAs
         frozenIndirectionTable: Option<IndirectionTable>,
         ephemeralIndirectionTable: IndirectionTable,
+        persistentIndirectionTableLoc: DiskLayout.Location,
+        frozenIndirectionTableLoc: Option<DiskLayout.Location>,
         outstandingIndirectionTableWrite: Option<BC.ReqId>,
-        outstandingBlockWrites: map<SD.ReqId, BC.OutstandingWrite>,
-        outstandingBlockReads: map<SD.ReqId, BC.OutstandingRead>,
-        syncReqs: MutableMapModel.LinearHashMap<BC.SyncReqStatus>,
+        outstandingBlockWrites: map<BC.ReqId, BC.OutstandingWrite>,
+        outstandingBlockReads: map<BC.ReqId, BC.OutstandingRead>,
         cache: map<Reference, Node>,
         lru: LruModel.LruQueue,
         blockAllocator: BlockAllocatorModel.BlockAllocatorModel
       )
-    | Unready(outstandingIndirectionTableRead: Option<SD.ReqId>, syncReqs: MutableMapModel.LinearHashMap<BC.SyncReqStatus>)
+    | LoadingIndirectionTable(
+        indirectionTableLoc: DiskLayout.Location,
+        indirectionTableRead: Option<BC.ReqId>)
+    | Unready
+
+  datatype Variables = Variables(
+    bc: BCVariables,
+    jc: CommitterModel.CM)
+
   datatype Sector =
-    | SectorBlock(block: Node)
+    | SectorNode(node: Node)
     | SectorIndirectionTable(indirectionTable: IndirectionTable)
+    | SectorSuperblock(superblock: SectorType.Superblock)
 
   predicate IsLocAllocIndirectionTable(indirectionTable: IndirectionTable, i: int)
   {
     IndirectionTableModel.IsLocAllocIndirectionTable(indirectionTable, i)
   }
 
-  predicate IsLocAllocOutstanding(outstanding: map<SD.ReqId, BC.OutstandingWrite>, i: int)
+  predicate IsLocAllocOutstanding(outstanding: map<BC.ReqId, BC.OutstandingWrite>, i: int)
   {
     !(forall id | id in outstanding :: outstanding[id].loc.addr as int != i * NodeBlockSize() as int)
   }
@@ -93,7 +114,7 @@ module StateModel {
       ephemeralIndirectionTable: IndirectionTable,
       frozenIndirectionTable: Option<IndirectionTable>,
       persistentIndirectionTable: IndirectionTable,
-      outstandingBlockWrites: map<SD.ReqId, BC.OutstandingWrite>,
+      outstandingBlockWrites: map<BC.ReqId, BC.OutstandingWrite>,
       blockAllocator: BlockAllocatorModel.BlockAllocatorModel)
   {
     && (forall i: int :: IsLocAllocIndirectionTable(ephemeralIndirectionTable, i)
@@ -120,16 +141,16 @@ module StateModel {
     forall ref | ref in cache :: WFNode(cache[ref])
   }
 
-  function TotalCacheSize(s: Variables) : int
+  function TotalCacheSize(s: BCVariables) : int
   requires s.Ready?
   {
     |s.cache| + |s.outstandingBlockReads|
   }
 
-  predicate WFVarsReady(s: Variables)
+  predicate WFVarsReady(s: BCVariables)
   requires s.Ready?
   {
-    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, locBitmap) := s;
+    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, persistentIndirectionTableLoc, frozenIndirectionTableLoc, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, cache, lru, locBitmap) := s;
     && WFCache(cache)
     && LruModel.WF(lru)
     && LruModel.I(lru) == cache.Keys
@@ -142,19 +163,20 @@ module StateModel {
     && ConsistentBitmap(s.ephemeralIndirectionTable, s.frozenIndirectionTable,
         s.persistentIndirectionTable, s.outstandingBlockWrites, s.blockAllocator)
   }
-  predicate WFVars(vars: Variables)
+  predicate WFBCVars(vars: BCVariables)
   {
     && (vars.Ready? ==> WFVarsReady(vars))
-    && MutableMapModel.Inv(vars.syncReqs)
   }
   predicate WFSector(sector: Sector)
   {
     match sector {
-      case SectorBlock(node) => WFNode(node)
+      case SectorNode(node) => WFNode(node)
       case SectorIndirectionTable(indirectionTable) => (
         && IndirectionTableModel.Inv(indirectionTable)
         && BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
       )
+      case SectorSuperblock(superblock) =>
+        JC.WFSuperblock(superblock)
     }
   }
 
@@ -167,68 +189,67 @@ module StateModel {
   {
     map ref | ref in cache :: INode(cache[ref])
   }
-  function IIndirectionTable(table: IndirectionTable) : (result: BC.IndirectionTable)
+  function IIndirectionTable(table: IndirectionTable) : (result: SectorType.IndirectionTable)
   {
     IndirectionTableModel.I(table)
   }
-  function IIndirectionTableOpt(table: Option<IndirectionTable>) : (result: Option<BC.IndirectionTable>)
+  function IIndirectionTableOpt(table: Option<IndirectionTable>) : (result: Option<SectorType.IndirectionTable>)
   {
     if table.Some? then
       Some(IIndirectionTable(table.value))
     else
       None
   }
-  function IVars(vars: Variables) : BBC.Variables
-  requires WFVars(vars)
+  function IBlockCache(vars: BCVariables) : BBC.Variables
+  requires WFBCVars(vars)
   {
     match vars {
-      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs, cache, lru, locBitmap) =>
-        BC.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable), outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, syncReqs.contents, ICache(cache))
-      case Unready(outstandingIndirectionTableRead, syncReqs) => BC.Unready(outstandingIndirectionTableRead, syncReqs.contents)
+      case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, persistentIndirectionTableLoc, frozenIndirectionTableLoc, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, cache, lru, locBitmap) =>
+        BC.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable),  persistentIndirectionTableLoc, frozenIndirectionTableLoc, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, ICache(cache))
+      case LoadingIndirectionTable(loc, read) =>
+        BC.LoadingIndirectionTable(loc, read)
+      case Unready => BC.Unready
     }
   }
-  function ISector(sector: Sector) : BC.Sector
+  function ISector(sector: Sector) : SectorType.Sector
   requires WFSector(sector)
   {
     match sector {
-      case SectorBlock(node) => BC.SectorBlock(INode(node))
-      case SectorIndirectionTable(indirectionTable) => BC.SectorIndirectionTable(IIndirectionTable(indirectionTable))
+      case SectorNode(node) => SectorType.SectorNode(INode(node))
+      case SectorIndirectionTable(indirectionTable) => SectorType.SectorIndirectionTable(IIndirectionTable(indirectionTable))
+      case SectorSuperblock(superblock) => SectorType.SectorSuperblock(superblock)
     }
   }
 
-  function Ik(k: Constants) : BBC.Constants
+  predicate WFVars(s: Variables)
   {
-    BC.Constants()
+    && WFBCVars(s.bc)
+    && CommitterModel.WF(s.jc)
   }
 
-  function I(k: Constants, s: Variables) : BBC.Variables
+  function IVars(vars: Variables) : BJC.Variables
+  requires WFVars(vars)
+  {
+    BJC.Variables(IBlockCache(vars.bc), CommitterModel.I(vars.jc))
+  }
+
+  function I(k: Constants, s: Variables) : BJC.Variables
   requires WFVars(s)
   {
     IVars(s)
   }
 
+  predicate BCInv(k: Constants, s: BCVariables)
+  {
+    && WFBCVars(s)
+    && BBC.Inv(Ik(k).bc, IBlockCache(s))
+  }
+
   predicate Inv(k: Constants, s: Variables)
   {
     && WFVars(s)
-    && BBC.Inv(Ik(k), IVars(s))
-  }
-
-  // Functional model of the DiskIOHandler
-
-  datatype IO =
-    | IOInit(id: uint64)
-    | IOReqRead(id: uint64, reqRead: D.ReqRead)
-    | IOReqWrite(id: uint64, reqWrite: D.ReqWrite)
-    | IORespRead(id: uint64, respRead: D.RespRead)
-    | IORespWrite(id: uint64, respWrite: D.RespWrite)
-
-  function diskOp(io: IO) : D.DiskOp {
-    match io {
-      case IOInit(id) => D.NoDiskOp
-      case IOReqRead(id, reqRead) => D.ReqReadOp(id, reqRead)
-      case IOReqWrite(id, reqWrite) => D.ReqWriteOp(id, reqWrite)
-      case IORespRead(id, respRead) => D.RespReadOp(id, respRead)
-      case IORespWrite(id, respWrite) => D.RespWriteOp(id, respWrite)
-    }
+    && BCInv(k, s.bc)
+    && CommitterModel.Inv(s.jc)
+    && BJC.Inv(Ik(k), I(k, s))
   }
 }

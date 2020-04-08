@@ -805,6 +805,7 @@ abstract module BtreeModel {
         Keys.LargestLteIsUnique2(oldindex.pivots, key, llte-1);
         assert key in oldint;
       }
+      assume false;
     }
   }
 

@@ -191,7 +191,21 @@ module Sequences {
     a + [b] + c
   }
 
-  predicate {:opaque} IsPrefix<A(==)>(a: seq<A>, b: seq<A>) {
+  function {:opaque} concatSeq<A>(a: seq<seq<A>>) : seq<A>
+  {
+    if |a| == 0 then [] else concatSeq(DropLast(a)) + Last(a)
+  }
+
+  lemma concatSeqAdditive<A>(a: seq<seq<A>>, b: seq<seq<A>>)
+  ensures concatSeq(a + b) == concatSeq(a) + concatSeq(b)
+
+  lemma lemma_concatSeqLen_ge_elemLen<A>(a: seq<seq<A>>, i: int)
+  requires 0 <= i < |a|
+  ensures |concatSeq(a)| >= |a[i]|
+
+  predicate {:opaque} IsPrefix<A(==)>(a: seq<A>, b: seq<A>)
+  ensures IsPrefix(a, b) ==> |a| <= |b|
+  {
     && |a| <= |b|
     && a == b[..|a|]
   }
@@ -461,5 +475,65 @@ module Sequences {
         |t|;
       }
     }
+  }
+
+  lemma lemma_seq_suffix_slice<T>(s: seq<T>, i: int, j: int, k: int)
+  requires 0 <= i <= |s|
+  requires 0 <= j <= k <= |s| - i
+  ensures s[i..][j..k] == s[i+j..i+k];
+  {
+  }
+
+  lemma lemma_seq_slice_suffix<T>(s: seq<T>, i: int, j: int, k: int)
+  requires 0 <= i <= j <= |s|
+  requires 0 <= k <= j - i
+  ensures s[i..j][k..] == s[i+k..j];
+  {
+  }
+
+  lemma lemma_array_suffix_slice<T>(ar: array<T>, i: int, j: int, k: int)
+  requires 0 <= i <= ar.Length
+  requires 0 <= j <= k <= ar.Length - i
+  ensures ar[i..][j..k] == ar[i+j..i+k];
+  {
+  }
+
+  lemma lemma_seq_extensionality<T>(s: seq<T>, t: seq<T>)
+  requires |s| == |t|
+  requires forall i | 0 <= i < |s| :: s[i] == t[i]
+  ensures s == t
+  {
+  }
+
+  lemma lemma_seq_slice_slice<T>(s: seq<T>, i: int, j: int, k: int, l: int)
+  requires 0 <= i <= j <= |s|
+  requires 0 <= k <= l <= j - i
+  ensures s[i..j][k..l] == s[i+k..i+l];
+  {
+    lemma_seq_extensionality(s[i..j][k..l], s[i+k..i+l]);
+  }
+
+  lemma lemma_array_slice_slice<T>(ar: array<T>, i: int, j: int, k: int, l: int)
+  requires 0 <= i <= j <= ar.Length
+  requires 0 <= k <= l <= j - i
+  ensures ar[i..j][k..l] == ar[i+k..i+l];
+  {
+    lemma_seq_slice_slice(ar[..], i, j, k, l);
+  }
+
+  lemma lemma_seq_extensionality_slice<T>(s: seq<T>, t: seq<T>, a: int, b: int)
+  requires 0 <= a <= b <= |s|
+  requires b <= |t|
+  requires forall i | a <= i < b :: s[i] == t[i]
+  ensures s[a..b] == t[a..b]
+  {
+  }
+
+  function {:opaque} fill<T>(n: int, t: T) : (res: seq<T>)
+  requires n >= 0
+  ensures |res| == n
+  ensures forall i | 0 <= i < n :: res[i] == t
+  {
+    if n == 0 then [] else fill(n-1, t) + [t]
   }
 }

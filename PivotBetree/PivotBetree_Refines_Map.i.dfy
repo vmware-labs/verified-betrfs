@@ -14,7 +14,7 @@ include "../Betree/Betree_Refines_Map.i.dfy"
 
 module PivotBetree_Refines_Map {
   import PB = PivotBetree
-  import PivotBetreeRefinesBetree = PivotBetreeInvAndRefinement
+  import PivotBetreeRefinesBetree = PivotBetree_Refines_Betree
   import BetreeRefinesMap = Betree_Refines_Map
   import MS = MapSpec
   type UIOp = MS.UI.Op
@@ -24,7 +24,7 @@ module PivotBetree_Refines_Map {
   }
 
   function I(k: PB.Constants, s: PB.Variables) : MS.Variables
-  requires PivotBetreeRefinesBetree.Inv(k, s)
+  requires PB.Inv(k, s)
   {
     BetreeRefinesMap.I(
       PivotBetreeRefinesBetree.Ik(k),
@@ -32,9 +32,9 @@ module PivotBetree_Refines_Map {
     )
   }
 
-  lemma PivotBetreeRefinesMapInit(k: PB.Constants, s: PB.Variables)
+  lemma RefinesInit(k: PB.Constants, s: PB.Variables)
     requires PB.Init(k, s)
-    ensures PivotBetreeRefinesBetree.Inv(k, s)
+    ensures PB.Inv(k, s)
     ensures MS.Init(Ik(k), I(k, s))
   {
     PivotBetreeRefinesBetree.RefinesInit(k, s);
@@ -43,10 +43,10 @@ module PivotBetree_Refines_Map {
       PivotBetreeRefinesBetree.I(k, s));
   }
 
-  lemma PivotBetreeRefinesMapNext(k: PB.Constants, s: PB.Variables, s': PB.Variables, uiop: UIOp)
-    requires PivotBetreeRefinesBetree.Inv(k, s)
+  lemma RefinesNext(k: PB.Constants, s: PB.Variables, s': PB.Variables, uiop: UIOp)
+    requires PB.Inv(k, s)
     requires PB.Next(k, s, s', uiop)
-    ensures PivotBetreeRefinesBetree.Inv(k, s')
+    ensures PB.Inv(k, s')
     ensures MS.Next(Ik(k), I(k, s), I(k, s'), uiop)
   {
     PivotBetreeRefinesBetree.RefinesNext(k, s, s', uiop);

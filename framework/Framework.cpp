@@ -84,11 +84,17 @@ namespace MainDiskIOHandler_Compile {
     bool made_req;
     bool done;
 
+    uint64 addr;
+    uint64 len;
+
     ~WriteTask() {
       free(aligned_bytes);
     }
     
     WriteTask(int fd, uint64 addr, uint8_t* buf, size_t len) {
+      this->addr = addr;
+      this->len = len;
+
       // TODO would be good to eliminate this copy,
       // but the application code might have lingering references
       // to the array.
@@ -163,8 +169,10 @@ namespace MainDiskIOHandler_Compile {
 
   struct ReadTask {
     DafnySequence<uint8_t> bytes;
+    uint64 addr;
 
-    ReadTask(DafnySequence<uint8_t> s) : bytes(s) { }
+    ReadTask(DafnySequence<uint8_t> s, uint64 addr)
+        : bytes(s), addr(addr) { }
   };
 
   uint64 readFromFile(int fd, uint64 addr, uint8_t* res, int len)
@@ -246,12 +254,21 @@ namespace MainDiskIOHandler_Compile {
       close(fd);
   }
 
-  uint64 DiskIOHandler::write(uint64 addr, DafnyArray<uint8> bytes)
+  Tuple2<uint64, uint64> DiskIOHandler::write2(
+      uint64 addr1, DafnySequence<uint8> bytes1,
+      uint64 addr2, DafnySequence<uint8> bytes2)
+  {
+    uint64 id1 = write(addr1, bytes1);
+    uint64 id2 = write(addr2, bytes2);
+    return Tuple2<uint64, uint64>(id1, id2);
+  }
+
+  uint64 DiskIOHandler::write(uint64 addr, DafnySequence<uint8> bytes)
   {
     size_t len = bytes.size();
 
     malloc_accounting_set_scope("DiskIOHandler::write.WriteTask");
-    shared_ptr<WriteTask> writeTask { new WriteTask(fd, addr, &bytes.at(0), len) };
+    shared_ptr<WriteTask> writeTask { new WriteTask(fd, addr, bytes.ptr(), len) };
     malloc_accounting_default_scope();
 
     if (nWriteReqsOut < MAX_WRITE_REQS_OUT) {
@@ -305,7 +322,7 @@ namespace MainDiskIOHandler_Compile {
     this->curId++;
 
     malloc_accounting_set_scope("DiskIOHandler::ReadTask");
-    readReqs.insert(std::make_pair(id, ReadTask(bytes)));
+    readReqs.insert(std::make_pair(id, ReadTask(bytes, addr)));
     malloc_accounting_default_scope();
 
     #ifdef LOG_QUERY_STATS
@@ -315,20 +332,23 @@ namespace MainDiskIOHandler_Compile {
     return id;
   }
 
-  uint64 DiskIOHandler::getWriteResult()
+  Tuple3<uint64, uint64, uint64> DiskIOHandler::getWriteResult()
   {
-    return writeResponseId;
+    return Tuple3<uint64, uint64, uint64>(
+      writeResponseId, responseAddr, responseLen);
   }
 
-  Tuple2<uint64, DafnySequence<uint8>> DiskIOHandler::getReadResult()
+  Tuple3<uint64, uint64, DafnySequence<uint8>> DiskIOHandler::getReadResult()
   {
-    return Tuple2<uint64, DafnySequence<uint8>>(readResponseId, readResponseBytes);
+    return Tuple3<uint64, uint64, DafnySequence<uint8>>(
+      readResponseId, responseAddr, readResponseBytes);
   }
 
   bool DiskIOHandler::prepareReadResponse() {
     auto it = this->readReqs.begin();
     if (it != this->readReqs.end()) {
       this->readResponseId = it->first;
+      this->responseAddr = it->second.addr;
       this->readResponseBytes = it->second.bytes;
       this->readReqs.erase(it);
       return true;
@@ -355,6 +375,8 @@ namespace MainDiskIOHandler_Compile {
       writeTask->check_if_complete();
       if (writeTask->done) {
         this->writeResponseId = it->first;
+        this->responseAddr = it->second->addr;
+        this->responseLen = it->second->len;
         this->writeReqs.erase(it);
         maybeStartWriteReq();
         return true;
