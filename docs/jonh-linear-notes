@@ -1,0 +1,9 @@
+git pull
+git checkout linear-examples
+tools/update-dafny.sh
+cd lib/DataStructures
+../../tools/local-dafny.sh  /compile:0 BtreeModel.i.dfy 
+
+Error: failure to decrease termination measure
+...if, on line 22, you change the 'lseq' to 'seq', the error goes away.
+Somehow the termination reasoning passes through seqs but not through lseqs.

@@ -9,7 +9,7 @@ module LinearSequence_i {
   import opened Sequences
   export
     provides LinearSequence_s
-    provides seq_alloc_init, lseqs, lseq_has, lseq_length, lseq_peek
+    provides seq_alloc_init, lseqs, lseq_has, lseq_length_doodle, lseq_length, lseq_peek
     provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give
     reveals lseq_full
     reveals operator'cardinality?lseq, operator'in?lseq, operator'subscript?lseq
@@ -54,6 +54,12 @@ module LinearSequence_i {
       ensures |s| == |lseqs(l)|
   {
       Apply(has, lseqs_raw(l))
+  }
+
+  function lseq_length_doodle<A>(s:lseq<A>):(n:nat) //XXX delete
+      ensures n == |lseqs(s)|
+  {
+      lseq_length_raw(s)
   }
 
   function method lseq_length<A>(shared s:lseq<A>):(n:nat)
