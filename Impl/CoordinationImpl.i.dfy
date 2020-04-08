@@ -125,7 +125,7 @@ module CoordinationImpl {
 
     if s.jc.isFrozen {
       if s.jc.frozenLoc.Some? {
-        CommitterCommitImpl.tryAdvanceLocation(k, s.jc, io);
+        wait := CommitterCommitImpl.tryAdvanceLocation(k, s.jc, io);
       } else {
         var froze, wait0 := SyncImpl.sync(k, s.bc, io);
         wait := wait0;
@@ -146,7 +146,7 @@ module CoordinationImpl {
           CommitterCommitImpl.freeze(k, s.jc);
         }
       } else {
-        CommitterCommitImpl.tryAdvanceLog(k, s.jc, io);
+        wait := CommitterCommitImpl.tryAdvanceLog(k, s.jc, io);
       }
     }
 

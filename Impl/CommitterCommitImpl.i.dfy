@@ -320,6 +320,7 @@ module CommitterCommitImpl {
   // == AdvanceLog ==
 
   method tryAdvanceLog(k: ImplConstants, cm: Committer, io: DiskIOHandler)
+  returns (wait: bool)
   requires cm.Inv()
   requires io.initialized()
   requires io !in cm.Repr
@@ -333,6 +334,8 @@ module CommitterCommitImpl {
   {
     CommitterCommitModel.reveal_tryAdvanceLog();
 
+    wait := false;
+
     var hasFrozen := cm.journalist.hasFrozenJournal();
     var hasInMem := cm.journalist.hasInMemoryJournal();
     if cm.superblockWrite.None? {
@@ -341,14 +344,17 @@ module CommitterCommitImpl {
       } else if (cm.outstandingJournalWrites == {}) {
         writeOutSuperblockAdvanceLog(k, cm, io);
       } else {
-        print "tryAdvanceLog: doing nothing, has outstanding journal writes\n";
+        //print "tryAdvanceLog: doing nothing, has outstanding journal writes\n";
+        wait := true;
       }
     } else {
-      print "tryAdvanceLog: doing nothing, has outstanding journal writes\n";
+      //print "tryAdvanceLog: doing nothing, has outstanding superblock writes\n";
+      wait := true;
     }
   }
 
   method tryAdvanceLocation(k: ImplConstants, cm: Committer, io: DiskIOHandler)
+  returns (wait: bool)
   requires cm.Inv()
   requires io.initialized()
   requires io !in cm.Repr
@@ -363,6 +369,8 @@ module CommitterCommitImpl {
   {
     CommitterCommitModel.reveal_tryAdvanceLocation();
 
+    wait := false;
+
     var hasFrozen := cm.journalist.hasFrozenJournal();
     var hasInMem := cm.journalist.hasInMemoryJournal();
     if cm.superblockWrite.None? {
@@ -371,10 +379,12 @@ module CommitterCommitImpl {
       } else if (cm.outstandingJournalWrites == {}) {
         writeOutSuperblockAdvanceLocation(k, cm, io);
       } else {
-        print "tryAdvanceLocation: doing nothing, has outstanding journal writes\n";
+        //print "tryAdvanceLocation: doing nothing, has outstanding journal writes\n";
+        wait := true;
       }
     } else {
-      print "tryAdvanceLocation: doing nothing, has outstanding journal writes\n";
+      //print "tryAdvanceLocation: doing nothing, has outstanding superblock writes\n";
+      wait := true;
     }
   }
 
