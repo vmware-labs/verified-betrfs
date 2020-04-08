@@ -19,7 +19,9 @@ module LeafImpl {
 
   import opened NativeTypes
 
-  method CopyKey(k: KeyType.Key) returns (k2: KeyType.Key) {
+  method CopyKey(k: KeyType.Key) returns (k2: KeyType.Key)
+  ensures k2 == k
+  {
     k2 := [] + k;
   }
 
