@@ -389,6 +389,7 @@ module LruImpl {
     // Unverified junk for debugging
     method Count() returns (count:uint64)
     {
+      assume false; // debugging junk
       if this == null {
         count := 0;
         return;
