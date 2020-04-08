@@ -481,6 +481,9 @@ module JournalIntervals {
   ensures journal[interval.start + i].Some?
   {
     reveal_CyclicSlice();
+    var slice := CyclicSlice(journal, interval);
+    assert journal[interval.start + i]
+        == slice[i];
   }
 
   lemma HasJournalRange_of_containedIn(
