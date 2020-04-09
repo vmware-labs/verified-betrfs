@@ -455,62 +455,51 @@ abstract module MutableBtree {
     }
   }
 
-//  method Grow(root: Node) returns (newroot: Node)
-//    requires WF(root)
-//    requires Full(root)
-//    ensures WFShape(newroot)
-//    ensures fresh(newroot.repr - root.repr)
-//    ensures newroot.height == root.height + 1
-//    ensures I(newroot) == Model.Grow(I(root))
-//    ensures !Full(newroot)
-//  {
-//    newroot := new Node;
-//    var newpivots := newArrayFill(MaxChildren()-1, DefaultKey());
-//    var newchildren := newArrayFill(MaxChildren(), null);
-//    newchildren[0] := root;
-//    newroot.contents := Index(1, newpivots, newchildren);
-//    newroot.repr := {newroot, newpivots, newchildren} + root.repr;
-//    newroot.height := root.height + 1;
-//
-//    assert WFShapeChildren(newroot.contents.children[..1], newroot.repr, newroot.height) by { reveal_SeqRepr(); }
-//    
-//    ghost var inewroot := I(newroot);
-//    IOfChild(newroot, 0);
-//    assert inewroot.children == [ I(root) ];
-//  }
-//
-//  lemma FullImpliesAllKeysNonEmpty(node: Node)
-//    requires WF(node)
-//    requires Full(node)
-//    ensures Model.AllKeys(I(node)) != {}
-//  {
-//    var inode := I(node);
-//    if inode.Leaf? {
-//      assert inode.keys[0] in Model.AllKeys(inode) by { Model.reveal_AllKeys(); }
-//    } else {
-//      assert inode.pivots[0] in Model.AllKeys(inode) by { Model.reveal_AllKeys(); }
-//    }
-//  }
-//  
-//  method Insert(root: Node, key: Key, value: Value) returns (newroot: Node, oldvalue: Option<Value>)
-//    requires WF(root)
-//    ensures WF(newroot)
-//    ensures fresh(newroot.repr - old(root.repr))
-//    ensures Interpretation(newroot) == old(Interpretation(root))[key := value]
-//    ensures oldvalue == MapLookupOption(old(Interpretation(root)), key)
-//    modifies root.repr
-//  {
-//    if Full(root) {
-//      FullImpliesAllKeysNonEmpty(root);
-//      Model.GrowPreservesWF(I(root));
-//      newroot := Grow(root);
-//      Model.GrowPreservesInterpretation(I(root));
-//    } else {
-//      newroot := root;
-//    }
-//    assert Model.Interpretation(I(newroot)) == Model.Interpretation(old(I(root)));
-//    oldvalue := InsertNode(newroot, key, value);
-//  }
+  method Grow(linear root: Node) returns (linear newroot: Node)
+    requires WF(root)
+    requires Full(root)
+    ensures WF(newroot)
+    ensures newroot == Model.Grow(root)
+    ensures !Full(newroot)
+  {
+    linear var pivots := seq_alloc_init(0, DefaultKey());
+    linear var children := lseq_alloc(1);
+    children := lseq_give(children, 0, root);
+    newroot := Model.Index(pivots, children);
+    assert lseqs(children) == [root]; // trigger
+    ImagineInverse(children);
+  }
+
+  lemma FullImpliesAllKeysNonEmpty(node: Node)
+    requires WF(node)
+    requires Full(node)
+    ensures Model.AllKeys(node) != {}
+  {
+    if node.Leaf? {
+      assert node.keys[0] in Model.AllKeys(node) by { Model.reveal_AllKeys(); }
+    } else {
+      assert node.pivots[0] in Model.AllKeys(node) by { Model.reveal_AllKeys(); }
+    }
+  }
+  
+  method Insert(linear root: Node, key: Key, value: Value)
+    returns (linear newroot: Node, oldvalue: Option<Value>)
+    requires WF(root)
+    ensures WF(newroot)
+    ensures Interpretation(newroot) == Interpretation(root)[key := value]
+    ensures oldvalue == MapLookupOption(Interpretation(root), key)
+  {
+    if Full(root) {
+      FullImpliesAllKeysNonEmpty(root);
+      Model.GrowPreservesWF(root);
+      newroot := Grow(root);
+      Model.GrowPreservesInterpretation(root);
+    } else {
+      newroot := root;
+    }
+    assert Model.Interpretation(newroot) == Model.Interpretation(root);
+    newroot, oldvalue := InsertNode(newroot, key, value);
+  }
 }
 
 // module TestBtreeModel refines BtreeModel {
