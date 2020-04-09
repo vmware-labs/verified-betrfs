@@ -9,6 +9,8 @@ include "../Base/mathematics.i.dfy"
 include "BtreeModel.i.dfy"
 
 abstract module MutableBtree {
+  import opened LinearSequence_s
+  import opened LinearSequence_i
   import opened NativeTypes
   import opened NativeArrays
   import opened Seq = Sequences
@@ -37,57 +39,79 @@ abstract module MutableBtree {
 
   // TODO(jonh): A renaming, since now Node == Model.Node. Do it with sed later.
   predicate WF(node: Node)
+    decreases node
   {
-    && Model.WF(node)
+    && (Model.LseqDecreases(node); true)
+    && Model.WF(node) // TODO(jonh) things are a little ackermanny with a recursion in both Model.WF and this WF
+    && (node.Index? ==> (
+      && 0 < |node.children| <= MaxChildren() as int
+      // Recurse on children
+      && (forall i :: 0 <= i < |node.children| ==> WF(node.children[i]))
+      && lseq_has_all(node.children)
+    ))
+    && (node.Leaf? ==> (
+      && 0 <= |node.keys| <= MaxKeysPerLeaf() as int
+    ))
   }
 
   // TODO(jonh): A renaming, since now Node == Model.Node. Do it with sed later.
   function Interpretation(node: Node) : map<Key, Value>
     requires WF(node)
   {
+    assert Model.WF(node);
     Model.Interpretation(node)
   }
 
-  method QueryLeaf(node: Node, needle: Key) returns (result: Option<Value>)
+  method Route(shared keys: seq<Key>, needle: Key) returns (posplus1: uint64)
+    requires |keys| < Uint64UpperBound() / 4;
+    requires Model.Keys.IsSorted(keys)
+    ensures posplus1 as int == Model.Keys.LargestLte(keys, needle) + 1
+  {
+    var pos: int64 := Model.Keys.ComputeLargestLte(keys, needle);
+    posplus1 := (pos + 1) as uint64;
+  }
+
+  method QueryLeaf(shared node: Node, needle: Key) returns (result: Option<Value>)
     requires WF(node)
     requires node.Leaf?
     ensures result == MapLookupOption(Interpretation(node), needle)
   {
     Model.reveal_Interpretation();
-    var posplus1: uint64 := Model.Keys.LargestLtePlus1(node.keys, 0, |node.keys|, needle);
-    if 1 <= posplus1 && node.keys[posplus1-1] == needle {
-      result := Some(node.values[posplus1-1]);
+    assert Model.Keys.IsStrictlySorted(node.keys);
+    assert Model.Keys.IsSorted(node.keys);
+    var posplus1 := Route(node.keys, needle);
+    if 1 <= posplus1 && seq_get(node.keys, posplus1-1) == needle {
+      result := Some(seq_get(node.values, posplus1-1));
     } else {
       result := None;
     }
   }
 
-//  method QueryIndex(node: Node, needle: Key) returns (result: Option<Value>)
-//    requires WF(node)
-//    requires node.contents.Index?
-//    ensures result == MapLookupOption(Interpretation(node), needle)
-//    decreases node.repr, 0
-//  {
-//    reveal_I();
-//    Model.reveal_Interpretation();
-//    Model.reveal_AllKeys();
-//    var posplus1: uint64 := Model.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, needle);
-//    assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
-//    result := Query(node.contents.children[posplus1], needle);
-//    assume result == MapLookupOption(Interpretation(node), needle);
-//  }
-//
-//  method Query(node: Node, needle: Key) returns (result: Option<Value>)
-//    requires WF(node)
-//    ensures result == MapLookupOption(Interpretation(node), needle)
-//    decreases node.repr, 1
-//  {
-//    match node.contents {
-//      case Leaf(_, _, _) => result := QueryLeaf(node, needle);
-//      case Index(_, _, _) => result := QueryIndex(node, needle);
-//    }
-//  }
-//
+  method QueryIndex(shared node: Node, needle: Key) returns (result: Option<Value>)
+    requires WF(node)
+    requires node.Index?
+    ensures result == MapLookupOption(Interpretation(node), needle)
+    decreases node, 0
+  {
+    Model.reveal_Interpretation();
+    Model.reveal_AllKeys();
+    var posplus1:uint64 := Route(node.pivots, needle);
+    Model.LseqDecreases(node);
+    result := Query(lseq_peek(node.children, posplus1), needle);
+    assert result == MapLookupOption(Interpretation(node), needle);
+  }
+
+  method Query(shared node: Node, needle: Key) returns (result: Option<Value>)
+    requires WF(node)
+    ensures result == MapLookupOption(Interpretation(node), needle)
+    decreases node, 1
+  {
+    shared match node {
+      case Leaf(_, _) => result := QueryLeaf(node, needle);
+      case Index(_, _) => result := QueryIndex(node, needle);
+    }
+  }
+
 //  method EmptyTree() returns (root: Node)
 //    ensures WF(root)
 //    ensures fresh(root.repr)

@@ -2,13 +2,15 @@ include "LinearMaybe.s.dfy"
 include "LinearSequence.s.dfy"
 
 module LinearSequence_i {
+  import opened NativeTypes
   import opened LinearMaybe
   import opened LinearSequence_s
   export
     provides LinearSequence_s
+    provides NativeTypes
     provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_length, lseq_peek
     provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give
-    reveals lseq_full, linLast
+    reveals lseq_full, linLast, lseq_has_all
     reveals operator'cardinality?lseq, operator'in?lseq, operator'subscript?lseq
 
   // method seq_alloc_init<A>(length:nat, a:A) returns(linear s:seq<A>)
@@ -71,6 +73,11 @@ module LinearSequence_i {
       seq(lseq_length_raw(l), i requires 0<=i<lseq_length_raw(l) => has(lseqs_raw(l)[i]))
   }
 
+  predicate lseq_has_all<A>(l:lseq<A>)
+  {
+    forall i :: 0<=i<|l| ==> lseq_has(l)[i]
+  }
+
   function method lseq_length<A>(shared s:lseq<A>):(n:nat)
       ensures n == |lseqs(s)|
   {
@@ -99,9 +106,9 @@ module LinearSequence_i {
       lseq_has(s)[i]
   }
 
-  function method lseq_peek<A>(shared s:lseq<A>, i:nat):(shared a:A)
-      requires i < |s| && i in s
-      ensures a == s[i]
+  function method lseq_peek<A>(shared s:lseq<A>, i:uint64):(shared a:A)
+      requires i as nat < |s| && i as nat in s
+      ensures a == s[i as nat]
   {
       peek(lseq_share_raw(s, i))
   }

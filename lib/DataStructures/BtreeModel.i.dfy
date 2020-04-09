@@ -1,5 +1,5 @@
-include "../Linear/LinearSequence.s.dfy"
-include "../Linear/LinearSequence.i.dfy"
+include "../Lang/LinearSequence.s.dfy"
+include "../Lang/LinearSequence.i.dfy"
 include "../Base/sequences.i.dfy"
 include "../Base/Maps.s.dfy"
 include "../Base/total_order.i.dfy"

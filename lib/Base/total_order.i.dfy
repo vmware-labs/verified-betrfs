@@ -1,4 +1,4 @@
-include "../Linear/LinearSequence.i.dfy"
+include "../Lang/LinearSequence.i.dfy"
 include "sequences.i.dfy"
 include "Maps.s.dfy"
 include "../Lang/NativeTypes.s.dfy"
@@ -1032,7 +1032,7 @@ module Lexicographic_Byte_Order refines Total_Order {
   }
 
   method ComputeLargestLte(shared run: seq<Element>, needle: Element) returns (res : int64)
-    requires |run| < 0x4000_0000_0000_0000
+    requires |run| < 0x8000_0000_0000_0000
     requires IsSorted(run)
     ensures res as int == LargestLte(run, needle)
   {
@@ -1046,7 +1046,8 @@ module Lexicographic_Byte_Order refines Total_Order {
     decreases hi - lo
     {
       var mid := (lo + hi) / 2;
-      var c := cmp(LinearSequence_s.seq_get(run, mid), needle);  // TODO(chris): again, happy with the clumsy non-ghost syntax?
+      assert 0<=mid;
+      var c := cmp(LinearSequence_s.seq_get(run, mid as uint64), needle);  // TODO(chris): again, happy with the clumsy non-ghost syntax?
       if (c > 0) {
         hi := mid;
       } else {

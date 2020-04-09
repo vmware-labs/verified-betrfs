@@ -57,8 +57,8 @@ module LinearSequence_s {
       ensures p.1 == lseqs_raw(s1)[i]
       ensures lseqs_raw(p.0) == lseqs_raw(s1)[i := a1]
 
-  function method lseq_share_raw<A>(shared s:lseq<A>, i:nat):(shared a:maybe<A>)
-      requires i < |lseqs_raw(s)|
+  function method lseq_share_raw<A>(shared s:lseq<A>, i:uint64):(shared a:maybe<A>)
+      requires i as int < |lseqs_raw(s)|
       ensures a == lseqs_raw(s)[i]
 
 } // module
