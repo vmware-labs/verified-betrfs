@@ -185,7 +185,7 @@ abstract module MutableBtree {
     requires Model.Keys.lte(pivot, node.keys[nleft])
     ensures WF(left)
     ensures WF(right)
-    ensures Model.SplitLeaf(old(node), left, right, pivot)
+    ensures Model.SplitLeaf(node, left, right, pivot)
     ensures |left.keys| == nleft as int
   {
     ghost var nkeys := |node.keys|;
@@ -216,9 +216,9 @@ abstract module MutableBtree {
     requires 0 < nleft as nat < |node.children|
     ensures WF(left)
     ensures WF(right)
-    ensures Model.SplitIndex(old(node), left, right, pivot)
+    ensures Model.SplitIndex(node, left, right, pivot)
     ensures |left.children| == nleft as nat
-    ensures pivot == old(node.pivots[nleft-1])
+    ensures pivot == node.pivots[nleft-1]
   {
     var nright:uint64 := |node.children| as uint64 - nleft;
     linear var Index(pivots, children) := node;
@@ -235,7 +235,7 @@ abstract module MutableBtree {
     right := Model.Index(rightPivots, rightChildren);
 
     ImagineInverse(left.children);
-    assert lseqs(right.children) == lseqs(old(node.children))[|left.children|..|node.children|];  // observe trigger
+    assert lseqs(right.children) == lseqs(node.children)[|left.children|..|node.children|];  // observe trigger
     ImagineInverse(right.children);
 
     assert Model.AllKeysBelowBound(node, nleft as int - 1); // trigger
@@ -252,8 +252,8 @@ abstract module MutableBtree {
     ensures WF(right)
     ensures !Full(left)
     ensures !Full(right)
-    ensures Model.SplitNode(old(node), left, right, pivot)
-    ensures pivot in Model.AllKeys(old(node))
+    ensures Model.SplitNode(node, left, right, pivot)
+    ensures pivot in Model.AllKeys(node)
   {
     if node.Leaf? {
       var boundary := seq_length(node.keys) as uint64 / 2;
@@ -275,11 +275,11 @@ abstract module MutableBtree {
     requires 0 <= childidx as nat < |node.children|
     requires Full(node.children[childidx as nat]);
     ensures splitNode.Index?
-    ensures Model.SplitChildOfIndex(old(node), splitNode, childidx as int)
+    ensures Model.SplitChildOfIndex(node, splitNode, childidx as int)
     ensures WF(splitNode)
     ensures !Full(splitNode.children[childidx as nat])
     ensures !Full(splitNode.children[childidx as nat + 1])
-    ensures splitNode.pivots[childidx] in Model.AllKeys(old(node).children[childidx as nat])
+    ensures splitNode.pivots[childidx] in Model.AllKeys(node.children[childidx as nat])
   {
     linear var Index(pivots, children) := node;
 
@@ -305,7 +305,7 @@ abstract module MutableBtree {
     ensures WF(n2)
     ensures Model.Interpretation(n2) == Model.Interpretation(node)[key := value]
     ensures Model.AllKeys(n2) == Model.AllKeys(node) + {key}
-    ensures oldvalue == MapLookupOption(old(Interpretation(node)), key);
+    ensures oldvalue == MapLookupOption(Interpretation(node), key);
   {
     Model.reveal_Interpretation();
     Model.reveal_AllKeys();
@@ -321,208 +321,88 @@ abstract module MutableBtree {
       values := InsertSeq(values, value, (pos + 1) as uint64);
     }
     n2 := Model.Leaf(keys, values);
-    Model.InsertLeafIsCorrect(old(node), key, value);
+    Model.InsertLeafIsCorrect(node, key, value);
   }
 
-//  twostate lemma InsertIndexChildNotFullPreservesWFShape(node: Node, childidx: int)
-//    requires old(WFShape(node))
-//    requires old(node.contents).Index?
-//    requires 0 <= childidx < old(node.contents).nchildren as int
-//    requires node.contents.Index?
-//    requires node.contents.nchildren == old(node.contents).nchildren
-//    requires node.contents.children == old(node.contents.children)
-//    requires node.contents.pivots == old(node.contents.pivots)
-//    requires node.height == old(node.height)
-//    requires old(node.contents.children[childidx]) != null
-//    requires node.contents.children[childidx] != null
-//    requires unchanged(old(node.repr) - ({node} + old(node.contents.children[childidx].repr)))
-//    requires forall i :: 0 <= i < childidx ==> node.contents.children[i] == old(node.contents.children[i])
-//    requires forall i :: childidx < i < node.contents.nchildren as int ==> node.contents.children[i] == old(node.contents.children[i])
-//    requires WFShape(node.contents.children[childidx])
-//    requires node.contents.children[childidx].height == old(node.contents.children[childidx].height)
-//    requires fresh(node.contents.children[childidx].repr - old(node.contents.children[childidx].repr))
-//    requires node.repr == old(node.repr) + node.contents.children[childidx].repr
-//    ensures WFShape(node)
-//  {
-//    assert old(WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height));
-//    assert forall i :: 0 <= i < node.contents.nchildren ==> old(WFShape(node.contents.children[i]));
-//    
-//    forall i | 0 <= i < node.contents.nchildren as int
-//      ensures node.contents.children[i] != null
-//      ensures node.contents.children[i] in node.repr
-//      ensures node.contents.children[i].repr < node.repr
-//      ensures node !in node.contents.children[i].repr
-//      ensures node.contents.pivots !in node.contents.children[i].repr
-//      ensures node.contents.children !in node.contents.children[i].repr
-//      ensures node.contents.children[i].height < node.height
-//      ensures WFShape(node.contents.children[i])
-//    {
-//      if i < childidx {
-//        assert old(DisjointSubtrees(node.contents, i, childidx));
-//      } else if i == childidx {
-//      } else {
-//        assert old(DisjointSubtrees(node.contents, childidx, i));
-//      }
-//    }
-//    SeqReprSubsetExtensionality(node.contents.children[..node.contents.nchildren], node.repr);
-//      
-//    forall i, j | 0 <= i < j < node.contents.nchildren as int
-//      ensures DisjointReprs(node.contents.children[..node.contents.nchildren], i,j)
-//    {
-//      assert old(DisjointSubtrees(node.contents, i, j));
-//      if                           j <  childidx       {
-//        assert old(DisjointSubtrees(node.contents, i, childidx));
-//        assert old(DisjointSubtrees(node.contents, j, childidx));
-//      } else if                    j == childidx       {
-//        assert old(DisjointSubtrees(node.contents, i, childidx));
-//      } else if i < childidx     &&      childidx < j {
-//        assert old(DisjointSubtrees(node.contents, i, childidx));
-//        assert old(DisjointSubtrees(node.contents, childidx, j));
-//      } else if i == childidx    &&      childidx < j {
-//        assert old(DisjointSubtrees(node.contents, childidx, j));
-//      } else {
-//        assert old(DisjointSubtrees(node.contents, childidx, i));
-//        assert old(DisjointSubtrees(node.contents, childidx, j));
-//      }
-//    }
-//  }
-//
-//  method InsertIndexChildNotFull(node: Node, childidx: uint64, key: Key, value: Value)
-//    returns (oldvalue: Option<Value>)
-//    requires WF(node)
-//    requires node.contents.Index?
-//    requires childidx as int == Model.Keys.LargestLte(node.contents.pivots[..node.contents.nchildren-1], key) + 1
-//    requires node.contents.children[childidx] != null
-//    requires !Full(node.contents.children[childidx])
-//    ensures WFShape(node)
-//    ensures fresh(node.repr - old(node.repr))
-//    ensures node.height == old(node.height)
-//    ensures Model.WF(I(node))
-//    ensures Model.Interpretation(I(node)) == Model.Interpretation(old(I(node)))[key := value]
-//    ensures Model.AllKeys(I(node)) <= Model.AllKeys(old(I(node))) + {key}
-//    ensures oldvalue == MapLookupOption(old(Interpretation(node)), key)
-//    modifies node, node.contents.children[childidx], node.contents.children[childidx].repr
-//    decreases node.height, 0
-//  {
-//    assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
-//
-//    forall i | 0 <= i < node.contents.nchildren
-//      ensures I(node.contents.children[i]) == I(node).children[i]
-//    {
-//      IOfChild(node, i as int);
-//    }
-//    
-//    oldvalue := InsertNode(node.contents.children[childidx], key, value);
-//    assert oldvalue == MapLookupOption(old(Interpretation(node)), key) by {
-//      reveal_I();
-//      Model.reveal_Interpretation();
-//      Model.reveal_AllKeys();
-//    }
-//    node.repr := node.repr + node.contents.children[childidx].repr;
-//    
-//    InsertIndexChildNotFullPreservesWFShape(node, childidx as int);
-//    
-//    ghost var oldinode := old(I(node));
-//    ghost var inode := I(node);
-//    ghost var oldchild := oldinode.children[childidx];
-//    ghost var newchild := inode.children[childidx];
-//
-//    forall i | 0 <= i < childidx as int
-//      ensures inode.children[i] == oldinode.children[i]
-//    {
-//      IOfChild(node, i);
-//      assert old(DisjointSubtrees(node.contents, i, childidx as int));
-//    }
-//    forall i | childidx as int < i < |inode.children|
-//      ensures inode.children[i] == oldinode.children[i]
-//    {
-//      IOfChild(node, i);
-//      assert old(DisjointSubtrees(node.contents, childidx as int, i));
-//    }
-//
-//    IOfChild(node, childidx as int);
-//    Model.RecursiveInsertIsCorrect(oldinode, key, value, childidx as int, inode, inode.children[childidx]);
-//  }
-//
-//  method InsertIndexSelectAndPrepareChild(node: Node, key: Key) returns (childidx: uint64)
-//    requires WF(node)
-//    requires node.contents.Index?
-//    requires !Full(node)
-//    ensures WFShape(node)
-//    ensures fresh(node.repr - old(node.repr))
-//    ensures node.height == old(node.height)
-//    ensures Model.WF(I(node))
-//    ensures node.contents.Index?
-//    ensures childidx as int == Model.Keys.LargestLte(node.contents.pivots[..node.contents.nchildren-1], key) + 1
-//    ensures node.contents.children[childidx] != null
-//    ensures !Full(node.contents.children[childidx])
-//    ensures Model.Interpretation(I(node)) == Model.Interpretation(old(I(node)))
-//    ensures Model.AllKeys(I(node)) == Model.AllKeys(old(I(node)))
-//    modifies node, node.repr
-//  {
-//    Model.reveal_AllKeys();
-//    assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
-//
-//    childidx := Model.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, key);
-//    if Full(node.contents.children[childidx]) {
-//      ghost var oldpivots := node.contents.pivots[..node.contents.nchildren-1];
-//      SplitChildOfIndex(node, childidx);
-//      ghost var newpivots := node.contents.pivots[..node.contents.nchildren-1];
-//      Model.SplitChildOfIndexPreservesWF(old(I(node)), I(node), childidx as int);
-//      Model.SplitChildOfIndexPreservesInterpretation(old(I(node)), I(node), childidx as int);
-//      Model.SplitChildOfIndexPreservesAllKeys(old(I(node)), I(node), childidx as int);
-//
-//      var t: int32 := Model.Keys.cmp(node.contents.pivots[childidx], key);
-//      if  t <= 0 {
-//        childidx := childidx + 1;
-//        forall i | childidx as int - 1 < i < |newpivots|
-//          ensures Model.Keys.lt(key, newpivots[i])
-//        {
-//          assert newpivots[i] == oldpivots[i-1];
-//        }
-//      }
-//      Model.Keys.LargestLteIsUnique(node.contents.pivots[..node.contents.nchildren-1], key, childidx as int - 1);
-//    }
-//  }
-//  
-//  method InsertIndex(node: Node, key: Key, value: Value) returns (oldvalue: Option<Value>)
-//    requires WF(node)
-//    requires node.contents.Index?
-//    requires !Full(node)
-//    ensures WFShape(node)
-//    ensures fresh(node.repr - old(node.repr))
-//    ensures node.height == old(node.height)
-//    ensures Model.WF(I(node))
-//    ensures Model.Interpretation(I(node)) == Model.Interpretation(old(I(node)))[key := value]
-//    ensures Model.AllKeys(I(node)) <= Model.AllKeys(old(I(node))) + {key}
-//    ensures oldvalue == MapLookupOption(old(Interpretation(node)), key)
-//    modifies node, node.repr
-//    decreases node.height, 1
-//  {
-//    var childidx: uint64 := InsertIndexSelectAndPrepareChild(node, key);
-//    oldvalue := InsertIndexChildNotFull(node, childidx, key, value);
-//  }
-//  
-//  method InsertNode(node: Node, key: Key, value: Value) returns (oldvalue: Option<Value>)
-//    requires WF(node)
-//    requires !Full(node)
-//    ensures WFShape(node)
-//    ensures fresh(node.repr - old(node.repr))
-//    ensures node.height == old(node.height)
-//    ensures Model.WF(I(node))
-//    ensures Model.Interpretation(I(node)) == Model.Interpretation(old(I(node)))[key := value]
-//    ensures Model.AllKeys(I(node)) <= Model.AllKeys(old(I(node))) + {key}
-//    ensures oldvalue == MapLookupOption(old(Interpretation(node)), key)
-//    modifies node, node.repr
-//    decreases node.height, 2
-//  {
-//    if node.contents.Leaf? {
-//      oldvalue := InsertLeaf(node, key, value);
-//    } else {
-//      oldvalue := InsertIndex(node, key, value);
-//    }
-//  }
-//
+/*
+  method InsertIndexSelectAndPrepareChild(linear node: Node, key: Key) returns (linear n2: Node, childidx: uint64)
+    requires WF(node)
+    requires node.Index?
+    requires !Full(node)
+    ensures WF(n2)
+    ensures n2.Index?
+    ensures childidx as int == Model.Keys.LargestLte(n2.pivots[..n2.nchildren-1], key) + 1
+    ensures node.children[childidx] != null
+    ensures !Full(node.children[childidx])
+    ensures Model.Interpretation(I(node)) == Model.Interpretation(old(I(node)))
+    ensures Model.AllKeys(I(node)) == Model.AllKeys(old(I(node)))
+    modifies node, node.repr
+  {
+    Model.reveal_AllKeys();
+    assert WFShapeChildren(node.children[..node.nchildren], node.repr, node.height);
+
+    childidx := Model.Keys.ArrayLargestLtePlus1(node.pivots, 0, node.nchildren-1, key);
+    if Full(node.children[childidx]) {
+      ghost var oldpivots := node.pivots[..node.nchildren-1];
+      SplitChildOfIndex(node, childidx);
+      ghost var newpivots := node.pivots[..node.nchildren-1];
+      Model.SplitChildOfIndexPreservesWF(old(I(node)), I(node), childidx as int);
+      Model.SplitChildOfIndexPreservesInterpretation(old(I(node)), I(node), childidx as int);
+      Model.SplitChildOfIndexPreservesAllKeys(old(I(node)), I(node), childidx as int);
+
+      var t: int32 := Model.Keys.cmp(node.pivots[childidx], key);
+      if  t <= 0 {
+        childidx := childidx + 1;
+        forall i | childidx as int - 1 < i < |newpivots|
+          ensures Model.Keys.lt(key, newpivots[i])
+        {
+          assert newpivots[i] == oldpivots[i-1];
+        }
+      }
+      Model.Keys.LargestLteIsUnique(node.pivots[..node.nchildren-1], key, childidx as int - 1);
+    }
+  }
+*/
+  
+  /*
+  method InsertIndex(node: Node, key: Key, value: Value) returns (oldvalue: Option<Value>)
+    requires WF(node)
+    requires node.contents.Index?
+    requires !Full(node)
+    ensures WFShape(node)
+    ensures fresh(node.repr - old(node.repr))
+    ensures node.height == old(node.height)
+    ensures Model.WF(I(node))
+    ensures Model.Interpretation(I(node)) == Model.Interpretation(old(I(node)))[key := value]
+    ensures Model.AllKeys(I(node)) <= Model.AllKeys(old(I(node))) + {key}
+    ensures oldvalue == MapLookupOption(old(Interpretation(node)), key)
+    modifies node, node.repr
+    decreases node.height, 1
+  {
+    var childidx: uint64 := InsertIndexSelectAndPrepareChild(node, key);
+    oldvalue := InsertIndexChildNotFull(node, childidx, key, value);
+  }
+  
+  method InsertNode(linear node: Node, key: Key, value: Value)
+    returns (linear n2: Node, oldvalue: Option<Value>)
+    requires WF(node)
+    requires !Full(node)
+    ensures WF(n2)
+    // TODO(jonh) clean up all the old-iness
+    ensures Model.Interpretation(n2) == Model.Interpretation(node)[key := value]
+    ensures Model.AllKeys(I(node)) <= Model.AllKeys(old(I(node))) + {key}
+    ensures oldvalue == MapLookupOption(old(Interpretation(node)), key)
+    modifies node, node.repr
+    decreases node.height, 2
+  {
+    if node.contents.Leaf? {
+      oldvalue := InsertLeaf(node, key, value);
+    } else {
+      oldvalue := InsertIndex(node, key, value);
+    }
+  }
+  */
+
 //  method Grow(root: Node) returns (newroot: Node)
 //    requires WF(root)
 //    requires Full(root)
