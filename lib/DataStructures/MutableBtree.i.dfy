@@ -267,63 +267,35 @@ abstract module MutableBtree {
     Model.reveal_AllKeys();
   }
 
+  method SplitChildOfIndex(linear node: Node, childidx: uint64)
+    returns (linear splitNode: Node)
+    requires WF(node)
+    requires node.Index?
+    requires !Full(node)
+    requires 0 <= childidx as nat < |node.children|
+    requires Full(node.children[childidx as nat]);
+    ensures splitNode.Index?
+    ensures Model.SplitChildOfIndex(old(node), splitNode, childidx as int)
+    ensures WF(splitNode)
+    ensures !Full(splitNode.children[childidx as nat])
+    ensures !Full(splitNode.children[childidx as nat + 1])
+    ensures splitNode.pivots[childidx] in Model.AllKeys(old(node).children[childidx as nat])
+  {
+    linear var Index(pivots, children) := node;
 
-//  method SplitChildOfIndex(node: Node, childidx: uint64)
-//    requires WF(node)
-//    requires node.contents.Index?
-//    requires !Full(node)
-//    requires 0 <= childidx < node.contents.nchildren
-//    requires node.contents.children[childidx] != null
-//    requires Full(node.contents.children[childidx]);
-//    ensures WFShape(node)
-//    ensures node.contents.Index?
-//    ensures fresh(node.repr - old(node.repr))
-//    ensures node.height == old(node.height)
-//    ensures Model.SplitChildOfIndex(old(I(node)), I(node), childidx as int)
-//    ensures node.contents.children[childidx] != null
-//    ensures node.contents.children[childidx+1] != null
-//    ensures !Full(node.contents.children[childidx])
-//    ensures !Full(node.contents.children[childidx+1])
-//    ensures node.contents.pivots[childidx] in Model.AllKeys(old(I(node)).children[childidx])
-//    modifies node, node.contents.pivots, node.contents.children, node.contents.children[childidx]
-//  {
-//    assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
-//    
-//    forall i | 0 <= i < node.contents.nchildren
-//      ensures I(node).children[i] == I(node.contents.children[i])
-//    {
-//      IOfChild(node, i as int);
-//    }
-//    
-//    var right, pivot := SplitNode(node.contents.children[childidx]);
-//    Arrays.Insert(node.contents.pivots, node.contents.nchildren-1, pivot, childidx);
-//    Arrays.Insert(node.contents.children, node.contents.nchildren, right, childidx + 1);
-//    node.contents := node.contents.(nchildren := node.contents.nchildren + 1);
-//    node.repr := node.repr + right.repr;
-//
-//    SplitChildOfIndexPreservesWFShape(node, childidx as int);
-//    
-//    ghost var ioldnode := old(I(node));
-//    ghost var inode := I(node);
-//    ghost var iright := I(right);
-//    ghost var target := Seq.replace1with2(ioldnode.children, inode.children[childidx], iright, childidx as int);
-//    forall i | 0 <= i < |inode.children|
-//      ensures inode.children[i] == target[i]
-//    {
-//      IOfChild(node, i);
-//      if i < childidx as int {
-//        assert old(DisjointSubtrees(node.contents, i as int, childidx as int));
-//      } else if i == childidx as int {
-//      } else if i == (childidx + 1) as int {
-//      } else {
-//        assert old(DisjointSubtrees(node.contents, childidx as int, (i-1) as int));      
-//      }
-//    }
-//
-//    IOfChild(node, childidx as int);
-//    IOfChild(node, childidx as int + 1);
-//  }
-//
+    linear var origChild;
+    children, origChild := lseq_take(children, childidx);
+
+    linear var left, right;
+    var pivot;
+    left, right, pivot := SplitNode(origChild);
+    pivots := InsertSeq(pivots, pivot, childidx);
+    children := lseq_give(children, childidx, left);
+    children := InsertLSeq(children, right, childidx + 1);
+    splitNode := Model.Index(pivots, children);
+    Model.SplitChildOfIndexPreservesWF(node, splitNode, childidx as int);
+  }
+
 //  method InsertLeaf(node: Node, key: Key, value: Value) returns (oldvalue: Option<Value>)
 //    requires WF(node)
 //    requires node.contents.Leaf?

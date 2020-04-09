@@ -10,7 +10,7 @@ module LinearSequence_i {
     provides NativeTypes
     provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_length, lseq_peek
     provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give
-    provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse
+    provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, InsertSeq, InsertLSeq
     reveals lseq_full, linLast, lseq_has_all
     reveals operator'cardinality?lseq, operator'in?lseq, operator'subscript?lseq
 
@@ -231,5 +231,69 @@ module LinearSequence_i {
       loot := lseq_give(loot, i-from, elt);
       i := i + 1;
     }
+  }
+
+  method TrustedRuntimeSeqResize<A>(linear s: seq<A>, newlen: uint64)
+    returns (linear s2: seq<A>)
+    ensures |s2| == newlen as nat
+    ensures forall j :: 0 <= j < newlen as nat && j < |s| ==> s2[j] == s[j]
+
+  method TrustedRuntimeLSeqResize<A>(linear s: lseq<A>, newlen: uint64)
+    returns (linear s2: lseq<A>)
+    ensures |s2| == newlen as nat
+    ensures forall j :: 0 <= j < newlen as nat && j < |s| ==> lseq_has(s2)[j] == lseq_has(s)[j]
+    ensures forall j :: |s| <= j < newlen as nat ==> lseq_has(s2)[j] == false
+    ensures forall j :: 0 <= j < newlen as nat && j < |s| ==> s2[j] == s[j]
+
+  method InsertSeq<A>(linear s: seq<A>, a: A, pos: uint64) returns (linear s2: seq<A>)
+    requires |s| < Uint64UpperBound() - 1;
+    requires 0 <= pos as int <= |s|;
+    ensures s2 == s[..pos] + [a] + s[pos..];
+  {
+    var newlen: uint64 := seq_length(s) as uint64 + 1;
+    s2 := TrustedRuntimeSeqResize(s, newlen);
+
+    var i:uint64 := newlen - 1;
+    while i > pos
+      invariant i >= pos
+      invariant |s2| == newlen as nat;
+      invariant forall j :: 0 <= j <= i as nat - 1 ==> s2[j] == old(s)[j]
+      invariant forall j :: i as nat +1 <= j < |s2| ==> s2[j] == old(s)[j-1]
+    {
+      var prevElt := seq_get(s2, i-1);
+      s2 := seq_set(s2, i, prevElt);
+      i := i - 1;
+    }
+    s2 := seq_set(s2, pos, a);
+  }
+
+  method InsertLSeq<A>(linear s: lseq<A>, linear a: A, pos: uint64) returns (linear s2: lseq<A>)
+    requires lseq_has_all(s)  // robj points out that you only really need to has all the elements >=pos
+    requires |s| < Uint64UpperBound() - 1;
+    requires 0 <= pos as int <= |s|;
+    ensures lseq_has_all(s2)
+    ensures lseqs(s2) == lseqs(s)[..pos] + [a] + lseqs(s)[pos..];
+  {
+    var newlen: uint64 := |s| as uint64 + 1;
+
+    s2 := TrustedRuntimeLSeqResize(s, newlen);
+
+    var i:uint64 := newlen - 1;
+    while i > pos
+      invariant i >= pos
+      invariant |s2| == newlen as nat;
+      // i is where we're writing next; it's the only hole in s2:
+      invariant forall j :: 0 <= j < |s2| ==> lseq_has(s2)[j] == (j != i as nat)
+      // Everything before i has its original value
+      invariant forall j :: 0 <= j <= i as nat - 1 ==> s2[j] == old(s)[j]
+      // Everything after i has the value of its original -1 neighbor
+      invariant forall j :: i as nat +1 <= j < |s2| ==> s2[j] == old(s)[j-1]
+    {
+      linear var prevElt;
+      s2, prevElt := lseq_take(s2, i-1);
+      s2 := lseq_give(s2, i, prevElt);
+      i := i - 1;
+    }
+    s2 := lseq_give(s2, pos, a);
   }
 } // module
