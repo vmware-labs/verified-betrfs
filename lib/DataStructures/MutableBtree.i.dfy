@@ -280,6 +280,7 @@ abstract module MutableBtree {
     ensures !Full(splitNode.children[childidx as nat])
     ensures !Full(splitNode.children[childidx as nat + 1])
     ensures splitNode.pivots[childidx] in Model.AllKeys(node.children[childidx as nat])
+    ensures forall i :: 0 <= i < |splitNode.children| ==> splitNode.children[i] < node
   {
     linear var Index(pivots, children) := node;
 
@@ -382,26 +383,77 @@ abstract module MutableBtree {
     var childidx: uint64 := InsertIndexSelectAndPrepareChild(node, key);
     oldvalue := InsertIndexChildNotFull(node, childidx, key, value);
   }
+  */
   
+  method InsertIndex(linear node: Node, key: Key, value: Value)
+    returns (linear n2: Node, oldvalue: Option<Value>)
+    requires WF(node)
+    requires node.Index?
+    requires !Full(node)
+    ensures WF(n2)
+    ensures Model.Interpretation(n2) == Model.Interpretation(node)[key := value]
+    ensures Model.AllKeys(n2) <= Model.AllKeys(node) + {key}  // shouldn't this be ==?
+    ensures oldvalue == MapLookupOption(Interpretation(node), key)
+    decreases node, 1
+  {
+    n2 := node;
+    var childidx := Route(n2.pivots, key);
+    if Full(lseq_peek(n2.children, childidx)) {
+      n2 := SplitChildOfIndex(n2, childidx);
+
+      Model.SplitChildOfIndexPreservesWF(node, n2, childidx as nat);
+      Model.SplitChildOfIndexPreservesInterpretation(node, n2, childidx as nat);
+      Model.SplitChildOfIndexPreservesAllKeys(node, n2, childidx as nat);
+      assert n2.pivots[childidx] in Model.AllKeys(node) by { Model.reveal_AllKeys(); }
+
+      var t: int32 := Model.Keys.cmp(seq_get(n2.pivots, childidx), key);
+      if  t <= 0 {
+        childidx := childidx + 1;
+        forall i | childidx as int - 1 < i < |n2.pivots|
+          ensures Model.Keys.lt(key, n2.pivots[i])
+        {
+          assert n2.pivots[i] == node.pivots[i-1];
+        }
+      }
+      Model.Keys.LargestLteIsUnique(n2.pivots, key, childidx as int - 1);
+      assert Interpretation(n2) == Interpretation(node);
+    }
+    ghost var preparedNode := n2;
+    assert Interpretation(preparedNode) == Interpretation(node);
+
+    linear var Index(pivots, children) := n2;
+    linear var childNode;
+    // Note(Andrea): In Rust, childNode would be a mutable borrow from
+    // children, and InsertNode would borrow it.
+    children, childNode := lseq_take(children, childidx);
+    ghost var childNodeSnapshot := childNode;
+    childNode, oldvalue := InsertNode(childNode, key, value);
+    children := lseq_give(children, childidx, childNode);
+    n2 := Model.Index(pivots, children);
+    Model.RecursiveInsertIsCorrect(preparedNode, key, value, childidx as int, n2, n2.children[childidx as int]);
+    if oldvalue.Some? {
+      Model.InterpretationDelegation(preparedNode, key);
+    } else {
+      Model.reveal_Interpretation();
+    }
+  }
+
   method InsertNode(linear node: Node, key: Key, value: Value)
     returns (linear n2: Node, oldvalue: Option<Value>)
     requires WF(node)
     requires !Full(node)
     ensures WF(n2)
-    // TODO(jonh) clean up all the old-iness
     ensures Model.Interpretation(n2) == Model.Interpretation(node)[key := value]
-    ensures Model.AllKeys(I(node)) <= Model.AllKeys(old(I(node))) + {key}
-    ensures oldvalue == MapLookupOption(old(Interpretation(node)), key)
-    modifies node, node.repr
-    decreases node.height, 2
+    ensures Model.AllKeys(n2) <= Model.AllKeys(node) + {key}  // shouldn't this be ==?
+    ensures oldvalue == MapLookupOption(Interpretation(node), key)
+    decreases node, 2
   {
-    if node.contents.Leaf? {
-      oldvalue := InsertLeaf(node, key, value);
+    if node.Leaf? {
+      n2, oldvalue := InsertLeaf(node, key, value);
     } else {
-      oldvalue := InsertIndex(node, key, value);
+      n2, oldvalue := InsertIndex(node, key, value);
     }
   }
-  */
 
 //  method Grow(root: Node) returns (newroot: Node)
 //    requires WF(root)
