@@ -482,8 +482,7 @@ module MutableMapModel {
     if item.Empty? || item.key == key then
       slotIdx
     else (
-      var successor := Uint64SlotSuccessor(seq_length(self.storage), slotIdx);
-      ProbeIterate(self, key, successor)
+      ProbeIterate(self, key, Uint64SlotSuccessor(seq_length(self.storage), slotIdx))
     )
   }
 
@@ -492,8 +491,7 @@ module MutableMapModel {
   requires self.count as int < |self.storage|
   ensures 0 <= foundSlotIdx as int < |self.storage|
   {
-    var slotForKey := Uint64SlotForKey(self, key);
-    ProbeIterate(self, key, slotForKey)
+    ProbeIterate(self, key, Uint64SlotForKey(self, key))
   }
 
   datatype ProbeResult<V> = ProbeResult(
@@ -591,7 +589,9 @@ module MutableMapModel {
   }
 
   linear datatype FixedSizeInsertResult<V> = FixedSizeInsertResult(linear self': FixedSizeLinearHashMap, replaced: Option<V>)
-  function method {:opaque} FixedSizeInsert<V>(linear self: FixedSizeLinearHashMap, key: uint64, value: V): linear FixedSizeInsertResult<V>
+  function method {:opaque} FixedSizeInsert<V>(
+    linear self: FixedSizeLinearHashMap, key: uint64, value: V): linear FixedSizeInsertResult<V>
+
     requires FixedSizeInv(self)
     requires self.count as nat < |self.storage| - 1
   {
@@ -599,16 +599,16 @@ module MutableMapModel {
 
     linear var FixedSizeLinearHashMap(selfStorage, selfCount, selfContents) := self;
     ghost var contents := selfContents[key := Some(value)];
-    if seq_get(selfStorage, slotIdx as nat).Empty? then (
-      linear var updatedStorage := seq_set(selfStorage, slotIdx as nat, Entry(key, value));
+
+    var replaced := seq_get(selfStorage, slotIdx as nat);
+    linear var updatedStorage := seq_set(selfStorage, slotIdx as nat, Entry(key, value));
+
+    if replaced.Empty? then (
       FixedSizeInsertResult(FixedSizeLinearHashMap(updatedStorage, selfCount + 1, contents), None)
-    ) else if seq_get(selfStorage, slotIdx as nat).Tombstone? then (
-      linear var updatedStorage := seq_set(selfStorage, slotIdx as nat, Entry(key, value));
+    ) else if replaced.Tombstone? then (
       FixedSizeInsertResult(FixedSizeLinearHashMap(updatedStorage, selfCount, contents), None)
     ) else (
-      var replaced := Some(seq_get(selfStorage, slotIdx as nat).value);
-      linear var updatedStorage := seq_set(selfStorage, slotIdx as nat, Entry(key, value));
-      FixedSizeInsertResult(FixedSizeLinearHashMap(updatedStorage, selfCount, contents), replaced)
+      FixedSizeInsertResult(FixedSizeLinearHashMap(updatedStorage, selfCount, contents), Some(replaced.value))
     )
   }
 
