@@ -24,8 +24,13 @@ module LinearSequence_s {
 
   type lseq<A>
 
-  function lseqs_raw<A>(s:lseq<A>):seq<maybe<A>> // contents of an lseq, as ghost seq
-    ensures |lseqs_raw(s)| == lseq_length_raw(s)
+  function lseqs_raw<A>(l:lseq<A>):(s:seq<maybe<A>>) // contents of an lseq, as ghost seq
+    ensures rank_is_less_than(s, l)
+
+  lemma axiom_lseqs_rank<A>(l:lseq<A>, s:seq<A>)
+    requires |lseqs_raw(l)| == |s|
+    requires forall i :: 0 <= i < |s| ==> s[i] == read(lseqs_raw(l)[i])
+    ensures rank_is_less_than(s, l)
 
   // it's okay to synthesize all the lseqs you want if they're ghosty
   function imagine_lseq<A>(s:seq<A>):(l:lseq<A>)

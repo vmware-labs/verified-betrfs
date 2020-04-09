@@ -46,8 +46,11 @@ module LinearSequence_i {
   }
 
   function lseqs<A>(l:lseq<A>):(s:seq<A>)
+    ensures rank_is_less_than(s, l)
   {
-      Apply(read, lseqs_raw(l))
+    var s := Apply(read, lseqs_raw(l));
+    axiom_lseqs_rank(l, s);
+    s
   }
 
   function lseq_has<A>(l:lseq<A>):(s:seq<bool>)

@@ -22,12 +22,6 @@ abstract module BtreeModel {
     | Index(linear pivots: seq<Key>, linear children: lseq<Node>)
 
 
-  lemma LseqDecreases(node: Node)
-    ensures node.Index? ==> forall i | 0 <= i < |node.children| :: node.children[i] < node;
-  {
-    assume false;
-  }
-
   function {:opaque} AllKeys(node: Node) : set<Key>
     ensures node.Leaf? && 0 < |node.keys| ==> AllKeys(node) != {}
     ensures node.Index? && 0 < |node.pivots| ==> AllKeys(node) != {}
@@ -42,7 +36,6 @@ abstract module BtreeModel {
           result
       case Index(pivots, children) =>
         var pivotKeys := (set k | k in pivots);
-        LseqDecreases(node);
         var indexKeys := (set i, k | 0 <= i < |children| && k in AllKeys(children[i]) :: k);
         var result := pivotKeys + indexKeys;
         if 0 < |node.pivots| then
