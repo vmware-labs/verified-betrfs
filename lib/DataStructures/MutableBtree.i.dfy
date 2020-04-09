@@ -98,7 +98,9 @@ abstract module MutableBtree {
     var posplus1:uint64 := Route(node.pivots, needle);
     Model.LseqDecreases(node);
     result := Query(lseq_peek(node.children, posplus1), needle);
-    assert result == MapLookupOption(Interpretation(node), needle);
+    if result.Some? {
+      Model.InterpretationDelegation(node, needle);
+    }
   }
 
   method Query(shared node: Node, needle: Key) returns (result: Option<Value>)
