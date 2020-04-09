@@ -114,21 +114,17 @@ abstract module MutableBtree {
     }
   }
 
-//  method EmptyTree() returns (root: Node)
-//    ensures WF(root)
-//    ensures fresh(root.repr)
-//    ensures Interpretation(root) == map[]
-//    ensures root.contents.Leaf?
-//  {
-//    var rootkeys := newArrayFill(MaxKeysPerLeaf(), DefaultKey());
-//    var rootvalues := newArrayFill(MaxKeysPerLeaf(), DefaultValue());
-//    root := new Node;
-//    root.contents := Leaf(0, rootkeys, rootvalues);
-//    root.repr := {root, rootkeys, rootvalues};
-//    root.height := 0;
-//    Model.reveal_Interpretation();
-//  }
-//
+  method EmptyTree() returns (linear root: Node)
+    ensures WF(root)
+    ensures Interpretation(root) == map[]
+    ensures root.Leaf?
+  {
+    linear var rootkeys := seq_alloc(0);
+    linear var rootvalues := seq_alloc(0);
+    root := Model.Leaf(rootkeys, rootvalues);
+    Model.reveal_Interpretation();
+  }
+
 //  method LeafFromSeqs(keys: seq<Key>, values: seq<Value>)
 //    returns (node: Node)
 //    requires |keys| == |values| <= MaxKeysPerLeaf() as int
@@ -169,16 +165,16 @@ abstract module MutableBtree {
 //    node.repr := {node, node.contents.pivots, node.contents.children} + SeqRepr(children);
 //    node.height := height;
 //  }
-//  
-//  predicate method Full(node: Node)
-//    reads node
-//  {
-//    match node.contents {
-//      case Leaf(nkeys, _, _) => nkeys == MaxKeysPerLeaf()
-//      case Index(nchildren, _, _) => nchildren == MaxChildren()
-//    }
-//  }
-//
+
+  predicate method Full(shared node: Node)
+    requires WF(node)
+  {
+    shared match node {
+      case Leaf(keys, _) => seq_length(keys) as uint64 == MaxKeysPerLeaf()
+      case Index(_, children) => |children| as uint64 == MaxChildren()
+    }
+  }
+
 //  method SplitLeaf(node: Node, nleft: uint64, ghost pivot: Key) returns (right: Node)
 //    requires WF(node)
 //    requires node.contents.Leaf?
