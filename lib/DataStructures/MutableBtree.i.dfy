@@ -199,6 +199,7 @@ abstract module MutableBtree {
     var nright:uint64 := seq_length(node.keys) as uint64 - nleft;
     linear var Leaf(keys, values) := node;
 
+    // TODO(robj): perf-pportunity: recycle node as left, rather than copy-and-free.
     linear var leftKeys := AllocAndCopy(keys, 0, nleft);
     linear var rightKeys := AllocAndCopy(keys, nleft, nleft + nright);
     linear var leftValues := AllocAndCopy(values, 0, nleft);
@@ -209,255 +210,43 @@ abstract module MutableBtree {
     var _ := seq_free(values);
   }
 
-//  predicate ObjectIsInSubtree(node: Node, o: object, i: int)
-//    requires WFShape(node)
-//    requires node.contents.Index?
-//    requires 0 <= i < node.contents.nchildren as int
-//    reads node.repr
-//  {
-//    assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
-//    o in node.contents.children[i].repr
-//  }
-//
-//  function SubRepr(node: Node, from: int, to: int) : (result: set<object>)
-//    requires WFShape(node)
-//    requires node.contents.Index?
-//    requires 0 <= from <= to <= node.contents.nchildren as int
-//    reads node.repr
-//  {
-//    assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
-//    assert forall i :: from <= i < to ==> node.contents.children[i] != null;
-//    assert forall i :: from <= i < to ==> node.contents.children[i] in node.repr;
-//    SeqRepr(node.contents.children[from..to])
-//  }
-//
-//  predicate DisjointSubtrees(contents: NodeContents, i: int, j: int)
-//    requires contents.Index?
-//    requires 0 <= i < contents.nchildren as int
-//    requires 0 <= j < contents.nchildren as int
-//    requires contents.nchildren as int <= contents.children.Length
-//    requires forall l :: 0 <= l < contents.nchildren ==> contents.children[l] != null
-//    requires contents.children[j] != null
-//    reads contents.children, contents.children[i], contents.children[j]
-//  {
-//    DisjointReprs(contents.children[..contents.nchildren], i, j)
-//  }
-//  
-//  lemma SubReprsDisjoint(node: Node, from1: int, to1: int, from2: int, to2: int)
-//    requires WFShape(node)
-//    requires node.contents.Index?
-//    requires 0 <= from1 <= to1 <= from2 <= to2 <= node.contents.nchildren as int
-//    ensures SubRepr(node, from1, to1) !! SubRepr(node, from2, to2)
-//  {
-//    assert node.contents.children[..node.contents.nchildren][from1..to1]
-//      == node.contents.children[from1..to1];
-//    assert node.contents.children[..node.contents.nchildren][from2..to2]
-//      == node.contents.children[from2..to2];
-//    assert WFShapeSiblings(node.contents.children[..node.contents.nchildren]);
-//    // assert forall i, j :: 0 <= i < j < node.contents.nchildren ==>
-//    //     DisjointReprs(node.contents.children[..node.contents.nchildren], i as int, j as int);
-//    DisjointSubSeqReprsAreDisjoint(node.contents.children[..node.contents.nchildren], from1, to1, from2, to2);
-//  }
-//
-//  lemma SubReprUpperBound(node: Node, from: int, to: int)
-//    requires WFShape(node)
-//    requires node.contents.Index?
-//    requires 1 < node.contents.nchildren
-//    requires 0 <= from <= to <= node.contents.nchildren as int
-//    ensures SubRepr(node, from, to) <= node.repr - {node, node.contents.pivots, node.contents.children}
-//    ensures to - from < node.contents.nchildren as int ==> SubRepr(node, from, to) < node.repr - {node, node.contents.pivots, node.contents.children}
-//  {
-//    reveal_SeqRepr();
-//    
-//    var subrepr := SubRepr(node, from, to);
-//    var nchildren := node.contents.nchildren;
-//    var pivots := node.contents.pivots;
-//    var children := node.contents.children;
-//
-//    forall o | o in subrepr
-//      ensures o in node.repr
-//    {
-//      var i :| from <= i < to && o in node.contents.children[i].repr;
-//    }
-//    assert subrepr <= node.repr;
-//    assert pivots !in subrepr;
-//    assert children !in subrepr;
-//    assert subrepr <= node.repr - {node, pivots, children};
-//    
-//    if to - from < nchildren as int {
-//      assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
-//      assert WFShape(children[0]);
-//      assert WFShape(children[nchildren-1]);
-//      assert children[0].repr < node.repr;
-//      assert children[0].repr != {};
-//      assert children[nchildren-1].repr < node.repr;
-//      assert children[nchildren-1].repr != {};
-//      if 0 < from {
-//        forall o | o in subrepr
-//          ensures o !in children[0].repr
-//        {
-//          if o == pivots {
-//          } else if o == children {
-//          } else {
-//            var i :| from <= i < to && o in node.repr && o in node.contents.children[i].repr; 
-//            assert DisjointSubtrees(node.contents, 0, i);
-//          }
-//        }
-//        assert subrepr < node.repr - {node, pivots, children};
-//      } else {
-//        assert to < nchildren as int;
-//        forall o | o in subrepr
-//          ensures o !in children[nchildren - 1].repr
-//        {
-//          if o == pivots {
-//          } else if o == children {
-//          } else {
-//            var i :| from <= i < to && o in node.repr && o in node.contents.children[i].repr; 
-//            assert DisjointSubtrees(node.contents, i, nchildren as int - 1);
-//          }
-//        }
-//        var wit :| wit in children[nchildren-1].repr;
-//        assert wit !in subrepr;
-//        assert subrepr < node.repr - {node, pivots, children};
-//      }
-//    }
-//  }
-//
-//  lemma SubReprLowerBound(node: Node, from: int, to: int)
-//    requires WFShape(node)
-//    requires node.contents.Index?
-//    requires 1 <= node.contents.nchildren
-//    requires 0 <= from <= to <= node.contents.nchildren as int
-//    ensures forall i :: from <= i < to ==> node.contents.children[i] != null
-//    ensures forall i :: from <= i < to ==> node.contents.children[i].repr <= SubRepr(node, from, to)
-//  {
-//    reveal_SeqRepr();
-//    
-//    var subrepr := SubRepr(node, from, to);
-//    var nchildren := node.contents.nchildren;
-//    var pivots := node.contents.pivots;
-//    var children := node.contents.children;
-//    
-//    forall o | o in subrepr
-//      ensures o in node.repr
-//    {
-//      var i :| from <= i < to && o in node.contents.children[i].repr;
-//    }
-//    assert subrepr <= node.repr;
-//    assert pivots !in subrepr;
-//    assert children !in subrepr;
-//    assert subrepr <= node.repr - {node, pivots, children};
-//    
-//    forall i | from <= i < to
-//      ensures children[i].repr <= subrepr
-//    {
-//      forall o | o in children[i].repr
-//        ensures o in subrepr
-//      {
-//        assert ObjectIsInSubtree(node, o, i);
-//      }
-//    }
-//  }
-//
-//  
-//  method IndexPrefix(node: Node, newnchildren: uint64)
-//    requires WF(node)
-//    requires node.contents.Index?
-//    requires 1 <= newnchildren
-//    requires 0 <= newnchildren <= node.contents.nchildren
-//    ensures WFShape(node)
-//    ensures node.repr == old({node, node.contents.pivots, node.contents.children} + SubRepr(node, 0, newnchildren as int))
-//    ensures node.height == old(node.height)
-//    ensures I(node) == Model.SubIndex(old(I(node)), 0, newnchildren as int)
-//    modifies node
-//  {
-//    assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
-//    ghost var oldinode := I(node);
-//    SubReprLowerBound(node, 0, newnchildren as int);
-//
-//    node.repr := {node, node.contents.pivots, node.contents.children} + SubRepr(node, 0, newnchildren as int);
-//    node.contents := node.contents.(nchildren := newnchildren);
-//
-//    ghost var newchildren := node.contents.children[..newnchildren];
-//    assert forall i :: 0 <= i < newnchildren ==> WFShape(newchildren[i]);
-//    assert newchildren == old(node.contents.children[..node.contents.nchildren])[..newnchildren];
-//    forall i, j | 0 <= i < j < |newchildren|
-//      ensures DisjointReprs(newchildren, i, j)
-//    {
-//      assert old(DisjointReprs(node.contents.children[..node.contents.nchildren], i, j));
-//    }
-//    assert WFShape(node);
-//    ghost var newinode := I(node);
-//    reveal_I();
-//    assert newinode == Model.SubIndex(oldinode, 0, newnchildren as int);
-//  }
-//
-//  method SubIndex(node: Node, from: uint64, to: uint64) returns (subnode: Node)
-//    requires WF(node)
-//    requires node.contents.Index?
-//    requires 1 < node.contents.nchildren
-//    requires 0 <= from < to <= node.contents.nchildren
-//    ensures WFShape(subnode)
-//    ensures subnode.contents.Index?
-//    ensures subnode.repr == SubRepr(node, from as int, to as int) + {subnode, subnode.contents.pivots, subnode.contents.children}
-//    ensures subnode.height == node.height
-//    ensures I(subnode) == Model.SubIndex(I(node), from as int, to as int)
-//    ensures fresh(subnode)
-//    ensures fresh(subnode.contents.pivots)
-//    ensures fresh(subnode.contents.children)
-//  {
-//    assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
-//
-//    subnode := IndexFromChildren(node.contents.pivots[from..to-1], node.contents.children[from..to], node.height);
-//
-//    ghost var newchildren := subnode.contents.children[..subnode.contents.nchildren];
-//    assert forall i :: 0 <= i < |newchildren| ==> WFShape(newchildren[i]);
-//    forall i, j | 0 <= i < j < |newchildren|
-//      ensures DisjointReprs(newchildren, i, j)
-//    {
-//      assert DisjointSubtrees(node.contents, from as int + i, from as int + j);
-//    }
-//    assert WFShapeSiblings(newchildren);
-//    assert WFShapeChildren(newchildren, subnode.repr, subnode.height);
-//
-//    reveal_I();
-//    assert node.contents.pivots[from..to-1] == I(node).pivots[from..to-1];
-//    assume I(subnode) == Model.SubIndex(I(node), from as int, to as int);
-//  }
-//
-//  method SplitIndex(node: Node, nleft: uint64) returns (right: Node, pivot: Key)
-//    requires WF(node)
-//    requires node.contents.Index?
-//    requires 2 <= node.contents.nchildren
-//    requires 0 < nleft < node.contents.nchildren
-//    ensures WFShape(node)
-//    ensures WFShape(right)
-//    ensures node.repr <= old(node.repr)
-//    ensures node.repr !! right.repr
-//    ensures fresh(right.repr - old(node.repr))
-//    ensures node.height == old(node.height) == right.height
-//    ensures Model.SplitIndex(old(I(node)), I(node), I(right), pivot)
-//    ensures node.contents.nchildren == nleft
-//    ensures pivot == old(node.contents.pivots[nleft-1])
-//    modifies node
-//  {
-//    SubReprsDisjoint(node, 0, nleft as int, nleft as int, node.contents.nchildren as int);
-//    SubReprUpperBound(node, 0, nleft as int);
-//    SubReprUpperBound(node, nleft as int, node.contents.nchildren as int);
-//    assert Model.AllKeysBelowBound(I(node), nleft as int - 1);
-//    assert Model.AllKeysAboveBound(I(node), nleft as int);
-//    right := SubIndex(node, nleft, node.contents.nchildren);
-//    pivot := node.contents.pivots[nleft-1];
-//    IOfChild(node, 0);
-//    IndexPrefix(node, nleft);
-//    ghost var inode := old(I(node));
-//    ghost var iright := I(right);
-//    assert Model.AllKeysBelowBound(inode, 0);
-//    assert iright.children[0] == inode.children[nleft];
-//    Model.Keys.IsStrictlySortedImpliesLte(old(I(node)).pivots, 0, (nleft - 1) as int);
-//    reveal_I();
-//  }
-//
+  method SplitIndex(linear node: Node, nleft: uint64)
+    returns (linear left: Node, linear right: Node, pivot: Key)
+    requires WF(node)
+    requires node.Index?
+    requires 2 <= |node.children|
+    requires 0 < nleft as nat < |node.children|
+    ensures WF(left)
+    ensures WF(right)
+    ensures Model.SplitIndex(old(node), left, right, pivot)
+    ensures |left.children| == nleft as nat
+    ensures pivot == old(node.pivots[nleft-1])
+  {
+    var nright:uint64 := |node.children| as uint64 - nleft;
+
+    Model.Keys.IsStrictlySortedImpliesLte(node.pivots, 0, (nleft - 1) as int);
+    Model.Keys.IsStrictlySortedImpliesLte(node.pivots, nleft as int, (nleft + nright - 1) as int);
+//    assert Model.AllKeysBelowBound(node, nleft as int - 1);
+//    assert Model.AllKeysAboveBound(node, nleft as int);
+//    assert Model.AllKeysBelowBound(node, 0);
+
+    linear var Index(pivots, children) := node;
+
+    pivot := seq_get(pivots, nleft-1);
+
+    // TODO(robj): perf-pportunity: recycle node as left, rather than copy-and-free.
+    linear var leftPivots := AllocAndCopy(pivots, 0, nleft-1);
+    linear var rightPivots := AllocAndCopy(pivots, nleft, nleft + nright - 1);
+    linear var leftChildren := AllocAndCopyLseq(children, 0, nleft);  // hmm
+    linear var rightChildren := AllocAndCopyLseq(children, nleft, nleft + nright);  // hmm
+    left := Model.Index(leftPivots, leftChildren);
+    right := Model.Index(rightPivots, rightChildren);
+    var _ := seq_free(pivots);
+    var _ := seq_free(children);  // hmm.
+
+//    assert right.children[0] == node.children[nleft];
+  }
+
 //  method SplitNode(node: Node) returns (right: Node, pivot: Key)
 //    requires WF(node)
 //    requires Full(node)

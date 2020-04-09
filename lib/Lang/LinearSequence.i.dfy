@@ -10,7 +10,7 @@ module LinearSequence_i {
     provides NativeTypes
     provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_length, lseq_peek
     provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give
-    provides AllocAndCopy
+    provides AllocAndCopy, AllocAndMoveLseq
     reveals lseq_full, linLast, lseq_has_all
     reveals operator'cardinality?lseq, operator'in?lseq, operator'subscript?lseq
 
@@ -114,9 +114,9 @@ module LinearSequence_i {
       peek(lseq_share_raw(s, i))
   }
 
-  method lseq_alloc<A>(length:nat) returns(linear s:lseq<A>)
-      ensures |s| == length
-      ensures forall i:nat | i < length :: i !in s
+  method lseq_alloc<A>(length:uint64) returns(linear s:lseq<A>)
+      ensures |s| == length as nat
+      ensures forall i:nat | i < length as nat :: i !in s
   {
       s := lseq_alloc_raw(length);
   }
@@ -129,11 +129,11 @@ module LinearSequence_i {
   }
 
   // can be implemented as in-place swap
-  method lseq_swap<A>(linear s1:lseq<A>, i:nat, linear a1:A) returns(linear s2:lseq<A>, linear a2:A)
-      requires i < |s1| && i in s1
-      ensures a2 == s1[i]
+  method lseq_swap<A>(linear s1:lseq<A>, i:uint64, linear a1:A) returns(linear s2:lseq<A>, linear a2:A)
+      requires i as nat < |s1| && i as nat in s1
+      ensures a2 == s1[i as nat]
       ensures lseq_has(s2) == lseq_has(s1)
-      ensures lseqs(s2) == lseqs(s1)[i := a1]
+      ensures lseqs(s2) == lseqs(s1)[i as nat := a1]
   {
       linear var x1:maybe<A> := give(a1);
       linear var x2:maybe<A>;
@@ -141,11 +141,11 @@ module LinearSequence_i {
       a2 := unwrap(x2);
   }
 
-  method lseq_take<A>(linear s1:lseq<A>, i:nat) returns(linear s2:lseq<A>, linear a:A)
-      requires i < |s1| && i in s1
-      ensures a == s1[i]
-      ensures lseq_has(s2) == lseq_has(s1)[i := false]
-      ensures forall j:nat | j < |s1| && j != i :: lseqs(s2)[j] == lseqs(s1)[j]
+  method lseq_take<A>(linear s1:lseq<A>, i:uint64) returns(linear s2:lseq<A>, linear a:A)
+      requires i as nat < |s1| && i as nat in s1
+      ensures a == s1[i as nat]
+      ensures lseq_has(s2) == lseq_has(s1)[i as nat := false]
+      ensures forall j:nat | j < |s1| && j != i as nat :: lseqs(s2)[j] == lseqs(s1)[j]
   {
       linear var x1:maybe<A> := empty();
       linear var x2:maybe<A>;
@@ -153,11 +153,11 @@ module LinearSequence_i {
       a := unwrap(x2);
   }
 
-  method lseq_give<A>(linear s1:lseq<A>, i:nat, linear a:A) returns(linear s2:lseq<A>)
-      requires i < |s1|
-      requires i !in s1
-      ensures lseq_has(s2) == lseq_has(s1)[i := true]
-      ensures lseqs(s2) == lseqs(s1)[i := a]
+  method lseq_give<A>(linear s1:lseq<A>, i:uint64, linear a:A) returns(linear s2:lseq<A>)
+      requires i as nat < |s1|
+      requires i as nat !in s1
+      ensures lseq_has(s2) == lseq_has(s1)[i as nat := true]
+      ensures lseqs(s2) == lseqs(s1)[i as nat := a]
   {
       linear var x1:maybe<A> := give(a);
       linear var x2:maybe<A>;
@@ -185,6 +185,34 @@ module LinearSequence_i {
       invariant forall j :: 0<=j<i ==> dest[j] == source[j + from];
     {
       dest := seq_set(dest, i, seq_get(source, i+from));
+      i := i + 1;
+    }
+  }
+
+  method AllocAndMoveLseq<A>(linear source: lseq<A>, from: uint64, to: uint64)
+    returns (linear looted: lseq<A>, linear loot: lseq<A>)
+    requires 0 <= from as nat <= to as nat <= |source|;
+    ensures lseqs(loot) == lseqs(source)[from..to]
+    ensures |looted| == |source|
+    ensures forall j :: 0<=j<|source|
+      ==> lseq_has(looted)[j] == if from as nat <= j < to as nat then false else lseq_has(source)[j]
+  {
+    looted := source;
+    ghost var count := (to - from) as nat;
+    loot := lseq_alloc(to - from);
+    var i:uint64 := from;
+    while i < to
+      invariant i <= to
+      invariant |loot| == count
+      invariant lseqs(loot)[..i-from] == lseqs(old(source))[from..i]
+      invariant |looted| == |old(source)|
+      invariant forall j :: 0<=j<|looted|
+      ==> lseq_has(looted)[j] == if from as nat <= j < i as nat then false else lseq_has(old(source))[j]
+    {
+      linear var elt:A;
+      // TODO(chris): halp, can't figure out how to write this one.
+//      source, elt := lseq_take(source, i+from);
+//      dest := lseq_give(dest, i, elt);
       i := i + 1;
     }
   }

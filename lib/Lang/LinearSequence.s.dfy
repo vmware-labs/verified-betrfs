@@ -38,18 +38,18 @@ module LinearSequence_s {
   function method lseq_length_raw<A>(shared s:lseq<A>):(n:nat)
       ensures n == |lseqs_raw(s)|
 
-  function method lseq_alloc_raw<A>(length:nat):(linear s:lseq<A>)
-      ensures |lseqs_raw(s)| == length
-      ensures forall i:nat | i < length :: !has(lseqs_raw(s)[i])
+  function method lseq_alloc_raw<A>(length:uint64):(linear s:lseq<A>)
+      ensures |lseqs_raw(s)| == length as nat
+      ensures forall i:nat | i < length as nat :: !has(lseqs_raw(s)[i])
 
   function method lseq_free_raw<A>(linear s:lseq<A>):()
       requires forall i:nat | i < |lseqs_raw(s)| :: !has(lseqs_raw(s)[i])
 
   // can be implemented as in-place swap
-  method lseq_swap_raw<A>(linear s1:lseq<A>, i:nat, linear a1:maybe<A>) returns(linear s2:lseq<A>, linear a2:maybe<A>)
-      requires i < |lseqs_raw(s1)|
-      ensures a2 == lseqs_raw(s1)[i]
-      ensures lseqs_raw(s2) == lseqs_raw(s1)[i := a1]
+  method lseq_swap_raw<A>(linear s1:lseq<A>, i:uint64, linear a1:maybe<A>) returns(linear s2:lseq<A>, linear a2:maybe<A>)
+      requires i as nat < |lseqs_raw(s1)|
+      ensures a2 == lseqs_raw(s1)[i as nat]
+      ensures lseqs_raw(s2) == lseqs_raw(s1)[i as nat := a1]
 
   // can be implemented as in-place swap
   function method lseq_swap_raw_fun<A>(linear s1:lseq<A>, i:nat, linear a1:maybe<A>):(linear p:(linear lseq<A>, linear maybe<A>))
