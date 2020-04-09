@@ -10,7 +10,7 @@ module LinearSequence_i {
     provides NativeTypes
     provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_length, lseq_peek
     provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give
-    provides AllocAndCopy, AllocAndMoveLseq
+    provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse
     reveals lseq_full, linLast, lseq_has_all
     reveals operator'cardinality?lseq, operator'in?lseq, operator'subscript?lseq
 
@@ -63,6 +63,12 @@ module LinearSequence_i {
     ensures lseqs(l) == s
   {
     imagine_lseq_raw(s)
+  }
+
+  lemma ImagineInverse<A>(l:lseq<A>)
+    ensures imagine_lseq(lseqs(l)) == l
+  {
+    // TODO(jonh) uh, -- TODO(chris)?
   }
 
   function linLast<A>(l:lseq<A>) : A
@@ -194,9 +200,12 @@ module LinearSequence_i {
 
   method AllocAndMoveLseq<A>(linear source: lseq<A>, from: uint64, to: uint64)
     returns (linear looted: lseq<A>, linear loot: lseq<A>)
-    requires 0 <= from as nat <= to as nat <= |source|;
+    requires 0 <= from as nat <= to as nat <= |source|
+    requires forall j :: from as nat <= j < to as nat ==> j in source
+    ensures lseq_has_all(loot)
     ensures lseqs(loot) == lseqs(source)[from..to]
     ensures |looted| == |source|
+    ensures forall j :: 0<=j<|source| && !(from as nat <= j < to as nat) ==> looted[j] == old(source)[j]
     ensures forall j :: 0<=j<|source|
       ==> lseq_has(looted)[j] == if from as nat <= j < to as nat then false else lseq_has(source)[j]
   {
@@ -204,18 +213,22 @@ module LinearSequence_i {
     ghost var count := (to - from) as nat;
     loot := lseq_alloc(to - from);
     var i:uint64 := from;
+    assert to as nat <= |old(source)|;
     while i < to
-      invariant i <= to
+      invariant from <= i <= to
       invariant |loot| == count
+      invariant to as nat <= |looted|
+      invariant forall j :: i <= j < to ==> lseq_has(looted)[j]
+      invariant forall j :: 0 <= j < to-from ==> lseq_has(loot)[j] == (j < i-from)
       invariant lseqs(loot)[..i-from] == lseqs(old(source))[from..i]
       invariant |looted| == |old(source)|
+      invariant forall j :: 0<=j<|source| && !(from as nat <= j < i as nat) ==> looted[j] == old(source)[j]
       invariant forall j :: 0<=j<|looted|
       ==> lseq_has(looted)[j] == if from as nat <= j < i as nat then false else lseq_has(old(source))[j]
     {
       linear var elt:A;
-      // TODO(chris): halp, can't figure out how to write this one.
-//      source, elt := lseq_take(source, i+from);
-//      dest := lseq_give(dest, i, elt);
+      looted, elt := lseq_take(looted, i);
+      loot := lseq_give(loot, i-from, elt);
       i := i + 1;
     }
   }

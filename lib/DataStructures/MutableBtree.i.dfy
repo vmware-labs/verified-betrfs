@@ -41,7 +41,6 @@ abstract module MutableBtree {
   predicate WF(node: Node)
     decreases node
   {
-    && (Model.LseqDecreases(node); true)
     && Model.WF(node) // TODO(jonh) things are a little ackermanny with a recursion in both Model.WF and this WF
     && (node.Index? ==> (
       && 0 < |node.children| <= MaxChildren() as int
@@ -96,7 +95,6 @@ abstract module MutableBtree {
     Model.reveal_Interpretation();
     Model.reveal_AllKeys();
     var posplus1:uint64 := Route(node.pivots, needle);
-    Model.LseqDecreases(node);
     result := Query(lseq_peek(node.children, posplus1), needle);
     if result.Some? {
       Model.InterpretationDelegation(node, needle);
@@ -223,28 +221,28 @@ abstract module MutableBtree {
     ensures pivot == old(node.pivots[nleft-1])
   {
     var nright:uint64 := |node.children| as uint64 - nleft;
-
-    Model.Keys.IsStrictlySortedImpliesLte(node.pivots, 0, (nleft - 1) as int);
-    Model.Keys.IsStrictlySortedImpliesLte(node.pivots, nleft as int, (nleft + nright - 1) as int);
-//    assert Model.AllKeysBelowBound(node, nleft as int - 1);
-//    assert Model.AllKeysAboveBound(node, nleft as int);
-//    assert Model.AllKeysBelowBound(node, 0);
-
     linear var Index(pivots, children) := node;
-
     pivot := seq_get(pivots, nleft-1);
 
     // TODO(robj): perf-pportunity: recycle node as left, rather than copy-and-free.
     linear var leftPivots := AllocAndCopy(pivots, 0, nleft-1);
     linear var rightPivots := AllocAndCopy(pivots, nleft, nleft + nright - 1);
-    linear var leftChildren := AllocAndCopyLseq(children, 0, nleft);  // hmm
-    linear var rightChildren := AllocAndCopyLseq(children, nleft, nleft + nright);  // hmm
+
+    linear var leftChildren, rightChildren;
+    children, leftChildren := AllocAndMoveLseq(children, 0, nleft);
+    children, rightChildren := AllocAndMoveLseq(children, nleft, nleft + nright);
     left := Model.Index(leftPivots, leftChildren);
     right := Model.Index(rightPivots, rightChildren);
-    var _ := seq_free(pivots);
-    var _ := seq_free(children);  // hmm.
 
-//    assert right.children[0] == node.children[nleft];
+    ImagineInverse(left.children);
+    assert lseqs(right.children) == lseqs(old(node.children))[|left.children|..|node.children|];  // observe trigger
+    ImagineInverse(right.children);
+
+    assert Model.AllKeysBelowBound(node, nleft as int - 1); // trigger
+    assert Model.AllKeysAboveBound(node, nleft as int); // trigger
+    Model.SplitIndexPreservesWF(node, left, right, pivot);
+    var _ := seq_free(pivots);
+    lseq_free(children);
   }
 
 //  method SplitNode(node: Node) returns (right: Node, pivot: Key)

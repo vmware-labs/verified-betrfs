@@ -65,7 +65,6 @@ abstract module BtreeModel {
   predicate WF(node: Node)
     decreases node, 1
   {
-    LseqDecreases(node);
     if node.Leaf? then
       && |node.keys| == |node.values|
       && Keys.IsStrictlySorted(node.keys)
@@ -91,7 +90,6 @@ abstract module BtreeModel {
     requires WF(node)
     decreases node
   {
-    LseqDecreases(node);
     if node.Leaf? then
       Keys.PosEqLargestLteForAllElts(node.keys);
       map k | (k in node.keys) :: node.values[Keys.LargestLte(node.keys, k)]
