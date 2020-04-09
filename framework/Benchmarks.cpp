@@ -634,11 +634,11 @@ void benchmark_clear() {
 }
 
 namespace NativeBenchmarking_Compile {
-  void __default::start(DafnySequence<char> dafnyName) {
+  void start(DafnySequence<char> dafnyName) {
     benchmark_start(nameToString(dafnyName));
   }
 
-  void __default::end(DafnySequence<char> dafnyName) {
+  void end(DafnySequence<char> dafnyName) {
     benchmark_end(nameToString(dafnyName));
   }
 }

@@ -50,6 +50,86 @@ void fail(std::string err)
 
 constexpr int MAX_WRITE_REQS_OUT = 8;
 
+
+namespace NativeArithmetic_Compile {
+  uint64_t u64add(uint64_t a, uint64_t b) {
+    return a + b;
+  }
+}
+
+namespace NativeArrays_Compile {
+  int32_t ByteSeqCmpByteSeq(DafnySequence<uint8> b1, DafnySequence<uint8> b2)
+  {
+    int result = memcmp(b1.ptr(), b2.ptr(), b1.size() < b2.size() ? b1.size() : b2.size());
+    if (result == 0) {
+      if (b1.size() == b2.size()) {
+        return 0;
+      } else if (b1.size() > b2.size()) {
+        return 1;
+      } else {
+        return -1;
+      }
+    } else {
+      return result;
+    }
+  }
+}
+
+namespace NativePackedInts_Compile {
+  static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__, "current implementation of NativePackedInts assumes little endian");
+  static_assert(sizeof(uint32) == 4, "uint32 is aliased wrong");
+  static_assert(sizeof(uint64) == 8, "uint64 is aliased wrong");
+
+  uint32 Unpack__LittleEndian__Uint32(DafnySequence<uint8> const& packed, uint64 idx)
+  {
+    uint32 res;
+    memcpy(&res, packed.ptr() + idx, sizeof(uint32));
+    return res;
+  }
+
+  uint64 Unpack__LittleEndian__Uint64(DafnySequence<uint8> const& packed, uint64 idx)
+  {
+    uint64 res;
+    memcpy(&res, packed.ptr() + idx, sizeof(uint64));
+    return res;
+  }
+
+  void Pack__LittleEndian__Uint32__into__Array(uint32 i, DafnyArray<uint8> const& ar, uint64 idx)
+  {
+    memcpy(&ar.at(idx), &i, sizeof(uint32));
+  }
+
+  void Pack__LittleEndian__Uint64__into__Array(uint64 i, DafnyArray<uint8> const& ar, uint64 idx)
+  {
+    memcpy(&ar.at(idx), &i, sizeof(uint64));
+  }
+
+  DafnySequence<uint32> Unpack__LittleEndian__Uint32__Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len)
+  {
+    // TODO is there a safe way to do this without a copy?
+    DafnySequence<uint32> res(len);
+    memcpy(res.ptr(), packed.ptr() + idx, sizeof(uint32) * len);
+    return res;
+  }
+
+  DafnySequence<uint64> Unpack__LittleEndian__Uint64__Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len)
+  {
+    DafnySequence<uint64> res(len);
+    memcpy(res.ptr(), packed.ptr() + idx, sizeof(uint64) * len);
+    return res;
+  }
+
+  void Pack__LittleEndian__Uint32__Seq__into__Array(DafnySequence<uint32> const& unpacked, DafnyArray<uint8> const& ar, uint64 idx)
+  {
+    memcpy(&ar.at(idx), unpacked.ptr(), sizeof(uint32) * unpacked.size());
+  }
+
+  void Pack__LittleEndian__Uint64__Seq__into__Array(DafnySequence<uint64> const& unpacked, DafnyArray<uint8> const& ar, uint64 idx)
+  {
+    memcpy(&ar.at(idx), unpacked.ptr(), sizeof(uint64) * unpacked.size());
+  }
+}
+
 namespace MainDiskIOHandler_Compile {
 #if USE_DIRECT
   uint8_t *aligned_copy(uint8_t* buf, size_t len, size_t *aligned_len) {
@@ -780,7 +860,7 @@ void Mkfs(string filename) {
 }
 
 namespace MallocAccounting_Compile {
-void __default::set_amass_mode(bool b) {
+void set_amass_mode(bool b) {
   horrible_amass_label = b ? "in_amass" : NULL;
 }
 }
@@ -788,7 +868,7 @@ void __default::set_amass_mode(bool b) {
 namespace AllocationReport_Compile {
 static std::unordered_map<uint64_t, uint64_t> sptr_to_len;
 
-void __default::start() {
+void start() {
   printf("allocationreport start\n");
   sptr_to_len.clear();
 }
@@ -805,7 +885,7 @@ static void visit_uptr(std::set<uint64_t>* observed_ptrs, const DafnySequence<ui
   }
 }
 
-void __default::sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node) {
+void sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node) {
   const char* type = "unpossible";
   int count = -1;
 
@@ -855,11 +935,11 @@ void __default::sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> n
   printf("allocationreport ref %lu type %s observed_sptr_count %d\n", ref, type, count);
 }
 #else // TRACK_DOWN_UNDERLYING_ALLOCATIONS
-void __default::sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node) {
+void sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node) {
 }
 #endif // TRACK_DOWN_UNDERLYING_ALLOCATIONS
 
-void __default::stop() {
+void stop() {
   uint64_t total_underlying = 0;
   for (auto it : sptr_to_len) {
     total_underlying += it.second;

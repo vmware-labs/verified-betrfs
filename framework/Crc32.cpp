@@ -229,12 +229,12 @@ namespace Crypto_Compile {
     return padded;
   }
 
-  DafnySequence<uint8> __default::Crc32C(DafnySequence<uint8> bytes)
+  DafnySequence<uint8> Crc32C(DafnySequence<uint8> bytes)
   {
     return padded_crc32(bytes.ptr(), bytes.size());
   }
 
-  DafnySequence<uint8> __default::Crc32CArray(DafnyArray<uint8> bytes, uint64 start, uint64 len)
+  DafnySequence<uint8> Crc32CArray(DafnyArray<uint8> bytes, uint64 start, uint64 len)
   {
     return padded_crc32(&bytes.at(start), len);
   }
