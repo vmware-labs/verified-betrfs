@@ -175,29 +175,40 @@ abstract module MutableBtree {
     }
   }
 
-//  method SplitLeaf(node: Node, nleft: uint64, ghost pivot: Key) returns (right: Node)
-//    requires WF(node)
-//    requires node.contents.Leaf?
-//    requires 0 < nleft < node.contents.nkeys
-//    requires Model.Keys.lt(node.contents.keys[nleft-1], pivot)
-//    requires Model.Keys.lte(pivot, node.contents.keys[nleft])
-//    ensures WFShape(node)
-//    ensures WFShape(right)
-//    ensures node.repr == old(node.repr)
-//    ensures fresh(right.repr)
-//    ensures Model.SplitLeaf(old(I(node)), I(node), I(right), pivot)
-//    ensures node.contents.nkeys == nleft
-//    modifies node
-//  {
-//    reveal_I();
-//    Model.Keys.StrictlySortedSubsequence(node.contents.keys[..node.contents.nkeys], nleft as int, node.contents.nkeys as int);
-//    assert node.contents.keys[nleft..node.contents.nkeys] == node.contents.keys[..node.contents.nkeys][nleft..node.contents.nkeys];
-//    right := LeafFromSeqs(node.contents.keys[nleft..node.contents.nkeys], node.contents.values[nleft..node.contents.nkeys]);
-//
-//    node.contents := Leaf(nleft, node.contents.keys, node.contents.values);
-//    Model.Keys.IsStrictlySortedImpliesLt(old(node.contents.keys[..node.contents.nkeys]), nleft as int - 1, nleft as int);
-//  }
-//
+  // TODO(robj): someday, if perf demands it: switch to a linear version of
+  // MutableVec as the underlying storage to save some sequence copies?
+
+  method SplitLeaf(linear node: Node, nleft: uint64, ghost pivot: Key)
+    returns (linear left: Node, linear right: Node)
+    requires WF(node)
+    requires node.Leaf?
+    requires 0 < nleft as int < |node.keys|
+    requires Model.Keys.lt(node.keys[nleft-1], pivot)
+    requires Model.Keys.lte(pivot, node.keys[nleft])
+    ensures WF(left)
+    ensures WF(right)
+    ensures Model.SplitLeaf(old(node), left, right, pivot)
+    ensures |left.keys| == nleft as int
+  {
+    ghost var nkeys := |node.keys|;
+    Model.Keys.StrictlySortedSubsequence(node.keys, nleft as int, nkeys);
+    Model.Keys.StrictlySortedSubsequence(node.keys, 0, nleft as int);
+    Model.Keys.IsStrictlySortedImpliesLt(node.keys, nleft as int - 1, nleft as int);
+    assert node.keys[nleft..nkeys] == node.keys[..nkeys][nleft..nkeys];
+
+    var nright:uint64 := seq_length(node.keys) as uint64 - nleft;
+    linear var Leaf(keys, values) := node;
+
+    linear var leftKeys := AllocAndCopy(keys, 0, nleft);
+    linear var rightKeys := AllocAndCopy(keys, nleft, nleft + nright);
+    linear var leftValues := AllocAndCopy(values, 0, nleft);
+    linear var rightValues := AllocAndCopy(values, nleft, nleft + nright);
+    left := Model.Leaf(leftKeys, leftValues);
+    right := Model.Leaf(rightKeys, rightValues);
+    var _ := seq_free(keys);
+    var _ := seq_free(values);
+  }
+
 //  predicate ObjectIsInSubtree(node: Node, o: object, i: int)
 //    requires WFShape(node)
 //    requires node.contents.Index?

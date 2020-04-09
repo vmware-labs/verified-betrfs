@@ -9,15 +9,15 @@ module LinearSequence_s {
       requires i as int < |s|
       ensures a == s[i]
 
-  function method seq_set<A>(linear s1:seq<A>, i:nat, a:A):(linear s2:seq<A>) // can be implemented as in-place update
-      requires i < |s1|
-      ensures s2 == s1[i := a]
+  function method seq_set<A>(linear s1:seq<A>, i:uint64, a:A):(linear s2:seq<A>) // can be implemented as in-place update
+      requires i as nat < |s1|
+      ensures s2 == s1[i as nat := a]
 
   function method seq_length<A>(shared s:seq<A>):(n:nat)
       ensures n == |s|
 
-  function method seq_alloc<A>(length:nat):(linear s:seq<A>)
-      ensures |s| == length
+  function method seq_alloc<A>(length:uint64):(linear s:seq<A>)
+      ensures |s| == length as int
 
   function method seq_free<A>(linear s:seq<A>):()
 

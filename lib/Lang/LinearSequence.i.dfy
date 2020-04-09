@@ -10,6 +10,7 @@ module LinearSequence_i {
     provides NativeTypes
     provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_length, lseq_peek
     provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give
+    provides AllocAndCopy
     reveals lseq_full, linLast, lseq_has_all
     reveals operator'cardinality?lseq, operator'in?lseq, operator'subscript?lseq
 
@@ -29,12 +30,12 @@ module LinearSequence_i {
   //     }
   // }
 
-  function method seq_alloc_init_iterate<A>(length:nat, a:A, i:nat, linear sofar:seq<A>) : (linear s:seq<A>)
+  function method seq_alloc_init_iterate<A>(length:uint64, a:A, i:uint64, linear sofar:seq<A>) : (linear s:seq<A>)
     requires i<=length;
-    requires |sofar| == length;
-    requires forall j:nat | j < i :: sofar[j] == a
-    ensures |s| == length;
-    ensures forall j:nat | j < length :: s[j] == a
+    requires |sofar| == length as nat;
+    requires forall j:nat | j < i as nat :: sofar[j] == a
+    ensures |s| == length as nat;
+    ensures forall j:nat | j < length as nat :: s[j] == a
     decreases length - i;
   {
     if i == length then
@@ -43,8 +44,8 @@ module LinearSequence_i {
       seq_alloc_init_iterate(length, a, i + 1, seq_set(sofar, i, a))
   }
 
-  function method seq_alloc_init<A>(length:nat, a:A) : (linear s:seq<A>)
-      ensures |s| == length
+  function method seq_alloc_init<A>(length:uint64, a:A) : (linear s:seq<A>)
+      ensures |s| == length as int
       ensures forall i:nat | i < |s| :: s[i] == a
   {
     seq_alloc_init_iterate(length, a, 0, seq_alloc(length))
@@ -167,5 +168,24 @@ module LinearSequence_i {
   predicate lseq_full<A>(s: lseq<A>)
   {
       && (forall i | 0 <= i < |s| :: i in s)
+  }
+
+  // TODO(robj): "probably not as fast as a memcpy"
+  method AllocAndCopy<A>(shared source: seq<A>, from: uint64, to: uint64)
+    returns (linear dest: seq<A>)
+    requires 0 <= from as nat <= to as nat <= |source|;
+    ensures source[from..to] == dest
+  {
+    dest := seq_alloc(to - from);
+    var i:uint64 := 0;
+    var count := to - from;
+    while i < count
+      invariant i <= count
+      invariant |dest| == count as nat
+      invariant forall j :: 0<=j<i ==> dest[j] == source[j + from];
+    {
+      dest := seq_set(dest, i, seq_get(source, i+from));
+      i := i + 1;
+    }
   }
 } // module
