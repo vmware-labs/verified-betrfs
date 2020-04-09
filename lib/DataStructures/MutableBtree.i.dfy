@@ -208,6 +208,39 @@ abstract module MutableBtree {
     var _ := seq_free(values);
   }
 
+  function IndexHeights(node: Node): seq<int>
+    requires Model.WF(node)
+    requires node.Index?
+    decreases node, 0
+  {
+      seq(|node.children|, i requires 0<=i<|node.children| => Height(node.children[i]))
+  }
+
+  function {:opaque} Height(node: Node): nat
+    requires Model.WF(node)
+    ensures node.Leaf? ==> Height(node) == 0
+    decreases node, 1
+  {
+    if node.Leaf?
+    then 0
+    else
+      var heights := IndexHeights(node); seqMax(heights) + 1
+  }
+
+  lemma SubIndexHeight(node: Node, from: nat, to: nat)
+    requires Model.WF(node)
+    requires node.Index?
+    requires 0 <= from < to <= |node.children|
+    ensures Model.WF(Model.SubIndex(node, from, to))
+    ensures Height(Model.SubIndex(node, from, to)) <= Height(node)
+  {
+    Model.SubIndexPreservesWF(node, from, to);
+    var heights := IndexHeights(node);
+    reveal_Height();
+    assert IndexHeights(Model.SubIndex(node, from, to)) == heights[from .. to]; // trigger
+    SubseqMax(heights, from, to);
+  }
+
   method SplitIndex(linear node: Node, nleft: uint64)
     returns (linear left: Node, linear right: Node, pivot: Key)
     requires WF(node)
@@ -219,6 +252,8 @@ abstract module MutableBtree {
     ensures Model.SplitIndex(node, left, right, pivot)
     ensures |left.children| == nleft as nat
     ensures pivot == node.pivots[nleft-1]
+    ensures Height(left) <= Height(node)
+    ensures Height(right) <= Height(node)
   {
     var nright:uint64 := |node.children| as uint64 - nleft;
     linear var Index(pivots, children) := node;
@@ -243,6 +278,42 @@ abstract module MutableBtree {
     Model.SplitIndexPreservesWF(node, left, right, pivot);
     var _ := seq_free(pivots);
     lseq_free(children);
+    SubIndexHeight(node, 0, nleft as nat);
+    SubIndexHeight(node, nleft as nat, nleft as nat + nright as nat);
+  }
+
+  function {:opaque} seqMax(s: seq<int>): int
+    requires 0 < |s|
+    ensures forall k :: k in s ==> seqMax(s) >= k
+    ensures seqMax(s) in s
+  {
+    assert s == DropLast(s) + [Last(s)];
+    if |s| == 1
+    then s[0]
+    else Math.max(seqMax(DropLast(s)), Last(s))
+  }
+
+  lemma SeqMaxCorrespondence(s1:seq<int>, s2:seq<int>, wit: seq<nat>)
+    requires 0 < |s1|
+    requires 0 < |s2|
+    requires |wit| == |s2|
+    requires forall j:nat :: j < |wit| ==> wit[j] < |s1|
+    requires forall i :: 0 <= i < |s2| ==> s2[i] <= s1[wit[i]]
+    ensures seqMax(s2) <= seqMax(s1)
+  {
+    if seqMax(s2) > seqMax(s1) {
+      var idx :| 0 <= idx < |s2| && s2[idx] == seqMax(s2);
+      assert s1[wit[idx]] in s1;  // trigger
+      assert false;
+    }
+  }
+
+  lemma SubseqMax(s: seq<int>, from: nat, to: nat)
+    requires 0 <= from < to <= |s|
+    ensures seqMax(s[from .. to]) <= seqMax(s)
+  {
+    var subseq := s[from .. to];
+    SeqMaxCorrespondence(s, subseq, seq(|subseq|, i requires 0<=i<|subseq| => i + from));
   }
 
   method SplitNode(linear node: Node) returns (linear left: Node, linear right: Node, pivot: Key)
@@ -254,6 +325,8 @@ abstract module MutableBtree {
     ensures !Full(right)
     ensures Model.SplitNode(node, left, right, pivot)
     ensures pivot in Model.AllKeys(node)
+    ensures Height(left) <= Height(node)
+    ensures Height(right) <= Height(node)
   {
     if node.Leaf? {
       var boundary := seq_length(node.keys) as uint64 / 2;
@@ -280,7 +353,7 @@ abstract module MutableBtree {
     ensures !Full(splitNode.children[childidx as nat])
     ensures !Full(splitNode.children[childidx as nat + 1])
     ensures splitNode.pivots[childidx] in Model.AllKeys(node.children[childidx as nat])
-    ensures forall i :: 0 <= i < |splitNode.children| ==> splitNode.children[i] < node
+    ensures Height(splitNode) <= Height(node)
   {
     linear var Index(pivots, children) := node;
 
@@ -295,6 +368,12 @@ abstract module MutableBtree {
     children := InsertLSeq(children, right, childidx + 1);
     splitNode := Model.Index(pivots, children);
     Model.SplitChildOfIndexPreservesWF(node, splitNode, childidx as int);
+
+    // Every new child is shorter than some old child.
+    ghost var wit := seq(|splitNode.children|, i requires 0<=i<|splitNode.children| =>
+      if i <= childidx as nat then i else i-1);
+    SeqMaxCorrespondence(IndexHeights(node), IndexHeights(splitNode), wit);
+    assert Height(splitNode) <= Height(node) by { reveal_Height(); }
   }
 
   method InsertLeaf(linear node: Node, key: Key, value: Value)
@@ -308,9 +387,6 @@ abstract module MutableBtree {
     ensures Model.AllKeys(n2) == Model.AllKeys(node) + {key}
     ensures oldvalue == MapLookupOption(Interpretation(node), key);
   {
-    Model.reveal_Interpretation();
-    Model.reveal_AllKeys();
-
     linear var Leaf(keys, values) := node;
     var pos: int64 := Model.Keys.ComputeLargestLte(keys, key);
     if 0 <= pos && seq_get(keys, pos as uint64) == key {
@@ -323,68 +399,21 @@ abstract module MutableBtree {
     }
     n2 := Model.Leaf(keys, values);
     Model.InsertLeafIsCorrect(node, key, value);
+    Model.reveal_Interpretation();
   }
-
-/*
-  method InsertIndexSelectAndPrepareChild(linear node: Node, key: Key) returns (linear n2: Node, childidx: uint64)
-    requires WF(node)
-    requires node.Index?
-    requires !Full(node)
-    ensures WF(n2)
-    ensures n2.Index?
-    ensures childidx as int == Model.Keys.LargestLte(n2.pivots[..n2.nchildren-1], key) + 1
-    ensures node.children[childidx] != null
-    ensures !Full(node.children[childidx])
-    ensures Model.Interpretation(I(node)) == Model.Interpretation(old(I(node)))
-    ensures Model.AllKeys(I(node)) == Model.AllKeys(old(I(node)))
-    modifies node, node.repr
-  {
-    Model.reveal_AllKeys();
-    assert WFShapeChildren(node.children[..node.nchildren], node.repr, node.height);
-
-    childidx := Model.Keys.ArrayLargestLtePlus1(node.pivots, 0, node.nchildren-1, key);
-    if Full(node.children[childidx]) {
-      ghost var oldpivots := node.pivots[..node.nchildren-1];
-      SplitChildOfIndex(node, childidx);
-      ghost var newpivots := node.pivots[..node.nchildren-1];
-      Model.SplitChildOfIndexPreservesWF(old(I(node)), I(node), childidx as int);
-      Model.SplitChildOfIndexPreservesInterpretation(old(I(node)), I(node), childidx as int);
-      Model.SplitChildOfIndexPreservesAllKeys(old(I(node)), I(node), childidx as int);
-
-      var t: int32 := Model.Keys.cmp(node.pivots[childidx], key);
-      if  t <= 0 {
-        childidx := childidx + 1;
-        forall i | childidx as int - 1 < i < |newpivots|
-          ensures Model.Keys.lt(key, newpivots[i])
-        {
-          assert newpivots[i] == oldpivots[i-1];
-        }
-      }
-      Model.Keys.LargestLteIsUnique(node.pivots[..node.nchildren-1], key, childidx as int - 1);
-    }
-  }
-*/
   
-  /*
-  method InsertIndex(node: Node, key: Key, value: Value) returns (oldvalue: Option<Value>)
-    requires WF(node)
-    requires node.contents.Index?
-    requires !Full(node)
-    ensures WFShape(node)
-    ensures fresh(node.repr - old(node.repr))
-    ensures node.height == old(node.height)
-    ensures Model.WF(I(node))
-    ensures Model.Interpretation(I(node)) == Model.Interpretation(old(I(node)))[key := value]
-    ensures Model.AllKeys(I(node)) <= Model.AllKeys(old(I(node))) + {key}
-    ensures oldvalue == MapLookupOption(old(Interpretation(node)), key)
-    modifies node, node.repr
-    decreases node.height, 1
+  lemma ChildrenAreShorter(parent: Node, childidx: nat)
+    requires WF(parent)
+    requires parent.Index?
+    requires 0 <= childidx < |parent.children|
+    ensures Height(parent.children[childidx]) < Height(parent)
   {
-    var childidx: uint64 := InsertIndexSelectAndPrepareChild(node, key);
-    oldvalue := InsertIndexChildNotFull(node, childidx, key, value);
+    var child := parent.children[childidx];
+    assert IndexHeights(parent)[childidx] == Height(child); // trigger
+    assert Height(child) in IndexHeights(parent);  // trigger *harder*
+    reveal_Height();
   }
-  */
-  
+
   method InsertIndex(linear node: Node, key: Key, value: Value)
     returns (linear n2: Node, oldvalue: Option<Value>)
     requires WF(node)
@@ -394,7 +423,7 @@ abstract module MutableBtree {
     ensures Model.Interpretation(n2) == Model.Interpretation(node)[key := value]
     ensures Model.AllKeys(n2) <= Model.AllKeys(node) + {key}  // shouldn't this be ==?
     ensures oldvalue == MapLookupOption(Interpretation(node), key)
-    decreases node, 1
+    decreases Height(node), 1
   {
     n2 := node;
     var childidx := Route(n2.pivots, key);
@@ -419,6 +448,7 @@ abstract module MutableBtree {
       assert Interpretation(n2) == Interpretation(node);
     }
     ghost var preparedNode := n2;
+    assert Height(preparedNode) <= Height(node);
     assert Interpretation(preparedNode) == Interpretation(node);
 
     linear var Index(pivots, children) := n2;
@@ -427,6 +457,8 @@ abstract module MutableBtree {
     // children, and InsertNode would borrow it.
     children, childNode := lseq_take(children, childidx);
     ghost var childNodeSnapshot := childNode;
+    assert Height(childNode) < Height(preparedNode) by { ChildrenAreShorter(preparedNode, childidx as nat); }
+    assert Height(childNode) < Height(node);
     childNode, oldvalue := InsertNode(childNode, key, value);
     children := lseq_give(children, childidx, childNode);
     n2 := Model.Index(pivots, children);
@@ -446,7 +478,7 @@ abstract module MutableBtree {
     ensures Model.Interpretation(n2) == Model.Interpretation(node)[key := value]
     ensures Model.AllKeys(n2) <= Model.AllKeys(node) + {key}  // shouldn't this be ==?
     ensures oldvalue == MapLookupOption(Interpretation(node), key)
-    decreases node, 2
+    decreases Height(node), 2
   {
     if node.Leaf? {
       n2, oldvalue := InsertLeaf(node, key, value);
