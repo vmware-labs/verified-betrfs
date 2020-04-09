@@ -296,35 +296,34 @@ abstract module MutableBtree {
     Model.SplitChildOfIndexPreservesWF(node, splitNode, childidx as int);
   }
 
-//  method InsertLeaf(node: Node, key: Key, value: Value) returns (oldvalue: Option<Value>)
-//    requires WF(node)
-//    requires node.contents.Leaf?
-//    requires !Full(node)
-//    ensures WFShape(node)
-//    ensures node.repr == old(node.repr)
-//    ensures I(node) == Model.InsertLeaf(old(I(node)), key, value)
-//    ensures Model.WF(I(node))
-//    ensures Model.Interpretation(I(node)) == Model.Interpretation(old(I(node)))[key := value]
-//    ensures Model.AllKeys(I(node)) == Model.AllKeys(old(I(node))) + {key}
-//    ensures oldvalue == MapLookupOption(old(Interpretation(node)), key);
-//    modifies node, node.contents.keys, node.contents.values
-//  {
-//    reveal_I();
-//    Model.reveal_Interpretation();
-//    Model.reveal_AllKeys();
-//    var posplus1: uint64 := Model.Keys.ArrayLargestLtePlus1(node.contents.keys, 0, node.contents.nkeys, key);
-//    if 1 <= posplus1 && node.contents.keys[posplus1-1] == key {
-//      oldvalue := Some(node.contents.values[posplus1-1]);
-//      node.contents.values[posplus1-1] := value;
-//    } else {
-//      oldvalue := None;
-//      Arrays.Insert(node.contents.keys, node.contents.nkeys, key, posplus1);
-//      Arrays.Insert(node.contents.values, node.contents.nkeys, value, posplus1);
-//      node.contents := node.contents.(nkeys := node.contents.nkeys + 1);
-//    }
-//    Model.InsertLeafIsCorrect(old(I(node)), key, value);
-//  }
-//
+  method InsertLeaf(linear node: Node, key: Key, value: Value)
+    returns (linear n2: Node, oldvalue: Option<Value>)
+    requires WF(node)
+    requires node.Leaf?
+    requires !Full(node)
+    ensures n2 == Model.InsertLeaf(node, key, value)
+    ensures WF(n2)
+    ensures Model.Interpretation(n2) == Model.Interpretation(node)[key := value]
+    ensures Model.AllKeys(n2) == Model.AllKeys(node) + {key}
+    ensures oldvalue == MapLookupOption(old(Interpretation(node)), key);
+  {
+    Model.reveal_Interpretation();
+    Model.reveal_AllKeys();
+
+    linear var Leaf(keys, values) := node;
+    var pos: int64 := Model.Keys.ComputeLargestLte(keys, key);
+    if 0 <= pos && seq_get(keys, pos as uint64) == key {
+      oldvalue := Some(seq_get(values, pos as uint64));
+      values := seq_set(values, pos as uint64, value);
+    } else {
+      oldvalue := None;
+      keys := InsertSeq(keys, key, (pos + 1) as uint64);
+      values := InsertSeq(values, value, (pos + 1) as uint64);
+    }
+    n2 := Model.Leaf(keys, values);
+    Model.InsertLeafIsCorrect(old(node), key, value);
+  }
+
 //  twostate lemma InsertIndexChildNotFullPreservesWFShape(node: Node, childidx: int)
 //    requires old(WFShape(node))
 //    requires old(node.contents).Index?
