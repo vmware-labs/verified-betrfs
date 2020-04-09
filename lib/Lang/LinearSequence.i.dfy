@@ -52,8 +52,11 @@ module LinearSequence_i {
   }
 
   function lseqs<A>(l:lseq<A>):(s:seq<A>)
+    ensures rank_is_less_than(s, l)
   {
-      seq(lseq_length_raw(l), i requires 0<=i<lseq_length_raw(l) => read(lseqs_raw(l)[i]))
+    var s := seq(lseq_length_raw(l), i requires 0<=i<lseq_length_raw(l) => read(lseqs_raw(l)[i]));
+    axiom_lseqs_rank(l, s);
+    s
   }
 
   function imagine_lseq<A>(s:seq<A>):(l:lseq<A>)
