@@ -1,0 +1,3 @@
+MutableBtree.i.dfy:232,233 this is cooler than rust; have solver reasoning to deal with ownership; Options in rust for "holes" in vectors would incur the runtime cost
+
+`linear` things behind a reference counted pointer? use a bare `pointer` instead and explicit `new`/`free`
