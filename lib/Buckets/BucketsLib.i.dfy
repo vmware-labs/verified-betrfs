@@ -23,6 +23,9 @@ module BucketsLib {
   import MS = MapSpec
 
   type BucketMap = map<Key, Message>
+    // TODO(jonh): The Bucket datatype is denormalized and has two
+    // representations of the same data.  Should do this with a
+    // function view of the same data.
   datatype Bucket = BucketMapWithSeq(b: BucketMap, keys: seq<Key>, msgs: seq<Message>)
   type BucketList = seq<Bucket>
 
@@ -77,6 +80,7 @@ module BucketsLib {
     && (forall i | 0 <= i < |blist| :: WFBucket(blist[i]))
   }
 
+  // TODO(jonh): suggests rename to ValidlyRoutedBucketList
   predicate WFBucketListProper(blist: BucketList, pivots: PivotTable)
   {
     && WFBucketList(blist, pivots)
@@ -143,6 +147,14 @@ module BucketsLib {
     BucketListFlushPartial(parent, children, pivots, |children|)
   }
 
+  predicate EquivalentPartialFlush(oldparent: Bucket, oldchildren: seq<Bucket>,
+    pivots: seq<Key>, newparent: Bucket, newchildren: seq<Bucket>)
+  {
+    && WFBucketListProper(oldchildren, pivots)
+    && WFBucketListProper(newchildren, pivots)
+    && 
+  }
+  
   function JoinBucketList(buckets: seq<Bucket>) : (bucket : Bucket)
   ensures BucketWellMarshalled(bucket)
   {
