@@ -203,6 +203,7 @@ module BetreeSpec {
   {
     && WFNode(flush.parent)
     && WFNode(flush.child)
+    // TODO(jonh): replace this with "<="
     && (forall key | key in flush.flushedKeys :: key in flush.movedKeys)
     && (forall key | key in flush.movedKeys :: IMapsTo(flush.parent.children, key, flush.childref))
   }

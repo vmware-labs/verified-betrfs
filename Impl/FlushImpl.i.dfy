@@ -22,7 +22,8 @@ module FlushImpl {
   import StateModel
   import BookkeepingModel
   import FlushModel
-  import KVListPartialFlush
+  //import BucketModel
+  //import KVListPartialFlush
 
   method flush(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference, child: Node)
   requires Inv(k, s)
@@ -79,7 +80,9 @@ module FlushImpl {
     assert s.I().cache[childref].buckets == MutBucket.ISeq(child.buckets);
     assert WeightBucketList(MutBucket.ISeq(child.buckets)) <= MaxTotalBucketWeight();
 
-    var newparentBucket, newbuckets := KVListPartialFlush.PartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
+    ghost var flushedKey;
+    var newparentBucket, newbuckets;
+    newparentBucket, newbuckets, flushedKey := BucketImpl.PartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
     var newchild := new Node(child.pivotTable, child.children, newbuckets);
 
     assert Some(parent) == s.cache.ptr(parentref);

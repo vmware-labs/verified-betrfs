@@ -3,6 +3,7 @@ include "PackedKV.i.dfy"
 include "KVList.i.dfy"
 include "../../PivotBetree/Bounds.i.dfy"
 include "BucketIteratorModel.i.dfy"
+include "BucketModel.i.dfy"
 //
 // Collects singleton message insertions efficiently, avoiding repeated
 // replacement of the immutable root Node. Once this bucket is full,
@@ -31,7 +32,8 @@ module BucketImpl {
   import opened KeyType
   import BucketIteratorModel
   import Pivots = PivotsLib
-
+  import opened BucketModel
+  
   type TreeMap = KMB.Node
 
   method tree_to_kvl(tree: TreeMap)
@@ -760,6 +762,24 @@ module BucketImpl {
         }
       }
     }
+  }
+
+  method PartialFlush(top: MutBucket, bots: seq<MutBucket>, pivots: seq<Key>)
+    returns (newtop: MutBucket, newbots: seq<MutBucket>, ghost flushedKeys: set<Key>)
+    requires top.Inv()
+    requires forall i | 0 <= i < |bots| :: bots[i].Inv()
+    requires |pivots| + 1 == |bots| < Uint64UpperBound()
+    requires PivotsLib.WFPivots(pivots)
+    //requires WeightBucketList(MutBucket.ISeq(bots)) < MaxTotalBucketWeight()
+    ensures forall i | 0 <= i < |newbots| :: newbots[i].Inv()
+    ensures forall i | 0 <= i < |newbots| :: fresh(newbots[i].Repr)
+    ensures MutBucket.ReprSeqDisjoint(newbots)
+    ensures newtop.Inv()
+    ensures fresh(newtop.Repr)
+    ensures forall i | 0 <= i < |newbots| :: newtop.Repr !! newbots[i].Repr
+    ensures partialFlushResult(newtop.I(), MutBucket.ISeq(newbots), flushedKeys) == partialFlush(top.I(), MutBucket.ISeq(bots), pivots)
+  {
+    assume false;
   }
 }
 

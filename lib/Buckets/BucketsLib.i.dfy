@@ -138,6 +138,7 @@ module BucketsLib {
     )
   }
 
+  // TODO(robj&jonh): Can this go away?  Will we ever do unconditionally full flushes?
   function BucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable) : (res : BucketList)
   requires WFPivots(pivots)
   ensures |res| == |children|
@@ -147,12 +148,15 @@ module BucketsLib {
     BucketListFlushPartial(parent, children, pivots, |children|)
   }
 
-  predicate EquivalentPartialFlush(oldparent: Bucket, oldchildren: seq<Bucket>,
+  // TODO(robj): Not yet used, but should replace the complex ensures in BucketMode.partialFlush
+  predicate ValidBucketFlush(oldparent: Bucket, oldchildren: seq<Bucket>,
     pivots: seq<Key>, newparent: Bucket, newchildren: seq<Bucket>)
   {
     && WFBucketListProper(oldchildren, pivots)
     && WFBucketListProper(newchildren, pivots)
-    && 
+    && (forall i | 0 <= i < |oldchildren| ::
+      Compose(ClampToSlot(oldparent, pivots, i), oldchildren[i]) ==
+      Compose(ClampToSlot(newparent, pivots, i), newchildren[i]))
   }
   
   function JoinBucketList(buckets: seq<Bucket>) : (bucket : Bucket)

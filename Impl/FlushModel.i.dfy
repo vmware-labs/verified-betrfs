@@ -1,7 +1,8 @@
 include "BookkeepingModel.i.dfy"
 include "IOModel.i.dfy"
 include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
-include "../lib/Buckets/KVListPartialFlush.i.dfy"
+//include "../lib/Buckets/KVListPartialFlush.i.dfy"
+include "../lib/Buckets/BucketModel.i.dfy"
 
 module FlushModel { 
   import opened StateModel
@@ -9,7 +10,6 @@ module FlushModel {
   import opened BookkeepingModel
   import opened ViewOp
   import opened DiskOpModel
-  import KVListPartialFlush
 
   import opened Options
   import opened Maps
@@ -18,6 +18,7 @@ module FlushModel {
 
   import opened BucketsLib
   import opened BucketWeights
+  import BucketModel
   import opened Bounds
 
   import opened NativeTypes
@@ -53,7 +54,7 @@ module FlushModel {
       lemmaChildrenConditionsOfNode(k, s, childref);
       lemmaChildrenConditionsOfNode(k, s, parentref);
 
-      var (newparentBucket, newbuckets) := KVListPartialFlush.bucketPartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
+      var partialFlushResult(newparentBucket, newbuckets, flushedKeys) := BucketModel.partialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
       var newchild := child.(buckets := newbuckets);
       var (s2, newchildref) := allocBookkeeping(k, s, newchild.children);
       lemmaChildrenConditionsUpdateOfAllocBookkeeping(
@@ -95,9 +96,9 @@ module FlushModel {
       lemmaChildrenConditionsOfNode(k, s, childref);
       lemmaChildrenConditionsOfNode(k, s, parentref);
 
-      var (newparentBucket, newbuckets) := KVListPartialFlush.bucketPartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
-      var flushedKeys := KVListPartialFlush.bucketPartialFlushRes(parent.buckets[slot], child.buckets, child.pivotTable);
-
+      var partialFlushResult(newparentBucket, newbuckets, flushedKeys) := BucketModel.partialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
+      //var flushedKeys := BucketModel.partialFlushRes(parent.buckets[slot], child.buckets, child.pivotTable);
+      
       WFBucketIntersect(parent.buckets[slot], flushedKeys);
       WFBucketComplement(parent.buckets[slot], flushedKeys);
       WeightBucketComplement(parent.buckets[slot], flushedKeys);
