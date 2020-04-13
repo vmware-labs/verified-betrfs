@@ -40,11 +40,6 @@ module {:extern "LinearExtern"} LinearSequence_s {
     ensures lseq_length_raw(l) as int == |s|
     ensures forall i :: 0 <= i < |s| ==> s[i] == read(lseqs_raw(l)[i])
 
-//  function {:axiom} lseq_length_raw<A>(s:lseq<A>):(n:nat)
-//      ensures n == |lseqs_raw(s)|
-//
-//  method {:extern "LinearExtern", "lseq_length_uint64"} lseq_length_uint64<A>(shared s:lseq<A>):(n:uint64)
-//      ensures n as int == |lseqs_raw(s)|
   function method {:extern "LinearExtern", "lseq_length_raw"} lseq_length_raw<A>(shared s:lseq<A>):(n:uint64)
       ensures n as int == |lseqs_raw(s)|
 
