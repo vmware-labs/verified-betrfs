@@ -1,4 +1,5 @@
-include "MutableBtreeBulkOperations.i.dfy"
+//include "MutableBtreeBulkOperations.i.dfy"
+include "MutableBtree.i.dfy"
 include "../Base/Message.i.dfy"
   
 module KMBtreeModel refines BtreeModel {
@@ -17,6 +18,7 @@ module KMBtree refines MutableBtree {
   function method DefaultKey() : Key { [] }
 }
 
-module KMBtreeBulkOperations refines MutableBtreeBulkOperations {
-  import opened MB = KMBtree`All
-}
+// TODO(robj): dead code; delete?
+//module KMBtreeBulkOperations refines MutableBtreeBulkOperations {
+//  import opened MB = KMBtree`All
+//}
