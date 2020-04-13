@@ -48,16 +48,16 @@ abstract module BtreeModel {
 
   predicate AllKeysBelowBound(node: Node, i: int)
     requires node.Index?
-    requires 0 <= i < |node.children|-1
-    requires 0 <= i < |node.pivots|
+    requires 0 <= i < |node.children| as nat - 1
+    requires 0 <= i < |node.pivots| as nat
   {
-    forall key :: key in AllKeys(node.children[i]) ==> Keys.lt(key, node.pivots[i])
+    forall key :: key in AllKeys(node.children[i as uint64]) ==> Keys.lt(key, node.pivots[i])
   }
 
   predicate AllKeysAboveBound(node: Node, i: int)
     requires node.Index?
-    requires 0 <= i < |node.children|
-    requires 0 <= i-1 < |node.pivots|
+    requires 0 <= i < |node.children| as nat
+    requires 0 <= i-1 < |node.pivots| as nat
   {
     forall key :: key in AllKeys(node.children[i]) ==> Keys.lte(node.pivots[i-1], key)
   }
