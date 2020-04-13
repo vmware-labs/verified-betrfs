@@ -208,6 +208,12 @@ abstract module MutableBtree {
     var _ := seq_free(values);
   }
 
+  // We need to measure the height of Nodes to manage termination in the mutual
+  // recursion between InsertNode and InsertIndex. You'd think that we wouldn't
+  // need to, since datatypes are well-founded. But when we SplitChildOfIndex,
+  // we replace some children with other children. The new children are of no
+  // greater height, but they don't order in Dafny's internal datatype lattice.
+  // Hence this machinery for explicitly measuring height.
   function IndexHeights(node: Node): seq<int>
     requires Model.WF(node)
     requires node.Index?
@@ -280,40 +286,6 @@ abstract module MutableBtree {
     lseq_free(children);
     SubIndexHeight(node, 0, nleft as nat);
     SubIndexHeight(node, nleft as nat, nleft as nat + nright as nat);
-  }
-
-  function {:opaque} seqMax(s: seq<int>): int
-    requires 0 < |s|
-    ensures forall k :: k in s ==> seqMax(s) >= k
-    ensures seqMax(s) in s
-  {
-    assert s == DropLast(s) + [Last(s)];
-    if |s| == 1
-    then s[0]
-    else Math.max(seqMax(DropLast(s)), Last(s))
-  }
-
-  lemma SeqMaxCorrespondence(s1:seq<int>, s2:seq<int>, wit: seq<nat>)
-    requires 0 < |s1|
-    requires 0 < |s2|
-    requires |wit| == |s2|
-    requires forall j:nat :: j < |wit| ==> wit[j] < |s1|
-    requires forall i :: 0 <= i < |s2| ==> s2[i] <= s1[wit[i]]
-    ensures seqMax(s2) <= seqMax(s1)
-  {
-    if seqMax(s2) > seqMax(s1) {
-      var idx :| 0 <= idx < |s2| && s2[idx] == seqMax(s2);
-      assert s1[wit[idx]] in s1;  // trigger
-      assert false;
-    }
-  }
-
-  lemma SubseqMax(s: seq<int>, from: nat, to: nat)
-    requires 0 <= from < to <= |s|
-    ensures seqMax(s[from .. to]) <= seqMax(s)
-  {
-    var subseq := s[from .. to];
-    SeqMaxCorrespondence(s, subseq, seq(|subseq|, i requires 0<=i<|subseq| => i + from));
   }
 
   method SplitNode(linear node: Node) returns (linear left: Node, linear right: Node, pivot: Key)

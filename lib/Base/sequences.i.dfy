@@ -1,9 +1,11 @@
 include "Option.s.dfy"
 include "../Lang/NativeTypes.s.dfy"
+include "mathematics.i.dfy"
 
 module Sequences {
   import opened Options
   import opened NativeTypes
+  import Math = Mathematics
 
   lemma EqualExtensionality<E>(a: seq<E>, b: seq<E>)
     requires |a| == |b|
@@ -461,5 +463,39 @@ module Sequences {
         |t|;
       }
     }
+  }
+
+  function {:opaque} seqMax(s: seq<int>): int
+    requires 0 < |s|
+    ensures forall k :: k in s ==> seqMax(s) >= k
+    ensures seqMax(s) in s
+  {
+    assert s == DropLast(s) + [Last(s)];
+    if |s| == 1
+    then s[0]
+    else Math.max(seqMax(DropLast(s)), Last(s))
+  }
+
+  lemma SeqMaxCorrespondence(s1:seq<int>, s2:seq<int>, wit: seq<nat>)
+    requires 0 < |s1|
+    requires 0 < |s2|
+    requires |wit| == |s2|
+    requires forall j:nat :: j < |wit| ==> wit[j] < |s1|
+    requires forall i :: 0 <= i < |s2| ==> s2[i] <= s1[wit[i]]
+    ensures seqMax(s2) <= seqMax(s1)
+  {
+    if seqMax(s2) > seqMax(s1) {
+      var idx :| 0 <= idx < |s2| && s2[idx] == seqMax(s2);
+      assert s1[wit[idx]] in s1;  // trigger
+      assert false;
+    }
+  }
+
+  lemma SubseqMax(s: seq<int>, from: nat, to: nat)
+    requires 0 <= from < to <= |s|
+    ensures seqMax(s[from .. to]) <= seqMax(s)
+  {
+    var subseq := s[from .. to];
+    SeqMaxCorrespondence(s, subseq, seq(|subseq|, i requires 0<=i<|subseq| => i + from));
   }
 }
