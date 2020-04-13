@@ -1,4 +1,4 @@
-include "../Base/NativeTypes.s.dfy"
+include "../Lang/NativeTypes.s.dfy"
 
 module {:extern} NativePackedInts {
   import opened NativeTypes
