@@ -16,7 +16,7 @@ include "BucketIteratorModel.i.dfy"
 
 module BucketImpl {
   import KMB = KMBtree`API
-  import KMBBOps = KMBtreeBulkOperations
+//  import KMBBOps = KMBtreeBulkOperations  // TODO(robj): want to kill BulkOps
   import KVList
   import PackedKV
   import opened ValueMessage`Internal
@@ -37,7 +37,7 @@ module BucketImpl {
   method tree_to_kvl(tree: TreeMap)
   returns (kvl : KVList.Kvl)
   requires KMB.WF(tree)
-  requires KMBBOps.NumElements(tree) < Uint64UpperBound()
+//  requires KMBBOps.NumElements(tree) < Uint64UpperBound() // TODO(robj): want to kill BulkOps
   ensures KVList.WF(kvl)
   ensures KVList.I(kvl) == B(KMB.Interpretation(tree))
   {
@@ -55,7 +55,7 @@ module BucketImpl {
   ensures KVList.I(kvl) == B(KMB.Interpretation(tree))
   {
     var modelkvl := KMB.Model.KVList(kvl.keys, kvl.messages);
-    tree := KMBBOps.BuildTreeForSequence(modelkvl);
+//    tree := KMBBOps.BuildTreeForSequence(modelkvl); // TODO(robj): want to kill BulkOps
     assume false;
   }
 

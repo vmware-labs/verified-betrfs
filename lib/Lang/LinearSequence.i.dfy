@@ -11,6 +11,8 @@ module LinearSequence_i {
     provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_length, lseq_peek
     provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give
     provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, InsertSeq, InsertLSeq
+    provides share_seq
+    reveals as_linear
     reveals lseq_full, linLast, lseq_has_all
     reveals operator'cardinality?lseq, operator'in?lseq, operator'subscript?lseq
 
@@ -54,7 +56,7 @@ module LinearSequence_i {
   function lseqs<A>(l:lseq<A>):(s:seq<A>)
     ensures rank_is_less_than(s, l)
   {
-    var s := seq(lseq_length_raw(l), i requires 0<=i<lseq_length_raw(l) => read(lseqs_raw(l)[i]));
+    var s := seq(lseq_length_raw(l) as int, i requires 0<=i<lseq_length_raw(l) as int => read(lseqs_raw(l)[i]));
     axiom_lseqs_rank(l, s);
     s
   }
@@ -80,7 +82,7 @@ module LinearSequence_i {
   function lseq_has<A>(l:lseq<A>):(s:seq<bool>)
       ensures |s| == |lseqs(l)|
   {
-      seq(lseq_length_raw(l), i requires 0<=i<lseq_length_raw(l) => has(lseqs_raw(l)[i]))
+      seq(lseq_length_raw(l) as int, i requires 0<=i<lseq_length_raw(l) as int => has(lseqs_raw(l)[i]))
   }
 
   predicate lseq_has_all<A>(l:lseq<A>)
@@ -91,12 +93,12 @@ module LinearSequence_i {
   function method lseq_length<A>(shared s:lseq<A>):(n:nat)
       ensures n == |lseqs(s)|
   {
-      lseq_length_raw(s)
+      lseq_length_raw(s) as nat
   }
 
   function method{:inline true} operator(| |)<A>(shared s:seq<A>):nat
   {
-      seq_length(s)
+      seq_length(s) as nat
   }
 
   function method{:inline true} operator(| |)<A>(shared s:lseq<A>):nat
@@ -145,8 +147,8 @@ module LinearSequence_i {
       ensures lseqs(s2) == lseqs(s1)[i as nat := a1]
   {
       linear var x1:maybe<A> := give(a1);
-      linear var x2:maybe<A>;
-      s2, x2 := lseq_swap_raw(s1, i, x1);
+      linear var (s2tmp, x2) := lseq_swap_raw_fun(s1, i, x1);
+      s2 := s2tmp;
       a2 := unwrap(x2);
   }
 
@@ -157,8 +159,8 @@ module LinearSequence_i {
       ensures forall j:nat | j < |s1| && j != i as nat :: lseqs(s2)[j] == lseqs(s1)[j]
   {
       linear var x1:maybe<A> := empty();
-      linear var x2:maybe<A>;
-      s2, x2 := lseq_swap_raw(s1, i, x1);
+      linear var (s2tmp, x2) := lseq_swap_raw_fun(s1, i, x1);
+      s2 := s2tmp;
       a := unwrap(x2);
   }
 
@@ -169,8 +171,8 @@ module LinearSequence_i {
       ensures lseqs(s2) == lseqs(s1)[i as nat := a]
   {
       linear var x1:maybe<A> := give(a);
-      linear var x2:maybe<A>;
-      s2, x2 := lseq_swap_raw(s1, i, x1);
+      linear var (s2tmp, x2) := lseq_swap_raw_fun(s1, i, x1);
+      s2 := s2tmp;
       var _ := discard(x2);
   }
 
@@ -296,4 +298,17 @@ module LinearSequence_i {
     }
     s2 := lseq_give(s2, pos, a);
   }
-} // module
+
+  // a wrapper object for borrowing immutable sequences. Necessary so that the C++ translation
+  // can use its construction/destruction to track the reference to the borrowed sequence.
+  linear datatype as_linear<A> = AsLinear(a:A)
+
+  function method share_seq<A>(shared a:as_linear<seq<A>>):(shared s:seq<A>)
+    ensures s == a.a
+
+  // Intended usage:
+  //  linear var l := AsLinear(o);  // Give C++ a chance to increment the ref count on o.
+  //  M(share_seq(l));              // borrow the seq in the call to M.
+  //  linear var AsLinear(_) := l;  // Free the wrapper, giving C++ a chance to drop the ref count.
+
+} // module LinearSequence_i

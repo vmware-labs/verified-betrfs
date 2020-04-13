@@ -37,10 +37,14 @@ module {:extern "LinearExtern"} LinearSequence_s {
 
   // it's okay to synthesize all the lseqs you want if they're ghosty
   function {:axiom} imagine_lseq_raw<A>(s:seq<A>):(l:lseq<A>)
-    requires |s| < 0x1_0000_0000_0000_0000
     ensures lseq_length_raw(l) as int == |s|
     ensures forall i :: 0 <= i < |s| ==> s[i] == read(lseqs_raw(l)[i])
 
+//  function {:axiom} lseq_length_raw<A>(s:lseq<A>):(n:nat)
+//      ensures n == |lseqs_raw(s)|
+//
+//  method {:extern "LinearExtern", "lseq_length_uint64"} lseq_length_uint64<A>(shared s:lseq<A>):(n:uint64)
+//      ensures n as int == |lseqs_raw(s)|
   function method {:extern "LinearExtern", "lseq_length_raw"} lseq_length_raw<A>(shared s:lseq<A>):(n:uint64)
       ensures n as int == |lseqs_raw(s)|
 

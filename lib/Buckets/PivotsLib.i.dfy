@@ -7,6 +7,7 @@ include "../Base/total_order.i.dfy"
 //
 
 module PivotsLib {
+  import opened LinearSequence_i
   import opened Sequences
   import opened NativeTypes
   import opened KeyType
@@ -46,8 +47,10 @@ module PivotsLib {
   requires WFPivots(pt)
   ensures i as int == Route(pt, key)
   {
-    var j := Keyspace.ComputeLargestLte(pt, key);
+    linear var lpt := AsLinear(pt);
+    var j := Keyspace.ComputeLargestLte(share_seq(lpt), key);
     i := (j + 1) as uint64;
+    linear var AsLinear(_) := lpt;  // free the ref to pt.
   }
 
   // Quick lemma for proving that Route(pt, key) == idx
