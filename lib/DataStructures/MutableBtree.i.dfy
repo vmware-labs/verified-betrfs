@@ -20,9 +20,8 @@ abstract module MutableBtree {
   import Arrays
   import Model : BtreeModel
 
-// TODO back turn on after transform complete
-//  export API provides WF, Interpretation, EmptyTree, Insert, Query, NativeTypes, Model, Options, Maps reveals Node, Key, Value
-//  export All reveals *
+  export API provides WF, Interpretation, EmptyTree, Insert, Query, NativeTypes, Model, Options, Maps reveals Node, Key, Value
+  export All reveals *
     
   type Key = Model.Keys.Element
   type Value = Model.Value
