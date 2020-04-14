@@ -6,8 +6,12 @@ from __future__ import division
 import sys
 import os
 
+def actuallyprint(msg):
+    print(msg)
+    sys.stdout.flush()
+
 def autoconfig(config, memlimit):
-  print("using node size roughly: " + config)
+  actuallyprint("using node size roughly: " + config)
   sys.stdout.flush()
 
   if memlimit.endswith("gb"):
@@ -44,28 +48,28 @@ def autoconfig(config, memlimit):
   ]
 
 def cgroup_defaults():
-  print("starting with default config...")
+  actuallyprint("starting with default config...")
   ret = os.system("./tools/configure-cgroups.sh")
   assert ret == 0
 
 def set_mem_limit(limit):
   if limit.endswith("gb"):
     val = int(float(limit[:-2]) * 1024*1024*1024)
-    print("setting mem limit to " + str(val) + " bytes (" + limit + ")")
+    actuallyprint("setting mem limit to " + str(val) + " bytes (" + limit + ")")
   else:
     val = int(limit)
-    print("setting mem limit to " + str(val) + " bytes")
+    actuallyprint("setting mem limit to " + str(val) + " bytes")
 
   ret = os.system("echo " + str(val) + " > /sys/fs/cgroup/memory/VeribetrfsExp/memory.limit_in_bytes")
   assert ret == 0
 
 def clear_page_cache():
   if not os.path.exists("tools/clear-os-page-cache"):
-    print("Error: can't clear cache.")
-    print("Run `sudo tools/setup-clear-os-page-cache-binary.sh` first.")
+    actuallyprint("Error: can't clear cache.")
+    actuallyprint("Run `sudo tools/setup-clear-os-page-cache-binary.sh` first.")
     sys.exit(1)
 
-  print("Clearing page cache")
+  actuallyprint("Clearing page cache")
   ret = os.system("tools/clear-os-page-cache")
   assert ret == 0
 
@@ -85,7 +89,7 @@ def splice_value_into_bundle(name, value):
         elif c == 2:
           line = "    return (uint64)" + value + "; /*hi mom*/\n"
           splice_successful = True
-          #print("Splicing %s = %s at line %d" % (name, value, lineNum))
+          #actuallyprint("Splicing %s = %s at line %d" % (name, value, lineNum))
           c = 0
       lines.append(line)
     cpp = "".join(lines)
@@ -146,13 +150,13 @@ def main():
   assert ret == 0
 
   if not rocks:
-    print("Building Bundle.cpp...")
+    actuallyprint("Building Bundle.cpp...")
     ret = os.system("make build/Bundle.cpp > /dev/null 2> /dev/null")
     assert ret == 0
 
   for (name, value) in value_updates:
     assert not rocks
-    print("setting " + name + " to " + value)
+    actuallyprint("setting " + name + " to " + value)
     splice_value_into_bundle(name, value)
 
   if rocks:
@@ -166,27 +170,28 @@ def main():
   if log_stats:
     make_options = "LOG_QUERY_STATS=1 "
 
-  print("Building executable...")
+  actuallyprint("Building executable...")
   sys.stdout.flush()
   cmd = make_options + "make " + exe + " -s -j4 > /dev/null 2> /dev/null"
-  print(cmd)
+  actuallyprint(cmd)
   ret = os.system(cmd)
   assert ret == 0
 
   wl = "ycsb/workload" + workload + "-onefield.spec"
-  print("workload: " + wl)
+  actuallyprint("workload: " + wl)
   sys.stdout.flush()
 
   if device == "optane":
     loc = "/scratch0/tjhance/ycsb/"
   elif device == "disk":
     #loc = "/home/tjhance/ycsb/"
-    loc = "/tmp/veribetrfs/"
+    #loc = "/tmp/veribetrfs/"
+    loc = "/media/jonh/portable-backup/scratch/"
   else:
     assert False
 
-  print("Device type: " + device)
-  print("Using " + loc)
+  actuallyprint("Device type: " + device)
+  actuallyprint("Using " + loc)
 
   ret = os.system("rm -rf " + loc)
   assert ret == 0
@@ -200,7 +205,7 @@ def main():
   taskset_cmd = "taskset 4 "
 
   command = taskset_cmd + "cgexec -g memory:VeribetrfsExp ./" + exe + " " + wl + " " + loc + " " + cmdoption
-  print(command)
+  actuallyprint(command)
   sys.stdout.flush()
 
   os.system(command)

@@ -1,5 +1,8 @@
 from PlotHelper import *    # scale prefixes such as Kilo
 
+Time = "time"
+OpCount = "opCount"
+
 class TimeSeries:
     def __init__(self, exp, plotHelper):
         self.exp = exp
@@ -19,7 +22,10 @@ class TimeSeries:
         return ax
 
     def timeToOp(self, t):
-        return self.exp.ops_completed[t]
+        idx = bisect.bisect(self.opTimes, t)
+        if idx>=len(self.opTimes):
+            idx = len(self.opTimes) - 1
+        return self.opValues[idx]
 
     def opToTime(self, op):
         idx = bisect.bisect(self.opValues, op)
@@ -48,10 +54,47 @@ class TimeSeries:
         assert None not in ys
         return xs,ys
 
-    def smoothedThroughput(self, ax, window, label=None, linestyle=None):
-        xs,ys = self.makePlot(self.exp.ops_completed, lambda t: (self.exp.ops_completed[t] - self.exp.ops_completed[t-window])/float(window)/Kilo)
-        line, = ax.plot(xs, ys, linestyle=linestyle)
+    def smooth(self, ax, window, source, fieldfunc, divideBy=Time, scale=1.0, label=None, linestyle=None, color=None):
+        # window is in time units, not ops. Sorry.
+        def valueAt(t):
+            curOpn = self.timeToOp(t)
+            prevOpn = self.timeToOp(t - window)
+            numerator = fieldfunc(t) - fieldfunc(t-window)
+            denominator = window if divideBy==Time else curOpn - prevOpn
+            result = numerator/denominator/scale
+            return result
+        xs,ys = self.makePlot(source, valueAt)
+        line, = ax.plot(xs, ys, linestyle=linestyle, color=color)
         if label:
             line.set_label(label)
         return ys[-1] if len(ys)>0 else 0
 
+    def smoothedThroughput(self, ax, window, label=None, linestyle=None):
+        return self.smooth(ax, window, source=self.exp.ops_completed, fieldfunc=lambda t: self.exp.ops_completed[t], divideBy=Time, scale=Kilo, label=label, linestyle=linestyle)
+
+    def plotThroughput(self, ax):
+        ax.set_title("op throughput")
+        self.smoothedThroughput(ax, 10)
+        cur = self.smoothedThroughput(ax, 100)
+        ax.set_ylim(bottom = 0)
+        ax.set_ylabel("Kops/sec")
+        ax.set_xlabel("op num (K)")
+
+        xs = [t for t in self.exp.ops_completed]
+        def aggregateAt(time, label):
+            if time > xs[-1]:
+                return
+            aggregate = (self.exp.ops_completed[time] - self.exp.ops_completed[xs[0]])/float(time)/Kilo
+            msg = "mean %.1f" % aggregate
+            if label == "end":
+                msg += "\ncur %.2f" % cur
+            ax.text(self.timeToKiloOp(time), aggregate, msg, horizontalalignment="right")
+        aggregateAt(xs[-1], "end")
+        t1m = self.opToTime(2000000)
+        aggregateAt(t1m, "op1000k")
+        
+        axtwin = ax.twinx()
+        ts = [t for t in self.exp.ops_completed]
+        ops = [self.exp.ops_completed[t]/Kilo for t in xs]
+        axtwin.plot(ops,ts, "g")
+        axtwin.set_ylabel("time (s)")

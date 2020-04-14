@@ -278,7 +278,7 @@ is below the forecast 4GB.
 
 
 tools/run-veri-config-experiment.py workload=b device=disk ram=4gb config-8mb > malloc-exp/cgroups-veri
-tools/run-veri-config-experiment.py workloab device=disk ram=4gb rocks > malloc-exp/cgroups-rocks
+tools/run-veri-config-experiment.py workload=b device=disk ram=4gb rocks > malloc-exp/cgroups-rocks
 
 
 Okay, some actual legit cgroups-enforced results, on workloadb (95% read):
@@ -763,3 +763,43 @@ X check in what works now.
   - CPU utilization
   - cache hit rate (implied by I/O count, I guess)
 Bogus behavior is evident after only 10M ops (45 minutes in veri).
+
+------------------------------------------------------------------------------
+tools/run-veri-config-experiment.py workload=a device=disk ram=4gb rocks > malloc-exp/cgroups-rocks
+
+gdb --args ./build/RocksYcsb ycsb/workloada-onefield.spec /tmp/veribetrfs/ --rocks
+
+
+tools/run-veri-config-experiment.py workload=a device=disk ram=4gb config-8mb > malloc-exp/veri-8mb-wka-ioperf-1.data
+
+tools/run-veri-config-experiment.py workload=a device=disk ram=4gb rocks > malloc-exp/rocks-wka-ioperf-1.data
+[malloc-exp/rocks-wka-perf-1.data]
+Rocks/wka with ioaccounting and stat-accounting fields
+
+Hypothesis: My NVMe SSD is good at small IOs.
+It's a MZVLB1T0HALR, speced at 3200MB/s read, 380K IOPs (2.6usec seek).
+
+My disk is usb-Seagate_BUP_Slim_BK_NA9Y4VC9-0:0, about 1TB.
+Apparently it's a hybrid SSD+HHD, which I guess sucks for us.
+https://www.storagereview.com/review/seagate-backup-plus-slim-review-1tb-2tb
+says 120MB/s, 40IOPS for 2MB random transfers, 308IOPs for 4K.
+
+
+[malloc-exp/rocks-wka-ioperf-disk.data]
+tools/run-veri-config-experiment.py workload=a device=disk ram=4gb rocks > malloc-exp/rocks-wka-ioperf-disk.data
+
+[malloc-exp/veri-8mb-wka-ioperf-disk.data]
+tools/run-veri-config-experiment.py workload=a device=disk ram=4gb config-8mb > malloc-exp/veri-8mb-wka-ioperf-disk.data
+
+With per-opn instead of per-time syncs:
+  - initial tput down at 3.5K. That's weird! If we could retire 5K ops + a sync
+    every second before, why not in this configuration? Hmm.
+  - There's still a pretty severe dropoff at 6M ops (full cache).
+I modified YcsbMain to account for sync time, and sure enough, many were
+in the 1s neighborhood.
+
+Let's get the syncs down to a manageable level. I set the period to 50K ops,
+and now syncs are in the 5s neighborhood. Uh oh! Our syncs aren't amortizing
+as well as we'd hope!
+
+[malloc-exp/veri-8mb-wka-ioperf-disk-syncops-2.data]

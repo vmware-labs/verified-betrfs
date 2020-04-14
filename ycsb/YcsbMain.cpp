@@ -15,6 +15,9 @@
 #include "rocksdb/db.h"
 #endif
 
+#include "ioaccounting.h"
+#include "stataccounting.h"
+
 #include <strstream>
 //#include <filesystem>
 #include <chrono>
@@ -118,6 +121,9 @@ void periodicReport(DB db) {
     size_t heap, all_maps;
     external_heap_size(&heap, &all_maps);
     printf("os-map-total %8ld os-map-heap %8ld\n", all_maps, heap);
+
+    IOAccounting::report();
+    StatAccounting::report();
 }
 
 template< class DB >
@@ -178,7 +184,7 @@ void ycsbRun(
     DB db,
     ycsbc::CoreWorkload& workload,
     int num_ops,
-    int sync_interval_ms,
+    int sync_interval_ops,
     bool verbose) {
 
     malloc_accounting_set_scope("ycsbRun.setup");
@@ -200,12 +206,12 @@ void ycsbRun(
     malloc_accounting_default_scope();
 
     cerr << db.name << " [step] running experiment (num ops: " << num_ops << ", sync interval " <<
-        sync_interval_ms << "ms)" << endl;
+        sync_interval_ops << "ops)" << endl;
 
     auto clock_start = chrono::steady_clock::now();
     auto clock_prev = clock_start;
     auto clock_last_sync = clock_start;
-    int next_sync_ms = sync_interval_ms;
+    int next_sync_ops = sync_interval_ops;
     int display_interval_ms = 10000;
     int next_display_ms = display_interval_ms;
 
@@ -267,7 +273,7 @@ void ycsbRun(
             next_display_ms += display_interval_ms;
         }
 
-        if (elapsed_ms >= next_sync_ms) {
+        if (i >= next_sync_ops) {
             db.sync();
 
             /*
@@ -279,8 +285,10 @@ void ycsbRun(
             }
             */
             auto sync_completed = chrono::steady_clock::now();
+            int sync_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                sync_completed - clock_op_completed).count();
 
-            cout << db.name << " [op] sync (completed " << i << " ops)" << endl;
+            cout << db.name << " [op] sync (completed " << i << " ops)" << " (sync time " << sync_time_ms << " ms)" << endl;
             periodicReport(db);
 
             #ifdef _YCSB_VERIBETRFS
@@ -298,7 +306,7 @@ void ycsbRun(
 
             clock_last_sync = sync_completed;
             clock_prev = sync_completed;
-            next_sync_ms += sync_interval_ms;
+            next_sync_ops += sync_interval_ops;
 
             fflush(stdout);
         } else {
@@ -366,7 +374,6 @@ public:
     }
 
     inline void memDebugFrequent() {
-      MainDiskIOHandler_Compile::iostats_display_report();
     }
 
     inline void memDebugInfrequent() {
@@ -473,11 +480,11 @@ void ycsbLoadAndRun(
     ycsbc::CoreWorkload& workload,
     int record_count,
     int num_ops,
-    int sync_interval_ms,
+    int sync_interval_ops,
     bool verbose) {
 
     ycsbLoad(db, workload, record_count, verbose);
-    ycsbRun(db, workload, num_ops, sync_interval_ms, verbose);
+    ycsbRun(db, workload, num_ops, sync_interval_ops, verbose);
     malloc_accounting_display("after experiment before teardown");
 }
 
@@ -533,7 +540,8 @@ int main(int argc, char* argv[]) {
         cerr << "error: spec must provide syncintervalms" << endl;
         exit(-1);
     }
-    int sync_interval_ms = stoi(props["syncintervalms"]);
+    //int sync_interval_ms = stoi(props["syncintervalms"]);
+    int sync_interval_ops = stoi(props["syncintervalops"]);
     int num_ops = stoi(props[ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY]);
 
 
@@ -547,7 +555,7 @@ int main(int argc, char* argv[]) {
         Application app(veribetrfs_filename);
         VeribetrkvFacade db(app);
     
-        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
+        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ops, verbose);
     #endif 
     }
 
@@ -576,7 +584,7 @@ int main(int argc, char* argv[]) {
         assert(status.ok());
         RocksdbFacade db(*rocks_db);
 
-        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
+        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ops, verbose);
     #endif 
     }
 
@@ -585,7 +593,7 @@ int main(int argc, char* argv[]) {
     if (do_nop) {
         NopFacade db;
 
-        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
+        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ops, verbose);
     }
 }
 

@@ -22,3 +22,4 @@ fieldlength=512
 requestdistribution=zipfian
 
 syncintervalms=1000
+syncintervalops=50000

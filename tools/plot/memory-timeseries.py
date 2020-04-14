@@ -15,34 +15,7 @@ def plot_memory_timeseries(e):
     plotHelper = PlotHelper(10)
     timeSeries = TimeSeries(e, plotHelper)
 
-    def plotThroughput(ax):
-        ax.set_title("op throughput")
-        timeSeries.smoothedThroughput(ax, 10)
-        cur = timeSeries.smoothedThroughput(ax, 100)
-        ax.set_ylim(bottom = 0)
-        ax.set_ylabel("Kops/sec")
-        ax.set_xlabel("op num (K)")
-
-        xs = [t for t in e.ops_completed]
-        def aggregateAt(time, label):
-            if time > xs[-1]:
-                return
-            aggregate = (e.ops_completed[time] - e.ops_completed[xs[0]])/float(time-xs[0])/Kilo
-            msg = "mean %.1f" % aggregate
-            if label == "end":
-                msg += "\ncur %.2f" % cur
-            ax.text(timeSeries.timeToKiloOp(time), aggregate, msg, horizontalalignment="right")
-        aggregateAt(xs[-1], "end")
-        t1m = timeSeries.opToTime(2000000)
-        aggregateAt(t1m, "op1000k")
-        
-        axtwin = ax.twinx()
-        ts = [t for t in e.ops_completed]
-        ops = [e.ops_completed[t]/Kilo for t in xs]
-        axtwin.plot(ops,ts, "g")
-        axtwin.set_ylabel("time (s)")
-
-    try: plotThroughput(timeSeries.nextOpAxis())
+    try: timeSeries.plotThroughput(timeSeries.nextOpAxis())
     except: raise
 
     def plotOSvsMalloc(ax):

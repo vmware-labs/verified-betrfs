@@ -4,6 +4,7 @@
 #include "Bundle.i.h"
 
 #include "MallocAccounting.h"
+#include "../ycsb/ioaccounting.h"
 
 //#include <filesystem> // c++17 lol
 #include <sys/types.h>
@@ -51,23 +52,6 @@ void fail(std::string err)
 constexpr int MAX_WRITE_REQS_OUT = 8;
 
 namespace MainDiskIOHandler_Compile {
-  class IOStats {
-    public:
-      uint64_t nReadReqs_started;
-      uint64_t nReadReqs_completed;
-      uint64_t nWriteReqs_started;
-      uint64_t nWriteReqs_completed;
-
-    void display_report() {
-      printf("iostats %ld reads_started %ld reads_completed %ld writes_started %ld writes_completed\n",
-        nReadReqs_started, nReadReqs_completed, nWriteReqs_started, nWriteReqs_completed);
-    }
-  };
-  static IOStats iostats;
-
-  void iostats_display_report() {
-    iostats.display_report();
-  }
 
 #if USE_DIRECT
   uint8_t *aligned_copy(uint8_t* buf, size_t len, size_t *aligned_len) {
@@ -171,7 +155,8 @@ namespace MainDiskIOHandler_Compile {
             fail("write did not write all bytes");
           }
           done = true;
-          iostats.nWriteReqs_completed += 1;
+          IOAccounting::record.write_count += 1;
+          IOAccounting::record.write_bytes += aligned_len;
           nWriteReqsOut--;
         } else if (status != EINPROGRESS) {
           fail("aio_error returned that write has failed");
@@ -192,9 +177,9 @@ namespace MainDiskIOHandler_Compile {
     auto t1 = chrono::high_resolution_clock::now();
     #endif
 
-    iostats.nReadReqs_started += 1;
     ssize_t count = pread(fd, res, len, addr);
-    iostats.nReadReqs_completed += 1;
+    IOAccounting::record.read_count += 1;
+    IOAccounting::record.read_bytes += len;
 
     #ifdef LOG_QUERY_STATS
     auto t2 = chrono::high_resolution_clock::now();
@@ -271,7 +256,6 @@ namespace MainDiskIOHandler_Compile {
   {
     size_t len = bytes.size();
 
-    iostats.nWriteReqs_started += 1;
     malloc_accounting_set_scope("DiskIOHandler::write.WriteTask");
     shared_ptr<WriteTask> writeTask { new WriteTask(fd, addr, &bytes.at(0), len) };
     malloc_accounting_default_scope();

@@ -355,7 +355,9 @@ build/YcsbMain.o: ycsb/YcsbMain.cpp
 			$(GPROF_FLAGS) \
 			$^
 
-build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/YcsbMain.o
+ACCOUNTING_OBJECTS=ycsb/ioaccounting.o ycsb/stataccounting.o
+
+build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/YcsbMain.o $(ACCOUNTING_OBJECTS)
 	# NOTE: this uses c++17, which is required by hdrhist
 	$(CC) $(STDLIB) -o $@ \
 			-Winline -std=c++17 $(O3FLAG) \
@@ -363,10 +365,11 @@ build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/Y
 			-L vendor/rocksdb \
 			$(DBG_SYMBOLS_FLAG) \
 			$(VERIBETRFS_YCSB_O_FILES) \
+			$(ACCOUNTING_OBJECTS) \
 			build/YcsbMain.o \
 			-lycsbc-libcpp -lpthread -ldl $(LDFLAGS)
 
-build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp
+build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp $(ACCOUNTING_OBJECTS)
 	# NOTE: this uses c++17, which is required by hdrhist
 	$(CC) -o $@ \
 			-L ycsb/build \
@@ -381,6 +384,7 @@ build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp
 			-D_YCSB_ROCKS \
 			$(POUND_DEFINES) \
 			ycsb/YcsbMain.cpp \
+			$(ACCOUNTING_OBJECTS) \
 			-lycsbc-default -lrocksdb -lpthread -ldl $(LDFLAGS) \
 
 
