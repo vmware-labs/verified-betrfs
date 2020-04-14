@@ -20,7 +20,7 @@ abstract module MutableBtree {
   import Arrays
   import Model : BtreeModel
 
-  export API provides WF, Interpretation, EmptyTree, Insert, Query, NativeTypes, Model, Options, Maps reveals Node, Key, Value
+  export API provides WF, Interpretation, EmptyTree, Insert, Query, Free, NativeTypes, Model, Options, Maps reveals Node, Key, Value
   export All reveals *
     
   type Key = Model.Keys.Element
@@ -510,6 +510,34 @@ abstract module MutableBtree {
     assert Model.Interpretation(newroot) == Model.Interpretation(root);
     newroot, oldvalue := InsertNode(newroot, key, value);
   }
+
+  method Free(linear node: Node)
+    requires WF(node)
+  {
+    linear match node {
+      case Leaf(keys, values) => {
+        var _ := seq_free(keys);
+        var _ := seq_free(values);
+      }
+      case Index(pivots, children) => {
+        var _ := seq_free(pivots);
+        var i:uint64 := 0;
+        linear var arr := children;
+        while (i < lseq_length_uint64(arr))
+          invariant 0 <= i as int <= |arr|
+          invariant |arr| == |children|
+          invariant forall j | 0 <= j < |arr| :: j in arr <==> j >= i as int
+          invariant forall j | i as int <= j < |arr| :: arr[j] == children[j]
+        {
+          linear var child;
+          arr, child := lseq_take(arr, i);
+          Free(child);
+          i := i + 1;
+        }
+        lseq_free(arr);
+      }
+    }
+  }
 }
 
 module TestBtreeModel refines BtreeModel {
@@ -601,7 +629,6 @@ module MainModule {
   //   i := i + 1;
   // }
     print "PASSED\n";
-    gobble(t);  // TODO(chris): can't figure out how to explicitly free a linear<A>.
-    //linear var _ := t;
+    TMB.Free(t);
   }
 } 
