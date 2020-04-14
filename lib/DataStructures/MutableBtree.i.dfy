@@ -167,8 +167,8 @@ abstract module MutableBtree {
     requires WF(node)
   {
     shared match node {
-      case Leaf(keys, _) => seq_length(keys) as uint64 == MaxKeysPerLeaf()
-      case Index(_, children) => lseq_length_raw(children) == MaxChildren()
+      case Leaf(keys, _) => seq_length(keys) == MaxKeysPerLeaf()
+      case Index(_, children) => lseq_length_uint64(children) == MaxChildren()
     }
   }
 
@@ -260,11 +260,13 @@ abstract module MutableBtree {
     ensures Height(left) <= Height(node)
     ensures Height(right) <= Height(node)
   {
-    var nright:uint64 := lseq_length_raw(node.children) - nleft;
+    assert nleft as nat < |node.children| == lseq_length_uint64(node.children) as nat;
+    var nright:uint64 := lseq_length_uint64(node.children) - nleft;
     linear var Index(pivots, children) := node;
     pivot := seq_get(pivots, nleft-1);
 
     // TODO(robj): perf-pportunity: recycle node as left, rather than copy-and-free.
+    assert 0 <= nleft - 1;
     linear var leftPivots := AllocAndCopy(pivots, 0, nleft-1);
     linear var rightPivots := AllocAndCopy(pivots, nleft, nleft + nright - 1);
 
@@ -300,15 +302,19 @@ abstract module MutableBtree {
     ensures Height(right) <= Height(node)
   {
     if node.Leaf? {
-      var boundary := seq_length(node.keys) as uint64 / 2;
+      var boundary := seq_length(node.keys) / 2;
       pivot := seq_get(node.keys, boundary);
       Model.Keys.IsStrictlySortedImpliesLt(node.keys, boundary as int - 1, boundary as int);
       left, right := SplitLeaf(node, boundary, pivot);
     } else {
-      var boundary := lseq_length_raw(node.children) / 2;
+      var boundary := lseq_length_uint64(node.children) / 2;
+//      assert 2 <= |node.children|;
+//      assert 0 < boundary as nat < |node.children|;
       left, right, pivot := SplitIndex(node, boundary);
     }
     Model.reveal_AllKeys();
+//    assert !Full(left);
+//    assert !Full(right);
   }
 
   method SplitChildOfIndex(linear node: Node, childidx: uint64)
@@ -366,6 +372,7 @@ abstract module MutableBtree {
     } else {
       oldvalue := None;
       keys := InsertSeq(keys, key, (pos + 1) as uint64);
+      //assume Model.Keys.IsStrictlySorted(keys); // TODO(robj): I need a lemma call here.
       values := InsertSeq(values, value, (pos + 1) as uint64);
     }
     n2 := Model.Leaf(keys, values);
@@ -505,72 +512,96 @@ abstract module MutableBtree {
   }
 }
 
-// module TestBtreeModel refines BtreeModel {
-//   import opened NativeTypes
-//   import Keys = Uint64_Order
-//   type Value = uint64
-// }
+module TestBtreeModel refines BtreeModel {
+  import opened NativeTypes
+//  import Keys = Uint64_Order
+  type Value = uint64
+}
 
-// module TestMutableBtree refines MutableBtree {
-//   import Model = TestBtreeModel
-    
-//   function method MaxKeysPerLeaf() : uint64 { 64 }
-//   function method MaxChildren() : uint64 { 64 }
+module TestMutableBtree refines MutableBtree {
+  import Model = TestBtreeModel
+ 
+  function method MaxKeysPerLeaf() : uint64 { 64 }
+  function method MaxChildren() : uint64 { 64 }
 
-//   function method DefaultValue() : Value { 0 }
-//   function method DefaultKey() : Key { 0 }
-// }
+  function method DefaultValue() : Value { 0 }
+  function method DefaultKey() : Key { [0] }
+}
 
-// module MainModule {
-//   import opened NativeTypes
-//   import TMB = TestMutableBtree`API
-  
-//   method Test()
-//   {
-//     // var n: uint64 := 1_000_000;
-//     // var p: uint64 := 300_007;
-//     var n: uint64 := 10_000_000;
-//     var p: uint64 := 3_000_017;
-//     // var n: uint64 := 100_000_000;
-//     // var p: uint64 := 1_073_741_827;
-//     var t := TMB.EmptyTree();
-//     var i: uint64 := 0;
-//     while i < n
-//       invariant 0 <= i <= n
-//       invariant TMB.WF(t)
-//       invariant fresh(t.repr)
-//     {
-//       var oldvalue;
-//       t, oldvalue := TMB.Insert(t, ((i * p) % n), i);
-//       i := i + 1;
-//     }
+module MainModule {
+  import opened LinearSequence_i
+  import opened NativeTypes
+  import TMB = TestMutableBtree`API
 
-//     // i := 0;
-//     // while i < n
-//     //   invariant 0 <= i <= n
-//     // {
-//     //   var needle := (i * p) % n;
-//     //   var qr := t.Query(needle);
-//     //   if qr != TestMutableBtree.Found(i) {
-//     //     print "Test failed";
-//   //   } else {
-//   //     //print "Query ", i, " for ", needle, "resulted in ", qr.value, "\n";
-//   //   }
-//   //   i := i + 1;
-//   // }
+  method SeqFor(i: uint64)
+  returns (result:TMB.Key)
+  requires i < 256*256*256;
+  {
+    var b0:byte := (i / 65536) as byte;
+    var r := i - (b0 as uint64 * 65536);
+    var b1:byte := (r / 256) as byte;
+    var b2:byte := (r - (b1 as uint64)*256) as byte;
 
-//   // i := 0;
-//   // while i < n
-//   //   invariant 0 <= i <= n
-//   // {
-//   //   var qr := t.Query(n + ((i * p) % n));
-//   //   if qr != TestMutableBtree.NotFound {
-//   //     print "Test failed";
-//   //   } else {
-//   //     //print "Didn't return bullsh*t\n";
-//   //   }
-//   //   i := i + 1;
-//   // }
-//     print "PASSED\n";
-//   }
-// } 
+    result := [b0, b1, b2];
+  }
+
+  method gobble<A>(linear a: A)
+  {
+    linear var s := lseq_alloc<A>(1);
+    s := lseq_give(s, 0, a);
+    lseq_free(s);
+  }
+
+  method Test()
+  {
+    // var n: uint64 := 1_000_000;
+    // var p: uint64 := 300_007;
+    var n: uint64 := 10_000_000;
+    var p: uint64 := 3_000_017;
+    // var n: uint64 := 100_000_000;
+    // var p: uint64 := 1_073_741_827;
+    linear var t := TMB.EmptyTree();
+    var i: uint64 := 0;
+    while i < n
+      invariant 0 <= i <= n
+      invariant TMB.WF(t)
+//      invariant fresh(t.repr)
+    {
+      var oldvalue;
+      var keyv := ((i * p) % n);
+      var key := SeqFor(keyv);
+      t, oldvalue := TMB.Insert(t, key, i);
+      i := i + 1;
+    }
+
+    // i := 0;
+    // while i < n
+    //   invariant 0 <= i <= n
+    // {
+    //   var needle := (i * p) % n;
+    //   var qr := t.Query(needle);
+    //   if qr != TestMutableBtree.Found(i) {
+    //     print "Test failed";
+  //   } else {
+  //     //print "Query ", i, " for ", needle, "resulted in ", qr.value, "\n";
+  //   }
+  //   i := i + 1;
+  // }
+
+  // i := 0;
+  // while i < n
+  //   invariant 0 <= i <= n
+  // {
+  //   var qr := t.Query(n + ((i * p) % n));
+  //   if qr != TestMutableBtree.NotFound {
+  //     print "Test failed";
+  //   } else {
+  //     //print "Didn't return bullsh*t\n";
+  //   }
+  //   i := i + 1;
+  // }
+    print "PASSED\n";
+    gobble(t);
+    //linear var _ := t;
+  }
+} 

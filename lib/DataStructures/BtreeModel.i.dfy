@@ -212,12 +212,6 @@ abstract module BtreeModel {
       imagine_lseq(lseqs(node.children)[from..to]))
   }
 
-  lemma ByThePowerOfChris()
-    ensures false;
-  {
-    assume false;
-  }
-
   lemma SubIndexPreservesWF(node: Node, from: int, to: int)
     requires WF(node)
     requires node.Index?

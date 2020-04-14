@@ -8,7 +8,7 @@ module LinearSequence_i {
   export
     provides LinearSequence_s
     provides NativeTypes
-    provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_length, lseq_peek
+    provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_length, lseq_length_uint64, lseq_peek
     provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give
     provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, InsertSeq, InsertLSeq
     provides share_seq
@@ -88,6 +88,12 @@ module LinearSequence_i {
   predicate lseq_has_all<A>(l:lseq<A>)
   {
     forall i :: 0<=i<|l| ==> lseq_has(l)[i]
+  }
+
+  function method lseq_length_uint64<A>(shared s:lseq<A>): (n:uint64)
+    ensures n as nat == |lseqs(s)|
+  {
+      lseq_length_raw(s)
   }
 
   function lseq_length<A>(s:lseq<A>):(n:nat)
