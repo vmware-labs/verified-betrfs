@@ -151,9 +151,15 @@ LinearMaybe::maybe<A> lseq_share_raw(lseq<A> s, uint64 i) {
 }
 
 template <typename A>
-lseq<A> TrustedRuntimeSeqResize(lseq<A> s, uint64 newlen) {
+lseq<A> TrustedRuntimeLSeqResize(lseq<A> s, uint64 newlen) {
   s.resize(newlen);
   return s;
+}
+
+template <typename A>
+lseq<A> get_lseq_default() {
+  lseq<A> ret;
+  return ret;
 }
 
 }
