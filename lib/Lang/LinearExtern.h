@@ -69,6 +69,9 @@ template <typename A>
 using linear_seq = std::vector<A>;
 
 template <typename A>
+using shared_seq = linear_seq<A>;
+
+template <typename A>
 A seq_get(linear_seq<A> s, uint64 i) {
   return s[i];
 }
