@@ -601,7 +601,7 @@ module MainModule {
   //   i := i + 1;
   // }
     print "PASSED\n";
-    gobble(t);
+    gobble(t);  // TODO(chris): can't figure out how to explicitly free a linear<A>.
     //linear var _ := t;
   }
 } 
