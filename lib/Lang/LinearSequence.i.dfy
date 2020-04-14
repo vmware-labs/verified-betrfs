@@ -90,18 +90,18 @@ module LinearSequence_i {
     forall i :: 0<=i<|l| ==> lseq_has(l)[i]
   }
 
-  function method lseq_length<A>(shared s:lseq<A>):(n:nat)
+  function lseq_length<A>(s:lseq<A>):(n:nat)
       ensures n == |lseqs(s)|
   {
       lseq_length_raw(s) as nat
   }
 
-  function method{:inline true} operator(| |)<A>(shared s:seq<A>):nat
+  function operator(| |)<A>(s:seq<A>):nat
   {
       seq_length(s) as nat
   }
 
-  function method{:inline true} operator(| |)<A>(shared s:lseq<A>):nat
+  function operator(| |)<A>(s:lseq<A>):nat
   {
       lseq_length(s)
   }
@@ -276,7 +276,7 @@ module LinearSequence_i {
     ensures lseq_has_all(s2)
     ensures lseqs(s2) == lseqs(s)[..pos] + [a] + lseqs(s)[pos..];
   {
-    var newlen: uint64 := |s| as uint64 + 1;
+    var newlen: uint64 := lseq_length_raw(s) + 1;
 
     s2 := TrustedRuntimeLSeqResize(s, newlen);
 

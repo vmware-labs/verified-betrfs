@@ -168,7 +168,7 @@ abstract module MutableBtree {
   {
     shared match node {
       case Leaf(keys, _) => seq_length(keys) as uint64 == MaxKeysPerLeaf()
-      case Index(_, children) => |children| as uint64 == MaxChildren()
+      case Index(_, children) => lseq_length_raw(children) == MaxChildren()
     }
   }
 
@@ -260,7 +260,7 @@ abstract module MutableBtree {
     ensures Height(left) <= Height(node)
     ensures Height(right) <= Height(node)
   {
-    var nright:uint64 := |node.children| as uint64 - nleft;
+    var nright:uint64 := lseq_length_raw(node.children) - nleft;
     linear var Index(pivots, children) := node;
     pivot := seq_get(pivots, nleft-1);
 
@@ -305,7 +305,7 @@ abstract module MutableBtree {
       Model.Keys.IsStrictlySortedImpliesLt(node.keys, boundary as int - 1, boundary as int);
       left, right := SplitLeaf(node, boundary, pivot);
     } else {
-      var boundary := |node.children| as uint64 / 2;
+      var boundary := lseq_length_raw(node.children) / 2;
       left, right, pivot := SplitIndex(node, boundary);
     }
     Model.reveal_AllKeys();
