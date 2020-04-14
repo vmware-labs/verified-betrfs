@@ -235,12 +235,12 @@ module LinearSequence_i {
     }
   }
 
-  method TrustedRuntimeSeqResize<A>(linear s: seq<A>, newlen: uint64)
+  method {:extern "LinearExtern", "TrustedRuntimeSeqResize"} TrustedRuntimeSeqResize<A>(linear s: seq<A>, newlen: uint64)
     returns (linear s2: seq<A>)
     ensures |s2| == newlen as nat
     ensures forall j :: 0 <= j < newlen as nat && j < |s| ==> s2[j] == s[j]
 
-  method TrustedRuntimeLSeqResize<A>(linear s: lseq<A>, newlen: uint64)
+  method {:extern "LinearExtern", "TrustedRuntimeLSeqResize"} TrustedRuntimeLSeqResize<A>(linear s: lseq<A>, newlen: uint64)
     returns (linear s2: lseq<A>)
     ensures |s2| == newlen as nat
     ensures forall j :: 0 <= j < newlen as nat && j < |s| ==> lseq_has(s2)[j] == lseq_has(s)[j]
@@ -303,7 +303,7 @@ module LinearSequence_i {
   // can use its construction/destruction to track the reference to the borrowed sequence.
   linear datatype as_linear<A> = AsLinear(a:A)
 
-  function method share_seq<A>(shared a:as_linear<seq<A>>):(shared s:seq<A>)
+  function method {:extern "LinearExtern", "share_seq"} share_seq<A>(shared a:as_linear<seq<A>>):(shared s:seq<A>)
     ensures s == a.a
 
   // Intended usage:

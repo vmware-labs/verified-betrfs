@@ -100,9 +100,15 @@ Tuple0 seq_free(linear_seq<A> s) {
 
 template <typename A>
 DafnySequence<A> seq_unleash(linear_seq<A> s) {
-  DafnySequence<A> ret(s);  // Copies contents of s into ret
+  DafnySequence<A> ret(s);  // TODO: Copies contents of s into ret
   seq_free(s);
   return ret;
+}
+
+template <typename A>
+linear_seq<A> TrustedRuntimeSeqResize(linear_seq<A> s, uint64 newlen) {
+  s.resize(newlen);
+  return s;
 }
 
 ////////////////////////////////////////////////////////////
@@ -142,6 +148,12 @@ Tuple2<lseq<A>, LinearMaybe::maybe<A>> lseq_swap_raw_fun(lseq<A> s1, uint64 i, L
 template <typename A>
 LinearMaybe::maybe<A> lseq_share_raw(lseq<A> s, uint64 i) {
   return s[i];
+}
+
+template <typename A>
+lseq<A> TrustedRuntimeSeqResize(lseq<A> s, uint64 newlen) {
+  s.resize(newlen);
+  return s;
 }
 
 }
