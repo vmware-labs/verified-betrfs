@@ -770,7 +770,7 @@ module BucketImpl {
     requires forall i | 0 <= i < |bots| :: bots[i].Inv()
     requires |pivots| + 1 == |bots| < Uint64UpperBound()
     requires PivotsLib.WFPivots(pivots)
-    //requires WeightBucketList(MutBucket.ISeq(bots)) < MaxTotalBucketWeight()
+    requires WeightBucketList(MutBucket.ISeq(bots)) < MaxTotalBucketWeight()
     ensures forall i | 0 <= i < |newbots| :: newbots[i].Inv()
     ensures forall i | 0 <= i < |newbots| :: fresh(newbots[i].Repr)
     ensures MutBucket.ReprSeqDisjoint(newbots)
