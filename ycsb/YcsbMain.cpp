@@ -268,7 +268,7 @@ void ycsbRun(
 
         if (elapsed_ms >= next_display_ms) {
             malloc_accounting_display("periodic");
-            printf("elapsed %d next %d int %d\n",
+            printf("elapsed run %d next %d int %d\n",
                 elapsed_ms, next_display_ms, display_interval_ms);
             next_display_ms += display_interval_ms;
         }

@@ -8,13 +8,13 @@ class TimeSeries:
         self.exp = exp
         self.plotHelper = plotHelper
 
-        self.opValues = list(exp.ops_completed.values())
-        self.opValues.sort()
-        self.opTimes = list(exp.ops_completed.keys())
-        self.opTimes.sort()
+#        self.opValues = list(exp.ops_completed.values())
+#        self.opValues.sort()
+#        self.opTimes = list(exp.ops_completed.keys())
+#        self.opTimes.sort()
 
-        self.t_end = max(self.exp.ops_completed.keys())
-        self.kop_end = self.timeToKiloOp(self.t_end)
+#        self.t_end = max(self.exp.ops_completed.keys())
+#        self.kop_end = self.timeToKiloOp(self.t_end)
 
     def nextOpAxis(self):
         ax = self.plotHelper.nextAxis()
