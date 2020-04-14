@@ -110,6 +110,7 @@ module MainHandlers refines Main {
   // jonh hack UNVERIFIED DEBUG ONLY
   method handleEvictEverything(k: Constants, hs: HeapState, io: DiskIOHandler)
   {
+    assume false;
     var s := hs.s;
     print "\nBefore\n";
     var acc := s.bc.DebugAccumulate();
@@ -130,6 +131,7 @@ module MainHandlers refines Main {
   // jonh hack UNVERIFIED DEBUG ONLY
   method handleCountAmassAllocations(k: Constants, hs: HeapState, io: DiskIOHandler)
   {
+    assume false;
     AllocationReport.start();
     var s := hs.s;
 

@@ -92,6 +92,7 @@ module EvictImpl {
       Dealloc(k, s, io, ref.value);
     } else {
       var refOpt := s.lru.NextOpt();
+      assume false; // TODO(jon) what's going on here, why was this changed?
       //if ref == BT.G.Root() {
       if refOpt.None? {
       } else {

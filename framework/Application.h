@@ -52,7 +52,7 @@ public:
   void Insert(std::string const& key, std::string const& val);
   ByteString Query(std::string const& key);
 
-  void Sync();
+  void Sync(bool graphSync);
   void EvictEverything();
   void CountAmassAllocations();
   void Insert(ByteString key, ByteString val);

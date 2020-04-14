@@ -45,8 +45,8 @@ module BucketImpl {
   {
     var s := KMBBOps.ToSeq(tree);
     kvl := KVList.Kvl(s.0[..], s.1[..]);
-    kvl := KVList.AmassKvl(kvl);  // TODO skip a seq-assembly step here
     assume false;
+    kvl := KVList.AmassKvl(kvl);  // TODO skip a seq-assembly step here
   }
 
   method kvl_to_tree(kvl : KVList.Kvl)
