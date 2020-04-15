@@ -1,4 +1,6 @@
 include "CommitterModel.i.dfy"
+include "../ByteBlockCacheSystem/InterpretationDiskOps.i.dfy"
+include "DiskOpModel.i.dfy"
 
 module CommitterReplayModel {
   import opened NativeTypes
