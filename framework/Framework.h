@@ -8,25 +8,17 @@
 #include <cstring>
 
 namespace Maps_Compile {
-  class __default {
-    public:
-    template <typename K, typename V>
-    static DafnyMap<K, V> ComputeMapRemove1(DafnyMap<K, V> m, K key)
-    {
-      DafnyMap<K, V> dm(m);
-      dm.map.erase(key);
-      return dm;
-    }
-  };
+  template <typename K, typename V>
+  DafnyMap<K, V> ComputeMapRemove1(DafnyMap<K, V> m, K key)
+  {
+    DafnyMap<K, V> dm(m);
+    dm.map.erase(key);
+    return dm;
+  }
 }
 
 namespace NativeArithmetic_Compile {
-  class __default {
-    public:
-    static uint64_t u64add(uint64_t a, uint64_t b) {
-      return a + b;
-    }
-  };
+  uint64_t u64add(uint64_t a, uint64_t b);
 }
 
 namespace NativeArrays_Compile {
@@ -97,66 +89,20 @@ namespace NativePackedInts_Compile {
   static_assert(sizeof(uint32) == 4, "uint32 is aliased wrong");
   static_assert(sizeof(uint64) == 8, "uint64 is aliased wrong");
 
-  class __default {
-    public:
-    static uint32 Unpack__LittleEndian__Uint32(DafnySequence<uint8> const& packed, uint64 idx)
-    {
-      uint32 res;
-      memcpy(&res, packed.ptr() + idx, sizeof(uint32));
-      return res;
-    }
-
-    static uint64 Unpack__LittleEndian__Uint64(DafnySequence<uint8> const& packed, uint64 idx)
-    {
-      uint64 res;
-      memcpy(&res, packed.ptr() + idx, sizeof(uint64));
-      return res;
-    }
-
-    static void Pack__LittleEndian__Uint32__into__Array(uint32 i, DafnyArray<uint8> const& ar, uint64 idx)
-    {
-      memcpy(&ar.at(idx), &i, sizeof(uint32));
-    }
-
-    static void Pack__LittleEndian__Uint64__into__Array(uint64 i, DafnyArray<uint8> const& ar, uint64 idx)
-    {
-      memcpy(&ar.at(idx), &i, sizeof(uint64));
-    }
-
-    static DafnySequence<uint32> Unpack__LittleEndian__Uint32__Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len)
-    {
-      // TODO is there a safe way to do this without a copy?
-      DafnySequence<uint32> res(len);
-      memcpy(res.ptr(), packed.ptr() + idx, sizeof(uint32) * len);
-      return res;
-    }
-
-    static DafnySequence<uint64> Unpack__LittleEndian__Uint64__Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len)
-    {
-      DafnySequence<uint64> res(len);
-      memcpy(res.ptr(), packed.ptr() + idx, sizeof(uint64) * len);
-      return res;
-    }
-
-    static void Pack__LittleEndian__Uint32__Seq__into__Array(DafnySequence<uint32> const& unpacked, DafnyArray<uint8> const& ar, uint64 idx)
-    {
-      memcpy(&ar.at(idx), unpacked.ptr(), sizeof(uint32) * unpacked.size());
-    }
-
-    static void Pack__LittleEndian__Uint64__Seq__into__Array(DafnySequence<uint64> const& unpacked, DafnyArray<uint8> const& ar, uint64 idx)
-    {
-      memcpy(&ar.at(idx), unpacked.ptr(), sizeof(uint64) * unpacked.size());
-    }
-  };
+  uint32 Unpack__LittleEndian__Uint32(DafnySequence<uint8> const& packed, uint64 idx);
+  uint64 Unpack__LittleEndian__Uint64(DafnySequence<uint8> const& packed, uint64 idx);
+  void Pack__LittleEndian__Uint32__into__Array(uint32 i, DafnyArray<uint8> const& ar, uint64 idx);
+  void Pack__LittleEndian__Uint64__into__Array(uint64 i, DafnyArray<uint8> const& ar, uint64 idx);
+  DafnySequence<uint32> Unpack__LittleEndian__Uint32__Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len);
+  DafnySequence<uint64> Unpack__LittleEndian__Uint64__Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len);
+  void Pack__LittleEndian__Uint32__Seq__into__Array(DafnySequence<uint32> const& unpacked, DafnyArray<uint8> const& ar, uint64 idx);
+  void Pack__LittleEndian__Uint64__Seq__into__Array(DafnySequence<uint64> const& unpacked, DafnyArray<uint8> const& ar, uint64 idx);
 }
 
 namespace Crypto_Compile {
-  class __default {
-    public:
-    static DafnySequence<uint8> Sha256(DafnySequence<uint8>);
-    static DafnySequence<uint8> Crc32C(DafnySequence<uint8>);
-    static DafnySequence<uint8> Crc32CArray(DafnyArray<uint8>, uint64 start, uint64 len);
-  };
+  DafnySequence<uint8> Sha256(DafnySequence<uint8>);
+  DafnySequence<uint8> Crc32C(DafnySequence<uint8>);
+  DafnySequence<uint8> Crc32CArray(DafnyArray<uint8>, uint64 start, uint64 len);
 }
 
 namespace MainDiskIOHandler_Compile {
@@ -165,10 +111,13 @@ namespace MainDiskIOHandler_Compile {
 
   class DiskIOHandler {
     public:
-    uint64 write(uint64 addr, DafnyArray<uint8> bytes);
+    uint64 write(uint64 addr, DafnySequence<uint8> bytes);
+    Tuple2<uint64, uint64> write2(
+      uint64 addr1, DafnySequence<uint8> bytes1,
+      uint64 addr2, DafnySequence<uint8> bytes2);
     uint64 read(uint64 addr, uint64 len);
-    uint64 getWriteResult();
-    Tuple2<uint64, DafnySequence<uint8>> getReadResult();
+    Tuple3<uint64, uint64, uint64> getWriteResult();
+    Tuple3<uint64, uint64, DafnySequence<uint8>> getReadResult();
 
     DiskIOHandler(std::string filename = ".veribetrfs.img");
     ~DiskIOHandler();
@@ -188,6 +137,8 @@ namespace MainDiskIOHandler_Compile {
     DafnySequence<uint8> readResponseBytes;
 
     uint64 writeResponseId;
+    uint64 responseAddr;
+    uint64 responseLen;
 
     uint64 curId;
 
@@ -197,18 +148,12 @@ namespace MainDiskIOHandler_Compile {
 }
 
 namespace NativeBenchmarking_Compile {
-  class __default {
-  public:
-    static void start(DafnySequence<char> dafnyName);
-    static void end(DafnySequence<char> dafnyName);
-  };
+  void start(DafnySequence<char> dafnyName);
+  void end(DafnySequence<char> dafnyName);
 }
 
 namespace MallocAccounting_Compile {
-  class __default {
-  public:
-    static void set_amass_mode(bool b);
-  };
+  void set_amass_mode(bool b);
 }
 
 namespace NodeImpl_Compile {
@@ -216,12 +161,9 @@ class Node;
 }
 
 namespace AllocationReport_Compile {
-  class __default {
-  public:
-    static void start();
-    static void sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node);
-    static void stop();
-  };
+  void start();
+  void sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node);
+  void stop();
 }
 
 void benchmark_start(std::string const&);

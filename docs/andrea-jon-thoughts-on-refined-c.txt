@@ -1,0 +1,40 @@
+27 Mar 2020
+Andrea & Jon synthesizing thoughts about Michael Sammler's Refined C.
+
+typing rules could become a big user-searched forest
+  - analogy to scala, where you have to dig around the entire code base
+  - in rust, the borrow rules are less powerful, but the same everywhere
+  - likely difficult to generate meaningful error messages; users will need
+    a huge mental vocabulary to debug "can't unify type" error message.
+
+the power lattice
+  - extra power to capture uninit (retyped) memory. GC.
+    - is this actually frequent?
+  - used the uninit "hammer" to do ownership types too; is there a better choice?
+    - more powerful type systems come with worse diagnostics. Reaching for the
+      more-powerful type system for everything means worse diagnostics for
+      everything.
+                            > Viper
+  -   Iris sep. logic > RC     ||             > Rust-borrow >? Linear-Dafny(except maybe)
+                            > Dafny-dyn-frames
+      Michael says a spin lock is something you can model in iris but not in RC.
+
+  - dependent-typing might remove some proof obligations high in the stack for
+    functional semantics.
+  - refinement vs dependent types? -- there are decidable dependent type systems
+    - WF goes into decidable-dependent type
+    - or would this require the user to do type-juggling to dispatch these things?
+  - a foundational proof allows you "to be reckless"
+
+the functional language is Coq
+  - which didn't look fun
+what RC ideas might we adopt if we didn't attach ourselves to Coq
+  - if we used newtypes (dafny dependent types) aggressively, would that be pretty
+    close to RC?
+    - not quite -- RC uses "type constructors", so a refined type has as many smaller
+      types as parameter choices.
+- Dafny is awesome because the proof language and the implementation language are the same.
+  - at least, this reduces lots of syntatic glue boilerplate
+  - much easier to make meaningful diagnostics
+  - so maybe this just means that Dafny is "mature" or "well-cooked", and we're constrasting
+    it with a bunch of duct-taped prototypes.

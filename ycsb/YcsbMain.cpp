@@ -98,7 +98,7 @@ void ycsbLoad(DB db, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
     }
 
     cerr << db.name << " [step] sync" << endl;
-    db.sync();
+    db.sync(true);
 
     auto clock_end = chrono::steady_clock::now();
     long long bench_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(clock_end - clock_start).count();
@@ -211,7 +211,7 @@ void ycsbRun(
 #if HACK_EVICT_PERIODIC
         if (elapsed_ms >= next_evict_ms) {
             printf("evict.");
-            db.sync();
+            db.sync(true);
             db.evictEverything();
             next_evict_ms += evict_interval_ms;
         }
@@ -232,7 +232,7 @@ void ycsbRun(
         }
 
         if (elapsed_ms >= next_sync_ms) {
-            db.sync();
+            db.sync(false);
 
             /*
             if (i > 3000000) {
@@ -271,7 +271,7 @@ void ycsbRun(
     }
 
     auto sync_started = chrono::steady_clock::now();
-    db.sync();
+    db.sync(true);
     auto sync_completed = chrono::steady_clock::now();
     auto sync_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(
         sync_completed - sync_started).count();
@@ -321,8 +321,8 @@ public:
         app.Insert(key, value);
     }
 
-    inline void sync() {
-        app.Sync();
+    inline void sync(bool fullSync) {
+        app.Sync(fullSync);
     }
 
     inline void evictEverything() {
@@ -368,7 +368,7 @@ public:
         assert(status.ok());
     }
 
-    inline void sync() {
+    inline void sync(bool /*fullSync*/) {
         static struct rocksdb::FlushOptions foptions = rocksdb::FlushOptions();
         rocksdb::Status status = db.Flush(foptions);
         assert(status.ok());
@@ -399,7 +399,7 @@ public:
         asm volatile ("nop");
     }
 
-    inline void sync() {
+    inline void sync(bool /*fullSync*/) {
         asm volatile ("nop");
     }
 

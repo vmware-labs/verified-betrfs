@@ -87,7 +87,7 @@ abstract module Main {
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp,
       io.diskOp())
 
-  method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: uint64)
+  method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: uint64, graphSync: bool)
   returns (wait: bool, success: bool)
   requires io.initialized()
   requires Inv(k, hs)

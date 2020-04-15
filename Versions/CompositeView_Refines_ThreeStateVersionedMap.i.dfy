@@ -1,24 +1,24 @@
-include "../BlockCacheSystem/BetreeBlockCacheSystem_Refines_ThreeStateVersionedMap.i.dfy"
-include "ByteBetreeBlockCacheSystem_Refines_BetreeBlockCacheSystem.i.dfy"
+include "CompositeView_Refines_TSJMap.i.dfy"
+include "../MapSpec/TSJMap_Refines_ThreeStateVersionedMap.i.dfy"
 
 //
 // Composes the two refinements:
 //
-//   ByteBetreeBlockCacheSystem -> BetreeBlockCacheSystem
-//   BetreeBlockCacheSystem -> ThreeStateVersioned Map
+//   CompositeView -> TSJMap
+//   TSJMap -> ThreeStateVersioned Map
 //
 // To yield
 //
-//   ByteBetreeBlockCacheSystem -> ThreeStateVersioned Map
+//   CompositeView -> ThreeStateVersioned Map
 //
 
-module ByteBetreeBlockCacheSystem_Refines_ThreeStateVersionedMap {
-  import A = ByteBetreeBlockCacheSystem
-  import B = BetreeBlockCacheSystem
+module CompositeView_Refines_ThreeStateVersionedMap {
+  import A = CompositeView
+  import B = TSJMap
   import C = ThreeStateVersionedMap
 
-  import Ref_A = ByteBetreeBlockCacheSystem_Refines_BetreeBlockCacheSystem
-  import Ref_B = BetreeBlockCacheSystem_Refines_ThreeStateVersionedMap
+  import Ref_A = CompositeView_Refines_TSJMap
+  import Ref_B = TSJMap_Refines_ThreeStateVersionedMap
   
   import UI
 

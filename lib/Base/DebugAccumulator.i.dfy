@@ -24,6 +24,7 @@ module DebugAccumulator {
     }
 
     method doPrint(indent:uint64) {
+      assume false;
       var i := doIndent(indent);
       print i, this.key, ": ", this.count, " ", this.unit, "\n";
       Display(this.index, indent+2);
@@ -48,11 +49,13 @@ module DebugAccumulator {
   }
   method AccPut(acc: DebugAccumulator, key:string, rec:AccRec) returns (out:DebugAccumulator)
   {
+    assume false;
     rec.key := key;
     out := acc + [rec];
   }
 
   method Display(a:DebugAccumulator, indent: uint64) {
+    assume false;
     var i:uint64 := 0;
     while i < |a| as uint64 {
       a[i].doPrint(indent);
