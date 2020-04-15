@@ -1,4 +1,5 @@
 include "IOModel.i.dfy"
+include "CommitterInitModel.i.dfy"
 
 module HandleReadResponseModel {
   import opened NativeTypes
@@ -10,6 +11,7 @@ module HandleReadResponseModel {
   import opened DiskOpModel
   import IOModel
   import CommitterModel
+  import CommitterInitModel
   import MarshallingModel
 
   function {:opaque} readSuperblockResp(
@@ -173,6 +175,13 @@ module HandleReadResponseModel {
       ) else (
         s
       )
+    ) else if ValidJournalLocation(loc) then (
+      if s.jc.status.StatusLoadingOther? then (
+        var jc' := CommitterInitModel.PageInJournalResp(k, s.jc, io);
+        s.(jc := jc')
+      ) else (
+        s
+      )
     ) else if loc == Superblock1Location() then (
       var jc' := readSuperblockResp(k, s.jc, io, 0);
       s.(jc := jc')
@@ -217,6 +226,17 @@ module HandleReadResponseModel {
 
         jcNoOp_respread(k, s, s', StatesInternalOp, io);
         assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), StatesInternalOp);
+        assert BJC.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
+        assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io));
+      } else {
+        noop_respread(k, s, io);
+      }
+    } else if ValidJournalLocation(loc) {
+      if s.jc.status.StatusLoadingOther? {
+        CommitterInitModel.PageInJournalRespCorrect(k, s.jc, io);
+
+        bcNoOp_respread(k, s, s', JournalInternalOp, io);
+        assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), JournalInternalOp);
         assert BJC.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
         assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io));
       } else {
