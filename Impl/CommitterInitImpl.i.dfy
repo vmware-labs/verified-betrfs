@@ -103,19 +103,19 @@ module CommitterInitImpl {
   method FinishLoadingOtherPhase(k: ImplConstants, cm: Committer)
   requires cm.Inv()
   requires cm.status.StatusLoadingOther?
-
   modifies cm.Repr
   ensures cm.W()
   ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
   ensures cm.I() ==
       CommitterInitModel.FinishLoadingOtherPhase(
           Ic(k), old(cm.I()));
-
   {
     CommitterInitModel.reveal_FinishLoadingOtherPhase();
     cm.reveal_ReprInv();
 
-    if cm.superblock.journalLen == 0 {
+    var success := cm.journalist.parseJournals();
+
+    if success {
       cm.status := CommitterModel.StatusReady;
       cm.frozenLoc := None;
       cm.isFrozen := false;
