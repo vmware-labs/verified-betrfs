@@ -195,6 +195,7 @@ module JournalistParsingImpl {
         && parseEntries(s, len as int, 8).Some?
         && parseEntries(s, len as int, 8).value
           == ar[..i] + parseEntries(s, (len-i) as int, idx as int).value
+    invariant i <= idx
     {
       var idx0 := idx;
 
