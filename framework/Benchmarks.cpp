@@ -542,6 +542,41 @@ public:
   }
 };
 
+class BenchmarkReplay : public Benchmark {
+public:
+  int count = 20000;
+
+  virtual string name() override { return "Replay"; }
+  virtual int opCount() override { return 1; }
+
+  vector<ByteString> keys;
+  vector<ByteString> values;
+  vector<ByteString> query_keys;
+  vector<ByteString> query_values;
+
+  BenchmarkReplay() {
+    int seed1 = 1234;
+    int seed2 = 527;
+    int seed3 = 19232;
+    keys = RandomKeys(count, seed1);
+    values = RandomValues(count, seed2);
+
+    auto p = RandomQueryKeysAndValues(count, seed3, keys, values);
+    query_keys = move(p.first);
+    query_values = move(p.second);
+  }
+
+  virtual void prepare(Application& app) override {
+    for (size_t i = 0; i < keys.size(); i++) {
+      app.Insert(keys[i], values[i]);
+    }
+    app.Sync(false);
+    app.crash();
+  }
+  virtual void go(Application& app) override {
+    app.QueryAndExpect(query_keys[0], query_values[0]);
+  }
+};
 
 void RunAllBenchmarks(string filename) {
   { BenchmarkRandomInserts q; q.run(filename); }
@@ -557,6 +592,7 @@ shared_ptr<Benchmark> benchmark_by_name(string const& name) {
   if (name == "random-succs") { return shared_ptr<Benchmark>(new BenchmarkRandomSuccQueries()); }
   if (name == "mixed-insert-query") { return shared_ptr<Benchmark>(new BenchmarkMixedInsertQuery()); }
   if (name == "mixed-update-query") { return shared_ptr<Benchmark>(new BenchmarkMixedUpdateQuery()); }
+  if (name == "replay") { return shared_ptr<Benchmark>(new BenchmarkReplay()); }
 
   cerr << "No benchmark found by name " << name << endl;
   exit(1);
