@@ -1,7 +1,7 @@
 include "../ByteBlockCacheSystem/JournalBytes.i.dfy"
 include "../lib/Base/NativeArrays.s.dfy"
 
-module JournalistParsingModel {
+module JournalistParsingImpl {
   import opened NativeTypes
   import opened Journal
   import opened JournalBytes
@@ -59,7 +59,7 @@ module JournalistParsingModel {
 
   method computeJournalRangeOfByteSeq(s: seq<byte>)
   returns (res: Option<JournalRange>)
-  requires |s| < 0xffff_ffff_ffff_ffff
+  requires |s| < 0x1_0000_0000_0000_0000
   ensures res == JournalRangeOfByteSeq(s)
   ensures res.Some? ==>
       forall i | 0 <= i < |res.value| :: |res.value[i]| == 4064
@@ -179,6 +179,7 @@ module JournalistParsingModel {
   requires 0 <= 8 <= |s| < 0x1_0000_0000_0000_0000
   requires 0 <= len
   ensures res == parseJournalRangeOfBytes(s, len as int)
+  ensures res.Some? ==> |res.value| <= |s|
   {
     var ar := new JournalEntry[len];
     var i := 0;
@@ -247,6 +248,8 @@ module JournalistParsingModel {
   returns (res : Option<seq<JournalEntry>>)
   requires forall i | 0 <= i < |jr| :: |jr[i]| == 4064
   requires |jr| <= 0x1_0000_0000
+  ensures res.Some? ==> |res.value| <= |jr| * 4064
+  ensures res == parseJournalRange(jr)
   {
     if |jr| as uint64 == 0 {
       return Some([]);

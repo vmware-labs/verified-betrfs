@@ -157,6 +157,8 @@ module JournalistModel {
   lemma reveal_I(jm: JournalistModel)
   requires WF(jm)
   ensures I(jm) == Iprivate(jm)
+  {
+  }
 
   predicate Inv(jm: JournalistModel)
   {

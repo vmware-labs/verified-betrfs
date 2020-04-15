@@ -18,6 +18,7 @@ module CommitterInitImpl {
   import StateImpl
   import SectorType
   import MutableMapModel
+  import JournalistParsingImpl
 
   import opened CommitterImpl
   import CommitterInitModel
@@ -58,61 +59,6 @@ module CommitterInitImpl {
       } else {
         print "PageInSuperblockReq: doing nothing\n";
       }
-    }
-
-    cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
-    cm.reveal_ReprInv();
-  }
-
-  method PageInSuperblockResp(
-    k: ImplConstants, cm: Committer, io: DiskIOHandler, which: uint64)
-  requires cm.Inv()
-  requires io.diskOp().RespReadOp?
-  requires ValidDiskOp(io.diskOp())
-  requires which == 0 || which == 1
-  requires which == 0 ==> ValidSuperblock1Location(
-      LocOfRespRead(io.diskOp().respRead))
-  requires which == 1 ==> ValidSuperblock2Location(
-      LocOfRespRead(io.diskOp().respRead))
-
-  requires io !in cm.Repr
-  modifies cm.Repr
-  ensures cm.W()
-  ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
-  ensures cm.I() ==
-      CommitterInitModel.PageInSuperblockResp(
-          Ic(k), old(cm.I()), old(IIO(io)), which)
-  {
-    CommitterInitModel.reveal_PageInSuperblockResp();
-    cm.reveal_ReprInv();
-
-    if cm.status.StatusLoadingSuperblock? {
-      var id, sector := ReadSector(io);
-      var sup := (
-        if sector.Some? &&
-            JC.WFSuperblock(sector.value.superblock) then (
-          JC.SuperblockSuccess(sector.value.superblock)
-        ) else (
-          JC.SuperblockCorruption
-        )
-      );
-      if which == 0 {
-        if cm.superblock1Read == Some(id) {
-          cm.superblock1Read := None;
-          cm.superblock1 := sup;
-        } else {
-          print "PageInSuperblockResp: did nothing\n";
-        }
-      } else {
-        if cm.superblock2Read == Some(id) {
-          cm.superblock2Read := None;
-          cm.superblock2 := sup;
-        } else {
-          print "PageInSuperblockResp: did nothing\n";
-        }
-      }
-    } else {
-      print "PageInSuperblockResp: did nothing\n";
     }
 
     cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
@@ -192,7 +138,137 @@ module CommitterInitImpl {
   requires cm.WF()
   ensures b == CommitterInitModel.isReplayEmpty(cm.I())
   {
-    CommitterInitModel.reveal_isReplayEmpty();
+    //CommitterInitModel.reveal_isReplayEmpty();
     b := cm.journalist.isReplayEmpty();
+  }
+
+  method PageInJournalReqFront(k: ImplConstants, cm: Committer, io: DiskIOHandler)
+  requires cm.WF()
+  requires cm.status.StatusLoadingOther?
+  requires cm.superblock.journalLen > 0
+  requires io.initialized()
+  requires io !in cm.Repr
+  modifies cm.Repr
+  modifies io
+  ensures cm.W()
+  ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
+  ensures (cm.I(), IIO(io)) == CommitterInitModel.PageInJournalReqFront(
+      Ic(k), old(cm.I()), old(IIO(io)))
+  {
+    CommitterInitModel.reveal_PageInJournalReqFront();
+    cm.reveal_ReprInv();
+
+    var len :=
+      if cm.superblock.journalStart + cm.superblock.journalLen
+          >= NumJournalBlocks()
+      then
+        NumJournalBlocks() - cm.superblock.journalStart
+      else
+        cm.superblock.journalLen;
+    var loc := JournalRangeLocation(cm.superblock.journalStart, len);
+    var id := RequestRead(io, loc);
+    cm.journalFrontRead := Some(id);
+    cm.journalBackRead :=
+        if cm.journalBackRead == Some(id)
+          then None else cm.journalBackRead;
+
+    cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
+    cm.reveal_ReprInv();
+  }
+  
+  method PageInJournalReqBack(k: ImplConstants, cm: Committer, io: DiskIOHandler)
+  requires cm.WF()
+  requires cm.status.StatusLoadingOther?
+  requires cm.superblock.journalLen > 0
+  requires cm.superblock.journalStart + cm.superblock.journalLen > NumJournalBlocks()
+  requires io.initialized()
+  requires io !in cm.Repr
+  modifies cm.Repr
+  modifies io
+  ensures cm.W()
+  ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
+  ensures (cm.I(), IIO(io)) == CommitterInitModel.PageInJournalReqBack(
+      Ic(k), old(cm.I()), old(IIO(io)))
+  {
+    CommitterInitModel.reveal_PageInJournalReqBack();
+    cm.reveal_ReprInv();
+
+    var len := cm.superblock.journalStart + cm.superblock.journalLen - NumJournalBlocks();
+    var loc := JournalRangeLocation(0, len);
+    var id := RequestRead(io, loc);
+    cm.journalBackRead := Some(id);
+    cm.journalFrontRead :=
+        if cm.journalFrontRead == Some(id)
+          then None else cm.journalFrontRead;
+
+    cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
+    cm.reveal_ReprInv();
+  }
+
+  method PageInJournalResp(
+      k: ImplConstants,
+      cm: Committer,
+      io: DiskIOHandler)
+  requires cm.WF()
+  requires cm.status.StatusLoadingOther?
+  requires io.diskOp().RespReadOp?
+  requires ValidDiskOp(io.diskOp())
+  requires ValidJournalLocation(LocOfRespRead(io.diskOp().respRead))
+  requires io !in cm.Repr
+  modifies cm.Repr
+  ensures cm.W()
+  ensures cm.Repr == old(cm.Repr)
+  ensures cm.I() == CommitterInitModel.PageInJournalResp(
+      Ic(k), old(cm.I()), old(IIO(io)))
+  {
+    CommitterInitModel.reveal_PageInJournalResp();
+    cm.reveal_ReprInv();
+
+    var id, addr, bytes := io.getReadResult();
+    var jr := JournalistParsingImpl.computeJournalRangeOfByteSeq(bytes);
+    if jr.Some? {
+      assert |jr.value| <= NumJournalBlocks() as int by {
+        reveal_ValidJournalLocation();
+      }
+
+      if cm.journalFrontRead == Some(id) {
+        cm.journalist.setFront(jr.value);
+        cm.journalFrontRead := None;
+      } else if cm.journalBackRead == Some(id) {
+        cm.journalist.setBack(jr.value);
+        cm.journalBackRead := None;
+      }
+    }
+
+    cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
+    cm.reveal_ReprInv();
+  }
+
+  method tryFinishLoadingOtherPhase(k: ImplConstants, cm: Committer, io: DiskIOHandler)
+  requires cm.Inv()
+  requires cm.status.StatusLoadingOther?
+  requires io.initialized()
+  requires io !in cm.Repr
+  modifies cm.Repr
+  modifies io
+  ensures cm.W()
+  ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
+  ensures (cm.I(), IIO(io)) == CommitterInitModel.tryFinishLoadingOtherPhase(
+      Ic(k), old(cm.I()), old(IIO(io)))
+  {
+    CommitterInitModel.reveal_tryFinishLoadingOtherPhase();
+    cm.reveal_ReprInv();
+
+    var hasFront := cm.journalist.hasFront();
+    var hasBack := cm.journalist.hasBack();
+    if cm.superblock.journalLen > 0 && !cm.journalFrontRead.Some? && !hasFront {
+      PageInJournalReqFront(k, cm, io);
+    } else if cm.superblock.journalStart + cm.superblock.journalLen > NumJournalBlocks() && !cm.journalBackRead.Some? && !hasBack {
+      PageInJournalReqBack(k, cm, io);
+    } else if (cm.superblock.journalLen > 0 ==> hasFront)
+        && (cm.superblock.journalStart + cm.superblock.journalLen > NumJournalBlocks() ==> hasBack) {
+      FinishLoadingOtherPhase(k, cm);
+    } else {
+    }
   }
 }

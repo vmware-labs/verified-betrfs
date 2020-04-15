@@ -423,10 +423,6 @@ module CoordinationModel {
     ) else if !isInitialized(s) then (
       && initialization(k, s, io, s', io')
       && success == false
-    ) else if !CommitterInitModel.isReplayEmpty(s.jc) then (
-      && s' == s
-      && io' == io
-      && success == false
     ) else (
       doSync(k, s, io, graphSync, s', io')
       && success == false
@@ -457,11 +453,9 @@ module CoordinationModel {
       assert BJC.Next(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
       assert M.Next(Ik(k), IVars(s), IVars(s'), uiop, diskOp(io'));
 
-    } else if !s.bc.Ready? || !s.jc.status.StatusReady? {
+    } else if !isInitialized(s) {
       initializationCorrect(k, s, io, s', io');
       assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'));
-    } else if !CommitterInitModel.isReplayEmpty(s.jc) {
-      noop(k, s);
     } else {
       doSyncCorrect(k, s, io, graphSync, s', io');
     }

@@ -1,5 +1,6 @@
 include "IOImpl.i.dfy"
 include "FullImpl.i.dfy"
+include "CommitterInitImpl.i.dfy"
 include "HandleReadResponseModel.i.dfy"
 
 module HandleReadResponseImpl {
@@ -12,6 +13,7 @@ module HandleReadResponseImpl {
   import opened DiskOpImpl
   import opened CommitterImpl
   import opened MainDiskIOHandler
+  import CommitterInitImpl
   import HandleReadResponseModel
   import IOImpl
 
@@ -84,6 +86,10 @@ module HandleReadResponseImpl {
         IOImpl.PageInIndirectionTableResp(k, s.bc, io);
       } else {
         print "readResponse: doing nothing\n";
+      }
+    } else if ValidJournalLocation(loc) {
+      if s.jc.status.StatusLoadingOther? {
+        CommitterInitImpl.PageInJournalResp(k, s.jc, io);
       }
     } else if loc == Superblock1Location() {
       readSuperblockResp(k, s.jc, io, 0);

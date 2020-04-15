@@ -3,6 +3,7 @@ include "FullImpl.i.dfy"
 include "CommitterCommitImpl.i.dfy"
 include "CommitterInitImpl.i.dfy"
 include "CommitterAppendImpl.i.dfy"
+include "CommitterReplayImpl.i.dfy"
 include "QueryImpl.i.dfy"
 include "InsertImpl.i.dfy"
 include "SuccImpl.i.dfy"
@@ -13,6 +14,7 @@ module CoordinationImpl {
   import CommitterCommitImpl
   import CommitterInitImpl
   import CommitterAppendImpl
+  import CommitterReplayImpl
   import QueryImpl
   import SuccImpl
   import InsertImpl
@@ -70,7 +72,7 @@ module CoordinationImpl {
   modifies io
   ensures s.W()
   ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
-  ensures (s.I(), IIO(io)) == CoordinationModel.initialization(Ic(k), old(s.I()), old(IIO(io)))
+  ensures CoordinationModel.initialization(Ic(k), old(s.I()), old(IIO(io)), s.I(), IIO(io))
   {
     CoordinationModel.reveal_initialization();
     s.reveal_ReprInv();
@@ -90,10 +92,21 @@ module CoordinationImpl {
         print "initialization: doing nothing, superblock reads out\n";
       }
     } else if s.jc.status.StatusLoadingOther? {
-      CommitterInitImpl.FinishLoadingOtherPhase(k, s.jc);
+      CommitterInitImpl.tryFinishLoadingOtherPhase(k, s.jc, io);
     } else if s.bc.loading && !s.bc.ready
         && s.bc.indirectionTableRead.None? {
       IOImpl.PageInIndirectionTableReq(k, s.bc, io);
+    } else if s.bc.ready {
+      var isEmpty := CommitterInitImpl.isReplayEmpty(s.jc);
+      if !isEmpty {
+        var je := s.jc.journalist.replayJournalTop();
+        var success := InsertImpl.insert(k, s.bc, io, je.key, je.value);
+        if success {
+          CommitterReplayImpl.JournalReplayOne(k, s.jc);
+        }
+      } else {
+        print "initialization: doing nothing, no replay journal\n";
+      }
     } else {
       print "initialization: doing nothing\n";
     }
@@ -184,14 +197,11 @@ module CoordinationImpl {
       s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
       s.reveal_ReprInv();
       assert s.ProtectedReprInv();
-    } else if !s.bc.ready || !s.jc.status.StatusReady? {
-      initialization(k, s, io);
-      success := false;
     } else {
-      var is_replay_empty := CommitterInitImpl.isReplayEmpty(s.jc);
-      if !is_replay_empty {
+      var isInit := isInitialized(s);
+      if !isInit {
+        initialization(k, s, io);
         success := false;
-        print "popSync: replay isn't empty\n";
       } else {
         wait := doSync(k, s, io, graphSync);
         success := false;

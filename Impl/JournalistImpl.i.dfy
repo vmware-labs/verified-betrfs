@@ -1,6 +1,7 @@
 include "JournalistModel.i.dfy"
 include "../lib/Base/NativeArrays.s.dfy"
 include "JournalistMarshallingImpl.i.dfy"
+include "JournalistParsingImpl.i.dfy"
 
 module JournalistImpl {
   import opened DiskLayout
@@ -14,6 +15,7 @@ module JournalistImpl {
   import opened Journal
   import JournalistMarshallingModel
   import opened JournalistMarshallingImpl
+  import JournalistParsingImpl
 
   import JournalistModel
 
@@ -26,8 +28,8 @@ module JournalistImpl {
     var replayJournal: seq<JournalEntry>;
     var replayIdx: uint64;
 
-    var journalFront: Option<seq<byte>>;
-    var journalBack: Option<seq<byte>>;
+    var journalFront: Option<seq<JournalBlock>>;
+    var journalBack: Option<seq<JournalBlock>>;
     
     var writtenJournalBlocks: uint64;
     var frozenJournalBlocks: uint64;
@@ -259,6 +261,99 @@ module JournalistImpl {
     {
       JournalistModel.reveal_isReplayEmpty();
       b := (replayIdx == |replayJournal| as uint64);
+    }
+
+    method replayJournalTop()
+    returns (je: JournalEntry)
+    requires Inv()
+    requires JournalistModel.I(I()).replayJournal != []
+    ensures je == JournalistModel.replayJournalTop(I())
+    {
+      JournalistModel.reveal_replayJournalTop();
+      JournalistModel.reveal_I(I());
+      je := replayJournal[replayIdx];
+    }
+
+    method replayJournalPop()
+    requires Inv()
+    requires JournalistModel.I(I()).replayJournal != []
+    modifies Repr
+    ensures Inv()
+    ensures Repr == old(Repr)
+    ensures I() == JournalistModel.replayJournalPop(old(I()))
+    {
+      JournalistModel.reveal_replayJournalPop();
+      JournalistModel.reveal_I(I());
+      replayIdx := replayIdx + 1;
+    }
+
+    method setFront(jr: JournalRange)
+    requires Inv()
+    requires forall i | 0 <= i < |jr| :: |jr[i]| == 4064
+    requires |jr| <= NumJournalBlocks() as int
+    modifies Repr
+    ensures Inv()
+    ensures Repr == old(Repr)
+    ensures I() == JournalistModel.setFront(old(I()), jr)
+    {
+      JournalistModel.reveal_setFront();
+      journalFront := Some(jr);
+    }
+
+    method setBack(jr: JournalRange)
+    requires Inv()
+    requires forall i | 0 <= i < |jr| :: |jr[i]| == 4064
+    requires |jr| <= NumJournalBlocks() as int
+    modifies Repr
+    ensures Inv()
+    ensures Repr == old(Repr)
+    ensures I() == JournalistModel.setBack(old(I()), jr)
+    {
+      JournalistModel.reveal_setBack();
+      journalBack := Some(jr);
+    }
+
+    method parseJournals()
+    returns (success: bool)
+    requires Inv()
+    modifies Repr
+    ensures Inv()
+    ensures Repr == old(Repr)
+    ensures (I(), success) == JournalistModel.parseJournals(old(I()))
+    {
+      JournalistModel.reveal_parseJournals();
+      JournalistModel.reveal_I(I());
+      var fullRange :=
+        (if journalFront.Some? then journalFront.value else []) +
+        (if journalBack.Some? then journalBack.value else []);
+      var p := JournalistParsingImpl.ParseJournalRange(fullRange);
+      if p.Some? && |p.value| as uint64 <= JournalistModel.Len() {
+        journalFront := None;
+        journalBack := None;
+        replayJournal := p.value;
+        replayIdx := 0;
+        return true;
+      } else {
+        return false;
+      }
+    }
+
+    method hasFront()
+    returns (b: bool)
+    requires Inv()
+    ensures b == JournalistModel.hasFront(I())
+    {
+      JournalistModel.reveal_hasFront();
+      b := journalFront.Some?;
+    }
+
+    method hasBack()
+    returns (b: bool)
+    requires Inv()
+    ensures b == JournalistModel.hasBack(I())
+    {
+      JournalistModel.reveal_hasBack();
+      b := journalBack.Some?;
     }
   }
 }
