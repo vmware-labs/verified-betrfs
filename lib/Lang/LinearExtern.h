@@ -48,6 +48,15 @@ struct get_default<LinearMaybe::maybe<A>> {
   }
 };
 
+template<typename A>
+struct std::hash<LinearMaybe::maybe<A>> {
+  std::size_t operator()(const LinearMaybe::maybe<A>& x) const {
+    size_t seed = 0;
+    hash_combine<A>(seed, x.a);
+    return seed;
+  }
+};
+
 namespace LinearExtern {
 
 ////////////////////////////////////////////////////////////
@@ -166,3 +175,36 @@ lseq<A> get_lseq_default() {
 }
 
 }
+
+//template<typename A>
+//struct std::hash<LinearExtern::linear_seq<A>> {
+//  std::size_t operator()(const LinearExtern::linear_seq<A>& x) const {
+//    size_t seed = 0;
+//    for (size_t i = 0; i < x.size(); i++) {      
+//      hash_combine<U>(seed, x[i]);
+//    }
+//    return seed;
+//  }
+//};
+//
+//template<typename A>
+//struct std::hash<LinearExtern::shared_seq<A>> {
+//  std::size_t operator()(const LinearExtern::shared_seq<A>& x) const {
+//    size_t seed = 0;
+//    for (size_t i = 0; i < x.size(); i++) {      
+//      hash_combine<U>(seed, x[i]);
+//    }
+//    return seed;
+//  }
+//};
+//
+//template<typename A>
+//struct std::hash<LinearExtern::lseq<A>> {
+//  std::size_t operator()(const LinearExtern::lseq<A>& x) const {
+//    size_t seed = 0;
+//    for (size_t i = 0; i < x.size(); i++) {      
+//      hash_combine<U>(seed, x[i]);
+//    }
+//    return seed;
+//  }
+//};
