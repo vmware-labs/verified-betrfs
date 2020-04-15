@@ -18,6 +18,7 @@ module JournalBytes {
 
   function {:opaque} JournalRangeOfByteSeq(s: seq<byte>): (res : Option<JournalRange>)
   ensures res.Some? ==> |res.value| * 4096 == |s|
+  ensures res.Some? ==> forall i | 0 <= i < |res.value| :: |res.value[i]| == 4064
   {
     if s == [] then
       Some([])

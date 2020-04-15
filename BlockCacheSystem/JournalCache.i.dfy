@@ -348,8 +348,9 @@ module JournalCache {
           == JournalFrontIntervalOfSuperblock(s.superblock).value
       && s.journalFrontRead.None?
       && s.journalFront.None?
-      && Some(dop.id) != s.journalBackRead
       && s' == s.(journalFrontRead := Some(dop.id))
+                .(journalBackRead :=
+                  if s.journalBackRead == Some(dop.id) then None else s.journalBackRead)
     )
     && (which == 1 ==>
       && JournalBackIntervalOfSuperblock(s.superblock).Some?
@@ -357,8 +358,9 @@ module JournalCache {
           == JournalBackIntervalOfSuperblock(s.superblock).value
       && s.journalBackRead.None?
       && s.journalBack.None?
-      && Some(dop.id) != s.journalFrontRead
       && s' == s.(journalBackRead := Some(dop.id))
+                .(journalFrontRead :=
+                  if s.journalFrontRead == Some(dop.id) then None else s.journalFrontRead)
     )
   }
 
@@ -685,6 +687,14 @@ module JournalCache {
   {
     && WFSuperblock(s.superblock)
     && (s.whichSuperblock == 0 || s.whichSuperblock == 1)
+    && (s.journalFrontRead.Some? ==>
+      JournalFrontIntervalOfSuperblock(s.superblock).Some?)
+    && (s.journalFront.Some? ==>
+      JournalFrontIntervalOfSuperblock(s.superblock).Some?)
+    && (s.journalBackRead.Some? ==>
+      JournalBackIntervalOfSuperblock(s.superblock).Some?)
+    && (s.journalBack.Some? ==>
+      JournalBackIntervalOfSuperblock(s.superblock).Some?)
   }
 
   predicate InvReady(k: Constants, s: Variables)

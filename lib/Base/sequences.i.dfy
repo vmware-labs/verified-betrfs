@@ -203,6 +203,10 @@ module Sequences {
   requires 0 <= i < |a|
   ensures |concatSeq(a)| >= |a[i]|
 
+  lemma lemma_concatSeqLen_le_mul<A>(a: seq<seq<A>>, t: int)
+  requires forall i | 0 <= i < |a| :: |a[i]| <= t
+  ensures |concatSeq(a)| <= |a| * t
+
   predicate {:opaque} IsPrefix<A(==)>(a: seq<A>, b: seq<A>)
   ensures IsPrefix(a, b) ==> |a| <= |b|
   {
