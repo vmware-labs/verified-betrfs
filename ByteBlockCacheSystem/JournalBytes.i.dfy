@@ -8,7 +8,8 @@ module JournalBytes {
   import opened Sequences
   import D = AsyncDisk
 
-  function {:opaque} JournalBlockOfByteSeq(s: seq<byte>): Option<JournalBlock>
+  function {:opaque} JournalBlockOfByteSeq(s: seq<byte>): (res: Option<JournalBlock>)
+  ensures res.Some? ==> |res.value| == 4064
   {
     if |s| == 4096 && D.ChecksumChecksOut(s) then
       Some(s[32..])
@@ -197,6 +198,7 @@ module JournalBytes {
           z[i];
           JournalBlockOfByteSeq(c[i*4096..(i+1)*4096]).value;
           {
+            sum_slice_second(a, b, i*4096, (i+1)*4096);
             assert c[i*4096..(i+1)*4096]
                 == b[(i-ta)*4096..(i-ta+1)*4096];
           }
