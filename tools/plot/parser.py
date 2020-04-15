@@ -104,20 +104,39 @@ class Experiment:
     def parse(self):
         print("Parsing %s" % self.filename)
         cur_op = 0
+        cur_t = 0
         line_num = 0
+
+        cur_phase = None
+        phase_op_base = 0
+        phase_t_base = 0
+        self.phase_starts = {}
+
         for line in open(self.filename, "r").readlines():
             line_num += 1
             line = line.strip()
             fields = line.split()
 
             # op count is the independent variable for all traces.
-            if line.startswith("veribetrkv [op] sync") or line.startswith("rocksdb [op] sync"):
-                cur_op = int(fields[4])
-                self.operation[cur_op] = cur_op
-
             if line.startswith("elapsed"):
-                t = int(fields[1])/1000.0
+                phase = fields[4]
+                if phase != cur_phase:
+                    cur_phase = phase
+                    phase_op_base = cur_op
+                    phase_t_base = cur_t
+                    self.phase_starts[phase] = phase_op_base
+                t_in_phase = int(fields[1])/1000.0
+                t = t_in_phase + phase_t_base
                 self.elapsed[cur_op] = t
+                cur_t = t
+                op_in_phase = int(fields[3])
+                cur_op = op_in_phase + phase_op_base
+                self.operation[cur_op] = cur_op
+                #print(phase, t_in_phase, phase_t_base, t, op_in_phase, cur_op)
+
+#            if line.startswith("veribetrkv [op] sync") or line.startswith("rocksdb [op] sync"):
+#                cur_op = int(fields[4])
+#                self.operation[cur_op] = cur_op
 
             if line.startswith("os-map-total"):
                 self.os_map_total[cur_op] = int(fields[1])

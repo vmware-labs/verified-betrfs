@@ -6,9 +6,23 @@ import sys
 import operator
 import bisect
 
-Kilo = 1000
-MB = float(1<<20)
-GB = float(1<<30)
+
+class Scale:
+    def __init__(self, prefix, mult):
+        self.prefix = prefix
+        self.mult = float(mult)
+
+    def __call__(self):
+        return self.mult
+
+    def __repr__(self):
+        return self.prefix
+
+Unit = Scale("", 1)
+K = Scale("K", 1000)
+Ki = Scale("Ki", 1024)
+Mi = Scale("Mi", 1<<20)
+Gi = Scale("Gi", 1<<30)
 
 class AxisAllocator:
     def __init__(self, axes):

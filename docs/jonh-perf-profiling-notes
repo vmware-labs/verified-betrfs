@@ -803,3 +803,13 @@ and now syncs are in the 5s neighborhood. Uh oh! Our syncs aren't amortizing
 as well as we'd hope!
 
 [malloc-exp/veri-8mb-wka-ioperf-disk-syncops-2.data]
+------------------------------------------------------------------------------
+Okay, let's just turn off sync and make the cache small (500MB) so we can
+watch the perf cliff happen much sooner.
+And then we'll probably need to be counting the cost of these crazy IOs,
+maybe inside the system.
+
+Modified workload-a to have sync at a zillion.
+tools/run-veri-config-experiment.py workload=a device=disk ram=0.5gb config-8mb > malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk.data
+
+Why aren't the writes from the inital load sync showing up?

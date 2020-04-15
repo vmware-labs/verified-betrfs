@@ -111,7 +111,10 @@ void external_heap_size(size_t* heap, size_t* all_maps) {
 
 static int i=0;
 template< class DB >
-void periodicReport(DB db) {
+void periodicReport(DB db, const char* phase, int elapsed_ms, int ops_completed) {
+    printf("elapsed_ms %d ops %d %s\n", elapsed_ms, ops_completed, phase);
+
+    malloc_accounting_display("periodic");
     db.memDebugFrequent();
     i += 1;
     if (i%10 == 0) {
@@ -124,6 +127,7 @@ void periodicReport(DB db) {
 
     IOAccounting::report();
     StatAccounting::report();
+    fflush(stdout);
 }
 
 template< class DB >
@@ -141,7 +145,10 @@ void ycsbLoad(DB db, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
             clock_op_completed - clock_last_report).count() > report_interval_ms) {
 
             cout << db.name << " (completed " << i << " ops)" << endl;
-            periodicReport(db);
+
+            int elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                clock_op_completed - clock_start).count();
+            periodicReport(db, "load", elapsed_ms, i);
 
             auto report_completed = chrono::steady_clock::now();
             clock_last_report = report_completed;
@@ -266,10 +273,9 @@ void ycsbRun(
         }
 #endif // HACK_EVICT_PERIODIC
 
+        //printf("elapsed_ms %d next_display %d\n", elapsed_ms, next_display_ms);
         if (elapsed_ms >= next_display_ms) {
-            malloc_accounting_display("periodic");
-            printf("elapsed run %d next %d int %d\n",
-                elapsed_ms, next_display_ms, display_interval_ms);
+            periodicReport(db, "run", elapsed_ms, i);
             next_display_ms += display_interval_ms;
         }
 
@@ -289,7 +295,6 @@ void ycsbRun(
                 sync_completed - clock_op_completed).count();
 
             cout << db.name << " [op] sync (completed " << i << " ops)" << " (sync time " << sync_time_ms << " ms)" << endl;
-            periodicReport(db);
 
             #ifdef _YCSB_VERIBETRFS
             #ifdef LOG_QUERY_STATS
@@ -536,8 +541,8 @@ int main(int argc, char* argv[]) {
     int record_count = stoi(props[ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY]);
 
     auto properties_map = props.properties();
-    if (properties_map.find("syncintervalms") == properties_map.end()) {
-        cerr << "error: spec must provide syncintervalms" << endl;
+    if (properties_map.find("syncintervalops") == properties_map.end()) {
+        cerr << "error: spec must provide syncintervalops" << endl;
         exit(-1);
     }
     //int sync_interval_ms = stoi(props["syncintervalms"]);

@@ -4,7 +4,9 @@
 #                        
 #   Read/update ratio: 50/50
 
-recordcount=1000000
+#recordcount=1000000
+#XXX TODO reset initial record count
+recordcount=400000
 operationcount=20000000
 workload=com.yahoo.ycsb.workloads.CoreWorkload
 
@@ -21,5 +23,6 @@ fieldlength=512
 
 requestdistribution=zipfian
 
-syncintervalms=1000
-syncintervalops=50000
+#syncintervalms=1000
+#XXX TODO re-enable sync
+syncintervalops=2147483646
