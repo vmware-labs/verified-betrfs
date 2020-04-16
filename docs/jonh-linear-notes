@@ -7,3 +7,26 @@ cd lib/DataStructures
 Error: failure to decrease termination measure
 ...if, on line 22, you change the 'lseq' to 'seq', the error goes away.
 Somehow the termination reasoning passes through seqs but not through lseqs.
+
+
+# debug version
+g++ -g lib/DataStructures/lib/DataStructures/MutableBtree.i.cpp -o MutableBtreeTest_g -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -Ilib -std=c++17 -I.
+
+
+Ugh, need framework stuff, but don't want all of Bundle. Time to break
+framework down, or just modify makefile to emit MutableBtreeTest instead
+of MainImpl.
+
+
+## How to build & test linear version
+git checkout linear-examples
+.dafny/dafny/Binaries/dafny /noVerify /spillTargetCode:3 /countVerificationErrors:0 /compileTarget:cpp lib/DataStructures/MutableBtree.i.dfy Lang/LinearExtern.h framework/Framework.h
+g++ -O3 lib/DataStructures/lib/DataStructures/MutableBtree.i.cpp -o MutableBtreeTest -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -Ilib -std=c++17 -I.
+time ./MutableBtreeTest
+
+## How to build & test Repr version
+git checkout master
+echo STOP HERE and uncomment 3 modules at bottom of MutableBtree.i.dfy to get Main
+.dafny/dafny/Binaries/dafny /noVerify /spillTargetCode:3 /countVerificationErrors:0 /compileTarget:cpp lib/DataStructures/MutableBtree.i.dfy framework/NativeArrays.h
+g++ -O3 lib/DataStructures/lib/DataStructures/MutableBtree.i.cpp -o MutableBtreeTest -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -Ilib -std=c++17 -I. -Iframework framework/NativeArrays.cpp
+
