@@ -573,14 +573,7 @@ module MainModule {
     result := [b0, b1, b2];
   }
 
-  method gobble<A>(linear a: A)
-  {
-    linear var s := lseq_alloc<A>(1);
-    s := lseq_give(s, 0, a);
-    lseq_free(s);
-  }
-
-  method Test()
+  method Main()
   {
     // var n: uint64 := 1_000_000;
     // var p: uint64 := 300_007;
@@ -602,32 +595,6 @@ module MainModule {
       i := i + 1;
     }
 
-    // i := 0;
-    // while i < n
-    //   invariant 0 <= i <= n
-    // {
-    //   var needle := (i * p) % n;
-    //   var qr := t.Query(needle);
-    //   if qr != TestMutableBtree.Found(i) {
-    //     print "Test failed";
-  //   } else {
-  //     //print "Query ", i, " for ", needle, "resulted in ", qr.value, "\n";
-  //   }
-  //   i := i + 1;
-  // }
-
-  // i := 0;
-  // while i < n
-  //   invariant 0 <= i <= n
-  // {
-  //   var qr := t.Query(n + ((i * p) % n));
-  //   if qr != TestMutableBtree.NotFound {
-  //     print "Test failed";
-  //   } else {
-  //     //print "Didn't return bullsh*t\n";
-  //   }
-  //   i := i + 1;
-  // }
     print "PASSED\n";
     TMB.Free(t);
   }
