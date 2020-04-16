@@ -1,6 +1,7 @@
 #include "DafnyRuntime.h"
 
 #include <vector>
+#include <assert.h>
 
 namespace LinearMaybe {
 ////////////////////////////////////////////////////////////
@@ -13,6 +14,16 @@ template <typename A>
 struct maybe {
   A a;
 };
+
+// This is required, because lseqs are compiled as std::vector's of
+// maybes, and hence the automatic, compiler-generated equality on
+// lseqs requires an equality on maybe's.  However, this operator
+// is not currently accessible from Dafny
+template <typename A>
+bool operator==(const maybe<A> &left, const maybe<A> &right) {
+  assert(false);  // Unsafe to hit this at runtime
+  return left.a == right.a;
+}
 
 template <typename A>
 A peek(maybe<A> m) { return m.a; }
