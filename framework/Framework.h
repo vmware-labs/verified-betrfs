@@ -18,7 +18,9 @@ namespace Maps_Compile {
 }
 
 namespace NativeArithmetic_Compile {
-  uint64_t u64add(uint64_t a, uint64_t b);
+  uint64_t u64add(uint64_t a, uint64_t b) {
+    return a + b;
+  }
 }
 
 namespace NativeArrays_Compile {

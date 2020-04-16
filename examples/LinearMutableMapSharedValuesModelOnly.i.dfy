@@ -20,7 +20,7 @@ include "../lib/Base/Arithmetic.s.dfy"
 // nice to cleanly separate these concerns.
 //
 
-module MutableMapModel {
+module MutableMap {
   import opened NativeTypes
   import opened Options
   import opened Sequences
@@ -953,6 +953,13 @@ module MutableMapModel {
     assert MapFromStorage(self.underlying.storage) == self.contents;
 
     self
+  }
+
+  method {:opaque} Destructor<V>(linear self: LinearHashMap<V>)
+  {
+    linear var LinearHashMap(underlying, _, _) := self;
+    linear var FixedSizeLinearHashMap(storage, _, _) := underlying;
+    var _ := seq_free(storage);
   }
 
   lemma LemmaEntryKeyInContents<V>(self: LinearHashMap<V>, i: uint64)
