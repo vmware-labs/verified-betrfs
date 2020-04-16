@@ -142,15 +142,10 @@ module MapSpec refines UIStateMachine {
   }
 
   lemma InitImpliesInv(k: Constants, s: Variables)
-    requires Init(k, s)
-    ensures Inv(k, s)
   {
   }
 
   lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
-    requires Inv(k, s)
-    requires Next(k, s, s', uiop)
-    ensures Inv(k, s')
   {
   }
 }

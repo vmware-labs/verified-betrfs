@@ -50,6 +50,86 @@ void fail(std::string err)
 
 constexpr int MAX_WRITE_REQS_OUT = 8;
 
+
+namespace NativeArithmetic_Compile {
+  uint64_t u64add(uint64_t a, uint64_t b) {
+    return a + b;
+  }
+}
+
+namespace NativeArrays_Compile {
+  int32_t ByteSeqCmpByteSeq(DafnySequence<uint8> b1, DafnySequence<uint8> b2)
+  {
+    int result = memcmp(b1.ptr(), b2.ptr(), b1.size() < b2.size() ? b1.size() : b2.size());
+    if (result == 0) {
+      if (b1.size() == b2.size()) {
+        return 0;
+      } else if (b1.size() > b2.size()) {
+        return 1;
+      } else {
+        return -1;
+      }
+    } else {
+      return result;
+    }
+  }
+}
+
+namespace NativePackedInts_Compile {
+  static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__, "current implementation of NativePackedInts assumes little endian");
+  static_assert(sizeof(uint32) == 4, "uint32 is aliased wrong");
+  static_assert(sizeof(uint64) == 8, "uint64 is aliased wrong");
+
+  uint32 Unpack__LittleEndian__Uint32(DafnySequence<uint8> const& packed, uint64 idx)
+  {
+    uint32 res;
+    memcpy(&res, packed.ptr() + idx, sizeof(uint32));
+    return res;
+  }
+
+  uint64 Unpack__LittleEndian__Uint64(DafnySequence<uint8> const& packed, uint64 idx)
+  {
+    uint64 res;
+    memcpy(&res, packed.ptr() + idx, sizeof(uint64));
+    return res;
+  }
+
+  void Pack__LittleEndian__Uint32__into__Array(uint32 i, DafnyArray<uint8> const& ar, uint64 idx)
+  {
+    memcpy(&ar.at(idx), &i, sizeof(uint32));
+  }
+
+  void Pack__LittleEndian__Uint64__into__Array(uint64 i, DafnyArray<uint8> const& ar, uint64 idx)
+  {
+    memcpy(&ar.at(idx), &i, sizeof(uint64));
+  }
+
+  DafnySequence<uint32> Unpack__LittleEndian__Uint32__Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len)
+  {
+    // TODO is there a safe way to do this without a copy?
+    DafnySequence<uint32> res(len);
+    memcpy(res.ptr(), packed.ptr() + idx, sizeof(uint32) * len);
+    return res;
+  }
+
+  DafnySequence<uint64> Unpack__LittleEndian__Uint64__Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len)
+  {
+    DafnySequence<uint64> res(len);
+    memcpy(res.ptr(), packed.ptr() + idx, sizeof(uint64) * len);
+    return res;
+  }
+
+  void Pack__LittleEndian__Uint32__Seq__into__Array(DafnySequence<uint32> const& unpacked, DafnyArray<uint8> const& ar, uint64 idx)
+  {
+    memcpy(&ar.at(idx), unpacked.ptr(), sizeof(uint32) * unpacked.size());
+  }
+
+  void Pack__LittleEndian__Uint64__Seq__into__Array(DafnySequence<uint64> const& unpacked, DafnyArray<uint8> const& ar, uint64 idx)
+  {
+    memcpy(&ar.at(idx), unpacked.ptr(), sizeof(uint64) * unpacked.size());
+  }
+}
+
 namespace MainDiskIOHandler_Compile {
 #if USE_DIRECT
   uint8_t *aligned_copy(uint8_t* buf, size_t len, size_t *aligned_len) {
@@ -84,11 +164,17 @@ namespace MainDiskIOHandler_Compile {
     bool made_req;
     bool done;
 
+    uint64 addr;
+    uint64 len;
+
     ~WriteTask() {
       free(aligned_bytes);
     }
     
     WriteTask(int fd, uint64 addr, uint8_t* buf, size_t len) {
+      this->addr = addr;
+      this->len = len;
+
       // TODO would be good to eliminate this copy,
       // but the application code might have lingering references
       // to the array.
@@ -163,8 +249,10 @@ namespace MainDiskIOHandler_Compile {
 
   struct ReadTask {
     DafnySequence<uint8_t> bytes;
+    uint64 addr;
 
-    ReadTask(DafnySequence<uint8_t> s) : bytes(s) { }
+    ReadTask(DafnySequence<uint8_t> s, uint64 addr)
+        : bytes(s), addr(addr) { }
   };
 
   uint64 readFromFile(int fd, uint64 addr, uint8_t* res, int len)
@@ -246,12 +334,21 @@ namespace MainDiskIOHandler_Compile {
       close(fd);
   }
 
-  uint64 DiskIOHandler::write(uint64 addr, DafnyArray<uint8> bytes)
+  Tuple2<uint64, uint64> DiskIOHandler::write2(
+      uint64 addr1, DafnySequence<uint8> bytes1,
+      uint64 addr2, DafnySequence<uint8> bytes2)
+  {
+    uint64 id1 = write(addr1, bytes1);
+    uint64 id2 = write(addr2, bytes2);
+    return Tuple2<uint64, uint64>(id1, id2);
+  }
+
+  uint64 DiskIOHandler::write(uint64 addr, DafnySequence<uint8> bytes)
   {
     size_t len = bytes.size();
 
     malloc_accounting_set_scope("DiskIOHandler::write.WriteTask");
-    shared_ptr<WriteTask> writeTask { new WriteTask(fd, addr, &bytes.at(0), len) };
+    shared_ptr<WriteTask> writeTask { new WriteTask(fd, addr, bytes.ptr(), len) };
     malloc_accounting_default_scope();
 
     if (nWriteReqsOut < MAX_WRITE_REQS_OUT) {
@@ -305,7 +402,7 @@ namespace MainDiskIOHandler_Compile {
     this->curId++;
 
     malloc_accounting_set_scope("DiskIOHandler::ReadTask");
-    readReqs.insert(std::make_pair(id, ReadTask(bytes)));
+    readReqs.insert(std::make_pair(id, ReadTask(bytes, addr)));
     malloc_accounting_default_scope();
 
     #ifdef LOG_QUERY_STATS
@@ -315,20 +412,23 @@ namespace MainDiskIOHandler_Compile {
     return id;
   }
 
-  uint64 DiskIOHandler::getWriteResult()
+  Tuple3<uint64, uint64, uint64> DiskIOHandler::getWriteResult()
   {
-    return writeResponseId;
+    return Tuple3<uint64, uint64, uint64>(
+      writeResponseId, responseAddr, responseLen);
   }
 
-  Tuple2<uint64, DafnySequence<uint8>> DiskIOHandler::getReadResult()
+  Tuple3<uint64, uint64, DafnySequence<uint8>> DiskIOHandler::getReadResult()
   {
-    return Tuple2<uint64, DafnySequence<uint8>>(readResponseId, readResponseBytes);
+    return Tuple3<uint64, uint64, DafnySequence<uint8>>(
+      readResponseId, responseAddr, readResponseBytes);
   }
 
   bool DiskIOHandler::prepareReadResponse() {
     auto it = this->readReqs.begin();
     if (it != this->readReqs.end()) {
       this->readResponseId = it->first;
+      this->responseAddr = it->second.addr;
       this->readResponseBytes = it->second.bytes;
       this->readReqs.erase(it);
       return true;
@@ -355,6 +455,8 @@ namespace MainDiskIOHandler_Compile {
       writeTask->check_if_complete();
       if (writeTask->done) {
         this->writeResponseId = it->first;
+        this->responseAddr = it->second->addr;
+        this->responseLen = it->second->len;
         this->writeReqs.erase(it);
         maybeStartWriteReq();
         return true;
@@ -441,8 +543,8 @@ void Application::initialize() {
 
 Application::~Application()
 {
-  Sync();
-  EvictEverything();
+  //Sync(false /* graphSync */);
+//  EvictEverything();  // Used when trying to track down below-Dafny leaks
   fini_malloc_accounting();
 }
 
@@ -460,7 +562,7 @@ void Application::CountAmassAllocations() {
   handle_CountAmassAllocations(k, hs, io);
 }
 
-void Application::Sync() {
+void Application::Sync(bool graphSync) {
   #ifdef LOG_QUERY_STATS
   currently_doing_action = ACTION_SYNC;
   auto t1 = chrono::high_resolution_clock::now();
@@ -476,7 +578,7 @@ void Application::Sync() {
 
   for (int i = 0; i < 500000; i++) {
     while (this->maybeDoResponse()) { }
-    auto tup2 = handle_PopSync(k, hs, io, id);
+    auto tup2 = handle_PopSync(k, hs, io, id, graphSync);
     bool wait = tup2.first;
     bool success = tup2.second;
     if (success) {
@@ -758,7 +860,7 @@ void Mkfs(string filename) {
 }
 
 namespace MallocAccounting_Compile {
-void __default::set_amass_mode(bool b) {
+void set_amass_mode(bool b) {
   horrible_amass_label = b ? "in_amass" : NULL;
 }
 }
@@ -766,7 +868,7 @@ void __default::set_amass_mode(bool b) {
 namespace AllocationReport_Compile {
 static std::unordered_map<uint64_t, uint64_t> sptr_to_len;
 
-void __default::start() {
+void start() {
   printf("allocationreport start\n");
   sptr_to_len.clear();
 }
@@ -783,7 +885,7 @@ static void visit_uptr(std::set<uint64_t>* observed_ptrs, const DafnySequence<ui
   }
 }
 
-void __default::sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node) {
+void sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node) {
   const char* type = "unpossible";
   int count = -1;
 
@@ -833,17 +935,18 @@ void __default::sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> n
   printf("allocationreport ref %lu type %s observed_sptr_count %d\n", ref, type, count);
 }
 #else // TRACK_DOWN_UNDERLYING_ALLOCATIONS
-void __default::sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node) {
+void sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node) {
 }
 #endif // TRACK_DOWN_UNDERLYING_ALLOCATIONS
 
-void __default::stop() {
+void stop() {
   uint64_t total_underlying = 0;
   for (auto it : sptr_to_len) {
     total_underlying += it.second;
   }
-  printf("allocationreport stop underyling_count %lu total_underlying %lu\n",
-       sptr_to_len.size(), total_underlying);
+  cout << "allocationreport stop underyling_count "
+    << sptr_to_len.size()
+    << " total_underlying " << total_underlying << endl;
 }
 
 } // AllocationReport_Compile

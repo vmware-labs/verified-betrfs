@@ -25,8 +25,10 @@ module MarshallingImpl {
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
+  import SectorType
   import BucketImpl
-  import BC = BetreeGraphBlockCache
+  import BC = BlockCache
+  import JC = JournalCache
   import StateImpl
   import KVList
   import Crypto
@@ -43,7 +45,6 @@ module MarshallingImpl {
 
   import ValueType`Internal
   import M = ValueMessage`Internal
-  import LBAType
 
   import Pivots = PivotsLib
   import MS = MapSpec
@@ -230,7 +231,7 @@ module MarshallingImpl {
   function ISectorOpt(s : Option<Sector>): Option<IMM.Sector>
   requires s.Some? ==> StateImpl.WFSector(s.value)
   requires s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
-  reads if s.Some? then (if s.value.SectorIndirectionTable? then {s.value.indirectionTable} else {s.value.block}) else {}
+  reads if s.Some? then StateImpl.SectorObjectSet(s.value) else {}
   reads if s.Some? then SI.SectorRepr(s.value) else {}
   {
     if s.Some? then
@@ -243,12 +244,19 @@ module MarshallingImpl {
   requires IMM.valToSector.requires(v)
   requires SizeOfV(v) < 0x1_0000_0000_0000_0000
   ensures s.Some? ==> StateImpl.WFSector(s.value)
-  ensures s.Some? && s.value.SectorBlock? ==> forall i | 0 <= i < |s.value.block.buckets| :: fresh(s.value.block.buckets[i].Repr)
+  ensures s.Some? && s.value.SectorNode? ==> forall i | 0 <= i < |s.value.node.buckets| :: fresh(s.value.node.buckets[i].Repr)
   ensures s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
   ensures MapOption(s, SI.ISector) == IMM.valToSector(v)
   ensures s.Some? ==> fresh(SI.SectorRepr(s.value));
   {
     if v.c == 0 {
+      var s := Marshalling.valToSuperblock(v.val);
+      if s.Some? {
+        return Some(StateImpl.SectorSuperblock(s.value));
+      } else {
+        return None;
+      }
+    } else if v.c == 1 {
       var mutMap := IndirectionTableImpl.IndirectionTable.ValToIndirectionTable(v.val);
       if mutMap != null {
         return Some(StateImpl.SectorIndirectionTable(mutMap));
@@ -258,7 +266,7 @@ module MarshallingImpl {
     } else {
       var node := ValToNode(v.val);
       match node {
-        case Some(s) => return Some(StateImpl.SectorBlock(s));
+        case Some(s) => return Some(StateImpl.SectorNode(s));
         case None => return None;
       }
     }
@@ -505,31 +513,49 @@ module MarshallingImpl {
     size := size_buckets + size_pivots + size_children;
   }
 
+  method {:fuel SizeOfV,7}
+  superblockToVal(superblock: SectorType.Superblock)
+  returns (v : V)
+  requires JC.WFSuperblock(superblock)
+  ensures ValidVal(v)
+  ensures ValInGrammar(v, Marshalling.SuperblockGrammar())
+  ensures SizeOfV(v) <= 4000
+  ensures Marshalling.valToSuperblock(v) == Some(superblock)
+  {
+    v := VTuple([
+      VUint64(superblock.counter),
+      VUint64(superblock.journalStart),
+      VUint64(superblock.journalLen),
+      VUint64(superblock.indirectionTableLoc.addr),
+      VUint64(superblock.indirectionTableLoc.len)
+    ]);
+  }
+
   method sectorToVal(sector: StateImpl.Sector)
   returns (v : V, size: uint64)
   requires StateImpl.WFSector(sector)
   requires IM.WFSector(StateImpl.ISector(sector))
-  requires sector.SectorBlock?
-  requires sector.SectorBlock? ==> IM.WFNode(sector.block.I())
-  requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block.I()))
+  requires sector.SectorNode?
+  requires sector.SectorNode? ==> IM.WFNode(sector.node.I())
+  requires sector.SectorNode? ==> BT.WFNode(IM.INode(sector.node.I()))
   requires sector.SectorIndirectionTable? ==>
       BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.I()))
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.SectorGrammar());
   ensures Marshalling.valToSector(v) == Some(IM.ISector(StateImpl.ISector(sector)))
-  ensures sector.SectorBlock? ==> SizeOfV(v) <= NodeBlockSize() as int - 32
+  ensures sector.SectorNode? ==> SizeOfV(v) <= NodeBlockSize() as int - 32
   ensures SizeOfV(v) < 0x1_0000_0000_0000_0000 - 32
   ensures SizeOfV(v) == size as int
   {
     match sector {
       //case SectorIndirectionTable(indirectionTable) => {
       //  var w, s := indirectionTable.indirectionTableToVal();
-      //  v := VCase(0, w);
+      //  v := VCase(1, w);
       //  size := s + 8;
       //}
-      case SectorBlock(node) => {
+      case SectorNode(node) => {
         var w, s := nodeToVal(node);
-        v := VCase(1, w);
+        v := VCase(2, w);
         size := s + 8;
       }
     }
@@ -541,10 +567,10 @@ module MarshallingImpl {
   requires start as int <= |data| < 0x1_0000_0000_0000_0000;
   ensures s.Some? ==> StateImpl.WFSector(s.value)
   ensures s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
-  ensures s.Some? && s.value.SectorBlock? ==> forall i | 0 <= i < |s.value.block.buckets| :: fresh(s.value.block.buckets[i].Repr)
+  ensures s.Some? && s.value.SectorNode? ==> forall i | 0 <= i < |s.value.node.buckets| :: fresh(s.value.node.buckets[i].Repr)
   ensures ISectorOpt(s) == IMM.parseSector(data[start..])
-  ensures s.Some? && s.value.SectorBlock? ==> IM.WFNode(s.value.block.I())
-  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(s.value.block.I()))
+  ensures s.Some? && s.value.SectorNode? ==> IM.WFNode(s.value.node.I())
+  ensures s.Some? && s.value.SectorNode? ==> BT.WFNode(IM.INode(s.value.node.I()))
   ensures s.Some? ==> fresh(SI.SectorRepr(s.value));
   {
     IMM.reveal_parseSector();
@@ -584,9 +610,9 @@ module MarshallingImpl {
   requires |data| < 0x1_0000_0000_0000_0000;
   ensures s.Some? ==> StateImpl.WFSector(s.value)
   ensures s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
-  ensures ISectorOpt(s) == IMM.parseCheckedSector(data[..])
-  ensures s.Some? && s.value.SectorBlock? ==> IM.WFNode(s.value.block.I())
-  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(s.value.block.I()))
+  ensures ISectorOpt(s) == IMM.parseCheckedSector(data)
+  ensures s.Some? && s.value.SectorNode? ==> IM.WFNode(s.value.node.I())
+  ensures s.Some? && s.value.SectorNode? ==> BT.WFNode(IM.INode(s.value.node.I()))
   ensures s.Some? ==> fresh(SI.SectorRepr(s.value))
   {
     s := None;
@@ -604,19 +630,39 @@ module MarshallingImpl {
   method MarshallCheckedSector(sector: Sector) returns (data : array?<byte>)
   requires StateImpl.WFSector(sector)
   requires IM.WFSector(StateImpl.ISector(sector))
-  requires sector.SectorBlock? ==> IM.WFNode(sector.block.I())
-  requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block.I()))
+  requires sector.SectorNode? ==> IM.WFNode(sector.node.I())
+  requires sector.SectorNode? ==> BT.WFNode(IM.INode(sector.node.I()))
+  requires sector.SectorSuperblock? ==> JC.WFSuperblock(sector.superblock)
   ensures data != null ==> IMM.parseCheckedSector(data[..]).Some?
   ensures data != null ==>
       && IM.ISector(IMM.parseCheckedSector(data[..]).value)
       == IM.ISector(StateImpl.ISector(sector))
   ensures data != null ==> 32 <= data.Length
-  ensures data != null && sector.SectorBlock? ==> data.Length <= NodeBlockSize() as int
-  ensures data != null && sector.SectorIndirectionTable? ==> data.Length == IndirectionTableBlockSize() as int
-  ensures sector.SectorBlock? ==> data != null;
+  ensures data != null && sector.SectorNode? ==> data.Length <= NodeBlockSize() as int
+  ensures data != null && sector.SectorIndirectionTable? ==> data.Length <= IndirectionTableBlockSize() as int
+  ensures sector.SectorNode? ==> data != null;
+  ensures sector.SectorSuperblock? ==> data != null && data.Length == 4096;
   ensures sector.SectorIndirectionTable? && Marshalling.IsInitIndirectionTable(IndirectionTableModel.I(sector.indirectionTable.I())) ==> data != null;
   {
-    if sector.SectorIndirectionTable? {
+    if sector.SectorSuperblock? {
+      var v0 := superblockToVal(sector.superblock);
+      var v := VCase(0, v0);
+      var data := MarshallIntoFixedSize(
+          v, Marshalling.SectorGrammar(), 32, 4096);
+
+      IMM.reveal_parseSector();
+      IMM.reveal_parseCheckedSector();
+
+      var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
+
+      assert data[32..] == data[32..data.Length];
+      assert hash == Crypto.Crc32C(data[32..]);
+      ghost var data_suffix := data[32..];
+      NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
+      assert data_suffix == data[32..];
+
+      return data;
+    } else if sector.SectorIndirectionTable? {
       //NativeBenchmarking.start("MarshallCheckedSector");
 
       var data := new byte[IndirectionTableBlockSizeUint64()];
@@ -630,8 +676,8 @@ module MarshallingImpl {
         return null;
       }
 
-      // case 0 indicates indirection table
-      Pack_LittleEndian_Uint64_into_Array(0, data, 32);
+      // case 1 indicates indirection table
+      Pack_LittleEndian_Uint64_into_Array(1, data, 32);
 
       //NativeBenchmarking.start("crc32");
       var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
