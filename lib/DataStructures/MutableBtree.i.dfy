@@ -1146,25 +1146,37 @@ abstract module MutableBtree {
 
 // module TestBtreeModel refines BtreeModel {
 //   import opened NativeTypes
-//   import Keys = Uint64_Order
+// //  import Keys = Uint64_Order
 //   type Value = uint64
 // }
-
+// 
 // module TestMutableBtree refines MutableBtree {
 //   import Model = TestBtreeModel
-    
+//  
 //   function method MaxKeysPerLeaf() : uint64 { 64 }
 //   function method MaxChildren() : uint64 { 64 }
-
+// 
 //   function method DefaultValue() : Value { 0 }
-//   function method DefaultKey() : Key { 0 }
+//   function method DefaultKey() : Key { [0] }
 // }
-
+// 
 // module MainModule {
 //   import opened NativeTypes
 //   import TMB = TestMutableBtree`API
-  
-//   method Test()
+// 
+//   method SeqFor(i: uint64)
+//   returns (result:TMB.Key)
+//   requires i < 256*256*256;
+//   {
+//     var b0:byte := (i / 65536) as byte;
+//     var r := i - (b0 as uint64 * 65536);
+//     var b1:byte := (r / 256) as byte;
+//     var b2:byte := (r - (b1 as uint64)*256) as byte;
+// 
+//     result := [b0, b1, b2];
+//   }
+// 
+//   method Main()
 //   {
 //     // var n: uint64 := 1_000_000;
 //     // var p: uint64 := 300_007;
@@ -1180,36 +1192,12 @@ abstract module MutableBtree {
 //       invariant fresh(t.repr)
 //     {
 //       var oldvalue;
-//       t, oldvalue := TMB.Insert(t, ((i * p) % n), i);
+//       var keyv := ((i * p) % n);
+//       var key := SeqFor(keyv);
+//       t, oldvalue := TMB.Insert(t, key, i);
 //       i := i + 1;
 //     }
-
-//     // i := 0;
-//     // while i < n
-//     //   invariant 0 <= i <= n
-//     // {
-//     //   var needle := (i * p) % n;
-//     //   var qr := t.Query(needle);
-//     //   if qr != TestMutableBtree.Found(i) {
-//     //     print "Test failed";
-//   //   } else {
-//   //     //print "Query ", i, " for ", needle, "resulted in ", qr.value, "\n";
-//   //   }
-//   //   i := i + 1;
-//   // }
-
-//   // i := 0;
-//   // while i < n
-//   //   invariant 0 <= i <= n
-//   // {
-//   //   var qr := t.Query(n + ((i * p) % n));
-//   //   if qr != TestMutableBtree.NotFound {
-//   //     print "Test failed";
-//   //   } else {
-//   //     //print "Didn't return bullsh*t\n";
-//   //   }
-//   //   i := i + 1;
-//   // }
+// 
 //     print "PASSED\n";
 //   }
 // } 

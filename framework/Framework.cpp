@@ -57,24 +57,6 @@ namespace NativeArithmetic_Compile {
   }
 }
 
-namespace NativeArrays_Compile {
-  int32_t ByteSeqCmpByteSeq(DafnySequence<uint8> b1, DafnySequence<uint8> b2)
-  {
-    int result = memcmp(b1.ptr(), b2.ptr(), b1.size() < b2.size() ? b1.size() : b2.size());
-    if (result == 0) {
-      if (b1.size() == b2.size()) {
-        return 0;
-      } else if (b1.size() > b2.size()) {
-        return 1;
-      } else {
-        return -1;
-      }
-    } else {
-      return result;
-    }
-  }
-}
-
 namespace NativePackedInts_Compile {
   static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__, "current implementation of NativePackedInts assumes little endian");
   static_assert(sizeof(uint32) == 4, "uint32 is aliased wrong");
