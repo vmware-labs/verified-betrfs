@@ -1,0 +1,614 @@
+// Dafny program MutableBtree.i.dfy compiled into a Cpp header file
+#pragma once
+#include "DafnyRuntime.h"
+namespace _System  {
+}// end of namespace _System  declarations
+namespace NativeTypes_Compile  {
+  class class_sbyte;
+  class class_byte;
+  class class_int16;
+  class class_uint16;
+  class class_int32;
+  class class_uint32;
+  class class_int64;
+  class class_uint64;
+  class class_nat8;
+  class class_nat16;
+  class class_nat32;
+  class class_nat64;
+  class __default;
+}// end of namespace NativeTypes_Compile  declarations
+namespace LinearMaybe  {
+}// end of namespace LinearMaybe  declarations
+namespace LinearExtern  {
+}// end of namespace LinearExtern  declarations
+namespace LinearSequence__i_Compile  {
+  template <typename A>
+struct as__linear;
+  class __default;
+}// end of namespace LinearSequence__i_Compile  declarations
+namespace SeqComparison_Compile  {
+}// end of namespace SeqComparison_Compile  declarations
+namespace NativeArrays_Compile  {
+}// end of namespace NativeArrays_Compile  declarations
+namespace Options_Compile  {
+  template <typename V>
+struct Option;
+}// end of namespace Options_Compile  declarations
+namespace Mathematics_Compile  {
+}// end of namespace Mathematics_Compile  declarations
+namespace Sequences_Compile  {
+  class __default;
+}// end of namespace Sequences_Compile  declarations
+namespace Maps_Compile  {
+}// end of namespace Maps_Compile  declarations
+namespace Arrays_Compile  {
+  class __default;
+}// end of namespace Arrays_Compile  declarations
+namespace KeyType_Compile  {
+   using Key = DafnySequence<uint8>;
+  class class_Key;
+  class __default;
+}// end of namespace KeyType_Compile  declarations
+namespace Byte__Order_Compile  {
+  class __default;
+}// end of namespace Byte__Order_Compile  declarations
+namespace Lexicographic__Byte__Order_Compile  {
+  class __default;
+}// end of namespace Lexicographic__Byte__Order_Compile  declarations
+namespace Integer__Order_Compile  {
+}// end of namespace Integer__Order_Compile  declarations
+namespace TestBtreeModel_Compile  {
+  
+struct Node;
+}// end of namespace TestBtreeModel_Compile  declarations
+namespace TestMutableBtree_Compile  {
+  class __default;
+}// end of namespace TestMutableBtree_Compile  declarations
+namespace MainModule_Compile  {
+  class __default;
+}// end of namespace MainModule_Compile  declarations
+namespace Uint32__Order_Compile  {
+  class __default;
+}// end of namespace Uint32__Order_Compile  declarations
+namespace Uint64__Order_Compile  {
+  class __default;
+}// end of namespace Uint64__Order_Compile  declarations
+namespace Char__Order_Compile  {
+  class __default;
+}// end of namespace Char__Order_Compile  declarations
+namespace ValueType_Compile  {
+   using Value = DafnySequence<uint8>;
+  class class_Value;
+  class __default;
+}// end of namespace ValueType_Compile  declarations
+namespace _module  {
+}// end of namespace _module  declarations
+namespace _System  {
+}// end of namespace _System  datatype declarations
+namespace NativeTypes_Compile  {
+}// end of namespace NativeTypes_Compile  datatype declarations
+namespace LinearMaybe  {
+}// end of namespace LinearMaybe  datatype declarations
+namespace LinearExtern  {
+}// end of namespace LinearExtern  datatype declarations
+namespace LinearSequence__i_Compile  {
+  template <typename A>
+struct as__linear {
+    A a;
+    as__linear(A a) : a (a) {}
+    as__linear();
+    friend bool operator==(const as__linear &left, const as__linear &right);
+    friend bool operator!=(const as__linear &left, const as__linear &right) { return !(left == right); } 
+  };
+  template <typename A>
+inline bool is_AsLinear(const struct as__linear<A> d) { (void) d; return true; }
+}// end of namespace LinearSequence__i_Compile  datatype declarations
+namespace SeqComparison_Compile  {
+}// end of namespace SeqComparison_Compile  datatype declarations
+namespace NativeArrays_Compile  {
+}// end of namespace NativeArrays_Compile  datatype declarations
+namespace Options_Compile  {
+  template <typename V>
+struct Option_None {
+    friend bool operator==(const Option_None &left, const Option_None &right); 
+    friend bool operator!=(const Option_None &left, const Option_None &right) { return !(left == right); } 
+  };
+  template <typename V>
+struct Option_Some {
+    V value;
+    friend bool operator==(const Option_Some &left, const Option_Some &right); 
+    friend bool operator!=(const Option_Some &left, const Option_Some &right) { return !(left == right); } 
+  };
+  template <typename V>
+struct Option {
+    std::variant<Option_None<V>,Option_Some<V>> v;
+    static Option create_None() {
+      Option<V> COMPILER_result;
+      Option_None<V> COMPILER_result_subStruct;
+      COMPILER_result.v = COMPILER_result_subStruct;
+      return COMPILER_result;
+    }
+    static Option create_Some(V value) {
+      Option<V> COMPILER_result;
+      Option_Some<V> COMPILER_result_subStruct;
+      COMPILER_result_subStruct.value = value;
+      COMPILER_result.v = COMPILER_result_subStruct;
+      return COMPILER_result;
+    }
+    Option();
+    ~Option() {}
+    Option(const Option &other) {
+      v = other.v;
+    }
+    Option& operator=(const Option other) {
+      v = other.v;
+      return *this;
+    }
+    bool is_Option_None() const { return std::holds_alternative<Option_None<V>>(v); }
+    bool is_Option_Some() const { return std::holds_alternative<Option_Some<V>>(v); }
+    friend bool operator==(const Option &left, const Option &right) { 
+    	return left.v == right.v;
+}
+    V dtor_value() {
+      return std::get<Option_Some<V>>(v).value; 
+    }
+    friend bool operator!=(const Option &left, const Option &right) { return !(left == right); } 
+  };
+  template <typename V>
+inline bool is_Option_None(const struct Option<V> d);
+  template <typename V>
+inline bool is_Option_Some(const struct Option<V> d);
+}// end of namespace Options_Compile  datatype declarations
+namespace Mathematics_Compile  {
+}// end of namespace Mathematics_Compile  datatype declarations
+namespace Sequences_Compile  {
+}// end of namespace Sequences_Compile  datatype declarations
+namespace Maps_Compile  {
+}// end of namespace Maps_Compile  datatype declarations
+namespace Arrays_Compile  {
+}// end of namespace Arrays_Compile  datatype declarations
+namespace KeyType_Compile  {
+}// end of namespace KeyType_Compile  datatype declarations
+namespace Byte__Order_Compile  {
+}// end of namespace Byte__Order_Compile  datatype declarations
+namespace Lexicographic__Byte__Order_Compile  {
+}// end of namespace Lexicographic__Byte__Order_Compile  datatype declarations
+namespace Integer__Order_Compile  {
+}// end of namespace Integer__Order_Compile  datatype declarations
+namespace TestBtreeModel_Compile  {
+  
+struct Node_Leaf {
+    LinearExtern::linear_seq<DafnySequence<uint8>> keys;
+    LinearExtern::linear_seq<uint64> values;
+    friend bool operator==(const Node_Leaf &left, const Node_Leaf &right); 
+    friend bool operator!=(const Node_Leaf &left, const Node_Leaf &right) { return !(left == right); } 
+  };
+  
+struct Node_Index {
+    LinearExtern::linear_seq<DafnySequence<uint8>> pivots;
+    LinearExtern::lseq <TestBtreeModel_Compile::Node>  children;
+    friend bool operator==(const Node_Index &left, const Node_Index &right); 
+    friend bool operator!=(const Node_Index &left, const Node_Index &right) { return !(left == right); } 
+  };
+  
+struct Node {
+    std::variant<Node_Leaf,Node_Index> v;
+    static Node create_Leaf(LinearExtern::linear_seq<DafnySequence<uint8>> keys, LinearExtern::linear_seq<uint64> values) {
+      Node COMPILER_result;
+      Node_Leaf COMPILER_result_subStruct;
+      COMPILER_result_subStruct.keys = keys;
+      COMPILER_result_subStruct.values = values;
+      COMPILER_result.v = COMPILER_result_subStruct;
+      return COMPILER_result;
+    }
+    static Node create_Index(LinearExtern::linear_seq<DafnySequence<uint8>> pivots, LinearExtern::lseq <TestBtreeModel_Compile::Node>  children) {
+      Node COMPILER_result;
+      Node_Index COMPILER_result_subStruct;
+      COMPILER_result_subStruct.pivots = pivots;
+      COMPILER_result_subStruct.children = children;
+      COMPILER_result.v = COMPILER_result_subStruct;
+      return COMPILER_result;
+    }
+    Node();
+    ~Node() {}
+    Node(const Node &other) {
+      v = other.v;
+    }
+    Node& operator=(const Node other) {
+      v = other.v;
+      return *this;
+    }
+    bool is_Node_Leaf() const { return std::holds_alternative<Node_Leaf>(v); }
+    bool is_Node_Index() const { return std::holds_alternative<Node_Index>(v); }
+    friend bool operator==(const Node &left, const Node &right) { 
+    	return left.v == right.v;
+}
+    LinearExtern::linear_seq<DafnySequence<uint8>> dtor_keys() {
+      return std::get<Node_Leaf>(v).keys; 
+    }
+    LinearExtern::linear_seq<uint64> dtor_values() {
+      return std::get<Node_Leaf>(v).values; 
+    }
+    LinearExtern::linear_seq<DafnySequence<uint8>> dtor_pivots() {
+      return std::get<Node_Index>(v).pivots; 
+    }
+    LinearExtern::lseq <TestBtreeModel_Compile::Node>  dtor_children() {
+      return std::get<Node_Index>(v).children; 
+    }
+    friend bool operator!=(const Node &left, const Node &right) { return !(left == right); } 
+  };
+  
+inline bool is_Node_Leaf(const struct Node d);
+  
+inline bool is_Node_Index(const struct Node d);
+}// end of namespace TestBtreeModel_Compile  datatype declarations
+namespace TestMutableBtree_Compile  {
+}// end of namespace TestMutableBtree_Compile  datatype declarations
+namespace MainModule_Compile  {
+}// end of namespace MainModule_Compile  datatype declarations
+namespace Uint32__Order_Compile  {
+}// end of namespace Uint32__Order_Compile  datatype declarations
+namespace Uint64__Order_Compile  {
+}// end of namespace Uint64__Order_Compile  datatype declarations
+namespace Char__Order_Compile  {
+}// end of namespace Char__Order_Compile  datatype declarations
+namespace ValueType_Compile  {
+}// end of namespace ValueType_Compile  datatype declarations
+namespace _module  {
+}// end of namespace _module  datatype declarations
+namespace _System  {
+}// end of namespace _System  class declarations
+namespace NativeTypes_Compile  {
+  class class_sbyte {
+    public:
+    // Default constructor
+ class_sbyte() {}
+    static int8 get_Default() {
+      return 0;
+    }
+  };
+  class class_byte {
+    public:
+    // Default constructor
+ class_byte() {}
+    static uint8 get_Default() {
+      return 0;
+    }
+  };
+  class class_int16 {
+    public:
+    // Default constructor
+ class_int16() {}
+    static int16 get_Default() {
+      return 0;
+    }
+  };
+  class class_uint16 {
+    public:
+    // Default constructor
+ class_uint16() {}
+    static uint16 get_Default() {
+      return 0;
+    }
+  };
+  class class_int32 {
+    public:
+    // Default constructor
+ class_int32() {}
+    static int32 get_Default() {
+      return 0;
+    }
+  };
+  class class_uint32 {
+    public:
+    // Default constructor
+ class_uint32() {}
+    static uint32 get_Default() {
+      return 0;
+    }
+  };
+  class class_int64 {
+    public:
+    // Default constructor
+ class_int64() {}
+    static int64 get_Default() {
+      return 0;
+    }
+  };
+  class class_uint64 {
+    public:
+    // Default constructor
+ class_uint64() {}
+    static uint64 get_Default() {
+      return 0;
+    }
+  };
+  class class_nat8 {
+    public:
+    // Default constructor
+ class_nat8() {}
+    static int8 get_Default() {
+      return 0;
+    }
+  };
+  class class_nat16 {
+    public:
+    // Default constructor
+ class_nat16() {}
+    static int16 get_Default() {
+      return 0;
+    }
+  };
+  class class_nat32 {
+    public:
+    // Default constructor
+ class_nat32() {}
+    static int32 get_Default() {
+      return 0;
+    }
+  };
+  class class_nat64 {
+    public:
+    // Default constructor
+ class_nat64() {}
+    static int64 get_Default() {
+      return 0;
+    }
+  };
+  class __default {
+    public:
+    // Default constructor
+ __default() {}
+    static uint64 Uint64Size();static uint64 Uint32Size();static uint64 Uint16Size();  };
+}// end of namespace NativeTypes_Compile  class declarations
+namespace LinearMaybe  {
+}// end of namespace LinearMaybe  class declarations
+namespace LinearExtern  {
+}// end of namespace LinearExtern  class declarations
+namespace LinearSequence__i_Compile  {
+  class __default {
+    public:
+    // Default constructor
+ __default() {}
+    template <typename A>
+    static LinearExtern::linear_seq<A> seq__alloc__init__iterate(uint64 length, A a, uint64 i, LinearExtern::linear_seq<A> sofar);template <typename A>
+    static LinearExtern::linear_seq<A> seq__alloc__init(uint64 length, A a);template <typename A>
+    static uint64 lseq__length__uint64(LinearExtern::lseq <A>  s);template <typename A>
+    static A lseq__peek(LinearExtern::lseq <A>  s, uint64 i);template <typename A>
+    static LinearExtern::lseq <A>  lseq__alloc(uint64 length);
+    template <typename A>
+    static void lseq__free(LinearExtern::lseq <A>  s);
+    template <typename A>
+    static struct Tuple2<LinearExtern::lseq <A> ,A> lseq__swap(LinearExtern::lseq <A>  s1, uint64 i, A a1);
+    template <typename A>
+    static struct Tuple2<LinearExtern::lseq <A> ,A> lseq__take(LinearExtern::lseq <A>  s1, uint64 i);
+    template <typename A>
+    static LinearExtern::lseq <A>  lseq__give(LinearExtern::lseq <A>  s1, uint64 i, A a);
+    template <typename A>
+    static LinearExtern::linear_seq<A> AllocAndCopy(LinearExtern::shared_seq<A> source, uint64 from, uint64 to);
+    template <typename A>
+    static struct Tuple2<LinearExtern::lseq <A> ,LinearExtern::lseq <A> > AllocAndMoveLseq(LinearExtern::lseq <A>  source, uint64 from, uint64 to);
+    template <typename A>
+    static LinearExtern::linear_seq<A> InsertSeq(LinearExtern::linear_seq<A> s, A a, uint64 pos);
+    template <typename A>
+    static LinearExtern::lseq <A>  InsertLSeq(LinearExtern::lseq <A>  s, A a, uint64 pos);
+  };
+}// end of namespace LinearSequence__i_Compile  class declarations
+namespace SeqComparison_Compile  {
+}// end of namespace SeqComparison_Compile  class declarations
+namespace NativeArrays_Compile  {
+}// end of namespace NativeArrays_Compile  class declarations
+namespace Options_Compile  {
+}// end of namespace Options_Compile  class declarations
+namespace Mathematics_Compile  {
+}// end of namespace Mathematics_Compile  class declarations
+namespace Sequences_Compile  {
+  class __default {
+    public:
+    // Default constructor
+ __default() {}
+    template <typename A>
+    static DafnySequence<A> Insert(DafnySequence<A> s, A a, uint64 pos);
+    template <typename A>
+    static DafnySequence<A> Replace1with2(DafnySequence<A> s, A a, A b, uint64 pos);
+    template <typename T>
+    static DafnySequence<T> SeqIndexUpdate(DafnySequence<T> s, uint64 i, T t);  };
+}// end of namespace Sequences_Compile  class declarations
+namespace Maps_Compile  {
+}// end of namespace Maps_Compile  class declarations
+namespace Arrays_Compile  {
+  class __default {
+    public:
+    // Default constructor
+ __default() {}
+    template <typename T>
+    static void Insert(DafnyArray<T> arr, uint64 length, T element, uint64 pos);
+    template <typename T>
+    static void replace1with2(DafnyArray<T> arr, uint64 length, T element1, T element2, uint64 pos);
+  };
+}// end of namespace Arrays_Compile  class declarations
+namespace KeyType_Compile  {
+  class class_Key {
+    public:
+    // Default constructor
+ class_Key() {}
+    static Key get_Default() {
+      return DafnySequence<uint8>();
+    }
+  };
+  class __default {
+    public:
+    // Default constructor
+ __default() {}
+    static uint64 MaxLen();  };
+}// end of namespace KeyType_Compile  class declarations
+namespace Byte__Order_Compile  {
+  class __default {
+    public:
+    // Default constructor
+ __default() {}
+    static bool lte(uint8 a, uint8 b);static bool ltedef(uint8 a, uint8 b);static int32 cmp(uint8 a, uint8 b);
+  };
+}// end of namespace Byte__Order_Compile  class declarations
+namespace Lexicographic__Byte__Order_Compile  {
+  class __default {
+    public:
+    // Default constructor
+ __default() {}
+    static int32 cmp(DafnySequence<uint8> a, DafnySequence<uint8> b);
+    static uint64 ArrayLargestLtePlus1Linear(DafnyArray<DafnySequence<uint8>> run, uint64 start, uint64 end, DafnySequence<uint8> needle);
+    static uint64 ArrayLargestLtePlus1(DafnyArray<DafnySequence<uint8>> run, uint64 start, uint64 end, DafnySequence<uint8> needle);
+    static uint64 ArrayLargestLtPlus1(DafnyArray<DafnySequence<uint8>> run, uint64 start, uint64 end, DafnySequence<uint8> needle);
+    static int64 ComputeLargestLte(LinearExtern::shared_seq<DafnySequence<uint8>> run, DafnySequence<uint8> needle);
+    static int64 ComputeLargestLt(DafnySequence<DafnySequence<uint8>> run, DafnySequence<uint8> needle);
+  };
+}// end of namespace Lexicographic__Byte__Order_Compile  class declarations
+namespace Integer__Order_Compile  {
+}// end of namespace Integer__Order_Compile  class declarations
+namespace TestBtreeModel_Compile  {
+}// end of namespace TestBtreeModel_Compile  class declarations
+namespace TestMutableBtree_Compile  {
+  class __default {
+    public:
+    // Default constructor
+ __default() {}
+    static uint64 MaxKeysPerLeaf();static uint64 MaxChildren();static uint64 DefaultValue();static DafnySequence<uint8> DefaultKey();static uint64 Route(LinearExtern::shared_seq<DafnySequence<uint8>> keys, DafnySequence<uint8> needle);
+    static Options_Compile::Option <uint64>  QueryLeaf(TestBtreeModel_Compile::Node node, DafnySequence<uint8> needle);
+    static Options_Compile::Option <uint64>  QueryIndex(TestBtreeModel_Compile::Node node, DafnySequence<uint8> needle);
+    static Options_Compile::Option <uint64>  Query(TestBtreeModel_Compile::Node node, DafnySequence<uint8> needle);
+    static TestBtreeModel_Compile::Node EmptyTree();
+    static bool Full(TestBtreeModel_Compile::Node node);static struct Tuple2<TestBtreeModel_Compile::Node,TestBtreeModel_Compile::Node> SplitLeaf(TestBtreeModel_Compile::Node node, uint64 nleft);
+    static struct Tuple3<TestBtreeModel_Compile::Node,TestBtreeModel_Compile::Node,DafnySequence<uint8>> SplitIndex(TestBtreeModel_Compile::Node node, uint64 nleft);
+    static struct Tuple3<TestBtreeModel_Compile::Node,TestBtreeModel_Compile::Node,DafnySequence<uint8>> SplitNode(TestBtreeModel_Compile::Node node);
+    static void SplitChildOfIndex(TestBtreeModel_Compile::Node* node, uint64 childidx);
+    static struct Options_Compile::Option <uint64> InsertLeaf(TestBtreeModel_Compile::Node* node, DafnySequence<uint8> key, uint64 value);
+    static struct Options_Compile::Option <uint64> InsertIndex(TestBtreeModel_Compile::Node* node, DafnySequence<uint8> key, uint64 value);
+    static struct Options_Compile::Option <uint64> InsertNode(TestBtreeModel_Compile::Node* node, DafnySequence<uint8> key, uint64 value);
+    static void Grow(TestBtreeModel_Compile::Node* root);
+    static struct Options_Compile::Option <uint64> Insert(TestBtreeModel_Compile::Node* root, DafnySequence<uint8> key, uint64 value);
+    static void Free(TestBtreeModel_Compile::Node node);
+  };
+}// end of namespace TestMutableBtree_Compile  class declarations
+namespace MainModule_Compile  {
+  class __default {
+    public:
+    // Default constructor
+ __default() {}
+    static DafnySequence<uint8> SeqFor(uint64 i);
+    static void Main();
+  };
+}// end of namespace MainModule_Compile  class declarations
+namespace Uint32__Order_Compile  {
+  class __default {
+    public:
+    // Default constructor
+ __default() {}
+    static bool lte(uint32 a, uint32 b);static bool ltedef(uint32 a, uint32 b);static int32 cmp(uint32 a, uint32 b);
+  };
+}// end of namespace Uint32__Order_Compile  class declarations
+namespace Uint64__Order_Compile  {
+  class __default {
+    public:
+    // Default constructor
+ __default() {}
+    static bool lte(uint64 a, uint64 b);static bool ltedef(uint64 a, uint64 b);static int32 cmp(uint64 a, uint64 b);
+  };
+}// end of namespace Uint64__Order_Compile  class declarations
+namespace Char__Order_Compile  {
+  class __default {
+    public:
+    // Default constructor
+ __default() {}
+    static bool lte(char a, char b);static bool ltedef(char a, char b);static int32 cmp(char a, char b);
+  };
+}// end of namespace Char__Order_Compile  class declarations
+namespace ValueType_Compile  {
+  class class_Value {
+    public:
+    // Default constructor
+ class_Value() {}
+    static Value get_Default() {
+      return DafnySequence<uint8>();
+    }
+  };
+  class __default {
+    public:
+    // Default constructor
+ __default() {}
+    static uint64 MaxLen();static DafnySequence<uint8> DefaultValue();  };
+}// end of namespace ValueType_Compile  class declarations
+namespace _module  {
+}// end of namespace _module  class declarations
+template <typename A>
+struct std::hash<LinearSequence__i_Compile::as__linear<A>> {
+  std::size_t operator()(const LinearSequence__i_Compile::as__linear<A>& x) const {
+    size_t seed = 0;
+    hash_combine<A>(seed, x.a);
+    return seed;
+  }
+};
+template <typename V>
+struct std::hash<Options_Compile::Option_None<V>> {
+  std::size_t operator()(const Options_Compile::Option_None<V>& x) const {
+    size_t seed = 0;
+    (void)x;
+    return seed;
+  }
+};
+template <typename V>
+struct std::hash<Options_Compile::Option_Some<V>> {
+  std::size_t operator()(const Options_Compile::Option_Some<V>& x) const {
+    size_t seed = 0;
+    hash_combine<V>(seed, x.value);
+    return seed;
+  }
+};
+template <typename V>
+struct std::hash<Options_Compile::Option<V>> {
+  std::size_t operator()(const Options_Compile::Option<V>& x) const {
+    size_t seed = 0;
+    if (x.is_Option_None()) {
+      hash_combine<uint64>(seed, 0);
+      hash_combine<struct Options_Compile::Option_None<V>>(seed, std::get<Options_Compile::Option_None<V>>(x.v));
+    }
+    if (x.is_Option_Some()) {
+      hash_combine<uint64>(seed, 1);
+      hash_combine<struct Options_Compile::Option_Some<V>>(seed, std::get<Options_Compile::Option_Some<V>>(x.v));
+    }
+    return seed;
+  }
+};
+template <>
+struct std::hash<TestBtreeModel_Compile::Node_Leaf> {
+  std::size_t operator()(const TestBtreeModel_Compile::Node_Leaf& x) const {
+    size_t seed = 0;
+    hash_combine<LinearExtern::linear_seq<DafnySequence<uint8>>>(seed, x.keys);
+    hash_combine<LinearExtern::linear_seq<uint64>>(seed, x.values);
+    return seed;
+  }
+};
+template <>
+struct std::hash<TestBtreeModel_Compile::Node_Index> {
+  std::size_t operator()(const TestBtreeModel_Compile::Node_Index& x) const {
+    size_t seed = 0;
+    hash_combine<LinearExtern::linear_seq<DafnySequence<uint8>>>(seed, x.pivots);
+    hash_combine<LinearExtern::lseq <TestBtreeModel_Compile::Node> >(seed, x.children);
+    return seed;
+  }
+};
+template <>
+struct std::hash<TestBtreeModel_Compile::Node> {
+  std::size_t operator()(const TestBtreeModel_Compile::Node& x) const {
+    size_t seed = 0;
+    if (x.is_Node_Leaf()) {
+      hash_combine<uint64>(seed, 0);
+      hash_combine<struct TestBtreeModel_Compile::Node_Leaf>(seed, std::get<TestBtreeModel_Compile::Node_Leaf>(x.v));
+    }
+    if (x.is_Node_Index()) {
+      hash_combine<uint64>(seed, 1);
+      hash_combine<struct TestBtreeModel_Compile::Node_Index>(seed, std::get<TestBtreeModel_Compile::Node_Index>(x.v));
+    }
+    return seed;
+  }
+};
