@@ -393,7 +393,7 @@ abstract module MutableBtree {
   }
 
   method InsertIndex(linear node: Node, key: Key, value: Value)
-    returns (linear n2: Node, oldvalue: Option<Value>, depth: uint64)
+    returns (linear n2: Node, oldvalue: Option<Value>)
     requires WF(node)
     requires node.Index?
     requires !Full(node)
@@ -437,7 +437,7 @@ abstract module MutableBtree {
     ghost var childNodeSnapshot := childNode;
     assert Height(childNode) < Height(preparedNode) by { ChildrenAreShorter(preparedNode, childidx as nat); }
     assert Height(childNode) < Height(node);
-    childNode, oldvalue, depth := InsertNode(childNode, key, value);
+    childNode, oldvalue := InsertNode(childNode, key, value);
     children := lseq_give(children, childidx, childNode);
     n2 := Model.Index(pivots, children);
     Model.RecursiveInsertIsCorrect(preparedNode, key, value, childidx as int, n2, n2.children[childidx as int]);
@@ -449,7 +449,7 @@ abstract module MutableBtree {
   }
 
   method InsertNode(linear node: Node, key: Key, value: Value)
-    returns (linear n2: Node, oldvalue: Option<Value>, depth: uint64)
+    returns (linear n2: Node, oldvalue: Option<Value>)
     requires WF(node)
     requires !Full(node)
     ensures WF(n2)
@@ -460,10 +460,8 @@ abstract module MutableBtree {
   {
     if node.Leaf? {
       n2, oldvalue := InsertLeaf(node, key, value);
-      depth := 0;
     } else {
-      n2, oldvalue, depth := InsertIndex(node, key, value);
-      depth := depth + 1;
+      n2, oldvalue := InsertIndex(node, key, value);
     }
   }
 
@@ -495,7 +493,7 @@ abstract module MutableBtree {
   }
   
   method Insert(linear root: Node, key: Key, value: Value)
-    returns (linear newroot: Node, oldvalue: Option<Value>, depth:uint64)
+    returns (linear newroot: Node, oldvalue: Option<Value>)
     requires WF(root)
     ensures WF(newroot)
     ensures Interpretation(newroot) == Interpretation(root)[key := value]
@@ -510,7 +508,7 @@ abstract module MutableBtree {
       newroot := root;
     }
     assert Model.Interpretation(newroot) == Model.Interpretation(root);
-    newroot, oldvalue, depth := InsertNode(newroot, key, value);
+    newroot, oldvalue := InsertNode(newroot, key, value);
   }
 
   method Free(linear node: Node)
@@ -579,7 +577,7 @@ module MainModule {
   {
     // var n: uint64 := 1_000_000;
     // var p: uint64 := 300_007;
-    var n: uint64 := 100_000;
+    var n: uint64 := 10_000_000;
     var p: uint64 := 3_000_017;
     // var n: uint64 := 100_000_000;
     // var p: uint64 := 1_073_741_827;
@@ -593,10 +591,9 @@ module MainModule {
       var oldvalue;
       var keyv := ((i * p) % n);
       var key := SeqFor(keyv);
-      var depth;
-      t, oldvalue, depth := TMB.Insert(t, key, i);
-      if (i%1000)==0 {
-        print "i", i, "depth", depth, "\n";
+      t, oldvalue := TMB.Insert(t, key, i);
+      if (i%1000000)==0 {
+        print "i", i, "\n";
       }
 
       // Sanity check
