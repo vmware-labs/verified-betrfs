@@ -30,3 +30,20 @@ echo STOP HERE and uncomment 3 modules at bottom of MutableBtree.i.dfy to get Ma
 .dafny/dafny/Binaries/dafny /noVerify /spillTargetCode:3 /countVerificationErrors:0 /compileTarget:cpp lib/DataStructures/MutableBtree.i.dfy framework/NativeArrays.h
 g++ -O3 lib/DataStructures/lib/DataStructures/MutableBtree.i.cpp -o MutableBtreeTest -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -Ilib -std=c++17 -I. -Iframework framework/NativeArrays.cpp
 
+Andrea points out that lseq_swap_raw_fun passes lseq around by value,
+which forces a copy of an entire vector in and out. Seems like a
+perf disaster, yes?
+
+jonh notes that lseq_swap_raw_fun is just wrong -- it returns the
+un-inserted list. So we probably haven't actually measured the
+linear code yet!
+
+
+- gcc vs clang -- easy to try; andrea saw equiv perf on broken
+- need to fix broken lseq_swap_raw_fun, which doesn't return the right thing
+  - confirm this TCB actually works with a test
+- need to fix vector copies in lseq
+- and then measure. Do we really need borrow? Chris worried that we
+  can't take refs to datatype fields.
+
+10k 0.623
