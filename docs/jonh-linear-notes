@@ -52,3 +52,5 @@ Okay, so the 75s/10Mops number was nonsense; bug in lseq_swap_raw_fun
 meant it wasn't doing anything.
 Fixing that bug makes things go ... quite slowly. 58s/10Kops;
 10^4 slower.
+
+Fixing vector -> vector* makes it go faster again; 0.785s/10Kops
