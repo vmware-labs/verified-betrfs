@@ -22,7 +22,7 @@ module MarshallingModel {
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
-  import BC = BetreeGraphBlockCache
+  import BC = BlockCache
   import SM = StateModel
   import KVList
   import Crypto
@@ -40,7 +40,6 @@ module MarshallingModel {
   // in a 64-bit int.
   import M = ValueMessage`Internal
   import ReferenceType`Internal
-  import LBAType
   import ValueType`Internal
 
   import Pivots = PivotsLib
@@ -170,13 +169,18 @@ module MarshallingModel {
   requires ValInGrammar(v, Marshalling.SectorGrammar())
   {
     if v.c == 0 then (
+      match Marshalling.valToSuperblock(v.val) {
+        case Some(s) => Some(SM.SectorSuperblock(s))
+        case None => None
+      }
+    ) else if v.c == 1 then (
       match IndirectionTableModel.valToIndirectionTable(v.val) {
         case Some(s) => Some(SM.SectorIndirectionTable(s))
         case None => None
       }
     ) else (
       match valToNode(v.val) {
-        case Some(s) => Some(SM.SectorBlock(s))
+        case Some(s) => Some(SM.SectorNode(s))
         case None => None
       }
     )

@@ -4,6 +4,8 @@ module LeafModel {
   import opened StateModel
   import opened IOModel
   import opened BookkeepingModel
+  import opened ViewOp
+  import opened DiskOpModel
 
   import opened Options
   import opened Maps
@@ -19,9 +21,9 @@ module LeafModel {
 
   import opened NativeTypes
 
-  function {:opaque} repivotLeaf(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
-  : (s': Variables)
-  requires Inv(k, s)
+  function {:opaque} repivotLeaf(k: Constants, s: BCVariables, ref: BT.G.Reference, node: Node)
+  : (s': BCVariables)
+  requires BCInv(k, s)
   requires s.Ready?
   requires ref in s.ephemeralIndirectionTable.graph
   requires ref in s.cache
@@ -50,8 +52,8 @@ module LeafModel {
     )
   }
 
-  lemma repivotLeafCorrect(k: Constants, s: Variables, ref: BT.G.Reference, node: Node)
-  requires Inv(k, s)
+  lemma repivotLeafCorrect(k: Constants, s: BCVariables, ref: BT.G.Reference, node: Node)
+  requires BCInv(k, s)
   requires s.Ready?
   requires ref in s.ephemeralIndirectionTable.graph
   requires ref in s.cache
@@ -60,8 +62,8 @@ module LeafModel {
   requires |node.buckets| == 1
   requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 1
   ensures var s' := repivotLeaf(k, s, ref, node);
-    && WFVars(s')
-    && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, D.NoDiskOp)
+    && WFBCVars(s')
+    && betree_next(k, IBlockCache(s), IBlockCache(s'))
   {
     reveal_SplitBucketLeft();
     reveal_SplitBucketRight();
@@ -74,8 +76,8 @@ module LeafModel {
       && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, ref)
     ) {
       assert s' == s;
-      assert WFVars(s');
-      assert noop(k, IVars(s), IVars(s));
+      assert WFBCVars(s');
+      assert noop(k, IBlockCache(s), IBlockCache(s));
       return;
     }
 
@@ -105,9 +107,9 @@ module LeafModel {
 
     assert WFNode(newnode);
     writeCorrect(k, s, ref, newnode);
-    assert WFVars(s');
+    assert WFBCVars(s');
 
-    //assert IVars(s1).cache == IVars(s).cache[ref := INode(newnode)];
+    //assert IBlockCache(s1).cache == IBlockCache(s).cache[ref := INode(newnode)];
 
     assert JoinBucketList(node.buckets).b
         == MapUnion(JoinBucketList([]).b, node.buckets[0].b)
@@ -123,11 +125,11 @@ module LeafModel {
     var step := BT.BetreeRepivot(BT.Repivot(ref, INode(node), pivots));
     assert BT.ValidBetreeStep(step);
     assert |BT.BetreeStepOps(step)| == 1; // TODO
-    assert BC.Dirty(Ik(k), IVars(s), IVars(s'), ref, INode(newnode));
-    assert BC.OpStep(Ik(k), IVars(s), IVars(s'), BT.BetreeStepOps(step)[0]);
-    BC.MakeTransaction1(Ik(k), IVars(s), IVars(s'), BT.BetreeStepOps(step));
-    //assert BC.ReadStep(k, IVars(s), BT.BetreeStepReads(step)[0]);
-    //assert BBC.BetreeMove(Ik(k), IVars(s), IVars(s'), UI.NoOp, SD.NoDiskOp, step);
-    assert stepsBetree(k, IVars(s), IVars(s'), UI.NoOp, step);
+    assert BC.Dirty(Ik(k).bc, IBlockCache(s), IBlockCache(s'), ref, INode(newnode));
+    assert BC.OpStep(Ik(k).bc, IBlockCache(s), IBlockCache(s'), BT.BetreeStepOps(step)[0]);
+    BC.MakeTransaction1(Ik(k).bc, IBlockCache(s), IBlockCache(s'), BT.BetreeStepOps(step));
+    //assert BC.ReadStep(k, IBlockCache(s), BT.BetreeStepReads(step)[0]);
+    //assert BBC.BetreeMove(Ik(k), IBlockCache(s), IBlockCache(s'), UI.NoOp, SD.NoDiskOp, step);
+    assert stepsBetree(k, IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), step);
   }
 }

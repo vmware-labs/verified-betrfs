@@ -7,8 +7,6 @@ include "../lib/DataStructures/LruModel.i.dfy"
 include "../lib/DataStructures/MutableMapModel.i.dfy"
 include "../lib/DataStructures/MutableMapImpl.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
-include "../BlockCacheSystem/AsyncSectorDiskModel.i.dfy"
-include "../BlockCacheSystem/BlockCacheSystem.i.dfy"
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "../lib/DataStructures/BitmapImpl.i.dfy"
 include "../lib/DataStructures/LruImpl.i.dfy"
@@ -26,11 +24,11 @@ module IndirectionTableImpl {
   import opened NativeTypes
   import ReferenceType`Internal
   import BT = PivotBetreeSpec`Internal
-  import BC = BetreeGraphBlockCache
+  import BC = BlockCache
   import LruModel
   import MutableMapModel
   import MutableMap
-  import opened LBAType
+  import opened DiskLayout
   import opened GenericMarshalling
   import BitmapModel
   import BitmapImpl
@@ -53,6 +51,7 @@ module IndirectionTableImpl {
       acc := DebugAccumulator.EmptyAccumulator();
       var a := new DebugAccumulator.AccRec(t.Count, "IndirectionTableModel.Entry");
       acc := DebugAccumulator.AccPut(acc, "t", a);
+      assume false; // DebugAccumulate
       var r := garbageQueue.DebugAccumulate();
       a := new DebugAccumulator.AccRec.Index(r);
       acc := DebugAccumulator.AccPut(acc, "garbageQueue", a);
@@ -452,7 +451,7 @@ module IndirectionTableImpl {
         var len := tuple.t[2 as uint64].u;
         var succs := tuple.t[3 as uint64].ua;
         var graphRef := mutMap.Get(ref);
-        var loc := LBAType.Location(addr, len);
+        var loc := Location(addr, len);
 
         assert ValidVal(tuple);
         assert ValidVal(tuple.t[3]);
@@ -461,7 +460,7 @@ module IndirectionTableImpl {
         assert DropLast(a[..i+1]) == a[..i];
         assert Last(a[..i+1]) == a[i];
 
-        if graphRef.Some? || addr == 0 || !LBAType.ValidLocation(loc)
+        if graphRef.Some? || !ValidNodeLocation(loc)
             || |succs| as uint64 > MaxNumChildrenUint64() {
           lemma_valToHashMapNonePrefix(a, (i+1) as int);
           return None;

@@ -5,8 +5,6 @@ include "../lib/Lang/NativeTypes.s.dfy"
 include "../lib/DataStructures/LruModel.i.dfy"
 include "../lib/DataStructures/MutableMapModel.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
-include "../BlockCacheSystem/AsyncSectorDiskModel.i.dfy"
-include "../BlockCacheSystem/BlockCacheSystem.i.dfy"
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "../lib/DataStructures/BitmapModel.i.dfy"
 include "../ByteBlockCacheSystem/Marshalling.i.dfy"
@@ -33,10 +31,11 @@ module IndirectionTableModel {
   import opened NativeTypes
   import ReferenceType`Internal
   import BT = PivotBetreeSpec`Internal
-  import BC = BetreeGraphBlockCache
+  import BC = BlockCache
   import LruModel
   import MutableMapModel
-  import opened LBAType
+  import SectorType
+  import opened DiskLayout
   import opened GenericMarshalling
   import BitmapModel
   import opened Bounds
@@ -169,14 +168,14 @@ module IndirectionTableModel {
   {
   }
 
-  function IHashMap(m: HashMap) : BC.IndirectionTable
+  function IHashMap(m: HashMap) : SectorType.IndirectionTable
   {
-    BC.IndirectionTable(Locs(m), Graph(m))
+    SectorType.IndirectionTable(Locs(m), Graph(m))
   }
 
-  function I(self: IndirectionTable) : BC.IndirectionTable
+  function I(self: IndirectionTable) : SectorType.IndirectionTable
   {
-    BC.IndirectionTable(self.locs, self.graph)
+    SectorType.IndirectionTable(self.locs, self.graph)
   }
 
   function FromHashMap(
@@ -1162,7 +1161,7 @@ module IndirectionTableModel {
   requires forall i | 0 <= i < |a| :: ValidVal(a[i])
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
   ensures s.Some? ==> s.value.count as int == |a|
-  ensures s.Some? ==> forall v | v in s.value.contents.Values :: v.loc.Some? && BC.ValidLocationForNode(v.loc.value)
+  ensures s.Some? ==> forall v | v in s.value.contents.Values :: v.loc.Some? && ValidNodeLocation(v.loc.value)
   ensures s.Some? ==> forall ref | ref in s.value.contents :: s.value.contents[ref].predCount == 0
   ensures s.Some? ==> forall ref | ref in s.value.contents :: |s.value.contents[ref].succs| <= MaxNumChildren()
   ensures s.Some? ==> Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(s.value))
@@ -1184,7 +1183,7 @@ module IndirectionTableModel {
           var len := tuple.t[2].u;
           var succs := tuple.t[3].ua;
           var loc := Location(lba, len);
-          if ref in table.contents || lba == 0 || !LBAType.ValidLocation(loc) || |succs| as int > MaxNumChildren() then (
+          if ref in table.contents || !ValidNodeLocation(loc) || |succs| as int > MaxNumChildren() then (
             None
           ) else (
             var res := MutableMapModel.Insert(table, ref, Entry(Some(loc), succs, 0));
@@ -1453,8 +1452,8 @@ module IndirectionTableModel {
         var locIndex: uint64 := loc / NodeBlockSize() as uint64;
 
         //assert I(indirectionTable).locs[kv.0] == kv.1.0.value;
-        LBAType.reveal_ValidAddr();
-        assert BC.ValidLocationForNode(it.next.value.loc.value);
+        reveal_ValidNodeAddr();
+        assert ValidNodeLocation(it.next.value.loc.value);
         assert locIndex as int * NodeBlockSize() == loc as int;
 
         //assert locIndex < NumBlocks() as uint64;
@@ -1512,8 +1511,8 @@ module IndirectionTableModel {
               assert BC.LocationsForDifferentRefsDontOverlap(I(indirectionTable), r1, r2);
             } else {
               if I(indirectionTable).locs[r1].addr == I(indirectionTable).locs[r2].addr {
-                var j1 := LBAType.ValidAddrDivisor(I(indirectionTable).locs[r1].addr);
-                var j2 := LBAType.ValidAddrDivisor(I(indirectionTable).locs[r2].addr);
+                var j1 := DiskLayout.ValidNodeAddrDivisor(I(indirectionTable).locs[r1].addr);
+                var j2 := DiskLayout.ValidNodeAddrDivisor(I(indirectionTable).locs[r2].addr);
                 if r1 !in it.s {
                   assert r2 in it.s;
                   assert !BitmapModel.IsSet(bm, j1);

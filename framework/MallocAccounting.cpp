@@ -1,7 +1,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <malloc.h>
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
@@ -13,6 +12,8 @@
 #include "MallocAccounting.h"
 
 #if MALLOC_ACCOUNTING
+
+#include <malloc.h>
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"

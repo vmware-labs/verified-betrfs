@@ -1,4 +1,4 @@
-include "../lib/sequences.s.dfy"
+include "../lib/Base/sequences.i.dfy"
   
 module Circular_List {
   import opened Sequences

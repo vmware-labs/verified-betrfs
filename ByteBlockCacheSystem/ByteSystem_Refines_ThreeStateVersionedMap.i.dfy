@@ -1,24 +1,24 @@
-include "../PivotBetree/ThreeStateVersionedPivotBetree_Refines_ThreeStateVersionedMap.i.dfy"
-include "BetreeBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree.i.dfy"
+include "ByteSystem_Refines_BetreeJournalSystem.i.dfy"
+include "../BlockCacheSystem/BetreeJournalSystem_Refines_ThreeStateVersionedMap.i.dfy"
 
 //
 // Composes the two refinements:
 //
-//   BetreeBlockCacheSystem -> ThreeStateVersioned PivotBetree
-//   ThreeStateVersioned PivotBetree -> ThreeStateVersioned Map
+//   ByteSystem -> BetreeJournalSystem
+//   BetreeJournalSystem -> ThreeStateVersioned Map
 //
 // To yield
 //
-//   BetreeBlockCacheSystem -> ThreeStateVersioned Map
+//   ByteSystem -> ThreeStateVersioned Map
 //
 
-module BetreeBlockCacheSystem_Refines_ThreeStateVersionedMap {
-  import A = BetreeBlockCacheSystem
-  import B = ThreeStateVersionedPivotBetree
+module ByteSystem_Refines_ThreeStateVersionedMap {
+  import A = ByteSystem
+  import B = BetreeJournalSystem
   import C = ThreeStateVersionedMap
 
-  import Ref_A = BetreeBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree
-  import Ref_B = ThreeStateVersionedPivotBetree_Refines_ThreeStateVersionedMap
+  import Ref_A = ByteSystem_Refines_BetreeJournalSystem
+  import Ref_B = BetreeJournalSystem_Refines_ThreeStateVersionedMap
   
   import UI
 

@@ -7,6 +7,7 @@ module SplitImpl {
   import SplitModel
   import opened StateImpl
   import opened NodeImpl
+  import opened DiskOpImpl
 
   import opened Options
   import opened Maps

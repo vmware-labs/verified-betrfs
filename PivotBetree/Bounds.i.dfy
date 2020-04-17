@@ -11,7 +11,7 @@ module Bounds {
 
   function method IndirectionTableBlockSizeUint64() : uint64 { 24*1024*1024 }
   function method NodeBlockSizeUint64() : uint64 { 98304 }
-  function method MinNodeBlockIndexUint64() : uint64 { 257 }
+  function method MinNodeBlockIndexUint64() : uint64 { 598 }
 
   //function method MaxTotalBucketWeightUint64() : uint64 { 8356168 }
   //function method MaxCacheSizeUint64() : uint64 { 200 }
@@ -25,6 +25,8 @@ module Bounds {
 
   function method NumBlocksUint64() : uint64 { 0x10_0000 }
 
+  function method DiskNumJournalBlocksUint64() : uint64 { 2048 }
+
   function method IndirectionTableMaxSizeUint64() : uint64 { 0x1_0000_0000 }
 
   function IndirectionTableBlockSize() : int { IndirectionTableBlockSizeUint64() as int }
@@ -36,10 +38,12 @@ module Bounds {
   function FlushTriggerWeight() : int { FlushTriggerWeightUint64() as int }
   function NumBlocks() : int { NumBlocksUint64() as int }
   function IndirectionTableMaxSize() : int { IndirectionTableMaxSizeUint64() as int }
+  function DiskNumJournalBlocks() : int { DiskNumJournalBlocksUint64() as int }
 
   lemma lemma_node_sector_doesnt_overlap_indirection_table()
   ensures NodeBlockSize() * MinNodeBlockIndex()
-       >= IndirectionTableBlockSize()
+       >= 2 * 4096 + DiskNumJournalBlocks() * 4096
+          + 2 * IndirectionTableBlockSize()
   {
   }
 

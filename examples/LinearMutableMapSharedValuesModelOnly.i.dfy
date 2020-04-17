@@ -1,5 +1,5 @@
-include "LinearSequence.s.dfy"
-include "LinearSequence.i.dfy"
+include "../lib/Lang/LinearSequence.s.dfy"
+include "../lib/Lang/LinearSequence.i.dfy"
 
 include "../lib/Lang/NativeTypes.s.dfy"
 include "../lib/Base/Option.s.dfy"
@@ -20,7 +20,7 @@ include "../lib/Base/Arithmetic.s.dfy"
 // nice to cleanly separate these concerns.
 //
 
-module MutableMapModel {
+module MutableMap {
   import opened NativeTypes
   import opened Options
   import opened Sequences
@@ -378,7 +378,7 @@ module MutableMapModel {
   ensures self.contents == map[]
   ensures size as nat == |self.storage|
   {
-    linear var storage := seq_alloc_init(size as nat, Empty);
+    linear var storage := seq_alloc_init(size, Empty);
     FixedSizeLinearHashMap(
      /* storage := */ storage,
      /* count := */ 0,
@@ -420,11 +420,20 @@ module MutableMapModel {
     assert b == b[..n-delta] + b[n-delta..]; // observe
   }
 
-  function method Uint64SlotSuccessor(elementsLength: nat, slot: uint64): (nextSlot: uint64)
+  function Uint64SlotSuccessor(elementsLength: nat, slot: uint64): (nextSlot: uint64)
   requires elementsLength < 0x1_0000_0000_0000_0000
   requires ValidSlot(elementsLength, Slot(slot as nat))
   ensures ValidSlot(elementsLength, Slot(nextSlot as nat))
   ensures Slot(nextSlot as nat) == SlotSuccessor(elementsLength, Slot(slot as nat))
+  {
+    Uint64SlotSuccessorUint64(elementsLength as uint64, slot)
+  }
+
+  // TODO rename
+  function method Uint64SlotSuccessorUint64(elementsLength: uint64, slot: uint64): (nextSlot: uint64)
+  requires ValidSlot(elementsLength as nat, Slot(slot as nat))
+  ensures ValidSlot(elementsLength as nat, Slot(nextSlot as nat))
+  ensures Slot(nextSlot as nat) == SlotSuccessor(elementsLength as nat, Slot(slot as nat))
   {
     if slot == (elementsLength as uint64) - 1 then
       0
@@ -478,11 +487,11 @@ module MutableMapModel {
 
   ensures 0 <= foundSlotIdx as int < |self.storage|
   {
-    var item := seq_get(self.storage, slotIdx as nat);
+    var item := seq_get(self.storage, slotIdx);
     if item.Empty? || item.key == key then
       slotIdx
     else (
-      ProbeIterate(self, key, Uint64SlotSuccessor(seq_length(self.storage), slotIdx))
+      ProbeIterate(self, key, Uint64SlotSuccessorUint64(seq_length(self.storage), slotIdx))
     )
   }
 
@@ -600,8 +609,8 @@ module MutableMapModel {
     linear var FixedSizeLinearHashMap(selfStorage, selfCount, selfContents) := self;
     ghost var contents := selfContents[key := Some(value)];
 
-    var replaced := seq_get(selfStorage, slotIdx as nat);
-    linear var updatedStorage := seq_set(selfStorage, slotIdx as nat, Entry(key, value));
+    var replaced := seq_get(selfStorage, slotIdx);
+    linear var updatedStorage := seq_set(selfStorage, slotIdx, Entry(key, value));
 
     if replaced.Empty? then (
       FixedSizeInsertResult(FixedSizeLinearHashMap(updatedStorage, selfCount + 1, contents), None)
@@ -677,8 +686,8 @@ module MutableMapModel {
   {
     linear var FixedSizeLinearHashMap(selfStorage, selfCount, selfContents) := self;
     ghost var updatedContents := selfContents[selfStorage[slotIdx].key := Some(value)];
-    var entry := seq_get(selfStorage, slotIdx as nat);
-    linear var updatedStorage := seq_set(selfStorage, slotIdx as nat, entry.(value := value));
+    var entry := seq_get(selfStorage, slotIdx);
+    linear var updatedStorage := seq_set(selfStorage, slotIdx, entry.(value := value));
     FixedSizeLinearHashMap(updatedStorage, selfCount, updatedContents)
   }
 
@@ -688,8 +697,8 @@ module MutableMapModel {
   {
     var slotIdx := Probe(self, key);
 
-    if seq_get(self.storage, slotIdx as nat).Entry? then
-      Some(seq_get(self.storage, slotIdx as nat).value)
+    if seq_get(self.storage, slotIdx).Entry? then
+      Some(seq_get(self.storage, slotIdx).value)
     else
       None
   }
@@ -710,10 +719,10 @@ module MutableMapModel {
   {
     var slotIdx := Probe(self, key);
 
-    if seq_get(self.storage, slotIdx as nat).Entry? then (
+    if seq_get(self.storage, slotIdx).Entry? then (
       linear var FixedSizeLinearHashMap(selfStorage, selfCount, selfContents) := self;
-      var removed := Some(seq_get(selfStorage, slotIdx as nat).value);
-      linear var updatedStorage := seq_set(selfStorage, slotIdx as nat, Tombstone(key));
+      var removed := Some(seq_get(selfStorage, slotIdx).value);
+      linear var updatedStorage := seq_set(selfStorage, slotIdx, Tombstone(key));
       linear var self' := FixedSizeLinearHashMap(
           updatedStorage,
           selfCount,
@@ -779,7 +788,7 @@ module MutableMapModel {
   linear datatype LinearHashMap<V> = LinearHashMap(
     linear underlying: FixedSizeLinearHashMap<V>,
     count: uint64,
-    /* ghost */ contents: map<uint64, V>)
+    ghost contents: map<uint64, V>)
 
   function MapFromStorage<V>(elements: seq<Item<V>>): (result: map<uint64, V>)
   {
@@ -946,6 +955,13 @@ module MutableMapModel {
     self
   }
 
+  method {:opaque} Destructor<V>(linear self: LinearHashMap<V>)
+  {
+    linear var LinearHashMap(underlying, _, _) := self;
+    linear var FixedSizeLinearHashMap(storage, _, _) := underlying;
+    var _ := seq_free(storage);
+  }
+
   lemma LemmaEntryKeyInContents<V>(self: LinearHashMap<V>, i: uint64)
   requires Inv(self)
   requires 0 <= i as int < |self.underlying.storage|
@@ -963,10 +979,10 @@ module MutableMapModel {
     requires newUnderlying.contents.Keys <= self.contents.Keys
     decreases |self.underlying.storage| - i as int
   {
-    if i as int == seq_length(self.underlying.storage) then (
+    if i == seq_length(self.underlying.storage) then (
       newUnderlying
     ) else (
-      var item := seq_get(self.underlying.storage, i as nat);
+      var item := seq_get(self.underlying.storage, i);
       linear var newUnderlying' := if item.Entry? then (
         SetInclusionImpliesSmallerCardinality(newUnderlying.contents.Keys, self.contents.Keys);
         /*assert newUnderlying.count as int
@@ -1212,8 +1228,6 @@ module MutableMapModel {
       && (replaced.Some? ==> MapsTo(self.contents, key, replaced.value))
       && (replaced.None? ==> key !in self.contents)
   {
-    var _ := 4;
-
     // -- mutation --
     linear var self1 := if seq_length(self.underlying.storage) as uint64 / 2 <= self.underlying.count then (
       Realloc(self)
@@ -1228,7 +1242,7 @@ module MutableMapModel {
     // -- mutation --
     linear var LinearHashMap(self1Underlying, self1Count, self1Contents) := self1;
     linear var FixedSizeInsertResult(underlying', replaced) := FixedSizeInsert(self1Underlying, key, value);
-    var contents' := self1Contents[key := value];
+    ghost var contents' := self1Contents[key := value];
     linear var self' := LinearHashMap(underlying',
         if replaced.None? then self1Count + 1 else self1Count,
         contents');
@@ -1456,12 +1470,12 @@ module MutableMapModel {
   requires 0 <= i as int <= |self.underlying.storage|
   requires i as int < |self.underlying.storage| ==> self.underlying.storage[i].Entry?
   {
-    if i as int == seq_length(self.underlying.storage) then (
+    if i == seq_length(self.underlying.storage) then (
       Done
     ) else (
       Next(
-        seq_get(self.underlying.storage, i as nat).key,
-        seq_get(self.underlying.storage, i as nat).value)
+        seq_get(self.underlying.storage, i).key,
+        seq_get(self.underlying.storage, i).value)
     )
   }
 
@@ -1519,10 +1533,10 @@ module MutableMapModel {
   ensures i <= res.0
   decreases |self.underlying.storage| - i as int
   {
-    if i as int == seq_length(self.underlying.storage) then (
+    if i == seq_length(self.underlying.storage) then (
       (i, Done)
-    ) else if seq_get(self.underlying.storage, i as nat).Entry? then (
-      (i, Next(seq_get(self.underlying.storage, i as nat).key, seq_get(self.underlying.storage, i as nat).value))
+    ) else if seq_get(self.underlying.storage, i).Entry? then (
+      (i, Next(seq_get(self.underlying.storage, i).key, seq_get(self.underlying.storage, i).value))
     ) else (
       iterToNext(self, i+1)
     )
@@ -1538,9 +1552,9 @@ module MutableMapModel {
   ensures i <= i'
   decreases |self.underlying.storage| - i as int
   {
-    if i as int == seq_length(self.underlying.storage) then (
+    if i == seq_length(self.underlying.storage) then (
       i
-    ) else if seq_get(self.underlying.storage, i as nat).Entry? then (
+    ) else if seq_get(self.underlying.storage, i).Entry? then (
       i
     ) else (
       simpleIterToNext(self, i+1)

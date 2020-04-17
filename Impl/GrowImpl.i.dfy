@@ -7,6 +7,7 @@ module GrowImpl {
   import opened StateImpl
   import opened NodeImpl
   import opened BucketImpl
+  import opened DiskOpImpl
   import GrowModel
 
   import KVList
