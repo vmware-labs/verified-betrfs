@@ -592,6 +592,9 @@ module MainModule {
       var keyv := ((i * p) % n);
       var key := SeqFor(keyv);
       t, oldvalue := TMB.Insert(t, key, i);
+      if (i%100_000)==0 {
+        print "i", i, "\n";
+      }
       i := i + 1;
     }
 
