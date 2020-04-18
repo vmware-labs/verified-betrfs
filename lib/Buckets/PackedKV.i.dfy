@@ -278,7 +278,8 @@ module PackedKV {
   }
 
   method ComputeIsSorted(pkv: Pkv)
-  returns (b: bool)
+    returns (b: bool)
+    ensures b == Keyspace.IsStrictlySorted(PackedStringArray.I(pkv.keys))
   {
     assume false;
     var i: uint64 := 1;

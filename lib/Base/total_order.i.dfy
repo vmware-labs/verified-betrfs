@@ -118,24 +118,6 @@ abstract module Total_Order {
     forall i, j :: 0 <= i <= j < |run| ==> lte(run[i], run[j])
   }
 
-  /*method ComputeIsSorted(run: seq<Element>)
-  returns (b: bool)
-  ensures b == IsSorted(run)
-  {
-    reveal_IsSorted();
-    var k := 1;
-    while k < |run|
-    invariant |run| > 0 ==> 0 <= k <= |run|
-    invariant |run| > 0 ==> forall i, j :: 0 <= i <= j < k ==> lte(run[i], run[j])
-    {
-      if (!lte(run[k-1], run[k])) {
-        return false;
-      }
-      k := k + 1;
-    }
-    return true;
-  }*/
-
   predicate {:opaque} IsStrictlySorted(run: seq<Element>)
   ensures IsStrictlySorted(run) ==> IsSorted(run)
   ensures |run| == 0 ==> IsStrictlySorted(run)
@@ -1074,4 +1056,41 @@ module Lexicographic_Byte_Order refines Total_Order {
     return lo - 1;
   }
 
+  method ComputeIsSorted(run: seq<Element>)
+  returns (b: bool)
+  ensures b == IsSorted(run)
+  {
+    reveal_IsSorted();
+    var k := 1;
+    while k < |run|
+    invariant |run| > 0 ==> 0 <= k <= |run|
+    invariant |run| > 0 ==> forall i, j :: 0 <= i <= j < k ==> lte(run[i], run[j])
+    {
+      var c := cmp(run[k-1], run[k]);
+      if (0 < c) {
+        return false;
+      }
+      k := k + 1;
+    }
+    return true;
+  }
+
+  method ComputeIsStrictlySorted(run: seq<Element>)
+  returns (b: bool)
+  ensures b == IsStrictlySorted(run)
+  {
+    reveal_IsStrictlySorted();
+    var k := 1;
+    while k < |run|
+    invariant |run| > 0 ==> 0 <= k <= |run|
+    invariant |run| > 0 ==> forall i, j :: 0 <= i < j < k ==> lt(run[i], run[j])
+    {
+      var c := cmp(run[k-1], run[k]);
+      if (0 <= c) {
+        return false;
+      }
+      k := k + 1;
+    }
+    return true;
+  }  
 }

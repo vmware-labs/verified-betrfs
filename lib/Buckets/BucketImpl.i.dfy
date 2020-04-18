@@ -105,9 +105,10 @@ module BucketImpl {
     var tree: KMB.Node?;
     var kvl: KVList.Kvl;
     var pkv: PackedKV.Pkv;
-
+    
     var Weight: uint64;
-
+    var sorted: bool
+    
     ghost var Repr: set<object>;
     ghost var Bucket: Bucket;
 
@@ -139,6 +140,7 @@ module BucketImpl {
       ))
       && WFBucket(Bucket)
       && (Weight as int == WeightBucket(Bucket))
+      && (sorted ==> BucketWellMarshalled(Bucket))
     }
 
     constructor(kv: KVList.Kvl)
@@ -155,6 +157,7 @@ module BucketImpl {
       var w := KVList.computeWeightKvl(kv);
       this.Weight := w;
       this.Bucket := KVList.I(kv);
+      this.sorted := false;
       KVList.WFImpliesWFBucket(kv);
     }
 
@@ -172,6 +175,7 @@ module BucketImpl {
       this.Repr := {this};
       this.Weight := w;
       this.Bucket := KVList.I(kv);
+      this.sorted := false;
       KVList.WFImpliesWFBucket(kv);
     }
 
@@ -187,6 +191,7 @@ module BucketImpl {
       this.Repr := {this};
       this.Bucket := PackedKV.I(pkv);
       this.tree := null;
+      this.sorted := false;
       new;
       assume Weight as int == WeightBucket(Bucket);
       assume WFBucket(Bucket);
@@ -219,12 +224,93 @@ module BucketImpl {
       }
     }
 
+    method WellMarshalled() returns (b: bool)
+      requires Inv()
+      ensures b == BucketWellMarshalled(Bucket)
+      // ensures Inv()
+      // ensures Bucket == old(Bucket)
+      // ensures Repr == old(Repr)
+      // modifies this
+    {
+      if (format.BFTree?) {
+        b := true;
+      } else if (format.BFKvl?) {
+        b := true;
+      } else {
+        if sorted {
+          b := true;
+        } else {
+          b := PackedKV.ComputeIsSorted(pkv);
+          assert Bucket.keys == PackedKV.PackedStringArray.I(pkv.keys); // observe
+          //sorted := b; // Repr hell
+        }
+      }
+    }
+
+    method Empty() returns (result: bool)
+      requires Inv()
+      ensures result == (|I().b| == 0)
+    {
+      if (format.BFTree?) {
+        result := KMB.Empty(tree);
+      } else if (format.BFKvl?) {
+        result := 0 == |kvl.keys| as uint64;
+      } else {
+        result := 0 == |pkv.keys.offsets| as uint64;
+      }
+    }
+
+    
+    method WFBucketAt(pivots: Pivots.PivotTable, i: uint64) returns (result: bool)
+      requires Inv()
+      requires BucketWellMarshalled(I())
+      requires Pivots.WFPivots(pivots)
+      requires i as nat <= |pivots| < Uint64UpperBound()
+      ensures result == BucketsLib.WFBucketAt(I(), pivots, i as nat)
+    {
+      var e := Empty();
+      if e {
+        return true;
+      }
+
+      assume 0 < |Bucket.keys|; // Need to fill in defs in BucketsLib to prove this.
+      
+      if i < |pivots| as uint64 {
+        var lastkey := GetLastKey();
+        var c := cmp(lastkey, pivots[i]);
+        if c >= 0 {
+          return false;   // Need to fill in defs in BucketsLib to prove correctness.
+        }
+      }
+
+      if 0 < i {
+        var firstkey := GetFirstKey();
+        var c := cmp(pivots[i-1], firstkey);
+        if 0 < c {
+          return false;    // Need to fill in defs in BucketsLib to prove correctness.
+        }
+      }
+
+      assume false;  // Need to fill in defs in BucketsLib to prove correctness.
+      
+      return true;
+    }
+      
+    
     static function {:opaque} ReprSeq(s: seq<MutBucket>) : set<object>
     reads s
     {
       set i, o | 0 <= i < |s| && o in s[i].Repr :: o
     }
 
+    static twostate lemma ReprSeqDependsOnlyOnReprs(s: seq<MutBucket>)
+      requires forall i | 0 <= i < |s| :: s[i].Repr == old(s[i].Repr)
+      ensures ReprSeq(s) == old(ReprSeq(s))
+    {
+      reveal_ReprSeq();
+    }
+    
+    
     static predicate {:opaque} InvSeq(s: seq<MutBucket>)
     reads s
     reads ReprSeq(s)
@@ -242,7 +328,7 @@ module BucketImpl {
       this.Bucket
     }
 
-    static protected function ISeq(s: seq<MutBucket>) : (bs : seq<Bucket>)
+    static function {:opaque} ISeq(s: seq<MutBucket>) : (bs : seq<Bucket>)
     reads s
     reads ReprSeq(s)
     ensures |bs| == |s|
@@ -335,6 +421,14 @@ module BucketImpl {
           buckets[i].Repr !! buckets[j].Repr
     }
 
+    static twostate lemma ReprSeqDisjointDependsOnlyOnReprs(s: seq<MutBucket>)
+      requires forall i | 0 <= i < |s| :: s[i].Repr == old(s[i].Repr)
+      ensures ReprSeqDisjoint(s) == old(ReprSeqDisjoint(s))
+    {
+      reveal_ReprSeqDisjoint();
+    }
+    
+    
     static lemma ReprSeqDisjointOfLen1(buckets: seq<MutBucket>)
     requires |buckets| <= 1
     ensures ReprSeqDisjoint(buckets)
@@ -520,6 +614,7 @@ module BucketImpl {
 
       ghost var ghosty := true;
       if ghosty {
+        reveal_ISeq();
         reveal_SplitBucketInList();
         assume ISeq(replace1with2(buckets, l, r, slot as int))
             == replace1with2(ISeq(buckets), l.I(), r.I(), slot as int);
@@ -556,6 +651,25 @@ module BucketImpl {
       }
     }
 
+    method GetFirstKey() returns (result: Key)
+      requires Inv()
+      requires BucketWellMarshalled(Bucket)
+      requires 0 < |Bucket.keys|
+      ensures result in Bucket.keys
+      ensures forall k | k in Bucket.keys :: lte(result, k)
+    {
+      if format.BFTree? {
+        assume false; // Need to fill in BucketsLib to prove 0 < |Interpretation(tree)|
+        result := KMB.MinKey(tree);
+      } else if format.BFKvl? {
+        assume false; // Need to fill in BucketsLib to prove 0 < |KVPairs.PackedStringArray.I(kvl.keys)|
+        result := kvl.keys[0];
+      } else if format.BFPkv? {
+        assume false;
+        result := PackedKV.FirstKey(pkv);
+      }
+    }
+    
     method GetMiddleKey() returns (res: Key)
     requires Inv()
     ensures getMiddleKey(I()) == res
@@ -588,11 +702,30 @@ module BucketImpl {
       }
     }
 
+    method GetLastKey() returns (result: Key)
+      requires Inv()
+      requires BucketWellMarshalled(Bucket)
+      requires 0 < |Bucket.keys|
+      ensures result in Bucket.keys
+      ensures forall k | k in Bucket.keys :: lte(k, result)
+    {
+      if format.BFTree? {
+        assume false; // Need to fill in BucketsLib to prove 0 < |Interpretation(tree)|
+        result := KMB.MaxKey(tree);
+      } else if format.BFKvl? {
+        assume false; // Need to fill in BucketsLib to prove 0 < |KVPairs.PackedStringArray.I(kvl.keys)|
+        result := kvl.keys[|kvl.keys| as uint64 - 1];
+      } else if format.BFPkv? {
+        assume false;
+        result := PackedKV.LastKey(pkv);
+      }
+    }
+    
     static method computeWeightOfSeq(buckets: seq<MutBucket>)
     returns (weight: uint64)
     requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
     requires WeightBucketList(ISeq(buckets)) < 0x1_0000_0000_0000_0000
-    requires |buckets| < 0x1_0000_0000_0000
+    requires |buckets| < 0x1_0000_0000_0000_0000
     ensures weight as int == WeightBucketList(old(ISeq(buckets)))
     {
       reveal_WeightBucketList();
@@ -770,14 +903,20 @@ module BucketImpl {
     requires forall i | 0 <= i < |bots| :: bots[i].Inv()
     requires |pivots| + 1 == |bots| < Uint64UpperBound()
     requires PivotsLib.WFPivots(pivots)
-    requires WeightBucketList(MutBucket.ISeq(bots)) < MaxTotalBucketWeight()
+    requires WeightBucketList(MutBucket.ISeq(bots)) <= MaxTotalBucketWeight()
+    requires BucketWellMarshalled(top.I())
+    requires BucketListWellMarshalled(MutBucket.ISeq(bots))
     ensures forall i | 0 <= i < |newbots| :: newbots[i].Inv()
-    ensures forall i | 0 <= i < |newbots| :: fresh(newbots[i].Repr)
+    //ensures forall i | 0 <= i < |newbots| :: fresh(newbots[i].Repr)
+    ensures fresh(MutBucket.ReprSeq(newbots))
     ensures MutBucket.ReprSeqDisjoint(newbots)
     ensures newtop.Inv()
     ensures fresh(newtop.Repr)
-    ensures forall i | 0 <= i < |newbots| :: newtop.Repr !! newbots[i].Repr
-    ensures partialFlushResult(newtop.I(), MutBucket.ISeq(newbots), flushedKeys) == partialFlush(top.I(), MutBucket.ISeq(bots), pivots)
+    ensures newtop.Repr !! MutBucket.ReprSeq(newbots)
+    // shouldn't need old in the line below, but dafny doesn't see
+    // that WeightBucketList(MutBucket.ISeq(bots)) <=
+    // MaxTotalBucketWeight() still holds after the function returns.
+    ensures partialFlushResult(newtop.I(), MutBucket.ISeq(newbots), flushedKeys) == partialFlush(top.I(), old(MutBucket.ISeq(bots)), pivots)
   {
     assume false;
   }

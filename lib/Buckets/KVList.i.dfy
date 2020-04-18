@@ -95,7 +95,7 @@ module KVList {
 
   function {:opaque} IMap(kvl: Kvl) : BucketMap
   requires |kvl.keys| == |kvl.messages|
-  ensures |kvl.keys| == 0 ==> |IMap(kvl).Keys| == 0    // empty input -> empty output.
+  ensures |kvl.keys| == 0 <==> |IMap(kvl).Keys| == 0    // empty input -> empty output.
   decreases |kvl.keys|
   {
     if |kvl.keys| == 0 then map[] else (

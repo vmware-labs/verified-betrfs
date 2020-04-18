@@ -30,6 +30,8 @@ module BucketModel {
     requires |pivots| + 1 == |children|
     requires WeightBucketList(children) <= MaxTotalBucketWeight()
     requires forall i | 0 <= i < |children| :: WFBucket(children[i])
+    requires BucketWellMarshalled(parent)
+    requires BucketListWellMarshalled(children)
     ensures WFBucket(res.newParent)
     ensures (forall i | 0 <= i < |res.newChildren| :: WFBucket(res.newChildren[i]))
     ensures res.newParent == BucketComplement(parent, res.flushedKeys)

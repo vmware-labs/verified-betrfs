@@ -58,10 +58,15 @@ module FlushImpl {
 
     //Native.BenchmarkingUtil.start();
 
-    MutBucket.reveal_ReprSeq();
-
     var nodeOpt := s.cache.GetOpt(parentref);
     var parent := nodeOpt.value;
+
+    var parentWellMarshalled := parent.BucketWellMarshalled(slot);
+    var childrenWellMarshalled := child.BucketsWellMarshalled();
+    if !parentWellMarshalled || !childrenWellMarshalled {
+      return;
+    }
+
     ghost var parentI := parent.I();
     var childref := parent.children.value[slot];
 
@@ -72,7 +77,6 @@ module FlushImpl {
 
     assert s.I().cache[parentref] == parent.I();
     assert parent.I().children == s.I().cache[parentref].children;
-    s.cache.LemmaNodeReprLeRepr(parentref);
 
     WeightBucketLeBucketList(BucketImpl.MutBucket.ISeq(parent.buckets), slot as int);
 
@@ -84,7 +88,7 @@ module FlushImpl {
     var newparentBucket, newbuckets;
     newparentBucket, newbuckets, flushedKey := BucketImpl.PartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
     var newchild := new Node(child.pivotTable, child.children, newbuckets);
-
+    
     assert Some(parent) == s.cache.ptr(parentref);
 
     BookkeepingModel.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
@@ -140,14 +144,30 @@ module FlushImpl {
 
     ghost var a := FlushModel.flush(Ic(k), old(s.I()), parentref, slot as int, childref, old(child.I()));
     ghost var b := s.I();
+
+    assert a.cache.Keys == c3.Keys;
+    forall key | key in a.cache
+      ensures a.cache[key] == c3[key]
+    {
+      if key == parentref {
+        assert a.cache[key] == c3[key];
+      } else if key == newchildref.value {
+        assert a.cache[key] == c3[key];
+      } else if key == childref {
+        assert a.cache[key] == c3[key];
+      } else {
+        assert a.cache[key] == c3[key];
+      }
+    }
+    
     assert a.cache
-        /*== old(s.I()).cache
+        /* == old(s.I()).cache
                   [newchildref.value := old(child.I()).(buckets := MutBucket.ISeq(newbuckets))]
                   [parentref := IM.Node(
                     parentI.pivotTable,
-                    Some(parentI.children.value[slot := newchildref.value]),
-                    parentI.buckets[slot := newParentBucketI]
-                  )]*/
+                    Some(parentI.children.value[slot as nat := newchildref.value]),
+                    parentI.buckets[slot as nat := newParentBucketI]
+                  )] */
         == c3
         == b.cache;
   }
