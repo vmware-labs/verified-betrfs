@@ -22,6 +22,22 @@ module BucketModel {
   import MS = MapSpec
   import opened Bounds
 
+  datatype singleMergeResult =
+      MergeCompleted(bot: Bucket, slack: nat)
+    | SlackExhausted(bot: Bucket, end: nat, slack: nat)
+
+  function mergeToOneChild(top: Bucket, from: nat, to: nat, bot: Bucket, slack: nat) : (result: singleMergeResult)
+    requires WFBucket(top)
+    requires BucketWellMarshalled(top)
+    requires from <= to < |top.keys|
+    requires WFBucket(bot)
+    requires BucketWellMarshalled(bot)
+  {
+    assume false;
+    MergeCompleted(bot, 0)
+  }
+    
+
   datatype partialFlushResult = partialFlushResult(newParent: Bucket, newChildren: seq<Bucket>, flushedKeys: set<Key>)
 
   function {:opaque} partialFlush(parent: Bucket, children: seq<Bucket>, pivots: seq<Key>) : (res: partialFlushResult)
