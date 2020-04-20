@@ -8,6 +8,7 @@ include "../Base/Message.i.dfy"
 include "../Base/NativeArrays.s.dfy"
 include "../Base/PackedInts.s.dfy"
 include "../Buckets/PackedKV.i.dfy"
+include "../Buckets/BucketWeights.i.dfy"
 
 module GenericMarshalling {
 //import opened Util__be_sequences_s
@@ -385,8 +386,8 @@ function parse_KeyArray(data:seq<byte>) : (Option<V>, seq<byte>)
               && ValidVal(opt_val.value)
               && ValInGrammar(opt_val.value, GKeyArray));
 {
-  var (psa, rest) := PackedStringArray.parse_Psa(data);
-  if psa.Some? && PackedKV.ValidKeyLens(psa.value) then (
+  var (psa, rest) := PSA.parse_Psa(data);
+  if psa.Some? && PackedKV.ValidKeyLens(PSA.I(psa.value)) then (
     (Some(VKeyArray(PackedKV.IKeys(psa.value))), rest)
   ) else (
     (None, [])
@@ -403,14 +404,14 @@ method ParseKeyArray(data:seq<byte>, index:uint64) returns (success:bool, v:V, r
     ensures  success ==> ValidVal(v);
 {
   assume false;
-  var psa, index1 := PackedStringArray.Parse_Psa(data, index);
+  var psa, index1 := PSA.Parse_Psa(data, index);
   if psa.Some? {
     var n := |psa.value.offsets| as uint64;
     var keys := new Key[n];
     var i: uint64 := 0;
     while i < n
     {
-      keys[i] := PackedStringArray.psaElement(psa.value, i);
+      keys[i] := PSA.psaElement(psa.value, i);
       i := i + 1;
     }
 
@@ -1001,10 +1002,10 @@ lemma lemma_parse_Val_view_Uint64Array(data:seq<byte>, v:V, grammar:G, index:int
       if (l as int == len) {
         /*var rest0 := data[index..bound][8..];
         var rest1 := data[index..index + SizeOfV(v)][8..];
-        PackedStringArray.lemma_seq_slice_suffix(data, index, bound, 8);
-        PackedStringArray.lemma_seq_slice_suffix(data, index, index + SizeOfV(v), 8);
-        PackedStringArray.lemma_seq_slice_slice(data, index + 8, bound, 0, 8*len);
-        PackedStringArray.lemma_seq_slice_slice(data, index + 8, index + SizeOfV(v), 0, 8*len);
+        PSA.lemma_seq_slice_suffix(data, index, bound, 8);
+        PSA.lemma_seq_slice_suffix(data, index, index + SizeOfV(v), 8);
+        PSA.lemma_seq_slice_slice(data, index + 8, bound, 0, 8*len);
+        PSA.lemma_seq_slice_slice(data, index + 8, index + SizeOfV(v), 0, 8*len);
         assert data[index..bound][Uint64Size()..][..Uint64Size() as int * len]
             == data[index..index + SizeOfV(v)][Uint64Size()..][..Uint64Size() as int * len];
         assert parse_Uint64Array(data[index..bound]).0.Some?;
@@ -2417,7 +2418,7 @@ function parse_MessageArray(data:seq<byte>) : (Option<V>, seq<byte>)
               && ValidVal(opt_val.value)
               && ValInGrammar(opt_val.value, GMessageArray));
 {
-  var (psa, rest) := PackedStringArray.parse_Psa(data);
+  var (psa, rest) := PSA.parse_Psa(data);
   if psa.Some? then (
     (Some(VMessageArray(PackedKV.IMessages(psa.value))), rest)
   ) else (

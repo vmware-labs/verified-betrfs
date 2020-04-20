@@ -21,10 +21,11 @@ module BucketModel {
   import UI
   import MS = MapSpec
   import opened Bounds
-
+  import opened NativeTypes
+  
   datatype singleMergeResult =
-      MergeCompleted(bot: Bucket, slack: nat)
-    | SlackExhausted(bot: Bucket, end: nat, slack: nat)
+      MergeCompleted(bot: Bucket, slack: uint64)
+    | SlackExhausted(bot: Bucket, end: uint64, slack: uint64)
 
   function mergeToOneChild(top: Bucket, from: nat, to: nat, bot: Bucket, slack: nat) : (result: singleMergeResult)
     requires WFBucket(top)

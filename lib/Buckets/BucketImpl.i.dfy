@@ -33,7 +33,7 @@ module BucketImpl {
   import BucketIteratorModel
   import Pivots = PivotsLib
   import opened BucketModel
-  
+
   type TreeMap = KMB.Node
 
   method tree_to_kvl(tree: TreeMap)
@@ -241,7 +241,7 @@ module BucketImpl {
           b := true;
         } else {
           b := PackedKV.ComputeIsSorted(pkv);
-          assert Bucket.keys == PackedKV.PackedStringArray.I(pkv.keys); // observe
+          assert Bucket.keys == PackedKV.PSA.I(pkv.keys); // observe
           //sorted := b; // Repr hell
         }
       }
@@ -517,7 +517,7 @@ module BucketImpl {
       } else if format.BFPkv? {
         format := BFTree;
         tree := pkv_to_tree(pkv);
-        var psa := PackedKV.PackedStringArray.Psa([], []);
+        var psa := PackedKV.PSA.Psa([], []);
         pkv := PackedKV.Pkv(psa, psa);
       }
 

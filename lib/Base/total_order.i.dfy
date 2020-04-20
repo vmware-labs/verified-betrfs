@@ -1098,13 +1098,14 @@ module Lexicographic_Byte_Order refines Total_Order {
   }
 
   method ComputeIsSorted(run: seq<Element>)
-  returns (b: bool)
-  ensures b == IsSorted(run)
+    returns (b: bool)
+    requires |run| < Uint64UpperBound()
+    ensures b == IsSorted(run)
   {
     reveal_IsSorted();
-    var k := 1;
-    while k < |run|
-    invariant |run| > 0 ==> 0 <= k <= |run|
+    var k: uint64 := 1;
+    while k < |run| as uint64
+    invariant |run| > 0 ==> 0 <= k <= |run| as uint64
     invariant |run| > 0 ==> forall i, j :: 0 <= i <= j < k ==> lte(run[i], run[j])
     {
       var c := cmp(run[k-1], run[k]);
@@ -1117,13 +1118,14 @@ module Lexicographic_Byte_Order refines Total_Order {
   }
 
   method ComputeIsStrictlySorted(run: seq<Element>)
-  returns (b: bool)
-  ensures b == IsStrictlySorted(run)
+    returns (b: bool)
+    requires |run| < Uint64UpperBound()
+    ensures b == IsStrictlySorted(run)
   {
     reveal_IsStrictlySorted();
-    var k := 1;
-    while k < |run|
-    invariant |run| > 0 ==> 0 <= k <= |run|
+    var k: uint64 := 1;
+    while k < |run| as uint64
+    invariant |run| > 0 ==> 0 <= k <= |run| as uint64
     invariant |run| > 0 ==> forall i, j :: 0 <= i < j < k ==> lt(run[i], run[j])
     {
       var c := cmp(run[k-1], run[k]);
