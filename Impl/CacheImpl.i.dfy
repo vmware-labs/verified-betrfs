@@ -106,13 +106,6 @@ module CacheImpl {
     {
     }
 
-    lemma CacheNotInNodeRepr(ref: BT.G.Reference)
-      requires Inv()
-      requires ptr(ref).Some?
-      ensures this !in ptr(ref).value.Repr
-    {
-    }
-    
     lemma LemmaSizeEqCount()
     requires Inv()
     ensures |I()| == |cache.Contents|
@@ -123,21 +116,6 @@ module CacheImpl {
           == |cache.Contents.Keys|
           == |cache.Contents|;
     }
-
-    // twostate lemma NodeInternalUpdate(ref: BT.G.Reference, node: Node)
-    //   requires old(Inv())
-    //   requires old(ptr(ref)) == Some(node)
-    //   requires cache == old(cache)
-    //   requires unchanged(cache.Repr)
-    //   requires Repr == old(Repr)
-    //   requires node.Repr == old(node.Repr)
-    //   requires node.Inv()
-    //   requires node.I() == old(node.I())
-    //   ensures Inv()
-    //   ensures I() == old(I())
-    // {
-    //   assume false;
-    // }
 
     protected function method Count() : (c : uint64)
     reads this, Repr

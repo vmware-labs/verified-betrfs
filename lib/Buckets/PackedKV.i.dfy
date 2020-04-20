@@ -202,8 +202,8 @@ module PackedKV {
   function method WeightPkv(pkv: Pkv) : uint64
   requires WF(pkv)
   {
-    4 + 4 * |pkv.keys.offsets| as uint64 + |pkv.keys.data| as uint64 +
-    4 + 4 * |pkv.messages.offsets| as uint64 + |pkv.messages.data| as uint64
+    4 * |pkv.keys.offsets| as uint64 + |pkv.keys.data| as uint64 +
+    4 * |pkv.messages.offsets| as uint64 + |pkv.messages.data| as uint64
   }
 
   // I don't think we need these if we use the generic marshaling code. -- rob
