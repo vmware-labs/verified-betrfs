@@ -20,4 +20,4 @@ set -x
 
 # https://github.com/secure-foundations/dafny.git
 # cpp branch
-git checkout 115edea85e66bd944ef4c
+git checkout malloc-accounting
