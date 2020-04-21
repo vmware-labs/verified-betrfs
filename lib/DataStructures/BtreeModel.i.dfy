@@ -1413,9 +1413,24 @@ abstract module BtreeModel {
     else NumElementsOfChildren(node.children)
   }
 
+  lemma InterpretationDisjointUnion(node: Node)
+    requires WF(node)
+    requires node.Index?
+    requires 1 < |node.children|
+    ensures WF(SubIndex(node, 0, |node.children|-1))
+    ensures Interpretation(SubIndex(node, 0, |node.children|-1)).Keys !!
+            Interpretation(Last(node.children)).Keys
+    ensures Interpretation(node) ==
+      MapDisjointUnion(Interpretation(SubIndex(node, 0, |node.children|-1)),
+                       Interpretation(Last(node.children)))
+  {
+    assume false;
+  }
+                       
   lemma NumElementsMatchesInterpretation(node: Node)
     requires WF(node)
     ensures NumElements(node) == |Interpretation(node)|
+    decreases if node.Index? then node.children else []
   {
     var interp := Interpretation(node);
     reveal_Interpretation();
@@ -1444,10 +1459,9 @@ abstract module BtreeModel {
       var iprefix := Interpretation(prefix);
       var child := Last(node.children);
       var ichild := Interpretation(child);
-      
-      assume iprefix.Keys !! ichild.Keys;
-      assume false;
-      //assert interp == MapDisjointUnion(iprefix, ichild);
+      NumElementsMatchesInterpretation(prefix);
+      NumElementsMatchesInterpretation(child);
+      InterpretationDisjointUnion(node);
     }
   }
   
