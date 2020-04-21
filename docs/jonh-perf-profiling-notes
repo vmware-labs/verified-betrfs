@@ -810,6 +810,75 @@ And then we'll probably need to be counting the cost of these crazy IOs,
 maybe inside the system.
 
 Modified workload-a to have sync at a zillion.
-tools/run-veri-config-experiment.py workload=a device=disk ram=0.5gb config-8mb > malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk.data
+tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb config-8mb > malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk.data
 
 Why aren't the writes from the inital load sync showing up?
+
+tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb rocks > malloc-exp/rocks-1gb-wka-nosync-ioperf-disk.data
+
+Current thoughts.
+
+(1) So maybe instead of comparing things vertically, horizontally makes more
+sense.  Maybe rocks is fitting 2M items (1GB/(512+24)) in its cache, and
+because of various overheads, we're only fitting some smaller number. We should
+collect that number. By that metric, we cross:
+
+          3Kop/s   2KOps/s  1KOp/s
+  rocks   3400     4100     6000
+  veri    2400     2800     4200
+
+...So maybe we should throw some more RAM at veri and see how it does.
+...And collect the actual storage size as viewed from inside.
+
+(2) It's difficult to make a useful io analysis comparison between
+the two systems, because rocks is measuring os read, not IO read. Can
+we get real underlying IO numbers out of cgroups or /proc? Can we
+use a system counter and just hope the rest of the system is fairly
+quiescent? iostat and pidstat can capture this; they must look in /proc
+/proc/self/io has read_bytes and write_bytes fields that are interesting.
+
+
+tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb config-8mb > malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-2.data
+(run manually after compile to avoid cgroup killage)
+This run:
+* sets malloc overhead to 0.78 to compensate for observed typical block
+  loading of 6.25MiB
+* re-enables infrequent aggregate collections
+  (to count up used memory from inside Dafny, so we can simulate perfectly
+  effecient memory usage)
+* adds proc-io output to track "real" disk IO.
+
+tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb rocks > malloc-exp/rocks-1gb-wka-nosync-ioperf-disk-2.data
+* adds proc-io output to track "real" disk IO.
+
+Looks like proc-io is going to be a different kind of lies for veri. I'm
+seeing almost no real reads. I guess they're getting absorbed by the buffer
+cache?
+
+Oh hells yeah, the "horizontal offset hypothesis" seems to be supported;
+we're blowing way past rocks now.
+
+            3Kop/s   2KOps/s  1KOp/s
+  rocks     3400     4100     6000
+  veri      2400     2800     4200
+  veri-1gb  4800     5600     ____
+Hah. Look at that. We turned the memory usage up by not quite a factor of
+two (1.87X), and the througput milestones all move out by a factor of two.
+Wait, is that how that should work? Yeah, because we get twice as many
+write ops in before we reach a given cache hit rate.
+
+Huh, memory usage is falling way off; is that because we're not counting
+PKVs? Yeah, probably. Yeah, exactly; they're "weirdBuckets" right now.
+
+So here's what was happening. We never saw rocks hit rocks bottom
+because we didn't wait long enough; it was able to stay in a warm-cache regime
+much longer. Veri fell off the cliff sooner because it was utilizing much
+less memory.
+
+malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-3.data
+accum counts pkvs.
+...or, perhaps it doesn't. Sure doesn't seem to be.
+
+Burning questions:
+[ ] Are we counting memory accurately for the no-fragmentation simulation?
+[ ] Is veri cheating by using buffer cache since I worked around cgroups?

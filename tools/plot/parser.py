@@ -91,6 +91,9 @@ class Experiment:
         self.vsize = Trace("vsize", "B")
         self.rss = Trace("rss", "B")
 
+        self.procio_read_bytes = Trace("procio_read_bytes", "B")
+        self.procio_write_bytes = Trace("procio_write_bytes", "B")
+
         self.scopes = {}
         self.kvl_underlying = {}
         self.kvl_underlying_count = {}
@@ -126,9 +129,8 @@ class Experiment:
                     phase_t_base = cur_t
                     self.phase_starts[phase] = phase_op_base
                 t_in_phase = int(fields[1])/1000.0
-                t = t_in_phase + phase_t_base
-                self.elapsed[cur_op] = t
-                cur_t = t
+                cur_t = t_in_phase + phase_t_base
+                self.elapsed[cur_op] = cur_t
                 op_in_phase = int(fields[3])
                 cur_op = op_in_phase + phase_op_base
                 self.operation[cur_op] = cur_op
@@ -160,6 +162,10 @@ class Experiment:
                 self.vsize[cur_op] = int(fields[6])
                 self.rss[cur_op] = int(fields[8])
 
+            if line.startswith("proc-io"):
+                self.procio_read_bytes[cur_op] = int(fields[2])
+                self.procio_write_bytes[cur_op] = int(fields[4])
+
 #            mo = match_arow_line("ma-scope", line)
 #            if mo:
 #                arow,label = mo
@@ -180,11 +186,11 @@ class Experiment:
 #                self.kvl_underlying[t] = int(fields[5])
 
 
-#            mo = re.compile("cache: (\d+) (.*)-(bytes|count)").search(line)
-#            if mo!=None:
-#                value,type,unit = mo.groups()
-#                accum_key = "%s-%s" % (type,unit)
-#                if accum_key not in self.accum:
-#                    self.accum[accum_key] = {}
-#                self.accum[accum_key][t] = int(value)
+            mo = re.compile("cache: (\d+) (.*)-(bytes|count)").search(line)
+            if mo!=None:
+                value,type,unit = mo.groups()
+                accum_key = "%s-%s" % (type,unit)
+                if accum_key not in self.accum:
+                    self.accum[accum_key] = Trace(accum_key, "unk")
+                self.accum[accum_key][cur_op] = int(value)
 

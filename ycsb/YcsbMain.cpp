@@ -109,6 +109,27 @@ void external_heap_size(size_t* heap, size_t* all_maps) {
   *all_maps = total;
 }
 
+void proc_io_report() {
+  long int read_bytes = -1;
+  long int write_bytes = -1;
+  FILE* fp = fopen("/proc/self/io", "r");
+  while (true) {
+    char space[1000];
+    char* line = fgets(space, sizeof(space), fp);
+    if (line==NULL) { break; }
+#define READ_PREFIX "read_bytes"
+#define WRITE_PREFIX "write_bytes"
+    if (strncmp(line, READ_PREFIX, strlen(READ_PREFIX))==0) {
+      read_bytes = strtol(&line[strlen(READ_PREFIX)+2], NULL, 10);
+    }
+    if (strncmp(line, WRITE_PREFIX, strlen(WRITE_PREFIX))==0) {
+      write_bytes = strtol(&line[strlen(WRITE_PREFIX)+2], NULL, 10);
+    }
+  }
+  fclose(fp);
+  printf("proc-io read_bytes %ld write_bytes %ld\n", read_bytes, write_bytes);
+}
+
 static int i=0;
 template< class DB >
 void periodicReport(DB db, const char* phase, int elapsed_ms, int ops_completed) {
@@ -127,6 +148,7 @@ void periodicReport(DB db, const char* phase, int elapsed_ms, int ops_completed)
 
     IOAccounting::report();
     StatAccounting::report();
+    proc_io_report();
     fflush(stdout);
 }
 
@@ -382,9 +404,9 @@ public:
     }
 
     inline void memDebugInfrequent() {
+        app.DebugAccumulator();
       /*
         printf("debug-accumulator start\n");
-        app.DebugAccumulator();
         app.CountAmassAllocations();
         printf("debug-accumulator finish\n");
       */

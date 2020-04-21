@@ -68,6 +68,12 @@ module NodeImpl {
         }
         else if bucket.format.BFPkv? {
           acc.pkvBuckets := acc.pkvBuckets + 1;
+          // Could separate out these weights by bucket type, but probably not interesting
+          // as Rob's going to turn everything into pkvs anyway.
+          acc.keyCount := acc.keyCount + |bucket.pkv.keys.offsets| as uint64;
+          acc.keyWeight := acc.keyWeight + |bucket.pkv.keys.data| as uint64;
+          acc.messageCount := acc.messageCount + |bucket.pkv.messages.offsets| as uint64;
+          acc.messageWeight := acc.messageWeight + |bucket.pkv.messages.data| as uint64;
         } else {
           acc.weirdBuckets := acc.weirdBuckets + 1;
         }

@@ -21,7 +21,7 @@ def autoconfig(config, memlimit):
 
   itable_size = 8*1024*1024
 
-  MALLOC_OVERHEAD=1.46
+  MALLOC_OVERHEAD=0.78
   if config == "8mb":
     node_size = 8*1024*1024
     bucket_weight = 8356168
