@@ -1235,8 +1235,37 @@ module BucketImpl {
     // MaxTotalBucketWeight() still holds after the function returns.
     ensures partialFlushResult(newtop.I(), MutBucket.ISeq(newbots), flushedKeys) == BucketModel.partialFlush(top.I(), old(MutBucket.ISeq(bots)), pivots)
   {
-    newtop, newbots := KVLPartialFlush(top, bots, pivots);
-    flushedKeys := {};
+    // newtop, newbots := KVLPartialFlush(top, bots, pivots);
+    // flushedKeys := {};
+    // assume false;
+
+    var i: uint64 := 0;
+    var totalWeight := 0;
+    var botPkvs: array<PKV.Pkv> := new PKV.Pkv[|bots| as uint64];
+    while i < |bots| as uint64
+      invariant i as nat <= |bots|
+    {
+      botPkvs[i] := bots[i].GetPkv();
+      totalWeight := totalWeight + PKV.WeightPkv(botPkvs[i]);
+      i := i + 1;
+    }
+
+    var topPkv := top.GetPkv();
+    
+    var result := MergeToChildren(topPkv, pivots, botPkvs[..], MaxTotalBucketWeightUint64() - totalWeight);
+
+    newtop := new MutBucket.InitFromPkv(result.top);
+
+    var anewbots := new MutBucket[|result.bots| as uint64];
+    i := 0;
+    while i < |result.bots| as uint64
+      invariant i as nat <= |result.bots|
+    {
+      anewbots[i] := new MutBucket.InitFromPkv(result.bots[i]);
+      i := i + 1;
+    }
+
+    newbots := anewbots[..];
     assume false;
   }
 }
