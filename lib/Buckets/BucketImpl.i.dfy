@@ -5,6 +5,7 @@ include "../../PivotBetree/Bounds.i.dfy"
 include "BucketIteratorModel.i.dfy"
 include "BucketModel.i.dfy"
 include "KVListPartialFlush.i.dfy"
+include "KMBPKVOps.i.dfy"
 
 //
 // Collects singleton message insertions efficiently, avoiding repeated
@@ -36,6 +37,8 @@ module BucketImpl {
   import Pivots = PivotsLib
   import opened BucketModel
   import opened KVLPFlush = KVListPartialFlush
+  import opened DPKV = DynamicPkv
+  import KMBPKVOps
   
   type TreeMap = KMB.Node
 
@@ -83,6 +86,31 @@ module BucketImpl {
     return KVList.Kvl(keys[..], messages[..]);
   }
 
+  method kvl_to_pkv(kvl: KVList.Kvl) returns (pkv: PackedKV.Pkv)
+    requires KVList.WF(kvl)
+    requires |kvl.keys| < Uint64UpperBound()
+    ensures PackedKV.WF(pkv)
+    ensures KVList.I(kvl) == PackedKV.I(pkv)
+  {
+    var dpkv := new DPKV.DynamicPkv.PreSized(DPKV.EmptyCapacity());
+    var i: uint64 := 0;
+
+    while i < |kvl.keys| as uint64
+      invariant i as int <= |kvl.keys|
+      invariant dpkv.WF()
+      invariant fresh(dpkv.Repr)
+    {
+      var key := kvl.keys[i];
+      var msg := kvl.messages[i];
+      assume PKV.canAppend(dpkv.toPkv(), key, PKV.Message_to_bytestring(msg));
+      dpkv.Append(key, msg);
+      i := i + 1;
+    }
+
+    pkv := dpkv.toPkv();
+    assume false;
+  }
+
   method pkv_to_tree(pkv: PackedKV.Pkv)
   returns (tree: TreeMap)
   requires PackedKV.WF(pkv)
@@ -94,6 +122,16 @@ module BucketImpl {
     tree := kvl_to_tree(kv);
   }
 
+  method tree_to_pkv(tree: TreeMap) returns (pkv : PackedKV.Pkv)
+    requires KMB.WF(tree)
+    requires KMBBOps.NumElements(tree) < Uint64UpperBound()
+    ensures PackedKV.WF(pkv)
+    ensures PackedKV.I(pkv) == B(KMB.Interpretation(tree))
+  {
+    pkv := KMBPKVOps.ToPkv(tree);
+    assume false;
+  }
+  
   datatype Iterator = Iterator(i: uint64)
   function IIterator(it: Iterator) : BucketIteratorModel.Iterator
 
@@ -224,6 +262,22 @@ module BucketImpl {
           print "pkv is not sorted\n";
         }
         kv := pkv_to_kvl(pkv);
+      }
+    }
+
+    method GetPkv() returns (pkv: PKV.Pkv)
+    requires Inv()
+    ensures PKV.WF(pkv)
+    ensures PKV.I(pkv) == Bucket
+    {
+      if (format.BFTree?) {
+        NumElementsLteWeight(B(KMB.Interpretation(tree)));
+        assume false;
+        pkv := tree_to_pkv(tree);
+      } else if (format.BFKvl?) {
+        pkv := kvl_to_pkv(kvl);
+      } else {
+        pkv := this.pkv;
       }
     }
 
