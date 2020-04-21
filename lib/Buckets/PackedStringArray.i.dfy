@@ -749,6 +749,47 @@ module PackedStringArray {
     LexOrder.IndexOfFirstGteIsUnique(I(psa), key, idx as nat);
   }
 
+  method IndexOfFirstKeyGt(psa: Psa, key: Key) returns (idx: uint64)
+    requires WF(psa)
+    requires LexOrder.IsSorted(I(psa))
+    ensures 0 <= idx as int <= |I(psa)|
+    ensures idx as int == LexOrder.IndexOfFirstGt(I(psa), key)
+  {
+    ghost var ipsa := I(psa);
+    
+    var lo: uint64 := 0;
+    var hi: uint64 := psaNumStrings(psa);
+
+    while lo < hi
+      invariant 0 <= lo as int <= |ipsa|
+      invariant 0 <= hi as int <= |ipsa|
+      invariant forall i | 0 <= i < lo as int :: LexOrder.lte(ipsa[i], key)
+      invariant forall i | hi as int <= i < |ipsa| :: LexOrder.lt(key, ipsa[i])
+      //decreases hi as int - lo as int
+    {
+      var mid: uint64 := (lo + hi) / 2;
+      var c := LexOrder.cmp(key, psaElement(psa, mid));
+      if (c >= 0) {
+        forall j | 0 <= j < mid
+          ensures LexOrder.lte(ipsa[j], key)
+        {
+          LexOrder.IsSortedImpliesLte(ipsa, j as int, mid as int);
+        }
+        lo := mid + 1;
+      } else {
+        forall j | mid as int <= j < |ipsa|
+          ensures LexOrder.lt(key, ipsa[j])
+        {
+          LexOrder.IsSortedImpliesLte(ipsa, mid as int, j);
+        }
+        hi := mid;
+      }
+    }
+
+    idx := lo;
+    LexOrder.IndexOfFirstGtIsUnique(I(psa), key, idx as nat);
+  }
+
   method PivotIndexes(keys: Psa, pivots: seq<Key>) returns (pivotIdxs: seq<uint64>)
     requires WF(keys)
     requires LexOrder.IsSorted(I(keys))

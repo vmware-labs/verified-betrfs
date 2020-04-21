@@ -456,6 +456,39 @@ abstract module Total_Order {
   {
   }
   
+  function IndexOfFirstGt(run: seq<Element>, needle: Element) : (result: nat)
+    requires IsSorted(run)
+    ensures result <= |run|
+    ensures forall i | 0 <= i < result :: lte(run[i], needle)
+    ensures forall i | result <= i < |run| :: lt(needle, run[i])
+  {
+    reveal_IsSorted();
+    if |run| == 0 then
+      0
+    else if lte(Seq.Last(run), needle) then
+      |run|
+    else
+      SortedSubsequence(run, 0, |run|-1);
+      IndexOfFirstGt(Seq.DropLast(run), needle)
+  }
+
+  lemma IndexOfFirstGtIsUnique(run: seq<Element>, needle: Element, idx: nat)
+    requires IsSorted(run)
+    requires idx <= |run|
+    requires forall i | 0 <= i < idx :: lte(run[i], needle)
+    requires forall i | idx <= i < |run| :: lt(needle, run[i])
+    ensures idx == IndexOfFirstGt(run, needle)
+  {
+    reveal_IsSorted();
+  }
+
+  lemma IndexOfFirstGtIsOrderPreserving(run: seq<Element>, needle1: Element, needle2: Element)
+    requires IsSorted(run)
+    requires lte(needle1, needle2)
+    ensures IndexOfFirstGt(run, needle1) <= IndexOfFirstGt(run, needle2)
+  {
+  }
+  
   lemma SortedAugment(run: seq<Element>, key: Element)
   requires IsSorted(run)
   requires |run| > 0 ==> lte(Seq.Last(run), key)

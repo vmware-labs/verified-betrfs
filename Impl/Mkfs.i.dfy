@@ -40,7 +40,7 @@ module MkfsImpl {
     var nodeAddr := NodeBlockSizeUint64() * MinNodeBlockIndexUint64();
 
     WeightBucketEmpty();
-    var empty := new MutBucket(KVList.Kvl([], []));
+    var empty := new MutBucket();
     MutBucket.ReprSeqDisjointOfLen1([empty]);
     var node := new Node([], None, [empty]);
 

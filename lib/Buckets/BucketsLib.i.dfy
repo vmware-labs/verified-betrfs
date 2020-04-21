@@ -27,6 +27,11 @@ module BucketsLib {
   datatype Bucket = BucketMapWithSeq(b: BucketMap, keys: seq<Key>, msgs: seq<Message>)
   type BucketList = seq<Bucket>
 
+  function EmptyBucket() : Bucket
+  {
+    BucketMapWithSeq(map[], [], [])
+  }
+    
   function {:opaque} BucketMapOfSeq(keys: seq<Key>, msgs: seq<Message>) : (result: BucketMap)
     requires |keys| == |msgs|
     ensures result.Keys == Set(keys)
