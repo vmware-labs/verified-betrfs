@@ -955,12 +955,12 @@ abstract module BtreeModel {
         Keys.LargestLteIsUnique2(oldindex.pivots, key, oldllte);
         assert oldllte == Keys.LargestLte(oldindex.pivots, key);
         assert key in Interpretation(oldindex.children[Keys.LargestLte(oldindex.pivots, key) + 1]);
+        InterpretationDelegation(oldindex, key);
         assert key in oldint;
       } else {
         Keys.LargestLteIsUnique2(oldindex.pivots, key, llte-1);
         assert key in oldint;
       }
-      assume false;
     }
   }
 
