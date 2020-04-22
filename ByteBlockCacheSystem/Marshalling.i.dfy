@@ -6,6 +6,7 @@ include "../lib/Base/Option.s.dfy"
 include "../BlockCacheSystem/BlockCache.i.dfy"
 include "../BlockCacheSystem/JournalCache.i.dfy"
 include "../lib/Buckets/KVList.i.dfy"
+include "../lib/Buckets/PackedKVMarshalling.i.dfy"
 
 //
 // Defines the interpretation of a sector of bytes as
@@ -33,7 +34,8 @@ module Marshalling {
   import Crypto
   import PackedKV
   import opened SectorType
-
+  import PackedKVMarshalling
+  
   type Reference = BC.Reference
   type Node = BT.G.Node
 
@@ -42,7 +44,7 @@ module Marshalling {
   function method BucketGrammar() : G
   ensures ValidGrammar(BucketGrammar())
   {
-    GPackedKV
+    PackedKVMarshalling.grammar()
   }
 
   function method PivotNodeGrammar() : G
@@ -160,27 +162,33 @@ module Marshalling {
     Some(v.ma)
   }
 
-  function {:fuel ValInGrammar,2} valToBucket(v: V) : (s : Bucket)
+  function {:fuel ValInGrammar,2} valToBucket(v: V) : (s : Option<Bucket>)
   requires ValidVal(v)
   requires ValInGrammar(v, BucketGrammar())
   {
-    var pkv := v.pkv;
-    var bucket := PackedKV.I(pkv);
-    bucket
+    var pkv := PackedKVMarshalling.fromVal(v);
+    if pkv.Some? then
+      Some(PackedKV.I(pkv.value))
+    else
+      None
   }
 
-  function valToBuckets(a: seq<V>) : (s : seq<Bucket>)
+  function valToBuckets(a: seq<V>) : (s : Option<seq<Bucket>>)
   requires forall i | 0 <= i < |a| :: ValidVal(a[i])
   requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], BucketGrammar())
-  ensures |s| == |a|
-  ensures forall i | 0 <= i < |s| :: WFBucket(s[i])
+  ensures s.Some? <==> (forall i | 0 <= i < |a| :: valToBucket(a[i]).Some?)
+  ensures s.Some? ==> |s.value| == |a|
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: WFBucket(s.value[i])
   {
     if |a| == 0 then
-      []
+      Some([])
     else (
       var pref := valToBuckets(DropLast(a));
       var bucket := valToBucket(Last(a));
-      pref + [bucket]
+      if pref.Some? && bucket.Some? then
+        Some(pref.value + [bucket.value])
+      else
+        None
     )
   }
 
@@ -217,11 +225,11 @@ module Marshalling {
             case Some(children) => (
               assert ValidVal(v.t[2]);
               var buckets := valToBuckets(v.t[2].a);
-              if WeightBucketList(buckets) <= MaxTotalBucketWeight() then (
+              if buckets.Some? && WeightBucketList(buckets.value) <= MaxTotalBucketWeight() then (
                 var node := BT.G.Node(
                   pivots,
                   if |children| == 0 then None else Some(children),
-                  buckets);
+                  buckets.value);
                 Some(node)
               ) else (
                 None

@@ -49,7 +49,8 @@ module MarshallingImpl {
   import Pivots = PivotsLib
   import MS = MapSpec
   import Keyspace = Lexicographic_Byte_Order
-
+  import PackedKVMarshalling
+  
   type Reference = IMM.Reference
   type Sector = SI.Sector
 
@@ -108,25 +109,32 @@ module MarshallingImpl {
     }
   }
 
-  method ValToBucket(v: V) returns (s : BucketImpl.MutBucket)
-  requires Marshalling.valToBucket.requires(v)
-  ensures fresh(s.Repr)
-  ensures s.Inv()
-  ensures WFBucket(s.I())
-  ensures s.I() == Marshalling.valToBucket(v)
+  method ValToBucket(v: V) returns (s : Option<BucketImpl.MutBucket>)
+    requires Marshalling.valToBucket.requires(v)
+    ensures s.Some? <==> Marshalling.valToBucket(v).Some?
+    ensures s.Some? ==> fresh(s.value.Repr)
+    ensures s.Some? ==> s.value.Inv()
+    ensures s.Some? ==> WFBucket(s.value.I())
+    ensures s.Some? ==> Some(s.value.I()) == Marshalling.valToBucket(v)
   { 
-    var pkv := v.pkv;
-    s := new BucketImpl.MutBucket.InitFromPkv(pkv);
+    var pkv := PackedKVMarshalling.FromVal(v);
+    if pkv.Some? {
+      var b := new BucketImpl.MutBucket.InitFromPkv(pkv.value);
+      s := Some(b);
+    } else {
+      s := None;
+    }
   }
 
-  method ValToBuckets(a: seq<V>) returns (s : seq<BucketImpl.MutBucket>)
+  method ValToBuckets(a: seq<V>) returns (s : Option<seq<BucketImpl.MutBucket>>)
   requires Marshalling.valToBuckets.requires(a)
   requires |a| < 0x1_0000_0000_0000_0000
   requires forall i | 0 <= i < |a| :: SizeOfV(a[i]) < 0x1_0000_0000_0000_0000
-  ensures forall i | 0 <= i < |s| :: s[i].Inv()
-  ensures BucketImpl.MutBucket.ReprSeqDisjoint(s)
-  ensures forall i | 0 <= i < |s| :: fresh(s[i].Repr)
-  ensures BucketImpl.MutBucket.ISeq(s) == Marshalling.valToBuckets(a)
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: s.value[i].Inv()
+  ensures s.Some? ==> BucketImpl.MutBucket.ReprSeqDisjoint(s.value)
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: fresh(s.value[i].Repr)
+  ensures s.Some? ==> Some(BucketImpl.MutBucket.ISeq(s.value)) == Marshalling.valToBuckets(a)
+  ensures s == None <==> Marshalling.valToBuckets(a) == None
   {
     var ar := new BucketImpl.MutBucket?[|a| as uint64];
 
@@ -139,26 +147,32 @@ module MarshallingImpl {
     invariant forall j, k | 0 <= j < i as int && 0 <= k < i as int && j != k :: ar[j].Repr !! ar[k].Repr
     invariant forall k: nat | k < i as int :: fresh(ar[k].Repr)
     invariant forall k: nat | k < i as int :: WFBucket(ar[k].Bucket)
-    invariant BucketImpl.MutBucket.ISeq(ar[..i]) == Marshalling.valToBuckets(a[..i])
+    invariant Some(BucketImpl.MutBucket.ISeq(ar[..i])) == Marshalling.valToBuckets(a[..i])
     {
-      var bucket := ValToBucket(a[i]);
+      var obucket := ValToBucket(a[i]);
 
-      assert forall k: nat | k < i as int :: ar[k].Inv();
-      ar[i] := bucket;
-      assert forall k: nat | k < i as int :: ar[k].Inv();
-      assert ar[i as int].Inv();
-      assert forall k: nat | k < i as int + 1 :: ar[k].Inv();
+      if obucket.Some? {
+        var bucket := obucket.value;
+        assert forall k: nat | k < i as int :: ar[k].Inv();
+        ar[i] := bucket;
+        assert forall k: nat | k < i as int :: ar[k].Inv();
+        assert ar[i as int].Inv();
+        assert forall k: nat | k < i as int + 1 :: ar[k].Inv();
+        
+        assert DropLast(a[..i+1]) == a[..i];
+        assert ar[..i+1] == ar[..i] + [bucket];
 
-      assert DropLast(a[..i+1]) == a[..i];
-      assert ar[..i+1] == ar[..i] + [bucket];
-
-      i := i + 1;
+        i := i + 1;
+        assert BucketImpl.MutBucket.ISeq(ar[..i]) == Marshalling.valToBuckets(a[..i]).value;
+      } else {
+        return None;
+      }
     }
 
     assert a[..|a|] == a;
     assert ar[..|a|] == ar[..];
 
-    s := ar[..];
+    s := Some(ar[..]);
 
     BucketImpl.MutBucket.reveal_ReprSeqDisjoint();
   }
@@ -205,7 +219,11 @@ module MarshallingImpl {
     IMM.SizeOfVTupleElem_le_SizeOfV(v, 2);
     IMM.SizeOfVArrayElem_le_SizeOfV_forall(v.t[2]);
 
-    var buckets := ValToBuckets(v.t[2 as uint64].a);
+    var obuckets := ValToBuckets(v.t[2 as uint64].a);
+    if obuckets == None {
+      return None;
+    }
+    var buckets := obuckets.value;
 
     BucketImpl.MutBucket.AllocatedReprSeq(buckets);
     BucketImpl.MutBucket.FreshReprSeqOfFreshEntries(buckets);
@@ -377,26 +395,28 @@ module MarshallingImpl {
     return VMessageArray(s);
   }
 
-  // We pass in pivotTable and i so we can state the pre- and post-conditions.
   method {:fuel SizeOfV,3}
   bucketToVal(bucket: BucketImpl.MutBucket)
   returns (v: V, size: uint64)
   requires bucket.Inv()
+  requires BucketWellMarshalled(bucket.I())
   requires WeightBucket(bucket.Bucket) <= MaxTotalBucketWeight()
   ensures ValInGrammar(v, Marshalling.BucketGrammar())
   ensures ValidVal(v)
-  ensures Marshalling.valToBucket(v) == bucket.Bucket
-  ensures SizeOfV(v) == WeightBucket(bucket.Bucket) + 8
+  ensures Marshalling.valToBucket(v) == Some(bucket.Bucket)
+  ensures SizeOfV(v) == WeightBucket(bucket.Bucket) + 32
   ensures SizeOfV(v) == size as int
   {
-    var kvl := bucket.GetKvl();
-    KVList.kvlWeightEq(kvl);
-    KVList.lenKeysLeWeight(kvl);
-    var keys := strictlySortedKeySeqToVal(kvl.keys);
-    var messages := messageSeqToVal(kvl.messages);
-    v := VTuple([keys, messages]);
-
-    assert SizeOfV(v) == SizeOfV(keys) + SizeOfV(messages);
+    var pkv := bucket.GetPkv();
+    //KVList.kvlWeightEq(kvl);
+    //KVList.lenKeysLeWeight(kvl);
+    //var keys := packedStringArrayToVal(kvl.keys);
+    //var messages := messageSeqToVal(kvl.messages);
+    v := PackedKVMarshalling.ToVal(pkv);
+    
+    //PackedKVMarshalling.SizeOfV_WeightBucket(pkv);
+    
+    //assert SizeOfV(v) == SizeOfV(keys) + SizeOfV(messages);
 
     // FIXME dafny goes nuts with trigger loops here some unknown reason
     // without these obvious asserts.
@@ -406,9 +426,10 @@ module MarshallingImpl {
 
     // TODO we need to show that v is equivalent to a V
     // which demarshalls to the same bucket.
-    assume ValInGrammar(v, Marshalling.BucketGrammar()); // this is not remotely true
-
-    size := bucket.Weight + 8;
+    //assume ValInGrammar(v, Marshalling.BucketGrammar()); // this is not remotely true
+    //assume false;
+    
+    size := bucket.Weight + 32;
   }
 
   method bucketsToVal(buckets: seq<BucketImpl.MutBucket>)
@@ -420,7 +441,7 @@ module MarshallingImpl {
   ensures ValidVal(v)
   ensures ValInGrammar(v, GArray(Marshalling.BucketGrammar()))
   ensures |v.a| == |buckets|
-  ensures Marshalling.valToBuckets(v.a) == BucketImpl.MutBucket.ISeq(buckets)
+  ensures Marshalling.valToBuckets(v.a) == Some(BucketImpl.MutBucket.ISeq(buckets))
   ensures SizeOfV(v) <= 8 + WeightBucketList(BucketImpl.MutBucket.ISeq(buckets)) + |buckets| * 8
   ensures SizeOfV(v) == size as int
   {
@@ -440,8 +461,8 @@ module MarshallingImpl {
       var bucketVal, bucket_size := bucketToVal(bucket);
       assert buckets == DropLast(buckets) + [Last(buckets)]; // observe
       lemma_SeqSum_prefix(pref.a, bucketVal);
-      assert Marshalling.valToBuckets(VArray(pref.a + [bucketVal]).a) == BucketImpl.MutBucket.ISeq(buckets); // observe
-      assert Marshalling.valToBuckets(VArray(pref.a + [bucketVal]).a) == BucketImpl.MutBucket.ISeq(buckets); // observe (reduces verification time)
+      assert Marshalling.valToBuckets(VArray(pref.a + [bucketVal]).a) == Some(BucketImpl.MutBucket.ISeq(buckets)); // observe
+      assert Marshalling.valToBuckets(VArray(pref.a + [bucketVal]).a) == Some(BucketImpl.MutBucket.ISeq(buckets)); // observe (reduces verification time)
 
       assert buckets == DropLast(buckets) + [Last(buckets)];
 

@@ -796,6 +796,26 @@ module Uint32_Order refines Total_Order {
   {
     return if a < b then -1 else if a > b then 1 else 0;
   }
+
+  method ComputeIsSorted(run: seq<Element>)
+    returns (b: bool)
+    requires |run| < Uint64UpperBound()
+    ensures b == IsSorted(run)
+  {
+    reveal_IsSorted();
+    var k: uint64 := 1;
+    while k < |run| as uint64
+    invariant |run| > 0 ==> 0 <= k <= |run| as uint64
+    invariant |run| > 0 ==> forall i, j :: 0 <= i <= j < k ==> lte(run[i], run[j])
+    {
+      var c := cmp(run[k-1], run[k]);
+      if (0 < c) {
+        return false;
+      }
+      k := k + 1;
+    }
+    return true;
+  }
 }
 
 module Uint64_Order refines Total_Order {

@@ -183,7 +183,7 @@ module BucketImpl {
     {
       this.format := BFTree;
       this.sorted := true;
-      this.Weight := 4;
+      this.Weight := 0;
       var tmp := KMB.EmptyTree();
       this.tree := tmp;
       this.Repr := {this} + tmp.repr;
