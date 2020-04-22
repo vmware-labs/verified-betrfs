@@ -1578,14 +1578,12 @@ lemma lemma_parse_Val_view(data:seq<byte>, v:V, grammar:G, index:int)
         reveal_parse_Val();
         match grammar
             case GUint32             => {
-              //assume false;
               assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v)) by {
                 assert data[index..bound][..Uint32Size()] == data[index..index+SizeOfV(v)][..Uint32Size()];
                 reveal_parse_Val();
               }
             }
             case GUint64             => {
-              //assume false;
               assert (parse_Val(data[index..bound], grammar).0 == Some(v)) <==> (parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v)) by {
                 assert data[index..bound][..Uint64Size()] == data[index..index+SizeOfV(v)][..Uint64Size()];
                 reveal_parse_Val();
