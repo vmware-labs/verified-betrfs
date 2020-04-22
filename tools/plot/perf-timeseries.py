@@ -127,7 +127,6 @@ def plot_perf_timeseries(exp):
 
     def plotVeriInternalMem(ax):
         ax.set_title("mem from inside veri")
-        ax.set_ylim(bottom=0)
         traceNames = ["bucket-message-bytes", "bucket-key-bytes", "pivot-key-bytes"]
         for stackc in list(range(len(traceNames)))[::-1]:
             stack = [exp.accum[n] for n in traceNames[:stackc+1]]
@@ -135,6 +134,7 @@ def plot_perf_timeseries(exp):
             line, = ax.plot(*plotVsKop(ax, exp, singleTrace(ax, stackedTraces, scale=Gi)))
             line.set_label(("" if stackc==0 else "+") + traceNames[stackc])
         ax.legend()
+        ax.set_ylim(bottom=0)
     try: plotVeriInternalMem(plotHelper.nextAxis())
     except: pass
 

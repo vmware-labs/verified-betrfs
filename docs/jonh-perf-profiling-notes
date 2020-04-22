@@ -882,3 +882,10 @@ accum counts pkvs.
 Burning questions:
 [ ] Are we counting memory accurately for the no-fragmentation simulation?
 [ ] Is veri cheating by using buffer cache since I worked around cgroups?
+
+------------------------------------------------------------------------------
+ssh splinter1
+
+
+tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb rocks > malloc-exp/rocks-1gb-wka-nosync-disk-1.data
+
