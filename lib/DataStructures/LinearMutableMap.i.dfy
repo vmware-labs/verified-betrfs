@@ -1,13 +1,13 @@
-include "../lib/Lang/LinearSequence.s.dfy"
-include "../lib/Lang/LinearSequence.i.dfy"
+include "../Lang/LinearSequence.s.dfy"
+include "../Lang/LinearSequence.i.dfy"
 
-include "../lib/Lang/NativeTypes.s.dfy"
-include "../lib/Base/Option.s.dfy"
-include "../lib/Base/sequences.i.dfy"
-include "../lib/Base/Sets.i.dfy"
-include "../lib/Base/Maps.s.dfy"
-include "../lib/Base/SetBijectivity.i.dfy"
-include "../lib/Base/Arithmetic.s.dfy"
+include "../Lang/NativeTypes.s.dfy"
+include "../Base/Option.s.dfy"
+include "../Base/sequences.i.dfy"
+include "../Base/Sets.i.dfy"
+include "../Base/Maps.s.dfy"
+include "../Base/SetBijectivity.i.dfy"
+include "../Base/Arithmetic.s.dfy"
 //
 // Immutable (functional) model to support MutableMapImpl.  API provides an
 // iterator interface with a deterministic order for parsing/marshaling.
@@ -20,7 +20,7 @@ include "../lib/Base/Arithmetic.s.dfy"
 // nice to cleanly separate these concerns.
 //
 
-module MutableMap {
+module LinearMutableMap {
   import opened NativeTypes
   import opened Options
   import opened Sequences
@@ -1669,9 +1669,7 @@ module MutableMap {
     }
   }
 
-  /*
-
-  function MaxKeyIterate<V>(self: LinearHashMap<V>, it: Iterator<V>, m: uint64) : (res : uint64)
+  function method MaxKeyIterate<V>(shared self: LinearHashMap<V>, it: Iterator<V>, m: uint64) : (res : uint64)
   requires Inv(self)
   requires WFIter(self, it)
   requires forall key | key in it.s :: key <= m
@@ -1686,15 +1684,15 @@ module MutableMap {
     )
   }
 
-  function {:opaque} MaxKey<V>(self: LinearHashMap<V>) : (res : uint64)
+  function method {:opaque} MaxKey<V>(shared self: LinearHashMap<V>) : (res : uint64)
   requires Inv(self)
   ensures forall key | key in self.contents :: key <= res
   {
     MaxKeyIterate(self, IterStart(self), 0)    
   }
 
-  function {:opaque} UpdateByIter<V>(self: LinearHashMap<V>, it: SimpleIterator, value: V)
-    : (self': LinearHashMap)
+  function method {:opaque} UpdateByIter<V>(linear self: LinearHashMap<V>, it: SimpleIterator, value: V)
+    : (linear self': LinearHashMap)
   requires Inv(self)
   requires WFSimpleIter(self, it)
   requires SimpleIterOutput(self, it).Next?
@@ -1703,8 +1701,9 @@ module MutableMap {
   ensures self'.count == self.count
   {
     assume false;
-    var underlying := FixedSizeUpdateBySlot(self.underlying, it.i, value);
-    LinearHashMap(underlying, self.count,
+    linear var LinearHashMap(selfUnderlying, selfCount, selfContents) := self;
+    linear var newUnderlying := FixedSizeUpdateBySlot(selfUnderlying, it.i, value);
+    LinearHashMap(newUnderlying, selfCount,
         self.contents[SimpleIterOutput(self, it).key := value])
   }
 
@@ -1718,7 +1717,7 @@ module MutableMap {
     assume false;
   }
 
-  function {:opaque} FindSimpleIter<V>(self: LinearHashMap<V>, key: uint64)
+  function method {:opaque} FindSimpleIter<V>(shared self: LinearHashMap<V>, key: uint64)
     : (it : SimpleIterator)
   requires Inv(self)
   ensures WFSimpleIter(self, it)
@@ -1727,12 +1726,11 @@ module MutableMap {
   {
     assume false;
     var i := Probe(self.underlying, key);
-    if self.underlying.storage[i].Entry? then (
+    if seq_get(self.underlying.storage, i).Entry? then (
       // TODO the ghosty {} is wrong
       SimpleIterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL)
     ) else (
-      SimpleIterator(|self.underlying.storage| as uint64, self.contents.Keys, 0)
+      SimpleIterator(seq_length(self.underlying.storage) as uint64, self.contents.Keys, 0)
     )
   }
-  */
 }
