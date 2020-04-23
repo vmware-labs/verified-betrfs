@@ -357,6 +357,10 @@ build/YcsbMain.o: ycsb/YcsbMain.cpp
 
 ACCOUNTING_OBJECTS=ycsb/ioaccounting.o ycsb/stataccounting.o
 
+# NOTE: this uses jemalloc (sudo apt install libjemalloc-dev)
+JEMALLOC_LIBDIR=/usr/lib/x86_64-linux-gnu/
+JEMALLOC_LIBS=jemalloc
+
 build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/YcsbMain.o $(ACCOUNTING_OBJECTS)
 	# NOTE: this uses c++17, which is required by hdrhist
 	$(CC) $(STDLIB) -o $@ \
@@ -367,6 +371,7 @@ build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/Y
 			$(VERIBETRFS_YCSB_O_FILES) \
 			$(ACCOUNTING_OBJECTS) \
 			build/YcsbMain.o \
+			-L$(JEMALLOC_LIBDIR) -Wl,-rpath,$(JEMALLOC_LIBDIR) -ljemalloc $(JEMALLLOC_LIBS) \
 			-lycsbc-libcpp -lpthread -ldl $(LDFLAGS)
 
 build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp $(ACCOUNTING_OBJECTS)
