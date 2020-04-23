@@ -1,3 +1,4 @@
+include "../Lang/LinearBox.i.dfy"
 include "../DataStructures/KMBtree.i.dfy"
 include "PackedKV.i.dfy"
 include "KVList.i.dfy"
@@ -31,6 +32,7 @@ module BucketImpl {
   import opened KeyType
   import BucketIteratorModel
   import Pivots = PivotsLib
+  import LinearBox
 
   type TreeMap = KMB.Node
 
@@ -41,7 +43,7 @@ module BucketImpl {
   ensures KVList.WF(kvl)
   ensures KVList.I(kvl) == B(KMB.Interpretation(tree))
   {
-    var s := KMBBOps.ToSeq(tree);
+    var s:(array<Key>, array<Value>) := KMBBOps.ToSeq(tree);
     kvl := KVList.Kvl(s.0[..], s.1[..]);
     assume false;
     kvl := KVList.AmassKvl(kvl);  // TODO skip a seq-assembly step here
@@ -97,10 +99,29 @@ module BucketImpl {
       | BFKvl
       | BFPkv
 
+// Notes for the future: Here's where we're headed after we finish duct-taping
+// linear KMB into Repry-MutBucket: linear MutBucket!
+//
+//  linear datatype MutBucket =
+//      MBTree(weight: uint64, linear tree: KMB.Node)
+//    | MBKvl(weight: uint64, kvl: KVList.Kvl)
+//    | MBPkv(weight: uint64, pkv: PackedKV.Pkv)
+//
+//  function IBucket(mutBucket: MutBucket) : Bucket
+//  {
+//  }
+//
+//  predicate Inv(mutBucket: MutBucket)
+//  {
+//    && mutBucket.MBKvl? ==> KVList.WF(mutBucket.kvl)
+//    && mutBucket.weight == WeightBucket(IBucket(mutBucket))
+//    && mutBucket.weight < Uint64UpperBound()
+//  }
+
   class MutBucket {
     var format: BucketFormat;
 
-    var tree: KMB.Node?;
+    var tree: LinearBox.BoxedLinear?<KMB.Node>;
     var kvl: KVList.Kvl;
     var pkv: PackedKV.Pkv;
 
@@ -124,11 +145,12 @@ module BucketImpl {
       ))
       && (format.BFTree? ==> (
         && tree != null
+        && tree.Has()
         && tree in Repr
-        && tree.repr <= Repr
-        && KMB.WF(tree)
+        && tree.Repr <= Repr
+        && KMB.WF(tree.Read())
         && Weight as int < Uint64UpperBound()
-        && Bucket == B(KMB.Interpretation(tree))
+        && Bucket == B(KMB.Interpretation(tree.Read()))
       ))
       && (format.BFPkv? ==> (
         && tree == null
@@ -202,9 +224,11 @@ module BucketImpl {
     ensures KVList.I(kv) == Bucket
     {
       if (format.BFTree?) {
-        NumElementsLteWeight(B(KMB.Interpretation(tree)));
+        NumElementsLteWeight(B(KMB.Interpretation(tree.Read())));
         assume false;
-        kv := tree_to_kvl(tree);
+        linear var treeGuts := tree.Take();
+        kv := tree_to_kvl(treeGuts);
+        tree.Give(treeGuts);
       } else if (format.BFKvl?) {
         kv := kvl;
       } else {
@@ -416,18 +440,24 @@ module BucketImpl {
 
       if format.BFKvl? {
         format := BFTree;
-        tree := kvl_to_tree(kvl);
+        linear var treeGuts := kvl_to_tree(kvl);
+        tree := new LinearBox.BoxedLinear(treeGuts);
         kvl := KVList.Kvl([], []); // not strictly necessary, but frees memory
       } else if format.BFPkv? {
         format := BFTree;
-        tree := pkv_to_tree(pkv);
+        linear var treeGuts := pkv_to_tree(pkv);
+        tree := new LinearBox.BoxedLinear(treeGuts);
         var psa := PackedKV.PackedStringArray.Psa([], []);
         pkv := PackedKV.Pkv(psa, psa);
       }
+      assert Inv();
+      assert format.BFTree?;
 
       if value.Define? {
         var cur;
-        tree, cur := KMB.Insert(tree, key, value);
+        linear var treeGuts := tree.Take();
+        treeGuts, cur := KMB.Insert(treeGuts, key, value);
+        tree.Give(treeGuts);
         if (cur.Some?) {
           Weight := Weight - WeightMessageUint64(cur.value) + WeightMessageUint64(value) as uint64;
         } else {
@@ -435,7 +465,7 @@ module BucketImpl {
         }
       }
 
-      Bucket := B(KMB.Interpretation(tree));
+      Bucket := B(KMB.Interpretation(tree.Read()));
     }
 
     method Query(key: Key)
@@ -444,7 +474,9 @@ module BucketImpl {
     ensures m == bucketBinarySearchLookup(I(), key)
     {
       if format.BFTree? {
-        m := KMB.Query(tree, key);
+        linear var treeGuts := tree.Take();
+        m := KMB.Query(treeGuts, key);
+        tree.Give(treeGuts);
       } else if format.BFKvl? {
         KVList.lenKeysLeWeightOver4(kvl);
         m := KVList.Query(kvl, key);
@@ -653,7 +685,9 @@ module BucketImpl {
       var kv;
       if format.BFTree? {
         assume false; // NumElements issue
-        kv := tree_to_kvl(tree);
+        linear var treeGuts := tree.Take();
+        kv := tree_to_kvl(treeGuts);
+        tree.Give(treeGuts);
       } else {
         kv := kvl;
       }
