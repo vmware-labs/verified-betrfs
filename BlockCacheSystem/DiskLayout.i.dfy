@@ -1,4 +1,4 @@
-include "../lib/Base/NativeTypes.s.dfy"
+include "../lib/Lang/NativeTypes.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 
