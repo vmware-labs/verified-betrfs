@@ -107,12 +107,17 @@ def plot_perf_timeseries(exp):
 #    except: raise
 
     def plotMemory(ax):
+        ax.set_title("OS memory")
         line, = ax.plot(*plotVsKop(ax, exp, singleTrace(ax, exp.os_map_total, scale=Gi)))
         line.set_label("OS mem")
+        line, = ax.plot(*plotVsKop(ax, exp, singleTrace(ax, exp.os_map_heap, scale=Gi)))
+        line.set_label("OS heap")
+        ax.set_ylim(bottom=0)
         ax.legend()
     plotMemory(plotHelper.nextAxis())
 
     def plotCpuTime(ax):
+        ax.set_title("CPU time")
         ticksPerSecond = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
         user_sec = LambdaTrace(lambda opn: exp.utime[opn]/ticksPerSecond, "s")
         sys_sec = LambdaTrace(lambda opn: exp.stime[opn]/ticksPerSecond, "s")

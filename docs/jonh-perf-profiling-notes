@@ -889,3 +889,21 @@ ssh splinter1
 
 tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb rocks > malloc-exp/rocks-1gb-wka-nosync-disk-1.data
 
+sshfs -o allow_other,default_permissions -o reconnect -C -o ServerAliveInterval=15 -o workaround=all -o idmap=user jonh@splinter1:. splinter1
+
+tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb config-8mb > malloc-exp/veri-1gb-100mb-8mb-wka-nosync-disk-1.data
+
+[malloc-exp/veri-1gb-100mb-8mb-wka-nosync-disk-1.data-perf.png]
+was an experiment where we used 100mb for veribetrfs internal cache,
+and let the page cache supply everything else. What we learned was that
+reading 8MB from the *page cache* was actually a bottleneck; we're using
+75% system time (and 25% user, of which 20% was CRC32) to run memcpy at
+3GBps. So we really can't get much out of the page cache without subblocks.
+
+Upcoming strategies:
+- repro the best case with conservative (MALLOC_OVERHEAD=2) cgroups.
+  [malloc-exp/veri-1gb-512mb-8mb-wka-nosync-disk-1.data]
+- try a dynamic oracle that watches the system page usage to try to
+  stay tight on it.
+- see if PackedKVs can help with fragmentation
+- try dropping in a better malloc (gemalloc) to help with fragmentation
