@@ -8,49 +8,67 @@ module LinearBox {
   class BoxedLinear<A>
   {
     var data:SwapLinear<maybe<A>>;
+    ghost var Repr:set<object>;
+
+    predicate Inv()
+      reads this, Repr
+    {
+      Repr == {this, this.data}
+    }
 
     function Has():bool
-      reads this, data
+      requires Inv()
+      reads this, Repr
     {
       has(data.Read())
     }
 
     function Read():A
-      reads this, data
+      requires Inv()
+      reads this, Repr
     {
       read(data.Read())
     }
 
     constructor Empty()
+      ensures Inv()
       ensures !Has()
-      ensures fresh(this.data)
+      ensures fresh(Repr)
     {
       data := new SwapLinear(empty());
+      Repr := {this, this.data};
     }
 
     constructor(linear a:A)
+      ensures Inv()
       ensures Read() == a
       ensures Has()
-      ensures fresh(this.data)
+      ensures fresh(Repr)
     {
       data := new SwapLinear(give(a));
+      Repr := {this, this.data};
     }
 
     method Take() returns(linear a:A)
-      modifies this, data
+      modifies this, Repr
+      requires Inv()
       requires Has()
+      ensures Inv()
       ensures !Has()
-      ensures a == old(Read())
+      ensures Repr == old(Repr)
     {
       linear var x := data.Swap(empty());
       a := unwrap(x);
     }
 
     method Give(linear a:A)
-      modifies this, data
+      modifies this, Repr
+      requires Inv()
       requires !Has()
+      ensures Inv()
       ensures Has()
       ensures a == Read()
+      ensures Repr == old(Repr)
     {
       linear var x := data.Swap(give(a));
       var _ := discard(x);
