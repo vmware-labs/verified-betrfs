@@ -410,42 +410,23 @@ module MarshallingImpl {
   ensures SizeOfV(v) == size as int
   {
     var pkv := bucket.GetPkv();
-    //KVList.kvlWeightEq(kvl);
-    //KVList.lenKeysLeWeight(kvl);
-    //var keys := packedStringArrayToVal(kvl.keys);
-    //var messages := messageSeqToVal(kvl.messages);
     v := PackedKVMarshalling.ToVal(pkv);
-    
-    //PackedKVMarshalling.SizeOfV_WeightBucket(pkv);
-    
-    //assert SizeOfV(v) == SizeOfV(keys) + SizeOfV(messages);
-
-    // FIXME dafny goes nuts with trigger loops here some unknown reason
-    // without these obvious asserts.
-    //assert ValInGrammar(v.t[0], Marshalling.BucketGrammar().t[0]);
-    //assert ValInGrammar(v.t[1], Marshalling.BucketGrammar().t[1]);
-    //assert ValInGrammar(v, Marshalling.BucketGrammar());
-
-    // TODO we need to show that v is equivalent to a V
-    // which demarshalls to the same bucket.
-    //assume ValInGrammar(v, Marshalling.BucketGrammar()); // this is not remotely true
-    //assume false;
-    
     size := bucket.Weight + 32;
-    SizeOfVWellMarshalledPackedKVIsBucketWeight(pkv);
+    PackedKVMarshalling.SizeOfVWellMarshalledPackedKVIsBucketWeight(pkv);
   }
 
   method bucketsToVal(buckets: seq<BucketImpl.MutBucket>)
   returns (v: V, size: uint64)
   requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
   requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i].Bucket)
+  requires forall i | 0 <= i < |buckets| :: BucketWellMarshalled(buckets[i].I())
   requires |buckets| <= MaxNumChildren() as int
   requires WeightBucketList(BucketImpl.MutBucket.ISeq(buckets)) <= MaxTotalBucketWeight()
   ensures ValidVal(v)
   ensures ValInGrammar(v, GArray(Marshalling.BucketGrammar()))
   ensures |v.a| == |buckets|
   ensures Marshalling.valToBuckets(v.a) == Some(BucketImpl.MutBucket.ISeq(buckets))
-  ensures SizeOfV(v) <= 8 + WeightBucketList(BucketImpl.MutBucket.ISeq(buckets)) + |buckets| * 8
+  ensures SizeOfV(v) <= 8 + WeightBucketList(BucketImpl.MutBucket.ISeq(buckets)) + |buckets| * 32
   ensures SizeOfV(v) == size as int
   {
     BucketImpl.MutBucket.AllocatedReprSeq(buckets);
@@ -464,10 +445,11 @@ module MarshallingImpl {
       var bucketVal, bucket_size := bucketToVal(bucket);
       assert buckets == DropLast(buckets) + [Last(buckets)]; // observe
       lemma_SeqSum_prefix(pref.a, bucketVal);
-      assert Marshalling.valToBuckets(VArray(pref.a + [bucketVal]).a) == Some(BucketImpl.MutBucket.ISeq(buckets)); // observe
-      assert Marshalling.valToBuckets(VArray(pref.a + [bucketVal]).a) == Some(BucketImpl.MutBucket.ISeq(buckets)); // observe (reduces verification time)
+      ghost var ibuckets := BucketImpl.MutBucket.ISeq(buckets);
+      assert ibuckets == DropLast(ibuckets) + [ Last(ibuckets) ];
+      assert Marshalling.valToBuckets(pref.a).value == DropLast(ibuckets);
 
-      assert buckets == DropLast(buckets) + [Last(buckets)];
+      assert Marshalling.valToBuckets(VArray(pref.a + [bucketVal]).a) == Some(BucketImpl.MutBucket.ISeq(buckets)); // observe (reduces verification time)
 
       reveal_WeightBucketList();
       BucketImpl.MutBucket.ISeqInduction(buckets);
@@ -503,6 +485,7 @@ module MarshallingImpl {
   requires node.Inv()
   requires IM.WFNode(node.I())
   requires BT.WFNode(IM.INode(node.I()))
+  requires forall i | 0 <= i < |node.buckets| :: BucketWellMarshalled(node.buckets[i].I())
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.PivotNodeGrammar())
   ensures IMM.valToNode(v) == INodeOpt(Some(node))
@@ -528,7 +511,7 @@ module MarshallingImpl {
 
     assert SizeOfV(pivots) <= (4 + (MaxNumChildren()-1)*(4 + KeyType.MaxLen() as int));
     assert SizeOfV(children) <= (8 + MaxNumChildren() * 8);
-    assert SizeOfV(buckets) <= 8 + MaxNumChildren() * (4 + 4) + MaxTotalBucketWeight();
+    assert SizeOfV(buckets) <= 8 + MaxNumChildren() * (32) + MaxTotalBucketWeight();
 
     assert SizeOfV(v) == SizeOfV(pivots) + SizeOfV(children) + SizeOfV(buckets);
 
@@ -562,6 +545,7 @@ module MarshallingImpl {
   requires sector.SectorNode?
   requires sector.SectorNode? ==> IM.WFNode(sector.node.I())
   requires sector.SectorNode? ==> BT.WFNode(IM.INode(sector.node.I()))
+  requires sector.SectorNode? ==> forall i | 0 <= i < |sector.node.buckets| :: BucketWellMarshalled(sector.node.buckets[i].I())
   requires sector.SectorIndirectionTable? ==>
       BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.I()))
   ensures ValidVal(v)
@@ -656,6 +640,7 @@ module MarshallingImpl {
   requires IM.WFSector(StateImpl.ISector(sector))
   requires sector.SectorNode? ==> IM.WFNode(sector.node.I())
   requires sector.SectorNode? ==> BT.WFNode(IM.INode(sector.node.I()))
+  requires sector.SectorNode? ==> forall i | 0 <= i < |sector.node.buckets| :: BucketWellMarshalled(sector.node.buckets[i].I())
   requires sector.SectorSuperblock? ==> JC.WFSuperblock(sector.superblock)
   ensures data != null ==> IMM.parseCheckedSector(data[..]).Some?
   ensures data != null ==>
