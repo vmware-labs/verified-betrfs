@@ -955,6 +955,7 @@ module Byte_Order refines Total_Order {
 module Lexicographic_Byte_Order refines Total_Order {
   import KeyType
   import SeqComparison
+  // TODO(robj): this forces all strings compared using this module to be < KeyType.MaxLen()
   type Element = KeyType.Key
 
   import Base_Order = Byte_Order
