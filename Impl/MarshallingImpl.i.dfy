@@ -94,13 +94,6 @@ module MarshallingImpl {
     }
   }
 
-  method ValToMessageSeq(v: V) returns (s : Option<seq<Message>>)
-  requires Marshalling.valToMessageSeq.requires(v)
-  ensures s == Marshalling.valToMessageSeq(v)
-  {
-    return Some(v.ma);
-  }
-
   method ValToPivots(v: V) returns (s : Option<seq<Key>>)
   requires Marshalling.valToPivots.requires(v)
   ensures s == Marshalling.valToPivots(v)
@@ -316,16 +309,6 @@ module MarshallingImpl {
     }
   }
 
-  lemma lemmaSizeOfMessageArray(messages: seq<Message>)
-  ensures 4 + WeightMessageSeq(messages) == SizeOfV(VMessageArray(messages))
-  {
-    if |messages| == 0 {
-    } else {
-      lemmaSizeOfMessageArray(DropLast(messages));
-      assert DropLast(messages) + [Last(messages)] == messages;
-    }
-  }
-
   lemma WeightKeySeqLe(keys: seq<Key>)
   ensures WeightKeySeq(keys) <= |keys| * (8 + KeyType.MaxLen() as int)
   {
@@ -381,20 +364,7 @@ module MarshallingImpl {
     if ghosty && |pivots| > 0 {
       KeyInPivotsIsNonempty(pivots);
     }
-    assume SizeOfV(v) <= 4 + |pivots| * (4 + KeyType.MaxLen() as int);
-  }
-
-  method messageSeqToVal(s: seq<Message>) returns (v : V)
-  requires forall i | 0 <= i < |s| :: s[i] != M.IdentityMessage()
-  requires |s| < 0x1_0000_0000_0000_0000
-  ensures ValidVal(v)
-  ensures ValInGrammar(v, GMessageArray)
-  ensures |v.ma| == |s|
-  ensures Marshalling.valToMessageSeq(v) == Some(s)
-  ensures SizeOfV(v) == 4 + WeightMessageSeq(s)
-  {
-    lemmaSizeOfMessageArray(s);
-    return VMessageArray(s);
+    //assume SizeOfV(v) <= 4 + |pivots| * (4 + KeyType.MaxLen() as int);
   }
 
   method {:fuel SizeOfV,3}

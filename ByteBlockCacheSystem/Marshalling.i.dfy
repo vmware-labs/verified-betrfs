@@ -151,17 +151,6 @@ module Marshalling {
     )
   }
 
-  function {:fuel ValInGrammar,2} valToMessageSeq(v: V) : (s : Option<seq<Message>>)
-  requires ValidVal(v)
-  requires ValInGrammar(v, GMessageArray)
-  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: s.value[i] != M.IdentityMessage()
-  ensures s.Some? ==> |s.value| == |v.ma|
-  decreases |v.ma|
-  {
-    assert forall i | 0 <= i < |v.ma| :: ValidMessage(v.ma[i]);
-    Some(v.ma)
-  }
-
   function {:fuel ValInGrammar,2} valToBucket(v: V) : (s : Option<Bucket>)
   requires ValidVal(v)
   requires ValInGrammar(v, BucketGrammar())
