@@ -50,6 +50,8 @@ module MarshallingImpl {
   import MS = MapSpec
   import Keyspace = Lexicographic_Byte_Order
   import PackedKVMarshalling
+  import PSA = PackedStringArray
+  import PSAM = PackedStringArrayMarshalling
   
   type Reference = IMM.Reference
   type Sector = SI.Sector
@@ -430,6 +432,7 @@ module MarshallingImpl {
     //assume false;
     
     size := bucket.Weight + 32;
+    SizeOfVWellMarshalledPackedKVIsBucketWeight(pkv);
   }
 
   method bucketsToVal(buckets: seq<BucketImpl.MutBucket>)

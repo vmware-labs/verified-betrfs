@@ -394,7 +394,9 @@ module PackedKV {
     requires WF(pkv)
     requires 0 <= from <= to <= PSA.psaNumStrings(pkv.keys)
     ensures WF(result)
+    ensures BucketWellMarshalled(I(pkv)) ==> BucketWellMarshalled(I(result))
   {
+    Keyspace.StrictlySortedSubsequence(PSA.I(pkv.keys), from as int, to as int);
     Pkv(PSA.psaSubSeq(pkv.keys, from, to), PSA.psaSubSeq(pkv.messages, from, to))
   }
 

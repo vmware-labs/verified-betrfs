@@ -45,7 +45,7 @@ module PackedStringArrayMarshalling {
     ensures fromVal(toVal(psa)) == Some(psa)
   {
   }
-  
+
   method ComputeWF(psa: Psa) returns (result: bool)
     requires |psa.offsets| < Uint64UpperBound()
     requires |psa.data| < Uint64UpperBound()
@@ -91,4 +91,21 @@ module PackedStringArrayMarshalling {
     v := VTuple([VUint32Array(psa.offsets), VByteArray(psa.data)]);
   }
 
+  lemma PSASizeOfV(psa: Psa)
+    requires WF(psa)
+    ensures SizeOfV(toVal(psa)) == 0
+    + SizeOfV(VUint32Array(psa.offsets))
+    + SizeOfV(VByteArray(psa.data))
+  {
+    var v := toVal(psa);
+    var ov := v.t[0];
+    var dv := v.t[1];
+    calc {
+      SizeOfV(v);
+      { reveal_SeqSum(); }
+      SizeOfV(ov) + SeqSum(v.t[1..]);
+      { reveal_SeqSum(); }
+      SizeOfV(ov) + SizeOfV(dv);
+    }
+  }
 }
