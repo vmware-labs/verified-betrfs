@@ -4,6 +4,14 @@ include "BucketsLib.i.dfy"
 // Assigning weights to buckets guides the flushing algorithm to decide
 // which child to push messages towards. TODO(thance): help!
 //
+// TODO(jonh&robj) Proposed restructuring: Weights don't belong at the
+// BucketsLib layer.  They belong at the concrete representation
+// layer, where the byte encoding is known.  The only reason they are
+// at this layer is that we use a function definition of flushing,
+// which means we have to deterministically know which flush we are
+// going to do.  If we use a predicate definition instead, then we can
+// describe the non-deterministic universe of valid flushes and
+// concretize at a lower layer.
 
 module BucketWeights {
   import Sets
@@ -89,6 +97,21 @@ module BucketWeights {
     )
   }
 
+  function WeightList(keys: seq<Key>, messages: seq<Message>) : (result: nat)
+  {
+    if |keys| == 0 then
+      0
+    else
+      WeightList(DropLast(keys), DropLast(messages)) + WeightKey(Last(keys)) + WeightMessage(Last(messages))
+  }
+
+  lemma WeightListEqualsWellFormedWeightBucket(bucket: Bucket)
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+    ensures WeightList(bucket.keys, bucket.msgs) == WeightBucket(bucket)
+  {
+  }
+  
   function {:opaque} WeightBucketList(buckets: BucketList) : (w:int)
   ensures w >= 0
   {

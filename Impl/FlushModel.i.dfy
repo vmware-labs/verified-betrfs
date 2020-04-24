@@ -1,7 +1,8 @@
 include "BookkeepingModel.i.dfy"
 include "IOModel.i.dfy"
 include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
-include "../lib/Buckets/KVListPartialFlush.i.dfy"
+//include "../lib/Buckets/KVListPartialFlush.i.dfy"
+include "../lib/Buckets/BucketModel.i.dfy"
 
 module FlushModel { 
   import opened StateModel
@@ -9,7 +10,6 @@ module FlushModel {
   import opened BookkeepingModel
   import opened ViewOp
   import opened DiskOpModel
-  import KVListPartialFlush
 
   import opened Options
   import opened Maps
@@ -18,6 +18,7 @@ module FlushModel {
 
   import opened BucketsLib
   import opened BucketWeights
+  import BucketModel
   import opened Bounds
 
   import opened NativeTypes
@@ -30,7 +31,7 @@ module FlushModel {
 
   requires parentref in s.ephemeralIndirectionTable.graph
   requires parentref in s.cache
-
+  
   requires s.cache[parentref].children.Some?
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires s.cache[parentref].children.value[slot] == childref
@@ -49,26 +50,31 @@ module FlushModel {
     ) else (
       var parent := s.cache[parentref];
 
-      WeightBucketLeBucketList(parent.buckets, slot);
-      lemmaChildrenConditionsOfNode(k, s, childref);
-      lemmaChildrenConditionsOfNode(k, s, parentref);
-
-      var (newparentBucket, newbuckets) := KVListPartialFlush.bucketPartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
-      var newchild := child.(buckets := newbuckets);
-      var (s2, newchildref) := allocBookkeeping(k, s, newchild.children);
-      lemmaChildrenConditionsUpdateOfAllocBookkeeping(
-          k, s, newchild.children, parent.children.value, slot);
-      if newchildref.None? then (
-        s2
+      if !BucketWellMarshalled(parent.buckets[slot]) || !BucketListWellMarshalled(child.buckets) then (
+        s
       ) else (
-        var newparent := Node(
-          parent.pivotTable,
-          Some(parent.children.value[slot := newchildref.value]),
-          parent.buckets[slot := newparentBucket]
-        );
-        var s2 := writeBookkeeping(k, s2, parentref, newparent.children);
-        var s' := s2.(cache := s2.cache[newchildref.value := newchild][parentref := newparent]);
-        s'
+      
+        WeightBucketLeBucketList(parent.buckets, slot);
+        lemmaChildrenConditionsOfNode(k, s, childref);
+        lemmaChildrenConditionsOfNode(k, s, parentref);
+
+        var partialFlushResult(newparentBucket, newbuckets, flushedKeys) := BucketModel.partialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
+        var newchild := child.(buckets := newbuckets);
+        var (s2, newchildref) := allocBookkeeping(k, s, newchild.children);
+        lemmaChildrenConditionsUpdateOfAllocBookkeeping(
+          k, s, newchild.children, parent.children.value, slot);
+        if newchildref.None? then (
+          s2
+        ) else (
+          var newparent := Node(
+            parent.pivotTable,
+            Some(parent.children.value[slot := newchildref.value]),
+            parent.buckets[slot := newparentBucket]
+          );
+          var s2 := writeBookkeeping(k, s2, parentref, newparent.children);
+          var s' := s2.(cache := s2.cache[newchildref.value := newchild][parentref := newparent]);
+          s'
+        )
       )
     )
   }
@@ -91,13 +97,18 @@ module FlushModel {
     } else {
       var parent := s.cache[parentref];
 
+      if !BucketWellMarshalled(parent.buckets[slot]) || !BucketListWellMarshalled(child.buckets) {
+        assert noop(k, IBlockCache(s), IBlockCache(s));
+        return;
+      }
+      
       WeightBucketLeBucketList(parent.buckets, slot);
       lemmaChildrenConditionsOfNode(k, s, childref);
       lemmaChildrenConditionsOfNode(k, s, parentref);
 
-      var (newparentBucket, newbuckets) := KVListPartialFlush.bucketPartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
-      var flushedKeys := KVListPartialFlush.bucketPartialFlushRes(parent.buckets[slot], child.buckets, child.pivotTable);
-
+      var partialFlushResult(newparentBucket, newbuckets, flushedKeys) := BucketModel.partialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
+      //var flushedKeys := BucketModel.partialFlushRes(parent.buckets[slot], child.buckets, child.pivotTable);
+      
       WFBucketIntersect(parent.buckets[slot], flushedKeys);
       WFBucketComplement(parent.buckets[slot], flushedKeys);
       WeightBucketComplement(parent.buckets[slot], flushedKeys);

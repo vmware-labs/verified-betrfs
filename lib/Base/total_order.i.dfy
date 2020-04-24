@@ -118,24 +118,6 @@ abstract module Total_Order {
     forall i, j :: 0 <= i <= j < |run| ==> lte(run[i], run[j])
   }
 
-  /*method ComputeIsSorted(run: seq<Element>)
-  returns (b: bool)
-  ensures b == IsSorted(run)
-  {
-    reveal_IsSorted();
-    var k := 1;
-    while k < |run|
-    invariant |run| > 0 ==> 0 <= k <= |run|
-    invariant |run| > 0 ==> forall i, j :: 0 <= i <= j < k ==> lte(run[i], run[j])
-    {
-      if (!lte(run[k-1], run[k])) {
-        return false;
-      }
-      k := k + 1;
-    }
-    return true;
-  }*/
-
   predicate {:opaque} IsStrictlySorted(run: seq<Element>)
   ensures IsStrictlySorted(run) ==> IsSorted(run)
   ensures |run| == 0 ==> IsStrictlySorted(run)
@@ -441,6 +423,80 @@ abstract module Total_Order {
     reveal_IsStrictlySorted();
   }
   
+  function IndexOfFirstGte(run: seq<Element>, needle: Element) : (result: nat)
+    requires IsSorted(run)
+    ensures result <= |run|
+    ensures forall i | 0 <= i < result :: lt(run[i], needle)
+    ensures forall i | result <= i < |run| :: lte(needle, run[i])
+  {
+    reveal_IsSorted();
+    if |run| == 0 then
+      0
+    else if lt(Seq.Last(run), needle) then
+      |run|
+    else
+      SortedSubsequence(run, 0, |run|-1);
+      IndexOfFirstGte(Seq.DropLast(run), needle)
+  }
+
+  lemma IndexOfFirstGteIsUnique(run: seq<Element>, needle: Element, idx: nat)
+    requires IsSorted(run)
+    requires idx <= |run|
+    requires forall i | 0 <= i < idx :: lt(run[i], needle)
+    requires forall i | idx <= i < |run| :: lte(needle, run[i])
+    ensures idx == IndexOfFirstGte(run, needle)
+  {
+    reveal_IsSorted();
+  }
+
+  lemma IndexOfFirstGteIsOrderPreserving(run: seq<Element>, needle1: Element, needle2: Element)
+    requires IsSorted(run)
+    requires lte(needle1, needle2)
+    ensures IndexOfFirstGte(run, needle1) <= IndexOfFirstGte(run, needle2)
+  {
+  }
+  
+  function IndexOfFirstGt(run: seq<Element>, needle: Element) : (result: nat)
+    requires IsSorted(run)
+    ensures result <= |run|
+    ensures forall i | 0 <= i < result :: lte(run[i], needle)
+    ensures forall i | result <= i < |run| :: lt(needle, run[i])
+  {
+    reveal_IsSorted();
+    if |run| == 0 then
+      0
+    else if lte(Seq.Last(run), needle) then
+      |run|
+    else
+      SortedSubsequence(run, 0, |run|-1);
+      IndexOfFirstGt(Seq.DropLast(run), needle)
+  }
+
+  lemma IndexOfFirstGtIsUnique(run: seq<Element>, needle: Element, idx: nat)
+    requires IsSorted(run)
+    requires idx <= |run|
+    requires forall i | 0 <= i < idx :: lte(run[i], needle)
+    requires forall i | idx <= i < |run| :: lt(needle, run[i])
+    ensures idx == IndexOfFirstGt(run, needle)
+  {
+    reveal_IsSorted();
+  }
+
+  lemma IndexOfFirstGtIsOrderPreserving(run: seq<Element>, needle1: Element, needle2: Element)
+    requires IsSorted(run)
+    requires lte(needle1, needle2)
+    ensures IndexOfFirstGt(run, needle1) <= IndexOfFirstGt(run, needle2)
+  {
+  }
+  
+  lemma SortedAugment(run: seq<Element>, key: Element)
+  requires IsSorted(run)
+  requires |run| > 0 ==> lte(Seq.Last(run), key)
+  ensures IsSorted(run + [key])
+  {
+    reveal_IsSorted();
+  }
+
   lemma StrictlySortedAugment(run: seq<Element>, key: Element)
   requires IsStrictlySorted(run)
   requires |run| > 0 ==> lt(Seq.Last(run), key)
@@ -739,6 +795,26 @@ module Uint32_Order refines Total_Order {
   method cmp(a: Element, b: Element) returns (c: int32)
   {
     return if a < b then -1 else if a > b then 1 else 0;
+  }
+
+  method ComputeIsSorted(run: seq<Element>)
+    returns (b: bool)
+    requires |run| < Uint64UpperBound()
+    ensures b == IsSorted(run)
+  {
+    reveal_IsSorted();
+    var k: uint64 := 1;
+    while k < |run| as uint64
+    invariant |run| > 0 ==> 0 <= k <= |run| as uint64
+    invariant |run| > 0 ==> forall i, j :: 0 <= i <= j < k ==> lte(run[i], run[j])
+    {
+      var c := cmp(run[k-1], run[k]);
+      if (0 < c) {
+        return false;
+      }
+      k := k + 1;
+    }
+    return true;
   }
 }
 
@@ -1074,4 +1150,43 @@ module Lexicographic_Byte_Order refines Total_Order {
     return lo - 1;
   }
 
+  method ComputeIsSorted(run: seq<Element>)
+    returns (b: bool)
+    requires |run| < Uint64UpperBound()
+    ensures b == IsSorted(run)
+  {
+    reveal_IsSorted();
+    var k: uint64 := 1;
+    while k < |run| as uint64
+    invariant |run| > 0 ==> 0 <= k <= |run| as uint64
+    invariant |run| > 0 ==> forall i, j :: 0 <= i <= j < k ==> lte(run[i], run[j])
+    {
+      var c := cmp(run[k-1], run[k]);
+      if (0 < c) {
+        return false;
+      }
+      k := k + 1;
+    }
+    return true;
+  }
+
+  method ComputeIsStrictlySorted(run: seq<Element>)
+    returns (b: bool)
+    requires |run| < Uint64UpperBound()
+    ensures b == IsStrictlySorted(run)
+  {
+    reveal_IsStrictlySorted();
+    var k: uint64 := 1;
+    while k < |run| as uint64
+    invariant |run| > 0 ==> 0 <= k <= |run| as uint64
+    invariant |run| > 0 ==> forall i, j :: 0 <= i < j < k ==> lt(run[i], run[j])
+    {
+      var c := cmp(run[k-1], run[k]);
+      if (0 <= c) {
+        return false;
+      }
+      k := k + 1;
+    }
+    return true;
+  }  
 }

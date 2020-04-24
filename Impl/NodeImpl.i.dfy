@@ -85,6 +85,80 @@ module NodeImpl {
         BucketImpl.MutBucket.ISeq(buckets))
     }
 
+    method BucketWellMarshalled(slot: uint64) returns (result: bool)
+      requires Inv()
+      requires slot as nat < |buckets|
+      // ensures Inv()
+      // ensures I() == old(I())
+      // ensures Repr == old(Repr)
+      // ensures buckets[slot].Inv()
+      // ensures buckets[slot].I() == old(buckets[slot].I())
+      // ensures buckets[slot].Repr == old(buckets[slot].Repr)
+      ensures result == BucketsLib.BucketWellMarshalled(buckets[slot].I())
+      //modifies Repr
+    {
+      result := buckets[slot].WellMarshalled();
+      // MutBucket.ReprSeqDependsOnlyOnReprs(buckets);
+      // MutBucket.ReprSeqDisjointDependsOnlyOnReprs(buckets);
+      // forall j | 0 <= j < |buckets|
+      //   ensures buckets[j].Inv()
+      // {
+      //   if j == slot as nat {
+      //   } else {
+      //     assert buckets[slot].Repr !! buckets[j].Repr by {
+      //       MutBucket.reveal_ReprSeqDisjoint();
+      //     }
+      //   }
+      // }
+    }
+
+    method BucketsWellMarshalled() returns (result: bool)
+      requires Inv()
+      requires |buckets| < Uint64UpperBound()
+      // ensures Inv()
+      // ensures I() == old(I())
+      // ensures Repr == old(Repr)
+      //ensures forall j | 0 <= j < |buckets| :: buckets[j].Repr == old(buckets[j].Repr)
+      ensures result == BucketsLib.BucketListWellMarshalled(MutBucket.ISeq(buckets))
+      //modifies Repr
+    {
+      var i: uint64 := 0;
+
+      while i < |buckets| as uint64
+        invariant i as nat <= |buckets|
+        // invariant buckets == old(buckets)
+        // invariant Inv()
+        // invariant I() == old(I())
+        // invariant Repr == old(Repr)
+        // invariant forall j | 0 <= j < |buckets| :: buckets[j].Repr == old(buckets[j].Repr)
+        invariant BucketListWellMarshalled(MutBucket.ISeq(buckets[..i]))
+      {
+        //MutBucket.LemmaReprBucketLeReprSeq(buckets, i as nat);
+        var bwm := buckets[i].WellMarshalled();
+
+        // MutBucket.ReprSeqDependsOnlyOnReprs(buckets);
+        // MutBucket.ReprSeqDisjointDependsOnlyOnReprs(buckets);
+        // forall j | 0 <= j < |buckets|
+        //   ensures buckets[j].Inv()
+        // {
+        //   if j == i as nat {
+        //   } else {
+        //     assert buckets[i].Repr !! buckets[j].Repr by {
+        //       MutBucket.reveal_ReprSeqDisjoint();
+        //     }
+        //   }
+        // }
+        
+        if !bwm {
+          return false;
+        }
+        assert buckets[..i+1] == buckets[..i] + [ buckets[i] ];
+        i := i + 1;
+      }
+      assert buckets == buckets[..i];
+      return true;  
+    }
+    
     method UpdateSlot(slot: uint64, bucket: BucketImpl.MutBucket, childref: BT.G.Reference)
     requires Inv()
     requires bucket.Inv()

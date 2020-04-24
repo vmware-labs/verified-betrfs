@@ -132,6 +132,161 @@ abstract module BtreeModel {
     }
   }
 
+  lemma IndexesNonempty(node: Node)
+    requires WF(node)
+    requires node.Index?
+    ensures 0 < |Interpretation(node)|
+  {
+    var child := node.children[0];
+    if child.Leaf? {
+      reveal_Interpretation();
+      reveal_AllKeys();
+      assert 0 < |child.keys|;
+      var key := child.keys[0];
+      assert key  in Interpretation(child);
+      assert key in AllKeys(child);
+      if 0 < |node.pivots| {
+        assert AllKeysBelowBound(node, 0);
+        assert Keys.LargestLte(node.pivots, key) == -1;
+      } else {
+        assert Keys.LargestLte(node.pivots, key) == -1;
+      }
+      InterpretationDelegation(node, key);
+    } else {
+      IndexesNonempty(child);
+      var key :| key in Interpretation(child);
+      AllKeysIsConsistentWithInterpretation(child, key);
+      assert key in AllKeys(child);
+      if 0 < |node.pivots| {
+        assert AllKeysBelowBound(node, 0);
+        assert Keys.LargestLte(node.pivots, key) == -1;
+      } else {
+        assert Keys.LargestLte(node.pivots, key) == -1;
+      }
+      InterpretationDelegation(node, key);      
+    }
+  }
+  
+  lemma ChildOfIndexNonempty(node: Node, i: nat)
+    requires WF(node)
+    requires node.Index?
+    requires i < |node.children|
+    ensures 0 < |Interpretation(node.children[i])|
+  {
+    var child := node.children[i];
+    if child.Leaf? {
+      reveal_Interpretation();
+      reveal_AllKeys();
+      assert 0 < |child.keys|;
+      var key := child.keys[0];
+      assert key  in Interpretation(child);      
+    } else {
+      IndexesNonempty(child);
+    }
+  }
+  
+  function MinKey(node: Node) : (result: Key)
+    requires WF(node)
+    requires 0 < |Interpretation(node)|
+  {
+    if node.Leaf? then (
+      assert |node.keys| == 0 ==> Interpretation(node) == map[] by {
+        reveal_Interpretation();
+      }
+      node.keys[0]
+    ) else (
+      ChildOfIndexNonempty(node, 0);
+      MinKey(node.children[0])
+    )
+  }
+
+  lemma MinKeyProperties(node: Node)
+    requires WF(node)
+    requires 0 < |Interpretation(node)|
+    ensures MinKey(node) in Interpretation(node)
+    ensures forall key | key in Interpretation(node) :: Keys.lte(MinKey(node), key)
+  {
+    var result := MinKey(node);
+    if node.Leaf? {
+      reveal_Interpretation();
+    } else {
+      var child := node.children[0];
+      ChildOfIndexNonempty(node, 0);
+      MinKeyProperties(child);
+      if 0 < |node.pivots| {
+        assert AllKeysBelowBound(node, 0);
+        AllKeysIsConsistentWithInterpretation(child, result);
+        assert Keys.LargestLte(node.pivots, result) == -1;
+      } else {
+        assert Keys.LargestLte(node.pivots, result) == -1;
+      }
+      InterpretationDelegation(node, result);
+      forall key | key in Interpretation(node)
+        ensures Keys.lte(result, key)
+      {
+        var keyidx := 1 + Keys.LargestLte(node.pivots, key);
+        InterpretationInheritance(node, key);
+        if keyidx == 0 {
+        } else {
+          assert AllKeysBelowBound(node, 0);
+          Keys.IsStrictlySortedImpliesLte(node.pivots, 0, keyidx-1);
+          assert AllKeysAboveBound(node, keyidx);
+        }
+      }
+    }
+  }
+
+  function MaxKey(node: Node) : (result: Key)
+    requires WF(node)
+    requires 0 < |Interpretation(node)|
+  {
+    if node.Leaf? then (
+      assert |node.keys| == 0 ==> Interpretation(node) == map[] by {
+        reveal_Interpretation();
+      }
+      Last(node.keys)
+    ) else (
+      ChildOfIndexNonempty(node, |node.children| - 1);
+      MaxKey(Last(node.children))
+    )
+  }
+
+  lemma MaxKeyProperties(node: Node)
+    requires WF(node)
+    requires 0 < |Interpretation(node)|
+    ensures MaxKey(node) in Interpretation(node)
+    ensures forall key | key in Interpretation(node) :: Keys.lte(key, MaxKey(node))
+  {
+    var result := MaxKey(node);
+    if node.Leaf? {
+      reveal_Interpretation();
+    } else {
+      var child := Last(node.children);
+      ChildOfIndexNonempty(node, |node.children|-1);
+      MaxKeyProperties(child);
+      if 0 < |node.pivots| {
+        assert AllKeysAboveBound(node, |node.children|-1);
+        AllKeysIsConsistentWithInterpretation(child, result);
+        assert Keys.LargestLte(node.pivots, result) == |node.pivots|-1;
+      } else {
+        assert Keys.LargestLte(node.pivots, result) == |node.pivots|-1;
+      }
+      InterpretationDelegation(node, result);
+      forall key | key in Interpretation(node)
+        ensures Keys.lte(key, result)
+      {
+        var keyidx := 1 + Keys.LargestLte(node.pivots, key);
+        InterpretationInheritance(node, key);
+        if keyidx == |node.children| - 1 {
+        } else {
+          assert AllKeysBelowBound(node, keyidx);
+          Keys.IsStrictlySortedImpliesLte(node.pivots, keyidx, |node.pivots| - 1);
+          assert AllKeysAboveBound(node, |node.children| - 1);
+        }
+      }
+    }
+  }
+  
   predicate SplitLeaf(oldleaf: Node, leftleaf: Node, rightleaf: Node, pivot: Key)
   {
     && oldleaf.Leaf?
@@ -800,12 +955,12 @@ abstract module BtreeModel {
         Keys.LargestLteIsUnique2(oldindex.pivots, key, oldllte);
         assert oldllte == Keys.LargestLte(oldindex.pivots, key);
         assert key in Interpretation(oldindex.children[Keys.LargestLte(oldindex.pivots, key) + 1]);
+        InterpretationDelegation(oldindex, key);
         assert key in oldint;
       } else {
         Keys.LargestLteIsUnique2(oldindex.pivots, key, llte-1);
         assert key in oldint;
       }
-      assume false;
     }
   }
 
@@ -1258,9 +1413,24 @@ abstract module BtreeModel {
     else NumElementsOfChildren(node.children)
   }
 
+  lemma InterpretationDisjointUnion(node: Node)
+    requires WF(node)
+    requires node.Index?
+    requires 1 < |node.children|
+    ensures WF(SubIndex(node, 0, |node.children|-1))
+    ensures Interpretation(SubIndex(node, 0, |node.children|-1)).Keys !!
+            Interpretation(Last(node.children)).Keys
+    ensures Interpretation(node) ==
+      MapDisjointUnion(Interpretation(SubIndex(node, 0, |node.children|-1)),
+                       Interpretation(Last(node.children)))
+  {
+    assume false;
+  }
+                       
   lemma NumElementsMatchesInterpretation(node: Node)
     requires WF(node)
     ensures NumElements(node) == |Interpretation(node)|
+    decreases if node.Index? then node.children else []
   {
     var interp := Interpretation(node);
     reveal_Interpretation();
@@ -1289,10 +1459,9 @@ abstract module BtreeModel {
       var iprefix := Interpretation(prefix);
       var child := Last(node.children);
       var ichild := Interpretation(child);
-      
-      assume iprefix.Keys !! ichild.Keys;
-      assume false;
-      //assert interp == MapDisjointUnion(iprefix, ichild);
+      NumElementsMatchesInterpretation(prefix);
+      NumElementsMatchesInterpretation(child);
+      InterpretationDisjointUnion(node);
     }
   }
   

@@ -48,6 +48,7 @@ module MarshallingModel {
 
   import MM = MutableMap
 
+  type Key = Keyspace.Element
   type Reference = BC.Reference
   type Sector = SM.Sector
   type Node = SM.Node
@@ -57,7 +58,7 @@ module MarshallingModel {
   lemma WeightBucketLteSize(v: V, pivotTable: seq<Key>, i: int, kvl: KVList.Kvl)
   requires Marshalling.valToBucket.requires(v)
   requires KVList.WF(kvl)
-  requires Marshalling.valToBucket(v) == KVList.I(kvl)
+  requires Marshalling.valToBucket(v) == Some(KVList.I(kvl))
   ensures WeightBucket(KVList.I(kvl)) <= SizeOfV(v)
   {
     /*KVList.kvlWeightEq(kvl);
@@ -74,7 +75,7 @@ module MarshallingModel {
   lemma WeightBucketListLteSize(v: V, pivotTable: seq<Key>, buckets: seq<Bucket>)
   requires v.VArray?
   requires Marshalling.valToBuckets.requires(v.a)
-  requires Marshalling.valToBuckets(v.a) == buckets
+  requires Marshalling.valToBuckets(v.a) == Some(buckets)
   ensures WeightBucketList(buckets) <= SizeOfV(v)
 
   decreases |v.a|
