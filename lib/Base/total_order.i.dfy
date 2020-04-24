@@ -742,6 +742,63 @@ abstract module Total_Order {
   {
     if s == {} then None else Some(maximum(s))
   }
+
+  function binarySearchIndexOfFirstKeyGteIter(s: seq<Element>, key: Element, lo: int, hi: int) : (i: int)
+  requires 0 <= lo < hi <= |s| + 1
+  requires lo > 0 ==> lt(s[lo-1], key)
+  requires hi <= |s| ==> lte(key, s[hi-1])
+  ensures 0 <= i <= |s|
+  ensures i > 0 ==> lt(s[i-1], key)
+  ensures i < |s| ==> lte(key, s[i])
+  decreases hi - lo
+  {
+    if lo + 1 < hi then (
+      var mid := (lo + hi) / 2;
+      if lt(s[mid-1], key) then
+        binarySearchIndexOfFirstKeyGteIter(s, key, mid, hi)
+      else
+        binarySearchIndexOfFirstKeyGteIter(s, key, lo, mid)
+    ) else (
+      lo
+    )
+  }
+
+  function {:opaque} binarySearchIndexOfFirstKeyGte(s: seq<Element>, key: Element) : (i: int)
+  ensures 0 <= i <= |s|
+  ensures i > 0 ==> lt(s[i-1], key)
+  ensures i < |s| ==> lte(key, s[i])
+  {
+    binarySearchIndexOfFirstKeyGteIter(s, key, 0, |s| + 1)
+  }
+
+  function binarySearchIndexOfFirstKeyGtIter(s: seq<Element>, key: Element, lo: int, hi: int) : (i: int)
+  requires 0 <= lo < hi <= |s| + 1
+  requires lo > 0 ==> lte(s[lo-1], key)
+  requires hi <= |s| ==> lt(key, s[hi-1])
+  ensures 0 <= i <= |s|
+  ensures i > 0 ==> lte(s[i-1], key)
+  ensures i < |s| ==> lt(key, s[i])
+  decreases hi - lo
+  {
+    if lo + 1 < hi then (
+      var mid := (lo + hi) / 2;
+      if lte(s[mid-1], key) then
+        binarySearchIndexOfFirstKeyGtIter(s, key, mid, hi)
+      else
+        binarySearchIndexOfFirstKeyGtIter(s, key, lo, mid)
+    ) else (
+      lo
+    )
+  }
+
+  function {:opaque} binarySearchIndexOfFirstKeyGt(s: seq<Element>, key: Element) : (i: int)
+  ensures 0 <= i <= |s|
+  ensures i > 0 ==> lte(s[i-1], key)
+  ensures i < |s| ==> lt(key, s[i])
+  {
+    binarySearchIndexOfFirstKeyGtIter(s, key, 0, |s| + 1)
+  }
+
 }
 
 /*abstract module Bounded_Total_Order refines Total_Order {

@@ -707,6 +707,65 @@ module PackedStringArray {
     LexOrder.LargestLteIsUnique(ipsa, key, hi as int - 1);
     result := hi - 1;
   }
+
+  method BinarySearchIndexOfFirstKeyGte(psa: Psa, key: Key)
+  returns (idx: uint64)
+  requires WF(psa)
+  ensures idx as int
+    == LexOrder.binarySearchIndexOfFirstKeyGte(I(psa), key)
+  {
+    LexOrder.reveal_binarySearchIndexOfFirstKeyGte();
+    var lo: uint64 := 0;
+    var hi: uint64 := psaNumStrings(psa) + 1;
+
+    while lo + 1 < hi
+    invariant 0 <= lo as int < hi as int <= |I(psa)| + 1
+    invariant lo > 0 ==> LexOrder.lt(I(psa)[lo-1], key)
+    invariant hi as int <= |I(psa)| ==> LexOrder.lte(key, I(psa)[hi-1])
+    invariant LexOrder.binarySearchIndexOfFirstKeyGte(I(psa), key)
+        == LexOrder.binarySearchIndexOfFirstKeyGteIter(I(psa), key, lo as int, hi as int)
+    {
+      var mid := (lo + hi) / 2;
+      var c := LexOrder.cmp(key, psaElement(psa, mid-1));
+      if c > 0 {
+        lo := mid;
+      } else {
+        hi := mid;
+      }
+    }
+    return lo;
+  }
+
+  method BinarySearchIndexOfFirstKeyGt(psa: Psa, key: Key)
+  returns (idx: uint64)
+  requires WF(psa)
+  ensures idx as int
+    == LexOrder.binarySearchIndexOfFirstKeyGt(I(psa), key)
+  {
+    LexOrder.reveal_binarySearchIndexOfFirstKeyGt();
+    var lo: uint64 := 0;
+    var hi: uint64 := psaNumStrings(psa) + 1;
+
+    while lo + 1 < hi
+    invariant 0 <= lo as int < hi as int <= |I(psa)| + 1
+    invariant lo > 0 ==> LexOrder.lte(I(psa)[lo-1], key)
+    invariant hi as int <= |I(psa)| ==> LexOrder.lt(key, I(psa)[hi-1])
+    invariant LexOrder.binarySearchIndexOfFirstKeyGt(I(psa), key)
+        == LexOrder.binarySearchIndexOfFirstKeyGtIter(I(psa), key, lo as int, hi as int)
+    {
+      var mid := (lo + hi) / 2;
+      var c := LexOrder.cmp(key, psaElement(psa, mid-1));
+      if c >= 0 {
+        lo := mid;
+      } else {
+        hi := mid;
+      }
+    }
+    return lo;
+  }
+
+  // TODO these could be written in terms of the above
+  // less-restrictive binary search methods:
   
   method IndexOfFirstKeyGte(psa: Psa, key: Key) returns (idx: uint64)
     requires WF(psa)

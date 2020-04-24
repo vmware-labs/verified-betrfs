@@ -94,8 +94,15 @@ module BucketImpl {
     assume false;
   }
   
-  datatype Iterator = Iterator(i: uint64)
+  datatype Iterator = Iterator(
+    ghost next: BucketIteratorModel.IteratorOutput,
+    i: uint64,
+    ghost decreaser: int)
+
   function IIterator(it: Iterator) : BucketIteratorModel.Iterator
+  {
+    BucketIteratorModel.Iterator(it.next, it.i as int, it.decreaser)
+  }
 
   datatype BucketFormat =
       | BFTree
@@ -730,18 +737,37 @@ module BucketImpl {
       reveal_ReprSeqDisjoint();
     }
 
-    predicate WFIter(it: Iterator)
+    protected predicate WFIter(it: Iterator)
     reads this, this.Repr
     ensures this.WFIter(it) ==> this.Inv()
     ensures this.WFIter(it) ==> BucketIteratorModel.WFIter(I(), IIterator(it))
+    {
+      && this.Inv()
+      && BucketIteratorModel.WFIter(I(), IIterator(it))
+    }
+
+    static function method makeIter(ghost bucket: Bucket, idx: uint64)
+        : (it': Iterator)
+    requires WFBucket(bucket)
+    requires |bucket.keys| == |bucket.msgs|
+    requires 0 <= idx as int <= |bucket.keys|
+    ensures IIterator(it')
+      == BucketIteratorModel.iterForIndex(bucket, idx as int)
+    {
+      Iterator(
+          (if idx as int == |bucket.keys| then BucketIteratorModel.Done
+              else BucketIteratorModel.Next(bucket.keys[idx], bucket.msgs[idx])),
+          idx,
+          |bucket.keys| - idx as int)
+    }
 
     method IterStart() returns (it': Iterator)
     requires Inv()
     ensures this.WFIter(it')
     ensures IIterator(it') == BucketIteratorModel.IterStart(I())
     {
-      assume false;
-      it' := Iterator(0);
+      BucketIteratorModel.reveal_IterStart();
+      it' := makeIter(I(), 0);
     }
 
     method IterFindFirstGte(key: Key) returns (it': Iterator)
@@ -749,10 +775,10 @@ module BucketImpl {
     ensures this.WFIter(it')
     ensures IIterator(it') == BucketIteratorModel.IterFindFirstGte(I(), key)
     {
-      assume false;
+      BucketIteratorModel.reveal_IterFindFirstGte();
       var pkv := GetPkv();
-      var i: uint64 := PSA.IndexOfFirstKeyGte(pkv.keys, key);
-      return Iterator(i);
+      var i: uint64 := PSA.BinarySearchIndexOfFirstKeyGte(pkv.keys, key);
+      it' := makeIter(I(), i);
     }
 
     method IterFindFirstGt(key: Key) returns (it': Iterator)
@@ -760,10 +786,10 @@ module BucketImpl {
     ensures this.WFIter(it')
     ensures IIterator(it') == BucketIteratorModel.IterFindFirstGt(I(), key)
     {
-      assume false;
+      BucketIteratorModel.reveal_IterFindFirstGt();
       var pkv := GetPkv();
-      var i: uint64 := PSA.IndexOfFirstKeyGt(pkv.keys, key);
-      return Iterator(i);
+      var i: uint64 := PSA.BinarySearchIndexOfFirstKeyGt(pkv.keys, key);
+      it' := makeIter(I(), i);
     }
 
     method IterInc(it: Iterator) returns (it': Iterator)
@@ -773,8 +799,8 @@ module BucketImpl {
     ensures this.WFIter(it')
     ensures IIterator(it') == BucketIteratorModel.IterInc(I(), IIterator(it))
     {
-      assume false;
-      return Iterator(it.i + 1);
+      BucketIteratorModel.reveal_IterInc();
+      it' := makeIter(I(), it.i + 1);
     }
 
     method GetNext(it: Iterator) returns (next : BucketIteratorModel.IteratorOutput)
@@ -782,18 +808,22 @@ module BucketImpl {
     requires this.WFIter(it)
     ensures next == IIterator(it).next
     {
-      assume false;
       var pkv;
       
       if format.BFPkv? {
         pkv := this.pkv;
       } else {
+        assume KMBBOps.NumElements(tree) < Uint64UpperBound();
         pkv := tree_to_pkv(tree);
       }
+
+      BucketIteratorModel.lemma_NextFromIndex(I(), IIterator(it));
         
       if it.i == |pkv.keys.offsets| as uint64 {
         next := BucketIteratorModel.Done;
       } else {
+        //assert BucketIteratorModel.WFIter(I(), IIterator(it));
+        //assert PackedKV.PSA.I(pkv.keys) == I().keys;
         next := BucketIteratorModel.Next(PackedKV.GetKey(pkv, it.i), PackedKV.GetMessage(pkv, it.i));
       }
     }

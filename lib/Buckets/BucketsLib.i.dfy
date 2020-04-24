@@ -11,6 +11,7 @@ include "../../MapSpec/MapSpec.s.dfy"
 // how pushing messages down a tree towards a child still produces equivalent
 // values as viewed through the Message chain.
 //
+// NOTE(travis): this should probably be split up into two things: (i) a library of utilities for describing the relationship between a map and a pair of (possibly sorted) lists and (ii) actual application-bucket operations. Furthermore, the whole thing where a Bucket has *both* the list representation and map representation was a bit of a crutch and should probably be changed.
 
 module BucketsLib {
   import opened PivotsLib
@@ -148,7 +149,6 @@ module BucketsLib {
   {
     reveal_IsStrictlySorted();
   }
-
   
   lemma WFWellMarshalledBucketMap(bucket: Bucket, key: Key)
     requires WFBucket(bucket)
@@ -167,6 +167,19 @@ module BucketsLib {
       BucketDropLastWF(bucket);
       BucketDropLastWellMarshalled(bucket);
       WFWellMarshalledBucketMap(bdl, key);
+    }
+  }
+
+  lemma WFWellMarshalledBucketMapI(bucket: Bucket, i: int)
+  requires WFBucket(bucket)
+  requires BucketWellMarshalled(bucket)
+  requires 0 <= i < |bucket.keys|
+  ensures bucket.keys[i] in bucket.b
+  ensures bucket.b[bucket.keys[i]] == bucket.msgs[i]
+  {
+    WFWellMarshalledBucketMap(bucket, bucket.keys[i]);
+    assert LargestLte(bucket.keys, bucket.keys[i]) == i by {
+      reveal_IsStrictlySorted();
     }
   }
 
