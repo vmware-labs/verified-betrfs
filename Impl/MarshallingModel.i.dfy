@@ -48,6 +48,7 @@ module MarshallingModel {
 
   import MM = MutableMap
 
+  type Key = Keyspace.Element
   type Reference = BC.Reference
   type Sector = SM.Sector
   type Node = SM.Node

@@ -882,21 +882,6 @@ void sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node) {
 
     if ((((bucket->format)).is_BucketFormat_BFTree())) {
       type = "tree";
-    } else if ((((bucket->format)).is_BucketFormat_BFKvl())) {
-      KVList_Compile::Kvl kvl = bucket->GetKvl();
-      DafnySequence<DafnySequence<uint8>> keys = kvl.keys;
-      for (size_t i=0; i<keys.len; i++) {
-        DafnySequence<uint8> key = keys.start[i];
-        visit_uptr(&observed_ptrs, key);
-      }
-      DafnySequence<ValueMessage_Compile::Message> messages = kvl.messages;
-      for (size_t i=0; i<messages.len; i++) {
-        auto message = messages.start[i];
-        assert(message.is_Message_Define());
-        DafnySequence<uint8> value_message = message.dtor_value();
-        visit_uptr(&observed_ptrs, value_message);
-      }
-      type = "kvl";
     } else if ((((bucket->format)).is_BucketFormat_BFPkv())) {
       type = "pkv";
       auto pkv = bucket->pkv;

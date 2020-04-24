@@ -52,7 +52,8 @@ module MarshallingImpl {
   import PackedKVMarshalling
   import PSA = PackedStringArray
   import PSAM = PackedStringArrayMarshalling
-  
+
+  type Key = Keyspace.Element
   type Reference = IMM.Reference
   type Sector = SI.Sector
 

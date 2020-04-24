@@ -35,7 +35,8 @@ module Marshalling {
   import PackedKV
   import opened SectorType
   import PackedKVMarshalling
-  
+
+  type Key = Keyspace.Element
   type Reference = BC.Reference
   type Node = BT.G.Node
 

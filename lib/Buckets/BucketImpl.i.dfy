@@ -36,25 +36,12 @@ module BucketImpl {
   import BucketIteratorModel
   import Pivots = PivotsLib
   import opened BucketModel
-  import opened KVLPFlush = KVListPartialFlush
   import opened DPKV = DynamicPkv
   import KMBPKVOps
   
   type TreeMap = KMB.Node
 
-  method tree_to_kvl(tree: TreeMap)
-  returns (kvl : KVList.Kvl)
-  requires KMB.WF(tree)
-  requires KMBBOps.NumElements(tree) < Uint64UpperBound()
-  ensures KVList.WF(kvl)
-  ensures KVList.I(kvl) == B(KMB.Interpretation(tree))
-  {
-    var s := KMBBOps.ToSeq(tree);
-    kvl := KVList.Kvl(s.0[..], s.1[..]);
-    assume false;
-    kvl := KVList.AmassKvl(kvl);  // TODO skip a seq-assembly step here
-  }
-
+  // TODO(robj): get rid of these last vestiges of kvl by converting directly from pkv to tree.
   method kvl_to_tree(kvl : KVList.Kvl)
   returns (tree: TreeMap)
   requires KVList.WF(kvl)
@@ -84,31 +71,6 @@ module BucketImpl {
       i := i + 1;
     }
     return KVList.Kvl(keys[..], messages[..]);
-  }
-
-  method kvl_to_pkv(kvl: KVList.Kvl) returns (pkv: PackedKV.Pkv)
-    requires KVList.WF(kvl)
-    requires |kvl.keys| < Uint64UpperBound()
-    ensures PackedKV.WF(pkv)
-    ensures KVList.I(kvl) == PackedKV.I(pkv)
-  {
-    var dpkv := new DPKV.DynamicPkv.PreSized(DPKV.EmptyCapacity());
-    var i: uint64 := 0;
-
-    while i < |kvl.keys| as uint64
-      invariant i as int <= |kvl.keys|
-      invariant dpkv.WF()
-      invariant fresh(dpkv.Repr)
-    {
-      var key := kvl.keys[i];
-      var msg := kvl.messages[i];
-      assume PKV.canAppend(dpkv.toPkv(), key, PKV.Message_to_bytestring(msg));
-      dpkv.Append(key, msg);
-      i := i + 1;
-    }
-
-    pkv := dpkv.toPkv();
-    assume false;
   }
 
   method pkv_to_tree(pkv: PackedKV.Pkv)
@@ -214,25 +176,6 @@ module BucketImpl {
       assume false;
     }
     
-    method GetKvl() returns (kv: KVList.Kvl)
-    requires Inv()
-    ensures KVList.WF(kv)
-    ensures KVList.I(kv) == Bucket
-    {
-      if (format.BFTree?) {
-        NumElementsLteWeight(B(KMB.Interpretation(tree)));
-        assume false;
-        kv := tree_to_kvl(tree);
-      } else {
-        var isSorted := PackedKV.ComputeIsSorted(pkv);
-        if (!isSorted) {
-          // TODO need to sort
-          print "pkv is not sorted\n";
-        }
-        kv := pkv_to_kvl(pkv);
-      }
-    }
-
     method GetPkv() returns (pkv: PKV.Pkv)
     requires Inv()
     ensures PKV.WF(pkv)
