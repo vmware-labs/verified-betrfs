@@ -144,7 +144,7 @@ module MarshallingImpl {
   { 
     var pkv := PackedKVMarshalling.FromVal(v);
     if pkv.Some? {
-      var b := new BucketImpl.MutBucket.InitFromPkv(pkv.value);
+      var b := new BucketImpl.MutBucket.InitFromPkv(pkv.value, false);
       s := Some(b);
     } else {
       s := None;

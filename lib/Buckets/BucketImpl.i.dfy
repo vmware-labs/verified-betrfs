@@ -159,11 +159,12 @@ module BucketImpl {
       this.Bucket := EmptyBucket();
     }
 
-    constructor InitFromPkv(pkv: PackedKV.Pkv)
-    requires PackedKV.WF(pkv)
-    ensures I() == PackedKV.I(pkv)
-    ensures Inv()
-    ensures fresh(Repr)
+    constructor InitFromPkv(pkv: PackedKV.Pkv, is_sorted: bool)
+      requires PackedKV.WF(pkv)
+      requires is_sorted ==> BucketWellMarshalled(PackedKV.I(pkv))
+      ensures I() == PackedKV.I(pkv)
+      ensures Inv()
+      ensures fresh(Repr)
     {
       this.format := BFPkv;
       this.pkv := pkv;
@@ -171,7 +172,7 @@ module BucketImpl {
       this.Repr := {this};
       this.Bucket := PackedKV.I(pkv);
       this.tree := null;
-      this.sorted := false;
+      this.sorted := is_sorted;
       new;
       assume Weight as int == WeightBucket(Bucket);
       assume WFBucket(Bucket);
@@ -491,7 +492,7 @@ module BucketImpl {
       var pkv := GetPkv();
       //WeightSplitBucketLeft(Bucket, pivot);
       var pkvleft := PKV.SplitLeft(pkv, pivot);
-      left := new MutBucket.InitFromPkv(pkvleft);
+      left := new MutBucket.InitFromPkv(pkvleft, sorted);
     }
 
     method SplitRight(pivot: Key)
@@ -504,7 +505,7 @@ module BucketImpl {
       var pkv := GetPkv();
       //WeightSplitBucketRight(Bucket, pivot);
       var pkvright := PKV.SplitRight(pkv, pivot);
-      right := new MutBucket.InitFromPkv(pkvright);
+      right := new MutBucket.InitFromPkv(pkvright, sorted);
     }
 
     method SplitLeftRight(pivot: Key)
@@ -693,7 +694,7 @@ module BucketImpl {
     ensures this.Bucket == bucket'.Bucket
     {
       if format.BFPkv? {
-        bucket' := new MutBucket.InitFromPkv(pkv);
+        bucket' := new MutBucket.InitFromPkv(pkv, sorted);
         return;
       }
 
@@ -702,7 +703,7 @@ module BucketImpl {
         assume false; // NumElements issue
         pkv := tree_to_pkv(tree);
       } 
-      bucket' := new MutBucket.InitFromPkv(pkv);
+      bucket' := new MutBucket.InitFromPkv(pkv, true);
     }
 
     static method CloneSeq(buckets: seq<MutBucket>) returns (buckets': seq<MutBucket>)
@@ -865,14 +866,14 @@ module BucketImpl {
     
     var result := MergeToChildren(topPkv, pivots, botPkvs[..], MaxTotalBucketWeightUint64() - totalWeight);
 
-    newtop := new MutBucket.InitFromPkv(result.top);
+    newtop := new MutBucket.InitFromPkv(result.top, true);
 
     var anewbots := new MutBucket[|result.bots| as uint64];
     i := 0;
     while i < |result.bots| as uint64
       invariant i as nat <= |result.bots|
     {
-      anewbots[i] := new MutBucket.InitFromPkv(result.bots[i]);
+      anewbots[i] := new MutBucket.InitFromPkv(result.bots[i], true);
       i := i + 1;
     }
 
