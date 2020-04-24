@@ -47,11 +47,17 @@ module Marshalling {
     PackedKVMarshalling.grammar()
   }
 
+  function method PivotTableGrammar() : G
+    ensures ValidGrammar(PivotTableGrammar())
+  {
+    GArray(GByteArray)
+  }
+    
   function method PivotNodeGrammar() : G
   ensures ValidGrammar(PivotNodeGrammar())
   {
     GTuple([
-        GKeyArray, // pivots
+        PivotTableGrammar(),
         GUint64Array, // children
         GArray(BucketGrammar()) 
     ])
@@ -86,6 +92,19 @@ module Marshalling {
 
   /////// Conversion to PivotNode
 
+  function pivotTableWeight(keys: seq<Key>) : nat
+  {
+    if |keys| == 0 then
+      0
+    else
+      pivotTableWeight(DropLast(keys)) + SizeOfV(VUint64(0)) + |Last(keys)|
+  }
+
+  lemma pivotTableWeightUpperBound(keys: seq<Key>)
+    ensures pivotTableWeight(keys) <= |keys| * (SizeOfV(VUint64(0)) + KeyType.MaxLen() as int)
+  {
+  }
+  
   predicate isStrictlySortedKeySeqIterate(a: seq<Key>, i: int)
   requires 1 <= i <= |a|
   decreases |a| - i
@@ -117,25 +136,46 @@ module Marshalling {
     )
   }
 
+  function keyValSeqToKeySeq(vs: seq<V>) : (result: Option<seq<Key>>)
+    requires forall i | 0 <= i < |vs| :: ValidVal(vs[i])
+    requires forall i | 0 <= i < |vs| :: ValInGrammar(vs[i], GByteArray)
+    ensures result.Some? <==> (forall i | 0 <= i < |vs| :: |vs[i].b| <= KeyType.MaxLen() as int)
+    ensures result.Some? ==> |result.value| == |vs|
+    ensures result.Some? ==> (forall i | 0 <= i < |vs| :: result.value[i] == vs[i].b)
+  {
+    if |vs| == 0 then
+      Some([])
+    else (
+      var prefix := keyValSeqToKeySeq(DropLast(vs));
+      var last := Last(vs).b;
+      if prefix.Some? && |last| <= KeyType.MaxLen() as int then (
+        var klast: Key := last;
+        Some(prefix.value + [ klast ])
+      ) else
+        None
+    )
+  }
+  
   function valToStrictlySortedKeySeq(v: V) : (s : Option<seq<Key>>)
   requires ValidVal(v)
-  requires ValInGrammar(v, GKeyArray)
+  requires ValInGrammar(v, PivotTableGrammar())
   ensures s.Some? ==> Keyspace.IsStrictlySorted(s.value)
-  ensures s.Some? ==> |s.value| == |v.ka|
-  decreases |v.ka|
+  ensures s.Some? ==> |s.value| == |v.a|
+  decreases |v.a|
   {
-    if isStrictlySortedKeySeq(v.ka) then
-      var blah : seq<Key> := v.ka;
-      Some(v.ka)
+    var keys := keyValSeqToKeySeq(v.a);
+    
+    if keys.Some? && isStrictlySortedKeySeq(keys.value) then
+      keys
     else
       None
   }
 
   function valToPivots(v: V) : (s : Option<seq<Key>>)
   requires ValidVal(v)
-  requires ValInGrammar(v, GKeyArray)
+  requires ValInGrammar(v, PivotTableGrammar())
   ensures s.Some? ==> Pivots.WFPivots(s.value)
-  ensures s.Some? ==> |s.value| == |v.ka|
+  ensures s.Some? ==> |s.value| == |v.a|
   {
     var s := valToStrictlySortedKeySeq(v);
     if s.Some? && (|s.value| > 0 ==> |s.value[0]| != 0) then (
@@ -196,7 +236,7 @@ module Marshalling {
     assert ValidVal(v.t[0]);
     assert ValidVal(v.t[1]);
     assert ValidVal(v.t[2]);
-    var pivots_len := |v.t[0].ka| as uint64;
+    var pivots_len := |v.t[0].a| as uint64;
     var children_len := |v.t[1].ua| as uint64;
     var buckets_len := |v.t[2].a| as uint64;
 
