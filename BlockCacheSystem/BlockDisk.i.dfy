@@ -204,8 +204,6 @@ abstract module BlockMachine {
 
   type Variables
   type Constants
-  type Location(==)
-  type Sector
   import opened ViewOp
 
   predicate Init(k: Constants, s: Variables)
