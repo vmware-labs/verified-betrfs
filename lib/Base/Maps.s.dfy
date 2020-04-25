@@ -209,4 +209,18 @@ module {:extern} Maps {
 	{
 	  if key in m then Some(m[key]) else None
 	}
+
+  lemma MapsEqualExtensionality<A,B>(a: map<A,B>, b: map<A,B>)
+    requires forall key | key in a :: MapsTo(b, key, a[key])
+    requires forall key | key in b :: MapsTo(a, key, b[key])
+  {
+  }
+
+  lemma MapDisjointUnionCardinality<A,B>(a: map<A, B>, b: map<A, B>)
+    requires a.Keys !! b.Keys
+    ensures |MapDisjointUnion(a, b)| == |a| + |b|
+  {
+    var u := MapDisjointUnion(a, b);
+    assert |u.Keys| == |a.Keys| + |b.Keys|;
+  }
 }

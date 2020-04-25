@@ -6,8 +6,8 @@ include "../Base/mathematics.i.dfy"
 abstract module BtreeModel {
   import opened Seq = Sequences
   import opened Maps
-  import KeysImpl = Lexicographic_Byte_Order_Impl
-  import Keys = KeysImpl.Ord
+  //import KeysImpl = Lexicographic_Byte_Order_Impl
+  import Keys : Total_Order //= KeysImpl.Ord
   import Integer_Order
   import Math = Mathematics
   
@@ -1418,7 +1418,41 @@ abstract module BtreeModel {
     else NumElementsOfChildren(node.children)
   }
 
-  lemma InterpretationDisjointUnion(node: Node)
+  lemma InterpretationsDisjoint(node: Node)
+    requires WF(node)
+    requires node.Index?
+    requires 1 < |node.children|
+    ensures WF(SubIndex(node, 0, |node.children|-1))
+    ensures Interpretation(SubIndex(node, 0, |node.children|-1)).Keys !!
+            Interpretation(Last(node.children)).Keys
+    // ensures Interpretation(node) ==
+    //   MapDisjointUnion(Interpretation(SubIndex(node, 0, |node.children|-1)),
+    //                    Interpretation(Last(node.children)))
+  {
+    var left := SubIndex(node, 0, |node.children|-1);
+    var rightchild := Last(node.children);
+    SubIndexPreservesWF(node, 0, |node.children|-1);
+    forall key | key in Interpretation(rightchild)
+      ensures key !in Interpretation(left)
+    {
+      if key in Interpretation(left) {
+        var childidx := Keys.LargestLte(left.pivots, key) + 1;
+        InterpretationInheritance(left, key);
+        AllKeysIsConsistentWithInterpretation(left.children[childidx], key);
+        assert AllKeysBelowBound(node, childidx);
+        //Keys.IsStrictlySortedImpliesLte(node.pivots, childidx, |node.pivots|-1);
+        AllKeysIsConsistentWithInterpretation(rightchild, key);
+        assert AllKeysAboveBound(node, |node.children|-1);
+      }
+    }
+    if Interpretation(left).Keys * Interpretation(rightchild).Keys != {} {
+      assert false;
+    }
+    assert Interpretation(left).Keys !! Interpretation(rightchild).Keys;
+    //assert Interpretation(node) == MapDisjointUnion(Interpretation(left), Interpretation(rightchild));
+  }
+
+  lemma InterpretationsDisjointUnion(node: Node)
     requires WF(node)
     requires node.Index?
     requires 1 < |node.children|
@@ -1426,18 +1460,104 @@ abstract module BtreeModel {
     ensures Interpretation(SubIndex(node, 0, |node.children|-1)).Keys !!
             Interpretation(Last(node.children)).Keys
     ensures Interpretation(node) ==
-      MapDisjointUnion(Interpretation(SubIndex(node, 0, |node.children|-1)),
-                       Interpretation(Last(node.children)))
+       MapDisjointUnion(Interpretation(SubIndex(node, 0, |node.children|-1)),
+                        Interpretation(Last(node.children)))
   {
-    assume false;
+    InterpretationsDisjoint(node);
+    var inode := Interpretation(node);
+    var left := SubIndex(node, 0, |node.children|-1);
+    var ileft := Interpretation(left);
+    var rightchild := Last(node.children);
+    var irightchild := Interpretation(rightchild);
+    var right := Grow(rightchild);
+    GrowPreservesWF(rightchild);
+    GrowPreservesInterpretation(rightchild);
+    GrowPreservesAllKeys(rightchild);
+    var iright := Interpretation(right);
+    var pivot := Last(node.pivots);
+
+    assert AllKeysBelowBound(node, |node.pivots|-1);
+    assert AllKeysAboveBound(node, |node.pivots|);
+    assert SplitIndex(node, left, right, pivot);
+    SplitNodeInterpretation(node, left, right, pivot);
+    
+    var rileft := Maps.MapIRestrict(ileft, iset k | Keys.lt(k, pivot));
+    var riright := Maps.MapIRestrict(iright, iset k | Keys.lte(pivot, k));
+
+    forall k | k in ileft
+      ensures Keys.lt(k, pivot)
+    {
+      var childidx := Keys.LargestLte(left.pivots, k) + 1;
+      InterpretationInheritance(left, k);
+      if childidx < |left.children| - 1 {
+        assert AllKeysBelowBound(left, childidx);
+      }
+      AllKeysIsConsistentWithInterpretation(left, k);
+    }
+
+    forall k | k in iright
+      ensures Keys.lte(pivot, k)
+    {
+      AllKeysIsConsistentWithInterpretation(right, k);
+    }
   }
-                       
+  
+  
+  lemma NumElementsOfChildrenMatchesInterpretation(nodes: seq<Node>, pivots: seq<Key>)
+    requires WF(Index(pivots, nodes))
+    ensures NumElements(Index(pivots, nodes)) == |Interpretation(Index(pivots, nodes))|
+  {
+    var parent := Index(pivots, nodes);
+    if |nodes| == 1 {
+      assert AllKeys(parent) == AllKeys(nodes[0]) by {
+        reveal_AllKeys();
+      }
+      forall key | key in Interpretation(parent)
+        ensures MapsTo(Interpretation(nodes[0]), key, Interpretation(parent)[key])
+      {
+        InterpretationInheritance(parent, key);
+      }
+      forall key | key in Interpretation(nodes[0])
+        ensures MapsTo(Interpretation(parent), key, Interpretation(nodes[0])[key])
+      {
+        InterpretationDelegation(parent, key);
+      }
+      MapsEqualExtensionality(Interpretation(parent), Interpretation(nodes[0]));
+      assert NumElementsOfChildren(nodes) == NumElements(nodes[0]);
+      NumElementsMatchesInterpretation(nodes[0]);
+      calc {
+        //NumElements(parent);
+        //NumElementsOfChildren(nodes);
+        //NumElements(nodes[0]);
+        |Interpretation(nodes[0])|;
+        { assert Interpretation(nodes[0]) == Interpretation(parent); }
+        |Interpretation(parent)|;
+      }
+    } else {
+      var left := Index(DropLast(pivots), DropLast(nodes));
+      var right := Index([], nodes[|nodes|-1..]);
+      var pivot := Last(pivots);
+      assert AllKeysBelowBound(parent, |nodes|-2);
+      assert AllKeysAboveBound(parent, |nodes|-1);
+      SplitIndexPreservesWF(parent, left, right, pivot);
+      NumElementsOfChildrenMatchesInterpretation(left.children, left.pivots);
+      NumElementsMatchesInterpretation(right.children[0]);
+      InterpretationsDisjointUnion(parent);
+      calc {
+        NumElements(parent);
+        //NumElementsOfChildren(left.children) + NumElements(right.children[0]);
+        //|Interpretation(left)| + |Interpretation(right)|;
+        |Interpretation(left)| + |Interpretation(right.children[0])|;
+        { MapDisjointUnionCardinality(Interpretation(left), Interpretation(right.children[0])); }
+        |Interpretation(parent)|;
+      }
+    }
+  }
+  
   lemma NumElementsMatchesInterpretation(node: Node)
     requires WF(node)
     ensures NumElements(node) == |Interpretation(node)|
-    decreases if node.Index? then node.children else []
   {
-    assume false;
     var interp := Interpretation(node);
     reveal_Interpretation();
     if node.Leaf? {
@@ -1447,27 +1567,8 @@ abstract module BtreeModel {
       }
       NoDupesSetCardinality(node.keys);
       assert interp.Keys == Set(node.keys);
-    } else if |node.children| == 1 {
-      var child := node.children[0];
-      var ichild := Interpretation(child);
-      forall key | key in ichild
-        ensures MapsTo(interp, key, ichild[key])
-      {
-        AllKeysIsConsistentWithInterpretation(child, key);
-        reveal_AllKeys();
-      }
-      assert interp == Interpretation(child);
-      NumElementsMatchesInterpretation(child);
-      assert NumElementsOfChildren(node.children) == NumElements(child);
     } else {
-      var prefix := SubIndex(node, 0, |node.children|-1);
-      SubIndexPreservesWF(node, 0, |node.children|-1);
-      var iprefix := Interpretation(prefix);
-      var child := Last(node.children);
-      var ichild := Interpretation(child);
-      NumElementsMatchesInterpretation(prefix);
-      NumElementsMatchesInterpretation(child);
-      InterpretationDisjointUnion(node);
+      NumElementsOfChildrenMatchesInterpretation(node.children, node.pivots);
     }
   }
   
