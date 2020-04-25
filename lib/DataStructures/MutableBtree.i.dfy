@@ -17,7 +17,7 @@ abstract module MutableBtree {
   export API provides WF, Interpretation, EmptyTree, Insert, Query, Empty, MinKey, MaxKey, NativeTypes, Model, Options, Maps reveals Node, NodeContents, Key, Value
   export All reveals *
     
-  type Key = Model.Keys.Element
+  type Key = Model.Key
   type Value = Model.Value
 
   function method MaxKeysPerLeaf() : uint64
@@ -286,7 +286,9 @@ abstract module MutableBtree {
     var posplus1: uint64 := Model.KeysImpl.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, needle);
     assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
     result := Query(node.contents.children[posplus1], needle);
-    assume result == MapLookupOption(Interpretation(node), needle);
+    if result.Some? {
+      Model.InterpretationDelegation(I(node), needle);
+    }
   }
 
   method Query(node: Node, needle: Key) returns (result: Option<Value>)
@@ -686,7 +688,6 @@ abstract module MutableBtree {
 
     reveal_I();
     assert node.contents.pivots[from..to-1] == I(node).pivots[from..to-1];
-    assume I(subnode) == Model.SubIndex(I(node), from as int, to as int);
   }
 
   method SplitIndex(node: Node, nleft: uint64) returns (right: Node, pivot: Key)
