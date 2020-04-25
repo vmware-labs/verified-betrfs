@@ -28,7 +28,7 @@ STDLIB=-stdlib=libc++
 # Uncomment to enable gprof
 #GPROF_FLAGS=-pg
 
-WANT_MALLOC_ACCOUNTING=false
+WANT_MALLOC_ACCOUNTING=true
 ifeq "$(WANT_MALLOC_ACCOUNTING)" "true"
 	MALLOC_ACCOUNTING_DEFINE=-DMALLOC_ACCOUNTING=1
 else
@@ -360,6 +360,8 @@ ACCOUNTING_OBJECTS=ycsb/ioaccounting.o ycsb/stataccounting.o
 # NOTE: this uses jemalloc (sudo apt install libjemalloc-dev)
 JEMALLOC_LIBDIR=/usr/lib/x86_64-linux-gnu/
 JEMALLOC_LIBS=jemalloc
+#JEMALLOC_OPTS=-DVERI_USE_JEMALLOC -L$(JEMALLOC_LIBDIR) -Wl,-rpath,$(JEMALLOC_LIBDIR) -ljemalloc $(JEMALLLOC_LIBS)
+JEMALLOC_OPTS=
 
 build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/YcsbMain.o $(ACCOUNTING_OBJECTS)
 	# NOTE: this uses c++17, which is required by hdrhist
@@ -371,7 +373,7 @@ build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/Y
 			$(VERIBETRFS_YCSB_O_FILES) \
 			$(ACCOUNTING_OBJECTS) \
 			build/YcsbMain.o \
-			-L$(JEMALLOC_LIBDIR) -Wl,-rpath,$(JEMALLOC_LIBDIR) -ljemalloc $(JEMALLLOC_LIBS) \
+			$(JEMALLOC_OPTS) \
 			-lycsbc-libcpp -lpthread -ldl $(LDFLAGS)
 
 build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp $(ACCOUNTING_OBJECTS)
