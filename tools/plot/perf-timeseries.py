@@ -13,35 +13,10 @@ from TimeSeries import *
 def plot_perf_timeseries(exp):
     """exp: Experiment"""
 
-    plotHelper = PlotHelper(10)
-    #timeSeries = TimeSeries(exp, plotHelper)
-
-    def plotThroughput(ax):
-        ax.set_title("op throughput")
-        #ax.set_ylabel("Kops/sec")
-        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, scale=K)))
-        ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, window=1000*K(), scale=K)))
-        line.set_label("tput")
-        ax.legend(loc="lower left")
-        ax.set_yscale("log")
-        ax.set_ylim(bottom=0.1)
-        ax.grid(which="major", color="black")
-        ax.grid(which="minor", color="#dddddd")
-        
-        for phase,opn in exp.phase_starts.items():
-            #print (phase,opn)
-            ax.text(opn/K(), 0, phase)
-
-        a2 = ax.twinx()
-        def elapsedTime(opn):
-            return exp.elapsed[opn]
-        line, = a2.plot(*plotVsKop(ax, exp, elapsedTime), color="green")
-        line.set_label("elapsed")
-        a2.set_ylabel("s")
-        a2.legend(loc="center right")
+    plotHelper = PlotHelper(10, scale=1.5)
 
     try:
-        plotThroughput(plotHelper.nextAxis(depth=2))
+        plotThroughput(plotHelper.nextAxis(depth=2), [exp])
     except: raise
 
     class IOMode:
@@ -112,6 +87,29 @@ def plot_perf_timeseries(exp):
         line.set_label("OS mem")
         line, = ax.plot(*plotVsKop(ax, exp, singleTrace(ax, exp.os_map_heap, scale=Gi)))
         line.set_label("OS heap")
+        line, = ax.plot(*plotVsKop(ax, exp, singleTrace(ax, exp.jem_allocated, scale=Gi)))
+        line.set_label("jem allocated")
+        line, = ax.plot(*plotVsKop(ax, exp, singleTrace(ax, exp.jem_active, scale=Gi)))
+        line.set_label("jem active")
+        line, = ax.plot(*plotVsKop(ax, exp, singleTrace(ax, exp.jem_mapped, scale=Gi)))
+        line.set_label("jem mapped")
+
+        def annotate_overhead():
+            xs,ys = plotVsKop(ax, exp, singleTrace(ax, exp.jem_active, scale=Gi))
+            active_last = ys[-1]
+            xs,ys = plotVsKop(ax, exp, singleTrace(ax, exp.os_map_total, scale=Gi))
+            os_last = ys[-1]
+            ovh = "%.2fX" % (os_last/active_last)
+            ax.text(xs[-1], os_last, ovh)
+
+            xs,ys = plotVsKop(ax, exp, singleTrace(ax, exp.jem_mapped, scale=Gi))
+            mapped_last=ys[-1]
+            ovh = "%.2fX" % (mapped_last/active_last)
+            ax.text(xs[-1], mapped_last, ovh)
+        try:
+            annotate_overhead()
+        except: pass
+
         ax.set_ylim(bottom=0)
         ax.legend()
     plotMemory(plotHelper.nextAxis())
@@ -133,11 +131,48 @@ def plot_perf_timeseries(exp):
     def plotVeriInternalMem(ax):
         ax.set_title("mem from inside veri")
         traceNames = ["bucket-message-bytes", "bucket-key-bytes", "pivot-key-bytes"]
+        def StackFor(count):
+            return [exp.accum[n] for n in traceNames[:count+1]]
+
+#        def debugBlock():
+#            bmbTrace = exp.accum["bucket-message-bytes"]
+#            xxs = list(bmbTrace.data.keys())[:3]
+#            print("xxs", xxs)
+#            yys = [bmbTrace[x] for x in xxs]
+#            print("yys", yys)
+#            print("at 72", bmbTrace[72])
+#            idx = bisect.bisect(bmbTrace.sortedKeys(), 72)
+#            print("idx for 72", idx)
+#            xs,ys = plotVsKop(ax, exp, singleTrace(ax, exp.accum["bucket-message-bytes"]))
+#            print("xs", xs[:3])
+#            print("ys", ys[:3])
+#            xs,ys = plotVsKop(ax, exp, singleTrace(ax, StackedTraces(StackFor(1))))
+#            print("xs", xs[:3])
+#            print("ys", ys[:3])
+#        debugBlock()
+
+        def plotWithLabel(lam, lbl, **plotkwargs):
+            xs,ys = plotVsKop(ax, exp, lam)
+            line, = ax.plot(xs, ys, **plotkwargs)
+            line.set_label(lbl + (" %.2f%sB" % (ys[-1], Gi.prefix)))
+
         for stackc in list(range(len(traceNames)))[::-1]:
-            stack = [exp.accum[n] for n in traceNames[:stackc+1]]
+            stack = StackFor(stackc)
             stackedTraces = StackedTraces(stack)
-            line, = ax.plot(*plotVsKop(ax, exp, singleTrace(ax, stackedTraces, scale=Gi)))
-            line.set_label(("" if stackc==0 else "+") + traceNames[stackc])
+            plotWithLabel(singleTrace(ax, stackedTraces, scale=Gi),
+                    ("" if stackc==0 else "+") + traceNames[stackc])
+
+        plotWithLabel(singleTrace(ax, exp.jem_allocated, scale=Gi), "jem_allocated", linestyle="dotted")
+
+        def annotate_overhead():
+            stackedTraces = StackedTraces(StackFor(len(traceNames)))
+            xs,ys = plotVsKop(ax, exp, singleTrace(ax, stackedTraces, scale=Gi))
+            total_last = ys[-1]
+            xs,ys = plotVsKop(ax, exp, singleTrace(ax, exp.jem_allocated, scale=Gi))
+            jem_last = ys[-1]
+            ax.text(xs[-1], ys[-1], "%.2fX" % (jem_last/total_last))
+        annotate_overhead()
+
         ax.legend()
         ax.set_ylim(bottom=0)
     try: plotVeriInternalMem(plotHelper.nextAxis())

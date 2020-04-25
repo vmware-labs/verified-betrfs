@@ -903,7 +903,26 @@ reading 8MB from the *page cache* was actually a bottleneck; we're using
 Upcoming strategies:
 - repro the best case with conservative (MALLOC_OVERHEAD=2) cgroups.
   [malloc-exp/veri-1gb-512mb-8mb-wka-nosync-disk-1.data]
+- try dropping in a better malloc (jemalloc) to help with fragmentation
+  -- wah. It sucked. Still at 1.82X.
+- see if PackedKVs can help with fragmentation
 - try a dynamic oracle that watches the system page usage to try to
   stay tight on it.
-- see if PackedKVs can help with fragmentation
-- try dropping in a better malloc (gemalloc) to help with fragmentation
+- rob's compacting allocator
+
+jemalloc looks pretty good on fragmentation; 1.1X:
+http://ithare.com/testing-memory-allocators-ptmalloc2-tcmalloc-hoard-jemalloc-while-trying-to-simulate-real-world-loads/
+
+tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb config-8mb > malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-jemalloc-1.data
+
+jemalloc mysteries:
+- how is it that we start out with 0.9GB allocated ("mem from inside veri"),
+  never seeing the climb?
+- why does jem go behind that?
+  * Resolution: plot library was extrapolating Traces to the left of their
+  first observation. We don't get the first accumulator data until 3Mops.
+- why does jem see 18% more stuff than we think is on the heap?
+  * Investigation: turn on malloc accounting again!
+- is it possible that the gap from jem_mapped to os_mem is not billed to us?
+- all reports of memory allocation climb to 1GB way sooner than we exhaust
+  the veri cache

@@ -101,9 +101,12 @@ def windowedPair(ax, num_trace, denom_trace, scale=Unit, window=100*K()):
     ax.set_ylabel("%s%s/%s" % (scale, num_trace.units, denom_trace.units))
     def val(opn):
         opnBefore = opn - window
-        if opnBefore < 0: return None
-        num = num_trace[opn] - num_trace[opnBefore]
-        denom = denom_trace[opn] - denom_trace[opnBefore]
+        #if opnBefore < 0: return None
+        try:
+            num = num_trace[opn] - num_trace[opnBefore]
+            denom = denom_trace[opn] - denom_trace[opnBefore]
+        except TypeError:   # None because some opn isn't defined
+            return None
         if denom == 0:
             return None
         rate = num/scale()/denom
@@ -112,4 +115,39 @@ def windowedPair(ax, num_trace, denom_trace, scale=Unit, window=100*K()):
 
 def singleTrace(ax, trace, scale=Unit):
     ax.set_ylabel("%s%s" % (scale, trace.units))
-    return lambda opn: trace[opn]/scale()
+    def lam(opn):
+        try:
+            return trace[opn]/scale()
+        except TypeError:   # None because trace undefined at opn
+            return None
+    return lam
+
+def plotThroughput(ax, experiments):
+    ax.set_title("op throughput")
+    a2 = ax.twinx()
+    a2.set_ylabel("s")
+    colors = ["red", "blue", "purple"]
+    xlim_right = 0
+    for expi in range(len(experiments)):
+        exp = experiments[expi]
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, scale=K)), color=colors[expi])
+        line.set_label(exp.nickname + " tput")
+        ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, window=1000*K(), scale=K)), color=colors[expi], linestyle="dotted")
+
+        def elapsedTime(opn):
+            return exp.elapsed[opn]
+        line, = a2.plot(*plotVsKop(ax, exp, elapsedTime), color=colors[expi])
+        line.set_label(exp.nickname + " rate")
+
+        xlim_right = max(xlim_right, exp.op_max/K())
+    ax.set_xlim(left = 0, right=xlim_right)
+    ax.legend(loc="upper center")
+    ax.set_yscale("log")
+    ax.set_ylim(bottom=0.1)
+    ax.grid(which="major", color="black")
+    ax.grid(which="minor", color="#dddddd")
+    a2.legend(loc="lower center")
+    
+    for phase,opn in experiments[0].phase_starts.items():
+        #print (phase,opn)
+        ax.text(opn/K(), 0, phase)

@@ -49,6 +49,11 @@ class Trace:
         if op in self.data:
             return self.data[op]
         else:
+            # We interpolate, but not extrapolate
+            if op < self.sortedKeys()[0]:
+                return None
+            if op > self.sortedKeys()[-1]:
+                return None
             idx = bisect.bisect(self.sortedKeys(), op)
             if idx == 0:
                 return self.data[self.sortedKeys()[0]]
@@ -65,6 +70,7 @@ class Trace:
 class Experiment:
     def __init__(self, filename):
         self.filename = filename
+        self.nickname = self.filename.split("/")[-1]
 
         self.elapsed = Trace("elapsed", "s")
 
@@ -93,6 +99,10 @@ class Experiment:
 
         self.procio_read_bytes = Trace("procio_read_bytes", "B")
         self.procio_write_bytes = Trace("procio_write_bytes", "B")
+
+        self.jem_allocated = Trace("jem_allocated", "B")
+        self.jem_active = Trace("jem_allocated", "B")
+        self.jem_mapped = Trace("jem_allocated", "B")
 
         self.scopes = {}
         self.kvl_underlying = {}
@@ -185,6 +195,12 @@ class Experiment:
 #                self.kvl_underlying_count[t] = int(fields[3])
 #                self.kvl_underlying[t] = int(fields[5])
 
+
+            mo = re.compile("Allocated: (\d+), active: (\d+), mapped: (\d+)").search(line)
+            if mo!=None:
+                (self.jem_allocated[cur_op],
+                    self.jem_active[cur_op],
+                    self.jem_mapped[cur_op]) = map(int, mo.groups())
 
             mo = re.compile("cache: (\d+) (.*)-(bytes|count)").search(line)
             if mo!=None:
