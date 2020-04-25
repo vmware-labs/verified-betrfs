@@ -22,6 +22,9 @@
 //#include <filesystem>
 #include <chrono>
 #include <iostream>
+#ifdef VERI_USE_JEMALLOC
+#include <jemalloc/jemalloc.h>
+#endif // VERI_USE_JEMALLOC
 
 using namespace std;
 
@@ -130,6 +133,16 @@ void proc_io_report() {
   printf("proc-io read_bytes %ld write_bytes %ld\n", read_bytes, write_bytes);
 }
 
+void jemalloc_print_cb(void* opaque, const char* msg) {
+  fputs(msg, stdout);
+}
+
+void jemalloc_report() {
+#ifdef VERI_USE_JEMALLOC
+  malloc_stats_print(jemalloc_print_cb, NULL, "j" /*"jmdaxe"*/);
+#endif // JEMALLOC_VERSION
+}
+
 static int i=0;
 template< class DB >
 void periodicReport(DB db, const char* phase, int elapsed_ms, int ops_completed) {
@@ -149,6 +162,7 @@ void periodicReport(DB db, const char* phase, int elapsed_ms, int ops_completed)
     IOAccounting::report();
     StatAccounting::report();
     proc_io_report();
+    jemalloc_report();
     fflush(stdout);
 }
 
