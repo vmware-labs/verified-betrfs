@@ -920,7 +920,7 @@ module PivotBetreeSpecRefinement {
     forall ref | ref in IMapRestrict(redirect.old_parent.children, redirect.keys).Values
     ensures ref in redirect.old_childrefs
     {
-      var key :| IMapsTo(IMapRestrict(redirect.old_parent.children, redirect.keys), key, ref);
+      var key: Key :| IMapsTo(IMapRestrict(redirect.old_parent.children, redirect.keys), key, ref);
       assert key in redirect.keys;
       if (Keyspace.lt(key, f.pivot)) {
         RouteIs(f.split_parent.pivotTable, key, f.slot_idx);

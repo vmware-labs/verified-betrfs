@@ -36,7 +36,7 @@ module Marshalling {
   import opened SectorType
   import PackedKVMarshalling
 
-  type Key = Keyspace.Element
+  type Key = KeyType.Key
   type Reference = BC.Reference
   type Node = BT.G.Node
 
@@ -104,6 +104,19 @@ module Marshalling {
   lemma pivotTableWeightUpperBound(keys: seq<Key>)
     ensures pivotTableWeight(keys) <= |keys| * (SizeOfV(VUint64(0)) + KeyType.MaxLen() as int)
   {
+    // if |keys| == 0 {
+    // } else {
+    //   pivotTableWeightUpperBound(DropLast(keys));
+    //   calc <= {
+    //     pivotTableWeight(keys);
+    //     pivotTableWeight(DropLast(keys)) + SizeOfV(VUint64(0)) + |Last(keys)|;
+    //     (|keys| - 1) * (SizeOfV(VUint64(0)) + KeyType.MaxLen() as int) + SizeOfV(VUint64(0)) + |Last(keys)|;
+    //     (|keys| - 1) * (SizeOfV(VUint64(0)) + KeyType.MaxLen() as int) + SizeOfV(VUint64(0)) + KeyType.MaxLen() as nat;
+    //     |keys| * (SizeOfV(VUint64(0)) + KeyType.MaxLen() as int) - (SizeOfV(VUint64(0)) + KeyType.MaxLen() as int) + SizeOfV(VUint64(0)) + KeyType.MaxLen() as nat;
+    //     |keys| * (SizeOfV(VUint64(0)) + KeyType.MaxLen() as int);
+    //   }
+    // }
+      
   }
   
   predicate isStrictlySortedKeySeqIterate(a: seq<Key>, i: int)

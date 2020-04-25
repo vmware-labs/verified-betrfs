@@ -98,6 +98,7 @@ module BucketWeights {
   }
 
   function WeightList(keys: seq<Key>, messages: seq<Message>) : (result: nat)
+    requires |keys| == |messages|
   {
     if |keys| == 0 then
       0
@@ -105,13 +106,6 @@ module BucketWeights {
       WeightList(DropLast(keys), DropLast(messages)) + WeightKey(Last(keys)) + WeightMessage(Last(messages))
   }
 
-  lemma WeightListEqualsWellFormedWeightBucket(bucket: Bucket)
-    requires WFBucket(bucket)
-    requires BucketWellMarshalled(bucket)
-    ensures WeightList(bucket.keys, bucket.msgs) == WeightBucket(bucket)
-  {
-  }
-  
   function {:opaque} WeightBucketList(buckets: BucketList) : (w:int)
   ensures w >= 0
   {

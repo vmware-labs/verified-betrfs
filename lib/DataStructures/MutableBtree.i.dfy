@@ -1,11 +1,7 @@
 include "../Base/NativeTypes.s.dfy"
 include "../Base/NativeArrays.s.dfy"
-include "../Base/total_order.i.dfy"
-include "../Base/sequences.i.dfy"
 include "../Base/Arrays.i.dfy"
-include "../Base/Maps.s.dfy"
 include "../Base/Option.s.dfy"
-include "../Base/mathematics.i.dfy"
 include "BtreeModel.i.dfy"
 
 abstract module MutableBtree {
@@ -270,7 +266,7 @@ abstract module MutableBtree {
   {
     reveal_I();
     Model.reveal_Interpretation();
-    var posplus1: uint64 := Model.Keys.ArrayLargestLtePlus1(node.contents.keys, 0, node.contents.nkeys, needle);
+    var posplus1: uint64 := Model.KeysImpl.ArrayLargestLtePlus1(node.contents.keys, 0, node.contents.nkeys, needle);
     if 1 <= posplus1 && node.contents.keys[posplus1-1] == needle {
       result := Some(node.contents.values[posplus1-1]);
     } else {
@@ -287,7 +283,7 @@ abstract module MutableBtree {
     reveal_I();
     Model.reveal_Interpretation();
     Model.reveal_AllKeys();
-    var posplus1: uint64 := Model.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, needle);
+    var posplus1: uint64 := Model.KeysImpl.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, needle);
     assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
     result := Query(node.contents.children[posplus1], needle);
     assume result == MapLookupOption(Interpretation(node), needle);
@@ -401,6 +397,7 @@ abstract module MutableBtree {
     root.repr := {root, rootkeys, rootvalues};
     root.height := 0;
     Model.reveal_Interpretation();
+    Model.Keys.reveal_IsStrictlySorted();
   }
 
   method LeafFromSeqs(keys: seq<Key>, values: seq<Value>)
@@ -958,7 +955,7 @@ abstract module MutableBtree {
     reveal_I();
     Model.reveal_Interpretation();
     Model.reveal_AllKeys();
-    var posplus1: uint64 := Model.Keys.ArrayLargestLtePlus1(node.contents.keys, 0, node.contents.nkeys, key);
+    var posplus1: uint64 := Model.KeysImpl.ArrayLargestLtePlus1(node.contents.keys, 0, node.contents.nkeys, key);
     if 1 <= posplus1 && node.contents.keys[posplus1-1] == key {
       oldvalue := Some(node.contents.values[posplus1-1]);
       node.contents.values[posplus1-1] := value;
@@ -1110,7 +1107,7 @@ abstract module MutableBtree {
     Model.reveal_AllKeys();
     assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
 
-    childidx := Model.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, key);
+    childidx := Model.KeysImpl.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, key);
     if Full(node.contents.children[childidx]) {
       ghost var oldpivots := node.contents.pivots[..node.contents.nchildren-1];
       SplitChildOfIndex(node, childidx);
@@ -1119,7 +1116,7 @@ abstract module MutableBtree {
       Model.SplitChildOfIndexPreservesInterpretation(old(I(node)), I(node), childidx as int);
       Model.SplitChildOfIndexPreservesAllKeys(old(I(node)), I(node), childidx as int);
 
-      var t: int32 := Model.Keys.cmp(node.contents.pivots[childidx], key);
+      var t: int32 := Model.KeysImpl.cmp(node.contents.pivots[childidx], key);
       if  t <= 0 {
         childidx := childidx + 1;
         forall i | childidx as int - 1 < i < |newpivots|

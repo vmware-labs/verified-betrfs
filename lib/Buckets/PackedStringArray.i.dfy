@@ -1,8 +1,7 @@
 include "../Base/NativeTypes.s.dfy"
 include "../Base/PackedInts.s.dfy"
 include "../Base/Option.s.dfy"
-include "../Base/total_order.i.dfy"
-include "../Base/sequences.i.dfy"
+include "../Base/total_order_impl.i.dfy"
 
 module PackedStringArray {
   import opened NativeTypes
@@ -11,8 +10,8 @@ module PackedStringArray {
   import opened NativeArrays
   import opened Sequences
   import Uint32_Order
-  import LexOrder = Lexicographic_Byte_Order
-  import KeyType
+  import LexOrderImpl = Lexicographic_Byte_Order_Impl
+  import LexOrder = LexOrderImpl.Ord
 
   type Key = LexOrder.Element
   
@@ -25,8 +24,6 @@ module PackedStringArray {
     && (|psa.offsets| == 0 ==> |psa.data| == 0)
     && (0 < |psa.offsets| ==> |psa.data| == psa.offsets[|psa.offsets|-1] as int)
     && Uint32_Order.IsSorted(psa.offsets)
-    && (0 < |psa.offsets| ==> psa.offsets[0] as nat <= KeyType.MaxLen() as nat)
-    && (forall i | 0 <= i < |psa.offsets| - 1 :: psa.offsets[i+1] as int - psa.offsets[i] as int <= KeyType.MaxLen() as int)
   }
 
   // TODO psa prefix is silly. Clean up.
@@ -128,65 +125,6 @@ module PackedStringArray {
     4 + 4 * |psa.offsets| as uint64 + |psa.data| as uint64
   }
 
-  // I don't think we need this if we use the generic marshaling. -- rob
-  function parse_Psa(data: seq<byte>) : (res : (Option<Psa>, seq<byte>))
-  ensures res.0.Some? ==> WF(res.0.value)
-  {
-    if |data| >= 4 then (
-      var len := unpack_LittleEndian_Uint32(data[0..4]);
-      if |data| >= 4 + len as int * 4 then (
-        var offsets := unpack_LittleEndian_Uint32_Seq(
-            data[4 .. 4 + len as int * 4], len as int);
-        var dataLen := if len == 0 then 0 else offsets[len-1];
-        if && Uint32_Order.IsSorted(offsets)
-           && (0 < |offsets| ==> offsets[0] as int <= KeyType.MaxLen() as int)
-           && (forall i | 0 <= i < |offsets| - 1 :: offsets[i+1] as int - offsets[i] as int <= KeyType.MaxLen() as int)
-           && |data| >= 4 + len as int * 4 + dataLen as int then (
-          var psa := Psa(offsets, data[4 + len as int * 4 .. 4 + len as int * 4 + dataLen as int]);
-          (Some(psa), data[4 + len as int * 4 + dataLen as int ..])
-        ) else (
-          (None, [])
-        )
-      ) else (
-        (None, [])
-      )
-    ) else (
-      (None, [])
-    )
-  }
-
-  method CheckStringLengths(offsets: seq<uint32>) returns (b: bool)
-    requires |offsets| < Uint64UpperBound()
-    ensures b <==>
-    (
-    && (0 < |offsets| ==> offsets[0] as nat <= KeyType.MaxLen() as nat)
-    && (forall i | 0 <= i < |offsets| - 1 :: offsets[i+1] as int - offsets[i] as int <= KeyType.MaxLen() as int)
-    )
-  {
-    var i: uint64 := 0;
-
-    if 0 < |offsets| as uint64 && offsets[0] as uint64 > KeyType.MaxLen() {
-      return false;
-    }
-
-    if |offsets| as nat <= 1 {
-      return true;
-    }
-    
-    while i + 1 < |offsets| as uint64
-      invariant i as nat + 1 <= |offsets|
-      invariant forall j | 0 <= j < i :: offsets[j+1] as int - offsets[j] as int <= KeyType.MaxLen() as int
-    {
-      var oi: int64 := offsets[i] as int64;
-      var oip1: int64 := offsets[i+1] as int64;
-      if KeyType.MaxLen() as int64 < oip1 - oi {
-        return false;
-      }
-      i := i + 1;
-    }
-    return true;
-  }
-  
   method CheckIsSorted(s: seq<uint32>) returns (b: bool)
   requires |s| < 0x1_0000_0000_0000_0000
   ensures b == Uint32_Order.IsSorted(s)
@@ -213,87 +151,6 @@ module PackedStringArray {
     }
     assert s == s[..i];
     return true;
-  }
-
-  method Parse_Psa(data: seq<byte>, index:uint64)
-  returns (psa: Option<Psa>, rest_index: uint64)
-  requires index as int <= |data|
-  requires |data| < 0x1_0000_0000_0000_0000
-  ensures rest_index as int <= |data|
-  ensures var (psa', rest') := parse_Psa(data[index..]);
-      && psa == psa'
-      && data[rest_index..] == rest'
-  {
-    if |data| as uint64 - index >= 4 {
-      var len_uint32 := Unpack_LittleEndian_Uint32(data, index);
-      var len := len_uint32 as uint64;
-      lemma_seq_suffix_slice(data, index as int, 0, 4);
-      if (|data| as uint64 - 4 - index) / 4 >= len {
-        lemma_seq_suffix_slice(data, index as int, 4, (4+4*len) as int);
-        var offsets := Unpack_LittleEndian_Uint32_Seq(data, index + 4, len);
-        var dataLen := if len == 0 then 0 else offsets[len-1] as uint64;
-        var is_sorted := CheckIsSorted(offsets);
-        var string_lens_valid := CheckStringLengths(offsets);
-        if is_sorted && string_lens_valid && |data| as uint64 - index - 4 - len * 4 >= dataLen {
-          lemma_seq_suffix_slice(data, index as int, (4+4*len) as int, (4+4*len+dataLen) as int);
-          psa := Some(Psa(offsets, data[index + 4 + len * 4 .. index + 4 + len * 4 + dataLen]));
-          rest_index := index + 4 + len * 4 + dataLen;
-        } else {
-          psa := None; 
-          rest_index := |data| as uint64;
-        }
-      } else {
-        psa := None; 
-        rest_index := |data| as uint64;
-      }
-    } else {
-      psa := None; 
-      rest_index := |data| as uint64;
-    }
-  }
-
-  method Marshall_Psa(data: array<byte>, index: uint64, psa: Psa)
-  requires 0 <= index
-  requires index as int + SizeOfPsa(psa) <= data.Length
-  requires data.Length < 0x1_0000_0000_0000_0000
-  requires WF(psa)
-  modifies data
-  ensures forall i | 0 <= i < index as int :: data[i] == old(data[i])
-  ensures forall i | index as int + SizeOfPsa(psa) <= i < data.Length :: data[i] == old(data[i])
-  ensures parse_Psa(data[index .. index as int + SizeOfPsa(psa)]).0
-       == Some(psa)
-  {
-    ghost var len := |psa.offsets| as uint64;
-    ghost var dataLen := |psa.data| as uint64;
-    ghost var data_seq0 := data[index .. index as int + SizeOfPsa(psa)];
-
-    // Write number of offsets
-    Pack_LittleEndian_Uint32_into_Array(|psa.offsets| as uint32, data, index);
-
-    lemma_array_slice_slice(data, index as int, index as int + SizeOfPsa(psa), 0, 4);
-    ghost var data_seq1 := data[index .. index as int + SizeOfPsa(psa)];
-    assert unpack_LittleEndian_Uint32(data_seq1[0..4]) as int == |psa.offsets|;
-
-    // Write offsets
-    Pack_LittleEndian_Uint32_Seq_into_Array(psa.offsets, data, index + 4);
-
-    lemma_array_slice_slice(data, index as int, index as int + SizeOfPsa(psa), 4, (4+4*len) as int);
-    ghost var data_seq2 := data[index .. index as int + SizeOfPsa(psa)];
-    lemma_seq_extensionality(data_seq1[0..4], data_seq2[0..4]);
-    assert unpack_LittleEndian_Uint32(data_seq2[0..4]) as int == |psa.offsets|;
-    assert unpack_LittleEndian_Uint32_Seq(data_seq2[4..4+4*len], len as int) == psa.offsets;
-
-    // Write byte data
-    CopySeqIntoArray(psa.data, 0, data,
-        index + 4 + 4 * |psa.offsets| as uint64, |psa.data| as uint64);
-
-    ghost var data_seq3 := data[index .. index as int + SizeOfPsa(psa)];
-    lemma_seq_extensionality(data_seq2[0..4], data_seq3[0..4]);
-    lemma_seq_extensionality_slice(data_seq2, data_seq3, 4, (4+4*len) as int);
-    assert unpack_LittleEndian_Uint32(data_seq3[0..4]) as int == |psa.offsets|;
-    assert unpack_LittleEndian_Uint32_Seq(data_seq3[4..4+4*len], len as int) == psa.offsets;
-    lemma_array_slice_slice(data, index as int, index as int + SizeOfPsa(psa), (4+4*len) as int, (4+4*len+dataLen) as int);
-    assert data_seq3[4+4*len..4+4*len+dataLen] == psa.data;
   }
 
   function method FirstElement(psa: Psa) : Key
@@ -687,7 +544,7 @@ module PackedStringArray {
       invariant forall j | hi <= j < |ipsa| as int64 :: LexOrder.lt(key, ipsa[j])
     {
       var mid: int64 := (lo + hi) / 2;
-      var t := LexOrder.cmp(psaElement(psa, mid as uint64), key);
+      var t := LexOrderImpl.cmp(psaElement(psa, mid as uint64), key);
       if t <= 0 {
         forall j | 0 <= j < mid + 1
           ensures LexOrder.lte(ipsa[j], key)
@@ -726,7 +583,7 @@ module PackedStringArray {
         == LexOrder.binarySearchIndexOfFirstKeyGteIter(I(psa), key, lo as int, hi as int)
     {
       var mid := (lo + hi) / 2;
-      var c := LexOrder.cmp(key, psaElement(psa, mid-1));
+      var c := LexOrderImpl.cmp(key, psaElement(psa, mid-1));
       if c > 0 {
         lo := mid;
       } else {
@@ -754,7 +611,7 @@ module PackedStringArray {
         == LexOrder.binarySearchIndexOfFirstKeyGtIter(I(psa), key, lo as int, hi as int)
     {
       var mid := (lo + hi) / 2;
-      var c := LexOrder.cmp(key, psaElement(psa, mid-1));
+      var c := LexOrderImpl.cmp(key, psaElement(psa, mid-1));
       if c >= 0 {
         lo := mid;
       } else {
@@ -786,7 +643,7 @@ module PackedStringArray {
       //decreases hi as int - lo as int
     {
       var mid: uint64 := (lo + hi) / 2;
-      var c := LexOrder.cmp(key, psaElement(psa, mid));
+      var c := LexOrderImpl.cmp(key, psaElement(psa, mid));
       if (c > 0) {
         forall j | 0 <= j < mid
           ensures LexOrder.lt(ipsa[j], key)
@@ -827,7 +684,7 @@ module PackedStringArray {
       //decreases hi as int - lo as int
     {
       var mid: uint64 := (lo + hi) / 2;
-      var c := LexOrder.cmp(key, psaElement(psa, mid));
+      var c := LexOrderImpl.cmp(key, psaElement(psa, mid));
       if (c >= 0) {
         forall j | 0 <= j < mid
           ensures LexOrder.lte(ipsa[j], key)
@@ -889,8 +746,6 @@ module PackedStringArray {
       && (0 < nstrings ==> offsets[nstrings-1] as int < 0x1_0000_0000)
       && (0 < nstrings ==> offsets[nstrings-1] as int <= data.Length)
       && Uint32_Order.IsSorted(offsets[..nstrings])
-      && (0 < nstrings ==> offsets[0] as int <= KeyType.MaxLen() as int)
-      && (forall i | 0 <= i < nstrings as int - 1 :: offsets[i+1] as int - offsets[i] as int <= KeyType.MaxLen() as int)
     }
 
     function method toPsa() : Psa

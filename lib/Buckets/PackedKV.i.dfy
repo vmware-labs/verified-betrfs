@@ -1,11 +1,11 @@
 include "PackedStringArray.i.dfy"
-include "../Base/total_order.i.dfy"
 include "BucketsLib.i.dfy"
 
 module PackedKV {
   import PSA = PackedStringArray
   import opened NativeTypes
-  import Keyspace = Lexicographic_Byte_Order
+  import KeyspaceImpl = Lexicographic_Byte_Order_Impl
+  import Keyspace = KeyspaceImpl.Ord
   import opened KeyType
   import opened ValueType`Internal
   import opened ValueMessage
@@ -172,7 +172,7 @@ module PackedKV {
       invariant i as int <= |pkv.keys.offsets| - 1
       invariant Keyspace.IsStrictlySorted(ikeys[..i+1])
     {
-      var c := Keyspace.cmp(PSA.psaElement(pkv.keys, i), PSA.psaElement(pkv.keys, i+1));
+      var c := KeyspaceImpl.cmp(PSA.psaElement(pkv.keys, i), PSA.psaElement(pkv.keys, i+1));
       if c >= 0 {
         assert PSA.I(pkv.keys)[i] == PSA.psaElement(pkv.keys, i);
         assert PSA.I(pkv.keys)[i+1] == PSA.psaElement(pkv.keys, i+1);
@@ -204,64 +204,6 @@ module PackedKV {
   {
     4 * |pkv.keys.offsets| as uint64 + |pkv.keys.data| as uint64 +
     4 * |pkv.messages.offsets| as uint64 + |pkv.messages.data| as uint64
-  }
-
-  // I don't think we need these if we use the generic marshaling code. -- rob
-  
-  function parse_Pkv(data: seq<byte>) : (res : (Option<Pkv>, seq<byte>))
-  ensures res.0.Some? ==> WF(res.0.value)
-  {
-    var (keys, rest1) := PSA.parse_Psa(data);
-    if keys.Some? then (
-      if ValidKeyLens(PSA.I(keys.value)) then (
-        var (messages, rest2) := PSA.parse_Psa(rest1);
-        if messages.Some?
-            && |keys.value.offsets| == |messages.value.offsets| then (
-          var res := Pkv(keys.value, messages.value);
-          (Some(res), rest2)
-        ) else (
-          (None, [])
-        )
-      ) else (
-        (None, [])
-      )
-    ) else (
-      (None, [])
-    )
-  }
-
-  method Parse_Pkv(data: seq<byte>, index:uint64)
-  returns (pkv: Option<Pkv>, rest_index: uint64)
-  requires index as int <= |data|
-  requires |data| < 0x1_0000_0000_0000_0000
-  ensures rest_index as int <= |data|
-  ensures var (pkv', rest') := parse_Pkv(data[index..]);
-      && pkv == pkv'
-      && data[rest_index..] == rest'
-  {
-    var keys, rest1 := PSA.Parse_Psa(data, index);
-    if keys.Some? {
-      // TODO we iterate twice, once to check sortedness, another
-      // to check lengths, we could consolidate.
-      var isValidKeyLens := ComputeValidStringLens(keys.value, KeyType.MaxLen());
-      if isValidKeyLens {
-        var messages, rest2 := PSA.Parse_Psa(data, rest1);
-        if messages.Some?
-            && |keys.value.offsets| as uint64 == |messages.value.offsets| as uint64 {
-          pkv := Some(Pkv(keys.value, messages.value));
-          rest_index := rest2;
-        } else {
-          pkv := None;
-          rest_index := |data| as uint64;
-        }
-      } else {
-        pkv := None;
-        rest_index := |data| as uint64;
-      }
-    } else {
-      pkv := None;
-      rest_index := |data| as uint64;
-    }
   }
 
   function method FirstKey(pkv: Pkv) : Key
@@ -320,7 +262,7 @@ module PackedKV {
       invariant binarySearch(keys, key) == binarySearchPostProc(lo as nat, binarySearch(keys[lo..hi], key))
     {
       var mid: uint64 := (lo + hi) / 2;
-      var c := Keyspace.cmp(key, GetKey(pkv, mid));
+      var c := KeyspaceImpl.cmp(key, GetKey(pkv, mid));
       if c == 0 {
         msg := Some(GetMessage(pkv, mid));
         return;
@@ -396,8 +338,11 @@ module PackedKV {
     ensures WF(result)
     ensures BucketWellMarshalled(I(pkv)) ==> BucketWellMarshalled(I(result))
   {
-    Keyspace.StrictlySortedSubsequence(PSA.I(pkv.keys), from as int, to as int);
-    Pkv(PSA.psaSubSeq(pkv.keys, from, to), PSA.psaSubSeq(pkv.messages, from, to))
+    if BucketWellMarshalled(I(pkv)) then
+      Keyspace.StrictlySortedSubsequence(PSA.I(pkv.keys), from as int, to as int);
+      Pkv(PSA.psaSubSeq(pkv.keys, from, to), PSA.psaSubSeq(pkv.messages, from, to))
+    else 
+      Pkv(PSA.psaSubSeq(pkv.keys, from, to), PSA.psaSubSeq(pkv.messages, from, to))
   }
 
   method SubPkv(pkv: Pkv, from: uint64, to: uint64) returns (result: Pkv)
@@ -883,7 +828,7 @@ module DynamicPkv {
         PKV.Keyspace.StrictlySortedAugment(PSA.I(dresult.keys.toPsa()), PSA.I(top.keys)[topidx]);
       }
 
-      var c := PKV.Keyspace.cmp(botkey, topkey);
+      var c := PKV.KeyspaceImpl.cmp(botkey, topkey);
 
       if c < 0 {
         var botmsg := PSA.psaElement(bot.messages, botidx);

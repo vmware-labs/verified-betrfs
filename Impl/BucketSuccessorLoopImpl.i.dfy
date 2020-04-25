@@ -8,7 +8,7 @@ module BucketSuccessorLoopImpl {
   import opened Options
   import BucketSuccessorLoopModel
   import BucketGeneratorModel
-  import opened Lexicographic_Byte_Order
+  import opened Lexicographic_Byte_Order_Impl
   import opened ValueMessage
   import opened KeyType
 
@@ -58,7 +58,7 @@ module BucketSuccessorLoopImpl {
           okay := false;
         }
       }
-      assert okay == (next.Next? && (upTo.Some? ==> lt(next.key, upTo.value)));
+      assert okay == (next.Next? && (upTo.Some? ==> Ord.lt(next.key, upTo.value)));
 
       if okay {
         var v := Merge(next.msg, DefineDefault()).value;

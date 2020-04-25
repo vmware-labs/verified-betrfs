@@ -232,7 +232,7 @@ module BucketGeneratorModel {
   requires WF(g)
   requires Monotonic(g)
   ensures GenLeft(g).Done? ==> BucketOf(g).b == map[]
-  ensures GenLeft(g).Next? ==> Keyspace.minimumOpt(BucketOf(g).b.Keys) == Some(GenLeft(g).key)
+  ensures GenLeft(g).Next? ==> BucketsLib.minimumKey(BucketOf(g).b.Keys) == Some(GenLeft(g).key)
   ensures GenLeft(g).Next? ==> BucketOf(g).b[GenLeft(g).key] == GenLeft(g).msg
   {
     reveal_BucketOf();
@@ -243,11 +243,11 @@ module BucketGeneratorModel {
         GenLeftIsMinimum(g.bot);
         assert GenLeft(g).key in BucketOf(g).b;
         assert forall k | k in BucketOf(g).b :: Keyspace.lte(GenLeft(g).key, k);
-        assert Keyspace.minimumOpt(BucketOf(g).b.Keys) == Some(GenLeft(g).key);
+        assert minimumKey(BucketOf(g).b.Keys) == Some(GenLeft(g).key);
       } else {
         assert GenLeft(g).key in BucketOf(g).b;
         assert forall k | k in BucketOf(g).b :: Keyspace.lte(GenLeft(g).key, k);
-        assert Keyspace.minimumOpt(BucketOf(g).b.Keys) == Some(GenLeft(g).key);
+        assert minimumKey(BucketOf(g).b.Keys) == Some(GenLeft(g).key);
       }
     }
   }

@@ -54,6 +54,38 @@ module PackedKVMarshalling {
   {
   }
 
+  method CheckStringLengths(offsets: seq<uint32>) returns (b: bool)
+    requires |offsets| < Uint64UpperBound()
+    ensures b <==>
+    (
+    && (0 < |offsets| ==> offsets[0] as nat <= KeyType.MaxLen() as nat)
+    && (forall i | 0 <= i < |offsets| - 1 :: offsets[i+1] as int - offsets[i] as int <= KeyType.MaxLen() as int)
+    )
+  {
+    var i: uint64 := 0;
+
+    if 0 < |offsets| as uint64 && offsets[0] as uint64 > KeyType.MaxLen() {
+      return false;
+    }
+
+    if |offsets| as nat <= 1 {
+      return true;
+    }
+    
+    while i + 1 < |offsets| as uint64
+      invariant i as nat + 1 <= |offsets|
+      invariant forall j | 0 <= j < i :: offsets[j+1] as int - offsets[j] as int <= KeyType.MaxLen() as int
+    {
+      var oi: int64 := offsets[i] as int64;
+      var oip1: int64 := offsets[i+1] as int64;
+      if KeyType.MaxLen() as int64 < oip1 - oi {
+        return false;
+      }
+      i := i + 1;
+    }
+    return true;
+  }
+  
   method ComputeWF(pkv: Pkv) returns (result: bool)
     requires PSA.WF(pkv.keys)
     requires PSA.WF(pkv.messages)

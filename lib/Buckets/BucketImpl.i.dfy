@@ -24,7 +24,7 @@ module BucketImpl {
   import KVList
   import PackedKV
   import opened ValueMessage`Internal
-  import opened Lexicographic_Byte_Order
+  import opened Lexicographic_Byte_Order_Impl
   import opened Sequences
   import opened Options
   import opened Maps
@@ -583,7 +583,7 @@ module BucketImpl {
       requires BucketWellMarshalled(Bucket)
       requires 0 < |Bucket.keys|
       ensures result in Bucket.keys
-      ensures forall k | k in Bucket.keys :: lte(result, k)
+      ensures forall k | k in Bucket.keys :: Ord.lte(result, k)
     {
       if format.BFTree? {
         assume false; // Need to fill in BucketsLib to prove 0 < |Interpretation(tree)|
@@ -623,7 +623,7 @@ module BucketImpl {
       requires BucketWellMarshalled(Bucket)
       requires 0 < |Bucket.keys|
       ensures result in Bucket.keys
-      ensures forall k | k in Bucket.keys :: lte(k, result)
+      ensures forall k | k in Bucket.keys :: Ord.lte(k, result)
     {
       if format.BFTree? {
         assume false; // Need to fill in BucketsLib to prove 0 < |Interpretation(tree)|

@@ -32,7 +32,29 @@ module BucketsLib {
   {
     BucketMapWithSeq(map[], [], [])
   }
-    
+
+  function maximumKey(b: set<Key>) : Option<Key>
+  {
+    var m := Lexicographic_Byte_Order.maximumOpt(b);
+    if m.Some? then
+      assert |m.value| <= KeyType.MaxLen() as nat;
+      var k: Key := m.value;
+      Some(k)
+    else
+      None
+  }
+  
+  function minimumKey(b: set<Key>) : Option<Key>
+  {
+    var m := Lexicographic_Byte_Order.minimumOpt(b);
+    if m.Some? then
+      assert |m.value| <= KeyType.MaxLen() as nat;
+      var k: Key := m.value;
+      Some(k)
+    else
+      None
+  }
+  
   function {:opaque} BucketMapOfSeq(keys: seq<Key>, msgs: seq<Message>) : (result: BucketMap)
     requires |keys| == |msgs|
     ensures result.Keys == Set(keys)

@@ -1,4 +1,3 @@
-include "../Base/Option.s.dfy"
 include "../Marshalling/GenericMarshalling.i.dfy"
 include "PackedStringArray.i.dfy"
 
@@ -6,7 +5,7 @@ module PackedStringArrayMarshalling {
   import opened Options
   import opened PackedStringArray
   import opened GenericMarshalling
-  import Uint32_Order
+  import Uint32_Order_Impl
   import opened NativeTypes
   
   function method grammar() : G
@@ -51,15 +50,13 @@ module PackedStringArrayMarshalling {
     requires |psa.data| < Uint64UpperBound()
     ensures result == WF(psa)
   {
-    var sorted := Uint32_Order.ComputeIsSorted(psa.offsets);
-    var validLens := CheckStringLengths(psa.offsets);
+    var sorted := Uint32_Order_Impl.ComputeIsSorted(psa.offsets);
     result :=
       && |psa.offsets| as uint64 < 0x1_0000_0000
       && |psa.data| as uint64 < 0x1_0000_0000
       && (|psa.offsets| as uint64 == 0 ==> |psa.data| as uint64 == 0)
       && (0 < |psa.offsets| as uint64 ==> |psa.data| as uint32 == psa.offsets[|psa.offsets| as uint64 - 1])
-      && sorted
-      && validLens;
+      && sorted;
   }
   
   method FromVal(v: V) returns (psa: Option<Psa>)

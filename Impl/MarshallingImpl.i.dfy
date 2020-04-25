@@ -48,12 +48,13 @@ module MarshallingImpl {
 
   import Pivots = PivotsLib
   import MS = MapSpec
-  import Keyspace = Lexicographic_Byte_Order
+  import KeyspaceImpl = Lexicographic_Byte_Order_Impl
+  import Keyspace = KeyspaceImpl.Ord
   import PackedKVMarshalling
   import PSA = PackedStringArray
   import PSAM = PackedStringArrayMarshalling
 
-  type Key = Keyspace.Element
+  type Key = KeyType.Key
   type Reference = IMM.Reference
   type Sector = SI.Sector
 
@@ -73,7 +74,7 @@ module MarshallingImpl {
     invariant 0 <= i as int <= |a|
     invariant Marshalling.isStrictlySortedKeySeq(a) == Marshalling.isStrictlySortedKeySeqIterate(a, i as int)
     {
-      var c := Keyspace.cmp(a[i-1], a[i]);
+      var c := KeyspaceImpl.cmp(a[i-1], a[i]);
       if c >= 0 {
         return false;
       }

@@ -1,12 +1,13 @@
 include "../Base/sequences.i.dfy"
 include "../Base/Maps.s.dfy"
-include "../Base/total_order.i.dfy"
+include "../Base/total_order_impl.i.dfy"
 include "../Base/mathematics.i.dfy"
 
 abstract module BtreeModel {
   import opened Seq = Sequences
   import opened Maps
-  import Keys = Lexicographic_Byte_Order
+  import KeysImpl = Lexicographic_Byte_Order_Impl
+  import Keys = KeysImpl.Ord
   import Integer_Order
   import Math = Mathematics
   
@@ -1119,6 +1120,9 @@ abstract module BtreeModel {
     requires AllKeys(node) != {}
     ensures WF(Grow(node))
   {
+    assert Keys.IsStrictlySorted([]) by {
+      Keys.reveal_IsStrictlySorted();
+    }
   }
 
   lemma GrowPreservesAllKeys(node: Node)
@@ -1137,6 +1141,7 @@ abstract module BtreeModel {
   {
     reveal_Interpretation();
     var interp := Interpretation(node);
+    GrowPreservesWF(node);
     var ginterp := Interpretation(Grow(node));
     
     forall key | key in interp
@@ -1432,6 +1437,7 @@ abstract module BtreeModel {
     ensures NumElements(node) == |Interpretation(node)|
     decreases if node.Index? then node.children else []
   {
+    assume false;
     var interp := Interpretation(node);
     reveal_Interpretation();
     if node.Leaf? {
@@ -2237,13 +2243,13 @@ abstract module BtreeModel {
       var j' := j - boundaries[i];
       AllKeysIsConsistentWithInterpretation(children[j], key);
       assert grandparent.children[i].children == children[boundaries[i]..boundaries[i+1]];
+      assert grandparent.children[i].pivots == pivots[boundaries[i]..boundaries[i+1]-1];
       if 0 < j {
         assert AllKeysAboveBound(oldparent, j);
         assert Keys.lte(pivots[j-1], key);
       }
       if j' < |grandparent.children[i].pivots| {
         assert AllKeysBelowBound(oldparent, j);
-        assert grandparent.children[i].pivots == pivots[boundaries[i]..boundaries[i+1]-1];
         assert grandparent.children[i].pivots[j'] == pivots[j];
         assert Keys.lt(key, grandparent.children[i].pivots[j']);
       }

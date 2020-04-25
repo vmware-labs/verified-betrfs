@@ -17,7 +17,8 @@ include "../Base/MallocAccounting.i.dfy"
 
 module KVList {
   import opened ValueMessage`Internal
-  import opened Lexicographic_Byte_Order
+  import opened LBOI = Lexicographic_Byte_Order_Impl
+  import opened Ord = LBOI.Ord
   import opened Sequences
   import opened Options
   import opened Maps
@@ -1379,7 +1380,7 @@ module KVList {
   lemma lastIsMax(kvl: Kvl)
   requires WF(kvl)
   requires |kvl.keys| > 0
-  ensures maximumOpt(I(kvl).b.Keys) == Some(Last(kvl.keys))
+  ensures maximumKey(I(kvl).b.Keys) == Some(Last(kvl.keys))
   {
     Imaps(kvl, |kvl.keys| - 1);
     assert Last(kvl.keys) in IMap(kvl).Keys;
@@ -1419,8 +1420,8 @@ module KVList {
       lastIsMax(kvl1);
       lastIsMax(kvl2);
       assert Some(Last(kvl1.keys))
-          == maximumOpt(IMap(kvl1).Keys)
-          == maximumOpt(IMap(kvl2).Keys)
+          == maximumKey(IMap(kvl1).Keys)
+          == maximumKey(IMap(kvl2).Keys)
           == Some(Last(kvl2.keys));
 
       var key := Last(kvl1.keys);
