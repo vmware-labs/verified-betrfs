@@ -258,7 +258,7 @@ module MarshallingImpl {
       return None;
     }
 
-    IMM.WeightBucketListLteSize(v.t[2 as uint64], pivots, BucketImpl.MutBucket.ISeq(buckets));
+    IMM.WeightBucketListLteSize(v.t[2 as uint64], BucketImpl.MutBucket.ISeq(buckets));
     assert WeightBucketList(BucketImpl.MutBucket.ISeq(buckets)) < 0x1_0000_0000_0000_0000;
 
     var w: uint64 := BucketImpl.MutBucket.computeWeightOfSeq(buckets);
@@ -661,7 +661,6 @@ module MarshallingImpl {
   requires IM.WFSector(StateImpl.ISector(sector))
   requires sector.SectorNode? ==> IM.WFNode(sector.node.I())
   requires sector.SectorNode? ==> BT.WFNode(IM.INode(sector.node.I()))
-  requires sector.SectorNode? ==> forall i | 0 <= i < |sector.node.buckets| :: BucketWellMarshalled(sector.node.buckets[i].I())
   requires sector.SectorSuperblock? ==> JC.WFSuperblock(sector.superblock)
   ensures data != null ==> IMM.parseCheckedSector(data[..]).Some?
   ensures data != null ==>
@@ -670,9 +669,10 @@ module MarshallingImpl {
   ensures data != null ==> 32 <= data.Length
   ensures data != null && sector.SectorNode? ==> data.Length <= NodeBlockSize() as int
   ensures data != null && sector.SectorIndirectionTable? ==> data.Length <= IndirectionTableBlockSize() as int
-  ensures sector.SectorNode? ==> data != null;
+  //ensures sector.SectorNode? ==> data != null;
   ensures sector.SectorSuperblock? ==> data != null && data.Length == 4096;
   ensures sector.SectorIndirectionTable? && Marshalling.IsInitIndirectionTable(IndirectionTableModel.I(sector.indirectionTable.I())) ==> data != null;
+  ensures sector.SectorNode? && BucketListWellMarshalled(BucketImpl.MutBucket.ISeq(sector.node.buckets)) ==> data != null
   {
     if sector.SectorSuperblock? {
       var v0 := superblockToVal(sector.superblock);
@@ -718,6 +718,13 @@ module MarshallingImpl {
 
       return data;
     } else {
+      var node := sector.node;
+
+      var wellmarshalled := node.BucketsWellMarshalled();
+      if !wellmarshalled {
+        return null;
+      }
+      
       var v, computedSize := sectorToVal(sector);
       var size := computedSize + 32;
 

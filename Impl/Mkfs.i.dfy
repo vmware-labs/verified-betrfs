@@ -49,6 +49,9 @@ module MkfsImpl {
     ghost var sector:SI.Sector := SI.SectorNode(node);
     ghost var is:SM.Sector := SI.ISector(sector);
 
+    assert SM.WFNode(is.node) by {
+      reveal_WeightBucketList();
+    }
     var bNode_array := MarshallingImpl.MarshallCheckedSector(SI.SectorNode(node));
     var bNode := bNode_array[..];
 
@@ -93,6 +96,12 @@ module MkfsImpl {
       }
     }
 
+    ghost var gnode := Marshalling.parseCheckedSector(bNode).value.node;
+    assert gnode.pivotTable == [];
+    assert gnode.children == None;
+    //assert gnode.buckets == [ EmptyBucket() ];
+    //assert Marshalling.parseCheckedSector(bNode).Some?;// == Some(SectorNode(BT.G.Node([], None, [MkfsModel.B(map[])])));
+    
     diskContents := map[
       // Map ref 0 to lba 1
       s1addr := bSuperblock,

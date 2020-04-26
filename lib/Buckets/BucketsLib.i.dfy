@@ -28,11 +28,6 @@ module BucketsLib {
   datatype Bucket = BucketMapWithSeq(b: BucketMap, keys: seq<Key>, msgs: seq<Message>)
   type BucketList = seq<Bucket>
 
-  function EmptyBucket() : Bucket
-  {
-    BucketMapWithSeq(map[], [], [])
-  }
-
   function maximumKey(b: set<Key>) : Option<Key>
   {
     var m := Lexicographic_Byte_Order.maximumOpt(b);
@@ -144,6 +139,16 @@ module BucketsLib {
       BInternal(m)
   }
 
+  function EmptyBucket() : Bucket
+    ensures EmptyBucket() == B(map[]);
+  {
+    var b := BucketMapWithSeq(map[], [], []);
+    assert b == B(map[]) by {
+      reveal_B();
+    }
+    b
+  }
+  
   function BucketDropLast(bucket: Bucket) : Bucket
     requires WFBucket(bucket)
     requires BucketWellMarshalled(bucket)
