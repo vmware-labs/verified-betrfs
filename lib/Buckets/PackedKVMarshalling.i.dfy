@@ -197,6 +197,16 @@ module PackedKVMarshalling {
         B(prebucket.b[Seq.Last(keys) := Seq.Last(msgs)]).b;
       }
       WellMarshalledBucketsEq(bucket, B(prebucket.b[Seq.Last(keys) := Seq.Last(msgs)]));
+      assert PSA.LastElement(pkv.messages) == Seq.Last(PSA.I(pkv.messages));
+      //assert |PSA.LastElement(pkv.messages)| <= ValueType.MaxLen() as int;
+      // calc {
+      //   |PSA.LastElement(pkv.messages)| + 4;
+      //   BW.WeightMessage(Define(PSA.LastElement(pkv.messages)));
+      //   BW.WeightMessage(bytestring_to_Message(PSA.LastElement(pkv.messages)));
+      //   BW.WeightMessage(bytestring_to_Message(Seq.Last(PSA.I(pkv.messages))));
+      //   BW.WeightMessage(Seq.Last(IMessages(pkv.messages)));
+      //   BW.WeightMessage(Seq.Last(msgs));
+      // }
     }
   }
 }
