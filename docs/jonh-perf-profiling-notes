@@ -926,3 +926,58 @@ jemalloc mysteries:
 - is it possible that the gap from jem_mapped to os_mem is not billed to us?
 - all reports of memory allocation climb to 1GB way sooner than we exhaust
   the veri cache
+
+tools/plot/perf-compare.py malloc=malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-malloc-4.data jemalloc=malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-jemalloc-3.data
+
+[ ] track master
+[ ] check what cgroups measures, compare to jemalloc mapped
+  https://www.kernel.org/doc/Documentation/cgroup-v1/memory.txt
+  cat /sys/fs/cgroup/memory/VeribetrfsExp/memory.usage_in_bytes
+[ ] study why jemalloc active seems higher than malloc
+[ ] run under strace and see what's being given back under madvise
+
+1.6 experiment seems to have fallen off into swapville
+
+1. Capture swapping values from /sys/fs/cgroup/memory/VeribetrfsExp/memory.stat
+2. Try using direct IO to keep cgroups from swapping us.
+Yup.
+
+[malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-jemalloc-7.data]
+In this experiment, I told Veri to use 1gb, and told cgroups to limit us
+to 1.8gb. Our actual usage before we fill the cache is around 1.4gb; notice
+that "jem mapped" and "cgroups-usage" are similar in the Grand Unified Memory
+graph.
+
+Once we start paging in Veri blocks (around opn 3500), our jem_mapped usage
+(orange line) sees a bump. The jem_alloc (green) line doesn't, so presumably
+we are seeing a more modest version of the earlier problem: we changed the
+size of cheese we usually allocate, so we're leaving a batch of holes behind
+at the previous sizes.
+
+But even that bump only goes to 1.6gb. Notice that the cgroups usage (red line)
+bumps up to 1.8gb, and stays there. Presumably that difference is page cache
+usage, now that we're actually faulting stuff in through the kernel IO path.
+At the same time, look at the cgroups-stat-pgfault graph: we begin faulting
+the application like crazy, eventually doing 150 pgfaults per opn! This
+explains why the op throughput drops to 100io/sec.
+
+But why are we pgfaulting? The application's 1.6gb fits in our budget. Is
+the kernel deciding to fault our memory rather than evict our page cache
+pages? Eww!
+
+[malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-jemalloc-8.data]
+...enables USE_DIRECT in Framework.cpp to try to bypass the page cache
+altogether, so that hopefully cgroups notices that we don't actually
+want its stupid help.
+So with USE_DIRECT, we see interesting phenomena:
+- cgroups-usage goes DOWN when we exceed the cache; in fact, it stays
+near jem_alloc -- and in fact sometimes below! It seems we're getting
+a cgroups discount for nonresident pages. That's pretty great!
+- Yet we're still swapping!
+
+[malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-jemalloc-9.data]
+Rob suggests: run in a huge cgroup to avoid swapping; see how much
+memory we really use. Setting cheat_factor to 10
+
+[malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-jemalloc-10.data]
+Same thing, no cgroup to see if faults go away
