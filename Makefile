@@ -292,7 +292,7 @@ build/framework/BundleWrapper.o: framework/BundleWrapper.cpp build/Bundle.cpp $(
 rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 -include $(call rwildcard,$(CPP_DEP_DIR)/,*.d)
 
-VERIBETRFS_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o build/framework/Main.o build/framework/Benchmarks.o
+VERIBETRFS_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o build/framework/Main.o build/framework/Benchmarks.o build/framework/MallocAccounting.o
 
 LDFLAGS=-msse4.2
 

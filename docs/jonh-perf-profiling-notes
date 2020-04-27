@@ -981,3 +981,7 @@ memory we really use. Setting cheat_factor to 10
 
 [malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-jemalloc-10.data]
 Same thing, no cgroup to see if faults go away
+
+Okay, look, things only started taking this weird swappy turn after -3.
+
+master merge: may need to advance dafny.

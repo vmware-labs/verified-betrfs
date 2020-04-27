@@ -448,7 +448,7 @@ void Application::initialize() {
 Application::~Application()
 {
   Sync();
-  EvictEverything();
+//  EvictEverything();  // Used when trying to track down below-Dafny leaks
   fini_malloc_accounting();
 }
 
@@ -802,8 +802,10 @@ void Observation::stop() {
   for (auto it : sptr_to_len) {
     total_underlying += it.second;
   }
-  printf("allocationreport stop underyling_count %lu total_underlying %lu\n",
-       sptr_to_len.size(), total_underlying);
+
+  cout << "allocationreport stop underyling_count "
+    << sptr_to_len.size()
+    << " total_underlying " << total_underlying << endl;
 
   for (auto it : sptr_to_ref_set) {
     printf("allocationreport refset ref %lu refd by %lu noderefs\n  ",
