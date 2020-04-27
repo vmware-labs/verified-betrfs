@@ -122,12 +122,17 @@ def singleTrace(ax, trace, scale=Unit):
             return None
     return lam
 
+def set_xlim(ax, experiments):
+    xlim_right = 0
+    for exp in experiments:
+        xlim_right = max(xlim_right, exp.op_max/K())
+    ax.set_xlim(left = 0, right=xlim_right)
+
 def plotThroughput(ax, experiments):
     ax.set_title("op throughput")
     a2 = ax.twinx()
     a2.set_ylabel("s")
     colors = ["red", "blue", "purple"]
-    xlim_right = 0
     for expi in range(len(experiments)):
         exp = experiments[expi]
         line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, scale=K)), color=colors[expi])
@@ -138,16 +143,69 @@ def plotThroughput(ax, experiments):
             return exp.elapsed[opn]
         line, = a2.plot(*plotVsKop(ax, exp, elapsedTime), color=colors[expi])
         line.set_label(exp.nickname + " rate")
-
-        xlim_right = max(xlim_right, exp.op_max/K())
-    ax.set_xlim(left = 0, right=xlim_right)
     ax.legend(loc="upper center")
     ax.set_yscale("log")
     ax.set_ylim(bottom=0.1)
     ax.grid(which="major", color="black")
     ax.grid(which="minor", color="#dddddd")
+    set_xlim(ax, experiments)
     a2.legend(loc="lower center")
     
     for phase,opn in experiments[0].phase_starts.items():
         #print (phase,opn)
         ax.text(opn/K(), 0, phase)
+
+def plotGrandUnifiedMemory(ax, experiments):
+    ax.set_title("Grand Unified Memory")
+
+    colors = ["black", "brown", "red", "orange", "yellow", "green", "indigo", "blue", "violet"]
+    linestyles=["solid", "dashed", "dotted"]
+    def plotOneExp(exp, plotkwargs):
+        coloridx = [0]
+
+        def plotWithLabel(lam, lbl):
+            plotkwargs["color"] = colors[coloridx[0]]
+            #print("using color %s for label %s" % (plotkwargs["color"], lbl))
+            coloridx[0] += 1
+            xs,ys = plotVsKop(ax, exp, lam)
+            if len(xs)==0:
+                # don't clutter legendspace
+                return
+            line, = ax.plot(xs, ys, **plotkwargs)
+            line.set_label(lbl + (" %.2f%sB" % (ys[-1], Gi.prefix)))
+
+        plotWithLabel(singleTrace(ax, exp.os_map_total, scale=Gi),
+                exp.nickname + " OS mem")
+        plotWithLabel(singleTrace(ax, exp.os_map_heap, scale=Gi),
+                exp.nickname + " OS heap")
+        plotWithLabel(singleTrace(ax, exp.cgroups_memory_usage_bytes, scale=Gi),
+                exp.nickname + " cgroups-usage")
+        plotWithLabel(singleTrace(ax, exp.jem_mapped, scale=Gi),
+                exp.nickname + " jem mapped")
+        plotWithLabel(singleTrace(ax, exp.jem_active, scale=Gi),
+                exp.nickname + " jem active")
+        plotWithLabel(singleTrace(ax, exp.jem_allocated, scale=Gi),
+                exp.nickname + " jem alloc")
+
+        mallocLam = singleTrace(ax, exp.microscopes["total"].getTrace("open_byte"), scale=Gi) if "total" in exp.microscopes else lambda opn: None
+        plotWithLabel(mallocLam, exp.nickname + " malloc")
+
+        # internal views, stacked
+        traceNames = ["bucket-message-bytes", "bucket-key-bytes", "pivot-key-bytes"]
+        def StackFor(count):
+            return [exp.accum[n] for n in traceNames[:count+1]]
+
+        # Just plot the sum of internal stuff
+        try:
+            stackedTraces = StackedTraces(StackFor(len(traceNames)))
+            plotWithLabel(singleTrace(ax, stackedTraces, scale=Gi),
+                exp.nickname + " internal-accum-bytes")
+        except: pass
+
+    for i in range(len(experiments)):
+        exp = experiments[i]
+        plotOneExp(exp, {"linestyle": linestyles[i]})
+
+    ax.set_ylim(bottom=0)
+    set_xlim(ax, experiments)
+    ax.legend(loc="lower right")

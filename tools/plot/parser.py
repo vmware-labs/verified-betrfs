@@ -7,30 +7,8 @@ import sys
 import operator
 import bisect
 
-class ARow:
-    def __init__(self, total_count, open_count, total_byte, open_byte):
-        self.total_count = int(total_count)
-        self.open_count = int(open_count)
-        self.total_byte = int(total_byte)
-        self.open_byte = int(open_byte)
-
 field_width = 14+1
 arow_width = field_width*4 - 1
-
-def parse_arow(s):
-    assert(len(s) == arow_width)
-    total_count = s[:field_width]
-    open_count = s[field_width:field_width*2]
-    total_byte = s[field_width*2:field_width*3]
-    open_byte = s[field_width*3:field_width*4]
-    return ARow(total_count, open_count, total_byte, open_byte)
-
-def match_arow_line(token, line):
-    if not line.startswith(token + " "):
-        return None
-    arow = parse_arow(line[len(token)+1:len(token)+1+arow_width])
-    label = line[len(token)+1+arow_width+1:]
-    return (arow, label)
 
 class Trace:
     def __init__(self, label, units):
@@ -38,6 +16,9 @@ class Trace:
         self.units = units
         self.data = {}
         self._sortedKeys = None
+
+    def empty(self):
+        return len(self.data) == 0
 
     def sortedKeys(self):
         if not self._sortedKeys:
@@ -67,10 +48,51 @@ class Trace:
     def __setitem__(self, op, val):
         self.data[op] = val
 
+class ARow:
+    def __init__(self, total_count, open_count, total_byte, open_byte):
+        self.field = {}
+        self.field["total_count"] = int(total_count)
+        self.field["open_count"] = int(open_count)
+        self.field["total_byte"] = int(total_byte)
+        self.field["open_byte"] = int(open_byte)
+
+class ARows:
+    def __init__(self, label):
+        self.label = label
+        self.arows = {}
+
+    def __setitem__(self, op, val):
+        self.arows[op] = val
+
+    def getTrace(self, field):
+        unit = "B" if field.endswith("_byte") else "cnt"
+        trace = Trace(self.label + "." + field, unit)
+        for op,arow in self.arows.items():
+            trace[op] = arow.field[field]
+        return trace
+
+def parse_arow(s):
+    assert(len(s) == arow_width)
+    total_count = s[:field_width]
+    open_count = s[field_width:field_width*2]
+    total_byte = s[field_width*2:field_width*3]
+    open_byte = s[field_width*3:field_width*4]
+    return ARow(total_count, open_count, total_byte, open_byte)
+
+def match_arow_line(token, line):
+    if not line.startswith(token + " "):
+        return None
+    arow = parse_arow(line[len(token)+1:len(token)+1+arow_width])
+    label = line[len(token)+1+arow_width+1:]
+    return (arow, label)
+
 class Experiment:
-    def __init__(self, filename):
+    def __init__(self, filename, nickname=None):
         self.filename = filename
-        self.nickname = self.filename.split("/")[-1]
+        if nickname:
+            self.nickname = nickname
+        else:
+            self.nickname = self.filename.split("/")[-1]
 
         self.elapsed = Trace("elapsed", "s")
 
@@ -99,10 +121,13 @@ class Experiment:
 
         self.procio_read_bytes = Trace("procio_read_bytes", "B")
         self.procio_write_bytes = Trace("procio_write_bytes", "B")
+        self.cgroups_memory_usage_bytes = Trace("cgroups_memory_usage_bytes", "B")
 
         self.jem_allocated = Trace("jem_allocated", "B")
         self.jem_active = Trace("jem_allocated", "B")
         self.jem_mapped = Trace("jem_allocated", "B")
+
+        self.cgroups_stat = {}
 
         self.scopes = {}
         self.kvl_underlying = {}
@@ -176,21 +201,24 @@ class Experiment:
                 self.procio_read_bytes[cur_op] = int(fields[2])
                 self.procio_write_bytes[cur_op] = int(fields[4])
 
+            if line.startswith("cgroups-memory.usage_in_bytes"):
+                self.cgroups_memory_usage_bytes[cur_op] = int(fields[1])
+
 #            mo = match_arow_line("ma-scope", line)
 #            if mo:
 #                arow,label = mo
 #                if label not in self.scopes:
 #                    self.scopes[label] = {}
 #                self.scopes[label][t] = arow
-#
-#            mo = match_arow_line("ma-microscope", line)
-#            if mo:
-#                arow,label = mo
-#                label = label.split()[-1]   # suffix word. Sorry.
-#                if label not in self.microscopes:
-#                    self.microscopes[label] = {}
-#                self.microscopes[label][t] = arow
-#            
+
+            mo = match_arow_line("ma-microscope", line)
+            if mo:
+                arow,label = mo
+                label = label.split()[-1]   # suffix word. Sorry.
+                if label not in self.microscopes:
+                    self.microscopes[label] = ARows(label)
+                self.microscopes[label][cur_op] = arow
+            
 #            if line.startswith("allocationreport stop underyling_count"):
 #                self.kvl_underlying_count[t] = int(fields[3])
 #                self.kvl_underlying[t] = int(fields[5])
@@ -210,3 +238,8 @@ class Experiment:
                     self.accum[accum_key] = Trace(accum_key, "unk")
                 self.accum[accum_key][cur_op] = int(value)
 
+            if line.startswith("cgroups-memory.stat"):
+                statName = fields[1]
+                if statName not in self.cgroups_stat:
+                    self.cgroups_stat[statName] = Trace("cgroups-stat-"+statName, "cnt")
+                self.cgroups_stat[statName][cur_op] = int(fields[2])

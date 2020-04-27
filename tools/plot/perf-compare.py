@@ -10,18 +10,20 @@ from PlotHelper import *
 from TimeSeries import *
 
 def plot_perf_compare(experiments):
-    plotHelper = PlotHelper(2, scale=2)
+    plotHelper = PlotHelper(4, scale=2)
 
-    for e in experiments:
-        e.nickname = e.filename.split("/")[-1]
-
-
-    try:
-        plotThroughput(plotHelper.nextAxis(depth=2), experiments)
+    try: plotThroughput(plotHelper.nextAxis(depth=2), experiments)
     except: raise
-        
+    
+    try: plotGrandUnifiedMemory(plotHelper.nextAxis(depth=2), experiments)
+    except: raise
 
     plotHelper.save("compare.png")
 
-experiments = [Experiment(fn) for fn in sys.argv[1:]]
+experiments = []
+for arg in sys.argv[1:]:
+    nick,fn = arg.split("=")
+    exp = Experiment(fn, nick)
+    exp.sortedOpns = exp.sortedOpns[:-5]    # hack: truncate teardown tail of completed exp where memory all goes to 0
+    experiments.append(exp)
 plot_perf_compare(experiments)
