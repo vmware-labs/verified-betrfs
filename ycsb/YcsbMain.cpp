@@ -143,6 +143,24 @@ void jemalloc_report() {
 #endif // JEMALLOC_VERSION
 }
 
+void cgroups_report() {
+  FILE* fp = fopen("/sys/fs/cgroup/memory/VeribetrfsExp/memory.usage_in_bytes", "r");
+  char space[1000];
+  char* line = fgets(space, sizeof(space), fp);
+  fclose(fp);
+  printf("cgroups-memory.usage_in_bytes %s", line);
+
+  fp = fopen("/sys/fs/cgroup/memory/VeribetrfsExp/memory.stat", "r");
+  while (true) {
+    char* line = fgets(space, sizeof(space), fp);
+    if (line==NULL) {
+      break;
+    }
+    printf("cgroups-memory.stat %s", line);
+  }
+  fclose(fp);
+}
+
 static int i=0;
 template< class DB >
 void periodicReport(DB db, const char* phase, int elapsed_ms, int ops_completed) {
@@ -163,6 +181,7 @@ void periodicReport(DB db, const char* phase, int elapsed_ms, int ops_completed)
     StatAccounting::report();
     proc_io_report();
     jemalloc_report();
+    cgroups_report();
     fflush(stdout);
 }
 
