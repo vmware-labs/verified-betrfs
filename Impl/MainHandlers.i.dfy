@@ -51,6 +51,7 @@ module MainHandlers refines Main {
     && hs.s in HeapSet(hs)
     && hs.s.Repr <= HeapSet(hs)
     && hs.s.Inv(k)
+    && hs !in hs.s.Repr
   }
 
   function Ik(k: Constants) : ADM.M.Constants {
@@ -72,20 +73,12 @@ module MainHandlers refines Main {
     BlockJournalCache.InitImpliesInv(Ik(k), I(k, hs));
   }
 
-  lemma ioAndHsNotInReadSet(s: Variables, io: DiskIOHandler, hs: HeapState)
-  requires s.W()
-  ensures io !in s.Repr
-  ensures hs !in s.Repr
-  // TODO I think this should just follow from the types of the objects
-  // in the Repr
-
   ////////// Top-level handlers
 
   method handlePushSync(k: Constants, hs: HeapState, io: DiskIOHandler)
   returns (id: uint64)
   {
     var s := hs.s;
-    ioAndHsNotInReadSet(s, io, hs);
     var id1 := CoordinationImpl.pushSync(k, s);
 
     CoordinationModel.pushSyncCorrect(Ic(k), old(s.I()));
@@ -94,7 +87,6 @@ module MainHandlers refines Main {
     //   if id1 == 0 then UI.NoOp else UI.PushSyncOp(id1 as int),
     //   D.NoDiskOp);
 
-    ioAndHsNotInReadSet(s, io, hs);
     id := id1;
     ghost var uiop := if id == 0 then UI.NoOp else UI.PushSyncOp(id as int);
     if ValidDiskOp(io.diskOp()) {
@@ -163,10 +155,8 @@ module MainHandlers refines Main {
   returns (wait: bool, success: bool)
   {
     var s := hs.s;
-    ioAndHsNotInReadSet(s, io, hs);
     var succ, w := CoordinationImpl.popSync(k, s, io, id, graphSync);
     CoordinationModel.popSyncCorrect(Ic(k), old(s.I()), old(IIO(io)), id, graphSync, s.I(), IIO(io), succ);
-    ioAndHsNotInReadSet(s, io, hs);
     success := succ;
     wait := w;
     ghost var uiop := if succ then UI.PopSyncOp(id as int) else UI.NoOp;
@@ -183,10 +173,8 @@ module MainHandlers refines Main {
   returns (v: Option<Value>)
   {
     var s := hs.s;
-    ioAndHsNotInReadSet(s, io, hs);
     var value := CoordinationImpl.query(k, s, io, key);
     CoordinationModel.queryCorrect(Ic(k), old(s.I()), old(IIO(io)), key, s.I(), value, IIO(io));
-    ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := if value.Some? then UI.GetOp(key, value.value) else UI.NoOp;
     if ValidDiskOp(io.diskOp()) {
       BlockJournalCache.NextPreservesInv(DOM.Ik(Ic(k)), SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
@@ -202,10 +190,8 @@ module MainHandlers refines Main {
   returns (success: bool)
   {
     var s := hs.s;
-    ioAndHsNotInReadSet(s, io, hs);
     var succ := CoordinationImpl.insert(k, s, io, key, value);
     CoordinationModel.insertCorrect(Ic(k), old(s.I()), old(IIO(io)), key, value, s.I(), succ, IIO(io));
-    ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := if succ then UI.PutOp(key, value) else UI.NoOp;
     if ValidDiskOp(io.diskOp()) {
       BlockJournalCache.NextPreservesInv(DOM.Ik(Ic(k)), SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
@@ -221,10 +207,8 @@ module MainHandlers refines Main {
   returns (res: Option<UI.SuccResultList>)
   {
     var s := hs.s;
-    ioAndHsNotInReadSet(s, io, hs);
     var value := CoordinationImpl.succ(k, s, io, start, maxToFind);
     CoordinationModel.succCorrect(Ic(k), old(s.I()), old(IIO(io)), start, maxToFind as int, s.I(), value, IIO(io));
-    ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := 
       if value.Some? then UI.SuccOp(start, value.value.results, value.value.end) else UI.NoOp;
     if ValidDiskOp(io.diskOp()) {
@@ -240,10 +224,8 @@ module MainHandlers refines Main {
   method handleReadResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
   {
     var s := hs.s;
-    ioAndHsNotInReadSet(s, io, hs);
     HandleReadResponseImpl.readResponse(k, s, io);
     HandleReadResponseModel.readResponseCorrect(Ic(k), old(s.I()), old(IIO(io)));
-    ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := UI.NoOp;
     if ValidDiskOp(io.diskOp()) {
       BlockJournalCache.NextPreservesInv(DOM.Ik(Ic(k)), SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
@@ -255,10 +237,8 @@ module MainHandlers refines Main {
   method handleWriteResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
   {
     var s := hs.s;
-    ioAndHsNotInReadSet(s, io, hs);
     HandleWriteResponseImpl.writeResponse(k, s, io);
     HandleWriteResponseModel.writeResponseCorrect(Ic(k), old(s.I()), old(IIO(io)));
-    ioAndHsNotInReadSet(s, io, hs);
     ghost var uiop := UI.NoOp;
     if ValidDiskOp(io.diskOp()) {
       BlockJournalCache.NextPreservesInv(DOM.Ik(Ic(k)), SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
