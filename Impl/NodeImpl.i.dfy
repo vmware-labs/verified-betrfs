@@ -45,6 +45,7 @@ module NodeImpl {
       i:=0;
       while i < |buckets| as uint64 {
         var bucket := buckets[i];
+        /*
         if bucket.format.BFKvl?
         {
           acc.kvlBuckets := acc.kvlBuckets + 1;
@@ -62,7 +63,8 @@ module NodeImpl {
             j := j + 1;
           }
         }
-        else if bucket.format.BFTree? {
+        else */
+        if bucket.format.BFTree? {
           acc.treeBuckets := acc.treeBuckets + 1;
           hasTreeBucket := true;
         }
@@ -163,6 +165,7 @@ module NodeImpl {
     ensures I() == old(I())
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o);
     {
+    /*
       // Every assume false in this method is a Repr problem. And a timeout. Pulling out hair.
       var newBuckets:seq<BucketImpl.MutBucket> := [];
       assert MutBucket.ReprSeqDisjoint(newBuckets) by { MutBucket.reveal_ReprSeqDisjoint(); }
@@ -212,6 +215,7 @@ module NodeImpl {
       {
         assume false;
       }
+      */
     }
 
     lemma LemmaRepr()

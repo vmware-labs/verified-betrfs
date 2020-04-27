@@ -315,7 +315,7 @@ module IOImpl {
         assert sector.Some? ==> SI.WFSector(sector.value);
         assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
 
-        var node := sector.value.block;
+        var node := sector.value.node;
         // Shake loose all the pointers to the memory underlying the PKV we just read in.
         // Doing this eagerly is a terrible idea, since, in the common case we page in
         // a block and throw it away before ever copying it out.
