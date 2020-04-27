@@ -28,7 +28,7 @@ STDLIB=-stdlib=libc++
 # Uncomment to enable gprof
 #GPROF_FLAGS=-pg
 
-WANT_MALLOC_ACCOUNTING=true
+WANT_MALLOC_ACCOUNTING=false
 ifeq "$(WANT_MALLOC_ACCOUNTING)" "true"
 	MALLOC_ACCOUNTING_DEFINE=-DMALLOC_ACCOUNTING=1
 else
@@ -339,6 +339,18 @@ librocksdb:
 
 .PHONY: libycsbc
 
+# NOTE: this uses jemalloc (sudo apt install libjemalloc-dev)
+WANT_JEMALLOC=true
+ifeq "$(WANT_JEMALLOC)" "true"
+JEMALLOC_LIBDIR=/usr/lib/x86_64-linux-gnu/
+JEMALLOC_LIBS=jemalloc
+JEMALLOC_DEFINES=-DVERI_USE_JEMALLOC
+JEMALLOC_OPTS=-L$(JEMALLOC_LIBDIR) -Wl,-rpath,$(JEMALLOC_LIBDIR) -ljemalloc $(JEMALLLOC_LIBS)
+else
+JEMALLOC_DEFINES=
+JEMALLOC_OPTS=
+endif
+
 build/YcsbMain.o: ycsb/YcsbMain.cpp
 	$(CC) $(STDLIB) -c -o $@ \
 			-I ycsb/build/include \
@@ -353,15 +365,10 @@ build/YcsbMain.o: ycsb/YcsbMain.cpp
 			$(MALLOC_ACCOUNTING_DEFINE) \
 			$(DBG_SYMBOLS_FLAG) \
 			$(GPROF_FLAGS) \
+			$(JEMALLOC_DEFINES) \
 			$^
 
 ACCOUNTING_OBJECTS=ycsb/ioaccounting.o ycsb/stataccounting.o
-
-# NOTE: this uses jemalloc (sudo apt install libjemalloc-dev)
-JEMALLOC_LIBDIR=/usr/lib/x86_64-linux-gnu/
-JEMALLOC_LIBS=jemalloc
-#JEMALLOC_OPTS=-DVERI_USE_JEMALLOC -L$(JEMALLOC_LIBDIR) -Wl,-rpath,$(JEMALLOC_LIBDIR) -ljemalloc $(JEMALLLOC_LIBS)
-JEMALLOC_OPTS=
 
 build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/YcsbMain.o $(ACCOUNTING_OBJECTS)
 	# NOTE: this uses c++17, which is required by hdrhist
