@@ -235,9 +235,10 @@ module MutableMap {
       ensures Repr == old(Repr)
       ensures ModelI(this) == FixedSizeUpdateBySlot(old(ModelI(this)), slotIdx, v)
     {
+      FixedSizeUpdateBySlotResult(ModelI(this), slotIdx, v);
+
       Contents := Contents[Storage[slotIdx].key := Some(v)];
       Storage[slotIdx] := Entry(Storage[slotIdx].key, v);
-      assume false;
     }
   }
 
@@ -550,8 +551,7 @@ module MutableMap {
     ensures next == MutableMapModel.SimpleIterOutput(I(), it)
     {
       LemmaWFSimpleIterImpliesEntry(I(), it);
-      assume MutableMapModel.SimpleIterOutput(I(), it)
-          == MutableMapModel.indexOutput(I(), it.i);
+      LemmaSimpleIterOutputReveal(I(), it);
       if it.i == this.Underlying.Storage.Length as uint64 {
         return Done;
       } else {
@@ -624,11 +624,13 @@ module MutableMap {
     {
       LemmaWFSimpleIterImpliesEntry(I(), it);
       MutableMapModel.reveal_UpdateByIter();
+      FixedSizeUpdateBySlotResult(I().underlying, it.i, value);
 
       this.Underlying.UpdateBySlot(it.i, value);
-
       this.Contents := this.Contents[MutableMapModel.SimpleIterOutput(old(I()), it).key := value];
-      assume false;
+
+      assert ModelI(this)
+        == MutableMapModel.UpdateByIter(old(I()), it, value);
     }
 
     method FindSimpleIter(key: uint64) returns (it : SimpleIterator)
@@ -636,12 +638,14 @@ module MutableMap {
     ensures it == MutableMapModel.FindSimpleIter(I(), key)
     {
       MutableMapModel.reveal_FindSimpleIter();
-      var i := this.Underlying.Probe(key);
-      if this.Underlying.Storage[i].Entry? {
-        return SimpleIterator(i, {}, (|I().underlying.storage| - i as int) as ORDINAL);
-      } else {
-        return SimpleIterator(Underlying.Storage.Length as uint64, I().contents.Keys, 0);
-      }
+      var idx := this.Underlying.Probe(key);
+      var i := if this.Underlying.Storage[idx].Entry?
+        then idx
+        else this.Underlying.Storage.Length as uint64;
+
+      ghost var s := MutableMapModel.setUpTo(I(), i as int);
+
+      return SimpleIterator(i, s, (|I().underlying.storage| - i as int) as ORDINAL);
     }
   }
 }
