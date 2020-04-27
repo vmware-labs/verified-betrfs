@@ -18,6 +18,7 @@ module BitmapImpl {
 
     method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator) {
       acc := DebugAccumulator.EmptyAccumulator();
+      assume false; // DebugAccumulate issue
       var a := new DebugAccumulator.AccRec(bits.Length as uint64, "uint64");
       acc := DebugAccumulator.AccPut(acc, "bits", a);
     }

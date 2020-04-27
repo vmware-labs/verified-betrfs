@@ -3,7 +3,7 @@
 #include <optional>
 #include "Framework.h"
 
-namespace BetreeGraphBlockCache_Compile {
+namespace BlockJournalCache_Compile {
   struct Constants;
 }
 namespace MainHandlers_Compile {
@@ -11,7 +11,7 @@ namespace MainHandlers_Compile {
 }
 
 struct Constants {
-  std::shared_ptr<BetreeGraphBlockCache_Compile::Constants> k;
+  std::shared_ptr<BlockJournalCache_Compile::Constants> k;
 };
 
 struct Variables {
@@ -29,7 +29,13 @@ void handle_EvictEverything(Constants k, Variables hs, std::shared_ptr<MainDiskI
 void handle_DebugAccumulator(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io);
 void handle_CountAmassAllocations(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io);
 uint64 handle_PushSync(Constants, Variables, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>);
-std::pair<bool, bool> handle_PopSync(Constants, Variables, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>, uint64);
+std::pair<bool, bool> handle_PopSync(
+  Constants,
+  Variables,
+  std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>,
+  uint64,
+  bool graphSync);
+
 bool handle_Insert(Constants, Variables, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>, DafnySequence<uint8>, DafnySequence<uint8>);
 std::optional<DafnySequence<uint8>> handle_Query(Constants, Variables, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>, DafnySequence<uint8>);
 std::optional<UI_Compile::SuccResultList> handle_Succ(Constants, Variables, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler>, UI_Compile::RangeStart start, uint64 maxToFind);

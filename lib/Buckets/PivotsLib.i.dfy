@@ -1,5 +1,6 @@
-include "../Base/sequences.i.dfy"
-include "../Base/total_order.i.dfy"
+include "../Base/total_order_impl.i.dfy"
+include "../Base/KeyType.s.dfy"
+  
 //
 // Provides definitions and libraries for pivot tables. A pivot
 // table is a sorted list of *pivot* keys that divides the keyspace into
@@ -10,8 +11,8 @@ module PivotsLib {
   import opened Sequences
   import opened NativeTypes
   import opened KeyType
-
-  import Keyspace = Lexicographic_Byte_Order
+  import KeyspaceImpl = Lexicographic_Byte_Order_Impl
+  import Keyspace = KeyspaceImpl.Ord
 
   // A PivotTable of length n breaks the keyspace into n "buckets"
   // If the pivots are (a_1,...,a_n) then the buckets are
@@ -46,7 +47,7 @@ module PivotsLib {
   requires WFPivots(pt)
   ensures i as int == Route(pt, key)
   {
-    var j := Keyspace.ComputeLargestLte(pt, key);
+    var j := KeyspaceImpl.ComputeLargestLte(pt, key);
     i := (j + 1) as uint64;
   }
 
@@ -69,7 +70,7 @@ module PivotsLib {
   {
     if (idx == 0) {
       if (|pivotTable| > 0) {
-        var key := Keyspace.SmallerElement(pivotTable[0]);
+        var key := Keyspace.SmallestElement();
         RouteIs(pivotTable, key, 0);
         return key;
       } else {
@@ -238,7 +239,7 @@ module PivotsLib {
   ensures i as int == CutoffForLeft(pivots, pivot)
   {
     reveal_CutoffForLeft();
-    var j := Keyspace.ComputeLargestLt(pivots, pivot);
+    var j := KeyspaceImpl.ComputeLargestLt(pivots, pivot);
     i := (j + 1) as uint64;
   }
 
@@ -304,12 +305,12 @@ module PivotsLib {
       RouteIs(parentPivots, key, parentIdx);
       RouteIs(childPivots, key, childIdx);
     } else if (|childPivots| > 0) {
-      key := Keyspace.SmallerElement(childPivots[0]);
+      key := Keyspace.SmallestElement();
       Keyspace.IsStrictlySortedImpliesLte(childPivots, 0, |childPivots| - 1);
       RouteIs(parentPivots, key, parentIdx);
       RouteIs(childPivots, key, childIdx);
     } else if (|parentPivots| > 0) {
-      key := Keyspace.SmallerElement(parentPivots[0]);
+      key := Keyspace.SmallestElement();
       RouteIs(parentPivots, key, parentIdx);
       RouteIs(childPivots, key, childIdx);
     } else {

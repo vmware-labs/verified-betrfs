@@ -615,6 +615,7 @@ module BetreeInv {
           assert lookup' == lookup'[..i] + middle' + lookup'[i+2..];
           
           InterpretLookupAdditive3(lookup[..i], middle, lookup[i+2..], key);
+          assert middle == lookup[i..i+2];
           assert lookup == lookup[..i] + middle + lookup[i+2..];
 
           RedirectResultingGraph(k, s, s', redirect);

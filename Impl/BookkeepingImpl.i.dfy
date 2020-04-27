@@ -4,6 +4,7 @@ include "BookkeepingModel.i.dfy"
 module BookkeepingImpl { 
   import opened IOImpl
   import opened StateImpl
+  import opened DiskOpImpl
   import BookkeepingModel
   import LruModel
 

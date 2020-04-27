@@ -15,10 +15,12 @@ module SuccImpl {
   import BookkeepingModel
   import opened StateImpl
   import opened BucketImpl
-  import opened Lexicographic_Byte_Order
+  import opened Lexicographic_Byte_Order_Impl
   import opened NodeImpl
   import BucketSuccessorLoopImpl
   import BucketSuccessorLoopModel
+  import opened DiskOpImpl
+  import opened MainDiskIOHandler
 
   import opened Options
   import opened NativeTypes
@@ -184,7 +186,7 @@ module SuccImpl {
       // TODO factor this out into something that checks (and if it's full, actually
       // does something).
       if s.cache.Count() + |s.outstandingBlockReads| as uint64 <= MaxCacheSizeUint64() - 1 {
-        PageInReq(k, s, io, ref);
+        PageInNodeReq(k, s, io, ref);
       } else {
         print "getPath: Can't page in anything because cache is full\n";
       }
@@ -199,6 +201,7 @@ module SuccImpl {
   requires io.initialized()
   requires io !in s.Repr()
   requires maxToFind >= 1
+  requires s.ready
 
   modifies io
   modifies s.Repr()
@@ -208,12 +211,7 @@ module SuccImpl {
   {
     SuccModel.reveal_doSucc();
 
-    if (!s.ready) {
-      PageInIndirectionTableReq(k, s, io);
-      res := None;
-    } else {
-      var startKey := if start.NegativeInf? then [] else start.key;
-      res := getPath(k, s, io, startKey, [], start, None, maxToFind, BT.G.Root(), 40);
-    }
+    var startKey := if start.NegativeInf? then [] else start.key;
+    res := getPath(k, s, io, startKey, [], start, None, maxToFind, BT.G.Root(), 40);
   }
 }

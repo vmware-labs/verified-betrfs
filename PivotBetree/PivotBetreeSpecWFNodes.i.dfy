@@ -16,7 +16,7 @@ module PivotBetreeSpecWFNodes {
   import Keyspace = Lexicographic_Byte_Order
 
   lemma ValidFlushWritesInvNodes(f: NodeFlush)
-  requires ValidFlush(f)
+  requires PivotBetreeSpec.ValidFlush(f)
   requires forall i | 0 <= i < |FlushReads(f)| :: InvNode(FlushReads(f)[i].node)
   ensures forall i | 0 <= i < |FlushOps(f)| :: InvNode(FlushOps(f)[i].node)
   ensures InvNode(FlushOps(f)[0].node)

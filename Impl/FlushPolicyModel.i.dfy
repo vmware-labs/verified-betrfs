@@ -14,6 +14,8 @@ module FlushPolicyModel {
   import opened SplitModel
   import opened LeafModel
   import opened EvictModel
+  import opened InterpretationDiskOps
+  import opened DiskOpModel
 
   import opened Sequences
 
@@ -70,7 +72,7 @@ module FlushPolicyModel {
     biggestSlotIterate(buckets, 1, 0, WeightBucket(buckets[0]) as uint64)
   }
 
-  predicate ValidStackSlots(k: Constants, s: Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
+  predicate ValidStackSlots(k: Constants, s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
   {
     && |stack| == |slots| + 1
     && s.Ready?
@@ -80,7 +82,7 @@ module FlushPolicyModel {
     && (forall j | 0 <= j < |stack| - 1 :: slots[j] as int < |s.cache[stack[j]].children.value| <= MaxNumChildren())
   }
 
-  predicate ValidAction(k: Constants, s: Variables, action: Action)
+  predicate ValidAction(k: Constants, s: BCVariables, action: Action)
   {
     && s.Ready?
     && (action.ActionPageIn? ==> (
@@ -116,9 +118,9 @@ module FlushPolicyModel {
     ))
   }
 
-  function {:opaque} getActionToSplit(k: Constants, s: Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64) : (action : Action)
+  function {:opaque} getActionToSplit(k: Constants, s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64) : (action : Action)
   requires 0 <= i as int < |stack|
-  requires WFVars(s)
+  requires WFBCVars(s)
   requires ValidStackSlots(k, s, stack, slots)
   {
     if i == 0 then
@@ -145,10 +147,10 @@ module FlushPolicyModel {
     )
   }
 
-  function {:opaque} getActionToFlush(k: Constants, s: Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>) : (Variables, Action)
+  function {:opaque} getActionToFlush(k: Constants, s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>) : (BCVariables, Action)
   requires |stack| <= 40
   requires ValidStackSlots(k, s, stack, slots)
-  requires WFVars(s)
+  requires WFBCVars(s)
   decreases 0x1_0000_0000_0000_0000 - |stack|
   {
     if |stack| as uint64 == 40 then (
@@ -168,7 +170,7 @@ module FlushPolicyModel {
             var child := s.cache[childref];
             var s1 := s.(lru := LruModel.Use(s.lru, childref));
             LruModel.LruUse(s.lru, childref);
-            assert IVars(s) == IVars(s1);
+            assert IBlockCache(s) == IBlockCache(s1);
 
             var childTotalWeight: uint64 := WeightBucketList(child.buckets) as uint64;
             if childTotalWeight + FlushTriggerWeight() as uint64 <= MaxTotalBucketWeight() as uint64 then (
@@ -197,9 +199,9 @@ module FlushPolicyModel {
     )
   }
 
-  lemma getActionToSplitValidAction(k: Constants, s: Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64)
+  lemma getActionToSplitValidAction(k: Constants, s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64)
   requires 0 <= i as int < |stack|
-  requires Inv(k, s)
+  requires BCInv(k, s)
   requires ValidStackSlots(k, s, stack, slots)
   requires forall j | 0 <= j < |stack| :: stack[j] in s.ephemeralIndirectionTable.graph
   requires forall j | 0 <= j < |stack| - 1 :: s.cache[stack[j]].children.value[slots[j]] == stack[j+1]
@@ -227,16 +229,16 @@ module FlushPolicyModel {
     }
   }
 
-  lemma getActionToFlushValidAction(k: Constants, s: Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
+  lemma getActionToFlushValidAction(k: Constants, s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
   requires |stack| <= 40
   requires ValidStackSlots(k, s, stack, slots)
-  requires Inv(k, s)
+  requires BCInv(k, s)
   requires forall j | 0 <= j < |stack| :: stack[j] in s.ephemeralIndirectionTable.graph
   requires forall j | 0 <= j < |stack| - 1 :: s.cache[stack[j]].children.value[slots[j]] == stack[j+1]
   decreases 0x1_0000_0000_0000_0000 - |stack|
   ensures var (s', action) := getActionToFlush(k, s, stack, slots);
-    && WFVars(s')
-    && IVars(s) == IVars(s')
+    && WFBCVars(s')
+    && IBlockCache(s) == IBlockCache(s')
     && ValidAction(k, s', action)
   {
     reveal_getActionToFlush();
@@ -265,7 +267,7 @@ module FlushPolicyModel {
               getActionToFlushValidAction(k, s1, stack + [childref], slots + [slot]);
             }
           } else {
-            assert childref !in IVars(s).cache;
+            assert childref !in IBlockCache(s).cache;
             assert childref in IIndirectionTable(s.ephemeralIndirectionTable).graph;
             assert childref in IIndirectionTable(s.ephemeralIndirectionTable).locs;
             assert ValidAction(k, s, action);
@@ -277,9 +279,9 @@ module FlushPolicyModel {
     }
   }
 
-  predicate {:opaque} runFlushPolicy(k: Constants, s: Variables, io: IO,
-      s': Variables, io': IO)
-  requires Inv(k, s)
+  predicate {:opaque} runFlushPolicy(k: Constants, s: BCVariables, io: IO,
+      s': BCVariables, io': IO)
+  requires BCInv(k, s)
   requires io.IOInit?
   requires s.Ready?
   requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
@@ -287,14 +289,14 @@ module FlushPolicyModel {
   {
     var s0 := s.(lru := LruModel.Use(s.lru, BT.G.Root()));
     LruModel.LruUse(s.lru, BT.G.Root());
-    assert IVars(s0) == IVars(s);
+    assert IBlockCache(s0) == IBlockCache(s);
 
     var (s1, action) := getActionToFlush(k, s0, [BT.G.Root()], []);
     getActionToFlushValidAction(k, s0, [BT.G.Root()], []);
 
     match action {
       case ActionPageIn(ref) => (
-        (s', io') == PageInReq(k, s1, io, ref)
+        (s', io') == PageInNodeReq(k, s1, io, ref)
       )
       case ActionSplit(parentref, slot) => (
         && s' == doSplit(k, s1, parentref, s1.cache[parentref].children.value[slot], slot as int)
@@ -324,19 +326,22 @@ module FlushPolicyModel {
     }
   }
 
-  lemma runFlushPolicyCorrect(k: Constants, s: Variables, io: IO, s': Variables, io': IO)
-  requires Inv(k, s)
+  lemma runFlushPolicyCorrect(k: Constants, s: BCVariables, io: IO, s': BCVariables, io': IO)
+  requires BCInv(k, s)
   requires io.IOInit?
   requires s.Ready?
   requires BT.G.Root() in s.cache
   requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
   requires runFlushPolicy(k, s, io, s', io')
-  ensures WFVars(s')
-  ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
+  ensures WFBCVars(s')
+  ensures ValidDiskOp(diskOp(io'))
+  ensures IDiskOp(diskOp(io')).jdop.NoDiskOp?
+  ensures betree_next_dop(k, IBlockCache(s), IBlockCache(s'),
+      IDiskOp(diskOp(io')).bdop)
   {
     var s0 := s.(lru := LruModel.Use(s.lru, BT.G.Root()));
     LruModel.LruUse(s.lru, BT.G.Root());
-    assert IVars(s0) == IVars(s);
+    assert IBlockCache(s0) == IBlockCache(s);
     var (s1, action) := getActionToFlush(k, s0, [BT.G.Root()], []);
     getActionToFlushValidAction(k, s0, [BT.G.Root()], []);
 
@@ -344,7 +349,7 @@ module FlushPolicyModel {
 
     match action {
       case ActionPageIn(ref) => {
-        PageInReqCorrect(k, s1, io, ref);
+        PageInNodeReqCorrect(k, s1, io, ref);
       }
       case ActionSplit(parentref, slot) => {
         doSplitCorrect(k, s1, parentref, s1.cache[parentref].children.value[slot], slot as int);
@@ -364,7 +369,7 @@ module FlushPolicyModel {
         EvictOrDeallocCorrect(k, s1, io, s', io');
       }
       case ActionFail => {
-        assert noop(k, IVars(s), IVars(s1));
+        assert noop(k, IBlockCache(s), IBlockCache(s1));
       }
     }
   }
