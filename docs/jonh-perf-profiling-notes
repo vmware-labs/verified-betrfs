@@ -985,3 +985,10 @@ Same thing, no cgroup to see if faults go away
 Okay, look, things only started taking this weird swappy turn after -3.
 
 master merge: may need to advance dafny.
+------------------------------------------------------------------------------
+Did a huuuuge master merge. All of my explicit amassin' got lost in the
+packedkv changeover.
+Time to see if memory is still under control.
+
+time build/VeribetrfsYcsb ycsb/workloada-onefield.spec /tmp/data/ --veribetrkv > malloc-exp/merge-1.data
+

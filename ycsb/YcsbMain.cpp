@@ -164,6 +164,7 @@ void cgroups_report() {
 static int i=0;
 template< class DB >
 void periodicReport(DB db, const char* phase, int elapsed_ms, int ops_completed) {
+  return; // TODO reducing gdb clutter
     printf("elapsed_ms %d ops %d %s\n", elapsed_ms, ops_completed, phase);
 
     malloc_accounting_display("periodic");

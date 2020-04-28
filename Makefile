@@ -28,14 +28,14 @@ STDLIB=-stdlib=libc++
 # Uncomment to enable gprof
 #GPROF_FLAGS=-pg
 
-WANT_MALLOC_ACCOUNTING=false
+WANT_MALLOC_ACCOUNTING=true
 ifeq "$(WANT_MALLOC_ACCOUNTING)" "true"
 	MALLOC_ACCOUNTING_DEFINE=-DMALLOC_ACCOUNTING=1
 else
 	MALLOC_ACCOUNTING_DEFINE=
 endif
 
-WANT_DEBUG=false
+WANT_DEBUG=true
 ifeq "$(WANT_DEBUG)" "true"
 	DBG_SYMBOLS_FLAG=-g
 	OPT_FLAG=-O0
@@ -292,14 +292,17 @@ build/framework/BundleWrapper.o: framework/BundleWrapper.cpp build/Bundle.cpp $(
 rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 -include $(call rwildcard,$(CPP_DEP_DIR)/,*.d)
 
-VERIBETRFS_O_FILES=\
-	build/framework/BundleWrapper.o \
-	build/framework/Framework.o \
-	build/framework/NativeArrays.o \
-	build/framework/Crc32.o \
-	build/framework/Main.o \
+VERIBETRFS_AUX_FILES=\
 	build/framework/Benchmarks.o \
+	build/framework/BundleWrapper.o \
+	build/framework/Crc32.o \
+	build/framework/Framework.o \
 	build/framework/MallocAccounting.o \
+	build/framework/NativeArrays.o \
+
+VERIBETRFS_O_FILES=\
+	$(VERIBETRFS_AUX_FILES)\
+	build/framework/Main.o \
 
 LDFLAGS=-msse4.2
 
@@ -317,12 +320,9 @@ build/Veribetrfs: $(VERIBETRFS_O_FILES)
 ##############################################################################
 # YCSB
 
+
 VERIBETRFS_YCSB_O_FILES=\
-	build/framework/BundleWrapper.o \
-	build/framework/Framework.o \
-	build/framework/Crc32.o \
-	build/framework/Benchmarks.o \
-	build/framework/MallocAccounting.o \
+	$(VERIBETRFS_AUX_FILES)\
 	build/framework/leakfinder.o \
 
 libycsbc: build/libycsbc-libcpp.a \
@@ -347,7 +347,7 @@ librocksdb:
 .PHONY: libycsbc
 
 # NOTE: this uses jemalloc (sudo apt install libjemalloc-dev)
-WANT_JEMALLOC=true
+WANT_JEMALLOC=false
 ifeq "$(WANT_JEMALLOC)" "true"
 JEMALLOC_LIBDIR=/usr/lib/x86_64-linux-gnu/
 JEMALLOC_LIBS=jemalloc
@@ -369,9 +369,7 @@ build/YcsbMain.o: ycsb/YcsbMain.cpp
 			-Winline -std=c++17 $(O3FLAG) \
 			-D_YCSB_VERIBETRFS \
 			$(POUND_DEFINES) \
-			$(MALLOC_ACCOUNTING_DEFINE) \
-			$(DBG_SYMBOLS_FLAG) \
-			$(GPROF_FLAGS) \
+			$(MALLOC_ACCOUNTING_DEFINE) $(DBG_SYMBOLS_FLAG) $(OPT_FLAG) $(GPROF_FLAGS) \
 			$(JEMALLOC_DEFINES) \
 			$^
 
@@ -383,7 +381,7 @@ build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/Y
 			-Winline -std=c++17 $(O3FLAG) \
 			-L ycsb/build \
 			-L vendor/rocksdb \
-			$(DBG_SYMBOLS_FLAG) \
+			$(OPT_FLAGS) \
 			$(VERIBETRFS_YCSB_O_FILES) \
 			$(ACCOUNTING_OBJECTS) \
 			build/YcsbMain.o \
