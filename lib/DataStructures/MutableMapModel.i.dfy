@@ -665,6 +665,60 @@ module MutableMapModel {
     FixedSizeLinearHashMap(storage', self.count, contents')
   }
 
+  lemma FixedSizeUpdateBySlotResult<V>(self: FixedSizeLinearHashMap<V>, slotIdx: uint64, value: V)
+  requires FixedSizeInv(self)
+  requires 0 <= slotIdx as int < |self.storage|
+  requires self.storage[slotIdx].Entry?
+  ensures var self' := FixedSizeUpdateBySlot(self, slotIdx, value);
+      && FixedSizeInv(self')
+  {
+    var self' := FixedSizeUpdateBySlot(self, slotIdx, value);
+    var key := self.storage[slotIdx].key;
+    assert EntryInSlotMatchesContents(self.storage, Slot(slotIdx as int), self.contents);
+    assert key in self.contents;
+    calc {
+      |self.contents|;
+      |self.contents.Keys|;
+      |self'.contents.Keys|;
+      |self'.contents.Keys|;
+    }
+
+    forall explainedKey | explainedKey in self'.contents
+    ensures exists skips :: SlotExplainsKey(self'.storage, skips, explainedKey)
+    {
+      var oldSkips :| SlotExplainsKey(self.storage, oldSkips, explainedKey);
+      assert SlotExplainsKey(self'.storage, oldSkips, explainedKey); // observe
+      
+    }
+
+    forall slot | ValidSlot(|self'.storage|, slot)
+        && SlotIsEntry(self'.storage, slot)
+    ensures EntryInSlotMatchesContents(self'.storage, slot, self'.contents)
+    {
+      assert EntryInSlotMatchesContents(self.storage, slot, self.contents);
+      if slot.slot == slotIdx as int {
+        calc {
+          self'.contents[self'.storage[slot.slot].key];
+          Some(self'.storage[slot.slot].value);
+        }
+      } else {
+        calc {
+          self'.contents[self'.storage[slot.slot].key];
+          {
+            assert self.storage[slot.slot].key
+                == self'.storage[slot.slot].key;
+            if self.storage[slot.slot].key == key {
+              assert TwoNonEmptyValidSlotsWithSameKey(self.storage, slot, Slot(slotIdx as int));
+            }
+          }
+          self.contents[self.storage[slot.slot].key];
+          Some(self.storage[slot.slot].value);
+          Some(self'.storage[slot.slot].value);
+        }
+      }
+    }
+  }
+
   function {:opaque} FixedSizeGet<V>(self: FixedSizeLinearHashMap<V>, key: uint64)
     : (found : Option<V>)
   requires FixedSizeInv(self)
@@ -1443,6 +1497,12 @@ module MutableMapModel {
     indexOutput(self, it.i)
   }
 
+  lemma LemmaSimpleIterOutputReveal<V>(self: LinearHashMap<V>, it: SimpleIterator)
+  requires WFSimpleIter(self, it)
+  ensures SimpleIterOutput(self, it) == indexOutput(self, it.i)
+  {
+  }
+
   lemma LemmaWFIterImpliesILt<V>(self: LinearHashMap<V>, it: Iterator<V>)
   requires WFIter(self, it)
   ensures it.next.Next? ==> it.i as int < |self.underlying.storage|
@@ -1654,10 +1714,17 @@ module MutableMapModel {
   ensures self'.contents == self.contents[SimpleIterOutput(self, it).key := value]
   ensures self'.count == self.count
   {
-    assume false;
+    FixedSizeUpdateBySlotResult(self.underlying, it.i, value);
+    //assert SimpleIterOutput(self, it).key
+    //    == self.underlying.storage[it.i].key;
+
     var underlying := FixedSizeUpdateBySlot(self.underlying, it.i, value);
-    LinearHashMap(underlying, self.count,
-        self.contents[SimpleIterOutput(self, it).key := value])
+    var self' := LinearHashMap(underlying, self.count,
+        self.contents[SimpleIterOutput(self, it).key := value]);
+
+    UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents);
+
+    self'
   }
 
   lemma UpdatePreservesSimpleIter<V>(
@@ -1667,7 +1734,44 @@ module MutableMapModel {
   requires WFSimpleIter(self, preserved)
   ensures WFSimpleIter(UpdateByIter(self, it, value), preserved)
   {
-    assume false;
+    reveal_UpdateByIter();
+    var self' := UpdateByIter(self, it, value);
+
+    forall key | key in preserved.s
+    ensures exists j | 0 <= j < preserved.i as int ::
+        && self'.underlying.storage[j].Entry?
+        && key == self'.underlying.storage[j].key
+    {
+      assert key in self.contents;
+      var j :| 0 <= j < preserved.i as int
+        && self.underlying.storage[j].Entry?
+        && key == self.underlying.storage[j].key;
+      assert self'.underlying.storage[j].Entry?;
+      assert key == self'.underlying.storage[j].key;
+    }
+  }
+
+  function setUpTo<V>(self: LinearHashMap<V>, i: int) : set<uint64>
+  requires 0 <= i <= |self.underlying.storage|
+  {
+    set j | 0 <= j < i && self.underlying.storage[j].Entry?
+        :: self.underlying.storage[j].key
+  }
+
+  lemma setUpToLeContents<V>(self: LinearHashMap<V>, i: int)
+  requires Inv(self)
+  requires 0 <= i <= |self.underlying.storage|
+  ensures setUpTo(self, i) <= self.contents.Keys
+  {
+    forall j | 0 <= j < i && self.underlying.storage[j].Entry?
+    ensures self.underlying.storage[j].key in self.contents
+    {
+      var key := self.underlying.storage[j].key;
+      var slot := Slot(j);
+      assert ValidSlot(|self.underlying.storage|, slot);
+      CantEquivocateMapFromStorageKey(self.underlying);
+      MapFromStorageProperties(self.underlying.storage, self.contents);
+    }
   }
 
   function {:opaque} FindSimpleIter<V>(self: LinearHashMap<V>, key: uint64)
@@ -1677,13 +1781,30 @@ module MutableMapModel {
   ensures key in self.contents ==> SimpleIterOutput(self, it) == Next(key, self.contents[key])
   ensures key !in self.contents ==> SimpleIterOutput(self, it) == Done
   {
-    assume false;
-    var i := Probe(self.underlying, key);
-    if self.underlying.storage[i].Entry? then (
-      // TODO the ghosty {} is wrong
-      SimpleIterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL)
-    ) else (
-      SimpleIterator(|self.underlying.storage| as uint64, self.contents.Keys, 0)
-    )
+    var idx := Probe(self.underlying, key);
+    var i := if self.underlying.storage[idx].Entry? then idx
+      else |self.underlying.storage| as uint64;
+      
+    var it := SimpleIterator(i, setUpTo(self, i as int), (|self.underlying.storage| - i as int) as ORDINAL);
+
+    assert WFSimpleIter(self, it)
+      && (key in self.contents ==>
+        SimpleIterOutput(self, it) == Next(key, self.contents[key]))
+      && (key !in self.contents ==>
+        SimpleIterOutput(self, it) == Done)
+    by {
+      var result := LemmaProbeResult(self.underlying, key);
+      if it.i as int < |self.underlying.storage| {
+        if self.underlying.storage[it.i].key in it.s {
+          var j :| 0 <= j < it.i && self.underlying.storage[j].Entry?
+              && self.underlying.storage[j].key == key;
+          assert TwoNonEmptyValidSlotsWithSameKey(
+              self.underlying.storage, Slot(j as int), Slot(it.i as int));
+        }
+      }
+      setUpToLeContents(self, i as int);
+    }
+
+    it
   }
 }
