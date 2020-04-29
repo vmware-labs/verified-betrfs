@@ -201,7 +201,7 @@ module IOImpl {
   {
     var id1, addr, bytes := io.getReadResult();
     id := id1;
-    if |bytes| as uint64 <= IndirectionTableBlockSizeUint64() {
+    if |bytes| as uint64 <= LargestBlockSizeOfAnyTypeUint64() {
       var loc := DiskLayout.Location(addr, |bytes| as uint64);
       var sectorOpt := MarshallingImpl.ParseCheckedSector(bytes);
       if sectorOpt.Some? && (
