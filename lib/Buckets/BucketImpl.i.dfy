@@ -414,6 +414,33 @@ module BucketImpl {
       reveal_ReprSeqDisjoint();
     }
 
+    static lemma ISeq_replace1with2(buckets: seq<MutBucket>, l: MutBucket, r: MutBucket, slot: int)
+    requires InvSeq(buckets)
+    requires 0 <= slot < |buckets|
+    requires l.Inv()
+    requires r.Inv()
+    ensures InvSeq(replace1with2(buckets, l, r, slot))
+    ensures ISeq(replace1with2(buckets, l, r, slot))
+        == replace1with2(ISeq(buckets), l.I(), r.I(), slot);
+    {
+      var s := replace1with2(buckets, l, r, slot);
+      forall i | 0 <= i < |s|
+      ensures s[i].Inv()
+      ensures ISeq(replace1with2(buckets, l, r, slot))[i]
+          == replace1with2(ISeq(buckets), l.I(), r.I(), slot)[i]
+      {
+        if i == slot {
+          assert s[i] == l;
+        } else if i == slot+1 {
+          assert s[i] == r;
+        } else if i < slot {
+          assert s[i] == buckets[i];
+        } else {
+          assert s[i] == buckets[i-1];
+        }
+      }
+    }
+
     static lemma ReprSeqDisjointOfReplace1with2(
         buckets: seq<MutBucket>,
         l: MutBucket,
@@ -425,6 +452,43 @@ module BucketImpl {
     requires r.Repr !! ReprSeq(buckets)
     requires l.Repr !! r.Repr
     ensures ReprSeqDisjoint(replace1with2(buckets, l, r, slot))
+    {
+      reveal_ReprSeqDisjoint();
+      var buckets' := replace1with2(buckets, l, r, slot);
+      forall i, j | 0 <= i < |buckets'| && 0 <= j < |buckets'| && i != j
+      ensures buckets'[i].Repr !! buckets'[j].Repr
+      {
+        if i == slot {
+          assert buckets'[i].Repr == l.Repr;
+        }
+        else if i == slot+1 {
+          assert buckets'[i].Repr == r.Repr;
+        }
+        else if i < slot {
+          assert buckets'[i].Repr == buckets[i].Repr;
+          assert buckets[i].Repr <= ReprSeq(buckets) by { reveal_ReprSeq(); }
+        }
+        else {
+          assert buckets'[i].Repr == buckets[i-1].Repr;
+          assert buckets[i-1].Repr <= ReprSeq(buckets) by { reveal_ReprSeq(); }
+        }
+
+        if j == slot {
+          assert buckets'[j].Repr == l.Repr;
+        }
+        else if j == slot+1 {
+          assert buckets'[j].Repr == r.Repr;
+        }
+        else if j < slot {
+          assert buckets'[j].Repr == buckets[j].Repr;
+          assert buckets[j].Repr <= ReprSeq(buckets) by { reveal_ReprSeq(); }
+        }
+        else {
+          assert buckets'[j].Repr == buckets[j-1].Repr;
+          assert buckets[j-1].Repr <= ReprSeq(buckets) by { reveal_ReprSeq(); }
+        }
+      }
+    }
 
     static lemma ListReprOfLen1(buckets: seq<MutBucket>)
     requires |buckets| == 1
@@ -543,23 +607,8 @@ module BucketImpl {
       if ghosty {
         reveal_ISeq();
         reveal_SplitBucketInList();
-        assume ISeq(replace1with2(buckets, l, r, slot as int))
-            == replace1with2(ISeq(buckets), l.I(), r.I(), slot as int);
+        ISeq_replace1with2(buckets, l, r, slot as int);
         ReprSeqDisjointOfReplace1with2(buckets, l, r, slot as int);
-        forall i | 0 <= i < |buckets'| ensures buckets'[i].Inv()
-        {
-          if i < slot as int {
-            assert buckets[i].Inv();
-            assert buckets'[i].Inv();
-          } else if i == slot as int  {
-            assert buckets'[i].Inv();
-          } else if i == slot as int + 1 {
-            assert buckets'[i].Inv();
-          } else {
-            assert buckets[i-1].Inv();
-            assert buckets'[i].Inv();
-          }
-        }
         forall o | o in ReprSeq(buckets')
         ensures o in old(ReprSeq(buckets)) || fresh(o)
         {
