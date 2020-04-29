@@ -108,8 +108,13 @@ module QueryModel {
         msg == BT.InterpretLookup(lookup, key))
   }
 
-  lemma AugmentLookup(lookup: seq<BT.G.ReadOp>, ref: BT.G.Reference, node: BT.G.Node, key: Key, cache: map<BT.G.Reference, BT.G.Node>, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
-  returns (lookup' : seq<BT.G.ReadOp>)
+  function {:opaque} new_lookup(lookup: seq<BT.G.ReadOp>, ref: BT.G.Reference, node: BT.G.Node) : seq<BT.G.ReadOp>
+  {
+    lookup + [BT.G.ReadOp(ref, node)]
+  }
+
+  lemma AugmentLookup(lookup': seq<BT.G.ReadOp>, lookup: seq<BT.G.ReadOp>, ref: BT.G.Reference, node: BT.G.Node, key: Key, cache: map<BT.G.Reference, BT.G.Node>, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
+  requires lookup' == new_lookup(lookup, ref, node)
   requires |lookup| > 0 ==> BT.WFLookupForKey(lookup, key)
   requires forall i | 0 <= i < |lookup| :: lookup[i].ref in graph
   requires forall i | 0 <= i < |lookup| :: MapsTo(cache, lookup[i].ref, lookup[i].node)
@@ -125,8 +130,7 @@ module QueryModel {
   ensures forall i | 0 <= i < |lookup'| :: lookup'[i].ref in graph
   ensures forall i | 0 <= i < |lookup'| :: MapsTo(cache, lookup'[i].ref, lookup'[i].node)
   {
-    assume false;
-    lookup' := lookup + [BT.G.ReadOp(ref, node)];
+    reveal_new_lookup();
 
     forall idx | BT.ValidLayerIndex(lookup', idx) && idx < |lookup'| - 1
     ensures BT.LookupFollowsChildRefAtLayer(key, lookup', idx)
@@ -184,10 +188,14 @@ module QueryModel {
         var inode := INode(s0.cache[ref]);
         assert BucketWellMarshalled(bucket) ==> lookupMsg == BT.NodeLookup(inode, key);
 
-        var newlookup := AugmentLookup(lookup, ref, inode, key, ICache(s0.cache), IIndirectionTable(s0.ephemeralIndirectionTable).graph);
+        var newlookup := new_lookup(lookup, ref, inode);
+        AugmentLookup(newlookup, lookup, ref, inode, key, ICache(s0.cache), IIndirectionTable(s0.ephemeralIndirectionTable).graph);
 
         assert PBS.LookupVisitsWellMarshalledBuckets(newlookup, key) ==> BucketWellMarshalled(bucket);
-        assume PBS.LookupVisitsWellMarshalledBuckets(newlookup, key) ==> PBS.LookupVisitsWellMarshalledBuckets(lookup, key);
+        assert PBS.LookupVisitsWellMarshalledBuckets(newlookup, key) ==> PBS.LookupVisitsWellMarshalledBuckets(lookup, key)
+        by {
+          reveal_new_lookup();
+        }
 
         if newmsg.Define? {
           assert BT.ValidQuery(BT.LookupQuery(key, res.value, newlookup));
