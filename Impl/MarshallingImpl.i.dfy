@@ -567,8 +567,6 @@ module MarshallingImpl {
   requires sector.SectorNode? ==> IM.WFNode(sector.node.I())
   requires sector.SectorNode? ==> BT.WFNode(IM.INode(sector.node.I()))
   requires sector.SectorNode? ==> forall i | 0 <= i < |sector.node.buckets| :: BucketWellMarshalled(sector.node.buckets[i].I())
-  requires sector.SectorIndirectionTable? ==>
-      BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.I()))
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.SectorGrammar());
   ensures Marshalling.valToSector(v) == Some(IM.ISector(StateImpl.ISector(sector)))
@@ -577,17 +575,30 @@ module MarshallingImpl {
   ensures SizeOfV(v) == size as int
   {
     match sector {
-      //case SectorIndirectionTable(indirectionTable) => {
-      //  var w, s := indirectionTable.indirectionTableToVal();
-      //  v := VCase(1, w);
-      //  size := s + 8;
-      //}
       case SectorNode(node) => {
         var w, s := nodeToVal(node);
         v := VCase(2, w);
         size := s + 8;
       }
     }
+  }
+
+  method indirectionTableSectorToVal(sector: StateImpl.Sector)
+  returns (v : V, size: uint64)
+  requires StateImpl.WFSector(sector)
+  requires IM.WFSector(StateImpl.ISector(sector))
+  requires sector.SectorIndirectionTable?
+  requires sector.indirectionTable.Inv()
+  requires BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.I()))
+  ensures ValidVal(v)
+  ensures ValInGrammar(v, Marshalling.SectorGrammar());
+  ensures Marshalling.valToSector(v) == Some(IM.ISector(StateImpl.ISector(sector)))
+  ensures SizeOfV(v) < 0x1_0000_0000_0000_0000 - 32
+  ensures SizeOfV(v) == size as int
+  {
+    var w, s := sector.indirectionTable.indirectionTableToVal();
+    v := VCase(1, w);
+    size := s + 8;
   }
 
   /////// Marshalling and de-marshalling
@@ -695,12 +706,44 @@ module MarshallingImpl {
     } else if sector.SectorIndirectionTable? {
       //NativeBenchmarking.start("MarshallCheckedSector");
 
-      var data := new byte[IndirectionTableBlockSizeUint64()];
+      //var data := new byte[IndirectionTableBlockSizeUint64()];
 
       //NativeBenchmarking.start("marshallIndirectionTable");
-      var end := sector.indirectionTable.marshallIndirectionTable(data, 40);
       //NativeBenchmarking.end("marshallIndirectionTable");
 
+      var v, computedSize := indirectionTableSectorToVal(sector);
+      var size: uint64 := computedSize + 32;
+
+      ghost var ghosty := true;
+      if ghosty {
+        if Marshalling.IsInitIndirectionTable(IndirectionTableModel.I(sector.indirectionTable.I()))
+        {
+          Marshalling.InitIndirectionTableSizeOfV(IndirectionTableModel.I(sector.indirectionTable.I()), v);
+        }
+      }
+
+      if size > IndirectionTableBlockSizeUint64() {
+        return null;
+      }
+
+      var data := MarshallIntoFixedSize(v, Marshalling.SectorGrammar(), 32, size);
+
+      IMM.reveal_parseSector();
+      IMM.reveal_parseCheckedSector();
+
+      var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
+
+      assert data[32..] == data[32..data.Length];
+      assert hash == Crypto.Crc32C(data[32..]);
+      ghost var data_suffix := data[32..];
+      NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
+      assert data_suffix == data[32..];
+
+
+
+      return data;
+
+      /*
       assume false;
       if end == 0 {
         return null;
@@ -717,6 +760,7 @@ module MarshallingImpl {
       //NativeBenchmarking.end("MarshallCheckedSector");
 
       return data;
+      */
     } else {
       var node := sector.node;
 
