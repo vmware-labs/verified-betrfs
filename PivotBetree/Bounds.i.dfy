@@ -9,9 +9,36 @@ module Bounds {
   import opened NativeTypes
   import opened KeyType
 
-  function method IndirectionTableBlockSizeUint64() : uint64 { 24*1024*1024 }
-  function method NodeBlockSizeUint64() : uint64 { 98304 }
-  function method MinNodeBlockIndexUint64() : uint64 { 598 }
+  function method NodeBlockSizeUint64() : uint64 { 8*1024*1024 }
+
+  // TODO(jonh): We should partition the disk, in byte units, into regions,
+  // and then address each region in its native block size with 0-based indexing.
+  function method MinNodeBlockIndexUint64() : uint64 { 8 }
+
+  // This is the configuration constraint for MinNodeBlockIndexUint64, so you can
+  // "make build/PivotBetree/Bounds.i.verified" as a quick way to sanity-check
+  // without running a complete system verification.
+  lemma SanityCheckMinNodeBlockIndexUint64()
+    ensures (MinNodeBlockIndexUint64() as int) * (NodeBlockSizeUint64() as int)
+      >= 2*SuperblockSize() + (DiskNumJournalBlocksUint64() as int) * JournalBlockSize() + 2 * (IndirectionTableBlockSizeUint64() as int)
+
+  // Disk layout goes: 2 Superblocks, Journal, 2 Indirection tables, nodes
+  function SuperblockSize() : int { 4096 }  // Bytes
+
+  function JournalBlockSize() : int { 4096 } // Bytes
+  function method DiskNumJournalBlocksUint64() : uint64 { 2048 } // JournalBlockSize() blocks
+
+  function method IndirectionTableBlockSizeUint64() : uint64 { 24*1024*1024 } // Bytes
+
+  function method LargestBlockSizeOfAnyTypeUint64() : (size:uint64)
+    ensures IndirectionTableBlockSizeUint64() <= size
+    ensures NodeBlockSizeUint64() <= size
+    // Superblock?
+    // Journal?
+  {
+    IndirectionTableBlockSizeUint64()
+  }
+
 
   //function method MaxTotalBucketWeightUint64() : uint64 { 8356168 }
   //function method MaxCacheSizeUint64() : uint64 { 200 }
@@ -24,8 +51,6 @@ module Bounds {
   function method FlushTriggerWeightUint64() : uint64 { MaxTotalBucketWeightUint64() / 8 }
 
   function method NumBlocksUint64() : uint64 { 0x10_0000 }
-
-  function method DiskNumJournalBlocksUint64() : uint64 { 2048 }
 
   function method IndirectionTableMaxSizeUint64() : uint64 { 0x1_0000_0000 }
 

@@ -292,14 +292,17 @@ build/framework/BundleWrapper.o: framework/BundleWrapper.cpp build/Bundle.cpp $(
 rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 -include $(call rwildcard,$(CPP_DEP_DIR)/,*.d)
 
-VERIBETRFS_O_FILES=\
-	build/framework/BundleWrapper.o \
-	build/framework/Framework.o \
-	build/framework/NativeArrays.o \
-	build/framework/Crc32.o \
-	build/framework/Main.o \
+VERIBETRFS_AUX_FILES=\
 	build/framework/Benchmarks.o \
+	build/framework/BundleWrapper.o \
+	build/framework/Crc32.o \
+	build/framework/Framework.o \
 	build/framework/MallocAccounting.o \
+	build/framework/NativeArrays.o \
+
+VERIBETRFS_O_FILES=\
+	$(VERIBETRFS_AUX_FILES)\
+	build/framework/Main.o \
 
 LDFLAGS=-msse4.2
 
@@ -318,11 +321,7 @@ build/Veribetrfs: $(VERIBETRFS_O_FILES)
 # YCSB
 
 VERIBETRFS_YCSB_O_FILES=\
-	build/framework/BundleWrapper.o \
-	build/framework/Framework.o \
-	build/framework/Crc32.o \
-	build/framework/Benchmarks.o \
-	build/framework/MallocAccounting.o \
+	$(VERIBETRFS_AUX_FILES)\
 	build/framework/leakfinder.o \
 
 libycsbc: build/libycsbc-libcpp.a \
