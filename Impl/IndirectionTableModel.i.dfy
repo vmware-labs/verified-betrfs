@@ -1539,6 +1539,35 @@ module IndirectionTableModel {
     }
   }
 
+  lemma BitmapInitUpToIterateResult(bm: BitmapModel.BitmapModelT, i: uint64, upTo: uint64, j: uint64)
+  requires 0 <= i as int <= upTo as int <= BitmapModel.Len(bm)
+  requires 0 <= j as int < BitmapModel.Len(bm)
+  ensures var bm' := BitmapInitUpToIterate(bm, i, upTo);
+    && BitmapModel.Len(bm') == BitmapModel.Len(bm)
+    && (i <= j < upTo ==> BitmapModel.IsSet(bm', j as int))
+    && (!(i <= j < upTo) ==> BitmapModel.IsSet(bm', j as int) == BitmapModel.IsSet(bm, j as int))
+  decreases upTo - i
+  {
+    BitmapModel.reveal_BitSet();
+    BitmapModel.reveal_IsSet();
+    if i == upTo {
+    } else {
+      BitmapInitUpToIterateResult(BitmapModel.BitSet(bm, i as int), i+1, upTo, j);
+    }
+  }
+
+  lemma BitmapInitUpToResult(bm: BitmapModel.BitmapModelT, upTo: uint64, j: uint64)
+  requires upTo as int <= BitmapModel.Len(bm)
+  requires 0 <= j as int < BitmapModel.Len(bm)
+  ensures var bm' := BitmapInitUpTo(bm, upTo);
+    && BitmapModel.Len(bm') == BitmapModel.Len(bm)
+    && (j < upTo ==> BitmapModel.IsSet(bm', j as int))
+    && (j >= upTo ==> BitmapModel.IsSet(bm', j as int) == BitmapModel.IsSet(bm, j as int))
+  {
+    reveal_BitmapInitUpTo();
+    BitmapInitUpToIterateResult(bm, 0, upTo, j);
+  }
+
   lemma InitLocBitmapCorrect(indirectionTable: IndirectionTable)
   requires Inv(indirectionTable)
   requires BC.WFCompleteIndirectionTable(I(indirectionTable))
@@ -1562,14 +1591,16 @@ module IndirectionTableModel {
     forall i: int | IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)
     ensures IsLocAllocBitmap(bm', i)
     {
+      BitmapInitUpToResult(bm, MinNodeBlockIndexUint64(), i as uint64);
       assert i < MinNodeBlockIndex();
-      assume BitmapModel.IsSet(bm', i);
+      assert BitmapModel.IsSet(bm', i);
     }
 
     forall i: int | IsLocAllocBitmap(bm', i)
     ensures IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)
     {
-      assume i < MinNodeBlockIndex();
+      BitmapInitUpToResult(bm, MinNodeBlockIndexUint64(), i as uint64);
+      assert i < MinNodeBlockIndex();
     }
 
     InitLocBitmapIterateCorrect(indirectionTable, it, bm');
