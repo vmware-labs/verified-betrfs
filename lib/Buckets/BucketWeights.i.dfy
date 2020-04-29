@@ -83,22 +83,9 @@ module BucketWeights {
     key
   }
 
-  // TODO we need to rewrite this in terms of the bucket sequences
-  // not the map.
-  function {:opaque} WeightBucket(bucket: Bucket) : (w:int)
-  ensures w >= 0
-  ensures |bucket.b| == 0 ==> WeightBucket(bucket) == 0
-  decreases bucket.b
-  {
-    if |bucket.b| == 0 then 0 else (
-      var key := ChooseKey(bucket);
-      var msg := bucket.b[key];
-      WeightBucket(B(MapRemove1(bucket.b, key))) + WeightKey(key) + WeightMessage(msg)
-    )
-  }
-
   function WeightList(keys: seq<Key>, messages: seq<Message>) : (result: nat)
     requires |keys| == |messages|
+    ensures |keys| == 0 ==> result == 0
   {
     if |keys| == 0 then
       0
@@ -106,8 +93,15 @@ module BucketWeights {
       WeightList(DropLast(keys), DropLast(messages)) + WeightKey(Last(keys)) + WeightMessage(Last(messages))
   }
 
-  function {:opaque} WeightBucketList(buckets: BucketList) : (w:int)
-  ensures w >= 0
+  function {:opaque} WeightBucket(bucket: Bucket) : (w:nat)
+    requires |bucket.keys| == |bucket.msgs|
+    ensures |bucket.keys| == 0 ==> WeightBucket(bucket) == 0
+  {
+    WeightList(bucket.keys, bucket.msgs)
+  }
+
+  function {:opaque} WeightBucketList(buckets: BucketList) : (w:nat)
+    requires forall i | 0 <= i < |buckets| :: |buckets[i].keys| == |buckets[i].msgs|
   {
     if |buckets| == 0 then 0 else (
       WeightBucketList(DropLast(buckets)) +
@@ -122,9 +116,9 @@ module BucketWeights {
   }
 
   lemma WeightBucketSingleton(bucket:Bucket, key:Key)
-  requires BucketWellMarshalled(bucket)
-  requires bucket.b.Keys == {key};
-  ensures WeightBucket(bucket) == WeightKey(key) + WeightMessage(bucket.b[key]);
+    requires |bucket.keys| == |bucket.msgs|
+    requires bucket.keys == [key]
+    ensures WeightBucket(bucket) == WeightKey(key) + WeightMessage(bucket.msgs[0]);
   {
     reveal_WeightBucket();
   }
@@ -145,17 +139,15 @@ module BucketWeights {
 
   // Image of bucket showing only keys in filter.
   function {:opaque} Image(bucket:Bucket, filter:iset<Key>) : (image:Bucket)
-  requires BucketWellMarshalled(bucket)
-  ensures BucketWellMarshalled(image)
-//    ensures image.Keys <= bucket.Keys
-// Even this subset relation is a timeout source. (This must be the cause of
-// timeout on branch hard-to-trace-map-timeout)
+    requires WFBucket(bucket)
+    ensures WFBucket(image)
+    ensures BucketWellMarshalled(image)
   {
     B(map k | k in bucket.b && k in filter :: bucket.b[k])
   }
 
   lemma ImageShape(b:Bucket, s:iset<Key>)
-    requires BucketWellMarshalled(b)
+    requires WFBucket(b)
     ensures forall k :: k in b.b && k in s <==> k in Image(b, s).b.Keys
     ensures forall k :: k in Image(b,s).b ==> Image(b,s).b[k] == b.b[k];
   {
@@ -163,45 +155,57 @@ module BucketWeights {
   }
 
   lemma ImageIdentity(bucket:Bucket, s:iset<Key>)
+  requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
   requires forall k :: k in bucket.b ==> k in s
   ensures bucket == Image(bucket, s)
   {
-    assume false;
+    var image := Image(bucket, s);
     ImageShape(bucket, s);
+    WellMarshalledBucketsEq(bucket, image);
   }
 
   lemma ImageTrim(bucket:Bucket, s:iset<Key>, trimBucket:Bucket)
-  requires BucketWellMarshalled(bucket)
-  requires BucketWellMarshalled(trimBucket)
-  requires forall k :: k in trimBucket.b <==> k in bucket.b && k in s
-  requires forall k :: k in trimBucket.b ==> trimBucket.b[k] == bucket.b[k]
-  ensures Image(bucket, s).b == trimBucket.b
+    requires WFBucket(bucket)
+    requires forall k :: k in trimBucket.b <==> k in bucket.b && k in s
+    requires forall k :: k in trimBucket.b ==> trimBucket.b[k] == bucket.b[k]
+    ensures Image(bucket, s).b == trimBucket.b
   {
     ImageShape(bucket, s);
   }
 
   lemma ImageEquiv(a:Bucket, b:Bucket, s:iset<Key>)
-  requires BucketWellMarshalled(a)
-  requires BucketWellMarshalled(b)
-  requires forall k :: k in a.b.Keys && k in s <==> k in b.b.Keys && k in s
-  requires forall k :: k in a.b.Keys && k in s ==> a.b[k] == b.b[k]
-  ensures Image(a, s) == Image(b, s)
+    requires WFBucket(a)
+    requires WFBucket(b)
+    requires forall k :: k in a.b.Keys && k in s <==> k in b.b.Keys && k in s
+    requires forall k :: k in a.b.Keys && k in s ==> a.b[k] == b.b[k]
+    ensures Image(a, s) == Image(b, s)
   {
     reveal_Image();
   }
 
   lemma ImageSingleton(b:Bucket, k:Key)
-    requires BucketWellMarshalled(b)
-    requires k in b.b;
-    ensures Image(b, iset {k}).b.Keys == {k};
-    ensures Image(b, iset {k}).b[k] == b.b[k];
+    requires WFBucket(b)
+    requires k in b.b
+    ensures Image(b, iset {k}).b.Keys == {k}
+    ensures Image(b, iset {k}).b[k] == b.b[k]
+    ensures Image(b, iset {k}).keys == [k]
+    ensures Image(b, iset {k}).msgs == [ b.b[k] ]
   {
     reveal_Image();
+    reveal_IsStrictlySorted();
+    var im := Image(b, iset {k});
+    if 1 < |im.keys| {
+      assert im.keys[0] != im.keys[1];
+      assert im.keys[0] in im.b.Keys;
+      assert im.keys[1] in im.b.Keys;
+      assert false;
+    }
+    WFWellMarshalledBucketMap(im, k);
   }
 
   lemma ImageSubset(b:Bucket, s:iset<Key>, t:iset<Key>)
-    requires BucketWellMarshalled(b)
+    requires WFBucket(b)
     requires s <= t;
     ensures Image(Image(b, t), s) == Image(b, s)
     ensures Image(b, s).b.Keys <= Image(b, t).b.Keys
@@ -210,14 +214,14 @@ module BucketWeights {
   }
 
   lemma ImageIntersect(b:Bucket, s:iset<Key>, t:iset<Key>)
-    requires BucketWellMarshalled(b)
+    requires WFBucket(b)
     ensures Image(Image(b, s), t) == Image(b, s * t)
   {
     reveal_Image();
   }
 
   lemma MapRemoveVsImage(bucket:Bucket, ibk:iset<Key>, key:Key)
-  requires BucketWellMarshalled(bucket)
+  requires WFBucket(bucket)
   requires forall k :: k in bucket.b.Keys ==> k in ibk
   ensures MapRemove1(bucket.b, key) == Image(bucket, ibk - iset{key}).b
   {
@@ -226,8 +230,9 @@ module BucketWeights {
   }
 
   lemma WeightBucketLinearInKeySetInner(bucket:Bucket, a:iset<Key>, b:iset<Key>)
-  requires a !! b
+  requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
+  requires a !! b
   requires forall k:Key :: k in bucket.b ==> k in a + b // a,b partition bucket
   requires Image(bucket, a).b.Keys != {} // So we can decrease
   requires Image(bucket, b).b.Keys != {} // So we can decrease
@@ -236,7 +241,6 @@ module BucketWeights {
   ensures WeightBucket(bucket) == WeightBucket(Image(bucket, a)) + WeightBucket(Image(bucket, b))
   decreases |Image(bucket, a).b.Keys| + |Image(bucket, b).b.Keys|, 0
   {
-    assume false;
     var key := ChooseKey(bucket);
     var msg := bucket.b[key];
     var residual := WeightKey(key) + WeightMessage(msg);
@@ -278,6 +282,8 @@ module BucketWeights {
         { reveal_WeightBucket(); }
       WeightBucket(B(MapRemove1(bucket.b, key))) + residual;
         { MapRemoveVsImage(bucket, a+b, key); }
+      WeightBucket(B(Image(bucket, (a+b)-iset{key}).b)) + residual;
+        { WellMarshalledBucketsEq(Image(bucket, (a+b)-iset{key}), B(Image(bucket, (a+b)-iset{key}).b)); }
       WeightBucket(Image(bucket, (a+b)-iset{key})) + residual;
         { assert a+b-iset{key} == (a-iset{key})+b; }  // OSBERVE trigger
       WeightBucket(Image(bucket, (a-iset{key})+b)) + residual;
@@ -308,21 +314,21 @@ module BucketWeights {
   }
 
   lemma WeightBucketLinearInKeySet(bucket:Bucket, a:iset<Key>, b:iset<Key>)
-  requires a !! b
+  requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
+  requires a !! b
   requires forall k:Key :: k in bucket.b ==> k in a + b
   ensures WeightBucket(bucket) == WeightBucket(Image(bucket, a)) + WeightBucket(Image(bucket, b))
   decreases |Image(bucket, a).b.Keys| + |Image(bucket, b).b.Keys|, 1
   {
-    assume false;
     ImageShape(bucket, a);
     ImageShape(bucket, b);
     WeightBucketEmpty();
     if |bucket.b| == 0 {
     } else if Image(bucket, a).b.Keys=={} {
-      assert bucket == Image(bucket, b);  // trigger
+      ImageIdentity(bucket, b);
     } else if Image(bucket, b).b.Keys=={} {
-      assert bucket == Image(bucket, a);  // trigger
+      ImageIdentity(bucket, a);
     } else {
       if ChooseKey(bucket) in a {
         WeightBucketLinearInKeySetInner(bucket, a, b);
@@ -334,6 +340,7 @@ module BucketWeights {
 
   // A variant that's handy if a+b don't cover bucket.
   lemma WeightBucketLinearInKeySetSum(bucket:Bucket, a:iset<Key>, b:iset<Key>)
+    requires WFBucket(bucket)
     requires BucketWellMarshalled(bucket)
     requires a!!b
     ensures WeightBucket(Image(bucket, a + b)) == WeightBucket(Image(bucket, a)) + WeightBucket(Image(bucket, b));

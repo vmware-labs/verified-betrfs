@@ -790,7 +790,7 @@ module DynamicPkv {
     assert PKV.Keyspace.IsStrictlySorted(PSA.I(dresult.keys.toPsa())) by {
       PKV.Keyspace.reveal_IsStrictlySorted();
     }
-    
+
     while
       && topidx < to
       && botidx < PKV.NumKVPairs(bot)
@@ -868,7 +868,18 @@ module DynamicPkv {
       }
     }
 
+    assert !(
+      && topidx < to
+      && botidx < PKV.NumKVPairs(bot)
+      );
+    assert from <= topidx <= to;
+    assert botidx <= PKV.NumKVPairs(bot);
+
+    
+    assert topidx == to || botidx == PKV.NumKVPairs(bot);
+    
     while topidx < to
+      invariant topidx == to || botidx == PKV.NumKVPairs(bot)
       invariant from <= topidx <= to
       invariant dresult.WF()
       invariant dresult.keys.nstrings <= botidx + topidx - from
@@ -877,7 +888,9 @@ module DynamicPkv {
       invariant dresult.weight() <= PKV.WeightPkv(PKV.subPkv(bot, 0, botidx)) + slack - runningSlack
       invariant fresh(dresult.Repr)
       invariant 0 < |PSA.I(dresult.keys.toPsa())| && topidx < to ==>
-        PKV.Keyspace.lt(Seq.Last(PSA.I(dresult.keys.toPsa())), PSA.I(top.keys)[topidx])
+      PKV.Keyspace.lt(Seq.Last(PSA.I(dresult.keys.toPsa())), PSA.I(top.keys)[topidx])
+      invariant 0 < |PSA.I(dresult.keys.toPsa())| && botidx as nat < |PSA.I(bot.keys)| ==>
+        PKV.Keyspace.lt(Seq.Last(PSA.I(dresult.keys.toPsa())), PSA.I(bot.keys)[botidx])
       invariant PKV.Keyspace.IsStrictlySorted(PSA.I(dresult.keys.toPsa()))
     {
       var topkey := PKV.GetKey(top, topidx);
@@ -909,7 +922,7 @@ module DynamicPkv {
       invariant dresult.weight() <= PKV.WeightPkv(PKV.subPkv(bot, 0, botidx)) + slack - runningSlack
       invariant fresh(dresult.Repr)
       invariant 0 < |PSA.I(dresult.keys.toPsa())| && botidx as nat < |PSA.I(bot.keys)| ==>
-        PKV.Keyspace.lt(Seq.Last(PSA.I(dresult.keys.toPsa())), PSA.I(bot.keys)[botidx])
+      PKV.Keyspace.lt(Seq.Last(PSA.I(dresult.keys.toPsa())), PSA.I(bot.keys)[botidx])
       invariant PKV.Keyspace.IsStrictlySorted(PSA.I(dresult.keys.toPsa()))
     {
       var botkey := PKV.GetKey(bot, botidx);
@@ -924,7 +937,7 @@ module DynamicPkv {
       // no change in slack
       botidx := botidx + 1;
     }
-
+    
     if topidx == to {
       result := MergeCompleted(dresult.toPkv(), runningSlack);
     } else {
