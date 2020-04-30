@@ -676,7 +676,7 @@ module PivotBetreeSpecRefinement {
     if (l.Some?) {
       if (r.Some?) {
         var node1 := P.CutoffNodeAndKeepLeft(node, r.value);
-        assume BucketListWellMarshalled(node1.buckets);
+        PivotBetreeSpecWFNodes.BucketListWellMarshalledCutoffNodeAndKeepLeft(node, r.value);
         CutoffNodeAndKeepLeftAgree(node, node1, r.value, key);
         CutoffNodeAndKeepRightAgree(node1, node', l.value, key);
       } else {
@@ -882,23 +882,6 @@ module PivotBetreeSpecRefinement {
     }
   }
 
-  lemma WellMarshalledMergeBucketsInList(blist: BucketList, slot: int)
-  requires 0 <= slot < |blist| - 1
-  requires BucketListWellMarshalled(blist)
-  ensures BucketListWellMarshalled(MergeBucketsInList(blist, slot))
-  {
-    assume false;
-  }
-
-  lemma WellMarshalledSplitBucketsInList(blist: BucketList, slot: int, pivot: Key)
-  requires 0 <= slot < |blist|
-  requires BucketListWellMarshalled(blist)
-  ensures BucketListWellMarshalled(SplitBucketInList(blist, slot, pivot))
-  {
-    assume false;
-  }
-
-
   lemma RefinesValidMerge(f: P.NodeFusion)
   requires P.ValidMerge(f)
   requires ReadOpsBucketsWellMarshalled(P.MergeReads(f))
@@ -1029,7 +1012,7 @@ module PivotBetreeSpecRefinement {
 
     assert P.SplitReads(f)[0].node == f.fused_parent;
     assert BucketListWellMarshalled(f.fused_parent.buckets);
-    WellMarshalledSplitBucketsInList(f.fused_parent.buckets, f.slot_idx,f.pivot);
+    WellMarshalledSplitBucketInList(f.fused_parent.buckets, f.slot_idx,f.pivot);
 
     forall ref | ref in IMapRestrict(r.old_parent.children, r.keys).Values
     ensures ref in r.old_childrefs

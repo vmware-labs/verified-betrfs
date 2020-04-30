@@ -134,7 +134,8 @@ module PivotBetreeSpecWFNodes {
   lemma BucketListWellMarshalledCutoffNodeAndKeepLeft(
       node: G.Node,
       pivot: Key)
-  requires InvNode(node)
+  requires WFNode(node)
+  requires BucketListWellMarshalled(node.buckets)
   ensures
     var node' := CutoffNodeAndKeepLeft(node, pivot);
     BucketListWellMarshalled(node'.buckets)
@@ -236,7 +237,7 @@ module PivotBetreeSpecWFNodes {
     WeightSplitBucketInListLe(fused_parent.buckets, slot_idx, pivot);
 
     assert BucketListWellMarshalled(split_parent.buckets) by {
-      WellMarshalledValidSplitWritesInvNodes(
+      WellMarshalledSplitBucketInList(
           fused_parent.buckets, slot_idx, pivot);
     }
     assert InvNode(split_parent);

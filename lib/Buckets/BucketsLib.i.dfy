@@ -804,7 +804,7 @@ module BucketsLib {
     assert WFBucketAt(blist'[slot+1], pivots', slot+1);
   }
 
-  lemma WellMarshalledValidSplitWritesInvNodes(blist: BucketList, slot: int, pivot: Key)
+  lemma WellMarshalledSplitBucketInList(blist: BucketList, slot: int, pivot: Key)
   requires 0 <= slot < |blist|
   requires BucketListWellMarshalled(blist)
   ensures BucketListWellMarshalled(SplitBucketInList(blist, slot, pivot))
@@ -884,6 +884,14 @@ module BucketsLib {
         blist, pivots, blist', pivots', slot+1, |blist'|-1, -1);
     reveal_MergeBuckets();
     assert WFBucketAt(blist'[slot], pivots', slot);
+  }
+
+  lemma WellMarshalledMergeBucketsInList(blist: BucketList, slot: int)
+  requires 0 <= slot < |blist| - 1
+  requires BucketListWellMarshalled(blist)
+  ensures BucketListWellMarshalled(MergeBucketsInList(blist, slot))
+  {
+    reveal_MergeBucketsInList();
   }
 
   lemma SplitOfMergeBucketsInList(blist: BucketList, slot: int, pivots: PivotTable)
