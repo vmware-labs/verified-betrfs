@@ -804,6 +804,35 @@ module BucketsLib {
     assert WFBucketAt(blist'[slot+1], pivots', slot+1);
   }
 
+  lemma WellMarshalledValidSplitWritesInvNodes(blist: BucketList, slot: int, pivot: Key)
+  requires 0 <= slot < |blist|
+  requires BucketListWellMarshalled(blist)
+  ensures BucketListWellMarshalled(SplitBucketInList(blist, slot, pivot))
+  {
+    var blist' := SplitBucketInList(blist, slot, pivot);
+    reveal_SplitBucketInList();
+    assert BucketWellMarshalled(SplitBucketLeft(blist[slot], pivot))
+      by { reveal_SplitBucketLeft(); }
+    assert BucketWellMarshalled(SplitBucketRight(blist[slot], pivot))
+      by { reveal_SplitBucketRight(); }
+    forall i | 0 <= i < |blist'|
+    ensures BucketWellMarshalled(blist'[i])
+    {
+      if i < slot {
+        assert BucketWellMarshalled(blist[i]);
+      } else if i > slot+1 {
+        assert BucketWellMarshalled(blist[i-1]);
+      }
+    }
+  }
+
+  lemma BucketListWellMarshalledSlice(blist: BucketList, i: int, j: int)
+  requires BucketListWellMarshalled(blist)
+  requires 0 <= i <= j <= |blist|
+  ensures BucketListWellMarshalled(blist[i..j])
+  {
+  }
+
   // This is useful for proving NodeHasWFBuckets(node')
   // for indices over the given interval [a, b],
   // assuming we already know the buckets and pivots come from some other
