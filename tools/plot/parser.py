@@ -177,7 +177,11 @@ class Experiment:
 
             if line.startswith("os-map-total"):
                 self.os_map_total[cur_op] = int(fields[1])
-                self.os_map_heap[cur_op] = max(0, int(fields[3]))
+                # some bug in heap accounting causes this number to go wacky.
+                # Not sure why it doesn't affect the total!
+                heap = int(fields[3])
+                if heap > 0 and heap < (300<<30):
+                    self.os_map_heap[cur_op] = heap
 
 #            if line.startswith("iostats "):
 #                self.reads_started[cur_op] = int(fields[1])
