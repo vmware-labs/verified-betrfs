@@ -1029,3 +1029,10 @@ merge-5: debug off, jemalloc on, tree size 200 * 8MB. Is the memory behavior
 sane? (works around bug in os heap calculation) Yep, not too far off.
 1.13GiB of internal becomes 1.6GiB of jem mapped; 41% overhead. Time to
 try with cgroups.
+
+merge-6: same config but with cgroups in play.
+And run-veri-config is making journal-oblivious nonsense configs again.
+8*1024*1024 * 7 
+2 * 4096 + 2048 * 4096
+          + 2 * 24*1024*1024
+

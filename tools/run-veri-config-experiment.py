@@ -20,6 +20,11 @@ def autoconfig(config, memlimit):
     memlimit = int(memlimit)
 
   itable_size = 8*1024*1024
+  superblock_size = 4096
+  superblocks_size = 2 * superblock_size
+  journal_block_size = 4096
+  disk_num_journal_blocks = 2048
+  journal_size = disk_num_journal_blocks * journal_block_size
 
   MALLOC_OVERHEAD=1.00
   if config == "8mb":
@@ -37,7 +42,9 @@ def autoconfig(config, memlimit):
   else:
     assert False
 
-  min_index = (itable_size + node_size - 1) // node_size
+  min_index = (superblocks_size + journal_size + 2*itable_size + node_size - 1) // node_size
+  # SanityCheckMinNodeBlockIndexUint64
+  assert min_index * node_size >= 2 * superblock_size + disk_num_journal_blocks * journal_block_size + 2 * itable_size
     
   return [
     ("IndirectionTableBlockSizeUint64", str(itable_size)),
@@ -45,6 +52,7 @@ def autoconfig(config, memlimit):
     ("MinNodeBlockIndexUint64", str(min_index)),
     ("MaxTotalBucketWeightUint64", str(bucket_weight)),
     ("MaxCacheSizeUint64", str(cache_size)),
+    ("DiskNumJournalBlocksUint64", str(disk_num_journal_blocks)),
   ]
 
 def cgroup_defaults():

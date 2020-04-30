@@ -19,14 +19,7 @@ module Bounds {
 
   // TODO(jonh): We should partition the disk, in byte units, into regions,
   // and then address each region in its native block size with 0-based indexing.
-  function method MinNodeBlockIndexUint64() : uint64 { 8 }
-
-  // This is the configuration constraint for MinNodeBlockIndexUint64, so you can
-  // "make build/PivotBetree/Bounds.i.verified" as a quick way to sanity-check
-  // without running a complete system verification.
-  lemma SanityCheckMinNodeBlockIndexUint64()
-    ensures (MinNodeBlockIndexUint64() as int) * (NodeBlockSizeUint64() as int)
-      >= 2*SuperblockSize() + (DiskNumJournalBlocksUint64() as int) * JournalBlockSize() + 2 * (IndirectionTableBlockSizeUint64() as int)
+  function method MinNodeBlockIndexUint64() : uint64 { 4 }
 
   // Disk layout goes: 2 Superblocks, Journal, 2 Indirection tables, nodes
   function SuperblockSize() : int { 4096 }  // Bytes
@@ -34,7 +27,7 @@ module Bounds {
   function JournalBlockSize() : int { 4096 } // Bytes
   function method DiskNumJournalBlocksUint64() : uint64 { 2048 } // JournalBlockSize() blocks
 
-  function method IndirectionTableBlockSizeUint64() : uint64 { 24*1024*1024 } // Bytes
+  function method IndirectionTableBlockSizeUint64() : uint64 { 8*1024*1024 } // Bytes
 
   function method LargestBlockSizeOfAnyTypeUint64() : (size:uint64)
     ensures IndirectionTableBlockSizeUint64() <= size
@@ -66,6 +59,9 @@ module Bounds {
   function IndirectionTableMaxSize() : int { IndirectionTableMaxSizeUint64() as int }
   function DiskNumJournalBlocks() : int { DiskNumJournalBlocksUint64() as int }
 
+  // This is the configuration constraint for MinNodeBlockIndexUint64, so you can
+  // "make build/PivotBetree/Bounds.i.verified" as a quick way to sanity-check
+  // without running a complete system verification.
   lemma lemma_node_sector_doesnt_overlap_indirection_table()
   ensures NodeBlockSize() * MinNodeBlockIndex()
        >= 2 * 4096 + DiskNumJournalBlocks() * 4096
