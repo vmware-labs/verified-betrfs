@@ -74,6 +74,14 @@ abstract module Total_Preorder {
       b
   }
 
+  lemma StrictlySortedImpliesNoDupes(run: seq<Element>)
+    requires IsStrictlySorted(run)
+    ensures Seq.NoDupes(run)
+  {
+    reveal_IsStrictlySorted();
+    Seq.reveal_NoDupes();
+  }
+  
   lemma IsSortedImpliesLte(run: seq<Element>, i: int, j: int)
   requires IsSorted(run)
   requires 0 <= i <= j < |run|

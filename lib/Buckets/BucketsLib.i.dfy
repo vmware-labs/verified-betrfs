@@ -1,6 +1,7 @@
 include "PivotsLib.i.dfy"
 include "../Base/Message.i.dfy"
 include "../Base/Maps.s.dfy"
+include "../Base/Multisets.i.dfy"
 include "../Base/total_order.i.dfy"
 include "../../MapSpec/UI.s.dfy"
 include "../../MapSpec/MapSpec.s.dfy"
@@ -23,7 +24,8 @@ module BucketsLib {
   import opened Options
   import UI
   import MS = MapSpec
-
+  import Multisets
+  
   type BucketMap = map<Key, Message>
   datatype Bucket = BucketMapWithSeq(b: BucketMap, keys: seq<Key>, msgs: seq<Message>)
   type BucketList = seq<Bucket>
@@ -87,20 +89,48 @@ module BucketsLib {
     ensures multiset(Set(bucket.keys)) == multiset(bucket.keys)
     ensures bucket.b.Keys == Set(bucket.keys)
   {
-    var m := multiset(bucket.keys);
-    reveal_IsStrictlySorted();
-    assert forall i, j | 0 <= i < |bucket.keys| && 0 <= j < |bucket.keys| && i != j :: bucket.keys[i] != bucket.keys[j];
-    if x :| x in m && 1 < m[x] {
-      var i :| 0 <= i < |bucket.keys| && bucket.keys[i] == x;
-      if j :| 0 <= j < |bucket.keys| && i != j && bucket.keys[j] == x {
-        assert bucket.keys[i] == bucket.keys[j];
-        assert false;
-      } else {
-        assert m[x] == 1;
-        assert false;
-      }
+    StrictlySortedImpliesNoDupes(bucket.keys);
+    assert NoDupes(bucket.keys) by {
+      // StrictlySortedImpliesNoDupes() gives us
+      //    NoDupes<Element>().
+      // We need
+      //    NoDupes<Key>().
+      reveal_NoDupes();
     }
-    assert forall x | x in m :: m[x] == 1;
+    NoDupesMultiset(bucket.keys);
+  }
+
+  lemma WellMarshalledMessageMultiset(bucket: Bucket)
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+    ensures Multisets.ValueMultiset(bucket.b) == multiset(bucket.msgs)
+    decreases |bucket.keys|
+  {
+    if |bucket.keys| == 0 {
+    } else if |bucket.keys| == 1 {
+      Multisets.ApplySingleton(x requires x in bucket.b => bucket.b[x], bucket.keys[0]);
+    } else {
+      var lastkey := Last(bucket.keys);
+      var lastmsg := Last(bucket.msgs);
+      var lastb := map[lastkey := lastmsg];
+      var lastbucket := BucketMapWithSeq(lastb, [ lastkey ], [ lastmsg ]);
+
+      assert WFBucket(lastbucket);
+      StrictlySortedSubsequence(bucket.keys, |bucket.keys| - 1, |bucket.keys|);
+      
+      var prekeys := DropLast(bucket.keys);
+      var premsgs := DropLast(bucket.msgs);
+      var preb := MapRemove1(bucket.b, lastkey);
+      var prebucket := BucketDropLast(bucket);
+
+      BucketDropLastWF(bucket);
+      BucketDropLastWellMarshalled(bucket);
+
+      WellMarshalledMessageMultiset(prebucket);
+      WellMarshalledMessageMultiset(lastbucket);
+      Multisets.ApplyAdditive(x requires x in bucket.b => bucket.b[x], multiset(preb.Keys), multiset(lastb.Keys));
+      assert bucket.msgs == DropLast(bucket.msgs) + [ Last(bucket.msgs) ];
+    }
   }
   
   predicate BucketListWellMarshalled(blist: BucketList)

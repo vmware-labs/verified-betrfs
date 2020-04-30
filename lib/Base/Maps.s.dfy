@@ -1,10 +1,12 @@
 // TODO most of this doesn't need to be .s
 
+// TODO(rob): Split into Maps and IMaps
+
 include "Option.s.dfy"
 
 module {:extern} Maps {
   import opened Options
-
+    
   predicate IMapsTo<K,V>(m: imap<K, V>, k: K, v: V) {
     k in m && m[k] == v
   }
