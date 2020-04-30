@@ -10,7 +10,7 @@ module LinearSequence_i {
     provides NativeTypes
     provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_length, lseq_length_uint64, lseq_peek
     provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give
-    provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, InsertSeq, InsertLSeq
+    provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, SeqResize, InsertSeq, InsertLSeq
     provides share_seq
     reveals as_linear
     reveals lseq_full, linLast, lseq_has_all
@@ -252,6 +252,22 @@ module LinearSequence_i {
     ensures forall j :: 0 <= j < newlen as nat && j < |s| ==> lseq_has(s2)[j] == lseq_has(s)[j]
     ensures forall j :: |s| <= j < newlen as nat ==> lseq_has(s2)[j] == false
     ensures forall j :: 0 <= j < newlen as nat && j < |s| ==> s2[j] == s[j]
+
+  method SeqResize<A>(linear s: seq<A>, newlen: uint64, a: A) returns (linear s2: seq<A>)
+    ensures |s2| == newlen as nat
+    ensures forall j :: 0 <= j < newlen as nat ==> s2[j] == (if j < |s| then s[j] else a)
+  {
+    var i:uint64 := seq_length(s);
+    s2 := TrustedRuntimeSeqResize(s, newlen);
+    while (i < newlen)
+      invariant |s2| == newlen as nat
+      invariant |s| <= |s2| ==> |s| <= i as nat <= |s2|
+      invariant forall j :: 0 <= j < i as nat && j < |s2| ==> s2[j] == (if j < |s| then s[j] else a)
+    {
+      s2 := seq_set(s2, i, a);
+      i := i + 1;
+    }
+  }
 
   method InsertSeq<A>(linear s: seq<A>, a: A, pos: uint64) returns (linear s2: seq<A>)
     requires |s| < Uint64UpperBound() - 1;

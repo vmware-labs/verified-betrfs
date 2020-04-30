@@ -24,6 +24,9 @@ module {:extern "LinearExtern"} LinearSequence_s {
   function method {:extern "LinearExtern", "seq_unleash"} seq_unleash<A>(linear s1:seq<A>):(s2:seq<A>)
       ensures s1 == s2
 
+  function method {:extern "LinearExtern", "seq_length_bound"} seq_length_bound<A>(shared s:seq<A>):()
+    ensures |s| < 0xffff_ffff_ffff_ffff
+
 
   type {:extern "predefined"} lseq<A>
 
