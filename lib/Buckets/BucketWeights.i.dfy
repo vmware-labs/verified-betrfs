@@ -1,5 +1,7 @@
 include "../Base/Sets.i.dfy"
+include "../Base/Multisets.i.dfy"
 include "BucketsLib.i.dfy"
+  
 //
 // Assigning weights to buckets guides the flushing algorithm to decide
 // which child to push messages towards. TODO(thance): help!
@@ -24,20 +26,15 @@ module BucketWeights {
   import opened BucketsLib
   import opened NativeTypes
   import opened KeyType
-
-  function WeightKey(key: Key) : (w:int)
+  import MSets = Multisets
+  
+  function WeightKey(key: Key) : (w:nat)
   ensures w >= 0
   {
     4 + |key|
   }
  
-  function WeightKeySeq(keys: seq<Key>) : (w:int)
-  ensures w >= 0
-  {
-    if |keys| == 0 then 0 else WeightKeySeq(DropLast(keys)) + WeightKey(Last(keys))
-  }
-
-  function WeightMessage(msg: Message) : (w:int)
+  function WeightMessage(msg: Message) : (w:nat)
   ensures w >= 0
   {
     match msg {
@@ -69,12 +66,6 @@ module BucketWeights {
     }
   }
 
-  function WeightMessageSeq(msgs: seq<Message>) : (w:int)
-  ensures w >= 0
-  {
-    if |msgs| == 0 then 0 else WeightMessageSeq(DropLast(msgs)) + WeightMessage(Last(msgs))
-  }
-
   function {:opaque} ChooseKey(bucket: Bucket) : (key : Key)
   requires |bucket.b| > 0
   ensures key in bucket.b
@@ -83,21 +74,72 @@ module BucketWeights {
     key
   }
 
-  function WeightList(keys: seq<Key>, messages: seq<Message>) : (result: nat)
-    requires |keys| == |messages|
+  function {:opaque} Choose<A> (things: multiset<A>) : (result: A)
+    requires 0 < |things|
+    ensures result in things
+  {
+    var thing :| thing in things;
+    thing
+  }
+  
+  function {:opaque} WeightKeyMultiset(keys: multiset<Key>) : (result: nat)
     ensures |keys| == 0 ==> result == 0
   {
-    if |keys| == 0 then
-      0
-    else
-      WeightList(DropLast(keys), DropLast(messages)) + WeightKey(Last(keys)) + WeightMessage(Last(messages))
+    var weights := MSets.Apply(WeightKey, keys);
+    assert |keys| == 0 ==> |weights| == 0;
+    MSets.Fold<nat>(0, (x, y) => x + y, weights)
   }
 
-  function {:opaque} WeightBucket(bucket: Bucket) : (w:nat)
-    requires |bucket.keys| == |bucket.msgs|
-    ensures |bucket.keys| == 0 ==> WeightBucket(bucket) == 0
+  lemma WeightKeyMultisetAdditive(things1: multiset<Key>, things2: multiset<Key>)
+    ensures WeightKeyMultiset(things1 + things2) == WeightKeyMultiset(things1) + WeightKeyMultiset(things2)
   {
-    WeightList(bucket.keys, bucket.msgs)
+    var weights1 := MSets.Apply(WeightKey, things1);
+    var weights2 := MSets.Apply(WeightKey, things2);
+    MSets.ApplyAdditive(WeightKey, things1, things2);
+    MSets.reveal_IsIdentity();
+    MSets.reveal_IsAssociative();
+    MSets.reveal_IsCommutative();
+    MSets.FoldAdditive<nat>(0, (x, y) => x + y, weights1, weights2);
+    reveal_WeightKeyMultiset();
+  }
+  
+  function {:opaque} WeightMessageMultiset(msgs: multiset<Message>) : (result: nat)
+    ensures |msgs| == 0 ==> result == 0
+  {
+    var weights := MSets.Apply(WeightMessage, msgs);
+    assert |msgs| == 0 ==> |weights| == 0;
+    MSets.Fold<nat>(0, (x, y) => x + y, weights)
+  }
+  
+  lemma WeightMessageMultisetAdditive(things1: multiset<Message>, things2: multiset<Message>)
+    ensures WeightMessageMultiset(things1 + things2) == WeightMessageMultiset(things1) + WeightMessageMultiset(things2)
+  {
+    var weights1 := MSets.Apply(WeightMessage, things1);
+    var weights2 := MSets.Apply(WeightMessage, things2);
+    MSets.ApplyAdditive(WeightMessage, things1, things2);
+    MSets.reveal_IsIdentity();
+    MSets.reveal_IsAssociative();
+    MSets.reveal_IsCommutative();
+    MSets.FoldAdditive<nat>(0, (x, y) => x + y, weights1, weights2);
+    reveal_WeightMessageMultiset();
+  }
+  
+  function WeightKeyList(keys: seq<Key>) : (result: nat)
+    ensures |keys| == 0 ==> result == 0
+  {
+    WeightKeyMultiset(multiset(keys))
+  }
+
+  function WeightMessageList(msgs: seq<Message>) : (result: nat)
+    ensures |msgs| == 0 ==> result == 0
+  {
+    WeightMessageMultiset(multiset(msgs))
+  }
+
+  function WeightBucket(bucket: Bucket) : (w:nat)
+    ensures |bucket.keys| == |bucket.msgs| == 0 ==> WeightBucket(bucket) == 0
+  {
+    WeightKeyList(bucket.keys) + WeightMessageList(bucket.msgs)
   }
 
   function {:opaque} WeightBucketList(buckets: BucketList) : (w:nat)
@@ -112,15 +154,35 @@ module BucketWeights {
   lemma WeightBucketEmpty()
   ensures WeightBucket(B(map[])) == 0
   {
-    reveal_WeightBucket();
   }
 
+  lemma WeightKeySingleton(key: Key)
+    ensures WeightKeyMultiset(multiset{key}) == WeightKey(key)
+  {
+    MSets.ApplySingleton(WeightKey, key);
+    MSets.FoldSingleton<nat>(0, (x, y) => x + y, WeightKey(key));
+    reveal_WeightKeyMultiset();
+  }
+  
+  lemma WeightMessageSingleton(msg: Message)
+    ensures WeightMessageMultiset(multiset{msg}) == WeightMessage(msg)
+  {
+    MSets.ApplySingleton(WeightMessage, msg);
+    MSets.FoldSingleton<nat>(0, (x, y) => x + y, WeightMessage(msg));
+    reveal_WeightMessageMultiset();
+  }
+  
   lemma WeightBucketSingleton(bucket:Bucket, key:Key)
     requires |bucket.keys| == |bucket.msgs|
     requires bucket.keys == [key]
     ensures WeightBucket(bucket) == WeightKey(key) + WeightMessage(bucket.msgs[0]);
   {
-    reveal_WeightBucket();
+    WeightKeySingleton(key);
+    WeightMessageSingleton(bucket.msgs[0]);
+    assert multiset(bucket.keys) == multiset{key};
+    assert multiset(bucket.msgs) == multiset{bucket.msgs[0]};
+    reveal_WeightKeyMultiset();
+    reveal_WeightMessageMultiset();
   }
 
   // Commonly-used filters for Image()
@@ -220,6 +282,11 @@ module BucketWeights {
     reveal_Image();
   }
 
+  lemma WellFormedKeyMultiset(b: Bucket, s: iset<Key>)
+    requires WFBucket(b)
+    requires BucketWellMarshalled(b)
+    ensures 
+
   lemma MapRemoveVsImage(bucket:Bucket, ibk:iset<Key>, key:Key)
   requires WFBucket(bucket)
   requires forall k :: k in bucket.b.Keys ==> k in ibk
@@ -279,7 +346,7 @@ module BucketWeights {
     }
     calc {
       WeightBucket(bucket);
-        { reveal_WeightBucket(); }
+        //{ reveal_WeightBucket(); }
       WeightBucket(B(MapRemove1(bucket.b, key))) + residual;
         { MapRemoveVsImage(bucket, a+b, key); }
       WeightBucket(B(Image(bucket, (a+b)-iset{key}).b)) + residual;

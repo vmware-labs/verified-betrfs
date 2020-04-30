@@ -81,6 +81,28 @@ module BucketsLib {
     IsStrictlySorted(bucket.keys)
   }
 
+  lemma WellMarshalledKeyMultiset(bucket: Bucket)
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+    ensures multiset(Set(bucket.keys)) == multiset(bucket.keys)
+    ensures bucket.b.Keys == Set(bucket.keys)
+  {
+    var m := multiset(bucket.keys);
+    reveal_IsStrictlySorted();
+    assert forall i, j | 0 <= i < |bucket.keys| && 0 <= j < |bucket.keys| && i != j :: bucket.keys[i] != bucket.keys[j];
+    if x :| x in m && 1 < m[x] {
+      var i :| 0 <= i < |bucket.keys| && bucket.keys[i] == x;
+      if j :| 0 <= j < |bucket.keys| && i != j && bucket.keys[j] == x {
+        assert bucket.keys[i] == bucket.keys[j];
+        assert false;
+      } else {
+        assert m[x] == 1;
+        assert false;
+      }
+    }
+    assert forall x | x in m :: m[x] == 1;
+  }
+  
   predicate BucketListWellMarshalled(blist: BucketList)
   {
     forall i | 0 <= i < |blist| :: BucketWellMarshalled(blist[i])

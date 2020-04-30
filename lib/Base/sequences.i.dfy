@@ -61,6 +61,23 @@ module Sequences {
       assert Set(a) == Set(DropLast(a)) + {Last(a)};
     }
   }
+
+  lemma NoDupesMultiset<T>(a: seq<T>)
+    requires NoDupes(a)
+    ensures forall x | x in multiset(a) :: multiset(a)[x] == 1
+  {
+    if |a| == 0 {
+    } else {
+      assert a == DropLast(a) + [ Last(a) ];
+      assert Last(a) !in DropLast(a) by {
+        reveal_NoDupes();
+      }
+      assert NoDupes(DropLast(a)) by {
+        reveal_NoDupes();
+      }
+      NoDupesMultiset(DropLast(a));
+    }
+  }
   
   function IndexOf<T>(s: seq<T>, e: T) : int
     requires e in s;
