@@ -871,6 +871,16 @@ module BucketsLib {
 
   lemma WFMergeBucketsInList(blist: BucketList, slot: int, pivots: PivotTable)
   requires 0 <= slot < |blist| - 1
+  requires WFBucketList(blist, pivots)
+  ensures WFBucketList(MergeBucketsInList(blist, slot), remove(pivots, slot))
+  {
+    reveal_MergeBucketsInList();
+    WFPivotsRemoved(pivots, slot);
+    reveal_MergeBuckets();
+  }
+
+  lemma WFProperMergeBucketsInList(blist: BucketList, slot: int, pivots: PivotTable)
+  requires 0 <= slot < |blist| - 1
   requires WFBucketListProper(blist, pivots)
   ensures WFBucketListProper(MergeBucketsInList(blist, slot), remove(pivots, slot))
   {

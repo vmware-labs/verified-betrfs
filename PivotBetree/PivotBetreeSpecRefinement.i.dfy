@@ -1509,7 +1509,7 @@ module PivotBetreeSpecRefinement {
   ensures INode(r.leaf) == INode(P.ApplyRepivot(r.leaf, r.pivots))
   {
     assert P.InvNode(P.RepivotReads(r)[0].node);
-    PivotBetreeSpecWFNodes.WFApplyRepivot(r.leaf, r.pivots);
+    PivotBetreeSpecWFNodes.InvApplyRepivot(r.leaf, r.pivots);
 
     var buckets1 := r.leaf.buckets;
     var joined := JoinBucketList(buckets1);
