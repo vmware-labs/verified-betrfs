@@ -791,6 +791,8 @@ module DynamicPkv {
       PKV.Keyspace.reveal_IsStrictlySorted();
     }
 
+    assume false; // TODO(robj)
+    
     while
       && topidx < to
       && botidx < PKV.NumKVPairs(bot)
@@ -957,6 +959,8 @@ module DynamicPkv {
     var tmp: SingleMergeResult;
     var runningSlack: uint64 := slack;
     var results := new PKV.Pkv[|bots| as uint64];
+
+    assume false; // TODO(robj)
 
     Uint64_Order.IsSortedImpliesLte(pivotIdxs, 0, |pivotIdxs|-1);
     tmp := MergeToOneChild(top, 0, pivotIdxs[0], bots[0], runningSlack);

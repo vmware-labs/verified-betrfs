@@ -906,8 +906,6 @@ module IndirectionTableImpl {
     requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
     modifies data
     {
-      assume false;
-
       var idx := start_idx;
 
       Pack_LittleEndian_Uint64_into_Array(t.Count, data, idx);

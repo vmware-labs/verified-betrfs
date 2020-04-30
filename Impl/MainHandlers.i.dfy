@@ -102,7 +102,7 @@ module MainHandlers refines Main {
   // jonh hack UNVERIFIED DEBUG ONLY
   method handleEvictEverything(k: Constants, hs: HeapState, io: DiskIOHandler)
   {
-    assume false;
+    assume false; // TODO(jonh) debugging stuff
     var s := hs.s;
     print "\nBefore\n";
     var acc := s.bc.DebugAccumulate();
@@ -117,13 +117,13 @@ module MainHandlers refines Main {
     print "\nAfter\n";
     acc := s.bc.DebugAccumulate();
     DebugAccumulator.Display(acc, 0);
-    assume false;
+    assume false; // TODO(jonh) debugging stuff
   }
 
   // jonh hack UNVERIFIED DEBUG ONLY
   method handleCountAmassAllocations(k: Constants, hs: HeapState, io: DiskIOHandler)
   {
-    assume false;
+    assume false; // TODO(jonh) debugging stuff
     AllocationReport.start();
     var s := hs.s;
 
@@ -148,7 +148,7 @@ module MainHandlers refines Main {
     }
 
     AllocationReport.stop();
-    assume false;
+    assume false; // TODO(jonh) debugging stuff
   }
 
   method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: uint64, graphSync: bool)

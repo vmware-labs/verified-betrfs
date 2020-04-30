@@ -1165,8 +1165,7 @@ module InterpretationDisk {
       JournalDiskOp_of_RespRead(dop.id, dop.respRead))
   {
     var loc := LocOfRespRead(dop.respRead);
-    assume atLocWithWrites(loc, disk.contents, disk.reqWrites)
-        == atLoc(loc, disk.contents);
+    atLoc_eq_atLocWithWrites(disk.contents, disk.reqWrites, loc);
     if ValidJournalLocation(loc) {
       var journal := DiskJournal(disk);
       var interval := JournalIntervalOfLocation(loc);

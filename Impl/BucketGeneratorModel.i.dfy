@@ -29,6 +29,7 @@ module BucketGeneratorModel {
   predicate WF(g: Generator)
   {
     && (g.BasicGenerator? ==> (
+      && WFBucket(g.bucket)
       && WFIter(g.bucket, g.it)
     ))
     && (g.ComposeGenerator? ==> (
@@ -158,6 +159,7 @@ module BucketGeneratorModel {
   }
 
   function {:opaque} GenFromBucketWithLowerBound(bucket: Bucket, start: UI.RangeStart) : (g : Generator)
+  requires WFBucket(bucket)
   ensures WF(g)
   {
     var it := match start {
@@ -170,6 +172,7 @@ module BucketGeneratorModel {
 
   function {:opaque} GenFromBucketStackWithLowerBound(buckets: seq<Bucket>, start: UI.RangeStart) : (g : Generator)
   requires |buckets| >= 1
+  requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
   decreases |buckets|
   ensures WF(g)
   {
@@ -186,7 +189,7 @@ module BucketGeneratorModel {
 
   // Characterizing what the generators return
 
-  protected predicate Monotonic(g: Generator)
+  predicate {:opaque} Monotonic(g: Generator)
   {
     g.ComposeGenerator? ==> (
       && (g.next.Next? && GenLeft(g.top).Next? ==> Keyspace.lt(g.next.key, GenLeft(g.top).key))
@@ -239,10 +242,14 @@ module BucketGeneratorModel {
     if GenLeft(g).Next? {
       if g.ComposeGenerator? {
         reveal_Compose();
+        assert Monotonic(g.top) by { reveal_Monotonic(); }
+        assert Monotonic(g.bot) by { reveal_Monotonic(); }
         GenLeftIsMinimum(g.top);
         GenLeftIsMinimum(g.bot);
         assert GenLeft(g).key in BucketOf(g).b;
-        assert forall k | k in BucketOf(g).b :: Keyspace.lte(GenLeft(g).key, k);
+        assert forall k | k in BucketOf(g).b :: Keyspace.lte(GenLeft(g).key, k) by {
+          reveal_Monotonic();
+        }
         assert minimumKey(BucketOf(g).b.Keys) == Some(GenLeft(g).key);
       } else {
         assert GenLeft(g).key in BucketOf(g).b;
@@ -281,10 +288,15 @@ module BucketGeneratorModel {
         noKeyBetweenIterAndIterInc(g.bucket, g.it, k);
       }
       assert b1 == b2;
+
+      assert Monotonic(GenPop(g)) by { reveal_Monotonic(); }
     } else {
+      assert g.ComposeGenerator?;
       reveal_Compose();
       reveal_MergeGenPop();
 
+      assert Monotonic(g.top) by { reveal_Monotonic(); }
+      assert Monotonic(g.bot) by { reveal_Monotonic(); }
       GenLeftIsMinimum(g.top);
       GenLeftIsMinimum(g.bot);
 
@@ -297,7 +309,22 @@ module BucketGeneratorModel {
         assert GenLeft(g.bot).key in BucketOf(g.bot).b.Keys;
       }
 
-      assume Monotonic(GenPop(g)); // why is this not obvious?
+      assert Monotonic(GenPop(g)) by {
+        reveal_Monotonic();
+      }
+
+      assert GenPop(g).ComposeGenerator?;
+      calc {
+        BucketOf(GenPop(g)).b;
+        {
+          assert
+            && (g.next.Next? && GenLeft(g.top).Next? ==> Keyspace.lt(g.next.key, GenLeft(g.top).key))
+            && (g.next.Next? && GenLeft(g.bot).Next? ==> Keyspace.lt(g.next.key, GenLeft(g.bot).key)) by {
+            reveal_Monotonic();
+          }
+        }
+        MapRemove1(BucketOf(g).b, Keyspace.minimum(BucketOf(g).b.Keys));
+      }
       assert YieldsSortedBucket(GenPop(g),
         B(MapRemove1(BucketOf(g).b, Keyspace.minimum(BucketOf(g).b.Keys))));
     }
@@ -325,7 +352,9 @@ module BucketGeneratorModel {
       GenPopIsRemove(bot);
       assert GenLeft(bot).key in BucketOf(bot).b.Keys;
     }
-    assume Monotonic(GenCompose(top, bot)); // why is this not obvious?
+    assert Monotonic(GenCompose(top, bot)) by {
+      reveal_Monotonic();
+    }
   }
 
   lemma GenComposeIsCompose(top: Generator, bot: Generator)
@@ -381,6 +410,7 @@ module BucketGeneratorModel {
   }
 
   lemma GenFromBucketWithLowerBoundYieldsClampStart(bucket: Bucket, start: UI.RangeStart)
+  requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
   ensures var g := GenFromBucketWithLowerBound(bucket, start);
       YieldsSortedBucket(g, ClampStart(bucket, start))
@@ -411,28 +441,41 @@ module BucketGeneratorModel {
         }
       }
     }
+
+    assert YieldsSortedBucket(g, ClampStart(bucket, start)) by {
+      reveal_Monotonic();
+    }
   }
 
   lemma GenFromBucketStackWithLowerBoundYieldsComposeSeq(buckets: seq<Bucket>, start: UI.RangeStart)
   requires |buckets| >= 1
+  requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
   requires BucketListWellMarshalled(buckets)
   ensures var g := GenFromBucketStackWithLowerBound(buckets, start);
-      YieldsSortedBucket(g, ClampStart(ComposeSeq(buckets), start))
+      && YieldsSortedBucket(g, ClampStart(ComposeSeq(buckets), start))
   {
     reveal_GenFromBucketStackWithLowerBound();
     var g := GenFromBucketStackWithLowerBound(buckets, start);
-    assume WM(g);
     if |buckets| == 1 {
+      assert BucketWellMarshalled(buckets[0]);
+      reveal_GenFromBucketWithLowerBound();
+      assert WM(g);
+
       ComposeSeq1(buckets[0]);
       assert [buckets[0]] == buckets;
+      assert WFBucket(buckets[0]);
+      assert WFBucket(ComposeSeq([buckets[0]])) by {
+        reveal_ComposeSeq();
+        reveal_Compose();
+      }
       GenFromBucketWithLowerBoundYieldsClampStart(buckets[0], start);
       WellMarshalledBucketsEq(ComposeSeq([buckets[0]]), buckets[0]);
     } else {
       var mid := |buckets| / 2;
       var g1 := GenFromBucketStackWithLowerBound(buckets[..mid], start);
       var g2 := GenFromBucketStackWithLowerBound(buckets[mid..], start);
-      assume WM(g1);
-      assume WM(g2);
+      assert WM(g1);
+      assert WM(g2);
       GenComposeIsCompose(g1, g2);
       calc {
         BucketOf(g).b;
