@@ -133,7 +133,9 @@ module BucketImpl {
         && tree.repr <= Repr
         && KMB.WF(tree)
         && Weight as int < Uint64UpperBound()
-        && Bucket == B(KMB.Interpretation(tree))
+        && forall k | k in KMB.Interpretation(tree) :: |k| <= KeyType.MaxLen() as nat
+        && var interp := map k: Key | k in KMB.Interpretation(tree) :: KMB.Interpretation(tree)[k];
+        && Bucket == B(interp)
       ))
       && (format.BFPkv? ==> (
         && tree == null
