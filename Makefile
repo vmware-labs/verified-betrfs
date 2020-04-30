@@ -28,16 +28,18 @@ STDLIB=-stdlib=libc++
 # Uncomment to enable gprof
 #GPROF_FLAGS=-pg
 
-WANT_MALLOC_ACCOUNTING=true
+WANT_MALLOC_ACCOUNTING=false
 ifeq "$(WANT_MALLOC_ACCOUNTING)" "true"
 	MALLOC_ACCOUNTING_DEFINE=-DMALLOC_ACCOUNTING=1
 else
 	MALLOC_ACCOUNTING_DEFINE=
 endif
 
-WANT_DEBUG=true
+WANT_DEBUG=tfalserue
 ifeq "$(WANT_DEBUG)" "true"
-	DBG_SYMBOLS_FLAG=-g
+	# DEBUG_UNDERLYING makes DafnySequence pointer objects 16B more expensive,
+	# and does a bunch of runtime reference tracking.
+	DBG_SYMBOLS_FLAG=-g -DDEBUG_UNDERLYING=1
 	OPT_FLAG=-O0
 else
 	DBG_SYMBOLS_FLAG=
@@ -347,7 +349,11 @@ librocksdb:
 .PHONY: libycsbc
 
 # NOTE: this uses jemalloc (sudo apt install libjemalloc-dev)
-WANT_JEMALLOC=false
+# TODO(jonh): why are we disabling jemalloc in rocks? Probably because we
+# didn't have it insalled on the host on first run. Should fix that for
+# fairness, not that it'll be a big factor for rocks, for which most memory is
+# managed explicitly in on-disk representation.
+WANT_JEMALLOC=true
 ifeq "$(WANT_JEMALLOC)" "true"
 JEMALLOC_LIBDIR=/usr/lib/x86_64-linux-gnu/
 JEMALLOC_LIBS=jemalloc

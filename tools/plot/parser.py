@@ -130,8 +130,8 @@ class Experiment:
         self.cgroups_stat = {}
 
         self.scopes = {}
-        self.kvl_underlying = {}
-        self.kvl_underlying_count = {}
+        self.kvl_underlying = Trace("underlying_bytes", "B")
+        self.kvl_underlying_count = Trace("underlying_cnt", "cnt")
         self.accum = {}
 
         self.parse()
@@ -177,7 +177,7 @@ class Experiment:
 
             if line.startswith("os-map-total"):
                 self.os_map_total[cur_op] = int(fields[1])
-                self.os_map_heap[cur_op] = int(fields[3])
+                self.os_map_heap[cur_op] = max(0, int(fields[3]))
 
 #            if line.startswith("iostats "):
 #                self.reads_started[cur_op] = int(fields[1])
@@ -219,9 +219,9 @@ class Experiment:
                     self.microscopes[label] = ARows(label)
                 self.microscopes[label][cur_op] = arow
             
-#            if line.startswith("allocationreport stop underyling_count"):
-#                self.kvl_underlying_count[t] = int(fields[3])
-#                self.kvl_underlying[t] = int(fields[5])
+            if line.startswith("allocationreport stop underyling_count"):
+                self.kvl_underlying_count[cur_op] = int(fields[3])
+                self.kvl_underlying[cur_op] = int(fields[5])
 
 
             mo = re.compile("Allocated: (\d+), active: (\d+), mapped: (\d+)").search(line)

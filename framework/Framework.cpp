@@ -859,6 +859,7 @@ void set_amass_mode(bool b) {
 
 namespace AllocationReport_Compile {
 
+#if DEBUG_UNDERLYING
 class Observation {
 private:
   std::set<uint64_t> observed_ptrs;
@@ -971,24 +972,24 @@ void Observation::sampleNode(uint64 noderef, std::shared_ptr<NodeImpl_Compile::N
   count = observed_ptrs.size();
   printf("allocationreport noderef %lu type %s observed_sptr_count %d\n", noderef, type, count);
 }
+#endif // DEBUG_UNDERLYING
 
-#define TRACK_DOWN_UNDERLYING_ALLOCATIONS 1
 void start() {
-#if TRACK_DOWN_UNDERLYING_ALLOCATIONS
+#if DEBUG_UNDERLYING
   g_observation.start();
-#endif // TRACK_DOWN_UNDERLYING_ALLOCATIONS
+#endif // DEBUG_UNDERLYING
 }
 
 void sampleNode(uint64 noderef, std::shared_ptr<NodeImpl_Compile::Node> node) {
-#if TRACK_DOWN_UNDERLYING_ALLOCATIONS
+#if DEBUG_UNDERLYING
   g_observation.sampleNode(noderef, node);
-#endif // TRACK_DOWN_UNDERLYING_ALLOCATIONS
+#endif // DEBUG_UNDERLYING
 }
 
 void stop() {
-#if TRACK_DOWN_UNDERLYING_ALLOCATIONS
+#if DEBUG_UNDERLYING
   g_observation.stop();
-#endif // TRACK_DOWN_UNDERLYING_ALLOCATIONS
+#endif // DEBUG_UNDERLYING
 }
 
 } // AllocationReport_Compile

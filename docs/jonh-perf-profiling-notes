@@ -992,3 +992,40 @@ Time to see if memory is still under control.
 
 time build/VeribetrfsYcsb ycsb/workloada-onefield.spec /tmp/data/ --veribetrkv > malloc-exp/merge-1.data
 
+Okay, back to the drawing board.
+internal-accum-bytes is 1.23GiB for a 8MB*25600
+* wait wut why is this system ever evicting? Debug symbols, I guess.
+* malloc is much higher than internal-accum-bytes; check yer mallocs
+
+merge-2: 200*8MB; internal-accum-bytes 1.21GiB but malloc 1.92GiB.
+Time to break out the CountAmassAllocations call in YcsbMain.cpp.
+
+merge-3: 40 * 8MB
+internal-accum & underlying agree that we're using 0.27GiB, which suggests
+we're not having amass troubles.
+Malloc, on the other hand, sees 0.96GiB -- 3X more.
+Most in explicit-seq.
+  38 ~7.3MiB allocations -- those sound about right, actually.
+...and 1M in 512-byte allocations -- values.
+...and 3M in ~29 byte allocations -- keys.
+Which is a lot, considering that (a) we already accounted for everything
+and (b) I'd only expect 8MB/(24+512)*40 = ~626k kv pairs in cache.
+Now the journal may be confounding things, except that the 100MB
+JournalEntry array is already accounted for -- and there's precisely one
+of it.
+I suppose spend some time on the debug stack looking at the value allocations.
+
+Journal: 1M entries, each 96B long! Each key, value pointer is 48B.
+(32 bytes for DafnySequence + 16 bytes for dbg_underlying crap that
+should be made switch-offable.)
+So in fact we're probably ALSO accounting for the 1M value allocations
+in the journal, and 1M of the 3M keys.
+
+merge-4: Drop journal to 16Ki entries, which should cost around 10MB in
+storage (vs 600MB). Yep, it does. Everything looks reasonably-well accounted
+for; time to try a jemalloc experiment again.
+
+merge-5: debug off, jemalloc on, tree size 200 * 8MB. Is the memory behavior
+sane? (works around bug in os heap calculation) Yep, not too far off.
+1.13GiB of internal becomes 1.6GiB of jem mapped; 41% overhead. Time to
+try with cgroups.

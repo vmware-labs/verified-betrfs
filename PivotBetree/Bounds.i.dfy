@@ -10,6 +10,12 @@ module Bounds {
   import opened KeyType
 
   function method NodeBlockSizeUint64() : uint64 { 8*1024*1024 }
+  function method MaxTotalBucketWeightUint64() : uint64 { 8356168 }
+  function method MaxCacheSizeUint64() : uint64 { 200 }
+  //function method NodeBlockSizeUint64() : uint64 { 96*1024 }
+  //function method MaxTotalBucketWeightUint64() : uint64 { 64220 }
+  //function method MaxCacheSizeUint64() : uint64 { 25600 }
+
 
   // TODO(jonh): We should partition the disk, in byte units, into regions,
   // and then address each region in its native block size with 0-based indexing.
@@ -39,11 +45,6 @@ module Bounds {
     IndirectionTableBlockSizeUint64()
   }
 
-
-  //function method MaxTotalBucketWeightUint64() : uint64 { 8356168 }
-  //function method MaxCacheSizeUint64() : uint64 { 200 }
-  function method MaxTotalBucketWeightUint64() : uint64 { 64220 }
-  function method MaxCacheSizeUint64() : uint64 { 25600 }
 
   function method MaxNumChildrenUint64() : uint64 { 32 }
 

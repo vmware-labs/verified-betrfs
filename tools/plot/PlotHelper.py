@@ -31,7 +31,7 @@ class PlotHelper:
         self.columns = 2 if numPlots > 4 else 1
         self.rows = int((numPlots+0.5)/self.columns)
         # You may need: sudo pip3 install --upgrade matplotlib
-        self.fig = plt.figure(constrained_layout=True,
+        self.fig = plt.figure(#constrained_layout=True,
                     figsize = (scale*7*self.columns, scale*self.rows*2))
         self.gridspec = GridSpec(self.rows, self.columns)
         #self.fig, self.axes = plt.subplots(rows, columns, figsize=())
@@ -49,7 +49,7 @@ class PlotHelper:
         return self.fig.add_subplot(self.gridspec[row:endRow, col])
 
     def save(self, figname):
-        plt.tight_layout()
+        #plt.tight_layout()
         plt.savefig(figname)
 
 class LambdaTrace:
@@ -180,6 +180,8 @@ def plotGrandUnifiedMemory(ax, experiments):
                 exp.nickname + " OS heap")
         plotWithLabel(singleTrace(ax, exp.cgroups_memory_usage_bytes, scale=Gi),
                 exp.nickname + " cgroups-usage")
+
+        # malloc & jemalloc
         plotWithLabel(singleTrace(ax, exp.jem_mapped, scale=Gi),
                 exp.nickname + " jem mapped")
         plotWithLabel(singleTrace(ax, exp.jem_active, scale=Gi),
@@ -189,6 +191,10 @@ def plotGrandUnifiedMemory(ax, experiments):
 
         mallocLam = singleTrace(ax, exp.microscopes["total"].getTrace("open_byte"), scale=Gi) if "total" in exp.microscopes else lambda opn: None
         plotWithLabel(mallocLam, exp.nickname + " malloc")
+
+        # "underlying" view: measured in C++ below Dafny but above malloc
+        plotWithLabel(singleTrace(ax, exp.kvl_underlying, scale=Gi),
+                exp.nickname + " underlying")
 
         # internal views, stacked
         traceNames = ["bucket-message-bytes", "bucket-key-bytes", "pivot-key-bytes"]
