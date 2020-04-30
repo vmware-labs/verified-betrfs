@@ -744,7 +744,6 @@ module MarshallingImpl {
       return data;
 
       /*
-      assume false;
       if end == 0 {
         return null;
       }
