@@ -35,7 +35,7 @@ else
 	MALLOC_ACCOUNTING_DEFINE=
 endif
 
-WANT_DEBUG=tfalserue
+WANT_DEBUG=false
 ifeq "$(WANT_DEBUG)" "true"
 	# DEBUG_UNDERLYING makes DafnySequence pointer objects 16B more expensive,
 	# and does a bunch of runtime reference tracking.
