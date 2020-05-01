@@ -108,7 +108,7 @@ module DList {
   function method Next<A>(shared l:DList<A>, p:uint64):(p':uint64)
     requires Inv(l)
     requires MaybePtr(l, p)
-    ensures MaybePtr(l, p)
+    ensures MaybePtr(l, p')
     ensures p == 0 && |Seq(l)| > 0 ==> Index(l, p') == 0
     ensures p == 0 && |Seq(l)| == 0 ==> p' == 0
     ensures p != 0 && Index(l, p) + 1 < |Seq(l)| ==> Index(l, p') == Index(l, p) + 1
@@ -120,7 +120,7 @@ module DList {
   function method Prev<A>(shared l:DList<A>, p:uint64):(p':uint64)
     requires Inv(l)
     requires MaybePtr(l, p)
-    ensures MaybePtr(l, p)
+    ensures MaybePtr(l, p')
     ensures p == 0 && |Seq(l)| > 0 ==> Index(l, p') == |Seq(l)| - 1
     ensures p == 0 && |Seq(l)| == 0 ==> p' == 0
     ensures p != 0 && Index(l, p) > 0 ==> Index(l, p') == Index(l, p) - 1

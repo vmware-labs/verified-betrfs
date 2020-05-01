@@ -50,6 +50,13 @@ module LruModel {
     )
   }
 
+  function Remove'(q: LruQueue, x: uint64) : LruQueue
+  {
+    if x !in q then q else
+    var i :| 0 <= i < |q| && x == q[i];
+    q[.. i] + q[i + 1 ..]
+  }
+
   function Use(q: LruQueue, x: uint64) : LruQueue
   {
     Remove(q, x) + [x]
@@ -73,6 +80,14 @@ module LruModel {
   requires |I(q)| > 0
   {
     (q[1..], q[0])
+  }
+
+  lemma LruRemove'(q: LruQueue, x: uint64)
+    requires WF(q)
+    ensures Remove(q, x) == Remove'(q, x)
+  {
+    reveal_distinct();
+    if |q| > 0 {LruRemove'(DropLast(q), x);}
   }
 
   lemma LruRemoveGetIndex(q: LruQueue, x: uint64, j: int)
@@ -193,5 +208,15 @@ module LruModel {
         == I(Remove(q,x)) + {x}
         == (I(q) - {x}) + {x}
         == I(q) + {x};
+  }
+
+  lemma QueueCount(q: LruQueue)
+  requires WF(q)
+  ensures |I(q)| == |q|
+  {
+    if (|q| > 0) {
+      assert I(q) == I(q[1..]) + {q[0]};
+      QueueCount(q[1..]);
+    }
   }
 }
