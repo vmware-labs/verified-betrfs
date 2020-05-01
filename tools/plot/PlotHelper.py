@@ -132,7 +132,7 @@ def plotThroughput(ax, experiments):
     ax.set_title("op throughput")
     a2 = ax.twinx()
     a2.set_ylabel("s")
-    colors = ["black", "brown", "red", "orange", "yellow", "green", "blue", "violet"]
+    colors = ["black", "brown", "red", "orange", "green", "blue", "violet"]
     for expi in range(len(experiments)):
         exp = experiments[expi]
         line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, scale=K)), color=colors[expi])
@@ -213,7 +213,7 @@ def plotGrandUnifiedMemory(ax, experiments):
 
     for i in range(len(experiments)):
         exp = experiments[i]
-        plotOneExp(exp, {"linestyle": linestyles[i]})
+        plotOneExp(exp, {"linestyle": linestyles[i % len(linestyles)]})
 
     ax.set_ylim(bottom=0)
     set_xlim(ax, experiments)
