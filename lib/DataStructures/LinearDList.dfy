@@ -13,10 +13,10 @@ module DList {
   export
     provides NativeTypes
     provides DList
-    provides Inv, Seq, ValidPtr, Index
+    provides Inv, Seq, ValidPtr, Index, IndexHi
     reveals MaybePtr
     provides Get, Next, Prev
-    provides Alloc, Free, Remove, InsertAfter
+    provides Alloc, Free, Remove, InsertAfter, InsertBefore
 
   /*
   A DList<A> is a doubly-linked list that represents a sequence s of type seq<A>.
@@ -88,6 +88,13 @@ module DList {
     ensures Inv(l) && p == 0 ==> i == -1
   {
     if Inv(l) && MaybePtr(l, p) then l.g[p] else 0
+  }
+
+  function IndexHi<A>(l:DList<A>, p:uint64):(i:int)
+    ensures Inv(l) && ValidPtr(l, p) ==> i == Index(l, p)
+    ensures Inv(l) && p == 0 ==> i == |Seq(l)|
+  {
+    if Inv(l) && ValidPtr(l, p) then l.g[p] else |l.s|
   }
 
   function method Get<A>(shared l:DList<A>, p:uint64):(a:A)
@@ -229,6 +236,39 @@ module DList {
     nodes := seq_set(nodes, p, node.(next := p'));
     var node_next := seq_get(nodes, node.next);
     nodes := seq_set(nodes, node.next, node_next.(prev := p'));
+    nodes := seq_set(nodes, p', node');
+    l' := DList(nodes, freeNode.next, s', f', g');
+  }
+
+  method InsertBefore<A>(linear l:DList<A>, p:uint64, a:A) returns(linear l':DList<A>, p':uint64)
+    requires Inv(l)
+    requires MaybePtr(l, p)
+    ensures Inv(l')
+    ensures Seq(l') == Seq(l)[.. IndexHi(l, p)] + [a] + Seq(l)[IndexHi(l, p) ..]
+    ensures ValidPtr(l', p') && Index(l', p') == IndexHi(l, p)
+    ensures forall x :: ValidPtr(l, x) ==>
+      ValidPtr(l', x) && Index(l', x) == Index(l, x) + (if Index(l, x) < IndexHi(l, p) then 0 else 1)
+  {
+    l' := l;
+    p' := l'.freeStack;
+    var freeNode := seq_get(l'.nodes, p');
+    if (p' == 0 || freeNode.data.Some?) {
+      l' := Expand(l');
+      p' := l'.freeStack;
+      freeNode := seq_get(l'.nodes, p');
+    }
+
+    linear var DList(nodes, freeStack, s, f, g) := l';
+    ghost var index' := IndexHi(l, p);
+    ghost var s' := s[.. index'] + [a] + s[index' ..];
+    ghost var f' := f[.. index'] + [p' as int] + f[index' ..];
+    ghost var g' := Sequences.OfFunction(|g|, x requires 0 <= x < |g| =>
+      if x == p' as int then index' else if g[x] >= index' then g[x] + 1 else g[x]);
+    var node := seq_get(nodes, p);
+    var node' := Node(Some(a), p, node.prev);
+    nodes := seq_set(nodes, p, node.(prev := p'));
+    var node_prev := seq_get(nodes, node.prev);
+    nodes := seq_set(nodes, node.prev, node_prev.(next := p'));
     nodes := seq_set(nodes, p', node');
     l' := DList(nodes, freeNode.next, s', f', g');
   }
