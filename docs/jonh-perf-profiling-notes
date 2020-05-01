@@ -750,7 +750,8 @@ maybe making a mess of the cache? Surprising, though. Trying again with
 less allocation reporting.
 Argh, the 8mb curve is still dropping well below manual-wka-opt-350. What gives!?
 
-perf record -p XXX
+perf record -p 10812 --call-graph dwarf sleep 10
+# --call-graph dwarf gives sensible call graphs on -O3 code
 ~/appimage/hotspot-v1.2.0-x86_64.AppImage --debugPaths /usr/lib/debug
 
 
@@ -1036,3 +1037,50 @@ And run-veri-config is making journal-oblivious nonsense configs again.
 2 * 4096 + 2048 * 4096
           + 2 * 24*1024*1024
 
+merge-7: same config, cgroups, but 10X overprovisioned to avoid pagefaults.
+  ...okay, so pgfaults still climb, but the perf is 10X better.
+  suggesting that
+    - pgfaults might be getting charged for IO activity / fresh allocations?
+    - maybe 10X is letting us do everything from the 10GB buffer cache.
+    (DIRECT is off)
+merge-8: same config, 1.5X overprovisioned.
+  Goal is to separate veri-cache fill from buffer cache fill, while still
+  seeing both effects in 15 minutes.
+merge-9: 1.2X overprovisioned. Trying to dial it in tight.
+
+tools/plot/perf-compare.py cgr1=malloc-exp/merge-6.data cgr10=malloc-exp/merge-7.data cgr1.5=malloc-exp/merge-8.data cgr1.2=malloc-exp/merge-9.data rocks=malloc-exp/rocks-1.2.data
+
+Holy crap, Rocks is wiping the floor with us.
+Okay, yeah -- Rocks is turning in an initial perf of 50Kops/sec,
+and we're straggling along at 0.6Kops/sec. We used to be 10X faster
+in the in-memory mode. Let's sort that out first.
+
+1. Fix memory leak in journal
+2. Disable journal for testing
+  merge-10: journal disabled with comments at CoordinationImpl:314
+3. Allow journal skipping
+
+2a. Why does memory usage go way up with the journal *disabled*?
+Actually maybe it's fine -- internal gets up to 1.2GB, which is what
+we'd expect. Rocks is impressively spare at 1GiB.
+
+[merge-11.data]
+  time tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb config-8mb > malloc-exp/merge-11.data
+  cgroup; cheats up to 1.4gb; journal sync disabled
+
+[rocks-1.4.data]
+  time tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb rocks > malloc-exp/rocks-1.4.data
+  cgroup 1.4gb (1.0 * cheat=1.4)
+
+For comedy, let's try giving ourselves a 1.4gb internal cache
+(2.8gb total cgroup). Just to see if the curve shape can be explained
+entirely by cache hit ratio.
+
+...and then we should look into IO rates on a perf graph, I guess?
+
+[ ] Why are we using only 0.7GiB when we're filling 200 ~6MiB nodes?
+  - script isn't doing the math right.
+[ ] Try same set of experiments with a smaller block size? eg 1MB
+  ** AND RUN ON SPLINTER1
+  1MB is closer to DAM size.
+[ ] In-memory journal should be small, but disk journal very big
