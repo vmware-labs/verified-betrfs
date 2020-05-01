@@ -132,7 +132,7 @@ def plotThroughput(ax, experiments):
     ax.set_title("op throughput")
     a2 = ax.twinx()
     a2.set_ylabel("s")
-    colors = ["red", "blue", "purple"]
+    colors = ["black", "brown", "red", "orange", "yellow", "green", "blue", "violet"]
     for expi in range(len(experiments)):
         exp = experiments[expi]
         line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, scale=K)), color=colors[expi])
@@ -159,14 +159,17 @@ def plotGrandUnifiedMemory(ax, experiments):
     ax.set_title("Grand Unified Memory")
 
     colors = ["black", "brown", "red", "orange", "yellow", "green", "indigo", "blue", "violet"]
-    linestyles=["solid", "dashed", "dotted"]
+    linestyles=["solid", "dashed", "dotted", "-."]
+    coloridx = [0]
     def plotOneExp(exp, plotkwargs):
-        coloridx = [0]
+        labelidx = [0]
+        plotkwargs["color"] = colors[coloridx[0] % len(colors)]
+        coloridx[0] += 1
 
         def plotWithLabel(lam, lbl):
-            plotkwargs["color"] = colors[coloridx[0]]
+            plotkwargs["linestyle"] = linestyles[labelidx[0] % len(linestyles)]
             #print("using color %s for label %s" % (plotkwargs["color"], lbl))
-            coloridx[0] += 1
+            labelidx[0] += 1
             xs,ys = plotVsKop(ax, exp, lam)
             if len(xs)==0:
                 # don't clutter legendspace
@@ -184,8 +187,8 @@ def plotGrandUnifiedMemory(ax, experiments):
         # malloc & jemalloc
         plotWithLabel(singleTrace(ax, exp.jem_mapped, scale=Gi),
                 exp.nickname + " jem mapped")
-        plotWithLabel(singleTrace(ax, exp.jem_active, scale=Gi),
-                exp.nickname + " jem active")
+#        plotWithLabel(singleTrace(ax, exp.jem_active, scale=Gi),
+#                exp.nickname + " jem active")
         plotWithLabel(singleTrace(ax, exp.jem_allocated, scale=Gi),
                 exp.nickname + " jem alloc")
 
@@ -214,4 +217,4 @@ def plotGrandUnifiedMemory(ax, experiments):
 
     ax.set_ylim(bottom=0)
     set_xlim(ax, experiments)
-    ax.legend(loc="lower right")
+    ax.legend(loc="upper left")
