@@ -1,6 +1,12 @@
 include "Maps.s.dfy"
 
 module Multisets {
+
+  lemma SingletonSet<A>(a: A)
+    ensures multiset{a} == multiset({a})
+  {
+  }
+
   function {:opaque} Choose<A>(s: multiset<A>) : (result: A)
     requires 0 < |s|
     ensures result in s
@@ -21,6 +27,20 @@ module Multisets {
       multiset{fn(x)} + Apply(fn, s - multiset{x})
   }
 
+  lemma ApplyEquivalentFns<A,B>(fn1: A ~> B, fn2: A ~> B, s: multiset<A>)
+    requires forall x | x in s :: fn1.requires(x)
+    requires forall x | x in s :: fn2.requires(x)
+    requires forall x | x in s :: fn1(x) == fn2(x)
+    ensures Apply(fn1, s) == Apply(fn2, s)
+  {
+    reveal_Apply();
+    if |s| == 0 {
+    } else {
+      var x := Choose(s);
+      ApplyEquivalentFns(fn1, fn2, s - multiset{x});
+    }
+  }
+  
   lemma ApplySingleton<A, B>(fn: A ~> B, x: A)
     requires fn.requires(x)
     ensures Apply(fn, multiset{x}) == multiset{fn(x)}
@@ -237,8 +257,12 @@ module Multisets {
   // TODO(rob): not really the right place for this, but can't put it
   // in Maps, since that's trusted, which precludes including this
   // file in Maps.s.dfy.
+  function ValueMultisetFn<A,B>(m: map<A,B>) : (result: A ~> B)
+  {
+    x requires x in m => m[x]
+  }
   function ValueMultiset<A,B>(m: map<A,B>) : (result: multiset<B>)
   {
-    Apply(x requires x in m => m[x], multiset(m.Keys))
+    Apply(ValueMultisetFn(m), multiset(m.Keys))
   }
 }

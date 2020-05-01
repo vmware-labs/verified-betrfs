@@ -100,39 +100,6 @@ module BucketsLib {
     NoDupesMultiset(bucket.keys);
   }
 
-  lemma WellMarshalledMessageMultiset(bucket: Bucket)
-    requires WFBucket(bucket)
-    requires BucketWellMarshalled(bucket)
-    ensures Multisets.ValueMultiset(bucket.b) == multiset(bucket.msgs)
-    decreases |bucket.keys|
-  {
-    if |bucket.keys| == 0 {
-    } else if |bucket.keys| == 1 {
-      Multisets.ApplySingleton(x requires x in bucket.b => bucket.b[x], bucket.keys[0]);
-    } else {
-      var lastkey := Last(bucket.keys);
-      var lastmsg := Last(bucket.msgs);
-      var lastb := map[lastkey := lastmsg];
-      var lastbucket := BucketMapWithSeq(lastb, [ lastkey ], [ lastmsg ]);
-
-      assert WFBucket(lastbucket);
-      StrictlySortedSubsequence(bucket.keys, |bucket.keys| - 1, |bucket.keys|);
-      
-      var prekeys := DropLast(bucket.keys);
-      var premsgs := DropLast(bucket.msgs);
-      var preb := MapRemove1(bucket.b, lastkey);
-      var prebucket := BucketDropLast(bucket);
-
-      BucketDropLastWF(bucket);
-      BucketDropLastWellMarshalled(bucket);
-
-      WellMarshalledMessageMultiset(prebucket);
-      WellMarshalledMessageMultiset(lastbucket);
-      Multisets.ApplyAdditive(x requires x in bucket.b => bucket.b[x], multiset(preb.Keys), multiset(lastb.Keys));
-      assert bucket.msgs == DropLast(bucket.msgs) + [ Last(bucket.msgs) ];
-    }
-  }
-  
   predicate BucketListWellMarshalled(blist: BucketList)
   {
     forall i | 0 <= i < |blist| :: BucketWellMarshalled(blist[i])
@@ -275,6 +242,62 @@ module BucketsLib {
     }
   }
 
+  lemma WellMarshalledMessageMultiset(bucket: Bucket)
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+    ensures Multisets.ValueMultiset(bucket.b) == multiset(bucket.msgs)
+    decreases |bucket.keys|
+  {
+    var fn := Multisets.ValueMultisetFn(bucket.b);
+    if |bucket.keys| == 0 {
+    } else if |bucket.keys| == 1 {
+      assert bucket.b.Keys == { bucket.keys[0] };
+      Multisets.ApplySingleton(fn, bucket.keys[0]);
+      WFWellMarshalledBucketMapI(bucket, 0);
+      Multisets.SingletonSet(bucket.keys[0]);
+    } else {
+      var lastkey := Last(bucket.keys);
+      var lastmsg := Last(bucket.msgs);
+      var lastb := map[lastkey := lastmsg];
+      var lastbucket := BucketMapWithSeq(lastb, [ lastkey ], [ lastmsg ]);
+
+      assert WFBucket(lastbucket) by {
+        reveal_BucketMapOfSeq();
+        WFWellMarshalledBucketMapI(bucket, |bucket.keys|-1);
+      }
+      StrictlySortedSubsequence(bucket.keys, |bucket.keys| - 1, |bucket.keys|);
+      
+      var prekeys := DropLast(bucket.keys);
+      var premsgs := DropLast(bucket.msgs);
+      var preb := MapRemove1(bucket.b, lastkey);
+      var prebucket := BucketDropLast(bucket);
+
+      BucketDropLastWF(bucket);
+      BucketDropLastWellMarshalled(bucket);
+
+      WellMarshalledMessageMultiset(prebucket);
+      WellMarshalledMessageMultiset(lastbucket);
+
+      assert multiset(bucket.b.Keys) == multiset(preb.Keys) + multiset(lastb.Keys);
+      Multisets.ApplyAdditive(fn, multiset(preb.Keys), multiset(lastb.Keys));
+      
+      calc {
+        Multisets.ValueMultiset(bucket.b);
+        Multisets.Apply(fn, multiset(bucket.b.Keys));
+        Multisets.Apply(fn, multiset(preb.Keys)) + Multisets.Apply(fn, multiset(lastb.Keys));
+        {
+          Multisets.ApplyEquivalentFns(fn, Multisets.ValueMultisetFn(preb), multiset(preb.Keys));
+          WFWellMarshalledBucketMapI(lastbucket, 0);
+          WFWellMarshalledBucketMapI(bucket, |bucket.keys| - 1);
+          Multisets.ApplyEquivalentFns(fn, Multisets.ValueMultisetFn(lastb), multiset(lastb.Keys));
+        }
+        multiset(prebucket.msgs) + multiset(lastbucket.msgs);
+        { assert bucket.msgs == premsgs + [ lastmsg ]; }
+        multiset(bucket.msgs);
+      }
+    }
+  }
+  
   predicate WFBucketAt(bucket: Bucket, pivots: PivotTable, i: int)
   requires WFPivots(pivots)
   {
