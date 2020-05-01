@@ -60,7 +60,7 @@ def cgroup_defaults():
   ret = os.system("./tools/configure-cgroups.sh")
   assert ret == 0
 
-def set_mem_limit(limit):
+def set_mem_limit(pillow, limit):
   if limit.endswith("gb"):
     val = int(float(limit[:-2]) * 1024*1024*1024)
     actuallyprint("setting mem limit to " + str(val) + " bytes (" + limit + ")")
@@ -68,6 +68,8 @@ def set_mem_limit(limit):
     val = int(limit)
     actuallyprint("setting mem limit to " + str(val) + " bytes")
 
+  val = int(val * pillow)
+  actuallyprint("after pillow adjustment, limit is " + str(val) + " bytes")
   ret = os.system("echo " + str(val) + " > /sys/fs/cgroup/memory/VeribetrfsExp/memory.limit_in_bytes")
   assert ret == 0
 
@@ -113,6 +115,7 @@ def main():
   value_updates = []
   config = None
   log_stats = False
+  pillow = 1.0  # amount of padding over nominal cache size for cgroup.
 
   rocks = None
 
@@ -123,6 +126,8 @@ def main():
       workload = arg[len("workload=") : ]
     elif arg.startswith("device="):
       device = arg[len("device=") : ]
+    elif arg.startswith("pillow="):
+      pillow = float(arg[len("pillow=") : ])
     elif "Uint64=" in arg:
       sp = arg.split("=")
       assert len(sp) == 2
@@ -146,13 +151,15 @@ def main():
     assert not rocks
     assert ram != None
     value_updates = autoconfig(config, ram) + value_updates
+  actuallyprint("value_updates: ")
+  actuallyprint("".join([str(v)+"\n" for v in value_updates]))
 
   assert workload != None
   assert device != None
 
   cgroup_defaults()
   if ram != None:
-    set_mem_limit(ram)
+    set_mem_limit(pillow, ram)
 
   ret = os.system("rm -rf build/")
   assert ret == 0
