@@ -87,7 +87,7 @@ module BucketWeights {
   {
     var weights := MSets.Apply(WeightKey, keys);
     assert |keys| == 0 ==> |weights| == 0;
-    MSets.Fold<nat>(0, (x, y) => x + y, weights)
+    MSets.FoldSimple<nat>(0, (x, y) => x + y, weights)
   }
 
   lemma WeightKeyMultisetAdditive(things1: multiset<Key>, things2: multiset<Key>)
@@ -99,7 +99,7 @@ module BucketWeights {
     MSets.reveal_IsIdentity();
     MSets.reveal_IsAssociative();
     MSets.reveal_IsCommutative();
-    MSets.FoldAdditive<nat>(0, (x, y) => x + y, weights1, weights2);
+    MSets.FoldSimpleAdditive<nat>(0, (x, y) => x + y, weights1, weights2);
     reveal_WeightKeyMultiset();
   }
   
@@ -108,7 +108,7 @@ module BucketWeights {
   {
     var weights := MSets.Apply(WeightMessage, msgs);
     assert |msgs| == 0 ==> |weights| == 0;
-    MSets.Fold<nat>(0, (x, y) => x + y, weights)
+    MSets.FoldSimple<nat>(0, (x, y) => x + y, weights)
   }
   
   lemma WeightMessageMultisetAdditive(things1: multiset<Message>, things2: multiset<Message>)
@@ -120,7 +120,7 @@ module BucketWeights {
     MSets.reveal_IsIdentity();
     MSets.reveal_IsAssociative();
     MSets.reveal_IsCommutative();
-    MSets.FoldAdditive<nat>(0, (x, y) => x + y, weights1, weights2);
+    MSets.FoldSimpleAdditive<nat>(0, (x, y) => x + y, weights1, weights2);
     reveal_WeightMessageMultiset();
   }
   
@@ -160,7 +160,7 @@ module BucketWeights {
     ensures WeightKeyMultiset(multiset{key}) == WeightKey(key)
   {
     MSets.ApplySingleton(WeightKey, key);
-    MSets.FoldSingleton<nat>(0, (x, y) => x + y, WeightKey(key));
+    MSets.FoldSimpleSingleton<nat>(0, (x, y) => x + y, WeightKey(key));
     reveal_WeightKeyMultiset();
   }
   
@@ -282,10 +282,10 @@ module BucketWeights {
     reveal_Image();
   }
 
-  lemma WellFormedKeyMultiset(b: Bucket, s: iset<Key>)
-    requires WFBucket(b)
-    requires BucketWellMarshalled(b)
-    ensures 
+  // lemma WellFormedKeyMultiset(b: Bucket, s: iset<Key>)
+  //   requires WFBucket(b)
+  //   requires BucketWellMarshalled(b)
+  //   ensures 
 
   lemma MapRemoveVsImage(bucket:Bucket, ibk:iset<Key>, key:Key)
   requires WFBucket(bucket)
