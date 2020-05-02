@@ -172,17 +172,12 @@ module BucketWeights {
   }
 
   // TODO(robj): wonky interface -- we should just pass key and msg
-  lemma WeightBucketSingleton(bucket:Bucket, key:Key)
-    requires |bucket.keys| == |bucket.msgs|
-    requires bucket.keys == [key]
-    ensures WeightBucket(bucket) == WeightKey(key) + WeightMessage(bucket.msgs[0]);
+  lemma WeightBucketSingleton(key:Key, msg: Message)
+    ensures WeightBucket(SingletonBucket(key, msg))
+    == WeightKey(key) + WeightMessage(msg);
   {
     WeightKeySingleton(key);
-    WeightMessageSingleton(bucket.msgs[0]);
-    assert multiset(bucket.keys) == multiset{key};
-    assert multiset(bucket.msgs) == multiset{bucket.msgs[0]};
-    reveal_WeightKeyMultiset();
-    reveal_WeightMessageMultiset();
+    WeightMessageSingleton(msg);
   }
 
   // Commonly-used filters for Image()
@@ -215,17 +210,21 @@ module BucketWeights {
     reveal_Image();
   }
 
-  // TODO(robj): Note that we could kill the requires if we only
-  // ensured the map fields (.b) are equal.
+  lemma ImageMapIdentity(bucket:Bucket, s:iset<Key>)
+    requires forall k :: k in bucket.b ==> k in s
+    ensures bucket.b == Image(bucket, s).b
+  {
+    reveal_Image();
+  }
+  
   lemma ImageIdentity(bucket:Bucket, s:iset<Key>)
   requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
   requires forall k :: k in bucket.b ==> k in s
   ensures bucket == Image(bucket, s)
   {
-    var image := Image(bucket, s);
-    ImageShape(bucket, s);
-    WellMarshalledBucketsEq(bucket, image);
+    ImageMapIdentity(bucket, s);
+    WellMarshalledBucketsEq(bucket, Image(bucket, s));
   }
 
   lemma ImageTrim(bucket:Bucket, s:iset<Key>, trimBucket:Bucket)
@@ -459,12 +458,13 @@ module BucketWeights {
 
     ImageShape(bucket, IncludeKey(key));
     if key in bucket.b {
+      WFWellMarshalledBucketMapI(kbucket, 0);
       assert kbucket.keys == [key] by {
         reveal_Image();
         reveal_B();
       }
-      WeightBucketSingleton(kbucket, key);
-      WFWellMarshalledBucketMapI(kbucket, 0);
+      assert kbucket == SingletonBucket(key, bucket.b[key]);
+      WeightBucketSingleton(key, kbucket.b[key]);
     } else {
       WeightBucketEmpty();
       WellMarshalledKeyMultiset(kbucket);
@@ -669,36 +669,43 @@ module BucketWeights {
   }
 
   lemma WeightBucketListItemFlushSingletonOrEmpty(parent: Bucket, children: BucketList, pivots: PivotTable, i: int, filter:iset<Key>, key:Key)
-  requires WFPivots(pivots)
-  requires BucketWellMarshalled(parent)
-  requires BucketListWellMarshalled(children)
-  requires 0 <= i < |children|
-  requires forall k :: k in filter ==> k == key   // filter admits at most one key
-  ensures WeightBucket(BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i))
+    requires WFPivots(pivots)
+    requires WFBucket(parent)
+    requires BucketWellMarshalled(parent)
+    requires 0 <= i < |children|
+    requires WFBucket(children[i])
+    requires BucketListWellMarshalled(children)
+    requires forall k :: k in filter ==> k == key   // filter admits at most one key
+    ensures WeightBucket(BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i))
     <= WeightBucket(Image(parent, RouteRange(pivots, i) * filter))
-       + WeightBucket(Image(children[i], RouteRange(pivots, i) * filter));
+    + WeightBucket(Image(children[i], RouteRange(pivots, i) * filter));
   {
     reveal_Image();
 
     var flush := BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i);
     if key in flush.b.Keys {
-      WeightBucketSingleton(flush, key);
+      WellMarshalledBucketsEq(flush, SingletonBucket(key, flush.b[key]));
+      WeightBucketSingleton(key, flush.b[key]);
     } else {
+      WellMarshalledBucketsEq(flush, EmptyBucket());
       WeightBucketEmpty();
-      assert flush.b == map[];
     }
 
     var filteredParent := Image(parent, RouteRange(pivots, i) * filter);
     if key in filteredParent.b {
-      WeightBucketSingleton(filteredParent, key);
+      WellMarshalledBucketsEq(filteredParent, SingletonBucket(key, filteredParent.b[key]));
+      WeightBucketSingleton(key, filteredParent.b[key]);
     } else {
+      WellMarshalledBucketsEq(filteredParent, EmptyBucket());
       WeightBucketEmpty();
     }
 
     var filteredChild := Image(children[i], RouteRange(pivots, i) * filter);
     if key in filteredChild.b {
-      WeightBucketSingleton(filteredChild, key);
+      WellMarshalledBucketsEq(filteredChild, SingletonBucket(key, filteredChild.b[key]));
+      WeightBucketSingleton(key, filteredChild.b[key]);
     } else {
+      WellMarshalledBucketsEq(filteredChild, EmptyBucket());
       WeightBucketEmpty();
     }
 
@@ -710,6 +717,7 @@ module BucketWeights {
   }
 
   lemma WeightBucketFilterPartitions(bucket:Bucket, filter:iset<Key>, a:iset<Key>, b:iset<Key>)
+    requires WFBucket(bucket)
     requires BucketWellMarshalled(bucket)
     requires a !! b
     requires filter * a + filter * b == filter;
@@ -732,16 +740,17 @@ module BucketWeights {
   }
 
   lemma WeightBucketListItemFlushInner(parent: Bucket, children: BucketList, pivots: PivotTable, i: int, filter:iset<Key>)
-  requires BucketWellMarshalled(parent)
-  requires BucketListWellMarshalled(children)
-  requires WFPivots(pivots)
-  requires 0 <= i < |children|
-  ensures
+    requires WFBucket(parent)
+    requires BucketWellMarshalled(parent)
+    requires forall i | 0 <= i < |children| :: WFBucket(children[i])
+    requires BucketListWellMarshalled(children)
+    requires WFPivots(pivots)
+    requires 0 <= i < |children|
+    ensures
     WeightBucket(BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i))
-      <= WeightBucket(Image(parent, RouteRange(pivots, i) * filter)) + WeightBucket(Image(children[i], RouteRange(pivots, i) * filter))
+    <= WeightBucket(Image(parent, RouteRange(pivots, i) * filter)) + WeightBucket(Image(children[i], RouteRange(pivots, i) * filter))
   decreases |Image(parent, filter).b| + |Image(children[i], filter).b|
   {
-    assume false;
     // Pick an arbitrary key to decrease by
     // (In Lisp, "car" is the first thing in a list, "cdr" is everything else.)
     var carKey;
@@ -750,6 +759,8 @@ module BucketWeights {
     } else if |Image(children[i], filter).b| != 0 {
       carKey :| carKey in Image(children[i], filter).b;
     } else {
+      WellMarshalledBucketsEq(BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i), EmptyBucket());
+      WeightBucketEmpty();
       return;
     }
 
@@ -792,10 +803,14 @@ module BucketWeights {
       + WeightBucket(Image(BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i), cdrFilter));
         { // push filters through Image operator & BucketListItemFlush.
           reveal_Image();
-          assert Image(BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i), carFilter)
-            == BucketListItemFlush(Image(parent, filter * carFilter), Image(children[i], filter * carFilter), pivots, i);
-          assert Image(BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i), cdrFilter)
-            == BucketListItemFlush(Image(parent, filter * cdrFilter), Image(children[i], filter * cdrFilter), pivots, i);
+          WellMarshalledBucketsEq(
+            Image(BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i), carFilter),
+            BucketListItemFlush(Image(parent, filter * carFilter), Image(children[i], filter * carFilter), pivots, i)
+          );
+          WellMarshalledBucketsEq(
+            Image(BucketListItemFlush(Image(parent, filter), Image(children[i], filter), pivots, i), cdrFilter),
+            BucketListItemFlush(Image(parent, filter * cdrFilter), Image(children[i], filter * cdrFilter), pivots, i)
+          );
         }
       WeightBucket(BucketListItemFlush(Image(parent, filter * carFilter), Image(children[i], filter * carFilter), pivots, i))
       + WeightBucket(BucketListItemFlush(Image(parent, filter * cdrFilter), Image(children[i], filter * cdrFilter), pivots, i));
@@ -827,7 +842,9 @@ module BucketWeights {
   lemma WeightBucketListItemFlush(parent: Bucket, children: BucketList, pivots: PivotTable, i: int)
   requires WFPivots(pivots)
   requires 0 <= i < |children|
+  requires WFBucket(parent)
   requires BucketWellMarshalled(parent)
+  requires forall i | 0 <= i < |children| :: WFBucket(children[i])
   requires BucketListWellMarshalled(children)
   ensures WeightBucket(BucketListItemFlush(parent, children[i], pivots, i))
       <= WeightBucket(Image(parent, RouteRange(pivots, i))) + WeightBucket(Image(children[i], RouteRange(pivots, i)))
@@ -858,13 +875,13 @@ module BucketWeights {
   lemma WeightBucketListFlushPartial(parent: Bucket, children: BucketList, pivots: PivotTable, items: int)
   requires WFBucketListProper(children, pivots)
   requires 0 <= items <= |children|
+  requires WFBucket(parent)
   requires BucketWellMarshalled(parent)
   requires BucketListWellMarshalled(children)
   ensures WeightBucketList(BucketListFlushPartial(parent, children, pivots, items))
       <= WeightBucket(Image(parent, RouteRanges(pivots, items)))
         + WeightBucketList(children[..items])
   {
-    assume false;
     if items == 0 {
     } else {
       calc {
@@ -898,7 +915,7 @@ module BucketWeights {
           + WeightBucket(Image(children[items - 1], RouteRange(pivots, items - 1)));
         { // The last child bucket's RouteRange covers the whole bucket, so we can simplify.
           ImageShape(children[items - 1], RouteRange(pivots, items - 1));
-          assert Image(children[items - 1], RouteRange(pivots, items - 1)) == children[items-1]; // trigger
+          WellMarshalledBucketsEq(Image(children[items - 1], RouteRange(pivots, items - 1)), children[items-1]);
         }
         WeightBucket(Image(parent, RouteRanges(pivots, items)))
           + WeightBucketList(children[..items-1]) + WeightBucket(children[items-1]);
@@ -920,18 +937,20 @@ module BucketWeights {
   }
 
   lemma WeightBucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable)
-  requires WFBucketList(children, pivots)
+  requires WFBucketListProper(children, pivots)
   requires |children| == NumBuckets(pivots)
+  requires WFBucket(parent)
   requires BucketWellMarshalled(parent)
+  //requires forall i | 0 <= i < |children| :: WFBucket(children[i])
   requires BucketListWellMarshalled(children)
   ensures WeightBucketList(BucketListFlush(parent, children, pivots))
       <= WeightBucket(parent) + WeightBucketList(children)
   {
-    assume false;
     WeightBucketListFlushPartial(parent, children, pivots, |children|);
     forall ensures Image(parent, RouteRanges(pivots, |children|)) == parent
     {
       reveal_Image();
+      WellMarshalledBucketsEq(Image(parent, RouteRanges(pivots, |children|)), parent);
     }
     assert children[..|children|] == children;  // trigger
   }
@@ -979,10 +998,11 @@ module BucketWeights {
 
   // Analogous to WeightBucketListReplace, except we're changing the size of the subsequence in the middle.
   lemma WeightSplitBucketInList(blist: BucketList, i: int, pivot: Key)
-  requires 0 <= i < |blist|
-  requires BucketWellMarshalled(blist[i])
-  ensures WeightBucketList(SplitBucketInList(blist, i, pivot))
-      == WeightBucketList(blist)
+    requires 0 <= i < |blist|
+    requires WFBucket(blist[i])
+    requires BucketWellMarshalled(blist[i])
+    ensures WeightBucketList(SplitBucketInList(blist, i, pivot))
+    == WeightBucketList(blist)
   {
     assert blist == (blist[..i] + [blist[i]]) + blist[i+1..];
     calc {  // Take the old list apart
@@ -1039,10 +1059,10 @@ module BucketWeights {
   lemma MergeUndoesSplit(blist:BucketList, pivots:PivotTable, i:int)
   requires 0 <= i < |blist| - 1
   requires WFBucketListProper(blist, pivots)
-  requires BucketListWellMarshalled(blist)
+  requires BucketWellMarshalled(blist[i])
+  requires BucketWellMarshalled(blist[i+1])
   ensures SplitBucketInList(MergeBucketsInList(blist, i), i, pivots[i]) == blist;
   {
-    assume false;
     var merged := MergeBucketsInList(blist, i);
     var mbucket := MergeBuckets(blist[i], blist[i+1]);
 
@@ -1059,8 +1079,8 @@ module BucketWeights {
           reveal_MergeBuckets();
           reveal_Image();
           SplitBucketImage(mbucket, pivots[i]);
-          assert SplitBucketLeft(mbucket, pivots[i]) == blist[i];
-          assert SplitBucketRight(mbucket, pivots[i]) == blist[i+1];
+          WellMarshalledBucketsEq(SplitBucketLeft(mbucket, pivots[i]), blist[i]);
+          WellMarshalledBucketsEq(SplitBucketRight(mbucket, pivots[i]), blist[i+1]);
         }
       blist[..i] + [blist[i], blist[i+1]] + blist[i+2..];
       blist;
@@ -1069,14 +1089,14 @@ module BucketWeights {
 
   // Undoes WeightSplitBucketInList
   lemma WeightMergeBucketsInList(blist: BucketList, i: int, pivots: PivotTable)
-  requires 0 <= i < |blist| - 1
-  requires WFBucketListProper(blist, pivots)
-  requires BucketWellMarshalled(blist[i])
-  requires BucketWellMarshalled(blist[i+1])
-  ensures WeightBucketList(MergeBucketsInList(blist, i)) == WeightBucketList(blist)
+    requires 0 <= i < |blist| - 1
+    requires WFBucketListProper(blist, pivots)
+    requires BucketWellMarshalled(blist[i])
+    requires BucketWellMarshalled(blist[i+1])
+    ensures WeightBucketList(MergeBucketsInList(blist, i)) == WeightBucketList(blist)
   {
-    assume false;
     MergeUndoesSplit(blist, pivots, i);
+    reveal_MergeBucketsInList();
     WeightSplitBucketInList(MergeBucketsInList(blist, i), i, pivots[i]);
   }
 
@@ -1089,9 +1109,10 @@ module BucketWeights {
   }
 
   lemma WeightBucketSubset(bucket:Bucket, a:iset<Key>, b:iset<Key>)
-  requires BucketWellMarshalled(bucket)
-  requires a<=b
-  ensures WeightBucket(Image(bucket, a)) <= WeightBucket(Image(bucket, b))
+    requires WFBucketMap(bucket.b)
+    requires BucketWellMarshalled(bucket)
+    requires a<=b
+    ensures WeightBucket(Image(bucket, a)) <= WeightBucket(Image(bucket, b))
   {
     calc {
       WeightBucket(Image(bucket, a));
@@ -1108,11 +1129,13 @@ module BucketWeights {
   }
 
   lemma WeightBucketMapUnion(x:Bucket, xKeys:iset<Key>, y:Bucket, yKeys:iset<Key>)
-  requires BucketWellMarshalled(x)
-  requires BucketWellMarshalled(y)
-  requires xKeys == iset k | k in x.b.Keys;
-  requires yKeys == iset k | k !in x.b.Keys;
-  ensures WeightBucket(B(MapUnion(x.b, y.b))) == WeightBucket(Image(x, xKeys)) + WeightBucket(Image(y, yKeys))
+    requires WFBucketMap(x.b)
+    requires WFBucketMap(y.b)
+    requires BucketWellMarshalled(x)
+    requires BucketWellMarshalled(y)
+    requires xKeys == iset k | k in x.b.Keys;
+    requires yKeys == iset k | k !in x.b.Keys;
+    ensures WeightBucket(B(MapUnion(x.b, y.b))) == WeightBucket(Image(x, xKeys)) + WeightBucket(Image(y, yKeys))
   {
     calc {
       WeightBucket(B(MapUnion(x.b, y.b)));
@@ -1238,7 +1261,7 @@ module BucketWeights {
         <=
           { assert Image(bucket, IncludeKey(key)).b.Keys == {key}; }
         WeightKey(key) + WeightMessage(bucket.b[key]) + |Image(bucket, others).b|;
-          { WeightBucketSingleton(Image(bucket, IncludeKey(key)), key); } // break key out of bucket
+          { WeightBucketSingleton(key, bucket.b[key]); } // break key out of bucket
         WeightBucket(Image(bucket, IncludeKey(key))) + |Image(bucket, others).b|;
         <=
           { // recurse
@@ -1280,7 +1303,6 @@ module BucketWeights {
   ensures WeightBucket(B(bucket.b[key := msg])) <=
       WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg)
   {
-    assume false;
     calc {
       WeightBucket(B(bucket.b[key := msg]));
         { KeyContribution(B(bucket.b[key := msg]), key); }
@@ -1319,7 +1341,6 @@ module BucketWeights {
   ensures WeightBucketList(BucketListInsert(blist, pivots, key, msg)) <=
       WeightBucketList(blist) + WeightKey(key) + WeightMessage(msg)
   {
-    assume false;
     var i := Route(pivots, key);
     var bucket := blist[i];
 
@@ -1360,7 +1381,6 @@ module BucketWeights {
   requires BucketWellMarshalled(bucket)
   ensures WeightBucket(BucketIntersect(bucket, keys)) <= WeightBucket(bucket)
   {
-    assume false;
     var ikeys := iset k | k in keys;
     reveal_BucketIntersect();
     ImageShape(bucket, ikeys);
@@ -1373,7 +1393,6 @@ module BucketWeights {
   requires BucketWellMarshalled(bucket)
   ensures WeightBucket(BucketComplement(bucket, keys)) <= WeightBucket(bucket)
   {
-    assume false;
     var ikeys := iset k | k !in keys;
     reveal_BucketComplement();
     ImageShape(bucket, ikeys);

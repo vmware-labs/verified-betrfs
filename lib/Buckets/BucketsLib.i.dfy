@@ -51,7 +51,7 @@ module BucketsLib {
     else
       None
   }
-  
+
   function {:opaque} BucketMapOfSeq(keys: seq<Key>, msgs: seq<Message>) : (result: BucketMap)
     requires |keys| == |msgs|
     ensures result.Keys == Set(keys)
@@ -158,14 +158,23 @@ module BucketsLib {
       BInternal(m)
   }
 
-  function EmptyBucket() : Bucket
-    ensures EmptyBucket() == B(map[]);
+  function EmptyBucket() : (result: Bucket)
+    ensures EmptyBucket() == B(map[])
+    ensures WFBucket(result)
+    ensures BucketWellMarshalled(result)
   {
     var b := BucketMapWithSeq(map[], [], []);
     assert b == B(map[]) by {
       reveal_B();
     }
     b
+  }
+  
+  function SingletonBucket(key: Key, msg: Message) : (result: Bucket)
+    ensures WFBucket(result)
+    ensures BucketWellMarshalled(result)
+  {
+    BucketMapWithSeq(map[key := msg], [key], [msg])
   }
   
   function BucketDropLast(bucket: Bucket) : Bucket
@@ -414,7 +423,8 @@ module BucketsLib {
   }
 
   function JoinBucketList(buckets: seq<Bucket>) : (bucket : Bucket)
-  ensures BucketWellMarshalled(bucket)
+    ensures BucketWellMarshalled(bucket)
+    ensures (forall i | 0 <= i < |buckets| :: WFBucketMap(buckets[i].b)) ==> WFBucket(bucket)
   {
     if |buckets| == 0 then B(map[]) else B(MapUnion(JoinBucketList(DropLast(buckets)).b, Last(buckets).b))
   }
@@ -725,15 +735,16 @@ module BucketsLib {
   }
 
   function {:opaque} MergeBuckets(left: Bucket, right: Bucket) : (res : Bucket)
-  ensures BucketWellMarshalled(res)
+    ensures BucketWellMarshalled(res)
+    ensures WFBucketMap(left.b) && WFBucketMap(right.b) ==> WFBucket(res)
   {
     B(MapUnionPreferA(left.b, right.b))
   }
 
   function {:opaque} MergeBucketsInList(blist: BucketList, slot: int) : (blist' : BucketList)
-  requires 0 <= slot < |blist| - 1
-  ensures |blist'| == |blist| - 1
-  ensures BucketWellMarshalled(blist'[slot])
+    requires 0 <= slot < |blist| - 1
+    ensures |blist'| == |blist| - 1
+    ensures BucketWellMarshalled(blist'[slot])
   {
     replace2with1(blist,
         MergeBuckets(blist[slot], blist[slot+1]),

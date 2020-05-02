@@ -331,7 +331,7 @@ module MarshallingImpl {
   }
 
   lemma WeightKeySeqLe(keys: seq<Key>)
-  ensures WeightKeySeq(keys) <= |keys| * (8 + KeyType.MaxLen() as int)
+  ensures WeightKeyList(keys) <= |keys| * (8 + KeyType.MaxLen() as int)
   {
     if |keys| == 0 {
     } else {
