@@ -143,7 +143,6 @@ module BucketWeights {
   }
 
   function {:opaque} WeightBucketList(buckets: BucketList) : (w:nat)
-    requires forall i | 0 <= i < |buckets| :: |buckets[i].keys| == |buckets[i].msgs|
   {
     if |buckets| == 0 then 0 else (
       WeightBucketList(DropLast(buckets)) +
@@ -168,10 +167,11 @@ module BucketWeights {
     ensures WeightMessageMultiset(multiset{msg}) == WeightMessage(msg)
   {
     MSets.ApplySingleton(WeightMessage, msg);
-    MSets.FoldSingleton<nat>(0, (x, y) => x + y, WeightMessage(msg));
+    MSets.FoldSimpleSingleton<nat>(0, (x, y) => x + y, WeightMessage(msg));
     reveal_WeightMessageMultiset();
   }
-  
+
+  // TODO(robj): wonky interface -- we should just pass key and msg
   lemma WeightBucketSingleton(bucket:Bucket, key:Key)
     requires |bucket.keys| == |bucket.msgs|
     requires bucket.keys == [key]
@@ -201,21 +201,22 @@ module BucketWeights {
 
   // Image of bucket showing only keys in filter.
   function {:opaque} Image(bucket:Bucket, filter:iset<Key>) : (image:Bucket)
-    requires WFBucket(bucket)
-    ensures WFBucket(image)
     ensures BucketWellMarshalled(image)
+    ensures |image.keys| == |image.msgs|
+    ensures WFBucketMap(bucket.b) ==> WFBucket(image)
   {
     B(map k | k in bucket.b && k in filter :: bucket.b[k])
   }
 
   lemma ImageShape(b:Bucket, s:iset<Key>)
-    requires WFBucket(b)
     ensures forall k :: k in b.b && k in s <==> k in Image(b, s).b.Keys
     ensures forall k :: k in Image(b,s).b ==> Image(b,s).b[k] == b.b[k];
   {
     reveal_Image();
   }
 
+  // TODO(robj): Note that we could kill the requires if we only
+  // ensured the map fields (.b) are equal.
   lemma ImageIdentity(bucket:Bucket, s:iset<Key>)
   requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
@@ -228,7 +229,6 @@ module BucketWeights {
   }
 
   lemma ImageTrim(bucket:Bucket, s:iset<Key>, trimBucket:Bucket)
-    requires WFBucket(bucket)
     requires forall k :: k in trimBucket.b <==> k in bucket.b && k in s
     requires forall k :: k in trimBucket.b ==> trimBucket.b[k] == bucket.b[k]
     ensures Image(bucket, s).b == trimBucket.b
@@ -237,8 +237,6 @@ module BucketWeights {
   }
 
   lemma ImageEquiv(a:Bucket, b:Bucket, s:iset<Key>)
-    requires WFBucket(a)
-    requires WFBucket(b)
     requires forall k :: k in a.b.Keys && k in s <==> k in b.b.Keys && k in s
     requires forall k :: k in a.b.Keys && k in s ==> a.b[k] == b.b[k]
     ensures Image(a, s) == Image(b, s)
@@ -267,7 +265,6 @@ module BucketWeights {
   }
 
   lemma ImageSubset(b:Bucket, s:iset<Key>, t:iset<Key>)
-    requires WFBucket(b)
     requires s <= t;
     ensures Image(Image(b, t), s) == Image(b, s)
     ensures Image(b, s).b.Keys <= Image(b, t).b.Keys
@@ -276,110 +273,80 @@ module BucketWeights {
   }
 
   lemma ImageIntersect(b:Bucket, s:iset<Key>, t:iset<Key>)
-    requires WFBucket(b)
     ensures Image(Image(b, s), t) == Image(b, s * t)
   {
     reveal_Image();
   }
 
-  // lemma WellFormedKeyMultiset(b: Bucket, s: iset<Key>)
-  //   requires WFBucket(b)
-  //   requires BucketWellMarshalled(b)
-  //   ensures 
-
-  lemma MapRemoveVsImage(bucket:Bucket, ibk:iset<Key>, key:Key)
-  requires WFBucket(bucket)
-  requires forall k :: k in bucket.b.Keys ==> k in ibk
-  ensures MapRemove1(bucket.b, key) == Image(bucket, ibk - iset{key}).b
+  lemma ImageSplitsKeys(bucket:Bucket, a:iset<Key>, b:iset<Key>)
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+    requires a !! b
+    requires forall k:Key :: k in bucket.b ==> k in a + b
+    ensures multiset(bucket.keys) == multiset(Image(bucket, a).keys) + multiset(Image(bucket, b).keys)
   {
-    reveal_MapRemove1();
-    reveal_Image();
-  }
-
-  lemma WeightBucketLinearInKeySetInner(bucket:Bucket, a:iset<Key>, b:iset<Key>)
-  requires WFBucket(bucket)
-  requires BucketWellMarshalled(bucket)
-  requires a !! b
-  requires forall k:Key :: k in bucket.b ==> k in a + b // a,b partition bucket
-  requires Image(bucket, a).b.Keys != {} // So we can decrease
-  requires Image(bucket, b).b.Keys != {} // So we can decrease
-  requires |bucket.b| > 0 // So we can ChooseKey
-  requires ChooseKey(bucket) in a
-  ensures WeightBucket(bucket) == WeightBucket(Image(bucket, a)) + WeightBucket(Image(bucket, b))
-  decreases |Image(bucket, a).b.Keys| + |Image(bucket, b).b.Keys|, 0
-  {
-    var key := ChooseKey(bucket);
-    var msg := bucket.b[key];
-    var residual := WeightKey(key) + WeightMessage(msg);
-
+    var abucket := Image(bucket, a);
+    var bbucket := Image(bucket, b);
+    
     calc {
-      WeightBucket(Image(bucket, a));
-        {
-          var A := Image(bucket, a);
-          var B := Image(A, a-iset{key});
-          ImageSubset(bucket, a-iset{key}, a);
-          ImageShape(bucket, a-iset{key});
-          ImageShape(bucket, a);
-          Sets.ProperSubsetImpliesSmallerCardinality(B.b.Keys, A.b.Keys);
-
-          ImageShape(A, iset{key});
-          Sets.SetInclusionImpliesSmallerCardinality(Image(A, iset{key}).b.Keys, {key});
-          ImageShape(bucket, b);
-          var kb :| kb in Image(bucket, b).b.Keys;
-          Sets.SetInclusionImpliesSmallerCardinality({kb}, Image(bucket, b).b.Keys);
-
-          WeightBucketLinearInKeySet(A, a-iset{key}, iset{key});
-        }
-      WeightBucket(Image(Image(bucket, a), a-iset{key})) + WeightBucket(Image(Image(bucket, a), iset{key}));
-        {
-          ImageSubset(bucket, a-iset{key}, a);
-          ImageSubset(bucket, iset{key}, a);
-        }
-      WeightBucket(Image(bucket, a-iset{key})) + WeightBucket(Image(bucket, iset{key}));
-        {
-          ImageSingleton(bucket, key);
-          WeightBucketSingleton(Image(bucket, iset{key}), key);
-          assert Image(bucket, iset{key}).b[key] == bucket.b[key];
-          assert WeightBucket(Image(bucket, iset{key})) == WeightKey(key) + WeightMessage(bucket.b[key]);
-        }
-      WeightBucket(Image(bucket, a-iset{key})) + residual;
-    }
-    calc {
-      WeightBucket(bucket);
-        //{ reveal_WeightBucket(); }
-      WeightBucket(B(MapRemove1(bucket.b, key))) + residual;
-        { MapRemoveVsImage(bucket, a+b, key); }
-      WeightBucket(B(Image(bucket, (a+b)-iset{key}).b)) + residual;
-        { WellMarshalledBucketsEq(Image(bucket, (a+b)-iset{key}), B(Image(bucket, (a+b)-iset{key}).b)); }
-      WeightBucket(Image(bucket, (a+b)-iset{key})) + residual;
-        { assert a+b-iset{key} == (a-iset{key})+b; }  // OSBERVE trigger
-      WeightBucket(Image(bucket, (a-iset{key})+b)) + residual;
-        {
-          var A := Image(bucket, (a-iset{key})+b);
-          var B := Image(A, a-iset{key});
-          ImageSubset(bucket, a-iset{key}, (a-iset{key})+b);
-          ImageShape(bucket, a-iset{key});
-          ImageShape(bucket, a);
-          Sets.ProperSubsetImpliesSmallerCardinality(B.b.Keys, Image(bucket, a).b.Keys);
-
-          ImageSubset(bucket, b, (a-iset{key})+b);
-          Sets.SetInclusionImpliesSmallerCardinality(
-            Image(Image(bucket, (a-iset{key})+b), b).b.Keys, Image(bucket, b).b.Keys);
-
-          ImageShape(bucket, (a-iset{key})+b); // propagate partition precondition
-          WeightBucketLinearInKeySet(Image(bucket, (a-iset{key})+b), a-iset{key}, b);
-        }
-      WeightBucket(Image(Image(bucket, (a-iset{key})+b), a-iset{key})) + WeightBucket(Image(Image(bucket, (a-iset{key})+b), b)) + residual;
-        { 
-          ImageSubset(bucket, a-iset{key}, (a-iset{key})+b);
-          ImageSubset(bucket, b, (a-iset{key})+b);
-        }
-      WeightBucket(Image(bucket, a-iset{key})) + WeightBucket(Image(bucket, b)) + residual;
-        // upper calc
-      WeightBucket(Image(bucket, a)) + WeightBucket(Image(bucket, b));
+      multiset(bucket.keys);
+      { WellMarshalledKeyMultiset(bucket); }
+      multiset(bucket.b.Keys);
+      { reveal_Image(); }
+      multiset(abucket.b.Keys) + multiset(bbucket.b.Keys);
+      {
+        WellMarshalledKeyMultiset(abucket);
+        WellMarshalledKeyMultiset(bbucket);
+      }
+      multiset(Image(bucket, a).keys) + multiset(Image(bucket, b).keys);
     }
   }
+  
+  lemma ImageSplitsMessages(bucket:Bucket, a:iset<Key>, b:iset<Key>)
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+    requires a !! b
+    requires forall k:Key :: k in bucket.b ==> k in a + b
+    ensures multiset(bucket.msgs) == multiset(Image(bucket, a).msgs) + multiset(Image(bucket, b).msgs)
+  {
+    var abucket := Image(bucket, a);
+    var bbucket := Image(bucket, b);
 
+    var fn := Multisets.ValueMultisetFn(bucket.b);
+    var afn := Multisets.ValueMultisetFn(abucket.b);
+    var bfn := Multisets.ValueMultisetFn(bbucket.b);
+    
+    calc {
+      multiset(bucket.msgs);
+      { WellMarshalledMessageMultiset(bucket); }
+      Multisets.ValueMultiset(bucket.b);
+      Multisets.Apply(fn, multiset(bucket.b.Keys));
+      { WellMarshalledKeyMultiset(bucket); }
+      Multisets.Apply(fn, multiset(bucket.keys));
+      {
+        ImageSplitsKeys(bucket, a, b);
+        Multisets.ApplyAdditive(fn, multiset(abucket.keys), multiset(bbucket.keys));
+      }
+      Multisets.Apply(fn, multiset(abucket.keys)) + Multisets.Apply(fn, multiset(bbucket.keys));
+      {
+        WellMarshalledKeyMultiset(abucket);
+        WellMarshalledKeyMultiset(bbucket);
+      }
+      Multisets.Apply(fn, multiset(abucket.b.Keys)) + Multisets.Apply(fn, multiset(bbucket.b.Keys));
+      {
+        reveal_Image();
+        Multisets.ApplyEquivalentFns(fn, afn, multiset(abucket.b.Keys));
+        Multisets.ApplyEquivalentFns(fn, bfn, multiset(bbucket.b.Keys));
+      }
+      Multisets.ValueMultiset(abucket.b) + Multisets.ValueMultiset(bbucket.b);
+      {
+        WellMarshalledMessageMultiset(abucket);
+        WellMarshalledMessageMultiset(bbucket);
+      }
+      multiset(abucket.msgs) + multiset(bbucket.msgs);
+    }
+  }
+  
   lemma WeightBucketLinearInKeySet(bucket:Bucket, a:iset<Key>, b:iset<Key>)
   requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
@@ -388,20 +355,61 @@ module BucketWeights {
   ensures WeightBucket(bucket) == WeightBucket(Image(bucket, a)) + WeightBucket(Image(bucket, b))
   decreases |Image(bucket, a).b.Keys| + |Image(bucket, b).b.Keys|, 1
   {
-    ImageShape(bucket, a);
-    ImageShape(bucket, b);
-    WeightBucketEmpty();
-    if |bucket.b| == 0 {
-    } else if Image(bucket, a).b.Keys=={} {
-      ImageIdentity(bucket, b);
-    } else if Image(bucket, b).b.Keys=={} {
-      ImageIdentity(bucket, a);
-    } else {
-      if ChooseKey(bucket) in a {
-        WeightBucketLinearInKeySetInner(bucket, a, b);
-      } else {
-        WeightBucketLinearInKeySetInner(bucket, b, a);
+    var keys := bucket.keys;
+    var msgs := bucket.msgs;
+    var keysweights := MSets.Apply(WeightKey, multiset(keys));
+    var msgsweights := MSets.Apply(WeightMessage, multiset(msgs));
+
+    var akeys := Image(bucket, a).keys;
+    var amsgs := Image(bucket, a).msgs;
+    var ab := Image(bucket, a).b;
+    var akeysweights := MSets.Apply(WeightKey, multiset(akeys));
+    var amsgsweights := MSets.Apply(WeightMessage, multiset(amsgs));
+    
+    var bkeys := Image(bucket, b).keys;
+    var bmsgs := Image(bucket, b).msgs;
+    var bb := Image(bucket, b).b;
+    var bkeysweights := MSets.Apply(WeightKey, multiset(bkeys));
+    var bmsgsweights := MSets.Apply(WeightMessage, multiset(bmsgs));
+
+    Multisets.natsumProperties();
+    
+    calc {
+      WeightBucket(bucket);
+      // WeightKeyList(keys) + WeightMessageList(msgs);
+      // WeightKeyMultiset(multiset(keys)) + WeightMessageMultiset(multiset(msgs));
+      {
+        reveal_WeightKeyMultiset();
+        reveal_WeightMessageMultiset();
       }
+      MSets.FoldSimple<nat>(0, (x, y) => x + y, keysweights) + MSets.FoldSimple<nat>(0, (x, y) => x + y, msgsweights);
+      {
+        ImageSplitsMessages(bucket, a, b);
+        //assert multiset(msgs) == multiset(amsgs) + multiset(bmsgs);
+        Multisets.ApplyAdditive(WeightMessage, multiset(amsgs), multiset(bmsgs));
+        //assert msgsweights == amsgsweights + bmsgsweights;
+        Multisets.FoldSimpleAdditive<nat>(0, (x, y) => x + y, amsgsweights, bmsgsweights);
+      }
+        MSets.FoldSimple<nat>(0, (x, y) => x + y, keysweights)
+      + MSets.FoldSimple<nat>(0, (x, y) => x + y, amsgsweights) + MSets.FoldSimple<nat>(0, (x, y) => x + y, bmsgsweights);
+      {
+        ImageSplitsKeys(bucket, a, b);
+        //assert multiset(keys) == multiset(akeys) + multiset(bkeys);
+        Multisets.ApplyAdditive(WeightKey, multiset(akeys), multiset(bkeys));
+        //assert keysweights == akeysweights + bkeysweights;
+        Multisets.FoldSimpleAdditive<nat>(0, (x, y) => x + y, akeysweights, bkeysweights);
+      }
+        MSets.FoldSimple<nat>(0, (x, y) => x + y, akeysweights) + MSets.FoldSimple<nat>(0, (x, y) => x + y, amsgsweights)
+      + MSets.FoldSimple<nat>(0, (x, y) => x + y, bkeysweights) + MSets.FoldSimple<nat>(0, (x, y) => x + y, bmsgsweights);
+      {
+        reveal_WeightKeyMultiset();
+        reveal_WeightMessageMultiset();
+      }
+      //   WeightKeyMultiset(multiset(akeys)) + WeightMessageMultiset(multiset(amsgs))
+      // + WeightKeyMultiset(multiset(bkeys)) + WeightMessageMultiset(multiset(bmsgs));
+      //   WeightKeyList(akeys) + WeightMessageList(amsgs)
+      // + WeightKeyList(bkeys) + WeightMessageList(bmsgs);
+      WeightBucket(Image(bucket, a)) + WeightBucket(Image(bucket, b));
     }
   }
 
@@ -431,7 +439,8 @@ module BucketWeights {
   }
 
   function WeightOneKey(bucket: Bucket, key: Key) : (w:int)
-  requires BucketWellMarshalled(bucket)
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
   {
     if key in bucket.b
       then WeightKey(key) + WeightMessage(bucket.b[key])
@@ -439,82 +448,105 @@ module BucketWeights {
   }
 
   lemma KeyContribution(bucket: Bucket, key: Key)
+    requires WFBucket(bucket)
     requires BucketWellMarshalled(bucket)
     ensures WeightBucket(bucket) == WeightBucket(Image(bucket, ExcludeKey(key))) + WeightOneKey(bucket, key);
   {
+    var kbucket := Image(bucket, IncludeKey(key));
+    
     ImageIdentity(bucket, ExcludeKey(key) + IncludeKey(key));
     WeightBucketLinearInKeySetSum(bucket, ExcludeKey(key), IncludeKey(key));
 
     ImageShape(bucket, IncludeKey(key));
     if key in bucket.b {
-      WeightBucketSingleton(Image(bucket, IncludeKey(key)), key);
+      assert kbucket.keys == [key] by {
+        reveal_Image();
+        reveal_B();
+      }
+      WeightBucketSingleton(kbucket, key);
+      WFWellMarshalledBucketMapI(kbucket, 0);
     } else {
       WeightBucketEmpty();
+      WellMarshalledKeyMultiset(kbucket);
     }
   }
 
   lemma WeightBucketInduct(bucket: Bucket, key: Key, msg: Message)
-  requires BucketWellMarshalled(bucket)
-  requires key !in bucket.b
-  ensures WeightBucket(B(bucket.b[key := msg])) == WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg)
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+    requires key !in bucket.b
+    requires msg != IdentityMessage()
+    ensures WeightBucket(B(bucket.b[key := msg])) == WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg)
   {
-    assume false;
-    KeyContribution(B(bucket.b[key := msg]), key);
-    ImageShape(B(bucket.b[key := msg]), ExcludeKey(key));
-    assert bucket == Image(B(bucket.b[key := msg]), ExcludeKey(key));
+    var newbucket := B(bucket.b[key := msg]);
+    calc {
+      WeightBucket(newbucket);
+      { KeyContribution(newbucket, key); }
+      WeightBucket(Image(newbucket, ExcludeKey(key))) + WeightOneKey(newbucket, key);
+      WeightBucket(Image(newbucket, ExcludeKey(key))) + WeightKey(key) + WeightMessage(msg);
+      {
+        ImageIdentity(bucket, ExcludeKey(key));
+        ImageEquiv(bucket, newbucket, ExcludeKey(key));
+      }
+      WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg);
+    }
   }
 
   function ILeftKeys(pivot: Key) : iset<Key> { iset k | Keyspace.lt(k, pivot) }
   function IRightKeys(pivot: Key) : iset<Key> { iset k | Keyspace.lte(pivot, k) }
 
   lemma SplitBucketImage(bucket: Bucket, pivot: Key)
-  requires BucketWellMarshalled(bucket)
-  ensures SplitBucketLeft(bucket, pivot) == Image(bucket, ILeftKeys(pivot))
-  ensures SplitBucketRight(bucket, pivot) == Image(bucket, IRightKeys(pivot))
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+    ensures SplitBucketLeft(bucket, pivot) == Image(bucket, ILeftKeys(pivot))
+    ensures SplitBucketRight(bucket, pivot) == Image(bucket, IRightKeys(pivot))
   {
-    assume false;
     reveal_SplitBucketLeft();
     reveal_SplitBucketRight();
-    ImageShape(bucket, ILeftKeys(pivot));
-    ImageShape(bucket, IRightKeys(pivot));
+    reveal_Image();
+    //ImageShape(bucket, ILeftKeys(pivot));
+    //ImageShape(bucket, IRightKeys(pivot));
   }
 
   lemma WeightSplitBucketLeft(bucket: Bucket, pivot: Key)
-  requires BucketWellMarshalled(bucket)
-  ensures WeightBucket(SplitBucketLeft(bucket, pivot)) <= WeightBucket(bucket)
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+    ensures WeightBucket(SplitBucketLeft(bucket, pivot)) <= WeightBucket(bucket)
   {
     SplitBucketImage(bucket, pivot);
     WeightBucketLinearInKeySet(bucket, ILeftKeys(pivot), AllKeys() - ILeftKeys(pivot));
   }
 
   lemma WeightSplitBucketRight(bucket: Bucket, pivot: Key)
-  requires BucketWellMarshalled(bucket)
-  ensures WeightBucket(SplitBucketRight(bucket, pivot)) <= WeightBucket(bucket)
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+    ensures WeightBucket(SplitBucketRight(bucket, pivot)) <= WeightBucket(bucket)
   {
     SplitBucketImage(bucket, pivot);
     WeightBucketLinearInKeySet(bucket, AllKeys() - IRightKeys(pivot), IRightKeys(pivot));
   }
 
   lemma WeightSplitBucketAdditive(bucket: Bucket, pivot: Key)
-  requires BucketWellMarshalled(bucket)
-  ensures WeightBucket(SplitBucketLeft(bucket, pivot)) +
-          WeightBucket(SplitBucketRight(bucket, pivot)) == WeightBucket(bucket)
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+    ensures WeightBucket(SplitBucketLeft(bucket, pivot)) +
+            WeightBucket(SplitBucketRight(bucket, pivot)) == WeightBucket(bucket)
   {
     SplitBucketImage(bucket, pivot);
     WeightBucketLinearInKeySet(bucket, ILeftKeys(pivot), IRightKeys(pivot));
   }
 
   lemma WeightSplitBucketAdditiveLe(bucket: Bucket, pivot: Key)
-  ensures WeightBucket(SplitBucketLeft(bucket, pivot)) +
-          WeightBucket(SplitBucketRight(bucket, pivot)) <= WeightBucket(bucket)
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+    ensures WeightBucket(SplitBucketLeft(bucket, pivot)) +
+            WeightBucket(SplitBucketRight(bucket, pivot)) <= WeightBucket(bucket)
   {
-    assume false;
+    WeightSplitBucketAdditive(bucket, pivot);
   }
 
   lemma WeightBucketList2(a: Bucket, b: Bucket)
-  requires BucketWellMarshalled(a)
-  requires BucketWellMarshalled(b)
-  ensures WeightBucketList([a,b]) == WeightBucket(a) + WeightBucket(b)
+    ensures WeightBucketList([a,b]) == WeightBucket(a) + WeightBucket(b)
   {
     calc {
       WeightBucketList([a,b]);
@@ -528,8 +560,8 @@ module BucketWeights {
   }
 
   lemma WeightBucketListConcat(left: BucketList, right: BucketList)
-  ensures WeightBucketList(left + right)
-      == WeightBucketList(left) + WeightBucketList(right)
+    ensures WeightBucketList(left + right)
+         == WeightBucketList(left) + WeightBucketList(right)
   {
     if |right| == 0 {
       reveal_WeightBucketList();
@@ -551,8 +583,7 @@ module BucketWeights {
   }
 
   lemma WeightBucketListConcatOne(left: BucketList, extra: Bucket)
-  requires BucketWellMarshalled(extra)
-  ensures WeightBucketList(left + [extra]) == WeightBucketList(left) + WeightBucket(extra)
+    ensures WeightBucketList(left + [extra]) == WeightBucketList(left) + WeightBucket(extra)
   {
     WeightBucketListConcat(left, [extra]);
     reveal_WeightBucketList();
@@ -576,11 +607,11 @@ module BucketWeights {
   }
 
   lemma WeightSplitBucketListLeft(blist: BucketList, pivots: seq<Key>, cLeft: int, key: Key)
-  requires SplitBucketListLeft.requires(blist, pivots, cLeft, key)
-  ensures WeightBucketList(SplitBucketListLeft(blist, pivots, cLeft, key))
-      <= WeightBucketList(blist)
+    requires SplitBucketListLeft.requires(blist, pivots, cLeft, key)
+    requires BucketWellMarshalled(blist[cLeft])
+    ensures WeightBucketList(SplitBucketListLeft(blist, pivots, cLeft, key))
+            <= WeightBucketList(blist)
   {
-    assume false;
     // This proof can get away with reveal_WeightBucketList, but maybe for
     // symmetry with the *Right version it should be rewritten with
     // WeightBucketListConcat.
@@ -603,11 +634,11 @@ module BucketWeights {
   }
 
   lemma WeightSplitBucketListRight(blist: BucketList, pivots: seq<Key>, cRight: int, key: Key)
-  requires SplitBucketListRight.requires(blist, pivots, cRight, key)
-  ensures WeightBucketList(SplitBucketListRight(blist, pivots, cRight, key))
+    requires SplitBucketListRight.requires(blist, pivots, cRight, key)
+    requires BucketWellMarshalled(blist[cRight])
+    ensures WeightBucketList(SplitBucketListRight(blist, pivots, cRight, key))
       <= WeightBucketList(blist)
   {
-    assume false;
     calc {
       WeightBucketList(SplitBucketListRight(blist, pivots, cRight, key));
       WeightBucketList([SplitBucketRight(blist[cRight], key)] + blist[cRight + 1 ..]);

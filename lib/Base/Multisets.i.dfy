@@ -254,6 +254,17 @@ module Multisets {
     FoldAdditive(zero, add, x => true, s1, s2);
   }  
 
+  lemma natsumProperties()
+    ensures IsCommutativeSimple<nat>((x, y) => x + y)
+    ensures IsAssociativeSimple<nat>((x, y) => x + y)
+    ensures IsIdentitySimple<nat>((x, y) => x + y, 0)
+  {
+    reveal_IsCommutative();
+    reveal_IsAssociative();
+    reveal_IsIdentity();
+  }
+
+  
   // TODO(rob): not really the right place for this, but can't put it
   // in Maps, since that's trusted, which precludes including this
   // file in Maps.s.dfy.
