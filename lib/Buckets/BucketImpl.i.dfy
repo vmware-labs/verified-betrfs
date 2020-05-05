@@ -4,7 +4,6 @@ include "KVList.i.dfy"
 include "../../PivotBetree/Bounds.i.dfy"
 include "BucketIteratorModel.i.dfy"
 include "BucketModel.i.dfy"
-include "KVListPartialFlush.i.dfy"
 include "KMBPKVOps.i.dfy"
 
 //
@@ -116,10 +115,10 @@ module BucketImpl {
 
     var tree: KMB.Node?;
     var pkv: PackedKV.Pkv;
-    
+
     var Weight: uint64;
     var sorted: bool
-    
+
     ghost var Repr: set<object>;
     ghost var Bucket: Bucket;
 
@@ -890,7 +889,7 @@ module BucketImpl {
   }
 
   method PartialFlush(top: MutBucket, bots: seq<MutBucket>, pivots: seq<Key>)
-    returns (newtop: MutBucket, newbots: seq<MutBucket>, ghost flushedKeys: set<Key>)
+    returns (newtop: MutBucket, newbots: seq<MutBucket>)
     requires top.Inv()
     requires forall i | 0 <= i < |bots| :: bots[i].Inv()
     requires |pivots| + 1 == |bots| < Uint64UpperBound()
@@ -908,17 +907,16 @@ module BucketImpl {
     // shouldn't need old in the line below, but dafny doesn't see
     // that WeightBucketList(MutBucket.ISeq(bots)) <=
     // MaxTotalBucketWeight() still holds after the function returns.
-    ensures partialFlushResult(newtop.I(), MutBucket.ISeq(newbots), flushedKeys) == BucketModel.partialFlush(top.I(), old(MutBucket.ISeq(bots)), pivots)
+    ensures partialFlushResult(newtop.I(), MutBucket.ISeq(newbots))
+        == BucketModel.partialFlush(top.I(), pivots, old(MutBucket.ISeq(bots)))
   {
     var i: uint64 := 0;
-    var totalWeight := 0;
     var botPkvs: array<PKV.Pkv> := new PKV.Pkv[|bots| as uint64];
     while i < |bots| as uint64
       invariant i as nat <= |bots|
     {
       botPkvs[i] := bots[i].GetPkv();
       assume false;
-      totalWeight := totalWeight + PKV.WeightPkv(botPkvs[i]);
       i := i + 1;
     }
 
@@ -926,7 +924,7 @@ module BucketImpl {
 
     var topPkv := top.GetPkv();
     
-    var result := MergeToChildren(topPkv, pivots, botPkvs[..], MaxTotalBucketWeightUint64() - totalWeight);
+    var result := DPKV.PartialFlush(topPkv, pivots, botPkvs[..]);
 
     newtop := new MutBucket.InitFromPkv(result.top, true);
 
