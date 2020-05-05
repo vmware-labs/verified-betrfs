@@ -1,3 +1,14 @@
+/*
+If Z3 fails to verify this file, try these Dafny options:
+  /noNLarith /proverOpt:OPTIMIZE_FOR_BV=true /z3opt:smt.PHASE_SELECTION=0 /z3opt:smt.RESTART_STRATEGY=0 /z3opt:smt.RESTART_FACTOR=1.5 /z3opt:smt.ARITH.RANDOM_INITIAL_VALUE=true /z3opt:smt.CASE_SPLIT=1
+Explanation:
+  Dafny/Boogie sets smt.CASE_SPLIT=3, which seems good in general, but makes this file unstable.
+  Z3's default is smt.CASE_SPLIT=1.
+  There's no direct way to override the smt.CASE_SPLIT=3, but /proverOpt:OPTIMIZE_FOR_BV=true blocks it,
+  along with a bunch of other options (e.g. smt.PHASE_SELECTION=0);
+  these other options then must be restored manually, as shown above.
+*/
+
 include "../Lang/NativeTypes.s.dfy"
 include "../Base/Option.s.dfy"
 include "../Base/sequences.i.dfy"
