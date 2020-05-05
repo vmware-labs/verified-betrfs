@@ -251,6 +251,90 @@ module BucketsLib {
     }
   }
 
+  lemma WFMessageMultiset(bucket: Bucket)
+    requires WFBucket(bucket)
+    ensures Multisets.ValueMultiset(bucket.b) <= multiset(bucket.msgs)
+    ensures BucketWellMarshalled(bucket) ==> Multisets.ValueMultiset(bucket.b) == multiset(bucket.msgs)
+    decreases |bucket.keys|
+  {
+    if |bucket.keys| == 0 {
+    } else {
+      var lastkey := Last(bucket.keys);
+      var lastmsg := Last(bucket.msgs);
+
+      var prekeys := DropLast(bucket.keys);
+      var premsgs := DropLast(bucket.msgs);
+      var preb := BucketMapOfSeq(prekeys, premsgs);
+      var prebucket := BucketMapWithSeq(preb, prekeys, premsgs);
+
+      calc == {
+        Multisets.ValueMultiset(bucket.b);
+        Multisets.Apply(Multisets.ValueMultisetFn(bucket.b), multiset(bucket.b.Keys));
+        {
+          assert multiset(bucket.b.Keys) == multiset(prebucket.b.Keys) - multiset{lastkey} + multiset{lastkey};
+        }
+        Multisets.Apply(Multisets.ValueMultisetFn(bucket.b),
+          multiset(prebucket.b.Keys) - multiset{lastkey} + multiset{lastkey});
+        {
+          Multisets.ApplyAdditive(Multisets.ValueMultisetFn(bucket.b),
+                                  multiset(prebucket.b.Keys) - multiset{lastkey},
+                                  multiset{lastkey});
+        }
+        Multisets.Apply(Multisets.ValueMultisetFn(bucket.b), multiset(prebucket.b.Keys) - multiset{lastkey})
+          + Multisets.Apply(Multisets.ValueMultisetFn(bucket.b), multiset{lastkey});
+        {
+          Multisets.ApplySingleton(Multisets.ValueMultisetFn(bucket.b), lastkey);
+          assert bucket.b[lastkey] == lastmsg by {
+            reveal_BucketMapOfSeq();
+          }
+        }
+        Multisets.Apply(Multisets.ValueMultisetFn(bucket.b), multiset(prebucket.b.Keys) - multiset{lastkey})
+          + multiset{lastmsg};
+        {
+          reveal_BucketMapOfSeq();
+          Multisets.ApplyEquivalentFns(Multisets.ValueMultisetFn(bucket.b),
+            Multisets.ValueMultisetFn(prebucket.b),
+            multiset(prebucket.b.Keys) - multiset{lastkey});
+        }
+        Multisets.Apply(Multisets.ValueMultisetFn(prebucket.b), multiset(prebucket.b.Keys) - multiset{lastkey})
+          + multiset{lastmsg};
+      }
+
+      if BucketWellMarshalled(bucket) {
+        calc {
+          Multisets.Apply(Multisets.ValueMultisetFn(prebucket.b), multiset(prebucket.b.Keys) - multiset{lastkey});
+          {
+            assert multiset(prebucket.b.Keys) - multiset{lastkey} == multiset(prebucket.b.Keys) by {
+              reveal_IsStrictlySorted();
+            }
+          }
+          Multisets.Apply(Multisets.ValueMultisetFn(prebucket.b), multiset(prebucket.b.Keys));
+          {
+            StrictlySortedSubsequence(bucket.keys, 0, |bucket.keys| - 1);
+            WFMessageMultiset(prebucket);
+          }
+          multiset(prebucket.msgs);
+        }
+      } else {
+        calc <= {
+          Multisets.Apply(Multisets.ValueMultisetFn(prebucket.b), multiset(prebucket.b.Keys) - multiset{lastkey});
+          {
+            Multisets.ApplyMonotonic(Multisets.ValueMultisetFn(prebucket.b),
+              multiset(prebucket.b.Keys) - multiset{lastkey},
+              multiset(prebucket.b.Keys));
+          }
+          Multisets.Apply(Multisets.ValueMultisetFn(prebucket.b), multiset(prebucket.b.Keys));
+          {
+            WFMessageMultiset(prebucket);
+          }
+          multiset(prebucket.msgs);
+        }
+      }
+
+      assert bucket.msgs == prebucket.msgs + [ lastmsg ];
+    }
+  }
+  
   lemma WellMarshalledMessageMultiset(bucket: Bucket)
     requires WFBucket(bucket)
     requires BucketWellMarshalled(bucket)
