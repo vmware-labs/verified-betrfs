@@ -728,41 +728,11 @@ module DynamicPkv {
       Repr := {this} + keys.Repr + messages.Repr;
     }
   }
-
-  
   
   datatype SingleMergeResult =
       MergeCompleted(bot: PKV.Pkv, slack: uint64)
     | SlackExhausted(bot: PKV.Pkv, end: uint64, slack: uint64)
   
-  predicate MergeIsCorrectIfInputsWereSorted(top: PKV.Pkv, from: uint64, to: uint64,
-    bot: PKV.Pkv, result: SingleMergeResult)
-    requires PKV.WF(top)
-    requires PKV.WF(bot)
-    requires to as nat - from as nat + PKV.NumKVPairs(bot) as nat < Uint32UpperBound()
-    requires from <= to <= PKV.NumKVPairs(top)
-    requires PKV.WF(result.bot)
-    requires result.SlackExhausted? ==> from <= result.end < to
-  {
-    if
-      && BucketWellMarshalled(PKV.I(top))
-      && BucketWellMarshalled(PKV.I(bot))
-    then (
-      var subtop := PKV.subPkv(top, from, to);
-      var oldcomp := Compose(PKV.I(subtop), PKV.I(bot));
-      var newcomp :=
-        if result.MergeCompleted? then
-          PKV.I(result.bot)
-        else (
-          var newsubtop := PKV.subPkv(top, result.end, to);
-          Compose(PKV.I(newsubtop), PKV.I(result.bot))
-        );
-      && BucketWellMarshalled(PKV.I(result.bot))
-      && BucketsEquivalent(oldcomp, newcomp)
-    ) else
-      true
-  }
-
   method MergeToOneChild(top: PKV.Pkv, from: uint64, to: uint64, bot: PKV.Pkv, slack: uint64)
     returns (result: SingleMergeResult)
     requires PKV.WF(top)

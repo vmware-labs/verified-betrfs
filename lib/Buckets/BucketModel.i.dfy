@@ -39,7 +39,10 @@ module BucketModel {
   }
     
 
-  datatype partialFlushResult = partialFlushResult(newParent: Bucket, newChildren: seq<Bucket>, flushedKeys: set<Key>)
+  datatype partialFlushResult = partialFlushResult(
+    newParent: Bucket,
+    newChildren: seq<Bucket>,
+    flushedKeys: set<Key>)
 
   function {:opaque} partialFlush(parent: Bucket, children: seq<Bucket>, pivots: seq<Key>) : (res: partialFlushResult)
     requires WFBucket(parent)
