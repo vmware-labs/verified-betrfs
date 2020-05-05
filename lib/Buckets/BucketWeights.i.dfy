@@ -180,6 +180,25 @@ module BucketWeights {
     WeightMessageSingleton(msg);
   }
 
+  lemma WeightWellMarshalledLe(unsorted: Bucket, sorted: Bucket)
+    requires WFBucket(unsorted)
+    requires WFBucket(sorted)
+    requires BucketWellMarshalled(sorted)
+    requires unsorted.b == sorted.b
+    ensures WeightBucket(sorted) <= WeightBucket(unsorted)
+  {
+    WellMarshalledKeyMultiset(sorted);
+    assert multiset(sorted.keys) <= multiset(unsorted.keys);
+    
+    calc <= {
+      multiset(sorted.msgs);
+      { WellMarshalledMessageMultiset(sorted); }
+      Multisets.ValueMultiset(sorted.b);
+      Multisets.ValueMultiset(unsorted.b);
+      multiset(unsorted.msgs);
+    }
+  }
+  
   // Commonly-used filters for Image()
   function AllKeys() : iset<Key>
   {
@@ -1040,11 +1059,11 @@ module BucketWeights {
   }
 
   lemma WeightSplitBucketInListLe(blist: BucketList, i: int, pivot: Key)
-  requires 0 <= i < |blist|
-  ensures WeightBucketList(SplitBucketInList(blist, i, pivot))
-      <= WeightBucketList(blist)
+   requires 0 <= i < |blist|
+   requires WFBucket(blist[i])
+   ensures WeightBucketList(SplitBucketInList(blist, i, pivot))
+           <= WeightBucketList(blist)
   {
-    assume false;
   }
 
   lemma WeightBucketListSuffix(blist: BucketList, a: int)
@@ -1236,9 +1255,10 @@ module BucketWeights {
   }
 
   lemma LenLeWeightInner(bucket: Bucket, filter:iset<Key>)
-  requires BucketWellMarshalled(bucket)
-  ensures |Image(bucket, filter).b| <= WeightBucket(Image(bucket, filter))
-  decreases |Image(bucket, filter).b|
+    requires WFBucket(bucket)
+    requires BucketWellMarshalled(bucket)
+    ensures |Image(bucket, filter).b| <= WeightBucket(Image(bucket, filter))
+    decreases |Image(bucket, filter).b|
   {
     if |Image(bucket, filter).b| == 0 {
     } else {
