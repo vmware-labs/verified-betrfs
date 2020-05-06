@@ -63,14 +63,16 @@ module LinearSequence_i {
 
   function imagine_lseq<A>(s:seq<A>):(l:lseq<A>)
     ensures lseqs(l) == s
+    ensures forall i :: 0 <= i < |s| ==> lseq_has(l)[i]
   {
-    imagine_lseq_raw(s)
+    imagine_lseq_raw(seq(|s|, i requires 0 <= i < |s| => give(s[i])))
   }
 
   lemma ImagineInverse<A>(l:lseq<A>)
+    requires forall i :: 0 <= i < |lseqs(l)| ==> lseq_has(l)[i]
     ensures imagine_lseq(lseqs(l)) == l
   {
-    // TODO(jonh) uh, -- TODO(chris)?
+    lemma_lseqs_extensional(imagine_lseq(lseqs(l)), l);
   }
 
   function linLast<A>(l:lseq<A>) : A
@@ -83,6 +85,21 @@ module LinearSequence_i {
       ensures |s| == |lseqs(l)|
   {
       seq(lseq_length_raw(l) as int, i requires 0<=i<lseq_length_raw(l) as int => has(lseqs_raw(l)[i]))
+  }
+
+  lemma lemma_lseqs_extensional<A>(l1:lseq<A>, l2:lseq<A>)
+    requires |lseqs(l1)| == |lseqs(l2)|
+    requires forall i :: 0 <= i < |lseqs(l1)| ==> lseqs(l1)[i] == lseqs(l2)[i] && lseq_has(l1)[i] == lseq_has(l2)[i]
+    ensures l1 == l2
+  {
+
+    forall i | 0 <= i < |lseqs(l1)|
+      ensures lseqs_raw(l1)[i] == lseqs_raw(l2)[i]
+    {
+      assert lseqs(l1)[i] == lseqs(l2)[i] && lseq_has(l1)[i] == lseq_has(l2)[i];
+      axiom_extensional(lseqs_raw(l1)[i], lseqs_raw(l2)[i]);
+    }
+    axiom_lseqs_extensional(l1, l2);
   }
 
   predicate lseq_has_all<A>(l:lseq<A>)

@@ -200,7 +200,6 @@ module DList {
       ValidPtr(l', x) && Index(l', x) == Index(l, x) - (if Index(l, x) < Index(l, p) then 0 else 1)
   {
     linear var DList(nodes, freeStack, s, f, g) := l;
-    assert nodes == l.nodes; // randomly perturb Z3 -- TODO: not necessary if using smt.CASE_SPLIT=1 (see comment at beginning of file)
     ghost var index := g[p];
     ghost var s' := s[.. index] + s[index + 1 ..];
     ghost var f' := f[.. index] + f[index + 1 ..];

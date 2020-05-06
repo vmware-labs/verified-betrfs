@@ -1,5 +1,6 @@
 
 module {:extern "LinearMaybe"} LinearMaybe {
+  // note: cannot test maybe<A> for equality at run-time (because has is ghost)
   type {:extern "predefined"} maybe(!new)<A>
 
   predicate {:axiom} has<A>(m:maybe<A>)
@@ -25,5 +26,14 @@ module {:extern "LinearMaybe"} LinearMaybe {
 
   function method {:extern "LinearMaybe", "discard"} discard<A>(linear m:maybe<A>):()
     requires !has(m)
+
+  function {:axiom} imagine<A>(h:bool, a:A):(m:maybe<A>)
+    ensures has(m) == h
+    ensures read(m) == a
+
+  lemma {:axiom} axiom_extensional<A>(m1:maybe<A>, m2:maybe<A>)
+    requires has(m1) == has(m2)
+    requires read(m1) == read(m2)
+    ensures m1 == m2
 
 } // module

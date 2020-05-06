@@ -42,10 +42,13 @@ module {:extern "LinearExtern"} LinearSequence_s {
     requires forall i :: 0 <= i < |s| ==> s[i] == read(lseqs_raw(l)[i])
     ensures rank_is_less_than(s, l)
 
+  lemma {:axiom} axiom_lseqs_extensional<A>(l1:lseq<A>, l2:lseq<A>)
+    requires lseqs_raw(l1) == lseqs_raw(l2)
+    ensures l1 == l2
+
   // it's okay to synthesize all the lseqs you want if they're ghosty
-  function {:axiom} imagine_lseq_raw<A>(s:seq<A>):(l:lseq<A>)
-    ensures lseq_length_raw(l) as int == |s|
-    ensures forall i :: 0 <= i < |s| ==> s[i] == read(lseqs_raw(l)[i])
+  function {:axiom} imagine_lseq_raw<A>(s:seq<maybe<A>>):(l:lseq<A>)
+    ensures lseqs_raw(l) == s
 
   function method {:extern "LinearExtern", "lseq_length_raw"} lseq_length_raw<A>(shared s:lseq<A>):(n:uint64)
       ensures n as int == |lseqs_raw(s)|
