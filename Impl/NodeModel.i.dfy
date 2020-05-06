@@ -70,7 +70,7 @@ module NodeModel {
 
   lemma CutoffNodeAndKeepLeftCorrect(node: Node, pivot: Key)
   requires WFNode(node)
-  requires BT.WFNode(INode(node))
+  requires BT.InvNode(INode(node))
   ensures var node' := CutoffNodeAndKeepLeft(node, pivot);
     && WFNode(node')
     && INode(node') == BT.CutoffNodeAndKeepLeft(INode(node), pivot)
@@ -103,7 +103,7 @@ module NodeModel {
 
   lemma CutoffNodeAndKeepRightCorrect(node: Node, pivot: Key)
   requires WFNode(node)
-  requires BT.WFNode(INode(node))
+  requires BT.InvNode(INode(node))
   ensures var node' := CutoffNodeAndKeepRight(node, pivot);
     && WFNode(node')
     && INode(node') == BT.CutoffNodeAndKeepRight(INode(node), pivot)
@@ -123,6 +123,7 @@ module NodeModel {
   function {:opaque} CutoffNode(node: Node, lbound: Option<Key>, rbound: Option<Key>)
   : (node' : Node)
   requires WFNode(node)
+  requires BT.InvNode(INode(node))
   ensures |node'.buckets| == |node'.pivotTable| + 1
   ensures node'.children.Some? ==> |node'.buckets| == |node'.children.value|
   {
@@ -154,7 +155,7 @@ module NodeModel {
 
   lemma CutoffNodeCorrect(node: Node, lbound: Option<Key>, rbound: Option<Key>)
   requires WFNode(node)
-  requires BT.WFNode(INode(node))
+  requires BT.InvNode(INode(node))
   ensures var node' := CutoffNode(node, lbound, rbound);
     && WFNode(node')
     && INode(node') == BT.CutoffNode(INode(node), lbound, rbound)

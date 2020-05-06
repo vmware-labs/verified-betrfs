@@ -136,6 +136,14 @@ module StateModel {
     && |node.buckets| <= MaxNumChildren()
     && WeightBucketList(node.buckets) <= MaxTotalBucketWeight()
   }
+
+  // predicate InvNode(node: Node)
+  // {
+  //   && WFNode(node)
+  //   && WFBucketListProper(node.buckets, node.pivotTable)
+  //   && BucketListWellMarshalled(node.buckets)
+  // }
+    
   predicate WFCache(cache: map<Reference, Node>)
   {
     forall ref | ref in cache :: WFNode(cache[ref])
