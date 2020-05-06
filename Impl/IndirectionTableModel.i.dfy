@@ -2,8 +2,7 @@ include "../lib/Base/Maps.s.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Lang/NativeTypes.s.dfy"
-include "../lib/DataStructures/LruModel.i.dfy"
-include "../lib/DataStructures/MutableMapModel.i.dfy"
+include "../lib/DataStructures/LinearMutableMap.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "../lib/DataStructures/BitmapModel.i.dfy"
@@ -32,8 +31,7 @@ module IndirectionTableModel {
   import ReferenceType`Internal
   import BT = PivotBetreeSpec`Internal
   import BC = BlockCache
-  import LruModel
-  import MutableMapModel
+  import LinearMutableMap
   import SectorType
   import opened DiskLayout
   import opened GenericMarshalling
@@ -43,14 +41,16 @@ module IndirectionTableModel {
   import Marshalling
 
   datatype Entry = Entry(loc: Option<Location>, succs: seq<BT.G.Reference>, predCount: uint64)
-  type HashMap = MutableMapModel.LinearHashMap<Entry>
+  type HashMap = LinearMutableMap.LinearHashMap<Entry>
+
+  type GarbageQueueModel = seq<uint64>
 
   // TODO move bitmap in here?
   datatype IndirectionTable = IndirectionTable(
     t: HashMap,
-    garbageQueue: Option<LruModel.LruQueue>,
+    garbageQueue: Option<GarbageQueueModel>,
     refUpperBound: uint64,
-    findLoclessIterator: Option<MutableMapModel.SimpleIterator>,
+    findLoclessIterator: Option<LinearMutableMap.SimpleIterator>,
 
     // These are for easy access in proof code, but all the relevant data
     // is contained in the `t: HashMap` field.
@@ -140,7 +140,7 @@ module IndirectionTableModel {
 
   predicate Inv1(self: IndirectionTable)
   {
-    && MutableMapModel.Inv(self.t)
+    && LinearMutableMap.Inv(self.t)
     && self.locs == Locs(self.t)
     && self.graph == Graph(self.t)
     && self.predCounts == PredCounts(self.t)
@@ -148,15 +148,14 @@ module IndirectionTableModel {
     && BC.GraphClosed(self.graph)
     && (forall ref | ref in self.graph :: |self.graph[ref]| <= MaxNumChildren())
     && (self.garbageQueue.Some? ==>
-      && LruModel.WF(self.garbageQueue.value)
-      && (forall ref | ref in self.t.contents && self.t.contents[ref].predCount == 0 :: ref in LruModel.I(self.garbageQueue.value))
-      && (forall ref | ref in LruModel.I(self.garbageQueue.value) :: ref in self.t.contents && self.t.contents[ref].predCount == 0)
+      && (forall ref | ref in self.t.contents && self.t.contents[ref].predCount == 0 :: ref in self.garbageQueue.value)
+      && (forall ref | ref in self.garbageQueue.value :: ref in self.t.contents && self.t.contents[ref].predCount == 0)
     )
     && BT.G.Root() in self.t.contents
     && self.t.count as int <= MaxSize()
     && (forall ref | ref in self.graph :: ref <= self.refUpperBound)
     && (self.findLoclessIterator.Some? ==>
-        && MutableMapModel.WFSimpleIter(self.t,
+        && LinearMutableMap.WFSimpleIter(self.t,
             self.findLoclessIterator.value)
         && (forall r | r in self.findLoclessIterator.value.s ::
             r in self.locs)
@@ -180,9 +179,9 @@ module IndirectionTableModel {
 
   function FromHashMap(
     m: HashMap,
-    q: Option<LruModel.LruQueue>,
+    q: Option<GarbageQueueModel>,
     refUpperBound: uint64,
-    findLoclessIterator: Option<MutableMapModel.SimpleIterator>
+    findLoclessIterator: Option<LinearMutableMap.SimpleIterator>
   ) : IndirectionTable
   {
     IndirectionTable(m, q, refUpperBound, findLoclessIterator, Locs(m), Graph(m), PredCounts(m))
@@ -197,14 +196,14 @@ module IndirectionTableModel {
       ref in self.locs && self.locs[ref] == e.value.loc.value
   ensures ref in self.locs ==> e.Some? && e.value.loc.Some?
   {
-    MutableMapModel.Get(self.t, ref)
+    LinearMutableMap.Get(self.t, ref)
   }
 
   predicate {:opaque} HasEmptyLoc(self: IndirectionTable, ref: BT.G.Reference)
   requires Inv(self)
   ensures HasEmptyLoc(self, ref) == (ref in self.graph && ref !in self.locs)
   {
-    var entry := MutableMapModel.Get(self.t, ref);
+    var entry := LinearMutableMap.Get(self.t, ref);
     entry.Some? && entry.value.loc.None?
   }
 
@@ -218,20 +217,20 @@ module IndirectionTableModel {
     && (!added ==> self'.locs == self.locs)
     && (TrackingGarbage(self) ==> TrackingGarbage(self'))
   {
-    var it := MutableMapModel.FindSimpleIter(self.t, ref);
-    var oldEntry := MutableMapModel.SimpleIterOutput(self.t, it);
+    var it := LinearMutableMap.FindSimpleIter(self.t, ref);
+    var oldEntry := LinearMutableMap.SimpleIterOutput(self.t, it);
     var added := oldEntry.Next? && oldEntry.value.loc.None?;
     //assert oldEntry.Next? == (ref in self.graph);
     //assert oldEntry.Next? ==> oldEntry.value.loc.None? == (ref !in self.locs);
     if added then (
-      var t := MutableMapModel.UpdateByIter(self.t, it, 
+      var t := LinearMutableMap.UpdateByIter(self.t, it, 
           Entry(Some(loc), oldEntry.value.succs, oldEntry.value.predCount));
 
       assert Graph(t) == Graph(self.t);
       assert PredCounts(t) == PredCounts(self.t);
 
       var _ := if self.findLoclessIterator.Some? then (
-        MutableMapModel.UpdatePreservesSimpleIter(self.t, it, 
+        LinearMutableMap.UpdatePreservesSimpleIter(self.t, it, 
           Entry(Some(loc), oldEntry.value.succs, oldEntry.value.predCount), self.findLoclessIterator.value); 0
       ) else 0;
 
@@ -307,15 +306,15 @@ module IndirectionTableModel {
 
   predicate RefcountUpdateInv(
       t: HashMap,
-      q: LruModel.LruQueue,
+      q: GarbageQueueModel,
       changingRef: BT.G.Reference,
       newSuccs: seq<BT.G.Reference>,
       oldSuccs: seq<BT.G.Reference>,
       newIdx: int,
       oldIdx: int)
   {
-    && MutableMapModel.Inv(t)
-    && LruModel.WF(q)
+    && LinearMutableMap.Inv(t)
+    // && LruModel.WF(q)
     && t.count as int <= MaxSize()
     && |oldSuccs| <= MaxNumChildren()
     && |newSuccs| <= MaxNumChildren()
@@ -327,8 +326,8 @@ module IndirectionTableModel {
     && ValidPredCountsIntermediate(PredCounts(t), Graph(t), newSuccs, oldSuccs, newIdx, oldIdx)
     && (forall j | 0 <= j < |oldSuccs| :: oldSuccs[j] in t.contents)
     && BC.GraphClosed(Graph(t))
-    && (forall ref | ref in t.contents && t.contents[ref].predCount == 0 :: ref in LruModel.I(q))
-    && (forall ref | ref in LruModel.I(q) :: ref in t.contents && t.contents[ref].predCount == 0)
+    && (forall ref | ref in t.contents && t.contents[ref].predCount == 0 :: ref in q)
+    && (forall ref | ref in q :: ref in t.contents && t.contents[ref].predCount == 0)
     && BT.G.Root() in t.contents
   }
 
@@ -404,7 +403,7 @@ module IndirectionTableModel {
 
   lemma LemmaUpdatePredCountsDecStuff(
       t: HashMap,
-      q: LruModel.LruQueue,
+      q: GarbageQueueModel,
       changingRef: BT.G.Reference,
       newSuccs: seq<BT.G.Reference>,
       oldSuccs: seq<BT.G.Reference>,
@@ -415,10 +414,10 @@ module IndirectionTableModel {
   ensures idx < |oldSuccs| ==>
     var (t', q') := PredDec(t, q, oldSuccs[idx]);
     RefcountUpdateInv(t', q', changingRef, newSuccs, oldSuccs, |newSuccs|, idx + 1)
-  ensures |LruModel.I(q)| <= 0x1_0000_0000
+  ensures |q| <= 0x1_0000_0000
   {
-    assert LruModel.I(q) <= t.contents.Keys;
-    SetInclusionImpliesSmallerCardinality(LruModel.I(q), t.contents.Keys);
+    assert Set(q) <= t.contents.Keys;
+    SetInclusionImpliesSmallerCardinality(Set(q), t.contents.Keys);
     assert |t.contents.Keys| == |t.contents|;
 
     if idx < |oldSuccs| {
@@ -463,7 +462,7 @@ module IndirectionTableModel {
         }
       }
 
-      LruModel.LruUse(q, ref);
+      // LruModel.LruUse(q, ref);
     }
   }
 
@@ -531,7 +530,7 @@ module IndirectionTableModel {
 
   lemma LemmaUpdatePredCountsIncStuff(
       t: HashMap,
-      q: LruModel.LruQueue,
+      q: GarbageQueueModel,
       changingRef: BT.G.Reference,
       newSuccs: seq<BT.G.Reference>,
       oldSuccs: seq<BT.G.Reference>,
@@ -542,7 +541,7 @@ module IndirectionTableModel {
   ensures idx < |newSuccs| ==>
     var (t', q') := PredInc(t, q, newSuccs[idx]);
     RefcountUpdateInv(t', q', changingRef, newSuccs, oldSuccs, idx + 1, 0)
-  ensures MutableMapModel.Inv(t)
+  ensures LinearMutableMap.Inv(t)
   ensures 0 <= idx <= |newSuccs|
   {
     if idx < |newSuccs| {
@@ -582,43 +581,43 @@ module IndirectionTableModel {
         }
       }
 
-      LruModel.LruRemove(q, ref);
+      // LruModel.LruRemove(q, ref);
     }
   }
 
-  function PredInc(t: HashMap, q: LruModel.LruQueue, ref: BT.G.Reference) : (HashMap, LruModel.LruQueue)
-  requires MutableMapModel.Inv(t)
+  function PredInc(t: HashMap, q: GarbageQueueModel, ref: BT.G.Reference) : (HashMap, GarbageQueueModel)
+  requires LinearMutableMap.Inv(t)
   requires t.count as nat < 0x1_0000_0000_0000_0000 / 8
   requires ref in t.contents
   requires t.contents[ref].predCount < 0xffff_ffff_ffff_ffff
   {
     var oldEntry := t.contents[ref];
     var newEntry := oldEntry.(predCount := oldEntry.predCount + 1);
-    var t' := MutableMapModel.Insert(t, ref, newEntry);
-    var q' := if oldEntry.predCount == 0 then LruModel.Remove(q, ref) else q;
+    var t' := LinearMutableMap.Insert(t, ref, newEntry);
+    var q' := if oldEntry.predCount == 0 then RemoveValue(q,  ref) else q;
     (t', q')
   }
 
-  function PredDec(t: HashMap, q: LruModel.LruQueue, ref: BT.G.Reference) : (HashMap, LruModel.LruQueue)
-  requires MutableMapModel.Inv(t)
+  function PredDec(t: HashMap, q: GarbageQueueModel, ref: BT.G.Reference) : (HashMap, GarbageQueueModel)
+  requires LinearMutableMap.Inv(t)
   requires t.count as nat < 0x1_0000_0000_0000_0000 / 8
   requires ref in t.contents
   requires t.contents[ref].predCount > 0
   {
     var oldEntry := t.contents[ref];
     var newEntry := oldEntry.(predCount := oldEntry.predCount - 1);
-    var t' := MutableMapModel.Insert(t, ref, newEntry);
-    var q' := if oldEntry.predCount == 1 then LruModel.Use(q, ref) else q;
+    var t' := LinearMutableMap.Insert(t, ref, newEntry);
+    var q' := if oldEntry.predCount == 1 then q + [ref] else q;
     (t', q')
   }
 
   function UpdatePredCountsDec(
       t: HashMap,
-      q: LruModel.LruQueue,
+      q: GarbageQueueModel,
       changingRef: BT.G.Reference,
       newSuccs: seq<BT.G.Reference>,
       oldSuccs: seq<BT.G.Reference>,
-      idx: uint64) : (res : (HashMap, LruModel.LruQueue))
+      idx: uint64) : (res : (HashMap, GarbageQueueModel))
   requires RefcountUpdateInv(t, q, changingRef, newSuccs, oldSuccs, |newSuccs|, idx as int)
   decreases |oldSuccs| - idx as int
   ensures var (t', q') := res;
@@ -638,11 +637,11 @@ module IndirectionTableModel {
 
   function {:fuel RefcountUpdateInv,0} UpdatePredCountsInc(
       t: HashMap,
-      q: LruModel.LruQueue,
+      q: GarbageQueueModel,
       changingRef: BT.G.Reference,
       newSuccs: seq<BT.G.Reference>,
       oldSuccs: seq<BT.G.Reference>,
-      idx: uint64) : (res : (HashMap, LruModel.LruQueue))
+      idx: uint64) : (res : (HashMap, GarbageQueueModel))
   requires RefcountUpdateInv(t, q, changingRef, newSuccs, oldSuccs, idx as int, 0)
   decreases |newSuccs| - idx as int
   ensures var (t', q') := res;
@@ -668,10 +667,10 @@ module IndirectionTableModel {
   lemma QueueSizeBound(self: IndirectionTable)
   requires Inv(self)
   ensures self.garbageQueue.Some? ==>
-      |LruModel.I(self.garbageQueue.value)| <= 0x1_0000_0000;
+      |self.garbageQueue.value| <= 0x1_0000_0000;
   {
     if self.garbageQueue.Some? {
-      SetInclusionImpliesSmallerCardinality(LruModel.I(self.garbageQueue.value), self.t.contents.Keys);
+      SetInclusionImpliesSmallerCardinality(Set(self.garbageQueue.value), self.t.contents.Keys);
       assert |self.t.contents.Keys| == |self.t.contents|;
     }
   }
@@ -683,22 +682,20 @@ module IndirectionTableModel {
   requires SuccsValid(succs, self.graph)
   requires self.t.count as nat <= MaxSize() - 1;
   ensures
-    var oldEntry := MutableMapModel.Get(self.t, ref);
+    var oldEntry := LinearMutableMap.Get(self.t, ref);
     var predCount := if oldEntry.Some? then oldEntry.value.predCount else 0;
-    var t := MutableMapModel.Insert(self.t, ref, Entry(None, succs, predCount));
-    var q := if oldEntry.Some? then self.garbageQueue.value else LruModel.Use(self.garbageQueue.value, ref);
+    var t := LinearMutableMap.Insert(self.t, ref, Entry(None, succs, predCount));
+    var q := if oldEntry.Some? then self.garbageQueue.value else self.garbageQueue.value + [ref];
     RefcountUpdateInv(t, q, ref, succs,
         if oldEntry.Some? then oldEntry.value.succs else [], 0, 0)
-  ensures |LruModel.I(self.garbageQueue.value)| <= 0x1_0000_0000;
+  ensures |self.garbageQueue.value| <= 0x1_0000_0000;
   {
     QueueSizeBound(self);
 
-    var oldEntry := MutableMapModel.Get(self.t, ref);
+    var oldEntry := LinearMutableMap.Get(self.t, ref);
     var predCount := if oldEntry.Some? then oldEntry.value.predCount else 0;
-    var t := MutableMapModel.Insert(self.t, ref, Entry(None, succs, predCount));
-    var q := if oldEntry.Some? then self.garbageQueue.value else LruModel.Use(self.garbageQueue.value, ref);
-
-    LruModel.LruUse(self.garbageQueue.value, ref);
+    var t := LinearMutableMap.Insert(self.t, ref, Entry(None, succs, predCount));
+    var q := if oldEntry.Some? then self.garbageQueue.value else self.garbageQueue.value + [ref];
 
     assert oldEntry.Some? ==> oldEntry.value.succs == Graph(self.t)[ref];
     assert forall r | r != ref && r in Graph(t) :: r in Graph(self.t) && Graph(t)[r] == Graph(self.t)[r];
@@ -749,7 +746,7 @@ module IndirectionTableModel {
   }
 
   lemma lemma_count_eq_graph_size(t: HashMap)
-  requires MutableMapModel.Inv(t)
+  requires LinearMutableMap.Inv(t)
   ensures t.count as int == |Graph(t)|
   {
     assert Graph(t).Keys == t.contents.Keys;
@@ -776,10 +773,10 @@ module IndirectionTableModel {
     lemma_count_eq_graph_size(self.t);
     LemmaUpdateAndRemoveLocStuff(self, ref, succs);
 
-    var oldEntry := MutableMapModel.Get(self.t, ref);
+    var oldEntry := LinearMutableMap.Get(self.t, ref);
     var predCount := if oldEntry.Some? then oldEntry.value.predCount else 0;
-    var q := if oldEntry.Some? then self.garbageQueue.value else LruModel.Use(self.garbageQueue.value, ref);
-    var t := MutableMapModel.Insert(self.t, ref, Entry(None, succs, predCount));
+    var q := if oldEntry.Some? then self.garbageQueue.value else self.garbageQueue.value + [ref];
+    var t := LinearMutableMap.Insert(self.t, ref, Entry(None, succs, predCount));
 
     var (t1, garbageQueue1) := UpdatePredCountsInc(t, q, ref, succs,
         if oldEntry.Some? then oldEntry.value.succs else [], 0);
@@ -810,13 +807,13 @@ module IndirectionTableModel {
     && (oldLoc.None? ==> ref !in self.locs)
     && (oldLoc.Some? ==> ref in self.locs && self.locs[ref] == oldLoc.value)
   {
-    var it := MutableMapModel.FindSimpleIter(self.t, ref);
-    var oldEntry := MutableMapModel.SimpleIterOutput(self.t, it);
+    var it := LinearMutableMap.FindSimpleIter(self.t, ref);
+    var oldEntry := LinearMutableMap.SimpleIterOutput(self.t, it);
 
     var predCount := oldEntry.value.predCount;
     var succs := oldEntry.value.succs;
 
-    var t := MutableMapModel.UpdateByIter(self.t, it, Entry(None, succs, predCount));
+    var t := LinearMutableMap.UpdateByIter(self.t, it, Entry(None, succs, predCount));
 
     var self' := FromHashMap(t, self.garbageQueue, self.refUpperBound, None);
     var oldLoc := oldEntry.value.loc;
@@ -830,7 +827,7 @@ module IndirectionTableModel {
   ////// Parsing stuff
 
   function ComputeRefCountsEntryIterate(t: HashMap, succs: seq<BT.G.Reference>, i: uint64) : (t' : Option<HashMap>)
-  requires MutableMapModel.Inv(t)
+  requires LinearMutableMap.Inv(t)
   requires 0 <= i as int <= |succs|
   requires |succs| <= MaxNumChildren()
   requires t.count as int <= MaxSize()
@@ -841,10 +838,10 @@ module IndirectionTableModel {
       Some(t)
     ) else (
       var ref := succs[i];
-      var oldEntry := MutableMapModel.Get(t, ref);
+      var oldEntry := LinearMutableMap.Get(t, ref);
       if oldEntry.Some? then (
         var newEntry := oldEntry.value.(predCount := oldEntry.value.predCount + 1);
-        var t0 := MutableMapModel.Insert(t, ref, newEntry);
+        var t0 := LinearMutableMap.Insert(t, ref, newEntry);
         ComputeRefCountsEntryIterate(t0, succs, i + 1)
       ) else (
         None
@@ -852,11 +849,11 @@ module IndirectionTableModel {
     )
   }
 
-  predicate ComputeRefCountsIterateInv(t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>)
+  predicate ComputeRefCountsIterateInv(t: HashMap, copy: HashMap, it: LinearMutableMap.Iterator<Entry>)
   {
-    && MutableMapModel.Inv(t)
-    && MutableMapModel.Inv(copy)
-    && MutableMapModel.WFIter(copy, it)
+    && LinearMutableMap.Inv(t)
+    && LinearMutableMap.Inv(copy)
+    && LinearMutableMap.WFIter(copy, it)
     && (forall ref | ref in copy.contents :: ref in t.contents)
     && (forall ref | ref in copy.contents :: t.contents[ref].loc == copy.contents[ref].loc)
     && (forall ref | ref in copy.contents :: t.contents[ref].succs == copy.contents[ref].succs)
@@ -891,11 +888,11 @@ module IndirectionTableModel {
         == PredecessorSetRestrictedPartial(graph, dest, domain, next, j);
   }
 
-  lemma LemmaComputeRefCountsEntryIterateCorrectPartial(t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>, i: uint64)
+  lemma LemmaComputeRefCountsEntryIterateCorrectPartial(t: HashMap, copy: HashMap, it: LinearMutableMap.Iterator<Entry>, i: uint64)
   requires it.next.Next?
-  requires MutableMapModel.Inv(t)
-  requires MutableMapModel.Inv(copy)
-  requires MutableMapModel.WFIter(copy, it)
+  requires LinearMutableMap.Inv(t)
+  requires LinearMutableMap.Inv(copy)
+  requires LinearMutableMap.WFIter(copy, it)
   requires (forall ref | ref in t.contents :: ref in copy.contents)
   requires (forall ref | ref in copy.contents :: ref in t.contents)
   requires (forall ref | ref in copy.contents :: t.contents[ref].succs == copy.contents[ref].succs)
@@ -906,7 +903,7 @@ module IndirectionTableModel {
   requires BT.G.Root() in t.contents
   ensures var t' := ComputeRefCountsEntryIterate(t, copy.contents[it.next.key].succs, i);
     && (t'.Some? ==>
-      && MutableMapModel.Inv(t'.value)
+      && LinearMutableMap.Inv(t'.value)
       && (forall ref | ref in t'.value.contents :: t'.value.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s + {it.next.key})| + IsRoot(ref))
       && (forall ref | ref in t'.value.contents :: ref in copy.contents)
       && (forall ref | ref in copy.contents :: ref in t'.value.contents)
@@ -927,10 +924,10 @@ module IndirectionTableModel {
       }
     } else {
       var ref := succs[i];
-      var oldEntry := MutableMapModel.Get(t, ref);
+      var oldEntry := LinearMutableMap.Get(t, ref);
       if oldEntry.Some? {
         var newEntry := oldEntry.value.(predCount := oldEntry.value.predCount + 1);
-        var t0 := MutableMapModel.Insert(t, ref, newEntry);
+        var t0 := LinearMutableMap.Insert(t, ref, newEntry);
 
         forall r | r in t0.contents
         ensures t0.contents[r].predCount as int == |PredecessorSetRestrictedPartial(Graph(copy), r, it.s, it.next.key, (i+1) as int)| + IsRoot(r)
@@ -950,11 +947,11 @@ module IndirectionTableModel {
     }
   }
 
-  lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>, i: uint64)
+  lemma LemmaComputeRefCountsEntryIterateGraphClosed(t: HashMap, copy: HashMap, it: LinearMutableMap.Iterator<Entry>, i: uint64)
   requires it.next.Next?
-  requires MutableMapModel.Inv(t)
-  requires MutableMapModel.Inv(copy)
-  requires MutableMapModel.WFIter(copy, it)
+  requires LinearMutableMap.Inv(t)
+  requires LinearMutableMap.Inv(copy)
+  requires LinearMutableMap.WFIter(copy, it)
   requires ComputeRefCountsEntryIterate.requires(t, copy.contents[it.next.key].succs, i)
   requires (forall ref | ref in t.contents :: ref in copy.contents)
   requires (forall ref | ref in copy.contents :: ref in t.contents)
@@ -989,10 +986,10 @@ module IndirectionTableModel {
       }*/
     } else {
       var ref := succs[i];
-      var oldEntry := MutableMapModel.Get(t, ref);
+      var oldEntry := LinearMutableMap.Get(t, ref);
       if oldEntry.Some? {
         var newEntry := oldEntry.value.(predCount := oldEntry.value.predCount + 1);
-        var t0 := MutableMapModel.Insert(t, ref, newEntry);
+        var t0 := LinearMutableMap.Insert(t, ref, newEntry);
 
         var graph := Graph(t0);
         forall k | 0 <= k < i+1
@@ -1013,7 +1010,7 @@ module IndirectionTableModel {
     }
   }
 
-  lemma LemmaComputeRefCountsEntryIterateCorrect(t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>)
+  lemma LemmaComputeRefCountsEntryIterateCorrect(t: HashMap, copy: HashMap, it: LinearMutableMap.Iterator<Entry>)
   requires it.next.Next?
   requires ComputeRefCountsIterateInv(t, copy, it)
   requires ComputeRefCountsEntryIterate.requires(t, copy.contents[it.next.key].succs, 0)
@@ -1021,7 +1018,7 @@ module IndirectionTableModel {
   requires BT.G.Root() in t.contents
   ensures var t' := ComputeRefCountsEntryIterate(t, copy.contents[it.next.key].succs, 0);
     && (t'.Some? ==>
-      && MutableMapModel.Inv(t'.value)
+      && LinearMutableMap.Inv(t'.value)
       && (forall ref | ref in t'.value.contents :: t'.value.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s + {it.next.key})| + IsRoot(ref))
       && (forall ref | ref in t'.value.contents :: ref in copy.contents)
       && (forall ref | ref in copy.contents :: ref in t'.value.contents)
@@ -1042,14 +1039,14 @@ module IndirectionTableModel {
     LemmaComputeRefCountsEntryIterateGraphClosed(t, copy, it, 0);
   }
 
-  lemma LemmaComputeRefCountsIterateStuff(t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>)
+  lemma LemmaComputeRefCountsIterateStuff(t: HashMap, copy: HashMap, it: LinearMutableMap.Iterator<Entry>)
   requires ComputeRefCountsIterateInv(t, copy, it)
   requires BT.G.Root() in t.contents
   ensures forall ref | ref in t.contents :: t.contents[ref].predCount as int <= 0x1_0000_0000_0000
   ensures it.next.Next? ==>
     var succs := it.next.value.succs;
     var t0 := ComputeRefCountsEntryIterate(t, succs, 0);
-    && (t0.Some? ==> ComputeRefCountsIterateInv(t0.value, copy, MutableMapModel.IterInc(copy, it)))
+    && (t0.Some? ==> ComputeRefCountsIterateInv(t0.value, copy, LinearMutableMap.IterInc(copy, it)))
     && (t0.None? ==> !BC.GraphClosed(Graph(copy)))
   {
     forall ref | ref in t.contents
@@ -1065,7 +1062,7 @@ module IndirectionTableModel {
   }
 
   lemma LemmaComputeRefCountsIterateValidPredCounts(
-    t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>)
+    t: HashMap, copy: HashMap, it: LinearMutableMap.Iterator<Entry>)
   requires ComputeRefCountsIterateInv(t, copy, it)
   ensures it.next.Done? ==> ValidPredCounts(PredCounts(t), Graph(t))
   {
@@ -1086,10 +1083,10 @@ module IndirectionTableModel {
   // t is the one that we're actually filling in.
   // We don't really need to make a copy, but it's easier\
   // as we don't need to prove anything about iterator preservation.
-  function ComputeRefCountsIterate(t: HashMap, copy: HashMap, it: MutableMapModel.Iterator<Entry>) : (t' : Option<HashMap>)
+  function ComputeRefCountsIterate(t: HashMap, copy: HashMap, it: LinearMutableMap.Iterator<Entry>) : (t' : Option<HashMap>)
   requires ComputeRefCountsIterateInv(t, copy, it)
   requires BT.G.Root() in t.contents
-  ensures t'.Some? ==> MutableMapModel.Inv(t'.value)
+  ensures t'.Some? ==> LinearMutableMap.Inv(t'.value)
   ensures t'.Some? <==> BC.GraphClosed(Graph(copy))
   ensures t'.Some? ==> Graph(copy) == Graph(t'.value)
   ensures t'.Some? ==> Locs(copy) == Locs(t'.value)
@@ -1106,7 +1103,7 @@ module IndirectionTableModel {
       var succs := it.next.value.succs;
       var t0 := ComputeRefCountsEntryIterate(t, succs, 0);
       if t0.Some? then (
-        ComputeRefCountsIterate(t0.value, copy, MutableMapModel.IterInc(copy, it))
+        ComputeRefCountsIterate(t0.value, copy, LinearMutableMap.IterInc(copy, it))
       ) else (
         None
       )
@@ -1114,20 +1111,20 @@ module IndirectionTableModel {
   }
 
   lemma LemmaComputeRefCountsIterateInvInit(t: HashMap)
-  requires MutableMapModel.Inv(t)
+  requires LinearMutableMap.Inv(t)
   requires forall ref | ref in t.contents :: t.contents[ref].predCount == 0
   requires forall ref | ref in t.contents :: |t.contents[ref].succs| <= MaxNumChildren()
   requires t.count as int <= MaxSize()
   requires BT.G.Root() in t.contents
   ensures
     var oldEntry := t.contents[BT.G.Root()];
-    var t0 := MutableMapModel.Insert(t, BT.G.Root(), oldEntry.(predCount := 1));
-    ComputeRefCountsIterateInv(t0, t, MutableMapModel.IterStart(t))
+    var t0 := LinearMutableMap.Insert(t, BT.G.Root(), oldEntry.(predCount := 1));
+    ComputeRefCountsIterateInv(t0, t, LinearMutableMap.IterStart(t))
   {
     var oldEntry := t.contents[BT.G.Root()];
-    var t0 := MutableMapModel.Insert(t, BT.G.Root(), oldEntry.(predCount := 1));
+    var t0 := LinearMutableMap.Insert(t, BT.G.Root(), oldEntry.(predCount := 1));
 
-    var it := MutableMapModel.IterStart(t);
+    var it := LinearMutableMap.IterStart(t);
     forall ref | ref in t0.contents
     ensures t0.contents[ref].predCount as int
         == |PredecessorSetRestricted(Graph(t0), ref, it.s)| + IsRoot(ref)
@@ -1137,7 +1134,7 @@ module IndirectionTableModel {
   }
 
   function ComputeRefCounts(t: HashMap) : (t' : Option<HashMap>)
-  requires MutableMapModel.Inv(t)
+  requires LinearMutableMap.Inv(t)
   requires forall ref | ref in t.contents :: t.contents[ref].predCount == 0
   requires forall ref | ref in t.contents :: |t.contents[ref].succs| <= MaxNumChildren()
   requires t.count as int <= MaxSize()
@@ -1151,9 +1148,9 @@ module IndirectionTableModel {
     LemmaComputeRefCountsIterateInvInit(t);
 
     var oldEntry := t.contents[BT.G.Root()];
-    var t0 := MutableMapModel.Insert(t, BT.G.Root(), oldEntry.(predCount := 1));
+    var t0 := LinearMutableMap.Insert(t, BT.G.Root(), oldEntry.(predCount := 1));
 
-    ComputeRefCountsIterate(t0, t, MutableMapModel.IterStart(t))
+    ComputeRefCountsIterate(t0, t, LinearMutableMap.IterStart(t))
   }
 
   function {:fuel ValInGrammar,3} valToHashMap(a: seq<V>) : (s : Option<HashMap>)
@@ -1168,7 +1165,7 @@ module IndirectionTableModel {
   ensures s.None? ==> Marshalling.valToIndirectionTableMaps(a).None?
   {
     if |a| == 0 then
-      var s := Some(MutableMapModel.Constructor(1024));
+      var s := Some(LinearMutableMap.Constructor(1024));
       assert Locs(s.value) == map[];
       assert Graph(s.value) == map[];
       //assert s.Some? ==> Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(s.value));
@@ -1186,7 +1183,7 @@ module IndirectionTableModel {
           if ref in table.contents || !ValidNodeLocation(loc) || |succs| as int > MaxNumChildren() then (
             None
           ) else (
-            var res := MutableMapModel.Insert(table, ref, Entry(Some(loc), succs, 0));
+            var res := LinearMutableMap.Insert(table, ref, Entry(Some(loc), succs, 0));
             assert Locs(res) == Locs(table)[ref := loc];
             assert Graph(res) == Graph(table)[ref := succs];
             //assert Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(res));
@@ -1205,75 +1202,75 @@ module IndirectionTableModel {
     GArray(GTuple([GUint64, GUint64, GUint64, GUint64Array]))
   }
 
-  function makeGarbageQueueIterate(t: HashMap, q: LruModel.LruQueue, it: MutableMapModel.Iterator<Entry>) : LruModel.LruQueue
-  requires MutableMapModel.Inv(t)
-  requires MutableMapModel.WFIter(t, it)
-  requires LruModel.WF(q)
+  function makeGarbageQueueIterate(t: HashMap, q: GarbageQueueModel, it: LinearMutableMap.Iterator<Entry>) : GarbageQueueModel
+  requires LinearMutableMap.Inv(t)
+  requires LinearMutableMap.WFIter(t, it)
+  // requires LruModel.WF(q)
   decreases it.decreaser
   {
     if it.next.Done? then
       q
     else (
       var q' := (if it.next.value.predCount == 0 then
-        LruModel.LruUse(q, it.next.key);
-        LruModel.Use(q, it.next.key)
+        // LruModel.LruUse(q, it.next.key);
+        q + [it.next.key]
       else
         q);
-      var it' := MutableMapModel.IterInc(t, it);
+      var it' := LinearMutableMap.IterInc(t, it);
       makeGarbageQueueIterate(t, q', it')
     )
   }
 
-  function {:opaque} makeGarbageQueue(t: HashMap) : LruModel.LruQueue
-  requires MutableMapModel.Inv(t)
+  function {:opaque} makeGarbageQueue(t: HashMap) : GarbageQueueModel
+  requires LinearMutableMap.Inv(t)
   {
-    makeGarbageQueueIterate(t, LruModel.Empty(), MutableMapModel.IterStart(t))
+    makeGarbageQueueIterate(t, [], LinearMutableMap.IterStart(t))
   }
 
-  lemma makeGarbageQueueIterateCorrect(t: HashMap, q: LruModel.LruQueue, it: MutableMapModel.Iterator<Entry>)
-  requires MutableMapModel.Inv(t)
-  requires MutableMapModel.WFIter(t, it)
-  requires LruModel.WF(q)
-  requires (forall ref | ref in t.contents && t.contents[ref].predCount == 0 && ref in it.s :: ref in LruModel.I(q))
-  requires (forall ref | ref in LruModel.I(q) :: ref in t.contents && t.contents[ref].predCount == 0 && ref in it.s)
+  lemma makeGarbageQueueIterateCorrect(t: HashMap, q: GarbageQueueModel, it: LinearMutableMap.Iterator<Entry>)
+  requires LinearMutableMap.Inv(t)
+  requires LinearMutableMap.WFIter(t, it)
+  // requires LruModel.WF(q)
+  requires (forall ref | ref in t.contents && t.contents[ref].predCount == 0 && ref in it.s :: ref in q)
+  requires (forall ref | ref in q :: ref in t.contents && t.contents[ref].predCount == 0 && ref in it.s)
   ensures var q' := makeGarbageQueueIterate(t, q, it);
-    && LruModel.WF(q')
-    && (forall ref | ref in t.contents && t.contents[ref].predCount == 0 :: ref in LruModel.I(q'))
-    && (forall ref | ref in LruModel.I(q') :: ref in t.contents && t.contents[ref].predCount == 0)
+    // && LruModel.WF(q')
+    && (forall ref | ref in t.contents && t.contents[ref].predCount == 0 :: ref in q')
+    && (forall ref | ref in q' :: ref in t.contents && t.contents[ref].predCount == 0)
   decreases it.decreaser
   {
     if it.next.Done? {
     } else {
       var q' := (if it.next.value.predCount == 0 then
-        LruModel.LruUse(q, it.next.key);
-        LruModel.Use(q, it.next.key)
+        // LruModel.LruUse(q, it.next.key);
+        q + [it.next.key]
       else
         q);
-      var it' := MutableMapModel.IterInc(t, it);
+      var it' := LinearMutableMap.IterInc(t, it);
       makeGarbageQueueIterateCorrect(t, q', it');
     }
   }
 
   lemma lemmaMakeGarbageQueueCorrect(t: HashMap)
-  requires MutableMapModel.Inv(t)
+  requires LinearMutableMap.Inv(t)
   ensures var q := makeGarbageQueue(t);
-    && LruModel.WF(q)
-    && (forall ref | ref in t.contents && t.contents[ref].predCount == 0 :: ref in LruModel.I(q))
-    && (forall ref | ref in LruModel.I(q) :: ref in t.contents && t.contents[ref].predCount == 0)
+    // && LruModel.WF(q)
+    && (forall ref | ref in t.contents && t.contents[ref].predCount == 0 :: ref in q)
+    && (forall ref | ref in q :: ref in t.contents && t.contents[ref].predCount == 0)
   {
     reveal_makeGarbageQueue();
-    makeGarbageQueueIterateCorrect(t, LruModel.Empty(), MutableMapModel.IterStart(t));
+    makeGarbageQueueIterateCorrect(t, [], LinearMutableMap.IterStart(t));
   }
 
-  function computeRefUpperBoundIterate(t: HashMap, it: MutableMapModel.Iterator<Entry>, refUpperBound: uint64) : (r: uint64)
-  requires MutableMapModel.Inv(t)
-  requires MutableMapModel.WFIter(t, it)
+  function computeRefUpperBoundIterate(t: HashMap, it: LinearMutableMap.Iterator<Entry>, refUpperBound: uint64) : (r: uint64)
+  requires LinearMutableMap.Inv(t)
+  requires LinearMutableMap.WFIter(t, it)
   requires forall ref | ref in it.s :: ref <= refUpperBound
   ensures forall ref | ref in t.contents :: ref <= r
   decreases it.decreaser
   {
     if it.next.Next? then (
-      computeRefUpperBoundIterate(t, MutableMapModel.IterInc(t, it),
+      computeRefUpperBoundIterate(t, LinearMutableMap.IterInc(t, it),
           if it.next.key > refUpperBound then it.next.key else refUpperBound)
     ) else (
       refUpperBound
@@ -1281,10 +1278,10 @@ module IndirectionTableModel {
   }
 
   function computeRefUpperBound(t: HashMap) : (r: uint64)
-  requires MutableMapModel.Inv(t)
+  requires LinearMutableMap.Inv(t)
   ensures forall ref | ref in t.contents :: ref <= r
   {
-    computeRefUpperBoundIterate(t, MutableMapModel.IterStart(t), 0)
+    computeRefUpperBoundIterate(t, LinearMutableMap.IterStart(t), 0)
   }
 
   function valToIndirectionTable(v: V) : (s : Option<IndirectionTable>)
@@ -1360,11 +1357,11 @@ module IndirectionTableModel {
   }
 
   function InitLocBitmapIterate(indirectionTable: IndirectionTable,
-      it: MutableMapModel.Iterator<Entry>,
+      it: LinearMutableMap.Iterator<Entry>,
       bm: BitmapModel.BitmapModelT)
   : (res : (bool, BitmapModel.BitmapModelT))
   requires Inv(indirectionTable)
-  requires MutableMapModel.WFIter(indirectionTable.t, it)
+  requires LinearMutableMap.WFIter(indirectionTable.t, it)
   requires BC.WFCompleteIndirectionTable(I(indirectionTable))
   requires BitmapModel.Len(bm) == NumBlocks()
   ensures BitmapModel.Len(res.1) == NumBlocks()
@@ -1379,7 +1376,7 @@ module IndirectionTableModel {
       var locIndex: uint64 := loc / NodeBlockSize() as uint64;
       if locIndex < NumBlocks() as uint64 && !BitmapModel.IsSet(bm, locIndex as int) then (
         InitLocBitmapIterate(indirectionTable,
-            MutableMapModel.IterInc(indirectionTable.t, it),
+            LinearMutableMap.IterInc(indirectionTable.t, it),
             BitmapModel.BitSet(bm, locIndex as int))
       ) else (
         (false, bm)
@@ -1395,7 +1392,7 @@ module IndirectionTableModel {
     var bm := BitmapModel.EmptyBitmap(NumBlocks());
     var bm' := BitmapInitUpTo(bm, MinNodeBlockIndexUint64());
     InitLocBitmapIterate(indirectionTable,
-        MutableMapModel.IterStart(indirectionTable.t),
+        LinearMutableMap.IterStart(indirectionTable.t),
         bm')
   }
 
@@ -1409,7 +1406,7 @@ module IndirectionTableModel {
   }
 
   lemma InitLocBitmapIterateCorrect(indirectionTable: IndirectionTable,
-      it: MutableMapModel.Iterator<Entry>,
+      it: LinearMutableMap.Iterator<Entry>,
       bm: BitmapModel.BitmapModelT)
   requires Inv(indirectionTable)
   requires InitLocBitmapIterate.requires(indirectionTable, it, bm);
@@ -1460,7 +1457,7 @@ module IndirectionTableModel {
         //assert !BitmapModel.IsSet(bm, locIndex as int);
 
         var bm0 := BitmapModel.BitSet(bm, locIndex as int);
-        var it0 := MutableMapModel.IterInc(indirectionTable.t, it);
+        var it0 := LinearMutableMap.IterInc(indirectionTable.t, it);
 
         forall i: int
         | IsLocAllocIndirectionTablePartial(indirectionTable, i, it0.s)
@@ -1554,7 +1551,7 @@ module IndirectionTableModel {
     BitmapModel.reveal_BitSet();
     BitmapModel.reveal_IsSet();
 
-    var it := MutableMapModel.IterStart(indirectionTable.t);
+    var it := LinearMutableMap.IterStart(indirectionTable.t);
 
     var bm := BitmapModel.EmptyBitmap(NumBlocks());
     var bm' := BitmapInitUpTo(bm, MinNodeBlockIndexUint64());
@@ -1589,7 +1586,7 @@ module IndirectionTableModel {
   requires Inv(self)
   requires TrackingGarbage(self)
   {
-    LruModel.NextOpt(self.garbageQueue.value)
+    FirstOpt(self.garbageQueue.value)
   }
 
   lemma FindDeallocableCorrect(self: IndirectionTable)
@@ -1638,13 +1635,13 @@ module IndirectionTableModel {
   requires deallocable(self, ref)
   requires self.t.count as nat < 0x1_0000_0000_0000_0000 / 8 - 1;
   ensures
-    var (t, oldEntry) := MutableMapModel.RemoveAndGet(self.t, ref);
-    var q := LruModel.Remove(self.garbageQueue.value, ref);
+    var RemoveResult(t, oldEntry) := LinearMutableMap.RemoveAndGet(self.t, ref);
+    var q := RemoveValue(self.garbageQueue.value,  ref);
     RefcountUpdateInv(t, q, ref, [], oldEntry.value.succs, 0, 0)
   {
-    var (t, oldEntry) := MutableMapModel.RemoveAndGet(self.t, ref);
+    var RemoveResult(t, oldEntry) := LinearMutableMap.RemoveAndGet(self.t, ref);
 
-    LruModel.LruRemove(self.garbageQueue.value, ref);
+    // LruModel.LruRemove(self.garbageQueue.value, ref);
 
     assert |Graph(self.t)[ref]| <= MaxNumChildren();
 
@@ -1713,8 +1710,8 @@ module IndirectionTableModel {
 
     LemmaRemoveRefStuff(self, ref);
 
-    var (t, oldEntry) := MutableMapModel.RemoveAndGet(self.t, ref);
-    var q := LruModel.Remove(self.garbageQueue.value, ref);
+    var RemoveResult(t, oldEntry) := LinearMutableMap.RemoveAndGet(self.t, ref);
+    var q := RemoveValue(self.garbageQueue.value,  ref);
     var (t1, q1) := UpdatePredCountsInc(t, q, ref, [], oldEntry.value.succs, 0);
 
     lemma_count_eq_graph_size(t);
@@ -1741,10 +1738,10 @@ module IndirectionTableModel {
 
   function FindRefWithNoLocIterate(
       self: IndirectionTable,
-      it: MutableMapModel.SimpleIterator)
+      it: LinearMutableMap.SimpleIterator)
      : (res: (IndirectionTable, Option<BT.G.Reference>))
   requires Inv(self)
-  requires MutableMapModel.WFSimpleIter(self.t, it)
+  requires LinearMutableMap.WFSimpleIter(self.t, it)
   requires forall r | r in it.s :: r in self.locs
   decreases it.decreaser
   ensures var (self', ref) := res;
@@ -1755,14 +1752,14 @@ module IndirectionTableModel {
     && (ref.Some? ==> ref.value !in self.locs)
     && (ref.None? ==> forall r | r in self.graph && r !in it.s :: r in self.locs)
   {
-    var next := MutableMapModel.SimpleIterOutput(self.t, it);
+    var next := LinearMutableMap.SimpleIterOutput(self.t, it);
     if next.Next? then (
       if next.value.loc.None? then (
         var self' := self.(findLoclessIterator := Some(it));
         (self', Some(next.key))
       ) else (
         FindRefWithNoLocIterate(self,
-            MutableMapModel.SimpleIterInc(self.t, it))
+            LinearMutableMap.SimpleIterInc(self.t, it))
       )
     ) else (
       var self' := self.(findLoclessIterator := Some(it));
@@ -1783,7 +1780,7 @@ module IndirectionTableModel {
     var it := if self.findLoclessIterator.Some? then (
       self.findLoclessIterator.value
     ) else (
-      MutableMapModel.SimpleIterStart(self.t)
+      LinearMutableMap.SimpleIterStart(self.t)
     );
     FindRefWithNoLocIterate(self, it)
   }
@@ -1793,8 +1790,8 @@ module IndirectionTableModel {
   ensures self'.graph == map[BT.G.Root() := []]
   ensures self'.locs == map[BT.G.Root() := loc]
   {
-    var t0 := MutableMapModel.Constructor(128);
-    var t1 := MutableMapModel.Insert(t0, BT.G.Root(),
+    var t0 := LinearMutableMap.Constructor(128);
+    var t1 := LinearMutableMap.Insert(t0, BT.G.Root(),
         Entry(Some(loc), [], 1));
     var self' := FromHashMap(t1, None, BT.G.Root(), None);
 
