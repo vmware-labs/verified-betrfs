@@ -11,14 +11,12 @@ Explanation:
 
 include "../Lang/NativeTypes.s.dfy"
 include "../Base/Option.s.dfy"
-include "../Base/sequences.i.dfy"
 include "../Lang/LinearSequence.s.dfy"
 include "../Lang/LinearSequence.i.dfy"
 
 module DList {
   import opened NativeTypes
   import opened Options
-  import Sequences
   import opened LinearSequence_s
   import opened LinearSequence_i
   export
@@ -165,9 +163,9 @@ module DList {
     ensures Inv(l)
     ensures Seq(l) == []
   {
-    linear var nodes := seq_alloc_init<Node>(initial_len, Node(None, 0, 0));
+    linear var nodes := seq_alloc<Node>(initial_len, Node(None, 0, 0));
     nodes := BuildFreeStack(nodes, 1);
-    l := DList(nodes, initial_len - 1, [], [], Sequences.OfFunction(initial_len as nat, p => if p == 0 then sentinel else unused));
+    l := DList(nodes, initial_len - 1, [], [], seq(initial_len as nat, p => if p == 0 then sentinel else unused));
   }
 
   method Free<A>(linear l:DList<A>)
@@ -189,7 +187,7 @@ module DList {
     var len' := if len < 0x7fff_ffff_ffff_ffff then len + len else len + 1;
     nodes := SeqResize(nodes, len', Node(None, freeStack, 0));
     nodes := BuildFreeStack(nodes, len + 1);
-    l' := DList(nodes, len' - 1, s, f, Sequences.OfFunction(|nodes|,
+    l' := DList(nodes, len' - 1, s, f, seq(|nodes|,
       i requires 0 <= i < |nodes| => if i < |g| then g[i] else unused));
   }
 
@@ -202,10 +200,11 @@ module DList {
       ValidPtr(l', x) && Index(l', x) == Index(l, x) - (if Index(l, x) < Index(l, p) then 0 else 1)
   {
     linear var DList(nodes, freeStack, s, f, g) := l;
+    assert nodes == l.nodes; // randomly perturb Z3 -- TODO: not necessary if using smt.CASE_SPLIT=1 (see comment at beginning of file)
     ghost var index := g[p];
     ghost var s' := s[.. index] + s[index + 1 ..];
     ghost var f' := f[.. index] + f[index + 1 ..];
-    ghost var g' := Sequences.OfFunction(|g|, x requires 0 <= x < |g| =>
+    ghost var g' := seq(|g|, x requires 0 <= x < |g| =>
       if g[x] == index then unused else if g[x] > index then g[x] - 1 else g[x]);
 
     var node := seq_get(nodes, p);
@@ -240,7 +239,7 @@ module DList {
     ghost var index' := index + 1;
     ghost var s' := s[.. index'] + [a] + s[index' ..];
     ghost var f' := f[.. index'] + [p' as int] + f[index' ..];
-    ghost var g' := Sequences.OfFunction(|g|, x requires 0 <= x < |g| =>
+    ghost var g' := seq(|g|, x requires 0 <= x < |g| =>
       if x == p' as int then index' else if g[x] > index then g[x] + 1 else g[x]);
     var node := seq_get(nodes, p);
     var node' := Node(Some(a), node.next, p);
@@ -273,7 +272,7 @@ module DList {
     ghost var index' := IndexHi(l, p);
     ghost var s' := s[.. index'] + [a] + s[index' ..];
     ghost var f' := f[.. index'] + [p' as int] + f[index' ..];
-    ghost var g' := Sequences.OfFunction(|g|, x requires 0 <= x < |g| =>
+    ghost var g' := seq(|g|, x requires 0 <= x < |g| =>
       if x == p' as int then index' else if g[x] >= index' then g[x] + 1 else g[x]);
     var node := seq_get(nodes, p);
     var node' := Node(Some(a), p, node.prev);

@@ -116,8 +116,8 @@ abstract module MutableBtree {
     ensures Interpretation(root) == map[]
     ensures root.Leaf?
   {
-    linear var rootkeys := seq_alloc(0);
-    linear var rootvalues := seq_alloc(0);
+    linear var rootkeys := seq_empty();
+    linear var rootvalues := seq_empty();
     root := Model.Leaf(rootkeys, rootvalues);
     Model.reveal_Interpretation();
   }

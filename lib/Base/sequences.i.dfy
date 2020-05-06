@@ -81,14 +81,6 @@ module Sequences {
     if n == 0 then [] else Range(n-1) + [n-1]
   }
   
-  function OfFunction<A>(len:nat, f:nat --> A):(s:seq<A>)
-    requires forall i:nat :: i < len ==> f.requires(i)
-    ensures |s| == len
-    ensures forall i {:trigger s[i]} :: 0 <= i < len ==> s[i] == f(i)
-  {
-    if len == 0 then [] else OfFunction(len - 1, f) + [f(len - 1)]
-  }
-
   function Apply<E,R>(f: (E ~> R), run: seq<E>) : (result: seq<R>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     ensures |result| == |run|

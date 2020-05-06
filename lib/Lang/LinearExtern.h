@@ -108,9 +108,15 @@ uint64 seq_length(linear_seq<A> s) {
 }
 
 template <typename A>
-linear_seq<A> seq_alloc(uint64 length) {
+linear_seq<A> seq_empty() {
   linear_seq<A> ret = new std::vector<A>;
-  ret->assign(length, get_default<A>::call());
+  return ret;
+}
+
+template <typename A>
+linear_seq<A> seq_alloc(uint64 length, A a) {
+  linear_seq<A> ret = new std::vector<A>;
+  ret->assign(length, a);
   return ret;
 }
 

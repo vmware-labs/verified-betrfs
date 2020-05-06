@@ -16,8 +16,12 @@ module {:extern "LinearExtern"} LinearSequence_s {
   function method {:extern "LinearExtern", "seq_length"} seq_length<A>(shared s:seq<A>):(n:uint64)
       ensures n as int == |s|
 
-  function method {:extern "LinearExtern", "seq_alloc"} seq_alloc<A>(length:uint64):(linear s:seq<A>)
-      ensures |s| == length as int
+  function method {:extern "LinearExtern", "seq_empty"} seq_empty<A>():(linear s:seq<A>)
+    ensures |s| == 0
+
+  function method {:extern "LinearExtern", "seq_alloc"} seq_alloc<A>(length:uint64, a:A):(linear s:seq<A>)
+    ensures |s| == length as int
+    ensures forall i :: 0 <= i < |s| ==> s[i] == a
 
   function method {:extern "LinearExtern", "seq_free"} seq_free<A>(linear s:seq<A>):()
 
