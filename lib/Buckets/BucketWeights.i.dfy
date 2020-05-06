@@ -476,6 +476,7 @@ module BucketWeights {
       else 0
   }
 
+  // used internally
   lemma KeyContribution(bucket: Bucket, key: Key)
     requires PreWFBucket(bucket)
     requires BucketWellMarshalled(bucket)
@@ -746,6 +747,7 @@ module BucketWeights {
     }
   }
 
+  // used internally
   lemma WeightBucketFilterPartitions(bucket:Bucket, filter:iset<Key>, a:iset<Key>, b:iset<Key>)
     requires WFBucket(bucket)
     requires BucketWellMarshalled(bucket)
@@ -769,6 +771,7 @@ module BucketWeights {
     }
   }
 
+  // used internally
   lemma WeightBucketListItemFlushInner(parent: Bucket, children: BucketList, pivots: PivotTable, i: int, filter:iset<Key>)
     requires WFBucket(parent)
     requires BucketWellMarshalled(parent)
@@ -869,6 +872,7 @@ module BucketWeights {
     }
   }
 
+  // used internally
   lemma WeightBucketListItemFlush(parent: Bucket, children: BucketList, pivots: PivotTable, i: int)
   requires WFPivots(pivots)
   requires 0 <= i < |children|
@@ -902,6 +906,7 @@ module BucketWeights {
   {
   }
 
+  // used internally
   lemma WeightBucketListFlushPartial(parent: Bucket, children: BucketList, pivots: PivotTable, items: int)
   requires WFBucketListProper(children, pivots)
   requires 0 <= items <= |children|
@@ -966,6 +971,7 @@ module BucketWeights {
     }
   }
 
+  // used
   lemma WeightBucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable)
   requires WFBucketListProper(children, pivots)
   requires |children| == NumBuckets(pivots)
@@ -985,6 +991,7 @@ module BucketWeights {
     assert children[..|children|] == children;  // trigger
   }
 
+  // used internally
   lemma WeightBucketListReplace(blist: BucketList, i: int, bucket: Bucket)
   requires 0 <= i < |blist|
   ensures WeightBucketList(blist[i := bucket]) == WeightBucketList(blist) - WeightBucket(blist[i]) + WeightBucket(bucket)
@@ -1011,6 +1018,7 @@ module BucketWeights {
     }
   }
 
+  // used
   lemma WeightBucketListShrinkEntry(blist: BucketList, i: int, bucket: Bucket)
   requires 0 <= i < |blist|
   requires WeightBucket(bucket) <= WeightBucket(blist[i])
@@ -1019,6 +1027,7 @@ module BucketWeights {
     WeightBucketListReplace(blist, i, bucket);
   }
 
+  // used
   lemma WeightBucketListClearEntry(blist: BucketList, i: int)
   requires 0 <= i < |blist|
   ensures WeightBucketList(blist[i := B(map[])]) <= WeightBucketList(blist)
@@ -1027,6 +1036,7 @@ module BucketWeights {
   }
 
   // Analogous to WeightBucketListReplace, except we're changing the size of the subsequence in the middle.
+  // used
   lemma WeightSplitBucketInList(blist: BucketList, i: int, pivot: Key)
     requires 0 <= i < |blist|
     requires WFBucket(blist[i])
@@ -1069,6 +1079,7 @@ module BucketWeights {
     WeightSplitBucketAdditive(blist[i], pivot);
   }
 
+  // used
   lemma WeightSplitBucketInListLe(blist: BucketList, i: int, pivot: Key)
    requires 0 <= i < |blist|
    requires WFBucket(blist[i])
@@ -1111,6 +1122,7 @@ module BucketWeights {
     }
   }
 
+  // used
   lemma WeightBucketListSuffix(blist: BucketList, a: int)
   requires 0 <= a <= |blist|
   ensures WeightBucketList(blist[a..]) <= WeightBucketList(blist)
@@ -1120,6 +1132,7 @@ module BucketWeights {
   }
 
   // TODO move this to BucketsLib?
+  /// used internally
   lemma MergeUndoesSplit(blist:BucketList, pivots:PivotTable, i:int)
   requires 0 <= i < |blist| - 1
   requires WFBucketList(blist, pivots)
@@ -1154,6 +1167,7 @@ module BucketWeights {
   }
 
   // Undoes WeightSplitBucketInList
+  // used
   lemma WeightMergeBucketsInList(blist: BucketList, i: int, pivots: PivotTable)
     requires 0 <= i < |blist| - 1
     requires WFBucketList(blist, pivots)
@@ -1168,6 +1182,7 @@ module BucketWeights {
     WeightSplitBucketInList(MergeBucketsInList(blist, i), i, pivots[i]);
   }
 
+  // used internally
   lemma MergedKeyMultisets(left: Bucket, right: Bucket)
     requires PreWFBucket(left)
     requires PreWFBucket(right)
@@ -1184,7 +1199,8 @@ module BucketWeights {
       multiset(left.keys) + multiset(right.keys);
     }
   }
-  
+
+  // used internally
   lemma MergedMessageMultisets(left: Bucket, right: Bucket)
     requires PreWFBucket(left)
     requires PreWFBucket(right)
@@ -1242,7 +1258,7 @@ module BucketWeights {
     }
   }    
 
-  
+  // used
   lemma WeightMergeBuckets(left: Bucket, right: Bucket)
     requires PreWFBucket(left)
     requires PreWFBucket(right)
@@ -1278,7 +1294,8 @@ module BucketWeights {
       WeightMessageMultiset(multiset(left.msgs)) + WeightMessageMultiset(multiset(right.msgs));
     }
   }
-  
+
+  // used
   lemma WeightMergeBucketsInListLe(blist: BucketList, i: int, pivots: PivotTable)
   requires 0 <= i < |blist| - 1
   requires PreWFBucket(blist[i])
@@ -1320,6 +1337,7 @@ module BucketWeights {
     }
   }
 
+  // used internally
   lemma WeightBucketSubset(bucket:Bucket, a:iset<Key>, b:iset<Key>)
     requires BucketWellMarshalled(bucket)
     requires a<=b
@@ -1343,6 +1361,7 @@ module BucketWeights {
   // former is nice because it obeys the WFBucketList discipline, and can hence
   // draw tight conclusions (WeightBucketList == WeightBucketList). Can we
   // redefine JoinBucketList in terms of MergBuckets and lose some cruft?
+  // used
   lemma WeightJoinBucketList(blist: BucketList)
     requires forall i | 0 <= i < |blist| :: PreWFBucket(blist[i])
     ensures WeightBucket(JoinBucketList(blist)) <= WeightBucketList(blist)
@@ -1365,6 +1384,7 @@ module BucketWeights {
     }
   }
 
+  // used
   lemma WeightSplitBucketOnPivots(bucket: Bucket, pivots: seq<Key>)
     requires PreWFBucket(bucket)
     requires BucketWellMarshalled(bucket)
@@ -1408,6 +1428,7 @@ module BucketWeights {
     }
   }
 
+  // used (in KVList)
   lemma KeyMultisetLeWeight(keys: multiset<Key>)
     ensures 4 * |keys| <= WeightKeyMultiset(keys)
   {
@@ -1440,16 +1461,17 @@ module BucketWeights {
   // This is far weaker than it could be, but it's probably good enough.
   // Weight is on the order of a few million, and I plan on using this lemma
   // to show that numbers fit within 64 bits.
-  lemma LenLeWeight(bucket: Bucket)
-    requires PreWFBucket(bucket)
-    ensures |bucket.keys| <= WeightBucket(bucket)
-    ensures |bucket.b| <= WeightBucket(bucket)
-    decreases bucket.keys
-  {
-    KeyMultisetLeWeight(multiset(bucket.keys));
-    SetCardinality(bucket.keys);
-  }
+  // lemma LenLeWeight(bucket: Bucket)
+  //   requires PreWFBucket(bucket)
+  //   ensures |bucket.keys| <= WeightBucket(bucket)
+  //   ensures |bucket.b| <= WeightBucket(bucket)
+  //   decreases bucket.keys
+  // {
+  //   KeyMultisetLeWeight(multiset(bucket.keys));
+  //   SetCardinality(bucket.keys);
+  // }
 
+  // used
   lemma WeightBucketListOneEmpty()
   ensures WeightBucketList([B(map[])]) == 0
   {
@@ -1457,30 +1479,32 @@ module BucketWeights {
     WeightBucketEmpty();
   }
 
-  lemma WeightBucketPut(bucket: Bucket, key: Key, msg: Message)
-    requires PreWFBucket(bucket)
-    requires BucketWellMarshalled(bucket)
-    ensures WeightBucket(B(bucket.b[key := msg])) <=
-      WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg)
-  {
-    calc {
-      WeightBucket(B(bucket.b[key := msg]));
-      { KeyContribution(B(bucket.b[key := msg]), key); }
-      WeightBucket(Image(B(bucket.b[key := msg]), ExcludeKey(key))) + WeightKey(key) + WeightMessage(msg);
-      {
-        ImageShape(B(bucket.b[key := msg]), ExcludeKey(key));
-        ImageShape(bucket, ExcludeKey(key));
-        WellMarshalledBucketsEq(Image(B(bucket.b[key := msg]), ExcludeKey(key)), Image(bucket, ExcludeKey(key)));
-      }
-      WeightBucket(Image(bucket, ExcludeKey(key))) + WeightKey(key) + WeightMessage(msg);
-      <=
-      WeightBucket(Image(bucket, ExcludeKey(key))) + (if key in bucket.b then WeightKey(key) + WeightMessage(bucket.b[key]) else 0)
-        + WeightKey(key) + WeightMessage(msg);
-        { KeyContribution(bucket, key); }
-      WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg);
-    }
-  }
+  
+  // lemma WeightBucketPut(bucket: Bucket, key: Key, msg: Message)
+  //   requires PreWFBucket(bucket)
+  //   requires BucketWellMarshalled(bucket)
+  //   ensures WeightBucket(B(bucket.b[key := msg])) <=
+  //     WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg)
+  // {
+  //   calc {
+  //     WeightBucket(B(bucket.b[key := msg]));
+  //     { KeyContribution(B(bucket.b[key := msg]), key); }
+  //     WeightBucket(Image(B(bucket.b[key := msg]), ExcludeKey(key))) + WeightKey(key) + WeightMessage(msg);
+  //     {
+  //       ImageShape(B(bucket.b[key := msg]), ExcludeKey(key));
+  //       ImageShape(bucket, ExcludeKey(key));
+  //       WellMarshalledBucketsEq(Image(B(bucket.b[key := msg]), ExcludeKey(key)), Image(bucket, ExcludeKey(key)));
+  //     }
+  //     WeightBucket(Image(bucket, ExcludeKey(key))) + WeightKey(key) + WeightMessage(msg);
+  //     <=
+  //     WeightBucket(Image(bucket, ExcludeKey(key))) + (if key in bucket.b then WeightKey(key) + WeightMessage(bucket.b[key]) else 0)
+  //       + WeightKey(key) + WeightMessage(msg);
+  //       { KeyContribution(bucket, key); }
+  //     WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg);
+  //   }
+  // }
 
+  // used
   lemma WeightBucketLeBucketList(blist: BucketList, i: int)
   requires 0 <= i < |blist|
   ensures WeightBucket(blist[i]) <= WeightBucketList(blist)
@@ -1497,6 +1521,7 @@ module BucketWeights {
     }
   }
 
+  // used
   lemma WeightBucketListInsert(blist: BucketList, pivots: PivotTable, key: Key, msg: Message)
     requires WFBucketList(blist, pivots)
     requires BucketWellMarshalled(blist[Route(pivots, key)])
@@ -1539,6 +1564,7 @@ module BucketWeights {
     }
   }
 
+  // used
   lemma WeightBucketIntersect(bucket: Bucket, keys: set<Key>)
     requires PreWFBucket(bucket)
     requires BucketWellMarshalled(bucket)
@@ -1552,6 +1578,7 @@ module BucketWeights {
     WeightBucketSubset(bucket, ikeys, AllKeys());
   }
 
+  // used
   lemma WeightBucketComplement(bucket: Bucket, keys: set<Key>)
     requires PreWFBucket(bucket)
     requires BucketWellMarshalled(bucket)
@@ -1564,8 +1591,4 @@ module BucketWeights {
     ImageIdentity(bucket, AllKeys());
     WeightBucketSubset(bucket, ikeys, AllKeys());
   }
-
-  lemma WeightMessageBound(msg: Message)
-  ensures WeightMessage(msg) <= 4 + 1024
-  { }
 }
