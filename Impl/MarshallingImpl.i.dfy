@@ -333,10 +333,7 @@ module MarshallingImpl {
   lemma WeightKeySeqLe(keys: seq<Key>)
   ensures WeightKeyList(keys) <= |keys| * (8 + KeyType.MaxLen() as int)
   {
-    if |keys| == 0 {
-    } else {
-      WeightKeySeqLe(DropLast(keys));
-    }
+    WeightKeyMultisetUpperBound(multiset(keys));
   }
 
   method strictlySortedKeySeqToVal(keys: seq<Key>)

@@ -66,22 +66,6 @@ module BucketWeights {
     }
   }
 
-  function {:opaque} ChooseKey(bucket: Bucket) : (key : Key)
-  requires |bucket.b| > 0
-  ensures key in bucket.b
-  {
-    var key :| key in bucket.b;
-    key
-  }
-
-  function {:opaque} Choose<A> (things: multiset<A>) : (result: A)
-    requires 0 < |things|
-    ensures result in things
-  {
-    var thing :| thing in things;
-    thing
-  }
-  
   function {:opaque} WeightKeyMultiset(keys: multiset<Key>) : (result: nat)
     ensures |keys| == 0 ==> result == 0
   {
@@ -101,6 +85,33 @@ module BucketWeights {
     MSets.reveal_IsCommutative();
     MSets.FoldSimpleAdditive<nat>(0, (x, y) => x + y, weights1, weights2);
     reveal_WeightKeyMultiset();
+  }
+
+  lemma WeightKeyMultisetUpperBound(keys: multiset<Key>)
+    ensures WeightKeyMultiset(keys) <= |keys| * (4 + KeyType.MaxLen() as nat)
+  {
+    if |keys| == 0 {
+    } else {
+      var key :| key in keys;
+      var rest := keys - multiset{key};
+      assert keys == rest + multiset{key};
+      calc <= {
+        WeightKeyMultiset(keys);
+        //WeightKeyMultiset(rest + multiset{key});
+        { WeightKeyMultisetAdditive(rest, multiset{key}); }
+        WeightKeyMultiset(rest) + WeightKeyMultiset(multiset{key});
+        { WeightKeyMultisetUpperBound(rest); }
+        |rest| * (4 + KeyType.MaxLen() as nat) + WeightKeyMultiset(multiset{key});
+        {
+          reveal_WeightKeyMultiset();
+          MSets.ApplySingleton(WeightKey, key);
+          MSets.FoldSimpleSingleton<nat>(0, (x, y) => x + y, WeightKey(key));
+        }
+        //|rest| * (4 + KeyType.MaxLen() as nat) + WeightKey(key);
+        //|rest| * (4 + KeyType.MaxLen() as nat) + (4 + KeyType.MaxLen() as nat);
+        |keys| * (4 + KeyType.MaxLen() as nat );
+      }
+    }
   }
   
   function {:opaque} WeightMessageMultiset(msgs: multiset<Message>) : (result: nat)
