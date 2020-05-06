@@ -1287,14 +1287,9 @@ module KVList {
   ensures 4*|kvl.keys| <= WeightBucket(I(kvl))
   decreases |kvl.keys|
   {
-    assert false;
-    if |kvl.keys| == 0 {
-    } else {
-      WFPrefix(kvl, |kvl.keys| - 1);
-      lenKeysLeWeightOver4(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)));
-      kvlWeightEq(kvl);
-      kvlWeightEq(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)));
-    }
+    var bucket := I(kvl);
+    KeyMultisetLeWeight(multiset(bucket.keys));
+    SetCardinality(bucket.keys);
   }
 
   // This is far weaker than it could be, but it's probably good enough.
