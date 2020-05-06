@@ -623,7 +623,7 @@ module PivotBetreeSpecRefinement {
   }
 
   lemma CutoffNodeAndKeepLeftAgree(node: PNode, node': PNode, pivot: Key, key: Key)
-  requires P.WFNode(node)
+  requires P.InvNode(node)
   requires P.WFNode(node')
   requires BucketListWellMarshalled(node.buckets)
   requires node' == P.CutoffNodeAndKeepLeft(node, pivot);
@@ -648,7 +648,7 @@ module PivotBetreeSpecRefinement {
   }
 
   lemma CutoffNodeAndKeepRightAgree(node: PNode, node': PNode, pivot: Key, key: Key)
-  requires P.WFNode(node)
+  requires P.InvNode(node)
   requires P.WFNode(node')
   requires BucketListWellMarshalled(node.buckets)
   requires node' == P.CutoffNodeAndKeepRight(node, pivot);
@@ -663,7 +663,7 @@ module PivotBetreeSpecRefinement {
   }
 
   lemma CutoffNodeAgree(node: PNode, node': PNode, l: Option<Key>, r: Option<Key>, key: Key)
-  requires P.WFNode(node)
+  requires P.InvNode(node)
   requires P.WFNode(node')
   requires BucketListWellMarshalled(node.buckets)
   requires node' == P.CutoffNode(node, l, r);
