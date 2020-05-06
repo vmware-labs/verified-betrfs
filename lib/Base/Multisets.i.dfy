@@ -17,7 +17,7 @@ module Multisets {
 
   function {:opaque} Apply<A, B>(fn: A ~> B, s: multiset<A>) : (result: multiset<B>)
     requires forall x | x in s :: fn.requires(x)
-    ensures |s| == 0 ==> |result| == 0
+    ensures |result| == |s|
     reads set x, o | x in s && o in fn.reads(x) :: o
   {
     if |s| == 0 then
@@ -96,6 +96,17 @@ module Multisets {
     }
   }
 
+  lemma ApplyMonotonic<A, B>(fn: A ~> B, s1: multiset<A>, s2: multiset<A>) 
+    requires s1 <= s2
+    requires forall x | x in s2 :: fn.requires(x)
+    ensures Apply(fn, s1) <= Apply(fn, s2)
+    ensures s1 < s2 ==> Apply(fn, s1) < Apply(fn, s2)
+  {
+    var rest := s2 - s1;
+    ApplyAdditive(fn, s1, rest);
+    assert s2 == s1 + rest;
+  }
+  
   predicate Foldable<A(!new)>(zero: A, add: (A, A) ~> A, inv: A -> bool)
     reads set x, y, o | inv(x) && inv(y) && o in add.reads(x, y) :: o
   {
