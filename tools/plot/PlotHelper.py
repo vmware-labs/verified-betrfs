@@ -128,20 +128,21 @@ def set_xlim(ax, experiments):
         xlim_right = max(xlim_right, exp.op_max/K())
     ax.set_xlim(left = 0, right=xlim_right)
 
+spectrum = ["black", "brown", "red", "orange", "yellow", "green", "indigo", "blue", "violet"]
+
 def plotThroughput(ax, experiments):
     ax.set_title("op throughput")
     a2 = ax.twinx()
     a2.set_ylabel("s")
-    colors = ["black", "brown", "red", "orange", "green", "blue", "violet"]
     for expi in range(len(experiments)):
         exp = experiments[expi]
-        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, scale=K)), color=colors[expi])
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, scale=K)), color=spectrum[expi])
         line.set_label(exp.nickname + " tput")
-        ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, window=1000*K(), scale=K)), color=colors[expi], linestyle="dotted")
+        ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, window=1000*K(), scale=K)), color=spectrum[expi], linestyle="dotted")
 
         def elapsedTime(opn):
             return exp.elapsed[opn]
-        line, = a2.plot(*plotVsKop(ax, exp, elapsedTime), color=colors[expi])
+        line, = a2.plot(*plotVsKop(ax, exp, elapsedTime), color=spectrum[expi])
         line.set_label(exp.nickname + " rate")
     ax.legend(loc="upper center")
     ax.set_yscale("log")
@@ -158,12 +159,11 @@ def plotThroughput(ax, experiments):
 def plotGrandUnifiedMemory(ax, experiments):
     ax.set_title("Grand Unified Memory")
 
-    colors = ["black", "brown", "red", "orange", "yellow", "green", "indigo", "blue", "violet"]
     linestyles=["solid", "dashed", "dotted", "-."]
     coloridx = [0]
     def plotOneExp(exp, plotkwargs):
         labelidx = [0]
-        plotkwargs["color"] = colors[coloridx[0] % len(colors)]
+        plotkwargs["color"] = spectrum[coloridx[0] % len(spectrum)]
         coloridx[0] += 1
 
         def plotWithLabel(lam, lbl):
