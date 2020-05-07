@@ -396,9 +396,9 @@ module PivotBetreeSpec {
   //// Useful functions and lemmas for Split, Merge (other redirects)
 
   function {:opaque} CutoffNodeAndKeepLeft(node: Node, pivot: Key) : (node': Node)
-  requires InvNode(node)
+  requires WFNode(node)
   ensures node.children.Some? <==> node'.children.Some?
-  ensures InvNode(node')
+  ensures WFNode(node')
   ensures |node'.pivotTable| > 0 ==> Keyspace.lt(Last(node'.pivotTable), pivot)
   ensures forall key | key in Last(node'.buckets).b :: Keyspace.lt(key, pivot)
   ensures G.Successors(node') <= G.Successors(node)
@@ -411,16 +411,16 @@ module PivotBetreeSpec {
     var leftChildren := if node.children.Some? then Some(node.children.value[.. cLeft + 1]) else None;
     var leftBuckets := SplitBucketListLeft(node.buckets, node.pivotTable, cLeft, pivot);
 
-    WFProperSplitBucketListLeft(node.buckets, node.pivotTable, cLeft, pivot);
+    WFSplitBucketListLeft(node.buckets, node.pivotTable, cLeft, pivot);
     WeightSplitBucketListLeft(node.buckets, node.pivotTable, cLeft, pivot);
 
     Node(leftPivots, leftChildren, leftBuckets)
   }
 
   function {:opaque} CutoffNodeAndKeepRight(node: Node, pivot: Key) : (node': Node)
-  requires InvNode(node)
+  requires WFNode(node)
   ensures node.children.Some? <==> node'.children.Some?
-  ensures InvNode(node')
+  ensures WFNode(node')
   ensures |node'.pivotTable| > 0 ==> Keyspace.lt(pivot, node'.pivotTable[0])
   ensures forall key | key in node'.buckets[0].b :: Keyspace.lte(pivot, key)
   ensures G.Successors(node') <= G.Successors(node)
@@ -433,14 +433,14 @@ module PivotBetreeSpec {
     var rightChildren := if node.children.Some? then Some(node.children.value[cRight ..]) else None;
     var rightBuckets := SplitBucketListRight(node.buckets, node.pivotTable, cRight, pivot);
 
-    WFProperSplitBucketListRight(node.buckets, node.pivotTable, cRight, pivot);
+    WFSplitBucketListRight(node.buckets, node.pivotTable, cRight, pivot);
     WeightSplitBucketListRight(node.buckets, node.pivotTable, cRight, pivot);
 
     Node(rightPivots, rightChildren, rightBuckets)
   }
 
   lemma CutoffNodeCorrect(node: Node, node1: Node, node2: Node, lpivot: Key, rpivot: Key)
-  requires InvNode(node)
+  requires WFNode(node)
   requires node1 == CutoffNodeAndKeepLeft(node, rpivot);
   requires node2 == CutoffNodeAndKeepRight(node1, lpivot);
   ensures |node2.pivotTable| > 0 ==> Keyspace.lt(lpivot, node2.pivotTable[0])
@@ -462,9 +462,9 @@ module PivotBetreeSpec {
   }
 
   function {:opaque} CutoffNode(node: Node, lpivot: Option<Key>, rpivot: Option<Key>) : (node' : Node)
-  requires InvNode(node)
+  requires WFNode(node)
   ensures node.children.Some? <==> node'.children.Some?
-  ensures InvNode(node')
+  ensures WFNode(node')
   ensures lpivot.Some? && |node'.pivotTable| > 0 ==> Keyspace.lt(lpivot.value, node'.pivotTable[0])
   ensures rpivot.Some? && |node'.pivotTable| > 0 ==> Keyspace.lt(Last(node'.pivotTable), rpivot.value)
   ensures lpivot.Some? ==> forall key | key in node'.buckets[0].b :: Keyspace.lte(lpivot.value, key)
@@ -543,8 +543,8 @@ module PivotBetreeSpec {
 
   predicate ValidSplit(f: NodeFusion)
   {
-    && InvNode(f.fused_parent)
-    && InvNode(f.fused_child)
+    && WFNode(f.fused_parent)
+    && WFNode(f.fused_child)
 
     && f.fused_parent.children.Some?
     && 0 <= f.slot_idx < |f.fused_parent.buckets|
@@ -590,9 +590,9 @@ module PivotBetreeSpec {
 
   predicate ValidMerge(f: NodeFusion)
   {
-    && InvNode(f.split_parent)
-    && InvNode(f.left_child)
-    && InvNode(f.right_child)
+    && WFNode(f.split_parent)
+    && WFNode(f.left_child)
+    && WFNode(f.right_child)
     && 0 <= f.slot_idx < |f.split_parent.buckets| - 1
     && f.num_children_left == |f.left_child.buckets|
     && f.split_parent.pivotTable[f.slot_idx] == f.pivot

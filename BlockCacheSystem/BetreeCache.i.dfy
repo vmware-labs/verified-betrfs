@@ -92,7 +92,7 @@ module BetreeCache refines BlockMachine {
       assert BC.ReadStep(k, s, BetreeStepReads(betreeStep)[i]);
     }
 
-    PivotBetreeSpecWFNodes.ValidStepWritesInvNodes(betreeStep);
+    PivotBetreeSpecWFNodes.ValidStepWritesWFNodes(betreeStep);
   }
 
   lemma BlockCacheMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, step: BC.Step)

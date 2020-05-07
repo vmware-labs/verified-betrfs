@@ -130,6 +130,7 @@ module BucketSuccessorLoopModel {
           var g' := GenPop(g);
           ProcessGeneratorResult(bucket, left', right', g', maxToFind, upTo, results');
         } else {
+          WellMarshalledBucketsEq(left', ClampEnd(bucket, UI.EInclusive(next.key)));
           assert left' == ClampEnd(bucket, UI.EInclusive(next.key));
           //var r := UI.SuccResultList(results', UI.EInclusive(next.key));
         }

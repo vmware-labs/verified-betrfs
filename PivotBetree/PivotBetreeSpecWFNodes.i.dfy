@@ -96,7 +96,7 @@ module PivotBetreeSpecWFNodes {
   lemma WFBucketListProperCutoffNodeAndKeepRight(
       node: G.Node,
       pivot: Key)
-  requires InvNode(node)
+  requires WFNode(node)
   requires WFBucketListProper(node.buckets, node.pivotTable);
   ensures
     var node' := CutoffNodeAndKeepRight(node, pivot);
@@ -157,7 +157,7 @@ module PivotBetreeSpecWFNodes {
   lemma BucketListWellMarshalledCutoffNodeAndKeepLeft(
       node: G.Node,
       pivot: Key)
-  requires InvNode(node)
+  requires WFNode(node)
   requires BucketListWellMarshalled(node.buckets)
   ensures
     var node' := CutoffNodeAndKeepLeft(node, pivot);
@@ -170,7 +170,7 @@ module PivotBetreeSpecWFNodes {
   lemma BucketListWellMarshalledCutoffNodeAndKeepRight(
       node: G.Node,
       pivot: Key)
-  requires InvNode(node)
+  requires WFNode(node)
   requires BucketListWellMarshalled(node.buckets)
   ensures
     var node' := CutoffNodeAndKeepRight(node, pivot);
