@@ -163,9 +163,15 @@ def main():
     elif arg.startswith("time_budget="):
       val_str = arg.split("=")[1]
       unit = val_str[-1]
-      mult = 1 if unit=="s" else 60 if unit=="m" else 3600 if unit=="h" else None
+      mult = 1 if unit=="s" else (
+                60 if unit=="m" else (
+                    3600 if unit=="h" else None))
       assert mult, "time_budget needs a unit"
-      time_budget_sec = float(val_str[:-1])
+      time_budget_sec = float(val_str[:-1]) * mult
+    elif arg.startswith("output="):
+      outpath = arg.split("=")[1]
+      assert not os.path.exists(outpath)
+      sys.stdout=open(outpath, "w")
     else:
       assert False, "unrecognized argument: " + arg
 
