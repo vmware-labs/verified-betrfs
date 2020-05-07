@@ -31,7 +31,10 @@ for arg in sys.argv[1:]:
     if nick=="output":
         output_filename = fn
     else:
-        exp = Experiment(fn, nick)
-        #exp.sortedOpns = exp.sortedOpns[:-5]    # hack: truncate teardown tail of completed exp where memory all goes to 0
-        experiments.append(exp)
+        try:
+            exp = Experiment(fn, nick)
+            #exp.sortedOpns = exp.sortedOpns[:-5]    # hack: truncate teardown tail of completed exp where memory all goes to 0
+            experiments.append(exp)
+        except ValueError:
+            print("Can't parse %s; skipping" % nick)
 plot_perf_compare(experiments)

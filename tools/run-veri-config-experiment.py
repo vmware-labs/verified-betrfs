@@ -112,6 +112,17 @@ def splice_value_into_bundle(name, value):
   with open("build/Bundle.cpp","w") as f:
     f.write(cpp)
 
+def find_loc_for_device(device):
+  scratch_config_filename = "scratch_locations.txt"
+  scratch_config_path = os.path.join(os.path.dirname(__file__), scratch_config_filename)
+  fp = open(scratch_config_path, "r")
+  mappings = {}
+  for k,v in [line.strip().split("=") for line in fp.readlines()]:
+    mappings[k] = v
+  if device not in mappings:
+    raise Exception("No scratch location for %s in %s" % (device, scratch_config_path))
+  return mappings[device]
+
 def main():
   workload = None
   device = None
@@ -214,14 +225,7 @@ def main():
   actuallyprint("workload: " + wl)
   sys.stdout.flush()
 
-  if device == "optane":
-    loc = "/scratch0/tjhance/ycsb/"
-  elif device == "disk":
-    #loc = "/home/tjhance/ycsb/"
-    #loc = "/tmp/veribetrfs/"
-    loc = "/media/jonh/portable-backup/scratch/"
-  else:
-    assert False
+  loc = find_loc_for_device(device)
 
   actuallyprint("Device type: " + device)
   actuallyprint("Using " + loc)
