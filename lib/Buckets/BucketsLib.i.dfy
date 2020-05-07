@@ -350,62 +350,6 @@ module BucketsLib {
     }
   }
   
-  lemma WellMarshalledMessageMultiset(bucket: Bucket)
-    requires PreWFBucket(bucket)
-    requires BucketWellMarshalled(bucket)
-    ensures Multisets.ValueMultiset(bucket.b) == multiset(bucket.msgs)
-    decreases |bucket.keys|
-  {
-    var fn := Multisets.ValueMultisetFn(bucket.b);
-    if |bucket.keys| == 0 {
-    } else if |bucket.keys| == 1 {
-      assert bucket.b.Keys == { bucket.keys[0] };
-      Multisets.ApplySingleton(fn, bucket.keys[0]);
-      WFWellMarshalledBucketMapI(bucket, 0);
-      Multisets.SingletonSet(bucket.keys[0]);
-    } else {
-      var lastkey := Last(bucket.keys);
-      var lastmsg := Last(bucket.msgs);
-      var lastb := map[lastkey := lastmsg];
-      var lastbucket := BucketMapWithSeq(lastb, [ lastkey ], [ lastmsg ]);
-
-      assert PreWFBucket(lastbucket) by {
-        reveal_BucketMapOfSeq();
-        WFWellMarshalledBucketMapI(bucket, |bucket.keys|-1);
-      }
-      StrictlySortedSubsequence(bucket.keys, |bucket.keys| - 1, |bucket.keys|);
-      
-      var prekeys := DropLast(bucket.keys);
-      var premsgs := DropLast(bucket.msgs);
-      var preb := MapRemove1(bucket.b, lastkey);
-      var prebucket := BucketDropLast(bucket);
-
-      BucketDropLastWF(bucket);
-      BucketDropLastWellMarshalled(bucket);
-
-      WellMarshalledMessageMultiset(prebucket);
-      WellMarshalledMessageMultiset(lastbucket);
-
-      assert multiset(bucket.b.Keys) == multiset(preb.Keys) + multiset(lastb.Keys);
-      Multisets.ApplyAdditive(fn, multiset(preb.Keys), multiset(lastb.Keys));
-      
-      calc {
-        Multisets.ValueMultiset(bucket.b);
-        Multisets.Apply(fn, multiset(bucket.b.Keys));
-        Multisets.Apply(fn, multiset(preb.Keys)) + Multisets.Apply(fn, multiset(lastb.Keys));
-        {
-          Multisets.ApplyEquivalentFns(fn, Multisets.ValueMultisetFn(preb), multiset(preb.Keys));
-          WFWellMarshalledBucketMapI(lastbucket, 0);
-          WFWellMarshalledBucketMapI(bucket, |bucket.keys| - 1);
-          Multisets.ApplyEquivalentFns(fn, Multisets.ValueMultisetFn(lastb), multiset(lastb.Keys));
-        }
-        multiset(prebucket.msgs) + multiset(lastbucket.msgs);
-        { assert bucket.msgs == premsgs + [ lastmsg ]; }
-        multiset(bucket.msgs);
-      }
-    }
-  }
-  
   predicate WFBucketAt(bucket: Bucket, pivots: PivotTable, i: int)
   requires WFPivots(pivots)
   {
@@ -501,6 +445,38 @@ module BucketsLib {
     )
   }
 
+  lemma BucketListItemFlushDependsOnlyOnB(parent: Bucket, child: Bucket,
+                                          parent': Bucket, child': Bucket, 
+                                          pivots: PivotTable, i: int)
+    requires WFPivots(pivots)
+    requires parent.b == parent'.b
+    requires ClampToSlot(child, pivots, i) == ClampToSlot(child', pivots, i)
+    ensures BucketListItemFlush(parent, child, pivots, i) == BucketListItemFlush(parent', child', pivots, i)
+  {
+    var c := ClampToSlot(child, pivots, i);
+    var c' := ClampToSlot(child', pivots, i);
+    var m := map key
+    | && (key in (child.b.Keys + parent.b.Keys)) // this is technically redundant but allows Dafny to figure out that the domain is finite
+      && Route(pivots, key) == i
+      && Merge(BucketGet(parent, key), BucketGet(child, key)) != IdentityMessage()
+      :: Merge(BucketGet(parent, key), BucketGet(child, key));
+    var cm := map key
+    | && (key in (c.b.Keys + parent.b.Keys)) // this is technically redundant but allows Dafny to figure out that the domain is finite
+      && Route(pivots, key) == i
+      && Merge(BucketGet(parent, key), BucketGet(c, key)) != IdentityMessage()
+      :: Merge(BucketGet(parent, key), BucketGet(c, key));
+
+   assert m == cm;
+
+   var m' := map key
+    | && (key in (child'.b.Keys + parent'.b.Keys)) // this is technically redundant but allows Dafny to figure out that the domain is finite
+      && Route(pivots, key) == i
+      && Merge(BucketGet(parent', key), BucketGet(child', key)) != IdentityMessage()
+      :: Merge(BucketGet(parent', key), BucketGet(child', key));
+
+    assert m == m';
+  }
+                                          
   function BucketListFlushPartial(parent: Bucket, children: BucketList, pivots: PivotTable, i: int) : (res : BucketList)
   requires WFPivots(pivots)
   requires 0 <= i <= |children|
@@ -512,6 +488,24 @@ module BucketsLib {
     )
   }
 
+  lemma BucketListFlushPartialDependsOnlyOnB(parent: Bucket, children: BucketList,
+                                             parent': Bucket, children': BucketList,
+                                             pivots: PivotTable, i: int)
+    requires WFPivots(pivots)
+    requires 0 <= i <= |children|
+    requires parent.b == parent'.b
+    requires |children| == |children'|
+    requires forall j | 0 <= j < |children| :: ClampToSlot(children[j], pivots, j) == ClampToSlot(children'[j], pivots, j)
+    ensures BucketListFlushPartial(parent, children, pivots, i) == BucketListFlushPartial(parent', children', pivots, i)
+  {
+    if i == 0 {
+    } else {
+      BucketListFlushPartialDependsOnlyOnB(parent, children, parent', children', pivots, i-1);
+      BucketListItemFlushDependsOnlyOnB(parent, children[i-1], parent', children'[i-1], pivots, i-1);
+      assert BucketListItemFlush(parent, children[i-1], pivots, i-1) == BucketListItemFlush(parent', children'[i-1], pivots, i-1);
+    }
+  }
+  
   function BucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable) : (res : BucketList)
   requires WFPivots(pivots)
   ensures |res| == |children|
