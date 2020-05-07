@@ -123,6 +123,16 @@ def find_loc_for_device(device):
     raise Exception("No scratch location for %s in %s" % (device, scratch_config_path))
   return mappings[device]
 
+def supakill(pgid):
+  # I had some evidence that a process lingered after I killed it.
+  # Maybe it took a while for the OS to tear it down? I don't have a
+  # hammer bigger than signal 9, so I'll just hit it a couple times.
+  os.killpg(pgid, signal.SIGKILL)
+  time.sleep(4)
+  os.killpg(pgid, signal.SIGKILL)
+  time.sleep(4)
+  os.killpg(pgid, signal.SIGKILL)
+
 def main():
   workload = None
   device = None
@@ -259,7 +269,7 @@ def main():
   actuallyprint("experiment pid %d pgid %d" % (proc.pid, proc_grp_id))
   while proc.poll() == None:
     if time.time() >= end_time:
-      os.killpg(proc_grp_id, signal.SIGKILL)
+      supakill(proc_grp_id)
       actuallyprint("time_budget exhausted; killed.")
       break
     time.sleep(10)
