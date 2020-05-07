@@ -26,9 +26,12 @@ Mi = Scale("Mi", 1<<20)
 Gi = Scale("Gi", 1<<30)
 
 class PlotHelper:
-    def __init__(self, numPlots, scale=1):
+    def __init__(self, numPlots, scale=1, columns=None):
         self.numPlots = numPlots
-        self.columns = 2 if numPlots > 4 else 1
+        if columns:
+            self.columns = columns
+        else:
+            self.columns = 2 if numPlots > 4 else 1
         self.rows = int((numPlots+0.5)/self.columns)
         # You may need: sudo pip3 install --upgrade matplotlib
         self.fig = plt.figure(#constrained_layout=True,
@@ -128,20 +131,21 @@ def set_xlim(ax, experiments):
         xlim_right = max(xlim_right, exp.op_max/K())
     ax.set_xlim(left = 0, right=xlim_right)
 
+spectrum = ["black", "brown", "red", "orange", "yellow", "green", "indigo", "blue", "violet"]
+
 def plotThroughput(ax, experiments):
     ax.set_title("op throughput")
     a2 = ax.twinx()
     a2.set_ylabel("s")
-    colors = ["black", "brown", "red", "orange", "green", "blue", "violet"]
     for expi in range(len(experiments)):
         exp = experiments[expi]
-        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, scale=K)), color=colors[expi])
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, scale=K)), color=spectrum[expi])
         line.set_label(exp.nickname + " tput")
-        ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, window=1000*K(), scale=K)), color=colors[expi], linestyle="dotted")
+        ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, window=1000*K(), scale=K)), color=spectrum[expi], linestyle="dotted")
 
         def elapsedTime(opn):
             return exp.elapsed[opn]
-        line, = a2.plot(*plotVsKop(ax, exp, elapsedTime), color=colors[expi])
+        line, = a2.plot(*plotVsKop(ax, exp, elapsedTime), color=spectrum[expi])
         line.set_label(exp.nickname + " rate")
     ax.legend(loc="upper center")
     ax.set_yscale("log")
@@ -158,12 +162,11 @@ def plotThroughput(ax, experiments):
 def plotGrandUnifiedMemory(ax, experiments):
     ax.set_title("Grand Unified Memory")
 
-    colors = ["black", "brown", "red", "orange", "yellow", "green", "indigo", "blue", "violet"]
     linestyles=["solid", "dashed", "dotted", "-."]
     coloridx = [0]
     def plotOneExp(exp, plotkwargs):
         labelidx = [0]
-        plotkwargs["color"] = colors[coloridx[0] % len(colors)]
+        plotkwargs["color"] = spectrum[coloridx[0] % len(spectrum)]
         coloridx[0] += 1
 
         def plotWithLabel(lam, lbl):
@@ -218,3 +221,30 @@ def plotGrandUnifiedMemory(ax, experiments):
     ax.set_ylim(bottom=0)
     set_xlim(ax, experiments)
     ax.legend(loc="upper left")
+
+def plotRocksIo(ax, experiments):
+    ax.set_title("rocks io")
+    window = 10*K()
+
+    def plotOneExp(exp, plotkwargs):
+        hit_ratio = LambdaTrace(lambda opn: exp.rocks_io_hits[opn]/exp.rocks_io_reads[opn], "frac")
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.rocks_io_hits, exp.rocks_io_reads, window=window)), **plotkwargs)
+        line.set_label(exp.nickname + " rio_ratio")
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.rocks_io_hits, exp.rocks_io_reads, window=100*window)), linestyle="dotted", **plotkwargs)
+    #        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.rocks_io_reads, exp.operation, window=window)))
+    #        line.set_label("rio_access")
+
+        miss_pages = LambdaTrace(lambda opn: (exp.rocks_io_reads[opn] - exp.rocks_io_hits[opn]), "pages")
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, miss_pages, exp.operation, scale=Unit, window=100*K())), **plotkwargs)
+        line.set_label(exp.nickname + " miss_per_opn (%s)" % miss_pages.units)
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, miss_pages, exp.operation, scale=Unit, window=1000*K())), linestyle="dotted", **plotkwargs)
+
+
+    for i in range(len(experiments)):
+        exp = experiments[i]
+        plotkwargs = {"color": spectrum[i % len(spectrum)]}
+        plotOneExp(exp, plotkwargs)
+
+    ax.set_ylim(bottom=0)
+    ax.legend()
+
