@@ -63,6 +63,28 @@ module BucketsLib {
       assert r.Values <= r'.Values + {Last(msgs)};
       r
   }
+
+  lemma BucketMapOfSeqGetIndex(keys: seq<Key>, msgs: seq<Message>, key: Key)
+  returns (i: int)
+  requires |keys| == |msgs|
+  requires key in BucketMapOfSeq(keys, msgs)
+  ensures 0 <= i < |keys|
+  ensures keys[i] == key
+  ensures msgs[i] == BucketMapOfSeq(keys, msgs)[key]
+  {
+    assume false;
+  }
+
+  lemma BucketMapOfSeqMapsIndex(keys: seq<Key>, msgs: seq<Message>, i: int)
+  requires |keys| == |msgs|
+  requires 0 <= i < |keys|
+  requires IsStrictlySorted(keys)
+  ensures keys[i] in BucketMapOfSeq(keys, msgs)
+  ensures msgs[i] == BucketMapOfSeq(keys, msgs)[keys[i]]
+  {
+    assume false;
+  }
+
   
   predicate WFBucketMap(bucket: BucketMap)
   {

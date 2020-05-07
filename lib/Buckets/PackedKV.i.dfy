@@ -467,55 +467,6 @@ module PackedKV {
     WellMarshalledBucketsEq(iresult, isplit);
   }
 
-  // TODO: add support for partial merges.  (slack is unused at the moment)
-  function mergeToOneChild(top: Pkv, from: nat, to: nat, bot: Pkv, slack: uint64) : (result: Option<Pkv>)
-    requires WF(top)
-    requires WF(bot)
-    requires from <= to <= NumKVPairs(top) as nat
-    ensures result.Some? ==> WF(result.value)
-    decreases to - from + NumKVPairs(bot) as nat
-  {
-    //assert 0 < NumKVPairs(top) ==> PSA.LastElement(top.keys) == Last(PSA.I(top.keys));
-    //assert 0 < NumKVPairs(bot) ==> PSA.LastElement(bot.keys) == Last(PSA.I(bot.keys));
-    if from == to then
-      Some(bot)
-    else if NumKVPairs(bot) == 0 then
-      Some(subPkv(top, from as uint64, to as uint64))
-    else if PSA.psaElement(top.keys, to as uint64 - 1) == PSA.LastElement(bot.keys) then (
-      var submerge := mergeToOneChild(DropLast(top), from, to-1, DropLast(bot), slack);
-      var key := PSA.psaElement(top.keys, to as uint64 - 1);
-      assert key == PSA.I(top.keys)[to-1];
-      var topmsg := bytestring_to_Message(PSA.psaElement(top.messages, to as uint64 - 1));
-      var botmsg := bytestring_to_Message(PSA.LastElement(bot.messages));
-      var msg := ValueMessage.Merge(topmsg, botmsg);
-      var bytemsg := Message_to_bytestring(msg);
-      if submerge == None || msg == IdentityMessage() then
-        submerge
-      else if !canAppend(submerge.value, key, bytemsg) then
-        None
-      else 
-        Some(AppendEncodedMessage(submerge.value, key, bytemsg))
-    ) else if Keyspace.lt(PSA.I(top.keys)[to - 1], Last(PSA.I(bot.keys))) then (
-      var submerge := mergeToOneChild(top, from, to, DropLast(bot), slack);
-      var key := PSA.LastElement(bot.keys);
-      assert key == PSA.I(bot.keys)[PSA.psaNumStrings(bot.keys)-1];
-      var msg := PSA.LastElement(bot.messages);
-      if submerge == None || !canAppend(submerge.value, key, msg) then
-        None
-      else 
-        Some(AppendEncodedMessage(submerge.value, key, msg))
-    ) else (
-      var submerge := mergeToOneChild(top, from, to-1, bot, slack);
-      var key := PSA.psaElement(top.keys, to as uint64 - 1);
-      assert key == PSA.I(top.keys)[to-1];
-      var msg := PSA.LastElement(top.messages);
-      if submerge == None || !canAppend(submerge.value, key, msg) then
-        None
-      else 
-        Some(AppendEncodedMessage(submerge.value, key, msg))
-    )    
-  }
-
   lemma psaTotalLengthBound(psa: PSA.Psa, maxlen: nat)
     requires PSA.WF(psa)
     requires forall i | 0 <= i < |PSA.I(psa)| :: |PSA.I(psa)[i]| <= maxlen
@@ -608,24 +559,6 @@ module PackedKV {
     else
       pivotIndexes(keys, Sequences.DropLast(pivots)) + [ Keyspace.IndexOfFirstGte(keys, Last(pivots)) ]
   }
-  
-  // function mergeToChildren(top: Pkv, pivots: seq<Key>, bots: seq<Pkv>, slack: nat) : (result: seq<Option<Pkv>>)
-  //   requires WF(top)
-  //   requires Integer_Order.IsSorted(pivotIdxs)
-  //   requires 0 < |bots| == |pivotIdxs|
-  //   requires Last(pivotIdxs) <= NumKVPairs(top) as nat
-  //   requires forall i | 0 <= i < |bots| :: WF(bots[i])
-  // {
-  //   // if |pivotIdxs| == 1 then
-  //   //   [ mergeToOneChild(top, 0, pivotIdxs[0], bots[0]) ]
-  //   // else
-  //   //   Integer_Order.SortedSubsequence(pivotIdxs, 0, |pivotIdxs| - 1);
-  //   //   Integer_Order.IsSortedImpliesLte(pivotIdxs, |pivotIdxs| - 2, |pivotIdxs| - 1);
-  //   //   var submerge := mergeToChildren(top, Sequences.DropLast(pivotIdxs), Sequences.DropLast(bots));
-  //   //   var lastmerge := mergeToOneChild(top, pivotIdxs[|pivotIdxs|-2], Last(pivotIdxs), Last(bots));
-  //   //   submerge + [ lastmerge ]
-  // }
-
 }
 
 module DynamicPkv {
