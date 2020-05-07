@@ -84,19 +84,7 @@ def plot_perf_timeseries(exp):
 
     plotGrandUnifiedMemory(plotHelper.nextAxis(depth=2), [exp])
 
-    def plotCpuTime(ax):
-        ax.set_title("CPU time")
-        ticksPerSecond = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
-        user_sec = LambdaTrace(lambda opn: exp.utime[opn]/ticksPerSecond, "s")
-        sys_sec = LambdaTrace(lambda opn: exp.stime[opn]/ticksPerSecond, "s")
-
-        #print("ticksPerSecond", ticksPerSecond)
-        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, user_sec, exp.elapsed)))
-        line.set_label("user")
-        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, sys_sec, exp.elapsed)))
-        line.set_label("sys")
-        ax.legend()
-    plotCpuTime(plotHelper.nextAxis())
+    plotCpuTime(plotHelper.nextAxis(), [exp])
 
 # Moved to Grand Unified
 #    def plotVeriInternalMem(ax):
@@ -134,7 +122,7 @@ def plot_perf_timeseries(exp):
 
     def plotProcIoBytes(ax):
         ax.set_title("proc io bytes")
-        window = 100*K()
+        window = 1000*K()
         line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.procio_read_bytes, exp.operation, scale=Ki, window=window)), color="green")
         line.set_label("read")
         line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.procio_write_bytes, exp.operation, scale=Ki, window=window)), color="orange")

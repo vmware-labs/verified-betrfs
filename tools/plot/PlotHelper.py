@@ -6,6 +6,7 @@ import numpy as np
 import sys
 import operator
 import bisect
+import os
 
 
 class Scale:
@@ -131,7 +132,7 @@ def set_xlim(ax, experiments):
         xlim_right = max(xlim_right, exp.op_max/K())
     ax.set_xlim(left = 0, right=xlim_right)
 
-spectrum = ["black", "brown", "red", "orange", "yellow", "green", "indigo", "blue", "violet"]
+spectrum = ["black", "brown", "red", "orange", "green", "indigo", "blue", "violet"]
 
 def plotThroughput(ax, experiments):
     ax.set_title("op throughput")
@@ -248,3 +249,46 @@ def plotRocksIo(ax, experiments):
     ax.set_ylim(bottom=0)
     ax.legend()
 
+
+def plotCpuTime(ax, experiments):
+    ax.set_title("CPU time")
+
+    def plotOneExp(exp, plotkwargs):
+        ticksPerSecond = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
+        user_sec = LambdaTrace(lambda opn: exp.utime[opn]/ticksPerSecond, "s")
+        sys_sec = LambdaTrace(lambda opn: exp.stime[opn]/ticksPerSecond, "s")
+
+        #print("ticksPerSecond", ticksPerSecond)
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, user_sec, exp.elapsed)), **plotkwargs)
+        line.set_label(exp.nickname+" user")
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, sys_sec, exp.elapsed)), **plotkwargs, linestyle="dotted")
+        line.set_label(exp.nickname+" sys")
+
+    for i in range(len(experiments)):
+        exp = experiments[i]
+        plotkwargs = {"color": spectrum[i % len(spectrum)]}
+        plotOneExp(exp, plotkwargs)
+
+    set_xlim(ax, experiments)
+    ax.set_ylim(bottom=0)
+    ax.legend()
+
+def plotProcIoBytes(ax, experiments):
+    ax.set_title("proc io bytes")
+
+    def plotOneExp(exp, plotkwargs):
+        window = 1000*K()
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.procio_read_bytes, exp.operation, scale=Ki, window=window)), **plotkwargs)
+        line.set_label(exp.nickname + " read")
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.procio_write_bytes, exp.operation, scale=Ki, window=window)), linestyle="dotted", **plotkwargs)
+        line.set_label(exp.nickname + " write")
+
+    for i in range(len(experiments)):
+        exp = experiments[i]
+        plotkwargs = {"color": spectrum[i % len(spectrum)]}
+        plotOneExp(exp, plotkwargs)
+
+    ax.grid(which="major", color="#dddddd")
+    set_xlim(ax, experiments)
+    ax.set_ylim(bottom=0)
+    ax.legend()

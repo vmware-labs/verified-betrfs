@@ -17,11 +17,17 @@ def plot_perf_compare(experiments):
     try: plotThroughput(plotHelper.nextAxis(depth=2), experiments)
     except: raise
     
-    try: plotGrandUnifiedMemory(plotHelper.nextAxis(depth=2), experiments)
+#    try: plotGrandUnifiedMemory(plotHelper.nextAxis(depth=2), experiments)
+#    except: raise
+
+    try: plotCpuTime(plotHelper.nextAxis(depth=2), experiments)
     except: raise
 
-    try: plotRocksIo(plotHelper.nextAxis(depth=2), experiments)
+    try: plotProcIoBytes(plotHelper.nextAxis(depth=2), experiments)
     except: raise
+
+#    try: plotRocksIo(plotHelper.nextAxis(depth=2), experiments)
+#    except: raise
 
     plotHelper.save(output_filename)
 
