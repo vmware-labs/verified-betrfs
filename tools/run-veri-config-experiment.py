@@ -171,7 +171,8 @@ def main():
     elif arg.startswith("output="):
       outpath = arg.split("=")[1]
       assert not os.path.exists(outpath)
-      sys.stdout=open(outpath, "w")
+      fp = open(outpath, "w")
+      os.dup2(fp.fileno(), 1)   # replace stdout for this program and children
     else:
       assert False, "unrecognized argument: " + arg
 
