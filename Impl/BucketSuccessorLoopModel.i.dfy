@@ -53,6 +53,7 @@ module BucketSuccessorLoopModel {
       upTo: Option<Key>) : UI.SuccResultList
   requires |buckets| >= 1
   requires maxToFind >= 1
+  requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
   {
     var g := GenFromBucketStackWithLowerBound(buckets, start);
     ProcessGenerator(g, maxToFind, upTo, [])
@@ -143,7 +144,6 @@ module BucketSuccessorLoopModel {
       var ce := ClampEnd(bucket, 
           if upTo.Some? then UI.EExclusive(upTo.value) else UI.PositiveInf);
       assert left.b == ce.b;
-      WellMarshalledBucketsEq(left, ce);
       //var r := UI.SuccResultList(results,
       //    if upTo.Some? then UI.EExclusive(upTo.value) else UI.PositiveInf);
     }
@@ -167,6 +167,7 @@ module BucketSuccessorLoopModel {
   requires |buckets| >= 1
   requires maxToFind >= 1
   requires BucketListWellMarshalled(buckets)
+  requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
   requires upTo.Some? && (start.SInclusive? || start.SExclusive?) ==>
       Keyspace.lt(start.key, upTo.value)
   ensures var r := GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);

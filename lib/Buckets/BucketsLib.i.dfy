@@ -804,6 +804,35 @@ module BucketsLib {
     assert WFBucketAt(blist'[slot+1], pivots', slot+1);
   }
 
+  lemma WellMarshalledSplitBucketInList(blist: BucketList, slot: int, pivot: Key)
+  requires 0 <= slot < |blist|
+  requires BucketListWellMarshalled(blist)
+  ensures BucketListWellMarshalled(SplitBucketInList(blist, slot, pivot))
+  {
+    var blist' := SplitBucketInList(blist, slot, pivot);
+    reveal_SplitBucketInList();
+    assert BucketWellMarshalled(SplitBucketLeft(blist[slot], pivot))
+      by { reveal_SplitBucketLeft(); }
+    assert BucketWellMarshalled(SplitBucketRight(blist[slot], pivot))
+      by { reveal_SplitBucketRight(); }
+    forall i | 0 <= i < |blist'|
+    ensures BucketWellMarshalled(blist'[i])
+    {
+      if i < slot {
+        assert BucketWellMarshalled(blist[i]);
+      } else if i > slot+1 {
+        assert BucketWellMarshalled(blist[i-1]);
+      }
+    }
+  }
+
+  lemma BucketListWellMarshalledSlice(blist: BucketList, i: int, j: int)
+  requires BucketListWellMarshalled(blist)
+  requires 0 <= i <= j <= |blist|
+  ensures BucketListWellMarshalled(blist[i..j])
+  {
+  }
+
   // This is useful for proving NodeHasWFBuckets(node')
   // for indices over the given interval [a, b],
   // assuming we already know the buckets and pivots come from some other
@@ -842,6 +871,16 @@ module BucketsLib {
 
   lemma WFMergeBucketsInList(blist: BucketList, slot: int, pivots: PivotTable)
   requires 0 <= slot < |blist| - 1
+  requires WFBucketList(blist, pivots)
+  ensures WFBucketList(MergeBucketsInList(blist, slot), remove(pivots, slot))
+  {
+    reveal_MergeBucketsInList();
+    WFPivotsRemoved(pivots, slot);
+    reveal_MergeBuckets();
+  }
+
+  lemma WFProperMergeBucketsInList(blist: BucketList, slot: int, pivots: PivotTable)
+  requires 0 <= slot < |blist| - 1
   requires WFBucketListProper(blist, pivots)
   ensures WFBucketListProper(MergeBucketsInList(blist, slot), remove(pivots, slot))
   {
@@ -855,6 +894,14 @@ module BucketsLib {
         blist, pivots, blist', pivots', slot+1, |blist'|-1, -1);
     reveal_MergeBuckets();
     assert WFBucketAt(blist'[slot], pivots', slot);
+  }
+
+  lemma WellMarshalledMergeBucketsInList(blist: BucketList, slot: int)
+  requires 0 <= slot < |blist| - 1
+  requires BucketListWellMarshalled(blist)
+  ensures BucketListWellMarshalled(MergeBucketsInList(blist, slot))
+  {
+    reveal_MergeBucketsInList();
   }
 
   lemma SplitOfMergeBucketsInList(blist: BucketList, slot: int, pivots: PivotTable)

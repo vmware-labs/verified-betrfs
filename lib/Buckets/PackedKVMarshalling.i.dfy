@@ -93,7 +93,7 @@ module PackedKVMarshalling {
   {
     var vkl := ComputeValidStringLens(pkv.keys, KeyType.MaxLen());
     var vml := ComputeValidStringLens(pkv.messages, ValueType.MaxLen());
-    assume IdentityMessage() !in IMessages(pkv.messages); // FIXME(robj): can we eliminate this from WF()?
+    assert IdentityMessage() !in IMessages(pkv.messages);
     result :=
       && PSA.psaNumStrings(pkv.keys) == PSA.psaNumStrings(pkv.messages)
       && vkl

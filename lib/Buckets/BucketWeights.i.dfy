@@ -977,7 +977,7 @@ module BucketWeights {
 
   lemma WeightMergeBucketsInListLe(blist: BucketList, i: int, pivots: PivotTable)
   requires 0 <= i < |blist| - 1
-  requires WFBucketListProper(blist, pivots)
+  requires WFBucketList(blist, pivots)
   ensures WeightBucketList(MergeBucketsInList(blist, i)) <= WeightBucketList(blist)
   {
     assume false;

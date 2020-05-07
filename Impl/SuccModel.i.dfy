@@ -55,6 +55,7 @@ module SuccModel {
   requires ref in s.ephemeralIndirectionTable.graph
   requires node == s.cache[ref]
   requires maxToFind >= 1
+  requires forall i | 0 <= i < |acc| :: WFBucket(acc[i])
   ensures var (s', io, sr) := res;
     && s'.Ready?
     && WFBCVars(s')
@@ -108,6 +109,7 @@ module SuccModel {
   requires io.IOInit?
   requires maxToFind >= 1
   requires ref in s.ephemeralIndirectionTable.graph
+  requires forall i | 0 <= i < |acc| :: WFBucket(acc[i])
   ensures var (s', io, sr) := res;
     && s'.Ready?
     && WFBCVars(s')
@@ -201,6 +203,7 @@ module SuccModel {
   requires s.Ready?
   requires io.IOInit?
   requires maxToFind >= 1
+  requires forall i | 0 <= i < |acc| :: WFBucket(acc[i])
   requires ref in s.ephemeralIndirectionTable.graph
   requires |lookup| > 0 ==> PBS.WFLookupForKey(lookup, startKey)
   requires |lookup| > 0 ==> Last(lookup).node.children.Some?

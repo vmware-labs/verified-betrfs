@@ -30,6 +30,7 @@ module MarshallingModel {
   import IndirectionTableModel
   import SeqComparison
   import Marshalling
+  import PackedKVMarshalling
 
   import BT = PivotBetreeSpec`Internal
 
@@ -71,14 +72,23 @@ module MarshallingModel {
       var lastbucket := Last(buckets);
       var lastv := Last(v.a);
 
-      assume false; 
+      assert WeightBucket(lastbucket) <= SizeOfV(lastv)
+      by {
+        assume false; // TODO(robj)
+        PackedKVMarshalling.SizeOfVWellMarshalledPackedKVIsBucketWeight(
+            PackedKVMarshalling.fromVal(v).value);
+      }
+
       calc <= {
         WeightBucketList(buckets);
         { reveal_WeightBucketList(); }
         WeightBucketList(prebuckets) + WeightBucket(lastbucket);
         { WeightBucketListLteSize(prev, prebuckets); }
         SizeOfV(prev) + WeightBucket(lastbucket);
-        //{ PkvMarshalling.SizeOfVWellMarshalledPackedKVIsBucketWeight(    FIXME
+        {
+          lemma_SeqSum_prefix(prev.a, lastv);
+          assert v.a == prev.a + [lastv];
+        }
         SizeOfV(v);
       }
     }
