@@ -277,6 +277,9 @@ void ycsbRun(
     int display_interval_ms = 10000;
     int next_display_ms = display_interval_ms;
 
+    int cdf_reset_interval_ops = 100000;
+    int next_cdf_reset_ops = cdf_reset_interval_ops;
+
 #define HACK_EVICT_PERIODIC 0
 #if HACK_EVICT_PERIODIC
 // An experiment that demonstrated that the heap was filling with small
@@ -332,6 +335,12 @@ void ycsbRun(
         if (elapsed_ms >= next_display_ms) {
             periodicReport(db, "run", elapsed_ms, i);
             next_display_ms += display_interval_ms;
+        }
+
+        if (i >= next_cdf_reset_ops) {
+          IOAccounting::report_histograms();
+          IOAccounting::reset_histograms();
+          next_cdf_reset_ops += cdf_reset_interval_ops;
         }
 
         if (i >= next_sync_ops) {
@@ -466,14 +475,14 @@ public:
 
     inline void insert(const string& key, const string& value) {
         static struct rocksdb::WriteOptions woptions = rocksdb::WriteOptions();
-        woptions.disableWAL = true;
+//        woptions.disableWAL = true;
         rocksdb::Status status = db.Put(woptions, rocksdb::Slice(key), rocksdb::Slice(value));
         assert(status.ok());
     }
 
     inline void update(const string& key, const string& value) {
         static struct rocksdb::WriteOptions woptions = rocksdb::WriteOptions();
-        woptions.disableWAL = true;
+//        woptions.disableWAL = true;
         rocksdb::Status status = db.Put(woptions, rocksdb::Slice(key), rocksdb::Slice(value));
         assert(status.ok());
     }

@@ -3,6 +3,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <x86intrin.h>
 
 namespace IOAccounting {
 
@@ -17,5 +18,9 @@ public:
 extern Record record;
 
 void report();
+void reset_histograms();
+void report_histograms();
+void record_read_latency(unsigned long time_cycles);
+void record_write_latency(unsigned long time_cycles);
 
 } // namespace IOAccounting

@@ -1084,3 +1084,55 @@ entirely by cache hit ratio.
   ** AND RUN ON SPLINTER1
   1MB is closer to DAM size.
 [ ] In-memory journal should be small, but disk journal very big
+
+Tired of clobbering data files?  set -o noclobber
+
+time tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=0.7gb pillow=1.2 rocks time_budget=3h output=malloc-exp/rocks-0.84-uniform-20.data
+time tools/run-veri-config-experiment.py workload=ycsb/wka-zipfian.spec device=disk ram=0.7gb pillow=1.2 rocks time_budget=3h output=malloc-exp/rocks-0.84-zipfian-20.data
+time tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=0.7gb pillow=1.2 config-64kb time_budget=3h output=malloc-exp/veri-0.84-uniform-64kb-20.data
+time tools/run-veri-config-experiment.py workload=ycsb/wka-zipfian.spec device=disk ram=0.7gb pillow=1.2 config-64kb time_budget=3h output=malloc-exp/veri-0.84-zipfian-64kb-20.data
+
+time tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=flash ram=0.7gb pillow=1.2 config-64kb time_budget=3h output=malloc-exp/veri-0.84-uniform-64kb-flash-21.data
+time tools/run-veri-config-experiment.py workload=ycsb/wka-zipfian.spec device=flash ram=0.7gb pillow=1.2 config-64kb time_budget=3h output=malloc-exp/veri-0.84-zipfian-64kb-flash-21.data
+time tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=flash ram=0.7gb pillow=1.2 rocks time_budget=3h output=malloc-exp/rocks-0.84-uniform-flash-21.data
+time tools/run-veri-config-experiment.py workload=ycsb/wka-zipfian.spec device=flash ram=0.7gb pillow=1.2 rocks time_budget=3h output=malloc-exp/rocks-0.84-zipfian-flash-21.data
+
+
+tools/plot/perf-compare.py rocks-u=malloc-sp1/rocks-0.84-uniform-20.data rocks-z=malloc-sp1/rocks-0.84-zipfian-20.data veri-u=malloc-sp1/veri-0.84-uniform-64kb-20.data veri-z=malloc-sp1/veri-0.84-zipfian-64kb-20.data output=/tmp/compare-uz.png
+
+Ideas from Andrea:
+- Doesn't it kind of look like we're doing *fewer* IOs per query?
+
+- Maybe marshalling is killing us. Profile! After mode change.
+You'll need lots of samples since cpu ratio is so low.
+perf record -g -F 30000 -p pid; sleep 10 
+
+- trace operations by using a real-time clock inside the code
+
+Further supporting this marshalling hypothesis:
+In Uniform-vs-Zipfian, both systems use about 40% as many IOs in the Zipfian
+case.
+tput @4000 veri u: 230 z: 500  2x
+proc-io-KB: @4000 veri z: 7 u: 17  40%
+proc-io-KB: @4000 rocks: z: 1 u: 2.5 : 2.5x
+@4000 rocks u:300 z: 1500 5x
+
+So why does rocks get 5x slower when doing 2.5x the IO?
+We think there's no way they're pipelining IO, because there is never
+more than one outstanding.
+
+Pin to a single core?
+  taskset is doing that from run-veri-config-experiment
+Is /proc/self/stat measuring cputime from threads?
+
+[ ] Turn on rocks write-ahead-logging: woptions.disableWAL = true;
+[ ] Hook rocks to measure IO latency CDF.
+[X] Disable swap. sudo swapoff -a : just turned it all off on splinter
+
+tools/plot/perf-compare.py \
+rocks-swapon=malloc-sp1/rocks-0.84-uniform-21.data \
+rocks-swapoff=malloc-sp1/rocks-0.84-uniform-swapoff-22.data \
+veri-swapon=malloc-sp1/veri-0.84-uniform-64kb-20.data \
+veri-swapoff=malloc-sp1/veri-0.84-uniform-64kb-swapoff-22.data \
+output=/tmp/compare-swapoff.png
+
