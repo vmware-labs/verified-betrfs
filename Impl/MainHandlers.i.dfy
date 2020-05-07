@@ -28,6 +28,7 @@ module MainHandlers refines Main {
   import FullImpl
   import MkfsImpl
   import MkfsModel
+  import Bounds  // jonh hack for metadata recording
 
   import BlockJournalCache
   import BBC = BetreeCache
@@ -61,11 +62,23 @@ module MainHandlers refines Main {
     SM.IVars(hs.s.I())
   }
 
+  method PrintMetadata()
+  {
+    print "metadata NodeBlockSize ", Bounds.NodeBlockSizeUint64(), "\n";
+    print "metadata MaxTotalBucketWeight ", Bounds.MaxTotalBucketWeightUint64(), "\n";
+    print "metadata MaxCacheSize ", Bounds.MaxCacheSizeUint64(), "\n";
+    print "metadata MaxNumChildren ", Bounds.MaxNumChildrenUint64(), "\n";
+    print "metadata IndirectionTableBlockSize ", Bounds.IndirectionTableBlockSizeUint64(), "\n";
+    print "metadata MinNodeBlockIndex ", Bounds.MinNodeBlockIndexUint64(), "\n";
+    print "metadata DiskNumJournalBlocks ", Bounds.DiskNumJournalBlocksUint64(), "\n";
+  }
+
   method InitState() returns (k: Constants, hs: HeapState)
     // conditions inherited:
     //ensures Inv(k, hs)
     //ensures ADM.M.Init(Ik(k), I(k, hs))
   {
+    PrintMetadata();
     var s := new Variables(k);
     hs := new HeapState(s, {});
     hs.Repr := s.Repr + {s};
