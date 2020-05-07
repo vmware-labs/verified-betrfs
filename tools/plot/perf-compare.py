@@ -9,8 +9,10 @@ from parser import Experiment
 from PlotHelper import *
 from TimeSeries import *
 
+output_filename = "compare.png"
+
 def plot_perf_compare(experiments):
-    plotHelper = PlotHelper(4, scale=2)
+    plotHelper = PlotHelper(6, scale=2, columns=1)
 
     try: plotThroughput(plotHelper.nextAxis(depth=2), experiments)
     except: raise
@@ -18,12 +20,18 @@ def plot_perf_compare(experiments):
     try: plotGrandUnifiedMemory(plotHelper.nextAxis(depth=2), experiments)
     except: raise
 
-    plotHelper.save("compare.png")
+    try: plotRocksIo(plotHelper.nextAxis(depth=2), experiments)
+    except: raise
+
+    plotHelper.save(output_filename)
 
 experiments = []
 for arg in sys.argv[1:]:
     nick,fn = arg.split("=")
-    exp = Experiment(fn, nick)
-    exp.sortedOpns = exp.sortedOpns[:-5]    # hack: truncate teardown tail of completed exp where memory all goes to 0
-    experiments.append(exp)
+    if nick=="output":
+        output_filename = fn
+    else:
+        exp = Experiment(fn, nick)
+        #exp.sortedOpns = exp.sortedOpns[:-5]    # hack: truncate teardown tail of completed exp where memory all goes to 0
+        experiments.append(exp)
 plot_perf_compare(experiments)

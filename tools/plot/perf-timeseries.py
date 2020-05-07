@@ -135,13 +135,52 @@ def plot_perf_timeseries(exp):
     def plotProcIoBytes(ax):
         ax.set_title("proc io bytes")
         window = 100*K()
-        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.procio_read_bytes, exp.operation, scale=Ki, window=window)))
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.procio_read_bytes, exp.operation, scale=Ki, window=window)), color="green")
         line.set_label("read")
-        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.procio_write_bytes, exp.operation, scale=Ki, window=window)))
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.procio_write_bytes, exp.operation, scale=Ki, window=window)), color="orange")
         line.set_label("write")
+
+        rio_bytes = LambdaTrace(lambda opn: exp.rocks_io_reads[opn]*4096, "B")
+#        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, rio_bytes, exp.operation, scale=Ki, window=window)))
+#        line.set_label("rio_access")
+
+        miss_bytes = LambdaTrace(lambda opn: (exp.rocks_io_reads[opn] - exp.rocks_io_hits[opn])*4096, "B")
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, miss_bytes, exp.operation, scale=Ki, window=window)), linestyle="dotted", color="green")
+        line.set_label("rio_miss")
+
+        miss_bytes = LambdaTrace(lambda opn: (exp.rocks_io_reads[opn])*4096, "B")
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, miss_bytes, exp.operation, scale=Ki, window=window)), linestyle="dotted", color="blue")
+
+        line.set_label("rio_read")
+
+        miss_bytes = LambdaTrace(lambda opn: (exp.rocks_io_writes[opn])*4096, "B")
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, miss_bytes, exp.operation, scale=Ki, window=window)), linestyle="dotted", color="black")
+        line.set_label("rio_write")
+
         ax.legend()
-    try: plotProcIoBytes(plotHelper.nextAxis())
+    try: plotProcIoBytes(plotHelper.nextAxis(depth=2))
     except: raise
+
+    def plotRocksIo(ax):
+        ax.set_title("rocks io")
+        window = 10*K()
+
+        hit_ratio = LambdaTrace(lambda opn: exp.rocks_io_hits[opn]/exp.rocks_io_reads[opn], "frac")
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.rocks_io_hits, exp.rocks_io_reads, window=window)))
+        line.set_label("rio_ratio")
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.rocks_io_hits, exp.rocks_io_reads, window=100*window)), linestyle="dotted")
+#        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.rocks_io_reads, exp.operation, window=window)))
+#        line.set_label("rio_access")
+
+        miss_pages = LambdaTrace(lambda opn: (exp.rocks_io_reads[opn] - exp.rocks_io_hits[opn]), "pages")
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, miss_pages, exp.operation, scale=Unit)))
+        line.set_label("miss_per_opn (%s)" % miss_pages.units)
+
+
+        ax.set_ylim(bottom=0)
+        ax.legend()
+
+    plotRocksIo(plotHelper.nextAxis())
 
     def plotPgfault(ax):
         ax.set_title("cgroups-stat-pgfault")
@@ -149,8 +188,8 @@ def plot_perf_timeseries(exp):
         line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, trace, exp.operation, scale=Unit)), "red")
         line.set_label(trace.label)
         ax.legend()
-    try: plotPgfault(plotHelper.nextAxis())
-    except: raise
+#    try: plotPgfault(plotHelper.nextAxis())
+#    except: raise
     
     ########################################
     plotHelper.save("%s-perf.png" % exp.filename)

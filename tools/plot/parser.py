@@ -134,11 +134,15 @@ class Experiment:
         self.kvl_underlying_count = Trace("underlying_cnt", "cnt")
         self.accum = {}
 
+        self.rocks_io_reads = Trace("rocksio_reads", "page")
+        self.rocks_io_hits = Trace("rocksio_hits", "page")
+        self.rocks_io_writes = Trace("rocksio_writes", "page")
+
         self.parse()
         self.sortedOpns = list(self.operation.data.keys())
         self.sortedOpns.sort()
         self.op_max = max(self.sortedOpns)
-    
+
     def parse(self):
         print("Parsing %s" % self.filename)
         cur_op = 0
@@ -222,7 +226,7 @@ class Experiment:
                 if label not in self.microscopes:
                     self.microscopes[label] = ARows(label)
                 self.microscopes[label][cur_op] = arow
-            
+
             if line.startswith("allocationreport stop underyling_count"):
                 self.kvl_underlying_count[cur_op] = int(fields[3])
                 self.kvl_underlying[cur_op] = int(fields[5])
@@ -241,6 +245,12 @@ class Experiment:
                 if accum_key not in self.accum:
                     self.accum[accum_key] = Trace(accum_key, "unk")
                 self.accum[accum_key][cur_op] = int(value)
+
+            if line.startswith("rocks_io_model"):
+                self.rocks_io_reads[cur_op] = int(fields[6])
+                self.rocks_io_hits[cur_op] = int(fields[8])
+                if len(fields)>=10:
+                    self.rocks_io_writes[cur_op] = int(fields[10])
 
             if line.startswith("cgroups-memory.stat"):
                 statName = fields[1]
