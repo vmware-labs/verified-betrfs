@@ -13,7 +13,7 @@ module KMBPKVOps {
   import ValueType = ValueType`Internal
   import opened Sequences
 
-  function MessageSeq_to_bytestringSeq(msgs: seq<KMB.Model.Messages.Message>) : (result: seq<seq<byte>>)
+  function messageSeq_to_bytestringSeq(msgs: seq<KMB.Model.Messages.Message>) : (result: seq<seq<byte>>)
     requires forall i | 0 <= i < |msgs| :: msgs[i].Define?
     ensures |result| == |msgs|
     ensures forall i | 0 <= i < |result| :: result[i] == PKV.Message_to_bytestring(msgs[i])
@@ -21,7 +21,37 @@ module KMBPKVOps {
     if |msgs| == 0 then
       []
     else
-      MessageSeq_to_bytestringSeq(DropLast(msgs)) + [ PKV.Message_to_bytestring(Last(msgs)) ]
+      messageSeq_to_bytestringSeq(DropLast(msgs)) + [ PKV.Message_to_bytestring(Last(msgs)) ]
+  }
+
+  function bytestringSeq_to_MessageSeq(strings: seq<seq<byte>>) : (result: seq<KMB.Model.Messages.Message>)
+    requires forall i | 0 <= i < |strings| :: |strings[i]| < 0x1_0000_0000
+    ensures |result| == |strings|
+    ensures forall i | 0 <= i < |strings| :: result[i] == PKV.bytestring_to_Message(strings[i])
+  {
+    if |strings| == 0 then
+      []
+    else
+      bytestringSeq_to_MessageSeq(DropLast(strings)) + [ PKV.bytestring_to_Message(Last(strings)) ]
+  }
+  
+  method MessageArray_to_bytestringSeq(msgs: array<KMB.Model.Messages.Message>, nmsgs: uint64) returns (result: seq<seq<byte>>)
+    requires nmsgs as nat <= msgs.Length
+    requires forall i | 0 <= i < nmsgs as int :: msgs[i].Define?
+    ensures result[..] == messageSeq_to_bytestringSeq(msgs[..nmsgs])
+  {
+    var aresult := new seq<byte>[nmsgs];
+    var i: uint64 := 0;
+
+    while i < nmsgs
+      invariant i <= nmsgs
+      invariant aresult[..i] == messageSeq_to_bytestringSeq(msgs[..i])
+    {
+      aresult[i] := PKV.Message_to_bytestring(msgs[i]);
+      i := i + 1;
+    }
+
+    result := aresult[..i];
   }
   
   method LeafFillDpkv(node: KMB.Node, dpkv: DPKV.DynamicPkv)
@@ -33,7 +63,7 @@ module KMBPKVOps {
     requires forall v | v in KMB.Interpretation(node).Values :: v.Define?
     requires PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, KMB.ToSeq(node).0)
     requires forall i | 0 <= i < |KMB.ToSeq(node).1| :: KMB.ToSeq(node).1[i].Define?
-    requires PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, MessageSeq_to_bytestringSeq(KMB.ToSeq(node).1))
+    requires PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, messageSeq_to_bytestringSeq(KMB.ToSeq(node).1))
     ensures dpkv.WF()
     ensures fresh(dpkv.Repr - old(dpkv.Repr))
     ensures PKV.IKeys(dpkv.toPkv().keys) == old(PKV.IKeys(dpkv.toPkv().keys)) + KMB.ToSeq(node).0
@@ -44,7 +74,7 @@ module KMBPKVOps {
     var keys := node.contents.keys;
     var values := node.contents.values;
     var nkeys := node.contents.nkeys;
-
+    
     assert KMB.ToSeq(node).0 == keys[..nkeys] by {
       KMB.reveal_I();
       KMB.Model.reveal_ToSeq();
@@ -55,45 +85,22 @@ module KMBPKVOps {
       KMB.Model.reveal_ToSeq();
     }        
 
-    ghost var oldpkvkeys := old(PKV.IKeys(dpkv.toPkv().keys));
-    ghost var oldpkvmsgs := old(PKV.IMessages(dpkv.toPkv().messages));
-    ghost var messages := MessageSeq_to_bytestringSeq(values[..nkeys]);
-    
-    var i: uint64 := 0;
-
-    assert messages[i..nkeys] == MessageSeq_to_bytestringSeq(KMB.ToSeq(node).1);
-
-    while i < nkeys
-      invariant i <= nkeys
-      invariant dpkv.WF()
-      invariant fresh(dpkv.Repr - old(dpkv.Repr))
-      invariant PKV.IKeys(dpkv.toPkv().keys) ==  oldpkvkeys + keys[..i]
-      invariant PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, keys[i..nkeys])
-      invariant PKV.IMessages(dpkv.toPkv().messages) == oldpkvmsgs + values[..i]
-      invariant PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, messages[i..nkeys])
+    forall i | 0 <= i < nkeys
+      ensures keys[i] in KMB.Interpretation(node)
     {
-      assert keys[i] in KMB.Interpretation(node) by {
-        KMB.reveal_I();
-        KMB.Model.reveal_Interpretation();
-      }
-      assert keys[i..nkeys] == [ keys[i] ] + keys[i+1..nkeys];
-      PKV.PSA.psaCanAppendSeqAdditive(dpkv.toPkv().keys, [ keys[i] ], keys[i+1..nkeys]);
-      PKV.PSA.psaCanAppendOne(dpkv.toPkv().keys, keys[i]);
-
-      assert messages[i..nkeys] == [ messages[i] ] + messages[i+1..nkeys];
-      PKV.PSA.psaCanAppendSeqAdditive(dpkv.toPkv().messages, [ messages[i] ], messages[i+1..nkeys]);
-      PKV.PSA.psaCanAppendOne(dpkv.toPkv().messages, messages[i]);
-      
-      dpkv.Append(keys[i], node.contents.values[i]);
-      
-      assert keys[..i+1] == keys[..i] + [ keys[i] ];
-      assert messages[..i+1] == messages[..i] + [ messages[i] ];
-      assert values[..i+1] == values[..i] + [ values[i] ];
-      i := i + 1;
-    }
-    assert KMB.Model.ToSeq(KMB.I(node)).0 == keys[..i] by {
       KMB.reveal_I();
-      KMB.Model.reveal_ToSeq();
+      KMB.Model.reveal_Interpretation();
+    }
+    
+    var messages := MessageArray_to_bytestringSeq(values, nkeys);
+    dpkv.keys.AppendSeq(keys[..nkeys]);
+    dpkv.messages.AppendSeq(messages);
+    dpkv.Repr := {dpkv} + dpkv.keys.Repr + dpkv.messages.Repr;
+
+    calc {
+      PKV.IMessages(dpkv.toPkv().messages);
+      bytestringSeq_to_MessageSeq(PKV.PSA.I(dpkv.toPkv().messages));
+      old(PKV.IMessages(dpkv.toPkv().messages)) + values[..nkeys];
     }
   }
 
