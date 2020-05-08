@@ -381,16 +381,30 @@ build/YcsbMain.o: ycsb/YcsbMain.cpp
 
 # Our build rules are a nightmare. we're actually using make's default g++ rule!
 # So i'll one-off this one. Man we need to clean the build mess.
-ycsb/ioaccounting.o: ycsb/ioaccounting.cpp
+# Oh my goodness what a disaster.
+# If I build ioaccounting with clang, VeribetrYcsb doesn't link.
+# If I build ioaccounting with g++, RocksYcsb doesn't link.
+# So I'm going to build TWO SEPARATE BINARIES, one for each target.
+# We really need to fix this bailing wire after the deadline.
+#
+ycsb/ioaccounting-gpp.o: ycsb/ioaccounting.cpp
+	g++  -c -o $@ \
+		$^ \
+		-std=c++17 \
+		-I vendor/hdrhist/ \
+
+ycsb/ioaccounting-clang.o: ycsb/ioaccounting.cpp
 	$(CC) $(STDLIB) -c -o $@ \
 		$^ \
 		-std=c++17 \
 		-stdlib=libc++ \
 		-I vendor/hdrhist/ \
 
-ACCOUNTING_OBJECTS=ycsb/ioaccounting.o ycsb/stataccounting.o
+ACCOUNTING_OBJECTS_COMMON=ycsb/stataccounting.o
+ACCOUNTING_OBJECTS_VERI=$(ACCOUNTING_OBJECTS_COMMON) ycsb/ioaccounting-clang.o
+ACCOUNTING_OBJECTS_ROCKS=$(ACCOUNTING_OBJECTS_COMMON) ycsb/ioaccounting-gpp.o
 
-build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/YcsbMain.o $(ACCOUNTING_OBJECTS)
+build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/YcsbMain.o $(ACCOUNTING_OBJECTS_VERI)
 	# NOTE: this uses c++17, which is required by hdrhist
 	$(CC) $(STDLIB) -o $@ \
 			-Winline -std=c++17 $(O3FLAG) \
@@ -398,12 +412,12 @@ build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/Y
 			-L vendor/rocksdb \
 			$(OPT_FLAGS) \
 			$(VERIBETRFS_YCSB_O_FILES) \
-			$(ACCOUNTING_OBJECTS) \
+			$(ACCOUNTING_OBJECTS_VERI) \
 			build/YcsbMain.o \
 			$(JEMALLOC_OPTS) \
 			-lycsbc-libcpp -lpthread -ldl $(LDFLAGS)
 
-build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp $(ACCOUNTING_OBJECTS)
+build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp $(ACCOUNTING_OBJECTS_ROCKS)
 	# NOTE: this uses c++17, which is required by hdrhist
 	$(CC) -o $@ \
 			-L ycsb/build \
@@ -418,7 +432,7 @@ build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp $(ACCOUNT
 			-D_YCSB_ROCKS \
 			$(POUND_DEFINES) \
 			ycsb/YcsbMain.cpp \
-			$(ACCOUNTING_OBJECTS) \
+			$(ACCOUNTING_OBJECTS_ROCKS) \
 			-lycsbc-default -lrocksdb -lpthread -ldl $(LDFLAGS) \
 
 
