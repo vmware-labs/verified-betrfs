@@ -25,6 +25,7 @@ K = Scale("K", 1000)
 Ki = Scale("Ki", 1024)
 Mi = Scale("Mi", 1<<20)
 Gi = Scale("Gi", 1<<30)
+G = Scale("G", 1e9)
 
 class PlotHelper:
     def __init__(self, numPlots, scale=1, columns=None):
@@ -160,6 +161,20 @@ def plotThroughput(ax, experiments):
         #print (phase,opn)
         ax.text(opn/K(), 0, phase)
 
+def plotManyForeach(ax, experiments, plotOneFunc):
+    for i in range(len(experiments)):
+        exp = experiments[i]
+        plotkwargs = {"color": spectrum[i % len(spectrum)]}
+        plotOneFunc(exp, plotkwargs)
+
+def plotMany(ax, experiments, plotOneFunc):
+    """plotMany with some standard axes adjustments for op x axis"""
+    plotManyForeach(ax, experiments, plotOneFunc)
+
+    ax.set_ylim(bottom=0)
+    set_xlim(ax, experiments)
+    ax.legend()
+
 def plotGrandUnifiedMemory(ax, experiments):
     ax.set_title("Grand Unified Memory")
 
@@ -219,9 +234,6 @@ def plotGrandUnifiedMemory(ax, experiments):
         exp = experiments[i]
         plotOneExp(exp, {"linestyle": linestyles[i % len(linestyles)]})
 
-    ax.set_ylim(bottom=0)
-    set_xlim(ax, experiments)
-    ax.legend(loc="upper left")
 
 def plotRocksIo(ax, experiments):
     ax.set_title("rocks io")
@@ -240,14 +252,7 @@ def plotRocksIo(ax, experiments):
         line.set_label(exp.nickname + " miss_per_opn (%s)" % miss_pages.units)
         line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, miss_pages, exp.operation, scale=Unit, window=1000*K())), linestyle="dotted", **plotkwargs)
 
-
-    for i in range(len(experiments)):
-        exp = experiments[i]
-        plotkwargs = {"color": spectrum[i % len(spectrum)]}
-        plotOneExp(exp, plotkwargs)
-
-    ax.set_ylim(bottom=0)
-    ax.legend()
+    plotMany(ax, experiments, plotOneExp)
 
 
 def plotCpuTime(ax, experiments):
@@ -264,14 +269,7 @@ def plotCpuTime(ax, experiments):
         line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, sys_sec, exp.elapsed)), **plotkwargs, linestyle="dotted")
         line.set_label(exp.nickname+" sys")
 
-    for i in range(len(experiments)):
-        exp = experiments[i]
-        plotkwargs = {"color": spectrum[i % len(spectrum)]}
-        plotOneExp(exp, plotkwargs)
-
-    set_xlim(ax, experiments)
-    ax.set_ylim(bottom=0)
-    ax.legend()
+    plotMany(ax, experiments, plotOneExp)
 
 def plotProcIoBytes(ax, experiments):
     ax.set_title("proc io bytes")
@@ -283,12 +281,35 @@ def plotProcIoBytes(ax, experiments):
         line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.procio_write_bytes, exp.operation, scale=Ki, window=window)), linestyle="dotted", **plotkwargs)
         line.set_label(exp.nickname + " write")
 
-    for i in range(len(experiments)):
-        exp = experiments[i]
-        plotkwargs = {"color": spectrum[i % len(spectrum)]}
-        plotOneExp(exp, plotkwargs)
-
+    plotMany(ax, experiments, plotOneExp)
     ax.grid(which="major", color="#dddddd")
-    set_xlim(ax, experiments)
-    ax.set_ylim(bottom=0)
+
+def plotIoLatencyCdf(ax, experiments):
+    ax.set_title("io latency")
+    ax.set_yscale("log")
+
+    # retrieve from metadata?
+    assumeProcCyclesPerSec = 2.2*G()
+    def plotOneExpAt(exp, plotkwargs, opn):
+        cdf = exp.iolatency_read[opn]
+        print(cdf.xs)
+        print(cdf.ys)
+        if cdf==None: return
+        line, = ax.plot([cycles/assumeProcCyclesPerSec*K() for cycles in cdf.xs], cdf.ys)
+        line.set_label("%s read @%dKop" % (exp.nickname, opn/K()))
+
+    def plotOneExp(exp, plotkwargs):
+        plotOneExpAt(exp, plotkwargs, 2000000)
+        line.set_label("%s read @%dKop" % (exp.nickname, opn/K()))
+
+    def plotOneExp(exp, plotkwargs):
+        try:
+            print(exp.nickname, exp.iolatency_read.sortedKeys())
+        except:
+            pass
+        plotOneExpAt(exp, plotkwargs,  500000)
+        plotOneExpAt(exp, plotkwargs, 2000000)
+        plotOneExpAt(exp, plotkwargs, 2700000)
+    plotManyForeach(ax, experiments, plotOneExp)
+    ax.set_xlabel("ms assuming clock %.1f%sHz" % (assumeProcCyclesPerSec/G(), G))
     ax.legend()

@@ -10,13 +10,14 @@ import bisect
 field_width = 14+1
 arow_width = field_width*4 - 1
 
-class Trace:
+class BaseTrace:
+    """Time-series data set addressed by opn."""
     def __init__(self, label, units):
         self.label = label
         self.units = units
         self.data = {}
         self._sortedKeys = None
-
+    
     def empty(self):
         return len(self.data) == 0
 
@@ -26,16 +27,30 @@ class Trace:
             self._sortedKeys.sort()
         return self._sortedKeys
 
+    def idxAfter(self, op):
+        # Never extrapolate
+        if len(self.sortedKeys())==0:
+            return None
+        if op < self.sortedKeys()[0]:
+            return None
+        if op > self.sortedKeys()[-1]:
+            return None
+        return bisect.bisect(self.sortedKeys(), op)
+
+    def __setitem__(self, op, val):
+        self.data[op] = val
+
+class Trace(BaseTrace):
+    """Interpolated values addressed by opn."""
+    def __init__(self, label, units):
+        super().__init__(label, units)
+
     def __getitem__(self, op):
         if op in self.data:
             return self.data[op]
         else:
-            # We interpolate, but not extrapolate
-            if op < self.sortedKeys()[0]:
-                return None
-            if op > self.sortedKeys()[-1]:
-                return None
-            idx = bisect.bisect(self.sortedKeys(), op)
+            idx = self.idxAfter(op)
+            if idx==None: return None
             if idx == 0:
                 return self.data[self.sortedKeys()[0]]
             left_op = self.sortedKeys()[idx - 1]
@@ -45,8 +60,18 @@ class Trace:
             right_v = self.data[right_op]
             return left_v + frac*(right_v - left_v)
 
-    def __setitem__(self, op, val):
-        self.data[op] = val
+class DiscreteTrace(BaseTrace):
+    """Un-interpolatable values addressed by opn."""
+    def __init__(self, label, units):
+        super().__init__(label, units)
+
+    def __getitem__(self, op):
+        if op in self.data:
+            return self.data[op]
+        else:
+            idx = self.idxAfter(op)
+            if idx == None: return None
+            return self.data[self.sortedKeys()[idx]]
 
 class ARow:
     def __init__(self, total_count, open_count, total_byte, open_byte):
@@ -85,6 +110,11 @@ def match_arow_line(token, line):
     arow = parse_arow(line[len(token)+1:len(token)+1+arow_width])
     label = line[len(token)+1+arow_width+1:]
     return (arow, label)
+
+class CDF:
+    def __init__(self, fields):
+        self.xs = [float(f.split(":")[0]) for f in fields]
+        self.ys = [float(f.split(":")[1]) for f in fields]
 
 class Experiment:
     def __init__(self, filename, nickname=None):
@@ -137,6 +167,9 @@ class Experiment:
         self.rocks_io_reads = Trace("rocksio_reads", "page")
         self.rocks_io_hits = Trace("rocksio_hits", "page")
         self.rocks_io_writes = Trace("rocksio_writes", "page")
+
+        self.iolatency_read = DiscreteTrace("read-latency", "cycles")
+        self.iolatency_write = DiscreteTrace("write-latency", "cycles")
 
         self.parse()
         self.sortedOpns = list(self.operation.data.keys())
@@ -257,3 +290,7 @@ class Experiment:
                 if statName not in self.cgroups_stat:
                     self.cgroups_stat[statName] = Trace("cgroups-stat-"+statName, "cnt")
                 self.cgroups_stat[statName][cur_op] = int(fields[2])
+
+            if line.startswith("io-latency"):
+                ptr = {"read":self.iolatency_read, "write":self.iolatency_write}[fields[1]]
+                ptr[cur_op] = CDF(fields[2:])

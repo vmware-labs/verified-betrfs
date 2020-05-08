@@ -1125,8 +1125,8 @@ Pin to a single core?
   taskset is doing that from run-veri-config-experiment
 Is /proc/self/stat measuring cputime from threads?
 
-[ ] Turn on rocks write-ahead-logging: woptions.disableWAL = true;
-[ ] Hook rocks to measure IO latency CDF.
+[X] Turn on rocks write-ahead-logging: woptions.disableWAL = true;
+[X] Hook rocks to measure IO latency CDF.
 [X] Disable swap. sudo swapoff -a : just turned it all off on splinter
 
 tools/plot/perf-compare.py \
@@ -1136,3 +1136,7 @@ veri-swapon=malloc-sp1/veri-0.84-uniform-64kb-20.data \
 veri-swapoff=malloc-sp1/veri-0.84-uniform-64kb-swapoff-22.data \
 output=/tmp/compare-swapoff.png
 
+time tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=0.7gb pillow=1.2 rocks time_budget=1h output=malloc-exp/rocks-iolatency-23.data
+time tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=0.7gb pillow=1.2 config-64kb time_budget=1h output=malloc-exp/veri-iolatency-23.data
+
+tools/plot/perf-compare.py veri=malloc-sp1/veri-0.84-uniform-64kb-swapoff-22.data rocks=malloc-sp1/rocks-iolatency-23.data output=compare-cdf.png veri=malloc-sp1/veri-iolatency-23.data

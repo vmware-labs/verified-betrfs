@@ -246,8 +246,11 @@ namespace MainDiskIOHandler_Compile {
     #ifdef LOG_QUERY_STATS
     auto t1 = chrono::high_resolution_clock::now();
     #endif
+    unsigned long clockStart = __rdtsc();
 
     ssize_t count = pread(fd, res, len, addr);
+    unsigned long clockEnd = __rdtsc();
+    IOAccounting::record_read_latency(clockEnd - clockStart);
     IOAccounting::record.read_count += 1;
     IOAccounting::record.read_bytes += len;
 
