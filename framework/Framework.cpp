@@ -144,6 +144,7 @@ namespace MainDiskIOHandler_Compile {
     size_t aligned_len;
     uint8_t *aligned_bytes;
     aiocb aio_req_write;
+    unsigned long clockStart;
 
     bool made_req;
     bool done;
@@ -182,6 +183,7 @@ namespace MainDiskIOHandler_Compile {
     }
 
     void start() {
+      clockStart = __rdtsc();
       int ret = aio_write(&aio_req_write);
       if (ret != 0) {
         cout << "number of writeReqs " << endl;
@@ -223,6 +225,8 @@ namespace MainDiskIOHandler_Compile {
             fail("write did not write all bytes");
           }
           done = true;
+          unsigned long clockEnd = __rdtsc();
+          IOAccounting::record_write_latency(clockEnd - clockStart);
           IOAccounting::record.write_count += 1;
           IOAccounting::record.write_bytes += aligned_len;
           nWriteReqsOut--;

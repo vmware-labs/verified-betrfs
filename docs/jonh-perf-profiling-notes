@@ -1140,3 +1140,8 @@ time tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=d
 time tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=0.7gb pillow=1.2 config-64kb time_budget=1h output=malloc-exp/veri-iolatency-23.data
 
 tools/plot/perf-compare.py veri=malloc-sp1/veri-0.84-uniform-64kb-swapoff-22.data rocks=malloc-sp1/rocks-iolatency-23.data output=compare-cdf.png veri=malloc-sp1/veri-iolatency-23.data
+
+disk-batch -24:
+- iolatency
+- un-disables WAL in Rocks since we have sync
+- swap is off -- wait it turned itself back on! Check at end of experiment. (Add to metadata recording?)
