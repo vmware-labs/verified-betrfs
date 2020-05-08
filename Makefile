@@ -382,9 +382,11 @@ build/YcsbMain.o: ycsb/YcsbMain.cpp
 # Our build rules are a nightmare. we're actually using make's default g++ rule!
 # So i'll one-off this one. Man we need to clean the build mess.
 ycsb/ioaccounting.o: ycsb/ioaccounting.cpp
-	g++ -c -o $@ $^ \
-			-std=c++17 \
-			-I vendor/hdrhist/ \
+	$(CC) $(STDLIB) -c -o $@ \
+		$^ \
+		-std=c++17 \
+		-stdlib=libc++ \
+		-I vendor/hdrhist/ \
 
 ACCOUNTING_OBJECTS=ycsb/ioaccounting.o ycsb/stataccounting.o
 
