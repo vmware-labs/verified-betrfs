@@ -292,9 +292,9 @@ def plotIoLatencyCdf(ax, experiments):
     assumeProcCyclesPerSec = 2.2*G()
     def plotOneExpAt(exp, plotkwargs, opn):
         cdf = exp.iolatency_read[opn]
+        if cdf==None: return
         print(cdf.xs)
         print(cdf.ys)
-        if cdf==None: return
         line, = ax.plot([cycles/assumeProcCyclesPerSec*K() for cycles in cdf.xs], cdf.ys)
         line.set_label("%s read @%dKop" % (exp.nickname, opn/K()))
 
