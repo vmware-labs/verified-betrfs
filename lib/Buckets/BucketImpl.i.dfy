@@ -136,9 +136,8 @@ module BucketImpl {
         && tree.repr <= Repr
         && KMB.WF(tree)
         && Weight as int < Uint64UpperBound()
-        && forall k | k in KMB.Interpretation(tree) :: |k| <= KeyType.MaxLen() as nat
-        && var interp := map k: Key | k in KMB.Interpretation(tree) :: KMB.Interpretation(tree)[k];
-        && Bucket == B(interp)
+        && (forall k | k in KMB.Interpretation(tree) :: |k| <= KeyType.MaxLen() as nat)
+        && Bucket == B(KMB.Interpretation(tree))
       ))
       && (format.BFPkv? ==> (
         && tree == null
@@ -184,9 +183,14 @@ module BucketImpl {
     }
 
     lemma NumElementsLteWeight(bucket: Bucket)
-      ensures |bucket.b| < WeightBucket(bucket)
+      ensures |bucket.b| <= WeightBucket(bucket)
+      decreases bucket.b
     {
-      assume false;
+      reveal_WeightBucket();
+      if |bucket.b| > 0 {
+        var key := ChooseKey(bucket);
+        NumElementsLteWeight(B(MapRemove1(bucket.b, key)));
+      }
     }
     
     method GetPkv() returns (pkv: PKV.Pkv)
@@ -196,7 +200,7 @@ module BucketImpl {
     {
       if (format.BFTree?) {
         NumElementsLteWeight(B(KMB.Interpretation(tree)));
-        assume false;
+        KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
         pkv := tree_to_pkv(tree);
       } else {
         pkv := this.pkv;
@@ -211,7 +215,6 @@ module BucketImpl {
       // ensures Repr == old(Repr)
       // modifies this
     {
-      assume false;
       if (format.BFTree?) {
         b := true;
       } else {
@@ -547,7 +550,6 @@ module BucketImpl {
     requires Inv()
     ensures m == bucketBinarySearchLookup(I(), key)
     {
-      assume false;
       if format.BFTree? {
         m := KMB.Query(tree, key);
       } else if format.BFPkv? {
@@ -663,7 +665,8 @@ module BucketImpl {
       if format.BFPkv? {
         pkv := this.pkv;
       } else {
-        assume false;
+        NumElementsLteWeight(B(KMB.Interpretation(tree)));
+        KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
         pkv := tree_to_pkv(tree);
       }
       
@@ -762,7 +765,8 @@ module BucketImpl {
 
       var pkv;
       if format.BFTree? {
-        assume false; // NumElements issue
+        NumElementsLteWeight(B(KMB.Interpretation(tree)));
+        KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
         pkv := tree_to_pkv(tree);
       } 
       bucket' := new MutBucket.InitFromPkv(pkv, true);
@@ -879,11 +883,10 @@ module BucketImpl {
       if format.BFPkv? {
         pkv := this.pkv;
       } else {
-        assume KMBBOps.NumElements(tree) < Uint64UpperBound();
+        NumElementsLteWeight(B(KMB.Interpretation(tree)));
+        KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
         pkv := tree_to_pkv(tree);
       }
-
-      assume false;
 
       BucketIteratorModel.lemma_NextFromIndex(I(), IIterator(it));
         
