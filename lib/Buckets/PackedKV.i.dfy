@@ -291,6 +291,7 @@ module PackedKV {
     requires WF(pkv)
     requires canAppend(pkv, key, msg)
     ensures WF(result)
+    ensures IKeys(result.keys) == IKeys(pkv.keys) + [ key ]
   {
     PSA.psaAppendIAppend(pkv.keys, key);
     PSA.psaAppendIAppend(pkv.messages, msg);
