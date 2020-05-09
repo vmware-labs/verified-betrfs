@@ -1582,15 +1582,15 @@ module BucketWeights {
   // This is far weaker than it could be, but it's probably good enough.
   // Weight is on the order of a few million, and I plan on using this lemma
   // to show that numbers fit within 64 bits.
-  // lemma LenLeWeight(bucket: Bucket)
-  //   requires PreWFBucket(bucket)
-  //   ensures |bucket.keys| <= WeightBucket(bucket)
-  //   ensures |bucket.b| <= WeightBucket(bucket)
-  //   decreases bucket.keys
-  // {
-  //   KeyMultisetLeWeight(multiset(bucket.keys));
-  //   SetCardinality(bucket.keys);
-  // }
+  lemma NumElementsLteWeight(bucket: Bucket)
+    requires PreWFBucket(bucket)
+    ensures |bucket.keys| <= WeightBucket(bucket)
+    ensures |bucket.b| <= WeightBucket(bucket)
+    decreases bucket.keys
+  {
+    KeyMultisetLeWeight(multiset(bucket.keys));
+    SetCardinality(bucket.keys);
+  }
 
   // used
   lemma WeightBucketListOneEmpty()
