@@ -10,13 +10,16 @@ namespace IOAccounting {
 Record record;
 HDRHist read_hist;
 HDRHist write_hist;
+uint64_t slow_reads = 0;
+uint64_t slow_writes = 0;
+const uint64_t slow_cycles_threshold = 100000;   // ~45usec: way longer than anything in cache; probably includes all disk IO
 
 void dump_ccdf_to_stdout(const HDRHist& hist) {
   auto upper_bound = hist.ccdf_upper_bound();
   for (auto ccdf_el = upper_bound.next();
       ccdf_el.has_value();
       ccdf_el = upper_bound.next()) {
-    std::cout << " " << ccdf_el->value << ":" << ccdf_el->fraction;
+    std::cout << " " << ccdf_el->value << ":" << ccdf_el->fraction << ":" << ccdf_el->count;
   }
   std::cout << std::endl;
 }
@@ -27,6 +30,10 @@ void report() {
       (unsigned long) record.read_bytes,
       (unsigned long) record.write_count,
       (unsigned long) record.write_bytes);
+  printf("ioaccounting-slow threshhold-cycles %lu slow_reads %lu slow_writes %lu\n",
+      (unsigned long) slow_reads,
+      (unsigned long) slow_writes,
+      (unsigned long) slow_cycles_threshold);
 }
 
 void report_histograms() {
@@ -44,10 +51,16 @@ void reset_histograms()
 
 void record_read_latency(unsigned long time_cycles) {
   read_hist.add_value(time_cycles);
+  if (time_cycles > slow_cycles_threshold) {
+    slow_reads += 1;
+  }
 }
 
 void record_write_latency(unsigned long time_cycles) {
   write_hist.add_value(time_cycles);
+  if (time_cycles > slow_cycles_threshold) {
+    slow_writes += 1;
+  }
 }
 
 } // namespace IOAccounting

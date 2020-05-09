@@ -291,25 +291,21 @@ def plotIoLatencyCdf(ax, experiments):
     # retrieve from metadata?
     assumeProcCyclesPerSec = 2.2*G()
     def plotOneExpAt(exp, plotkwargs, opn):
-        cdf = exp.iolatency_read[opn]
-        if cdf==None: return
-        print(cdf.xs)
-        print(cdf.ys)
-        line, = ax.plot([cycles/assumeProcCyclesPerSec*K() for cycles in cdf.xs], cdf.ys)
-        line.set_label("%s read @%dKop" % (exp.nickname, opn/K()))
+        for cdf_src,label,linestyle in (
+                (exp.iolatency_read, "read", "-"),
+                (exp.iolatency_write, "write", "dotted")):
+            cdf = cdf_src[opn]
+            if cdf==None: continue
+            line, = ax.plot([cycles/assumeProcCyclesPerSec*K() for cycles in cdf.xs], cdf.ys, linestyle=linestyle, **plotkwargs)
+            line.set_label("%s %s @%dKop" % (exp.nickname, label, opn/K()))
 
     def plotOneExp(exp, plotkwargs):
-        plotOneExpAt(exp, plotkwargs, 2000000)
-        line.set_label("%s read @%dKop" % (exp.nickname, opn/K()))
-
-    def plotOneExp(exp, plotkwargs):
-        try:
-            print(exp.nickname, exp.iolatency_read.sortedKeys())
-        except:
-            pass
-        plotOneExpAt(exp, plotkwargs,  500000)
-        plotOneExpAt(exp, plotkwargs, 2000000)
-        plotOneExpAt(exp, plotkwargs, 2700000)
+        try: pass #print(exp.nickname, exp.iolatency_read.sortedKeys())
+        except: pass
+#        plotOneExpAt(exp, plotkwargs,  500000)
+        #print(plotkwargs)
+        plotOneExpAt(exp, plotkwargs, 3000000)
+#        plotOneExpAt(exp, plotkwargs, 2700000)
     plotManyForeach(ax, experiments, plotOneExp)
     ax.set_xlabel("ms assuming clock %.1f%sHz" % (assumeProcCyclesPerSec/G(), G))
     ax.legend()

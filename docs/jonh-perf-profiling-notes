@@ -1145,3 +1145,20 @@ disk-batch -24:
 - iolatency
 - un-disables WAL in Rocks since we have sync
 - swap is off -- wait it turned itself back on! Check at end of experiment. (Add to metadata recording?)
+
+tools/plot/perf-compare.py \
+output=compare-iolatencycdf.png \
+rocks-u=malloc-sp1/rocks-uniform-24.data \
+rocks-z=malloc-sp1/rocks-zipfian-24.data \
+veri-u=malloc-sp1/veri-uniform-24.data \
+veri-z=malloc-sp1/veri-zipfian-24.data \
+
+[X] How to keep swap turned off? Who's turning it on!?
+  - tried commenting out swap lines in /etc/fstab
+[X] capture total samples?
+
+Next group of experiments captures (using a latency cutoff) how many disk IO operations each system does
+per query. Confirm that performance is driven entirely by seek cost.
+
+[ ] Andrea suggests running a flash suite.
+[ ] I should also run a larger cache suite.
