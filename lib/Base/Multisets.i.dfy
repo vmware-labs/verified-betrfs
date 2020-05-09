@@ -1,6 +1,8 @@
 include "Maps.s.dfy"
+include "sequences.i.dfy"
 
 module Multisets {
+  import Sequences
 
   lemma SingletonSet<A>(a: A)
     ensures multiset{a} == multiset({a})
@@ -107,6 +109,36 @@ module Multisets {
     assert s2 == s1 + rest;
   }
   
+  lemma ApplySeq<A, B>(fn: A ~> B, s: seq<A>)
+    requires forall i | 0 <= i < |s| :: fn.requires(s[i])
+    ensures Apply(fn, multiset(s)) == multiset(Sequences.ApplyOpaque(fn, s))
+    decreases s
+  {
+    if |s| == 0 {
+      reveal_Apply();
+    } else {
+      var m := multiset(s);
+      var x := Choose(m);
+      var m' := m - multiset{x};
+      var i :| 0 <= i < |s| && s[i] == x;
+      var s' := s[.. i] + s[i + 1 ..];
+      calc {
+        Apply(fn, m);
+        { reveal_Apply(); }
+        multiset{fn(x)} + Apply(fn, m');
+        { assert s == s[.. i] + [s[i]] + s[i + 1 ..]; }
+        { assert m' == multiset(s'); }
+        multiset{fn(x)} + Apply(fn, multiset(s'));
+        { ApplySeq(fn, s'); }
+        multiset{fn(x)} + multiset(Sequences.ApplyOpaque(fn, s'));
+        { assert Sequences.ApplyOpaque(fn, s') == Sequences.ApplyOpaque(fn, s'[.. i]) + Sequences.ApplyOpaque(fn, s'[i ..]); }
+        multiset(Sequences.ApplyOpaque(fn, s[.. i]) + [fn(x)] + Sequences.ApplyOpaque(fn, s[i + 1 ..]));
+        { assert Sequences.ApplyOpaque(fn, s) == Sequences.ApplyOpaque(fn, s[.. i]) + [fn(x)] + Sequences.ApplyOpaque(fn, s[i + 1 ..]); }
+        multiset(Sequences.ApplyOpaque(fn, s));
+      }
+    }
+  }
+
   predicate Foldable<A(!new)>(zero: A, add: (A, A) ~> A, inv: A -> bool)
     reads set x, y, o | inv(x) && inv(y) && o in add.reads(x, y) :: o
   {
@@ -256,8 +288,6 @@ module Multisets {
     }
   }
 
-  function AddNat(x:nat, y:nat):nat { x + y }
-
   lemma FoldSimpleAdditive<A>(zero: A, add: (A, A) -> A, s1: multiset<A>, s2: multiset<A>)
     requires IsCommutativeSimple(add)
     requires IsAssociativeSimple(add)
@@ -266,6 +296,68 @@ module Multisets {
   {
     FoldAdditive(zero, add, x => true, s1, s2);
   }  
+
+  lemma FoldSeqRemove<A>(zero: A, add: (A, A) -> A, s: seq<A>, i: int)
+    requires 0 <= i < |s|
+    requires IsIdentitySimple(add, zero);
+    requires IsCommutativeSimple(add);
+    requires IsAssociativeSimple(add);
+    ensures Sequences.FoldFromRight(add, zero, s) ==
+      add(Sequences.FoldFromRight(add, zero, s[.. i] + s[i + 1 ..]), s[i])
+  {
+    if |s| - 1 == i {
+      assert s[.. i] + s[i + 1 ..] == s[.. i];
+    } else {
+      var a := s[i];
+      var b := Sequences.Last(s);
+      var s' := Sequences.DropLast(s);
+      calc {
+        Sequences.FoldFromRight(add, zero, s);
+        add(Sequences.FoldFromRight(add, zero, s'), b);
+        { FoldSeqRemove(zero, add, s', i); }
+        add(add(Sequences.FoldFromRight(add, zero, s'[.. i] + s'[i + 1 ..]), a), b);
+        { reveal_IsIdentity(); }
+        { reveal_IsCommutative(); }
+        { reveal_IsAssociative(); }
+        add(add(Sequences.FoldFromRight(add, zero, s'[.. i] + s'[i + 1 ..]), b), a);
+        { assert s[.. i] + s[i + 1 ..] == s'[.. i] + s'[i + 1 ..] + [b]; }
+        add(Sequences.FoldFromRight(add, zero, s[.. i] + s[i + 1 ..]), a);
+      }
+    }
+  }
+
+  lemma FoldSeq<A>(zero: A, add: (A, A) -> A, s: seq<A>)
+    requires IsIdentitySimple(add, zero);
+    requires IsCommutativeSimple(add);
+    requires IsAssociativeSimple(add);
+    ensures FoldSimple(zero, add, multiset(s)) == Sequences.FoldFromRight(add, zero, s)
+  {
+    if |s| == 0 {
+      reveal_Fold();
+    } else {
+      var m := multiset(s);
+      var a := Choose(m);
+      var m' := m - multiset{a};
+      var i :| 0 <= i < |s| && s[i] == a;
+      var s' := s[.. i] + s[i + 1 ..];
+      calc {
+        FoldSimple(zero, add, m);
+        { reveal_Fold(); }
+        add(a, FoldSimple(zero, add, m'));
+        { reveal_IsCommutative(); }
+        add(FoldSimple(zero, add, m'), a);
+        { assert s == s[.. i] + [s[i]] + s[i + 1 ..]; }
+        { assert m' == multiset(s'); }
+        add(FoldSimple(zero, add, multiset(s')), a);
+        { FoldSeq(zero, add, s'); }
+        add(Sequences.FoldFromRight(add, zero, s'), a);
+        { FoldSeqRemove(zero, add, s, i); }
+        Sequences.FoldFromRight(add, zero, s);
+      }
+    }
+  }
+
+  function AddNat(x:nat, y:nat):nat { x + y }
 
   lemma natsumProperties()
     ensures IsCommutativeSimple<nat>(AddNat)
