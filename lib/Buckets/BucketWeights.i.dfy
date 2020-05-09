@@ -74,6 +74,12 @@ module BucketWeights {
     MSets.FoldSimple<nat>(0, MSets.AddNat, weights)
   }
 
+  function {:opaque} WeightKeySeq(keys: seq<Key>) : nat
+  {
+    var weights := ApplyOpaque(WeightKey, keys);
+    FoldFromRight<nat, nat>(MSets.AddNat, 0, weights)
+  }
+
   lemma WeightKeyMultisetAdditive(things1: multiset<Key>, things2: multiset<Key>)
     ensures WeightKeyMultiset(things1 + things2) == WeightKeyMultiset(things1) + WeightKeyMultiset(things2)
   {
@@ -122,6 +128,12 @@ module BucketWeights {
     MSets.FoldSimple<nat>(0, MSets.AddNat, weights)
   }
   
+  function {:opaque} WeightMessageSeq(msgs: seq<Message>) : nat
+  {
+    var weights := ApplyOpaque(WeightMessage, msgs);
+    FoldFromRight<nat, nat>(MSets.AddNat, 0, weights)
+  }
+
   lemma WeightMessageMultisetAdditive(things1: multiset<Message>, things2: multiset<Message>)
     ensures WeightMessageMultiset(things1 + things2) == WeightMessageMultiset(things1) + WeightMessageMultiset(things2)
   {
@@ -159,6 +171,44 @@ module BucketWeights {
       WeightBucketList(DropLast(buckets)) +
           WeightBucket(Last(buckets))
     )
+  }
+
+  lemma WeightKeySeqList(keys: seq<Key>)
+    ensures WeightKeySeq(keys) == WeightKeyList(keys)
+  {
+    var ws := ApplyOpaque(WeightKey, keys);
+    var ws' := MSets.Apply(WeightKey, multiset(keys));
+    calc {
+      WeightKeySeq(keys);
+      { reveal_WeightKeySeq(); }
+      FoldFromRight<nat, nat>(MSets.AddNat, 0, ws);
+      { MSets.natsumProperties(); }
+      { MSets.FoldSeq<nat>(0, MSets.AddNat, ws); }
+      MSets.FoldSimple<nat>(0, MSets.AddNat, multiset(ws));
+      { MSets.ApplySeq(WeightKey, keys); }
+      MSets.FoldSimple<nat>(0, MSets.AddNat, ws');
+      { reveal_WeightKeyMultiset(); }
+      WeightKeyList(keys);
+    }
+  }
+
+  lemma WeightMessageSeqList(msgs: seq<Message>)
+    ensures WeightMessageSeq(msgs) == WeightMessageList(msgs)
+  {
+    var ws := ApplyOpaque(WeightMessage, msgs);
+    var ws' := MSets.Apply(WeightMessage, multiset(msgs));
+    calc {
+      WeightMessageSeq(msgs);
+      { reveal_WeightMessageSeq(); }
+      FoldFromRight<nat, nat>(MSets.AddNat, 0, ws);
+      { MSets.natsumProperties(); }
+      { MSets.FoldSeq<nat>(0, MSets.AddNat, ws); }
+      MSets.FoldSimple<nat>(0, MSets.AddNat, multiset(ws));
+      { MSets.ApplySeq(WeightMessage, msgs); }
+      MSets.FoldSimple<nat>(0, MSets.AddNat, ws');
+      { reveal_WeightMessageMultiset(); }
+      WeightMessageList(msgs);
+    }
   }
 
   lemma WeightBucketEmpty()

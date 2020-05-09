@@ -178,8 +178,80 @@ module BucketImpl {
       this.tree := null;
       this.sorted := is_sorted;
       new;
-      assume Weight as int == WeightBucket(Bucket);
-      assume WFBucket(Bucket);
+      WeightBucketIs(pkv);
+    }
+
+    lemma WeightKeySeqIs(psa: PackedKV.PSA.Psa, k: int)
+      requires PSA.WF(psa)
+      requires 0 <= k <= |psa.offsets|
+      requires PackedKV.ValidKeyLens(PSA.I(psa))
+      ensures WeightKeySeq(PackedKV.IKeys(psa)[.. k]) ==
+        4 * k + (if k == 0 then 0 else PSA.psaEnd(psa, (k - 1) as uint64) as int);
+    {
+      if k == 0 {
+        reveal_WeightKeySeq();
+      } else {
+        var keys:seq<Key> := PackedKV.IKeys(psa);
+        var weights := ApplyOpaque(WeightKey, keys[.. k]);
+        var weights' := ApplyOpaque(WeightKey, keys[.. k - 1]);
+        var key := keys[k - 1];
+        calc {
+          WeightKeySeq(keys[.. k]);
+          { reveal_WeightKeySeq(); }
+          FoldFromRight<nat, nat>(MSets.AddNat, 0, weights);
+          WeightKey(key) + FoldFromRight<nat, nat>(MSets.AddNat, 0, DropLast(weights));
+          { reveal_WeightKeySeq(); }
+          { assert weights' == DropLast(weights); }
+          WeightKey(key) + WeightKeySeq(keys[.. k - 1]);
+          { WeightKeySeqIs(psa, k - 1); }
+          4 * k + PackedKV.PSA.psaEnd(psa, (k - 1) as uint64) as int;
+        }
+      }
+    }
+
+    lemma WeightMessageSeqIs(psa: PackedKV.PSA.Psa, k: int)
+      requires PSA.WF(psa)
+      requires 0 <= k <= |psa.offsets|
+      requires PackedKV.ValidMessageLens(PSA.I(psa));
+      ensures WeightMessageSeq(PackedKV.IMessages(psa)[.. k]) ==
+        4 * k + (if k == 0 then 0 else PSA.psaEnd(psa, (k - 1) as uint64) as int);
+    {
+      if k == 0 {
+        reveal_WeightMessageSeq();
+      } else {
+        var msgs:seq<Message> := PackedKV.IMessages(psa);
+        var weights := ApplyOpaque(WeightMessage, msgs[.. k]);
+        var weights' := ApplyOpaque(WeightMessage, msgs[.. k - 1]);
+        var msg := msgs[k - 1];
+        calc {
+          WeightMessageSeq(msgs[.. k]);
+          { reveal_WeightMessageSeq(); }
+          FoldFromRight<nat, nat>(MSets.AddNat, 0, weights);
+          WeightMessage(msg) + FoldFromRight<nat, nat>(MSets.AddNat, 0, DropLast(weights));
+          { reveal_WeightMessageSeq(); }
+          { assert weights' == DropLast(weights); }
+          WeightMessage(msg) + WeightMessageSeq(msgs[.. k - 1]);
+          { WeightMessageSeqIs(psa, k - 1); }
+          { PackedKV.DefineIMessage(psa, k - 1); }
+          4 * k + PackedKV.PSA.psaEnd(psa, (k - 1) as uint64) as int;
+        }
+      }
+    }
+
+    lemma WeightBucketIs(pkv: PackedKV.Pkv)
+      requires PackedKV.WF(pkv)
+      ensures WeightBucket(PackedKV.I(pkv)) == PackedKV.WeightPkv(pkv) as int
+    {
+      var bucket := PackedKV.I(pkv);
+      var n := |pkv.keys.offsets|;
+      var keys:seq<Key> := PSA.I(pkv.keys);
+      var msgs:seq<Message> := PackedKV.IMessages(pkv.messages);
+      assert keys == keys[0..n];
+      assert msgs == msgs[0..n];
+      WeightKeySeqIs(pkv.keys, n);
+      WeightMessageSeqIs(pkv.messages, n);
+      WeightKeySeqList(keys);
+      WeightMessageSeqList(msgs);
     }
 
     method GetPkv() returns (pkv: PKV.Pkv)

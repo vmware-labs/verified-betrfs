@@ -88,6 +88,16 @@ module PackedKV {
     psaSeq_Messages(psa, |psa.offsets|)
   }
 
+  lemma DefineIMessage(psa: PSA.Psa, j: int)
+    requires PSA.WF(psa)
+    requires ValidMessageLens(PSA.I(psa))
+    requires 0 <= j < |psa.offsets|
+    ensures |PSA.psaElement(psa, j as uint64)| <= ValueType.MaxLen() as nat
+    ensures IMessages(psa)[j] == Define(PSA.psaElement(psa, j as uint64))
+  {
+    assert |PSA.I(psa)[j]| == |PSA.psaElement(psa, j as uint64)|;
+  }
+
   predicate WF(pkv: Pkv) {
     && PSA.WF(pkv.keys)
     && PSA.WF(pkv.messages)
