@@ -1360,6 +1360,7 @@ module InterpretationDisk {
       {
         D.reveal_splice();
         reveal_atLoc();
+        assert a[i] == b[i]; // Fixes verification failure somehow. -- robj
       }
     }
 

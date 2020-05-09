@@ -405,6 +405,7 @@ module PivotBetreeSpecWFNodes {
     PivotNotMinimum(split_parent.pivotTable, slot_idx);
     WFConcat3(left_child.pivotTable, pivot, right_child.pivotTable);
 
+    assert WFPivots(fused_child.pivotTable); // This fixes a time-out somehow. -- robj
     BucketListHasWFBucketAtIdenticalSlice(left_child.buckets, left_child.pivotTable, fused_child.buckets, fused_child.pivotTable, 0, |left_child.buckets| - 1, 0);
     BucketListHasWFBucketAtIdenticalSlice(right_child.buckets, right_child.pivotTable, fused_child.buckets, fused_child.pivotTable, |left_child.buckets|, |fused_child.buckets| - 1, |left_child.buckets|);
 

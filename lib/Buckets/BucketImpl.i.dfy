@@ -182,17 +182,6 @@ module BucketImpl {
       assume WFBucket(Bucket);
     }
 
-    lemma NumElementsLteWeight(bucket: Bucket)
-      ensures |bucket.b| <= WeightBucket(bucket)
-      decreases bucket.b
-    {
-      reveal_WeightBucket();
-      if |bucket.b| > 0 {
-        var key := ChooseKey(bucket);
-        NumElementsLteWeight(B(MapRemove1(bucket.b, key)));
-      }
-    }
-    
     method GetPkv() returns (pkv: PKV.Pkv)
     requires Inv()
     ensures PKV.WF(pkv)
