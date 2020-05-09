@@ -256,6 +256,8 @@ module Multisets {
     }
   }
 
+  function AddNat(x:nat, y:nat):nat { x + y }
+
   lemma FoldSimpleAdditive<A>(zero: A, add: (A, A) -> A, s1: multiset<A>, s2: multiset<A>)
     requires IsCommutativeSimple(add)
     requires IsAssociativeSimple(add)
@@ -266,9 +268,9 @@ module Multisets {
   }  
 
   lemma natsumProperties()
-    ensures IsCommutativeSimple<nat>((x, y) => x + y)
-    ensures IsAssociativeSimple<nat>((x, y) => x + y)
-    ensures IsIdentitySimple<nat>((x, y) => x + y, 0)
+    ensures IsCommutativeSimple<nat>(AddNat)
+    ensures IsAssociativeSimple<nat>(AddNat)
+    ensures IsIdentitySimple<nat>(AddNat, 0)
   {
     reveal_IsCommutative();
     reveal_IsAssociative();
