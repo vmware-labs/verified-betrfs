@@ -31,9 +31,9 @@ void report() {
       (unsigned long) record.write_count,
       (unsigned long) record.write_bytes);
   printf("ioaccounting-slow threshhold-cycles %lu slow_reads %lu slow_writes %lu\n",
+      (unsigned long) slow_cycles_threshold,
       (unsigned long) slow_reads,
-      (unsigned long) slow_writes,
-      (unsigned long) slow_cycles_threshold);
+      (unsigned long) slow_writes);
 }
 
 void report_histograms() {
