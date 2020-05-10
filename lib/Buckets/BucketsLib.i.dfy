@@ -99,6 +99,11 @@ module BucketsLib {
     forall key | key in bucket :: bucket[key] != IdentityMessage()
   }
 
+  predicate WFMessageSeq(messages: seq<Message>)
+  {
+    forall i | 0 <= i < |messages| :: messages[i] != IdentityMessage()
+  }
+
   // TODO(robj): convert as much of this file as possible to require only PreWFBucket
   predicate PreWFBucket(bucket: Bucket)
   {
@@ -110,6 +115,7 @@ module BucketsLib {
   {
     && PreWFBucket(bucket)
     && WFBucketMap(bucket.b)
+    && WFMessageSeq(bucket.msgs)
   }
 
   predicate BucketWellMarshalled(bucket: Bucket)
