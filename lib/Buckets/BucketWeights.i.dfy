@@ -1788,4 +1788,49 @@ module BucketWeights {
     ImageIdentity(wmbucket, AllKeys());
     WeightBucketSubset(wmbucket, ikeys, AllKeys());
   }
+
+  lemma WeightKeyListAdditive(a: seq<Key>, b: seq<Key>)
+  ensures WeightKeyList(a) + WeightKeyList(b) == WeightKeyList(a + b)
+  {
+    WeightKeyMultisetAdditive(multiset(a), multiset(b));
+  }
+
+  lemma WeightMessageListAdditive(a: seq<Message>, b: seq<Message>)
+  ensures WeightMessageList(a) + WeightMessageList(b) == WeightMessageList(a + b)
+  {
+    WeightMessageMultisetAdditive(multiset(a), multiset(b));
+  }
+
+  lemma WeightKeyListPushFront(key: Key, keys: seq<Key>)
+  ensures WeightKeyList([key] + keys)
+      == WeightKey(key) + WeightKeyList(keys)
+  {
+    WeightKeyListAdditive([key], keys);
+    WeightKeySingleton(key);
+  }
+
+  lemma WeightMessageListPushFront(msg: Message, msgs: seq<Message>)
+  ensures WeightMessageList([msg] + msgs)
+      == WeightMessage(msg) + WeightMessageList(msgs)
+  {
+    WeightMessageListAdditive([msg], msgs);
+    WeightMessageSingleton(msg);
+  }
+
+  lemma WeightKeyListPushBack(keys: seq<Key>, key: Key)
+  ensures WeightKeyList(keys + [key])
+      == WeightKey(key) + WeightKeyList(keys)
+  {
+    WeightKeyListAdditive(keys, [key]);
+    WeightKeySingleton(key);
+  }
+
+  lemma WeightMessageListPushBack(msgs: seq<Message>, msg: Message)
+  ensures WeightMessageList(msgs + [msg])
+      == WeightMessage(msg) + WeightMessageList(msgs)
+  {
+    WeightMessageListAdditive(msgs, [msg]);
+    WeightMessageSingleton(msg);
+  }
+
 }

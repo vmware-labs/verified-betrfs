@@ -58,7 +58,9 @@ module FlushModel {
         lemmaChildrenConditionsOfNode(k, s, childref);
         lemmaChildrenConditionsOfNode(k, s, parentref);
 
-        var partialFlushResult(newparentBucket, newbuckets, flushedKeys) := BucketModel.partialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
+        var partialFlushResult(newparentBucket, newbuckets) :=
+            BucketModel.partialFlush(
+              parent.buckets[slot], child.pivotTable, child.buckets);
         var newchild := child.(buckets := newbuckets);
         var (s2, newchildref) := allocBookkeeping(k, s, newchild.children);
         lemmaChildrenConditionsUpdateOfAllocBookkeeping(
@@ -106,8 +108,13 @@ module FlushModel {
       lemmaChildrenConditionsOfNode(k, s, childref);
       lemmaChildrenConditionsOfNode(k, s, parentref);
 
-      var partialFlushResult(newparentBucket, newbuckets, flushedKeys) := BucketModel.partialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
-      //var flushedKeys := BucketModel.partialFlushRes(parent.buckets[slot], child.buckets, child.pivotTable);
+      assume WFBucketListProper(child.buckets, child.pivotTable);
+
+      var partialFlushResult(newparentBucket, newbuckets) :=
+        BucketModel.partialFlush(
+          parent.buckets[slot], child.pivotTable, child.buckets);
+      var flushedKeys := BucketModel.partialFlushCorrect(parent.buckets[slot], child.pivotTable, child.buckets);
+      BucketModel.partialFlushWeightBound(parent.buckets[slot], child.pivotTable, child.buckets);
       
       WFBucketIntersect(parent.buckets[slot], flushedKeys);
       WFBucketComplement(parent.buckets[slot], flushedKeys);
@@ -158,7 +165,6 @@ module FlushModel {
           lemmaChildInGraph(k, s, childref, ref);
         }
 
-        WeightBucketListFlush(parent.buckets[slot], child.buckets, child.pivotTable);
         WeightBucketListClearEntry(parent.buckets, slot);
 
         allocCorrect(k, s, newchild);
