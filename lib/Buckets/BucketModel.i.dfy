@@ -745,12 +745,16 @@ module BucketModel {
   requires |acc_keys| == |acc_msgs|
   requires from <= to <= |top_keys|
   requires bot_from <= |bot_keys|
+  requires (forall i | 0 <= i < |bot_msgs| :: bot_msgs[i] != IdentityMessage())
+  requires (forall i | 0 <= i < |top_msgs| :: top_msgs[i] != IdentityMessage())
+  requires (forall i | 0 <= i < |acc_msgs| :: acc_msgs[i] != IdentityMessage())
   ensures
     var res := mergeToOneChild(
           top_keys, top_msgs, from, to,
           bot_keys, bot_msgs, bot_from,
           acc_keys, acc_msgs, slack);
-    WeightKeyList(res.keys) + WeightMessageList(res.msgs) + res.slack
+    && (forall i | 0 <= i < |res.msgs| :: res.msgs[i] != IdentityMessage())
+    && WeightKeyList(res.keys) + WeightMessageList(res.msgs) + res.slack
       == WeightKeyList(acc_keys) + WeightMessageList(acc_msgs)
        + WeightKeyList(bot_keys[bot_from..]) + WeightMessageList(bot_msgs[bot_from..])
        + slack
@@ -1204,6 +1208,7 @@ module BucketModel {
       results: seq<Bucket>)
   requires WFBucket(top)
   requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
+  requires forall i | 0 <= i < |results| :: WFBucket(results[i])
   requires 0 < |bots|
   requires |results| == i
   requires 0 <= i <= |bots|
@@ -1214,16 +1219,29 @@ module BucketModel {
   decreases |bots| - i
 
   ensures var res := mergeToChildrenIter(top, bots, idxs, tmp, i, results);
+    && WFBucket(res.top)
+    && |res.bots| == |bots|
+    && (forall i | 0 <= i < |res.bots| :: WFBucket(res.bots[i]))
+    && WeightBucket(res.top) <= WeightBucket(top)
     && WeightBucketList(results) + WeightBucketList(bots[i..]) + tmp.slack
         == WeightBucketList(res.bots) + res.slack
   {
+    var res := mergeToChildrenIter(top, bots, idxs, tmp, i, results);
     if i == |bots| {
       if tmp.SlackExhausted? {
         var leftover_top := BucketOfSeq(top.keys[tmp.end..], top.msgs[tmp.end..]);
+
+        assert WeightBucket(res.top) <= WeightBucket(top) by {
+          WeightKeyListAdditive(top.keys[..tmp.end], top.keys[tmp.end..]);
+          WeightMessageListAdditive(top.msgs[..tmp.end], top.msgs[tmp.end..]);
+          assert top.keys[..tmp.end] + top.keys[tmp.end..] == top.keys;
+          assert top.msgs[..tmp.end] + top.msgs[tmp.end..] == top.msgs;
+        }
       } else {
       }
       assert bots[i..] == [];
       assert WeightBucketList([]) == 0 by { reveal_WeightBucketList(); }
+      WFBucketMapOfWFMessageSeq(res.top.keys, res.top.msgs);
     } else {
       calc {
         WeightBucketList(bots[i..]);
@@ -1255,6 +1273,7 @@ module BucketModel {
             bots[i].keys, bots[i].msgs, 0,
             [], [], tmp.slack);
         var results' := results + [BucketOfSeq(tmp'.keys, tmp'.msgs)];
+        WFBucketMapOfWFMessageSeq(tmp'.keys, tmp'.msgs);
         mergeToChildrenIterSlack(top, bots, idxs, tmp', i+1, results');
 
         calc {
@@ -1343,7 +1362,11 @@ module BucketModel {
   requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
   requires 0 < |bots| == |pivots| + 1
   ensures var res := mergeToChildren(top, pivots, bots, slack);
-    WeightBucketList(bots) + slack == WeightBucketList(res.bots) + res.slack
+    && WFBucket(res.top)
+    && |res.bots| == |bots|
+    && (forall i | 0 <= i < |res.bots| :: WFBucket(res.bots[i]))
+    && WeightBucket(res.top) <= WeightBucket(top)
+    && WeightBucketList(bots) + slack == WeightBucketList(res.bots) + res.slack
   {
     reveal_mergeToChildren();
     var idxs := pivotIndexes(top.keys, pivots);
@@ -1399,8 +1422,12 @@ module BucketModel {
   requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
   requires 0 < |bots| == |pivots| + 1
   requires WeightBucketList(bots) <= MaxTotalBucketWeight()
-  ensures WeightBucketList(partialFlush(top, pivots, bots).bots)
-       <= MaxTotalBucketWeight()
+  ensures var res := partialFlush(top, pivots, bots);
+      && WFBucket(res.top)
+      && |res.bots| == |bots|
+      && (forall i | 0 <= i < |res.bots| :: WFBucket(res.bots[i]))
+      && WeightBucket(res.top) <= WeightBucket(top)
+      && WeightBucketList(res.bots) <= MaxTotalBucketWeight()
   {
     reveal_partialFlush();
     mergeToChildrenSlack(

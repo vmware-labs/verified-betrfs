@@ -93,6 +93,17 @@ module BucketsLib {
     assume false;
   }
 
+  lemma WFBucketMapOfWFMessageSeq(keys: seq<Key>, msgs: seq<Message>)
+  requires |keys| == |msgs|
+  requires WFMessageSeq(msgs)
+  ensures WFBucketMap(BucketMapOfSeq(keys, msgs))
+  {
+    forall key | key in BucketMapOfSeq(keys, msgs)
+    ensures BucketMapOfSeq(keys, msgs)[key] != IdentityMessage()
+    {
+      var i := BucketMapOfSeqGetIndex(keys, msgs, key);
+    }
+  }
   
   predicate WFBucketMap(bucket: BucketMap)
   {

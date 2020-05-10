@@ -27,13 +27,13 @@ module PivotBetreeSpecWFNodes {
   {
     assert WFNode(FlushReads(f)[0].node);
     assert WFNode(FlushReads(f)[1].node);
-    WFBucketComplement(f.parent.buckets[f.slotIndex], f.keys);
-    WFBucketIntersect(f.parent.buckets[f.slotIndex], f.keys);
-    WeightBucketComplement(f.parent.buckets[f.slotIndex], f.keys);
-    WeightBucketIntersect(f.parent.buckets[f.slotIndex], f.keys);
-    WFBucketListFlush(BucketIntersect(f.parent.buckets[f.slotIndex], f.keys), f.child.buckets, f.child.pivotTable);
-    WeightBucketListFlush(BucketIntersect(f.parent.buckets[f.slotIndex], f.keys), f.child.buckets, f.child.pivotTable);
-    WeightBucketListShrinkEntry(f.parent.buckets, f.slotIndex, BucketComplement(f.parent.buckets[f.slotIndex], f.keys));
+    //WFBucketComplement(f.parent.buckets[f.slotIndex], f.keys);
+    //WFBucketIntersect(f.parent.buckets[f.slotIndex], f.keys);
+    //WeightBucketComplement(f.parent.buckets[f.slotIndex], f.keys);
+    //WeightBucketIntersect(f.parent.buckets[f.slotIndex], f.keys);
+    //WFBucketListFlush(BucketIntersect(f.parent.buckets[f.slotIndex], f.keys), f.child.buckets, f.child.pivotTable);
+    //WeightBucketListFlush(BucketIntersect(f.parent.buckets[f.slotIndex], f.keys), f.child.buckets, f.child.pivotTable);
+    WeightBucketListShrinkEntry(f.parent.buckets, f.slotIndex, f.newParentBucket);
     assert WFNode(FlushOps(f)[0].node);
     assert WFNode(FlushOps(f)[1].node);
   }

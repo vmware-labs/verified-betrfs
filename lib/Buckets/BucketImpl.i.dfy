@@ -895,8 +895,6 @@ module BucketImpl {
     requires |pivots| + 1 == |bots| < Uint64UpperBound()
     requires PivotsLib.WFPivots(pivots)
     requires WeightBucketList(MutBucket.ISeq(bots)) <= MaxTotalBucketWeight()
-    requires BucketWellMarshalled(top.I())
-    requires BucketListWellMarshalled(MutBucket.ISeq(bots))
     ensures forall i | 0 <= i < |newbots| :: newbots[i].Inv()
     //ensures forall i | 0 <= i < |newbots| :: fresh(newbots[i].Repr)
     ensures fresh(MutBucket.ReprSeq(newbots))
