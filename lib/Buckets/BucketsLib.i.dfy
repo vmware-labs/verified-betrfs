@@ -80,7 +80,12 @@ module BucketsLib {
   ensures keys[i] == key
   ensures msgs[i] == BucketMapOfSeq(keys, msgs)[key]
   {
-    assume false;
+    reveal_BucketMapOfSeq();
+    if key == keys[|keys| - 1] && msgs[|keys| - 1] == BucketMapOfSeq(keys, msgs)[key] {
+      i := |keys| - 1;
+    } else {
+      i := BucketMapOfSeqGetIndex(DropLast(keys), DropLast(msgs), key);
+    }
   }
 
   lemma BucketMapOfSeqMapsIndex(keys: seq<Key>, msgs: seq<Message>, i: int)
@@ -90,7 +95,12 @@ module BucketsLib {
   ensures keys[i] in BucketMapOfSeq(keys, msgs)
   ensures msgs[i] == BucketMapOfSeq(keys, msgs)[keys[i]]
   {
-    assume false;
+    reveal_BucketMapOfSeq();
+    if i == |keys| - 1 {
+    } else {
+      reveal_IsStrictlySorted();
+      BucketMapOfSeqMapsIndex(DropLast(keys), DropLast(msgs), i);
+    }
   }
 
   lemma WFBucketMapOfWFMessageSeq(keys: seq<Key>, msgs: seq<Message>)
