@@ -592,9 +592,54 @@ module DynamicPkv {
 
   lemma WeightBucketPkv_eq_WeightPkv(pkv: PKV.Pkv)
   requires PKV.WF(pkv)
+  decreases PKV.NumKVPairs(pkv)
   ensures PKV.WeightPkv(pkv) as int == WeightBucketPkv(pkv)
   {
-    assume false;
+    if |pkv.keys.offsets| == 0 {
+      calc {
+        PKV.WeightPkv(pkv) as int;
+        0;
+        WeightBucketPkv(pkv);
+      }
+    } else {
+      var pkv' := PKV.subPkv(pkv, 0, PKV.NumKVPairs(pkv) - 1);
+      var key := PKV.GetKey(pkv, PKV.NumKVPairs(pkv) -  1);
+      var msg := PKV.GetMessage(pkv, PKV.NumKVPairs(pkv) - 1);
+      var keys' := PKV.IKeys(pkv'.keys);
+      var msgs' := PKV.IMessages(pkv'.messages);
+      var keys := PKV.IKeys(pkv.keys);
+      var msgs := PKV.IMessages(pkv.messages);
+      calc {
+        PKV.WeightPkv(pkv) as int;
+        {
+          //assert |pkv'.keys.offsets| == |pkv.keys.offsets| - 1;
+          //assert |pkv'.messages.offsets| == |pkv.messages.offsets| - 1;
+          //assert |pkv'.keys.data| == |pkv.keys.data| - |key|;
+          assert |PSA.I(pkv.messages)[PKV.NumKVPairs(pkv) - 1]|
+              <= ValueType.MaxLen() as int;
+          /*assert PKV.Message_to_bytestring(msg)
+              == PKV.Message_to_bytestring(PKV.bytestring_to_Message(
+                    PSA.psaElement(pkv.messages, PKV.NumKVPairs(pkv) - 1)))
+              == PSA.psaElement(pkv.messages, PKV.NumKVPairs(pkv) - 1);
+          assert |pkv'.messages.data|
+              == |pkv.messages.data| - |PSA.psaElement(pkv.messages, PKV.NumKVPairs(pkv) - 1)|
+              == |pkv.messages.data| - |PKV.Message_to_bytestring(msg)|;*/
+        }
+        PKV.WeightPkv(pkv') as int + WeightKey(key) + WeightMessage(msg);
+        { WeightBucketPkv_eq_WeightPkv(pkv'); }
+        WeightBucketPkv(pkv') + WeightKey(key) + WeightMessage(msg);
+        WeightKeyList(keys') + WeightMessageList(msgs') + WeightKey(key) + WeightMessage(msg);
+        {
+          IMessagesSlice(pkv, 0, PKV.NumKVPairs(pkv) -  1);
+          assert keys' + [key] == keys;
+          assert msgs' + [msg] == msgs;
+          WeightKeyListPushBack(keys', key);
+          WeightMessageListPushBack(msgs', msg);
+        }
+        WeightKeyList(keys) + WeightMessageList(msgs);
+        WeightBucketPkv(pkv);
+      }
+    }
   }
 
   class DynamicPkv {
