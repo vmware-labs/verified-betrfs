@@ -2,3 +2,4 @@ bastion
     ubuntu@3.21.176.58
 workers
     ubuntu@3.17.7.43
+    ubuntu@3.22.228.182

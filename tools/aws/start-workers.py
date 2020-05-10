@@ -8,7 +8,8 @@ ec2_connection = boto3.client('ec2', region_name='us-east-2')
 
 try:
     response = ec2_connection.start_instances(InstanceIds=[
-        'i-0417debb8c8b1f5f6'
+        'i-0417debb8c8b1f5f6',
+        'i-04d1314d2bf5b926f'
         ])
     print(response)
 except ClientError as e:
