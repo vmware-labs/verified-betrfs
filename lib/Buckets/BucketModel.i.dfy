@@ -745,12 +745,16 @@ module BucketModel {
   requires |acc_keys| == |acc_msgs|
   requires from <= to <= |top_keys|
   requires bot_from <= |bot_keys|
+  requires (forall i | 0 <= i < |bot_msgs| :: bot_msgs[i] != IdentityMessage())
+  requires (forall i | 0 <= i < |top_msgs| :: top_msgs[i] != IdentityMessage())
+  requires (forall i | 0 <= i < |acc_msgs| :: acc_msgs[i] != IdentityMessage())
   ensures
     var res := mergeToOneChild(
           top_keys, top_msgs, from, to,
           bot_keys, bot_msgs, bot_from,
           acc_keys, acc_msgs, slack);
-    WeightKeyList(res.keys) + WeightMessageList(res.msgs) + res.slack
+    && (forall i | 0 <= i < |res.msgs| :: res.msgs[i] != IdentityMessage())
+    && WeightKeyList(res.keys) + WeightMessageList(res.msgs) + res.slack
       == WeightKeyList(acc_keys) + WeightMessageList(acc_msgs)
        + WeightKeyList(bot_keys[bot_from..]) + WeightMessageList(bot_msgs[bot_from..])
        + slack
@@ -1214,6 +1218,10 @@ module BucketModel {
   decreases |bots| - i
 
   ensures var res := mergeToChildrenIter(top, bots, idxs, tmp, i, results);
+    && WFBucket(res.top)
+    && |res.bots| == |bots|
+    && (forall i | 0 <= i < |res.bots| :: WFBucket(res.bots[i]))
+    && WeightBucket(res.top) <= WeightBucket(top)
     && WeightBucketList(results) + WeightBucketList(bots[i..]) + tmp.slack
         == WeightBucketList(res.bots) + res.slack
   {
@@ -1245,6 +1253,17 @@ module BucketModel {
         var from := if i == 0 then 0 else idxs[i-1];
         var to1 := if i == |idxs| then |top.keys| else idxs[i];
         var to := if to1 < from then from else to1;
+
+        forall j | 0 <= j < |bots[i].msgs|
+        ensures bots[i].msgs[j] != IdentityMessage()
+        {
+          BucketMapOfSeqMapsIndex(bots[i].keys, bots[i].msgs, j);
+        }
+        forall j | 0 <= j < |top.msgs|
+        ensures top.msgs[j] != IdentityMessage()
+        {
+          BucketMapOfSeqMapsIndex(top.keys, top.msgs, j);
+        }
 
         var tmp' := mergeToOneChild(
             top.keys, top.msgs, from, to,
@@ -1343,7 +1362,11 @@ module BucketModel {
   requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
   requires 0 < |bots| == |pivots| + 1
   ensures var res := mergeToChildren(top, pivots, bots, slack);
-    WeightBucketList(bots) + slack == WeightBucketList(res.bots) + res.slack
+    && WFBucket(res.top)
+    && |res.bots| == |bots|
+    && (forall i | 0 <= i < |res.bots| :: WFBucket(res.bots[i]))
+    && WeightBucket(res.top) <= WeightBucket(top)
+    && WeightBucketList(bots) + slack == WeightBucketList(res.bots) + res.slack
   {
     reveal_mergeToChildren();
     var idxs := pivotIndexes(top.keys, pivots);
@@ -1399,8 +1422,12 @@ module BucketModel {
   requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
   requires 0 < |bots| == |pivots| + 1
   requires WeightBucketList(bots) <= MaxTotalBucketWeight()
-  ensures WeightBucketList(partialFlush(top, pivots, bots).bots)
-       <= MaxTotalBucketWeight()
+  ensures var res := partialFlush(top, pivots, bots);
+      && WFBucket(res.top)
+      && |res.bots| == |bots|
+      && (forall i | 0 <= i < |res.bots| :: WFBucket(res.bots[i]))
+      && WeightBucket(res.top) <= WeightBucket(top)
+      && WeightBucketList(res.bots) <= MaxTotalBucketWeight()
   {
     reveal_partialFlush();
     mergeToChildrenSlack(
