@@ -1208,6 +1208,7 @@ module BucketModel {
       results: seq<Bucket>)
   requires WFBucket(top)
   requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
+  requires forall i | 0 <= i < |results| :: WFBucket(results[i])
   requires 0 < |bots|
   requires |results| == i
   requires 0 <= i <= |bots|
@@ -1225,13 +1226,22 @@ module BucketModel {
     && WeightBucketList(results) + WeightBucketList(bots[i..]) + tmp.slack
         == WeightBucketList(res.bots) + res.slack
   {
+    var res := mergeToChildrenIter(top, bots, idxs, tmp, i, results);
     if i == |bots| {
       if tmp.SlackExhausted? {
         var leftover_top := BucketOfSeq(top.keys[tmp.end..], top.msgs[tmp.end..]);
+
+        assert WeightBucket(res.top) <= WeightBucket(top) by {
+          WeightKeyListAdditive(top.keys[..tmp.end], top.keys[tmp.end..]);
+          WeightMessageListAdditive(top.msgs[..tmp.end], top.msgs[tmp.end..]);
+          assert top.keys[..tmp.end] + top.keys[tmp.end..] == top.keys;
+          assert top.msgs[..tmp.end] + top.msgs[tmp.end..] == top.msgs;
+        }
       } else {
       }
       assert bots[i..] == [];
       assert WeightBucketList([]) == 0 by { reveal_WeightBucketList(); }
+      WFBucketMapOfWFMessageSeq(res.top.keys, res.top.msgs);
     } else {
       calc {
         WeightBucketList(bots[i..]);
@@ -1254,17 +1264,6 @@ module BucketModel {
         var to1 := if i == |idxs| then |top.keys| else idxs[i];
         var to := if to1 < from then from else to1;
 
-        forall j | 0 <= j < |bots[i].msgs|
-        ensures bots[i].msgs[j] != IdentityMessage()
-        {
-          BucketMapOfSeqMapsIndex(bots[i].keys, bots[i].msgs, j);
-        }
-        forall j | 0 <= j < |top.msgs|
-        ensures top.msgs[j] != IdentityMessage()
-        {
-          BucketMapOfSeqMapsIndex(top.keys, top.msgs, j);
-        }
-
         var tmp' := mergeToOneChild(
             top.keys, top.msgs, from, to,
             bots[i].keys, bots[i].msgs, 0,
@@ -1274,6 +1273,7 @@ module BucketModel {
             bots[i].keys, bots[i].msgs, 0,
             [], [], tmp.slack);
         var results' := results + [BucketOfSeq(tmp'.keys, tmp'.msgs)];
+        WFBucketMapOfWFMessageSeq(tmp'.keys, tmp'.msgs);
         mergeToChildrenIterSlack(top, bots, idxs, tmp', i+1, results');
 
         calc {
