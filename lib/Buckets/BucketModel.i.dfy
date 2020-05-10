@@ -1261,6 +1261,8 @@ module BucketModel {
           WeightBucketList(results) + WeightKeyList(tmp'.keys) + WeightMessageList(tmp'.msgs);
           {
             reveal_WeightBucketList();
+            assert DropLast(results') == results;
+            assert Last(results') == BucketOfSeq(tmp'.keys, tmp'.msgs);
             //WeightBucket_eq_WeightSeqs(results'[i]);
           }
           WeightBucketList(results');
