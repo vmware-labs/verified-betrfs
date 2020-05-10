@@ -1,0 +1,4 @@
+bastion
+    ubuntu@3.21.176.58
+workers
+    ubuntu@3.17.7.43
