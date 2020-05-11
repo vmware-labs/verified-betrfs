@@ -1,6 +1,8 @@
+#!/usr/bin/python3
 import urllib, json, sys
 import argparse
 import boto3
+import json
 from botocore.exceptions import ClientError
 
 instance_ids = [
@@ -19,6 +21,9 @@ args = parser.parse_args()
 
 print(args)
 
+def prettyResponse(response):
+    return json.dumps(response, indent=2)
+
 if args.scale_up is None and args.scale_down is None:
     print("either --scale-up or --scale-down is required")
     sys.exit(-1)
@@ -31,7 +36,7 @@ if args.scale_up is not None:
         ec2_connection = boto3.client('ec2', region_name='us-east-2')
         try:
             response = ec2_connection.start_instances(InstanceIds=to_start)
-            print(response)
+            print(prettyResponse(response))
         except ClientError as e:
             print(e)
 
@@ -43,7 +48,7 @@ elif args.scale_down is not None:
         ec2_connection = boto3.client('ec2', region_name='us-east-2')
         try:
             response = ec2_connection.stop_instances(InstanceIds=to_stop)
-            print(response)
+            print(prettyResponse(response))
         except ClientError as e:
             print(e)
 
