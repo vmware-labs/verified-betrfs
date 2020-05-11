@@ -4,8 +4,10 @@ import boto3
 from botocore.exceptions import ClientError
 
 instance_ids = [
-    'i-0417debb8c8b1f5f6',
-    'i-04d1314d2bf5b926f'
+    'i-0ef45a89f48487fce',
+    'i-006858073c1785f92',
+    'i-0070ff5413bf8eed4',
+    'i-0119b98c9b74ffaea'
 ]
 
 parser = argparse.ArgumentParser()
