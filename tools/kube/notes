@@ -51,3 +51,18 @@ docker image build veribetrfs_ci
 docker container run -t -i `docker image ls -q | head -1`
 dest=$(sudo docker inspect -f "{{ .NetworkSettings.IPAddress }}" `docker container ls --latest -q`)
 ssh dafnyserver@${dest}
+
+- Switch to enable remver in Makefile
+- Not really happy with server keys checked into source control (eyeroll)
+- Script should pull assets/veribetrfs; encode docker build command
+- Merge into master
+- Need to scale out to cluster; waiting on Lalith; due 2/22.
+- Could try on Amazon?
+
+------------------------------------------------------------------------------
+
+https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-initialization/
+...in ciserver.kube
+KUBECONFIG=kubeconfig kubectl apply -f ciserver.kube 
+KUBECONFIG=kubeconfig kubectl get pod ciserver
+
