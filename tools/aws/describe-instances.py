@@ -30,7 +30,7 @@ try:
         insts = [x for x in insts if x.Name.startswith('veri-worker')]
     if args.ssh:
         for ist in insts:
-            print("\033[1m{}\033[0m\tssh ubuntu@{}".format(ist.Name, ist.PublicIpAddress))
+            print("\033[1m{}\033[0m \x1b[34m{}\033[0m\tssh ubuntu@{}".format(ist.Name, ist.State, ist.PublicIpAddress))
     else:
         pprint.pprint(insts, indent = 2)
 except ClientError as e:
