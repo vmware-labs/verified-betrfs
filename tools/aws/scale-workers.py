@@ -23,7 +23,7 @@ def extract_salient(inst):
     return Instance(
             Name=[x for x in inst['Tags'] if x['Key'] == 'Name'][0]['Value'],
             InstanceId=inst['InstanceId'],
-            PublicIpAddress=inst['PublicIpAddress'],
+            PublicIpAddress=inst.get('PublicIpAddress'),
             State=inst['State']['Name'])
 
 try:
@@ -53,7 +53,7 @@ if args.scale_up is not None:
     if not args.dry_run:
         try:
             response = ec2_connection.start_instances(InstanceIds=to_start)
-            pprint.pprint(response, ident=2)
+            pprint.pprint(response, indent=2)
         except ClientError as e:
             print(e)
 
@@ -64,7 +64,7 @@ elif args.scale_down is not None:
     if not args.dry_run:
         try:
             response = ec2_connection.stop_instances(InstanceIds=to_stop)
-            pprint.pprint(response, ident=2)
+            pprint.pprint(response, indent=2)
         except ClientError as e:
             print(e)
 
