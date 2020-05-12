@@ -23,7 +23,7 @@ def extract_salient(inst):
     return Instance(
             Name=[x for x in inst['Tags'] if x['Key'] == 'Name'][0]['Value'],
             InstanceId=inst['InstanceId'],
-            PublicIpAddress=inst['PublicIpAddress'],
+            PublicIpAddress=inst.get('PublicIpAddress'),
             State=inst['State']['Name'])
 
 try:
