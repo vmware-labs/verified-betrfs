@@ -48,6 +48,7 @@ module BucketImpl {
   ensures KMB.WF(tree)
   ensures forall k | k in KMB.Interpretation(tree) :: |k| <= KeyType.MaxLen() as nat
   ensures KVList.I(kvl) == B(KMB.Interpretation(tree))
+  ensures fresh(tree.repr)
   {
     var modelkvl := KMB.Model.KVList(kvl.keys, kvl.messages);
     tree := KMBBOps.BuildTreeForSequence(modelkvl);
@@ -79,6 +80,7 @@ module BucketImpl {
   ensures KMB.WF(tree)
   ensures forall k | k in KMB.Interpretation(tree) :: |k| <= KeyType.MaxLen() as nat
   ensures PackedKV.I(pkv) == B(KMB.Interpretation(tree))
+  ensures fresh(tree.repr)
   {
     var kv := pkv_to_kvl(pkv);
     assume |kv.keys| < Uint64UpperBound() - 1;
@@ -133,6 +135,7 @@ module BucketImpl {
         && tree != null
         && tree in Repr
         && tree.repr <= Repr
+        && {this} !! tree.repr
         && KMB.WF(tree)
         && Weight as int < Uint64UpperBound()
         && (forall k | k in KMB.Interpretation(tree) :: |k| <= KeyType.MaxLen() as nat)
@@ -292,11 +295,10 @@ module BucketImpl {
       requires Inv()
       ensures result == (|I().b| == 0)
     {
-      assume false;
       if (format.BFTree?) {
         result := KMB.Empty(tree);
       } else {
-        assume false;
+        SetCardinality0(PackedKV.IKeys(pkv.keys));
         result := 0 == |pkv.keys.offsets| as uint64;
       }
     }
@@ -583,8 +585,6 @@ module BucketImpl {
     ensures Bucket == BucketInsert(old(Bucket), key, value)
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
-      assume false;
-
       if format.BFPkv? {
         format := BFTree;
         tree := pkv_to_tree(pkv);
@@ -596,13 +596,24 @@ module BucketImpl {
         var cur;
         tree, cur := KMB.Insert(tree, key, value);
         if (cur.Some?) {
+          ghost var map0 := Maps.MapRemove1(Bucket.b, key);
+          WeightBucketInduct(B(map0), key, cur.value);
+          WeightBucketInduct(B(map0), key, value);
+          assert Bucket.b[key := value] == map0[key := value];
+          assert Bucket.b == map0[key := cur.value];
           Weight := Weight - WeightMessageUint64(cur.value) + WeightMessageUint64(value) as uint64;
         } else {
+          WeightBucketInduct(Bucket, key, value);
           Weight := Weight + WeightKeyUint64(key) + WeightMessageUint64(value);
         }
       }
 
+      ghost var mergedMsg := Merge(value, BucketGet(old(Bucket), key));
+      assert mergedMsg == IdentityMessage() ==> KMB.Interpretation(tree) == MapRemove1(Bucket.b, key);
+      assert mergedMsg != IdentityMessage() ==> KMB.Interpretation(tree) == Bucket.b[key := mergedMsg];
+
       Bucket := B(KMB.Interpretation(tree));
+      Repr := {this} + tree.repr;
     }
 
     method Query(key: Key)
