@@ -16,6 +16,8 @@ module InsertImpl {
   import opened StateImpl
   import opened FlushPolicyImpl
   import opened BucketImpl
+  import opened DiskOpImpl
+  import opened MainDiskIOHandler
 
   import opened Options
   import opened Maps
@@ -68,18 +70,13 @@ module InsertImpl {
   requires io.initialized()
   requires Inv(k, s)
   requires io !in s.Repr()
+  requires s.ready
   modifies s.Repr()
   modifies io
   ensures WellUpdated(s)
   ensures InsertModel.insert(Ic(k), old(s.I()), old(IIO(io)), key, value, s.I(), success, IIO(io))
   {
     InsertModel.reveal_insert();
-
-    if (!s.ready) {
-      PageInIndirectionTableReq(k, s, io);
-      success := false;
-      return;
-    }
 
     var indirectionTableSize := s.ephemeralIndirectionTable.GetSize();
     if (!(indirectionTableSize <= IndirectionTableModel.MaxSizeUint64() - 3)) {
@@ -90,7 +87,7 @@ module InsertImpl {
     var rootLookup := s.cache.GetOpt(BT.G.Root());
     if (rootLookup.None?) {
       if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
-        PageInReq(k, s, io, BT.G.Root());
+        PageInNodeReq(k, s, io, BT.G.Root());
         success := false;
       } else {
         print "insert: root not in cache, but cache is full\n";

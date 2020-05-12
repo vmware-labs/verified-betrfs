@@ -27,6 +27,16 @@ module Sequences {
   function Set<T>(run: seq<T>) : set<T> {
     set x : T | x in multiset(run)
   }
+
+  lemma SetCardinality<T>(run: seq<T>)
+    ensures |Set(run)| <= |run|
+  {
+    if |run| == 0 {
+    } else {
+      assert Set(run) == Set(DropLast(run)) + {Last(run)};
+      SetCardinality(DropLast(run));
+    }
+  }
   
   function ISet<T>(run: seq<T>) : iset<T> {
     iset x : T | x in multiset(run)
@@ -50,6 +60,35 @@ module Sequences {
     }
   }
 
+  lemma NoDupesSetCardinality<T>(a: seq<T>)
+    requires NoDupes(a)
+    ensures |Set(a)| == |a|
+  {
+    reveal_NoDupes();
+    if |a| == 0 {
+    } else {
+      NoDupesSetCardinality(DropLast(a));
+      assert Set(a) == Set(DropLast(a)) + {Last(a)};
+    }
+  }
+
+  lemma NoDupesMultiset<T>(a: seq<T>)
+    requires NoDupes(a)
+    ensures forall x | x in multiset(a) :: multiset(a)[x] == 1
+  {
+    if |a| == 0 {
+    } else {
+      assert a == DropLast(a) + [ Last(a) ];
+      assert Last(a) !in DropLast(a) by {
+        reveal_NoDupes();
+      }
+      assert NoDupes(DropLast(a)) by {
+        reveal_NoDupes();
+      }
+      NoDupesMultiset(DropLast(a));
+    }
+  }
+  
   function IndexOf<T>(s: seq<T>, e: T) : int
     requires e in s;
     ensures 0 <= IndexOf(s,e) < |s|;
@@ -179,7 +218,69 @@ module Sequences {
     a + [b] + c
   }
 
-  predicate {:opaque} IsPrefix<A(==)>(a: seq<A>, b: seq<A>) {
+  function {:opaque} concatSeq<A>(a: seq<seq<A>>) : seq<A>
+  {
+    if |a| == 0 then [] else concatSeq(DropLast(a)) + Last(a)
+  }
+
+  lemma concatSeqAdditive<A>(a: seq<seq<A>>, b: seq<seq<A>>)
+  ensures concatSeq(a + b) == concatSeq(a) + concatSeq(b)
+  {
+    if b == [] {
+      calc {
+        concatSeq(a + b);
+        { assert a + b == a; }
+        concatSeq(a);
+        {
+          reveal_concatSeq();
+          assert concatSeq(b) == [];
+        }
+        concatSeq(a) + concatSeq(b);
+      }
+    } else {
+      calc {
+        concatSeq(a + b);
+        { reveal_concatSeq(); }
+        concatSeq(DropLast(a + b)) + Last(a + b);
+        {
+          assert DropLast(a + b) == a + DropLast(b);
+          assert Last(a + b) == Last(b);
+        }
+        concatSeq(a + DropLast(b)) + Last(b);
+        {
+          concatSeqAdditive(a, DropLast(b));
+        }
+        concatSeq(a) + concatSeq(DropLast(b)) + Last(b);
+        { reveal_concatSeq(); }
+        concatSeq(a) + concatSeq(b);
+      }
+    }
+  }
+
+  lemma lemma_concatSeqLen_ge_elemLen<A>(a: seq<seq<A>>, i: int)
+  requires 0 <= i < |a|
+  ensures |concatSeq(a)| >= |a[i]|
+  {
+    reveal_concatSeq();
+    if i < |a| - 1 {
+      lemma_concatSeqLen_ge_elemLen(a[..|a|-1], i);
+    }
+  }
+
+  lemma lemma_concatSeqLen_le_mul<A>(a: seq<seq<A>>, t: int)
+  requires forall i | 0 <= i < |a| :: |a[i]| <= t
+  ensures |concatSeq(a)| <= |a| * t
+  {
+    reveal_concatSeq();
+    if |a| == 0 {
+    } else {
+      lemma_concatSeqLen_le_mul(a[..|a|-1], t);
+    }
+  }
+
+  predicate {:opaque} IsPrefix<A(==)>(a: seq<A>, b: seq<A>)
+  ensures IsPrefix(a, b) ==> |a| <= |b|
+  {
     && |a| <= |b|
     && a == b[..|a|]
   }
@@ -286,22 +387,37 @@ module Sequences {
     else FlattenShape(DropLast(seqs)) + [|Last(seqs)|]
   }
 
+  lemma FlattenShapeAdditive<A>(seqs1: seq<seq<A>>, seqs2: seq<seq<A>>)
+    ensures FlattenShape(seqs1 + seqs2) == FlattenShape(seqs1) + FlattenShape(seqs2)
+  {
+  }
+  
   function {:opaque} FlattenLength(shape: seq<nat>) : nat
+    ensures |shape| == 0 ==> FlattenLength(shape) == 0
   {
     if |shape| == 0 then 0
     else FlattenLength(DropLast(shape)) + Last(shape)
   }
-  
-  lemma FlattenLengthMonotonic(shape: seq<nat>, prefix: nat)
-    requires prefix < |shape|
-    ensures FlattenLength(shape[..prefix]) <= FlattenLength(shape)
+
+
+  lemma FlattenLengthAdditive(shape1: seq<nat>, shape2: seq<nat>)
+    ensures FlattenLength(shape1 + shape2) == FlattenLength(shape1) + FlattenLength(shape2)
   {
-    reveal_FlattenLength();
-    if prefix == |shape|-1 {
+    if |shape2| == 0 {
+      assert shape1 + shape2 == shape1;
     } else {
-      FlattenLengthMonotonic(DropLast(shape), prefix);
-      assert DropLast(shape)[..prefix] == shape[..prefix];
+      reveal_FlattenLength();
+      assert shape1 + shape2 == (shape1 + DropLast(shape2)) + [Last(shape2)];
     }
+  }
+  
+  lemma FlattenLengthSubSeq(shape: seq<nat>, from: nat, to: nat)
+    requires from <= to <= |shape|
+    ensures FlattenLength(shape[from..to]) <= FlattenLength(shape)
+  {
+    assert shape == shape[..from] + shape[from..to] + shape[to..];
+    FlattenLengthAdditive(shape[..from] + shape[from..to], shape[to..]);
+    FlattenLengthAdditive(shape[..from], shape[from..to]);
   }
 
   function {:opaque} Flatten<A>(seqs: seq<seq<A>>) : seq<A>
@@ -391,7 +507,7 @@ module Sequences {
     reveal_FlattenLength();
     if il < jl-1 {
       assert shape[..il] == shape[..il+1][..il];
-      FlattenLengthMonotonic(shape[..jl], il+1);
+      FlattenLengthSubSeq(shape[..jl], 0, il+1);
       assert shape[..jl][..il+1] == shape[..il+1];
     } else if il == jl - 1 {
       assert shape[..il] == shape[..il+1][..il];
@@ -451,4 +567,69 @@ module Sequences {
     }
   }
 
+  lemma lemma_seq_suffix_slice<T>(s: seq<T>, i: int, j: int, k: int)
+  requires 0 <= i <= |s|
+  requires 0 <= j <= k <= |s| - i
+  ensures s[i..][j..k] == s[i+j..i+k];
+  {
+  }
+
+  lemma lemma_seq_slice_suffix<T>(s: seq<T>, i: int, j: int, k: int)
+  requires 0 <= i <= j <= |s|
+  requires 0 <= k <= j - i
+  ensures s[i..j][k..] == s[i+k..j];
+  {
+  }
+
+  lemma lemma_array_suffix_slice<T>(ar: array<T>, i: int, j: int, k: int)
+  requires 0 <= i <= ar.Length
+  requires 0 <= j <= k <= ar.Length - i
+  ensures ar[i..][j..k] == ar[i+j..i+k];
+  {
+  }
+
+  lemma lemma_seq_extensionality<T>(s: seq<T>, t: seq<T>)
+  requires |s| == |t|
+  requires forall i | 0 <= i < |s| :: s[i] == t[i]
+  ensures s == t
+  {
+  }
+
+  lemma lemma_seq_slice_slice<T>(s: seq<T>, i: int, j: int, k: int, l: int)
+  requires 0 <= i <= j <= |s|
+  requires 0 <= k <= l <= j - i
+  ensures s[i..j][k..l] == s[i+k..i+l];
+  {
+    lemma_seq_extensionality(s[i..j][k..l], s[i+k..i+l]);
+  }
+
+  lemma lemma_array_slice_slice<T>(ar: array<T>, i: int, j: int, k: int, l: int)
+  requires 0 <= i <= j <= ar.Length
+  requires 0 <= k <= l <= j - i
+  ensures ar[i..j][k..l] == ar[i+k..i+l];
+  {
+    lemma_seq_slice_slice(ar[..], i, j, k, l);
+  }
+
+  lemma lemma_seq_extensionality_slice<T>(s: seq<T>, t: seq<T>, a: int, b: int)
+  requires 0 <= a <= b <= |s|
+  requires b <= |t|
+  requires forall i | a <= i < b :: s[i] == t[i]
+  ensures s[a..b] == t[a..b]
+  {
+  }
+
+  function {:opaque} fill<T>(n: int, t: T) : (res: seq<T>)
+  requires n >= 0
+  ensures |res| == n
+  ensures forall i | 0 <= i < n :: res[i] == t
+  {
+    if n == 0 then [] else fill(n-1, t) + [t]
+  }
+
+  lemma sum_slice_second<T>(a: seq<T>, b: seq<T>, i: int, j: int)
+  requires |a| <= i <= j <= |a| + |b|
+  ensures (a+b)[i..j] == b[i-|a| .. j-|a|]
+  {
+  }
 }

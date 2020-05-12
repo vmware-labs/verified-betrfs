@@ -1,0 +1,22 @@
+NodeImpl:
+
+Most qi offenders were method declarations (reads/modifies?); no obvious
+qis of my own.
+
+Wrote a nice profile-reader script to compare two runs with different
+timeouts. Hoping to have the offending root cause emerge as a low-count but
+high-ratio enttry. Nothing jumped out.
+Further directions:
+- profile against the .bpl to understand what the method-decl locs mean
+
+Seq#Index getting used 15k times is interesting.
+  NodeImpl.39: constructor requires
+  NodeImpl.63: Inv forall
+  NodeImpl.70: Inv forall
+  NodeImpl.69: Inv forall
+
+Hiding Inv made the verification fast-ish (20s), but it's not clearly
+the underlying cause. Should I worry less about timeouts in code that
+we're going to attack with linear types?
+
+.dafny/dafny//Binaries/dafny /compile:0 /timeLimit:20 Impl/NodeImpl.i.dfy /proc:'*CutoffNodeAndKeepLeft*' /z3opt:smt.qi.profile=true /z3opt:smt.qi.profile_freq=100 > /tmp/qi20.log

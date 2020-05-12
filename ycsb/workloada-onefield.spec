@@ -21,4 +21,6 @@ fieldlength=512
 
 requestdistribution=zipfian
 
-syncintervalms=1000
+#syncintervalms=1000
+# Sync based on ops, so we don't create sync-collapse in slow phases.
+syncintervalops=10000

@@ -134,6 +134,122 @@ public:
   }
 };
 
+class SimpleTest : public Benchmark {
+public:
+  virtual string name() override { return "SimpleTest"; }
+  virtual int opCount() override { return 100000; }
+
+  SimpleTest() {
+  }
+
+  virtual void prepare(Application& app) override {
+    app.Insert("a", "1");
+    app.Insert("b", "2");
+    app.Insert("c", "3");
+    app.Insert("d", "4");
+    app.Sync(true);
+    app.crash();
+  }
+  virtual void go(Application& app) override {
+    app.QueryAndExpect(ByteString("a"), ByteString("1"));
+    app.QueryAndExpect(ByteString("b"), ByteString("2"));
+    app.QueryAndExpect(ByteString("c"), ByteString("3"));
+    app.QueryAndExpect(ByteString("d"), ByteString("4"));
+    app.QueryAndExpect(ByteString("a"), ByteString("1"));
+    app.QueryAndExpect(ByteString("b"), ByteString("2"));
+    app.QueryAndExpect(ByteString("c"), ByteString("3"));
+    app.QueryAndExpect(ByteString("d"), ByteString("4"));
+    app.QueryAndExpect(ByteString("a"), ByteString("1"));
+    app.QueryAndExpect(ByteString("a"), ByteString("1"));
+    app.QueryAndExpect(ByteString("a"), ByteString("1"));
+    app.QueryAndExpect(ByteString("b"), ByteString("2"));
+    app.QueryAndExpect(ByteString("a"), ByteString("1"));
+    app.QueryAndExpect(ByteString("b"), ByteString("2"));
+    app.QueryAndExpect(ByteString("c"), ByteString("3"));
+    app.QueryAndExpect(ByteString("d"), ByteString("4"));
+    app.QueryAndExpect(ByteString("a"), ByteString("1"));
+    app.QueryAndExpect(ByteString("c"), ByteString("3"));
+    app.QueryAndExpect(ByteString("a"), ByteString("1"));
+    app.QueryAndExpect(ByteString("a"), ByteString("1"));
+    app.QueryAndExpect(ByteString("a"), ByteString("1"));
+
+    app.QueryAndExpect(ByteString("a"), ByteString("1"));
+    app.QueryAndExpect(ByteString("b"), ByteString("2"));
+    app.QueryAndExpect(ByteString("c"), ByteString("3"));
+    app.QueryAndExpect(ByteString("d"), ByteString("4"));
+
+    app.Insert("a", "x");
+
+    app.QueryAndExpect(ByteString("a"), ByteString("x"));
+    app.QueryAndExpect(ByteString("b"), ByteString("2"));
+    app.QueryAndExpect(ByteString("c"), ByteString("3"));
+    app.QueryAndExpect(ByteString("d"), ByteString("4"));
+
+    app.Insert("b", "y");
+
+    app.QueryAndExpect(ByteString("d"), ByteString("4"));
+    app.QueryAndExpect(ByteString("c"), ByteString("3"));
+    app.QueryAndExpect(ByteString("b"), ByteString("y"));
+    app.QueryAndExpect(ByteString("a"), ByteString("x"));
+
+    app.QueryAndExpect(ByteString("a"), ByteString("x"));
+    app.QueryAndExpect(ByteString("b"), ByteString("y"));
+    app.QueryAndExpect(ByteString("c"), ByteString("3"));
+    app.QueryAndExpect(ByteString("d"), ByteString("4"));
+
+    app.Insert("c", "z");
+
+    app.QueryAndExpect(ByteString("d"), ByteString("4"));
+    app.QueryAndExpect(ByteString("c"), ByteString("z"));
+    app.QueryAndExpect(ByteString("b"), ByteString("y"));
+    app.QueryAndExpect(ByteString("a"), ByteString("x"));
+
+    app.QueryAndExpect(ByteString("a"), ByteString("x"));
+    app.QueryAndExpect(ByteString("b"), ByteString("y"));
+    app.QueryAndExpect(ByteString("c"), ByteString("z"));
+    app.QueryAndExpect(ByteString("d"), ByteString("4"));
+
+    app.Insert("d", "w");
+
+    app.QueryAndExpect(ByteString("d"), ByteString("w"));
+    app.QueryAndExpect(ByteString("c"), ByteString("z"));
+    app.QueryAndExpect(ByteString("b"), ByteString("y"));
+    app.QueryAndExpect(ByteString("a"), ByteString("x"));
+
+    app.QueryAndExpect(ByteString("a"), ByteString("x"));
+    app.QueryAndExpect(ByteString("b"), ByteString("y"));
+    app.QueryAndExpect(ByteString("c"), ByteString("z"));
+    app.QueryAndExpect(ByteString("d"), ByteString("w"));
+
+    ByteString t[4];
+    t[0] = ByteString("x");
+    t[1] = ByteString("y");
+    t[2] = ByteString("z");
+    t[3] = ByteString("w");
+    for (int i = 0; i < 100000; i++) {
+      int k = rand() % 4;
+      ByteString key;
+      if (k == 0) key = ByteString("a");
+      if (k == 1) key = ByteString("b");
+      if (k == 2) key = ByteString("c");
+      if (k == 3) key = ByteString("d");
+      if (rand() % 2) {
+        app.QueryAndExpect(key, t[k]);
+      } else {
+        int v = rand() % 2;
+        ByteString val;
+        if (k == 0) val = v ? ByteString("1") : ByteString("11");
+        if (k == 1) val = v ? ByteString("2") : ByteString("22");
+        if (k == 2) val = v ? ByteString("3") : ByteString("33");
+        if (k == 3) val = v ? ByteString("4") : ByteString("44");
+        app.Insert(key, val);
+        t[k] = val;
+      }
+    }
+  }
+};
+
+
 class BenchmarkRandomInserts : public Benchmark {
 public:
   int count = 500000;
@@ -157,7 +273,7 @@ public:
     for (size_t i = 0; i < keys.size(); i++) {
       app.Insert(keys[i], values[i]);
     }
-    app.Sync();
+    app.Sync(false);
   }
 };
 
@@ -199,10 +315,10 @@ public:
 
       app.Insert(key, value);
 
-      if (i % 50000 == 0) app.Sync();
+      if (i % 50000 == 0) app.Sync(false);
     }
 
-    app.Sync();
+    app.Sync(true);
   }
 };
 
@@ -271,7 +387,7 @@ public:
 
       app.Insert(key, value);
     }
-    app.Sync();
+    app.Sync(true);
     app.crash();
   }
 
@@ -310,7 +426,7 @@ public:
     for (size_t i = 0; i < keys.size(); i++) {
       app.Insert(keys[i], values[i]);
     }
-    app.Sync();
+    app.Sync(true);
     app.crash();
   }
   virtual void go(Application& app) override {
@@ -362,7 +478,7 @@ public:
       app.Insert(keys[i], value);
     }
 
-    app.Sync();
+    app.Sync(true);
   }
 
   virtual void go(Application& app) override {
@@ -433,7 +549,7 @@ public:
       app.Insert(keys[i], value);
     }
 
-    app.Sync();
+    app.Sync(true);
   }
 
   virtual void go(Application& app) override {
@@ -518,7 +634,7 @@ public:
       //cout << "Inserting " << to_hex(keys_values[i].first) << " -> " << to_hex(keys_values[i].second) << endl;
       app.Insert(keys_values[i].first, keys_values[i].second);
     }
-    app.Sync();
+    app.Sync(true);
     app.crash();
   }
 
@@ -538,10 +654,45 @@ public:
         fail("Incorrect succ result");
       }
     }
-    app.Sync();
+    app.Sync(true);
   }
 };
 
+class BenchmarkReplay : public Benchmark {
+public:
+  int count = 20000;
+
+  virtual string name() override { return "Replay"; }
+  virtual int opCount() override { return 1; }
+
+  vector<ByteString> keys;
+  vector<ByteString> values;
+  vector<ByteString> query_keys;
+  vector<ByteString> query_values;
+
+  BenchmarkReplay() {
+    int seed1 = 1234;
+    int seed2 = 527;
+    int seed3 = 19232;
+    keys = RandomKeys(count, seed1);
+    values = RandomValues(count, seed2);
+
+    auto p = RandomQueryKeysAndValues(count, seed3, keys, values);
+    query_keys = move(p.first);
+    query_values = move(p.second);
+  }
+
+  virtual void prepare(Application& app) override {
+    for (size_t i = 0; i < keys.size(); i++) {
+      app.Insert(keys[i], values[i]);
+    }
+    app.Sync(false);
+    app.crash();
+  }
+  virtual void go(Application& app) override {
+    app.QueryAndExpect(query_keys[0], query_values[0]);
+  }
+};
 
 void RunAllBenchmarks(string filename) {
   { BenchmarkRandomInserts q; q.run(filename); }
@@ -557,6 +708,8 @@ shared_ptr<Benchmark> benchmark_by_name(string const& name) {
   if (name == "random-succs") { return shared_ptr<Benchmark>(new BenchmarkRandomSuccQueries()); }
   if (name == "mixed-insert-query") { return shared_ptr<Benchmark>(new BenchmarkMixedInsertQuery()); }
   if (name == "mixed-update-query") { return shared_ptr<Benchmark>(new BenchmarkMixedUpdateQuery()); }
+  if (name == "replay") { return shared_ptr<Benchmark>(new BenchmarkReplay()); }
+  if (name == "simple-test") { return shared_ptr<Benchmark>(new SimpleTest()); }
 
   cerr << "No benchmark found by name " << name << endl;
   exit(1);
@@ -634,11 +787,11 @@ void benchmark_clear() {
 }
 
 namespace NativeBenchmarking_Compile {
-  void __default::start(DafnySequence<char> dafnyName) {
+  void start(DafnySequence<char> dafnyName) {
     benchmark_start(nameToString(dafnyName));
   }
 
-  void __default::end(DafnySequence<char> dafnyName) {
+  void end(DafnySequence<char> dafnyName) {
     benchmark_end(nameToString(dafnyName));
   }
 }

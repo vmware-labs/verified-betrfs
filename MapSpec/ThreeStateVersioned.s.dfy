@@ -38,9 +38,9 @@ abstract module ThreeStateVersioned {
 
   datatype Constants = Constants(k: SM.Constants)
   datatype Variables = Variables(
-      s1: SM.Variables,
-      s2: SM.Variables,
-      s3: SM.Variables,
+      s1: SM.Variables, // persistent
+      s2: SM.Variables, // frozen
+      s3: SM.Variables, // ephemeral
       ghost outstandingSyncReqs: map<int, SyncReqStatus>
   )
 

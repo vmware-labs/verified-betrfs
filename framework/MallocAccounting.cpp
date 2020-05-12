@@ -1,17 +1,19 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <malloc.h>
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/mman.h>
 #include <unordered_map>
 #include <vector>
 
 #include "MallocAccounting.h"
 
 #if MALLOC_ACCOUNTING
+
+#include <malloc.h>
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
@@ -53,37 +55,28 @@ bool cstr_ends_with(const char* haystack, const char* needle) {
 }
 
 // OS view of heap size
-size_t external_heap_size() {
+void external_heap_size(size_t* heap, size_t* all_maps) {
   size_t result = -1;
   FILE* fp = fopen("/proc/self/maps", "r");
+  size_t total = 0;
   while (true) {
     char space[1000];
     char* line = fgets(space, sizeof(space), fp);
     if (line==NULL) { break; }
+    char* remainder;
+    size_t base = strtol(line, &remainder, 16);
+    size_t end = strtol(&remainder[1], NULL, 16);
+    result = end - base;
+    total += result;
+
     if (cstr_ends_with(line, "[heap]\n")) {
-      char* remainder;
-      long base = strtol(line, &remainder, 16);
-      long end = strtol(&remainder[1], NULL, 16);
-      result = end - base;
-      break;
+      *heap = result;
     }
   }
   fclose(fp);
-  return result;
+  *all_maps = total;
 }
   
-#define ACCOUNTING_MAGIC 0x1badf00f
-
-struct ARow;
-
-// A little header we prepend to each allocation so we can track the
-// allocation size so we know what to free later.
-typedef struct {
-  uint64_t magic; // identify my own mallocs
-  size_t allocation_size;
-  ARow* arow;
-} AccountingHeader;
-
 struct Label {
   const char* scope;
   const char* subscope;
@@ -114,30 +107,78 @@ namespace std {
   };
 }
 
+// A little header we prepend to each allocation so we can track the
+// allocation size so we know what to free later.
+#define ACCOUNTING_MAGIC 0x1badf00f
+typedef struct {
+  uint64_t magic; // identify my own mallocs
+  size_t allocation_size;
+  Label label;
+} AccountingHeader;
+
 struct ARow {
   Label label;
-  uint64_t total_allocation_count;
-  uint64_t open_allocation_count;
-  uint64_t total_allocation_bytes;
-  uint64_t open_allocation_bytes;
-  ARow(const Label &label)
+  uint64_t total_count;
+  uint64_t open_count;
+  uint64_t total_bytes;
+  uint64_t open_bytes;
+  ARow(const Label& label)
     : label(label),
-      total_allocation_count(0),
-      open_allocation_count(0),
-      total_allocation_bytes(0),
-      open_allocation_bytes(0)
+      total_count(0),
+      open_count(0),
+      total_bytes(0),
+      open_bytes(0)
   {}
+
+  inline void record_allocate(size_t size) {
+    total_count += 1;
+    open_count += 1;
+    total_bytes += size;
+    open_bytes += size;
+  }
+
+  inline void record_free(size_t size) {
+    open_count -= 1;
+    open_bytes -= size;
+  }
+
+#define AROW_BUFSIZE (1024)
+  static char* display_header(char* buf, int bufsize) {
+    assert(bufsize==AROW_BUFSIZE);
+    snprintf(buf, bufsize, "%14s %14s %14s %14s  %s",
+      "tot cnt", "open cnt", "tot byt", "open byt", "label");
+    return buf;
+  }
+
+  char* display(char* buf, int bufsize) {
+    assert(bufsize==AROW_BUFSIZE);
+    snprintf(buf, bufsize, "%14ld %14ld %14ld %14ld %s.%s",
+      total_count,
+      open_count,
+      total_bytes,
+      open_bytes,
+      label.subscope,
+      label.scope);
+    return buf;
+  }
 };
 
-// Somebody wishes he had a hashtable, doesn't somebody?
+//////////////////////////////////////////////////////////////////////////////
+// Scope Map
+//
+// Label allocations with the call site that caused them, to find leaks.
+// "scopes" are Labels given by the emitted code (or framework code)
+// that are high enough up the call graph that they are interpretable.
+
 Label g_default_label("default", "");
-class ATable {
+
+class ScopeMap {
 private:
   std::unordered_map<Label, ARow> umap;
   Label g_active_label;
 
 public:
-  ATable();
+  ScopeMap();
 
   void set_active_label(const Label& label) {
     assert(g_active_label.equals(g_default_label)); // nested label calls; need label stack?
@@ -148,17 +189,28 @@ public:
   // Add a row to the table if it's absent.
   ARow* get_or_add_row(const Label& label);
 
- ARow* get_active_row() { return get_or_add_row(g_active_label); }
+  ARow* get_active_row() { return get_or_add_row(g_active_label); }
   
   void display();
-  size_t total_open();  // total open allocation bytes
+
+  inline const Label* get_active_label() { return &g_active_label; }
+
+  inline void record_allocate(size_t size) {
+#if MALLOC_ACCOUNTING_ENABLE_SCOPES
+    ARow* arow = get_active_row();
+    arow->record_allocate(size);
+#endif // MALLOC_ACCOUNTING_ENABLE_SCOPES
+  };
+
+  inline void record_free(const Label& label, size_t size) {
+#if MALLOC_ACCOUNTING_ENABLE_SCOPES
+    ARow* arow = get_or_add_row(label);
+    arow->record_free(size);
+#endif // MALLOC_ACCOUNTING_ENABLE_SCOPES
+  }
 };
 
-ATable::ATable() {
-  g_active_label = g_default_label;
-}
-
-ARow* ATable::get_or_add_row(const Label& label) {
+ARow* ScopeMap::get_or_add_row(const Label& label) {
   assert(label.scope != NULL);
   auto insertPair = umap.emplace(label, ARow(label));
   // Don't care if insert succeeded or was just a lookup; just want
@@ -166,80 +218,216 @@ ARow* ATable::get_or_add_row(const Label& label) {
   return &insertPair.first->second;
 }
 
-size_t ATable::total_open() {
-  size_t total = 0;
-  for (auto it = umap.begin(); it != umap.end(); it++)  {
-    total += it->second.open_allocation_bytes;
-  }
-  return total;
+ScopeMap::ScopeMap() {
+  g_active_label = g_default_label;
 }
 
-void ATable::display() {
-  Label totalLabel("total", "");
-  ARow total(totalLabel);
-  printf("%10s %10s %10s %10s  %s\n",
-    "tot cnt", "open cnt", "tot byt", "open byt", "label");
-  printf("%10s %10s %10s %10s  %s\n",
-    "-------", "--------", "-------", "--------", "----------");
+void ScopeMap::display() {
+#if !MALLOC_ACCOUNTING_ENABLE_SCOPES
+  return;
+#endif // MALLOC_ACCOUNTING_ENABLE_SCOPES
+  char buf[AROW_BUFSIZE];
+  printf("ma-hdr   %s\n", ARow::display_header(buf, sizeof(buf)));
+  printf("ma-hdr   ----------------------------------------------------  ----------\n");
   std::vector<ARow> rows;
   for (auto it = umap.begin(); it != umap.end(); it++)  {
     rows.push_back(it->second);
   }
 
   sort(rows.begin(), rows.end(), [](const ARow& lhs, const ARow& rhs) {
-      return lhs.open_allocation_bytes < rhs.open_allocation_bytes;
+      return lhs.open_bytes < rhs.open_bytes;
   });
 
   for (auto it = rows.begin(); it != rows.end(); it++)  {
     ARow* row = &(*it);
-    Label* label = &row->label;
-    printf("%10ld %10ld %10ld %10ld  %s.%s\n",
-      row->total_allocation_count,
-      row->open_allocation_count,
-      row->total_allocation_bytes,
-      row->open_allocation_bytes,
-      label->subscope,
-      label->scope);
-    total.total_allocation_count += row->total_allocation_count;
-    total.open_allocation_count += row->open_allocation_count;
-    total.total_allocation_bytes += row->total_allocation_bytes;
-    total.open_allocation_bytes += row->open_allocation_bytes;
+    printf("ma-scope %s\n",
+      row->display(buf, sizeof(buf)));
   }
-  printf("%10s %10s %10s %10s  %s\n",
-    "-------", "--------", "-------", "--------", "----------");
-  printf("%10ld %10ld %10ld %10ld  %s.%s\n",
-    total.total_allocation_count,
-    total.open_allocation_count,
-    total.total_allocation_bytes,
-    total.open_allocation_bytes,
-    "total",
-    "");
 }
+
+//////////////////////////////////////////////////////////////////////////////
+// A pattern-matcher for chasing down particular allocations
+
+struct Microscope {
+  uint64_t min_size;
+  uint64_t max_size;
+  ARow arow;
+  const char* description;
+};
+
+static const char* match_any = "any";
+
+Microscope microscopes[] = {
+  // row 0 is reserved for total
+  {0, ULLONG_MAX, ARow(Label(match_any, "")), "total"},
+  {0, (1<<20)-1, ARow(Label(match_any, "")), "coarse-small"},
+  {1<<20, ULLONG_MAX, ARow(Label(match_any, "")), "coarse-large"},
+  {0, 511, ARow(Label("[T = unsigned char]", "explicit-seq")), "es511"},
+  {512, 512, ARow(Label("[T = unsigned char]", "explicit-seq")), "es512"},
+  {513, (1<<20)-1, ARow(Label("[T = unsigned char]", "explicit-seq")), "esMid"},
+  {1<<20, ULLONG_MAX, ARow(Label("[T = unsigned char]", "explicit-seq")), "esLarge"},
+  {0, 511, ARow(Label("[T = unsigned char]", "seq-from-array")), "sfa511"},
+  {512, 512, ARow(Label("[T = unsigned char]", "seq-from-array")), "sfa512"},
+  {513, (1<<20)-1, ARow(Label("[T = unsigned char]", "seq-from-array")), "sfaMid"},
+  {1<<20, ULLONG_MAX, ARow(Label("[T = unsigned char]", "seq-from-array")), "sfaLarge"},
+};
+
+class MicroscopeBench {
+public:
+  inline void record_allocate(const Label& label, size_t size) {
+#if MALLOC_ACCOUNTING_ENABLE_SCOPES
+    for (unsigned int i=0; i<sizeof(microscopes)/sizeof(Microscope); i++) {
+      Microscope& microscope = microscopes[i];
+      if (microscope.min_size <= size
+          && size <= microscope.max_size
+          && (microscope.arow.label.scope == match_any
+            || microscope.arow.label.equals(label))) {
+        microscope.arow.record_allocate(size);
+      }
+    }
+#endif // MALLOC_ACCOUNTING_ENABLE_SCOPES
+  }
+
+  inline void record_free(const Label& label, size_t size) {
+#if MALLOC_ACCOUNTING_ENABLE_SCOPES
+    for (unsigned int i=0; i<sizeof(microscopes)/sizeof(Microscope); i++) {
+      Microscope& microscope = microscopes[i];
+      if (microscope.min_size <= size
+          && size <= microscope.max_size
+          && (microscope.arow.label.scope == match_any
+            || microscope.arow.label.equals(label))) {
+        microscope.arow.record_free(size);
+      }
+    }
+#endif // MALLOC_ACCOUNTING_ENABLE_SCOPES
+  }
+
+  void display() {
+    for (unsigned int i=0; i<sizeof(microscopes)/sizeof(Microscope); i++) {
+      Microscope& microscope = microscopes[i];
+      char buf[AROW_BUFSIZE];
+      printf("ma-microscope %s %s\n",
+        microscope.arow.display(buf, sizeof(buf)), microscope.description);
+    }
+  }
+};
+
+//////////////////////////////////////////////////////////////////////////////
+// Fine-grained histogram
+
+class FineHistogram {
+private:
+  std::unordered_map<size_t, size_t> histogram;
+
+  void histogram_increment(size_t size, int delta);
+
+public:
+  inline void record_allocate(size_t size) {
+#if MALLOC_ACCOUNTING_ENABLE_FULL_HISTOGRAM
+    histogram_increment(size, 1);
+#endif // MALLOC_ACCOUNTING_ENABLE_FULL_HISTOGRAM
+  }
+
+  inline void record_free(size_t size) {
+#if MALLOC_ACCOUNTING_ENABLE_FULL_HISTOGRAM
+    histogram_increment(size, -1);
+#endif // MALLOC_ACCOUNTING_ENABLE_FULL_HISTOGRAM
+  }
+
+  void display();
+};
+
+void FineHistogram::histogram_increment(size_t size, int delta) {
+  auto insertPair = histogram.emplace(size, 0);
+  auto eltIt = insertPair.first;
+  auto kvPointer = &(*eltIt);
+  kvPointer->second += delta;
+}
+
+void FineHistogram::display() {
+#if !MALLOC_ACCOUNTING_ENABLE_FULL_HISTOGRAM
+  return; // nothing to display.
+#endif // MALLOC_ACCOUNTING_ENABLE_FULL_HISTOGRAM
+  std::vector<std::pair<size_t, size_t>> buckets;
+  for (auto it = histogram.begin(); it != histogram.end(); it++)  {
+    buckets.push_back(std::pair<size_t, size_t>(it->first, it->second));
+  }
+  sort(buckets.begin(), buckets.end(), [](const std::pair<size_t,size_t>& lhs, const std::pair<size_t,size_t>& rhs) {
+      return lhs.first < rhs.first;
+  });
+
+  size_t total = 0;
+  printf("ma-fine-histogram {");
+  for (auto it = buckets.begin(); it != buckets.end(); it++)  {
+    auto pair = *it;
+    total += pair.first * pair.second;
+    printf("%ld:%ld,", pair.first, pair.second);
+  }
+  printf("}\n");
+  printf("ma-fine-histogram-total %ld\n", total);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// table of interesting metrics.
+
+class ATable {
+public:
+  // These different modules are activated/deactivated with #defines in .h
+  ScopeMap scope_map;
+  FineHistogram fine_histogram;
+  MicroscopeBench microscope_bench;
+
+  inline const Label* record_allocate(size_t size) {
+    const Label* label = scope_map.get_active_label();
+    fine_histogram.record_allocate(size);
+    scope_map.record_allocate(size);
+    microscope_bench.record_allocate(*label, size);
+    return label; // tuck into allocation header so we know it at free time
+  }
+
+  // scope_row is tucked into allocation to avoid a hash lookup at free time
+  inline void record_free(size_t size, const Label& label) {
+    fine_histogram.record_free(size);
+    scope_map.record_free(label, size);
+    microscope_bench.record_free(label, size);
+  }
+
+  size_t total_open_bytes() {
+    // row 0 is reserved for total
+    return microscopes[0].arow.open_bytes;
+  }
+};
 
 ATable atable;
 
+//////////////////////////////////////////////////////////////////////////////
+
+// If enabled, allocations bigger than MMAP_POOL_SIZE are done with mmap
+#define MMAP_POOL_ENABLE 0
+#define MMAP_POOL_SIZE_THRESH (1<<20) /* 1MB */
+
 void *malloc_hook(size_t size, const void *caller) {
+  void *underlying;
   void *result;
 
   remove_hooks();
+  // do our work (outside of hookland)
+
+  size_t underlying_size = size + sizeof(AccountingHeader);
 
   // Call real malloc
-  result = malloc(size + sizeof(AccountingHeader));
+  bool use_mmap = MMAP_POOL_ENABLE && (size >= MMAP_POOL_SIZE_THRESH);
+  if (use_mmap) {
+    underlying = mmap(NULL, underlying_size, PROT_READ|PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  } else {
+    underlying = malloc(underlying_size);
+  }
 
-  ARow* arow = atable.get_active_row();
-  AccountingHeader* ar = (AccountingHeader*) result;
-  result = (char*) result + sizeof(AccountingHeader);
+  AccountingHeader* ar = (AccountingHeader*) underlying;
+  result = (char*) underlying + sizeof(AccountingHeader);
   ar->magic = ACCOUNTING_MAGIC;
   ar->allocation_size = size;
-  ar->arow = arow;
-  //record_underlying_hooks(); // not sure why example re-saves hooks here
-
-  // do our work (outside of hookland)
-  //printf("malloc_hook sees size %lx from %p; returns %p\n", size, caller, result);
-  arow->total_allocation_count += 1;
-  arow->open_allocation_count += 1;
-  arow->total_allocation_bytes += size;
-  arow->open_allocation_bytes += size;
+  ar->label = *atable.record_allocate(size);
 
   install_hooks();
 
@@ -257,24 +445,34 @@ void free_hook(void* ptr, const void *caller) {
   // do our work (outside of hookland)
   AccountingHeader* ar = (AccountingHeader*)((char*) ptr - sizeof(AccountingHeader));
   void* orig_ptr;
+  size_t size = 0;
+  bool use_munmap;
+
   if (ar->magic != ACCOUNTING_MAGIC) {
-    // Uh, that's not mine.
+    // That's, uh, not mine.
     // https://getyarn.io/yarn-clip/00a2eaf9-a18d-4aea-b600-6e4b19bbe4d1
     orig_ptr = ptr;
 
     // This occurs due to allocations that happened before our hook
     // mechanism got installed. Not very interesting. 
     //printf("free_hook frees someone else's ptr %p\n", ptr);
+    use_munmap = false;
   } else {
     orig_ptr = ar;
 //    printf("free_hook sees free %p size %lx from %p\n", ptr, ar->allocation_size, caller);
 
-    ARow* arow = ar->arow;
-    arow->open_allocation_count -= 1;
-    arow->open_allocation_bytes -= ar->allocation_size;
+    size = ar->allocation_size;
+    atable.record_free(size, ar->label);
+    use_munmap = MMAP_POOL_ENABLE && (size >= MMAP_POOL_SIZE_THRESH);
   }
 
-  free(orig_ptr);
+  if (use_munmap) {
+    size_t underlying_size = size + sizeof(AccountingHeader);
+//    printf("--munmap big block %.1fMB\n", underlying_size/(1024*1024.0));
+    munmap(orig_ptr, underlying_size);
+  } else {
+    free(orig_ptr);
+  }
 
   install_hooks();
 }
@@ -299,9 +497,12 @@ void dump_proc_self_maps() {
 }
 
 void malloc_accounting_display(const char* label) {
-  printf("*** Malloc accounting at %s\n", label);
-  atable.display();
+  printf("ma-display-header %s\n", label);
+  atable.scope_map.display();
+  atable.fine_histogram.display();
+  atable.microscope_bench.display();
   // dump_proc_self_maps();
+  // atable.display_histogram();
 }
 
 void fini_malloc_accounting() {
@@ -320,13 +521,17 @@ void fini_malloc_accounting() {
 // Finally, we could also be gobbling up other cgroup-y memory -- maybe
 // space in the buffer cache? Not worrying about that here.
 void malloc_accounting_status() {
-  printf("proc-heap %8ld malloc-accounting-total %8ld\n",
-    external_heap_size(),
-    atable.total_open());
+  size_t heap, all_maps;
+  external_heap_size(&heap, &all_maps);
+  printf("os-map-total %8ld os-map-heap %8ld malloc-accounting-total %8ld\n",
+    all_maps,
+    heap,
+    atable.total_open_bytes());
 }
 
+#if MALLOC_ACCOUNTING_ENABLE_SCOPES
 void malloc_accounting_set_scope(const char* scope, const char* subscope) {
-  atable.set_active_label(Label(scope, subscope));
+  atable.scope_map.set_active_label(Label(scope, subscope));
 }
 
 void malloc_accounting_set_scope(const char* scope) {
@@ -334,8 +539,11 @@ void malloc_accounting_set_scope(const char* scope) {
 }
 
 void malloc_accounting_default_scope() {
-  atable.clear_active_label();
+  atable.scope_map.clear_active_label();
 }
+#endif // MALLOC_ACCOUNTING_ENABLE_SCOPES
 #else // MALLOC_ACCOUNTING
 // implementations are empty inlines in .h
 #endif // MALLOC_ACCOUNTING
+
+const char* horrible_amass_label = NULL;

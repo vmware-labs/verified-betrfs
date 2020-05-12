@@ -1,15 +1,15 @@
 #include "BundleWrapper.h"
 #include "Bundle.cpp"
 
-using namespace MainHandlers;
+using namespace MainHandlers_Compile;
 
 std::pair<Constants, Variables> handle_InitState()
 {
   auto tup2 = __default::InitState();
   Constants k;
   malloc_accounting_set_scope("BundleWrapper::handle_InitState");
-  k.k = std::shared_ptr<BetreeGraphBlockCache::Constants>(
-      new BetreeGraphBlockCache::Constants(tup2.t0));
+  k.k = std::shared_ptr<BlockJournalCache_Compile::Constants>(
+      new BlockJournalCache_Compile::Constants(tup2.t0));
   malloc_accounting_default_scope();
   Variables hs;
   hs.hs = tup2.t1;
@@ -18,7 +18,7 @@ std::pair<Constants, Variables> handle_InitState()
 
 DafnyMap<uint64, DafnySequence<uint8>> handle_Mkfs()
 {
-  return MkfsImpl::__default::Mkfs();
+  return __default::Mkfs();
 }
 
 void handle_EvictEverything(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
@@ -26,14 +26,24 @@ void handle_EvictEverything(Constants k, Variables hs, std::shared_ptr<MainDiskI
   __default::handleEvictEverything(*k.k, hs.hs, io);
 }
 
+void handle_CountAmassAllocations(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
+{
+  __default::handleCountAmassAllocations(*k.k, hs.hs, io);
+}
+
 uint64 handle_PushSync(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
 {
   return __default::handlePushSync(*k.k, hs.hs, io);
 }
 
-std::pair<bool, bool> handle_PopSync(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io, uint64 id)
+std::pair<bool, bool> handle_PopSync(
+  Constants k,
+  Variables hs,
+  std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io,
+  uint64 id,
+  bool graphSync)
 {
-  auto p = __default::handlePopSync(*k.k, hs.hs, io, id);
+  auto p = __default::handlePopSync(*k.k, hs.hs, io, id, graphSync);
   return std::make_pair(p.t0, p.t1);
 }
 
@@ -74,10 +84,10 @@ void handle_WriteResponse(Constants k, Variables hs, std::shared_ptr<MainDiskIOH
 
 uint64 MaxKeyLen()
 {
-  return KeyType::__default::MaxLen();
+  return KeyType_Compile::__default::MaxLen();
 }
 
 uint64 MaxValueLen()
 {
-  return ValueType::__default::MaxLen();
+  return ValueType_Compile::__default::MaxLen();
 }

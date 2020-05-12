@@ -98,7 +98,7 @@ void ycsbLoad(DB db, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
     }
 
     cerr << db.name << " [step] sync" << endl;
-    db.sync();
+    db.sync(true);
 
     auto clock_end = chrono::steady_clock::now();
     long long bench_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(clock_end - clock_start).count();
@@ -159,6 +159,22 @@ void ycsbRun(
     int display_interval_ms = 10000;
     int next_display_ms = display_interval_ms;
 
+#define HACK_EVICT_PERIODIC 0
+#if HACK_EVICT_PERIODIC
+// An experiment that demonstrated that the heap was filling with small
+// junk ("heap Kessler syndrome"?): by evicting periodically, we freed
+// most of the small junk and kept the heap waste down. TODO okay to clean up.
+    int evict_interval_ms = 100000;
+    int next_evict_ms = evict_interval_ms;
+#endif // HACK_EVICT_PERIODIC
+
+#define HACK_PROBE_PERIODIC 1
+#if HACK_PROBE_PERIODIC
+// An experiment to periodically study how the kv allocations are distributed
+    int probe_interval_ms = 50000;
+    int next_probe_ms = probe_interval_ms;
+#endif // HACK_PROBE_PERIODIC
+
     for (int i = 0; i < num_ops; ++i) {
         auto next_operation = workload.NextOperation();
         switch (next_operation) {
@@ -192,6 +208,22 @@ void ycsbRun(
         int elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             clock_op_completed - clock_start).count();
 
+#if HACK_EVICT_PERIODIC
+        if (elapsed_ms >= next_evict_ms) {
+            printf("evict.");
+            db.sync(true);
+            db.evictEverything();
+            next_evict_ms += evict_interval_ms;
+        }
+#endif // HACK_EVICT_PERIODIC
+#if HACK_PROBE_PERIODIC
+        if (elapsed_ms >= next_probe_ms) {
+            printf("probe.");
+            db.CountAmassAllocations();
+            next_probe_ms += probe_interval_ms;
+        }
+#endif // HACK_PROBE_PERIODIC
+
         if (elapsed_ms >= next_display_ms) {
             malloc_accounting_display("periodic");
             printf("elapsed %d next %d int %d\n",
@@ -200,7 +232,7 @@ void ycsbRun(
         }
 
         if (elapsed_ms >= next_sync_ms) {
-            db.sync();
+            db.sync(false);
 
             /*
             if (i > 3000000) {
@@ -239,7 +271,7 @@ void ycsbRun(
     }
 
     auto sync_started = chrono::steady_clock::now();
-    db.sync();
+    db.sync(true);
     auto sync_completed = chrono::steady_clock::now();
     auto sync_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(
         sync_completed - sync_started).count();
@@ -289,12 +321,16 @@ public:
         app.Insert(key, value);
     }
 
-    inline void sync() {
-        app.Sync();
+    inline void sync(bool fullSync) {
+        app.Sync(fullSync);
     }
 
     inline void evictEverything() {
         app.EvictEverything();
+    }
+
+    inline void CountAmassAllocations() {
+        app.CountAmassAllocations();
     }
 };
 
@@ -332,7 +368,7 @@ public:
         assert(status.ok());
     }
 
-    inline void sync() {
+    inline void sync(bool /*fullSync*/) {
         static struct rocksdb::FlushOptions foptions = rocksdb::FlushOptions();
         rocksdb::Status status = db.Flush(foptions);
         assert(status.ok());
@@ -363,11 +399,15 @@ public:
         asm volatile ("nop");
     }
 
-    inline void sync() {
+    inline void sync(bool /*fullSync*/) {
         asm volatile ("nop");
     }
 
     inline void evictEverything() {
+        asm volatile ("nop");
+    }
+
+    inline void CountAmassAllocations() {
         asm volatile ("nop");
     }
 };
@@ -400,7 +440,7 @@ int main(int argc, char* argv[]) {
 //    for (int i=0; i<15; i++) {
 //      leakfinder_mark(1);
 //    }
-    leakfinder_report(0);
+//    leakfinder_report(0);
 
     std::string workload_filename(argv[1]);
     std::string base_directory(argv[2]);

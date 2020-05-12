@@ -1,13 +1,13 @@
 include "NativeTypes.s.dfy"
 
-module {:compileName "KeyType"} KeyType {
+module KeyType {
   import NativeTypes
 
   function method MaxLen() : NativeTypes.uint64 { 1024 }
   type Key = s : seq<NativeTypes.byte> | |s| <= 1024
 }
 
-module {:compileName "ValueType"} ValueType {
+module ValueType {
   import NativeTypes
 
   function method MaxLen() : NativeTypes.uint64 { 1024 }

@@ -8,6 +8,7 @@ module LeafImpl {
   import opened StateImpl
   import opened NodeImpl
   import opened BucketImpl
+  import opened DiskOpImpl
 
   import opened Options
   import opened Maps
@@ -17,6 +18,12 @@ module LeafImpl {
   import opened BucketsLib
 
   import opened NativeTypes
+
+  method CopyKey(k: KeyType.Key) returns (k2: KeyType.Key)
+  ensures k2 == k
+  {
+    k2 := [] + k;
+  }
 
   method repivotLeaf(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, node: Node)
   requires Inv(k, s)
@@ -43,6 +50,7 @@ module LeafImpl {
     }
 
     var pivot := node.buckets[0 as uint64].GetMiddleKey();
+    pivot := CopyKey(pivot);
 
     var pivots := [pivot];
 

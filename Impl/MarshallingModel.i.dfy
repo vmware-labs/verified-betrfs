@@ -22,7 +22,7 @@ module MarshallingModel {
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
-  import BC = BetreeGraphBlockCache
+  import BC = BlockCache
   import SM = StateModel
   import KVList
   import Crypto
@@ -30,6 +30,7 @@ module MarshallingModel {
   import IndirectionTableModel
   import SeqComparison
   import Marshalling
+  import PackedKVMarshalling
 
   import BT = PivotBetreeSpec`Internal
 
@@ -40,7 +41,6 @@ module MarshallingModel {
   // in a 64-bit int.
   import M = ValueMessage`Internal
   import ReferenceType`Internal
-  import LBAType
   import ValueType`Internal
 
   import Pivots = PivotsLib
@@ -49,55 +49,49 @@ module MarshallingModel {
 
   import MM = MutableMap
 
+  type Key = Keyspace.Element
   type Reference = BC.Reference
   type Sector = SM.Sector
   type Node = SM.Node
 
   /////// Some lemmas that are useful in Impl
 
-  lemma WeightBucketLteSize(v: V, pivotTable: seq<Key>, i: int, kvl: KVList.Kvl)
-  requires Marshalling.valToBucket.requires(v)
-  requires KVList.WF(kvl)
-  requires Marshalling.valToBucket(v) == KVList.I(kvl)
-  ensures WeightBucket(KVList.I(kvl)) <= SizeOfV(v)
-  {
-    /*KVList.kvlWeightEq(kvl);
-    reveal_SeqSum();
-    assert SizeOfV(v)
-        == SeqSum(v.t)
-        == SizeOfV(v.t[0]) + SeqSum(v.t[1..])
-        == SizeOfV(v.t[0]) + SizeOfV(v.t[1]) + SeqSum([])
-        == SizeOfV(v.t[0]) + SizeOfV(v.t[1])
-        == 8 + WeightKeySeq(v.t[0].ka) + 8 + WeightMessageSeq(v.t[1].ma);*/
-    assume false;
-  }
-
-  lemma WeightBucketListLteSize(v: V, pivotTable: seq<Key>, buckets: seq<Bucket>)
+  lemma WeightBucketListLteSize(v: V, buckets: seq<Bucket>)
   requires v.VArray?
   requires Marshalling.valToBuckets.requires(v.a)
-  requires Marshalling.valToBuckets(v.a) == buckets
+  requires Marshalling.valToBuckets(v.a) == Some(buckets)
   ensures WeightBucketList(buckets) <= SizeOfV(v)
 
   decreases |v.a|
   {
-    /*reveal_WeightBucketList();
-    if |v.a| == 0 {
+    if |buckets| == 0 {
+      reveal_WeightBucketList();
     } else {
-      WeightBucketListLteSize(VArray(DropLast(v.a)), pivotTable, DropLast(buckets));
-      lemma_SeqSum_prefix(DropLast(v.a), Last(v.a));
+      var prebuckets := DropLast(buckets);
+      var prev := VArray(DropLast(v.a));
+      var lastbucket := Last(buckets);
+      var lastv := Last(v.a);
 
-      var pref := Marshalling.valToBuckets(DropLast(v.a), pivotTable).value;
-      var kvl := Marshalling.valToBucket(Last(v.a), pivotTable, |pref|).value;
-      WeightBucketLteSize(Last(v.a), pivotTable, |pref|, kvl);
+      assert WeightBucket(lastbucket) <= SizeOfV(lastv)
+      by {
+        assume false; // TODO(robj)
+        PackedKVMarshalling.SizeOfVWellMarshalledPackedKVIsBucketWeight(
+            PackedKVMarshalling.fromVal(v).value);
+      }
 
-      assert DropLast(v.a) + [Last(v.a)] == v.a;
-      assert WeightBucketList(buckets)
-          == WeightBucketList(DropLast(buckets)) + WeightBucket(Last(buckets))
-          <= SizeOfV(VArray(DropLast(v.a))) + WeightBucket(Last(buckets))
-          <= SizeOfV(VArray(DropLast(v.a))) + SizeOfV(Last(v.a))
-          == SizeOfV(v);
-    }*/
-    assume false;
+      calc <= {
+        WeightBucketList(buckets);
+        { reveal_WeightBucketList(); }
+        WeightBucketList(prebuckets) + WeightBucket(lastbucket);
+        { WeightBucketListLteSize(prev, prebuckets); }
+        SizeOfV(prev) + WeightBucket(lastbucket);
+        {
+          lemma_SeqSum_prefix(prev.a, lastv);
+          assert v.a == prev.a + [lastv];
+        }
+        SizeOfV(v);
+      }
+    }
   }
 
   lemma SizeOfVTupleElem_le_SizeOfV(v: V, i: int)
@@ -170,13 +164,18 @@ module MarshallingModel {
   requires ValInGrammar(v, Marshalling.SectorGrammar())
   {
     if v.c == 0 then (
+      match Marshalling.valToSuperblock(v.val) {
+        case Some(s) => Some(SM.SectorSuperblock(s))
+        case None => None
+      }
+    ) else if v.c == 1 then (
       match IndirectionTableModel.valToIndirectionTable(v.val) {
         case Some(s) => Some(SM.SectorIndirectionTable(s))
         case None => None
       }
     ) else (
       match valToNode(v.val) {
-        case Some(s) => Some(SM.SectorBlock(s))
+        case Some(s) => Some(SM.SectorNode(s))
         case None => None
       }
     )

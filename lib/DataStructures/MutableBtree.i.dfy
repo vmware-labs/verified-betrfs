@@ -1,11 +1,7 @@
 include "../Base/NativeTypes.s.dfy"
 include "../Base/NativeArrays.s.dfy"
-include "../Base/total_order.i.dfy"
-include "../Base/sequences.i.dfy"
 include "../Base/Arrays.i.dfy"
-include "../Base/Maps.s.dfy"
 include "../Base/Option.s.dfy"
-include "../Base/mathematics.i.dfy"
 include "BtreeModel.i.dfy"
 
 abstract module MutableBtree {
@@ -18,10 +14,10 @@ abstract module MutableBtree {
   import Arrays
   import Model : BtreeModel
 
-  export API provides WF, Interpretation, EmptyTree, Insert, Query, NativeTypes, Model, Options, Maps reveals Node, NodeContents, Key, Value
+  export API provides WF, Interpretation, EmptyTree, Insert, Query, Empty, MinKey, MaxKey, NativeTypes, Model, Options, Maps reveals Node, NodeContents, Key, Value
   export All reveals *
     
-  type Key = Model.Keys.Element
+  type Key = Model.Key
   type Value = Model.Value
 
   function method MaxKeysPerLeaf() : uint64
@@ -270,7 +266,7 @@ abstract module MutableBtree {
   {
     reveal_I();
     Model.reveal_Interpretation();
-    var posplus1: uint64 := Model.Keys.ArrayLargestLtePlus1(node.contents.keys, 0, node.contents.nkeys, needle);
+    var posplus1: uint64 := Model.KeysImpl.ArrayLargestLtePlus1(node.contents.keys, 0, node.contents.nkeys, needle);
     if 1 <= posplus1 && node.contents.keys[posplus1-1] == needle {
       result := Some(node.contents.values[posplus1-1]);
     } else {
@@ -287,10 +283,12 @@ abstract module MutableBtree {
     reveal_I();
     Model.reveal_Interpretation();
     Model.reveal_AllKeys();
-    var posplus1: uint64 := Model.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, needle);
+    var posplus1: uint64 := Model.KeysImpl.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, needle);
     assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
     result := Query(node.contents.children[posplus1], needle);
-    assume result == MapLookupOption(Interpretation(node), needle);
+    if result.Some? {
+      Model.InterpretationDelegation(I(node), needle);
+    }
   }
 
   method Query(node: Node, needle: Key) returns (result: Option<Value>)
@@ -304,6 +302,90 @@ abstract module MutableBtree {
     }
   }
 
+  method Empty(node: Node) returns (result: bool)
+    requires WF(node)
+    ensures result == (|Interpretation(node)| == 0)
+  {
+    if node.contents.Leaf? {
+      Model.reveal_Interpretation();
+      result := 0 == node.contents.nkeys;
+      assert !result ==> node.contents.keys[0] in Interpretation(node);
+    } else {
+      Model.IndexesNonempty(I(node));
+      result := false;
+    }
+  }
+  
+  method MinKeyInternal(node: Node) returns (result: Key)
+    requires WF(node)
+    requires 0 < |Interpretation(node)|
+    ensures result == Model.MinKey(I(node))
+    decreases node.repr
+  {
+    if node.contents.Leaf? {
+      assert 0 < node.contents.nkeys by {
+        Model.reveal_Interpretation();
+      }
+      assert node.contents.keys[0] == node.contents.keys[..node.contents.nkeys][0];
+      result := node.contents.keys[0];
+    } else {
+      assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
+      IOfChild(node, 0);
+      assert WF(node.contents.children[0]);
+      Model.ChildOfIndexNonempty(I(node), 0);
+      result := MinKeyInternal(node.contents.children[0]);
+    }
+  }
+
+  // We separate MinKey and MinKeyInternal in order to keep the API
+  // export set clean.  (MinKeyInternal needs to mention I(), but we
+  // don't want to export it.)
+  method MinKey(node: Node) returns (result: Key)
+    requires WF(node)
+    requires 0 < |Interpretation(node)|
+    ensures result in Interpretation(node)
+    ensures forall key | key in Interpretation(node) :: Model.Keys.lte(result, key)
+  {
+    result := MinKeyInternal(node);
+    Model.MinKeyProperties(I(node));
+  }
+  
+  method MaxKeyInternal(node: Node) returns (result: Key)
+    requires WF(node)
+    requires 0 < |Interpretation(node)|
+    ensures result == Model.MaxKey(I(node))
+    decreases node.repr
+  {
+    if node.contents.Leaf? {
+      assert 0 < node.contents.nkeys by {
+        Model.reveal_Interpretation();
+      }
+      var nkeys: uint64 := node.contents.nkeys;
+      assert node.contents.keys[nkeys - 1] == node.contents.keys[..nkeys][nkeys - 1];
+      result := node.contents.keys[nkeys-1];
+    } else {
+      var nchildren: uint64 := node.contents.nchildren;
+      assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
+      IOfChild(node, nchildren as nat - 1);
+      assert WF(node.contents.children[nchildren - 1]);
+      Model.ChildOfIndexNonempty(I(node), nchildren as nat - 1);
+      result := MaxKeyInternal(node.contents.children[nchildren - 1]);
+    }
+  }
+  
+  // We separate MaxKey and MaxKeyInternal in order to keep the API
+  // export set clean.  (MaxKeyInternal needs to mention I(), but we
+  // don't want to export it.)
+  method MaxKey(node: Node) returns (result: Key)
+    requires WF(node)
+    requires 0 < |Interpretation(node)|
+    ensures result in Interpretation(node)
+    ensures forall key | key in Interpretation(node) :: Model.Keys.lte(key, result)
+  {
+    result := MaxKeyInternal(node);
+    Model.MaxKeyProperties(I(node));
+  }
+  
   method EmptyTree() returns (root: Node)
     ensures WF(root)
     ensures fresh(root.repr)
@@ -317,6 +399,7 @@ abstract module MutableBtree {
     root.repr := {root, rootkeys, rootvalues};
     root.height := 0;
     Model.reveal_Interpretation();
+    Model.Keys.reveal_IsStrictlySorted();
   }
 
   method LeafFromSeqs(keys: seq<Key>, values: seq<Value>)
@@ -605,7 +688,6 @@ abstract module MutableBtree {
 
     reveal_I();
     assert node.contents.pivots[from..to-1] == I(node).pivots[from..to-1];
-    assume I(subnode) == Model.SubIndex(I(node), from as int, to as int);
   }
 
   method SplitIndex(node: Node, nleft: uint64) returns (right: Node, pivot: Key)
@@ -874,7 +956,7 @@ abstract module MutableBtree {
     reveal_I();
     Model.reveal_Interpretation();
     Model.reveal_AllKeys();
-    var posplus1: uint64 := Model.Keys.ArrayLargestLtePlus1(node.contents.keys, 0, node.contents.nkeys, key);
+    var posplus1: uint64 := Model.KeysImpl.ArrayLargestLtePlus1(node.contents.keys, 0, node.contents.nkeys, key);
     if 1 <= posplus1 && node.contents.keys[posplus1-1] == key {
       oldvalue := Some(node.contents.values[posplus1-1]);
       node.contents.values[posplus1-1] := value;
@@ -1026,7 +1108,7 @@ abstract module MutableBtree {
     Model.reveal_AllKeys();
     assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
 
-    childidx := Model.Keys.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, key);
+    childidx := Model.KeysImpl.ArrayLargestLtePlus1(node.contents.pivots, 0, node.contents.nchildren-1, key);
     if Full(node.contents.children[childidx]) {
       ghost var oldpivots := node.contents.pivots[..node.contents.nchildren-1];
       SplitChildOfIndex(node, childidx);
@@ -1035,7 +1117,7 @@ abstract module MutableBtree {
       Model.SplitChildOfIndexPreservesInterpretation(old(I(node)), I(node), childidx as int);
       Model.SplitChildOfIndexPreservesAllKeys(old(I(node)), I(node), childidx as int);
 
-      var t: int32 := Model.Keys.cmp(node.contents.pivots[childidx], key);
+      var t: int32 := Model.KeysImpl.cmp(node.contents.pivots[childidx], key);
       if  t <= 0 {
         childidx := childidx + 1;
         forall i | childidx as int - 1 < i < |newpivots|
@@ -1146,25 +1228,37 @@ abstract module MutableBtree {
 
 // module TestBtreeModel refines BtreeModel {
 //   import opened NativeTypes
-//   import Keys = Uint64_Order
+// //  import Keys = Uint64_Order
 //   type Value = uint64
 // }
-
+// 
 // module TestMutableBtree refines MutableBtree {
 //   import Model = TestBtreeModel
-    
+//  
 //   function method MaxKeysPerLeaf() : uint64 { 64 }
 //   function method MaxChildren() : uint64 { 64 }
-
+// 
 //   function method DefaultValue() : Value { 0 }
-//   function method DefaultKey() : Key { 0 }
+//   function method DefaultKey() : Key { [0] }
 // }
-
+// 
 // module MainModule {
 //   import opened NativeTypes
 //   import TMB = TestMutableBtree`API
-  
-//   method Test()
+// 
+//   method SeqFor(i: uint64)
+//   returns (result:TMB.Key)
+//   requires i < 256*256*256;
+//   {
+//     var b0:byte := (i / 65536) as byte;
+//     var r := i - (b0 as uint64 * 65536);
+//     var b1:byte := (r / 256) as byte;
+//     var b2:byte := (r - (b1 as uint64)*256) as byte;
+// 
+//     result := [b0, b1, b2];
+//   }
+// 
+//   method Main()
 //   {
 //     // var n: uint64 := 1_000_000;
 //     // var p: uint64 := 300_007;
@@ -1180,36 +1274,12 @@ abstract module MutableBtree {
 //       invariant fresh(t.repr)
 //     {
 //       var oldvalue;
-//       t, oldvalue := TMB.Insert(t, ((i * p) % n), i);
+//       var keyv := ((i * p) % n);
+//       var key := SeqFor(keyv);
+//       t, oldvalue := TMB.Insert(t, key, i);
 //       i := i + 1;
 //     }
-
-//     // i := 0;
-//     // while i < n
-//     //   invariant 0 <= i <= n
-//     // {
-//     //   var needle := (i * p) % n;
-//     //   var qr := t.Query(needle);
-//     //   if qr != TestMutableBtree.Found(i) {
-//     //     print "Test failed";
-//   //   } else {
-//   //     //print "Query ", i, " for ", needle, "resulted in ", qr.value, "\n";
-//   //   }
-//   //   i := i + 1;
-//   // }
-
-//   // i := 0;
-//   // while i < n
-//   //   invariant 0 <= i <= n
-//   // {
-//   //   var qr := t.Query(n + ((i * p) % n));
-//   //   if qr != TestMutableBtree.NotFound {
-//   //     print "Test failed";
-//   //   } else {
-//   //     //print "Didn't return bullsh*t\n";
-//   //   }
-//   //   i := i + 1;
-//   // }
+// 
 //     print "PASSED\n";
 //   }
 // } 

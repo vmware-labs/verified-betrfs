@@ -62,8 +62,10 @@ abstract module Main {
   returns (id: uint64)
   requires io.initialized()
   requires Inv(k, hs)
+  requires io !in HeapSet(hs)
   modifies hs, HeapSet(hs)
   modifies io
+  ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
   ensures Inv(k, hs)
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
       if id == 0 then UI.NoOp else UI.PushSyncOp(id as int),
@@ -72,18 +74,33 @@ abstract module Main {
   method handleEvictEverything(k: Constants, hs: HeapState, io: DiskIOHandler)
   requires io.initialized()
   requires Inv(k, hs)
+  requires io !in HeapSet(hs)
   modifies hs, HeapSet(hs)
   modifies io
+  ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
   ensures Inv(k, hs)
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp,
       io.diskOp())
 
-  method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: uint64)
+  method countAmassAllocations(k: Constants, hs: HeapState, io: DiskIOHandler)
+  requires io.initialized()
+  requires Inv(k, hs)
+  requires io !in HeapSet(hs)
+  modifies hs, HeapSet(hs)
+  modifies io
+  ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
+  ensures Inv(k, hs)
+  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp,
+      io.diskOp())
+
+  method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: uint64, graphSync: bool)
   returns (wait: bool, success: bool)
   requires io.initialized()
   requires Inv(k, hs)
+  requires io !in HeapSet(hs)
   modifies hs, HeapSet(hs)
   modifies io
+  ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
   ensures Inv(k, hs)
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
       if success then UI.PopSyncOp(id as int) else UI.NoOp,
@@ -92,14 +109,18 @@ abstract module Main {
   method handleReadResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
   requires io.diskOp().RespReadOp?
   requires Inv(k, hs)
+  requires io !in HeapSet(hs)
   modifies hs, HeapSet(hs)
+  ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
   ensures Inv(k, hs)
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp())
 
   method handleWriteResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
   requires io.diskOp().RespWriteOp?
   requires Inv(k, hs)
+  requires io !in HeapSet(hs)
   modifies hs, HeapSet(hs)
+  ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
   ensures Inv(k, hs)
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp())
 
@@ -107,8 +128,10 @@ abstract module Main {
   returns (v: Option<Value>)
   requires io.initialized()
   requires Inv(k, hs)
+  requires io !in HeapSet(hs)
   modifies hs, HeapSet(hs)
   modifies io
+  ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
   ensures Inv(k, hs)
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
     if v.Some? then UI.GetOp(key, v.value) else UI.NoOp,
@@ -118,8 +141,10 @@ abstract module Main {
   returns (success: bool)
   requires io.initialized()
   requires Inv(k, hs)
+  requires io !in HeapSet(hs)
   modifies hs, HeapSet(hs)
   modifies io
+  ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
   ensures Inv(k, hs)
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
     if success then UI.PutOp(key, value) else UI.NoOp,
@@ -130,8 +155,10 @@ abstract module Main {
   requires io.initialized()
   requires Inv(k, hs)
   requires maxToFind >= 1
+  requires io !in HeapSet(hs)
   modifies hs, HeapSet(hs)
   modifies io
+  ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
   ensures Inv(k, hs)
   ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
     if res.Some? then UI.SuccOp(start, res.value.results, res.value.end) else UI.NoOp,

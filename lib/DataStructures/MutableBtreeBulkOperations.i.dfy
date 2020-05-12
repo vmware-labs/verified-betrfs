@@ -1,5 +1,4 @@
 include "MutableBtree.i.dfy"
-include "../Base/mathematics.i.dfy"
   
 abstract module MutableBtreeBulkOperations {
   import opened NativeTypes

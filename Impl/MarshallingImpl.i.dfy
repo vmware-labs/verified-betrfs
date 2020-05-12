@@ -25,8 +25,10 @@ module MarshallingImpl {
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
+  import SectorType
   import BucketImpl
-  import BC = BetreeGraphBlockCache
+  import BC = BlockCache
+  import JC = JournalCache
   import StateImpl
   import KVList
   import Crypto
@@ -43,12 +45,16 @@ module MarshallingImpl {
 
   import ValueType`Internal
   import M = ValueMessage`Internal
-  import LBAType
 
   import Pivots = PivotsLib
   import MS = MapSpec
-  import Keyspace = Lexicographic_Byte_Order
+  import KeyspaceImpl = Lexicographic_Byte_Order_Impl
+  import Keyspace = KeyspaceImpl.Ord
+  import PackedKVMarshalling
+  import PSA = PackedStringArray
+  import PSAM = PackedStringArrayMarshalling
 
+  type Key = KeyType.Key
   type Reference = IMM.Reference
   type Sector = SI.Sector
 
@@ -68,7 +74,7 @@ module MarshallingImpl {
     invariant 0 <= i as int <= |a|
     invariant Marshalling.isStrictlySortedKeySeq(a) == Marshalling.isStrictlySortedKeySeqIterate(a, i as int)
     {
-      var c := Keyspace.cmp(a[i-1], a[i]);
+      var c := KeyspaceImpl.cmp(a[i-1], a[i]);
       if c >= 0 {
         return false;
       }
@@ -78,23 +84,45 @@ module MarshallingImpl {
     return true;
   }
 
+  method KeyValSeqToKeySeq(vs: seq<V>) returns (result: Option<seq<Key>>)
+    requires |vs| < Uint64UpperBound()
+    requires forall i | 0 <= i < |vs| :: ValidVal(vs[i])
+    requires forall i | 0 <= i < |vs| :: ValInGrammar(vs[i], GByteArray)
+    ensures result == Marshalling.keyValSeqToKeySeq(vs)
+  {
+    var aresult: array<Key> := new Key[|vs| as uint64];
+
+    var i: uint64 := 0;
+    while i < |vs| as uint64
+      invariant i as nat <= |vs|
+      invariant Marshalling.keyValSeqToKeySeq(vs[..i]).Some?
+      invariant aresult[..i] == Marshalling.keyValSeqToKeySeq(vs[..i]).value
+    {
+      if KeyType.MaxLen() < |vs[i].b| as uint64 {
+        return None;
+      }
+      aresult[i] := vs[i].b;
+      i := i + 1;
+    }
+    assert vs[..i] == vs;
+    return Some(aresult[..i]);
+  }
+  
   method ValToStrictlySortedKeySeq(v: V) returns (s : Option<seq<Key>>)
   requires Marshalling.valToStrictlySortedKeySeq.requires(v)
   ensures s == Marshalling.valToStrictlySortedKeySeq(v)
   {
-    var is_sorted := IsStrictlySortedKeySeq(v.ka);
+    var okeys := KeyValSeqToKeySeq(v.a);
+    if okeys == None {
+      return None;
+    }
+    
+    var is_sorted := IsStrictlySortedKeySeq(okeys.value);
     if is_sorted {
-      return Some(v.ka);
+      return okeys;
     } else {
       return None;
     }
-  }
-
-  method ValToMessageSeq(v: V) returns (s : Option<seq<Message>>)
-  requires Marshalling.valToMessageSeq.requires(v)
-  ensures s == Marshalling.valToMessageSeq(v)
-  {
-    return Some(v.ma);
   }
 
   method ValToPivots(v: V) returns (s : Option<seq<Key>>)
@@ -107,25 +135,32 @@ module MarshallingImpl {
     }
   }
 
-  method ValToBucket(v: V) returns (s : BucketImpl.MutBucket)
-  requires Marshalling.valToBucket.requires(v)
-  ensures fresh(s.Repr)
-  ensures s.Inv()
-  ensures WFBucket(s.I())
-  ensures s.I() == Marshalling.valToBucket(v)
+  method ValToBucket(v: V) returns (s : Option<BucketImpl.MutBucket>)
+    requires Marshalling.valToBucket.requires(v)
+    ensures s.Some? <==> Marshalling.valToBucket(v).Some?
+    ensures s.Some? ==> fresh(s.value.Repr)
+    ensures s.Some? ==> s.value.Inv()
+    ensures s.Some? ==> WFBucket(s.value.I())
+    ensures s.Some? ==> Some(s.value.I()) == Marshalling.valToBucket(v)
   { 
-    var pkv := v.pkv;
-    s := new BucketImpl.MutBucket.InitFromPkv(pkv);
+    var pkv := PackedKVMarshalling.FromVal(v);
+    if pkv.Some? {
+      var b := new BucketImpl.MutBucket.InitFromPkv(pkv.value, false);
+      s := Some(b);
+    } else {
+      s := None;
+    }
   }
 
-  method ValToBuckets(a: seq<V>) returns (s : seq<BucketImpl.MutBucket>)
+  method ValToBuckets(a: seq<V>) returns (s : Option<seq<BucketImpl.MutBucket>>)
   requires Marshalling.valToBuckets.requires(a)
   requires |a| < 0x1_0000_0000_0000_0000
   requires forall i | 0 <= i < |a| :: SizeOfV(a[i]) < 0x1_0000_0000_0000_0000
-  ensures forall i | 0 <= i < |s| :: s[i].Inv()
-  ensures BucketImpl.MutBucket.ReprSeqDisjoint(s)
-  ensures forall i | 0 <= i < |s| :: fresh(s[i].Repr)
-  ensures BucketImpl.MutBucket.ISeq(s) == Marshalling.valToBuckets(a)
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: s.value[i].Inv()
+  ensures s.Some? ==> BucketImpl.MutBucket.ReprSeqDisjoint(s.value)
+  ensures s.Some? ==> forall i | 0 <= i < |s.value| :: fresh(s.value[i].Repr)
+  ensures s.Some? ==> Some(BucketImpl.MutBucket.ISeq(s.value)) == Marshalling.valToBuckets(a)
+  ensures s == None <==> Marshalling.valToBuckets(a) == None
   {
     var ar := new BucketImpl.MutBucket?[|a| as uint64];
 
@@ -138,26 +173,32 @@ module MarshallingImpl {
     invariant forall j, k | 0 <= j < i as int && 0 <= k < i as int && j != k :: ar[j].Repr !! ar[k].Repr
     invariant forall k: nat | k < i as int :: fresh(ar[k].Repr)
     invariant forall k: nat | k < i as int :: WFBucket(ar[k].Bucket)
-    invariant BucketImpl.MutBucket.ISeq(ar[..i]) == Marshalling.valToBuckets(a[..i])
+    invariant Some(BucketImpl.MutBucket.ISeq(ar[..i])) == Marshalling.valToBuckets(a[..i])
     {
-      var bucket := ValToBucket(a[i]);
+      var obucket := ValToBucket(a[i]);
 
-      assert forall k: nat | k < i as int :: ar[k].Inv();
-      ar[i] := bucket;
-      assert forall k: nat | k < i as int :: ar[k].Inv();
-      assert ar[i as int].Inv();
-      assert forall k: nat | k < i as int + 1 :: ar[k].Inv();
+      if obucket.Some? {
+        var bucket := obucket.value;
+        assert forall k: nat | k < i as int :: ar[k].Inv();
+        ar[i] := bucket;
+        assert forall k: nat | k < i as int :: ar[k].Inv();
+        assert ar[i as int].Inv();
+        assert forall k: nat | k < i as int + 1 :: ar[k].Inv();
+        
+        assert DropLast(a[..i+1]) == a[..i];
+        assert ar[..i+1] == ar[..i] + [bucket];
 
-      assert DropLast(a[..i+1]) == a[..i];
-      assert ar[..i+1] == ar[..i] + [bucket];
-
-      i := i + 1;
+        i := i + 1;
+        assert BucketImpl.MutBucket.ISeq(ar[..i]) == Marshalling.valToBuckets(a[..i]).value;
+      } else {
+        return None;
+      }
     }
 
     assert a[..|a|] == a;
     assert ar[..|a|] == ar[..];
 
-    s := ar[..];
+    s := Some(ar[..]);
 
     BucketImpl.MutBucket.reveal_ReprSeqDisjoint();
   }
@@ -175,7 +216,7 @@ module MarshallingImpl {
     assert ValidVal(v.t[1]);
     assert ValidVal(v.t[2]);
 
-    var pivots_len := |v.t[0 as uint64].ka| as uint64;
+    var pivots_len := |v.t[0 as uint64].a| as uint64;
     var children_len := |v.t[1 as uint64].ua| as uint64;
     var buckets_len := |v.t[2 as uint64].a| as uint64;
 
@@ -204,7 +245,11 @@ module MarshallingImpl {
     IMM.SizeOfVTupleElem_le_SizeOfV(v, 2);
     IMM.SizeOfVArrayElem_le_SizeOfV_forall(v.t[2]);
 
-    var buckets := ValToBuckets(v.t[2 as uint64].a);
+    var obuckets := ValToBuckets(v.t[2 as uint64].a);
+    if obuckets == None {
+      return None;
+    }
+    var buckets := obuckets.value;
 
     BucketImpl.MutBucket.AllocatedReprSeq(buckets);
     BucketImpl.MutBucket.FreshReprSeqOfFreshEntries(buckets);
@@ -213,7 +258,7 @@ module MarshallingImpl {
       return None;
     }
 
-    IMM.WeightBucketListLteSize(v.t[2 as uint64], pivots, BucketImpl.MutBucket.ISeq(buckets));
+    IMM.WeightBucketListLteSize(v.t[2 as uint64], BucketImpl.MutBucket.ISeq(buckets));
     assert WeightBucketList(BucketImpl.MutBucket.ISeq(buckets)) < 0x1_0000_0000_0000_0000;
 
     var w: uint64 := BucketImpl.MutBucket.computeWeightOfSeq(buckets);
@@ -230,7 +275,7 @@ module MarshallingImpl {
   function ISectorOpt(s : Option<Sector>): Option<IMM.Sector>
   requires s.Some? ==> StateImpl.WFSector(s.value)
   requires s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
-  reads if s.Some? then (if s.value.SectorIndirectionTable? then {s.value.indirectionTable} else {s.value.block}) else {}
+  reads if s.Some? then StateImpl.SectorObjectSet(s.value) else {}
   reads if s.Some? then SI.SectorRepr(s.value) else {}
   {
     if s.Some? then
@@ -243,12 +288,19 @@ module MarshallingImpl {
   requires IMM.valToSector.requires(v)
   requires SizeOfV(v) < 0x1_0000_0000_0000_0000
   ensures s.Some? ==> StateImpl.WFSector(s.value)
-  ensures s.Some? && s.value.SectorBlock? ==> forall i | 0 <= i < |s.value.block.buckets| :: fresh(s.value.block.buckets[i].Repr)
+  ensures s.Some? && s.value.SectorNode? ==> forall i | 0 <= i < |s.value.node.buckets| :: fresh(s.value.node.buckets[i].Repr)
   ensures s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
   ensures MapOption(s, SI.ISector) == IMM.valToSector(v)
   ensures s.Some? ==> fresh(SI.SectorRepr(s.value));
   {
     if v.c == 0 {
+      var s := Marshalling.valToSuperblock(v.val);
+      if s.Some? {
+        return Some(StateImpl.SectorSuperblock(s.value));
+      } else {
+        return None;
+      }
+    } else if v.c == 1 {
       var mutMap := IndirectionTableImpl.IndirectionTable.ValToIndirectionTable(v.val);
       if mutMap != null {
         return Some(StateImpl.SectorIndirectionTable(mutMap));
@@ -258,7 +310,7 @@ module MarshallingImpl {
     } else {
       var node := ValToNode(v.val);
       match node {
-        case Some(s) => return Some(StateImpl.SectorBlock(s));
+        case Some(s) => return Some(StateImpl.SectorNode(s));
         case None => return None;
       }
     }
@@ -278,50 +330,61 @@ module MarshallingImpl {
     return VUint64Array(children);
   }
 
-  lemma lemmaSizeOfKeyArray(keys: seq<Key>)
-  ensures 4 + WeightKeySeq(keys) == SizeOfV(VKeyArray(keys))
-  {
-    if |keys| == 0 {
-    } else {
-      lemmaSizeOfKeyArray(DropLast(keys));
-      assert DropLast(keys) + [Last(keys)] == keys;
-    }
-  }
-
-  lemma lemmaSizeOfMessageArray(messages: seq<Message>)
-  ensures 4 + WeightMessageSeq(messages) == SizeOfV(VMessageArray(messages))
-  {
-    if |messages| == 0 {
-    } else {
-      lemmaSizeOfMessageArray(DropLast(messages));
-      assert DropLast(messages) + [Last(messages)] == messages;
-    }
-  }
-
   lemma WeightKeySeqLe(keys: seq<Key>)
-  ensures WeightKeySeq(keys) <= |keys| * (8 + KeyType.MaxLen() as int)
+  ensures WeightKeyList(keys) <= |keys| * (8 + KeyType.MaxLen() as int)
   {
-    if |keys| == 0 {
-    } else {
-      WeightKeySeqLe(DropLast(keys));
-    }
+    WeightKeyMultisetUpperBound(multiset(keys));
   }
 
   method strictlySortedKeySeqToVal(keys: seq<Key>)
-  returns (v : V)
+  returns (v : V, size: uint64)
   requires Keyspace.IsStrictlySorted(keys)
-  requires |keys| < 0x1_0000_0000_0000_0000
+  requires |keys| < (Uint64UpperBound() - 8) / (8 + KeyType.MaxLen() as nat)
   ensures ValidVal(v)
-  ensures ValInGrammar(v, GKeyArray)
-  ensures v.ka == keys
+  ensures ValInGrammar(v, Marshalling.PivotTableGrammar())
+  ensures |v.a| == |keys|
   ensures Marshalling.valToStrictlySortedKeySeq(v) == Some(keys)
   ensures SizeOfV(v) <= 8 + |keys| * (8 + KeyType.MaxLen() as int)
-  ensures SizeOfV(v) == 4 + WeightKeySeq(keys)
+  ensures SizeOfV(v) == 8 + Marshalling.pivotTableWeight(keys)
+  ensures size as nat == SizeOfV(v)
   {
-    lemmaSizeOfKeyArray(keys);
     WeightKeySeqLe(keys);
 
-    v := VKeyArray(keys);
+    var vs: array<V> := new V[|keys| as uint64];
+
+    assert SeqSum(vs[..0]) == 0 by {
+      reveal_SeqSum();
+    }
+
+    size := 0;
+    var i: uint64 := 0;
+    while i < |keys| as uint64
+      invariant i as nat <= |keys|
+      invariant forall j | 0 <= j < i :: ValidVal(vs[j])
+      invariant forall j | 0 <= j < i :: vs[j] == VByteArray(keys[j])
+      invariant Marshalling.keyValSeqToKeySeq(vs[..i]).value == keys[..i]
+      invariant SeqSum(vs[..i]) == Marshalling.pivotTableWeight(keys[..i])
+      invariant size as nat == SeqSum(vs[..i])
+    {
+      vs[i] := VByteArray(keys[i]);
+      assert vs[..i+1] == vs[..i] + [ vs[i] ];
+      lemma_SeqSum_prefix(vs[..i], vs[i]);
+      Marshalling.pivotTableWeightUpperBound(keys[..i]);
+      calc <= {
+        size as nat + 8 + |keys[i]|;
+        SeqSum(vs[..i+1]);
+        |keys| * (8 + KeyType.MaxLen() as int);
+        (Uint64UpperBound() - 8) / (8 + KeyType.MaxLen() as nat) * (8 + KeyType.MaxLen() as int);
+        Uint64UpperBound() - 8;
+      }
+      size := size + 8 + |keys[i]| as uint64;
+      i := i + 1;
+    }
+
+    assert keys[..i] == keys;
+    Marshalling.pivotTableWeightUpperBound(keys);
+    v := VArray(vs[..i]);
+    size := size + 8;
   }
 
   lemma KeyInPivotsIsNonempty(pivots: seq<Key>)
@@ -338,82 +401,50 @@ module MarshallingImpl {
   requires Pivots.WFPivots(pivots)
   requires |pivots| <= MaxNumChildren() as int - 1
   ensures ValidVal(v)
-  ensures ValInGrammar(v, GKeyArray)
-  ensures |v.ka| == |pivots|
+  ensures ValInGrammar(v, Marshalling.PivotTableGrammar())
+  ensures |v.a| == |pivots|
   ensures Marshalling.valToPivots(v) == Some(pivots)
-  ensures SizeOfV(v) <= 4 + |pivots| * (4 + KeyType.MaxLen() as int)
+  ensures SizeOfV(v) <= 8 + |pivots| * (8 + KeyType.MaxLen() as int)
   ensures SizeOfV(v) == size as int
   {
-    v := strictlySortedKeySeqToVal(pivots);
-
-    var keys_size := ComputeWeightKeySeq(pivots);
-    size := keys_size + 4;
+    v, size := strictlySortedKeySeqToVal(pivots);
 
     ghost var ghosty := true;
     if ghosty && |pivots| > 0 {
       KeyInPivotsIsNonempty(pivots);
     }
-    assume SizeOfV(v) <= 4 + |pivots| * (4 + KeyType.MaxLen() as int);
   }
 
-  method messageSeqToVal(s: seq<Message>) returns (v : V)
-  requires forall i | 0 <= i < |s| :: s[i] != M.IdentityMessage()
-  requires |s| < 0x1_0000_0000_0000_0000
-  ensures ValidVal(v)
-  ensures ValInGrammar(v, GMessageArray)
-  ensures |v.ma| == |s|
-  ensures Marshalling.valToMessageSeq(v) == Some(s)
-  ensures SizeOfV(v) == 4 + WeightMessageSeq(s)
-  {
-    lemmaSizeOfMessageArray(s);
-    return VMessageArray(s);
-  }
-
-  // We pass in pivotTable and i so we can state the pre- and post-conditions.
   method {:fuel SizeOfV,3}
   bucketToVal(bucket: BucketImpl.MutBucket)
   returns (v: V, size: uint64)
   requires bucket.Inv()
+  requires BucketWellMarshalled(bucket.I())
   requires WeightBucket(bucket.Bucket) <= MaxTotalBucketWeight()
   ensures ValInGrammar(v, Marshalling.BucketGrammar())
   ensures ValidVal(v)
-  ensures Marshalling.valToBucket(v) == bucket.Bucket
-  ensures SizeOfV(v) == WeightBucket(bucket.Bucket) + 8
+  ensures Marshalling.valToBucket(v) == Some(bucket.Bucket)
+  ensures SizeOfV(v) == WeightBucket(bucket.Bucket) + 32
   ensures SizeOfV(v) == size as int
   {
-    var kvl := bucket.GetKvl();
-    KVList.kvlWeightEq(kvl);
-    KVList.lenKeysLeWeight(kvl);
-    var keys := strictlySortedKeySeqToVal(kvl.keys);
-    var messages := messageSeqToVal(kvl.messages);
-    v := VTuple([keys, messages]);
-
-    assert SizeOfV(v) == SizeOfV(keys) + SizeOfV(messages);
-
-    // FIXME dafny goes nuts with trigger loops here some unknown reason
-    // without these obvious asserts.
-    //assert ValInGrammar(v.t[0], Marshalling.BucketGrammar().t[0]);
-    //assert ValInGrammar(v.t[1], Marshalling.BucketGrammar().t[1]);
-    //assert ValInGrammar(v, Marshalling.BucketGrammar());
-
-    // TODO we need to show that v is equivalent to a V
-    // which demarshalls to the same bucket.
-    assume ValInGrammar(v, Marshalling.BucketGrammar()); // this is not remotely true
-
-    size := bucket.Weight + 8;
+    var pkv := bucket.GetPkv();
+    v := PackedKVMarshalling.ToVal(pkv);
+    size := bucket.Weight + 32;
+    PackedKVMarshalling.SizeOfVWellMarshalledPackedKVIsBucketWeight(pkv);
   }
 
   method bucketsToVal(buckets: seq<BucketImpl.MutBucket>)
   returns (v: V, size: uint64)
   requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
   requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i].Bucket)
+  requires forall i | 0 <= i < |buckets| :: BucketWellMarshalled(buckets[i].I())
   requires |buckets| <= MaxNumChildren() as int
   requires WeightBucketList(BucketImpl.MutBucket.ISeq(buckets)) <= MaxTotalBucketWeight()
   ensures ValidVal(v)
   ensures ValInGrammar(v, GArray(Marshalling.BucketGrammar()))
   ensures |v.a| == |buckets|
-  ensures Marshalling.valToBuckets(v.a) == BucketImpl.MutBucket.ISeq(buckets)
-  ensures SizeOfV(v) <= 8 + WeightBucketList(BucketImpl.MutBucket.ISeq(buckets)) + |buckets| * 8
+  ensures Marshalling.valToBuckets(v.a) == Some(BucketImpl.MutBucket.ISeq(buckets))
+  ensures SizeOfV(v) <= 8 + WeightBucketList(BucketImpl.MutBucket.ISeq(buckets)) + |buckets| * 32
   ensures SizeOfV(v) == size as int
   {
     BucketImpl.MutBucket.AllocatedReprSeq(buckets);
@@ -432,10 +463,11 @@ module MarshallingImpl {
       var bucketVal, bucket_size := bucketToVal(bucket);
       assert buckets == DropLast(buckets) + [Last(buckets)]; // observe
       lemma_SeqSum_prefix(pref.a, bucketVal);
-      assert Marshalling.valToBuckets(VArray(pref.a + [bucketVal]).a) == BucketImpl.MutBucket.ISeq(buckets); // observe
-      assert Marshalling.valToBuckets(VArray(pref.a + [bucketVal]).a) == BucketImpl.MutBucket.ISeq(buckets); // observe (reduces verification time)
+      ghost var ibuckets := BucketImpl.MutBucket.ISeq(buckets);
+      assert ibuckets == DropLast(ibuckets) + [ Last(ibuckets) ];
+      assert Marshalling.valToBuckets(pref.a).value == DropLast(ibuckets);
 
-      assert buckets == DropLast(buckets) + [Last(buckets)];
+      assert Marshalling.valToBuckets(VArray(pref.a + [bucketVal]).a) == Some(BucketImpl.MutBucket.ISeq(buckets)); // observe (reduces verification time)
 
       reveal_WeightBucketList();
       BucketImpl.MutBucket.ISeqInduction(buckets);
@@ -471,6 +503,7 @@ module MarshallingImpl {
   requires node.Inv()
   requires IM.WFNode(node.I())
   requires BT.WFNode(IM.INode(node.I()))
+  requires forall i | 0 <= i < |node.buckets| :: BucketWellMarshalled(node.buckets[i].I())
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.PivotNodeGrammar())
   ensures IMM.valToNode(v) == INodeOpt(Some(node))
@@ -494,9 +527,9 @@ module MarshallingImpl {
 
     v := VTuple([pivots, children, buckets]);
 
-    assert SizeOfV(pivots) <= (4 + (MaxNumChildren()-1)*(4 + KeyType.MaxLen() as int));
+    assert SizeOfV(pivots) <= (8 + (MaxNumChildren()-1)*(8 + KeyType.MaxLen() as int));
     assert SizeOfV(children) <= (8 + MaxNumChildren() * 8);
-    assert SizeOfV(buckets) <= 8 + MaxNumChildren() * (4 + 4) + MaxTotalBucketWeight();
+    assert SizeOfV(buckets) <= 8 + MaxNumChildren() * (32) + MaxTotalBucketWeight();
 
     assert SizeOfV(v) == SizeOfV(pivots) + SizeOfV(children) + SizeOfV(buckets);
 
@@ -505,34 +538,64 @@ module MarshallingImpl {
     size := size_buckets + size_pivots + size_children;
   }
 
+  method {:fuel SizeOfV,7}
+  superblockToVal(superblock: SectorType.Superblock)
+  returns (v : V)
+  requires JC.WFSuperblock(superblock)
+  ensures ValidVal(v)
+  ensures ValInGrammar(v, Marshalling.SuperblockGrammar())
+  ensures SizeOfV(v) <= 4000
+  ensures Marshalling.valToSuperblock(v) == Some(superblock)
+  {
+    v := VTuple([
+      VUint64(superblock.counter),
+      VUint64(superblock.journalStart),
+      VUint64(superblock.journalLen),
+      VUint64(superblock.indirectionTableLoc.addr),
+      VUint64(superblock.indirectionTableLoc.len)
+    ]);
+  }
+
   method sectorToVal(sector: StateImpl.Sector)
   returns (v : V, size: uint64)
   requires StateImpl.WFSector(sector)
   requires IM.WFSector(StateImpl.ISector(sector))
-  requires sector.SectorBlock?
-  requires sector.SectorBlock? ==> IM.WFNode(sector.block.I())
-  requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block.I()))
-  requires sector.SectorIndirectionTable? ==>
-      BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.I()))
+  requires sector.SectorNode?
+  requires sector.SectorNode? ==> IM.WFNode(sector.node.I())
+  requires sector.SectorNode? ==> BT.WFNode(IM.INode(sector.node.I()))
+  requires sector.SectorNode? ==> forall i | 0 <= i < |sector.node.buckets| :: BucketWellMarshalled(sector.node.buckets[i].I())
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.SectorGrammar());
   ensures Marshalling.valToSector(v) == Some(IM.ISector(StateImpl.ISector(sector)))
-  ensures sector.SectorBlock? ==> SizeOfV(v) <= NodeBlockSize() as int - 32
+  ensures sector.SectorNode? ==> SizeOfV(v) <= NodeBlockSize() as int - 32
   ensures SizeOfV(v) < 0x1_0000_0000_0000_0000 - 32
   ensures SizeOfV(v) == size as int
   {
     match sector {
-      //case SectorIndirectionTable(indirectionTable) => {
-      //  var w, s := indirectionTable.indirectionTableToVal();
-      //  v := VCase(0, w);
-      //  size := s + 8;
-      //}
-      case SectorBlock(node) => {
+      case SectorNode(node) => {
         var w, s := nodeToVal(node);
-        v := VCase(1, w);
+        v := VCase(2, w);
         size := s + 8;
       }
     }
+  }
+
+  method indirectionTableSectorToVal(sector: StateImpl.Sector)
+  returns (v : V, size: uint64)
+  requires StateImpl.WFSector(sector)
+  requires IM.WFSector(StateImpl.ISector(sector))
+  requires sector.SectorIndirectionTable?
+  requires sector.indirectionTable.Inv()
+  requires BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.I()))
+  ensures ValidVal(v)
+  ensures ValInGrammar(v, Marshalling.SectorGrammar());
+  ensures Marshalling.valToSector(v) == Some(IM.ISector(StateImpl.ISector(sector)))
+  ensures SizeOfV(v) < 0x1_0000_0000_0000_0000 - 32
+  ensures SizeOfV(v) == size as int
+  {
+    var w, s := sector.indirectionTable.indirectionTableToVal();
+    v := VCase(1, w);
+    size := s + 8;
   }
 
   /////// Marshalling and de-marshalling
@@ -541,10 +604,10 @@ module MarshallingImpl {
   requires start as int <= |data| < 0x1_0000_0000_0000_0000;
   ensures s.Some? ==> StateImpl.WFSector(s.value)
   ensures s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
-  ensures s.Some? && s.value.SectorBlock? ==> forall i | 0 <= i < |s.value.block.buckets| :: fresh(s.value.block.buckets[i].Repr)
+  ensures s.Some? && s.value.SectorNode? ==> forall i | 0 <= i < |s.value.node.buckets| :: fresh(s.value.node.buckets[i].Repr)
   ensures ISectorOpt(s) == IMM.parseSector(data[start..])
-  ensures s.Some? && s.value.SectorBlock? ==> IM.WFNode(s.value.block.I())
-  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(s.value.block.I()))
+  ensures s.Some? && s.value.SectorNode? ==> IM.WFNode(s.value.node.I())
+  ensures s.Some? && s.value.SectorNode? ==> BT.WFNode(IM.INode(s.value.node.I()))
   ensures s.Some? ==> fresh(SI.SectorRepr(s.value));
   {
     IMM.reveal_parseSector();
@@ -584,9 +647,9 @@ module MarshallingImpl {
   requires |data| < 0x1_0000_0000_0000_0000;
   ensures s.Some? ==> StateImpl.WFSector(s.value)
   ensures s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
-  ensures ISectorOpt(s) == IMM.parseCheckedSector(data[..])
-  ensures s.Some? && s.value.SectorBlock? ==> IM.WFNode(s.value.block.I())
-  ensures s.Some? && s.value.SectorBlock? ==> BT.WFNode(IM.INode(s.value.block.I()))
+  ensures ISectorOpt(s) == IMM.parseCheckedSector(data)
+  ensures s.Some? && s.value.SectorNode? ==> IM.WFNode(s.value.node.I())
+  ensures s.Some? && s.value.SectorNode? ==> BT.WFNode(IM.INode(s.value.node.I()))
   ensures s.Some? ==> fresh(SI.SectorRepr(s.value))
   {
     s := None;
@@ -604,34 +667,86 @@ module MarshallingImpl {
   method MarshallCheckedSector(sector: Sector) returns (data : array?<byte>)
   requires StateImpl.WFSector(sector)
   requires IM.WFSector(StateImpl.ISector(sector))
-  requires sector.SectorBlock? ==> IM.WFNode(sector.block.I())
-  requires sector.SectorBlock? ==> BT.WFNode(IM.INode(sector.block.I()))
+  requires sector.SectorNode? ==> IM.WFNode(sector.node.I())
+  requires sector.SectorNode? ==> BT.WFNode(IM.INode(sector.node.I()))
+  requires sector.SectorSuperblock? ==> JC.WFSuperblock(sector.superblock)
   ensures data != null ==> IMM.parseCheckedSector(data[..]).Some?
   ensures data != null ==>
       && IM.ISector(IMM.parseCheckedSector(data[..]).value)
       == IM.ISector(StateImpl.ISector(sector))
   ensures data != null ==> 32 <= data.Length
-  ensures data != null && sector.SectorBlock? ==> data.Length <= NodeBlockSize() as int
-  ensures data != null && sector.SectorIndirectionTable? ==> data.Length == IndirectionTableBlockSize() as int
-  ensures sector.SectorBlock? ==> data != null;
+  ensures data != null && sector.SectorNode? ==> data.Length <= NodeBlockSize() as int
+  ensures data != null && sector.SectorIndirectionTable? ==> data.Length <= IndirectionTableBlockSize() as int
+  //ensures sector.SectorNode? ==> data != null;
+  ensures sector.SectorSuperblock? ==> data != null && data.Length == 4096;
   ensures sector.SectorIndirectionTable? && Marshalling.IsInitIndirectionTable(IndirectionTableModel.I(sector.indirectionTable.I())) ==> data != null;
+  ensures sector.SectorNode? && BucketListWellMarshalled(BucketImpl.MutBucket.ISeq(sector.node.buckets)) ==> data != null
   {
-    if sector.SectorIndirectionTable? {
+    if sector.SectorSuperblock? {
+      var v0 := superblockToVal(sector.superblock);
+      var v := VCase(0, v0);
+      var data := MarshallIntoFixedSize(
+          v, Marshalling.SectorGrammar(), 32, 4096);
+
+      IMM.reveal_parseSector();
+      IMM.reveal_parseCheckedSector();
+
+      var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
+
+      assert data[32..] == data[32..data.Length];
+      assert hash == Crypto.Crc32C(data[32..]);
+      ghost var data_suffix := data[32..];
+      NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
+      assert data_suffix == data[32..];
+
+      return data;
+    } else if sector.SectorIndirectionTable? {
       //NativeBenchmarking.start("MarshallCheckedSector");
 
-      var data := new byte[IndirectionTableBlockSizeUint64()];
+      //var data := new byte[IndirectionTableBlockSizeUint64()];
 
       //NativeBenchmarking.start("marshallIndirectionTable");
-      var end := sector.indirectionTable.marshallIndirectionTable(data, 40);
       //NativeBenchmarking.end("marshallIndirectionTable");
 
-      assume false;
+      var v, computedSize := indirectionTableSectorToVal(sector);
+      var size: uint64 := computedSize + 32;
+
+      ghost var ghosty := true;
+      if ghosty {
+        if Marshalling.IsInitIndirectionTable(IndirectionTableModel.I(sector.indirectionTable.I()))
+        {
+          Marshalling.InitIndirectionTableSizeOfV(IndirectionTableModel.I(sector.indirectionTable.I()), v);
+        }
+      }
+
+      if size > IndirectionTableBlockSizeUint64() {
+        return null;
+      }
+
+      var data := MarshallIntoFixedSize(v, Marshalling.SectorGrammar(), 32, size);
+
+      IMM.reveal_parseSector();
+      IMM.reveal_parseCheckedSector();
+
+      var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
+
+      assert data[32..] == data[32..data.Length];
+      assert hash == Crypto.Crc32C(data[32..]);
+      ghost var data_suffix := data[32..];
+      NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
+      assert data_suffix == data[32..];
+
+
+
+      return data;
+
+      /*
       if end == 0 {
         return null;
       }
 
-      // case 0 indicates indirection table
-      Pack_LittleEndian_Uint64_into_Array(0, data, 32);
+      // case 1 indicates indirection table
+      Pack_LittleEndian_Uint64_into_Array(1, data, 32);
 
       //NativeBenchmarking.start("crc32");
       var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
@@ -641,7 +756,15 @@ module MarshallingImpl {
       //NativeBenchmarking.end("MarshallCheckedSector");
 
       return data;
+      */
     } else {
+      var node := sector.node;
+
+      var wellmarshalled := node.BucketsWellMarshalled();
+      if !wellmarshalled {
+        return null;
+      }
+      
       var v, computedSize := sectorToVal(sector);
       var size := computedSize + 32;
 
