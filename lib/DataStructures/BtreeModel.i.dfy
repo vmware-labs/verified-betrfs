@@ -119,7 +119,7 @@ abstract module BtreeModel {
     assert key in AllKeys(node);
     assert key in interp;
   }
-  
+
   lemma AllKeysIsConsistentWithInterpretation(node: Node, key: Key)
     requires WF(node)
     requires key in Interpretation(node)
@@ -133,6 +133,27 @@ abstract module BtreeModel {
     }
   }
 
+  lemma ChildInterpretationSubMap(node: Node, i: nat)
+    requires WF(node)
+    requires node.Index?
+    requires i < |node.children|
+    ensures IsSubMap(Interpretation(node.children[i]), Interpretation(node))
+  {
+    forall k | k in Interpretation(node.children[i])
+      ensures MapsAgreeOnKey(Interpretation(node), Interpretation(node.children[i]), k)
+    {
+      AllKeysIsConsistentWithInterpretation(node.children[i], k);
+      if 0 < i {
+        assert AllKeysAboveBound(node, i);
+      }
+      if i < |node.children| - 1 {
+        assert AllKeysBelowBound(node, i);
+      }
+      Keys.LargestLteIsUnique2(node.pivots, k, i as int - 1);
+      InterpretationDelegation(node, k);
+    }
+  }
+  
   lemma IndexesNonempty(node: Node)
     requires WF(node)
     requires node.Index?
@@ -1633,6 +1654,20 @@ abstract module BtreeModel {
     ensures Flatten(ToSeqChildren(nodes).1) == Flatten(ToSeqChildren(DropLast(nodes)).1) + ToSeq(Last(nodes)).1
   {
     reveal_Flatten();
+  }
+
+  lemma ToSeqChildrenAdditive(nodes1: seq<Node>, nodes2: seq<Node>)
+    requires forall i :: 0 <= i < |nodes1| ==> WF(nodes1[i])
+    requires forall i :: 0 <= i < |nodes2| ==> WF(nodes2[i])
+    ensures ToSeqChildren(nodes1 + nodes2).0 == ToSeqChildren(nodes1).0 + ToSeqChildren(nodes2).0
+    ensures Flatten(ToSeqChildren(nodes1 + nodes2).0)
+         == Flatten(ToSeqChildren(nodes1).0) + Flatten(ToSeqChildren(nodes2).0)
+    ensures ToSeqChildren(nodes1 + nodes2).1 == ToSeqChildren(nodes1).1 + ToSeqChildren(nodes2).1
+    ensures Flatten(ToSeqChildren(nodes1 + nodes2).1)
+         == Flatten(ToSeqChildren(nodes1).1) + Flatten(ToSeqChildren(nodes2).1)
+  {
+    FlattenAdditive(ToSeqChildren(nodes1).0, ToSeqChildren(nodes2).0);
+    FlattenAdditive(ToSeqChildren(nodes1).1, ToSeqChildren(nodes2).1);
   }
   
   lemma ToSeqChildrenLength(nodes: seq<Node>)
