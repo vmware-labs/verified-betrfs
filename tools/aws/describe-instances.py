@@ -34,7 +34,7 @@ try:
         for ist in insts:
             print("\033[1m{}\033[0m \x1b[34m{}\033[0m\tssh ubuntu@{}".format(ist.Name, ist.State, ist.PublicIpAddress))
     elif args.json:
-        json.dumps(insts)
+        print(json.dumps(insts))
     else:
         for ist in insts:
             print("{}\t{}\t{}\t{}".format(
