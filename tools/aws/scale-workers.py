@@ -2,15 +2,9 @@
 import urllib, json, sys
 import argparse
 import boto3
-import json
+import pprint
+from collections import namedtuple
 from botocore.exceptions import ClientError
-
-instance_ids = [
-    'i-0ef45a89f48487fce',
-    'i-006858073c1785f92',
-    'i-0070ff5413bf8eed4',
-    'i-0119b98c9b74ffaea'
-]
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--scale-up', type=int, help='scale up to target worker count')
@@ -19,10 +13,34 @@ parser.add_argument('--dry-run', action='store_true')
 
 args = parser.parse_args()
 
-print(args)
+print("Args: ", args)
 
-def prettyResponse(response):
-    return json.dumps(response, indent=2)
+print("Fetching instances.")
+
+Instance = namedtuple('Instance', ['Name', 'InstanceId', 'PublicIpAddress', 'State'])
+
+def extract_salient(inst):
+    return Instance(
+            Name=[x for x in inst['Tags'] if x['Key'] == 'Name'][0]['Value'],
+            InstanceId=inst['InstanceId'],
+            PublicIpAddress=inst['PublicIpAddress'],
+            State=inst['State']['Name'])
+
+try:
+    ec2_connection = boto3.client('ec2', region_name='us-east-2')
+    response = ec2_connection.describe_instances()
+except ClientError as e:
+    print(e)
+    sys.exit(-1)
+
+insts = [extract_salient(x) for reservation in response['Reservations'] for x in reservation['Instances']]
+insts.sort(key=lambda x: x.Name)
+insts = [x for x in insts if x.Name.startswith('veri-worker')]
+
+print("Found instances:")
+pprint.pprint(insts, indent=2)
+
+instance_ids = [x.InstanceId for x in insts]
 
 if args.scale_up is None and args.scale_down is None:
     print("either --scale-up or --scale-down is required")
@@ -33,10 +51,9 @@ if args.scale_up is not None:
     print("starting instances:", to_start)
 
     if not args.dry_run:
-        ec2_connection = boto3.client('ec2', region_name='us-east-2')
         try:
             response = ec2_connection.start_instances(InstanceIds=to_start)
-            print(prettyResponse(response))
+            pprint.pprint(response, ident=2)
         except ClientError as e:
             print(e)
 
@@ -45,10 +62,9 @@ elif args.scale_down is not None:
     print("stopping instances:", to_stop)
 
     if not args.dry_run:
-        ec2_connection = boto3.client('ec2', region_name='us-east-2')
         try:
             response = ec2_connection.stop_instances(InstanceIds=to_stop)
-            print(prettyResponse(response))
+            pprint.pprint(response, ident=2)
         except ClientError as e:
             print(e)
 
