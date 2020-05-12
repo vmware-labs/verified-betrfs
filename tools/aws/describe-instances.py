@@ -38,7 +38,7 @@ try:
     else:
         for ist in insts:
             print("{}\t{}\t{}\t{}".format(
-                ist.Name, ist.InstanceId, ist.PublicIdAddress, ist.State))
+                ist.Name, ist.InstanceId, ist.PublicIpAddress, ist.State))
 except ClientError as e:
     print(e)
 
