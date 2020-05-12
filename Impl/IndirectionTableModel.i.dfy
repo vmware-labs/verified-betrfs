@@ -138,6 +138,11 @@ module IndirectionTableModel {
     self.garbageQueue.Some?
   }
 
+  predicate GarbageQueueInv(q: GarbageQueueModel)
+  {
+    && NoDupes(q)
+  }
+
   predicate Inv1(self: IndirectionTable)
   {
     && LinearMutableMap.Inv(self.t)
@@ -148,6 +153,7 @@ module IndirectionTableModel {
     && BC.GraphClosed(self.graph)
     && (forall ref | ref in self.graph :: |self.graph[ref]| <= MaxNumChildren())
     && (self.garbageQueue.Some? ==>
+      && (GarbageQueueInv(self.garbageQueue.value))
       && (forall ref | ref in self.t.contents && self.t.contents[ref].predCount == 0 :: ref in self.garbageQueue.value)
       && (forall ref | ref in self.garbageQueue.value :: ref in self.t.contents && self.t.contents[ref].predCount == 0)
     )
@@ -326,8 +332,8 @@ module IndirectionTableModel {
     && ValidPredCountsIntermediate(PredCounts(t), Graph(t), newSuccs, oldSuccs, newIdx, oldIdx)
     && (forall j | 0 <= j < |oldSuccs| :: oldSuccs[j] in t.contents)
     && BC.GraphClosed(Graph(t))
-    && (forall ref | ref in t.contents && t.contents[ref].predCount == 0 :: ref in q)
-    && (forall ref | ref in q :: ref in t.contents && t.contents[ref].predCount == 0)
+    && (forall ref | ref in t.contents && t.contents[ref].predCount == 0 :: ref in Set(q))
+    && (forall ref | ref in Set(q) :: ref in t.contents && t.contents[ref].predCount == 0)
     && BT.G.Root() in t.contents
   }
 
@@ -409,12 +415,14 @@ module IndirectionTableModel {
       oldSuccs: seq<BT.G.Reference>,
       idx: int)
   requires RefcountUpdateInv(t, q, changingRef, newSuccs, oldSuccs, |newSuccs|, idx)
+  requires GarbageQueueInv(q)
   ensures idx < |oldSuccs| ==> oldSuccs[idx] in t.contents
   ensures idx < |oldSuccs| ==> t.contents[oldSuccs[idx]].predCount > 0
   ensures idx < |oldSuccs| ==>
     var (t', q') := PredDec(t, q, oldSuccs[idx]);
-    RefcountUpdateInv(t', q', changingRef, newSuccs, oldSuccs, |newSuccs|, idx + 1)
-  ensures |q| <= 0x1_0000_0000
+    && RefcountUpdateInv(t', q', changingRef, newSuccs, oldSuccs, |newSuccs|, idx + 1)
+    && GarbageQueueInv(q')
+  // ensures |q| <= 0x1_0000_0000
   {
     assert Set(q) <= t.contents.Keys;
     SetInclusionImpliesSmallerCardinality(Set(q), t.contents.Keys);
@@ -446,6 +454,10 @@ module IndirectionTableModel {
       assert t.contents[oldSuccs[idx]].predCount > 0;
 
       var (t', q') := PredDec(t, q, oldSuccs[idx]);
+      if t.contents[ref].predCount == 1 {
+        assert NoDupes([ref]) by { reveal_NoDupes(); }
+        DisjointConcatenation(q, [ref]);
+      }
       assert Graph(t) == Graph(t');
 
       var predCounts := PredCounts(t);
@@ -462,8 +474,11 @@ module IndirectionTableModel {
         }
       }
 
+      // assert |q| <= 0x1_0000_0000;
       // LruModel.LruUse(q, ref);
     }
+      // assert |q| <= 0x1_0000_0000;
+
   }
 
   lemma PredecessorSetRestrictedSizeBound(graph: map<BT.G.Reference, seq<BT.G.Reference>>,
@@ -536,11 +551,13 @@ module IndirectionTableModel {
       oldSuccs: seq<BT.G.Reference>,
       idx: int)
   requires RefcountUpdateInv(t, q, changingRef, newSuccs, oldSuccs, idx, 0)
+  requires GarbageQueueInv(q)
   ensures idx < |newSuccs| ==> newSuccs[idx] in t.contents
   ensures idx < |newSuccs| ==> t.contents[newSuccs[idx]].predCount < 0xffff_ffff_ffff_ffff
   ensures idx < |newSuccs| ==>
     var (t', q') := PredInc(t, q, newSuccs[idx]);
-    RefcountUpdateInv(t', q', changingRef, newSuccs, oldSuccs, idx + 1, 0)
+    && RefcountUpdateInv(t', q', changingRef, newSuccs, oldSuccs, idx + 1, 0)
+    && GarbageQueueInv(q')
   ensures LinearMutableMap.Inv(t)
   ensures 0 <= idx <= |newSuccs|
   {
@@ -565,7 +582,13 @@ module IndirectionTableModel {
       SeqCountBound(oldSuccs, ref, 0);
       assert t.contents[ref].predCount < 0xffff_ffff_ffff_ffff;
 
+      assert t.contents[ref].predCount != 0;
+      
       var (t', q') := PredInc(t, q, newSuccs[idx]);
+      // assert GarbageQueueInv(q') by {
+      //   reveal_NoDupes();
+      //   var _ := RemoveValueMultiset(q, ref);
+      // }
       assert Graph(t) == Graph(t');
 
       var predCounts := PredCounts(t);
@@ -585,24 +608,30 @@ module IndirectionTableModel {
     }
   }
 
-  function PredInc(t: HashMap, q: GarbageQueueModel, ref: BT.G.Reference) : (HashMap, GarbageQueueModel)
+  function PredInc(t: HashMap, q: GarbageQueueModel, ref: BT.G.Reference) : (res: (HashMap, GarbageQueueModel))
   requires LinearMutableMap.Inv(t)
+  requires GarbageQueueInv(q)
   requires t.count as nat < 0x1_0000_0000_0000_0000 / 8
   requires ref in t.contents
   requires t.contents[ref].predCount < 0xffff_ffff_ffff_ffff
+  // ensures var (t', q') := res;
+  //   && GarbageQueueInv(q')
   {
     var oldEntry := t.contents[ref];
     var newEntry := oldEntry.(predCount := oldEntry.predCount + 1);
     var t' := LinearMutableMap.Insert(t, ref, newEntry);
-    var q' := if oldEntry.predCount == 0 then RemoveValue(q,  ref) else q;
-    (t', q')
+    // var q' := if oldEntry.predCount == 0 then RemoveValue(q,  ref) else q;
+    (t', q)
   }
 
-  function PredDec(t: HashMap, q: GarbageQueueModel, ref: BT.G.Reference) : (HashMap, GarbageQueueModel)
+  function PredDec(t: HashMap, q: GarbageQueueModel, ref: BT.G.Reference) : (res: (HashMap, GarbageQueueModel))
   requires LinearMutableMap.Inv(t)
+  requires GarbageQueueInv(q)
   requires t.count as nat < 0x1_0000_0000_0000_0000 / 8
   requires ref in t.contents
   requires t.contents[ref].predCount > 0
+  // ensures var (t', q') := res;
+  //   && GarbageQueueInv(q')
   {
     var oldEntry := t.contents[ref];
     var newEntry := oldEntry.(predCount := oldEntry.predCount - 1);
@@ -619,11 +648,13 @@ module IndirectionTableModel {
       oldSuccs: seq<BT.G.Reference>,
       idx: uint64) : (res : (HashMap, GarbageQueueModel))
   requires RefcountUpdateInv(t, q, changingRef, newSuccs, oldSuccs, |newSuccs|, idx as int)
+  requires GarbageQueueInv(q)
   decreases |oldSuccs| - idx as int
   ensures var (t', q') := res;
     && RefcountUpdateInv(t', q', changingRef, newSuccs, oldSuccs, |newSuccs|, |oldSuccs|)
     && Graph(t) == Graph(t')
     && Locs(t) == Locs(t')
+    && GarbageQueueInv(q')
   {
     LemmaUpdatePredCountsDecStuff(t, q, changingRef, newSuccs, oldSuccs, idx as int);
 
@@ -642,18 +673,20 @@ module IndirectionTableModel {
       newSuccs: seq<BT.G.Reference>,
       oldSuccs: seq<BT.G.Reference>,
       idx: uint64) : (res : (HashMap, GarbageQueueModel))
+  requires GarbageQueueInv(q)
   requires RefcountUpdateInv(t, q, changingRef, newSuccs, oldSuccs, idx as int, 0)
   decreases |newSuccs| - idx as int
   ensures var (t', q') := res;
     && RefcountUpdateInv(t', q', changingRef, newSuccs, oldSuccs, |newSuccs|, |oldSuccs|)
     && Graph(t) == Graph(t')
     && Locs(t) == Locs(t')
+    && GarbageQueueInv(q')
   {
     LemmaUpdatePredCountsIncStuff(t, q, changingRef, newSuccs, oldSuccs, idx as int);
 
-    if idx == |newSuccs| as uint64 then
+    if idx == |newSuccs| as uint64 then (
       UpdatePredCountsDec(t, q, changingRef, newSuccs, oldSuccs, 0)
-    else (
+    ) else (
       var (t', q') := PredInc(t, q, newSuccs[idx]);
       UpdatePredCountsInc(t', q', changingRef, newSuccs, oldSuccs, idx + 1)
     )
@@ -670,6 +703,7 @@ module IndirectionTableModel {
       |self.garbageQueue.value| <= 0x1_0000_0000;
   {
     if self.garbageQueue.Some? {
+      NoDupesSetCardinality(self.garbageQueue.value);
       SetInclusionImpliesSmallerCardinality(Set(self.garbageQueue.value), self.t.contents.Keys);
       assert |self.t.contents.Keys| == |self.t.contents|;
     }
@@ -756,6 +790,7 @@ module IndirectionTableModel {
         == t.count as int;
   }
 
+  // TODO(andreal)
   function {:opaque} UpdateAndRemoveLoc(self: IndirectionTable, ref: BT.G.Reference, succs: seq<BT.G.Reference>) : (res : (IndirectionTable, Option<Location>))
   requires Inv(self)
   requires TrackingGarbage(self)
@@ -780,6 +815,8 @@ module IndirectionTableModel {
 
     var (t1, garbageQueue1) := UpdatePredCountsInc(t, q, ref, succs,
         if oldEntry.Some? then oldEntry.value.succs else [], 0);
+
+    assert GarbageQueueInv(garbageQueue1);
 
     lemma_count_eq_graph_size(t);
     lemma_count_eq_graph_size(t1);
@@ -1284,6 +1321,7 @@ module IndirectionTableModel {
     computeRefUpperBoundIterate(t, LinearMutableMap.IterStart(t), 0)
   }
 
+  // TODO(andreal)
   function valToIndirectionTable(v: V) : (s : Option<IndirectionTable>)
   requires ValidVal(v)
   requires ValInGrammar(v, IndirectionTableGrammar())
@@ -1693,6 +1731,7 @@ module IndirectionTableModel {
     }
   }
 
+  // TODO(andreal)
   function {:opaque} RemoveRef(self: IndirectionTable, ref: BT.G.Reference)
     : (res : (IndirectionTable, Option<Location>))
   requires Inv(self)
