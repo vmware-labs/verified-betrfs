@@ -84,9 +84,9 @@ module FlushImpl {
     assert s.I().cache[childref].buckets == MutBucket.ISeq(child.buckets);
     assert WeightBucketList(MutBucket.ISeq(child.buckets)) <= MaxTotalBucketWeight();
 
-    ghost var flushedKey;
     var newparentBucket, newbuckets;
-    newparentBucket, newbuckets, flushedKey := BucketImpl.PartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
+    newparentBucket, newbuckets := BucketImpl.PartialFlush(
+        parent.buckets[slot], child.buckets, child.pivotTable);
     var newchild := new Node(child.pivotTable, child.children, newbuckets);
     
     assert Some(parent) == s.cache.ptr(parentref);

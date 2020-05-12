@@ -71,7 +71,13 @@ module BucketWeights {
   {
     var weights := MSets.Apply(WeightKey, keys);
     assert |keys| == 0 ==> |weights| == 0;
-    MSets.FoldSimple<nat>(0, (x, y) => x + y, weights)
+    MSets.FoldSimple<nat>(0, MSets.AddNat, weights)
+  }
+
+  function {:opaque} WeightKeySeq(keys: seq<Key>) : nat
+  {
+    var weights := ApplyOpaque(WeightKey, keys);
+    FoldFromRight<nat, nat>(MSets.AddNat, 0, weights)
   }
 
   lemma WeightKeyMultisetAdditive(things1: multiset<Key>, things2: multiset<Key>)
@@ -83,7 +89,7 @@ module BucketWeights {
     MSets.reveal_IsIdentity();
     MSets.reveal_IsAssociative();
     MSets.reveal_IsCommutative();
-    MSets.FoldSimpleAdditive<nat>(0, (x, y) => x + y, weights1, weights2);
+    MSets.FoldSimpleAdditive<nat>(0, MSets.AddNat, weights1, weights2);
     reveal_WeightKeyMultiset();
   }
 
@@ -105,7 +111,7 @@ module BucketWeights {
         {
           reveal_WeightKeyMultiset();
           MSets.ApplySingleton(WeightKey, key);
-          MSets.FoldSimpleSingleton<nat>(0, (x, y) => x + y, WeightKey(key));
+          MSets.FoldSimpleSingleton<nat>(0, MSets.AddNat, WeightKey(key));
         }
         //|rest| * (4 + KeyType.MaxLen() as nat) + WeightKey(key);
         //|rest| * (4 + KeyType.MaxLen() as nat) + (4 + KeyType.MaxLen() as nat);
@@ -119,9 +125,15 @@ module BucketWeights {
   {
     var weights := MSets.Apply(WeightMessage, msgs);
     assert |msgs| == 0 ==> |weights| == 0;
-    MSets.FoldSimple<nat>(0, (x, y) => x + y, weights)
+    MSets.FoldSimple<nat>(0, MSets.AddNat, weights)
   }
   
+  function {:opaque} WeightMessageSeq(msgs: seq<Message>) : nat
+  {
+    var weights := ApplyOpaque(WeightMessage, msgs);
+    FoldFromRight<nat, nat>(MSets.AddNat, 0, weights)
+  }
+
   lemma WeightMessageMultisetAdditive(things1: multiset<Message>, things2: multiset<Message>)
     ensures WeightMessageMultiset(things1 + things2) == WeightMessageMultiset(things1) + WeightMessageMultiset(things2)
   {
@@ -131,7 +143,7 @@ module BucketWeights {
     MSets.reveal_IsIdentity();
     MSets.reveal_IsAssociative();
     MSets.reveal_IsCommutative();
-    MSets.FoldSimpleAdditive<nat>(0, (x, y) => x + y, weights1, weights2);
+    MSets.FoldSimpleAdditive<nat>(0, MSets.AddNat, weights1, weights2);
     reveal_WeightMessageMultiset();
   }
   
@@ -161,6 +173,44 @@ module BucketWeights {
     )
   }
 
+  lemma WeightKeySeqList(keys: seq<Key>)
+    ensures WeightKeySeq(keys) == WeightKeyList(keys)
+  {
+    var ws := ApplyOpaque(WeightKey, keys);
+    var ws' := MSets.Apply(WeightKey, multiset(keys));
+    calc {
+      WeightKeySeq(keys);
+      { reveal_WeightKeySeq(); }
+      FoldFromRight<nat, nat>(MSets.AddNat, 0, ws);
+      { MSets.natsumProperties(); }
+      { MSets.FoldSeq<nat>(0, MSets.AddNat, ws); }
+      MSets.FoldSimple<nat>(0, MSets.AddNat, multiset(ws));
+      { MSets.ApplySeq(WeightKey, keys); }
+      MSets.FoldSimple<nat>(0, MSets.AddNat, ws');
+      { reveal_WeightKeyMultiset(); }
+      WeightKeyList(keys);
+    }
+  }
+
+  lemma WeightMessageSeqList(msgs: seq<Message>)
+    ensures WeightMessageSeq(msgs) == WeightMessageList(msgs)
+  {
+    var ws := ApplyOpaque(WeightMessage, msgs);
+    var ws' := MSets.Apply(WeightMessage, multiset(msgs));
+    calc {
+      WeightMessageSeq(msgs);
+      { reveal_WeightMessageSeq(); }
+      FoldFromRight<nat, nat>(MSets.AddNat, 0, ws);
+      { MSets.natsumProperties(); }
+      { MSets.FoldSeq<nat>(0, MSets.AddNat, ws); }
+      MSets.FoldSimple<nat>(0, MSets.AddNat, multiset(ws));
+      { MSets.ApplySeq(WeightMessage, msgs); }
+      MSets.FoldSimple<nat>(0, MSets.AddNat, ws');
+      { reveal_WeightMessageMultiset(); }
+      WeightMessageList(msgs);
+    }
+  }
+
   lemma WeightBucketEmpty()
   ensures WeightBucket(B(map[])) == 0
   {
@@ -170,7 +220,7 @@ module BucketWeights {
     ensures WeightKeyMultiset(multiset{key}) == WeightKey(key)
   {
     MSets.ApplySingleton(WeightKey, key);
-    MSets.FoldSimpleSingleton<nat>(0, (x, y) => x + y, WeightKey(key));
+    MSets.FoldSimpleSingleton<nat>(0, MSets.AddNat, WeightKey(key));
     reveal_WeightKeyMultiset();
   }
   
@@ -178,7 +228,7 @@ module BucketWeights {
     ensures WeightMessageMultiset(multiset{msg}) == WeightMessage(msg)
   {
     MSets.ApplySingleton(WeightMessage, msg);
-    MSets.FoldSimpleSingleton<nat>(0, (x, y) => x + y, WeightMessage(msg));
+    MSets.FoldSimpleSingleton<nat>(0, MSets.AddNat, WeightMessage(msg));
     reveal_WeightMessageMultiset();
   }
 
@@ -460,25 +510,25 @@ module BucketWeights {
         reveal_WeightKeyMultiset();
         reveal_WeightMessageMultiset();
       }
-      MSets.FoldSimple<nat>(0, (x, y) => x + y, keysweights) + MSets.FoldSimple<nat>(0, (x, y) => x + y, msgsweights);
+      MSets.FoldSimple<nat>(0, MSets.AddNat, keysweights) + MSets.FoldSimple<nat>(0, MSets.AddNat, msgsweights);
       {
         ImageSplitsMessages(bucket, a, b);
         //assert multiset(msgs) == multiset(amsgs) + multiset(bmsgs);
         Multisets.ApplyAdditive(WeightMessage, multiset(amsgs), multiset(bmsgs));
         //assert msgsweights == amsgsweights + bmsgsweights;
-        Multisets.FoldSimpleAdditive<nat>(0, (x, y) => x + y, amsgsweights, bmsgsweights);
+        Multisets.FoldSimpleAdditive<nat>(0, MSets.AddNat, amsgsweights, bmsgsweights);
       }
-        MSets.FoldSimple<nat>(0, (x, y) => x + y, keysweights)
-      + MSets.FoldSimple<nat>(0, (x, y) => x + y, amsgsweights) + MSets.FoldSimple<nat>(0, (x, y) => x + y, bmsgsweights);
+        MSets.FoldSimple<nat>(0, MSets.AddNat, keysweights)
+      + MSets.FoldSimple<nat>(0, MSets.AddNat, amsgsweights) + MSets.FoldSimple<nat>(0, MSets.AddNat, bmsgsweights);
       {
         ImageSplitsKeys(bucket, a, b);
         //assert multiset(keys) == multiset(akeys) + multiset(bkeys);
         Multisets.ApplyAdditive(WeightKey, multiset(akeys), multiset(bkeys));
         //assert keysweights == akeysweights + bkeysweights;
-        Multisets.FoldSimpleAdditive<nat>(0, (x, y) => x + y, akeysweights, bkeysweights);
+        Multisets.FoldSimpleAdditive<nat>(0, MSets.AddNat, akeysweights, bkeysweights);
       }
-        MSets.FoldSimple<nat>(0, (x, y) => x + y, akeysweights) + MSets.FoldSimple<nat>(0, (x, y) => x + y, amsgsweights)
-      + MSets.FoldSimple<nat>(0, (x, y) => x + y, bkeysweights) + MSets.FoldSimple<nat>(0, (x, y) => x + y, bmsgsweights);
+        MSets.FoldSimple<nat>(0, MSets.AddNat, akeysweights) + MSets.FoldSimple<nat>(0, MSets.AddNat, amsgsweights)
+      + MSets.FoldSimple<nat>(0, MSets.AddNat, bkeysweights) + MSets.FoldSimple<nat>(0, MSets.AddNat, bmsgsweights);
       {
         reveal_WeightKeyMultiset();
         reveal_WeightMessageMultiset();
@@ -1570,7 +1620,7 @@ module BucketWeights {
         {
           reveal_WeightKeyMultiset();
           MSets.ApplySingleton(WeightKey, key);
-          MSets.FoldSimpleSingleton<nat>(0, (x, y) => x + y, WeightKey(key));
+          MSets.FoldSimpleSingleton<nat>(0, MSets.AddNat, WeightKey(key));
         }
         WeightKeyMultiset(rest) + WeightKeyMultiset(multiset{key});
         { WeightKeyMultisetAdditive(rest, multiset{key}); }
@@ -1738,4 +1788,49 @@ module BucketWeights {
     ImageIdentity(wmbucket, AllKeys());
     WeightBucketSubset(wmbucket, ikeys, AllKeys());
   }
+
+  lemma WeightKeyListAdditive(a: seq<Key>, b: seq<Key>)
+  ensures WeightKeyList(a) + WeightKeyList(b) == WeightKeyList(a + b)
+  {
+    WeightKeyMultisetAdditive(multiset(a), multiset(b));
+  }
+
+  lemma WeightMessageListAdditive(a: seq<Message>, b: seq<Message>)
+  ensures WeightMessageList(a) + WeightMessageList(b) == WeightMessageList(a + b)
+  {
+    WeightMessageMultisetAdditive(multiset(a), multiset(b));
+  }
+
+  lemma WeightKeyListPushFront(key: Key, keys: seq<Key>)
+  ensures WeightKeyList([key] + keys)
+      == WeightKey(key) + WeightKeyList(keys)
+  {
+    WeightKeyListAdditive([key], keys);
+    WeightKeySingleton(key);
+  }
+
+  lemma WeightMessageListPushFront(msg: Message, msgs: seq<Message>)
+  ensures WeightMessageList([msg] + msgs)
+      == WeightMessage(msg) + WeightMessageList(msgs)
+  {
+    WeightMessageListAdditive([msg], msgs);
+    WeightMessageSingleton(msg);
+  }
+
+  lemma WeightKeyListPushBack(keys: seq<Key>, key: Key)
+  ensures WeightKeyList(keys + [key])
+      == WeightKey(key) + WeightKeyList(keys)
+  {
+    WeightKeyListAdditive(keys, [key]);
+    WeightKeySingleton(key);
+  }
+
+  lemma WeightMessageListPushBack(msgs: seq<Message>, msg: Message)
+  ensures WeightMessageList(msgs + [msg])
+      == WeightMessage(msg) + WeightMessageList(msgs)
+  {
+    WeightMessageListAdditive(msgs, [msg]);
+    WeightMessageSingleton(msg);
+  }
+
 }
