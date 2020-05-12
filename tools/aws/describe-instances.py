@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 import urllib, json, sys
 import boto3
-import json
+import pprint
 from botocore.exceptions import ClientError
 
 instance_ids = [
@@ -12,7 +12,7 @@ instance_ids = [
 ]
 
 def prettyResponse(response):
-    return json.dumps(response, indent=2)
+    return pprint.pprint(response, indent=2)
 
 ec2_connection = boto3.client('ec2', region_name='us-east-2')
 try:
