@@ -3,12 +3,14 @@ import argparse
 import urllib, json, sys
 import boto3
 import pprint
+import json
 from collections import namedtuple
 from botocore.exceptions import ClientError
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--all', action='store_true')
 parser.add_argument('--ssh', action='store_true')
+parser.add_argument('--json', action='store_true')
 args = parser.parse_args()
 
 Instance = namedtuple('Instance', ['Name', 'InstanceId', 'PublicIpAddress', 'State'])
@@ -31,8 +33,12 @@ try:
     if args.ssh:
         for ist in insts:
             print("\033[1m{}\033[0m \x1b[34m{}\033[0m\tssh ubuntu@{}".format(ist.Name, ist.State, ist.PublicIpAddress))
+    elif args.json:
+        json.dumps(insts)
     else:
-        pprint.pprint(insts, indent = 2)
+        for ist in insts:
+            print("{}\t{}\t{}\t{}".format(
+                ist.Name, ist.InstanceId, ist.PublicIdAddress, ist.State))
 except ClientError as e:
     print(e)
 
