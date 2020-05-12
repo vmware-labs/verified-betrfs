@@ -141,6 +141,7 @@ def main():
   config = None
   log_stats = False
   pillow = 1.0  # amount of padding over nominal cache size for cgroup.
+  max_children = None   # Default
 
   rocks = None
   time_budget_sec = 3600*24*365 # You get a year if you don't ask for a budget
@@ -170,6 +171,8 @@ def main():
       rocks = True
     elif arg == "log_stats":
       log_stats = True
+    elif arg.startswith("max_children="):
+      max_children = arg.split("=")[1]
     elif arg.startswith("time_budget="):
       val_str = arg.split("=")[1]
       unit = val_str[-1]
@@ -193,6 +196,11 @@ def main():
     assert not rocks
     assert ram != None
     value_updates = autoconfig(config, ram) + value_updates
+
+  if max_children != None:
+    assert not rocks
+    value_updates.append(("MaxNumChildrenUint64", str(max_children)))
+
   actuallyprint("value_updates: ")
   actuallyprint("".join([str(v)+"\n" for v in value_updates]))
 

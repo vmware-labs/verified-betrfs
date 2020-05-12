@@ -1205,3 +1205,11 @@ $SSH ubuntu@3.12.97.231 "(cd veribetrfs; tools/run-veri-config-experiment.py wor
 $SSH ubuntu@3.17.7.43 "(cd veribetrfs; tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=2.0gb pillow=1.2 config-64kb time_budget=2h output=../expresults/veri-u-pillow1.2.data)"
 
 rsync -rave "$SSH" 
+
+Next thing: Let's sweep fanout.
+[ ] fanout knob in run-veri; metadata
+
+time tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=2.0gb pillow=1.1 config-64kb time_budget=1h max_children=8 output=malloc-exp/veri-children8.data
+
+[ ] Deploy script
+[ ] rsync collect data script
