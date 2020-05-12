@@ -231,6 +231,11 @@ module PackedKV {
     PSA.psaElement(pkv.keys, i)
   }
 
+  function method GetMessageBytes(pkv: Pkv, i: uint64) : seq<byte>
+  {
+    PSA.psaElement(pkv.messages, i)
+  }
+
   function method GetMessage(pkv: Pkv, i: uint64) : Message
   requires WF(pkv)
   requires 0 <= i as int < |pkv.messages.offsets|

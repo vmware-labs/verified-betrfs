@@ -5,6 +5,7 @@ include "../../PivotBetree/Bounds.i.dfy"
 include "BucketIteratorModel.i.dfy"
 include "BucketModel.i.dfy"
 include "KMBPKVOps.i.dfy"
+include "PageBucketImpl.i.dfy"
 
 //
 // Collects singleton message insertions efficiently, avoiding repeated
@@ -37,6 +38,7 @@ module BucketImpl {
   import opened BucketModel
   import opened DPKV = DynamicPkv
   import KMBPKVOps
+  import opened PageBucketImpl
   
   type TreeMap = KMB.Node
 
@@ -109,12 +111,14 @@ module BucketImpl {
   datatype BucketFormat =
       | BFTree
       | BFPkv
+      | BFPage
 
   class MutBucket {
     var format: BucketFormat;
 
     var tree: KMB.Node?;
     var pkv: PackedKV.Pkv;
+    var page: Option<PageBucket>;
 
     var Weight: uint64;
     var sorted: bool
@@ -190,6 +194,8 @@ module BucketImpl {
         NumElementsLteWeight(B(KMB.Interpretation(tree)));
         KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
         pkv := tree_to_pkv(tree);
+      } else if format.BFPage? {
+        pkv := page.value.ToPkv();
       } else {
         pkv := this.pkv;
       }
@@ -205,6 +211,8 @@ module BucketImpl {
     {
       if (format.BFTree?) {
         b := true;
+      } else if format.BFPage? {
+        b := true;  // not like I checked
       } else {
         if sorted {
           b := true;
@@ -223,6 +231,8 @@ module BucketImpl {
       assume false;
       if (format.BFTree?) {
         result := KMB.Empty(tree);
+      } else if format.BFPage? {
+        result := page.value.IsEmpty();
       } else {
         assume false;
         result := 0 == |pkv.keys.offsets| as uint64;
@@ -513,11 +523,16 @@ module BucketImpl {
     {
       assume false;
 
+      if format.BFPage? {
+        pkv := page.value.ToPkv();
+        format := BFPkv;
+        page := None;
+      }
       if format.BFPkv? {
         format := BFTree;
         tree := pkv_to_tree(pkv);
         var psa := PackedKV.PSA.Psa([], []);
-        pkv := PackedKV.Pkv(psa, psa);
+        pkv := PackedKV.Pkv(psa, psa);  // Break reference to PKV for GC
       }
 
       if value.Define? {
@@ -542,6 +557,8 @@ module BucketImpl {
         m := KMB.Query(tree, key);
       } else if format.BFPkv? {
         m := PackedKV.BinarySearchQuery(pkv, key);
+      } else if format.BFPage? {
+        m := page.value.Query(key);
       }
     }
 
@@ -638,6 +655,8 @@ module BucketImpl {
       if format.BFTree? {
         assume false; // Need to fill in BucketsLib to prove 0 < |Interpretation(tree)|
         result := KMB.MinKey(tree);
+      } else if format.BFPage? {
+        result := page.value.GetKey(0);
       } else if format.BFPkv? {
         assume false;
         result := PackedKV.FirstKey(pkv);
@@ -652,6 +671,10 @@ module BucketImpl {
 
       if format.BFPkv? {
         pkv := this.pkv;
+      } else if format.BFPage? {
+        var numKeys := page.value.GetNumPairs();
+        res := page.value.GetKey(numKeys / 2);
+        return;
       } else {
         NumElementsLteWeight(B(KMB.Interpretation(tree)));
         KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
@@ -681,6 +704,9 @@ module BucketImpl {
       if format.BFTree? {
         assume false; // Need to fill in BucketsLib to prove 0 < |Interpretation(tree)|
         result := KMB.MaxKey(tree);
+      } else if format.BFPage? {
+        var numKeys := page.value.GetNumPairs();
+        result := page.value.GetKey(numKeys - 1);
       } else if format.BFPkv? {
         assume false;
         result := PackedKV.LastKey(pkv);
@@ -746,6 +772,12 @@ module BucketImpl {
     ensures fresh(bucket'.Repr)
     ensures this.Bucket == bucket'.Bucket
     {
+      if format.BFPage? {
+        pkv := page.value.ToPkv();
+        format := BFPkv;
+        page := None;
+      }
+
       if format.BFPkv? {
         bucket' := new MutBucket.InitFromPkv(pkv, sorted);
         return;
@@ -866,24 +898,30 @@ module BucketImpl {
     requires this.WFIter(it)
     ensures next == IIterator(it).next
     {
-      var pkv;
+      var scanPkv;
       
+      // Maybe we suck at next because we're copying the data structure on each iterate!?
       if format.BFPkv? {
-        pkv := this.pkv;
+        scanPkv := this.pkv;
+      } else if format.BFPage? {
+        this.pkv := page.value.ToPkv();
+        this.format := BFPkv;
+        this.page := None;
+        scanPkv := this.pkv;
       } else {
         NumElementsLteWeight(B(KMB.Interpretation(tree)));
         KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
-        pkv := tree_to_pkv(tree);
+        scanPkv := tree_to_pkv(tree);
       }
 
       BucketIteratorModel.lemma_NextFromIndex(I(), IIterator(it));
         
-      if it.i == |pkv.keys.offsets| as uint64 {
+      if it.i == |scanPkv.keys.offsets| as uint64 {
         next := BucketIteratorModel.Done;
       } else {
         //assert BucketIteratorModel.WFIter(I(), IIterator(it));
         //assert PackedKV.PSA.I(pkv.keys) == I().keys;
-        next := BucketIteratorModel.Next(PackedKV.GetKey(pkv, it.i), PackedKV.GetMessage(pkv, it.i));
+        next := BucketIteratorModel.Next(PackedKV.GetKey(scanPkv, it.i), PackedKV.GetMessage(scanPkv, it.i));
       }
     }
   }
