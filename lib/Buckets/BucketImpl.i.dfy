@@ -93,7 +93,6 @@ module BucketImpl {
     ensures PackedKV.I(pkv) == B(KMB.Interpretation(tree))
   {
     pkv := KMBPKVOps.ToPkv(tree);
-    assume false;
   }
   
   datatype Iterator = Iterator(

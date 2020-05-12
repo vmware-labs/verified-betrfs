@@ -2,6 +2,7 @@ include "../Base/NativeTypes.s.dfy"
 include "../Base/KeyType.s.dfy"
 include "../DataStructures/KMBtree.i.dfy"
 include "PackedKV.i.dfy"
+include "BucketsLib.i.dfy"
 
 module KMBPKVOps {
   import opened NativeTypes
@@ -13,6 +14,7 @@ module KMBPKVOps {
   import ValueType = ValueType`Internal
   import opened Sequences
   import opened Maps
+  import BucketsLib
   
   predicate EncodableMessage(msg: KMB.Model.Messages.Message)
   {
@@ -419,8 +421,71 @@ module KMBPKVOps {
       IndexFillDpkv(node, dpkv);
     }
   }
-  
 
+
+  function byteSeqSeqToKeySeq(keys: seq<seq<byte>>) : (result: seq<KeyType.Key>)
+    requires forall k | k in keys :: |k| <= KeyType.MaxLen() as nat
+    ensures |result| == |keys|
+    ensures forall i | 0 <= i < |keys| :: result[i] == keys[i]
+  {
+    seq(|keys|, i requires 0 <= i < |keys| => keys[i])
+  }
+  
+  lemma ToSeqInterpretation(node: KMB.Node)
+    requires KMB.WF(node)
+    requires IsKeyMessageTree(node)
+    ensures forall k | k in KMB.ToSeq(node).0 :: |k| <= KeyType.MaxLen() as nat
+    ensures BucketsLib.BucketMapOfSeq(byteSeqSeqToKeySeq(KMB.ToSeq(node).0), KMB.ToSeq(node).1) == KMB.Interpretation(node)
+  {
+    KMB.Model.ToSeqCoversInterpretation(KMB.I(node));
+    KMB.Model.ToSeqInInterpretation(KMB.I(node));
+    assert forall k | k in KMB.ToSeq(node).0 :: k in KMB.Interpretation(node);
+    var keys: seq<KMB.Model.Key> := byteSeqSeqToKeySeq(KMB.ToSeq(node).0);
+    var msgs := KMB.ToSeq(node).1;
+    var interp := KMB.Interpretation(node);
+    KMB.Model.ToSeqIsStrictlySorted(KMB.I(node));
+    assert KMB.Model.Keys.IsStrictlySorted(keys) by {
+      KMB.Model.Keys.reveal_IsStrictlySorted();
+    }
+    BucketsLib.StrictlySortedIsBucketMapOfSeq(keys, msgs, interp);
+  }
+
+  lemma IMessagesInverse(pkv: PKV.Pkv, msgs: seq<KMB.Model.Messages.Message>)
+    requires PKV.WF(pkv)
+    requires EncodableMessageSeq(msgs)
+    requires PKV.PSA.I(pkv.messages) == messageSeq_to_bytestringSeq(msgs)
+    ensures PKV.IMessages(pkv.messages) == msgs
+  {
+    
+  }
+  
+  lemma ToPkvPreservesInterpretation(node: KMB.Node, pkv: DPKV.PKV.Pkv)
+    requires KMB.WF(node)
+    requires IsKeyMessageTree(node)
+    requires PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), KMB.ToSeq(node).0)
+    requires PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), messageSeq_to_bytestringSeq(KMB.ToSeq(node).1))
+    requires DPKV.PKV.WF(pkv)
+    requires PKV.IKeys(pkv.keys) == KMB.ToSeq(node).0
+    requires PKV.PSA.I(pkv.messages) == messageSeq_to_bytestringSeq(KMB.ToSeq(node).1)
+    ensures DPKV.PKV.I(pkv) == BucketsLib.B(KMB.Interpretation(node))
+  {
+    var keys := byteSeqSeqToKeySeq(KMB.ToSeq(node).0);
+    var msgs := KMB.ToSeq(node).1;
+    calc {
+      DPKV.PKV.I(pkv).b;
+      BucketsLib.BucketMapOfSeq(PKV.IKeys(pkv.keys), PKV.IMessages(pkv.messages));
+      { assert PKV.IKeys(pkv.keys) == keys; }
+      BucketsLib.BucketMapOfSeq(keys, PKV.IMessages(pkv.messages));
+      { IMessagesInverse(pkv, msgs); }
+      BucketsLib.BucketMapOfSeq(keys, msgs);
+      { ToSeqInterpretation(node); }
+      KMB.Interpretation(node);
+      BucketsLib.B(KMB.Interpretation(node)).b;
+    }
+    KMB.Model.ToSeqIsStrictlySorted(KMB.I(node));
+    BucketsLib.WellMarshalledBucketsEq(DPKV.PKV.I(pkv), BucketsLib.B(KMB.Interpretation(node)));
+  }
+  
   method ToPkv(node: KMB.Node) returns (pkv: DPKV.PKV.Pkv)
     requires KMB.WF(node)
     requires IsKeyMessageTree(node)
@@ -429,6 +494,7 @@ module KMBPKVOps {
     ensures DPKV.PKV.WF(pkv)
     ensures PKV.IKeys(pkv.keys) == KMB.ToSeq(node).0
     ensures PKV.PSA.I(pkv.messages) == messageSeq_to_bytestringSeq(KMB.ToSeq(node).1)
+    ensures DPKV.PKV.I(pkv) == BucketsLib.B(KMB.Interpretation(node))
   {
     KMB.Model.ToSeqLength(KMB.I(node));
     var nelts: uint64 := KMBBOps.CountElements(node);
@@ -438,6 +504,7 @@ module KMBPKVOps {
     var dpkv := new DPKV.DynamicPkv.PreSized(cap);
     FillDpkv(node, dpkv);
     pkv := dpkv.toPkv();
+    ToPkvPreservesInterpretation(node, pkv);
   }
 
   // I don't think we use this much (if at all?) so not optimizing for now.
