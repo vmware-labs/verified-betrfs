@@ -22,7 +22,7 @@ try:
         return Instance(
                 Name=[x for x in inst['Tags'] if x['Key'] == 'Name'][0]['Value'],
                 InstanceId=inst['InstanceId'],
-                PublicIpAddress=inst['PublicIpAddress'],
+                PublicIpAddress=inst.get('PublicIpAddress'),
                 State=inst['State']['Name'])
     insts = [extract_salient(x) for reservation in response['Reservations'] for x in reservation['Instances']]
     insts.sort(key=lambda x: x.Name)
