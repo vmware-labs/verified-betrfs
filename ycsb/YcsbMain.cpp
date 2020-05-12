@@ -476,6 +476,9 @@ public:
     inline void insert(const string& key, const string& value) {
         static struct rocksdb::WriteOptions woptions = rocksdb::WriteOptions();
 //        woptions.disableWAL = true;
+        // this should be the default, but to be careful we don't charge rocks
+        // to sync on every write.
+        woptions.sync = false;
         rocksdb::Status status = db.Put(woptions, rocksdb::Slice(key), rocksdb::Slice(value));
         assert(status.ok());
     }
@@ -483,13 +486,17 @@ public:
     inline void update(const string& key, const string& value) {
         static struct rocksdb::WriteOptions woptions = rocksdb::WriteOptions();
 //        woptions.disableWAL = true;
+        // this should be the default, but to be careful we don't charge rocks
+        // to sync on every write.
+        woptions.sync = false;
         rocksdb::Status status = db.Put(woptions, rocksdb::Slice(key), rocksdb::Slice(value));
         assert(status.ok());
     }
 
     inline void sync(bool /*fullSync*/) {
-        static struct rocksdb::FlushOptions foptions = rocksdb::FlushOptions();
-        rocksdb::Status status = db.Flush(foptions);
+//        static struct rocksdb::FlushOptions foptions = rocksdb::FlushOptions();
+//        rocksdb::Status status = db.Flush(foptions);
+        rocksdb::Status status = db.SyncWAL();
         assert(status.ok());
     }
 
