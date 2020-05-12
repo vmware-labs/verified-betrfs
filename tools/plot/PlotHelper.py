@@ -149,13 +149,13 @@ def plotThroughput(ax, experiments):
             return exp.elapsed[opn]
         line, = a2.plot(*plotVsKop(ax, exp, elapsedTime), color=spectrum[expi])
         line.set_label(exp.nickname + " rate")
-    ax.legend(loc="upper center")
+    ax.legend(loc="lower right")
     ax.set_yscale("log")
     ax.set_ylim(bottom=0.1)
     ax.grid(which="major", color="black")
     ax.grid(which="minor", color="#dddddd")
     set_xlim(ax, experiments)
-    a2.legend(loc="lower center")
+    a2.legend(loc="upper right")
     
     for phase,opn in experiments[0].phase_starts.items():
         #print (phase,opn)
@@ -304,8 +304,32 @@ def plotIoLatencyCdf(ax, experiments):
         except: pass
 #        plotOneExpAt(exp, plotkwargs,  500000)
         #print(plotkwargs)
-        plotOneExpAt(exp, plotkwargs, 3000000)
+        plotOneExpAt(exp, plotkwargs, 8000000)
 #        plotOneExpAt(exp, plotkwargs, 2700000)
     plotManyForeach(ax, experiments, plotOneExp)
     ax.set_xlabel("ms assuming clock %.1f%sHz" % (assumeProcCyclesPerSec/G(), G))
     ax.legend()
+
+def plotSlowIos(ax, experiments):
+    threshTraces = set()
+    for exp in experiments:
+        try: threshTraces.add(exp.slow_thresh)
+        except IndexError: pass
+    try:
+        threshValues = set([t[t.sortedKeys()[0]] for t in threshTraces if not t.empty()])
+        descr = str(list(threshValues)[0]) if len(threshValues)==1 else str(threshValues)
+        ax.set_title("slow ios (thresh %s %s)" % (
+            descr, list(threshTraces)[0].units))
+    except: raise
+    window = 10*K()
+    def plotOneExp(exp, plotkwargs):
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.slow_reads, exp.operation, window=window)), **plotkwargs)
+        print(exp.nickname, len(exp.slow_reads.data))
+        if not exp.slow_reads.empty():
+            line.set_label(exp.nickname + " reads")
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.slow_writes, exp.operation, window=window)), linestyle="dotted", **plotkwargs)
+        if not exp.slow_writes.empty():
+            line.set_label(exp.nickname + " writes")
+    plotManyForeach(ax, experiments, plotOneExp)
+    ax.legend()
+    set_xlim(ax, experiments)

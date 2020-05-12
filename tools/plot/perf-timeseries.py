@@ -86,40 +86,6 @@ def plot_perf_timeseries(exp):
 
     plotCpuTime(plotHelper.nextAxis(), [exp])
 
-# Moved to Grand Unified
-#    def plotVeriInternalMem(ax):
-#        ax.set_title("mem from inside veri")
-#        traceNames = ["bucket-message-bytes", "bucket-key-bytes", "pivot-key-bytes"]
-#        def StackFor(count):
-#            return [exp.accum[n] for n in traceNames[:count+1]]
-#
-#        def plotWithLabel(lam, lbl, **plotkwargs):
-#            xs,ys = plotVsKop(ax, exp, lam)
-#            line, = ax.plot(xs, ys, **plotkwargs)
-#            line.set_label(lbl + (" %.2f%sB" % (ys[-1], Gi.prefix)))
-#
-#        for stackc in list(range(len(traceNames)))[::-1]:
-#            stack = StackFor(stackc)
-#            stackedTraces = StackedTraces(stack)
-#            plotWithLabel(singleTrace(ax, stackedTraces, scale=Gi),
-#                    ("" if stackc==0 else "+") + traceNames[stackc])
-#
-#        plotWithLabel(singleTrace(ax, exp.jem_allocated, scale=Gi), "jem_allocated", linestyle="dotted")
-#
-#        def annotate_overhead():
-#            stackedTraces = StackedTraces(StackFor(len(traceNames)))
-#            xs,ys = plotVsKop(ax, exp, singleTrace(ax, stackedTraces, scale=Gi))
-#            total_last = ys[-1]
-#            xs,ys = plotVsKop(ax, exp, singleTrace(ax, exp.jem_allocated, scale=Gi))
-#            jem_last = ys[-1]
-#            ax.text(xs[-1], ys[-1], "%.2fX" % (jem_last/total_last))
-#        annotate_overhead()
-#
-#        ax.legend()
-#        ax.set_ylim(bottom=0)
-#    try: plotVeriInternalMem(plotHelper.nextAxis())
-#    except: pass
-
     def plotProcIoBytes(ax):
         ax.set_title("proc io bytes")
         window = 1000*K()
@@ -168,7 +134,7 @@ def plot_perf_timeseries(exp):
         ax.set_ylim(bottom=0)
         ax.legend()
 
-    plotRocksIo(plotHelper.nextAxis())
+#    plotRocksIo(plotHelper.nextAxis())
 
     def plotPgfault(ax):
         ax.set_title("cgroups-stat-pgfault")
@@ -176,8 +142,8 @@ def plot_perf_timeseries(exp):
         line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, trace, exp.operation, scale=Unit)), "red")
         line.set_label(trace.label)
         ax.legend()
-#    try: plotPgfault(plotHelper.nextAxis())
-#    except: raise
+    try: plotPgfault(plotHelper.nextAxis())
+    except: raise
     
     ########################################
     plotHelper.save("%s-perf.png" % exp.filename)

@@ -171,6 +171,10 @@ class Experiment:
         self.iolatency_read = DiscreteTrace("read-latency", "cycles")
         self.iolatency_write = DiscreteTrace("write-latency", "cycles")
 
+        self.slow_thresh = Trace("slow_thresh", "cycles")
+        self.slow_reads = Trace("slow_reads", "count")
+        self.slow_writes = Trace("slow_writes", "count")
+
         self.parse()
         self.sortedOpns = list(self.operation.data.keys())
         self.sortedOpns.sort()
@@ -294,3 +298,8 @@ class Experiment:
             if line.startswith("io-latency"):
                 ptr = {"read":self.iolatency_read, "write":self.iolatency_write}[fields[1]]
                 ptr[cur_op] = CDF(fields[2:])
+
+            if line.startswith("ioaccounting-slow"):
+                self.slow_thresh[cur_op] = int(fields[2])
+                self.slow_reads[cur_op] = int(fields[4])
+                self.slow_writes[cur_op] = int(fields[6])

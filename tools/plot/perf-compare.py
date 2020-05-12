@@ -12,19 +12,22 @@ from TimeSeries import *
 output_filename = "compare.png"
 
 def plot_perf_compare(experiments):
-    plotHelper = PlotHelper(6, scale=2, columns=1)
+    plotHelper = PlotHelper(8, scale=2)
 
     try: plotThroughput(plotHelper.nextAxis(depth=2), experiments)
     except: raise
     
-#    try: plotGrandUnifiedMemory(plotHelper.nextAxis(depth=2), experiments)
-#    except: raise
+    try: plotGrandUnifiedMemory(plotHelper.nextAxis(depth=2), experiments)
+    except: raise
 
 #    try: plotCpuTime(plotHelper.nextAxis(depth=2), experiments)
 #    except: raise
 
-    try: plotProcIoBytes(plotHelper.nextAxis(depth=2), experiments)
+    try: plotSlowIos(plotHelper.nextAxis(depth=2), experiments)
     except: raise
+
+#    try: plotProcIoBytes(plotHelper.nextAxis(depth=2), experiments)
+#    except: raise
 
     try: plotIoLatencyCdf(plotHelper.nextAxis(depth=2), experiments)
     except: raise
@@ -44,6 +47,6 @@ for arg in sys.argv[1:]:
             exp = Experiment(fn, nick)
             #exp.sortedOpns = exp.sortedOpns[:-5]    # hack: truncate teardown tail of completed exp where memory all goes to 0
             experiments.append(exp)
-        except ValueError:
+        except (ValueError,FileNotFoundError):
             print("Can't parse %s; skipping" % nick)
 plot_perf_compare(experiments)

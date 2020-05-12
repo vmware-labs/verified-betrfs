@@ -1160,5 +1160,48 @@ veri-z=malloc-sp1/veri-zipfian-24.data \
 Next group of experiments captures (using a latency cutoff) how many disk IO operations each system does
 per query. Confirm that performance is driven entirely by seek cost.
 
-[ ] Andrea suggests running a flash suite.
+tools/plot/perf-compare.py output=slowreads.png rocks-u=malloc-sp1/rocks-uniform-25.data rocks-z=malloc-sp1/rocks-zipfian-25.data veri-u=malloc-sp1/veri-uniform-25.data veri-z=malloc-sp1/veri-zipfian-25.data 
+
+
+[x] push and run the rocks with changes to the sync policy.
+[ ] Andrea suggests running a suite on SSD.
 [ ] I should also run a larger cache suite.
+
+[*-26.data]: got swapoff to stick.
+
+watch -n 60 tools/plot/perf-compare.py output=swapoff.png \
+rocks-z-24=malloc-sp1/rocks-zipfian-24.data \
+rocks-u-24=malloc-sp1/rocks-uniform-24.data \
+veri-z-25=malloc-sp1/veri-zipfian-25.data \
+veri-u-25=malloc-sp1/veri-uniform-25.data \
+rocks-z=malloc-sp1/rocks-zipfian-26.data \
+rocks-u=malloc-sp1/rocks-uniform-26.data \
+veri-z=malloc-sp1/veri-zipfian-26.data \
+veri-u=malloc-sp1/veri-uniform-26.data \
+
+
+tools/plot/perf-compare.py output=compare2g-27.png \
+  veri-u=malloc-sp1/veri-uniform-27.data \
+  rocks-u=malloc-sp1/rocks-uniform-27.data \
+  veri-z=malloc-sp1/veri-zipfian-27.data \
+  rocks-z=malloc-sp1/rocks-zipfian-27.data \
+
+mkdir host2-expresults/
+rsync -rave "ssh -i ~/veribetrfsbastion.pem" ubuntu@3.22.228.182:expresults/ host2-expresults/
+tools/plot/perf-compare.py \
+  output=compare-aws \
+  aws-rocks01=host1-expresults/rocks01/test.data \
+  aws-rocks02=host1-expresults/rocks02/test.data \
+  aws-veri01=host2-expresults/veri01/test.data \
+  aws-veri02=host2-expresults/veri02/test.data \
+  splinter-rocks-u=malloc-sp1/rocks-uniform-27.data \
+  splinter-veri-u=malloc-sp1/veri-uniform-27.data \
+
+SSH='ssh -i /home/jonh/veribetrfsbastion.pem -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no'
+SSH='ssh -i /home/jonh/veribetrfsbastion.pem -o StrictHostKeyChecking=no'
+$SSH ubuntu@3.22.228.182 "(cd veribetrfs; tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=2.0gb pillow=0.9 config-64kb time_budget=2h output=../expresults/veri-u-pillow0.9.data)"
+$SSH ubuntu@18.221.12.251 "(cd veribetrfs; tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=2.0gb pillow=1.0 config-64kb time_budget=2h output=../expresults/veri-u-pillow1.0.data)"
+$SSH ubuntu@3.12.97.231 "(cd veribetrfs; tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=2.0gb pillow=1.1 config-64kb time_budget=2h output=../expresults/veri-u-pillow1.1.data)"
+$SSH ubuntu@3.17.7.43 "(cd veribetrfs; tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=2.0gb pillow=1.2 config-64kb time_budget=2h output=../expresults/veri-u-pillow1.2.data)"
+
+rsync -rave "$SSH" 
