@@ -43,7 +43,7 @@ module Bounds {
   //function method MaxTotalBucketWeightUint64() : uint64 { 8356168 }
   //function method MaxCacheSizeUint64() : uint64 { 200 }
   function method MaxTotalBucketWeightUint64() : uint64 { 64220 }
-  function method MaxCacheSizeUint64() : uint64 { 25600 }
+  function method MaxCacheSizeUint64() : uint64 { 256 }
 
   function method MaxNumChildrenUint64() : uint64 { 32 }
 
@@ -65,6 +65,8 @@ module Bounds {
   function IndirectionTableMaxSize() : int { IndirectionTableMaxSizeUint64() as int }
   function DiskNumJournalBlocks() : int { DiskNumJournalBlocksUint64() as int }
 
+  predicate method UsePageBuckets() { true }
+  
   lemma lemma_node_sector_doesnt_overlap_indirection_table()
   ensures NodeBlockSize() * MinNodeBlockIndex()
        >= 2 * 4096 + DiskNumJournalBlocks() * 4096

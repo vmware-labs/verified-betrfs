@@ -177,6 +177,7 @@ module NodeImpl {
     ensures forall o | o in Repr :: o in old(Repr) || o in old(bucket.Repr) || fresh(o);
     {
       buckets := SeqIndexUpdate(buckets, slot, bucket);
+      buckets := PkvBucketSeqToPageBucketSeq(buckets);
       children := Some(SeqIndexUpdate(children.value, slot, childref));
 
       MutBucket.reveal_ReprSeq();

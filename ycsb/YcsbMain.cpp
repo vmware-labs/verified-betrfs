@@ -174,7 +174,8 @@ void ycsbRun(
     int probe_interval_ms = 50000;
     int next_probe_ms = probe_interval_ms;
 #endif // HACK_PROBE_PERIODIC
-
+    bool have_done_insert_since_last_sync = false;
+    
     for (int i = 0; i < num_ops; ++i) {
         auto next_operation = workload.NextOperation();
         switch (next_operation) {
@@ -183,9 +184,11 @@ void ycsbRun(
                 break;
             case ycsbc::UPDATE:
                 performYcsbUpdate(db, workload, verbose);
+                have_done_insert_since_last_sync = true;
                 break;
             case ycsbc::INSERT:
                 performYcsbInsert(db, workload, verbose);
+                have_done_insert_since_last_sync = true;
                 break;
             case ycsbc::SCAN:
                 cerr << "error: operation SCAN unimplemented" << endl;
@@ -231,8 +234,11 @@ void ycsbRun(
             next_display_ms += display_interval_ms;
         }
 
-        if (elapsed_ms >= next_sync_ms) {
+        if (elapsed_ms >= next_sync_ms && have_done_insert_since_last_sync) {
+          cout << "About to sync (i=" << i << ")..." << endl;
             db.sync(false);
+            cout << "Finished sync (i=" << i << ")" << endl;
+            have_done_insert_since_last_sync = false;
 
             /*
             if (i > 3000000) {

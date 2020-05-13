@@ -185,6 +185,18 @@ module BucketImpl {
       assume WFBucket(Bucket);
     }
 
+    constructor InitFromPageBucket(pageBucket: PageBucket, is_sorted: bool)
+      ensures fresh(Repr)
+    {
+      this.format := BFPage;
+      this.page := Some(pageBucket);
+      this.Weight := *;
+      this.Repr := {this};
+      this.Bucket := *;
+      this.tree := null;
+      this.sorted := is_sorted;
+    }
+
     method GetPkv() returns (pkv: PKV.Pkv)
     requires Inv()
     ensures PKV.WF(pkv)
@@ -195,7 +207,7 @@ module BucketImpl {
         KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
         pkv := tree_to_pkv(tree);
       } else if format.BFPage? {
-        pkv := page.value.ToPkv();
+        pkv := ToPkv(page.value);
       } else {
         pkv := this.pkv;
       }
@@ -232,7 +244,7 @@ module BucketImpl {
       if (format.BFTree?) {
         result := KMB.Empty(tree);
       } else if format.BFPage? {
-        result := page.value.IsEmpty();
+        result := IsEmpty(page.value);
       } else {
         assume false;
         result := 0 == |pkv.keys.offsets| as uint64;
@@ -524,7 +536,7 @@ module BucketImpl {
       assume false;
 
       if format.BFPage? {
-        pkv := page.value.ToPkv();
+        pkv := ToPkv(page.value);
         format := BFPkv;
         page := None;
       }
@@ -558,7 +570,7 @@ module BucketImpl {
       } else if format.BFPkv? {
         m := PackedKV.BinarySearchQuery(pkv, key);
       } else if format.BFPage? {
-        m := page.value.Query(key);
+        m := PageBucketImpl.Query(page.value, key);
       }
     }
 
@@ -620,7 +632,8 @@ module BucketImpl {
 
       var l, r := buckets[slot].SplitLeftRight(pivot);
       buckets' := Replace1with2(buckets, l, r, slot);
-
+      buckets' := PkvBucketSeqToPageBucketSeq(buckets');
+      
       ghost var ghosty := true;
       if ghosty {
         reveal_ISeq();
@@ -656,7 +669,7 @@ module BucketImpl {
         assume false; // Need to fill in BucketsLib to prove 0 < |Interpretation(tree)|
         result := KMB.MinKey(tree);
       } else if format.BFPage? {
-        result := page.value.GetKey(0);
+        result := GetKey(page.value, 0);
       } else if format.BFPkv? {
         assume false;
         result := PackedKV.FirstKey(pkv);
@@ -672,8 +685,8 @@ module BucketImpl {
       if format.BFPkv? {
         pkv := this.pkv;
       } else if format.BFPage? {
-        var numKeys := page.value.GetNumPairs();
-        res := page.value.GetKey(numKeys / 2);
+        var numKeys := GetNumPairs(page.value);
+        res := GetKey(page.value, numKeys / 2);
         return;
       } else {
         NumElementsLteWeight(B(KMB.Interpretation(tree)));
@@ -705,8 +718,8 @@ module BucketImpl {
         assume false; // Need to fill in BucketsLib to prove 0 < |Interpretation(tree)|
         result := KMB.MaxKey(tree);
       } else if format.BFPage? {
-        var numKeys := page.value.GetNumPairs();
-        result := page.value.GetKey(numKeys - 1);
+        var numKeys := GetNumPairs(page.value);
+        result := GetKey(page.value, numKeys - 1);
       } else if format.BFPkv? {
         assume false;
         result := PackedKV.LastKey(pkv);
@@ -773,7 +786,7 @@ module BucketImpl {
     ensures this.Bucket == bucket'.Bucket
     {
       if format.BFPage? {
-        pkv := page.value.ToPkv();
+        pkv := ToPkv(page.value);
         format := BFPkv;
         page := None;
       }
@@ -817,7 +830,7 @@ module BucketImpl {
         ar[j] := buckets[j].Clone();
         j := j + 1;
       }
-      buckets' := ar[..];
+      buckets' := PkvBucketSeqToPageBucketSeq(ar[..]);
 
       reveal_InvSeq();
       reveal_ReprSeq();
@@ -904,7 +917,7 @@ module BucketImpl {
       if format.BFPkv? {
         scanPkv := this.pkv;
       } else if format.BFPage? {
-        this.pkv := page.value.ToPkv();
+        this.pkv := ToPkv(page.value);
         this.format := BFPkv;
         this.page := None;
         scanPkv := this.pkv;
@@ -926,6 +939,34 @@ module BucketImpl {
     }
   }
 
+  method PkvBucketSeqToPageBucketSeq(pkvBuckets: seq<MutBucket>) returns (pageMutBuckets: seq<MutBucket>)
+    ensures fresh(MutBucket.ReprSeq(pageMutBuckets))
+  {
+    if Bounds.UsePageBuckets() {
+      var pkvs := new PackedKV.Pkv[|pkvBuckets| as uint64];
+      var i: uint64 := 0;
+      while i < pkvs.Length as uint64
+      {
+        pkvs[i] := pkvBuckets[i].GetPkv();
+        i := i + 1;
+      }
+
+      var pageBuckets := PageBucketsFromPKVBuckets(pkvs[..]);
+
+      var apageMutBuckets := new MutBucket[|pageBuckets| as uint64];
+      i := 0;
+      while i < apageMutBuckets.Length as uint64
+      {
+        apageMutBuckets[i] := new MutBucket.InitFromPageBucket(pageBuckets[i], pkvBuckets[i].sorted);
+        i := i + 1;
+      }
+
+      return apageMutBuckets[..];
+    } else {
+      return pkvBuckets;
+    }
+  }
+  
   method PartialFlush(top: MutBucket, bots: seq<MutBucket>, pivots: seq<Key>)
     returns (newtop: MutBucket, newbots: seq<MutBucket>)
     requires top.Inv()

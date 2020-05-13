@@ -80,7 +80,8 @@ module FlushImpl {
 
     var newparentBucket, newbuckets;
     newparentBucket, newbuckets := BucketImpl.PartialFlush(
-        parent.buckets[slot], child.buckets, child.pivotTable);
+      parent.buckets[slot], child.buckets, child.pivotTable);
+    newbuckets := PkvBucketSeqToPageBucketSeq(newbuckets);
     var newchild := new Node(child.pivotTable, child.children, newbuckets);
     
     assert Some(parent) == s.cache.ptr(parentref);

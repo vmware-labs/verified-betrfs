@@ -203,6 +203,16 @@ module MarshallingImpl {
     BucketImpl.MutBucket.reveal_ReprSeqDisjoint();
   }
 
+  method ValToPageBuckets(a: seq<V>) returns (s: Option<seq<BucketImpl.MutBucket>>)
+  {
+    var opkvBuckets := ValToBuckets(a);
+    if opkvBuckets.None? {
+      return None;
+    }
+    var pageBuckets := BucketImpl.PkvBucketSeqToPageBucketSeq(opkvBuckets.value);
+    s := Some(pageBuckets);
+  }
+  
   method ValToNode(v: V) returns (s : Option<Node>)
   requires IMM.valToNode.requires(v)
   requires SizeOfV(v) < 0x1_0000_0000_0000_0000
@@ -245,7 +255,8 @@ module MarshallingImpl {
     IMM.SizeOfVTupleElem_le_SizeOfV(v, 2);
     IMM.SizeOfVArrayElem_le_SizeOfV_forall(v.t[2]);
 
-    var obuckets := ValToBuckets(v.t[2 as uint64].a);
+    //var obuckets := ValToBuckets(v.t[2 as uint64].a);
+    var obuckets := ValToPageBuckets(v.t[2 as uint64].a);
     if obuckets == None {
       return None;
     }
