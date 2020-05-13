@@ -1,10 +1,9 @@
 #!/usr/bin/python3
 
-import subprocess
 from automation import *
 
 def cmd_for_idx(idx, worker):
-    return ["rsync", "-rav", "-e", " ".join(ssh_preamble()), ssh_target_for_worker(worker)+":expresults/", "expresults/"]
+    return ssh_cmd_for_worker(worker) + ["ps", "-auxww", "|", "grep", "Ycsb", "|", "grep", "-v", "grep"]
 
 def main():
     workers = retrieve_running_workers()
