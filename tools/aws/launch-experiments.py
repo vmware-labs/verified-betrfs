@@ -1,55 +1,37 @@
 #!/usr/bin/python3
 
-import os
-import subprocess
 from automation import *
+from suite import *
 
-#control = "tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=2.0gb pillow=1.1 time_budget=1h config-64kb"
-#experiments = [("max_children=%d" % x) for x in (8,12,16,20,32)]
+suite = Suite(
+    "recordcount-page-13",
+    Variable("git_branch", "git_branch", [Value("page", "page-la2"), Value("block", "leak-adventure-2")]),
+    Variable("system", "run_veri", [Value("rocks", "rocks"), Value("veri64k", "config-64kb")]),
+    Variable("ram", "run_veri", [Value("2gb", "ram=2.0gb")]),
+    Variable("device", "run_veri", [Value("disk", "device=disk")]),
+    Variable("workload", "run_veri", [Value("wka1m", "workload=ycsb/wka-uniform-rc1000k.spec")]),
+    Variable("duration", "run_veri", [Value("1h", "time_budget=1h")]),
+    )
 
-#control = "tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=2.0gb pillow=1.1 time_budget=1h"
-#experiments = [["rocks"], ["config-64kb"], ["config-1mb"], ["config-8mb"]]
-#label="blocksize-sweep-01"
-
-control = "tools/run-veri-config-experiment.py device=disk ram=2.0gb time_budget=1h"
-workloads=["workload=ycsb/wka-uniform-rc%sk.spec"%sz for sz in (400,1000,2000)]
-git_branch="page-la2"
-#configs=["rocks", "config-64kb"]
-configs=["config-64kb"]
-experiments = []
-for w in workloads:
-    for c in configs:
-        experiments.append([w,c])
-label="recordcount-page-08"
-
-#machine_indices = [5]
-
-def curt_label_for(exp):
-    return "-".join([p.replace("=", ":").replace('/', '_') for p in exp])
-
-def outfile_for(exp):
-    return "expresults/%s-%s.data" % (label, curt_label_for(exp))
-
-def plot_command_for(experiments):
-    return " ".join([
-        "tools/plot/perf-compare.py",
-        "output=%s.png" % label] + [curt_label_for(exp)+"="+outfile_for(exp) for exp in experiments])
+RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
 def cmd_for_idx(idx, worker):
-    exp = experiments[idx]
-    cmd = ssh_cmd_for_worker(worker) + [
+    variant = suite.variants[idx]
+    cmd = (ssh_cmd_for_worker(worker) + [
         "cd", "veribetrfs", ";",
-        "tools/clean-for-build.sh", git_branch, ";"
-    ] + control.split() + exp + ["output=../"+outfile_for(exp)]
+        "sh", "tools/clean-for-build.sh", variant.git_branch(), ";",
+        ]
+        + [RUN_VERI_PATH] + variant.run_veri_params() + ["output=../"+variant.outfile()]
+        )
     return cmd
 
 def main():
-    set_logfile(os.path.join("logs", label+".log"))
-    log(plot_command_for(experiments))
+    set_logfile(suite.logpath())
+    log("PLOT %s" % suite.plot_command())
+    log("VARIANTS %s" % suite.variants)
 
     workers = retrieve_running_workers()
-    #print("workers: ", workers)
-    worker_pipes = launch_worker_pipes(workers, len(experiments), cmd_for_idx, dry_run=False)
+    worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=False)
     monitor_worker_pipes(worker_pipes)
 
 main()
