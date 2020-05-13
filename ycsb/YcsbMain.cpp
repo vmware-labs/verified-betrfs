@@ -22,94 +22,6 @@
 
 using namespace std;
 
-template< class DB >
-inline void performYcsbRead(DB db, ycsbc::CoreWorkload& workload, bool verbose) {
-    malloc_accounting_set_scope("performYcsbRead setup");
-    ycsbcwrappers::TxRead txread = ycsbcwrappers::TransactionRead(workload);
-    if (!workload.read_all_fields()) {
-        cerr << db.name << " error: not reading all fields unsupported" << endl;
-        exit(-1);
-    }
-    if (verbose) {
-        cerr << db.name << " [op] READ " << txread.table << " " << txread.key << " { all fields }" << endl;
-    }
-    malloc_accounting_default_scope();
-    // TODO use the table name?
-    db.query(txread.key);
-}
-
-template< class DB >
-inline void performYcsbInsert(DB db, ycsbc::CoreWorkload& workload, bool verbose) {
-    malloc_accounting_set_scope("performYcsbInsert setup");
-    ycsbcwrappers::TxInsert txinsert = ycsbcwrappers::TransactionInsert(workload);
-    if (txinsert.values->size() != 1) {
-        cerr << db.name << " error: only fieldcount=1 is supported" << endl;
-        exit(-1);
-    }
-    const std::string& value = (*txinsert.values)[0].second;
-    if (verbose) {
-        cerr << db.name << " [op] INSERT " << txinsert.table << " " << txinsert.key << " " << value << endl;
-    }
-    malloc_accounting_default_scope();
-    // TODO use the table name?
-    db.insert(txinsert.key, value);
-}
-
-template< class DB >
-inline void performYcsbUpdate(DB db, ycsbc::CoreWorkload& workload, bool verbose) {
-    malloc_accounting_set_scope("performYcsbUpdate setup");
-    ycsbcwrappers::TxUpdate txupdate = ycsbcwrappers::TransactionUpdate(workload);
-    if (!workload.write_all_fields()) {
-        cerr << db.name << " error: not writing all fields unsupported" << endl;
-        exit(-1);
-    }
-    if (txupdate.values->size() != 1) {
-        cerr << db.name << " error: only fieldcount=1 is supported" << endl;
-        exit(-1);
-    }
-    const std::string& value = (*txupdate.values)[0].second;
-    if (verbose) {
-        cerr << db.name << " [op] UPDATE " << txupdate.table << " " << txupdate.key << " " << value << endl;
-    }
-    malloc_accounting_default_scope();
-    // TODO use the table name?
-    db.update(txupdate.key, value);
-}
-
-template< class DB >
-void ycsbLoad(DB db, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
-    cerr << db.name << " [step] loading (num ops: " << num_ops << ")" << endl;
-
-    auto clock_start = chrono::steady_clock::now();
-    auto clock_last_report = clock_start;
-    auto report_interval_ms = 1000;
-    for (int i = 0; i < num_ops; ++i) {
-        performYcsbInsert(db, workload, verbose);
-
-        auto clock_op_completed = chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::milliseconds>(
-            clock_op_completed - clock_last_report).count() > report_interval_ms) {
-
-            cout << db.name << " (completed " << i << " ops)" << endl;
-            malloc_accounting_status();
-            auto report_completed = chrono::steady_clock::now();
-            clock_last_report = report_completed;
-        }
-    }
-
-    cerr << db.name << " [step] sync" << endl;
-    db.sync(true);
-
-    auto clock_end = chrono::steady_clock::now();
-    long long bench_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(clock_end - clock_start).count();
-
-    double ops_per_sec = ((double) num_ops) / (((double) bench_ns) / 1000000000);
-
-    cerr << db.name << " [step] loading complete" << endl;
-    cout << "--\tthroughput(load)\tduration(ns)\toperations\tops/s" << endl;
-    cout << db.name << "\tthroughput(load)\t" << bench_ns << "\t" << num_ops << "\t" << ops_per_sec << endl;
-}
-
 void print_summary(HDRHistQuantiles& summary, const string db_name, const string op) {
     if (summary.samples() != 0) {
         std::cout << "--" << "\tlatency_ccdf\top\t" << "quantile" << "\t" << "upper_bound(ns)" << std::endl;
@@ -123,14 +35,114 @@ void print_summary(HDRHistQuantiles& summary, const string db_name, const string
     }
 }
 
-template< class DB >
-void ycsbRun(
-    DB db,
-    ycsbc::CoreWorkload& workload,
-    int num_ops,
-    int sync_interval_ms,
-    bool verbose) {
+template<class DB>
+class BenchmarkState {
+  DB db;
+  ycsbc::CoreWorkload &workload;
+  bool verbose;
+  bool validate;
 
+public:
+  BenchmarkState(DB db,
+                 ycsbc::CoreWorkload &workload,
+                 bool verbose,
+                 bool validate)
+    : db(db), workload(workload), verbose(verbose), validate(validate)
+  {
+  }
+  
+  inline void performYcsbRead() {
+    malloc_accounting_set_scope("performYcsbRead setup");
+    ycsbcwrappers::TxRead txread = ycsbcwrappers::TransactionRead(workload);
+    if (!workload.read_all_fields()) {
+      cerr << db.name << " error: not reading all fields unsupported" << endl;
+      exit(-1);
+    }
+    if (verbose) {
+      cerr << db.name << " [op] READ " << txread.table << " " << txread.key << " { all fields }" << endl;
+    }
+    malloc_accounting_default_scope();
+    // TODO use the table name?
+    string result = db.query(txread.key);
+    if (validate && result != txread.key) {
+      cout << "Query for \"" << txread.key << "\" returned wrong result \"" << result << "\"" << endl;
+    }
+  }
+
+  inline void performYcsbInsert() {
+    malloc_accounting_set_scope("performYcsbInsert setup");
+    ycsbcwrappers::TxInsert txinsert = ycsbcwrappers::TransactionInsert(workload);
+    if (txinsert.values->size() != 1) {
+      cerr << db.name << " error: only fieldcount=1 is supported" << endl;
+      exit(-1);
+    }
+    std::string value = (*txinsert.values)[0].second;
+    if (validate)
+      value = txinsert.key;
+    if (verbose) {
+      cerr << db.name << " [op] INSERT " << txinsert.table << " " << txinsert.key << " " << value << endl;
+    }
+    malloc_accounting_default_scope();
+    // TODO use the table name?
+    db.insert(txinsert.key, value);
+  }
+
+  inline void performYcsbUpdate() {
+    malloc_accounting_set_scope("performYcsbUpdate setup");
+    ycsbcwrappers::TxUpdate txupdate = ycsbcwrappers::TransactionUpdate(workload);
+    if (!workload.write_all_fields()) {
+      cerr << db.name << " error: not writing all fields unsupported" << endl;
+      exit(-1);
+    }
+    if (txupdate.values->size() != 1) {
+      cerr << db.name << " error: only fieldcount=1 is supported" << endl;
+      exit(-1);
+    }
+    std::string value = (*txupdate.values)[0].second;
+    if (validate)
+      value = txupdate.key;
+    if (verbose) {
+      cerr << db.name << " [op] UPDATE " << txupdate.table << " " << txupdate.key << " " << value << endl;
+    }
+    malloc_accounting_default_scope();
+    // TODO use the table name?
+    db.update(txupdate.key, value);
+  }
+
+  void ycsbLoad(int num_ops) {
+    cerr << db.name << " [step] loading (num ops: " << num_ops << ")" << endl;
+
+    auto clock_start = chrono::steady_clock::now();
+    auto clock_last_report = clock_start;
+    auto report_interval_ms = 1000;
+    for (int i = 0; i < num_ops; ++i) {
+      performYcsbInsert();
+
+      auto clock_op_completed = chrono::steady_clock::now();
+      if (std::chrono::duration_cast<std::chrono::milliseconds>(
+          clock_op_completed - clock_last_report).count() > report_interval_ms) {
+
+        cout << db.name << " (completed " << i << " ops)" << endl;
+        malloc_accounting_status();
+        auto report_completed = chrono::steady_clock::now();
+        clock_last_report = report_completed;
+      }
+    }
+
+    cerr << db.name << " [step] sync" << endl;
+    db.sync(true);
+
+    auto clock_end = chrono::steady_clock::now();
+    long long bench_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(clock_end - clock_start).count();
+
+    double ops_per_sec = ((double) num_ops) / (((double) bench_ns) / 1000000000);
+
+    cerr << db.name << " [step] loading complete" << endl;
+    cout << "--\tthroughput(load)\tduration(ns)\toperations\tops/s" << endl;
+    cout << db.name << "\tthroughput(load)\t" << bench_ns << "\t" << num_ops << "\t" << ops_per_sec << endl;
+  }
+
+  void ycsbRun(int num_ops, int sync_interval_ms) {
     malloc_accounting_set_scope("ycsbRun.setup");
     vector<pair<ycsbc::Operation, string>> operations = {
         make_pair(ycsbc::READ, "read"),
@@ -180,14 +192,14 @@ void ycsbRun(
         auto next_operation = workload.NextOperation();
         switch (next_operation) {
             case ycsbc::READ:
-                performYcsbRead(db, workload, verbose);
+                performYcsbRead();
                 break;
             case ycsbc::UPDATE:
-                performYcsbUpdate(db, workload, verbose);
+                performYcsbUpdate();
                 have_done_insert_since_last_sync = true;
                 break;
             case ycsbc::INSERT:
-                performYcsbInsert(db, workload, verbose);
+                performYcsbInsert();
                 have_done_insert_since_last_sync = true;
                 break;
             case ycsbc::SCAN:
@@ -303,7 +315,14 @@ void ycsbRun(
         }
     }
     malloc_accounting_default_scope();
-}
+  }
+
+  void ycsbLoadAndRun(int record_count, int num_ops, int sync_interval_ms) {
+    ycsbLoad(record_count);
+    ycsbRun(num_ops, sync_interval_ms);
+    malloc_accounting_display("after experiment before teardown");
+  }
+};
 
 #ifdef _YCSB_VERIBETRFS
 class VeribetrkvFacade {
@@ -315,8 +334,8 @@ public:
 
     VeribetrkvFacade(Application& app) : app(app) { }
 
-    inline void query(const string& key) {
-        app.Query(key);
+    inline string query(const string& key) {
+      return app.Query(key).as_string();
     }
 
     inline void insert(const string& key, const string& value) {
@@ -353,11 +372,12 @@ public:
 
     RocksdbFacade(rocksdb::DB& db) : db(db) { }
 
-    inline void query(const string& key) {
+    inline string query(const string& key) {
         static struct rocksdb::ReadOptions roptions = rocksdb::ReadOptions();
         string value;
         rocksdb::Status status = db.Get(roptions, rocksdb::Slice(key), &value);
         assert(status.ok() || status.IsNotFound()); // TODO is it expected we're querying non-existing keys?
+        return value;
     }
 
     inline void insert(const string& key, const string& value) {
@@ -393,8 +413,9 @@ public:
 
     NopFacade() { }
 
-    inline void query(const string& key) {
+    inline string query(const string& key) {
         asm volatile ("nop");
+        return "No string for you";
     }
 
     inline void insert(const string& key, const string& value) {
@@ -419,20 +440,6 @@ public:
 };
 
 const string NopFacade::name = string("nop");
-
-template< class DB >
-void ycsbLoadAndRun(
-    DB db,
-    ycsbc::CoreWorkload& workload,
-    int record_count,
-    int num_ops,
-    int sync_interval_ms,
-    bool verbose) {
-
-    ycsbLoad(db, workload, record_count, verbose);
-    ycsbRun(db, workload, num_ops, sync_interval_ms, verbose);
-    malloc_accounting_display("after experiment before teardown");
-}
 
 int main(int argc, char* argv[]) {
     bool verbose = false;
@@ -461,6 +468,7 @@ int main(int argc, char* argv[]) {
     bool do_veribetrkv = false;
     bool do_rocks = false;
     bool do_nop = false;
+    bool validate = false;
     for (int i = 3; i < argc; i++) {
       if (string(argv[i]) == "--veribetrkv") {
         do_veribetrkv = true;
@@ -470,6 +478,12 @@ int main(int argc, char* argv[]) {
       }
       else if (string(argv[i]) == "--nop") {
         do_nop = true;
+      }
+      else if (string(argv[i]) == "--validate") {
+        validate = true;
+      }
+      else if (string(argv[i]) == "--verbose") {
+        verbose = true;
       }
       else {
         cerr << "unrecognized: " << argv[i] << endl;
@@ -499,8 +513,9 @@ int main(int argc, char* argv[]) {
         Mkfs(veribetrfs_filename);
         Application app(veribetrfs_filename);
         VeribetrkvFacade db(app);
-    
-        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
+        BenchmarkState VeriBetrfsState(db, *workload, verbose, validate);
+        
+        VeriBetrfsState.ycsbLoadAndRun(record_count, num_ops, sync_interval_ms);
     #endif 
     }
 
@@ -529,7 +544,8 @@ int main(int argc, char* argv[]) {
         assert(status.ok());
         RocksdbFacade db(*rocks_db);
 
-        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
+        BenchmarkState RocksDBState(db, *workload, verbose, validate);
+        RocksDBState.ycsbLoadAndRun(record_count, num_ops, sync_interval_ms);
     #endif 
     }
 
@@ -537,8 +553,8 @@ int main(int argc, char* argv[]) {
     // == nop ==
     if (do_nop) {
         NopFacade db;
-
-        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
+        BenchmarkState NopState(db, *workload, verbose, validate);
+        NopState.ycsbLoadAndRun(record_count, num_ops, sync_interval_ms);
     }
 }
 

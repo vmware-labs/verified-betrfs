@@ -957,6 +957,10 @@ module BucketImpl {
       i := 0;
       while i < apageMutBuckets.Length as uint64
       {
+        var newpkv := ToPkv(pageBuckets[i]);
+        if newpkv != pkvs[i] {
+          print "PageBucket did not convert back to its original Pkv";
+        }
         apageMutBuckets[i] := new MutBucket.InitFromPageBucket(pageBuckets[i], pkvBuckets[i].sorted);
         i := i + 1;
       }
