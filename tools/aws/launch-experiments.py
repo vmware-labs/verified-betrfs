@@ -20,7 +20,7 @@ experiments = []
 for w in workloads:
     for c in configs:
         experiments.append([w,c])
-label="recordcount-page-07"
+label="recordcount-page-08"
 
 #machine_indices = [5]
 
@@ -38,6 +38,7 @@ def plot_command_for(experiments):
 def cmd_for_idx(idx, worker):
     exp = experiments[idx]
     cmd = ssh_cmd_for_worker(worker) + [
+        "cd", "veribetrfs", ";",
         "tools/clean-for-build.sh", git_branch, ";"
     ] + control.split() + exp + ["output=../"+outfile_for(exp)]
     return cmd
