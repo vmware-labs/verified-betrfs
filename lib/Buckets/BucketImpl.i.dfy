@@ -185,12 +185,12 @@ module BucketImpl {
       assume WFBucket(Bucket);
     }
 
-    constructor InitFromPageBucket(pageBucket: PageBucket, is_sorted: bool)
+    constructor InitFromPageBucket(pageBucket: PageBucket, weight: uint64, is_sorted: bool)
       ensures fresh(Repr)
     {
       this.format := BFPage;
       this.page := Some(pageBucket);
-      this.Weight := *;
+      this.Weight := weight;
       this.Repr := {this};
       this.Bucket := *;
       this.tree := null;
@@ -960,7 +960,11 @@ module BucketImpl {
       i := 0;
       while i < apageMutBuckets.Length as uint64
       {
-        apageMutBuckets[i] := new MutBucket.InitFromPageBucket(pageBuckets[i], pkvBuckets[i].sorted);
+        var newpkv := ToPkv(pageBuckets[i]);
+        if newpkv != pkvs[i] {
+          print "PageBucket did not convert back to its original Pkv";
+        }
+        apageMutBuckets[i] := new MutBucket.InitFromPageBucket(pageBuckets[i], pkvBuckets[i].Weight, pkvBuckets[i].sorted);
         i := i + 1;
       }
 

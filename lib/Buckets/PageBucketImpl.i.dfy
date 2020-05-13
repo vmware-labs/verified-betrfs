@@ -22,10 +22,15 @@ module PageBucketImpl {
   import PackedKV
   import DynamicPkv
   import KeyspaceImpl = Lexicographic_Byte_Order_Impl
-
+  import opened Sequences
+  import Uint32_Order
+  
   function method PageSize() : uint64 { 4096 }  // XXX move to bounds
 
-  method minUint64(a:uint64, b:uint64) returns (result:uint64) {
+  method minUint64(a:uint64, b:uint64) returns (result:uint64)
+    ensures a < b ==> result == a
+    ensures b <= a ==> result == b
+  {
     if a < b {
       result := a;
     } else {
@@ -39,9 +44,87 @@ module PageBucketImpl {
     valueOffsets:seq<uint32>,   // units: bytes
     pages:seq<seq<byte>>)
 
+  function AllocLen(this_: PageBucketStore) : nat
+  {
+    |this_.pages| * PageSize() as nat
+  }
+    
+  function Data(this_: PageBucketStore) : seq<byte>
+  {
+    Flatten(this_.pages)
+  }
+
+  predicate AllPagesOfCorrectSize(pages: seq<seq<byte>>)
+  {
+    && (forall i | 0 <= i < |pages| :: |pages[i]| == PageSize() as nat)
+  }
+  
+  predicate WFStore(this_: PageBucketStore)
+  {
+    && |this_.keyOffsets| == |this_.valueOffsets|
+    && (0 < |this_.keyOffsets| ==> 0 < |this_.bucketOffsets|)
+
+    && |this_.bucketOffsets| < Uint64UpperBound()
+    && |this_.keyOffsets| < Uint64UpperBound()
+    && |this_.valueOffsets| < Uint64UpperBound()
+    && |this_.pages| < Uint64UpperBound()
+    
+    && Uint32_Order.IsSorted(this_.bucketOffsets)
+    && (0 < |this_.bucketOffsets| ==> this_.bucketOffsets[0] == 0)
+    && (0 < |this_.bucketOffsets| ==> Last(this_.bucketOffsets) as nat == |this_.keyOffsets|)
+
+    && Uint32_Order.IsSorted(this_.keyOffsets)
+    && (0 < |this_.keyOffsets| ==> this_.keyOffsets[0] == 0)
+    && (0 < |this_.keyOffsets| ==> Last(this_.keyOffsets) as nat <= AllocLen(this_))
+
+    && Uint32_Order.IsSorted(this_.valueOffsets)
+    && (0 < |this_.valueOffsets| ==> this_.valueOffsets[0] == Last(this_.keyOffsets))
+    && (0 < |this_.valueOffsets| ==> Last(this_.valueOffsets) as nat <= AllocLen(this_))
+
+    && AllPagesOfCorrectSize(this_.pages)
+
+  }
+
+  lemma DataIsAllocLen(pages: seq<seq<byte>>)
+    requires AllPagesOfCorrectSize(pages)
+    ensures |Flatten(pages)| == |pages| * PageSize() as nat
+  {
+    reveal_Flatten();
+    if |pages| == 0 {
+    } else {
+      DataIsAllocLen(DropLast(pages));
+    }
+  }
+
+  lemma DataSliceIdentity(pages: seq<seq<byte>>, pageIdx: nat, offset: nat, len: nat)
+    requires AllPagesOfCorrectSize(pages)
+    requires pageIdx < |pages|
+    requires offset + len <= PageSize() as nat
+    ensures (DataIsAllocLen(pages);
+             pages[pageIdx][offset..offset+len] ==
+             Flatten(pages)[pageIdx * PageSize() as nat + offset..pageIdx * PageSize() as nat + offset + len])
+  {
+    reveal_Flatten();
+    var pagesize := PageSize() as nat;
+    var data := Flatten(pages);
+    var data' := Flatten(DropLast(pages));
+    assert data == data' + Last(pages);
+    DataIsAllocLen(DropLast(pages));
+    if pageIdx == |pages| - 1 {
+      assert pages[pageIdx] == data[pageIdx * pagesize..pageIdx * pagesize + pagesize];
+    } else {
+      DataSliceIdentity(DropLast(pages), pageIdx, offset, len);
+    }
+  }
+  
   method stitchBytes(this_: PageBucketStore, offset:uint64, len:uint64)
     returns (stitched: seq<byte>)
+    requires WFStore(this_)
+    requires offset as nat + len as nat <= AllocLen(this_)
   {
+    DataIsAllocLen(this_.pages);
+    ghost var data := Data(this_);
+    
     var stitchedArray := new byte[len];
     var nextPage := offset / PageSize();
     var nextOffset := offset % PageSize();
@@ -49,8 +132,43 @@ module PageBucketImpl {
     var nextArrayOffset:uint64 := 0;
     var remainingLen := len;
 
-    while (nextLen > 0) {
+    assert stitchedArray[..nextArrayOffset] == Data(this_)[offset..offset as nat + nextArrayOffset as nat];
+    
+    while 0 < nextLen
+      invariant nextLen < remainingLen ==>
+         (offset as nat + nextArrayOffset as nat + nextLen as nat) / PageSize() as nat
+      == (offset as nat + nextArrayOffset as nat                 ) / PageSize() as nat + 1
+      invariant 0 < nextLen ==> nextPage as nat == (offset as nat + nextArrayOffset as nat) / PageSize() as nat
+      invariant nextOffset as nat + nextLen as nat <= PageSize() as nat
+      invariant 0 < nextLen ==> nextOffset as nat == offset as nat + nextArrayOffset as nat - nextPage as nat * PageSize() as nat
+      invariant nextArrayOffset as nat + remainingLen as nat == len as nat
+      invariant nextArrayOffset as nat + nextLen as nat <= stitchedArray.Length
+      invariant stitchedArray[..nextArrayOffset] == data[offset..offset as nat + nextArrayOffset as nat]
+      decreases |this_.pages| - nextPage as nat
+    {
       CopySeqIntoArray(this_.pages[nextPage], nextOffset as uint64, stitchedArray, nextArrayOffset as uint64, nextLen as uint64);
+      assert stitchedArray[..nextArrayOffset+nextLen] ==
+        stitchedArray[..nextArrayOffset] + stitchedArray[nextArrayOffset..nextArrayOffset+nextLen];
+      assert data[offset..offset as nat + nextArrayOffset as nat + nextLen as nat] ==
+        data[offset..offset as nat + nextArrayOffset as nat] +
+        data[offset as nat + nextArrayOffset as nat..offset as nat + nextArrayOffset as nat + nextLen as nat];
+
+      calc {
+        stitchedArray[..nextArrayOffset+nextLen];
+        stitchedArray[..nextArrayOffset] + stitchedArray[nextArrayOffset..nextArrayOffset+nextLen];
+        data[offset..offset as nat + nextArrayOffset as nat] + stitchedArray[nextArrayOffset..nextArrayOffset+nextLen];
+        data[offset..offset as nat + nextArrayOffset as nat] + this_.pages[nextPage][nextOffset..nextOffset+nextLen];
+        { DataSliceIdentity(this_.pages, nextPage as nat, nextOffset as nat, nextLen as nat); }
+        data[offset..offset as nat + nextArrayOffset as nat]
+          + data[nextPage as nat * PageSize() as nat + nextOffset as nat..nextPage as nat * PageSize() as nat + nextOffset as nat + nextLen as nat];
+        data[offset..offset as nat + nextArrayOffset as nat]
+          + data[offset as nat + nextArrayOffset as nat..offset as nat + nextArrayOffset as nat + nextLen as nat];
+
+
+        
+        data[offset..offset as nat + nextArrayOffset as nat + nextLen as nat];
+      }
+        
       nextArrayOffset := nextArrayOffset + nextLen;
       remainingLen := remainingLen - nextLen;
 
@@ -63,8 +181,13 @@ module PageBucketImpl {
 
   method getKey(this_: PageBucketStore, bucketIndex:uint64, kvIndexInBucket:uint64)
     returns (key: Key)
+    requires WFStore(this_)
+    requires bucketIndex as nat + 1 < |this_.bucketOffsets|
+    requires kvIndexInBucket as nat < this_.bucketOffsets[bucketIndex+1] as nat - this_.bucketOffsets[bucketIndex] as nat
   {
     var kvIndex := this_.bucketOffsets[bucketIndex] as uint64 + kvIndexInBucket;
+    Uint32_Order.IsStrictlySortedImpliesLte(this_.bucketOffsets, 0, bucketIndex as nat);
+    Uint32_Order.IsStrictlySortedImpliesLte(this_.bucketOffsets, bucketIndex as nat, |this_.bucketOffsets|-1);
     var keyOffset := this_.keyOffsets[kvIndex] as uint64;
     var keyLen := this_.keyOffsets[kvIndex+1] as uint64 - keyOffset;
     key := stitchBytes(this_, keyOffset, keyLen);
@@ -159,7 +282,7 @@ module PageBucketImpl {
 
   method ToPkv(this_: PageBucket) returns (pkv: PackedKV.Pkv)
   {
-    assume false; // XXX
+    pkv := getPkv(this_.store, this_.bucketIdx);
   }
 
   method PageBucketsFromPKVBuckets(pkvBuckets:seq<PackedKV.Pkv>)
@@ -191,11 +314,14 @@ module PageBucketImpl {
       bucketIdx := bucketIdx + 1;
     }
     bucketOffsetsArray[bucketIdx] := numKvPairs as uint32;
-
+    var numPages := (numDataBytes + PageSize() - 1) / PageSize();
+    var allocSize := numPages * PageSize();
+    assert numDataBytes <= allocSize;
+    
     // Allocate the arrays
     var keyOffsetsArray := new uint32[numKvPairs+1];
     var valueOffsetsArray := new uint32[numKvPairs+1];
-    var dataArray := new byte[numDataBytes];
+    var dataArray := new byte[allocSize];
 
     // "write pointers"
     var dataOffset:uint64 := 0;
@@ -242,12 +368,13 @@ module PageBucketImpl {
 
     // Break dataArray into the pages in pagesArray
     var dataLen := dataOffset;
-    var numPages := (dataLen + PageSize() - 1) / PageSize();
     var pagesArray := new seq<byte>[numPages];
     dataOffset := 0;
     var pageOffset:uint64 := 0;
-    while dataOffset < dataLen {
-      var len := minUint64(PageSize(), dataLen - dataOffset);
+    while dataOffset < dataLen
+      invariant dataOffset == pageOffset * PageSize()
+    {
+      var len := PageSize();
       pagesArray[pageOffset] := dataArray[dataOffset..dataOffset+len];
       pageOffset := pageOffset + 1;
       dataOffset := dataOffset + len;
