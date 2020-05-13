@@ -237,7 +237,7 @@ def main():
 
   actuallyprint("Building executable...")
   sys.stdout.flush()
-  cmd = make_options + "make " + exe + " -s -j4 > /dev/null 2> /dev/null"
+  cmd = make_options + "make " + exe + " -j4 > /dev/null 2> /dev/null"
   actuallyprint(cmd)
   ret = os.system(cmd)
   assert ret == 0
