@@ -67,8 +67,18 @@ module NodeImpl {
         if bucket.format.BFTree? {
           acc.treeBuckets := acc.treeBuckets + 1;
           hasTreeBucket := true;
-        }
-        else if bucket.format.BFPkv? {
+        } else if bucket.format.BFPage? {
+          acc.pageBuckets := acc.pageBuckets + 1;
+
+          var page := bucket.page.value;
+          var numPairs := PageBucketImpl.GetNumPairs(page);
+          var keysSize := PageBucketImpl.getKeysSize(page);
+          var valuesSize := PageBucketImpl.getValuesSize(page);
+          acc.keyCount := acc.keyCount + numPairs;
+          acc.keyWeight := acc.keyWeight + keysSize;
+          acc.messageCount := acc.messageCount + numPairs;
+          acc.messageWeight := acc.messageWeight + valuesSize;
+        } else if bucket.format.BFPkv? {
           acc.pkvBuckets := acc.pkvBuckets + 1;
           // Could separate out these weights by bucket type, but probably not interesting
           // as Rob's going to turn everything into pkvs anyway.

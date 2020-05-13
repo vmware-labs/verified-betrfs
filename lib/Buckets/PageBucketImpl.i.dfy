@@ -98,6 +98,26 @@ module PageBucketImpl {
   
   datatype PageBucket = PageBucket(store:PageBucketStore, bucketIdx:uint64)
 
+  method getKeysSize(this_: PageBucket)
+    returns (size:uint64)
+  {
+    var bucketOffsetStart := this_.store.bucketOffsets[this_.bucketIdx];
+    var bucketOffsetEnd := this_.store.bucketOffsets[this_.bucketIdx+1];
+    var keysStart := this_.store.keyOffsets[bucketOffsetStart] as uint64;
+    var keysEnd := this_.store.keyOffsets[bucketOffsetEnd] as uint64;
+    return keysEnd - keysStart;
+  }
+
+  method getValuesSize(this_: PageBucket)
+    returns (size:uint64)
+  {
+    var bucketOffsetStart := this_.store.bucketOffsets[this_.bucketIdx];
+    var bucketOffsetEnd := this_.store.bucketOffsets[this_.bucketIdx+1];
+    var valuesStart := this_.store.valueOffsets[bucketOffsetStart] as uint64;
+    var valuesEnd := this_.store.valueOffsets[bucketOffsetEnd] as uint64;
+    return valuesEnd - valuesStart;
+  }
+
   method GetNumPairs(this_: PageBucket) returns (result:uint64) {
     result := this_.store.bucketOffsets[this_.bucketIdx + 1] as uint64
       - this_.store.bucketOffsets[this_.bucketIdx] as uint64;

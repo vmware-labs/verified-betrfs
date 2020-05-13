@@ -63,6 +63,8 @@ module CacheImpl {
       acc := DebugAccumulator.AccPut(acc, "cache", a);
       a := new DebugAccumulator.AccRec(counter.pkvBuckets, "pkv-buckets-count");
       acc := DebugAccumulator.AccPut(acc, "cache", a);
+      a := new DebugAccumulator.AccRec(counter.pageBuckets, "page-buckets-count");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
       a := new DebugAccumulator.AccRec(counter.weirdBuckets, "weird-buckets-count");
       acc := DebugAccumulator.AccPut(acc, "cache", a);
       a := new DebugAccumulator.AccRec(counter.treeNodes, "tree-nodes-count");

@@ -16,6 +16,7 @@ module DebugAccumulator {
     var treeBuckets:uint64;
     var kvlBuckets:uint64;
     var pkvBuckets:uint64;
+    var pageBuckets:uint64;
     var weirdBuckets:uint64;
     var treeNodes:uint64;
 
@@ -26,6 +27,7 @@ module DebugAccumulator {
       treeBuckets := 0;
       kvlBuckets := 0;
       pkvBuckets := 0;
+      pageBuckets := 0;
       weirdBuckets := 0;
       treeNodes := 0;
     }
