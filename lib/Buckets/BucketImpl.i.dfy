@@ -190,11 +190,13 @@ module BucketImpl {
     {
       this.format := BFPage;
       this.page := Some(pageBucket);
-      this.Weight := *;
       this.Repr := {this};
       this.Bucket := *;
       this.tree := null;
       this.sorted := is_sorted;
+      new;
+      var tmppkv := ToPkv(pageBucket);
+      this.Weight := PackedKV.WeightPkv(tmppkv);
     }
 
     method GetPkv() returns (pkv: PKV.Pkv)

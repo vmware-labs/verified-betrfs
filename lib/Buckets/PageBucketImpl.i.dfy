@@ -61,6 +61,9 @@ module PageBucketImpl {
   
   predicate WFStore(this_: PageBucketStore)
   {
+    && |this_.keyOffsets| == |this_.valueOffsets|
+    && (0 < |this_.keyOffsets| ==> 0 < |this_.bucketOffsets|)
+
     && |this_.bucketOffsets| < Uint64UpperBound()
     && |this_.keyOffsets| < Uint64UpperBound()
     && |this_.valueOffsets| < Uint64UpperBound()
@@ -80,8 +83,6 @@ module PageBucketImpl {
 
     && AllPagesOfCorrectSize(this_.pages)
 
-    && |this_.keyOffsets| == |this_.valueOffsets|
-    && (0 < |this_.keyOffsets| ==> 0 < |this_.bucketOffsets|)
   }
 
   lemma DataIsAllocLen(pages: seq<seq<byte>>)
@@ -180,8 +181,13 @@ module PageBucketImpl {
 
   method getKey(this_: PageBucketStore, bucketIndex:uint64, kvIndexInBucket:uint64)
     returns (key: Key)
+    requires WFStore(this_)
+    requires bucketIndex as nat + 1 < |this_.bucketOffsets|
+    requires kvIndexInBucket as nat < this_.bucketOffsets[bucketIndex+1] as nat - this_.bucketOffsets[bucketIndex] as nat
   {
     var kvIndex := this_.bucketOffsets[bucketIndex] as uint64 + kvIndexInBucket;
+    Uint32_Order.IsStrictlySortedImpliesLte(this_.bucketOffsets, 0, bucketIndex as nat);
+    Uint32_Order.IsStrictlySortedImpliesLte(this_.bucketOffsets, bucketIndex as nat, |this_.bucketOffsets|-1);
     var keyOffset := this_.keyOffsets[kvIndex] as uint64;
     var keyLen := this_.keyOffsets[kvIndex+1] as uint64 - keyOffset;
     key := stitchBytes(this_, keyOffset, keyLen);

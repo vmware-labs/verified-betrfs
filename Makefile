@@ -37,7 +37,7 @@ endif
 
 WANT_DEBUG=false
 ifeq "$(WANT_DEBUG)" "true"
-	DBG_SYMBOLS_FLAG=-g
+	DBG_SYMBOLS_FLAG=-g -fsanitize=address -fno-omit-frame-pointer
 	OPT_FLAG=-O0
 else
 	DBG_SYMBOLS_FLAG=
