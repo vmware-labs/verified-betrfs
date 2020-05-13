@@ -173,9 +173,10 @@ def main():
   if log_stats:
     make_options = "LOG_QUERY_STATS=1 "
 
-  print("Building executable...")
-  cmd = make_options + "make " + exe + " -s -j4 > /dev/null 2> /dev/null"
-  print(cmd)
+  actuallyprint("Building executable...")
+  sys.stdout.flush()
+  cmd = make_options + "make " + exe + " -j4 > /dev/null 2> /dev/null"
+  actuallyprint(cmd)
   ret = os.system(cmd)
   assert ret == 0
 
