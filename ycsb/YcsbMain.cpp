@@ -571,6 +571,10 @@ void dump_metadata(const char* workload_filename, const char* base_directory) {
 
   printf("metadata workload_filename %s", workload_filename);
   fp = fopen(workload_filename, "r");
+  if (fp==NULL) {
+    printf("Cannot access workload '%s'!\n", workload_filename);
+    exit(-1);
+  }
   while (true) {
     char* line = fgets(space, sizeof(space), fp);
     if (line==NULL) {
