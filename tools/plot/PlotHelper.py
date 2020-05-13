@@ -233,6 +233,7 @@ def plotGrandUnifiedMemory(ax, experiments):
     for i in range(len(experiments)):
         exp = experiments[i]
         plotOneExp(exp, {"linestyle": linestyles[i % len(linestyles)]})
+    ax.legend()
 
 
 def plotRocksIo(ax, experiments):
