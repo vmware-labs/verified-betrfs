@@ -1,6 +1,5 @@
 #!/bin/sh
 # Args: git-branch to check out
-cd veribetrfs
 git fetch
 git checkout $*
 git pull
