@@ -128,14 +128,15 @@ class BenchmarkState {
   bool verbose;
   bool validate;
   int infrequent_clock=0;
-  int sync_interval_ops,
+  int sync_interval_ops;
 
 public:
   BenchmarkState(DB db,
                  ycsbc::CoreWorkload &workload,
                  bool verbose,
-                 bool validate)
-    : db(db), workload(workload), verbose(verbose), validate(validate)
+                 bool validate,
+                 int sync_interval_ops)
+    : db(db), workload(workload), verbose(verbose), validate(validate), sync_interval_ops(sync_interval_ops)
   {
   }
   
@@ -236,7 +237,7 @@ public:
 
         int elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             clock_op_completed - clock_start).count();
-        periodicReport(db, "load", elapsed_ms, i);
+        periodicReport("load", elapsed_ms, i);
 
         auto report_completed = chrono::steady_clock::now();
         clock_last_report = report_completed;
@@ -256,7 +257,7 @@ public:
     cout << db.name << "\tthroughput(load)\t" << bench_ns << "\t" << num_ops << "\t" << ops_per_sec << endl;
   }
 
-  void ycsbRun(int num_ops, int sync_interval_ms) {
+  void ycsbRun(int num_ops) {
     malloc_accounting_set_scope("ycsbRun.setup");
     vector<pair<ycsbc::Operation, string>> operations = {
         make_pair(ycsbc::READ, "read"),
@@ -287,6 +288,7 @@ public:
 
     int cdf_reset_interval_ops = 100000;
     int next_cdf_reset_ops = cdf_reset_interval_ops;
+    bool have_done_insert_since_last_sync = false;
 
 #define HACK_EVICT_PERIODIC 0
 #if HACK_EVICT_PERIODIC
@@ -343,7 +345,7 @@ public:
 
         //printf("elapsed_ms %d next_display %d\n", elapsed_ms, next_display_ms);
         if (elapsed_ms >= next_display_ms) {
-            periodicReport(db, "run", elapsed_ms, i);
+            periodicReport("run", elapsed_ms, i);
             next_display_ms += display_interval_ms;
         }
 
@@ -672,9 +674,9 @@ int main(int argc, char* argv[]) {
         Mkfs(veribetrfs_filename);
         Application app(veribetrfs_filename);
         VeribetrkvFacade db(app);
-        BenchmarkState VeriBetrfsState(db, *workload, verbose, validate);
+        BenchmarkState veriBetrfsState(db, *workload, verbose, validate, sync_interval_ops);
         
-        VeriBetrfsState.ycsbLoadAndRun(record_count, num_ops);
+        veriBetrfsState.ycsbLoadAndRun(record_count, num_ops);
     #endif 
     }
 
@@ -703,8 +705,8 @@ int main(int argc, char* argv[]) {
         assert(status.ok());
         RocksdbFacade db(*rocks_db);
 
-        BenchmarkState RocksDBState(db, *workload, verbose, validate);
-        RocksDBState.ycsbLoadAndRun(record_count, num_ops);
+        BenchmarkState rocksDBState(db, *workload, verbose, validate, sync_interval_ops);
+        rocksDBState.ycsbLoadAndRun(record_count, num_ops);
     #endif 
     }
 
@@ -712,8 +714,8 @@ int main(int argc, char* argv[]) {
     // == nop ==
     if (do_nop) {
         NopFacade db;
-        BenchmarkState NopState(db, *workload, verbose, validate);
-        NopState.ycsbLoadAndRun(record_count, num_ops, sync_interval_ops);
+        BenchmarkState nopState(db, *workload, verbose, validate, sync_interval_ops);
+        nopState.ycsbLoadAndRun(record_count, num_ops);
     }
 }
 
