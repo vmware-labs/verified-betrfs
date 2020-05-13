@@ -50,33 +50,28 @@ module FlushModel {
     ) else (
       var parent := s.cache[parentref];
 
-      if !BucketWellMarshalled(parent.buckets[slot]) || !BucketListWellMarshalled(child.buckets) then (
-        s
-      ) else (
-      
-        WeightBucketLeBucketList(parent.buckets, slot);
-        lemmaChildrenConditionsOfNode(k, s, childref);
-        lemmaChildrenConditionsOfNode(k, s, parentref);
+      WeightBucketLeBucketList(parent.buckets, slot);
+      lemmaChildrenConditionsOfNode(k, s, childref);
+      lemmaChildrenConditionsOfNode(k, s, parentref);
 
-        var partialFlushResult(newparentBucket, newbuckets) :=
-            BucketModel.partialFlush(
-              parent.buckets[slot], child.pivotTable, child.buckets);
-        var newchild := child.(buckets := newbuckets);
-        var (s2, newchildref) := allocBookkeeping(k, s, newchild.children);
-        lemmaChildrenConditionsUpdateOfAllocBookkeeping(
-          k, s, newchild.children, parent.children.value, slot);
-        if newchildref.None? then (
-          s2
-        ) else (
-          var newparent := Node(
-            parent.pivotTable,
-            Some(parent.children.value[slot := newchildref.value]),
-            parent.buckets[slot := newparentBucket]
-          );
-          var s2 := writeBookkeeping(k, s2, parentref, newparent.children);
-          var s' := s2.(cache := s2.cache[newchildref.value := newchild][parentref := newparent]);
-          s'
-        )
+      var partialFlushResult(newparentBucket, newbuckets) :=
+          BucketModel.partialFlush(
+            parent.buckets[slot], child.pivotTable, child.buckets);
+      var newchild := child.(buckets := newbuckets);
+      var (s2, newchildref) := allocBookkeeping(k, s, newchild.children);
+      lemmaChildrenConditionsUpdateOfAllocBookkeeping(
+        k, s, newchild.children, parent.children.value, slot);
+      if newchildref.None? then (
+        s2
+      ) else (
+        var newparent := Node(
+          parent.pivotTable,
+          Some(parent.children.value[slot := newchildref.value]),
+          parent.buckets[slot := newparentBucket]
+        );
+        var s2 := writeBookkeeping(k, s2, parentref, newparent.children);
+        var s' := s2.(cache := s2.cache[newchildref.value := newchild][parentref := newparent]);
+        s'
       )
     )
   }
@@ -99,30 +94,31 @@ module FlushModel {
     } else {
       var parent := s.cache[parentref];
 
-      if !BucketWellMarshalled(parent.buckets[slot]) || !BucketListWellMarshalled(child.buckets) {
-        assert noop(k, IBlockCache(s), IBlockCache(s));
-        return;
-      }
-      
       WeightBucketLeBucketList(parent.buckets, slot);
       lemmaChildrenConditionsOfNode(k, s, childref);
       lemmaChildrenConditionsOfNode(k, s, parentref);
 
-      assume WFBucketListProper(child.buckets, child.pivotTable);
-
       var partialFlushResult(newparentBucket, newbuckets) :=
         BucketModel.partialFlush(
           parent.buckets[slot], child.pivotTable, child.buckets);
-      var flushedKeys := BucketModel.partialFlushCorrect(parent.buckets[slot], child.pivotTable, child.buckets);
+
+      var flushedKeys;
+      if BucketWellMarshalled(parent.buckets[slot])
+          && BucketListWellMarshalled(child.buckets)
+          && WFBucketListProper(child.buckets, child.pivotTable)
+      {
+        flushedKeys := BucketModel.partialFlushCorrect(parent.buckets[slot], child.pivotTable, child.buckets);
+      }
+
       BucketModel.partialFlushWeightBound(parent.buckets[slot], child.pivotTable, child.buckets);
       
-      WFBucketIntersect(parent.buckets[slot], flushedKeys);
+      /*WFBucketIntersect(parent.buckets[slot], flushedKeys);
       WFBucketComplement(parent.buckets[slot], flushedKeys);
       WeightBucketComplement(parent.buckets[slot], flushedKeys);
       WFBucketListFlush(
         BucketIntersect(parent.buckets[slot], flushedKeys),
         child.buckets,
-        child.pivotTable);
+        child.pivotTable);*/
       WeightBucketListShrinkEntry(parent.buckets, slot, newparentBucket);
 
       // TODO these are actually kind of annoying right now
@@ -170,7 +166,17 @@ module FlushModel {
         allocCorrect(k, s, newchild);
         writeCorrect(k, s2, parentref, newparent);
 
-        var flushStep := BT.NodeFlush(parentref, INode(parent), childref, INode(child), newchildref.value, INode(newchild), slot, flushedKeys);
+        var flushStep := BT.NodeFlush(
+          parentref,
+          INode(parent),
+          childref,
+          INode(child),
+          newchildref.value,
+          INode(newchild),
+          slot,
+          flushedKeys,
+          INode(newparent).buckets[slot],
+          INode(newchild).buckets);
         assert BT.ValidFlush(flushStep);
         var step := BT.BetreeFlush(flushStep);
         assert INode(newparent) == BT.FlushOps(flushStep)[1].node;
