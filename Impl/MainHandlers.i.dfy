@@ -101,8 +101,8 @@ module MainHandlers refines Main {
 
   // jonh hack UNVERIFIED DEBUG ONLY
   method handleEvictEverything(k: Constants, hs: HeapState, io: DiskIOHandler)
+  requires false
   {
-    assume false; // TODO(jonh) debugging stuff
     var s := hs.s;
     print "\nBefore\n";
     var acc := s.bc.DebugAccumulate();
@@ -110,20 +110,20 @@ module MainHandlers refines Main {
     var count:uint64 := s.bc.cache.cache.Count;
 //    var last_count:uint64 := count;
 //    var last_at_this_count:uint64 = 0;
-    while (count > 0) { // somehow it gets to where we can't get rid of the last few...?
+    while (count > 0)
+    { // somehow it gets to where we can't get rid of the last few...?
       EvictOrDealloc(k, s.bc, io);
       count := s.bc.cache.cache.Count;
     }
     print "\nAfter\n";
     acc := s.bc.DebugAccumulate();
     DebugAccumulator.Display(acc, 0);
-    assume false; // TODO(jonh) debugging stuff
   }
 
   // jonh hack UNVERIFIED DEBUG ONLY
   method handleCountAmassAllocations(k: Constants, hs: HeapState, io: DiskIOHandler)
+  requires false
   {
-    assume false; // TODO(jonh) debugging stuff
     AllocationReport.start();
     var s := hs.s;
 
@@ -148,7 +148,6 @@ module MainHandlers refines Main {
     }
 
     AllocationReport.stop();
-    assume false; // TODO(jonh) debugging stuff
   }
 
   method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: uint64, graphSync: bool)
