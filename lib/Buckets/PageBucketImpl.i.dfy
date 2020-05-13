@@ -2,6 +2,15 @@ include "../../PivotBetree/Bounds.i.dfy"
 include "BucketModel.i.dfy"
 include "PackedKV.i.dfy"
 
+// TODO(robj): convert this back to using member methods on
+// datastructs once the C++ backend supports them.  Errors we were getting:
+
+// build/Bundle.cpp:6749:60: error: member reference type 'PageBucketImpl_Compile::PageBucket' is not a
+//      pointer; did you mean to use '.'?
+//      auto _outcollector169 = (((this->page).dtor_value()))->ToPkv();
+//                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~
+
+
 module PageBucketImpl {
   import opened NativeTypes
   import opened BucketModel
@@ -11,6 +20,7 @@ module PageBucketImpl {
   import opened Options
   import opened NativeArrays
   import PackedKV
+  import DynamicPkv
   import KeyspaceImpl = Lexicographic_Byte_Order_Impl
 
   function method PageSize() : uint64 { 4096 }  // XXX move to bounds
@@ -28,93 +38,108 @@ module PageBucketImpl {
     keyOffsets:seq<uint32>,     // units: bytes
     valueOffsets:seq<uint32>,   // units: bytes
     pages:seq<seq<byte>>)
+
+  method stitchBytes(this_: PageBucketStore, offset:uint64, len:uint64)
+    returns (stitched: seq<byte>)
   {
-    method stitchBytes(offset:uint64, len:uint64)
-      returns (stitched: seq<byte>)
-    {
-      var stitchedArray := new byte[len];
-      var nextPage := offset / PageSize();
-      var nextOffset := offset % PageSize();
-      var nextLen := minUint64(PageSize() - nextOffset, len);
-      var nextArrayOffset:uint64 := 0;
-      var remainingLen := len;
+    var stitchedArray := new byte[len];
+    var nextPage := offset / PageSize();
+    var nextOffset := offset % PageSize();
+    var nextLen := minUint64(PageSize() - nextOffset, len);
+    var nextArrayOffset:uint64 := 0;
+    var remainingLen := len;
 
-      while (nextLen > 0) {
-        CopySeqIntoArray(pages[nextPage], nextOffset as uint64, stitchedArray, nextArrayOffset as uint64, nextLen as uint64);
-        nextArrayOffset := nextArrayOffset + nextLen;
-        remainingLen := remainingLen - nextLen;
+    while (nextLen > 0) {
+      CopySeqIntoArray(this_.pages[nextPage], nextOffset as uint64, stitchedArray, nextArrayOffset as uint64, nextLen as uint64);
+      nextArrayOffset := nextArrayOffset + nextLen;
+      remainingLen := remainingLen - nextLen;
 
-        nextPage := nextPage + 1;
-        nextOffset := 0;
-        nextLen := minUint64(PageSize(), remainingLen);
-      }
-      return stitchedArray[..];
+      nextPage := nextPage + 1;
+      nextOffset := 0;
+      nextLen := minUint64(PageSize(), remainingLen);
     }
-
-    method getKey(bucketIndex:uint64, kvIndexInBucket:uint64)
-      returns (key: Key)
-    {
-      var kvIndex := bucketOffsets[bucketIndex] as uint64 + kvIndexInBucket;
-      var keyOffset := keyOffsets[kvIndex] as uint64;
-      var keyLen := keyOffsets[kvIndex+1] as uint64 - keyOffset;
-      key := stitchBytes(keyOffset, keyLen);
-    }
-
-    method getValue(bucketIndex:uint64, kvIndexInBucket:uint64)
-      returns (value:seq<byte>)
-    {
-      var kvIndex := bucketOffsets[bucketIndex] as uint64 + kvIndexInBucket;
-      var valueOffset := valueOffsets[kvIndex] as uint64;
-      var valueLen := valueOffsets[kvIndex+1] as uint64 - valueOffset;
-      value := stitchBytes(valueOffset, valueLen);
-    }
+    return stitchedArray[..];
   }
 
-  datatype PageBucket = PageBucket(store:PageBucketStore, bucketIdx:uint64)
+  method getKey(this_: PageBucketStore, bucketIndex:uint64, kvIndexInBucket:uint64)
+    returns (key: Key)
   {
-    method GetNumPairs() returns (result:uint64) {
-      result := store.bucketOffsets[bucketIdx + 1] as uint64
-                - store.bucketOffsets[bucketIdx] as uint64;
+    var kvIndex := this_.bucketOffsets[bucketIndex] as uint64 + kvIndexInBucket;
+    var keyOffset := this_.keyOffsets[kvIndex] as uint64;
+    var keyLen := this_.keyOffsets[kvIndex+1] as uint64 - keyOffset;
+    key := stitchBytes(this_, keyOffset, keyLen);
+  }
+
+  method getValue(this_: PageBucketStore, bucketIndex:uint64, kvIndexInBucket:uint64)
+    returns (value:seq<byte>)
+  {
+    var kvIndex := this_.bucketOffsets[bucketIndex] as uint64 + kvIndexInBucket;
+    var valueOffset := this_.valueOffsets[kvIndex] as uint64;
+    var valueLen := this_.valueOffsets[kvIndex+1] as uint64 - valueOffset;
+    value := stitchBytes(this_, valueOffset, valueLen);
+  }
+
+  method getPkv(this_: PageBucketStore, bucketIndex: uint64) returns (result: PackedKV.Pkv)
+  {
+    var dpkv := new DynamicPkv.DynamicPkv.PreSized(DynamicPkv.EmptyCapacity());
+    var i: uint64 := 0;
+    var numPairs: uint64 := (this_.bucketOffsets[bucketIndex+1] - this_.bucketOffsets[bucketIndex]) as uint64;
+    
+    while i < numPairs
+    {
+      var key := getKey(this_, bucketIndex, i);
+      var msgbytes := getValue(this_, bucketIndex, i);
+      dpkv.AppendEncodedMessage(key, msgbytes);
+      i := i + 1;
     }
 
-    method Query(key: Key) returns (msg: Option<Message>)
+    result := dpkv.toPkv();
+  }
+  
+  datatype PageBucket = PageBucket(store:PageBucketStore, bucketIdx:uint64)
+
+  method GetNumPairs(this_: PageBucket) returns (result:uint64) {
+    result := this_.store.bucketOffsets[this_.bucketIdx + 1] as uint64
+      - this_.store.bucketOffsets[this_.bucketIdx] as uint64;
+  }
+
+  method Query(this_: PageBucket, key: Key) returns (msg: Option<Message>)
+  {
+    var lo: uint64 := 0;
+    var hi: uint64 := GetNumPairs(this_);
+    while lo < hi
     {
-      var lo: uint64 := 0;
-      var hi: uint64 := GetNumPairs();
-      while lo < hi
-      {
-        var mid: uint64 := (lo + hi) / 2;
-        var midKey := store.getKey(bucketIdx, mid);
-        var c := KeyspaceImpl.cmp(key, midKey);
-        if c == 0 {
-          var valueBytes := store.getValue(bucketIdx, mid);
-          var message := PackedKV.bytestring_to_Message(valueBytes);
-          msg := Some(message);
-          return;
-        } else if (c < 0) {
-          hi := mid;
-        } else {
-          lo := mid + 1;
-        }
+      var mid: uint64 := (lo + hi) / 2;
+      var midKey := getKey(this_.store, this_.bucketIdx, mid);
+      var c := KeyspaceImpl.cmp(key, midKey);
+      if c == 0 {
+        var valueBytes := getValue(this_.store, this_.bucketIdx, mid);
+        var message := PackedKV.bytestring_to_Message(valueBytes);
+        msg := Some(message);
+        return;
+      } else if (c < 0) {
+        hi := mid;
+      } else {
+        lo := mid + 1;
       }
-      msg := None;
     }
+    msg := None;
+  }
 
-    method GetKey(idx:uint64) returns (key:Key)
-    {
-      key := store.getKey(bucketIdx, idx);
-    }
+  method GetKey(this_: PageBucket, idx:uint64) returns (key:Key)
+  {
+    key := getKey(this_.store, this_.bucketIdx, idx);
+  }
 
-    method IsEmpty() returns (empty: bool)
-    {
-      var numPairs := GetNumPairs();
-      empty := numPairs  == 0;
-    }
+  method IsEmpty(this_: PageBucket) returns (empty: bool)
+  {
+    var numPairs := GetNumPairs(this_);
+    empty := numPairs  == 0;
+  }
 
-    method ToPkv() returns (pkv: PackedKV.Pkv)
-    {
-      assume false; // XXX
-    }
+  method ToPkv(this_: PageBucket) returns (pkv: PackedKV.Pkv)
+  {
+    assume false; // XXX
   }
 
   method PageBucketsFromPKVBuckets(pkvBuckets:seq<PackedKV.Pkv>)
@@ -141,6 +166,7 @@ module PageBucketImpl {
         var valueSeq := PackedKV.GetMessageBytes(pkvBucket, kvIdx);
         var valueLen := |valueSeq| as uint64;
         numDataBytes := numDataBytes + keyLen + valueLen;
+        kvIdx := kvIdx + 1;
       }
       bucketIdx := bucketIdx + 1;
     }
@@ -213,8 +239,8 @@ module PageBucketImpl {
     var i:uint64 := 0;
     while i < numBuckets {
       pageBucketsArray[i] := PageBucket(store, i);
+      i := i + 1;
     }
     pageBuckets := pageBucketsArray[..];
   }
-
 } // module PageBucketImpl

@@ -297,9 +297,11 @@ void ycsbRun(
                 break;
             case ycsbc::UPDATE:
                 performYcsbUpdate(db, workload, verbose);
+                have_done_insert_since_last_sync = true;
                 break;
             case ycsbc::INSERT:
                 performYcsbInsert(db, workload, verbose);
+                have_done_insert_since_last_sync = true;
                 break;
             case ycsbc::SCAN:
                 cerr << "error: operation SCAN unimplemented" << endl;
@@ -343,8 +345,9 @@ void ycsbRun(
           next_cdf_reset_ops += cdf_reset_interval_ops;
         }
 
-        if (i >= next_sync_ops) {
+        if (i >= next_sync_ops && have_done_insert_since_last_sync) {
             db.sync(false);
+            have_done_insert_since_last_sync = false;
 
             /*
             if (i > 3000000) {

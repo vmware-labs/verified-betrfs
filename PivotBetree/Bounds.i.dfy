@@ -59,6 +59,8 @@ module Bounds {
   function IndirectionTableMaxSize() : int { IndirectionTableMaxSizeUint64() as int }
   function DiskNumJournalBlocks() : int { DiskNumJournalBlocksUint64() as int }
 
+  predicate method UsePageBuckets() { true }
+  
   // This is the configuration constraint for MinNodeBlockIndexUint64, so you can
   // "make build/PivotBetree/Bounds.i.verified" as a quick way to sanity-check
   // without running a complete system verification.
