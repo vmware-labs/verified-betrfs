@@ -161,15 +161,15 @@ void cgroups_report() {
   fclose(fp);
 }
 
-static int i=0;
+static int infrequent_clock=0;
 template< class DB >
 void periodicReport(DB db, const char* phase, int elapsed_ms, int ops_completed) {
     printf("elapsed_ms %d ops %d %s\n", elapsed_ms, ops_completed, phase);
 
     malloc_accounting_display("periodic");
     db.memDebugFrequent();
-    i += 1;
-    if (i%10 == 0) {
+    infrequent_clock += 1;
+    if (infrequent_clock%3 == 0) {
       db.memDebugInfrequent();
     }
 
