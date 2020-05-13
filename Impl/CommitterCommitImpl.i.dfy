@@ -342,6 +342,7 @@ module CommitterCommitImpl {
       if hasFrozen || hasInMem {
         WriteOutJournal(k, cm, io);
       } else if (cm.outstandingJournalWrites == {}) {
+        cm.syncReqs := SyncReqs3to2(cm.syncReqs);
         writeOutSuperblockAdvanceLog(k, cm, io);
       } else {
         //print "tryAdvanceLog: doing nothing, has outstanding journal writes\n";
@@ -377,6 +378,7 @@ module CommitterCommitImpl {
       if hasFrozen || hasInMem {
         WriteOutJournal(k, cm, io);
       } else if (cm.outstandingJournalWrites == {}) {
+        cm.syncReqs := SyncReqs3to2(cm.syncReqs);
         writeOutSuperblockAdvanceLocation(k, cm, io);
       } else {
         //print "tryAdvanceLocation: doing nothing, has outstanding journal writes\n";
