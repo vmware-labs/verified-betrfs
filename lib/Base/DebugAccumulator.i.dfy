@@ -17,7 +17,6 @@ module DebugAccumulator {
     var kvlBuckets:uint64;
     var pkvBuckets:uint64;
     var pkvBacktraces: map<seq<uint64>, uint64> // Map to number of occurances
-    var pageBuckets:uint64;
     var weirdBuckets:uint64;
     var treeNodes:uint64;
 
