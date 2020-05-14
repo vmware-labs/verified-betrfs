@@ -12,7 +12,7 @@ from TimeSeries import *
 output_filename = "compare.png"
 
 def plot_perf_compare(experiments):
-    plotHelper = PlotHelper(8, scale=2)
+    plotHelper = PlotHelper(12, scale=2)
 
     try: plotThroughput(plotHelper.nextAxis(depth=2), experiments)
     except: raise
@@ -26,8 +26,8 @@ def plot_perf_compare(experiments):
     try: plotCpuTime(plotHelper.nextAxis(depth=2), experiments)
     except: raise
 
-#    try: plotProcIoBytes(plotHelper.nextAxis(depth=2), experiments)
-#    except: raise
+    try: plotProcIoBytes(plotHelper.nextAxis(depth=2), experiments)
+    except: raise
 
 #    try: plotIoLatencyCdf(plotHelper.nextAxis(depth=2), experiments)
 #    except: raise

@@ -343,4 +343,6 @@ def plotSlowIos(ax, experiments):
             line.set_label(exp.nickname + " writes")
     plotManyForeach(ax, experiments, plotOneExp)
     ax.legend()
+    ax.grid(which="major", color="#dddddd")
     set_xlim(ax, experiments)
+    ax.set_ylim(top=1)
