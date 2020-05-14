@@ -56,7 +56,7 @@ module LeafImpl {
 
     var left, right := node.buckets[0 as uint64].SplitLeftRight(pivot);
 
-    var buckets' := [left, right];
+    var buckets' := PkvBucketSeqToPageBucketSeq([left, right]);
     MutBucket.ReprSeqDisjointOfLen2(buckets');
     MutBucket.ListReprOfLen2(buckets');
     var newnode := new Node(pivots, None, buckets');
