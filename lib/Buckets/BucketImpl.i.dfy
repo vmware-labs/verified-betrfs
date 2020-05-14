@@ -256,18 +256,32 @@ module BucketImpl {
       WeightMessageSeqList(msgs);
     }
 
-    method GetPkv() returns (pkv: PKV.Pkv)
+    method GetPkvSorted(must_be_sorted:bool) returns (pkv: PKV.Pkv)
     requires Inv()
     ensures PKV.WF(pkv)
     ensures PKV.I(pkv) == Bucket
+    ensures must_be_sorted ==> PKV.SortedKeys(pkv)
     {
       if (format.BFTree?) {
         NumElementsLteWeight(B(KMB.Interpretation(tree)));
         KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
         pkv := tree_to_pkv(tree);
-      } else {
+      } else if !must_be_sorted || sorted {
         pkv := this.pkv;
+      } else {
+        var tree := pkv_to_tree(this.pkv);
+        NumElementsLteWeight(Bucket);
+        KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
+        pkv := tree_to_pkv(tree);
       }
+    }
+
+    method GetPkv() returns (pkv: PKV.Pkv)
+    requires Inv()
+    ensures PKV.WF(pkv)
+    ensures PKV.I(pkv) == Bucket
+    {
+      pkv := GetPkvSorted(false);
     }
 
     method WellMarshalled() returns (b: bool)
@@ -633,8 +647,7 @@ module BucketImpl {
     ensures left.Bucket == SplitBucketLeft(Bucket, pivot)
     ensures fresh(left.Repr)
     {
-      assume false;
-      var pkv := GetPkv();
+      var pkv := GetPkvSorted(true);
       //WeightSplitBucketLeft(Bucket, pivot);
       var pkvleft := PKV.SplitLeft(pkv, pivot);
       left := new MutBucket.InitFromPkv(pkvleft, sorted);
@@ -647,8 +660,7 @@ module BucketImpl {
     ensures right.Bucket == SplitBucketRight(Bucket, pivot)
     ensures fresh(right.Repr)
     {
-      assume false;
-      var pkv := GetPkv();
+      var pkv := GetPkvSorted(true);
       //WeightSplitBucketRight(Bucket, pivot);
       var pkvright := PKV.SplitRight(pkv, pivot);
       right := new MutBucket.InitFromPkv(pkvright, sorted);
