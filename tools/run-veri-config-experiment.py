@@ -111,6 +111,7 @@ def main():
   log_stats = False
   nodeCountFudge = 1.0  # Pretend we have more memory when computing node count budget, since mean node is 75% utilized. This lets us tune veri to exploit all available cgroup memory.
   max_children = None   # Default
+  cgroup_enabled = True
 
   rocks = None
   time_budget_sec = 3600*24*365 # You get a year if you don't ask for a budget
@@ -143,7 +144,15 @@ def main():
       unit = val_str[-1]
       mult = 1 if unit=="s" else 60 if unit=="m" else 3600 if unit=="h" else None
       assert mult, "time_budget needs a unit"
-      time_budget_sec = float(val_str[:-1])
+      time_budget_sec = float(val_str[:-1]) * mult
+    elif arg.startswith("cgroup="):
+      enabled = arg.split("=")[1]
+      cgroup_enabled = enabled=="True"
+    elif arg.startswith("output="):
+      outpath = arg.split("=")[1]
+      assert not os.path.exists(outpath)
+      fp = open(outpath, "w")
+      os.dup2(fp.fileno(), 1)   # replace stdout for this program and children
     else:
       assert False, "unrecognized argument: " + arg
 
@@ -223,8 +232,10 @@ def main():
   # See https://linux.die.net/man/1/taskset
   taskset_cmd = "taskset 4 "
 
-  command = taskset_cmd + "cgexec -g memory:VeribetrfsExp ./" + exe + " " + wl + " " + loc + " " + cmdoption
-  print(command)
+  cgroup_prefix = "cgexec -g memory:VeribetrfsExp " if cgroup_enabled else ""
+  command = taskset_cmd + cgroup_prefix + "./" + exe + " " + wl + " " + loc + " " + cmdoption
+  actuallyprint(command)
+  sys.stdout.flush()
 
   start_time = time.time()
   end_time = start_time + time_budget_sec
