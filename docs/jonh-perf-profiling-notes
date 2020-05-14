@@ -1211,5 +1211,22 @@ Next thing: Let's sweep fanout.
 
 time tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=2.0gb pillow=1.1 config-64kb time_budget=1h max_children=8 output=malloc-exp/veri-children8.data
 
-[ ] Deploy script
-[ ] rsync collect data script
+[x] Deploy script
+[x] rsync collect data script
+
+tools/aws/run-all.py "cd veribetrfs; git checkout leak-adventure-2; git pull"
+
+Best system, with fudge=1.1, is using 1.63gb (overhead 23%)
+veri-blocks was overhead 44%
+Steady-state perf is definitely improved, at the cost of perf during non-io phase.
+slow ios are definitely delayed -- but not as much as rocks' gloriously flat curve.
+CPU seems to be hurting us:
+  * veri-blocks has a worse slow-io curve than page-0.9, but a better perf curve.
+  * veri-blocks rounds out higher than page-0.9 by a fair bit.
+0.9 has an overhead of 49%, so the overhead is doing a nice job of predicting the IO knee.
+
+The veri curves seem to mostly scale proportionately (except the red 1.0 one), but they don't
+  scale like the rocks curve. Rocks is really doing a lot fewer slow ios, even in randomville.
+  Even though it caches the same total amount of keyspace.
+There is 0.5gb of keyspace, actually. That might be a factor that really helps rocks and
+  somehow hurts us (because of how writes trickle down our tree?)
