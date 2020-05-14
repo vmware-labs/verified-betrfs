@@ -39,7 +39,7 @@ WANT_DEBUG=false
 ifeq "$(WANT_DEBUG)" "true"
 	# DEBUG_UNDERLYING makes DafnySequence pointer objects 16B more expensive,
 	# and does a bunch of runtime reference tracking.
-	DBG_SYMBOLS_FLAG=-g -DDEBUG_UNDERLYING=1
+	DBG_SYMBOLS_FLAG=-g -fsanitize=address -fno-omit-frame-pointer #-DDEBUG_UNDERLYING=1 
 	OPT_FLAG=-O0
 else
 	DBG_SYMBOLS_FLAG=
@@ -300,7 +300,9 @@ VERIBETRFS_AUX_FILES=\
 	build/framework/Crc32.o \
 	build/framework/Framework.o \
 	build/framework/MallocAccounting.o \
+	build/framework/Backtrace.o \
 	build/framework/NativeArrays.o \
+
 
 VERIBETRFS_O_FILES=\
 	$(VERIBETRFS_AUX_FILES)\
