@@ -54,3 +54,9 @@ Fixing that bug makes things go ... quite slowly. 58s/10Kops;
 10^4 slower.
 
 Fixing vector -> vector* makes it go faster again; 0.785s/10Kops
+
+Andrea:
+parameter sweep for btree and hashtable (size of collection)
+compare code
+verification time
+borrow system: take apart, put back
