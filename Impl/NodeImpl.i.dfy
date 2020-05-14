@@ -86,13 +86,13 @@ module NodeImpl {
           acc.keyWeight := acc.keyWeight + |bucket.pkv.keys.data| as uint64;
           acc.messageCount := acc.messageCount + |bucket.pkv.messages.offsets| as uint64;
           acc.messageWeight := acc.messageWeight + |bucket.pkv.messages.data| as uint64;
-          var btcount: uint64;
-          if bucket.backtrace in acc.pkvBacktraces {
-            btcount := acc.pkvBacktraces[bucket.backtrace] + 1;
-          } else {
-            btcount := 1;
-          }
-          acc.pkvBacktraces := acc.pkvBacktraces[bucket.backtrace := btcount];
+          // var btcount: uint64;
+          // if bucket.backtrace in acc.pkvBacktraces {
+          //   btcount := acc.pkvBacktraces[bucket.backtrace] + 1;
+          // } else {
+          //   btcount := 1;
+          // }
+          // acc.pkvBacktraces := acc.pkvBacktraces[bucket.backtrace := btcount];
         } else {
           acc.weirdBuckets := acc.weirdBuckets + 1;
         }
@@ -549,7 +549,6 @@ module NodeImpl {
           }
         }
       }
-      node'.buckets := PkvBucketSeqToPageBucketSeq(node'.buckets);
     }
 
     method SplitChildLeft(num_children_left: uint64)
