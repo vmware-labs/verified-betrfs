@@ -198,8 +198,8 @@ def plotGrandUnifiedMemory(ax, experiments):
 
         plotWithLabel(singleTrace(ax, exp.os_map_total, scale=Gi),
                 exp.nickname + " OS mem")
-        plotWithLabel(singleTrace(ax, exp.os_map_heap, scale=Gi),
-                exp.nickname + " OS heap")
+#        plotWithLabel(singleTrace(ax, exp.os_map_heap, scale=Gi),
+#                exp.nickname + " OS heap")
         plotWithLabel(singleTrace(ax, exp.cgroups_memory_usage_bytes, scale=Gi),
                 exp.nickname + " cgroups-usage")
 

@@ -14,7 +14,7 @@ def actuallyprint(msg):
     print(msg)
     sys.stdout.flush()
 
-def autoconfig(config, memlimit):
+def autoconfig(config, memlimit, nodeCountFudge):
   actuallyprint("using node size roughly: " + config)
   sys.stdout.flush()
 
@@ -30,19 +30,18 @@ def autoconfig(config, memlimit):
   disk_num_journal_blocks = 2048
   journal_size = disk_num_journal_blocks * journal_block_size
 
-  MALLOC_OVERHEAD=1.00
   if config == "8mb":
     node_size = 8*1024*1024
     bucket_weight = 8356168
-    cache_size = int(memlimit // ((8*1024*1024)*MALLOC_OVERHEAD))
+    cache_size = int(memlimit * nodeCountFudge // ((8*1024*1024)))
   elif config == "1mb":
     node_size = 1*1024*1024
     bucket_weight = 1016136 # jonh has no idea where this number comes from, so I subtracted 32000 because that looks like a popular choice.
-    cache_size = int(memlimit // ((1*1024*1024)*MALLOC_OVERHEAD))
+    cache_size = int(memlimit * nodeCountFudge // ((1*1024*1024)))
   elif config == "64kb":
     node_size = 98304
     bucket_weight = 64220
-    cache_size = int(memlimit // ((64*1024)*MALLOC_OVERHEAD))
+    cache_size = int(memlimit * nodeCountFudge // ((64*1024)))
   else:
     assert False
 
@@ -64,7 +63,7 @@ def cgroup_defaults():
   ret = os.system("./tools/configure-cgroups.sh")
   assert ret == 0
 
-def set_mem_limit(pillow, limit):
+def set_mem_limit(limit):
   if limit.endswith("gb"):
     val = int(float(limit[:-2]) * 1024*1024*1024)
     actuallyprint("setting mem limit to " + str(val) + " bytes (" + limit + ")")
@@ -72,8 +71,7 @@ def set_mem_limit(pillow, limit):
     val = int(limit)
     actuallyprint("setting mem limit to " + str(val) + " bytes")
 
-  val = int(val * pillow)
-  actuallyprint("after pillow adjustment, limit is " + str(val) + " bytes")
+  val = int(val)
   ret = os.system("echo " + str(val) + " > /sys/fs/cgroup/memory/VeribetrfsExp/memory.limit_in_bytes")
   assert ret == 0
 
@@ -140,7 +138,7 @@ def main():
   value_updates = []
   config = None
   log_stats = False
-  pillow = 1.0  # amount of padding over nominal cache size for cgroup.
+  nodeCountFudge = 1.0  # Pretend we have more memory when computing node count budget, since mean node is 75% utilized. This lets us tune veri to exploit all available cgroup memory.
   max_children = None   # Default
 
   rocks = None
@@ -153,8 +151,8 @@ def main():
       workload = arg[len("workload=") : ]
     elif arg.startswith("device="):
       device = arg[len("device=") : ]
-    elif arg.startswith("pillow="):
-      pillow = float(arg[len("pillow=") : ])
+    elif arg.startswith("nodeCountFudge="):
+      nodeCountFudge = float(arg[len("nodeCountFudge=") : ])
     elif "Uint64=" in arg:
       sp = arg.split("=")
       assert len(sp) == 2
@@ -195,7 +193,7 @@ def main():
   if config != None:
     assert not rocks
     assert ram != None
-    value_updates = autoconfig(config, ram) + value_updates
+    value_updates = autoconfig(config, ram, nodeCountFudge) + value_updates
 
   if max_children != None:
     assert not rocks
@@ -209,7 +207,7 @@ def main():
 
   cgroup_defaults()
   if ram != None:
-    set_mem_limit(pillow, ram)
+    set_mem_limit(ram)
 
   ret = os.system("rm -rf build/")
   assert ret == 0

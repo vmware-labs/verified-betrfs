@@ -110,7 +110,8 @@ def monitor_worker_pipes(monitors):
     log("All jobs complete.")
 
 def launch_worker_pipes(workers, ntasks, lam, dry_run=False):
-    assert ntasks <= len(workers)
+    if ntasks > len(workers):
+        raise Exception("Requested %d tasks for %d workers" % (ntasks, len(workers)))
     monitors = []
     for idx in range(ntasks):
         worker = workers[idx]
