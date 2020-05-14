@@ -1275,3 +1275,25 @@ block-veri8m-0.6=expresults/recordcount-page-26-block-veri8m-0.6.data \
 block-veri8m-0.7=expresults/recordcount-page-26-block-veri8m-0.7.data \
 block-rocks=expresults/recordcount-page-26-block-rocks.data \
 
+
+tools/plot/perf-compare.py \
+output=recordcount-page-27-pageonly.png \
+page-veri64k-0.7=expresults/recordcount-page-27-page-veri64k-0.7.data \
+page-veri64k-0.9=expresults/recordcount-page-27-page-veri64k-0.9.data \
+page-veri1m-0.7=expresults/recordcount-page-27-page-veri1m-0.7.data \
+page-veri1m-0.9=expresults/recordcount-page-27-page-veri1m-0.9.data \
+page-veri8m-0.7=expresults/recordcount-page-27-page-veri8m-0.7.data \
+page-veri8m-0.9=expresults/recordcount-page-27-page-veri8m-0.9.data \
+block-rocks=expresults/recordcount-page-27-block-rocks.data
+
+tools/plot/perf-compare.py \
+output=recordcount-page-27-blockonly.png \
+block-veri64k-0.4=expresults/recordcount-page-27-block-veri64k-0.4.data \
+block-veri64k-0.5=expresults/recordcount-page-27-block-veri64k-0.5.data \
+block-veri1m-0.4=expresults/recordcount-page-27-block-veri1m-0.4.data \
+block-veri1m-0.5=expresults/recordcount-page-27-block-veri1m-0.5.data \
+block-veri8m-0.4=expresults/recordcount-page-27-block-veri8m-0.4.data \
+block-veri8m-0.5=expresults/recordcount-page-27-block-veri8m-0.5.data \
+block-rocks=expresults/recordcount-page-27-block-rocks.data
+
+eog recordcount-page-27-pageonly.png recordcount-page-27-blockonly.png
