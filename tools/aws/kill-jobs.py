@@ -3,7 +3,7 @@
 from automation import *
 
 def cmd_for_idx(idx, worker):
-    return ssh_cmd_for_worker(worker) + ["killall", "VeribetrfsYcsb", "RocksYcsb"]
+    return ssh_cmd_for_worker(worker) + ["killall", "VeribetrfsYcsb", "RocksYcsb", "make"]
 
 def main():
     workers = retrieve_running_workers()
