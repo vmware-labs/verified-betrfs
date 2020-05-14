@@ -207,7 +207,11 @@ namespace MainDiskIOHandler_Compile {
       if (!done) {
         aiocb* aiolist[1];
         aiolist[0] = &aio_req_write; //&aio_req_fsync;
+
+        unsigned long suspendStart = __rdtsc();
         aio_suspend(aiolist, 1, NULL);
+        unsigned long suspendEnd = __rdtsc();
+        IOAccounting::record.record_suspend(suspendEnd - suspendStart);
 
         check_if_complete();
         if (!done) {
@@ -484,7 +488,10 @@ namespace MainDiskIOHandler_Compile {
         break;
       }
 
+      unsigned long suspendStart = __rdtsc();
       aio_suspend(&tasks[0], i, NULL);
+      unsigned long suspendEnd = __rdtsc();
+      IOAccounting::record.record_suspend(suspendEnd - suspendStart);
 
       maybeStartWriteReq();
     }
@@ -507,7 +514,10 @@ namespace MainDiskIOHandler_Compile {
       fail("waitForOne called with no tasks\n");
     }
 
+    unsigned long suspendStart = __rdtsc();
     aio_suspend(&tasks[0], i, NULL);
+    unsigned long suspendEnd = __rdtsc();
+    IOAccounting::record.record_suspend(suspendEnd - suspendStart);
 
     maybeStartWriteReq();
   }

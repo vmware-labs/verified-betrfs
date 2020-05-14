@@ -63,4 +63,8 @@ void record_write_latency(unsigned long time_cycles) {
   }
 }
 
+void record_suspend(unsigned long time_cycles) {
+  // TODO jonh
+}
+
 } // namespace IOAccounting
