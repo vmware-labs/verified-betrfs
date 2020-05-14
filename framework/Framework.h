@@ -3,6 +3,7 @@
 #include "DafnyRuntime.h"
 #include "MallocAccounting.h"
 #include "NativeArrays.h"
+#include "Backtrace.h"
 
 #include <map>
 #include <unordered_map>
