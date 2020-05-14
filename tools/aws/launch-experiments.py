@@ -28,7 +28,7 @@ rocks_suite = Suite(
     Variable("git_branch", "git_branch", [Value("block", "leak-adventure-2")]),
     Variable("system", "run_veri", [Value("rocks", "rocks")]),
     *common_vars)
-suite = ConcatSuite("recordcount-page-27", page_veri_suite, block_veri_suite, rocks_suite)
+suite = ConcatSuite("recordcount-page-28", page_veri_suite, block_veri_suite, rocks_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
@@ -48,7 +48,7 @@ def main():
     log("VARIANTS %s" % suite.variants)
 
     workers = retrieve_running_workers()
-    worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=True)
+    worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=False)
     monitor_worker_pipes(worker_pipes)
 
 main()
