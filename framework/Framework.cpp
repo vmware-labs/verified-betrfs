@@ -638,19 +638,19 @@ void Application::Insert(ByteString key, ByteString val)
     bool success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
     // TODO remove this to enable more asyncronocity:
 
-    if (io->has_write_task()) {
+    if (!success && io->has_write_task()) {
       #ifdef LOG_QUERY_STATS
       benchmark_start("write (insert)");
       #endif
 
-      io->completeWriteTasks();
+      io->waitForOne();
 
       #ifdef LOG_QUERY_STATS
       benchmark_end("write (insert)");
       #endif
     }
 
-    this->maybeDoResponse();
+    while (this->maybeDoResponse()) { };
 
     if (success) {
       LOG("doing insert... success!");
@@ -710,18 +710,18 @@ ByteString Application::Query(ByteString key)
     }
     #endif
 
-    if (io->has_write_task()) {
+    if (!result.has_value() && io->has_write_task()) {
       #ifdef LOG_QUERY_STATS
       benchmark_start("write (query)");
       #endif
 
-      io->completeWriteTasks();
+      io->waitForOne();
 
       #ifdef LOG_QUERY_STATS
       benchmark_start("write (query)");
       #endif
     }
-    this->maybeDoResponse();
+    while (this->maybeDoResponse()) { };
 
     if (result.has_value()) {
       DafnySequence<uint8_t> val_bytes = *result;
