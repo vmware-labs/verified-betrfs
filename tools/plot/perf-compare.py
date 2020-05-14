@@ -20,17 +20,17 @@ def plot_perf_compare(experiments):
     try: plotGrandUnifiedMemory(plotHelper.nextAxis(depth=2), experiments)
     except: raise
 
-#    try: plotCpuTime(plotHelper.nextAxis(depth=2), experiments)
-#    except: raise
-
     try: plotSlowIos(plotHelper.nextAxis(depth=2), experiments)
+    except: raise
+
+    try: plotCpuTime(plotHelper.nextAxis(depth=2), experiments)
     except: raise
 
 #    try: plotProcIoBytes(plotHelper.nextAxis(depth=2), experiments)
 #    except: raise
 
-    try: plotIoLatencyCdf(plotHelper.nextAxis(depth=2), experiments)
-    except: raise
+#    try: plotIoLatencyCdf(plotHelper.nextAxis(depth=2), experiments)
+#    except: raise
 
 #    try: plotRocksIo(plotHelper.nextAxis(depth=2), experiments)
 #    except: raise

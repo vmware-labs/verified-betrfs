@@ -133,7 +133,13 @@ def set_xlim(ax, experiments):
         xlim_right = max(xlim_right, exp.op_max/K())
     ax.set_xlim(left = 0, right=xlim_right)
 
-spectrum = ["black", "brown", "red", "orange", "green", "indigo", "blue", "violet"]
+resistor_spectrum_ = ["black", "brown", "red", "orange", "green", "indigo", "blue", "violet"]
+# same colors as in the aws automation console
+spectrum_ = ["red", "yellow", "green", "cyan", "blue", "magenta",
+             "#800000", "#808000", "#008000", "#008080", "#000080", "#800080"]
+
+def spectrum(idx):
+    return spectrum_[idx % len(spectrum_)]
 
 def plotThroughput(ax, experiments):
     ax.set_title("op throughput")
@@ -141,21 +147,21 @@ def plotThroughput(ax, experiments):
     a2.set_ylabel("s")
     for expi in range(len(experiments)):
         exp = experiments[expi]
-        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, scale=K)), color=spectrum[expi])
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, scale=K)), color=spectrum(expi))
         line.set_label(exp.nickname + " tput")
-        ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, window=1000*K(), scale=K)), color=spectrum[expi], linestyle="dotted")
+        ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, window=1000*K(), scale=K)), color=spectrum(expi), linestyle="dotted")
 
         def elapsedTime(opn):
             return exp.elapsed[opn]
-        line, = a2.plot(*plotVsKop(ax, exp, elapsedTime), color=spectrum[expi])
+        line, = a2.plot(*plotVsKop(ax, exp, elapsedTime), color=spectrum(expi))
         line.set_label(exp.nickname + " rate")
-    ax.legend(loc="lower right")
+    ax.legend(loc="upper left")
     ax.set_yscale("log")
     ax.set_ylim(bottom=0.1)
     ax.grid(which="major", color="black")
     ax.grid(which="minor", color="#dddddd")
     set_xlim(ax, experiments)
-    a2.legend(loc="upper right")
+    a2.legend(loc="lower left")
     
     for exp in experiments[:1]:
         for phase,opn in exp.phase_starts.items():
@@ -165,7 +171,7 @@ def plotThroughput(ax, experiments):
 def plotManyForeach(ax, experiments, plotOneFunc):
     for i in range(len(experiments)):
         exp = experiments[i]
-        plotkwargs = {"color": spectrum[i % len(spectrum)]}
+        plotkwargs = {"color": spectrum(i)}
         plotOneFunc(exp, plotkwargs)
 
 def plotMany(ax, experiments, plotOneFunc):
@@ -183,10 +189,11 @@ def plotGrandUnifiedMemory(ax, experiments):
     coloridx = [0]
     def plotOneExp(exp, plotkwargs):
         labelidx = [0]
-        plotkwargs["color"] = spectrum[coloridx[0] % len(spectrum)]
+        plotkwargs["color"] = spectrum(coloridx[0])
+        is_first_exp = coloridx[0]==0
         coloridx[0] += 1
 
-        def plotWithLabel(lam, lbl):
+        def plotWithLabel(lam, exp_nick, lbl, always=False):
             plotkwargs["linestyle"] = linestyles[labelidx[0] % len(linestyles)]
             #print("using color %s for label %s" % (plotkwargs["color"], lbl))
             labelidx[0] += 1
@@ -195,29 +202,30 @@ def plotGrandUnifiedMemory(ax, experiments):
                 # don't clutter legendspace
                 return
             line, = ax.plot(xs, ys, **plotkwargs)
-            line.set_label(lbl + (" %.2f%sB" % (ys[-1], Gi.prefix)))
+            if is_first_exp or always:
+                line.set_label(exp_nick + lbl + (" %.2f%sB" % (ys[-1], Gi.prefix)))
 
         plotWithLabel(singleTrace(ax, exp.os_map_total, scale=Gi),
-                exp.nickname + " OS mem")
+                exp.nickname, " OS mem")
 #        plotWithLabel(singleTrace(ax, exp.os_map_heap, scale=Gi),
-#                exp.nickname + " OS heap")
+#                exp.nickname, " OS heap")
         plotWithLabel(singleTrace(ax, exp.cgroups_memory_usage_bytes, scale=Gi),
-                exp.nickname + " cgroups-usage")
+                exp.nickname, " cgroups-usage", always=True)
 
         # malloc & jemalloc
         plotWithLabel(singleTrace(ax, exp.jem_mapped, scale=Gi),
-                exp.nickname + " jem mapped")
+                exp.nickname, " jem mapped")
 #        plotWithLabel(singleTrace(ax, exp.jem_active, scale=Gi),
-#                exp.nickname + " jem active")
+#                exp.nickname, " jem active")
         plotWithLabel(singleTrace(ax, exp.jem_allocated, scale=Gi),
-                exp.nickname + " jem alloc")
+                exp.nickname, " jem alloc")
 
         mallocLam = singleTrace(ax, exp.microscopes["total"].getTrace("open_byte"), scale=Gi) if "total" in exp.microscopes else lambda opn: None
-        plotWithLabel(mallocLam, exp.nickname + " malloc")
+        plotWithLabel(mallocLam, exp.nickname, " malloc")
 
         # "underlying" view: measured in C++ below Dafny but above malloc
         plotWithLabel(singleTrace(ax, exp.kvl_underlying, scale=Gi),
-                exp.nickname + " underlying")
+                exp.nickname, " underlying")
 
         # internal views, stacked
         traceNames = ["bucket-message-bytes", "bucket-key-bytes", "pivot-key-bytes"]
@@ -228,7 +236,7 @@ def plotGrandUnifiedMemory(ax, experiments):
         try:
             stackedTraces = StackedTraces(StackFor(len(traceNames)))
             plotWithLabel(singleTrace(ax, stackedTraces, scale=Gi),
-                exp.nickname + " internal-accum-bytes")
+                exp.nickname, " internal-accum-bytes", always=True)
         except: pass
 
     for i in range(len(experiments)):

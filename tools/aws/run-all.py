@@ -1,9 +1,10 @@
 #!/usr/bin/python3
 
+import sys
 from automation import *
 
 def cmd_for_idx(idx, worker):
-    return Command("kill", ssh_cmd_for_worker(worker) + ["killall", "VeribetrfsYcsb", "RocksYcsb", "make"])
+    return Command("run", ssh_cmd_for_worker(worker) + sys.argv[1:])
 
 def main():
     workers = retrieve_running_workers()
