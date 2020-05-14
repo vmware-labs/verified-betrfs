@@ -48,11 +48,13 @@ module IndirectionTableImpl {
     var findLoclessIterator: Option<MutableMapModel.SimpleIterator>;
     ghost var Repr: set<object>;
 
-    method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator) {
+    method DebugAccumulate()
+    returns (acc:DebugAccumulator.DebugAccumulator)
+    requires false
+    {
       acc := DebugAccumulator.EmptyAccumulator();
       var a := new DebugAccumulator.AccRec(t.Count, "IndirectionTableModel.Entry");
       acc := DebugAccumulator.AccPut(acc, "t", a);
-      assume false; // DebugAccumulate
       var r := garbageQueue.DebugAccumulate();
       a := new DebugAccumulator.AccRec.Index(r);
       acc := DebugAccumulator.AccPut(acc, "garbageQueue", a);

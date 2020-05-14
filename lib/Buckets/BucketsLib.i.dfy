@@ -97,7 +97,12 @@ module BucketsLib {
   ensures keys[i] == key
   ensures msgs[i] == BucketMapOfSeq(keys, msgs)[key]
   {
-    assume false;
+    reveal_BucketMapOfSeq();
+    if key == keys[|keys| - 1] && msgs[|keys| - 1] == BucketMapOfSeq(keys, msgs)[key] {
+      i := |keys| - 1;
+    } else {
+      i := BucketMapOfSeqGetIndex(DropLast(keys), DropLast(msgs), key);
+    }
   }
 
   lemma BucketMapOfSeqMapsIndex(keys: seq<Key>, msgs: seq<Message>, i: int)
@@ -107,13 +112,34 @@ module BucketsLib {
   ensures keys[i] in BucketMapOfSeq(keys, msgs)
   ensures msgs[i] == BucketMapOfSeq(keys, msgs)[keys[i]]
   {
-    assume false;
+    reveal_BucketMapOfSeq();
+    if i == |keys| - 1 {
+    } else {
+      reveal_IsStrictlySorted();
+      BucketMapOfSeqMapsIndex(DropLast(keys), DropLast(msgs), i);
+    }
   }
 
+  lemma WFBucketMapOfWFMessageSeq(keys: seq<Key>, msgs: seq<Message>)
+  requires |keys| == |msgs|
+  requires WFMessageSeq(msgs)
+  ensures WFBucketMap(BucketMapOfSeq(keys, msgs))
+  {
+    forall key | key in BucketMapOfSeq(keys, msgs)
+    ensures BucketMapOfSeq(keys, msgs)[key] != IdentityMessage()
+    {
+      var i := BucketMapOfSeqGetIndex(keys, msgs, key);
+    }
+  }
   
   predicate WFBucketMap(bucket: BucketMap)
   {
     forall key | key in bucket :: bucket[key] != IdentityMessage()
+  }
+
+  predicate WFMessageSeq(messages: seq<Message>)
+  {
+    forall i | 0 <= i < |messages| :: messages[i] != IdentityMessage()
   }
 
   // TODO(robj): convert as much of this file as possible to require only PreWFBucket
@@ -127,6 +153,7 @@ module BucketsLib {
   {
     && PreWFBucket(bucket)
     && WFBucketMap(bucket.b)
+    && WFMessageSeq(bucket.msgs)
   }
 
   predicate BucketWellMarshalled(bucket: Bucket)

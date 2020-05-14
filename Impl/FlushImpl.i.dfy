@@ -61,12 +61,6 @@ module FlushImpl {
     var nodeOpt := s.cache.GetOpt(parentref);
     var parent := nodeOpt.value;
 
-    var parentWellMarshalled := parent.BucketWellMarshalled(slot);
-    var childrenWellMarshalled := child.BucketsWellMarshalled();
-    if !parentWellMarshalled || !childrenWellMarshalled {
-      return;
-    }
-
     ghost var parentI := parent.I();
     var childref := parent.children.value[slot];
 
