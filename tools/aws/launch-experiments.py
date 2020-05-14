@@ -4,10 +4,11 @@ from automation import *
 from suite import *
 
 suite = Suite(
-    "recordcount-page-13",
+    "recordcount-page-18",
     Variable("git_branch", "git_branch", [Value("page", "page-la2"), Value("block", "leak-adventure-2")]),
-    Variable("system", "run_veri", [Value("rocks", "rocks"), Value("veri64k", "config-64kb")]),
-    Variable("ram", "run_veri", [Value("2gb", "ram=2.0gb")]),
+    Variable("system", "run_veri", [Value("veri64k", "config-64kb"), Value("rocks", "rocks")]),
+    Variable("ram", "run_veri", [Value("2gb", "ram=1.818gb"), Value("pseudo2", "ram=2.42gb")]),
+    Variable("pillow", "run_veri", [Value("1.1", "pillow=1.1")]),
     Variable("device", "run_veri", [Value("disk", "device=disk")]),
     Variable("workload", "run_veri", [Value("wka1m", "workload=ycsb/wka-uniform-rc1000k.spec")]),
     Variable("duration", "run_veri", [Value("1h", "time_budget=1h")]),
