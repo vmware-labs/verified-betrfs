@@ -4,11 +4,13 @@ from automation import *
 from suite import *
 
 suite = Suite(
-    "recordcount-page-18",
-    Variable("git_branch", "git_branch", [Value("page", "page-la2"), Value("block", "leak-adventure-2")]),
-    Variable("system", "run_veri", [Value("veri64k", "config-64kb"), Value("rocks", "rocks")]),
-    Variable("ram", "run_veri", [Value("2gb", "ram=1.818gb"), Value("pseudo2", "ram=2.42gb")]),
-    Variable("pillow", "run_veri", [Value("1.1", "pillow=1.1")]),
+    "recordcount-page-19",
+#    Variable("git_branch", "git_branch", [Value("page", "page-la2"), Value("block", "leak-adventure-2")]),
+    Variable("git_branch", "git_branch", [Value("page", "page-la2")]),
+#    Variable("system", "run_veri", [Value("veri64k", "config-64kb"), Value("rocks", "rocks")]),
+    Variable("system", "run_veri", [Value("veri64k", "config-64kb")]),
+    Variable("ram", "run_veri", [Value("2gb", "ram=2.0b")]),
+    Variable("nodeCountFudge", "run_veri", [Value(str(f), "nodeCountFudge="+str(f)) for f in [0.8,0.9,1.0,1.1,1.2,1.3]]),
     Variable("device", "run_veri", [Value("disk", "device=disk")]),
     Variable("workload", "run_veri", [Value("wka1m", "workload=ycsb/wka-uniform-rc1000k.spec")]),
     Variable("duration", "run_veri", [Value("1h", "time_budget=1h")]),
@@ -32,7 +34,7 @@ def main():
     log("VARIANTS %s" % suite.variants)
 
     workers = retrieve_running_workers()
-    worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=False)
+    worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=True)
     monitor_worker_pipes(worker_pipes)
 
 main()

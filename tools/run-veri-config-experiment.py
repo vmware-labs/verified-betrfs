@@ -10,8 +10,13 @@ import time
 import datetime
 import signal
 
-def autoconfig(config, memlimit):
-  print("using node size roughly: " + config)
+def actuallyprint(msg):
+    print(msg)
+    sys.stdout.flush()
+
+def autoconfig(config, memlimit, nodeCountFudge):
+  actuallyprint("using node size roughly: " + config)
+  sys.stdout.flush()
 
   if memlimit.endswith("gb"):
     memlimit = int(float(memlimit[:-2]) * 1024*1024*1024)
@@ -20,15 +25,18 @@ def autoconfig(config, memlimit):
 
   itable_size = 8*1024*1024
 
-  MALLOC_OVERHEAD=1.3
   if config == "8mb":
     node_size = 8*1024*1024
     bucket_weight = 8356168
-    cache_size = int(memlimit // ((8*1024*1024)*MALLOC_OVERHEAD))
+    cache_size = int(memlimit * nodeCountFudge // ((8*1024*1024)))
+  elif config == "1mb":
+    node_size = 1*1024*1024
+    bucket_weight = 1016136 # jonh has no idea where this number comes from, so I subtracted 32000 because that looks like a popular choice.
+    cache_size = int(memlimit * nodeCountFudge // ((1*1024*1024)))
   elif config == "64kb":
     node_size = 98304
     bucket_weight = 64220
-    cache_size = int(memlimit // ((64*1024)*MALLOC_OVERHEAD))
+    cache_size = int(memlimit * nodeCountFudge // ((64*1024)))
   else:
     assert False
 
@@ -55,6 +63,7 @@ def set_mem_limit(limit):
     val = int(limit)
     print("setting mem limit to " + str(val) + " bytes")
 
+  val = int(val)
   ret = os.system("echo " + str(val) + " > /sys/fs/cgroup/memory/VeribetrfsExp/memory.limit_in_bytes")
   assert ret == 0
 
@@ -100,6 +109,8 @@ def main():
   value_updates = []
   config = None
   log_stats = False
+  nodeCountFudge = 1.0  # Pretend we have more memory when computing node count budget, since mean node is 75% utilized. This lets us tune veri to exploit all available cgroup memory.
+  max_children = None   # Default
 
   rocks = None
   time_budget_sec = 3600*24*365 # You get a year if you don't ask for a budget
@@ -111,6 +122,8 @@ def main():
       workload = arg[len("workload=") : ]
     elif arg.startswith("device="):
       device = arg[len("device=") : ]
+    elif arg.startswith("nodeCountFudge="):
+      nodeCountFudge = float(arg[len("nodeCountFudge=") : ])
     elif "Uint64=" in arg:
       sp = arg.split("=")
       assert len(sp) == 2
@@ -140,7 +153,7 @@ def main():
   if config != None:
     assert not rocks
     assert ram != None
-    value_updates = autoconfig(config, ram) + value_updates
+    value_updates = autoconfig(config, ram, nodeCountFudge) + value_updates
 
   assert workload != None
   assert device != None
