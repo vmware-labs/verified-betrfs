@@ -1,5 +1,7 @@
 include "../lib/Base/DebugAccumulator.i.dfy"
 include "NodeImpl.i.dfy"
+include "../lib/Base/Backtrace.s.dfy"
+
 //
 // Implements map<Reference, Node>
 //
