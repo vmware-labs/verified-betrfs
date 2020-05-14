@@ -133,7 +133,9 @@ def set_xlim(ax, experiments):
         xlim_right = max(xlim_right, exp.op_max/K())
     ax.set_xlim(left = 0, right=xlim_right)
 
-spectrum = ["black", "brown", "red", "orange", "green", "indigo", "blue", "violet"]
+spectrum_ = ["black", "brown", "red", "orange", "green", "indigo", "blue", "violet"]
+def spectrum(idx):
+    return spectrum_[idx % len(spectrum_)]
 
 def plotThroughput(ax, experiments):
     ax.set_title("op throughput")
@@ -141,21 +143,21 @@ def plotThroughput(ax, experiments):
     a2.set_ylabel("s")
     for expi in range(len(experiments)):
         exp = experiments[expi]
-        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, scale=K)), color=spectrum[expi])
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, scale=K)), color=spectrum(expi))
         line.set_label(exp.nickname + " tput")
-        ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, window=1000*K(), scale=K)), color=spectrum[expi], linestyle="dotted")
+        ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, window=1000*K(), scale=K)), color=spectrum(expi), linestyle="dotted")
 
         def elapsedTime(opn):
             return exp.elapsed[opn]
-        line, = a2.plot(*plotVsKop(ax, exp, elapsedTime), color=spectrum[expi])
+        line, = a2.plot(*plotVsKop(ax, exp, elapsedTime), color=spectrum(expi))
         line.set_label(exp.nickname + " rate")
-    ax.legend(loc="lower right")
+    ax.legend(loc="upper left")
     ax.set_yscale("log")
     ax.set_ylim(bottom=0.1)
     ax.grid(which="major", color="black")
     ax.grid(which="minor", color="#dddddd")
     set_xlim(ax, experiments)
-    a2.legend(loc="upper right")
+    a2.legend(loc="lower left")
     
     for exp in experiments[:1]:
         for phase,opn in exp.phase_starts.items():
@@ -165,7 +167,7 @@ def plotThroughput(ax, experiments):
 def plotManyForeach(ax, experiments, plotOneFunc):
     for i in range(len(experiments)):
         exp = experiments[i]
-        plotkwargs = {"color": spectrum[i % len(spectrum)]}
+        plotkwargs = {"color": spectrum(i)}
         plotOneFunc(exp, plotkwargs)
 
 def plotMany(ax, experiments, plotOneFunc):
@@ -183,7 +185,7 @@ def plotGrandUnifiedMemory(ax, experiments):
     coloridx = [0]
     def plotOneExp(exp, plotkwargs):
         labelidx = [0]
-        plotkwargs["color"] = spectrum[coloridx[0] % len(spectrum)]
+        plotkwargs["color"] = spectrum(coloridx[0])
         coloridx[0] += 1
 
         def plotWithLabel(lam, lbl):

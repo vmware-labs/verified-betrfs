@@ -1230,3 +1230,48 @@ The veri curves seem to mostly scale proportionately (except the red 1.0 one), b
   Even though it caches the same total amount of keyspace.
 There is 0.5gb of keyspace, actually. That might be a factor that really helps rocks and
   somehow hurts us (because of how writes trickle down our tree?)
+I wonder how we look on a read-mostly workload now. Or with much larger recordcount (> storage size)
+
+Toxin cleanse.
+tools/aws/run-all.py "cd veribetrfs; git checkout leak-adventure-2; git pull"
+
+Who's got something going on?
+tools/aws/run-all.py "ps auxww | grep Verib | grep -v grep"
+
+
+tools/plot/perf-compare.py \
+output=recordcount-page-26.png \
+page-veri64k-1.0=expresults/recordcount-page-26-page-veri64k-1.0.data \
+page-veri64k-1.1=expresults/recordcount-page-26-page-veri64k-1.1.data \
+page-veri1m-1.0=expresults/recordcount-page-26-page-veri1m-1.0.data \
+page-veri1m-1.1=expresults/recordcount-page-26-page-veri1m-1.1.data \
+page-veri8m-1.0=expresults/recordcount-page-26-page-veri8m-1.0.data \
+page-veri8m-1.1=expresults/recordcount-page-26-page-veri8m-1.1.data \
+block-veri64k-0.6=expresults/recordcount-page-26-block-veri64k-0.6.data \
+block-veri64k-0.7=expresults/recordcount-page-26-block-veri64k-0.7.data \
+block-veri1m-0.6=expresults/recordcount-page-26-block-veri1m-0.6.data \
+block-veri1m-0.7=expresults/recordcount-page-26-block-veri1m-0.7.data \
+block-veri8m-0.6=expresults/recordcount-page-26-block-veri8m-0.6.data \
+block-veri8m-0.7=expresults/recordcount-page-26-block-veri8m-0.7.data \
+block-rocks=expresults/recordcount-page-26-block-rocks.data \
+
+tools/plot/perf-compare.py \
+output=recordcount-page-26-pageonly.png \
+page-veri64k-1.0=expresults/recordcount-page-26-page-veri64k-1.0.data \
+page-veri64k-1.1=expresults/recordcount-page-26-page-veri64k-1.1.data \
+page-veri1m-1.0=expresults/recordcount-page-26-page-veri1m-1.0.data \
+page-veri1m-1.1=expresults/recordcount-page-26-page-veri1m-1.1.data \
+page-veri8m-1.0=expresults/recordcount-page-26-page-veri8m-1.0.data \
+page-veri8m-1.1=expresults/recordcount-page-26-page-veri8m-1.1.data \
+block-rocks=expresults/recordcount-page-26-block-rocks.data \
+
+tools/plot/perf-compare.py \
+output=recordcount-page-26-blockonly.png \
+block-veri64k-0.6=expresults/recordcount-page-26-block-veri64k-0.6.data \
+block-veri64k-0.7=expresults/recordcount-page-26-block-veri64k-0.7.data \
+block-veri1m-0.6=expresults/recordcount-page-26-block-veri1m-0.6.data \
+block-veri1m-0.7=expresults/recordcount-page-26-block-veri1m-0.7.data \
+block-veri8m-0.6=expresults/recordcount-page-26-block-veri8m-0.6.data \
+block-veri8m-0.7=expresults/recordcount-page-26-block-veri8m-0.7.data \
+block-rocks=expresults/recordcount-page-26-block-rocks.data \
+
