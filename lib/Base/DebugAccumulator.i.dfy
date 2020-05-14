@@ -38,26 +38,31 @@ module DebugAccumulator {
     var unit:string;
     var index:DebugAccumulator;
 
-    constructor(count:uint64, unit:string) {
+    constructor(count:uint64, unit:string)
+    {
       this.count := count;
       this.unit := unit;
     }
 
-    constructor Index(index:DebugAccumulator) {
+    constructor Index(index:DebugAccumulator)
+    {
       this.count := 0;
       this.unit := "";
       this.index := index;
     }
 
-    method doPrint(indent:uint64) {
-      assume false;
+    method doPrint(indent:uint64)
+    requires false
+    {
       var i := doIndent(indent);
       print i, this.key, ": ", this.count, " ", this.unit, "\n";
       Display(this.index, indent+2);
     }
   }
 
-  method doIndent(indent:uint64) returns (s:string) {
+  method doIndent(indent:uint64) returns (s:string)
+  requires false
+  {
     var x:uint64 := 0;
     s := "";
     while x <  indent {
@@ -74,14 +79,15 @@ module DebugAccumulator {
     []
   }
   method AccPut(acc: DebugAccumulator, key:string, rec:AccRec) returns (out:DebugAccumulator)
+  requires false
   {
-    assume false;
     rec.key := key;
     out := acc + [rec];
   }
 
-  method Display(a:DebugAccumulator, indent: uint64) {
-    assume false;
+  method Display(a:DebugAccumulator, indent: uint64)
+  requires false
+  {
     var i:uint64 := 0;
     while i < |a| as uint64 {
       a[i].doPrint(indent);

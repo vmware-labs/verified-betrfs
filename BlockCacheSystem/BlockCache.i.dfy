@@ -87,8 +87,6 @@ module BlockCache refines Transactable {
   {
     && (forall loc | loc in indirectionTable.locs.Values :: ValidNodeLocation(loc))
     && indirectionTable.locs.Keys <= indirectionTable.graph.Keys
-    // TODO this may be necessary for an assume in Marshalling, but may be solved by the weights branch
-    // && IndirectionTableGraphHasUniqueRefsInAdjList(indirectionTable.graph)
     && G.Root() in indirectionTable.graph
     && GraphClosed(indirectionTable.graph)
   }

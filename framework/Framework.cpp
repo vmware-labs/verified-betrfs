@@ -547,6 +547,10 @@ void Application::crash() {
   LOG("'crashing' and reinitializing");
   LOG("");
   initialize();
+
+  #ifdef USE_UNVERIFIED_ROW_CACHE
+  unverifiedRowCache = RowCache();
+  #endif
 }
 
 void Application::EvictEverything() {
@@ -614,6 +618,10 @@ void Application::Sync(bool graphSync) {
 
 void Application::Insert(ByteString key, ByteString val)
 {
+  #ifdef USE_UNVERIFIED_ROW_CACHE
+  unverifiedRowCache.set(key, val);
+  #endif
+
   #ifdef LOG_QUERY_STATS
   currently_doing_action = ACTION_INSERT;
   auto t1 = chrono::high_resolution_clock::now();
@@ -670,6 +678,13 @@ int queryCount = 0;
 
 ByteString Application::Query(ByteString key)
 {
+  #ifdef USE_UNVERIFIED_ROW_CACHE
+  auto cache_res = unverifiedRowCache.get(key);
+  if (cache_res.has_value()) {
+    return cache_res.value();
+  }
+  #endif
+
   #ifdef LOG_QUERY_STATS
   currently_doing_action = ACTION_QUERY;
   auto t1 = chrono::high_resolution_clock::now();
@@ -727,6 +742,10 @@ ByteString Application::Query(ByteString key)
         benchmark_append("Application::Query", ns);
       }
       queryCount++;
+      #endif
+
+      #ifdef USE_UNVERIFIED_ROW_CACHE
+      unverifiedRowCache.set(key, val);
       #endif
 
       return val;

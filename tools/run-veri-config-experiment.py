@@ -247,6 +247,15 @@ def main():
   else:
     wl = workload
   actuallyprint("workload: " + wl)
+
+  if device == "optane":
+    loc = "/scratch0/tjhance/ycsb/"
+  elif device == "disk":
+    #loc = "/home/tjhance/ycsb/"
+    loc = "/tmp/veribetrfs/"
+  else:
+    wl = workload
+  actuallyprint("workload: " + wl)
   sys.stdout.flush()
 
   loc = find_loc_for_device(device)

@@ -27,6 +27,8 @@ export S
       lemma_SizeOfV_parse_Val
   reveals G, V, ValidGrammar, ValInGrammar, ValidVal, SizeOfV, SeqSum
 
+export Internal reveals *
+
 export extends S
 
 datatype G = GUint32

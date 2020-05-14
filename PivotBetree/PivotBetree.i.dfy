@@ -338,7 +338,7 @@ module PivotBetree refines UIStateMachine {
     ensures B.Init(Ik(k), I(k, s))
   {
     reveal_WeightBucketList();
-    reveal_WeightBucket();
+    //reveal_WeightBucket();
     assert SpecRef.INode(EmptyNode()) == B.EmptyNode();
     BInv.InitImpliesInv(Ik(k), I(k, s));
   }

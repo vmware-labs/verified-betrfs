@@ -22,7 +22,10 @@ module BlockAllocatorImpl {
     var outstanding: BitmapImpl.Bitmap;
     var full: BitmapImpl.Bitmap;
 
-    method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator) {
+    method DebugAccumulate()
+    returns (acc:DebugAccumulator.DebugAccumulator)
+    requires false
+    {
       acc := DebugAccumulator.EmptyAccumulator();
       var r := ephemeral.DebugAccumulate();
       var a := new DebugAccumulator.AccRec.Index(r);

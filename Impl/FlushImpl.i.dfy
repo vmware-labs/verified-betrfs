@@ -61,12 +61,6 @@ module FlushImpl {
     var nodeOpt := s.cache.GetOpt(parentref);
     var parent := nodeOpt.value;
 
-    var parentWellMarshalled := parent.BucketWellMarshalled(slot);
-    var childrenWellMarshalled := child.BucketsWellMarshalled();
-    if !parentWellMarshalled || !childrenWellMarshalled {
-      return;
-    }
-
     ghost var parentI := parent.I();
     var childref := parent.children.value[slot];
 
@@ -84,9 +78,9 @@ module FlushImpl {
     assert s.I().cache[childref].buckets == MutBucket.ISeq(child.buckets);
     assert WeightBucketList(MutBucket.ISeq(child.buckets)) <= MaxTotalBucketWeight();
 
-    ghost var flushedKey;
     var newparentBucket, newbuckets;
-    newparentBucket, newbuckets, flushedKey := BucketImpl.PartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
+    newparentBucket, newbuckets := BucketImpl.PartialFlush(
+        parent.buckets[slot], child.buckets, child.pivotTable);
     var newchild := new Node(child.pivotTable, child.children, newbuckets);
     newchild.RecopyPivots();  // amassy sort of thing.
 

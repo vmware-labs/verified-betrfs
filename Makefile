@@ -298,6 +298,7 @@ VERIBETRFS_AUX_FILES=\
 	build/framework/Benchmarks.o \
 	build/framework/BundleWrapper.o \
 	build/framework/Crc32.o \
+	build/framework/UnverifiedRowCache.o \
 	build/framework/Framework.o \
 	build/framework/MallocAccounting.o \
 	build/framework/Backtrace.o \

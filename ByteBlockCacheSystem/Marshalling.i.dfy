@@ -64,11 +64,16 @@ module Marshalling {
     ])
   }
 
+  function method IndirectionTableRowGrammar() : G
+  {
+    GTuple([GUint64, GUint64, GUint64, GUint64Array])
+  }
+
   function method IndirectionTableGrammar() : G
   ensures ValidGrammar(IndirectionTableGrammar())
   {
     // (Reference, address, len, successor-list) triples
-    GArray(GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+    GArray(IndirectionTableRowGrammar())
   }
 
   function method SuperblockGrammar() : G

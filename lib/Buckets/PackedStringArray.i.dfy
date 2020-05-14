@@ -773,7 +773,7 @@ module PackedStringArray {
       requires WF()
       reads this, this.Repr
     {
-      4 + 4 * nstrings + if nstrings == 0 then 0 else offsets[nstrings-1] as uint64
+      4 * nstrings + if nstrings == 0 then 0 else offsets[nstrings-1] as uint64
     }
 
     predicate canAppend(str: Key)

@@ -3,6 +3,9 @@
 #include "DafnyRuntime.h"
 #include "Framework.h"
 
+// Uncomment this to enable the unverified row cache:
+//#define USE_UNVERIFIED_ROW_CACHE
+
 struct ByteString {
   DafnySequence<uint8> seq;
 
@@ -42,6 +45,27 @@ struct ByteString {
   }
 };
 
+struct QueueEntry {
+  int prev;
+  int next;
+  ByteString key;
+  ByteString value;
+};
+
+
+class RowCache {
+public:
+  RowCache();
+  std::optional<ByteString> get(ByteString key);
+  void set(ByteString key, ByteString val);
+
+private:
+  std::map<ByteString, int> m;
+  std::vector<QueueEntry> queue;
+  int head;
+  int tail;
+};
+
 class Application {
 public:
   Application(std::string filename);
@@ -72,4 +96,8 @@ private:
   void log(std::string const&);
 
   UI_Compile::SuccResultList SuccOnce(UI_Compile::RangeStart start, uint64 maxToFind);
+
+#ifdef USE_UNVERIFIED_ROW_CACHE
+  RowCache unverifiedRowCache;
+#endif
 };
