@@ -316,9 +316,7 @@ module BucketImpl {
         return true;
       }
 
-      assume 0 < |Bucket.keys|; // Need to fill in defs in BucketsLib to prove this.
-      assume false;  // Need to fill in defs in BucketsLib to prove correctness.
-      
+      assert forall k :: k in Bucket.keys <==> k in I().b;
       
       if i < |pivots| as uint64 {
         var lastkey := GetLastKey();
@@ -719,11 +717,11 @@ module BucketImpl {
       ensures forall k | k in Bucket.keys :: Ord.lte(result, k)
     {
       if format.BFTree? {
-        assume false; // Need to fill in BucketsLib to prove 0 < |Interpretation(tree)|
         result := KMB.MinKey(tree);
       } else if format.BFPkv? {
-        assume false;
         result := PackedKV.FirstKey(pkv);
+        assert result == PackedKV.I(pkv).keys[0];
+        reveal BucketsLib.Lexicographic_Byte_Order.IsSorted();
       }
     }
     
@@ -748,7 +746,6 @@ module BucketImpl {
         if |key| as uint64 == 0 {
           return [0];
         } else {
-          assume false;
           return key;
         }
       }
@@ -762,11 +759,11 @@ module BucketImpl {
       ensures forall k | k in Bucket.keys :: Ord.lte(k, result)
     {
       if format.BFTree? {
-        assume false; // Need to fill in BucketsLib to prove 0 < |Interpretation(tree)|
         result := KMB.MaxKey(tree);
       } else if format.BFPkv? {
-        assume false;
         result := PackedKV.LastKey(pkv);
+        assert result == Last(PackedKV.I(pkv).keys);
+        reveal BucketsLib.Lexicographic_Byte_Order.IsSorted();
       }
     }
     
@@ -938,9 +935,9 @@ module BucketImpl {
     ensures IIterator(it') == BucketIteratorModel.IterInc(I(), IIterator(it))
     {
       BucketIteratorModel.lemma_NextFromIndex(I(), IIterator(it));
-      assume false;
 
       BucketIteratorModel.reveal_IterInc();
+      NumElementsLteWeight(I());
       it' := makeIter(I(), it.i + 1);
     }
 
