@@ -4,7 +4,6 @@ include "KVList.i.dfy"
 include "../../PivotBetree/Bounds.i.dfy"
 include "BucketIteratorModel.i.dfy"
 include "BucketModel.i.dfy"
-include "KVListPartialFlush.i.dfy"
 include "KMBPKVOps.i.dfy"
 
 //
@@ -116,10 +115,10 @@ module BucketImpl {
 
     var tree: KMB.Node?;
     var pkv: PackedKV.Pkv;
-    
+
     var Weight: uint64;
     var sorted: bool
-    
+
     ghost var Repr: set<object>;
     ghost var Bucket: Bucket;
 
@@ -136,9 +135,8 @@ module BucketImpl {
         && tree.repr <= Repr
         && KMB.WF(tree)
         && Weight as int < Uint64UpperBound()
-        && forall k | k in KMB.Interpretation(tree) :: |k| <= KeyType.MaxLen() as nat
-        && var interp := map k: Key | k in KMB.Interpretation(tree) :: KMB.Interpretation(tree)[k];
-        && Bucket == B(interp)
+        && (forall k | k in KMB.Interpretation(tree) :: |k| <= KeyType.MaxLen() as nat)
+        && Bucket == B(KMB.Interpretation(tree))
       ))
       && (format.BFPkv? ==> (
         && tree == null
@@ -183,12 +181,6 @@ module BucketImpl {
       assume WFBucket(Bucket);
     }
 
-    lemma NumElementsLteWeight(bucket: Bucket)
-      ensures |bucket.b| < WeightBucket(bucket)
-    {
-      assume false;
-    }
-    
     method GetPkv() returns (pkv: PKV.Pkv)
     requires Inv()
     ensures PKV.WF(pkv)
@@ -196,7 +188,7 @@ module BucketImpl {
     {
       if (format.BFTree?) {
         NumElementsLteWeight(B(KMB.Interpretation(tree)));
-        assume false;
+        KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
         pkv := tree_to_pkv(tree);
       } else {
         pkv := this.pkv;
@@ -211,7 +203,6 @@ module BucketImpl {
       // ensures Repr == old(Repr)
       // modifies this
     {
-      assume false;
       if (format.BFTree?) {
         b := true;
       } else {
@@ -547,7 +538,6 @@ module BucketImpl {
     requires Inv()
     ensures m == bucketBinarySearchLookup(I(), key)
     {
-      assume false;
       if format.BFTree? {
         m := KMB.Query(tree, key);
       } else if format.BFPkv? {
@@ -663,7 +653,8 @@ module BucketImpl {
       if format.BFPkv? {
         pkv := this.pkv;
       } else {
-        assume false;
+        NumElementsLteWeight(B(KMB.Interpretation(tree)));
+        KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
         pkv := tree_to_pkv(tree);
       }
       
@@ -762,7 +753,8 @@ module BucketImpl {
 
       var pkv;
       if format.BFTree? {
-        assume false; // NumElements issue
+        NumElementsLteWeight(B(KMB.Interpretation(tree)));
+        KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
         pkv := tree_to_pkv(tree);
       } 
       bucket' := new MutBucket.InitFromPkv(pkv, true);
@@ -879,11 +871,10 @@ module BucketImpl {
       if format.BFPkv? {
         pkv := this.pkv;
       } else {
-        assume KMBBOps.NumElements(tree) < Uint64UpperBound();
+        NumElementsLteWeight(B(KMB.Interpretation(tree)));
+        KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
         pkv := tree_to_pkv(tree);
       }
-
-      assume false;
 
       BucketIteratorModel.lemma_NextFromIndex(I(), IIterator(it));
         
@@ -897,15 +888,54 @@ module BucketImpl {
     }
   }
 
+  method pkvList2BucketList(pkvs: seq<PKV.Pkv>, sorted: bool)
+  returns (buckets: seq<MutBucket>)
+  requires |pkvs| < Uint64UpperBound()
+  requires forall i | 0 <= i < |pkvs| :: PKV.WF(pkvs[i])
+  requires sorted ==>
+           forall i | 0 <= i < |pkvs| :: BucketWellMarshalled(PKV.I(pkvs[i]))
+  ensures |buckets| == |pkvs|
+  ensures allocated(MutBucket.ReprSeq(buckets))
+  ensures fresh(MutBucket.ReprSeq(buckets))
+  ensures MutBucket.ReprSeqDisjoint(buckets)
+  ensures MutBucket.InvSeq(buckets)
+  ensures MutBucket.ISeq(buckets) == DPKV.PKVISeq(pkvs)
+  {
+    var abuckets := new MutBucket?[|pkvs| as uint64];
+    var i: uint64 := 0;
+    while i < |pkvs| as uint64
+      invariant i as nat <= |pkvs|
+      invariant forall j | 0 <= j < i :: abuckets[j] != null
+      invariant forall j | 0 <= j < i :: abuckets[j].Inv()
+      invariant forall j | 0 <= j < i :: abuckets[j].Bucket == PKV.I(pkvs[j])
+      invariant forall j | 0 <= j < i :: abuckets !in abuckets[j].Repr
+      invariant forall j,k | 0 <= j < i && 0 <= k < i && j != k ::
+          abuckets[k].Repr !! abuckets[j].Repr
+      invariant forall j | 0 <= j < i :: fresh(abuckets[j].Repr)
+    {
+      abuckets[i] := new MutBucket.InitFromPkv(pkvs[i], sorted);
+      i := i + 1;
+    }
+    buckets := abuckets[..];
+
+    MutBucket.AllocatedReprSeq(buckets);
+
+    assert MutBucket.ReprSeqDisjoint(buckets) by {
+      MutBucket.reveal_ReprSeqDisjoint();
+    }
+    assert MutBucket.ISeq(buckets) == DPKV.PKVISeq(pkvs);
+    MutBucket.reveal_ReprSeq();
+    assert fresh(MutBucket.ReprSeq(buckets));
+  }
+
   method PartialFlush(top: MutBucket, bots: seq<MutBucket>, pivots: seq<Key>)
-    returns (newtop: MutBucket, newbots: seq<MutBucket>, ghost flushedKeys: set<Key>)
+    returns (newtop: MutBucket, newbots: seq<MutBucket>)
     requires top.Inv()
     requires forall i | 0 <= i < |bots| :: bots[i].Inv()
     requires |pivots| + 1 == |bots| < Uint64UpperBound()
     requires PivotsLib.WFPivots(pivots)
+    requires WeightBucket(top.I()) <= MaxTotalBucketWeight()
     requires WeightBucketList(MutBucket.ISeq(bots)) <= MaxTotalBucketWeight()
-    requires BucketWellMarshalled(top.I())
-    requires BucketListWellMarshalled(MutBucket.ISeq(bots))
     ensures forall i | 0 <= i < |newbots| :: newbots[i].Inv()
     //ensures forall i | 0 <= i < |newbots| :: fresh(newbots[i].Repr)
     ensures fresh(MutBucket.ReprSeq(newbots))
@@ -916,39 +946,59 @@ module BucketImpl {
     // shouldn't need old in the line below, but dafny doesn't see
     // that WeightBucketList(MutBucket.ISeq(bots)) <=
     // MaxTotalBucketWeight() still holds after the function returns.
-    ensures partialFlushResult(newtop.I(), MutBucket.ISeq(newbots), flushedKeys) == BucketModel.partialFlush(top.I(), old(MutBucket.ISeq(bots)), pivots)
+    ensures partialFlushResult(newtop.I(), MutBucket.ISeq(newbots))
+        == BucketModel.partialFlush(top.I(), pivots, old(MutBucket.ISeq(bots)))
   {
+    MutBucket.AllocatedReprSeq(bots);
+
     var i: uint64 := 0;
-    var totalWeight := 0;
     var botPkvs: array<PKV.Pkv> := new PKV.Pkv[|bots| as uint64];
+    var sorted := true;
     while i < |bots| as uint64
       invariant i as nat <= |bots|
+      invariant forall j | 0 <= j < i :: PKV.WF(botPkvs[j])
+      invariant forall j | 0 <= j < i :: PKV.I(botPkvs[j]) == bots[j].Bucket
+      invariant forall j | 0 <= j < i :: |PKV.IKeys(botPkvs[j].keys)| < 0x1000_0000
+      invariant sorted ==> forall j | 0 <= j < i ::
+          BucketWellMarshalled(PKV.I(botPkvs[j]))
     {
       botPkvs[i] := bots[i].GetPkv();
-      assume false;
-      totalWeight := totalWeight + PKV.WeightPkv(botPkvs[i]);
+      NumElementsLteWeight(PKV.I(botPkvs[i]));
+      WeightBucketLeBucketList(MutBucket.ISeq(bots), i as int);
+      if !bots[i].sorted {
+        sorted := false;
+      }
+      //assert |PKV.IKeys(botPkvs[i].keys)|
+      //    <= WeightBucket(PKV.I(botPkvs[i]))
+      //    <= WeightBucketList(MutBucket.ISeq(bots))
+      //    < 0x1000_0000;
       i := i + 1;
     }
 
-    assume false;
+    var botPkvsSeq := botPkvs[..];
+
+    NumElementsLteWeight(top.Bucket);
+    assert DPKV.PKVISeq(botPkvsSeq) == MutBucket.ISeq(bots);
 
     var topPkv := top.GetPkv();
-    
-    var result := MergeToChildren(topPkv, pivots, botPkvs[..], MaxTotalBucketWeightUint64() - totalWeight);
-
-    newtop := new MutBucket.InitFromPkv(result.top, true);
-
-    var anewbots := new MutBucket[|result.bots| as uint64];
-    i := 0;
-    while i < |result.bots| as uint64
-      invariant i as nat <= |result.bots|
-    {
-      anewbots[i] := new MutBucket.InitFromPkv(result.bots[i], true);
-      i := i + 1;
+    if !top.sorted {
+      sorted := false;
     }
 
-    newbots := anewbots[..];
-    assume false;
+    var result := DPKV.PartialFlush(topPkv, pivots, botPkvsSeq);
+
+    assert sorted ==>
+      && BucketWellMarshalled(PKV.I(result.top)) 
+      && (forall j | 0 <= j < |result.bots| ::
+          BucketWellMarshalled(PKV.I(result.bots[j])))
+    by {
+      if sorted {
+        partialFlushWeightPreservesSorted(top.Bucket, pivots, MutBucket.ISeq(bots));
+      }
+    }
+
+    newtop := new MutBucket.InitFromPkv(result.top, sorted);
+    newbots := pkvList2BucketList(result.bots, sorted);
   }
 }
 

@@ -27,6 +27,16 @@ module Sequences {
   function Set<T>(run: seq<T>) : set<T> {
     set x : T | x in multiset(run)
   }
+
+  lemma SetCardinality<T>(run: seq<T>)
+    ensures |Set(run)| <= |run|
+  {
+    if |run| == 0 {
+    } else {
+      assert Set(run) == Set(DropLast(run)) + {Last(run)};
+      SetCardinality(DropLast(run));
+    }
+  }
   
   function ISet<T>(run: seq<T>) : iset<T> {
     iset x : T | x in multiset(run)
@@ -59,6 +69,23 @@ module Sequences {
     } else {
       NoDupesSetCardinality(DropLast(a));
       assert Set(a) == Set(DropLast(a)) + {Last(a)};
+    }
+  }
+
+  lemma NoDupesMultiset<T>(a: seq<T>)
+    requires NoDupes(a)
+    ensures forall x | x in multiset(a) :: multiset(a)[x] == 1
+  {
+    if |a| == 0 {
+    } else {
+      assert a == DropLast(a) + [ Last(a) ];
+      assert Last(a) !in DropLast(a) by {
+        reveal_NoDupes();
+      }
+      assert NoDupes(DropLast(a)) by {
+        reveal_NoDupes();
+      }
+      NoDupesMultiset(DropLast(a));
     }
   }
   

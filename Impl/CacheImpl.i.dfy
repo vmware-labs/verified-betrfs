@@ -28,7 +28,10 @@ module CacheImpl {
     var cache: MM.ResizingHashMap<Node>;
     ghost var Repr: set<object>;
 
-    method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator) {
+    method DebugAccumulate()
+    returns (acc:DebugAccumulator.DebugAccumulator)
+    requires false
+    {
       acc := DebugAccumulator.EmptyAccumulator();
       var a := new DebugAccumulator.AccRec(cache.Count, "Node");
       acc := DebugAccumulator.AccPut(acc, "cache", a);

@@ -1,5 +1,6 @@
 include "PackedStringArray.i.dfy"
 include "BucketsLib.i.dfy"
+include "BucketModel.i.dfy"
 
 module PackedKV {
   import PSA = PackedStringArray
@@ -467,55 +468,6 @@ module PackedKV {
     WellMarshalledBucketsEq(iresult, isplit);
   }
 
-  // TODO: add support for partial merges.  (slack is unused at the moment)
-  function mergeToOneChild(top: Pkv, from: nat, to: nat, bot: Pkv, slack: uint64) : (result: Option<Pkv>)
-    requires WF(top)
-    requires WF(bot)
-    requires from <= to <= NumKVPairs(top) as nat
-    ensures result.Some? ==> WF(result.value)
-    decreases to - from + NumKVPairs(bot) as nat
-  {
-    //assert 0 < NumKVPairs(top) ==> PSA.LastElement(top.keys) == Last(PSA.I(top.keys));
-    //assert 0 < NumKVPairs(bot) ==> PSA.LastElement(bot.keys) == Last(PSA.I(bot.keys));
-    if from == to then
-      Some(bot)
-    else if NumKVPairs(bot) == 0 then
-      Some(subPkv(top, from as uint64, to as uint64))
-    else if PSA.psaElement(top.keys, to as uint64 - 1) == PSA.LastElement(bot.keys) then (
-      var submerge := mergeToOneChild(DropLast(top), from, to-1, DropLast(bot), slack);
-      var key := PSA.psaElement(top.keys, to as uint64 - 1);
-      assert key == PSA.I(top.keys)[to-1];
-      var topmsg := bytestring_to_Message(PSA.psaElement(top.messages, to as uint64 - 1));
-      var botmsg := bytestring_to_Message(PSA.LastElement(bot.messages));
-      var msg := ValueMessage.Merge(topmsg, botmsg);
-      var bytemsg := Message_to_bytestring(msg);
-      if submerge == None || msg == IdentityMessage() then
-        submerge
-      else if !canAppend(submerge.value, key, bytemsg) then
-        None
-      else 
-        Some(AppendEncodedMessage(submerge.value, key, bytemsg))
-    ) else if Keyspace.lt(PSA.I(top.keys)[to - 1], Last(PSA.I(bot.keys))) then (
-      var submerge := mergeToOneChild(top, from, to, DropLast(bot), slack);
-      var key := PSA.LastElement(bot.keys);
-      assert key == PSA.I(bot.keys)[PSA.psaNumStrings(bot.keys)-1];
-      var msg := PSA.LastElement(bot.messages);
-      if submerge == None || !canAppend(submerge.value, key, msg) then
-        None
-      else 
-        Some(AppendEncodedMessage(submerge.value, key, msg))
-    ) else (
-      var submerge := mergeToOneChild(top, from, to-1, bot, slack);
-      var key := PSA.psaElement(top.keys, to as uint64 - 1);
-      assert key == PSA.I(top.keys)[to-1];
-      var msg := PSA.LastElement(top.messages);
-      if submerge == None || !canAppend(submerge.value, key, msg) then
-        None
-      else 
-        Some(AppendEncodedMessage(submerge.value, key, msg))
-    )    
-  }
-
   lemma psaTotalLengthBound(psa: PSA.Psa, maxlen: nat)
     requires PSA.WF(psa)
     requires forall i | 0 <= i < |PSA.I(psa)| :: |PSA.I(psa)[i]| <= maxlen
@@ -531,73 +483,6 @@ module PackedKV {
     }
   }
   
-  // lemma MergeWillSucceed(top: Pkv, bot: Pkv) returns (result: Pkv)
-  //   requires WF(top)
-  //   requires WF(bot)
-  //   requires NumKVPairs(top) + NumKVPairs(bot) < 0x1_0000_0000
-  //   requires PSA.psaTotalLength(top.keys) + PSA.psaTotalLength(bot.keys) < 0x1_0000_0000
-  //   requires (NumKVPairs(top) as nat + NumKVPairs(bot) as nat) * (1 + ValueType.MaxLen() as nat) < 0x1_0000_0000
-  //   ensures Merge(top, bot) == Some(result)
-  //   ensures NumKVPairs(result) <= NumKVPairs(top) + NumKVPairs(bot)
-  //   ensures PSA.psaTotalLength(result.keys) <= PSA.psaTotalLength(top.keys) + PSA.psaTotalLength(bot.keys)
-  //   ensures PSA.psaTotalLength(result.messages) as nat
-  //   <= (NumKVPairs(top) as nat + NumKVPairs(bot) as nat) * (1 + ValueType.MaxLen() as nat)
-  //   decreases NumKVPairs(top) + NumKVPairs(bot)
-  // {
-  //   assert 0 < NumKVPairs(top) ==> PSA.LastElement(top.keys) == Last(PSA.I(top.keys));
-  //   assert 0 < NumKVPairs(bot) ==> PSA.LastElement(bot.keys) == Last(PSA.I(bot.keys));
-  //   if NumKVPairs(top) == 0 {
-  //     psaTotalLengthBound(bot.messages, ValueType.MaxLen() as nat);
-  //     result := bot;
-  //   } else if NumKVPairs(bot) == 0 {
-  //     psaTotalLengthBound(top.messages, ValueType.MaxLen() as nat);
-  //     result := top;
-  //   } else if PSA.LastElement(top.keys) == PSA.LastElement(bot.keys) {
-  //     var submerge := Merge(DropLast(top), DropLast(bot));
-  //     var key := PSA.LastElement(top.keys);
-  //     var topmsg := bytestring_to_Message(PSA.LastElement(top.messages));
-  //     var botmsg := bytestring_to_Message(PSA.LastElement(bot.messages));
-  //     var msg := ValueMessage.Merge(topmsg, botmsg);
-  //     var bytemsg := Message_to_bytestring(msg);
-  //     var submergepsa := MergeWillSucceed(DropLast(top), DropLast(bot));
-  //     if msg == IdentityMessage() {
-  //       result := submergepsa;
-  //     } else {
-  //       result := AppendEncodedMessage(submerge.value, key, bytemsg);
-  //     }
-  //   } else if Keyspace.lt(PSA.LastElement(top.keys), PSA.LastElement(bot.keys)) {
-  //     var submerge := Merge(top, DropLast(bot));
-  //     var key := PSA.LastElement(bot.keys);
-  //     var msg := PSA.LastElement(bot.messages);
-  //     assert msg == Last(PSA.I(bot.messages));
-  //     var submergepsa := MergeWillSucceed(top, DropLast(bot));
-  //     result := AppendEncodedMessage(submerge.value, key, msg);
-  //   } else {
-  //     var submerge := Merge(DropLast(top), bot);
-  //     var key := PSA.LastElement(top.keys);
-  //     var msg := PSA.LastElement(top.messages);
-  //     assert msg == Last(PSA.I(top.messages));
-  //     var submergepsa := MergeWillSucceed(DropLast(top), bot);
-  //     result := AppendEncodedMessage(submerge.value, key, msg);
-  //   }
-  // }
-
-  // lemma MergeWillSucceedNoReturn(top: Pkv, bot: Pkv)
-  //   requires WF(top)
-  //   requires WF(bot)
-  //   requires NumKVPairs(top) + NumKVPairs(bot) < 0x1_0000_0000
-  //   requires PSA.psaTotalLength(top.keys) + PSA.psaTotalLength(bot.keys) < 0x1_0000_0000
-  //   requires (NumKVPairs(top) as nat + NumKVPairs(bot) as nat) * (1 + ValueType.MaxLen() as nat) < 0x1_0000_0000
-  //   ensures Merge(top, bot).Some?
-  //   ensures NumKVPairs(Merge(top, bot).value) <= NumKVPairs(top) + NumKVPairs(bot)
-  //   ensures PSA.psaTotalLength(Merge(top, bot).value.keys)
-  //   <= PSA.psaTotalLength(top.keys) + PSA.psaTotalLength(bot.keys)
-  //   ensures PSA.psaTotalLength(Merge(top, bot).value.messages) as nat
-  //   <= (NumKVPairs(top) as nat + NumKVPairs(bot) as nat) * (1 + ValueType.MaxLen() as nat)
-  // {
-  //   var dummy := MergeWillSucceed(top, bot);
-  // }
-
   function pivotIndexes(keys: seq<Key>, pivots: seq<Key>) : (result: seq<nat>)
     requires Keyspace.IsStrictlySorted(keys)
     ensures |result| == |pivots|
@@ -608,24 +493,6 @@ module PackedKV {
     else
       pivotIndexes(keys, Sequences.DropLast(pivots)) + [ Keyspace.IndexOfFirstGte(keys, Last(pivots)) ]
   }
-  
-  // function mergeToChildren(top: Pkv, pivots: seq<Key>, bots: seq<Pkv>, slack: nat) : (result: seq<Option<Pkv>>)
-  //   requires WF(top)
-  //   requires Integer_Order.IsSorted(pivotIdxs)
-  //   requires 0 < |bots| == |pivotIdxs|
-  //   requires Last(pivotIdxs) <= NumKVPairs(top) as nat
-  //   requires forall i | 0 <= i < |bots| :: WF(bots[i])
-  // {
-  //   // if |pivotIdxs| == 1 then
-  //   //   [ mergeToOneChild(top, 0, pivotIdxs[0], bots[0]) ]
-  //   // else
-  //   //   Integer_Order.SortedSubsequence(pivotIdxs, 0, |pivotIdxs| - 1);
-  //   //   Integer_Order.IsSortedImpliesLte(pivotIdxs, |pivotIdxs| - 2, |pivotIdxs| - 1);
-  //   //   var submerge := mergeToChildren(top, Sequences.DropLast(pivotIdxs), Sequences.DropLast(bots));
-  //   //   var lastmerge := mergeToOneChild(top, pivotIdxs[|pivotIdxs|-2], Last(pivotIdxs), Last(bots));
-  //   //   submerge + [ lastmerge ]
-  // }
-
 }
 
 module DynamicPkv {
@@ -639,6 +506,10 @@ module DynamicPkv {
   import Uint64_Order
   import LexOrder = Lexicographic_Byte_Order
   import opened BucketsLib
+  import BucketModel
+  import opened BucketWeights
+  import opened Bounds
+  import KeyspaceImpl = Lexicographic_Byte_Order_Impl
   
   datatype Capacity = Capacity(num_kv_pairs: uint32, total_key_len: uint32, total_message_len: uint32)
 
@@ -646,7 +517,131 @@ module DynamicPkv {
   {
     Capacity(0, 0, 0)
   }
-    
+
+  lemma PSAPushBackWeight(pkv: PKV.Pkv, key: Key, msg: Message)
+  requires PKV.WF(pkv)
+  ensures WeightKeyList(PSA.I(pkv.keys) + [key])
+      == WeightKeyList(PSA.I(pkv.keys)) + WeightKey(key)
+  ensures WeightMessageList(PKV.IMessages(pkv.messages) + [msg])
+      == WeightMessageList(PKV.IMessages(pkv.messages)) + WeightMessage(msg)
+  {
+    WeightKeyListPushBack(PSA.I(pkv.keys), key);
+    WeightMessageListPushBack(PKV.IMessages(pkv.messages), msg);
+  }
+
+  lemma PSAPopFrontWeight(pkv: PKV.Pkv, a: uint64, b: uint64)
+  requires PKV.WF(pkv)
+  requires 0 <= a < b <= PKV.NumKVPairs(pkv)
+  ensures WeightKey(PKV.GetKey(pkv, a))
+       + WeightKeyList(PSA.I(pkv.keys)[a+1..b])
+      == WeightKeyList(PSA.I(pkv.keys)[a..b]);
+  ensures WeightMessage(PKV.GetMessage(pkv, a))
+       + WeightMessageList(PKV.IMessages(pkv.messages)[a+1..b])
+      == WeightMessageList(PKV.IMessages(pkv.messages)[a..b]);
+  {
+    calc {
+      WeightKey(PKV.GetKey(pkv, a)) + WeightKeyList(PSA.I(pkv.keys)[a+1..b]);
+      WeightKey(PSA.I(pkv.keys)[a]) + WeightKeyList(PSA.I(pkv.keys)[a+1..b]);
+      {
+        WeightKeyListPushFront(PSA.I(pkv.keys)[a],
+            PSA.I(pkv.keys)[a+1..b]);
+        assert [PSA.I(pkv.keys)[a]] + PSA.I(pkv.keys)[a+1..b]
+            == PSA.I(pkv.keys)[a..b];
+      }
+      WeightKeyList(PSA.I(pkv.keys)[a..b]);
+    }
+    calc {
+      WeightMessage(PKV.GetMessage(pkv, a)) + WeightMessageList(PKV.IMessages(pkv.messages)[a+1..b]);
+      {
+        WeightMessageListPushFront(PKV.IMessages(pkv.messages)[a],
+            PKV.IMessages(pkv.messages)[a+1..b]);
+        assert [PKV.IMessages(pkv.messages)[a]] + PKV.IMessages(pkv.messages)[a+1..b]
+            == PKV.IMessages(pkv.messages)[a..b];
+      }
+      WeightMessageList(PKV.IMessages(pkv.messages)[a..b]);
+    }
+  }
+
+  lemma PSAPopFrontWeightSuffix(pkv: PKV.Pkv, a: uint64)
+  requires PKV.WF(pkv)
+  requires 0 <= a < PKV.NumKVPairs(pkv)
+  ensures WeightKey(PKV.GetKey(pkv, a))
+       + WeightKeyList(PSA.I(pkv.keys)[a+1..])
+      == WeightKeyList(PSA.I(pkv.keys)[a..]);
+  ensures WeightMessage(PKV.GetMessage(pkv, a))
+       + WeightMessageList(PKV.IMessages(pkv.messages)[a+1..])
+      == WeightMessageList(PKV.IMessages(pkv.messages)[a..]);
+  {
+    PSAPopFrontWeight(pkv, a, PKV.NumKVPairs(pkv));
+    assert PSA.I(pkv.keys)[a+1..]
+        == PSA.I(pkv.keys)[a+1..PKV.NumKVPairs(pkv)];
+    assert PSA.I(pkv.keys)[a..]
+        == PSA.I(pkv.keys)[a..PKV.NumKVPairs(pkv)];
+    assert PKV.IMessages(pkv.messages)[a+1..]
+        == PKV.IMessages(pkv.messages)[a+1..PKV.NumKVPairs(pkv)];
+    assert PKV.IMessages(pkv.messages)[a..]
+        == PKV.IMessages(pkv.messages)[a..PKV.NumKVPairs(pkv)];
+  }
+
+  function WeightBucketPkv(pkv: PKV.Pkv) : int
+  requires PKV.WF(pkv)
+  {
+    WeightKeyList(PSA.I(pkv.keys))
+      + WeightMessageList(PKV.IMessages(pkv.messages))
+  }
+
+  lemma WeightBucketPkv_eq_WeightPkv(pkv: PKV.Pkv)
+  requires PKV.WF(pkv)
+  decreases PKV.NumKVPairs(pkv)
+  ensures PKV.WeightPkv(pkv) as int == WeightBucketPkv(pkv)
+  {
+    if |pkv.keys.offsets| == 0 {
+      calc {
+        PKV.WeightPkv(pkv) as int;
+        0;
+        WeightBucketPkv(pkv);
+      }
+    } else {
+      var pkv' := PKV.subPkv(pkv, 0, PKV.NumKVPairs(pkv) - 1);
+      var key := PKV.GetKey(pkv, PKV.NumKVPairs(pkv) -  1);
+      var msg := PKV.GetMessage(pkv, PKV.NumKVPairs(pkv) - 1);
+      var keys' := PKV.IKeys(pkv'.keys);
+      var msgs' := PKV.IMessages(pkv'.messages);
+      var keys := PKV.IKeys(pkv.keys);
+      var msgs := PKV.IMessages(pkv.messages);
+      calc {
+        PKV.WeightPkv(pkv) as int;
+        {
+          //assert |pkv'.keys.offsets| == |pkv.keys.offsets| - 1;
+          //assert |pkv'.messages.offsets| == |pkv.messages.offsets| - 1;
+          //assert |pkv'.keys.data| == |pkv.keys.data| - |key|;
+          assert |PSA.I(pkv.messages)[PKV.NumKVPairs(pkv) - 1]|
+              <= ValueType.MaxLen() as int;
+          /*assert PKV.Message_to_bytestring(msg)
+              == PKV.Message_to_bytestring(PKV.bytestring_to_Message(
+                    PSA.psaElement(pkv.messages, PKV.NumKVPairs(pkv) - 1)))
+              == PSA.psaElement(pkv.messages, PKV.NumKVPairs(pkv) - 1);
+          assert |pkv'.messages.data|
+              == |pkv.messages.data| - |PSA.psaElement(pkv.messages, PKV.NumKVPairs(pkv) - 1)|
+              == |pkv.messages.data| - |PKV.Message_to_bytestring(msg)|;*/
+        }
+        PKV.WeightPkv(pkv') as int + WeightKey(key) + WeightMessage(msg);
+        { WeightBucketPkv_eq_WeightPkv(pkv'); }
+        WeightBucketPkv(pkv') + WeightKey(key) + WeightMessage(msg);
+        WeightKeyList(keys') + WeightMessageList(msgs') + WeightKey(key) + WeightMessage(msg);
+        {
+          IMessagesSlice(pkv, 0, PKV.NumKVPairs(pkv) -  1);
+          assert keys' + [key] == keys;
+          assert msgs' + [msg] == msgs;
+          WeightKeyListPushBack(keys', key);
+          WeightMessageListPushBack(msgs', msg);
+        }
+        WeightKeyList(keys) + WeightMessageList(msgs);
+        WeightBucketPkv(pkv);
+      }
+    }
+  }
+
   class DynamicPkv {
     var keys: PKV.PSA.DynamicPsa
     var messages: PKV.PSA.DynamicPsa
@@ -697,13 +692,105 @@ module DynamicPkv {
     method Append(key: Key, msg: Message)
       requires WF()
       requires msg.Define?
-      requires PKV.canAppend(toPkv(), key, PKV.Message_to_bytestring(msg))
+      requires PKV.NumKVPairs(toPkv()) < 0x1_0000_0000 - 1
+      requires WeightKey(key) + WeightMessage(msg) + WeightKeyList(PKV.IKeys(toPkv().keys)) + WeightMessageList(PKV.IMessages(toPkv().messages)) < 0x1_0000_0000
       ensures WF()
-      ensures toPkv() == PKV.Append(old(toPkv()), key, msg)
+      //ensures toPkv() == PKV.Append(old(toPkv()), key, msg)
+      ensures PKV.IKeys(toPkv().keys) == PKV.IKeys(old(toPkv()).keys) + [key]
+      ensures PKV.IMessages(toPkv().messages)
+        == PKV.IMessages(old(toPkv()).messages) + [msg]
       ensures fresh(Repr - old(Repr))
       modifies this, Repr
     {
+      WeightBucketPkv_eq_WeightPkv(toPkv());
+      PSA.psaAppendIAppend(toPkv().keys, key);
+      PSA.psaAppendIAppend(toPkv().messages,
+          PKV.Message_to_bytestring(msg));
+
       AppendEncodedMessage(key, PKV.Message_to_bytestring(msg));
+
+      calc {
+        PKV.IMessages(toPkv().messages);
+        {
+          var a := PKV.IMessages(toPkv().messages);
+          var b := PKV.IMessages(old(toPkv()).messages) + [msg];
+          assert |a| == |b|;
+          forall i | 0 <= i < |a|
+          ensures a[i] == b[i]
+          {
+            if i == |a| - 1 {
+              assert a[i] == b[i];
+            } else {
+              assert a[i] == b[i];
+            }
+          }
+        }
+        PKV.IMessages(old(toPkv()).messages) + [msg];
+      }
+    }
+
+    method AppendPkv(pkv: PKV.Pkv, start: uint64, end: uint64)
+    requires WF()
+    requires PKV.WF(pkv)
+    requires 0 <= start <= end <= PKV.NumKVPairs(pkv)
+    requires PKV.NumKVPairs(toPkv()) + end - start <= 0x1_0000_0000 - 1
+    requires WeightKeyList(PKV.IKeys(toPkv().keys)) + WeightKeyList(PSA.I(pkv.keys)[start..end])
+          + WeightMessageList(PKV.IMessages(toPkv().messages)) + WeightMessageList(PKV.IMessages(pkv.messages)[start..end]) < 0x1_0000_0000
+    ensures WF()
+    ensures fresh(Repr - old(Repr))
+    ensures PSA.I(toPkv().keys) == PSA.I(old(toPkv()).keys) + PSA.I(pkv.keys)[start..end]
+    ensures PKV.IMessages(toPkv().messages) == PKV.IMessages(old(toPkv().messages)) + PKV.IMessages(pkv.messages)[start..end]
+    ensures WeightKeyList(PKV.IKeys(toPkv().keys))
+      == WeightKeyList(PKV.IKeys(old(toPkv()).keys)) + WeightKeyList(PSA.I(pkv.keys)[start..end])
+    ensures WeightMessageList(PKV.IMessages(toPkv().messages))
+      == WeightMessageList(PKV.IMessages(old(toPkv()).messages)) + WeightMessageList(PKV.IMessages(pkv.messages)[start..end])
+    modifies this, Repr
+    {
+      var i := start;
+      while i < end
+      invariant start <= i <= end
+      invariant WF()
+      invariant PKV.NumKVPairs(old(toPkv())) + end - start <= 0x1_0000_0000 - 1
+      invariant fresh(Repr - old(Repr))
+      invariant PSA.I(toPkv().keys) == PSA.I(old(toPkv()).keys) + PSA.I(pkv.keys)[start..i]
+      invariant PKV.IMessages(toPkv().messages) == PKV.IMessages(old(toPkv().messages)) + PKV.IMessages(pkv.messages)[start..i]
+      invariant WeightKeyList(PKV.IKeys(toPkv().keys)) + WeightKeyList(PKV.IKeys(pkv.keys)[i..end])
+            + WeightMessageList(PKV.IMessages(toPkv().messages)) + WeightMessageList(PKV.IMessages(pkv.messages)[i..end]) < 0x1_0000_0000
+      invariant WeightKeyList(PKV.IKeys(toPkv().keys))
+        == WeightKeyList(PKV.IKeys(old(toPkv()).keys)) + WeightKeyList(PSA.I(pkv.keys)[start..i])
+      invariant WeightMessageList(PKV.IMessages(toPkv().messages))
+        == WeightMessageList(PKV.IMessages(old(toPkv()).messages)) + WeightMessageList(PKV.IMessages(pkv.messages)[start..i])
+      {
+        var key := PKV.GetKey(pkv, i);
+        var msg := PKV.GetMessage(pkv, i);
+
+        PSAPopFrontWeight(pkv, i, end);
+        PSAPushBackWeight(toPkv(), key, msg);
+        
+        Append(key, msg);
+
+        calc {
+          PSA.I(pkv.keys)[start..i+1];
+          PSA.I(pkv.keys)[start..i] + [key];
+        }
+        calc {
+          PKV.IMessages(pkv.messages)[start..i+1];
+          PKV.IMessages(pkv.messages)[start..i] + [msg];
+        }
+
+        calc {
+          WeightKeyList(PSA.I(pkv.keys)[start..i+1]);
+          { WeightKeyListPushBack(PSA.I(pkv.keys)[start..i], key); }
+          WeightKeyList(PSA.I(pkv.keys)[start..i]) + WeightKey(key);
+        }
+        calc {
+          WeightMessageList(PKV.IMessages(pkv.messages)[start..i+1]);
+          { WeightMessageListPushBack(PKV.IMessages(pkv.messages)[start..i], msg); }
+          WeightMessageList(PKV.IMessages(pkv.messages)[start..i]) + WeightMessage(msg);
+        }
+
+        i := i + 1;
+      }
     }
 
     predicate hasCapacity(cap: Capacity)
@@ -729,281 +816,538 @@ module DynamicPkv {
     }
   }
 
-  
+  lemma WeightEmptySeq()
+  ensures WeightKeyList([]) == 0
+  ensures WeightMessageList([]) == 0
+  {
+  }
   
   datatype SingleMergeResult =
       MergeCompleted(bot: PKV.Pkv, slack: uint64)
     | SlackExhausted(bot: PKV.Pkv, end: uint64, slack: uint64)
-  
-  predicate MergeIsCorrectIfInputsWereSorted(top: PKV.Pkv, from: uint64, to: uint64,
-    bot: PKV.Pkv, result: SingleMergeResult)
-    requires PKV.WF(top)
-    requires PKV.WF(bot)
-    requires to as nat - from as nat + PKV.NumKVPairs(bot) as nat < Uint32UpperBound()
-    requires from <= to <= PKV.NumKVPairs(top)
-    requires PKV.WF(result.bot)
-    requires result.SlackExhausted? ==> from <= result.end < to
   {
-    if
-      && BucketWellMarshalled(PKV.I(top))
-      && BucketWellMarshalled(PKV.I(bot))
-    then (
-      var subtop := PKV.subPkv(top, from, to);
-      var oldcomp := Compose(PKV.I(subtop), PKV.I(bot));
-      var newcomp :=
-        if result.MergeCompleted? then
-          PKV.I(result.bot)
-        else (
-          var newsubtop := PKV.subPkv(top, result.end, to);
-          Compose(PKV.I(newsubtop), PKV.I(result.bot))
-        );
-      && BucketWellMarshalled(PKV.I(result.bot))
-      && BucketsEquivalent(oldcomp, newcomp)
-    ) else
-      true
+    predicate WF()
+    {
+      && PKV.WF(this.bot)
+    }
+
+    function I() : BucketModel.singleMergeResult
+    requires WF()
+    {
+      match this {
+        case MergeCompleted(bot, slack) =>
+          BucketModel.MergeCompleted(
+            PSA.I(bot.keys),
+            PKV.IMessages(bot.messages),
+            slack as nat)
+        case SlackExhausted(bot, end, slack) =>
+          BucketModel.SlackExhausted(
+            PSA.I(bot.keys),
+            PKV.IMessages(bot.messages),
+            end as nat,
+            slack as nat)
+      }
+    }
   }
 
-  method MergeToOneChild(top: PKV.Pkv, from: uint64, to: uint64, bot: PKV.Pkv, slack: uint64)
+  method MergeToOneChild(top: PKV.Pkv, from0: uint64, to: uint64, bot: PKV.Pkv, slack0: uint64)
     returns (result: SingleMergeResult)
     requires PKV.WF(top)
     requires PKV.WF(bot)
-    requires PKV.Keyspace.IsStrictlySorted(PSA.I(top.keys))
-    requires PKV.Keyspace.IsStrictlySorted(PSA.I(bot.keys))
-    requires to as nat - from as nat + PKV.NumKVPairs(bot) as nat < Uint32UpperBound()
-    requires PKV.WeightPkv(bot) as nat + slack as nat < Uint32UpperBound()
-    requires from <= to <= PKV.NumKVPairs(top)
-    ensures PKV.WF(result.bot)
-    ensures result.slack <= PKV.WeightPkv(bot) + slack
-    ensures PKV.WeightPkv(result.bot) <= PKV.WeightPkv(bot) + slack - result.slack
-    ensures result.SlackExhausted? ==> from <= result.end < to
+    requires from0 <= to <= PKV.NumKVPairs(top)
+    requires 0 <= PKV.NumKVPairs(top) < 0x1000_0000
+    requires 0 <= PKV.NumKVPairs(bot) < 0x1000_0000
+    requires WeightBucketPkv(bot) as int + slack0 as int
+        <= MaxTotalBucketWeight()
+    ensures result.WF()
+    ensures result.I() == BucketModel.mergeToOneChild(
+        PSA.I(top.keys), PKV.IMessages(top.messages),
+        from0 as nat, to as nat,
+        PSA.I(bot.keys), PKV.IMessages(bot.messages),
+        0, [], [],
+        slack0 as nat)
+    ensures WeightKeyList(PKV.IKeys(result.bot.keys)) +
+          WeightMessageList(PKV.IMessages(result.bot.messages)) +
+          result.slack as int
+       == WeightKeyList(PKV.IKeys(bot.keys)) +
+          WeightMessageList(PKV.IMessages(bot.messages)) +
+          slack0 as int
   {
+    BucketModel.reveal_mergeToOneChild();
+
+    var from: uint64 := from0;
+    var slack: uint64 := slack0;
+    var bot_from: uint64 := 0;
+
+    assert PSA.psaTotalLength(bot.keys) as int <= MaxTotalBucketWeight() by {
+      WeightBucketPkv_eq_WeightPkv(bot);
+    }
+    assert PSA.psaTotalLength(bot.messages) as int <= MaxTotalBucketWeight() by {
+      WeightBucketPkv_eq_WeightPkv(bot);
+    }
+
     var maxkeys: uint32 := (to - from + PKV.NumKVPairs(bot)) as uint32;
     var maxkeyspace: uint32 := (PSA.psaTotalLength(bot.keys) + slack) as uint32;
     var maxmsgspace: uint32 := (PSA.psaTotalLength(bot.messages) + slack) as uint32;
     var cap := Capacity(maxkeys, maxkeyspace, maxmsgspace);
     var dresult := new DynamicPkv.PreSized(cap);
 
-    var runningSlack := slack;
-    var topidx: uint64 := from;
-    var botidx: uint64 := 0;
+    //assert PKV.subPkv(bot, bot_from, PKV.NumKVPairs(bot))
+    //    == bot;
 
-    assert PKV.Keyspace.IsStrictlySorted(PSA.I(dresult.keys.toPsa())) by {
-      PKV.Keyspace.reveal_IsStrictlySorted();
-    }
+    WeightEmptySeq();
+    assert WeightBucketPkv(dresult.toPkv()) == 0;
 
-    assume false; // TODO(robj)
-    
-    while
-      && topidx < to
-      && botidx < PKV.NumKVPairs(bot)
-      invariant from <= topidx <= to
-      invariant botidx <= PKV.NumKVPairs(bot)
-      invariant dresult.keys.nstrings <= botidx + topidx - from
-      invariant runningSlack <= slack
-      invariant dresult.WF()
-      invariant dresult.weight() <= PKV.WeightPkv(PKV.subPkv(bot, 0, botidx)) + slack - runningSlack
-      invariant fresh(dresult.Repr)
-      invariant 0 < |PSA.I(dresult.keys.toPsa())| && topidx < to ==>
-        PKV.Keyspace.lt(Seq.Last(PSA.I(dresult.keys.toPsa())), PSA.I(top.keys)[topidx])
-      invariant 0 < |PSA.I(dresult.keys.toPsa())| && botidx as nat < |PSA.I(bot.keys)| ==>
-        PKV.Keyspace.lt(Seq.Last(PSA.I(dresult.keys.toPsa())), PSA.I(bot.keys)[botidx])
-      invariant PKV.Keyspace.IsStrictlySorted(PSA.I(dresult.keys.toPsa()))
-      decreases to - topidx + PSA.psaNumStrings(bot.keys) - botidx
+    while true
+    invariant from <= to
+    invariant bot_from <= PKV.NumKVPairs(bot)
+    invariant dresult.WF()
+    invariant fresh(dresult.Repr)
+    invariant BucketModel.mergeToOneChild(
+          PSA.I(top.keys), PKV.IMessages(top.messages),
+          from0 as nat, to as nat,
+          PSA.I(bot.keys), PKV.IMessages(bot.messages),
+          0, [], [],
+          slack0 as nat)
+     == BucketModel.mergeToOneChild(
+          PSA.I(top.keys), PKV.IMessages(top.messages),
+          from as nat, to as nat,
+          PSA.I(bot.keys), PKV.IMessages(bot.messages),
+          bot_from as nat,
+          PSA.I(dresult.toPkv().keys),
+          PKV.IMessages(dresult.toPkv().messages),
+          slack as nat)
+    invariant PKV.NumKVPairs(dresult.toPkv()) as int
+        <= bot_from as int + from as int - from0 as int
+    invariant WeightBucketPkv(bot) + slack0 as int
+        == WeightBucketPkv(dresult.toPkv())
+          //+ WeightBucketPkv(PKV.subPkv(bot, bot_from, PKV.NumKVPairs(bot)))
+          + WeightKeyList(PKV.IKeys(bot.keys)[bot_from..])
+          + WeightMessageList(PKV.IMessages(bot.messages)[bot_from..])
+          + slack as int
+    decreases PKV.NumKVPairs(top) as int + PKV.NumKVPairs(bot) as int
+          - from as int - bot_from as int
     {
-      var topkey := PKV.GetKey(top, topidx);
-      var botkey := PKV.GetKey(bot, botidx);
-      var topmsg := PSA.psaElement(top.messages, topidx);
-      var botmsg := PSA.psaElement(bot.messages, botidx);
-      assert botmsg == PSA.I(bot.messages)[botidx];
-      assert topmsg == PSA.I(top.messages)[topidx];
-      
-      if botidx as nat + 1 < |PSA.I(bot.keys)| {
-        PKV.Keyspace.IsStrictlySortedImpliesLt(PSA.I(bot.keys), botidx as nat, botidx as nat + 1);
-      }
-      if topidx + 1 < to {
-        PKV.Keyspace.IsStrictlySortedImpliesLt(PSA.I(top.keys), topidx as nat, topidx as nat + 1);
-      }
-      PSA.psaAppendIAppend(dresult.keys.toPsa(), PSA.I(bot.keys)[botidx]);
-      PKV.Keyspace.StrictlySortedAugment(PSA.I(dresult.keys.toPsa()), PSA.I(bot.keys)[botidx]);
-      if PSA.psaCanAppend(dresult.keys.toPsa(), PSA.I(top.keys)[topidx]) {
-        PSA.psaAppendIAppend(dresult.keys.toPsa(), PSA.I(top.keys)[topidx]);
-        PKV.Keyspace.StrictlySortedAugment(PSA.I(dresult.keys.toPsa()), PSA.I(top.keys)[topidx]);
-      }
+      //WeightBucketPkv_eq_WeightPkv(dresult.toPkv());
 
-      var c := PKV.KeyspaceImpl.cmp(botkey, topkey);
+      if from == to {
+        assert PKV.IKeys(bot.keys)[bot_from..]
+            == PKV.IKeys(bot.keys)[bot_from..PKV.NumKVPairs(bot)];
+        assert PKV.IMessages(bot.messages)[bot_from..]
+            == PKV.IMessages(bot.messages)[bot_from..PKV.NumKVPairs(bot)];
 
-      if c < 0 {
-        var botmsg := PSA.psaElement(bot.messages, botidx);
-        dresult.AppendEncodedMessage(botkey, botmsg);
-        // no change is slack
-        botidx := botidx + 1;
-      } else if c > 0 {
-        var topmsg := PSA.psaElement(top.messages, topidx);
-        var kvweight := 4 + |topkey| as uint64 + 4 + |topmsg| as uint64;
-        if kvweight < runningSlack {
-          dresult.AppendEncodedMessage(topkey, topmsg);
-          runningSlack := runningSlack - kvweight;
-          topidx := topidx + 1;
-        } else {
-          break;
-        }
+        dresult.AppendPkv(bot, bot_from, PKV.NumKVPairs(bot));
+        result := MergeCompleted(dresult.toPkv(), slack);
+        return;
       } else {
-        var botmsg := PKV.GetMessage(bot, botidx);
-        var topmsg := PKV.GetMessage(top, topidx);
-        var newmsg := ValueMessage.Merge(topmsg, botmsg);
-        var encoded_newmsg := PKV.Message_to_bytestring(newmsg);
-        var kvweight := 4 + |topkey| as uint64 + 4 + |encoded_newmsg| as uint64;
-        if newmsg != IdentityMessage() {
-          var kvweight := 4 + |topkey| as uint64 + 4 + |encoded_newmsg| as uint64;
-          if kvweight < runningSlack {
-            dresult.AppendEncodedMessage(topkey, encoded_newmsg);
-            runningSlack := runningSlack - kvweight;
+        var topkey := PSA.psaElement(top.keys, from);
+        var botkey;
+        var c;
+        if bot_from < PKV.NumKVPairs(bot) {
+          botkey := PSA.psaElement(bot.keys, bot_from);
+          c := KeyspaceImpl.cmp(topkey, botkey);
+        }
+
+        if bot_from < PKV.NumKVPairs(bot) && c == 0 {
+          var key := topkey;
+          var topmsg := PKV.GetMessage(top, from);
+          var botmsg := PKV.GetMessage(bot, bot_from);
+          var msg := ValueMessage.Merge(topmsg, botmsg);
+          if msg == IdentityMessage() {
+            from := from + 1;
+            bot_from := bot_from + 1;
+            slack := slack
+                + WeightKeyUint64(key)
+                + WeightMessageUint64(botmsg);
           } else {
-            break;
+            var wm1 := WeightMessageUint64(msg);
+            var wm2 := WeightMessageUint64(botmsg);
+            if wm1 > slack + wm2 {
+              assert PKV.IKeys(bot.keys)[bot_from..]
+                  == PKV.IKeys(bot.keys)[bot_from..PKV.NumKVPairs(bot)];
+              assert PKV.IMessages(bot.messages)[bot_from..]
+                  == PKV.IMessages(bot.messages)[bot_from..PKV.NumKVPairs(bot)];
+
+              dresult.AppendPkv(bot, bot_from, PKV.NumKVPairs(bot));
+              result := SlackExhausted(dresult.toPkv(), from, slack);
+              return;
+            } else {
+              PSAPopFrontWeight(top, from, to);
+              PSAPopFrontWeightSuffix(bot, bot_from);
+              PSAPushBackWeight(dresult.toPkv(), key, msg);
+
+              dresult.Append(key, msg);
+              from := from + 1;
+              bot_from := bot_from + 1;
+              slack := slack + wm2 - wm1;
+            }
+          }
+        } else if bot_from == PKV.NumKVPairs(bot) || c < 0 {
+          var key := topkey;
+          var msg := PKV.GetMessage(top, from);
+          var delta := WeightKeyUint64(key) + WeightMessageUint64(msg);
+          if delta > slack {
+            assert PKV.IKeys(bot.keys)[bot_from..]
+                == PKV.IKeys(bot.keys)[bot_from..PKV.NumKVPairs(bot)];
+            assert PKV.IMessages(bot.messages)[bot_from..]
+                == PKV.IMessages(bot.messages)[bot_from..PKV.NumKVPairs(bot)];
+
+            dresult.AppendPkv(bot, bot_from, PKV.NumKVPairs(bot));
+            result := SlackExhausted(dresult.toPkv(), from, slack);
+            return;
+          } else {
+            PSAPopFrontWeight(top, from, to);
+            PSAPushBackWeight(dresult.toPkv(), key, msg);
+
+            dresult.Append(key, msg);
+            from := from + 1;
+            slack := slack - delta;
           }
         } else {
-          var kvweight := 4 + |botkey| as uint64 + 4 + |PSA.psaElement(bot.messages, botidx)| as uint64;
-          runningSlack := runningSlack + kvweight;
+          var key := botkey;
+          var msg := PKV.GetMessage(bot, bot_from);
+
+          PSAPushBackWeight(dresult.toPkv(), key, msg);
+          PSAPopFrontWeightSuffix(bot, bot_from);
+
+          dresult.Append(key, msg);
+          bot_from := bot_from + 1;
         }
-        topidx := topidx + 1;
-        botidx := botidx + 1;
       }
     }
+  }
 
-    while topidx < to
-      invariant from <= topidx <= to
-      invariant dresult.WF()
-      invariant dresult.keys.nstrings <= botidx + topidx - from
-      invariant runningSlack <= slack
-      invariant dresult.keys.nstrings <= botidx + topidx - from
-      invariant dresult.weight() <= PKV.WeightPkv(PKV.subPkv(bot, 0, botidx)) + slack - runningSlack
-      invariant fresh(dresult.Repr)
-      invariant 0 < |PSA.I(dresult.keys.toPsa())| && topidx < to ==>
-        PKV.Keyspace.lt(Seq.Last(PSA.I(dresult.keys.toPsa())), PSA.I(top.keys)[topidx])
-      invariant PKV.Keyspace.IsStrictlySorted(PSA.I(dresult.keys.toPsa()))
-    {
-      var topkey := PKV.GetKey(top, topidx);
-      var topmsg := PSA.psaElement(top.messages, topidx);
-      var kvweight := 4 + |topkey| as uint64 + 4 + |topmsg| as uint64;
-      assert topmsg == PSA.I(top.messages)[topidx];
-      if topidx + 1 < to {
-        PKV.Keyspace.IsStrictlySortedImpliesLt(PSA.I(top.keys), topidx as nat, topidx as nat + 1);
-      }
-      if PSA.psaCanAppend(dresult.keys.toPsa(), PSA.I(top.keys)[topidx]) {
-        PSA.psaAppendIAppend(dresult.keys.toPsa(), PSA.I(top.keys)[topidx]);
-        PKV.Keyspace.StrictlySortedAugment(PSA.I(dresult.keys.toPsa()), PSA.I(top.keys)[topidx]);
-      }
-      if kvweight < runningSlack {
-        dresult.AppendEncodedMessage(topkey, topmsg);
-        runningSlack := runningSlack - kvweight;
-        topidx := topidx + 1;
-      } else {
-        break;
-      }
-    }
+  function PKVISeq(s: seq<PKV.Pkv>) : (res: seq<Bucket>)
+  requires forall i | 0 <= i < |s| :: PKV.WF(s[i])
+  ensures |res| == |s|
+  ensures forall i | 0 <= i < |s| :: PKV.I(s[i]) == res[i]
+  {
+    if |s| == 0 then [] else PKVISeq(Seq.DropLast(s)) + [PKV.I(Seq.Last(s))]
+  }
 
-    while botidx < PKV.NumKVPairs(bot)
-      invariant botidx <= PKV.NumKVPairs(bot)
-      invariant dresult.WF()
-      invariant dresult.keys.nstrings <= botidx + topidx - from
-      invariant runningSlack <= slack
-      invariant dresult.keys.nstrings <= botidx + topidx - from
-      invariant dresult.weight() <= PKV.WeightPkv(PKV.subPkv(bot, 0, botidx)) + slack - runningSlack
-      invariant fresh(dresult.Repr)
-      invariant 0 < |PSA.I(dresult.keys.toPsa())| && botidx as nat < |PSA.I(bot.keys)| ==>
-        PKV.Keyspace.lt(Seq.Last(PSA.I(dresult.keys.toPsa())), PSA.I(bot.keys)[botidx])
-      invariant PKV.Keyspace.IsStrictlySorted(PSA.I(dresult.keys.toPsa()))
-    {
-      var botkey := PKV.GetKey(bot, botidx);
-      var botmsg := PSA.psaElement(bot.messages, botidx);
-      assert botmsg == PSA.I(bot.messages)[botidx];
-      if botidx as nat + 1 < |PSA.I(bot.keys)| {
-        PKV.Keyspace.IsStrictlySortedImpliesLt(PSA.I(bot.keys), botidx as nat, botidx as nat + 1);
-      }
-      PSA.psaAppendIAppend(dresult.keys.toPsa(), PSA.I(bot.keys)[botidx]);
-      PKV.Keyspace.StrictlySortedAugment(PSA.I(dresult.keys.toPsa()), PSA.I(bot.keys)[botidx]);
-      dresult.AppendEncodedMessage(botkey, botmsg);
-      // no change in slack
-      botidx := botidx + 1;
-    }
-
-    if topidx == to {
-      result := MergeCompleted(dresult.toPkv(), runningSlack);
-    } else {
-      result := SlackExhausted(dresult.toPkv(), topidx, runningSlack);
-    }
+  function seqInt(s: seq<uint64>) : (res: seq<int>)
+  ensures |res| == |s|
+  ensures forall i | 0 <= i < |s| :: res[i] == s[i] as int
+  {
+    if |s| == 0 then [] else seqInt(Seq.DropLast(s)) + [Seq.Last(s) as int]
   }
 
   datatype MergeResult = MergeResult(top: PKV.Pkv, bots: seq<PKV.Pkv>, slack: uint64)
-  
-  method DoMergeToChildren(top: PKV.Pkv, pivotIdxs: seq<uint64>, bots: seq<PKV.Pkv>, slack: uint64) returns (result: MergeResult)
-    requires PKV.WF(top)
-    requires Uint64_Order.IsSorted(pivotIdxs)
-    requires 0 < |bots| == |pivotIdxs| < Uint64UpperBound()
-    requires Seq.Last(pivotIdxs) <= PKV.NumKVPairs(top)
-    requires forall i | 0 <= i < |bots| :: PKV.WF(bots[i])
   {
-    var tmp: SingleMergeResult;
-    var runningSlack: uint64 := slack;
-    var results := new PKV.Pkv[|bots| as uint64];
-
-    assume false; // TODO(robj)
-
-    Uint64_Order.IsSortedImpliesLte(pivotIdxs, 0, |pivotIdxs|-1);
-    tmp := MergeToOneChild(top, 0, pivotIdxs[0], bots[0], runningSlack);
-    results[0] := tmp.bot;
-    runningSlack := tmp.slack;
-    
-    var i: uint64 := 1;
-    while i < |bots| as uint64
-      invariant i <= |bots| as uint64
-      invariant tmp.SlackExhausted? ==> tmp.end < PKV.NumKVPairs(top)
+    predicate WF()
     {
-      Uint64_Order.IsSortedImpliesLte(pivotIdxs, i as int - 1, i as int);
-      Uint64_Order.IsSortedImpliesLte(pivotIdxs, i as int, |pivotIdxs|-1);
-      if tmp.MergeCompleted? {
-        tmp := MergeToOneChild(top, pivotIdxs[i-1], pivotIdxs[i], bots[i], runningSlack);
-        results[i] := tmp.bot;
-        runningSlack := tmp.slack;
-      } else {
-        // Once we exhaust our slack on one child, we just copy the
-        // remaining children
-        //
-        // XXX/FIXME/TODO[robj]: Do we want to copy the pkvs in this
-        // situation?  I suspect not.
-        results[i] := bots[i];
+      && PKV.WF(this.top)
+      && forall i | 0 <= i < |this.bots| :: PKV.WF(this.bots[i])
+    }
+
+    function I() : BucketModel.mergeResult
+    requires WF()
+    {
+      BucketModel.mergeResult(
+        PKV.I(this.top),
+        PKVISeq(this.bots),
+        this.slack as nat
+      )
+    }
+  }
+
+  lemma WeightIthBucketLe(bots: seq<PKV.Pkv>, i: uint64)
+  requires forall i | 0 <= i < |bots| :: PKV.WF(bots[i])
+  requires 0 <= i as int < |bots|
+  ensures WeightBucketPkv(bots[i]) 
+      <= WeightBucketList(PKVISeq(bots[i..]))
+  {
+    WeightBucketLeBucketList(PKVISeq(bots[i..]), 0);
+  }
+
+  lemma IMessagesSlice(pkv: PKV.Pkv, a: uint64, b: uint64)
+  requires PKV.WF(pkv)
+  requires 0 <= a <= b <= PKV.NumKVPairs(pkv)
+  ensures PKV.IMessages(pkv.messages)[a..b]
+      == PKV.IMessages(PKV.subPkv(pkv, a, b).messages)
+  {
+    var x := PKV.IMessages(pkv.messages)[a..b];
+    var y := PKV.IMessages(PKV.subPkv(pkv, a, b).messages);
+    assert |x| == |y|;
+    forall i | 0 <= i < |x|
+    ensures x[i] == y[i];
+    {
+      calc {
+        x[i];
+        PKV.IMessages(pkv.messages)[a as int + i];
+        PKV.bytestring_to_Message(PSA.I(pkv.messages)[a as int + i]);
+        y[i];
       }
+    }
+  }
+
+  lemma WeightPKVListPopFront(pkvs: seq<PKV.Pkv>, i: int)
+  requires forall j | 0 <= j < |pkvs| :: PKV.WF(pkvs[j])
+  requires 0 <= i < |pkvs|
+  ensures forall j | 0 <= j < |pkvs[i..]| :: PKV.WF(pkvs[i..][j])
+  ensures forall j | 0 <= j < |pkvs[i+1..]| :: PKV.WF(pkvs[i+1..][j])
+  ensures WeightBucketList(PKVISeq(pkvs[i..]))
+      == WeightBucketList(PKVISeq(pkvs[i+1..]))
+          + WeightKeyList(PKV.IKeys(pkvs[i].keys))
+          + WeightMessageList(PKV.IMessages(pkvs[i].messages))
+  {
+    WeightBucketListConcat([PKV.I(pkvs[i])], PKVISeq(pkvs[i+1..]));
+    assert [PKV.I(pkvs[i])] + PKVISeq(pkvs[i+1..])
+        == PKVISeq(pkvs[i..]);
+    assert WeightBucketList([PKV.I(pkvs[i])]) == WeightBucket(PKV.I(pkvs[i])) by {
+      reveal_WeightBucketList();
+    }
+  }
+
+  lemma WeightPKVArrayPushBack(pkvs: array<PKV.Pkv>, i: int)
+  requires 0 <= i < pkvs.Length
+  requires forall j | 0 <= j < i+1 :: PKV.WF(pkvs[j])
+  ensures forall j | 0 <= j < |pkvs[..i]| :: PKV.WF(pkvs[..i][j])
+  ensures forall j | 0 <= j < |pkvs[..i+1]| :: PKV.WF(pkvs[..i+1][j])
+  ensures WeightBucketList(PKVISeq(pkvs[..i]))
+          + WeightKeyList(PKV.IKeys(pkvs[i].keys))
+          + WeightMessageList(PKV.IMessages(pkvs[i].messages))
+      == WeightBucketList(PKVISeq(pkvs[..i+1]))
+  {
+    WeightBucketListConcat(PKVISeq(pkvs[..i]), [PKV.I(pkvs[i])]);
+    assert PKVISeq(pkvs[..i]) + [PKV.I(pkvs[i])]
+        == PKVISeq(pkvs[..i+1]);
+    assert WeightBucketList([PKV.I(pkvs[i])]) == WeightBucket(PKV.I(pkvs[i])) by {
+      reveal_WeightBucketList();
+    }
+  }
+
+  method MergeToChildrenIter(
+    top: PKV.Pkv, 
+    bots: seq<PKV.Pkv>,
+    idxs: seq<uint64>,
+    tmp: SingleMergeResult,
+    i: uint64,
+    results: array<PKV.Pkv>)
+  returns (res: MergeResult)
+  requires PKV.WF(top)
+  requires forall i | 0 <= i < |bots| :: PKV.WF(bots[i])
+  requires |bots| < 0x1_0000_0000_0000_0000
+  requires 0 <= |PKV.IKeys(top.keys)| < 0x1000_0000
+  requires forall i | 0 <= i < |bots| :: |PKV.IKeys(bots[i].keys)| < 0x1000_0000
+  requires 0 < |bots|
+  requires results.Length == |bots|
+  requires 0 <= i as int <= |bots|
+  requires |idxs| == |bots| - 1
+  requires forall i | 0 <= i < |idxs| :: 0 <= idxs[i] as int <= |PKV.IKeys(top.keys)|
+  requires tmp.SlackExhausted? ==> 0 <= tmp.end as int <= |PKV.IKeys(top.keys)|
+  requires tmp.WF()
+  requires forall j | 0 <= j < i :: PKV.WF(results[j])
+  requires WeightBucketList(PKVISeq(results[..i]))
+      + WeightBucketList(PKVISeq(bots[i..]))
+      + tmp.slack as int == MaxTotalBucketWeight()
+  decreases |bots| - i as int
+  modifies results
+  ensures res.WF()
+  ensures res.I() == BucketModel.mergeToChildrenIter(
+      PKV.I(top), PKVISeq(bots), seqInt(idxs), tmp.I(), i as int, 
+          PKVISeq(old(results[..i])))
+  {
+    if i == |bots| as uint64 {
+      if tmp.SlackExhausted? {
+        var leftover_top := PKV.SubPkv(top, tmp.end, PKV.NumKVPairs(top));
+
+        ghost var topb := PKV.I(top);
+        calc
+        {
+          BucketOfSeq(topb.keys[tmp.end..], topb.msgs[tmp.end..]);
+          {
+            assert PKV.IKeys(top.keys)[tmp.end..]
+                == PKV.IKeys(top.keys)[tmp.end..PKV.NumKVPairs(top)];
+            assert PKV.IMessages(top.messages)[tmp.end..]
+                == PKV.IMessages(top.messages)[tmp.end..PKV.NumKVPairs(top)];
+            assert PKV.I(leftover_top).keys == topb.keys[tmp.end..];
+            IMessagesSlice(top, tmp.end, PKV.NumKVPairs(top));
+            assert PKV.I(leftover_top).msgs == topb.msgs[tmp.end..];
+          }
+          PKV.I(leftover_top);
+        }
+
+        assert results[..] == results[..i];
+
+        return MergeResult(leftover_top, results[..], tmp.slack);
+      } else {
+        return MergeResult(PKV.EmptyPkv(), results[..], tmp.slack);
+      }
+    } else {
+      if tmp.MergeCompleted? {
+        var from := if i == 0 then 0 else idxs[i-1];
+        var to1 := if i == |idxs| as uint64 then PKV.NumKVPairs(top) else idxs[i];
+        var to := if to1 < from then from else to1;
+
+        WeightIthBucketLe(bots, i);
+
+        var tmp' := MergeToOneChild(top, from, to, bots[i], tmp.slack);
+        results[i] := tmp'.bot;
+
+        calc {
+          WeightBucketList(PKVISeq(results[..i]))
+            + WeightBucketList(PKVISeq(bots[i..]))
+            + tmp.slack as int;
+          {
+            WeightPKVListPopFront(bots, i as int);
+            WeightPKVArrayPushBack(results, i as int);
+          }
+          WeightBucketList(PKVISeq(results[..i+1]))
+            + WeightBucketList(PKVISeq(bots[i+1..]))
+            + tmp'.slack as int;
+        }
+
+        calc {
+          PKVISeq(results[..i+1]);
+          PKVISeq(old(results[..i])) + [BucketOfSeq(PKV.IKeys(tmp'.bot.keys), PKV.IMessages(tmp'.bot.messages))];
+        }
+
+        res := MergeToChildrenIter(top, bots, idxs, tmp', i+1, results);
+        return;
+      } else {
+        results[i] := bots[i];
+
+        calc {
+          WeightBucketList(PKVISeq(results[..i]))
+            + WeightBucketList(PKVISeq(bots[i..]));
+          {
+            WeightPKVListPopFront(bots, i as int);
+            WeightPKVArrayPushBack(results, i as int);
+          }
+          WeightBucketList(PKVISeq(results[..i+1]))
+            + WeightBucketList(PKVISeq(bots[i+1..]));
+        }
+
+        calc {
+          PKVISeq(results[..i+1]);
+          PKVISeq(old(results[..i])) + [PKV.I(bots[i])];
+        }
+
+        res := MergeToChildrenIter(top, bots, idxs, tmp, i+1, results);
+        return;
+      }
+    }
+  }
+
+  method computePivotIndexes(keys: PSA.Psa, pivots: seq<Key>)
+  returns (pivotIdxs: seq<uint64>)
+    requires PSA.WF(keys)
+    requires |PSA.I(keys)| < Uint64UpperBound()
+    requires |pivots| < Uint64UpperBound() - 1
+    ensures |pivotIdxs| == |pivots|
+    ensures forall i | 0 <= i < |pivots| :: pivotIdxs[i] as nat
+        == LexOrder.binarySearchIndexOfFirstKeyGte(PSA.I(keys), pivots[i])
+  {
+    var results := new uint64[|pivots| as uint64];
+    var i : uint64 := 0;
+    while i < |pivots| as uint64
+      invariant i <= |pivots| as uint64
+      invariant forall j | 0 <= j < i :: results[j] as nat
+          == LexOrder.binarySearchIndexOfFirstKeyGte(PSA.I(keys), pivots[j])
+    {
+      results[i] := PSA.BinarySearchIndexOfFirstKeyGte(keys, pivots[i]);
       i := i + 1;
     }
 
-    if tmp.SlackExhausted? {
-      var leftover_top := PKV.SubPkv(top, tmp.end, PKV.NumKVPairs(top));
-      result := MergeResult(leftover_top, results[..], runningSlack);
-    } else {
-      result := MergeResult(PKV.EmptyPkv(), results[..], runningSlack);
+    pivotIdxs := results[..];
+  }
+ 
+  method MergeToChildren(
+      top: PKV.Pkv,
+      pivots: seq<Key>,
+      bots: seq<PKV.Pkv>,
+      slack: uint64)
+  returns (result: MergeResult)
+  requires PKV.WF(top)
+  requires forall i | 0 <= i < |bots| :: PKV.WF(bots[i])
+  requires 0 <= |PKV.IKeys(top.keys)| < 0x1000_0000
+  requires forall i | 0 <= i < |bots| :: |PKV.IKeys(bots[i].keys)| < 0x1000_0000
+  requires 0 < |bots| == |pivots| + 1 < Uint64UpperBound()
+  requires WeightBucketList(PKVISeq(bots)) + slack as int == MaxTotalBucketWeight()
+
+  ensures result.WF()
+  ensures result.I() == BucketModel.mergeToChildren(
+      PKV.I(top), pivots, PKVISeq(bots), slack as int)
+  {
+    BucketModel.reveal_mergeToChildren();
+
+    var idxs := computePivotIndexes(top.keys, pivots);
+    var tmp := MergeCompleted(PKV.EmptyPkv(), slack);
+    var ar := new PKV.Pkv[|bots| as uint64];
+
+    assert WeightBucketList(PKVISeq(ar[..0])) == 0 by { reveal_WeightBucketList(); }
+    assert bots[0..] == bots;
+    assert BucketModel.pivotIndexes(PKV.I(top).keys, pivots) == seqInt(idxs);
+
+    result := MergeToChildrenIter(top, bots, idxs, tmp, 0, ar);
+  }
+
+  datatype PartialFlushResult = PartialFlushResult(top: PKV.Pkv, bots: seq<PKV.Pkv>)
+  {
+    predicate WF()
+    {
+      && PKV.WF(top)
+      && forall i | 0 <= i < |bots| :: PKV.WF(bots[i])
+    }
+
+    function I() : BucketModel.partialFlushResult
+    requires WF()
+    {
+      BucketModel.partialFlushResult(PKV.I(top), PKVISeq(bots))
     }
   }
 
-  method MergeToChildren(top: PKV.Pkv, pivots: seq<Key>, bots: seq<PKV.Pkv>, slack: uint64) returns (result: MergeResult)
-    requires PKV.WF(top)
-    requires PKV.Keyspace.IsStrictlySorted(PSA.I(top.keys))
-    requires PKV.Keyspace.IsStrictlySorted(pivots)
-    requires 0 < |bots| == |pivots| + 1 < Uint64UpperBound()
-    requires forall i | 0 <= i < |bots| :: PKV.WF(bots[i])
+  method PartialFlush(
+      top: PKV.Pkv,
+      pivots: seq<Key>,
+      bots: seq<PKV.Pkv>)
+  returns (result: PartialFlushResult)
+  requires PKV.WF(top)
+  requires forall i | 0 <= i < |bots| :: PKV.WF(bots[i])
+  requires 0 <= |PKV.IKeys(top.keys)| < 0x1000_0000
+  requires forall i | 0 <= i < |bots| :: |PKV.IKeys(bots[i].keys)| < 0x1000_0000
+  requires 0 < |bots| == |pivots| + 1 < Uint64UpperBound()
+  requires WeightBucketList(PKVISeq(bots)) <= MaxTotalBucketWeight()
+  ensures result.WF()
+  ensures result.I() == BucketModel.partialFlush(
+      PKV.I(top), pivots, PKVISeq(bots))
   {
-    var pivotIdxs := PSA.PivotIndexes(top.keys, pivots);
-    forall i, j | 0 <= i <= j < |pivotIdxs|
-      ensures pivotIdxs[i] <= pivotIdxs[j]
+    var slack := MaxTotalBucketWeightUint64();
+    var i := 0;
+
+    assert WeightBucketList(PKVISeq(bots)[..i]) == 0 by { reveal_WeightBucketList(); }
+
+    while i < |bots| as uint64
+    invariant 0 <= i as int <= |bots|
+    invariant slack as int == MaxTotalBucketWeight() - WeightBucketList(PKVISeq(bots)[..i])
     {
-      if j < |pivotIdxs|-1 {
-        PKV.Keyspace.IndexOfFirstGteIsOrderPreserving(PSA.I(top.keys), pivots[i], pivots[j]);
-      } else {
+      calc {
+        WeightBucketList(PKVISeq(bots)[..i+1]);
+        {
+          assert Seq.DropLast(PKVISeq(bots)[..i+1]) == PKVISeq(bots)[..i];
+          assert Seq.Last(PKVISeq(bots)[..i+1]) == PKVISeq(bots)[i];
+          reveal_WeightBucketList();
+        }
+        WeightBucketList(PKVISeq(bots)[..i]) + WeightBucket(PKVISeq(bots)[i]);
+        {
+          WeightBucketPkv_eq_WeightPkv(bots[i]);
+          //WeightBucket_eq_WeightSeqs(PKV.I(bots[i]));
+          assert WeightBucket(PKVISeq(bots)[i])
+              == WeightBucket(PKV.I(bots[i]))
+              == PKV.WeightPkv(bots[i]) as int;
+        }
+        WeightBucketList(PKVISeq(bots)[..i]) + PKV.WeightPkv(bots[i]) as int;
       }
+      WeightBucketListSlice(PKVISeq(bots), 0, (i+1) as int);
+
+      slack := slack - PKV.WeightPkv(bots[i]);
+      i := i + 1;
     }
-    assert Uint64_Order.IsSorted(pivotIdxs) by {
-      Uint64_Order.reveal_IsSorted();
-    }
-    result := DoMergeToChildren(top, pivotIdxs, bots, slack);
+    assert PKVISeq(bots)[..i] == PKVISeq(bots);
+
+    BucketModel.reveal_partialFlush();
+    var res := MergeToChildren(top, pivots, bots, slack);
+    return PartialFlushResult(res.top, res.bots);
   }
 }
-
