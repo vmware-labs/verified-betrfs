@@ -68,9 +68,9 @@ class WorkerMonitor:
     def linetag(self):
         return termcolor.colored("[%s]" % self, spectrum[self.index % len(spectrum)])
 
-    def set_dead(self):
+    def set_dead(self, remaining):
         if self.running:
-            log("%s WORKER_ENDS" % self.linetag())
+            log("%s WORKER_ENDS (%d remaining)" % (self.linetag(), remaining))
         self.running = False
 
 def running(monitors):
@@ -104,22 +104,37 @@ def monitor_worker_pipes(monitors):
             else:
                 # Don't process POLLHUP until there's no POLLIN left to read.
                 if event & select.POLLHUP:
-                    monitor.set_dead()
+                    monitor.set_dead(len(running(monitors))-1)
 
         time.sleep(snooze)
     log("All jobs complete.")
+
+class Command:
+    def __init__(self, label, cmd_ary):
+        self.label = label
+        self.cmd_ary = cmd_ary
+
+    def __repr__(self):
+        return self.label
+
+    def text_cmd_line(self):
+        return " ".join(self.cmd_ary)
 
 def launch_worker_pipes(workers, ntasks, lam, dry_run=False):
     if ntasks > len(workers):
         raise Exception("Requested %d tasks for %d workers" % (ntasks, len(workers)))
     monitors = []
+
     for idx in range(ntasks):
         worker = workers[idx]
         cmd = lam(idx, worker)
         monitor = WorkerMonitor(worker, cmd)
-        log("%s LAUNCH_CMD %s" % (monitor.linetag(), " ".join(cmd)))
+        log("%s ASSIGN_CMD %s" % (monitor.linetag(), cmd))
         if not dry_run:
-            monitor.set_pipe(subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT))
             monitors.append(monitor)
+
+    for monitor in monitors:
+        log("%s LAUNCH_CMD %s" % (monitor.linetag(), monitor.cmd.text_cmd_line()))
+        monitor.set_pipe(subprocess.Popen(monitor.cmd.cmd_ary, stdout=subprocess.PIPE, stderr=subprocess.STDOUT))
     return monitors
         

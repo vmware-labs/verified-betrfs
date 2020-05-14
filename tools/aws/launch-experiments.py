@@ -40,7 +40,7 @@ def cmd_for_idx(idx, worker):
         ]
         + [RUN_VERI_PATH] + variant.run_veri_params() + ["output=../"+variant.outfile()]
         )
-    return cmd
+    return Command(str(variant), cmd)
 
 def main():
     set_logfile(suite.logpath())
@@ -48,7 +48,7 @@ def main():
     log("VARIANTS %s" % suite.variants)
 
     workers = retrieve_running_workers()
-    worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=False)
+    worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=True)
     monitor_worker_pipes(worker_pipes)
 
 main()
