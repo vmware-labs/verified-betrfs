@@ -157,9 +157,10 @@ def plotThroughput(ax, experiments):
     set_xlim(ax, experiments)
     a2.legend(loc="upper right")
     
-    for phase,opn in experiments[0].phase_starts.items():
-        #print (phase,opn)
-        ax.text(opn/K(), 0, phase)
+    for exp in experiments[:1]:
+        for phase,opn in exp.phase_starts.items():
+            #print (phase,opn,opn/K())
+            ax.text(opn/K(), ax.get_ylim()[0], phase)
 
 def plotManyForeach(ax, experiments, plotOneFunc):
     for i in range(len(experiments)):
@@ -234,6 +235,7 @@ def plotGrandUnifiedMemory(ax, experiments):
         exp = experiments[i]
         plotOneExp(exp, {"linestyle": linestyles[i % len(linestyles)]})
     ax.legend()
+    set_xlim(ax, experiments)
 
 
 def plotRocksIo(ax, experiments):
