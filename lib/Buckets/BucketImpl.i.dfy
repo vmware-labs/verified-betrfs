@@ -133,7 +133,7 @@ module BucketImpl {
         && tree in Repr
         && tree.repr <= Repr
         && KMB.WF(tree)
-        && Weight as int < Uint64UpperBound()
+        && Weight as int < Uint32UpperBound()
         && (forall k | k in KMB.Interpretation(tree) :: |k| <= KeyType.MaxLen() as nat)
         && Bucket == B(KMB.Interpretation(tree))
       ))

@@ -1814,6 +1814,22 @@ abstract module BtreeModel {
     }
   }
 
+  lemma InterpretationNumElements(node: Node)
+    requires WF(node)
+    ensures NumElements(node) == |Interpretation(node)|
+  {
+    ToSeqLength(node);
+    ToSeqCoversInterpretation(node);
+    ToSeqInInterpretation(node);
+    ToSeqIsStrictlySorted(node);
+    
+    var keys := ToSeq(node).0;
+    var interp := Interpretation(node);
+    Keys.StrictlySortedImpliesNoDupes(keys);
+    NoDupesSetCardinality(keys);
+    assert Set(keys) == interp.Keys;
+  }
+  
   lemma ToSeqIsSortedSeqForInterpretation(node: Node)
     requires WF(node)
     ensures Keys.SortedSeqForMap(Zip(ToSeq(node).0, ToSeq(node).1), Interpretation(node))

@@ -1,7 +1,8 @@
 include "../Base/Sets.i.dfy"
 include "../Base/Multisets.i.dfy"
 include "BucketsLib.i.dfy"
-  
+include "PackedKV.i.dfy"
+
 //
 // Assigning weights to buckets guides the flushing algorithm to decide
 // which child to push messages towards. TODO(thance): help!
@@ -27,6 +28,8 @@ module BucketWeights {
   import opened NativeTypes
   import opened KeyType
   import MSets = Multisets
+  import PackedKV
+
   
   function WeightKey(key: Key) : (w:nat)
   ensures w >= 0
@@ -119,7 +122,7 @@ module BucketWeights {
       }
     }
   }
-  
+
   function {:opaque} WeightMessageMultiset(msgs: multiset<Message>) : (result: nat)
     ensures |msgs| == 0 ==> result == 0
   {
@@ -171,6 +174,37 @@ module BucketWeights {
       WeightBucketList(DropLast(buckets)) +
           WeightBucket(Last(buckets))
     )
+  }
+
+  
+  
+  lemma WeightKeyListFlatten(keys: seq<Key>)
+    ensures WeightKeyList(keys) == FlattenLength(FlattenShape(keys)) + 4 * |keys|
+  {
+    if |keys| == 0 {
+    } else {
+      WeightKeyListAdditive(DropLast(keys),[ Last(keys) ]);
+      assert keys == DropLast(keys) + [ Last(keys) ];
+      WeightKeyListFlatten(DropLast(keys));
+      WeightKeySingleton(Last(keys));
+      reveal_FlattenShape();
+      reveal_FlattenLength();
+    }
+  }
+  
+  lemma WeightMessageListFlatten(msgs: seq<Message>)
+    requires PackedKV.EncodableMessageSeq(msgs)
+    ensures WeightMessageList(msgs) == FlattenLength(FlattenShape(PackedKV.messageSeq_to_bytestringSeq(msgs))) + 4 * |msgs|
+  {
+    if |msgs| == 0 {
+    } else {
+      assert msgs == DropLast(msgs) + [ Last(msgs) ];
+      PackedKV.messageSeq_to_bytestringSeq_Additive(DropLast(msgs), [ Last(msgs) ]);
+      WeightMessageListAdditive(DropLast(msgs),[ Last(msgs) ]);
+      WeightMessageSingleton(Last(msgs));
+      reveal_FlattenShape();
+      reveal_FlattenLength();
+    }
   }
 
   lemma WeightKeySeqList(keys: seq<Key>)
