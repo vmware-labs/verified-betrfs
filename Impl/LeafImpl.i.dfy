@@ -56,19 +56,7 @@ module LeafImpl {
 
     var left, right := node.buckets[0 as uint64].SplitLeftRight(pivot);
 
-    // amass the results
-    // TODO amass
-/*
-    var leftKvl := left.GetKvl();
-    var leftAmassed := KVList.AmassKvl(leftKvl);
-    left := new MutBucket(leftAmassed);
-
-    var rightKvl := right.GetKvl();
-    var rightAmassed := KVList.AmassKvl(rightKvl);
-    right := new MutBucket(rightAmassed);
-*/
-
-    var buckets' := [left, right];
+    var buckets' := PkvBucketSeqToPageBucketSeq([left, right]);
     MutBucket.ReprSeqDisjointOfLen2(buckets');
     MutBucket.ListReprOfLen2(buckets');
     var newnode := new Node(pivots, None, buckets');

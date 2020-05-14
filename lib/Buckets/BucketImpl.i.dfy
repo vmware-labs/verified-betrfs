@@ -6,6 +6,7 @@ include "BucketIteratorModel.i.dfy"
 include "BucketModel.i.dfy"
 include "KMBPKVOps.i.dfy"
 include "PageBucketImpl.i.dfy"
+include "../Base/Backtrace.s.dfy"
 
 //
 // Collects singleton message insertions efficiently, avoiding repeated
@@ -39,6 +40,7 @@ module BucketImpl {
   import opened DPKV = DynamicPkv
   import KMBPKVOps
   import opened PageBucketImpl
+  import Backtrace
   
   type TreeMap = KMB.Node
 
@@ -123,6 +125,8 @@ module BucketImpl {
     var Weight: uint64;
     var sorted: bool
 
+    var backtrace: seq<uint64>
+      
     ghost var Repr: set<object>;
     ghost var Bucket: Bucket;
 
@@ -164,6 +168,8 @@ module BucketImpl {
       this.tree := tmp;
       this.Repr := {this} + tmp.repr;
       this.Bucket := EmptyBucket();
+      new;
+      this.backtrace := Backtrace.Backtrace();
     }
 
     constructor InitFromPkv(pkv: PackedKV.Pkv, is_sorted: bool)
@@ -181,6 +187,7 @@ module BucketImpl {
       this.tree := null;
       this.sorted := is_sorted;
       new;
+      this.backtrace := Backtrace.Backtrace();
       assume Weight as int == WeightBucket(Bucket);
       assume WFBucket(Bucket);
     }
@@ -195,6 +202,8 @@ module BucketImpl {
       this.Bucket := *;
       this.tree := null;
       this.sorted := is_sorted;
+      new;
+      this.backtrace := Backtrace.Backtrace();
     }
 
     method GetPkv() returns (pkv: PKV.Pkv)
@@ -539,6 +548,7 @@ module BucketImpl {
         pkv := ToPkv(page.value);
         format := BFPkv;
         page := None;
+        this.backtrace := Backtrace.Backtrace();
       }
       if format.BFPkv? {
         format := BFTree;
@@ -787,25 +797,18 @@ module BucketImpl {
     ensures fresh(bucket'.Repr)
     ensures this.Bucket == bucket'.Bucket
     {
+      var tmppkv;
+      
       if format.BFPage? {
-        pkv := ToPkv(page.value);
-        format := BFPkv;
-        page := None;
-      }
-
-      if format.BFPkv? {
-        bucket' := new MutBucket.InitFromPkv(pkv, sorted);
-        return;
-      }
-
-      var pkv;
-      if format.BFTree? {
+        tmppkv := ToPkv(page.value);
+      } else  if format.BFPkv? {
+        tmppkv := pkv;
+      } else  if format.BFTree? {
         NumElementsLteWeight(B(KMB.Interpretation(tree)));
         KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
-        pkv := tree_to_pkv(tree);
-//        kv := KVList.AmassKvl(kvl);  // TODO UH OH! Are we loosing amass-iness?
+        tmppkv := tree_to_pkv(tree);
       } 
-      bucket' := new MutBucket.InitFromPkv(pkv, true);
+      bucket' := new MutBucket.InitFromPkv(tmppkv, sorted);
     }
 
     static method CloneSeq(buckets: seq<MutBucket>) returns (buckets': seq<MutBucket>)
@@ -920,10 +923,7 @@ module BucketImpl {
       if format.BFPkv? {
         scanPkv := this.pkv;
       } else if format.BFPage? {
-        this.pkv := ToPkv(page.value);
-        this.format := BFPkv;
-        this.page := None;
-        scanPkv := this.pkv;
+        scanPkv := ToPkv(page.value);
       } else {
         NumElementsLteWeight(B(KMB.Interpretation(tree)));
         KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));

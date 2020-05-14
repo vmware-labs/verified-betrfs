@@ -71,7 +71,7 @@ module PageBucketImpl {
     
     && Uint32_Order.IsSorted(this_.bucketOffsets)
     && (0 < |this_.bucketOffsets| ==> this_.bucketOffsets[0] == 0)
-    && (0 < |this_.bucketOffsets| ==> Last(this_.bucketOffsets) as nat == |this_.keyOffsets|)
+    && (0 < |this_.bucketOffsets| ==> Last(this_.bucketOffsets) as nat == |this_.keyOffsets| - 1)
 
     && Uint32_Order.IsSorted(this_.keyOffsets)
     && (0 < |this_.keyOffsets| ==> this_.keyOffsets[0] == 0)
@@ -121,6 +121,7 @@ module PageBucketImpl {
     returns (stitched: seq<byte>)
     requires WFStore(this_)
     requires offset as nat + len as nat <= AllocLen(this_)
+    ensures (DataIsAllocLen(this_.pages); stitched == Data(this_)[offset..offset as nat + len as nat])
   {
     DataIsAllocLen(this_.pages);
     ghost var data := Data(this_);
@@ -179,29 +180,82 @@ module PageBucketImpl {
     return stitchedArray[..];
   }
 
+  function IgetKey(this_: PageBucketStore, bucketIndex:nat, kvIndexInBucket:nat) : (key: seq<byte>)
+    requires WFStore(this_)
+    requires bucketIndex + 1 < |this_.bucketOffsets|
+    requires kvIndexInBucket < this_.bucketOffsets[bucketIndex+1] as nat - this_.bucketOffsets[bucketIndex] as nat
+  {
+    var kvIndex := this_.bucketOffsets[bucketIndex] as nat + kvIndexInBucket;
+    Uint32_Order.IsSortedImpliesLte(this_.bucketOffsets, bucketIndex + 1, |this_.bucketOffsets|-1);
+    var keyOffset := this_.keyOffsets[kvIndex];
+    Uint32_Order.IsSortedImpliesLte(this_.keyOffsets, kvIndex, kvIndex + 1);
+    var keyLen := this_.keyOffsets[kvIndex+1] - keyOffset;
+    Uint32_Order.IsSortedImpliesLte(this_.keyOffsets, kvIndex + 1, |this_.keyOffsets| - 1);
+    DataIsAllocLen(this_.pages);
+    Data(this_)[keyOffset..keyOffset + keyLen]
+  }
+  
   method getKey(this_: PageBucketStore, bucketIndex:uint64, kvIndexInBucket:uint64)
-    returns (key: Key)
+    returns (key: seq<byte>)
     requires WFStore(this_)
     requires bucketIndex as nat + 1 < |this_.bucketOffsets|
     requires kvIndexInBucket as nat < this_.bucketOffsets[bucketIndex+1] as nat - this_.bucketOffsets[bucketIndex] as nat
+    ensures key == IgetKey(this_, bucketIndex as nat, kvIndexInBucket as nat)
   {
-    var kvIndex := this_.bucketOffsets[bucketIndex] as uint64 + kvIndexInBucket;
-    Uint32_Order.IsStrictlySortedImpliesLte(this_.bucketOffsets, 0, bucketIndex as nat);
-    Uint32_Order.IsStrictlySortedImpliesLte(this_.bucketOffsets, bucketIndex as nat, |this_.bucketOffsets|-1);
+    var kvIndex: uint64 := this_.bucketOffsets[bucketIndex] as uint64 + kvIndexInBucket;
+    Uint32_Order.IsSortedImpliesLte(this_.bucketOffsets, bucketIndex as nat + 1, |this_.bucketOffsets|-1);
     var keyOffset := this_.keyOffsets[kvIndex] as uint64;
+    Uint32_Order.IsSortedImpliesLte(this_.keyOffsets, kvIndex as nat, kvIndex as nat + 1);
     var keyLen := this_.keyOffsets[kvIndex+1] as uint64 - keyOffset;
+    Uint32_Order.IsSortedImpliesLte(this_.keyOffsets, kvIndex as nat + 1, |this_.keyOffsets| - 1);
     key := stitchBytes(this_, keyOffset, keyLen);
   }
 
+  function IgetValue(this_: PageBucketStore, bucketIndex:nat, kvIndexInBucket:nat) : (key: seq<byte>)
+    requires WFStore(this_)
+    requires bucketIndex + 1 < |this_.bucketOffsets|
+    requires kvIndexInBucket < this_.bucketOffsets[bucketIndex+1] as nat - this_.bucketOffsets[bucketIndex] as nat
+  {
+    var kvIndex := this_.bucketOffsets[bucketIndex] as nat + kvIndexInBucket;
+    Uint32_Order.IsSortedImpliesLte(this_.bucketOffsets, bucketIndex + 1, |this_.bucketOffsets|-1);
+    var valueOffset := this_.valueOffsets[kvIndex];
+    Uint32_Order.IsSortedImpliesLte(this_.valueOffsets, kvIndex, kvIndex + 1);
+    var valueLen := this_.valueOffsets[kvIndex+1] - valueOffset;
+    Uint32_Order.IsSortedImpliesLte(this_.valueOffsets, kvIndex + 1, |this_.valueOffsets| - 1);
+    DataIsAllocLen(this_.pages);
+    Data(this_)[valueOffset..valueOffset + valueLen]
+  }
+  
   method getValue(this_: PageBucketStore, bucketIndex:uint64, kvIndexInBucket:uint64)
     returns (value:seq<byte>)
+    requires WFStore(this_)
+    requires bucketIndex as nat + 1 < |this_.bucketOffsets|
+    requires kvIndexInBucket as nat < this_.bucketOffsets[bucketIndex+1] as nat - this_.bucketOffsets[bucketIndex] as nat
+    ensures value == IgetValue(this_, bucketIndex as nat, kvIndexInBucket as nat)
   {
     var kvIndex := this_.bucketOffsets[bucketIndex] as uint64 + kvIndexInBucket;
+    Uint32_Order.IsSortedImpliesLte(this_.bucketOffsets, bucketIndex as nat + 1, |this_.bucketOffsets|-1);
     var valueOffset := this_.valueOffsets[kvIndex] as uint64;
+    Uint32_Order.IsSortedImpliesLte(this_.valueOffsets, kvIndex as nat, kvIndex as nat + 1);
     var valueLen := this_.valueOffsets[kvIndex+1] as uint64 - valueOffset;
+    Uint32_Order.IsSortedImpliesLte(this_.valueOffsets, kvIndex as nat + 1, |this_.valueOffsets| - 1);
     value := stitchBytes(this_, valueOffset, valueLen);
   }
 
+  function IPkvIterate(this_: PageBucketStore, bucketIndex: nat, prefixLen: nat) : (result: PackedKV.Pkv)
+    requires WFStore(this_)
+    requires bucketIndex + 1 < |this_.bucketOffsets|
+    requires prefixLen <= this_.bucketOffsets[bucketIndex+1] as nat - this_.bucketOffsets[bucketIndex] as nat
+    ensures PackedKV.WF(result)
+  {
+    if prefixLen == 0 then
+      PackedKV.EmptyPkv()
+    else
+      var prepkv := IPkvIterate(this_, bucketIndex, prefixLen - 1);
+      // TODO(robj): prove canAppend()
+      PackedKV.AppendEncodedMessage(prepkv, IgetKey(this_, bucketIndex, prefixLen-1), IgetValue(this_, bucketIndex, prefixLen-1))
+  }
+    
   method getPkv(this_: PageBucketStore, bucketIndex: uint64) returns (result: PackedKV.Pkv)
   {
     var dpkv := new DynamicPkv.DynamicPkv.PreSized(DynamicPkv.EmptyCapacity());
