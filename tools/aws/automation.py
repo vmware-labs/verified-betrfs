@@ -1,4 +1,4 @@
-SSH_ID_PEM="~/veribetrfsbastion.pem"
+SSH_ID_PEM="~/.ssh/veribetrfsbastion.pem"
 
 import json
 import subprocess
