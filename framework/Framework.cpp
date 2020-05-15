@@ -211,7 +211,7 @@ namespace MainDiskIOHandler_Compile {
         unsigned long suspendStart = __rdtsc();
         aio_suspend(aiolist, 1, NULL);
         unsigned long suspendEnd = __rdtsc();
-        IOAccounting::record.record_suspend(suspendEnd - suspendStart);
+        IOAccounting::record_suspend(suspendEnd - suspendStart);
 
         check_if_complete();
         if (!done) {
@@ -491,7 +491,7 @@ namespace MainDiskIOHandler_Compile {
       unsigned long suspendStart = __rdtsc();
       aio_suspend(&tasks[0], i, NULL);
       unsigned long suspendEnd = __rdtsc();
-      IOAccounting::record.record_suspend(suspendEnd - suspendStart);
+      IOAccounting::record_suspend(suspendEnd - suspendStart);
 
       maybeStartWriteReq();
     }
@@ -517,7 +517,7 @@ namespace MainDiskIOHandler_Compile {
     unsigned long suspendStart = __rdtsc();
     aio_suspend(&tasks[0], i, NULL);
     unsigned long suspendEnd = __rdtsc();
-    IOAccounting::record.record_suspend(suspendEnd - suspendStart);
+    IOAccounting::record_suspend(suspendEnd - suspendStart);
 
     maybeStartWriteReq();
   }
