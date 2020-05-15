@@ -182,6 +182,7 @@ void periodicReport(DB db, const char* phase, int elapsed_ms, int ops_completed)
     proc_io_report();
     jemalloc_report();
     cgroups_report();
+    db.cacheDebug();
     fflush(stdout);
 }
 
