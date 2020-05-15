@@ -102,6 +102,7 @@ module InsertImpl {
         <= MaxTotalBucketWeightUint64() {
       success := InsertKeyValue(k, s, key, value);
     } else {
+      //runFlushPolicy(k, s, io);
       success := false;
     }
     

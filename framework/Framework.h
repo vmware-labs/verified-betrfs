@@ -71,6 +71,9 @@ namespace MainDiskIOHandler_Compile {
     bool has_io_task() { return has_write_task() || has_read_task(); }
     
     private:
+    void dumpQueues();
+    
+    
     int fd;
     
     uint64 readResponseId;

@@ -304,6 +304,8 @@ module IOImpl {
     var lba := lbaGraph.value.loc.value;
     var graph := lbaGraph.value.succs;
 
+    s.outstandingBlockReads := ComputeMapRemove1(s.outstandingBlockReads, id);
+    
     if (sector.Some? && sector.value.SectorNode?) {
       var node := sector.value.node;
       if (graph == (if node.children.Some? then node.children.value else [])) {
@@ -318,7 +320,6 @@ module IOImpl {
         assert |s.cache.I()| <= MaxCacheSize();
         s.cache.Insert(ref, sector.value.node);
 
-        s.outstandingBlockReads := ComputeMapRemove1(s.outstandingBlockReads, id);
       } else {
         print "giving up; block does not match graph\n";
       }

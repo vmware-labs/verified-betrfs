@@ -138,7 +138,9 @@ module FlushPolicyImpl {
               action := getActionToFlush(k, s, stack + [childref], slots + [slot]);
             }
           } else {
-            if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
+            if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1
+              && BC.OutstandingRead(childref) !in s.outstandingBlockReads.Values
+            {
               action := FlushPolicyModel.ActionPageIn(childref);
             } else {
               action := FlushPolicyModel.ActionEvict;
