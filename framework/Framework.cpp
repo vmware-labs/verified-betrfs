@@ -245,6 +245,17 @@ namespace MainDiskIOHandler_Compile {
     }
   };
 
+  ostream& operator<<(ostream& os, const WriteTask& wt)
+  {
+    os << "WriteTask("
+       << "addr="        << wt.addr        << " "
+       << "len="         << wt.len         << " "
+       << "aligned_len=" << wt.aligned_len << " "
+       << "made_req="    << wt.made_req    << " "
+       << "done="        << wt.done        << ")";
+    return os;
+  }
+  
   struct ReadTask {
     uint64_t len;
     uint64_t aligned_len;
@@ -277,7 +288,7 @@ namespace MainDiskIOHandler_Compile {
       req.aio_fildes = fd;
       req.aio_offset = addr;
       req.aio_buf = bytes.ptr();
-      req.aio_nbytes = len;
+      req.aio_nbytes = aligned_len;
       req.aio_reqprio = 0;
       req.aio_sigevent.sigev_notify = SIGEV_NONE;
       nReadReqsWaiting++;
@@ -333,40 +344,17 @@ namespace MainDiskIOHandler_Compile {
 
   };
 
-  uint64 readFromFile(int fd, uint64 addr, uint8_t* res, int len)
+  ostream& operator<<(ostream& os, const ReadTask& rt)
   {
-    #ifdef LOG_QUERY_STATS
-    auto t1 = chrono::high_resolution_clock::now();
-    #endif
-    unsigned long clockStart = __rdtsc();
-
-    ssize_t count = pread(fd, res, len, addr);
-    unsigned long clockEnd = __rdtsc();
-    IOAccounting::record_read_latency(clockEnd - clockStart);
-    IOAccounting::record.read_count += 1;
-    IOAccounting::record.read_bytes += len;
-
-    #ifdef LOG_QUERY_STATS
-    auto t2 = chrono::high_resolution_clock::now();
-    long long ns = std::chrono::duration_cast<
-        std::chrono::nanoseconds>(t2 - t1).count();
-    if (currently_doing_action == ACTION_QUERY) {
-      benchmark_append("pread (query)", ns);
-    }
-    else if (currently_doing_action == ACTION_INSERT) {
-      benchmark_append("pread (insert)", ns);
-    }
-    else if (currently_doing_action == ACTION_SYNC) {
-      benchmark_append("pread (sync)", ns);
-    }
-    #endif
-
-    if (count < 0) {
-      fail("pread failed");
-    }
-    return (uint64)count;
+    os << "ReadTask("
+       << "addr="        << rt.addr        << " "
+       << "len="         << rt.len         << " "
+       << "aligned_len=" << rt.aligned_len << " "
+       << "made_req="    << rt.made_req    << " "
+       << "done="        << rt.done        << ")";
+    return os;
   }
-
+  
   void writeSync(int fd, uint64 addr, uint8_t* sector, size_t len) {
     size_t aligned_len;
     uint8_t *aligned_sector;
@@ -384,13 +372,6 @@ namespace MainDiskIOHandler_Compile {
       printf("fd=%d sector=%p len=%016lx addr=%016lx\n",
              fd, sector, len, (unsigned long)addr);
       fail("pwrite failed");
-    }
-  }
-
-  void readSync(int fd, uint64 addr, uint64 expected_len, uint64 len_to_read, uint8_t* sector) {
-    uint64 actualRead = readFromFile(fd, addr, sector, len_to_read);
-    if (actualRead < expected_len) {
-      fail("readSync did not find enough bytes");
     }
   }
 
@@ -485,16 +466,20 @@ namespace MainDiskIOHandler_Compile {
   }
 
   bool DiskIOHandler::prepareReadResponse() {
-    auto it = this->readReqs.begin();
-    if (it != this->readReqs.end()) {
-      this->readResponseId = it->first;
-      this->readResponseBytes = it->second->bytes;
-      this->responseAddr = it->second->addr;
-      this->readReqs.erase(it);
-      return true;
-    } else {
-      return false;
+    for (auto it = this->readReqs.begin();
+        it != this->readReqs.end(); ++it) {
+      std::shared_ptr<ReadTask> readTask = it->second;
+      readTask->check_if_complete();
+      if (readTask->done) {
+        this->readResponseId = it->first;
+        this->readResponseBytes = it->second->bytes;
+        this->responseAddr = it->second->addr;
+        this->readReqs.erase(it);
+        maybeStartReadReq();
+        return true;
+      }
     }
+    return false;
   }
 
   void DiskIOHandler::maybeStartWriteReq() {
@@ -568,7 +553,23 @@ namespace MainDiskIOHandler_Compile {
       maybeStartWriteReq();
     }
   }
+
+  void DiskIOHandler::dumpQueues() {
+    cout << "IO queues "
+         << "nWriteReqsOut=" << nWriteReqsOut << " "
+         << "nWriteReqsWaiting=" << nWriteReqsWaiting << " "
+         << "nReadReqsOut=" << nReadReqsOut << " "
+         << "nReadReqsWaiting=" << nReadReqsWaiting << endl;
+    for (auto p : this->writeReqs) {
+      cout << "  Write Request " << p.first << " " << *p.second << endl;
+    }
+    for (auto p : this->readReqs) {
+      cout << "  Read Request " << p.first << " " << *p.second << endl;
+    }
+  }
+  
   void DiskIOHandler::waitForOne() {
+    //dumpQueues();
     std::vector<aiocb*> tasks;
     malloc_accounting_set_scope("waitForOne.resize");
     tasks.resize(this->writeReqs.size() + this->readReqs.size());
