@@ -346,3 +346,14 @@ def plotSlowIos(ax, experiments):
     ax.grid(which="major", color="#dddddd")
     set_xlim(ax, experiments)
     ax.set_ylim(top=1)
+
+def plotCacheStats(ax, experiments):
+    ax.set_title("cache stats")
+    def plotOneExp(exp, plotkwargs):
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.writeback_stalls, exp.operation, window=10*K())), **plotkwargs)
+        line.set_label(exp.nickname + " stalls")
+    plotManyForeach(ax, experiments, plotOneExp)
+    ax.legend()
+    ax.grid(which="major", color="#dddddd")
+    set_xlim(ax, experiments)
+    

@@ -331,6 +331,11 @@ public:
 
     inline void CountAmassAllocations() {
         app.CountAmassAllocations();
+        printf("debug-accumulator finish\n");
+    }
+
+    inline void cacheDebug() {
+      app.CacheDebug();
     }
 };
 
@@ -376,6 +381,11 @@ public:
 
     inline void evictEverything() {
     }
+
+    inline void memDebugFrequent() {}
+    inline void memDebugInfrequent() { }
+    inline void cacheDebug() { }
+
 };
 
 const string RocksdbFacade::name = string("rocksdb");
@@ -408,6 +418,9 @@ public:
     }
 
     inline void CountAmassAllocations() {
+        asm volatile ("nop");
+    }
+    inline void cacheDebug() {
         asm volatile ("nop");
     }
 };
