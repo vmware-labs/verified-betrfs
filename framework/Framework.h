@@ -64,10 +64,12 @@ namespace MainDiskIOHandler_Compile {
     void completeWriteTasks();
     void waitForOne();
     void maybeStartWriteReq();
+    void maybeStartReadReq();
 
     bool has_read_task() { return !readReqs.empty(); }
     bool has_write_task() { return !writeReqs.empty(); }
-
+    bool has_io_task() { return has_write_task() || has_read_task(); }
+    
     private:
     int fd;
     
@@ -81,7 +83,7 @@ namespace MainDiskIOHandler_Compile {
     uint64 curId;
 
     std::map<uint64, std::shared_ptr<WriteTask>> writeReqs;
-    std::map<uint64, ReadTask> readReqs;
+    std::map<uint64, std::shared_ptr<ReadTask>> readReqs;
   };
 }
 
