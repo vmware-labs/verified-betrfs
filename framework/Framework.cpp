@@ -207,7 +207,11 @@ namespace MainDiskIOHandler_Compile {
       if (!done) {
         aiocb* aiolist[1];
         aiolist[0] = &aio_req_write; //&aio_req_fsync;
+
+        unsigned long suspendStart = __rdtsc();
         aio_suspend(aiolist, 1, NULL);
+        unsigned long suspendEnd = __rdtsc();
+        IOAccounting::record_suspend(suspendEnd - suspendStart);
 
         check_if_complete();
         if (!done) {
@@ -484,7 +488,10 @@ namespace MainDiskIOHandler_Compile {
         break;
       }
 
+      unsigned long suspendStart = __rdtsc();
       aio_suspend(&tasks[0], i, NULL);
+      unsigned long suspendEnd = __rdtsc();
+      IOAccounting::record_suspend(suspendEnd - suspendStart);
 
       maybeStartWriteReq();
     }
@@ -507,7 +514,10 @@ namespace MainDiskIOHandler_Compile {
       fail("waitForOne called with no tasks\n");
     }
 
+    unsigned long suspendStart = __rdtsc();
     aio_suspend(&tasks[0], i, NULL);
+    unsigned long suspendEnd = __rdtsc();
+    IOAccounting::record_suspend(suspendEnd - suspendStart);
 
     maybeStartWriteReq();
   }
@@ -559,6 +569,10 @@ void Application::EvictEverything() {
 
 void Application::DebugAccumulator() {
   handle_DebugAccumulator(k, hs, io);
+}
+
+void Application::CacheDebug() {
+  handle_CacheDebug(k, hs, io);
 }
 
 void Application::CountAmassAllocations() {
@@ -638,19 +652,19 @@ void Application::Insert(ByteString key, ByteString val)
     bool success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
     // TODO remove this to enable more asyncronocity:
 
-    if (io->has_write_task()) {
+    if (!success && io->has_write_task()) {
       #ifdef LOG_QUERY_STATS
       benchmark_start("write (insert)");
       #endif
 
-      io->completeWriteTasks();
+      io->waitForOne();
 
       #ifdef LOG_QUERY_STATS
       benchmark_end("write (insert)");
       #endif
     }
 
-    this->maybeDoResponse();
+    while (this->maybeDoResponse()) { };
 
     if (success) {
       LOG("doing insert... success!");
@@ -710,18 +724,18 @@ ByteString Application::Query(ByteString key)
     }
     #endif
 
-    if (io->has_write_task()) {
+    if (!result.has_value() && io->has_write_task()) {
       #ifdef LOG_QUERY_STATS
       benchmark_start("write (query)");
       #endif
 
-      io->completeWriteTasks();
+      io->waitForOne();
 
       #ifdef LOG_QUERY_STATS
       benchmark_start("write (query)");
       #endif
     }
-    this->maybeDoResponse();
+    while (this->maybeDoResponse()) { };
 
     if (result.has_value()) {
       DafnySequence<uint8_t> val_bytes = *result;

@@ -21,7 +21,9 @@ module CacheImpl {
   import opened ValueMessage
   import NodeModel
   import Backtrace
-  
+
+  datatype Statistics = Statistics(writebackStalls: uint64)
+
   // TODO ARARGHGHESGKSG it sucks that we have to wrap this in a new object type
   // just to have a Repr field. It also sucks that we have to have a Repr field
   // at all instead of an opaque Repr() function, see
@@ -29,8 +31,14 @@ module CacheImpl {
   class MutCache
   {
     var cache: MM.ResizingHashMap<Node>;
+    var statistics: Statistics;
     ghost var Repr: set<object>;
 
+    method DumpStatistics()
+    {
+      print "writebackStalls ", statistics.writebackStalls, "\n";
+    }
+    
     method DebugAccumulate()
     returns (acc:DebugAccumulator.DebugAccumulator)
     requires false

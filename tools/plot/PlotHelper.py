@@ -335,7 +335,6 @@ def plotSlowIos(ax, experiments):
     window = 10*K()
     def plotOneExp(exp, plotkwargs):
         line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.slow_reads, exp.operation, window=window)), **plotkwargs)
-        print(exp.nickname, len(exp.slow_reads.data))
         if not exp.slow_reads.empty():
             line.set_label(exp.nickname + " reads")
         line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.slow_writes, exp.operation, window=window)), linestyle="dotted", **plotkwargs)
@@ -343,4 +342,16 @@ def plotSlowIos(ax, experiments):
             line.set_label(exp.nickname + " writes")
     plotManyForeach(ax, experiments, plotOneExp)
     ax.legend()
+    ax.grid(which="major", color="#dddddd")
     set_xlim(ax, experiments)
+
+def plotCacheStats(ax, experiments):
+    ax.set_title("cache stats")
+    def plotOneExp(exp, plotkwargs):
+        line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.writeback_stalls, exp.operation, window=window)), **plotkwargs)
+        line.set_label(exp.nickname + " stalls")
+    plotManyForeach(ax, experiments, plotOneExp)
+    ax.legend()
+    ax.grid(which="major", color="#dddddd")
+    set_xlim(ax, experiments)
+    
