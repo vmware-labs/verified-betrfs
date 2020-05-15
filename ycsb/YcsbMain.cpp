@@ -456,6 +456,10 @@ public:
         app.CountAmassAllocations();
         printf("debug-accumulator finish\n");
     }
+
+    inline void cacheDebug() {
+      
+    }
 };
 
 const string VeribetrkvFacade::name = string("veribetrkv");

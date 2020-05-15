@@ -29,6 +29,9 @@ def plot_perf_compare(experiments):
     try: plotProcIoBytes(plotHelper.nextAxis(depth=2), experiments)
     except: raise
 
+    try: plotCacheStats(plotHelper.nextAxis(depth=1), experiments)
+    except: raise
+
 #    try: plotIoLatencyCdf(plotHelper.nextAxis(depth=2), experiments)
 #    except: raise
 
