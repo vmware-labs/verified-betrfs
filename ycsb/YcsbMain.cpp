@@ -458,7 +458,7 @@ public:
     }
 
     inline void cacheDebug() {
-      
+      app.CacheDebug();
     }
 };
 
@@ -514,6 +514,7 @@ public:
 
     inline void memDebugFrequent() {}
     inline void memDebugInfrequent() { }
+    inline void cacheDebug() { }
 
 };
 
@@ -551,6 +552,9 @@ public:
     }
 
     inline void memDebugInfrequent() {
+        asm volatile ("nop");
+    }
+    inline void cacheDebug() {
         asm volatile ("nop");
     }
 };
