@@ -6,6 +6,15 @@ include "../lib/Base/Maps.s.dfy"
 //
 
 module ThreeStateTypes {
+  // Why are these three states here in the .s file? The caller doesn't care
+  // *why* the sync isn't complete. These should move down the refinement
+  // stack.
+  // State3 means "some data that was ephemeral when this request was created
+  //   is still ephemeral."
+  // State2 means "some data that was ephemeral when this request was created
+  //   is still frozen."
+  // State2 means "all the data known when this request was created is now
+  //   persistent."
   datatype SyncReqStatus = State1 | State2 | State3
 
   function SyncReqs2to1(syncReqs: map<int, SyncReqStatus>) : map<int, SyncReqStatus> {
