@@ -48,6 +48,7 @@ module BucketImpl {
   ensures KMB.WF(tree)
   ensures forall k | k in KMB.Interpretation(tree) :: |k| <= KeyType.MaxLen() as nat
   ensures KVList.I(kvl) == B(KMB.Interpretation(tree))
+  ensures fresh(tree.repr)
   {
     var modelkvl := KMB.Model.KVList(kvl.keys, kvl.messages);
     tree := KMBBOps.BuildTreeForSequence(modelkvl);
@@ -79,6 +80,7 @@ module BucketImpl {
   ensures KMB.WF(tree)
   ensures forall k | k in KMB.Interpretation(tree) :: |k| <= KeyType.MaxLen() as nat
   ensures PackedKV.I(pkv) == B(KMB.Interpretation(tree))
+  ensures fresh(tree.repr)
   {
     var kv := pkv_to_kvl(pkv);
     assume |kv.keys| < Uint64UpperBound() - 1;
@@ -132,6 +134,7 @@ module BucketImpl {
         && tree != null
         && tree in Repr
         && tree.repr <= Repr
+        && {this} !! tree.repr
         && KMB.WF(tree)
         && Weight as int < Uint32UpperBound()
         && (forall k | k in KMB.Interpretation(tree) :: |k| <= KeyType.MaxLen() as nat)
@@ -252,18 +255,32 @@ module BucketImpl {
       WeightMessageSeqList(msgs);
     }
 
-    method GetPkv() returns (pkv: PKV.Pkv)
+    method GetPkvSorted(must_be_sorted:bool) returns (pkv: PKV.Pkv)
     requires Inv()
     ensures PKV.WF(pkv)
     ensures PKV.I(pkv) == Bucket
+    ensures must_be_sorted ==> PKV.SortedKeys(pkv)
     {
       if (format.BFTree?) {
         NumElementsLteWeight(B(KMB.Interpretation(tree)));
         KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
         pkv := tree_to_pkv(tree);
-      } else {
+      } else if !must_be_sorted || sorted {
         pkv := this.pkv;
+      } else {
+        var tree := pkv_to_tree(this.pkv);
+        NumElementsLteWeight(Bucket);
+        KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
+        pkv := tree_to_pkv(tree);
       }
+    }
+
+    method GetPkv() returns (pkv: PKV.Pkv)
+    requires Inv()
+    ensures PKV.WF(pkv)
+    ensures PKV.I(pkv) == Bucket
+    {
+      pkv := GetPkvSorted(false);
     }
 
     method WellMarshalled() returns (b: bool)
@@ -291,11 +308,10 @@ module BucketImpl {
       requires Inv()
       ensures result == (|I().b| == 0)
     {
-      assume false;
       if (format.BFTree?) {
         result := KMB.Empty(tree);
       } else {
-        assume false;
+        SetCardinality0(PackedKV.IKeys(pkv.keys));
         result := 0 == |pkv.keys.offsets| as uint64;
       }
     }
@@ -313,9 +329,7 @@ module BucketImpl {
         return true;
       }
 
-      assume 0 < |Bucket.keys|; // Need to fill in defs in BucketsLib to prove this.
-      assume false;  // Need to fill in defs in BucketsLib to prove correctness.
-      
+      assert forall k :: k in Bucket.keys <==> k in I().b;
       
       if i < |pivots| as uint64 {
         var lastkey := GetLastKey();
@@ -582,8 +596,6 @@ module BucketImpl {
     ensures Bucket == BucketInsert(old(Bucket), key, value)
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
-      assume false;
-
       if format.BFPkv? {
         format := BFTree;
         tree := pkv_to_tree(pkv);
@@ -595,13 +607,24 @@ module BucketImpl {
         var cur;
         tree, cur := KMB.Insert(tree, key, value);
         if (cur.Some?) {
+          ghost var map0 := Maps.MapRemove1(Bucket.b, key);
+          WeightBucketInduct(B(map0), key, cur.value);
+          WeightBucketInduct(B(map0), key, value);
+          assert Bucket.b[key := value] == map0[key := value];
+          assert Bucket.b == map0[key := cur.value];
           Weight := Weight - WeightMessageUint64(cur.value) + WeightMessageUint64(value) as uint64;
         } else {
+          WeightBucketInduct(Bucket, key, value);
           Weight := Weight + WeightKeyUint64(key) + WeightMessageUint64(value);
         }
       }
 
+      ghost var mergedMsg := Merge(value, BucketGet(old(Bucket), key));
+      assert mergedMsg == IdentityMessage() ==> KMB.Interpretation(tree) == MapRemove1(Bucket.b, key);
+      assert mergedMsg != IdentityMessage() ==> KMB.Interpretation(tree) == Bucket.b[key := mergedMsg];
+
       Bucket := B(KMB.Interpretation(tree));
+      Repr := {this} + tree.repr;
     }
 
     method Query(key: Key)
@@ -623,8 +646,7 @@ module BucketImpl {
     ensures left.Bucket == SplitBucketLeft(Bucket, pivot)
     ensures fresh(left.Repr)
     {
-      assume false;
-      var pkv := GetPkv();
+      var pkv := GetPkvSorted(true);
       //WeightSplitBucketLeft(Bucket, pivot);
       var pkvleft := PKV.SplitLeft(pkv, pivot);
       left := new MutBucket.InitFromPkv(pkvleft, sorted);
@@ -637,8 +659,7 @@ module BucketImpl {
     ensures right.Bucket == SplitBucketRight(Bucket, pivot)
     ensures fresh(right.Repr)
     {
-      assume false;
-      var pkv := GetPkv();
+      var pkv := GetPkvSorted(true);
       //WeightSplitBucketRight(Bucket, pivot);
       var pkvright := PKV.SplitRight(pkv, pivot);
       right := new MutBucket.InitFromPkv(pkvright, sorted);
@@ -707,11 +728,11 @@ module BucketImpl {
       ensures forall k | k in Bucket.keys :: Ord.lte(result, k)
     {
       if format.BFTree? {
-        assume false; // Need to fill in BucketsLib to prove 0 < |Interpretation(tree)|
         result := KMB.MinKey(tree);
       } else if format.BFPkv? {
-        assume false;
         result := PackedKV.FirstKey(pkv);
+        assert result == PackedKV.I(pkv).keys[0];
+        reveal BucketsLib.Lexicographic_Byte_Order.IsSorted();
       }
     }
     
@@ -736,7 +757,6 @@ module BucketImpl {
         if |key| as uint64 == 0 {
           return [0];
         } else {
-          assume false;
           return key;
         }
       }
@@ -750,11 +770,11 @@ module BucketImpl {
       ensures forall k | k in Bucket.keys :: Ord.lte(k, result)
     {
       if format.BFTree? {
-        assume false; // Need to fill in BucketsLib to prove 0 < |Interpretation(tree)|
         result := KMB.MaxKey(tree);
       } else if format.BFPkv? {
-        assume false;
         result := PackedKV.LastKey(pkv);
+        assert result == Last(PackedKV.I(pkv).keys);
+        reveal BucketsLib.Lexicographic_Byte_Order.IsSorted();
       }
     }
     
@@ -926,9 +946,9 @@ module BucketImpl {
     ensures IIterator(it') == BucketIteratorModel.IterInc(I(), IIterator(it))
     {
       BucketIteratorModel.lemma_NextFromIndex(I(), IIterator(it));
-      assume false;
 
       BucketIteratorModel.reveal_IterInc();
+      NumElementsLteWeight(I());
       it' := makeIter(I(), it.i + 1);
     }
 

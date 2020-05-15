@@ -38,6 +38,14 @@ module Sequences {
     }
   }
   
+  lemma SetCardinality0<T>(run: seq<T>)
+    ensures |Set(run)| == 0 <==> |run| == 0
+  {
+    if |run| != 0 {
+      assert run[0] in Set(run);
+    }
+  }
+  
   function ISet<T>(run: seq<T>) : iset<T> {
     iset x : T | x in multiset(run)
   }
