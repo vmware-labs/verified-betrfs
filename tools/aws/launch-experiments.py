@@ -22,7 +22,7 @@ rocks_suite = Suite(
     Variable("git_branch", "git_branch", [Value("block", "leak-adventure-2")]),
     Variable("system", "run_veri", [Value("rocks", "rocks")]),
     *common_vars)
-suite = ConcatSuite("study-29", veri_suite, rocks_suite)
+suite = ConcatSuite("robj-008", veri_suite, rocks_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
