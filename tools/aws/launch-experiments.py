@@ -13,17 +13,17 @@ common_vars = [
 veri_suite = Suite(
     "veri",
     Variable("git_branch", "git_branch", [Value("suspless", "suspend-less-la2"), Value("la2", "leak-adventure-2")]),
-    Variable("nodeCountFudge", "run_veri", [Value(str(f), "nodeCountFudge="+str(f)) for f in [0.7]]),
+    Variable("nodeCountFudge", "run_veri", [Value(str(f), "nodeCountFudge="+str(f)) for f in [0.5]]),
     Variable("system", "run_veri", [Value("veri1m", "config-1mb")]),
     Variable("max_children", "run_veri", [Value("fanout16", "max_children=16")]),
     Variable("cgroup", "run_veri", [Value("yescgroup", "cgroup=True")]),
     *common_vars)
 rocks_suite = Suite(
     "rocks",
-    Variable("git_branch", "git_branch", [Value("block", "leak-adventure-2")]),
+    Variable("git_branch", "git_branch", [Value("la2", "leak-adventure-2")]),
     Variable("system", "run_veri", [Value("rocks", "rocks")]),
     *common_vars)
-suite = ConcatSuite("robj-009", veri_suite, rocks_suite)
+suite = ConcatSuite("robj-010", veri_suite, rocks_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
