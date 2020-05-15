@@ -158,7 +158,8 @@ void ycsbRun(
     int next_sync_ms = sync_interval_ms;
     int display_interval_ms = 10000;
     int next_display_ms = display_interval_ms;
-
+    int have_done_insert_since_last_sync = false;
+    
 #define HACK_EVICT_PERIODIC 0
 #if HACK_EVICT_PERIODIC
 // An experiment that demonstrated that the heap was filling with small
@@ -183,9 +184,11 @@ void ycsbRun(
                 break;
             case ycsbc::UPDATE:
                 performYcsbUpdate(db, workload, verbose);
+                have_done_insert_since_last_sync = true;
                 break;
             case ycsbc::INSERT:
                 performYcsbInsert(db, workload, verbose);
+                have_done_insert_since_last_sync = true;
                 break;
             case ycsbc::SCAN:
                 cerr << "error: operation SCAN unimplemented" << endl;
@@ -209,9 +212,10 @@ void ycsbRun(
             clock_op_completed - clock_start).count();
 
 #if HACK_EVICT_PERIODIC
-        if (elapsed_ms >= next_evict_ms) {
+        if (have_done_insert_since_last_sync && elapsed_ms >= next_evict_ms) {
             printf("evict.");
             db.sync(true);
+            have_done_insert_since_last_sync = false;
             db.evictEverything();
             next_evict_ms += evict_interval_ms;
         }
@@ -231,8 +235,9 @@ void ycsbRun(
             next_display_ms += display_interval_ms;
         }
 
-        if (elapsed_ms >= next_sync_ms) {
+        if (have_done_insert_since_last_sync && elapsed_ms >= next_sync_ms) {
             db.sync(false);
+            have_done_insert_since_last_sync = false;
 
             /*
             if (i > 3000000) {
@@ -272,6 +277,7 @@ void ycsbRun(
 
     auto sync_started = chrono::steady_clock::now();
     db.sync(true);
+    have_done_insert_since_last_sync = false;
     auto sync_completed = chrono::steady_clock::now();
     auto sync_duration = std::chrono::duration_cast<std::chrono::nanoseconds>(
         sync_completed - sync_started).count();
