@@ -50,6 +50,7 @@ void fail(std::string err)
 }
 
 constexpr int MAX_WRITE_REQS_OUT = 8;
+constexpr int MAX_READ_REQS_OUT = 8;
 
 
 namespace NativeArithmetic_Compile {
@@ -139,6 +140,9 @@ namespace MainDiskIOHandler_Compile {
   
   int nWriteReqsOut = 0;
   int nWriteReqsWaiting = 0;
+
+  int nReadReqsOut = 0;
+  int nReadReqsWaiting = 0;
 
   struct WriteTask {
     size_t aligned_len;
@@ -242,11 +246,91 @@ namespace MainDiskIOHandler_Compile {
   };
 
   struct ReadTask {
-    DafnySequence<uint8_t> bytes;
+    uint64_t len;
+    uint64_t aligned_len;
     uint64 addr;
+    DafnySequence<uint8> bytes;
+    aiocb req;
 
-    ReadTask(DafnySequence<uint8_t> s, uint64 addr)
-        : bytes(s), addr(addr) { }
+    bool made_req;
+    bool done;
+    
+    ReadTask(int fd, uint64 addr, size_t len)
+      : len(len), addr(addr), made_req(false), done(false) {
+#if USE_DIRECT
+      aligned_len = (len + 4095) & ~0xfffULL;
+      {
+        uint8_t* aligned_res;
+        int result = posix_memalign((void **)&aligned_res, 4096, aligned_len);
+        if (result != 0) {
+          fail("DiskIOHandler::read couldn't allocate aligned memory");
+        }
+        bytes.sptr = std::shared_ptr<uint8_t>(aligned_res, free);
+        bytes.start = aligned_res;
+        bytes.len = len;
+      }
+#else
+      aligned_len = len;
+      bytes = DafnySequence<uint8>(len);
+#endif
+
+      req.aio_fildes = fd;
+      req.aio_offset = addr;
+      req.aio_buf = bytes.ptr();
+      req.aio_nbytes = len;
+      req.aio_reqprio = 0;
+      req.aio_sigevent.sigev_notify = SIGEV_NONE;
+      nReadReqsWaiting++;
+    }
+
+    void start() {
+      int ret = aio_read(&req);
+      if (ret != 0) {
+        cout << "number of readReqs " << endl;
+        if (errno == EAGAIN) { fail("aio_read failed EAGAIN"); }
+        else if (errno == EBADF) { fail("aio_read failed EBADF"); }
+        else if (errno == EINVAL) { fail("aio_read failed EINVAL"); }
+        else if (errno == ENOSYS) { fail("aio_read failed ENOSYS"); }
+        else if (errno == EOVERFLOW) { fail("aio_read failed EOVERFLOW"); }
+        else { fail("aio_read failed, error unknown, " + to_string(errno)); }
+      }
+      made_req = true;
+      nReadReqsWaiting--;
+      nReadReqsOut++;
+    }
+
+    void wait() {
+      if (!this->made_req) {
+        fail("wait() failed - request not made yet");
+      }
+      if (!done) {
+        aiocb* aiolist[1];
+        aiolist[0] = &req;
+        aio_suspend(aiolist, 1, NULL);
+
+        check_if_complete();
+        if (!done) {
+          fail("wait failed to complete");
+        }
+      }
+    }
+
+    void check_if_complete() {
+      if (!done && made_req) {
+        int status = aio_error(&req);
+        if (status == 0) {
+          ssize_t ret = aio_return(&req);
+          if (ret < 0 || (size_t)ret != len) {
+            fail("read did not read all bytes");
+          }
+          done = true;
+          nReadReqsOut--;
+        } else if (status != EINPROGRESS) {
+          fail("aio_error returned that read has failed");
+        }
+      }
+    }
+
   };
 
   uint64 readFromFile(int fd, uint64 addr, uint8_t* res, int len)
@@ -366,42 +450,19 @@ namespace MainDiskIOHandler_Compile {
 
   uint64 DiskIOHandler::read(uint64 addr, uint64 len)
   {
-    #ifdef LOG_QUERY_STATS
-    //benchmark_start("DiskIOHandler::read alloc");
-    #endif
+    malloc_accounting_set_scope("DiskIOHandler::read.ReadTask");
+    shared_ptr<ReadTask> readTask { new ReadTask(fd, addr, len) };
+    malloc_accounting_default_scope();
 
-    #if USE_DIRECT
-    size_t aligned_len = (len + 4095) & ~0xfffULL;
-    uint8_t* aligned_res;
-    int result = posix_memalign((void **)&aligned_res,
-        4096, aligned_len);
-    if (result != 0) {
-      fail("DiskIOHandler::read couldn't allocate aligned memory");
+    if (nReadReqsOut < MAX_READ_REQS_OUT) {
+      readTask->start();
     }
-    DafnySequence<uint8_t> bytes;
-    bytes.sptr = std::shared_ptr<uint8_t>(aligned_res, free);
-    bytes.start = aligned_res;
-    bytes.len = len;
-    #else
-    DafnySequence<uint8_t> bytes(len);
-    uint64 aligned_len = len;
-    #endif
-
-    #ifdef LOG_QUERY_STATS
-    //benchmark_end("DiskIOHandler::read alloc");
-    #endif
-
-    readSync(fd, addr, len, aligned_len, bytes.ptr());
-
-    #ifdef LOG_QUERY_STATS
-    //benchmark_start("DiskIOHandler::read finish");
-    #endif
 
     uint64 id = this->curId;
     this->curId++;
 
     malloc_accounting_set_scope("DiskIOHandler::ReadTask");
-    readReqs.insert(std::make_pair(id, ReadTask(bytes, addr)));
+    readReqs.insert(std::make_pair(id, readTask));
     malloc_accounting_default_scope();
 
     #ifdef LOG_QUERY_STATS
@@ -427,8 +488,8 @@ namespace MainDiskIOHandler_Compile {
     auto it = this->readReqs.begin();
     if (it != this->readReqs.end()) {
       this->readResponseId = it->first;
-      this->responseAddr = it->second.addr;
-      this->readResponseBytes = it->second.bytes;
+      this->readResponseBytes = it->second->bytes;
+      this->responseAddr = it->second->addr;
       this->readReqs.erase(it);
       return true;
     } else {
@@ -440,6 +501,17 @@ namespace MainDiskIOHandler_Compile {
     for (auto it = this->writeReqs.begin();
         it != this->writeReqs.end() && nWriteReqsWaiting > 0
           && nWriteReqsOut < MAX_WRITE_REQS_OUT; ++it)
+    {
+      if (!it->second->made_req) {
+        it->second->start();
+      }
+    }
+  }
+
+  void DiskIOHandler::maybeStartReadReq() {
+    for (auto it = this->readReqs.begin();
+        it != this->readReqs.end() && nReadReqsWaiting > 0
+          && nReadReqsOut < MAX_READ_REQS_OUT; ++it)
     {
       if (!it->second->made_req) {
         it->second->start();
@@ -499,7 +571,7 @@ namespace MainDiskIOHandler_Compile {
   void DiskIOHandler::waitForOne() {
     std::vector<aiocb*> tasks;
     malloc_accounting_set_scope("waitForOne.resize");
-    tasks.resize(this->writeReqs.size());
+    tasks.resize(this->writeReqs.size() + this->readReqs.size());
     malloc_accounting_default_scope();
     int i = 0;
     for (auto p : this->writeReqs) {
@@ -507,6 +579,14 @@ namespace MainDiskIOHandler_Compile {
         return;
       } else if (p.second->made_req) {
         tasks[i] = &p.second->aio_req_write;
+        i++;
+      }
+    }
+    for (auto p : this->readReqs) {
+      if (p.second->done) {
+        return;
+      } else if (p.second->made_req) {
+        tasks[i] = &p.second->req;
         i++;
       }
     }
@@ -520,6 +600,7 @@ namespace MainDiskIOHandler_Compile {
     IOAccounting::record_suspend(suspendEnd - suspendStart);
 
     maybeStartWriteReq();
+    maybeStartReadReq();
   }
 }
 
@@ -652,15 +733,15 @@ void Application::Insert(ByteString key, ByteString val)
     bool success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
     // TODO remove this to enable more asyncronocity:
 
-    if (!success && io->has_write_task()) {
+    if (!success && io->has_io_task()) {
       #ifdef LOG_QUERY_STATS
-      benchmark_start("write (insert)");
+      benchmark_start("io (insert)");
       #endif
 
       io->waitForOne();
 
       #ifdef LOG_QUERY_STATS
-      benchmark_end("write (insert)");
+      benchmark_end("io (insert)");
       #endif
     }
 
@@ -724,7 +805,7 @@ ByteString Application::Query(ByteString key)
     }
     #endif
 
-    if (!result.has_value() && io->has_write_task()) {
+    if (!result.has_value() && io->has_io_task()) {
       #ifdef LOG_QUERY_STATS
       benchmark_start("write (query)");
       #endif
