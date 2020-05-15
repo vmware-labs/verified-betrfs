@@ -31,6 +31,11 @@ void handle_DebugAccumulator(Constants k, Variables hs, std::shared_ptr<MainDisk
   __default::handleDebugAccumulator(*k.k, hs.hs, io);
 }
 
+void handle_CacheDebug(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
+{
+  __default::handleCacheDebug(*k.k, hs.hs, io);
+}
+
 void handle_CountAmassAllocations(Constants k, Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
 {
   __default::handleCountAmassAllocations(*k.k, hs.hs, io);

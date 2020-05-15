@@ -79,6 +79,7 @@ public:
   void Sync(bool graphSync);
   void EvictEverything();
   void DebugAccumulator();
+  void CacheDebug();
   void CountAmassAllocations();
   void Insert(ByteString key, ByteString val);
   ByteString Query(ByteString key);

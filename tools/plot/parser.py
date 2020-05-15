@@ -175,6 +175,8 @@ class Experiment:
         self.slow_reads = Trace("slow_reads", "count")
         self.slow_writes = Trace("slow_writes", "count")
 
+        self.writeback_stalls = Trace("writeback_stalls", "count")
+        
         self.parse()
         self.sortedOpns = list(self.operation.data.keys())
         self.sortedOpns.sort()
@@ -303,3 +305,6 @@ class Experiment:
                 self.slow_thresh[cur_op] = int(fields[2])
                 self.slow_reads[cur_op] = int(fields[4])
                 self.slow_writes[cur_op] = int(fields[6])
+
+            if line.startswith("writebackStalls"):
+                self.writeback_stalls[cur_op] = int(fields[1])

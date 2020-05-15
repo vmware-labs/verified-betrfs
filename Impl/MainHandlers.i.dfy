@@ -141,6 +141,13 @@ module MainHandlers refines Main {
     DebugAccumulator.Display(acc, 0);
   }
 
+  // robj hack UNVERIFIED DEBUG ONLY
+  method handleCacheDebug(k: Constants, hs: HeapState, io: DiskIOHandler)
+  {
+    var s := hs.s;
+    s.bc.cache.DumpStatistics();
+  }
+
   // jonh hack UNVERIFIED DEBUG ONLY
   method handleCountAmassAllocations(k: Constants, hs: HeapState, io: DiskIOHandler)
   requires false

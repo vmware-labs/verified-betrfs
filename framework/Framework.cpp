@@ -571,6 +571,10 @@ void Application::DebugAccumulator() {
   handle_DebugAccumulator(k, hs, io);
 }
 
+void Application::CacheDebug() {
+  handle_CacheDebug(k, hs, io);
+}
+
 void Application::CountAmassAllocations() {
   handle_CountAmassAllocations(k, hs, io);
 }

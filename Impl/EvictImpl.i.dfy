@@ -98,6 +98,7 @@ module EvictImpl {
         var needToWrite := NeedToWrite(s, ref);
         if needToWrite {
           if s.outstandingIndirectionTableWrite.None? {
+            s.cache.statistics := s.cache.statistics.(writebackStalls := s.cache.statistics.writebackStalls + 1);
             TryToWriteBlock(k, s, io, ref);
           } else {
           }
