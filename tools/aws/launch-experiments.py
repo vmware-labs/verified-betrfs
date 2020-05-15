@@ -7,7 +7,7 @@ common_vars = [
     Variable("ram", "run_veri", [Value("2gb", "ram=2.0gb")]),
     Variable("device", "run_veri", [Value("disk", "device=disk")]),
     Variable("workload", "run_veri", [Value("wka6m", "workload=ycsb/wka-uniform-rc6000k.spec")]),
-    Variable("duration", "run_veri", [Value("2h", "time_budget=3h")]),
+    Variable("duration", "run_veri", [Value("2h", "time_budget=2h")]),
     Variable("replica", "silent", [Value("r0", "r=0"), Value("r1", "r=1")]),
     ]
 veri_suite = Suite(
