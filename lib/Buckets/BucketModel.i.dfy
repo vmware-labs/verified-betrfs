@@ -825,6 +825,91 @@ module BucketModel {
     }
   }
 
+  lemma mergeToOneChildPreservesSorted(
+      top_keys: seq<Key>,
+      top_msgs: seq<Message>,
+      from: nat,
+      to: nat,
+      bot_keys: seq<Key>,
+      bot_msgs: seq<Message>,
+      bot_from: nat,
+      acc_keys: seq<Key>,
+      acc_msgs: seq<Message>,
+      slack: nat
+    )
+  requires |top_keys| == |top_msgs|
+  requires |bot_keys| == |bot_msgs|
+  requires |acc_keys| == |acc_msgs|
+  requires from <= to <= |top_keys|
+  requires bot_from <= |bot_keys|
+  requires IsStrictlySorted(top_keys)
+  requires IsStrictlySorted(bot_keys)
+  requires IsStrictlySorted(acc_keys)
+  requires seq_lt(acc_keys, bot_keys, bot_from)
+  requires seq_lt(acc_keys, top_keys, from)
+  ensures
+    var res := mergeToOneChild(
+          top_keys, top_msgs, from, to,
+          bot_keys, bot_msgs, bot_from,
+          acc_keys, acc_msgs, slack);
+    && IsStrictlySorted(res.keys)
+  decreases |top_keys| + |bot_keys| - from - bot_from
+  {
+    reveal_mergeToOneChild();
+    reveal_IsStrictlySorted();
+
+    if from == to {
+    } else if bot_from < |bot_keys| &&
+        top_keys[from] == bot_keys[bot_from] {
+      bots_weight_pop_back(bot_keys, bot_msgs, bot_from);
+
+      var key := top_keys[from];
+      var topmsg := top_msgs[from];
+      var botmsg := bot_msgs[bot_from];
+      var msg := ValueMessage.Merge(topmsg, botmsg);
+      if msg == IdentityMessage() {
+        mergeToOneChildPreservesSorted(
+            top_keys, top_msgs, from+1, to,
+            bot_keys, bot_msgs, bot_from+1,
+            acc_keys, acc_msgs,
+            slack + WeightKey(key) + WeightMessage(botmsg));
+      } else {
+        var delta := WeightMessage(msg) - WeightMessage(botmsg);
+        if delta > slack {
+        } else {
+          mergeToOneChildPreservesSorted(
+              top_keys, top_msgs, from+1, to,
+              bot_keys, bot_msgs, bot_from+1,
+              acc_keys + [key], acc_msgs + [msg],
+              slack - delta);
+        }
+      }
+    } else if bot_from == |bot_keys| ||
+        Keyspace.lt(top_keys[from], bot_keys[bot_from]) {
+      var key := top_keys[from];
+      var msg := top_msgs[from];
+      var delta := WeightKey(key) + WeightMessage(msg);
+      if delta > slack {
+      } else {
+        mergeToOneChildPreservesSorted(
+            top_keys, top_msgs, from+1, to,
+            bot_keys, bot_msgs, bot_from,
+            acc_keys + [key], acc_msgs + [msg],
+            slack - delta);
+      }
+    } else {
+      var key := bot_keys[bot_from];
+      var msg := bot_msgs[bot_from];
+
+      mergeToOneChildPreservesSorted(
+          top_keys, top_msgs, from, to,
+          bot_keys, bot_msgs, bot_from+1,
+          acc_keys + [key], acc_msgs + [msg],
+          slack);
+    }
+  }
+
+
   function pivotIndexes(top_keys: seq<Key>, pivots: seq<Key>) : (res: seq<int>)
   ensures |res| == |pivots|
   ensures forall i | 0 <= i < |res| :: res[i]
@@ -894,6 +979,7 @@ module BucketModel {
   requires WFBucket(top)
   requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
   requires 0 < |bots| == |pivots| + 1
+  ensures |result.bots| == |bots|
   {
     var idxs := pivotIndexes(top.keys, pivots);
     var tmp := MergeCompleted([], [], slack);
@@ -1016,8 +1102,16 @@ module BucketModel {
         }
       } else {
         var res := mergeResult(B(map[]), results, tmp.slack);
-        assert res.top == BucketComplement(top, flushedKeys) by {
-          reveal_BucketComplement();
+        calc {
+          res.top;
+          B(map[]);
+          {
+            reveal_BucketComplement();
+            assert forall key | key in top.b :: key in flushedKeys;
+            assert BucketComplement(top, flushedKeys).b
+                == map[];
+          }
+          BucketComplement(top, flushedKeys);
         }
       }
     } else {
@@ -1228,6 +1322,7 @@ module BucketModel {
   {
     var res := mergeToChildrenIter(top, bots, idxs, tmp, i, results);
     if i == |bots| {
+      assert {:split_here} true;
       if tmp.SlackExhausted? {
         var leftover_top := BucketOfSeq(top.keys[tmp.end..], top.msgs[tmp.end..]);
 
@@ -1243,6 +1338,7 @@ module BucketModel {
       assert WeightBucketList([]) == 0 by { reveal_WeightBucketList(); }
       WFBucketMapOfWFMessageSeq(res.top.keys, res.top.msgs);
     } else {
+      assert {:split_here} true;
       calc {
         WeightBucketList(bots[i..]);
         {
@@ -1308,6 +1404,66 @@ module BucketModel {
       }
     }
   }
+
+  lemma mergeToChildrenIterPreservesSorted(
+      top: Bucket,
+      bots: seq<Bucket>,
+      idxs: seq<int>,
+      tmp: singleMergeResult,
+      i: int,
+      results: seq<Bucket>)
+  requires WFBucket(top)
+  requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
+  requires IsStrictlySorted(top.keys)
+  requires forall i | 0 <= i < |bots| :: IsStrictlySorted(bots[i].keys)
+  requires forall i | 0 <= i < |results| :: IsStrictlySorted(results[i].keys)
+  requires 0 < |bots|
+  requires |results| == i
+  requires 0 <= i <= |bots|
+  requires |idxs| == |bots| - 1
+  requires forall i | 0 <= i < |idxs| :: 0 <= idxs[i] <= |top.keys|
+  requires tmp.SlackExhausted? ==> 0 <= tmp.end <= |top.keys|
+
+  decreases |bots| - i
+
+  ensures var res := mergeToChildrenIter(top, bots, idxs, tmp, i, results);
+      && IsStrictlySorted(res.top.keys)
+      && forall i | 0 <= i < |res.bots| :: IsStrictlySorted(res.bots[i].keys)
+  {
+    reveal_IsStrictlySorted();
+    var res := mergeToChildrenIter(top, bots, idxs, tmp, i, results);
+    if i == |bots| {
+      if tmp.SlackExhausted? {
+        var leftover_top := BucketOfSeq(top.keys[tmp.end..], top.msgs[tmp.end..]);
+      } else {
+      }
+      assert bots[i..] == [];
+      WFBucketMapOfWFMessageSeq(res.top.keys, res.top.msgs);
+    } else {
+      if tmp.MergeCompleted? {
+        var from := if i == 0 then 0 else idxs[i-1];
+        var to1 := if i == |idxs| then |top.keys| else idxs[i];
+        var to := if to1 < from then from else to1;
+
+        var tmp' := mergeToOneChild(
+            top.keys, top.msgs, from, to,
+            bots[i].keys, bots[i].msgs, 0,
+            [], [], tmp.slack);
+        mergeToOneChildPreservesSorted(
+            top.keys, top.msgs, from, to,
+            bots[i].keys, bots[i].msgs, 0,
+            [], [], tmp.slack);
+        var results' := results + [BucketOfSeq(tmp'.keys, tmp'.msgs)];
+        mergeToChildrenIterPreservesSorted(top, bots, idxs, tmp', i+1, results');
+
+        var res := mergeToChildrenIter(top, bots, idxs, tmp, i, results);
+      } else {
+        var results' := results + [bots[i]];
+        mergeToChildrenIterPreservesSorted(top, bots, idxs, tmp, i+1, results');
+      }
+    }
+  }
+
  
   lemma mergeToChildrenCorrect(
       top: Bucket,
@@ -1374,17 +1530,38 @@ module BucketModel {
     assert WeightBucketList([]) == 0 by { reveal_WeightBucketList(); }
     mergeToChildrenIterSlack(top, bots, idxs, tmp, 0, []);
   }
+ 
+  lemma mergeToChildrenPreservesSorted(
+      top: Bucket,
+      pivots: seq<Key>,
+      bots: seq<Bucket>,
+      slack: nat)
+  requires WFBucket(top)
+  requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
+  requires IsStrictlySorted(top.keys)
+  requires forall i | 0 <= i < |bots| :: IsStrictlySorted(bots[i].keys)
+  requires 0 < |bots| == |pivots| + 1
+  ensures var res := mergeToChildren(top, pivots, bots, slack);
+      && IsStrictlySorted(res.top.keys)
+      && forall i | 0 <= i < |res.bots| :: IsStrictlySorted(res.bots[i].keys)
+  {
+    reveal_mergeToChildren();
+    var idxs := pivotIndexes(top.keys, pivots);
+    var tmp := MergeCompleted([], [], slack);
+    mergeToChildrenIterPreservesSorted(top, bots, idxs, tmp, 0, []);
+  }
 
   datatype partialFlushResult = partialFlushResult(top: Bucket, bots: seq<Bucket>)
 
   function {:opaque} partialFlush(
       top: Bucket,
       pivots: seq<Key>,
-      bots: seq<Bucket>) : partialFlushResult
+      bots: seq<Bucket>) : (res : partialFlushResult)
   requires WFBucket(top)
   requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
   requires 0 < |bots| == |pivots| + 1
   requires WeightBucketList(bots) <= MaxTotalBucketWeight()
+  ensures |res.bots| == |bots|
   {
     var res := mergeToChildren(
         top, pivots, bots, MaxTotalBucketWeight() - WeightBucketList(bots));
@@ -1431,6 +1608,25 @@ module BucketModel {
   {
     reveal_partialFlush();
     mergeToChildrenSlack(
+        top, pivots, bots, MaxTotalBucketWeight() - WeightBucketList(bots));
+  }
+
+  lemma partialFlushWeightPreservesSorted(
+      top: Bucket,
+      pivots: seq<Key>,
+      bots: seq<Bucket>)
+  requires WFBucket(top)
+  requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
+  requires 0 < |bots| == |pivots| + 1
+  requires IsStrictlySorted(top.keys)
+  requires forall i | 0 <= i < |bots| :: IsStrictlySorted(bots[i].keys)
+  requires WeightBucketList(bots) <= MaxTotalBucketWeight()
+  ensures var res := partialFlush(top, pivots, bots);
+      && IsStrictlySorted(res.top.keys)
+      && forall i | 0 <= i < |res.bots| :: IsStrictlySorted(res.bots[i].keys)
+  {
+    reveal_partialFlush();
+    mergeToChildrenPreservesSorted(
         top, pivots, bots, MaxTotalBucketWeight() - WeightBucketList(bots));
   }
 }

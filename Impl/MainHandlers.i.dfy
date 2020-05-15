@@ -28,6 +28,7 @@ module MainHandlers refines Main {
   import FullImpl
   import MkfsImpl
   import MkfsModel
+  import Bounds  // jonh hack for metadata recording
 
   import BlockJournalCache
   import BBC = BetreeCache
@@ -61,11 +62,23 @@ module MainHandlers refines Main {
     SM.IVars(hs.s.I())
   }
 
+  method PrintMetadata()
+  {
+    print "metadata NodeBlockSize ", Bounds.NodeBlockSizeUint64(), "\n";
+    print "metadata MaxTotalBucketWeight ", Bounds.MaxTotalBucketWeightUint64(), "\n";
+    print "metadata MaxCacheSize ", Bounds.MaxCacheSizeUint64(), "\n";
+    print "metadata MaxNumChildren ", Bounds.MaxNumChildrenUint64(), "\n";
+    print "metadata IndirectionTableBlockSize ", Bounds.IndirectionTableBlockSizeUint64(), "\n";
+    print "metadata MinNodeBlockIndex ", Bounds.MinNodeBlockIndexUint64(), "\n";
+    print "metadata DiskNumJournalBlocks ", Bounds.DiskNumJournalBlocksUint64(), "\n";
+  }
+
   method InitState() returns (k: Constants, hs: HeapState)
     // conditions inherited:
     //ensures Inv(k, hs)
     //ensures ADM.M.Init(Ik(k), I(k, hs))
   {
+    PrintMetadata();
     var s := new Variables(k);
     hs := new HeapState(s, {});
     hs.Repr := s.Repr + {s};
@@ -101,8 +114,8 @@ module MainHandlers refines Main {
 
   // jonh hack UNVERIFIED DEBUG ONLY
   method handleEvictEverything(k: Constants, hs: HeapState, io: DiskIOHandler)
+  requires false
   {
-    assume false; // TODO(jonh) debugging stuff
     var s := hs.s;
     print "\nBefore\n";
     var acc := s.bc.DebugAccumulate();
@@ -110,20 +123,20 @@ module MainHandlers refines Main {
     var count:uint64 := s.bc.cache.cache.Count;
 //    var last_count:uint64 := count;
 //    var last_at_this_count:uint64 = 0;
-    while (count > 0) { // somehow it gets to where we can't get rid of the last few...?
+    while (count > 0)
+    { // somehow it gets to where we can't get rid of the last few...?
       EvictOrDealloc(k, s.bc, io);
       count := s.bc.cache.cache.Count;
     }
     print "\nAfter\n";
     acc := s.bc.DebugAccumulate();
     DebugAccumulator.Display(acc, 0);
-    assume false; // TODO(jonh) debugging stuff
   }
 
   // jonh hack UNVERIFIED DEBUG ONLY
   method handleCountAmassAllocations(k: Constants, hs: HeapState, io: DiskIOHandler)
+  requires false
   {
-    assume false; // TODO(jonh) debugging stuff
     AllocationReport.start();
     var s := hs.s;
 
@@ -148,7 +161,6 @@ module MainHandlers refines Main {
     }
 
     AllocationReport.stop();
-    assume false; // TODO(jonh) debugging stuff
   }
 
   method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: uint64, graphSync: bool)

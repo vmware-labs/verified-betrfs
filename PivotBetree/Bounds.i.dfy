@@ -21,6 +21,8 @@ module Bounds {
   lemma SanityCheckMinNodeBlockIndexUint64()
     ensures (MinNodeBlockIndexUint64() as int) * (NodeBlockSizeUint64() as int)
       >= 2*SuperblockSize() + (DiskNumJournalBlocksUint64() as int) * JournalBlockSize() + 2 * (IndirectionTableBlockSizeUint64() as int)
+  {
+  }
 
   // Disk layout goes: 2 Superblocks, Journal, 2 Indirection tables, nodes
   function SuperblockSize() : int { 4096 }  // Bytes

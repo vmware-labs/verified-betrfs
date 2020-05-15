@@ -38,6 +38,14 @@ module Sequences {
     }
   }
   
+  lemma SetCardinality0<T>(run: seq<T>)
+    ensures |Set(run)| == 0 <==> |run| == 0
+  {
+    if |run| != 0 {
+      assert run[0] in Set(run);
+    }
+  }
+  
   function ISet<T>(run: seq<T>) : iset<T> {
     iset x : T | x in multiset(run)
   }
@@ -116,6 +124,16 @@ module Sequences {
     else  [f(run[0])] + Apply(f, run[1..])
   }
 
+  // TODO: can we replace Apply with this?
+  function {:opaque} ApplyOpaque<E,R>(f: (E ~> R), run: seq<E>) : (result: seq<R>)
+    requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
+    ensures |result| == |run|
+    ensures forall i :: 0 <= i < |run| ==> result[i] == f(run[i]);
+    reads set i, o | 0 <= i < |run| && o in f.reads(run[i]) :: o
+  {
+    Apply(f, run)
+  }
+
   function Filter<E>(f : (E ~> bool), run: seq<E>) : (result: seq<E>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     ensures |result| <= |run|
@@ -136,6 +154,12 @@ module Sequences {
   {
     if |run| == 0 then init
     else f(FoldRight(f, init, run[1..]), run[0])
+  }
+
+  function FoldFromRight<A,E>(f: (A, E) -> A, init: A, run: seq<E>) : A
+  {
+    if |run| == 0 then init
+    else f(FoldFromRight(f, init, DropLast(run)), Last(run))
   }
 
   function {:opaque} remove<A>(s: seq<A>, pos: int) : seq<A>

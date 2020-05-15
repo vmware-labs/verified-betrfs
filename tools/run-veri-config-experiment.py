@@ -5,6 +5,10 @@ from __future__ import division
 
 import sys
 import os
+import subprocess
+import time
+import datetime
+import signal
 
 def autoconfig(config, memlimit):
   print("using node size roughly: " + config)
@@ -98,6 +102,7 @@ def main():
   log_stats = False
 
   rocks = None
+  time_budget_sec = 3600*24*365 # You get a year if you don't ask for a budget
 
   for arg in sys.argv[1:]:
     if arg.startswith("ram="):
@@ -120,8 +125,17 @@ def main():
       rocks = True
     elif arg == "log_stats":
       log_stats = True
+    elif arg.startswith("time_budget="):
+      val_str = arg.split("=")[1]
+      unit = val_str[-1]
+      mult = 1 if unit=="s" else 60 if unit=="m" else 3600 if unit=="h" else None
+      assert mult, "time_budget needs a unit"
+      time_budget_sec = float(val_str[:-1])
     else:
       assert False, "unrecognized argument: " + arg
+
+  actuallyprint("Experiment time budget %s" % (datetime.timedelta(seconds=time_budget_sec)))
+  actuallyprint("metadata time_budget %s seconds" % time_budget_sec)
 
   if config != None:
     assert not rocks
@@ -165,8 +179,12 @@ def main():
   ret = os.system(cmd)
   assert ret == 0
 
-  wl = "ycsb/workload" + workload + "-onefield.spec"
-  print("workload: " + wl)
+  if len(workload)==1:
+    # sheesh you're lazy
+    wl = "ycsb/workload" + workload + "-onefield.spec"
+  else:
+    wl = workload
+  actuallyprint("workload: " + wl)
 
   if device == "optane":
     loc = "/scratch0/tjhance/ycsb/"
@@ -193,7 +211,18 @@ def main():
   command = taskset_cmd + "cgexec -g memory:VeribetrfsExp ./" + exe + " " + wl + " " + loc + " " + cmdoption
   print(command)
 
-  os.system(command)
+  start_time = time.time()
+  end_time = start_time + time_budget_sec
+  proc = subprocess.Popen(command, shell=True, preexec_fn=os.setsid)
+  proc_grp_id = os.getpgid(proc.pid)
+  actuallyprint("experiment pid %d pgid %d" % (proc.pid, proc_grp_id))
+  while proc.poll() == None:
+    if time.time() >= end_time:
+      os.killpg(proc_grp_id, signal.SIGKILL)
+      actuallyprint("time_budget exhausted; killed.")
+      break
+    time.sleep(10)
+
   assert ret == 0
 
 if __name__ == "__main__":

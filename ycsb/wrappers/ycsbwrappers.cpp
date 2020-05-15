@@ -42,7 +42,7 @@ const ycsbcwrappers::TxInsert ycsbcwrappers::TransactionInsert(ycsbc::CoreWorklo
 
 const ycsbcwrappers::TxUpdate ycsbcwrappers::TransactionUpdate(ycsbc::CoreWorkload&workload) {
     const std::string &table = workload.NextTable();
-    const std::string &key = workload.NextSequenceKey();
+    const std::string &key = workload.NextTransactionKey();
     std::vector<ycsbc::DB::KVPair>* values = new std::vector<ycsbc::DB::KVPair>();
     values->reserve(16);
     if (workload.write_all_fields()) {

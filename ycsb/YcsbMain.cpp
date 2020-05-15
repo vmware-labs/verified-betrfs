@@ -428,6 +428,34 @@ void ycsbLoadAndRun(
     malloc_accounting_display("after experiment before teardown");
 }
 
+void dump_metadata(const char* workload_filename, const char* base_directory) {
+  FILE* fp = fopen("/sys/fs/cgroup/memory/VeribetrfsExp/memory.limit_in_bytes", "r");
+  char space[1000];
+  char* line = fgets(space, sizeof(space), fp);
+  fclose(fp);
+  printf("metadata cgroups-memory.limit_in_bytes %s", line);
+
+  printf("metadata workload_filename %s", workload_filename);
+  fp = fopen(workload_filename, "r");
+  while (true) {
+    char* line = fgets(space, sizeof(space), fp);
+    if (line==NULL) {
+      break;
+    }
+    printf("metadata workload %s", line);
+  }
+  fclose(fp);
+
+  printf("metadata base_directory %s", base_directory);
+  fflush(stdout);
+  char cmdbuf[1000];
+  // yes, this is a security hole. In the measurement framework,
+  // not the actual system. You can take the man out of K&R, as they say...
+  snprintf(cmdbuf, sizeof(cmdbuf), "df --output=source %s | tail -1", base_directory);
+  system(cmdbuf);
+  fflush(stdout);
+}
+
 int main(int argc, char* argv[]) {
     bool verbose = false;
  
@@ -447,6 +475,9 @@ int main(int argc, char* argv[]) {
     // (unsupported on macOS 10.14) std::filesystem::create_directory(base_directory);
     // check that base_directory is empty
     int status = std::system(("[ \"$(ls -A " + base_directory + ")\" ]").c_str());
+
+    dump_metadata(workload_filename.c_str(), base_directory.c_str());
+
     if (status == 0) {
         cerr << "error: " << base_directory << " appears to be non-empty" << endl;
         exit(-1);
