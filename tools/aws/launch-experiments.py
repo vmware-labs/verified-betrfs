@@ -8,21 +8,22 @@ common_vars = [
     Variable("device", "run_veri", [Value("disk", "device=disk")]),
     Variable("workload", "run_veri", [Value("wka6m", "workload=ycsb/wka-uniform-rc6000k.spec")]),
     Variable("duration", "run_veri", [Value("2h", "time_budget=3h")]),
+    Variable("replica", "silent", [Value("r0", "r=0"), Value("r1", "r=1")]),
     ]
 veri_suite = Suite(
     "veri",
-    Variable("git_branch", "git_branch", [Value("page", "page-la2"), Value("block", "leak-adventure-2")]),
-    Variable("nodeCountFudge", "run_veri", [Value(str(f), "nodeCountFudge="+str(f)) for f in [1.3]]),
+    Variable("git_branch", "git_branch", [Value("suspless", "suspend-less-la2"), Value("la2", "leak-adventure-2")]),
+    Variable("nodeCountFudge", "run_veri", [Value(str(f), "nodeCountFudge="+str(f)) for f in [0.5]]),
     Variable("system", "run_veri", [Value("veri1m", "config-1mb")]),
     Variable("max_children", "run_veri", [Value("fanout16", "max_children=16")]),
-    Variable("cgroup", "run_veri", [Value("nocgroup", "cgroup=False")]),
+    Variable("cgroup", "run_veri", [Value("yescgroup", "cgroup=True")]),
     *common_vars)
 rocks_suite = Suite(
     "rocks",
-    Variable("git_branch", "git_branch", [Value("block", "leak-adventure-2")]),
+    Variable("git_branch", "git_branch", [Value("la2", "leak-adventure-2")]),
     Variable("system", "run_veri", [Value("rocks", "rocks")]),
     *common_vars)
-suite = ConcatSuite("robj-009", veri_suite, rocks_suite)
+suite = ConcatSuite("robj-010", veri_suite, rocks_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
