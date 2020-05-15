@@ -346,7 +346,7 @@ void ycsbRun(
           next_cdf_reset_ops += cdf_reset_interval_ops;
         }
 
-        if (have_done_insert_since_last_sync && elapsed_ms >= next_sync_ms) {
+        if (have_done_insert_since_last_sync && i > next_sync_ops) {
             db.sync(false);
             have_done_insert_since_last_sync = false;
 
