@@ -37,7 +37,9 @@ endif
 
 WANT_DEBUG=false
 ifeq "$(WANT_DEBUG)" "true"
-	DBG_SYMBOLS_FLAG=-g
+	# DEBUG_UNDERLYING makes DafnySequence pointer objects 16B more expensive,
+	# and does a bunch of runtime reference tracking.
+	DBG_SYMBOLS_FLAG=-g -fsanitize=address -fno-omit-frame-pointer #-DDEBUG_UNDERLYING=1 
 	OPT_FLAG=-O0
 else
 	DBG_SYMBOLS_FLAG=
@@ -299,7 +301,9 @@ VERIBETRFS_AUX_FILES=\
 	build/framework/UnverifiedRowCache.o \
 	build/framework/Framework.o \
 	build/framework/MallocAccounting.o \
+	build/framework/Backtrace.o \
 	build/framework/NativeArrays.o \
+
 
 VERIBETRFS_O_FILES=\
 	$(VERIBETRFS_AUX_FILES)\
@@ -320,6 +324,7 @@ build/Veribetrfs: $(VERIBETRFS_O_FILES)
 
 ##############################################################################
 # YCSB
+
 
 VERIBETRFS_YCSB_O_FILES=\
 	$(VERIBETRFS_AUX_FILES)\
@@ -346,6 +351,22 @@ librocksdb:
 
 .PHONY: libycsbc
 
+# NOTE: this uses jemalloc (sudo apt install libjemalloc-dev)
+# TODO(jonh): why are we disabling jemalloc in rocks? Probably because we
+# didn't have it insalled on the host on first run. Should fix that for
+# fairness, not that it'll be a big factor for rocks, for which most memory is
+# managed explicitly in on-disk representation.
+WANT_JEMALLOC=true
+ifeq "$(WANT_JEMALLOC)" "true"
+JEMALLOC_LIBDIR=/usr/lib/x86_64-linux-gnu/
+JEMALLOC_LIBS=jemalloc
+JEMALLOC_DEFINES=-DVERI_USE_JEMALLOC
+JEMALLOC_OPTS=-L$(JEMALLOC_LIBDIR) -Wl,-rpath,$(JEMALLOC_LIBDIR) -ljemalloc $(JEMALLLOC_LIBS)
+else
+JEMALLOC_DEFINES=
+JEMALLOC_OPTS=
+endif
+
 build/YcsbMain.o: ycsb/YcsbMain.cpp
 	$(CC) $(STDLIB) -c -o $@ \
 			-I ycsb/build/include \
@@ -357,23 +378,49 @@ build/YcsbMain.o: ycsb/YcsbMain.cpp
 			-Winline -std=c++17 $(O3FLAG) \
 			-D_YCSB_VERIBETRFS \
 			$(POUND_DEFINES) \
-			$(MALLOC_ACCOUNTING_DEFINE) \
-			$(DBG_SYMBOLS_FLAG) \
-			$(GPROF_FLAGS) \
+			$(MALLOC_ACCOUNTING_DEFINE) $(DBG_SYMBOLS_FLAG) $(OPT_FLAG) $(GPROF_FLAGS) \
+			$(JEMALLOC_DEFINES) \
 			$^
 
-build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/YcsbMain.o
+# Our build rules are a nightmare. we're actually using make's default g++ rule!
+# So i'll one-off this one. Man we need to clean the build mess.
+# Oh my goodness what a disaster.
+# If I build ioaccounting with clang, VeribetrYcsb doesn't link.
+# If I build ioaccounting with g++, RocksYcsb doesn't link.
+# So I'm going to build TWO SEPARATE BINARIES, one for each target.
+# We really need to fix this bailing wire after the deadline.
+#
+ycsb/ioaccounting-gpp.o: ycsb/ioaccounting.cpp
+	g++  -c -o $@ \
+		$^ \
+		-std=c++17 \
+		-I vendor/hdrhist/ \
+
+ycsb/ioaccounting-clang.o: ycsb/ioaccounting.cpp
+	$(CC) $(STDLIB) -c -o $@ \
+		$^ \
+		-std=c++17 \
+		-stdlib=libc++ \
+		-I vendor/hdrhist/ \
+
+ACCOUNTING_OBJECTS_COMMON=ycsb/stataccounting.o
+ACCOUNTING_OBJECTS_VERI=$(ACCOUNTING_OBJECTS_COMMON) ycsb/ioaccounting-clang.o
+ACCOUNTING_OBJECTS_ROCKS=$(ACCOUNTING_OBJECTS_COMMON) ycsb/ioaccounting-gpp.o
+
+build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/YcsbMain.o $(ACCOUNTING_OBJECTS_VERI)
 	# NOTE: this uses c++17, which is required by hdrhist
 	$(CC) $(STDLIB) -o $@ \
 			-Winline -std=c++17 $(O3FLAG) \
 			-L ycsb/build \
 			-L vendor/rocksdb \
-			$(DBG_SYMBOLS_FLAG) \
+			$(OPT_FLAGS) \
 			$(VERIBETRFS_YCSB_O_FILES) \
+			$(ACCOUNTING_OBJECTS_VERI) \
 			build/YcsbMain.o \
+			$(JEMALLOC_OPTS) \
 			-lycsbc-libcpp -lpthread -ldl $(LDFLAGS)
 
-build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp
+build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp $(ACCOUNTING_OBJECTS_ROCKS)
 	# NOTE: this uses c++17, which is required by hdrhist
 	$(CC) -o $@ \
 			-L ycsb/build \
@@ -388,6 +435,7 @@ build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp
 			-D_YCSB_ROCKS \
 			$(POUND_DEFINES) \
 			ycsb/YcsbMain.cpp \
+			$(ACCOUNTING_OBJECTS_ROCKS) \
 			-lycsbc-default -lrocksdb -lpthread -ldl $(LDFLAGS) \
 
 

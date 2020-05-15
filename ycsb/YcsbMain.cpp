@@ -15,10 +15,16 @@
 #include "rocksdb/db.h"
 #endif
 
+#include "ioaccounting.h"
+#include "stataccounting.h"
+
 #include <strstream>
 //#include <filesystem>
 #include <chrono>
 #include <iostream>
+#ifdef VERI_USE_JEMALLOC
+#include <jemalloc/jemalloc.h>
+#endif // VERI_USE_JEMALLOC
 
 using namespace std;
 
@@ -76,6 +82,109 @@ inline void performYcsbUpdate(DB db, ycsbc::CoreWorkload& workload, bool verbose
     db.update(txupdate.key, value);
 }
 
+bool cstr_ends_with(const char* haystack, const char* needle) {
+  int haystack_len = strlen(haystack);
+  int needle_len = strlen(needle);
+  if (haystack_len < needle_len) { return false; }
+  return strcmp(&haystack[haystack_len - needle_len], needle) == 0;
+}
+
+// OS view of heap size
+void external_heap_size(size_t* heap, size_t* all_maps) {
+  size_t result = -1;
+  FILE* fp = fopen("/proc/self/maps", "r");
+  size_t total = 0;
+  while (true) {
+    char space[1000];
+    char* line = fgets(space, sizeof(space), fp);
+    if (line==NULL) { break; }
+    char* remainder;
+    size_t base = strtol(line, &remainder, 16);
+    size_t end = strtol(&remainder[1], NULL, 16);
+    result = end - base;
+    total += result;
+
+    if (cstr_ends_with(line, "[heap]\n")) {
+      *heap = result;
+    }
+  }
+  fclose(fp);
+  *all_maps = total;
+}
+
+void proc_io_report() {
+  long int read_bytes = -1;
+  long int write_bytes = -1;
+  FILE* fp = fopen("/proc/self/io", "r");
+  while (true) {
+    char space[1000];
+    char* line = fgets(space, sizeof(space), fp);
+    if (line==NULL) { break; }
+#define READ_PREFIX "read_bytes"
+#define WRITE_PREFIX "write_bytes"
+    if (strncmp(line, READ_PREFIX, strlen(READ_PREFIX))==0) {
+      read_bytes = strtol(&line[strlen(READ_PREFIX)+2], NULL, 10);
+    }
+    if (strncmp(line, WRITE_PREFIX, strlen(WRITE_PREFIX))==0) {
+      write_bytes = strtol(&line[strlen(WRITE_PREFIX)+2], NULL, 10);
+    }
+  }
+  fclose(fp);
+  printf("proc-io read_bytes %ld write_bytes %ld\n", read_bytes, write_bytes);
+}
+
+void jemalloc_print_cb(void* opaque, const char* msg) {
+  fputs(msg, stdout);
+}
+
+void jemalloc_report() {
+#ifdef VERI_USE_JEMALLOC
+  malloc_stats_print(jemalloc_print_cb, NULL, "j" /*"jmdaxe"*/);
+#endif // JEMALLOC_VERSION
+}
+
+void cgroups_report() {
+  FILE* fp = fopen("/sys/fs/cgroup/memory/VeribetrfsExp/memory.usage_in_bytes", "r");
+  char space[1000];
+  char* line = fgets(space, sizeof(space), fp);
+  fclose(fp);
+  printf("cgroups-memory.usage_in_bytes %s", line);
+
+  fp = fopen("/sys/fs/cgroup/memory/VeribetrfsExp/memory.stat", "r");
+  while (true) {
+    char* line = fgets(space, sizeof(space), fp);
+    if (line==NULL) {
+      break;
+    }
+    printf("cgroups-memory.stat %s", line);
+  }
+  fclose(fp);
+}
+
+static int infrequent_clock=0;
+template< class DB >
+void periodicReport(DB db, const char* phase, int elapsed_ms, int ops_completed) {
+    printf("elapsed_ms %d ops %d %s\n", elapsed_ms, ops_completed, phase);
+
+    malloc_accounting_display("periodic");
+    db.memDebugFrequent();
+    infrequent_clock += 1;
+    if (infrequent_clock%3 == 0) {
+      db.memDebugInfrequent();
+    }
+
+    size_t heap, all_maps;
+    external_heap_size(&heap, &all_maps);
+    printf("os-map-total %8ld os-map-heap %8ld\n", all_maps, heap);
+
+    IOAccounting::report();
+    StatAccounting::report();
+    proc_io_report();
+    jemalloc_report();
+    cgroups_report();
+    fflush(stdout);
+}
+
 template< class DB >
 void ycsbLoad(DB db, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
     cerr << db.name << " [step] loading (num ops: " << num_ops << ")" << endl;
@@ -91,7 +200,11 @@ void ycsbLoad(DB db, ycsbc::CoreWorkload& workload, int num_ops, bool verbose) {
             clock_op_completed - clock_last_report).count() > report_interval_ms) {
 
             cout << db.name << " (completed " << i << " ops)" << endl;
-            malloc_accounting_status();
+
+            int elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                clock_op_completed - clock_start).count();
+            periodicReport(db, "load", elapsed_ms, i);
+
             auto report_completed = chrono::steady_clock::now();
             clock_last_report = report_completed;
         }
@@ -123,12 +236,17 @@ void print_summary(HDRHistQuantiles& summary, const string db_name, const string
     }
 }
 
+bool importantStep(uint64_t i) {
+  return false;
+  // return (i%10000==0) || (i==59367 || i==59368 || i==74652 || i==74653 || i==90107 || i==90108 || i == 102197 || i == 102198);
+}
+
 template< class DB >
 void ycsbRun(
     DB db,
     ycsbc::CoreWorkload& workload,
     int num_ops,
-    int sync_interval_ms,
+    int sync_interval_ops,
     bool verbose) {
 
     malloc_accounting_set_scope("ycsbRun.setup");
@@ -150,16 +268,18 @@ void ycsbRun(
     malloc_accounting_default_scope();
 
     cerr << db.name << " [step] running experiment (num ops: " << num_ops << ", sync interval " <<
-        sync_interval_ms << "ms)" << endl;
+        sync_interval_ops << "ops)" << endl;
 
     auto clock_start = chrono::steady_clock::now();
     auto clock_prev = clock_start;
     auto clock_last_sync = clock_start;
-    int next_sync_ms = sync_interval_ms;
+    int next_sync_ops = sync_interval_ops;
     int display_interval_ms = 10000;
     int next_display_ms = display_interval_ms;
     int have_done_insert_since_last_sync = false;
-    
+    int cdf_reset_interval_ops = 100000;
+    int next_cdf_reset_ops = cdf_reset_interval_ops;
+
 #define HACK_EVICT_PERIODIC 0
 #if HACK_EVICT_PERIODIC
 // An experiment that demonstrated that the heap was filling with small
@@ -168,13 +288,6 @@ void ycsbRun(
     int evict_interval_ms = 100000;
     int next_evict_ms = evict_interval_ms;
 #endif // HACK_EVICT_PERIODIC
-
-#define HACK_PROBE_PERIODIC 1
-#if HACK_PROBE_PERIODIC
-// An experiment to periodically study how the kv allocations are distributed
-    int probe_interval_ms = 50000;
-    int next_probe_ms = probe_interval_ms;
-#endif // HACK_PROBE_PERIODIC
 
     for (int i = 0; i < num_ops; ++i) {
         auto next_operation = workload.NextOperation();
@@ -220,19 +333,17 @@ void ycsbRun(
             next_evict_ms += evict_interval_ms;
         }
 #endif // HACK_EVICT_PERIODIC
-#if HACK_PROBE_PERIODIC
-        if (elapsed_ms >= next_probe_ms) {
-            printf("probe.");
-            db.CountAmassAllocations();
-            next_probe_ms += probe_interval_ms;
-        }
-#endif // HACK_PROBE_PERIODIC
 
+        //printf("elapsed_ms %d next_display %d\n", elapsed_ms, next_display_ms);
         if (elapsed_ms >= next_display_ms) {
-            malloc_accounting_display("periodic");
-            printf("elapsed %d next %d int %d\n",
-                elapsed_ms, next_display_ms, display_interval_ms);
+            periodicReport(db, "run", elapsed_ms, i);
             next_display_ms += display_interval_ms;
+        }
+
+        if (i >= next_cdf_reset_ops) {
+          IOAccounting::report_histograms();
+          IOAccounting::reset_histograms();
+          next_cdf_reset_ops += cdf_reset_interval_ops;
         }
 
         if (have_done_insert_since_last_sync && elapsed_ms >= next_sync_ms) {
@@ -248,9 +359,10 @@ void ycsbRun(
             }
             */
             auto sync_completed = chrono::steady_clock::now();
+            int sync_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                sync_completed - clock_op_completed).count();
 
-            cout << db.name << " [op] sync (completed " << i << " ops)" << endl;
-            malloc_accounting_status();
+            cout << db.name << " [op] sync (completed " << i << " ops)" << " (sync time " << sync_time_ms << " ms)" << endl;
 
             #ifdef _YCSB_VERIBETRFS
             #ifdef LOG_QUERY_STATS
@@ -267,7 +379,7 @@ void ycsbRun(
 
             clock_last_sync = sync_completed;
             clock_prev = sync_completed;
-            next_sync_ms += sync_interval_ms;
+            next_sync_ops += sync_interval_ops;
 
             fflush(stdout);
         } else {
@@ -335,8 +447,14 @@ public:
         app.EvictEverything();
     }
 
-    inline void CountAmassAllocations() {
+    inline void memDebugFrequent() {
+    }
+
+    inline void memDebugInfrequent() {
+        app.DebugAccumulator();
+        printf("debug-accumulator start\n");
         app.CountAmassAllocations();
+        printf("debug-accumulator finish\n");
     }
 };
 
@@ -362,26 +480,37 @@ public:
 
     inline void insert(const string& key, const string& value) {
         static struct rocksdb::WriteOptions woptions = rocksdb::WriteOptions();
-        woptions.disableWAL = true;
+//        woptions.disableWAL = true;
+        // this should be the default, but to be careful we don't charge rocks
+        // to sync on every write.
+        woptions.sync = false;
         rocksdb::Status status = db.Put(woptions, rocksdb::Slice(key), rocksdb::Slice(value));
         assert(status.ok());
     }
 
     inline void update(const string& key, const string& value) {
         static struct rocksdb::WriteOptions woptions = rocksdb::WriteOptions();
-        woptions.disableWAL = true;
+//        woptions.disableWAL = true;
+        // this should be the default, but to be careful we don't charge rocks
+        // to sync on every write.
+        woptions.sync = false;
         rocksdb::Status status = db.Put(woptions, rocksdb::Slice(key), rocksdb::Slice(value));
         assert(status.ok());
     }
 
     inline void sync(bool /*fullSync*/) {
-        static struct rocksdb::FlushOptions foptions = rocksdb::FlushOptions();
-        rocksdb::Status status = db.Flush(foptions);
+//        static struct rocksdb::FlushOptions foptions = rocksdb::FlushOptions();
+//        rocksdb::Status status = db.Flush(foptions);
+        rocksdb::Status status = db.SyncWAL();
         assert(status.ok());
     }
 
     inline void evictEverything() {
     }
+
+    inline void memDebugFrequent() {}
+    inline void memDebugInfrequent() { }
+
 };
 
 const string RocksdbFacade::name = string("rocksdb");
@@ -413,7 +542,11 @@ public:
         asm volatile ("nop");
     }
 
-    inline void CountAmassAllocations() {
+    inline void memDebugFrequent() {
+        asm volatile ("nop");
+    }
+
+    inline void memDebugInfrequent() {
         asm volatile ("nop");
     }
 };
@@ -426,11 +559,11 @@ void ycsbLoadAndRun(
     ycsbc::CoreWorkload& workload,
     int record_count,
     int num_ops,
-    int sync_interval_ms,
+    int sync_interval_ops,
     bool verbose) {
 
     ycsbLoad(db, workload, record_count, verbose);
-    ycsbRun(db, workload, num_ops, sync_interval_ms, verbose);
+    ycsbRun(db, workload, num_ops, sync_interval_ops, verbose);
     malloc_accounting_display("after experiment before teardown");
 }
 
@@ -443,6 +576,10 @@ void dump_metadata(const char* workload_filename, const char* base_directory) {
 
   printf("metadata workload_filename %s", workload_filename);
   fp = fopen(workload_filename, "r");
+  if (fp==NULL) {
+    printf("Cannot access workload '%s'!\n", workload_filename);
+    exit(-1);
+  }
   while (true) {
     char* line = fgets(space, sizeof(space), fp);
     if (line==NULL) {
@@ -513,11 +650,12 @@ int main(int argc, char* argv[]) {
     int record_count = stoi(props[ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY]);
 
     auto properties_map = props.properties();
-    if (properties_map.find("syncintervalms") == properties_map.end()) {
-        cerr << "error: spec must provide syncintervalms" << endl;
+    if (properties_map.find("syncintervalops") == properties_map.end()) {
+        cerr << "error: spec must provide syncintervalops" << endl;
         exit(-1);
     }
-    int sync_interval_ms = stoi(props["syncintervalms"]);
+    //int sync_interval_ms = stoi(props["syncintervalms"]);
+    int sync_interval_ops = stoi(props["syncintervalops"]);
     int num_ops = stoi(props[ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY]);
 
 
@@ -531,7 +669,7 @@ int main(int argc, char* argv[]) {
         Application app(veribetrfs_filename);
         VeribetrkvFacade db(app);
     
-        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
+        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ops, verbose);
     #endif 
     }
 
@@ -560,7 +698,7 @@ int main(int argc, char* argv[]) {
         assert(status.ok());
         RocksdbFacade db(*rocks_db);
 
-        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
+        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ops, verbose);
     #endif 
     }
 
@@ -569,7 +707,7 @@ int main(int argc, char* argv[]) {
     if (do_nop) {
         NopFacade db;
 
-        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
+        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ops, verbose);
     }
 }
 

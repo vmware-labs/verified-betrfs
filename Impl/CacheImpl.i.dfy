@@ -1,5 +1,7 @@
 include "../lib/Base/DebugAccumulator.i.dfy"
 include "NodeImpl.i.dfy"
+include "../lib/Base/Backtrace.s.dfy"
+
 //
 // Implements map<Reference, Node>
 //
@@ -18,7 +20,8 @@ module CacheImpl {
   import opened KeyType
   import opened ValueMessage
   import NodeModel
-
+  import Backtrace
+  
   // TODO ARARGHGHESGKSG it sucks that we have to wrap this in a new object type
   // just to have a Repr field. It also sucks that we have to have a Repr field
   // at all instead of an opaque Repr() function, see
@@ -34,6 +37,43 @@ module CacheImpl {
     {
       acc := DebugAccumulator.EmptyAccumulator();
       var a := new DebugAccumulator.AccRec(cache.Count, "Node");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
+
+      var counter := new DebugAccumulator.DebugCounter();
+
+      var iter := cache.SimpleIterStart();
+      var output := cache.SimpleIterOutput(iter);
+      while (!output.Done?) {
+        var node := output.value;
+        node.DebugCountBytes(counter);
+
+        iter := cache.SimpleIterInc(iter);
+        output := cache.SimpleIterOutput(iter);
+      }
+
+      Backtrace.DumpCollection(counter.pkvBacktraces);
+      
+      a := new DebugAccumulator.AccRec(counter.pivotCount, "pivot-key-count");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
+      a := new DebugAccumulator.AccRec(counter.keyCount, "bucket-key-count");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
+      a := new DebugAccumulator.AccRec(counter.messageCount, "bucket-message-count");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
+      a := new DebugAccumulator.AccRec(counter.pivotWeight, "pivot-key-bytes");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
+      a := new DebugAccumulator.AccRec(counter.keyWeight, "bucket-key-bytes");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
+      a := new DebugAccumulator.AccRec(counter.messageWeight, "bucket-message-bytes");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
+      a := new DebugAccumulator.AccRec(counter.kvlBuckets, "kvl-buckets-count");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
+      a := new DebugAccumulator.AccRec(counter.treeBuckets, "tree-buckets-count");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
+      a := new DebugAccumulator.AccRec(counter.pkvBuckets, "pkv-buckets-count");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
+      a := new DebugAccumulator.AccRec(counter.weirdBuckets, "weird-buckets-count");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
+      a := new DebugAccumulator.AccRec(counter.treeNodes, "tree-nodes-count");
       acc := DebugAccumulator.AccPut(acc, "cache", a);
     }
 

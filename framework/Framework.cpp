@@ -4,6 +4,7 @@
 #include "Bundle.i.h"
 
 #include "MallocAccounting.h"
+#include "../ycsb/ioaccounting.h"
 
 //#include <filesystem> // c++17 lol
 #include <sys/types.h>
@@ -113,6 +114,7 @@ namespace NativePackedInts_Compile {
 }
 
 namespace MainDiskIOHandler_Compile {
+
 #if USE_DIRECT
   uint8_t *aligned_copy(uint8_t* buf, size_t len, size_t *aligned_len) {
     uint8_t *aligned_bytes;
@@ -142,6 +144,7 @@ namespace MainDiskIOHandler_Compile {
     size_t aligned_len;
     uint8_t *aligned_bytes;
     aiocb aio_req_write;
+    unsigned long clockStart;
 
     bool made_req;
     bool done;
@@ -180,6 +183,7 @@ namespace MainDiskIOHandler_Compile {
     }
 
     void start() {
+      clockStart = __rdtsc();
       int ret = aio_write(&aio_req_write);
       if (ret != 0) {
         cout << "number of writeReqs " << endl;
@@ -203,7 +207,11 @@ namespace MainDiskIOHandler_Compile {
       if (!done) {
         aiocb* aiolist[1];
         aiolist[0] = &aio_req_write; //&aio_req_fsync;
+
+        unsigned long suspendStart = __rdtsc();
         aio_suspend(aiolist, 1, NULL);
+        unsigned long suspendEnd = __rdtsc();
+        IOAccounting::record.record_suspend(suspendEnd - suspendStart);
 
         check_if_complete();
         if (!done) {
@@ -221,6 +229,10 @@ namespace MainDiskIOHandler_Compile {
             fail("write did not write all bytes");
           }
           done = true;
+          unsigned long clockEnd = __rdtsc();
+          IOAccounting::record_write_latency(clockEnd - clockStart);
+          IOAccounting::record.write_count += 1;
+          IOAccounting::record.write_bytes += aligned_len;
           nWriteReqsOut--;
         } else if (status != EINPROGRESS) {
           fail("aio_error returned that write has failed");
@@ -242,8 +254,13 @@ namespace MainDiskIOHandler_Compile {
     #ifdef LOG_QUERY_STATS
     auto t1 = chrono::high_resolution_clock::now();
     #endif
+    unsigned long clockStart = __rdtsc();
 
     ssize_t count = pread(fd, res, len, addr);
+    unsigned long clockEnd = __rdtsc();
+    IOAccounting::record_read_latency(clockEnd - clockStart);
+    IOAccounting::record.read_count += 1;
+    IOAccounting::record.read_bytes += len;
 
     #ifdef LOG_QUERY_STATS
     auto t2 = chrono::high_resolution_clock::now();
@@ -471,7 +488,10 @@ namespace MainDiskIOHandler_Compile {
         break;
       }
 
+      unsigned long suspendStart = __rdtsc();
       aio_suspend(&tasks[0], i, NULL);
+      unsigned long suspendEnd = __rdtsc();
+      IOAccounting::record.record_suspend(suspendEnd - suspendStart);
 
       maybeStartWriteReq();
     }
@@ -494,7 +514,10 @@ namespace MainDiskIOHandler_Compile {
       fail("waitForOne called with no tasks\n");
     }
 
+    unsigned long suspendStart = __rdtsc();
     aio_suspend(&tasks[0], i, NULL);
+    unsigned long suspendEnd = __rdtsc();
+    IOAccounting::record.record_suspend(suspendEnd - suspendStart);
 
     maybeStartWriteReq();
   }
@@ -542,6 +565,10 @@ void Application::crash() {
 
 void Application::EvictEverything() {
   handle_EvictEverything(k, hs, io);
+}
+
+void Application::DebugAccumulator() {
+  handle_DebugAccumulator(k, hs, io);
 }
 
 void Application::CountAmassAllocations() {
@@ -867,35 +894,96 @@ void set_amass_mode(bool b) {
 }
 
 namespace AllocationReport_Compile {
-static std::unordered_map<uint64_t, uint64_t> sptr_to_len;
 
-void start() {
+#if DEBUG_UNDERLYING
+class Observation {
+private:
+  std::set<uint64_t> observed_ptrs;
+  std::unordered_map<uint64_t, uint64_t> sptr_to_len;
+  std::unordered_map<uint64_t, std::set<uint64_t>> sptr_to_ref_set;
+  std::unordered_map<uint64_t, uint64_t> sptr_to_used_sizes;
+  void visit_uptr(uint64 noderef, const DafnySequence<uint8>& seqref);
+
+public:
+  void start();
+  void sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node);
+  void stop();
+};
+static Observation g_observation;
+
+void Observation::start() {
   printf("allocationreport start\n");
   sptr_to_len.clear();
+  sptr_to_ref_set.clear();
+  sptr_to_used_sizes.clear();
 }
 
-#if TRACK_DOWN_UNDERLYING_ALLOCATIONS
-static void visit_uptr(std::set<uint64_t>* observed_ptrs, const DafnySequence<uint8>& ref) {
-  uint64_t uptr = (uint64_t) ref.sptr.get();
-  observed_ptrs->insert(uptr);
-  uint64_t underlying_size = ref.dbg_underlying_len;
+void Observation::stop() {
+  uint64_t total_underlying = 0;
+  for (auto it : sptr_to_len) {
+    total_underlying += it.second;
+  }
+
+  cout << "allocationreport stop underyling_count "
+    << sptr_to_len.size()
+    << " total_underlying " << total_underlying << endl;
+
+  for (auto it : sptr_to_ref_set) {
+    printf("allocationreport refset ref %lu refd by %lu noderefs\n  ",
+        it.first, it.second.size());
+    for (auto it2 : it.second) {
+       printf("  %lu", it2);
+    }
+    printf("\n");
+  }
+  
+  for (auto it : sptr_to_used_sizes) {
+    size_t used = sptr_to_len[it.first];
+    size_t refcount = sptr_to_ref_set[it.first].size();
+    printf("allocationreport ref_used ref %lu underlying %lu used_total %lu refd_by_nodes %lu\n",
+        it.first, used, it.second, refcount);
+  }
+}
+
+void Observation::visit_uptr(uint64 noderef, const DafnySequence<uint8>& seqref) {
+  uint64_t uptr = (uint64_t) seqref.sptr.get();
+  observed_ptrs.insert(uptr);
+  uint64_t seq_size = seqref.len;
+  uint64_t underlying_size = seqref.dbg_underlying_len;
   if (sptr_to_len.find(uptr) != sptr_to_len.end()) {
     assert(sptr_to_len.at(uptr) == underlying_size);
   } else {
     sptr_to_len.insert(std::make_pair(uptr, underlying_size));
   }
+
+  auto emplaced = sptr_to_ref_set.emplace(uptr, std::set<uint64_t>{});
+  emplaced.first->second.insert(noderef);
+
+  auto used_emplaced = sptr_to_used_sizes.emplace(uptr, 0);
+  used_emplaced.first->second += seq_size;
 }
 
-void sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node) {
+void Observation::sampleNode(uint64 noderef, std::shared_ptr<NodeImpl_Compile::Node> node) {
   const char* type = "unpossible";
   int count = -1;
 
-  std::set<uint64_t> observed_ptrs;
-  for (size_t i=0; i<node->pivotTable.len; i++) {
-    DafnySequence<uint8> pivot = node->pivotTable.start[i];
-    visit_uptr(&observed_ptrs, pivot);
+  observed_ptrs.clear();
+
+  // Print the children
+  if (node->children.is_Option_Some()) {
+    auto children = node->children.dtor_value();
+    for (size_t i=0; i<children.len; i++) {
+      printf("Node %lu -> child %lu\n", noderef, children.start[i]);
+    }
   }
 
+  // Keys in the pivot table
+  for (size_t i=0; i<node->pivotTable.len; i++) {
+    DafnySequence<uint8> pivot = node->pivotTable.start[i];
+    visit_uptr(noderef, pivot);
+  }
+
+  // Keys & messages in buckets
   for (size_t i=0; i<node->buckets.len; i++) {
     std::shared_ptr<BucketImpl_Compile::MutBucket> bucket = node->buckets.start[i];
 
@@ -906,33 +994,38 @@ void sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node) {
       auto pkv = bucket->pkv;
       for (size_t i=0; i<pkv.keys.offsets.len; i++) {
         auto key = PackedKV_Compile::__default::GetKey(pkv, i);
-        visit_uptr(&observed_ptrs, key);
+        visit_uptr(noderef, key);
       }
       for (size_t i=0; i<pkv.messages.offsets.len; i++) {
         auto message = PackedKV_Compile::__default::GetMessage(pkv, i);
         assert(message.is_Message_Define());
         DafnySequence<uint8> value_message = message.dtor_value();
-        visit_uptr(&observed_ptrs, value_message);
+        visit_uptr(noderef, value_message);
       }
     }
   }
 
   count = observed_ptrs.size();
-  printf("allocationreport ref %lu type %s observed_sptr_count %d\n", ref, type, count);
+  printf("allocationreport noderef %lu type %s observed_sptr_count %d\n", noderef, type, count);
 }
-#else // TRACK_DOWN_UNDERLYING_ALLOCATIONS
-void sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node) {
+#endif // DEBUG_UNDERLYING
+
+void start() {
+#if DEBUG_UNDERLYING
+  g_observation.start();
+#endif // DEBUG_UNDERLYING
 }
-#endif // TRACK_DOWN_UNDERLYING_ALLOCATIONS
+
+void sampleNode(uint64 noderef, std::shared_ptr<NodeImpl_Compile::Node> node) {
+#if DEBUG_UNDERLYING
+  g_observation.sampleNode(noderef, node);
+#endif // DEBUG_UNDERLYING
+}
 
 void stop() {
-  uint64_t total_underlying = 0;
-  for (auto it : sptr_to_len) {
-    total_underlying += it.second;
-  }
-  cout << "allocationreport stop underyling_count "
-    << sptr_to_len.size()
-    << " total_underlying " << total_underlying << endl;
+#if DEBUG_UNDERLYING
+  g_observation.stop();
+#endif // DEBUG_UNDERLYING
 }
 
 } // AllocationReport_Compile

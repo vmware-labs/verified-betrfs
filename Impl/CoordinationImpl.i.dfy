@@ -306,21 +306,28 @@ module CoordinationImpl {
       initialization(k, s, io);
       success := false;
     } else {
-      var can_append := s.jc.journalist.canAppend(
-          Journal.JournalInsert(key, value));
-      if can_append {
-        success := InsertImpl.insert(k, s.bc, io, key, value);
-        if success {
-          CommitterAppendImpl.JournalAppend(k, s.jc, key, value);
-        }
+      // TODO jonh: if !canAppend, rather than forcing a sync, let's just let the journal get
+      // stale. In fact, perhaps we can stop journaling altogether until somebody cares enough
+      // to sync the tree!
+      // THRONE OF LIES: let's forget the journal for now. Sync will be lies, but this lets me
+      // measure the impact of journal IO, particularly during early cache-not-full phase.
+      success := InsertImpl.insert(k, s.bc, io, key, value);
 
-        s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
-        s.reveal_ReprInv();
-        assert s.ProtectedReprInv();
-      } else {
-        var wait := doSync(k, s, io, true /* graphSync */);
-        success := false;
-      }
+//      var can_append := s.jc.journalist.canAppend(
+//          Journal.JournalInsert(key, value));
+//      if can_append {
+//        success := InsertImpl.insert(k, s.bc, io, key, value);
+//        if success {
+//          CommitterAppendImpl.JournalAppend(k, s.jc, key, value);
+//        }
+//
+//        s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
+//        s.reveal_ReprInv();
+//        assert s.ProtectedReprInv();
+//      } else {
+//        var wait := doSync(k, s, io, true /* graphSync */);
+//        success := false;
+//      }
     }
   }
 }

@@ -6,6 +6,32 @@ include "NativeTypes.s.dfy"
 module DebugAccumulator {
   import opened NativeTypes
 
+  class DebugCounter {
+    var pivotCount:uint64;
+    var keyCount:uint64;
+    var messageCount:uint64;
+    var pivotWeight:uint64;
+    var keyWeight:uint64;
+    var messageWeight:uint64;
+    var treeBuckets:uint64;
+    var kvlBuckets:uint64;
+    var pkvBuckets:uint64;
+    var pkvBacktraces: map<seq<uint64>, uint64> // Map to number of occurances
+    var weirdBuckets:uint64;
+    var treeNodes:uint64;
+
+    constructor() {
+      pivotWeight := 0;
+      keyWeight := 0;
+      messageWeight := 0;
+      treeBuckets := 0;
+      kvlBuckets := 0;
+      pkvBuckets := 0;
+      weirdBuckets := 0;
+      treeNodes := 0;
+    }
+  }
+
   class AccRec {
     var key:string;
     var count:uint64;

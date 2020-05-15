@@ -7,6 +7,7 @@ include "NodeModel.i.dfy"
 //
 
 module NodeImpl {
+  import DebugAccumulator
   import opened Options
   import opened Sequences
   import opened NativeTypes
@@ -31,6 +32,66 @@ module NodeImpl {
     var children: Option<seq<BT.G.Reference>>;
     var buckets: seq<BucketImpl.MutBucket>;
     ghost var Repr: set<object>;
+
+    method DebugCountBytes(acc:DebugAccumulator.DebugCounter) {
+      var i:uint64 := 0;
+      //print("pivots-one-node ", |pivotTable| as uint64, " buckets ", |buckets| as uint64, "\n");
+      while i < |pivotTable| as uint64 {
+        acc.pivotCount := acc.pivotCount + 1;
+        acc.pivotWeight := acc.pivotWeight + |pivotTable[i]| as uint64;
+        i := i + 1;
+      }
+      var hasTreeBucket := false;
+      i:=0;
+      while i < |buckets| as uint64 {
+        var bucket := buckets[i];
+        /*
+        if bucket.format.BFKvl?
+        {
+          acc.kvlBuckets := acc.kvlBuckets + 1;
+          var kvl := bucket.kvl;
+          var j:uint64 := 0;
+          while j < |kvl.keys| as uint64 {
+            acc.keyCount := acc.keyCount + 1;
+            acc.keyWeight := acc.keyWeight + |kvl.keys[j]| as uint64;
+            j := j + 1;
+          }
+          j:=0;
+          while j < |kvl.messages| as uint64 {
+            acc.messageCount := acc.messageCount + 1;
+            acc.messageWeight := acc.messageWeight + |kvl.messages[j].value| as uint64;
+            j := j + 1;
+          }
+        }
+        else */
+        if bucket.format.BFTree? {
+          acc.treeBuckets := acc.treeBuckets + 1;
+          hasTreeBucket := true;
+        }
+        else if bucket.format.BFPkv? {
+          acc.pkvBuckets := acc.pkvBuckets + 1;
+          // Could separate out these weights by bucket type, but probably not interesting
+          // as Rob's going to turn everything into pkvs anyway.
+          acc.keyCount := acc.keyCount + |bucket.pkv.keys.offsets| as uint64;
+          acc.keyWeight := acc.keyWeight + |bucket.pkv.keys.data| as uint64;
+          acc.messageCount := acc.messageCount + |bucket.pkv.messages.offsets| as uint64;
+          acc.messageWeight := acc.messageWeight + |bucket.pkv.messages.data| as uint64;
+          // var btcount: uint64;
+          // if bucket.backtrace in acc.pkvBacktraces {
+          //   btcount := acc.pkvBacktraces[bucket.backtrace] + 1;
+          // } else {
+          //   btcount := 1;
+          // }
+          // acc.pkvBacktraces := acc.pkvBacktraces[bucket.backtrace := btcount];
+        } else {
+          acc.weirdBuckets := acc.weirdBuckets + 1;
+        }
+        i := i + 1;
+      }  // while buckets
+      if hasTreeBucket {
+        acc.treeNodes := acc.treeNodes + 1;
+      }
+    }
 
     constructor(
       pivotTable: Pivots.PivotTable,
@@ -69,6 +130,99 @@ module NodeImpl {
         && (forall i | 0 <= i < |buckets| :: buckets[i].Inv())
         && (forall i | 0 <= i < |buckets| :: this !in buckets[i].Repr)
       )
+    }
+
+    // There's another copy of this method over in LeafImpl. It's a mess
+    // because I'm just trying to prove that we CAN manage memory successfully.
+    // TODO Clean this mess up.
+    method CopyKey(k: KeyType.Key) returns (k2: KeyType.Key)
+      ensures k == k2
+    {
+      k2 := [] + k;
+    }
+
+    method RecopyPivots()
+    requires Inv()
+    modifies Repr
+    ensures Inv()
+    ensures I() == old(I())
+    ensures forall o | o in Repr :: o in old(Repr) || fresh(o);
+    {
+      assume 0 <= |pivotTable| < Uint64UpperBound();
+      var newPivotTable := [];
+      var i:uint64 := 0;
+      while i < (|pivotTable| as uint64)
+        invariant pivotTable == old(pivotTable)
+        invariant i as int <= |pivotTable|
+        invariant i as int == |newPivotTable|
+        invariant forall j :: 0<=j<i ==> newPivotTable[j] == pivotTable[j]
+      {
+        var newKey := CopyKey(pivotTable[i]);
+        newPivotTable := newPivotTable + [newKey];
+        i := i + 1;
+      }
+      pivotTable := newPivotTable;
+      assume false; // all the Repr crap
+    }
+
+    method AmassBuckets()
+    requires Inv()
+    modifies Repr
+    ensures Inv()
+    ensures I() == old(I())
+    ensures forall o | o in Repr :: o in old(Repr) || fresh(o);
+    {
+    /*
+      // Every assume false in this method is a Repr problem. And a timeout. Pulling out hair.
+      var newBuckets:seq<BucketImpl.MutBucket> := [];
+      assert MutBucket.ReprSeqDisjoint(newBuckets) by { MutBucket.reveal_ReprSeqDisjoint(); }
+      assert MutBucket.ReprSeq(newBuckets) !! Repr by { MutBucket.reveal_ReprSeq(); }
+      var i:uint64 := 0;
+      assume 0 <= |buckets| < Uint64UpperBound();
+      while i < (|buckets| as uint64)
+        invariant buckets == old(buckets)
+        invariant Inv()
+        invariant i as int <= |buckets|
+        invariant i as int == |newBuckets|
+        invariant forall j :: 0<=j<i ==> newBuckets[j].Inv()
+        invariant forall j :: 0<=j<i ==> buckets[j].I() == newBuckets[j].I()
+        invariant MutBucket.ReprSeqDisjoint(newBuckets)
+        invariant MutBucket.ReprSeq(newBuckets) !! Repr
+      {
+        assert old(buckets[i].Inv());
+        assert buckets[i].Inv();
+        var oldKvl := buckets[i].GetKvl();
+        var newKvl := KVList.AmassKvl(oldKvl);
+        var newBucket := new MutBucket(newKvl);
+        newBuckets := newBuckets + [newBucket];
+        assert MutBucket.ReprSeqDisjoint(newBuckets) by { MutBucket.reveal_ReprSeqDisjoint(); }
+        assert MutBucket.ReprSeq(newBuckets) !! Repr by { assume false; MutBucket.reveal_ReprSeq(); }
+        i := i + 1;
+      }
+      this.buckets := newBuckets;
+
+      Repr := {this} + MutBucket.ReprSeq(buckets);
+      assume (forall i | 0 <= i < |buckets| :: buckets[i] in Repr); // This and the next line of Inv contradict each other.
+
+      assert Inv() by { assume false; MutBucket.reveal_ReprSeq(); }
+
+      assert BucketImpl.MutBucket.ISeq(buckets) == BucketImpl.MutBucket.ISeq(old(buckets));
+      forall ensures I() == old(I()) {
+        calc {
+          old(IM.Node(pivotTable, children, BucketImpl.MutBucket.ISeq(buckets)));
+            { assume false; }
+          IM.Node(pivotTable, children, old(BucketImpl.MutBucket.ISeq(buckets)));
+            { assume false; }
+          IM.Node(pivotTable, children, BucketImpl.MutBucket.ISeq(old(buckets)));
+          IM.Node(pivotTable, children, BucketImpl.MutBucket.ISeq(buckets));
+        }
+      }
+
+      forall o | o in Repr ensures o in old(Repr) || fresh(o)
+      {
+        assume false;
+      }
+      */
     }
 
     lemma LemmaRepr()

@@ -44,7 +44,8 @@ module JournalistModel {
     inMemoryWeight: uint64
   )
 
-  function method Len() : uint64 { 1048576 }
+  //function method Len() : uint64 { 1048576 }
+  function method Len() : uint64 { 16384 }
 
   function method basic_mod(x: uint64) : uint64
   {

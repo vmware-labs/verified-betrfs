@@ -8,12 +8,10 @@
 
 #if MALLOC_ACCOUNTING
 void init_malloc_accounting();
-void malloc_accounting_status();  // short status comparing tot bytes to proc maps heap
-void malloc_accounting_display(const char* label); // full accountingg
+void malloc_accounting_display(const char* label); // full accounting
 void fini_malloc_accounting();
 #else // MALLOC_ACCOUNTING
 inline void init_malloc_accounting() {}
-inline void malloc_accounting_status() {}
 inline void malloc_accounting_display(const char* label) {}
 inline void fini_malloc_accounting() {}
 // You don't need scopes if you've turned off the main MALLOC_ACCOUNTING knob.

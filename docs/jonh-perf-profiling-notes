@@ -278,7 +278,7 @@ is below the forecast 4GB.
 
 
 tools/run-veri-config-experiment.py workload=b device=disk ram=4gb config-8mb > malloc-exp/cgroups-veri
-tools/run-veri-config-experiment.py workloab device=disk ram=4gb rocks > malloc-exp/cgroups-rocks
+tools/run-veri-config-experiment.py workload=b device=disk ram=4gb rocks > malloc-exp/cgroups-rocks
 
 
 Okay, some actual legit cgroups-enforced results, on workloadb (95% read):
@@ -449,3 +449,868 @@ in_amass is 378 (669MB).
 [malloc-exp/wprofile-amass-parent-pivot]
 Only parent amass & pivot copy-key in place; child amass and split amass disabled.
 Oh yeah, that's a disaster. Wish I had my ulimit on.
+
+------------------------------------------------------------------------------
+Okay, amass is in. Let's run some experiments.
+tools/run-veri-config-experiment.py workload=b device=disk ram=4gb config-8mb > malloc-exp/cgroups-veri-wkb.data
+-- happy as a clam because it doesn't insert much.
+tools/run-veri-config-experiment.py workload=a device=disk ram=4gb config-8mb > malloc-exp/cgroups-veri-wka.data
+... killed even with cache size 343 (malloc overhead 1.5)
+time build/VeribetrfsYcsb ycsb/workloada-onefield.spec /tmp/data/ --veribetrkv > malloc-exp/manual-wka-100.data
+100 blocks settles in at about 1.7GB, or 17MB per node. At 4GB, we can afford about 240 such nodes,
+so MALLOC_OVERHEAD should be set to 2.2.
+...that makes nodes=232, which crashes.
+200 nodes seemed to squeak by (4.2GB after 3500), so let's try that. overhead=2.56. Erk. This sucks.
+need to turn malloc stuff back on.
+
+So what the heck. I guess I need to turn malloc back on so I can understand why the overhead is 2.56 now.
+
+So the page fault was just malloc_accounting tripping on the null return from underlying malloc,
+due to blowing through 4GB.
+
+With 200 blocks. I see a 33% overhead in the malloc graphs: OS mapping is 4GB,
+malloc total is 3GB. That's 15MB/node. What broke!?  CopyKey is enabled. Only
+thing disabled was left/right splitting. Let's re-enable it.
+
+[malloc-exp/manual-wka-200-amasssplit.data]
+
+Okay, so amassing split was indeed relevant. We're still at an overhead factor of 2X.
+A hypothesis: pkvs hanging around? But Amass should cure that.
+Oh, no, amass on the parent only replaces one bucket.
+
+[malloc-exp/manual-wka-200-amassspagein.data]
+...does an amass on page-in to break the pkv into buckets, and also recopies the pivots, to shake
+loose any connection to the underlying pagein pkv.
+
+Hooray. I think I've finally gotten a handle on the memory situation.
+
+Wednesday I thought I had everything tied up, and it was "just a matter of" measuring.
+Then I ran the thing, and found that 200 8MB nodes were gobbling 3.2GB of malloc. That's 100% overhead.
+I realized the problem: once we start paging in, we pull in a monolithic 8MB block, then as we flush changes
+through it, we replace some of the buckets with new 1MB (isolated "amassed") allocations. I think that,
+in steady state, the cached blocks are responsible for 8 1MB buckets, plus they hang onto the original
+8MB PKV paged-in block via at least a pivot key. (Or maybe they have 7 buckets and one bucket referencing
+the PKV allocation.)
+
+So I added code to, upon page-in, copy out the keys, and re-copy (using the same bucket-amass method)
+the buckets into fresh buckets. From the memory perspective, this seems to be mostly working.
+The amassed memory adds up to about 2GB (perfect!). The total malloc is about the same.
+The OS allocations, once page-in begins, show about a 500MB overhead. I'd guess this is a swiss-cheese
+memory layout problem (since page-ins ask for 8MB allocations), except that now we should only ever have
+about one 8MB unit in memory at a time. So why a 500MB tax?
+
+But these results aren't really final:
+- the total allocations continue to climb. Will they level off?
+- it's hella-slow. Perf dropped to 1Kop/sec. I could imagine a 2x drop, since
+  we're recopying all of the memory on every page-in. But perhaps my copies are
+  slower than the memcpys in the natively-supported IO ops? So my experiment has only reached op #3000;
+  it'll be at least an hour before it reaches op 7,000.
+
+Takeaways:
+- it would be nice to understand why the OS allocation jumps up so high after page-in time. But maybe
+  unnecessary, depending on the ultimate fix.
+- the ultimate fix is probably to store the nodes on disk as a set of 8 PKVs, so that we don't need to
+  recopy them. And when we page them in, recopy the pivot keys. (Or are the pivots represented separately
+  in the marshalled representation? The pivot recopy might have been a waste of time.)
+- also: Reprs will turn me into a supervillian. Horrible.
+
+Rob suggests that os-vs-malloc gap may be libasyncio stacks.
+  - well, it ain't stacks. All of the mapped bytes are in the heap mapping.
+Try disabling stupid sequence-copy optimization.
+Try measuring memory usage from the inside (dafny view).
+  -- how are we still seeing amass @ 2GB, expecting 1.6GB.
+Graph read, write I/O rates.  Cache hit rate.
+
+[malloc-exp/manual-wka-200-amassspagein-4.data-timeseries.png]
+Looking from the inside!
+- tree-node-count I'd have expected to be 1. It gets up to 12, 7 during the
+  startup phase.
+  = What's going on there!?
+  - Nothing. Those are buckets. They're all in the root node. Data labeling corrected.
+
+- Most of the GB are in message bytes (yay!). Keys seem to be about 24 bytes.
+  = check in YCSB.
+  - yep. Dropped into the debugger, and saw a key 'user181211450603064119781\002', which is 27 bytes long.
+
+- There are only 3758 bytes in Pivot keys across 200 nodes? That's 19 bytes per node,
+  or less than one key per node. That feels wrong!
+  = count pivots, keys, and messages.
+  - sure enough, At 158 Nodes, there are 123 pivot keys!
+  - average buckets/node is below 2!
+  - turns out that's expected, because all of the leaves have 1 bucket.
+
+- The messages (95% of the data) get up to about 1GB at op2500; at the same
+  time, malloc is already around 1.8GB! This is all before we even begin page-in!
+  # How is that possible?
+  # Next step: turn the underlying allocation counter back on; see who it agrees with.
+
+[malloc-exp/manual-wka-200-noseqopt-1.data]
+Re-enables dbg_underlying_len walk.
+Disables subsequence optimization.
+...was a disaster. Load took forever; was running at 343 ops/sec.
+
+[malloc-exp/manual-wka-200-underlying-1.data]
+Re-enables dbg_underlying_len walk.
+Leaves subsequence optimization enabled.
+  yeah, that's loading at 7.9 Kops/sec.
+Okay, so yeah, underlying is seeing pretty much all the malloc mass.
+
+So we *know* (due to underlying allocations; Framework.cpp/sampleNode) that
+we're reaching all that extra memory, just in kvl & pkv keys & messages. That's
+surprising, since we're amassing the crap out of everything. Job 1 is to get
+underlying to match internal-bucket-message-bytes.
+
+Next question: Do particular nodes or buckets have the overage disproportionately?
+Would it be useful to print out, for each node, the disagreement between underlying
+and internal, and then sort them by ... depth in the tree?
+
+First thing: let's associate each underlying with the referrers and size-of-reference.
+
+[malloc-exp/manual-wka-200-underlying-2.data]
+Adds map from underlying reference to the set of nodes that mention it. Prints counts.
+Okay, so the counting is working. I'd next want to know:
+- I see some refs being pointed at by 16 unique noderefs! Why?
+- More importantly, do the pointers at noderefs use all the data in the ref?
+  - could use a conservative count, assuming nobody uses the same data twice, to avoid
+  having to track intervalsets.
+
+Okay, so we can, in fact, see the leaks from this vantage.
+Sorting ref_used rows by how much was leaked, I find:
+- some negative leakage: these are places where the sequence really is in play
+  in two places at once, and my conservative count was wrong. There were seven such
+  sequences. Probably in the write queue or something; not going to get too worked up.
+- about half of the refs were precise (zero leak)
+- the other half were leaky.
+  The distribution of original allocations isn't obviously bimodal; there's a hop near 4MB.
+
+Okay, so wtf. We know that there are exactly 1 tree nodes and exactly 0 pkv nodes, so these
+all have got to be coming from kvl nodes. Don't we amass on every split & flush?
+
+So now I've caught it in the debugger with 7 nodes, a grand total of 5 pivot keys
+(root, and 5 to separate the six kids).
+I think we need to label the buckets to understand which code path is generating each one.
+I'd have thought every one of these children would have come from the root via flush.
+
+BucketImpl ctor invocations:
+- ctor -- mkfs
+- pkv -- pagein the mkfs
+- kvl -- amass (after page-in)
+- ctor -- runFlushPolicy / grow
+- ctor -- splitLeftRight
+- ctor -- amass left
+- ctor -- amass right
+- InitWithWeight -- MutBucket::CloneA (SplitChildLeft)
+  ** this looks pretty suspicious! NodeImpl.SplitChildLeft (and Right).
+  -- except those don't split byte seqs.
+
+Hard to find the subsequence leaks with the debugger, because the Amass code takes its
+own subsequences of the array on purpose.
+
+Hey, here's a neat trick for a gdb condition variable. I want to skip cases where
+a particular frame is on the stack, two above the breakpoint:
+
+cond 5 dbg_underlying_len - (hi - lo) > 50000 && hi-lo > 50000 && ((void***)$rbp)[0][1]!=0x40dffb
+So, if we want to look N frames up for pc address 0x40dffb, use N+1 *'s and N-1 [0]'s.
+
+Well, THAT'S interesting: the only code *generating* big subsequence references
+is the Amass code!  So somehow those subsequences are escaping. Each Amass
+should be glued to a Node; perhaps we can set a Node association during the
+Amass step and then get angry if it ever parts?
+
+So maybe I can track this down from the instrumentation: any two nodes talking
+to the same underlying allocation represent an amassed allocation that was
+supposed to stay with its original owner, but leaked.
+
+Looks like the first PartialFlush happens at op num 59368 (in the current workload-profile config).
+So I can run a trace before and after it to confirm my suspicions.
+
+back at ~26k
+grow
+
+repivot
+  - some leaf node gets cut in half. Is that ... the root? Nope, it's node 1: the first pkv-lookin' node.
+split
+  - parent=0 and child=0. Constructs a new pair of children, and replaces the single child ptr in the
+  parent with two.
+  - and SplitChildLeft does call MutBucket.CloneSeq, which is the only place where we take a subsequence,
+  but it's a subseq of buckets, not of bytes. Arrgh.
+  - MutableBucket.CloneSeq calls .Clone, which copies the kvl into place.
+flush
+  - pushes writes from the parent down to buckets in the children.
+
+so which one is guilty?
+I mean, split makes new nodes -- which should be clean,
+and then flush flushes new buckets into those nodes -- 
+ah. So say we Split, and then only flush onto one side. Would that do it?
+Well, we can at least rule that out by adding an Amass in the Clone.
+
+And that worked. We went from:
+allocationreport refset ref 39192832 refd by 2 noderefs
+allocationreport refset ref 70288656 refd by 3 noderefs
+allocationreport refset ref 74408624 refd by 1 noderefs
+allocationreport refset ref 23808784 refd by 1 noderefs
+allocationreport refset ref 39184688 refd by 2 noderefs
+
+To:
+allocationreport ref_used ref 53160256 underlying 4112868 used_total 4112868 refd_by_nodes 1
+allocationreport ref_used ref 39200944 underlying 4112868 used_total 4112868 refd_by_nodes 1
+allocationreport ref_used ref 70296768 underlying 4119920 used_total 4119920 refd_by_nodes 1
+allocationreport ref_used ref 49040288 underlying 4119920 used_total 8239840 refd_by_nodes 2
+  -- this is a bunch of alternated keys/values.
+allocationreport ref_used ref 82649600 underlying 4137044 used_total 4112934 refd_by_nodes 1
+allocationreport ref_used ref 38787360 underlying 24110 used_total 24110 refd_by_nodes 1
+
+Which kinda looks better.
+
+So which nodes are taking those duplicate references?
+Debugging slowly, it's nodes 4 & 2.
+
+Yup, let's just print that stuff out:
+
+allocationreport refset ref 39196976 refd by 1 noderefs
+    1
+allocationreport refset ref 70292800 refd by 1 noderefs
+    1
+allocationreport refset ref 20797824 refd by 1 noderefs
+    0
+allocationreport refset ref 49036320 refd by 2 noderefs
+    2  4
+allocationreport refset ref 53156288 refd by 1 noderefs
+    3
+allocationreport refset ref 61406288 refd by 1 noderefs
+    4
+allocationreport refset ref 39188832 refd by 2 noderefs
+    0  1
+
+Node 0 -> child 4
+Node 0 -> child 3
+So if we treat nodes 1 and 2 as dead nodes (need eviction), we're okay.
+That's annoying. Well, maybe we've fixed the problem (run a bigger experiment
+outside the debugger), or maybe we need to clean old crap out of the cache?
+Need some way to account for that stuff. How long does it linger?
+
+[malloc-exp/manual-wka-200-amassclone.data]
+...full experiment with Clone amass turned on.
+Nope. Still leaky.
+
+Is this stuff Frozen?
+
+Okay wait this is stupid. If we're amassing correctly, nothing should be
+shared. 0 shouldn't be sharing with 1, and 2 shouldn't be sharing with 4.
+
+Wait, somehow before the splitasaurus, we have 0->1, both *tree* nodes! How
+is that even possible? Okay, Grow is sort of simple; it just make a new node
+with no pivots, a single newly-minted emptyKvl bucket, and a single pointer to
+the child, which is the same tree-node representation. No carried-over
+pointers.
+
+Okay, so the first crime is definitely being committed in the repivot-split-flush
+sequence. Sure would be nice to call allocationreport on those suckers.
+We're looking for sharing between 2,4 and 0,1 (24 bytes -- just a key!)
+
+Pretty confident repivot is not it, since it replaces refs to a bucket with
+new buckets in a replacement node. (The other node *might* be loitering in the
+Frozen table, but that's okay.) And we Amass on top of that! Could confirm,
+but I don't think it's here.
+
+doSplit(0, 1, slot 0)
+  splitDoChanges has left__childref=2, right__childref=3, parentref=0.
+...and indeed there was a not-CopyKey'd pivot in splitDoChanges.
+Patching it eliminated the 24-byte (single-key) shared between 0,1, **FIXED**
+leaving only the 2,4 sharing.
+
+So the guilty party must be Flush.
+Flush is called on (0, 2), but the leak is 2,4. Where does 4 come from? It's newchildref.
+Oh baby we're onto something hot now.
+
+child.pivotTable -- carted over from the input child node. Oops; pivotTable needs to be copied. **FIXED**
+child.children -- same as before and that's fine.
+child.newbuckets -- well damn, we left the new child buckets amass in place but
+  the assignment to the return variable commented out. Aaiieee. **FIXED**
+
+Okay, yay! internal-bucket-message-bytes now agrees with underlying!
+There are still ~25MB of seq-from-array stuff (Messages, seq<char>); ~20%. Not sure
+how we lost track of that. But let's worry about that later.
+And we ARE under 1.6GB total now!
+
+Next thing to fix: lazily amass pkvs.
+
+---
+Okay, so veri-8mb was much slower than manual-wka-opt-350 (also 8mb).
+That's weird.
+- re-run both experiments; figure out what changed
+- factor out the plotting tool so I can plot comparative graphs with rocks
+- gather os-heap usage info from rocks, just because I'm curious.
+
+[malloc-exp/veri-8mb-wka-3.data]
+tools/run-veri-config-experiment.py workload=a device=disk ram=4gb config-8mb > malloc-exp/veri-8mb-wka-3.data
+...was dribbling along at 320ops/sec. But manual-wka-opt-350 had finished out at
+1360 ops/sec. I think all of the allocation reporting was actually hurting us;
+maybe making a mess of the cache? Surprising, though. Trying again with
+less allocation reporting.
+Argh, the 8mb curve is still dropping well below manual-wka-opt-350. What gives!?
+
+perf record -p 10812 --call-graph dwarf sleep 10
+# --call-graph dwarf gives sensible call graphs on -O3 code
+~/appimage/hotspot-v1.2.0-x86_64.AppImage --debugPaths /usr/lib/debug
+
+
+------------------------------------------------------------------------------
+Next steps:
+X check in what works now.
+- merge back to master...?
+- instrument rocks for:
+  - I/O count, byte count
+  - CPU utilization
+  - cache hit rate (implied by I/O count, I guess)
+Bogus behavior is evident after only 10M ops (45 minutes in veri).
+
+------------------------------------------------------------------------------
+tools/run-veri-config-experiment.py workload=a device=disk ram=4gb rocks > malloc-exp/cgroups-rocks
+
+gdb --args ./build/RocksYcsb ycsb/workloada-onefield.spec /tmp/veribetrfs/ --rocks
+
+
+tools/run-veri-config-experiment.py workload=a device=disk ram=4gb config-8mb > malloc-exp/veri-8mb-wka-ioperf-1.data
+
+tools/run-veri-config-experiment.py workload=a device=disk ram=4gb rocks > malloc-exp/rocks-wka-ioperf-1.data
+[malloc-exp/rocks-wka-perf-1.data]
+Rocks/wka with ioaccounting and stat-accounting fields
+
+Hypothesis: My NVMe SSD is good at small IOs.
+It's a MZVLB1T0HALR, speced at 3200MB/s read, 380K IOPs (2.6usec seek).
+
+My disk is usb-Seagate_BUP_Slim_BK_NA9Y4VC9-0:0, about 1TB.
+Apparently it's a hybrid SSD+HHD, which I guess sucks for us.
+https://www.storagereview.com/review/seagate-backup-plus-slim-review-1tb-2tb
+says 120MB/s, 40IOPS for 2MB random transfers, 308IOPs for 4K.
+
+
+[malloc-exp/rocks-wka-ioperf-disk.data]
+tools/run-veri-config-experiment.py workload=a device=disk ram=4gb rocks > malloc-exp/rocks-wka-ioperf-disk.data
+
+[malloc-exp/veri-8mb-wka-ioperf-disk.data]
+tools/run-veri-config-experiment.py workload=a device=disk ram=4gb config-8mb > malloc-exp/veri-8mb-wka-ioperf-disk.data
+
+With per-opn instead of per-time syncs:
+  - initial tput down at 3.5K. That's weird! If we could retire 5K ops + a sync
+    every second before, why not in this configuration? Hmm.
+  - There's still a pretty severe dropoff at 6M ops (full cache).
+I modified YcsbMain to account for sync time, and sure enough, many were
+in the 1s neighborhood.
+
+Let's get the syncs down to a manageable level. I set the period to 50K ops,
+and now syncs are in the 5s neighborhood. Uh oh! Our syncs aren't amortizing
+as well as we'd hope!
+
+[malloc-exp/veri-8mb-wka-ioperf-disk-syncops-2.data]
+------------------------------------------------------------------------------
+Okay, let's just turn off sync and make the cache small (500MB) so we can
+watch the perf cliff happen much sooner.
+And then we'll probably need to be counting the cost of these crazy IOs,
+maybe inside the system.
+
+Modified workload-a to have sync at a zillion.
+tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb config-8mb > malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk.data
+
+Why aren't the writes from the inital load sync showing up?
+
+tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb rocks > malloc-exp/rocks-1gb-wka-nosync-ioperf-disk.data
+
+Current thoughts.
+
+(1) So maybe instead of comparing things vertically, horizontally makes more
+sense.  Maybe rocks is fitting 2M items (1GB/(512+24)) in its cache, and
+because of various overheads, we're only fitting some smaller number. We should
+collect that number. By that metric, we cross:
+
+          3Kop/s   2KOps/s  1KOp/s
+  rocks   3400     4100     6000
+  veri    2400     2800     4200
+
+...So maybe we should throw some more RAM at veri and see how it does.
+...And collect the actual storage size as viewed from inside.
+
+(2) It's difficult to make a useful io analysis comparison between
+the two systems, because rocks is measuring os read, not IO read. Can
+we get real underlying IO numbers out of cgroups or /proc? Can we
+use a system counter and just hope the rest of the system is fairly
+quiescent? iostat and pidstat can capture this; they must look in /proc
+/proc/self/io has read_bytes and write_bytes fields that are interesting.
+
+
+tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb config-8mb > malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-2.data
+(run manually after compile to avoid cgroup killage)
+This run:
+* sets malloc overhead to 0.78 to compensate for observed typical block
+  loading of 6.25MiB
+* re-enables infrequent aggregate collections
+  (to count up used memory from inside Dafny, so we can simulate perfectly
+  effecient memory usage)
+* adds proc-io output to track "real" disk IO.
+
+tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb rocks > malloc-exp/rocks-1gb-wka-nosync-ioperf-disk-2.data
+* adds proc-io output to track "real" disk IO.
+
+Looks like proc-io is going to be a different kind of lies for veri. I'm
+seeing almost no real reads. I guess they're getting absorbed by the buffer
+cache?
+
+Oh hells yeah, the "horizontal offset hypothesis" seems to be supported;
+we're blowing way past rocks now.
+
+            3Kop/s   2KOps/s  1KOp/s
+  rocks     3400     4100     6000
+  veri      2400     2800     4200
+  veri-1gb  4800     5600     ____
+Hah. Look at that. We turned the memory usage up by not quite a factor of
+two (1.87X), and the througput milestones all move out by a factor of two.
+Wait, is that how that should work? Yeah, because we get twice as many
+write ops in before we reach a given cache hit rate.
+
+Huh, memory usage is falling way off; is that because we're not counting
+PKVs? Yeah, probably. Yeah, exactly; they're "weirdBuckets" right now.
+
+So here's what was happening. We never saw rocks hit rocks bottom
+because we didn't wait long enough; it was able to stay in a warm-cache regime
+much longer. Veri fell off the cliff sooner because it was utilizing much
+less memory.
+
+malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-3.data
+accum counts pkvs.
+...or, perhaps it doesn't. Sure doesn't seem to be.
+
+Burning questions:
+[ ] Are we counting memory accurately for the no-fragmentation simulation?
+[ ] Is veri cheating by using buffer cache since I worked around cgroups?
+
+------------------------------------------------------------------------------
+ssh splinter1
+
+
+tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb rocks > malloc-exp/rocks-1gb-wka-nosync-disk-1.data
+
+sshfs -o allow_other,default_permissions -o reconnect -C -o ServerAliveInterval=15 -o workaround=all -o idmap=user jonh@splinter1:. splinter1
+
+tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb config-8mb > malloc-exp/veri-1gb-100mb-8mb-wka-nosync-disk-1.data
+
+[malloc-exp/veri-1gb-100mb-8mb-wka-nosync-disk-1.data-perf.png]
+was an experiment where we used 100mb for veribetrfs internal cache,
+and let the page cache supply everything else. What we learned was that
+reading 8MB from the *page cache* was actually a bottleneck; we're using
+75% system time (and 25% user, of which 20% was CRC32) to run memcpy at
+3GBps. So we really can't get much out of the page cache without subblocks.
+
+Upcoming strategies:
+- repro the best case with conservative (MALLOC_OVERHEAD=2) cgroups.
+  [malloc-exp/veri-1gb-512mb-8mb-wka-nosync-disk-1.data]
+- try dropping in a better malloc (jemalloc) to help with fragmentation
+  -- wah. It sucked. Still at 1.82X.
+- see if PackedKVs can help with fragmentation
+- try a dynamic oracle that watches the system page usage to try to
+  stay tight on it.
+- rob's compacting allocator
+
+jemalloc looks pretty good on fragmentation; 1.1X:
+http://ithare.com/testing-memory-allocators-ptmalloc2-tcmalloc-hoard-jemalloc-while-trying-to-simulate-real-world-loads/
+
+tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb config-8mb > malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-jemalloc-1.data
+
+jemalloc mysteries:
+- how is it that we start out with 0.9GB allocated ("mem from inside veri"),
+  never seeing the climb?
+- why does jem go behind that?
+  * Resolution: plot library was extrapolating Traces to the left of their
+  first observation. We don't get the first accumulator data until 3Mops.
+- why does jem see 18% more stuff than we think is on the heap?
+  * Investigation: turn on malloc accounting again!
+- is it possible that the gap from jem_mapped to os_mem is not billed to us?
+- all reports of memory allocation climb to 1GB way sooner than we exhaust
+  the veri cache
+
+tools/plot/perf-compare.py malloc=malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-malloc-4.data jemalloc=malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-jemalloc-3.data
+
+[ ] track master
+[ ] check what cgroups measures, compare to jemalloc mapped
+  https://www.kernel.org/doc/Documentation/cgroup-v1/memory.txt
+  cat /sys/fs/cgroup/memory/VeribetrfsExp/memory.usage_in_bytes
+[ ] study why jemalloc active seems higher than malloc
+[ ] run under strace and see what's being given back under madvise
+
+1.6 experiment seems to have fallen off into swapville
+
+1. Capture swapping values from /sys/fs/cgroup/memory/VeribetrfsExp/memory.stat
+2. Try using direct IO to keep cgroups from swapping us.
+Yup.
+
+[malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-jemalloc-7.data]
+In this experiment, I told Veri to use 1gb, and told cgroups to limit us
+to 1.8gb. Our actual usage before we fill the cache is around 1.4gb; notice
+that "jem mapped" and "cgroups-usage" are similar in the Grand Unified Memory
+graph.
+
+Once we start paging in Veri blocks (around opn 3500), our jem_mapped usage
+(orange line) sees a bump. The jem_alloc (green) line doesn't, so presumably
+we are seeing a more modest version of the earlier problem: we changed the
+size of cheese we usually allocate, so we're leaving a batch of holes behind
+at the previous sizes.
+
+But even that bump only goes to 1.6gb. Notice that the cgroups usage (red line)
+bumps up to 1.8gb, and stays there. Presumably that difference is page cache
+usage, now that we're actually faulting stuff in through the kernel IO path.
+At the same time, look at the cgroups-stat-pgfault graph: we begin faulting
+the application like crazy, eventually doing 150 pgfaults per opn! This
+explains why the op throughput drops to 100io/sec.
+
+But why are we pgfaulting? The application's 1.6gb fits in our budget. Is
+the kernel deciding to fault our memory rather than evict our page cache
+pages? Eww!
+
+[malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-jemalloc-8.data]
+...enables USE_DIRECT in Framework.cpp to try to bypass the page cache
+altogether, so that hopefully cgroups notices that we don't actually
+want its stupid help.
+So with USE_DIRECT, we see interesting phenomena:
+- cgroups-usage goes DOWN when we exceed the cache; in fact, it stays
+near jem_alloc -- and in fact sometimes below! It seems we're getting
+a cgroups discount for nonresident pages. That's pretty great!
+- Yet we're still swapping!
+
+[malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-jemalloc-9.data]
+Rob suggests: run in a huge cgroup to avoid swapping; see how much
+memory we really use. Setting cheat_factor to 10
+
+[malloc-exp/veri-1gb-8mb-wka-nosync-ioperf-disk-jemalloc-10.data]
+Same thing, no cgroup to see if faults go away
+
+Okay, look, things only started taking this weird swappy turn after -3.
+
+master merge: may need to advance dafny.
+------------------------------------------------------------------------------
+Did a huuuuge master merge. All of my explicit amassin' got lost in the
+packedkv changeover.
+Time to see if memory is still under control.
+
+time build/VeribetrfsYcsb ycsb/workloada-onefield.spec /tmp/data/ --veribetrkv > malloc-exp/merge-1.data
+
+Okay, back to the drawing board.
+internal-accum-bytes is 1.23GiB for a 8MB*25600
+* wait wut why is this system ever evicting? Debug symbols, I guess.
+* malloc is much higher than internal-accum-bytes; check yer mallocs
+
+merge-2: 200*8MB; internal-accum-bytes 1.21GiB but malloc 1.92GiB.
+Time to break out the CountAmassAllocations call in YcsbMain.cpp.
+
+merge-3: 40 * 8MB
+internal-accum & underlying agree that we're using 0.27GiB, which suggests
+we're not having amass troubles.
+Malloc, on the other hand, sees 0.96GiB -- 3X more.
+Most in explicit-seq.
+  38 ~7.3MiB allocations -- those sound about right, actually.
+...and 1M in 512-byte allocations -- values.
+...and 3M in ~29 byte allocations -- keys.
+Which is a lot, considering that (a) we already accounted for everything
+and (b) I'd only expect 8MB/(24+512)*40 = ~626k kv pairs in cache.
+Now the journal may be confounding things, except that the 100MB
+JournalEntry array is already accounted for -- and there's precisely one
+of it.
+I suppose spend some time on the debug stack looking at the value allocations.
+
+Journal: 1M entries, each 96B long! Each key, value pointer is 48B.
+(32 bytes for DafnySequence + 16 bytes for dbg_underlying crap that
+should be made switch-offable.)
+So in fact we're probably ALSO accounting for the 1M value allocations
+in the journal, and 1M of the 3M keys.
+
+merge-4: Drop journal to 16Ki entries, which should cost around 10MB in
+storage (vs 600MB). Yep, it does. Everything looks reasonably-well accounted
+for; time to try a jemalloc experiment again.
+
+merge-5: debug off, jemalloc on, tree size 200 * 8MB. Is the memory behavior
+sane? (works around bug in os heap calculation) Yep, not too far off.
+1.13GiB of internal becomes 1.6GiB of jem mapped; 41% overhead. Time to
+try with cgroups.
+
+merge-6: same config but with cgroups in play.
+And run-veri-config is making journal-oblivious nonsense configs again.
+8*1024*1024 * 7 
+2 * 4096 + 2048 * 4096
+          + 2 * 24*1024*1024
+
+merge-7: same config, cgroups, but 10X overprovisioned to avoid pagefaults.
+  ...okay, so pgfaults still climb, but the perf is 10X better.
+  suggesting that
+    - pgfaults might be getting charged for IO activity / fresh allocations?
+    - maybe 10X is letting us do everything from the 10GB buffer cache.
+    (DIRECT is off)
+merge-8: same config, 1.5X overprovisioned.
+  Goal is to separate veri-cache fill from buffer cache fill, while still
+  seeing both effects in 15 minutes.
+merge-9: 1.2X overprovisioned. Trying to dial it in tight.
+
+tools/plot/perf-compare.py cgr1=malloc-exp/merge-6.data cgr10=malloc-exp/merge-7.data cgr1.5=malloc-exp/merge-8.data cgr1.2=malloc-exp/merge-9.data rocks=malloc-exp/rocks-1.2.data
+
+Holy crap, Rocks is wiping the floor with us.
+Okay, yeah -- Rocks is turning in an initial perf of 50Kops/sec,
+and we're straggling along at 0.6Kops/sec. We used to be 10X faster
+in the in-memory mode. Let's sort that out first.
+
+1. Fix memory leak in journal
+2. Disable journal for testing
+  merge-10: journal disabled with comments at CoordinationImpl:314
+3. Allow journal skipping
+
+2a. Why does memory usage go way up with the journal *disabled*?
+Actually maybe it's fine -- internal gets up to 1.2GB, which is what
+we'd expect. Rocks is impressively spare at 1GiB.
+
+[merge-11.data]
+  time tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb config-8mb > malloc-exp/merge-11.data
+  cgroup; cheats up to 1.4gb; journal sync disabled
+
+[rocks-1.4.data]
+  time tools/run-veri-config-experiment.py workload=a device=disk ram=1.0gb rocks > malloc-exp/rocks-1.4.data
+  cgroup 1.4gb (1.0 * cheat=1.4)
+
+For comedy, let's try giving ourselves a 1.4gb internal cache
+(2.8gb total cgroup). Just to see if the curve shape can be explained
+entirely by cache hit ratio.
+
+...and then we should look into IO rates on a perf graph, I guess?
+
+[ ] Why are we using only 0.7GiB when we're filling 200 ~6MiB nodes?
+  - script isn't doing the math right.
+[ ] Try same set of experiments with a smaller block size? eg 1MB
+  ** AND RUN ON SPLINTER1
+  1MB is closer to DAM size.
+[ ] In-memory journal should be small, but disk journal very big
+
+Tired of clobbering data files?  set -o noclobber
+
+time tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=0.7gb pillow=1.2 rocks time_budget=3h output=malloc-exp/rocks-0.84-uniform-20.data
+time tools/run-veri-config-experiment.py workload=ycsb/wka-zipfian.spec device=disk ram=0.7gb pillow=1.2 rocks time_budget=3h output=malloc-exp/rocks-0.84-zipfian-20.data
+time tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=0.7gb pillow=1.2 config-64kb time_budget=3h output=malloc-exp/veri-0.84-uniform-64kb-20.data
+time tools/run-veri-config-experiment.py workload=ycsb/wka-zipfian.spec device=disk ram=0.7gb pillow=1.2 config-64kb time_budget=3h output=malloc-exp/veri-0.84-zipfian-64kb-20.data
+
+time tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=flash ram=0.7gb pillow=1.2 config-64kb time_budget=3h output=malloc-exp/veri-0.84-uniform-64kb-flash-21.data
+time tools/run-veri-config-experiment.py workload=ycsb/wka-zipfian.spec device=flash ram=0.7gb pillow=1.2 config-64kb time_budget=3h output=malloc-exp/veri-0.84-zipfian-64kb-flash-21.data
+time tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=flash ram=0.7gb pillow=1.2 rocks time_budget=3h output=malloc-exp/rocks-0.84-uniform-flash-21.data
+time tools/run-veri-config-experiment.py workload=ycsb/wka-zipfian.spec device=flash ram=0.7gb pillow=1.2 rocks time_budget=3h output=malloc-exp/rocks-0.84-zipfian-flash-21.data
+
+
+tools/plot/perf-compare.py rocks-u=malloc-sp1/rocks-0.84-uniform-20.data rocks-z=malloc-sp1/rocks-0.84-zipfian-20.data veri-u=malloc-sp1/veri-0.84-uniform-64kb-20.data veri-z=malloc-sp1/veri-0.84-zipfian-64kb-20.data output=/tmp/compare-uz.png
+
+Ideas from Andrea:
+- Doesn't it kind of look like we're doing *fewer* IOs per query?
+
+- Maybe marshalling is killing us. Profile! After mode change.
+You'll need lots of samples since cpu ratio is so low.
+perf record -g -F 30000 -p pid; sleep 10 
+
+- trace operations by using a real-time clock inside the code
+
+Further supporting this marshalling hypothesis:
+In Uniform-vs-Zipfian, both systems use about 40% as many IOs in the Zipfian
+case.
+tput @4000 veri u: 230 z: 500  2x
+proc-io-KB: @4000 veri z: 7 u: 17  40%
+proc-io-KB: @4000 rocks: z: 1 u: 2.5 : 2.5x
+@4000 rocks u:300 z: 1500 5x
+
+So why does rocks get 5x slower when doing 2.5x the IO?
+We think there's no way they're pipelining IO, because there is never
+more than one outstanding.
+
+Pin to a single core?
+  taskset is doing that from run-veri-config-experiment
+Is /proc/self/stat measuring cputime from threads?
+
+[X] Turn on rocks write-ahead-logging: woptions.disableWAL = true;
+[X] Hook rocks to measure IO latency CDF.
+[X] Disable swap. sudo swapoff -a : just turned it all off on splinter
+
+tools/plot/perf-compare.py \
+rocks-swapon=malloc-sp1/rocks-0.84-uniform-21.data \
+rocks-swapoff=malloc-sp1/rocks-0.84-uniform-swapoff-22.data \
+veri-swapon=malloc-sp1/veri-0.84-uniform-64kb-20.data \
+veri-swapoff=malloc-sp1/veri-0.84-uniform-64kb-swapoff-22.data \
+output=/tmp/compare-swapoff.png
+
+time tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=0.7gb pillow=1.2 rocks time_budget=1h output=malloc-exp/rocks-iolatency-23.data
+time tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=0.7gb pillow=1.2 config-64kb time_budget=1h output=malloc-exp/veri-iolatency-23.data
+
+tools/plot/perf-compare.py veri=malloc-sp1/veri-0.84-uniform-64kb-swapoff-22.data rocks=malloc-sp1/rocks-iolatency-23.data output=compare-cdf.png veri=malloc-sp1/veri-iolatency-23.data
+
+disk-batch -24:
+- iolatency
+- un-disables WAL in Rocks since we have sync
+- swap is off -- wait it turned itself back on! Check at end of experiment. (Add to metadata recording?)
+
+tools/plot/perf-compare.py \
+output=compare-iolatencycdf.png \
+rocks-u=malloc-sp1/rocks-uniform-24.data \
+rocks-z=malloc-sp1/rocks-zipfian-24.data \
+veri-u=malloc-sp1/veri-uniform-24.data \
+veri-z=malloc-sp1/veri-zipfian-24.data \
+
+[X] How to keep swap turned off? Who's turning it on!?
+  - tried commenting out swap lines in /etc/fstab
+[X] capture total samples?
+
+Next group of experiments captures (using a latency cutoff) how many disk IO operations each system does
+per query. Confirm that performance is driven entirely by seek cost.
+
+tools/plot/perf-compare.py output=slowreads.png rocks-u=malloc-sp1/rocks-uniform-25.data rocks-z=malloc-sp1/rocks-zipfian-25.data veri-u=malloc-sp1/veri-uniform-25.data veri-z=malloc-sp1/veri-zipfian-25.data 
+
+
+[x] push and run the rocks with changes to the sync policy.
+[ ] Andrea suggests running a suite on SSD.
+[ ] I should also run a larger cache suite.
+
+[*-26.data]: got swapoff to stick.
+
+watch -n 60 tools/plot/perf-compare.py output=swapoff.png \
+rocks-z-24=malloc-sp1/rocks-zipfian-24.data \
+rocks-u-24=malloc-sp1/rocks-uniform-24.data \
+veri-z-25=malloc-sp1/veri-zipfian-25.data \
+veri-u-25=malloc-sp1/veri-uniform-25.data \
+rocks-z=malloc-sp1/rocks-zipfian-26.data \
+rocks-u=malloc-sp1/rocks-uniform-26.data \
+veri-z=malloc-sp1/veri-zipfian-26.data \
+veri-u=malloc-sp1/veri-uniform-26.data \
+
+
+tools/plot/perf-compare.py output=compare2g-27.png \
+  veri-u=malloc-sp1/veri-uniform-27.data \
+  rocks-u=malloc-sp1/rocks-uniform-27.data \
+  veri-z=malloc-sp1/veri-zipfian-27.data \
+  rocks-z=malloc-sp1/rocks-zipfian-27.data \
+
+mkdir host2-expresults/
+rsync -rave "ssh -i ~/veribetrfsbastion.pem" ubuntu@3.22.228.182:expresults/ host2-expresults/
+tools/plot/perf-compare.py \
+  output=compare-aws \
+  aws-rocks01=host1-expresults/rocks01/test.data \
+  aws-rocks02=host1-expresults/rocks02/test.data \
+  aws-veri01=host2-expresults/veri01/test.data \
+  aws-veri02=host2-expresults/veri02/test.data \
+  splinter-rocks-u=malloc-sp1/rocks-uniform-27.data \
+  splinter-veri-u=malloc-sp1/veri-uniform-27.data \
+
+SSH='ssh -i /home/jonh/veribetrfsbastion.pem -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no'
+SSH='ssh -i /home/jonh/veribetrfsbastion.pem -o StrictHostKeyChecking=no'
+$SSH ubuntu@3.22.228.182 "(cd veribetrfs; tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=2.0gb pillow=0.9 config-64kb time_budget=2h output=../expresults/veri-u-pillow0.9.data)"
+$SSH ubuntu@18.221.12.251 "(cd veribetrfs; tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=2.0gb pillow=1.0 config-64kb time_budget=2h output=../expresults/veri-u-pillow1.0.data)"
+$SSH ubuntu@3.12.97.231 "(cd veribetrfs; tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=2.0gb pillow=1.1 config-64kb time_budget=2h output=../expresults/veri-u-pillow1.1.data)"
+$SSH ubuntu@3.17.7.43 "(cd veribetrfs; tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=2.0gb pillow=1.2 config-64kb time_budget=2h output=../expresults/veri-u-pillow1.2.data)"
+
+rsync -rave "$SSH" 
+
+Next thing: Let's sweep fanout.
+[ ] fanout knob in run-veri; metadata
+
+time tools/run-veri-config-experiment.py workload=ycsb/wka-uniform.spec device=disk ram=2.0gb pillow=1.1 config-64kb time_budget=1h max_children=8 output=malloc-exp/veri-children8.data
+
+[x] Deploy script
+[x] rsync collect data script
+
+tools/aws/run-all.py "cd veribetrfs; git checkout leak-adventure-2; git pull"
+
+Best system, with fudge=1.1, is using 1.63gb (overhead 23%)
+veri-blocks was overhead 44%
+Steady-state perf is definitely improved, at the cost of perf during non-io phase.
+slow ios are definitely delayed -- but not as much as rocks' gloriously flat curve.
+CPU seems to be hurting us:
+  * veri-blocks has a worse slow-io curve than page-0.9, but a better perf curve.
+  * veri-blocks rounds out higher than page-0.9 by a fair bit.
+0.9 has an overhead of 49%, so the overhead is doing a nice job of predicting the IO knee.
+
+The veri curves seem to mostly scale proportionately (except the red 1.0 one), but they don't
+  scale like the rocks curve. Rocks is really doing a lot fewer slow ios, even in randomville.
+  Even though it caches the same total amount of keyspace.
+There is 0.5gb of keyspace, actually. That might be a factor that really helps rocks and
+  somehow hurts us (because of how writes trickle down our tree?)
+I wonder how we look on a read-mostly workload now. Or with much larger recordcount (> storage size)
+
+Toxin cleanse.
+tools/aws/run-all.py "cd veribetrfs; git checkout leak-adventure-2; git pull"
+
+Who's got something going on?
+tools/aws/run-all.py "ps auxww | grep Verib | grep -v grep"
+
+
+tools/plot/perf-compare.py \
+output=recordcount-page-26.png \
+page-veri64k-1.0=expresults/recordcount-page-26-page-veri64k-1.0.data \
+page-veri64k-1.1=expresults/recordcount-page-26-page-veri64k-1.1.data \
+page-veri1m-1.0=expresults/recordcount-page-26-page-veri1m-1.0.data \
+page-veri1m-1.1=expresults/recordcount-page-26-page-veri1m-1.1.data \
+page-veri8m-1.0=expresults/recordcount-page-26-page-veri8m-1.0.data \
+page-veri8m-1.1=expresults/recordcount-page-26-page-veri8m-1.1.data \
+block-veri64k-0.6=expresults/recordcount-page-26-block-veri64k-0.6.data \
+block-veri64k-0.7=expresults/recordcount-page-26-block-veri64k-0.7.data \
+block-veri1m-0.6=expresults/recordcount-page-26-block-veri1m-0.6.data \
+block-veri1m-0.7=expresults/recordcount-page-26-block-veri1m-0.7.data \
+block-veri8m-0.6=expresults/recordcount-page-26-block-veri8m-0.6.data \
+block-veri8m-0.7=expresults/recordcount-page-26-block-veri8m-0.7.data \
+block-rocks=expresults/recordcount-page-26-block-rocks.data \
+
+tools/plot/perf-compare.py \
+output=recordcount-page-26-pageonly.png \
+page-veri64k-1.0=expresults/recordcount-page-26-page-veri64k-1.0.data \
+page-veri64k-1.1=expresults/recordcount-page-26-page-veri64k-1.1.data \
+page-veri1m-1.0=expresults/recordcount-page-26-page-veri1m-1.0.data \
+page-veri1m-1.1=expresults/recordcount-page-26-page-veri1m-1.1.data \
+page-veri8m-1.0=expresults/recordcount-page-26-page-veri8m-1.0.data \
+page-veri8m-1.1=expresults/recordcount-page-26-page-veri8m-1.1.data \
+block-rocks=expresults/recordcount-page-26-block-rocks.data \
+
+tools/plot/perf-compare.py \
+output=recordcount-page-26-blockonly.png \
+block-veri64k-0.6=expresults/recordcount-page-26-block-veri64k-0.6.data \
+block-veri64k-0.7=expresults/recordcount-page-26-block-veri64k-0.7.data \
+block-veri1m-0.6=expresults/recordcount-page-26-block-veri1m-0.6.data \
+block-veri1m-0.7=expresults/recordcount-page-26-block-veri1m-0.7.data \
+block-veri8m-0.6=expresults/recordcount-page-26-block-veri8m-0.6.data \
+block-veri8m-0.7=expresults/recordcount-page-26-block-veri8m-0.7.data \
+block-rocks=expresults/recordcount-page-26-block-rocks.data \
+
+tools/plot/perf-compare.py \
+output=recordcount-page-27-blockonly.png \
+block-veri64k-0.4=expresults/recordcount-page-27-block-veri64k-0.4.data \
+block-veri64k-0.5=expresults/recordcount-page-27-block-veri64k-0.5.data \
+block-veri1m-0.4=expresults/recordcount-page-27-block-veri1m-0.4.data \
+block-veri1m-0.5=expresults/recordcount-page-27-block-veri1m-0.5.data \
+block-veri8m-0.4=expresults/recordcount-page-27-block-veri8m-0.4.data \
+block-veri8m-0.5=expresults/recordcount-page-27-block-veri8m-0.5.data \
+block-rocks=expresults/recordcount-page-27-block-rocks.data
+
+
+tools/plot/perf-compare.py \
+output=recordcount-page-28-pageonly.png \
+page-veri64k-0.7=expresults/recordcount-page-28-page-veri64k-0.7.data \
+page-veri64k-0.9=expresults/recordcount-page-28-page-veri64k-0.9.data \
+page-veri1m-0.7=expresults/recordcount-page-28-page-veri1m-0.7.data \
+page-veri1m-0.9=expresults/recordcount-page-28-page-veri1m-0.9.data \
+page-veri8m-0.7=expresults/recordcount-page-28-page-veri8m-0.7.data \
+page-veri8m-0.9=expresults/recordcount-page-28-page-veri8m-0.9.data \
+block-rocks=expresults/recordcount-page-28-block-rocks.data \
+&& \
+tools/plot/perf-compare.py \
+output=recordcount-page-28-blockonly.png \
+block-veri64k-0.4=expresults/recordcount-page-28-block-veri64k-0.4.data \
+block-veri64k-0.5=expresults/recordcount-page-28-block-veri64k-0.5.data \
+block-veri1m-0.4=expresults/recordcount-page-28-block-veri1m-0.4.data \
+block-veri1m-0.5=expresults/recordcount-page-28-block-veri1m-0.5.data \
+block-veri8m-0.4=expresults/recordcount-page-28-block-veri8m-0.4.data \
+block-veri8m-0.5=expresults/recordcount-page-28-block-veri8m-0.5.data \
+block-rocks=expresults/recordcount-page-28-block-rocks.data
+
+eog recordcount-page-28-pageonly.png recordcount-page-28-blockonly.png
+
+
+tools/plot/perf-compare.py \
+output=page-vs-block-28 \
+page-veri1m-0.9=expresults/recordcount-page-28-page-veri1m-0.9.data \
+block-veri1m-0.5=expresults/recordcount-page-28-block-veri1m-0.5.data \
+block-rocks=expresults/recordcount-page-28-block-rocks.data

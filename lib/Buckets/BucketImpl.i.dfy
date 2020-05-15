@@ -556,6 +556,7 @@ module BucketImpl {
       var pkv := GetPkv();
       //WeightSplitBucketLeft(Bucket, pivot);
       var pkvleft := PKV.SplitLeft(pkv, pivot);
+//      kvlLeft := KVList.AmassKvl(kvlLeft);  // TODO UH OH! Are we loosing amass-iness?
       left := new MutBucket.InitFromPkv(pkvleft, sorted);
     }
 
@@ -570,6 +571,7 @@ module BucketImpl {
       var pkv := GetPkv();
       //WeightSplitBucketRight(Bucket, pivot);
       var pkvright := PKV.SplitRight(pkv, pivot);
+//      kvlRight := KVList.AmassKvl(kvlRight);  // TODO UH OH! Are we loosing amass-iness?
       right := new MutBucket.InitFromPkv(pkvright, sorted);
     }
 
@@ -756,6 +758,7 @@ module BucketImpl {
         NumElementsLteWeight(B(KMB.Interpretation(tree)));
         KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
         pkv := tree_to_pkv(tree);
+//        kv := KVList.AmassKvl(kvl);  // TODO UH OH! Are we loosing amass-iness?
       } 
       bucket' := new MutBucket.InitFromPkv(pkv, true);
     }

@@ -47,36 +47,6 @@ static inline void remove_hooks() {
   __free_hook = old_free_hook;
 }
 
-bool cstr_ends_with(const char* haystack, const char* needle) {
-  int haystack_len = strlen(haystack);
-  int needle_len = strlen(needle);
-  if (haystack_len < needle_len) { return false; }
-  return strcmp(&haystack[haystack_len - needle_len], needle) == 0;
-}
-
-// OS view of heap size
-void external_heap_size(size_t* heap, size_t* all_maps) {
-  size_t result = -1;
-  FILE* fp = fopen("/proc/self/maps", "r");
-  size_t total = 0;
-  while (true) {
-    char space[1000];
-    char* line = fgets(space, sizeof(space), fp);
-    if (line==NULL) { break; }
-    char* remainder;
-    size_t base = strtol(line, &remainder, 16);
-    size_t end = strtol(&remainder[1], NULL, 16);
-    result = end - base;
-    total += result;
-
-    if (cstr_ends_with(line, "[heap]\n")) {
-      *heap = result;
-    }
-  }
-  fclose(fp);
-  *all_maps = total;
-}
-  
 struct Label {
   const char* scope;
   const char* subscope;
@@ -509,28 +479,11 @@ void fini_malloc_accounting() {
   malloc_accounting_display("fini");
 }
 
-// This is here to confirm that malloc accounting indeed finds
-// all of the memory that the OS is giving us. When I studied this,
-// I found that the OS heap accounting was about 20% more than what
-// we used in malloc -- probably fragmentation. It stayed fairly
-// proportional, giving me confidence that malloc is gettingt a
-// complete view.
-// (Note that there could also be other ways to gobble process memory,
-// like mmap, but we're not doing that; /proc/maps only shows
-// text segments and other ordinary features.)
-// Finally, we could also be gobbling up other cgroup-y memory -- maybe
-// space in the buffer cache? Not worrying about that here.
-void malloc_accounting_status() {
-  size_t heap, all_maps;
-  external_heap_size(&heap, &all_maps);
-  printf("os-map-total %8ld os-map-heap %8ld malloc-accounting-total %8ld\n",
-    all_maps,
-    heap,
-    atable.total_open_bytes());
-}
-
 #if MALLOC_ACCOUNTING_ENABLE_SCOPES
 void malloc_accounting_set_scope(const char* scope, const char* subscope) {
+  if (horrible_amass_label != NULL) {
+    subscope = horrible_amass_label;
+  }
   atable.scope_map.set_active_label(Label(scope, subscope));
 }
 

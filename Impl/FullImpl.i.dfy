@@ -100,5 +100,9 @@ module FullImpl {
 
       assert StateModel.Inv(Ic(k), I());
     }
+
+    method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator) {
+       acc := bc.DebugAccumulate();
+    }
   }
 }
