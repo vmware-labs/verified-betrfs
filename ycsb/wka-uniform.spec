@@ -23,5 +23,5 @@ fieldlength=512
 
 requestdistribution=uniform
 
-#syncintervalms=1000
+syncintervalms=1000
 syncintervalops=10000
