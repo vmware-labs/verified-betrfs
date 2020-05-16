@@ -128,10 +128,10 @@ namespace MainDiskIOHandler_Compile {
   }
 #else
   uint8_t *aligned_copy(uint8_t* buf, size_t len, size_t *aligned_len) {
-    uint8_t *aligned_bytes = (uint8_t *)malloc(len);
+    *aligned_len = (len + 4095) & ~0xfffUL;
+    uint8_t *aligned_bytes = (uint8_t *)malloc(*aligned_len);
     if (aligned_bytes) {
       memcpy(aligned_bytes, buf, len);
-      *aligned_len = len;
     }
     return aligned_bytes;
   }
