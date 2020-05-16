@@ -90,8 +90,11 @@ private:
   Variables hs;
   std::string filename;
   std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io;
-
+  uint64 ops_until_next_background_sync;
+  uint64 background_sync_id;
+  
   bool maybeDoResponse();
+  void backgroundSyncStep(bool did_an_op);
   void log(std::string const&);
 
   UI_Compile::SuccResultList SuccOnce(UI_Compile::RangeStart start, uint64 maxToFind);

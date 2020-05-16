@@ -508,6 +508,8 @@ using MainDiskIOHandler_Compile::DiskIOHandler;
   #define LOG(x)
 #endif
 
+#define BACKGROUND_SYNC_INTERVAL (32000) // measured in ops.  Should be roughly 16MB of data
+
 Application::Application(string filename) {
   this->filename = filename;
   initialize();
@@ -521,6 +523,8 @@ void Application::initialize() {
   malloc_accounting_set_scope("Application::initialize DiskIOHandler");
   this->io = make_shared<DiskIOHandler>(this->filename);
   malloc_accounting_default_scope();
+  this->ops_until_next_background_sync = BACKGROUND_SYNC_INTERVAL;
+  this->background_sync_id = 0;
 }
 
 Application::~Application()
@@ -548,6 +552,27 @@ void Application::CountAmassAllocations() {
   handle_CountAmassAllocations(k, hs, io);
 }
 
+void Application::backgroundSyncStep(bool did_an_op) {
+  return;
+  // if (background_sync_id) {
+  //   assert (background_sync_id != 0);
+  //   auto tup2 = handle_PopSync(k, hs, io, background_sync_id, false);
+  //   bool success = tup2.second;
+  //   if (success) {
+  //     background_sync_id = 0;
+  //     ops_until_next_background_sync = BACKGROUND_SYNC_INTERVAL;
+  //   }
+  //   // Note we let the main operation driving the program right now do all the waits.
+  // } else if (did_an_op) {
+  //   if (1 < ops_until_next_background_sync) {
+  //     ops_until_next_background_sync--;
+  //   } else if (1 == ops_until_next_background_sync) {
+  //     ops_until_next_background_sync--;
+  //     background_sync_id = handle_PushSync(k, hs, io);
+  //   }
+  // }
+}
+
 void Application::Sync(bool graphSync) {
   #ifdef LOG_QUERY_STATS
   currently_doing_action = ACTION_SYNC;
@@ -563,6 +588,7 @@ void Application::Sync(bool graphSync) {
   LOG("doing push sync...");
 
   for (int i = 0; i < 500000; i++) {
+    backgroundSyncStep(false);
     while (this->maybeDoResponse()) { }
     auto tup2 = handle_PopSync(k, hs, io, id, graphSync);
     bool wait = tup2.first;
@@ -578,6 +604,12 @@ void Application::Sync(bool graphSync) {
       benchmark_append("Application::Sync", ns);
       #endif
 
+      // If we just did a graph sync and there's not currently a
+      // background sync going on, then we can defer the next
+      // background sync.
+      if (!graphSync && 0 < ops_until_next_background_sync)
+        ops_until_next_background_sync = BACKGROUND_SYNC_INTERVAL;
+      
       return;
     } else if (wait) {
       LOG("doing wait...");
@@ -617,7 +649,10 @@ void Application::Insert(ByteString key, ByteString val)
     fail("Insert: value is too long");
   }
 
+  backgroundSyncStep(true);
+  
   for (int i = 0; i < 500000; i++) {
+    backgroundSyncStep(false);
     bool success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
     // TODO remove this to enable more asyncronocity:
 
@@ -682,6 +717,7 @@ ByteString Application::Query(ByteString key)
   }
 
   for (int i = 0; i < 500000; i++) {
+    backgroundSyncStep(false); // Queries don't add anything to the log
     auto result = handle_Query(k, hs, io, key.as_dafny_seq());
 
     #ifdef LOG_QUERY_STATS
@@ -784,6 +820,7 @@ UI_Compile::SuccResultList Application::SuccOnce(UI_Compile::RangeStart start, u
   }
 
   for (int i = 0; i < 500000; i++) {
+    backgroundSyncStep(false); // Queries don't add anything to the log
     auto result = handle_Succ(k, hs, io, start, maxToFind);
     this->maybeDoResponse();
     if (result.has_value()) {
