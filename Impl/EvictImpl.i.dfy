@@ -123,10 +123,17 @@ module EvictImpl {
   ensures WellUpdated(s)
   ensures s.ready
   {
-    var count := s.cache.Count() / 10;
-    if  10 < count {
-      count := 10;
+    return;
+    var headroom;
+    if MaxCacheSizeUint64() < s.cache.Count() {
+      headroom := 0;
+    } else {
+      headroom := MaxCacheSizeUint64() - s.cache.Count();
     }
+    if 10 <= headroom {
+      return;
+    }
+    var count := 10 - headroom;
     var refs := s.lru.NextN(count);
     var i: uint64 := 0;
     while i < |refs| as uint64 {

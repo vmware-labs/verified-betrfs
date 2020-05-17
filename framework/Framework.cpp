@@ -19,6 +19,9 @@ using namespace std;
 
 //#define LOG_QUERY_STATS
 
+//#define IOLOG(x) (x)
+#define IOLOG(x)
+
 #define USE_DIRECT (1)
 //#define USE_DIRECT (0)
 
@@ -160,7 +163,7 @@ namespace MainDiskIOHandler_Compile {
       // TODO would be good to eliminate this copy,
       // but the application code might have lingering references
       // to the array.
-      cout << "WriteTask: received addr=" << addr << endl;
+      IOLOG(cout << "WriteTask: received addr=" << addr << endl);
       
       aligned_bytes = aligned_copy(buf, len, &aligned_len);
       if (aligned_bytes == NULL) {
@@ -181,10 +184,10 @@ namespace MainDiskIOHandler_Compile {
     }
 
     void start() {
-      cout << "WriteTask: starting addr=" << addr << endl;
+      IOLOG(cout << "WriteTask: starting addr=" << addr << endl);
       int ret = aio_write(&aio_req_write);
       if (ret != 0) {
-        cout << "number of writeReqs " << endl;
+        IOLOG(cout << "number of writeReqs " << endl);
         if (errno == EAGAIN) { fail("aio_write failed EAGAIN"); }
         else if (errno == EBADF) { fail("aio_write failed EBADF"); }
         else if (errno == EFBIG) { fail("aio_write failed EFBIG"); }
@@ -216,20 +219,20 @@ namespace MainDiskIOHandler_Compile {
 
     void check_if_complete() {
       if (!done && made_req) {
-	cout << "WriteTask: checking completion addr=" << addr;
+	IOLOG(cout << "WriteTask: checking completion addr=" << addr);
         int status = aio_error(&aio_req_write);
         if (status == 0) {
           ssize_t ret = aio_return(&aio_req_write);
           if (ret < 0 || (size_t)ret != aligned_len) {
             fail("write did not write all bytes");
           }
-	  cout << " done" << endl;
+	  IOLOG(cout << " done" << endl);
           done = true;
           nWriteReqsOut--;
         } else if (status != EINPROGRESS) {
           fail("aio_error returned that write has failed");
         } else {
-	  cout << " not done" << endl;	  
+	  IOLOG(cout << " not done" << endl);
 	}
       }
     }
@@ -379,9 +382,9 @@ namespace MainDiskIOHandler_Compile {
     #ifdef LOG_QUERY_STATS
     //benchmark_end("DiskIOHandler::read alloc");
     #endif
-    cout << "ReadTask: received for " << addr << endl;
+    IOLOG(cout << "ReadTask: received for " << addr << endl);
     readSync(fd, addr, len, aligned_len, bytes.ptr());
-    cout << "ReadTask: completed for " << addr << endl;
+    IOLOG(cout << "ReadTask: completed for " << addr << endl);
 
     #ifdef LOG_QUERY_STATS
     //benchmark_start("DiskIOHandler::read finish");
@@ -801,7 +804,7 @@ void Application::QueryAndExpect(ByteString key, ByteString expected_val)
 bool Application::maybeDoResponse()
 {
   if (io->prepareReadResponse()) {
-    cout << "ReadTask: delivering result" << endl;
+    IOLOG(cout << "ReadTask: delivering result" << endl);
     handle_ReadResponse(k, hs, io);
     LOG("doing read response...");
     return true;
