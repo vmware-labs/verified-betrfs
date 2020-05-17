@@ -379,8 +379,9 @@ namespace MainDiskIOHandler_Compile {
     #ifdef LOG_QUERY_STATS
     //benchmark_end("DiskIOHandler::read alloc");
     #endif
-
+    cout << "ReadTask: received for " << addr << endl;
     readSync(fd, addr, len, aligned_len, bytes.ptr());
+    cout << "ReadTask: completed for " << addr << endl;
 
     #ifdef LOG_QUERY_STATS
     //benchmark_start("DiskIOHandler::read finish");
@@ -800,6 +801,7 @@ void Application::QueryAndExpect(ByteString key, ByteString expected_val)
 bool Application::maybeDoResponse()
 {
   if (io->prepareReadResponse()) {
+    cout << "ReadTask: delivering result" << endl;
     handle_ReadResponse(k, hs, io);
     LOG("doing read response...");
     return true;
