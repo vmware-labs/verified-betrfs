@@ -19,8 +19,8 @@ using namespace std;
 
 //#define LOG_QUERY_STATS
 
-//#define USE_DIRECT (1)
-#define USE_DIRECT (0)
+#define USE_DIRECT (1)
+//#define USE_DIRECT (0)
 
 #ifndef O_NOATIME
 #define O_NOATIME (0)
@@ -160,7 +160,8 @@ namespace MainDiskIOHandler_Compile {
       // TODO would be good to eliminate this copy,
       // but the application code might have lingering references
       // to the array.
-
+      cout << "WriteTask: received addr=" << addr << endl;
+      
       aligned_bytes = aligned_copy(buf, len, &aligned_len);
       if (aligned_bytes == NULL) {
         fail("Couldn't create aligned copy of buffer");
@@ -180,6 +181,7 @@ namespace MainDiskIOHandler_Compile {
     }
 
     void start() {
+      cout << "WriteTask: starting addr=" << addr << endl;
       int ret = aio_write(&aio_req_write);
       if (ret != 0) {
         cout << "number of writeReqs " << endl;
@@ -214,17 +216,21 @@ namespace MainDiskIOHandler_Compile {
 
     void check_if_complete() {
       if (!done && made_req) {
+	cout << "WriteTask: checking completion addr=" << addr;
         int status = aio_error(&aio_req_write);
         if (status == 0) {
           ssize_t ret = aio_return(&aio_req_write);
           if (ret < 0 || (size_t)ret != aligned_len) {
             fail("write did not write all bytes");
           }
+	  cout << " done" << endl;
           done = true;
           nWriteReqsOut--;
         } else if (status != EINPROGRESS) {
           fail("aio_error returned that write has failed");
-        }
+        } else {
+	  cout << " not done" << endl;	  
+	}
       }
     }
   };
@@ -556,9 +562,11 @@ void Application::backgroundSyncStep(bool did_an_op) {
   return;
   // if (background_sync_id) {
   //   assert (background_sync_id != 0);
+  //   cout << "background sync: handle_PopSync" << endl;
   //   auto tup2 = handle_PopSync(k, hs, io, background_sync_id, false);
   //   bool success = tup2.second;
   //   if (success) {
+  //   cout << "backgroundSync: completed" << endl;
   //     background_sync_id = 0;
   //     ops_until_next_background_sync = BACKGROUND_SYNC_INTERVAL;
   //   }
@@ -568,6 +576,7 @@ void Application::backgroundSyncStep(bool did_an_op) {
   //     ops_until_next_background_sync--;
   //   } else if (1 == ops_until_next_background_sync) {
   //     ops_until_next_background_sync--;
+  //     cout << "backgroundSync: starting" << endl;
   //     background_sync_id = handle_PushSync(k, hs, io);
   //   }
   // }
@@ -653,15 +662,19 @@ void Application::Insert(ByteString key, ByteString val)
   
   for (int i = 0; i < 500000; i++) {
     backgroundSyncStep(false);
-    bool success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
-    // TODO remove this to enable more asyncronocity:
-
+    bool success;
+    int oldnios;
+    do {
+      oldnios = MainDiskIOHandler_Compile::nWriteReqsOut;
+      success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
+    } while (!success && oldnios < MainDiskIOHandler_Compile::nWriteReqsOut);
+    
     if (io->has_write_task()) {
       #ifdef LOG_QUERY_STATS
       benchmark_start("write (insert)");
       #endif
 
-      io->completeWriteTasks();
+      io->waitForOne();
 
       #ifdef LOG_QUERY_STATS
       benchmark_end("write (insert)");

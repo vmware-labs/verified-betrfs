@@ -474,14 +474,14 @@ int main(int argc, char* argv[]) {
     std::string base_directory(argv[2]);
     // (unsupported on macOS 10.14) std::filesystem::create_directory(base_directory);
     // check that base_directory is empty
-    int status = std::system(("[ \"$(ls -A " + base_directory + ")\" ]").c_str());
+    //int status = std::system(("[ \"$(ls -A " + base_directory + ")\" ]").c_str());
 
     dump_metadata(workload_filename.c_str(), base_directory.c_str());
 
-    if (status == 0) {
-        cerr << "error: " << base_directory << " appears to be non-empty" << endl;
-        exit(-1);
-    }
+    // if (status == 0) {
+    //     cerr << "error: " << base_directory << " appears to be non-empty" << endl;
+    //     exit(-1);
+    // }
 
     bool do_veribetrkv = false;
     bool do_rocks = false;
@@ -522,9 +522,9 @@ int main(int argc, char* argv[]) {
     // == veribetrkv ==
     if (do_veribetrkv) {
     #ifdef _YCSB_VERIBETRFS
-        std::string veribetrfs_filename = base_directory + "veribetrfs.img";
+      std::string veribetrfs_filename = base_directory; // + "veribetrfs.img";
         // (unsupported on macOS 10.14) std::filesystem::remove_all(veribetrfs_filename);
-        system(("rm -rf " + veribetrfs_filename).c_str());
+        //system(("rm -rf " + veribetrfs_filename).c_str());
         Mkfs(veribetrfs_filename);
         Application app(veribetrfs_filename);
         VeribetrkvFacade db(app);
