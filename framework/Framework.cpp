@@ -618,15 +618,19 @@ void Application::Insert(ByteString key, ByteString val)
   }
 
   for (int i = 0; i < 500000; i++) {
-    bool success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
-    // TODO remove this to enable more asyncronocity:
+    bool success;
+    int oldnios;
+    do {
+      oldnios = MainDiskIOHandler_Compile::nWriteReqsOut;
+      success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
+    } while (!success && oldnios < MainDiskIOHandler_Compile::nWriteReqsOut);
 
     if (io->has_write_task()) {
       #ifdef LOG_QUERY_STATS
       benchmark_start("write (insert)");
       #endif
 
-      io->completeWriteTasks();
+      io->waitForOne();
 
       #ifdef LOG_QUERY_STATS
       benchmark_end("write (insert)");
