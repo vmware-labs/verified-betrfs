@@ -413,5 +413,23 @@ build/KyotoYcsb: ycsb/YcsbMain.cpp build/libycsbc-libcpp.a vendor/kyoto/kyotocab
 			vendor/kyoto/kyotocabinet/libkyotocabinet.a \
 			-lycsbc-libcpp -lpthread -ldl -lz $(LDFLAGS)
 
+# Requires libdb-stl-dev to be installed (on debian, libdbb5.3-stl-dev)
+build/BerkeleyYcsb: ycsb/YcsbMain.cpp build/libycsbc-libcpp.a
+	# NOTE: this uses c++17, which is required by hdrhist
+	$(CC) \
+      $(STDLIB) \
+      -o $@ \
+			-Winline -std=c++17 $(O3FLAG) \
+			-L ycsb/build \
+			-I ycsb/build/include \
+			-I $(DAFNY_ROOT)/Binaries/ \
+			-I framework/ \
+			-I build/ \
+			-I vendor/hdrhist/ \
+			$(DBG_SYMBOLS_FLAG) \
+			-D_YCSB_BERKELEYDB \
+			ycsb/YcsbMain.cpp \
+			-lycsbc-libcpp -lpthread -ldl -lz -ldb_stl $(LDFLAGS)
 
-ycsb: build/VeribetrfsYcsb build/RocksYcsb build/KyotoYcsb
+
+ycsb: build/VeribetrfsYcsb build/RocksYcsb build/KyotoYcsb build/BerkeleyYcsb
