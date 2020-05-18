@@ -1,4 +1,7 @@
 include "KeyType.s.dfy"
+include "NativeTypes.s.dfy"
+include "sequences.i.dfy"
+
 //
 // The messages propagated down a B-epsilon tree. Each message either
 // completely defines the value of the key, or is a delta that modifies the
@@ -73,8 +76,10 @@ abstract module Message {
 }
 
 module ValueMessage refines Message {
-  import ValueType
-
+  import ValueType`Internal
+  import opened NativeTypes
+  import opened Sequences
+  
   type Value = ValueType.Value
   datatype Delta = NoDelta
 
@@ -92,6 +97,86 @@ module ValueMessage refines Message {
 	{
 	}
 
+  function method bytestring_to_Message(s: seq<byte>) : Message
+  requires |s| < 0x1_0000_0000
+  {
+    if |s| as uint64 <= ValueType.MaxLen() then (
+      Define(s)
+    ) else (
+      // NOTE(travis)
+      // It's just convenient to make this function total, so
+      // we just do this if the byte string is invalid.
+      Define(ValueType.DefaultValue())
+    )
+  }
+
+  predicate EncodableMessage(msg: Message)
+  {
+    && msg.Define?
+  }
+
+  predicate EncodableMessageSeq(msgs: seq<Message>)
+  {
+    && (forall i | 0 <= i < |msgs| :: EncodableMessage(msgs[i]))
+  }
+
+  function method Message_to_bytestring(msg: Message) : seq<byte>
+    requires msg.Define?
+  {
+    msg.value
+  }
+  
+  function messageSeq_to_bytestringSeq(msgs: seq<Message>) : (result: seq<seq<byte>>)
+    requires EncodableMessageSeq(msgs)
+    ensures |result| == |msgs|
+    ensures forall i | 0 <= i < |result| :: result[i] == Message_to_bytestring(msgs[i])
+  {
+    if |msgs| == 0 then
+      []
+    else
+      messageSeq_to_bytestringSeq(Sequences.DropLast(msgs)) + [ Message_to_bytestring(Last(msgs)) ]
+  }
+
+  function bytestringSeq_to_MessageSeq(strings: seq<seq<byte>>) : (result: seq<Message>)
+    requires forall i | 0 <= i < |strings| :: |strings[i]| < 0x1_0000_0000
+    ensures |result| == |strings|
+    ensures forall i | 0 <= i < |strings| :: result[i] == bytestring_to_Message(strings[i])
+  {
+    if |strings| == 0 then
+      []
+    else
+      bytestringSeq_to_MessageSeq(Sequences.DropLast(strings)) + [ bytestring_to_Message(Last(strings)) ]
+  }
+
+  lemma messageSeq_to_bytestringSeq_Additive(msgs1: seq<Message>, msgs2: seq<Message>)
+    requires EncodableMessageSeq(msgs1)
+    requires EncodableMessageSeq(msgs2)
+    ensures EncodableMessageSeq(msgs1 + msgs2)
+    ensures messageSeq_to_bytestringSeq(msgs1 + msgs2) == messageSeq_to_bytestringSeq(msgs1) + messageSeq_to_bytestringSeq(msgs2)
+  {
+  }
+  
+  method MessageArray_to_bytestringSeq(msgs: array<Message>, nmsgs: uint64) returns (result: seq<seq<byte>>)
+    requires nmsgs as nat <= msgs.Length
+    requires EncodableMessageSeq(msgs[..nmsgs])
+    ensures result[..] == messageSeq_to_bytestringSeq(msgs[..nmsgs])
+  {
+    var aresult := new seq<byte>[nmsgs];
+    var i: uint64 := 0;
+
+    while i < nmsgs
+      invariant i <= nmsgs
+      invariant aresult[..i] == messageSeq_to_bytestringSeq(msgs[..i])
+    {
+      aresult[i] := Message_to_bytestring(msgs[i]);
+      i := i + 1;
+    }
+
+    result := aresult[..i];
+  }
+
+  
+  
 	export S provides * reveals Message, Merge, IdentityMessage, DefineDefault, Value
 	export extends S
 	export Internal reveals *

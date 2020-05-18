@@ -1,7 +1,6 @@
 include "../Base/Sets.i.dfy"
 include "../Base/Multisets.i.dfy"
 include "BucketsLib.i.dfy"
-include "PackedKV.i.dfy"
 
 //
 // Assigning weights to buckets guides the flushing algorithm to decide
@@ -28,7 +27,6 @@ module BucketWeights {
   import opened NativeTypes
   import opened KeyType
   import MSets = Multisets
-  import PackedKV
 
   
   function WeightKey(key: Key) : (w:nat)
@@ -193,13 +191,13 @@ module BucketWeights {
   }
   
   lemma WeightMessageListFlatten(msgs: seq<Message>)
-    requires PackedKV.EncodableMessageSeq(msgs)
-    ensures WeightMessageList(msgs) == FlattenLength(FlattenShape(PackedKV.messageSeq_to_bytestringSeq(msgs))) + 4 * |msgs|
+    requires EncodableMessageSeq(msgs)
+    ensures WeightMessageList(msgs) == FlattenLength(FlattenShape(messageSeq_to_bytestringSeq(msgs))) + 4 * |msgs|
   {
     if |msgs| == 0 {
     } else {
       assert msgs == DropLast(msgs) + [ Last(msgs) ];
-      PackedKV.messageSeq_to_bytestringSeq_Additive(DropLast(msgs), [ Last(msgs) ]);
+      messageSeq_to_bytestringSeq_Additive(DropLast(msgs), [ Last(msgs) ]);
       WeightMessageListAdditive(DropLast(msgs),[ Last(msgs) ]);
       WeightMessageSingleton(Last(msgs));
       reveal_FlattenShape();

@@ -22,6 +22,7 @@ module BucketImpl {
   import KMBBOps = KMBtreeBulkOperations
   import KVList
   import PackedKV
+  import ValueType = ValueType`Internal
   import opened ValueMessage`Internal
   import opened Lexicographic_Byte_Order_Impl
   import opened Sequences
@@ -89,11 +90,12 @@ module BucketImpl {
 
   method tree_to_pkv(tree: TreeMap) returns (pkv : PackedKV.Pkv)
     requires KMB.WF(tree)
-    requires KMBBOps.NumElements(tree) < Uint64UpperBound()
-    requires forall k | k in KMB.Interpretation(tree) :: |k| <= KeyType.MaxLen() as nat
+    requires KMBPKVOps.IsKeyMessageTree(tree)
+    requires BucketWeights.WeightBucket(BucketsLib.B(KMB.Interpretation(tree))) < Uint32UpperBound()
     ensures PackedKV.WF(pkv)
     ensures PackedKV.I(pkv) == B(KMB.Interpretation(tree))
   {
+    KMBPKVOps.WeightImpliesCanAppend(tree);
     pkv := KMBPKVOps.ToPkv(tree);
   }
   
@@ -136,8 +138,8 @@ module BucketImpl {
         && tree.repr <= Repr
         && {this} !! tree.repr
         && KMB.WF(tree)
+        && KMBPKVOps.IsKeyMessageTree(tree)
         && Weight as int < Uint32UpperBound()
-        && (forall k | k in KMB.Interpretation(tree) :: |k| <= KeyType.MaxLen() as nat)
         && Bucket == B(KMB.Interpretation(tree))
       ))
       && (format.BFPkv? ==> (
@@ -213,7 +215,7 @@ module BucketImpl {
     lemma WeightMessageSeqIs(psa: PackedKV.PSA.Psa, k: int)
       requires PSA.WF(psa)
       requires 0 <= k <= |psa.offsets|
-      requires PackedKV.ValidMessageLens(PSA.I(psa));
+      requires ValueType.ValidMessageBytestrings(PSA.I(psa));
       ensures WeightMessageSeq(PackedKV.IMessages(psa)[.. k]) ==
         4 * k + (if k == 0 then 0 else PSA.psaEnd(psa, (k - 1) as uint64) as int);
     {
