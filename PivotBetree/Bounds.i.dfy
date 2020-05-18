@@ -9,7 +9,7 @@ module Bounds {
   import opened NativeTypes
   import opened KeyType
 
-  function method NodeBlockSizeUint64() : uint64 { 8*1024*1024 }
+  function method NodeBlockSizeUint64() : uint64 { 2*1024*1024 }
 
   // TODO(jonh): We should partition the disk, in byte units, into regions,
   // and then address each region in its native block size with 0-based indexing.
@@ -51,8 +51,8 @@ module Bounds {
 
   //function method MaxTotalBucketWeightUint64() : uint64 { 8356168 }
   //function method MaxCacheSizeUint64() : uint64 { 200 }
-  function method MaxTotalBucketWeightUint64() : uint64 { 7848576 }
-  function method MaxCacheSizeUint64() : uint64 { 100 }
+  function method MaxTotalBucketWeightUint64() : uint64 { 2*1024*1024-65536 }
+  function method MaxCacheSizeUint64() : uint64 { 400 }
 
   function method MaxNumChildrenUint64() : uint64 { 32 }
 

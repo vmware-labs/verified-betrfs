@@ -22,8 +22,8 @@ using namespace std;
 //#define IOLOG(x) (x)
 #define IOLOG(x)
 
-#define USE_DIRECT (1)
-//#define USE_DIRECT (0)
+//#define USE_DIRECT (1)
+#define USE_DIRECT (0)
 
 #ifndef O_NOATIME
 #define O_NOATIME (0)
