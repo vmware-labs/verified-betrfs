@@ -47,7 +47,7 @@ def main():
 
   for arg in sys.argv[1:]:
     if arg.startswith("ops="):
-      ram = arg[len("ops=") : ]
+      ops = arg[len("ops=") : ]
     elif arg.startswith("output="):
       output = arg[len("output=") : ]
     else:
