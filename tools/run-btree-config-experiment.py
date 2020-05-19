@@ -76,22 +76,23 @@ def main():
   taskset_cmd = "taskset 4 "
 
 
-  for pp in eval(ops):
-      nops = 2**pp
+  with open(output, 'w') as f:
+      for pp in eval(ops):
+          nops = 2**pp
 
-      command = taskset_cmd + "./MutableBtreeBench" + " " + nops
-      actuallyprint(command)
-      sys.stdout.flush()
+          command = taskset_cmd + "./MutableBtreeBench" + " " + str(nops)
+          actuallyprint(command)
+          sys.stdout.flush()
 
-      start_time = time.time()
-      proc = subprocess.Popen(command, shell=True, preexec_fn=os.setsid)
-      proc_grp_id = os.getpgid(proc.pid)
-      actuallyprint("experiment pid %d pgid %d" % (proc.pid, proc_grp_id))
+          start_time = time.time()
+          proc = subprocess.Popen(command, shell=True, preexec_fn=os.setsid)
+          proc_grp_id = os.getpgid(proc.pid)
+          actuallyprint("experiment pid %d pgid %d" % (proc.pid, proc_grp_id))
 
-      proc.wait()
-      end_time = time.time()
-      actuallyprint("writing to {}".format(output))
-      with open(output, 'w') as f:
+          proc.wait()
+          end_time = time.time()
+
+          actuallyprint("{} writing to {}".format(nops, output))
           f.write("{}\t{}".format(nops, end_time - start_time))
 
 if __name__ == "__main__":
