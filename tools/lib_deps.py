@@ -74,21 +74,24 @@ class IncludeReference:
     def rootPath(self):
         return self.normPath
 
+    def _tuple(self):
+        return (self.absPath, self.line_num)
+
     def __hash__(self):
-        return hash(self.rootPath())
+        return hash(self._tuple())
 
     # Python3
     def __lt__(self, other):
-        return self.rootPath() < other.rootPath()
+        return self._tuple() < other._tuple()
 
     def __eq__(self, other):
-        return self.rootPath() == other.rootPath()
+        return self._tuple() == other._tuple()
 
     # Python2
     def __cmp__(self, other):
         if other is None:
             return False
-        return cmp(self.rootPath(), other.rootPath())
+        return cmp(self._tuple(), other._tuple())
 
 
 class IncludeNotFound(Exception):
@@ -147,6 +150,16 @@ def depsFromDfySource(initialRef):
         needExplore.extend(childrenForIref(iref))
     visited.remove(initialRef)
     return visited
+
+def depsFromDfySources(roots):
+    irefs = set()
+    for i in range(len(roots)):
+        dafnyRoot = roots[i]
+        rootIref = IncludeReference(None, i, dafnyRoot)
+        irefs.add(rootIref)
+        targets = depsFromDfySource(rootIref)
+        irefs = irefs.union(set(targets))
+    return irefs
 
 def targetName(iref, suffix):
     targetRootRelPath = iref.normPath.replace(".dfy", suffix)
