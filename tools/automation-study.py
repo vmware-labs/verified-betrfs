@@ -99,18 +99,20 @@ def totalDefinitions(defs):
     defRef = grepAll("(function|predicate|method)")
     ghost = set()
     impl = set()
+    all = set()
     for iref in defRef:
         line = lineForIref(iref)
         if "method" in line:
             impl.add(line)
-        else:
+        if "predicate" in line or "function" in line:
             ghost.add(line)
-    allDefCount = len(ghost) + len(impl)
+        all.add(line)
+    allDefCount = len(all)
     defs.update({
         "autoAllDefnCount": allDefCount,
-        "autoGhostDefnCount": len(ghost),
+        "autoOpaquableDefnCount": len(ghost),
         "autoImplDefnCount": len(impl),
-        "autoOpaquePct": "%d\\%%" % (100.0*defs["autoOpaqueCount"] / allDefCount),
+        "autoOpaquePct": "%d\\%%" % (100.0*defs["autoOpaqueCount"] / len(ghost)),
     })
     return defs
 
