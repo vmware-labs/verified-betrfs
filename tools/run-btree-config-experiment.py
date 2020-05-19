@@ -93,7 +93,8 @@ def main():
           end_time = time.time()
 
           actuallyprint("{} writing to {}".format(nops, output))
-          f.write("{}\t{}".format(nops, end_time - start_time))
+          f.write("{}\t{}\n".format(nops, end_time - start_time))
+          f.flush()
 
 if __name__ == "__main__":
   main()
