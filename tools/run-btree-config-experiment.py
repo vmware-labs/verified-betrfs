@@ -64,7 +64,7 @@ def main():
   ret = os.system(dafny_cmd)
   assert ret == 0
 
-  cmd = "g++ -O3 lib/DataStructures/lib/DataStructures/MutableBtree.i.cpp bench/run-mutable-btree.cpp -o MutableBtreeTest -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -Ilib -std=c++17 -I. -Iframework framework/NativeArrays.cpp"
+  cmd = "g++ -O3 lib/DataStructures/lib/DataStructures/MutableBtree.i.cpp bench/run-mutable-btree.cpp -o MutableBtreeBench -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -Ilib -std=c++17 -I. -Iframework framework/NativeArrays.cpp"
   actuallyprint(cmd)
   ret = os.system(cmd)
   assert ret == 0
@@ -73,7 +73,7 @@ def main():
   # See https://linux.die.net/man/1/taskset
   taskset_cmd = "taskset 4 "
 
-  command = taskset_cmd + "./MutableBtree"
+  command = taskset_cmd + "./MutableBtreeBench"
   actuallyprint(command)
   sys.stdout.flush()
 
