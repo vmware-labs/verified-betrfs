@@ -87,8 +87,8 @@ def main():
 
 
   with open(output, 'w') as f:
-      f.write("METADATA btree perf comparison")
-      f.write("METADATA branch {}".format(branch))
+      f.write("METADATA btree perf comparison\n")
+      f.write("METADATA branch {}\n".format(branch))
       for pp in eval(ops):
           nops = 2**pp
 
