@@ -1,5 +1,4 @@
 include "../Lang/NativeTypes.s.dfy"
-include "../Base/NativeArrays.s.dfy"
 include "../Base/total_order.i.dfy"
 include "../Base/sequences.i.dfy"
 include "../Base/Arrays.i.dfy"
@@ -12,7 +11,6 @@ abstract module MutableBtree {
   import opened LinearSequence_s
   import opened LinearSequence_i
   import opened NativeTypes
-  import opened NativeArrays
   import opened Seq = Sequences
   import opened Options
   import opened Maps

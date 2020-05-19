@@ -76,8 +76,8 @@ namespace LinearExtern {
 //
 ////////////////////////////////////////////////////////////
 
-uint64 MakeLinearInt(uint64 u) { return u; }
-void DiscardLinearInt(uint64 u) { (void) u; }
+inline uint64 MakeLinearInt(uint64 u) { return u; }
+inline void DiscardLinearInt(uint64 u) { (void) u; }
 
 ////////////////////////////////////////////////////////////
 //
@@ -201,6 +201,7 @@ lseq<A> get_lseq_default() {
 }
 
 }
+
 
 //template<typename A>
 //struct std::hash<LinearExtern::linear_seq<A>> {

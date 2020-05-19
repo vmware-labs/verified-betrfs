@@ -64,9 +64,9 @@ def main():
   sys.stdout.flush()
 
   dafny_cmd = None
-  if branch == "eval-btree-master":
+  if branch == "eval-btree-linear":
     dafny_cmd = ".dafny/dafny/Binaries/dafny /noVerify /spillTargetCode:3 /countVerificationErrors:0 /compileTarget:cpp lib/DataStructures/MutableBtree.i.dfy Lang/LinearExtern.h framework/Framework.h"
-  elif branch == "eval-btree-linear":
+  elif branch == "eval-btree-master":
     dafny_cmd = ".dafny/dafny/Binaries/dafny /noVerify /spillTargetCode:3 /countVerificationErrors:0 /compileTarget:cpp lib/DataStructures/MutableBtree.i.dfy framework/NativeArrays.h"
   actuallyprint(dafny_cmd)
   ret = os.system(dafny_cmd)
@@ -76,7 +76,7 @@ def main():
   if branch == "eval-btree-master":
     cmd = "g++ -O3 lib/DataStructures/lib/DataStructures/MutableBtree.i.cpp bench/run-mutable-btree.cpp -o MutableBtreeBench -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -Ilib -std=c++17 -I. -Iframework framework/NativeArrays.cpp"
   elif branch == "eval-btree-linear":
-    cmd = "g++ -O3 lib/DataStructures/lib/DataStructures/MutableBtree.i.cpp bench/run-mutable-btree.cpp -o MutableBtreeTest -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -Ilib -std=c++17 -I."
+    cmd = "g++ -O3 lib/DataStructures/lib/DataStructures/MutableBtree.i.cpp bench/run-mutable-btree.cpp -o MutableBtreeBench -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -Ilib -std=c++17 -I."
   actuallyprint(cmd)
   ret = os.system(cmd)
   assert ret == 0
