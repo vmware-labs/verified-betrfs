@@ -75,20 +75,24 @@ def main():
   # See https://linux.die.net/man/1/taskset
   taskset_cmd = "taskset 4 "
 
-  command = taskset_cmd + "./MutableBtreeBench" + " " + ops
-  actuallyprint(command)
-  sys.stdout.flush()
 
-  start_time = time.time()
-  proc = subprocess.Popen(command, shell=True, preexec_fn=os.setsid)
-  proc_grp_id = os.getpgid(proc.pid)
-  actuallyprint("experiment pid %d pgid %d" % (proc.pid, proc_grp_id))
+  for pp in eval(ops):
+      nops = 2**pp
 
-  proc.wait()
-  end_time = time.time()
-  actuallyprint("writing to {}".format(output))
-  with open(output, 'w') as f:
-      f.write("duration:{}".format(end_time - start_time))
+      command = taskset_cmd + "./MutableBtreeBench" + " " + nops
+      actuallyprint(command)
+      sys.stdout.flush()
+
+      start_time = time.time()
+      proc = subprocess.Popen(command, shell=True, preexec_fn=os.setsid)
+      proc_grp_id = os.getpgid(proc.pid)
+      actuallyprint("experiment pid %d pgid %d" % (proc.pid, proc_grp_id))
+
+      proc.wait()
+      end_time = time.time()
+      actuallyprint("writing to {}".format(output))
+      with open(output, 'w') as f:
+          f.write("{}\t{}".format(nops, end_time - start_time))
 
 if __name__ == "__main__":
   main()
