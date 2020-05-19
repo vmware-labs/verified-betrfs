@@ -1453,12 +1453,4 @@ module KVList {
     I_injective(toKvl(I(kvl)), kvl);
   }
 
-  lemma WFPivotsOfGetMiddleKey(bucket: Bucket)
-  requires WFBucket(bucket)
-  ensures P.WFPivots([getMiddleKey(bucket)])
-  {
-    reveal_IsStrictlySorted();
-    SeqComparison.reveal_lte();
-    IsNotMinimum([], getMiddleKey(bucket));
-  }
 }

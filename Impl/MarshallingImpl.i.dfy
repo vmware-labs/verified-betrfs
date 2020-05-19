@@ -30,7 +30,6 @@ module MarshallingImpl {
   import BC = BlockCache
   import JC = JournalCache
   import StateImpl
-  import KVList
   import Crypto
   import NativeArrays
   import MutableMapModel

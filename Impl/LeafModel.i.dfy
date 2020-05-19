@@ -16,7 +16,6 @@ module LeafModel {
   import opened BucketWeights
   import opened Bounds
   import PivotsLib
-  import KVList
   import PivotBetreeSpec`Internal
 
   import opened NativeTypes
@@ -84,7 +83,7 @@ module LeafModel {
     var pivot := getMiddleKey(node.buckets[0]);
     var pivots := [pivot];
 
-    KVList.WFPivotsOfGetMiddleKey(node.buckets[0]);
+    WFPivotsOfGetMiddleKey(node.buckets[0]);
 
     var buckets' := [
         SplitBucketLeft(node.buckets[0], pivot),

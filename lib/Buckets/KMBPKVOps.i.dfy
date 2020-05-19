@@ -26,9 +26,16 @@ module KMBPKVOps {
     && KMB.WF(node)
     && (forall k | k in KMB.Interpretation(node) :: PKV.ValidKeyByteString(k))
     && (forall v | v in KMB.Interpretation(node).Values :: ValueMessage.EncodableMessage(v))
-    && ValueMessage.EncodableMessageSeq(KMB.ToSeq(node).1)
+    //&& ValueMessage.EncodableMessageSeq(KMB.ToSeq(node).1)
   }
 
+  lemma KMTreeEncodableToSeq(node: KMB.Node)
+    requires IsKeyMessageTree(node)
+    ensures ValueMessage.EncodableMessageSeq(KMB.ToSeq(node).1)
+  {
+    KMB.Model.ToSeqInInterpretation(KMB.I(node));
+  }
+  
   lemma IsKeyMessageTreeInheritance(node: KMB.Node, i: nat)
     requires KMB.WF(node)
     requires node.contents.Index?
@@ -83,6 +90,7 @@ module KMBPKVOps {
     forall m | m in KMB.ToSeq(node.contents.children[i]).1
       ensures ValueMessage.EncodableMessage(m)
     {
+      KMTreeEncodableToSeq(node);
     }
   }
 
@@ -93,7 +101,7 @@ module KMBPKVOps {
     requires node.repr !! dpkv.Repr
     requires IsKeyMessageTree(node)
     requires PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, KMB.ToSeq(node).0)
-    requires PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1))
+    requires (KMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1)))
     ensures dpkv.WF()
     ensures fresh(dpkv.Repr - old(dpkv.Repr))
     ensures dpkv.toPkv().keys == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().keys), KMB.ToSeq(node).0)
@@ -102,6 +110,7 @@ module KMBPKVOps {
     //ensures PKV.IMessages(dpkv.toPkv().messages) == old(PKV.IMessages(dpkv.toPkv().messages)) + KMB.ToSeq(node).1
     modifies dpkv.Repr
   {
+    KMTreeEncodableToSeq(node); 
     var keys := node.contents.keys;
     var values := node.contents.values;
     var nkeys := node.contents.nkeys;
@@ -202,7 +211,7 @@ module KMBPKVOps {
     requires node.repr !! dpkv.Repr
     requires IsKeyMessageTree(node)
     requires PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, KMB.ToSeq(node).0)
-    requires PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1))
+    requires (KMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1)))
     ensures dpkv.WF()
     ensures fresh(dpkv.Repr - old(dpkv.Repr))
     ensures dpkv.toPkv().keys == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().keys), KMB.ToSeq(node).0)
@@ -482,24 +491,99 @@ module KMBPKVOps {
   }
 
   // I don't think we use this much (if at all?) so not optimizing for now.
-  method FromPkv(pkv: DPKV.PKV.Pkv) returns (node: KMB.Node)
+  method FromPkv(pkv: DPKV.PKV.Pkv) returns (node: KMB.Node, weight: uint64)
     requires DPKV.PKV.WF(pkv)
     ensures KMB.WF(node)
+    ensures IsKeyMessageTree(node)
+    ensures PKV.I(pkv).b == BucketsLib.B(KMB.Interpretation(node)).b
+    ensures weight as nat == BucketWeights.WeightBucket(BucketsLib.B(KMB.Interpretation(node)))
     ensures fresh(node.repr)
   {
+    ghost var keys := PKV.IKeys(pkv.keys);
+    ghost var msgs := PKV.IMessages(pkv.messages);
+    
     var i: uint64 := 0;
     var oldvalue;
     
     node := KMB.EmptyTree();
+    weight := 0;
     
     while i < DPKV.PKV.NumKVPairs(pkv)
       invariant i <= DPKV.PKV.NumKVPairs(pkv)
       invariant KMB.WF(node)
+      invariant IsKeyMessageTree(node)
+      invariant KMB.Interpretation(node) == BucketsLib.BucketMapOfSeq(keys[..i], msgs[..i])
+      invariant weight as nat == BucketWeights.WeightBucket(BucketsLib.B(KMB.Interpretation(node)))
       invariant fresh(node.repr)
     {
-      node, oldvalue := KMB.Insert(node, DPKV.PKV.GetKey(pkv, i), DPKV.PKV.GetMessage(pkv, i));
+      calc <= {
+        weight as nat;
+        BucketWeights.WeightBucket(BucketsLib.B(KMB.Interpretation(node)));
+        BucketWeights.WeightBucket(BucketsLib.B(BucketsLib.BucketMapOfSeq(keys[..i], msgs[..i])));
+        {
+          BucketWeights.WeightWellMarshalledLe(
+            BucketsLib.BucketMapWithSeq(BucketsLib.BucketMapOfSeq(keys[..i], msgs[..i]), keys[..i], msgs[..i]),
+            BucketsLib.B(BucketsLib.BucketMapOfSeq(keys[..i], msgs[..i])));
+        }
+        BucketWeights.WeightBucket(BucketsLib.BucketMapWithSeq(BucketsLib.BucketMapOfSeq(keys[..i],
+          msgs[..i]), keys[..i], msgs[..i]));
+        {
+          assert keys == keys[..i] + keys[i..];
+          assert msgs == msgs[..i] + msgs[i..];
+          BucketWeights.WeightKeyListAdditive(keys[..i], keys[i..]);
+          BucketWeights.WeightMessageListAdditive(msgs[..i], msgs[i..]);
+        }
+        BucketWeights.WeightBucket(BucketsLib.BucketMapWithSeq(BucketsLib.BucketMapOfSeq(keys, msgs),
+          keys, msgs));
+        BucketWeights.WeightBucket(PKV.I(pkv));
+        {
+          DPKV.WeightBucketPkv_eq_WeightPkv(pkv);
+        }
+        PKV.WeightPkv(pkv) as nat;
+        0x10_0000_0000;
+      }
+      ghost var oldinterp := KMB.Interpretation(node);
+      ghost var oldweight := weight as nat;
+      
+      var key := DPKV.PKV.GetKey(pkv, i);
+      var msg := DPKV.PKV.GetMessage(pkv, i);
+      node, oldvalue := KMB.Insert(node, key, msg);
+
+      weight := weight + BucketWeights.WeightMessageUint64(msg);
+      if oldvalue.Some? {
+        calc <= {
+          BucketWeights.WeightMessageUint64(oldvalue.value) as nat;
+          { BucketWeights.WeightBucketSingleton(key, oldvalue.value); }
+          BucketWeights.WeightBucket(BucketsLib.SingletonBucket(key, oldvalue.value));
+          {
+            BucketWeights.WeightWellMarshalledSubsetLe(BucketsLib.SingletonBucket(key, oldvalue.value),
+              BucketsLib.B(oldinterp));
+          }
+          BucketWeights.WeightBucket(BucketsLib.B(oldinterp));
+          oldweight;
+          weight as nat;
+        }
+        weight := weight - BucketWeights.WeightMessageUint64(oldvalue.value);
+
+        ghost var map0 := Maps.MapRemove1(oldinterp, key);
+        BucketWeights.WeightBucketInduct(BucketsLib.B(map0), key, oldvalue.value);
+        BucketWeights.WeightBucketInduct(BucketsLib.B(map0), key, msg);
+        assert oldinterp == map0[key := oldvalue.value];
+        assert KMB.Interpretation(node) == map0[key := msg];
+      } else {
+        weight := weight + BucketWeights.WeightKeyUint64(key);
+        BucketWeights.WeightBucketInduct(BucketsLib.B(oldinterp), key, msg);
+      }
+
+      BucketsLib.reveal_BucketMapOfSeq();
+      assert keys[..i+1] == keys[..i] + [ keys[i] ];
+      assert msgs[..i+1] == msgs[..i] + [ msgs[i] ];
+
       i := i + 1;
     }
+
+    assert keys[..i] == keys;
+    assert msgs[..i] == msgs;
   }
   
   

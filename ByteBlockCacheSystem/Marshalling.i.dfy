@@ -5,7 +5,6 @@ include "../lib/Base/Crypto.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../BlockCacheSystem/BlockCache.i.dfy"
 include "../BlockCacheSystem/JournalCache.i.dfy"
-include "../lib/Buckets/KVList.i.dfy"
 include "../lib/Buckets/PackedKVMarshalling.i.dfy"
 
 //
@@ -25,7 +24,6 @@ module Marshalling {
   import BT = PivotBetreeSpec`Internal
   import M = ValueMessage`Internal
   import Pivots = PivotsLib
-  import KVList
   import Keyspace = Lexicographic_Byte_Order
   import SeqComparison
   import opened Bounds

@@ -24,7 +24,6 @@ module MarshallingModel {
   import opened Bounds
   import BC = BlockCache
   import SM = StateModel
-  import KVList
   import Crypto
   import NativeArrays
   import IndirectionTableModel

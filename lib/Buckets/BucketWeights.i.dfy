@@ -635,10 +635,9 @@ module BucketWeights {
   }
 
   lemma WeightBucketInduct(bucket: Bucket, key: Key, msg: Message)
-    requires WFBucket(bucket)
+    requires PreWFBucket(bucket)
     requires BucketWellMarshalled(bucket)
     requires key !in bucket.b
-    requires msg != IdentityMessage()
     ensures WeightBucket(B(bucket.b[key := msg])) == WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg)
   {
     var newbucket := B(bucket.b[key := msg]);

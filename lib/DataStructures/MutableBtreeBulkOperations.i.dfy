@@ -129,289 +129,289 @@ abstract module MutableBtreeBulkOperations {
     return (keys, values);
   }
 
-  function method DivCeilUint64(x: uint64, d: uint64) : (y: uint64)
-    requires 0 < d
-    requires x as int + d as int < Uint64UpperBound()
-    ensures d as int *(y as int - 1) < x as int <= d as int * y as int
-  {
-    (x + d - 1) / d
-  }
+  // function method DivCeilUint64(x: uint64, d: uint64) : (y: uint64)
+  //   requires 0 < d
+  //   requires x as int + d as int < Uint64UpperBound()
+  //   ensures d as int *(y as int - 1) < x as int <= d as int * y as int
+  // {
+  //   (x + d - 1) / d
+  // }
 
-  function NatBoundaries(boundaries: seq<uint64>) : (natboundaries: seq<nat>)
-    ensures |natboundaries| == |boundaries|
-    ensures forall i :: 0 <= i < |boundaries| ==> natboundaries[i] == boundaries[i] as nat
-  {
-    if |boundaries| == 0 then []
-    else NatBoundaries(DropLast(boundaries)) + [Last(boundaries) as nat]
-  }
+  // function NatBoundaries(boundaries: seq<uint64>) : (natboundaries: seq<nat>)
+  //   ensures |natboundaries| == |boundaries|
+  //   ensures forall i :: 0 <= i < |boundaries| ==> natboundaries[i] == boundaries[i] as nat
+  // {
+  //   if |boundaries| == 0 then []
+  //   else NatBoundaries(DropLast(boundaries)) + [Last(boundaries) as nat]
+  // }
 
-  predicate ValidBoundariesForSeqInner(len: uint64, boundaries: seq<uint64>)
-  {
-    Model.ValidBoundariesForSeq(len as nat, NatBoundaries(boundaries))
-  }
+  // predicate ValidBoundariesForSeqInner(len: uint64, boundaries: seq<uint64>)
+  // {
+  //   Model.ValidBoundariesForSeq(len as nat, NatBoundaries(boundaries))
+  // }
   
-  lemma ValidBoundariesForSeqProperties(len: uint64, boundaries: seq<uint64>)
-    ensures ValidBoundariesForSeqInner(len, boundaries) ==> Uint64_Order.IsStrictlySorted(boundaries)
-  {
-    if ValidBoundariesForSeqInner(len, boundaries) {
-      forall i, j | 0 < i < j < |boundaries|
-        ensures boundaries[i] < boundaries[j]
-        {
-          Integer_Order.IsStrictlySortedImpliesLt(NatBoundaries(boundaries), i, j);
-        }
-      Uint64_Order.reveal_IsStrictlySorted();
-    }
-  }
+  // lemma ValidBoundariesForSeqProperties(len: uint64, boundaries: seq<uint64>)
+  //   ensures ValidBoundariesForSeqInner(len, boundaries) ==> Uint64_Order.IsStrictlySorted(boundaries)
+  // {
+  //   if ValidBoundariesForSeqInner(len, boundaries) {
+  //     forall i, j | 0 < i < j < |boundaries|
+  //       ensures boundaries[i] < boundaries[j]
+  //       {
+  //         Integer_Order.IsStrictlySortedImpliesLt(NatBoundaries(boundaries), i, j);
+  //       }
+  //     Uint64_Order.reveal_IsStrictlySorted();
+  //   }
+  // }
 
-  predicate ValidBoundariesForSeq(len: uint64, boundaries: seq<uint64>)
-    ensures ValidBoundariesForSeq(len, boundaries) ==> Uint64_Order.IsStrictlySorted(boundaries)
-  {
-    ValidBoundariesForSeqProperties(len, boundaries);
-    ValidBoundariesForSeqInner(len, boundaries)
-  }
+  // predicate ValidBoundariesForSeq(len: uint64, boundaries: seq<uint64>)
+  //   ensures ValidBoundariesForSeq(len, boundaries) ==> Uint64_Order.IsStrictlySorted(boundaries)
+  // {
+  //   ValidBoundariesForSeqProperties(len, boundaries);
+  //   ValidBoundariesForSeqInner(len, boundaries)
+  // }
   
-  predicate BoundariesFit(boundaries: seq<uint64>, groupSize: uint64)
-  {
-    Model.BoundariesFit(NatBoundaries(boundaries), groupSize as nat)
-  }
+  // predicate BoundariesFit(boundaries: seq<uint64>, groupSize: uint64)
+  // {
+  //   Model.BoundariesFit(NatBoundaries(boundaries), groupSize as nat)
+  // }
   
-  // FIXME: This proof is bizarre and fragile.
-  method BuildBoundaries(numthings: uint64, groupSize: uint64) returns (boundaries: seq<uint64>)
-    requires 0 < numthings
-    requires 0 < groupSize
-    requires numthings as int + groupSize as int < Uint64UpperBound()
-    ensures NatBoundaries(boundaries) == Model.BuildBoundaries(numthings as nat, groupSize as nat)
-  {
-    var numgroups: uint64 := (numthings + groupSize - 1) / groupSize;
-    var aboundaries := newArrayFill(numgroups + 1, numthings);
+  // // FIXME: This proof is bizarre and fragile.
+  // method BuildBoundaries(numthings: uint64, groupSize: uint64) returns (boundaries: seq<uint64>)
+  //   requires 0 < numthings
+  //   requires 0 < groupSize
+  //   requires numthings as int + groupSize as int < Uint64UpperBound()
+  //   ensures NatBoundaries(boundaries) == Model.BuildBoundaries(numthings as nat, groupSize as nat)
+  // {
+  //   var numgroups: uint64 := (numthings + groupSize - 1) / groupSize;
+  //   var aboundaries := newArrayFill(numgroups + 1, numthings);
 
-    ghost var nnumthings := numthings as nat;
-    ghost var ngroupSize := groupSize as nat;
-    ghost var targetA: seq<nat> := Apply((i: nat) => i * ngroupSize, Range((nnumthings + ngroupSize - 1) / ngroupSize));
-    ghost var target := Model.BuildBoundaries(nnumthings, ngroupSize);
+  //   ghost var nnumthings := numthings as nat;
+  //   ghost var ngroupSize := groupSize as nat;
+  //   ghost var targetA: seq<nat> := Apply((i: nat) => i * ngroupSize, Range((nnumthings + ngroupSize - 1) / ngroupSize));
+  //   ghost var target := Model.BuildBoundaries(nnumthings, ngroupSize);
 
-    assert target == targetA || target == targetA + [nnumthings] by {Model.reveal_BuildBoundariesInner();}
-    assert target ==
-      if Last(targetA) == nnumthings then targetA
-      else targetA + [nnumthings]
-    by { Model.reveal_BuildBoundariesInner(); }
+  //   assert target == targetA || target == targetA + [nnumthings] by {Model.reveal_BuildBoundariesInner();}
+  //   assert target ==
+  //     if Last(targetA) == nnumthings then targetA
+  //     else targetA + [nnumthings]
+  //   by { Model.reveal_BuildBoundariesInner(); }
 
-    var i: uint64 := 0;
-    while i < numgroups
-      invariant i <= numgroups
-      invariant forall j :: 0 <= j < i ==> aboundaries[j] as nat == targetA[j]
-      invariant forall j :: i <= j <= numgroups ==> aboundaries[j] == numthings;
-    {
-      //assert target[i] == i as nat * groupSize as nat;
-      aboundaries[i] := i * groupSize;
-      i := i + 1;
-    }
+  //   var i: uint64 := 0;
+  //   while i < numgroups
+  //     invariant i <= numgroups
+  //     invariant forall j :: 0 <= j < i ==> aboundaries[j] as nat == targetA[j]
+  //     invariant forall j :: i <= j <= numgroups ==> aboundaries[j] == numthings;
+  //   {
+  //     //assert target[i] == i as nat * groupSize as nat;
+  //     aboundaries[i] := i * groupSize;
+  //     i := i + 1;
+  //   }
     
-    if aboundaries[numgroups-1] == numthings {
-      boundaries := aboundaries[..numgroups];
-    } else {
-      boundaries := aboundaries[..numgroups+1];
-    }
-  }
+  //   if aboundaries[numgroups-1] == numthings {
+  //     boundaries := aboundaries[..numgroups];
+  //   } else {
+  //     boundaries := aboundaries[..numgroups+1];
+  //   }
+  // }
 
-  method ExtractPivotsForBoundaries(pivots: seq<Key>, boundaries: seq<uint64>) returns (subpivots: seq<Key>)
-    requires |pivots| + 1 < Uint64UpperBound()
-    requires ValidBoundariesForSeq(|pivots| as uint64 + 1, boundaries)
-    requires |boundaries| < Uint64UpperBound()
-    ensures subpivots == Model.ExtractPivotsForBoundaries(pivots, NatBoundaries(boundaries))
-  {
-    ghost var target := Model.ExtractPivotsForBoundaries(pivots, NatBoundaries(boundaries));
-    Model.reveal_ExtractPivotsForBoundaries();
+  // method ExtractPivotsForBoundaries(pivots: seq<Key>, boundaries: seq<uint64>) returns (subpivots: seq<Key>)
+  //   requires |pivots| + 1 < Uint64UpperBound()
+  //   requires ValidBoundariesForSeq(|pivots| as uint64 + 1, boundaries)
+  //   requires |boundaries| < Uint64UpperBound()
+  //   ensures subpivots == Model.ExtractPivotsForBoundaries(pivots, NatBoundaries(boundaries))
+  // {
+  //   ghost var target := Model.ExtractPivotsForBoundaries(pivots, NatBoundaries(boundaries));
+  //   Model.reveal_ExtractPivotsForBoundaries();
 
-    var asubpivots := newArrayFill(|boundaries| as uint64 - 2, DefaultKey());
+  //   var asubpivots := newArrayFill(|boundaries| as uint64 - 2, DefaultKey());
 
-    var i: uint64 := 0;
-    while i < asubpivots.Length as uint64
-      invariant i <= asubpivots.Length as uint64
-      invariant forall j :: 0 <= j < i ==> asubpivots[j] == target[j]
-    {
-      asubpivots[i] := pivots[boundaries[i+1]-1];
-      i := i + 1;
-    }
+  //   var i: uint64 := 0;
+  //   while i < asubpivots.Length as uint64
+  //     invariant i <= asubpivots.Length as uint64
+  //     invariant forall j :: 0 <= j < i ==> asubpivots[j] == target[j]
+  //   {
+  //     asubpivots[i] := pivots[boundaries[i+1]-1];
+  //     i := i + 1;
+  //   }
 
-    subpivots := asubpivots[..];
-  }
+  //   subpivots := asubpivots[..];
+  // }
 
-  method BuildLeafForSequence(kvlist: Model.KVList, boundaries: seq<uint64>, i: uint64) returns (node: Node)
-    requires |kvlist.keys| < Uint64UpperBound()
-    requires Model.WFKVList(kvlist)
-    requires ValidBoundariesForSeq(|kvlist.keys| as uint64, boundaries)
-    requires i as int < |boundaries| - 1
-    requires BoundariesFit(boundaries, MaxKeysPerLeaf())
-    ensures WFShape(node)
-    ensures I(node) == Model.BuildLeafForSequence(kvlist, NatBoundaries(boundaries), i as nat)
-    ensures fresh(node.repr)
-  {
-    Model.ValidBoundaryLength(|kvlist.keys|, NatBoundaries(boundaries));
-    Uint64_Order.IsStrictlySortedImpliesLte(boundaries, i as int, i as int + 1);
-    assert boundaries[i+1] - boundaries[i] <= MaxKeysPerLeaf() by { Model.reveal_BoundariesFit(); }
+  // method BuildLeafForSequence(kvlist: Model.KVList, boundaries: seq<uint64>, i: uint64) returns (node: Node)
+  //   requires |kvlist.keys| < Uint64UpperBound()
+  //   requires Model.WFKVList(kvlist)
+  //   requires ValidBoundariesForSeq(|kvlist.keys| as uint64, boundaries)
+  //   requires i as int < |boundaries| - 1
+  //   requires BoundariesFit(boundaries, MaxKeysPerLeaf())
+  //   ensures WFShape(node)
+  //   ensures I(node) == Model.BuildLeafForSequence(kvlist, NatBoundaries(boundaries), i as nat)
+  //   ensures fresh(node.repr)
+  // {
+  //   Model.ValidBoundaryLength(|kvlist.keys|, NatBoundaries(boundaries));
+  //   Uint64_Order.IsStrictlySortedImpliesLte(boundaries, i as int, i as int + 1);
+  //   assert boundaries[i+1] - boundaries[i] <= MaxKeysPerLeaf() by { Model.reveal_BoundariesFit(); }
     
-    var mykeys := kvlist.keys[boundaries[i]..boundaries[i+1]];
-    var myvals := kvlist.values[boundaries[i]..boundaries[i+1]];
-    node := LeafFromSeqs(mykeys, myvals);
+  //   var mykeys := kvlist.keys[boundaries[i]..boundaries[i+1]];
+  //   var myvals := kvlist.values[boundaries[i]..boundaries[i+1]];
+  //   node := LeafFromSeqs(mykeys, myvals);
 
-    Model.reveal_ExtractBoundedSubsequence();
-  }
+  //   Model.reveal_ExtractBoundedSubsequence();
+  // }
 
-  method BuildLeavesForSequence(kvlist: Model.KVList, boundaries: seq<uint64>) returns (nodes: seq<Node>)
-    requires Model.WFKVList(kvlist)
-    requires |kvlist.keys| < Uint64UpperBound() - 1
-    requires ValidBoundariesForSeq(|kvlist.keys| as uint64, boundaries)
-    requires BoundariesFit(boundaries, MaxKeysPerLeaf())
-    ensures WFShapeSiblings(nodes)
-    ensures fresh(SeqRepr(nodes))
-    ensures forall i :: 0 <= i < |nodes| ==> nodes[i].height  == 0
-    ensures ISiblings(nodes) == Model.BuildLeavesForSequence(kvlist, NatBoundaries(boundaries))
-  {
-    Model.ValidBoundaryLength(|kvlist.keys|, NatBoundaries(boundaries));
-    var anodes: array<Node?> := newArrayFill(|boundaries| as uint64 - 1, null);
-    ghost var target := Model.BuildLeavesForSequence(kvlist, NatBoundaries(boundaries));
+  // method BuildLeavesForSequence(kvlist: Model.KVList, boundaries: seq<uint64>) returns (nodes: seq<Node>)
+  //   requires Model.WFKVList(kvlist)
+  //   requires |kvlist.keys| < Uint64UpperBound() - 1
+  //   requires ValidBoundariesForSeq(|kvlist.keys| as uint64, boundaries)
+  //   requires BoundariesFit(boundaries, MaxKeysPerLeaf())
+  //   ensures WFShapeSiblings(nodes)
+  //   ensures fresh(SeqRepr(nodes))
+  //   ensures forall i :: 0 <= i < |nodes| ==> nodes[i].height  == 0
+  //   ensures ISiblings(nodes) == Model.BuildLeavesForSequence(kvlist, NatBoundaries(boundaries))
+  // {
+  //   Model.ValidBoundaryLength(|kvlist.keys|, NatBoundaries(boundaries));
+  //   var anodes: array<Node?> := newArrayFill(|boundaries| as uint64 - 1, null);
+  //   ghost var target := Model.BuildLeavesForSequence(kvlist, NatBoundaries(boundaries));
     
-    var i: uint64 := 0;
-    while i < anodes.Length as uint64
-      invariant i <= anodes.Length as uint64
-      invariant forall j :: 0 <= j < i ==> anodes[j] != null
-      invariant forall j :: 0 <= j < i ==> anodes !in anodes[j].repr
-      invariant WFShapeSiblings(anodes[..i])
-      invariant fresh(SeqRepr(anodes[..i]))
-      invariant forall j :: 0 <= j < i ==> anodes[j].height == 0
-      invariant ISiblings(anodes[..i]) == Model.BuildLeavesForSequenceInner(kvlist, NatBoundaries(boundaries), i as int);
-    {
-      anodes[i] := BuildLeafForSequence(kvlist, boundaries, i);
-      i := i + 1;
+  //   var i: uint64 := 0;
+  //   while i < anodes.Length as uint64
+  //     invariant i <= anodes.Length as uint64
+  //     invariant forall j :: 0 <= j < i ==> anodes[j] != null
+  //     invariant forall j :: 0 <= j < i ==> anodes !in anodes[j].repr
+  //     invariant WFShapeSiblings(anodes[..i])
+  //     invariant fresh(SeqRepr(anodes[..i]))
+  //     invariant forall j :: 0 <= j < i ==> anodes[j].height == 0
+  //     invariant ISiblings(anodes[..i]) == Model.BuildLeavesForSequenceInner(kvlist, NatBoundaries(boundaries), i as int);
+  //   {
+  //     anodes[i] := BuildLeafForSequence(kvlist, boundaries, i);
+  //     i := i + 1;
       
-      forall j, k | 0 <= j < k < i as int
-        ensures DisjointReprs(anodes[..i], j, k)
-      {
-        if k < i as int - 1 {
-          assert DisjointReprs(anodes[..i-1], j, k);
-        } else {
-        }
-      }
+  //     forall j, k | 0 <= j < k < i as int
+  //       ensures DisjointReprs(anodes[..i], j, k)
+  //     {
+  //       if k < i as int - 1 {
+  //         assert DisjointReprs(anodes[..i-1], j, k);
+  //       } else {
+  //       }
+  //     }
 
-      ghost var seqrepr := SeqRepr(anodes[..i]);
-      forall o | o in seqrepr
-        ensures fresh(o)
-      {
-        var j: int := SeqReprDelegation(anodes[..i], o);
-        if j < i as int - 1 {
-          assert o in SeqRepr(anodes[..i-1]);
-        } else {
-        }
-      }
-      assert fresh(seqrepr);
-    }
+  //     ghost var seqrepr := SeqRepr(anodes[..i]);
+  //     forall o | o in seqrepr
+  //       ensures fresh(o)
+  //     {
+  //       var j: int := SeqReprDelegation(anodes[..i], o);
+  //       if j < i as int - 1 {
+  //         assert o in SeqRepr(anodes[..i-1]);
+  //       } else {
+  //       }
+  //     }
+  //     assert fresh(seqrepr);
+  //   }
 
-    assert anodes[..] == anodes[..anodes.Length as uint64];
-    nodes := anodes[..];
-  }
+  //   assert anodes[..] == anodes[..anodes.Length as uint64];
+  //   nodes := anodes[..];
+  // }
 
-  function ExtractBoundedSubsequence<T>(things: seq<T>, boundaries: seq<uint64>, i: uint64) :  seq<T>
-    requires |things| < Uint64UpperBound()
-    requires ValidBoundariesForSeq(|things| as uint64, boundaries)
-    requires 0 <= i as int < |boundaries|-1
-  {
-    Model.ExtractBoundedSubsequence(things, NatBoundaries(boundaries), i as int)
-  }
+  // function ExtractBoundedSubsequence<T>(things: seq<T>, boundaries: seq<uint64>, i: uint64) :  seq<T>
+  //   requires |things| < Uint64UpperBound()
+  //   requires ValidBoundariesForSeq(|things| as uint64, boundaries)
+  //   requires 0 <= i as int < |boundaries|-1
+  // {
+  //   Model.ExtractBoundedSubsequence(things, NatBoundaries(boundaries), i as int)
+  // }
 
-  lemma ExtractBoundedSubsequenceFacts<T>(things: seq<T>, boundaries: seq<uint64>, i: uint64)
-    requires |things| < Uint64UpperBound() - 1
-    requires ValidBoundariesForSeq(|things| as uint64, boundaries)
-    requires 0 <= i as int < |boundaries|-1
-    ensures |boundaries| <= |things| + 1
-    ensures boundaries[i] < boundaries[i+1]
-    ensures ExtractBoundedSubsequence(things, boundaries, i) == things[boundaries[i]..boundaries[i+1]]
-  {
-    Model.ValidBoundaryLength(|things|, NatBoundaries(boundaries));
-    Uint64_Order.IsStrictlySortedImpliesLt(boundaries, i as int, i as int + 1);
-    Model.reveal_ExtractBoundedSubsequence();
-  }
+  // lemma ExtractBoundedSubsequenceFacts<T>(things: seq<T>, boundaries: seq<uint64>, i: uint64)
+  //   requires |things| < Uint64UpperBound() - 1
+  //   requires ValidBoundariesForSeq(|things| as uint64, boundaries)
+  //   requires 0 <= i as int < |boundaries|-1
+  //   ensures |boundaries| <= |things| + 1
+  //   ensures boundaries[i] < boundaries[i+1]
+  //   ensures ExtractBoundedSubsequence(things, boundaries, i) == things[boundaries[i]..boundaries[i+1]]
+  // {
+  //   Model.ValidBoundaryLength(|things|, NatBoundaries(boundaries));
+  //   Uint64_Order.IsStrictlySortedImpliesLt(boundaries, i as int, i as int + 1);
+  //   Model.reveal_ExtractBoundedSubsequence();
+  // }
     
-  lemma ExtractBoundedSubsequenceRepr(nodes: seq<Node>, boundaries: seq<uint64>, i: uint64)
-    requires |nodes| < Uint64UpperBound() - 1
-    requires ValidBoundariesForSeq(|nodes| as uint64, boundaries)
-    requires 0 <= i as int < |boundaries|-1
-    ensures SeqRepr(ExtractBoundedSubsequence(nodes, boundaries, i)) <= SeqRepr(nodes)
-  {
-    ExtractBoundedSubsequenceFacts(nodes, boundaries, i);
-    SubSeqRepr(nodes, boundaries[i] as nat, boundaries[i+1] as nat);
-  }
+  // lemma ExtractBoundedSubsequenceRepr(nodes: seq<Node>, boundaries: seq<uint64>, i: uint64)
+  //   requires |nodes| < Uint64UpperBound() - 1
+  //   requires ValidBoundariesForSeq(|nodes| as uint64, boundaries)
+  //   requires 0 <= i as int < |boundaries|-1
+  //   ensures SeqRepr(ExtractBoundedSubsequence(nodes, boundaries, i)) <= SeqRepr(nodes)
+  // {
+  //   ExtractBoundedSubsequenceFacts(nodes, boundaries, i);
+  //   SubSeqRepr(nodes, boundaries[i] as nat, boundaries[i+1] as nat);
+  // }
   
-  datatype BuildParentsArgs = BuildParentsArgs(children: seq<Node>,
-                                               pivots: seq<Key>, 
-                                               boundaries: seq<uint64>,
-                                               ghost height: nat)
+  // datatype BuildParentsArgs = BuildParentsArgs(children: seq<Node>,
+  //                                              pivots: seq<Key>, 
+  //                                              boundaries: seq<uint64>,
+  //                                              ghost height: nat)
 
                                                
                                                
-  predicate ValidBuildParentsArgs(bpa: BuildParentsArgs)
-    ensures ValidBuildParentsArgs(bpa) ==> |bpa.boundaries| <= |bpa.children| + 1
-    reads Set(bpa.children), SeqRepr(bpa.children)
-  {
-    && |bpa.children| < Uint64UpperBound() - 1
-    && WFShapeSiblings(bpa.children)
-    && (forall j :: 0 <= j < |bpa.children| ==> bpa.children[j].height < bpa.height)
-    && Model.WF(Model.Index(bpa.pivots, ISiblings(bpa.children)))
-    && ValidBoundariesForSeq(|bpa.children| as uint64, bpa.boundaries)
-    && (Model.ValidBoundaryLength(|bpa.children|, NatBoundaries(bpa.boundaries));
-       && BoundariesFit(bpa.boundaries, MaxChildren()))
-  }
+  // predicate ValidBuildParentsArgs(bpa: BuildParentsArgs)
+  //   ensures ValidBuildParentsArgs(bpa) ==> |bpa.boundaries| <= |bpa.children| + 1
+  //   reads Set(bpa.children), SeqRepr(bpa.children)
+  // {
+  //   && |bpa.children| < Uint64UpperBound() - 1
+  //   && WFShapeSiblings(bpa.children)
+  //   && (forall j :: 0 <= j < |bpa.children| ==> bpa.children[j].height < bpa.height)
+  //   && Model.WF(Model.Index(bpa.pivots, ISiblings(bpa.children)))
+  //   && ValidBoundariesForSeq(|bpa.children| as uint64, bpa.boundaries)
+  //   && (Model.ValidBoundaryLength(|bpa.children|, NatBoundaries(bpa.boundaries));
+  //      && BoundariesFit(bpa.boundaries, MaxChildren()))
+  // }
 
-  predicate BuildParentRequires(bpa: BuildParentsArgs, i: uint64)
-    reads Set(bpa.children), SeqRepr(bpa.children)
-  {
-    && ValidBuildParentsArgs(bpa)
-    && 0 <= i < |bpa.boundaries| as uint64 - 1
-  }
+  // predicate BuildParentRequires(bpa: BuildParentsArgs, i: uint64)
+  //   reads Set(bpa.children), SeqRepr(bpa.children)
+  // {
+  //   && ValidBuildParentsArgs(bpa)
+  //   && 0 <= i < |bpa.boundaries| as uint64 - 1
+  // }
   
-  twostate predicate BuildParentShapeProperties(bpa: BuildParentsArgs, i: uint64, new parent: Node)
-    requires BuildParentRequires(bpa, i)
-    reads Set(bpa.children), SeqRepr(bpa.children), parent, parent.repr
-  {
-    var mychildren := ExtractBoundedSubsequence(bpa.children, bpa.boundaries, i);
-    ExtractBoundedSubsequenceFacts(bpa.children, bpa.boundaries, i);
-    ExtractBoundedSubsequenceRepr(bpa.children, bpa.boundaries, i);
-    && WFShape(parent)
-    && fresh(parent.repr - SeqRepr(mychildren))
-  }
+  // twostate predicate BuildParentShapeProperties(bpa: BuildParentsArgs, i: uint64, new parent: Node)
+  //   requires BuildParentRequires(bpa, i)
+  //   reads Set(bpa.children), SeqRepr(bpa.children), parent, parent.repr
+  // {
+  //   var mychildren := ExtractBoundedSubsequence(bpa.children, bpa.boundaries, i);
+  //   ExtractBoundedSubsequenceFacts(bpa.children, bpa.boundaries, i);
+  //   ExtractBoundedSubsequenceRepr(bpa.children, bpa.boundaries, i);
+  //   && WFShape(parent)
+  //   && fresh(parent.repr - SeqRepr(mychildren))
+  // }
 
-  predicate MatchesModelBuildParent(bpa: BuildParentsArgs, i: uint64, parent: Node)
-    requires BuildParentRequires(bpa, i)
-    requires WFShape(parent)
-    reads Set(bpa.children), SeqRepr(bpa.children), parent, parent.repr
-  {
-    I(parent) == Model.BuildParent(ISiblings(bpa.children), bpa.pivots, NatBoundaries(bpa.boundaries), i as nat)
-  }
+  // predicate MatchesModelBuildParent(bpa: BuildParentsArgs, i: uint64, parent: Node)
+  //   requires BuildParentRequires(bpa, i)
+  //   requires WFShape(parent)
+  //   reads Set(bpa.children), SeqRepr(bpa.children), parent, parent.repr
+  // {
+  //   I(parent) == Model.BuildParent(ISiblings(bpa.children), bpa.pivots, NatBoundaries(bpa.boundaries), i as nat)
+  // }
   
-  method BuildParent(bpa: BuildParentsArgs, i: uint64) returns (parent: Node)
-    requires BuildParentRequires(bpa, i)
-    ensures BuildParentShapeProperties(bpa, i, parent)
-    ensures MatchesModelBuildParent(bpa, i, parent)
-  {
-    ExtractBoundedSubsequenceFacts(bpa.children, bpa.boundaries, i);
-    var mychildren := bpa.children[bpa.boundaries[i]..bpa.boundaries[i+1]];
-    var mypivots   := bpa.pivots[bpa.boundaries[i]..bpa.boundaries[i+1]-1];
-    assert |mychildren| <= MaxChildren() as int by { Model.reveal_BoundariesFit(); }
-    parent := IndexFromChildren(mypivots, mychildren, bpa.height);
-    forall j, k | 0 <= j < k < |mychildren|
-      ensures DisjointReprs(mychildren, j, k)
-    {
-      assert DisjointReprs(bpa.children, bpa.boundaries[i] as int + j, bpa.boundaries[i] as int + k);
-    }
-    assert SeqRepr(mychildren) <= SeqRepr(bpa.children) by { reveal_SeqRepr(); }
-    SeqReprSet(mychildren);
+  // method BuildParent(bpa: BuildParentsArgs, i: uint64) returns (parent: Node)
+  //   requires BuildParentRequires(bpa, i)
+  //   ensures BuildParentShapeProperties(bpa, i, parent)
+  //   ensures MatchesModelBuildParent(bpa, i, parent)
+  // {
+  //   ExtractBoundedSubsequenceFacts(bpa.children, bpa.boundaries, i);
+  //   var mychildren := bpa.children[bpa.boundaries[i]..bpa.boundaries[i+1]];
+  //   var mypivots   := bpa.pivots[bpa.boundaries[i]..bpa.boundaries[i+1]-1];
+  //   assert |mychildren| <= MaxChildren() as int by { Model.reveal_BoundariesFit(); }
+  //   parent := IndexFromChildren(mypivots, mychildren, bpa.height);
+  //   forall j, k | 0 <= j < k < |mychildren|
+  //     ensures DisjointReprs(mychildren, j, k)
+  //   {
+  //     assert DisjointReprs(bpa.children, bpa.boundaries[i] as int + j, bpa.boundaries[i] as int + k);
+  //   }
+  //   assert SeqRepr(mychildren) <= SeqRepr(bpa.children) by { reveal_SeqRepr(); }
+  //   SeqReprSet(mychildren);
 
-    assert WFShape(parent);
-    reveal_I();
-    ghost var iparent := I(parent);
-    ghost var target := Model.BuildParent(ISiblings(bpa.children), bpa.pivots, NatBoundaries(bpa.boundaries), i as nat);
-    assert iparent.pivots == target.pivots;
-  }
+  //   assert WFShape(parent);
+  //   reveal_I();
+  //   ghost var iparent := I(parent);
+  //   ghost var target := Model.BuildParent(ISiblings(bpa.children), bpa.pivots, NatBoundaries(bpa.boundaries), i as nat);
+  //   assert iparent.pivots == target.pivots;
+  // }
 
   
   
@@ -593,127 +593,127 @@ abstract module MutableBtreeBulkOperations {
     ExtractBoundedSubsequenceRepr(bpa.children, bpa.boundaries, i);
   }
   
-  twostate lemma BuildParentsLoopInvariant4(bpa: BuildParentsArgs, new aparents: array<Node?>, i: uint64)
-    requires ValidBuildParentsArgs(bpa)
-    requires aparents.Length == |bpa.boundaries|-1
-    requires i as int < aparents.Length
-    requires forall j :: 0 <= j <= i ==> aparents[j] != null
-    requires SeqRepr(aparents[..i]) !! SeqRepr(bpa.children[bpa.boundaries[i]..])
-    requires WFShapeSiblings(aparents[..i])
-    requires BuildParentShapeProperties(bpa, i, aparents[i])
-    requires aparents[i].repr * SeqRepr(aparents[..i]) <=
-             SeqRepr(ExtractBoundedSubsequence(bpa.children, bpa.boundaries, i))
-    ensures WFShapeSiblings(aparents[..i+1])
-  {
-    forall j, k | 0 <= j < k < i+1
-      ensures DisjointReprs(aparents[..i+1], j as int, k as int)
-    {
-      if k < i {
-        assert DisjointReprs(aparents[..i], j as int, k as int);
-      } else {
-        assume false;
-      }
-    }
+  // twostate lemma BuildParentsLoopInvariant4(bpa: BuildParentsArgs, new aparents: array<Node?>, i: uint64)
+  //   requires ValidBuildParentsArgs(bpa)
+  //   requires aparents.Length == |bpa.boundaries|-1
+  //   requires i as int < aparents.Length
+  //   requires forall j :: 0 <= j <= i ==> aparents[j] != null
+  //   requires SeqRepr(aparents[..i]) !! SeqRepr(bpa.children[bpa.boundaries[i]..])
+  //   requires WFShapeSiblings(aparents[..i])
+  //   requires BuildParentShapeProperties(bpa, i, aparents[i])
+  //   requires aparents[i].repr * SeqRepr(aparents[..i]) <=
+  //            SeqRepr(ExtractBoundedSubsequence(bpa.children, bpa.boundaries, i))
+  //   ensures WFShapeSiblings(aparents[..i+1])
+  // {
+  //   forall j, k | 0 <= j < k < i+1
+  //     ensures DisjointReprs(aparents[..i+1], j as int, k as int)
+  //   {
+  //     if k < i {
+  //       assert DisjointReprs(aparents[..i], j as int, k as int);
+  //     } else {
+  //       assume false;
+  //     }
+  //   }
     
-    assert WFShapeSiblings(aparents[..i+1]);
-  }
+  //   assert WFShapeSiblings(aparents[..i+1]);
+  // }
   
-  method BuildParents(bpa: BuildParentsArgs) returns (parents: seq<Node>)
-    requires ValidBuildParentsArgs(bpa)
-    ensures WFShapeSiblings(parents)
-    ensures fresh(SeqRepr(parents) - SeqRepr(bpa.children))
-    ensures ISiblings(parents) == Model.BuildParents(ISiblings(bpa.children), bpa.pivots, NatBoundaries(bpa.boundaries))
-    ensures |parents| < |bpa.children|
-  {
-    // assert Stale(SeqRepr(bpa.children)) by {
-    //   reveal_SeqRepr();
-    // }
+  // method BuildParents(bpa: BuildParentsArgs) returns (parents: seq<Node>)
+  //   requires ValidBuildParentsArgs(bpa)
+  //   ensures WFShapeSiblings(parents)
+  //   ensures fresh(SeqRepr(parents) - SeqRepr(bpa.children))
+  //   ensures ISiblings(parents) == Model.BuildParents(ISiblings(bpa.children), bpa.pivots, NatBoundaries(bpa.boundaries))
+  //   ensures |parents| < |bpa.children|
+  // {
+  //   // assert Stale(SeqRepr(bpa.children)) by {
+  //   //   reveal_SeqRepr();
+  //   // }
     
-    var aparents: array<Node?> := newArrayFill(|bpa.boundaries| as uint64 - 1, null);
-    //assert aparents !in SeqRepr(bpa.children) by { reveal_SeqRepr(); }
+  //   var aparents: array<Node?> := newArrayFill(|bpa.boundaries| as uint64 - 1, null);
+  //   //assert aparents !in SeqRepr(bpa.children) by { reveal_SeqRepr(); }
 
-    var i: uint64 := 0;
-    while i < aparents.Length as uint64
-      invariant i as int <= aparents.Length
-      invariant forall j :: 0 <= j < i ==> aparents[j] != null
-      // invariant aparents !in SeqRepr(aparents[..i])
-      // invariant Stale(SeqRepr(bpa.children))
-      // invariant SeqRepr(aparents[..i]) !! SeqRepr(bpa.children[bpa.boundaries[i]..])
-      // invariant fresh(SeqRepr(aparents[..i]) - SeqRepr(bpa.children))
-      // invariant forall j :: 0 <= j < i ==> WF(aparents[j])
-      modifies aparents
-    {
-      //ghost var oldrepr := SeqRepr(aparents[..i]);
-      aparents[i] := BuildParent(bpa, i);
+  //   var i: uint64 := 0;
+  //   while i < aparents.Length as uint64
+  //     invariant i as int <= aparents.Length
+  //     invariant forall j :: 0 <= j < i ==> aparents[j] != null
+  //     // invariant aparents !in SeqRepr(aparents[..i])
+  //     // invariant Stale(SeqRepr(bpa.children))
+  //     // invariant SeqRepr(aparents[..i]) !! SeqRepr(bpa.children[bpa.boundaries[i]..])
+  //     // invariant fresh(SeqRepr(aparents[..i]) - SeqRepr(bpa.children))
+  //     // invariant forall j :: 0 <= j < i ==> WF(aparents[j])
+  //     modifies aparents
+  //   {
+  //     //ghost var oldrepr := SeqRepr(aparents[..i]);
+  //     aparents[i] := BuildParent(bpa, i);
 
-      // assert aparents !in aparents[i].repr by {
-      //   ExtractBoundedSubsequenceRepr(bpa.children, bpa.boundaries, i);
-      // }
-      // BuildParentsLoopInvariant1(bpa, aparents, i);
-      // BuildParentsLoopInvariant2(bpa, aparents, i);
-      // BuildParentsLoopInvariant3(bpa, aparents, i);
+  //     // assert aparents !in aparents[i].repr by {
+  //     //   ExtractBoundedSubsequenceRepr(bpa.children, bpa.boundaries, i);
+  //     // }
+  //     // BuildParentsLoopInvariant1(bpa, aparents, i);
+  //     // BuildParentsLoopInvariant2(bpa, aparents, i);
+  //     // BuildParentsLoopInvariant3(bpa, aparents, i);
 
       
-      i := i + 1;
-    }
+  //     i := i + 1;
+  //   }
 
-    parents := aparents[..aparents.Length as uint64];
-    assume false;
-  }
+  //   parents := aparents[..aparents.Length as uint64];
+  //   assume false;
+  // }
 
-  method BuildLayers(children: seq<Node>, pivots: seq<Key>, ghost height: nat) returns (newnode: Node)
-    requires 0 < |children|
-    requires |children| < Uint64UpperBound() - 1
-    requires |children| == |pivots| + 1
-    requires WFShapeSiblings(children)
-    requires Model.WF(Model.Index(pivots, ISiblings(children)))
-    ensures WF(newnode)
-    ensures Interpretation(newnode) == Model.Interpretation(Model.Index(pivots, ISiblings(children)))
-  {
-    var currChildren := children;
-    var currPivots := pivots;
-    ghost var currHeight := height;
+  // method BuildLayers(children: seq<Node>, pivots: seq<Key>, ghost height: nat) returns (newnode: Node)
+  //   requires 0 < |children|
+  //   requires |children| < Uint64UpperBound() - 1
+  //   requires |children| == |pivots| + 1
+  //   requires WFShapeSiblings(children)
+  //   requires Model.WF(Model.Index(pivots, ISiblings(children)))
+  //   ensures WF(newnode)
+  //   ensures Interpretation(newnode) == Model.Interpretation(Model.Index(pivots, ISiblings(children)))
+  // {
+  //   var currChildren := children;
+  //   var currPivots := pivots;
+  //   ghost var currHeight := height;
     
-    while 1 < |currChildren| as uint64
-      invariant 0 < |currChildren|
-      //invariant |currChildren| < Uint64UpperBound() - 1
-      //invariant |currChildren| == |currPivots| + 1
-      //invariant WFShapeSiblings(currChildren)
-      //invariant Model.WF(Model.Index(currPivots, ISiblings(currChildren)))
-      decreases |currChildren|
-    {
-      assume false;
-      var boundaries := BuildBoundaries(|currChildren| as uint64, 3 * MaxChildren() / 4);
-      var newPivots := ExtractPivotsForBoundaries(currPivots, boundaries);
-      var bpa := BuildParentsArgs(currChildren, currPivots, boundaries, currHeight);
-      var parents := BuildParents(bpa);
+  //   while 1 < |currChildren| as uint64
+  //     invariant 0 < |currChildren|
+  //     //invariant |currChildren| < Uint64UpperBound() - 1
+  //     //invariant |currChildren| == |currPivots| + 1
+  //     //invariant WFShapeSiblings(currChildren)
+  //     //invariant Model.WF(Model.Index(currPivots, ISiblings(currChildren)))
+  //     decreases |currChildren|
+  //   {
+  //     assume false;
+  //     var boundaries := BuildBoundaries(|currChildren| as uint64, 3 * MaxChildren() / 4);
+  //     var newPivots := ExtractPivotsForBoundaries(currPivots, boundaries);
+  //     var bpa := BuildParentsArgs(currChildren, currPivots, boundaries, currHeight);
+  //     var parents := BuildParents(bpa);
 
-      currChildren := parents;
-      currPivots := newPivots;
-      currHeight := currHeight + 1;
-    }
+  //     currChildren := parents;
+  //     currPivots := newPivots;
+  //     currHeight := currHeight + 1;
+  //   }
 
-    newnode := currChildren[0];
-    assume false;
-  }
+  //   newnode := currChildren[0];
+  //   assume false;
+  // }
 
-  method BuildTreeForSequence(kvlist: Model.KVList) returns (node: Node)
-    requires |kvlist.keys| < Uint64UpperBound() - 1
-    requires Model.WFKVList(kvlist)
-    ensures WF(node)
-    ensures Interpretation(node) == Model.KVListInterpretation(kvlist)
-    ensures fresh(node.repr)
-  {
-    if |kvlist.keys| == 0 {
-      node := EmptyTree();
-    } else {
-      assume false;
-      var boundaries := BuildBoundaries(|kvlist.keys| as uint64, MaxKeysPerLeaf());
-      var leaves := BuildLeavesForSequence(kvlist, boundaries);
-      var pivots := ExtractPivotsForBoundaries(kvlist.keys[1..], boundaries);
-      node := BuildLayers(leaves, pivots, 1);
-    }
-  }
+  // method BuildTreeForSequence(kvlist: Model.KVList) returns (node: Node)
+  //   requires |kvlist.keys| < Uint64UpperBound() - 1
+  //   requires Model.WFKVList(kvlist)
+  //   ensures WF(node)
+  //   ensures Interpretation(node) == Model.KVListInterpretation(kvlist)
+  //   ensures fresh(node.repr)
+  // {
+  //   if |kvlist.keys| == 0 {
+  //     node := EmptyTree();
+  //   } else {
+  //     assume false;
+  //     var boundaries := BuildBoundaries(|kvlist.keys| as uint64, MaxKeysPerLeaf());
+  //     var leaves := BuildLeavesForSequence(kvlist, boundaries);
+  //     var pivots := ExtractPivotsForBoundaries(kvlist.keys[1..], boundaries);
+  //     node := BuildLayers(leaves, pivots, 1);
+  //   }
+  // }
 
     
   // method SplitLeafOfIndexAtKey(node: Node, childidx: uint64, pivot: Key, nleft: uint64)  returns (ghost wit: Key)

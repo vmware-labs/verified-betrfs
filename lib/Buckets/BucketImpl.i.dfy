@@ -1,6 +1,5 @@
 include "../DataStructures/KMBtree.i.dfy"
 include "PackedKV.i.dfy"
-include "KVList.i.dfy"
 include "../../PivotBetree/Bounds.i.dfy"
 include "BucketIteratorModel.i.dfy"
 include "BucketModel.i.dfy"
@@ -15,12 +14,10 @@ include "KMBPKVOps.i.dfy"
 // The MutBucket class also supplies Iterators using the functional
 // Iterator datatype from BucketIteratorModel, which is why there is no
 // BucketIteratorImpl module/class.
-// TODO(robj): Littered with assume false!?
 
 module BucketImpl {
   import KMB = KMBtree`API
   import KMBBOps = KMBtreeBulkOperations
-  import KVList
   import PackedKV
   import ValueType = ValueType`Internal
   import opened ValueMessage`Internal
@@ -41,51 +38,16 @@ module BucketImpl {
   
   type TreeMap = KMB.Node
 
-  // TODO(robj): get rid of these last vestiges of kvl by converting directly from pkv to tree.
-  method kvl_to_tree(kvl : KVList.Kvl)
-  returns (tree: TreeMap)
-  requires KVList.WF(kvl)
-  requires |kvl.keys| < Uint64UpperBound() - 1
-  ensures KMB.WF(tree)
-  ensures forall k | k in KMB.Interpretation(tree) :: |k| <= KeyType.MaxLen() as nat
-  ensures KVList.I(kvl) == B(KMB.Interpretation(tree))
-  ensures fresh(tree.repr)
-  {
-    var modelkvl := KMB.Model.KVList(kvl.keys, kvl.messages);
-    tree := KMBBOps.BuildTreeForSequence(modelkvl);
-    assume false;
-  }
-
-  method pkv_to_kvl(pkv: PackedKV.Pkv)
-  returns (kvl: KVList.Kvl)
-  requires PackedKV.WF(pkv)
-  ensures KVList.WF(kvl)
-  ensures KVList.I(kvl) == PackedKV.I(pkv)
-  {
-    assume false;
-    var n := |pkv.keys.offsets| as uint64;
-    var keys := new Key[n];
-    var messages := new Message[n];
-    var i: uint64 := 0;
-    while i < n {
-      keys[i] := PackedKV.GetKey(pkv, i);
-      messages[i] := PackedKV.GetMessage(pkv, i);
-      i := i + 1;
-    }
-    return KVList.Kvl(keys[..], messages[..]);
-  }
-
   method pkv_to_tree(pkv: PackedKV.Pkv)
-  returns (tree: TreeMap)
+  returns (tree: TreeMap, weight: uint64)
   requires PackedKV.WF(pkv)
   ensures KMB.WF(tree)
-  ensures forall k | k in KMB.Interpretation(tree) :: |k| <= KeyType.MaxLen() as nat
-  ensures PackedKV.I(pkv) == B(KMB.Interpretation(tree))
+  ensures KMBPKVOps.IsKeyMessageTree(tree)
+  ensures PackedKV.I(pkv).b == B(KMB.Interpretation(tree)).b
+  ensures weight as nat == BucketWeights.WeightBucket(BucketsLib.B(KMB.Interpretation(tree)))
   ensures fresh(tree.repr)
   {
-    var kv := pkv_to_kvl(pkv);
-    assume |kv.keys| < Uint64UpperBound() - 1;
-    tree := kvl_to_tree(kv);
+    tree, weight := KMBPKVOps.FromPkv(pkv);
   }
 
   method tree_to_pkv(tree: TreeMap) returns (pkv : PackedKV.Pkv)
@@ -270,7 +232,7 @@ module BucketImpl {
       } else if !must_be_sorted || sorted {
         pkv := this.pkv;
       } else {
-        var tree := pkv_to_tree(this.pkv);
+        var tree, weight := pkv_to_tree(this.pkv);
         NumElementsLteWeight(Bucket);
         KMB.Model.NumElementsMatchesInterpretation(KMBBOps.MB.I(tree));
         pkv := tree_to_pkv(tree);
@@ -592,7 +554,7 @@ module BucketImpl {
 
     method Insert(key: Key, value: Message)
     requires Inv()
-    requires Weight as int + WeightKey(key) + WeightMessage(value) < 0x1_0000_0000_0000_0000
+    requires Weight as int + WeightKey(key) + WeightMessage(value) < 0x1_0000_0000
     modifies Repr
     ensures Inv()
     ensures Bucket == BucketInsert(old(Bucket), key, value)
@@ -600,7 +562,9 @@ module BucketImpl {
     {
       if format.BFPkv? {
         format := BFTree;
-        tree := pkv_to_tree(pkv);
+        tree, Weight := pkv_to_tree(pkv);
+        Bucket := B(Bucket.b);
+        WeightWellMarshalledLe(old(Bucket), Bucket);
         var psa := PackedKV.PSA.Psa([], []);
         pkv := PackedKV.Pkv(psa, psa);
       }

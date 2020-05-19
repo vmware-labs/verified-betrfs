@@ -1639,4 +1639,12 @@ module BucketsLib {
     )
   }
 
+  lemma WFPivotsOfGetMiddleKey(bucket: Bucket)
+  requires WFBucket(bucket)
+  ensures WFPivots([getMiddleKey(bucket)])
+  {
+    reveal_IsStrictlySorted();
+    SeqComparison.reveal_lte();
+    IsNotMinimum([], getMiddleKey(bucket));
+  }
 }
