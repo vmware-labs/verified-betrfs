@@ -5,7 +5,7 @@ from suite import *
 
 common_vars = [
     Variable("ops", "run_btree", [
-        Value("2**{}".format(pp), "ops={}".format(2**pp)) for pp in [20, 21, 22, 23, 24]]),
+        Value("2pow{}".format(pp), "ops={}".format(2**pp)) for pp in [20, 21, 22, 23, 24]]),
     ]
 repr_suite = Suite(
     "repr",
@@ -15,7 +15,7 @@ linear_suite = Suite(
     "linear",
     Variable("git_branch", "git_branch", [Value("linear", "eval-btree-linear")]),
     *common_vars)
-suite = ConcatSuite("andreal-btree-01", repr_suite, linear_suite)
+suite = ConcatSuite("andreal-btree-01", repr_suite)
 
 MBTREE_PATH="./tools/run-btree-config-experiment.py"
 
@@ -25,8 +25,7 @@ def cmd_for_idx(idx, worker):
         "cd", "veribetrfs", ";",
         "git", "clean", "-fd", ".", ";",
         "sh", "tools/clean-for-build.sh", variant.git_branch(), ";",
-        ]
-        + [MBTREE_PATH] + variant.vars_of_type("run_btree") + ["output=../"+variant.outfile()]
+        ] + ["python3", MBTREE_PATH] + [variant.valmap[var].param_value for var in variant.vars_of_type("run_btree")] + ["output=../"+variant.outfile()]
         )
     return Command(str(variant), cmd)
 

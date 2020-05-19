@@ -43,6 +43,8 @@ def main():
   ops=None
   output=None
 
+  print("arguments", sys.argv)
+
   for arg in sys.argv[1:]:
     if arg.startswith("ops="):
       ram = arg[len("ops=") : ]
