@@ -573,7 +573,7 @@ module MainModule {
     result := [b0, b1, b2];
   }
 
-  method Main()
+  method Run(n: uint64)
   {
     // var n: uint64 := 1_000_000;
     // var p: uint64 := 300_007;
