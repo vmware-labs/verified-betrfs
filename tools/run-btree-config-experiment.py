@@ -42,6 +42,7 @@ def actuallyprint(msg):
 def main():
   ops=None
   output=None
+  branch=None
 
   print("arguments", sys.argv)
 
