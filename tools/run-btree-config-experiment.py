@@ -73,7 +73,7 @@ def main():
   # See https://linux.die.net/man/1/taskset
   taskset_cmd = "taskset 4 "
 
-  command = taskset_cmd + "./MutableBtreeBench"
+  command = taskset_cmd + "./MutableBtreeBench" + " " + ops
   actuallyprint(command)
   sys.stdout.flush()
 
