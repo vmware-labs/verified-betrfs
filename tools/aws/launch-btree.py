@@ -5,7 +5,7 @@ from suite import *
 
 common_vars = [
     Variable("ops", "run_btree", [
-        Value("2pow{}".format(pp), "ops={}".format(2**pp)) for pp in [20, 21, 22, 23, 24]]),
+        Value("2pow{}".format(pp), "ops={}".format(2**pp)) for pp in [20, 21, 22, 23, 24, 25, 26, 27]]),
     ]
 repr_suite = Suite(
     "repr",

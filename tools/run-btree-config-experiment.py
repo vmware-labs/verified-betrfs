@@ -79,12 +79,16 @@ def main():
   actuallyprint(command)
   sys.stdout.flush()
 
+  start_time = time.time()
   proc = subprocess.Popen(command, shell=True, preexec_fn=os.setsid)
   proc_grp_id = os.getpgid(proc.pid)
   actuallyprint("experiment pid %d pgid %d" % (proc.pid, proc_grp_id))
 
-  while proc.poll() == None:
-    time.sleep(10)
+  proc.wait()
+  end_time = time.time()
+  actuallyprint("writing to {}".format(output))
+  with open(output, 'w') as f:
+      f.write("duration:{}".format(end_time - start_time))
 
 if __name__ == "__main__":
   main()
