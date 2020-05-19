@@ -213,7 +213,7 @@ module Marshalling {
   requires ValInGrammar(v, BucketGrammar())
   {
     var pkv := PackedKVMarshalling.fromVal(v);
-    if pkv.Some? then
+    if pkv.Some? && PackedKV.WeightPkv(pkv.value) < Uint32UpperBound() as uint64 then
       Some(PackedKV.I(pkv.value))
     else
       None

@@ -247,6 +247,7 @@ module KMBPKVOps {
       KMB.reveal_I();
       KMB.Model.reveal_ToSeq();
     }
+    KMTreeEncodableToSeq(node);
     assert ValueMessage.EncodableMessageSeq(Flatten(childSeqs.1));
     forall i | 0 <= i <= nchildren
       ensures ValueMessage.EncodableMessageSeq(Flatten(childSeqs.1[..i]))
@@ -362,7 +363,7 @@ module KMBPKVOps {
     requires node.repr !! dpkv.Repr
     requires IsKeyMessageTree(node)
     requires PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, KMB.ToSeq(node).0)
-    requires PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1))
+    requires (KMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1)))
     ensures dpkv.WF()
     ensures fresh(dpkv.Repr - old(dpkv.Repr))
     ensures dpkv.toPkv().keys == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().keys), KMB.ToSeq(node).0)
@@ -417,12 +418,13 @@ module KMBPKVOps {
     requires KMB.WF(node)
     requires IsKeyMessageTree(node)
     requires PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), KMB.ToSeq(node).0)
-    requires PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1))
+    requires (KMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1)))
     requires DPKV.PKV.WF(pkv)
     requires PKV.IKeys(pkv.keys) == KMB.ToSeq(node).0
     requires PKV.PSA.I(pkv.messages) == ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1)
     ensures DPKV.PKV.I(pkv) == BucketsLib.B(KMB.Interpretation(node))
   {
+    KMTreeEncodableToSeq(node);
     var keys := byteSeqSeqToKeySeq(KMB.ToSeq(node).0);
     var msgs := KMB.ToSeq(node).1;
     calc {
@@ -444,7 +446,7 @@ module KMBPKVOps {
     requires KMB.WF(node)
     requires IsKeyMessageTree(node)
     requires BucketWeights.WeightBucket(BucketsLib.B(KMB.Interpretation(node))) < Uint32UpperBound()
-    ensures PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), KMB.ToSeq(node).0)
+    ensures (KMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), KMB.ToSeq(node).0))
     ensures PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1))
   {
     var inode := KMB.I(node);
@@ -472,7 +474,7 @@ module KMBPKVOps {
   method ToPkv(node: KMB.Node) returns (pkv: DPKV.PKV.Pkv)
     requires KMB.WF(node)
     requires IsKeyMessageTree(node)
-    requires PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), KMB.ToSeq(node).0)
+    requires (KMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), KMB.ToSeq(node).0))
     requires PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1))
     ensures DPKV.PKV.WF(pkv)
     ensures PKV.IKeys(pkv.keys) == KMB.ToSeq(node).0

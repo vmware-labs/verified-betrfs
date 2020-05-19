@@ -508,90 +508,90 @@ abstract module MutableBtreeBulkOperations {
 
   //twostate lemma BuildParentsLoopInvariant(bpa: BuildParentsArgs, new aparents: array<Node?>, i: uint64)
 
-  twostate lemma BuildParentsLoopInvariant1(bpa: BuildParentsArgs, new aparents: array<Node?>, i: uint64)
-    requires ValidBuildParentsArgs(bpa)
-    requires aparents.Length == |bpa.boundaries|-1
-    requires i as int < aparents.Length
-    requires forall j :: 0 <= j <= i ==> aparents[j] != null
-    requires aparents !in SeqRepr(aparents[..i])
-    requires aparents !in aparents[i].repr;
-    requires fresh(aparents[i].repr - SeqRepr(ExtractBoundedSubsequence(bpa.children, bpa.boundaries, i)))
-    ensures aparents !in SeqRepr(aparents[..i+1])
-  {
-    assert SeqRepr(aparents[..i+1]) == SeqRepr(aparents[..i]) + aparents[i].repr by {
-      reveal_SeqRepr();
-    }
-    assert aparents !in SeqRepr(aparents[..i]);
-  }
+  // twostate lemma BuildParentsLoopInvariant1(bpa: BuildParentsArgs, new aparents: array<Node?>, i: uint64)
+  //   requires ValidBuildParentsArgs(bpa)
+  //   requires aparents.Length == |bpa.boundaries|-1
+  //   requires i as int < aparents.Length
+  //   requires forall j :: 0 <= j <= i ==> aparents[j] != null
+  //   requires aparents !in SeqRepr(aparents[..i])
+  //   requires aparents !in aparents[i].repr;
+  //   requires fresh(aparents[i].repr - SeqRepr(ExtractBoundedSubsequence(bpa.children, bpa.boundaries, i)))
+  //   ensures aparents !in SeqRepr(aparents[..i+1])
+  // {
+  //   assert SeqRepr(aparents[..i+1]) == SeqRepr(aparents[..i]) + aparents[i].repr by {
+  //     reveal_SeqRepr();
+  //   }
+  //   assert aparents !in SeqRepr(aparents[..i]);
+  // }
 
-  twostate predicate Stale(new a: set<object>)
-  {
-    forall o :: o in a ==> !fresh(o)
-  }
+  // twostate predicate Stale(new a: set<object>)
+  // {
+  //   forall o :: o in a ==> !fresh(o)
+  // }
   
-  twostate lemma BuildParentsLoopInvariant2(bpa: BuildParentsArgs, new aparents: array<Node?>, i: uint64)
-    requires ValidBuildParentsArgs(bpa)
-    requires aparents.Length == |bpa.boundaries|-1
-    requires i as int < aparents.Length
-    requires forall j :: 0 <= j <= i ==> aparents[j] != null
-    requires Stale(SeqRepr(bpa.children))
-    requires SeqRepr(aparents[..i]) !! SeqRepr(bpa.children[bpa.boundaries[i]..])
-    requires fresh(aparents[i].repr - SeqRepr(ExtractBoundedSubsequence(bpa.children, bpa.boundaries, i)))
-    ensures SeqRepr(aparents[..i+1]) !! SeqRepr(bpa.children[bpa.boundaries[i+1]..])
-  {
-    var srpi  := SeqRepr(aparents[..i]);
-    var srpii := SeqRepr(aparents[..i+1]);
-    var src   := SeqRepr(ExtractBoundedSubsequence(bpa.children, bpa.boundaries, i));
-    var srci  := SeqRepr(bpa.children[bpa.boundaries[i]..]);
-    var srcii := SeqRepr(bpa.children[bpa.boundaries[i+1]..]);
+  // twostate lemma BuildParentsLoopInvariant2(bpa: BuildParentsArgs, new aparents: array<Node?>, i: uint64)
+  //   requires ValidBuildParentsArgs(bpa)
+  //   requires aparents.Length == |bpa.boundaries|-1
+  //   requires i as int < aparents.Length
+  //   requires forall j :: 0 <= j <= i ==> aparents[j] != null
+  //   requires Stale(SeqRepr(bpa.children))
+  //   requires SeqRepr(aparents[..i]) !! SeqRepr(bpa.children[bpa.boundaries[i]..])
+  //   requires fresh(aparents[i].repr - SeqRepr(ExtractBoundedSubsequence(bpa.children, bpa.boundaries, i)))
+  //   ensures SeqRepr(aparents[..i+1]) !! SeqRepr(bpa.children[bpa.boundaries[i+1]..])
+  // {
+  //   var srpi  := SeqRepr(aparents[..i]);
+  //   var srpii := SeqRepr(aparents[..i+1]);
+  //   var src   := SeqRepr(ExtractBoundedSubsequence(bpa.children, bpa.boundaries, i));
+  //   var srci  := SeqRepr(bpa.children[bpa.boundaries[i]..]);
+  //   var srcii := SeqRepr(bpa.children[bpa.boundaries[i+1]..]);
 
-    assert srpi !! srci;
+  //   assert srpi !! srci;
     
-    assert srpii == srpi + aparents[i].repr by {
-      reveal_SeqRepr();
-    }
+  //   assert srpii == srpi + aparents[i].repr by {
+  //     reveal_SeqRepr();
+  //   }
     
-    assert srci == src + srcii by {
-      ExtractBoundedSubsequenceFacts(bpa.children, bpa.boundaries, i);
-      ExtractBoundedSubsequenceRepr(bpa.children, bpa.boundaries, i);
-      SeqReprUnion(bpa.children[bpa.boundaries[i]..bpa.boundaries[i+1]], bpa.children[bpa.boundaries[i+1]..]);
-      assert bpa.children[bpa.boundaries[i]..] ==
-        bpa.children[bpa.boundaries[i]..bpa.boundaries[i+1]] + bpa.children[bpa.boundaries[i+1]..];
-    }
-    assert src !! srcii by {
-      ExtractBoundedSubsequenceFacts(bpa.children, bpa.boundaries, i);
-      DisjointSubSeqReprsAreDisjoint(bpa.children,
-        bpa.boundaries[i] as int, bpa.boundaries[i+1] as int,
-        bpa.boundaries[i+1] as int, |bpa.children|);
-      assert bpa.children[bpa.boundaries[i]..] == bpa.children[bpa.boundaries[i]..|bpa.children|];
-      assert bpa.children[bpa.boundaries[i+1]..] == bpa.children[bpa.boundaries[i+1]..|bpa.children|];
-    }
-    assert srcii == srci - src;
+  //   assert srci == src + srcii by {
+  //     ExtractBoundedSubsequenceFacts(bpa.children, bpa.boundaries, i);
+  //     ExtractBoundedSubsequenceRepr(bpa.children, bpa.boundaries, i);
+  //     SeqReprUnion(bpa.children[bpa.boundaries[i]..bpa.boundaries[i+1]], bpa.children[bpa.boundaries[i+1]..]);
+  //     assert bpa.children[bpa.boundaries[i]..] ==
+  //       bpa.children[bpa.boundaries[i]..bpa.boundaries[i+1]] + bpa.children[bpa.boundaries[i+1]..];
+  //   }
+  //   assert src !! srcii by {
+  //     ExtractBoundedSubsequenceFacts(bpa.children, bpa.boundaries, i);
+  //     DisjointSubSeqReprsAreDisjoint(bpa.children,
+  //       bpa.boundaries[i] as int, bpa.boundaries[i+1] as int,
+  //       bpa.boundaries[i+1] as int, |bpa.children|);
+  //     assert bpa.children[bpa.boundaries[i]..] == bpa.children[bpa.boundaries[i]..|bpa.children|];
+  //     assert bpa.children[bpa.boundaries[i+1]..] == bpa.children[bpa.boundaries[i+1]..|bpa.children|];
+  //   }
+  //   assert srcii == srci - src;
 
-    assert fresh(aparents[i].repr - src);
-    assert Stale(srci) by {
-      SubSeqRepr(bpa.children, bpa.boundaries[i] as nat, |bpa.children|);
-      assert bpa.children[bpa.boundaries[i]..|bpa.children|] == bpa.children[bpa.boundaries[i]..];
-      assert srci <= SeqRepr(bpa.children);
-    }
-    assert (aparents[i].repr - src) !! (srci - src);
-  }
+  //   assert fresh(aparents[i].repr - src);
+  //   assert Stale(srci) by {
+  //     SubSeqRepr(bpa.children, bpa.boundaries[i] as nat, |bpa.children|);
+  //     assert bpa.children[bpa.boundaries[i]..|bpa.children|] == bpa.children[bpa.boundaries[i]..];
+  //     assert srci <= SeqRepr(bpa.children);
+  //   }
+  //   assert (aparents[i].repr - src) !! (srci - src);
+  // }
 
-  twostate lemma BuildParentsLoopInvariant3(bpa: BuildParentsArgs, new aparents: array<Node?>, i: uint64)
-    requires ValidBuildParentsArgs(bpa)
-    requires aparents.Length == |bpa.boundaries|-1
-    requires i as int < aparents.Length
-    requires forall j :: 0 <= j <= i ==> aparents[j] != null
-    requires fresh(SeqRepr(aparents[..i]) - SeqRepr(bpa.children))
-    requires BuildParentShapeProperties(bpa, i, aparents[i])
-    ensures fresh(SeqRepr(aparents[..i+1]) - SeqRepr(bpa.children))
-  {
-    assert SeqRepr(aparents[..i+1]) == SeqRepr(aparents[..i]) + aparents[i].repr by {
-      reveal_SeqRepr();
-    }
-    assert fresh(aparents[i].repr - SeqRepr(ExtractBoundedSubsequence(bpa.children, bpa.boundaries, i)));
-    ExtractBoundedSubsequenceRepr(bpa.children, bpa.boundaries, i);
-  }
+  // twostate lemma BuildParentsLoopInvariant3(bpa: BuildParentsArgs, new aparents: array<Node?>, i: uint64)
+  //   requires ValidBuildParentsArgs(bpa)
+  //   requires aparents.Length == |bpa.boundaries|-1
+  //   requires i as int < aparents.Length
+  //   requires forall j :: 0 <= j <= i ==> aparents[j] != null
+  //   requires fresh(SeqRepr(aparents[..i]) - SeqRepr(bpa.children))
+  //   requires BuildParentShapeProperties(bpa, i, aparents[i])
+  //   ensures fresh(SeqRepr(aparents[..i+1]) - SeqRepr(bpa.children))
+  // {
+  //   assert SeqRepr(aparents[..i+1]) == SeqRepr(aparents[..i]) + aparents[i].repr by {
+  //     reveal_SeqRepr();
+  //   }
+  //   assert fresh(aparents[i].repr - SeqRepr(ExtractBoundedSubsequence(bpa.children, bpa.boundaries, i)));
+  //   ExtractBoundedSubsequenceRepr(bpa.children, bpa.boundaries, i);
+  // }
   
   // twostate lemma BuildParentsLoopInvariant4(bpa: BuildParentsArgs, new aparents: array<Node?>, i: uint64)
   //   requires ValidBuildParentsArgs(bpa)

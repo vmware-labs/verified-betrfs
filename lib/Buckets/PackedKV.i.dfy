@@ -9,7 +9,7 @@ module PackedKV {
   import Keyspace = KeyspaceImpl.Ord
   import opened KeyType
   import opened ValueType`Internal
-  import opened ValueMessage
+  import opened ValueMessage`Internal
   import opened BucketsLib
   import opened Options
   import opened Sequences
@@ -624,6 +624,18 @@ module DynamicPkv {
     }
   }
 
+  function PkvWeightBound() : int
+  {
+    10*(Uint32UpperBound() - 1)
+  }
+
+  lemma PkvWeightBounds(pkv: PKV.Pkv)
+    requires PKV.WF(pkv)
+    ensures PKV.WeightPkv(pkv) as nat <= PkvWeightBound()
+  {
+    WeightBucketPkv_eq_WeightPkv(pkv);
+  }
+  
   class DynamicPkv {
     var keys: PKV.PSA.DynamicPsa
     var messages: PKV.PSA.DynamicPsa

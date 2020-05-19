@@ -204,9 +204,9 @@ module BucketsLib {
   {
     if |m| == 0 {
       reveal_IsStrictlySorted();
-    } else if |m| == 1 {
-      reveal_BucketMapOfSeq();
-      reveal_IsStrictlySorted();
+    // } else if |m| == 1 {
+    //   reveal_BucketMapOfSeq();
+    //   reveal_IsStrictlySorted();
     } else {
       var maxkey := maximum(m.Keys);
       var subm := MapRemove1(m, maxkey);

@@ -2175,7 +2175,7 @@ method MarshallUint32Array(val:V, ghost grammar:G, data:array<byte>, index:uint6
 
   ghost var len := unpack_LittleEndian_Uint64(data_seq2[..8]);
   assert |data_seq2| >= 8;
-  assert len <= (|data_seq2| as uint64 - 8) / 4;
+  //assert len <= (|data_seq2| as uint64 - 8) / 4;
   assert parse_Uint32Array(data_seq2).0.Some?;
   assert parse_Val(data_seq2, grammar).0.Some?;
   assert parse_Uint32Array(data_seq2).0.value.va == val.va;

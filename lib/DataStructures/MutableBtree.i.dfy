@@ -259,6 +259,8 @@ abstract module MutableBtree {
   }
 
   function ToSeq(node: Node) : (kvlists: (seq<Key>, seq<Value>))
+    requires WF(node)
+    reads node.repr
   {
     Model.ToSeq(I(node))
   }

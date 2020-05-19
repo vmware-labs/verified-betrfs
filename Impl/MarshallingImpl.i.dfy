@@ -50,6 +50,8 @@ module MarshallingImpl {
   import KeyspaceImpl = Lexicographic_Byte_Order_Impl
   import Keyspace = KeyspaceImpl.Ord
   import PackedKVMarshalling
+  import PackedKV
+  import DPKV = DynamicPkv
   import PSA = PackedStringArray
   import PSAM = PackedStringArrayMarshalling
 
@@ -143,7 +145,7 @@ module MarshallingImpl {
     ensures s.Some? ==> Some(s.value.I()) == Marshalling.valToBucket(v)
   { 
     var pkv := PackedKVMarshalling.FromVal(v);
-    if pkv.Some? {
+    if pkv.Some? && PackedKV.WeightPkv(pkv.value) < 0x1_0000_0000 {
       var b := new BucketImpl.MutBucket.InitFromPkv(pkv.value, false);
       s := Some(b);
     } else {
@@ -428,6 +430,10 @@ module MarshallingImpl {
   {
     var pkv := bucket.GetPkv();
     v := PackedKVMarshalling.ToVal(pkv);
+    PackedKVMarshalling.parseMarshalledCorrect(pkv);
+    assert PackedKVMarshalling.fromVal(v) == Some(pkv);
+    DPKV.WeightBucketPkv_eq_WeightPkv(pkv);
+    assert PackedKV.WeightPkv(pkv) < Uint32UpperBound() as uint64;
     size := bucket.Weight + 32;
     PackedKVMarshalling.SizeOfVWellMarshalledPackedKVIsBucketWeight(pkv);
   }
