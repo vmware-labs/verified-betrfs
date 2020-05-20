@@ -45,6 +45,13 @@ module PackedStringArrayMarshalling {
   {
   }
 
+  lemma uniqueMarshalling(v: V)
+    requires ValInGrammar(v, grammar())
+    requires fromVal(v).Some?
+    ensures toVal(fromVal(v).value) == v
+  {
+  }
+  
   method ComputeWF(psa: Psa) returns (result: bool)
     requires |psa.offsets| < Uint64UpperBound()
     requires |psa.data| < Uint64UpperBound()

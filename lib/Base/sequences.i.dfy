@@ -454,6 +454,37 @@ module Sequences {
     else Flatten(DropLast(seqs)) + Last(seqs)
   }
 
+  lemma FlattenSingleton<A>(s: seq<A>)
+    ensures Flatten([ s ]) == s
+  {
+    reveal_Flatten();
+  }
+  
+  lemma FlattenAdditive<A>(seqs1: seq<seq<A>>, seqs2: seq<seq<A>>)
+    ensures Flatten(seqs1 + seqs2) == Flatten(seqs1) + Flatten(seqs2)
+    decreases |seqs2|
+  {
+    if |seqs2| == 0 {
+      assert seqs1 + seqs2 == seqs1;
+    } else if |seqs2| == 1 {
+      reveal_Flatten();
+    } else {
+      calc {
+        Flatten(seqs1 + seqs2);
+        { assert seqs1 + seqs2 == seqs1 + DropLast(seqs2) + [ Last(seqs2) ]; }
+        Flatten(seqs1 + DropLast(seqs2) + [ Last(seqs2) ]);
+        { FlattenAdditive(seqs1 + DropLast(seqs2), [ Last(seqs2) ]); }
+        Flatten(seqs1 + DropLast(seqs2)) + Flatten([ Last(seqs2) ]);
+        { FlattenAdditive(seqs1, DropLast(seqs2)); }
+        Flatten(seqs1) + Flatten(DropLast(seqs2)) + Flatten([ Last(seqs2) ]);
+        { FlattenAdditive(DropLast(seqs2), [ Last(seqs2) ]); }
+        Flatten(seqs1) + Flatten(DropLast(seqs2) + [ Last(seqs2) ]);
+        { assert seqs2 == DropLast(seqs2) + [ Last(seqs2) ]; }
+        Flatten(seqs1) + Flatten(seqs2);
+      }
+    }
+  }
+  
   function FlattenIndex(shape: seq<nat>, i: nat, j: nat) : nat
     requires i < |shape|
     requires j < shape[i]

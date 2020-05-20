@@ -66,6 +66,23 @@ module BucketsLib {
       r
   }
 
+  lemma StrictlySortedIsBucketMapOfSeq(keys: seq<Key>, msgs: seq<Message>, bmap: BucketMap)
+    requires IsStrictlySorted(keys)
+    requires Set(keys) == bmap.Keys
+    requires |keys| == |msgs|
+    requires forall i | 0 <= i < |keys| :: bmap[keys[i]] == msgs[i]
+    ensures bmap == BucketMapOfSeq(keys, msgs)
+  {
+    reveal_BucketMapOfSeq();
+    if |keys| == 0 {
+    } else {
+      var prebmap := MapRemove1(bmap, Last(keys));
+      StrictlySortedSubsequence(keys, 0, |keys| - 1);
+      reveal_IsStrictlySorted();
+      StrictlySortedIsBucketMapOfSeq(DropLast(keys), DropLast(msgs), prebmap);
+    }
+  }
+  
   function BucketOfSeq(keys: seq<Key>, msgs: seq<Message>) : (result: Bucket)
   requires |keys| == |msgs|
   {
@@ -187,9 +204,9 @@ module BucketsLib {
   {
     if |m| == 0 {
       reveal_IsStrictlySorted();
-    } else if |m| == 1 {
-      reveal_BucketMapOfSeq();
-      reveal_IsStrictlySorted();
+    // } else if |m| == 1 {
+    //   reveal_BucketMapOfSeq();
+    //   reveal_IsStrictlySorted();
     } else {
       var maxkey := maximum(m.Keys);
       var subm := MapRemove1(m, maxkey);
@@ -1622,4 +1639,12 @@ module BucketsLib {
     )
   }
 
+  lemma WFPivotsOfGetMiddleKey(bucket: Bucket)
+  requires WFBucket(bucket)
+  ensures WFPivots([getMiddleKey(bucket)])
+  {
+    reveal_IsStrictlySorted();
+    SeqComparison.reveal_lte();
+    IsNotMinimum([], getMiddleKey(bucket));
+  }
 }
