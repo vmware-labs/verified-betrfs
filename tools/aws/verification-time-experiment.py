@@ -8,9 +8,12 @@ from automation import *
 from suite import *
 from lib_deps import *
 
+# Consider updating all the workers before running the experiment!
+# tools/aws/run-all.py "cd veribetrfs; git checkout master; git pull"
 ROOT="Impl/Bundle.i.dfy"
 #ROOT="lib/DataStructures/MutableBtree.i.dfy"   # a small test case
-SUITE_NAME="veri_time_09"
+SUITE_NAME="veri_time_10"
+N_REPLICAS=5
 
 def constructSuite(nReplicas):
     values = []
@@ -38,7 +41,7 @@ def main():
             )
         return Command(str(variant), cmd)
 
-    suite = constructSuite(2)
+    suite = constructSuite(N_REPLICAS)
     set_logfile(suite.logpath())
     log("VARIANTS %s" % suite.variants)
 
