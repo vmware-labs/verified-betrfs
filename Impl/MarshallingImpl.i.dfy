@@ -435,7 +435,7 @@ module MarshallingImpl {
     DPKV.WeightBucketPkv_eq_WeightPkv(pkv);
     assert PackedKV.WeightPkv(pkv) < Uint32UpperBound() as uint64;
     size := bucket.Weight + 32;
-    PackedKVMarshalling.SizeOfVWellMarshalledPackedKVIsBucketWeight(pkv);
+    PackedKVMarshalling.SizeOfVPackedKVIsBucketWeight(pkv);
   }
 
   method bucketsToVal(buckets: seq<BucketImpl.MutBucket>)

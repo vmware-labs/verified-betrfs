@@ -148,6 +148,13 @@ module ValueMessage refines Message {
       bytestringSeq_to_MessageSeq(Sequences.DropLast(strings)) + [ bytestring_to_Message(Last(strings)) ]
   }
 
+  lemma bytestringSeq_to_MessageSeq_Additive(msgs1: seq<seq<byte>>, msgs2: seq<seq<byte>>)
+    requires forall i | 0 <= i < |msgs1| :: |msgs1[i]| < 0x1_0000_0000
+    requires forall i | 0 <= i < |msgs2| :: |msgs2[i]| < 0x1_0000_0000
+    ensures bytestringSeq_to_MessageSeq(msgs1 + msgs2) == bytestringSeq_to_MessageSeq(msgs1) + bytestringSeq_to_MessageSeq(msgs2)
+  {
+  }
+  
   lemma messageSeq_to_bytestringSeq_Additive(msgs1: seq<Message>, msgs2: seq<Message>)
     requires EncodableMessageSeq(msgs1)
     requires EncodableMessageSeq(msgs2)
