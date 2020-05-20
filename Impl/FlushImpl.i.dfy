@@ -23,7 +23,6 @@ module FlushImpl {
   import BookkeepingModel
   import FlushModel
   //import BucketModel
-  //import KVListPartialFlush
 
   method flush(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference, child: Node)
   requires Inv(k, s)

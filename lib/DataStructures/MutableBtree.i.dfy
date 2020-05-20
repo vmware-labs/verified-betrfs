@@ -258,6 +258,13 @@ abstract module MutableBtree {
     Model.Interpretation(I(node))
   }
 
+  function ToSeq(node: Node) : (kvlists: (seq<Key>, seq<Value>))
+    requires WF(node)
+    reads node.repr
+  {
+    Model.ToSeq(I(node))
+  }
+  
   method QueryLeaf(node: Node, needle: Key) returns (result: Option<Value>)
     requires WF(node)
     requires node.contents.Leaf?

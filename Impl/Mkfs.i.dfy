@@ -12,7 +12,6 @@ module MkfsImpl {
   import SM = StateModel
   import opened BucketImpl
   import opened NodeImpl
-  import KVList
   import IndirectionTableModel
   import IndirectionTableImpl
   import Marshalling

@@ -10,8 +10,6 @@ module GrowImpl {
   import opened DiskOpImpl
   import GrowModel
 
-  import KVList
-
   import opened Options
   import opened Maps
   import opened Sequences

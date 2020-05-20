@@ -340,6 +340,11 @@ public:
 
     inline void CountAmassAllocations() {
         app.CountAmassAllocations();
+        printf("debug-accumulator finish\n");
+    }
+
+    inline void cacheDebug() {
+      app.CacheDebug();
     }
 };
 
@@ -521,6 +526,9 @@ public:
     }
 
     inline void CountAmassAllocations() {
+        asm volatile ("nop");
+    }
+    inline void cacheDebug() {
         asm volatile ("nop");
     }
 };

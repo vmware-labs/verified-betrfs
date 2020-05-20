@@ -11,7 +11,8 @@ module PackedKVMarshalling {
   import opened NativeTypes
   import PSAMarshalling = PackedStringArrayMarshalling
   import opened PackedKV
-  import opened ValueMessage
+  import opened ValueMessage`Internal
+  import ValueType`Internal
   import opened BucketsLib
   import BW = BucketWeights
   import Seq = Sequences
@@ -54,6 +55,15 @@ module PackedKVMarshalling {
   {
   }
 
+  lemma uniqueMarshalling(v: V)
+    requires ValInGrammar(v, grammar())
+    requires fromVal(v).Some?
+    ensures toVal(fromVal(v).value) == v
+  {
+    PSAMarshalling.uniqueMarshalling(v.t[0]);
+    PSAMarshalling.uniqueMarshalling(v.t[1]);
+  }
+  
   method CheckStringLengths(offsets: seq<uint32>) returns (b: bool)
     requires |offsets| < Uint64UpperBound()
     ensures b <==>
@@ -153,60 +163,59 @@ module PackedKVMarshalling {
       SizeOfV(ov) + SizeOfV(dv);
     }
   }
+
+  lemma SizeOfVPackedStringArrayIsKeyListWeight(psa: PSA.Psa)
+    requires PSA.WF(psa)
+    requires ValidStringLens(PSA.I(psa), KeyType.MaxLen() as nat)
+    ensures SizeOfV(PSAMarshalling.toVal(psa)) == BW.WeightKeyList(IKeys(psa)) + 2 * SizeOfV(VUint64(0))
+    decreases |IKeys(psa)|
+  {
+    var keys := IKeys(psa);
+    if |keys| == 0 {
+    } else {
+      var prepsa := PSA.psaDropLast(psa);
+      var prekeys := IKeys(prepsa);
+      var last := Seq.Last(keys);
+      
+      SizeOfVPackedStringArrayIsKeyListWeight(prepsa);
+      assert keys == prekeys + [ Seq.Last(keys) ];
+      BW.WeightKeyListPushBack(prekeys, Seq.Last(keys));
+      PSAMarshalling.PSASizeOfV(psa);
+      PSAMarshalling.PSASizeOfV(prepsa);
+    }
+  }
   
-  lemma SizeOfVWellMarshalledPackedKVIsBucketWeight(pkv: PackedKV.Pkv)
+  lemma SizeOfVPackedStringArrayIsMessageListWeight(psa: PSA.Psa)
+    requires PSA.WF(psa)
+    requires ValueType.ValidMessageBytestrings(PSA.I(psa))
+    ensures SizeOfV(PSAMarshalling.toVal(psa)) == BW.WeightMessageList(IMessages(psa)) + 2 * SizeOfV(VUint64(0))
+    decreases |PSA.I(psa)|
+  {
+    var msgs := IMessages(psa);
+    assert msgs == bytestringSeq_to_MessageSeq(PSA.I(psa));
+    
+    if |msgs| == 0 {
+    } else {
+      var prepsa := PSA.psaDropLast(psa);
+      var premsgs := IMessages(prepsa);
+      var last := Seq.Last(msgs);
+
+      SizeOfVPackedStringArrayIsMessageListWeight(prepsa);
+      bytestringSeq_to_MessageSeq_Additive(PSA.I(prepsa), [ Seq.Last(PSA.I(psa)) ]);
+      assert msgs == premsgs + [ Seq.Last(msgs) ];
+      BW.WeightMessageListPushBack(premsgs, Seq.Last(msgs));
+      PSAMarshalling.PSASizeOfV(psa);
+      PSAMarshalling.PSASizeOfV(prepsa);
+    }
+  }
+  
+  lemma SizeOfVPackedKVIsBucketWeight(pkv: PackedKV.Pkv)
     requires PackedKV.WF(pkv)
-    requires BucketWellMarshalled(PackedKV.I(pkv))
     ensures SizeOfV(toVal(pkv)) == BW.WeightBucket(PackedKV.I(pkv)) + 4 * SizeOfV(VUint64(0))
     decreases NumKVPairs(pkv)
   {
-    var pkvv := toVal(pkv);
+    SizeOfVPackedStringArrayIsKeyListWeight(pkv.keys);
+    SizeOfVPackedStringArrayIsMessageListWeight(pkv.messages);
     PKVSizeOfV(pkv);
-    PSAMarshalling.PSASizeOfV(pkv.keys);
-    PSAMarshalling.PSASizeOfV(pkv.messages);
-
-    if NumKVPairs(pkv) == 0 {
-    } else {
-      var keys := PSA.I(pkv.keys);
-      var msgs := IMessages(pkv.messages);
-      var bucket := PackedKV.I(pkv);
-      var prepkv := DropLast(pkv);
-      var prekeys := PSA.I(prepkv.keys);
-      var premsgs := IMessages(prepkv.messages);
-      var prebucket := PackedKV.I(prepkv);
-      var prepkvv := toVal(prepkv);
-      PKVSizeOfV(prepkv);
-      PSAMarshalling.PSASizeOfV(prepkv.keys);
-      PSAMarshalling.PSASizeOfV(prepkv.messages);
-      SizeOfVWellMarshalledPackedKVIsBucketWeight(prepkv);
-      assert Seq.Last(keys) !in prebucket.b by {
-        Keyspace.reveal_IsStrictlySorted();
-      }
-      BW.WeightBucketInduct(prebucket, Seq.Last(keys), Seq.Last(msgs));
-      forall i | 0 <= i < |premsgs|
-        ensures premsgs[i] == Seq.DropLast(msgs)[i];
-      {
-        assert PSA.psaElement(prepkv.messages, i as uint64) == PSA.I(prepkv.messages)[i];
-      }
-      assert premsgs == Seq.DropLast(msgs);
-      calc {
-        bucket.b;
-        { reveal_BucketMapOfSeq(); }
-        BucketMapOfSeq(prekeys, premsgs)[Seq.Last(keys) := Seq.Last(msgs)];
-        { reveal_B(); }
-        B(prebucket.b[Seq.Last(keys) := Seq.Last(msgs)]).b;
-      }
-      WellMarshalledBucketsEq(bucket, B(prebucket.b[Seq.Last(keys) := Seq.Last(msgs)]));
-      assert PSA.LastElement(pkv.messages) == Seq.Last(PSA.I(pkv.messages));
-      //assert |PSA.LastElement(pkv.messages)| <= ValueType.MaxLen() as int;
-      // calc {
-      //   |PSA.LastElement(pkv.messages)| + 4;
-      //   BW.WeightMessage(Define(PSA.LastElement(pkv.messages)));
-      //   BW.WeightMessage(bytestring_to_Message(PSA.LastElement(pkv.messages)));
-      //   BW.WeightMessage(bytestring_to_Message(Seq.Last(PSA.I(pkv.messages))));
-      //   BW.WeightMessage(Seq.Last(IMessages(pkv.messages)));
-      //   BW.WeightMessage(Seq.Last(msgs));
-      // }
-    }
   }
 }
