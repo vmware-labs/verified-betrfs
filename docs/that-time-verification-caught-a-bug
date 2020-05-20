@@ -1,0 +1,24 @@
+i ran into a snag
+so i'm implementing the superblocks thing
+where you write out the superblock to a different block
+on boot, the strategy is
+read in both superblocks
+if they're both well-formed, then use the later one
+if one is ill-formed, then just use the other one
+i just realized (via verification failure) though that this can create the following situation:
+superblock1 and superblock2 are both good superblocks, and superblock2 is written later
+therefore the interpretation of this disk state is given via the superblock2
+but if superblock2 corrupts (due to random bit malfunction)
+we would fail to read in superblock2 (due to checksum failure)
+and as such, the interpretation of the disk state would have gone back in time
+
+sorry, i describe it slightly wrong
+the interpretation function doesn't go backwards, because the interpretation ffunction assumes no bitflips - rather, we just assume the bitflips happen on read
+so what would happen is we would read the superblock2 as corrupted
+use superblock1 instead
+and then return wrong results
+more specifically, results from an earlier version of the map state
+
+
+> Oh, on every other block corrupted state -> liveness failure (for that part of the tree), but here corrupted state -> rollback?
+yes
