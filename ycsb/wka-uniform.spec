@@ -7,7 +7,7 @@
 #recordcount=1000000
 #XXX TODO reset initial record count
 recordcount=4000000
-operationcount=20000000
+operationcount=1000
 workload=com.yahoo.ycsb.workloads.CoreWorkload
 
 readallfields=true
