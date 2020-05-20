@@ -152,6 +152,7 @@ def depsFromDfySource(initialRef):
     return visited
 
 def depsFromDfySources(roots):
+    """roots are file pathnames"""
     irefs = set()
     for i in range(len(roots)):
         dafnyRoot = roots[i]
