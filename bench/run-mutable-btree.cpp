@@ -1,3 +1,4 @@
+#include "lib/Lang/LinearExtern.h"
 #include "lib/DataStructures/MutableBtree.i.h"
 
 int main(int argc, char**argv) {
