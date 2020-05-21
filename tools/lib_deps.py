@@ -75,7 +75,7 @@ class IncludeReference:
         return self.normPath
 
     def _tuple(self):
-        return (self.absPath, self.line_num)
+        return (self.absPath,)
 
     def __hash__(self):
         return hash(self._tuple())
@@ -152,6 +152,7 @@ def depsFromDfySource(initialRef):
     return visited
 
 def depsFromDfySources(roots):
+    """roots are file pathnames"""
     irefs = set()
     for i in range(len(roots)):
         dafnyRoot = roots[i]
