@@ -62,7 +62,8 @@ packages = [
 def cur_branch():
     return subprocess.run("git rev-parse --abbrev-ref HEAD".split(), stdout=subprocess.PIPE).stdout.decode("utf-8").strip()
 
-def main():
+DATA_FILE = "data/linear_lines.json"
+def collect():
     start_branch = cur_branch()
 
     try:
@@ -70,8 +71,17 @@ def main():
         for package in packages:
             package.count()
             accum.append(package.jsondict())
-        open("data/linear_lines.json", "w").write(json.dumps(accum, indent=2))
+        open(DATA_FILE, "w").write(json.dumps(accum, indent=2))
     finally:
         do_cmd(["git", "checkout", start_branch])
+
+def report():
+    data = json.loads(open(DATA_FILE).read())
+    for row in data:
+        print(row["label"], row["impl"], row["proof"], "%.1f" % (1.0*row["proof"]/row["impl"]))
+
+def main():
+    collect()
+    report()
         
 main()
