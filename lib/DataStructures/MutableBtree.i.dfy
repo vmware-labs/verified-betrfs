@@ -1271,6 +1271,8 @@ module MainModule {
     var t := TMB.EmptyTree();
     var i: uint64 := 0;
     var lcg: LCG := new LCG(seed);
+
+    var write_start: uint64 := steadyClockMillis();
     while i < n
       invariant 0 <= i <= n
       invariant TMB.WF(t)
@@ -1284,7 +1286,30 @@ module MainModule {
       }
       i := i + 1;
     }
+    var write_end: uint64 := steadyClockMillis();
+    var write_duration: uint64 := write_end - write_start;
+    print(n, "\twrite\trepr\t", write_duration, "\n");
 
-    print "PASSED\n";
+    i := 0;
+
+    var read_start: uint64 := steadyClockMillis();
+    while i < n
+      invariant 0 <= i <= n
+      invariant TMB.WF(t)
+      invariant fresh(t.repr)
+    {
+      var keyv := lcg.next();
+      var key := SeqFor(keyv);
+      if (!dry) {
+        var result := TMB.Query(t, key);
+        if result.Some? {
+          opaqueBlackhole(result.value);
+        }
+      }
+      i := i + 1;
+    }
+    var read_end: uint64 := steadyClockMillis();
+    var read_duration: uint64 := read_end - read_start;
+    print(n, "\tread\trepr\t", read_duration, "\n");
   }
 } 

@@ -8,7 +8,7 @@ int main(int argc, char**argv) {
     uint64 seed = atol(argv[1]);
     uint64 ops = atol(argv[2]);
     bool dry = (strcmp(argv[3], "true") == 0);
-    printf("running %llu ops with seed %llu dry run %d\n", ops, seed, dry);
+    printf("METADATA title running %llu ops with seed %llu dry run %d\n", ops, seed, dry);
     MainModule_Compile::__default::Run(seed, ops, dry);
     return 0;
 }

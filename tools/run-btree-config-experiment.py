@@ -92,6 +92,7 @@ def main():
   with open(output, 'w') as f:
       f.write("METADATA btree perf comparison\n")
       f.write("METADATA branch {}\n".format(branch))
+      f.write("METADATA seed {}\n".format(seed))
       for pp in eval(ops):
           nops = 2**pp
 
@@ -99,16 +100,12 @@ def main():
           actuallyprint(command)
           sys.stdout.flush()
 
-          start_time = time.time()
-          proc = subprocess.Popen(command, shell=True, preexec_fn=os.setsid)
-          proc_grp_id = os.getpgid(proc.pid)
-          actuallyprint("experiment pid %d pgid %d" % (proc.pid, proc_grp_id))
-
-          proc.wait()
-          end_time = time.time()
-
-          actuallyprint("{} writing to {}".format(nops, output))
-          f.write("{}\t{}\n".format(nops, end_time - start_time))
+          result = subprocess.run(command, shell=True, preexec_fn=os.setsid, capture_output=True, text=True)
+          # proc_grp_id = os.getpgid(proc.pid)
+          # actuallyprint("experiment pid %d pgid %d" % (proc.pid, proc_grp_id))
+          # actuallyprint("{} writing to {}".format(nops, output))
+          # f.write("{}\t{}\n".format(nops, end_time - start_time))
+          f.write(result.stdout)
           f.flush()
 
 if __name__ == "__main__":
