@@ -49,8 +49,6 @@ module Bounds {
   }
 
 
-  //function method MaxTotalBucketWeightUint64() : uint64 { 8356168 }
-  //function method MaxCacheSizeUint64() : uint64 { 200 }
   function method MaxTotalBucketWeightUint64() : uint64 { 2*1024*1024-65536 }
   function method MaxCacheSizeUint64() : uint64 { 400 }
 
