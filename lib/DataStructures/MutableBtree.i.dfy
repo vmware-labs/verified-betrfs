@@ -618,7 +618,6 @@ module MainModule {
       invariant TMB.WF(t)
 //      invariant fresh(t.repr)
     {
-      var oldvalue;
       var keyv := lcg.next();
       var key := SeqFor(keyv);
       if (!dry) {
