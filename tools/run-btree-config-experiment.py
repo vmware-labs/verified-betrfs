@@ -100,7 +100,7 @@ def main():
           actuallyprint(command)
           sys.stdout.flush()
 
-          result = subprocess.run(command, shell=True, preexec_fn=os.setsid, text=True,
+          result = subprocess.run(command, shell=True, preexec_fn=os.setsid,
                   stdout=subprocess.PIPE)
           # proc_grp_id = os.getpgid(proc.pid)
           # actuallyprint("experiment pid %d pgid %d" % (proc.pid, proc_grp_id))
