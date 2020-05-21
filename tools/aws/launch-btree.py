@@ -7,12 +7,12 @@ common_vars = [
     Variable("ops", "run_btree", [
         Value("2pows", "ops=[21,22,23,24,25,26,27,28]") ]),
     Variable("seed", "run_btree", [
-        Value("seed0", "348725789"),
-        Value("seed1", "34578699348"),
-        Value("seed2", "23945765203"),
-        Value("seed3", "625478238923"),
-        Value("seed4", "657843290874"),
-        Value("seed5", "9526729840202"),
+        Value("seed0", "seed=348725789"),
+        Value("seed1", "seed=34578699348"),
+        Value("seed2", "seed=23945765203"),
+        Value("seed3", "seed=625478238923"),
+        Value("seed4", "seed=657843290874"),
+        Value("seed5", "seed=9526729840202"),
         ]),
     ]
 repr_suite = Suite(
