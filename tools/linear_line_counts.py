@@ -38,6 +38,11 @@ class Package:
         print(msg, self.label, self.counter)
 
 packages = [
+    Package("Hashtable-linear", branch="eval-btree-linear", sources=
+            ["lib/DataStructures/LinearMutableMap.i.dfy"]),
+    Package("Hashtable-master", branch="eval-btree-master", sources=
+            ["lib/DataStructures/MutableMapModel.i.dfy",
+                "lib/DataStructures/MutableMapImpl.i.dfy"]),
     Package("BTree-linear", branch="eval-btree-linear", sources=
             ["lib/DataStructures/BtreeModel.i.dfy",
                 "lib/DataStructures/MutableBtree.i.dfy"]),
