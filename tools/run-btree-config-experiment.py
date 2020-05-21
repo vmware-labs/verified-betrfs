@@ -40,6 +40,7 @@ def actuallyprint(msg):
 #     f.write(cpp)
 
 def main():
+  seed=None
   ops=None
   output=None
 
@@ -48,6 +49,8 @@ def main():
   for arg in sys.argv[1:]:
     if arg.startswith("ops="):
       ops = arg[len("ops=") : ]
+    elif arg.startswith("seed="):
+      seed = arg[len("seed=") : ]
     elif arg.startswith("output="):
       output = arg[len("output=") : ]
     elif arg.startswith("git_branch="):
@@ -67,14 +70,14 @@ def main():
   if branch == "eval-btree-linear":
     dafny_cmd = ".dafny/dafny/Binaries/dafny /noVerify /spillTargetCode:3 /countVerificationErrors:0 /compileTarget:cpp lib/DataStructures/MutableBtree.i.dfy Lang/LinearExtern.h framework/Framework.h"
   elif branch == "eval-btree-master":
-    dafny_cmd = ".dafny/dafny/Binaries/dafny /noVerify /spillTargetCode:3 /countVerificationErrors:0 /compileTarget:cpp lib/DataStructures/MutableBtree.i.dfy framework/NativeArrays.h"
+    dafny_cmd = ".dafny/dafny/Binaries/dafny /noVerify /spillTargetCode:3 /countVerificationErrors:0 /compileTarget:cpp lib/DataStructures/MutableBtree.i.dfy framework/NativeArrays.h framework/LinearCongruentialGenerator.h"
   actuallyprint(dafny_cmd)
   ret = os.system(dafny_cmd)
   assert ret == 0
 
   cmd = None
   if branch == "eval-btree-master":
-    cmd = "g++ -O3 lib/DataStructures/lib/DataStructures/MutableBtree.i.cpp bench/run-mutable-btree.cpp -o MutableBtreeBench -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -Ilib -std=c++17 -I. -Iframework framework/NativeArrays.cpp"
+    cmd = "g++ -O3 lib/DataStructures/lib/DataStructures/MutableBtree.i.cpp bench/run-mutable-btree.cpp -o MutableBtreeBench -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -Ilib -std=c++17 -I. -Iframework framework/NativeArrays.cpp framework/LinearCongruentialGenerator.h"
   elif branch == "eval-btree-linear":
     cmd = "g++ -O3 lib/DataStructures/lib/DataStructures/MutableBtree.i.cpp bench/run-mutable-btree.cpp -o MutableBtreeBench -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -Ilib -std=c++17 -I."
   actuallyprint(cmd)
@@ -92,7 +95,7 @@ def main():
       for pp in eval(ops):
           nops = 2**pp
 
-          command = taskset_cmd + "./MutableBtreeBench" + " " + str(nops)
+          command = taskset_cmd + "./MutableBtreeBench {} {} false".format(str(seed), str(nops))
           actuallyprint(command)
           sys.stdout.flush()
 

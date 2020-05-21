@@ -3,6 +3,7 @@ include "../Base/NativeArrays.s.dfy"
 include "../Base/Arrays.i.dfy"
 include "../Base/Option.s.dfy"
 include "BtreeModel.i.dfy"
+include "../../lib/Math/LinearCongruentialGenerator.s.dfy"
 
 abstract module MutableBtree {
   import opened NativeTypes
@@ -1245,6 +1246,7 @@ module TestMutableBtree refines MutableBtree {
 module MainModule {
   import opened NativeTypes
   import TMB = TestMutableBtree`API
+  import opened LinearCongruentialGenerator
 
   method SeqFor(i: uint64)
   returns (result:TMB.Key)
@@ -1258,7 +1260,7 @@ module MainModule {
     result := [b0, b1, b2];
   }
 
-  method Run(n: uint64)
+  method Run(seed: uint64, n: uint64, dry: bool)
   {
     // var n: uint64 := 1_000_000;
     // var p: uint64 := 300_007;
@@ -1268,15 +1270,18 @@ module MainModule {
     // var p: uint64 := 1_073_741_827;
     var t := TMB.EmptyTree();
     var i: uint64 := 0;
+    var lcg: LCG := new LCG(seed);
     while i < n
       invariant 0 <= i <= n
       invariant TMB.WF(t)
       invariant fresh(t.repr)
     {
       var oldvalue;
-      var keyv := ((i * p) % n);
+      var keyv := lcg.next();
       var key := SeqFor(keyv);
-      t, oldvalue := TMB.Insert(t, key, i);
+      if (!dry) {
+        t, oldvalue := TMB.Insert(t, key, i);
+      }
       i := i + 1;
     }
 
