@@ -101,7 +101,7 @@ def main():
           sys.stdout.flush()
 
           result = subprocess.run(command, shell=True, preexec_fn=os.setsid,
-                  stdout=subprocess.PIPE)
+                  universal_newlines=True, stdout=subprocess.PIPE)
           # proc_grp_id = os.getpgid(proc.pid)
           # actuallyprint("experiment pid %d pgid %d" % (proc.pid, proc_grp_id))
           # actuallyprint("{} writing to {}".format(nops, output))
