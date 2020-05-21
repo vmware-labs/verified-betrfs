@@ -386,27 +386,6 @@ module LruImpl {
       }
     }
 
-    method NextN(maxCount: uint64)
-      returns (elders: seq<uint64>)
-      requires Inv()
-      ensures |elders| <= maxCount as nat
-    {
-      var alders := new uint64[maxCount];
-      var i: uint64 := 0;
-      var node := head_node;
-
-      while node != null && i < maxCount
-        invariant i <= maxCount
-      {
-        alders[i] := node.value;
-        node := node.next;
-        i := i + 1;
-      }
-
-      return alders[..i];
-    }
-
-    
     // Unverified junk for debugging
     method Count()
     returns (count:uint64)
