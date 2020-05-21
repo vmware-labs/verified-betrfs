@@ -1,8 +1,19 @@
 #pragma once
 
 #include "DafnyRuntime.h"
+#include <chrono>
 
 namespace LinearCongruentialGenerator_Compile {
+  inline uint64_t steadyClockMillis() {
+    auto now = std::chrono::steady_clock::now();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        now.time_since_epoch()).count();
+  }
+
+  inline void opaqueBlackhole(uint64_t value) {
+    asm volatile("" : : "m"(value) : "memory");
+  }
+
   class LCG {
     uint64_t seed;
 
