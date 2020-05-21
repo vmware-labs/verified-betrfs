@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import glob
 import collections
 
-EXPERIMENT="veri_time_12"
+EXPERIMENT="veri_time_13"
 SLOW_THRESH = 20
 
 class Observation:
