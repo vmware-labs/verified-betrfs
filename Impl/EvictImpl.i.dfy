@@ -112,44 +112,6 @@ module EvictImpl {
     }
   }
 
-  method cleanOldestNodes(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
-  requires Inv(k, s)
-  requires s.ready
-  requires io.initialized()
-  requires |s.cache.I()| > 0
-  requires io !in s.Repr()
-  modifies io
-  modifies s.Repr()
-  ensures WellUpdated(s)
-  ensures s.ready
-  {
-    return;
-    var headroom;
-    if MaxCacheSizeUint64() < s.cache.Count() {
-      headroom := 0;
-    } else {
-      headroom := MaxCacheSizeUint64() - s.cache.Count();
-    }
-    if 10 <= headroom {
-      return;
-    }
-    var count := 10 - headroom;
-    var refs := s.lru.NextN(count);
-    var i: uint64 := 0;
-    while i < |refs| as uint64 {
-      var ref := refs[i];
-      var needToWrite := NeedToWrite(s, ref);
-      if needToWrite {
-        if s.outstandingIndirectionTableWrite.None? {
-          TryToWriteBlock(k, s, io, ref);
-        } else {
-        }
-      }
-      i := i + 1;
-    }
-  }
-
-  
   method PageInNodeReqOrMakeRoom(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
   requires Inv(k, s)
   requires s.ready
@@ -165,8 +127,6 @@ module EvictImpl {
   {
     EvictModel.reveal_PageInNodeReqOrMakeRoom();
 
-    cleanOldestNodes(k, s, io);
-    
     if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
       PageInNodeReq(k, s, io, ref);
     } else {
