@@ -571,25 +571,30 @@ module MainModule {
     result := [b0, b1, b2];
   }
 
-  method Run(n: uint64)
+  method Run(seed: uint64, n: uint64, dry: bool)
   {
     // var n: uint64 := 1_000_000;
     // var p: uint64 := 300_007;
     // var n: uint64 := 10_000_000;
-    var p: uint64 := 3_000_017;
+    // var p: uint64 := 3_000_017;
     // var n: uint64 := 100_000_000;
     // var p: uint64 := 1_073_741_827;
     linear var t := TMB.EmptyTree();
     var i: uint64 := 0;
+    var lcg: LCG := new LCG(seed);
+
+    var write_start: uint64 := steadyClockMillis();
     while i < n
       invariant 0 <= i <= n
       invariant TMB.WF(t)
 //      invariant fresh(t.repr)
     {
       var oldvalue;
-      var keyv := ((i * p) % n);
+      var keyv := lcg.next();
       var key := SeqFor(keyv);
-      t, oldvalue := TMB.Insert(t, key, i);
+      if (!dry) {
+        t, oldvalue := TMB.Insert(t, key, i);
+      }
 
       // Sanity check
 //      var found := TMB.Query(t, key);
@@ -599,8 +604,40 @@ module MainModule {
 
       i := i + 1;
     }
+    var write_end: uint64 := steadyClockMillis();
+    var write_duration: uint64 := write_end - write_start;
+    print(n, "\twrite\tlinear\t", write_duration, "\n");
 
-    print "PASSED\n";
+    i := 0;
+
+    var read_start: uint64 := steadyClockMillis();
+    while i < n
+      invariant 0 <= i <= n
+      invariant TMB.WF(t)
+//      invariant fresh(t.repr)
+    {
+      var oldvalue;
+      var keyv := lcg.next();
+      var key := SeqFor(keyv);
+      if (!dry) {
+        var result := TMB.Query(t, key);
+        if result.Some? {
+          opaqueBlackhole(result.value);
+        }
+      }
+
+      // Sanity check
+//      var found := TMB.Query(t, key);
+//      if !found.Some? {
+//        print "lost at ", i, "\n";
+//      }
+
+      i := i + 1;
+    }
+    var read_end: uint64 := steadyClockMillis();
+    var read_duration: uint64 := read_end - read_start;
+    print(n, "\tread\tlinear\t", read_duration, "\n");
+
     TMB.Free(t);
   }
 } 
