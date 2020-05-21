@@ -70,7 +70,7 @@ def main():
         for package in packages:
             package.count()
             accum.append(package.jsondict())
-        open("data/linear_lines.json", "w").write(json.dumps(accum))
+        open("data/linear_lines.json", "w").write(json.dumps(accum, indent=2))
     finally:
         do_cmd(["git", "checkout", start_branch])
         
