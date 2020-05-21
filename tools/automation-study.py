@@ -63,11 +63,14 @@ def plot(records):
     reveals = [record["reveal_count"] for record in records]
     reveals.sort()
     ax.hist(reveals, bins=max(reveals))
+    ax.set_ylabel("count of\nopaque definitions")
 
     ax = fig.add_subplot(212)
     xs = reveals
     ys = [i/(len(reveals)-1.0) for i in range(len(reveals))]
     ax.plot(xs, ys)
+    ax.set_ylabel("cum. frac. of\nopaque definitions")
+    ax.set_xlabel("number of times manually revealed")
     fig.savefig("automation-figure.pdf")
 
 def gather_constants(records):
@@ -127,7 +130,7 @@ def main():
 
     records = json.loads(open(INTERMEDIATE).read())
     print("Got %s records" % len(records))
-#    plot(records)
+    plot(records)
     defs = gather_constants(records)
     defs = totalDefinitions(defs)
     emit_constants(defs)
