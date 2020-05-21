@@ -3,6 +3,7 @@
 A hand-tuned script for doing head-to-head line counts of linear component across branches.
 """
 
+import json
 import collections
 import subprocess
 import line_count_lib
@@ -37,6 +38,13 @@ class Package:
     def display(self, msg):
         print(msg, self.label, self.counter)
 
+    def jsondict(self):
+        d = dict(self.counter)
+        d["label"] = self.label
+        d["branch"] = self.branch
+        d["sources"] = self.sources
+        return d
+
 packages = [
     Package("Hashtable-linear", branch="eval-btree-linear", sources=
             ["lib/DataStructures/LinearMutableMap.i.dfy"]),
@@ -58,9 +66,11 @@ def main():
     start_branch = cur_branch()
 
     try:
+        accum = []
         for package in packages:
             package.count()
-            package.display("final")
+            accum.append(package.jsondict())
+        open("data/linear_lines.json", "w").write(json.dumps(accum))
     finally:
         do_cmd(["git", "checkout", start_branch])
         
