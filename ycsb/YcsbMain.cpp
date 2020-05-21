@@ -556,7 +556,7 @@ void ycsbLoadAndRun(
     malloc_accounting_display("after experiment before teardown");
 }
 
-void dump_metadata(const char* workload_filename, const char* base_directory) {
+void dump_metadata(const char* workload_filename, const char* database_filename) {
   FILE* fp = fopen("/sys/fs/cgroup/memory/VeribetrfsExp/memory.limit_in_bytes", "r");
   char space[1000];
   char* line = fgets(space, sizeof(space), fp);
@@ -574,12 +574,12 @@ void dump_metadata(const char* workload_filename, const char* base_directory) {
   }
   fclose(fp);
 
-  printf("metadata base_directory %s", base_directory);
+  printf("metadata database_filename %s", database_filename);
   fflush(stdout);
   char cmdbuf[1000];
   // yes, this is a security hole. In the measurement framework,
   // not the actual system. You can take the man out of K&R, as they say...
-  snprintf(cmdbuf, sizeof(cmdbuf), "df --output=source %s | tail -1", base_directory);
+  snprintf(cmdbuf, sizeof(cmdbuf), "df --output=source %s | tail -1", database_filename);
   system(cmdbuf);
   fflush(stdout);
 }
@@ -588,59 +588,30 @@ int main(int argc, char* argv[]) {
     bool verbose = false;
  
     if (argc < 3) {
-        cerr << "error: expects two arguments: the workload spec, and the persistent data directory" << endl;
-        exit(-1);
-    }
-
-//    leakfinder_mark(1);
-//    for (int i=0; i<15; i++) {
-//      leakfinder_mark(1);
-//    }
-//    leakfinder_report(0);
-
-    std::string workload_filename(argv[1]);
-    std::string base_directory(argv[2]);
-    // (unsupported on macOS 10.14) std::filesystem::create_directory(base_directory);
-    // check that base_directory is empty
-    int status = std::system(("[ \"$(ls -A " + base_directory + ")\" ]").c_str());
-
-    dump_metadata(workload_filename.c_str(), base_directory.c_str());
-
-    if (status == 0) {
-        cerr << "error: " << base_directory << " appears to be non-empty" << endl;
-        exit(-1);
-    }
-
-    bool do_veribetrkv = false;
-    bool do_rocks = false;
-    bool do_kyoto = false;
-    bool do_berkeley = false;
-    bool do_nop = false;
-    for (int i = 3; i < argc; i++) {
+      cerr << "Usage: " << argv[0] << " <workload.spec> ";
 #ifdef _YCSB_VERIBETRFS
-      if (string(argv[i]) == "--veribetrkv") {
-        do_veribetrkv = true;
-      }
-      else
+      cout << "<veribetrkv.img> ";
 #endif
-#ifdef _YCSB_ROCKS        
-      if (string(argv[i]) == "--rocks") {
-        do_rocks = true;
-      }
-      else
-#endif
-#ifdef _YCSB_KYOTO
-      if (string(argv[i]) == "--kyoto") {
-        do_kyoto = true;
-      }
-      else
+#ifdef _YCSB_ROCKS
+      cout << "<rocks.db> ";
 #endif
 #ifdef _YCSB_BERKELEYDB
-      if (string(argv[i]) == "--berkeley") {
-        do_berkeley = true;
-      }
-      else
+      cout << "<berkeley.db> ";
 #endif
+#ifdef _YCSB_KYOTO
+      cout << "<kyoto.cbt> ";
+#endif
+      cout << "[--nop]" << endl;
+      exit(-1);
+    }
+
+    std::string workload_filename(argv[1]);
+    std::string database_filename(argv[2]);
+
+    dump_metadata(workload_filename.c_str(), database_filename.c_str());
+
+    bool do_nop = false;
+    for (int i = 3; i < argc; i++) {
       if (string(argv[i]) == "--nop") {
         do_nop = true;
       }
@@ -648,10 +619,6 @@ int main(int argc, char* argv[]) {
         cerr << "unrecognized: " << argv[i] << endl;
         exit(-1);
       }
-    }
-    if (!do_veribetrkv && !do_rocks && !do_nop && !do_kyoto && !do_berkeley) {
-        cerr << "No benchmark flags specified; doing nothing." << endl;
-        exit(-1);
     }
 
     utils::Properties props = ycsbcwrappers::props_from(workload_filename);
@@ -668,26 +635,16 @@ int main(int argc, char* argv[]) {
 
 
     // == veribetrkv ==
-    if (do_veribetrkv) {
     #ifdef _YCSB_VERIBETRFS
-        std::string veribetrfs_filename = base_directory + "veribetrfs.img";
-        // (unsupported on macOS 10.14) std::filesystem::remove_all(veribetrfs_filename);
-        system(("rm -rf " + veribetrfs_filename).c_str());
-        Mkfs(veribetrfs_filename);
-        Application app(veribetrfs_filename);
+        Mkfs(database_filename);
+        Application app(database_filename);
         VeribetrkvFacade db(app);
     
         ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
     #endif 
-    }
 
     // == rocksdb ==
-    if (do_rocks) {
     #ifdef _YCSB_ROCKS
-        static string rocksdb_path = base_directory + "rocksdb.db";
-        // (unsupported on macOS 10.14) std::filesystem::remove_all(rocksdb_path);
-        system(("rm -rf " + rocksdb_path).c_str());
-
         rocksdb::DB* rocks_db;
         rocksdb::Options options;
         options.create_if_missing = true;
@@ -702,23 +659,17 @@ int main(int argc, char* argv[]) {
         // options.use_direct_reads = true;
         // options.use_direct_io_for_flush_and_compaction = true;
 
-        rocksdb::Status status = rocksdb::DB::Open(options, rocksdb_path, &rocks_db);
+        rocksdb::Status status = rocksdb::DB::Open(options, database_filename, &rocks_db);
         assert(status.ok());
         RocksdbFacade db(*rocks_db);
 
         ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
     #endif 
-    }
 
     // == kyotodb ==
-    if (do_kyoto) {
     #ifdef _YCSB_KYOTO
-        static string kyoto_path = base_directory + "kyoto.kct";
-        // (unsupported on macOS 10.14) std::filesystem::remove_all(rocksdb_path);
-        system(("rm -rf " + kyoto_path).c_str());
-
         kyotocabinet::TreeDB tdb;
-        tdb.open(kyoto_path,
+        tdb.open(database_filename,
                   kyotocabinet::TreeDB::OWRITER
                 | kyotocabinet::TreeDB::OCREATE
                 | kyotocabinet::TreeDB::ONOLOCK);
@@ -726,26 +677,22 @@ int main(int argc, char* argv[]) {
 
         ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
     #endif 
-    }
 
     // == berkeleydb ==
-    if (do_berkeley) {
     #ifdef _YCSB_BERKELEYDB
-        static string berkeley_path = base_directory + "berkeley.db";
+        static env_directory = dirname(database_filename.c_str());
         // (unsupported on macOS 10.14) std::filesystem::remove_all(rocksdb_path);
-        system(("rm -rf " + berkeley_path).c_str());
+        //system(("rm -rf " + berkeley_path).c_str());
 
         DbEnv env(DB_CXX_NO_EXCEPTIONS);
-        env.open(base_directory.c_str(), DB_CREATE | DB_INIT_MPOOL, 0);
+        env.open(env_directory, DB_CREATE | DB_INIT_MPOOL, 0);
         Db* pdb;
         pdb = new Db(&env, DB_CXX_NO_EXCEPTIONS);
-        pdb->open(NULL, berkeley_path.c_str(), NULL, DB_BTREE, DB_CREATE, 0);
+        pdb->open(NULL, database_filename.c_str(), NULL, DB_BTREE, DB_CREATE, 0);
         BerkeleyDBFacade db(&env, pdb);
         
         ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
     #endif 
-    }
-
 
     // == nop ==
     if (do_nop) {

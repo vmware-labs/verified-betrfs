@@ -35,7 +35,7 @@ module Bounds {
   function method SuperblockSizeUint64() : uint64 { 4096 }  // Bytes
 
   function method JournalBlockSizeUint64() : uint64 { 4096 } // Bytes
-  function method DiskNumJournalBlocksUint64() : uint64 { 128*1024 /* 512MB */ } // JournalBlockSize() blocks
+  function method DiskNumJournalBlocksUint64() : uint64 { 64*1024 /* 512MB */ } // JournalBlockSize() blocks
 
   function method IndirectionTableBlockSizeUint64() : uint64 { 24*1024*1024 } // Bytes
 
@@ -50,7 +50,7 @@ module Bounds {
 
 
   function method MaxTotalBucketWeightUint64() : uint64 { 2*1024*1024-65536 }
-  function method MaxCacheSizeUint64() : uint64 { 400 }
+  function method MaxCacheSizeUint64() : uint64 { 100 }
 
   function method MaxNumChildrenUint64() : uint64 { 8 }
 
