@@ -7,3 +7,6 @@
 [submodule "vendor/rocksdb"]
 	path = vendor/rocksdb
 	url = git@github.com:facebook/rocksdb.git
+[submodule "vendor/kyoto"]
+	path = vendor/kyoto
+	url = git@github.com:splatlab/kyoto.git

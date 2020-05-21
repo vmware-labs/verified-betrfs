@@ -15,6 +15,15 @@
 #include "rocksdb/db.h"
 #endif
 
+#ifdef _YCSB_KYOTO
+#include <kchashdb.h>
+#endif
+
+#ifdef _YCSB_BERKELEYDB
+#include <db_cxx.h>
+#include <dbstl_map.h>
+#endif
+
 #include <strstream>
 //#include <filesystem>
 #include <chrono>
@@ -335,7 +344,7 @@ public:
     }
 
     inline void cacheDebug() {
-      app.CacheDebug();
+      //app.CacheDebug();
     }
 };
 
@@ -382,13 +391,112 @@ public:
     inline void evictEverything() {
     }
 
-    inline void memDebugFrequent() {}
-    inline void memDebugInfrequent() { }
-    inline void cacheDebug() { }
-
+    inline void CountAmassAllocations() {
+    }
 };
 
 const string RocksdbFacade::name = string("rocksdb");
+#endif
+
+#ifdef _YCSB_KYOTO
+class KyotoFacade {
+protected:
+    kyotocabinet::TreeDB &db;
+    
+public:
+    static const string name;
+
+    KyotoFacade(kyotocabinet::TreeDB &db) : db(db) { }
+
+    inline void query(const string& key) {
+      string result;
+      db.get(key, &result);
+    }
+
+    inline void insert(const string& key, const string& value) {
+      if (!db.set(key, value)) {
+        cout << "Insert failed" << endl;
+        abort();
+      }
+    }
+
+    inline void update(const string& key, const string& value) {
+      if (!db.set(key, value)) {
+        cout << "Update failed" << endl;
+        abort();
+      }
+    }
+
+    inline void sync(bool /*fullSync*/) {
+      db.synchronize();
+    }
+
+    inline void evictEverything() {
+    }
+
+    inline void CountAmassAllocations() {
+    }
+};
+
+const string KyotoFacade::name = string("kyotodb");
+#endif
+
+#ifdef _YCSB_BERKELEYDB
+class BerkeleyDBFacade {
+protected:
+    DbEnv *env;
+    Db* pdb;
+    dbstl::db_map<string, string> *huge_map;
+
+public:
+    static const string name;
+
+  BerkeleyDBFacade(DbEnv *_env, Db *_pdb) : env(_env), pdb(_pdb) {
+    huge_map = new dbstl::db_map<string, string>(pdb, env);
+  }
+
+    inline void query(const string& key) {
+      string result;
+      try {
+        const auto &t = *huge_map; // Get a const reference so operator[] doesn't insert key if it doesn't exist.
+        result = t[key];
+      } catch (DbException& e) {
+        cerr << "DbException: " << e.what() << endl;
+        abort();
+      } catch (std::exception& e) {
+        cerr << e.what() << endl;
+        abort();
+      }
+    }
+
+    inline void insert(const string& key, const string& value) {
+      try {
+        (*huge_map)[key] = value;
+      } catch (DbException& e) {
+        cerr << "DbException: " << e.what() << endl;
+        abort();
+      } catch (std::exception& e) {
+        cerr << e.what() << endl;
+        abort();
+      }
+    }
+
+    inline void update(const string& key, const string& value) {
+      insert(key, value);
+    }
+
+    inline void sync(bool /*fullSync*/) {
+      pdb->sync(0);
+    }
+
+    inline void evictEverything() {
+    }
+
+    inline void CountAmassAllocations() {
+    }
+};
+
+const string BerkeleyDBFacade::name = string("berkeleydb");
 #endif
 
 class NopFacade {
@@ -498,15 +606,35 @@ int main(int argc, char* argv[]) {
 
     bool do_veribetrkv = false;
     bool do_rocks = false;
+    bool do_kyoto = false;
+    bool do_berkeley = false;
     bool do_nop = false;
     for (int i = 3; i < argc; i++) {
+#ifdef _YCSB_VERIBETRFS
       if (string(argv[i]) == "--veribetrkv") {
         do_veribetrkv = true;
       }
-      else if (string(argv[i]) == "--rocks") {
+      else
+#endif
+#ifdef _YCSB_ROCKS        
+      if (string(argv[i]) == "--rocks") {
         do_rocks = true;
       }
-      else if (string(argv[i]) == "--nop") {
+      else
+#endif
+#ifdef _YCSB_KYOTO
+      if (string(argv[i]) == "--kyoto") {
+        do_kyoto = true;
+      }
+      else
+#endif
+#ifdef _YCSB_BERKELEYDB
+      if (string(argv[i]) == "--berkeley") {
+        do_berkeley = true;
+      }
+      else
+#endif
+      if (string(argv[i]) == "--nop") {
         do_nop = true;
       }
       else {
@@ -514,7 +642,7 @@ int main(int argc, char* argv[]) {
         exit(-1);
       }
     }
-    if (!do_veribetrkv && !do_rocks && !do_nop) {
+    if (!do_veribetrkv && !do_rocks && !do_nop && !do_kyoto && !do_berkeley) {
         cerr << "No benchmark flags specified; doing nothing." << endl;
         exit(-1);
     }
@@ -571,6 +699,42 @@ int main(int argc, char* argv[]) {
         assert(status.ok());
         RocksdbFacade db(*rocks_db);
 
+        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
+    #endif 
+    }
+
+    // == kyotodb ==
+    if (do_kyoto) {
+    #ifdef _YCSB_KYOTO
+        static string kyoto_path = base_directory + "kyoto.kct";
+        // (unsupported on macOS 10.14) std::filesystem::remove_all(rocksdb_path);
+        system(("rm -rf " + kyoto_path).c_str());
+
+        kyotocabinet::TreeDB tdb;
+        tdb.open(kyoto_path,
+                  kyotocabinet::TreeDB::OWRITER
+                | kyotocabinet::TreeDB::OCREATE
+                | kyotocabinet::TreeDB::ONOLOCK);
+        KyotoFacade db(tdb);
+
+        ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
+    #endif 
+    }
+
+    // == berkeleydb ==
+    if (do_berkeley) {
+    #ifdef _YCSB_BERKELEYDB
+        static string berkeley_path = base_directory + "berkeley.db";
+        // (unsupported on macOS 10.14) std::filesystem::remove_all(rocksdb_path);
+        system(("rm -rf " + berkeley_path).c_str());
+
+        DbEnv env(DB_CXX_NO_EXCEPTIONS);
+        env.open(base_directory.c_str(), DB_CREATE | DB_INIT_MPOOL, 0);
+        Db* pdb;
+        pdb = new Db(&env, DB_CXX_NO_EXCEPTIONS);
+        pdb->open(NULL, berkeley_path.c_str(), NULL, DB_BTREE, DB_CREATE, 0);
+        BerkeleyDBFacade db(&env, pdb);
+        
         ycsbLoadAndRun(db, *workload, record_count, num_ops, sync_interval_ms, verbose);
     #endif 
     }
