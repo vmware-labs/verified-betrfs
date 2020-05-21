@@ -3,6 +3,7 @@
 A hand-tuned script for doing head-to-head line counts of linear component across branches.
 """
 
+import collections
 import subprocess
 import line_count_lib
 import line_counter_report_lib
@@ -16,6 +17,7 @@ class Package:
         self.label = label
         self.branch = branch
         self.sources = sources
+        self.counter = collections.Counter()
 
     def count(self):
         do_cmd(["git", "checkout", self.branch])
@@ -27,7 +29,13 @@ class Package:
         counter = line_count_lib.Counter(".")
         dafnyFile = line_count_lib.DafnyFile(source, 0.0)
         counter.collect_line_counts([dafnyFile])
-        print("spec",dafnyFile.spec, "impl",dafnyFile.impl, "proof",dafnyFile.proof)
+        self.counter["spec"] += dafnyFile.spec
+        self.counter["impl"] += dafnyFile.impl
+        self.counter["proof"] += dafnyFile.proof
+        self.display("intermediate")
+
+    def display(self, msg):
+        print(msg, self.label, self.counter)
 
 packages = [
     Package("BTree-linear", branch="eval-btree-linear", sources=
@@ -47,6 +55,7 @@ def main():
     try:
         for package in packages:
             package.count()
+            package.display("final")
     finally:
         do_cmd(["git", "checkout", start_branch])
         
