@@ -459,14 +459,14 @@ module PivotBetreeSpecWFNodes {
     WFApplyRepivot(r.leaf, r.pivots);
   }
 
-  lemma ValidRepivotInvNodes(r: Repivot)
-  requires ValidRepivot(r)
-  requires forall i | 0 <= i < |RepivotReads(r)| :: InvNode(RepivotReads(r)[i].node)
-  ensures forall i | 0 <= i < |RepivotOps(r)| :: InvNode(RepivotOps(r)[i].node)
-  {
-    assert InvNode(RepivotReads(r)[0].node);
-    InvApplyRepivot(r.leaf, r.pivots);
-  }
+//~  lemma ValidRepivotInvNodes(r: Repivot)
+//~  requires ValidRepivot(r)
+//~  requires forall i | 0 <= i < |RepivotReads(r)| :: InvNode(RepivotReads(r)[i].node)
+//~  ensures forall i | 0 <= i < |RepivotOps(r)| :: InvNode(RepivotOps(r)[i].node)
+//~  {
+//~    assert InvNode(RepivotReads(r)[0].node);
+//~    InvApplyRepivot(r.leaf, r.pivots);
+//~  }
 
   lemma ValidInsertWritesWFNodes(ins: MessageInsertion)
   requires ValidInsertion(ins)
@@ -516,40 +516,40 @@ module PivotBetreeSpecWFNodes {
     assert InvNode(newroot);
   }
 
-  lemma ValidStepWritesInvNodes(betreeStep: BetreeStep)
-  requires ValidBetreeStep(betreeStep)
-  requires forall i | 0 <= i < |BetreeStepReads(betreeStep)| :: InvNode(BetreeStepReads(betreeStep)[i].node)
-  ensures forall i | 0 <= i < |BetreeStepOps(betreeStep)| :: InvNode(BetreeStepOps(betreeStep)[i].node)
-  {
-    match betreeStep {
-      case BetreeQuery(q) => {}
-      case BetreeSuccQuery(q) => {}
-      case BetreeInsert(ins) => {
-        assert forall i | 0 <= i < |BetreeStepReads(betreeStep)| :: BetreeStepReads(betreeStep)[i].node == InsertionReads(betreeStep.ins)[i].node;
-        ValidInsertWritesInvNodes(ins);
-      }
-      case BetreeFlush(flush) => {
-        assert forall i | 0 <= i < |BetreeStepReads(betreeStep)| :: BetreeStepReads(betreeStep)[i].node == FlushReads(betreeStep.flush)[i].node;
-        ValidFlushWritesInvNodes(flush);
-      }
-      case BetreeGrow(growth) => {
-        assert forall i | 0 <= i < |BetreeStepReads(betreeStep)| :: BetreeStepReads(betreeStep)[i].node == GrowReads(betreeStep.growth)[i].node;
-        ValidGrowWritesInvNodes(growth);
-      }
-      case BetreeSplit(fusion) => {
-        assert forall i | 0 <= i < |BetreeStepReads(betreeStep)| :: BetreeStepReads(betreeStep)[i].node == SplitReads(betreeStep.fusion)[i].node;
-        ValidSplitWritesInvNodes(fusion);
-      }
-      case BetreeMerge(fusion) => {
-        assert forall i | 0 <= i < |BetreeStepReads(betreeStep)| :: BetreeStepReads(betreeStep)[i].node == MergeReads(betreeStep.fusion)[i].node;
-        ValidMergeWritesInvNodes(fusion);
-      }
-      case BetreeRepivot(r) => {
-        assert forall i | 0 <= i < |BetreeStepReads(betreeStep)| :: BetreeStepReads(betreeStep)[i].node == RepivotReads(betreeStep.repivot)[i].node;
-        ValidRepivotInvNodes(r);
-      }
-    }
-  }
+//~  lemma ValidStepWritesInvNodes(betreeStep: BetreeStep)
+//~  requires ValidBetreeStep(betreeStep)
+//~  requires forall i | 0 <= i < |BetreeStepReads(betreeStep)| :: InvNode(BetreeStepReads(betreeStep)[i].node)
+//~  ensures forall i | 0 <= i < |BetreeStepOps(betreeStep)| :: InvNode(BetreeStepOps(betreeStep)[i].node)
+//~  {
+//~    match betreeStep {
+//~      case BetreeQuery(q) => {}
+//~      case BetreeSuccQuery(q) => {}
+//~      case BetreeInsert(ins) => {
+//~        assert forall i | 0 <= i < |BetreeStepReads(betreeStep)| :: BetreeStepReads(betreeStep)[i].node == InsertionReads(betreeStep.ins)[i].node;
+//~        ValidInsertWritesInvNodes(ins);
+//~      }
+//~      case BetreeFlush(flush) => {
+//~        assert forall i | 0 <= i < |BetreeStepReads(betreeStep)| :: BetreeStepReads(betreeStep)[i].node == FlushReads(betreeStep.flush)[i].node;
+//~        ValidFlushWritesInvNodes(flush);
+//~      }
+//~      case BetreeGrow(growth) => {
+//~        assert forall i | 0 <= i < |BetreeStepReads(betreeStep)| :: BetreeStepReads(betreeStep)[i].node == GrowReads(betreeStep.growth)[i].node;
+//~        ValidGrowWritesInvNodes(growth);
+//~      }
+//~      case BetreeSplit(fusion) => {
+//~        assert forall i | 0 <= i < |BetreeStepReads(betreeStep)| :: BetreeStepReads(betreeStep)[i].node == SplitReads(betreeStep.fusion)[i].node;
+//~        ValidSplitWritesInvNodes(fusion);
+//~      }
+//~      case BetreeMerge(fusion) => {
+//~        assert forall i | 0 <= i < |BetreeStepReads(betreeStep)| :: BetreeStepReads(betreeStep)[i].node == MergeReads(betreeStep.fusion)[i].node;
+//~        ValidMergeWritesInvNodes(fusion);
+//~      }
+//~      case BetreeRepivot(r) => {
+//~        assert forall i | 0 <= i < |BetreeStepReads(betreeStep)| :: BetreeStepReads(betreeStep)[i].node == RepivotReads(betreeStep.repivot)[i].node;
+//~        ValidRepivotInvNodes(r);
+//~      }
+//~    }
+//~  }
 
   lemma ValidStepWritesWFNodes(betreeStep: BetreeStep)
   requires ValidBetreeStep(betreeStep)
