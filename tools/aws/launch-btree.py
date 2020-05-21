@@ -23,7 +23,7 @@ linear_suite = Suite(
     "linear",
     Variable("git_branch", "git_branch", [Value("linear", "eval-btree-linear")]),
     *common_vars)
-suite = ConcatSuite("andreal-btree-full-repr", repr_suite)
+suite = ConcatSuite("andreal-btree-full-linear", linear_suite)
 
 MBTREE_PATH="./tools/run-btree-config-experiment.py"
 
