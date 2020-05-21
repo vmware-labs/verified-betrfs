@@ -6,6 +6,7 @@ include "../Base/Maps.s.dfy"
 include "../Base/Option.s.dfy"
 include "../Base/mathematics.i.dfy"
 include "BtreeModel.i.dfy"
+include "../../lib/Math/LinearCongruentialGenerator.s.dfy"
 
 abstract module MutableBtree {
   import opened LinearSequence_s
@@ -558,6 +559,7 @@ module MainModule {
   import opened LinearSequence_i
   import opened NativeTypes
   import TMB = TestMutableBtree`API
+  import opened LinearCongruentialGenerator
 
   method SeqFor(i: uint64)
   returns (result:TMB.Key)
