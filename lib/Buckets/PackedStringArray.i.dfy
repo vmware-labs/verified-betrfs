@@ -49,16 +49,16 @@ module PackedStringArray {
       psa.offsets[i-1]
   }
 
-  lemma psaStartsLte(psa: Psa, i: uint64, j: uint64)
-  requires WF(psa)
-  requires 0 <= i as int <= j as int < |psa.offsets|
-  ensures psaStart(psa, i) <= psaStart(psa, j)
-  {
-    if i == 0 {
-    } else {
-      Uint32_Order.IsSortedImpliesLte(psa.offsets, i as int - 1, j as int - 1);
-    }
-  }
+//~  lemma psaStartsLte(psa: Psa, i: uint64, j: uint64)
+//~  requires WF(psa)
+//~  requires 0 <= i as int <= j as int < |psa.offsets|
+//~  ensures psaStart(psa, i) <= psaStart(psa, j)
+//~  {
+//~    if i == 0 {
+//~    } else {
+//~      Uint32_Order.IsSortedImpliesLte(psa.offsets, i as int - 1, j as int - 1);
+//~    }
+//~  }
     
   function method psaEnd(psa: Psa, i: uint64) : (end : uint32)
   requires WF(psa)
@@ -418,37 +418,37 @@ module PackedStringArray {
     FlattenLengthAdditive(FlattenShape(strs1), FlattenShape(strs2));
   }
 
-  lemma psaCanAppendSubSeq(psa: Psa, strs: seq<Key>, from: nat, to: nat)
-    requires WF(psa)
-    requires psaCanAppendSeq(psa, strs)
-    requires from <= to <= |strs|
-    ensures psaCanAppendSeq(psa, strs[from..to])
-  {
-    var strssh := FlattenShape(strs);
-    var strsl := FlattenLength(strssh);
-    
-    var a := strs[..from];
-    var ash := FlattenShape(a);
-    var al := FlattenLength(ash);
-
-    var b := strs[from..to];
-    var bsh := FlattenShape(b);
-    var bl := FlattenLength(bsh);
-    
-    var c := strs[to..];
-    var csh := FlattenShape(c);
-    var cl := FlattenLength(csh);
-
-    assert strs == a + b + c;
-    
-    FlattenShapeAdditive(a + b, c);
-    FlattenShapeAdditive(a, b);
-    //assert strssh == ash + bsh + csh;
-
-    FlattenLengthAdditive(ash + bsh, csh);
-    FlattenLengthAdditive(ash, bsh);
-    //assert strsl == al + bl + cl;
-  }
+//~  lemma psaCanAppendSubSeq(psa: Psa, strs: seq<Key>, from: nat, to: nat)
+//~    requires WF(psa)
+//~    requires psaCanAppendSeq(psa, strs)
+//~    requires from <= to <= |strs|
+//~    ensures psaCanAppendSeq(psa, strs[from..to])
+//~  {
+//~    var strssh := FlattenShape(strs);
+//~    var strsl := FlattenLength(strssh);
+//~    
+//~    var a := strs[..from];
+//~    var ash := FlattenShape(a);
+//~    var al := FlattenLength(ash);
+//~
+//~    var b := strs[from..to];
+//~    var bsh := FlattenShape(b);
+//~    var bl := FlattenLength(bsh);
+//~    
+//~    var c := strs[to..];
+//~    var csh := FlattenShape(c);
+//~    var cl := FlattenLength(csh);
+//~
+//~    assert strs == a + b + c;
+//~    
+//~    FlattenShapeAdditive(a + b, c);
+//~    FlattenShapeAdditive(a, b);
+//~    //assert strssh == ash + bsh + csh;
+//~
+//~    FlattenLengthAdditive(ash + bsh, csh);
+//~    FlattenLengthAdditive(ash, bsh);
+//~    //assert strsl == al + bl + cl;
+//~  }
   
   lemma psaAppendSeqAdditive(psa: Psa, strs1: seq<Key>, strs2: seq<Key>)
     requires WF(psa)

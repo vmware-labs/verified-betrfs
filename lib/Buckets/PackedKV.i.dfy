@@ -289,31 +289,31 @@ module PackedKV {
     AppendEncodedMessage(pkv, key, Message_to_bytestring(msg))
   }
 
-  lemma IMapAppend(pkv: Pkv, key: Key, msg: seq<byte>)
-    requires WF(pkv)
-    requires canAppend(pkv, key, msg)
-    ensures IMap(AppendEncodedMessage(pkv, key, msg)) == IMap(pkv)[key := bytestring_to_Message(msg)]
-  {
-    PSA.psaAppendIAppend(pkv.keys, key);
-    PSA.psaAppendIAppend(pkv.messages, msg);
-    var keys := PSA.I(pkv.keys);
-    var messages := IMessages(pkv.messages);
-    var newpkv := AppendEncodedMessage(pkv, key, msg);
-    var newkeys := PSA.I(newpkv.keys);
-    var newmessages := IMessages(newpkv.messages);
-
-    assert forall i | 0 <= i < |messages| :: Sequences.DropLast(newmessages)[i] == bytestring_to_Message(PSA.I(newpkv.messages)[i]);
-    assert Sequences.DropLast(newmessages) == messages;
-    assert Last(newmessages) == bytestring_to_Message(msg);
-
-    calc {
-      IMap(newpkv);
-      { reveal_BucketMapOfSeq(); }
-      BucketMapOfSeq(keys, messages)[key := bytestring_to_Message(msg)];
-      { reveal_BucketMapOfSeq(); }
-      IMap(pkv)[key := bytestring_to_Message(msg)];
-    }
-  }
+//~  lemma IMapAppend(pkv: Pkv, key: Key, msg: seq<byte>)
+//~    requires WF(pkv)
+//~    requires canAppend(pkv, key, msg)
+//~    ensures IMap(AppendEncodedMessage(pkv, key, msg)) == IMap(pkv)[key := bytestring_to_Message(msg)]
+//~  {
+//~    PSA.psaAppendIAppend(pkv.keys, key);
+//~    PSA.psaAppendIAppend(pkv.messages, msg);
+//~    var keys := PSA.I(pkv.keys);
+//~    var messages := IMessages(pkv.messages);
+//~    var newpkv := AppendEncodedMessage(pkv, key, msg);
+//~    var newkeys := PSA.I(newpkv.keys);
+//~    var newmessages := IMessages(newpkv.messages);
+//~
+//~    assert forall i | 0 <= i < |messages| :: Sequences.DropLast(newmessages)[i] == bytestring_to_Message(PSA.I(newpkv.messages)[i]);
+//~    assert Sequences.DropLast(newmessages) == messages;
+//~    assert Last(newmessages) == bytestring_to_Message(msg);
+//~
+//~    calc {
+//~      IMap(newpkv);
+//~      { reveal_BucketMapOfSeq(); }
+//~      BucketMapOfSeq(keys, messages)[key := bytestring_to_Message(msg)];
+//~      { reveal_BucketMapOfSeq(); }
+//~      IMap(pkv)[key := bytestring_to_Message(msg)];
+//~    }
+//~  }
 
   function subPkv(pkv: Pkv, from: uint64, to: uint64) : (result: Pkv)
     requires WF(pkv)
@@ -629,12 +629,12 @@ module DynamicPkv {
     10*(Uint32UpperBound() - 1)
   }
 
-  lemma PkvWeightBounds(pkv: PKV.Pkv)
-    requires PKV.WF(pkv)
-    ensures PKV.WeightPkv(pkv) as nat <= PkvWeightBound()
-  {
-    WeightBucketPkv_eq_WeightPkv(pkv);
-  }
+//~  lemma PkvWeightBounds(pkv: PKV.Pkv)
+//~    requires PKV.WF(pkv)
+//~    ensures PKV.WeightPkv(pkv) as nat <= PkvWeightBound()
+//~  {
+//~    WeightBucketPkv_eq_WeightPkv(pkv);
+//~  }
   
   class DynamicPkv {
     var keys: PKV.PSA.DynamicPsa

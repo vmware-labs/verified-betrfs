@@ -11,13 +11,36 @@ def relevantSources():
     dafnyRoot = "Impl/Bundle.i.dfy"
     return depsFromDfySources([dafnyRoot])
 
+lineComment = re.compile(r'//.*$')
+blockComment = re.compile(r'/[*]([^*]|[*]+[^/])*[*]+/')
+startComment = re.compile(r'/[*].*$')
+endComment = re.compile(r'^.*[*]/')
+refToLine = {}
+refToLines = {}
+
 def grepOne(iref, regex):
     rec = re.compile(regex)
-    lines = open(iref.normPath).readlines()
+    if iref in refToLines:
+        lines = refToLines[iref]
+    else:
+        lines = open(iref.normPath).readlines()
+        lines = [lineComment.sub('', line) for line in lines] # remove // comments
+        lines = [blockComment.sub('', line) for line in lines] # remove single-line /* */ comments
+        lines = [startComment.sub('/*', line) for line in lines] # simplify multi-line /*
+        lines = [endComment.sub('*/', line) for line in lines] # simplify multi-line */
+        refToLines[iref] = lines
     output = set()
+    inComment = False
     for i in range(len(lines)):
-        if rec.search(lines[i]):
-            output.add(IncludeReference(iref, i+1, iref.absPath))
+        line = lines[i]
+        if line.startswith('*/'):
+            inComment = False
+        if not inComment and rec.search(line):
+            ir = IncludeReference(iref, i+1, iref.absPath)
+            output.add(ir)
+            refToLine[ir] = line
+        if line.strip().endswith('/*'):
+            inComment = True
     return output
 
 def grepAll(regex):
@@ -55,7 +78,7 @@ INTERMEDIATE = "auto.data"
 
 def scrape():
     records = opaqueInstances()
-    open(INTERMEDIATE, "w").write(json.dumps(records))
+    open(INTERMEDIATE, "w").write(json.dumps(records, indent = 4))
 
 def plot(records):
     fig = plt.figure()
@@ -63,11 +86,14 @@ def plot(records):
     reveals = [record["reveal_count"] for record in records]
     reveals.sort()
     ax.hist(reveals, bins=max(reveals))
+    ax.set_ylabel("count of\nopaque definitions")
 
     ax = fig.add_subplot(212)
     xs = reveals
     ys = [i/(len(reveals)-1.0) for i in range(len(reveals))]
     ax.plot(xs, ys)
+    ax.set_ylabel("cum. frac. of\nopaque definitions")
+    ax.set_xlabel("number of times manually revealed")
     fig.savefig("automation-figure.pdf")
 
 def gather_constants(records):
@@ -122,12 +148,19 @@ def emit_constants(defs):
         for k,v in defs.items():
             fp.write("\\newcommand{\\%s}{%s}\n" % (k, v))
 
+def find_dead_lemmas():
+    lemmaRE = r'\blemma\b(\s|{[^}]+})+(?P<X>\w+)'
+    lemmas = [re.search(lemmaRE, refToLine[r]).group('X') for r in grepAll(lemmaRE)]
+    for x in lemmas:
+        if len(grepAll(r"\b" + x + r"\b")) <= 1:
+            print(x)
+
 def main():
     #scrape()
 
     records = json.loads(open(INTERMEDIATE).read())
     print("Got %s records" % len(records))
-#    plot(records)
+    plot(records)
     defs = gather_constants(records)
     defs = totalDefinitions(defs)
     emit_constants(defs)
