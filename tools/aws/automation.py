@@ -26,7 +26,7 @@ def log(msg):
         logfile.flush()
 
 def retrieve_running_workers():
-    workers_pipe = subprocess.Popen("ssh bastion veribetrfs/tools/aws/describe-instances.py --running --json".split(), stdout=subprocess.PIPE)
+    workers_pipe = subprocess.Popen("ssh -i ~/.ssh/veribetrfsbastion.pem ubuntu@3.21.176.58 python3 veribetrfs/tools/aws/describe-instances.py --running --json".split(), stdout=subprocess.PIPE)
     workers_json,_ = workers_pipe.communicate()
     workers = json.loads(workers_json)
     return workers

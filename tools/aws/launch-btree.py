@@ -5,14 +5,14 @@ from suite import *
 
 common_vars = [
     Variable("ops", "run_btree", [
-        Value("2pows", "ops=[22,23,24,25,26,27,28,29]") ]),
+        Value("2pows", "ops=[21,22,23,24,25,26,27,28]") ]),
     Variable("seed", "run_btree", [
+        Value("seed0", "348725789"),
         Value("seed1", "34578699348"),
         Value("seed2", "23945765203"),
         Value("seed3", "625478238923"),
         Value("seed4", "657843290874"),
         Value("seed5", "9526729840202"),
-        Value("seed6", "348725789"),
         ]),
     ]
 repr_suite = Suite(
@@ -23,7 +23,7 @@ linear_suite = Suite(
     "linear",
     Variable("git_branch", "git_branch", [Value("linear", "eval-btree-linear")]),
     *common_vars)
-suite = ConcatSuite("andreal-btree-full", repr_suite)
+suite = ConcatSuite("andreal-btree-full-repr", repr_suite)
 
 MBTREE_PATH="./tools/run-btree-config-experiment.py"
 
