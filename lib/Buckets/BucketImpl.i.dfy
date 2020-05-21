@@ -331,12 +331,12 @@ module BucketImpl {
       set i, o | 0 <= i < |s| && o in s[i].Repr :: o
     }
 
-    static twostate lemma ReprSeqDependsOnlyOnReprs(s: seq<MutBucket>)
-      requires forall i | 0 <= i < |s| :: s[i].Repr == old(s[i].Repr)
-      ensures ReprSeq(s) == old(ReprSeq(s))
-    {
-      reveal_ReprSeq();
-    }
+//~    static twostate lemma ReprSeqDependsOnlyOnReprs(s: seq<MutBucket>)
+//~      requires forall i | 0 <= i < |s| :: s[i].Repr == old(s[i].Repr)
+//~      ensures ReprSeq(s) == old(ReprSeq(s))
+//~    {
+//~      reveal_ReprSeq();
+//~    }
     
     
     static predicate {:opaque} InvSeq(s: seq<MutBucket>)
@@ -449,12 +449,12 @@ module BucketImpl {
           buckets[i].Repr !! buckets[j].Repr
     }
 
-    static twostate lemma ReprSeqDisjointDependsOnlyOnReprs(s: seq<MutBucket>)
-      requires forall i | 0 <= i < |s| :: s[i].Repr == old(s[i].Repr)
-      ensures ReprSeqDisjoint(s) == old(ReprSeqDisjoint(s))
-    {
-      reveal_ReprSeqDisjoint();
-    }
+//~    static twostate lemma ReprSeqDisjointDependsOnlyOnReprs(s: seq<MutBucket>)
+//~      requires forall i | 0 <= i < |s| :: s[i].Repr == old(s[i].Repr)
+//~      ensures ReprSeqDisjoint(s) == old(ReprSeqDisjoint(s))
+//~    {
+//~      reveal_ReprSeqDisjoint();
+//~    }
     
     
     static lemma ReprSeqDisjointOfLen1(buckets: seq<MutBucket>)
@@ -804,14 +804,14 @@ module BucketImpl {
       }
     }
 
-    static lemma Isuffix(buckets: seq<MutBucket>, a: int)
-    requires 0 <= a <= |buckets|
-    requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
-    ensures forall i | 0 <= i < |buckets[a..]| :: buckets[a..][i].Inv()
-    ensures ISeq(buckets[a..]) == ISeq(buckets)[a..]
-    {
-      Islice(buckets, a, |buckets|);
-    }
+//~    static lemma Isuffix(buckets: seq<MutBucket>, a: int)
+//~    requires 0 <= a <= |buckets|
+//~    requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
+//~    ensures forall i | 0 <= i < |buckets[a..]| :: buckets[a..][i].Inv()
+//~    ensures ISeq(buckets[a..]) == ISeq(buckets)[a..]
+//~    {
+//~      Islice(buckets, a, |buckets|);
+//~    }
 
     method Clone() returns (bucket': MutBucket)
     requires Inv()

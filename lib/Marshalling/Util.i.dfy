@@ -172,37 +172,37 @@ lemma lemma_BEByteSeqToUint32_properties(bs:seq<byte>)
 }
 */
 
-lemma lemma_BEByteSeqToUint64_properties(bs:seq<byte>)
-    requires |bs| == (Uint64Size()) as int;
-    ensures  var ret := (bs[0]) as uint64 * 256*256*256*0x100000000 + (bs[1]) as uint64 * 256*256*0x100000000 + (bs[2]) as uint64 * 256*0x100000000 + (bs[3]) as uint64 * 0x100000000 +
-                        (bs[4]) as uint64 * 256*256*256 + (bs[5]) as uint64 * 256*256 + (bs[6]) as uint64 * 256 + (bs[7]) as uint64;
-             (ret) as int == BEByteSeqToInt(bs);
-{
-    lemma_2toX();
-    var ret := (bs[0]) as uint64 * 256*256*256*0x100000000 + (bs[1]) as uint64 * 256*256*0x100000000 + (bs[2]) as uint64 * 256*0x100000000 + (bs[3]) as uint64 * 0x100000000 +
-                            (bs[4]) as uint64 * 256*256*256 + (bs[5]) as uint64 * 256*256 + (bs[6]) as uint64 * 256 + (bs[7]) as uint64;
-
-    var byteSeq := bs;
-
-    calc {
-        BEByteSeqToInt(bs);
-        BEByteSeqToInt(bs[..|bs|-1]) * 256 + (bs[|bs|-1]) as int;
-            { assert bs[..|bs|-1][..|bs[..|bs|-1]|-1] == bs[..|bs|-2]; }
-        (BEByteSeqToInt(bs[..|bs|-2]) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
-            { assert bs[..|bs|-2][..|bs[..|bs|-2]|-1] == bs[..|bs|-3]; }
-        ((BEByteSeqToInt(bs[..|bs|-3]) * 256 + (bs[|bs|-3]) as int) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
-            { assert bs[..|bs|-3][..|bs[..|bs|-3]|-1] == bs[..|bs|-4]; }
-        (((BEByteSeqToInt(bs[..|bs|-4]) * 256 + (bs[|bs|-4]) as int) * 256 + (bs[|bs|-3]) as int) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
-            { assert bs[..|bs|-4][..|bs[..|bs|-4]|-1] == bs[..|bs|-5]; }
-        ((((BEByteSeqToInt(bs[..|bs|-5]) * 256 + (bs[|bs|-5]) as int) * 256 + (bs[|bs|-4]) as int) * 256 + (bs[|bs|-3]) as int) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
-            { assert bs[..|bs|-5][..|bs[..|bs|-5]|-1] == bs[..|bs|-6]; }
-        (((((BEByteSeqToInt(bs[..|bs|-6]) * 256 + (bs[|bs|-6]) as int) * 256 + (bs[|bs|-5]) as int) * 256 + (bs[|bs|-4]) as int) * 256 + (bs[|bs|-3]) as int) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
-            { assert bs[..|bs|-6][..|bs[..|bs|-6]|-1] == bs[..|bs|-7]; }
-        ((((((BEByteSeqToInt(bs[..|bs|-7]) * 256 + (bs[|bs|-7]) as int) * 256 + (bs[|bs|-6]) as int) * 256 + (bs[|bs|-5]) as int) * 256 + (bs[|bs|-4]) as int) * 256 + (bs[|bs|-3]) as int) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
-        (((((((BEByteSeqToInt(bs[..|bs|-8]) * 256 + (bs[|bs|-8]) as int) * 256 + (bs[|bs|-7]) as int) * 256 + (bs[|bs|-6]) as int) * 256 + (bs[|bs|-5]) as int) * 256 + (bs[|bs|-4]) as int) * 256 + (bs[|bs|-3]) as int) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
-        (ret) as int;
-    }
-}
+//~ lemma lemma_BEByteSeqToUint64_properties(bs:seq<byte>)
+//~     requires |bs| == (Uint64Size()) as int;
+//~     ensures  var ret := (bs[0]) as uint64 * 256*256*256*0x100000000 + (bs[1]) as uint64 * 256*256*0x100000000 + (bs[2]) as uint64 * 256*0x100000000 + (bs[3]) as uint64 * 0x100000000 +
+//~                         (bs[4]) as uint64 * 256*256*256 + (bs[5]) as uint64 * 256*256 + (bs[6]) as uint64 * 256 + (bs[7]) as uint64;
+//~              (ret) as int == BEByteSeqToInt(bs);
+//~ {
+//~     lemma_2toX();
+//~     var ret := (bs[0]) as uint64 * 256*256*256*0x100000000 + (bs[1]) as uint64 * 256*256*0x100000000 + (bs[2]) as uint64 * 256*0x100000000 + (bs[3]) as uint64 * 0x100000000 +
+//~                             (bs[4]) as uint64 * 256*256*256 + (bs[5]) as uint64 * 256*256 + (bs[6]) as uint64 * 256 + (bs[7]) as uint64;
+//~ 
+//~     var byteSeq := bs;
+//~ 
+//~     calc {
+//~         BEByteSeqToInt(bs);
+//~         BEByteSeqToInt(bs[..|bs|-1]) * 256 + (bs[|bs|-1]) as int;
+//~             { assert bs[..|bs|-1][..|bs[..|bs|-1]|-1] == bs[..|bs|-2]; }
+//~         (BEByteSeqToInt(bs[..|bs|-2]) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
+//~             { assert bs[..|bs|-2][..|bs[..|bs|-2]|-1] == bs[..|bs|-3]; }
+//~         ((BEByteSeqToInt(bs[..|bs|-3]) * 256 + (bs[|bs|-3]) as int) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
+//~             { assert bs[..|bs|-3][..|bs[..|bs|-3]|-1] == bs[..|bs|-4]; }
+//~         (((BEByteSeqToInt(bs[..|bs|-4]) * 256 + (bs[|bs|-4]) as int) * 256 + (bs[|bs|-3]) as int) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
+//~             { assert bs[..|bs|-4][..|bs[..|bs|-4]|-1] == bs[..|bs|-5]; }
+//~         ((((BEByteSeqToInt(bs[..|bs|-5]) * 256 + (bs[|bs|-5]) as int) * 256 + (bs[|bs|-4]) as int) * 256 + (bs[|bs|-3]) as int) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
+//~             { assert bs[..|bs|-5][..|bs[..|bs|-5]|-1] == bs[..|bs|-6]; }
+//~         (((((BEByteSeqToInt(bs[..|bs|-6]) * 256 + (bs[|bs|-6]) as int) * 256 + (bs[|bs|-5]) as int) * 256 + (bs[|bs|-4]) as int) * 256 + (bs[|bs|-3]) as int) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
+//~             { assert bs[..|bs|-6][..|bs[..|bs|-6]|-1] == bs[..|bs|-7]; }
+//~         ((((((BEByteSeqToInt(bs[..|bs|-7]) * 256 + (bs[|bs|-7]) as int) * 256 + (bs[|bs|-6]) as int) * 256 + (bs[|bs|-5]) as int) * 256 + (bs[|bs|-4]) as int) * 256 + (bs[|bs|-3]) as int) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
+//~         (((((((BEByteSeqToInt(bs[..|bs|-8]) * 256 + (bs[|bs|-8]) as int) * 256 + (bs[|bs|-7]) as int) * 256 + (bs[|bs|-6]) as int) * 256 + (bs[|bs|-5]) as int) * 256 + (bs[|bs|-4]) as int) * 256 + (bs[|bs|-3]) as int) * 256 + (bs[|bs|-2]) as int) * 256 + (bs[|bs|-1]) as int;
+//~         (ret) as int;
+//~     }
+//~ }
 
 /*  Doesn't appear to be in use at present
 function method BEByteSeqToUint32(bs:seq<byte>) : uint32
@@ -292,24 +292,24 @@ lemma lemma_BEByteSeqToInt_invertability(bytes:seq<byte>, val:int, width:nat)
     }
 }
 
-lemma lemma_BEByteSeqToInt_BEUintToSeqByte_invertability()
-    ensures forall bytes:seq<byte>, width:nat :: 
-            |bytes| == width ==> bytes == BEUintToSeqByte(BEByteSeqToInt(bytes), width);
-    ensures forall val:int, width:nat :: 0 <= val < power2(8*width) ==>
-            val == BEByteSeqToInt(BEUintToSeqByte(val, width));
-{
-    forall bytes:seq<byte>, width:nat | |bytes| == width 
-        ensures bytes == BEUintToSeqByte(BEByteSeqToInt(bytes), width);
-    {
-        lemma_BEByteSeqToInt_bound(bytes);
-        lemma_BEByteSeqToInt_invertability(bytes, BEByteSeqToInt(bytes), width);
-    }
-    forall val:int, width:nat | 0 <= val < power2(8*width)
-        ensures val   == BEByteSeqToInt(BEUintToSeqByte(val, width));
-    {
-        lemma_BEUintToSeqByte_invertability(BEUintToSeqByte(val, width), val, width);
-    }
-}
+//~ lemma lemma_BEByteSeqToInt_BEUintToSeqByte_invertability()
+//~     ensures forall bytes:seq<byte>, width:nat :: 
+//~             |bytes| == width ==> bytes == BEUintToSeqByte(BEByteSeqToInt(bytes), width);
+//~     ensures forall val:int, width:nat :: 0 <= val < power2(8*width) ==>
+//~             val == BEByteSeqToInt(BEUintToSeqByte(val, width));
+//~ {
+//~     forall bytes:seq<byte>, width:nat | |bytes| == width 
+//~         ensures bytes == BEUintToSeqByte(BEByteSeqToInt(bytes), width);
+//~     {
+//~         lemma_BEByteSeqToInt_bound(bytes);
+//~         lemma_BEByteSeqToInt_invertability(bytes, BEByteSeqToInt(bytes), width);
+//~     }
+//~     forall val:int, width:nat | 0 <= val < power2(8*width)
+//~         ensures val   == BEByteSeqToInt(BEUintToSeqByte(val, width));
+//~     {
+//~         lemma_BEUintToSeqByte_invertability(BEUintToSeqByte(val, width), val, width);
+//~     }
+//~ }
 
 
 function Uint64ToSeqByte(u:uint64) : seq<byte>

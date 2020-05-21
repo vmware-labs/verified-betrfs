@@ -401,25 +401,25 @@ module BucketWeights {
     reveal_Image();
   }
 
-  lemma ImageSingleton(b:Bucket, k:Key)
-    requires PreWFBucket(b)
-    requires k in b.b
-    ensures Image(b, iset {k}).b.Keys == {k}
-    ensures Image(b, iset {k}).b[k] == b.b[k]
-    ensures Image(b, iset {k}).keys == [k]
-    ensures Image(b, iset {k}).msgs == [ b.b[k] ]
-  {
-    reveal_Image();
-    reveal_IsStrictlySorted();
-    var im := Image(b, iset {k});
-    if 1 < |im.keys| {
-      assert im.keys[0] != im.keys[1];
-      assert im.keys[0] in im.b.Keys;
-      assert im.keys[1] in im.b.Keys;
-      assert false;
-    }
-    WFWellMarshalledBucketMap(im, k);
-  }
+//~  lemma ImageSingleton(b:Bucket, k:Key)
+//~    requires PreWFBucket(b)
+//~    requires k in b.b
+//~    ensures Image(b, iset {k}).b.Keys == {k}
+//~    ensures Image(b, iset {k}).b[k] == b.b[k]
+//~    ensures Image(b, iset {k}).keys == [k]
+//~    ensures Image(b, iset {k}).msgs == [ b.b[k] ]
+//~  {
+//~    reveal_Image();
+//~    reveal_IsStrictlySorted();
+//~    var im := Image(b, iset {k});
+//~    if 1 < |im.keys| {
+//~      assert im.keys[0] != im.keys[1];
+//~      assert im.keys[0] in im.b.Keys;
+//~      assert im.keys[1] in im.b.Keys;
+//~      assert false;
+//~    }
+//~    WFWellMarshalledBucketMap(im, k);
+//~  }
 
   lemma ImageSubset(b:Bucket, s:iset<Key>, t:iset<Key>)
     requires s <= t;
