@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import glob
 import collections
 
-EXPERIMENT="veri_time_09"
+EXPERIMENT="veri_time_12"
 SLOW_THRESH = 20
 
 class Observation:
@@ -101,6 +101,7 @@ def detect_bogus_workers(pile):
     for worker,count in offending_workers.items():
         if count>20:
             bogus_workers.add(worker)
+        #print("bogus", worker, count)
     return bogus_workers
 
 def reject_bogus_workers(pile, bogus_workers):
@@ -179,10 +180,16 @@ def report_slowest_symbols(pile):
             no_repr_set.add(r)
             print("unsure", r.name, r.mean(), source_filename)
     all_slow_count = len(repr_set)+len(no_repr_set)
+    print("all_slow_count", all_slow_count)
+    pct_slow = 100.0*len(repr_set)/all_slow_count
+
+    slowest = max(reports, key=lambda r: r.mean())
+    print("slowest", slowest.name, slowest.mean())
+
     return {
         "slowThresholdSecs": SLOW_THRESH,
         "numSlowVerifications": all_slow_count,
-        "fracOfSlowVerifsInvolvingHeap": ("%d\\%%" % (100.0*len(repr_set)/all_slow_count)),
+        "pctOfSlowVerifsInvolvingHeap": ("%d\\%%" % pct_slow),
         }
 
 def emit_constants(defs):
@@ -212,7 +219,7 @@ def plot_all(pile):
     ypos = complog(cdist(idx))
     y0 = complog(0)
     ax.plot([0, t, t], [ypos, ypos, y0])
-    ax.text(0, ypos*1.01, "%.1f%% faster than %ds" % (cdist(idx)*100, SLOW_THRESH))
+    ax.text(t*1.01, ypos*0.99, va="top", s="%.1f%% faster than %ds" % (cdist(idx)*100, SLOW_THRESH))
 
     yticks = range(4)
     ax.set_yticks(yticks)
@@ -225,6 +232,7 @@ def plot_all(pile):
 def main():
     pile = parse_all()
     bogus_workers = detect_bogus_workers(pile)
+    print("Rejecting bogus workers: ", bogus_workers)
     pile = reject_bogus_workers(pile, bogus_workers)
     detect_bogus_workers(pile)
     defs = report_slowest_symbols(pile)

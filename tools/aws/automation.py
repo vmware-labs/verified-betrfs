@@ -179,7 +179,10 @@ def sequenced_launcher(workers, ntasks, lam, dry_run=False):
         
         # wait for something to finish
         prevSize = len(running(monitors))
-        surviving_monitors = poll_monitors(monitors)
+        if not dry_run:
+            surviving_monitors = poll_monitors(monitors)
+        else:
+            surviving_monitors = []
         for monitor in monitors:
             if monitor not in surviving_monitors:
                 idle_resources.insert(0, monitor.worker)

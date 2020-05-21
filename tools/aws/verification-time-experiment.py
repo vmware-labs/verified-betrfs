@@ -10,17 +10,26 @@ from lib_deps import *
 
 # Consider updating all the workers before running the experiment!
 # tools/aws/run-all.py "cd veribetrfs; git checkout master; git pull"
+# tools/aws/run-all.py "cd veribetrfs; tools/update-submodules.sh; tools/update-dafny.sh"
 ROOT="Impl/Bundle.i.dfy"
 #ROOT="lib/DataStructures/MutableBtree.i.dfy"   # a small test case
-SUITE_NAME="veri_time_10"
+SUITE_NAME="veri_time_13"   # comment branch merged
 N_REPLICAS=5
 
-def constructSuite(nReplicas):
-    values = []
+def listSources():
+    paths = set()
     for source in depsFromDfySources([ROOT]):
-        clean_path = re.sub("[^A-Za-z0-9-]", "_", source.normPath)
-        values.append(Value(clean_path, source.normPath))
-    sourceVariable = Variable("source", "source", values)
+        # depsFromDfySources seems to produce some duplication; not sure why
+        paths.add(source.normPath)
+
+    values = []
+    for path in paths:
+        clean_path = re.sub("[^A-Za-z0-9-]", "_", path)
+        values.append(Value(clean_path, path))
+    return values
+
+def constructSuite(nReplicas):
+    sourceVariable = Variable("source", "source", listSources())
     replicaVariable = Variable("replica", "silent", [Value("r%d"%i, "r%d"%i) for i in range(nReplicas)])
     suite = Suite(SUITE_NAME, sourceVariable, replicaVariable)
     return suite
@@ -43,7 +52,12 @@ def main():
 
     suite = constructSuite(N_REPLICAS)
     set_logfile(suite.logpath())
-    log("VARIANTS %s" % suite.variants)
+    #log("VARIANTS %s" % suite.variants)
+
+    for variant in suite.variants:
+        log("VARIANT %s" % variant)
+    log("NUM_SOURCES %s" % len(listSources()))
+    log("NUM_VARIANTS %s" % len(suite.variants))
 
     workers = retrieve_running_workers()
     sequenced_launcher(workers, len(suite.variants), cmd_for_idx, dry_run=False)
