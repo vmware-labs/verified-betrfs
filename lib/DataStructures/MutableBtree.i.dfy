@@ -370,8 +370,12 @@ abstract module MutableBtree {
       values := seq_set(values, pos as uint64, value);
     } else {
       oldvalue := None;
+      assert Model.Keys.IsStrictlySorted(keys);
+      Model.Keys.strictlySortedInsert(keys, key, pos as int);
+      ghost var before := keys;
       keys := InsertSeq(keys, key, (pos + 1) as uint64);
-      //assume Model.Keys.IsStrictlySorted(keys); // TODO(robj): I need a lemma call here.
+      assert keys == Seq.insert(before, key, (pos + 1) as int);
+      assert Model.Keys.IsStrictlySorted(keys);
       values := InsertSeq(values, value, (pos + 1) as uint64);
     }
     n2 := Model.Leaf(keys, values);
@@ -563,14 +567,17 @@ module MainModule {
 
   method SeqFor(i: uint64)
   returns (result:TMB.Key)
-  requires i < 256*256*256;
   {
-    var b0:byte := (i / 65536) as byte;
-    var r := i - (b0 as uint64 * 65536);
-    var b1:byte := (r / 256) as byte;
-    var b2:byte := (r - (b1 as uint64)*256) as byte;
-
-    result := [b0, b1, b2];
+    result := [
+      ((i / (1)) % 256) as byte,
+      ((i / (1*2)) % 256) as byte,
+      ((i / (1*2*2)) % 256) as byte,
+      ((i / (1*2*2*2)) % 256) as byte,
+      ((i / (1*2*2*2*2)) % 256) as byte,
+      ((i / (1*2*2*2*2*2)) % 256) as byte,
+      ((i / (1*2*2*2*2*2*2)) % 256) as byte,
+      ((i / (1*2*2*2*2*2*2*2)) % 256) as byte
+    ];
   }
 
   method Run(seed: uint64, n: uint64, dry: bool)
@@ -607,6 +614,8 @@ module MainModule {
       i := i + 1;
     }
     var write_end: uint64 := steadyClockMillis();
+    assume (write_end as int - write_start as int) < 0xffff_ffff_ffff_ffff;
+    assume write_end >= write_start;
     var write_duration: uint64 := write_end - write_start;
     print(n, "\twrite\tlinear\t", write_duration, "\n");
 
@@ -636,6 +645,8 @@ module MainModule {
       i := i + 1;
     }
     var read_end: uint64 := steadyClockMillis();
+    assume (read_end as int - read_start as int) < 0xffff_ffff_ffff_ffff;
+    assume read_end >= read_start;
     var read_duration: uint64 := read_end - read_start;
     print(n, "\tread\tlinear\t", read_duration, "\n");
 

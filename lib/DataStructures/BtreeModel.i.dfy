@@ -648,7 +648,7 @@ abstract module BtreeModel {
     forall key | key in newint
       ensures key in oldint
     {
-      reveal_AllKeys();
+      // reveal_AllKeys();
       var llte := Keys.LargestLte(newindex.pivots, key);
       if llte + 1 < childidx {
         Keys.LargestLteIsUnique2(oldindex.pivots, key, llte);
@@ -665,9 +665,8 @@ abstract module BtreeModel {
         assert key in oldint;
       } else {
         Keys.LargestLteIsUnique2(oldindex.pivots, key, llte-1);
-        assert key in oldint;
+        assert key in oldint by { reveal_AllKeys(); }
       }
-      assume false;
     }
   }
 
