@@ -65,7 +65,7 @@ abstract module MutableBtree {
     requires Model.Keys.IsSorted(keys)
     ensures posplus1 as int == Model.Keys.LargestLte(keys, needle) + 1
   {
-    var pos: int64 := Model.KeysImpl.ComputeLargestLte(keys, needle);
+    var pos: int64 := Model.KeysImpl.ComputeLargestLteShared(keys, needle);
     posplus1 := (pos + 1) as uint64;
   }
 
@@ -111,13 +111,13 @@ abstract module MutableBtree {
     }
   }
 
-  method Empty(node: Node) returns (result: bool)
+  method Empty(shared node: Node) returns (result: bool)
     requires WF(node)
     ensures result == (|Interpretation(node)| == 0)
   {
     if node.Leaf? {
       Model.reveal_Interpretation();
-      result := 0 == |node.keys|;
+      result := 0 == seq_length(node.keys);
       assert !result ==> node.keys[0] in Interpretation(node);
     } else {
       Model.IndexesNonempty(node);
@@ -125,7 +125,7 @@ abstract module MutableBtree {
     }
   }
   
-  method MinKeyInternal(node: Node) returns (result: Key)
+  method MinKeyInternal(shared node: Node) returns (result: Key)
     requires WF(node)
     requires 0 < |Interpretation(node)|
     ensures result == Model.MinKey(node)
@@ -135,19 +135,19 @@ abstract module MutableBtree {
         Model.reveal_Interpretation();
       }
       assert node.keys[0] == node.keys[..|node.keys|][0];
-      result := node.keys[0];
+      result := seq_get(node.keys, 0);
     } else {
       // IOfChild(node, 0);
       assert WF(node.children[0]);
       Model.ChildOfIndexNonempty(node, 0);
-      result := MinKeyInternal(node.children[0]);
+      result := MinKeyInternal(lseq_peek(node.children, 0));
     }
   }
 
   // We separate MinKey and MinKeyInternal in order to keep the API
   // export set clean.  (MinKeyInternal needs to mention I(), but we
   // don't want to export it.)
-  method MinKey(node: Node) returns (result: Key)
+  method MinKey(shared node: Node) returns (result: Key)
     requires WF(node)
     requires 0 < |Interpretation(node)|
     ensures result in Interpretation(node)
@@ -157,7 +157,7 @@ abstract module MutableBtree {
     Model.MinKeyProperties(node);
   }
   
-  method MaxKeyInternal(node: Node) returns (result: Key)
+  method MaxKeyInternal(shared node: Node) returns (result: Key)
     requires WF(node)
     requires 0 < |Interpretation(node)|
     ensures result == Model.MaxKey(node)
@@ -166,9 +166,9 @@ abstract module MutableBtree {
       assert 0 < |node.keys| by {
         Model.reveal_Interpretation();
       }
-      var nkeys: uint64 := |node.keys| as uint64;
+      var nkeys: uint64 := seq_length(node.keys) as uint64;
       assert node.keys[nkeys - 1] == node.keys[..nkeys][nkeys - 1];
-      result := node.keys[nkeys-1];
+      result := seq_get(node.keys, nkeys-1);
     } else {
       var nchildren: uint64 := lseq_length_uint64(node.children);
       // IOfChild(node, nchildren as nat - 1);
@@ -181,7 +181,7 @@ abstract module MutableBtree {
   // We separate MaxKey and MaxKeyInternal in order to keep the API
   // export set clean.  (MaxKeyInternal needs to mention I(), but we
   // don't want to export it.)
-  method MaxKey(node: Node) returns (result: Key)
+  method MaxKey(shared node: Node) returns (result: Key)
     requires WF(node)
     requires 0 < |Interpretation(node)|
     ensures result in Interpretation(node)
@@ -445,7 +445,7 @@ abstract module MutableBtree {
     ensures oldvalue == MapLookupOption(Interpretation(node), key);
   {
     linear var Leaf(keys, values) := node;
-    var pos: int64 := Model.KeysImpl.ComputeLargestLte(keys, key);
+    var pos: int64 := Model.KeysImpl.ComputeLargestLteShared(keys, key);
     if 0 <= pos && seq_get(keys, pos as uint64) == key {
       oldvalue := Some(seq_get(values, pos as uint64));
       values := seq_set(values, pos as uint64, value);

@@ -1,5 +1,6 @@
 include "../Lang/NativeTypes.s.dfy"
 include "total_order.i.dfy"
+include "../Lang/LinearSequence.s.dfy"
 
 // Methods for total_orders go here because we don't want
 // Integer_Order to have any methods, since we don't want to require
@@ -17,6 +18,7 @@ abstract module Total_Preorder_Impl {
 abstract module Total_Order_Impl {
   import opened Ord : Total_Order
   import opened NativeTypes
+  import opened LinearSequence_s
     
   method cmp(a: Element, b: Element) returns (c: int32)
     ensures c < 0 ==> lt(a, b)
@@ -221,6 +223,32 @@ abstract module Total_Order_Impl {
     {
       var mid := (lo + hi) / 2;
       var c := cmp(run[mid], needle);
+      if (c > 0) {
+        hi := mid;
+      } else {
+        lo := mid+1;
+      }
+    }
+
+    return lo - 1;
+  }
+
+  method ComputeLargestLteShared(shared run: seq<Element>, needle: Element) returns (res : int64)
+    requires |run| < 0x4000_0000_0000_0000
+    requires IsSorted(run)
+    ensures res as int == LargestLte(run, needle)
+  {
+    var lo: int64 := 0;
+    var hi: int64 := seq_length(run) as int64;
+    while lo < hi
+    invariant 0 <= lo as int <= hi as int <= |run|
+    invariant 1 <= lo as int ==> lte(run[lo-1], needle)
+    invariant hi as int < |run| ==> lt(needle, run[hi])
+    invariant lo <= hi
+    decreases hi - lo
+    {
+      var mid := (lo + hi) / 2;
+      var c := cmp(seq_get(run, mid as uint64), needle);
       if (c > 0) {
         hi := mid;
       } else {
