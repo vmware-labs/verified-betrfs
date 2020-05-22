@@ -402,25 +402,24 @@ module IndirectionTableImpl {
 
     // Parsing and marshalling
 
-// TODO: fix Dafny issue, then uncomment this:
-//  static lemma lemma_valToHashMapNonePrefix(a: seq<V>, i: int)
-//  requires IndirectionTableModel.valToHashMap.requires(a)
-//  requires 0 <= i <= |a|
-//  requires IndirectionTableModel.valToHashMap(a[..i]).None?
-//  ensures IndirectionTableModel.valToHashMap(a).None?
-//  decreases |a| - i
-//  {
-//    if (i == |a|) {
-//      assert a[..i] == a;
-//    } else {
-//      assert IndirectionTableModel.valToHashMap(a[..i+1]).None? by {
-//        assert DropLast(a[..i+1]) == a[..i];
-//        assert Last(a[..i+1]) == a[i];
-//      }
-//      lemma_valToHashMapNonePrefix(a, i+1);
-//    }
-//  }
-//
+    static lemma lemma_valToHashMapNonePrefix(a: seq<V>, i: int)
+    requires IndirectionTableModel.valToHashMap.requires(a)
+    requires 0 <= i <= |a|
+    requires IndirectionTableModel.valToHashMap(a[..i]).None?
+    ensures IndirectionTableModel.valToHashMap(a).None?
+    decreases |a| - i
+    {
+      if (i == |a|) {
+        assert a[..i] == a;
+      } else {
+        assert IndirectionTableModel.valToHashMap(a[..i+1]).None? by {
+          assert DropLast(a[..i+1]) == a[..i];
+          assert Last(a[..i+1]) == a[i];
+        }
+        lemma_valToHashMapNonePrefix(a, i+1);
+      }
+    }
+  
 
     static method {:fuel ValInGrammar,3} ValToHashMap(a: seq<V>) returns (linear s : lOption<HashMap>)
     requires IndirectionTableModel.valToHashMap.requires(a)
@@ -1212,23 +1211,4 @@ module IndirectionTableImpl {
       return this.refUpperBound;
     }
   }
-
-  // TODO: delete this, uncomment the original copy above
-    lemma lemma_valToHashMapNonePrefix(a: seq<V>, i: int)
-    requires IndirectionTableModel.valToHashMap.requires(a)
-    requires 0 <= i <= |a|
-    requires IndirectionTableModel.valToHashMap(a[..i]).None?
-    ensures IndirectionTableModel.valToHashMap(a).None?
-    decreases |a| - i
-    {
-      if (i == |a|) {
-        assert a[..i] == a;
-      } else {
-        assert IndirectionTableModel.valToHashMap(a[..i+1]).None? by {
-          assert DropLast(a[..i+1]) == a[..i];
-          assert Last(a[..i+1]) == a[i];
-        }
-        lemma_valToHashMapNonePrefix(a, i+1);
-      }
-    }
 }
