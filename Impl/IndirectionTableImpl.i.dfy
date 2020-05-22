@@ -46,17 +46,15 @@ module IndirectionTableImpl {
     refUpperBound: uint64,
     findLoclessIterator: Option<LinearMutableMap.SimpleIterator>)
   {
-/*
-    method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator) {
-      acc := DebugAccumulator.EmptyAccumulator();
-      var a := new DebugAccumulator.AccRec(LinearMutableMap.Count(t), "IndirectionTableModel.Entry");
-      acc := DebugAccumulator.AccPut(acc, "t", a);
-      assume false; // DebugAccumulate
-      var r := garbageQueue.DebugAccumulate();
-      a := new DebugAccumulator.AccRec.Index(r);
-      acc := DebugAccumulator.AccPut(acc, "garbageQueue", a);
-    }
-    */
+    // method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator) {
+    //   acc := DebugAccumulator.EmptyAccumulator();
+    //   var a := new DebugAccumulator.AccRec(LinearMutableMap.Count(t), "IndirectionTableModel.Entry");
+    //   acc := DebugAccumulator.AccPut(acc, "t", a);
+    //   assume false; // DebugAccumulate
+    //   var r := garbageQueue.DebugAccumulate();
+    //   a := new DebugAccumulator.AccRec.Index(r);
+    //   acc := DebugAccumulator.AccPut(acc, "garbageQueue", a);
+    // }
 
     protected predicate Inv()
     {
@@ -129,41 +127,28 @@ module IndirectionTableImpl {
       r
     }
 
-/*
-    constructor(t: HashMap)
-    ensures this.t == t
-    ensures this.garbageQueue == null
-    {
-      this.t := t;
-      this.garbageQueue := null;
-    }
-*/
+    // constructor RootOnly(loc: Location)
+    // ensures Inv()
+    // ensures fresh(Repr)
+    // ensures I() == IndirectionTableModel.ConstructorRootOnly(loc)
+    // {
+    //   this.t := new LinearMutableMap.LinearHashMap(128);
+    //   this.findLoclessIterator := None;
+    //   new;
+    //   this.t.Insert(BT.G.Root(), IndirectionTableModel.Entry(Some(loc), [], 1));
+    //   this.garbageQueue := null;
+    //   this.refUpperBound := BT.G.Root();
+    //   Repr := {this} + this.t.Repr;
+    //   IndirectionTableModel.reveal_ConstructorRootOnly();
+    // }
 
-/*
-
-    constructor RootOnly(loc: Location)
-    ensures Inv()
-    ensures fresh(Repr)
-    ensures I() == IndirectionTableModel.ConstructorRootOnly(loc)
-    {
-      this.t := new LinearMutableMap.LinearHashMap(128);
-      this.findLoclessIterator := None;
-      new;
-      this.t.Insert(BT.G.Root(), IndirectionTableModel.Entry(Some(loc), [], 1));
-      this.garbageQueue := null;
-      this.refUpperBound := BT.G.Root();
-      Repr := {this} + this.t.Repr;
-      IndirectionTableModel.reveal_ConstructorRootOnly();
-    }
-
-    constructor(t: HashMap)
-    ensures this.t == t
-    ensures this.garbageQueue == null
-    {
-      this.t := t;
-      this.garbageQueue := null;
-    }
-*/
+    // constructor(t: HashMap)
+    // ensures this.t == t
+    // ensures this.garbageQueue == null
+    // {
+    //   this.t := t;
+    //   this.garbageQueue := null;
+    // }
 
     shared method Clone()
     returns (linear table : IndirectionTable)
@@ -413,25 +398,25 @@ module IndirectionTableImpl {
 
     // Parsing and marshalling
 
-/* TODO: fix Dafny issue, then uncomment this:
-    static lemma lemma_valToHashMapNonePrefix(a: seq<V>, i: int)
-    requires IndirectionTableModel.valToHashMap.requires(a)
-    requires 0 <= i <= |a|
-    requires IndirectionTableModel.valToHashMap(a[..i]).None?
-    ensures IndirectionTableModel.valToHashMap(a).None?
-    decreases |a| - i
-    {
-      if (i == |a|) {
-        assert a[..i] == a;
-      } else {
-        assert IndirectionTableModel.valToHashMap(a[..i+1]).None? by {
-          assert DropLast(a[..i+1]) == a[..i];
-          assert Last(a[..i+1]) == a[i];
-        }
-        lemma_valToHashMapNonePrefix(a, i+1);
-      }
-    }
-*/
+// TODO: fix Dafny issue, then uncomment this:
+//  static lemma lemma_valToHashMapNonePrefix(a: seq<V>, i: int)
+//  requires IndirectionTableModel.valToHashMap.requires(a)
+//  requires 0 <= i <= |a|
+//  requires IndirectionTableModel.valToHashMap(a[..i]).None?
+//  ensures IndirectionTableModel.valToHashMap(a).None?
+//  decreases |a| - i
+//  {
+//    if (i == |a|) {
+//      assert a[..i] == a;
+//    } else {
+//      assert IndirectionTableModel.valToHashMap(a[..i+1]).None? by {
+//        assert DropLast(a[..i+1]) == a[..i];
+//        assert Last(a[..i+1]) == a[i];
+//      }
+//      lemma_valToHashMapNonePrefix(a, i+1);
+//    }
+//  }
+//
 
     static method {:fuel ValInGrammar,3} ValToHashMap(a: seq<V>) returns (linear s : lOption<HashMap>)
     requires IndirectionTableModel.valToHashMap.requires(a)
