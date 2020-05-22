@@ -67,7 +67,7 @@ def plot(data):
     fig = plt.figure()
     width=0.4
 
-    def plot_case(ax, mode):
+    def plot_case(ax, mode, label, want_xlabel):
         num_cases = len(data.values())
         for expi, exp in enumerate(data.values()):
             case = exp.cases[mode]
@@ -82,15 +82,14 @@ def plot(data):
         ax.set_xticks([x + width*(num_cases-1)/2 for x in xpos])
         prettySizes = ["%d" % (size/(1<<20)) for size in sizes]
         ax.set_xticklabels(prettySizes)
-        ax.set_xlabel(r"inserts (${\times} 2^{20}$)", usetex=True)
-        ax.set_ylabel(r"inserts/sec ($\times M$)", usetex=True)
+        if want_xlabel:
+            ax.set_xlabel(r"Mi operation count (${\times} 2^{20}$)", usetex=True)
+        ax.set_ylabel(r"M %s/sec ($\times 10^6$)" % label, usetex=True)
+        ax.legend()
 
-    ax = fig.add_subplot(2, 1, 1)
-    plot_case(ax, "read")
-    ax = fig.add_subplot(2, 1, 2)
-    plot_case(ax, "write")
+    plot_case(fig.add_subplot(2, 1, 1), "read", "reads", want_xlabel=False)
+    plot_case(fig.add_subplot(2, 1, 2), "write", "inserts", want_xlabel=True)
 
-    ax.legend()
     fig.savefig("data/btree-perf.pdf")
 
 data = parseSeveral(glob.glob("expresults/btree-tp-insert/*.data"))
