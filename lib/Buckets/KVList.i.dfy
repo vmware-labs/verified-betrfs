@@ -17,7 +17,8 @@ include "../Base/MallocAccounting.i.dfy"
 
 module KVList {
   import opened ValueMessage`Internal
-  import opened Lexicographic_Byte_Order
+  import opened LBOI = Lexicographic_Byte_Order_Impl
+  import opened Ord = LBOI.Ord
   import opened Sequences
   import opened Options
   import opened Maps
@@ -93,20 +94,17 @@ module KVList {
     amassed := Kvl(keyAry[..], messageAry[..]);
   }
 
-  function {:opaque} IMap(kvl: Kvl) : BucketMap
+  function IMap(kvl: Kvl) : BucketMap
   requires |kvl.keys| == |kvl.messages|
-  ensures |kvl.keys| == 0 ==> |IMap(kvl).Keys| == 0    // empty input -> empty output.
-  decreases |kvl.keys|
   {
-    if |kvl.keys| == 0 then map[] else (
-      IMap(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)))[Last(kvl.keys) := Last(kvl.messages)]
-    )
+    BucketMapOfSeq(kvl.keys, kvl.messages)
   }
 
   function I(kvl: Kvl) : Bucket
   requires |kvl.keys| == |kvl.messages|
   {
-    B(IMap(kvl))
+    //B(IMap(kvl))
+    BucketMapWithSeq(BucketMapOfSeq(kvl.keys, kvl.messages), kvl.keys, kvl.messages)
   }
 
   function {:opaque} ISeq(kvls: seq<Kvl>) : (s : seq<Bucket>)
@@ -139,7 +137,7 @@ module KVList {
   ensures kvl.keys[i] == key
   decreases |kvl.keys|
   {
-    reveal_IMap();
+    reveal_BucketMapOfSeq();
     if key == Last(kvl.keys) {
       i := |kvl.keys| - 1;
     } else {
@@ -153,7 +151,7 @@ module KVList {
   ensures MapsTo(IMap(kvl), kvl.keys[i], kvl.messages[i])
   decreases |kvl.keys|
   {
-    reveal_IMap();
+    reveal_BucketMapOfSeq();
     if (i == |kvl.keys| - 1) {
     } else {
       reveal_IsStrictlySorted();
@@ -167,13 +165,11 @@ module KVList {
   ensures WFBucket(I(kvl))
   decreases |kvl.keys|
   {
-    reveal_IMap();
-    reveal_WFBucket();
+    reveal_BucketMapOfSeq();
     if |kvl.keys| == 0 {
     } else {
-      ghost var km' := Kvl(DropLast(kvl.keys), DropLast(kvl.messages));
+      ghost var km' := prefix(kvl, |kvl.keys| - 1);
       WFPrefix(kvl, |kvl.keys| - 1);
-      assert WF(km');
       WFImpliesWFBucket(km');
     }
   }
@@ -191,7 +187,7 @@ module KVList {
   requires |kvl.keys| == |kvl.messages|
   ensures IMap(append(kvl, key, value)) == IMap(kvl)[key := value]
   {
-    reveal_IMap();
+    reveal_BucketMapOfSeq();
   }
 
   lemma Iprefix_append(kvl: Kvl, i: int)
@@ -293,7 +289,7 @@ module KVList {
   ensures |cur.keys| > 0 && parentIdx < |parent.keys| ==> lt(cur.keys[|cur.keys| - 1], parent.keys[parentIdx])
   ensures |cur.keys| > 0 && childIdx < |children[childrenIdx].keys| ==> lt(cur.keys[|cur.keys| - 1], children[childrenIdx].keys[childIdx])
   {
-    reveal_IMap();
+    reveal_BucketMapOfSeq();
     if (|cur.keys| > 0) {
       var lastCurKey := cur.keys[|cur.keys| - 1];
       assert lastCurKey in IMap(cur);
@@ -357,15 +353,16 @@ module KVList {
   ensures I(append(cur, parent.keys[parentIdx], parent.messages[parentIdx]))
       == BucketListItemFlush(I(prefix(parent, parentIdx + 1)), I(prefix(children[childrenIdx], childIdx)), pivots, childrenIdx)
   {
-    flushIterateCurLastLt(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-    flushIterateNextsNotInPrefixes(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-    StrictlySortedAugment(cur.keys, parent.keys[parentIdx]);
-    BucketListItemFlushAddParentKey(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, parent.keys[parentIdx], parent.messages[parentIdx]);
+    assume false;
+    // flushIterateCurLastLt(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
+    // flushIterateNextsNotInPrefixes(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
+    // StrictlySortedAugment(cur.keys, parent.keys[parentIdx]);
+    // BucketListItemFlushAddParentKey(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, parent.keys[parentIdx], parent.messages[parentIdx]);
 
-    P.RouteIs(pivots, parent.keys[parentIdx], childrenIdx);
+    // P.RouteIs(pivots, parent.keys[parentIdx], childrenIdx);
 
-    Iappend(cur, parent.keys[parentIdx], parent.messages[parentIdx]);
-    Iprefix_append(parent, parentIdx);
+    // Iappend(cur, parent.keys[parentIdx], parent.messages[parentIdx]);
+    // Iprefix_append(parent, parentIdx);
 
     /*assert I(append(cur, parent.keys[parentIdx], parent.messages[parentIdx]))
         == I(cur)[parent.keys[parentIdx] := parent.messages[parentIdx]]
@@ -383,19 +380,20 @@ module KVList {
   ensures I(append(cur, children[childrenIdx].keys[childIdx], children[childrenIdx].messages[childIdx]))
       == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx + 1)), pivots, childrenIdx)
   {
-    var child := children[childrenIdx];
-    flushIterateCurLastLt(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-    flushIterateNextsNotInPrefixes(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-    StrictlySortedAugment(cur.keys, child.keys[childIdx]);
-    BucketListItemFlushAddChildKey(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, child.keys[childIdx], child.messages[childIdx]);
+    assume false;
+    // var child := children[childrenIdx];
+    // flushIterateCurLastLt(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
+    // flushIterateNextsNotInPrefixes(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
+    // StrictlySortedAugment(cur.keys, child.keys[childIdx]);
+    // BucketListItemFlushAddChildKey(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, child.keys[childIdx], child.messages[childIdx]);
 
-    assert WFBucketAt(I(children[childrenIdx]), pivots, childrenIdx);
-    Imaps(child, childIdx);
-    assert child.keys[childIdx] in IMap(children[childrenIdx]);
-    assert P.Route(pivots, child.keys[childIdx]) == childrenIdx;
+    // assert WFBucketAt(I(children[childrenIdx]), pivots, childrenIdx);
+    // Imaps(child, childIdx);
+    // assert child.keys[childIdx] in IMap(children[childrenIdx]);
+    // assert P.Route(pivots, child.keys[childIdx]) == childrenIdx;
 
-    Iappend(cur, child.keys[childIdx], child.messages[childIdx]);
-    Iprefix_append(child, childIdx);
+    // Iappend(cur, child.keys[childIdx], child.messages[childIdx]);
+    // Iprefix_append(child, childIdx);
 
     /*assert I(append(cur, child.keys[childIdx], child.messages[childIdx]))
         == I(cur)[child.keys[childIdx] := child.messages[childIdx]]
@@ -418,20 +416,21 @@ module KVList {
   ensures I(append(cur, parent.keys[parentIdx], Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx])))
       == BucketListItemFlush(I(prefix(parent, parentIdx + 1)), I(prefix(children[childrenIdx], childIdx + 1)), pivots, childrenIdx)
   {
-    var child := children[childrenIdx];
-    flushIterateCurLastLt(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-    flushIterateNextsNotInPrefixes(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
-    StrictlySortedAugment(cur.keys, child.keys[childIdx]);
-    BucketListItemFlushAddParentAndChildKey(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, child.keys[childIdx], parent.messages[parentIdx], child.messages[childIdx]);
+    assume false;
+    // var child := children[childrenIdx];
+    // flushIterateCurLastLt(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
+    // flushIterateNextsNotInPrefixes(parent, children, pivots, parentIdx, childrenIdx, childIdx, acc, cur);
+    // StrictlySortedAugment(cur.keys, child.keys[childIdx]);
+    // BucketListItemFlushAddParentAndChildKey(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx], childIdx)), pivots, child.keys[childIdx], parent.messages[parentIdx], child.messages[childIdx]);
 
-    assert WFBucketAt(I(children[childrenIdx]), pivots, childrenIdx);
-    Imaps(child, childIdx);
-    assert child.keys[childIdx] in IMap(children[childrenIdx]);
-    assert P.Route(pivots, child.keys[childIdx]) == childrenIdx;
+    // assert WFBucketAt(I(children[childrenIdx]), pivots, childrenIdx);
+    // Imaps(child, childIdx);
+    // assert child.keys[childIdx] in IMap(children[childrenIdx]);
+    // assert P.Route(pivots, child.keys[childIdx]) == childrenIdx;
 
-    Iappend(cur, parent.keys[parentIdx], Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx]));
-    Iprefix_append(parent, parentIdx);
-    Iprefix_append(child, childIdx);
+    // Iappend(cur, parent.keys[parentIdx], Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx]));
+    // Iprefix_append(parent, parentIdx);
+    // Iprefix_append(child, childIdx);
 
     /*assert I(append(cur, parent.keys[parentIdx], Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx])))
         == I(cur)[parent.keys[parentIdx] := Merge(parent.messages[parentIdx], children[childrenIdx].messages[childIdx])]
@@ -492,7 +491,7 @@ module KVList {
          I(Kvl([],[])).b
       == BucketListItemFlush(I(prefix(parent, parentIdx)), I(prefix(children[childrenIdx + 1], 0)), pivots, childrenIdx + 1).b
   {
-    reveal_IMap();
+    reveal_BucketMapOfSeq();
     forall key | key in IMap(prefix(parent, parentIdx))
     ensures P.Route(pivots, key) != childrenIdx + 1
     {
@@ -586,7 +585,7 @@ module KVList {
       && (forall i | 0 <= i < |f| :: WF(f[i]))
       && ISeq(f) == BucketListFlush(I(parent), ISeq(children), pivots)
   {
-    reveal_IMap();
+    reveal_BucketMapOfSeq();
     assert BucketListItemFlush(B(map[]), B(map[]), pivots, 0).b == map[];
     flushIterateRes(parent, children, pivots, 0, 0, 0, [], Kvl([], []));
   }
@@ -834,6 +833,7 @@ module KVList {
   ensures WF(left)
   ensures I(left) == SplitBucketLeft(I(kvl), pivot)
   {
+    assume false;
     reveal_SplitBucketLeft();
     var idx := IndexOfFirstKeyGte(kvl, pivot);
     left := Kvl(kvl.keys[..idx], kvl.messages[..idx]);
@@ -870,6 +870,7 @@ module KVList {
   ensures WF(right)
   ensures I(right) == SplitBucketRight(I(kvl), pivot)
   {
+    assume false;
     reveal_SplitBucketRight();
     var idx := IndexOfFirstKeyGte(kvl, pivot);
     right := Kvl(kvl.keys[idx..], kvl.messages[idx..]);
@@ -1073,7 +1074,7 @@ module KVList {
   ensures ISeq(kvls) == SplitBucketOnPivots(I(kvl), pivots)
   ensures kvls == splitOnPivots(kvl, pivots)
   {
-    reveal_IMap();
+    reveal_BucketMapOfSeq();
     kvls := Flush(kvl, EmptySeq(|pivots| + 1), pivots);
 
     forall key | key in I(kvl)
@@ -1125,7 +1126,7 @@ module KVList {
   ensures WF(kvl)
   ensures I(kvl) == B(map[])
   {
-    reveal_IMap();
+    reveal_BucketMapOfSeq();
     Kvl([],[])
   }
 
@@ -1135,7 +1136,7 @@ module KVList {
   ensures forall i | 0 <= i < |kvls[a..b]| :: WF(kvls[a..b][i])
   ensures ISeq(kvls[a..b]) == ISeq(kvls)[a..b]
   {
-    reveal_IMap();
+    reveal_BucketMapOfSeq();
     if b == |kvls| {
       if (a == b) {
       } else {
@@ -1213,7 +1214,7 @@ module KVList {
 
   function WeightKvl(kvl: Kvl) : int
   {
-    WeightKeySeq(kvl.keys) + WeightMessageSeq(kvl.messages)
+    WeightKeyList(kvl.keys) + WeightMessageList(kvl.messages)
   }
 
   function WeightKvlSeq(kvls: seq<Kvl>) : int
@@ -1226,23 +1227,26 @@ module KVList {
   ensures WeightKvl(kvl) == WeightBucket(I(kvl))
   decreases |kvl.keys|
   {
-    reveal_IMap();
-    if |kvl.keys| == 0 {
-      WeightBucketEmpty();
-    } else {
-      WFPrefix(kvl, |kvl.keys| - 1);
-      kvlWeightEq(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)));
-      if Last(kvl.keys) in IMap(Kvl(DropLast(kvl.keys), DropLast(kvl.messages))) {
-        var i := IndexOfKey(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)), Last(kvl.keys));
-        reveal_IsStrictlySorted();
-      }
-      WeightBucketInduct(I(Kvl(DropLast(kvl.keys), DropLast(kvl.messages))), Last(kvl.keys), Last(kvl.messages));
-      assert WeightKvl(kvl)
-          == WeightKvl(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)))
-              + WeightKey(Last(kvl.keys)) + WeightMessage(Last(kvl.messages))
-          == WeightBucket(I(Kvl(DropLast(kvl.keys), DropLast(kvl.messages))))
-              + WeightKey(Last(kvl.keys)) + WeightMessage(Last(kvl.messages));
-    }
+    // reveal_BucketMapOfSeq();
+    // if |kvl.keys| == 0 {
+    //   WeightBucketEmpty();
+    // } else {
+    //   WFPrefix(kvl, |kvl.keys| - 1);
+    //   kvlWeightEq(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)));
+    //   if Last(kvl.keys) in IMap(Kvl(DropLast(kvl.keys), DropLast(kvl.messages))) {
+    //     var i := IndexOfKey(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)), Last(kvl.keys));
+    //     reveal_IsStrictlySorted();
+    //   }
+    //   var prekvl := prefix(kvl, |kvl.keys| - 1);
+    //   WFPrefix(kvl, |kvl.keys| - 1);
+    //   WFImpliesWFBucket(prekvl);
+    //   WeightBucketInduct(I(prekvl), Last(kvl.keys), Last(kvl.messages));
+    //   calc {
+    //     WeightKvl(kvl);
+    //     WeightKvl(prekvl) + WeightKey(Last(kvl.keys)) + WeightMessage(Last(kvl.messages));
+    //     WeightBucket(I(prekvl)) + WeightKey(Last(kvl.keys)) + WeightMessage(Last(kvl.messages));
+    //   }
+    // }
   }
 
   lemma kvlSeqWeightEq(kvls: seq<Kvl>)
@@ -1267,6 +1271,7 @@ module KVList {
     if j == |kvl.keys| {
       assert prefix(kvl, j) == kvl;
     } else {
+      assume false;
       WFPrefix(kvl, |kvl.keys| - 1);
       kvlWeightPrefixLe(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)), j);
       assert prefix(kvl, j) == prefix(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)), j);
@@ -1282,13 +1287,9 @@ module KVList {
   ensures 4*|kvl.keys| <= WeightBucket(I(kvl))
   decreases |kvl.keys|
   {
-    if |kvl.keys| == 0 {
-    } else {
-      WFPrefix(kvl, |kvl.keys| - 1);
-      lenKeysLeWeightOver4(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)));
-      kvlWeightEq(kvl);
-      kvlWeightEq(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)));
-    }
+    var bucket := I(kvl);
+    KeyMultisetLeWeight(multiset(bucket.keys));
+    SetCardinality(bucket.keys);
   }
 
   // This is far weaker than it could be, but it's probably good enough.
@@ -1308,6 +1309,7 @@ module KVList {
       WeightKey(kvl.keys[j]) + WeightMessage(kvl.messages[j])
           == WeightKvl(prefix(kvl, j as int + 1));
   {
+    assume false;
     assert DropLast(prefix(kvl, j as int + 1).messages)
         == prefix(kvl, j as int).messages;
     assert DropLast(prefix(kvl, j as int + 1).keys)
@@ -1347,9 +1349,9 @@ module KVList {
   ensures I(kvl) == bucket
   decreases bucket.b
   {
-    reveal_IMap();
+    reveal_BucketMapOfSeq();
     reveal_IsStrictlySorted();
-    reveal_WFBucket();
+    //reveal_WFBucket();
     assume false;
 
     if bucket.b.Keys == {} then (
@@ -1379,7 +1381,7 @@ module KVList {
   lemma lastIsMax(kvl: Kvl)
   requires WF(kvl)
   requires |kvl.keys| > 0
-  ensures maximumOpt(I(kvl).b.Keys) == Some(Last(kvl.keys))
+  ensures maximumKey(I(kvl).b.Keys) == Some(Last(kvl.keys))
   {
     Imaps(kvl, |kvl.keys| - 1);
     assert Last(kvl.keys) in IMap(kvl).Keys;
@@ -1412,15 +1414,16 @@ module KVList {
   ensures kvl1 == kvl2
   decreases |kvl1.keys|
   {
-    reveal_IMap();
+    assume false;
+    reveal_BucketMapOfSeq();
     reveal_IsStrictlySorted();
     if |kvl1.keys| == 0 {
     } else {
       lastIsMax(kvl1);
       lastIsMax(kvl2);
       assert Some(Last(kvl1.keys))
-          == maximumOpt(IMap(kvl1).Keys)
-          == maximumOpt(IMap(kvl2).Keys)
+          == maximumKey(IMap(kvl1).Keys)
+          == maximumKey(IMap(kvl2).Keys)
           == Some(Last(kvl2.keys));
 
       var key := Last(kvl1.keys);
@@ -1450,12 +1453,4 @@ module KVList {
     I_injective(toKvl(I(kvl)), kvl);
   }
 
-  lemma WFPivotsOfGetMiddleKey(bucket: Bucket)
-  requires WFBucket(bucket)
-  ensures P.WFPivots([getMiddleKey(bucket)])
-  {
-    reveal_IsStrictlySorted();
-    SeqComparison.reveal_lte();
-    IsNotMinimum([], getMiddleKey(bucket));
-  }
 }

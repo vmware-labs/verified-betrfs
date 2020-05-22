@@ -2,6 +2,7 @@ include "SyncModel.i.dfy"
 include "CommitterCommitModel.i.dfy"
 include "CommitterInitModel.i.dfy"
 include "CommitterAppendModel.i.dfy"
+include "CommitterReplayModel.i.dfy"
 include "QueryModel.i.dfy"
 include "SuccModel.i.dfy"
 include "InsertModel.i.dfy"
@@ -15,6 +16,7 @@ module CoordinationModel {
   import CommitterCommitModel
   import CommitterInitModel
   import CommitterAppendModel
+  import CommitterReplayModel
   import QueryModel
   import SuccModel
   import InsertModel
@@ -139,8 +141,8 @@ module CoordinationModel {
     assert BBC.NextStep(Ik(k).bc, IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, SendPersistentLocOp(loc), BBC.BlockCacheMoveStep(BC.ReceiveLocStep));
   }
 
-  function {:opaque} initialization(k: Constants, s: Variables, io: IO)
-      : (Variables, IO)
+  predicate {:opaque} initialization(k: Constants, s: Variables, io: IO,
+      s': Variables, io': IO)
   requires Inv(k, s)
   requires io.IOInit?
   {
@@ -150,43 +152,52 @@ module CoordinationModel {
         var cm' := CommitterInitModel.FinishLoadingSuperblockPhase(k, s.jc);
         var bc' := receiveLoc(
             k, s.bc, cm'.superblock.indirectionTableLoc);
-        var s' := s.(jc := cm').(bc := bc');
-        (s', io)
+        && s' == s.(jc := cm').(bc := bc')
+        && io' == io
       ) else if s.jc.superblock1Read.None?
           && s.jc.superblock1.SuperblockUnfinished? then (
-        var (cm', io') := CommitterInitModel.PageInSuperblockReq(k, s.jc, io, 0);
-        var s' := s.(jc := cm');
-        (s', io')
+        && (s'.jc, io') == CommitterInitModel.PageInSuperblockReq(k, s.jc, io, 0)
+        && s'.bc == s.bc
       ) else if s.jc.superblock2Read.None?
           && s.jc.superblock2.SuperblockUnfinished? then (
-        var (cm', io') := CommitterInitModel.PageInSuperblockReq(k, s.jc, io, 1);
-        var s' := s.(jc := cm');
-        (s', io')
+        && (s'.jc, io') == CommitterInitModel.PageInSuperblockReq(k, s.jc, io, 1)
+        && s'.bc == s.bc
       ) else (
-        (s, io)
+        && s' == s
+        && io' == io
       )
     ) else if s.jc.status.StatusLoadingOther? then (
-      var cm' := CommitterInitModel.FinishLoadingOtherPhase(k, s.jc);
-      var s' := s.(jc := cm');
-      (s', io)
+      && (s'.jc, io') == CommitterInitModel.tryFinishLoadingOtherPhase(k, s.jc, io)
+      && s'.bc == s.bc
     ) else if s.bc.LoadingIndirectionTable? &&
         s.bc.indirectionTableRead.None? then (
-      var (bc', io') := IOModel.PageInIndirectionTableReq(k, s.bc, io);
-      var s' := s.(bc := bc');
-      (s', io')
+      && (s'.bc, io') == IOModel.PageInIndirectionTableReq(k, s.bc, io)
+      && s'.jc == s.jc
+    ) else if s.bc.Ready? &&
+          !CommitterInitModel.isReplayEmpty(s.jc) then (
+      var je := JournalistModel.replayJournalTop(s.jc.journalist);
+      && ((
+        && InsertModel.insert(k, s.bc, io, je.key, je.value, s'.bc, false, io')
+        && s'.jc == s.jc
+      ) || (
+        && InsertModel.insert(k, s.bc, io, je.key, je.value, s'.bc, true, io')
+        && s'.jc ==
+            CommitterReplayModel.JournalReplayOne(k, s.jc)
+      ))
     ) else (
-      (s, io)
+      && s' == s
+      && io' == io
     )
   }
 
-  lemma initializationCorrect(k: Constants, s: Variables, io: IO)
+  lemma initializationCorrect(k: Constants, s: Variables, io: IO,
+      s': Variables, io': IO)
   requires Inv(k, s)
   requires io.IOInit?
-  ensures var (s', io') := initialization(k, s, io);
-    && WFVars(s')
-    && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
+  requires initialization(k, s, io, s', io')
+  ensures WFVars(s')
+  ensures M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
   {
-    var (s', io') := initialization(k, s, io);
     reveal_initialization();
     if s.jc.status.StatusLoadingSuperblock? {
       if s.jc.superblock1.SuperblockSuccess?  && s.jc.superblock2.SuperblockSuccess? {
@@ -215,7 +226,7 @@ module CoordinationModel {
         noop(k, s);
       }
     } else if s.jc.status.StatusLoadingOther? {
-      CommitterInitModel.FinishLoadingOtherPhaseCorrect(k, s.jc);
+      CommitterInitModel.tryFinishLoadingOtherPhaseCorrect(k, s.jc, io);
       bcNoOp(k, s, s', JournalInternalOp);
       assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')), JournalInternalOp);
       assert BJC.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')));
@@ -227,6 +238,30 @@ module CoordinationModel {
       assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')), StatesInternalOp);
       assert BJC.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')));
       assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'));
+    } else if s.bc.Ready? &&
+          !CommitterInitModel.isReplayEmpty(s.jc) {
+      var je := JournalistModel.replayJournalTop(s.jc.journalist);
+      if InsertModel.insert(k, s.bc, io, je.key, je.value, s'.bc, false, io') && s'.jc == s.jc {
+        InsertModel.insertCorrect(k, s.bc, io, je.key, je.value, s'.bc, false, io', true);
+        var vop;
+        if BBC.Next(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io')).bdop, StatesInternalOp) {
+          vop := StatesInternalOp;
+        } else {
+          vop := AdvanceOp(UI.NoOp, true);
+        }
+        jcNoOp(k, s, s', vop);
+        assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')), vop);
+        assert BJC.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')));
+        assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'));
+      } else {
+        assert InsertModel.insert(k, s.bc, io, je.key, je.value, s'.bc, true, io');
+        InsertModel.insertCorrect(k, s.bc, io, je.key, je.value, s'.bc, true, io', true);
+        CommitterReplayModel.JournalReplayOneCorrect(k, s.jc, je);
+        var vop := AdvanceOp(UI.PutOp(je.key, je.value), true);
+        assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')), vop);
+        assert BJC.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')));
+        assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'));
+      }
     } else {
       noop(k, s);
     }
@@ -366,6 +401,14 @@ module CoordinationModel {
     }
   }
 
+  predicate isInitialized(s: Variables)
+  {
+    && s.bc.Ready?
+    && s.jc.status.StatusReady?
+    && JournalistModel.Inv(s.jc.journalist)
+    && CommitterInitModel.isReplayEmpty(s.jc)
+  }
+
   predicate {:opaque} popSync(
       k: Constants, s: Variables, io: IO, id: uint64, graphSync: bool,
       s': Variables, io': IO, success: bool)
@@ -377,12 +420,8 @@ module CoordinationModel {
       && s' == s.(jc := jc')
       && io' == io
       && success == true
-    ) else if !s.bc.Ready? || !s.jc.status.StatusReady? then (
-      && (s', io') == initialization(k, s, io)
-      && success == false
-    ) else if !CommitterInitModel.isReplayEmpty(s.jc) then (
-      && s' == s
-      && io' == io
+    ) else if !isInitialized(s) then (
+      && initialization(k, s, io, s', io')
       && success == false
     ) else (
       doSync(k, s, io, graphSync, s', io')
@@ -403,7 +442,7 @@ module CoordinationModel {
         diskOp(io'))
   {
     reveal_popSync();
-    CommitterInitModel.reveal_isReplayEmpty();
+    //CommitterInitModel.reveal_isReplayEmpty();
     if id in s.jc.syncReqs.contents && s.jc.syncReqs.contents[id] == JC.State1 {
       CommitterCommitModel.popSyncCorrect(k, s.jc, id);
 
@@ -414,22 +453,12 @@ module CoordinationModel {
       assert BJC.Next(Ik(k), IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
       assert M.Next(Ik(k), IVars(s), IVars(s'), uiop, diskOp(io'));
 
-    } else if !s.bc.Ready? || !s.jc.status.StatusReady? {
-      initializationCorrect(k, s, io);
+    } else if !isInitialized(s) {
+      initializationCorrect(k, s, io, s', io');
       assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io'));
-    } else if !CommitterInitModel.isReplayEmpty(s.jc) {
-      noop(k, s);
     } else {
       doSyncCorrect(k, s, io, graphSync, s', io');
     }
-  }
-
-  predicate isInitialized(s: Variables)
-  {
-    && s.bc.Ready?
-    && s.jc.status.StatusReady?
-    && JournalistModel.Inv(s.jc.journalist)
-    && CommitterInitModel.isReplayEmpty(s.jc)
   }
 
   predicate {:opaque} query(
@@ -439,7 +468,7 @@ module CoordinationModel {
   requires Inv(k, s)
   {
     if !isInitialized(s) then (
-      && (s', io') == initialization(k, s, io)
+      && initialization(k, s, io, s', io')
       && result == None
     ) else (
       && QueryModel.query(k, s.bc, io, key, s'.bc, result, io')
@@ -458,9 +487,9 @@ module CoordinationModel {
           diskOp(io'))
   {
     reveal_query();
-    CommitterInitModel.reveal_isReplayEmpty();
+    //CommitterInitModel.reveal_isReplayEmpty();
     if !isInitialized(s) {
-      initializationCorrect(k, s, io);
+      initializationCorrect(k, s, io, s', io');
     } else {
       QueryModel.queryCorrect(k, s.bc, io, key, s'.bc, result, io');
       if result.Some? {
@@ -503,7 +532,7 @@ module CoordinationModel {
   requires maxToFind >= 1
   {
     if !isInitialized(s) then (
-      && (s', io') == initialization(k, s, io)
+      && initialization(k, s, io, s', io')
       && result == None
     ) else (
       && (s'.bc, io', result) == SuccModel.doSucc(k, s.bc, io, start, maxToFind)
@@ -523,9 +552,9 @@ module CoordinationModel {
           diskOp(io'))
   {
     reveal_succ();
-    CommitterInitModel.reveal_isReplayEmpty();
+    //CommitterInitModel.reveal_isReplayEmpty();
     if !isInitialized(s) {
-      initializationCorrect(k, s, io);
+      initializationCorrect(k, s, io, s', io');
     } else {
       SuccModel.doSuccCorrect(k, s.bc, io, start, maxToFind);
       if result.Some? {
@@ -567,7 +596,7 @@ module CoordinationModel {
   requires Inv(k, s)
   {
     if !isInitialized(s) then (
-      && (s', io') == initialization(k, s, io)
+      && initialization(k, s, io, s', io')
       && success == false
     ) else if JournalistModel.canAppend(s.jc.journalist,
         Journal.JournalInsert(key, value))
@@ -596,9 +625,9 @@ module CoordinationModel {
           diskOp(io'))
   {
     reveal_insert();
-    CommitterInitModel.reveal_isReplayEmpty();
+    //CommitterInitModel.reveal_isReplayEmpty();
     if !isInitialized(s) {
-      initializationCorrect(k, s, io);
+      initializationCorrect(k, s, io, s', io');
     } else if JournalistModel.canAppend(s.jc.journalist, Journal.JournalInsert(key, value)) {
       InsertModel.insertCorrect(k, s.bc, io, key, value, s'.bc, success, io', false /* replay */);
       if success {

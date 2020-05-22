@@ -50,6 +50,7 @@ module IOModel {
     BBC.NextStep(Ik(k).bc, s, s', BlockDisk.NoDiskOp, StatesInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep))
   }
 
+  // TODO(jonh): rename to indicate this is only nops.
   predicate betree_next(k: Constants, s: BBC.Variables, s': BBC.Variables)
   {
     || BBC.Next(Ik(k).bc, s, s', BlockDisk.NoDiskOp, StatesInternalOp)

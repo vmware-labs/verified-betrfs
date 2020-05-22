@@ -1,5 +1,6 @@
-include "../Base/sequences.i.dfy"
-include "../Base/total_order.i.dfy"
+include "../Base/total_order_impl.i.dfy"
+include "../Base/KeyType.s.dfy"
+  
 //
 // Provides definitions and libraries for pivot tables. A pivot
 // table is a sorted list of *pivot* keys that divides the keyspace into
@@ -7,12 +8,11 @@ include "../Base/total_order.i.dfy"
 //
 
 module PivotsLib {
-  import opened LinearSequence_i
   import opened Sequences
   import opened NativeTypes
   import opened KeyType
-
-  import Keyspace = Lexicographic_Byte_Order
+  import KeyspaceImpl = Lexicographic_Byte_Order_Impl
+  import Keyspace = KeyspaceImpl.Ord
 
   // A PivotTable of length n breaks the keyspace into n "buckets"
   // If the pivots are (a_1,...,a_n) then the buckets are
@@ -47,10 +47,8 @@ module PivotsLib {
   requires WFPivots(pt)
   ensures i as int == Route(pt, key)
   {
-    linear var lpt := AsLinear(pt);
-    var j := Keyspace.ComputeLargestLte(share_seq(lpt), key);
+    var j := KeyspaceImpl.ComputeLargestLte(pt, key);
     i := (j + 1) as uint64;
-    linear var AsLinear(_) := lpt;  // free the ref to pt.
   }
 
   // Quick lemma for proving that Route(pt, key) == idx
@@ -72,7 +70,7 @@ module PivotsLib {
   {
     if (idx == 0) {
       if (|pivotTable| > 0) {
-        var key := Keyspace.SmallerElement(pivotTable[0]);
+        var key := Keyspace.SmallestElement();
         RouteIs(pivotTable, key, 0);
         return key;
       } else {
@@ -151,17 +149,17 @@ module PivotsLib {
     }
   }
 
-  lemma RouteIdenticalForInsert(pt: PivotTable, pt': PivotTable, idx: int, i: int, key: Key)
-  requires WFPivots(pt)
-  requires WFPivots(pt')
-  requires 0 <= idx <= |pt|
-  requires pt' == insert(pt, key, idx)
-  requires Route(pt, key) == i
-  requires i < idx
-  ensures Route(pt', key) == i
-  {
-    RouteIs(pt', key, i);
-  }
+//~  lemma RouteIdenticalForInsert(pt: PivotTable, pt': PivotTable, idx: int, i: int, key: Key)
+//~  requires WFPivots(pt)
+//~  requires WFPivots(pt')
+//~  requires 0 <= idx <= |pt|
+//~  requires pt' == insert(pt, key, idx)
+//~  requires Route(pt, key) == i
+//~  requires i < idx
+//~  ensures Route(pt', key) == i
+//~  {
+//~    RouteIs(pt', key, i);
+//~  }
 
   lemma WFSlice(pt: PivotTable, i: int, j: int)
   requires WFPivots(pt)
@@ -241,7 +239,7 @@ module PivotsLib {
   ensures i as int == CutoffForLeft(pivots, pivot)
   {
     reveal_CutoffForLeft();
-    var j := Keyspace.ComputeLargestLt(pivots, pivot);
+    var j := KeyspaceImpl.ComputeLargestLt(pivots, pivot);
     i := (j + 1) as uint64;
   }
 
@@ -307,12 +305,12 @@ module PivotsLib {
       RouteIs(parentPivots, key, parentIdx);
       RouteIs(childPivots, key, childIdx);
     } else if (|childPivots| > 0) {
-      key := Keyspace.SmallerElement(childPivots[0]);
+      key := Keyspace.SmallestElement();
       Keyspace.IsStrictlySortedImpliesLte(childPivots, 0, |childPivots| - 1);
       RouteIs(parentPivots, key, parentIdx);
       RouteIs(childPivots, key, childIdx);
     } else if (|parentPivots| > 0) {
-      key := Keyspace.SmallerElement(parentPivots[0]);
+      key := Keyspace.SmallestElement();
       RouteIs(parentPivots, key, parentIdx);
       RouteIs(childPivots, key, childIdx);
     } else {

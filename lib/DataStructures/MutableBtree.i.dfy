@@ -20,7 +20,7 @@ abstract module MutableBtree {
   import Arrays
   import Model : BtreeModel
 
-  export API provides WF, Interpretation, EmptyTree, Insert, Query, Free, NativeTypes, Model, Options, Maps reveals Node, Key, Value
+  export API provides WF, Interpretation, EmptyTree, Insert, Query, Empty, MinKey, MaxKey, NativeTypes, Model, Options, Maps reveals Node, NodeContents, Key, Value
   export All reveals *
     
   type Key = Model.Keys.Element
@@ -111,6 +111,90 @@ abstract module MutableBtree {
     }
   }
 
+  method Empty(node: Node) returns (result: bool)
+    requires WF(node)
+    ensures result == (|Interpretation(node)| == 0)
+  {
+    if node.contents.Leaf? {
+      Model.reveal_Interpretation();
+      result := 0 == node.contents.nkeys;
+      assert !result ==> node.contents.keys[0] in Interpretation(node);
+    } else {
+      Model.IndexesNonempty(I(node));
+      result := false;
+    }
+  }
+  
+  method MinKeyInternal(node: Node) returns (result: Key)
+    requires WF(node)
+    requires 0 < |Interpretation(node)|
+    ensures result == Model.MinKey(I(node))
+    decreases node.repr
+  {
+    if node.contents.Leaf? {
+      assert 0 < node.contents.nkeys by {
+        Model.reveal_Interpretation();
+      }
+      assert node.contents.keys[0] == node.contents.keys[..node.contents.nkeys][0];
+      result := node.contents.keys[0];
+    } else {
+      assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
+      IOfChild(node, 0);
+      assert WF(node.contents.children[0]);
+      Model.ChildOfIndexNonempty(I(node), 0);
+      result := MinKeyInternal(node.contents.children[0]);
+    }
+  }
+
+  // We separate MinKey and MinKeyInternal in order to keep the API
+  // export set clean.  (MinKeyInternal needs to mention I(), but we
+  // don't want to export it.)
+  method MinKey(node: Node) returns (result: Key)
+    requires WF(node)
+    requires 0 < |Interpretation(node)|
+    ensures result in Interpretation(node)
+    ensures forall key | key in Interpretation(node) :: Model.Keys.lte(result, key)
+  {
+    result := MinKeyInternal(node);
+    Model.MinKeyProperties(I(node));
+  }
+  
+  method MaxKeyInternal(node: Node) returns (result: Key)
+    requires WF(node)
+    requires 0 < |Interpretation(node)|
+    ensures result == Model.MaxKey(I(node))
+    decreases node.repr
+  {
+    if node.contents.Leaf? {
+      assert 0 < node.contents.nkeys by {
+        Model.reveal_Interpretation();
+      }
+      var nkeys: uint64 := node.contents.nkeys;
+      assert node.contents.keys[nkeys - 1] == node.contents.keys[..nkeys][nkeys - 1];
+      result := node.contents.keys[nkeys-1];
+    } else {
+      var nchildren: uint64 := node.contents.nchildren;
+      assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
+      IOfChild(node, nchildren as nat - 1);
+      assert WF(node.contents.children[nchildren - 1]);
+      Model.ChildOfIndexNonempty(I(node), nchildren as nat - 1);
+      result := MaxKeyInternal(node.contents.children[nchildren - 1]);
+    }
+  }
+  
+  // We separate MaxKey and MaxKeyInternal in order to keep the API
+  // export set clean.  (MaxKeyInternal needs to mention I(), but we
+  // don't want to export it.)
+  method MaxKey(node: Node) returns (result: Key)
+    requires WF(node)
+    requires 0 < |Interpretation(node)|
+    ensures result in Interpretation(node)
+    ensures forall key | key in Interpretation(node) :: Model.Keys.lte(key, result)
+  {
+    result := MaxKeyInternal(node);
+    Model.MaxKeyProperties(I(node));
+  }
+  
   method EmptyTree() returns (linear root: Node)
     ensures WF(root)
     ensures Interpretation(root) == map[]

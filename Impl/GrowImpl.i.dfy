@@ -10,8 +10,6 @@ module GrowImpl {
   import opened DiskOpImpl
   import GrowModel
 
-  import KVList
-
   import opened Options
   import opened Maps
   import opened Sequences
@@ -57,10 +55,10 @@ module GrowImpl {
         print "giving up; could not allocate ref\n";
       }
       case Some(newref) => {
-        var emptyKvl := KVList.Empty();
+        //var emptyPkv := PKV.EmptyPkv();
         WeightBucketEmpty();
 
-        var mutbucket := new MutBucket(emptyKvl);
+        var mutbucket := new MutBucket();
 
         MutBucket.ListReprOfLen1([mutbucket]);
         MutBucket.ReprSeqDisjointOfLen1([mutbucket]);

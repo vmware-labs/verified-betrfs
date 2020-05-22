@@ -34,6 +34,24 @@ module Sequences {
   function Set<T>(run: seq<T>) : set<T> {
     set x : T | x in multiset(run)
   }
+
+  lemma SetCardinality<T>(run: seq<T>)
+    ensures |Set(run)| <= |run|
+  {
+    if |run| == 0 {
+    } else {
+      assert Set(run) == Set(DropLast(run)) + {Last(run)};
+      SetCardinality(DropLast(run));
+    }
+  }
+  
+  lemma SetCardinality0<T>(run: seq<T>)
+    ensures |Set(run)| == 0 <==> |run| == 0
+  {
+    if |run| != 0 {
+      assert run[0] in Set(run);
+    }
+  }
   
   function ISet<T>(run: seq<T>) : iset<T> {
     iset x : T | x in multiset(run)
@@ -68,6 +86,23 @@ module Sequences {
       assert Set(a) == Set(DropLast(a)) + {Last(a)};
     }
   }
+
+  lemma NoDupesMultiset<T>(a: seq<T>)
+    requires NoDupes(a)
+    ensures forall x | x in multiset(a) :: multiset(a)[x] == 1
+  {
+    if |a| == 0 {
+    } else {
+      assert a == DropLast(a) + [ Last(a) ];
+      assert Last(a) !in DropLast(a) by {
+        reveal_NoDupes();
+      }
+      assert NoDupes(DropLast(a)) by {
+        reveal_NoDupes();
+      }
+      NoDupesMultiset(DropLast(a));
+    }
+  }
   
   function IndexOf<T>(s: seq<T>, e: T) : int
     requires e in s;
@@ -96,6 +131,16 @@ module Sequences {
     else  [f(run[0])] + Apply(f, run[1..])
   }
 
+  // TODO: can we replace Apply with this?
+  function {:opaque} ApplyOpaque<E,R>(f: (E ~> R), run: seq<E>) : (result: seq<R>)
+    requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
+    ensures |result| == |run|
+    ensures forall i :: 0 <= i < |run| ==> result[i] == f(run[i]);
+    reads set i, o | 0 <= i < |run| && o in f.reads(run[i]) :: o
+  {
+    Apply(f, run)
+  }
+
   function Filter<E>(f : (E ~> bool), run: seq<E>) : (result: seq<E>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     ensures |result| <= |run|
@@ -116,6 +161,12 @@ module Sequences {
   {
     if |run| == 0 then init
     else f(FoldRight(f, init, run[1..]), run[0])
+  }
+
+  function FoldFromRight<A,E>(f: (A, E) -> A, init: A, run: seq<E>) : A
+  {
+    if |run| == 0 then init
+    else f(FoldFromRight(f, init, DropLast(run)), Last(run))
   }
 
   function {:opaque} remove<A>(s: seq<A>, pos: int) : seq<A>
@@ -240,14 +291,56 @@ module Sequences {
   lemma concatSeqAdditive<A>(a: seq<seq<A>>, b: seq<seq<A>>)
   ensures concatSeq(a + b) == concatSeq(a) + concatSeq(b)
   {
-    assume false;
+    if b == [] {
+      calc {
+        concatSeq(a + b);
+        { assert a + b == a; }
+        concatSeq(a);
+        {
+          reveal_concatSeq();
+          assert concatSeq(b) == [];
+        }
+        concatSeq(a) + concatSeq(b);
+      }
+    } else {
+      calc {
+        concatSeq(a + b);
+        { reveal_concatSeq(); }
+        concatSeq(DropLast(a + b)) + Last(a + b);
+        {
+          assert DropLast(a + b) == a + DropLast(b);
+          assert Last(a + b) == Last(b);
+        }
+        concatSeq(a + DropLast(b)) + Last(b);
+        {
+          concatSeqAdditive(a, DropLast(b));
+        }
+        concatSeq(a) + concatSeq(DropLast(b)) + Last(b);
+        { reveal_concatSeq(); }
+        concatSeq(a) + concatSeq(b);
+      }
+    }
   }
 
   lemma lemma_concatSeqLen_ge_elemLen<A>(a: seq<seq<A>>, i: int)
   requires 0 <= i < |a|
   ensures |concatSeq(a)| >= |a[i]|
   {
-    assume false;
+    reveal_concatSeq();
+    if i < |a| - 1 {
+      lemma_concatSeqLen_ge_elemLen(a[..|a|-1], i);
+    }
+  }
+
+  lemma lemma_concatSeqLen_le_mul<A>(a: seq<seq<A>>, t: int)
+  requires forall i | 0 <= i < |a| :: |a[i]| <= t
+  ensures |concatSeq(a)| <= |a| * t
+  {
+    reveal_concatSeq();
+    if |a| == 0 {
+    } else {
+      lemma_concatSeqLen_le_mul(a[..|a|-1], t);
+    }
   }
 
   predicate {:opaque} IsPrefix<A(==)>(a: seq<A>, b: seq<A>)
@@ -262,25 +355,25 @@ module Sequences {
     && a == b[|b|-|a|..]
   }
 
-  lemma SelfIsPrefix<A>(a: seq<A>)
-  ensures IsPrefix(a, a);
-  {
-    reveal_IsPrefix();
-  }
+//~  lemma SelfIsPrefix<A>(a: seq<A>)
+//~  ensures IsPrefix(a, a);
+//~  {
+//~    reveal_IsPrefix();
+//~  }
 
-  lemma IsPrefixFromEqSums<A>(a: seq<A>, b: seq<A>, c: seq<A>, d: seq<A>)
-  requires a + b == c + d
-  requires IsSuffix(b, d);
-  ensures IsPrefix(c, a);
-  {
-    reveal_IsPrefix();
-    reveal_IsSuffix();
-    assert |c| <= |a|;
-    assert c
-        == (c + d)[..|c|]
-        == (a + b)[..|c|]
-        == a[..|c|];
-  }
+//~  lemma IsPrefixFromEqSums<A>(a: seq<A>, b: seq<A>, c: seq<A>, d: seq<A>)
+//~  requires a + b == c + d
+//~  requires IsSuffix(b, d);
+//~  ensures IsPrefix(c, a);
+//~  {
+//~    reveal_IsPrefix();
+//~    reveal_IsSuffix();
+//~    assert |c| <= |a|;
+//~    assert c
+//~        == (c + d)[..|c|]
+//~        == (a + b)[..|c|]
+//~        == a[..|c|];
+//~  }
 
   function {:opaque} SeqIndexIterate<A(==)>(run: seq<A>, needle: A, i: int) : (res : Option<int>)
   requires 0 <= i <= |run|
@@ -359,22 +452,37 @@ module Sequences {
     else FlattenShape(DropLast(seqs)) + [|Last(seqs)|]
   }
 
+  lemma FlattenShapeAdditive<A>(seqs1: seq<seq<A>>, seqs2: seq<seq<A>>)
+    ensures FlattenShape(seqs1 + seqs2) == FlattenShape(seqs1) + FlattenShape(seqs2)
+  {
+  }
+  
   function {:opaque} FlattenLength(shape: seq<nat>) : nat
+    ensures |shape| == 0 ==> FlattenLength(shape) == 0
   {
     if |shape| == 0 then 0
     else FlattenLength(DropLast(shape)) + Last(shape)
   }
-  
-  lemma FlattenLengthMonotonic(shape: seq<nat>, prefix: nat)
-    requires prefix < |shape|
-    ensures FlattenLength(shape[..prefix]) <= FlattenLength(shape)
+
+
+  lemma FlattenLengthAdditive(shape1: seq<nat>, shape2: seq<nat>)
+    ensures FlattenLength(shape1 + shape2) == FlattenLength(shape1) + FlattenLength(shape2)
   {
-    reveal_FlattenLength();
-    if prefix == |shape|-1 {
+    if |shape2| == 0 {
+      assert shape1 + shape2 == shape1;
     } else {
-      FlattenLengthMonotonic(DropLast(shape), prefix);
-      assert DropLast(shape)[..prefix] == shape[..prefix];
+      reveal_FlattenLength();
+      assert shape1 + shape2 == (shape1 + DropLast(shape2)) + [Last(shape2)];
     }
+  }
+  
+  lemma FlattenLengthSubSeq(shape: seq<nat>, from: nat, to: nat)
+    requires from <= to <= |shape|
+    ensures FlattenLength(shape[from..to]) <= FlattenLength(shape)
+  {
+    assert shape == shape[..from] + shape[from..to] + shape[to..];
+    FlattenLengthAdditive(shape[..from] + shape[from..to], shape[to..]);
+    FlattenLengthAdditive(shape[..from], shape[from..to]);
   }
 
   function {:opaque} Flatten<A>(seqs: seq<seq<A>>) : seq<A>
@@ -387,6 +495,37 @@ module Sequences {
     else Flatten(DropLast(seqs)) + Last(seqs)
   }
 
+  lemma FlattenSingleton<A>(s: seq<A>)
+    ensures Flatten([ s ]) == s
+  {
+    reveal_Flatten();
+  }
+  
+  lemma FlattenAdditive<A>(seqs1: seq<seq<A>>, seqs2: seq<seq<A>>)
+    ensures Flatten(seqs1 + seqs2) == Flatten(seqs1) + Flatten(seqs2)
+    decreases |seqs2|
+  {
+    if |seqs2| == 0 {
+      assert seqs1 + seqs2 == seqs1;
+    } else if |seqs2| == 1 {
+      reveal_Flatten();
+    } else {
+      calc {
+        Flatten(seqs1 + seqs2);
+        { assert seqs1 + seqs2 == seqs1 + DropLast(seqs2) + [ Last(seqs2) ]; }
+        Flatten(seqs1 + DropLast(seqs2) + [ Last(seqs2) ]);
+        { FlattenAdditive(seqs1 + DropLast(seqs2), [ Last(seqs2) ]); }
+        Flatten(seqs1 + DropLast(seqs2)) + Flatten([ Last(seqs2) ]);
+        { FlattenAdditive(seqs1, DropLast(seqs2)); }
+        Flatten(seqs1) + Flatten(DropLast(seqs2)) + Flatten([ Last(seqs2) ]);
+        { FlattenAdditive(DropLast(seqs2), [ Last(seqs2) ]); }
+        Flatten(seqs1) + Flatten(DropLast(seqs2) + [ Last(seqs2) ]);
+        { assert seqs2 == DropLast(seqs2) + [ Last(seqs2) ]; }
+        Flatten(seqs1) + Flatten(seqs2);
+      }
+    }
+  }
+  
   function FlattenIndex(shape: seq<nat>, i: nat, j: nat) : nat
     requires i < |shape|
     requires j < shape[i]
@@ -452,25 +591,25 @@ module Sequences {
     }
   }
   
-  lemma FlattenIndexOrdering(shape: seq<nat>, il: nat, io: nat, jl: nat, jo: nat)
-    requires il < |shape|
-    requires io < shape[il]
-    requires jl < |shape|
-    requires jo < shape[jl]
-    requires il <= jl
-    requires il == jl ==> io < jo
-    ensures FlattenIndex(shape, il, io) < FlattenIndex(shape, jl, jo)
-  {
-    reveal_FlattenLength();
-    if il < jl-1 {
-      assert shape[..il] == shape[..il+1][..il];
-      FlattenLengthMonotonic(shape[..jl], il+1);
-      assert shape[..jl][..il+1] == shape[..il+1];
-    } else if il == jl - 1 {
-      assert shape[..il] == shape[..il+1][..il];
-    } else {
-    }
-  }
+//~  lemma FlattenIndexOrdering(shape: seq<nat>, il: nat, io: nat, jl: nat, jo: nat)
+//~    requires il < |shape|
+//~    requires io < shape[il]
+//~    requires jl < |shape|
+//~    requires jo < shape[jl]
+//~    requires il <= jl
+//~    requires il == jl ==> io < jo
+//~    ensures FlattenIndex(shape, il, io) < FlattenIndex(shape, jl, jo)
+//~  {
+//~    reveal_FlattenLength();
+//~    if il < jl-1 {
+//~      assert shape[..il] == shape[..il+1][..il];
+//~      FlattenLengthSubSeq(shape[..jl], 0, il+1);
+//~      assert shape[..jl][..il+1] == shape[..il+1];
+//~    } else if il == jl - 1 {
+//~      assert shape[..il] == shape[..il+1][..il];
+//~    } else {
+//~    }
+//~  }
 
   lemma UnflattenIndexOrdering(shape: seq<nat>, i: nat, j: nat)
     requires i < j < FlattenLength(shape)

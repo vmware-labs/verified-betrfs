@@ -227,14 +227,14 @@ module BetreeInv {
     }
   }
 
-  lemma InsertMessagePreservesAcyclic(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
-    requires Inv(k, s)
-    requires InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
-    ensures Acyclic(k, s')
-  {
-    G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, Root());
-    AcyclicGraphImpliesAcyclic(k, s');
-  }
+//~  lemma InsertMessagePreservesAcyclic(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
+//~    requires Inv(k, s)
+//~    requires InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
+//~    ensures Acyclic(k, s')
+//~  {
+//~    G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, Root());
+//~    AcyclicGraphImpliesAcyclic(k, s');
+//~  }
 
   lemma FlushPreservesAcyclic(k: Constants, s: Variables, s': Variables, flush:NodeFlush)
     requires Inv(k, s)
@@ -615,6 +615,7 @@ module BetreeInv {
           assert lookup' == lookup'[..i] + middle' + lookup'[i+2..];
           
           InterpretLookupAdditive3(lookup[..i], middle, lookup[i+2..], key);
+          assert middle == lookup[i..i+2];
           assert lookup == lookup[..i] + middle + lookup[i+2..];
 
           RedirectResultingGraph(k, s, s', redirect);
@@ -813,13 +814,13 @@ module BetreeInv {
     }
   }
 
-  lemma GCStepPreservesIsPathFromRootLookupRev(k: Constants, s: Variables, s': Variables, refs: iset<Reference>, lookup: Lookup, key: Key)
-    requires Inv(k, s)
-    requires BI.GC(k.bck, s.bcv, s'.bcv, refs)
-    requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup);
-    ensures IsPathFromRootLookup(k, s.bcv.view, key, lookup);
-  {
-  }
+//~  lemma GCStepPreservesIsPathFromRootLookupRev(k: Constants, s: Variables, s': Variables, refs: iset<Reference>, lookup: Lookup, key: Key)
+//~    requires Inv(k, s)
+//~    requires BI.GC(k.bck, s.bcv, s'.bcv, refs)
+//~    requires IsPathFromRootLookup(k, s'.bcv.view, key, lookup);
+//~    ensures IsPathFromRootLookup(k, s.bcv.view, key, lookup);
+//~  {
+//~  }
 
   lemma GCStepPreservesAcyclicity(k: Constants, s: Variables, s': Variables, refs: iset<Reference>)
     requires Inv(k, s)

@@ -449,6 +449,13 @@ module JournalIntervals {
   requires ValidJournalLocation(loc)
   ensures ContiguousJournalInterval(interval)
   ensures JournalRangeLocation(interval.start as uint64, interval.len as uint64) == loc
+  {
+    reveal_ValidJournalLocation();
+    JournalInterval(
+      (loc.addr as int - JournalStartAddr() as int) / 4096,
+      loc.len as int / 4096
+    )
+  }
 
   lemma get_Disk_JournalRange(
     journal: seq<Option<JournalBlock>>,

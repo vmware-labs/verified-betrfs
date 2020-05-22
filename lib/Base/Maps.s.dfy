@@ -1,10 +1,12 @@
 // TODO most of this doesn't need to be .s
 
+// TODO(rob): Split into Maps and IMaps
+
 include "Option.s.dfy"
 
 module {:extern} Maps {
   import opened Options
-
+    
   predicate IMapsTo<K,V>(m: imap<K, V>, k: K, v: V) {
     k in m && m[k] == v
   }
@@ -24,6 +26,11 @@ module {:extern} Maps {
   predicate IsSubIMap<K,V>(sub: imap<K,V>, sup: imap<K,V>) {
     && sub.Keys <= sup.Keys
     && (forall key :: key in sub.Keys ==> IMapsAgreeOnKey(sub, sup, key))
+  }
+
+  predicate IsSubMap<K,V>(sub: map<K,V>, sup: map<K,V>) {
+    && sub.Keys <= sup.Keys
+    && (forall key :: key in sub.Keys ==> MapsAgreeOnKey(sub, sup, key))
   }
 
   function {:opaque} MapRemove<K,V>(m:map<K,V>, ks:set<K>) : (m':map<K,V>)
@@ -209,4 +216,18 @@ module {:extern} Maps {
 	{
 	  if key in m then Some(m[key]) else None
 	}
+
+  lemma MapsEqualExtensionality<A,B>(a: map<A,B>, b: map<A,B>)
+    requires forall key | key in a :: MapsTo(b, key, a[key])
+    requires forall key | key in b :: MapsTo(a, key, b[key])
+  {
+  }
+
+  lemma MapDisjointUnionCardinality<A,B>(a: map<A, B>, b: map<A, B>)
+    requires a.Keys !! b.Keys
+    ensures |MapDisjointUnion(a, b)| == |a| + |b|
+  {
+    var u := MapDisjointUnion(a, b);
+    assert |u.Keys| == |a.Keys| + |b.Keys|;
+  }
 }

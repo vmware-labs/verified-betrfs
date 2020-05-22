@@ -5,9 +5,18 @@ from __future__ import division
 
 import sys
 import os
+import subprocess
+import time
+import datetime
+import signal
 
-def autoconfig(config, memlimit):
-  print("using node size roughly: " + config)
+def actuallyprint(msg):
+    print(msg)
+    sys.stdout.flush()
+
+def autoconfig(config, memlimit, nodeCountFudge):
+  actuallyprint("using node size roughly: " + config)
+  sys.stdout.flush()
 
   if memlimit.endswith("gb"):
     memlimit = int(float(memlimit[:-2]) * 1024*1024*1024)
@@ -16,15 +25,18 @@ def autoconfig(config, memlimit):
 
   itable_size = 8*1024*1024
 
-  MALLOC_OVERHEAD=1.3
   if config == "8mb":
     node_size = 8*1024*1024
     bucket_weight = 8356168
-    cache_size = int(memlimit // ((8*1024*1024)*MALLOC_OVERHEAD))
+    cache_size = int(memlimit * nodeCountFudge // ((8*1024*1024)))
+  elif config == "1mb":
+    node_size = 1*1024*1024
+    bucket_weight = 1016136 # jonh has no idea where this number comes from, so I subtracted 32000 because that looks like a popular choice.
+    cache_size = int(memlimit * nodeCountFudge // ((1*1024*1024)))
   elif config == "64kb":
     node_size = 98304
     bucket_weight = 64220
-    cache_size = int(memlimit // ((64*1024)*MALLOC_OVERHEAD))
+    cache_size = int(memlimit * nodeCountFudge // ((64*1024)))
   else:
     assert False
 
@@ -51,6 +63,7 @@ def set_mem_limit(limit):
     val = int(limit)
     print("setting mem limit to " + str(val) + " bytes")
 
+  val = int(val)
   ret = os.system("echo " + str(val) + " > /sys/fs/cgroup/memory/VeribetrfsExp/memory.limit_in_bytes")
   assert ret == 0
 
@@ -96,8 +109,12 @@ def main():
   value_updates = []
   config = None
   log_stats = False
+  nodeCountFudge = 1.0  # Pretend we have more memory when computing node count budget, since mean node is 75% utilized. This lets us tune veri to exploit all available cgroup memory.
+  max_children = None   # Default
+  cgroup_enabled = True
 
   rocks = None
+  time_budget_sec = 3600*24*365 # You get a year if you don't ask for a budget
 
   for arg in sys.argv[1:]:
     if arg.startswith("ram="):
@@ -106,6 +123,8 @@ def main():
       workload = arg[len("workload=") : ]
     elif arg.startswith("device="):
       device = arg[len("device=") : ]
+    elif arg.startswith("nodeCountFudge="):
+      nodeCountFudge = float(arg[len("nodeCountFudge=") : ])
     elif "Uint64=" in arg:
       sp = arg.split("=")
       assert len(sp) == 2
@@ -120,13 +139,30 @@ def main():
       rocks = True
     elif arg == "log_stats":
       log_stats = True
+    elif arg.startswith("time_budget="):
+      val_str = arg.split("=")[1]
+      unit = val_str[-1]
+      mult = 1 if unit=="s" else 60 if unit=="m" else 3600 if unit=="h" else None
+      assert mult, "time_budget needs a unit"
+      time_budget_sec = float(val_str[:-1]) * mult
+    elif arg.startswith("cgroup="):
+      enabled = arg.split("=")[1]
+      cgroup_enabled = enabled=="True"
+    elif arg.startswith("output="):
+      outpath = arg.split("=")[1]
+      assert not os.path.exists(outpath)
+      fp = open(outpath, "w")
+      os.dup2(fp.fileno(), 1)   # replace stdout for this program and children
     else:
       assert False, "unrecognized argument: " + arg
+
+  actuallyprint("Experiment time budget %s" % (datetime.timedelta(seconds=time_budget_sec)))
+  actuallyprint("metadata time_budget %s seconds" % time_budget_sec)
 
   if config != None:
     assert not rocks
     assert ram != None
-    value_updates = autoconfig(config, ram) + value_updates
+    value_updates = autoconfig(config, ram, nodeCountFudge) + value_updates
 
   assert workload != None
   assert device != None
@@ -159,14 +195,20 @@ def main():
   if log_stats:
     make_options = "LOG_QUERY_STATS=1 "
 
-  print("Building executable...")
-  cmd = make_options + "make " + exe + " -s -j4 > /dev/null 2> /dev/null"
-  print(cmd)
+  actuallyprint("Building executable...")
+  sys.stdout.flush()
+  #cmd = make_options + "make " + exe + " -j4 > /dev/null 2> /dev/null"
+  cmd = make_options + "make " + exe
+  actuallyprint(cmd)
   ret = os.system(cmd)
   assert ret == 0
 
-  wl = "ycsb/workload" + workload + "-onefield.spec"
-  print("workload: " + wl)
+  if len(workload)==1:
+    # sheesh you're lazy
+    wl = "ycsb/workload" + workload + "-onefield.spec"
+  else:
+    wl = workload
+  actuallyprint("workload: " + wl)
 
   if device == "optane":
     loc = "/scratch0/tjhance/ycsb/"
@@ -190,10 +232,23 @@ def main():
   # See https://linux.die.net/man/1/taskset
   taskset_cmd = "taskset 4 "
 
-  command = taskset_cmd + "cgexec -g memory:VeribetrfsExp ./" + exe + " " + wl + " " + loc + " " + cmdoption
-  print(command)
+  cgroup_prefix = "cgexec -g memory:VeribetrfsExp " if cgroup_enabled else ""
+  command = taskset_cmd + cgroup_prefix + "./" + exe + " " + wl + " " + loc + " " + cmdoption
+  actuallyprint(command)
+  sys.stdout.flush()
 
-  os.system(command)
+  start_time = time.time()
+  end_time = start_time + time_budget_sec
+  proc = subprocess.Popen(command, shell=True, preexec_fn=os.setsid)
+  proc_grp_id = os.getpgid(proc.pid)
+  actuallyprint("experiment pid %d pgid %d" % (proc.pid, proc_grp_id))
+  while proc.poll() == None:
+    if time.time() >= end_time:
+      os.killpg(proc_grp_id, signal.SIGKILL)
+      actuallyprint("time_budget exhausted; killed.")
+      break
+    time.sleep(10)
+
   assert ret == 0
 
 if __name__ == "__main__":

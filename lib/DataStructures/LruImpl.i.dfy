@@ -192,7 +192,7 @@ module LruImpl {
           if k < j {
             assert Queue[k] == ref;
           } else {
-            assert Queue[k-1] == ref;
+            //assert Queue[k-1] == ref;
           }
         }
 
@@ -387,9 +387,10 @@ module LruImpl {
     }
 
     // Unverified junk for debugging
-    method Count() returns (count:uint64)
+    method Count()
+    returns (count:uint64)
+    requires false
     {
-      assume false; // debugging junk
       if this == null {
         count := 0;
         return;
@@ -402,7 +403,10 @@ module LruImpl {
       }
     }
 
-    method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator) {
+    method DebugAccumulate()
+    returns (acc:DebugAccumulator.DebugAccumulator)
+    requires false
+    {
       var nodeCount := Count();
       var r := new DebugAccumulator.AccRec(nodeCount, "Node");
       acc := DebugAccumulator.AccPut(acc, "t", r);

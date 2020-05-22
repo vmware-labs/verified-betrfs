@@ -136,7 +136,10 @@ module StateImpl {
     // Unready
     // no fields
 
-    method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator) {
+    method DebugAccumulate()
+    returns (acc:DebugAccumulator.DebugAccumulator)
+    requires false
+    {
       acc := DebugAccumulator.EmptyAccumulator();
       //var r := new DebugAccumulator.AccRec(syncReqs.Count, "SyncReqStatus");
       //acc := DebugAccumulator.AccPut(acc, "syncReqs", r);

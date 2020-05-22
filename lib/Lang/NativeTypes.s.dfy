@@ -18,5 +18,6 @@ module NativeTypes {
   function method Uint16Size() : uint64 { 2 }
 
   function Uint64UpperBound() : int { 0x1_0000_0000_0000_0000 }
+  function Uint32UpperBound() : int { 0x1_0000_0000 }
 
 }

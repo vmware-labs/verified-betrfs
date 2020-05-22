@@ -1,0 +1,15 @@
+#!/usr/bin/python3
+ipmapping = """
+veribetrfs-bastion 3.21.176.58	eipalloc-0a4adc9ce75c03c6a	i-0c76f39a65be38618 	172.31.25.215	eipassoc-0a00ec20c51db6df0	387954881389
+veri-worker-b0 18.221.12.251	eipalloc-0eaa40716bb85f270	i-0ef45a89f48487fce 	172.31.29.13	eipassoc-0e70234cb147af779	387954881389
+veri-worker-b1 3.12.97.231	eipalloc-0b450e069a52d1699	i-006858073c1785f92 	172.31.21.18	eipassoc-05aadc653d5d4d5b4	387954881389
+veri-worker-b2 3.17.7.43	eipalloc-0df8033e96a00a8c1	i-0070ff5413bf8eed4 	172.31.25.175	eipassoc-060d331bce8a4ae73	387954881389
+veri-worker-b3 3.22.228.182	eipalloc-03fb8d354f407123d	i-0119b98c9b74ffaea 	172.31.26.15	eipassoc-09793f42842d1b05a	387954881389
+"""
+for line in ipmapping.split("\n"):
+  line=line.strip()
+  if line=="": continue
+  fields = line.split()
+  name = fields[0]
+  ip = fields[1]
+  print("%s ssh ubuntu@%s" % (name, ip))

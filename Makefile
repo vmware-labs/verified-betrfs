@@ -292,7 +292,18 @@ build/framework/BundleWrapper.o: framework/BundleWrapper.cpp build/Bundle.cpp $(
 rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 -include $(call rwildcard,$(CPP_DEP_DIR)/,*.d)
 
-VERIBETRFS_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o build/framework/Main.o build/framework/Benchmarks.o build/framework/MallocAccounting.o
+VERIBETRFS_AUX_FILES=\
+	build/framework/Benchmarks.o \
+	build/framework/BundleWrapper.o \
+	build/framework/Crc32.o \
+	build/framework/UnverifiedRowCache.o \
+	build/framework/Framework.o \
+	build/framework/MallocAccounting.o \
+	build/framework/NativeArrays.o \
+
+VERIBETRFS_O_FILES=\
+	$(VERIBETRFS_AUX_FILES)\
+	build/framework/Main.o \
 
 LDFLAGS=-msse4.2
 
@@ -311,11 +322,7 @@ build/Veribetrfs: $(VERIBETRFS_O_FILES)
 # YCSB
 
 VERIBETRFS_YCSB_O_FILES=\
-	build/framework/BundleWrapper.o \
-	build/framework/Framework.o \
-	build/framework/Crc32.o \
-	build/framework/Benchmarks.o \
-	build/framework/MallocAccounting.o \
+	$(VERIBETRFS_AUX_FILES)\
 	build/framework/leakfinder.o \
 
 libycsbc: build/libycsbc-libcpp.a \
@@ -383,5 +390,46 @@ build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp
 			ycsb/YcsbMain.cpp \
 			-lycsbc-default -lrocksdb -lpthread -ldl $(LDFLAGS) \
 
+vendor/kyoto/kyotocabinet/libkyotocabinet.a:
+	(cd vendor/kyoto/kyotocabinet; CXX=clang++ CXXFLAGS=$(STDLIB) ./configure; make)
 
-ycsb: build/VeribetrfsYcsb build/RocksYcsb
+build/KyotoYcsb: ycsb/YcsbMain.cpp build/libycsbc-libcpp.a vendor/kyoto/kyotocabinet/libkyotocabinet.a
+	# NOTE: this uses c++17, which is required by hdrhist
+	$(CC) \
+      $(STDLIB) \
+      -o $@ \
+			-Winline -std=c++17 $(O3FLAG) \
+			-L ycsb/build \
+			-I ycsb/build/include \
+			-I $(DAFNY_ROOT)/Binaries/ \
+			-I framework/ \
+			-I build/ \
+			-I vendor/hdrhist/ \
+			-I vendor/kyoto/kyotocabinet \
+			-L vendor/kyoto/kyotocabinet \
+			$(DBG_SYMBOLS_FLAG) \
+			-D_YCSB_KYOTO \
+			ycsb/YcsbMain.cpp \
+			vendor/kyoto/kyotocabinet/libkyotocabinet.a \
+			-lycsbc-libcpp -lpthread -ldl -lz $(LDFLAGS)
+
+# Requires libdb-stl-dev to be installed (on debian, libdbb5.3-stl-dev)
+build/BerkeleyYcsb: ycsb/YcsbMain.cpp build/libycsbc-libcpp.a
+	# NOTE: this uses c++17, which is required by hdrhist
+	$(CC) \
+      $(STDLIB) \
+      -o $@ \
+			-Winline -std=c++17 $(O3FLAG) \
+			-L ycsb/build \
+			-I ycsb/build/include \
+			-I $(DAFNY_ROOT)/Binaries/ \
+			-I framework/ \
+			-I build/ \
+			-I vendor/hdrhist/ \
+			$(DBG_SYMBOLS_FLAG) \
+			-D_YCSB_BERKELEYDB \
+			ycsb/YcsbMain.cpp \
+			-lycsbc-libcpp -lpthread -ldl -lz -ldb_stl $(LDFLAGS)
+
+
+ycsb: build/VeribetrfsYcsb build/RocksYcsb build/KyotoYcsb build/BerkeleyYcsb

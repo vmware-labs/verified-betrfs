@@ -16,6 +16,17 @@ module ValueType {
 
 	function Len(v: Value) : nat { |v| }
 
+  predicate ValidMessageBytestring(s: seq<NativeTypes.byte>)
+  {
+    |s| <= MaxLen() as int
+  }
+
+  predicate ValidMessageBytestrings(strs: seq<seq<NativeTypes.byte>>)
+  {
+    forall i | 0 <= i < |strs| :: ValidMessageBytestring(strs[i])
+  }
+
+  
 	export S provides Value, DefaultValue, Len
 	export Internal reveals *
 	export extends S

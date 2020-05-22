@@ -39,6 +39,10 @@ module Mathematics {
     ensures (x + d - 1) / d < x
   {
     PosMulPosIsPos(d-1, x-1);
+    calc <= {
+      0; <
+      (d-1) * (x-1);
+    }
   }
 
   lemma PosMulPreservesOrder(x: nat, y: nat, m: nat)

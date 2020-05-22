@@ -429,8 +429,8 @@ abstract module TSJ {
   {
     SM.NextPreservesInv(k.k, s.s3, s'.s3, replayedUIOp);
     path_append(k.k, s.s2, SeqSub(s.j2 + s.j_delta, s.j3), s.s3, replayedUIOp, s'.s3);
-    assert SeqSub(s.j2 + s.j_delta, s.j3) + JournalEntriesForUIOp(replayedUIOp)
-        == SeqSub(s.j2 + s.j_delta, s'.j3);
+    // assert SeqSub(s.j2 + s.j_delta, s.j3) + JournalEntriesForUIOp(replayedUIOp)
+    //     == SeqSub(s.j2 + s.j_delta, s'.j3);
   }
 
   lemma PushSyncStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op, id: int)
