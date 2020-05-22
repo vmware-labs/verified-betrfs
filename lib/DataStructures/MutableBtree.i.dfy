@@ -1250,14 +1250,17 @@ module MainModule {
 
   method SeqFor(i: uint64)
   returns (result:TMB.Key)
-  requires i < 256*256*256;
   {
-    var b0:byte := (i / 65536) as byte;
-    var r := i - (b0 as uint64 * 65536);
-    var b1:byte := (r / 256) as byte;
-    var b2:byte := (r - (b1 as uint64)*256) as byte;
-
-    result := [b0, b1, b2];
+    result := [
+      ((i / (1)) % 256) as byte,
+      ((i / (1*256)) % 256) as byte,
+      ((i / (1*256*256)) % 256) as byte,
+      ((i / (1*256*256*256)) % 256) as byte,
+      ((i / (1*256*256*256*256)) % 256) as byte,
+      ((i / (1*256*256*256*256*256)) % 256) as byte,
+      ((i / (1*256*256*256*256*256*256)) % 256) as byte,
+      ((i / (1*256*256*256*256*256*256*256)) % 256) as byte
+    ];
   }
 
   method Run(seed: uint64, n: uint64, dry: bool)
