@@ -1,4 +1,4 @@
-include "../Base/NativeTypes.s.dfy"
+include "../Lang/NativeTypes.s.dfy"
 include "../Base/KeyType.s.dfy"
 include "../DataStructures/KMBtree.i.dfy"
 include "PackedKV.i.dfy"

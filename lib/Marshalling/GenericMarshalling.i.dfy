@@ -1,4 +1,4 @@
-include "../Base/NativeTypes.s.dfy"
+include "../Lang/NativeTypes.s.dfy"
 include "../Base/total_order.i.dfy"
 include "../Math/bases.i.dfy"
 include "Maps.i.dfy"

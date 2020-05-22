@@ -1,5 +1,5 @@
 include "KeyType.s.dfy"
-include "NativeTypes.s.dfy"
+include "../Lang/NativeTypes.s.dfy"
 include "sequences.i.dfy"
 
 //

@@ -957,10 +957,11 @@ module IndirectionTableImpl {
     ensures SizeOfV(v) <= MaxIndirectionTableByteSize()
     ensures SizeOfV(v) == size as int
     {
-      assert t.Count <= IndirectionTableModel.MaxSizeUint64();
+      assert t.count <= IndirectionTableModel.MaxSizeUint64();
       lemma_SeqSum_empty();
-      var a: array<V> := new V[t.Count as uint64];
-      var it := t.IterStart();
+      var count := t.count as uint64;
+      var a: array<V> := new V[count];
+      var it := LinearMutableMap.IterStart(t);
       var i: uint64 := 0;
       size := 0;
 
@@ -969,7 +970,7 @@ module IndirectionTableImpl {
       invariant Inv()
       invariant BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
       invariant 0 <= i as int <= a.Length
-      invariant MutableMapModel.WFIter(t.I(), it);
+      invariant LinearMutableMap.WFIter(t, it);
       invariant forall j | 0 <= j < i :: ValidVal(a[j])
       invariant forall j | 0 <= j < i :: ValInGrammar(a[j], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
       // NOALIAS/CONST table doesn't need to be mutable, if we could say so we wouldn't need this
@@ -977,12 +978,12 @@ module IndirectionTableImpl {
       invariant IndirectionTableModel.valToHashMap(a[..i]).value.contents == partial
       invariant |partial.Keys| == i as nat
       invariant partial.Keys == it.s
-      invariant partial.Keys <= t.I().contents.Keys
-      invariant forall r | r in partial :: r in t.I().contents
-          && partial[r].loc == t.I().contents[r].loc
-          && partial[r].succs == t.I().contents[r].succs
+      invariant partial.Keys <= t.contents.Keys
+      invariant forall r | r in partial :: r in t.contents
+          && partial[r].loc == t.contents[r].loc
+          && partial[r].succs == t.contents[r].succs
       // NOALIAS/CONST t doesn't need to be mutable, if we could say so we wouldn't need this
-      invariant t.I().contents == old(t.I().contents)
+      invariant t.contents == old(t.contents)
       invariant size as int <=
           |it.s| * (8 + 8 + 8 + (8 + MaxNumChildren() * 8))
       invariant SeqSum(a[..i]) == size as int;
@@ -1011,12 +1012,12 @@ module IndirectionTableImpl {
         assert loc.addr != 0;
         assert LBAType.ValidLocation(loc);*/
 
-        MutableMapModel.LemmaIterIndexLtCount(t.I(), it);
+        LinearMutableMap.LemmaIterIndexLtCount(t, it);
 
         assert |succs| < 0x1_0000_0000_0000_0000;
         assert ValidVal(VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]));
 
-        assert |MutableMapModel.IterInc(t.I(), it).s| == |it.s| + 1;
+        assert |LinearMutableMap.IterInc(t, it).s| == |it.s| + 1;
 
         var vi := VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]);
 
@@ -1026,7 +1027,7 @@ module IndirectionTableImpl {
         partial := partial[ref := IndirectionTableModel.Entry(locOpt, succs, 0)];
         a[i] := vi;
         i := i + 1;
-        it := t.IterInc(it);
+        it := LinearMutableMap.IterInc(t, it);
         // ==============
 
         assert a[..i-1] == DropLast(a[..i]); // observe
@@ -1047,8 +1048,8 @@ module IndirectionTableImpl {
         size := size + 32 + 8 * |succs| as uint64;
       }
 
-      /* (doc) assert |partial.Keys| == |t.I().contents.Keys|; */
-      SetInclusionAndEqualCardinalityImpliesSetEquality(partial.Keys, t.I().contents.Keys);
+      /* (doc) assert |partial.Keys| == |t.contents.Keys|; */
+      SetInclusionAndEqualCardinalityImpliesSetEquality(partial.Keys, t.contents.Keys);
 
       assert a[..i] == a[..]; // observe
       v := VArray(a[..]);
