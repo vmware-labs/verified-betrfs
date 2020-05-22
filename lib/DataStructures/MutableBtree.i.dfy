@@ -115,12 +115,12 @@ abstract module MutableBtree {
     requires WF(node)
     ensures result == (|Interpretation(node)| == 0)
   {
-    if node.contents.Leaf? {
+    if node.Leaf? {
       Model.reveal_Interpretation();
-      result := 0 == node.contents.nkeys;
-      assert !result ==> node.contents.keys[0] in Interpretation(node);
+      result := 0 == |node.keys|;
+      assert !result ==> node.keys[0] in Interpretation(node);
     } else {
-      Model.IndexesNonempty(I(node));
+      Model.IndexesNonempty(node);
       result := false;
     }
   }
@@ -128,21 +128,19 @@ abstract module MutableBtree {
   method MinKeyInternal(node: Node) returns (result: Key)
     requires WF(node)
     requires 0 < |Interpretation(node)|
-    ensures result == Model.MinKey(I(node))
-    decreases node.repr
+    ensures result == Model.MinKey(node)
   {
-    if node.contents.Leaf? {
-      assert 0 < node.contents.nkeys by {
+    if node.Leaf? {
+      assert 0 < |node.keys| by {
         Model.reveal_Interpretation();
       }
-      assert node.contents.keys[0] == node.contents.keys[..node.contents.nkeys][0];
-      result := node.contents.keys[0];
+      assert node.keys[0] == node.keys[..|node.keys|][0];
+      result := node.keys[0];
     } else {
-      assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
-      IOfChild(node, 0);
-      assert WF(node.contents.children[0]);
-      Model.ChildOfIndexNonempty(I(node), 0);
-      result := MinKeyInternal(node.contents.children[0]);
+      // IOfChild(node, 0);
+      assert WF(node.children[0]);
+      Model.ChildOfIndexNonempty(node, 0);
+      result := MinKeyInternal(node.children[0]);
     }
   }
 
@@ -156,29 +154,27 @@ abstract module MutableBtree {
     ensures forall key | key in Interpretation(node) :: Model.Keys.lte(result, key)
   {
     result := MinKeyInternal(node);
-    Model.MinKeyProperties(I(node));
+    Model.MinKeyProperties(node);
   }
   
   method MaxKeyInternal(node: Node) returns (result: Key)
     requires WF(node)
     requires 0 < |Interpretation(node)|
-    ensures result == Model.MaxKey(I(node))
-    decreases node.repr
+    ensures result == Model.MaxKey(node)
   {
-    if node.contents.Leaf? {
-      assert 0 < node.contents.nkeys by {
+    if node.Leaf? {
+      assert 0 < |node.keys| by {
         Model.reveal_Interpretation();
       }
-      var nkeys: uint64 := node.contents.nkeys;
-      assert node.contents.keys[nkeys - 1] == node.contents.keys[..nkeys][nkeys - 1];
-      result := node.contents.keys[nkeys-1];
+      var nkeys: uint64 := |node.keys| as uint64;
+      assert node.keys[nkeys - 1] == node.keys[..nkeys][nkeys - 1];
+      result := node.keys[nkeys-1];
     } else {
-      var nchildren: uint64 := node.contents.nchildren;
-      assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
-      IOfChild(node, nchildren as nat - 1);
-      assert WF(node.contents.children[nchildren - 1]);
-      Model.ChildOfIndexNonempty(I(node), nchildren as nat - 1);
-      result := MaxKeyInternal(node.contents.children[nchildren - 1]);
+      var nchildren: uint64 := lseq_length_uint64(node.children);
+      // IOfChild(node, nchildren as nat - 1);
+      assert WF(node.children[nchildren as nat - 1]);
+      Model.ChildOfIndexNonempty(node, nchildren as nat - 1);
+      result := MaxKeyInternal(lseq_peek(node.children, nchildren - 1));
     }
   }
   
@@ -192,7 +188,7 @@ abstract module MutableBtree {
     ensures forall key | key in Interpretation(node) :: Model.Keys.lte(key, result)
   {
     result := MaxKeyInternal(node);
-    Model.MaxKeyProperties(I(node));
+    Model.MaxKeyProperties(node);
   }
   
   method EmptyTree() returns (linear root: Node)
@@ -210,31 +206,31 @@ abstract module MutableBtree {
 //    returns (node: Node)
 //    requires |keys| == |values| <= MaxKeysPerLeaf() as int
 //    ensures WFShape(node)
-//    ensures node.contents.Leaf?
+//    ensures node.Leaf?
 //    ensures fresh(node.repr)
-//    ensures node.contents.keys[..node.contents.nkeys] == keys
-//    ensures node.contents.values[..node.contents.nkeys] == values
+//    ensures node.keys[..|node.keys|] == keys
+//    ensures node.values[..|node.keys|] == values
 //  {
 //    node := EmptyTree();
-//    CopySeqIntoArray(keys, 0, node.contents.keys, 0, |keys| as uint64);
-//    CopySeqIntoArray(values, 0, node.contents.values, 0, |values| as uint64);
-//    node.contents := node.contents.(nkeys := |keys| as uint64);
-//    assert node.contents.keys[..node.contents.nkeys] == keys;
+//    CopySeqIntoArray(keys, 0, node.keys, 0, |keys| as uint64);
+//    CopySeqIntoArray(values, 0, node.values, 0, |values| as uint64);
+//    node := node.(nkeys := |keys| as uint64);
+//    assert node.keys[..|node.keys|] == keys;
 //  }
 //
 //  method IndexFromChildren(pivots: seq<Key>, children: seq<Node>, ghost height: nat) returns (node: Node)
 //    requires 0 < |children| <= MaxChildren() as int
 //    requires |pivots| == |children|-1
-//    ensures node.contents.Index?
-//    ensures node.contents.pivots.Length == MaxChildren() as int - 1
-//    ensures node.contents.children.Length == MaxChildren() as int
-//    ensures node.contents.nchildren == |children| as uint64
-//    ensures node.contents.pivots[..node.contents.nchildren-1] == pivots
-//    ensures node.contents.children[..node.contents.nchildren] == children
+//    ensures node.Index?
+//    ensures node.pivots.Length == MaxChildren() as int - 1
+//    ensures node.children.Length == MaxChildren() as int
+//    ensures |node.children| == |children| as uint64
+//    ensures node.pivots[..|node.children|-1] == pivots
+//    ensures node.children[..|node.children|] == children
 //    ensures fresh(node)
-//    ensures fresh(node.contents.pivots)
-//    ensures fresh(node.contents.children)
-//    ensures node.repr == {node, node.contents.pivots, node.contents.children} + SeqRepr(children)
+//    ensures fresh(node.pivots)
+//    ensures fresh(node.children)
+//    ensures node.repr == {node, node.pivots, node.children} + SeqRepr(children)
 //    ensures node.height == height
 //  {
 //    var pivotarray := newArrayFill(MaxChildren()-1, DefaultKey());
@@ -242,8 +238,8 @@ abstract module MutableBtree {
 //    CopySeqIntoArray(pivots, 0, pivotarray, 0, |pivots| as uint64);
 //    CopySeqIntoArray(children, 0, childarray, 0, |children| as uint64);
 //    node := new Node;
-//    node.contents := Index(|children| as uint64, pivotarray, childarray);
-//    node.repr := {node, node.contents.pivots, node.contents.children} + SeqRepr(children);
+//    node := Index(|children| as uint64, pivotarray, childarray);
+//    node.repr := {node, node.pivots, node.children} + SeqRepr(children);
 //    node.height := height;
 //  }
 
@@ -624,72 +620,72 @@ abstract module MutableBtree {
   }
 }
 
-module TestBtreeModel refines BtreeModel {
-  import opened NativeTypes
-//  import Keys = Uint64_Order
-  type Value = uint64
-}
-
-module TestMutableBtree refines MutableBtree {
-  import Model = TestBtreeModel
- 
-  function method MaxKeysPerLeaf() : uint64 { 64 }
-  function method MaxChildren() : uint64 { 64 }
-
-  function method DefaultValue() : Value { 0 }
-  function method DefaultKey() : Key { [0] }
-}
-
-module MainModule {
-  import opened LinearSequence_i
-  import opened NativeTypes
-  import TMB = TestMutableBtree`API
-
-  method SeqFor(i: uint64)
-  returns (result:TMB.Key)
-  requires i < 256*256*256;
-  {
-    var b0:byte := (i / 65536) as byte;
-    var r := i - (b0 as uint64 * 65536);
-    var b1:byte := (r / 256) as byte;
-    var b2:byte := (r - (b1 as uint64)*256) as byte;
-
-    result := [b0, b1, b2];
-  }
-
-  method Main()
-  {
-    // var n: uint64 := 1_000_000;
-    // var p: uint64 := 300_007;
-    var n: uint64 := 10_000_000;
-    var p: uint64 := 3_000_017;
-    // var n: uint64 := 100_000_000;
-    // var p: uint64 := 1_073_741_827;
-    linear var t := TMB.EmptyTree();
-    var i: uint64 := 0;
-    while i < n
-      invariant 0 <= i <= n
-      invariant TMB.WF(t)
-//      invariant fresh(t.repr)
-    {
-      var oldvalue;
-      var keyv := ((i * p) % n);
-      var key := SeqFor(keyv);
-      t, oldvalue := TMB.Insert(t, key, i);
-      if (i%1000000)==0 {
-        print "i", i, "\n";
-      }
-
-      // Sanity check
-//      var found := TMB.Query(t, key);
-//      if !found.Some? {
-//        print "lost at ", i, "\n";
-//      }
-
-      i := i + 1;
-    }
-
-    print "PASSED\n";
-    TMB.Free(t);
-  }
-} 
+// module TestBtreeModel refines BtreeModel {
+//   import opened NativeTypes
+// //  import Keys = Uint64_Order
+//   type Value = uint64
+// }
+// 
+// module TestMutableBtree refines MutableBtree {
+//   import Model = TestBtreeModel
+//  
+//   function method MaxKeysPerLeaf() : uint64 { 64 }
+//   function method MaxChildren() : uint64 { 64 }
+// 
+//   function method DefaultValue() : Value { 0 }
+//   function method DefaultKey() : Key { [0] }
+// }
+// 
+// module MainModule {
+//   import opened LinearSequence_i
+//   import opened NativeTypes
+//   import TMB = TestMutableBtree`API
+// 
+//   method SeqFor(i: uint64)
+//   returns (result:TMB.Key)
+//   requires i < 256*256*256;
+//   {
+//     var b0:byte := (i / 65536) as byte;
+//     var r := i - (b0 as uint64 * 65536);
+//     var b1:byte := (r / 256) as byte;
+//     var b2:byte := (r - (b1 as uint64)*256) as byte;
+// 
+//     result := [b0, b1, b2];
+//   }
+// 
+//   method Main()
+//   {
+//     // var n: uint64 := 1_000_000;
+//     // var p: uint64 := 300_007;
+//     var n: uint64 := 10_000_000;
+//     var p: uint64 := 3_000_017;
+//     // var n: uint64 := 100_000_000;
+//     // var p: uint64 := 1_073_741_827;
+//     linear var t := TMB.EmptyTree();
+//     var i: uint64 := 0;
+//     while i < n
+//       invariant 0 <= i <= n
+//       invariant TMB.WF(t)
+// //      invariant fresh(t.repr)
+//     {
+//       var oldvalue;
+//       var keyv := ((i * p) % n);
+//       var key := SeqFor(keyv);
+//       t, oldvalue := TMB.Insert(t, key, i);
+//       if (i%1000000)==0 {
+//         print "i", i, "\n";
+//       }
+// 
+//       // Sanity check
+// //      var found := TMB.Query(t, key);
+// //      if !found.Some? {
+// //        print "lost at ", i, "\n";
+// //      }
+// 
+//       i := i + 1;
+//     }
+// 
+//     print "PASSED\n";
+//     TMB.Free(t);
+//   }
+// } 
