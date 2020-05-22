@@ -75,13 +75,41 @@ def collect():
     finally:
         do_cmd(["git", "checkout", start_branch])
 
+# Translation table from package labels to tex macro names & table labels.
+tex_names = {
+        "Hashtable-linear": {"macroPrefix": "HashtableLinear", "tableModule": "Hashtable", "tableMode": "linear"},
+        "Hashtable-master": {"macroPrefix": "HashtableRepr", "tableModule": "Hashtable", "tableMode": "dyn. frames"},
+        "BTree-linear": {"macroPrefix": "BTreeLinear", "tableModule": "BTree", "tableMode": "linear"},
+        "BTree-master": {"macroPrefix": "BTreeRepr", "tableModule": "BTree", "tableMode": "dyn. frames"},
+        }
+
 def report():
     data = json.loads(open(DATA_FILE).read())
+    fp = open("../veripapers/osdi2020/data/linear-line-counts.tex", "w")
     for row in data:
-        print(row["label"], row["impl"], row["proof"], "%.1f" % (1.0*row["proof"]/row["impl"]))
+        tex = tex_names[row["label"]]
+        macroPrefix = tex["macroPrefix"]
+        fp.write("\\newcommand{\\%sImpl}{%d}\n" % (macroPrefix, row["impl"]))
+        fp.write("\\newcommand{\\%sProof}{%d}\n" % (macroPrefix, row["proof"]))
+        fp.write("\\newcommand{\\%sRatio}{%.1f$\\times$}\n" % (macroPrefix, (1.0*row["proof"]/row["impl"])))
+    fp.close()
+
+    fp = open("../veripapers/osdi2020/data/linear-line-count-table.tex", "w")
+    fp.write("\\begin{tabular}{|ll|rrr|}\n")
+    fp.write("\\\\ \\hline\n")
+    fp.write("component & style & impl. & proof & ratio \\\\\n")
+    fp.write("\\\\ \\hline\n")
+    for row in data:
+        tex = tex_names[row["label"]]
+        macroPrefix = tex["macroPrefix"]
+        fp.write("%s & %s & \\%sImpl & \\%sProof & \\%sRatio \\\\\n" %
+            (tex["tableModule"], tex["tableMode"], macroPrefix, macroPrefix, macroPrefix))
+    fp.write("\\\\ \\hline\n")
+    fp.write("\\end{tabular}\n")
+    fp.close()
 
 def main():
-    collect()
+    #collect()
     report()
         
 main()
