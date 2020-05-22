@@ -94,7 +94,7 @@ def main():
       f.write("METADATA branch {}\n".format(branch))
       f.write("METADATA seed {}\n".format(seed))
       for pp in eval(ops):
-          nops = 2**pp
+          nops = 1000000 * (2**pp)
 
           command = taskset_cmd + "./MutableBtreeBench {} {} false".format(str(seed), str(nops))
           actuallyprint(command)
