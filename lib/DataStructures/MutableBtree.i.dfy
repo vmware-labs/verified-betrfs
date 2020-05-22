@@ -20,7 +20,7 @@ abstract module MutableBtree {
   import Arrays
   import Model : BtreeModel
 
-  export API provides WF, Interpretation, EmptyTree, Insert, Query, Empty, MinKey, MaxKey, NativeTypes, Model, Options, Maps reveals Node, NodeContents, Key, Value
+  export API provides WF, Interpretation, EmptyTree, Insert, Query, Empty, MinKey, MaxKey, NativeTypes, Model, Options, Maps reveals Node, Key, Value
   export All reveals *
     
   type Key = Model.Keys.Element
@@ -65,7 +65,7 @@ abstract module MutableBtree {
     requires Model.Keys.IsSorted(keys)
     ensures posplus1 as int == Model.Keys.LargestLte(keys, needle) + 1
   {
-    var pos: int64 := Model.Keys.ComputeLargestLte(keys, needle);
+    var pos: int64 := Model.KeysImpl.ComputeLargestLte(keys, needle);
     posplus1 := (pos + 1) as uint64;
   }
 
@@ -445,7 +445,7 @@ abstract module MutableBtree {
     ensures oldvalue == MapLookupOption(Interpretation(node), key);
   {
     linear var Leaf(keys, values) := node;
-    var pos: int64 := Model.Keys.ComputeLargestLte(keys, key);
+    var pos: int64 := Model.KeysImpl.ComputeLargestLte(keys, key);
     if 0 <= pos && seq_get(keys, pos as uint64) == key {
       oldvalue := Some(seq_get(values, pos as uint64));
       values := seq_set(values, pos as uint64, value);
@@ -493,7 +493,7 @@ abstract module MutableBtree {
       Model.SplitChildOfIndexPreservesAllKeys(node, n2, childidx as nat);
       assert n2.pivots[childidx] in Model.AllKeys(node) by { Model.reveal_AllKeys(); }
 
-      var t: int32 := Model.Keys.cmp(seq_get(n2.pivots, childidx), key);
+      var t: int32 := Model.KeysImpl.cmp(seq_get(n2.pivots, childidx), key);
       if  t <= 0 {
         childidx := childidx + 1;
         forall i | childidx as int - 1 < i < |n2.pivots|
