@@ -25,7 +25,7 @@ module DList {
     provides Inv, Seq, ValidPtr, Index, IndexHi
     reveals MaybePtr
     provides Get, Next, Prev
-    provides Alloc, Free, Remove, InsertAfter, InsertBefore
+    provides Alloc, Free, Remove, InsertAfter, InsertBefore, Clone
 
   /*
   A DList<A> is a doubly-linked list that represents a sequence s of type seq<A>.
@@ -280,6 +280,14 @@ module DList {
     nodes := seq_set(nodes, node.prev, node_prev.(next := p'));
     nodes := seq_set(nodes, p', node');
     l' := DList(nodes, freeNode.next, s', f', g');
+  }
+
+  method Clone<A>(shared l:DList<A>) returns(linear l':DList<A>)
+    ensures l' == l
+  {
+    shared var DList(nodes, freeStack, s, f, g) := l;
+    linear var nodes' := AllocAndCopy(nodes, 0, seq_length(nodes));
+    l' := DList(nodes', freeStack, s, f, g);
   }
 }
 

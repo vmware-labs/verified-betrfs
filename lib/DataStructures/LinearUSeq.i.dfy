@@ -11,7 +11,7 @@ Exports seq-like operation to get First element.
 Uses a map to efficiently find values in the sequence and remove them.
 */
 
-module LinearUSeq
+module USeq
 {
   import opened NativeTypes
   import opened Options
@@ -20,16 +20,16 @@ module LinearUSeq
   import DList
   export
     provides NativeTypes, Options, Sequences
-    provides LinearUSeq
-    provides Inv, I, Unique
-    provides Alloc, Free, Add, Remove, First, FirstOpt
+    provides USeq
+    provides Inv, I
+    provides Alloc, Free, Add, Remove, First, FirstOpt, Clone
 
-  linear datatype LinearUSeq = LinearUSeq(
+  linear datatype USeq = USeq(
     linear dlist:DList.DList<uint64>,  // list of values
     linear ptr_map:LinearMutableMap.LinearHashMap<uint64> // map of pointers into dlist
     )
 
-  predicate Inv(useq:LinearUSeq) {
+  predicate Inv(useq:USeq) {
     var q := DList.Seq(useq.dlist);
     && LinearMutableMap.Inv(useq.ptr_map)
     && DList.Inv(useq.dlist)
@@ -43,58 +43,56 @@ module LinearUSeq
       && DList.Get(useq.dlist, useq.ptr_map.contents[x]) == x)
   }
 
-  function I(useq:LinearUSeq):seq<uint64>
+  function I(useq:USeq):(s:seq<uint64>)
+    ensures Inv(useq) ==> NoDupes(s)
   {
     DList.Seq(useq.dlist)
   }
 
-  lemma Unique(useq:LinearUSeq)
-    requires Inv(useq)
-    ensures NoDupes(I(useq))
-  {
-  }
-
-  method Alloc() returns(linear useq:LinearUSeq)
+  method Alloc() returns(linear useq:USeq)
     ensures Inv(useq)
+    ensures I(useq) == []
   {
     var size := 128;
     linear var dlist := DList.Alloc<uint64>(size + 1);
     linear var ptr_map := LinearMutableMap.Constructor(size);
-    useq := LinearUSeq(dlist, ptr_map);
+    useq := USeq(dlist, ptr_map);
     reveal_NoDupes();
   }
 
-  method Free(linear useq:LinearUSeq)
+  method Free(linear useq:USeq)
   {
-    linear var LinearUSeq(dlist, ptr_map) := useq;
+    linear var USeq(dlist, ptr_map) := useq;
     DList.Free(dlist);
     LinearMutableMap.Destructor(ptr_map);
   }
 
-  method Add(linear useq:LinearUSeq, x:uint64) returns(linear useq':LinearUSeq)
+  method Add(linear useq:USeq, x:uint64) returns(linear useq':USeq)
     requires Inv(useq)
     requires |I(useq)| < 0x1_0000_0000_0000_0000 / 8
     ensures Inv(useq')
-    ensures Set(I(useq')) == Set(I(useq)) + {x}
+    ensures I(useq') == (if x in I(useq) then I(useq) else I(useq) + [x])
   {
     reveal_NoDupes();
-    useq' := Remove(useq, x);
     NoDupesSetCardinality(I(useq));
-    NoDupesSetCardinality(I(useq'));
 
-    linear var LinearUSeq(dlist, ptr_map) := useq';
-    var p;
-    dlist, p := DList.InsertBefore(dlist, 0, x);
-    ptr_map := LinearMutableMap.Insert(ptr_map, x, p);
-    useq' := LinearUSeq(dlist, ptr_map);
+    linear var USeq(dlist, ptr_map) := useq;
+    if (LinearMutableMap.Get(ptr_map, x).Some?) {
+      useq' := USeq(dlist, ptr_map);
+    } else {
+      var p;
+      dlist, p := DList.InsertBefore(dlist, 0, x);
+      ptr_map := LinearMutableMap.Insert(ptr_map, x, p);
+      useq' := USeq(dlist, ptr_map);
+    }
   }
 
-  method Remove(linear useq:LinearUSeq, x:uint64) returns(linear useq':LinearUSeq)
+  method Remove(linear useq:USeq, x:uint64) returns(linear useq':USeq)
     requires Inv(useq)
     ensures Inv(useq')
-    ensures Set(I(useq')) == Set(I(useq)) - {x}
+    ensures I(useq') == RemoveOneValue(I(useq), x)
   {
-    linear var LinearUSeq(dlist, ptr_map) := useq;
+    linear var USeq(dlist, ptr_map) := useq;
     ghost var q := DList.Seq(dlist);
 
     linear var RemoveResult(ptr_map', removed) := LinearMutableMap.RemoveAndGet(ptr_map, x);
@@ -102,11 +100,12 @@ module LinearUSeq
       var Some(p) := removed;
       dlist := DList.Remove(dlist, p);
     }
-    useq' := LinearUSeq(dlist, ptr_map');
+    useq' := USeq(dlist, ptr_map');
     reveal_NoDupes();
+    reveal_RemoveOneValue();
   }
 
-  method First(shared useq:LinearUSeq) returns(x:uint64)
+  method First(shared useq:USeq) returns(x:uint64)
     requires Inv(useq)
     requires |I(useq)| > 0
     ensures x == I(useq)[0]
@@ -115,7 +114,7 @@ module LinearUSeq
     x := DList.Get(useq.dlist, p);
   }
 
-  method FirstOpt(shared useq:LinearUSeq) returns(x:Option<uint64>)
+  method FirstOpt(shared useq:USeq) returns(x:Option<uint64>)
     requires Inv(useq)
     ensures |I(useq)| == 0 ==> x == None
     ensures |I(useq)| > 0 ==> x == Some(I(useq)[0])
@@ -126,5 +125,14 @@ module LinearUSeq
     } else {
       x := Some(DList.Get(useq.dlist, p));
     }
+  }
+
+  method Clone(shared useq:USeq) returns(linear useq':USeq)
+    ensures useq' == useq
+  {
+    shared var USeq(dlist, ptr_map) := useq;
+    linear var dlist' := DList.Clone(dlist);
+    linear var ptr_map' := LinearMutableMap.Clone(ptr_map);
+    useq' := USeq(dlist', ptr_map');
   }
 }

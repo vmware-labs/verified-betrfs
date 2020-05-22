@@ -127,6 +127,16 @@ module Sequences {
     s[.. pos] + s[pos + 1 ..]
   }
 
+  function {:opaque} RemoveOneValue<V>(s: seq<V>, v: V) : (s': seq<V>)
+    ensures NoDupes(s) ==> NoDupes(s') && Set(s') == Set(s) - {v}
+  {
+    reveal_NoDupes();
+    if v !in s then s else
+    var i :| 0 <= i < |s| && s[i] == v;
+    s[.. i] + s[i + 1 ..]
+  }
+
+/*
   function {:opaque} RemoveValue<V>(s: seq<V>, v: V) : seq<V>
   // ensures forall i: nat | i < |RemoveValue(s, v)| :: RemoveValue(s, v)[i] != v
   ensures Set(RemoveValue(s, v)) == Set(s) - {v}
@@ -149,6 +159,7 @@ module Sequences {
       assume Set(RemoveValue(s, v)) == Set(s) - {v};
     }
   }
+*/
 
   function {:opaque} insert<A>(s: seq<A>, a: A, pos: int) : seq<A>
   requires 0 <= pos <= |s|;

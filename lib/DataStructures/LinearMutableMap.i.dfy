@@ -789,6 +789,9 @@ module LinearMutableMap {
     linear underlying: FixedSizeLinearHashMap<V>,
     count: uint64,
     ghost contents: map<uint64, V>)
+  {
+    predicate Inv() {Inv0(this)} // HACK Inv0: is there a better way to refer to the outer Inv(...) from inside Inv()?
+  }
 
   function MapFromStorage<V>(elements: seq<Item<V>>): (result: map<uint64, V>)
   {
@@ -916,6 +919,8 @@ module LinearMutableMap {
     MapFromStorageProperties(underlying.storage, mapFromStorage);
     assert MapFromStorage(underlying.storage) == contents;
   }
+
+  predicate Inv0<V>(self: LinearHashMap<V>) { Inv(self) }
 
   protected predicate Inv<V>(self: LinearHashMap<V>)
     ensures Inv(self) ==> |self.contents| == self.count as nat
@@ -1732,5 +1737,14 @@ module LinearMutableMap {
     ) else (
       SimpleIterator(seq_length(self.underlying.storage) as uint64, self.contents.Keys, 0)
     )
+  }
+
+  method Clone<V>(shared self: LinearHashMap<V>) returns(linear self': LinearHashMap<V>)
+    ensures self' == self
+  {
+    shared var LinearHashMap(underlying, count, contents) := self;
+    shared var FixedSizeLinearHashMap(storage, fCount, fContents) := underlying;
+    linear var storage' := AllocAndCopy(storage, 0, seq_length(storage));
+    self' := LinearHashMap(FixedSizeLinearHashMap(storage', fCount, fContents), count, contents);
   }
 }
