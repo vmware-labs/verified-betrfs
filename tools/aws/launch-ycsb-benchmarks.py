@@ -10,7 +10,11 @@ common_vars = [
                                       Value("wkb", "workload=ycsb/workloadb-onefield.spec"),
                                       Value("wkc", "workload=ycsb/workloadc-onefield.spec")]),
     #Variable("duration", "run_veri", [Value("2h", "time_budget=2h")]),
-    Variable("replica", "silent", [Value("r0", "r=0"), Value("r1", "r=1")]),
+    Variable("replica", "silent", [Value("r0", "r=0"),
+                                   Value("r1", "r=1"),
+                                   Value("r2", "r=2"),
+                                   Value("r3", "r=3"),
+                                   Value("r4", "r=4")]),
     ]
 veri_suite = Suite(
     "veribetrkv",
@@ -36,7 +40,7 @@ kyoto_suite = Suite(
     Variable("system", "run_veri", [Value("kyoto", "kyoto")]),
     *common_vars)
 #suite = ConcatSuite("ycsb-001", veri_suite, rocks_suite, berkeleydb_suite)
-suite = ConcatSuite("ycsb-run-002", rocks_suite, veri_suite)
+suite = ConcatSuite("ycsb-berkeley-000", berkeley_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
@@ -56,6 +60,8 @@ def main():
     log("VARIANTS %s" % suite.variants)
 
     workers = retrieve_running_workers()
+    blacklist = []
+    works = [w for w in workers if w["Name"] not in blacklist]
     worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=False)
     monitor_worker_pipes(worker_pipes)
 

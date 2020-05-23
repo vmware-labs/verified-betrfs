@@ -638,10 +638,10 @@ module PivotBetreeSpecRefinement {
     var cLeft := CutoffForLeft(node.pivotTable, pivot);
     if i < |node.pivotTable| {
       if i < cLeft - 1 {
-        //assert Keyspace.lt(key, node'.pivotTable[i]);
-        //assert Keyspace.lt(key, node.pivotTable[i]);
+        assert Keyspace.lt(key, node'.pivotTable[i]);
+        assert Keyspace.lt(key, node.pivotTable[i]);
       } else {
-        //assert Keyspace.lt(key, node.pivotTable[i]);
+        assert Keyspace.lt(key, node.pivotTable[i]);
       }
     }
     RouteIs(node.pivotTable, key, i);

@@ -690,6 +690,10 @@ abstract module MutableBtree {
     {
       assert DisjointSubtrees(node.contents, from as int + i, from as int + j);
     }
+    forall i | 0 <= i < |newchildren|
+      ensures subnode !in newchildren[i].repr
+    {
+    }
     assert WFShapeSiblings(newchildren);
     assert WFShapeChildren(newchildren, subnode.repr, subnode.height);
 
