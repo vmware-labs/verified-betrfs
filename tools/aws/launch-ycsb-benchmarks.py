@@ -16,7 +16,7 @@ veri_suite = Suite(
     "veribetrkv",
     Variable("git_branch", "git_branch", [Value("master", "master")]),
     #Variable("nodeCountFudge", "run_veri", [Value(str(f), "nodeCountFudge="+str(f)) for f in [0.5]]),
-    Variable("system", "run_veri", [Value("veribetrkv", "veribetrkv")]),
+    #Variable("system", "run_veri", [Value("veribetrkv", "veribetrkv")]),
     #Variable("max_children", "run_veri", [Value("fanout16", "max_children=16")]),
     Variable("cgroup", "run_veri", [Value("yescgroup", "cgroup=True")]),
     *common_vars)
@@ -31,7 +31,7 @@ berkeleydb_suite = Suite(
     Variable("system", "run_veri", [Value("berkeley", "berkeley")]),
     *common_vars)
 #suite = ConcatSuite("ycsb-001", veri_suite, rocks_suite, berkeleydb_suite)
-suite = ConcatSuite("ycsb-test-007", rocks_suite)
+suite = ConcatSuite("ycsb-test-012", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 

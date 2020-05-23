@@ -226,6 +226,14 @@ def main():
   else:
     assert False
 
+  print("Device type: " + device)
+  print("Using " + loc)
+
+  ret = os.system("rm -rf " + loc)
+  assert ret == 0
+  ret = os.system("mkdir " + loc)
+  assert ret == 0
+
   if rocks:
     loc = loc
   elif berkeley:
@@ -235,14 +243,6 @@ def main():
   else:
     loc = loc + "/veribetrkv.img"
     
-  print("Device type: " + device)
-  print("Using " + loc)
-
-  ret = os.system("rm -rf " + loc)
-  assert ret == 0
-  ret = os.system("mkdir " + loc)
-  assert ret == 0
-
   clear_page_cache()
 
   # bitmask indicating which CPUs we can use
