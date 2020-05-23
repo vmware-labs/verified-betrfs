@@ -20,7 +20,7 @@ veri_suite = Suite(
     #Variable("max_children", "run_veri", [Value("fanout16", "max_children=16")]),
     Variable("cgroup", "run_veri", [Value("yescgroup", "cgroup=True")]),
     *common_vars)
-rocksdb_suite = Suite(
+rocks_suite = Suite(
     "rocksdb",
     Variable("git_branch", "git_branch", [Value("master", "master")]),
     Variable("system", "run_veri", [Value("rocks", "rocks")]),
@@ -30,7 +30,8 @@ berkeleydb_suite = Suite(
     Variable("git_branch", "git_branch", [Value("master", "master")]),
     Variable("system", "run_veri", [Value("berkeley", "berkeley")]),
     *common_vars)
-suite = ConcatSuite("robj-010", veri_suite, rocks_suite, berkeleydb_suite)
+#suite = ConcatSuite("ycsb-001", veri_suite, rocks_suite, berkeleydb_suite)
+suite = ConcatSuite("ycsb-test-003", rocks_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 

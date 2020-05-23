@@ -1,5 +1,4 @@
 #include <cstdlib>
-#include <filesystem>
 
 #ifdef _YCSB_VERIBETRFS
 #include "Application.h"
