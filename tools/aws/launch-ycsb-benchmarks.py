@@ -17,7 +17,7 @@ veri_suite = Suite(
     Variable("git_branch", "git_branch", [Value("master", "master")]),
     #Variable("nodeCountFudge", "run_veri", [Value(str(f), "nodeCountFudge="+str(f)) for f in [0.5]]),
     Variable("system", "run_veri", [Value("veribetrkv", "veribetrkv")]),
-    Variable("max_children", "run_veri", [Value("fanout16", "max_children=16")]),
+    #Variable("max_children", "run_veri", [Value("fanout16", "max_children=16")]),
     Variable("cgroup", "run_veri", [Value("yescgroup", "cgroup=True")]),
     *common_vars)
 rocksdb_suite = Suite(
