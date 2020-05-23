@@ -168,32 +168,30 @@ module IndirectionTableImpl {
 
     shared method Clone()
     returns (linear table : indirectionTable)
-    ensures table == this
+    requires Inv()
+    ensures table.Inv()
+    ensures table.I() == IndirectionTableModel.clone(this.I())
     {
+      IndirectionTableModel.reveal_clone();
       shared var indirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator) := this;
       linear var t' := LinearMutableMap.Clone(t);
-      linear var garbageQueue';
-      shared match garbageQueue {
-        case lNone => {garbageQueue' := lNone;}
-        case lSome(gq) => {linear var gq' := USeq.Clone(gq); garbageQueue' := lSome(gq');}
-      }
-      table := indirectionTable(t', garbageQueue', refUpperBound, findLoclessIterator);
+      table := indirectionTable(t', lNone, refUpperBound, None);
     }
 
-    shared method GetEntry(ref: BT.G.Reference) returns (e : Option<IndirectionTableModel.Entry>)
+    shared function method GetEntry(ref: BT.G.Reference) : (e : Option<IndirectionTableModel.Entry>)
     requires Inv()
     ensures e == IndirectionTableModel.GetEntry(I(), ref)
     {
       IndirectionTableModel.reveal_GetEntry();
-      e := LinearMutableMap.Get(this.t, ref);
+      LinearMutableMap.Get(this.t, ref)
     }
 
-    shared method HasEmptyLoc(ref: BT.G.Reference) returns (b: bool)
+    shared function method HasEmptyLoc(ref: BT.G.Reference) : (b: bool)
     requires Inv()
     ensures b == IndirectionTableModel.HasEmptyLoc(I(), ref)
     {
       var entry := LinearMutableMap.Get(this.t, ref);
-      b := entry.Some? && entry.value.loc.None?;
+      entry.Some? && entry.value.loc.None?
     }
 
     linear method RemoveLoc(ref: BT.G.Reference)
@@ -1155,22 +1153,21 @@ module IndirectionTableImpl {
     
     ///// Dealloc stuff
 
-    shared method FindDeallocable() returns (ref: Option<BT.G.Reference>)
+    shared function method FindDeallocable() : (ref: Option<BT.G.Reference>)
     requires Inv()
     requires IndirectionTableModel.TrackingGarbage(I())
     ensures ref == IndirectionTableModel.FindDeallocable(I())
     {
       IndirectionTableModel.reveal_FindDeallocable();
-      ref := USeq.FirstOpt(garbageQueue.value);
+      USeq.FirstOpt(garbageQueue.value)
     }
 
-    shared method GetSize()
-    returns (size: uint64)
+    shared function method GetSize() : (size: uint64)
     requires Inv()
     ensures size as int == |I().graph|
     {
       IndirectionTableModel.lemma_count_eq_graph_size(I().t);
-      return this.t.count;
+      this.t.count
     }
 
     linear method FindRefWithNoLoc() returns (linear self: indirectionTable, ref: Option<BT.G.Reference>)
@@ -1215,12 +1212,12 @@ module IndirectionTableImpl {
       self := indirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator);
     }
 
-    shared method GetRefUpperBound() returns (r: uint64)
+    shared function method GetRefUpperBound() : (r: uint64)
     requires Inv()
     ensures r == IndirectionTableModel.getRefUpperBound(this.I())
     {
       IndirectionTableModel.reveal_getRefUpperBound();
-      return this.refUpperBound;
+      this.refUpperBound
     }
   }
 
@@ -1312,25 +1309,33 @@ module IndirectionTableImpl {
 
     method Clone() returns (table: IndirectionTable)
       requires Inv()
+      modifies Repr
+      ensures Inv() && I() == old(I()) && Repr == old(Repr)
       ensures table.Inv()
       ensures fresh(table.Repr)
       ensures table.I() == IndirectionTableModel.clone(old(I()))
     {
-      assume false;
+      linear var x := box.Take();
+      linear var clone := x.Clone();
+      box.Give(x);
+      var boxed := new BoxedLinear(clone);
+      table := new IndirectionTable.Box(boxed);
     }
 
-    method GetEntry(ref: BT.G.Reference) returns (e : Option<IndirectionTableModel.Entry>)
+    function method GetEntry(ref: BT.G.Reference) : (e : Option<IndirectionTableModel.Entry>)
       requires Inv()
+      reads Repr
       ensures e == IndirectionTableModel.GetEntry(I(), ref)
     {
-      assume false;
+      box.Borrow().GetEntry(ref)
     }
 
-    method HasEmptyLoc(ref: BT.G.Reference) returns (b: bool)
+    function method HasEmptyLoc(ref: BT.G.Reference) : (b: bool)
       requires Inv()
+      reads Repr
       ensures b == IndirectionTableModel.HasEmptyLoc(I(), ref)
     {
-      assume false;
+      box.Borrow().HasEmptyLoc(ref)
     }
 
     method RemoveLoc(ref: BT.G.Reference) returns (oldLoc: Option<Location>)
@@ -1396,12 +1401,21 @@ module IndirectionTableImpl {
       ensures s == null ==> IndirectionTableModel.valToIndirectionTable(v).None?
       ensures s != null ==> IndirectionTableModel.valToIndirectionTable(v) == Some(s.I())
     {
-      assume false;
+      linear var opt := indirectionTable.ValToIndirectionTable(v);
+      linear match opt {
+        case lNone => {s := null;}
+        case lSome(it) => {
+          var box := new BoxedLinear(it);
+          s := new IndirectionTable.Box(box);
+        }
+      }
     }
 
     method indirectionTableToVal() returns (v: V, size: uint64)
       requires Inv()
       requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
+      modifies Repr
+      ensures Inv() && I() == old(I()) && Repr == old(Repr)
       ensures ValInGrammar(v, IndirectionTableModel.IndirectionTableGrammar())
       ensures ValidVal(v)
       ensures IndirectionTableModel.valToIndirectionTable(v).Some?
@@ -1411,32 +1425,40 @@ module IndirectionTableImpl {
       ensures SizeOfV(v) <= indirectionTable.MaxIndirectionTableByteSize()
       ensures SizeOfV(v) == size as int
     {
-      assume false;
+      linear var x := box.Take();
+      v, size := x.indirectionTableToVal();
+      box.Give(x);
     }
 
     method InitLocBitmap() returns (success: bool, bm: BitmapImpl.Bitmap)
       requires Inv()
       requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
+      modifies Repr
+      ensures Inv() && I() == old(I()) && Repr == old(Repr)
       ensures bm.Inv()
       ensures (success, bm.I()) == IndirectionTableModel.InitLocBitmap(old(I()))
       ensures fresh(bm.Repr)
     {
-      assume false;
+      linear var x := box.Take();
+      success, bm := x.InitLocBitmap();
+      box.Give(x);
     }
     
-    method FindDeallocable() returns (ref: Option<BT.G.Reference>)
+    function method FindDeallocable() : (ref: Option<BT.G.Reference>)
       requires Inv()
       requires IndirectionTableModel.TrackingGarbage(I())
+      reads Repr
       ensures ref == IndirectionTableModel.FindDeallocable(I())
     {
-      assume false;
+      box.Borrow().FindDeallocable()
     }
 
-    method GetSize() returns (size: uint64)
+    function method GetSize() : (size: uint64)
       requires Inv()
+      reads Repr
       ensures size as int == |I().graph|
     {
-      assume false;
+      box.Borrow().GetSize()
     }
 
     method FindRefWithNoLoc() returns (ref: Option<BT.G.Reference>)
@@ -1446,14 +1468,17 @@ module IndirectionTableImpl {
       ensures Repr == old(Repr)
       ensures (I(), ref) == IndirectionTableModel.FindRefWithNoLoc(old(I()))
     {
-      assume false;
+      linear var x := box.Take();
+      x, ref := x.FindRefWithNoLoc();
+      box.Give(x);
     }
 
-    method GetRefUpperBound() returns (r: uint64)
+    function method GetRefUpperBound() : (r: uint64)
       requires Inv()
+      reads Repr
       ensures r == IndirectionTableModel.getRefUpperBound(this.I())
     {
-      assume false;
+      box.Borrow().GetRefUpperBound()
     }
   }
 }

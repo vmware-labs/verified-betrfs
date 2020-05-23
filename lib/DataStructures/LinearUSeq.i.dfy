@@ -105,26 +105,22 @@ module USeq
     reveal_RemoveOneValue();
   }
 
-  method First(shared useq:USeq) returns(x:uint64)
+  function method First(shared useq:USeq) : (x:uint64)
     requires Inv(useq)
     requires |I(useq)| > 0
     ensures x == I(useq)[0]
   {
-    var p := DList.Next(useq.dlist, 0);
-    x := DList.Get(useq.dlist, p);
+    DList.Get(useq.dlist, DList.Next(useq.dlist, 0))
   }
 
-  method FirstOpt(shared useq:USeq) returns(x:Option<uint64>)
+  function method FirstOpt(shared useq:USeq) : (x:Option<uint64>)
     requires Inv(useq)
     ensures |I(useq)| == 0 ==> x == None
     ensures |I(useq)| > 0 ==> x == Some(I(useq)[0])
   {
     var p := DList.Next(useq.dlist, 0);
-    if (p == 0) {
-      x := None;
-    } else {
-      x := Some(DList.Get(useq.dlist, p));
-    }
+    if (p == 0) then None
+    else Some(DList.Get(useq.dlist, p))
   }
 
   method Clone(shared useq:USeq) returns(linear useq':USeq)

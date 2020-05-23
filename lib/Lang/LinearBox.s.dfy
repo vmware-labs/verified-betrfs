@@ -17,6 +17,10 @@ module LinearBox_s {
       modifies this
       ensures a2 == old(Read())
       ensures Read() == a1
+
+    function method{:caller_must_be_pure} Borrow():(shared a:A)
+      reads this
+      ensures a == Read()
   }
 
 } // module

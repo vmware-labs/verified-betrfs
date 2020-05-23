@@ -101,6 +101,10 @@ module IOImpl {
   requires io !in s.Repr()
   requires sector.SectorIndirectionTable?
   modifies io
+  requires sector.SectorIndirectionTable? ==> sector.indirectionTable == s.frozenIndirectionTable
+  requires sector.SectorIndirectionTable? ==> io !in sector.indirectionTable.Repr
+  modifies if sector.SectorIndirectionTable? then sector.indirectionTable.Repr else {}
+  ensures sector.SectorIndirectionTable? ==> (sector.indirectionTable.Inv() && sector.indirectionTable.I() == old(sector.indirectionTable.I()) && sector.indirectionTable.Repr == old(sector.indirectionTable.Repr))
   ensures id.Some? ==> id.value == old(io.reservedId())
   ensures s.W()
   ensures IOModel.FindIndirectionTableLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(ISector(sector)), id, loc, IIO(io))
