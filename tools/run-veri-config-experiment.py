@@ -227,6 +227,7 @@ def main():
     assert False
 
   if rocks:
+    loc = loc
   elif berkeley:
     loc = loc + "/berkeley.db"
   elif kyoto:
