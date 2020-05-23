@@ -219,13 +219,21 @@ def main():
   actuallyprint("workload: " + wl)
 
   if device == "optane":
-    loc = "/scratch0/tjhance/ycsb/"
+    loc = "/scratch0/tjhance/ycsb"
   elif device == "disk":
     #loc = "/home/tjhance/ycsb/"
-    loc = "/tmp/veribetrfs/"
+    loc = "/tmp/veribetrfs"
   else:
     assert False
 
+  if rocks:
+  elif berkeley:
+    loc = loc + "/berkeley.db"
+  elif kyoto:
+    loc = loc + "/kyoto.cbt"
+  else
+    loc = loc + "/veribetrkv.img"
+    
   print("Device type: " + device)
   print("Using " + loc)
 
@@ -241,7 +249,7 @@ def main():
   taskset_cmd = "taskset 4 "
 
   cgroup_prefix = "cgexec -g memory:VeribetrfsExp " if cgroup_enabled else ""
-  command = taskset_cmd + cgroup_prefix + "./" + exe + " " + wl + " " + loc + " " + cmdoption
+  command = taskset_cmd + cgroup_prefix + "./" + exe + " " + loc + " " + wl
   actuallyprint(command)
   sys.stdout.flush()
 
