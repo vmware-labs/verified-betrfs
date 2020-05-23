@@ -678,272 +678,268 @@ module IndirectionTableImpl {
       reveal_SeqSum();
     }
 
-  /*
-    method marshallIndirectionTableRow(
-        data: array<byte>,
-        start: uint64,
-        next: MutableMapModel.IteratorOutput<IndirectionTableModel.Entry>)
-    returns (end: uint64)
-    modifies data
-    requires 0 <= start as int <= data.Length
-    requires data.Length < 0x1_0000_0000_0000_0000
-    requires next.Next?
-    requires next.value.loc.Some?
-    requires |next.value.succs| <= MaxNumChildren()
-    ensures end != 0 ==>
-      && start as int <= end as int <= data.Length
-      && parse_Val(data[start..end],
-        Marshalling.IndirectionTableRowGrammar()).0
-          == Some(VTuple([
-              VUint64(next.key),
-              VUint64(next.value.loc.value.addr),
-              VUint64(next.value.loc.value.len),
-              VUint64Array(next.value.succs)
-             ]))
-    {
-      if 8 + 8 + 8 + 8 + 8*|next.value.succs| as uint64
-            > data.Length as uint64 - start
-      {
-        return 0;
-      }
+    // method marshallIndirectionTableRow(
+    //     data: array<byte>,
+    //     start: uint64,
+    //     next: MutableMapModel.IteratorOutput<IndirectionTableModel.Entry>)
+    // returns (end: uint64)
+    // modifies data
+    // requires 0 <= start as int <= data.Length
+    // requires data.Length < 0x1_0000_0000_0000_0000
+    // requires next.Next?
+    // requires next.value.loc.Some?
+    // requires |next.value.succs| <= MaxNumChildren()
+    // ensures end != 0 ==>
+    //   && start as int <= end as int <= data.Length
+    //   && parse_Val(data[start..end],
+    //     Marshalling.IndirectionTableRowGrammar()).0
+    //       == Some(VTuple([
+    //           VUint64(next.key),
+    //           VUint64(next.value.loc.value.addr),
+    //           VUint64(next.value.loc.value.len),
+    //           VUint64Array(next.value.succs)
+    //          ]))
+    // {
+    //   if 8 + 8 + 8 + 8 + 8*|next.value.succs| as uint64
+    //         > data.Length as uint64 - start
+    //   {
+    //     return 0;
+    //   }
 
-      var idx0 := start;
-      ghost var data0 := data[..];
+    //   var idx0 := start;
+    //   ghost var data0 := data[..];
 
-      Pack_LittleEndian_Uint64_into_Array(next.key, data, idx0);
-      var idx1 := idx0 + 8;
+    //   Pack_LittleEndian_Uint64_into_Array(next.key, data, idx0);
+    //   var idx1 := idx0 + 8;
 
-      ghost var data1 := data[..];
+    //   ghost var data1 := data[..];
 
-      Pack_LittleEndian_Uint64_into_Array(next.value.loc.value.addr, data, idx1);
-      var idx2 := idx1 + 8;
+    //   Pack_LittleEndian_Uint64_into_Array(next.value.loc.value.addr, data, idx1);
+    //   var idx2 := idx1 + 8;
 
-      ghost var data2 := data[..];
+    //   ghost var data2 := data[..];
 
-      Pack_LittleEndian_Uint64_into_Array(next.value.loc.value.len, data, idx2);
-      var idx3 := idx2 + 8;
+    //   Pack_LittleEndian_Uint64_into_Array(next.value.loc.value.len, data, idx2);
+    //   var idx3 := idx2 + 8;
 
-      ghost var data3 := data[..];
+    //   ghost var data3 := data[..];
 
-      Pack_LittleEndian_Uint64_into_Array(
-          |next.value.succs| as uint64, data, idx3);
-      var idx4 := idx3 + 8;
+    //   Pack_LittleEndian_Uint64_into_Array(
+    //       |next.value.succs| as uint64, data, idx3);
+    //   var idx4 := idx3 + 8;
 
-      ghost var data4 := data[..];
+    //   ghost var data4 := data[..];
 
-      Pack_LittleEndian_Uint64_Seq_into_Array(
-          next.value.succs, data, idx4);
-      var idx5 := idx4 + 8 * |next.value.succs| as uint64;
+    //   Pack_LittleEndian_Uint64_Seq_into_Array(
+    //       next.value.succs, data, idx4);
+    //   var idx5 := idx4 + 8 * |next.value.succs| as uint64;
 
-      ghost var data5 := data[..];
+    //   ghost var data5 := data[..];
 
-      end := idx5;
+    //   end := idx5;
 
-      calc {
-        parse_Val(data5[idx3..idx5], GUint64Array).0;
-        { reveal_parse_Val(); }
-        parse_Uint64Array(data5[idx3..idx5]).0;
-        {
-          assert unpack_LittleEndian_Uint64(data5[idx3..idx5][..8])
-             == |next.value.succs| as uint64 by {
-            assert data5[idx3..idx5][..8]
-                == data5[idx3..idx4]
-                == data4[idx3..idx4];
-          }
-          var len := |next.value.succs| as uint64;
-          assert unpack_LittleEndian_Uint64_Seq(data5[idx3..idx5][8..8 + 8*len], len as int)
-            == next.value.succs by {
-            assert data5[idx3..idx5][8..8+8*len] == data5[idx4..idx5];
-          }
-        }
-        Some(VUint64Array(next.value.succs));
-      }
+    //   calc {
+    //     parse_Val(data5[idx3..idx5], GUint64Array).0;
+    //     { reveal_parse_Val(); }
+    //     parse_Uint64Array(data5[idx3..idx5]).0;
+    //     {
+    //       assert unpack_LittleEndian_Uint64(data5[idx3..idx5][..8])
+    //          == |next.value.succs| as uint64 by {
+    //         assert data5[idx3..idx5][..8]
+    //             == data5[idx3..idx4]
+    //             == data4[idx3..idx4];
+    //       }
+    //       var len := |next.value.succs| as uint64;
+    //       assert unpack_LittleEndian_Uint64_Seq(data5[idx3..idx5][8..8 + 8*len], len as int)
+    //         == next.value.succs by {
+    //         assert data5[idx3..idx5][8..8+8*len] == data5[idx4..idx5];
+    //       }
+    //     }
+    //     Some(VUint64Array(next.value.succs));
+    //   }
 
-      calc {
-        parse_Val(data5[idx2..idx5], GUint64).0;
-        { reveal_parse_Val(); }
-        parse_Uint64(data5[idx2..idx5]).0;
-        {
-          calc {
-            data5[idx2..idx5][..8];
-            data4[idx2..idx3];
-            data3[idx2..idx3];
-          }
-        }
-        Some(VUint64(next.value.loc.value.len));
-      }
+    //   calc {
+    //     parse_Val(data5[idx2..idx5], GUint64).0;
+    //     { reveal_parse_Val(); }
+    //     parse_Uint64(data5[idx2..idx5]).0;
+    //     {
+    //       calc {
+    //         data5[idx2..idx5][..8];
+    //         data4[idx2..idx3];
+    //         data3[idx2..idx3];
+    //       }
+    //     }
+    //     Some(VUint64(next.value.loc.value.len));
+    //   }
 
-      calc {
-        parse_Val(data5[idx1..idx5], GUint64).0;
-        { reveal_parse_Val(); }
-        parse_Uint64(data5[idx1..idx5]).0;
-        {
-          calc {
-            data5[idx1..idx5][..8];
-            { lemma_seq_slice_slice(data5, idx1 as int, idx5 as int, 0, 8); }
-            data5[idx1..idx2];
-            data4[idx1..idx2];
-            data3[idx1..idx2];
-            data2[idx1..idx2];
-          }
-        }
-        Some(VUint64(next.value.loc.value.addr));
-      }
+    //   calc {
+    //     parse_Val(data5[idx1..idx5], GUint64).0;
+    //     { reveal_parse_Val(); }
+    //     parse_Uint64(data5[idx1..idx5]).0;
+    //     {
+    //       calc {
+    //         data5[idx1..idx5][..8];
+    //         { lemma_seq_slice_slice(data5, idx1 as int, idx5 as int, 0, 8); }
+    //         data5[idx1..idx2];
+    //         data4[idx1..idx2];
+    //         data3[idx1..idx2];
+    //         data2[idx1..idx2];
+    //       }
+    //     }
+    //     Some(VUint64(next.value.loc.value.addr));
+    //   }
 
-      calc {
-        parse_Val(data5[idx0..idx5], GUint64).0;
-        { reveal_parse_Val(); }
-        parse_Uint64(data5[idx0..idx5]).0;
-        {
-          calc {
-            data5[idx0..idx5][..8];
-            {
-              lemma_seq_slice_slice(data5, idx0 as int, idx5 as int, 0, 8);
-            }
-            data4[idx0..idx1];
-            data3[idx0..idx1];
-            data2[idx0..idx1];
-            data1[idx0..idx1];
-          }
-        }
-        Some(VUint64(next.key));
-      }
+    //   calc {
+    //     parse_Val(data5[idx0..idx5], GUint64).0;
+    //     { reveal_parse_Val(); }
+    //     parse_Uint64(data5[idx0..idx5]).0;
+    //     {
+    //       calc {
+    //         data5[idx0..idx5][..8];
+    //         {
+    //           lemma_seq_slice_slice(data5, idx0 as int, idx5 as int, 0, 8);
+    //         }
+    //         data4[idx0..idx1];
+    //         data3[idx0..idx1];
+    //         data2[idx0..idx1];
+    //         data1[idx0..idx1];
+    //       }
+    //     }
+    //     Some(VUint64(next.key));
+    //   }
 
-      ghost var sl := data5[idx0..idx5];
+    //   ghost var sl := data5[idx0..idx5];
 
-      calc {
-        [
-          VUint64(next.key),
-          VUint64(next.value.loc.value.addr),
-          VUint64(next.value.loc.value.len),
-          VUint64Array(next.value.succs)
-        ];
-        {
-          assert sl == data5[idx0..idx5];
-          assert sl[8..] == data5[idx1..idx5];
-          assert sl[16..] == data5[idx2..idx5];
-          assert sl[24..] == data5[idx3..idx5];
-          var x := [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + [parse_Val(sl[16..], GUint64).0.value] + [parse_Val(sl[24..], GUint64Array).0.value] + [];
-          assert VUint64(next.key) == parse_Val(sl, GUint64).0.value;
-          assert VUint64(next.value.loc.value.addr) == parse_Val(sl[8..], GUint64).0.value;
-          assert VUint64(next.value.loc.value.len) == parse_Val(sl[16..], GUint64).0.value;
-          assert VUint64Array(next.value.succs) == parse_Val(sl[24..], GUint64Array).0.value;
-        }
-        [parse_Val(sl, GUint64).0.value, parse_Val(sl[8..], GUint64).0.value, parse_Val(sl[16..], GUint64).0.value, parse_Val(sl[24..], GUint64Array).0.value];
-        [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + [parse_Val(sl[16..], GUint64).0.value] + [parse_Val(sl[24..], GUint64Array).0.value] + [];
-        {
-          reveal_parse_Tuple_contents();
-          assert parse_Tuple_contents(sl[idx5-idx0..], []).0.value == [];
-        }
-        [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + [parse_Val(sl[16..], GUint64).0.value] + [parse_Val(sl[24..], GUint64Array).0.value] + parse_Tuple_contents(sl[idx5-idx0..], []).0.value;
-        {
-          reveal_parse_Tuple_contents();
-          reveal_parse_Val();
-          assert sl[24..][idx5-idx3..] == sl[idx5-idx0..];
-        }
-        [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + [parse_Val(sl[16..], GUint64).0.value] + parse_Tuple_contents(sl[24..], [GUint64Array]).0.value;
-        {
-          reveal_parse_Tuple_contents();
-          reveal_parse_Val();
-          assert sl[16..][8..] == sl[24..];
-        }
-        [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + parse_Tuple_contents(sl[16..], [GUint64, GUint64Array]).0.value;
-        {
-          reveal_parse_Tuple_contents();
-          reveal_parse_Val();
-          assert sl[8..][8..] == sl[16..];
-        }
-        [parse_Val(sl, GUint64).0.value] + parse_Tuple_contents(sl[8..], [GUint64, GUint64, GUint64Array]).0.value;
-        {
-          reveal_parse_Tuple_contents();
-          reveal_parse_Val();
-        }
-        parse_Tuple_contents(sl, [GUint64, GUint64, GUint64, GUint64Array]).0.value;
-      }
+    //   calc {
+    //     [
+    //       VUint64(next.key),
+    //       VUint64(next.value.loc.value.addr),
+    //       VUint64(next.value.loc.value.len),
+    //       VUint64Array(next.value.succs)
+    //     ];
+    //     {
+    //       assert sl == data5[idx0..idx5];
+    //       assert sl[8..] == data5[idx1..idx5];
+    //       assert sl[16..] == data5[idx2..idx5];
+    //       assert sl[24..] == data5[idx3..idx5];
+    //       var x := [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + [parse_Val(sl[16..], GUint64).0.value] + [parse_Val(sl[24..], GUint64Array).0.value] + [];
+    //       assert VUint64(next.key) == parse_Val(sl, GUint64).0.value;
+    //       assert VUint64(next.value.loc.value.addr) == parse_Val(sl[8..], GUint64).0.value;
+    //       assert VUint64(next.value.loc.value.len) == parse_Val(sl[16..], GUint64).0.value;
+    //       assert VUint64Array(next.value.succs) == parse_Val(sl[24..], GUint64Array).0.value;
+    //     }
+    //     [parse_Val(sl, GUint64).0.value, parse_Val(sl[8..], GUint64).0.value, parse_Val(sl[16..], GUint64).0.value, parse_Val(sl[24..], GUint64Array).0.value];
+    //     [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + [parse_Val(sl[16..], GUint64).0.value] + [parse_Val(sl[24..], GUint64Array).0.value] + [];
+    //     {
+    //       reveal_parse_Tuple_contents();
+    //       assert parse_Tuple_contents(sl[idx5-idx0..], []).0.value == [];
+    //     }
+    //     [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + [parse_Val(sl[16..], GUint64).0.value] + [parse_Val(sl[24..], GUint64Array).0.value] + parse_Tuple_contents(sl[idx5-idx0..], []).0.value;
+    //     {
+    //       reveal_parse_Tuple_contents();
+    //       reveal_parse_Val();
+    //       assert sl[24..][idx5-idx3..] == sl[idx5-idx0..];
+    //     }
+    //     [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + [parse_Val(sl[16..], GUint64).0.value] + parse_Tuple_contents(sl[24..], [GUint64Array]).0.value;
+    //     {
+    //       reveal_parse_Tuple_contents();
+    //       reveal_parse_Val();
+    //       assert sl[16..][8..] == sl[24..];
+    //     }
+    //     [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + parse_Tuple_contents(sl[16..], [GUint64, GUint64Array]).0.value;
+    //     {
+    //       reveal_parse_Tuple_contents();
+    //       reveal_parse_Val();
+    //       assert sl[8..][8..] == sl[16..];
+    //     }
+    //     [parse_Val(sl, GUint64).0.value] + parse_Tuple_contents(sl[8..], [GUint64, GUint64, GUint64Array]).0.value;
+    //     {
+    //       reveal_parse_Tuple_contents();
+    //       reveal_parse_Val();
+    //     }
+    //     parse_Tuple_contents(sl, [GUint64, GUint64, GUint64, GUint64Array]).0.value;
+    //   }
 
-      calc {
-        Some(VTuple([
-          VUint64(next.key),
-          VUint64(next.value.loc.value.addr),
-          VUint64(next.value.loc.value.len),
-          VUint64Array(next.value.succs)
-        ]));
-        { reveal_parse_Val(); }
-        parse_Val(sl, Marshalling.IndirectionTableRowGrammar()).0;
-      }
-    }
+    //   calc {
+    //     Some(VTuple([
+    //       VUint64(next.key),
+    //       VUint64(next.value.loc.value.addr),
+    //       VUint64(next.value.loc.value.len),
+    //       VUint64Array(next.value.succs)
+    //     ]));
+    //     { reveal_parse_Val(); }
+    //     parse_Val(sl, Marshalling.IndirectionTableRowGrammar()).0;
+    //   }
+    // }
 
-    method marshallIndirectionTableContents(data: array<byte>, start: uint64)
-    returns (end: uint64)
-    requires Inv()
-    requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
+    // method marshallIndirectionTableContents(data: array<byte>, start: uint64)
+    // returns (end: uint64)
+    // requires Inv()
+    // requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
 
-    requires 0 <= start as int <= data.Length
-    requires data.Length < 0x1_0000_0000_0000_0000
+    // requires 0 <= start as int <= data.Length
+    // requires data.Length < 0x1_0000_0000_0000_0000
 
-    modifies data
+    // modifies data
 
-    ensures end != 0 ==>
-      && start as int <= end as int <= data.Length
-      && Marshalling.valToIndirectionTableMaps(
-           parse_Array_contents(
-             data[start..end],
-             Marshalling.IndirectionTableRowGrammar(),
-             t.Count
-           )
-         ) == IndirectionTableModel.I(I())
-    {
-      var idx := start;
-      var it := t.IterStart();
-      while it.next.Next?
-      {
-      }
-    }
-    */
+    // ensures end != 0 ==>
+    //   && start as int <= end as int <= data.Length
+    //   && Marshalling.valToIndirectionTableMaps(
+    //        parse_Array_contents(
+    //          data[start..end],
+    //          Marshalling.IndirectionTableRowGrammar(),
+    //          t.Count
+    //        )
+    //      ) == IndirectionTableModel.I(I())
+    // {
+    //   var idx := start;
+    //   var it := t.IterStart();
+    //   while it.next.Next?
+    //   {
+    //   }
+    // }
 
-/*
-    method marshallIndirectionTable(data: array<byte>, start_idx: uint64)
-    returns (end: uint64)
-    requires Inv()
-    requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
-    modifies data
-    {
-      var idx := start_idx;
+    // method marshallIndirectionTable(data: array<byte>, start_idx: uint64)
+    // returns (end: uint64)
+    // requires Inv()
+    // requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
+    // modifies data
+    // {
+    //   var idx := start_idx;
 
-      Pack_LittleEndian_Uint64_into_Array(t.Count, data, idx);
-      idx := idx + 8;
+    //   Pack_LittleEndian_Uint64_into_Array(t.Count, data, idx);
+    //   idx := idx + 8;
 
-      var it := t.IterStart();
-      while it.next.Next?
-      {
-        if idx + 8 + 8 + 8 + 8 + 8*|it.next.value.succs| as uint64
-            > data.Length as uint64
-        {
-          return 0;
-        }
+    //   var it := t.IterStart();
+    //   while it.next.Next?
+    //   {
+    //     if idx + 8 + 8 + 8 + 8 + 8*|it.next.value.succs| as uint64
+    //         > data.Length as uint64
+    //     {
+    //       return 0;
+    //     }
 
-        Pack_LittleEndian_Uint64_into_Array(it.next.key, data, idx);
-        idx := idx + 8;
+    //     Pack_LittleEndian_Uint64_into_Array(it.next.key, data, idx);
+    //     idx := idx + 8;
 
-        Pack_LittleEndian_Uint64_into_Array(it.next.value.loc.value.addr, data, idx);
-        idx := idx + 8;
+    //     Pack_LittleEndian_Uint64_into_Array(it.next.value.loc.value.addr, data, idx);
+    //     idx := idx + 8;
 
-        Pack_LittleEndian_Uint64_into_Array(it.next.value.loc.value.len, data, idx);
-        idx := idx + 8;
+    //     Pack_LittleEndian_Uint64_into_Array(it.next.value.loc.value.len, data, idx);
+    //     idx := idx + 8;
 
-        Pack_LittleEndian_Uint64_into_Array(
-            |it.next.value.succs| as uint64, data, idx);
-        idx := idx + 8;
+    //     Pack_LittleEndian_Uint64_into_Array(
+    //         |it.next.value.succs| as uint64, data, idx);
+    //     idx := idx + 8;
 
-        Pack_LittleEndian_Uint64_Seq_into_Array(
-            it.next.value.succs, data, idx);
-        idx := idx + 8 * |it.next.value.succs| as uint64;
-        
-        it := t.IterInc(it);
-      }
-      return idx;
-    }
-    */
+    //     Pack_LittleEndian_Uint64_Seq_into_Array(
+    //         it.next.value.succs, data, idx);
+    //     idx := idx + 8 * |it.next.value.succs| as uint64;
+    //     
+    //     it := t.IterInc(it);
+    //   }
+    //   return idx;
+    // }
 
     // NOTE(travis): I found that the above method which marshalls
     // directly from indirection table to bytes is much faster
