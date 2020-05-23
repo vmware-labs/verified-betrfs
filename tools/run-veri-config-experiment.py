@@ -141,7 +141,7 @@ def main():
       rocks = True
     elif arg == "berkeley":
       berkeley = True
-    elif arg == "berkeley":
+    elif arg == "kyoto":
       kyoto = True
     elif arg == "log_stats":
       log_stats = True

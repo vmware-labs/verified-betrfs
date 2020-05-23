@@ -30,8 +30,13 @@ berkeley_suite = Suite(
     Variable("git_branch", "git_branch", [Value("master", "master")]),
     Variable("system", "run_veri", [Value("berkeley", "berkeley")]),
     *common_vars)
+kyoto_suite = Suite(
+    "berkeleydb",
+    Variable("git_branch", "git_branch", [Value("master", "master")]),
+    Variable("system", "run_veri", [Value("kyoto", "kyoto")]),
+    *common_vars)
 #suite = ConcatSuite("ycsb-001", veri_suite, rocks_suite, berkeleydb_suite)
-suite = ConcatSuite("ycsb-test-017", berkeley_suite)
+suite = ConcatSuite("ycsb-test-020", kyoto_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
