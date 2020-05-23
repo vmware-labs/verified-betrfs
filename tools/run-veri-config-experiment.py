@@ -114,6 +114,8 @@ def main():
   cgroup_enabled = True
 
   rocks = None
+  berkeley = None
+  kyoto = None
   time_budget_sec = 3600*24*365 # You get a year if you don't ask for a budget
 
   for arg in sys.argv[1:]:
@@ -137,6 +139,10 @@ def main():
       config = "8mb"
     elif arg == "rocks":
       rocks = True
+    elif arg == "berkeley":
+      berkeley = True
+    elif arg == "berkeley":
+      kyoto = True
     elif arg == "log_stats":
       log_stats = True
     elif arg.startswith("time_budget="):
@@ -186,10 +192,12 @@ def main():
 
   if rocks:
     exe = "build/RocksYcsb"
-    cmdoption = "--rocks"
+  elif berkeley:
+      exe = "build/BerkeleyYcsb"
+  elif kyoto:
+      exe = "build/KyotoYcsb"
   else:
     exe = "build/VeribetrfsYcsb"
-    cmdoption = "--veribetrkv"
 
   make_options = ""
   if log_stats:

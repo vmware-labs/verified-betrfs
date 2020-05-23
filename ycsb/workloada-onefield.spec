@@ -6,7 +6,7 @@
 
 workloadname=A
 
-recordcount=1000000
+recordcount=10000000
 operationcount=1000
 workload=com.yahoo.ycsb.workloads.CoreWorkload
 
@@ -25,4 +25,4 @@ requestdistribution=zipfian
 
 #syncintervalms=1000
 # Sync based on ops, so we don't create sync-collapse in slow phases.
-syncintervalops=10000
+#syncintervalops=10000

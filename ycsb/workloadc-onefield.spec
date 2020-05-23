@@ -6,7 +6,7 @@
 
 workloadname=C
 
-recordcount=1000000
+recordcount=10000000
 operationcount=1000
 workload=com.yahoo.ycsb.workloads.CoreWorkload
 
@@ -23,4 +23,4 @@ fieldlength=512
 
 requestdistribution=uniform
 
-syncintervalms=1000
+#syncintervalms=1000
