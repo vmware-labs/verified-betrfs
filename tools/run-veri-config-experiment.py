@@ -168,7 +168,7 @@ def main():
   actuallyprint("Experiment time budget %s" % (datetime.timedelta(seconds=time_budget_sec)))
   actuallyprint("metadata time_budget %s seconds" % time_budget_sec)
 
-  assert veri || rocks || berkeley || kyoto
+  assert veri or rocks or berkeley or kyoto
   
   if config != None:
     assert veri
