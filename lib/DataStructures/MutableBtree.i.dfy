@@ -627,7 +627,7 @@ abstract module MutableBtree {
       forall o | o in children[i].repr
         ensures o in subrepr
       {
-        assert ObjectIsInSubtree(node, o, i);
+        //assert ObjectIsInSubtree(node, o, i);
       }
     }
   }

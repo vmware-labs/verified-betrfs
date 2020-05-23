@@ -327,7 +327,7 @@ abstract module TSJ {
         assert uiops[i] == uiops1[i];
         assert SM.Next(k, states1[i], states1[i+1], uiops1[i]);
       } else {
-        assert states[i] == states2[i - |uiops1|];
+        //assert states[i] == states2[i - |uiops1|];
         assert states[i+1] == states2[i - |uiops1| + 1];
         assert uiops[i] == uiops2[i - |uiops1|];
         assert SM.Next(k, states2[i - |uiops1|],

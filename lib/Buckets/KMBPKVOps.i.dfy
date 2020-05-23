@@ -301,7 +301,8 @@ module KMBPKVOps {
 
       ghost var prekeys := dpkv.toPkv().keys;
       ghost var premsgs := dpkv.toPkv().messages;
-      
+
+      assert PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, KMB.ToSeq(children[i]).0);
       FillDpkv(children[i], dpkv);
       
       calc {

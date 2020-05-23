@@ -2221,10 +2221,10 @@ method MarshallUint64Array(val:V, ghost grammar:G, data:array<byte>, index:uint6
   ghost var len := unpack_LittleEndian_Uint64(data_seq2[..8]);
   assert |data_seq2| >= 8;
   //assert len <= (|data_seq2| as uint64 - 8) / 8;
-  assert parse_Uint64Array(data_seq2).0.Some?;
+  //assert parse_Uint64Array(data_seq2).0.Some?;
   assert parse_Val(data_seq2, grammar).0.Some?;
   //assert parse_Uint64Array(data_seq2).0.value.ua == val.ua;
-  assert parse_Val(data_seq2, grammar).0.value.ua == val.ua;
+  //assert parse_Val(data_seq2, grammar).0.value.ua == val.ua;
 
   size := 8 + |val.ua| as uint64 * 8;
 }

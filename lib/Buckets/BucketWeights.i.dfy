@@ -1592,23 +1592,23 @@ module BucketWeights {
         WeightBucket(bucket);
       }
     } else {
-      var l := map key | key in bucket.b && Keyspace.lt(key, Last(pivots)) :: bucket.b[key];
-      var r := map key | key in bucket.b && Keyspace.lte(Last(pivots), key) :: bucket.b[key];
-      var lKeys := iset k | k in l;
-      var rKeys := iset k | k in r;
-
+      var l := B(map key | key in bucket.b && Keyspace.lt(key, Last(pivots)) :: bucket.b[key]);
+      var r := B(map key | key in bucket.b && Keyspace.lte(Last(pivots), key) :: bucket.b[key]);
+      var lKeys := iset k | k in l.b;
+      var rKeys := iset k | k in r.b;
+      
       calc {
         WeightBucketList(SplitBucketOnPivots(bucket, pivots));  // defn.
-        WeightBucketList(SplitBucketOnPivots(B(l), DropLast(pivots)) + [B(r)]);
-          { WeightBucketListConcatOne(SplitBucketOnPivots(B(l), DropLast(pivots)), B(r)); } // break off tail
-        WeightBucketList(SplitBucketOnPivots(B(l), DropLast(pivots))) + WeightBucket(B(r));
-          { WMWeightSplitBucketOnPivots(B(l), DropLast(pivots)); }
-        WeightBucket(B(l)) + WeightBucket(B(r));
+        WeightBucketList(SplitBucketOnPivots(l, DropLast(pivots)) + [r]);  // defn.
+          { WeightBucketListConcatOne(SplitBucketOnPivots(l, DropLast(pivots)), r); } // break off tail
+        WeightBucketList(SplitBucketOnPivots(l, DropLast(pivots))) + WeightBucket(r);
+          { WMWeightSplitBucketOnPivots(l, DropLast(pivots)); }
+        WeightBucket(l) + WeightBucket(r);
           {
-            ImageTrim(bucket, lKeys, B(l));
-            ImageTrim(bucket, rKeys, B(r));
-            WellMarshalledBucketsEq(B(l), Image(bucket, lKeys));
-            WellMarshalledBucketsEq(B(r), Image(bucket, rKeys));            
+            ImageTrim(bucket, lKeys, l);
+            ImageTrim(bucket, rKeys, r);
+            WellMarshalledBucketsEq(l, Image(bucket, lKeys));
+            WellMarshalledBucketsEq(r, Image(bucket, rKeys));            
           }
         WeightBucket(Image(bucket, lKeys)) + WeightBucket(Image(bucket, rKeys));
           { WeightBucketLinearInKeySetSum(bucket, lKeys, rKeys); }
