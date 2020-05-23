@@ -6,8 +6,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import glob
 import collections
+import tarfile
 
-EXPERIMENT="veri_time_13"
+#EXPERIMENT="expresults/veri_time_13-*"
+EXPERIMENT="expresults/veri_time_13.tgz"
 SLOW_THRESH = 20
 
 class Observation:
@@ -51,7 +53,7 @@ class SymbolPile:
     def reports(self):
         return list(self.symbols.values())
 
-def parse_one(datafile, pile):
+def parse_one(opener, pile):
     symbol_parts = {}
 
     def record_part(symbol, part, obs):
@@ -61,8 +63,10 @@ def parse_one(datafile, pile):
         obs.part = part
 
     worker_name = None
-    for line in open(datafile).readlines():
-        #print (line)
+    fn,fp = opener()
+    for line in fp.readlines():
+        if not type(line) == type(""):
+            line = line.decode("utf-8")
         if line.startswith("Parsing"):
             source_filename = line.split()[-1]
         if line.startswith("WORKER"):
@@ -85,9 +89,25 @@ def parse_one(datafile, pile):
 
 def parse_all():
     pile = SymbolPile()
-    resultsfiles = glob.glob("expresults/%s-*" % EXPERIMENT)
-    for file in resultsfiles:
-        parse_one(file, pile)
+    openers = []
+    if "*" in EXPERIMENT:
+        # Load a glob out of the filesystem for interactive experimenting
+        resultsfiles = glob.glob(EXPERIMENT)
+        def opener(fn):
+            return lambda: (fn,open(fn))
+        openers = [opener(fn) for fn in resultsfiles]
+    else:
+        # Load from a tarball for git recorded raw data.
+        tf = tarfile.open(EXPERIMENT, "r")
+        resultsfiles = tf.getnames()
+        def opener(fn):
+            return lambda: (fn,tf.extractfile(fn))
+        openers = [opener(fn) for fn in resultsfiles]
+        
+    if len(openers) == 0:
+        raise Exception("No files match %s" % EXPERIMENT)
+    for opener in openers:
+        parse_one(opener, pile)
     return pile
 
 def detect_bogus_workers(pile):
