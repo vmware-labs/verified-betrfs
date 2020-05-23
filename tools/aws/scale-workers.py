@@ -9,6 +9,7 @@ from botocore.exceptions import ClientError
 parser = argparse.ArgumentParser()
 parser.add_argument('--scale-up', type=int, help='scale up to target worker count')
 parser.add_argument('--scale-down', type=int, help='scale down to target worker count')
+parser.add_argument('--ssd', action='store_true', help='act on the ssd cluster')
 parser.add_argument('--dry-run', action='store_true')
 
 args = parser.parse_args()
@@ -35,7 +36,7 @@ except ClientError as e:
 
 insts = [extract_salient(x) for reservation in response['Reservations'] for x in reservation['Instances']]
 insts.sort(key=lambda x: x.Name)
-insts = [x for x in insts if x.Name.startswith('veri-worker')]
+insts = [x for x in insts if x.Name.startswith('veri-ssd' if args.ssd else 'veri-worker')]
 
 print("Found instances:")
 pprint.pprint(insts, indent=2)
