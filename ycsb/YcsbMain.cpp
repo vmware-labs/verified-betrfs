@@ -156,7 +156,7 @@ public:
   }
 
   void Load() {
-    cerr << "[step] " << name << " load start (num ops: " << record_count << ")" << endl;
+    cout << "[step] " << name << " load start (num ops: " << record_count << ")" << endl;
 
     auto clock_start = steady_clock::now();
     auto clock_next_report = clock_start + progress_report_interval;
