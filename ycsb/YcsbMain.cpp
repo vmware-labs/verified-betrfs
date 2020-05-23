@@ -33,21 +33,21 @@ using namespace chrono;
 
 template< class C, class D1, class D2 >
 void record_duration(HDRHist &hist,
-                     const time_point<C,D1>& begin,
-                     const time_point<C,D2>& end)
+                     const time_point<C,D1> &begin,
+                     const time_point<C,D2> &end)
 {
-  auto duration = duration_cast<nanoseconds>(begin - end);
+  auto duration = duration_cast<nanoseconds>(end - begin);
   hist.add_value(duration.count());
 }
   
-void print_summary(HDRHistQuantiles& summary, const string db_name, const string op) {
+void print_summary(HDRHistQuantiles& summary, const string workload_name, const string op) {
   if (summary.samples() != 0) {
     cout << "--" << "\tlatency_ccdf\top\t" << "quantile" << "\t" << "upper_bound(ns)" << endl;
     for (auto summary_el = summary.next();
          summary_el.has_value();
          summary_el = summary.next()) {
       
-      cout << db_name << "\tlatency_ccdf\t" << op << "\t"
+      cout << workload_name << "\tlatency_ccdf\t" << op << "\t"
            << summary_el->quantile << "\t" << summary_el->upper_bound << endl;
     }
   }
@@ -66,6 +66,7 @@ template< class DB >
 class YcsbExecution {
   // Benchmark definition
   DB db;
+  string name;
   ycsbc::CoreWorkload& workload;
   bool verbose;
   int record_count;
@@ -84,14 +85,17 @@ class YcsbExecution {
 public:
   
   YcsbExecution(DB db,
+                string name,
                 ycsbc::CoreWorkload& workload,
                 int record_count,
                 int num_ops,
                 bool verbose,
-                int max_sync_interval_ms = 1000,
-                int max_sync_interval_ops = 1000,
+                int max_sync_interval_ms = 0,
+                int max_sync_interval_ops = 0,
                 int progress_report_interval_ms = 1000)
-    : db(db), workload(workload), record_count(record_count), num_ops(num_ops), verbose(verbose),
+    : db(db), name(name), workload(workload),
+      record_count(record_count), num_ops(num_ops),
+      verbose(verbose),
       max_sync_interval(max_sync_interval_ms),
       max_sync_interval_ops(max_sync_interval_ops),
       progress_report_interval(progress_report_interval_ms)
@@ -153,7 +157,7 @@ public:
   }
 
   void Load() {
-    cerr << db.name << " [step] load start (num ops: " << record_count << ")" << endl;
+    cerr << "[step] " << name << " load start (num ops: " << record_count << ")" << endl;
 
     auto clock_start = steady_clock::now();
     auto clock_next_report = clock_start + progress_report_interval;
@@ -169,19 +173,26 @@ public:
       if (clock_next_report < clock_op_completed) {
         auto duration_ms = duration_cast<milliseconds>(
                         clock_op_completed - clock_start).count();
-        cout << "[step] load progress " << db.name << " " << duration_ms << " ms " << i << " ops" << endl;
+        cout << "[step] " << name << " load progress " << duration_ms << " ms " << i << " ops" << endl;
         malloc_accounting_status();
         clock_next_report = clock_op_completed + progress_report_interval;
       }
     }
 
     auto duration_ms = duration_cast<milliseconds>(clock_op_completed - clock_start);
-    cerr << db.name << " [step] load sync " << duration_ms.count() << " ms" << endl;
+    cout << "[step] " << name << " load sync " << duration_ms.count() << " ms" << endl;
     db.sync(true);
 
     auto clock_end = steady_clock::now();
     load_duration_ms = duration_cast<milliseconds>(clock_end - clock_start);
-    cerr << db.name << " [step] load end " << load_duration_ms.count() << " ms" << endl;
+    cout << "[step] " << name << " load end " << load_duration_ms.count() << " ms" << endl;
+
+    auto load_duration_ns = duration_cast<nanoseconds>(clock_end - clock_start);
+    assert(load_duration_ns.count() != 0);
+
+    double load_duration_s = duration_cast<nanoseconds>(clock_end - clock_start).count() / 1000000000.0;
+    double throughput = record_count / load_duration_s;
+    cout << "[step] " << name << " load throughput " << throughput << " ops/sec" << endl;
   }
 
   void Run() {
@@ -192,7 +203,7 @@ public:
     auto next_sync    = clock_start + max_sync_interval;
     auto next_display = clock_start + progress_report_interval;
 
-    int next_sync_ops = max_sync_interval_ops;
+    int next_sync_ops = 0 < max_sync_interval_ops ? max_sync_interval_ops : num_ops+1;
     bool have_done_insert_since_last_sync = false;
     
 #define HACK_EVICT_PERIODIC 0
@@ -211,8 +222,8 @@ public:
     int next_probe_ms = probe_interval_ms;
 #endif // HACK_PROBE_PERIODIC
 
-    cerr << db.name << " [step] run start (num ops: " << num_ops << ", sync interval " <<
-      max_sync_interval.count() << "ms, sync ops " << max_sync_interval_ops << ")" << endl;
+    cout << "[step] " << name << " run start (num ops: " << num_ops << ", sync interval " <<
+      max_sync_interval.count() << " ms, sync ops " << max_sync_interval_ops << ")" << endl;
 
     for (int i = 0; i < num_ops; ++i) {
       auto next_operation = workload.NextOperation();
@@ -247,19 +258,20 @@ public:
       if (next_display <= clock_op_completed) {
         malloc_accounting_display("periodic");
         auto elapsed_ms = duration_cast<milliseconds>(clock_op_completed - clock_start);
-        cout << "[step] run progress " << elapsed_ms.count() << " ms " <<  i << " ops" << endl;
+        cout << "[step] " << name << " run progress " << elapsed_ms.count() << " ms " <<  i << " ops" << endl;
         next_display += progress_report_interval;
       }
 
       if (have_done_insert_since_last_sync &&
-          (next_sync < clock_op_completed || next_sync_ops <= i)) {
+          ((0 < max_sync_interval.count() && next_sync < clock_op_completed)
+           || next_sync_ops <= i)) {
         auto sync_started = steady_clock::now();
         milliseconds elapsed_ms = duration_cast<milliseconds>(sync_started - clock_start);
-        cout << "[step] run sync start " << elapsed_ms.count() << " ms " << i << " ops" << endl;
+        cout << "[step] " << name << " run sync start " << elapsed_ms.count() << " ms " << i << " ops" << endl;
         db.sync(false);
         auto sync_completed = steady_clock::now();
         elapsed_ms = duration_cast<milliseconds>(sync_completed - clock_start);
-        cout << "[step] run sync end " << elapsed_ms.count() << " ms " << i << " ops" << endl;
+        cout << "[step] " << name << " run sync end " << elapsed_ms.count() << " ms " << i << " ops" << endl;
         record_duration(sync_latency_hist, sync_started, sync_completed);
         have_done_insert_since_last_sync = false;
         next_sync = sync_completed + max_sync_interval;
@@ -281,11 +293,11 @@ public:
     if (have_done_insert_since_last_sync) {
       auto sync_started = steady_clock::now();
       milliseconds elapsed_ms = duration_cast<milliseconds>(sync_started - clock_start);
-      cout << "[step] sync start " << elapsed_ms.count()  << " ms " << num_ops << " ops" << endl;
+      cout << "[step] " << name << " sync start " << elapsed_ms.count()  << " ms " << num_ops << " ops" << endl;
       db.sync(true);
       auto sync_completed = steady_clock::now();
       elapsed_ms = duration_cast<milliseconds>(sync_completed - clock_start);
-      cout << "[step] sync end " << elapsed_ms.count() << " ms " << num_ops << " ops" << endl;
+      cout << "[step] " << name << " sync end " << elapsed_ms.count() << " ms " << num_ops << " ops" << endl;
       record_duration(sync_latency_hist, sync_started, sync_completed);
       have_done_insert_since_last_sync = false;
       next_sync = sync_completed + max_sync_interval;
@@ -295,17 +307,21 @@ public:
     auto clock_end = steady_clock::now();
     run_duration_ms = duration_cast<milliseconds>(clock_end - clock_start);
 
+    double run_duration_s = duration_cast<nanoseconds>(clock_end - clock_start).count() / 1000000000.0;
+    double throughput = num_ops / run_duration_s;
+    cout << "[step] " << name << " run throughput " << throughput << " ops/sec" << endl;
+    
     malloc_accounting_set_scope("ycsbRun.summary");
     {
       auto load_insert_summary = load_insert_latency_hist.summary();
-      print_summary(load_insert_summary, db.name, "load");
+      print_summary(load_insert_summary, name, "load");
 
       for (auto op : YcsbOperations) {
         auto op_summary = latency_hist[op.first]->summary();
-        print_summary(op_summary, db.name, op.second);
+        print_summary(op_summary, name, op.second);
       }
       auto sync_summary = sync_latency_hist.summary();
-      print_summary(sync_summary, db.name, "sync");
+      print_summary(sync_summary, name, "sync");
     }
     malloc_accounting_default_scope();
   }
@@ -453,15 +469,15 @@ const string KyotoFacade::name = string("kyotodb");
 #ifdef _YCSB_BERKELEYDB
 class BerkeleyDBFacade {
 protected:
-    DbEnv *env;
+  //DbEnv *env;
     Db* pdb;
     dbstl::db_map<string, string> *huge_map;
 
 public:
     static const string name;
 
-  BerkeleyDBFacade(DbEnv *_env, Db *_pdb) : env(_env), pdb(_pdb) {
-    huge_map = new dbstl::db_map<string, string>(pdb, env);
+  BerkeleyDBFacade(Db *_pdb) : pdb(_pdb) {
+    huge_map = new dbstl::db_map<string, string>(pdb, NULL);
   }
 
     inline void query(const string& key) {
@@ -580,14 +596,57 @@ void dump_metadata(const char* workload_filename, const char* database_filename)
   fflush(stdout);
 }
 
+template< class DbFacade >
+void runOneWorkload(DbFacade db, string workload_filename, string database_filename, bool do_nop, bool verbose)
+{
+  utils::Properties props = ycsbcwrappers::props_from(workload_filename);
+  auto properties_map = props.properties();
+  unique_ptr<ycsbc::CoreWorkload> workload(ycsbcwrappers::new_workload(props));
+
+  int record_count = stoi(props[ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY]);
+  int num_ops = stoi(props[ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY]);
+
+  int sync_interval_ms =  0;
+  int sync_interval_ops = 0;
+
+  string workload_name;
+  
+  if (properties_map.find("syncintervalms") != properties_map.end()) {
+    sync_interval_ms= stoi(props["syncintervalms"]);
+  }
+  
+  if (properties_map.find("syncintervalops") != properties_map.end()) {
+    sync_interval_ops = stoi(props["syncintervalops"]);
+  }
+  
+  if (properties_map.find("workloadname") != properties_map.end()) {
+    workload_name = props["workloadname"];
+  } else {
+    workload_name = workload_filename;
+  }
+  
+  dump_metadata(workload_filename.c_str(), database_filename.c_str());
+
+  if (do_nop) {
+    NopFacade nopdb;
+    YcsbExecution ycsbExecution(nopdb, workload_name, *workload, record_count, num_ops, verbose,
+                                sync_interval_ms, sync_interval_ops);
+    ycsbExecution.LoadAndRun();
+  } else {
+    YcsbExecution ycsbExecution(db, workload_name, *workload, record_count, num_ops, verbose,
+                                sync_interval_ms, sync_interval_ops);
+    ycsbExecution.LoadAndRun();
+  }
+}
+
 void usage(int argc, char **argv)
 {
-  cerr << "Usage: " << argv[0] << " <workload.spec> ";
+  cerr << "Usage: " << argv[0] << " ";
 #ifdef _YCSB_VERIBETRFS
   cout << "<veribetrkv.img> ";
 #endif
 #ifdef _YCSB_ROCKS
-  cout << "<rocks.db> ";
+  cout << "<rocksdb-directory> ";
 #endif
 #ifdef _YCSB_BERKELEYDB
   cout << "<berkeley.db> ";
@@ -595,7 +654,8 @@ void usage(int argc, char **argv)
 #ifdef _YCSB_KYOTO
   cout << "<kyoto.cbt> ";
 #endif
-  cout << "[--nop] [--verbose]" << endl;
+  cout << "[--nop] [--verbose] <workload.spec> [workload.spec...]" << endl;
+  cout << "  --nop: use a no-op database" << endl;
   exit(-1);
 }  
 
@@ -605,47 +665,34 @@ int main(int argc, char* argv[]) {
   
   bool do_nop = false;
   bool verbose = false;
-  std::string workload_filename(argv[1]);
-  std::string database_filename(argv[2]);
-  
-  for (int i = 3; i < argc; i++) {
+  std::string database_filename(argv[1]);
+
+  int first_workload_filename;
+  int i;
+  for (i = 2; i < argc; i++) {
     if (string(argv[i]) == "--nop") {
       do_nop = true;
     } else if (string(argv[i]) == "--verbose") {
       verbose = true;
-    } 
-    else {
-      cerr << "unrecognized: " << argv[i] << endl;
-      exit(-1);
+    } else {
+      break;
     }
   }
-
-  utils::Properties props = ycsbcwrappers::props_from(workload_filename);
-  unique_ptr<ycsbc::CoreWorkload> workload(ycsbcwrappers::new_workload(props));
-  int record_count = stoi(props[ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY]);
-
-  auto properties_map = props.properties();
-  if (properties_map.find("syncintervalms") == properties_map.end()) {
-    cerr << "error: spec must provide syncintervalms" << endl;
-    exit(-1);
-  }
-  int sync_interval_ms = stoi(props["syncintervalms"]);
-  int sync_interval_ops = stoi(props["syncintervalops"]);
-  int num_ops = stoi(props[ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY]);
-
+  first_workload_filename = i;
+  
   // == veribetrkv ==
 #ifdef _YCSB_VERIBETRFS
   Mkfs(database_filename);
   Application app(database_filename);
   VeribetrkvFacade db(app);
-#endif 
+#endif
 
   // == rocksdb ==
 #ifdef _YCSB_ROCKS
   rocksdb::DB* rocks_db;
   rocksdb::Options options;
   options.create_if_missing = true;
-  options.error_if_exists = true;
+  //options.error_if_exists = true;
     
   // FIXME this is probably not fair, especially when we implement off-thread compaction
   // disables background compaction _and_ flushing
@@ -659,7 +706,7 @@ int main(int argc, char* argv[]) {
   rocksdb::Status status = rocksdb::DB::Open(options, database_filename, &rocks_db);
   assert(status.ok());
   RocksdbFacade db(*rocks_db);
-#endif 
+#endif
 
   // == kyotodb ==
 #ifdef _YCSB_KYOTO
@@ -675,27 +722,45 @@ int main(int argc, char* argv[]) {
 
   // == berkeleydb ==
 #ifdef _YCSB_BERKELEYDB
-  filesystem::path dbfilename(database_filename);
-  filesystem::path env_directory = dbfilename.remove_filename();
-  DbEnv env(DB_CXX_NO_EXCEPTIONS);
-  env.open(env_directory.c_str(), DB_CREATE | DB_INIT_MPOOL, 0);
   Db* pdb;
-  pdb = new Db(&env, DB_CXX_NO_EXCEPTIONS);
-  pdb->open(NULL, dbfilename.c_str(), NULL, DB_BTREE, DB_CREATE, 0);
-  BerkeleyDBFacade db(&env, pdb);
-#endif 
-
-  dump_metadata(workload_filename.c_str(), database_filename.c_str());
-
-  if (do_nop) {
-    NopFacade nopdb;
-    YcsbExecution ycsbExecution(nopdb, *workload, record_count, num_ops, verbose,
-                                sync_interval_ms, sync_interval_ops);
-    ycsbExecution.LoadAndRun();
-  } else {
-    YcsbExecution ycsbExecution(db, *workload, record_count, num_ops, verbose,
-                                sync_interval_ms, sync_interval_ops);
-    ycsbExecution.LoadAndRun();
+  pdb = new Db(NULL, DB_CXX_NO_EXCEPTIONS);
+  assert(pdb);
+  if (pdb->open(NULL, database_filename.c_str(), NULL, DB_BTREE, DB_CREATE, 0)) {
+    cerr << "Failed to open database " << database_filename << endl;
+    abort();
   }
+  BerkeleyDBFacade db(pdb);
+#endif
+
+  for (i = first_workload_filename; i < argc; i++) {
+    runOneWorkload(db, argv[i], database_filename, do_nop, verbose);
+  }
+  
+#ifdef _YCSB_VERIBETRFS
+  // No shutdown needed
+#endif
+  
+#ifdef _YCSB_ROCKS
+  // No shutdown needed
+#endif
+  
+#ifdef _YCSB_KYOTO
+  if (!tdb.close()) {
+    cout << "Failed to close " << database_filename;
+    abort();
+  }
+#endif
+
+#ifdef _YCSB_BERKELEYDB
+  if (pdb != NULL) {
+    if (pdb->close(0)) {
+      cerr << "Failed to close database" << endl;
+      abort();
+    }
+    delete pdb;
+  }
+#endif
+
+  return 0;
 }
 

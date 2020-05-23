@@ -4,8 +4,10 @@
 #                        
 #   Read/update ratio: 95/5
 
+workloadname=B
+
 recordcount=1000000
-operationcount=5000000
+operationcount=1000
 workload=com.yahoo.ycsb.workloads.CoreWorkload
 
 readallfields=true

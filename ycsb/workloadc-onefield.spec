@@ -4,7 +4,9 @@
 #                        
 #   Read/update ratio: 100/0
 
-recordcount=4000000
+workloadname=C
+
+recordcount=1000000
 operationcount=1000
 workload=com.yahoo.ycsb.workloads.CoreWorkload
 
