@@ -56,6 +56,7 @@ module LinearBox {
       ensures Inv()
       ensures !Has()
       ensures Repr == old(Repr)
+      ensures a == old(Read())
     {
       linear var x := data.Swap(empty());
       a := unwrap(x);

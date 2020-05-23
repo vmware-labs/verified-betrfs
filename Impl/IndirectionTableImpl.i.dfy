@@ -5,6 +5,7 @@ include "../lib/Base/Option.s.dfy"
 include "../lib/Base/LinearOption.i.dfy"
 include "../lib/Lang/NativeTypes.s.dfy"
 include "../lib/Lang/LinearMaybe.s.dfy"
+include "../lib/Lang/LinearBox.i.dfy"
 include "../lib/DataStructures/LinearMutableMap.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
@@ -21,6 +22,7 @@ module IndirectionTableImpl {
   import opened Sets
   import opened Options
   import opened LinearOption
+  import opened LinearBox
   import opened Sequences
   import opened NativeTypes
   import ReferenceType`Internal
@@ -41,7 +43,7 @@ module IndirectionTableImpl {
   type GarbageQueue = USeq.USeq
 
   // TODO move bitmap in here?
-  linear datatype IndirectionTable = IndirectionTable(
+  linear datatype indirectionTable = indirectionTable(
     linear t: HashMap,
     linear garbageQueue: lOption<GarbageQueue>,
     refUpperBound: uint64,
@@ -97,21 +99,21 @@ module IndirectionTableImpl {
     // Dummy constructor only used when ImplVariables is in a state with no indirection
     // table. We could use a null indirection table instead, it's just slightly more
     // annoying to do that because we'd need additional invariants.
-    static function method IndirectionTableEmptyConstructor() : linear IndirectionTable
+    static function method IndirectionTableEmptyConstructor() : linear indirectionTable
     ensures IndirectionTableEmptyConstructor().Inv()
     {
       linear var t0 := LinearMutableMap.Constructor<IndirectionTableModel.Entry>(128);
       // This is not important, but needed to satisfy the Inv:
       linear var t1 := LinearMutableMap.Insert(t0, BT.G.Root(), IndirectionTableModel.Entry(None, [], 1));
 
-      IndirectionTable(
+      indirectionTable(
         t1,
         lNone,
         /* refUpperBound = */ 0,
         None)
     }
 
-    static function method IndirectionTableRootOnlyConstructor(loc: Location) : linear IndirectionTable
+    static function method IndirectionTableRootOnlyConstructor(loc: Location) : linear indirectionTable
     ensures IndirectionTableRootOnlyConstructor(loc).Inv()
     ensures IndirectionTableRootOnlyConstructor(loc).I() == IndirectionTableModel.ConstructorRootOnly(loc)
     {
@@ -120,7 +122,7 @@ module IndirectionTableImpl {
 
       IndirectionTableModel.reveal_ConstructorRootOnly();
 
-      linear var r := IndirectionTable(
+      linear var r := indirectionTable(
         t1,
         lNone,
         /* refUpperBound = */ BT.G.Root(),
@@ -154,18 +156,28 @@ module IndirectionTableImpl {
     //   this.garbageQueue := null;
     // }
 
+    linear method Destructor()
+    {
+      linear var indirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator) := this;
+      LinearMutableMap.Destructor(t);
+      linear match garbageQueue {
+        case lNone => {}
+        case lSome(gq) => {USeq.Free(gq);}
+      }
+    }
+
     shared method Clone()
-    returns (linear table : IndirectionTable)
+    returns (linear table : indirectionTable)
     ensures table == this
     {
-      shared var IndirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator) := this;
+      shared var indirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator) := this;
       linear var t' := LinearMutableMap.Clone(t);
       linear var garbageQueue';
       shared match garbageQueue {
         case lNone => {garbageQueue' := lNone;}
         case lSome(gq) => {linear var gq' := USeq.Clone(gq); garbageQueue' := lSome(gq');}
       }
-      table := IndirectionTable(t', garbageQueue', refUpperBound, findLoclessIterator);
+      table := indirectionTable(t', garbageQueue', refUpperBound, findLoclessIterator);
     }
 
     shared method GetEntry(ref: BT.G.Reference) returns (e : Option<IndirectionTableModel.Entry>)
@@ -185,7 +197,7 @@ module IndirectionTableImpl {
     }
 
     linear method RemoveLoc(ref: BT.G.Reference)
-    returns (linear self: IndirectionTable, oldLoc: Option<Location>)
+    returns (linear self: indirectionTable, oldLoc: Option<Location>)
     requires Inv()
     requires IndirectionTableModel.TrackingGarbage(I())
     requires ref in I().graph
@@ -194,7 +206,7 @@ module IndirectionTableImpl {
     {
       IndirectionTableModel.reveal_RemoveLoc();
 
-      linear var IndirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator) := this;
+      linear var indirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator) := this;
       var it := LinearMutableMap.FindSimpleIter(t, ref);
       var oldEntry := LinearMutableMap.SimpleIterOutput(t, it);
       var predCount := oldEntry.value.predCount;
@@ -205,19 +217,19 @@ module IndirectionTableImpl {
       oldLoc := oldEntry.value.loc;
 
       ghost var _ := IndirectionTableModel.RemoveLoc(old(I()), ref);
-      self := IndirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator);
+      self := indirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator);
       assert (self.I(), oldLoc) == IndirectionTableModel.RemoveLoc(I(), ref);
     }
 
     linear method AddLocIfPresent(ref: BT.G.Reference, loc: Location)
-    returns (linear self: IndirectionTable, added: bool)
+    returns (linear self: indirectionTable, added: bool)
     requires Inv()
     ensures self.Inv()
     ensures (self.I(), added) == IndirectionTableModel.AddLocIfPresent(I(), ref, loc)
     {
       IndirectionTableModel.reveal_AddLocIfPresent();
 
-      linear var IndirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator) := this;
+      linear var indirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator) := this;
       var it := LinearMutableMap.FindSimpleIter(t, ref);
       var oldEntry := LinearMutableMap.SimpleIterOutput(t, it);
       added := oldEntry.Next? && oldEntry.value.loc.None?;
@@ -234,12 +246,12 @@ module IndirectionTableImpl {
       }
 
       ghost var _ := IndirectionTableModel.AddLocIfPresent(I(), ref, loc);
-      self := IndirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator);
+      self := indirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator);
       assert (self.I(), added) == IndirectionTableModel.AddLocIfPresent(I(), ref, loc);
     }
 
     linear method RemoveRef(ref: BT.G.Reference)
-    returns (linear self: IndirectionTable, oldLoc : Option<Location>)
+    returns (linear self: indirectionTable, oldLoc : Option<Location>)
     requires Inv()
     requires IndirectionTableModel.TrackingGarbage(I())
     requires IndirectionTableModel.deallocable(I(), ref)
@@ -251,7 +263,7 @@ module IndirectionTableImpl {
       IndirectionTableModel.lemma_count_eq_graph_size(I().t);
       IndirectionTableModel.LemmaRemoveRefStuff(I(), ref);
 
-      linear var IndirectionTable(t, lSome(garbageQueue), refUpperBound, findLoclessIterator) := this;
+      linear var indirectionTable(t, lSome(garbageQueue), refUpperBound, findLoclessIterator) := this;
       linear var RemoveResult(t', oldEntry) := LinearMutableMap.RemoveAndGet(t, ref);
       t := t';
 
@@ -266,7 +278,7 @@ module IndirectionTableImpl {
       findLoclessIterator := None;
 
       ghost var _ := IndirectionTableModel.RemoveRef(I(), ref);
-      self := IndirectionTable(t, lSome(garbageQueue), refUpperBound, findLoclessIterator);
+      self := indirectionTable(t, lSome(garbageQueue), refUpperBound, findLoclessIterator);
     }
 
     static method PredInc(linear t: HashMap, linear q: USeq.USeq, ref: BT.G.Reference)
@@ -358,7 +370,7 @@ module IndirectionTableImpl {
     }
 
     linear method UpdateAndRemoveLoc(ref: BT.G.Reference, succs: seq<BT.G.Reference>)
-    returns (linear self: IndirectionTable, oldLoc : Option<Location>)
+    returns (linear self: indirectionTable, oldLoc : Option<Location>)
     requires Inv()
     requires IndirectionTableModel.TrackingGarbage(I())
     requires |succs| <= MaxNumChildren()
@@ -372,7 +384,7 @@ module IndirectionTableImpl {
       IndirectionTableModel.lemma_count_eq_graph_size(I().t);
       IndirectionTableModel.LemmaUpdateAndRemoveLocStuff(I(), ref, succs);
 
-      linear var IndirectionTable(t, lSome(garbageQueue), refUpperBound, findLoclessIterator) := this;
+      linear var indirectionTable(t, lSome(garbageQueue), refUpperBound, findLoclessIterator) := this;
       var oldEntry := LinearMutableMap.Get(t, ref);
       var predCount := if oldEntry.Some? then oldEntry.value.predCount else 0;
       if oldEntry.None? {
@@ -397,7 +409,7 @@ module IndirectionTableImpl {
       findLoclessIterator := None;
 
       ghost var _ := IndirectionTableModel.UpdateAndRemoveLoc(I(), ref, succs);
-      self := IndirectionTable(t, lSome(garbageQueue), refUpperBound, findLoclessIterator);
+      self := indirectionTable(t, lSome(garbageQueue), refUpperBound, findLoclessIterator);
     }
 
     // Parsing and marshalling
@@ -606,7 +618,7 @@ module IndirectionTableImpl {
     }
 
     static method ValToIndirectionTable(v: V)
-    returns (linear s : lOption<IndirectionTable>)
+    returns (linear s : lOption<indirectionTable>)
     requires IndirectionTableModel.valToIndirectionTable.requires(v)
     ensures s.lSome? ==> s.value.Inv()
     ensures s.lNone? ==> IndirectionTableModel.valToIndirectionTable(v).None?
@@ -628,7 +640,7 @@ module IndirectionTableImpl {
 
                   linear var q := MakeGarbageQueue(t1);
                   var refUpperBound := ComputeRefUpperBound(t1);
-                  s := lSome(IndirectionTable(t1, lSome(q), refUpperBound, None));
+                  s := lSome(indirectionTable(t1, lSome(q), refUpperBound, None));
                 }
                 case lNone => {
                   s := lNone;
@@ -648,7 +660,7 @@ module IndirectionTableImpl {
       }
     }
 
-    function MaxIndirectionTableByteSize() : int {
+    static function MaxIndirectionTableByteSize() : int {
       8 + IndirectionTableModel.MaxSize() * (8 + 8 + 8 + (8 + MaxNumChildren() * 8))
     }
 
@@ -1161,14 +1173,14 @@ module IndirectionTableImpl {
       return this.t.count;
     }
 
-    linear method FindRefWithNoLoc() returns (linear self: IndirectionTable, ref: Option<BT.G.Reference>)
+    linear method FindRefWithNoLoc() returns (linear self: indirectionTable, ref: Option<BT.G.Reference>)
     requires Inv()
     ensures self.Inv()
     ensures (self.I(), ref) == IndirectionTableModel.FindRefWithNoLoc(I())
     {
       IndirectionTableModel.reveal_FindRefWithNoLoc();
 
-      linear var IndirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator) := this;
+      linear var indirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator) := this;
       var it;
       if findLoclessIterator.Some? {
         it := findLoclessIterator.value;
@@ -1182,7 +1194,7 @@ module IndirectionTableImpl {
       invariant forall r | r in it.s :: r in I().locs
       invariant IndirectionTableModel.FindRefWithNoLoc(I())
           == IndirectionTableModel.FindRefWithNoLocIterate(
-              IndirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator).I(), it)
+              indirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator).I(), it)
       decreases it.decreaser
       {
         var next := LinearMutableMap.SimpleIterOutput(t, it);
@@ -1200,7 +1212,7 @@ module IndirectionTableImpl {
           break;
         }
       }
-      self := IndirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator);
+      self := indirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator);
     }
 
     shared method GetRefUpperBound() returns (r: uint64)
@@ -1209,6 +1221,239 @@ module IndirectionTableImpl {
     {
       IndirectionTableModel.reveal_getRefUpperBound();
       return this.refUpperBound;
+    }
+  }
+
+  class IndirectionTable {
+    var box: BoxedLinear<indirectionTable>;
+    ghost var Repr: set<object>;
+
+    function Read() : indirectionTable
+      requires box.Inv()
+      reads this, box, box.Repr
+    {
+      box.Read()
+    }
+
+    method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator)
+      requires false
+    {
+/*
+      acc := DebugAccumulator.EmptyAccumulator();
+      var a := new DebugAccumulator.AccRec(t.Count, "IndirectionTableModel.Entry");
+      acc := DebugAccumulator.AccPut(acc, "t", a);
+      var r := garbageQueue.DebugAccumulate();
+      a := new DebugAccumulator.AccRec.Index(r);
+      acc := DebugAccumulator.AccPut(acc, "garbageQueue", a);
+*/
+    }
+
+    protected predicate Inv()
+      reads this, Repr
+      ensures Inv() ==> this in Repr
+    {
+      && box in Repr
+      && Repr == {this} + box.Repr
+      && box.Inv()
+      && box.Has()
+      && Read().Inv()
+    }
+
+    protected function I() : IndirectionTableModel.IndirectionTable
+      reads this, Repr
+      requires Inv()
+      ensures IndirectionTableModel.Inv(I())
+    {
+      Read().I()
+    }
+
+    constructor Box(box: BoxedLinear<indirectionTable>)
+      ensures this.box == box
+      ensures Repr == {this} + box.Repr
+    {
+      this.box := box;
+      new;
+      Repr := {this} + box.Repr;
+    }
+
+    constructor Empty()
+      ensures Inv()
+      ensures fresh(Repr)
+    {
+      box := new BoxedLinear(indirectionTable.IndirectionTableEmptyConstructor());
+      new;
+      Repr := {this} + box.Repr;
+    }
+
+    constructor RootOnly(loc: Location)
+      ensures Inv()
+      ensures fresh(Repr)
+      ensures I() == IndirectionTableModel.ConstructorRootOnly(loc)
+    {
+      box := new BoxedLinear(indirectionTable.IndirectionTableRootOnlyConstructor(loc));
+      new;
+      Repr := {this} + box.Repr;
+    }
+
+//    constructor(t: HashMap)
+//    {
+//      box := new LinearBox(indirectionTable(t, lNone, 0, None));
+//      Repr := {this} + box.Repr;
+//    }
+
+    // TODO: need to remember to call this; otherwise, memory will leak
+    method Destructor()
+      requires Inv()
+      modifies Repr
+    {
+      linear var x := box.Take();
+      x.Destructor();
+    }
+
+    method Clone() returns (table: IndirectionTable)
+      requires Inv()
+      ensures table.Inv()
+      ensures fresh(table.Repr)
+      ensures table.I() == IndirectionTableModel.clone(old(I()))
+    {
+      assume false;
+    }
+
+    method GetEntry(ref: BT.G.Reference) returns (e : Option<IndirectionTableModel.Entry>)
+      requires Inv()
+      ensures e == IndirectionTableModel.GetEntry(I(), ref)
+    {
+      assume false;
+    }
+
+    method HasEmptyLoc(ref: BT.G.Reference) returns (b: bool)
+      requires Inv()
+      ensures b == IndirectionTableModel.HasEmptyLoc(I(), ref)
+    {
+      assume false;
+    }
+
+    method RemoveLoc(ref: BT.G.Reference) returns (oldLoc: Option<Location>)
+      requires Inv()
+      requires IndirectionTableModel.TrackingGarbage(I())
+      requires ref in I().graph
+      modifies Repr
+      ensures Inv()
+      ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
+      ensures (I(), oldLoc) == IndirectionTableModel.RemoveLoc(old(I()), ref)
+    {
+      linear var x := box.Take();
+      x, oldLoc := x.RemoveLoc(ref);
+      box.Give(x);
+    }
+
+    method AddLocIfPresent(ref: BT.G.Reference, loc: Location) returns (added: bool)
+      requires Inv()
+      modifies Repr
+      ensures Inv()
+      ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
+      ensures (I(), added) == IndirectionTableModel.AddLocIfPresent(old(I()), ref, loc)
+    {
+      linear var x := box.Take();
+      x, added := x.AddLocIfPresent(ref, loc);
+      box.Give(x);
+    }
+
+    method RemoveRef(ref: BT.G.Reference) returns (oldLoc: Option<Location>)
+      requires Inv()
+      requires IndirectionTableModel.TrackingGarbage(I())
+      requires IndirectionTableModel.deallocable(I(), ref)
+      modifies Repr
+      ensures Inv()
+      ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
+      ensures (I(), oldLoc) == IndirectionTableModel.RemoveRef(old(I()), ref)
+    {
+      linear var x := box.Take();
+      x, oldLoc := x.RemoveRef(ref);
+      box.Give(x);
+    }
+
+    method UpdateAndRemoveLoc(ref: BT.G.Reference, succs: seq<BT.G.Reference>) returns (oldLoc: Option<Location>)
+      requires Inv()
+      requires IndirectionTableModel.TrackingGarbage(I())
+      requires |succs| <= MaxNumChildren()
+      requires |I().graph| < IndirectionTableModel.MaxSize()
+      requires IndirectionTableModel.SuccsValid(succs, I().graph)
+      modifies Repr
+      ensures Inv()
+      ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
+      ensures (I(), oldLoc) == IndirectionTableModel.UpdateAndRemoveLoc(old(I()), ref, succs)
+    {
+      linear var x := box.Take();
+      x, oldLoc := x.UpdateAndRemoveLoc(ref, succs);
+      box.Give(x);
+    }
+
+    static method ValToIndirectionTable(v: V) returns (s: IndirectionTable?)
+      requires IndirectionTableModel.valToIndirectionTable.requires(v)
+      ensures s != null ==> s.Inv()
+      ensures s != null ==> fresh(s.Repr)
+      ensures s == null ==> IndirectionTableModel.valToIndirectionTable(v).None?
+      ensures s != null ==> IndirectionTableModel.valToIndirectionTable(v) == Some(s.I())
+    {
+      assume false;
+    }
+
+    method indirectionTableToVal() returns (v: V, size: uint64)
+      requires Inv()
+      requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
+      ensures ValInGrammar(v, IndirectionTableModel.IndirectionTableGrammar())
+      ensures ValidVal(v)
+      ensures IndirectionTableModel.valToIndirectionTable(v).Some?
+      ensures
+            IndirectionTableModel.I(IndirectionTableModel.valToIndirectionTable(v).value)
+         == IndirectionTableModel.I(I())
+      ensures SizeOfV(v) <= indirectionTable.MaxIndirectionTableByteSize()
+      ensures SizeOfV(v) == size as int
+    {
+      assume false;
+    }
+
+    method InitLocBitmap() returns (success: bool, bm: BitmapImpl.Bitmap)
+      requires Inv()
+      requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
+      ensures bm.Inv()
+      ensures (success, bm.I()) == IndirectionTableModel.InitLocBitmap(old(I()))
+      ensures fresh(bm.Repr)
+    {
+      assume false;
+    }
+    
+    method FindDeallocable() returns (ref: Option<BT.G.Reference>)
+      requires Inv()
+      requires IndirectionTableModel.TrackingGarbage(I())
+      ensures ref == IndirectionTableModel.FindDeallocable(I())
+    {
+      assume false;
+    }
+
+    method GetSize() returns (size: uint64)
+      requires Inv()
+      ensures size as int == |I().graph|
+    {
+      assume false;
+    }
+
+    method FindRefWithNoLoc() returns (ref: Option<BT.G.Reference>)
+      requires Inv()
+      modifies Repr
+      ensures Inv()
+      ensures Repr == old(Repr)
+      ensures (I(), ref) == IndirectionTableModel.FindRefWithNoLoc(old(I()))
+    {
+      assume false;
+    }
+
+    method GetRefUpperBound() returns (r: uint64)
+      requires Inv()
+      ensures r == IndirectionTableModel.getRefUpperBound(this.I())
+    {
+      assume false;
     }
   }
 }
