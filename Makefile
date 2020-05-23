@@ -429,7 +429,7 @@ build/BerkeleyYcsb: ycsb/YcsbMain.cpp build/libycsbc-libcpp.a
 			$(DBG_SYMBOLS_FLAG) \
 			-D_YCSB_BERKELEYDB \
 			ycsb/YcsbMain.cpp \
-			-lycsbc-libcpp -lc++fs -lpthread -ldl -lz -ldb_stl $(LDFLAGS)
+			-lycsbc-libcpp -lpthread -ldl -lz -ldb_stl $(LDFLAGS)
 
 
 ycsb: build/VeribetrfsYcsb build/RocksYcsb build/KyotoYcsb build/BerkeleyYcsb
