@@ -210,6 +210,7 @@ def report_slowest_symbols(pile):
         "slowThresholdSecs": SLOW_THRESH,
         "numSlowVerifications": all_slow_count,
         "pctOfSlowVerifsInvolvingHeap": ("%d\\%%" % pct_slow),
+        "fasterPctile": ("%s\\%%" % CDFStuff(pile).pct_text),
         }
 
 def emit_constants(defs):
@@ -218,28 +219,37 @@ def emit_constants(defs):
         for k,v in defs.items():
             fp.write("\\newcommand{\\%s}{%s}\n" % (k, v))
 
+class CDFStuff:
+    def __init__(self, pile):
+        def cdist(i):
+            return i*1.0/self.N
+
+        self.mean_times = [report.mean() for report in pile.reports()]
+        self.mean_times.sort()
+        self.N = len(self.mean_times)
+        self.ys = [cdist(i) for i in range(self.N)]
+        idx,t = next((idx,t) for idx,t in enumerate(self.mean_times) if t>SLOW_THRESH)
+        self.idx = idx - 1
+
+        self.tThr = self.mean_times[self.idx]
+        self.yThr = cdist(self.idx)
+        self.pct = cdist(self.idx)*100
+        self.pct_text = "%.1f" % self.pct
+
 def plot_all(pile):
-    mean_times = [report.mean() for report in pile.reports()]
-    mean_times.sort()
-    N = len(mean_times)
-    def cdist(i):
-        return i*1.0/N
-    ys = [cdist(i) for i in range(N)]
+    cdf = CDFStuff(pile)
     def complog(y):
         return -math.log10(1-y)
-    ys = [complog(y) for y in ys]
+    ys = [complog(y) for y in cdf.ys]
 
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    ax.plot(mean_times, ys)
+    ax.plot(cdf.mean_times, ys)
 
-    idx,t = next((idx,t) for idx,t in enumerate(mean_times) if t>SLOW_THRESH)
-    idx = idx - 1
-    t = mean_times[idx]
-    ypos = complog(cdist(idx))
+    ylogThr = complog(cdf.yThr)
     y0 = complog(0)
-    ax.plot([0, t, t], [ypos, ypos, y0])
-    ax.text(t*1.01, ypos*0.99, va="top", s="%.1f%% faster than %ds" % (cdist(idx)*100, SLOW_THRESH))
+    ax.plot([0, cdf.tThr, cdf.tThr], [ylogThr, ylogThr, y0])
+    ax.text(cdf.tThr*1.01, ylogThr*0.99, va="top", s="%s%% faster than %ds" % (cdf.pct_text, SLOW_THRESH))
 
     yticks = range(4)
     ax.set_yticks(yticks)
