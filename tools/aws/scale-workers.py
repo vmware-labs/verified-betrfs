@@ -9,7 +9,7 @@ from botocore.exceptions import ClientError
 parser = argparse.ArgumentParser()
 parser.add_argument('--scale-up', type=int, help='scale up to target worker count')
 parser.add_argument('--scale-down', type=int, help='scale down to target worker count')
-parser.add_argument('--ssd', type=int, help='act on the ssd cluster')
+parser.add_argument('--ssd', action='store_true', help='act on the ssd cluster')
 parser.add_argument('--dry-run', action='store_true')
 
 args = parser.parse_args()
