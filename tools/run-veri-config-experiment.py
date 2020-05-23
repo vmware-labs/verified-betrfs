@@ -113,6 +113,7 @@ def main():
   max_children = None   # Default
   cgroup_enabled = True
 
+  veri = None
   rocks = None
   berkeley = None
   kyoto = None
@@ -137,6 +138,8 @@ def main():
       config = "64kb"
     elif arg == "config-8mb":
       config = "8mb"
+    elif arg == "veri":
+      veri = True
     elif arg == "rocks":
       rocks = True
     elif arg == "berkeley":
@@ -161,12 +164,14 @@ def main():
       os.dup2(fp.fileno(), 1)   # replace stdout for this program and children
     else:
       assert False, "unrecognized argument: " + arg
-
+      
   actuallyprint("Experiment time budget %s" % (datetime.timedelta(seconds=time_budget_sec)))
   actuallyprint("metadata time_budget %s seconds" % time_budget_sec)
 
+  assert veri || rocks || berkeley || kyoto
+  
   if config != None:
-    assert not rocks
+    assert veri
     assert ram != None
     value_updates = autoconfig(config, ram, nodeCountFudge) + value_updates
 
@@ -180,13 +185,13 @@ def main():
   ret = os.system("rm -rf build/")
   assert ret == 0
 
-  if not rocks:
+  if veri:
     print("Building Bundle.cpp...")
     ret = os.system("make build/Bundle.cpp > /dev/null 2> /dev/null")
     assert ret == 0
 
   for (name, value) in value_updates:
-    assert not rocks
+    assert veri
     print("setting " + name + " to " + value)
     splice_value_into_bundle(name, value)
 
@@ -197,6 +202,7 @@ def main():
   elif kyoto:
       exe = "build/KyotoYcsb"
   else:
+    assert veri
     exe = "build/VeribetrfsYcsb"
 
   make_options = ""
@@ -241,6 +247,7 @@ def main():
   elif kyoto:
     loc = loc + "/kyoto.cbt"
   else:
+    assert veri
     loc = loc + "/veribetrkv.img"
     
   clear_page_cache()
