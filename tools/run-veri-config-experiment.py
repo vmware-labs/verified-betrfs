@@ -232,7 +232,7 @@ def main():
     loc = loc + "/berkeley.db"
   elif kyoto:
     loc = loc + "/kyoto.cbt"
-  else
+  else:
     loc = loc + "/veribetrkv.img"
     
   print("Device type: " + device)
