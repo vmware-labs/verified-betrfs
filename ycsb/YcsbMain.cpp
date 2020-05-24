@@ -13,6 +13,8 @@
 
 #ifdef _YCSB_ROCKS
 #include "rocksdb/db.h"
+#include "rocksdb/table.h"
+#include "rocksdb/filter_policy.h"
 #endif
 
 #ifdef _YCSB_KYOTO
@@ -129,9 +131,9 @@ public:
     db.query(txread.key);
   }
 
-  inline void performInsert() {
+  inline void performInsert(bool load) {
     malloc_accounting_set_scope("performInsert setup");
-    ycsbcwrappers::TxInsert txinsert = ycsbcwrappers::TransactionInsert(workload);
+    ycsbcwrappers::TxInsert txinsert = ycsbcwrappers::TransactionInsert(workload, load);
     if (txinsert.values->size() != 1) {
       cerr << db.name << " error: only fieldcount=1 is supported" << endl;
       exit(-1);
@@ -165,6 +167,41 @@ public:
     db.update(txupdate.key, value);
   }
 
+  inline void performReadModifyWrite() {
+    malloc_accounting_set_scope("performReadModifyWrite setup");
+    ycsbcwrappers::TxUpdate txupdate = ycsbcwrappers::TransactionUpdate(workload);
+    if (!workload.write_all_fields()) {
+      cerr << db.name << " error: not writing all fields unsupported" << endl;
+      exit(-1);
+    }
+    if (txupdate.values->size() != 1) {
+      cerr << db.name << " error: only fieldcount=1 is supported" << endl;
+      exit(-1);
+    }
+    const string& value = (*txupdate.values)[0].second;
+    if (verbose) {
+      cerr << db.name << " [op] READMODIFYWRITE " << txupdate.table << " " << txupdate.key << " " << value << endl;
+    }
+    malloc_accounting_default_scope();
+    // TODO use the table name?
+    db.readmodifywrite(txupdate.key, value);
+  }
+
+  inline void performScan() {
+    malloc_accounting_set_scope("performScan setup");
+    ycsbcwrappers::TxScan txscan = ycsbcwrappers::TransactionScan(workload);
+    if (!workload.write_all_fields()) {
+      cerr << db.name << " error: not writing all fields unsupported" << endl;
+      exit(-1);
+    }
+    if (verbose) {
+      cerr << db.name << " [op] SCAN " << txscan.table << " " << txscan.key << " " << txscan.scan_length << endl;
+    }
+    malloc_accounting_default_scope();
+    // TODO use the table name?
+    db.scan(txscan.key, txscan.scan_length);
+  }
+
   void Load() {
     cout << "[step] " << name << " load start (num ops: " << record_count << ")" << endl;
 
@@ -175,7 +212,7 @@ public:
     
     for (int i = 0; i < record_count; ++i) {
       clock_op_started = steady_clock::now();
-        performInsert();
+        performInsert(true /* load */);
       clock_op_completed = steady_clock::now();
       record_duration(load_insert_latency_hist, clock_op_started, clock_op_completed);
 
@@ -246,16 +283,15 @@ public:
         have_done_insert_since_last_sync = true;
         break;
       case ycsbc::INSERT:
-        performInsert();
+        performInsert(false /* not load */);
         have_done_insert_since_last_sync = true;
         break;
       case ycsbc::SCAN:
-        cerr << "error: operation SCAN unimplemented" << endl;
-        exit(-1);
+        performScan();
         break;
       case ycsbc::READMODIFYWRITE:
-        cerr << "error: operation READMODIFYWRITE unimplemented" << endl;
-        exit(-1);
+        performReadModifyWrite();
+        have_done_insert_since_last_sync = true;
         break;
       default:
         cerr << "error: invalid NextOperation" << endl;
@@ -370,6 +406,14 @@ public:
         app.Insert(key, value);
     }
 
+    inline void readmodifywrite(const string& key, const string& value) {
+      update(key, value);
+    }
+
+    inline void scan(const string &key, int len) {
+      app.Succ(ByteString(key), true, len);
+    }
+  
     inline void sync(bool fullSync) {
         app.Sync(fullSync);
     }
@@ -422,6 +466,19 @@ public:
         assert(status.ok());
     }
 
+    inline void readmodifywrite(const string& key, const string& value) {
+      update(key, value);
+    }
+  
+    inline void scan(const string &key, int len) {
+      rocksdb::Iterator* it = db.NewIterator(rocksdb::ReadOptions());
+      int i = 0;
+      for (it->Seek(key); i < len && it->Valid(); it->Next()) {
+        i++;
+      }
+      delete it;
+    }
+  
     inline void sync(bool /*fullSync*/) {
         static struct rocksdb::FlushOptions foptions = rocksdb::FlushOptions();
         rocksdb::Status status = db.Flush(foptions);
@@ -467,6 +524,21 @@ public:
       }
     }
 
+    inline void readmodifywrite(const string& key, const string& value) {
+      query(key);
+      update(key, value);
+    }
+
+    inline void scan(const string &key, int len) {
+      kyotocabinet::DB::Cursor *cursor = db.cursor();
+      assert(cursor);
+      assert(cursor->jump(key));
+      int i = 0;
+      while (i < len && cursor->step())
+        i++;
+      delete cursor;
+    }
+  
     inline void sync(bool /*fullSync*/) {
       db.synchronize();
     }
@@ -525,6 +597,20 @@ public:
       insert(key, value);
     }
 
+    inline void readmodifywrite(const string& key, const string& value) {
+      query(key);
+      update(key, value);
+    }
+  
+    inline void scan(const string &key, int len) {
+      int i = 0;
+      auto iter = huge_map->begin(); // lower_bound() seems to be broken in berkeleydb
+      while(i < len && iter != huge_map->end()) {
+        ++iter;
+        i++;
+      }
+    }
+  
     inline void sync(bool /*fullSync*/) {
       pdb->sync(0);
     }
@@ -557,6 +643,12 @@ public:
         asm volatile ("nop");
     }
 
+    inline void readmodifywrite(const string& key, const string& value) {
+    }
+
+    inline void scan(const string &key, int len) {
+    }
+  
     inline void sync(bool /*fullSync*/) {
         asm volatile ("nop");
     }
@@ -612,11 +704,13 @@ void dump_metadata(const char* workload_filename, const char* database_filename)
 }
 
 template< class DbFacade >
-void runOneWorkload(DbFacade db, string workload_filename, string database_filename, bool do_nop, bool verbose)
+void runOneWorkload(DbFacade db, string workload_filename, string database_filename,
+                    ycsbc::CoreWorkload &workload,
+                    bool load, bool do_nop, bool verbose)
 {
   utils::Properties props = ycsbcwrappers::props_from(workload_filename);
   auto properties_map = props.properties();
-  unique_ptr<ycsbc::CoreWorkload> workload(ycsbcwrappers::new_workload(props));
+  workload.Init(props, !load);
 
   int record_count = stoi(props[ycsbc::CoreWorkload::RECORD_COUNT_PROPERTY]);
   int num_ops = stoi(props[ycsbc::CoreWorkload::OPERATION_COUNT_PROPERTY]);
@@ -644,13 +738,19 @@ void runOneWorkload(DbFacade db, string workload_filename, string database_filen
 
   if (do_nop) {
     NopFacade nopdb;
-    YcsbExecution ycsbExecution(nopdb, workload_name, *workload, record_count, num_ops, verbose,
+    YcsbExecution ycsbExecution(nopdb, workload_name, workload, record_count, num_ops, verbose,
                                 sync_interval_ms, sync_interval_ops);
-    ycsbExecution.LoadAndRun();
+    if (load)
+      ycsbExecution.Load();
+    else
+      ycsbExecution.Run();
   } else {
-    YcsbExecution ycsbExecution(db, workload_name, *workload, record_count, num_ops, verbose,
+    YcsbExecution ycsbExecution(db, workload_name, workload, record_count, num_ops, verbose,
                                 sync_interval_ms, sync_interval_ops);
-    ycsbExecution.LoadAndRun();
+    if (load)
+      ycsbExecution.Load();
+    else
+      ycsbExecution.Run();
   }
 }
 
@@ -669,8 +769,15 @@ void usage(int argc, char **argv)
 #ifdef _YCSB_KYOTO
   cout << "<kyoto.cbt> ";
 #endif
-  cout << "[--nop] [--verbose] <workload.spec> [workload.spec...]" << endl;
+  cout << "[--nop] [--verbose] ";
+#ifdef _YCSB_ROCKS
+  cout << "[--filters] ";
+#endif
+  cout << "<load-workload.spec> [run-workload1.spec...]" << endl;
   cout << "  --nop: use a no-op database" << endl;
+#ifdef _YCSB_ROCKS
+  cout << "  --filters: enable filters" << endl;
+#endif
   exit(-1);
 }  
 
@@ -680,6 +787,9 @@ int main(int argc, char* argv[]) {
   
   bool do_nop = false;
   bool verbose = false;
+#ifdef _YCSB_ROCKS
+  bool use_filters = false;
+#endif
   std::string database_filename(argv[1]);
 
   int first_workload_filename;
@@ -689,6 +799,10 @@ int main(int argc, char* argv[]) {
       do_nop = true;
     } else if (string(argv[i]) == "--verbose") {
       verbose = true;
+#ifdef _YCSB_ROCKS
+    } else if (string(argv[i]) == "--filters") {
+      use_filters = true;
+#endif
     } else {
       break;
     }
@@ -717,7 +831,13 @@ int main(int argc, char* argv[]) {
   // disabled - we let rocks use the page cache
   // options.use_direct_reads = true;
   // options.use_direct_io_for_flush_and_compaction = true;
-    
+
+  if (use_filters) {
+    rocksdb::BlockBasedTableOptions table_options;
+    table_options.filter_policy.reset(rocksdb::NewBloomFilterPolicy(10, false));
+    options.table_factory.reset(rocksdb::NewBlockBasedTableFactory(table_options));
+  }
+  
   rocksdb::Status status = rocksdb::DB::Open(options, database_filename, &rocks_db);
   assert(status.ok());
   RocksdbFacade db(*rocks_db);
@@ -747,8 +867,10 @@ int main(int argc, char* argv[]) {
   BerkeleyDBFacade db(pdb);
 #endif
 
+  ycsbc::CoreWorkload workload_template;
   for (i = first_workload_filename; i < argc; i++) {
-    runOneWorkload(db, argv[i], database_filename, do_nop, verbose);
+    runOneWorkload(db, argv[i], database_filename, workload_template,
+                   i == first_workload_filename, do_nop, verbose);
   }
   
 #ifdef _YCSB_VERIBETRFS

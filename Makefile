@@ -28,6 +28,13 @@ STDLIB=-stdlib=libc++
 # Uncomment to enable gprof
 #GPROF_FLAGS=-pg
 
+WANT_UNVERIFIED_ROW_CACHE=false
+ifeq "$(WANT_UNVERIFIED_ROW_CACHE)" "true"
+	UNVERIFIED_ROW_CACHE_DEFINE=-DUSE_UNVERIFIED_ROW_CACHE
+else
+	UNVERIFIED_ROW_CACHE_DEFINE=
+endif
+
 WANT_MALLOC_ACCOUNTING=false
 ifeq "$(WANT_MALLOC_ACCOUNTING)" "true"
 	MALLOC_ACCOUNTING_DEFINE=-DMALLOC_ACCOUNTING=1
@@ -47,7 +54,12 @@ endif
 # _LIBCPP_HAS_NO_THREADS makes shared_ptr faster
 # (but also makes stuff not thread-safe)
 # Note: this optimization only works with stdlib=libc++
-OPT_FLAGS=$(MALLOC_ACCOUNTING_DEFINE) $(DBG_SYMBOLS_FLAG) $(OPT_FLAG) -D_LIBCPP_HAS_NO_THREADS $(GPROF_FLAGS)
+OPT_FLAGS=$(MALLOC_ACCOUNTING_DEFINE) \
+          $(UNVERIFIED_ROW_CACHE_DEFINE) \
+          $(DBG_SYMBOLS_FLAG) \
+          $(OPT_FLAG) \
+          -D_LIBCPP_HAS_NO_THREADS \
+          $(GPROF_FLAGS)
 
 ##############################################################################
 # Automatic targets

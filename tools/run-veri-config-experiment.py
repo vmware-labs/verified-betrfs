@@ -112,7 +112,9 @@ def main():
   nodeCountFudge = 1.0  # Pretend we have more memory when computing node count budget, since mean node is 75% utilized. This lets us tune veri to exploit all available cgroup memory.
   max_children = None   # Default
   cgroup_enabled = True
-
+  use_unverified_row_cache = None
+  use_filters = None
+  
   veri = None
   rocks = None
   berkeley = None
@@ -134,6 +136,10 @@ def main():
       name = sp[0]
       value = sp[1]
       value_updates.append((name, value))
+    elif arg == "use_unverified_row_cache":
+        use_unverified_row_cache = True
+    elif arg == "use_filters":
+        use_filters = True
     elif arg == "config-64kb":
       config = "64kb"
     elif arg == "config-8mb":
@@ -169,7 +175,13 @@ def main():
   actuallyprint("metadata time_budget %s seconds" % time_budget_sec)
 
   assert veri or rocks or berkeley or kyoto
-  
+
+  if use_unverified_row_cache:
+      assert veri
+
+  if use_filters:
+      assert rocks
+      
   if config != None:
     assert veri
     assert ram != None
@@ -207,8 +219,10 @@ def main():
 
   make_options = ""
   if log_stats:
-    make_options = "LOG_QUERY_STATS=1 "
-
+    make_options += "LOG_QUERY_STATS=1 "
+  if use_unverified_row_cache:
+    make_options += "WANT_UNVERIFIED_ROW_CACHE=true "
+      
   actuallyprint("Building executable...")
   sys.stdout.flush()
   #cmd = make_options + "make " + exe + " -j4 > /dev/null 2> /dev/null"
@@ -249,6 +263,10 @@ def main():
   else:
     assert veri
     loc = loc + "/veribetrkv.img"
+
+  driver_options = ""
+  if use_filter:
+    driver_options := "--filters"
     
   clear_page_cache()
 
@@ -257,7 +275,7 @@ def main():
   taskset_cmd = "taskset 4 "
 
   cgroup_prefix = "cgexec -g memory:VeribetrfsExp " if cgroup_enabled else ""
-  command = taskset_cmd + cgroup_prefix + "./" + exe + " " + loc + " " + wl
+  command = taskset_cmd + cgroup_prefix + "./" + exe + " " + loc + " " + driver_options + " " + wl
   actuallyprint(command)
   sys.stdout.flush()
 

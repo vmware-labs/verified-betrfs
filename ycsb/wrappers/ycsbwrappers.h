@@ -71,8 +71,9 @@ namespace ycsbcwrappers {
         TxScan(
             const std::string table,
             const std::string key,
+            int len,
             const std::vector<std::string>* fields) :
-                table(table), key(key), fields(fields) {
+          table(table), key(key), scan_length(len), fields(fields) {
         }
         
         ~TxScan() {
@@ -83,7 +84,7 @@ namespace ycsbcwrappers {
     };
 
     const TxRead TransactionRead(ycsbc::CoreWorkload&workload);
-    const TxInsert TransactionInsert(ycsbc::CoreWorkload&workload);
+    const TxInsert TransactionInsert(ycsbc::CoreWorkload&workload, bool load);
     const TxUpdate TransactionUpdate(ycsbc::CoreWorkload&workload);
     const TxScan TransactionScan(ycsbc::CoreWorkload&workload);
 }

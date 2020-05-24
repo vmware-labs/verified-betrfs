@@ -601,10 +601,6 @@ void Application::Sync(bool graphSync) {
 
 void Application::Insert(ByteString key, ByteString val)
 {
-  #ifdef USE_UNVERIFIED_ROW_CACHE
-  unverifiedRowCache.set(key, val);
-  #endif
-
   #ifdef LOG_QUERY_STATS
   currently_doing_action = ACTION_INSERT;
   auto t1 = chrono::high_resolution_clock::now();
@@ -640,6 +636,10 @@ void Application::Insert(ByteString key, ByteString val)
     this->maybeDoResponse();
 
     if (success) {
+      #ifdef USE_UNVERIFIED_ROW_CACHE
+      unverifiedRowCache.set(key, val);
+      #endif
+
       LOG("doing insert... success!");
       LOG("");
 
