@@ -11,8 +11,8 @@ common_vars = [
     Variable("workload",   "run_veri",
              [Value("all", "workload=\"" +
                     "ycsb/workloada-onefield.spec " + # load
-                    "ycsb/workloadc-uniform.spec"   + # Doesn't modify database
-                    "ycsb/workloada-onefield.spec " + # run
+                    "ycsb/workloadc-uniform.spec"   + # Doesn't modify database, so sneak it in here
+                    "ycsb/workloada-onefield.spec " + # runs...
                     "ycsb/workloadb-onefield.spec " +
                     "ycsb/workloadc-onefield.spec " +
                     "ycsb/workloadd-onefield.spec " +

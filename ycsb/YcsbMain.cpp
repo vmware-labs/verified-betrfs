@@ -769,12 +769,14 @@ void usage(int argc, char **argv)
 #ifdef _YCSB_KYOTO
   cout << "<kyoto.cbt> ";
 #endif
-  cout << "[--nop] [--verbose] ";
+  cout << "[--nop] [--verbose] [--preloaded] ";
 #ifdef _YCSB_ROCKS
   cout << "[--filters] ";
 #endif
   cout << "<load-workload.spec> [run-workload1.spec...]" << endl;
   cout << "  --nop: use a no-op database" << endl;
+  cout << "  --preloaded: don't format database.  Database must have been loaded " << endl;
+  cout << "               with the given load workload." << endl;
 #ifdef _YCSB_ROCKS
   cout << "  --filters: enable filters" << endl;
 #endif
@@ -787,6 +789,7 @@ int main(int argc, char* argv[]) {
   
   bool do_nop = false;
   bool verbose = false;
+  bool preloaded = false;
 #ifdef _YCSB_ROCKS
   bool use_filters = false;
 #endif
@@ -799,6 +802,8 @@ int main(int argc, char* argv[]) {
       do_nop = true;
     } else if (string(argv[i]) == "--verbose") {
       verbose = true;
+    } else if (string(argv[i]) == "--preloaded") {
+      preloaded = true;
 #ifdef _YCSB_ROCKS
     } else if (string(argv[i]) == "--filters") {
       use_filters = true;
@@ -811,7 +816,8 @@ int main(int argc, char* argv[]) {
   
   // == veribetrkv ==
 #ifdef _YCSB_VERIBETRFS
-  Mkfs(database_filename);
+  if (!preloaded)
+    Mkfs(database_filename);
   Application app(database_filename);
   VeribetrkvFacade db(app);
 #endif
@@ -820,7 +826,8 @@ int main(int argc, char* argv[]) {
 #ifdef _YCSB_ROCKS
   rocksdb::DB* rocks_db;
   rocksdb::Options options;
-  options.create_if_missing = true;
+  if (!preloaded)
+    options.create_if_missing = true;
   //options.error_if_exists = true;
     
   // FIXME this is probably not fair, especially when we implement off-thread compaction
@@ -848,7 +855,7 @@ int main(int argc, char* argv[]) {
   kyotocabinet::TreeDB tdb;
   bool success = tdb.open(database_filename,
                           kyotocabinet::TreeDB::OWRITER
-                          | kyotocabinet::TreeDB::OCREATE
+                          | (preloaded ? 0 : kyotocabinet::TreeDB::OCREATE)
                           | kyotocabinet::TreeDB::ONOLOCK);
   if (!success)
     abort();
@@ -860,7 +867,7 @@ int main(int argc, char* argv[]) {
   Db* pdb;
   pdb = new Db(NULL, DB_CXX_NO_EXCEPTIONS);
   assert(pdb);
-  if (pdb->open(NULL, database_filename.c_str(), NULL, DB_BTREE, DB_CREATE, 0)) {
+  if (pdb->open(NULL, database_filename.c_str(), NULL, DB_BTREE, preloaded ? 0 : DB_CREATE, 0)) {
     cerr << "Failed to open database " << database_filename << endl;
     abort();
   }
@@ -870,7 +877,7 @@ int main(int argc, char* argv[]) {
   ycsbc::CoreWorkload workload_template;
   for (i = first_workload_filename; i < argc; i++) {
     runOneWorkload(db, argv[i], database_filename, workload_template,
-                   i == first_workload_filename, do_nop, verbose);
+                   i == first_workload_filename, do_nop || (i ==first_workload_filename && preloaded), verbose);
   }
   
 #ifdef _YCSB_VERIBETRFS

@@ -103,6 +103,7 @@ def splice_value_into_bundle(name, value):
     f.write(cpp)
 
 def main():
+  archive_dir = "/mnt/xvde/archives"
   workload = None
   device = None
   mem = None
@@ -114,6 +115,7 @@ def main():
   cgroup_enabled = True
   use_unverified_row_cache = None
   use_filters = None
+  from_archive = None
   
   veri = None
   rocks = None
@@ -128,6 +130,8 @@ def main():
       workload = arg[len("workload=") : ]
     elif arg.startswith("device="):
       device = arg[len("device=") : ]
+    elif arg.startswith("fromArchive="):
+        from_archive = arg[len("fromArchive=") : ]
     elif arg.startswith("nodeCountFudge="):
       nodeCountFudge = float(arg[len("nodeCountFudge=") : ])
     elif "Uint64=" in arg:
@@ -238,11 +242,11 @@ def main():
     wl = workload
   actuallyprint("workload: " + wl)
 
-  if device == "optane":
-    loc = "/scratch0/tjhance/ycsb"
+  if device == "ssd":
+    loc = "/tmp/veribetrfs"
   elif device == "disk":
     #loc = "/home/tjhance/ycsb/"
-    loc = "/tmp/veribetrfs"
+    loc = "/mnt/xvde/scratch"
   else:
     assert False
 
@@ -264,10 +268,18 @@ def main():
     assert veri
     loc = loc + "/veribetrkv.img"
 
+  if from_archive:
+    if rocks:
+      os.system("cp -a " + from_archive + "/* " + loc + "/"
+    else:
+      os.system("cp -a " + from_archive + " " + loc
+    
   driver_options = ""
   if use_filter:
-    driver_options := "--filters"
-    
+    driver_options += "--filters"
+  if from_archive:
+    driver_options += "--preloaded"
+
   clear_page_cache()
 
   # bitmask indicating which CPUs we can use
