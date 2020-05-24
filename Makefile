@@ -7,6 +7,7 @@ DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy
 DAFNY_ROOT?=.dafny/dafny/
 DAFNY_CMD=$(DAFNY_ROOT)/Binaries/dafny
 DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
+DAFNY_FLAGS=
 
 ifndef TL
 	TL=20
@@ -178,8 +179,13 @@ build/%.synchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 # .verchk: Dafny file-local verification
 build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.verchk,%.verchk-tmp,$@))
-	( $(TIME) $(DAFNY_CMD) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
+	( $(TIME) $(DAFNY_CMD) $(DAFNY_FLAGS) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
+
+build/lib/DataStructures/MutableBtree.i.verchk: DAFNY_FLAGS=/noNLarith
+build/lib/DataStructures/LinearDList.i.verchk: DAFNY_FLAGS=/noNLarith
+build/lib/Buckets/PackedStringArray.i.verchk: DAFNY_FLAGS=/noNLarith
+build/lib/Buckets/KMBPKVOps.i.verchk: DAFNY_FLAGS=/noNLarith
 
 ##############################################################################
 # .okay: Dafny file-level verification, no time limit,
