@@ -46,11 +46,20 @@ void print_summary(HDRHistQuantiles& summary, const string workload_name, const 
          summary_el.has_value();
          summary_el = summary.next()) {
       
-      cout << workload_name << "\tlatency_ccdf\t" << op << "\t"
+      cout << workload_name << "\tlatency_summary\t" << op << "\t"
            << summary_el->quantile << "\t" << summary_el->upper_bound << endl;
     }
   }
 }
+
+void print_ccdf(HDRHistCcdf &ccdf, const string workload_name, const string op) {
+  optional<CcdfElement> cur = ccdf.next();
+  while (cur.has_value()) {
+    cout << workload_name << " latency_ccdf " << op << " "
+         << cur->value << " " << cur->fraction << " " << cur->count << endl;
+  }
+}
+
 
 static const vector<pair<ycsbc::Operation, string>> YcsbOperations =
   {
@@ -313,14 +322,20 @@ public:
     malloc_accounting_set_scope("ycsbRun.summary");
     {
       auto load_insert_summary = load_insert_latency_hist.summary();
+      auto load_insert_ccdf = load_insert_latency_hist.ccdf();
       print_summary(load_insert_summary, name, "load");
+      print_ccdf(load_insert_ccdf, name, "load");
 
       for (auto op : YcsbOperations) {
         auto op_summary = latency_hist[op.first]->summary();
+        auto op_ccdf = latency_hist[op.first]->ccdf();
         print_summary(op_summary, name, op.second);
+        print_ccdf(op_ccdf, name, op.second);
       }
       auto sync_summary = sync_latency_hist.summary();
+      auto sync_ccdf = sync_latency_hist.ccdf();
       print_summary(sync_summary, name, "sync");
+      print_ccdf(sync_ccdf, name, "sync");
     }
     malloc_accounting_default_scope();
   }
