@@ -57,6 +57,7 @@ void print_ccdf(HDRHistCcdf &ccdf, const string workload_name, const string op) 
   while (cur.has_value()) {
     cout << workload_name << " latency_ccdf " << op << " "
          << cur->value << " " << cur->fraction << " " << cur->count << endl;
+    cur = ccdf.next();
   }
 }
 
