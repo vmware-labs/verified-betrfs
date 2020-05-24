@@ -42,6 +42,45 @@ module IndirectionTableImpl {
   type HashMap = LinearMutableMap.LinearHashMap<IndirectionTableModel.Entry>
   type GarbageQueue = USeq.USeq
 
+  // Dummy constructor only used when ImplVariables is in a state with no indirection
+  // table. We could use a null indirection table instead, it's just slightly more
+  // annoying to do that because we'd need additional invariants.
+  function method IndirectionTableEmptyConstructor() : linear indirectionTable
+  ensures IndirectionTableEmptyConstructor().Inv()
+  {
+    linear var t0 := LinearMutableMap.Constructor<IndirectionTableModel.Entry>(128);
+    // This is not important, but needed to satisfy the Inv:
+    linear var t1 := LinearMutableMap.Insert(t0, BT.G.Root(), IndirectionTableModel.Entry(None, [], 1));
+
+    indirectionTable(
+      t1,
+      lNone,
+      /* refUpperBound = */ 0,
+      None)
+  }
+
+  function method IndirectionTableRootOnlyConstructor(loc: Location) : linear indirectionTable
+  ensures IndirectionTableRootOnlyConstructor(loc).Inv()
+  ensures IndirectionTableRootOnlyConstructor(loc).I() == IndirectionTableModel.ConstructorRootOnly(loc)
+  {
+    linear var t0 := LinearMutableMap.Constructor<IndirectionTableModel.Entry>(128);
+    linear var t1 := LinearMutableMap.Insert(t0, BT.G.Root(), IndirectionTableModel.Entry(Some(loc), [], 1));
+
+    IndirectionTableModel.reveal_ConstructorRootOnly();
+
+    linear var r := indirectionTable(
+      t1,
+      lNone,
+      /* refUpperBound = */ BT.G.Root(),
+      None);
+
+    assert r.I() == IndirectionTableModel.ConstructorRootOnly(loc); // observe (surprisingly)
+
+    r
+  }
+
+
+
   // TODO move bitmap in here?
   linear datatype indirectionTable = indirectionTable(
     linear t: HashMap,
@@ -94,43 +133,6 @@ module IndirectionTableImpl {
       var res := IndirectionTableModel.FromHashMap(this.t, MapOption(this.garbageQueue.Option(), x => USeq.I(x)), this.refUpperBound, this.findLoclessIterator);
       IndirectionTableModel.reveal_Inv(res);
       res
-    }
-
-    // Dummy constructor only used when ImplVariables is in a state with no indirection
-    // table. We could use a null indirection table instead, it's just slightly more
-    // annoying to do that because we'd need additional invariants.
-    static function method IndirectionTableEmptyConstructor() : linear indirectionTable
-    ensures IndirectionTableEmptyConstructor().Inv()
-    {
-      linear var t0 := LinearMutableMap.Constructor<IndirectionTableModel.Entry>(128);
-      // This is not important, but needed to satisfy the Inv:
-      linear var t1 := LinearMutableMap.Insert(t0, BT.G.Root(), IndirectionTableModel.Entry(None, [], 1));
-
-      indirectionTable(
-        t1,
-        lNone,
-        /* refUpperBound = */ 0,
-        None)
-    }
-
-    static function method IndirectionTableRootOnlyConstructor(loc: Location) : linear indirectionTable
-    ensures IndirectionTableRootOnlyConstructor(loc).Inv()
-    ensures IndirectionTableRootOnlyConstructor(loc).I() == IndirectionTableModel.ConstructorRootOnly(loc)
-    {
-      linear var t0 := LinearMutableMap.Constructor<IndirectionTableModel.Entry>(128);
-      linear var t1 := LinearMutableMap.Insert(t0, BT.G.Root(), IndirectionTableModel.Entry(Some(loc), [], 1));
-
-      IndirectionTableModel.reveal_ConstructorRootOnly();
-
-      linear var r := indirectionTable(
-        t1,
-        lNone,
-        /* refUpperBound = */ BT.G.Root(),
-        None);
-
-      assert r.I() == IndirectionTableModel.ConstructorRootOnly(loc); // observe (surprisingly)
-
-      r
     }
 
     // constructor RootOnly(loc: Location)
@@ -1277,7 +1279,7 @@ module IndirectionTableImpl {
       ensures Inv()
       ensures fresh(Repr)
     {
-      box := new BoxedLinear(indirectionTable.IndirectionTableEmptyConstructor());
+      box := new BoxedLinear(IndirectionTableEmptyConstructor());
       new;
       Repr := {this} + box.Repr;
     }
@@ -1287,7 +1289,7 @@ module IndirectionTableImpl {
       ensures fresh(Repr)
       ensures I() == IndirectionTableModel.ConstructorRootOnly(loc)
     {
-      box := new BoxedLinear(indirectionTable.IndirectionTableRootOnlyConstructor(loc));
+      box := new BoxedLinear(IndirectionTableRootOnlyConstructor(loc));
       new;
       Repr := {this} + box.Repr;
     }
