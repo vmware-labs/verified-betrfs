@@ -239,6 +239,11 @@ public:
     double load_duration_s = duration_cast<nanoseconds>(clock_end - clock_start).count() / 1000000000.0;
     double throughput = record_count / load_duration_s;
     cout << "[step] " << name << " load throughput " << throughput << " ops/sec" << endl;
+
+    auto load_insert_summary = load_insert_latency_hist.summary();
+    auto load_insert_ccdf = load_insert_latency_hist.ccdf();
+    print_summary(load_insert_summary, name, "load");
+    print_ccdf(load_insert_ccdf, name, "load");
   }
 
   void Run() {
@@ -358,11 +363,6 @@ public:
     
     malloc_accounting_set_scope("ycsbRun.summary");
     {
-      auto load_insert_summary = load_insert_latency_hist.summary();
-      auto load_insert_ccdf = load_insert_latency_hist.ccdf();
-      print_summary(load_insert_summary, name, "load");
-      print_ccdf(load_insert_ccdf, name, "load");
-
       for (auto op : YcsbOperations) {
         auto op_summary = latency_hist[op.first]->summary();
         auto op_ccdf = latency_hist[op.first]->ccdf();
@@ -754,6 +754,14 @@ void runOneWorkload(DbFacade db, string workload_filename, string database_filen
   }
 }
 
+void pretendToDoLoadPhase(const string &workload_filename, ycsbc::CoreWorkload &workload)
+{
+  utils::Properties props = ycsbcwrappers::props_from(workload_filename);
+  auto properties_map = props.properties();
+  workload.Init(props, false);
+  workload.AdvanceToEndOfLoad();
+}
+
 void usage(int argc, char **argv)
 {
   cerr << "Usage: " << argv[0] << " ";
@@ -876,8 +884,11 @@ int main(int argc, char* argv[]) {
 
   ycsbc::CoreWorkload workload_template;
   for (i = first_workload_filename; i < argc; i++) {
-    runOneWorkload(db, argv[i], database_filename, workload_template,
-                   i == first_workload_filename, do_nop || (i ==first_workload_filename && preloaded), verbose);
+    if (preloaded && i == first_workload_filename)
+      pretendToDoLoadPhase(argv[i], workload_template);
+    else
+      runOneWorkload(db, argv[i], database_filename, workload_template,
+                     i == first_workload_filename, do_nop, verbose);
   }
   
 #ifdef _YCSB_VERIBETRFS
