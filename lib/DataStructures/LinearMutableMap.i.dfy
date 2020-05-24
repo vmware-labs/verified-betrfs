@@ -691,6 +691,60 @@ module LinearMutableMap {
     FixedSizeLinearHashMap(updatedStorage, selfCount, updatedContents)
   }
 
+  lemma FixedSizeUpdateBySlotResult<V>(self: FixedSizeLinearHashMap<V>, slotIdx: uint64, value: V)
+  requires FixedSizeInv(self)
+  requires 0 <= slotIdx as int < |self.storage|
+  requires self.storage[slotIdx].Entry?
+  ensures var self' := FixedSizeUpdateBySlot(self, slotIdx, value);
+      && FixedSizeInv(self')
+  {
+    var self' := FixedSizeUpdateBySlot(self, slotIdx, value);
+    var key := self.storage[slotIdx].key;
+    assert EntryInSlotMatchesContents(self.storage, Slot(slotIdx as int), self.contents);
+    assert key in self.contents;
+    calc {
+      |self.contents|;
+      |self.contents.Keys|;
+      |self'.contents.Keys|;
+      |self'.contents.Keys|;
+    }
+
+    forall explainedKey | explainedKey in self'.contents
+    ensures exists skips :: SlotExplainsKey(self'.storage, skips, explainedKey)
+    {
+      var oldSkips :| SlotExplainsKey(self.storage, oldSkips, explainedKey);
+      assert SlotExplainsKey(self'.storage, oldSkips, explainedKey); // observe
+      
+    }
+
+    forall slot | ValidSlot(|self'.storage|, slot)
+        && SlotIsEntry(self'.storage, slot)
+    ensures EntryInSlotMatchesContents(self'.storage, slot, self'.contents)
+    {
+      assert EntryInSlotMatchesContents(self.storage, slot, self.contents);
+      if slot.slot == slotIdx as int {
+        calc {
+          self'.contents[self'.storage[slot.slot].key];
+          Some(self'.storage[slot.slot].value);
+        }
+      } else {
+        calc {
+          self'.contents[self'.storage[slot.slot].key];
+          {
+            assert self.storage[slot.slot].key
+                == self'.storage[slot.slot].key;
+            if self.storage[slot.slot].key == key {
+              assert TwoNonEmptyValidSlotsWithSameKey(self.storage, slot, Slot(slotIdx as int));
+            }
+          }
+          self.contents[self.storage[slot.slot].key];
+          Some(self.storage[slot.slot].value);
+          Some(self'.storage[slot.slot].value);
+        }
+      }
+    }
+  }
+
   function method {:opaque} FixedSizeGet<V>(shared self: FixedSizeLinearHashMap<V>, key: uint64)
     : (found : Option<V>)
   requires FixedSizeInv(self)
@@ -1705,11 +1759,16 @@ module LinearMutableMap {
   ensures self'.contents == self.contents[SimpleIterOutput(self, it).key := value]
   ensures self'.count == self.count
   {
-    assume false;
+    FixedSizeUpdateBySlotResult(self.underlying, it.i, value);
+
     linear var LinearHashMap(selfUnderlying, selfCount, selfContents) := self;
     linear var newUnderlying := FixedSizeUpdateBySlot(selfUnderlying, it.i, value);
-    LinearHashMap(newUnderlying, selfCount,
-        self.contents[SimpleIterOutput(self, it).key := value])
+    linear var self' := LinearHashMap(newUnderlying, selfCount,
+        self.contents[SimpleIterOutput(self, it).key := value]);
+
+    UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents);
+
+    self'
   }
 
   lemma UpdatePreservesSimpleIter<V>(
@@ -1719,7 +1778,21 @@ module LinearMutableMap {
   requires WFSimpleIter(self, preserved)
   ensures WFSimpleIter(UpdateByIter(self, it, value), preserved)
   {
-    assume false;
+    reveal_UpdateByIter();
+    var self' := UpdateByIter(self, it, value);
+
+    forall key | key in preserved.s
+    ensures exists j | 0 <= j < preserved.i as int ::
+        && self'.underlying.storage[j].Entry?
+        && key == self'.underlying.storage[j].key
+    {
+      assert key in self.contents;
+      var j :| 0 <= j < preserved.i as int
+        && self.underlying.storage[j].Entry?
+        && key == self.underlying.storage[j].key;
+      assert self'.underlying.storage[j].Entry?;
+      assert key == self'.underlying.storage[j].key;
+    }
   }
 
   function method {:opaque} FindSimpleIter<V>(shared self: LinearHashMap<V>, key: uint64)
