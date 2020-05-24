@@ -1795,6 +1795,29 @@ module LinearMutableMap {
     }
   }
 
+  function setUpTo<V>(self: LinearHashMap<V>, i: int) : set<uint64>
+  requires 0 <= i <= |self.underlying.storage|
+  {
+    set j | 0 <= j < i && self.underlying.storage[j].Entry?
+        :: self.underlying.storage[j].key
+  }
+
+  lemma setUpToLeContents<V>(self: LinearHashMap<V>, i: int)
+  requires Inv(self)
+  requires 0 <= i <= |self.underlying.storage|
+  ensures setUpTo(self, i) <= self.contents.Keys
+  {
+    forall j | 0 <= j < i && self.underlying.storage[j].Entry?
+    ensures self.underlying.storage[j].key in self.contents
+    {
+      var key := self.underlying.storage[j].key;
+      var slot := Slot(j);
+      assert ValidSlot(|self.underlying.storage|, slot);
+      CantEquivocateMapFromStorageKey(self.underlying);
+      MapFromStorageProperties(self.underlying.storage, self.contents);
+    }
+  }
+
   function method {:opaque} FindSimpleIter<V>(shared self: LinearHashMap<V>, key: uint64)
     : (it : SimpleIterator)
   requires Inv(self)
@@ -1802,14 +1825,31 @@ module LinearMutableMap {
   ensures key in self.contents ==> SimpleIterOutput(self, it) == Next(key, self.contents[key])
   ensures key !in self.contents ==> SimpleIterOutput(self, it) == Done
   {
-    assume false;
-    var i := Probe(self.underlying, key);
-    if seq_get(self.underlying.storage, i).Entry? then (
-      // TODO the ghosty {} is wrong
-      SimpleIterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL)
-    ) else (
-      SimpleIterator(seq_length(self.underlying.storage) as uint64, self.contents.Keys, 0)
-    )
+    var idx := Probe(self.underlying, key);
+
+    var i := if seq_get(self.underlying.storage, idx).Entry? then idx
+      else seq_length(self.underlying.storage) as uint64;
+    var it := SimpleIterator(i, setUpTo(self, i as int), (|self.underlying.storage| - i as int) as ORDINAL);
+
+    assert WFSimpleIter(self, it)
+      && (key in self.contents ==>
+        SimpleIterOutput(self, it) == Next(key, self.contents[key]))
+      && (key !in self.contents ==>
+        SimpleIterOutput(self, it) == Done)
+    by {
+      var result := LemmaProbeResult(self.underlying, key);
+      if it.i as int < |self.underlying.storage| {
+        if self.underlying.storage[it.i].key in it.s {
+          var j :| 0 <= j < it.i && self.underlying.storage[j].Entry?
+              && self.underlying.storage[j].key == key;
+          assert TwoNonEmptyValidSlotsWithSameKey(
+              self.underlying.storage, Slot(j as int), Slot(it.i as int));
+        }
+      }
+      setUpToLeContents(self, i as int);
+    }
+
+    it
   }
 
   method Clone<V>(shared self: LinearHashMap<V>) returns(linear self': LinearHashMap<V>)
