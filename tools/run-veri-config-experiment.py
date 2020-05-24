@@ -113,7 +113,10 @@ def main():
   max_children = None   # Default
   cgroup_enabled = True
 
+  veri = None
   rocks = None
+  berkeley = None
+  kyoto = None
   time_budget_sec = 3600*24*365 # You get a year if you don't ask for a budget
 
   for arg in sys.argv[1:]:
@@ -135,8 +138,14 @@ def main():
       config = "64kb"
     elif arg == "config-8mb":
       config = "8mb"
+    elif arg == "veri":
+      veri = True
     elif arg == "rocks":
       rocks = True
+    elif arg == "berkeley":
+      berkeley = True
+    elif arg == "kyoto":
+      kyoto = True
     elif arg == "log_stats":
       log_stats = True
     elif arg.startswith("time_budget="):
@@ -155,12 +164,14 @@ def main():
       os.dup2(fp.fileno(), 1)   # replace stdout for this program and children
     else:
       assert False, "unrecognized argument: " + arg
-
+      
   actuallyprint("Experiment time budget %s" % (datetime.timedelta(seconds=time_budget_sec)))
   actuallyprint("metadata time_budget %s seconds" % time_budget_sec)
 
+  assert veri or rocks or berkeley or kyoto
+  
   if config != None:
-    assert not rocks
+    assert veri
     assert ram != None
     value_updates = autoconfig(config, ram, nodeCountFudge) + value_updates
 
@@ -174,22 +185,25 @@ def main():
   ret = os.system("rm -rf build/")
   assert ret == 0
 
-  if not rocks:
+  if veri:
     print("Building Bundle.cpp...")
     ret = os.system("make build/Bundle.cpp > /dev/null 2> /dev/null")
     assert ret == 0
 
   for (name, value) in value_updates:
-    assert not rocks
+    assert veri
     print("setting " + name + " to " + value)
     splice_value_into_bundle(name, value)
 
   if rocks:
     exe = "build/RocksYcsb"
-    cmdoption = "--rocks"
+  elif berkeley:
+      exe = "build/BerkeleyYcsb"
+  elif kyoto:
+      exe = "build/KyotoYcsb"
   else:
+    assert veri
     exe = "build/VeribetrfsYcsb"
-    cmdoption = "--veribetrkv"
 
   make_options = ""
   if log_stats:
@@ -211,10 +225,10 @@ def main():
   actuallyprint("workload: " + wl)
 
   if device == "optane":
-    loc = "/scratch0/tjhance/ycsb/"
+    loc = "/scratch0/tjhance/ycsb"
   elif device == "disk":
     #loc = "/home/tjhance/ycsb/"
-    loc = "/tmp/veribetrfs/"
+    loc = "/tmp/veribetrfs"
   else:
     assert False
 
@@ -226,6 +240,16 @@ def main():
   ret = os.system("mkdir " + loc)
   assert ret == 0
 
+  if rocks:
+    loc = loc
+  elif berkeley:
+    loc = loc + "/berkeley.db"
+  elif kyoto:
+    loc = loc + "/kyoto.cbt"
+  else:
+    assert veri
+    loc = loc + "/veribetrkv.img"
+    
   clear_page_cache()
 
   # bitmask indicating which CPUs we can use
@@ -233,7 +257,7 @@ def main():
   taskset_cmd = "taskset 4 "
 
   cgroup_prefix = "cgexec -g memory:VeribetrfsExp " if cgroup_enabled else ""
-  command = taskset_cmd + cgroup_prefix + "./" + exe + " " + wl + " " + loc + " " + cmdoption
+  command = taskset_cmd + cgroup_prefix + "./" + exe + " " + loc + " " + wl
   actuallyprint(command)
   sys.stdout.flush()
 

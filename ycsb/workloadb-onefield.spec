@@ -4,8 +4,10 @@
 #                        
 #   Read/update ratio: 95/5
 
-recordcount=1000000
-operationcount=5000000
+workloadname=B
+
+recordcount=10000000
+operationcount=1000
 workload=com.yahoo.ycsb.workloads.CoreWorkload
 
 readallfields=true
@@ -21,4 +23,4 @@ fieldlength=512
 
 requestdistribution=zipfian
 
-syncintervalms=1000
+#syncintervalops=1000

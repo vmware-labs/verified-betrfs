@@ -1371,6 +1371,10 @@ module BucketsLib {
       ensures a[key] == b[key];
       {
         assert key in bucket.b;
+        if 0 < i {
+        }
+        if i < |pivots| {
+        }
         RouteIs(pivots, key, i);
       }
 
@@ -1502,9 +1506,10 @@ module BucketsLib {
           assert WFBucketAt(bucketsPref[i], DropLast(pivots), i);
           forall key | key in buckets[i].b ensures Route(pivots, key) == i
           {
+            RouteIs(DropLast(pivots), key, i);
             assert Route(DropLast(pivots), key) == i;
-            assert buckets[i] == bucketsPref[i];
-            assert key in bucketsPref[i].b;
+            //assert buckets[i] == bucketsPref[i];
+            //assert key in bucketsPref[i].b;
             SplitBucketOnPivotsAt(B(l), DropLast(pivots), i);
             assert key in l;
             RouteIs(pivots, key, i);
