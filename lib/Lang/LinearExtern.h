@@ -140,6 +140,13 @@ Tuple0 seq_length_bound(linear_seq<A> s) {
   return Tuple0();
 }
 
+/* TODO
+template <typename A>
+shared_seq<A> share_seq(struct as__linear<DafnySequence<A>> a) {
+  return 
+}
+*/
+
 template <typename A>
 linear_seq<A> TrustedRuntimeSeqResize(linear_seq<A> s, uint64 newlen) {
   s->resize(newlen);
