@@ -3,6 +3,8 @@
 #include "DafnyRuntime.h"
 #include "MallocAccounting.h"
 #include "NativeArrays.h"
+#include "lib/Lang/LinearExtern.h"
+#include "lib/Lang/LinearBox.h"
 
 #include <map>
 #include <unordered_map>

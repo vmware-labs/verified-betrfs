@@ -3,8 +3,7 @@
 #include "DafnyRuntime.h"
 
 namespace NativeArrays_Compile {
-  int32_t ByteSeqCmpByteSeq(DafnySequence<uint8> b1, DafnySequence<uint8> b2);
-  {
+  int32_t ByteSeqCmpByteSeq(DafnySequence<uint8> b1, DafnySequence<uint8> b2) {
     int result = memcmp(b1.ptr(), b2.ptr(), b1.size() < b2.size() ? b1.size() : b2.size());
     if (result == 0) {
       if (b1.size() == b2.size()) {
