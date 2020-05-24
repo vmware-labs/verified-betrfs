@@ -187,30 +187,28 @@ module Sequences {
     s[.. i] + s[i + 1 ..]
   }
 
-/*
-  function {:opaque} RemoveValue<V>(s: seq<V>, v: V) : seq<V>
-  // ensures forall i: nat | i < |RemoveValue(s, v)| :: RemoveValue(s, v)[i] != v
-  ensures Set(RemoveValue(s, v)) == Set(s) - {v}
-  {
-    if s == [] then s
-      else (if s[0] == v then [] else [s[0]]) + RemoveValue(s[1..], v)
-  }
-
-  lemma RemoveValueMultiset<V>(s: seq<V>, v: V) returns (res: seq<V>)
-  ensures Set(RemoveValue(s, v)) == Set(s) - {v}
-  {
-    reveal_RemoveValue();
-    if s == [] {
-      assert Set(RemoveValue(s, v)) == Set(s) - {v};
-    } else {
-      assert s == [s[0]] + s[1..];
-      var _ := RemoveValueMultiset(s[1..], v);
-      assert Set(s) == Set([s[0]]) + Set(s[1..]);
-      // TODO(andreal)
-      assume Set(RemoveValue(s, v)) == Set(s) - {v};
-    }
-  }
-*/
+//  function {:opaque} RemoveValue<V>(s: seq<V>, v: V) : seq<V>
+//  // ensures forall i: nat | i < |RemoveValue(s, v)| :: RemoveValue(s, v)[i] != v
+//  ensures Set(RemoveValue(s, v)) == Set(s) - {v}
+//  {
+//    if s == [] then s
+//      else (if s[0] == v then [] else [s[0]]) + RemoveValue(s[1..], v)
+//  }
+//
+//  lemma RemoveValueMultiset<V>(s: seq<V>, v: V) returns (res: seq<V>)
+//  ensures Set(RemoveValue(s, v)) == Set(s) - {v}
+//  {
+//    reveal_RemoveValue();
+//    if s == [] {
+//      assert Set(RemoveValue(s, v)) == Set(s) - {v};
+//    } else {
+//      assert s == [s[0]] + s[1..];
+//      var _ := RemoveValueMultiset(s[1..], v);
+//      assert Set(s) == Set([s[0]]) + Set(s[1..]);
+//      // TODO(andreal)
+//      assume Set(RemoveValue(s, v)) == Set(s) - {v};
+//    }
+//  }
 
   function {:opaque} insert<A>(s: seq<A>, a: A, pos: int) : seq<A>
   requires 0 <= pos <= |s|;
