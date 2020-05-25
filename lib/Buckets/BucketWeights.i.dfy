@@ -1,7 +1,7 @@
 include "../Base/Sets.i.dfy"
 include "../Base/Multisets.i.dfy"
 include "BucketsLib.i.dfy"
-  
+
 //
 // Assigning weights to buckets guides the flushing algorithm to decide
 // which child to push messages towards. TODO(thance): help!
@@ -27,6 +27,7 @@ module BucketWeights {
   import opened NativeTypes
   import opened KeyType
   import MSets = Multisets
+
   
   function WeightKey(key: Key) : (w:nat)
   ensures w >= 0
@@ -119,7 +120,7 @@ module BucketWeights {
       }
     }
   }
-  
+
   function {:opaque} WeightMessageMultiset(msgs: multiset<Message>) : (result: nat)
     ensures |msgs| == 0 ==> result == 0
   {
@@ -171,6 +172,37 @@ module BucketWeights {
       WeightBucketList(DropLast(buckets)) +
           WeightBucket(Last(buckets))
     )
+  }
+
+  
+  
+  lemma WeightKeyListFlatten(keys: seq<Key>)
+    ensures WeightKeyList(keys) == FlattenLength(FlattenShape(keys)) + 4 * |keys|
+  {
+    if |keys| == 0 {
+    } else {
+      WeightKeyListAdditive(DropLast(keys),[ Last(keys) ]);
+      assert keys == DropLast(keys) + [ Last(keys) ];
+      WeightKeyListFlatten(DropLast(keys));
+      WeightKeySingleton(Last(keys));
+      reveal_FlattenShape();
+      reveal_FlattenLength();
+    }
+  }
+  
+  lemma WeightMessageListFlatten(msgs: seq<Message>)
+    requires EncodableMessageSeq(msgs)
+    ensures WeightMessageList(msgs) == FlattenLength(FlattenShape(messageSeq_to_bytestringSeq(msgs))) + 4 * |msgs|
+  {
+    if |msgs| == 0 {
+    } else {
+      assert msgs == DropLast(msgs) + [ Last(msgs) ];
+      messageSeq_to_bytestringSeq_Additive(DropLast(msgs), [ Last(msgs) ]);
+      WeightMessageListAdditive(DropLast(msgs),[ Last(msgs) ]);
+      WeightMessageSingleton(Last(msgs));
+      reveal_FlattenShape();
+      reveal_FlattenLength();
+    }
   }
 
   lemma WeightKeySeqList(keys: seq<Key>)
@@ -369,25 +401,25 @@ module BucketWeights {
     reveal_Image();
   }
 
-  lemma ImageSingleton(b:Bucket, k:Key)
-    requires PreWFBucket(b)
-    requires k in b.b
-    ensures Image(b, iset {k}).b.Keys == {k}
-    ensures Image(b, iset {k}).b[k] == b.b[k]
-    ensures Image(b, iset {k}).keys == [k]
-    ensures Image(b, iset {k}).msgs == [ b.b[k] ]
-  {
-    reveal_Image();
-    reveal_IsStrictlySorted();
-    var im := Image(b, iset {k});
-    if 1 < |im.keys| {
-      assert im.keys[0] != im.keys[1];
-      assert im.keys[0] in im.b.Keys;
-      assert im.keys[1] in im.b.Keys;
-      assert false;
-    }
-    WFWellMarshalledBucketMap(im, k);
-  }
+//~  lemma ImageSingleton(b:Bucket, k:Key)
+//~    requires PreWFBucket(b)
+//~    requires k in b.b
+//~    ensures Image(b, iset {k}).b.Keys == {k}
+//~    ensures Image(b, iset {k}).b[k] == b.b[k]
+//~    ensures Image(b, iset {k}).keys == [k]
+//~    ensures Image(b, iset {k}).msgs == [ b.b[k] ]
+//~  {
+//~    reveal_Image();
+//~    reveal_IsStrictlySorted();
+//~    var im := Image(b, iset {k});
+//~    if 1 < |im.keys| {
+//~      assert im.keys[0] != im.keys[1];
+//~      assert im.keys[0] in im.b.Keys;
+//~      assert im.keys[1] in im.b.Keys;
+//~      assert false;
+//~    }
+//~    WFWellMarshalledBucketMap(im, k);
+//~  }
 
   lemma ImageSubset(b:Bucket, s:iset<Key>, t:iset<Key>)
     requires s <= t;
@@ -603,10 +635,9 @@ module BucketWeights {
   }
 
   lemma WeightBucketInduct(bucket: Bucket, key: Key, msg: Message)
-    requires WFBucket(bucket)
+    requires PreWFBucket(bucket)
     requires BucketWellMarshalled(bucket)
     requires key !in bucket.b
-    requires msg != IdentityMessage()
     ensures WeightBucket(B(bucket.b[key := msg])) == WeightBucket(bucket) + WeightKey(key) + WeightMessage(msg)
   {
     var newbucket := B(bucket.b[key := msg]);
@@ -1561,23 +1592,23 @@ module BucketWeights {
         WeightBucket(bucket);
       }
     } else {
-      var l := map key | key in bucket.b && Keyspace.lt(key, Last(pivots)) :: bucket.b[key];
-      var r := map key | key in bucket.b && Keyspace.lte(Last(pivots), key) :: bucket.b[key];
-      var lKeys := iset k | k in l;
-      var rKeys := iset k | k in r;
-
+      var l := B(map key | key in bucket.b && Keyspace.lt(key, Last(pivots)) :: bucket.b[key]);
+      var r := B(map key | key in bucket.b && Keyspace.lte(Last(pivots), key) :: bucket.b[key]);
+      var lKeys := iset k | k in l.b;
+      var rKeys := iset k | k in r.b;
+      
       calc {
         WeightBucketList(SplitBucketOnPivots(bucket, pivots));  // defn.
-        WeightBucketList(SplitBucketOnPivots(B(l), DropLast(pivots)) + [B(r)]);
-          { WeightBucketListConcatOne(SplitBucketOnPivots(B(l), DropLast(pivots)), B(r)); } // break off tail
-        WeightBucketList(SplitBucketOnPivots(B(l), DropLast(pivots))) + WeightBucket(B(r));
-          { WMWeightSplitBucketOnPivots(B(l), DropLast(pivots)); }
-        WeightBucket(B(l)) + WeightBucket(B(r));
+        WeightBucketList(SplitBucketOnPivots(l, DropLast(pivots)) + [r]);  // defn.
+          { WeightBucketListConcatOne(SplitBucketOnPivots(l, DropLast(pivots)), r); } // break off tail
+        WeightBucketList(SplitBucketOnPivots(l, DropLast(pivots))) + WeightBucket(r);
+          { WMWeightSplitBucketOnPivots(l, DropLast(pivots)); }
+        WeightBucket(l) + WeightBucket(r);
           {
-            ImageTrim(bucket, lKeys, B(l));
-            ImageTrim(bucket, rKeys, B(r));
-            WellMarshalledBucketsEq(B(l), Image(bucket, lKeys));
-            WellMarshalledBucketsEq(B(r), Image(bucket, rKeys));            
+            ImageTrim(bucket, lKeys, l);
+            ImageTrim(bucket, rKeys, r);
+            WellMarshalledBucketsEq(l, Image(bucket, lKeys));
+            WellMarshalledBucketsEq(r, Image(bucket, rKeys));            
           }
         WeightBucket(Image(bucket, lKeys)) + WeightBucket(Image(bucket, rKeys));
           { WeightBucketLinearInKeySetSum(bucket, lKeys, rKeys); }

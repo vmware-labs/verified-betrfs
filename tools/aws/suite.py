@@ -46,6 +46,11 @@ class Variant:
     def vars_of_type(self, type_label):
         return [val.variable for val in self.values if val.variable.type == type_label]
 
+    def value_by_name(self, label):
+        match = [val for val in self.values if val.variable.label == label]
+        assert len(match)==1
+        return match[0]
+
     def git_branch(self):
         return self.valmap[self.vars_of_type("git_branch")[0]].param_value
 

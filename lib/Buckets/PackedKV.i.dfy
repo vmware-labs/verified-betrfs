@@ -9,7 +9,7 @@ module PackedKV {
   import Keyspace = KeyspaceImpl.Ord
   import opened KeyType
   import opened ValueType`Internal
-  import opened ValueMessage
+  import opened ValueMessage`Internal
   import opened BucketsLib
   import opened Options
   import opened Sequences
@@ -27,11 +27,6 @@ module PackedKV {
     |s| <= KeyType.MaxLen() as int
   }
 
-  predicate ValidMessageByteString(s: seq<byte>)
-  {
-    |s| <= ValueType.MaxLen() as int
-  }
-
   predicate ValidStringLens<A>(strs: seq<seq<A>>, upper_bound: nat)
   {
     forall i | 0 <= i < |strs| :: |strs[i]| <= upper_bound
@@ -42,30 +37,6 @@ module PackedKV {
     ValidStringLens(strs, KeyType.MaxLen() as nat)
   }
 
-  predicate ValidMessageLens<A>(strs: seq<seq<A>>)
-  {
-    ValidStringLens(strs, ValueType.MaxLen() as nat)
-  }
-
-  function method bytestring_to_Message(s: seq<byte>) : Message
-  requires |s| < 0x1_0000_0000
-  {
-    if |s| as uint64 <= ValueType.MaxLen() then (
-      Define(s)
-    ) else (
-      // NOTE(travis)
-      // It's just convenient to make this function total, so
-      // we just do this if the byte string is invalid.
-      Define(ValueType.DefaultValue())
-    )
-  }
-
-  function method Message_to_bytestring(msg: Message) : seq<byte>
-    requires msg.Define?
-  {
-    msg.value
-  }
-  
   function IKeys(psa: PSA.Psa) : (res : seq<Key>)
   requires PSA.WF(psa)
   requires ValidStringLens(PSA.I(psa), KeyType.MaxLen() as nat)
@@ -91,7 +62,7 @@ module PackedKV {
 
   lemma DefineIMessage(psa: PSA.Psa, j: int)
     requires PSA.WF(psa)
-    requires ValidMessageLens(PSA.I(psa))
+    requires ValidMessageBytestrings(PSA.I(psa))
     requires 0 <= j < |psa.offsets|
     ensures |PSA.psaElement(psa, j as uint64)| <= ValueType.MaxLen() as nat
     ensures IMessages(psa)[j] == Define(PSA.psaElement(psa, j as uint64))
@@ -104,7 +75,7 @@ module PackedKV {
     && PSA.WF(pkv.messages)
     && |pkv.keys.offsets| == |pkv.messages.offsets|
     && ValidKeyLens(PSA.I(pkv.keys))
-    && ValidMessageLens(PSA.I(pkv.messages))
+    && ValidMessageBytestrings(PSA.I(pkv.messages))
     && IdentityMessage() !in IMessages(pkv.messages)
   }
 
@@ -295,13 +266,14 @@ module PackedKV {
   {
     && PSA.psaCanAppend(pkv.keys, key)
     && PSA.psaCanAppend(pkv.messages, msg)
-    && ValidMessageByteString(msg)
+    && ValidMessageBytestring(msg)
   }
 
   function AppendEncodedMessage(pkv: Pkv, key: Key, msg: seq<byte>) : (result: Pkv)
     requires WF(pkv)
     requires canAppend(pkv, key, msg)
     ensures WF(result)
+    ensures IKeys(result.keys) == IKeys(pkv.keys) + [ key ]
   {
     PSA.psaAppendIAppend(pkv.keys, key);
     PSA.psaAppendIAppend(pkv.messages, msg);
@@ -317,31 +289,31 @@ module PackedKV {
     AppendEncodedMessage(pkv, key, Message_to_bytestring(msg))
   }
 
-  lemma IMapAppend(pkv: Pkv, key: Key, msg: seq<byte>)
-    requires WF(pkv)
-    requires canAppend(pkv, key, msg)
-    ensures IMap(AppendEncodedMessage(pkv, key, msg)) == IMap(pkv)[key := bytestring_to_Message(msg)]
-  {
-    PSA.psaAppendIAppend(pkv.keys, key);
-    PSA.psaAppendIAppend(pkv.messages, msg);
-    var keys := PSA.I(pkv.keys);
-    var messages := IMessages(pkv.messages);
-    var newpkv := AppendEncodedMessage(pkv, key, msg);
-    var newkeys := PSA.I(newpkv.keys);
-    var newmessages := IMessages(newpkv.messages);
-
-    assert forall i | 0 <= i < |messages| :: Sequences.DropLast(newmessages)[i] == bytestring_to_Message(PSA.I(newpkv.messages)[i]);
-    assert Sequences.DropLast(newmessages) == messages;
-    assert Last(newmessages) == bytestring_to_Message(msg);
-
-    calc {
-      IMap(newpkv);
-      { reveal_BucketMapOfSeq(); }
-      BucketMapOfSeq(keys, messages)[key := bytestring_to_Message(msg)];
-      { reveal_BucketMapOfSeq(); }
-      IMap(pkv)[key := bytestring_to_Message(msg)];
-    }
-  }
+//~  lemma IMapAppend(pkv: Pkv, key: Key, msg: seq<byte>)
+//~    requires WF(pkv)
+//~    requires canAppend(pkv, key, msg)
+//~    ensures IMap(AppendEncodedMessage(pkv, key, msg)) == IMap(pkv)[key := bytestring_to_Message(msg)]
+//~  {
+//~    PSA.psaAppendIAppend(pkv.keys, key);
+//~    PSA.psaAppendIAppend(pkv.messages, msg);
+//~    var keys := PSA.I(pkv.keys);
+//~    var messages := IMessages(pkv.messages);
+//~    var newpkv := AppendEncodedMessage(pkv, key, msg);
+//~    var newkeys := PSA.I(newpkv.keys);
+//~    var newmessages := IMessages(newpkv.messages);
+//~
+//~    assert forall i | 0 <= i < |messages| :: Sequences.DropLast(newmessages)[i] == bytestring_to_Message(PSA.I(newpkv.messages)[i]);
+//~    assert Sequences.DropLast(newmessages) == messages;
+//~    assert Last(newmessages) == bytestring_to_Message(msg);
+//~
+//~    calc {
+//~      IMap(newpkv);
+//~      { reveal_BucketMapOfSeq(); }
+//~      BucketMapOfSeq(keys, messages)[key := bytestring_to_Message(msg)];
+//~      { reveal_BucketMapOfSeq(); }
+//~      IMap(pkv)[key := bytestring_to_Message(msg)];
+//~    }
+//~  }
 
   function subPkv(pkv: Pkv, from: uint64, to: uint64) : (result: Pkv)
     requires WF(pkv)
@@ -510,7 +482,7 @@ module DynamicPkv {
   import PSA = PackedStringArray
   import opened KeyType
   import opened ValueType`Internal
-  import opened ValueMessage
+  import opened ValueMessage`Internal
   import opened NativeTypes
   import Seq = Sequences
   import Uint64_Order
@@ -652,6 +624,18 @@ module DynamicPkv {
     }
   }
 
+  function PkvWeightBound() : int
+  {
+    10*(Uint32UpperBound() - 1)
+  }
+
+//~  lemma PkvWeightBounds(pkv: PKV.Pkv)
+//~    requires PKV.WF(pkv)
+//~    ensures PKV.WeightPkv(pkv) as nat <= PkvWeightBound()
+//~  {
+//~    WeightBucketPkv_eq_WeightPkv(pkv);
+//~  }
+  
   class DynamicPkv {
     var keys: PKV.PSA.DynamicPsa
     var messages: PKV.PSA.DynamicPsa
@@ -714,10 +698,9 @@ module DynamicPkv {
     {
       WeightBucketPkv_eq_WeightPkv(toPkv());
       PSA.psaAppendIAppend(toPkv().keys, key);
-      PSA.psaAppendIAppend(toPkv().messages,
-          PKV.Message_to_bytestring(msg));
+      PSA.psaAppendIAppend(toPkv().messages, Message_to_bytestring(msg));
 
-      AppendEncodedMessage(key, PKV.Message_to_bytestring(msg));
+      AppendEncodedMessage(key, Message_to_bytestring(msg));
 
       calc {
         PKV.IMessages(toPkv().messages);
@@ -1085,7 +1068,7 @@ module DynamicPkv {
       calc {
         x[i];
         PKV.IMessages(pkv.messages)[a as int + i];
-        PKV.bytestring_to_Message(PSA.I(pkv.messages)[a as int + i]);
+        bytestring_to_Message(PSA.I(pkv.messages)[a as int + i]);
         y[i];
       }
     }

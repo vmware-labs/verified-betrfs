@@ -24,14 +24,14 @@ module MarshallingModel {
   import opened Bounds
   import BC = BlockCache
   import SM = StateModel
-  import KVList
   import Crypto
   import NativeArrays
   import IndirectionTableModel
   import SeqComparison
   import Marshalling
   import PackedKVMarshalling
-
+  import PackedKV
+  
   import BT = PivotBetreeSpec`Internal
 
   // This is one of the few places where we actually
@@ -74,9 +74,9 @@ module MarshallingModel {
 
       assert WeightBucket(lastbucket) <= SizeOfV(lastv)
       by {
-        assume false; // TODO(robj)
-        PackedKVMarshalling.SizeOfVWellMarshalledPackedKVIsBucketWeight(
-            PackedKVMarshalling.fromVal(v).value);
+        var pkv := PackedKVMarshalling.fromVal(lastv).value;
+        PackedKVMarshalling.SizeOfVPackedKVIsBucketWeight(pkv);
+        PackedKVMarshalling.uniqueMarshalling(lastv);
       }
 
       calc <= {

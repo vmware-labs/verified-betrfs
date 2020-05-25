@@ -89,11 +89,11 @@ module PivotBetreeSpecRefinement {
     B.G.Node(IChildren(node), IBuffer(node))
   }
 
-  lemma WFNodeRefinesWFNode(node: PNode)
-  requires P.WFNode(node)
-  ensures B.WFNode(INode(node))
-  {
-  }
+//~  lemma WFNodeRefinesWFNode(node: PNode)
+//~  requires P.WFNode(node)
+//~  ensures B.WFNode(INode(node))
+//~  {
+//~  }
 
   predicate ReadOpsBucketsWellMarshalled(readOps: seq<P.G.ReadOp>)
   {
@@ -638,10 +638,10 @@ module PivotBetreeSpecRefinement {
     var cLeft := CutoffForLeft(node.pivotTable, pivot);
     if i < |node.pivotTable| {
       if i < cLeft - 1 {
-        //assert Keyspace.lt(key, node'.pivotTable[i]);
-        //assert Keyspace.lt(key, node.pivotTable[i]);
+        assert Keyspace.lt(key, node'.pivotTable[i]);
+        assert Keyspace.lt(key, node.pivotTable[i]);
       } else {
-        //assert Keyspace.lt(key, node.pivotTable[i]);
+        assert Keyspace.lt(key, node.pivotTable[i]);
       }
     }
     RouteIs(node.pivotTable, key, i);

@@ -26,18 +26,18 @@ module SyncModel {
 
   import opened NativeTypes
 
-  lemma lemmaRefHasLoc(k: Constants, s: BCVariables, ref: BT.G.Reference)
-  requires BCInv(k, s)
-  requires s.Ready?
-  requires ref !in s.cache
-  requires ref in s.ephemeralIndirectionTable.graph
-  ensures ref in s.ephemeralIndirectionTable.locs
-  {
-    /*assert ref in IIndirectionTable(s.ephemeralIndirectionTable).graph.Keys;
-    assert ref in s.cache.Keys + IIndirectionTable(s.ephemeralIndirectionTable).locs.Keys;
-    assert ref !in s.cache.Keys;
-    assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs.Keys;*/
-  }
+//~  lemma lemmaRefHasLoc(k: Constants, s: BCVariables, ref: BT.G.Reference)
+//~  requires BCInv(k, s)
+//~  requires s.Ready?
+//~  requires ref !in s.cache
+//~  requires ref in s.ephemeralIndirectionTable.graph
+//~  ensures ref in s.ephemeralIndirectionTable.locs
+//~  {
+//~    /*assert ref in IIndirectionTable(s.ephemeralIndirectionTable).graph.Keys;
+//~    assert ref in s.cache.Keys + IIndirectionTable(s.ephemeralIndirectionTable).locs.Keys;
+//~    assert ref !in s.cache.Keys;
+//~    assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs.Keys;*/
+//~  }
 
   function {:opaque} AssignRefToLocEphemeral(k: Constants, s: BCVariables, ref: BT.G.Reference, loc: Location) : (s' : BCVariables)
   requires s.Ready?

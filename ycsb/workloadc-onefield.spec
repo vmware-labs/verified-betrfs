@@ -4,7 +4,9 @@
 #                        
 #   Read/update ratio: 100/0
 
-recordcount=20000000
+workloadname=C
+
+recordcount=10000000
 operationcount=10000
 workload=com.yahoo.ycsb.workloads.CoreWorkload
 
@@ -21,4 +23,4 @@ fieldlength=512
 
 requestdistribution=zipfian
 
-syncintervalms=1000
+#syncintervalms=1000

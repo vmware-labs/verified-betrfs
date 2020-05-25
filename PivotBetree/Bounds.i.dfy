@@ -9,11 +9,18 @@ module Bounds {
   import opened NativeTypes
   import opened KeyType
 
-  function method NodeBlockSizeUint64() : uint64 { 8*1024*1024 }
+  function method NodeBlockSizeUint64() : uint64 { 2*1024*1024 }
 
   // TODO(jonh): We should partition the disk, in byte units, into regions,
   // and then address each region in its native block size with 0-based indexing.
-  function method MinNodeBlockIndexUint64() : uint64 { 8 }
+  function method MinNodeBlockIndexUint64() : uint64
+  {
+    (2 * SuperblockSizeUint64()
+      + DiskNumJournalBlocksUint64() * JournalBlockSizeUint64()
+      + 2 * (IndirectionTableBlockSizeUint64())
+      + NodeBlockSizeUint64() - 1)
+    / NodeBlockSizeUint64()
+  }
 
   // This is the configuration constraint for MinNodeBlockIndexUint64, so you can
   // "make build/PivotBetree/Bounds.i.verified" as a quick way to sanity-check
@@ -25,10 +32,10 @@ module Bounds {
   }
 
   // Disk layout goes: 2 Superblocks, Journal, 2 Indirection tables, nodes
-  function SuperblockSize() : int { 4096 }  // Bytes
+  function method SuperblockSizeUint64() : uint64 { 4096 }  // Bytes
 
-  function JournalBlockSize() : int { 4096 } // Bytes
-  function method DiskNumJournalBlocksUint64() : uint64 { 2048 } // JournalBlockSize() blocks
+  function method JournalBlockSizeUint64() : uint64 { 4096 } // Bytes
+  function method DiskNumJournalBlocksUint64() : uint64 { 64*1024 /* 512MB */ } // JournalBlockSize() blocks
 
   function method IndirectionTableBlockSizeUint64() : uint64 { 24*1024*1024 } // Bytes
 
@@ -42,12 +49,10 @@ module Bounds {
   }
 
 
-  //function method MaxTotalBucketWeightUint64() : uint64 { 8356168 }
-  //function method MaxCacheSizeUint64() : uint64 { 200 }
-  function method MaxTotalBucketWeightUint64() : uint64 { 64220 }
-  function method MaxCacheSizeUint64() : uint64 { 25600 }
+  function method MaxTotalBucketWeightUint64() : uint64 { 2*1024*1024-65536 }
+  function method MaxCacheSizeUint64() : uint64 { 100 }
 
-  function method MaxNumChildrenUint64() : uint64 { 32 }
+  function method MaxNumChildrenUint64() : uint64 { 8 }
 
   // Minimum weight a bucket needs to have before we consider flushing it.
   function method FlushTriggerWeightUint64() : uint64 { MaxTotalBucketWeightUint64() / 8 }
@@ -56,6 +61,7 @@ module Bounds {
 
   function method IndirectionTableMaxSizeUint64() : uint64 { 0x1_0000_0000 }
 
+  function SuperblockSize() : int { SuperblockSizeUint64() as int }  // Bytes
   function IndirectionTableBlockSize() : int { IndirectionTableBlockSizeUint64() as int }
   function NodeBlockSize() : int { NodeBlockSizeUint64() as int }
   function MinNodeBlockIndex() : int { MinNodeBlockIndexUint64() as int }
@@ -65,6 +71,7 @@ module Bounds {
   function FlushTriggerWeight() : int { FlushTriggerWeightUint64() as int }
   function NumBlocks() : int { NumBlocksUint64() as int }
   function IndirectionTableMaxSize() : int { IndirectionTableMaxSizeUint64() as int }
+  function JournalBlockSize() : int { JournalBlockSizeUint64() as int } // Bytes
   function DiskNumJournalBlocks() : int { DiskNumJournalBlocksUint64() as int }
 
   lemma lemma_node_sector_doesnt_overlap_indirection_table()

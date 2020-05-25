@@ -192,7 +192,7 @@ module LruImpl {
           if k < j {
             assert Queue[k] == ref;
           } else {
-            assert Queue[k-1] == ref;
+            //assert Queue[k-1] == ref;
           }
         }
 

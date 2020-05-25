@@ -1411,20 +1411,20 @@ lemma lemma_parse_Val_view_specific(data:seq<byte>, v:V, grammar:G, index:int, b
     lemma_parse_Val_view(data, v, grammar, index);
 }
 
-lemma lemma_parse_Val_view_specific_size(data:seq<byte>, v:V, grammar:G, index:int, bound:int)
-    requires |data| < 0x1_0000_0000_0000_0000;
-    requires ValInGrammar(v, grammar);
-    requires ValidGrammar(grammar);
-    requires 0 <= index <= |data|;
-    requires 0 <= index + SizeOfV(v) <= |data|;
-    requires index+SizeOfV(v) <= bound <= |data|; 
-    requires parse_Val(data[index..bound], grammar).0 == Some(v)
-    decreases grammar, 0;
-    ensures  parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v);
-    ensures  parse_Val(data[index..bound], grammar).1 == data[index+SizeOfV(v)..bound];
-{
-    lemma_parse_Val_view(data, v, grammar, index);
-}
+//~ lemma lemma_parse_Val_view_specific_size(data:seq<byte>, v:V, grammar:G, index:int, bound:int)
+//~     requires |data| < 0x1_0000_0000_0000_0000;
+//~     requires ValInGrammar(v, grammar);
+//~     requires ValidGrammar(grammar);
+//~     requires 0 <= index <= |data|;
+//~     requires 0 <= index + SizeOfV(v) <= |data|;
+//~     requires index+SizeOfV(v) <= bound <= |data|; 
+//~     requires parse_Val(data[index..bound], grammar).0 == Some(v)
+//~     decreases grammar, 0;
+//~     ensures  parse_Val(data[index..index+SizeOfV(v)], grammar).0 == Some(v);
+//~     ensures  parse_Val(data[index..bound], grammar).1 == data[index+SizeOfV(v)..bound];
+//~ {
+//~     lemma_parse_Val_view(data, v, grammar, index);
+//~ }
 
 method ComputeSeqSum(s:seq<V>) returns (size:uint64)
     requires |s| < 0x1_0000_0000_0000_0000;
@@ -1482,49 +1482,49 @@ method ComputeSizeOf(val:V) returns (size:uint64)
   }
 }
 
-lemma seq_ext(a: seq<byte>, b: seq<byte>)
-requires |a| == |b|
-requires forall i | 0 <= i < |a| :: a[i] == b[i]
-ensures a == b
-{
-}
+//~ lemma seq_ext(a: seq<byte>, b: seq<byte>)
+//~ requires |a| == |b|
+//~ requires forall i | 0 <= i < |a| :: a[i] == b[i]
+//~ ensures a == b
+//~ {
+//~ }
 
-lemma MarshallUint64_index_splicing(data: array<byte>, index: uint64, val: V, i: int)
-requires 0 <= i
-requires 0 <= index
-requires 8 + (i+1)*8 <= SizeOfV(val)
-requires (index as int) + SizeOfV(val) <= data.Length
-ensures data[index..(index as int) + SizeOfV(val)][8 + i*8 .. 8 + (i+1)*8]
-     == data[index as int + 8 + i*8 .. index as int + 8 + (i+1)*8];
-{
-  // I had to go through enormous trouble to prove this for some reason
-
-  var ar := data[..];
-  var a := index as int;
-  var b := SizeOfV(val);
-  var c := 8 + i*8;
-  var d := 8;
-
-  var x1 := ar[a .. a + b][c .. c + d];
-  var x2 := ar[a + c .. a + c + d];
-  forall i | 0 <= i < |x1|
-  ensures x1[i] == x2[i]
-  {
-    assert x1[i]
-        == ar[a .. a + b][c .. c + d][i]
-        == ar[a .. a + b][c + i]
-        == ar[a + c + i]
-        == ar[a + c .. a + c + d][i]
-        == x2[i];
-  }
-  assert |x1| == |x2|;
-  seq_ext(x1, x2);
-
-  assert ar[a .. a + b][c .. c + d]
-      == ar[a + c .. a + c + d];
-  assert ar[index..(index as int) + SizeOfV(val)][8 + i*8 .. 8 + (i+1)*8]
-     == ar[index as int + 8 + i*8 .. index as int + 8 + (i+1)*8];
-}
+//~ lemma MarshallUint64_index_splicing(data: array<byte>, index: uint64, val: V, i: int)
+//~ requires 0 <= i
+//~ requires 0 <= index
+//~ requires 8 + (i+1)*8 <= SizeOfV(val)
+//~ requires (index as int) + SizeOfV(val) <= data.Length
+//~ ensures data[index..(index as int) + SizeOfV(val)][8 + i*8 .. 8 + (i+1)*8]
+//~      == data[index as int + 8 + i*8 .. index as int + 8 + (i+1)*8];
+//~ {
+//~   // I had to go through enormous trouble to prove this for some reason
+//~ 
+//~   var ar := data[..];
+//~   var a := index as int;
+//~   var b := SizeOfV(val);
+//~   var c := 8 + i*8;
+//~   var d := 8;
+//~ 
+//~   var x1 := ar[a .. a + b][c .. c + d];
+//~   var x2 := ar[a + c .. a + c + d];
+//~   forall i | 0 <= i < |x1|
+//~   ensures x1[i] == x2[i]
+//~   {
+//~     assert x1[i]
+//~         == ar[a .. a + b][c .. c + d][i]
+//~         == ar[a .. a + b][c + i]
+//~         == ar[a + c + i]
+//~         == ar[a + c .. a + c + d][i]
+//~         == x2[i];
+//~   }
+//~   assert |x1| == |x2|;
+//~   seq_ext(x1, x2);
+//~ 
+//~   assert ar[a .. a + b][c .. c + d]
+//~       == ar[a + c .. a + c + d];
+//~   assert ar[index..(index as int) + SizeOfV(val)][8 + i*8 .. 8 + (i+1)*8]
+//~      == ar[index as int + 8 + i*8 .. index as int + 8 + (i+1)*8];
+//~ }
 
 method MarshallUint32(n:uint32, data:array<byte>, index:uint64)
     requires (index as int) + (Uint32Size() as int) <= data.Length;
@@ -2175,7 +2175,7 @@ method MarshallUint32Array(val:V, ghost grammar:G, data:array<byte>, index:uint6
 
   ghost var len := unpack_LittleEndian_Uint64(data_seq2[..8]);
   assert |data_seq2| >= 8;
-  assert len <= (|data_seq2| as uint64 - 8) / 4;
+  //assert len <= (|data_seq2| as uint64 - 8) / 4;
   assert parse_Uint32Array(data_seq2).0.Some?;
   assert parse_Val(data_seq2, grammar).0.Some?;
   assert parse_Uint32Array(data_seq2).0.value.va == val.va;
@@ -2220,11 +2220,11 @@ method MarshallUint64Array(val:V, ghost grammar:G, data:array<byte>, index:uint6
 
   ghost var len := unpack_LittleEndian_Uint64(data_seq2[..8]);
   assert |data_seq2| >= 8;
-  assert len <= (|data_seq2| as uint64 - 8) / 8;
-  assert parse_Uint64Array(data_seq2).0.Some?;
+  //assert len <= (|data_seq2| as uint64 - 8) / 8;
+  //assert parse_Uint64Array(data_seq2).0.Some?;
   assert parse_Val(data_seq2, grammar).0.Some?;
-  assert parse_Uint64Array(data_seq2).0.value.ua == val.ua;
-  assert parse_Val(data_seq2, grammar).0.value.ua == val.ua;
+  //assert parse_Uint64Array(data_seq2).0.value.ua == val.ua;
+  //assert parse_Val(data_seq2, grammar).0.value.ua == val.ua;
 
   size := 8 + |val.ua| as uint64 * 8;
 }

@@ -80,26 +80,26 @@ abstract module MutableBtree {
     set i, o | 0 <= i < |nodes| && o in nodes[i].repr :: o
   }
 
-  lemma SeqReprUnion(left: seq<Node>, right: seq<Node>)
-    ensures SeqRepr(left + right) == SeqRepr(left) + SeqRepr(right)
-  {
-    reveal_SeqRepr();
-    forall o | o in SeqRepr(left + right)
-      ensures o in SeqRepr(left) + SeqRepr(right)
-    {
-    }
-    forall o | o in SeqRepr(left) + SeqRepr(right)
-      ensures o in SeqRepr(left + right)
-    {
-      if o in SeqRepr(left) {
-        var i :| 0 <= i < |left| && o in left[i].repr;
-        assert o in (left + right)[i].repr;
-      } else {
-        var i :| 0 <= i < |right| && o in right[i].repr;
-        assert o in (left + right)[|left| + i].repr;
-      }
-    }
-  }
+//~  lemma SeqReprUnion(left: seq<Node>, right: seq<Node>)
+//~    ensures SeqRepr(left + right) == SeqRepr(left) + SeqRepr(right)
+//~  {
+//~    reveal_SeqRepr();
+//~    forall o | o in SeqRepr(left + right)
+//~      ensures o in SeqRepr(left) + SeqRepr(right)
+//~    {
+//~    }
+//~    forall o | o in SeqRepr(left) + SeqRepr(right)
+//~      ensures o in SeqRepr(left + right)
+//~    {
+//~      if o in SeqRepr(left) {
+//~        var i :| 0 <= i < |left| && o in left[i].repr;
+//~        assert o in (left + right)[i].repr;
+//~      } else {
+//~        var i :| 0 <= i < |right| && o in right[i].repr;
+//~        assert o in (left + right)[|left| + i].repr;
+//~      }
+//~    }
+//~  }
   
   lemma SeqReprSubsetExtensionality(nodes: seq<Node>, parentRepr: set<object>)
     requires forall i :: 0 <= i < |nodes| ==> nodes[i].repr <= parentRepr
@@ -108,21 +108,21 @@ abstract module MutableBtree {
     reveal_SeqRepr();
   }
 
-  lemma SeqReprDelegation(nodes: seq<Node>, o: object) returns (idx: nat)
-    requires o in SeqRepr(nodes)
-    ensures 0 <= idx < |nodes|
-    ensures o in nodes[idx].repr
-  {
-    reveal_SeqRepr();
-    idx :| 0 <= idx < |nodes| && o in nodes[idx].repr;
-  }
+//~  lemma SeqReprDelegation(nodes: seq<Node>, o: object) returns (idx: nat)
+//~    requires o in SeqRepr(nodes)
+//~    ensures 0 <= idx < |nodes|
+//~    ensures o in nodes[idx].repr
+//~  {
+//~    reveal_SeqRepr();
+//~    idx :| 0 <= idx < |nodes| && o in nodes[idx].repr;
+//~  }
 
-  lemma SubSeqRepr(nodes: seq<Node>, from: nat, to: nat)
-    requires 0 <= from <= to <= |nodes|
-    ensures SeqRepr(nodes[from..to]) <= SeqRepr(nodes)
-  {
-    reveal_SeqRepr();
-  }
+//~  lemma SubSeqRepr(nodes: seq<Node>, from: nat, to: nat)
+//~    requires 0 <= from <= to <= |nodes|
+//~    ensures SeqRepr(nodes[from..to]) <= SeqRepr(nodes)
+//~  {
+//~    reveal_SeqRepr();
+//~  }
   
   lemma DisjointSubSeqReprsAreDisjoint(nodes: seq<Node>, lo1: int, hi1: int, lo2: int, hi2: int)
     requires 0 <= lo1 <= hi1 <= lo2 <= hi2 <= |nodes|
@@ -183,12 +183,12 @@ abstract module MutableBtree {
       && (forall i :: 0 <= i < nchildren ==> children !in children[i].repr)
   }
 
-  lemma SeqReprSet(nodes: seq<Node>)
-    requires WFShapeSiblings(nodes)
-    ensures Set(nodes) <= SeqRepr(nodes)
-  {
-    reveal_SeqRepr();
-  }
+//~  lemma SeqReprSet(nodes: seq<Node>)
+//~    requires WFShapeSiblings(nodes)
+//~    ensures Set(nodes) <= SeqRepr(nodes)
+//~  {
+//~    reveal_SeqRepr();
+//~  }
   
   function IChildren(nodes: seq<Node>, parentheight: int) : (result: seq<Model.Node>)
     requires forall i :: 0 <= i < |nodes| ==> WFShape(nodes[i])
@@ -259,6 +259,13 @@ abstract module MutableBtree {
     Model.Interpretation(I(node))
   }
 
+  function ToSeq(node: Node) : (kvlists: (seq<Key>, seq<Value>))
+    requires WF(node)
+    reads node.repr
+  {
+    Model.ToSeq(I(node))
+  }
+  
   method QueryLeaf(node: Node, needle: Key) returns (result: Option<Value>)
     requires WF(node)
     requires node.contents.Leaf?
@@ -621,7 +628,7 @@ abstract module MutableBtree {
       forall o | o in children[i].repr
         ensures o in subrepr
       {
-        assert ObjectIsInSubtree(node, o, i);
+        //assert ObjectIsInSubtree(node, o, i);
       }
     }
   }
@@ -683,6 +690,10 @@ abstract module MutableBtree {
       ensures DisjointReprs(newchildren, i, j)
     {
       assert DisjointSubtrees(node.contents, from as int + i, from as int + j);
+    }
+    forall i | 0 <= i < |newchildren|
+      ensures subnode !in newchildren[i].repr
+    {
     }
     assert WFShapeSiblings(newchildren);
     assert WFShapeChildren(newchildren, subnode.repr, subnode.height);

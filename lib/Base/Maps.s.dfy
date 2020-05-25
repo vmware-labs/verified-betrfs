@@ -28,6 +28,11 @@ module {:extern} Maps {
     && (forall key :: key in sub.Keys ==> IMapsAgreeOnKey(sub, sup, key))
   }
 
+  predicate IsSubMap<K,V>(sub: map<K,V>, sup: map<K,V>) {
+    && sub.Keys <= sup.Keys
+    && (forall key :: key in sub.Keys ==> MapsAgreeOnKey(sub, sup, key))
+  }
+
   function {:opaque} MapRemove<K,V>(m:map<K,V>, ks:set<K>) : (m':map<K,V>)
     ensures forall k :: k in m && k !in ks ==> k in m'
     ensures forall k :: k in m' ==> k in m && k !in ks

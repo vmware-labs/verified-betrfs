@@ -6,8 +6,8 @@
 
 #recordcount=1000000
 #XXX TODO reset initial record count
-recordcount=400000
-operationcount=20000000
+recordcount=4000000
+operationcount=1000
 workload=com.yahoo.ycsb.workloads.CoreWorkload
 
 readallfields=true
@@ -23,5 +23,5 @@ fieldlength=512
 
 requestdistribution=uniform
 
-#syncintervalms=1000
+syncintervalms=1000
 syncintervalops=10000
