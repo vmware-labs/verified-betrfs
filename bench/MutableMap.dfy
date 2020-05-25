@@ -25,9 +25,6 @@ module MutableMapBench {
       invariant fresh(hashMap.Repr)
       invariant {lcg} !! {lcg2} !! hashMap.Repr
     {
-      if i % 1000000 == 0 {
-        print "Inserting ", i, "\n";
-      }
       var v := lcg.next();
       assert fresh(hashMap);
       assert hashMap.Count as nat < 0x10000000000000000 / 8;
