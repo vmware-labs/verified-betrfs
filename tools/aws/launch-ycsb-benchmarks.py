@@ -39,17 +39,17 @@ rocks_suite = Suite(
     "rocksdb",
     Variable("system",  "run_veri", [Value("rocks", "rocks")]),
     Variable("filters", "run_veri", [Value("nofilters", "")]),
-    *common_other_vars)
+    *common_vars_others)
 berkeley_suite = Suite(
     "berkeleydb",
     Variable("system", "run_veri", [Value("berkeley", "berkeley")]),
-    *common_other_vars)
+    *common_vars_others)
 kyoto_suite = Suite(
     "berkeleydb",
     Variable("system", "run_veri", [Value("kyoto", "kyoto")]),
-    *common_other_vars)
+    *common_vars_others)
 #suite = ConcatSuite("ycsb-001", veri_suite, rocks_suite, berkeleydb_suite)
-suite = ConcatSuite("ycsb-veri-new-script-003", veri_suite)
+suite = ConcatSuite("ycsb-veri-new-script-004", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
