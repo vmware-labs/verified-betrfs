@@ -44,11 +44,12 @@ module JournalistModel {
     inMemoryWeight: uint64
   )
 
-  function method Len() : uint64 { 1*1048576 }
+  function method MaxPossibleEntries() : uint64 { 32*1048576 }
 
-  function method basic_mod(x: uint64) : uint64
+  function method basic_mod(x: uint64, len: uint64) : uint64
+  requires len <= 2 * MaxPossibleEntries()
   {
-    if x >= Len() then x - Len() else x
+    if x >= len then x - len else x
   }
 
   predicate CorrectJournalBlockSizes(jr: JournalRange)
@@ -59,12 +60,12 @@ module JournalistModel {
 
   predicate WF(jm: JournalistModel)
   {
-    && |jm.journalEntries| == Len() as int
-    && 0 <= jm.start < Len()
-    && 0 <= jm.len1 <= Len()
-    && 0 <= jm.len2 <= Len()
-    && 0 <= jm.len1 + jm.len2 <= Len()
-    && 0 <= jm.replayIdx as int <= |jm.replayJournal| <= Len() as int
+    && 1 <= |jm.journalEntries| <= 2 * MaxPossibleEntries() as int
+    && 0 <= jm.start < |jm.journalEntries| as uint64
+    && 0 <= jm.len1 <= |jm.journalEntries| as uint64
+    && 0 <= jm.len2 <= |jm.journalEntries| as uint64
+    && 0 <= jm.len1 + jm.len2 <= |jm.journalEntries| as uint64
+    && 0 <= jm.replayIdx as int <= |jm.replayJournal| <= MaxPossibleEntries() as int
     && (jm.journalFront.Some? ==>
         CorrectJournalBlockSizes(jm.journalFront.value))
     && (jm.journalBack.Some? ==>
@@ -85,19 +86,21 @@ module JournalistModel {
     jm.start
   }
 
-  function mid(jm: JournalistModel) : uint64
-  requires jm.start < Len()
-  requires jm.len1 <= Len()
+  function mid(jm: JournalistModel, len: uint64) : uint64
+  requires len <= 2 * MaxPossibleEntries()
+  requires jm.start < len
+  requires jm.len1 <= len
   {
-    basic_mod(jm.start + jm.len1)
+    basic_mod(jm.start + jm.len1, len)
   }
 
-  function end(jm: JournalistModel) : uint64
-  requires jm.start < Len()
-  requires jm.len1 <= Len()
-  requires jm.len2 <= Len()
+  function end(jm: JournalistModel, len: uint64) : uint64
+  requires len <= 2 * MaxPossibleEntries()
+  requires jm.start < len
+  requires jm.len1 <= len
+  requires jm.len2 <= len
   {
-    basic_mod(jm.start + jm.len1 + jm.len2)
+    basic_mod(jm.start + jm.len1 + jm.len2, len)
   }
 
   function InMemoryJournalFrozen(jm: JournalistModel) : seq<JournalEntry>
@@ -109,7 +112,9 @@ module JournalistModel {
   function InMemoryJournal(jm: JournalistModel) : seq<JournalEntry>
   requires WF(jm)
   {
-    cyclicSlice(jm.journalEntries, mid(jm), jm.len2)
+    cyclicSlice(jm.journalEntries,
+      mid(jm, |jm.journalEntries| as uint64),
+      jm.len2)
   }
 
   function ReplayJournal(jm: JournalistModel) : seq<JournalEntry>
@@ -183,7 +188,7 @@ module JournalistModel {
     reveal_cyclicSlice();
     reveal_WeightJournalEntries();
     JournalistModel(
-        fill(Len() as int, JournalInsert([], [])), // fill with dummies
+        fill(4096, JournalInsert([], [])), // fill with dummies
         0, 0, 0, [], 0, None, None, 0, 0, 0)
   }
 
@@ -218,7 +223,7 @@ module JournalistModel {
   {
     reveal_WeightJournalEntries();
     var s := marshallJournalEntries(jm.journalEntries, jm.start, jm.len1, jm.frozenJournalBlocks);
-    var jm' := jm.(start := basic_mod(jm.start + jm.len1))
+    var jm' := jm.(start := basic_mod(jm.start + jm.len1, |jm.journalEntries| as uint64))
                  .(len1 := 0)
                  .(frozenJournalBlocks := 0)
                  .(writtenJournalBlocks := jm.writtenJournalBlocks + jm.frozenJournalBlocks);
@@ -354,8 +359,22 @@ module JournalistModel {
     lenTimes8LeWeight(InMemoryJournal(jm));
     lenTimes8LeWeight(InMemoryJournalFrozen(jm));
 
-    var idx := basic_mod(jm.start + jm.len1 + jm.len2);
-    var jm' := jm.(journalEntries := jm.journalEntries[idx as int := je])
+    var (start', journalEntries') := 
+      if jm.len1 + jm.len2 < |jm.journalEntries| as uint64 then (
+        var idx := basic_mod(jm.start + jm.len1 + jm.len2, |jm.journalEntries| as uint64);
+        (jm.start, jm.journalEntries[idx as int := je])
+      ) else (
+        var newLen: uint64 := |jm.journalEntries| as uint64 * 2;
+        (0, jm.journalEntries[jm.start..]
+            + jm.journalEntries[..jm.start]
+            + [je]
+            + fill((newLen as int - |jm.journalEntries| - 1),
+                JournalInsert([], [])))
+      );
+
+    var jm' := jm
+      .(journalEntries := journalEntries')
+      .(start := start')
       .(len2 := jm.len2 + 1)
       .(inMemoryWeight := jm.inMemoryWeight + WeightJournalEntry(je) as uint64 + (if jm.len2 == 0 then 8 else 0));
 
@@ -440,7 +459,7 @@ module JournalistModel {
       (if jm.journalFront.Some? then jm.journalFront.value else []) +
       (if jm.journalBack.Some? then jm.journalBack.value else []);
     var p := parseJournalRange(fullRange);
-    if p.Some? && |p.value| <= Len() as int then
+    if p.Some? && |p.value| <= MaxPossibleEntries() as int then
       var jm' := jm
         .(journalFront := None)
         .(journalBack := None)

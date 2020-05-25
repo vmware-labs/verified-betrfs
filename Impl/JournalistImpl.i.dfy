@@ -84,7 +84,7 @@ module JournalistImpl {
     {
       new;
       this.journalEntries := NativeArrays.newArrayFill(
-          JournalistModel.Len(),
+          4096,
           JournalInsert([], []));
       this.start := 0;
       this.len1 := 0;
@@ -136,7 +136,8 @@ module JournalistImpl {
         this.len1,
         this.frozenJournalBlocks);
 
-      this.start := JournalistModel.basic_mod(this.start + this.len1);
+      this.start := JournalistModel.basic_mod(this.start + this.len1,
+          this.journalEntries.Length as uint64);
       this.len1 := 0;
       this.writtenJournalBlocks :=
           this.writtenJournalBlocks + this.frozenJournalBlocks;
@@ -238,19 +239,56 @@ module JournalistImpl {
     requires Inv()
     requires JournalistModel.canAppend(I(), je)
     modifies Repr
-    ensures Repr == old(Repr)
+    ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     ensures Inv()
     ensures I() == JournalistModel.append(old(I()), je)
     {
       JournalistModel.reveal_append();
 
-      var idx := JournalistModel.basic_mod(start + len1 + len2);
-      this.journalEntries[idx] := je;
+      if this.len1 + this.len2 < this.journalEntries.Length as uint64 {
+        var idx := JournalistModel.basic_mod(
+            start + len1 + len2,
+            this.journalEntries.Length as uint64);
+        this.journalEntries[idx] := je;
+      } else {
+        var newLen: uint64 := this.journalEntries.Length as uint64 * 2;
+        var newArray := NativeArrays.newArrayFill(
+            newLen,
+            JournalInsert([], []));
+        NativeArrays.CopyArrayIntoDifferentArray(
+            this.journalEntries,
+            this.start,
+            newArray,
+            0,
+            this.journalEntries.Length as uint64 - this.start);
+        NativeArrays.CopyArrayIntoDifferentArray(
+            this.journalEntries,
+            0,
+            newArray,
+            this.journalEntries.Length as uint64 - this.start,
+            this.start);
+        newArray[this.journalEntries.Length as uint64] := je;
+
+        calc {
+          newArray[..];
+          journalEntries[start..]
+            + journalEntries[..start]
+            + [je]
+            + fill((newLen as int - journalEntries.Length - 1) as int, JournalInsert([], []));
+        }
+
+        this.journalEntries := newArray;
+        this.start := 0;
+      }
+
       this.inMemoryWeight := this.inMemoryWeight
           + WeightJournalEntryUint64(je)
           + (if this.len2 == 0 then 8 else 0);
       this.len2 := this.len2 + 1;
 
+      Repr := {this, this.journalEntries};
+      //assert I().journalEntries == JournalistModel.append(old(I()), je).journalEntries;
+      //assert I().start == JournalistModel.append(old(I()), je).start;
       assert I() == JournalistModel.append(old(I()), je);
     }
 
@@ -327,7 +365,7 @@ module JournalistImpl {
         (if journalFront.Some? then journalFront.value else []) +
         (if journalBack.Some? then journalBack.value else []);
       var p := JournalistParsingImpl.ParseJournalRange(fullRange);
-      if p.Some? && |p.value| as uint64 <= JournalistModel.Len() {
+      if p.Some? && |p.value| as uint64 <= JournalistModel.MaxPossibleEntries() {
         journalFront := None;
         journalBack := None;
         replayJournal := p.value;
