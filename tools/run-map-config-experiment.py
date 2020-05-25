@@ -87,11 +87,11 @@ def main():
   assert ret == 0
 
   cmd = None
-  if branch == "eval-btree-master":
-    cmd = "g++ -O3 bench/bench/MutableMap.cpp bench/run-mutable-map.cpp framework/NativeArithmetic.cpp -o MutableMapBench  -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -I bench -Ilib -std=c++17 -I."
-  elif branch == "eval-btree-linear":
+  if branch == "eval-btree-linear":
     # cmd = "g++ -O3 lib/DataStructures/lib/DataStructures/MutableBtree.i.cpp bench/run-mutable-btree.cpp -o MutableBtreeBench -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -Ilib -std=c++17 -I."
     pass
+  elif branch == "eval-btree-master":
+    cmd = "g++ -O3 bench/bench/MutableMap.cpp bench/run-mutable-map.cpp framework/NativeArithmetic.cpp -o MutableMapBench  -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -I bench -Ilib -std=c++17 -I."
   actuallyprint(cmd)
   ret = os.system(cmd)
   assert ret == 0
