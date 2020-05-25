@@ -3,6 +3,8 @@
 from automation import *
 from suite import *
 
+replica_count = 1
+
 common_vars = [
     Variable("cgroup",     "run_veri",   [Value("yescgroup", "cgroup=True")]),
     Variable("ram",        "run_veri",   [Value("2gb",       "ram=4.0gb")]),
@@ -15,11 +17,10 @@ common_vars = [
                     "ycsb/workloadb-onefield.spec" ,
                     "ycsb/workloadc-onefield.spec" ,
                     "ycsb/workloadd-onefield.spec" ,
-                    "ycsb/workloade-onefield.spec" ,
                     "ycsb/workloadf-onefield.spec" ,
                     ])),]),
     #Variable("duration", "run_veri", [Value("2h", "time_budget=2h")]),
-    Variable("replica",  "silent", [Value("r0", "r=0")]),
+    Variable("replica",  "silent", [Value("r{}".format(r), "r={}".format(r)) for r in range(replica_count)]),
     ]
 veri_suite = Suite(
     "veribetrkv",
@@ -28,7 +29,8 @@ veri_suite = Suite(
         Value("linear",    "linear-disintegration"),
         ]),
     Variable("system",     "run_veri", [Value("veri", "veri")]),
-    Variable("rowcache",   "run_veri", [Value("norowcache", "")]),
+    Variable("rowcache",   "run_veri", [Value("norowcache", "")
+                                        Value("yesrowcache", "use_unverified_row_cache")]),
     *common_vars)
 
 common_vars_others = common_vars + [
@@ -38,7 +40,8 @@ common_vars_others = common_vars + [
 rocks_suite = Suite(
     "rocksdb",
     Variable("system",  "run_veri", [Value("rocks", "rocks")]),
-    Variable("filters", "run_veri", [Value("nofilters", "")]),
+    Variable("filters", "run_veri", [Value("nofilters", "")
+                                     Value("yesfilters", "use_filters")]),
     *common_vars_others)
 berkeley_suite = Suite(
     "berkeleydb",
@@ -49,7 +52,7 @@ kyoto_suite = Suite(
     Variable("system", "run_veri", [Value("kyoto", "kyoto")]),
     *common_vars_others)
 #suite = ConcatSuite("ycsb-001", veri_suite, rocks_suite, berkeleydb_suite)
-suite = ConcatSuite("ycsb-veri-new-script-004", veri_suite)
+suite = ConcatSuite("ycsb-new-script-005", veri_suite, rocks_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
