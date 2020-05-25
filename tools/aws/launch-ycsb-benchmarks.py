@@ -7,7 +7,7 @@ replica_count = 1
 
 common_vars = [
     Variable("cgroup",     "run_veri",   [Value("yescgroup", "cgroup=True")]),
-    Variable("ram",        "run_veri",   [Value("2gb",       "ram=4.0gb")]),
+    Variable("ram",        "run_veri",   [Value("2gb",       "ram=2.0gb")]),
     Variable("device",     "run_veri",   [Value("disk",      "device=disk")]),
     Variable("workload",   "run_veri",
              [Value("all", "workload=" + ",".join(
