@@ -29,7 +29,7 @@ veri_suite = Suite(
         Value("linear",    "linear-disintegration"),
         ]),
     Variable("system",     "run_veri", [Value("veri", "veri")]),
-    Variable("rowcache",   "run_veri", [Value("norowcache", "")
+    Variable("rowcache",   "run_veri", [Value("norowcache", ""),
                                         Value("yesrowcache", "use_unverified_row_cache")]),
     *common_vars)
 
@@ -40,7 +40,7 @@ common_vars_others = common_vars + [
 rocks_suite = Suite(
     "rocksdb",
     Variable("system",  "run_veri", [Value("rocks", "rocks")]),
-    Variable("filters", "run_veri", [Value("nofilters", "")
+    Variable("filters", "run_veri", [Value("nofilters", ""),
                                      Value("yesfilters", "use_filters")]),
     *common_vars_others)
 berkeley_suite = Suite(
