@@ -265,9 +265,9 @@ def main():
 
   if from_archive:
     if rocks:
-      os.system("cp -a " + from_archive + "/* " + loc + "/"
+      os.system("cp -a " + from_archive + "/* " + loc + "/")
     else:
-      os.system("cp -a " + from_archive + " " + loc
+      os.system("cp -a " + from_archive + " " + loc)
     
   driver_options = ""
   if use_filter:
