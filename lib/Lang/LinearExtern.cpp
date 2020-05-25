@@ -1,74 +1,5 @@
-#pragma once
+#include "LinearExtern.h"
 
-#include "DafnyRuntime.h"
-
-#include <vector>
-#include <assert.h>
-
-namespace LinearMaybe {
-////////////////////////////////////////////////////////////
-//
-//   Maybe
-//
-////////////////////////////////////////////////////////////
-
-template <typename A>
-struct maybe {
-  A a;
-};
-
-// This is required, because lseqs are compiled as std::vector's of
-// maybes, and hence the automatic, compiler-generated equality on
-// lseqs requires an equality on maybe's.  However, this operator
-// is not currently accessible from Dafny
-template <typename A>
-bool operator==(const maybe<A> &left, const maybe<A> &right) {
-  assert(false);  // Unsafe to hit this at runtime
-  return left.a == right.a;
-}
-
-template <typename A>
-A peek(maybe<A> m) { return m.a; }
-
-template <typename A>
-A unwrap(maybe<A> m) { return m.a; }
-
-template <typename A>
-maybe<A> give(A a) { 
-  struct maybe<A> m;
-  m.a = a;
-  return m;
-}
-
-template <typename A>
-//maybe<A> empty() { return maybe(get_default<A>::call()); }
-maybe<A> empty() { 
-  struct maybe<A> m;
-  return m;  // REVIEW: Safe, b/c !has ?
-}    
-
-template <typename A>
-Tuple0 discard(maybe<A> m) { (void)m; Tuple0 ret; return ret; } 
-
-}
-
-template<typename A>
-struct get_default<LinearMaybe::maybe<A>> {
-  static LinearMaybe::maybe<A> call() { 
-    struct LinearMaybe::maybe<A> m;
-    m.a = get_default<A>::call();
-    return m; 
-  }
-};
-
-template<typename A>
-struct std::hash<LinearMaybe::maybe<A>> {
-  std::size_t operator()(const LinearMaybe::maybe<A>& x) const {
-    size_t seed = 0;
-    hash_combine<A>(seed, x.a);
-    return seed;
-  }
-};
 
 namespace LinearExtern {
 
@@ -78,8 +9,8 @@ namespace LinearExtern {
 //
 ////////////////////////////////////////////////////////////
 
-uint64 MakeLinearInt(uint64 u);
-void DiscardLinearInt(uint64 u);
+uint64 MakeLinearInt(uint64 u) { return u; }
+void DiscardLinearInt(uint64 u) { (void) u; }
 
 ////////////////////////////////////////////////////////////
 //
