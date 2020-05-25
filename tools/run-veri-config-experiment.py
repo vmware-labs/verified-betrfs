@@ -271,7 +271,7 @@ def main():
       os.system("cp -a " + from_archive + " " + loc)
     
   driver_options = ""
-  if use_filter:
+  if use_filters:
     driver_options += "--filters"
   if from_archive:
     driver_options += "--preloaded"
