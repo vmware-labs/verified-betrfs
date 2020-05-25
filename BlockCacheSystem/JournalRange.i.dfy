@@ -302,19 +302,70 @@ module JournalRanges {
       SumJournalEntries(s) + 8
   }
 
+  lemma lenTimes8LeSum(s: seq<JournalEntry>)
+  ensures 8 * |s| <= SumJournalEntries(s)
+  {
+    if |s| > 0 {
+      lenTimes8LeSum(s[..|s|-1]);
+    }
+  }
+
   lemma lenTimes8LeWeight(s: seq<JournalEntry>)
   ensures 8 * |s| <= WeightJournalEntries(s)
+  {
+    lenTimes8LeSum(s);
+    reveal_WeightJournalEntries();
+  }
 
-  lemma SumJournalEntriesSum(s: seq<JournalEntry>, t: seq<JournalEntry>)
-  ensures SumJournalEntries(s + t)
-      == SumJournalEntries(s) + SumJournalEntries(t)
+  lemma SumJournalEntriesSum(a: seq<JournalEntry>, b: seq<JournalEntry>)
+  ensures SumJournalEntries(a + b)
+      == SumJournalEntries(a) + SumJournalEntries(b)
+  {
+    if b == [] {
+      calc {
+        SumJournalEntries(a + b);
+        { assert a + b == a; }
+        SumJournalEntries(a);
+        {
+          assert SumJournalEntries(b) == 0;
+        }
+        SumJournalEntries(a) + SumJournalEntries(b);
+      }
+    } else {
+      calc {
+        SumJournalEntries(a + b);
+        SumJournalEntries(DropLast(a + b)) + WeightJournalEntry(Last(a + b));
+        {
+          assert DropLast(a + b) == a + DropLast(b);
+          assert Last(a + b) == Last(b);
+        }
+        SumJournalEntries(a + DropLast(b)) + WeightJournalEntry(Last(b));
+        {
+          SumJournalEntriesSum(a, DropLast(b));
+        }
+        SumJournalEntries(a) + SumJournalEntries(DropLast(b)) + WeightJournalEntry(Last(b));
+        SumJournalEntries(a) + SumJournalEntries(b);
+      }
+    }
+  }
 
   lemma WeightJournalEntriesSum(s: seq<JournalEntry>, t: seq<JournalEntry>)
   ensures WeightJournalEntries(s + t)
       <= WeightJournalEntries(s) + WeightJournalEntries(t)
+  {
+    reveal_WeightJournalEntries();
+    SumJournalEntriesSum(s, t);
+  }
 
   lemma JournalEntriesSumPrefix(s: seq<JournalEntry>, i: int)
   requires 0 <= i <= |s|
   ensures SumJournalEntries(s[..i]) <= SumJournalEntries(s)
-
+  {
+    if i == |s| {
+      assert s[..i] == s;
+    } else {
+      JournalEntriesSumPrefix(DropLast(s), i);
+      assert s[..i] == DropLast(s)[..i];
+    }
+  }
 }

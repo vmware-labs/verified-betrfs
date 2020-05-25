@@ -327,7 +327,7 @@ abstract module TSJ {
         assert uiops[i] == uiops1[i];
         assert SM.Next(k, states1[i], states1[i+1], uiops1[i]);
       } else {
-        assert states[i] == states2[i - |uiops1|];
+        //assert states[i] == states2[i - |uiops1|];
         assert states[i+1] == states2[i - |uiops1| + 1];
         assert uiops[i] == uiops2[i - |uiops1|];
         assert SM.Next(k, states2[i - |uiops1|],
@@ -429,8 +429,8 @@ abstract module TSJ {
   {
     SM.NextPreservesInv(k.k, s.s3, s'.s3, replayedUIOp);
     path_append(k.k, s.s2, SeqSub(s.j2 + s.j_delta, s.j3), s.s3, replayedUIOp, s'.s3);
-    assert SeqSub(s.j2 + s.j_delta, s.j3) + JournalEntriesForUIOp(replayedUIOp)
-        == SeqSub(s.j2 + s.j_delta, s'.j3);
+    // assert SeqSub(s.j2 + s.j_delta, s.j3) + JournalEntriesForUIOp(replayedUIOp)
+    //     == SeqSub(s.j2 + s.j_delta, s'.j3);
   }
 
   lemma PushSyncStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op, id: int)

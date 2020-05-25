@@ -33,8 +33,8 @@ module JournalistModel {
     replayJournal: seq<JournalEntry>,
     replayIdx: uint64,
 
-    journalFront: Option<seq<byte>>,
-    journalBack: Option<seq<byte>>,
+    journalFront: Option<seq<JournalBlock>>,
+    journalBack: Option<seq<JournalBlock>>,
     
     // number of blocks already written on disk:
     writtenJournalBlocks: uint64,
@@ -44,11 +44,17 @@ module JournalistModel {
     inMemoryWeight: uint64
   )
 
-  function method Len() : uint64 { 1048576 }
+  function method Len() : uint64 { 1*1048576 }
 
   function method basic_mod(x: uint64) : uint64
   {
     if x >= Len() then x - Len() else x
+  }
+
+  predicate CorrectJournalBlockSizes(jr: JournalRange)
+  {
+    && |jr| <= NumJournalBlocks() as int
+    && (forall i | 0 <= i < |jr| :: |jr[i]| == 4064)
   }
 
   predicate WF(jm: JournalistModel)
@@ -60,19 +66,19 @@ module JournalistModel {
     && 0 <= jm.len1 + jm.len2 <= Len()
     && 0 <= jm.replayIdx as int <= |jm.replayJournal| <= Len() as int
     && (jm.journalFront.Some? ==>
-        JournalRangeOfByteSeq(jm.journalFront.value).Some?)
+        CorrectJournalBlockSizes(jm.journalFront.value))
     && (jm.journalBack.Some? ==>
-        JournalRangeOfByteSeq(jm.journalBack.value).Some?)
+        CorrectJournalBlockSizes(jm.journalBack.value))
     && 0 <= jm.writtenJournalBlocks <= NumJournalBlocks()
     && 0 <= jm.frozenJournalBlocks <= NumJournalBlocks()
     && 0 <= jm.inMemoryWeight <= NumJournalBlocks() * 4096
   }
 
-  function IJournalRead(j: Option<seq<byte>>) : Option<JournalRange>
+  /*function IJournalRead(j: Option<seq<byte>>) : Option<JournalRange>
   requires j.Some? ==> JournalRangeOfByteSeq(j.value).Some?
   {
     if j.Some? then JournalRangeOfByteSeq(j.value) else None
-  }
+  }*/
 
   function start(jm: JournalistModel) : uint64
   {
@@ -115,13 +121,13 @@ module JournalistModel {
   function JournalFrontRead(jm: JournalistModel) : Option<JournalRange>
   requires WF(jm)
   {
-    IJournalRead(jm.journalFront)
+    jm.journalFront
   }
 
   function JournalBackRead(jm: JournalistModel) : Option<JournalRange>
   requires WF(jm)
   {
-    IJournalRead(jm.journalBack)
+    jm.journalBack
   }
 
   function WrittenJournalLen(jm: JournalistModel) : int
@@ -151,6 +157,8 @@ module JournalistModel {
   lemma reveal_I(jm: JournalistModel)
   requires WF(jm)
   ensures I(jm) == Iprivate(jm)
+  {
+  }
 
   predicate Inv(jm: JournalistModel)
   {
@@ -366,5 +374,96 @@ module JournalistModel {
   ensures b == (I(jm).replayJournal == [])
   {
     jm.replayIdx == |jm.replayJournal| as uint64
+  }
+
+  function {:opaque} replayJournalTop(jm: JournalistModel) : (je: JournalEntry)
+  requires Inv(jm)
+  requires I(jm).replayJournal != []
+  ensures je == I(jm).replayJournal[0]
+  {
+    jm.replayJournal[jm.replayIdx]
+  }
+
+  function {:opaque} replayJournalPop(jm: JournalistModel) : (jm': JournalistModel)
+  requires Inv(jm)
+  requires I(jm).replayJournal != []
+  ensures Inv(jm')
+  ensures I(jm') == I(jm).(replayJournal := I(jm').replayJournal)
+  ensures I(jm).replayJournal
+      == [replayJournalTop(jm)] + I(jm').replayJournal
+  {
+    jm.(replayIdx := jm.replayIdx + 1)
+  }
+
+  function {:opaque} setFront(jm: JournalistModel, jr: JournalRange)
+    : (jm': JournalistModel)
+  requires Inv(jm)
+  requires forall i | 0 <= i < |jr| :: |jr[i]| == 4064
+  requires |jr| <= NumJournalBlocks() as int
+  ensures Inv(jm')
+  ensures I(jm') == I(jm).(journalFront := Some(jr))
+  {
+    jm.(journalFront := Some(jr))
+  }
+
+  function {:opaque} setBack(jm: JournalistModel, jr: JournalRange)
+    : (jm': JournalistModel)
+  requires Inv(jm)
+  requires forall i | 0 <= i < |jr| :: |jr[i]| == 4064
+  requires |jr| <= NumJournalBlocks() as int
+  ensures Inv(jm')
+  ensures I(jm') == I(jm).(journalBack := Some(jr))
+  {
+    jm.(journalBack := Some(jr))
+  }
+
+  function {:opaque} parseJournals(jm: JournalistModel)
+    : (res : (JournalistModel, bool))
+  requires Inv(jm)
+  ensures var (jm', success) := res;
+    && Inv(jm')
+    && (!success ==> I(jm) == I(jm'))
+    && (success ==>
+      var fullRange :=
+        (if I(jm).journalFront.Some? then I(jm).journalFront.value
+            else []) +
+        (if I(jm).journalBack.Some? then I(jm).journalBack.value
+            else []);
+      && parseJournalRange(fullRange).Some?
+      && I(jm') == I(jm)
+          .(journalFront := None)
+          .(journalBack := None)
+          .(replayJournal := parseJournalRange(fullRange).value)
+    )
+  {
+    var fullRange :=
+      (if jm.journalFront.Some? then jm.journalFront.value else []) +
+      (if jm.journalBack.Some? then jm.journalBack.value else []);
+    var p := parseJournalRange(fullRange);
+    if p.Some? && |p.value| <= Len() as int then
+      var jm' := jm
+        .(journalFront := None)
+        .(journalBack := None)
+        .(replayJournal := p.value)
+        .(replayIdx := 0);
+      (jm', true)
+    else
+      (jm, false)
+  }
+
+  function {:opaque} hasFront(jm: JournalistModel)
+    : (b : bool)
+  requires Inv(jm)
+  ensures b == I(jm).journalFront.Some?
+  {
+    jm.journalFront.Some?
+  }
+
+  function {:opaque} hasBack(jm: JournalistModel)
+    : (b : bool)
+  requires Inv(jm)
+  ensures b == I(jm).journalBack.Some?
+  {
+    jm.journalBack.Some?
   }
 }

@@ -16,20 +16,10 @@ DIR_DEPS = "dir.deps"   # The per-directory dependencies file
 class Veridepend:
     def __init__(self, dafnyRoots):
         self.dafnyRoots = dafnyRoots
-        self.discoverAllDfys(self.dafnyRoots)
+        self.targetIrefs = depsFromDfySources(self.dafnyRoots)
         output = self.gatherDeps()
         self.writeDepsFile(output)
         self.graph = {}
-
-    def discoverAllDfys(self, dafnyRoots):
-        irefs = set()
-        for i in range(len(dafnyRoots)):
-            dafnyRoot = dafnyRoots[i]
-            rootIref = IncludeReference(None, i, dafnyRoot)
-            irefs.add(rootIref)
-            targets = depsFromDfySource(rootIref)
-            irefs = irefs.union(set(targets))
-        self.targetIrefs = irefs
 
     def gatherDeps(self):
         output = []

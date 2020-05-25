@@ -56,6 +56,7 @@ module LinearBox {
       ensures Inv()
       ensures !Has()
       ensures Repr == old(Repr)
+      ensures a == old(Read())
     {
       linear var x := data.Swap(empty());
       a := unwrap(x);
@@ -72,6 +73,15 @@ module LinearBox {
     {
       linear var x := data.Swap(give(a));
       var _ := discard(x);
+    }
+
+    function method{:caller_must_be_pure} Borrow():(shared a:A)
+      reads this, Repr
+      requires Inv()
+      requires Has()
+      ensures a == Read()
+    {
+      peek(data.Borrow())
     }
   }
 

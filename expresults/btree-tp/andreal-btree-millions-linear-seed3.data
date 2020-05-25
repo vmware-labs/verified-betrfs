@@ -1,0 +1,27 @@
+METADATA btree perf comparison
+METADATA branch eval-btree-linear
+METADATA seed 625478238923
+METADATA title running 2000000 ops with seed 625478238923 dry run 0
+2000000	write	linear	9303
+2000000	read	linear	4969
+METADATA title running 4000000 ops with seed 625478238923 dry run 0
+4000000	write	linear	20306
+4000000	read	linear	10999
+METADATA title running 8000000 ops with seed 625478238923 dry run 0
+8000000	write	linear	45046
+8000000	read	linear	25790
+METADATA title running 16000000 ops with seed 625478238923 dry run 0
+16000000	write	linear	98352
+16000000	read	linear	57143
+METADATA title running 32000000 ops with seed 625478238923 dry run 0
+32000000	write	linear	214579
+32000000	read	linear	127393
+METADATA title running 64000000 ops with seed 625478238923 dry run 0
+64000000	write	linear	455848
+64000000	read	linear	276805
+METADATA title running 128000000 ops with seed 625478238923 dry run 0
+128000000	write	linear	979682
+128000000	read	linear	614111
+METADATA title running 256000000 ops with seed 625478238923 dry run 0
+256000000	write	linear	2146582
+256000000	read	linear	1278923

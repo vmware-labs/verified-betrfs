@@ -110,7 +110,7 @@ module FlushPolicyImpl {
       if node.children.None? || |node.buckets| as uint64 == MaxNumChildrenUint64() {
         action := getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1);
       } else {
-        var bs := biggestSlot(node.buckets);
+        var bs:(uint64, uint64) := biggestSlot(node.buckets);
         var (slot, slotWeight) := bs;
         //if slotWeight >= FlushTriggerWeight() as uint64 then (
         if |node.buckets| as uint64 < 8 {

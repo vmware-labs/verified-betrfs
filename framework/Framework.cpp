@@ -57,24 +57,6 @@ namespace NativeArithmetic_Compile {
   }
 }
 
-namespace NativeArrays_Compile {
-  int32_t ByteSeqCmpByteSeq(DafnySequence<uint8> b1, DafnySequence<uint8> b2)
-  {
-    int result = memcmp(b1.ptr(), b2.ptr(), b1.size() < b2.size() ? b1.size() : b2.size());
-    if (result == 0) {
-      if (b1.size() == b2.size()) {
-        return 0;
-      } else if (b1.size() > b2.size()) {
-        return 1;
-      } else {
-        return -1;
-      }
-    } else {
-      return result;
-    }
-  }
-}
-
 namespace NativePackedInts_Compile {
   static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__, "current implementation of NativePackedInts assumes little endian");
   static_assert(sizeof(uint32) == 4, "uint32 is aliased wrong");
@@ -144,10 +126,10 @@ namespace MainDiskIOHandler_Compile {
   }
 #else
   uint8_t *aligned_copy(uint8_t* buf, size_t len, size_t *aligned_len) {
-    uint8_t *aligned_bytes = (uint8_t *)malloc(len);
+    *aligned_len = (len + 4095) & ~0xfffUL;
+    uint8_t *aligned_bytes = (uint8_t *)malloc(*aligned_len);
     if (aligned_bytes) {
       memcpy(aligned_bytes, buf, len);
-      *aligned_len = len;
     }
     return aligned_bytes;
   }
@@ -552,6 +534,10 @@ void Application::crash() {
   LOG("'crashing' and reinitializing");
   LOG("");
   initialize();
+
+  #ifdef USE_UNVERIFIED_ROW_CACHE
+  unverifiedRowCache = RowCache();
+  #endif
 }
 
 void Application::EvictEverything() {
@@ -628,15 +614,19 @@ void Application::Insert(ByteString key, ByteString val)
   }
 
   for (int i = 0; i < 500000; i++) {
-    bool success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
-    // TODO remove this to enable more asyncronocity:
+    bool success;
+    int oldnios;
+    do {
+      oldnios = MainDiskIOHandler_Compile::nWriteReqsOut;
+      success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
+    } while (!success && oldnios < MainDiskIOHandler_Compile::nWriteReqsOut);
 
     if (io->has_write_task()) {
       #ifdef LOG_QUERY_STATS
       benchmark_start("write (insert)");
       #endif
 
-      io->completeWriteTasks();
+      io->waitForOne();
 
       #ifdef LOG_QUERY_STATS
       benchmark_end("write (insert)");
@@ -646,6 +636,10 @@ void Application::Insert(ByteString key, ByteString val)
     this->maybeDoResponse();
 
     if (success) {
+      #ifdef USE_UNVERIFIED_ROW_CACHE
+      unverifiedRowCache.set(key, val);
+      #endif
+
       LOG("doing insert... success!");
       LOG("");
 
@@ -671,6 +665,13 @@ int queryCount = 0;
 
 ByteString Application::Query(ByteString key)
 {
+  #ifdef USE_UNVERIFIED_ROW_CACHE
+  auto cache_res = unverifiedRowCache.get(key);
+  if (cache_res.has_value()) {
+    return cache_res.value();
+  }
+  #endif
+
   #ifdef LOG_QUERY_STATS
   currently_doing_action = ACTION_QUERY;
   auto t1 = chrono::high_resolution_clock::now();
@@ -728,6 +729,10 @@ ByteString Application::Query(ByteString key)
         benchmark_append("Application::Query", ns);
       }
       queryCount++;
+      #endif
+
+      #ifdef USE_UNVERIFIED_ROW_CACHE
+      unverifiedRowCache.set(key, val);
       #endif
 
       return val;
@@ -900,21 +905,6 @@ void sampleNode(uint64 ref, std::shared_ptr<NodeImpl_Compile::Node> node) {
 
     if ((((bucket->format)).is_BucketFormat_BFTree())) {
       type = "tree";
-    } else if ((((bucket->format)).is_BucketFormat_BFKvl())) {
-      KVList_Compile::Kvl kvl = bucket->GetKvl();
-      DafnySequence<DafnySequence<uint8>> keys = kvl.keys;
-      for (size_t i=0; i<keys.len; i++) {
-        DafnySequence<uint8> key = keys.start[i];
-        visit_uptr(&observed_ptrs, key);
-      }
-      DafnySequence<ValueMessage_Compile::Message> messages = kvl.messages;
-      for (size_t i=0; i<messages.len; i++) {
-        auto message = messages.start[i];
-        assert(message.is_Message_Define());
-        DafnySequence<uint8> value_message = message.dtor_value();
-        visit_uptr(&observed_ptrs, value_message);
-      }
-      type = "kvl";
     } else if ((((bucket->format)).is_BucketFormat_BFPkv())) {
       type = "pkv";
       auto pkv = bucket->pkv;

@@ -7,6 +7,7 @@ DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy
 DAFNY_ROOT?=.dafny/dafny/
 DAFNY_CMD=$(DAFNY_ROOT)/Binaries/dafny
 DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
+DAFNY_FLAGS=
 
 ifndef TL
 	TL=20
@@ -28,6 +29,13 @@ STDLIB=-stdlib=libc++
 # Uncomment to enable gprof
 #GPROF_FLAGS=-pg
 
+WANT_UNVERIFIED_ROW_CACHE=false
+ifeq "$(WANT_UNVERIFIED_ROW_CACHE)" "true"
+	UNVERIFIED_ROW_CACHE_DEFINE=-DUSE_UNVERIFIED_ROW_CACHE
+else
+	UNVERIFIED_ROW_CACHE_DEFINE=
+endif
+
 WANT_MALLOC_ACCOUNTING=false
 ifeq "$(WANT_MALLOC_ACCOUNTING)" "true"
 	MALLOC_ACCOUNTING_DEFINE=-DMALLOC_ACCOUNTING=1
@@ -47,7 +55,12 @@ endif
 # _LIBCPP_HAS_NO_THREADS makes shared_ptr faster
 # (but also makes stuff not thread-safe)
 # Note: this optimization only works with stdlib=libc++
-OPT_FLAGS=$(MALLOC_ACCOUNTING_DEFINE) $(DBG_SYMBOLS_FLAG) $(OPT_FLAG) -D_LIBCPP_HAS_NO_THREADS $(GPROF_FLAGS)
+OPT_FLAGS=$(MALLOC_ACCOUNTING_DEFINE) \
+          $(UNVERIFIED_ROW_CACHE_DEFINE) \
+          $(DBG_SYMBOLS_FLAG) \
+          $(OPT_FLAG) \
+          -D_LIBCPP_HAS_NO_THREADS \
+          $(GPROF_FLAGS)
 
 ##############################################################################
 # Automatic targets
@@ -178,8 +191,13 @@ build/%.synchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 # .verchk: Dafny file-local verification
 build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.verchk,%.verchk-tmp,$@))
-	( $(TIME) $(DAFNY_CMD) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
+	( $(TIME) $(DAFNY_CMD) $(DAFNY_FLAGS) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
+
+build/lib/DataStructures/MutableBtree.i.verchk: DAFNY_FLAGS=/noNLarith
+build/lib/Buckets/PackedStringArray.i.verchk: DAFNY_FLAGS=/noNLarith
+build/lib/Buckets/KMBPKVOps.i.verchk: DAFNY_FLAGS=/noNLarith
+build/lib/DataStructures/LinearDList.i.verchk: DAFNY_FLAGS=/noNLarith /proverOpt:OPTIMIZE_FOR_BV=true /z3opt:smt.PHASE_SELECTION=0 /z3opt:smt.RESTART_STRATEGY=0 /z3opt:smt.RESTART_FACTOR=1.5 /z3opt:smt.ARITH.RANDOM_INITIAL_VALUE=true /z3opt:smt.CASE_SPLIT=1
 
 ##############################################################################
 # .okay: Dafny file-level verification, no time limit,
@@ -292,7 +310,18 @@ build/framework/BundleWrapper.o: framework/BundleWrapper.cpp build/Bundle.cpp $(
 rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 -include $(call rwildcard,$(CPP_DEP_DIR)/,*.d)
 
-VERIBETRFS_O_FILES=build/framework/BundleWrapper.o build/framework/Framework.o build/framework/Crc32.o build/framework/Main.o build/framework/Benchmarks.o build/framework/MallocAccounting.o
+VERIBETRFS_AUX_FILES=\
+	build/framework/Benchmarks.o \
+	build/framework/BundleWrapper.o \
+	build/framework/Crc32.o \
+	build/framework/UnverifiedRowCache.o \
+	build/framework/Framework.o \
+	build/framework/MallocAccounting.o \
+	build/framework/NativeArrays.o \
+
+VERIBETRFS_O_FILES=\
+	$(VERIBETRFS_AUX_FILES)\
+	build/framework/Main.o \
 
 LDFLAGS=-msse4.2
 
@@ -311,11 +340,7 @@ build/Veribetrfs: $(VERIBETRFS_O_FILES)
 # YCSB
 
 VERIBETRFS_YCSB_O_FILES=\
-	build/framework/BundleWrapper.o \
-	build/framework/Framework.o \
-	build/framework/Crc32.o \
-	build/framework/Benchmarks.o \
-	build/framework/MallocAccounting.o \
+	$(VERIBETRFS_AUX_FILES)\
 	build/framework/leakfinder.o \
 
 libycsbc: build/libycsbc-libcpp.a \
@@ -383,5 +408,46 @@ build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp
 			ycsb/YcsbMain.cpp \
 			-lycsbc-default -lrocksdb -lpthread -ldl $(LDFLAGS) \
 
+vendor/kyoto/kyotocabinet/libkyotocabinet.a:
+	(cd vendor/kyoto/kyotocabinet; CXX=clang++ CXXFLAGS=$(STDLIB) ./configure; make)
 
-ycsb: build/VeribetrfsYcsb build/RocksYcsb
+build/KyotoYcsb: ycsb/YcsbMain.cpp build/libycsbc-libcpp.a vendor/kyoto/kyotocabinet/libkyotocabinet.a
+	# NOTE: this uses c++17, which is required by hdrhist
+	$(CC) \
+      $(STDLIB) \
+      -o $@ \
+			-Winline -std=c++17 $(O3FLAG) \
+			-L ycsb/build \
+			-I ycsb/build/include \
+			-I $(DAFNY_ROOT)/Binaries/ \
+			-I framework/ \
+			-I build/ \
+			-I vendor/hdrhist/ \
+			-I vendor/kyoto/kyotocabinet \
+			-L vendor/kyoto/kyotocabinet \
+			$(DBG_SYMBOLS_FLAG) \
+			-D_YCSB_KYOTO \
+			ycsb/YcsbMain.cpp \
+			vendor/kyoto/kyotocabinet/libkyotocabinet.a \
+			-lycsbc-libcpp -lpthread -ldl -lz $(LDFLAGS)
+
+# Requires libdb-stl-dev to be installed (on debian, libdbb5.3-stl-dev)
+build/BerkeleyYcsb: ycsb/YcsbMain.cpp build/libycsbc-libcpp.a
+	# NOTE: this uses c++17, which is required by hdrhist
+	$(CC) \
+      $(STDLIB) \
+      -o $@ \
+			-Winline -std=c++17 $(O3FLAG) \
+			-L ycsb/build \
+			-I ycsb/build/include \
+			-I $(DAFNY_ROOT)/Binaries/ \
+			-I framework/ \
+			-I build/ \
+			-I vendor/hdrhist/ \
+			$(DBG_SYMBOLS_FLAG) \
+			-D_YCSB_BERKELEYDB \
+			ycsb/YcsbMain.cpp \
+			-lycsbc-libcpp -lpthread -ldl -lz -ldb_stl $(LDFLAGS)
+
+
+ycsb: build/VeribetrfsYcsb build/RocksYcsb build/KyotoYcsb build/BerkeleyYcsb

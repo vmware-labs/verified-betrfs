@@ -12,7 +12,6 @@ module MkfsImpl {
   import SM = StateModel
   import opened BucketImpl
   import opened NodeImpl
-  import KVList
   import IndirectionTableModel
   import IndirectionTableImpl
   import Marshalling
@@ -40,7 +39,7 @@ module MkfsImpl {
     var nodeAddr := NodeBlockSizeUint64() * MinNodeBlockIndexUint64();
 
     WeightBucketEmpty();
-    var empty := new MutBucket(KVList.Kvl([], []));
+    var empty := new MutBucket();
     MutBucket.ReprSeqDisjointOfLen1([empty]);
     var node := new Node([], None, [empty]);
 
@@ -49,6 +48,9 @@ module MkfsImpl {
     ghost var sector:SI.Sector := SI.SectorNode(node);
     ghost var is:SM.Sector := SI.ISector(sector);
 
+    assert SM.WFNode(is.node) by {
+      reveal_WeightBucketList();
+    }
     var bNode_array := MarshallingImpl.MarshallCheckedSector(SI.SectorNode(node));
     var bNode := bNode_array[..];
 
@@ -93,6 +95,12 @@ module MkfsImpl {
       }
     }
 
+    ghost var gnode := Marshalling.parseCheckedSector(bNode).value.node;
+    assert gnode.pivotTable == [];
+    assert gnode.children == None;
+    //assert gnode.buckets == [ EmptyBucket() ];
+    //assert Marshalling.parseCheckedSector(bNode).Some?;// == Some(SectorNode(BT.G.Node([], None, [MkfsModel.B(map[])])));
+    
     diskContents := map[
       // Map ref 0 to lba 1
       s1addr := bSuperblock,

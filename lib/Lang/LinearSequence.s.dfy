@@ -31,6 +31,18 @@ module {:extern "LinearExtern"} LinearSequence_s {
   function method {:extern "LinearExtern", "seq_length_bound"} seq_length_bound<A>(shared s:seq<A>):()
     ensures |s| < 0xffff_ffff_ffff_ffff
 
+//  // a wrapper object for borrowing immutable sequences. Necessary so that the C++ translation
+//  // can use its construction/destruction to track the reference to the borrowed sequence.
+//  linear datatype as_linear<A> = AsLinear(a:A)
+//
+//  function method {:extern "LinearExtern", "share_seq"} share_seq<A>(shared a:as_linear<seq<A>>):(shared s:seq<A>)
+//    ensures s == a.a
+
+  // Intended usage:
+  //  linear var l := AsLinear(o);  // Give C++ a chance to increment the ref count on o.
+  //  M(share_seq(l));              // borrow the seq in the call to M.
+  //  linear var AsLinear(_) := l;  // Free the wrapper, giving C++ a chance to drop the ref count.
+
 
   type {:extern "predefined"} lseq<A>
 

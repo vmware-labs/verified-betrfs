@@ -58,7 +58,8 @@ class Traverser:
         self.output.append('subgraph cluster_legend {')
         self.output.append('  label="legend"')
         self.output.append('  style=filled')
-        self.output.append('  color=lightblue')
+        self.output.append('  color=lightgrey')
+        self.output.append("    fontsize=48")
         for sample in samples:
             self.output.append('"%s" [style=filled; %s; label="%s"];' % (
                 sample.result, sample.style, sample.result))
@@ -71,7 +72,7 @@ class Traverser:
     def addFillColors(self):
         def breakName(name):
             parts = name.rsplit("/", 1)
-            return "/\n".join(parts)
+            return parts[1] #"/\n".join(parts)
 
         for iref in self.visited:
             summary = self.getSummary(iref)
@@ -92,6 +93,7 @@ class Traverser:
             self.output.append('    label="%s"' % prefix)
             self.output.append("    style=filled")
             self.output.append("    color=lightblue")
+            self.output.append("    fontsize=48")
             for member in members:
                 self.output.append("    %s;" % member);
             self.output.append("}");

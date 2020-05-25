@@ -68,19 +68,19 @@ module EvictModel {
       // If we can deallocate something, just do that.
       (s', io') == Dealloc(k, s, io, ref.value)
     ) else (
-      var ref := LruModel.Next(s.lru);
-      if ref == BT.G.Root() then (
+      var refOpt := LruModel.NextOpt(s.lru);
+      if refOpt.None? then (
         && s' == s
         && io' == io
-      ) else if NeedToWrite(s, ref) then (
+      ) else if NeedToWrite(s, refOpt.value) then (
         if && s.outstandingIndirectionTableWrite.None? then (
-          && TryToWriteBlock(k, s, io, ref, s', io')
+          && TryToWriteBlock(k, s, io, refOpt.value, s', io')
         ) else (
           && s' == s
           && io' == io
         )
-      ) else if CanEvict(s, ref) then (
-        && s' == Evict(k, s, ref)
+      ) else if CanEvict(s, refOpt.value) then (
+        && s' == Evict(k, s, refOpt.value)
         && io' == io
       ) else (
         && s' == s
@@ -106,19 +106,19 @@ module EvictModel {
     if ref.Some? {
       DeallocCorrect(k, s, io, ref.value);
     } else {
-      var ref := LruModel.Next(s.lru);
-      if ref == BT.G.Root() {
+      var refOpt := LruModel.NextOpt(s.lru);
+      if refOpt.None? {
         assert noop(k, IBlockCache(s), IBlockCache(s));
-      } else if (NeedToWrite(s, ref)) {
+      } else if (NeedToWrite(s, refOpt.value)) {
         if s.outstandingIndirectionTableWrite.None? {
-          TryToWriteBlockCorrect(k, s, io, ref, s', io');
+          TryToWriteBlockCorrect(k, s, io, refOpt.value, s', io');
         } else {
           assert noop(k, IBlockCache(s), IBlockCache(s));
         }
-      } else if CanEvict(s, ref) {
-        LruModel.LruRemove(s.lru, ref);
+      } else if CanEvict(s, refOpt.value) {
+        LruModel.LruRemove(s.lru, refOpt.value);
         assert WFBCVars(s');
-        assert stepsBC(k, IBlockCache(s), IBlockCache(s'), StatesInternalOp, io', BC.EvictStep(ref));
+        assert stepsBC(k, IBlockCache(s), IBlockCache(s'), StatesInternalOp, io', BC.EvictStep(refOpt.value));
       } else {
         assert noop(k, IBlockCache(s), IBlockCache(s));
       }

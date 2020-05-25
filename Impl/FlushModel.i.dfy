@@ -1,7 +1,7 @@
 include "BookkeepingModel.i.dfy"
 include "IOModel.i.dfy"
 include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
-include "../lib/Buckets/KVListPartialFlush.i.dfy"
+include "../lib/Buckets/BucketModel.i.dfy"
 
 module FlushModel { 
   import opened StateModel
@@ -9,7 +9,6 @@ module FlushModel {
   import opened BookkeepingModel
   import opened ViewOp
   import opened DiskOpModel
-  import KVListPartialFlush
 
   import opened Options
   import opened Maps
@@ -18,6 +17,7 @@ module FlushModel {
 
   import opened BucketsLib
   import opened BucketWeights
+  import BucketModel
   import opened Bounds
 
   import opened NativeTypes
@@ -30,7 +30,7 @@ module FlushModel {
 
   requires parentref in s.ephemeralIndirectionTable.graph
   requires parentref in s.cache
-
+  
   requires s.cache[parentref].children.Some?
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires s.cache[parentref].children.value[slot] == childref
@@ -53,11 +53,13 @@ module FlushModel {
       lemmaChildrenConditionsOfNode(k, s, childref);
       lemmaChildrenConditionsOfNode(k, s, parentref);
 
-      var (newparentBucket, newbuckets) := KVListPartialFlush.bucketPartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
+      var partialFlushResult(newparentBucket, newbuckets) :=
+          BucketModel.partialFlush(
+            parent.buckets[slot], child.pivotTable, child.buckets);
       var newchild := child.(buckets := newbuckets);
       var (s2, newchildref) := allocBookkeeping(k, s, newchild.children);
       lemmaChildrenConditionsUpdateOfAllocBookkeeping(
-          k, s, newchild.children, parent.children.value, slot);
+        k, s, newchild.children, parent.children.value, slot);
       if newchildref.None? then (
         s2
       ) else (
@@ -95,16 +97,27 @@ module FlushModel {
       lemmaChildrenConditionsOfNode(k, s, childref);
       lemmaChildrenConditionsOfNode(k, s, parentref);
 
-      var (newparentBucket, newbuckets) := KVListPartialFlush.bucketPartialFlush(parent.buckets[slot], child.buckets, child.pivotTable);
-      var flushedKeys := KVListPartialFlush.bucketPartialFlushRes(parent.buckets[slot], child.buckets, child.pivotTable);
+      var partialFlushResult(newparentBucket, newbuckets) :=
+        BucketModel.partialFlush(
+          parent.buckets[slot], child.pivotTable, child.buckets);
 
-      WFBucketIntersect(parent.buckets[slot], flushedKeys);
+      var flushedKeys;
+      if BucketWellMarshalled(parent.buckets[slot])
+          && BucketListWellMarshalled(child.buckets)
+          && WFBucketListProper(child.buckets, child.pivotTable)
+      {
+        flushedKeys := BucketModel.partialFlushCorrect(parent.buckets[slot], child.pivotTable, child.buckets);
+      }
+
+      BucketModel.partialFlushWeightBound(parent.buckets[slot], child.pivotTable, child.buckets);
+      
+      /*WFBucketIntersect(parent.buckets[slot], flushedKeys);
       WFBucketComplement(parent.buckets[slot], flushedKeys);
       WeightBucketComplement(parent.buckets[slot], flushedKeys);
       WFBucketListFlush(
         BucketIntersect(parent.buckets[slot], flushedKeys),
         child.buckets,
-        child.pivotTable);
+        child.pivotTable);*/
       WeightBucketListShrinkEntry(parent.buckets, slot, newparentBucket);
 
       // TODO these are actually kind of annoying right now
@@ -147,13 +160,22 @@ module FlushModel {
           lemmaChildInGraph(k, s, childref, ref);
         }
 
-        WeightBucketListFlush(parent.buckets[slot], child.buckets, child.pivotTable);
         WeightBucketListClearEntry(parent.buckets, slot);
 
         allocCorrect(k, s, newchild);
         writeCorrect(k, s2, parentref, newparent);
 
-        var flushStep := BT.NodeFlush(parentref, INode(parent), childref, INode(child), newchildref.value, INode(newchild), slot, flushedKeys);
+        var flushStep := BT.NodeFlush(
+          parentref,
+          INode(parent),
+          childref,
+          INode(child),
+          newchildref.value,
+          INode(newchild),
+          slot,
+          flushedKeys,
+          INode(newparent).buckets[slot],
+          INode(newchild).buckets);
         assert BT.ValidFlush(flushStep);
         var step := BT.BetreeFlush(flushStep);
         assert INode(newparent) == BT.FlushOps(flushStep)[1].node;

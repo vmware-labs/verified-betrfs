@@ -193,19 +193,26 @@ module Math {
       assert x/c < d;
       assert (x/c)/d == 0;
     } else {
-      lemma_div_ind(x - c*d, c*d);
-      assert x / (c*d) == (x-c*d) / (c*d) + 1;
-
-      lemma_div_ind((x - c*d) / c, d);
-      lemma_add_mul_div(x-c*d, d, c);
-
-      lemma_div_denominator(x - c*d, c, d);
-
-      assert (x / c) / d
-          == ((x - c*d + c*d) / c) / d
-          == ((x - c*d) / c + d) / d
-          == ((x - c*d) / c) / d + 1
-          == ((x - c*d) / (c*d)) + 1;
+      calc {
+        (x / c) / d;
+        ((x - c*d + c*d) / c) / d;
+        {
+          lemma_add_mul_div(x-c*d, d, c);
+        }
+        ((x - c*d) / c + d) / d;
+        {
+          lemma_div_ind((x - c*d) / c, d);
+        }
+        ((x - c*d) / c) / d + 1;
+        {
+          lemma_div_denominator(x - c*d, c, d);
+        }
+        ((x - c*d) / (c*d)) + 1;
+        {
+          lemma_div_ind(x - c*d, c*d);
+        }
+        x / (c*d);
+      }
     }
   }
 }

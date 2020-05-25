@@ -311,7 +311,18 @@ module PivotBetreeSpec {
 
   //// Flush
 
-  datatype NodeFlush = NodeFlush(parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, newchild: Node, ghost slotIndex: int, keys: set<Key>)
+  datatype NodeFlush = NodeFlush(
+    parentref: Reference,
+    parent: Node,
+    childref: Reference,
+    child: Node,
+    newchildref: Reference,
+    newchild: Node,
+    ghost slotIndex: int,
+    keys: set<Key>,
+    newParentBucket: Bucket,
+    newChildBuckets: seq<Bucket>
+  )
 
   predicate ValidFlush(f: NodeFlush)
   {
@@ -320,12 +331,19 @@ module PivotBetreeSpec {
     && 0 <= f.slotIndex < |f.parent.buckets|
     && f.parent.children.Some?
     && f.parent.children.value[f.slotIndex] == f.childref
-    && BucketListWellMarshalled(f.child.buckets)
-    && BucketWellMarshalled(f.parent.buckets[f.slotIndex])
-    && WeightBucketList(BucketListFlush(BucketIntersect(
-        f.parent.buckets[f.slotIndex], f.keys),
-        f.child.buckets,
-        f.child.pivotTable)) <= MaxTotalBucketWeight()
+    && WFBucketList(f.newChildBuckets, f.child.pivotTable)
+    && WFBucket(f.newParentBucket)
+    && WeightBucketList(f.newChildBuckets) <= MaxTotalBucketWeight()
+    && WeightBucket(f.newParentBucket) <= WeightBucket(f.parent.buckets[f.slotIndex])
+    && (BucketListWellMarshalled(f.child.buckets)
+          && BucketWellMarshalled(f.parent.buckets[f.slotIndex])
+          && WFBucketListProper(f.child.buckets, f.child.pivotTable)
+        ==>
+      && f.newParentBucket == BucketComplement(f.parent.buckets[f.slotIndex], f.keys)
+      && f.newChildBuckets == BucketListFlush(
+          BucketIntersect(f.parent.buckets[f.slotIndex], f.keys),
+          f.child.buckets, f.child.pivotTable)
+    )
   }
 
   function FlushReads(f: NodeFlush) : seq<ReadOp>
@@ -343,9 +361,9 @@ module PivotBetreeSpec {
     var newparent := Node(
         f.parent.pivotTable,
         Some(f.parent.children.value[f.slotIndex := f.newchildref]),
-        f.parent.buckets[f.slotIndex := BucketComplement(f.parent.buckets[f.slotIndex], f.keys)]
+        f.parent.buckets[f.slotIndex := f.newParentBucket]
       );
-    var newchild := AddMessagesToNode(f.child, BucketIntersect(f.parent.buckets[f.slotIndex], f.keys));
+    var newchild := f.child.(buckets := f.newChildBuckets);
     var allocop := G.AllocOp(f.newchildref, newchild);
     var writeop := G.WriteOp(f.parentref, newparent);
     [allocop, writeop]

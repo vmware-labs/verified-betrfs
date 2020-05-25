@@ -1,26 +1,22 @@
-include "../Lang/LinearSequence.s.dfy"
-include "../Lang/LinearSequence.i.dfy"
 include "../Base/sequences.i.dfy"
 include "../Base/Maps.s.dfy"
-include "../Base/total_order.i.dfy"
+include "../Base/total_order_impl.i.dfy"
 include "../Base/mathematics.i.dfy"
 
 abstract module BtreeModel {
-  import opened LinearSequence_s
-  import opened LinearSequence_i
   import opened Seq = Sequences
   import opened Maps
-  import Keys = Lexicographic_Byte_Order
+  import KeysImpl = Lexicographic_Byte_Order_Impl
+  import Keys = KeysImpl.Ord
   import Integer_Order
   import Math = Mathematics
   
   type Key = Keys.Element
   type Value
     
-  linear datatype Node =
-    | Leaf(linear keys: seq<Key>, linear values: seq<Value>)
-    | Index(linear pivots: seq<Key>, linear children: lseq<Node>)
-
+  datatype Node =
+    | Leaf(keys: seq<Key>, values: seq<Value>)
+    | Index(pivots: seq<Key>, children: seq<Node>)
 
   function {:opaque} AllKeys(node: Node) : set<Key>
     ensures node.Leaf? && 0 < |node.keys| ==> AllKeys(node) != {}
@@ -35,9 +31,10 @@ abstract module BtreeModel {
         else
           result
       case Index(pivots, children) =>
-        var pivotKeys := (set k | k in pivots);
-        var indexKeys := (set i, k | 0 <= i < |children| && k in AllKeys(children[i]) :: k);
-        var result := pivotKeys + indexKeys;
+        var result := 
+        (set k | k in pivots)
+        +
+        (set i, k | 0 <= i < |children| && k in AllKeys(children[i]) :: k);
         if 0 < |node.pivots| then
           assert node.pivots[0] in result;
           result
@@ -77,14 +74,14 @@ abstract module BtreeModel {
       && (forall i :: 0 < i < |node.children|   ==> AllKeysAboveBound(node, i))
   }
 
-  lemma WFIndexAllKeys(node: Node)
-    requires node.Index?
-    requires WF(node)
-    ensures AllKeys(node) != {}
-  {
-    var x :| x in AllKeys(node.children[0]);
-    reveal_AllKeys();
-  }
+//~  lemma WFIndexAllKeys(node: Node)
+//~    requires node.Index?
+//~    requires WF(node)
+//~    ensures AllKeys(node) != {}
+//~  {
+//~    var x :| x in AllKeys(node.children[0]);
+//~    reveal_AllKeys();
+//~  }
   
   function {:opaque} Interpretation(node: Node) : map<Key, Value>
     requires WF(node)
@@ -122,7 +119,7 @@ abstract module BtreeModel {
     assert key in AllKeys(node);
     assert key in interp;
   }
-  
+
   lemma AllKeysIsConsistentWithInterpretation(node: Node, key: Key)
     requires WF(node)
     requires key in Interpretation(node)
@@ -136,6 +133,182 @@ abstract module BtreeModel {
     }
   }
 
+  lemma ChildInterpretationSubMap(node: Node, i: nat)
+    requires WF(node)
+    requires node.Index?
+    requires i < |node.children|
+    ensures IsSubMap(Interpretation(node.children[i]), Interpretation(node))
+  {
+    forall k | k in Interpretation(node.children[i])
+      ensures MapsAgreeOnKey(Interpretation(node), Interpretation(node.children[i]), k)
+    {
+      AllKeysIsConsistentWithInterpretation(node.children[i], k);
+      if 0 < i {
+        assert AllKeysAboveBound(node, i);
+      }
+      if i < |node.children| - 1 {
+        assert AllKeysBelowBound(node, i);
+      }
+      Keys.LargestLteIsUnique2(node.pivots, k, i as int - 1);
+      InterpretationDelegation(node, k);
+    }
+  }
+  
+  lemma IndexesNonempty(node: Node)
+    requires WF(node)
+    requires node.Index?
+    ensures 0 < |Interpretation(node)|
+  {
+    var child := node.children[0];
+    if child.Leaf? {
+      reveal_Interpretation();
+      reveal_AllKeys();
+      assert 0 < |child.keys|;
+      var key := child.keys[0];
+      assert key  in Interpretation(child);
+      assert key in AllKeys(child);
+      if 0 < |node.pivots| {
+        assert AllKeysBelowBound(node, 0);
+        assert Keys.LargestLte(node.pivots, key) == -1;
+      } else {
+        assert Keys.LargestLte(node.pivots, key) == -1;
+      }
+      InterpretationDelegation(node, key);
+    } else {
+      IndexesNonempty(child);
+      var key :| key in Interpretation(child);
+      AllKeysIsConsistentWithInterpretation(child, key);
+      assert key in AllKeys(child);
+      if 0 < |node.pivots| {
+        assert AllKeysBelowBound(node, 0);
+        assert Keys.LargestLte(node.pivots, key) == -1;
+      } else {
+        assert Keys.LargestLte(node.pivots, key) == -1;
+      }
+      InterpretationDelegation(node, key);      
+    }
+  }
+  
+  lemma ChildOfIndexNonempty(node: Node, i: nat)
+    requires WF(node)
+    requires node.Index?
+    requires i < |node.children|
+    ensures 0 < |Interpretation(node.children[i])|
+  {
+    var child := node.children[i];
+    if child.Leaf? {
+      reveal_Interpretation();
+      reveal_AllKeys();
+      assert 0 < |child.keys|;
+      var key := child.keys[0];
+      assert key  in Interpretation(child);      
+    } else {
+      IndexesNonempty(child);
+    }
+  }
+  
+  function MinKey(node: Node) : (result: Key)
+    requires WF(node)
+    requires 0 < |Interpretation(node)|
+  {
+    if node.Leaf? then (
+      assert |node.keys| == 0 ==> Interpretation(node) == map[] by {
+        reveal_Interpretation();
+      }
+      node.keys[0]
+    ) else (
+      ChildOfIndexNonempty(node, 0);
+      MinKey(node.children[0])
+    )
+  }
+
+  lemma MinKeyProperties(node: Node)
+    requires WF(node)
+    requires 0 < |Interpretation(node)|
+    ensures MinKey(node) in Interpretation(node)
+    ensures forall key | key in Interpretation(node) :: Keys.lte(MinKey(node), key)
+  {
+    var result := MinKey(node);
+    if node.Leaf? {
+      reveal_Interpretation();
+    } else {
+      var child := node.children[0];
+      ChildOfIndexNonempty(node, 0);
+      MinKeyProperties(child);
+      if 0 < |node.pivots| {
+        assert AllKeysBelowBound(node, 0);
+        AllKeysIsConsistentWithInterpretation(child, result);
+        assert Keys.LargestLte(node.pivots, result) == -1;
+      } else {
+        assert Keys.LargestLte(node.pivots, result) == -1;
+      }
+      InterpretationDelegation(node, result);
+      forall key | key in Interpretation(node)
+        ensures Keys.lte(result, key)
+      {
+        var keyidx := 1 + Keys.LargestLte(node.pivots, key);
+        InterpretationInheritance(node, key);
+        if keyidx == 0 {
+        } else {
+          assert AllKeysBelowBound(node, 0);
+          Keys.IsStrictlySortedImpliesLte(node.pivots, 0, keyidx-1);
+          assert AllKeysAboveBound(node, keyidx);
+        }
+      }
+    }
+  }
+
+  function MaxKey(node: Node) : (result: Key)
+    requires WF(node)
+    requires 0 < |Interpretation(node)|
+  {
+    if node.Leaf? then (
+      assert |node.keys| == 0 ==> Interpretation(node) == map[] by {
+        reveal_Interpretation();
+      }
+      Last(node.keys)
+    ) else (
+      ChildOfIndexNonempty(node, |node.children| - 1);
+      MaxKey(Last(node.children))
+    )
+  }
+
+  lemma MaxKeyProperties(node: Node)
+    requires WF(node)
+    requires 0 < |Interpretation(node)|
+    ensures MaxKey(node) in Interpretation(node)
+    ensures forall key | key in Interpretation(node) :: Keys.lte(key, MaxKey(node))
+  {
+    var result := MaxKey(node);
+    if node.Leaf? {
+      reveal_Interpretation();
+    } else {
+      var child := Last(node.children);
+      ChildOfIndexNonempty(node, |node.children|-1);
+      MaxKeyProperties(child);
+      if 0 < |node.pivots| {
+        assert AllKeysAboveBound(node, |node.children|-1);
+        AllKeysIsConsistentWithInterpretation(child, result);
+        assert Keys.LargestLte(node.pivots, result) == |node.pivots|-1;
+      } else {
+        assert Keys.LargestLte(node.pivots, result) == |node.pivots|-1;
+      }
+      InterpretationDelegation(node, result);
+      forall key | key in Interpretation(node)
+        ensures Keys.lte(key, result)
+      {
+        var keyidx := 1 + Keys.LargestLte(node.pivots, key);
+        InterpretationInheritance(node, key);
+        if keyidx == |node.children| - 1 {
+        } else {
+          assert AllKeysBelowBound(node, keyidx);
+          Keys.IsStrictlySortedImpliesLte(node.pivots, keyidx, |node.pivots| - 1);
+          assert AllKeysAboveBound(node, |node.children| - 1);
+        }
+      }
+    }
+  }
+  
   predicate SplitLeaf(oldleaf: Node, leftleaf: Node, rightleaf: Node, pivot: Key)
   {
     && oldleaf.Leaf?
@@ -161,6 +334,27 @@ abstract module BtreeModel {
     assert rightleaf.keys == oldleaf.keys[|leftleaf.keys|..|oldleaf.keys|];
   }
 
+//~  lemma MergeLeafPreservesWF(oldleaf: Node, leftleaf: Node, rightleaf: Node, pivot: Key)
+//~    requires WF(leftleaf)
+//~    requires WF(rightleaf)
+//~    requires SplitLeaf(oldleaf, leftleaf, rightleaf, pivot)
+//~    ensures WF(oldleaf)
+//~  {
+//~    forall i, j | 0 <= i < j < |oldleaf.keys|
+//~      ensures Keys.lt(oldleaf.keys[i], oldleaf.keys[j])
+//~    {
+//~      if j < |leftleaf.keys| {
+//~        Keys.IsStrictlySortedImpliesLt(leftleaf.keys, i, j);
+//~      } else if i < |leftleaf.keys| {
+//~        Keys.IsStrictlySortedImpliesLte(leftleaf.keys, i, |leftleaf.keys|-1);
+//~        Keys.IsStrictlySortedImpliesLte(rightleaf.keys, 0, j - |leftleaf.keys|);
+//~      } else {
+//~        Keys.IsStrictlySortedImpliesLt(rightleaf.keys, i - |leftleaf.keys|, j - |leftleaf.keys|);
+//~      }
+//~    }
+//~    Keys.reveal_IsStrictlySorted();
+//~  }
+  
   lemma SplitLeafInterpretation(oldleaf: Node, leftleaf: Node, rightleaf: Node, pivot: Key)
     requires SplitLeaf(oldleaf, leftleaf, rightleaf, pivot)
     requires WF(oldleaf)
@@ -208,8 +402,7 @@ abstract module BtreeModel {
     requires |node.children| == |node.pivots| + 1
     requires 0 <= from < to <= |node.children|
   {
-    Index(node.pivots[from..to-1],
-      imagine_lseq(lseqs(node.children)[from..to]))
+    Index(node.pivots[from..to-1], node.children[from..to])
   }
 
   lemma SubIndexPreservesWF(node: Node, from: int, to: int)
@@ -230,8 +423,6 @@ abstract module BtreeModel {
     {
       assert AllKeysAboveBound(node, from + i);
     }
-    assert |subindex.pivots| == |subindex.children| - 1;
-    assert WF(subindex);
   }
   
   predicate SplitIndex(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
@@ -241,10 +432,9 @@ abstract module BtreeModel {
     && rightindex.Index?
     && 0 < |leftindex.children| < |oldindex.children|
     && |oldindex.children| == |oldindex.pivots| + 1
-
     && leftindex == SubIndex(oldindex, 0, |leftindex.children|)
     && rightindex == SubIndex(oldindex, |leftindex.children|, |oldindex.children|)
-    && (forall key :: key in AllKeys(linLast(leftindex.children)) ==> Keys.lt(key, pivot))
+    && (forall key :: key in AllKeys(Last(leftindex.children)) ==> Keys.lt(key, pivot))
     && (forall key :: key in AllKeys(rightindex.children[0]) ==> Keys.lte(pivot, key))
     && pivot == oldindex.pivots[|leftindex.pivots|]
   }
@@ -258,6 +448,59 @@ abstract module BtreeModel {
     SubIndexPreservesWF(oldindex, 0, |leftindex.children|);
     SubIndexPreservesWF(oldindex, |leftindex.children|, |oldindex.children|);
   }
+  
+//~  lemma MergeIndexPreservesWF(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
+//~    requires WF(leftindex)
+//~    requires WF(rightindex)
+//~    requires SplitIndex(oldindex, leftindex, rightindex, pivot)
+//~    ensures WF(oldindex)
+//~  {
+//~    forall i, j | 0 <= i < j < |oldindex.pivots|
+//~      ensures Keys.lt(oldindex.pivots[i], oldindex.pivots[j])
+//~    {
+//~      if j < |leftindex.pivots| {
+//~        Keys.IsStrictlySortedImpliesLt(leftindex.pivots, i, j);
+//~      } else if j == |leftindex.pivots| {
+//~        Keys.IsStrictlySortedImpliesLte(leftindex.pivots, i, j-1);
+//~        assert AllKeysAboveBound(leftindex, j);
+//~      } else if i <  |leftindex.pivots| {
+//~        Keys.IsStrictlySortedImpliesLte(leftindex.pivots, i, |leftindex.pivots|-1);
+//~        assert AllKeysAboveBound(leftindex, |leftindex.pivots|);
+//~        var lwit :| lwit in AllKeys(Last(leftindex.children));
+//~        var rwit :| rwit in AllKeys(rightindex.children[0]);
+//~        assert AllKeysBelowBound(rightindex, 0);
+//~        Keys.IsStrictlySortedImpliesLte(rightindex.pivots, 0, j - |leftindex.children|);
+//~      } else if i == |leftindex.pivots| {
+//~        assert AllKeysBelowBound(rightindex, 0);
+//~        Keys.IsStrictlySortedImpliesLte(rightindex.pivots, 0, j - |leftindex.children|);
+//~      } else {
+//~        Keys.IsStrictlySortedImpliesLt(rightindex.pivots, i - |leftindex.children|, j - |leftindex.children|);
+//~      }
+//~    }
+//~    Keys.reveal_IsStrictlySorted();
+//~
+//~    forall i | 0 <= i < |oldindex.children|-1
+//~      ensures AllKeysBelowBound(oldindex, i)
+//~    {
+//~      if i < |leftindex.children|-1 {
+//~        assert AllKeysBelowBound(leftindex, i);
+//~      } else if i == |leftindex.children|-1 {
+//~      } else {
+//~        assert AllKeysBelowBound(rightindex, i - |leftindex.children|);
+//~      }
+//~    }
+//~    forall i | 0 < i < |oldindex.children|
+//~      ensures AllKeysAboveBound(oldindex, i)
+//~    {
+//~      if i < |leftindex.children| {
+//~        assert AllKeysAboveBound(leftindex, i);
+//~      } else if i == |leftindex.children| {
+//~      } else {
+//~        assert AllKeysAboveBound(rightindex, i - |leftindex.children|);
+//~      }
+//~    }
+//~    assert WF(oldindex);
+//~  }
   
   lemma SplitIndexInterpretation1(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
     requires WF(oldindex)
@@ -341,6 +584,8 @@ abstract module BtreeModel {
     SplitIndexInterpretation2(oldindex, leftindex, rightindex, pivot);
   }
 
+  // TODO: maybe eliminate wit by just requiring pivot to be larger
+  // than the lower-bounding pivot in SplitChildOfIndex.
   predicate SplitNode(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
   {
     || SplitLeaf(oldnode, leftnode, rightnode, pivot)
@@ -359,6 +604,19 @@ abstract module BtreeModel {
       SplitIndexPreservesWF(oldnode, leftnode, rightnode, pivot);
     }
   }
+    
+//~  lemma MergeNodePreservesWF(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
+//~    requires SplitNode(oldnode, leftnode, rightnode, pivot)
+//~    requires WF(leftnode)
+//~    requires WF(rightnode)
+//~    ensures WF(oldnode)
+//~  {
+//~    if SplitLeaf(oldnode, leftnode, rightnode, pivot) {
+//~      MergeLeafPreservesWF(oldnode, leftnode, rightnode, pivot);
+//~    } else {
+//~      MergeIndexPreservesWF(oldnode, leftnode, rightnode, pivot);
+//~    }
+//~  }
     
   lemma SplitNodeInterpretation(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
     requires WF(oldnode)
@@ -440,7 +698,7 @@ abstract module BtreeModel {
         Keys.IsSortedImpliesLte(oldnode.pivots, |leftnode.pivots|, |leftnode.children| + i - 1);
       }
     }
-    assert linLast(rightnode.children) == linLast(oldnode.children);
+    assert Last(rightnode.children) == Last(oldnode.children);
   }
   
   lemma SplitNodeAllKeys(oldnode: Node, leftnode: Node, rightnode: Node, pivot: Key)
@@ -472,7 +730,7 @@ abstract module BtreeModel {
     && |oldindex.pivots| == |oldindex.children| - 1
     && SplitNode(oldindex.children[childidx], newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx])
     && newindex.pivots == Seq.insert(oldindex.pivots, newindex.pivots[childidx], childidx)
-    && lseqs(newindex.children) == Seq.replace1with2(lseqs(oldindex.children), newindex.children[childidx], newindex.children[childidx+1], childidx)
+    && newindex.children == Seq.replace1with2(oldindex.children, newindex.children[childidx], newindex.children[childidx+1], childidx)
   }
 
   lemma SplitChildOfIndexPreservesWF(oldindex: Node, newindex: Node, childidx: int)
@@ -534,6 +792,64 @@ abstract module BtreeModel {
     }
   }
 
+//~  lemma MergeChildOfIndexPreservesWF(oldindex: Node, newindex: Node, childidx: int)
+//~    requires WF(newindex)
+//~    requires SplitChildOfIndex(oldindex, newindex, childidx)
+//~    ensures WF(oldindex)
+//~  {
+//~    assert Keys.IsStrictlySorted(oldindex.pivots) by { Keys.reveal_IsStrictlySorted(); }
+//~    forall i | 0 <= i < |oldindex.children|
+//~      ensures WF(oldindex.children[i])
+//~    {
+//~      if i < childidx {
+//~      } else if i == childidx {
+//~        MergeNodePreservesWF(oldindex.children[childidx],
+//~          newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx]);
+//~      } else {
+//~      }
+//~    }
+//~    forall i | 0 <= i < |oldindex.children|-1
+//~      ensures AllKeysBelowBound(oldindex, i)
+//~    {
+//~      if i < childidx {
+//~        assert AllKeysBelowBound(newindex, i);
+//~      } else if i == childidx {
+//~        SplitNodeAllKeys(oldindex.children[childidx],
+//~          newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx]);
+//~        assert AllKeysBelowBound(newindex, childidx);
+//~        assert AllKeysBelowBound(newindex, childidx+1);
+//~        Keys.IsStrictlySortedImpliesLt(newindex.pivots, childidx, childidx + 1);
+//~      } else {
+//~        assert AllKeysBelowBound(newindex, i+1);
+//~      }
+//~    }
+//~    forall i | 0 < i < |oldindex.children|
+//~      ensures AllKeysAboveBound(oldindex, i)
+//~    {
+//~      if i < childidx {
+//~        assert AllKeysAboveBound(newindex, i);
+//~      } else if i == childidx {
+//~        SplitNodeAllKeys(oldindex.children[childidx],
+//~          newindex.children[childidx], newindex.children[childidx+1], newindex.pivots[childidx]);
+//~        Keys.IsStrictlySortedImpliesLt(newindex.pivots, childidx-1, childidx);
+//~        forall key | key in AllKeys(oldindex.children[childidx])
+//~          ensures Keys.lte(oldindex.pivots[childidx-1], key)
+//~        {
+//~          if key in AllKeys(newindex.children[childidx]) {
+//~            assert AllKeysAboveBound(newindex, childidx);
+//~          } else if key == newindex.pivots[childidx] {
+//~            Keys.IsStrictlySortedImpliesLt(newindex.pivots, childidx-1, childidx);
+//~          } else {
+//~            assert key in AllKeys(newindex.children[childidx+1]);
+//~            assert AllKeysAboveBound(newindex, childidx+1);
+//~          }
+//~        }
+//~      } else {
+//~        assert AllKeysAboveBound(newindex, i+1);
+//~      }
+//~    }
+//~  }
+  
   lemma SplitChildOfIndexPreservesAllKeys(oldindex: Node, newindex: Node, childidx: int)
     requires WF(oldindex)
     requires WF(newindex)
@@ -737,13 +1053,7 @@ abstract module BtreeModel {
     requires WF(newchild)
     requires pos == Keys.LargestLte(node.pivots, key)+1
     requires Interpretation(newchild) == Interpretation(node.children[pos])[key := value]
-
-//    requires newnode == node.(children := node.children[pos := newchild])
-// Can't do update on linear datatype, so instead we'll break out the parts:
-    requires newnode.Index?
-    requires newnode.pivots == node.pivots
-    requires lseqs(newnode.children) == lseqs(node.children)[pos := newchild]
-
+    requires newnode == node.(children := node.children[pos := newchild])
     requires AllKeys(newchild) <= AllKeys(node.children[pos]) + {key}
     ensures WF(newnode)
     ensures Interpretation(newnode) == Interpretation(node)[key := value]
@@ -823,7 +1133,7 @@ abstract module BtreeModel {
 
   function Grow(node: Node) : Node
   {
-    Index([], imagine_lseq([node]))
+    Index([], [node])
   }
 
   lemma GrowPreservesWF(node: Node)
@@ -831,6 +1141,9 @@ abstract module BtreeModel {
     requires AllKeys(node) != {}
     ensures WF(Grow(node))
   {
+    assert Keys.IsStrictlySorted([]) by {
+      Keys.reveal_IsStrictlySorted();
+    }
   }
 
   lemma GrowPreservesAllKeys(node: Node)
@@ -849,6 +1162,7 @@ abstract module BtreeModel {
   {
     reveal_Interpretation();
     var interp := Interpretation(node);
+    GrowPreservesWF(node);
     var ginterp := Interpretation(Grow(node));
     
     forall key | key in interp
@@ -858,532 +1172,678 @@ abstract module BtreeModel {
     }
   }
 
-  // function ReplacePivot(node: Node, pivotidx: int, pivot: Key) : Node
-  //   requires WF(node)
-  //   requires node.Index?
-  //   requires 0 <= pivotidx < |node.pivots|
-  // {
-  //   node.(pivots := node.pivots[pivotidx := pivot])
-  // }
+  function ReplacePivot(node: Node, pivotidx: int, pivot: Key) : Node
+    requires WF(node)
+    requires node.Index?
+    requires 0 <= pivotidx < |node.pivots|
+  {
+    node.(pivots := node.pivots[pivotidx := pivot])
+  }
 
-  // // Used in splitting a tree into two trees.
-  // lemma ReplacePivotIsCorrect(node: Node, pivotidx: int, pivot: Key)
-  //   requires WF(node)
-  //   requires node.Index?
-  //   requires 0 <= pivotidx < |node.pivots|
-  //   requires forall key :: key in AllKeys(node.children[pivotidx]) ==> Keys.lt(key, pivot)
-  //   requires forall key :: key in AllKeys(node.children[pivotidx+1]) ==> Keys.lte(pivot, key)
-  //   ensures WF(ReplacePivot(node, pivotidx, pivot))
-  //   ensures Interpretation(ReplacePivot(node, pivotidx, pivot)) == Interpretation(node)
-  //   ensures AllKeys(ReplacePivot(node, pivotidx, pivot)) <= AllKeys(node) + {pivot}
-  // {
-  //   reveal_Interpretation();
-  //   reveal_AllKeys();
-  //   var newnode := ReplacePivot(node, pivotidx, pivot);
-  //   
-  //   if pivotidx < |node.pivots|-1 {
-  //     var wit :| wit in AllKeys(node.children[pivotidx+1]);
-  //     assert AllKeysBelowBound(node, pivotidx+1);
-  //     assert Keys.lte(pivot, wit);
-  //     assert Keys.lt(pivot, node.pivots[pivotidx+1]);
-  //   }
-  //   if 0 < pivotidx {
-  //     var wit :| wit in AllKeys(node.children[pivotidx]);
-  //     assert AllKeysAboveBound(node, pivotidx);
-  //     assert Keys.lt(wit, pivot);
-  //     assert Keys.lt(node.pivots[pivotidx-1], pivot);
-  //   }
-  //   Keys.strictlySortedReplace(node.pivots, pivot, pivotidx);
-  //   
-  //   forall i | 0 <= i < |newnode.children|-1
-  //     ensures AllKeysBelowBound(newnode, i)
-  //   {
-  //     assert AllKeysBelowBound(node, i);
-  //   }
-  //   forall i | 0 < i < |newnode.children|
-  //     ensures AllKeysAboveBound(newnode, i)
-  //   {
-  //     assert AllKeysAboveBound(node, i);
-  //   }
+  // Used in splitting a tree into two trees.
+//~  lemma ReplacePivotIsCorrect(node: Node, pivotidx: int, pivot: Key)
+//~    requires WF(node)
+//~    requires node.Index?
+//~    requires 0 <= pivotidx < |node.pivots|
+//~    requires forall key :: key in AllKeys(node.children[pivotidx]) ==> Keys.lt(key, pivot)
+//~    requires forall key :: key in AllKeys(node.children[pivotidx+1]) ==> Keys.lte(pivot, key)
+//~    ensures WF(ReplacePivot(node, pivotidx, pivot))
+//~    ensures Interpretation(ReplacePivot(node, pivotidx, pivot)) == Interpretation(node)
+//~    ensures AllKeys(ReplacePivot(node, pivotidx, pivot)) <= AllKeys(node) + {pivot}
+//~  {
+//~    reveal_Interpretation();
+//~    reveal_AllKeys();
+//~    var newnode := ReplacePivot(node, pivotidx, pivot);
+//~    
+//~    if pivotidx < |node.pivots|-1 {
+//~      var wit :| wit in AllKeys(node.children[pivotidx+1]);
+//~      assert AllKeysBelowBound(node, pivotidx+1);
+//~      assert Keys.lte(pivot, wit);
+//~      assert Keys.lt(pivot, node.pivots[pivotidx+1]);
+//~    }
+//~    if 0 < pivotidx {
+//~      var wit :| wit in AllKeys(node.children[pivotidx]);
+//~      assert AllKeysAboveBound(node, pivotidx);
+//~      assert Keys.lt(wit, pivot);
+//~      assert Keys.lt(node.pivots[pivotidx-1], pivot);
+//~    }
+//~    Keys.strictlySortedReplace(node.pivots, pivot, pivotidx);
+//~    
+//~    forall i | 0 <= i < |newnode.children|-1
+//~      ensures AllKeysBelowBound(newnode, i)
+//~    {
+//~      assert AllKeysBelowBound(node, i);
+//~    }
+//~    forall i | 0 < i < |newnode.children|
+//~      ensures AllKeysAboveBound(newnode, i)
+//~    {
+//~      assert AllKeysAboveBound(node, i);
+//~    }
+//~
+//~    forall key | key in Interpretation(node)
+//~      ensures MapsTo(Interpretation(newnode), key, Interpretation(node)[key])
+//~    {
+//~      var childidx := Keys.LargestLte(node.pivots, key) + 1;
+//~      InterpretationInheritance(node, key);
+//~      Keys.LargestLteIsUnique2(newnode.pivots, key, childidx-1);
+//~      InterpretationDelegation(newnode, key);
+//~    }
+//~    forall key | key in Interpretation(newnode)
+//~      ensures key in Interpretation(node)
+//~    {
+//~      var childidx := Keys.LargestLte(newnode.pivots, key) + 1;
+//~      InterpretationInheritance(newnode, key);
+//~      AllKeysIsConsistentWithInterpretation(newnode, key);
+//~      if childidx < |newnode.pivots| {
+//~        assert AllKeysBelowBound(newnode, childidx);
+//~      }
+//~      assert AllKeysBelowBound(node, pivotidx);
+//~      if 0 <= childidx - 1 {
+//~        assert AllKeysAboveBound(node, childidx);
+//~      }
+//~      Keys.LargestLteIsUnique2(node.pivots, key, childidx-1);
+//~      assert key in AllKeys(node);
+//~    }
+//~  }
 
-  //   forall key | key in Interpretation(node)
-  //     ensures MapsTo(Interpretation(newnode), key, Interpretation(node)[key])
-  //   {
-  //     var childidx := Keys.LargestLte(node.pivots, key) + 1;
-  //     InterpretationInheritance(node, key);
-  //     Keys.LargestLteIsUnique2(newnode.pivots, key, childidx-1);
-  //     InterpretationDelegation(newnode, key);
-  //   }
-  //   forall key | key in Interpretation(newnode)
-  //     ensures key in Interpretation(node)
-  //   {
-  //     var childidx := Keys.LargestLte(newnode.pivots, key) + 1;
-  //     InterpretationInheritance(newnode, key);
-  //     AllKeysIsConsistentWithInterpretation(newnode, key);
-  //     if childidx < |newnode.pivots| {
-  //       assert AllKeysBelowBound(newnode, childidx);
-  //     }
-  //     assert AllKeysBelowBound(node, pivotidx);
-  //     if 0 <= childidx - 1 {
-  //       assert AllKeysAboveBound(node, childidx);
-  //     }
-  //     Keys.LargestLteIsUnique2(node.pivots, key, childidx-1);
-  //     assert key in AllKeys(node);
-  //   }
-  // }
+//~  lemma IncreasePivotIsCorrect(node: Node, pivotidx: int, pivot: Key)
+//~    requires WF(node)
+//~    requires node.Index?
+//~    requires 0 <= pivotidx < |node.pivots|
+//~    requires Keys.lte(node.pivots[pivotidx], pivot)
+//~    requires forall key :: key in AllKeys(node.children[pivotidx+1]) ==> Keys.lte(pivot, key)
+//~    ensures WF(ReplacePivot(node, pivotidx, pivot))
+//~    ensures Interpretation(ReplacePivot(node, pivotidx, pivot)) == Interpretation(node)
+//~    ensures AllKeys(ReplacePivot(node, pivotidx, pivot)) <= AllKeys(node) + {pivot}
+//~  {
+//~    forall key | key in AllKeys(node.children[pivotidx])
+//~    ensures Keys.lt(key, pivot)
+//~    {
+//~      assert AllKeysBelowBound(node, pivotidx);
+//~    }
+//~    ReplacePivotIsCorrect(node, pivotidx, pivot);
+//~  }
+  
+//~  lemma DecreasePivotIsCorrect(node: Node, pivotidx: int, pivot: Key)
+//~    requires WF(node)
+//~    requires node.Index?
+//~    requires 0 <= pivotidx < |node.pivots|
+//~    requires forall key :: key in AllKeys(node.children[pivotidx]) ==> Keys.lt(key, pivot)
+//~    requires Keys.lte(pivot, node.pivots[pivotidx])
+//~    ensures WF(ReplacePivot(node, pivotidx, pivot))
+//~    ensures Interpretation(ReplacePivot(node, pivotidx, pivot)) == Interpretation(node)
+//~    ensures AllKeys(ReplacePivot(node, pivotidx, pivot)) <= AllKeys(node) + {pivot}
+//~  {
+//~    //requires forall key :: key in AllKeys(node.children[pivotidx+1]) ==> Keys.lte(pivot, key)
+//~    forall key | key in AllKeys(node.children[pivotidx+1])
+//~    ensures Keys.lte(pivot, key)
+//~    {
+//~      assert AllKeysAboveBound(node, pivotidx+1);
+//~    }
+//~    ReplacePivotIsCorrect(node, pivotidx, pivot);
+//~  }
 
-  // lemma IncreasePivotIsCorrect(node: Node, pivotidx: int, pivot: Key)
-  //   requires WF(node)
-  //   requires node.Index?
-  //   requires 0 <= pivotidx < |node.pivots|
-  //   requires Keys.lte(node.pivots[pivotidx], pivot)
-  //   requires forall key :: key in AllKeys(node.children[pivotidx+1]) ==> Keys.lte(pivot, key)
-  //   ensures WF(ReplacePivot(node, pivotidx, pivot))
-  //   ensures Interpretation(ReplacePivot(node, pivotidx, pivot)) == Interpretation(node)
-  //   ensures AllKeys(ReplacePivot(node, pivotidx, pivot)) <= AllKeys(node) + {pivot}
-  // {
-  //   forall key | key in AllKeys(node.children[pivotidx])
-  //   ensures Keys.lt(key, pivot)
-  //   {
-  //     assert AllKeysBelowBound(node, pivotidx);
-  //   }
-  //   ReplacePivotIsCorrect(node, pivotidx, pivot);
-  // }
-  // 
-  // lemma DecreasePivotIsCorrect(node: Node, pivotidx: int, pivot: Key)
-  //   requires WF(node)
-  //   requires node.Index?
-  //   requires 0 <= pivotidx < |node.pivots|
-  //   requires forall key :: key in AllKeys(node.children[pivotidx]) ==> Keys.lt(key, pivot)
-  //   requires Keys.lte(pivot, node.pivots[pivotidx])
-  //   ensures WF(ReplacePivot(node, pivotidx, pivot))
-  //   ensures Interpretation(ReplacePivot(node, pivotidx, pivot)) == Interpretation(node)
-  //   ensures AllKeys(ReplacePivot(node, pivotidx, pivot)) <= AllKeys(node) + {pivot}
-  // {
-  //   //requires forall key :: key in AllKeys(node.children[pivotidx+1]) ==> Keys.lte(pivot, key)
-  //   forall key | key in AllKeys(node.children[pivotidx+1])
-  //   ensures Keys.lte(pivot, key)
-  //   {
-  //     assert AllKeysAboveBound(node, pivotidx+1);
-  //   }
-  //   ReplacePivotIsCorrect(node, pivotidx, pivot);
-  // }
+  predicate AppendChild(oldparent: Node, newparent: Node) 
+  {
+    && oldparent.Index?
+    && newparent.Index?
+    && 1 < |newparent.children| == |newparent.pivots| + 1
+    && newparent.pivots == oldparent.pivots + [Last(newparent.pivots)]
+    && newparent.children == oldparent.children + [Last(newparent.children)]
+    && (0 < |oldparent.pivots| ==> Keys.lt(Last(oldparent.pivots), Last(newparent.pivots)))
+    && AllKeysBelowBound(newparent, |newparent.children|-2)
+    && AllKeysAboveBound(newparent, |newparent.children|-1)
+  }
 
-  // predicate AppendChild(oldparent: Node, newparent: Node) 
-  // {
-  //   && oldparent.Index?
-  //   && newparent.Index?
-  //   && 1 < |newparent.children| == |newparent.pivots| + 1
-  //   && newparent.pivots == oldparent.pivots + [Last(newparent.pivots)]
-  //   && newparent.children == oldparent.children + [Last(newparent.children)]
-  //   && (0 < |oldparent.pivots| ==> Keys.lt(Last(oldparent.pivots), Last(newparent.pivots)))
-  //   && AllKeysBelowBound(newparent, |newparent.children|-2)
-  //   && AllKeysAboveBound(newparent, |newparent.children|-1)
-  // }
+//~  lemma AppendChildPreservesWF(oldparent: Node, newparent: Node)
+//~    requires WF(oldparent)
+//~    requires AppendChild(oldparent, newparent)
+//~    requires WF(Last(newparent.children))
+//~    requires AllKeys(Last(newparent.children)) != {}
+//~    ensures WF(newparent)
+//~  {
+//~    Keys.StrictlySortedAugment(oldparent.pivots, Last(newparent.pivots));
+//~    forall i | 0 <= i < |newparent.children|-1
+//~      ensures AllKeysBelowBound(newparent, i)
+//~    {
+//~      if i < |newparent.children|-2 {
+//~        assert AllKeysBelowBound(oldparent, i);
+//~      } else {
+//~      }
+//~    }
+//~    forall i | 0 < i < |newparent.children|
+//~      ensures AllKeysAboveBound(newparent, i)
+//~    {
+//~      if i < |newparent.children|-1 {
+//~        assert AllKeysAboveBound(oldparent, i);
+//~      } else {
+//~      }
+//~    }
+//~    assert WF(newparent);
+//~  }
 
-  // lemma AppendChildPreservesWF(oldparent: Node, newparent: Node)
-  //   requires WF(oldparent)
-  //   requires AppendChild(oldparent, newparent)
-  //   requires WF(Last(newparent.children))
-  //   requires AllKeys(Last(newparent.children)) != {}
-  //   ensures WF(newparent)
-  // {
-  //   Keys.StrictlySortedAugment(oldparent.pivots, Last(newparent.pivots));
-  //   forall i | 0 <= i < |newparent.children|-1
-  //     ensures AllKeysBelowBound(newparent, i)
-  //   {
-  //     if i < |newparent.children|-2 {
-  //       assert AllKeysBelowBound(oldparent, i);
-  //     } else {
-  //     }
-  //   }
-  //   forall i | 0 < i < |newparent.children|
-  //     ensures AllKeysAboveBound(newparent, i)
-  //   {
-  //     if i < |newparent.children|-1 {
-  //       assert AllKeysAboveBound(oldparent, i);
-  //     } else {
-  //     }
-  //   }
-  //   assert WF(newparent);
-  // }
+//~  lemma AppendChildAllKeys(oldparent: Node, newparent: Node)
+//~    requires WF(oldparent)
+//~    requires WF(newparent)
+//~    requires AppendChild(oldparent, newparent)
+//~    ensures AllKeys(newparent) ==
+//~      AllKeys(oldparent) + {Last(newparent.pivots)} + AllKeys(Last(newparent.children))
+//~  {
+//~    var newkeys := AllKeys(newparent);
+//~    var oldkeys := AllKeys(oldparent);
+//~    var equivkeys := oldkeys + {Last(newparent.pivots)} + AllKeys(Last(newparent.children));
+//~    forall key | key in newkeys
+//~      ensures key in equivkeys
+//~    {
+//~      reveal_AllKeys();
+//~      if i :| 0 <= i < |newparent.pivots| && key == newparent.pivots[i] {
+//~      } else {
+//~        var i :| 0 <= i < |newparent.children| && key in AllKeys(newparent.children[i]);
+//~      }
+//~    }
+//~    forall key | key in equivkeys
+//~      ensures key in newkeys
+//~    {
+//~      reveal_AllKeys();
+//~      if key in AllKeys(oldparent) {
+//~        if i :| 0 <= i < |oldparent.pivots| && key == oldparent.pivots[i] {
+//~        } else {
+//~          var i :| 0 <= i < |oldparent.children| && key in AllKeys(oldparent.children[i]);
+//~          assert key in AllKeys(newparent.children[i]);
+//~        }
+//~      } else if key == Last(newparent.pivots) {
+//~      } else {
+//~      }
+//~    }
+//~  }
+  
+//~  lemma AppendChildInterpretation(oldparent: Node, newparent: Node)
+//~    requires WF(oldparent)
+//~    requires WF(newparent)
+//~    requires AppendChild(oldparent, newparent)
+//~    ensures Interpretation(newparent) ==
+//~    Maps.MapUnion(Interpretation(oldparent), Interpretation(Last(newparent.children)))
+//~  {
+//~    AppendChildAllKeys(oldparent, newparent);
+//~    var newinterp := Interpretation(newparent);
+//~    var oldinterp := Interpretation(oldparent);
+//~    var childinterp := Interpretation(Last(newparent.children));
+//~    var equivinterp := Maps.MapUnion(oldinterp, childinterp);
+//~    
+//~    forall key | key in newinterp
+//~      ensures MapsTo(equivinterp, key, newinterp[key])
+//~    {
+//~      var i := Keys.LargestLte(newparent.pivots, key) + 1;
+//~      if i < |oldparent.children| {
+//~        InterpretationInheritance(newparent, key);
+//~        assert 0 <= i-1 ==> oldparent.pivots[i-1] == newparent.pivots[i-1];
+//~        assert i-1 < |oldparent.pivots|-1 ==> oldparent.pivots[i] == newparent.pivots[i];
+//~        Keys.LargestLteIsUnique2(oldparent.pivots, key, i-1);
+//~        InterpretationDelegation(oldparent, key);
+//~        AllKeysIsConsistentWithInterpretation(newparent.children[i], key);
+//~        assert AllKeysBelowBound(newparent, i);
+//~        Keys.IsStrictlySortedImpliesLte(newparent.pivots, i, |newparent.pivots|-1);
+//~        assert AllKeysAboveBound(newparent, |newparent.children|-1);
+//~        assert key !in AllKeys(Last(newparent.children));
+//~        if key in childinterp {
+//~          AllKeysIsConsistentWithInterpretation(Last(newparent.children), key);
+//~          assert false;
+//~        }
+//~      } else {
+//~        InterpretationInheritance(newparent, key);
+//~        assert MapsTo(childinterp, key, newinterp[key]);
+//~        assert Keys.LargestLte(oldparent.pivots, key) == |oldparent.pivots|-1;
+//~        assert AllKeysBelowBound(newparent, |oldparent.pivots|);
+//~        assert key !in AllKeys(Last(oldparent.children));
+//~        if key in oldinterp {
+//~          InterpretationInheritance(oldparent, key);
+//~          assert key in Interpretation(Last(oldparent.children));
+//~          AllKeysIsConsistentWithInterpretation(Last(oldparent.children), key);
+//~          assert false;
+//~        }
+//~      }
+//~    }
+//~
+//~    forall key | key in equivinterp
+//~      ensures key in newinterp
+//~    {
+//~      if key in oldinterp {
+//~        InterpretationInheritance(oldparent, key);
+//~        var i := Keys.LargestLte(oldparent.pivots, key) + 1;
+//~        if i == |oldparent.children| - 1 {
+//~          AllKeysIsConsistentWithInterpretation(Last(oldparent.children), key);
+//~        }
+//~        Keys.LargestLteIsUnique2(newparent.pivots, key, i-1);
+//~        InterpretationDelegation(newparent, key);
+//~      } else {
+//~        assert key in childinterp;
+//~        AllKeysIsConsistentWithInterpretation(Last(newparent.children), key);
+//~        assert AllKeysAboveBound(newparent, |newparent.children|-1);
+//~        Keys.LargestLteIsUnique2(newparent.pivots, key, |newparent.pivots|-1);
+//~        InterpretationDelegation(newparent, key);
+//~      }
+//~    }
+//~  }
+  
+  function NumElementsOfChildren(nodes: seq<Node>) : nat
+    requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
+  {
+    if |nodes| == 0 then 0
+    else NumElementsOfChildren(DropLast(nodes)) + NumElements(Last(nodes))
+  }
+  
+  function NumElements(node: Node) : nat
+    requires WF(node)
+  {
+    if node.Leaf? then |node.keys|
+    else NumElementsOfChildren(node.children)
+  }
 
-  // lemma AppendChildAllKeys(oldparent: Node, newparent: Node)
-  //   requires WF(oldparent)
-  //   requires WF(newparent)
-  //   requires AppendChild(oldparent, newparent)
-  //   ensures AllKeys(newparent) ==
-  //     AllKeys(oldparent) + {Last(newparent.pivots)} + AllKeys(Last(newparent.children))
-  // {
-  //   var newkeys := AllKeys(newparent);
-  //   var oldkeys := AllKeys(oldparent);
-  //   var equivkeys := oldkeys + {Last(newparent.pivots)} + AllKeys(Last(newparent.children));
-  //   forall key | key in newkeys
-  //     ensures key in equivkeys
-  //   {
-  //     reveal_AllKeys();
-  //     if i :| 0 <= i < |newparent.pivots| && key == newparent.pivots[i] {
-  //     } else {
-  //       var i :| 0 <= i < |newparent.children| && key in AllKeys(newparent.children[i]);
-  //     }
-  //   }
-  //   forall key | key in equivkeys
-  //     ensures key in newkeys
-  //   {
-  //     reveal_AllKeys();
-  //     if key in AllKeys(oldparent) {
-  //       if i :| 0 <= i < |oldparent.pivots| && key == oldparent.pivots[i] {
-  //       } else {
-  //         var i :| 0 <= i < |oldparent.children| && key in AllKeys(oldparent.children[i]);
-  //         assert key in AllKeys(newparent.children[i]);
-  //       }
-  //     } else if key == Last(newparent.pivots) {
-  //     } else {
-  //     }
-  //   }
-  // }
-  // 
-  // lemma AppendChildInterpretation(oldparent: Node, newparent: Node)
-  //   requires WF(oldparent)
-  //   requires WF(newparent)
-  //   requires AppendChild(oldparent, newparent)
-  //   ensures Interpretation(newparent) ==
-  //   Maps.MapUnion(Interpretation(oldparent), Interpretation(Last(newparent.children)))
-  // {
-  //   AppendChildAllKeys(oldparent, newparent);
-  //   var newinterp := Interpretation(newparent);
-  //   var oldinterp := Interpretation(oldparent);
-  //   var childinterp := Interpretation(Last(newparent.children));
-  //   var equivinterp := Maps.MapUnion(oldinterp, childinterp);
-  //   
-  //   forall key | key in newinterp
-  //     ensures MapsTo(equivinterp, key, newinterp[key])
-  //   {
-  //     var i := Keys.LargestLte(newparent.pivots, key) + 1;
-  //     if i < |oldparent.children| {
-  //       InterpretationInheritance(newparent, key);
-  //       assert 0 <= i-1 ==> oldparent.pivots[i-1] == newparent.pivots[i-1];
-  //       assert i-1 < |oldparent.pivots|-1 ==> oldparent.pivots[i] == newparent.pivots[i];
-  //       Keys.LargestLteIsUnique2(oldparent.pivots, key, i-1);
-  //       InterpretationDelegation(oldparent, key);
-  //       AllKeysIsConsistentWithInterpretation(newparent.children[i], key);
-  //       assert AllKeysBelowBound(newparent, i);
-  //       Keys.IsStrictlySortedImpliesLte(newparent.pivots, i, |newparent.pivots|-1);
-  //       assert AllKeysAboveBound(newparent, |newparent.children|-1);
-  //       assert key !in AllKeys(Last(newparent.children));
-  //       if key in childinterp {
-  //         AllKeysIsConsistentWithInterpretation(Last(newparent.children), key);
-  //         assert false;
-  //       }
-  //     } else {
-  //       InterpretationInheritance(newparent, key);
-  //       assert MapsTo(childinterp, key, newinterp[key]);
-  //       assert Keys.LargestLte(oldparent.pivots, key) == |oldparent.pivots|-1;
-  //       assert AllKeysBelowBound(newparent, |oldparent.pivots|);
-  //       assert key !in AllKeys(Last(oldparent.children));
-  //       if key in oldinterp {
-  //         InterpretationInheritance(oldparent, key);
-  //         assert key in Interpretation(Last(oldparent.children));
-  //         AllKeysIsConsistentWithInterpretation(Last(oldparent.children), key);
-  //         assert false;
-  //       }
-  //     }
-  //   }
+  lemma InterpretationsDisjoint(node: Node)
+    requires WF(node)
+    requires node.Index?
+    requires 1 < |node.children|
+    ensures WF(SubIndex(node, 0, |node.children|-1))
+    ensures Interpretation(SubIndex(node, 0, |node.children|-1)).Keys !!
+            Interpretation(Last(node.children)).Keys
+    // ensures Interpretation(node) ==
+    //   MapDisjointUnion(Interpretation(SubIndex(node, 0, |node.children|-1)),
+    //                    Interpretation(Last(node.children)))
+  {
+    var left := SubIndex(node, 0, |node.children|-1);
+    var rightchild := Last(node.children);
+    SubIndexPreservesWF(node, 0, |node.children|-1);
+    forall key | key in Interpretation(rightchild)
+      ensures key !in Interpretation(left)
+    {
+      if key in Interpretation(left) {
+        var childidx := Keys.LargestLte(left.pivots, key) + 1;
+        InterpretationInheritance(left, key);
+        AllKeysIsConsistentWithInterpretation(left.children[childidx], key);
+        assert AllKeysBelowBound(node, childidx);
+        //Keys.IsStrictlySortedImpliesLte(node.pivots, childidx, |node.pivots|-1);
+        AllKeysIsConsistentWithInterpretation(rightchild, key);
+        assert AllKeysAboveBound(node, |node.children|-1);
+      }
+    }
+    if Interpretation(left).Keys * Interpretation(rightchild).Keys != {} {
+      assert false;
+    }
+    assert Interpretation(left).Keys !! Interpretation(rightchild).Keys;
+    //assert Interpretation(node) == MapDisjointUnion(Interpretation(left), Interpretation(rightchild));
+  }
 
-  //   forall key | key in equivinterp
-  //     ensures key in newinterp
-  //   {
-  //     if key in oldinterp {
-  //       InterpretationInheritance(oldparent, key);
-  //       var i := Keys.LargestLte(oldparent.pivots, key) + 1;
-  //       if i == |oldparent.children| - 1 {
-  //         AllKeysIsConsistentWithInterpretation(Last(oldparent.children), key);
-  //       }
-  //       Keys.LargestLteIsUnique2(newparent.pivots, key, i-1);
-  //       InterpretationDelegation(newparent, key);
-  //     } else {
-  //       assert key in childinterp;
-  //       AllKeysIsConsistentWithInterpretation(Last(newparent.children), key);
-  //       assert AllKeysAboveBound(newparent, |newparent.children|-1);
-  //       Keys.LargestLteIsUnique2(newparent.pivots, key, |newparent.pivots|-1);
-  //       InterpretationDelegation(newparent, key);
-  //     }
-  //   }
-  // }
-  // 
-  // function NumElementsOfChildren(nodes: seq<Node>) : nat
-  //   requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
-  // {
-  //   if |nodes| == 0 then 0
-  //   else NumElementsOfChildren(DropLast(nodes)) + NumElements(Last(nodes))
-  // }
-  // 
-  // function NumElements(node: Node) : nat
-  //   requires WF(node)
-  // {
-  //   if node.Leaf? then |node.keys|
-  //   else NumElementsOfChildren(node.children)
-  // }
+  lemma InterpretationsDisjointUnion(node: Node)
+    requires WF(node)
+    requires node.Index?
+    requires 1 < |node.children|
+    ensures WF(SubIndex(node, 0, |node.children|-1))
+    ensures Interpretation(SubIndex(node, 0, |node.children|-1)).Keys !!
+            Interpretation(Last(node.children)).Keys
+    ensures Interpretation(node) ==
+       MapDisjointUnion(Interpretation(SubIndex(node, 0, |node.children|-1)),
+                        Interpretation(Last(node.children)))
+  {
+    InterpretationsDisjoint(node);
+    var inode := Interpretation(node);
+    var left := SubIndex(node, 0, |node.children|-1);
+    var ileft := Interpretation(left);
+    var rightchild := Last(node.children);
+    var irightchild := Interpretation(rightchild);
+    var right := Grow(rightchild);
+    GrowPreservesWF(rightchild);
+    GrowPreservesInterpretation(rightchild);
+    GrowPreservesAllKeys(rightchild);
+    var iright := Interpretation(right);
+    var pivot := Last(node.pivots);
 
-  // lemma NumElementsMatchesInterpretation(node: Node)
-  //   requires WF(node)
-  //   ensures NumElements(node) == |Interpretation(node)|
-  // {
-  //   var interp := Interpretation(node);
-  //   reveal_Interpretation();
-  //   if node.Leaf? {
-  //     assert NoDupes(node.keys) by {
-  //       reveal_NoDupes();
-  //       Keys.reveal_IsStrictlySorted();
-  //     }
-  //     NoDupesSetCardinality(node.keys);
-  //     assert interp.Keys == Set(node.keys);
-  //   } else if |node.children| == 1 {
-  //     var child := node.children[0];
-  //     var ichild := Interpretation(child);
-  //     forall key | key in ichild
-  //       ensures MapsTo(interp, key, ichild[key])
-  //     {
-  //       AllKeysIsConsistentWithInterpretation(child, key);
-  //       reveal_AllKeys();
-  //     }
-  //     assert interp == Interpretation(child);
-  //     NumElementsMatchesInterpretation(child);
-  //     assert NumElementsOfChildren(node.children) == NumElements(child);
-  //   } else {
-  //     var prefix := SubIndex(node, 0, |node.children|-1);
-  //     SubIndexPreservesWF(node, 0, |node.children|-1);
-  //     var iprefix := Interpretation(prefix);
-  //     var child := Last(node.children);
-  //     var ichild := Interpretation(child);
-  //     
-  //     assume iprefix.Keys !! ichild.Keys;
-  //     assume false;
-  //     //assert interp == MapDisjointUnion(iprefix, ichild);
-  //   }
-  // }
-  // 
-  // lemma NumElementsOfChildrenNotZero(node: Node)
-  //   requires WF(node)
-  //   requires node.Index?
-  //   ensures forall child :: 0 <= child < |node.children| ==> 0 < NumElements(node.children[child])
-  // {
-  //   forall child | 0 <= child < |node.children|
-  //     ensures 0 < NumElements(node.children[child])
-  //   {
-  //     reveal_AllKeys();
-  //     if node.children[child].Leaf? {
-  //     } else {
-  //       NumElementsOfChildrenNotZero(node.children[child]);
-  //     }
-  //   }
-  // }
-  // 
-  // lemma NumElementsOfChildrenDecreases(nodes: seq<Node>, prefix: int)
-  //   requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
-  //   //requires forall i :: 0 <= i < |nodes| ==> 0 < NumElements(nodes[i])
-  //   requires 0 <= prefix <= |nodes|
-  //   ensures NumElementsOfChildren(nodes[..prefix]) <= NumElementsOfChildren(nodes)
-  //   //ensures prefix < |nodes| ==> NumElementsOfChildren(nodes[..prefix]) < NumElementsOfChildren(nodes)
-  // {
-  //   if prefix == |nodes| {
-  //     assert nodes[..prefix] == nodes;
-  //   } else {
-  //     NumElementsOfChildrenDecreases(DropLast(nodes), prefix);
-  //     assert DropLast(nodes)[..prefix] == nodes[..prefix];
-  //   }
-  // }
+    assert AllKeysBelowBound(node, |node.pivots|-1);
+    assert AllKeysAboveBound(node, |node.pivots|);
+    assert SplitIndex(node, left, right, pivot);
+    SplitNodeInterpretation(node, left, right, pivot);
+    
+    var rileft := Maps.MapIRestrict(ileft, iset k | Keys.lt(k, pivot));
+    var riright := Maps.MapIRestrict(iright, iset k | Keys.lte(pivot, k));
 
-  // function ToSeqChildren(nodes: seq<Node>) : (kvlists : (seq<seq<Key>>, seq<seq<Value>>))
-  //   requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
-  //   ensures |kvlists.0| == |kvlists.1| == |nodes|
-  //   ensures forall i :: 0 <= i < |nodes| ==> (kvlists.0[i], kvlists.1[i]) == ToSeq(nodes[i])
-  //   ensures FlattenShape(kvlists.0) == FlattenShape(kvlists.1)
-  // {
-  //   if |nodes| == 0 then ([], [])
-  //   else
-  //     var kv1 := ToSeqChildren(DropLast(nodes));
-  //     var kv2 := ToSeq(Last(nodes));
-  //     (kv1.0 + [kv2.0], kv1.1 + [kv2.1])
-  // }
-  //   
-  // function {:opaque} ToSeq(node: Node) : (kvlists : (seq<Key>, seq<Value>))
-  //   requires WF(node)
-  //   ensures |kvlists.0| == |kvlists.1|
-  // {
-  //   if node.Leaf? then (node.keys, node.values)
-  //   else
-  //     var (keylists, valuelists) := ToSeqChildren(node.children);
-  //     (Flatten(keylists), Flatten(valuelists))
-  // }
+    forall k | k in ileft
+      ensures Keys.lt(k, pivot)
+    {
+      var childidx := Keys.LargestLte(left.pivots, k) + 1;
+      InterpretationInheritance(left, k);
+      if childidx < |left.children| - 1 {
+        assert AllKeysBelowBound(left, childidx);
+      }
+      AllKeysIsConsistentWithInterpretation(left, k);
+    }
 
-  // lemma ToSeqChildrenDecomposition(nodes: seq<Node>)
-  //   requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
-  //   requires 0 < |nodes|
-  //   ensures Flatten(ToSeqChildren(nodes).0) == Flatten(ToSeqChildren(DropLast(nodes)).0) + ToSeq(Last(nodes)).0
-  //   ensures Flatten(ToSeqChildren(nodes).1) == Flatten(ToSeqChildren(DropLast(nodes)).1) + ToSeq(Last(nodes)).1
-  // {
-  //   reveal_Flatten();
-  // }
-  // 
-  // lemma ToSeqChildrenLength(nodes: seq<Node>)
-  //   requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
-  //   ensures |Flatten(ToSeqChildren(nodes).0)| == NumElementsOfChildren(nodes)
-  // {
-  //   reveal_Flatten();
-  //   if |nodes| == 0 {
-  //   } else {
-  //     ToSeqChildrenLength(DropLast(nodes));
-  //     ToSeqLength(Last(nodes));
-  //   }
-  // }
-  // 
-  // lemma ToSeqLength(node: Node)
-  //   requires WF(node)
-  //   ensures |ToSeq(node).0| == NumElements(node)
-  // {
-  //   reveal_ToSeq();
-  //   if node.Leaf? {
-  //   } else {
-  //     ToSeqChildrenLength(node.children);
-  //   }      
-  // }
+    forall k | k in iright
+      ensures Keys.lte(pivot, k)
+    {
+      AllKeysIsConsistentWithInterpretation(right, k);
+    }
+  }
+  
+  
+  lemma NumElementsOfChildrenMatchesInterpretation(nodes: seq<Node>, pivots: seq<Key>)
+    requires WF(Index(pivots, nodes))
+    ensures NumElements(Index(pivots, nodes)) == |Interpretation(Index(pivots, nodes))|
+  {
+    var parent := Index(pivots, nodes);
+    if |nodes| == 1 {
+      assert AllKeys(parent) == AllKeys(nodes[0]) by {
+        reveal_AllKeys();
+      }
+      forall key | key in Interpretation(parent)
+        ensures MapsTo(Interpretation(nodes[0]), key, Interpretation(parent)[key])
+      {
+        InterpretationInheritance(parent, key);
+      }
+      forall key | key in Interpretation(nodes[0])
+        ensures MapsTo(Interpretation(parent), key, Interpretation(nodes[0])[key])
+      {
+        InterpretationDelegation(parent, key);
+      }
+      MapsEqualExtensionality(Interpretation(parent), Interpretation(nodes[0]));
+      assert NumElementsOfChildren(nodes) == NumElements(nodes[0]);
+      NumElementsMatchesInterpretation(nodes[0]);
+      calc {
+        //NumElements(parent);
+        //NumElementsOfChildren(nodes);
+        //NumElements(nodes[0]);
+        |Interpretation(nodes[0])|;
+        { assert Interpretation(nodes[0]) == Interpretation(parent); }
+        |Interpretation(parent)|;
+      }
+    } else {
+      var left := Index(DropLast(pivots), DropLast(nodes));
+      var right := Index([], nodes[|nodes|-1..]);
+      var pivot := Last(pivots);
+      assert AllKeysBelowBound(parent, |nodes|-2);
+      assert AllKeysAboveBound(parent, |nodes|-1);
+      SplitIndexPreservesWF(parent, left, right, pivot);
+      NumElementsOfChildrenMatchesInterpretation(left.children, left.pivots);
+      NumElementsMatchesInterpretation(right.children[0]);
+      InterpretationsDisjointUnion(parent);
+      calc {
+        NumElements(parent);
+        //NumElementsOfChildren(left.children) + NumElements(right.children[0]);
+        //|Interpretation(left)| + |Interpretation(right)|;
+        |Interpretation(left)| + |Interpretation(right.children[0])|;
+        { MapDisjointUnionCardinality(Interpretation(left), Interpretation(right.children[0])); }
+        |Interpretation(parent)|;
+      }
+    }
+  }
+  
+  lemma NumElementsMatchesInterpretation(node: Node)
+    requires WF(node)
+    ensures NumElements(node) == |Interpretation(node)|
+  {
+    var interp := Interpretation(node);
+    reveal_Interpretation();
+    if node.Leaf? {
+      assert NoDupes(node.keys) by {
+        reveal_NoDupes();
+        Keys.reveal_IsStrictlySorted();
+      }
+      NoDupesSetCardinality(node.keys);
+      assert interp.Keys == Set(node.keys);
+    } else {
+      NumElementsOfChildrenMatchesInterpretation(node.children, node.pivots);
+    }
+  }
+  
+  lemma NumElementsOfChildrenNotZero(node: Node)
+    requires WF(node)
+    requires node.Index?
+    ensures forall child :: 0 <= child < |node.children| ==> 0 < NumElements(node.children[child])
+  {
+    forall child | 0 <= child < |node.children|
+      ensures 0 < NumElements(node.children[child])
+    {
+      reveal_AllKeys();
+      if node.children[child].Leaf? {
+      } else {
+        NumElementsOfChildrenNotZero(node.children[child]);
+      }
+    }
+  }
+  
+  lemma NumElementsOfChildrenDecreases(nodes: seq<Node>, prefix: int)
+    requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
+    //requires forall i :: 0 <= i < |nodes| ==> 0 < NumElements(nodes[i])
+    requires 0 <= prefix <= |nodes|
+    ensures NumElementsOfChildren(nodes[..prefix]) <= NumElementsOfChildren(nodes)
+    //ensures prefix < |nodes| ==> NumElementsOfChildren(nodes[..prefix]) < NumElementsOfChildren(nodes)
+  {
+    if prefix == |nodes| {
+      assert nodes[..prefix] == nodes;
+    } else {
+      NumElementsOfChildrenDecreases(DropLast(nodes), prefix);
+      assert DropLast(nodes)[..prefix] == nodes[..prefix];
+    }
+  }
 
-  // lemma ToSeqInAllKeys(node: Node)
-  //   requires WF(node)
-  //   ensures forall key :: key in ToSeq(node).0 ==> key in AllKeys(node)
-  // {
-  //   var (keys, values) := ToSeq(node);
-  //   reveal_ToSeq();
-  //   reveal_AllKeys();
-  //   
-  //   if node.Index? {
-  //     var (childkeys, chilvalues) := ToSeqChildren(node.children);
-  //     var shape := FlattenShape(childkeys);
-  //     
-  //     forall i | 0 <= i < |keys|
-  //       ensures keys[i] in AllKeys(node)
-  //       {
-  //         var (child, offset) := UnflattenIndex(shape, i);
-  //         UnflattenIndexIsCorrect(childkeys, i);
-  //         ToSeqInAllKeys(node.children[child]);
-  //         assert keys[i] in AllKeys(node.children[child]);
-  //       }
-  //   } 
-  // }
-  // 
-  // lemma ToSeqIsStrictlySorted(node: Node)
-  //   requires WF(node)
-  //   ensures Keys.IsStrictlySorted(ToSeq(node).0);
-  // {
-  //   var (keys, values) := ToSeq(node);
+  function ToSeqChildren(nodes: seq<Node>) : (kvlists : (seq<seq<Key>>, seq<seq<Value>>))
+    requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
+    ensures |kvlists.0| == |kvlists.1| == |nodes|
+    ensures forall i :: 0 <= i < |nodes| ==> (kvlists.0[i], kvlists.1[i]) == ToSeq(nodes[i])
+    ensures FlattenShape(kvlists.0) == FlattenShape(kvlists.1)
+  {
+    if |nodes| == 0 then ([], [])
+    else
+      var kv1 := ToSeqChildren(DropLast(nodes));
+      var kv2 := ToSeq(Last(nodes));
+      (kv1.0 + [kv2.0], kv1.1 + [kv2.1])
+  }
+    
+  function {:opaque} ToSeq(node: Node) : (kvlists : (seq<Key>, seq<Value>))
+    requires WF(node)
+    ensures |kvlists.0| == |kvlists.1|
+  {
+    if node.Leaf? then (node.keys, node.values)
+    else
+      var (keylists, valuelists) := ToSeqChildren(node.children);
+      (Flatten(keylists), Flatten(valuelists))
+  }
 
-  //   reveal_ToSeq();
-  //   
-  //   if node.Index? {
-  //     var (keylists, valuelists) := ToSeqChildren(node.children);
-  //     var shape := FlattenShape(keylists);
-  //     
-  //     forall i | 0 <= i < |keylists|
-  //       ensures Keys.IsStrictlySorted(keylists[i])
-  //     {
-  //       ToSeqIsStrictlySorted(node.children[i]);
-  //     }
+  lemma ToSeqChildrenDecomposition(nodes: seq<Node>)
+    requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
+    requires 0 < |nodes|
+    ensures Flatten(ToSeqChildren(nodes).0) == Flatten(ToSeqChildren(DropLast(nodes)).0) + ToSeq(Last(nodes)).0
+    ensures Flatten(ToSeqChildren(nodes).1) == Flatten(ToSeqChildren(DropLast(nodes)).1) + ToSeq(Last(nodes)).1
+  {
+    reveal_Flatten();
+  }
 
-  //     forall i, j, k1, k2 | 0 <= i < j < |keylists| && k1 in keylists[i] && k2 in keylists[j]
-  //       ensures Keys.lt(k1, k2)
-  //     {
-  //       ToSeqInAllKeys(node.children[i]);
-  //       ToSeqInAllKeys(node.children[j]);
-  //       assert AllKeysBelowBound(node, i);
-  //       assert AllKeysAboveBound(node, j);
-  //       if i < j-1 {
-  //         Keys.IsStrictlySortedImpliesLt(node.pivots, i, j-1);
-  //       }
-  //     }
-  //     Keys.FlattenStrictlySorted(keylists);
-  //   }
-  // }
+  lemma ToSeqChildrenAdditive(nodes1: seq<Node>, nodes2: seq<Node>)
+    requires forall i :: 0 <= i < |nodes1| ==> WF(nodes1[i])
+    requires forall i :: 0 <= i < |nodes2| ==> WF(nodes2[i])
+    ensures ToSeqChildren(nodes1 + nodes2).0 == ToSeqChildren(nodes1).0 + ToSeqChildren(nodes2).0
+    ensures Flatten(ToSeqChildren(nodes1 + nodes2).0)
+         == Flatten(ToSeqChildren(nodes1).0) + Flatten(ToSeqChildren(nodes2).0)
+    ensures ToSeqChildren(nodes1 + nodes2).1 == ToSeqChildren(nodes1).1 + ToSeqChildren(nodes2).1
+    ensures Flatten(ToSeqChildren(nodes1 + nodes2).1)
+         == Flatten(ToSeqChildren(nodes1).1) + Flatten(ToSeqChildren(nodes2).1)
+  {
+    FlattenAdditive(ToSeqChildren(nodes1).0, ToSeqChildren(nodes2).0);
+    FlattenAdditive(ToSeqChildren(nodes1).1, ToSeqChildren(nodes2).1);
+  }
+  
+  lemma ToSeqChildrenLength(nodes: seq<Node>)
+    requires forall i :: 0 <= i < |nodes| ==> WF(nodes[i])
+    ensures |Flatten(ToSeqChildren(nodes).0)| == NumElementsOfChildren(nodes)
+  {
+    reveal_Flatten();
+    if |nodes| == 0 {
+    } else {
+      ToSeqChildrenLength(DropLast(nodes));
+      ToSeqLength(Last(nodes));
+    }
+  }
+  
+  lemma ToSeqLength(node: Node)
+    requires WF(node)
+    ensures |ToSeq(node).0| == NumElements(node)
+  {
+    reveal_ToSeq();
+    if node.Leaf? {
+    } else {
+      ToSeqChildrenLength(node.children);
+    }      
+  }
 
-  // lemma ToSeqInInterpretation(node: Node)
-  //   requires WF(node)
-  //   ensures forall i :: 0 <= i < |ToSeq(node).0| ==> MapsTo(Interpretation(node), ToSeq(node).0[i], ToSeq(node).1[i])
-  // {
-  //   reveal_Interpretation();
-  //   var (keys, values) := ToSeq(node);
-  //   var interp := Interpretation(node);
-  //   
-  //   reveal_ToSeq();
-  //   
-  //   if node.Leaf? {
-  //     forall i | 0 <= i < |keys|
-  //       ensures MapsTo(interp, keys[i], values[i])
-  //       {
-  //         Keys.PosEqLargestLte(keys, keys[i], i);
-  //       }
-  //   } else {
-  //     var (keylists, valuelists) := ToSeqChildren(node.children);
-  //     var shape := FlattenShape(keylists);
+  lemma ToSeqInAllKeys(node: Node)
+    requires WF(node)
+    ensures forall key :: key in ToSeq(node).0 ==> key in AllKeys(node)
+  {
+    var (keys, values) := ToSeq(node);
+    reveal_ToSeq();
+    reveal_AllKeys();
+    
+    if node.Index? {
+      var (childkeys, chilvalues) := ToSeqChildren(node.children);
+      var shape := FlattenShape(childkeys);
+      
+      forall i | 0 <= i < |keys|
+        ensures keys[i] in AllKeys(node)
+        {
+          var (child, offset) := UnflattenIndex(shape, i);
+          UnflattenIndexIsCorrect(childkeys, i);
+          ToSeqInAllKeys(node.children[child]);
+          assert keys[i] in AllKeys(node.children[child]);
+        }
+    } 
+  }
+  
+  lemma ToSeqIsStrictlySorted(node: Node)
+    requires WF(node)
+    ensures Keys.IsStrictlySorted(ToSeq(node).0);
+  {
+    var (keys, values) := ToSeq(node);
 
-  //     forall i | 0 <= i < |keys|
-  //       ensures MapsTo(Interpretation(node), keys[i], values[i])
-  //     {
-  //       var (child, offset) := UnflattenIndex(shape, i);
-  //       UnflattenIndexIsCorrect(keylists, i);
-  //       UnflattenIndexIsCorrect(valuelists, i);
-  //       ToSeqInInterpretation(node.children[child]);
-  //       AllKeysIsConsistentWithInterpretation(node.children[child], keys[i]);
-  //       if 0 < child {
-  //         assert AllKeysAboveBound(node, child);
-  //       }
-  //       if child < |node.children| - 1 {
-  //         assert AllKeysBelowBound(node, child);
-  //       }
-  //       Keys.LargestLteIsUnique2(node.pivots, keys[i], child-1);
-  //       InterpretationDelegation(node, keys[i]);
-  //     }
-  //   }
-  // }
+    reveal_ToSeq();
+    
+    if node.Index? {
+      var (keylists, valuelists) := ToSeqChildren(node.children);
+      var shape := FlattenShape(keylists);
+      
+      forall i | 0 <= i < |keylists|
+        ensures Keys.IsStrictlySorted(keylists[i])
+      {
+        ToSeqIsStrictlySorted(node.children[i]);
+      }
 
-  // lemma ToSeqCoversInterpretation(node: Node)
-  //   requires WF(node)
-  //   ensures forall key :: key in Interpretation(node) ==> key in ToSeq(node).0
-  // {
-  //   reveal_Interpretation();
-  //   var (keys, values) := ToSeq(node);
-  //   var interp := Interpretation(node);
-  //   
-  //   reveal_ToSeq();
-  //   
-  //   if node.Index? {
-  //     var (keylists, valuelists) := ToSeqChildren(node.children);
-  //     var shape := FlattenShape(keylists);
+      forall i, j, k1, k2 | 0 <= i < j < |keylists| && k1 in keylists[i] && k2 in keylists[j]
+        ensures Keys.lt(k1, k2)
+      {
+        ToSeqInAllKeys(node.children[i]);
+        ToSeqInAllKeys(node.children[j]);
+        assert AllKeysBelowBound(node, i);
+        assert AllKeysAboveBound(node, j);
+        if i < j-1 {
+          Keys.IsStrictlySortedImpliesLt(node.pivots, i, j-1);
+        }
+      }
+      Keys.FlattenStrictlySorted(keylists);
+    }
+  }
 
-  //     forall key | key in Interpretation(node)
-  //       ensures key in keys
-  //     {
-  //       InterpretationInheritance(node, key);
-  //       var child := Keys.LargestLte(node.pivots, key) + 1;
-  //       var offset :| 0 <= offset < |keylists[child]| && keylists[child][offset] == key;
-  //       FlattenIndexIsCorrect(keylists, child, offset);
-  //     }
-  //   }
-  // }
+  lemma ToSeqInInterpretation(node: Node)
+    requires WF(node)
+    ensures forall i :: 0 <= i < |ToSeq(node).0| ==> MapsTo(Interpretation(node), ToSeq(node).0[i], ToSeq(node).1[i])
+  {
+    reveal_Interpretation();
+    var (keys, values) := ToSeq(node);
+    var interp := Interpretation(node);
+    
+    reveal_ToSeq();
+    
+    if node.Leaf? {
+      forall i | 0 <= i < |keys|
+        ensures MapsTo(interp, keys[i], values[i])
+        {
+          Keys.PosEqLargestLte(keys, keys[i], i);
+        }
+    } else {
+      var (keylists, valuelists) := ToSeqChildren(node.children);
+      var shape := FlattenShape(keylists);
 
-  // lemma ToSeqIsSortedSeqForInterpretation(node: Node)
-  //   requires WF(node)
-  //   ensures Keys.SortedSeqForMap(Zip(ToSeq(node).0, ToSeq(node).1), Interpretation(node))
-  // {
-  //   reveal_Interpretation();
-  //   ToSeqIsStrictlySorted(node);
-  //   ToSeqInInterpretation(node);
-  //   ToSeqCoversInterpretation(node);
-  //   Keys.reveal_SortedSeqForMap();
+      forall i | 0 <= i < |keys|
+        ensures MapsTo(Interpretation(node), keys[i], values[i])
+      {
+        var (child, offset) := UnflattenIndex(shape, i);
+        UnflattenIndexIsCorrect(keylists, i);
+        UnflattenIndexIsCorrect(valuelists, i);
+        ToSeqInInterpretation(node.children[child]);
+        AllKeysIsConsistentWithInterpretation(node.children[child], keys[i]);
+        if 0 < child {
+          assert AllKeysAboveBound(node, child);
+        }
+        if child < |node.children| - 1 {
+          assert AllKeysBelowBound(node, child);
+        }
+        Keys.LargestLteIsUnique2(node.pivots, keys[i], child-1);
+        InterpretationDelegation(node, keys[i]);
+      }
+    }
+  }
 
-  //   var (keys, values) := ToSeq(node);
-  //   var kvlist := Zip(keys, values);
-  //   assert keys == Unzip(kvlist).0;
-  // }
+  lemma ToSeqCoversInterpretation(node: Node)
+    requires WF(node)
+    ensures forall key :: key in Interpretation(node) ==> key in ToSeq(node).0
+  {
+    reveal_Interpretation();
+    var (keys, values) := ToSeq(node);
+    var interp := Interpretation(node);
+    
+    reveal_ToSeq();
+    
+    if node.Index? {
+      var (keylists, valuelists) := ToSeqChildren(node.children);
+      var shape := FlattenShape(keylists);
+
+      forall key | key in Interpretation(node)
+        ensures key in keys
+      {
+        InterpretationInheritance(node, key);
+        var child := Keys.LargestLte(node.pivots, key) + 1;
+        var offset :| 0 <= offset < |keylists[child]| && keylists[child][offset] == key;
+        FlattenIndexIsCorrect(keylists, child, offset);
+      }
+    }
+  }
+
+  lemma InterpretationNumElements(node: Node)
+    requires WF(node)
+    ensures NumElements(node) == |Interpretation(node)|
+  {
+    ToSeqLength(node);
+    ToSeqCoversInterpretation(node);
+    ToSeqInInterpretation(node);
+    ToSeqIsStrictlySorted(node);
+    
+    var keys := ToSeq(node).0;
+    var interp := Interpretation(node);
+    Keys.StrictlySortedImpliesNoDupes(keys);
+    NoDupesSetCardinality(keys);
+    assert Set(keys) == interp.Keys;
+  }
+  
+//~  lemma ToSeqIsSortedSeqForInterpretation(node: Node)
+//~    requires WF(node)
+//~    ensures Keys.SortedSeqForMap(Zip(ToSeq(node).0, ToSeq(node).1), Interpretation(node))
+//~  {
+//~    reveal_Interpretation();
+//~    ToSeqIsStrictlySorted(node);
+//~    ToSeqInInterpretation(node);
+//~    ToSeqCoversInterpretation(node);
+//~    Keys.reveal_SortedSeqForMap();
+//~
+//~    var (keys, values) := ToSeq(node);
+//~    var kvlist := Zip(keys, values);
+//~    assert keys == Unzip(kvlist).0;
+//~  }
 
   // predicate ValidBoundariesForSeqInner(nkeys: int, boundaries: seq<nat>)
   // {
@@ -1420,7 +1880,7 @@ abstract module BtreeModel {
   //   ValidBoundariesForSeqBounds(nkeys, boundaries);
   //   ValidBoundariesForSeqInner(nkeys, boundaries)
   // }
-  // 
+  
   // lemma ValidBoundaryLength(nkeys: int, boundaries: seq<nat>)
   //   requires ValidBoundariesForSeq(nkeys, boundaries)
   //   ensures |boundaries| <= nkeys + 1
@@ -1434,7 +1894,7 @@ abstract module BtreeModel {
   //     i := i + 1;
   //   }
   // }
-  // 
+  
   // function {:opaque} ExtractBoundedSubsequence<T>(things: seq<T>, boundaries: seq<nat>, i: int) : seq<T>
   //   requires ValidBoundariesForSeq(|things|, boundaries)
   //   requires 0 <= i < |boundaries|-1
@@ -1455,7 +1915,7 @@ abstract module BtreeModel {
   //   reveal_ExtractBoundedSubsequence();
   //   Integer_Order.IsStrictlySortedImpliesLte(boundaries, i, i+1);
   // }
-  // 
+  
   // // lemma ToSeqChildrenOfChildrenFromSeq(keys: seq<Key>, values: seq<Value>, boundaries: seq<nat>, children: seq<Node>)
   // //   requires |keys| == |values|
   // //   requires Keys.IsStrictlySorted(keys)
@@ -1507,7 +1967,7 @@ abstract module BtreeModel {
   //   && 0 < config.maxKeys
   //   && 1 < config.maxChildren
   // }
-  //   
+    
   // predicate FitsConfig(node: Node, config: Configuration)
   // {
   //   && WF(node)
@@ -1520,7 +1980,7 @@ abstract module BtreeModel {
   // }
 
   // datatype KVList = KVList(keys: seq<Key>, values: seq<Value>)
-  // 
+  
   // predicate WFKVList(kvlist: KVList)
   // {
   //   && |kvlist.keys| == |kvlist.values|
@@ -1533,7 +1993,7 @@ abstract module BtreeModel {
   //   var keys := Set(kvlist.keys);
   //   map k | k in keys :: kvlist.values[Keys.LargestLte(kvlist.keys, k)]
   // }
-  // 
+  
   // function DropLastPiece<T>(things: seq<T>, boundaries: seq<nat>) : (subthings: seq<T>)
   //   requires 2 < |boundaries|
   //   requires ValidBoundariesForSeq(|things|, boundaries)
@@ -1562,12 +2022,12 @@ abstract module BtreeModel {
   //   Integer_Order.StrictlySortedSubsequence(boundaries, 0, |boundaries|-1);
   //   pivots[..boundaries[|boundaries|-2] - 1]
   // }
-  // 
+  
   // predicate {:opaque} BoundariesFit(boundaries: seq<nat>, groupSize: nat)
   // {
   //   forall i :: 0 <= i < |boundaries| - 1 ==> boundaries[i+1] - boundaries[i] <= groupSize
   // }
-  // 
+  
   // function {:opaque} BuildBoundariesInner(numthings: nat, groupSize: nat) : (boundaries: seq<nat>)
   //   requires 0 < numthings
   //   requires 0 < groupSize
@@ -1642,7 +2102,7 @@ abstract module BtreeModel {
   //   }
   //   Keys.reveal_IsStrictlySorted();
   // }
-  // 
+  
   // function ExtractPivotsFromKVList(kvlist: KVList) : (pivots: seq<Key>)
   //   requires 0 < |kvlist.keys|
   //   requires WFKVList(kvlist)
@@ -1689,7 +2149,7 @@ abstract module BtreeModel {
   //   else
   //     BuildLeavesForSequenceInner(kvlist, boundaries, count-1) + [BuildLeafForSequence(kvlist, boundaries, count-1)]
   // }
-  // 
+  
   // function BuildLeavesForSequence(kvlist: KVList, boundaries: seq<nat>) : (nodes: seq<Node>)
   //   requires WFKVList(kvlist)
   //   requires ValidBoundariesForSeq(|kvlist.keys|, boundaries)
@@ -1735,8 +2195,8 @@ abstract module BtreeModel {
   //     }
   //   }
   // }
-  // 
-  // 
+  
+  
   // function BuildParentsInner(children: seq<Node>, pivots: seq<Key>, boundaries: seq<nat>, count: nat) :
   //   (parents: seq<Node>)
   //   requires WF(Index(pivots, children))
@@ -1792,7 +2252,7 @@ abstract module BtreeModel {
   // {
   //   Index(ExtractPivotsForBoundaries(pivots, boundaries), BuildParents(children, pivots, boundaries))
   // }
-  // 
+  
   // lemma GrandparentWF(children: seq<Node>, pivots: seq<Key>, boundaries: seq<nat>)
   //   requires WF(Index(pivots, children))
   //   requires ValidBoundariesForSeq(|children|, boundaries)
@@ -1802,7 +2262,7 @@ abstract module BtreeModel {
   //   var oldparent := Index(pivots, children);
   //   var grandparent := Grandparent(children, pivots, boundaries);
   //   BuildParentsInnerProperties(children, pivots, boundaries, |boundaries|-1, grandparent.children);
-  //   
+    
   //   ExtractPivotsForBoundariesPreservesSort(pivots, boundaries);
   //   forall i | 0 <= i < |grandparent.children|-1
   //     ensures AllKeysBelowBound(grandparent, i)
@@ -1856,7 +2316,7 @@ abstract module BtreeModel {
 
   //   var grandak := AllKeys(grandparent);
   //   var oldak := AllKeys(oldparent);
-  //   
+    
   //   forall key | key in grandak
   //     ensures key in oldak
   //   {
@@ -1888,10 +2348,10 @@ abstract module BtreeModel {
   //       assert grandparent.children[i].children == children[boundaries[i]..boundaries[i+1]];
   //       assert key in AllKeys(grandparent.children[i]);
   //     }
-  //     
+      
   //   }
   // }
-  // 
+  
   // lemma GrandparentInterpretation(children: seq<Node>, pivots: seq<Key>, boundaries: seq<nat>)
   //   requires WF(Index(pivots, children))
   //   requires ValidBoundariesForSeq(|children|, boundaries)
@@ -1902,7 +2362,7 @@ abstract module BtreeModel {
   //   var grandparent := Grandparent(children, pivots, boundaries);
   //   BuildParentsInnerProperties(children, pivots, boundaries, |boundaries|-1, grandparent.children);
   //   GrandparentWF(children, pivots, boundaries);
-  //   
+    
   //   var grandinterp := Interpretation(grandparent);
   //   var oldinterp := Interpretation(oldparent);
 
@@ -1925,7 +2385,7 @@ abstract module BtreeModel {
   //     Keys.LargestLteIsUnique2(pivots, key, boundaries[i] + j - 1);
   //     InterpretationDelegation(oldparent, key);
   //   }
-  //   
+    
   //   forall key | key in oldinterp
   //     ensures key in grandinterp
   //   {
@@ -1935,13 +2395,13 @@ abstract module BtreeModel {
   //     var j' := j - boundaries[i];
   //     AllKeysIsConsistentWithInterpretation(children[j], key);
   //     assert grandparent.children[i].children == children[boundaries[i]..boundaries[i+1]];
+  //     assert grandparent.children[i].pivots == pivots[boundaries[i]..boundaries[i+1]-1];
   //     if 0 < j {
   //       assert AllKeysAboveBound(oldparent, j);
   //       assert Keys.lte(pivots[j-1], key);
   //     }
   //     if j' < |grandparent.children[i].pivots| {
   //       assert AllKeysBelowBound(oldparent, j);
-  //       assert grandparent.children[i].pivots == pivots[boundaries[i]..boundaries[i+1]-1];
   //       assert grandparent.children[i].pivots[j'] == pivots[j];
   //       assert Keys.lt(key, grandparent.children[i].pivots[j']);
   //     }
@@ -2053,10 +2513,10 @@ abstract module BtreeModel {
   //     ExtractBoundedSubsequenceLength(kvlist.keys, boundaries, i);
   //     reveal_BoundariesFit();
   //   }
-  //   
+    
   //   var inode := Interpretation(node);
   //   var ikvlist := KVListInterpretation(kvlist);
-  //   
+    
   //   forall k | k in inode
   //     ensures MapsTo(ikvlist, k, inode[k])
   //   {
@@ -2090,9 +2550,9 @@ abstract module BtreeModel {
   //     assert k in Interpretation(child) by { reveal_Interpretation(); }
   //     InterpretationDelegation(node, k);
   //   }
-  //   
+    
   // }
-  // 
+  
   // function BuildTreeForSequence(kvlist: KVList, config: Configuration) : (node: Node)
   //   requires 0 < |kvlist.keys|
   //   requires WFKVList(kvlist)

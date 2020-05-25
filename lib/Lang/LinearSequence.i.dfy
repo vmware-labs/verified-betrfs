@@ -11,8 +11,6 @@ module LinearSequence_i {
     provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_length, lseq_length_uint64, lseq_peek
     provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give
     provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, SeqResize, InsertSeq, InsertLSeq
-    provides share_seq
-    reveals as_linear
     reveals lseq_full, linLast, lseq_has_all
     reveals operator'cardinality?lseq, operator'in?lseq, operator'subscript?lseq
 
@@ -341,17 +339,5 @@ module LinearSequence_i {
     }
     s2 := lseq_give(s2, pos, a);
   }
-
-  // a wrapper object for borrowing immutable sequences. Necessary so that the C++ translation
-  // can use its construction/destruction to track the reference to the borrowed sequence.
-  linear datatype as_linear<A> = AsLinear(a:A)
-
-  function method {:extern "LinearExtern", "share_seq"} share_seq<A>(shared a:as_linear<seq<A>>):(shared s:seq<A>)
-    ensures s == a.a
-
-  // Intended usage:
-  //  linear var l := AsLinear(o);  // Give C++ a chance to increment the ref count on o.
-  //  M(share_seq(l));              // borrow the seq in the call to M.
-  //  linear var AsLinear(_) := l;  // Free the wrapper, giving C++ a chance to drop the ref count.
 
 } // module LinearSequence_i

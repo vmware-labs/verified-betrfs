@@ -1,22 +1,13 @@
-include "../Lang/LinearSequence.i.dfy"
 include "sequences.i.dfy"
 include "Maps.s.dfy"
 include "../Lang/NativeTypes.s.dfy"
-include "KeyType.s.dfy"
 include "NativeArrays.s.dfy"
 include "Option.s.dfy"
-  
-abstract module Total_Order {
+
+abstract module Total_Preorder {
   import Seq = Sequences
-  import Maps
-  import opened NativeTypes
-  import opened Options
-  import NativeArrays
-  import opened LinearSequence_i
   
 	type Element(!new,==)
-
-	function SomeElement() : Element
 
 	predicate lt(a: Element, b: Element)
 	{
@@ -26,15 +17,9 @@ abstract module Total_Order {
 	predicate lte(a: Element, b: Element)
 		ensures lte(a, b) == ltedef(a, b);
 		ensures ltedef(a, b) || ltedef(b, a); // Total
-		ensures ltedef(a, b) && ltedef(b, a) ==> a == b; // Antisymmetric
 		ensures forall a, b, c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c); // Transitive
 
 	predicate ltedef(a: Element, b: Element)
-
-  //method cmp(a: Element, b: Element) returns (c: int32)
-  //  ensures c < 0 ==> lt(a, b)
-  //  ensures c > 0 ==> lt(b, a)
-  //  ensures c == 0 ==> a == b
 
   function Min(a: Element, b: Element) : Element
   {
@@ -53,128 +38,56 @@ abstract module Total_Order {
   {
   }
 
-  lemma transitivity_le_lt(a: Element, b: Element, c: Element)
-    requires lte(a,b)
-    requires lt(b,c)
-    ensures lt(a,c)
+  predicate {:opaque} IsSorted(run: seq<Element>)
+    ensures |run| == 0 ==> IsSorted(run)
+    ensures |run| == 1 ==> IsSorted(run)
   {
-  }
-
-  /*method SeqMinIndex(run: seq<Element>) returns (pos: int)
-    requires 0 < |run|;
-    ensures 0 <= pos < |run|;
-    ensures forall i {:trigger lte(run[pos], run[i]) } :: 0 <= i < |run| ==> lte(run[pos], run[i]);
-  {
-    pos := 0;
-    var i := 1;
-    while i < |run|
-      invariant 0 <= i <= |run|;
-      invariant pos < i;
-      invariant forall j :: 0 <= j < i ==> lte(run[pos], run[j]);
-    {
-      if lt(run[i], run[pos]) {
-        pos := i;
-      }
-      i := i + 1;
-    }
-  }
-
-  method SeqMin(run: seq<Element>) returns (elt: Element)
-    requires 0 < |run|;
-    ensures elt in run;
-    ensures forall elt' {:trigger lte(elt, elt') } :: elt' in run ==> lte(elt, elt');
-  {
-    var index := SeqMinIndex(run);
-    elt := run[index];
-  }
-  
-  method SeqMaxIndex(run: seq<Element>) returns (pos: int)
-    requires 0 < |run|;
-    ensures 0 <= pos < |run|;
-    ensures forall i {:trigger lte(run[i], run[pos]) } :: 0 <= i < |run| ==> lte(run[i], run[pos]);
-  {
-    pos := 0;
-    var i := 1;
-    while i < |run|
-      invariant 0 <= i <= |run|;
-      invariant pos < i;
-      invariant forall j :: 0 <= j < i ==> lte(run[j], run[pos]);
-    {
-      if lt(run[pos], run[i]) {
-        pos := i;
-      }
-      i := i + 1;
-    }
-  }
-
-  method SeqMax(run: seq<Element>) returns (elt: Element)
-    requires 0 < |run|;
-    ensures elt in run;
-    ensures forall elt' {:trigger lte(elt, elt') } :: elt' in run ==> lte(elt', elt);
-  {
-    var index := SeqMaxIndex(run);
-    elt := run[index];
-  }*/
-  
-  predicate {:opaque} IsSorted(run: seq<Element>) {
     forall i, j :: 0 <= i <= j < |run| ==> lte(run[i], run[j])
   }
 
-  /*method ComputeIsSorted(run: seq<Element>)
-  returns (b: bool)
-  ensures b == IsSorted(run)
+  predicate IsStrictlySortedInternal(run: seq<Element>)
   {
-    reveal_IsSorted();
-    var k := 1;
-    while k < |run|
-    invariant |run| > 0 ==> 0 <= k <= |run|
-    invariant |run| > 0 ==> forall i, j :: 0 <= i <= j < k ==> lte(run[i], run[j])
-    {
-      if (!lte(run[k-1], run[k])) {
-        return false;
-      }
-      k := k + 1;
-    }
-    return true;
-  }*/
-
-  predicate {:opaque} IsStrictlySorted(run: seq<Element>)
-  ensures IsStrictlySorted(run) ==> IsSorted(run)
-  ensures |run| == 0 ==> IsStrictlySorted(run)
-  ensures |run| == 1 ==> IsStrictlySorted(run)
-  {
-    var b := forall i, j :: 0 <= i < j < |run| ==> lt(run[i], run[j]);
-    assert b ==> IsSorted(run) by {
-       reveal_IsSorted();
-    }
-    b
-    //forall i, j :: 0 <= i < j < |run| ==> lt(run[i], run[j])
+    forall i, j :: 0 <= i < j < |run| ==> lt(run[i], run[j])
   }
 
-  lemma IsStrictlySortedImpliesLt(run: seq<Element>, i: int, j: int)
-  requires IsStrictlySorted(run)
-  requires 0 <= i < j < |run|
-  ensures lt(run[i], run[j])
+  lemma StrictlySortedImpliesSorted(run: seq<Element>)
+    requires IsStrictlySortedInternal(run)
+    ensures IsSorted(run)
+  {
+    forall i, j | 0 <= i <= j < |run|
+      ensures lte(run[i], run[j])
+    {
+    }
+    reveal_IsSorted();
+  }
+  
+  predicate {:opaque} IsStrictlySorted(run: seq<Element>)
+    ensures |run| == 0 ==> IsStrictlySorted(run)
+    ensures |run| == 1 ==> IsStrictlySorted(run)
+    ensures IsStrictlySorted(run) ==> IsSorted(run)
+  {
+    var b := IsStrictlySortedInternal(run);
+    if b then
+      StrictlySortedImpliesSorted(run);
+      b
+    else
+      b
+  }
+
+  lemma StrictlySortedImpliesNoDupes(run: seq<Element>)
+    requires IsStrictlySorted(run)
+    ensures Seq.NoDupes(run)
   {
     reveal_IsStrictlySorted();
+    Seq.reveal_NoDupes();
   }
-
+  
   lemma IsSortedImpliesLte(run: seq<Element>, i: int, j: int)
   requires IsSorted(run)
   requires 0 <= i <= j < |run|
   ensures lte(run[i], run[j])
   {
     reveal_IsSorted();
-  }
-
-  lemma IsStrictlySortedImpliesLtIndices(run: seq<Element>, i: int, j: int)
-  requires IsStrictlySorted(run)
-  requires 0 <= i < |run|
-  requires 0 <= j < |run|
-  requires lt(run[i], run[j])
-  ensures 0 <= i < j < |run|
-  {
-    reveal_IsStrictlySorted();
   }
 
   lemma IsStrictlySortedImpliesLte(run: seq<Element>, i: int, j: int)
@@ -208,104 +121,133 @@ abstract module Total_Order {
   {
     reveal_IsStrictlySorted();
   }
-  
-  lemma strictlySortedInsert(l: seq<Element>, k: Element, pos: int)
-  requires -1 <= pos < |l|;
-  requires IsStrictlySorted(l);
-  requires IsSorted(l);
-  requires pos == LargestLte(l, k);
-  requires pos < 0 || k != l[pos];
-  ensures IsStrictlySorted(Seq.insert(l, k, pos+1));
-  {
-    Seq.reveal_insert();
-    var l' := l[..pos+1] + [k] + l[pos+1..];
-    reveal_IsStrictlySorted();
 
-    forall i, j | 0 <= i < j < |l'|
-    ensures lt(l'[i], l'[j])
-    {
-    }
-  }
+//~  lemma FlattenSorted(seqs: seq<seq<Element>>)
+//~    requires forall i :: 0 <= i < |seqs| ==> IsSorted(seqs[i])
+//~    requires forall i, j, k1, k2 :: 0 <= i < j < |seqs| && k1 in seqs[i] && k2 in seqs[j] ==> lte(k1, k2)
+//~    ensures IsSorted(Seq.Flatten(seqs))
+//~  {
+//~    var shape := Seq.FlattenShape(seqs);
+//~    var fseqs := Seq.Flatten(seqs);
+//~    forall i, j | 0 <= i < j < |fseqs|
+//~      ensures lte(fseqs[i], fseqs[j])
+//~    {
+//~      var (il, io) := Seq.UnflattenIndex(shape, i);
+//~      var (jl, jo) := Seq.UnflattenIndex(shape, j);
+//~      Seq.UnflattenIndexIsCorrect(seqs, i);
+//~      Seq.UnflattenIndexIsCorrect(seqs, j);
+//~      Seq.UnflattenIndexOrdering(shape, i, j);
+//~      if il < jl {
+//~      } else {
+//~        IsSortedImpliesLte(seqs[il], io, jo);
+//~      }
+//~    }
+//~    reveal_IsSorted();
+//~  }
 
-  lemma strictlySortedInsert2(l: seq<Element>, k: Element, pos: int)
-    requires IsStrictlySorted(l);
-    requires 0 <= pos <= |l|;
-    requires 0 < pos ==> lt(l[pos-1], k);
-    requires pos < |l| ==> lt(k, l[pos]);
-    ensures IsStrictlySorted(Seq.insert(l, k, pos));
+  lemma SortedAugment(run: seq<Element>, key: Element)
+  requires IsSorted(run)
+  requires |run| > 0 ==> lte(Seq.Last(run), key)
+  ensures IsSorted(run + [key])
   {
-    Seq.reveal_insert();
-    reveal_IsStrictlySorted();
-  }
-
-  lemma strictlySortedReplace(l: seq<Element>, k: Element, pos: int)
-    requires IsStrictlySorted(l)
-    requires 0 <= pos < |l|
-    requires 0 < pos ==> lt(l[pos-1], k)
-    requires pos < |l|-1 ==> lt(k, l[pos+1])
-    ensures IsStrictlySorted(l[pos := k])
-  {
-    var l' := l[pos := k];
-    reveal_IsStrictlySorted();
-    forall i, j | 0 <= i < j < |l'|
-      ensures lt(l'[i], l'[j])
-    {
-      if i == pos {
-        if pos < |l|-1 {
-          assert lte(l[pos+1], l[j]);
-        }
-      } else if j == pos {
-        if 0 < pos {
-          assert lte(l[i], l[pos-1]);
-        }
-      }
-    }
-  }
-  
-  lemma FlattenSorted(seqs: seq<seq<Element>>)
-    requires forall i :: 0 <= i < |seqs| ==> IsSorted(seqs[i])
-    requires forall i, j, k1, k2 :: 0 <= i < j < |seqs| && k1 in seqs[i] && k2 in seqs[j] ==> lte(k1, k2)
-    ensures IsSorted(Seq.Flatten(seqs))
-  {
-    var shape := Seq.FlattenShape(seqs);
-    var fseqs := Seq.Flatten(seqs);
-    forall i, j | 0 <= i < j < |fseqs|
-      ensures lte(fseqs[i], fseqs[j])
-    {
-      var (il, io) := Seq.UnflattenIndex(shape, i);
-      var (jl, jo) := Seq.UnflattenIndex(shape, j);
-      Seq.UnflattenIndexIsCorrect(seqs, i);
-      Seq.UnflattenIndexIsCorrect(seqs, j);
-      Seq.UnflattenIndexOrdering(shape, i, j);
-      if il < jl {
-      } else {
-        IsSortedImpliesLte(seqs[il], io, jo);
-      }
-    }
     reveal_IsSorted();
   }
 
-  lemma FlattenStrictlySorted(seqs: seq<seq<Element>>)
-    requires forall i :: 0 <= i < |seqs| ==> IsStrictlySorted(seqs[i])
-    requires forall i, j, k1, k2 :: 0 <= i < j < |seqs| && k1 in seqs[i] && k2 in seqs[j] ==> lt(k1, k2)
-    ensures IsStrictlySorted(Seq.Flatten(seqs))
+//~  lemma SortedPrepend(key: Element, run: seq<Element>)
+//~    requires IsSorted(run)
+//~    requires 0 < |run| ==> lte(key, run[0])
+//~    ensures IsSorted([key] + run)
+//~  {
+//~    reveal_IsSorted();
+//~  }
+  
+//~  lemma StrictlySortedPop(run: seq<Element>)
+//~  requires IsStrictlySorted(run)
+//~  requires |run| > 0
+//~  ensures IsStrictlySorted(Seq.DropLast(run))
+//~  {
+//~    reveal_IsStrictlySorted();
+//~  }
+  
+}
+
+abstract module Total_Order refines Total_Preorder {
+  import Maps
+  import opened NativeTypes
+  import opened Options
+  import NativeArrays
+  
+	type Element(!new,==)
+
+	function SomeElement() : Element
+
+	predicate lte(a: Element, b: Element)
+		ensures lte(a, b) == ltedef(a, b);
+		ensures ltedef(a, b) || ltedef(b, a); // Total
+		ensures ltedef(a, b) && ltedef(b, a) ==> a == b; // Antisymmetric
+		ensures forall a, b, c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c); // Transitive
+
+	predicate ltedef(a: Element, b: Element)
+
+  lemma transitivity_le_lt(a: Element, b: Element, c: Element)
+    requires lte(a,b)
+    requires lt(b,c)
+    ensures lt(a,c)
   {
-    var shape := Seq.FlattenShape(seqs);
-    var fseqs := Seq.Flatten(seqs);
-    forall i, j | 0 <= i < j < |fseqs|
-      ensures lt(fseqs[i], fseqs[j])
-    {
-      var (il, io) := Seq.UnflattenIndex(shape, i);
-      var (jl, jo) := Seq.UnflattenIndex(shape, j);
-      Seq.UnflattenIndexIsCorrect(seqs, i);
-      Seq.UnflattenIndexIsCorrect(seqs, j);
-      Seq.UnflattenIndexOrdering(shape, i, j);
-      if il < jl {
-      } else {
-        IsStrictlySortedImpliesLt(seqs[il], io, jo);
-      }
-    }
+  }
+
+  lemma IsStrictlySortedImpliesLt(run: seq<Element>, i: int, j: int)
+  requires IsStrictlySorted(run)
+  requires 0 <= i < j < |run|
+  ensures lt(run[i], run[j])
+  {
     reveal_IsStrictlySorted();
+  }
+
+  lemma IsStrictlySortedImpliesLtIndices(run: seq<Element>, i: int, j: int)
+  requires IsStrictlySorted(run)
+  requires 0 <= i < |run|
+  requires 0 <= j < |run|
+  requires lt(run[i], run[j])
+  ensures 0 <= i < j < |run|
+  {
+    reveal_IsStrictlySorted();
+  }
+
+  lemma StrictlySortedEq(run1: seq<Element>, run2: seq<Element>)
+    requires IsStrictlySorted(run1)
+    requires IsStrictlySorted(run2)
+    requires Seq.Set(run1) == Seq.Set(run2)
+    ensures run1 == run2
+  {
+    if |run1| == 0 {
+      if 0 < |run2| {
+        assert run2[0] in Seq.Set(run2);
+        assert false;
+      }
+    } else {
+      assert run1[0] in Seq.Set(run2);
+      var last1 := Seq.Last(run1);
+      var last2 := Seq.Last(run2);
+      assert last1 in Seq.Set(run1);
+      assert last1 == maximum(Seq.Set(run1)) by {
+        reveal_IsStrictlySorted();
+      }
+      assert last2 in Seq.Set(run2);
+      assert last2 == maximum(Seq.Set(run2)) by {
+        reveal_IsStrictlySorted();
+      }
+      assert last1 == last2;
+      StrictlySortedSubsequence(run1, 0, |run1|-1);
+      StrictlySortedSubsequence(run2, 0, |run2|-1);
+      assert Seq.Set(Seq.DropLast(run1)) == Seq.Set(run1) - {last1} by {
+        reveal_IsStrictlySorted();
+      }
+      assert Seq.Set(Seq.DropLast(run2)) == Seq.Set(run2) - {last2} by {
+        reveal_IsStrictlySorted();
+      }
+      StrictlySortedEq(Seq.DropLast(run1), Seq.DropLast(run2));
+    }
   }
   
   function LargestLte(run: seq<Element>, needle: Element) : int
@@ -320,12 +262,12 @@ abstract module Total_Order {
     else 1 + LargestLte(run[1..], needle)
   }
 
-  lemma LargestLteIsOrderPreserving(run: seq<Element>, smaller: Element, larger: Element)
-    requires IsSorted(run)
-    requires lte(smaller, larger)
-    ensures LargestLte(run, smaller) <= LargestLte(run, larger)
-  {
-  }
+//~  lemma LargestLteIsOrderPreserving(run: seq<Element>, smaller: Element, larger: Element)
+//~    requires IsSorted(run)
+//~    requires lte(smaller, larger)
+//~    ensures LargestLte(run, smaller) <= LargestLte(run, larger)
+//~  {
+//~  }
 
   lemma LargestLteIsUnique(run: seq<Element>, needle: Element, pos: int)
     requires IsSorted(run)
@@ -367,6 +309,22 @@ abstract module Total_Order {
     LargestLteIsUnique(run, needle, pos);
   }
   
+  lemma PosEqLargestLte(run: seq<Element>, key: Element, pos: int)
+  requires IsStrictlySorted(run);
+  requires 0 <= pos < |run|
+  requires run[pos] == key;
+  ensures pos == LargestLte(run, key);
+  {
+    reveal_IsStrictlySorted();
+  }
+
+  lemma PosEqLargestLteForAllElts(run: seq<Element>)
+    requires IsStrictlySorted(run)
+    ensures forall elt :: elt in run ==> Seq.IndexOf(run, elt) == LargestLte(run, elt)
+  {
+    reveal_IsStrictlySorted();
+  }
+
   lemma LargestLteSubsequence(run: seq<Element>, needle: Element, from: int, to: int)
     requires IsSorted(run)
     requires 0 <= from <= to <= |run|
@@ -394,7 +352,7 @@ abstract module Total_Order {
       LargestLteIsUnique2(run, needle, from + subllte);
     }
   }
-  
+
   function LargestLt(run: seq<Element>, needle: Element) : int
     requires IsSorted(run);
     ensures -1 <= LargestLt(run, needle) < |run|;
@@ -427,35 +385,210 @@ abstract module Total_Order {
     }
   }
   
-  lemma PosEqLargestLte(run: seq<Element>, key: Element, pos: int)
-  requires IsStrictlySorted(run);
-  requires 0 <= pos < |run|
-  requires run[pos] == key;
-  ensures pos == LargestLte(run, key);
+  function IndexOfFirstGte(run: seq<Element>, needle: Element) : (result: nat)
+    requires IsSorted(run)
+    ensures result <= |run|
+    ensures forall i | 0 <= i < result :: lt(run[i], needle)
+    ensures forall i | result <= i < |run| :: lte(needle, run[i])
   {
-    reveal_IsStrictlySorted();
+    reveal_IsSorted();
+    if |run| == 0 then
+      0
+    else if lt(Seq.Last(run), needle) then
+      |run|
+    else
+      SortedSubsequence(run, 0, |run|-1);
+      IndexOfFirstGte(Seq.DropLast(run), needle)
   }
 
-  lemma PosEqLargestLteForAllElts(run: seq<Element>)
-    requires IsStrictlySorted(run)
-    ensures forall elt :: elt in run ==> Seq.IndexOf(run, elt) == LargestLte(run, elt)
+  lemma IndexOfFirstGteIsUnique(run: seq<Element>, needle: Element, idx: nat)
+    requires IsSorted(run)
+    requires idx <= |run|
+    requires forall i | 0 <= i < idx :: lt(run[i], needle)
+    requires forall i | idx <= i < |run| :: lte(needle, run[i])
+    ensures idx == IndexOfFirstGte(run, needle)
   {
-    reveal_IsStrictlySorted();
+    reveal_IsSorted();
   }
+
+//~  lemma IndexOfFirstGteIsOrderPreserving(run: seq<Element>, needle1: Element, needle2: Element)
+//~    requires IsSorted(run)
+//~    requires lte(needle1, needle2)
+//~    ensures IndexOfFirstGte(run, needle1) <= IndexOfFirstGte(run, needle2)
+//~  {
+//~  }
+
+  function binarySearchIndexOfFirstKeyGteIter(s: seq<Element>, key: Element, lo: int, hi: int) : (i: int)
+  requires 0 <= lo < hi <= |s| + 1
+  requires lo > 0 ==> lt(s[lo-1], key)
+  requires hi <= |s| ==> lte(key, s[hi-1])
+  ensures 0 <= i <= |s|
+  ensures i > 0 ==> lt(s[i-1], key)
+  ensures i < |s| ==> lte(key, s[i])
+  decreases hi - lo
+  {
+    if lo + 1 < hi then (
+      var mid := (lo + hi) / 2;
+      if lt(s[mid-1], key) then
+        binarySearchIndexOfFirstKeyGteIter(s, key, mid, hi)
+      else
+        binarySearchIndexOfFirstKeyGteIter(s, key, lo, mid)
+    ) else (
+      lo
+    )
+  }
+
+  function {:opaque} binarySearchIndexOfFirstKeyGte(s: seq<Element>, key: Element) : (i: int)
+  ensures 0 <= i <= |s|
+  ensures i > 0 ==> lt(s[i-1], key)
+  ensures i < |s| ==> lte(key, s[i])
+  {
+    binarySearchIndexOfFirstKeyGteIter(s, key, 0, |s| + 1)
+  }
+
+  function IndexOfFirstGt(run: seq<Element>, needle: Element) : (result: nat)
+    requires IsSorted(run)
+    ensures result <= |run|
+    ensures forall i | 0 <= i < result :: lte(run[i], needle)
+    ensures forall i | result <= i < |run| :: lt(needle, run[i])
+   {
+    reveal_IsSorted();
+    if |run| == 0 then
+      0
+    else if lte(Seq.Last(run), needle) then
+      |run|
+    else
+      SortedSubsequence(run, 0, |run|-1);
+      IndexOfFirstGt(Seq.DropLast(run), needle)
+  }
+
+  lemma IndexOfFirstGtIsUnique(run: seq<Element>, needle: Element, idx: nat)
+    requires IsSorted(run)
+    requires idx <= |run|
+    requires forall i | 0 <= i < idx :: lte(run[i], needle)
+    requires forall i | idx <= i < |run| :: lt(needle, run[i])
+    ensures idx == IndexOfFirstGt(run, needle)
+  {
+    reveal_IsSorted();
+  }
+
+//~  lemma IndexOfFirstGtIsOrderPreserving(run: seq<Element>, needle1: Element, needle2: Element)
+//~    requires IsSorted(run)
+//~    requires lte(needle1, needle2)
+//~    ensures IndexOfFirstGt(run, needle1) <= IndexOfFirstGt(run, needle2)
+//~  {
+//~  }
   
+  function binarySearchIndexOfFirstKeyGtIter(s: seq<Element>, key: Element, lo: int, hi: int) : (i: int)
+    requires 0 <= lo < hi <= |s| + 1
+    requires lo > 0 ==> lte(s[lo-1], key)
+    requires hi <= |s| ==> lt(key, s[hi-1])
+    ensures 0 <= i <= |s|
+    ensures i > 0 ==> lte(s[i-1], key)
+    ensures i < |s| ==> lt(key, s[i])
+    decreases hi - lo
+  {
+    if lo + 1 < hi then (
+      var mid := (lo + hi) / 2;
+      if lte(s[mid-1], key) then
+        binarySearchIndexOfFirstKeyGtIter(s, key, mid, hi)
+      else
+        binarySearchIndexOfFirstKeyGtIter(s, key, lo, mid)
+    ) else (
+      lo
+    )
+  }
+
+  function {:opaque} binarySearchIndexOfFirstKeyGt(s: seq<Element>, key: Element) : (i: int)
+    ensures 0 <= i <= |s|
+    ensures i > 0 ==> lte(s[i-1], key)
+    ensures i < |s| ==> lt(key, s[i])
+  {
+    binarySearchIndexOfFirstKeyGtIter(s, key, 0, |s| + 1)
+  }
+
+  lemma strictlySortedInsert(l: seq<Element>, k: Element, pos: int)
+  requires -1 <= pos < |l|;
+  requires IsStrictlySorted(l);
+  requires IsSorted(l);
+  requires pos == LargestLte(l, k);
+  requires pos < 0 || k != l[pos];
+  ensures IsStrictlySorted(Seq.insert(l, k, pos+1));
+  {
+    Seq.reveal_insert();
+    var l' := l[..pos+1] + [k] + l[pos+1..];
+    reveal_IsStrictlySorted();
+
+    forall i, j | 0 <= i < j < |l'|
+    ensures lt(l'[i], l'[j])
+    {
+    }
+  }
+
+  lemma strictlySortedInsert2(l: seq<Element>, k: Element, pos: int)
+    requires IsStrictlySorted(l);
+    requires 0 <= pos <= |l|;
+    requires 0 < pos ==> lt(l[pos-1], k);
+    requires pos < |l| ==> lt(k, l[pos]);
+    ensures IsStrictlySorted(Seq.insert(l, k, pos));
+  {
+    Seq.reveal_insert();
+    reveal_IsStrictlySorted();
+  }
+
+//~  lemma strictlySortedReplace(l: seq<Element>, k: Element, pos: int)
+//~    requires IsStrictlySorted(l)
+//~    requires 0 <= pos < |l|
+//~    requires 0 < pos ==> lt(l[pos-1], k)
+//~    requires pos < |l|-1 ==> lt(k, l[pos+1])
+//~    ensures IsStrictlySorted(l[pos := k])
+//~  {
+//~    var l' := l[pos := k];
+//~    reveal_IsStrictlySorted();
+//~    forall i, j | 0 <= i < j < |l'|
+//~      ensures lt(l'[i], l'[j])
+//~    {
+//~      if i == pos {
+//~        if pos < |l|-1 {
+//~          assert lte(l[pos+1], l[j]);
+//~        }
+//~      } else if j == pos {
+//~        if 0 < pos {
+//~          assert lte(l[i], l[pos-1]);
+//~        }
+//~      }
+//~    }
+//~  }
+
   lemma StrictlySortedAugment(run: seq<Element>, key: Element)
-  requires IsStrictlySorted(run)
-  requires |run| > 0 ==> lt(Seq.Last(run), key)
-  ensures IsStrictlySorted(run + [key])
+    requires IsStrictlySorted(run)
+    requires |run| > 0 ==> lt(Seq.Last(run), key)
+    ensures IsStrictlySorted(run + [key])
   {
     reveal_IsStrictlySorted();
   }
 
-  lemma StrictlySortedPop(run: seq<Element>)
-  requires IsStrictlySorted(run)
-  requires |run| > 0
-  ensures IsStrictlySorted(Seq.DropLast(run))
+
+  lemma FlattenStrictlySorted(seqs: seq<seq<Element>>)
+    requires forall i :: 0 <= i < |seqs| ==> IsStrictlySorted(seqs[i])
+    requires forall i, j, k1, k2 :: 0 <= i < j < |seqs| && k1 in seqs[i] && k2 in seqs[j] ==> lt(k1, k2)
+    ensures IsStrictlySorted(Seq.Flatten(seqs))
   {
+    var shape := Seq.FlattenShape(seqs);
+    var fseqs := Seq.Flatten(seqs);
+    forall i, j | 0 <= i < j < |fseqs|
+      ensures lt(fseqs[i], fseqs[j])
+    {
+      var (il, io) := Seq.UnflattenIndex(shape, i);
+      var (jl, jo) := Seq.UnflattenIndex(shape, j);
+      Seq.UnflattenIndexIsCorrect(seqs, i);
+      Seq.UnflattenIndexIsCorrect(seqs, j);
+      Seq.UnflattenIndexOrdering(shape, i, j);
+      if il < jl {
+      } else {
+        IsStrictlySortedImpliesLt(seqs[il], io, jo);
+      }
+    }
     reveal_IsStrictlySorted();
   }
   
@@ -555,10 +688,10 @@ abstract module Total_Order {
   {
   }
   
-  lemma SetAllLtImpliesDisjoint(a: set<Element>, b: set<Element>)
-    requires SetAllLt(a, b);
-    ensures a !! b;
-  {}
+//~  lemma SetAllLtImpliesDisjoint(a: set<Element>, b: set<Element>)
+//~    requires SetAllLt(a, b);
+//~    ensures a !! b;
+//~  {}
 
   predicate {:opaque} NotMinimum(a: Element) {
     exists b :: lt(b, a)
@@ -606,21 +739,21 @@ abstract module Total_Order {
     SetSuccessor(set x | x in m, key)
   }
 
-  lemma StrictlySortedSeqSuccessor(s: seq<Element>, key: Element, pos: int)
-    requires IsStrictlySorted(s)
-    requires 0 < pos < |s|
-    requires lte(s[pos-1], key)
-    requires lt(key, s[pos])
-    ensures SeqSuccessor(s, key) == Some(s[pos])
-  {
-    forall other | other in s && other != s[pos] && lt(key, other)
-      ensures lt(s[pos], other)
-    {
-      var otherpos := Seq.IndexOf(s, other);
-      IsStrictlySortedImpliesLtIndices(s, pos-1, otherpos);
-      IsStrictlySortedImpliesLt(s, pos, otherpos);
-    }
-  }
+//~  lemma StrictlySortedSeqSuccessor(s: seq<Element>, key: Element, pos: int)
+//~    requires IsStrictlySorted(s)
+//~    requires 0 < pos < |s|
+//~    requires lte(s[pos-1], key)
+//~    requires lt(key, s[pos])
+//~    ensures SeqSuccessor(s, key) == Some(s[pos])
+//~  {
+//~    forall other | other in s && other != s[pos] && lt(key, other)
+//~      ensures lt(s[pos], other)
+//~    {
+//~      var otherpos := Seq.IndexOf(s, other);
+//~      IsStrictlySortedImpliesLtIndices(s, pos-1, otherpos);
+//~      IsStrictlySortedImpliesLt(s, pos, otherpos);
+//~    }
+//~  }
   
   predicate {:opaque} SortedSeqForMap<V>(s: seq<(Element, V)>, m: map<Element, V>)
   {
@@ -709,6 +842,7 @@ abstract module Total_Order {
   }
 }*/
 
+
 module Integer_Order refines Total_Order {
   type Element = int
 
@@ -737,11 +871,6 @@ module Uint32_Order refines Total_Order {
   predicate method {:opaque} ltedef(a: Element, b: Element) {
     a <= b
   }
-
-  method cmp(a: Element, b: Element) returns (c: int32)
-  {
-    return if a < b then -1 else if a > b then 1 else 0;
-  }
 }
 
 module Uint64_Order refines Total_Order {
@@ -757,11 +886,6 @@ module Uint64_Order refines Total_Order {
   predicate method {:opaque} ltedef(a: Element, b: Element) {
     a <= b
   }
-
-  method cmp(a: Element, b: Element) returns (c: int32)
-  {
-    return if a < b then -1 else if a > b then 1 else 0;
-  }
 }
 
 
@@ -776,11 +900,6 @@ module Char_Order refines Total_Order {
 
   predicate method ltedef(a: Element, b: Element) {
     a <= b
-  }
-
-  method cmp(a: Element, b: Element) returns (c: int32)
-  {
-    return if a < b then -1 else if a > b then 1 else 0;
   }
 }
 
@@ -812,19 +931,11 @@ module Byte_Order refines Total_Order {
   predicate method {:opaque} ltedef(a: Element, b: Element) {
     a <= b
   }
-
-  method cmp(a: Element, b: Element) returns (c: int32)
-  {
-    reveal_lte();
-    reveal_ltedef();
-    return if a < b then -1 else if a > b then 1 else 0;
-  }
 }
 
 module Lexicographic_Byte_Order refines Total_Order {
-  import KeyType
   import SeqComparison
-  type Element = KeyType.Key
+  type Element = seq<NativeTypes.byte>
 
   import Base_Order = Byte_Order
 
@@ -882,205 +993,30 @@ module Lexicographic_Byte_Order refines Total_Order {
     }
   }
 
-  method cmp(a: Element, b: Element) returns (c: int32)
-    ensures c < 0 ==> lt(a, b)
-    ensures c > 0 ==> lt(b, a)
-    ensures c == 0 ==> a == b
-  {
-    c := NativeArrays.ByteSeqCmpByteSeq(a, b);
-  }
-
   lemma EmptyLte(x: Element)
   ensures lte([], x)
   {
     SeqComparison.reveal_lte();
   }
 
-  // TODO Ideally we would put these methods in the abstract class
-  // (since they could apply to any kind of Element)
-  // But then our c++ backend would not be able to compile
-  // Integer_Total_Order which uses the `int` type.
-
-  // Searching for inline elements in a smaller array is faster with linear search
-  // perhaps because the cpu's prefetcher gets the hint.
-  // It turns out we don't have inline elements (we have pointers to keys), so
-  // we don't use this after all.
-  method ArrayLargestLtePlus1Linear(run: array<Element>, start: uint64, end: uint64, needle: Element) returns (posplus1: uint64)
-    requires 0 <= start as int <= end as int <= run.Length < Uint64UpperBound() / 2
-    requires IsSorted(run[start..end]);
-    ensures posplus1 as int == start as int + LargestLte(run[start..end], needle) + 1
+  // TODO(robj): Ideally we'd just overload SmallerElement to return
+  // [], but dafny won't let us.  :\
+  lemma SmallestElement() returns (b: Element)
+    ensures |b| == 0
+    ensures forall a | NotMinimum(a) :: lt(b, a)
   {
-    var i: uint64 := start;
-    var t;
-    if i < end {
-      t := cmp(run[i], needle);
-    }
-    while i < end && t <= 0
-      invariant start <= i <= end
-      invariant forall j :: start <= j < i ==> lte(run[j], needle)
-      invariant i < end ==> (t <= 0 <==> lte(run[i], needle))
+    SeqComparison.reveal_lte();
+    b := [];
+    forall a | NotMinimum(a)
+      ensures lt(b, a)
     {
-      i := i + 1;
-      if i < end {
-        t := cmp(run[i], needle);
+      var wit := SmallerElement(a);
+      if a == [] {
+        assert lte(a, wit);
+        assert false;
       }
     }
-    forall j | i <= j < end
-      ensures lt(needle, run[j])
-    {
-      reveal_IsSorted();
-      assert lt(needle, run[i]);
-      assert lte(run[i], run[j]);
-    }
-    LargestLteIsUnique(run[start..end], needle, i as int - start as int - 1);
-    posplus1 := i;
   }
 
-  method ArrayLargestLtePlus1(run: array<Element>, start: uint64, end: uint64, needle: Element) returns (posplus1: uint64)
-    requires 0 <= start as int <= end as int <= run.Length < Uint64UpperBound() / 2
-    requires IsSorted(run[start..end]);
-    ensures posplus1 as int == start as int + LargestLte(run[start..end], needle) + 1
-  {
-    reveal_IsSorted();
-    var lo := start;
-    var hi := end + 1;
-    while 1 < hi - lo 
-      invariant start <= lo < hi <= end + 1
-      invariant forall i :: start <= i < lo ==> lte(run[i], needle)
-      invariant forall i :: hi - 1 <= i < end ==> lt(needle, run[i])
-      decreases hi - lo
-    {
-      var mid := (lo + hi) / 2;
-      var t := cmp(run[mid-1], needle);
-      if t <= 0 {
-        lo := mid;
-      } else {
-        hi := mid;
-      }
-    }
-    var i: uint64 := lo;
-    // Linear search at end -- no longer used. See comment on ArrayLargestLtePlus1Linear
-    /*
-    var t;
-    if i < hi {
-      t := cmp(run[i], needle);
-    }
-    while i < hi && t <= 0
-      invariant start <= i <= end
-      invariant forall j :: start <= j < i ==> lte(run[j], needle)
-      invariant i < hi ==> (t <= 0 <==> lte(run[i], needle))
-    {
-      i := i + 1;
-      if i < hi {
-        t := cmp(run[i], needle);
-      }
-    }
-    forall j | i <= j < end
-      ensures lt(needle, run[j])
-    {
-      reveal_IsSorted();
-      assert lt(needle, run[i]);
-      assert lte(run[i], run[j]);
-    }
-    */
-    LargestLteIsUnique(run[start..end], needle, i as int - start as int - 1);
-    posplus1 := i;
-  }
-  
-  method ArrayLargestLtPlus1(run: array<Element>, start: uint64, end: uint64, needle: Element) returns (posplus1: uint64)
-    requires 0 <= start as int <= end as int <= run.Length < Uint64UpperBound() / 2
-    requires IsSorted(run[start..end]);
-    ensures posplus1 as int == start as int + LargestLt(run[start..end], needle) + 1
-  {
-    reveal_IsSorted();
-    var lo := start;
-    var hi := end + 1;
-    while 1 < hi - lo 
-      invariant start <= lo < hi <= end + 1
-      invariant forall i :: start <= i < lo ==> lt(run[i], needle)
-      invariant forall i :: hi - 1 <= i < end ==> lte(needle, run[i])
-      decreases hi - lo
-    {
-      var mid := (lo + hi) / 2;
-      var t := cmp(run[mid-1], needle);
-      if t < 0 {
-        lo := mid;
-      } else {
-        hi := mid;
-      }
-    }
-    var i: uint64 := lo;
-    // Linear search at end -- no longer used. See comment on ArrayLargestLtePlus1Linear
-    /*
-    var t;
-    if i < hi {
-      t := cmp(run[i], needle);
-    }
-    while i < hi && t < 0
-      invariant start <= i <= end
-      invariant forall j :: start <= j < i ==> lt(run[j], needle)
-      invariant i < hi ==> (t < 0 <==> lt(run[i], needle))
-    {
-      i := i + 1;
-      if i < hi {
-        t := cmp(run[i], needle);
-      }
-    }
-    */
-    LargestLtIsUnique(run[start..end], needle, i as int - start as int - 1);
-    posplus1 := i;
-  }
-
-  method ComputeLargestLte(shared run: seq<Element>, needle: Element) returns (res : int64)
-    requires |run| < 0x8000_0000_0000_0000
-    requires IsSorted(run)
-    ensures res as int == LargestLte(run, needle)
-  {
-    var lo: int64 := 0;
-    var hi: int64 := LinearSequence_s.seq_length(run) as int64;  // TODO(chris): should there be a non-ghost operator-|| for shared seq?
-    while lo < hi
-    invariant 0 <= lo as int <= hi as int <= |run|
-    invariant 1 <= lo as int ==> lte(run[lo-1], needle)
-    invariant hi as int < |run| ==> lt(needle, run[hi])
-    invariant lo <= hi
-    decreases hi - lo
-    {
-      var mid := (lo + hi) / 2;
-      assert 0<=mid;
-      var c := cmp(LinearSequence_s.seq_get(run, mid as uint64), needle);  // TODO(chris): again, happy with the clumsy non-ghost syntax?
-      if (c > 0) {
-        hi := mid;
-      } else {
-        lo := mid+1;
-      }
-    }
-
-    return lo - 1;
-  }
-    
-  method ComputeLargestLt(run: seq<Element>, needle: Element) returns (res : int64)
-    requires |run| < 0x4000_0000_0000_0000
-    requires IsSorted(run)
-    ensures res as int == LargestLt(run, needle)
-  {
-    var lo: int64 := 0;
-    var hi: int64 := |run| as int64;
-    while lo < hi
-    invariant 0 <= lo as int <= hi as int <= |run|
-    invariant 1 <= lo as int ==> lt(run[lo-1], needle)
-    invariant hi as int < |run| ==> lte(needle, run[hi])
-    decreases hi - lo
-    {
-      var mid := (lo + hi) / 2;
-      var c := cmp(run[mid], needle);
-      if (c < 0) {
-        lo := mid+1;
-      } else {
-        hi := mid;
-      }
-    }
-
-    return lo - 1;
-  }
 
 }

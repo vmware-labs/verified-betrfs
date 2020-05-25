@@ -5,7 +5,7 @@ module BucketGeneratorImpl {
   import opened BucketImpl
   import BucketGeneratorModel
   import BucketIteratorModel
-  import opened Lexicographic_Byte_Order
+  import opened Lexicographic_Byte_Order_Impl
   import opened ValueMessage
   import opened NativeTypes
   import UI

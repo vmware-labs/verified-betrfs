@@ -422,10 +422,11 @@ module IndirectionTableModel {
     var (t', q') := PredDec(t, q, oldSuccs[idx]);
     && RefcountUpdateInv(t', q', changingRef, newSuccs, oldSuccs, |newSuccs|, idx + 1)
     && GarbageQueueInv(q')
-  // ensures |q| <= 0x1_0000_0000
+  ensures |q| <= 0x1_0000_0000
   {
     assert Set(q) <= t.contents.Keys;
     SetInclusionImpliesSmallerCardinality(Set(q), t.contents.Keys);
+    NoDupesSetCardinality(q);
     assert |t.contents.Keys| == |t.contents|;
 
     if idx < |oldSuccs| {
@@ -582,7 +583,7 @@ module IndirectionTableModel {
       SeqCountBound(oldSuccs, ref, 0);
       assert t.contents[ref].predCount < 0xffff_ffff_ffff_ffff;
 
-      assert t.contents[ref].predCount != 0;
+//      assert t.contents[ref].predCount != 0;
       
       var (t', q') := PredInc(t, q, newSuccs[idx]);
       // assert GarbageQueueInv(q') by {
@@ -620,8 +621,11 @@ module IndirectionTableModel {
     var oldEntry := t.contents[ref];
     var newEntry := oldEntry.(predCount := oldEntry.predCount + 1);
     var t' := LinearMutableMap.Insert(t, ref, newEntry);
-    // var q' := if oldEntry.predCount == 0 then RemoveValue(q,  ref) else q;
-    (t', q)
+    var q' := if oldEntry.predCount == 0 then RemoveOneValue(q, ref) else q;
+    (t', q')
+
+//    // var q' := if oldEntry.predCount == 0 then RemoveOneValue(q, ref) else q;
+//    (t', q)
   }
 
   function PredDec(t: HashMap, q: GarbageQueueModel, ref: BT.G.Reference) : (res: (HashMap, GarbageQueueModel))
@@ -636,7 +640,7 @@ module IndirectionTableModel {
     var oldEntry := t.contents[ref];
     var newEntry := oldEntry.(predCount := oldEntry.predCount - 1);
     var t' := LinearMutableMap.Insert(t, ref, newEntry);
-    var q' := if oldEntry.predCount == 1 then q + [ref] else q;
+    var q' := if oldEntry.predCount == 1 && ref !in q then q + [ref] else q;
     (t', q')
   }
 
@@ -813,6 +817,7 @@ module IndirectionTableModel {
     var q := if oldEntry.Some? then self.garbageQueue.value else self.garbageQueue.value + [ref];
     var t := LinearMutableMap.Insert(self.t, ref, Entry(None, succs, predCount));
 
+    reveal_NoDupes();
     var (t1, garbageQueue1) := UpdatePredCountsInc(t, q, ref, succs,
         if oldEntry.Some? then oldEntry.value.succs else [], 0);
 
@@ -1248,7 +1253,7 @@ module IndirectionTableModel {
     if it.next.Done? then
       q
     else (
-      var q' := (if it.next.value.predCount == 0 then
+      var q' := (if it.next.value.predCount == 0 && it.next.key !in q then
         // LruModel.LruUse(q, it.next.key);
         q + [it.next.key]
       else
@@ -1267,15 +1272,16 @@ module IndirectionTableModel {
   lemma makeGarbageQueueIterateCorrect(t: HashMap, q: GarbageQueueModel, it: LinearMutableMap.Iterator<Entry>)
   requires LinearMutableMap.Inv(t)
   requires LinearMutableMap.WFIter(t, it)
-  // requires LruModel.WF(q)
+  requires GarbageQueueInv(q)
   requires (forall ref | ref in t.contents && t.contents[ref].predCount == 0 && ref in it.s :: ref in q)
   requires (forall ref | ref in q :: ref in t.contents && t.contents[ref].predCount == 0 && ref in it.s)
   ensures var q' := makeGarbageQueueIterate(t, q, it);
-    // && LruModel.WF(q')
+    && GarbageQueueInv(q')
     && (forall ref | ref in t.contents && t.contents[ref].predCount == 0 :: ref in q')
     && (forall ref | ref in q' :: ref in t.contents && t.contents[ref].predCount == 0)
   decreases it.decreaser
   {
+    reveal_NoDupes();
     if it.next.Done? {
     } else {
       var q' := (if it.next.value.predCount == 0 then
@@ -1291,10 +1297,11 @@ module IndirectionTableModel {
   lemma lemmaMakeGarbageQueueCorrect(t: HashMap)
   requires LinearMutableMap.Inv(t)
   ensures var q := makeGarbageQueue(t);
-    // && LruModel.WF(q)
+    && GarbageQueueInv(q)
     && (forall ref | ref in t.contents && t.contents[ref].predCount == 0 :: ref in q)
     && (forall ref | ref in q :: ref in t.contents && t.contents[ref].predCount == 0)
   {
+    reveal_NoDupes();
     reveal_makeGarbageQueue();
     makeGarbageQueueIterateCorrect(t, [], LinearMutableMap.IterStart(t));
   }
@@ -1574,6 +1581,35 @@ module IndirectionTableModel {
     }
   }
 
+  lemma BitmapInitUpToIterateResult(bm: BitmapModel.BitmapModelT, i: uint64, upTo: uint64, j: uint64)
+  requires 0 <= i as int <= upTo as int <= BitmapModel.Len(bm)
+  requires 0 <= j as int < BitmapModel.Len(bm)
+  ensures var bm' := BitmapInitUpToIterate(bm, i, upTo);
+    && BitmapModel.Len(bm') == BitmapModel.Len(bm)
+    && (i <= j < upTo ==> BitmapModel.IsSet(bm', j as int))
+    && (!(i <= j < upTo) ==> BitmapModel.IsSet(bm', j as int) == BitmapModel.IsSet(bm, j as int))
+  decreases upTo - i
+  {
+    BitmapModel.reveal_BitSet();
+    BitmapModel.reveal_IsSet();
+    if i == upTo {
+    } else {
+      BitmapInitUpToIterateResult(BitmapModel.BitSet(bm, i as int), i+1, upTo, j);
+    }
+  }
+
+  lemma BitmapInitUpToResult(bm: BitmapModel.BitmapModelT, upTo: uint64, j: uint64)
+  requires upTo as int <= BitmapModel.Len(bm)
+  requires 0 <= j as int < BitmapModel.Len(bm)
+  ensures var bm' := BitmapInitUpTo(bm, upTo);
+    && BitmapModel.Len(bm') == BitmapModel.Len(bm)
+    && (j < upTo ==> BitmapModel.IsSet(bm', j as int))
+    && (j >= upTo ==> BitmapModel.IsSet(bm', j as int) == BitmapModel.IsSet(bm, j as int))
+  {
+    reveal_BitmapInitUpTo();
+    BitmapInitUpToIterateResult(bm, 0, upTo, j);
+  }
+
   lemma InitLocBitmapCorrect(indirectionTable: IndirectionTable)
   requires Inv(indirectionTable)
   requires BC.WFCompleteIndirectionTable(I(indirectionTable))
@@ -1597,14 +1633,16 @@ module IndirectionTableModel {
     forall i: int | IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)
     ensures IsLocAllocBitmap(bm', i)
     {
+      BitmapInitUpToResult(bm, MinNodeBlockIndexUint64(), i as uint64);
       assert i < MinNodeBlockIndex();
-      assume BitmapModel.IsSet(bm', i);
+      assert BitmapModel.IsSet(bm', i);
     }
 
     forall i: int | IsLocAllocBitmap(bm', i)
     ensures IsLocAllocIndirectionTablePartial(indirectionTable, i, it.s)
     {
-      assume i < MinNodeBlockIndex();
+      BitmapInitUpToResult(bm, MinNodeBlockIndexUint64(), i as uint64);
+      assert i < MinNodeBlockIndex();
     }
 
     InitLocBitmapIterateCorrect(indirectionTable, it, bm');
@@ -1674,7 +1712,7 @@ module IndirectionTableModel {
   requires self.t.count as nat < 0x1_0000_0000_0000_0000 / 8 - 1;
   ensures
     var RemoveResult(t, oldEntry) := LinearMutableMap.RemoveAndGet(self.t, ref);
-    var q := RemoveValue(self.garbageQueue.value,  ref);
+    var q := RemoveOneValue(self.garbageQueue.value, ref);
     RefcountUpdateInv(t, q, ref, [], oldEntry.value.succs, 0, 0)
   {
     var RemoveResult(t, oldEntry) := LinearMutableMap.RemoveAndGet(self.t, ref);
@@ -1750,7 +1788,7 @@ module IndirectionTableModel {
     LemmaRemoveRefStuff(self, ref);
 
     var RemoveResult(t, oldEntry) := LinearMutableMap.RemoveAndGet(self.t, ref);
-    var q := RemoveValue(self.garbageQueue.value,  ref);
+    var q := RemoveOneValue(self.garbageQueue.value, ref);
     var (t1, q1) := UpdatePredCountsInc(t, q, ref, [], oldEntry.value.succs, 0);
 
     lemma_count_eq_graph_size(t);
