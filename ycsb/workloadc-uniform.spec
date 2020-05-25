@@ -4,7 +4,7 @@
 #                        
 #   Read/update ratio: 100/0
 
-workloadname=C
+workloadname=Cuniform
 
 recordcount=10000000
 operationcount=10000
@@ -21,6 +21,6 @@ insertproportion=0
 fieldcount=1
 fieldlength=512
 
-requestdistribution=zipfian
+requestdistribution=uniform
 
 #syncintervalms=1000
