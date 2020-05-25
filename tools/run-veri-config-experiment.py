@@ -272,9 +272,9 @@ def main():
     
   driver_options = ""
   if use_filters:
-    driver_options += "--filters"
+    driver_options += "--filters "
   if from_archive:
-    driver_options += "--preloaded"
+    driver_options += "--preloaded "
 
   clear_page_cache()
 
