@@ -235,12 +235,7 @@ def main():
   ret = os.system(cmd)
   assert ret == 0
 
-  if len(workload)==1:
-    # sheesh you're lazy
-    wl = "ycsb/workload" + workload + "-onefield.spec"
-  else:
-    wl = workload
-  actuallyprint("workload: " + wl)
+  workload_cmd = " ".join(workload.split(","))
 
   if device == "ssd":
     loc = "/tmp/veribetrfs"
@@ -287,7 +282,7 @@ def main():
   taskset_cmd = "taskset 4 "
 
   cgroup_prefix = "cgexec -g memory:VeribetrfsExp " if cgroup_enabled else ""
-  command = taskset_cmd + cgroup_prefix + "./" + exe + " " + loc + " " + driver_options + " " + wl
+  command = taskset_cmd + cgroup_prefix + "./" + exe + " " + loc + " " + driver_options + " " + workload_cmd
   actuallyprint(command)
   sys.stdout.flush()
 
