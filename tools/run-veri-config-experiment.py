@@ -169,6 +169,7 @@ def main():
       cgroup_enabled = enabled=="True"
     elif arg.startswith("output="):
       outpath = arg.split("=")[1]
+      actuallyprint("outpath: %s", outpath)
       assert not os.path.exists(outpath)
       fp = open(outpath, "w")
       os.dup2(fp.fileno(), 1)   # replace stdout for this program and children
