@@ -1,10 +1,5 @@
 include "../Lang/NativeTypes.s.dfy"
-<<<<<<< HEAD
-include "../Base/total_order.i.dfy"
-include "../Base/sequences.i.dfy"
-=======
 include "../Base/NativeArrays.s.dfy"
->>>>>>> linear-disintegration
 include "../Base/Arrays.i.dfy"
 include "../Base/Option.s.dfy"
 include "BtreeModel.i.dfy"
@@ -978,19 +973,9 @@ abstract module MutableBtree {
       node.contents.values[posplus1-1] := value;
     } else {
       oldvalue := None;
-<<<<<<< HEAD
-      assert Model.Keys.IsStrictlySorted(keys);
-      Model.Keys.strictlySortedInsert(keys, key, pos as int);
-      ghost var before := keys;
-      keys := InsertSeq(keys, key, (pos + 1) as uint64);
-      assert keys == Seq.insert(before, key, (pos + 1) as int);
-      assert Model.Keys.IsStrictlySorted(keys);
-      values := InsertSeq(values, value, (pos + 1) as uint64);
-=======
       Arrays.Insert(node.contents.keys, node.contents.nkeys, key, posplus1);
       Arrays.Insert(node.contents.values, node.contents.nkeys, value, posplus1);
       node.contents := node.contents.(nkeys := node.contents.nkeys + 1);
->>>>>>> linear-disintegration
     }
     Model.InsertLeafIsCorrect(old(I(node)), key, value);
   }
