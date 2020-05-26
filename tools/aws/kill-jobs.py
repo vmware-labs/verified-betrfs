@@ -7,6 +7,9 @@ def cmd_for_idx(idx, worker):
 
 def main():
     workers = retrieve_running_workers()
+    blacklist = [
+    ]
+    workers = [w for w in workers if w["Name"] not in blacklist]
     worker_pipes = launch_worker_pipes(workers, len(workers), cmd_for_idx, dry_run=False)
     monitor_worker_pipes(worker_pipes)
 
