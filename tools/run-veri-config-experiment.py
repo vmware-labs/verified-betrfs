@@ -297,14 +297,9 @@ def main():
   proc = subprocess.Popen(command, shell=True, preexec_fn=os.setsid, stdout=fp)
   proc_grp_id = os.getpgid(proc.pid)
   actuallyprint("experiment pid %d pgid %d" % (proc.pid, proc_grp_id))
-  while proc.poll() == None:
-    if time.time() >= end_time:
-      os.killpg(proc_grp_id, signal.SIGKILL)
-      actuallyprint("time_budget exhausted; killed.")
-      break
-    time.sleep(10)
-
+  ret = proc.wait()
   assert ret == 0
+  actuallyprint("done")
 
 if __name__ == "__main__":
   main()
