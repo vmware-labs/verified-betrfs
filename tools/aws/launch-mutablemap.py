@@ -41,6 +41,15 @@ def main():
     log("VARIANTS %s" % suite.variants)
 
     workers = retrieve_running_workers()
+    blacklist = [
+        "veri-worker-b00",
+        "veri-worker-b01",
+        "veri-worker-b02",
+        "veri-worker-b03",
+        "veri-worker-b04",
+        "veri-worker-b05",
+    ]
+    workers = [w for w in workers if w["Name"] not in blacklist]
     worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=False)
     monitor_worker_pipes(worker_pipes)
 
