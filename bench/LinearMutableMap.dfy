@@ -85,7 +85,7 @@ module MutableMapBench {
     var readnegative_end: uint64 := steadyClockMillis();
     assume readnegative_end >= readnegative_start;
     var readnegative_duration: uint64 := readnegative_end - readnegative_start;
-    print(nOperations, "readnegative\tlinear\t", readnegative_duration, "\n");
+    print("readnegative\tlinear\t", readnegative_duration, "\n");
 
     // EMPTY (REMOVE POSITIVE)
     i := 0;
