@@ -83,7 +83,9 @@ module QueryImpl {
 
         node.LemmaReprSeqBucketsLeRepr();
         s.cache.LemmaNodeReprLeRepr(ref);
-        MutBucket.reveal_ReprSeq();
+        MutBucket.AllocatedReprSeq(node.buckets);
+        MutBucket.LemmaReprBucketLeReprSeq(node.buckets,
+            Pivots.Route(node.pivotTable, key));
 
         ghost var oldIVars := s.I();
         LruModel.LruUse(s.lru.Queue, ref);
