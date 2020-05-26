@@ -23,9 +23,6 @@ module MutableMapBench {
       invariant LinearMutableMap.Inv(hashMap)
       invariant hashMap.count <= i
     {
-      if i % 1000000 == 0 {
-        print "Inserting ", i, "\n";
-      }
       var v := lcg.next();
       assert hashMap.count as nat < 0x10000000000000000 / 8;
       if (!dry) {
@@ -38,7 +35,6 @@ module MutableMapBench {
       }
       i := i + 1;
     }
-    print i;
     var write_end: uint64 := steadyClockMillis();
     assume write_end >= write_start;
     var write_duration: uint64 := write_end - write_start;
@@ -89,7 +85,7 @@ module MutableMapBench {
     var readnegative_end: uint64 := steadyClockMillis();
     assume readnegative_end >= readnegative_start;
     var readnegative_duration: uint64 := readnegative_end - readnegative_start;
-    print(nOperations, "\treadnegative\tlinear\t", readnegative_duration, "\n");
+    print(nOperations, "readnegative\tlinear\t", readnegative_duration, "\n");
 
     // EMPTY (REMOVE POSITIVE)
     i := 0;
@@ -100,9 +96,6 @@ module MutableMapBench {
       invariant LinearMutableMap.Inv(hashMap)
       invariant hashMap.count <= nOperations
     {
-      if i % 1000000 == 0 {
-        print "Inserting ", i, "\n";
-      }
       var v := lcg.next();
       if (!dry) {
         hashMap := LinearMutableMap.Remove(hashMap, v);
@@ -110,7 +103,6 @@ module MutableMapBench {
       }
       i := i + 1;
     }
-    print i;
     var remove_end: uint64 := steadyClockMillis();
     assume remove_end >= remove_start;
     var remove_duration: uint64 := remove_end - remove_start;
