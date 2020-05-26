@@ -17,11 +17,11 @@ common_vars = [
     ]
 repr_suite = Suite(
     "repr",
-    Variable("git_branch", "git_branch", [Value("master", "eval-btree-master")]),
+    Variable("git_branch", "git_branch", [Value("master", "eval-mutablemap-master")]),
     *common_vars)
 linear_suite = Suite(
     "linear",
-    Variable("git_branch", "git_branch", [Value("linear", "eval-btree-linear")]),
+    Variable("git_branch", "git_branch", [Value("linear", "eval-mutablemap-linear")]),
     *common_vars)
 suite = ConcatSuite("silver-btree-millions", linear_suite, repr_suite)
 
