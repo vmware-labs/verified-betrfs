@@ -68,6 +68,8 @@ def set_mem_limit(limit):
   assert ret == 0
 
 def clear_page_cache():
+  os.system("sudo tools/setup-clear-os-page-cache-binary.sh")
+
   if not os.path.exists("tools/clear-os-page-cache"):
     print("Error: can't clear cache.")
     print("Run `sudo tools/setup-clear-os-page-cache-binary.sh` first.")
@@ -123,6 +125,8 @@ def main():
   kyoto = None
   time_budget_sec = 3600*24*365 # You get a year if you don't ask for a budget
 
+  fp = None
+
   for arg in sys.argv[1:]:
     if arg.startswith("ram="):
       ram = arg[len("ram=") : ]
@@ -172,9 +176,10 @@ def main():
       actuallyprint("outpath: %s" % outpath)
       assert not os.path.exists(outpath)
       fp = open(outpath, "w")
-      os.dup2(fp.fileno(), 1)   # replace stdout for this program and children
     else:
       assert False, "unrecognized argument: " + arg
+
+  assert fp is not None
       
   actuallyprint("Experiment time budget %s" % (datetime.timedelta(seconds=time_budget_sec)))
   actuallyprint("metadata time_budget %s seconds" % time_budget_sec)
@@ -272,9 +277,9 @@ def main():
     
   driver_options = ""
   if use_filters:
-    driver_options += "--filters"
+    driver_options += "--filters "
   if from_archive:
-    driver_options += "--preloaded"
+    driver_options += "--preloaded "
 
   clear_page_cache()
 
@@ -289,7 +294,7 @@ def main():
 
   start_time = time.time()
   end_time = start_time + time_budget_sec
-  proc = subprocess.Popen(command, shell=True, preexec_fn=os.setsid)
+  proc = subprocess.Popen(command, shell=True, preexec_fn=os.setsid, stdout=fp)
   proc_grp_id = os.getpgid(proc.pid)
   actuallyprint("experiment pid %d pgid %d" % (proc.pid, proc_grp_id))
   while proc.poll() == None:
