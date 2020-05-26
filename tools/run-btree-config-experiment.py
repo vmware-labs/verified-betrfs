@@ -77,7 +77,7 @@ def main():
 
   cmd = None
   if branch == "eval-btree-master":
-    cmd = "g++ -O3 lib/DataStructures/lib/DataStructures/MutableBtree.i.cpp bench/run-mutable-btree.cpp -o MutableBtreeBench -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -Ilib -std=c++17 -I. -Iframework framework/NativeArrays.cpp framework/LinearCongruentialGenerator.h"
+    cmd = "g++ -O3 lib/DataStructures/lib/DataStructures/MutableBtree.i.cpp bench/run-mutable-btree.cpp -o MutableBtreeBench -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -Ilib -std=c++17 -I. -Iframework framework/NativeArrays.cpp"
   elif branch == "eval-btree-linear":
     cmd = "g++ -O3 lib/DataStructures/lib/DataStructures/MutableBtree.i.cpp bench/run-mutable-btree.cpp -o MutableBtreeBench -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -Ilib -std=c++17 -I."
   actuallyprint(cmd)
