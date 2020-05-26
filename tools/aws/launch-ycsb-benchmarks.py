@@ -3,7 +3,7 @@
 from automation import *
 from suite import *
 
-replica_count = 1
+replica_count = 6
 
 common_vars = [
     Variable("cgroup",     "run_veri",   [Value("yescgroup", "cgroup=True")]),
@@ -52,7 +52,7 @@ kyoto_suite = Suite(
     Variable("system", "run_veri", [Value("kyoto", "kyoto")]),
     *common_vars_others)
 #suite = ConcatSuite("ycsb-001", veri_suite, rocks_suite, berkeleydb_suite)
-suite = ConcatSuite("ycsb-new-script-005", veri_suite, rocks_suite)
+suite = ConcatSuite("silver-run-endtoend-berkeley", berkeley_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
