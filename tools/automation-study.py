@@ -74,10 +74,11 @@ def opaqueInstances():
     for iref in opaqueRefs:
         symbolName = symbolNameForOpaqueIref(iref)
         #print(symbolName)
-        reveal_count = len(grepAll("reveal_%s" % symbolName))
+        reveal_lines = grepAll("reveal_%s\\b" % symbolName)
+        reveal_count = len(reveal_lines)
         record = {"file": iref.normPath, "line": iref.line_num, "symbol":symbolName, "reveal_count":reveal_count}
         records.append(record)
-        #print("revealed %2d times: %s in %s at %s" % (reveal_count, symbolName, iref.normPath, iref.line_num))
+        print("revealed %2d times: %s in %s at %s" % (reveal_count, symbolName, iref.normPath, iref.line_num))
         #sys.stdout.flush()
     return records
 
@@ -163,7 +164,7 @@ def find_dead_lemmas():
             print(x)
 
 def main():
-    #scrape()
+    scrape()
 
     records = json.loads(open(INTERMEDIATE).read())
     print("Got %s records" % len(records))
