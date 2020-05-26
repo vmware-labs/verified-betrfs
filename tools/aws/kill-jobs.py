@@ -1,12 +1,17 @@
 #!/usr/bin/python3
 
 from automation import *
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--ssd', action='store_true', help="select ssd machines")
+args = parser.parse_args()
 
 def cmd_for_idx(idx, worker):
     return Command("kill", ssh_cmd_for_worker(worker) + ["killall", "-q", "VeribetrfsYcsb", "RocksYcsb", "make", "z3", "mono", "dafny"])
 
 def main():
-    workers = retrieve_running_workers()
+    workers = retrieve_running_workers(ssd=args.ssd)
     blacklist = [
     ]
     workers = [w for w in workers if w["Name"] not in blacklist]
