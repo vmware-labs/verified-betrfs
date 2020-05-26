@@ -55,7 +55,7 @@ kyoto_suite = Suite(
     "berkeleydb",
     Variable("system", "run_veri", [Value("kyoto", "kyoto")]),
     *common_vars_others)
-suite = ConcatSuite("exp-run-ssd-veri-weight", veri_suite)
+suite = ConcatSuite("exp-run-ssd-veri-weight-cc", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
@@ -80,7 +80,7 @@ def main():
     ]
     workers = [w for w in workers if w["Name"] not in blacklist]
     print(workers)
-    worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=True)
+    worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=False)
     monitor_worker_pipes(worker_pipes)
 
 main()
