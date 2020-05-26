@@ -41,15 +41,12 @@ def actuallyprint(msg):
 
 def main():
   seed=None
-  ops=None
   output=None
 
   print("arguments", sys.argv)
 
   for arg in sys.argv[1:]:
-    if arg.startswith("ops="):
-      ops = arg[len("ops=") : ]
-    elif arg.startswith("seed="):
+    if arg.startswith("seed="):
       seed = arg[len("seed=") : ]
     elif arg.startswith("output="):
       output = arg[len("output=") : ]
@@ -105,21 +102,15 @@ def main():
       f.write("METADATA btree perf comparison\n")
       f.write("METADATA branch {}\n".format(branch))
       f.write("METADATA seed {}\n".format(seed))
-      for pp in eval(ops):
-          nops = 1000000 * (2**pp)
+      command = taskset_cmd + "./MutableMapBench {} false".format(str(seed))
+      actuallyprint(command)
+      sys.stdout.flush()
 
-          command = taskset_cmd + "./MutableMapBench {} {} false".format(str(seed), str(nops))
-          actuallyprint(command)
-          sys.stdout.flush()
-
-          result = subprocess.run(command, shell=True, preexec_fn=os.setsid,
-                  universal_newlines=True, stdout=subprocess.PIPE)
-          # proc_grp_id = os.getpgid(proc.pid)
-          # actuallyprint("experiment pid %d pgid %d" % (proc.pid, proc_grp_id))
-          # actuallyprint("{} writing to {}".format(nops, output))
-          # f.write("{}\t{}\n".format(nops, end_time - start_time))
-          f.write(result.stdout)
-          f.flush()
+      result = subprocess.run(command, shell=True, preexec_fn=os.setsid,
+              universal_newlines=True, stdout=subprocess.PIPE)
+      f.write(result.stdout)
+      f.flush()
+      actuallyprint("done")
 
 if __name__ == "__main__":
   main()
