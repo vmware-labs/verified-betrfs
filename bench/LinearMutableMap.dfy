@@ -13,7 +13,7 @@ module MutableMapBench {
     var lcg: LCG := new LCG(seed);
 
     var nOperations: uint64 := 64000000;
-    print("METADATA operations ", nOperations);
+    print("METADATA operations ", nOperations, "\n");
 
     // WRITE
     var i: uint64 := 0;
