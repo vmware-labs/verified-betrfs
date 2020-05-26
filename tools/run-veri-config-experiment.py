@@ -14,40 +14,12 @@ def actuallyprint(msg):
     print(msg)
     sys.stdout.flush()
 
-def autoconfig(config, memlimit, nodeCountFudge):
-  actuallyprint("using node size roughly: " + config)
-  sys.stdout.flush()
-
-  if memlimit.endswith("gb"):
-    memlimit = int(float(memlimit[:-2]) * 1024*1024*1024)
-  else:
-    memlimit = int(memlimit)
-
-  itable_size = 8*1024*1024
-
-  if config == "8mb":
-    node_size = 8*1024*1024
-    bucket_weight = 8356168
-    cache_size = int(memlimit * nodeCountFudge // ((8*1024*1024)))
-  elif config == "1mb":
-    node_size = 1*1024*1024
-    bucket_weight = 1016136 # jonh has no idea where this number comes from, so I subtracted 32000 because that looks like a popular choice.
-    cache_size = int(memlimit * nodeCountFudge // ((1*1024*1024)))
-  elif config == "64kb":
-    node_size = 98304
-    bucket_weight = 64220
-    cache_size = int(memlimit * nodeCountFudge // ((64*1024)))
-  else:
-    assert False
-
-  min_index = (itable_size + node_size - 1) // node_size
+def autoconfig(bucket_weight_bytes, cache_size_bytes):
+  cache_size_nodes = int(cache_size_bytes // bucket_weight_bytes)
     
   return [
-    ("IndirectionTableBlockSizeUint64", str(itable_size)),
-    ("NodeBlockSizeUint64", str(node_size)),
-    ("MinNodeBlockIndexUint64", str(min_index)),
-    ("MaxTotalBucketWeightUint64", str(bucket_weight)),
-    ("MaxCacheSizeUint64", str(cache_size)),
+    ("MaxTotalBucketWeightUint64", str(bucket_weight_bytes)),
+    ("MaxCacheSizeUint64", str(cache_size_nodes)),
   ]
 
 def cgroup_defaults():
@@ -118,6 +90,8 @@ def main():
   use_unverified_row_cache = None
   use_filters = None
   from_archive = None
+  veri_cache_size = None
+  veri_bucket_weight = None
   
   veri = None
   rocks = None
@@ -135,7 +109,11 @@ def main():
     elif arg.startswith("device="):
       device = arg[len("device=") : ]
     elif arg.startswith("fromArchive="):
-        from_archive = arg[len("fromArchive=") : ]
+      from_archive = arg[len("fromArchive=") : ]
+    elif arg.startswith("cacheSize="):
+      veri_cache_size = arg[len("cacheSize=") : ]
+    elif arg.startswith("bucketWeight="):
+      veri_bucket_weight = arg[len("bucketWeight=") : ]
     elif arg.startswith("nodeCountFudge="):
       nodeCountFudge = float(arg[len("nodeCountFudge=") : ])
     elif "Uint64=" in arg:
@@ -148,10 +126,6 @@ def main():
         use_unverified_row_cache = True
     elif arg == "use_filters":
         use_filters = True
-    elif arg == "config-64kb":
-      config = "64kb"
-    elif arg == "config-8mb":
-      config = "8mb"
     elif arg == "veri":
       veri = True
     elif arg == "rocks":
@@ -192,10 +166,10 @@ def main():
   if use_filters:
       assert rocks
       
-  if config != None:
+  if veri_bucket_weight is not None:
     assert veri
-    assert ram != None
-    value_updates = autoconfig(config, ram, nodeCountFudge) + value_updates
+    assert veri_cache_size is not None
+    value_updates = autoconfig(veri_bucket_weight, veri_cache_size) + value_updates
 
   assert workload != None
   assert device != None
