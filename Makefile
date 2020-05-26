@@ -185,6 +185,7 @@ build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 build/lib/DataStructures/MutableBtree.i.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/Buckets/PackedStringArray.i.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/Buckets/KMBPKVOps.i.verchk: DAFNY_FLAGS=/noNLarith
+build/Impl/QueryImpl.i.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/DataStructures/LinearDList.i.verchk: DAFNY_FLAGS=/noNLarith /proverOpt:OPTIMIZE_FOR_BV=true /z3opt:smt.PHASE_SELECTION=0 /z3opt:smt.RESTART_STRATEGY=0 /z3opt:smt.RESTART_FACTOR=1.5 /z3opt:smt.ARITH.RANDOM_INITIAL_VALUE=true /z3opt:smt.CASE_SPLIT=1
 
 ##############################################################################
