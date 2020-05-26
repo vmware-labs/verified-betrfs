@@ -7,23 +7,25 @@ module MutableMapBench {
   import opened MutableMap
   import opened LinearCongruentialGenerator
 
-  method Run(seed: uint64, nOperations: uint64, dry: bool)
-  requires nOperations as nat < 0x10000000000000000 / 8
+  method Run(seed: uint64, dry: bool)
   {
     var hashMap := new ResizingHashMap<uint64>(1024 * 1024);
     assert hashMap.Inv();
     assert fresh(hashMap);
     var lcg: LCG := new LCG(seed);
-    var lcg2: LCG := new LCG(seed);
 
+    var nOperations: uint64 := 256000000;
+
+    // WRITE
     var i: uint64 := 0;
     var write_start: uint64 := steadyClockMillis();
     while i < nOperations
+      invariant i <= nOperations
       invariant hashMap.Inv()
       invariant hashMap.Count <= i
       invariant fresh(hashMap)
       invariant fresh(hashMap.Repr)
-      invariant {lcg} !! {lcg2} !! hashMap.Repr
+      invariant {lcg} !! hashMap.Repr
     {
       var v := lcg.next();
       assert fresh(hashMap);
@@ -37,26 +39,27 @@ module MutableMapBench {
       if (!dry) {
         assert v in hashMap.Contents && hashMap.Contents[v] == v;
       }
-      if !dry && i >= 1000000 {
-        var vn := lcg2.next();
-        hashMap.Remove(vn);
-      }
       i := i + 1;
       assert fresh(hashMap);
     }
-    print i;
     var write_end: uint64 := steadyClockMillis();
     assume write_end >= write_start;
     var write_duration: uint64 := write_end - write_start;
-    print(nOperations, "\twrite\trepr\t", write_duration, "\n");
+    print("insert\trepr\t", write_duration, "\n");
 
+    assert hashMap.Count <= nOperations;
+
+    // READ POSITIVE
     i := 0;
-
-    var read_start: uint64 := steadyClockMillis();
+    lcg := new LCG(seed);
+    var readpositive_start: uint64 := steadyClockMillis();
     while i < nOperations
       invariant 0 <= i <= nOperations
+      invariant hashMap.Count <= nOperations
       invariant hashMap.Inv()
-      invariant {lcg} !! {lcg2} !! hashMap.Repr
+      invariant fresh(hashMap)
+      invariant fresh(hashMap.Repr)
+      invariant {lcg} !! hashMap.Repr
     {
       var keyv := lcg.next();
       if (!dry) {
@@ -67,9 +70,60 @@ module MutableMapBench {
       }
       i := i + 1;
     }
-    var read_end: uint64 := steadyClockMillis();
-    assume read_end >= read_start;
-    var read_duration: uint64 := read_end - read_start;
-    print(nOperations, "\tread\trepr\t", read_duration, "\n");
+    var readpositive_end: uint64 := steadyClockMillis();
+    assume readpositive_end >= readpositive_start;
+    var readpositive_duration: uint64 := readpositive_end - readpositive_start;
+    print("readpositive\trepr\t", readpositive_duration, "\n");
+
+    // READ NEGATIVE
+    i := 0;
+    assume seed as nat + 1 < 0x1_0000_0000_0000_0000;
+    lcg := new LCG(seed + 1);
+    var readnegative_start: uint64 := steadyClockMillis();
+    while i < nOperations
+      invariant 0 <= i <= nOperations
+      invariant hashMap.Count <= nOperations
+      invariant hashMap.Inv()
+      invariant fresh(hashMap)
+      invariant fresh(hashMap.Repr)
+      invariant {lcg} !! hashMap.Repr
+    {
+      var keyv := lcg.next();
+      if (!dry) {
+        var result := hashMap.Get(keyv);
+        if result.Some? {
+          opaqueBlackhole(result.value);
+        }
+      }
+      i := i + 1;
+    }
+    var readnegative_end: uint64 := steadyClockMillis();
+    assume readnegative_end >= readnegative_start;
+    var readnegative_duration: uint64 := readnegative_end - readnegative_start;
+    print("readnegative\trepr\t", readnegative_duration, "\n");
+
+    // EMTPY (REMOVE POSITIVE)
+    i := 0;
+    lcg := new LCG(seed);
+    var remove_start: uint64 := steadyClockMillis();
+    while i < nOperations
+      invariant hashMap.Inv()
+      invariant hashMap.Count <= nOperations
+      invariant fresh(hashMap)
+      invariant fresh(hashMap.Repr)
+      invariant {lcg} !! hashMap.Repr
+    {
+      var vn := lcg.next();
+      if (!dry) {
+        hashMap.Remove(vn);
+        assert !(vn in hashMap.Contents);
+      }
+      i := i + 1;
+    }
+    var remove_end: uint64 := steadyClockMillis();
+    assume remove_end >= remove_start;
+    var remove_duration: uint64 := remove_end - remove_start;
+    print("remove\trepr\t", remove_duration, "\n");
+
   }
 }
