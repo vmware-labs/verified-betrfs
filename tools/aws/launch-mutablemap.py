@@ -4,8 +4,6 @@ from automation import *
 from suite import *
 
 common_vars = [
-    Variable("ops", "run_map", [
-        Value("2pows", "ops=[4,5,6,7,8,9,10,11]") ]),
     Variable("seed", "run_map", [
         Value("seed0", "seed=348725789"),
         Value("seed1", "seed=34578699348"),
