@@ -14,7 +14,7 @@ module MutableMapBench {
     assert fresh(hashMap);
     var lcg: LCG := new LCG(seed);
 
-    var nOperations: uint64 := 256000000;
+    var nOperations: uint64 := 64000000;
 
     // WRITE
     var i: uint64 := 0;
