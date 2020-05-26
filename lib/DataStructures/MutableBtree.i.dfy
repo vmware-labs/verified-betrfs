@@ -1,4 +1,6 @@
 include "../Lang/NativeTypes.s.dfy"
+include "../Lang/LinearSequence.s.dfy"
+include "../Lang/LinearSequence.i.dfy"
 include "../Base/NativeArrays.s.dfy"
 include "../Base/total_order.i.dfy"
 include "../Base/sequences.i.dfy"
@@ -21,7 +23,7 @@ abstract module MutableBtree {
   import Arrays
   import Model : BtreeModel
 
-  export API provides WF, Interpretation, EmptyTree, Insert, Query, Empty, MinKey, MaxKey, NativeTypes, Model, Options, Maps reveals Node, Key, Value
+  export API provides WF, Interpretation, EmptyTree, Insert, Query, Empty, MinKey, MaxKey, NativeTypes, Model, Options, Maps, Free reveals Node, Key, Value
   export All reveals *
     
   type Key = Model.Keys.Element
