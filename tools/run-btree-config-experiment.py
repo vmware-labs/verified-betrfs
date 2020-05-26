@@ -108,6 +108,7 @@ def main():
           # f.write("{}\t{}\n".format(nops, end_time - start_time))
           f.write(result.stdout)
           f.flush()
+          actuallyprint("DONE")
 
 if __name__ == "__main__":
   main()
