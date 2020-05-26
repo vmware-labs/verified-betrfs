@@ -1565,6 +1565,7 @@ abstract module BtreeModel {
   lemma NumElementsOfChildrenMatchesInterpretation(nodes: lseq<Node>, pivots: seq<Key>)
     requires WF(Index(pivots, nodes))
     ensures NumElements(Index(pivots, nodes)) == |Interpretation(Index(pivots, nodes))|
+    decreases lseqs(nodes)
   {
     var parent := Index(pivots, nodes);
     if |nodes| == 1 {
@@ -1598,6 +1599,7 @@ abstract module BtreeModel {
       var pivot := Last(pivots);
       assert AllKeysBelowBound(parent, |nodes|-2);
       assert AllKeysAboveBound(parent, |nodes|-1);
+      assert lseqs(right.children) == lseqs(SubIndex(parent, |left.children|, |parent.children|).children);
       SplitIndexPreservesWF(parent, left, right, pivot);
       NumElementsOfChildrenMatchesInterpretation(left.children, left.pivots);
       NumElementsMatchesInterpretation(right.children[0]);
@@ -1616,6 +1618,7 @@ abstract module BtreeModel {
   lemma NumElementsMatchesInterpretation(node: Node)
     requires WF(node)
     ensures NumElements(node) == |Interpretation(node)|
+    decreases node
   {
     var interp := Interpretation(node);
     reveal_Interpretation();
