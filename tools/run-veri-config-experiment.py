@@ -111,9 +111,9 @@ def main():
     elif arg.startswith("fromArchive="):
       from_archive = arg[len("fromArchive=") : ]
     elif arg.startswith("cacheSize="):
-      veri_cache_size = arg[len("cacheSize=") : ]
+      veri_cache_size = int(arg[len("cacheSize=") : ])
     elif arg.startswith("bucketWeight="):
-      veri_bucket_weight = arg[len("bucketWeight=") : ]
+      veri_bucket_weight = int(arg[len("bucketWeight=") : ])
     elif arg.startswith("nodeCountFudge="):
       nodeCountFudge = float(arg[len("nodeCountFudge=") : ])
     elif "Uint64=" in arg:
