@@ -12,7 +12,8 @@ module MutableMapBench {
     linear var hashMap := LinearMutableMap.Constructor(1024 * 1024);
     var lcg: LCG := new LCG(seed);
 
-    var nOperations: uint64 := 256000000;
+    var nOperations: uint64 := 64000000;
+    print("METADATA operations ", nOperations);
 
     // WRITE
     var i: uint64 := 0;
