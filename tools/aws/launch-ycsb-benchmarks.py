@@ -3,7 +3,7 @@
 from automation import *
 from suite import *
 
-replica_count = 1
+replica_count = 6
 
 common_vars = [
     Variable("cgroup",     "run_veri",   [Value("yescgroup", "cgroup=True")]),
@@ -33,8 +33,7 @@ veri_suite = Suite(
                                         # Value("yesrowcache", "use_unverified_row_cache")]),
     Variable("cachesize", "run_veri", [Value("cachesize200m", "cacheSize={}".format(200*1024*1024))]),
     Variable("bucketweight", "run_veri", [
-        Value("bucketweight2pow{}".format(p), "bucketWeight={}".format((2**p)*1024))
-        for p in [4, 5, 6, 7, 8, 9, 10]]),
+        Value("bucketweight2pow{}".format(p), "bucketWeight={}".format((2**p)*1024)) for p in [7]]),
     *common_vars)
 
 common_vars_others = common_vars + [
@@ -55,7 +54,7 @@ kyoto_suite = Suite(
     "berkeleydb",
     Variable("system", "run_veri", [Value("kyoto", "kyoto")]),
     *common_vars_others)
-suite = ConcatSuite("exp-run-ssd-veri-weight-cc", veri_suite)
+suite = ConcatSuite("golden-ssd-veri-bucketweight", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
