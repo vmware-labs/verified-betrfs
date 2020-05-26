@@ -1,4 +1,4 @@
-#include "bench/MutableMap.h"
+#include "bench/LinearMutableMap.h"
 
 int main(int argc, char**argv) {
     if (argc != 3) {
