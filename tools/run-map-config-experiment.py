@@ -81,6 +81,12 @@ def main():
   ret = os.system(dafny_cmd_2)
   assert ret == 0
 
+  if branch == "eval-btree-linear":
+    ret = os.system("""sed -i~ '3 a\
+#include "framework/LinearExtern.h"
+' bench/LinearMutableMap.h""")
+    assert ret == 0
+
   cmd = None
   if branch == "eval-btree-linear":
     cmd = "g++ -O3 bench/bench/LinearMutableMap.cpp bench/run-mutable-map.cpp framework/NativeArithmetic.cpp -o MutableMapBench  -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -I bench -Ilib -std=c++17 -I."
