@@ -1,5 +1,6 @@
 include "KeyType.s.dfy"
 include "../Lang/NativeTypes.s.dfy"
+include "../Lang/LinearSequence.s.dfy"
 include "sequences.i.dfy"
 
 //
@@ -78,6 +79,7 @@ abstract module Message {
 module ValueMessage refines Message {
   import ValueType`Internal
   import opened NativeTypes
+  import opened LinearSequence_s
   import opened Sequences
   
   type Value = ValueType.Value
@@ -163,6 +165,24 @@ module ValueMessage refines Message {
   {
   }
   
+  method MessageSeq_to_bytestringSeq(shared msgs: seq<Message>, nmsgs: uint64) returns (linear result: seq<seq<byte>>)
+    requires nmsgs as nat <= |msgs|
+    requires EncodableMessageSeq(msgs[..nmsgs])
+    ensures result[..] == messageSeq_to_bytestringSeq(msgs[..nmsgs])
+  {
+    result := seq_alloc<seq<byte>>(nmsgs, []);
+    var i: uint64 := 0;
+
+    while i < nmsgs
+      invariant i <= nmsgs
+      invariant |result| == nmsgs as int;
+      invariant result[..i] == messageSeq_to_bytestringSeq(msgs[..i])
+    {
+      result := seq_set(result, i, Message_to_bytestring(seq_get(msgs, i)));
+      i := i + 1;
+    }
+  }
+
   method MessageArray_to_bytestringSeq(msgs: array<Message>, nmsgs: uint64) returns (result: seq<seq<byte>>)
     requires nmsgs as nat <= msgs.Length
     requires EncodableMessageSeq(msgs[..nmsgs])

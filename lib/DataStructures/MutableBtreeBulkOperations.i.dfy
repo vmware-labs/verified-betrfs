@@ -3,6 +3,8 @@ include "../Base/mathematics.i.dfy"
 // TODO(robj): dead code; delete? 
 
 abstract module MutableBtreeBulkOperations {
+  import opened LinearSequence_s
+  import opened LinearSequence_i
   import opened NativeTypes
   import opened NativeArrays
   import opened Sequences
@@ -15,121 +17,127 @@ abstract module MutableBtreeBulkOperations {
     reads node, node.repr
     requires WF(node)
   {
-    Model.NumElements(I(node))
+    L.Model.NumElements(I(node))
   }
   
-  method CountElements(node: Node) returns (count: uint64)
-    requires WFShape(node)
-    requires Model.WF(I(node))
-    requires NumElements(node) < Uint64UpperBound()
-    ensures count as nat == Model.NumElements(I(node))
-    decreases node.height
+  method CountElements(shared node: L.Node) returns (count: uint64)
+    requires L.WF(node)
+    requires L.Model.NumElements(node) < Uint64UpperBound()
+    ensures count as nat == L.Model.NumElements(node)
+//    decreases node.height
   {
-    reveal_I();
-    if node.contents.Leaf? {
-      count := node.contents.nkeys;
+    if node.Leaf? {
+      count := seq_length(node.keys);
     } else {
-      ghost var inode := I(node);
+      ghost var inode := node;
       count := 0;
       ghost var icount: int := 0;
       
       var i: uint64 := 0;
-      while i < node.contents.nchildren
-        invariant i <= node.contents.nchildren
-        invariant icount == Model.NumElementsOfChildren(inode.children[..i])
+      while i < lseq_length_uint64(node.children)
+        invariant i as int <= |node.children|
+        invariant icount == L.Model.NumElementsOfChildren(lseqs(inode.children)[..i])
         invariant icount < Uint64UpperBound()
         invariant count == icount as uint64
       {
-        ghost var ichildcount := Model.NumElements(inode.children[i]);
-        assert inode.children[..i+1][..i] == inode.children[..i];
-        Model.NumElementsOfChildrenNotZero(inode);
-        Model.NumElementsOfChildrenDecreases(inode.children, (i+1) as int);
+        ghost var ichildcount := L.Model.NumElements(lseqs(inode.children)[i]);
+        assert lseqs(inode.children)[..i+1][..i] == lseqs(inode.children)[..i];
+        L.Model.NumElementsOfChildrenNotZero(inode);
+        L.Model.NumElementsOfChildrenDecreases(lseqs(inode.children), (i+1) as int);
         icount := icount + ichildcount;
 
-        IOfChild(node, i as int);
-        var childcount: uint64 := CountElements(node.contents.children[i]);
+        var childcount: uint64 := CountElements(lseq_peek(node.children, i));
         count := count + childcount;
         i := i + 1;
       }
-      assert inode.children[..node.contents.nchildren] == inode.children;
+      assert lseqs(inode.children)[..|node.children|] == lseqs(inode.children);
     }
   }
 
-  method ToSeqSubtree(node: Node, keys: array<Key>, values: array<Value>, start: uint64) returns (nextstart: uint64)
-    requires WF(node)
-    requires !Arrays.Aliases(keys, values)
-    requires keys.Length == values.Length
-    requires keys !in node.repr
-    requires values !in node.repr
-    requires start as nat + NumElements(node) <= keys.Length
-    requires start as nat + NumElements(node) < Uint64UpperBound()
-    ensures nextstart as nat == start as nat + NumElements(node)
-    ensures keys[..start] == old(keys[..start])
-    ensures keys[start..nextstart] == Model.ToSeq(I(node)).0
-    ensures keys[nextstart..] == old(keys[nextstart..]);
-    ensures values[..start] == old(values[..start]);
-    ensures values[start..nextstart] == Model.ToSeq(I(node)).1
-    ensures values[nextstart..] == old(values[nextstart..])
-    modifies keys, values
-    decreases node.height
-  {
-    if node.contents.Leaf? {
-      CopyArrayIntoDifferentArray(node.contents.keys, 0, keys, start, node.contents.nkeys);
-      CopyArrayIntoDifferentArray(node.contents.values, 0, values, start, node.contents.nkeys);
-      //CopySeqIntoArray(node.contents.keys[..node.contents.nkeys], 0, keys, start, node.contents.nkeys);
-      //CopySeqIntoArray(node.contents.values[..node.contents.nkeys], 0, values, start, node.contents.nkeys);
-      nextstart := start + node.contents.nkeys;
-      forall
-        ensures keys[start..nextstart] == Model.ToSeq(I(node)).0
-        ensures values[start..nextstart] == Model.ToSeq(I(node)).1
-      {
-        reveal_I();
-        Model.reveal_ToSeq();
-      }
-    } else {
-      nextstart := start;
-      var i: uint64 := 0;
-      while i < node.contents.nchildren
-        invariant 0 <= i <= node.contents.nchildren
-        invariant nextstart as nat == start as nat + Model.NumElementsOfChildren(I(node).children[..i])
-        invariant nextstart as nat <= keys.Length
-        invariant keys[..start] == old(keys[..start])
-        invariant keys[start..nextstart] == Model.Seq.Flatten(Model.ToSeqChildren(I(node).children[..i]).0)
-        invariant keys[nextstart..] == old(keys[nextstart..]);
-        invariant values[..start] == old(values[..start]);
-        invariant values[start..nextstart] == Model.Seq.Flatten(Model.ToSeqChildren(I(node).children[..i]).1)
-        invariant values[nextstart..] == old(values[nextstart..])
-      {
-        assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
-        assert I(node).children[..i+1][..i] == I(node).children[..i];
-        Model.NumElementsOfChildrenDecreases(I(node).children, (i + 1) as int);
-        Model.ToSeqChildrenDecomposition(I(node).children[..i+1]);
-        IOfChild(node, i as int);
+//  method NodeCountElements(node: Node) returns (count: uint64)
+//    requires WF(node)
+//    requires NumElements(node) < Uint64UpperBound()
+//    ensures count as nat == L.Model.NumElements(I(node))
+//  {
+//    reveal_I();
+//    count := CountElements(node.box.Borrow());
+//  }
 
-        nextstart := ToSeqSubtree(node.contents.children[i], keys, values, nextstart);
-        i := i + 1;
-        Model.reveal_ToSeq();
-      }
-      assert I(node).children[..node.contents.nchildren] == I(node).children;
-      Model.reveal_ToSeq();
-    }
-  }
+//  method ToSeqSubtree(node: Node, keys: array<Key>, values: array<Value>, start: uint64) returns (nextstart: uint64)
+//    requires WF(node)
+//    requires !Arrays.Aliases(keys, values)
+//    requires keys.Length == values.Length
+//    requires keys !in node.repr
+//    requires values !in node.repr
+//    requires start as nat + NumElements(node) <= keys.Length
+//    requires start as nat + NumElements(node) < Uint64UpperBound()
+//    ensures nextstart as nat == start as nat + NumElements(node)
+//    ensures keys[..start] == old(keys[..start])
+//    ensures keys[start..nextstart] == Model.ToSeq(I(node)).0
+//    ensures keys[nextstart..] == old(keys[nextstart..]);
+//    ensures values[..start] == old(values[..start]);
+//    ensures values[start..nextstart] == Model.ToSeq(I(node)).1
+//    ensures values[nextstart..] == old(values[nextstart..])
+//    modifies keys, values
+//    decreases node.height
+//  {
+//    if node.contents.Leaf? {
+//      CopyArrayIntoDifferentArray(node.contents.keys, 0, keys, start, node.contents.nkeys);
+//      CopyArrayIntoDifferentArray(node.contents.values, 0, values, start, node.contents.nkeys);
+//      //CopySeqIntoArray(node.contents.keys[..node.contents.nkeys], 0, keys, start, node.contents.nkeys);
+//      //CopySeqIntoArray(node.contents.values[..node.contents.nkeys], 0, values, start, node.contents.nkeys);
+//      nextstart := start + node.contents.nkeys;
+//      forall
+//        ensures keys[start..nextstart] == Model.ToSeq(I(node)).0
+//        ensures values[start..nextstart] == Model.ToSeq(I(node)).1
+//      {
+//        reveal_I();
+//        Model.reveal_ToSeq();
+//      }
+//    } else {
+//      nextstart := start;
+//      var i: uint64 := 0;
+//      while i < node.contents.nchildren
+//        invariant 0 <= i <= node.contents.nchildren
+//        invariant nextstart as nat == start as nat + Model.NumElementsOfChildren(I(node).children[..i])
+//        invariant nextstart as nat <= keys.Length
+//        invariant keys[..start] == old(keys[..start])
+//        invariant keys[start..nextstart] == Model.Seq.Flatten(Model.ToSeqChildren(I(node).children[..i]).0)
+//        invariant keys[nextstart..] == old(keys[nextstart..]);
+//        invariant values[..start] == old(values[..start]);
+//        invariant values[start..nextstart] == Model.Seq.Flatten(Model.ToSeqChildren(I(node).children[..i]).1)
+//        invariant values[nextstart..] == old(values[nextstart..])
+//      {
+//        assert WFShapeChildren(node.contents.children[..node.contents.nchildren], node.repr, node.height);
+//        assert I(node).children[..i+1][..i] == I(node).children[..i];
+//        Model.NumElementsOfChildrenDecreases(I(node).children, (i + 1) as int);
+//        Model.ToSeqChildrenDecomposition(I(node).children[..i+1]);
+//        IOfChild(node, i as int);
+//
+//        nextstart := ToSeqSubtree(node.contents.children[i], keys, values, nextstart);
+//        i := i + 1;
+//        Model.reveal_ToSeq();
+//      }
+//      assert I(node).children[..node.contents.nchildren] == I(node).children;
+//      Model.reveal_ToSeq();
+//    }
+//  }
 
-  method ToSeq(node: Node) returns (kvlists: (array<Key>, array<Value>))
-    requires WF(node)
-    requires NumElements(node) < Uint64UpperBound()
-    ensures (kvlists.0[..], kvlists.1[..]) == Model.ToSeq(I(node))
-    ensures fresh(kvlists.0)
-    ensures fresh(kvlists.1)
-  {
-    var count := CountElements(node);
-    var keys := newArrayFill(count, DefaultKey());
-    var values := newArrayFill(count, DefaultValue());
-    var end := ToSeqSubtree(node, keys, values, 0);
-    assert keys[..] == keys[0..end];
-    assert values[..] == values[0..end];
-    return (keys, values);
-  }
+//  method ToSeq(node: Node) returns (kvlists: (array<Key>, array<Value>))
+//    requires WF(node)
+//    requires NumElements(node) < Uint64UpperBound()
+//    ensures (kvlists.0[..], kvlists.1[..]) == Model.ToSeq(I(node))
+//    ensures fresh(kvlists.0)
+//    ensures fresh(kvlists.1)
+//  {
+//    var count := CountElements(node);
+//    var keys := newArrayFill(count, DefaultKey());
+//    var values := newArrayFill(count, DefaultValue());
+//    var end := ToSeqSubtree(node, keys, values, 0);
+//    assert keys[..] == keys[0..end];
+//    assert values[..] == values[0..end];
+//    return (keys, values);
+//  }
 
   // function method DivCeilUint64(x: uint64, d: uint64) : (y: uint64)
   //   requires 0 < d

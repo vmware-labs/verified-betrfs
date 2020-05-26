@@ -63,7 +63,8 @@ module BucketImpl {
     // KMB.Model.ToSeqIsStrictlySorted(KMB.I(tree));
     // WellMarshalledBucketsEq(B(KMB.Interpretation(tree)),
     //     BucketMapWithSeq(KMB.Interpretation(tree), KMB.ToSeq(tree).0, KMB.ToSeq(tree).1));
-    pkv := KMBPKVOps.ToPkv(tree);
+    KMB.reveal_I();
+    pkv := KMBPKVOps.ToPkv(tree.box.Borrow());
   }
   
   datatype Iterator = Iterator(

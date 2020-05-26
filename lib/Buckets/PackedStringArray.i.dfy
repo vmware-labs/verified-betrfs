@@ -1,4 +1,5 @@
 include "../Lang/NativeTypes.s.dfy"
+include "../Lang/LinearSequence.s.dfy"
 include "../Base/PackedInts.s.dfy"
 include "../Base/Option.s.dfy"
 include "../Base/total_order_impl.i.dfy"
@@ -8,6 +9,7 @@ module PackedStringArray {
   import opened Options
   import opened NativePackedInts
   import opened NativeArrays
+  import opened LinearSequence_s
   import opened Sequences
   import Uint32_Order
   import LexOrderImpl = Lexicographic_Byte_Order_Impl
@@ -919,7 +921,7 @@ module PackedStringArray {
       assert strs[..|strs|] == strs;
     }
     
-    method realloc_to_accomodate_seq(strs: seq<Key>)
+    method realloc_to_accomodate_seq(shared strs: seq<Key>)
       requires WF()
       requires psaCanAppendSeq(toPsa(), strs)
       ensures WF()
@@ -937,20 +939,20 @@ module PackedStringArray {
         psaAppendSeqAdditive(toPsa(), strs[..i], strs[i..]);
       }
       
-      if offsets.Length as uint64 < nstrings as uint64 + |strs| as uint64 {
-        realloc_offsets(nstrings as uint64 + |strs| as uint64);
+      if offsets.Length as uint64 < nstrings as uint64 + seq_length(strs) as uint64 {
+        realloc_offsets(nstrings as uint64 + seq_length(strs) as uint64);
       }
 
       var total_len: uint64 := if nstrings == 0 then 0 else offsets[nstrings-1] as uint64;
       var i: uint64 := 0;
-      while i < |strs| as uint64
+      while i < seq_length(strs) as uint64
         invariant i as int <= |strs|
         invariant  total_len as int == psaTotalLength(psaAppendSeq(toPsa(), strs[..i])) as int
         modifies {}
       {
         assert strs[..i] == DropLast(strs[..i+1]);
         psaAppendTotalLength(psaAppendSeq(toPsa(), strs[..i]), strs[i]);
-        total_len := total_len + |strs[i]| as uint64;
+        total_len := total_len + |seq_get(strs, i)| as uint64;
         i := i + 1;
       }
       assert strs == strs[..|strs|];
@@ -959,7 +961,7 @@ module PackedStringArray {
       }
     }
     
-    method AppendSeq(strs: seq<Key>)
+    method AppendSeq(shared strs: seq<Key>)
       requires WF()
       requires psaCanAppendSeq(toPsa(), strs)
       ensures WF()
@@ -993,7 +995,7 @@ module PackedStringArray {
       }
       
       var i: uint64 := 0;
-      while i < |strs| as uint64
+      while i < seq_length(strs) as uint64
         invariant i as int <= |strs|
         invariant WF()
         invariant toPsa() == psaAppendSeq(old(toPsa()), strs[..i])
@@ -1002,7 +1004,7 @@ module PackedStringArray {
         invariant data == new_data
       {
         assert strs[..i+1] == strs[..i] + [strs[i]];
-        append(strs[i]);
+        append(seq_get(strs, i));
         i := i + 1;
       }
       assert strs[..|strs|] == strs;

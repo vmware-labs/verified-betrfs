@@ -6,6 +6,8 @@ include "BucketsLib.i.dfy"
 include "BucketWeights.i.dfy"
 
 module KMBPKVOps {
+  import opened LinearSequence_s
+  import opened LinearSequence_i
   import opened NativeTypes
   import PKV = PackedKV
   import KMB = KMBtree`All
@@ -20,6 +22,14 @@ module KMBPKVOps {
   import BucketWeights
   
 
+  predicate LIsKeyMessageTree(node: KMB.L.Model.Node)
+  {
+    && KMB.L.WF(node)
+    && (forall k | k in KMB.L.Interpretation(node) :: PKV.ValidKeyByteString(k))
+    && (forall v | v in KMB.L.Interpretation(node).Values :: ValueMessage.EncodableMessage(v))
+    //&& ValueMessage.EncodableMessageSeq(KMB.ToSeq(node).1)
+  }
+
   predicate IsKeyMessageTree(node: KMB.Node)
     reads node, node.repr
   {
@@ -29,46 +39,59 @@ module KMBPKVOps {
     //&& ValueMessage.EncodableMessageSeq(KMB.ToSeq(node).1)
   }
 
+  lemma LKMTreeEncodableToSeq(node: KMB.L.Model.Node)
+    requires LIsKeyMessageTree(node)
+    ensures ValueMessage.EncodableMessageSeq(KMB.L.Model.ToSeq(node).1)
+  {
+    KMB.L.Model.ToSeqInInterpretation(node);
+  }
+  
   lemma KMTreeEncodableToSeq(node: KMB.Node)
     requires IsKeyMessageTree(node)
     ensures ValueMessage.EncodableMessageSeq(KMB.ToSeq(node).1)
   {
-    KMB.Model.ToSeqInInterpretation(KMB.I(node));
+    KMB.L.Model.ToSeqInInterpretation(KMB.I(node));
   }
   
-  lemma IsKeyMessageTreeInheritance(node: KMB.Node, i: nat)
+  lemma lemma_LIsKeyMessageTree(node: KMB.Node)
     requires KMB.WF(node)
-    requires node.contents.Index?
-    requires IsKeyMessageTree(node)
-    requires i < node.contents.nchildren as nat
-    ensures IsKeyMessageTree(node.contents.children[i])
+    ensures IsKeyMessageTree(node) <==> LIsKeyMessageTree(KMB.I(node))
   {
-    KMB.IOfChild(node, i);
-    var inode := KMB.I(node);
-    KMB.Model.ChildInterpretationSubMap(inode, i);
+  }
+
+  lemma IsKeyMessageTreeInheritance(node: KMB.L.Model.Node, i: nat)
+    requires KMB.L.WF(node)
+    requires node.Index?
+    requires LIsKeyMessageTree(node)
+    requires i < |node.children|
+    ensures LIsKeyMessageTree(node.children[i])
+  {
+    //KMB.IOfChild(node, i);
+    var inode := node;
+    var children := lseqs(inode.children);
+    KMB.L.Model.ChildInterpretationSubMap(inode, i);
     
-    var cs := KMB.Model.ToSeqChildren(inode.children).1;
+    var cs := KMB.L.Model.ToSeqChildren(children).1;
     calc {
-      KMB.ToSeq(node).1;
-      KMB.Model.ToSeq(KMB.I(node)).1;
-      KMB.Model.ToSeq(inode).1;
-      { KMB.Model.reveal_ToSeq(); }
+      KMB.L.Model.ToSeq(node).1;
+      KMB.L.Model.ToSeq(inode).1;
+      { KMB.L.Model.reveal_ToSeq(); }
       Flatten(cs);
     }
 
-    var csA := KMB.Model.ToSeqChildren(inode.children[..i]).1;
-    var csB := KMB.Model.ToSeqChildren(inode.children[i..i+1]).1;
-    var csC := KMB.Model.ToSeqChildren(inode.children[i+1..]).1;
+    var csA := KMB.L.Model.ToSeqChildren(children[..i]).1;
+    var csB := KMB.L.Model.ToSeqChildren(children[i..i+1]).1;
+    var csC := KMB.L.Model.ToSeqChildren(children[i+1..]).1;
     calc {
-      KMB.Model.ToSeqChildren(inode.children).1;
+      KMB.L.Model.ToSeqChildren(children).1;
       {
-        KMB.Model.ToSeqChildrenAdditive(inode.children[..i], inode.children[i..]);
-        assert inode.children == inode.children[..i] + inode.children[i..];
+        KMB.L.Model.ToSeqChildrenAdditive(children[..i], children[i..]);
+        assert children == children[..i] + children[i..];
       }
-      csA + KMB.Model.ToSeqChildren(inode.children[i..]).1;
+      csA + KMB.L.Model.ToSeqChildren(children[i..]).1;
       {
-        KMB.Model.ToSeqChildrenAdditive(inode.children[i..i+1], inode.children[i+1..]);
-        assert inode.children[i..] == inode.children[i..i+1] + inode.children[i+1..];
+        KMB.L.Model.ToSeqChildrenAdditive(children[i..i+1], children[i+1..]);
+        assert children[i..] == children[i..i+1] + children[i+1..];
       }
       csA + csB + csC;
     }
@@ -81,65 +104,67 @@ module KMBPKVOps {
       Flatten(csA) + Flatten(csB) + Flatten(csC);
     }
 
-    assert csB == [ KMB.Model.ToSeq(inode.children[i]).1 ];
-    assert Flatten(csB) == KMB.Model.ToSeq(inode.children[i]).1 by {
-      FlattenSingleton(KMB.Model.ToSeq(inode.children[i]).1);
+    assert csB == [ KMB.L.Model.ToSeq(children[i]).1 ];
+    assert Flatten(csB) == KMB.L.Model.ToSeq(children[i]).1 by {
+      FlattenSingleton(KMB.L.Model.ToSeq(children[i]).1);
     }
 
-    assert forall m | m in KMB.ToSeq(node.contents.children[i]).1 :: m in KMB.ToSeq(node).1;
-    forall m | m in KMB.ToSeq(node.contents.children[i]).1
+    assert forall m | m in KMB.L.Model.ToSeq(children[i]).1 :: m in KMB.L.Model.ToSeq(node).1;
+    forall m | m in KMB.L.Model.ToSeq(children[i]).1
       ensures ValueMessage.EncodableMessage(m)
     {
-      KMTreeEncodableToSeq(node);
+      LKMTreeEncodableToSeq(node);
     }
   }
 
-  method LeafFillDpkv(node: KMB.Node, dpkv: DPKV.DynamicPkv)
-    requires KMB.WF(node)
-    requires node.contents.Leaf?
+  method LeafFillDpkv(shared node: KMB.L.Model.Node, dpkv: DPKV.DynamicPkv)
+    requires KMB.L.WF(node)
+    requires node.Leaf?
     requires dpkv.WF()
-    requires node.repr !! dpkv.Repr
-    requires IsKeyMessageTree(node)
-    requires PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, KMB.ToSeq(node).0)
-    requires (KMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1)))
+    requires LIsKeyMessageTree(node)
+    requires PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, KMB.L.Model.ToSeq(node).0)
+    requires (LKMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(KMB.L.Model.ToSeq(node).1)))
     ensures dpkv.WF()
     ensures fresh(dpkv.Repr - old(dpkv.Repr))
-    ensures dpkv.toPkv().keys == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().keys), KMB.ToSeq(node).0)
-    //ensures PKV.IKeys(dpkv.toPkv().keys) == old(PKV.IKeys(dpkv.toPkv().keys)) + KMB.ToSeq(node).0
-    ensures dpkv.toPkv().messages == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().messages), ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1))
-    //ensures PKV.IMessages(dpkv.toPkv().messages) == old(PKV.IMessages(dpkv.toPkv().messages)) + KMB.ToSeq(node).1
+    ensures dpkv.toPkv().keys == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().keys), KMB.L.Model.ToSeq(node).0)
+    //ensures PKV.IKeys(dpkv.toPkv().keys) == old(PKV.IKeys(dpkv.toPkv().keys)) + KMB.L.Model.ToSeq(node).0
+    ensures dpkv.toPkv().messages == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().messages), ValueMessage.messageSeq_to_bytestringSeq(KMB.L.Model.ToSeq(node).1))
+    //ensures PKV.IMessages(dpkv.toPkv().messages) == old(PKV.IMessages(dpkv.toPkv().messages)) + KMB.L.Model.ToSeq(node).1
     modifies dpkv.Repr
   {
-    KMTreeEncodableToSeq(node); 
-    var keys := node.contents.keys;
-    var values := node.contents.values;
-    var nkeys := node.contents.nkeys;
+    LKMTreeEncodableToSeq(node); 
+    shared var keys := node.keys;
+    shared var values := node.values;
+    var nkeys := seq_length(keys);
     
-    assert KMB.ToSeq(node).0 == keys[..nkeys] by {
+    assert KMB.L.Model.ToSeq(node).0 == keys[..nkeys] by {
       KMB.reveal_I();
-      KMB.Model.reveal_ToSeq();
+      KMB.L.Model.reveal_ToSeq();
     }
 
-    assert KMB.ToSeq(node).1 == values[..nkeys] by {
+    assert KMB.L.Model.ToSeq(node).1 == values[..nkeys] by {
       KMB.reveal_I();
-      KMB.Model.reveal_ToSeq();
+      KMB.L.Model.reveal_ToSeq();
     }        
 
     forall i | 0 <= i < nkeys
-      ensures keys[i] in KMB.Interpretation(node)
+      ensures keys[i] in KMB.L.Interpretation(node)
     {
       KMB.reveal_I();
-      KMB.Model.reveal_Interpretation();
+      KMB.L.Model.reveal_Interpretation();
     }
     
-    var messages := ValueMessage.MessageArray_to_bytestringSeq(values, nkeys);
-    dpkv.keys.AppendSeq(keys[..nkeys]);
+    linear var messages := ValueMessage.MessageSeq_to_bytestringSeq(values, nkeys);
+    linear var keys_nkeys := AllocAndCopy(keys, 0, nkeys);
+    dpkv.keys.AppendSeq(keys_nkeys);
+    //dpkv.keys.AppendSeq(keys[..nkeys]);
     dpkv.messages.AppendSeq(messages);
     dpkv.Repr := {dpkv} + dpkv.keys.Repr + dpkv.messages.Repr;
-
+    var _ := seq_free(keys_nkeys);
+    var _ := seq_free(messages);
   }
 
-  lemma canAppendKeysIterate(pkv: PKV.Pkv, keyseqs: seq<seq<KMB.Model.Key>>)
+  lemma canAppendKeysIterate(pkv: PKV.Pkv, keyseqs: seq<seq<KMB.L.Model.Key>>)
     requires PKV.WF(pkv)
     requires 0 < |keyseqs|
     requires PKV.PSA.psaCanAppendSeq(pkv.keys, Flatten(keyseqs))
@@ -166,7 +191,7 @@ module KMBPKVOps {
     }
   }
   
-  lemma canAppendMessagesIterate(pkv: PKV.Pkv, msgseqs: seq<seq<KMB.Model.Messages.Message>>)
+  lemma canAppendMessagesIterate(pkv: PKV.Pkv, msgseqs: seq<seq<KMB.L.Model.Messages.Message>>)
     requires PKV.WF(pkv)
     requires 0 < |msgseqs|
     requires ValueMessage.EncodableMessageSeq(Flatten(msgseqs))
@@ -204,50 +229,49 @@ module KMBPKVOps {
   }
   
   // TODO(robj): Break this mofo up.
-  method IndexFillDpkv(node: KMB.Node, dpkv: DPKV.DynamicPkv)
-    requires KMB.WF(node)
-    requires node.contents.Index?
+  method IndexFillDpkv(shared node: KMB.L.Model.Node, dpkv: DPKV.DynamicPkv)
+    requires KMB.L.WF(node)
+    requires node.Index?
     requires dpkv.WF()
-    requires node.repr !! dpkv.Repr
-    requires IsKeyMessageTree(node)
-    requires PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, KMB.ToSeq(node).0)
-    requires (KMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1)))
+    requires LIsKeyMessageTree(node)
+    requires PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, KMB.L.Model.ToSeq(node).0)
+    requires (LKMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(KMB.L.Model.ToSeq(node).1)))
     ensures dpkv.WF()
     ensures fresh(dpkv.Repr - old(dpkv.Repr))
-    ensures dpkv.toPkv().keys == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().keys), KMB.ToSeq(node).0)
-    ensures dpkv.toPkv().messages == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().messages), ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1))
+    ensures dpkv.toPkv().keys == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().keys), KMB.L.Model.ToSeq(node).0)
+    ensures dpkv.toPkv().messages == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().messages), ValueMessage.messageSeq_to_bytestringSeq(KMB.L.Model.ToSeq(node).1))
     modifies dpkv.Repr
-    decreases node.height, 0
+    decreases node, 0
   {
-    var children := node.contents.children;
-    var nchildren := node.contents.nchildren;
+    ghost var children := lseqs(node.children);
+    var nchildren := lseq_length_uint64(node.children);
 
-    assert KMB.WFShapeChildren(children[..nchildren], node.repr, node.height);
-    ghost var inode := KMB.I(node);
-    ghost var ichildren := inode.children;
-    forall i | 0 <= i < |ichildren|
-      ensures ichildren[i] == KMB.IChildren(children[..nchildren], node.height)[i]
-    {
-      KMB.IOfChild(node, i);
+//    assert KMB.WFShapeChildren(children[..nchildren], node.repr, node.height);
+//    ghost var inode := KMB.I(node);
+//    ghost var ichildren := inode.children;
+//    forall i | 0 <= i < |ichildren|
+//      ensures ichildren[i] == KMB.IChildren(children[..nchildren], node.height)[i]
+//    {
+//      KMB.IOfChild(node, i);
+//    }
+//    assert ichildren == KMB.IChildren(children[..nchildren], node.height);
+    ghost var childSeqs := KMB.L.Model.ToSeqChildren(children);
+    assert forall i | 0 <= i < |childSeqs.0| :: childSeqs.0[i] == KMB.L.Model.ToSeq(children[i]).0 by {
+      KMB.L.Model.reveal_ToSeq();
     }
-    assert ichildren == KMB.IChildren(children[..nchildren], node.height);
-    ghost var childSeqs := KMB.Model.ToSeqChildren(ichildren);
-    assert forall i | 0 <= i < |childSeqs.0| :: childSeqs.0[i] == KMB.ToSeq(children[i]).0 by {
-      KMB.Model.reveal_ToSeq();
-    }
-    assert forall i | 0 <= i < |childSeqs.1| :: childSeqs.1[i] == KMB.ToSeq(children[i]).1 by {
-      KMB.Model.reveal_ToSeq();
+    assert forall i | 0 <= i < |childSeqs.1| :: childSeqs.1[i] == KMB.L.Model.ToSeq(children[i]).1 by {
+      KMB.L.Model.reveal_ToSeq();
     }
 
-    assert Flatten(childSeqs.0) == KMB.ToSeq(node).0 by {
+    assert Flatten(childSeqs.0) == KMB.L.Model.ToSeq(node).0 by {
       KMB.reveal_I();
-      KMB.Model.reveal_ToSeq();
+      KMB.L.Model.reveal_ToSeq();
     }
-    assert Flatten(childSeqs.1) == KMB.ToSeq(node).1 by {
+    assert Flatten(childSeqs.1) == KMB.L.Model.ToSeq(node).1 by {
       KMB.reveal_I();
-      KMB.Model.reveal_ToSeq();
+      KMB.L.Model.reveal_ToSeq();
     }
-    KMTreeEncodableToSeq(node);
+    LKMTreeEncodableToSeq(node);
     assert ValueMessage.EncodableMessageSeq(Flatten(childSeqs.1));
     forall i | 0 <= i <= nchildren
       ensures ValueMessage.EncodableMessageSeq(Flatten(childSeqs.1[..i]))
@@ -289,12 +313,12 @@ module KMBPKVOps {
       invariant dpkv.toPkv().messages == PKV.PSA.psaAppendSeq(oldpkvmsgs, ValueMessage.messageSeq_to_bytestringSeq(Flatten(childSeqs.1[..i])))
       invariant PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(Flatten(childSeqs.1[i..])))
     {
-      assert KMB.WF(children[i]);
+      assert KMB.L.WF(children[i]);
       assert dpkv.WF();
-      assert children[i].repr !! dpkv.Repr;
+//      assert children[i].repr !! dpkv.Repr;
 
       IsKeyMessageTreeInheritance(node, i as nat);
-      assert IsKeyMessageTree(children[i]);
+      assert LIsKeyMessageTree(children[i]);
 
       canAppendKeysIterate(dpkv.toPkv(), childSeqs.0[i..]);
       canAppendMessagesIterate(dpkv.toPkv(), childSeqs.1[i..]);
@@ -302,15 +326,15 @@ module KMBPKVOps {
       ghost var prekeys := dpkv.toPkv().keys;
       ghost var premsgs := dpkv.toPkv().messages;
 
-      assert PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, KMB.ToSeq(children[i]).0);
-      FillDpkv(children[i], dpkv);
+      assert PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, KMB.L.Model.ToSeq(children[i]).0);
+      FillDpkv(lseq_peek(node.children, i), dpkv);
       
       calc {
         dpkv.toPkv().keys;
-        PKV.PSA.psaAppendSeq(prekeys, KMB.ToSeq(children[i]).0);
-        PKV.PSA.psaAppendSeq(PKV.PSA.psaAppendSeq(oldpkvkeys, Flatten(childSeqs.0[..i])), KMB.ToSeq(children[i]).0);
-        { PKV.PSA.psaAppendSeqAdditive(oldpkvkeys, Flatten(childSeqs.0[..i]), KMB.ToSeq(children[i]).0); }
-        PKV.PSA.psaAppendSeq(oldpkvkeys, Flatten(childSeqs.0[..i]) + KMB.ToSeq(children[i]).0);
+        PKV.PSA.psaAppendSeq(prekeys, KMB.L.Model.ToSeq(children[i]).0);
+        PKV.PSA.psaAppendSeq(PKV.PSA.psaAppendSeq(oldpkvkeys, Flatten(childSeqs.0[..i])), KMB.L.Model.ToSeq(children[i]).0);
+        { PKV.PSA.psaAppendSeqAdditive(oldpkvkeys, Flatten(childSeqs.0[..i]), KMB.L.Model.ToSeq(children[i]).0); }
+        PKV.PSA.psaAppendSeq(oldpkvkeys, Flatten(childSeqs.0[..i]) + KMB.L.Model.ToSeq(children[i]).0);
         PKV.PSA.psaAppendSeq(oldpkvkeys, Flatten(childSeqs.0[..i]) + childSeqs.0[i]);
         { FlattenSingleton(childSeqs.0[i]); }
         PKV.PSA.psaAppendSeq(oldpkvkeys, Flatten(childSeqs.0[..i]) + Flatten([ childSeqs.0[i] ]));
@@ -323,7 +347,7 @@ module KMBPKVOps {
     
       calc {
         dpkv.toPkv().messages;
-        PKV.PSA.psaAppendSeq(premsgs, ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(children[i]).1));
+        PKV.PSA.psaAppendSeq(premsgs, ValueMessage.messageSeq_to_bytestringSeq(KMB.L.Model.ToSeq(children[i]).1));
         PKV.PSA.psaAppendSeq(premsgs, ValueMessage.messageSeq_to_bytestringSeq(childSeqs.1[i]));
         PKV.PSA.psaAppendSeq(PKV.PSA.psaAppendSeq(oldpkvmsgs, ValueMessage.messageSeq_to_bytestringSeq(Flatten(childSeqs.1[..i]))),
                                                               ValueMessage.messageSeq_to_bytestringSeq(childSeqs.1[i]));
@@ -348,31 +372,30 @@ module KMBPKVOps {
       dpkv.toPkv().keys;
       PKV.PSA.psaAppendSeq(oldpkvkeys, Flatten(childSeqs.0[..i]));
       { assert childSeqs.0[..i] == childSeqs.0; }
-      PKV.PSA.psaAppendSeq(old(dpkv.toPkv().keys), KMB.ToSeq(node).0);
+      PKV.PSA.psaAppendSeq(old(dpkv.toPkv().keys), KMB.L.Model.ToSeq(node).0);
     }
     calc {
       dpkv.toPkv().messages;
       PKV.PSA.psaAppendSeq(oldpkvmsgs, ValueMessage.messageSeq_to_bytestringSeq(Flatten(childSeqs.1[..i])));
       { assert childSeqs.1[..i] == childSeqs.1; }
-      PKV.PSA.psaAppendSeq(old(dpkv.toPkv().messages), ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1));
+      PKV.PSA.psaAppendSeq(old(dpkv.toPkv().messages), ValueMessage.messageSeq_to_bytestringSeq(KMB.L.Model.ToSeq(node).1));
     }
   }
 
-  method FillDpkv(node: KMB.Node, dpkv: DPKV.DynamicPkv)
-    requires KMB.WF(node)
+  method FillDpkv(shared node: KMB.L.Model.Node, dpkv: DPKV.DynamicPkv)
+    requires KMB.L.WF(node)
     requires dpkv.WF()
-    requires node.repr !! dpkv.Repr
-    requires IsKeyMessageTree(node)
-    requires PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, KMB.ToSeq(node).0)
-    requires (KMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1)))
+    requires LIsKeyMessageTree(node)
+    requires PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, KMB.L.Model.ToSeq(node).0)
+    requires (LKMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(KMB.L.Model.ToSeq(node).1)))
     ensures dpkv.WF()
     ensures fresh(dpkv.Repr - old(dpkv.Repr))
-    ensures dpkv.toPkv().keys == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().keys), KMB.ToSeq(node).0)
-    ensures dpkv.toPkv().messages == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().messages), ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1))
+    ensures dpkv.toPkv().keys == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().keys), KMB.L.Model.ToSeq(node).0)
+    ensures dpkv.toPkv().messages == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().messages), ValueMessage.messageSeq_to_bytestringSeq(KMB.L.Model.ToSeq(node).1))
     modifies dpkv.Repr
-    decreases node.height, 1
+    decreases node, 1
   {
-    if node.contents.Leaf? {
+    if node.Leaf? {
       LeafFillDpkv(node, dpkv);
     } else {
       IndexFillDpkv(node, dpkv);
@@ -387,26 +410,26 @@ module KMBPKVOps {
     seq(|keys|, i requires 0 <= i < |keys| => keys[i])
   }
   
-  lemma ToSeqInterpretation(node: KMB.Node)
-    requires KMB.WF(node)
-    requires IsKeyMessageTree(node)
-    ensures forall k | k in KMB.ToSeq(node).0 :: |k| <= KeyType.MaxLen() as nat
-    ensures BucketsLib.BucketMapOfSeq(byteSeqSeqToKeySeq(KMB.ToSeq(node).0), KMB.ToSeq(node).1) == KMB.Interpretation(node)
+  lemma ToSeqInterpretation(node: KMB.L.Model.Node)
+    requires KMB.L.WF(node)
+    requires LIsKeyMessageTree(node)
+    ensures forall k | k in KMB.L.Model.ToSeq(node).0 :: |k| <= KeyType.MaxLen() as nat
+    ensures BucketsLib.BucketMapOfSeq(byteSeqSeqToKeySeq(KMB.L.Model.ToSeq(node).0), KMB.L.Model.ToSeq(node).1) == KMB.L.Interpretation(node)
   {
-    KMB.Model.ToSeqCoversInterpretation(KMB.I(node));
-    KMB.Model.ToSeqInInterpretation(KMB.I(node));
-    assert forall k | k in KMB.ToSeq(node).0 :: k in KMB.Interpretation(node);
-    var keys: seq<KMB.Model.Key> := byteSeqSeqToKeySeq(KMB.ToSeq(node).0);
-    var msgs := KMB.ToSeq(node).1;
-    var interp := KMB.Interpretation(node);
-    KMB.Model.ToSeqIsStrictlySorted(KMB.I(node));
-    assert KMB.Model.Keys.IsStrictlySorted(keys) by {
-      KMB.Model.Keys.reveal_IsStrictlySorted();
+    KMB.L.Model.ToSeqCoversInterpretation(node);
+    KMB.L.Model.ToSeqInInterpretation(node);
+    assert forall k | k in KMB.L.Model.ToSeq(node).0 :: k in KMB.L.Interpretation(node);
+    var keys: seq<KMB.L.Model.Key> := byteSeqSeqToKeySeq(KMB.L.Model.ToSeq(node).0);
+    var msgs := KMB.L.Model.ToSeq(node).1;
+    var interp := KMB.L.Interpretation(node);
+    KMB.L.Model.ToSeqIsStrictlySorted(node);
+    assert KMB.L.Model.Keys.IsStrictlySorted(keys) by {
+      KMB.L.Model.Keys.reveal_IsStrictlySorted();
     }
     BucketsLib.StrictlySortedIsBucketMapOfSeq(keys, msgs, interp);
   }
 
-  lemma IMessagesInverse(pkv: PKV.Pkv, msgs: seq<KMB.Model.Messages.Message>)
+  lemma IMessagesInverse(pkv: PKV.Pkv, msgs: seq<KMB.L.Model.Messages.Message>)
     requires PKV.WF(pkv)
     requires ValueMessage.EncodableMessageSeq(msgs)
     requires PKV.PSA.I(pkv.messages) == ValueMessage.messageSeq_to_bytestringSeq(msgs)
@@ -415,19 +438,19 @@ module KMBPKVOps {
     
   }
   
-  lemma ToPkvPreservesInterpretation(node: KMB.Node, pkv: DPKV.PKV.Pkv)
-    requires KMB.WF(node)
-    requires IsKeyMessageTree(node)
-    requires PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), KMB.ToSeq(node).0)
-    requires (KMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1)))
+  lemma ToPkvPreservesInterpretation(node: KMB.L.Model.Node, pkv: DPKV.PKV.Pkv)
+    requires KMB.L.WF(node)
+    requires LIsKeyMessageTree(node)
+    requires PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), KMB.L.Model.ToSeq(node).0)
+    requires (LKMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), ValueMessage.messageSeq_to_bytestringSeq(KMB.L.Model.ToSeq(node).1)))
     requires DPKV.PKV.WF(pkv)
-    requires PKV.IKeys(pkv.keys) == KMB.ToSeq(node).0
-    requires PKV.PSA.I(pkv.messages) == ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1)
-    ensures DPKV.PKV.I(pkv) == BucketsLib.B(KMB.Interpretation(node))
+    requires PKV.IKeys(pkv.keys) == KMB.L.Model.ToSeq(node).0
+    requires PKV.PSA.I(pkv.messages) == ValueMessage.messageSeq_to_bytestringSeq(KMB.L.Model.ToSeq(node).1)
+    ensures DPKV.PKV.I(pkv) == BucketsLib.B(KMB.L.Interpretation(node))
   {
-    KMTreeEncodableToSeq(node);
-    var keys := byteSeqSeqToKeySeq(KMB.ToSeq(node).0);
-    var msgs := KMB.ToSeq(node).1;
+    LKMTreeEncodableToSeq(node);
+    var keys := byteSeqSeqToKeySeq(KMB.L.Model.ToSeq(node).0);
+    var msgs := KMB.L.Model.ToSeq(node).1;
     calc {
       DPKV.PKV.I(pkv).b;
       BucketsLib.BucketMapOfSeq(PKV.IKeys(pkv.keys), PKV.IMessages(pkv.messages));
@@ -436,11 +459,11 @@ module KMBPKVOps {
       { IMessagesInverse(pkv, msgs); }
       BucketsLib.BucketMapOfSeq(keys, msgs);
       { ToSeqInterpretation(node); }
-      KMB.Interpretation(node);
-      BucketsLib.B(KMB.Interpretation(node)).b;
+      KMB.L.Interpretation(node);
+      BucketsLib.B(KMB.L.Interpretation(node)).b;
     }
-    KMB.Model.ToSeqIsStrictlySorted(KMB.I(node));
-    BucketsLib.WellMarshalledBucketsEq(DPKV.PKV.I(pkv), BucketsLib.B(KMB.Interpretation(node)));
+    KMB.L.Model.ToSeqIsStrictlySorted(node);
+    BucketsLib.WellMarshalledBucketsEq(DPKV.PKV.I(pkv), BucketsLib.B(KMB.L.Interpretation(node)));
   }
 
   lemma WeightImpliesCanAppend(node: KMB.Node)
@@ -451,17 +474,17 @@ module KMBPKVOps {
     ensures PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1))
   {
     var inode := KMB.I(node);
-    KMB.Model.ToSeqInInterpretation(KMB.I(node));
+    KMB.L.Model.ToSeqInInterpretation(KMB.I(node));
     var keys := byteSeqSeqToKeySeq(KMB.ToSeq(node).0);
     var msgs := KMB.ToSeq(node).1;
     var interp := KMB.Interpretation(node);
     var bucket := BucketsLib.BucketMapWithSeq(interp, keys, msgs);
-    ToSeqInterpretation(node);
-    KMB.Model.ToSeqIsStrictlySorted(inode);
+    ToSeqInterpretation(KMB.I(node));
+    KMB.L.Model.ToSeqIsStrictlySorted(inode);
     
     BucketWeights.NumElementsLteWeight(BucketsLib.B(interp));
-    KMB.Model.InterpretationNumElements(inode);
-    KMB.Model.ToSeqLength(inode);
+    KMB.L.Model.InterpretationNumElements(inode);
+    KMB.L.Model.ToSeqLength(inode);
 
     BucketsLib.WellMarshalledBucketsEq(bucket, BucketsLib.B(interp));
 
@@ -471,18 +494,18 @@ module KMBPKVOps {
     BucketWeights.WeightMessageListFlatten(msgs);
     assert msgs == BucketsLib.B(interp).msgs;
   }
-  
-  method ToPkv(node: KMB.Node) returns (pkv: DPKV.PKV.Pkv)
-    requires KMB.WF(node)
-    requires IsKeyMessageTree(node)
-    requires (KMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), KMB.ToSeq(node).0))
-    requires PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1))
+
+  method ToPkv(shared node: KMB.L.Model.Node) returns (pkv: DPKV.PKV.Pkv)
+    requires KMB.L.WF(node)
+    requires LIsKeyMessageTree(node)
+    requires (LKMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), KMB.L.Model.ToSeq(node).0))
+    requires PKV.PSA.psaCanAppendSeq(PKV.PSA.EmptyPsa(), ValueMessage.messageSeq_to_bytestringSeq(KMB.L.Model.ToSeq(node).1))
     ensures DPKV.PKV.WF(pkv)
-    ensures PKV.IKeys(pkv.keys) == KMB.ToSeq(node).0
-    ensures PKV.PSA.I(pkv.messages) == ValueMessage.messageSeq_to_bytestringSeq(KMB.ToSeq(node).1)
-    ensures DPKV.PKV.I(pkv) == BucketsLib.B(KMB.Interpretation(node))
+    ensures PKV.IKeys(pkv.keys) == KMB.L.Model.ToSeq(node).0
+    ensures PKV.PSA.I(pkv.messages) == ValueMessage.messageSeq_to_bytestringSeq(KMB.L.Model.ToSeq(node).1)
+    ensures DPKV.PKV.I(pkv) == BucketsLib.B(KMB.L.Interpretation(node))
   {
-    KMB.Model.ToSeqLength(KMB.I(node));
+    KMB.L.Model.ToSeqLength(node);
     var nelts: uint64 := KMBBOps.CountElements(node);
     var keydatasize := if nelts * KeyType.MaxLen() <= 0xffff_ffff then (nelts * KeyType.MaxLen()) as uint32 else 0xffff_ffff;
     var msgdatasize := if nelts * ValueType.MaxLen() <= 0xffff_ffff then (nelts * ValueType.MaxLen()) as uint32 else 0xffff_ffff;
