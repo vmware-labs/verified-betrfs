@@ -29,8 +29,8 @@ veri_suite = Suite(
         Value("linear",    "linear-disintegration"),
         ]),
     Variable("system",     "run_veri", [Value("veri", "veri")]),
-    Variable("rowcache",   "run_veri", [Value("norowcache", ""),
-                                        Value("yesrowcache", "use_unverified_row_cache")]),
+    Variable("rowcache",   "run_veri", [Value("norowcache", "")]),
+                                        # Value("yesrowcache", "use_unverified_row_cache")]),
     *common_vars)
 
 common_vars_others = common_vars + [
@@ -52,7 +52,7 @@ kyoto_suite = Suite(
     Variable("system", "run_veri", [Value("kyoto", "kyoto")]),
     *common_vars_others)
 #suite = ConcatSuite("ycsb-001", veri_suite, rocks_suite, berkeleydb_suite)
-suite = ConcatSuite("silver-run-ok2-rocks-ssd", rocks_suite)
+suite = ConcatSuite("silver-run-veri-ssd", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
