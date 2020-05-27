@@ -8,10 +8,10 @@ module LinearSequence_i {
   export
     provides LinearSequence_s
     provides NativeTypes
-    provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_length, lseq_peek
-    provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give
+    provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_peek
+    provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give, lseq_length_uint64, lseq_length_as_uint64
     provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, SeqResize, InsertSeq, InsertLSeq
-    reveals lseq_full, linLast, lseq_has_all
+    reveals lseq_length, lseq_full, linLast, lseq_has_all
     reveals operator'cardinality?lseq, operator'in?lseq, operator'subscript?lseq
 
   // method seq_alloc_init<A>(length:nat, a:A) returns(linear s:seq<A>)
@@ -103,6 +103,20 @@ module LinearSequence_i {
   predicate lseq_has_all<A>(l:lseq<A>)
   {
     forall i :: 0<=i<|l| ==> lseq_has(l)[i]
+  }
+
+  function method lseq_length_as_uint64<A>(shared s:lseq<A>) : (n:uint64)
+    requires |lseqs(s)| <= 0xffff_ffff_ffff_ffff
+    ensures n as nat == |lseqs(s)|
+  {
+    lseq_length_raw(s)
+  }
+
+  method lseq_length_uint64<A>(shared s:lseq<A>) returns(n:uint64)
+    ensures n as nat == |lseqs(s)|
+  {
+    lseq_length_bound(s);
+    n := lseq_length_raw(s);
   }
 
   function lseq_length<A>(s:lseq<A>):(n:nat)

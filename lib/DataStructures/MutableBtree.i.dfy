@@ -250,7 +250,7 @@ abstract module LMutableBtree {
   {
     shared match node {
       case Leaf(keys, _) => seq_length(keys) == MaxKeysPerLeaf()
-      case Index(_, children) => lseq_length_uint64(children) == MaxChildren()
+      case Index(_, children) => lseq_length_as_uint64(children) == MaxChildren()
     }
   }
 
@@ -342,8 +342,9 @@ abstract module LMutableBtree {
     ensures Height(left) <= Height(node)
     ensures Height(right) <= Height(node)
   {
-    assert nleft as nat < |node.children| == lseq_length_uint64(node.children) as nat;
-    var nright:uint64 := lseq_length_uint64(node.children) - nleft;
+    assert nleft as nat < |node.children| == lseq_length(node.children);
+    var len := lseq_length_uint64(node.children);
+    var nright:uint64 := len - nleft;
     linear var Index(pivots, children) := node;
     pivot := seq_get(pivots, nleft-1);
 
@@ -389,7 +390,8 @@ abstract module LMutableBtree {
       Model.Keys.IsStrictlySortedImpliesLt(node.keys, boundary as int - 1, boundary as int);
       left, right := SplitLeaf(node, boundary, pivot);
     } else {
-      var boundary := lseq_length_uint64(node.children) / 2;
+      var len := lseq_length_uint64(node.children);
+      var boundary := len / 2;
 //      assert 2 <= |node.children|;
 //      assert 0 < boundary as nat < |node.children|;
       left, right, pivot := SplitIndex(node, boundary);
@@ -605,7 +607,8 @@ abstract module LMutableBtree {
         var _ := seq_free(pivots);
         var i:uint64 := 0;
         linear var arr := children;
-        while (i < lseq_length_uint64(arr))
+        var len := lseq_length_uint64(arr);
+        while (i < len)
           invariant 0 <= i as int <= |arr|
           invariant |arr| == |children|
           invariant forall j | 0 <= j < |arr| :: j in arr <==> j >= i as int

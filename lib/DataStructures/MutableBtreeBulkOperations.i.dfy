@@ -34,7 +34,8 @@ abstract module MutableBtreeBulkOperations {
       ghost var icount: int := 0;
       
       var i: uint64 := 0;
-      while i < lseq_length_uint64(node.children)
+      var len := lseq_length_uint64(node.children);
+      while i < len
         invariant i as int <= |node.children|
         invariant icount == L.Model.NumElementsOfChildren(lseqs(inode.children)[..i])
         invariant icount < Uint64UpperBound()
