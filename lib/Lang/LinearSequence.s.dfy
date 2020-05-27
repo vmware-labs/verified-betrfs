@@ -14,7 +14,8 @@ module {:extern "LinearExtern"} LinearSequence_s {
       ensures s2 == s1[i as nat := a]
 
   function method {:extern "LinearExtern", "seq_length"} seq_length<A>(shared s:seq<A>):(n:uint64)
-      ensures n as int == |s|
+    requires |s| <= 0xffff_ffff_ffff_ffff
+    ensures n as int == |s|
 
   function method {:extern "LinearExtern", "seq_empty"} seq_empty<A>():(linear s:seq<A>)
     ensures |s| == 0
@@ -28,7 +29,12 @@ module {:extern "LinearExtern"} LinearSequence_s {
   function method {:extern "LinearExtern", "seq_unleash"} seq_unleash<A>(linear s1:seq<A>):(s2:seq<A>)
       ensures s1 == s2
 
-  function method {:extern "LinearExtern", "seq_length_bound"} seq_length_bound<A>(shared s:seq<A>):()
+  // must be a method, not a function method, so that we know s is a run-time value, not a ghost value
+  method {:extern "LinearExtern", "seq_length_bound"} seq_length_bound<A>(s:seq<A>)
+    ensures |s| < 0xffff_ffff_ffff_ffff
+
+  // must be a method, not a function method, so that we know s is a run-time value, not a ghost value
+  method {:extern "LinearExtern", "shared_seq_length_bound"} shared_seq_length_bound<A>(shared s:seq<A>)
     ensures |s| < 0xffff_ffff_ffff_ffff
 
 //  // a wrapper object for borrowing immutable sequences. Necessary so that the C++ translation
@@ -63,7 +69,8 @@ module {:extern "LinearExtern"} LinearSequence_s {
     ensures lseqs_raw(l) == s
 
   function method {:extern "LinearExtern", "lseq_length_raw"} lseq_length_raw<A>(shared s:lseq<A>):(n:uint64)
-      ensures n as int == |lseqs_raw(s)|
+    requires |lseqs_raw(s)| <= 0xffff_ffff_ffff_ffff
+    ensures n as int == |lseqs_raw(s)|
 
   function method {:extern "LinearExtern", "lseq_alloc_raw"} lseq_alloc_raw<A>(length:uint64):(linear s:lseq<A>)
       ensures |lseqs_raw(s)| == length as nat
@@ -81,5 +88,9 @@ module {:extern "LinearExtern"} LinearSequence_s {
   function method {:extern "LinearExtern", "lseq_share_raw"} lseq_share_raw<A>(shared s:lseq<A>, i:uint64):(shared a:maybe<A>)
       requires i as int < |lseqs_raw(s)|
       ensures a == lseqs_raw(s)[i]
+
+  // must be a method, not a function method, so that we know s is a run-time value, not a ghost value
+  method {:extern "LinearExtern", "lseq_length_bound"} lseq_length_bound<A>(shared s:lseq<A>)
+    ensures |lseqs_raw(s)| < 0xffff_ffff_ffff_ffff
 
 } // module
