@@ -29,8 +29,11 @@ veri_suite = Suite(
         Value("linear",    "linear-disintegration"),
         ]),
     Variable("system",     "run_veri", [Value("veri", "veri")]),
-    Variable("rowcache",   "run_veri", [Value("norowcache", ""),
-                                        Value("yesrowcache", "use_unverified_row_cache")]),
+    Variable("rowcache",   "run_veri", [Value("norowcache", "")]),
+                                        # Value("yesrowcache", "use_unverified_row_cache")]),
+    Variable("cachesize", "run_veri", [Value("cachesize200m", "cacheSize={}".format(200*1024*1024))]),
+    Variable("bucketweight", "run_veri", [
+        Value("bucketweight2pow{}".format(p), "bucketWeight={}".format((2**p)*1024)) for p in [7]]),
     *common_vars)
 
 common_vars_others = common_vars + [
@@ -51,8 +54,7 @@ kyoto_suite = Suite(
     "berkeleydb",
     Variable("system", "run_veri", [Value("kyoto", "kyoto")]),
     *common_vars_others)
-#suite = ConcatSuite("ycsb-001", veri_suite, rocks_suite, berkeleydb_suite)
-suite = ConcatSuite("silver-run-endtoend-berkeley", berkeley_suite)
+suite = ConcatSuite("golden-ssd-veri-bucketweight", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
@@ -72,9 +74,11 @@ def main():
     #log("PLOT tools/aws/pull-results.py && %s && eog %s" % (suite.plot_command(), suite.png_filename()))
     log("VARIANTS %s" % suite.variants)
 
-    workers = retrieve_running_workers()
-    blacklist = []
-    # works = [w for w in workers if w["Name"] not in blacklist]
+    workers = retrieve_running_workers(ssd=True)
+    blacklist = [
+    ]
+    workers = [w for w in workers if w["Name"] not in blacklist]
+    print(workers)
     worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=False)
     monitor_worker_pipes(worker_pipes)
 

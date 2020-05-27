@@ -13,7 +13,7 @@ from lib_deps import *
 # tools/aws/run-all.py "cd veribetrfs; tools/update-submodules.sh; tools/update-dafny.sh"
 ROOT="Impl/Bundle.i.dfy"
 #ROOT="lib/DataStructures/MutableBtree.i.dfy"   # a small test case
-SUITE_NAME="veri_time_13"   # comment branch merged
+SUITE_NAME="veri_time_15"   # with noNlArith
 N_REPLICAS=5
 
 def listSources():
@@ -46,6 +46,7 @@ def main():
             "echo", "WORKER", worker["Name"], ">", output_path, ";",
     #        "sleep", "1",
             "tools/local-dafny.sh", source_path, "/compile:0", "/trace", ">>", output_path
+#            "tools/local-dafny.sh", source_path, "/compile:0", "/trace", "/noNLarith", ">>", output_path
             ]
             )
         return Command(str(variant), cmd)
