@@ -7,7 +7,6 @@ DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy
 DAFNY_ROOT?=.dafny/dafny/
 DAFNY_CMD=$(DAFNY_ROOT)/Binaries/dafny
 DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
-DAFNY_FLAGS=
 
 ifndef TL
 	TL=20
@@ -29,6 +28,13 @@ STDLIB=-stdlib=libc++
 # Uncomment to enable gprof
 #GPROF_FLAGS=-pg
 
+WANT_UNVERIFIED_ROW_CACHE=false
+ifeq "$(WANT_UNVERIFIED_ROW_CACHE)" "true"
+	UNVERIFIED_ROW_CACHE_DEFINE=-DUSE_UNVERIFIED_ROW_CACHE
+else
+	UNVERIFIED_ROW_CACHE_DEFINE=
+endif
+
 WANT_MALLOC_ACCOUNTING=false
 ifeq "$(WANT_MALLOC_ACCOUNTING)" "true"
 	MALLOC_ACCOUNTING_DEFINE=-DMALLOC_ACCOUNTING=1
@@ -48,7 +54,12 @@ endif
 # _LIBCPP_HAS_NO_THREADS makes shared_ptr faster
 # (but also makes stuff not thread-safe)
 # Note: this optimization only works with stdlib=libc++
-OPT_FLAGS=$(MALLOC_ACCOUNTING_DEFINE) $(DBG_SYMBOLS_FLAG) $(OPT_FLAG) -D_LIBCPP_HAS_NO_THREADS $(GPROF_FLAGS)
+OPT_FLAGS=$(MALLOC_ACCOUNTING_DEFINE) \
+          $(UNVERIFIED_ROW_CACHE_DEFINE) \
+          $(DBG_SYMBOLS_FLAG) \
+          $(OPT_FLAG) \
+          -D_LIBCPP_HAS_NO_THREADS \
+          $(GPROF_FLAGS)
 
 ##############################################################################
 # Automatic targets
@@ -179,13 +190,8 @@ build/%.synchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 # .verchk: Dafny file-local verification
 build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.verchk,%.verchk-tmp,$@))
-	( $(TIME) $(DAFNY_CMD) $(DAFNY_FLAGS) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
+	( $(TIME) $(DAFNY_CMD) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
-
-build/lib/DataStructures/MutableBtree.i.verchk: DAFNY_FLAGS=/noNLarith
-build/lib/Buckets/PackedStringArray.i.verchk: DAFNY_FLAGS=/noNLarith
-build/lib/Buckets/KMBPKVOps.i.verchk: DAFNY_FLAGS=/noNLarith
-build/lib/DataStructures/LinearDList.i.verchk: DAFNY_FLAGS=/noNLarith /proverOpt:OPTIMIZE_FOR_BV=true /z3opt:smt.PHASE_SELECTION=0 /z3opt:smt.RESTART_STRATEGY=0 /z3opt:smt.RESTART_FACTOR=1.5 /z3opt:smt.ARITH.RANDOM_INITIAL_VALUE=true /z3opt:smt.CASE_SPLIT=1
 
 ##############################################################################
 # .okay: Dafny file-level verification, no time limit,
