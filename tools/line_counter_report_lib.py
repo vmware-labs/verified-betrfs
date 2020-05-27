@@ -130,12 +130,24 @@ class ManualMapper(Mapper):
             print("unmapped: ", source)
         return self.mapping.get(report["source"], "unmapped")
 
+class MutableMapMapper(Mapper):
+    def __init__(self):
+        super().__init__()
+
+    def map(self, report):
+        source = report["source"]
+        if source in ["lib/DataStructures/LinearMutableMap.i.dfy"]:
+            return "linearmap"
+        else:
+            return "other"
+
 def report(input, output):
     reports = gatherReports(input)
 
     counters = accumulate(reports, AllMapper())
     counters.update(accumulate(reports, DirMapper()))
     counters.update(accumulate(reports, ManualMapper()))
+    counters.update(accumulate(reports, MutableMapMapper()))
     fp = open(output, "w")
 #    json.dumps(counters, fp, sort_keys=True, indent=2)
 #    fp.write("\n")
