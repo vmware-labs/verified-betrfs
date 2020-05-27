@@ -166,9 +166,10 @@ def main():
   if use_filters:
       assert rocks
       
-  if veri_bucket_weight is not None:
+  if veri_bucket_weight is not None or veri_cache_size is not None:
     assert veri
     assert veri_cache_size is not None
+    assert veri_bucket_weight is not None
     value_updates = autoconfig(veri_bucket_weight, veri_cache_size) + value_updates
 
   assert workload != None

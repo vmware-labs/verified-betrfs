@@ -25,8 +25,16 @@ def log(msg):
         logfile.write(msg + "\n")
         logfile.flush()
 
-def retrieve_running_workers():
-    workers_pipe = subprocess.Popen("ssh bastion veribetrfs/tools/aws/describe-instances.py --running --json".split(), stdout=subprocess.PIPE)
+def retrieve_running_workers(family):
+    if family == "ssd":
+        ssdarg = "--ssd"
+    elif family == "hdd":
+        ssdarg=""
+    else:
+        assert False, "Unknown machine family: " + family
+        
+    command = "ssh bastion veribetrfs/tools/aws/describe-instances.py --running --json " + ssdarg;
+    workers_pipe = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
     workers_json,_ = workers_pipe.communicate()
     workers = json.loads(workers_json)
     return workers

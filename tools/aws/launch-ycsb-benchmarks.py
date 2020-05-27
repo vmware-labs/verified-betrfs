@@ -3,7 +3,7 @@
 from automation import *
 from suite import *
 
-replica_count = 6
+replica_count = 3
 
 common_vars = [
     Variable("cgroup",     "run_veri",   [Value("yescgroup", "cgroup=True")]),
@@ -24,13 +24,11 @@ common_vars = [
     ]
 veri_suite = Suite(
     "veribetrkv",
-    Variable("git_branch", "git_branch", [
-        Value("master",    "master"),
-        Value("linear",    "linear-disintegration"),
-        ]),
+    Variable("git_branch", "git_branch", [Value("master",    "performance-search")]),
     Variable("system",     "run_veri", [Value("veri", "veri")]),
-    Variable("rowcache",   "run_veri", [Value("norowcache", ""),
-                                        Value("yesrowcache", "use_unverified_row_cache")]),
+    Variable("cacheSize",  "run_veri",
+             [Value("{}mb".format((200+400*s)), "cacheSize={}".format((200+400*s)*1024*1024)) for s in range(5)]),
+    Variable("bucketWeight", "run_veri", [Value("128kb", "bucketWeight=131072")]),
     *common_vars)
 
 common_vars_others = common_vars + [
@@ -52,7 +50,7 @@ kyoto_suite = Suite(
     Variable("system", "run_veri", [Value("kyoto", "kyoto")]),
     *common_vars_others)
 #suite = ConcatSuite("ycsb-001", veri_suite, rocks_suite, berkeleydb_suite)
-suite = ConcatSuite("silver-run-endtoend-berkeley", berkeley_suite)
+suite = ConcatSuite("performance-search-ssd-veri-003", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
@@ -72,7 +70,7 @@ def main():
     #log("PLOT tools/aws/pull-results.py && %s && eog %s" % (suite.plot_command(), suite.png_filename()))
     log("VARIANTS %s" % suite.variants)
 
-    workers = retrieve_running_workers()
+    workers = retrieve_running_workers("ssd")
     blacklist = []
     # works = [w for w in workers if w["Name"] not in blacklist]
     worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=False)
