@@ -27,8 +27,8 @@ veri_suite = Suite(
     Variable("git_branch", "git_branch", [Value("master",    "performance-search")]),
     Variable("system",     "run_veri", [Value("veri", "veri")]),
     Variable("cacheSize",  "run_veri",
-             [Value("{}mb".format((200+400*s)), "cacheSize={}".format((200+400*s)*1024*1024)) for s in range(5)]),
-    Variable("bucketWeight", "run_veri", [Value("128kb", "bucketWeight=131072")]),
+             [Value("{}mb".format((200+100*s)), "cacheSize={}".format((200+100*s)*1024*1024)) for s in range(5)]),
+    Variable("bucketWeight", "run_veri", [Value("2MB", "bucketWeight=2000000")]),
     *common_vars)
 
 common_vars_others = common_vars + [
@@ -50,7 +50,7 @@ kyoto_suite = Suite(
     Variable("system", "run_veri", [Value("kyoto", "kyoto")]),
     *common_vars_others)
 #suite = ConcatSuite("ycsb-001", veri_suite, rocks_suite, berkeleydb_suite)
-suite = ConcatSuite("performance-search-ssd-veri-003", veri_suite)
+suite = ConcatSuite("performance-search-hdd-veri-002", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
@@ -70,7 +70,7 @@ def main():
     #log("PLOT tools/aws/pull-results.py && %s && eog %s" % (suite.plot_command(), suite.png_filename()))
     log("VARIANTS %s" % suite.variants)
 
-    workers = retrieve_running_workers("ssd")
+    workers = retrieve_running_workers("hdd")
     blacklist = []
     # works = [w for w in workers if w["Name"] not in blacklist]
     worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=False)
