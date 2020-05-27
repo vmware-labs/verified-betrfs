@@ -64,30 +64,30 @@ def main():
   sys.stdout.flush()
 
   dafny_cmd = None
-  if branch == "eval-btree-linear":
+  if branch == "eval-mutablemap-linear":
     # dafny_cmd = ".dafny/dafny/Binaries/dafny /noVerify /spillTargetCode:3 /countVerificationErrors:0 /compileTarget:cpp lib/DataStructures/MutableBtree.i.dfy Lang/LinearExtern.h framework/Framework.h"
     pass
-  elif branch == "eval-btree-master":
+  elif branch == "eval-mutablemap-master":
     dafny_cmd = ".dafny/dafny/Binaries/dafny /noVerify /spillTargetCode:3 /countVerificationErrors:0 /compileTarget:cpp lib/DataStructures/MutableMapImpl.i.dfy framework/NativeArithmetic.h framework/NativeArrays.h framework/LinearCongruentialGenerator.h"
   actuallyprint(dafny_cmd)
   ret = os.system(dafny_cmd)
   assert ret == 0
 
   dafny_cmd_2 = None
-  if branch == "eval-btree-linear":
+  if branch == "eval-mutablemap-linear":
     # dafny_cmd_2 = ".dafny/dafny/Binaries/dafny /noVerify /spillTargetCode:3 /countVerificationErrors:0 /compileTarget:cpp lib/DataStructures/MutableBtree.i.dfy Lang/LinearExtern.h framework/Framework.h"
     pass
-  elif branch == "eval-btree-master":
+  elif branch == "eval-mutablemap-master":
     dafny_cmd_2 = ".dafny/dafny/Binaries/dafny /noVerify /spillTargetCode:3 /countVerificationErrors:0 /compileTarget:cpp bench/MutableMap.dfy framework/NativeArithmetic.h framework/NativeArrays.h framework/LinearCongruentialGenerator.h"
   actuallyprint(dafny_cmd_2)
   ret = os.system(dafny_cmd_2)
   assert ret == 0
 
   cmd = None
-  if branch == "eval-btree-linear":
+  if branch == "eval-mutablemap-linear":
     # cmd = "g++ -O3 lib/DataStructures/lib/DataStructures/MutableBtree.i.cpp bench/run-mutable-btree.cpp -o MutableBtreeBench -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -Ilib -std=c++17 -I."
     pass
-  elif branch == "eval-btree-master":
+  elif branch == "eval-mutablemap-master":
     cmd = "g++ -O3 bench/bench/MutableMap.cpp bench/run-mutable-map.cpp framework/NativeArithmetic.cpp -o MutableMapBench  -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -I bench -Ilib -std=c++17 -I."
   actuallyprint(cmd)
   ret = os.system(cmd)
