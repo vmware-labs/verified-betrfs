@@ -29,6 +29,13 @@ STDLIB=-stdlib=libc++
 # Uncomment to enable gprof
 #GPROF_FLAGS=-pg
 
+WANT_UNVERIFIED_ROW_CACHE=false
+ifeq "$(WANT_UNVERIFIED_ROW_CACHE)" "true"
+	UNVERIFIED_ROW_CACHE_DEFINE=-DUSE_UNVERIFIED_ROW_CACHE
+else
+	UNVERIFIED_ROW_CACHE_DEFINE=
+endif
+
 WANT_MALLOC_ACCOUNTING=false
 ifeq "$(WANT_MALLOC_ACCOUNTING)" "true"
 	MALLOC_ACCOUNTING_DEFINE=-DMALLOC_ACCOUNTING=1
@@ -48,7 +55,12 @@ endif
 # _LIBCPP_HAS_NO_THREADS makes shared_ptr faster
 # (but also makes stuff not thread-safe)
 # Note: this optimization only works with stdlib=libc++
-OPT_FLAGS=$(MALLOC_ACCOUNTING_DEFINE) $(DBG_SYMBOLS_FLAG) $(OPT_FLAG) -D_LIBCPP_HAS_NO_THREADS $(GPROF_FLAGS)
+OPT_FLAGS=$(MALLOC_ACCOUNTING_DEFINE) \
+          $(UNVERIFIED_ROW_CACHE_DEFINE) \
+          $(DBG_SYMBOLS_FLAG) \
+          $(OPT_FLAG) \
+          -D_LIBCPP_HAS_NO_THREADS \
+          $(GPROF_FLAGS)
 
 ##############################################################################
 # Automatic targets
@@ -183,7 +195,6 @@ build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	mv $(TMPNAME) $@
 
 build/lib/DataStructures/MutableBtree.i.verchk: DAFNY_FLAGS=/noNLarith
-build/lib/Buckets/PackedStringArray.i.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/Buckets/KMBPKVOps.i.verchk: DAFNY_FLAGS=/noNLarith
 build/Impl/QueryImpl.i.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/DataStructures/LinearDList.i.verchk: DAFNY_FLAGS=/noNLarith /proverOpt:OPTIMIZE_FOR_BV=true /z3opt:smt.PHASE_SELECTION=0 /z3opt:smt.RESTART_STRATEGY=0 /z3opt:smt.RESTART_FACTOR=1.5 /z3opt:smt.ARITH.RANDOM_INITIAL_VALUE=true /z3opt:smt.CASE_SPLIT=1
@@ -282,17 +293,17 @@ WARNINGS=-Wall -Wsign-compare
 
 build/%.o: build/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I . -std=c++17 -msse4.2 $(POUND_DEFINES) -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAGS) $(WARNINGS)
+	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++17 -msse4.2 $(POUND_DEFINES) -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAGS) $(WARNINGS)
 
 build/framework/%.o: framework/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
-	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I . -I build/ -std=c++17 -march=native -msse4.2 $(POUND_DEFINES) -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAGS) $(WARNINGS) -Werror
+	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++17 -march=native -msse4.2 $(POUND_DEFINES) -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAGS) $(WARNINGS) -Werror
 
 # the BundleWrapper.cpp file includes the auto-generated Bundle.cpp
 build/framework/BundleWrapper.o: framework/BundleWrapper.cpp build/Bundle.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
 # No -Werror
-	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I . -I build/ -std=c++17 -march=native -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAGS) $(WARNINGS)
+	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -I build/ -std=c++17 -march=native -msse4.2 -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAGS) $(WARNINGS)
 
 # Include the .h depencies for all previously-built .o targets. If one of the .h files
 # changes, we'll rebuild the .o

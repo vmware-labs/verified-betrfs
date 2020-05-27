@@ -80,7 +80,7 @@ def plot(data):
             line = ax.bar([x+width*expi for x in xpos], rates, yerr=errs, width=width)
             line.set_label(exp.branch())
         ax.set_xticks([x + width*(num_cases-1)/2 for x in xpos])
-        prettySizes = ["%d" % (size/(1<<20)) for size in sizes]
+        prettySizes = ["%d" % (size/(1000000)) for size in sizes]
         ax.set_xticklabels(prettySizes)
         if want_xlabel:
             ax.set_xlabel(r"Mi operation count (${\times} 2^{20}$)", usetex=True)
@@ -92,5 +92,5 @@ def plot(data):
 
     fig.savefig("data/btree-perf.pdf")
 
-data = parseSeveral(glob.glob("expresults/btree-tp-insert/*.data"))
+data = parseSeveral(glob.glob("expresults/btree-tp/*.data"))
 plot(data)

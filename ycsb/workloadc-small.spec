@@ -6,8 +6,8 @@
 
 workloadname=C
 
-recordcount=10000000
-operationcount=10000
+recordcount=100
+operationcount=10
 workload=com.yahoo.ycsb.workloads.CoreWorkload
 
 readallfields=true

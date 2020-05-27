@@ -14,40 +14,12 @@ def actuallyprint(msg):
     print(msg)
     sys.stdout.flush()
 
-def autoconfig(config, memlimit, nodeCountFudge):
-  actuallyprint("using node size roughly: " + config)
-  sys.stdout.flush()
-
-  if memlimit.endswith("gb"):
-    memlimit = int(float(memlimit[:-2]) * 1024*1024*1024)
-  else:
-    memlimit = int(memlimit)
-
-  itable_size = 8*1024*1024
-
-  if config == "8mb":
-    node_size = 8*1024*1024
-    bucket_weight = 8356168
-    cache_size = int(memlimit * nodeCountFudge // ((8*1024*1024)))
-  elif config == "1mb":
-    node_size = 1*1024*1024
-    bucket_weight = 1016136 # jonh has no idea where this number comes from, so I subtracted 32000 because that looks like a popular choice.
-    cache_size = int(memlimit * nodeCountFudge // ((1*1024*1024)))
-  elif config == "64kb":
-    node_size = 98304
-    bucket_weight = 64220
-    cache_size = int(memlimit * nodeCountFudge // ((64*1024)))
-  else:
-    assert False
-
-  min_index = (itable_size + node_size - 1) // node_size
+def autoconfig(bucket_weight_bytes, cache_size_bytes):
+  cache_size_nodes = int(cache_size_bytes // bucket_weight_bytes)
     
   return [
-    ("IndirectionTableBlockSizeUint64", str(itable_size)),
-    ("NodeBlockSizeUint64", str(node_size)),
-    ("MinNodeBlockIndexUint64", str(min_index)),
-    ("MaxTotalBucketWeightUint64", str(bucket_weight)),
-    ("MaxCacheSizeUint64", str(cache_size)),
+    ("MaxTotalBucketWeightUint64", str(bucket_weight_bytes)),
+    ("MaxCacheSizeUint64", str(cache_size_nodes)),
   ]
 
 def cgroup_defaults():
@@ -68,6 +40,8 @@ def set_mem_limit(limit):
   assert ret == 0
 
 def clear_page_cache():
+  os.system("sudo tools/setup-clear-os-page-cache-binary.sh")
+
   if not os.path.exists("tools/clear-os-page-cache"):
     print("Error: can't clear cache.")
     print("Run `sudo tools/setup-clear-os-page-cache-binary.sh` first.")
@@ -103,6 +77,7 @@ def splice_value_into_bundle(name, value):
     f.write(cpp)
 
 def main():
+  archive_dir = "/mnt/xvde/archives"
   workload = None
   device = None
   mem = None
@@ -112,12 +87,19 @@ def main():
   nodeCountFudge = 1.0  # Pretend we have more memory when computing node count budget, since mean node is 75% utilized. This lets us tune veri to exploit all available cgroup memory.
   max_children = None   # Default
   cgroup_enabled = True
-
+  use_unverified_row_cache = None
+  use_filters = None
+  from_archive = None
+  veri_cache_size = None
+  veri_bucket_weight = None
+  
   veri = None
   rocks = None
   berkeley = None
   kyoto = None
   time_budget_sec = 3600*24*365 # You get a year if you don't ask for a budget
+
+  fp = None
 
   for arg in sys.argv[1:]:
     if arg.startswith("ram="):
@@ -126,6 +108,12 @@ def main():
       workload = arg[len("workload=") : ]
     elif arg.startswith("device="):
       device = arg[len("device=") : ]
+    elif arg.startswith("fromArchive="):
+      from_archive = arg[len("fromArchive=") : ]
+    elif arg.startswith("cacheSize="):
+      veri_cache_size = int(arg[len("cacheSize=") : ])
+    elif arg.startswith("bucketWeight="):
+      veri_bucket_weight = int(arg[len("bucketWeight=") : ])
     elif arg.startswith("nodeCountFudge="):
       nodeCountFudge = float(arg[len("nodeCountFudge=") : ])
     elif "Uint64=" in arg:
@@ -134,10 +122,10 @@ def main():
       name = sp[0]
       value = sp[1]
       value_updates.append((name, value))
-    elif arg == "config-64kb":
-      config = "64kb"
-    elif arg == "config-8mb":
-      config = "8mb"
+    elif arg == "use_unverified_row_cache":
+        use_unverified_row_cache = True
+    elif arg == "use_filters":
+        use_filters = True
     elif arg == "veri":
       veri = True
     elif arg == "rocks":
@@ -159,21 +147,29 @@ def main():
       cgroup_enabled = enabled=="True"
     elif arg.startswith("output="):
       outpath = arg.split("=")[1]
+      actuallyprint("outpath: %s" % outpath)
       assert not os.path.exists(outpath)
       fp = open(outpath, "w")
-      os.dup2(fp.fileno(), 1)   # replace stdout for this program and children
     else:
       assert False, "unrecognized argument: " + arg
+
+  assert fp is not None
       
   actuallyprint("Experiment time budget %s" % (datetime.timedelta(seconds=time_budget_sec)))
   actuallyprint("metadata time_budget %s seconds" % time_budget_sec)
 
   assert veri or rocks or berkeley or kyoto
-  
-  if config != None:
+
+  if use_unverified_row_cache:
+      assert veri
+
+  if use_filters:
+      assert rocks
+      
+  if veri_bucket_weight is not None:
     assert veri
-    assert ram != None
-    value_updates = autoconfig(config, ram, nodeCountFudge) + value_updates
+    assert veri_cache_size is not None
+    value_updates = autoconfig(veri_bucket_weight, veri_cache_size) + value_updates
 
   assert workload != None
   assert device != None
@@ -207,8 +203,10 @@ def main():
 
   make_options = ""
   if log_stats:
-    make_options = "LOG_QUERY_STATS=1 "
-
+    make_options += "LOG_QUERY_STATS=1 "
+  if use_unverified_row_cache:
+    make_options += "WANT_UNVERIFIED_ROW_CACHE=true "
+      
   actuallyprint("Building executable...")
   sys.stdout.flush()
   #cmd = make_options + "make " + exe + " -j4 > /dev/null 2> /dev/null"
@@ -217,18 +215,13 @@ def main():
   ret = os.system(cmd)
   assert ret == 0
 
-  if len(workload)==1:
-    # sheesh you're lazy
-    wl = "ycsb/workload" + workload + "-onefield.spec"
-  else:
-    wl = workload
-  actuallyprint("workload: " + wl)
+  workload_cmd = " ".join(workload.split(","))
 
-  if device == "optane":
-    loc = "/scratch0/tjhance/ycsb"
+  if device == "ssd":
+    loc = "/tmp/veribetrfs"
   elif device == "disk":
     #loc = "/home/tjhance/ycsb/"
-    loc = "/tmp/veribetrfs"
+    loc = "/mnt/xvde/scratch"
   else:
     assert False
 
@@ -249,7 +242,19 @@ def main():
   else:
     assert veri
     loc = loc + "/veribetrkv.img"
+
+  if from_archive:
+    if rocks:
+      os.system("cp -a " + from_archive + "/* " + loc + "/")
+    else:
+      os.system("cp -a " + from_archive + " " + loc)
     
+  driver_options = ""
+  if use_filters:
+    driver_options += "--filters "
+  if from_archive:
+    driver_options += "--preloaded "
+
   clear_page_cache()
 
   # bitmask indicating which CPUs we can use
@@ -257,23 +262,18 @@ def main():
   taskset_cmd = "taskset 4 "
 
   cgroup_prefix = "cgexec -g memory:VeribetrfsExp " if cgroup_enabled else ""
-  command = taskset_cmd + cgroup_prefix + "./" + exe + " " + loc + " " + wl
+  command = taskset_cmd + cgroup_prefix + "./" + exe + " " + loc + " " + driver_options + " " + workload_cmd
   actuallyprint(command)
   sys.stdout.flush()
 
   start_time = time.time()
   end_time = start_time + time_budget_sec
-  proc = subprocess.Popen(command, shell=True, preexec_fn=os.setsid)
+  proc = subprocess.Popen(command, shell=True, preexec_fn=os.setsid, stdout=fp)
   proc_grp_id = os.getpgid(proc.pid)
   actuallyprint("experiment pid %d pgid %d" % (proc.pid, proc_grp_id))
-  while proc.poll() == None:
-    if time.time() >= end_time:
-      os.killpg(proc_grp_id, signal.SIGKILL)
-      actuallyprint("time_budget exhausted; killed.")
-      break
-    time.sleep(10)
-
+  ret = proc.wait()
   assert ret == 0
+  actuallyprint("done")
 
 if __name__ == "__main__":
   main()

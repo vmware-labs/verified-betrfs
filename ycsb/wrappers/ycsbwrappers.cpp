@@ -31,9 +31,9 @@ const ycsbcwrappers::TxRead ycsbcwrappers::TransactionRead(ycsbc::CoreWorkload&w
     }
 }
 
-const ycsbcwrappers::TxInsert ycsbcwrappers::TransactionInsert(ycsbc::CoreWorkload&workload) {
+const ycsbcwrappers::TxInsert ycsbcwrappers::TransactionInsert(ycsbc::CoreWorkload&workload, bool load) {
     const std::string &table = workload.NextTable();
-    const std::string &key = workload.NextSequenceKey();
+    const std::string &key = load ? workload.NextSequenceKey() : workload.NextTransactionKey();
     std::vector<ycsbc::DB::KVPair>* values = new std::vector<ycsbc::DB::KVPair>();
     values->reserve(16);
     workload.BuildValues(*values);
@@ -56,11 +56,12 @@ const ycsbcwrappers::TxUpdate ycsbcwrappers::TransactionUpdate(ycsbc::CoreWorklo
 const ycsbcwrappers::TxScan ycsbcwrappers::TransactionScan(ycsbc::CoreWorkload&workload) {
     const std::string &table = workload.NextTable();
     const std::string &key = workload.NextSequenceKey();
+    int len = workload.NextScanLength();
     if (!workload.read_all_fields()) {
         std::vector<std::string>* fields = new std::vector<std::string>;
         fields->push_back("field" + workload.NextFieldName());
-        return TxScan(table, key, fields);
+        return TxScan(table, key, len, fields);
     } else {
-        return TxScan(table, key, NULL);
+        return TxScan(table, key, len, NULL);
     }
 } 

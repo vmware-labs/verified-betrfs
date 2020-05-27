@@ -1510,7 +1510,7 @@ module LinearMutableMap {
   protected predicate WFSimpleIter<V>(self: LinearHashMap<V>, it: SimpleIterator)
   ensures WFSimpleIter(self, it) ==> it.s <= self.contents.Keys
   {
-    && 0 <= it.i as int <= |self.underlying.storage|
+    && 0 <= it.i as int <= |self.underlying.storage| < Uint64UpperBound()
     && (it.i as int == |self.underlying.storage| ==> (it.s == self.contents.Keys))
     && (it.i as int < |self.underlying.storage| ==> self.underlying.storage[it.i].Entry?)
     // Each passed index appears in s
@@ -1526,7 +1526,7 @@ module LinearMutableMap {
   }
 
   function method indexOutput<V>(shared self: LinearHashMap<V>, i: uint64) : (next: IteratorOutput<V>)
-  requires 0 <= i as int <= |self.underlying.storage|
+  requires 0 <= i as int <= |self.underlying.storage| < Uint64UpperBound()
   requires i as int < |self.underlying.storage| ==> self.underlying.storage[i].Entry?
   {
     if i == seq_length(self.underlying.storage) then (
@@ -1857,6 +1857,7 @@ module LinearMutableMap {
   {
     shared var LinearHashMap(underlying, count, contents) := self;
     shared var FixedSizeLinearHashMap(storage, fCount, fContents) := underlying;
+    shared_seq_length_bound(storage);
     linear var storage' := AllocAndCopy(storage, 0, seq_length(storage));
     self' := LinearHashMap(FixedSizeLinearHashMap(storage', fCount, fContents), count, contents);
   }

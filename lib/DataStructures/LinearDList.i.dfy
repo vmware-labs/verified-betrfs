@@ -142,12 +142,13 @@ module DList {
     requires 0 < k as nat <= |a|
     ensures |b| == |a|
     ensures forall i :: 0 <= i < k as nat ==> b[i] == a[i]
-    ensures forall i :: k as nat <= i < seq_length(a) as nat ==> b[i] == Node(None, i as uint64 - 1, 0)
+    ensures forall i :: k as nat <= i < |a| <= 0xffff_ffff_ffff_ffff ==> b[i] == Node(None, i as uint64 - 1, 0)
   {
     b := a;
     var n := k;
+    shared_seq_length_bound(b);
     while (n < seq_length(b))
-      invariant k <= n <= seq_length(b)
+      invariant k as int <= n as int <= |b|
       invariant |b| == |a|
       invariant forall i :: 0 <= i < k as nat ==> b[i] == a[i]
       invariant forall i :: k as nat <= i < n as nat ==> b[i] == Node(None, i as uint64 - 1, 0)
@@ -182,8 +183,9 @@ module DList {
     ensures l'.freeStack != 0 && l'.nodes[l'.freeStack].data.None?
   {
     linear var DList(nodes, freeStack, s, f, g) := l;
+    shared_seq_length_bound(nodes);
     var len := seq_length(nodes);
-    var _ := seq_length_bound(nodes);
+    shared_seq_length_bound(nodes);
     var len' := if len < 0x7fff_ffff_ffff_ffff then len + len else len + 1;
     nodes := SeqResize(nodes, len', Node(None, freeStack, 0));
     nodes := BuildFreeStack(nodes, len + 1);
@@ -286,6 +288,7 @@ module DList {
     ensures l' == l
   {
     shared var DList(nodes, freeStack, s, f, g) := l;
+    shared_seq_length_bound(nodes);
     linear var nodes' := AllocAndCopy(nodes, 0, seq_length(nodes));
     l' := DList(nodes', freeStack, s, f, g);
   }

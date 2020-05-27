@@ -3,44 +3,56 @@
 from automation import *
 from suite import *
 
+replica_count = 6
+
 common_vars = [
-    Variable("ram", "run_veri", [Value("2gb", "ram=2.0gb")]),
-    Variable("device", "run_veri", [Value("disk", "device=disk")]),
-    Variable("workload", "run_veri", [Value("wka", "workload=ycsb/workloada-onefield.spec"),
-                                      Value("wkb", "workload=ycsb/workloadb-onefield.spec"),
-                                      Value("wkc", "workload=ycsb/workloadc-onefield.spec")]),
+    Variable("cgroup",     "run_veri",   [Value("yescgroup", "cgroup=True")]),
+    Variable("ram",        "run_veri",   [Value("2gb",       "ram=2.0gb")]),
+    Variable("device",     "run_veri",   [Value("disk",      "device=disk")]),
+    Variable("workload",   "run_veri",
+             [Value("all", "workload=" + ",".join(
+                    ["ycsb/workloada-onefield.spec", # load
+                    "ycsb/workloadc-uniform.spec"  , # Doesn't modify database, so sneak it in here
+                    "ycsb/workloada-onefield.spec" , # runs...
+                    "ycsb/workloadb-onefield.spec" ,
+                    "ycsb/workloadc-onefield.spec" ,
+                    "ycsb/workloadd-onefield.spec" ,
+                    "ycsb/workloadf-onefield.spec" ,
+                    ])),]),
     #Variable("duration", "run_veri", [Value("2h", "time_budget=2h")]),
-    Variable("replica", "silent", [Value("r0", "r=0"),
-                                   Value("r1", "r=1"),
-                                   Value("r2", "r=2"),
-                                   Value("r3", "r=3"),
-                                   Value("r4", "r=4")]),
+    Variable("replica",  "silent", [Value("r{}".format(r), "r={}".format(r)) for r in range(replica_count)]),
     ]
 veri_suite = Suite(
     "veribetrkv",
-    Variable("system", "run_veri", [Value("veri", "veri")]),
-    Variable("git_branch", "git_branch", [Value("master", "master")]),
-    #Variable("nodeCountFudge", "run_veri", [Value(str(f), "nodeCountFudge="+str(f)) for f in [0.5]]),
-    #Variable("max_children", "run_veri", [Value("fanout16", "max_children=16")]),
-    Variable("cgroup", "run_veri", [Value("yescgroup", "cgroup=True")]),
+    Variable("git_branch", "git_branch", [
+        Value("master",    "master"),
+        Value("linear",    "linear-disintegration"),
+        ]),
+    Variable("system",     "run_veri", [Value("veri", "veri")]),
+    Variable("rowcache",   "run_veri", [Value("norowcache", ""),
+                                        Value("yesrowcache", "use_unverified_row_cache")]),
     *common_vars)
+
+common_vars_others = common_vars + [
+    Variable("git_branch", "git_branch", [Value("master",    "master")]),
+    ]
+
 rocks_suite = Suite(
     "rocksdb",
-    Variable("git_branch", "git_branch", [Value("master", "master")]),
-    Variable("system", "run_veri", [Value("rocks", "rocks")]),
-    *common_vars)
+    Variable("system",  "run_veri", [Value("rocks", "rocks")]),
+    Variable("filters", "run_veri", [Value("nofilters", ""),
+                                     Value("yesfilters", "use_filters")]),
+    *common_vars_others)
 berkeley_suite = Suite(
     "berkeleydb",
-    Variable("git_branch", "git_branch", [Value("master", "master")]),
     Variable("system", "run_veri", [Value("berkeley", "berkeley")]),
-    *common_vars)
+    *common_vars_others)
 kyoto_suite = Suite(
     "berkeleydb",
-    Variable("git_branch", "git_branch", [Value("master", "master")]),
     Variable("system", "run_veri", [Value("kyoto", "kyoto")]),
-    *common_vars)
+    *common_vars_others)
 #suite = ConcatSuite("ycsb-001", veri_suite, rocks_suite, berkeleydb_suite)
-suite = ConcatSuite("ycsb-berkeley-000", berkeley_suite)
+suite = ConcatSuite("silver-run-endtoend-berkeley", berkeley_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
@@ -52,6 +64,7 @@ def cmd_for_idx(idx, worker):
         ]
         + [RUN_VERI_PATH] + variant.run_veri_params() + ["output=../"+variant.outfile()]
         )
+    print(cmd)
     return Command(str(variant), cmd)
 
 def main():
@@ -61,7 +74,7 @@ def main():
 
     workers = retrieve_running_workers()
     blacklist = []
-    works = [w for w in workers if w["Name"] not in blacklist]
+    # works = [w for w in workers if w["Name"] not in blacklist]
     worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=False)
     monitor_worker_pipes(worker_pipes)
 

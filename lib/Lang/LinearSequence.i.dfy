@@ -8,7 +8,7 @@ module LinearSequence_i {
   export
     provides LinearSequence_s
     provides NativeTypes
-    provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_length, lseq_length_uint64, lseq_peek
+    provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_length, lseq_peek
     provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give
     provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, SeqResize, InsertSeq, InsertLSeq
     reveals lseq_full, linLast, lseq_has_all
@@ -54,7 +54,7 @@ module LinearSequence_i {
   function lseqs<A>(l:lseq<A>):(s:seq<A>)
     ensures rank_is_less_than(s, l)
   {
-    var s := seq(lseq_length_raw(l) as int, i requires 0<=i<lseq_length_raw(l) as int => read(lseqs_raw(l)[i]));
+    var s := seq(|lseqs_raw(l)|, i requires 0 <= i < |lseqs_raw(l)| => read(lseqs_raw(l)[i]));
     axiom_lseqs_rank(l, s);
     s
   }
@@ -82,7 +82,7 @@ module LinearSequence_i {
   function lseq_has<A>(l:lseq<A>):(s:seq<bool>)
       ensures |s| == |lseqs(l)|
   {
-      seq(lseq_length_raw(l) as int, i requires 0<=i<lseq_length_raw(l) as int => has(lseqs_raw(l)[i]))
+    seq(|lseqs_raw(l)|, i requires 0 <= i < |lseqs_raw(l)| => has(lseqs_raw(l)[i]))
   }
 
   lemma lemma_lseqs_extensional<A>(l1:lseq<A>, l2:lseq<A>)
@@ -105,26 +105,14 @@ module LinearSequence_i {
     forall i :: 0<=i<|l| ==> lseq_has(l)[i]
   }
 
-  function method lseq_length_uint64<A>(shared s:lseq<A>): (n:uint64)
-    ensures n as nat == |lseqs(s)|
-  {
-      lseq_length_raw(s)
-  }
-
   function lseq_length<A>(s:lseq<A>):(n:nat)
-      ensures n == |lseqs(s)|
   {
-      lseq_length_raw(s) as nat
-  }
-
-  function operator(| |)<A>(s:seq<A>):nat
-  {
-      seq_length(s) as nat
+    |lseqs(s)|
   }
 
   function operator(| |)<A>(s:lseq<A>):nat
   {
-      lseq_length(s)
+    lseq_length(s)
   }
 
   function{:inline true} operator([])<A>(s:lseq<A>, i:nat):A
@@ -276,6 +264,7 @@ module LinearSequence_i {
     ensures |s2| == newlen as nat
     ensures forall j :: 0 <= j < newlen as nat ==> s2[j] == (if j < |s| then s[j] else a)
   {
+    shared_seq_length_bound(s);
     var i:uint64 := seq_length(s);
     s2 := TrustedRuntimeSeqResize(s, newlen);
     while (i < newlen)
@@ -293,7 +282,8 @@ module LinearSequence_i {
     requires 0 <= pos as int <= |s|;
     ensures s2 == s[..pos] + [a] + s[pos..];
   {
-    var newlen: uint64 := seq_length(s) as uint64 + 1;
+    var len := seq_length(s);
+    var newlen: uint64 := len as uint64 + 1;
     s2 := TrustedRuntimeSeqResize(s, newlen);
 
     var i:uint64 := newlen - 1;
@@ -317,7 +307,8 @@ module LinearSequence_i {
     ensures lseq_has_all(s2)
     ensures lseqs(s2) == lseqs(s)[..pos] + [a] + lseqs(s)[pos..];
   {
-    var newlen: uint64 := lseq_length_raw(s) + 1;
+    var len: uint64 := lseq_length_raw(s);
+    var newlen: uint64 := len + 1;
 
     s2 := TrustedRuntimeLSeqResize(s, newlen);
 

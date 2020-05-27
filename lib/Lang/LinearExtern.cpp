@@ -69,7 +69,12 @@ DafnySequence<A> seq_unleash(linear_seq<A> s) {
 }
 
 template <typename A>
-Tuple0 seq_length_bound(linear_seq<A> s) {
+Tuple0 seq_length_bound(DafnySequence<A> s) {
+  return Tuple0();
+}
+
+template <typename A>
+Tuple0 shared_seq_length_bound(linear_seq<A> s) {
   return Tuple0();
 }
 
@@ -138,6 +143,11 @@ template <typename A>
 lseq<A> get_lseq_default() {
   lseq<A> ret;
   return ret;
+}
+
+template <typename A>
+Tuple0 lseq_length_bound(lseq<A> s) {
+  return Tuple0();
 }
 
 }
