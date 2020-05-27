@@ -850,7 +850,7 @@ abstract module MutableBtree {
     root := new Node(t);
   }
 
-  // TODO: need to call this
+  // TODO: are we calling this everywhere that needs it?
   method Free(root: Node)
     requires WF(root)
     modifies root.repr

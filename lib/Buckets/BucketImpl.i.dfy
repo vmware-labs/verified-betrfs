@@ -153,6 +153,15 @@ module BucketImpl {
       WeightBucketIs(pkv);
     }
 
+    method Destructor()
+      requires Inv()
+      modifies Repr
+    {
+      if tree != null {
+        KMB.Free(tree);
+      }
+    }
+
     lemma WeightKeySeqIs(psa: PackedKV.PSA.Psa, k: int)
       requires PSA.WF(psa)
       requires 0 <= k <= |psa.offsets|
