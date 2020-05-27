@@ -5,23 +5,24 @@ from suite import *
 
 common_vars = [
     Variable("seed", "run_map", [
-        Value("seed0", "seed=348725789"),
+        Value("seed0", "seed=11348725789"),
         Value("seed1", "seed=34578699348"),
         Value("seed2", "seed=23945765203"),
         Value("seed3", "seed=625478238923"),
         Value("seed4", "seed=657843290874"),
         Value("seed5", "seed=9526729840202"),
+        Value("seed6", "seed=95229840202"),
         ]),
     ]
 repr_suite = Suite(
     "repr",
-    Variable("git_branch", "git_branch", [Value("master", "eval-btree-master")]),
+    Variable("git_branch", "git_branch", [Value("master", "eval-mutablemap-master")]),
     *common_vars)
 linear_suite = Suite(
     "linear",
-    Variable("git_branch", "git_branch", [Value("linear", "eval-btree-linear")]),
+    Variable("git_branch", "git_branch", [Value("linear", "eval-mutablemap-linear")]),
     *common_vars)
-suite = ConcatSuite("silver-mutablemap", linear_suite, repr_suite)
+suite = ConcatSuite("bold-golden-mutablemap-linear-2", linear_suite)
 
 MBTREE_PATH="./tools/run-map-config-experiment.py"
 
@@ -42,12 +43,6 @@ def main():
 
     workers = retrieve_running_workers()
     blacklist = [
-        "veri-worker-b00",
-        "veri-worker-b01",
-        "veri-worker-b02",
-        "veri-worker-b03",
-        "veri-worker-b04",
-        "veri-worker-b05",
     ]
     workers = [w for w in workers if w["Name"] not in blacklist]
     worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=False)
