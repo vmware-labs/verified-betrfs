@@ -22,7 +22,7 @@ linear_suite = Suite(
     "linear",
     Variable("git_branch", "git_branch", [Value("linear", "eval-mutablemap-linear")]),
     *common_vars)
-suite = ConcatSuite("bold-golden-mutablemap-linear-2", linear_suite)
+suite = ConcatSuite("bold-golden-mutablemap-master-00", repr_suite)
 
 MBTREE_PATH="./tools/run-map-config-experiment.py"
 
