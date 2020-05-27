@@ -9,7 +9,7 @@ import collections
 import tarfile
 
 #EXPERIMENT="expresults/veri_time_13-*"
-EXPERIMENT="expresults/veri_time_16.tgz"
+EXPERIMENT="expresults/veri_time_14.tgz"
 
 class Observation:
     def __init__(self, time, worker_name, source_filename):
@@ -271,21 +271,23 @@ def plot_all(pile):
         return -math.log10(1-y)
     ys = [complog(y) for y in cdf.ys]
 
-    fig = plt.figure()
+    fig = plt.figure(figsize=(6*0.8,2.5*0.8))
     ax = fig.add_subplot(111)
     ax.plot(cdf.pile.avg_times(), ys)
 
     for point in (cdf.point20s, cdf.point10s):
         ylogThr = complog(point.yThr)
         y0 = complog(0)
-        ax.plot([0, point.tThr, point.tThr], [ylogThr, ylogThr, y0], color="black")
-        ax.text(point.tThr*1.01, ylogThr*0.99, va="top", s="%s%% faster than %ds" % (point.pct_text, point.thresh_sec))
+        ax.plot([0, point.tThr, point.tThr], [ylogThr, ylogThr, y0], color="gray")
+        yOff = 0.80 if point==cdf.point10s else 0.99
+        ax.text(point.tThr*1.01, ylogThr*yOff, va="top", s="%s%% faster than %ds" % (point.pct_text, point.thresh_sec))
 
     yticks = range(4)
     ax.set_yticks(yticks)
     ax.set_yticklabels([1-math.pow(10, -y) for y in yticks])
     ax.set_xlabel("time to verify definition, method or lemma (s)")
-    ax.set_ylabel("cumulative fraction (log scale)")
+    ax.set_ylabel("cumulative frac.\n(log scale)")
+    plt.tight_layout()
 
     fig.savefig("../veripapers/osdi2020/figures/verification-times.pdf")
 
@@ -297,7 +299,7 @@ def main():
     detect_bogus_workers(pile)
     report_slowest_symbols(pile)
     report_sequential_time(pile)
-    #emit_constants(CDFStuff(pile).defs())
-    #plot_all(pile)
+    emit_constants(CDFStuff(pile).defs())
+    plot_all(pile)
 
 main()

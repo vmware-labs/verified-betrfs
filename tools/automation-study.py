@@ -89,19 +89,20 @@ def scrape():
     open(INTERMEDIATE, "w").write(json.dumps(records, indent = 4))
 
 def plot(records):
-    fig = plt.figure()
-    ax = fig.add_subplot(211)
+    fig = plt.figure(figsize=(6*0.8,2.5*0.8))
+    ax = fig.add_subplot(111)
     reveals = [record["reveal_count"] for record in records]
     reveals.sort()
     ax.hist(reveals, bins=max(reveals))
     ax.set_ylabel("count of\nopaque definitions")
 
-    ax = fig.add_subplot(212)
+    a2 = ax.twinx()
     xs = reveals
     ys = [i/(len(reveals)-1.0) for i in range(len(reveals))]
-    ax.plot(xs, ys)
-    ax.set_ylabel("cum. frac. of\nopaque definitions")
+    a2.plot(xs, ys, color="red")
+    a2.set_ylabel("cum. frac. of\nopaque definitions")
     ax.set_xlabel("number of times manually revealed")
+    plt.tight_layout()
     fig.savefig("../veripapers/osdi2020/figures/automation-figure.pdf")
 
 def gather_constants(records):
@@ -164,7 +165,7 @@ def find_dead_lemmas():
             print(x)
 
 def main():
-    scrape()
+    #scrape()
 
     records = json.loads(open(INTERMEDIATE).read())
     print("Got %s records" % len(records))
