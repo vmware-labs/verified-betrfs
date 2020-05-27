@@ -27,7 +27,7 @@ veri_suite = Suite(
     Variable("git_branch", "git_branch", [Value("master",    "performance-search")]),
     Variable("system",     "run_veri", [Value("veri", "veri")]),
     Variable("cacheSize",  "run_veri",
-             [Value("{}mb".format((200+100*s)), "cacheSize={}".format((200+100*s)*1024*1024)) for s in range(5)]),
+             [Value("{}mb".format((600-100*s)), "cacheSize={}".format((600-100*s)*1024*1024)) for s in range(5)]),
     Variable("bucketWeight", "run_veri", [Value("2MB", "bucketWeight=2000000")]),
     *common_vars)
 
@@ -50,7 +50,7 @@ kyoto_suite = Suite(
     Variable("system", "run_veri", [Value("kyoto", "kyoto")]),
     *common_vars_others)
 #suite = ConcatSuite("ycsb-001", veri_suite, rocks_suite, berkeleydb_suite)
-suite = ConcatSuite("performance-search-hdd-veri-002", veri_suite)
+suite = ConcatSuite("performance-search-hdd-veri-003", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
