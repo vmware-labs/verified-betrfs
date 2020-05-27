@@ -13,8 +13,8 @@ from lib_deps import *
 # tools/aws/run-all.py "cd veribetrfs; tools/update-submodules.sh; tools/update-dafny.sh"
 ROOT="Impl/Bundle.i.dfy"
 #ROOT="lib/DataStructures/MutableBtree.i.dfy"   # a small test case
-SUITE_NAME="veri_time_15"   # with noNlArith
-N_REPLICAS=5
+SUITE_NAME="veri_time_16"   # one big parallel build
+N_REPLICAS=1
 
 def listSources():
     paths = set()
@@ -29,7 +29,7 @@ def listSources():
     return values
 
 def constructSuite(nReplicas):
-    sourceVariable = Variable("source", "source", listSources())
+    sourceVariable = Variable("source", "source", listSources()[::-1])
     replicaVariable = Variable("replica", "silent", [Value("r%d"%i, "r%d"%i) for i in range(nReplicas)])
     suite = Suite(SUITE_NAME, sourceVariable, replicaVariable)
     return suite
