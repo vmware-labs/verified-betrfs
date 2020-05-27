@@ -62,8 +62,9 @@ def write_tex_table(fp, counters):
     keys = list(counters.keys())
     keys.sort()
     for key,label in row_labels.items():
-        label = row_labels[key]
-        write_row(label, counters[key])
+        if key in row_labels and key in counters:
+            label = row_labels[key]
+            write_row(label, counters[key])
     fp.write("\\hline\n")
     write_row("total", counters["AllMapper-all"])
     fp.write("\\hline\n")
