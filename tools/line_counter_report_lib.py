@@ -136,7 +136,7 @@ class MutableMapMapper(Mapper):
 
     def map(self, report):
         source = report["source"]
-        if source in ["lib/DataStructures/LinearMutableMap.i.dfy"]:
+        if source in ["lib/DataStructures/MutableMapImpl.i.dfy", "lib/DataStructures/MutableMapModel.i.dfy"]:
             return "linearmap"
         else:
             return "other"
