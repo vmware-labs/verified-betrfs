@@ -87,15 +87,15 @@ composite ./Versions/VOp.i.dfy
 composite ./Versions/CompositeView.i.dfy
 composite ./Versions/CompositeView_Refines_TSJMap.i.dfy
 composite ./Versions/StatesViewMap.i.dfy
-map ./MapSpec/TSJMap.i.dfy
+composite ./MapSpec/TSJMap.i.dfy
 map ./MapSpec/ThreeStateVersionedMap.s.dfy
 map ./MapSpec/UI.s.dfy
 map ./MapSpec/MapSpec.s.dfy
-map ./MapSpec/TSJ.i.dfy
+composite./MapSpec/TSJ.i.dfy
 map ./MapSpec/ThreeStateVersioned.s.dfy
-map ./MapSpec/TSJMap_Refines_ThreeStateVersionedMap.i.dfy
+composite./MapSpec/TSJMap_Refines_ThreeStateVersionedMap.i.dfy
 map ./MapSpec/UIStateMachine.s.dfy
-map ./MapSpec/Journal.i.dfy
+composite./MapSpec/Journal.i.dfy
 system ./BlockCacheSystem/BetreeSystem_Refines_StatesViewMap.i.dfy
 system ./BlockCacheSystem/JournalDisk.i.dfy
 system ./BlockCacheSystem/BlockCache.i.dfy
