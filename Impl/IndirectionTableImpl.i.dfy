@@ -1312,15 +1312,11 @@ module IndirectionTableImpl {
 
     method Clone() returns (table: IndirectionTable)
       requires Inv()
-      modifies Repr
-      ensures Inv() && I() == old(I()) && Repr == old(Repr)
       ensures table.Inv()
       ensures fresh(table.Repr)
       ensures table.I() == IndirectionTableModel.clone(old(I()))
     {
-      linear var x := box.Take();
-      linear var clone := It.Clone(x);
-      box.Give(x);
+      linear var clone := It.Clone(box.Borrow());
       var boxed := new BoxedLinear(clone);
       table := new IndirectionTable.Box(boxed);
     }
@@ -1417,8 +1413,6 @@ module IndirectionTableImpl {
     method indirectionTableToVal() returns (v: V, size: uint64)
       requires Inv()
       requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
-      modifies Repr
-      ensures Inv() && I() == old(I()) && Repr == old(Repr)
       ensures ValInGrammar(v, IndirectionTableModel.IndirectionTableGrammar())
       ensures ValidVal(v)
       ensures IndirectionTableModel.valToIndirectionTable(v).Some?
@@ -1428,23 +1422,17 @@ module IndirectionTableImpl {
       ensures SizeOfV(v) <= It.MaxIndirectionTableByteSize()
       ensures SizeOfV(v) == size as int
     {
-      linear var x := box.Take();
-      v, size := It.indirectionTableToVal(x);
-      box.Give(x);
+      v, size := It.indirectionTableToVal(box.Borrow());
     }
 
     method InitLocBitmap() returns (success: bool, bm: BitmapImpl.Bitmap)
       requires Inv()
       requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
-      modifies Repr
-      ensures Inv() && I() == old(I()) && Repr == old(Repr)
       ensures bm.Inv()
       ensures (success, bm.I()) == IndirectionTableModel.InitLocBitmap(old(I()))
       ensures fresh(bm.Repr)
     {
-      linear var x := box.Take();
-      success, bm := It.InitLocBitmap(x);
-      box.Give(x);
+      success, bm := It.InitLocBitmap(box.Borrow());
     }
     
     function method FindDeallocable() : (ref: Option<BT.G.Reference>)
