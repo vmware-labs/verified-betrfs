@@ -55,34 +55,6 @@ module NodeImpl {
       MutBucket.reveal_ReprSeq();
     }
 
-    method Destructor()
-      requires Inv()
-      modifies Repr
-    {
-      var bs := buckets;
-      var gs := buckets;
-      seq_length_bound(buckets);
-      var len := |bs| as uint64;
-      var i:uint64 := len;
-      forall j | 0 <= j < i ensures gs[j].Repr <= old(Repr)
-      {
-        MutBucket.reveal_ReprSeq();
-      }
-      while i > 0
-        invariant i <= i <= len
-        invariant bs == old(buckets)
-        invariant gs == bs[..i]
-        invariant MutBucket.ReprSeqDisjoint(gs)
-        invariant forall j :: 0 <= j < i ==> gs[j].Inv()
-        invariant forall j :: 0 <= j < i ==> gs[j].Repr <= old(Repr)
-      {
-        i := i - 1;
-        bs[i].Destructor();
-        gs := bs[..i];
-        MutBucket.reveal_ReprSeqDisjoint();
-      }
-    }
-
     protected predicate Inv()
     reads this, Repr
     ensures Inv() ==> this in Repr

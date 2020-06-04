@@ -2,6 +2,7 @@ include "../Lang/NativeTypes.s.dfy"
 include "../Base/NativeArrays.s.dfy"
 include "../Lang/LinearMaybe.s.dfy"
 include "../Lang/LinearBox.i.dfy"
+include "../Base/LinearOption.i.dfy"
 include "../Base/total_order.i.dfy"
 include "../Base/sequences.i.dfy"
 include "../Base/Arrays.i.dfy"
@@ -595,32 +596,37 @@ abstract module LMutableBtree {
     newroot, oldvalue := InsertNode(newroot, key, value);
   }
 
-  method Free(linear node: Node)
+  function method FreeChildren(ghost a:seq<Node>, linear arr: lseq<Node>, i:uint64, len:uint64) : ()
+    requires len as int == |arr| == |a|
+    requires i <= len
+    requires forall j | 0 <= j < |arr| :: j in arr <==> j >= i as int
+    requires forall j | i as int <= j < |arr| :: WF(arr[j]) && a[j] == arr[j]
+    decreases a, |arr| - i as int
+  {
+    if i == len then
+      lseq_free_fun(arr)
+    else
+      linear var arr'' := (
+        // Perform take/FreeNode in a nested lexical scope so that the C++ Node destructor runs
+        // before the call to FreeChildren, allowing tail-call optimization on the call to FreeChildren.
+        linear var (arr', child) := lseq_take_fun(arr, i);
+        var _ := FreeNode(child);
+        arr');
+      FreeChildren(a, arr'', i + 1, len)
+  }
+
+  function method FreeNode(linear node: Node) : ()
     requires WF(node)
+    decreases node
   {
     linear match node {
-      case Leaf(keys, values) => {
+      case Leaf(keys, values) =>
         var _ := seq_free(keys);
-        var _ := seq_free(values);
-      }
-      case Index(pivots, children) => {
+        seq_free(values)
+      case Index(pivots, children) =>
         var _ := seq_free(pivots);
-        var i:uint64 := 0;
-        linear var arr := children;
-        var len := lseq_length_uint64(arr);
-        while (i < len)
-          invariant 0 <= i as int <= |arr|
-          invariant |arr| == |children|
-          invariant forall j | 0 <= j < |arr| :: j in arr <==> j >= i as int
-          invariant forall j | i as int <= j < |arr| :: arr[j] == children[j]
-        {
-          linear var child;
-          arr, child := lseq_take(arr, i);
-          Free(child);
-          i := i + 1;
-        }
-        lseq_free(arr);
-      }
+        var len := lseq_length_as_uint64(children);
+        FreeChildren(lseqs(children), children, 0, len)
     }
   }
 }
@@ -700,7 +706,9 @@ abstract module LMutableBtree {
 abstract module MutableBtree {
   import opened LinearSequence_s
   import opened LinearSequence_i
+  import opened LinearBox_s
   import opened LinearBox
+  import opened LinearOption
   import opened NativeTypes
   import opened NativeArrays
   import opened Seq = Sequences
@@ -730,7 +738,7 @@ abstract module MutableBtree {
 
   class Node {
 //    var contents: NodeContents
-    var box: BoxedLinear<L.Model.Node>;
+    var box: BoxedLinearOption<L.Model.Node>;
     ghost var repr: set<object>
 //    ghost var height: nat
 
@@ -748,12 +756,23 @@ abstract module MutableBtree {
       ensures fresh(this.repr)
     {
       reveal_I();
-      box := new BoxedLinear(root);
+      box := new BoxedLinearOption(root, ToDestructor(Destruct));
       new;
       repr := {this} + box.Repr;
     }
   }
   
+  predicate WF_Option(root: lOption<L.Model.Node>)
+  {
+    match root case lNone => true case lSome(r) => L.WF(r)
+  }
+
+  function method Destruct(linear root: lOption<L.Model.Node>) : ()
+    requires WF_Option(root)
+  {
+    linear match root case lNone => () case lSome(x) => L.FreeNode(x)
+  }
+
   datatype NodeContents =
     | Leaf(nkeys: uint64, keys: array<Key>, values: array<Value>)
     | Index(nchildren: uint64, pivots: array<Key>, children: array<Node?>)
@@ -780,6 +799,7 @@ abstract module MutableBtree {
     && node.repr == {node} + node.box.Repr
     && node.box.Inv()
     && node.box.Has()
+    && node.box.DataInv == Destruct.requires
     && L.WF(I(node))
   }
 
@@ -850,15 +870,14 @@ abstract module MutableBtree {
     root := new Node(t);
   }
 
-  // TODO: are we calling this everywhere that needs it?
-  method Free(root: Node)
-    requires WF(root)
-    modifies root.repr
-  {
-    reveal_I();
-    linear var x := root.box.Take();
-    L.Free(x);
-  }
+//  method Free(root: Node)
+//    requires WF(root)
+//    modifies root.repr
+//  {
+//    reveal_I();
+//    linear var x := root.box.Take();
+//    L.Free(x);
+//  }
 
   method Insert(root: Node, key: Key, value: Value) returns (newroot: Node, oldvalue: Option<Value>)
     requires WF(root)

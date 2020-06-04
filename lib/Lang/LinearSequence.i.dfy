@@ -8,7 +8,7 @@ module LinearSequence_i {
   export
     provides LinearSequence_s
     provides NativeTypes
-    provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_peek
+    provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_peek, lseq_free_fun, lseq_take_fun
     provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give, lseq_length_uint64, lseq_length_as_uint64
     provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, SeqResize, InsertSeq, InsertLSeq
     reveals lseq_length, lseq_full, linLast, lseq_has_all
@@ -162,6 +162,13 @@ module LinearSequence_i {
       var _ := lseq_free_raw(s);
   }
 
+  function method lseq_free_fun<A>(linear s:lseq<A>) : ()
+      requires forall i:nat | i < |s| :: i !in s
+  {
+      assert forall i:nat {:trigger lseqs_raw(s)[i]} | i < |lseqs_raw(s)| :: i !in s;
+      lseq_free_raw(s)
+  }
+
   // can be implemented as in-place swap
   method lseq_swap<A>(linear s1:lseq<A>, i:uint64, linear a1:A) returns(linear s2:lseq<A>, linear a2:A)
       requires i as nat < |s1| && i as nat in s1
@@ -185,6 +192,17 @@ module LinearSequence_i {
       linear var (s2tmp, x2) := lseq_swap_raw_fun(s1, i, x1);
       s2 := s2tmp;
       a := unwrap(x2);
+  }
+
+  function method lseq_take_fun<A>(linear s1:lseq<A>, i:uint64) : (linear p:(linear lseq<A>, linear A))
+      requires i as nat < |s1| && i as nat in s1
+      ensures p.1 == s1[i as nat]
+      ensures lseq_has(p.0) == lseq_has(s1)[i as nat := false]
+      ensures forall j:nat | j < |s1| && j != i as nat :: lseqs(p.0)[j] == lseqs(s1)[j]
+  {
+      linear var x1:maybe<A> := empty();
+      linear var (s2tmp, x2) := lseq_swap_raw_fun(s1, i, x1);
+      (linear s2tmp, linear unwrap(x2))
   }
 
   method lseq_give<A>(linear s1:lseq<A>, i:uint64, linear a:A) returns(linear s2:lseq<A>)
