@@ -5,154 +5,116 @@ module Bank {
 
   predicate Init(s: variables)
   {
-    forall i :: s.accounts[i] == 0
+    forall i | 0 <= i < |s.accounts| :: s.accounts[i] == 0
   }
 
-  predicate Transfer(s: variables, s’: variables, from_account: int, to_account: int, amt: int)
+  predicate Transfer(s: variables, s': variables, from_account: int, to_account: int, amt: int)
   {
     && from_account != to_account
     && 0 <= to_account < |s.accounts|
     && 0 <= from_account < |s.accounts|
-    && s’.accounts == s.accounts
+    && s'.accounts == s.accounts
           [from_account := s.accounts[from_account] - amt]
           [to_account := s.accounts[to_account] + amt]
   }
 
   datatype Step = TransferStep(from_account: int, to_account: int, amt: int)
 
-  predicate NextStep(s: variables, s’: variables, step: Step)
+  predicate NextStep(s: variables, s': variables, step: Step)
   {
     Transfer(s, s', step.from_account, step.to_account, step.amt)
   }
 
-  predicate Next(s: variables, s’: variables)
+  predicate Next(s: variables, s': variables)
   {
     exists step :: NextStep(s, s', step)
   }
 
   // should follow from spec above
-  predicate Inv(k, s)
-  {
-    sum(s.accounts) == 0
-  }
-}
-
-// SharedMemory axiomatization
-
-module SharedMemory {
-  type MutexId = int
-  type Value = int
-
-  datatype variables = variables(m: map<MutexId, Value>)
-
-  /*datatype ReadOp = ReadOp(mid: MutexId, v: value)
-  datatype WriteOp = WriteOp(mid: MutexId, v: value)
-
-  datatype MemoryStep = MemoryStep(
-    readOps: seq<ReadOp>
-    writeOps: seq<WriteOp>
-  )*/
-}
-
-abstract module SharedMemorySystem {
-  import SharedMemory
-
-  type FixedMemory
-
-  datatype variables = variables(
-    sharedMemory: SharedMemory.variables,
-    fixedMemory: FixedMemory
-    //threadStates
-   )
-
-  datatype Step = Step(ms: SharedMemory.MemoryStep)
-
-  predicate ThreadNext(k: FixedMemory, s: SharedMemory.variables, s': SharedMemory.variables)
-
-  predicate Next(s: variables, s': variables)
-  {
-    && s'.fixedMemory == s.fixedMemory
-    && ThreadNext(s.fixedMemory, s.sharedMemory, s'.sharedMemory)
-  }
-}
-
-// Implementation of thread transition for the SharedMemorySystem
-
-module BankSharedMemorySystem refines SharedMemorySystem {
-  import Bank
-
-  type FixedMemory = seq<SharedMemory.LockId>
-
-  function lookup_balances(
-      s: seq<SharedMemory.LockId>,
-      balances: map<SharedMemory.LockId, int>) : seq<int>
-  {
-    if s == [] then [] else
-      lookup_balances(s[..|s|-1]) + balances[s[|s|-1]]
-  }
-
-  function I(k: FixedMemory, s: SharedMemory.variables)
-  {
-    lookup_balances(k, s.m)
-  }
-
-  predicate ThreadNextStep(k: FixedMemory, s: SharedMemory.variables, s': SharedMemory.variables, bs: Bank.Step)
-  {
-    Bank.Next(I(k, s), I(k, s'), bs)
-  }
-
-  predicate ThreadNext(k: FixedMemory, s: SharedMemory.variables, s': SharedMemory.variables)
-  {
-    exists step ::
-      ThreadNextStep(k, s, s', step)
-  }
+  //predicate Inv(s: variables)
+  //{
+   // sum(s.accounts) == 0
+  //}
 }
 
 module BankImpl {
-  import opened SharedMemory
+  // axiomatization of a mutex
+  import Bank
 
   class LockHandler {
-    //function step() : MemoryStep
-    //reads this
-
-    function 
+    predicate can_acquire()
+    reads this
   }
 
   class Mutex {
-    function id() : MutexId
+    predicate is_acquired()
     reads this
 
-    predicate has()
+    function value() : int
     reads this
 
     method acquire(lh: LockHandler)
     returns (v: int)
-    requires lh.step().writeOps == []
-    requires !has()
-    modifies lh
+    requires lh.can_acquire()
+    requires !is_acquired()
     modifies this
-    ensures lh.step().readOps == old(lh.step()).readOps + [ReadOp(id(), v)]
-    ensures lh.step().writeOps == old(lh.step()).writeOps
-    ensures id() == old(id())
-    ensures has()
+    ensures is_acquired()
+    ensures value() == old(value())
+    ensures v == old(value())
 
     method release(lh: LockHandler, v: int)
+    requires is_acquired()
     modifies lh
-    requires has()
-    ensures lh.step().readOps == old(lh.step()).readOps
-    ensures lh.step().writeOps == old(lh.step()).writeOps + [WriteOp(id(), v)]
-    ensures id() == old(id())
-    ensures !has()
+    modifies this
+    ensures !lh.can_acquire()
+    ensures value() == v
+  }
+
+  // Implementation
+
+  function mutex_values(ms: seq<Mutex>) : (res : seq<int>)
+  reads ms
+  ensures |res| == |ms|
+  ensures forall i | 0 <= i < |res| :: res[i] == ms[i].value()
+  {
+    if ms == [] then [] else mutex_values(ms[..|ms|-1]) + [ms[|ms|-1].value()]
   }
 
   datatype state = state(accounts: seq<Mutex>)
+  {
+    function I() : Bank.variables
+    reads accounts
+    {
+      Bank.variables(mutex_values(accounts))
+    }
+  }
 
-  method transaction(s: state, lh: LockHandler)
+  method transaction(s: state, lh: LockHandler, i: int, j: int, amt: int)
+  requires lh.can_acquire()
+  requires forall i, j | 0 <= i < |s.accounts| && 0 <= j < |s.accounts| && i != j
+      :: s.accounts[i] != s.accounts[j]
+  requires forall i | 0 <= i < |s.accounts| :: !s.accounts[i].is_acquired()
+  requires i != j
+  requires 0 <= i < |s.accounts|
+  requires 0 <= j < |s.accounts|
   modifies lh
   modifies s.accounts
-  requires lh.step().readOps == []
-  requires lh.step().writesOps == []
-  ensures Next(lh.step())
+  ensures Bank.Next(old(s.I()), s.I())
   {
+    var m1 := s.accounts[i];
+    var m2 := s.accounts[j];
+
+    var v1 := m1.acquire(lh);
+    var v2 := m2.acquire(lh);
+
+    v1 := v1 - amt;
+    v2 := v2 + amt;
+
+    m1.release(lh, v1);
+    m2.release(lh, v2);
+
+    assert Bank.NextStep(
+        old(s.I()), s.I(),
+        Bank.TransferStep(i, j, amt));
   }
 }
