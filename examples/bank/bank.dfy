@@ -41,80 +41,84 @@ module BankImpl {
   // axiomatization of a mutex
   import Bank
 
+  type Mutex = int
+
   class LockHandler {
+    // Starts true in any transition
+    // Is set to false when a 'release' occurs
     predicate can_acquire()
     reads this
-  }
 
-  class Mutex {
-    predicate is_acquired()
+    predicate is_acquired(m: Mutex)
     reads this
 
-    function value() : int
+    function value(m: Mutex) : int
     reads this
 
-    method acquire(lh: LockHandler)
+    method acquire(m: Mutex)
     returns (v: int)
-    requires lh.can_acquire()
-    requires !is_acquired()
+    requires can_acquire()
+    requires !is_acquired(m)
     modifies this
-    ensures is_acquired()
-    ensures value() == old(value())
-    ensures v == old(value())
+    ensures can_acquire()
+    ensures is_acquired(m)
+    ensures forall m' | m' != m :: is_acquired(m') == old(is_acquired(m'))
+    ensures forall m' :: value(m') == old(value(m'))
+    ensures v == value(m)
 
-    method release(lh: LockHandler, v: int)
-    requires is_acquired()
-    modifies lh
+    method release(m: Mutex, v: int)
+    requires is_acquired(m)
     modifies this
-    ensures !lh.can_acquire()
-    ensures value() == v
+    ensures is_acquired(m)
+    ensures forall m' | m' != m :: is_acquired(m') == old(is_acquired(m'))
+    ensures value(m) == v
+    ensures forall m' | m' != m :: value(m') == old(value(m'))
   }
 
   // Implementation
 
-  function mutex_values(ms: seq<Mutex>) : (res : seq<int>)
-  reads ms
+  function mutex_values(lh: LockHandler, ms: seq<Mutex>) : (res : seq<int>)
+  reads lh
   ensures |res| == |ms|
-  ensures forall i | 0 <= i < |res| :: res[i] == ms[i].value()
+  ensures forall i | 0 <= i < |res| :: res[i] == lh.value(ms[i])
   {
-    if ms == [] then [] else mutex_values(ms[..|ms|-1]) + [ms[|ms|-1].value()]
+    if ms == [] then [] else
+      mutex_values(lh, ms[..|ms|-1]) + [lh.value(ms[|ms|-1])]
   }
 
   datatype state = state(accounts: seq<Mutex>)
+
+  function I(lh: LockHandler, s: state) : Bank.variables
+  reads lh
   {
-    function I() : Bank.variables
-    reads accounts
-    {
-      Bank.variables(mutex_values(accounts))
-    }
+    Bank.variables(mutex_values(lh, s.accounts))
   }
 
   method transaction(s: state, lh: LockHandler, i: int, j: int, amt: int)
   requires lh.can_acquire()
   requires forall i, j | 0 <= i < |s.accounts| && 0 <= j < |s.accounts| && i != j
       :: s.accounts[i] != s.accounts[j]
-  requires forall i | 0 <= i < |s.accounts| :: !s.accounts[i].is_acquired()
+  requires forall i | 0 <= i < |s.accounts| :: !lh.is_acquired(s.accounts[i])
   requires i != j
   requires 0 <= i < |s.accounts|
   requires 0 <= j < |s.accounts|
   modifies lh
-  modifies s.accounts
-  ensures Bank.Next(old(s.I()), s.I())
+  ensures Bank.Next(old(I(lh, s)), I(lh, s))
   {
     var m1 := s.accounts[i];
     var m2 := s.accounts[j];
 
-    var v1 := m1.acquire(lh);
-    var v2 := m2.acquire(lh);
+    var v1 := lh.acquire(m1);
+    var v2 := lh.acquire(m2);
 
     v1 := v1 - amt;
     v2 := v2 + amt;
 
-    m1.release(lh, v1);
-    m2.release(lh, v2);
+    lh.release(m1, v1);
+    lh.release(m2, v2);
 
     assert Bank.NextStep(
-        old(s.I()), s.I(),
+        old(I(lh, s)), I(lh, s),
         Bank.TransferStep(i, j, amt));
   }
 }
