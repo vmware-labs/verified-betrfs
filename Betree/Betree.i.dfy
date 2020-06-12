@@ -26,7 +26,7 @@ module Betree {
   import opened G = BetreeGraph
 
   datatype Constants = Constants(bck: BI.Constants)
-  datatype Variables = Variables(bcv: BI.Variables)
+  datatype Variables = Variables(bcv: BI.Variables, queries: multiset<QueryState>)
   
   // TODO(jonh): [cleanup] Not sure why these 3 are in this file.
   predicate LookupRespectsDisk(view: BI.View, lookup: Lookup) {
@@ -54,6 +54,7 @@ module Betree {
   predicate Init(k: Constants, s: Variables) {
     && BI.Init(k.bck, s.bcv)
     && s.bcv.view[Root()] == EmptyNode()
+    && s.queries == multiset{}
   }
 
   predicate GC(k: Constants, s: Variables, s': Variables, uiop: UI.Op, refs: iset<Reference>) {
@@ -61,9 +62,21 @@ module Betree {
     && BI.GC(k.bck, s.bcv, s'.bcv, refs)
   }
 
+  predicate AvoidsQueries(ref: Reference, queries: multiset<QueryState>)
+  {
+    forall q | q in queries && q.InProgress? :: ref != q.ref
+  }
+
+  predicate BetreeQueryStepUpdates(k: Constants, s: Variables, s': Variables, q: QueryDescent)
+    requires ValidQueryDescent(q)
+  {
+    
+  }
+  
   predicate Betree(k: Constants, s: Variables, s': Variables, uiop: UI.Op, betreeStep: BetreeStep)
   {
     && ValidBetreeStep(betreeStep)
+    && (betreeStep.BetreeInsert? ==> AvoidsQueries(Root(), s.queries))
     && BetreeStepUI(betreeStep, uiop)
     && BI.Reads(k.bck, s.bcv, BetreeStepReads(betreeStep))
     && BI.OpTransaction(k.bck, s.bcv, s'.bcv, BetreeStepOps(betreeStep))

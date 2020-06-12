@@ -65,12 +65,44 @@ module BetreeSpec {
     && (forall k:Key :: k !in node.children ==> BufferIsDefining(node.buffer[k]))
   }
 
-  // Now we define the state machine
-
-  //// Query
-
   type Layer = G.ReadOp
   type Lookup = seq<Layer>
+
+  // Now we define the state machine
+
+  //// Query Descent
+
+  datatype QueryState =
+      InProgress(key: Key, delta: G.M.Message, ref: Reference, answer: G.M.Message)
+    | Finished(key: Key, result: G.M.Message, answer: G.M.Message)
+  
+  datatype QueryDescent = QueryDescent(query: QueryState, parent: Node, query': QueryState)
+  
+  predicate ValidQueryDescent(q: QueryDescent) {
+    && WFNode(q.parent)
+    && q.query.InProgress?
+    && q.query'.key == q.query.key
+    && q.query'.answer == q.query.answer
+    && if q.parent.buffer[q.query.key].Define? || q.query.key !in q.parent.children then (
+      q.query' == Finished(q.query.key, G.M.Merge(q.query.delta, q.parent.buffer[q.query.key]), q.query.answer)
+    ) else (
+      && q.query'.InProgress?
+      && q.query'.delta == G.M.Merge(q.query.delta, q.parent.buffer[q.query.key])
+      && IMapsTo(q.parent.children, q.query.key, q.query'.ref)
+    )
+  }
+
+  function QueryDescentReads(q: QueryDescent): seq<ReadOp>
+    requires ValidQueryDescent(q)
+  {
+    [ReadOp(q.query.ref, q.parent)]
+  }
+
+  function QueryDescentOps(q: LookupQuery): seq<Op> {
+    []
+  }
+  
+  //// Query
 
   datatype LookupQuery = LookupQuery(key: Key, value: Value, lookup: Lookup)
 
@@ -343,7 +375,7 @@ module BetreeSpec {
     [ ReadOp(redirect.parentref, redirect.old_parent) ]
       + RedirectChildReads(redirect.old_childrefs, redirect.old_children)
   }
- 
+
   function RedirectChildAllocs(childrefs: seq<Reference>, children: imap<Reference, Node>) : (ops: seq<Op>)
     requires forall ref :: ref in childrefs ==> ref in children
     ensures |ops| == |childrefs|
@@ -363,6 +395,7 @@ module BetreeSpec {
   //// All together
 
   datatype BetreeStep =
+    | BetreeQueryDescent(qd: QueryDescent)
     | BetreeQuery(q: LookupQuery)
     | BetreeSuccQuery(sq: SuccQuery)
     | BetreeInsert(ins: MessageInsertion)
@@ -374,6 +407,7 @@ module BetreeSpec {
   predicate ValidBetreeStep(step: BetreeStep)
   {
     match step {
+      case BetreeQueryDescent(qd) => ValidQueryDescent(q)
       case BetreeQuery(q) => ValidQuery(q)
       case BetreeSuccQuery(sq) => ValidSuccQuery(sq)
       case BetreeInsert(ins) => ValidInsertion(ins)
@@ -387,6 +421,7 @@ module BetreeSpec {
   requires ValidBetreeStep(step)
   {
     match step {
+      case BetreeQueryDescent(qd) => QueryDescentReads(q)
       case BetreeQuery(q) => QueryReads(q)
       case BetreeSuccQuery(sq) => SuccQueryReads(sq)
       case BetreeInsert(ins) => InsertionReads(ins)
@@ -400,6 +435,7 @@ module BetreeSpec {
   requires ValidBetreeStep(step)
   {
     match step {
+      case BetreeQueryDescent(qd) => QueryDescentOps(q)
       case BetreeQuery(q) => QueryOps(q)
       case BetreeSuccQuery(sq) => SuccQueryOps(sq)
       case BetreeInsert(ins) => InsertionOps(ins)
@@ -411,6 +447,7 @@ module BetreeSpec {
 
   predicate BetreeStepUI(step: BetreeStep, uiop: UI.Op) {
     match step {
+      case BetreeQueryDescent(qd) => uiop.NoOp?
       case BetreeQuery(q) => uiop == UI.GetOp(q.key, q.value)
       case BetreeSuccQuery(sq) => uiop == UI.SuccOp(sq.start, sq.results, sq.end)
       case BetreeInsert(ins) => ins.msg.Define? && uiop == UI.PutOp(ins.key, ins.msg.value)
