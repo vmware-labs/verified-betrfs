@@ -3,7 +3,7 @@ include "../lib/Base/SeqComparison.s.dfy"
 include "../MapSpec/UI.s.dfy"
 include "../MapSpec/UIStateMachine.s.dfy"
 
-module MapSpec refines UIStateMachine {
+module ThreadSafeMapSpec refines UIStateMachine {
   import opened ValueType
   import opened KeyType
   import SeqComparison
@@ -16,11 +16,11 @@ module MapSpec refines UIStateMachine {
     ValueType.DefaultValue()
   }
 
-  datatype InFlightQuery = InFlightQuery(key: Key, value: Value, ghost id: int)
+  datatype InFlightQuery = InFlightQuery(key: Key, value: Value)
   
   datatype Constants = Constants()
   type View = imap<Key, Value>
-  datatype Variables = Variables(ghost view:View, queries: set<InFlightQuery>)
+  datatype Variables = Variables(ghost view:View, ghost queries: map<int, InFlightQuery>)
 
   predicate ViewComplete(view:View)
   {
@@ -60,12 +60,21 @@ module MapSpec refines UIStateMachine {
     && s' == s
   }
 
-  predicate BeginQuery(k:Constants, s:Variables, s':Variables, uiop: UIOp, key:Key, result:Value)
+  predicate BeginQuery(k:Constants, s:Variables, s':Variables, uiop: UIOp, key:Key, result:Value, id: int)
   {
-    && uiop == UI.GetBeginOp(key, result)
+    && uiop == GetBeginOp(key, id)
     && WF(s)
     && result == s.view[key]
-    && s' == s.(queries := s.queries + { InFlightQuery(key, value, uiop.id) }
+    && uiop.id !in s.queries
+    && s' == s.(queries := s.queries[id := InFlightQuery(key, result)])
+  }
+
+  predicate EndQuery(k:Constants, s:Variables, s':Variables, uiop: UIOp, result:Value, id: int)
+  {
+    && uiop == GetFinishOp(result, id)
+    && id in s.queries
+    && s.queries[id].value == result
+    && s' == s.(queries := MapRemove1(s.queries, id))
   }
   
   predicate LowerBound(start: UI.RangeStart, key: Key)
@@ -127,6 +136,8 @@ module MapSpec refines UIStateMachine {
   // uiop should be in here, too.
   datatype Step =
       | QueryStep(key: Key, result: Value)
+      | BeginQueryStep(key: Key, result: Value, id: int)
+      | EndQueryStep(result: Value, id: int)
       | WriteStep(key: Key, new_value: Value)
       | SuccStep(start: UI.RangeStart, results: seq<UI.SuccResult>, end: UI.RangeEnd)
       | StutterStep
@@ -135,6 +146,8 @@ module MapSpec refines UIStateMachine {
   {
     match step {
       case QueryStep(key, result) => Query(k, s, s', uiop, key, result)
+      case BeginQueryStep(key, result, id) => BeginQuery(k, s, s', uiop, key, result, id)
+      case EndQueryStep(result, id) => EndQuery(k, s, s', uiop, key, result, id)
       case WriteStep(key, new_value) => Write(k, s, s', uiop, key, new_value)
       case SuccStep(start, results, end) => Succ(k, s, s', uiop, start, results, end)
       case StutterStep() => Stutter(k, s, s', uiop)

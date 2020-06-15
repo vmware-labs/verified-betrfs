@@ -22,8 +22,8 @@ module {:extern} UI {
 
     | GetOp(key: Key, value: Value)
     
-    | GetBeginOp(key: Key, value: Value, ghost id: int)
-    | GetFinishOp(key: Key, value: Value, ghost id: int)
+    | GetBeginOp(key: Key, ghost id: int)
+    | GetFinishOp(value: Value, ghost id: int)
 
     // TODO make this async? any value from it?
     | PutOp(key: Key, value: Value)
