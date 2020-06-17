@@ -73,18 +73,20 @@ module BetreeSpec {
   //// Query Descent
 
   datatype QueryState =
-      InProgress(key: Key, delta: G.M.Message, ref: Reference, answer: G.M.Message)
-    | Finished(key: Key, result: G.M.Message, answer: G.M.Message)
+    | InProgress(key: Key, delta: G.M.Message, ref: Reference)
+    | Finished(key: Key, answer: Value)
   
-  datatype QueryDescent = QueryDescent(query: QueryState, parent: Node, query': QueryState)
-  
+  datatype QueryDescent = QueryDescent(
+      query: QueryState,
+      parent: Node,
+      query': QueryState)
+
   predicate ValidQueryDescent(q: QueryDescent) {
     && WFNode(q.parent)
     && q.query.InProgress?
     && q.query'.key == q.query.key
-    && q.query'.answer == q.query.answer
-    && if q.parent.buffer[q.query.key].Define? || q.query.key !in q.parent.children then (
-      q.query' == Finished(q.query.key, G.M.Merge(q.query.delta, q.parent.buffer[q.query.key]), q.query.answer)
+    && if G.M.Merge(q.query.delta, q.parent.buffer[q.query.key]).Define? then (
+      && q.query' == Finished(q.query.key, G.M.Merge(q.query.delta, q.parent.buffer[q.query.key]).value)
     ) else (
       && q.query'.InProgress?
       && q.query'.delta == G.M.Merge(q.query.delta, q.parent.buffer[q.query.key])
@@ -98,7 +100,7 @@ module BetreeSpec {
     [ReadOp(q.query.ref, q.parent)]
   }
 
-  function QueryDescentOps(q: LookupQuery): seq<Op> {
+  function QueryDescentOps(q: QueryDescent): seq<Op> {
     []
   }
   
@@ -407,7 +409,7 @@ module BetreeSpec {
   predicate ValidBetreeStep(step: BetreeStep)
   {
     match step {
-      case BetreeQueryDescent(qd) => ValidQueryDescent(q)
+      case BetreeQueryDescent(qd) => ValidQueryDescent(qd)
       case BetreeQuery(q) => ValidQuery(q)
       case BetreeSuccQuery(sq) => ValidSuccQuery(sq)
       case BetreeInsert(ins) => ValidInsertion(ins)
@@ -421,7 +423,7 @@ module BetreeSpec {
   requires ValidBetreeStep(step)
   {
     match step {
-      case BetreeQueryDescent(qd) => QueryDescentReads(q)
+      case BetreeQueryDescent(qd) => QueryDescentReads(qd)
       case BetreeQuery(q) => QueryReads(q)
       case BetreeSuccQuery(sq) => SuccQueryReads(sq)
       case BetreeInsert(ins) => InsertionReads(ins)
@@ -435,7 +437,7 @@ module BetreeSpec {
   requires ValidBetreeStep(step)
   {
     match step {
-      case BetreeQueryDescent(qd) => QueryDescentOps(q)
+      case BetreeQueryDescent(qd) => QueryDescentOps(qd)
       case BetreeQuery(q) => QueryOps(q)
       case BetreeSuccQuery(sq) => SuccQueryOps(sq)
       case BetreeInsert(ins) => InsertionOps(ins)
