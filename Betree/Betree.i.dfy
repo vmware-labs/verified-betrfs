@@ -27,24 +27,6 @@ module Betree {
 
   datatype Constants = Constants(bck: BI.Constants)
   datatype Variables = Variables(bcv: BI.Variables, queries: multiset<QueryState>)
-  
-  // TODO(jonh): [cleanup] Not sure why these 3 are in this file.
-  predicate LookupRespectsDisk(view: BI.View, lookup: Lookup) {
-    forall i :: 0 <= i < |lookup| ==> IMapsTo(view, lookup[i].ref, lookup[i].node)
-  }
-
-  predicate IsPathFromRootLookup(k: Constants, view: BI.View, key: Key, lookup: Lookup) {
-    && |lookup| > 0
-    && lookup[0].ref == Root()
-    && LookupRespectsDisk(view, lookup)
-    && LookupFollowsChildRefs(key, lookup)
-  }
-
-  predicate IsSatisfyingLookup(k: Constants, view: BI.View, key: Key, value: Value, lookup: Lookup) {
-    && IsPathFromRootLookup(k, view, key, lookup)
-    && LookupVisitsWFNodes(lookup)
-    && BufferDefinesValue(InterpretLookup(lookup, key), value)
-  }
 
   function EmptyNode() : Node {
     var buffer := imap key | MS.InDomain(key) :: G.M.Define(G.M.DefaultValue());
@@ -67,11 +49,11 @@ module Betree {
     forall q | q in queries && q.InProgress? :: ref != q.ref
   }
 
-  predicate BetreeQueryStepUpdates(k: Constants, s: Variables, s': Variables, q: QueryDescent)
+  /*predicate BetreeQueryStepUpdates(k: Constants, s: Variables, s': Variables, q: QueryDescent)
     requires ValidQueryDescent(q)
   {
     
-  }
+  }*/
   
   predicate Betree(k: Constants, s: Variables, s': Variables, uiop: UI.Op, betreeStep: BetreeStep)
   {

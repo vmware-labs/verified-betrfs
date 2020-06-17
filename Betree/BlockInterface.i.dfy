@@ -94,6 +94,11 @@ abstract module BlockInterface refines Transactable {
     forall ref :: ref in refs ==> Predecessors(view, ref) <= refs
   }
 
+  predicate RootHasNoPredecessor(view: View)
+  {
+    forall ref | ref in view :: G.Root() !in G.Successors(view[ref])
+  }
+
   predicate Transaction(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
   {
     OpTransaction(k, s, s', ops)
