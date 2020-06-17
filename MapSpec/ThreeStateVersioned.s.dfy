@@ -13,7 +13,7 @@ module ThreeStateTypes {
   //   is still ephemeral."
   // State2 means "some data that was ephemeral when this request was created
   //   is still frozen."
-  // State2 means "all the data known when this request was created is now
+  // State1 means "all the data known when this request was created is now
   //   persistent."
   datatype SyncReqStatus = State1 | State2 | State3
 

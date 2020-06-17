@@ -108,6 +108,16 @@ module MapSpec refines UIStateMachine {
     && s'.view == s.view[key := new_value]
   }
 
+  predicate Clone(k:Constants, s:Variables, s':Variables, uiop: UIOp, new_to_old:imap<Key, Key>)
+  {
+    && uiop == UI.CloneOp(new_to_old)
+    && WF(s)
+    && WF(s')
+    && assert ViewComplete(s'.view); assert (forall k :: k in s'.view); 
+    && (forall k :: assert k in s'.view; true)
+    && (forall k :: assert k in s'.view; s'.view[k] == if k in new_to_old then s.view[new_to_old[k]] else s.view[k])
+  }
+
   predicate Stutter(k:Constants, s:Variables, s':Variables, uiop: UIOp)
   {
     && uiop.NoOp?
@@ -118,6 +128,7 @@ module MapSpec refines UIStateMachine {
   datatype Step =
       | QueryStep(key: Key, result: Value)
       | WriteStep(key: Key, new_value: Value)
+      | CloneStep(new_to_old: imap<Key, Key>) // map from key to key
       | SuccStep(start: UI.RangeStart, results: seq<UI.SuccResult>, end: UI.RangeEnd)
       | StutterStep
 
@@ -126,6 +137,7 @@ module MapSpec refines UIStateMachine {
     match step {
       case QueryStep(key, result) => Query(k, s, s', uiop, key, result)
       case WriteStep(key, new_value) => Write(k, s, s', uiop, key, new_value)
+      case CloneStep(new_to_old) => Clone(k, s, s', uiop, new_to_old)
       case SuccStep(start, results, end) => Succ(k, s, s', uiop, start, results, end)
       case StutterStep() => Stutter(k, s, s', uiop)
     }

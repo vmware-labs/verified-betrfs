@@ -23,7 +23,7 @@ module {:extern} UI {
     // TODO make these async? any value from it?
     | GetOp(key: Key, value: Value)
     | PutOp(key: Key, value: Value)
-
+    | CloneOp(new_to_old: imap<Key, Key>)
     | SuccOp(start: RangeStart,
         results: seq<SuccResult>, end: RangeEnd)
 }
