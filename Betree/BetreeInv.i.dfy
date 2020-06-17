@@ -861,40 +861,32 @@ module BetreeInv {
 
   // GC Step
 
-  lemma IsPathLookupFromRootImpliesReachable(k: Constants, s: Variables, key: Key, lookup: Lookup, i: int)
-    requires Inv(k, s)
-    requires IsPathLookup(k, s.bcv.view, key, lookup)
-    requires lookup[0].ref == Root()
-    requires 0 <= i < |lookup|
-    ensures BI.ReachableReference(k.bck, s.bcv, lookup[i].ref);
-  {
-    if (i == 0) {
-      var l := [lookup[0].ref];
-      assert BI.LookupIsValid(k.bck, s.bcv, l) && Last(l) == lookup[0].ref;
-      assert BI.ReachableReference(k.bck, s.bcv, lookup[0].ref);
-    } else {
-      IsPathLookupFromRootImpliesReachable(k, s, key, lookup, i-1);
-      var l: BI.Lookup :| BI.LookupIsValid(k.bck, s.bcv, l) && Last(l) == lookup[i-1].ref;
-      var l' := l + [lookup[i].ref];
-      assert LookupFollowsChildRefAtLayer(key, lookup, i-1);
-      assert BI.LookupIsValid(k.bck, s.bcv, l') && Last(l') == lookup[i].ref;
-      assert BI.ReachableReference(k.bck, s.bcv, lookup[i].ref);
-    }
-  }
-
   lemma GCStepPreservesIsPathLookup(k: Constants, s: Variables, s': Variables, refs: iset<Reference>, lookup: Lookup, key: Key)
     requires Inv(k, s)
     requires BI.GC(k.bck, s.bcv, s'.bcv, refs)
     requires IsPathLookup(k, s.bcv.view, key, lookup);
+    requires lookup[0].ref !in refs
     ensures IsPathLookup(k, s'.bcv.view, key, lookup);
   {
-    forall i | 0 <= i < |lookup|
-    ensures IMapsTo(s'.bcv.view, lookup[i].ref, lookup[i].node)
-    {
-      assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
-      IsPathLookupFromRootImpliesReachable(k, s, key, lookup, i);
-      assert BI.ReachableReference(k.bck, s.bcv, lookup[i].ref);
-      assert lookup[i].ref !in refs;
+    if |lookup| == 1 {
+    } else {
+      var lookup' := DropLast(lookup);
+      forall idx | 0 <= idx < |lookup'| - 1
+      ensures LookupFollowsChildRefAtLayer(key, lookup', idx)
+      {
+        assert LookupFollowsChildRefAtLayer(key, lookup, idx);
+      }
+      GCStepPreservesIsPathLookup(k, s, s', refs, lookup', key);
+      assert LookupFollowsChildRefAtLayer(key, lookup, |lookup| - 2);
+      // by the closure requirement, since `prev` isn't in `refs`,
+      // `last` shouldn't be either:
+      //var prev := lookup[|lookup|-2].ref;
+      //var last := lookup[|lookup|-1].ref;
+      //assert prev !in refs;
+      //assert s.bcv.view[prev] == lookup[|lookup|-2].node;
+      //assert last in Successors(s.bcv.view[prev]);
+      //assert prev in BI.Predecessors(s.bcv.view, last);
+      //assert last !in refs;
     }
   }
 
@@ -922,8 +914,8 @@ module BetreeInv {
     requires start !in refs
     ensures PreservesLookups(k, s, s', start)
   {
-    forall lookup:Lookup, key, value | IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
-    ensures exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+    forall lookup:Lookup, key, value | IsSatisfyingLookup(k, s.bcv.view, key, value, lookup) && lookup[0].ref == start
+    ensures exists lookup':Lookup :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup') && lookup'[0].ref == start
     {
       GCStepPreservesIsPathLookup(k, s, s', refs, lookup, key);
       assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup);
