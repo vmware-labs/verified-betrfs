@@ -18,22 +18,22 @@ function Donate(view:View, victim:nat) : (view':View, outidx: Option<nat>) {
 
 module Abstract {
 
-datatype State = State(board:View)
+  datatype State = State(board:View)
 
-predicate DonateStep(s:State, s':State, victim:nat, ui:UI) {
-  var view',outidx := Donate(s, victim);
-  && s' == view'
-  && ui == Some((victim, outidx))
-}
+  predicate DonateStep(s:State, s':State, victim:nat, ui:UI) {
+    var view',outidx := Donate(s, victim);
+    && s' == view'
+    && ui == Some((victim, outidx))
+  }
 
-predicate NoopStep(s:State, s':State) {
-  s' == s
-}
+  predicate NoopStep(s:State, s':State) {
+    s' == s
+  }
 
-predicate Next(s:State, s':State) {
-  || (exists victim, outidx :: DonateStep(s, s', victim, ui:UI)
-  || (NoopStep(s, s') && ui==None())
-}
+  predicate Next(s:State, s':State) {
+    || (exists victim, outidx :: DonateStep(s, s', victim, ui:UI)
+    || (NoopStep(s, s') && ui==None())
+  }
 
 }
 
@@ -41,72 +41,72 @@ predicate Next(s:State, s':State) {
 
 module Concrete {
 
-datatype Well = Well(stones: nat /*, ghost suffix: View*/)
+  datatype Well = Well(stones: nat /*, ghost suffix: View*/)
 
-datatype Thread = Thread(lockHeld: nat, victim:nat)
-  // Thread's goal is to find a well containing victim stones, and add a stone to it.
+  datatype Thread = Thread(lockHeld: nat, victim:nat)
+    // Thread's goal is to find a well containing victim stones, and add a stone to it.
 
-type Board = seq<Well>
+  type Board = seq<Well>
 
-datatype State = (board:Board, threads:set<Thread>)
+  datatype State = (board:Board, threads:set<Thread>)
 
-function View(board:Board, i:nat) : (v:seq<nat>)
-  ensures |v| == |board| - i
-  ensures forall j | 0<=j<|v| :: v[i] == board[j-i]
-{
-  [board[i]] + View(board, i+1)
-}
+  function View(board:Board, i:nat) : (v:seq<nat>)
+    ensures |v| == |board| - i
+    ensures forall j | 0<=j<|v| :: v[i] == board[j-i]
+  {
+    [board[i]] + View(board, i+1)
+  }
 
-predicate Init(s: State) {
-  && (forall i :: board[i].stones == 0)  // not necessary, just feels right
-  && (forall i :: board[i].suffix == View(board, i))
-  && threads == {}
-}
+  predicate Init(s: State) {
+    && (forall i :: board[i].stones == 0)  // not necessary, just feels right
+    && (forall i :: board[i].suffix == View(board, i))
+    && threads == {}
+  }
 
-predicate LockFree(s: State, lockId:nat) {
-  forall t | t in s.threads :: t.lockHeld != lockId
-}
+  predicate LockFree(s: State, lockId:nat) {
+    forall t | t in s.threads :: t.lockHeld != lockId
+  }
 
-predicate Start(s: State, s':State, victim:nat, ui:UI) {
-  var newThread := Thread(0, victim);
-  && LockFree(s, 0)
-  && s'.board == s.board
-  && s'.threads == s.threads + {newThread}
-  && ui == None()
-}
-
-predicate Advance(s: State, s':State, ui:UI) {
-  var t :| t in s.threads;
-  var nextLock := t.lockHeld + 1;
-  if s.board[lockHeld] == t.victim then
-    // yay we found it!
-    && s'.board == s.board[t.lockHeld := t.victim + 1]
-    && s'.threads == s.threads - {t}  // we're done! exit the runnable queue
-    && ui == Some(t.victim, Some(t.lockHeld))
-  else if |s.board| <= nextLock then
-    // Ran off end of list without finding victim.
+  predicate Start(s: State, s':State, victim:nat, ui:UI) {
+    var newThread := Thread(0, victim);
+    && LockFree(s, 0)
     && s'.board == s.board
-    && s'.threads == s.threads - {t}  // we're done! exit the runnable queue
-    && ui == Some(t.victim, None())
-  else if LockFree(s, nextLock) then
-    var t' := Thread(nextLock, victim);
-    && s'.board == s.board
-    && s'.threads == s.threads - {t} + {t'}
+    && s'.threads == s.threads + {newThread}
     && ui == None()
-  else
-    // Need to advance, but waiting on a lock
-    && s' = s
-    && ui == None()
-}
+  }
 
-predicate Next(s:State, s':State, ui:UI) {
-  || (exists victim :: Start(s, s', victim, ui))
-  || Advance(s, s', ui)
-}
+  predicate Advance(s: State, s':State, ui:UI) {
+    var t :| t in s.threads;
+    var nextLock := t.lockHeld + 1;
+    if s.board[lockHeld] == t.victim then
+      // yay we found it!
+      && s'.board == s.board[t.lockHeld := t.victim + 1]
+      && s'.threads == s.threads - {t}  // we're done! exit the runnable queue
+      && ui == Some(t.victim, Some(t.lockHeld))
+    else if |s.board| <= nextLock then
+      // Ran off end of list without finding victim.
+      && s'.board == s.board
+      && s'.threads == s.threads - {t}  // we're done! exit the runnable queue
+      && ui == Some(t.victim, None())
+    else if LockFree(s, nextLock) then
+      var t' := Thread(nextLock, victim);
+      && s'.board == s.board
+      && s'.threads == s.threads - {t} + {t'}
+      && ui == None()
+    else
+      // Need to advance, but waiting on a lock
+      && s' = s
+      && ui == None()
+  }
 
-function I(s:State) : (as:Abstract.State) {
-  s.board[0].suffix
-}
+  predicate Next(s:State, s':State, ui:UI) {
+    || (exists victim :: Start(s, s', victim, ui))
+    || Advance(s, s', ui)
+  }
+
+  function I(s:State) : (as:Abstract.State) {
+    s.board[0].suffix
+  }
 
 } // module Concrete
 
@@ -126,5 +126,4 @@ module TheoremObligationDotS {
     ensures var ab := Interpret(b, I); Reachable(ab, Abstract.Init, Abstract.Next)
   {
   }
-
 } // module TheoremObligationDotS
