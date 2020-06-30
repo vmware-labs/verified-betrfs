@@ -1,6 +1,11 @@
-module Abstract {
-  type View = seq<nat>
+module Options {
   datatype Option<V> = None | Some(value:V)
+}
+
+module Abstract {
+  import opened Options
+
+  type View = seq<nat>
 
   datatype Op = DonateOp(victim:nat, outidx: Option<nat>)
   type UI = Option<Op>
@@ -25,7 +30,7 @@ module Abstract {
     )
   }
 
-  function Donate(view:View, victim:nat, ui:UI) : (View, Option<nat>) {
+  function Donate(view:View, victim:nat) : (View, Option<nat>) {
     var outidx := LeastIndexOf(view, victim);
     var view' := (
       if outidx.None? then
@@ -39,7 +44,7 @@ module Abstract {
   datatype State = State(board:View)
 
   predicate DonateStep(s:State, s':State, victim:nat, ui:UI) {
-    var (view',outidx) := Donate(s.board, victim, ui);
+    var (view',outidx) := Donate(s.board, victim);
     && s' == State(view')
     && ui == Some(DonateOp(victim, outidx))
   }
@@ -58,8 +63,10 @@ module Abstract {
 //////////////////////////////////////////////////////////////////////////////
 
 module Concrete {
+  import Abstract
+  import opened Options
 
-  datatype Well = Well(stones: nat /*, ghost suffix: View*/)
+  datatype Well = Well(stones: nat, ghost suffix: Abstract.View)
 
   datatype Thread = Thread(lockHeld: nat, victim:nat)
     // Thread's goal is to find a well containing victim stones, and add a stone to it.
@@ -70,69 +77,71 @@ module Concrete {
 
   function View(board:Board, i:nat) : (v:seq<nat>)
     ensures |v| == |board| - i
-    ensures forall j | 0<=j<|v| :: v[i] == board[j-i]
+    ensures forall j | 0<=j<|v| :: v[i] == board[j-i].stones
   {
-    [board[i]] + View(board, i+1)
+    [board[i].stones] + View(board, i+1)
   }
 
   predicate Init(s: State) {
-    && (forall i :: board[i].stones == 0)  // not necessary, just feels right
-    && (forall i :: board[i].suffix == View(board, i))
-    && threads == {}
+    && (forall i :: s.board[i].stones == 0)  // not necessary, just feels right
+    && (forall i :: s.board[i].suffix == View(s.board, i))
+    && s.threads == {}
   }
 
   predicate LockFree(s: State, lockId:nat) {
     forall t | t in s.threads :: t.lockHeld != lockId
   }
 
-  predicate Start(s: State, s':State, victim:nat, ui:UI) {
+  predicate Start(s: State, s':State, victim:nat, ui:Abstract.UI) {
     var newThread := Thread(0, victim);
     && LockFree(s, 0)
     && s'.board == s.board
     && s'.threads == s.threads + {newThread}
-    && ui == None()
+    && var (suffix', outidx) := Abstract.Donate(s.board[0].suffix, victim);
+    && ui == Some(Abstract.DonateOp(victim, outidx))
+    && s'.board == s.board[0 := s.board[0].(suffix := suffix')]
   }
 
-  predicate Advance(s: State, s':State, ui:UI) {
-    var t :| t in s.threads;
-    var nextLock := t.lockHeld + 1;
-    if s.board[lockHeld] == t.victim then
+  predicate Advance(s: State, s':State, ui:Abstract.UI) {
+    && ui == None
+    && var t :| t in s.threads;
+    && var nextLock := t.lockHeld + 1;
+    && if s.board[t.lockHeld].stones == t.victim then
       // yay we found it!
-      && s'.board == s.board[t.lockHeld := t.victim + 1]
+      && s'.board == s.board[t.lockHeld := s.board[t.lockHeld].(stones := t.victim + 1)]
       && s'.threads == s.threads - {t}  // we're done! exit the runnable queue
-      && ui == Some(t.victim, Some(t.lockHeld))
     else if |s.board| <= nextLock then
       // Ran off end of list without finding victim.
       && s'.board == s.board
       && s'.threads == s.threads - {t}  // we're done! exit the runnable queue
-      && ui == Some(t.victim, None())
     else if LockFree(s, nextLock) then
-      var t' := Thread(nextLock, victim);
-      && s'.board == s.board
+      var t' := Thread(nextLock, t.victim);
+      var (suffix', outidx) := Abstract.Donate(s.board[nextLock].suffix, t.victim);
+      && s'.board == s.board[nextLock := s.board[nextLock].(suffix := suffix')]
       && s'.threads == s.threads - {t} + {t'}
-      && ui == None()
     else
       // Need to advance, but waiting on a lock
       && s' == s
-      && ui == None()
   }
 
-  predicate Next(s:State, s':State, ui:UI) {
+  predicate Next(s:State, s':State, ui:Abstract.UI) {
     || (exists victim :: Start(s, s', victim, ui))
     || Advance(s, s', ui)
   }
 
   function I(s:State) : (abs:Abstract.State) {
-    s.board[0].suffix
+    Abstract.State(s.board[0].suffix)
   }
 
 } // module Concrete
 
 module TheoremObligationDotS {
-  datatype MetaState<State> = MetaState(state: State, ui: UI)
-  type Behavior<State> = iseq<MetaState>
+  import Abstract
 
-  function Interpret<CState, AState>(b:Behavior<CState, UI>, I:CState->AState) : (ab:Behavior<AState, UI>)
+  datatype MetaState<State, UI> = MetaState(state: State, ui: UI)
+  type Behavior<State, UI> = seq<MetaState> // iseq would be better
+
+  function Interpret<CState, AState>(b:Behavior<CState, Abstract.UI>, I:CState->AState) : (ab:Behavior<AState, Abstract.UI>)
     ensures forall i :: I(b[i].state) == ab[i].state
     ensures forall i :: b[i].ui == ab[i].ui
   {
