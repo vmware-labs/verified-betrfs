@@ -135,7 +135,7 @@ module Concrete {
 
 } // module Concrete
 
-module TheoremObligationDotS {
+/*module TheoremObligationDotS {
   import Abstract
 
   datatype MetaState<State, UI> = MetaState(state: State, ui: UI)
@@ -153,4 +153,4 @@ module TheoremObligationDotS {
     ensures var ab := Interpret(b, I); Reachable(ab, Abstract.Init, Abstract.Next)
   {
   }
-} // module TheoremObligationDotS
+} // module TheoremObligationDotS*/
