@@ -108,7 +108,6 @@ module IrisImpl {
     invariant r == old(r)
     invariant is == old(is)
 
-    // local invariants only
     invariant r.can_return(victim, g_outidx)
     invariant 0 <= idx < size()
     invariant is.w[idx].suffix
