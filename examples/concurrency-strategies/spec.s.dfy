@@ -7,7 +7,9 @@ module Abstract {
 
   type View = seq<nat>
 
-  datatype Op = DonateOp(victim:nat, outidx: Option<nat>)
+  datatype Op =
+    | DonateStartOp(reqId: int, victim:nat)
+    | DonateEndOp(reqId: int, outidx: Option<nat>)
   type UI = Option<Op>
 
   function LeastIndexOf(view:View, victim:nat) : (idx:Option<nat>)

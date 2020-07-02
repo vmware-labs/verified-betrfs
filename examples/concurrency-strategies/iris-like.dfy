@@ -48,6 +48,8 @@ module IrisImpl {
   requires |board| == |w|
   requires 0 <= i < |board|
   {
+    // Imagine each lock protects an invariant,
+    //    acc(w[i].stones) && acc(w[i].suffix, 0.5) && acc(w[i+1].suffix, 0.5)
     !w[i].locked ==>
       w[i].suffix == ghost_cons(w, i)
   }
@@ -112,6 +114,7 @@ module IrisImpl {
     invariant 0 <= idx < size()
     invariant is.w[idx].suffix
         == Abstract.Donate(ghost_cons(is.w, idx), victim).0
+            // connecting is.w[idx].suffix to is.w[idx+1].suffix
     invariant g_outidx.Some? ==> Abstract.Donate(ghost_cons(is.w, idx), victim).1.Some?
         && g_outidx.value == idx + Abstract.Donate(ghost_cons(is.w, idx), victim).1.value
     invariant g_outidx.None? ==> Abstract.Donate(ghost_cons(is.w, idx), victim).1.None?
@@ -119,7 +122,10 @@ module IrisImpl {
     {
       // imaginary yield point here
       // The rest of this while-loop is just assumed to be atomic.
-      // Pretend we have CIVL or something similar to justify that.
+      // Pretend we have CIVL or something similar to justify that, and also
+      // imagine that we justify that the "yield invariants" (here, loop invariants)
+      // are preserved by other threads.
+      // Alternatively, use permissions logic, with accesses held by lock invariants.
 
       ghost var old_s := r.abstract_state();
       ghost var old_w := is.w;
