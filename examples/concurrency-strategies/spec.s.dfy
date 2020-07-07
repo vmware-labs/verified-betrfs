@@ -8,8 +8,7 @@ module Abstract {
   type View = seq<nat>
 
   datatype Op =
-    | DonateStartOp(reqId: int, victim:nat)
-    | DonateEndOp(reqId: int, outidx: Option<nat>)
+    | DonateOp(victim:nat, outidx: Option<nat>)
   type UI = Option<Op>
 
   function LeastIndexOf(view:View, victim:nat) : (idx:Option<nat>)
@@ -64,7 +63,7 @@ module Abstract {
 
 //////////////////////////////////////////////////////////////////////////////
 
-module Concrete {
+/*module Concrete {
   import Abstract
   import opened Options
 
@@ -136,6 +135,7 @@ module Concrete {
   }
 
 } // module Concrete
+*/
 
 /*module TheoremObligationDotS {
   import Abstract
