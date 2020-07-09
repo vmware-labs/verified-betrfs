@@ -1,6 +1,6 @@
 
 method {:extern} Assign<V>(inout v: V, newV: V)
-ensures after(v) == newV
+ensures v == newV
 
 {
   v := newV;
@@ -8,8 +8,8 @@ ensures after(v) == newV
 
 method {:extern} Replace<V>(linear inout v: V, linear newV: V)
 returns (linear replaced: V)
-ensures replaced == v
-ensures after(v) == newV
+ensures replaced == old(v)
+ensures v == newV
 
 {
   replaced := v;
@@ -17,8 +17,8 @@ ensures after(v) == newV
 }
 
 method {:extern} Swap<V>(linear inout a: V, linear inout b: V)
-ensures after(b) == a
-ensures after(a) == b
+ensures b == old(a)
+ensures a == old(b)
 
 {
   linear var tmp := a;
@@ -32,18 +32,19 @@ linear datatype Car = Car(passengers: nat)
 method LoadPassengers(linear inout self: Car, count: nat)
 
 method LoadPassengers(linear inout self: Car, count: nat)
-ensures after(self).passengers == self.passengers + count
+ensures self.passengers == old(self).passengers + count
 {
   var newCount := self.passengers + count;
   Assign(inout self.passengers, newCount);
 }
 
 method LoadPassengers(linear inout self: Car, count: nat)
-ensures after(self).passengers == self.passengers + count
+ensures self.passengers == old(self).passengers + count
 {
   var newCount := self.passengers + count;
   ghost var beforeLoad := self;
   Assign(inout self.passengers, newCount);
+  assert beforeLoad == old(self);
   assert beforeLoad.passengers == self.passengers - count;
 }
 

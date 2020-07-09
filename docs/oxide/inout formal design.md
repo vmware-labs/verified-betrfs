@@ -64,14 +64,14 @@ linear inout Member()
 
 #### `requires` and `ensures`
 
-A `requires` clause can refer to the value of `param` before the method has executed as `param`. An `ensures` clause can refer to the value of `param` before the method has executed as `param` and it can refer to the value of `param` after execution as `after(param)`. Note that, differently from `old` in dynamic frames dafny, because `param` is linear and doesn't contain pointers, `old(param).fieldname` and `old(param.fieldname)` would have identical meaning. To simplify translation, we only permit `after(param)` (no complex expressions within `after`) for `inout` method parameters.
+A `requires` clause can refer to the value of `param` before the method has executed as `param`. An `ensures` clause can refer to the value of `param` before the method has executed as `old(param)` and it can refer to the value of `param` after execution as `param`. Note that, differently from `old` in dynamic frames dafny, because `param` is linear and doesn't contain pointers, `old(param).fieldname` and `old(param.fieldname)` have identical meaning. To simplify translation, we only permit `old(param)` (no complex expressions within `old`) for `inout` method parameters.
 
 
 
 ##### example
 
 <div class="highlight" style="font-size:11pt"><pre style="line-height: 125%"><span></span><span id="lineno-syn-00-1"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">1 </span><span style="color: #008000; font-weight: bold">method</span> <span style="color: #0000FF">LoadPassengers</span>(<span style="color: #008000; font-weight: bold">linear</span> <span style="color: #008000; font-weight: bold">inout</span> self: Car, count: nat)
-</span><span id="lineno-syn-00-2"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">2 </span><span style="color: #008000; font-weight: bold">ensures</span> <span style="color: #0000FF">after</span>(self).passengers == self.passengers + count
+</span><span id="lineno-syn-00-2"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">2 </span><span style="color: #008000; font-weight: bold">ensures</span> self.passengers == <span style="color: #008000; font-weight: bold">old</span>(self).passengers + count
 </span></pre></div>
 
 
@@ -93,11 +93,11 @@ A method call can construct a mutable reference by passing (a path of `linear` f
 given the trusted library `method Assign` (see "proposed trusted methods")
 
 <div class="highlight" style="font-size:11pt"><pre style="line-height: 125%"><span></span><span id="lineno-syn-00-1"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">1 </span><span style="color: #008000; font-weight: bold">method</span> {:<span style="color: #008000; font-weight: bold">extern</span>} Assign&lt;V&gt;(<span style="color: #008000; font-weight: bold">inout</span> v: V, newV: V)
-</span><span id="lineno-syn-00-2"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">2 </span><span style="color: #008000; font-weight: bold">ensures</span> <span style="color: #0000FF">after</span>(v) == newV
+</span><span id="lineno-syn-00-2"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">2 </span><span style="color: #008000; font-weight: bold">ensures</span> v == newV
 </span></pre></div>
 
 <div class="highlight" style="font-size:11pt"><pre style="line-height: 125%"><span></span><span id="lineno-syn-00-1"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">1 </span><span style="color: #008000; font-weight: bold">method</span> <span style="color: #0000FF">LoadPassengers</span>(<span style="color: #008000; font-weight: bold">linear</span> <span style="color: #008000; font-weight: bold">inout</span> self: Car, count: nat)
-</span><span id="lineno-syn-00-2"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">2 </span><span style="color: #008000; font-weight: bold">ensures</span> <span style="color: #0000FF">after</span>(self).passengers == self.passengers + count
+</span><span id="lineno-syn-00-2"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">2 </span><span style="color: #008000; font-weight: bold">ensures</span> self.passengers == <span style="color: #008000; font-weight: bold">old</span>(self).passengers + count
 </span><span id="lineno-syn-00-3"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">3 </span>{
 </span><span id="lineno-syn-00-4"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">4 </span>  <span style="color: #B00040">var</span> newCount := self.passengers + count;
 </span><span id="lineno-syn-00-5"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">5 </span>  Assign(<span style="color: #008000; font-weight: bold">inout</span> self.passengers, newCount);
@@ -125,13 +125,14 @@ Similarly to `linear` variables, `[linear] inout` variables (formals) can be use
 ##### example
 
 <div class="highlight" style="font-size:11pt"><pre style="line-height: 125%"><span></span><span id="lineno-syn-00-1"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">1 </span><span style="color: #008000; font-weight: bold">method</span> <span style="color: #0000FF">LoadPassengers</span>(<span style="color: #008000; font-weight: bold">linear</span> <span style="color: #008000; font-weight: bold">inout</span> self: Car, count: nat)
-</span><span id="lineno-syn-00-2"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">2 </span><span style="color: #008000; font-weight: bold">ensures</span> <span style="color: #0000FF">after</span>(self).passengers == self.passengers + count
+</span><span id="lineno-syn-00-2"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">2 </span><span style="color: #008000; font-weight: bold">ensures</span> self.passengers == <span style="color: #008000; font-weight: bold">old</span>(self).passengers + count
 </span><span id="lineno-syn-00-3"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">3 </span>{
 </span><span id="lineno-syn-00-4"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">4 </span>  <span style="color: #B00040">var</span> newCount := self.passengers + count;
 </span><span id="lineno-syn-00-5"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">5 </span>  <span style="color: #008000; font-weight: bold">ghost</span> <span style="color: #B00040">var</span> beforeLoad := self;
 </span><span id="lineno-syn-00-6"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">6 </span>  Assign(<span style="color: #008000; font-weight: bold">inout</span> self.passengers, newCount);
-</span><span id="lineno-syn-00-7"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">7 </span>  assert beforeLoad.passengers == self.passengers - count;
-</span><span id="lineno-syn-00-8"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">8 </span>}
+</span><span id="lineno-syn-00-7"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">7 </span>  assert beforeLoad == <span style="color: #008000; font-weight: bold">old</span>(self);
+</span><span id="lineno-syn-00-8"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">8 </span>  assert beforeLoad.passengers == self.passengers - count;
+</span><span id="lineno-syn-00-9"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">9 </span>}
 </span></pre></div>
 
 
@@ -143,7 +144,7 @@ These are trusted library methods that complement the new syntax.
 ### `Assign`
 
 <div class="highlight" style="font-size:11pt"><pre style="line-height: 125%"><span></span><span id="lineno-syn-00-1"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">1 </span><span style="color: #008000; font-weight: bold">method</span> {:<span style="color: #008000; font-weight: bold">extern</span>} Assign&lt;V&gt;(<span style="color: #008000; font-weight: bold">inout</span> v: V, newV: V)
-</span><span id="lineno-syn-00-2"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">2 </span><span style="color: #008000; font-weight: bold">ensures</span> <span style="color: #0000FF">after</span>(v) == newV
+</span><span id="lineno-syn-00-2"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">2 </span><span style="color: #008000; font-weight: bold">ensures</span> v == newV
 </span></pre></div>
 
 `Assign` enables changing the value of an `ordinary` field of a `linear` datatype without additional syntax. We can later add syntactic sugar to support regular assignment syntax.
@@ -154,8 +155,8 @@ These are trusted library methods that complement the new syntax.
 
 <div class="highlight" style="font-size:11pt"><pre style="line-height: 125%"><span></span><span id="lineno-syn-00-1"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">1 </span><span style="color: #008000; font-weight: bold">method</span> {:<span style="color: #008000; font-weight: bold">extern</span>} Replace&lt;V&gt;(<span style="color: #008000; font-weight: bold">linear</span> <span style="color: #008000; font-weight: bold">inout</span> v: V, <span style="color: #008000; font-weight: bold">linear</span> newV: V)
 </span><span id="lineno-syn-00-2"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">2 </span>returns (<span style="color: #008000; font-weight: bold">linear</span> replaced: V)
-</span><span id="lineno-syn-00-3"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">3 </span><span style="color: #008000; font-weight: bold">ensures</span> replaced == v
-</span><span id="lineno-syn-00-4"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">4 </span><span style="color: #008000; font-weight: bold">ensures</span> <span style="color: #0000FF">after</span>(v) == newV
+</span><span id="lineno-syn-00-3"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">3 </span><span style="color: #008000; font-weight: bold">ensures</span> replaced == <span style="color: #008000; font-weight: bold">old</span>(v)
+</span><span id="lineno-syn-00-4"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">4 </span><span style="color: #008000; font-weight: bold">ensures</span> v == newV
 </span></pre></div>
 
 `Replace` enables updating the value of a `linear` field of a `linear` datatype without additional syntax. We can later add syntactic sugar to support regular assignment syntax.
@@ -165,15 +166,15 @@ These are trusted library methods that complement the new syntax.
 ### `Swap`
 
 <div class="highlight" style="font-size:11pt"><pre style="line-height: 125%"><span></span><span id="lineno-syn-00-1"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">1 </span><span style="color: #008000; font-weight: bold">method</span> {:<span style="color: #008000; font-weight: bold">extern</span>} Swap&lt;V&gt;(<span style="color: #008000; font-weight: bold">linear</span> <span style="color: #008000; font-weight: bold">inout</span> a: V, <span style="color: #008000; font-weight: bold">linear</span> <span style="color: #008000; font-weight: bold">inout</span> b: V)
-</span><span id="lineno-syn-00-2"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">2 </span><span style="color: #008000; font-weight: bold">ensures</span> <span style="color: #0000FF">after</span>(b) == a
-</span><span id="lineno-syn-00-3"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">3 </span><span style="color: #008000; font-weight: bold">ensures</span> <span style="color: #0000FF">after</span>(a) == b
+</span><span id="lineno-syn-00-2"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">2 </span><span style="color: #008000; font-weight: bold">ensures</span> b == <span style="color: #008000; font-weight: bold">old</span>(a)
+</span><span id="lineno-syn-00-3"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">3 </span><span style="color: #008000; font-weight: bold">ensures</span> a == <span style="color: #008000; font-weight: bold">old</span>(b)
 </span></pre></div>
 
 `Swap` enables swapping the values of two `linear` fields of the same type of `linear` datatypes without additional syntax.
 
 
 
-## translation (verification conditions)
+## translation (verification conditions) [WIP]
 
 For verification (translation to _Boogie_), the `[linear] inout` parameters are translated to regular dafny as follows:
 
@@ -259,6 +260,28 @@ thing := thing.(field := _tmp00);
 
 ## design considerations
 
+### alternatives considered
+
+#### `after`
+
+We considered using `after` to refer to the value after execution; unfortunately this breaks the semantics of `old` from within the body.
+
+<div class="highlight" style="font-size:11pt"><pre style="line-height: 125%"><span></span><span id="lineno-syn-00-1"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">1 </span><span style="color: #008000; font-weight: bold">method</span> <span style="color: #0000FF">LoadPassengers</span>(<span style="color: #008000; font-weight: bold">linear</span> <span style="color: #008000; font-weight: bold">inout</span> self: Car, count: nat)
+</span><span id="lineno-syn-00-2"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">2 </span><span style="color: #008000; font-weight: bold">ensures</span> <span style="color: #0000FF">after</span>(self).passengers == self.passengers + count
+</span><span id="lineno-syn-00-3"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">3 </span>{
+</span><span id="lineno-syn-00-4"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">4 </span>  <span style="color: #B00040">var</span> newCount := self.passengers + count;
+</span><span id="lineno-syn-00-5"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">5 </span>  <span style="color: #008000; font-weight: bold">ghost</span> <span style="color: #B00040">var</span> beforeLoad := self;
+</span><span id="lineno-syn-00-6"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">6 </span>  Assign(<span style="color: #008000; font-weight: bold">inout</span> self.passengers, newCount);
+</span><span id="lineno-syn-00-7"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">7 </span>  assert beforeLoad.passengers == self.passengers - count;
+</span><span id="lineno-syn-00-8"><span style="background-color: #f0f0f0; padding: 0 5px 0 5px">8 </span>}
+</span></pre></div>
+
+
+
+### [WIP]
+
+
+
 [todo discuss how borrow checking is only useful when you have mutable references]
 
 ```
@@ -269,6 +292,10 @@ thing := thing.(field := _tmp00);
              -----------\   |
                    borrow checker
 ```
+
+
+
+[discuss alternative compiler optimisation pass for `function method`s]
 
 
 
