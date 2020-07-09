@@ -1022,16 +1022,17 @@ module LinearMutableMap {
     assert EntryInSlotMatchesContents(self.underlying.storage, Slot(i as nat), self.underlying.contents); // trigger
   }
 
-  method ReallocInternal<V>(shared self: LinearHashMap<V>)
-  returns (linear newUnderlying: FixedSizeLinearHashMap<V>)
+  method Realloc<V>(linear self: LinearHashMap<V>)
+  returns (linear self': LinearHashMap<V>)
     requires Inv(self)
-    ensures FixedSizeInv(newUnderlying)
-    ensures UnderlyingInv(self.(underlying := newUnderlying), newUnderlying)
-    ensures newUnderlying.count as nat < |newUnderlying.storage| - 2
+    requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
+    ensures Inv(self')
+    ensures self'.contents == self.contents
+    ensures self'.underlying.count as nat < |self'.underlying.storage| - 2
   {
     var i: uint64 := 0;
     var newSize: uint64 := (128 + self.count) * 4;
-    newUnderlying := ConstructorFromSize(newSize);
+    linear var newUnderlying := ConstructorFromSize(newSize);
 
     var transferredContents: map<uint64, V> := map[];
 
@@ -1117,7 +1118,11 @@ module LinearMutableMap {
     UnderlyingInvImpliesMapFromStorageMatchesContents(newUnderlying, transferredContents);
     assert transferredContents == self.contents;
 
-    ghost var self' := self.(underlying := newUnderlying);
+    linear var LinearHashMap(selfUnderlying, selfCount, selfContents) := self;
+    linear var FixedSizeLinearHashMap(oldStorage, _, _) := selfUnderlying;
+    var _ := seq_free(oldStorage);
+
+    self' := LinearHashMap(newUnderlying, selfCount, selfContents);
 
     assert self'.contents == transferredContents;
 
@@ -1125,597 +1130,575 @@ module LinearMutableMap {
     assert forall key :: key in self.contents ==> key in newUnderlying.contents && newUnderlying.contents[key] == Some(self.contents[key]);
     assert forall key :: key !in self.contents ==> key !in newUnderlying.contents || newUnderlying.contents[key].None?;
 
-    // assert MapFromStorage(newUnderlying.storage) == self'.contents;
-    // assert UnderlyingInv(self', newUnderlying);
-    // assert newUnderlying.count as nat < |newUnderlying.storage| - 2;
   }
 
-  method Realloc<V>(linear self: LinearHashMap<V>) returns (linear self': LinearHashMap<V>)
-    requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
+  method InsertAndGetOld<V>(linear self: LinearHashMap, key: uint64, value: V)
+  returns (linear self': LinearHashMap, replaced: Option<V>)
     requires Inv(self)
+    requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
     ensures Inv(self')
-    ensures self'.contents == self.contents
-    ensures self'.underlying.count as nat < |self'.underlying.storage| - 2
+    ensures self'.contents == self.contents[key := value]
+    ensures self'.count as nat == self.count as nat + (if replaced.Some? then 0 else 1)
+    ensures replaced.Some? ==> MapsTo(self.contents, key, replaced.value)
+    ensures replaced.None? ==> key !in self.contents
   {
-    linear var newUnderlying := ReallocInternal(self);
-    linear var LinearHashMap(selfUnderlying, selfCount, selfContents) := self;
-    linear var FixedSizeLinearHashMap(oldStorage, _, _) := selfUnderlying;
-    var _ := seq_free(oldStorage);
-    self' := LinearHashMap(newUnderlying, selfCount, selfContents);
+    linear var self1 := self;
+    // -- mutation --
+    if seq_length(self1.underlying.storage) as uint64 / 2 <= self1.underlying.count {
+      self1 := Realloc(self1);
+    }
+    // --------------
+
+    // -- mutation --
+    linear var LinearHashMap(self1Underlying, self1Count, self1Contents) := self1;
+    linear var underlying';
+    underlying', replaced := FixedSizeInsert(self1Underlying, key, value);
+    ghost var contents' := self1Contents[key := value];
+    self' := LinearHashMap(underlying',
+        if replaced.None? then self1Count + 1 else self1Count,
+        contents');
+    // --------------
+
+    UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents);
   }
 
-  // linear datatype InsertAndGetOldResult<V> = InsertAndGetOldResult(linear self': LinearHashMap, replaced: Option<V>)
-  // function method {:opaque} InsertAndGetOld<V>(linear self: LinearHashMap, key: uint64, value: V)
-  // : (linear res: InsertAndGetOldResult<V>)
-  //   requires Inv(self)
-  //   requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
-  //   ensures var InsertAndGetOldResult(self', replaced) := res;
-  //     && Inv(self')
-  //     && self'.contents == self.contents[key := value]
-  //     && self'.count as nat == self.count as nat + (if replaced.Some? then 0 else 1)
-  //     && (replaced.Some? ==> MapsTo(self.contents, key, replaced.value))
-  //     && (replaced.None? ==> key !in self.contents)
-  // {
-  //   // -- mutation --
-  //   linear var self1 := if seq_length(self.underlying.storage) as uint64 / 2 <= self.underlying.count then (
-  //     Realloc(self)
-  //   ) else (
-  //     self
-  //   );
-  //   // --------------
-
-  //   // -- mutation --
-  //   linear var LinearHashMap(self1Underlying, self1Count, self1Contents) := self1;
-  //   linear var FixedSizeInsertResult(underlying', replaced) := FixedSizeInsert(self1Underlying, key, value);
-  //   ghost var contents' := self1Contents[key := value];
-  //   linear var self' := LinearHashMap(underlying',
-  //       if replaced.None? then self1Count + 1 else self1Count,
-  //       contents');
-  //   // --------------
-
-  //   LemmaFixedSizeInsertResult(self1.underlying, key, value);
-  //   UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents);
-
-  //   InsertAndGetOldResult(self', replaced)
-  // }
-
-  // function method {:opaque} Insert<V>(linear self: LinearHashMap, key: uint64, value: V)
-  // : (linear self': LinearHashMap)
-  //   requires Inv(self)
-  //   requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
-  //   ensures
-  //     && Inv(self')
-  //     && self'.contents == self.contents[key := value]
-  //     && (self'.count as nat == self.count as nat ||
-  //        self'.count as nat == self.count as nat + 1)
-  // {
-  //   linear var InsertAndGetOldResult(self', _) := InsertAndGetOld(self, key, value);
-  //   self'
-  // }
-
-  // linear datatype RemoveResult<V> = RemoveResult(linear self': LinearHashMap, removed: Option<V>)
-  // function method RemoveInternal<V>(linear self: LinearHashMap, key: uint64)
-  // : (linear res: RemoveResult<V>)
-  //   requires Inv(self)
-  //   ensures var RemoveResult(self', removed) := res;
-  //     && FixedSizeRemoveResult(self'.underlying, removed) == FixedSizeRemove(self.underlying, key)
-  //     && FixedSizeInv(self'.underlying)
-  //     && (self'.underlying.contents == if key in self.underlying.contents
-  //       then self.underlying.contents[key := None]
-  //       else self.underlying.contents)
-  //     && (removed == if key in self.underlying.contents && self.underlying.contents[key].Some?
-  //       then Some(self.underlying.contents[key].value)
-  //       else None)
-  //     && (self'.underlying.count == self.underlying.count)
-  // {
-  //   // -- mutation --
-  //   linear var LinearHashMap(selfUnderlying, selfCount, selfContents) := self;
-  //   linear var FixedSizeRemoveResult(underlying', removed) := FixedSizeRemove(selfUnderlying, key);
-  //   // --------------
-
-  //   LemmaFixedSizeRemoveResult(self.underlying, key);
-
-  //   linear var self' := LinearHashMap(
-  //     /* underlying := */ underlying',
-  //     /* count := */ if removed.Some? then selfCount - 1 else selfCount,
-  //     /* contents := */ map k | k in selfContents && k != key :: selfContents[k]);
-
-  //   RemoveResult(self', removed)
-  // }
-
-  // lemma RemoveCountCorrect<V>(self: LinearHashMap, key: uint64, res: RemoveResult<V>)
-  // requires Inv(self)
-  // requires res == RemoveInternal(self, key)
-  // ensures var RemoveResult(self', removed) := res;
-  //   self'.count as nat == |self'.contents|
-  // {
-  //   var RemoveResult(self', removed) := res;
-  //   if removed.Some? {
-  //     assert key in self.contents;
-  //     assert self'.contents.Keys <= self.contents.Keys;
-  //     assert |self.contents| == self'.count as nat + 1;
-  //     assert |self.contents.Keys| == self'.count as nat + 1;
-  //     assert |self.contents.Keys - {key}| == |self.contents.Keys| - |{key}|;
-  //     assert self.contents.Keys - {key} == self'.contents.Keys;
-  //     assert |self'.contents| == |self.contents| - 1;
-  //     assert |self'.contents| == self'.count as nat;
-  //   } else {
-  //     assert key !in self.contents;
-  //     assert self'.contents == self.contents;
-  //     assert |self'.contents| == self'.count as nat;
-  //   }
-  // }
-
-  // function method RemoveAndGet<V>(linear self: LinearHashMap, key: uint64)
-  // : (linear res: RemoveResult<V>)
-  //   requires Inv(self)
-  //   ensures var RemoveResult(self', removed) := res;
-  //     && Inv(self')
-  //     && (self'.contents == if key in self.contents
-  //       then map k | k in self.contents && k != key :: self.contents[k]
-  //       else self.contents)
-  //     && (removed == if key in self.contents
-  //       then Some(self.contents[key])
-  //       else None)
-  // {
-  //   linear var RemoveResult(self', removed) := RemoveInternal(self, key);
-
-  //   LemmaFixedSizeRemoveResult(self.underlying, key);
-  //   RemoveCountCorrect(self, key, RemoveResult(self', removed));
-  //   UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents); 
-
-  //   RemoveResult(self', removed)
-  // }
-
-  // function method Remove<V>(linear self: LinearHashMap, key: uint64)
-  // : (linear self': LinearHashMap)
-  //   requires Inv(self)
-  //   ensures
-  //     && Inv(self')
-  //     && (self'.contents == if key in self.contents
-  //       then map k | k in self.contents && k != key :: self.contents[k]
-  //       else self.contents)
-  // {
-  //   linear var RemoveResult(self', _) := RemoveAndGet(self, key);
-  //   self'
-  // }
-
-  // function method Get<V>(shared self: LinearHashMap, key: uint64)
-  // : (found: Option<V>)
-  //   requires Inv(self)
-  //   ensures if key in self.contents then found == Some(self.contents[key]) else found.None?
-  //   ensures found.Some? <==> key in self.contents
-  // {
-  //   var found := FixedSizeGet(self.underlying, key);
-  //   LemmaFixedSizeGetResult(self.underlying, key);
-  //   found
-  // }
-
-  // //////// Iterator
-
-  // // We have two types of iterators.
-  // //
-  // // Iterator is usually more convenient as it has the IteratorOutput
-  // // built-in.
-  // //
-  // // SimpleIterator doesn't (you have to call SimpleIteratorOutput)
-  // // but has the advantage that the WFSimpleIter condition doesn't
-  // // depend on the key/value being correct. Thus the well-formedness
-  // // of a SimpleIterator can be preserved across (some) modifications
-  // // of the hash map.
-  // //
-  // // TODO fix the duplicated code that results.
-
-  // datatype IteratorOutput<V> = Next(key: uint64, value: V) | Done
-
-  // datatype Iterator<V> = Iterator(
-  //   i: uint64, // index in hash table item list
-  //   ghost s: set<uint64>,   // set of values returned so far
-  //   ghost decreaser: ORDINAL,
-  //   next: IteratorOutput)
-
-  // datatype SimpleIterator = SimpleIterator(
-  //   i: uint64, // index in hash table item list
-  //   ghost s: set<uint64>,   // set of values returned so far
-  //   ghost decreaser: ORDINAL)
-
-  // predicate NextExplainedByI<V>(self: LinearHashMap<V>, i : uint64, output:IteratorOutput)
-  // {
-  //   && (output.Next? ==>
-  //     && i as int < |self.underlying.storage|
-  //     && self.underlying.storage[i].Entry?
-  //     && self.underlying.storage[i].key == output.key
-  //     && self.underlying.storage[i].value == output.value)
-  //   && (output.Done? ==> i as int == |self.underlying.storage|)
-  // }
-
-  // predicate ValidI<V>(self: LinearHashMap<V>, it: Iterator<V>)
-  // {
-  //   && 0 <= it.i as int <= |self.underlying.storage|
-  // }
-
-  // predicate EachReturnedKeyExplainedByPassedIndex<V>(self: LinearHashMap<V>, s: set<uint64>, i: uint64)
-  // requires 0 <= i as int <= |self.underlying.storage|
-  // {
-  //   forall key | key in s ::
-  //       exists j | 0 <= j < i as int ::
-  //       && self.underlying.storage[j].Entry?
-  //       && key == self.underlying.storage[j].key
-  // }
-
-  // protected predicate WFIter<V>(self: LinearHashMap<V>, it: Iterator<V>)
-  // ensures WFIter(self, it) ==> (it.next.Done? ==> it.s == self.contents.Keys)
-  // ensures WFIter(self, it) ==> (it.next.Next? ==>
-  //     MapsTo(self.contents, it.next.key, it.next.value));
-  // ensures WFIter(self, it) ==> (it.next.Next? ==> it.next.key !in it.s)
-  // ensures WFIter(self, it) ==> it.s <= self.contents.Keys
-  // {
-  //   && ValidI(self, it)
-  //   && NextExplainedByI(self, it.i, it.next)
-  //   // Done justified by exhausting i
-  //   && (it.next.Done? ==> (it.s == self.contents.Keys))
-  //   // Each passed index appears in s
-  //   && (forall j | 0 <= j < it.i as int ::
-  //       self.underlying.storage[j].Entry? ==> self.underlying.storage[j].key in it.s)
-  //   && EachReturnedKeyExplainedByPassedIndex(self, it.s, it.i)
-  //   && it.decreaser == (|self.underlying.storage| - it.i as int) as ORDINAL
-  //   && (it.next.Next? ==> MapsTo(self.contents, it.next.key, it.next.value))
-  //   && (it.next.Next? ==> it.next.key !in it.s)
-  //   && it.s <= self.contents.Keys
-  // }
-
-  // protected predicate WFSimpleIter<V>(self: LinearHashMap<V>, it: SimpleIterator)
-  // ensures WFSimpleIter(self, it) ==> it.s <= self.contents.Keys
-  // {
-  //   && 0 <= it.i as int <= |self.underlying.storage| < Uint64UpperBound()
-  //   && (it.i as int == |self.underlying.storage| ==> (it.s == self.contents.Keys))
-  //   && (it.i as int < |self.underlying.storage| ==> self.underlying.storage[it.i].Entry?)
-  //   // Each passed index appears in s
-  //   && (forall j | 0 <= j < it.i as int ::
-  //       self.underlying.storage[j].Entry? ==> self.underlying.storage[j].key in it.s)
-  //   && EachReturnedKeyExplainedByPassedIndex(self, it.s, it.i)
-  //   && it.decreaser == (|self.underlying.storage| - it.i as int) as ORDINAL
-  //   && (it.i as int < |self.underlying.storage| ==> (
-  //     && MapsTo(self.contents, self.underlying.storage[it.i].key, self.underlying.storage[it.i].value)
-  //     && self.underlying.storage[it.i].key !in it.s
-  //   ))
-  //   && it.s <= self.contents.Keys
-  // }
-
-  // function method indexOutput<V>(shared self: LinearHashMap<V>, i: uint64) : (next: IteratorOutput<V>)
-  // requires 0 <= i as int <= |self.underlying.storage| < Uint64UpperBound()
-  // requires i as int < |self.underlying.storage| ==> self.underlying.storage[i].Entry?
-  // {
-  //   if i == seq_length(self.underlying.storage) then (
-  //     Done
-  //   ) else (
-  //     Next(
-  //       seq_get(self.underlying.storage, i).key,
-  //       seq_get(self.underlying.storage, i).value)
-  //   )
-  // }
-
-  // protected function method SimpleIterOutput<V>(shared self: LinearHashMap<V>, it: SimpleIterator) : (next: IteratorOutput<V>)
-  // requires WFSimpleIter(self, it)
-  // ensures (next.Done? ==> it.s == self.contents.Keys)
-  // ensures (next.Next? ==>
-  //     MapsTo(self.contents, next.key, next.value));
-  // ensures (next.Next? ==> next.key !in it.s)
-  // {
-  //   indexOutput(self, it.i)
-  // }
-
-  // lemma LemmaWFIterImpliesILt<V>(self: LinearHashMap<V>, it: Iterator<V>)
-  // requires WFIter(self, it)
-  // ensures it.next.Next? ==> it.i as int < |self.underlying.storage|
-  // {
-  // }
-
-  // lemma LemmaWFSimpleIterImpliesEntry<V>(self: LinearHashMap<V>, it: SimpleIterator)
-  // requires WFSimpleIter(self, it)
-  // ensures
-  //   && 0 <= it.i as int <= |self.underlying.storage|
-  //   && (SimpleIterOutput(self, it).Next? ==> it.i as int < |self.underlying.storage|)
-  //   && (it.i as int < |self.underlying.storage| ==>
-  //     && self.underlying.storage[it.i].Entry?
-  //   )
-  // {
-  // }
-
-  // lemma LemmaIterNextNotInS<V>(self: LinearHashMap<V>, it: Iterator<V>)
-  // requires 0 <= it.i as int <= |self.underlying.storage|
-  // requires ValidElements(self.underlying.storage)
-  // requires CantEquivocateStorageKey(self.underlying.storage)
-  // requires NextExplainedByI(self, it.i, it.next)
-  // requires EachReturnedKeyExplainedByPassedIndex(self, it.s, it.i)
-  // ensures (it.next.Next? ==> it.next.key !in it.s)
-  // {
-  //   if it.next.Next? {
-  //     if it.next.key in it.s {
-  //       var j :| 0 <= j < it.i as int
-  //         && self.underlying.storage[j].Entry?
-  //         && it.next.key == self.underlying.storage[j].key;
-  //       assert TwoNonEmptyValidSlotsWithSameKey<V>(self.underlying.storage, Slot(it.i as int), Slot(j));  // trigger
-  //       // assert false; // proof by contradiction
-  //     }
-  //   }
-  // }
-
-  // function method iterToNext<V>(shared self: LinearHashMap<V>, i: uint64) : (res: (uint64, IteratorOutput))
-  // requires Inv(self)
-  // requires 0 <= i as int <= |self.underlying.storage|
-  // ensures NextExplainedByI(self, res.0, res.1)
-  // ensures forall j | i <= j < res.0 :: !self.underlying.storage[j].Entry?
-  // ensures i <= res.0
-  // decreases |self.underlying.storage| - i as int
-  // {
-  //   if i == seq_length(self.underlying.storage) then (
-  //     (i, Done)
-  //   ) else if seq_get(self.underlying.storage, i).Entry? then (
-  //     (i, Next(seq_get(self.underlying.storage, i).key, seq_get(self.underlying.storage, i).value))
-  //   ) else (
-  //     iterToNext(self, i+1)
-  //   )
-  // }
-
-  // function method simpleIterToNext<V>(shared self: LinearHashMap<V>, i: uint64) : (i': uint64)
-  // requires Inv(self)
-  // requires 0 <= i as int <= |self.underlying.storage|
-  // ensures 0 <= i' as int <= |self.underlying.storage|
-  // ensures forall j | i <= j < i' :: !self.underlying.storage[j].Entry?
-  // ensures i' as int < |self.underlying.storage| ==>
-  //     self.underlying.storage[i'].Entry?
-  // ensures i <= i'
-  // decreases |self.underlying.storage| - i as int
-  // {
-  //   if i == seq_length(self.underlying.storage) then (
-  //     i
-  //   ) else if seq_get(self.underlying.storage, i).Entry? then (
-  //     i
-  //   ) else (
-  //     simpleIterToNext(self, i+1)
-  //   )
-  // }
-
-  // lemma lemmaIterToNextValidKeyValuePair<V>(self: LinearHashMap<V>, i: uint64)
-  // requires Inv(self)
-  // requires 0 <= i as int <= |self.underlying.storage|
-  // ensures iterToNext(self, i).1.Next? ==>
-  //     MapsTo(self.contents, 
-  //         iterToNext(self, i).1.key,
-  //         iterToNext(self, i).1.value)
-  // {
-  //   var j := iterToNext(self, i).0;
-  //   var next := iterToNext(self, i).1;
-  //   if next.Next? {
-  //     UnderlyingInvImpliesMapFromStorageMatchesContents(self.underlying, self.contents);
-  //     CantEquivocateMapFromStorageKey(self.underlying);
-  //     MapFromStorageProperties(self.underlying.storage, self.contents);
-  //     assert self.underlying.storage[Slot(j as int).slot].value == next.value; // trigger
-  //   }
-  // }
-
-  // function method {:opaque} IterStart<V>(shared self: LinearHashMap<V>) : (it' : Iterator<V>)
-  // requires Inv(self)
-  // ensures WFIter(self, it')
-  // ensures it'.s == {}
-  // {
-  //   lemmaIterToNextValidKeyValuePair(self, 0);
-
-  //   var (i, next) := iterToNext(self, 0);
-  //   var it' := Iterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL, next);
-
-  //   LemmaIterNextNotInS(self, it');
-
-  //   it'
-  // }
-
-  // function method {:opaque} SimpleIterStart<V>(shared self: LinearHashMap<V>) : (it' : SimpleIterator)
-  // requires Inv(self)
-  // ensures WFSimpleIter(self, it')
-  // ensures it'.s == {}
-  // {
-  //   lemmaIterToNextValidKeyValuePair(self, 0);
-
-  //   var i := simpleIterToNext(self, 0);
-  //   var it' := SimpleIterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL);
-
-  //   LemmaIterNextNotInS(self,
-  //     Iterator(it'.i, it'.s, it'.decreaser, indexOutput(self, it'.i)));
-
-  //   it'
-  // }
-
-  // function method {:opaque} IterInc<V>(shared self: LinearHashMap<V>, it: Iterator) : (it' : Iterator)
-  // requires Inv(self)
-  // requires WFIter(self, it)
-  // requires it.next.Next?
-  // ensures WFIter(self, it')
-  // ensures it'.s == it.s + {it.next.key}
-  // ensures it'.next.Done? ==> it'.s == self.contents.Keys
-  // ensures it'.decreaser < it.decreaser
-  // {
-  //   lemmaIterToNextValidKeyValuePair(self, it.i + 1);
-
-  //   var (i, next) := iterToNext(self, it.i + 1);
-  //   var it' := Iterator(i, it.s + {it.next.key}, (|self.underlying.storage| - i as int) as ORDINAL, next);
-
-  //   assert (forall key | key in it'.s ::
-  //       exists j | 0 <= j < it'.i as int ::
-  //       && self.underlying.storage[j].Entry?
-  //       && key == self.underlying.storage[j].key);
-  //   assert (it'.next.Done? ==> it'.s == self.contents.Keys);
-
-  //   LemmaIterNextNotInS(self, it');
-
-  //   it'
-  // }
-
-  // function method {:opaque} SimpleIterInc<V>(shared self: LinearHashMap<V>, it: SimpleIterator) : (it' : SimpleIterator)
-  // requires Inv(self)
-  // requires WFSimpleIter(self, it)
-  // requires SimpleIterOutput(self, it).Next?
-  // ensures WFSimpleIter(self, it')
-  // ensures it'.s == it.s + {SimpleIterOutput(self, it).key}
-  // ensures it'.decreaser < it.decreaser
-  // {
-  //   lemmaIterToNextValidKeyValuePair(self, it.i + 1);
-
-  //   var i := simpleIterToNext(self, it.i + 1);
-  //   var it' := SimpleIterator(i, it.s + {SimpleIterOutput(self, it).key}, (|self.underlying.storage| - i as int) as ORDINAL);
-
-  //   assert (forall key | key in it'.s ::
-  //       exists j | 0 <= j < it'.i as int ::
-  //       && self.underlying.storage[j].Entry?
-  //       && key == self.underlying.storage[j].key);
-
-  //   LemmaIterNextNotInS(self,
-  //     Iterator(it'.i, it'.s, it'.decreaser, indexOutput(self, it'.i)));
-
-  //   it'
-  // }
-
-  // lemma LemmaIterIndexLtCount<V>(self: LinearHashMap<V>, it: Iterator<V>)
-  // requires Inv(self)
-  // requires WFIter(self, it)
-  // ensures it.next.Next? ==> |it.s| < self.count as int
-  // {
-  //   if it.next.Next? {
-  //     ProperSubsetImpliesSmallerCardinality(it.s, self.contents.Keys);
-  //   }
-  // }
-
-  // function method MaxKeyIterate<V>(shared self: LinearHashMap<V>, it: Iterator<V>, m: uint64) : (res : uint64)
-  // requires Inv(self)
-  // requires WFIter(self, it)
-  // requires forall key | key in it.s :: key <= m
-  // ensures forall key | key in self.contents :: key <= res
-  // decreases it.decreaser
-  // {
-  //   if it.next.Done? then (
-  //     m
-  //   ) else (
-  //     var key := it.next.key;
-  //     MaxKeyIterate(self, IterInc(self, it), if m < key then key else m)
-  //   )
-  // }
-
-  // function method {:opaque} MaxKey<V>(shared self: LinearHashMap<V>) : (res : uint64)
-  // requires Inv(self)
-  // ensures forall key | key in self.contents :: key <= res
-  // {
-  //   MaxKeyIterate(self, IterStart(self), 0)    
-  // }
-
-  // function method {:opaque} UpdateByIter<V>(linear self: LinearHashMap<V>, it: SimpleIterator, value: V)
-  //   : (linear self': LinearHashMap)
-  // requires Inv(self)
-  // requires WFSimpleIter(self, it)
-  // requires SimpleIterOutput(self, it).Next?
-  // ensures Inv(self')
-  // ensures self'.contents == self.contents[SimpleIterOutput(self, it).key := value]
-  // ensures self'.count == self.count
-  // {
-  //   FixedSizeUpdateBySlotResult(self.underlying, it.i, value);
-
-  //   linear var LinearHashMap(selfUnderlying, selfCount, selfContents) := self;
-  //   linear var newUnderlying := FixedSizeUpdateBySlot(selfUnderlying, it.i, value);
-  //   linear var self' := LinearHashMap(newUnderlying, selfCount,
-  //       self.contents[SimpleIterOutput(self, it).key := value]);
-
-  //   UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents);
-
-  //   self'
-  // }
-
-  // lemma UpdatePreservesSimpleIter<V>(
-  //   self: LinearHashMap<V>, it: SimpleIterator, value: V,
-  //   preserved: SimpleIterator)
-  // requires UpdateByIter.requires(self, it, value)
-  // requires WFSimpleIter(self, preserved)
-  // ensures WFSimpleIter(UpdateByIter(self, it, value), preserved)
-  // {
-  //   reveal_UpdateByIter();
-  //   var self' := UpdateByIter(self, it, value);
-
-  //   forall key | key in preserved.s
-  //   ensures exists j | 0 <= j < preserved.i as int ::
-  //       && self'.underlying.storage[j].Entry?
-  //       && key == self'.underlying.storage[j].key
-  //   {
-  //     assert key in self.contents;
-  //     var j :| 0 <= j < preserved.i as int
-  //       && self.underlying.storage[j].Entry?
-  //       && key == self.underlying.storage[j].key;
-  //     assert self'.underlying.storage[j].Entry?;
-  //     assert key == self'.underlying.storage[j].key;
-  //   }
-  // }
-
-  // function setUpTo<V>(self: LinearHashMap<V>, i: int) : set<uint64>
-  // requires 0 <= i <= |self.underlying.storage|
-  // {
-  //   set j | 0 <= j < i && self.underlying.storage[j].Entry?
-  //       :: self.underlying.storage[j].key
-  // }
-
-  // lemma setUpToLeContents<V>(self: LinearHashMap<V>, i: int)
-  // requires Inv(self)
-  // requires 0 <= i <= |self.underlying.storage|
-  // ensures setUpTo(self, i) <= self.contents.Keys
-  // {
-  //   forall j | 0 <= j < i && self.underlying.storage[j].Entry?
-  //   ensures self.underlying.storage[j].key in self.contents
-  //   {
-  //     var key := self.underlying.storage[j].key;
-  //     var slot := Slot(j);
-  //     assert ValidSlot(|self.underlying.storage|, slot);
-  //     CantEquivocateMapFromStorageKey(self.underlying);
-  //     MapFromStorageProperties(self.underlying.storage, self.contents);
-  //   }
-  // }
-
-  // function method {:opaque} FindSimpleIter<V>(shared self: LinearHashMap<V>, key: uint64)
-  //   : (it : SimpleIterator)
-  // requires Inv(self)
-  // ensures WFSimpleIter(self, it)
-  // ensures key in self.contents ==> SimpleIterOutput(self, it) == Next(key, self.contents[key])
-  // ensures key !in self.contents ==> SimpleIterOutput(self, it) == Done
-  // {
-  //   var idx := Probe(self.underlying, key);
-
-  //   var i := if seq_get(self.underlying.storage, idx).Entry? then idx
-  //     else seq_length(self.underlying.storage) as uint64;
-  //   var it := SimpleIterator(i, setUpTo(self, i as int), (|self.underlying.storage| - i as int) as ORDINAL);
-
-  //   assert WFSimpleIter(self, it)
-  //     && (key in self.contents ==>
-  //       SimpleIterOutput(self, it) == Next(key, self.contents[key]))
-  //     && (key !in self.contents ==>
-  //       SimpleIterOutput(self, it) == Done)
-  //   by {
-  //     var result := LemmaProbeResult(self.underlying, key);
-  //     if it.i as int < |self.underlying.storage| {
-  //       if self.underlying.storage[it.i].key in it.s {
-  //         var j :| 0 <= j < it.i && self.underlying.storage[j].Entry?
-  //             && self.underlying.storage[j].key == key;
-  //         assert TwoNonEmptyValidSlotsWithSameKey(
-  //             self.underlying.storage, Slot(j as int), Slot(it.i as int));
-  //       }
-  //     }
-  //     setUpToLeContents(self, i as int);
-  //   }
-
-  //   it
-  // }
-
-  // method Clone<V>(shared self: LinearHashMap<V>) returns(linear self': LinearHashMap<V>)
-  //   ensures self' == self
-  // {
-  //   shared var LinearHashMap(underlying, count, contents) := self;
-  //   shared var FixedSizeLinearHashMap(storage, fCount, fContents) := underlying;
-  //   shared_seq_length_bound(storage);
-  //   linear var storage' := AllocAndCopy(storage, 0, seq_length(storage));
-  //   self' := LinearHashMap(FixedSizeLinearHashMap(storage', fCount, fContents), count, contents);
-  // }
+  method Insert<V>(linear self: LinearHashMap, key: uint64, value: V)
+  returns (linear self': LinearHashMap)
+    requires Inv(self)
+    requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
+    ensures
+      && Inv(self')
+      && self'.contents == self.contents[key := value]
+      && (self'.count as nat == self.count as nat ||
+         self'.count as nat == self.count as nat + 1)
+  {
+    var replaced;
+    self', replaced := InsertAndGetOld(self, key, value);
+  }
+
+  linear datatype RemoveResult<V> = RemoveResult(linear self': LinearHashMap, removed: Option<V>)
+  function method RemoveInternal<V>(linear self: LinearHashMap, key: uint64)
+  : (linear res: RemoveResult<V>)
+    requires Inv(self)
+    ensures var RemoveResult(self', removed) := res;
+      && FixedSizeRemoveResult(self'.underlying, removed) == FixedSizeRemove(self.underlying, key)
+      && FixedSizeInv(self'.underlying)
+      && (self'.underlying.contents == if key in self.underlying.contents
+        then self.underlying.contents[key := None]
+        else self.underlying.contents)
+      && (removed == if key in self.underlying.contents && self.underlying.contents[key].Some?
+        then Some(self.underlying.contents[key].value)
+        else None)
+      && (self'.underlying.count == self.underlying.count)
+  {
+    // -- mutation --
+    linear var LinearHashMap(selfUnderlying, selfCount, selfContents) := self;
+    linear var FixedSizeRemoveResult(underlying', removed) := FixedSizeRemove(selfUnderlying, key);
+    // --------------
+
+    LemmaFixedSizeRemoveResult(self.underlying, key);
+
+    linear var self' := LinearHashMap(
+      /* underlying := */ underlying',
+      /* count := */ if removed.Some? then selfCount - 1 else selfCount,
+      /* contents := */ map k | k in selfContents && k != key :: selfContents[k]);
+
+    RemoveResult(self', removed)
+  }
+
+  lemma RemoveCountCorrect<V>(self: LinearHashMap, key: uint64, res: RemoveResult<V>)
+  requires Inv(self)
+  requires res == RemoveInternal(self, key)
+  ensures var RemoveResult(self', removed) := res;
+    self'.count as nat == |self'.contents|
+  {
+    var RemoveResult(self', removed) := res;
+    if removed.Some? {
+      assert key in self.contents;
+      assert self'.contents.Keys <= self.contents.Keys;
+      assert |self.contents| == self'.count as nat + 1;
+      assert |self.contents.Keys| == self'.count as nat + 1;
+      assert |self.contents.Keys - {key}| == |self.contents.Keys| - |{key}|;
+      assert self.contents.Keys - {key} == self'.contents.Keys;
+      assert |self'.contents| == |self.contents| - 1;
+      assert |self'.contents| == self'.count as nat;
+    } else {
+      assert key !in self.contents;
+      assert self'.contents == self.contents;
+      assert |self'.contents| == self'.count as nat;
+    }
+  }
+
+  function method RemoveAndGet<V>(linear self: LinearHashMap, key: uint64)
+  : (linear res: RemoveResult<V>)
+    requires Inv(self)
+    ensures var RemoveResult(self', removed) := res;
+      && Inv(self')
+      && (self'.contents == if key in self.contents
+        then map k | k in self.contents && k != key :: self.contents[k]
+        else self.contents)
+      && (removed == if key in self.contents
+        then Some(self.contents[key])
+        else None)
+  {
+    linear var RemoveResult(self', removed) := RemoveInternal(self, key);
+
+    LemmaFixedSizeRemoveResult(self.underlying, key);
+    RemoveCountCorrect(self, key, RemoveResult(self', removed));
+    UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents); 
+
+    RemoveResult(self', removed)
+  }
+
+  function method Remove<V>(linear self: LinearHashMap, key: uint64)
+  : (linear self': LinearHashMap)
+    requires Inv(self)
+    ensures
+      && Inv(self')
+      && (self'.contents == if key in self.contents
+        then map k | k in self.contents && k != key :: self.contents[k]
+        else self.contents)
+  {
+    linear var RemoveResult(self', _) := RemoveAndGet(self, key);
+    self'
+  }
+
+  function method Get<V>(shared self: LinearHashMap, key: uint64)
+  : (found: Option<V>)
+    requires Inv(self)
+    ensures if key in self.contents then found == Some(self.contents[key]) else found.None?
+    ensures found.Some? <==> key in self.contents
+  {
+    var found := FixedSizeGet(self.underlying, key);
+    LemmaFixedSizeGetResult(self.underlying, key);
+    found
+  }
+
+  //////// Iterator
+
+  // We have two types of iterators.
+  //
+  // Iterator is usually more convenient as it has the IteratorOutput
+  // built-in.
+  //
+  // SimpleIterator doesn't (you have to call SimpleIteratorOutput)
+  // but has the advantage that the WFSimpleIter condition doesn't
+  // depend on the key/value being correct. Thus the well-formedness
+  // of a SimpleIterator can be preserved across (some) modifications
+  // of the hash map.
+  //
+  // TODO fix the duplicated code that results.
+
+  datatype IteratorOutput<V> = Next(key: uint64, value: V) | Done
+
+  datatype Iterator<V> = Iterator(
+    i: uint64, // index in hash table item list
+    ghost s: set<uint64>,   // set of values returned so far
+    ghost decreaser: ORDINAL,
+    next: IteratorOutput)
+
+  datatype SimpleIterator = SimpleIterator(
+    i: uint64, // index in hash table item list
+    ghost s: set<uint64>,   // set of values returned so far
+    ghost decreaser: ORDINAL)
+
+  predicate NextExplainedByI<V>(self: LinearHashMap<V>, i : uint64, output:IteratorOutput)
+  {
+    && (output.Next? ==>
+      && i as int < |self.underlying.storage|
+      && self.underlying.storage[i].Entry?
+      && self.underlying.storage[i].key == output.key
+      && self.underlying.storage[i].value == output.value)
+    && (output.Done? ==> i as int == |self.underlying.storage|)
+  }
+
+  predicate ValidI<V>(self: LinearHashMap<V>, it: Iterator<V>)
+  {
+    && 0 <= it.i as int <= |self.underlying.storage|
+  }
+
+  predicate EachReturnedKeyExplainedByPassedIndex<V>(self: LinearHashMap<V>, s: set<uint64>, i: uint64)
+  requires 0 <= i as int <= |self.underlying.storage|
+  {
+    forall key | key in s ::
+        exists j | 0 <= j < i as int ::
+        && self.underlying.storage[j].Entry?
+        && key == self.underlying.storage[j].key
+  }
+
+  protected predicate WFIter<V>(self: LinearHashMap<V>, it: Iterator<V>)
+  ensures WFIter(self, it) ==> (it.next.Done? ==> it.s == self.contents.Keys)
+  ensures WFIter(self, it) ==> (it.next.Next? ==>
+      MapsTo(self.contents, it.next.key, it.next.value));
+  ensures WFIter(self, it) ==> (it.next.Next? ==> it.next.key !in it.s)
+  ensures WFIter(self, it) ==> it.s <= self.contents.Keys
+  {
+    && ValidI(self, it)
+    && NextExplainedByI(self, it.i, it.next)
+    // Done justified by exhausting i
+    && (it.next.Done? ==> (it.s == self.contents.Keys))
+    // Each passed index appears in s
+    && (forall j | 0 <= j < it.i as int ::
+        self.underlying.storage[j].Entry? ==> self.underlying.storage[j].key in it.s)
+    && EachReturnedKeyExplainedByPassedIndex(self, it.s, it.i)
+    && it.decreaser == (|self.underlying.storage| - it.i as int) as ORDINAL
+    && (it.next.Next? ==> MapsTo(self.contents, it.next.key, it.next.value))
+    && (it.next.Next? ==> it.next.key !in it.s)
+    && it.s <= self.contents.Keys
+  }
+
+  protected predicate WFSimpleIter<V>(self: LinearHashMap<V>, it: SimpleIterator)
+  ensures WFSimpleIter(self, it) ==> it.s <= self.contents.Keys
+  {
+    && 0 <= it.i as int <= |self.underlying.storage| < Uint64UpperBound()
+    && (it.i as int == |self.underlying.storage| ==> (it.s == self.contents.Keys))
+    && (it.i as int < |self.underlying.storage| ==> self.underlying.storage[it.i].Entry?)
+    // Each passed index appears in s
+    && (forall j | 0 <= j < it.i as int ::
+        self.underlying.storage[j].Entry? ==> self.underlying.storage[j].key in it.s)
+    && EachReturnedKeyExplainedByPassedIndex(self, it.s, it.i)
+    && it.decreaser == (|self.underlying.storage| - it.i as int) as ORDINAL
+    && (it.i as int < |self.underlying.storage| ==> (
+      && MapsTo(self.contents, self.underlying.storage[it.i].key, self.underlying.storage[it.i].value)
+      && self.underlying.storage[it.i].key !in it.s
+    ))
+    && it.s <= self.contents.Keys
+  }
+
+  function method indexOutput<V>(shared self: LinearHashMap<V>, i: uint64) : (next: IteratorOutput<V>)
+  requires 0 <= i as int <= |self.underlying.storage| < Uint64UpperBound()
+  requires i as int < |self.underlying.storage| ==> self.underlying.storage[i].Entry?
+  {
+    if i == seq_length(self.underlying.storage) then (
+      Done
+    ) else (
+      Next(
+        seq_get(self.underlying.storage, i).key,
+        seq_get(self.underlying.storage, i).value)
+    )
+  }
+
+  protected function method SimpleIterOutput<V>(shared self: LinearHashMap<V>, it: SimpleIterator) : (next: IteratorOutput<V>)
+  requires WFSimpleIter(self, it)
+  ensures (next.Done? ==> it.s == self.contents.Keys)
+  ensures (next.Next? ==>
+      MapsTo(self.contents, next.key, next.value));
+  ensures (next.Next? ==> next.key !in it.s)
+  {
+    indexOutput(self, it.i)
+  }
+
+  lemma LemmaWFIterImpliesILt<V>(self: LinearHashMap<V>, it: Iterator<V>)
+  requires WFIter(self, it)
+  ensures it.next.Next? ==> it.i as int < |self.underlying.storage|
+  {
+  }
+
+  lemma LemmaWFSimpleIterImpliesEntry<V>(self: LinearHashMap<V>, it: SimpleIterator)
+  requires WFSimpleIter(self, it)
+  ensures
+    && 0 <= it.i as int <= |self.underlying.storage|
+    && (SimpleIterOutput(self, it).Next? ==> it.i as int < |self.underlying.storage|)
+    && (it.i as int < |self.underlying.storage| ==>
+      && self.underlying.storage[it.i].Entry?
+    )
+  {
+  }
+
+  lemma LemmaIterNextNotInS<V>(self: LinearHashMap<V>, it: Iterator<V>)
+  requires 0 <= it.i as int <= |self.underlying.storage|
+  requires ValidElements(self.underlying.storage)
+  requires CantEquivocateStorageKey(self.underlying.storage)
+  requires NextExplainedByI(self, it.i, it.next)
+  requires EachReturnedKeyExplainedByPassedIndex(self, it.s, it.i)
+  ensures (it.next.Next? ==> it.next.key !in it.s)
+  {
+    if it.next.Next? {
+      if it.next.key in it.s {
+        var j :| 0 <= j < it.i as int
+          && self.underlying.storage[j].Entry?
+          && it.next.key == self.underlying.storage[j].key;
+        assert TwoNonEmptyValidSlotsWithSameKey<V>(self.underlying.storage, Slot(it.i as int), Slot(j));  // trigger
+        // assert false; // proof by contradiction
+      }
+    }
+  }
+
+  function method iterToNext<V>(shared self: LinearHashMap<V>, i: uint64) : (res: (uint64, IteratorOutput))
+  requires Inv(self)
+  requires 0 <= i as int <= |self.underlying.storage|
+  ensures NextExplainedByI(self, res.0, res.1)
+  ensures forall j | i <= j < res.0 :: !self.underlying.storage[j].Entry?
+  ensures i <= res.0
+  decreases |self.underlying.storage| - i as int
+  {
+    if i == seq_length(self.underlying.storage) then (
+      (i, Done)
+    ) else if seq_get(self.underlying.storage, i).Entry? then (
+      (i, Next(seq_get(self.underlying.storage, i).key, seq_get(self.underlying.storage, i).value))
+    ) else (
+      iterToNext(self, i+1)
+    )
+  }
+
+  function method simpleIterToNext<V>(shared self: LinearHashMap<V>, i: uint64) : (i': uint64)
+  requires Inv(self)
+  requires 0 <= i as int <= |self.underlying.storage|
+  ensures 0 <= i' as int <= |self.underlying.storage|
+  ensures forall j | i <= j < i' :: !self.underlying.storage[j].Entry?
+  ensures i' as int < |self.underlying.storage| ==>
+      self.underlying.storage[i'].Entry?
+  ensures i <= i'
+  decreases |self.underlying.storage| - i as int
+  {
+    if i == seq_length(self.underlying.storage) then (
+      i
+    ) else if seq_get(self.underlying.storage, i).Entry? then (
+      i
+    ) else (
+      simpleIterToNext(self, i+1)
+    )
+  }
+
+  lemma lemmaIterToNextValidKeyValuePair<V>(self: LinearHashMap<V>, i: uint64)
+  requires Inv(self)
+  requires 0 <= i as int <= |self.underlying.storage|
+  ensures iterToNext(self, i).1.Next? ==>
+      MapsTo(self.contents, 
+          iterToNext(self, i).1.key,
+          iterToNext(self, i).1.value)
+  {
+    var j := iterToNext(self, i).0;
+    var next := iterToNext(self, i).1;
+    if next.Next? {
+      UnderlyingInvImpliesMapFromStorageMatchesContents(self.underlying, self.contents);
+      CantEquivocateMapFromStorageKey(self.underlying);
+      MapFromStorageProperties(self.underlying.storage, self.contents);
+      assert self.underlying.storage[Slot(j as int).slot].value == next.value; // trigger
+    }
+  }
+
+  function method {:opaque} IterStart<V>(shared self: LinearHashMap<V>) : (it' : Iterator<V>)
+  requires Inv(self)
+  ensures WFIter(self, it')
+  ensures it'.s == {}
+  {
+    lemmaIterToNextValidKeyValuePair(self, 0);
+
+    var (i, next) := iterToNext(self, 0);
+    var it' := Iterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL, next);
+
+    LemmaIterNextNotInS(self, it');
+
+    it'
+  }
+
+  function method {:opaque} SimpleIterStart<V>(shared self: LinearHashMap<V>) : (it' : SimpleIterator)
+  requires Inv(self)
+  ensures WFSimpleIter(self, it')
+  ensures it'.s == {}
+  {
+    lemmaIterToNextValidKeyValuePair(self, 0);
+
+    var i := simpleIterToNext(self, 0);
+    var it' := SimpleIterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL);
+
+    LemmaIterNextNotInS(self,
+      Iterator(it'.i, it'.s, it'.decreaser, indexOutput(self, it'.i)));
+
+    it'
+  }
+
+  function method {:opaque} IterInc<V>(shared self: LinearHashMap<V>, it: Iterator) : (it' : Iterator)
+  requires Inv(self)
+  requires WFIter(self, it)
+  requires it.next.Next?
+  ensures WFIter(self, it')
+  ensures it'.s == it.s + {it.next.key}
+  ensures it'.next.Done? ==> it'.s == self.contents.Keys
+  ensures it'.decreaser < it.decreaser
+  {
+    lemmaIterToNextValidKeyValuePair(self, it.i + 1);
+
+    var (i, next) := iterToNext(self, it.i + 1);
+    var it' := Iterator(i, it.s + {it.next.key}, (|self.underlying.storage| - i as int) as ORDINAL, next);
+
+    assert (forall key | key in it'.s ::
+        exists j | 0 <= j < it'.i as int ::
+        && self.underlying.storage[j].Entry?
+        && key == self.underlying.storage[j].key);
+    assert (it'.next.Done? ==> it'.s == self.contents.Keys);
+
+    LemmaIterNextNotInS(self, it');
+
+    it'
+  }
+
+  function method {:opaque} SimpleIterInc<V>(shared self: LinearHashMap<V>, it: SimpleIterator) : (it' : SimpleIterator)
+  requires Inv(self)
+  requires WFSimpleIter(self, it)
+  requires SimpleIterOutput(self, it).Next?
+  ensures WFSimpleIter(self, it')
+  ensures it'.s == it.s + {SimpleIterOutput(self, it).key}
+  ensures it'.decreaser < it.decreaser
+  {
+    lemmaIterToNextValidKeyValuePair(self, it.i + 1);
+
+    var i := simpleIterToNext(self, it.i + 1);
+    var it' := SimpleIterator(i, it.s + {SimpleIterOutput(self, it).key}, (|self.underlying.storage| - i as int) as ORDINAL);
+
+    assert (forall key | key in it'.s ::
+        exists j | 0 <= j < it'.i as int ::
+        && self.underlying.storage[j].Entry?
+        && key == self.underlying.storage[j].key);
+
+    LemmaIterNextNotInS(self,
+      Iterator(it'.i, it'.s, it'.decreaser, indexOutput(self, it'.i)));
+
+    it'
+  }
+
+  lemma LemmaIterIndexLtCount<V>(self: LinearHashMap<V>, it: Iterator<V>)
+  requires Inv(self)
+  requires WFIter(self, it)
+  ensures it.next.Next? ==> |it.s| < self.count as int
+  {
+    if it.next.Next? {
+      ProperSubsetImpliesSmallerCardinality(it.s, self.contents.Keys);
+    }
+  }
+
+  function method MaxKeyIterate<V>(shared self: LinearHashMap<V>, it: Iterator<V>, m: uint64) : (res : uint64)
+  requires Inv(self)
+  requires WFIter(self, it)
+  requires forall key | key in it.s :: key <= m
+  ensures forall key | key in self.contents :: key <= res
+  decreases it.decreaser
+  {
+    if it.next.Done? then (
+      m
+    ) else (
+      var key := it.next.key;
+      MaxKeyIterate(self, IterInc(self, it), if m < key then key else m)
+    )
+  }
+
+  function method {:opaque} MaxKey<V>(shared self: LinearHashMap<V>) : (res : uint64)
+  requires Inv(self)
+  ensures forall key | key in self.contents :: key <= res
+  {
+    MaxKeyIterate(self, IterStart(self), 0)    
+  }
+
+  function method {:opaque} UpdateByIter<V>(linear self: LinearHashMap<V>, it: SimpleIterator, value: V)
+    : (linear self': LinearHashMap)
+  requires Inv(self)
+  requires WFSimpleIter(self, it)
+  requires SimpleIterOutput(self, it).Next?
+  ensures Inv(self')
+  ensures self'.contents == self.contents[SimpleIterOutput(self, it).key := value]
+  ensures self'.count == self.count
+  {
+    FixedSizeUpdateBySlotResult(self.underlying, it.i, value);
+
+    linear var LinearHashMap(selfUnderlying, selfCount, selfContents) := self;
+    linear var newUnderlying := FixedSizeUpdateBySlot(selfUnderlying, it.i, value);
+    linear var self' := LinearHashMap(newUnderlying, selfCount,
+        self.contents[SimpleIterOutput(self, it).key := value]);
+
+    UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents);
+
+    self'
+  }
+
+  lemma UpdatePreservesSimpleIter<V>(
+    self: LinearHashMap<V>, it: SimpleIterator, value: V,
+    preserved: SimpleIterator)
+  requires UpdateByIter.requires(self, it, value)
+  requires WFSimpleIter(self, preserved)
+  ensures WFSimpleIter(UpdateByIter(self, it, value), preserved)
+  {
+    reveal_UpdateByIter();
+    var self' := UpdateByIter(self, it, value);
+
+    forall key | key in preserved.s
+    ensures exists j | 0 <= j < preserved.i as int ::
+        && self'.underlying.storage[j].Entry?
+        && key == self'.underlying.storage[j].key
+    {
+      assert key in self.contents;
+      var j :| 0 <= j < preserved.i as int
+        && self.underlying.storage[j].Entry?
+        && key == self.underlying.storage[j].key;
+      assert self'.underlying.storage[j].Entry?;
+      assert key == self'.underlying.storage[j].key;
+    }
+  }
+
+  function setUpTo<V>(self: LinearHashMap<V>, i: int) : set<uint64>
+  requires 0 <= i <= |self.underlying.storage|
+  {
+    set j | 0 <= j < i && self.underlying.storage[j].Entry?
+        :: self.underlying.storage[j].key
+  }
+
+  lemma setUpToLeContents<V>(self: LinearHashMap<V>, i: int)
+  requires Inv(self)
+  requires 0 <= i <= |self.underlying.storage|
+  ensures setUpTo(self, i) <= self.contents.Keys
+  {
+    forall j | 0 <= j < i && self.underlying.storage[j].Entry?
+    ensures self.underlying.storage[j].key in self.contents
+    {
+      var key := self.underlying.storage[j].key;
+      var slot := Slot(j);
+      assert ValidSlot(|self.underlying.storage|, slot);
+      CantEquivocateMapFromStorageKey(self.underlying);
+      MapFromStorageProperties(self.underlying.storage, self.contents);
+    }
+  }
+
+  function method {:opaque} FindSimpleIter<V>(shared self: LinearHashMap<V>, key: uint64)
+    : (it : SimpleIterator)
+  requires Inv(self)
+  ensures WFSimpleIter(self, it)
+  ensures key in self.contents ==> SimpleIterOutput(self, it) == Next(key, self.contents[key])
+  ensures key !in self.contents ==> SimpleIterOutput(self, it) == Done
+  {
+    var idx := Probe(self.underlying, key);
+
+    var i := if seq_get(self.underlying.storage, idx).Entry? then idx
+      else seq_length(self.underlying.storage) as uint64;
+    var it := SimpleIterator(i, setUpTo(self, i as int), (|self.underlying.storage| - i as int) as ORDINAL);
+
+    assert WFSimpleIter(self, it)
+      && (key in self.contents ==>
+        SimpleIterOutput(self, it) == Next(key, self.contents[key]))
+      && (key !in self.contents ==>
+        SimpleIterOutput(self, it) == Done)
+    by {
+      var result := LemmaProbeResult(self.underlying, key);
+      if it.i as int < |self.underlying.storage| {
+        if self.underlying.storage[it.i].key in it.s {
+          var j :| 0 <= j < it.i && self.underlying.storage[j].Entry?
+              && self.underlying.storage[j].key == key;
+          assert TwoNonEmptyValidSlotsWithSameKey(
+              self.underlying.storage, Slot(j as int), Slot(it.i as int));
+        }
+      }
+      setUpToLeContents(self, i as int);
+    }
+
+    it
+  }
+
+  method Clone<V>(shared self: LinearHashMap<V>) returns(linear self': LinearHashMap<V>)
+    ensures self' == self
+  {
+    shared var LinearHashMap(underlying, count, contents) := self;
+    shared var FixedSizeLinearHashMap(storage, fCount, fContents) := underlying;
+    shared_seq_length_bound(storage);
+    linear var storage' := AllocAndCopy(storage, 0, seq_length(storage));
+    self' := LinearHashMap(FixedSizeLinearHashMap(storage', fCount, fContents), count, contents);
+  }
 }
