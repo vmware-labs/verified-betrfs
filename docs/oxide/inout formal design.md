@@ -84,7 +84,7 @@ The body of a `method` that takes one or more mutable references as parameters w
 
 ### call site
 
-A method call can construct a mutable reference by passing (a path of `linear` fields of) a `linear` variable or a `linear inout` argument, prefixed with `[linear] inout`. The variable/argument must be available before the call and remains available after the call.
+A method call can construct a mutable reference by passing (a path of `linear` fields of) a `linear` variable or a `linear inout` argument, prefixed with `[linear] inout`. The variable/argument must be available before the call and remains available after the call. The variable/argument must *not* be otherwise borrowed for the duration of the call.
 
 
 
