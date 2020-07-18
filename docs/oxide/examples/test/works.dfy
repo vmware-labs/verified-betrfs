@@ -1,0 +1,26 @@
+linear datatype ASDF = ASDF(a: int)
+linear datatype QWER = QWER(linear asdf: ASDF)
+
+method linlin(linear inout c: ASDF) returns (linear oo: ASDF)
+requires old_c.a == 31 // use old(c)
+ensures c.a == old_c.a + 1
+ensures oo == old_c
+{
+  var oldA := c.a;
+  oo := c;
+  c := ASDF(oldA + 1);
+}
+
+method {:axiom} Imagine<V>(ghost v: V) returns (linear v2: V)
+ensures v == v2
+
+method asdf() {
+  linear var q := QWER(ASDF(31));
+
+  linear var c := linlin(inout q.asdf);
+
+  assert q.asdf.a == 32;
+  linear var QWER(asdf) := q;
+  linear var ASDF(_) := asdf;
+  linear var ASDF(_) := c;
+}
