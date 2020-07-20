@@ -597,49 +597,41 @@ module LinearMutableMap {
     }
   }
 
-  linear datatype FixedSizeInsertResult<V> = FixedSizeInsertResult(linear self': FixedSizeLinearHashMap, replaced: Option<V>)
-  function method {:opaque} FixedSizeInsert<V>(
-    linear self: FixedSizeLinearHashMap, key: uint64, value: V): linear FixedSizeInsertResult<V>
+  method FixedSizeInsert<V>(linear self: FixedSizeLinearHashMap, key: uint64, value: V)
+  returns (linear self': FixedSizeLinearHashMap, replaced: Option<V>)
 
     requires FixedSizeInv(self)
     requires self.count as nat < |self.storage| - 1
+    ensures (
+      && FixedSizeInv(self')
+      && self'.contents == self.contents[key := Some(value)]
+      && (key in self.contents ==> replaced == self.contents[key])
+      && (replaced.Some? ==> key in self.contents)
+      && (key !in self.contents ==> replaced.None?)
+      && |self'.storage| == |self.storage|)
   {
     var slotIdx := Probe(self, key);
+    var probeRes := LemmaProbeResult(self, key);
+
+    assert slotIdx == probeRes.slotIdx;
+    ghost var probeStartSlotIdx := probeRes.startSlotIdx;
+    ghost var probeSkips := probeRes.ghostSkips;
 
     linear var FixedSizeLinearHashMap(selfStorage, selfCount, selfContents) := self;
     ghost var contents := selfContents[key := Some(value)];
 
-    var replaced := seq_get(selfStorage, slotIdx);
+    var replacedItem := seq_get(selfStorage, slotIdx);
     linear var updatedStorage := seq_set(selfStorage, slotIdx, Entry(key, value));
 
-    if replaced.Empty? then (
-      FixedSizeInsertResult(FixedSizeLinearHashMap(updatedStorage, selfCount + 1, contents), None)
-    ) else if replaced.Tombstone? then (
-      FixedSizeInsertResult(FixedSizeLinearHashMap(updatedStorage, selfCount, contents), None)
-    ) else (
-      FixedSizeInsertResult(FixedSizeLinearHashMap(updatedStorage, selfCount, contents), Some(replaced.value))
-    )
-  }
-
-  lemma LemmaFixedSizeInsertResult<V>(self: FixedSizeLinearHashMap, key: uint64, value: V)
-  requires FixedSizeInv(self)
-  requires self.count as nat < |self.storage| - 1
-  ensures var FixedSizeInsertResult(self', replaced) := FixedSizeInsert(self, key, value);
-    && FixedSizeInv(self')
-    && self'.contents == self.contents[key := Some(value)]
-    && (key in self.contents ==> replaced == self.contents[key])
-    && (replaced.Some? ==> key in self.contents)
-    && (key !in self.contents ==> replaced.None?)
-    && |self'.storage| == |self.storage|
-  {
-    reveal_FixedSizeInsert();
-    var self' := FixedSizeInsert(self, key, value).self';
-    var replaced := FixedSizeInsert(self, key, value).replaced;
-
-    var probeRes := LemmaProbeResult(self, key);
-    var slotIdx := probeRes.slotIdx;
-    var probeStartSlotIdx := probeRes.startSlotIdx;
-    var probeSkips := probeRes.ghostSkips;
+    replaced := None;
+    if replacedItem.Empty? {
+      self' := FixedSizeLinearHashMap(updatedStorage, selfCount + 1, contents);
+    } else if replacedItem.Tombstone? {
+      self' := FixedSizeLinearHashMap(updatedStorage, selfCount, contents);
+    } else {
+      self' := FixedSizeLinearHashMap(updatedStorage, selfCount, contents);
+      replaced := Some(replacedItem.value);
+    }
 
     forall explainedKey | explainedKey in self'.contents
     ensures exists skips :: SlotExplainsKey(self'.storage, skips, explainedKey)
@@ -1030,300 +1022,148 @@ module LinearMutableMap {
     assert EntryInSlotMatchesContents(self.underlying.storage, Slot(i as nat), self.underlying.contents); // trigger
   }
 
-  function method ReallocIterate<V>(shared self: LinearHashMap<V>, linear newUnderlying: FixedSizeLinearHashMap<V>, i: uint64) : linear FixedSizeLinearHashMap<V>
+  method Realloc<V>(linear self: LinearHashMap<V>)
+  returns (linear self': LinearHashMap<V>)
     requires Inv(self)
-    requires FixedSizeInv(newUnderlying);
-    requires 0 <= i as int <= |self.underlying.storage|
-    requires self.count as int < |newUnderlying.storage| - 1
-    requires newUnderlying.contents.Keys <= self.contents.Keys
-    decreases |self.underlying.storage| - i as int
-  {
-    if i == seq_length(self.underlying.storage) then (
-      newUnderlying
-    ) else (
-      var item := seq_get(self.underlying.storage, i);
-      linear var newUnderlying' := if item.Entry? then (
-        SetInclusionImpliesSmallerCardinality(newUnderlying.contents.Keys, self.contents.Keys);
-        /*assert newUnderlying.count as int
-            == |newUnderlying.contents.Keys|
-            <= |self.contents.Keys|
-            == self.count as int
-            < |newUnderlying.storage| - 1;*/
-        LemmaFixedSizeInsertResult(newUnderlying, item.key, item.value);
-        LemmaEntryKeyInContents(self, i);
-        //assert item.key in self.contents.Keys;
-        linear var FixedSizeInsertResult(updatedUnderlying, _) := FixedSizeInsert(newUnderlying, item.key, item.value);
-        updatedUnderlying
-      ) else (
-        newUnderlying
-      );
-      ReallocIterate(self, newUnderlying', i+1)
-    )
-  }
-
-  function method {:opaque} ReallocInternal<V>(linear self: LinearHashMap<V>) : (linear self' : LinearHashMap<V>)
     requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
-    requires Inv(self)
-  {
-    var newSize: uint64 := (128 + self.count) * 4;
-    linear var newUnderlying := ReallocIterate(self, ConstructorFromSize(newSize), 0);
-    linear var LinearHashMap(selfUnderlying, selfCount, selfContents) := self;
-    linear var FixedSizeLinearHashMap(oldStorage, _, _) := selfUnderlying;
-    var _ := seq_free(oldStorage);
-    LinearHashMap(newUnderlying, selfCount, selfContents)
-  }
-
-  function method Realloc<V>(linear self: LinearHashMap<V>) : (linear self': LinearHashMap<V>)
-    requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
-    requires Inv(self)
     ensures Inv(self')
     ensures self'.contents == self.contents
     ensures self'.underlying.count as nat < |self'.underlying.storage| - 2
   {
-    linear var self' := ReallocInternal(self);
-    LemmaReallocResult(self);
-    self'
-  }
+    var i: uint64 := 0;
+    var newSize: uint64 := (128 + self.count) * 4;
+    linear var newUnderlying := ConstructorFromSize(newSize);
 
-  lemma LemmaReallocIterateResult<V>(self: LinearHashMap<V>, newUnderlying: FixedSizeLinearHashMap<V>, i: uint64, transferredContents: map<uint64, V>,
-      newSize: uint64)
-    requires Inv(self)
-    requires FixedSizeInv(newUnderlying);
-    requires 0 <= i as int <= |self.underlying.storage|
-    requires self.count as int < |newUnderlying.storage| - 1
-    requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
-    requires newUnderlying.contents.Keys <= self.contents.Keys
-    requires |newUnderlying.storage| == newSize as nat
-    requires newSize == (128 + self.count) * 4
+    var transferredContents: map<uint64, V> := map[];
 
-    requires |self.contents| == self.count as nat
-    requires UnderlyingContentsMatchesContents(newUnderlying, transferredContents)
-    requires MapFromStorage(self.underlying.storage[..i]) == transferredContents
-    requires MapFromStorage(self.underlying.storage) == self.contents
+    while i < seq_length(self.underlying.storage)
+      invariant i <= seq_length(self.underlying.storage)
 
-    requires newUnderlying.count as nat <= i as nat
-    requires FixedSizeInv(self.underlying)
+      invariant FixedSizeInv(newUnderlying)
+      invariant self.count as int < |newUnderlying.storage| - 1
+      invariant newUnderlying.contents.Keys <= self.contents.Keys
 
-    requires |transferredContents| == newUnderlying.count as nat
-    requires transferredContents.Keys <= self.contents.Keys
-    requires forall key :: key in newUnderlying.contents ==> exists slot: Slot :: (
-        && slot.slot < i as int
-        && ValidSlot(|self.underlying.storage|, slot)
-        && FilledWithEntryKey(self.underlying.storage, slot, key))
+      invariant transferredContents.Keys <= self.contents.Keys
+      invariant UnderlyingContentsMatchesContents(newUnderlying, transferredContents)
+      invariant MapFromStorage(self.underlying.storage[..i]) == transferredContents
 
-    ensures var newUnderlying' := ReallocIterate(self, newUnderlying, i);
-      && FixedSizeInv(newUnderlying')
-      && newUnderlying'.count == self.count
-      && UnderlyingInv(self.(underlying := newUnderlying'), newUnderlying')
-      && newUnderlying'.count as nat < |newUnderlying'.storage| - 2
+      invariant FixedSizeInv(newUnderlying)
+      invariant newUnderlying.count as nat <= i as nat
+      invariant |newUnderlying.storage| == newSize as nat
 
-    decreases |self.underlying.storage| - i as int
-  {
-    if i as int == |self.underlying.storage| {
-      assert i as nat == |self.underlying.storage|;
-      assert self.underlying.storage[..i] == self.underlying.storage;
-
-      assert MapFromStorage(self.underlying.storage) == transferredContents;
-      UnderlyingInvImpliesMapFromStorageMatchesContents(newUnderlying, transferredContents);
-      assert transferredContents == self.contents;
-
-      assert |self.contents| == self.count as nat;
-
-      assert forall key :: key in self.contents ==> key in newUnderlying.contents && newUnderlying.contents[key] == Some(self.contents[key]);
-      assert forall key :: key !in self.contents ==> key !in newUnderlying.contents || newUnderlying.contents[key].None?;
-
-      var self' := self.(underlying := newUnderlying);
-
-      assert FixedSizeInv(newUnderlying);
-      assert UnderlyingInv(self', newUnderlying);
-      assert UnderlyingContentsMatchesContents(newUnderlying, self.contents);
-      assert MapFromStorage(newUnderlying.storage) == self.contents;
-      assert newUnderlying.count as nat < |newUnderlying.storage| - 2;
-
-      assert self'.underlying.count as nat < |self'.underlying.storage| - 2;
-      assert self'.contents == self.contents;
-      assert self'.count == self.count;
-      assert self'.count <= self'.underlying.count;
-      assert Inv(self');
-
-      return;
-    }
-
-    var item := self.underlying.storage[i];
-    assert self.underlying.storage[..i+1] == self.underlying.storage[..i] + [self.underlying.storage[i]];
-
-    var newUnderlying';
-    var transferredContents';
-
-    if item.Entry? {
-      assert MapFromStorage(self.underlying.storage[..i]) == transferredContents;
-      assert |transferredContents| == newUnderlying.count as nat;
-
-      if item.key in newUnderlying.contents {
-        var j:uint64 :| (
-            && 0 <= j < i
-            && ValidSlot(|self.underlying.storage|, Slot(j as int))
-            && self.underlying.storage[Slot(j as int).slot].Entry?
-            && self.underlying.storage[Slot(j as int).slot].key == item.key);
-        assert ValidSlot(|self.underlying.storage|, Slot(i as nat));
-        assert i != j;
-        assert Slot(i as nat) != Slot(j as nat);
-        assert self.underlying.storage[Slot(j as nat).slot].key == self.underlying.storage[Slot(i as nat).slot].key;
-        CantEquivocateMapFromStorageKey(self.underlying);
-        assert false;
-      }
-      assert item.key !in newUnderlying.contents;
-
-      assert transferredContents.Keys <= self.contents.Keys;
-      SetInclusionImpliesSmallerCardinality(transferredContents.Keys, self.contents.Keys);
-      assert |transferredContents.Keys| <= |self.contents.Keys|;
-      assert |transferredContents.Keys| == |transferredContents|;
-      assert |self.contents.Keys| == |self.contents|;
-      assert |transferredContents| <= |self.contents|;
-      assert newUnderlying.count as nat < |newUnderlying.storage| - 1;
-
-      LemmaFixedSizeInsertResult(newUnderlying, item.key, item.value);
-
-      // -- mutation --
-      newUnderlying' := FixedSizeInsert(newUnderlying, item.key, item.value).self';
-      transferredContents' := transferredContents[item.key := item.value];
-      // --------------
-
-      forall key | key in newUnderlying'.contents
-      ensures exists slot: Slot :: (
-          && slot.slot < i as nat + 1
+      invariant |transferredContents| == newUnderlying.count as nat
+      invariant transferredContents.Keys <= self.contents.Keys
+      invariant forall key :: key in newUnderlying.contents ==> exists slot: Slot :: (
+          && slot.slot < i as int
           && ValidSlot(|self.underlying.storage|, slot)
-          && self.underlying.storage[slot.slot].Entry?
-          && self.underlying.storage[slot.slot].key == key)
-      {
-        if key == item.key {
+          && FilledWithEntryKey(self.underlying.storage, slot, key))
+
+      decreases |self.underlying.storage| - i as int
+    {
+      var item := seq_get(self.underlying.storage, i);
+
+      assert self.underlying.storage[..i+1] == self.underlying.storage[..i] + [self.underlying.storage[i]];
+
+      if item.Entry? {
+        SetInclusionImpliesSmallerCardinality(newUnderlying.contents.Keys, self.contents.Keys);
+        LemmaEntryKeyInContents(self, i);
+
+        assert item == self.underlying.storage[i];
+
+        if item.key in newUnderlying.contents {
+          var j:uint64 :| (
+              && 0 <= j < i
+              && ValidSlot(|self.underlying.storage|, Slot(j as int))
+              && self.underlying.storage[Slot(j as int).slot].Entry?
+              && self.underlying.storage[Slot(j as int).slot].key == item.key);
           assert ValidSlot(|self.underlying.storage|, Slot(i as nat));
-          assert exists slot: Slot :: (
-              && slot.slot < i as nat + 1
-              && ValidSlot(|self.underlying.storage|, slot)
-              && self.underlying.storage[slot.slot].Entry?
-              && self.underlying.storage[slot.slot].key == key);
-        } else {
-          assert exists slot: Slot :: (
-              && slot.slot < i as nat + 1
-              && ValidSlot(|self.underlying.storage|, slot)
-              && self.underlying.storage[slot.slot].Entry?
-              && self.underlying.storage[slot.slot].key == key);
+          assert i != j;
+          assert Slot(i as nat) != Slot(j as nat);
+          assert self.underlying.storage[Slot(j as nat).slot].key == self.underlying.storage[Slot(i as nat).slot].key;
+          CantEquivocateMapFromStorageKey(self.underlying);
+          assert false;
+        }
+        assert item.key !in newUnderlying.contents;
+
+        // assert transferredContents.Keys <= self.contents.Keys;
+        SetInclusionImpliesSmallerCardinality(transferredContents.Keys, self.contents.Keys);
+
+        // -- mutation --
+        var replaced;
+        newUnderlying, replaced := FixedSizeInsert(newUnderlying, item.key, item.value); // use mutable ref here
+        transferredContents := transferredContents[item.key := item.value];
+        // --------------
+
+        forall key | key in newUnderlying.contents
+        ensures exists slot: Slot :: (
+            && slot.slot < i as nat + 1
+            && ValidSlot(|self.underlying.storage|, slot)
+            && self.underlying.storage[slot.slot].Entry?
+            && self.underlying.storage[slot.slot].key == key)
+        {
+          if key == item.key {
+            assert ValidSlot(|self.underlying.storage|, Slot(i as nat));
+          } else {
+          }
         }
       }
-      assert |transferredContents'| == newUnderlying'.count as nat;
-      assert MapFromStorage(self.underlying.storage[..i+1]) == transferredContents';
-    } else {
-      newUnderlying' := newUnderlying;
-      transferredContents' := transferredContents;
 
-      assert forall key :: key in newUnderlying.contents ==> exists slot: Slot :: (
-          && slot.slot < i as nat
-          && ValidSlot(|self.underlying.storage|, slot)
-          && self.underlying.storage[slot.slot].Entry?
-          && self.underlying.storage[slot.slot].key == key);
-      assert |transferredContents'| <= newUnderlying.count as nat;
-      assert MapFromStorage(self.underlying.storage[..i+1]) == transferredContents';
+      i := i + 1;
     }
+    assert FixedSizeInv(newUnderlying);
 
-    assert MapFromStorage(self.underlying.storage[..i+1]) == transferredContents';
+    assert self.underlying.storage[..i] == self.underlying.storage;
+    assert MapFromStorage(self.underlying.storage) == transferredContents;
 
-    LemmaReallocIterateResult(self, newUnderlying', i+1, transferredContents', newSize);
+    UnderlyingInvImpliesMapFromStorageMatchesContents(newUnderlying, transferredContents);
+    assert transferredContents == self.contents;
+
+    linear var LinearHashMap(selfUnderlying, selfCount, selfContents) := self;
+    linear var FixedSizeLinearHashMap(oldStorage, _, _) := selfUnderlying;
+    var _ := seq_free(oldStorage);
+
+    self' := LinearHashMap(newUnderlying, selfCount, selfContents);
+
+    assert self'.contents == transferredContents;
+
+    assert UnderlyingContentsMatchesContents(newUnderlying, self'.contents);
+    assert forall key :: key in self.contents ==> key in newUnderlying.contents && newUnderlying.contents[key] == Some(self.contents[key]);
+    assert forall key :: key !in self.contents ==> key !in newUnderlying.contents || newUnderlying.contents[key].None?;
+
   }
 
-
-  lemma LemmaReallocResult(self: LinearHashMap)
-    requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
-    requires Inv(self)
-    ensures var self' := ReallocInternal(self);
-      && Inv(self')
-      && self'.contents == self.contents
-      && self'.underlying.count as nat < |self'.underlying.storage| - 2
-  {
-    var self' := ReallocInternal(self);
-    reveal_ReallocInternal();
-
-    assert |self.contents| == self.count as nat;
-
-    var newSize: uint64 := (128 + self.count) * 4;
-    //print "(debug) MutableMap.ReallocInternal: Count ", Count, ", ReallocInternal ", newSize, "\n";
-
-    var newUnderlying := ConstructorFromSize(newSize);
-    
-    assert |newUnderlying.storage| == newSize as nat;
-
-    assert MapFromStorage(self.underlying.storage) == self.contents;
-    UnderlyingInvImpliesMapFromStorageMatchesContents(newUnderlying, map[]);
-    assert MapFromStorage(newUnderlying.storage) == map[];
-
-    LemmaReallocIterateResult(self, newUnderlying, 0, map[], newSize);
-
-    var newUnderlying' := ReallocIterate(self, newUnderlying, 0);
-    
-    assert self' == self.(underlying := newUnderlying');
-
-    assert FixedSizeInv(newUnderlying');
-    assert UnderlyingInv(self', newUnderlying');
-    assert UnderlyingContentsMatchesContents(newUnderlying', self.contents);
-    assert MapFromStorage(newUnderlying'.storage) == self.contents;
-    assert newUnderlying'.count as nat < |newUnderlying'.storage| - 2;
-
-    assert self'.underlying.count as nat < |self'.underlying.storage| - 2;
-    assert self'.contents == self.contents;
-    assert self'.count == self.count;
-    assert self'.count <= self'.underlying.count;
-    assert Inv(self');
-  }
-
-  linear datatype InsertAndGetOldResult<V> = InsertAndGetOldResult(linear self': LinearHashMap, replaced: Option<V>)
-  function method {:opaque} InsertAndGetOld<V>(linear self: LinearHashMap, key: uint64, value: V)
-  : (linear res: InsertAndGetOldResult<V>)
+  method InsertAndGetOld<V>(linear self: LinearHashMap, key: uint64, value: V)
+  returns (linear self': LinearHashMap, replaced: Option<V>)
     requires Inv(self)
     requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
-    ensures var InsertAndGetOldResult(self', replaced) := res;
-      && Inv(self')
-      && self'.contents == self.contents[key := value]
-      && self'.count as nat == self.count as nat + (if replaced.Some? then 0 else 1)
-      && (replaced.Some? ==> MapsTo(self.contents, key, replaced.value))
-      && (replaced.None? ==> key !in self.contents)
+    ensures Inv(self')
+    ensures self'.contents == self.contents[key := value]
+    ensures self'.count as nat == self.count as nat + (if replaced.Some? then 0 else 1)
+    ensures replaced.Some? ==> MapsTo(self.contents, key, replaced.value)
+    ensures replaced.None? ==> key !in self.contents
   {
+    linear var self1 := self;
     // -- mutation --
-    linear var self1 := if seq_length(self.underlying.storage) as uint64 / 2 <= self.underlying.count then (
-      Realloc(self)
-    ) else (
-      self
-    );
+    if seq_length(self1.underlying.storage) as uint64 / 2 <= self1.underlying.count {
+      self1 := Realloc(self1);
+    }
     // --------------
-
-    //assert MapFromStorage(self1.underlying.storage) == self1.contents;
-    //assert self1.underlying.count as nat < |self1.underlying.storage| - 2;
 
     // -- mutation --
     linear var LinearHashMap(self1Underlying, self1Count, self1Contents) := self1;
-    linear var FixedSizeInsertResult(underlying', replaced) := FixedSizeInsert(self1Underlying, key, value);
+    linear var underlying';
+    underlying', replaced := FixedSizeInsert(self1Underlying, key, value);
     ghost var contents' := self1Contents[key := value];
-    linear var self' := LinearHashMap(underlying',
+    self' := LinearHashMap(underlying',
         if replaced.None? then self1Count + 1 else self1Count,
         contents');
     // --------------
 
-    LemmaFixedSizeInsertResult(self1.underlying, key, value);
-
-    //assert replaced.None? ==> key !in self.contents;
-    //assert !replaced.None? ==> key in self'.contents;
-
-    //assert self'.underlying.count as nat < |self'.underlying.storage| - 1;
-
     UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents);
-    //assert MapFromStorage(self'.underlying.storage[..]) == self'.contents;
-    //assert UnderlyingInv(self', self'.underlying);
-    //assert Inv(self');
-
-    InsertAndGetOldResult(self', replaced)
   }
 
-  function method {:opaque} Insert<V>(linear self: LinearHashMap, key: uint64, value: V)
-  : (linear self': LinearHashMap)
+  method Insert<V>(linear self: LinearHashMap, key: uint64, value: V)
+  returns (linear self': LinearHashMap)
     requires Inv(self)
     requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
     ensures
@@ -1332,8 +1172,8 @@ module LinearMutableMap {
       && (self'.count as nat == self.count as nat ||
          self'.count as nat == self.count as nat + 1)
   {
-    linear var InsertAndGetOldResult(self', _) := InsertAndGetOld(self, key, value);
-    self'
+    var replaced;
+    self', replaced := InsertAndGetOld(self, key, value);
   }
 
   linear datatype RemoveResult<V> = RemoveResult(linear self': LinearHashMap, removed: Option<V>)
