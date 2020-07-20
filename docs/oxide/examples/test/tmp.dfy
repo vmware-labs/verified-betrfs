@@ -1,6 +1,9 @@
 linear datatype ASDF = ASDF(a: int)
 linear datatype QWER = QWER(linear asdf: ASDF)
 
+method {:extern} Assign<V>(inout v: V, newV: V)
+ensures v == newV
+
 // method {:axiom} drop<V>(linear v: V)
 
 method linlin(linear inout c: ASDF) returns (linear oo: ASDF)
@@ -10,7 +13,8 @@ ensures oo == old_c
 {
   var oldA := c.a;
   oo := c;
-  c := ASDF(oldA + 1);
+  c := ASDF(oldA);
+  Assign(inout c.a, oldA + 1);
 }
 
 method {:axiom} Imagine<V>(ghost v: V) returns (linear v2: V)

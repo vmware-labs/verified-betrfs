@@ -16,10 +16,10 @@ ensures v == newV
 
 linear datatype Car = Car(passengers: nat) {
   linear inout method LoadPassengers(count: nat)
-  ensures this.passengers == old(this).passengers + count
+  ensures self.passengers == old_self.passengers + count
   {
-    var newCount := this.passengers + count;
-    Assign(inout this.passengers, newCount);
+    var newCount := self.passengers + count;
+    Assign(inout self.passengers, newCount);
   }
 }
 
@@ -37,7 +37,6 @@ returns (count: nat)
 
 method Main() {
   linear var c := Car(13);
-  LoadPassengers(inout c, 3);
+  inout c.LoadPassengers(3);
   Drop(c);
-  assert false;
 }
