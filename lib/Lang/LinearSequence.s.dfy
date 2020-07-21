@@ -13,6 +13,10 @@ module {:extern "LinearExtern"} LinearSequence_s {
       requires i as nat < |s1|
       ensures s2 == s1[i as nat := a]
 
+  method {:extern "LinearExtern", "mut_seq_set"} mut_seq_set<A>(linear inout s:seq<A>, i:uint64, a:A)
+      requires i as nat < |old_s|
+      ensures s == old_s[i as nat := a]
+
   function method {:extern "LinearExtern", "seq_length"} seq_length<A>(shared s:seq<A>):(n:uint64)
     requires |s| <= 0xffff_ffff_ffff_ffff
     ensures n as int == |s|
