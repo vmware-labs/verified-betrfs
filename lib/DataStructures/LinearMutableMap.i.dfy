@@ -1,3 +1,4 @@
+include "../Lang/Inout.s.dfy"
 include "../Lang/LinearSequence.s.dfy"
 include "../Lang/LinearSequence.i.dfy"
 
@@ -24,6 +25,7 @@ module LinearMutableMap {
   import opened NativeTypes
   import opened Options
   import opened Sequences
+  import opened Inout
   import opened Sets
   import opened Maps
   import opened SetBijectivity
@@ -597,18 +599,17 @@ module LinearMutableMap {
     }
   }
 
-  method FixedSizeInsert<V>(linear self: FixedSizeLinearHashMap, key: uint64, value: V)
-  returns (linear self': FixedSizeLinearHashMap, replaced: Option<V>)
-
-    requires FixedSizeInv(self)
-    requires self.count as nat < |self.storage| - 1
+  method FixedSizeInsert<V>(linear inout self: FixedSizeLinearHashMap, key: uint64, value: V)
+  returns (replaced: Option<V>)
+    requires FixedSizeInv(old_self)
+    requires old_self.count as nat < |old_self.storage| - 1
     ensures (
-      && FixedSizeInv(self')
-      && self'.contents == self.contents[key := Some(value)]
-      && (key in self.contents ==> replaced == self.contents[key])
-      && (replaced.Some? ==> key in self.contents)
-      && (key !in self.contents ==> replaced.None?)
-      && |self'.storage| == |self.storage|)
+      && FixedSizeInv(self)
+      && self.contents == old_self.contents[key := Some(value)]
+      && (key in old_self.contents ==> replaced == old_self.contents[key])
+      && (replaced.Some? ==> key in old_self.contents)
+      && (key !in old_self.contents ==> replaced.None?)
+      && |self.storage| == |old_self.storage|)
   {
     var slotIdx := Probe(self, key);
     var probeRes := LemmaProbeResult(self, key);
@@ -617,55 +618,56 @@ module LinearMutableMap {
     ghost var probeStartSlotIdx := probeRes.startSlotIdx;
     ghost var probeSkips := probeRes.ghostSkips;
 
-    linear var FixedSizeLinearHashMap(selfStorage, selfCount, selfContents) := self;
-    ghost var contents := selfContents[key := Some(value)];
+    ghost var updatedContents := self.contents[key := Some(value)];
+    AssignGhost(ghost inout self.contents, updatedContents);
 
-    var replacedItem := seq_get(selfStorage, slotIdx);
-    linear var updatedStorage := seq_set(selfStorage, slotIdx, Entry(key, value));
+    var replacedItem := seq_get(self.storage, slotIdx);
+    mut_seq_set(inout self.storage, slotIdx, Entry(key, value));
 
-    replaced := None;
     if replacedItem.Empty? {
-      self' := FixedSizeLinearHashMap(updatedStorage, selfCount + 1, contents);
-    } else if replacedItem.Tombstone? {
-      self' := FixedSizeLinearHashMap(updatedStorage, selfCount, contents);
-    } else {
-      self' := FixedSizeLinearHashMap(updatedStorage, selfCount, contents);
-      replaced := Some(replacedItem.value);
+      var newCount := self.count + 1;
+      Assign(inout self.count, newCount);
     }
 
-    forall explainedKey | explainedKey in self'.contents
-    ensures exists skips :: SlotExplainsKey(self'.storage, skips, explainedKey)
+    if replacedItem.Entry? {
+      replaced := Some(replacedItem.value);
+    } else {
+      replaced := None;
+    }
+
+    forall explainedKey | explainedKey in self.contents
+    ensures exists skips :: SlotExplainsKey(self.storage, skips, explainedKey)
     {
       if key == explainedKey {
-        assert SlotExplainsKey(self'.storage, probeSkips as nat, key); // observe
+        assert SlotExplainsKey(self.storage, probeSkips as nat, key); // observe
       } else {
-        var oldSkips :| SlotExplainsKey(self.storage, oldSkips, explainedKey);
-        assert SlotExplainsKey(self'.storage, oldSkips, explainedKey); // observe
+        var oldSkips :| SlotExplainsKey(old_self.storage, oldSkips, explainedKey);
+        assert SlotExplainsKey(self.storage, oldSkips, explainedKey); // observe
       }
     }
 
-    forall slot | ValidSlot(|self'.storage|, slot) && self'.storage[slot.slot].Entry?
-    ensures && var item := self'.storage[slot.slot];
-            && self'.contents[item.key] == Some(item.value)
+    forall slot | ValidSlot(|self.storage|, slot) && self.storage[slot.slot].Entry?
+    ensures && var item := self.storage[slot.slot];
+            && self.contents[item.key] == Some(item.value)
     {
-      var item := self'.storage[slot.slot];
+      var item := self.storage[slot.slot];
       if slot != Slot(slotIdx as nat) {
         if item.key == key {
-          assert TwoNonEmptyValidSlotsWithSameKey(self'.storage, slot, Slot(slotIdx as nat)); // observe
-          assert SameSlot(|self'.storage|, slot, Slot(slotIdx as nat)); // observe
+          assert TwoNonEmptyValidSlotsWithSameKey(self.storage, slot, Slot(slotIdx as nat)); // observe
+          assert SameSlot(|self.storage|, slot, Slot(slotIdx as nat)); // observe
           assert false;
         }
       }
     }
-    forall slot | ValidSlot(|self'.storage|, slot) && self'.storage[slot.slot].Tombstone?
-    ensures && var item := self'.storage[slot.slot];
-            && self'.contents[item.key].None?
+    forall slot | ValidSlot(|self.storage|, slot) && self.storage[slot.slot].Tombstone?
+    ensures && var item := self.storage[slot.slot];
+            && self.contents[item.key].None?
     {
-      var item := self'.storage[slot.slot];
+      var item := self.storage[slot.slot];
       if slot != Slot(slotIdx as nat) {
         if item.key == key {
-          assert TwoNonEmptyValidSlotsWithSameKey(self'.storage, slot, Slot(slotIdx as nat)); // observe
-          assert SameSlot(|self'.storage|, slot, Slot(slotIdx as nat)); // observe
+          assert TwoNonEmptyValidSlotsWithSameKey(self.storage, slot, Slot(slotIdx as nat)); // observe
+          assert SameSlot(|self.storage|, slot, Slot(slotIdx as nat)); // observe
           assert false;
         }
       }
@@ -1022,13 +1024,12 @@ module LinearMutableMap {
     assert EntryInSlotMatchesContents(self.underlying.storage, Slot(i as nat), self.underlying.contents); // trigger
   }
 
-  method Realloc<V>(linear self: LinearHashMap<V>)
-  returns (linear self': LinearHashMap<V>)
-    requires Inv(self)
-    requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
-    ensures Inv(self')
-    ensures self'.contents == self.contents
-    ensures self'.underlying.count as nat < |self'.underlying.storage| - 2
+  method Realloc<V>(linear inout self: LinearHashMap<V>)
+    requires Inv(old_self)
+    requires old_self.count as nat < 0x1_0000_0000_0000_0000 / 8
+    ensures Inv(self)
+    ensures self.contents == old_self.contents
+    ensures self.underlying.count as nat < |self.underlying.storage| - 2
   {
     var i: uint64 := 0;
     var newSize: uint64 := (128 + self.count) * 4;
@@ -1089,8 +1090,7 @@ module LinearMutableMap {
         SetInclusionImpliesSmallerCardinality(transferredContents.Keys, self.contents.Keys);
 
         // -- mutation --
-        var replaced;
-        newUnderlying, replaced := FixedSizeInsert(newUnderlying, item.key, item.value); // use mutable ref here
+        var replaced := FixedSizeInsert(inout newUnderlying, item.key, item.value); // use mutable ref here
         transferredContents := transferredContents[item.key := item.value];
         // --------------
 
@@ -1118,66 +1118,60 @@ module LinearMutableMap {
     UnderlyingInvImpliesMapFromStorageMatchesContents(newUnderlying, transferredContents);
     assert transferredContents == self.contents;
 
-    linear var LinearHashMap(selfUnderlying, selfCount, selfContents) := self;
-    linear var FixedSizeLinearHashMap(oldStorage, _, _) := selfUnderlying;
+    // linear var LinearHashMap(selfUnderlying, selfCount, selfContents) := self;
+    // self' := LinearHashMap(newUnderlying, selfCount, selfContents);
+    linear var oldUnderlying := Replace(inout self.underlying, newUnderlying);
+    linear var FixedSizeLinearHashMap(oldStorage, _, _) := oldUnderlying;
     var _ := seq_free(oldStorage);
 
-    self' := LinearHashMap(newUnderlying, selfCount, selfContents);
+    assert self.contents == transferredContents;
 
-    assert self'.contents == transferredContents;
-
-    assert UnderlyingContentsMatchesContents(newUnderlying, self'.contents);
-    assert forall key :: key in self.contents ==> key in newUnderlying.contents && newUnderlying.contents[key] == Some(self.contents[key]);
-    assert forall key :: key !in self.contents ==> key !in newUnderlying.contents || newUnderlying.contents[key].None?;
+    assert UnderlyingContentsMatchesContents(newUnderlying, self.contents);
+    assert forall key :: key in old_self.contents ==> key in newUnderlying.contents && newUnderlying.contents[key] == Some(old_self.contents[key]);
+    assert forall key :: key !in old_self.contents ==> key !in newUnderlying.contents || newUnderlying.contents[key].None?;
 
   }
 
-  method InsertAndGetOld<V>(linear self: LinearHashMap, key: uint64, value: V)
-  returns (linear self': LinearHashMap, replaced: Option<V>)
-    requires Inv(self)
-    requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
-    ensures Inv(self')
-    ensures self'.contents == self.contents[key := value]
-    ensures self'.count as nat == self.count as nat + (if replaced.Some? then 0 else 1)
-    ensures replaced.Some? ==> MapsTo(self.contents, key, replaced.value)
-    ensures replaced.None? ==> key !in self.contents
+  method InsertAndGetOld<V>(linear inout self: LinearHashMap, key: uint64, value: V)
+  returns (replaced: Option<V>)
+    requires Inv(old_self)
+    requires old_self.count as nat < 0x1_0000_0000_0000_0000 / 8
+    ensures Inv(self)
+    ensures self.contents == old_self.contents[key := value]
+    ensures self.count as nat == old_self.count as nat + (if replaced.Some? then 0 else 1)
+    ensures replaced.Some? ==> MapsTo(old_self.contents, key, replaced.value)
+    ensures replaced.None? ==> key !in old_self.contents
   {
-    linear var self1 := self;
     // -- mutation --
-    if seq_length(self1.underlying.storage) as uint64 / 2 <= self1.underlying.count {
-      self1 := Realloc(self1);
+    if seq_length(self.underlying.storage) as uint64 / 2 <= self.underlying.count {
+      Realloc(inout self);
     }
     // --------------
 
     // -- mutation --
-    linear var LinearHashMap(self1Underlying, self1Count, self1Contents) := self1;
-    linear var underlying';
-    underlying', replaced := FixedSizeInsert(self1Underlying, key, value);
-    ghost var contents' := self1Contents[key := value];
-    self' := LinearHashMap(underlying',
-        if replaced.None? then self1Count + 1 else self1Count,
-        contents');
+    // linear var LinearHashMap(self1Underlying, self1Count, self1Contents) := self1;
+    replaced := FixedSizeInsert(inout self.underlying, key, value);
+    ghost var newContents := self.contents[key := value];
+    AssignGhost(ghost inout self.contents, newContents);
+    if replaced.None? {
+      var newCount := self.count + 1;
+      Assign(inout self.count, newCount);
+    }
     // --------------
 
-    // TODO(andrea) do we need this? LemmaFixedSizeInsertResult(self1.underlying, key, value);
-
-    UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents);
-
-    // TODO(andrea) do we need this? InsertAndGetOldResult(self', replaced)
+    UnderlyingInvImpliesMapFromStorageMatchesContents(self.underlying, self.contents);
   }
 
-  method Insert<V>(linear self: LinearHashMap, key: uint64, value: V)
-  returns (linear self': LinearHashMap)
-    requires Inv(self)
-    requires self.count as nat < 0x1_0000_0000_0000_0000 / 8
+  method Insert<V>(linear inout self: LinearHashMap, key: uint64, value: V)
+    requires Inv(old_self)
+    requires old_self.count as nat < 0x1_0000_0000_0000_0000 / 8
     ensures
-      && Inv(self')
-      && self'.contents == self.contents[key := value]
-      && (self'.count as nat == self.count as nat ||
-         self'.count as nat == self.count as nat + 1)
+      && Inv(self)
+      && self.contents == old_self.contents[key := value]
+      && (self.count as nat == old_self.count as nat ||
+         self.count as nat == old_self.count as nat + 1)
   {
-    var replaced;
-    self', replaced := InsertAndGetOld(self, key, value);
+    var replaced := InsertAndGetOld(inout self, key, value);
   }
 
   linear datatype RemoveResult<V> = RemoveResult(linear self': LinearHashMap, removed: Option<V>)
