@@ -1,0 +1,10 @@
+#!/bin/bash
+if [[ X`echo $* | grep /proc`X == XX ]]
+then echo "Don't forget the /proc argument!"; exit -1
+fi
+if [[ X`echo $* | grep /timeLimit`X == XX ]]
+then echo "Warning: /timeLimit flag recommended."
+fi
+# "qi" stands for "quantifier instatiation" count.
+dafny /z3opt:smt.qi.profile=true /z3opt:smt.qi.profile_freq=1000 $* | tee dafny-qi.profile | grep -v "Prover error:"
+
