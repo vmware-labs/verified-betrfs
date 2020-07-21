@@ -760,69 +760,57 @@ module LinearMutableMap {
     var _ := LemmaProbeResult(self, key);
   }
 
-  linear datatype FixedSizeRemoveResult<V> = FixedSizeRemoveResult(linear self': FixedSizeLinearHashMap<V>, removed: Option<V>)
-  function method {:opaque} FixedSizeRemove<V>(linear self: FixedSizeLinearHashMap<V>, key: uint64)
-    : linear FixedSizeRemoveResult<V>
-  requires FixedSizeInv(self)
+  method FixedSizeRemove<V>(linear inout self: FixedSizeLinearHashMap<V>, key: uint64)
+  returns (removed: Option<V>)
+  requires FixedSizeInv(old_self)
+  ensures FixedSizeInv(self)
+  ensures (self.contents == if key in old_self.contents
+    then old_self.contents[key := None]
+    else old_self.contents)
+  ensures (removed == if key in old_self.contents && old_self.contents[key].Some?
+    then Some(old_self.contents[key].value)
+    else None)
+  ensures (removed.Some? <==> (key in old_self.contents && old_self.contents[key].Some?))
+  ensures (self.count == old_self.count)
   {
     var slotIdx := Probe(self, key);
 
-    if seq_get(self.storage, slotIdx).Entry? then (
-      linear var FixedSizeLinearHashMap(selfStorage, selfCount, selfContents) := self;
-      var removed := Some(seq_get(selfStorage, slotIdx).value);
-      linear var updatedStorage := seq_set(selfStorage, slotIdx, Tombstone(key));
-      linear var self' := FixedSizeLinearHashMap(
-          updatedStorage,
-          selfCount,
-          selfContents[key := None]);
-      FixedSizeRemoveResult(self', removed)
-    ) else (
-      FixedSizeRemoveResult(self, None)
-    )
-  }
+    ghost var probeRes := LemmaProbeResult(self, key);
+    assert slotIdx == probeRes.slotIdx;
+    ghost var probeStartSlotIdx := probeRes.startSlotIdx;
+    ghost var probeSkips := probeRes.ghostSkips;
 
-  lemma LemmaFixedSizeRemoveResult<V>(self: FixedSizeLinearHashMap<V>, key: uint64)
-  requires FixedSizeInv(self)
-  ensures var FixedSizeRemoveResult(self', removed) := FixedSizeRemove(self, key);
-    && FixedSizeInv(self')
-    && (self'.contents == if key in self.contents
-      then self.contents[key := None]
-      else self.contents)
-    && (removed == if key in self.contents && self.contents[key].Some?
-      then Some(self.contents[key].value)
-      else None)
-    && (removed.Some? <==> (key in self.contents && self.contents[key].Some?))
-    && (self'.count == self.count)
-  {
-    reveal_FixedSizeRemove();
-    var FixedSizeRemoveResult(self', removed) := FixedSizeRemove(self, key);
+    if seq_get(self.storage, slotIdx).Entry? {
+      removed := Some(seq_get(self.storage, slotIdx).value);
+      mut_seq_set(inout self.storage, slotIdx, Tombstone(key));
+      ghost var newContents := self.contents[key := None];
+      AssignGhost(ghost inout self.contents, newContents);
+    } else {
+      removed := None;
+    }
 
-    var probeRes := LemmaProbeResult(self, key);
-    var slotIdx := probeRes.slotIdx;
-    var probeStartSlotIdx := probeRes.startSlotIdx;
-    var probeSkips := probeRes.ghostSkips;
-
-    if self.storage[slotIdx].Entry? {
-      forall explainedKey | explainedKey in self'.contents
-      ensures exists skips :: SlotExplainsKey(self'.storage, skips, explainedKey)
+    ghost var old_self := old_self; // TODO(andrea) is there something we can do about this?
+    if old_self.storage[slotIdx].Entry? {
+      forall explainedKey | explainedKey in self.contents
+      ensures exists skips :: SlotExplainsKey(self.storage, skips, explainedKey)
       {
         if key == explainedKey {
-          assert SlotExplainsKey(self'.storage, probeSkips as nat, key);
+          assert SlotExplainsKey(self.storage, probeSkips as nat, key);
         } else {
-          var oldSkips :| SlotExplainsKey(self.storage, oldSkips, explainedKey);
-          assert SlotExplainsKey(self'.storage, oldSkips, explainedKey);
+          var oldSkips :| SlotExplainsKey(old_self.storage, oldSkips, explainedKey);
+          assert SlotExplainsKey(self.storage, oldSkips, explainedKey);
         }
       }
 
-      forall slot | ValidSlot(|self'.storage|, slot) && self'.storage[slot.slot].Entry?
-      ensures && var item := self'.storage[slot.slot];
-              && self'.contents[item.key] == Some(item.value)
+      forall slot | ValidSlot(|self.storage|, slot) && self.storage[slot.slot].Entry?
+      ensures && var item := self.storage[slot.slot];
+              && self.contents[item.key] == Some(item.value)
       {
-        var item := self'.storage[slot.slot];
+        var item := self.storage[slot.slot];
         if slot != Slot(slotIdx as nat) {
           if item.key == key {
-            assert CantEquivocateStorageKey(self'.storage);
-            assert TwoNonEmptyValidSlotsWithSameKey(self'.storage, slot, Slot(slotIdx as nat));
+            assert CantEquivocateStorageKey(self.storage);
+            assert TwoNonEmptyValidSlotsWithSameKey(self.storage, slot, Slot(slotIdx as nat));
             assert false;
           }
         }
@@ -1165,100 +1153,86 @@ module LinearMutableMap {
   method Insert<V>(linear inout self: LinearHashMap, key: uint64, value: V)
     requires Inv(old_self)
     requires old_self.count as nat < 0x1_0000_0000_0000_0000 / 8
-    ensures
-      && Inv(self)
-      && self.contents == old_self.contents[key := value]
-      && (self.count as nat == old_self.count as nat ||
-         self.count as nat == old_self.count as nat + 1)
+    ensures Inv(self)
+    ensures self.contents == old_self.contents[key := value]
+    ensures (self.count as nat == old_self.count as nat ||
+       self.count as nat == old_self.count as nat + 1)
   {
     var replaced := InsertAndGetOld(inout self, key, value);
   }
 
-  linear datatype RemoveResult<V> = RemoveResult(linear self': LinearHashMap, removed: Option<V>)
-  function method RemoveInternal<V>(linear self: LinearHashMap, key: uint64)
-  : (linear res: RemoveResult<V>)
-    requires Inv(self)
-    ensures var RemoveResult(self', removed) := res;
-      && FixedSizeRemoveResult(self'.underlying, removed) == FixedSizeRemove(self.underlying, key)
-      && FixedSizeInv(self'.underlying)
-      && (self'.underlying.contents == if key in self.underlying.contents
-        then self.underlying.contents[key := None]
-        else self.underlying.contents)
-      && (removed == if key in self.underlying.contents && self.underlying.contents[key].Some?
-        then Some(self.underlying.contents[key].value)
-        else None)
-      && (self'.underlying.count == self.underlying.count)
+  method RemoveInternal<V>(linear inout self: LinearHashMap, key: uint64)
+  returns (removed: Option<V>)
+    requires Inv(old_self)
+    // TODO ensures FixedSizeRemoveResult(self.underlying, removed) == FixedSizeRemove(old_self.underlying, key)
+    ensures FixedSizeInv(self.underlying)
+    ensures (self.underlying.contents == if key in old_self.underlying.contents
+      then old_self.underlying.contents[key := None]
+      else old_self.underlying.contents)
+    ensures (removed == if key in old_self.underlying.contents && old_self.underlying.contents[key].Some?
+      then Some(old_self.underlying.contents[key].value)
+      else None)
+    ensures (self.underlying.count == old_self.underlying.count)
   {
     // -- mutation --
-    linear var LinearHashMap(selfUnderlying, selfCount, selfContents) := self;
-    linear var FixedSizeRemoveResult(underlying', removed) := FixedSizeRemove(selfUnderlying, key);
-    // --------------
-
-    LemmaFixedSizeRemoveResult(self.underlying, key);
-
-    linear var self' := LinearHashMap(
-      /* underlying := */ underlying',
-      /* count := */ if removed.Some? then selfCount - 1 else selfCount,
-      /* contents := */ map k | k in selfContents && k != key :: selfContents[k]);
-
-    RemoveResult(self', removed)
-  }
-
-  lemma RemoveCountCorrect<V>(self: LinearHashMap, key: uint64, res: RemoveResult<V>)
-  requires Inv(self)
-  requires res == RemoveInternal(self, key)
-  ensures var RemoveResult(self', removed) := res;
-    self'.count as nat == |self'.contents|
-  {
-    var RemoveResult(self', removed) := res;
+    removed := FixedSizeRemove(inout self.underlying, key);
     if removed.Some? {
-      assert key in self.contents;
-      assert self'.contents.Keys <= self.contents.Keys;
-      assert |self.contents| == self'.count as nat + 1;
-      assert |self.contents.Keys| == self'.count as nat + 1;
-      assert |self.contents.Keys - {key}| == |self.contents.Keys| - |{key}|;
-      assert self.contents.Keys - {key} == self'.contents.Keys;
-      assert |self'.contents| == |self.contents| - 1;
-      assert |self'.contents| == self'.count as nat;
-    } else {
-      assert key !in self.contents;
-      assert self'.contents == self.contents;
-      assert |self'.contents| == self'.count as nat;
+      var newCount := self.count - 1;
+      Assign(inout self.count, newCount);
     }
+    ghost var newContents := map k | k in self.contents && k != key :: self.contents[k];
+    AssignGhost(ghost inout self.contents, newContents);
+    // --------------
   }
 
-  function method RemoveAndGet<V>(linear self: LinearHashMap, key: uint64)
-  : (linear res: RemoveResult<V>)
-    requires Inv(self)
-    ensures var RemoveResult(self', removed) := res;
-      && Inv(self')
-      && (self'.contents == if key in self.contents
-        then map k | k in self.contents && k != key :: self.contents[k]
-        else self.contents)
-      && (removed == if key in self.contents
-        then Some(self.contents[key])
-        else None)
+  // TODO lemma RemoveCountCorrect<V>(self: LinearHashMap, key: uint64, res: RemoveResult<V>)
+  // TODO requires Inv(self)
+  // TODO requires res == RemoveInternal(self, key)
+  // TODO ensures var RemoveResult(self', removed) := res;
+  // TODO   self'.count as nat == |self'.contents|
+  // TODO {
+  // TODO   var RemoveResult(self', removed) := res;
+  // TODO   if removed.Some? {
+  // TODO     assert key in self.contents;
+  // TODO     assert self'.contents.Keys <= self.contents.Keys;
+  // TODO     assert |self.contents| == self'.count as nat + 1;
+  // TODO     assert |self.contents.Keys| == self'.count as nat + 1;
+  // TODO     assert |self.contents.Keys - {key}| == |self.contents.Keys| - |{key}|;
+  // TODO     assert self.contents.Keys - {key} == self'.contents.Keys;
+  // TODO     assert |self'.contents| == |self.contents| - 1;
+  // TODO     assert |self'.contents| == self'.count as nat;
+  // TODO   } else {
+  // TODO     assert key !in self.contents;
+  // TODO     assert self'.contents == self.contents;
+  // TODO     assert |self'.contents| == self'.count as nat;
+  // TODO   }
+  // TODO }
+
+  method RemoveAndGet<V>(linear inout self: LinearHashMap, key: uint64)
+  returns (removed: Option<V>)
+    requires Inv(old_self)
+    ensures Inv(self)
+    ensures (self.contents == if key in old_self.contents
+      then map k | k in old_self.contents && k != key :: old_self.contents[k]
+      else old_self.contents)
+    ensures (removed == if key in old_self.contents
+      then Some(old_self.contents[key])
+      else None)
   {
-    linear var RemoveResult(self', removed) := RemoveInternal(self, key);
-
-    LemmaFixedSizeRemoveResult(self.underlying, key);
-    RemoveCountCorrect(self, key, RemoveResult(self', removed));
-    UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents); 
-
-    RemoveResult(self', removed)
+    removed := RemoveInternal(inout self, key);
+    // TODO RemoveCountCorrect(self, key, RemoveResult(self', removed));
+    // TODO UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents); 
   }
 
-  function method Remove<V>(linear self: LinearHashMap, key: uint64)
-  : (linear self': LinearHashMap)
-    requires Inv(self)
+  method Remove<V>(linear inout self: LinearHashMap, key: uint64)
+    requires Inv(old_self)
     ensures
-      && Inv(self')
-      && (self'.contents == if key in self.contents
-        then map k | k in self.contents && k != key :: self.contents[k]
-        else self.contents)
+      && Inv(self)
+      && (self.contents == if key in old_self.contents
+        then map k | k in old_self.contents && k != key :: old_self.contents[k]
+        else old_self.contents)
   {
-    linear var RemoveResult(self', _) := RemoveAndGet(self, key);
-    self'
+    var _ := RemoveAndGet(inout self, key);
   }
 
   function method Get<V>(shared self: LinearHashMap, key: uint64)
