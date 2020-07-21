@@ -1,0 +1,2 @@
+#!/bin/bash
+sort -k 4,4 -k6nr,6 dafny-qi.profile | sort -su -k 4,4 | sort -k6nr,6 | less
