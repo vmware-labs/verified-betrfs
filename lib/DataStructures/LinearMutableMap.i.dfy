@@ -1329,96 +1329,100 @@ module LinearMutableMap {
     }
   }
 
-  function method iterToNext<V>(shared self: LinearHashMap<V>, i: uint64) : (res: (uint64, IteratorOutput))
+  method iterToNext<V>(shared self: LinearHashMap<V>, i: uint64) returns (i': uint64, output: IteratorOutput)
   requires Inv(self)
   requires 0 <= i as int <= |self.underlying.storage|
-  ensures NextExplainedByI(self, res.0, res.1)
-  ensures forall j | i <= j < res.0 :: !self.underlying.storage[j].Entry?
-  ensures i <= res.0
+  ensures NextExplainedByI(self, i', output)
+  ensures forall j | i <= j < i' :: !self.underlying.storage[j].Entry?
+  ensures i <= i'
+  ensures output.Next? ==> MapsTo(self.contents, output.key, output.value)
   decreases |self.underlying.storage| - i as int
   {
-    if i == seq_length(self.underlying.storage) then (
-      (i, Done)
-    ) else if seq_get(self.underlying.storage, i).Entry? then (
-      (i, Next(seq_get(self.underlying.storage, i).key, seq_get(self.underlying.storage, i).value))
-    ) else (
-      iterToNext(self, i+1)
-    )
+    i' := i;
+
+    while true
+    invariant 0 <= i' as int <= |self.underlying.storage|
+    invariant forall j | i <= j < i' :: !self.underlying.storage[j].Entry?
+    invariant i <= i'
+    decreases |self.underlying.storage| - i' as int
+    {
+      if i' == seq_length(self.underlying.storage) {
+        output := Done;
+        return;
+      } else if seq_get(self.underlying.storage, i').Entry? {
+        output := Next(seq_get(self.underlying.storage, i').key, seq_get(self.underlying.storage, i').value);
+        UnderlyingInvImpliesMapFromStorageMatchesContents(self.underlying, self.contents);
+        CantEquivocateMapFromStorageKey(self.underlying);
+        MapFromStorageProperties(self.underlying.storage, self.contents);
+        assert Slot(i' as int).slot == i' as nat; // trigger
+        return;
+      }
+      i' := i' + 1;
+    }
   }
 
-  function method simpleIterToNext<V>(shared self: LinearHashMap<V>, i: uint64) : (i': uint64)
+  method simpleIterToNext<V>(shared self: LinearHashMap<V>, i: uint64) returns (i': uint64)
   requires Inv(self)
   requires 0 <= i as int <= |self.underlying.storage|
   ensures 0 <= i' as int <= |self.underlying.storage|
   ensures forall j | i <= j < i' :: !self.underlying.storage[j].Entry?
-  ensures i' as int < |self.underlying.storage| ==>
-      self.underlying.storage[i'].Entry?
+  ensures i' as int < |self.underlying.storage| ==> self.underlying.storage[i'].Entry?
+  ensures i' as int < |self.underlying.storage| ==> (
+    var output := self.underlying.storage[i'];
+    MapsTo(self.contents, output.key, output.value)
+  )
   ensures i <= i'
-  decreases |self.underlying.storage| - i as int
   {
-    if i == seq_length(self.underlying.storage) then (
-      i
-    ) else if seq_get(self.underlying.storage, i).Entry? then (
-      i
-    ) else (
-      simpleIterToNext(self, i+1)
-    )
-  }
+    i' := i;
 
-  lemma lemmaIterToNextValidKeyValuePair<V>(self: LinearHashMap<V>, i: uint64)
-  requires Inv(self)
-  requires 0 <= i as int <= |self.underlying.storage|
-  ensures iterToNext(self, i).1.Next? ==>
-      MapsTo(self.contents, 
-          iterToNext(self, i).1.key,
-          iterToNext(self, i).1.value)
-  {
-    var j := iterToNext(self, i).0;
-    var next := iterToNext(self, i).1;
-    if next.Next? {
-      UnderlyingInvImpliesMapFromStorageMatchesContents(self.underlying, self.contents);
-      CantEquivocateMapFromStorageKey(self.underlying);
-      MapFromStorageProperties(self.underlying.storage, self.contents);
-      assert self.underlying.storage[Slot(j as int).slot].value == next.value; // trigger
+    while true
+    invariant 0 <= i' as int <= |self.underlying.storage|
+    invariant forall j | i <= j < i' :: !self.underlying.storage[j].Entry?
+    decreases |self.underlying.storage| - i' as int
+    {
+      if i' == seq_length(self.underlying.storage) {
+        return;
+      } else if seq_get(self.underlying.storage, i').Entry? {
+        ghost var output := self.underlying.storage[i'];
+        UnderlyingInvImpliesMapFromStorageMatchesContents(self.underlying, self.contents);
+        CantEquivocateMapFromStorageKey(self.underlying);
+        MapFromStorageProperties(self.underlying.storage, self.contents);
+        assert Slot(i' as int).slot == i' as nat; // trigger
+        return;
+      }
+      i' := i' + 1;
     }
   }
 
-  function method {:opaque} IterStart<V>(shared self: LinearHashMap<V>) : (it' : Iterator<V>)
+
+  method IterStart<V>(shared self: LinearHashMap<V>) returns (it' : Iterator<V>)
   requires Inv(self)
   ensures WFIter(self, it')
   ensures it'.s == {}
   {
-    lemmaIterToNextValidKeyValuePair(self, 0);
-
-    var (i, next) := iterToNext(self, 0);
-    var it' := Iterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL, next);
+    var i, next := iterToNext(self, 0);
+    it' := Iterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL, next);
 
     LemmaIterNextNotInS(self, it');
 
     reveal_SomeSkipCountExplainsKey();
-
-    it'
   }
 
-  function method {:opaque} SimpleIterStart<V>(shared self: LinearHashMap<V>) : (it' : SimpleIterator)
+  method SimpleIterStart<V>(shared self: LinearHashMap<V>) returns (it' : SimpleIterator)
   requires Inv(self)
   ensures WFSimpleIter(self, it')
   ensures it'.s == {}
   {
-    lemmaIterToNextValidKeyValuePair(self, 0);
-
     var i := simpleIterToNext(self, 0);
-    var it' := SimpleIterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL);
+    it' := SimpleIterator(i, {}, (|self.underlying.storage| - i as int) as ORDINAL);
 
     LemmaIterNextNotInS(self,
       Iterator(it'.i, it'.s, it'.decreaser, indexOutput(self, it'.i)));
 
     reveal_SomeSkipCountExplainsKey();
-
-    it'
   }
 
-  function method {:opaque} IterInc<V>(shared self: LinearHashMap<V>, it: Iterator) : (it' : Iterator)
+  method IterInc<V>(shared self: LinearHashMap<V>, it: Iterator) returns (it' : Iterator)
   requires Inv(self)
   requires WFIter(self, it)
   requires it.next.Next?
@@ -1427,10 +1431,8 @@ module LinearMutableMap {
   ensures it'.next.Done? ==> it'.s == self.contents.Keys
   ensures it'.decreaser < it.decreaser
   {
-    lemmaIterToNextValidKeyValuePair(self, it.i + 1);
-
-    var (i, next) := iterToNext(self, it.i + 1);
-    var it' := Iterator(i, it.s + {it.next.key}, (|self.underlying.storage| - i as int) as ORDINAL, next);
+    var i, next := iterToNext(self, it.i + 1);
+    it' := Iterator(i, it.s + {it.next.key}, (|self.underlying.storage| - i as int) as ORDINAL, next);
 
     assert FilledWithEntryKey(self.underlying.storage, Slot(it.i as nat), it.next.key);
     // assert EachReturnedKeyExplainedByPassedIndex(self, it'.s, it'.i as nat); // goal
@@ -1440,11 +1442,9 @@ module LinearMutableMap {
     assert (it'.next.Done? ==> it'.s == self.contents.Keys) by {
       reveal_SomeSkipCountExplainsKey();
     }
-
-    it'
   }
 
-  function method {:opaque} SimpleIterInc<V>(shared self: LinearHashMap<V>, it: SimpleIterator) : (it' : SimpleIterator)
+  method SimpleIterInc<V>(shared self: LinearHashMap<V>, it: SimpleIterator) returns (it' : SimpleIterator)
   requires Inv(self)
   requires WFSimpleIter(self, it)
   requires SimpleIterOutput(self, it).Next?
@@ -1452,10 +1452,8 @@ module LinearMutableMap {
   ensures it'.s == it.s + {SimpleIterOutput(self, it).key}
   ensures it'.decreaser < it.decreaser
   {
-    lemmaIterToNextValidKeyValuePair(self, it.i + 1);
-
     var i := simpleIterToNext(self, it.i + 1);
-    var it' := SimpleIterator(i, it.s + {SimpleIterOutput(self, it).key}, (|self.underlying.storage| - i as int) as ORDINAL);
+    it' := SimpleIterator(i, it.s + {SimpleIterOutput(self, it).key}, (|self.underlying.storage| - i as int) as ORDINAL);
 
     assert FilledWithEntryKey(self.underlying.storage, Slot(it.i as nat), SimpleIterOutput(self, it).key);
     // assert EachReturnedKeyExplainedByPassedIndex(self, it'.s, it'.i as nat); // goal
@@ -1466,8 +1464,6 @@ module LinearMutableMap {
     assert (it'.i as int == |self.underlying.storage| ==> (it'.s == self.contents.Keys)) by {
       reveal_SomeSkipCountExplainsKey();
     }
-
-    it'
   }
 
   lemma LemmaIterIndexLtCount<V>(self: LinearHashMap<V>, it: Iterator<V>)
@@ -1480,26 +1476,21 @@ module LinearMutableMap {
     }
   }
 
-  function method MaxKeyIterate<V>(shared self: LinearHashMap<V>, it: Iterator<V>, m: uint64) : (res : uint64)
+  method MaxKey<V>(shared self: LinearHashMap<V>) returns (maxK : uint64)
   requires Inv(self)
-  requires WFIter(self, it)
-  requires forall key | key in it.s :: key <= m
-  ensures forall key | key in self.contents :: key <= res
-  decreases it.decreaser
+  ensures forall key | key in self.contents :: key <= maxK
   {
-    if it.next.Done? then (
-      m
-    ) else (
-      var key := it.next.key;
-      MaxKeyIterate(self, IterInc(self, it), if m < key then key else m)
-    )
-  }
+    var it := IterStart(self);
 
-  function method {:opaque} MaxKey<V>(shared self: LinearHashMap<V>) : (res : uint64)
-  requires Inv(self)
-  ensures forall key | key in self.contents :: key <= res
-  {
-    MaxKeyIterate(self, IterStart(self), 0)    
+    while it.next.Next?
+    invariant WFIter(self, it)
+    invariant forall key | key in it.s :: key <= maxK
+    decreases it.decreaser
+    {
+      var key := it.next.key;
+      maxK := if maxK < key then key else maxK;
+      it := IterInc(self, it);
+    }
   }
 
   method UpdateByIter<V>(linear inout self: LinearHashMap<V>, it: SimpleIterator, value: V)
@@ -1514,25 +1505,6 @@ module LinearMutableMap {
     ghost var newContents := self.contents[SimpleIterOutput(self, it).key := value];
     FixedSizeUpdateBySlot(inout self.underlying, it.i, value);
     AssignGhost(ghost inout self.contents, newContents);
-
-    // assert EachReturnedKeyExplainedByPassedIndex(old_self, it.s, it.i);
-    // assert forall key | key in it.s ::
-    //     exists j | 0 <= j < it.i as int :: FilledWithEntryKey(self.underlying.storage, Slot(j), key); 
-
-    // forall key | key in it.s
-    // ensures exists j | 0 <= j < it.i as int ::
-    //     && self.underlying.storage[j].Entry?
-    //     && key == self.underlying.storage[j].key
-    // {
-    //   // assert key in old_self.contents;
-    //   var j :| 0 <= j < it.i as int
-    //     && old_self.underlying.storage[j].Entry?
-    //     && key == old_self.underlying.storage[j].key;
-    //   assert key == self.underlying.storage[j].key; // observe
-    // }
-
-    // assert EachReturnedKeyExplainedByPassedIndex(self, it.s, it.i);
-    // assert WFSimpleIter(self, it);
     UnderlyingInvImpliesMapFromStorageMatchesContents(self.underlying, self.contents);
   }
 
