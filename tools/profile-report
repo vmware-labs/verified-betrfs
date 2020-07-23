@@ -1,2 +1,54 @@
-#!/bin/bash
-sort -k 4,4 -k6nr,6 dafny-qi.profile | sort -su -k 4,4 | sort -k6nr,6 | less
+#!/usr/bin/env python3
+import sys
+import re
+from termcolor import colored
+import argparse
+
+class Profile:
+    def __init__(self):
+        self.by_max = {}
+        self.by_sum = {}
+        self.by_count = {}
+
+    def parse(self, fn):
+        ptrn = re.compile("\[quantifier_instances\] ([^ ]*) : *(\d+) :")
+        for line in open(fn).readlines():
+            line = line.strip()
+            mo = ptrn.search(line)
+            if mo != None:
+                loc,count = mo.groups()
+                count = int(count)
+                self.by_max[loc] = max(self.by_max.get(loc, 0), count)
+                self.by_sum[loc] = self.by_sum.get(loc, 0) + count
+                self.by_count[loc] = self.by_count.get(loc, 0) + 1
+
+    def display(self, d, label):
+        tuples = list(d.items())
+        tuples.sort(key=lambda i: (-i[1],i[0]))
+        print("%10s %s" % (label, ""))
+        for (loc,val) in tuples:
+            if loc.startswith("DafnyPre") or loc.startswith("funType") or loc.startswith("unknown") or loc.startswith("cast:") or loc.startswith("typeInv"):
+                color = "grey"
+            else:
+                color = "white"
+            print("%10d %s" % (val, colored(loc, color)))
+
+def main(args):
+    profile_filename = args.input
+    if len(sys.argv)>1:
+        profile_filename == sys.argv[1]
+    p = Profile()
+    p.parse(profile_filename)
+    source = {"max":p.by_max, "sum":p.by_sum, "count":p.by_count}
+    p.display(source[args.metric], args.metric)
+
+parser = argparse.ArgumentParser(description = "Display a report from Z3 quantifier-instantiation profiling output.\nUse Dafny flags /z3opt:smt.qi.profile=true /z3opt:smt.qi.profile_freq=1000")
+parser.add_argument("--input", default="dafny-qi.profile", help="Input filename")
+parser.add_argument("--metric", default="max", help="Sort by max count in profile output.",
+        choices=["max", "sum", "count"])
+# We're not super-confident we know how to interpret the profiler output.
+# I think it's kinda periodic, so sum and count don't really make sense,
+# but we've seen some weird behavior where the "max" isn't monotonic.
+# So we add these modes in case you want to investigate further.
+
+main(parser.parse_args())
