@@ -314,13 +314,13 @@ module LinearSequence_i {
   {
     shared_seq_length_bound(s);
     var i:uint64 := seq_length(s);
-    TrustedRuntimeSeqResizeMut(s, newlen);
+    TrustedRuntimeSeqResizeMut(inout s, newlen);
     while (i < newlen)
       invariant |s| == newlen as nat
       invariant |old_s| <= |s| ==> |old_s| <= i as nat <= |s|
       invariant forall j :: 0 <= j < i as nat && j < |s| ==> s[j] == (if j < |old_s| then old_s[j] else a)
     {
-      mut_seq_set(s, i, a);
+      mut_seq_set(inout s, i, a);
       i := i + 1;
     }
   }
