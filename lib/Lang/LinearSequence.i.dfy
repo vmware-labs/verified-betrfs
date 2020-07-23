@@ -303,6 +303,28 @@ module LinearSequence_i {
     }
   }
 
+  method {:extern "LinearExtern", "TrustedRuntimeSeqResizeMut"} TrustedRuntimeSeqResizeMut<A>(linear inout s: seq<A>, newlen: uint64)
+    ensures |s| == newlen as nat
+    ensures forall j :: 0 <= j < newlen as nat && j < |old_s| ==> s[j] == old_s[j]
+
+
+  method SeqResizeMut<A>(linear inout s: seq<A>, newlen: uint64, a: A)
+    ensures |s| == newlen as nat
+    ensures forall j :: 0 <= j < newlen as nat ==> s[j] == (if j < |old_s| then old_s[j] else a)
+  {
+    shared_seq_length_bound(s);
+    var i:uint64 := seq_length(s);
+    TrustedRuntimeSeqResizeMut(s, newlen);
+    while (i < newlen)
+      invariant |s| == newlen as nat
+      invariant |old_s| <= |s| ==> |old_s| <= i as nat <= |s|
+      invariant forall j :: 0 <= j < i as nat && j < |s| ==> s[j] == (if j < |old_s| then old_s[j] else a)
+    {
+      mut_seq_set(s, i, a);
+      i := i + 1;
+    }
+  }
+
   method InsertSeq<A>(linear s: seq<A>, a: A, pos: uint64) returns (linear s2: seq<A>)
     requires |s| < Uint64UpperBound() - 1;
     requires 0 <= pos as int <= |s|;

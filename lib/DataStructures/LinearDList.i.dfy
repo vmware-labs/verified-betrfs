@@ -175,17 +175,18 @@ module DList {
     var _ := seq_free(nodes);
   }
 
-  method Expand<A>(linear l:DList<A>) returns(linear l':DList<A>)
-    requires Inv(l)
-    ensures Inv(l')
-    ensures l'.s == l.s
-    ensures forall x :: ValidPtr(l, x) ==> ValidPtr(l', x) && l'.g[x] == l.g[x]
-    ensures l'.freeStack != 0 && l'.nodes[l'.freeStack].data.None?
+  method Expand<A>(linear inout l:DList<A>)
+    requires Inv(old_l)
+    ensures Inv(l)
+    ensures l.s == old_l.s
+    ensures forall x :: ValidPtr(old_l, x) ==> ValidPtr(l, x) && l.g[x] == old_l.g[x]
+    ensures l.freeStack != 0 && l.nodes[l.freeStack].data.None?
   {
-    linear var DList(nodes, freeStack, s, f, g) := l;
-    shared_seq_length_bound(nodes);
-    var len := seq_length(nodes);
-    shared_seq_length_bound(nodes);
+    // linear var DList(nodes, freeStack, s, f, g) := l;
+
+    shared_seq_length_bound(l.nodes);
+    var len := seq_length(l.nodes);
+    shared_seq_length_bound(l.nodes);
     var len' := if len < 0x7fff_ffff_ffff_ffff then len + len else len + 1;
     nodes := SeqResize(nodes, len', Node(None, freeStack, 0));
     nodes := BuildFreeStack(nodes, len + 1);
