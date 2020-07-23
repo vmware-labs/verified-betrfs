@@ -1,5 +1,19 @@
+## quantifier instantiation
+
 To generate a log of quantifier instantiations:
-  dafny <source.dfy> /proc:*ProcedureName* /z3opt:smt.qi.profile=true /z3opt:smt.qi.profile_freq=1000 > /tmp/qi.log
+  dafny <source.dfy> /proc:*ProcedureName* /z3opt:smt.qi.profile=true /z3opt:smt.qi.profile_freq=1000 > qi.profile
+
+To display a report/summary:
+  ./tools/profile-report
+
+## z3 statistics
+To generate the input to z3:
+  dafny <source.dfy> /proc:*ProcedureName* /proverLog:log.smt2
+
+Then run z3 directly with statistics enabled:
+  .dafny/dafny/Binaries/z3/bin/z3 -st log.smt2
+
+### legacy sorter for quantifier instantiation
 
 Then you can sort them using the following command:
   sort -k 4,4 -k6nr,6 /tmp/qi.log | sort -su -k 4,4 | sort -k6nr,6 | less
@@ -20,3 +34,4 @@ Then you can sort them using the following command:
 
 - The third sort reverse sorts by instantiation count, so the highest
   instantiation counts are at the top of the file.
+
