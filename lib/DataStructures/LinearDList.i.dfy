@@ -195,28 +195,33 @@ module DList {
     AssignGhost(ghost inout l.g, seq(|l.nodes|, i requires 0 <= i < |l.nodes| => if i < |l.g| then l.g[i] else unused));
   }
 
-  method Remove<A>(linear l:DList<A>, p:uint64) returns(linear l':DList<A>)
-    requires Inv(l)
-    requires ValidPtr(l, p)
-    ensures Inv(l')
-    ensures Seq(l') == Seq(l)[.. Index(l, p)] + Seq(l)[Index(l, p) + 1 ..]
-    ensures forall x :: x != p && ValidPtr(l, x) ==>
-      ValidPtr(l', x) && Index(l', x) == Index(l, x) - (if Index(l, x) < Index(l, p) then 0 else 1)
+  method Remove<A>(linear inout l:DList<A>, p:uint64)
+    requires Inv(old_l)
+    requires ValidPtr(old_l, p)
+    ensures Inv(l)
+    ensures Seq(l) == Seq(old_l)[.. Index(old_l, p)] + Seq(old_l)[Index(old_l, p) + 1 ..]
+    ensures forall x :: x != p && ValidPtr(old_l, x) ==>
+      ValidPtr(l, x) && Index(l, x) == Index(old_l, x) - (if Index(old_l, x) < Index(old_l, p) then 0 else 1)
   {
-    linear var DList(nodes, freeStack, s, f, g) := l;
-    ghost var index := g[p];
-    ghost var s' := s[.. index] + s[index + 1 ..];
-    ghost var f' := f[.. index] + f[index + 1 ..];
-    ghost var g' := seq(|g|, x requires 0 <= x < |g| =>
-      if g[x] == index then unused else if g[x] > index then g[x] - 1 else g[x]);
+    ghost var index := l.g[p];
+    ghost var s' := l.s[.. index] + l.s[index + 1 ..];
+    ghost var f' := l.f[.. index] + l.f[index + 1 ..];
+    ghost var g' := seq(|l.g|, x requires 0 <= x < |l.g| =>
+      if l.g[x] == index then unused else if l.g[x] > index then l.g[x] - 1 else l.g[x]);
 
-    var node := seq_get(nodes, p);
-    var node_prev := seq_get(nodes, node.prev);
-    nodes := seq_set(nodes, node.prev, node_prev.(next := node.next));
-    var node_next := seq_get(nodes, node.next);
-    nodes := seq_set(nodes, node.next, node_next.(prev := node.prev));
-    nodes := seq_set(nodes, p, Node(None, freeStack, 0));
-    l' := DList(nodes, p, s', f', g');
+    var freeStack := l.freeStack;
+
+    var node := seq_get(l.nodes, p);
+    var node_prev := seq_get(l.nodes, node.prev);
+    mut_seq_set(inout l.nodes, node.prev, node_prev.(next := node.next));
+    var node_next := seq_get(l.nodes, node.next);
+    mut_seq_set(inout l.nodes, node.next, node_next.(prev := node.prev));
+    mut_seq_set(inout l.nodes, p, Node(None, freeStack, 0));
+
+    Assign(inout l.freeStack, p);
+    AssignGhost(ghost inout l.s, s');
+    AssignGhost(ghost inout l.f, f');
+    AssignGhost(ghost inout l.g, g');
   }
 
   method InsertAfter<A>(linear l:DList<A>, p:uint64, a:A) returns(linear l':DList<A>, p':uint64)
@@ -251,6 +256,28 @@ module DList {
     nodes := seq_set(nodes, node.next, node_next.(prev := p'));
     nodes := seq_set(nodes, p', node');
     l' := DList(nodes, freeNode.next, s', f', g');
+
+    forall p | 0 <= p < |g| && sentinel <= g[p]
+      ensures 
+        && (g'[p] == sentinel ==> p == 0)
+        && (0 <= g'[p] ==> f'[g'[p]] == p && nodes[p].data == Some(s'[g'[p]]))
+        && nodes[p].next as int == (
+          if g'[p] + 1 < |f'| then f'[g'[p] + 1] // nonlast.next or sentinel.next
+          else 0) // last.next == sentinel or sentinel.next == sentinel
+        && nodes[p].prev as int == (
+          if g'[p] > 0 then f'[g'[p] - 1] // nonfirst.prev
+          else if g'[p] == 0 || |f'| == 0 then 0 // first.prev == sentinel or sentinel.prev == sentinel
+          else f'[|f'| - 1]) // sentinel.prev == last
+      {
+        assert nodes[p].next as int == (
+          if g'[p] + 1 < |f| then f'[g'[p] + 1] // nonlast.next or sentinel.next
+          else 0); // last.next == sentinel or sentinel.next == sentinel
+        
+        assert nodes[p].prev as int == (
+          if g'[p] > 0 then f'[g'[p] - 1] // nonfirst.prev
+          else if g'[p] == 0 || |f'| == 0 then 0 // first.prev == sentinel or sentinel.prev == sentinel
+          else f'[|f'| - 1]); // sentinel.prev == last
+    }
   }
 
   method InsertBefore<A>(linear l:DList<A>, p:uint64, a:A) returns(linear l':DList<A>, p':uint64)
