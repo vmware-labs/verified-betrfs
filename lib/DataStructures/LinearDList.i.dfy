@@ -256,28 +256,18 @@ module DList {
     nodes := seq_set(nodes, node.next, node_next.(prev := p'));
     nodes := seq_set(nodes, p', node');
     l' := DList(nodes, freeNode.next, s', f', g');
-
-    forall p | 0 <= p < |g| && sentinel <= g[p]
-      ensures 
-        && (g'[p] == sentinel ==> p == 0)
-        && (0 <= g'[p] ==> f'[g'[p]] == p && nodes[p].data == Some(s'[g'[p]]))
-        && nodes[p].next as int == (
-          if g'[p] + 1 < |f'| then f'[g'[p] + 1] // nonlast.next or sentinel.next
-          else 0) // last.next == sentinel or sentinel.next == sentinel
-        && nodes[p].prev as int == (
-          if g'[p] > 0 then f'[g'[p] - 1] // nonfirst.prev
-          else if g'[p] == 0 || |f'| == 0 then 0 // first.prev == sentinel or sentinel.prev == sentinel
-          else f'[|f'| - 1]) // sentinel.prev == last
-      {
-        assert nodes[p].next as int == (
-          if g'[p] + 1 < |f| then f'[g'[p] + 1] // nonlast.next or sentinel.next
-          else 0); // last.next == sentinel or sentinel.next == sentinel
-        
-        assert nodes[p].prev as int == (
-          if g'[p] > 0 then f'[g'[p] - 1] // nonfirst.prev
-          else if g'[p] == 0 || |f'| == 0 then 0 // first.prev == sentinel or sentinel.prev == sentinel
-          else f'[|f'| - 1]); // sentinel.prev == last
-    }
+ 
+    // TODO(andrea) reduce this after fixing trigger loops
+    assert (forall p :: 0 <= p < |g'| && sentinel <= g'[p] ==>
+      && (g'[p] == sentinel ==> p == 0)
+      && (0 <= g'[p] ==> f'[g'[p]] == p && nodes[p].data == Some(s'[g'[p]]))
+      && nodes[p].next as int == (
+        if g'[p] + 1 < |f'| then f'[g'[p] + 1] // nonlast.next or sentinel.next
+        else 0) // last.next == sentinel or sentinel.next == sentinel
+      && nodes[p].prev as int == (
+        if g'[p] > 0 then f'[g'[p] - 1] // nonfirst.prev
+        else if g'[p] == 0 || |f'| == 0 then 0 // first.prev == sentinel or sentinel.prev == sentinel
+        else f'[|f'| - 1])); // sentinel.prev == last
   }
 
   method InsertBefore<A>(linear l:DList<A>, p:uint64, a:A) returns(linear l':DList<A>, p':uint64)
