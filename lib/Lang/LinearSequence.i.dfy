@@ -283,6 +283,7 @@ module LinearSequence_i {
       looted, elt := lseq_take(looted, i);
       loot := lseq_give(loot, i-from, elt);
       i := i + 1;
+      assert lseqs(loot)[..i-from] == lseqs(old(source))[from..i]; // observe
     }
   }
 

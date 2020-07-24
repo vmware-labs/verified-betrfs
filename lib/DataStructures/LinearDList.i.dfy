@@ -13,12 +13,14 @@ include "../Lang/NativeTypes.s.dfy"
 include "../Base/Option.s.dfy"
 include "../Lang/LinearSequence.s.dfy"
 include "../Lang/LinearSequence.i.dfy"
+include "../Lang/Inout.s.dfy"
 
 module DList {
   import opened NativeTypes
   import opened Options
   import opened LinearSequence_s
   import opened LinearSequence_i
+  import opened Inout
   export
     provides NativeTypes
     provides DList
@@ -138,22 +140,21 @@ module DList {
     seq_get(l.nodes, p).prev
   }
 
-  method BuildFreeStack<A>(linear a:seq<Node<A>>, k:uint64) returns(linear b:seq<Node<A>>)
-    requires 0 < k as nat <= |a|
-    ensures |b| == |a|
-    ensures forall i :: 0 <= i < k as nat ==> b[i] == a[i]
-    ensures forall i :: k as nat <= i < |a| <= 0xffff_ffff_ffff_ffff ==> b[i] == Node(None, i as uint64 - 1, 0)
+  method BuildFreeStack<A>(linear inout a:seq<Node<A>>, k:uint64)
+    requires 0 < k as nat <= |old_a|
+    ensures |a| == |old_a|
+    ensures forall i :: 0 <= i < k as nat ==> a[i] == old_a[i]
+    ensures forall i :: k as nat <= i < |old_a| <= 0xffff_ffff_ffff_ffff ==> a[i] == Node(None, i as uint64 - 1, 0)
   {
-    b := a;
     var n := k;
-    shared_seq_length_bound(b);
-    while (n < seq_length(b))
-      invariant k as int <= n as int <= |b|
-      invariant |b| == |a|
-      invariant forall i :: 0 <= i < k as nat ==> b[i] == a[i]
-      invariant forall i :: k as nat <= i < n as nat ==> b[i] == Node(None, i as uint64 - 1, 0)
+    shared_seq_length_bound(a);
+    while (n < seq_length(a))
+      invariant k as int <= n as int <= |a|
+      invariant |a| == |old_a| //?
+      invariant forall i :: 0 <= i < k as nat ==> a[i] == old_a[i]
+      invariant forall i :: k as nat <= i < n as nat ==> a[i] == Node(None, i as uint64 - 1, 0)
     {
-      b := seq_set(b, n, Node(None, n - 1, 0));
+      mut_seq_set(inout a, n, Node(None, n - 1, 0));
       n := n + 1;
     }
   }
@@ -165,7 +166,7 @@ module DList {
     ensures Seq(l) == []
   {
     linear var nodes := seq_alloc<Node>(initial_len, Node(None, 0, 0));
-    nodes := BuildFreeStack(nodes, 1);
+    BuildFreeStack(inout nodes, 1);
     l := DList(nodes, initial_len - 1, [], [], seq(initial_len as nat, p => if p == 0 then sentinel else unused));
   }
 
@@ -182,16 +183,16 @@ module DList {
     ensures forall x :: ValidPtr(old_l, x) ==> ValidPtr(l, x) && l.g[x] == old_l.g[x]
     ensures l.freeStack != 0 && l.nodes[l.freeStack].data.None?
   {
-    // linear var DList(nodes, freeStack, s, f, g) := l;
-
     shared_seq_length_bound(l.nodes);
     var len := seq_length(l.nodes);
     shared_seq_length_bound(l.nodes);
     var len' := if len < 0x7fff_ffff_ffff_ffff then len + len else len + 1;
-    nodes := SeqResize(nodes, len', Node(None, freeStack, 0));
-    nodes := BuildFreeStack(nodes, len + 1);
-    l' := DList(nodes, len' - 1, s, f, seq(|nodes|,
-      i requires 0 <= i < |nodes| => if i < |g| then g[i] else unused));
+    var s := l.freeStack;
+    SeqResizeMut(inout l.nodes, len', Node(None, s, 0));
+    BuildFreeStack(inout l.nodes, len + 1);
+    
+    Assign(inout l.freeStack, len' - 1);
+    AssignGhost(ghost inout l.g, seq(|l.nodes|, i requires 0 <= i < |l.nodes| => if i < |l.g| then l.g[i] else unused));
   }
 
   method Remove<A>(linear l:DList<A>, p:uint64) returns(linear l':DList<A>)
@@ -233,7 +234,7 @@ module DList {
     p' := l'.freeStack;
     var freeNode := seq_get(l'.nodes, p');
     if (p' == 0 || freeNode.data.Some?) {
-      l' := Expand(l');
+      Expand(inout l');
       p' := l'.freeStack;
       freeNode := seq_get(l'.nodes, p');
     }
@@ -267,7 +268,7 @@ module DList {
     p' := l'.freeStack;
     var freeNode := seq_get(l'.nodes, p');
     if (p' == 0 || freeNode.data.Some?) {
-      l' := Expand(l');
+      Expand(inout l');
       p' := l'.freeStack;
       freeNode := seq_get(l'.nodes, p');
     }
