@@ -317,25 +317,25 @@ module DList {
     }
   }
 
-  method InsertBefore<A>(linear l:DList<A>, p:uint64, a:A) returns(linear l':DList<A>, p':uint64)
-    requires Inv(l)
-    requires MaybePtr(l, p)
-    ensures Inv(l')
-    ensures Seq(l') == Seq(l)[.. IndexHi(l, p)] + [a] + Seq(l)[IndexHi(l, p) ..]
-    ensures ValidPtr(l', p') && Index(l', p') == IndexHi(l, p)
-    ensures forall x :: ValidPtr(l, x) ==>
-      ValidPtr(l', x) && Index(l', x) == Index(l, x) + (if Index(l, x) < IndexHi(l, p) then 0 else 1)
+  method InsertBefore<A>(linear inout l:DList<A>, p:uint64, a:A) returns(p':uint64)
+    requires Inv(old_l)
+    requires MaybePtr(old_l, p)
+    ensures Inv(l)
+    ensures Seq(l) == Seq(old_l)[.. IndexHi(old_l, p)] + [a] + Seq(old_l)[IndexHi(old_l, p) ..]
+    ensures ValidPtr(l, p') && Index(l, p') == IndexHi(old_l, p)
+    ensures forall x :: ValidPtr(old_l, x) ==>
+      ValidPtr(l, x) && Index(l, x) == Index(old_l, x) + (if Index(old_l, x) < IndexHi(old_l, p) then 0 else 1)
   {
-    l' := l;
-    p' := l'.freeStack;
-    var freeNode := seq_get(l'.nodes, p');
+    //l' := l;
+    p' := l.freeStack;
+    var freeNode := seq_get(l.nodes, p');
     if (p' == 0 || freeNode.data.Some?) {
-      Expand(inout l');
-      p' := l'.freeStack;
-      freeNode := seq_get(l'.nodes, p');
+      Expand(inout l);
+      p' := l.freeStack;
+      freeNode := seq_get(l.nodes, p');
     }
 
-    ghost var lExpanded := l';
+    ghost var lExpanded := l;
 
     forall i | 0 <= i < |lExpanded.f|
     ensures PointerInRange(lExpanded.nodes, lExpanded.f, i)
@@ -343,22 +343,23 @@ module DList {
       assert PointerInRange(l.nodes, l.f, i); // observe
     }
 
-    linear var DList(nodes, freeStack, s, f, g) := l';
-    ghost var index' := IndexHi(l, p);
-    ghost var s' := s[.. index'] + [a] + s[index' ..];
-    ghost var f' := f[.. index'] + [p' as int] + f[index' ..];
-    ghost var g' := seq(|g|, x requires 0 <= x < |g| =>
-      if x == p' as int then index' else if g[x] >= index' then g[x] + 1 else g[x]);
-    var node := seq_get(nodes, p);
-    var node' := Node(Some(a), p, node.prev);
-    nodes := seq_set(nodes, p, node.(prev := p'));
-    var node_prev := seq_get(nodes, node.prev);
-    nodes := seq_set(nodes, node.prev, node_prev.(next := p'));
-    nodes := seq_set(nodes, p', node');
-    l' := DList(nodes, freeNode.next, s', f', g');
+    ghost var lBefore := l;
 
-    forall i | 0 <= i < |l'.f|
-    ensures PointerInRange(l'.nodes, l'.f, i)
+    //linear var DList(nodes, freeStack, s, f, g) := l';
+    ghost var index' := IndexHi(l, p);
+    inout ghost l.s := lBefore.s[.. index'] + [a] + lBefore.s[index' ..];
+    inout ghost l.f := l.f[.. index'] + [p' as int] + l.f[index' ..];
+    inout ghost l.g := seq(|l.g|, x requires 0 <= x < |l.g| =>
+      if x == p' as int then index' else if l.g[x] >= index' then l.g[x] + 1 else l.g[x]);
+    var node := seq_get(l.nodes, p);
+    var node' := Node(Some(a), p, node.prev);
+    mut_seq_set(inout l.nodes, p, node.(prev := p'));
+    var node_prev := seq_get(l.nodes, node.prev);
+    mut_seq_set(inout l.nodes, node.prev, node_prev.(next := p'));
+    mut_seq_set(inout l.nodes, p', node');
+
+    forall i | 0 <= i < |l.f|
+    ensures PointerInRange(l.nodes, l.f, i)
     {
       if i < index' {
         assert PointerInRange(lExpanded.nodes, lExpanded.f, i); // observe
@@ -368,11 +369,11 @@ module DList {
       }
     }
 
-    assert Inv(l') by {
-      forall i | 0 <= i < |l'.f|
+    assert Inv(l) by {
+      forall i | 0 <= i < |l.f|
       ensures (
-        assert PointerInRange(l'.nodes, l'.f, i);
-        l'.g[l'.f[i]] == i
+        assert PointerInRange(l.nodes, l.f, i);
+        l.g[l.f[i]] == i
       )
       {
         if i == index' {
