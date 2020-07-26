@@ -585,15 +585,13 @@ module LinearMutableMap {
     ghost var probeStartSlotIdx, probeSkips;
     slotIdx, probeStartSlotIdx, probeSkips := Probe(self, key);
 
-    ghost var updatedContents := self.contents[key := Some(value)];
-    AssignGhost(ghost inout self.contents, updatedContents);
+    inout ghost self.contents := self.contents[key := Some(value)];
 
     var replacedItem := seq_get(self.storage, slotIdx);
     mut_seq_set(inout self.storage, slotIdx, Entry(key, value));
 
     if replacedItem.Empty? {
-      var newCount := self.count + 1;
-      Assign(inout self.count, newCount);
+      inout self.count := self.count + 1;
     }
 
     if replacedItem.Entry? {
@@ -654,10 +652,9 @@ module LinearMutableMap {
   ensures self.storage == old_self.storage[slotIdx as nat := Entry(old_self.storage[slotIdx].key, value)]
   ensures self.contents == old_self.contents[old_self.storage[slotIdx].key := Some(value)]
   {
-    ghost var updatedContents := self.contents[self.storage[slotIdx].key := Some(value)];
     var entry := seq_get(self.storage, slotIdx);
     mut_seq_set(inout self.storage, slotIdx, entry.(value := value));
-    AssignGhost(ghost inout self.contents, updatedContents);
+    inout ghost self.contents := self.contents[self.storage[slotIdx].key := Some(value)];
 
     ghost var old_self := old_self; // TODO(andrea)
     ghost var key := old_self.storage[slotIdx].key;
@@ -741,8 +738,7 @@ module LinearMutableMap {
     if seq_get(self.storage, slotIdx).Entry? {
       removed := Some(seq_get(self.storage, slotIdx).value);
       mut_seq_set(inout self.storage, slotIdx, Tombstone(key));
-      ghost var newContents := self.contents[key := None];
-      AssignGhost(ghost inout self.contents, newContents);
+      inout ghost self.contents := self.contents[key := None];
     } else {
       removed := None;
     }
@@ -1103,11 +1099,9 @@ module LinearMutableMap {
     // -- mutation --
     // linear var LinearHashMap(self1Underlying, self1Count, self1Contents) := self1;
     replaced := FixedSizeInsert(inout self.underlying, key, value);
-    ghost var newContents := self.contents[key := value];
-    AssignGhost(ghost inout self.contents, newContents);
+    inout ghost self.contents := self.contents[key := value];
     if replaced.None? {
-      var newCount := self.count + 1;
-      Assign(inout self.count, newCount);
+      inout self.count := self.count + 1;
     }
     // --------------
 
@@ -1138,11 +1132,9 @@ module LinearMutableMap {
   {
     removed := FixedSizeRemove(inout self.underlying, key);
     if removed.Some? {
-      var newCount := self.count - 1;
-      Assign(inout self.count, newCount);
+      inout self.count := self.count - 1;
     }
-    ghost var newContents := map k | k in self.contents && k != key :: self.contents[k];
-    AssignGhost(ghost inout self.contents, newContents);
+    inout ghost self.contents := map k | k in self.contents && k != key :: self.contents[k];
 
     if removed.Some? {
       assert |old_self.contents.Keys - {key}| == |old_self.contents.Keys| - |{key}|; // observe
@@ -1513,9 +1505,9 @@ module LinearMutableMap {
   ensures self.count == old_self.count
   ensures WFSimpleIter(self, it)
   {
-    ghost var newContents := self.contents[SimpleIterOutput(self, it).key := value];
+    ghost var key := SimpleIterOutput(self, it).key;
     FixedSizeUpdateBySlot(inout self.underlying, it.i, value);
-    AssignGhost(ghost inout self.contents, newContents);
+    inout ghost self.contents := self.contents[key := value];
     UnderlyingInvImpliesMapFromStorageMatchesContents(self.underlying, self.contents);
   }
 
