@@ -67,40 +67,35 @@ module USeq
     LinearMutableMap.Destructor(ptr_map);
   }
 
-  method Add(linear useq:USeq, x:uint64) returns(linear useq':USeq)
-    requires Inv(useq)
-    requires |I(useq)| < 0x1_0000_0000_0000_0000 / 8
-    ensures Inv(useq')
-    ensures I(useq') == (if x in I(useq) then I(useq) else I(useq) + [x])
+  method Add(linear inout useq:USeq, x:uint64)
+    requires Inv(old_useq)
+    requires |I(old_useq)| < 0x1_0000_0000_0000_0000 / 8
+    ensures Inv(useq)
+    ensures I(useq) == (if x in I(old_useq) then I(old_useq) else I(old_useq) + [x])
   {
     reveal_NoDupes();
     NoDupesSetCardinality(I(useq));
 
-    linear var USeq(dlist, ptr_map) := useq;
-    if (LinearMutableMap.Get(ptr_map, x).Some?) {
-      useq' := USeq(dlist, ptr_map);
-    } else {
-      var p;
-      dlist, p := DList.InsertBefore(dlist, 0, x);
-      ptr_map := LinearMutableMap.Insert(ptr_map, x, p);
-      useq' := USeq(dlist, ptr_map);
+    var found := LinearMutableMap.Get(useq.ptr_map, x);
+    if !found.Some? {
+      var p := DList.InsertBefore(inout useq.dlist, 0, x);
+      LinearMutableMap.Insert(inout useq.ptr_map, x, p);
     }
   }
 
-  method Remove(linear useq:USeq, x:uint64) returns(linear useq':USeq)
-    requires Inv(useq)
-    ensures Inv(useq')
-    ensures I(useq') == RemoveOneValue(I(useq), x)
+  method Remove(linear inout useq:USeq, x:uint64)
+    requires Inv(old_useq)
+    ensures Inv(useq)
+    ensures I(useq) == RemoveOneValue(I(old_useq), x)
   {
-    linear var USeq(dlist, ptr_map) := useq;
-    ghost var q := DList.Seq(dlist);
+    //linear var USeq(dlist, ptr_map) := useq;
+    ghost var q := DList.Seq(useq.dlist);
 
-    linear var RemoveResult(ptr_map', removed) := LinearMutableMap.RemoveAndGet(ptr_map, x);
+    var removed := LinearMutableMap.RemoveAndGet(inout useq.ptr_map, x);
     if (removed.Some?) {
       var Some(p) := removed;
-      dlist := DList.Remove(dlist, p);
+      DList.Remove(inout useq.dlist, p);
     }
-    useq' := USeq(dlist, ptr_map');
     reveal_NoDupes();
     reveal_RemoveOneValue();
   }
