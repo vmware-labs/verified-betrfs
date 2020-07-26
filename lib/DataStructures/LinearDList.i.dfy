@@ -1,26 +1,13 @@
-/*
-If Z3 fails to verify this file, try these Dafny options:
-  /noNLarith /proverOpt:OPTIMIZE_FOR_BV=true /z3opt:smt.PHASE_SELECTION=0 /z3opt:smt.RESTART_STRATEGY=0 /z3opt:smt.RESTART_FACTOR=1.5 /z3opt:smt.ARITH.RANDOM_INITIAL_VALUE=true /z3opt:smt.CASE_SPLIT=1
-Explanation:
-  Dafny/Boogie sets smt.CASE_SPLIT=3, which seems good in general, but makes this file unstable.
-  Z3's default is smt.CASE_SPLIT=1.
-  There's no direct way to override the smt.CASE_SPLIT=3, but /proverOpt:OPTIMIZE_FOR_BV=true blocks it,
-  along with a bunch of other options (e.g. smt.PHASE_SELECTION=0);
-  these other options then must be restored manually, as shown above.
-*/
-
 include "../Lang/NativeTypes.s.dfy"
 include "../Base/Option.s.dfy"
 include "../Lang/LinearSequence.s.dfy"
 include "../Lang/LinearSequence.i.dfy"
-include "../Lang/Inout.s.dfy"
 
 module DList {
   import opened NativeTypes
   import opened Options
   import opened LinearSequence_s
   import opened LinearSequence_i
-  import opened Inout
   export
     provides NativeTypes
     provides DList
@@ -47,6 +34,23 @@ module DList {
   ghost const unused:int := -2
   ghost const sentinel:int := -1
 
+  predicate PointerInRange<A>(nodes:seq<Node<A>>, f:seq<int>, i:nat)
+  requires i < |f|
+  {
+    0 < f[i] < |nodes|
+  }
+
+  lemma RevealPointerInRange<A>(nodes:seq<Node<A>>, f:seq<int>)
+  requires forall i :: 0 <= i < |f| ==> PointerInRange(nodes, f, i)
+  ensures forall i :: 0 <= i < |f| ==> 0 < f[i] < |nodes|
+  {
+    forall i | 0 <= i < |f|
+    ensures 0 < f[i] < |nodes|
+    {
+      assert PointerInRange(nodes, f, i);
+    }
+  }
+
   predicate Invs<A>(nodes:seq<Node<A>>, freeStack:uint64, s:seq<A>, f:seq<int>, g:seq<int>)
   {
     && |f| == |s|
@@ -54,8 +58,11 @@ module DList {
     && |nodes| > 0
     && g[0] == sentinel
     && 0 <= freeStack as int < |nodes|
-    && (forall i :: 0 <= i < |f| ==> 0 < f[i] < |nodes|)
-    && (forall i {:trigger g[f[i]]} :: 0 <= i < |f| ==> g[f[i]] == i)
+    && (forall i :: 0 <= i < |f| ==> PointerInRange(nodes, f, i))
+    && (forall i {:trigger g[f[i]]} :: 0 <= i < |f| ==> (
+      assert PointerInRange(nodes, f, i);
+      g[f[i]] == i
+    ))
     && (forall p :: 0 <= p < |g| ==>
       && unused <= g[p] < |s|
       && 0 <= nodes[p].next as int < |g|
@@ -70,6 +77,7 @@ module DList {
         if g[p] > 0 then f[g[p] - 1] // nonfirst.prev
         else if g[p] == 0 || |f| == 0 then 0 // first.prev == sentinel or sentinel.prev == sentinel
         else f[|f| - 1]) // sentinel.prev == last
+      && nodes[p].prev as int < |nodes|
       )
   }
 
@@ -176,11 +184,18 @@ module DList {
     var _ := seq_free(nodes);
   }
 
+  predicate PointerToIndexUnchanged<A>(old_l: DList<A>, l: DList<A>, x: uint64)
+  requires ValidPtr(old_l, x)
+  {
+    && ValidPtr(l, x)
+    && l.g[x] == old_l.g[x]
+  }
+
   method Expand<A>(linear inout l:DList<A>)
     requires Inv(old_l)
     ensures Inv(l)
     ensures l.s == old_l.s
-    ensures forall x :: ValidPtr(old_l, x) ==> ValidPtr(l, x) && l.g[x] == old_l.g[x]
+    ensures forall x :: ValidPtr(old_l, x) ==> PointerToIndexUnchanged(old_l, l, x)
     ensures l.freeStack != 0 && l.nodes[l.freeStack].data.None?
   {
     shared_seq_length_bound(l.nodes);
@@ -191,8 +206,17 @@ module DList {
     SeqResizeMut(inout l.nodes, len', Node(None, s, 0));
     BuildFreeStack(inout l.nodes, len + 1);
     
-    Assign(inout l.freeStack, len' - 1);
-    AssignGhost(ghost inout l.g, seq(|l.nodes|, i requires 0 <= i < |l.nodes| => if i < |l.g| then l.g[i] else unused));
+    inout l.freeStack := len' - 1;
+    inout ghost l.g := seq(|l.nodes|, i requires 0 <= i < |l.nodes| => if i < |l.g| then l.g[i] else unused);
+
+    forall i | 0 <= i < |l.f|
+    ensures PointerInRange(l.nodes, l.f, i)
+    {
+      assert PointerInRange(old_l.nodes, old_l.f, i); // observe
+    }
+    
+    RevealPointerInRange(old_l.nodes, old_l.f);
+    RevealPointerInRange(l.nodes, l.f);
   }
 
   method Remove<A>(linear inout l:DList<A>, p:uint64)
@@ -218,10 +242,21 @@ module DList {
     mut_seq_set(inout l.nodes, node.next, node_next.(prev := node.prev));
     mut_seq_set(inout l.nodes, p, Node(None, freeStack, 0));
 
-    Assign(inout l.freeStack, p);
-    AssignGhost(ghost inout l.s, s');
-    AssignGhost(ghost inout l.f, f');
-    AssignGhost(ghost inout l.g, g');
+    inout l.freeStack := p;
+    inout ghost l.s := s';
+    inout ghost l.f := f';
+    inout ghost l.g := g';
+
+    forall i | 0 <= i < |l.f|
+    ensures PointerInRange(l.nodes, l.f, i)
+    ensures 0 < l.f[i] < |l.nodes|
+    {
+      if i < index {
+        assert PointerInRange(old_l.nodes, old_l.f, i); // observe
+      } else {
+        assert PointerInRange(old_l.nodes, old_l.f, i + 1); // observe
+      }
+    }
   }
 
   method InsertAfter<A>(linear l:DList<A>, p:uint64, a:A) returns(linear l':DList<A>, p':uint64)
@@ -242,6 +277,14 @@ module DList {
       freeNode := seq_get(l'.nodes, p');
     }
 
+    ghost var lExpanded := l';
+
+    forall i | 0 <= i < |lExpanded.f|
+    ensures PointerInRange(lExpanded.nodes, lExpanded.f, i)
+    {
+      assert PointerInRange(l.nodes, l.f, i); // observe
+    }
+
     linear var DList(nodes, freeStack, s, f, g) := l';
     ghost var index := g[p];
     ghost var index' := index + 1;
@@ -256,18 +299,26 @@ module DList {
     nodes := seq_set(nodes, node.next, node_next.(prev := p'));
     nodes := seq_set(nodes, p', node');
     l' := DList(nodes, freeNode.next, s', f', g');
- 
-    // TODO(andrea) reduce this after fixing trigger loops
-    assert (forall p :: 0 <= p < |g'| && sentinel <= g'[p] ==>
-      && (g'[p] == sentinel ==> p == 0)
-      && (0 <= g'[p] ==> f'[g'[p]] == p && nodes[p].data == Some(s'[g'[p]]))
-      && nodes[p].next as int == (
-        if g'[p] + 1 < |f'| then f'[g'[p] + 1] // nonlast.next or sentinel.next
-        else 0) // last.next == sentinel or sentinel.next == sentinel
-      && nodes[p].prev as int == (
-        if g'[p] > 0 then f'[g'[p] - 1] // nonfirst.prev
-        else if g'[p] == 0 || |f'| == 0 then 0 // first.prev == sentinel or sentinel.prev == sentinel
-        else f'[|f'| - 1])); // sentinel.prev == last
+
+    forall i | 0 <= i < |l'.f|
+    ensures PointerInRange(l'.nodes, l'.f, i)
+    {
+      if i < index {
+        assert PointerInRange(lExpanded.nodes, lExpanded.f, i); // observe
+      } else if i == index {
+      } else if (i as int - 1 >= 0) {
+        assert PointerInRange(lExpanded.nodes, lExpanded.f, i - 1); // observe
+      }
+    }
+
+    assert Inv(l') by {
+      assert forall i :: 0 <= i < |l'.f| ==> (
+        assert PointerInRange(l'.nodes, l'.f, i);
+        l'.g[l'.f[i]] == i
+      ) by {
+        RevealPointerInRange(l'.nodes, l'.f);
+      }
+    }
   }
 
   method InsertBefore<A>(linear l:DList<A>, p:uint64, a:A) returns(linear l':DList<A>, p':uint64)
@@ -288,6 +339,14 @@ module DList {
       freeNode := seq_get(l'.nodes, p');
     }
 
+    ghost var lExpanded := l';
+
+    forall i | 0 <= i < |lExpanded.f|
+    ensures PointerInRange(lExpanded.nodes, lExpanded.f, i)
+    {
+      assert PointerInRange(l.nodes, l.f, i); // observe
+    }
+
     linear var DList(nodes, freeStack, s, f, g) := l';
     ghost var index' := IndexHi(l, p);
     ghost var s' := s[.. index'] + [a] + s[index' ..];
@@ -301,6 +360,28 @@ module DList {
     nodes := seq_set(nodes, node.prev, node_prev.(next := p'));
     nodes := seq_set(nodes, p', node');
     l' := DList(nodes, freeNode.next, s', f', g');
+
+    forall i | 0 <= i < |l'.f|
+    ensures PointerInRange(l'.nodes, l'.f, i)
+    {
+      if i < index' {
+        assert PointerInRange(lExpanded.nodes, lExpanded.f, i); // observe
+      } else if i == index' {
+      } else {
+        assert PointerInRange(lExpanded.nodes, lExpanded.f, i - 1); // observe
+      }
+    }
+
+    assert Inv(l') by {
+      assert forall i :: 0 <= i < |l'.f| ==> (
+        assert PointerInRange(l'.nodes, l'.f, i);
+        l'.g[l'.f[i]] == i
+      ) by {
+        RevealPointerInRange(l.nodes, l.f);
+        RevealPointerInRange(lExpanded.nodes, lExpanded.f);
+        RevealPointerInRange(l'.nodes, l'.f);
+      }
+    }
   }
 
   method Clone<A>(shared l:DList<A>) returns(linear l':DList<A>)
