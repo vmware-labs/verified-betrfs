@@ -61,9 +61,9 @@ module USeq
       assert useq.I() == []; // observe
     }
 
-    method Free(linear useq:USeq)
+    linear method Free()
     {
-      linear var USeq(dlist, ptr_map) := useq;
+      linear var USeq(dlist, ptr_map) := this;
       dlist.Free();
       LinearMutableMap.Destructor(ptr_map);
     }
