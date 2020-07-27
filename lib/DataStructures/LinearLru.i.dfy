@@ -44,7 +44,7 @@ module LinearLru
       this.dlist.Seq()
     }
 
-    method Alloc() returns (linear lru:LinearLru)
+    static method Alloc() returns (linear lru:LinearLru)
       ensures lru.Inv()
     {
       var size := 128;
@@ -53,9 +53,9 @@ module LinearLru
       lru := LinearLru(dlist, ptr_map);
     }
 
-    method Free(linear lru:LinearLru)
+    linear method Free()
     {
-      linear var LinearLru(dlist, ptr_map) := lru;
+      linear var LinearLru(dlist, ptr_map) := this;
       dlist.Free();
       LinearMutableMap.Destructor(ptr_map);
     }
