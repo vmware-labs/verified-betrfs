@@ -59,39 +59,34 @@ module LinearLru
     LinearMutableMap.Destructor(ptr_map);
   }
 
-  method Remove(linear lru:LinearLru, x:uint64) returns(linear lru':LinearLru)
-    requires Inv(lru)
-    ensures Inv(lru')
-    ensures Queue(lru') == LruModel.Remove(Queue(lru), x)
+  method Remove(linear inout lru:LinearLru, x:uint64)
+    requires Inv(old_lru)
+    ensures Inv(lru)
+    ensures Queue(lru) == LruModel.Remove(Queue(old_lru), x)
   {
-    linear var LinearLru(dlist, ptr_map) := lru;
-    ghost var q := DList.Seq(dlist);
+    ghost var q := DList.Seq(lru.dlist);
     LruModel.LruRemove'(q, x);
 
-    linear var RemoveResult(ptr_map', removed) := LinearMutableMap.RemoveAndGet(ptr_map, x);
+    var removed := LinearMutableMap.RemoveAndGet(inout lru.ptr_map, x);
     if (removed.Some?) {
       var Some(p) := removed;
-      dlist := DList.Remove(dlist, p);
+      DList.Remove(inout lru.dlist, p);
     }
-    lru' := LinearLru(dlist, ptr_map');
   }
 
-  method Use(linear lru:LinearLru, x:uint64) returns(linear lru':LinearLru)
-    requires Inv(lru)
-    requires |LruModel.I(Queue(lru))| < 0x1_0000_0000_0000_0000 / 8
-    ensures Inv(lru')
-    ensures Queue(lru') == LruModel.Use(Queue(lru), x)
+  method Use(linear inout lru:LinearLru, x:uint64)
+    requires Inv(old_lru)
+    requires |LruModel.I(Queue(old_lru))| < 0x1_0000_0000_0000_0000 / 8
+    ensures Inv(lru)
+    ensures Queue(lru) == LruModel.Use(Queue(old_lru), x)
   {
     LruModel.QueueCount(Queue(lru));
     LruModel.LruRemove'(Queue(lru), x);
-    lru' := Remove(lru, x);
-    LruModel.QueueCount(Queue(lru'));
+    Remove(inout lru, x);
+    LruModel.QueueCount(Queue(lru));
 
-    linear var LinearLru(dlist, ptr_map) := lru';
-    var p;
-    dlist, p := DList.InsertBefore(dlist, 0, x);
-    ptr_map := LinearMutableMap.Insert(ptr_map, x, p);
-    lru' := LinearLru(dlist, ptr_map);
+    var p := DList.InsertBefore(inout lru.dlist, 0, x);
+    LinearMutableMap.Insert(inout lru.ptr_map, x, p);
   }
 
   method Next(shared lru:LinearLru) returns(x:uint64)
