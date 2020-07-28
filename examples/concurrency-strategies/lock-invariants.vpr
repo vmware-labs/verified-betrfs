@@ -1,0 +1,165 @@
+// abstract spec
+
+function size() : Int
+ensures size() > 0
+
+function LeastIndexOf(view: Seq[Int], victim: Int) : Int
+ensures -1 <= LeastIndexOf(view, victim)
+ensures LeastIndexOf(view, victim) < |view|
+{
+  |view| == 0 ? (
+    -1
+  ) : (
+    view[0] == victim ? (
+      0
+    ) : (
+      let t == (LeastIndexOf(view[1..], victim)) in
+      t == -1 ? -1 : t + 1
+    )
+  )
+}
+
+function donate(view: Seq[Int], victim: Int) : Seq[Int]
+{
+  let idx == (LeastIndexOf(view, victim)) in
+  idx == -1 ? view : view[idx := victim + 1]
+}
+
+function tr_donate(
+  s: Seq[Int],
+  t: Seq[Int],
+  victim: Int,
+  outidx: Int) : Bool
+{
+     t == donate(s, victim)
+  && outidx == LeastIndexOf(s, victim)
+}
+
+// Implementation spec
+
+predicate Source(s: Seq[Int])
+
+predicate Ticket(victim: Int)
+predicate Stub(outidx: Int)
+
+method SourceTransition(s: Seq[Int], t: Seq[Int], victim: Int, outidx: Int)
+requires Source(s)
+requires Ticket(victim)
+requires tr_donate(s, t, victim, outidx)
+ensures Source(t)
+ensures Stub(outidx)
+
+// implementation
+
+function wells() : Seq[Ref]
+ensures |wells()| == size()
+
+field stones: Int
+field suffix: Seq[Int]
+
+function ghost_cons(i: Int) : Seq[Int]
+requires 0 <= i
+requires i < size()
+requires acc(wells()[i].stones)
+requires i < size() - 1 ==> acc(wells()[i+1].suffix, 1/2)
+{
+  ((i == size() - 1)
+      ? (Seq(wells()[i].stones))
+      : (Seq(wells()[i].stones) ++ wells()[i+1].suffix)
+  )
+}
+
+predicate Inv(i: Int)
+{
+     0 <= i
+  && i < size()
+  && acc(wells()[i].stones)
+  && (i == 0 ==> acc(wells()[i].suffix))
+  && (i > 0 ==>
+    acc(wells()[i].suffix, 1/2))
+  && (i < size() - 1 ==>
+    acc(wells()[i+1].suffix, 1/2))
+  && wells()[i].suffix == ghost_cons(i)
+  && (i == 0 ==>
+    Source(wells()[0].suffix)
+  )
+}
+
+method acquire(i: Int)
+requires 0 <= i && i < size()
+ensures Inv(i)
+
+method release(i: Int)
+requires 0 <= i && i < size()
+requires Inv(i)
+
+method donate_impl(victim: Int)
+returns (outidx: Int)
+requires Ticket(victim)
+ensures Stub(outidx)
+{
+  var idx: Int := 0;
+
+  acquire(0);
+  unfold Inv(0);
+
+  var old_suffix: Seq[Int] := wells()[0].suffix;
+  var new_suffix: Seq[Int] := donate(old_suffix, victim);
+  var g_outidx: Int := LeastIndexOf(old_suffix, victim);
+
+  wells()[0].suffix := new_suffix;
+
+  SourceTransition(old_suffix, new_suffix, victim, g_outidx);
+
+  outidx := inner_loop(victim, idx, g_outidx);
+}
+
+method inner_loop(victim: Int, idx: Int, g_outidx: Int)
+returns (outidx: Int)
+
+// "loop invariants"
+requires Stub(g_outidx)
+requires 0 <= idx && idx < size()
+requires acc(wells()[idx].stones)
+requires acc(wells()[idx].suffix, 1/2)
+requires idx == 0 ==> acc(wells()[idx].suffix, 1/2)
+requires idx == 0 ==> Source(wells()[idx].suffix)
+requires idx < size() - 1 ==> acc(wells()[idx+1].suffix, 1/2)
+requires wells()[idx].suffix == donate(ghost_cons(idx), victim)
+requires LeastIndexOf(ghost_cons(idx), victim) != -1 ==> g_outidx == idx + LeastIndexOf(ghost_cons(idx), victim)
+requires LeastIndexOf(ghost_cons(idx), victim) == -1 ==> g_outidx == -1
+
+ensures Stub(outidx)
+{
+  if (wells()[idx].stones == victim) {
+    wells()[idx].stones := victim + 1;
+
+    fold Inv(idx);
+    release(idx);
+
+    // return
+    outidx := idx;
+  } else {
+    if (idx == size() - 1) {
+      //assert g_outidx == -1;
+
+      fold Inv(idx);
+      release(idx);
+
+      // return
+      outidx := -1;
+    } else {
+      acquire(idx + 1);
+      unfold Inv(idx + 1);
+
+      var old_suffix: Seq[Int] := wells()[idx+1].suffix;
+      var new_suffix: Seq[Int] := donate(old_suffix, victim);
+      wells()[idx+1].suffix := new_suffix;
+
+      fold Inv(idx);
+      release(idx);
+
+      outidx := inner_loop(victim, idx + 1, g_outidx);
+    }
+  }
+}

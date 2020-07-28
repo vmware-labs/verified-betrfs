@@ -1,0 +1,81 @@
+define arr_access(a, p) (forall j: Int :: 0 <= j && j < len(a) ==> acc(loc(a, j).val, p))
+define init(s) forall j: Int :: 0 <= j && j < len(s.accounts) ==> loc(s.accounts, j).val == 0
+
+function sum_helper(arr: IArray, i: Int, p: Perm): Int
+    requires 0 <= i && i <= len(arr)
+    requires p > none && arr_access(arr, p)
+{
+    i == len(arr)
+    ? 0
+    : (loc(arr, i).val + sum_helper(arr, i + 1, p))
+}
+
+function sum(arr: IArray, p: Perm): Int
+    requires p > none && arr_access(arr, p)
+{
+    sum_helper(arr, 0, p)
+}
+
+predicate inv(accounts: IArray, p: Perm)
+{
+       p > none
+    && arr_access(accounts, p)
+    && (sum(accounts, p) == 0)
+}
+
+define transfer_acc(accounts, from_account, to_account) (
+       acc(loc(accounts, from_account).val)
+    && acc(loc(accounts, to_account).val)
+)
+
+method Transfer(accounts: IArray, from_account: Int, to_account: Int, amt: Int)
+    requires from_account != to_account
+    requires transfer_acc(accounts, from_account, to_account)
+    ensures transfer_acc(accounts, from_account, to_account)
+      && old(loc(accounts, from_account).val + loc(accounts, to_account).val) ==
+        (loc(accounts, from_account).val + loc(accounts, to_account).val) {
+
+    loc(accounts, from_account).val := loc(accounts, from_account).val - amt
+	loc(accounts, to_account).val := loc(accounts, to_account).val + amt
+}
+
+method Client(accounts: IArray, from_account: Int, to_account: Int, amt: Int)
+    requires from_account != to_account
+    requires 0 <= from_account && from_account < len(accounts)
+    requires 0 <= to_account && to_account < len(accounts)
+    requires inv(accounts, 1/10)
+    ensures inv(accounts, 1/10)
+{
+    unfold inv(accounts, 1/10)
+    assert sum(accounts, 1/10) == 0
+
+    /* lock */ inhale acc(loc(accounts, from_account).val, 9/10)
+    /* lock */ inhale acc(loc(accounts, to_account).val, 9/10)
+
+    Transfer(accounts, from_account, to_account, amt)
+
+    /* unlock */ exhale acc(loc(accounts, from_account).val, 9/10)
+    /* unlock */ exhale acc(loc(accounts, to_account).val, 9/10)
+
+    assert sum(accounts, 1/10) == 0
+    fold inv(accounts, 1/10)
+}
+
+/* Encoding of arrays */
+field val: Int
+
+domain IArray {
+  function loc(a: IArray, i: Int): Ref
+  function len(a: IArray): Int
+  function first(r: Ref): IArray
+  function second(r: Ref): Int
+
+  axiom all_diff {
+    forall a: IArray, i: Int :: {loc(a, i)}
+      first(loc(a, i)) == a && second(loc(a, i)) == i
+  }
+
+  axiom length_nonneg {
+    forall a: IArray :: len(a) >= 0
+  }
+}
