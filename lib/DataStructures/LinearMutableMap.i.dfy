@@ -1493,11 +1493,27 @@ module LinearMutableMap {
   ensures self.contents == old_self.contents[SimpleIterOutput(old_self, it).key := value]
   ensures self.count == old_self.count
   ensures WFSimpleIter(self, it)
+  ensures (forall preserved :: WFSimpleIter(old_self, preserved) ==> WFSimpleIter(self, preserved))
   {
     ghost var key := SimpleIterOutput(self, it).key;
     FixedSizeUpdateBySlot(inout self.underlying, it.i, value);
     inout ghost self.contents := self.contents[key := value];
     UnderlyingInvImpliesMapFromStorageMatchesContents(self.underlying, self.contents);
+  
+    forall preserved | WFSimpleIter(old_self, preserved) ensures WFSimpleIter(self, preserved) {
+      forall key | key in preserved.s
+      ensures exists j | 0 <= j < preserved.i as int ::
+      && self.underlying.storage[j].Entry?
+      && key == self.underlying.storage[j].key
+      {
+        assert key in old_self.contents;
+        var j :| 0 <= j < preserved.i as int
+        && old_self.underlying.storage[j].Entry?
+        && key == old_self.underlying.storage[j].key;
+        assert self.underlying.storage[j].Entry?;
+        assert key == self.underlying.storage[j].key;
+      }
+    }
   }
 
   function setUpTo<V>(self: LinearHashMap<V>, i: int) : set<uint64>
