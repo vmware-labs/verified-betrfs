@@ -18,6 +18,11 @@
 set -e
 set -x
 
+commit=61d00e0dd417a2f00a6776615f9aac8f62989eef
+if [ $1 ]; then
+   commit=$1
+fi
+
 # https://github.com/secure-foundations/dafny.git
 # cpp branch
-git checkout 61d00e0dd417a2f00a6776615f9aac8f62989eef
+git checkout $commit
