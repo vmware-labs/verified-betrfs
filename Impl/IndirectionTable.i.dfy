@@ -246,9 +246,9 @@ module IndirectionTableImpl {
       b := entry.Some? && entry.value.loc.None?;
     }
 
-    predicate TrackingGarbage(self: IndirectionTable)
+    predicate TrackingGarbage()
     {
-      self.garbageQueue.lSome?
+      this.garbageQueue.lSome?
     }
 
     linear inout method UpdateGhost()
@@ -261,11 +261,11 @@ module IndirectionTableImpl {
 
     linear inout method RemoveLoc(ref: BT.G.Reference) returns (oldLoc: Option<Location>)
     requires old_self.Inv()
-    requires TrackingGarbage(old_self)
+    requires old_self.TrackingGarbage()
     requires ref in old_self.graph
     ensures self.Inv()
     ensures self.locs == MapRemove1(old_self.locs, ref)
-    ensures TrackingGarbage(self)
+    ensures self.TrackingGarbage()
     ensures self.graph == old_self.graph
     ensures (oldLoc.None? ==> ref !in old_self.locs)
     ensures (oldLoc.Some? ==> ref in old_self.locs && old_self.locs[ref] == oldLoc.value)
@@ -286,34 +286,27 @@ module IndirectionTableImpl {
       assert Graph(self.t) == Graph(old_self.t);
     }
 
-    // static method AddLocIfPresent(linear me: IndirectionTable, ref: BT.G.Reference, loc: Location)
-    // returns (linear self: IndirectionTable, added: bool)
-    // requires Inv(me)
-    // ensures Inv(self)
-    // ensures (I(self), added) == IndirectionTableModel.AddLocIfPresent(I(me), ref, loc)
-    // {
-    //   IndirectionTableModel.reveal_AddLocIfPresent();
+    linear inout method AddLocIfPresent(ref: BT.G.Reference, loc: Location)
+    returns (added: bool)
+    requires old_self.Inv()
+    ensures self.Inv()
+    ensures added == (ref in old_self.graph && ref !in old_self.locs)
+    ensures self.graph == old_self.graph
+    ensures (added ==> self.locs == old_self.locs[ref := loc])
+    ensures (!added ==> self.locs == old_self.locs)
+    ensures (old_self.TrackingGarbage() ==> self.TrackingGarbage())
+    {
+      var it := LinearMutableMap.FindSimpleIter(self.t, ref);
+      var oldEntry := LinearMutableMap.SimpleIterOutput(self.t, it);
 
-    //   linear var IndirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator) := me;
-    //   var it := LinearMutableMap.FindSimpleIter(t, ref);
-    //   var oldEntry := LinearMutableMap.SimpleIterOutput(t, it);
-    //   added := oldEntry.Next? && oldEntry.value.loc.None?;
+      added := oldEntry.Next? && oldEntry.value.loc.None?;
+      if added {
+        LinearMutableMap.UpdateByIter(inout self.t, it, Entry(Some(loc), oldEntry.value.succs, oldEntry.value.predCount));
+        inout self.UpdateGhost();
+      }
 
-    //   if added {
-    //     ghost var ghosty := true;
-    //     if ghosty {
-    //       if I(me).findLoclessIterator.Some? {
-    //         LinearMutableMap.UpdatePreservesSimpleIter(I(me).t, it, Entry(Some(loc), oldEntry.value.succs, oldEntry.value.predCount), I(me).findLoclessIterator.value);
-    //       }
-    //     }
-
-    //     t := LinearMutableMap.UpdateByIter(t, it, Entry(Some(loc), oldEntry.value.succs, oldEntry.value.predCount));
-    //   }
-
-    //   ghost var _ := IndirectionTableModel.AddLocIfPresent(I(me), ref, loc);
-    //   self := IndirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator);
-    //   assert (I(self), added) == IndirectionTableModel.AddLocIfPresent(I(me), ref, loc);
-    // }
+      assert Graph(self.t) == Graph(old_self.t);
+    }
 
     // static method RemoveRef(linear me: IndirectionTable, ref: BT.G.Reference)
     // returns (linear self: IndirectionTable, oldLoc : Option<Location>)
