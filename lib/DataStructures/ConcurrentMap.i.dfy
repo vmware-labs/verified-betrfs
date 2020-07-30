@@ -236,6 +236,12 @@ lemma PointInterpretationBackwards(table: seq<Item>)
   requires UniqueKeys(table)
   ensures forall k | k in I(table) :: exists i :: KeySlot(table, i) && table[i.slot] == Entry(k, I(table)[k])
 {
+  if |table| == 0 {
+  } else {
+    PointInterpretationBackwards(DropLast(table));
+    var prem := I(DropLast(table));
+    var m := I(table);
+  }
 }
 
 lemma PointInterpretation(table: seq<Item>)
