@@ -1,0 +1,39 @@
+From vendor/fscq/builder/README.setup
+
+  apt-get install camlidl
+
+From vendor/fscq/src/README:
+
+  apt-get install libfuse-dev
+  apt-get install libextunix-ocaml-dev libzarith-ocaml-dev
+
+
+Okay, you need coq installed, and ubuntu comes with something old (8.6);
+readme asks for >=8.8.
+https://coq.inria.fr/opam-using.html
+sudo apt install opam
+...and Ubuntu opam is 1.2.2 failing "Make sure opam version is 2.0.0 or above".
+
+I followed Installation from sources at
+https://github.com/coq/coq/wiki/Installation-of-Coq-on-Linux
+sudo apt-get install build-essential
+sudo apt-get install ocaml
+
+... which includes a recent opam. Interesting.
+
+opam-depext coq
+opam pin add coq 8.11.0
+eval $(opam env)
+cd fscq/src
+time make
+
+make: /opt/ghc/8.0.1/bin/hsc2hs: Command not found
+apt install haskell-platform haskell-stack
+
+    Failed to load interface for ‘Data.Digest.CRC32’
+    Failed to load interface for ‘System.CPUTime.Rdtsc’
+cabal update
+cabal install digest
+cabal install rdtsc
+
+Yay! I think I have binaries!
