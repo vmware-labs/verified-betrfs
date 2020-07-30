@@ -201,29 +201,64 @@ ensures Inv(s')
 {
 }
 
-function AValue() : Value
-
-lemma InsertPossible()
+lemma InsertInitInterpretation(s:Variables, s':Variables, tid:nat, key:Key, value:Value)
+  requires Inv(s)
+  requires InsertInit(s, s', tid, key, value)
+  ensures Inv(s')
+  ensures I(s'.table) == I(s.table)
 {
-  var t0 := [Empty];
-  var s0 := Variables(t0, [Idle]);
-  var v0 := AValue();
-  assert Init(s0);
-
-  // InsertInit
-
-  var t1 := [Empty];
-  var s1 := Variables(t1, [Insert(5, v0, Slot(0))]);
-  assert NextStep(s0, s1, InsertInitStep(5, v0, 0));
-  assert Next(s0, s1);
-
-  // InsertComplete
-
-  var t2 := [Entry(5, v0)];
-  var s2 := Variables(t1, [Idle]);
-  assert NextStep(s1, s2, InsertCompleteStep(0));
-  assert Next(s1, s2);
 }
 
+lemma InsertAdvanceInterpretation(s:Variables, s':Variables, tid:nat)
+  requires Inv(s)
+  requires InsertAdvance(s, s', tid)
+  ensures Inv(s')
+  ensures I(s'.table) == I(s.table)
+{
+}
+
+lemma PointInterpretationForwards(table: seq<Item>, i: Slot)
+  requires UniqueKeys(table)
+  requires KeySlot(table, i)
+  requires table[i.slot].Entry?
+  ensures table[i.slot].key in I(table) && I(table)[table[i.slot].key] == table[i.slot].value
+{
+  if |table| == i.slot + 1 {
+  } else {
+    PointInterpretationForwards(DropLast(table), i);
+    if Last(table).Entry? {
+      assert KeySlot(table, Slot(|table|-1));
+    }
+  }
+}
+
+lemma PointInterpretationBackwards(table: seq<Item>)
+  requires UniqueKeys(table)
+  ensures forall k | k in I(table) :: exists i :: KeySlot(table, i) && table[i.slot] == Entry(k, I(table)[k])
+{
+}
+
+lemma PointInterpretation(table: seq<Item>)
+  requires UniqueKeys(table)
+  ensures forall i | KeySlot(table, i) && table[i.slot].Entry? :: table[i.slot].key in I(table) && I(table)[table[i.slot].key] == table[i.slot].value
+  ensures forall k | k in I(table) :: exists i :: KeySlot(table, i) && table[i.slot] == Entry(k, I(table)[k])
+{
+  forall i | KeySlot(table, i) && table[i.slot].Entry?
+    ensures table[i.slot].key in I(table) && I(table)[table[i.slot].key] == table[i.slot].value
+  {
+    PointInterpretationForwards(table, i);
+  }
+  PointInterpretationBackwards(table);
+}
+
+lemma InsertCompleteInterpretation(s:Variables, s':Variables, tid:nat)
+  requires Inv(s)
+  requires InsertComplete(s, s', tid)
+  ensures Inv(s')
+  ensures I(s'.table) == I(s.table)[s.threads[tid].key := s.threads[tid].value]
+{
+  PointInterpretation(s.table);
+  PointInterpretation(s'.table);
+}
 
 }
