@@ -1118,6 +1118,7 @@ module LinearMutableMap {
     ensures (removed == if key in old_self.contents
       then Some(old_self.contents[key])
       else None)
+    ensures (self.count == if key in old_self.contents then old_self.count - 1 else old_self.count)
   {
     removed := FixedSizeRemove(inout self.underlying, key);
     if removed.Some? {
