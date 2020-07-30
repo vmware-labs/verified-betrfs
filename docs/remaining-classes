@@ -1,0 +1,49 @@
+lib/Base/DebugAccumulator.i.dfy:  class AccRec {
+  -- ignore
+
+lib/Math/LinearCongruentialGenerator.s.dfy:  class {:extern} LCG {
+  -- unused. What is it?
+
+lib/DataStructures/MutableMapImpl.i.dfy:  class FixedSizeHashMap<V> {
+lib/DataStructures/MutableMapImpl.i.dfy:  class ResizingHashMap<V> {
+  -- dead, right?
+
+lib/Marshalling/Native.s.dfy:  class Arrays
+  -- will probably disappear into compiler once all arrays become seqs
+
+lib/Lang/LinearBox.i.dfy:  class BoxedLinear<A>
+lib/Lang/LinearBox.i.dfy:  class BoxedLinearOption<A>
+lib/Lang/LinearBox.s.dfy:  class {:extern} SwapAffine<A>
+lib/Lang/LinearBox.s.dfy:  class {:extern} SwapLinear<A>
+  -- duct tape
+
+
+Impl/MainDiskIOHandler.s.dfy:  class {:extern} DiskIOHandler {
+  -- API
+
+Impl/Main.s.dfy:  class HeapState {
+  Impl/FullImpl.i.dfy:  class Full {
+    Impl/StateImpl.i.dfy:  class Variables {
+      Impl/IndirectionTableImpl.i.dfy:  class IndirectionTable {
+        -- dying (wraps a linear thing)
+        Impl/IndirectionTableImpl.i.dfy:  class It
+          -- just a static namespace class; surely will die along with IndirectionTable
+      Impl/CacheImpl.i.dfy:  class MutCache
+        Impl/NodeImpl.i.dfy:  class Node
+      Impl/BlockAllocatorImpl.i.dfy:  class BlockAllocator {
+      lib/DataStructures/LruImpl.i.dfy:  class LruImplQueue {
+        lib/DataStructures/LruImpl.i.dfy:  class Node {
+    Impl/CommitterImpl.i.dfy:  class Committer {
+      Impl/JournalistImpl.i.dfy:  class Journalist {
+
+
+lib/DataStructures/MutableBtree.i.dfy:  class Node {
+  lib/Base/MutableVec.i.dfy:  class Vec<V(==)> {
+
+Impl/BucketGeneratorImpl.i.dfy:  class Generator {
+  lib/Buckets/BucketImpl.i.dfy:  class MutBucket {
+    -- unused? BucketSuccessorLoopImpl
+  lib/Buckets/PackedKV.i.dfy:  class DynamicPkv {
+
+lib/Buckets/PackedStringArray.i.dfy:  class DynamicPsa {
+lib/DataStructures/BitmapImpl.i.dfy:  class Bitmap {
