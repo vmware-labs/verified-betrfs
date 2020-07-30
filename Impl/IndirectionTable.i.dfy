@@ -199,6 +199,8 @@ module IndirectionTable {
         /* r.locs */ Locs(hashMap),
         /* r.graph */ Graph(hashMap),
         /* r.predCounts */ PredCounts(hashMap));
+
+      assert r.Inv() by { reveal_PredCounts(); }
     }
 
     // TODO useful? var res := IndirectionTableModel.FromHashMap(me.t, MapOption(me.garbageQueue.Option(), x => USeq.I(x)), me.refUpperBound, me.findLoclessIterator);
@@ -283,7 +285,7 @@ module IndirectionTable {
 
       oldLoc := oldEntry.value.loc;
 
-      assert PredCounts(self.t) == PredCounts(old_self.t);
+      assert PredCounts(self.t) == PredCounts(old_self.t) by { reveal_PredCounts(); }
       assert Graph(self.t) == Graph(old_self.t);
     }
 
@@ -307,6 +309,7 @@ module IndirectionTable {
       }
 
       assert Graph(self.t) == Graph(old_self.t);
+      assert self.Inv() by { reveal_PredCounts(); }
     }
 
     predicate DeallocableRef(ref: BT.G.Reference)
@@ -493,14 +496,14 @@ module IndirectionTable {
     ensures self.TrackingGarbage()
     ensures self.graph == MapRemove1(old_self.graph, ref)
     ensures self.locs == MapRemove1(old_self.locs, ref)
-    ensures (ref in self.locs ==> oldLoc == Some(self.locs[ref]))
-    ensures (ref !in self.locs ==> oldLoc == None)
+    ensures (ref in old_self.locs ==> oldLoc == Some(old_self.locs[ref]))
+    ensures (ref !in old_self.locs ==> oldLoc == None)
     {
       TCountEqGraphSize(self.t);
-      // TODO LemmaRemoveRefStuff(I(me), ref);
 
+      // == mutation ==
       var oldEntry := LinearMutableMap.RemoveAndGet(inout self.t, ref);
-
+      // ==============
       TCountEqGraphSize(self.t);
 
       assert |Graph(old_self.t)[ref]| <= MaxNumChildren();
@@ -521,6 +524,8 @@ module IndirectionTable {
             - SeqCount(succs1, r, 0)
             + SeqCount(succs0, r, 0)
       {
+        reveal_PredCounts();
+
         SeqCountPlusPredecessorSetExcept(graph0, r, ref);
         SeqCountPlusPredecessorSetExcept(graph1, r, ref);
 
@@ -552,24 +557,26 @@ module IndirectionTable {
         assert succ in Graph(old_self.t);
       }
 
-      // ?? inout self.garbageQueue.value.Remove(ref);
-      assert RefcountUpdateInv(old_self.t, old_self.garbageQueue.value.I(), ref, [], oldEntry.value.succs, 0, 0);
+      // == mutation ==
+      inout self.garbageQueue.value.Remove(ref);
+      assert self.t.count as int <= MaxSize();
       UpdatePredCounts(inout self, ref, [], oldEntry.value.succs);
+      // ==============
 
       TCountEqGraphSize(self.t);
 
       oldLoc := if oldEntry.Some? then oldEntry.value.loc else None;
-      inout self.findLoclessIterator := None;
 
+      // == mutation ==
+      inout self.findLoclessIterator := None;
       inout self.UpdateGhost();
+      // ==============
+
+      assert self.graph == MapRemove1(old_self.graph, ref); // observe
     }
 
     static predicate UnchangedExceptTAndGarbageQueue(old_self: IndirectionTable, self: IndirectionTable) {
-      && old_self.refUpperBound       == self.refUpperBound
-      && old_self.findLoclessIterator == self.findLoclessIterator
-      && old_self.locs                == self.locs
-      && old_self.graph               == self.graph
-      && old_self.predCounts          == self.predCounts
+      self == old_self.(t := self.t, garbageQueue := self.garbageQueue)
     }
 
     linear inout method PredInc(ref: BT.G.Reference)
@@ -583,7 +590,12 @@ module IndirectionTable {
     ensures self.TrackingGarbage()
     ensures self.garbageQueue.value.Inv()
     ensures UnchangedExceptTAndGarbageQueue(old_self, self)
-    // ?? ensures ref !in self.garbageQueue.value.I()
+    ensures (
+      var oldEntry := old_self.t.contents[ref];
+      self.t.contents == old_self.t.contents[ref := oldEntry.(predCount := oldEntry.predCount + 1)])
+    ensures if old_self.t.contents[ref].predCount == 0
+      then self.garbageQueue.value.I() == RemoveOneValue(old_self.garbageQueue.value.I(), ref)
+      else self.garbageQueue.value.I() == old_self.garbageQueue.value.I()
     {
       var oldEntryOpt := LinearMutableMap.Get(self.t, ref);
       var oldEntry := oldEntryOpt.value;
@@ -606,6 +618,12 @@ module IndirectionTable {
     ensures self.TrackingGarbage()
     ensures self.garbageQueue.value.Inv()
     ensures UnchangedExceptTAndGarbageQueue(old_self, self)
+    ensures (
+      var oldEntry := old_self.t.contents[ref];
+      self.t.contents == old_self.t.contents[ref := oldEntry.(predCount := oldEntry.predCount - 1)])
+    ensures if (old_self.t.contents[ref].predCount == 1 && ref !in old_self.garbageQueue.value.I())
+      then self.garbageQueue.value.I() == old_self.garbageQueue.value.I() + [ref]
+      else self.garbageQueue.value.I() == old_self.garbageQueue.value.I()
     {
       var oldEntryOpt := LinearMutableMap.Get(self.t, ref);
       var oldEntry := oldEntryOpt.value;
@@ -615,71 +633,6 @@ module IndirectionTable {
         inout self.garbageQueue.value.Add(ref);
       }
     }
-
-    // lemma LemmaUpdatePredCountsIncStuff(
-    //     t: HashMap,
-    //     q: GarbageQueueModel,
-    //     changingRef: BT.G.Reference,
-    //     newSuccs: seq<BT.G.Reference>,
-    //     oldSuccs: seq<BT.G.Reference>,
-    //     idx: int)
-    // requires RefcountUpdateInv(t, q, changingRef, newSuccs, oldSuccs, idx, 0)
-    // requires GarbageQueueInv(q)
-    // ensures idx < |newSuccs| ==> newSuccs[idx] in t.contents
-    // ensures idx < |newSuccs| ==> t.contents[newSuccs[idx]].predCount < 0xffff_ffff_ffff_ffff
-    // ensures idx < |newSuccs| ==>
-    //   var (t', q') := PredInc(t, q, newSuccs[idx]);
-    //   && RefcountUpdateInv(t', q', changingRef, newSuccs, oldSuccs, idx + 1, 0)
-    //   && GarbageQueueInv(q')
-    // ensures LinearMutableMap.Inv(t)
-    // ensures 0 <= idx <= |newSuccs|
-    // {
-    //   if idx < |newSuccs| {
-    //     var graph := Graph(t);
-
-    //     assert newSuccs[idx] in graph;
-    //     assert newSuccs[idx] in t.contents;
-
-    //     var ref := newSuccs[idx];
-    //     assert t.contents[ref].predCount as int
-    //       == |PredecessorSet(graph, ref)| + IsRoot(ref)
-    //         - SeqCount(newSuccs, ref, idx)
-    //         + SeqCount(oldSuccs, ref, 0);
-
-    //     SeqCountInc(newSuccs, ref, idx);
-    //     assert SeqCount(newSuccs, ref, idx + 1)
-    //         == SeqCount(newSuccs, ref, idx) - 1;
-
-    //     lemma_count_eq_graph_size(t);
-    //     PredecessorSetSizeBound(graph, ref);
-    //     SeqCountBound(oldSuccs, ref, 0);
-    //     assert t.contents[ref].predCount < 0xffff_ffff_ffff_ffff;
-
-  ////       assert t.contents[ref].predCount != 0;
-    //     
-    //     var (t', q') := PredInc(t, q, newSuccs[idx]);
-    //     // assert GarbageQueueInv(q') by {
-    //     //   reveal_NoDupes();
-    //     //   var _ := RemoveValueMultiset(q, ref);
-    //     // }
-    //     assert Graph(t) == Graph(t');
-
-    //     var predCounts := PredCounts(t);
-    //     var predCounts' := PredCounts(t');
-    //     forall r | r in predCounts'
-    //     ensures predCounts'[r] == |PredecessorSet(graph, r)| + IsRoot(r)
-    //         - SeqCount(newSuccs, r, idx + 1)
-    //         + SeqCount(oldSuccs, r, 0)
-    //     {
-    //       if r == ref {
-    //       } else {
-    //         SeqCountIncOther(newSuccs, r, idx);
-    //       }
-    //     }
-
-    //     // LruModel.LruRemove(q, ref);
-    //   }
-    // }
 
     static lemma SeqCountLePredecessorSet(
         graph: map<BT.G.Reference, seq<BT.G.Reference>>,
@@ -751,6 +704,67 @@ module IndirectionTable {
       assert a == b;
     }
 
+    static lemma PredecessorSetRestrictedSizeBound(graph: map<BT.G.Reference, seq<BT.G.Reference>>,
+        dest: BT.G.Reference, domain: set<BT.G.Reference>)
+    requires |graph| <= MaxSize()
+    requires forall ref | ref in graph :: |graph[ref]| <= MaxNumChildren()
+    ensures |PredecessorSetRestricted(graph, dest, domain)| <= MaxSize() * MaxNumChildren()
+    {
+      var s1 := set src, idx | src in graph && 0 <= idx < |graph[src]| && graph[src][idx] == dest && src in domain :: PredecessorEdge(src, idx);
+      var s2 := set src, idx | src in graph.Keys && idx in SetRange(MaxNumChildren()) :: PredecessorEdge(src, idx);
+      var s3 := set src, idx | src in graph.Keys && idx in SetRange(MaxNumChildren()) :: (src, idx);
+
+      assert s1 <= s2;
+      SetInclusionImpliesSmallerCardinality(s1, s2);
+      assert |s1| <= |s2|;
+
+      var relation := iset t : (PredecessorEdge, (BT.G.Reference, int)) | t.0.src == t.1.0 && t.0.idx == t.1.1;
+      forall a | a in s2 ensures exists b :: b in s3 && (a, b) in relation
+      {
+        var b := (a.src, a.idx);
+        assert b in s3;
+      }
+      forall b | b in s3 ensures exists a :: a in s2 && (a, b) in relation
+      {
+        var a := PredecessorEdge(b.0, b.1);
+        assert a in s2;
+      }
+      SetBijectivity.BijectivityImpliesEqualCardinality(s2, s3, relation);
+      assert |s2| == |s3|;
+
+      var x1 := graph.Keys;
+      var y1 := SetRange(MaxNumChildren());
+      var z1 := (set a, b | a in x1 && b in y1 :: (a,b));
+      SetBijectivity.CrossProductCardinality(x1, y1, z1);
+      assert |s3|
+          == |z1|
+          == |x1| * |y1|
+          == |graph.Keys| * |SetRange(MaxNumChildren())|;
+      assert |graph.Keys| <= MaxSize();
+      CardinalitySetRange(MaxNumChildren());
+      assert |SetRange(MaxNumChildren())| == MaxNumChildren();
+    }
+
+    static lemma PredecessorSetSizeBound(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference)
+    requires |graph| <= MaxSize()
+    requires forall ref | ref in graph :: |graph[ref]| <= MaxNumChildren()
+    ensures |PredecessorSet(graph, dest)| <= MaxSize() * MaxNumChildren()
+    {
+      PredecessorSetRestrictedSizeBound(graph, dest, graph.Keys);
+      assert PredecessorSet(graph, dest) == PredecessorSetRestricted(graph, dest, graph.Keys);
+    }
+
+    static lemma SeqCountBound(s: seq<BT.G.Reference>, ref: BT.G.Reference, lb: int)
+    requires 0 <= lb <= |s|
+    ensures SeqCount(s, ref, lb) <= |s|
+    {
+      var s1 := SeqCountSet(s, ref, lb);
+      var s2 := SetRange(|s|);
+      assert s1 <= s2;
+      SetInclusionImpliesSmallerCardinality(s1, s2);
+      CardinalitySetRange(|s|);
+    }
+
     linear inout method UpdatePredCounts(ghost changingRef: BT.G.Reference, newSuccs: seq<BT.G.Reference>, oldSuccs: seq<BT.G.Reference>)
     requires old_self.t.Inv()
     requires old_self.TrackingGarbage()
@@ -760,7 +774,12 @@ module IndirectionTable {
     ensures self.TrackingGarbage()
     ensures self.garbageQueue.value.Inv()
     ensures RefcountUpdateInv(self.t, self.garbageQueue.value.I(), changingRef, newSuccs, oldSuccs, |newSuccs|, |oldSuccs|)
+    // ?? ensures if changingRef in old_self.t.contents
+    // ??   then changingRef in self.t.contents && self.t.contents[changingRef] == old_self.t.contents[changingRef]
+    // ??   else changingRef !in self.t.contents
     ensures UnchangedExceptTAndGarbageQueue(old_self, self)
+    ensures Graph(self.t) == Graph(old_self.t)
+    ensures Locs(self.t) == Locs(old_self.t)
     {
       var idx: uint64 := 0;
 
@@ -769,9 +788,9 @@ module IndirectionTable {
       invariant self.TrackingGarbage()
       invariant self.garbageQueue.value.Inv()
       invariant RefcountUpdateInv(self.t, self.garbageQueue.value.I(), changingRef, newSuccs, oldSuccs, idx as int, 0)
-      // invariant IndirectionTableModel.UpdatePredCountsInc(t, USeq.I(q), changingRef, newSuccs, oldSuccs, 0)
-      //        == IndirectionTableModel.UpdatePredCountsInc(t', USeq.I(self.garbageQueue.value), changingRef, newSuccs, oldSuccs, idx)
       invariant UnchangedExceptTAndGarbageQueue(old_self, self)
+      invariant Graph(self.t) == Graph(old_self.t)
+      invariant Locs(self.t) == Locs(old_self.t)
       decreases |newSuccs| - idx as int
       {
         var ref := newSuccs[idx];
@@ -781,10 +800,49 @@ module IndirectionTable {
         assert ref in graph;
         assert ref in self.t.contents;
 
-        inout self.PredInc(ref);
-        idx := idx + 1;
+        assert self.t.contents[ref].predCount as int
+          == |PredecessorSet(graph, ref)| + IsRoot(ref)
+            - SeqCount(newSuccs, ref, idx as nat)
+            + SeqCount(oldSuccs, ref, 0) by { reveal_PredCounts(); }
 
-        assert RefcountUpdateInv(self.t, self.garbageQueue.value.I(), changingRef, newSuccs, oldSuccs, idx as int, 0);
+        SeqCountInc(newSuccs, ref, idx as nat);
+        assert SeqCount(newSuccs, ref, idx as nat + 1)
+            == SeqCount(newSuccs, ref, idx as nat) - 1;
+
+        TCountEqGraphSize(self.t);
+        PredecessorSetSizeBound(graph, ref);
+        SeqCountBound(oldSuccs, ref, 0);
+        assert self.t.contents[ref].predCount < 0xffff_ffff_ffff_ffff;
+
+        // ?? assert t.contents[ref].predCount != 0;
+        ghost var self_before := self;
+
+        // == mutation ==
+        inout self.PredInc(ref);
+        // ==============
+
+        assert Graph(self.t) == Graph(self_before.t);
+
+        ghost var predCounts := PredCounts(self_before.t);
+        ghost var predCounts' := PredCounts(self.t);
+        forall r | r in predCounts'
+        ensures predCounts'[r] == |PredecessorSet(graph, r)| + IsRoot(r)
+            - SeqCount(newSuccs, r, idx as nat + 1)
+            + SeqCount(oldSuccs, r, 0)
+        {
+          reveal_PredCounts();
+
+          if r == ref {
+          } else {
+            SeqCountIncOther(newSuccs, r, idx as nat);
+          }
+        }
+
+        assert RefcountUpdateInv(self.t, self.garbageQueue.value.I(), changingRef, newSuccs, oldSuccs, idx as nat + 1, 0);
+        // == mutation ==
+        idx := idx + 1;
+        // ==============
+
       }
 
       var idx2: uint64 := 0;
@@ -794,12 +852,11 @@ module IndirectionTable {
       invariant self.TrackingGarbage()
       invariant self.garbageQueue.value.Inv()
       invariant RefcountUpdateInv(self.t, self.garbageQueue.value.I(), changingRef, newSuccs, oldSuccs, |newSuccs|, idx2 as int)
-      // invariant IndirectionTableModel.UpdatePredCountsInc(t, USeq.I(q), changingRef, newSuccs, oldSuccs, 0)
-      //        == IndirectionTableModel.UpdatePredCountsDec(t', USeq.I(self.garbageQueue.value), changingRef, newSuccs, oldSuccs, idx2)
       invariant UnchangedExceptTAndGarbageQueue(old_self, self)
+      invariant Graph(self.t) == Graph(old_self.t)
+      invariant Locs(self.t) == Locs(old_self.t)
       decreases |oldSuccs| - idx2 as int
       {
-        // PredDec model
         assert Set(self.garbageQueue.value.I()) <= self.t.contents.Keys;
         SetInclusionImpliesSmallerCardinality(Set(self.garbageQueue.value.I()), self.t.contents.Keys);
         NoDupesSetCardinality(self.garbageQueue.value.I());
@@ -830,41 +887,38 @@ module IndirectionTable {
             == SeqCount(oldSuccs, ref, idx2 as nat) - 1;
 
         assert self.t.contents[oldSuccs[idx2]].predCount > 0;
-        // end
 
-        // TODO IndirectionTableModel.LemmaUpdatePredCountsDecStuff(t', USeq.I(self.garbageQueue.value), changingRef, newSuccs, oldSuccs, idx2 as int);
-        assert oldSuccs[idx2] in self.t.contents;
-        assert self.t.contents[oldSuccs[idx2]].predCount > 0;
-        assert |self.garbageQueue.value.I()| <= 0x1_0000_0000;
+        ghost var self_before := self;
 
-        ghost var old_t := self.t;
+        // == mutation ==
         inout self.PredDec(oldSuccs[idx2]);
+        // ==============
 
-        //x
-        if old_t.contents[ref].predCount == 1 {
+        if self_before.t.contents[ref].predCount == 1 {
           assert NoDupes([ref]) by { reveal_NoDupes(); }
-          assume ref !in self.garbageQueue.value.I();
-          DisjointConcatenation(self.garbageQueue.value.I(), [ref]);
+          // (doc) assert self.t.contents[ref].predCount == 0;
+          DisjointConcatenation(self_before.garbageQueue.value.I(), [ref]);
         }
-        assert Graph(old_t) == Graph(self.t);
+        assert Graph(self_before.t) == Graph(self.t);
 
-        ghost var predCounts := PredCounts(old_t);
+        ghost var predCounts := PredCounts(self_before.t);
         ghost var predCounts' := PredCounts(self.t);
         forall r | r in predCounts'
         ensures predCounts'[r] == |PredecessorSet(graph, r)| + IsRoot(r)
             - SeqCount(newSuccs, r, |newSuccs| as nat)
             + SeqCount(oldSuccs, r, idx2 as nat + 1)
         {
+          reveal_PredCounts();
           if r == ref {
           } else {
             SeqCountIncOther(oldSuccs, r, idx2 as nat);
             assert SeqCount(oldSuccs, r, idx2 as nat) == SeqCount(oldSuccs, r, idx2 as nat + 1);
           }
         }
-        //x
 
+        // == mutation ==
         idx2 := idx2 + 1;
-        assert RefcountUpdateInv(self.t, self.garbageQueue.value.I(), changingRef, newSuccs, oldSuccs, |newSuccs|, idx2 as int);
+        // ==============
       }
     }
 
