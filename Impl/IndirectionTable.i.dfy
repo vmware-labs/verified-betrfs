@@ -422,71 +422,6 @@ module IndirectionTable {
       && BT.G.Root() in t.contents
     }
 
-    // lemma LemmaRemoveRefStuff(ref: BT.G.Reference)
-    // requires Inv(this)
-    // requires TrackingGarbage(this)
-    // requires ref in this.t.contents
-    // requires deallocable(this, ref)
-    // requires this.t.count as nat < 0x1_0000_0000_0000_0000 / 8 - 1;
-    // ensures
-    //   var RemoveResult(t, oldEntry) := LinearMutableMap.RemoveAndGet(this.t, ref);
-    //   var q := RemoveOneValue(this.garbageQueue.value, ref);
-    //   RefcountUpdateInv(t, q, ref, [], oldEntry.value.succs, 0, 0)
-    // {
-    //   var RemoveResult(t, oldEntry) := LinearMutableMap.RemoveAndGet(this.t, ref);
-
-    //   // LruModel.LruRemove(this.garbageQueue.value, ref);
-
-    //   assert |Graph(this.t)[ref]| <= MaxNumChildren();
-
-    //   forall ref | ref in Graph(t)
-    //   ensures |Graph(t)[ref]| <= MaxNumChildren()
-    //   {
-    //     assert Graph(t)[ref] == Graph(this.t)[ref];
-    //   }
-
-    //   var graph0 := Graph(this.t);
-    //   var graph1 := Graph(t);
-    //   var succs0 := Graph(this.t)[ref];
-    //   var succs1 := [];
-    //   var predCounts1 := PredCounts(t);
-    //   forall r | r in predCounts1
-    //   ensures predCounts1[r] == |PredecessorSet(graph1, r)| + IsRoot(r)
-    //         - SeqCount(succs1, r, 0)
-    //         + SeqCount(succs0, r, 0)
-    //   {
-    //     SeqCountPlusPredecessorSetExcept(graph0, r, ref);
-    //     SeqCountPlusPredecessorSetExcept(graph1, r, ref);
-
-    //     assert PredecessorSetExcept(graph0, r, ref)
-    //         == PredecessorSetExcept(graph1, r, ref);
-    //   }
-    //   assert ValidPredCountsIntermediate(PredCounts(t), Graph(t), [], succs0, 0, 0);
-
-    //   forall j | 0 <= j < |succs0|
-    //   ensures succs0[j] in t.contents
-    //   {
-    //     if succs0[j] == ref {
-    //       assert ref in I(this).graph[ref];
-    //       assert false;
-    //     }
-    //     assert succs0[j] == this.t.contents[ref].succs[j];
-    //     assert succs0[j] in this.t.contents[ref].succs;
-    //     assert succs0[j] in this.t.contents;
-    //   }
-
-    //   forall r, succ | r in Graph(t) && succ in Graph(t)[r]
-    //   ensures succ in Graph(t)
-    //   {
-    //     if succ == ref {
-    //       assert ref in I(this).graph[r];
-    //       assert false;
-    //     }
-    //     assert succ in Graph(this.t)[r];
-    //     assert succ in Graph(this.t);
-    //   }
-    // }
-
     linear inout method RemoveRef(ref: BT.G.Reference)
     returns (oldLoc : Option<Location>)
     requires old_self.Inv()
@@ -922,48 +857,114 @@ module IndirectionTable {
       }
     }
 
-    // static method UpdateAndRemoveLoc(linear me: IndirectionTable, ref: BT.G.Reference, succs: seq<BT.G.Reference>)
-    // returns (linear self: IndirectionTable, oldLoc : Option<Location>)
-    // requires Inv(me)
-    // requires IndirectionTableModel.TrackingGarbage(I(me))
-    // requires |succs| <= MaxNumChildren()
-    // requires |I(me).graph| < IndirectionTableModel.MaxSize()
-    // requires IndirectionTableModel.SuccsValid(succs, I(me).graph)
-    // ensures Inv(self)
-    // ensures (I(self), oldLoc)  == IndirectionTableModel.UpdateAndRemoveLoc(I(me), ref, succs)
-    // {
-    //   IndirectionTableModel.reveal_UpdateAndRemoveLoc();
+    predicate SuccsValid(succs: seq<BT.G.Reference>, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
+    {
+      forall ref | ref in succs :: ref in graph
+    }
 
-    //   IndirectionTableModel.lemma_count_eq_graph_size(I(me).t);
-    //   IndirectionTableModel.LemmaUpdateAndRemoveLocStuff(I(me), ref, succs);
+    lemma QueueSizeBound()
+    requires this.Inv()
+    ensures this.garbageQueue.lSome? ==>
+        |this.garbageQueue.value.I()| <= 0x1_0000_0000;
+    {
+      if this.garbageQueue.lSome? {
+        NoDupesSetCardinality(this.garbageQueue.value.I());
+        SetInclusionImpliesSmallerCardinality(Set(this.garbageQueue.value.I()), this.t.contents.Keys);
+        assert |this.t.contents.Keys| == |this.t.contents|;
+      }
+    }
 
-    //   linear var IndirectionTable(t, lSome(garbageQueue), refUpperBound, findLoclessIterator) := me;
-    //   var oldEntry := LinearMutableMap.Get(t, ref);
-    //   var predCount := if oldEntry.Some? then oldEntry.value.predCount else 0;
-    //   if oldEntry.None? {
-    //     garbageQueue := USeq.Add(garbageQueue, ref);
-    //   }
-    //   t := LinearMutableMap.Insert(t, ref, Entry(None, succs, predCount));
+    linear inout method UpdateAndRemoveLoc(ref: BT.G.Reference, succs: seq<BT.G.Reference>)
+    returns (oldLoc : Option<Location>)
+    requires old_self.Inv()
+    requires old_self.TrackingGarbage()
+    requires |succs| <= MaxNumChildren()
+    requires |old_self.graph| < MaxSize()
+    requires SuccsValid(succs, old_self.graph)
+    ensures self.Inv()
+    ensures self.TrackingGarbage()
+    // ?? ensures |self.garbageQueue.value| <= 0x1_0000_0000;
+    ensures self.Inv()
+    ensures self.TrackingGarbage()
+    ensures self.locs == MapRemove1(old_self.locs, ref)
+    ensures self.graph == old_self.graph[ref := succs]
+    ensures (oldLoc.None? ==> ref !in old_self.locs)
+    ensures (oldLoc.Some? ==> ref in old_self.locs && old_self.locs[ref] == oldLoc.value)
+    {
+      self.QueueSizeBound();
+      TCountEqGraphSize(self.t);
 
-    //   IndirectionTableModel.lemma_count_eq_graph_size(me.t);
+      // TODO use the iterator instead?
+      var oldEntry := LinearMutableMap.Get(self.t, ref);
+      var predCount := if oldEntry.Some? then oldEntry.value.predCount else 0;
 
-    //   t, garbageQueue := UpdatePredCounts(t, garbageQueue, ref, succs,
-    //       if oldEntry.Some? then oldEntry.value.succs else []);
+      // == mutation ==
+      if oldEntry.None? {
+        inout self.garbageQueue.value.Add(ref);
+      }
+      LinearMutableMap.Insert(inout self.t, ref, Entry(None, succs, predCount));
+      // ==============
 
-    //   IndirectionTableModel.lemma_count_eq_graph_size(me.t);
+      assert oldEntry.Some? ==> oldEntry.value.succs == Graph(old_self.t)[ref];
+      assert forall r | r != ref && r in Graph(self.t) :: r in Graph(old_self.t) && Graph(self.t)[r] == Graph(old_self.t)[r];
 
-    //   //IndirectionTableModel.LemmaValidPredCountsOfValidPredCountsIntermediate(IndirectionTableModel.PredCounts(me.t), IndirectionTableModel.Graph(me.t), succs, if oldEntry.Some? then oldEntry.value.succs else []);
+      TCountEqGraphSize(self.t);
 
-    //   if ref > refUpperBound {
-    //     refUpperBound := ref;
-    //   }
+      ghost var oldSuccs := if oldEntry.Some? then oldEntry.value.succs else [];
 
-    //   oldLoc := if oldEntry.Some? && oldEntry.value.loc.Some? then oldEntry.value.loc else None;
-    //   findLoclessIterator := None;
+      ghost var predCounts := PredCounts(self.t);
+      ghost var graph0 := Graph(old_self.t);
+      ghost var graph := Graph(self.t);
 
-    //   ghost var _ := IndirectionTableModel.UpdateAndRemoveLoc(I(me), ref, succs);
-    //   self := IndirectionTable(t, lSome(garbageQueue), refUpperBound, findLoclessIterator);
-    // }
+      forall r | r in predCounts
+      ensures predCounts[r] == |PredecessorSet(graph, r)| + IsRoot(r)
+            - SeqCount(succs, r, 0)
+            + SeqCount(oldSuccs, r, 0)
+      {
+        reveal_PredCounts();
+
+        SeqCountPlusPredecessorSetExcept(graph0, r, ref);
+        SeqCountPlusPredecessorSetExcept(graph, r, ref);
+
+        assert PredecessorSetExcept(graph0, r, ref)
+            == PredecessorSetExcept(graph, r, ref);
+
+        assert |PredecessorSet(graph0, r)| - SeqCount(oldSuccs, r, 0)
+          == |PredecessorSetExcept(graph0, r, ref)|
+          == |PredecessorSetExcept(graph, r, ref)|
+          == |PredecessorSet(graph, r)| - SeqCount(succs, r, 0);
+      }
+
+      assert ValidPredCountsIntermediate(PredCounts(self.t), Graph(self.t), succs, oldSuccs, 0, 0);
+
+      forall j | 0 <= j < |oldSuccs|
+      ensures oldSuccs[j] in self.t.contents
+      {
+        assert oldSuccs[j] in graph0;
+        assert oldSuccs[j] in graph;
+      }
+
+      assert RefcountUpdateInv(self.t, self.garbageQueue.value.I(), ref, succs, oldSuccs, 0, 0);
+
+      // == mutation ==
+      inout self.UpdatePredCounts(ref, succs, if oldEntry.Some? then oldEntry.value.succs else []);
+      // ==============
+
+      TCountEqGraphSize(self.t);
+
+      assert ValidPredCounts(PredCounts(self.t), Graph(self.t));
+
+      if ref > self.refUpperBound {
+        inout self.refUpperBound := ref;
+      }
+
+      oldLoc := if oldEntry.Some? && oldEntry.value.loc.Some? then oldEntry.value.loc else None;
+
+      // == mutation ==
+      inout self.findLoclessIterator := None;
+      inout self.UpdateGhost();
+      // ==============
+    }
 
     // // Parsing and marshalling
 
