@@ -1,10 +1,12 @@
 include "../../lib/Base/sequences.i.dfy"
+include "ConcurrentMap.i.dfy"
 
 module ConcurrentLinearHashTable {
   import opened Sequences
+  import ConcurrentMap
 
-  type Key = int
-  type Value(!new,==)
+  type Key = ConcurrentMap.Key
+  type Value = ConcurrentMap.Value
 
   datatype Slot = Slot(ghost slot: nat)
   predicate ValidSlot(elementsLength: nat, slot: Slot)
@@ -24,7 +26,7 @@ module ConcurrentLinearHashTable {
 
   datatype ThreadState =
     | Insert(key: Key, value: Value, slot:Slot)
-    | Remove(key: Key, slot:Slot)
+    //| Remove(key: Key, slot:Slot)
     | Query(key: Key, slot:Slot)
     | Idle
 
@@ -32,7 +34,7 @@ module ConcurrentLinearHashTable {
   {
     match t
       case Insert(_, _, slot) => ValidSlot(elementsLength, slot)
-      case Remove(_, slot) => ValidSlot(elementsLength, slot)
+      //case Remove(_, slot) => ValidSlot(elementsLength, slot)
       case Query(_, slot) => ValidSlot(elementsLength, slot)
       case Idle => true
   }
@@ -133,7 +135,7 @@ module ConcurrentLinearHashTable {
     exists step:Step :: NextStep(s, s', step)
   }
 
-  function I(table:seq<Item>) : (m:map<Key,Value>)
+  function ITable(table:seq<Item>) : (m:map<Key,Value>)
     ensures forall slot | ValidSlot(|table|, slot) && table[slot.slot].Entry?  :: table[slot.slot].key in m
   {
     if |table|==0
@@ -141,8 +143,8 @@ module ConcurrentLinearHashTable {
     else
       var last := Last(table);
       if last.Entry?
-        then I(DropLast(table))[last.key := last.value]
-        else I(DropLast(table))
+        then ITable(DropLast(table))[last.key := last.value]
+        else ITable(DropLast(table))
   }
 
   predicate KeySlot(table:seq<Item>, slot:Slot)
@@ -205,7 +207,7 @@ module ConcurrentLinearHashTable {
     requires Inv(s)
     requires InsertInit(s, s', tid, key, value)
     ensures Inv(s')
-    ensures I(s'.table) == I(s.table)
+    ensures ITable(s'.table) == ITable(s.table)
   {
   }
 
@@ -213,7 +215,7 @@ module ConcurrentLinearHashTable {
     requires Inv(s)
     requires InsertAdvance(s, s', tid)
     ensures Inv(s')
-    ensures I(s'.table) == I(s.table)
+    ensures ITable(s'.table) == ITable(s.table)
   {
   }
 
@@ -221,7 +223,7 @@ module ConcurrentLinearHashTable {
     requires UniqueKeys(table)
     requires KeySlot(table, i)
     requires table[i.slot].Entry?
-    ensures table[i.slot].key in I(table) && I(table)[table[i.slot].key] == table[i.slot].value
+    ensures table[i.slot].key in ITable(table) && ITable(table)[table[i.slot].key] == table[i.slot].value
   {
     if |table| == i.slot + 1 {
     } else {
@@ -234,23 +236,23 @@ module ConcurrentLinearHashTable {
 
   lemma PointInterpretationBackwards(table: seq<Item>)
     requires UniqueKeys(table)
-    ensures forall k | k in I(table) :: exists i :: KeySlot(table, i) && table[i.slot] == Entry(k, I(table)[k])
+    ensures forall k | k in ITable(table) :: exists i :: KeySlot(table, i) && table[i.slot] == Entry(k, ITable(table)[k])
   {
     if |table| == 0 {
     } else {
       PointInterpretationBackwards(DropLast(table));
-      var prem := I(DropLast(table));
-      var m := I(table);
-      forall k | k in I(table)
-      ensures exists i :: KeySlot(table, i) && table[i.slot] == Entry(k, I(table)[k])
+      var prem := ITable(DropLast(table));
+      var m := ITable(table);
+      forall k | k in ITable(table)
+      ensures exists i :: KeySlot(table, i) && table[i.slot] == Entry(k, ITable(table)[k])
       {
         var l := Last(table);
         if (l.Entry? || l.Tombstone?) && k == l.key {
           var i := Slot(|table| - 1);
           assert KeySlot(table, i);
-          assert table[i.slot] == Entry(k, I(table)[k]);
+          assert table[i.slot] == Entry(k, ITable(table)[k]);
         } else {
-          assert exists i :: KeySlot(table, i) && table[i.slot] == Entry(k, I(table)[k]);
+          assert exists i :: KeySlot(table, i) && table[i.slot] == Entry(k, ITable(table)[k]);
         }
       }
     }
@@ -258,11 +260,11 @@ module ConcurrentLinearHashTable {
 
   lemma PointInterpretation(table: seq<Item>)
     requires UniqueKeys(table)
-    ensures forall i | KeySlot(table, i) && table[i.slot].Entry? :: table[i.slot].key in I(table) && I(table)[table[i.slot].key] == table[i.slot].value
-    ensures forall k | k in I(table) :: exists i :: KeySlot(table, i) && table[i.slot] == Entry(k, I(table)[k])
+    ensures forall i | KeySlot(table, i) && table[i.slot].Entry? :: table[i.slot].key in ITable(table) && ITable(table)[table[i.slot].key] == table[i.slot].value
+    ensures forall k | k in ITable(table) :: exists i :: KeySlot(table, i) && table[i.slot] == Entry(k, ITable(table)[k])
   {
     forall i | KeySlot(table, i) && table[i.slot].Entry?
-      ensures table[i.slot].key in I(table) && I(table)[table[i.slot].key] == table[i.slot].value
+      ensures table[i.slot].key in ITable(table) && ITable(table)[table[i.slot].key] == table[i.slot].value
     {
       PointInterpretationForwards(table, i);
     }
@@ -273,7 +275,7 @@ module ConcurrentLinearHashTable {
     requires Inv(s)
     requires InsertComplete(s, s', tid)
     ensures Inv(s')
-    ensures I(s'.table) == I(s.table)[s.threads[tid].key := s.threads[tid].value]
+    ensures ITable(s'.table) == ITable(s.table)[s.threads[tid].key := s.threads[tid].value]
   {
     PointInterpretation(s.table);
     PointInterpretation(s'.table);
@@ -283,7 +285,7 @@ module ConcurrentLinearHashTable {
     requires Inv(s)
     requires QueryInit(s, s', tid, key)
     ensures Inv(s')
-    ensures I(s'.table) == I(s.table)
+    ensures ITable(s'.table) == ITable(s.table)
   {
   }
 
@@ -291,7 +293,7 @@ module ConcurrentLinearHashTable {
     requires Inv(s)
     requires QueryAdvance(s, s', tid)
     ensures Inv(s')
-    ensures I(s'.table) == I(s.table)
+    ensures ITable(s'.table) == ITable(s.table)
   {
   }
 
@@ -299,7 +301,25 @@ module ConcurrentLinearHashTable {
     requires Inv(s)
     requires QueryComplete(s, s', tid, value)
     ensures Inv(s')
-    ensures I(s'.table) == I(s.table)
+    ensures ITable(s'.table) == ITable(s.table)
   {
+  }
+
+  function IThread(t: ThreadState) : ConcurrentMap.Req
+  requires t != Idle
+  {
+    match t {
+      case Insert(key, value, slot) => ConcurrentMap.ReqInsert(key, value)
+      case Query(key, slot) => ConcurrentMap.ReqQuery(key)
+    }
+  }
+
+  function I(s: Variables): ConcurrentMap.Variables
+  {
+    ConcurrentMap.Variables(
+      ITable(s.table),
+      map tid:nat | 0 <= tid < |s.threads| && s.threads[tid] != Idle
+          :: IThread(s.threads[tid])
+    ) 
   }
 }
