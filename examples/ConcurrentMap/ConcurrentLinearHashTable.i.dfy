@@ -3,6 +3,7 @@ include "ConcurrentMap.i.dfy"
 
 module ConcurrentLinearHashTable {
   import opened Sequences
+  import opened Options
   import ConcurrentMap
 
   type Key = ConcurrentMap.Key
@@ -190,13 +191,13 @@ module ConcurrentLinearHashTable {
     && (forall tid | ValidThreadId(s, tid) :: ThreadInv(s, s.threads[tid]))
   }
 
-  lemma InitInv(s:Variables)
+  lemma InitImpliesInv(s:Variables)
   requires Init(s)
   ensures Inv(s)
   {
   }
 
-  lemma NextInv(s:Variables, s':Variables)
+  lemma NextPreservesInv(s:Variables, s':Variables)
   requires Next(s, s')
   requires Inv(s)
   ensures Inv(s')
@@ -321,5 +322,98 @@ module ConcurrentLinearHashTable {
       map tid:nat | 0 <= tid < |s.threads| && s.threads[tid] != Idle
           :: IThread(s.threads[tid])
     ) 
+  }
+
+  lemma InsertInitStepRefinesNext(s: Variables, s': Variables, key: Key, value: Value, tid: nat)
+    requires Inv(s)
+    requires InsertInit(s, s', tid, key, value)
+    ensures Inv(s')
+    ensures ConcurrentMap.Next(I(s), I(s'))
+  {
+    assert ConcurrentMap.NextStep(I(s), I(s'),
+        ConcurrentMap.InsertStartStep(tid, key, value));
+  }
+
+  lemma InsertAdvanceStepRefinesNext(s: Variables, s': Variables, tid: nat)
+    requires Inv(s)
+    requires InsertAdvance(s, s', tid)
+    ensures Inv(s')
+    ensures ConcurrentMap.Next(I(s), I(s'))
+  {
+    assert ConcurrentMap.NextStep(I(s), I(s'), ConcurrentMap.NoOpStep);
+  }
+
+  lemma InsertCompleteStepRefinesNext(s: Variables, s': Variables, tid: nat)
+    requires Inv(s)
+    requires InsertComplete(s, s', tid)
+    ensures Inv(s')
+    ensures ConcurrentMap.Next(I(s), I(s'))
+  {
+    PointInterpretationForwards(s.table, s.threads[tid].slot);
+    assert ConcurrentMap.NextStep(I(s), I(s'),
+        ConcurrentMap.InsertEndStep(tid));
+  }
+
+  lemma QueryInitStepRefinesNext(s: Variables, s': Variables, key: Key, tid: nat)
+    requires Inv(s)
+    requires QueryInit(s, s', tid, key)
+    ensures Inv(s')
+    ensures ConcurrentMap.Next(I(s), I(s'))
+  {
+    assert ConcurrentMap.NextStep(I(s), I(s'),
+        ConcurrentMap.QueryStartStep(tid, key));
+  }
+
+  lemma QueryAdvanceStepRefinesNext(s: Variables, s': Variables, tid: nat)
+    requires Inv(s)
+    requires QueryAdvance(s, s', tid)
+    ensures Inv(s')
+    ensures ConcurrentMap.Next(I(s), I(s'))
+  {
+    assert ConcurrentMap.NextStep(I(s), I(s'), ConcurrentMap.NoOpStep);
+  }
+
+  lemma QueryCompleteStepRefinesNext(s: Variables, s': Variables, tid: nat, value: Value)
+    requires Inv(s)
+    requires QueryComplete(s, s', tid, value)
+    ensures Inv(s')
+    ensures ConcurrentMap.Next(I(s), I(s'))
+  {
+    assert ConcurrentMap.NextStep(I(s), I(s'),
+        ConcurrentMap.QueryEndStep(tid, Some(value)));
+  }
+
+  lemma RefinesNextStep(s: Variables, s': Variables, step: Step)
+    requires Inv(s)
+    requires NextStep(s, s', step)
+    ensures Inv(s')
+    ensures ConcurrentMap.Next(I(s), I(s'))
+  {
+    NextPreservesInv(s, s');
+    match step {
+      case InsertInitStep(key, value, tid)
+          => InsertInitStepRefinesNext(s, s', key, value, tid);
+      case InsertAdvanceStep(tid)
+          => InsertAdvanceStepRefinesNext(s, s', tid);
+      case InsertCompleteStep(tid)
+          => InsertCompleteStepRefinesNext(s, s', tid);
+      case QueryInitStep(key, tid)
+          => QueryInitStepRefinesNext(s, s', key, tid);
+      case QueryAdvanceStep(tid)
+          => QueryAdvanceStepRefinesNext(s, s', tid);
+      case QueryCompleteStep(tid, value)
+          => QueryCompleteStepRefinesNext(s, s', tid, value);
+    }
+  }
+
+  lemma RefinesNext(s: Variables, s': Variables)
+    requires Inv(s)
+    requires Next(s, s')
+    ensures Inv(s')
+    ensures ConcurrentMap.Next(I(s), I(s'))
+  {
+    NextPreservesInv(s, s');
+    var step :| NextStep(s, s', step);
+    RefinesNextStep(s, s', step);
   }
 }
