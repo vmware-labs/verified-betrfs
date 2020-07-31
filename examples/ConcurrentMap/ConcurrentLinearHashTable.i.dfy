@@ -349,7 +349,8 @@ module ConcurrentLinearHashTable {
     ensures Inv(s')
     ensures ConcurrentMap.Next(I(s), I(s'))
   {
-    PointInterpretationForwards(s.table, s.threads[tid].slot);
+    InsertCompleteInterpretation(s, s', tid);
+    assert ConcurrentMap.InsertEnd(I(s), I(s'), tid);
     assert ConcurrentMap.NextStep(I(s), I(s'),
         ConcurrentMap.InsertEndStep(tid));
   }
@@ -379,6 +380,7 @@ module ConcurrentLinearHashTable {
     ensures Inv(s')
     ensures ConcurrentMap.Next(I(s), I(s'))
   {
+    PointInterpretationForwards(s.table, s.threads[tid].slot);
     assert ConcurrentMap.NextStep(I(s), I(s'),
         ConcurrentMap.QueryEndStep(tid, Some(value)));
   }
