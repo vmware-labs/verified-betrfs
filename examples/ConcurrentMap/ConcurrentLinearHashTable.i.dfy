@@ -1,29 +1,17 @@
 include "../../lib/Base/sequences.i.dfy"
 include "ConcurrentMap.i.dfy"
 
-module ConcurrentLinearHashTable {
-  import opened Sequences
-  import opened Options
+module LocalConcurrentLinearHashTable {
   import ConcurrentMap
 
   type Key = ConcurrentMap.Key
   type Value = ConcurrentMap.Value
 
-  datatype Slot = Slot(ghost slot: nat)
-  predicate ValidSlot(elementsLength: nat, slot: Slot)
-  {
-    slot.slot < elementsLength
-  }
-
-  function SlotForKey(elementsLength: nat, key: Key): (result: Slot)
-  requires 0 < elementsLength
-  ensures ValidSlot(elementsLength, result)
-  //  {
-  //    var h := hash64(key);
-  //    Slot((h as nat) % elementsLength)
-  //  }
-
   datatype Item = Empty | Entry(key: Key, value: Value) | Tombstone(key: Key)
+
+  datatype SharedVariables = SharedVariables(table: seq<Item>)
+
+  datatype Slot = Slot(ghost slot: nat)
 
   datatype ThreadState =
     | Insert(key: Key, value: Value, slot:Slot)
@@ -31,7 +19,7 @@ module ConcurrentLinearHashTable {
     | Query(key: Key, slot:Slot)
     | Idle
 
-  predicate WFThreadState(elementsLength:nat, t:ThreadState)
+  predicate WFThreadState(elementsLength: nat, t: ThreadState)
   {
     match t
       case Insert(_, _, slot) => ValidSlot(elementsLength, slot)
@@ -40,103 +28,144 @@ module ConcurrentLinearHashTable {
       case Idle => true
   }
 
-  datatype Variables = Variables(table:seq<Item>, threads:seq<ThreadState>)
-  predicate ValidThreadId(s:Variables, tid:nat)
+  predicate ValidSlot(elementsLength: nat, slot: Slot)
   {
-    tid < |s.threads|
+    slot.slot < elementsLength
   }
 
-  predicate WFVariables(s:Variables)
+   function SlotForKey(elementsLength: nat, key: Key): (result: Slot)
+   requires 0 < elementsLength
+   ensures ValidSlot(elementsLength, result)
+   //  {
+   //    var h := hash64(key);
+   //    Slot((h as nat) % elementsLength)
+   //  }
+
+  predicate InsertInit(s:SharedVariables, s':SharedVariables, t: ThreadState, t': ThreadState, key:Key, value:Value)
   {
-    && 0 < |s.table|
-    && (forall tid | ValidThreadId(s, tid) :: WFThreadState(|s.table|, s.threads[tid]))
+    && WFThreadState(|s.table|, t)
+    && |s.table| > 0
+    && t.Idle?
+    && t' == Insert(key, value, SlotForKey(|s.table|, key))
+    && s' == s
   }
 
-  predicate InsertInit(s:Variables, s':Variables, tid:nat, key:Key, value:Value) {
-    && WFVariables(s)
-    && ValidThreadId(s, tid)
-    && s.threads[tid].Idle?
-    && s' == s.(threads := s.threads[tid := Insert(key, value, SlotForKey(|s.table|, key))])
-  }
-
-  predicate InsertAdvance(s:Variables, s':Variables, tid:nat) {
-    && WFVariables(s)
-    && ValidThreadId(s, tid)
-    && var t := s.threads[tid];
+  predicate InsertAdvance(s:SharedVariables, s':SharedVariables, t:ThreadState, t':ThreadState)
+  {
+    && WFThreadState(|s.table|, t)
     && t.Insert?
     && !s.table[t.slot.slot].Empty?
     && s.table[t.slot.slot].key != t.key
     && t.slot.slot < |s.table|-1  // Can't roll around end of table
-    && s' == s.(threads := s.threads[tid := t.(slot := Slot(t.slot.slot+1))])
+    && s' == s
+    && t' == t.(slot := Slot(t.slot.slot+1))
   }
 
-  predicate InsertComplete(s:Variables, s':Variables, tid:nat) {
-    && WFVariables(s)
-    && ValidThreadId(s, tid)
-    && var t := s.threads[tid];
+  predicate InsertComplete(s:SharedVariables, s':SharedVariables, t: ThreadState, t': ThreadState)
+  {
+    && WFThreadState(|s.table|, t)
     && t.Insert?
+    && t'.Idle?
     && (s.table[t.slot.slot].Empty? || s.table[t.slot.slot].key == t.key)
-    && s' == s.(threads := s.threads[tid := Idle], table := s.table[t.slot.slot := Entry(t.key, t.value)])
+    && s' == s.(table := s.table[t.slot.slot := Entry(t.key, t.value)])
   }
 
-
-  predicate QueryInit(s:Variables, s':Variables, tid:nat, key:Key) {
-    && WFVariables(s)
-    && ValidThreadId(s, tid)
-    && s.threads[tid].Idle?
-    && s' == s.(threads := s.threads[tid := Query(key, SlotForKey(|s.table|, key))])
+  predicate QueryInit(s:SharedVariables, s':SharedVariables, t: ThreadState, t': ThreadState, key:Key)
+  {
+    && 0 < |s.table|
+    && WFThreadState(|s.table|, t)
+    && t.Idle?
+    && s' == s
+    && t' == Query(key, SlotForKey(|s.table|, key))
   }
 
-  predicate QueryAdvance(s:Variables, s':Variables, tid:nat) {
-    && WFVariables(s)
-    && ValidThreadId(s, tid)
-    && var t := s.threads[tid];
+  predicate QueryAdvance(s:SharedVariables, s':SharedVariables, t: ThreadState, t': ThreadState)
+  {
+    && WFThreadState(|s.table|, t)
     && t.Query?
     && !s.table[t.slot.slot].Empty?
     && s.table[t.slot.slot].key != t.key
     && t.slot.slot < |s.table|-1  // Can't roll around end of table TODO
-    && s' == s.(threads := s.threads[tid := t.(slot := Slot(t.slot.slot+1))])
+    && t' == t.(slot := Slot(t.slot.slot+1))
+    && s' == s
   }
 
   // TODO Success-only result; need to return None
-  predicate QueryComplete(s:Variables, s':Variables, tid:nat, value:Value) {
-    && WFVariables(s)
-    && ValidThreadId(s, tid)
-    && var t := s.threads[tid];
+  predicate QueryComplete(s:SharedVariables, s':SharedVariables, t: ThreadState, t': ThreadState, value:Value)
+  {
+    && WFThreadState(|s.table|, t)
     && t.Query?
+    && t'.Idle?
     && s.table[t.slot.slot] == Entry(t.key, value)
-    && s' == s.(threads := s.threads[tid := Idle])
-  }
-
-  predicate Init(s:Variables) {
-    && |s.table| >0
-    && (forall si | 0<=si<|s.table| :: s.table[si].Empty?)
-    && (forall tid | 0 <= tid < |s.threads| :: s.threads[tid].Idle?)
+    && s' == s
   }
 
   datatype Step =
-    | InsertInitStep(key:Key, value:Value, tid:nat)
-    | InsertAdvanceStep(tid:nat)
-    | InsertCompleteStep(tid:nat)
-    | QueryInitStep(key:Key, tid:nat)
-    | QueryAdvanceStep(tid:nat)
-    | QueryCompleteStep(tid:nat, value:Value)
+    | InsertInitStep(key:Key, value:Value)
+    | InsertAdvanceStep
+    | InsertCompleteStep
+    | QueryInitStep(key:Key)
+    | QueryAdvanceStep
+    | QueryCompleteStep(value:Value)
 
-  predicate NextStep(s:Variables, s':Variables, step:Step) {
-    match step
-      case InsertInitStep(key, value, tid) => InsertInit(s, s', tid, key, value)
-      case InsertAdvanceStep(tid) => InsertAdvance(s, s', tid)
-      case InsertCompleteStep(tid) => InsertComplete(s, s', tid)
-      case QueryInitStep(key, tid) => QueryInit(s, s', tid, key)
-      case QueryAdvanceStep(tid) => QueryAdvance(s, s', tid)
-      case QueryCompleteStep(tid, value) => QueryComplete(s, s', tid, value)
+  predicate NextStep(s:SharedVariables, s':SharedVariables, t: ThreadState, t': ThreadState, step:Step) {
+    match step {
+      case InsertInitStep(key, value) => InsertInit(s, s', t, t', key, value)
+      case InsertAdvanceStep => InsertAdvance(s, s', t, t')
+      case InsertCompleteStep => InsertComplete(s, s', t, t')
+      case QueryInitStep(key) => QueryInit(s, s', t, t', key)
+      case QueryAdvanceStep => QueryAdvance(s, s', t, t')
+      case QueryCompleteStep(value) => QueryComplete(s, s', t, t', value)
+    }
+  }
+
+  predicate Next(s:SharedVariables, s':SharedVariables, t: ThreadState, t': ThreadState) {
+    exists step:Step :: NextStep(s, s', t, t', step)
+  }
+}
+
+module ConcurrentLinearHashTable {
+  import opened L = LocalConcurrentLinearHashTable
+  import ConcurrentMap
+
+  import opened Sequences
+  import opened Options
+
+
+  datatype Variables = Variables(
+      sv: L.SharedVariables,
+      threads: map<nat, L.ThreadState>
+  )
+
+  predicate ValidThreadId(s:Variables, tid:nat)
+  {
+    tid in s.threads
+  }
+
+  predicate WFVariables(s:Variables)
+  {
+    && 0 < |s.sv.table|
+    && (forall tid | ValidThreadId(s, tid) :: WFThreadState(|s.sv.table|, s.threads[tid]))
+  }
+
+  predicate Init(s:Variables) {
+    && |s.sv.table| > 0
+    && (forall si | 0<=si<|s.sv.table| :: s.sv.table[si].Empty?)
+    && (forall tid | tid in s.threads :: s.threads[tid].Idle?)
+  }
+
+  predicate NextThread(s:Variables, s':Variables, tid: nat) {
+    && tid in s.threads
+    && tid in s'.threads
+    && L.Next(s.sv, s'.sv, s.threads[tid], s'.threads[tid])
+    && s'.threads == s.threads[tid := s'.threads[tid]]
   }
 
   predicate Next(s:Variables, s':Variables) {
-    exists step:Step :: NextStep(s, s', step)
+    exists tid:nat :: NextThread(s, s', tid)
   }
 
-  function ITable(table:seq<Item>) : (m:map<Key,Value>)
+  function ITable(table:seq<L.Item>) : (m:map<Key,Value>)
     ensures forall slot | ValidSlot(|table|, slot) && table[slot.slot].Entry?  :: table[slot.slot].key in m
   {
     if |table|==0
@@ -148,46 +177,46 @@ module ConcurrentLinearHashTable {
         else ITable(DropLast(table))
   }
 
-  predicate KeySlot(table:seq<Item>, slot:Slot)
+  predicate KeySlot(table:seq<L.Item>, slot:L.Slot)
   {
     && ValidSlot(|table|, slot)
     && !table[slot.slot].Empty?
   }
 
-  predicate UniqueKeys(table:seq<Item>)
+  predicate UniqueKeys(table:seq<L.Item>)
   {
     (forall i, j | && KeySlot(table, i) && KeySlot(table, j) && table[i.slot].key == table[j.slot].key
       :: i == j)
   }
 
-  predicate ReachableForKey(table:seq<Item>, key:Key, end /* exclusive */ :Slot)
+  predicate ReachableForKey(table:seq<L.Item>, key:Key, end /* exclusive */ :L.Slot)
   {
     && 0<|table|
     && ValidSlot(|table|, end)
     && var start := SlotForKey(|table|, key);
     && start.slot <= end.slot
-    && (forall i:Slot | start.slot<=i.slot<end.slot :: !table[i.slot].Empty? && table[i.slot].key!=key)
+    && (forall i:L.Slot | start.slot<=i.slot<end.slot :: !table[i.slot].Empty? && table[i.slot].key!=key)
   }
 
-  predicate ReachableInv(table:seq<Item>)
+  predicate ReachableInv(table:seq<L.Item>)
   {
     (forall i | KeySlot(table, i) :: ReachableForKey(table, table[i.slot].key, i))
   }
 
-  predicate TableInv(table:seq<Item>)
+  predicate TableInv(table:seq<L.Item>)
   {
     && UniqueKeys(table)
     && ReachableInv(table)
   }
 
-  predicate ThreadInv(s:Variables, t:ThreadState)
+  predicate ThreadInv(s:Variables, t:L.ThreadState)
   {
-    !t.Idle? ==> ReachableForKey(s.table, t.key, t.slot)
+    !t.Idle? ==> ReachableForKey(s.sv.table, t.key, t.slot)
   }
 
   predicate Inv(s:Variables)
   {
-    && TableInv(s.table)
+    && TableInv(s.sv.table)
     && (forall tid | ValidThreadId(s, tid) :: ThreadInv(s, s.threads[tid]))
   }
 
@@ -206,21 +235,27 @@ module ConcurrentLinearHashTable {
 
   lemma InsertInitInterpretation(s:Variables, s':Variables, tid:nat, key:Key, value:Value)
     requires Inv(s)
-    requires InsertInit(s, s', tid, key, value)
+    requires ValidThreadId(s, tid)
+    requires ValidThreadId(s', tid)
+    requires s'.threads == s.threads[tid := s'.threads[tid]]
+    requires InsertInit(s.sv, s'.sv, s.threads[tid], s'.threads[tid], key, value)
     ensures Inv(s')
-    ensures ITable(s'.table) == ITable(s.table)
+    ensures ITable(s'.sv.table) == ITable(s.sv.table)
   {
   }
 
   lemma InsertAdvanceInterpretation(s:Variables, s':Variables, tid:nat)
     requires Inv(s)
-    requires InsertAdvance(s, s', tid)
+    requires ValidThreadId(s, tid)
+    requires ValidThreadId(s', tid)
+    requires s'.threads == s.threads[tid := s'.threads[tid]]
+    requires InsertAdvance(s.sv, s'.sv, s.threads[tid], s'.threads[tid])
     ensures Inv(s')
-    ensures ITable(s'.table) == ITable(s.table)
+    ensures ITable(s'.sv.table) == ITable(s.sv.table)
   {
   }
 
-  lemma PointInterpretationForwards(table: seq<Item>, i: Slot)
+  lemma PointInterpretationForwards(table: seq<L.Item>, i: L.Slot)
     requires UniqueKeys(table)
     requires KeySlot(table, i)
     requires table[i.slot].Entry?
@@ -230,12 +265,12 @@ module ConcurrentLinearHashTable {
     } else {
       PointInterpretationForwards(DropLast(table), i);
       if Last(table).Entry? {
-        assert KeySlot(table, Slot(|table|-1));
+        assert KeySlot(table, L.Slot(|table|-1));
       }
     }
   }
 
-  lemma PointInterpretationBackwards(table: seq<Item>)
+  lemma PointInterpretationBackwards(table: seq<L.Item>)
     requires UniqueKeys(table)
     ensures forall k | k in ITable(table) :: exists i :: KeySlot(table, i) && table[i.slot] == Entry(k, ITable(table)[k])
   {
@@ -249,7 +284,7 @@ module ConcurrentLinearHashTable {
       {
         var l := Last(table);
         if (l.Entry? || l.Tombstone?) && k == l.key {
-          var i := Slot(|table| - 1);
+          var i := L.Slot(|table| - 1);
           assert KeySlot(table, i);
           assert table[i.slot] == Entry(k, ITable(table)[k]);
         } else {
@@ -259,7 +294,7 @@ module ConcurrentLinearHashTable {
     }
   }
 
-  lemma PointInterpretation(table: seq<Item>)
+  lemma PointInterpretation(table: seq<L.Item>)
     requires UniqueKeys(table)
     ensures forall i | KeySlot(table, i) && table[i.slot].Entry? :: table[i.slot].key in ITable(table) && ITable(table)[table[i.slot].key] == table[i.slot].value
     ensures forall k | k in ITable(table) :: exists i :: KeySlot(table, i) && table[i.slot] == Entry(k, ITable(table)[k])
@@ -274,39 +309,51 @@ module ConcurrentLinearHashTable {
 
   lemma InsertCompleteInterpretation(s:Variables, s':Variables, tid:nat)
     requires Inv(s)
-    requires InsertComplete(s, s', tid)
+    requires ValidThreadId(s, tid)
+    requires ValidThreadId(s', tid)
+    requires s'.threads == s.threads[tid := s'.threads[tid]]
+    requires InsertComplete(s.sv, s'.sv, s.threads[tid], s'.threads[tid])
     ensures Inv(s')
-    ensures ITable(s'.table) == ITable(s.table)[s.threads[tid].key := s.threads[tid].value]
+    ensures ITable(s'.sv.table) == ITable(s.sv.table)[s.threads[tid].key := s.threads[tid].value]
   {
-    PointInterpretation(s.table);
-    PointInterpretation(s'.table);
+    PointInterpretation(s.sv.table);
+    PointInterpretation(s'.sv.table);
   }
 
   lemma QueryInitInterpretation(s:Variables, s':Variables, tid:nat, key: Key)
     requires Inv(s)
-    requires QueryInit(s, s', tid, key)
+    requires ValidThreadId(s, tid)
+    requires ValidThreadId(s', tid)
+    requires s'.threads == s.threads[tid := s'.threads[tid]]
+    requires QueryInit(s.sv, s'.sv, s.threads[tid], s'.threads[tid], key)
     ensures Inv(s')
-    ensures ITable(s'.table) == ITable(s.table)
+    ensures ITable(s'.sv.table) == ITable(s.sv.table)
   {
   }
 
   lemma QueryAdvanceInterpretation(s:Variables, s':Variables, tid:nat)
     requires Inv(s)
-    requires QueryAdvance(s, s', tid)
+    requires ValidThreadId(s, tid)
+    requires ValidThreadId(s', tid)
+    requires s'.threads == s.threads[tid := s'.threads[tid]]
+    requires QueryAdvance(s.sv, s'.sv, s.threads[tid], s'.threads[tid])
     ensures Inv(s')
-    ensures ITable(s'.table) == ITable(s.table)
+    ensures ITable(s'.sv.table) == ITable(s.sv.table)
   {
   }
 
   lemma QueryCompleteInterpretation(s:Variables, s':Variables, tid:nat, value: Value)
     requires Inv(s)
-    requires QueryComplete(s, s', tid, value)
+    requires ValidThreadId(s, tid)
+    requires ValidThreadId(s', tid)
+    requires s'.threads == s.threads[tid := s'.threads[tid]]
+    requires QueryComplete(s.sv, s'.sv, s.threads[tid], s'.threads[tid], value)
     ensures Inv(s')
-    ensures ITable(s'.table) == ITable(s.table)
+    ensures ITable(s'.sv.table) == ITable(s.sv.table)
   {
   }
 
-  function IThread(t: ThreadState) : ConcurrentMap.Req
+  function IThread(t: L.ThreadState) : ConcurrentMap.Req
   requires t != Idle
   {
     match t {
@@ -318,15 +365,18 @@ module ConcurrentLinearHashTable {
   function I(s: Variables): ConcurrentMap.Variables
   {
     ConcurrentMap.Variables(
-      ITable(s.table),
-      map tid:nat | 0 <= tid < |s.threads| && s.threads[tid] != Idle
+      ITable(s.sv.table),
+      map tid:nat | tid in s.threads && s.threads[tid] != Idle
           :: IThread(s.threads[tid])
     ) 
   }
 
   lemma InsertInitStepRefinesNext(s: Variables, s': Variables, key: Key, value: Value, tid: nat)
     requires Inv(s)
-    requires InsertInit(s, s', tid, key, value)
+    requires ValidThreadId(s, tid)
+    requires ValidThreadId(s', tid)
+    requires s'.threads == s.threads[tid := s'.threads[tid]]
+    requires InsertInit(s.sv, s'.sv, s.threads[tid], s'.threads[tid], key, value)
     ensures Inv(s')
     ensures ConcurrentMap.Next(I(s), I(s'))
   {
@@ -336,7 +386,10 @@ module ConcurrentLinearHashTable {
 
   lemma InsertAdvanceStepRefinesNext(s: Variables, s': Variables, tid: nat)
     requires Inv(s)
-    requires InsertAdvance(s, s', tid)
+    requires ValidThreadId(s, tid)
+    requires ValidThreadId(s', tid)
+    requires s'.threads == s.threads[tid := s'.threads[tid]]
+    requires InsertAdvance(s.sv, s'.sv, s.threads[tid], s'.threads[tid])
     ensures Inv(s')
     ensures ConcurrentMap.Next(I(s), I(s'))
   {
@@ -345,7 +398,10 @@ module ConcurrentLinearHashTable {
 
   lemma InsertCompleteStepRefinesNext(s: Variables, s': Variables, tid: nat)
     requires Inv(s)
-    requires InsertComplete(s, s', tid)
+    requires ValidThreadId(s, tid)
+    requires ValidThreadId(s', tid)
+    requires s'.threads == s.threads[tid := s'.threads[tid]]
+    requires InsertComplete(s.sv, s'.sv, s.threads[tid], s'.threads[tid])
     ensures Inv(s')
     ensures ConcurrentMap.Next(I(s), I(s'))
   {
@@ -357,7 +413,10 @@ module ConcurrentLinearHashTable {
 
   lemma QueryInitStepRefinesNext(s: Variables, s': Variables, key: Key, tid: nat)
     requires Inv(s)
-    requires QueryInit(s, s', tid, key)
+    requires ValidThreadId(s, tid)
+    requires ValidThreadId(s', tid)
+    requires s'.threads == s.threads[tid := s'.threads[tid]]
+    requires QueryInit(s.sv, s'.sv, s.threads[tid], s'.threads[tid], key)
     ensures Inv(s')
     ensures ConcurrentMap.Next(I(s), I(s'))
   {
@@ -367,7 +426,10 @@ module ConcurrentLinearHashTable {
 
   lemma QueryAdvanceStepRefinesNext(s: Variables, s': Variables, tid: nat)
     requires Inv(s)
-    requires QueryAdvance(s, s', tid)
+    requires ValidThreadId(s, tid)
+    requires ValidThreadId(s', tid)
+    requires s'.threads == s.threads[tid := s'.threads[tid]]
+    requires QueryAdvance(s.sv, s'.sv, s.threads[tid], s'.threads[tid])
     ensures Inv(s')
     ensures ConcurrentMap.Next(I(s), I(s'))
   {
@@ -376,34 +438,38 @@ module ConcurrentLinearHashTable {
 
   lemma QueryCompleteStepRefinesNext(s: Variables, s': Variables, tid: nat, value: Value)
     requires Inv(s)
-    requires QueryComplete(s, s', tid, value)
+    requires ValidThreadId(s, tid)
+    requires ValidThreadId(s', tid)
+    requires s'.threads == s.threads[tid := s'.threads[tid]]
+    requires QueryComplete(s.sv, s'.sv, s.threads[tid], s'.threads[tid], value)
     ensures Inv(s')
     ensures ConcurrentMap.Next(I(s), I(s'))
   {
-    PointInterpretationForwards(s.table, s.threads[tid].slot);
+    PointInterpretationForwards(s.sv.table, s.threads[tid].slot);
     assert ConcurrentMap.NextStep(I(s), I(s'),
         ConcurrentMap.QueryEndStep(tid, Some(value)));
   }
 
-  lemma RefinesNextStep(s: Variables, s': Variables, step: Step)
+  lemma RefinesNextThread(s: Variables, s': Variables, tid: nat)
     requires Inv(s)
-    requires NextStep(s, s', step)
+    requires NextThread(s, s', tid)
     ensures Inv(s')
     ensures ConcurrentMap.Next(I(s), I(s'))
   {
+    var step: L.Step :| L.NextStep(s.sv, s'.sv, s.threads[tid], s'.threads[tid], step);
     NextPreservesInv(s, s');
     match step {
-      case InsertInitStep(key, value, tid)
+      case InsertInitStep(key, value)
           => InsertInitStepRefinesNext(s, s', key, value, tid);
-      case InsertAdvanceStep(tid)
+      case InsertAdvanceStep
           => InsertAdvanceStepRefinesNext(s, s', tid);
-      case InsertCompleteStep(tid)
+      case InsertCompleteStep
           => InsertCompleteStepRefinesNext(s, s', tid);
-      case QueryInitStep(key, tid)
+      case QueryInitStep(key)
           => QueryInitStepRefinesNext(s, s', key, tid);
-      case QueryAdvanceStep(tid)
+      case QueryAdvanceStep
           => QueryAdvanceStepRefinesNext(s, s', tid);
-      case QueryCompleteStep(tid, value)
+      case QueryCompleteStep(value)
           => QueryCompleteStepRefinesNext(s, s', tid, value);
     }
   }
@@ -415,7 +481,7 @@ module ConcurrentLinearHashTable {
     ensures ConcurrentMap.Next(I(s), I(s'))
   {
     NextPreservesInv(s, s');
-    var step :| NextStep(s, s', step);
-    RefinesNextStep(s, s', step);
+    var tid :| NextThread(s, s', tid);
+    RefinesNextThread(s, s', tid);
   }
 }
