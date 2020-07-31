@@ -1,4 +1,4 @@
-include "../Base/sequences.i.dfy"
+include "../../lib/Base/sequences.i.dfy"
 
 module ConcurrentMap {
   import opened Sequences
