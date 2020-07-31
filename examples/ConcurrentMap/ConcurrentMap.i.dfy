@@ -241,6 +241,18 @@ lemma PointInterpretationBackwards(table: seq<Item>)
     PointInterpretationBackwards(DropLast(table));
     var prem := I(DropLast(table));
     var m := I(table);
+    forall k | k in I(table)
+    ensures exists i :: KeySlot(table, i) && table[i.slot] == Entry(k, I(table)[k])
+    {
+      var l := Last(table);
+      if (l.Entry? || l.Tombstone?) && k == l.key {
+        var i := Slot(|table| - 1);
+        assert KeySlot(table, i);
+        assert table[i.slot] == Entry(k, I(table)[k]);
+      } else {
+        assert exists i :: KeySlot(table, i) && table[i.slot] == Entry(k, I(table)[k]);
+      }
+    }
   }
 }
 
