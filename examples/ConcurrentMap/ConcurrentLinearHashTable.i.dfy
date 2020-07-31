@@ -1,6 +1,6 @@
 include "../../lib/Base/sequences.i.dfy"
 
-module ConcurrentHashTable {
+module ConcurrentLinearHashTable {
   import opened Sequences
 
 type Key = int
