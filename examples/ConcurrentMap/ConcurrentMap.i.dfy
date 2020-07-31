@@ -1,6 +1,6 @@
 include "../../lib/Base/sequences.i.dfy"
 
-module ConcurrentMap {
+module ConcurrentHashTable {
   import opened Sequences
 
 type Key = int
@@ -278,5 +278,32 @@ lemma InsertCompleteInterpretation(s:Variables, s':Variables, tid:nat)
   PointInterpretation(s.table);
   PointInterpretation(s'.table);
 }
+
+lemma QueryInitInterpretation(s:Variables, s':Variables, tid:nat, key: Key)
+  requires Inv(s)
+  requires QueryInit(s, s', tid, key)
+  ensures Inv(s')
+  ensures I(s'.table) == I(s.table)
+{
+}
+
+lemma QueryAdvanceInterpretation(s:Variables, s':Variables, tid:nat)
+  requires Inv(s)
+  requires QueryAdvance(s, s', tid)
+  ensures Inv(s')
+  ensures I(s'.table) == I(s.table)
+{
+}
+
+lemma QueryCompleteInterpretation(s:Variables, s':Variables, tid:nat, value: Value)
+  requires Inv(s)
+  requires QueryComplete(s, s', tid, value)
+  ensures Inv(s')
+  ensures I(s'.table) == I(s.table)
+{
+}
+
+
+
 
 }
