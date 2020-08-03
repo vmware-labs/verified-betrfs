@@ -14,6 +14,8 @@ module Impl {
 
   method query(s: SharedState, key: Key, shared tid: Tid, linear r: RightPhase)
   returns (res: Value, linear l: LeftPhase)
+  modifies s
+  modifies arbitrary_objects()
   requires |s| > 0
   {
     var slot := L.SlotForKey(|s|, key);
@@ -22,16 +24,22 @@ module Impl {
 
   method query_loop(s: SharedState, key: Key, slot: L.Slot, shared tid: Tid, linear r: RightPhase)
   returns (res: Value, linear l_out: LeftPhase)
+  modifies s
+  modifies arbitrary_objects()
   requires 0 <= slot.slot <= |s|
+  decreases |s| - slot.slot
   {
+    linear var l;
+
     if slot.slot == |s| {
       assume false;
+      l_out := shift_phase(r);
     } else {
       s[slot.slot].Acq(tid, r);
 
       var entry := s[slot.slot].Read(tid);
 
-      linear var l := shift_phase(r);
+      l := shift_phase(r);
       s[slot.slot].Rel(tid, l);
 
       if entry.Empty? {
