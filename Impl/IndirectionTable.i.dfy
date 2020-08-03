@@ -27,6 +27,7 @@ module IndirectionTable {
   import opened Sequences
   import opened NativeTypes
   import ReferenceType`Internal
+  import SectorType
   import BT = PivotBetreeSpec`Internal
   import BC = BlockCache
   import LinearMutableMap
@@ -157,6 +158,11 @@ module IndirectionTable {
     //   acc := DebugAccumulator.AccPut(acc, "garbageQueue", a);
     // }
 
+    function I(): SectorType.IndirectionTable
+    {
+      SectorType.IndirectionTable(this.locs, this.graph)
+    }
+
     protected predicate Inv()
     {
       && LinearMutableMap.Inv(this.t)
@@ -219,9 +225,10 @@ module IndirectionTable {
     shared method Clone()
     returns (linear cloned : IndirectionTable)
     requires this.Inv()
-    ensures this.Inv()
+    ensures cloned.Inv()
     ensures cloned.graph == this.graph
     ensures cloned.locs == this.locs
+    ensures cloned.I() == this.I()
     {
       shared var IndirectionTable(
         t, garbageQueue, refUpperBound, findLoclessIterator, locs, graph, predCounts) := this;
@@ -857,7 +864,7 @@ module IndirectionTable {
       }
     }
 
-    predicate SuccsValid(succs: seq<BT.G.Reference>, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
+    static predicate SuccsValid(succs: seq<BT.G.Reference>, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
     {
       forall ref | ref in succs :: ref in graph
     }
@@ -1775,177 +1782,211 @@ module IndirectionTable {
     //   IndirectionTableModel.reveal_getRefUpperBound();
     //   me.refUpperBound
     // }
+  }
 
-    // ass IndirectionTable {
-    // var box: BoxedLinear<IndirectionTable>;
-    // ghost var Repr: set<object>;
+  class BoxedIndirectionTable {
+    var box: BoxedLinear<IndirectionTable>;
+    ghost var Repr: set<object>;
 
-    // function Read() : IndirectionTable
-    //   requires box.Inv()
-    //   reads this, box, box.Repr
-    // {
-    //   box.Read()
-    // }
+    function Read() : IndirectionTable
+      requires box.Inv()
+      reads this, box, box.Repr
+    {
+      box.Read()
+    }
 
-    // method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator)
-    //   requires false
-    // {
-/*
-    //   acc := DebugAccumulator.EmptyAccumulator();
-    //   var a := new DebugAccumulator.AccRec(t.Count, "Entry");
-    //   acc := DebugAccumulator.AccPut(acc, "t", a);
-    //   var r := garbageQueue.DebugAccumulate();
-    //   a := new DebugAccumulator.AccRec.Index(r);
-    //   acc := DebugAccumulator.AccPut(acc, "garbageQueue", a);
-*/
-    // }
+//     method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator)
+//       requires false
+//     {
+// /*
+//       acc := DebugAccumulator.EmptyAccumulator();
+//       var a := new DebugAccumulator.AccRec(t.Count, "Entry");
+//       acc := DebugAccumulator.AccPut(acc, "t", a);
+//       var r := garbageQueue.DebugAccumulate();
+//       a := new DebugAccumulator.AccRec.Index(r);
+//       acc := DebugAccumulator.AccPut(acc, "garbageQueue", a);
+// */
+//     }
 
-    // protected predicate Inv()
-    //   reads this, Repr
-    //   ensures Inv() ==> this in Repr
-    // {
-    //   && box in Repr
-    //   && Repr == {this} + box.Repr
-    //   && box.Inv()
-    //   && box.Has()
-    //   && It.Inv(Read())
-    // }
+    protected predicate Inv()
+      reads this, Repr
+      ensures Inv() ==> this in Repr
+    {
+      && box in Repr
+      && Repr == {this} + box.Repr
+      && box.Inv()
+      && box.Has()
+      && Read().Inv()
+    }
 
-    // protected function I() : IndirectionTableModel.IndirectionTable
-    //   reads this, Repr
-    //   requires Inv()
-    //   ensures IndirectionTableModel.Inv(I())
-    // {
-    //   It.I(Read())
-    // }
+    protected function I() : SectorType.IndirectionTable
+      reads this, Repr
+      requires Inv()
+    {
+      this.Read().I()
+    }
 
-    // constructor Box(box: BoxedLinear<IndirectionTable>)
-    //   ensures this.box == box
-    //   ensures Repr == {this} + box.Repr
-    // {
-    //   this.box := box;
-    //   new;
-    //   Repr := {this} + box.Repr;
-    // }
+    protected predicate TrackingGarbage()
+      reads this, Repr
+      requires Inv()
+    {
+      this.Read().TrackingGarbage()
+    }
 
-    // constructor Empty()
-    //   ensures Inv()
-    //   ensures fresh(Repr)
-    // {
-    //   box := new BoxedLinear(IndirectionTableEmptyConstructor());
-    //   new;
-    //   Repr := {this} + box.Repr;
-    // }
+    predicate DeallocableRef(ref: BT.G.Reference)
+    reads this, Repr
+    requires this.Inv()
+    ensures DeallocableRef(ref) ==> this.Read().DeallocableRef(ref)
+    {
+      && ref in this.I().graph
+      && ref != BT.G.Root()
+      && (forall r | r in this.I().graph :: ref !in this.I().graph[r])
+    }
 
-    // constructor RootOnly(loc: Location)
-    //   ensures Inv()
-    //   ensures fresh(Repr)
-    //   ensures I() == IndirectionTableModel.ConstructorRootOnly(loc)
-    // {
-    //   box := new BoxedLinear(IndirectionTableRootOnlyConstructor(loc));
-    //   new;
-    //   Repr := {this} + box.Repr;
-    // }
+    constructor Box(box: BoxedLinear<IndirectionTable>)
+      ensures this.box == box
+      ensures Repr == {this} + box.Repr
+    {
+      this.box := box;
+      new;
+      Repr := {this} + box.Repr;
+    }
 
-//  //   constructor(t: HashMap)
-//  //   {
-//  //     box := new LinearBox(IndirectionTable(t, lNone, 0, None));
-//  //     Repr := {this} + box.Repr;
-//  //   }
+    // TODO constructor Empty()
+    // TODO   ensures Inv()
+    // TODO   ensures fresh(Repr)
+    // TODO {
+    // TODO   box := new BoxedLinear(IndirectionTableEmptyConstructor());
+    // TODO   new;
+    // TODO   Repr := {this} + box.Repr;
+    // TODO }
 
-    // // TODO: need to remember to call this; otherwise, memory will leak
-    // method Destructor()
-    //   requires Inv()
-    //   modifies Repr
-    // {
-    //   linear var x := box.Take();
-    //   It.Destructor(x);
-    // }
+    constructor (loc: Location)
+      ensures Inv()
+      ensures fresh(Repr)
+      ensures Read().Inv()
+      ensures Read().graph == map[BT.G.Root() := []]
+      ensures Read().locs == map[BT.G.Root() := loc]
+    {
+      linear var allocd := IndirectionTable.Alloc(loc);
+      box := new BoxedLinear(allocd);
+      new;
+      Repr := {this} + box.Repr;
+    }
 
-    // method Clone() returns (table: IndirectionTable)
-    //   requires Inv()
-    //   ensures table.Inv()
-    //   ensures fresh(table.Repr)
-    //   ensures table.I() == IndirectionTableModel.clone(old(I()))
-    // {
-    //   linear var clone := It.Clone(box.Borrow());
-    //   var boxed := new BoxedLinear(clone);
-    //   table := new IndirectionTable.Box(boxed);
-    // }
+    // TODO: need to remember to call this; otherwise, memory will leak
+    method Destructor()
+      requires Inv()
+      modifies Repr
+    {
+      linear var x := box.Take();
+      x.Free();
+    }
 
-    // function method GetEntry(ref: BT.G.Reference) : (e : Option<Entry>)
-    //   requires Inv()
-    //   reads Repr
-    //   ensures e == IndirectionTableModel.GetEntry(I(), ref)
-    // {
-    //   It.GetEntry(box.Borrow(), ref)
-    // }
+    method Clone() returns (table: BoxedIndirectionTable)
+      requires Inv()
+      ensures table.Inv()
+      ensures fresh(table.Repr)
+      ensures table.I() == this.I()
+    {
+      linear var clone := box.Borrow().Clone();
+      assert clone.I() == this.I();
+      var boxed := new BoxedLinear(clone);
+      table := new BoxedIndirectionTable.Box(boxed);
+    }
 
-    // function method HasEmptyLoc(ref: BT.G.Reference) : (b: bool)
-    //   requires Inv()
-    //   reads Repr
-    //   ensures b == IndirectionTableModel.HasEmptyLoc(I(), ref)
-    // {
-    //   It.HasEmptyLoc(box.Borrow(), ref)
-    // }
+    method GetEntry(ref: BT.G.Reference) returns (e : Option<Entry>)
+      requires Inv()
+      ensures e.None? ==> ref !in this.Read().graph
+      ensures e.Some? ==> ref in this.Read().graph
+      ensures e.Some? ==> this.Read().graph[ref] == e.value.succs
+      ensures e.Some? && e.value.loc.Some? ==>
+          ref in this.Read().locs && this.Read().locs[ref] == e.value.loc.value
+      ensures ref in this.Read().locs ==> e.Some? && e.value.loc.Some?
+    {
+      e := box.Borrow().GetEntry(ref);
+    }
 
-    // method RemoveLoc(ref: BT.G.Reference) returns (oldLoc: Option<Location>)
-    //   requires Inv()
-    //   requires IndirectionTableModel.TrackingGarbage(I())
-    //   requires ref in I().graph
-    //   modifies Repr
-    //   ensures Inv()
-    //   ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
-    //   ensures (I(), oldLoc) == IndirectionTableModel.RemoveLoc(old(I()), ref)
-    // {
-    //   linear var x := box.Take();
-    //   x, oldLoc := It.RemoveLoc(x, ref);
-    //   box.Give(x);
-    // }
+    method HasEmptyLoc(ref: BT.G.Reference) returns (b: bool)
+      requires Inv()
+      ensures b == (ref in this.I().graph && ref !in this.I().locs)
+    {
+      b := box.Borrow().HasEmptyLoc(ref);
+    }
 
-    // method AddLocIfPresent(ref: BT.G.Reference, loc: Location) returns (added: bool)
-    //   requires Inv()
-    //   modifies Repr
-    //   ensures Inv()
-    //   ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
-    //   ensures (I(), added) == IndirectionTableModel.AddLocIfPresent(old(I()), ref, loc)
-    // {
-    //   linear var x := box.Take();
-    //   x, added := It.AddLocIfPresent(x, ref, loc);
-    //   box.Give(x);
-    // }
+    method RemoveLoc(ref: BT.G.Reference) returns (oldLoc: Option<Location>)
+      requires Inv()
+      requires TrackingGarbage()
+      requires ref in I().graph
+      modifies Repr
+      ensures Inv()
+      ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
+      ensures TrackingGarbage()
+      ensures this.I().locs == MapRemove1(old(this.I()).locs, ref)
+      ensures this.I().graph == old(this.I()).graph
+      ensures oldLoc.None? ==> ref !in old(this.I()).locs
+      ensures oldLoc.Some? ==> ref in old(this.I()).locs && old(this.I()).locs[ref] == oldLoc.value
+    {
+      linear var x := box.Take();
+      oldLoc := inout x.RemoveLoc(ref);
+      box.Give(x);
+    }
 
-    // method RemoveRef(ref: BT.G.Reference) returns (oldLoc: Option<Location>)
-    //   requires Inv()
-    //   requires IndirectionTableModel.TrackingGarbage(I())
-    //   requires IndirectionTableModel.deallocable(I(), ref)
-    //   modifies Repr
-    //   ensures Inv()
-    //   ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
-    //   ensures (I(), oldLoc) == IndirectionTableModel.RemoveRef(old(I()), ref)
-    // {
-    //   linear var x := box.Take();
-    //   x, oldLoc := It.RemoveRef(x, ref);
-    //   box.Give(x);
-    // }
+    method AddLocIfPresent(ref: BT.G.Reference, loc: Location) returns (added: bool)
+      requires Inv()
+      modifies Repr
+      ensures Inv()
+      ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
+      ensures added == (ref in old(this.I()).graph && ref !in old(this.I()).locs)
+      ensures this.I().graph == old(this.I()).graph
+      ensures added ==> this.I().locs == old(this.I()).locs[ref := loc]
+      ensures !added ==> this.I().locs == old(this.I()).locs
+      ensures old(this.TrackingGarbage()) ==> this.TrackingGarbage()
+    {
+      linear var x := box.Take();
+      added := inout x.AddLocIfPresent(ref, loc);
+      box.Give(x);
+    }
 
-    // method UpdateAndRemoveLoc(ref: BT.G.Reference, succs: seq<BT.G.Reference>) returns (oldLoc: Option<Location>)
-    //   requires Inv()
-    //   requires IndirectionTableModel.TrackingGarbage(I())
-    //   requires |succs| <= MaxNumChildren()
-    //   requires |I().graph| < IndirectionTableModel.MaxSize()
-    //   requires IndirectionTableModel.SuccsValid(succs, I().graph)
-    //   modifies Repr
-    //   ensures Inv()
-    //   ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
-    //   ensures (I(), oldLoc) == IndirectionTableModel.UpdateAndRemoveLoc(old(I()), ref, succs)
-    // {
-    //   linear var x := box.Take();
-    //   x, oldLoc := It.UpdateAndRemoveLoc(x, ref, succs);
-    //   box.Give(x);
-    // }
+    method RemoveRef(ref: BT.G.Reference) returns (oldLoc: Option<Location>)
+      requires Inv()
+      requires this.TrackingGarbage()
+      requires this.DeallocableRef(ref)
+      modifies Repr
+      ensures Inv()
+      ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
+      ensures this.TrackingGarbage()
+      ensures this.I().graph == MapRemove1(old(this.I()).graph, ref)
+      ensures this.I().locs == MapRemove1(old(this.I()).locs, ref)
+      ensures (ref in old(this.I()).locs ==> oldLoc == Some(old(this.I()).locs[ref]))
+      ensures (ref !in old(this.I()).locs ==> oldLoc == None)
+    {
+      linear var x := box.Take();
+      oldLoc := inout x.RemoveRef(ref);
+      box.Give(x);
+    }
 
-    // static method ValToIndirectionTable(v: V) returns (s: IndirectionTable?)
+    method UpdateAndRemoveLoc(ref: BT.G.Reference, succs: seq<BT.G.Reference>) returns (oldLoc: Option<Location>)
+      requires Inv()
+      requires this.TrackingGarbage()
+      requires |succs| <= MaxNumChildren()
+      requires |I().graph| < MaxSize()
+      requires IndirectionTable.SuccsValid(succs, I().graph)
+      modifies Repr
+      ensures Inv()
+      ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
+      ensures this.TrackingGarbage()
+      ensures this.I().locs == MapRemove1(old(this.I()).locs, ref)
+      ensures this.I().graph == old(this.I()).graph[ref := succs]
+      ensures (oldLoc.None? ==> ref !in old(this.I()).locs)
+      ensures (oldLoc.Some? ==> ref in old(this.I()).locs && old(this.I()).locs[ref] == oldLoc.value)
+    {
+      linear var x := box.Take();
+      oldLoc := inout x.UpdateAndRemoveLoc(ref, succs);
+      box.Give(x);
+    }
+
+    // static method ValToIndirectionTable(v: V) returns (s: BoxedIndirectionTable?)
     //   requires IndirectionTableModel.valToIndirectionTable.requires(v)
     //   ensures s != null ==> s.Inv()
     //   ensures s != null ==> fresh(s.Repr)
