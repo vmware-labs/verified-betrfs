@@ -11,7 +11,7 @@ module LocalConcurrentLinearHashTable {
 
   datatype SharedVariables = SharedVariables(table: seq<Item>)
 
-  datatype Slot = Slot(ghost slot: nat)
+  datatype Slot = Slot(slot: nat)
 
   datatype ThreadState =
     | Insert(key: Key, value: Value, slot:Slot)
@@ -33,7 +33,7 @@ module LocalConcurrentLinearHashTable {
     slot.slot < elementsLength
   }
 
-   function SlotForKey(elementsLength: nat, key: Key): (result: Slot)
+   function method SlotForKey(elementsLength: nat, key: Key): (result: Slot)
    requires 0 < elementsLength
    ensures ValidSlot(elementsLength, result)
    //  {

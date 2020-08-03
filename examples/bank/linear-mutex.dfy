@@ -1,3 +1,55 @@
+
+m: mutex
+
+acc(m) // normal acc
+write_perm(m)
+read_perm(m)
+
+m.x // non-ghosty read requires read_perm(m) (in addition to acc(m) as usual)
+m.x := y // write requires write_perm(m) (in addition to acc(m) as usual)
+
+method acquire (m: mutex)
+requires acc(m)
+ensures acc(m)
+ensures write_perm(m)
+ensures old(m.has())
+
+method release (m: mutex)
+requires acc(m)
+requires write_perm(m)
+ensures acc(m)
+ensures m.has()
+
+method acquire_readonly (m: mutex)
+requires acc(m)
+ensures acc(m)
+ensures read_perm(m)
+
+method release_readonly (m: mutex)
+requires acc(m)
+requires read_perm(m)
+ensures acc(m)
+
+
+
+
+
+class DummyClassObject {
+  // no fields
+}
+
+linear datatype acc(ghost o: DummyClassObject)
+
+function {:axiom} read_int(o: DummyClassObject, c: acc)
+
+method {:axiom} write(o: DummyClassObject, c: acc, new_int: int)
+returns (c': acc)
+requires c.o == o
+ensures c'.o == o
+ensures read_int(o, c') == new_int
+
+
+
 // This is, like, half-ghosty
 // It doen't really exist in compiled code,
 // but the type system treats it as linear
