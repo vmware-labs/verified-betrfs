@@ -23,20 +23,28 @@ module Impl {
 
   method transfer_QueryInit(
         linear tt: QueryTransitionTracker,
-        linear s: Source<L.SharedVariables, L.ThreadState>,
-        g': L.SharedVariables,
+        linear source: Source<L.SharedVariables, L.ThreadState>,
+        ghost g': L.SharedVariables,
         l': L.ThreadState,
         key: Key
   )
   returns (
-      linear s' : Source<L.SharedVariables, L.ThreadState>,
-      linear tt' : QueryTransitionTracker
+      linear tt' : QueryTransitionTracker,
+      linear source' : Source<L.SharedVariables, L.ThreadState>
   ) 
-  requires L.QueryInit(s.global(), g', s.local(), l', key)
+  requires L.QueryInit(source.global(), g', source.local(), l', key)
   requires tt.place() == Start
   ensures tt.place() == Mid(key)
-  ensures s'.global() == g'
-  ensures s'.local() == l'
+  ensures source'.global() == g'
+  ensures source'.local() == l'
+
+  predicate Inv(
+    s: SharedState,
+    source: Source<L.SharedVariables, L.ThreadState>)
+  reads s
+  {
+    I(s) == source.global()
+  }
 
   // Impl
 
@@ -55,8 +63,21 @@ module Impl {
     )
   }
 
-  method query(s: SharedState, key: Key, shared tid: Tid, linear p: Phase)
-  returns (res: Value, linear p': Phase)
+  method query(
+    s: SharedState,
+    key: Key,
+    shared tid: Tid,
+    linear p: Phase,
+    linear source: Source<L.SharedVariables, L.ThreadState>,
+    linear tt: QueryTransitionTracker)
+  returns (res: Value,
+    linear p': Phase,
+    linear source': Source<L.SharedVariables, L.ThreadState>,
+    linear tt': QueryTransitionTracker)
+  requires tt.place() == Start
+  requires Inv(s, source)
+  requires source.local() == L.Idle
+
   modifies s
   modifies arbitrary_objects()
   requires |s| > 0
@@ -64,13 +85,23 @@ module Impl {
     var slot := L.SlotForKey(|s|, key);
 
     assert L.QueryInit(old(I(s)), I(s), L.Idle, ThreadState.Query(key, slot), key);
+    linear var tt1, source1 := transfer_QueryInit(tt, source, I(s), ThreadState.Query(key, slot), key);
+
+    assert Inv(s, source1);
+    assert source1.local() == ThreadState.Query(key, slot);
+    assert tt1.place() == Mid(key);
+    
     linear var p1 := do_yield(p);
 
-    res, p' := query_loop(s, key, slot, tid, p1);
+    res, p', source', tt' := query_loop(s, key, slot, tid, p1, source1, tt1);
   }
 
-  method query_loop(s: SharedState, key: Key, slot: L.Slot, shared tid: Tid, linear p: Phase)
-  returns (res: Value, linear p': Phase)
+  method query_loop(s: SharedState, key: Key, slot: L.Slot, shared tid: Tid, linear p: Phase,
+    linear source: Source<L.SharedVariables, L.ThreadState>,
+    linear tt: QueryTransitionTracker)
+  returns (res: Value, linear p': Phase,
+    linear source': Source<L.SharedVariables, L.ThreadState>,
+    linear tt': QueryTransitionTracker)
   requires p.is_rising()
   modifies s
   modifies arbitrary_objects()
@@ -83,6 +114,8 @@ module Impl {
     if slot.slot == |s| {
       assume false;
       p' := p;
+      source' := source;
+      tt' := tt;
     } else {
       p1 := s[slot.slot].Acq(tid, p);
 
@@ -93,18 +126,24 @@ module Impl {
       if entry.Empty? {
         assume false;
         p' := p2;
+        source' := source;
+        tt' := tt;
       } else if entry.key == key {
         if entry.Tombstone? {
           assume false;
           p' := p2;
+          source' := source;
+          tt' := tt;
         } else {
           p' := p2;
+          source' := source;
+          tt' := tt;
           res := entry.value;
         }
       } else {
         var slot' := L.Slot(slot.slot + 1);
         linear var r' := do_yield(p2);
-        res, p' := query_loop(s, key, slot', tid, r');
+        res, p', source', tt' := query_loop(s, key, slot', tid, r', source, tt);
       }
     }
   }
