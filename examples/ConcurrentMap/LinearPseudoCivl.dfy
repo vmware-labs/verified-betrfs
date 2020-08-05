@@ -19,8 +19,8 @@ module LinearPseudoCivl {
     function {:axiom} value(b: Block) : V
 
     // right-mover
-    method {:axiom} Acq(shared b: Block, shared tid:Tid, linear p:Phase)
-    returns (m' : Mutex, p' : Phase)
+    linear method {:axiom} Acq(shared b: Block, shared tid:Tid, linear p:Phase)
+    returns (linear m' : Mutex, linear p' : Phase)
     requires p.is_open()
     ensures p'.is_open()
     ensures lock(b) == None
@@ -31,6 +31,7 @@ module LinearPseudoCivl {
     returns (m' : Mutex<V>, p' : Phase)
     requires lock(b) == Some(tid)
     ensures m'.lock(b) == None
+    ensures !p'.is_open()
 
     method {:axiom} Read(shared b: Block, shared tid:Tid) returns (v: V)
     requires lock(b) == Some(tid)
@@ -42,38 +43,7 @@ module LinearPseudoCivl {
     ensures v == m'.value(b)
   }
 
+  // TODO acquired locks need to be preserved
   method do_yield(linear b: Block, linear p: Phase)
   returns (linear b': Block, linear p': Phase)
 }
-
-/*module ExampleUsage {
-  method stuff(m: Mutex<int>, linear tid: TID, linear r:RightPhase) {
-    {
-      m.Acq(tid, r)
-      var l := shift_phase(r);
-      m.Rel(tid, l)
-    }
-
-    r := yield(l);
-
-    {
-      m.Acq(tid, r)
-      var l := shift_phase(r);
-      m.Rel(tid, l)
-    }
-  }
-
-  function I(s: seq<Entry>) : LocalConcurrentLinearHashTable.SharedVariables
-
-  method LockAdvance(s: seq<Entry>, linear tid: TID, localThreadState: LocalThreadState)
-  ensures LocalConcurrentLinearHashTable.InsertAdvance(old(I(s)), old(localThreadState), I(s), localThreadState)
-  {
-    s[localThreadState.currentSlot].Acquire();
-
-    // do some work with s[i]
-
-    s[localThreadState.currentSlot].Release();
-
-    localThreadState.currentSlot += 1;
-  }
-}*/

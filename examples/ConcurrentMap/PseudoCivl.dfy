@@ -1,22 +1,15 @@
 include "../../lib/Base/Option.s.dfy"
 
-/*module PseudoCivl {
-  class Env {
-    method do_yield()
-    modifies this
-  }
-
-  class Mutex<V> {
-    function has() 
-  }
-}*/
-
 module PseudoCivl {
   import opened Options
 
-  linear datatype RightPhase = RightPhase // TODO make opaque
-  linear datatype LeftPhase = LeftPhase // TODO make opaque
   linear datatype Tid = Tid // TODO make opaque
+
+  linear datatype Phase = Phase(x: int) // TODO make opaque
+  {
+    predicate is_rising()
+    predicate is_falling() { !is_rising() }
+  }
 
   class Mutex<V> {
     function {:axiom} lock() : Option<Tid>
@@ -26,13 +19,17 @@ module PseudoCivl {
     reads this
 
     // right-mover
-    method {:axiom} Acq(shared tid:Tid, shared r:RightPhase)
+    method {:axiom} Acq(shared tid:Tid, linear p:Phase)
+    returns (linear p': Phase)
     modifies this
+    requires p.is_rising()
+    ensures p'.is_rising()
     ensures old(lock()) == None
     ensures lock() == Some(tid)
 
     // left-mover
-    method {:axiom} Rel(shared tid:Tid, shared l:LeftPhase)
+    method {:axiom} Rel(shared tid:Tid, linear p:Phase)
+    returns (linear p' : Phase)
     modifies this
     requires lock() == Some(tid)
     ensures lock() == None
@@ -49,14 +46,19 @@ module PseudoCivl {
 
   function arbitrary_objects(): set<object>
 
-  method do_yield(linear l:LeftPhase)
-  returns (linear r:RightPhase)
+  method do_yield(linear p:Phase)
+  returns (linear p':Phase)
   modifies arbitrary_objects()
+  ensures p'.is_rising()
   //modifies all Mutex objects / all objects? // ?
   //modifies *
 
-  method shift_phase(linear r:RightPhase)
-  returns (linear l:LeftPhase)
+
+  datatype Source<G, L> = Source(x: int) // TODO make opaque
+  {
+    function global() : G
+    function local() : L
+  }
 }
 
 /*module ExampleUsage {

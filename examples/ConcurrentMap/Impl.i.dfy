@@ -12,51 +12,99 @@ module Impl {
   type Key = ConcurrentMap.Key
   type Value = ConcurrentMap.Value
 
-  method query(s: SharedState, key: Key, shared tid: Tid, linear r: RightPhase)
-  returns (res: Value, linear l: LeftPhase)
+  // Spec
+
+  datatype QueryPlace = Start | Mid(key: Key) | End(key: Key, value: Value)
+  linear datatype QueryTransitionTracker =
+      QueryTransitionTracker(x: int) // TODO make opaque
+  {
+    function place() : QueryPlace
+  }
+
+  method transfer_QueryInit(
+        linear tt: QueryTransitionTracker,
+        linear s: Source<L.SharedVariables, L.ThreadState>,
+        g': L.SharedVariables,
+        l': L.ThreadState,
+        key: Key
+  )
+  returns (
+      linear s' : Source<L.SharedVariables, L.ThreadState>,
+      linear tt' : QueryTransitionTracker
+  ) 
+  requires L.QueryInit(s.global(), g', s.local(), l', key)
+  requires tt.place() == Start
+  ensures tt.place() == Mid(key)
+  ensures s'.global() == g'
+  ensures s'.local() == l'
+
+  // Impl
+
+  function values_of_mutexes(s: seq<Mutex<L.Item>>) : (res : seq<L.Item>)
+  ensures |res| == |s|
+  reads s
+  {
+    if s == [] then [] else values_of_mutexes(s[..|s|-1]) + [s[|s|-1].value()]
+  }
+
+  function I(s: SharedState) : L.SharedVariables
+  reads s
+  {
+    L.SharedVariables(
+      values_of_mutexes(s)
+    )
+  }
+
+  method query(s: SharedState, key: Key, shared tid: Tid, linear p: Phase)
+  returns (res: Value, linear p': Phase)
   modifies s
   modifies arbitrary_objects()
   requires |s| > 0
   {
     var slot := L.SlotForKey(|s|, key);
-    res, l := query_loop(s, key, slot, tid, r);
+
+    assert L.QueryInit(old(I(s)), I(s), L.Idle, ThreadState.Query(key, slot), key);
+    linear var p1 := do_yield(p);
+
+    res, p' := query_loop(s, key, slot, tid, p1);
   }
 
-  method query_loop(s: SharedState, key: Key, slot: L.Slot, shared tid: Tid, linear r: RightPhase)
-  returns (res: Value, linear l_out: LeftPhase)
+  method query_loop(s: SharedState, key: Key, slot: L.Slot, shared tid: Tid, linear p: Phase)
+  returns (res: Value, linear p': Phase)
+  requires p.is_rising()
   modifies s
   modifies arbitrary_objects()
   requires 0 <= slot.slot <= |s|
   decreases |s| - slot.slot
   {
-    linear var l;
+    linear var p1;
+    linear var p2;
 
     if slot.slot == |s| {
       assume false;
-      l_out := shift_phase(r);
+      p' := p;
     } else {
-      s[slot.slot].Acq(tid, r);
+      p1 := s[slot.slot].Acq(tid, p);
 
       var entry := s[slot.slot].Read(tid);
 
-      l := shift_phase(r);
-      s[slot.slot].Rel(tid, l);
+      p2 := s[slot.slot].Rel(tid, p1);
 
       if entry.Empty? {
         assume false;
-        l_out := l;
+        p' := p2;
       } else if entry.key == key {
         if entry.Tombstone? {
           assume false;
-          l_out := l;
+          p' := p2;
         } else {
-          l_out := l;
+          p' := p2;
           res := entry.value;
         }
       } else {
         var slot' := L.Slot(slot.slot + 1);
-        linear var r' := do_yield(l);
-        res, l_out := query_loop(s, key, slot', tid, r');
+        linear var r' := do_yield(p2);
+        res, p' := query_loop(s, key, slot', tid, r');
       }
     }
   }

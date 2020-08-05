@@ -1,7 +1,11 @@
 include "../../lib/Base/sequences.i.dfy"
 include "ConcurrentMap.i.dfy"
 
-module LocalConcurrentLinearHashTable {
+abstract module LocalModel {
+  type SharedVariables
+}
+
+module LocalConcurrentLinearHashTable refines LocalModel {
   import ConcurrentMap
 
   type Key = ConcurrentMap.Key
@@ -9,6 +13,7 @@ module LocalConcurrentLinearHashTable {
 
   datatype Item = Empty | Entry(key: Key, value: Value) | Tombstone(key: Key)
 
+  // Implementation uses sequence of Items:
   datatype SharedVariables = SharedVariables(table: seq<Item>)
 
   datatype Slot = Slot(slot: nat)
