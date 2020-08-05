@@ -53,6 +53,24 @@ module Impl {
   ensures source'.global() == g'
   ensures source'.local() == l'
 
+  method transfer_QueryComplete(
+        linear tt: QueryTransitionTracker,
+        linear source: Source<L.SharedVariables, L.ThreadState>,
+        ghost g': L.SharedVariables,
+        l': L.ThreadState,
+        value: Value
+  )
+  returns (
+      linear tt' : QueryTransitionTracker,
+      linear source' : Source<L.SharedVariables, L.ThreadState>
+  ) 
+  requires L.QueryComplete(source.global(), g', source.local(), l', value)
+  requires tt.place().Mid?
+  ensures tt'.place() == End(tt.place().key, value)
+  ensures source'.global() == g'
+  ensures source'.local() == l'
+
+
   predicate Inv(
     s: SharedState,
     source: Source<L.SharedVariables, L.ThreadState>)
@@ -93,10 +111,12 @@ module Impl {
   requires tt.place() == Start
   requires Inv(s, source)
   requires source.local() == L.Idle
+  requires |s| > 0
 
   modifies s
   modifies arbitrary_objects()
-  requires |s| > 0
+
+  ensures tt'.place() == End(key, res)
   {
     var slot := L.SlotForKey(|s|, key);
 
@@ -122,9 +142,10 @@ module Impl {
   requires Inv(s, source)
   requires source.local() == ThreadState.Query(key, slot)
   requires tt.place() == Mid(key)
+  requires 0 <= slot.slot <= |s|
   modifies s
   modifies arbitrary_objects()
-  requires 0 <= slot.slot <= |s|
+  ensures tt'.place() == End(key, res)
   decreases |s| - slot.slot
   {
     linear var p1;
@@ -161,9 +182,14 @@ module Impl {
           tt' := tt;
         } else {
           p' := p2;
-          source' := source;
-          tt' := tt;
           res := entry.value;
+
+          tt', source' := transfer_QueryComplete(
+            tt,
+            source,
+            I(s),
+            L.Idle,
+            res);
         }
       } else {
         assume slot.slot + 1 < |s|;
