@@ -21,7 +21,7 @@ module Impl {
     function place() : QueryPlace
   }
 
-  method transfer_QueryInit(
+  method {:axiom} transfer_QueryInit(
         linear tt: QueryTransitionTracker,
         linear source: Source<L.SharedVariables, L.ThreadState>,
         ghost g': L.SharedVariables,
@@ -38,7 +38,7 @@ module Impl {
   ensures source'.global() == g'
   ensures source'.local() == l'
 
-  method transfer_QueryAdvance(
+  method {:axiom} transfer_QueryAdvance(
         linear tt: QueryTransitionTracker,
         linear source: Source<L.SharedVariables, L.ThreadState>,
         ghost g': L.SharedVariables,
@@ -53,7 +53,7 @@ module Impl {
   ensures source'.global() == g'
   ensures source'.local() == l'
 
-  method transfer_QueryComplete(
+  method {:axiom} transfer_QueryComplete(
         linear tt: QueryTransitionTracker,
         linear source: Source<L.SharedVariables, L.ThreadState>,
         ghost g': L.SharedVariables,
@@ -70,6 +70,10 @@ module Impl {
   ensures source'.global() == g'
   ensures source'.local() == l'
 
+  //datatype Global<V> = IsGlobal(x: int) // TODO make opaque
+  //{
+  //  state() : V
+  //}
 
   predicate Inv(
     s: SharedState,
@@ -78,6 +82,21 @@ module Impl {
   {
     I(s) == source.global()
   }
+
+  method do_yield_inv(
+    s: SharedState,
+    linear p:Phase,
+    linear source: Source<L.SharedVariables, L.ThreadState>
+  )
+  returns (
+    linear p': Phase,
+    linear source': Source<L.SharedVariables, L.ThreadState>
+  )
+  requires Inv(s, source)
+  modifies arbitrary_objects()
+  ensures p'.is_rising()
+  ensures Inv(s, source')
+  ensures source'.local() == source.local()
 
   // Impl
 
@@ -127,9 +146,9 @@ module Impl {
     assert source1.local() == ThreadState.Query(key, slot);
     assert tt1.place() == Mid(key);
     
-    linear var p1 := do_yield(p);
+    linear var p1, source2 := do_yield_inv(s, p, source1);
 
-    res, p', source', tt' := query_loop(s, key, slot, tid, p1, source1, tt1);
+    res, p', source', tt' := query_loop(s, key, slot, tid, p1, source2, tt1);
   }
 
   method query_loop(s: SharedState, key: Key, slot: L.Slot, shared tid: Tid, linear p: Phase,
@@ -207,10 +226,9 @@ module Impl {
         assert source1.local() == ThreadState.Query(key, slot');
         assert tt1.place() == Mid(key);
 
-        linear var r' := do_yield(p2);
-        assume Inv(s, source1); // TODO do_yield should give you a new source
+        linear var r', source2 := do_yield_inv(s, p2, source1);
 
-        res, p', source', tt' := query_loop(s, key, slot', tid, r', source1, tt1);
+        res, p', source', tt' := query_loop(s, key, slot', tid, r', source2, tt1);
       }
     }
   }

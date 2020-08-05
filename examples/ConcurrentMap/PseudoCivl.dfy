@@ -62,35 +62,3 @@ module PseudoCivl {
     function local() : L
   }
 }
-
-/*module ExampleUsage {
-  method stuff(m: Mutex<int>, linear tid: TID, linear r:RightPhase) {
-    {
-      m.Acq(tid, r)
-      var l := shift_phase(r);
-      m.Rel(tid, l)
-    }
-
-    r := yield(l);
-
-    {
-      m.Acq(tid, r)
-      var l := shift_phase(r);
-      m.Rel(tid, l)
-    }
-  }
-
-  function I(s: seq<Entry>) : LocalConcurrentLinearHashTable.SharedVariables
-
-  method LockAdvance(s: seq<Entry>, linear tid: TID, localThreadState: LocalThreadState)
-  ensures LocalConcurrentLinearHashTable.InsertAdvance(old(I(s)), old(localThreadState), I(s), localThreadState)
-  {
-    s[localThreadState.currentSlot].Acquire();
-
-    // do some work with s[i]
-
-    s[localThreadState.currentSlot].Release();
-
-    localThreadState.currentSlot += 1;
-  }
-}*/
