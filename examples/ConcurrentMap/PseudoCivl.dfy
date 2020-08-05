@@ -26,6 +26,7 @@ module PseudoCivl {
     ensures p'.is_rising()
     ensures old(lock()) == None
     ensures lock() == Some(tid)
+    ensures value() == old(value())
 
     // left-mover
     method {:axiom} Rel(shared tid:Tid, linear p:Phase)
@@ -33,6 +34,7 @@ module PseudoCivl {
     modifies this
     requires lock() == Some(tid)
     ensures lock() == None
+    ensures value() == old(value())
 
     method {:axiom} Read(shared tid:Tid) returns (v: V)
     requires lock() == Some(tid)

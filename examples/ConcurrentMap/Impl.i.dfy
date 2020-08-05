@@ -38,6 +38,21 @@ module Impl {
   ensures source'.global() == g'
   ensures source'.local() == l'
 
+  method transfer_QueryAdvance(
+        linear tt: QueryTransitionTracker,
+        linear source: Source<L.SharedVariables, L.ThreadState>,
+        ghost g': L.SharedVariables,
+        l': L.ThreadState
+  )
+  returns (
+      linear tt' : QueryTransitionTracker,
+      linear source' : Source<L.SharedVariables, L.ThreadState>
+  ) 
+  requires L.QueryAdvance(source.global(), g', source.local(), l')
+  ensures tt'.place() == tt.place()
+  ensures source'.global() == g'
+  ensures source'.local() == l'
+
   predicate Inv(
     s: SharedState,
     source: Source<L.SharedVariables, L.ThreadState>)
@@ -48,8 +63,9 @@ module Impl {
 
   // Impl
 
-  function values_of_mutexes(s: seq<Mutex<L.Item>>) : (res : seq<L.Item>)
+  function {:opaque} values_of_mutexes(s: seq<Mutex<L.Item>>) : (res : seq<L.Item>)
   ensures |res| == |s|
+  ensures forall i | 0 <= i < |res| :: res[i] == s[i].value()
   reads s
   {
     if s == [] then [] else values_of_mutexes(s[..|s|-1]) + [s[|s|-1].value()]
@@ -103,6 +119,9 @@ module Impl {
     linear source': Source<L.SharedVariables, L.ThreadState>,
     linear tt': QueryTransitionTracker)
   requires p.is_rising()
+  requires Inv(s, source)
+  requires source.local() == ThreadState.Query(key, slot)
+  requires tt.place() == Mid(key)
   modifies s
   modifies arbitrary_objects()
   requires 0 <= slot.slot <= |s|
@@ -110,6 +129,8 @@ module Impl {
   {
     linear var p1;
     linear var p2;
+    linear var tt1;
+    linear var source1;
 
     if slot.slot == |s| {
       assume false;
@@ -121,7 +142,11 @@ module Impl {
 
       var entry := s[slot.slot].Read(tid);
 
+      assert entry == I(s).table[slot.slot];
+
       p2 := s[slot.slot].Rel(tid, p1);
+
+      assert entry == I(s).table[slot.slot];
 
       if entry.Empty? {
         assume false;
@@ -141,9 +166,25 @@ module Impl {
           res := entry.value;
         }
       } else {
+        assume slot.slot + 1 < |s|;
+
         var slot' := L.Slot(slot.slot + 1);
+
+        assert L.QueryAdvance(old(I(s)), I(s), ThreadState.Query(key, slot), ThreadState.Query(key, slot'));
+        tt1, source1 := transfer_QueryAdvance(
+          tt,
+          source,
+          I(s),
+          ThreadState.Query(key, slot'));
+
+        assert Inv(s, source1);
+        assert source1.local() == ThreadState.Query(key, slot');
+        assert tt1.place() == Mid(key);
+
         linear var r' := do_yield(p2);
-        res, p', source', tt' := query_loop(s, key, slot', tid, r', source, tt);
+        assume Inv(s, source1); // TODO do_yield should give you a new source
+
+        res, p', source', tt' := query_loop(s, key, slot', tid, r', source1, tt1);
       }
     }
   }
