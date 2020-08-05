@@ -146,9 +146,7 @@ module Impl {
     assert source1.local() == ThreadState.Query(key, slot);
     assert tt1.place() == Mid(key);
     
-    linear var p1, source2 := do_yield_inv(s, p, source1);
-
-    res, p', source', tt' := query_loop(s, key, slot, tid, p1, source2, tt1);
+    res, p', source', tt' := query_loop(s, key, slot, tid, p, source1, tt1);
   }
 
   method query_loop(s: SharedState, key: Key, slot: L.Slot, shared tid: Tid, linear p: Phase,
