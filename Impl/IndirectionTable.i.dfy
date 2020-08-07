@@ -1058,23 +1058,12 @@ module IndirectionTable {
       var t0 := LinearMutableMap.Insert(t, BT.G.Root(), oldEntry.(predCount := 1));
       ComputeRefCountsIterateInv(t0, t, LinearMutableMap.IterStart(t))
     {
-      var oldEntry := t.contents[BT.G.Root()];
-      var t0 := LinearMutableMap.Insert(t, BT.G.Root(), oldEntry.(predCount := 1));
-
-      var it := LinearMutableMap.IterStart(t);
-      forall ref | ref in t0.contents
-      ensures t0.contents[ref].predCount as int
-          == |PredecessorSetRestricted(Graph(t0), ref, it.s)| + IsRoot(ref)
-      {
-        assert PredecessorSetRestricted(Graph(t0), ref, it.s) == {};
-      }
     }*/
 
-    static predicate ComputeRefCountsIterateInv(t: HashMap, copy: HashMap, it: LinearMutableMap.Iterator<Entry>)
+
+
+    static predicate {:opaque} ComputeRefCountsIterateInv(t: HashMap, copy: HashMap, it: LinearMutableMap.Iterator<Entry>)
     {
-      && LinearMutableMap.Inv(t)
-      && LinearMutableMap.Inv(copy)
-      && LinearMutableMap.WFIter(copy, it)
       && (forall ref | ref in copy.contents :: ref in t.contents)
       && (forall ref | ref in copy.contents :: t.contents[ref].loc == copy.contents[ref].loc)
       && (forall ref | ref in copy.contents :: t.contents[ref].succs == copy.contents[ref].succs)
@@ -1100,11 +1089,6 @@ module IndirectionTable {
       ensures t'.lSome? ==> Locs(t) == Locs(t'.value)
       ensures t'.lSome? ==> ValidPredCounts(PredCounts(t'.value), Graph(t'.value))
       ensures t'.lSome? ==> BT.G.Root() in t'.value.contents
-
-      /*ensures match t' {
-        case lNone => ComputeRefCounts(t) == None
-        case lSome(t'') => t''.Inv() && ComputeRefCounts(t) == Some(t'')
-      }*/
     {
       //LemmaComputeRefCountsIterateInvInit(t);
 
@@ -1116,12 +1100,25 @@ module IndirectionTable {
       LinearMutableMap.Insert(inout t1, BT.G.Root(), oldEntry.(predCount := 1));
 
       var it := LinearMutableMap.IterStart(copy);
+
+      assert ComputeRefCountsIterateInv(t1, copy, it) by {
+        forall ref | ref in t1.contents
+        ensures t1.contents[ref].predCount as int
+            == |PredecessorSetRestricted(Graph(t1), ref, it.s)| + IsRoot(ref)
+        {
+          assert PredecessorSetRestricted(Graph(t1), ref, it.s) == {};
+        }
+
+        reveal_ComputeRefCountsIterateInv();
+      }
+
       var success := true;
       while it.next.Next?
+      invariant LinearMutableMap.Inv(t1)
+      invariant LinearMutableMap.Inv(copy)
+      invariant LinearMutableMap.WFIter(copy, it)
       invariant ComputeRefCountsIterateInv(t1, copy, it)
       invariant BT.G.Root() in t1.contents
-      //invariant IndirectionTableModel.ComputeRefCounts(old(t))
-      //       == IndirectionTableModel.ComputeRefCountsIterate(t1, copy, it)
       decreases it.decreaser
       {
         //IndirectionTableModel.LemmaComputeRefCountsIterateStuff(t1, copy, it);
@@ -1134,6 +1131,7 @@ module IndirectionTable {
         while i < |succs| as uint64
         invariant LinearMutableMap.Inv(t1)
         invariant LinearMutableMap.Inv(copy)
+        invariant LinearMutableMap.WFIter(copy, it)
         invariant BT.G.Root() in t1.contents
         invariant 0 <= i as int <= |succs|
         invariant |succs| <= MaxNumChildren()
@@ -1162,6 +1160,8 @@ module IndirectionTable {
 
       if success {
         t' := lSome(t1);
+
+        assert t'.lSome? ==> Graph(t) == Graph(t'.value);
       } else {
         LinearMutableMap.Destructor(t1);
         t' := lNone;
