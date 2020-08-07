@@ -1,2 +1,2 @@
 #!/bin/bash
-dafny /noVerify /printTooltips $*
+./.dafny/dafny/Binaries/dafny /noVerify /printTooltips $*

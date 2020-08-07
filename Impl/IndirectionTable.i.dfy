@@ -12,6 +12,7 @@ include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "../lib/DataStructures/BitmapImpl.i.dfy"
 include "../lib/DataStructures/LinearUSeq.i.dfy"
 include "../BlockCacheSystem/BlockCache.i.dfy"
+include "../BlockCacheSystem/SectorType.i.dfy"
 include "../ByteBlockCacheSystem/Marshalling.i.dfy"
 //
 // The heap-y implementation of IndirectionTableModel.
@@ -30,6 +31,7 @@ module IndirectionTable {
   import SectorType
   import BT = PivotBetreeSpec`Internal
   import BC = BlockCache
+  import SectorType
   import LinearMutableMap
   import opened DiskLayout
   import opened GenericMarshalling
@@ -1046,81 +1048,82 @@ module IndirectionTable {
     //   }
     // }
 
-    // static method ComputeRefCounts(shared t: HashMap)
-    //   returns (linear t' : lOption<HashMap>)
-    //   requires t.Inv()
-    //   requires forall ref | ref in t.contents :: t.contents[ref].predCount == 0
-    //   requires forall ref | ref in t.contents :: |t.contents[ref].succs| <= MaxNumChildren()
-    //   requires t.count as int <= IndirectionTableModel.MaxSize()
-    //   requires BT.G.Root() in t.contents
-    //   ensures match t' {
-    //     case lNone => IndirectionTableModel.ComputeRefCounts(t) == None
-    //     case lSome(t'') => t''.Inv() && IndirectionTableModel.ComputeRefCounts(t) == Some(t'')
-    //   }
-    // {
-    //   IndirectionTableModel.LemmaComputeRefCountsIterateInvInit(t);
+    // TODO left off here due to ref counts:
+    static method ComputeRefCounts(shared t: HashMap)
+      returns (linear t' : lOption<HashMap>)
+      requires t.Inv()
+      requires forall ref | ref in t.contents :: t.contents[ref].predCount == 0
+      requires forall ref | ref in t.contents :: |t.contents[ref].succs| <= MaxNumChildren()
+      requires t.count as int <= IndirectionTableModel.MaxSize()
+      requires BT.G.Root() in t.contents
+      ensures match t' {
+        case lNone => IndirectionTableModel.ComputeRefCounts(t) == None
+        case lSome(t'') => t''.Inv() && IndirectionTableModel.ComputeRefCounts(t) == Some(t'')
+      }
+    {
+      IndirectionTableModel.LemmaComputeRefCountsIterateInvInit(t);
 
-    //   shared var copy := t;
-    //   linear var t1 := LinearMutableMap.Clone(t);
+      shared var copy := t;
+      linear var t1 := LinearMutableMap.Clone(t);
 
-    //   var oldEntryOpt := LinearMutableMap.Get(t1, BT.G.Root());
-    //   var oldEntry := oldEntryOpt.value;
-    //   t1 := LinearMutableMap.Insert(t1, BT.G.Root(), oldEntry.(predCount := 1));
+      var oldEntryOpt := LinearMutableMap.Get(t1, BT.G.Root());
+      var oldEntry := oldEntryOpt.value;
+      t1 := LinearMutableMap.Insert(t1, BT.G.Root(), oldEntry.(predCount := 1));
 
-    //   var it := LinearMutableMap.IterStart(copy);
-    //   var success := true;
-    //   while it.next.Next?
-    //   invariant t1.Inv()
-    //   invariant copy.Inv()
-    //   invariant IndirectionTableModel.ComputeRefCountsIterateInv(t1, copy, it)
-    //   invariant BT.G.Root() in t1.contents
-    //   invariant IndirectionTableModel.ComputeRefCounts(old(t))
-    //          == IndirectionTableModel.ComputeRefCountsIterate(t1, copy, it)
-    //   decreases it.decreaser
-    //   {
-    //     IndirectionTableModel.LemmaComputeRefCountsIterateStuff(t1, copy, it);
-    //     IndirectionTableModel.LemmaComputeRefCountsIterateValidPredCounts(t1, copy, it);
+      var it := LinearMutableMap.IterStart(copy);
+      var success := true;
+      while it.next.Next?
+      invariant t1.Inv()
+      invariant copy.Inv()
+      invariant IndirectionTableModel.ComputeRefCountsIterateInv(t1, copy, it)
+      invariant BT.G.Root() in t1.contents
+      invariant IndirectionTableModel.ComputeRefCounts(old(t))
+             == IndirectionTableModel.ComputeRefCountsIterate(t1, copy, it)
+      decreases it.decreaser
+      {
+        IndirectionTableModel.LemmaComputeRefCountsIterateStuff(t1, copy, it);
+        IndirectionTableModel.LemmaComputeRefCountsIterateValidPredCounts(t1, copy, it);
 
-    //     ghost var t0 := t1;
+        ghost var t0 := t1;
 
-    //     var succs := it.next.value.succs;
-    //     var i: uint64 := 0;
-    //     while i < |succs| as uint64
-    //     invariant t1.Inv()
-    //     invariant copy.Inv()
-    //     invariant BT.G.Root() in t1.contents
-    //     invariant 0 <= i as int <= |succs|
-    //     invariant |succs| <= MaxNumChildren()
-    //     invariant t1.count as int <= IndirectionTableModel.MaxSize()
-    //     invariant forall ref | ref in t1.contents :: t1.contents[ref].predCount as int <= 0x1_0000_0000_0000 + i as int
-    //     invariant IndirectionTableModel.ComputeRefCounts(old(t))
-    //            == IndirectionTableModel.ComputeRefCountsIterate(t0, copy, it)
-    //     invariant IndirectionTableModel.ComputeRefCountsEntryIterate(t0, succs, 0)
-    //            == IndirectionTableModel.ComputeRefCountsEntryIterate(t1, succs, i)
-    //     decreases |succs| - i as int
-    //     {
-    //       var ref := succs[i];
-    //       var oldEntry := LinearMutableMap.Get(t1, ref);
-    //       if oldEntry.Some? {
-    //         var newEntry := oldEntry.value.(predCount := oldEntry.value.predCount + 1);
-    //         t1 := LinearMutableMap.Insert(t1, ref, newEntry);
-    //         i := i + 1;
-    //       } else {
-    //         success := false;
-    //         break break;
-    //       }
-    //     }
+        var succs := it.next.value.succs;
+        var i: uint64 := 0;
+        while i < |succs| as uint64
+        invariant t1.Inv()
+        invariant copy.Inv()
+        invariant BT.G.Root() in t1.contents
+        invariant 0 <= i as int <= |succs|
+        invariant |succs| <= MaxNumChildren()
+        invariant t1.count as int <= IndirectionTableModel.MaxSize()
+        invariant forall ref | ref in t1.contents :: t1.contents[ref].predCount as int <= 0x1_0000_0000_0000 + i as int
+        invariant IndirectionTableModel.ComputeRefCounts(old(t))
+               == IndirectionTableModel.ComputeRefCountsIterate(t0, copy, it)
+        invariant IndirectionTableModel.ComputeRefCountsEntryIterate(t0, succs, 0)
+               == IndirectionTableModel.ComputeRefCountsEntryIterate(t1, succs, i)
+        decreases |succs| - i as int
+        {
+          var ref := succs[i];
+          var oldEntry := LinearMutableMap.Get(t1, ref);
+          if oldEntry.Some? {
+            var newEntry := oldEntry.value.(predCount := oldEntry.value.predCount + 1);
+            t1 := LinearMutableMap.Insert(t1, ref, newEntry);
+            i := i + 1;
+          } else {
+            success := false;
+            break break;
+          }
+        }
 
-    //     it := LinearMutableMap.IterInc(copy, it);
-    //   }
+        it := LinearMutableMap.IterInc(copy, it);
+      }
 
-    //   if success {
-    //     t' := lSome(t1);
-    //   } else {
-    //     LinearMutableMap.Destructor(t1);
-    //     t' := lNone;
-    //   }
-    // }
+      if success {
+        t' := lSome(t1);
+      } else {
+        LinearMutableMap.Destructor(t1);
+        t' := lNone;
+      }
+    }
 
     // static method MakeGarbageQueue(shared t: HashMap)
     // returns (linear q : USeq.USeq)
@@ -1246,397 +1249,495 @@ module IndirectionTable {
     //   reveal_SeqSum();
     // }
 
-    // // method marshallIndirectionTableRow(
-    // //     data: array<byte>,
-    // //     start: uint64,
-    // //     next: MutableMapModel.IteratorOutput<Entry>)
-    // // returns (end: uint64)
-    // // modifies data
-    // // requires 0 <= start as int <= data.Length
-    // // requires data.Length < 0x1_0000_0000_0000_0000
-    // // requires next.Next?
-    // // requires next.value.loc.Some?
-    // // requires |next.value.succs| <= MaxNumChildren()
-    // // ensures end != 0 ==>
-    // //   && start as int <= end as int <= data.Length
-    // //   && parse_Val(data[start..end],
-    // //     Marshalling.IndirectionTableRowGrammar()).0
-    // //       == Some(VTuple([
-    // //           VUint64(next.key),
-    // //           VUint64(next.value.loc.value.addr),
-    // //           VUint64(next.value.loc.value.len),
-    // //           VUint64Array(next.value.succs)
-    // //          ]))
-    // // {
-    // //   if 8 + 8 + 8 + 8 + 8*|next.value.succs| as uint64
-    // //         > data.Length as uint64 - start
-    // //   {
-    // //     return 0;
-    // //   }
-
-    // //   var idx0 := start;
-    // //   ghost var data0 := data[..];
-
-    // //   Pack_LittleEndian_Uint64_into_Array(next.key, data, idx0);
-    // //   var idx1 := idx0 + 8;
-
-    // //   ghost var data1 := data[..];
-
-    // //   Pack_LittleEndian_Uint64_into_Array(next.value.loc.value.addr, data, idx1);
-    // //   var idx2 := idx1 + 8;
-
-    // //   ghost var data2 := data[..];
-
-    // //   Pack_LittleEndian_Uint64_into_Array(next.value.loc.value.len, data, idx2);
-    // //   var idx3 := idx2 + 8;
-
-    // //   ghost var data3 := data[..];
-
-    // //   Pack_LittleEndian_Uint64_into_Array(
-    // //       |next.value.succs| as uint64, data, idx3);
-    // //   var idx4 := idx3 + 8;
-
-    // //   ghost var data4 := data[..];
-
-    // //   Pack_LittleEndian_Uint64_Seq_into_Array(
-    // //       next.value.succs, data, idx4);
-    // //   var idx5 := idx4 + 8 * |next.value.succs| as uint64;
-
-    // //   ghost var data5 := data[..];
-
-    // //   end := idx5;
-
-    // //   calc {
-    // //     parse_Val(data5[idx3..idx5], GUint64Array).0;
-    // //     { reveal_parse_Val(); }
-    // //     parse_Uint64Array(data5[idx3..idx5]).0;
-    // //     {
-    // //       assert unpack_LittleEndian_Uint64(data5[idx3..idx5][..8])
-    // //          == |next.value.succs| as uint64 by {
-    // //         assert data5[idx3..idx5][..8]
-    // //             == data5[idx3..idx4]
-    // //             == data4[idx3..idx4];
-    // //       }
-    // //       var len := |next.value.succs| as uint64;
-    // //       assert unpack_LittleEndian_Uint64_Seq(data5[idx3..idx5][8..8 + 8*len], len as int)
-    // //         == next.value.succs by {
-    // //         assert data5[idx3..idx5][8..8+8*len] == data5[idx4..idx5];
-    // //       }
-    // //     }
-    // //     Some(VUint64Array(next.value.succs));
-    // //   }
-
-    // //   calc {
-    // //     parse_Val(data5[idx2..idx5], GUint64).0;
-    // //     { reveal_parse_Val(); }
-    // //     parse_Uint64(data5[idx2..idx5]).0;
-    // //     {
-    // //       calc {
-    // //         data5[idx2..idx5][..8];
-    // //         data4[idx2..idx3];
-    // //         data3[idx2..idx3];
-    // //       }
-    // //     }
-    // //     Some(VUint64(next.value.loc.value.len));
-    // //   }
-
-    // //   calc {
-    // //     parse_Val(data5[idx1..idx5], GUint64).0;
-    // //     { reveal_parse_Val(); }
-    // //     parse_Uint64(data5[idx1..idx5]).0;
-    // //     {
-    // //       calc {
-    // //         data5[idx1..idx5][..8];
-    // //         { lemma_seq_slice_slice(data5, idx1 as int, idx5 as int, 0, 8); }
-    // //         data5[idx1..idx2];
-    // //         data4[idx1..idx2];
-    // //         data3[idx1..idx2];
-    // //         data2[idx1..idx2];
-    // //       }
-    // //     }
-    // //     Some(VUint64(next.value.loc.value.addr));
-    // //   }
-
-    // //   calc {
-    // //     parse_Val(data5[idx0..idx5], GUint64).0;
-    // //     { reveal_parse_Val(); }
-    // //     parse_Uint64(data5[idx0..idx5]).0;
-    // //     {
-    // //       calc {
-    // //         data5[idx0..idx5][..8];
-    // //         {
-    // //           lemma_seq_slice_slice(data5, idx0 as int, idx5 as int, 0, 8);
-    // //         }
-    // //         data4[idx0..idx1];
-    // //         data3[idx0..idx1];
-    // //         data2[idx0..idx1];
-    // //         data1[idx0..idx1];
-    // //       }
-    // //     }
-    // //     Some(VUint64(next.key));
-    // //   }
-
-    // //   ghost var sl := data5[idx0..idx5];
-
-    // //   calc {
-    // //     [
-    // //       VUint64(next.key),
-    // //       VUint64(next.value.loc.value.addr),
-    // //       VUint64(next.value.loc.value.len),
-    // //       VUint64Array(next.value.succs)
-    // //     ];
-    // //     {
-    // //       assert sl == data5[idx0..idx5];
-    // //       assert sl[8..] == data5[idx1..idx5];
-    // //       assert sl[16..] == data5[idx2..idx5];
-    // //       assert sl[24..] == data5[idx3..idx5];
-    // //       var x := [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + [parse_Val(sl[16..], GUint64).0.value] + [parse_Val(sl[24..], GUint64Array).0.value] + [];
-    // //       assert VUint64(next.key) == parse_Val(sl, GUint64).0.value;
-    // //       assert VUint64(next.value.loc.value.addr) == parse_Val(sl[8..], GUint64).0.value;
-    // //       assert VUint64(next.value.loc.value.len) == parse_Val(sl[16..], GUint64).0.value;
-    // //       assert VUint64Array(next.value.succs) == parse_Val(sl[24..], GUint64Array).0.value;
-    // //     }
-    // //     [parse_Val(sl, GUint64).0.value, parse_Val(sl[8..], GUint64).0.value, parse_Val(sl[16..], GUint64).0.value, parse_Val(sl[24..], GUint64Array).0.value];
-    // //     [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + [parse_Val(sl[16..], GUint64).0.value] + [parse_Val(sl[24..], GUint64Array).0.value] + [];
-    // //     {
-    // //       reveal_parse_Tuple_contents();
-    // //       assert parse_Tuple_contents(sl[idx5-idx0..], []).0.value == [];
-    // //     }
-    // //     [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + [parse_Val(sl[16..], GUint64).0.value] + [parse_Val(sl[24..], GUint64Array).0.value] + parse_Tuple_contents(sl[idx5-idx0..], []).0.value;
-    // //     {
-    // //       reveal_parse_Tuple_contents();
-    // //       reveal_parse_Val();
-    // //       assert sl[24..][idx5-idx3..] == sl[idx5-idx0..];
-    // //     }
-    // //     [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + [parse_Val(sl[16..], GUint64).0.value] + parse_Tuple_contents(sl[24..], [GUint64Array]).0.value;
-    // //     {
-    // //       reveal_parse_Tuple_contents();
-    // //       reveal_parse_Val();
-    // //       assert sl[16..][8..] == sl[24..];
-    // //     }
-    // //     [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + parse_Tuple_contents(sl[16..], [GUint64, GUint64Array]).0.value;
-    // //     {
-    // //       reveal_parse_Tuple_contents();
-    // //       reveal_parse_Val();
-    // //       assert sl[8..][8..] == sl[16..];
-    // //     }
-    // //     [parse_Val(sl, GUint64).0.value] + parse_Tuple_contents(sl[8..], [GUint64, GUint64, GUint64Array]).0.value;
-    // //     {
-    // //       reveal_parse_Tuple_contents();
-    // //       reveal_parse_Val();
-    // //     }
-    // //     parse_Tuple_contents(sl, [GUint64, GUint64, GUint64, GUint64Array]).0.value;
-    // //   }
-
-    // //   calc {
-    // //     Some(VTuple([
-    // //       VUint64(next.key),
-    // //       VUint64(next.value.loc.value.addr),
-    // //       VUint64(next.value.loc.value.len),
-    // //       VUint64Array(next.value.succs)
-    // //     ]));
-    // //     { reveal_parse_Val(); }
-    // //     parse_Val(sl, Marshalling.IndirectionTableRowGrammar()).0;
-    // //   }
-    // // }
-
-    // // method marshallIndirectionTableContents(data: array<byte>, start: uint64)
-    // // returns (end: uint64)
-    // // requires Inv(me)
-    // // requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I(me)))
-
-    // // requires 0 <= start as int <= data.Length
-    // // requires data.Length < 0x1_0000_0000_0000_0000
-
-    // // modifies data
-
-    // // ensures end != 0 ==>
-    // //   && start as int <= end as int <= data.Length
-    // //   && Marshalling.valToIndirectionTableMaps(
-    // //        parse_Array_contents(
-    // //          data[start..end],
-    // //          Marshalling.IndirectionTableRowGrammar(),
-    // //          t.Count
-    // //        )
-    // //      ) == IndirectionTableModel.I(I(me))
-    // // {
-    // //   var idx := start;
-    // //   var it := t.IterStart();
-    // //   while it.next.Next?
-    // //   {
-    // //   }
-    // // }
-
-    // // method marshallIndirectionTable(data: array<byte>, start_idx: uint64)
-    // // returns (end: uint64)
-    // // requires Inv(me)
-    // // requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I(me)))
-    // // modifies data
-    // // {
-    // //   var idx := start_idx;
-
-    // //   Pack_LittleEndian_Uint64_into_Array(t.Count, data, idx);
-    // //   idx := idx + 8;
-
-    // //   var it := t.IterStart();
-    // //   while it.next.Next?
-    // //   {
-    // //     if idx + 8 + 8 + 8 + 8 + 8*|it.next.value.succs| as uint64
-    // //         > data.Length as uint64
-    // //     {
-    // //       return 0;
-    // //     }
-
-    // //     Pack_LittleEndian_Uint64_into_Array(it.next.key, data, idx);
-    // //     idx := idx + 8;
-
-    // //     Pack_LittleEndian_Uint64_into_Array(it.next.value.loc.value.addr, data, idx);
-    // //     idx := idx + 8;
-
-    // //     Pack_LittleEndian_Uint64_into_Array(it.next.value.loc.value.len, data, idx);
-    // //     idx := idx + 8;
-
-    // //     Pack_LittleEndian_Uint64_into_Array(
-    // //         |it.next.value.succs| as uint64, data, idx);
-    // //     idx := idx + 8;
-
-    // //     Pack_LittleEndian_Uint64_Seq_into_Array(
-    // //         it.next.value.succs, data, idx);
-    // //     idx := idx + 8 * |it.next.value.succs| as uint64;
-    // //     
-    // //     it := t.IterInc(it);
-    // //   }
-    // //   return idx;
-    // // }
-
-    // // NOTE(travis): I found that the above method which marshalls
-    // // directly from indirection table to bytes is much faster
-    // // than converting to a V and using the GenericMarshalling
-    // // framework. I did some work on proving it (above),
-    // // but it's kind of annoying. However, I think that it won't
-    // // be a big deal as long as most syncs are journaling syncs?
-    // // So I've moved back to this one which is slower but cleaner.
-    // static method IndirectionTableToVal(shared me: IndirectionTable)
-    // returns (v : V, size: uint64)
-    // requires Inv(me)
-    // requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I(me)))
-    // ensures ValInGrammar(v, IndirectionTableModel.IndirectionTableGrammar())
-    // ensures ValidVal(v)
-    // ensures IndirectionTableModel.valToIndirectionTable(v).Some?
-    // ensures
-    //       IndirectionTableModel.I(IndirectionTableModel.valToIndirectionTable(v).value)
-    //    == IndirectionTableModel.I(I(me))
-    // ensures SizeOfV(v) <= MaxIndirectionTableByteSize()
-    // ensures SizeOfV(v) == size as int
+    // method marshallIndirectionTableRow(
+    //     data: array<byte>,
+    //     start: uint64,
+    //     next: MutableMapModel.IteratorOutput<Entry>)
+    // returns (end: uint64)
+    // modifies data
+    // requires 0 <= start as int <= data.Length
+    // requires data.Length < 0x1_0000_0000_0000_0000
+    // requires next.Next?
+    // requires next.value.loc.Some?
+    // requires |next.value.succs| <= MaxNumChildren()
+    // ensures end != 0 ==>
+    //   && start as int <= end as int <= data.Length
+    //   && parse_Val(data[start..end],
+    //     Marshalling.IndirectionTableRowGrammar()).0
+    //       == Some(VTuple([
+    //           VUint64(next.key),
+    //           VUint64(next.value.loc.value.addr),
+    //           VUint64(next.value.loc.value.len),
+    //           VUint64Array(next.value.succs)
+    //          ]))
     // {
-    //   assert me.t.count <= IndirectionTableModel.MaxSizeUint64();
-    //   lemma_SeqSum_empty();
-    //   var count := me.t.count as uint64;
-    //   var a: array<V> := new V[count];
-    //   var it := LinearMutableMap.IterStart(me.t);
-    //   var i: uint64 := 0;
-    //   size := 0;
-
-    //   ghost var partial := map[];
-    //   while it.next.Next?
-    //   invariant Inv(me)
-    //   invariant BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I(me)))
-    //   invariant 0 <= i as int <= a.Length
-    //   invariant LinearMutableMap.WFIter(me.t, it);
-    //   invariant forall j | 0 <= j < i :: ValidVal(a[j])
-    //   invariant forall j | 0 <= j < i :: ValInGrammar(a[j], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
-    //   // NOALIAS/CONST table doesn't need to be mutable, if we could say so we wouldn't need this
-    //   invariant IndirectionTableModel.valToHashMap(a[..i]).Some?
-    //   invariant IndirectionTableModel.valToHashMap(a[..i]).value.contents == partial
-    //   invariant |partial.Keys| == i as nat
-    //   invariant partial.Keys == it.s
-    //   invariant partial.Keys <= me.t.contents.Keys
-    //   invariant forall r | r in partial :: r in me.t.contents
-    //       && partial[r].loc == me.t.contents[r].loc
-    //       && partial[r].succs == me.t.contents[r].succs
-    //   // NOALIAS/CONST t doesn't need to be mutable, if we could say so we wouldn't need this
-    //   invariant me.t.contents == old(me.t.contents)
-    //   invariant size as int <=
-    //       |it.s| * (8 + 8 + 8 + (8 + MaxNumChildren() * 8))
-    //   invariant SeqSum(a[..i]) == size as int;
-    //   decreases it.decreaser
+    //   if 8 + 8 + 8 + 8 + 8*|next.value.succs| as uint64
+    //         > data.Length as uint64 - start
     //   {
-    //     var (ref, locOptGraph: Entry) := (it.next.key, it.next.value);
-    //     assert ref in I(me).locs;
-    //     // NOTE: deconstructing in two steps to work around c# translation bug
-    //     var locOpt := locOptGraph.loc;
-    //     var succs := locOptGraph.succs;
-    //     var loc := locOpt.value;
-    //     //ghost var predCount := locOptGraph.predCount;
-    //     var childrenVal := VUint64Array(succs);
-
-    //     assert |succs| <= MaxNumChildren();
-
-    //     //assert I(me).locs[ref] == loc;
-    //     //assert I(me).graph[ref] == succs;
-
-    //     //assert IndirectionTableModel.I(I(me)).locs[ref] == loc;
-    //     //assert IndirectionTableModel.I(I(me)).graph[ref] == succs;
-
-    //     assert ValidNodeLocation(loc);
-    //     /*ghost var t0 := IndirectionTableModel.valToHashMap(a[..i]);
-    //     assert ref !in t0.value.contents;
-    //     assert loc.addr != 0;
-    //     assert LBAType.ValidLocation(loc);*/
-
-    //     LinearMutableMap.LemmaIterIndexLtCount(me.t, it);
-
-    //     assert |succs| < 0x1_0000_0000_0000_0000;
-    //     assert ValidVal(VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]));
-
-    //     assert |LinearMutableMap.IterInc(me.t, it).s| == |it.s| + 1;
-
-    //     var vi := VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]);
-
-    //     //assert SizeOfV(vi) <= (8 + 8 + 8 + (8 + MaxNumChildren() * 8));
-
-    //     // == mutation ==
-    //     partial := partial[ref := Entry(locOpt, succs, 0)];
-    //     a[i] := vi;
-    //     i := i + 1;
-    //     it := LinearMutableMap.IterInc(me.t, it);
-    //     // ==============
-
-    //     assert a[..i-1] == DropLast(a[..i]); // observe
-
-    //     calc {
-    //       SeqSum(a[..i]);
-    //       {
-    //         lemma_SeqSum_prefix_array(a, i as int);
-    //       }
-    //       SeqSum(a[..i-1]) + SizeOfV(a[i-1]);
-    //       SeqSum(a[..i-1]) + SizeOfV(vi);
-    //       {
-    //         lemma_tuple_size(ref, loc.addr, loc.len, succs);
-    //       }
-    //       size as int + (8 + 8 + 8 + (8 + 8 * |succs|));
-    //     }
-
-    //     size := size + 32 + 8 * |succs| as uint64;
+    //     return 0;
     //   }
 
-    //   /* (doc) assert |partial.Keys| == |me.t.contents.Keys|; */
-    //   SetInclusionAndEqualCardinalityImpliesSetEquality(partial.Keys, me.t.contents.Keys);
+    //   var idx0 := start;
+    //   ghost var data0 := data[..];
 
-    //   assert a[..i] == a[..]; // observe
-    //   v := VArray(a[..]);
+    //   Pack_LittleEndian_Uint64_into_Array(next.key, data, idx0);
+    //   var idx1 := idx0 + 8;
 
-    //   /*ghost var t0 := IndirectionTableModel.valToHashMap(v.value.a);
-    //   assert t0.Some?;
-    //   assert BT.G.Root() in t0.value.contents;
-    //   assert t0.value.count <= MaxSizeUint64();
-    //   ghost var t1 := IndirectionTableModel.ComputeRefCounts(t0.value);
-    //   assert t1.Some?;*/
+    //   ghost var data1 := data[..];
 
-    //   assert |it.s| <= IndirectionTableModel.MaxSize();
+    //   Pack_LittleEndian_Uint64_into_Array(next.value.loc.value.addr, data, idx1);
+    //   var idx2 := idx1 + 8;
 
-    //   size := size + 8;
+    //   ghost var data2 := data[..];
+
+    //   Pack_LittleEndian_Uint64_into_Array(next.value.loc.value.len, data, idx2);
+    //   var idx3 := idx2 + 8;
+
+    //   ghost var data3 := data[..];
+
+    //   Pack_LittleEndian_Uint64_into_Array(
+    //       |next.value.succs| as uint64, data, idx3);
+    //   var idx4 := idx3 + 8;
+
+    //   ghost var data4 := data[..];
+
+    //   Pack_LittleEndian_Uint64_Seq_into_Array(
+    //       next.value.succs, data, idx4);
+    //   var idx5 := idx4 + 8 * |next.value.succs| as uint64;
+
+    //   ghost var data5 := data[..];
+
+    //   end := idx5;
+
+    //   calc {
+    //     parse_Val(data5[idx3..idx5], GUint64Array).0;
+    //     { reveal_parse_Val(); }
+    //     parse_Uint64Array(data5[idx3..idx5]).0;
+    //     {
+    //       assert unpack_LittleEndian_Uint64(data5[idx3..idx5][..8])
+    //          == |next.value.succs| as uint64 by {
+    //         assert data5[idx3..idx5][..8]
+    //             == data5[idx3..idx4]
+    //             == data4[idx3..idx4];
+    //       }
+    //       var len := |next.value.succs| as uint64;
+    //       assert unpack_LittleEndian_Uint64_Seq(data5[idx3..idx5][8..8 + 8*len], len as int)
+    //         == next.value.succs by {
+    //         assert data5[idx3..idx5][8..8+8*len] == data5[idx4..idx5];
+    //       }
+    //     }
+    //     Some(VUint64Array(next.value.succs));
+    //   }
+
+    //   calc {
+    //     parse_Val(data5[idx2..idx5], GUint64).0;
+    //     { reveal_parse_Val(); }
+    //     parse_Uint64(data5[idx2..idx5]).0;
+    //     {
+    //       calc {
+    //         data5[idx2..idx5][..8];
+    //         data4[idx2..idx3];
+    //         data3[idx2..idx3];
+    //       }
+    //     }
+    //     Some(VUint64(next.value.loc.value.len));
+    //   }
+
+    //   calc {
+    //     parse_Val(data5[idx1..idx5], GUint64).0;
+    //     { reveal_parse_Val(); }
+    //     parse_Uint64(data5[idx1..idx5]).0;
+    //     {
+    //       calc {
+    //         data5[idx1..idx5][..8];
+    //         { lemma_seq_slice_slice(data5, idx1 as int, idx5 as int, 0, 8); }
+    //         data5[idx1..idx2];
+    //         data4[idx1..idx2];
+    //         data3[idx1..idx2];
+    //         data2[idx1..idx2];
+    //       }
+    //     }
+    //     Some(VUint64(next.value.loc.value.addr));
+    //   }
+
+    //   calc {
+    //     parse_Val(data5[idx0..idx5], GUint64).0;
+    //     { reveal_parse_Val(); }
+    //     parse_Uint64(data5[idx0..idx5]).0;
+    //     {
+    //       calc {
+    //         data5[idx0..idx5][..8];
+    //         {
+    //           lemma_seq_slice_slice(data5, idx0 as int, idx5 as int, 0, 8);
+    //         }
+    //         data4[idx0..idx1];
+    //         data3[idx0..idx1];
+    //         data2[idx0..idx1];
+    //         data1[idx0..idx1];
+    //       }
+    //     }
+    //     Some(VUint64(next.key));
+    //   }
+
+    //   ghost var sl := data5[idx0..idx5];
+
+    //   calc {
+    //     [
+    //       VUint64(next.key),
+    //       VUint64(next.value.loc.value.addr),
+    //       VUint64(next.value.loc.value.len),
+    //       VUint64Array(next.value.succs)
+    //     ];
+    //     {
+    //       assert sl == data5[idx0..idx5];
+    //       assert sl[8..] == data5[idx1..idx5];
+    //       assert sl[16..] == data5[idx2..idx5];
+    //       assert sl[24..] == data5[idx3..idx5];
+    //       var x := [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + [parse_Val(sl[16..], GUint64).0.value] + [parse_Val(sl[24..], GUint64Array).0.value] + [];
+    //       assert VUint64(next.key) == parse_Val(sl, GUint64).0.value;
+    //       assert VUint64(next.value.loc.value.addr) == parse_Val(sl[8..], GUint64).0.value;
+    //       assert VUint64(next.value.loc.value.len) == parse_Val(sl[16..], GUint64).0.value;
+    //       assert VUint64Array(next.value.succs) == parse_Val(sl[24..], GUint64Array).0.value;
+    //     }
+    //     [parse_Val(sl, GUint64).0.value, parse_Val(sl[8..], GUint64).0.value, parse_Val(sl[16..], GUint64).0.value, parse_Val(sl[24..], GUint64Array).0.value];
+    //     [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + [parse_Val(sl[16..], GUint64).0.value] + [parse_Val(sl[24..], GUint64Array).0.value] + [];
+    //     {
+    //       reveal_parse_Tuple_contents();
+    //       assert parse_Tuple_contents(sl[idx5-idx0..], []).0.value == [];
+    //     }
+    //     [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + [parse_Val(sl[16..], GUint64).0.value] + [parse_Val(sl[24..], GUint64Array).0.value] + parse_Tuple_contents(sl[idx5-idx0..], []).0.value;
+    //     {
+    //       reveal_parse_Tuple_contents();
+    //       reveal_parse_Val();
+    //       assert sl[24..][idx5-idx3..] == sl[idx5-idx0..];
+    //     }
+    //     [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + [parse_Val(sl[16..], GUint64).0.value] + parse_Tuple_contents(sl[24..], [GUint64Array]).0.value;
+    //     {
+    //       reveal_parse_Tuple_contents();
+    //       reveal_parse_Val();
+    //       assert sl[16..][8..] == sl[24..];
+    //     }
+    //     [parse_Val(sl, GUint64).0.value] + [parse_Val(sl[8..], GUint64).0.value] + parse_Tuple_contents(sl[16..], [GUint64, GUint64Array]).0.value;
+    //     {
+    //       reveal_parse_Tuple_contents();
+    //       reveal_parse_Val();
+    //       assert sl[8..][8..] == sl[16..];
+    //     }
+    //     [parse_Val(sl, GUint64).0.value] + parse_Tuple_contents(sl[8..], [GUint64, GUint64, GUint64Array]).0.value;
+    //     {
+    //       reveal_parse_Tuple_contents();
+    //       reveal_parse_Val();
+    //     }
+    //     parse_Tuple_contents(sl, [GUint64, GUint64, GUint64, GUint64Array]).0.value;
+    //   }
+
+    //   calc {
+    //     Some(VTuple([
+    //       VUint64(next.key),
+    //       VUint64(next.value.loc.value.addr),
+    //       VUint64(next.value.loc.value.len),
+    //       VUint64Array(next.value.succs)
+    //     ]));
+    //     { reveal_parse_Val(); }
+    //     parse_Val(sl, Marshalling.IndirectionTableRowGrammar()).0;
+    //   }
     // }
+
+    // method marshallIndirectionTableContents(data: array<byte>, start: uint64)
+    // returns (end: uint64)
+    // requires Inv(me)
+    // requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I(me)))
+
+    // requires 0 <= start as int <= data.Length
+    // requires data.Length < 0x1_0000_0000_0000_0000
+
+    // modifies data
+
+    // ensures end != 0 ==>
+    //   && start as int <= end as int <= data.Length
+    //   && Marshalling.valToIndirectionTableMaps(
+    //        parse_Array_contents(
+    //          data[start..end],
+    //          Marshalling.IndirectionTableRowGrammar(),
+    //          t.Count
+    //        )
+    //      ) == IndirectionTableModel.I(I(me))
+    // {
+    //   var idx := start;
+    //   var it := t.IterStart();
+    //   while it.next.Next?
+    //   {
+    //   }
+    // }
+
+    // method marshallIndirectionTable(data: array<byte>, start_idx: uint64)
+    // returns (end: uint64)
+    // requires Inv(me)
+    // requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I(me)))
+    // modifies data
+    // {
+    //   var idx := start_idx;
+
+    //   Pack_LittleEndian_Uint64_into_Array(t.Count, data, idx);
+    //   idx := idx + 8;
+
+    //   var it := t.IterStart();
+    //   while it.next.Next?
+    //   {
+    //     if idx + 8 + 8 + 8 + 8 + 8*|it.next.value.succs| as uint64
+    //         > data.Length as uint64
+    //     {
+    //       return 0;
+    //     }
+
+    //     Pack_LittleEndian_Uint64_into_Array(it.next.key, data, idx);
+    //     idx := idx + 8;
+
+    //     Pack_LittleEndian_Uint64_into_Array(it.next.value.loc.value.addr, data, idx);
+    //     idx := idx + 8;
+
+    //     Pack_LittleEndian_Uint64_into_Array(it.next.value.loc.value.len, data, idx);
+    //     idx := idx + 8;
+
+    //     Pack_LittleEndian_Uint64_into_Array(
+    //         |it.next.value.succs| as uint64, data, idx);
+    //     idx := idx + 8;
+
+    //     Pack_LittleEndian_Uint64_Seq_into_Array(
+    //         it.next.value.succs, data, idx);
+    //     idx := idx + 8 * |it.next.value.succs| as uint64;
+    //     
+    //     it := t.IterInc(it);
+    //   }
+    //   return idx;
+    // }
+
+    function IHashMap(m: HashMap) : SectorType.IndirectionTable
+    {
+      SectorType.IndirectionTable(Locs(m), Graph(m))
+    }
+
+
+    function method IndirectionTableGrammar() : G
+    ensures ValidGrammar(IndirectionTableGrammar())
+    {
+      // (Reference, address, len, successor-list) triples
+      GArray(GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+    }
+
+    method {:fuel ValInGrammar,3} valToHashMap(a: seq<V>) returns (s : Option<HashMap>)
+    requires |a| <= MaxSize()
+    requires forall i | 0 <= i < |a| :: ValidVal(a[i])
+    requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+    ensures s.Some? ==> s.value.count as int == |a|
+    ensures s.Some? ==> forall v | v in s.value.contents.Values :: v.loc.Some? && ValidNodeLocation(v.loc.value)
+    ensures s.Some? ==> forall ref | ref in s.value.contents :: s.value.contents[ref].predCount == 0
+    ensures s.Some? ==> forall ref | ref in s.value.contents :: |s.value.contents[ref].succs| <= MaxNumChildren()
+    ensures s.Some? ==> Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(s.value))
+    ensures s.None? ==> Marshalling.valToIndirectionTableMaps(a).None?
+    {
+      if |a| == 0 {
+        s := Some(LinearMutableMap.Constructor(1024));
+        assert Locs(s.value) == map[];
+        assert Graph(s.value) == map[];
+        //assert s.Some? ==> Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(s.value));
+      } else {
+        var res := valToHashMap(DropLast(a));
+        match res {
+          case Some(table) => {
+            var tuple := Last(a);
+            var ref := tuple.t[0].u;
+            var lba := tuple.t[1].u;
+            var len := tuple.t[2].u;
+            var succs := tuple.t[3].ua;
+            var loc := Location(lba, len);
+            if (ref in table.contents || !ValidNodeLocation(loc) || |succs| as int > MaxNumChildren()) {
+              s := None;
+            } else {
+              LinearMutableMap.Insert(inout table, ref, Entry(Some(loc), succs, 0));
+              // not sure, but these two next lines are probably unnecessary now:
+              //assert Locs(res) == Locs(table)[ref := loc];
+              //assert Graph(res) == Graph(table)[ref := succs];
+              //assert Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(res));
+              s := Some(table);
+            }
+          }
+          case None => s := None;
+        }
+      }
+    }
+
+    // TODO(andreal)
+    method valToIndirectionTable(v: V) 
+    returns (s : Option<IndirectionTable>)
+    requires ValidVal(v)
+    requires ValInGrammar(v, IndirectionTableGrammar())
+    ensures s.Some? ==> s.value.Inv()
+    ensures s.Some? ==> s.value.TrackingGarbage()
+    ensures s.Some? ==> BC.WFCompleteIndirectionTable(IModel(s.value))
+    ensures s.Some? ==> Marshalling.valToIndirectionTable(v) == Some(IModel(s.value))
+    ensures s.None? ==> Marshalling.valToIndirectionTable(v).None?
+    {
+      if |v.a| <= MaxSize() {
+        var t := valToHashMap(v.a);
+        match t {
+          case Some(t) => {
+            if BT.G.Root() in t.contents {
+              var t1 := ComputeRefCounts(t);
+              if t1.Some? {
+                lemmaMakeGarbageQueueCorrect(t1.value);
+                lemma_count_eq_graph_size(t);
+                lemma_count_eq_graph_size(t1.value);
+                var refUpperBound := computeRefUpperBound(t1.value);
+                var res := FromHashMap(t1.value, Some(makeGarbageQueue(t1.value)), refUpperBound, None);
+                s := Some(res);
+              } else {
+                s := None;
+              }
+            } else {
+              s := None;
+            }
+          }
+          case None => s := None;
+        }
+      } else {
+        s := None;
+      }
+    }
+
+    function IModel(self: IndirectionTable) : SectorType.IndirectionTable
+    {
+      SectorType.IndirectionTable(self.locs, self.graph)
+    }
+
+    // NOTE(travis): I found that the above method which marshalls
+    // directly from indirection table to bytes is much faster
+    // than converting to a V and using the GenericMarshalling
+    // framework. I did some work on proving it (above),
+    // but it's kind of annoying. However, I think that it won't
+    // be a big deal as long as most syncs are journaling syncs?
+    // So I've moved back to this one which is slower but cleaner.
+    linear method IndirectionTableToVal() 
+    returns (v : V, size: uint64)
+    requires this.Inv()
+    requires BC.WFCompleteIndirectionTable(IModel(old_self))
+    ensures ValInGrammar(v, IndirectionTableGrammar())
+    ensures ValidVal(v)
+    ensures valToIndirectionTable(v).Some?
+    ensures
+          IModel(valToIndirectionTable(v).value)
+       == IModel(self)
+    ensures SizeOfV(v) <= MaxIndirectionTableByteSize()
+    ensures SizeOfV(v) == size as int
+    {
+      assert me.t.count <= IndirectionTableModel.MaxSizeUint64();
+      lemma_SeqSum_empty();
+      var count := me.t.count as uint64;
+      var a: array<V> := new V[count];
+      var it := LinearMutableMap.IterStart(me.t);
+      var i: uint64 := 0;
+      size := 0;
+
+      ghost var partial := map[];
+      while it.next.Next?
+      invariant Inv(me)
+      invariant BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I(me)))
+      invariant 0 <= i as int <= a.Length
+      invariant LinearMutableMap.WFIter(me.t, it);
+      invariant forall j | 0 <= j < i :: ValidVal(a[j])
+      invariant forall j | 0 <= j < i :: ValInGrammar(a[j], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+      // NOALIAS/CONST table doesn't need to be mutable, if we could say so we wouldn't need this
+      invariant IndirectionTableModel.valToHashMap(a[..i]).Some?
+      invariant IndirectionTableModel.valToHashMap(a[..i]).value.contents == partial
+      invariant |partial.Keys| == i as nat
+      invariant partial.Keys == it.s
+      invariant partial.Keys <= me.t.contents.Keys
+      invariant forall r | r in partial :: r in me.t.contents
+          && partial[r].loc == me.t.contents[r].loc
+          && partial[r].succs == me.t.contents[r].succs
+      // NOALIAS/CONST t doesn't need to be mutable, if we could say so we wouldn't need this
+      invariant me.t.contents == old(me.t.contents)
+      invariant size as int <=
+          |it.s| * (8 + 8 + 8 + (8 + MaxNumChildren() * 8))
+      invariant SeqSum(a[..i]) == size as int;
+      decreases it.decreaser
+      {
+        var (ref, locOptGraph: Entry) := (it.next.key, it.next.value);
+        assert ref in I(me).locs;
+        // NOTE: deconstructing in two steps to work around c# translation bug
+        var locOpt := locOptGraph.loc;
+        var succs := locOptGraph.succs;
+        var loc := locOpt.value;
+        //ghost var predCount := locOptGraph.predCount;
+        var childrenVal := VUint64Array(succs);
+
+        assert |succs| <= MaxNumChildren();
+
+        //assert I(me).locs[ref] == loc;
+        //assert I(me).graph[ref] == succs;
+
+        //assert IndirectionTableModel.I(I(me)).locs[ref] == loc;
+        //assert IndirectionTableModel.I(I(me)).graph[ref] == succs;
+
+        assert ValidNodeLocation(loc);
+        /*ghost var t0 := IndirectionTableModel.valToHashMap(a[..i]);
+        assert ref !in t0.value.contents;
+        assert loc.addr != 0;
+        assert LBAType.ValidLocation(loc);*/
+
+        LinearMutableMap.LemmaIterIndexLtCount(me.t, it);
+
+        assert |succs| < 0x1_0000_0000_0000_0000;
+        assert ValidVal(VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]));
+
+        assert |LinearMutableMap.IterInc(me.t, it).s| == |it.s| + 1;
+
+        var vi := VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]);
+
+        //assert SizeOfV(vi) <= (8 + 8 + 8 + (8 + MaxNumChildren() * 8));
+
+        // == mutation ==
+        partial := partial[ref := Entry(locOpt, succs, 0)];
+        a[i] := vi;
+        i := i + 1;
+        it := LinearMutableMap.IterInc(me.t, it);
+        // ==============
+
+        assert a[..i-1] == DropLast(a[..i]); // observe
+
+        calc {
+          SeqSum(a[..i]);
+          {
+            lemma_SeqSum_prefix_array(a, i as int);
+          }
+          SeqSum(a[..i-1]) + SizeOfV(a[i-1]);
+          SeqSum(a[..i-1]) + SizeOfV(vi);
+          {
+            lemma_tuple_size(ref, loc.addr, loc.len, succs);
+          }
+          size as int + (8 + 8 + 8 + (8 + 8 * |succs|));
+        }
+
+        size := size + 32 + 8 * |succs| as uint64;
+      }
+
+      /* (doc) assert |partial.Keys| == |me.t.contents.Keys|; */
+      SetInclusionAndEqualCardinalityImpliesSetEquality(partial.Keys, me.t.contents.Keys);
+
+      assert a[..i] == a[..]; // observe
+      v := VArray(a[..]);
+
+      /*ghost var t0 := IndirectionTableModel.valToHashMap(v.value.a);
+      assert t0.Some?;
+      assert BT.G.Root() in t0.value.contents;
+      assert t0.value.count <= MaxSizeUint64();
+      ghost var t1 := IndirectionTableModel.ComputeRefCounts(t0.value);
+      assert t1.Some?;*/
+
+      assert |it.s| <= IndirectionTableModel.MaxSize();
+
+      size := size + 8;
+    }
 
     // // To bitmap
 
