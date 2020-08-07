@@ -31,7 +31,6 @@ module IndirectionTable {
   import SectorType
   import BT = PivotBetreeSpec`Internal
   import BC = BlockCache
-  import SectorType
   import LinearMutableMap
   import opened DiskLayout
   import opened GenericMarshalling
@@ -1048,65 +1047,109 @@ module IndirectionTable {
     //   }
     // }
 
+    /*lemma LemmaComputeRefCountsIterateInvInit(t: HashMap)
+    requires LinearMutableMap.Inv(t)
+    requires forall ref | ref in t.contents :: t.contents[ref].predCount == 0
+    requires forall ref | ref in t.contents :: |t.contents[ref].succs| <= MaxNumChildren()
+    requires t.count as int <= MaxSize()
+    requires BT.G.Root() in t.contents
+    ensures
+      var oldEntry := t.contents[BT.G.Root()];
+      var t0 := LinearMutableMap.Insert(t, BT.G.Root(), oldEntry.(predCount := 1));
+      ComputeRefCountsIterateInv(t0, t, LinearMutableMap.IterStart(t))
+    {
+      var oldEntry := t.contents[BT.G.Root()];
+      var t0 := LinearMutableMap.Insert(t, BT.G.Root(), oldEntry.(predCount := 1));
+
+      var it := LinearMutableMap.IterStart(t);
+      forall ref | ref in t0.contents
+      ensures t0.contents[ref].predCount as int
+          == |PredecessorSetRestricted(Graph(t0), ref, it.s)| + IsRoot(ref)
+      {
+        assert PredecessorSetRestricted(Graph(t0), ref, it.s) == {};
+      }
+    }*/
+
+    static predicate ComputeRefCountsIterateInv(t: HashMap, copy: HashMap, it: LinearMutableMap.Iterator<Entry>)
+    {
+      && LinearMutableMap.Inv(t)
+      && LinearMutableMap.Inv(copy)
+      && LinearMutableMap.WFIter(copy, it)
+      && (forall ref | ref in copy.contents :: ref in t.contents)
+      && (forall ref | ref in copy.contents :: t.contents[ref].loc == copy.contents[ref].loc)
+      && (forall ref | ref in copy.contents :: t.contents[ref].succs == copy.contents[ref].succs)
+      && (forall ref | ref in copy.contents :: t.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s)| + IsRoot(ref))
+      && (forall ref | ref in copy.contents :: |copy.contents[ref].succs| <= MaxNumChildren())
+      && (forall ref | ref in t.contents :: ref in copy.contents)
+      && GraphClosedRestricted(Graph(copy), it.s)
+      && (t.count == copy.count)
+      && (t.count as int <= MaxSize())
+    }
+
     // TODO left off here due to ref counts:
     static method ComputeRefCounts(shared t: HashMap)
       returns (linear t' : lOption<HashMap>)
       requires t.Inv()
       requires forall ref | ref in t.contents :: t.contents[ref].predCount == 0
       requires forall ref | ref in t.contents :: |t.contents[ref].succs| <= MaxNumChildren()
-      requires t.count as int <= IndirectionTableModel.MaxSize()
+      requires t.count as int <= MaxSize()
       requires BT.G.Root() in t.contents
-      ensures match t' {
-        case lNone => IndirectionTableModel.ComputeRefCounts(t) == None
-        case lSome(t'') => t''.Inv() && IndirectionTableModel.ComputeRefCounts(t) == Some(t'')
-      }
+
+      ensures BC.GraphClosed(Graph(t)) <==> t'.lSome?
+      ensures t'.lSome? ==> Graph(t) == Graph(t'.value)
+      ensures t'.lSome? ==> Locs(t) == Locs(t'.value)
+      ensures t'.lSome? ==> ValidPredCounts(PredCounts(t'.value), Graph(t'.value))
+      ensures t'.lSome? ==> BT.G.Root() in t'.value.contents
+
+      /*ensures match t' {
+        case lNone => ComputeRefCounts(t) == None
+        case lSome(t'') => t''.Inv() && ComputeRefCounts(t) == Some(t'')
+      }*/
     {
-      IndirectionTableModel.LemmaComputeRefCountsIterateInvInit(t);
+      //LemmaComputeRefCountsIterateInvInit(t);
 
       shared var copy := t;
       linear var t1 := LinearMutableMap.Clone(t);
 
       var oldEntryOpt := LinearMutableMap.Get(t1, BT.G.Root());
       var oldEntry := oldEntryOpt.value;
-      t1 := LinearMutableMap.Insert(t1, BT.G.Root(), oldEntry.(predCount := 1));
+      LinearMutableMap.Insert(inout t1, BT.G.Root(), oldEntry.(predCount := 1));
 
       var it := LinearMutableMap.IterStart(copy);
       var success := true;
       while it.next.Next?
-      invariant t1.Inv()
-      invariant copy.Inv()
-      invariant IndirectionTableModel.ComputeRefCountsIterateInv(t1, copy, it)
+      invariant ComputeRefCountsIterateInv(t1, copy, it)
       invariant BT.G.Root() in t1.contents
-      invariant IndirectionTableModel.ComputeRefCounts(old(t))
-             == IndirectionTableModel.ComputeRefCountsIterate(t1, copy, it)
+      //invariant IndirectionTableModel.ComputeRefCounts(old(t))
+      //       == IndirectionTableModel.ComputeRefCountsIterate(t1, copy, it)
       decreases it.decreaser
       {
-        IndirectionTableModel.LemmaComputeRefCountsIterateStuff(t1, copy, it);
-        IndirectionTableModel.LemmaComputeRefCountsIterateValidPredCounts(t1, copy, it);
+        //IndirectionTableModel.LemmaComputeRefCountsIterateStuff(t1, copy, it);
+        //IndirectionTableModel.LemmaComputeRefCountsIterateValidPredCounts(t1, copy, it);
 
         ghost var t0 := t1;
 
         var succs := it.next.value.succs;
         var i: uint64 := 0;
         while i < |succs| as uint64
-        invariant t1.Inv()
-        invariant copy.Inv()
+        invariant LinearMutableMap.Inv(t1)
+        invariant LinearMutableMap.Inv(copy)
         invariant BT.G.Root() in t1.contents
         invariant 0 <= i as int <= |succs|
         invariant |succs| <= MaxNumChildren()
-        invariant t1.count as int <= IndirectionTableModel.MaxSize()
+        invariant t1.count as int <= MaxSize()
         invariant forall ref | ref in t1.contents :: t1.contents[ref].predCount as int <= 0x1_0000_0000_0000 + i as int
-        invariant IndirectionTableModel.ComputeRefCounts(old(t))
+        /*invariant IndirectionTableModel.ComputeRefCounts(old(t))
                == IndirectionTableModel.ComputeRefCountsIterate(t0, copy, it)
         invariant IndirectionTableModel.ComputeRefCountsEntryIterate(t0, succs, 0)
-               == IndirectionTableModel.ComputeRefCountsEntryIterate(t1, succs, i)
+               == IndirectionTableModel.ComputeRefCountsEntryIterate(t1, succs, i)*/
         decreases |succs| - i as int
         {
           var ref := succs[i];
           var oldEntry := LinearMutableMap.Get(t1, ref);
           if oldEntry.Some? {
             var newEntry := oldEntry.value.(predCount := oldEntry.value.predCount + 1);
-            t1 := LinearMutableMap.Insert(t1, ref, newEntry);
+            LinearMutableMap.Insert(inout t1, ref, newEntry);
             i := i + 1;
           } else {
             success := false;
@@ -1518,92 +1561,92 @@ module IndirectionTable {
     }
 
 
-    function method IndirectionTableGrammar() : G
-    ensures ValidGrammar(IndirectionTableGrammar())
-    {
-      // (Reference, address, len, successor-list) triples
-      GArray(GTuple([GUint64, GUint64, GUint64, GUint64Array]))
-    }
-
-    method {:fuel ValInGrammar,3} valToHashMap(a: seq<V>) returns (s : Option<HashMap>)
-    requires |a| <= MaxSize()
-    requires forall i | 0 <= i < |a| :: ValidVal(a[i])
-    requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
-    ensures s.Some? ==> s.value.count as int == |a|
-    ensures s.Some? ==> forall v | v in s.value.contents.Values :: v.loc.Some? && ValidNodeLocation(v.loc.value)
-    ensures s.Some? ==> forall ref | ref in s.value.contents :: s.value.contents[ref].predCount == 0
-    ensures s.Some? ==> forall ref | ref in s.value.contents :: |s.value.contents[ref].succs| <= MaxNumChildren()
-    ensures s.Some? ==> Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(s.value))
-    ensures s.None? ==> Marshalling.valToIndirectionTableMaps(a).None?
-    {
-      if |a| == 0 {
-        s := Some(LinearMutableMap.Constructor(1024));
-        assert Locs(s.value) == map[];
-        assert Graph(s.value) == map[];
-        //assert s.Some? ==> Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(s.value));
-      } else {
-        var res := valToHashMap(DropLast(a));
-        match res {
-          case Some(table) => {
-            var tuple := Last(a);
-            var ref := tuple.t[0].u;
-            var lba := tuple.t[1].u;
-            var len := tuple.t[2].u;
-            var succs := tuple.t[3].ua;
-            var loc := Location(lba, len);
-            if (ref in table.contents || !ValidNodeLocation(loc) || |succs| as int > MaxNumChildren()) {
-              s := None;
-            } else {
-              LinearMutableMap.Insert(inout table, ref, Entry(Some(loc), succs, 0));
-              // not sure, but these two next lines are probably unnecessary now:
-              //assert Locs(res) == Locs(table)[ref := loc];
-              //assert Graph(res) == Graph(table)[ref := succs];
-              //assert Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(res));
-              s := Some(table);
-            }
-          }
-          case None => s := None;
-        }
-      }
-    }
+//    function method IndirectionTableGrammar() : G
+//    ensures ValidGrammar(IndirectionTableGrammar())
+//    {
+//      // (Reference, address, len, successor-list) triples
+//      GArray(GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+//    }
+//
+//    method {:fuel ValInGrammar,3} valToHashMap(a: seq<V>) returns (s : Option<HashMap>)
+//    requires |a| <= MaxSize()
+//    requires forall i | 0 <= i < |a| :: ValidVal(a[i])
+//    requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+//    ensures s.Some? ==> s.value.count as int == |a|
+//    ensures s.Some? ==> forall v | v in s.value.contents.Values :: v.loc.Some? && ValidNodeLocation(v.loc.value)
+//    ensures s.Some? ==> forall ref | ref in s.value.contents :: s.value.contents[ref].predCount == 0
+//    ensures s.Some? ==> forall ref | ref in s.value.contents :: |s.value.contents[ref].succs| <= MaxNumChildren()
+//    ensures s.Some? ==> Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(s.value))
+//    ensures s.None? ==> Marshalling.valToIndirectionTableMaps(a).None?
+//    {
+//      if |a| == 0 {
+//        s := Some(LinearMutableMap.Constructor(1024));
+//        assert Locs(s.value) == map[];
+//        assert Graph(s.value) == map[];
+//        //assert s.Some? ==> Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(s.value));
+//      } else {
+//        var res := valToHashMap(DropLast(a));
+//        match res {
+//          case Some(table) => {
+//            var tuple := Last(a);
+//            var ref := tuple.t[0].u;
+//            var lba := tuple.t[1].u;
+//            var len := tuple.t[2].u;
+//            var succs := tuple.t[3].ua;
+//            var loc := Location(lba, len);
+//            if (ref in table.contents || !ValidNodeLocation(loc) || |succs| as int > MaxNumChildren()) {
+//              s := None;
+//            } else {
+//              LinearMutableMap.Insert(inout table, ref, Entry(Some(loc), succs, 0));
+//              // not sure, but these two next lines are probably unnecessary now:
+//              //assert Locs(res) == Locs(table)[ref := loc];
+//              //assert Graph(res) == Graph(table)[ref := succs];
+//              //assert Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(res));
+//              s := Some(table);
+//            }
+//          }
+//          case None => s := None;
+//        }
+//      }
+//    }
 
     // TODO(andreal)
-    method valToIndirectionTable(v: V) 
-    returns (s : Option<IndirectionTable>)
-    requires ValidVal(v)
-    requires ValInGrammar(v, IndirectionTableGrammar())
-    ensures s.Some? ==> s.value.Inv()
-    ensures s.Some? ==> s.value.TrackingGarbage()
-    ensures s.Some? ==> BC.WFCompleteIndirectionTable(IModel(s.value))
-    ensures s.Some? ==> Marshalling.valToIndirectionTable(v) == Some(IModel(s.value))
-    ensures s.None? ==> Marshalling.valToIndirectionTable(v).None?
-    {
-      if |v.a| <= MaxSize() {
-        var t := valToHashMap(v.a);
-        match t {
-          case Some(t) => {
-            if BT.G.Root() in t.contents {
-              var t1 := ComputeRefCounts(t);
-              if t1.Some? {
-                lemmaMakeGarbageQueueCorrect(t1.value);
-                lemma_count_eq_graph_size(t);
-                lemma_count_eq_graph_size(t1.value);
-                var refUpperBound := computeRefUpperBound(t1.value);
-                var res := FromHashMap(t1.value, Some(makeGarbageQueue(t1.value)), refUpperBound, None);
-                s := Some(res);
-              } else {
-                s := None;
-              }
-            } else {
-              s := None;
-            }
-          }
-          case None => s := None;
-        }
-      } else {
-        s := None;
-      }
-    }
+//    method valToIndirectionTable(v: V) 
+//    returns (s : Option<IndirectionTable>)
+//    requires ValidVal(v)
+//    requires ValInGrammar(v, IndirectionTableGrammar())
+//    ensures s.Some? ==> s.value.Inv()
+//    ensures s.Some? ==> s.value.TrackingGarbage()
+//    ensures s.Some? ==> BC.WFCompleteIndirectionTable(IModel(s.value))
+//    ensures s.Some? ==> Marshalling.valToIndirectionTable(v) == Some(IModel(s.value))
+//    ensures s.None? ==> Marshalling.valToIndirectionTable(v).None?
+//    {
+//      if |v.a| <= MaxSize() {
+//        var t := valToHashMap(v.a);
+//        match t {
+//          case Some(t) => {
+//            if BT.G.Root() in t.contents {
+//              var t1 := ComputeRefCounts(t);
+//              if t1.Some? {
+//                lemmaMakeGarbageQueueCorrect(t1.value);
+//                lemma_count_eq_graph_size(t);
+//                lemma_count_eq_graph_size(t1.value);
+//                var refUpperBound := computeRefUpperBound(t1.value);
+//                var res := FromHashMap(t1.value, Some(makeGarbageQueue(t1.value)), refUpperBound, None);
+//                s := Some(res);
+//              } else {
+//                s := None;
+//              }
+//            } else {
+//              s := None;
+//            }
+//          }
+//          case None => s := None;
+//        }
+//      } else {
+//        s := None;
+//      }
+//    }
 
     function IModel(self: IndirectionTable) : SectorType.IndirectionTable
     {
@@ -1617,127 +1660,127 @@ module IndirectionTable {
     // but it's kind of annoying. However, I think that it won't
     // be a big deal as long as most syncs are journaling syncs?
     // So I've moved back to this one which is slower but cleaner.
-    linear method IndirectionTableToVal() 
-    returns (v : V, size: uint64)
-    requires this.Inv()
-    requires BC.WFCompleteIndirectionTable(IModel(old_self))
-    ensures ValInGrammar(v, IndirectionTableGrammar())
-    ensures ValidVal(v)
-    ensures valToIndirectionTable(v).Some?
-    ensures
-          IModel(valToIndirectionTable(v).value)
-       == IModel(self)
-    ensures SizeOfV(v) <= MaxIndirectionTableByteSize()
-    ensures SizeOfV(v) == size as int
-    {
-      assert me.t.count <= IndirectionTableModel.MaxSizeUint64();
-      lemma_SeqSum_empty();
-      var count := me.t.count as uint64;
-      var a: array<V> := new V[count];
-      var it := LinearMutableMap.IterStart(me.t);
-      var i: uint64 := 0;
-      size := 0;
-
-      ghost var partial := map[];
-      while it.next.Next?
-      invariant Inv(me)
-      invariant BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I(me)))
-      invariant 0 <= i as int <= a.Length
-      invariant LinearMutableMap.WFIter(me.t, it);
-      invariant forall j | 0 <= j < i :: ValidVal(a[j])
-      invariant forall j | 0 <= j < i :: ValInGrammar(a[j], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
-      // NOALIAS/CONST table doesn't need to be mutable, if we could say so we wouldn't need this
-      invariant IndirectionTableModel.valToHashMap(a[..i]).Some?
-      invariant IndirectionTableModel.valToHashMap(a[..i]).value.contents == partial
-      invariant |partial.Keys| == i as nat
-      invariant partial.Keys == it.s
-      invariant partial.Keys <= me.t.contents.Keys
-      invariant forall r | r in partial :: r in me.t.contents
-          && partial[r].loc == me.t.contents[r].loc
-          && partial[r].succs == me.t.contents[r].succs
-      // NOALIAS/CONST t doesn't need to be mutable, if we could say so we wouldn't need this
-      invariant me.t.contents == old(me.t.contents)
-      invariant size as int <=
-          |it.s| * (8 + 8 + 8 + (8 + MaxNumChildren() * 8))
-      invariant SeqSum(a[..i]) == size as int;
-      decreases it.decreaser
-      {
-        var (ref, locOptGraph: Entry) := (it.next.key, it.next.value);
-        assert ref in I(me).locs;
-        // NOTE: deconstructing in two steps to work around c# translation bug
-        var locOpt := locOptGraph.loc;
-        var succs := locOptGraph.succs;
-        var loc := locOpt.value;
-        //ghost var predCount := locOptGraph.predCount;
-        var childrenVal := VUint64Array(succs);
-
-        assert |succs| <= MaxNumChildren();
-
-        //assert I(me).locs[ref] == loc;
-        //assert I(me).graph[ref] == succs;
-
-        //assert IndirectionTableModel.I(I(me)).locs[ref] == loc;
-        //assert IndirectionTableModel.I(I(me)).graph[ref] == succs;
-
-        assert ValidNodeLocation(loc);
-        /*ghost var t0 := IndirectionTableModel.valToHashMap(a[..i]);
-        assert ref !in t0.value.contents;
-        assert loc.addr != 0;
-        assert LBAType.ValidLocation(loc);*/
-
-        LinearMutableMap.LemmaIterIndexLtCount(me.t, it);
-
-        assert |succs| < 0x1_0000_0000_0000_0000;
-        assert ValidVal(VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]));
-
-        assert |LinearMutableMap.IterInc(me.t, it).s| == |it.s| + 1;
-
-        var vi := VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]);
-
-        //assert SizeOfV(vi) <= (8 + 8 + 8 + (8 + MaxNumChildren() * 8));
-
-        // == mutation ==
-        partial := partial[ref := Entry(locOpt, succs, 0)];
-        a[i] := vi;
-        i := i + 1;
-        it := LinearMutableMap.IterInc(me.t, it);
-        // ==============
-
-        assert a[..i-1] == DropLast(a[..i]); // observe
-
-        calc {
-          SeqSum(a[..i]);
-          {
-            lemma_SeqSum_prefix_array(a, i as int);
-          }
-          SeqSum(a[..i-1]) + SizeOfV(a[i-1]);
-          SeqSum(a[..i-1]) + SizeOfV(vi);
-          {
-            lemma_tuple_size(ref, loc.addr, loc.len, succs);
-          }
-          size as int + (8 + 8 + 8 + (8 + 8 * |succs|));
-        }
-
-        size := size + 32 + 8 * |succs| as uint64;
-      }
-
-      /* (doc) assert |partial.Keys| == |me.t.contents.Keys|; */
-      SetInclusionAndEqualCardinalityImpliesSetEquality(partial.Keys, me.t.contents.Keys);
-
-      assert a[..i] == a[..]; // observe
-      v := VArray(a[..]);
-
-      /*ghost var t0 := IndirectionTableModel.valToHashMap(v.value.a);
-      assert t0.Some?;
-      assert BT.G.Root() in t0.value.contents;
-      assert t0.value.count <= MaxSizeUint64();
-      ghost var t1 := IndirectionTableModel.ComputeRefCounts(t0.value);
-      assert t1.Some?;*/
-
-      assert |it.s| <= IndirectionTableModel.MaxSize();
-
-      size := size + 8;
-    }
+//    linear method IndirectionTableToVal() 
+//    returns (v : V, size: uint64)
+//    requires this.Inv()
+//    requires BC.WFCompleteIndirectionTable(IModel(old_self))
+//    ensures ValInGrammar(v, IndirectionTableGrammar())
+//    ensures ValidVal(v)
+//    ensures valToIndirectionTable(v).Some?
+//    ensures
+//          IModel(valToIndirectionTable(v).value)
+//       == IModel(self)
+//    ensures SizeOfV(v) <= MaxIndirectionTableByteSize()
+//    ensures SizeOfV(v) == size as int
+//    {
+//      assert me.t.count <= IndirectionTableModel.MaxSizeUint64();
+//      lemma_SeqSum_empty();
+//      var count := me.t.count as uint64;
+//      var a: array<V> := new V[count];
+//      var it := LinearMutableMap.IterStart(me.t);
+//      var i: uint64 := 0;
+//      size := 0;
+//
+//      ghost var partial := map[];
+//      while it.next.Next?
+//      invariant Inv(me)
+//      invariant BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I(me)))
+//      invariant 0 <= i as int <= a.Length
+//      invariant LinearMutableMap.WFIter(me.t, it);
+//      invariant forall j | 0 <= j < i :: ValidVal(a[j])
+//      invariant forall j | 0 <= j < i :: ValInGrammar(a[j], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+//      // NOALIAS/CONST table doesn't need to be mutable, if we could say so we wouldn't need this
+//      invariant IndirectionTableModel.valToHashMap(a[..i]).Some?
+//      invariant IndirectionTableModel.valToHashMap(a[..i]).value.contents == partial
+//      invariant |partial.Keys| == i as nat
+//      invariant partial.Keys == it.s
+//      invariant partial.Keys <= me.t.contents.Keys
+//      invariant forall r | r in partial :: r in me.t.contents
+//          && partial[r].loc == me.t.contents[r].loc
+//          && partial[r].succs == me.t.contents[r].succs
+//      // NOALIAS/CONST t doesn't need to be mutable, if we could say so we wouldn't need this
+//      invariant me.t.contents == old(me.t.contents)
+//      invariant size as int <=
+//          |it.s| * (8 + 8 + 8 + (8 + MaxNumChildren() * 8))
+//      invariant SeqSum(a[..i]) == size as int;
+//      decreases it.decreaser
+//      {
+//        var (ref, locOptGraph: Entry) := (it.next.key, it.next.value);
+//        assert ref in I(me).locs;
+//        // NOTE: deconstructing in two steps to work around c# translation bug
+//        var locOpt := locOptGraph.loc;
+//        var succs := locOptGraph.succs;
+//        var loc := locOpt.value;
+//        //ghost var predCount := locOptGraph.predCount;
+//        var childrenVal := VUint64Array(succs);
+//
+//        assert |succs| <= MaxNumChildren();
+//
+//        //assert I(me).locs[ref] == loc;
+//        //assert I(me).graph[ref] == succs;
+//
+//        //assert IndirectionTableModel.I(I(me)).locs[ref] == loc;
+//        //assert IndirectionTableModel.I(I(me)).graph[ref] == succs;
+//
+//        assert ValidNodeLocation(loc);
+//        /*ghost var t0 := IndirectionTableModel.valToHashMap(a[..i]);
+//        assert ref !in t0.value.contents;
+//        assert loc.addr != 0;
+//        assert LBAType.ValidLocation(loc);*/
+//
+//        LinearMutableMap.LemmaIterIndexLtCount(me.t, it);
+//
+//        assert |succs| < 0x1_0000_0000_0000_0000;
+//        assert ValidVal(VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]));
+//
+//        assert |LinearMutableMap.IterInc(me.t, it).s| == |it.s| + 1;
+//
+//        var vi := VTuple([VUint64(ref), VUint64(loc.addr), VUint64(loc.len), childrenVal]);
+//
+//        //assert SizeOfV(vi) <= (8 + 8 + 8 + (8 + MaxNumChildren() * 8));
+//
+//        // == mutation ==
+//        partial := partial[ref := Entry(locOpt, succs, 0)];
+//        a[i] := vi;
+//        i := i + 1;
+//        it := LinearMutableMap.IterInc(me.t, it);
+//        // ==============
+//
+//        assert a[..i-1] == DropLast(a[..i]); // observe
+//
+//        calc {
+//          SeqSum(a[..i]);
+//          {
+//            lemma_SeqSum_prefix_array(a, i as int);
+//          }
+//          SeqSum(a[..i-1]) + SizeOfV(a[i-1]);
+//          SeqSum(a[..i-1]) + SizeOfV(vi);
+//          {
+//            lemma_tuple_size(ref, loc.addr, loc.len, succs);
+//          }
+//          size as int + (8 + 8 + 8 + (8 + 8 * |succs|));
+//        }
+//
+//        size := size + 32 + 8 * |succs| as uint64;
+//      }
+//
+//      /* (doc) assert |partial.Keys| == |me.t.contents.Keys|; */
+//      SetInclusionAndEqualCardinalityImpliesSetEquality(partial.Keys, me.t.contents.Keys);
+//
+//      assert a[..i] == a[..]; // observe
+//      v := VArray(a[..]);
+//
+//      /*ghost var t0 := IndirectionTableModel.valToHashMap(v.value.a);
+//      assert t0.Some?;
+//      assert BT.G.Root() in t0.value.contents;
+//      assert t0.value.count <= MaxSizeUint64();
+//      ghost var t1 := IndirectionTableModel.ComputeRefCounts(t0.value);
+//      assert t1.Some?;*/
+//
+//      assert |it.s| <= IndirectionTableModel.MaxSize();
+//
+//      size := size + 8;
+//    }
 
     // // To bitmap
 
