@@ -629,269 +629,39 @@ abstract module LMutableBtree {
         FreeChildren(lseqs(children), children, 0, len)
     }
   }
-}
 
-// module TestBtreeModel refines BtreeModel {
-//   import opened NativeTypes
-// //  import Keys = Uint64_Order
-//   type Value = uint64
-// }
-// 
-// module TestMutableBtree refines MutableBtree {
-//   import Model = TestBtreeModel
-//  
-//   function method MaxKeysPerLeaf() : uint64 { 64 }
-//   function method MaxChildren() : uint64 { 64 }
-// 
-//   function method DefaultValue() : Value { 0 }
-//   function method DefaultKey() : Key { [0] }
-// }
-// 
-// module MainModule {
-//   import opened LinearSequence_i
-//   import opened NativeTypes
-//   import TMB = TestMutableBtree`API
-// 
-//   method SeqFor(i: uint64)
-//   returns (result:TMB.Key)
-//   requires i < 256*256*256;
-//   {
-//     var b0:byte := (i / 65536) as byte;
-//     var r := i - (b0 as uint64 * 65536);
-//     var b1:byte := (r / 256) as byte;
-//     var b2:byte := (r - (b1 as uint64)*256) as byte;
-// 
-//     result := [b0, b1, b2];
-//   }
-// 
-//   method Main()
-//   {
-//     // var n: uint64 := 1_000_000;
-//     // var p: uint64 := 300_007;
-//     var n: uint64 := 10_000_000;
-//     var p: uint64 := 3_000_017;
-//     // var n: uint64 := 100_000_000;
-//     // var p: uint64 := 1_073_741_827;
-//     linear var t := TMB.EmptyTree();
-//     var i: uint64 := 0;
-//     while i < n
-//       invariant 0 <= i <= n
-//       invariant TMB.WF(t)
-// //      invariant fresh(t.repr)
-//     {
-//       var oldvalue;
-//       var keyv := ((i * p) % n);
-//       var key := SeqFor(keyv);
-//       t, oldvalue := TMB.Insert(t, key, i);
-//       if (i%1000000)==0 {
-//         print "i", i, "\n";
-//       }
-// 
-//       // Sanity check
-// //      var found := TMB.Query(t, key);
-// //      if !found.Some? {
-// //        print "lost at ", i, "\n";
-// //      }
-// 
-//       i := i + 1;
-//     }
-// 
-//     print "PASSED\n";
-//     TMB.Free(t);
-//   }
-// } 
+  method CountElements(shared node: Node) returns (count: uint64)
+    requires WF(node)
+    requires Model.NumElements(node) < Uint64UpperBound()
+    ensures count as nat == Model.NumElements(node)
+  {
+    if node.Leaf? {
+      count := seq_length(node.keys);
+    } else {
+      ghost var inode := node;
+      count := 0;
+      ghost var icount: int := 0;
+      
+      var i: uint64 := 0;
+      var len := lseq_length_uint64(node.children);
+      while i < len
+        invariant i as int <= |node.children|
+        invariant icount == Model.NumElementsOfChildren(lseqs(inode.children)[..i])
+        invariant icount < Uint64UpperBound()
+        invariant count == icount as uint64
+      {
+        ghost var ichildcount := Model.NumElements(lseqs(inode.children)[i]);
+        assert lseqs(inode.children)[..i+1][..i] == lseqs(inode.children)[..i];
+        Model.NumElementsOfChildrenNotZero(inode);
+        Model.NumElementsOfChildrenDecreases(lseqs(inode.children), (i+1) as int);
+        icount := icount + ichildcount;
 
-///////////////////////////////////////////////////////////////////////////////////
-
-abstract module MutableBtree {
-  import opened LinearSequence_s
-  import opened LinearSequence_i
-  import opened LinearBox_s
-  import opened LinearBox
-  import opened LinearOption
-  import opened NativeTypes
-  import opened NativeArrays
-  import opened Seq = Sequences
-  import opened Options
-  import opened Maps
-  import Math = Mathematics
-  import Arrays
-
-// TODO: clean up these module imports?
-  import L : LMutableBtree`All
-  import Model : BtreeModel
-
-  export API provides WF, Interpretation, EmptyTree, Insert, Query, Empty, MinKey, MaxKey, NativeTypes, LinearBox, L, Options, Maps reveals Node, NodeContents, Key, Value
-  export All reveals *
-    
-  type Key = L.Model.Key
-  type Value = L.Model.Value
-
-  function method MaxKeysPerLeaf() : uint64
-    ensures 2 < MaxKeysPerLeaf() as int < Uint64UpperBound() / 4
-
-  function method MaxChildren() : uint64
-    ensures 3 < MaxChildren() as int < Uint64UpperBound() / 4
-
-  function method DefaultValue() : Value
-  function method DefaultKey() : Key
-
-  class Node {
-//    var contents: NodeContents
-    var box: BoxedLinearOption<L.Model.Node>;
-    ghost var repr: set<object>
-//    ghost var height: nat
-
-    function Read() : L.Model.Node
-      requires box.Inv()
-      reads this, box, box.Repr
-    {
-      box.Read()
+        var childcount: uint64 := CountElements(lseq_peek(node.children, i));
+        count := count + childcount;
+        i := i + 1;
+      }
+      assert lseqs(inode.children)[..|node.children|] == lseqs(inode.children);
     }
-
-    constructor(linear root: L.Model.Node)
-      requires L.WF(root)
-      ensures WF(this)
-      ensures this.box.Read() == root
-      ensures fresh(this.repr)
-    {
-      reveal_I();
-      box := new BoxedLinearOption(root, ToDestructor(Destruct));
-      new;
-      repr := {this} + box.Repr;
-    }
-  }
-  
-  predicate WF_Option(root: lOption<L.Model.Node>)
-  {
-    match root case lNone => true case lSome(r) => L.WF(r)
-  }
-
-  function method Destruct(linear root: lOption<L.Model.Node>) : ()
-    requires WF_Option(root)
-  {
-    linear match root case lNone => () case lSome(x) => L.FreeNode(x)
-  }
-
-  datatype NodeContents =
-    | Leaf(nkeys: uint64, keys: array<Key>, values: array<Value>)
-    | Index(nchildren: uint64, pivots: array<Key>, children: array<Node?>)
-
-
-  function {:opaque} I(node: Node) : (result: L.Model.Node)
-//    requires WFShape(node)
-//    ensures node.contents.Leaf? <==> I(node).Leaf?
-//    ensures node.contents.Leaf? ==> I(node).keys == node.contents.keys[..node.contents.nkeys]
-//    ensures node.contents.Leaf? ==> I(node).values == node.contents.values[..node.contents.nkeys]
-//    ensures node.contents.Index? ==> I(node).pivots == node.contents.pivots[..node.contents.nchildren-1]
-//    ensures node.contents.Index? ==> |I(node).children| == node.contents.nchildren as int
-    reads node, node.box.Repr
-    requires node.box.Inv()
-  {
-    node.Read()
-  }
-
-  predicate WF(node: Node)
-    ensures WF(node) ==> node in node.repr
-    reads node, node.repr
-  {
-    && node.box in node.repr
-    && node.repr == {node} + node.box.Repr
-    && node.box.Inv()
-    && node.box.Has()
-    && node.box.DataInv == Destruct.requires
-    && L.WF(I(node))
-  }
-
-  function Interpretation(node: Node) : map<Key, Value>
-    requires WF(node)
-    reads node.repr
-  {
-    L.Model.Interpretation(I(node))
-  }
-
-  function ToSeq(node: Node) : (kvlists: (seq<Key>, seq<Value>))
-    requires WF(node)
-    reads node.repr
-  {
-    L.Model.ToSeq(I(node))
-  }
-  
-  method Query(node: Node, needle: Key) returns (result: Option<Value>)
-    requires WF(node)
-    ensures result == MapLookupOption(Interpretation(node), needle)
-  {
-    reveal_I();
-    result := L.Query(node.box.Borrow(), needle);
-  }
-
-  method Empty(node: Node) returns (result: bool)
-    requires WF(node)
-    ensures result == (|Interpretation(node)| == 0)
-  {
-    reveal_I();
-    result := L.Empty(node.box.Borrow());
-  }
-  
-  // We separate MinKey and MinKeyInternal in order to keep the API
-  // export set clean.  (MinKeyInternal needs to mention I(), but we
-  // don't want to export it.)
-  method MinKey(node: Node) returns (result: Key)
-    requires WF(node)
-    requires 0 < |Interpretation(node)|
-    ensures result in Interpretation(node)
-    ensures forall key | key in Interpretation(node) :: L.Model.Keys.lte(result, key)
-  {
-    reveal_I();
-    result := L.MinKey(node.box.Borrow());
-  }
-  
-  // We separate MaxKey and MaxKeyInternal in order to keep the API
-  // export set clean.  (MaxKeyInternal needs to mention I(), but we
-  // don't want to export it.)
-  method MaxKey(node: Node) returns (result: Key)
-    requires WF(node)
-    requires 0 < |Interpretation(node)|
-    ensures result in Interpretation(node)
-    ensures forall key | key in Interpretation(node) :: L.Model.Keys.lte(key, result)
-  {
-    reveal_I();
-    result := L.MaxKey(node.box.Borrow());
-  }
-  
-  method EmptyTree() returns (root: Node)
-    ensures WF(root)
-    ensures fresh(root.repr)
-    ensures Interpretation(root) == map[]
-//    ensures root.contents.Leaf?
-  {
-    reveal_I();
-    linear var t := L.EmptyTree();
-    root := new Node(t);
-  }
-
-//  method Free(root: Node)
-//    requires WF(root)
-//    modifies root.repr
-//  {
-//    reveal_I();
-//    linear var x := root.box.Take();
-//    L.Free(x);
-//  }
-
-  method Insert(root: Node, key: Key, value: Value) returns (newroot: Node, oldvalue: Option<Value>)
-    requires WF(root)
-    ensures WF(newroot)
-    ensures fresh(newroot.repr - old(root.repr))
-    ensures Interpretation(newroot) == old(Interpretation(root))[key := value]
-    ensures oldvalue == MapLookupOption(old(Interpretation(root)), key)
-    modifies root.repr
-  {
-    reveal_I();
-    linear var x := root.box.Take();
-    x, oldvalue := L.Insert(x, key, value);
-    root.box.Give(x);
-    newroot := root;
   }
 }
 

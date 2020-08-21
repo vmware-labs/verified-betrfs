@@ -9,7 +9,7 @@ include "NodeImpl.i.dfy"
 
 module CacheImpl {
   import DebugAccumulator
-  import opened NodeImpl
+  import opened BoxNodeImpl
   import opened Options
   import opened Maps
   import opened NativeTypes
@@ -73,10 +73,10 @@ module CacheImpl {
       && (forall ref | ref in cache.Contents :: this !in cache.Contents[ref].Repr)
       && this !in cache.Repr
       && cache.Inv()
-      && (forall ref | ref in cache.Contents :: cache.Contents[ref].Inv())
+      && (forall ref | ref in cache.Contents :: cache.Contents[ref].Inv()) // unhappy
     }
 
-    protected function I() : map<BT.G.Reference, IM.Node>
+    protected function I() : map<BT.G.Reference, L.IM.Node>
     reads this, Repr
     requires Inv()
     {
@@ -206,7 +206,7 @@ module CacheImpl {
       assert Inv();
     }
 
-    method UpdateNodeSlot(ghost ref: BT.G.Reference, node: Node, slot: uint64, bucket: MutBucket, childref: BT.G.Reference)
+    method UpdateNodeSlot(ghost ref: BT.G.Reference, node: Node, slot: uint64, linear bucket: MutBucket, childref: BT.G.Reference)
     requires Inv()
     requires bucket.Inv()
     requires ref in I()
@@ -214,30 +214,29 @@ module CacheImpl {
     requires 0 <= slot as int < |I()[ref].children.value|
     requires 0 <= slot as int < |I()[ref].buckets|
     requires slot as int + 1 < 0x1_0000_0000_0000_0000
-    requires bucket.Repr !! Repr
     requires |I()| <= 0x10000
     requires ptr(ref) == Some(node)
     modifies Repr
     ensures Inv()
-    ensures I() == old(I()[ref := IM.Node(
+    ensures I() == old(I()[ref := L.IM.Node(
         I()[ref].pivotTable,
         Some(I()[ref].children.value[slot as int := childref]),
-        I()[ref].buckets[slot as int := bucket.Bucket]
+        I()[ref].buckets[slot as int := bucket.bucket]
       )])
-    ensures forall o | o in Repr :: o in old(Repr) || o in old(bucket.Repr) || fresh(o)
+    ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
       //var nodeOpt := cache.Get(ref);
       //var node := nodeOpt.value;
       node.UpdateSlot(slot, bucket, childref);
 
-      Repr := {this} + cache.Repr + MutCacheBucketRepr();
+      Repr := {this} + cache.Repr + MutCacheBucketRepr(); 
       assert Inv();
     }
 
     method SplitParent(ref: BT.G.Reference, slot: uint64, pivot: Key, left_childref: BT.G.Reference, right_childref: BT.G.Reference)
     requires Inv()
     requires ref in I()
-    requires IM.WFNode(I()[ref])
+    requires L.IM.WFNode(I()[ref])
     requires I()[ref].children.Some?
     requires 0 <= slot as int < |I()[ref].children.value|
     requires 0 <= slot as int < |I()[ref].buckets|
@@ -258,11 +257,11 @@ module CacheImpl {
     method InsertKeyValue(ref: BT.G.Reference, key: Key, msg: Message)
     requires Inv()
     requires ref in I()
-    requires IM.WFNode(I()[ref])
+    requires L.IM.WFNode(I()[ref])
     requires WeightBucketList(I()[ref].buckets) + WeightKey(key) + WeightMessage(msg) < 0x1_0000_0000_0000_0000
     modifies Repr
     ensures Inv()
-    ensures I() == old(NodeModel.CacheInsertKeyValue(I(), ref, key, msg))
+    ensures I() == NodeModel.CacheInsertKeyValue(old(I()), ref, key, msg)
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
       NodeModel.reveal_CacheInsertKeyValue();

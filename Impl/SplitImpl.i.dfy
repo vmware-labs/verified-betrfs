@@ -6,13 +6,15 @@ module SplitImpl {
   import opened BookkeepingImpl
   import SplitModel
   import opened StateImpl
-  import opened NodeImpl
+  import opened BoxNodeImpl
   import opened DiskOpImpl
 
   import opened Options
   import opened Maps
   import opened Sequences
   import opened Sets
+  import opened LinearSequence_s
+  import opened LinearSequence_i
 
   import opened BucketsLib
   import opened BucketWeights
@@ -31,8 +33,8 @@ module SplitImpl {
   requires left_child.Repr !! s.Repr()
   requires right_child.Repr !! s.Repr()
   requires s.ready
-  requires BookkeepingModel.ChildrenConditions(Ic(k), s.I(), left_child.children)
-  requires BookkeepingModel.ChildrenConditions(Ic(k), s.I(), right_child.children)
+  requires BookkeepingModel.ChildrenConditions(Ic(k), s.I(), left_child.Read().children)
+  requires BookkeepingModel.ChildrenConditions(Ic(k), s.I(), right_child.Read().children)
   requires BookkeepingModel.ChildrenConditions(Ic(k), s.I(), Some(fused_parent_children))
   requires |fused_parent_children| < MaxNumChildren()
   requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
@@ -48,17 +50,19 @@ module SplitImpl {
   {
     SplitModel.reveal_splitBookkeeping();
 
-    BookkeepingModel.lemmaChildrenConditionsPreservedWriteBookkeeping(Ic(k), s.I(), left_childref, left_child.children, right_child.children);
-    BookkeepingModel.lemmaChildrenConditionsPreservedWriteBookkeeping(Ic(k), s.I(), left_childref, left_child.children, Some(fused_parent_children));
-    BookkeepingModel.lemmaRefInGraphOfWriteBookkeeping(Ic(k), s.I(), left_childref, left_child.children);
+    BookkeepingModel.lemmaChildrenConditionsPreservedWriteBookkeeping(Ic(k), s.I(), left_childref, left_child.Read().children, right_child.Read().children);
+    BookkeepingModel.lemmaChildrenConditionsPreservedWriteBookkeeping(Ic(k), s.I(), left_childref, left_child.Read().children, Some(fused_parent_children));
+    BookkeepingModel.lemmaRefInGraphOfWriteBookkeeping(Ic(k), s.I(), left_childref, left_child.Read().children);
 
-    writeBookkeeping(k, s, left_childref, left_child.children);
+    var leftchild_children := left_child.GetChildren();
+    writeBookkeeping(k, s, left_childref, leftchild_children);
 
-    BookkeepingModel.lemmaChildrenConditionsPreservedWriteBookkeeping(Ic(k), s.I(), right_childref, right_child.children, Some(fused_parent_children));
-    BookkeepingModel.lemmaRefInGraphOfWriteBookkeeping(Ic(k), s.I(), right_childref, right_child.children);
-    BookkeepingModel.lemmaRefInGraphPreservedWriteBookkeeping(Ic(k), s.I(), right_childref, right_child.children, left_childref);
+    BookkeepingModel.lemmaChildrenConditionsPreservedWriteBookkeeping(Ic(k), s.I(), right_childref, right_child.Read().children, Some(fused_parent_children));
+    BookkeepingModel.lemmaRefInGraphOfWriteBookkeeping(Ic(k), s.I(), right_childref, right_child.Read().children);
+    BookkeepingModel.lemmaRefInGraphPreservedWriteBookkeeping(Ic(k), s.I(), right_childref, right_child.Read().children, left_childref);
 
-    writeBookkeeping(k, s, right_childref, right_child.children);
+    var rightchild_children := right_child.GetChildren();
+    writeBookkeeping(k, s, right_childref, rightchild_children);
 
     BookkeepingModel.lemmaChildrenConditionsOfReplace1With2(Ic(k), s.I(), fused_parent_children, slot as int, left_childref, right_childref);
 
@@ -111,9 +115,9 @@ module SplitImpl {
   requires 0 <= slot as int < |fused_parent_children|
   requires left_childref != parentref
   requires right_childref != parentref
-  requires |child.buckets| >= 2
+  requires |child.Read().buckets| >= 2
   requires BookkeepingModel.ChildrenConditions(Ic(k), s.I(), Some(fused_parent_children))
-  requires BookkeepingModel.ChildrenConditions(Ic(k), s.I(), child.children)
+  requires BookkeepingModel.ChildrenConditions(Ic(k), s.I(), child.Read().children)
   requires |fused_parent_children| < MaxNumChildren()
   requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
 
@@ -123,13 +127,15 @@ module SplitImpl {
   ensures s.I() == SplitModel.splitDoChanges(Ic(k), old(s.I()), old(child.I()), left_childref, right_childref, parentref, fused_parent_children, slot as int)
   ensures s.ready
   {
-    var num_children_left := |child.buckets| as uint64 / 2;
-    var pivot := child.pivotTable[num_children_left - 1];
+    var len := child.GetBucketsLen();
+    var num_children_left := len / 2;
+    var pivots := child.GetPivots();
+    var pivot := pivots[num_children_left - 1];
 
     SplitModel.lemmaChildrenConditionsSplitChild(Ic(k), s.I(), child.I(), num_children_left as int);
 
-    var left_child := child.SplitChildLeft(num_children_left as uint64);
-    var right_child := child.SplitChildRight(num_children_left as uint64);
+    var left_child := child.SplitChildLeft(num_children_left);
+    var right_child := child.SplitChildRight(num_children_left);
 
     splitBookkeeping(k, s, left_childref, right_childref, parentref, fused_parent_children, left_child, right_child, slot as uint64);
     splitCacheChanges(s, left_childref, right_childref, parentref, slot as uint64, num_children_left as uint64, pivot, left_child, right_child);
@@ -172,15 +178,18 @@ module SplitImpl {
     BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), parentref);
     BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), childref);
 
-    var lbound := (if slot > 0 then Some(fused_parent.pivotTable[slot - 1]) else None);
-    var ubound := (if slot < |fused_parent.pivotTable| as uint64 then Some(fused_parent.pivotTable[slot]) else None);
+    var fparent_pivots := fused_parent.GetPivots();
+    var lbound := (if slot > 0 then Some(fparent_pivots[slot - 1]) else None);
+    var ubound := (if slot < |fparent_pivots| as uint64 then Some(fparent_pivots[slot]) else None);
 
     SplitModel.lemmaChildrenConditionsCutoffNode(Ic(k), s.I(), fused_child.I(), lbound, ubound);
-    NodeModel.CutoffNodeCorrect(fused_child.I(), lbound, ubound);
-    var child := NodeImpl.Node.CutoffNode(fused_child, lbound, ubound);
+    L.NodeModel.CutoffNodeCorrect(fused_child.I(), lbound, ubound);
+    
+    var child := fused_child.CutoffNode(lbound, ubound);
     assert IM.WFNode(child.I());
 
-    if (|child.pivotTable| as uint64 == 0) {
+    var child_pivots := child.GetPivots();
+    if (|child_pivots| as uint64 == 0) {
       // TODO there should be an operation which just
       // cuts off the node and doesn't split it.
       print "giving up; doSplit can't run because child.pivots == 0\n";
@@ -203,7 +212,8 @@ module SplitImpl {
       return;
     }
 
+    var fparent_children := fused_parent.GetChildren();
     splitDoChanges(k, s, child, left_childref.value, right_childref.value,
-        parentref, fused_parent.children.value, slot as uint64);
+        parentref, fparent_children.value, slot as uint64);
   }
 }

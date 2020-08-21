@@ -8,10 +8,10 @@ module LinearSequence_i {
   export
     provides LinearSequence_s
     provides NativeTypes
-    provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_peek, lseq_free_fun, lseq_take_fun
-    provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give, lseq_length_uint64, lseq_length_as_uint64
-    provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, SeqResize, InsertSeq, InsertLSeq
-    reveals lseq_length, lseq_full, linLast, lseq_has_all
+    provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_peek, lseq_free_fun, lseq_take_fun, lseq_swap_inout, lseq_take_inout, lseq_give_inout
+    provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give, lseq_length_uint64, lseq_length_as_uint64, lseq_add
+    provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, SeqResize, InsertSeq, InsertLSeq, Replace1With2Lseq, Replace1With2Lseq_inout
+    reveals lseq_length, lseq_full, linLast, ldroplast, lseq_has_all
     reveals operator'cardinality?lseq, operator'in?lseq, operator'subscript?lseq
 
   // method seq_alloc_init<A>(length:nat, a:A) returns(linear s:seq<A>)
@@ -53,6 +53,7 @@ module LinearSequence_i {
 
   function lseqs<A>(l:lseq<A>):(s:seq<A>)
     ensures rank_is_less_than(s, l)
+    ensures |s| == |lseqs_raw(l)|
   {
     var s := seq(|lseqs_raw(l)|, i requires 0 <= i < |lseqs_raw(l)| => read(lseqs_raw(l)[i]));
     axiom_lseqs_rank(l, s);
@@ -77,6 +78,14 @@ module LinearSequence_i {
     requires 0<|l|
   {
     lseqs(l)[|l| - 1]
+  }
+
+  function ldroplast<A>(l: lseq<A>) : (l': lseq<A>)
+    requires 0<|l|
+    ensures |l| == |l'| + 1
+    ensures forall i :: 0 <= i < |l'| ==> l'[i] == l[i]
+  {
+    imagine_lseq(lseqs(l)[..|l|-1])
   }
 
   function lseq_has<A>(l:lseq<A>):(s:seq<bool>)
@@ -141,6 +150,11 @@ module LinearSequence_i {
       lseq_has(s)[i]
   }
 
+  function lseq_add<A>(l:lseq<A>, r:lseq<A>): (s: lseq<A>)
+  {
+      imagine_lseq(lseqs(l)+lseqs(r))
+  }
+
   function method lseq_peek<A>(shared s:lseq<A>, i:uint64):(shared a:A)
       requires i as nat < |s| && i as nat in s
       ensures a == s[i as nat]
@@ -182,6 +196,12 @@ module LinearSequence_i {
       a2 := unwrap(x2);
   }
 
+  method lseq_swap_inout<A>(linear inout s1:lseq<A>, i:uint64, linear a1:A) returns(linear a2:A)
+      requires i as nat < |old_s1| && i as nat in old_s1
+      ensures a2 == old_s1[i as nat]
+      ensures lseq_has(s1) == lseq_has(old_s1)
+      ensures lseqs(s1) == lseqs(old_s1)[i as nat := a1]
+
   method lseq_take<A>(linear s1:lseq<A>, i:uint64) returns(linear s2:lseq<A>, linear a:A)
       requires i as nat < |s1| && i as nat in s1
       ensures a == s1[i as nat]
@@ -205,6 +225,12 @@ module LinearSequence_i {
       (linear s2tmp, linear unwrap(x2))
   }
 
+  method lseq_take_inout<A>(linear inout s1:lseq<A>, i:uint64) returns(linear a:A)
+      requires i as nat < |old_s1| && i as nat in old_s1
+      ensures a == old_s1[i as nat]
+      ensures lseq_has(s1) == lseq_has(old_s1)[i as nat := false]
+      ensures forall j:nat | j < |s1| && j != i as nat :: lseqs(s1)[j] == lseqs(old_s1)[j]
+
   method lseq_give<A>(linear s1:lseq<A>, i:uint64, linear a:A) returns(linear s2:lseq<A>)
       requires i as nat < |s1|
       requires i as nat !in s1
@@ -216,6 +242,12 @@ module LinearSequence_i {
       s2 := s2tmp;
       var _ := discard(x2);
   }
+
+  method lseq_give_inout<A>(linear inout s1:lseq<A>, i:uint64, linear a:A)
+      requires i as nat < |old_s1|
+      requires i as nat !in old_s1
+      ensures lseq_has(s1) == lseq_has(old_s1)[i as nat := true]
+      ensures lseqs(s1) == lseqs(old_s1)[i as nat := a]
 
   predicate lseq_full<A>(s: lseq<A>)
   {
@@ -361,6 +393,30 @@ module LinearSequence_i {
       i := i - 1;
     }
     s2 := lseq_give(s2, pos, a);
+  }
+
+  method Replace1With2Lseq<A>(linear s: lseq<A>, linear l: A, linear r: A, pos: uint64) returns (linear s2: lseq<A>, linear replaced: A)
+    requires lseq_has_all(s)
+    requires |s| < Uint64UpperBound() - 1;
+    requires 0 <= pos as int < |s|;
+    ensures lseq_has_all(s2)
+    ensures lseqs(s2) == lseqs(s)[..pos] + [l] + [r] + lseqs(s)[pos+1..];
+    ensures replaced == s[pos as nat]
+  {
+    s2, replaced := lseq_swap(s, pos, l);
+    s2 := InsertLSeq(s2, r, pos+1);
+  }
+
+  method Replace1With2Lseq_inout<A>(linear inout s: lseq<A>, linear l: A, linear r: A, pos: uint64) returns (linear replaced: A)
+    requires lseq_has_all(old_s)
+    requires |old_s| < Uint64UpperBound() - 1;
+    requires 0 <= pos as int < |old_s|;
+    ensures lseq_has_all(s)
+    ensures lseqs(s) == lseqs(old_s)[..pos] + [l] + [r] + lseqs(old_s)[pos+1..];
+    ensures replaced == old_s[pos as nat]
+  {
+    replaced := lseq_swap_inout(inout s, pos, l);
+    s := InsertLSeq(s, r, pos+1);
   }
 
 } // module LinearSequence_i

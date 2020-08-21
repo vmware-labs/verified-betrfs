@@ -196,7 +196,7 @@ build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 
 build/lib/DataStructures/MutableBtree.i.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/DataStructures/BtreeModel.i.verchk: DAFNY_FLAGS=/noNLarith
-build/lib/Buckets/KMBPKVOps.i.verchk: DAFNY_FLAGS=/noNLarith
+build/lib/Buckets/LKMBPKVOps.i.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/Buckets/PackedKVMarshalling.i.verchk: DAFNY_FLAGS=/noNLarith
 build/Impl/NodeImpl.i.verchk: DAFNY_FLAGS=/noNLarith
 build/Impl/QueryImpl.i.verchk: DAFNY_FLAGS=/noNLarith

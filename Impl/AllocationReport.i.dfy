@@ -3,8 +3,8 @@ include "NodeImpl.i.dfy"
 
 module {:extern} AllocationReport {
   import opened NativeTypes
-  import NodeImpl
+  import BoxNodeImpl
   method {:extern "AllocationReport_Compile", "start"} start()
-  method {:extern "AllocationReport_Compile", "sampleNode"} sampleNode(ref: uint64, node: NodeImpl.Node)
+  method {:extern "AllocationReport_Compile", "sampleNode"} sampleNode(ref: uint64, node: BoxNodeImpl.Node)
   method {:extern "AllocationReport_Compile", "stop"} stop()
 }

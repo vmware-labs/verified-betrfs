@@ -36,7 +36,6 @@ impl ./lib/DataStructures/BtreeModel.i.dfy
 impl ./lib/DataStructures/KMBtree.i.dfy
 impl ./lib/DataStructures/LruImpl.i.dfy
 impl ./lib/DataStructures/LruModel.i.dfy
-impl ./lib/DataStructures/MutableBtreeBulkOperations.i.dfy
 impl ./lib/DataStructures/MutableBtree.i.dfy
 impl ./lib/DataStructures/MutableMapImpl.i.dfy
 impl ./lib/DataStructures/MutableMapModel.i.dfy

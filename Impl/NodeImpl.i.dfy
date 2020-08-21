@@ -1,6 +1,8 @@
 include "StateModel.i.dfy"
 include "../lib/Buckets/BucketImpl.i.dfy"
 include "NodeModel.i.dfy"
+include "../lib/Lang/LinearBox.i.dfy"
+
 //
 // Implements PivotBetree/PivotBetreeSpec.Node. (There's no Model file
 // because Node is already a precise functional model of this code.)
@@ -11,6 +13,7 @@ module NodeImpl {
   import opened Sequences
   import opened NativeTypes
   import opened LinearSequence_s
+  import opened LinearSequence_i
   import opened KeyType
   import opened ValueMessage
 
@@ -26,346 +29,189 @@ module NodeImpl {
   import MM = MutableMap
   import ReferenceType`Internal
 
-  class Node
+  // update to linear, lseq loption (elements of the sequence)
+  linear datatype Node = Node(pivotTable: Pivots.PivotTable, children: Option<seq<BT.G.Reference>>, linear buckets: lseq<BucketImpl.MutBucket>)
   {
-    var pivotTable: Pivots.PivotTable;
-    var children: Option<seq<BT.G.Reference>>;
-    var buckets: seq<BucketImpl.MutBucket>;
-    ghost var Repr: set<object>;
-
-    constructor(
-      pivotTable: Pivots.PivotTable,
-      children: Option<seq<BT.G.Reference>>,
-      buckets: seq<BucketImpl.MutBucket>)
-    requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
-    requires MutBucket.ReprSeqDisjoint(buckets)
-    ensures this.pivotTable == pivotTable;
-    ensures this.children == children;
-    ensures this.buckets == buckets;
-    ensures Inv();
-    ensures forall o | o in Repr :: fresh(o) || o in old(MutBucket.ReprSeq(buckets))
+    static method Alloc(pivotTable: Pivots.PivotTable, children: Option<seq<BT.G.Reference>>, linear buckets: lseq<BucketImpl.MutBucket>) returns (linear node: Node)
+    requires MutBucket.InvLseq(buckets)
+    ensures node.pivotTable == pivotTable;
+    ensures node.children == children;
+    ensures node.buckets == buckets;
+    ensures node.Inv();
     {
-      this.pivotTable := pivotTable;
-      this.children := children;
-      this.buckets := buckets;
-
-      new;
-
-      this.Repr := {this} + MutBucket.ReprSeq(buckets);
-      MutBucket.reveal_ReprSeq();
+      node := Node(pivotTable, children, buckets);
     }
 
-    protected predicate Inv()
-    reads this, Repr
-    ensures Inv() ==> this in Repr
-    ensures Inv() ==>
-      forall i | 0 <= i < |buckets| :: buckets[i].Inv()
+    predicate Inv()
     {
-      && (forall i | 0 <= i < |buckets| :: buckets[i] in Repr)
-      && Repr == {this} + MutBucket.ReprSeq(buckets)
-      && MutBucket.ReprSeqDisjoint(buckets)
-
-      && (
-        MutBucket.reveal_ReprSeq();
-        && (forall i | 0 <= i < |buckets| :: buckets[i].Inv())
-        && (forall i | 0 <= i < |buckets| :: this !in buckets[i].Repr)
-      )
-    }
-
-    lemma LemmaRepr()
-    requires Inv()
-    ensures Repr == {this} + MutBucket.ReprSeq(buckets)
-    {
+      MutBucket.InvLseq(buckets)
     }
 
     function I() : IM.Node
-    reads this, Repr
     requires Inv()
     {
       IM.Node(pivotTable, children,
-        BucketImpl.MutBucket.ISeq(buckets))
+        BucketImpl.MutBucket.ILseq(buckets))
     }
 
-    method BucketWellMarshalled(slot: uint64) returns (result: bool)
+    linear method Free()
+    requires Inv()
+    {
+      linear var Node(_,_,buckets) := this;
+      MutBucket.FreeSeq(buckets);
+    }
+
+    static method GetBucketsLen(shared node: Node) returns (len: uint64)
+    requires node.Inv()
+    ensures len as nat == |node.buckets|
+    {
+      len := lseq_length_raw(node.buckets);
+    }
+
+    static method GetChildren(shared node: Node) returns (children: Option<seq<BT.G.Reference>>)
+    requires node.Inv()
+    ensures children == node.children
+    {
+      children := node.children;
+    }
+
+    static method GetPivots(shared node: Node) returns (pivots: Pivots.PivotTable)
+    requires node.Inv()
+    ensures pivots == node.pivotTable
+    {
+      pivots := node.pivotTable;
+    }
+
+    shared method BucketWellMarshalled(slot: uint64) returns (result: bool)
       requires Inv()
       requires slot as nat < |buckets|
-      // ensures Inv()
-      // ensures I() == old(I())
-      // ensures Repr == old(Repr)
-      // ensures buckets[slot].Inv()
-      // ensures buckets[slot].I() == old(buckets[slot].I())
-      // ensures buckets[slot].Repr == old(buckets[slot].Repr)
-      ensures result == BucketsLib.BucketWellMarshalled(buckets[slot].I())
-      //modifies Repr
+      ensures result == BucketsLib.BucketWellMarshalled(buckets[slot as nat].I())
     {
-      result := buckets[slot].WellMarshalled();
-      // MutBucket.ReprSeqDependsOnlyOnReprs(buckets);
-      // MutBucket.ReprSeqDisjointDependsOnlyOnReprs(buckets);
-      // forall j | 0 <= j < |buckets|
-      //   ensures buckets[j].Inv()
-      // {
-      //   if j == slot as nat {
-      //   } else {
-      //     assert buckets[slot].Repr !! buckets[j].Repr by {
-      //       MutBucket.reveal_ReprSeqDisjoint();
-      //     }
-      //   }
-      // }
+      result := lseq_peek(buckets, slot).WellMarshalled();
     }
 
-    method BucketsWellMarshalled() returns (result: bool)
-      requires Inv()
-      requires |buckets| < Uint64UpperBound()
-      // ensures Inv()
-      // ensures I() == old(I())
-      // ensures Repr == old(Repr)
-      //ensures forall j | 0 <= j < |buckets| :: buckets[j].Repr == old(buckets[j].Repr)
-      ensures result == BucketsLib.BucketListWellMarshalled(MutBucket.ISeq(buckets))
-      //modifies Repr
+    static method BucketsWellMarshalled(shared node: Node) returns (result: bool)
+    requires node.Inv()
+    requires |node.buckets| < Uint64UpperBound()
+    ensures result == BucketsLib.BucketListWellMarshalled(MutBucket.ILseq(node.buckets))
     {
       var i: uint64 := 0;
 
-      while i < |buckets| as uint64
-        invariant i as nat <= |buckets|
-        // invariant buckets == old(buckets)
-        // invariant Inv()
-        // invariant I() == old(I())
-        // invariant Repr == old(Repr)
-        // invariant forall j | 0 <= j < |buckets| :: buckets[j].Repr == old(buckets[j].Repr)
-        invariant BucketListWellMarshalled(MutBucket.ISeq(buckets[..i]))
+      while i < lseq_length_raw(node.buckets)
+        invariant i as nat <= |node.buckets|
+        invariant BucketListWellMarshalled(MutBucket.ISeq(lseqs(node.buckets)[..i]))
       {
-        //MutBucket.LemmaReprBucketLeReprSeq(buckets, i as nat);
-        var bwm := buckets[i].WellMarshalled();
-
-        // MutBucket.ReprSeqDependsOnlyOnReprs(buckets);
-        // MutBucket.ReprSeqDisjointDependsOnlyOnReprs(buckets);
-        // forall j | 0 <= j < |buckets|
-        //   ensures buckets[j].Inv()
-        // {
-        //   if j == i as nat {
-        //   } else {
-        //     assert buckets[i].Repr !! buckets[j].Repr by {
-        //       MutBucket.reveal_ReprSeqDisjoint();
-        //     }
-        //   }
-        // }
+        var bwm := lseq_peek(node.buckets, i).WellMarshalled();
         
         if !bwm {
           return false;
         }
-        assert buckets[..i+1] == buckets[..i] + [ buckets[i] ];
+        assert lseqs(node.buckets)[..i+1] == lseqs(node.buckets)[..i] + [ node.buckets[i as nat] ];
         i := i + 1;
       }
-      assert buckets == buckets[..i];
+      assert lseqs(node.buckets) == lseqs(node.buckets)[..i];
       return true;  
     }
-    
-    method UpdateSlot(slot: uint64, bucket: BucketImpl.MutBucket, childref: BT.G.Reference)
-    requires Inv()
+
+    linear inout method UpdateSlot(slot: uint64, linear bucket: BucketImpl.MutBucket, childref: BT.G.Reference)
+    requires old_self.Inv()
     requires bucket.Inv()
-    requires children.Some?
-    requires 0 <= slot as int < |children.value|
-    requires 0 <= slot as int < |buckets|
+    requires old_self.children.Some?
+    requires 0 <= slot as int < |old_self.children.value|
+    requires 0 <= slot as int < |old_self.buckets|
     requires slot as int + 1 < 0x1_0000_0000_0000_0000
-    requires bucket.Repr !! Repr
-    modifies Repr
-    ensures Inv()
-    ensures I() == old(IM.Node(
-        I().pivotTable,
-        Some(I().children.value[slot as int := childref]),
-        I().buckets[slot as int := bucket.Bucket]
-      ))
-    ensures forall o | o in Repr :: o in old(Repr) || o in old(bucket.Repr) || fresh(o);
+    ensures self.Inv() // mark all with self.
+    ensures self.I() == IM.Node(
+        old_self.I().pivotTable,
+        Some(old_self.I().children.value[slot as int := childref]),
+        old_self.I().buckets[slot as int := bucket.bucket]
+      )
     {
-      buckets := SeqIndexUpdate(buckets, slot, bucket);
-      children := Some(SeqIndexUpdate(children.value, slot, childref));
-
-      MutBucket.reveal_ReprSeq();
-      MutBucket.reveal_ReprSeqDisjoint();
-
-      Repr := {this} + MutBucket.ReprSeq(buckets);
-      assert Inv();
+      linear var replaced := lseq_swap_inout(inout self.buckets, slot, bucket);
+      inout self.children := Some(SeqIndexUpdate(self.children.value, slot, childref));
+      replaced.Free();
+      assert self.Inv();
     }
 
-    lemma LemmaReprFacts()
-    requires Repr == {this} + MutBucket.ReprSeq(buckets);
-    requires (forall i | 0 <= i < |buckets| :: buckets[i].Inv())
-    ensures (forall i | 0 <= i < |buckets| :: buckets[i] in Repr)
-    //ensures (forall i | 0 <= i < |buckets| :: this !in buckets[i].Repr)
+    linear inout method SplitParent(slot: uint64, pivot: Key, left_childref: BT.G.Reference, right_childref: BT.G.Reference)
+    requires old_self.Inv()
+    requires IM.WFNode(old_self.I())
+    requires old_self.children.Some?
+    requires 0 <= slot as int < |old_self.children.value|
+    requires 0 <= slot as int < |old_self.buckets|
+    ensures self.Inv()
+    ensures self.I() == (NodeModel.SplitParent(old_self.I(), pivot, slot as int, left_childref, right_childref))
     {
-      MutBucket.reveal_ReprSeq();
-    }
-
-    twostate lemma SplitParentReprSeqFacts(new s: seq<MutBucket>)
-    requires forall i | 0 <= i < |buckets| :: this !in buckets[i].Repr
-    requires forall o | o in MutBucket.ReprSeq(s) :: o in MutBucket.ReprSeq(buckets) || fresh(o)
-    ensures forall i | 0 <= i < |s| :: this !in s[i].Repr;
-    ensures this !in MutBucket.ReprSeq(s);
-    ensures forall o :: o in MutBucket.ReprSeq(s) ==> allocated(o);
-    {
-      MutBucket.reveal_ReprSeq();
-      forall i | 0 <= i < |s| ensures this !in s[i].Repr
-      {
-        if this in s[i].Repr {
-          assert this in MutBucket.ReprSeq(s);
-        }
-      }
-    }
-
-    method SplitParent(slot: uint64, pivot: Key, left_childref: BT.G.Reference, right_childref: BT.G.Reference)
-    requires Inv()
-    requires IM.WFNode(I())
-    requires children.Some?
-    requires 0 <= slot as int < |children.value|
-    requires 0 <= slot as int < |buckets|
-    requires children.Some?
-    modifies Repr
-    ensures Inv()
-    ensures I() == old(NodeModel.SplitParent(I(), pivot, slot as int, left_childref, right_childref))
-    ensures forall o | o in Repr :: o in old(Repr) || fresh(o);
-    {
-      ghost var b := NodeModel.SplitParent(I(), pivot, slot as int, left_childref, right_childref);
+      ghost var b := NodeModel.SplitParent(self.I(), pivot, slot as int, left_childref, right_childref);
       NodeModel.reveal_SplitParent();
-      //assert SplitBucketInList(I().buckets, slot as int, pivot)
-      //    == b.buckets;
 
-      this.pivotTable := Sequences.Insert(this.pivotTable, pivot, slot);
+      inout self.pivotTable := Sequences.Insert(self.pivotTable, pivot, slot);
+      MutBucket.SplitOneInList(inout self.buckets, slot, pivot);
+      assert MutBucket.ILseq(self.buckets) == SplitBucketInList(old_self.I().buckets, slot as int, pivot);
+      
+      var childrenReplaced := Replace1with2(self.children.value, left_childref, right_childref, slot);
+      inout self.children := Some(childrenReplaced);
 
-      ghost var node2 := I();
-
-      var bucks := MutBucket.SplitOneInList(this.buckets, slot, pivot);
-      assert forall o | o in MutBucket.ReprSeq(bucks) :: o in MutBucket.ReprSeq(this.buckets) || fresh(o);
-      //MutBucket.reveal_ReprSeq();
-      assert MutBucket.ISeq(bucks) == SplitBucketInList(node2.buckets, slot as int, pivot);
-      assert node2.buckets == old(I()).buckets;
-      //assert MutBucket.ISeq(bucks) == SplitBucketInList(old(I()).buckets, slot as int, pivot);
-      SplitParentReprSeqFacts(bucks);
-      //assert forall o :: o in MutBucket.ReprSeq(bucks) ==> allocated(o);
-      //assert forall i | 0 <= i < |bucks| :: bucks[i].Inv();
-      //assert forall i | 0 <= i < |bucks| :: this !in bucks[i].Repr;
-      //assert this !in MutBucket.ReprSeq(bucks);
-
-      this.buckets := bucks;
-
-      var childrenReplaced := Replace1with2(children.value, left_childref, right_childref, slot);
-      this.children := Some(childrenReplaced);
-
-      Repr := {this} + MutBucket.ReprSeq(buckets);
-      LemmaReprFacts();
-      assert Inv();
-      assert forall o | o in Repr :: o in old(Repr) || fresh(o);
-      ghost var a := I();
-      /*assert a.buckets
-          == SplitBucketInList(old(I()).buckets, slot as int, pivot)
-          == b.buckets;
-      assert a.children == b.children;
-      assert a.pivotTable == b.pivotTable;*/
+      ghost var a := self.I();
       assert a == b;
     }
 
-    lemma ReprSeqDisjointAppend(s: seq<MutBucket>, t: MutBucket)
-    requires MutBucket.ReprSeqDisjoint(s)
-    requires MutBucket.ReprSeq(s) !! t.Repr
-    ensures MutBucket.ReprSeqDisjoint(s + [t])
-    {
-      MutBucket.reveal_ReprSeqDisjoint();
-      MutBucket.reveal_ReprSeq();
-    }
-
-    lemma ReprSeqAppend(s: seq<MutBucket>, t: MutBucket)
-    ensures MutBucket.ReprSeq(s + [t]) == MutBucket.ReprSeq(s) + t.Repr
-    {
-      MutBucket.reveal_ReprSeq();
-      var a := MutBucket.ReprSeq(s + [t]);
-      var b := MutBucket.ReprSeq(s) + t.Repr;
-      forall o | o in a ensures o in b { }
-      forall o | o in b ensures o in a {
-        if o in MutBucket.ReprSeq(s) {
-          var i :| 0 <= i < |s| && o in s[i].Repr;
-          assert o in (s + [t])[i].Repr;
-          assert o in a;
-        } else {
-          assert o in (s + [t])[|s|].Repr;
-          assert o in a;
-        }
-      }
-    }
-
-    method CutoffNodeAndKeepLeft(pivot: Key) returns (node': Node)
+    shared method CutoffNodeAndKeepLeft(pivot: Key) returns (linear node': Node)
     requires Inv()
     requires IM.WFNode(I())
     ensures node'.Inv()
-    //ensures fresh(node'.Repr)
-    ensures node'.I() == NodeModel.CutoffNodeAndKeepLeft(old(I()), pivot);
+    ensures node'.I() == NodeModel.CutoffNodeAndKeepLeft(I(), pivot);
     {
       NodeModel.reveal_CutoffNodeAndKeepLeft();
       var cLeft := Pivots.ComputeCutoffForLeft(this.pivotTable, pivot);
       var leftPivots := this.pivotTable[.. cLeft];
       var leftChildren := if this.children.Some? then Some(this.children.value[.. cLeft + 1]) else None;
-      WeightBucketLeBucketList(MutBucket.ISeq(this.buckets), cLeft as int);
-      var splitBucket := this.buckets[cLeft].SplitLeft(pivot);
-      var slice := MutBucket.CloneSeq(this.buckets[.. cLeft]); // TODO clone not necessary?
-      //var slice := this.buckets[.. cLeft];
-      var leftBuckets := slice + [splitBucket];
-      ReprSeqDisjointAppend(slice, splitBucket);
-      ReprSeqAppend(slice, splitBucket);
-      node' := new Node(leftPivots, leftChildren, leftBuckets);
+
+      WeightBucketLeBucketList(MutBucket.ILseq(this.buckets), cLeft as int);  
+      linear var splitBucket := lseq_peek(buckets, cLeft).SplitLeft(pivot);
+      linear var slice := MutBucket.CloneSeq(this.buckets, 0, cLeft); // TODO clone not necessary?
+      linear var leftBuckets := InsertLSeq(slice, splitBucket, cLeft);
+      node' := Node(leftPivots, leftChildren, leftBuckets);
     }
 
-    static lemma ReprSeqDisjointPrepend(t: MutBucket, s: seq<MutBucket>)
-    requires MutBucket.ReprSeqDisjoint(s)
-    requires MutBucket.ReprSeq(s) !! t.Repr
-    ensures MutBucket.ReprSeqDisjoint([t] + s)
-    {
-      MutBucket.reveal_ReprSeqDisjoint();
-      MutBucket.reveal_ReprSeq();
-    }
-
-    static lemma ReprSeqPrepend(t: MutBucket, s: seq<MutBucket>)
-    ensures MutBucket.ReprSeq([t] + s) == MutBucket.ReprSeq(s) + t.Repr
-    {
-      MutBucket.ReprSeqAdditive([t], s);
-      MutBucket.ReprSeq1Eq([t]);
-    }
-
-    method CutoffNodeAndKeepRight(pivot: Key) returns (node': Node)
+    shared method CutoffNodeAndKeepRight(pivot: Key) returns (linear node': Node)
     requires Inv()
     requires IM.WFNode(I())
     ensures node'.Inv()
-    //ensures fresh(node'.Repr)
-    ensures node'.I() == NodeModel.CutoffNodeAndKeepRight(old(I()), pivot);
+    ensures node'.I() == NodeModel.CutoffNodeAndKeepRight(I(), pivot);
     {
       NodeModel.reveal_CutoffNodeAndKeepRight();
       var cRight := Pivots.ComputeCutoffForRight(this.pivotTable, pivot);
       var rightPivots := this.pivotTable[cRight ..];
       var rightChildren := if this.children.Some? then Some(this.children.value[cRight ..]) else None;
-      WeightBucketLeBucketList(MutBucket.ISeq(this.buckets), cRight as int);
-      var splitBucket := this.buckets[cRight].SplitRight(pivot);
-      var slice := MutBucket.CloneSeq(this.buckets[cRight + 1 ..]);
+
+      WeightBucketLeBucketList(MutBucket.ILseq(this.buckets), cRight as int);
+      linear var splitBucket := lseq_peek(buckets, cRight).SplitRight(pivot);
+      linear var slice := MutBucket.CloneSeq(buckets, cRight + 1, lseq_length_raw(buckets));
       //var slice := this.buckets[cRight + 1 ..];
-      var rightBuckets := [splitBucket] + slice;
-      ReprSeqDisjointPrepend(splitBucket, slice);
-      ReprSeqPrepend(splitBucket, slice);
-      node' := new Node(rightPivots, rightChildren, rightBuckets);
-      assert node'.I().buckets == NodeModel.CutoffNodeAndKeepRight(old(I()), pivot).buckets;
-      assert node'.I().children == NodeModel.CutoffNodeAndKeepRight(old(I()), pivot).children;
-      assert node'.I().pivotTable == NodeModel.CutoffNodeAndKeepRight(old(I()), pivot).pivotTable;
+      linear var rightBuckets := InsertLSeq(slice, splitBucket, 0);
+      //  [splitBucket] + slice;
+      node' := Node(rightPivots, rightChildren, rightBuckets);
+      assert node'.I().buckets == NodeModel.CutoffNodeAndKeepRight(I(), pivot).buckets;
+      assert node'.I().children == NodeModel.CutoffNodeAndKeepRight(I(), pivot).children;
+      assert node'.I().pivotTable == NodeModel.CutoffNodeAndKeepRight(I(), pivot).pivotTable;
     }
 
-    static method CutoffNode(node: Node, lbound: Option<Key>, rbound: Option<Key>)
-    returns (node' : Node)
+    static method CutoffNode(shared node: Node, lbound: Option<Key>, rbound: Option<Key>)
+    returns (linear node' : Node)
     requires node.Inv()
     requires IM.WFNode(node.I())
     ensures node'.Inv()
-    //ensures fresh(node'.Repr)
-    ensures node'.I() == NodeModel.CutoffNode(old(node.I()), lbound, rbound)
+    ensures node'.I() == NodeModel.CutoffNode(node.I(), lbound, rbound)
     {
       NodeModel.reveal_CutoffNode();
       match lbound {
         case None => {
           match rbound {
             case None => {
-              node' := node;
+              shared var Node(pivotTable, children, buckets) := node;
+              linear var buckets' := MutBucket.CloneSeq(buckets, 0, lseq_length_raw(buckets));
+              node' := Node(pivotTable, children, buckets');
             }
             case Some(rbound) => {
               node' := node.CutoffNodeAndKeepLeft(rbound);
@@ -378,112 +224,281 @@ module NodeImpl {
               node' := node.CutoffNodeAndKeepRight(lbound);
             }
             case Some(rbound) => {
-              var node1 := node.CutoffNodeAndKeepLeft(rbound);
+              linear var node1 := node.CutoffNodeAndKeepLeft(rbound);
               NodeModel.CutoffNodeAndKeepLeftCorrect(node.I(), rbound);
               node' := node1.CutoffNodeAndKeepRight(lbound);
+              node1.Free();
             }
           }
         }
       }
     }
 
+    static method SplitChildLeft(shared node: Node, num_children_left: uint64)
+    returns (linear node': Node)
+    requires node.Inv()
+    requires 0 <= num_children_left as int - 1 <= |node.pivotTable|
+    requires node.children.Some? ==> 0 <= num_children_left as int <= |node.children.value|
+    requires 0 <= num_children_left as int <= |node.buckets|
+    ensures node'.Inv()
+    ensures node'.I() == NodeModel.SplitChildLeft(node.I(), num_children_left as int)
+    {
+      NodeModel.reveal_SplitChildLeft();
+      linear var slice := MutBucket.CloneSeq(node.buckets, 0, num_children_left);
+      node' := Node(
+        node.pivotTable[ .. num_children_left - 1 ],
+        if node.children.Some? then Some(node.children.value[ .. num_children_left ]) else None,
+        slice
+      );
+    }
+
+    static method SplitChildRight(shared node: Node, num_children_left: uint64)
+    returns (linear node': Node)
+    requires node.Inv()
+    requires 0 <= num_children_left as int <= |node.pivotTable|
+    requires node.children.Some? ==> 0 <= num_children_left as int <= |node.children.value|
+    requires 0 <= num_children_left as int <= |node.buckets|
+    // requires |this.buckets| < 0x1_0000_0000_0000_0000
+    ensures node'.Inv()
+    ensures node'.I() == NodeModel.SplitChildRight(node.I(), num_children_left as int)
+    {
+      NodeModel.reveal_SplitChildRight();
+      linear var slice := MutBucket.CloneSeq(node.buckets, num_children_left, lseq_length_raw(node.buckets));
+      node' := Node(
+        node.pivotTable[ num_children_left .. ],
+        if node.children.Some? then Some(node.children.value[ num_children_left .. ]) else None,
+        slice
+      );
+    }
+
+    linear inout method InsertKeyValue(key: Key, msg: Message)
+    requires old_self.Inv();
+    requires IM.WFNode(old_self.I())
+    requires WeightBucketList(MutBucket.ILseq(buckets)) + WeightKey(key) + WeightMessage(msg) < 0x1_0000_0000_0000_0000
+    ensures self.Inv();
+    ensures self.I() == NodeModel.NodeInsertKeyValue(old_self.I(), key, msg)
+    {
+      NodeModel.reveal_NodeInsertKeyValue();
+
+      var r := Pivots.ComputeRoute(self.pivotTable, key);
+
+      WeightBucketLeBucketList(MutBucket.ILseq(self.buckets), r as int);
+      linear var b := lseq_take_inout(inout self.buckets, r);
+      inout b.Insert(key, msg);
+      lseq_give_inout(inout self.buckets, r, b);
+
+      forall i | 0 <= i < |self.buckets|
+      ensures self.buckets[i].Inv()
+      ensures i != r as int ==> self.buckets[i].bucket == old_self.buckets[i].bucket
+      {
+      }
+      
+      assert self.Inv();
+      assert self.I().buckets == NodeModel.NodeInsertKeyValue(old_self.I(), key, msg).buckets;
+    }
+  }
+}
+
+// boxed linear node, use till we have linear mutable map with linear items
+module BoxNodeImpl {
+  import opened LinearSequence_s
+  import opened LinearSequence_i
+  import opened LinearBox_s
+  import opened LinearBox
+  import opened KeyType
+  import opened ValueMessage
+  import opened NativeTypes
+  import opened BucketImpl
+  import opened BucketWeights
+  import opened Options
+
+  import IM = StateModel
+  import MM = MutableMap
+  import BT = PivotBetreeSpec`Internal
+
+  import L : NodeImpl
+
+  class Node {
+    var box: BoxedLinear<L.Node>;
+    ghost var Repr: set<object>
+
+    function Read() : L.Node
+    requires box.Inv()
+    reads this, box, box.Repr
+    {
+      box.Read()
+    }
+
+    constructor(pivotTable: Pivots.PivotTable, children: Option<seq<BT.G.Reference>>, linear buckets: lseq<MutBucket>)
+    requires MutBucket.InvLseq(buckets)
+    ensures Inv()
+    ensures Read().pivotTable == pivotTable
+    ensures Read().children == children
+    ensures Read().buckets == buckets
+    ensures fresh(this.Repr)
+    {
+      linear var node := L.Node.Alloc(pivotTable, children, buckets);
+      box := new BoxedLinear(node);
+      new;
+      Repr := {this} + box.Repr;
+    }
+
+    constructor InitFromNode(linear node: L.Node)
+    requires node.Inv()
+    ensures Inv()
+    ensures Read() == node
+    ensures fresh(this.Repr)
+    {
+      box := new BoxedLinear(node);
+      new;
+      Repr := {this} + box.Repr;
+    }
+
+    function I() : (result: L.IM.Node)
+    reads this, this.box.Repr
+    requires Inv()
+    {
+      this.Read().I()
+    }
+
+    predicate Inv()
+    ensures Inv() ==> this in this.Repr
+    reads this, this.Repr
+    {
+      && this.box in this.Repr
+      && this.Repr == {this} + this.box.Repr
+      && this.box.Inv()
+      && this.box.Has()
+      && this.Read().Inv()
+    }
+
+    // need to call manually, cannot use boxedoption bc inout doesn't deal with function method
+    method Destructor()
+    requires Inv()
+    modifies Repr
+    {
+      linear var x := box.Take();
+      x.Free();
+    }
+
+    method SplitParent(slot: uint64, pivot: Key, left_childref: L.BT.G.Reference, right_childref: L.BT.G.Reference)
+    requires Inv()
+    requires L.IM.WFNode(I())
+    requires Read().children.Some?
+    requires 0 <= slot as int < |Read().children.value|
+    requires 0 <= slot as int < |Read().buckets|
+    ensures Inv()
+    ensures I() == (L.NodeModel.SplitParent(old(I()), pivot, slot as int, left_childref, right_childref))
+    ensures Repr == old(Repr)
+    modifies this.Repr
+    {
+      linear var n := this.box.Take();
+      inout n.SplitParent(slot, pivot, left_childref, right_childref);
+      this.box.Give(n);
+    }
+
+    method InsertKeyValue(key: Key, msg: Message)
+    requires Inv()
+    requires L.IM.WFNode(I())
+    requires WeightBucketList(MutBucket.ILseq(Read().buckets)) + WeightKey(key) + WeightMessage(msg) < 0x1_0000_0000_0000_0000
+    ensures Inv();
+    ensures I() == old(L.NodeModel.NodeInsertKeyValue(I(), key, msg))
+    ensures Repr == old(Repr)
+    modifies this.Repr
+    {
+      linear var n := this.box.Take();
+      inout n.InsertKeyValue(key, msg);
+      this.box.Give(n);
+    }
+
+    method UpdateSlot(slot: uint64, linear bucket: MutBucket, childref: BT.G.Reference) 
+    requires Inv()
+    requires bucket.Inv()
+    requires Read().children.Some?
+    requires 0 <= slot as int < |Read().children.value|
+    requires 0 <= slot as int < |Read().buckets|
+    requires slot as int + 1 < 0x1_0000_0000_0000_0000
+    ensures Inv()
+    ensures I() == L.IM.Node(
+        old(I()).pivotTable,
+        Some(old(I()).children.value[slot as int := childref]),
+        old(I()).buckets[slot as int := bucket.bucket]
+      )
+    ensures Repr == old(Repr)
+    modifies this.Repr
+    {
+      linear var n := this.box.Take();  
+      inout n.UpdateSlot(slot, bucket, childref);
+      this.box.Give(n);
+    }
+
+    method BucketsWellMarshalled() returns (result: bool)
+    requires Inv()
+    requires |Read().buckets| < Uint64UpperBound()
+    ensures result == BucketsLib.BucketListWellMarshalled(MutBucket.ILseq(Read().buckets))
+    {
+      result := L.Node.BucketsWellMarshalled(this.box.Borrow());
+    }
+
     method SplitChildLeft(num_children_left: uint64)
     returns (node': Node)
     requires Inv()
-    requires 0 <= num_children_left as int - 1 <= |this.pivotTable|
-    requires this.children.Some? ==> 0 <= num_children_left as int <= |this.children.value|
-    requires 0 <= num_children_left as int <= |this.buckets|
+    requires 0 <= num_children_left as int - 1 <= |Read().pivotTable|
+    requires Read().children.Some? ==> 0 <= num_children_left as int <= |Read().children.value|
+    requires 0 <= num_children_left as int <= |Read().buckets|
     ensures node'.Inv()
-    ensures node'.I() == old(NodeModel.SplitChildLeft(I(), num_children_left as int))
+    ensures node'.I() == L.NodeModel.SplitChildLeft(I(), num_children_left as int)
     ensures fresh(node'.Repr)
     {
-      NodeModel.reveal_SplitChildLeft();
-      var slice := MutBucket.CloneSeq(this.buckets[ .. num_children_left]);
-      node' := new Node(
-        this.pivotTable[ .. num_children_left - 1 ],
-        if this.children.Some? then Some(this.children.value[ .. num_children_left ]) else None,
-        slice
-      );
+      linear var lnode' := L.Node.SplitChildLeft(this.box.Borrow(), num_children_left);
+      node' := new Node.InitFromNode(lnode');
     }
 
     method SplitChildRight(num_children_left: uint64)
     returns (node': Node)
     requires Inv()
-    requires 0 <= num_children_left as int <= |this.pivotTable|
-    requires this.children.Some? ==> 0 <= num_children_left as int <= |this.children.value|
-    requires 0 <= num_children_left as int <= |this.buckets|
-    requires |this.buckets| < 0x1_0000_0000_0000_0000
+    requires 0 <= num_children_left as int <= |Read().pivotTable|
+    requires Read().children.Some? ==> 0 <= num_children_left as int <= |Read().children.value|
+    requires 0 <= num_children_left as int <= |Read().buckets|
     ensures node'.Inv()
-    ensures node'.I() == old(NodeModel.SplitChildRight(I(), num_children_left as int))
+    ensures node'.I() == L.NodeModel.SplitChildRight(I(), num_children_left as int)
     ensures fresh(node'.Repr)
     {
-      NodeModel.reveal_SplitChildRight();
-      var slice := MutBucket.CloneSeq(this.buckets[num_children_left .. ]);
-      node' := new Node(
-        this.pivotTable[ num_children_left .. ],
-        if this.children.Some? then Some(this.children.value[ num_children_left .. ]) else None,
-        slice
-      );
+      linear var lnode' := L.Node.SplitChildRight(this.box.Borrow(), num_children_left);
+      node' := new Node.InitFromNode(lnode');
     }
 
-    twostate lemma ReprSeqDisjointAfterUpdate(buckets: seq<MutBucket>, r: int)
-    requires 0 <= r < |buckets|
-    requires old(MutBucket.ReprSeqDisjoint(buckets))
-    requires forall o | o in buckets[r].Repr :: o in old(buckets[r].Repr) || fresh(o)
-    requires forall i | 0 <= i < |buckets| && i != r :: buckets[i].Repr == old(buckets[i].Repr)
-    ensures MutBucket.ReprSeqDisjoint(buckets)
-    {
-      MutBucket.reveal_ReprSeqDisjoint();
-      MutBucket.reveal_ReprSeq();
-    }
-
-    twostate lemma ReprSeqReplace(buckets: seq<MutBucket>, r: int)
-    requires 0 <= r < |buckets|
-    requires forall i | 0 <= i < |buckets| && i != r :: buckets[i].Repr == old(buckets[i].Repr)
-    ensures MutBucket.ReprSeq(buckets) <= old(MutBucket.ReprSeq(buckets)) + buckets[r].Repr
-    {
-      MutBucket.reveal_ReprSeq();
-    }
-
-    method InsertKeyValue(key: Key, msg: Message)
-    requires Inv();
-    requires IM.WFNode(I())
-    requires WeightBucketList(MutBucket.ISeq(buckets)) + WeightKey(key) + WeightMessage(msg) < 0x1_0000_0000_0000_0000
-    modifies Repr
-    ensures Inv();
-    ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
-    ensures I() == NodeModel.NodeInsertKeyValue(old(I()), key, msg)
-    {
-      NodeModel.reveal_NodeInsertKeyValue();
-
-      var r := Pivots.ComputeRoute(pivotTable, key);
-
-      MutBucket.LemmaReprBucketLeReprSeq(buckets, r as int);
-      WeightBucketLeBucketList(MutBucket.ISeq(buckets), r as int);
-
-      buckets[r].Insert(key, msg);
-
-      forall i | 0 <= i < |buckets|
-      ensures buckets[i].Inv()
-      ensures i != r as int ==> buckets[i].Bucket == old(buckets[i].Bucket)
-      ensures i != r as int ==> buckets[i].Repr == old(buckets[i].Repr)
-      ensures this !in buckets[i].Repr
-      {
-        MutBucket.reveal_ReprSeqDisjoint();
-      }
-      ReprSeqDisjointAfterUpdate(buckets, r as int);
-      ReprSeqReplace(buckets, r as int);
-
-      Repr := {this} + MutBucket.ReprSeq(buckets);
-      LemmaReprFacts();
-      assert Inv();
-      assert I().buckets == NodeModel.NodeInsertKeyValue(old(I()), key, msg).buckets;
-    }
-
-    lemma LemmaReprSeqBucketsLeRepr()
+    method CutoffNode(lbound: Option<Key>, rbound: Option<Key>)
+    returns (node' : Node)
     requires Inv()
-    ensures MutBucket.ReprSeq(buckets) <= Repr
+    requires IM.WFNode(I())
+    ensures node'.Inv()
+    ensures node'.I() == L.NodeModel.CutoffNode(I(), lbound, rbound)
+    ensures fresh(node'.Repr)
     {
+      linear var lnode' := L.Node.CutoffNode(this.box.Borrow(), lbound, rbound);
+      node' := new Node.InitFromNode(lnode');
+    }
+
+    method GetBucketsLen() returns (len: uint64)
+    requires Inv()
+    ensures len as nat == |Read().buckets|
+    {
+      len := L.Node.GetBucketsLen(this.box.Borrow());
+    }
+
+    method GetChildren() returns (children: Option<seq<BT.G.Reference>>)
+    requires Inv()
+    ensures children == Read().children
+    {
+      children := L.Node.GetChildren(this.box.Borrow());
+    }
+
+    method GetPivots() returns (pivots: Pivots.PivotTable)
+    requires Inv()
+    ensures pivots == Read().pivotTable
+    {
+      pivots := L.Node.GetPivots(this.box.Borrow());
     }
   }
 }

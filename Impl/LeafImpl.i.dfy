@@ -6,7 +6,7 @@ module LeafImpl {
   import opened BookkeepingImpl
   import opened LeafModel
   import opened StateImpl
-  import opened NodeImpl
+  import opened BoxNodeImpl
   import opened BucketImpl
   import opened DiskOpImpl
 
@@ -14,7 +14,8 @@ module LeafImpl {
   import opened Maps
   import opened Sequences
   import opened Sets
-
+  import opened LinearSequence_s
+  import opened LinearSequence_i
   import opened BucketsLib
 
   import opened NativeTypes
@@ -31,8 +32,8 @@ module LeafImpl {
   requires ref in s.ephemeralIndirectionTable.I().graph
   requires s.cache.ptr(ref) == Some(node)
   requires node.Inv()
-  requires node.children.None?
-  requires |node.buckets| == 1
+  requires node.Read().children.None?
+  requires |node.Read().buckets| == 1
   requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 1
   modifies s.Repr()
   ensures s.ready
@@ -49,21 +50,19 @@ module LeafImpl {
       }
     }
 
-    var pivot := node.buckets[0 as uint64].GetMiddleKey();
+    var pivot := lseq_peek(node.box.Borrow().buckets, 0).GetMiddleKey();
     pivot := CopyKey(pivot);
-
     var pivots := [pivot];
 
-    var left, right := node.buckets[0 as uint64].SplitLeftRight(pivot);
+    linear var left, right := MutBucket.SplitLeftRight(lseq_peek(node.box.Borrow().buckets, 0), pivot);
+    linear var buckets' := lseq_alloc(2);
+    lseq_give_inout(inout buckets', 0, left);
+    lseq_give_inout(inout buckets', 1, right);
 
-    var buckets' := [left, right];
-    MutBucket.ReprSeqDisjointOfLen2(buckets');
-    MutBucket.ListReprOfLen2(buckets');
     var newnode := new Node(pivots, None, buckets');
 
     writeBookkeeping(k, s, ref, None);
 
-    newnode.LemmaRepr();
     assert fresh(newnode.Repr);
     assert s.cache.Repr !! newnode.Repr;
     s.cache.Insert(ref, newnode);

@@ -179,10 +179,9 @@ module BucketGeneratorModel {
     if |buckets| == 1 then (
       GenFromBucketWithLowerBound(buckets[0], start)
     ) else (
-      var mid := |buckets| / 2;
       GenCompose(
-        GenFromBucketStackWithLowerBound(buckets[..mid], start),
-        GenFromBucketStackWithLowerBound(buckets[mid..], start)
+        GenFromBucketStackWithLowerBound(DropLast(buckets), start),
+        GenFromBucketStackWithLowerBound([Last(buckets)], start)
       )
     )
   }
@@ -453,6 +452,7 @@ module BucketGeneratorModel {
   requires BucketListWellMarshalled(buckets)
   ensures var g := GenFromBucketStackWithLowerBound(buckets, start);
       && YieldsSortedBucket(g, ClampStart(ComposeSeq(buckets), start))
+  decreases |buckets|
   {
     reveal_GenFromBucketStackWithLowerBound();
     var g := GenFromBucketStackWithLowerBound(buckets, start);
@@ -471,35 +471,34 @@ module BucketGeneratorModel {
       GenFromBucketWithLowerBoundYieldsClampStart(buckets[0], start);
       WellMarshalledBucketsEq(ComposeSeq([buckets[0]]), buckets[0]);
     } else {
-      var mid := |buckets| / 2;
-      var g1 := GenFromBucketStackWithLowerBound(buckets[..mid], start);
-      var g2 := GenFromBucketStackWithLowerBound(buckets[mid..], start);
+      var g1 := GenFromBucketStackWithLowerBound(DropLast(buckets), start);
+      var g2 := GenFromBucketStackWithLowerBound([Last(buckets)], start);
       assert WM(g1);
-      assert WM(g2);
+      assert WM(g2) by { GenFromBucketStackWithLowerBoundYieldsComposeSeq([Last(buckets)], start); }
       GenComposeIsCompose(g1, g2);
       calc {
         BucketOf(g).b;
           { GenComposeIsCompose(g1, g2); }
         Compose(BucketOf(g1), BucketOf(g2)).b;
           {
-            GenFromBucketStackWithLowerBoundYieldsComposeSeq(buckets[..mid], start);
-            GenFromBucketStackWithLowerBoundYieldsComposeSeq(buckets[mid..], start);
+            GenFromBucketStackWithLowerBoundYieldsComposeSeq(DropLast(buckets), start);
+            GenFromBucketStackWithLowerBoundYieldsComposeSeq([Last(buckets)], start);
             reveal_Compose();
           }
         Compose(
-          ClampStart(ComposeSeq(buckets[..mid]), start), 
-          ClampStart(ComposeSeq(buckets[mid..]), start)).b;
+          ClampStart(ComposeSeq(DropLast(buckets)), start), 
+          ClampStart(ComposeSeq([Last(buckets)]), start)).b;
           {
             reveal_Compose();
             reveal_ClampStart();
           }
-        ClampStart(Compose(ComposeSeq(buckets[..mid]), ComposeSeq(buckets[mid..])), start).b;
+        ClampStart(Compose(ComposeSeq(DropLast(buckets)), ComposeSeq([Last(buckets)])), start).b;
           {
-            ComposeSeqAdditive(buckets[..mid], buckets[mid..]);
+            ComposeSeqAdditive(DropLast(buckets), [Last(buckets)]);
             reveal_ClampStart();
           }
-        ClampStart(ComposeSeq(buckets[..mid] + buckets[mid..]), start).b;
-          { assert buckets[..mid] + buckets[mid..] == buckets; }
+        ClampStart(ComposeSeq(DropLast(buckets) + [Last(buckets)]), start).b;
+          { assert DropLast(buckets) + [Last(buckets)] == buckets; }
         ClampStart(ComposeSeq(buckets), start).b;
       }
     }

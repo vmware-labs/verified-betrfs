@@ -11,11 +11,13 @@ module MkfsImpl {
   import opened BucketWeights
   import SM = StateModel
   import opened BucketImpl
-  import opened NodeImpl
+  import opened BoxNodeImpl
   import IndirectionTableModel
   import IndirectionTableImpl
   import Marshalling
   import MkfsModel
+  import opened LinearSequence_s
+  import opened LinearSequence_i
 
   import BT = PivotBetreeSpec
   import BC = BlockCache
@@ -39,9 +41,11 @@ module MkfsImpl {
     var nodeAddr := NodeBlockSizeUint64() * MinNodeBlockIndexUint64();
 
     WeightBucketEmpty();
-    var empty := new MutBucket();
-    MutBucket.ReprSeqDisjointOfLen1([empty]);
-    var node := new Node([], None, [empty]);
+    
+    linear var empty := MutBucket.Alloc();
+    linear var buckets := lseq_alloc(1);
+    lseq_give_inout(inout buckets,0, empty);
+    var node := new Node([], None, buckets);
 
     WeightBucketListOneEmpty();
     assert node.I().buckets == [empty.I()];    // OBSERVE (trigger)

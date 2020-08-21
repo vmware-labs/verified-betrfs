@@ -15,7 +15,7 @@ module StateImpl {
   import opened Sequences
   import opened NativeTypes
   import SM = StateModel
-  import opened NodeImpl
+  import opened BoxNodeImpl
   import opened CacheImpl
   import BlockAllocatorImpl
   import BitmapImpl

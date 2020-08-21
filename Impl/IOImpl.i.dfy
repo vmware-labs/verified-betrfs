@@ -7,7 +7,7 @@ module IOImpl {
   import opened NativeTypes
   import opened Options
   import opened Maps
-  import opened NodeImpl
+  import opened BoxNodeImpl
   import opened CacheImpl
   import opened DiskLayout
   import opened DiskOpImpl
@@ -310,7 +310,8 @@ module IOImpl {
 
     if (sector.Some? && sector.value.SectorNode?) {
       var node := sector.value.node;
-      if (graph == (if node.children.Some? then node.children.value else [])) {
+      var children := node.GetChildren();
+      if (graph == (if children.Some? then children.value else [])) {
         assert|LruModel.I(s.lru.Queue)| <= 0x10000;
         assert sector.Some? ==> SI.WFSector(sector.value);
         assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();

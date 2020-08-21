@@ -4,7 +4,7 @@ include "FlushModel.i.dfy"
 module FlushImpl { 
   import opened BookkeepingImpl
   import opened StateImpl
-  import opened NodeImpl
+  import opened BoxNodeImpl
   import opened DiskOpImpl
 
   import opened Options
@@ -17,6 +17,8 @@ module FlushImpl {
   import opened BucketWeights
   import opened Bounds
   import opened BucketImpl
+  import opened LinearSequence_s
+  import opened LinearSequence_i
 
   import opened NativeTypes
   import StateModel
@@ -61,7 +63,8 @@ module FlushImpl {
     var parent := nodeOpt.value;
 
     ghost var parentI := parent.I();
-    var childref := parent.children.value[slot];
+    var children := parent.GetChildren();
+    var childref := children.value[slot];
 
     assert Some(parent) == s.cache.ptr(parentref);
 
@@ -71,97 +74,93 @@ module FlushImpl {
     assert s.I().cache[parentref] == parent.I();
     assert parent.I().children == s.I().cache[parentref].children;
 
-    WeightBucketLeBucketList(BucketImpl.MutBucket.ISeq(parent.buckets), slot as int);
+    WeightBucketLeBucketList(BucketImpl.MutBucket.ILseq(parent.box.Borrow().buckets), slot as int);
 
     assert WeightBucketList(s.I().cache[childref].buckets) <= MaxTotalBucketWeight();
-    assert s.I().cache[childref].buckets == MutBucket.ISeq(child.buckets);
-    assert WeightBucketList(MutBucket.ISeq(child.buckets)) <= MaxTotalBucketWeight();
+    assert s.I().cache[childref].buckets == MutBucket.ILseq(child.Read().buckets);
+    assert WeightBucketList(MutBucket.ILseq(child.Read().buckets)) <= MaxTotalBucketWeight();
 
-    var newparentBucket, newbuckets;
-    newparentBucket, newbuckets := BucketImpl.PartialFlush(
-        parent.buckets[slot], child.buckets, child.pivotTable);
-    var newchild := new Node(child.pivotTable, child.children, newbuckets);
+    linear var newparentBucket, newbuckets := BucketImpl.PartialFlush(
+        lseq_peek(parent.box.Borrow().buckets, slot as uint64), child.box.Borrow().buckets, child.box.Borrow().pivotTable);
+
+    var childpivots := child.GetPivots();
+    var childchildren := child.GetChildren();
+    var newchild := new Node(childpivots, childchildren, newbuckets);
     
     assert Some(parent) == s.cache.ptr(parentref);
 
     BookkeepingModel.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
-        Ic(k), s.I(), newchild.children, parent.children.value, slot as int);
+        Ic(k), s.I(), newchild.Read().children, parent.Read().children.value, slot as int);
 
-    BookkeepingModel.allocRefDoesntEqual(Ic(k), s.I(), newchild.children, parentref);
-    var newchildref := allocBookkeeping(k, s, newchild.children);
+    BookkeepingModel.allocRefDoesntEqual(Ic(k), s.I(), newchild.Read().children, parentref);
+    var newchildref := allocBookkeeping(k, s, childchildren);
     if newchildref.None? {
+      newchild.Destructor();
+      newparentBucket.Free();
       print "giving up; could not get parentref\n";
-      return;
-    }
+    } else {
+      assert Some(parent) == s.cache.ptr(parentref);
+      assert parent.I().children == s.I().cache[parentref].children;
 
-    assert Some(parent) == s.cache.ptr(parentref);
+      var newparent_children := SeqIndexUpdate(
+        children.value, slot, newchildref.value);
 
-    assert parent.I().children == s.I().cache[parentref].children;
+      writeBookkeeping(k, s, parentref, Some(newparent_children));
+      assert Some(parent) == s.cache.ptr(parentref);
+      assert parentref != newchildref.value;
 
-    var newparent_children := SeqIndexUpdate(
-      parent.children.value, slot, newchildref.value);
+      ghost var c1 := s.cache.I();
+      assert c1 == old(s.cache.I());
+      s.cache.Insert(newchildref.value, newchild);
+      assert Some(parent) == s.cache.ptr(parentref);
 
-    writeBookkeeping(k, s, parentref, Some(newparent_children));
+      ghost var c2 := s.cache.I();
+      assert c2 == c1[newchildref.value := newchild.I()];
+      // assert newchild.I() == old(child.I()).(buckets := MutBucket.ISeq(newbuckets));
+      ghost var newParentBucketI := newparentBucket.bucket;
+      s.cache.UpdateNodeSlot(parentref, parent, slot, newparentBucket, newchildref.value);
 
-    assert Some(parent) == s.cache.ptr(parentref);
+      ghost var c3 := s.cache.I();
+      //Native.BenchmarkingUtil.end();
 
-    assert parentref != newchildref.value;
+      assert c3 == c2[parentref := IM.Node(
+            parentI.pivotTable,
+            Some(parentI.children.value[slot as int := newchildref.value]),
+            parentI.buckets[slot as int := newParentBucketI]
+          )];
+      //assert parentI == old(s.I()).cache[parentref];
 
-    ghost var c1 := s.cache.I();
-    assert c1 == old(s.cache.I());
+      //assert c2 == old(s.I()).cache
+      //      [newchildref.value := old(child.I()).(buckets := MutBucket.ISeq(newbuckets))];
 
-    s.cache.Insert(newchildref.value, newchild);
+      ghost var a := FlushModel.flush(Ic(k), old(s.I()), parentref, slot as int, childref, old(child.I()));
+      ghost var b := s.I();
 
-    assert Some(parent) == s.cache.ptr(parentref);
-
-    ghost var c2 := s.cache.I();
-    assert c2 == c1[newchildref.value := newchild.I()];
-    //assert newchild.I() == old(child.I()).(buckets := MutBucket.ISeq(newbuckets));
-    ghost var newParentBucketI := newparentBucket.Bucket;
-
-    s.cache.UpdateNodeSlot(parentref, parent, slot, newparentBucket, newchildref.value);
-
-    ghost var c3 := s.cache.I();
-
-    //Native.BenchmarkingUtil.end();
-
-    assert c3 == c2[parentref := IM.Node(
-          parentI.pivotTable,
-          Some(parentI.children.value[slot as int := newchildref.value]),
-          parentI.buckets[slot as int := newParentBucketI]
-        )];
-    //assert parentI == old(s.I()).cache[parentref];
-
-    //assert c2 == old(s.I()).cache
-    //      [newchildref.value := old(child.I()).(buckets := MutBucket.ISeq(newbuckets))];
-
-    ghost var a := FlushModel.flush(Ic(k), old(s.I()), parentref, slot as int, childref, old(child.I()));
-    ghost var b := s.I();
-
-    assert a.cache.Keys == c3.Keys;
-    forall key | key in a.cache
-      ensures a.cache[key] == c3[key]
-    {
-      if key == parentref {
-        assert a.cache[key] == c3[key];
-      } else if key == newchildref.value {
-        assert a.cache[key] == c3[key];
-      } else if key == childref {
-        assert a.cache[key] == c3[key];
-      } else {
-        assert a.cache[key] == c3[key];
+      assert a.cache.Keys == c3.Keys;
+      forall key | key in a.cache
+        ensures a.cache[key] == c3[key]
+      {
+        if key == parentref {
+          assert a.cache[key] == c3[key];
+        } else if key == newchildref.value {
+          assert a.cache[key] == c3[key];
+        } else if key == childref {
+          assert a.cache[key] == c3[key];
+        } else {
+          assert a.cache[key] == c3[key];
+        }
       }
-    }
     
-    assert a.cache
-        /* == old(s.I()).cache
-                  [newchildref.value := old(child.I()).(buckets := MutBucket.ISeq(newbuckets))]
-                  [parentref := IM.Node(
-                    parentI.pivotTable,
-                    Some(parentI.children.value[slot as nat := newchildref.value]),
-                    parentI.buckets[slot as nat := newParentBucketI]
-                  )] */
-        == c3
-        == b.cache;
+      assert a.cache
+          /* == old(s.I()).cache
+                    [newchildref.value := old(child.I()).(buckets := MutBucket.ISeq(newbuckets))]
+                    [parentref := IM.Node(
+                      parentI.pivotTable,
+                      Some(parentI.children.value[slot as nat := newchildref.value]),
+                      parentI.buckets[slot as nat := newParentBucketI]
+                    )] */
+          == c3
+          == b.cache;
+    }
   }
 }

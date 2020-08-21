@@ -202,7 +202,7 @@ cont
 f5 copying a Message
 f10 copying an array of Message
 f11 ToSeqSubtree into caller-supplied key, value arrays
-f12 allocates that array and returns it up the stack. (MutableBtreeBulkOperations::ToSeq returns a pair)
+f12 allocates that array and returns it up the stack. (MutableBtreeBulkOperations::ToSeq returns a pair) - removed
 f13 tree_to_kvl deconstructs the pair and tucks them into a KVList.Kvl.
 f14 GetKvl returns it up
 f15 MarshallingImpl bucketToVal tucks the message seq into a marshalling V

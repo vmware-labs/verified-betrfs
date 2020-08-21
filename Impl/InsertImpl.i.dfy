@@ -95,9 +95,8 @@ module InsertImpl {
       }
       return;
     }
-
-    var weightSeq := MutBucket.computeWeightOfSeq(rootLookup.value.buckets);
-
+    
+    var weightSeq := MutBucket.computeWeightOfSeq(rootLookup.value.box.Borrow().buckets);
     if WeightKeyUint64(key) + WeightMessageUint64(ValueMessage.Define(value)) + weightSeq
         <= MaxTotalBucketWeightUint64() {
       success := InsertKeyValue(k, s, key, value);

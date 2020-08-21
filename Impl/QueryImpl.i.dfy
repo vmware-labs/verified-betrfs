@@ -26,6 +26,8 @@ module QueryImpl {
   import opened Sequences
   import opened KeyType
   import opened ValueMessage
+  import opened LinearSequence_s
+  import opened LinearSequence_i
 
   import opened Bounds
   import opened BucketsLib
@@ -69,34 +71,27 @@ module QueryImpl {
       return;
     } else {
       var node := nodeOpt.value;
-
-      node.LemmaReprSeqBucketsLeRepr();
       s.cache.LemmaNodeReprLeRepr(ref);
-      //MutBucket.reveal_ReprSeq();
-      MutBucket.AllocatedReprSeq(node.buckets);
-      MutBucket.LemmaReprBucketLeReprSeq(node.buckets,
-          Pivots.Route(node.pivotTable, key));
-      //assert node.buckets[Pivots.Route(node.pivotTable, key)].Repr
-      //    <= MutBucket.ReprSeq(node.buckets);
 
       ghost var oldIVars := s.I();
       LruModel.LruUse(s.lru.Queue, ref);
       s.lru.Use(ref);
       assert SM.IBlockCache(oldIVars) == SM.IBlockCache(s.I());
 
-      var r := Pivots.ComputeRoute(node.pivotTable, key);
-      var bucket := node.buckets[r];
+      var pivots := node.GetPivots();
+      var r := Pivots.ComputeRoute(pivots, key);
 
-      var kmtMsg := bucket.Query(key);
+      var kmtMsg := lseq_peek(node.box.Borrow().buckets, r).Query(key);
       var newmsg := if kmtMsg.Some? then ValueMessage.Merge(msg, kmtMsg.value) else msg;
 
       if (newmsg.Define?) {
         res := Some(newmsg.value);
         return;
       } else {
-        if node.children.Some? {
-          BookkeepingModel.lemmaChildInGraph(Ic(k), s.I(), ref, node.children.value[r]);
-          res := queryIterate(k, s, key, newmsg, node.children.value[r], io, counter - 1);
+        var children := node.GetChildren();
+        if children.Some? {
+          BookkeepingModel.lemmaChildInGraph(Ic(k), s.I(), ref, children.value[r]);
+          res := queryIterate(k, s, key, newmsg, children.value[r], io, counter - 1);
         } else {
           res := Some(ValueType.DefaultValue());
           return;

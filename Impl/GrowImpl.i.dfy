@@ -5,7 +5,7 @@ module GrowImpl {
   import opened IOImpl
   import opened BookkeepingImpl
   import opened StateImpl
-  import opened NodeImpl
+  import opened BoxNodeImpl
   import opened BucketImpl
   import opened DiskOpImpl
   import GrowModel
@@ -16,6 +16,8 @@ module GrowImpl {
   import opened Sets
   import opened BucketWeights
   import opened BucketsLib
+  import opened LinearSequence_s
+  import opened LinearSequence_i
 
   import opened NativeTypes
 
@@ -47,8 +49,9 @@ module GrowImpl {
     var oldrootOpt := s.cache.GetOpt(BT.G.Root());
     var oldroot := oldrootOpt.value;
 
-    BookkeepingModel.lemmaChildrenConditionsSingleOfAllocBookkeeping(Ic(k), s.I(), oldroot.children);
-    var newref := allocBookkeeping(k, s, oldroot.children);
+    BookkeepingModel.lemmaChildrenConditionsSingleOfAllocBookkeeping(Ic(k), s.I(), oldroot.Read().children);
+    var children := oldroot.GetChildren();
+    var newref := allocBookkeeping(k, s, children);
 
     match newref {
       case None => {
@@ -58,17 +61,16 @@ module GrowImpl {
         //var emptyPkv := PKV.EmptyPkv();
         WeightBucketEmpty();
 
-        var mutbucket := new MutBucket();
+        linear var mutbucket := MutBucket.Alloc();
+        linear var buckets := lseq_alloc(1);
+        lseq_give_inout(inout buckets, 0, mutbucket);
 
-        MutBucket.ListReprOfLen1([mutbucket]);
-        MutBucket.ReprSeqDisjointOfLen1([mutbucket]);
-        var newroot := new Node([], Some([newref]), [mutbucket]);
-        
+        var newroot := new Node([], Some([newref]), buckets);
         assert newroot.I() == IM.Node([], Some([newref]), [B(map[])]);
         assert s.I().cache[BT.G.Root()] == old(s.I().cache[BT.G.Root()]);
         assert fresh(newroot.Repr);
 
-        writeBookkeeping(k, s, BT.G.Root(), newroot.children);
+        writeBookkeeping(k, s, BT.G.Root(), Some([newref]));
 
         s.cache.MoveAndReplace(BT.G.Root(), newref, newroot);
 

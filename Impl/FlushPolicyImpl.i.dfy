@@ -19,6 +19,9 @@ module FlushPolicyImpl {
   import opened DiskOpImpl
   import opened MainDiskIOHandler
 
+  import opened LinearSequence_s
+  import opened LinearSequence_i
+
   import opened Sequences
 
   import opened Bounds
@@ -26,31 +29,28 @@ module FlushPolicyImpl {
   import opened BucketsLib
   import opened BucketWeights
 
-  method biggestSlot(buckets: seq<MutBucket>) returns (res : (uint64, uint64))
-  requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
-  requires FlushPolicyModel.biggestSlot.requires(MutBucket.ISeq(buckets))
-  ensures res == FlushPolicyModel.biggestSlot(old(MutBucket.ISeq(buckets)))
+  method biggestSlot(shared buckets: lseq<MutBucket>) returns (res : (uint64, uint64))
+  requires MutBucket.InvLseq(buckets)
+  requires FlushPolicyModel.biggestSlot.requires(MutBucket.ILseq(buckets))
+  ensures res == FlushPolicyModel.biggestSlot(old(MutBucket.ILseq(buckets)))
   {
-    // It's in the reads clause of ISeq:
-    MutBucket.reveal_ReprSeq();
-
-    WeightBucketLeBucketList(MutBucket.ISeq(buckets), 0);
+    WeightBucketLeBucketList(MutBucket.ILseq(buckets), 0);
     var j := 1;
     var bestIdx := 0;
-    var bestWeight := buckets[0 as uint64].Weight;
-    while j < |buckets| as uint64
-    invariant FlushPolicyModel.biggestSlotIterate.requires(MutBucket.ISeq(buckets), j, bestIdx, bestWeight)
-    invariant FlushPolicyModel.biggestSlotIterate(MutBucket.ISeq(buckets), j, bestIdx, bestWeight) == FlushPolicyModel.biggestSlot(MutBucket.ISeq(buckets))
+    var bestWeight := lseq_peek(buckets, 0).weight;
+
+    while j < lseq_length_raw(buckets)
+    invariant FlushPolicyModel.biggestSlotIterate.requires(MutBucket.ILseq(buckets), j, bestIdx, bestWeight)
+    invariant FlushPolicyModel.biggestSlotIterate(MutBucket.ILseq(buckets), j, bestIdx, bestWeight) == FlushPolicyModel.biggestSlot(MutBucket.ILseq(buckets))
     {
-      WeightBucketLeBucketList(MutBucket.ISeq(buckets), j as int);
-      var w := buckets[j].Weight;
+      WeightBucketLeBucketList(MutBucket.ILseq(buckets), j as int);
+      var w := lseq_peek(buckets, j).weight;
       if w > bestWeight {
         bestIdx := j;
         bestWeight := w;
       }
       j := j + 1;
     }
-
     return (bestIdx, bestWeight);
   }
 
@@ -71,9 +71,11 @@ module FlushPolicyImpl {
       }
     } else {
       var nodePrev := s.cache.GetOpt(stack[i-1]);
-      if |nodePrev.value.children.value| as uint64 < MaxNumChildrenUint64() {
+      var nodePrevChildren := nodePrev.value.GetChildren();
+      if |nodePrevChildren.value| as uint64 < MaxNumChildrenUint64() {
         var nodeThis := s.cache.GetOpt(stack[i]);
-        if |nodeThis.value.buckets| as uint64 == 1 {
+        var bucketslen := nodeThis.value.GetBucketsLen();
+        if bucketslen == 1 {
           action := FlushPolicyModel.ActionRepivot(stack[i]);
         } else {
           if TotalCacheSize(s) <= MaxCacheSizeUint64() - 2 {
@@ -106,27 +108,26 @@ module FlushPolicyImpl {
       var ref := stack[|stack| as uint64 - 1];
       var nodeOpt := s.cache.GetOpt(ref);
       var node := nodeOpt.value;
-      MutBucket.reveal_ReprSeq();
-      if node.children.None? || |node.buckets| as uint64 == MaxNumChildrenUint64() {
+      var children := node.GetChildren();
+      var bucketslen := node.GetBucketsLen();
+
+      if children.None? || bucketslen == MaxNumChildrenUint64() {
         action := getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1);
       } else {
-        var bs:(uint64, uint64) := biggestSlot(node.buckets);
+        var bs:(uint64, uint64) := biggestSlot(node.box.Borrow().buckets);
         var (slot, slotWeight) := bs;
-        //if slotWeight >= FlushTriggerWeight() as uint64 then (
-        if |node.buckets| as uint64 < 8 {
-          var childref := node.children.value[slot];
+        if bucketslen as uint64 < 8 {
+          var childref := children.value[slot];
           var childOpt := s.cache.GetOpt(childref);
           if childOpt.Some? {
             s.cache.LemmaNodeReprLeRepr(childref);
             var child := childOpt.value;
-            child.LemmaReprSeqBucketsLeRepr();
-            //assert forall i | 0 <= i < |child.buckets| ensures child.buckets[i].Repr !! s.lru.Repr;
-            assert forall i | 0 <= i < |child.buckets| :: child.buckets[i].Inv();
+            assert MutBucket.InvLseq(child.Read().buckets);
             s.lru.Use(childref);
-            assert forall i | 0 <= i < |child.buckets| :: child.buckets[i].Inv();
+            assert MutBucket.InvLseq(child.Read().buckets);
             LruModel.LruUse(old(s.lru.Queue), childref);
 
-            var childTotalWeight: uint64 := MutBucket.computeWeightOfSeq(child.buckets);
+            var childTotalWeight: uint64 := MutBucket.computeWeightOfSeq(child.box.Borrow().buckets);
 
             if childTotalWeight + FlushTriggerWeightUint64() <= MaxTotalBucketWeightUint64() {
               if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
@@ -179,7 +180,8 @@ module FlushPolicyImpl {
       }
       case ActionSplit(parentref, slot) => {
         var parent := s.cache.GetOpt(parentref);
-        doSplit(k, s, parentref, parent.value.children.value[slot], slot);
+        var parent_children := parent.value.GetChildren();
+        doSplit(k, s, parentref, parent_children.value[slot], slot);
       }
       case ActionRepivot(ref) => {
         var node := s.cache.GetOpt(ref);
@@ -187,10 +189,11 @@ module FlushPolicyImpl {
       }
       case ActionFlush(parentref, slot) => {
         var parent := s.cache.GetOpt(parentref);
-        var childref := parent.value.children.value[slot];
+        var parent_children := parent.value.GetChildren();
+        var childref := parent_children.value[slot];
         var child := s.cache.GetOpt(childref);
         flush(k, s, parentref, slot, 
-            parent.value.children.value[slot],
+            parent_children.value[slot],
             child.value);
       }
       case ActionGrow => {
