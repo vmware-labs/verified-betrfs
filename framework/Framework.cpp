@@ -50,12 +50,7 @@ void fail(std::string err)
 
 constexpr int MAX_WRITE_REQS_OUT = 8;
 
-
-namespace NativeArithmetic_Compile {
-  uint64_t u64add(uint64_t a, uint64_t b) {
-    return a + b;
-  }
-}
+#include "NativeArithmetic.cpp"
 
 namespace NativePackedInts_Compile {
   static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__, "current implementation of NativePackedInts assumes little endian");

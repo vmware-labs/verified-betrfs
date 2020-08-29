@@ -3,6 +3,7 @@ include "../Base/NativeArrays.s.dfy"
 include "../Base/Arrays.i.dfy"
 include "../Base/Option.s.dfy"
 include "BtreeModel.i.dfy"
+include "../../lib/Math/LinearCongruentialGenerator.s.dfy"
 
 abstract module MutableBtree {
   import opened NativeTypes
@@ -1237,60 +1238,92 @@ abstract module MutableBtree {
   }
 }
 
-// module TestBtreeModel refines BtreeModel {
-//   import opened NativeTypes
-// //  import Keys = Uint64_Order
-//   type Value = uint64
-// }
-// 
-// module TestMutableBtree refines MutableBtree {
-//   import Model = TestBtreeModel
-//  
-//   function method MaxKeysPerLeaf() : uint64 { 64 }
-//   function method MaxChildren() : uint64 { 64 }
-// 
-//   function method DefaultValue() : Value { 0 }
-//   function method DefaultKey() : Key { [0] }
-// }
-// 
-// module MainModule {
-//   import opened NativeTypes
-//   import TMB = TestMutableBtree`API
-// 
-//   method SeqFor(i: uint64)
-//   returns (result:TMB.Key)
-//   requires i < 256*256*256;
-//   {
-//     var b0:byte := (i / 65536) as byte;
-//     var r := i - (b0 as uint64 * 65536);
-//     var b1:byte := (r / 256) as byte;
-//     var b2:byte := (r - (b1 as uint64)*256) as byte;
-// 
-//     result := [b0, b1, b2];
-//   }
-// 
-//   method Main()
-//   {
-//     // var n: uint64 := 1_000_000;
-//     // var p: uint64 := 300_007;
-//     var n: uint64 := 10_000_000;
-//     var p: uint64 := 3_000_017;
-//     // var n: uint64 := 100_000_000;
-//     // var p: uint64 := 1_073_741_827;
-//     var t := TMB.EmptyTree();
-//     var i: uint64 := 0;
-//     while i < n
-//       invariant 0 <= i <= n
-//       invariant TMB.WF(t)
-//       invariant fresh(t.repr)
-//     {
-//       var oldvalue;
-//       var keyv := ((i * p) % n);
-//       var key := SeqFor(keyv);
-//       t, oldvalue := TMB.Insert(t, key, i);
-//       i := i + 1;
-//     }
-// 
-//     print "PASSED\n";
-//   }
-// } 
+module TestBtreeModel refines BtreeModel {
+  import opened NativeTypes
+//  import Keys = Uint64_Order
+  type Value = uint64
+}
+
+module TestMutableBtree refines MutableBtree {
+  import Model = TestBtreeModel
+ 
+  function method MaxKeysPerLeaf() : uint64 { 64 }
+  function method MaxChildren() : uint64 { 64 }
+
+  function method DefaultValue() : Value { 0 }
+  function method DefaultKey() : Key { [0] }
+}
+
+module MainModule {
+  import opened NativeTypes
+  import TMB = TestMutableBtree`API
+  import opened LinearCongruentialGenerator
+
+  method SeqFor(i: uint64)
+  returns (result:TMB.Key)
+  {
+    result := [
+      ((i / (1)) % 256) as byte,
+      ((i / (1*256)) % 256) as byte,
+      ((i / (1*256*256)) % 256) as byte,
+      ((i / (1*256*256*256)) % 256) as byte,
+      ((i / (1*256*256*256*256)) % 256) as byte,
+      ((i / (1*256*256*256*256*256)) % 256) as byte,
+      ((i / (1*256*256*256*256*256*256)) % 256) as byte,
+      ((i / (1*256*256*256*256*256*256*256)) % 256) as byte
+    ];
+  }
+
+  method Run(seed: uint64, n: uint64, dry: bool)
+  {
+    // var n: uint64 := 1_000_000;
+    // var p: uint64 := 300_007;
+    // var n: uint64 := 10_000_000;
+    var p: uint64 := 3_000_017;
+    // var n: uint64 := 100_000_000;
+    // var p: uint64 := 1_073_741_827;
+    var t := TMB.EmptyTree();
+    var i: uint64 := 0;
+    var lcg: LCG := new LCG(seed);
+
+    var write_start: uint64 := steadyClockMillis();
+    while i < n
+      invariant 0 <= i <= n
+      invariant TMB.WF(t)
+      invariant fresh(t.repr)
+    {
+      var oldvalue;
+      var keyv := lcg.next();
+      var key := SeqFor(keyv);
+      if (!dry) {
+        t, oldvalue := TMB.Insert(t, key, i);
+      }
+      i := i + 1;
+    }
+    var write_end: uint64 := steadyClockMillis();
+    var write_duration: uint64 := write_end - write_start;
+    print(n, "\twrite\trepr\t", write_duration, "\n");
+
+    i := 0;
+
+    var read_start: uint64 := steadyClockMillis();
+    while i < n
+      invariant 0 <= i <= n
+      invariant TMB.WF(t)
+      invariant fresh(t.repr)
+    {
+      var keyv := lcg.next();
+      var key := SeqFor(keyv);
+      if (!dry) {
+        var result := TMB.Query(t, key);
+        if result.Some? {
+          opaqueBlackhole(result.value);
+        }
+      }
+      i := i + 1;
+    }
+    var read_end: uint64 := steadyClockMillis();
+    var read_duration: uint64 := read_end - read_start;
+    print(n, "\tread\trepr\t", read_duration, "\n");
+  }
+} 

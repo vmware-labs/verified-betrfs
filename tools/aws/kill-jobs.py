@@ -8,7 +8,7 @@ parser.add_argument('--ssd', action='store_true', help="select ssd machines")
 args = parser.parse_args()
 
 def cmd_for_idx(idx, worker):
-    return Command("kill", ssh_cmd_for_worker(worker) + ["killall", "-q", "VeribetrfsYcsb", "RocksYcsb", "make", "z3", "mono", "dafny"])
+    return Command("kill", ssh_cmd_for_worker(worker) + ["killall", "-q", "VeribetrfsYcsb", "RocksYcsb", "make", "z3", "mono", "dafny", "MutableBtreeBench", "MutableBtreeBench"])
 
 def main():
     workers = retrieve_running_workers(ssd=args.ssd)
