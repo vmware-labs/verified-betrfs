@@ -48,12 +48,12 @@ class Package:
 packages = [
     # Package("Hashtable-linear", branch="osdi20-artifact-linear", sources=
     #         ["lib/DataStructures/LinearMutableMap.i.dfy"]),
-    Package("Hashtable-master", branch="osdi20-artifact-dynamic-frames", sources=
-            ["lib/DataStructures/MutableMapModel.i.dfy",
-                "lib/DataStructures/MutableMapImpl.i.dfy"]),
     # Package("BTree-linear", branch="osdi20-artifact-linear", sources=
     #         ["lib/DataStructures/BtreeModel.i.dfy",
     #             "lib/DataStructures/MutableBtree.i.dfy"]),
+    Package("Hashtable-master", branch="osdi20-artifact-dynamic-frames", sources=
+            ["lib/DataStructures/MutableMapModel.i.dfy",
+                "lib/DataStructures/MutableMapImpl.i.dfy"]),
     Package("BTree-master", branch="osdi20-artifact-dynamic-frames", sources=
             ["lib/DataStructures/BtreeModel.i.dfy",
                 "lib/DataStructures/MutableBtree.i.dfy"]),
