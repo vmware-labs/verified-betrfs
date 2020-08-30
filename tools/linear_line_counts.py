@@ -46,15 +46,15 @@ class Package:
         return d
 
 packages = [
-    Package("Hashtable-linear", branch="eval-btree-linear", sources=
-            ["lib/DataStructures/LinearMutableMap.i.dfy"]),
-    Package("Hashtable-master", branch="eval-btree-master", sources=
+    # Package("Hashtable-linear", branch="osdi20-artifact-linear", sources=
+    #         ["lib/DataStructures/LinearMutableMap.i.dfy"]),
+    Package("Hashtable-master", branch="osdi20-artifact-dynamic-frames", sources=
             ["lib/DataStructures/MutableMapModel.i.dfy",
                 "lib/DataStructures/MutableMapImpl.i.dfy"]),
-    Package("BTree-linear", branch="eval-btree-linear", sources=
-            ["lib/DataStructures/BtreeModel.i.dfy",
-                "lib/DataStructures/MutableBtree.i.dfy"]),
-    Package("BTree-master", branch="eval-btree-master", sources=
+    # Package("BTree-linear", branch="osdi20-artifact-linear", sources=
+    #         ["lib/DataStructures/BtreeModel.i.dfy",
+    #             "lib/DataStructures/MutableBtree.i.dfy"]),
+    Package("BTree-master", branch="osdi20-artifact-dynamic-frames", sources=
             ["lib/DataStructures/BtreeModel.i.dfy",
                 "lib/DataStructures/MutableBtree.i.dfy"]),
     ]
@@ -85,16 +85,16 @@ tex_names = {
 
 def report():
     data = json.loads(open(DATA_FILE).read())
-    fp = open("../veripapers/osdi2020/data/linear-line-counts.tex", "w")
-    for row in data:
-        tex = tex_names[row["label"]]
-        macroPrefix = tex["macroPrefix"]
-        fp.write("\\newcommand{\\%sImpl}{%d}\n" % (macroPrefix, row["impl"]))
-        fp.write("\\newcommand{\\%sProof}{%d}\n" % (macroPrefix, row["proof"]))
-        fp.write("\\newcommand{\\%sRatio}{%.1f$\\times$}\n" % (macroPrefix, (1.0*row["proof"]/row["impl"])))
-    fp.close()
+    # fp = open("build/linear-line-counts.tex", "w")
+    # for row in data:
+    #     tex = tex_names[row["label"]]
+    #     macroPrefix = tex["macroPrefix"]
+    #     fp.write("\\newcommand{\\%sImpl}{%d}\n" % (macroPrefix, row["impl"]))
+    #     fp.write("\\newcommand{\\%sProof}{%d}\n" % (macroPrefix, row["proof"]))
+    #     fp.write("\\newcommand{\\%sRatio}{%.1f$\\times$}\n" % (macroPrefix, (1.0*row["proof"]/row["impl"])))
+    # fp.close()
 
-    fp = open("../veripapers/osdi2020/data/linear-line-count-table.tex", "w")
+    fp = open("build/linear-line-count-table.tex", "w")
     fp.write("\\begin{tabular}{|ll|rrr|}\n")
     fp.write("\\\\ \\hline\n")
     fp.write("component & style & impl. & proof & ratio \\\\\n")
@@ -109,7 +109,7 @@ def report():
     fp.close()
 
 def main():
-    #collect()
+    collect()
     report()
         
 main()

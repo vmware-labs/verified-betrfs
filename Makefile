@@ -447,9 +447,15 @@ build/BerkeleyYcsb: ycsb/YcsbMain.cpp build/libycsbc-libcpp.a
 ycsb: build/VeribetrfsYcsb build/RocksYcsb build/KyotoYcsb build/BerkeleyYcsb
 
 ##############################################################################
-# Verification time results
+# Verification time and automation study results
+
 build/verification-times.tgz: build/Impl/Bundle.i.verified
 	tar cvzf $@ `find build -name "*.verchk"`
 
 build/verification-times.pdf: build/verification-times.tgz
 	./tools/plot/plot-verification-time.py
+
+# Hrm. Not clear how to depend on all source files, so we just depend on
+# this verification result, which transitively depends on all sources.
+build/automation-figure.pdf: build/Impl/Bundle.i.verified
+	./tools/automation-study.py
