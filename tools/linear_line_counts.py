@@ -85,14 +85,14 @@ tex_names = {
 
 def report():
     data = json.loads(open(DATA_FILE).read())
-    # fp = open("build/linear-line-counts.tex", "w")
-    # for row in data:
-    #     tex = tex_names[row["label"]]
-    #     macroPrefix = tex["macroPrefix"]
-    #     fp.write("\\newcommand{\\%sImpl}{%d}\n" % (macroPrefix, row["impl"]))
-    #     fp.write("\\newcommand{\\%sProof}{%d}\n" % (macroPrefix, row["proof"]))
-    #     fp.write("\\newcommand{\\%sRatio}{%.1f$\\times$}\n" % (macroPrefix, (1.0*row["proof"]/row["impl"])))
-    # fp.close()
+    fp = open("build/linear-line-counts.tex", "w")
+    for row in data:
+        tex = tex_names[row["label"]]
+        macroPrefix = tex["macroPrefix"]
+        fp.write("\\newcommand{\\%sImpl}{%d}\n" % (macroPrefix, row["impl"]))
+        fp.write("\\newcommand{\\%sProof}{%d}\n" % (macroPrefix, row["proof"]))
+        fp.write("\\newcommand{\\%sRatio}{%.1f$\\times$}\n" % (macroPrefix, (1.0*row["proof"]/row["impl"])))
+    fp.close()
 
     fp = open("build/linear-line-count-table.tex", "w")
     fp.write("\\begin{tabular}{|ll|rrr|}\n")
