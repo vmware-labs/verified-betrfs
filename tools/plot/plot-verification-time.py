@@ -9,7 +9,7 @@ import collections
 import tarfile
 
 #EXPERIMENT="expresults/veri_time_13-*"
-EXPERIMENT="expresults/veri_time_14.tgz"
+EXPERIMENT="build/verification-times.tgz"
 
 class Observation:
     def __init__(self, time, worker_name, source_filename):
@@ -289,7 +289,7 @@ def plot_all(pile):
     ax.set_ylabel("cumulative frac.\n(log scale)")
     plt.tight_layout()
 
-    fig.savefig("../veripapers/osdi2020/figures/verification-times.pdf")
+    fig.savefig("build/verification-times.pdf")
 
 def main():
     pile = parse_all()

@@ -190,7 +190,7 @@ build/%.synchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 # .verchk: Dafny file-local verification
 build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.verchk,%.verchk-tmp,$@))
-	( $(TIME) $(DAFNY_CMD) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
+	( $(TIME) $(DAFNY_CMD) /compile:0 /trace $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
 
 ##############################################################################
@@ -445,3 +445,11 @@ build/BerkeleyYcsb: ycsb/YcsbMain.cpp build/libycsbc-libcpp.a
 
 
 ycsb: build/VeribetrfsYcsb build/RocksYcsb build/KyotoYcsb build/BerkeleyYcsb
+
+##############################################################################
+# Verification time results
+build/verification-times.tgz: build/Impl/Bundle.i.verified
+	tar cvzf $@ `find build -name "*.verchk"`
+
+build/verification-times.pdf: build/verification-times.tgz
+	./tools/plot/plot-verification-time.py
