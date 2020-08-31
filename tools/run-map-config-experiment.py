@@ -14,31 +14,6 @@ def actuallyprint(msg):
     print(msg)
     sys.stdout.flush()
 
-# def splice_value_into_bundle(name, value):
-#   splice_successful = False
-#   with open("build/Bundle.cpp") as f:
-#     lineNum = 0
-#     c = 0
-#     lines = []
-#     for line in f:
-#       lineNum += 1
-#       if line.strip() == "uint64 __default::" + name + "()":
-#         c = 1
-#       else:
-#         if c == 1:
-#           c = 2
-#         elif c == 2:
-#           line = "    return (uint64)" + value + "; /*hi mom*/\n"
-#           splice_successful = True
-#           #print("Splicing %s = %s at line %d" % (name, value, lineNum))
-#           c = 0
-#       lines.append(line)
-#     cpp = "".join(lines)
-#   assert splice_successful
-# 
-#   with open("build/Bundle.cpp","w") as f:
-#     f.write(cpp)
-
 def main():
   seed=None
   output=None
@@ -50,8 +25,6 @@ def main():
       seed = arg[len("seed=") : ]
     elif arg.startswith("output="):
       output = arg[len("output=") : ]
-    elif arg.startswith("git_branch="):
-      branch = arg[len("git_branch=") : ]
     else:
       assert False, "unrecognized argument: " + arg
 
@@ -63,32 +36,17 @@ def main():
   actuallyprint("Building executable...")
   sys.stdout.flush()
 
-  dafny_cmd = None
-  if branch == "eval-mutablemap-linear":
-    # dafny_cmd = ".dafny/dafny/Binaries/dafny /noVerify /spillTargetCode:3 /countVerificationErrors:0 /compileTarget:cpp lib/DataStructures/MutableBtree.i.dfy Lang/LinearExtern.h framework/Framework.h"
-    pass
-  elif branch == "eval-mutablemap-master":
-    dafny_cmd = ".dafny/dafny/Binaries/dafny /noVerify /spillTargetCode:3 /countVerificationErrors:0 /compileTarget:cpp lib/DataStructures/MutableMapImpl.i.dfy framework/NativeArithmetic.h framework/NativeArrays.h framework/LinearCongruentialGenerator.h"
+  dafny_cmd = ".dafny/dafny/Binaries/dafny /noVerify /spillTargetCode:3 /countVerificationErrors:0 /compileTarget:cpp lib/DataStructures/MutableMapImpl.i.dfy framework/NativeArithmetic.h framework/NativeArrays.h framework/LinearCongruentialGenerator.h"
   actuallyprint(dafny_cmd)
   ret = os.system(dafny_cmd)
   assert ret == 0
 
-  dafny_cmd_2 = None
-  if branch == "eval-mutablemap-linear":
-    # dafny_cmd_2 = ".dafny/dafny/Binaries/dafny /noVerify /spillTargetCode:3 /countVerificationErrors:0 /compileTarget:cpp lib/DataStructures/MutableBtree.i.dfy Lang/LinearExtern.h framework/Framework.h"
-    pass
-  elif branch == "eval-mutablemap-master":
-    dafny_cmd_2 = ".dafny/dafny/Binaries/dafny /noVerify /spillTargetCode:3 /countVerificationErrors:0 /compileTarget:cpp bench/MutableMap.dfy framework/NativeArithmetic.h framework/NativeArrays.h framework/LinearCongruentialGenerator.h"
+  dafny_cmd_2 = ".dafny/dafny/Binaries/dafny /noVerify /spillTargetCode:3 /countVerificationErrors:0 /compileTarget:cpp bench/MutableMap.dfy framework/NativeArithmetic.h framework/NativeArrays.h framework/LinearCongruentialGenerator.h"
   actuallyprint(dafny_cmd_2)
   ret = os.system(dafny_cmd_2)
   assert ret == 0
 
-  cmd = None
-  if branch == "eval-mutablemap-linear":
-    # cmd = "g++ -O3 lib/DataStructures/lib/DataStructures/MutableBtree.i.cpp bench/run-mutable-btree.cpp -o MutableBtreeBench -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -Ilib -std=c++17 -I."
-    pass
-  elif branch == "eval-mutablemap-master":
-    cmd = "g++ -O3 bench/bench/MutableMap.cpp bench/run-mutable-map.cpp framework/NativeArithmetic.cpp -o MutableMapBench  -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -I bench -Ilib -std=c++17 -I."
+  cmd = "g++ -O3 bench/bench/MutableMap.cpp bench/run-mutable-map.cpp framework/NativeArithmetic.cpp -o MutableMapBench  -I .dafny/dafny/Binaries/ -I lib/DataStructures/ -I bench -Ilib -std=c++17 -I."
   actuallyprint(cmd)
   ret = os.system(cmd)
   assert ret == 0
@@ -99,8 +57,7 @@ def main():
 
 
   with open(output, 'w') as f:
-      f.write("METADATA btree perf comparison\n")
-      f.write("METADATA branch {}\n".format(branch))
+      f.write("METADATA map perf comparison\n")
       f.write("METADATA seed {}\n".format(seed))
       command = taskset_cmd + "./MutableMapBench {} false".format(str(seed))
       actuallyprint(command)

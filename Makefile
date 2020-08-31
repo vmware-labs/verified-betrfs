@@ -259,12 +259,17 @@ build/%.cs: %.dfy $(DAFNY_BINS) | $$(@D)/.
 ##############################################################################
 # .cpp: C++ output from compiling a Dafny file (which includes all deps)
 # Slow, but useful for iterating when working on the cpp compiler.
-build/%.cpp: %.dfy $(DAFNY_BINS) | $$(@D)/.
+build/%.cpp build/%.h: %.dfy $(DAFNY_BINS) | $$(@D)/.
 #eval trick to assign make var inside rule
-	$(eval TMPNAME=$(abspath $(patsubst %.cpp,%-i.cpp,$@)))
+	$(eval CPPNAME=$(abspath build/$*.cpp))
+	$(eval TMPCPPNAME=$(abspath $(patsubst build/%,build/tmp/%,build/$*.cpp)))
+	$(eval HNAME=$(abspath build/$*.h))
+	$(eval TMPHNAME=$(abspath $(patsubst build/%,build/tmp/%,build/$*.h)))
+	mkdir -p $(shell dirname $(TMPCPPNAME))
 # Dafny irritatingly removes the '.i' presuffix.
-	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $< Framework.h
-	mv $(TMPNAME) $@
+	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPCPPNAME) /compileTarget:cpp $< Framework.h
+	mv $(TMPCPPNAME) $(CPPNAME)
+	mv $(TMPHNAME) $(HNAME)
 
 # Build the main cpp file without building all the partial cpp files.
 build/Bundle.cpp: Impl/Bundle.i.dfy build/Impl/Bundle.i.dummydep $(DAFNY_BINS) | $$(@D)/.
@@ -459,3 +464,19 @@ build/verification-times.pdf: build/verification-times.tgz
 # this verification result, which transitively depends on all sources.
 build/automation-figure.pdf: build/Impl/Bundle.i.verified
 	./tools/automation-study.py
+
+build/linear-line-counts.tex build/linear-line-count-table.tex:
+	./tools/linear_line_counts.py
+
+##############################################################################
+# Linear/Dynamic Frames benchmarks of hashtable and btree
+
+build/bench/run-mutable-map.o: bench/run-mutable-map.cpp build/bench/MutableMap.h
+	$(CC) -c $< -o $@ $(STDLIB) -I build -I .dafny/dafny/Binaries/ -std=c++17 -O3
+
+build/bench/run-mutable-map: build/bench/run-mutable-map.o build/bench/MutableMap.o build/framework/NativeArithmetic.o 
+	$(CC)    $^ -o $@ $(STDLIB)
+
+build/mutable-map-benchmark.data: build/bench/run-mutable-map
+	$< 0 false
+
