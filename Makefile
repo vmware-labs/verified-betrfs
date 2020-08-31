@@ -108,8 +108,9 @@ build%/.:
 # Use bash so PIPESTATUS works
 SHELL=/bin/bash
 define tee_capture
-	$(eval TMPNAME=$(patsubst %.verified,%.verified-tmp,$1))
-	$(2) 2&>1 | tee $(TMPNAME); test $${PIPESTATUS[0]} -eq 0
+	$(eval TMPNAME=$(patsubst build/%,build/tmp/%,$1))
+	mkdir -p $(shell dirname $(TMPNAME))
+	$(2) 2>&1 | tee $(TMPNAME); test $${PIPESTATUS[0]} -eq 0
 	mv $(TMPNAME) $1
 endef
 
@@ -478,5 +479,16 @@ build/bench/run-mutable-map: build/bench/run-mutable-map.o build/bench/MutableMa
 	$(CC)    $^ -o $@ $(STDLIB)
 
 build/mutable-map-benchmark.data: build/bench/run-mutable-map
-	$< 0 false
+	$(call tee_capture,$@,$< 17 false)
+
+
+
+build/bench/run-mutable-btree.o: bench/run-mutable-btree.cpp build/lib/DataStructures/MutableBtree.i.h
+	$(CC) -c $< -o $@ $(STDLIB) -I build -I .dafny/dafny/Binaries/ -std=c++17 -O3
+
+build/bench/run-mutable-btree: build/bench/run-mutable-btree.o build/lib/DataStructures/MutableBtree.i.o build/framework/NativeArithmetic.o build/framework/NativeArrays.o
+	$(CC)    $^ -o $@ $(STDLIB)
+
+build/mutable-btree-benchmark.data: build/bench/run-mutable-btree
+	$(call tee_capture,$@,$< 17 64000000 false)
 
