@@ -693,7 +693,9 @@ abstract module MutableBtree {
     }
     forall i | 0 <= i < |newchildren|
       ensures subnode !in newchildren[i].repr
+      ensures newchildren[i].height < subnode.height
     {
+      assert newchildren[i] == subnode.contents.children[i];
     }
     assert WFShapeSiblings(newchildren);
     assert WFShapeChildren(newchildren, subnode.repr, subnode.height);
