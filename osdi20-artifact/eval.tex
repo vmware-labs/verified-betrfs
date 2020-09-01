@@ -1,0 +1,494 @@
+\section{Evaluation}\label{sec:eval}
+
+Our evaluation is designed to answer two main questions:
+\begin{enumerate}
+  \item Do our automation-control techniques (\S\ref{sec:discipline}) and language
+    improvements (\S\ref{sec:lang}) improve the developer experience? 
+  \item Can our verification methodology scale to the complexity of a
+    modern key-value-store data structure, and can we deliver the
+    performance gains of write optimization?
+\end{enumerate}
+
+\todo{We should measure how much (and what percentage) of code we added/modified to create linear Dafny}
+
+\subsection{Developer Experience}\label{sec:eval:effort}
+
+\paragraph{Measuring Tedium}\label{eval:tedium}
+We estimate the amount of tedium (or conversely, the efficacy of automation)
+by the ratio of the lines of proof 
+(e.g., lemmas, pre-/post-conditions, loop invariants)
+to the lines of executable implementation code.
+This is not a precise model, since it measures a completely verified artifact,
+where the developers may have cleaned up temporary lines of tedium that
+were typed in the course of resolving verification failures.
+However, the proof text in the ``cleaned up'' code at least
+reflects the tedium needed to bridge what automation
+could not manage by itself.
+
+\begin{figure}
+\begin{center}
+\input{data/line-counts}
+\end{center}
+  \vspace{-3mm}
+\caption{Line counts~\cite{sloc} by major components in Figure~\ref{fig:full}.}
+\label{line-counts}
+\end{figure}
+
+\begin{figure}
+\begin{center}
+\input{data/line-counts-micro}
+\end{center}
+  \vspace{-3mm}
+\caption{Line counts~\cite{sloc} of two subcomponents, comparing dynamic-frame implementations with  our linear type system.\protect\footnotemark~
+        Linear typing reduces the proof burden by 31-37\%}
+\label{line-counts-micro}
+  \vspace{-2mm}
+\end{figure}
+
+%\todo{It would be nice to have Disk, IoSystem and such like be charged to a ``framework'' category}
+
+Figure~\ref{line-counts} gives line counts for \name, 
+organized by the major components shown in Figure~\ref{fig:full}.
+We see that the proof ratio for the implementation code
+is 4:1, which grows to 7:1 %for the system as a whole
+%(i.e., when proving crash safety).
+when including all system refinement proofs (``total'').
+This is comparable to the distributed, in-memory key-value store
+verified in previous work~\cite{ironfleet},
+which also reports a 7:1 ratio.
+However, \name's implementation is 3$\times$ larger,
+indicating that automated verification techniques can scale
+to larger systems without super-linear effort.
+
+The results also show that \name's implementation is 
+more than 5$\times$ larger than its specification,
+giving us reason to hope that the specification
+is less likely to contain bugs than an unverified implementation.
+
+Figure~\ref{line-counts-micro}\footnotetext{The implementation of the hash table (with dynamic frames and the linear type system) and search tree (with dynamic frames) coincidentally have an identical line count, despite having substantial differences.} 
+compares two \name components that we wrote using
+both dynamic frames and linear reasoning.
+The results show that
+switching to linear reasoning saves tedium,
+reducing proof overhead by 31-37\%. \todo{Overhead on verification time?}
+%on the hash table
+%and search tree subcomponents.
+
+\paragraph{Measuring Proof-Attempt Latency}\label{eval:discipline}
+To assess the success
+of our discipline for keeping automation under control (\S\ref{sec:discipline}),
+we measure the time to verify individual proof
+units (e.g., definitions, methods, or lemmas) 
+where developers spend most of their time waiting for verification results.
+This approximately measures the developer's perception of the 
+latency of the verification-development cycle.
+
+\begin{figure}
+\includegraphics[width=1\columnwidth]{figures/verification-times.pdf}
+  \vspace{-5mm}
+\caption{Cumulative distribution of verification times of function
+  definitions, implementation methods, and proof lemmas. Most
+  definitions--{\twentySecFasterPctile}--verify in less than {\twentySecSlowThresholdSecs}s,
+  and {\tenSecFasterPctile}--verify in less than {\tenSecSlowThresholdSecs}s.
+  }
+  \vspace{-4mm}
+\label{verification-times}
+\end{figure}
+
+Figure~\ref{verification-times} demonstrates that
+{\name} almost always exhibits interactive verification times,
+with {\tenSecFasterPctile} completing in under {\tenSecSlowThresholdSecs} seconds,
+and {\twentySecFasterPctile} in under {\twentySecSlowThresholdSecs} seconds.
+This suggests that our timeout-averse
+development policy is effective.
+The figure reveals that
+we did not apply our policy with perfect consistency,
+as {\twentySecNumSlowVerifications} proofs do take longer than
+{\twentySecSlowThresholdSecs}s to verify.
+Of those, {\twentySecPctOfSlowVerifsInvolvingHeap} involve dynamic frames.
+
+It is difficult to capture every place we applied the policy. As a proxy,
+we can count places where we explicitly hid a definition.
+This both overestimates the cost of the policy 
+(because sometimes we hid a definition based on intuition,
+before observing a timeout) and underestimates it (because automation can
+be controlled with other techniques).
+
+\begin{figure}
+\includegraphics[width=1\columnwidth]{figures/automation-figure.pdf}
+  \vspace{-4mm}
+  \caption{{\System} manually hides {\autoOpaqueCount} definitions ({\autoOpaquePct} of all system definitions),  revealing
+them {\autoRevealCount} times.
+This metric reflects the effort involved in explicitly managing automation.
+}
+  \vspace{-3mm}
+\label{automation-histogram}
+\end{figure}
+
+These approximations aside, Figure~\ref{automation-histogram}
+gives an idea of the burden of controlling automation.
+We hid {\autoOpaqueCount} definitions,
+{\autoOpaquePct} of all definitions in the system.
+These hidden definitions are manually revealed {\autoRevealCount} times.
+Of the {\autoOpaqueCount}, {\autoOpaqueZeroReveals} were never revealed:
+the salient properties of the definition could be exported as a postcondition
+without causing timeouts.
+{\autoFivePct} of hidden definitions are revealed no more than five
+times; their essential features are captured in lemmas or wrapped into
+higher-level definitions.
+%
+%\cut{The most revealed definition is IsStrictlySorted, revealed {\autoRevealMax} times.}
+
+Developers are typically less sensitive to the latency of continuous-integration
+builds that check that the system as a whole still verifies.
+For \name, these take 1.8 hours of CPU time,
+but thanks to the inherent parallelism of modular verification,
+complete in 11 minutes on 32 cloud machines.
+
+
+
+\subsection{Performance}\label{sec:eval:perf}
+
+Our performance evaluation is designed for two questions:
+\begin{enumerate}
+  \item Does {\name} demonstrate
+    the insertion-performance gains of write-optimized data
+    structures?
+  \item Does our linear extension produce code with
+    performance comparable to hand-written code using dynamic frames?
+\end{enumerate}
+
+All experiments were run on cloud instances with directly attached physical storage.
+The HDD experiments and subcomponent microbenchmarks are run on AWS EC2 d2.xlarge instances, with 4x hardware hyperthreads on a 2.4 GHz Intel Xeon E5-2676 v3.
+The SSD experiments are run on AWS EC2 i2.xlarge instances, with 4x hardware hyperthreads on a 2.5 GHz Intel E5-2670 v2 and a SATA SSD.
+
+\newcommand{\ycsbHddDataDir}{data/ycsb-hdd/golden}
+\newcommand{\ycsbSsdDataDir}{data/ycsb-ssd/golden}
+\newcommand{\mutablemapDataDir}{data/mutablemap/boldgolden}
+\newcommand{\mutablebtreeDataDir}{data/mutablebtree/silver}
+
+\pgfplotsset{
+  GenericBarplot/.style={
+    ybar=1pt,
+    bar width=5.5pt,
+    height = 1.75in,
+    enlarge x limits=0.1,
+    major x tick style = transparent,
+    scaled y ticks=false,
+    ylabel near ticks,
+    point meta=rawy,
+    nodes near coords,
+    every node near coord/.append style={rotate=90, anchor=west, font=\tiny},
+    nodes near coords={\pgfmathprintnumber[fixed, precision=0]{\pgfplotspointmeta}},
+    area legend,
+    legend columns=-1,
+    label style={font=\small, align=center},
+  },
+  MinMidMaxFile/.style n args={3}{
+    /pgfplots/error bars/y dir=both,
+    /pgfplots/error bars/y explicit,
+    table/y error plus expr = (\thisrow{#3} - \thisrow{#2}),
+    table/y error minus expr = (\thisrow{#2} - \thisrow{#1}),
+  }
+}
+
+\pgfplotsset{
+  YcsbThroughput/.style={
+    GenericBarplot,
+    symbolic x coords = {Load, A, B, C, D, F, Cuniform},
+    ylabel={Operations/Second},
+    MinMidMaxFile={MinThroughput}{MedianThroughput}{MaxThroughput},
+  },
+  YcsbLoadThroughput/.style={
+    YcsbThroughput,
+    width = 1.1in,
+    restrict x to domain=0:0,
+    xtick = {Load},
+    xlabel={(from YCSB A)},
+  },
+  YcsbRunThroughput/.style={
+    YcsbThroughput,
+    width = 3.1in,
+    xmin = A,
+    xmax = Cuniform,
+    restrict x to domain=1:10,
+    xtick = {A, B, C, D, F, Cuniform},
+    xticklabels = {A, B, C, D, F, U},
+    xlabel={YCSB Workload},
+  },
+}
+
+\pgfplotsset{
+    LinearStyle/.style={teal, fill=teal!10!white, postaction={pattern=north west lines, pattern color=teal!50!white}},
+    HeapStyle/.style={violet!50!black, fill=violet!50!black!10!white, postaction={pattern=north east lines, pattern color=violet!50!black!50!white}},
+}
+
+\pgfplotsset{
+    BerkeleyStyle/.style={blue, fill=blue!10!white, postaction={pattern=crosshatch dots, pattern color=blue!50!white}},
+    VeriHeapStyle/.style={HeapStyle},
+    VeriLinearStyle/.style={LinearStyle},
+    RocksStyle/.style={red, fill=red!05!white, postaction={pattern=crosshatch, pattern color=red!50!white}},
+}
+
+\begin{figure*}
+\centering
+%\ref{ycsb-legend}
+\begin{subfigure}[c]{\textwidth}
+  \centering
+  \parbox[c]{0.1\textwidth}{\subcaption{HDD}} ~
+  \parbox[c]{0.7\textwidth}{
+  \begin{tikzpicture}
+    \begin{axis}[
+        YcsbLoadThroughput,
+        ymode = log,
+        ymax = 100000,
+        ytick = { 100, 1000, 10000, 100000, 1000000 },
+        legend columns=1,
+        legend to name={ycsb-legend},
+      ]
+      \addplot+ [BerkeleyStyle] table {\ycsbHddDataDir/berkeleydb.csv};
+      \addlegendentry{BerkeleyDB}
+      \addplot+ [VeriHeapStyle] table {\ycsbHddDataDir/veribetrkv.csv};
+      \addlegendentry{\name-DF}
+      \addplot+ [VeriLinearStyle] table {\ycsbHddDataDir/veribetrkv-linear.csv};
+      \addlegendentry{\name}
+      \addplot+ [RocksStyle] table {\ycsbHddDataDir/rocksdb.csv};
+      \addlegendentry{RocksDB}
+    \end{axis}
+  \end{tikzpicture}
+  \begin{tikzpicture}
+    \begin{axis}[
+        YcsbRunThroughput,
+        ymin = 0,
+        ymax = 800,
+      ]
+      \addplot+ [BerkeleyStyle] table {\ycsbHddDataDir/berkeleydb.csv};
+      \addplot+ [VeriHeapStyle] table {\ycsbHddDataDir/veribetrkv.csv};
+      \addplot+ [VeriLinearStyle] table {\ycsbHddDataDir/veribetrkv-linear.csv};
+      \addplot+ [RocksStyle] table {\ycsbHddDataDir/rocksdb.csv};
+    \end{axis}
+  \end{tikzpicture}
+  }%
+  \hspace{-0.6in}%
+  \ref{ycsb-legend}
+  \label{subfig:ycsb-hdd}
+\end{subfigure}
+
+\begin{subfigure}{\textwidth}
+  \centering
+  \parbox[c]{0.1\textwidth}{\subcaption{SSD}} ~
+  \parbox[c]{0.7\textwidth}{
+  \begin{tikzpicture}
+    \begin{axis}[
+        YcsbLoadThroughput,
+        ymode = log,
+        ymax = 200000,
+        ytick = { 100, 1000, 10000, 100000, 1000000 },
+      ]
+      \addplot+ [BerkeleyStyle] table {\ycsbSsdDataDir/berkeleydb.csv};
+      % \addlegendentry{BerkeleyDB}
+      \addplot+ [VeriHeapStyle] table {\ycsbSsdDataDir/veribetrkv-128k.csv};
+      % \addlegendentry{\name-Dynamic Frames}
+      \addplot+ [VeriLinearStyle] table {\ycsbSsdDataDir/veribetrkv-linear-128k.csv};
+      % \addlegendentry{\name}
+      \addplot+ [RocksStyle] table {\ycsbSsdDataDir/rocksdb.csv};
+      % \addlegendentry{RocksDB}
+    \end{axis}
+  \end{tikzpicture}
+  \begin{tikzpicture}
+    \begin{axis}[
+        YcsbRunThroughput,
+        ymin = 0,
+        ymax = 20000,
+        ytick = { 5000, 10000, 15000, 20000, 1000000 },
+      ]
+      \addplot+ [BerkeleyStyle] table {\ycsbSsdDataDir/berkeleydb.csv};
+      \addplot+ [VeriHeapStyle] table {\ycsbSsdDataDir/veribetrkv-128k.csv};
+      \addplot+ [VeriLinearStyle] table {\ycsbSsdDataDir/veribetrkv-linear-128k.csv};
+      \addplot+ [RocksStyle] table {\ycsbSsdDataDir/rocksdb.csv};
+    \end{axis}
+  \end{tikzpicture}
+  }
+  \hspace{0.9in}
+  \label{subfig:ycsb-ssd}
+\end{subfigure}
+% %   \caption{
+% %     Median throughput of YCSB workloads with 24B keys and 512B
+% %     values running on a HDD and 2GB of RAM.  Load is 10M operations
+% %     ($\approx$ 5GB of data) and runs are 10000 operations each.
+% %     Workload ``U'' is a workload of uniformly random queries.
+% %     Error
+% %     bars indicate min/max of 6 runs.  Higher is
+% %     better.}\label{fig:ycsb-hdd-512B}
+\caption{
+Median throughput of YCSB workloads values running on an HDD (\subref{subfig:ycsb-hdd}) and SSD (\subref{subfig:ycsb-ssd}) and 2GB of RAM. \name-DF is a version of our system with hand-tuned code using dynamic frames reasoning.  Load is 10M operations
+($\approx$ 5GB of data) and runs are 10000 operations each.
+Error bars indicate min/max of 6 runs.  Higher is better.
+On an HDD (\subref{subfig:ycsb-hdd}), \name insertions are over $25\times$ faster than in
+BerkeleyDB, but lag RocksDB, by about $9\times$.
+\name queries are are about $4\times$ slower than both.
+On an SSD (\subref{subfig:ycsb-ssd}), \name still beats BerkleyDB on random
+insertions, but \name queries are slower than BerkeleyDB.
+}
+\label{fig:ycsb}
+\end{figure*}
+
+\subsubsection{YCSB}
+
+\Cref{fig:ycsb} show throughput for \name,
+BerkeleyDB, and RocksDB on the YCSB benchmarks~\cite{ycsb} on hard drive and SSD,
+including the load phase for workload A, and a uniformly random query
+workload (labeled as workload ``U'').
+
+There are three main take-aways from these measurements.  First, \name
+demonstrates the performance gains of using a write-optimized data
+structure.  For the load phase on hard drive, which consists of a pure
+random insertion workload, \name is over $25\times$ faster than
+BerkeleyDB.  Even on SSD, where random I/O is much cheaper, \name
+modestly outperforms BerkeleyDB on insertions.
+
+In contrast, \name is roughly $8\times$ slower than RocksDB on hard
+disk and $4\times$ slower on SSD.  We think this gap is due to two main
+factors.  First, our implementation performs a sync whenever its
+on-disk log fills up, whereas RocksDB performs sync only when the
+application requests them.  Second, due to memory fragmentation and
+other overheads, our effective cache size is approximately $4\times$
+smaller than Rocks.  Ths is because Rocks primarily uses the OS page
+cache, which can pack 4KB pages in memory, whereas we use an internal
+(and, hence, verified!) cache of nodes.
+
+The second main take-away is that queries in \name are a constant
+factor slower than in a \btree: roughly $4\times$ slower than
+BerkeleyDB on both hard drive and SSD.  It is well known that
+write-optimized data structures need additional optimizations to match
+\btree point-query performance.  For example, RocksDB is
+also slower than BerkeleyDB on SSD and has relatively mixed
+performance on hard disk.  The primary bottleneck for \name query
+performance is that each cache miss loads an entire node, and nodes
+are large (2MB on hard disk and 128K on SSD) in order to amortize I/O
+overheads.  BerkeleyDB nodes, on the other hand, are only 16KB.
+Industrial-grade \beptrees solve this problem with
+``sub-nodes'', but we have not yet implemented this optimization.
+
+The final take-away is that at a macro-level our linear implementation has essentially
+the same performance as the version with hand-tuned code
+using dynamic frames reasoning.  
+%This demonstrates that our linear type system extension to
+%Dafny enables us to write algorithms and data structures as if we are
+%using immutable variables, but compile down to efficient,
+%update-in-place code.
+
+Overall, we conclude that \name demonstrates that a verified system
+can achieve the performance gains of a write-optimized storage system,
+but it needs further optimization to match highly-tuned commercial
+implementations.
+
+\begin{figure}
+\centering
+\ref{micro-legend}
+\begin{subfigure}[t]{.25\textwidth}
+  \begin{tikzpicture}
+    \begin{axis}[
+        GenericBarplot,
+        enlarge x limits=0.2,
+        width = 1.8in,
+        symbolic x coords = {insert, readpositive, readnegative, remove},
+        xtick = {insert, readpositive, readnegative, remove},
+        xticklabels = {Insert, Pos. Query, Neg. Query, Delete},
+        x tick label style={rotate=90},
+        ymin = 0,
+        ymax = 8300000,
+        ytick = {0, 2000000, 4000000, 6000000, 8000000},
+        yticklabels={0, 2M, 4M, 6M, 8M},
+        ylabel={Operations/Second},
+        legend to name={micro-legend},
+        MinMidMaxFile={min}{med}{max},
+      ]
+      \addplot+ [HeapStyle] table {\mutablemapDataDir/master.csv};
+      \addlegendentry{Dynamic Frames}
+      \addplot+ [LinearStyle] table {\mutablemapDataDir/linear.csv};
+      \addlegendentry{Linear}
+    \end{axis}
+  \end{tikzpicture}
+  \subcaption{Hash table}
+        \label{subfig:micro-hashtable}
+\end{subfigure}~%
+\begin{subfigure}[t]{.2\textwidth}
+  \centering
+  \parbox{1.7\textwidth}{
+    \vspace{-2.475in}
+  \begin{tikzpicture}
+    \begin{axis}[
+        GenericBarplot,
+        enlarge x limits=0.5,
+        width = 1.3in,
+        symbolic x coords = {write,read},
+        xtick = {write, read},
+        xticklabels = {Insert, Query},
+        x tick label style={rotate=90},
+        ymin = 0,
+        ymax = 300000,
+        ylabel={Operations/Second},
+        MinMidMaxFile={min}{med}{max},
+      ]
+      \addplot+ [HeapStyle] table {\mutablebtreeDataDir/8000000-master.csv};
+      \addplot+ [LinearStyle] table {\mutablebtreeDataDir/8000000-linear.csv};
+    \end{axis}
+  \end{tikzpicture}}\\
+        \subcaption{Search tree}
+        \label{subfig:micro-btree}
+\end{subfigure}
+        \caption{Median throughput of subcomponent microbenchmarks.
+Higher is better. Error bars are min/max of 6 runs.
+%Our linear hash table (\subref{subfig:micro-hashtable}) is slightly faster,
+%or at least comparable, than our hand-optimized implementation using
+%dynamic frames reasoning. Throughput of successively inserting
+%64 million key-value pairs, performing 64 million positive and
+%negative queries, and emptying the hash table by removing each
+%key. 
+%Our linear in-memory search tree (\subref{subfig:micro-btree}) is comparable with our
+%hand-optimized update-in-place version using dynamic frames reasoning.
+%Throughput of inserting 8 million key-value pairs, and performing 8 million negative queries.
+}\label{fig:datastructures-micro}
+\end{figure}
+
+
+\subsubsection{Linear Data Structures}
+
+\Cref{fig:datastructures-micro} shows the performance of
+our linear and dynamic-frames-based hash-table and search-tree implementations.
+%
+The main take-away from both experiments is that, even in
+microbenchmarks, the linear and non-linear implementations have very
+comparable performance.
+
+The hash table benchmark inserts 64 million key-value
+pairs, then performs as many positive and negative queries, and then
+deletes everything in the hash table.  The linear version is slightly
+faster than the non-linear version, except for deletes, which are
+slightly slower.  We suspect the speedup comes primarily from the lack
+of shared pointer overhead.
+
+The search-tree benchmark measures the time to insert 8 million key-value
+pairs and then query them all.  Performance for the linear version is
+close to the non-linear version, but slightly faster for queries and
+slightly slower for inserts.  We believe queries are faster due to the
+elimination of shared pointer overheads, and the insertions are slower
+due to the overheads of destructing nodes on the way down the tree and
+reconstructing them on the way back up.  
+%We could eliminate this
+%overhead by adding support for mutably borrowing references to our
+%linear type system.  The non-linear version was also written to be
+%tail recursive.  This is not possible in the linear version, since it
+%needs to reconstruct nodes as it unwinds the recursion.  Mutable
+%borrow support would also eliminate this overhead.
+
+Overall, we conclude that our linear type system enables us to
+construct performant code without the challenges of dynamic frame
+reasoning.
+
+%% \begin{figure}
+%% \includegraphics[width=1\columnwidth]{figures/btree-perf.pdf}
+%% \caption{linear/repr perf}
+%% \label{btree-perf}
+%% \end{figure}
