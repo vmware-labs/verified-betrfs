@@ -9,7 +9,7 @@ function generate_output_line {
     if [ -z "$logs" ]; then
         return
     fi
-    throughputs=`sed -n "s,^$count\s*$operation\s*\(.*\)$,\1,p" $logs`
+    throughputs=`sed -n "s,^$count[ \t]*$operation[ \t]*\(.*\)$,\1,p" $logs`
     if [ -z "$throughputs" ]; then
         return
     fi

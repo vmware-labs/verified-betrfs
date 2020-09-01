@@ -428,6 +428,7 @@ Storage Systems are Distributed Systems\\
   \subcaption{Hash table}
   \label{subfig:micro-hashtable}
 \end{subfigure}~%
+\hspace{0.3in}
 \begin{subfigure}[t]{.2\textwidth}
   \centering
   \parbox{1.7\textwidth}{
@@ -443,7 +444,7 @@ Storage Systems are Distributed Systems\\
         x tick label style={rotate=90},
         ymin = 0,
         %ymax = 300000,
-        ylabel={Operations/Second},
+        %ylabel={Operations/Second},
         MinMidMaxFile={min}{med}{max},
       ]
       \addplot+ [HeapStyle] table {build/mutable-btree-benchmark.csv};
