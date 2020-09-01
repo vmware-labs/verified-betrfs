@@ -190,9 +190,7 @@ build/%.synchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 ##############################################################################
 # .verchk: Dafny file-local verification
 build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
-	$(eval TMPNAME=$(patsubst %.verchk,%.verchk-tmp,$@))
-	( $(TIME) $(DAFNY_CMD) /compile:0 /trace $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
-	mv $(TMPNAME) $@
+	$(call tee_capture,$@,$(TIME) $(DAFNY_CMD) /compile:0 /trace /countVerificationErrors:0 $(TIMELIMIT) $<)
 
 ##############################################################################
 # .okay: Dafny file-level verification, no time limit,
