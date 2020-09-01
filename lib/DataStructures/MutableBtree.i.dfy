@@ -1306,7 +1306,7 @@ module MainModule {
     }
     var write_end: uint64 := steadyClockMillis();
     var write_duration: uint64 := write_end - write_start;
-    print(n, "\twrite\trepr\t", write_duration, "\n");
+    print(n, "\twrite\t", write_duration, "\n");
 
     i := 0;
 
@@ -1328,6 +1328,6 @@ module MainModule {
     }
     var read_end: uint64 := steadyClockMillis();
     var read_duration: uint64 := read_end - read_start;
-    print(n, "\tread\trepr\t", read_duration, "\n");
+    print(n, "\tread\t", read_duration, "\n");
   }
 } 

@@ -420,7 +420,7 @@ Storage Systems are Distributed Systems\\
         MinMidMaxFile={min}{med}{max},
       ]
       \addplot+ [HeapStyle] table {build/mutable-map-benchmark.csv};
-      \addlegendentry{Dynamic Frames}
+      %\addlegendentry{Dynamic Frames}
       %\addplot+ [LinearStyle] table {\mutablemapDataDir/linear.csv};
       %\addlegendentry{Linear}
     \end{axis}
@@ -428,31 +428,31 @@ Storage Systems are Distributed Systems\\
   \subcaption{Hash table}
   \label{subfig:micro-hashtable}
 \end{subfigure}~%
-%% \begin{subfigure}[t]{.2\textwidth}
-%%   \centering
-%%   \parbox{1.7\textwidth}{
-%%     \vspace{-2.475in}
-%%   \begin{tikzpicture}
-%%     \begin{axis}[
-%%         GenericBarplot,
-%%         enlarge x limits=0.5,
-%%         width = 1.3in,
-%%         symbolic x coords = {write,read},
-%%         xtick = {write, read},
-%%         xticklabels = {Insert, Query},
-%%         x tick label style={rotate=90},
-%%         ymin = 0,
-%%         ymax = 300000,
-%%         ylabel={Operations/Second},
-%%         MinMidMaxFile={min}{med}{max},
-%%       ]
-%%       \addplot+ [HeapStyle] table {\mutablebtreeDataDir/8000000-master.csv};
-%%       \addplot+ [LinearStyle] table {\mutablebtreeDataDir/8000000-linear.csv};
-%%     \end{axis}
-%%   \end{tikzpicture}}\\
-%%         \subcaption{Search tree}
-%%         \label{subfig:micro-btree}
-%% \end{subfigure}
+\begin{subfigure}[t]{.2\textwidth}
+  \centering
+  \parbox{1.7\textwidth}{
+    \vspace{-2.475in}
+  \begin{tikzpicture}
+    \begin{axis}[
+        GenericBarplot,
+        enlarge x limits=0.5,
+        width = 1.3in,
+        symbolic x coords = {write,read},
+        xtick = {write, read},
+        xticklabels = {Insert, Query},
+        x tick label style={rotate=90},
+        ymin = 0,
+        %ymax = 300000,
+        ylabel={Operations/Second},
+        MinMidMaxFile={min}{med}{max},
+      ]
+      \addplot+ [HeapStyle] table {build/mutable-btree-benchmark.csv};
+      %\addplot+ [LinearStyle] table {\mutablebtreeDataDir/8000000-linear.csv};
+    \end{axis}
+  \end{tikzpicture}}\\
+  \subcaption{Search tree}
+  \label{subfig:micro-btree}
+\end{subfigure}
 \caption{Throughput of subcomponent microbenchmarks.
   Higher is better. 
 }\label{fig:datastructures-micro}

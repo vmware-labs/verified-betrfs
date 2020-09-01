@@ -114,6 +114,15 @@ define tee_capture
 	mv $(TMPNAME) $1
 endef
 
+# This version only breaks on abnormal exits, e.g. segfaults
+define tee_capture_allow_errors
+	$(eval TMPNAME=$(patsubst build/%,build/tmp/%,$1))
+	mkdir -p $(shell dirname $(TMPNAME))
+	$(2) 2>&1 | tee $(TMPNAME); test $${PIPESTATUS[0]} -lt 128
+	mv $(TMPNAME) $1
+endef
+
+
 ##############################################################################
 ##############################################################################
 # Special top-level targets
@@ -183,16 +192,12 @@ build/%.dummydep: %.dfy | $$(@D)/.
 ##############################################################################
 # .synchk: Dafny syntax check
 build/%.synchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
-	$(eval TMPNAME=$(patsubst %.synchk,%.synchk-tmp,$@))
-	( $(TIME) $(DAFNY_CMD) /compile:0 /dafnyVerify:0 $< ) 2>&1 | tee $(TMPNAME)
-	mv $(TMPNAME) $@
+	$(call tee_capture_allow_errors,$@,$(TIME) $(DAFNY_CMD) /compile:0 /dafnyVerify:0 $<)
 
 ##############################################################################
 # .verchk: Dafny file-local verification
 build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
-	$(eval TMPNAME=$(patsubst %.verchk,%.verchk-tmp,$@))
-	( $(TIME) $(DAFNY_CMD) /compile:0 /trace $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
-	mv $(TMPNAME) $@
+	$(call tee_capture_allow_errors,$@,$(TIME) $(DAFNY_CMD) /compile:0 /trace $(TIMELIMIT) $<)
 
 ##############################################################################
 # .okay: Dafny file-level verification, no time limit,
@@ -481,7 +486,7 @@ build/bench/run-mutable-map: build/bench/run-mutable-map.o build/bench/MutableMa
 build/mutable-map-benchmark.data: build/bench/run-mutable-map
 	$(call tee_capture,$@,$< 17 false)
 
-build/mutable-map-benchmark.csv: build/mutable-map-benchmark.data
+build/mutable-map-benchmark.csv: build/mutable-map-benchmark.data tools/mutablemap-cook.sh
 	$(call tee_capture,$@,tools/mutablemap-cook.sh $<)
 
 build/bench/run-mutable-btree.o: bench/run-mutable-btree.cpp build/lib/DataStructures/MutableBtree.i.h
@@ -492,6 +497,9 @@ build/bench/run-mutable-btree: build/bench/run-mutable-btree.o build/lib/DataStr
 
 build/mutable-btree-benchmark.data: build/bench/run-mutable-btree
 	$(call tee_capture,$@,$< 17 64000000 false)
+
+build/mutable-btree-benchmark.csv: build/mutable-btree-benchmark.data tools/mutablebtree-cook-2.sh
+	$(call tee_capture,$@,tools/mutablebtree-cook-2.sh 64000000 $<)
 
 ##############################################################################
 # YCSB benchmark runs
@@ -512,5 +520,5 @@ build/BerkeleyYcsb.data: build/BerkeleyYcsb ycsb/workloada-onefield.spec ycsb/wo
 ##############################################################################
 # Build a PDF summarizing results
 
-build/osdi20-artifact/paper.pdf: osdi20-artifact/paper.tex build/Impl/Bundle.i.lcreport build/linear-line-counts.tex build/verification-times.pdf build/automation-figure.pdf build/mutable-map-benchmark.csv build/Impl/Bundle.i.status.pdf
+build/osdi20-artifact/paper.pdf: osdi20-artifact/paper.tex build/Impl/Bundle.i.lcreport build/linear-line-counts.tex build/verification-times.pdf build/automation-figure.pdf build/mutable-map-benchmark.csv build/mutable-btree-benchmark.csv build/Impl/Bundle.i.status.pdf
 	pdflatex -shell-escape -output-directory build/osdi20-artifact $<
