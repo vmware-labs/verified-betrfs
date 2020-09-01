@@ -1277,6 +1277,8 @@ module MainModule {
   }
 
   method Run(seed: uint64, n: uint64, dry: bool)
+  // This can only called from trusted benchmark code.
+  requires false
   {
     // var n: uint64 := 1_000_000;
     // var p: uint64 := 300_007;
