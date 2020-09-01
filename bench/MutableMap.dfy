@@ -46,7 +46,7 @@ module MutableMapBench {
     var write_end: uint64 := steadyClockMillis();
     assume write_end >= write_start;
     var write_duration: uint64 := write_end - write_start;
-    print("insert\trepr\t", write_duration, "\n");
+    print("insert\t", write_duration, "\n");
 
     assert hashMap.Count <= nOperations;
 
@@ -74,7 +74,7 @@ module MutableMapBench {
     var readpositive_end: uint64 := steadyClockMillis();
     assume readpositive_end >= readpositive_start;
     var readpositive_duration: uint64 := readpositive_end - readpositive_start;
-    print("readpositive\trepr\t", readpositive_duration, "\n");
+    print("readpositive\t", readpositive_duration, "\n");
 
     // READ NEGATIVE
     i := 0;
@@ -101,7 +101,7 @@ module MutableMapBench {
     var readnegative_end: uint64 := steadyClockMillis();
     assume readnegative_end >= readnegative_start;
     var readnegative_duration: uint64 := readnegative_end - readnegative_start;
-    print("readnegative\trepr\t", readnegative_duration, "\n");
+    print("readnegative\t", readnegative_duration, "\n");
 
     // EMTPY (REMOVE POSITIVE)
     i := 0;
@@ -124,7 +124,7 @@ module MutableMapBench {
     var remove_end: uint64 := steadyClockMillis();
     assume remove_end >= remove_start;
     var remove_duration: uint64 := remove_end - remove_start;
-    print("remove\trepr\t", remove_duration, "\n");
+    print("remove\t", remove_duration, "\n");
 
   }
 }

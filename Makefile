@@ -9,7 +9,7 @@ DAFNY_CMD=$(DAFNY_ROOT)/Binaries/dafny
 DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
 
 ifndef TL
-	TL=20
+	TL=0
 endif
 ifeq "$(TL)" "0"
   TIMELIMIT=
@@ -481,7 +481,8 @@ build/bench/run-mutable-map: build/bench/run-mutable-map.o build/bench/MutableMa
 build/mutable-map-benchmark.data: build/bench/run-mutable-map
 	$(call tee_capture,$@,$< 17 false)
 
-
+build/mutable-map-benchmark.csv: build/mutable-map-benchmark.data
+	$(call tee_capture,$@,tools/mutablemap-cook.sh $<)
 
 build/bench/run-mutable-btree.o: bench/run-mutable-btree.cpp build/lib/DataStructures/MutableBtree.i.h
 	$(CC) -c $< -o $@ $(STDLIB) -I build -I .dafny/dafny/Binaries/ -std=c++17 -O3
@@ -492,3 +493,24 @@ build/bench/run-mutable-btree: build/bench/run-mutable-btree.o build/lib/DataStr
 build/mutable-btree-benchmark.data: build/bench/run-mutable-btree
 	$(call tee_capture,$@,$< 17 64000000 false)
 
+##############################################################################
+# YCSB benchmark runs
+
+build/VeribetrfsYcsb.data: build/VeribetrfsYcsb ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec
+	rm -f build/veribetrkv.img
+	$(call tee_capture,$@,./build/VeribetrfsYcsb build/veribetrkv.img ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec)
+
+build/RocksYcsb.data: build/RocksYcsb ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec
+	rm -rf build/RocksYcsb.db
+	mkdir build/RocksYcsb.db
+	$(call tee_capture,$@,./build/RocksYcsb build/RocksYcsb.db ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec)
+
+build/BerkeleyYcsb.data: build/BerkeleyYcsb ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec
+	rm -f build/berkeley.db
+	$(call tee_capture,$@,./build/BerkeleyYcsb build/berkeley.db ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec)
+
+##############################################################################
+# Build a PDF summarizing results
+
+build/osdi20-artifact/paper.pdf: osdi20-artifact/paper.tex build/Impl/Bundle.i.lcreport build/linear-line-counts.tex build/verification-times.pdf build/automation-figure.pdf build/mutable-map-benchmark.csv build/Impl/Bundle.i.status.pdf
+	pdflatex -shell-escape -output-directory build/osdi20-artifact $<
