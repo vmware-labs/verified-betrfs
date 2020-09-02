@@ -299,7 +299,7 @@ def main():
     detect_bogus_workers(pile)
     report_slowest_symbols(pile)
     report_sequential_time(pile)
-    emit_constants(CDFStuff(pile).defs())
+    #emit_constants(CDFStuff(pile).defs())
     plot_all(pile)
 
 main()
