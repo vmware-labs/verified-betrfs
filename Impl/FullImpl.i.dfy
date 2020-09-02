@@ -23,8 +23,9 @@ module FullImpl {
       && this.bc in Repr
       && this.jc in Repr
 
-      // UGH TODO make bc.Repr instaed of bc.Repr()
-      // so we don't have to do this crap
+      // TODO make bc.Repr instaed of bc.Repr()
+      // so we don't have to do this nonsense.
+      // (jonh) Or wait until linearization gets to the top of the object tree...
       && this.bc.persistentIndirectionTable in Repr
       && this.bc.ephemeralIndirectionTable in Repr
       && (this.bc.frozenIndirectionTable != null ==>
