@@ -52,17 +52,6 @@ function FindIndexInSeq<T>(s:seq<T>, v:T):int
         -1
 }
 
-//~ lemma Lemma_IdenticalSingletonSequencesHaveIdenticalElement<T>(x:T, y:T)
-//~     requires [x] == [y];
-//~     ensures  x == y;
-//~ {
-//~     calc {
-//~         x;
-//~         [x][0];
-//~         [y][0];
-//~         y;
-//~     }
-//~ }
 
 //////////////////////////////////////////////////////////
 //  Combining sequences of sequences

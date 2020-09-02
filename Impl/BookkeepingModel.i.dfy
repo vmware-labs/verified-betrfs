@@ -356,15 +356,9 @@ module BookkeepingModel {
         } else {
           var r :| r in s'.ephemeralIndirectionTable.locs &&
               s'.ephemeralIndirectionTable.locs[r].addr as int == i * NodeBlockSize() as int;
-          //assert r != ref;
           assert MapsAgreeOnKey(
             IIndirectionTable(s.ephemeralIndirectionTable).locs,
             IIndirectionTable(s'.ephemeralIndirectionTable).locs, r);
-          //assert r in IIndirectionTable(s'.ephemeralIndirectionTable).locs;
-          //assert r in IIndirectionTable(s.ephemeralIndirectionTable).locs;
-          //assert r in s.ephemeralIndirectionTable.contents;
-          //assert s.ephemeralIndirectionTable.contents[r].0.Some?;
-          //assert s.ephemeralIndirectionTable.contents[r].0.value.addr as int == i * NodeBlockSize() as int;
           assert IsLocAllocIndirectionTable(s.ephemeralIndirectionTable, i);
           assert IsLocAllocBitmap(s.blockAllocator.ephemeral, i);
           assert IsLocAllocBitmap(s'.blockAllocator.ephemeral, i);

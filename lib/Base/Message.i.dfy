@@ -14,51 +14,51 @@ include "sequences.i.dfy"
 
 abstract module Message {
   type Value(!new)
-	type Delta(!new)
+  type Delta(!new)
 
-	function method NopDelta() : Delta
-	function method DefaultValue() : Value
+  function method NopDelta() : Delta
+  function method DefaultValue() : Value
 
-	datatype Message =
-	  | Define(value: Value)
-	  | Update(delta: Delta)
+  datatype Message =
+    | Define(value: Value)
+    | Update(delta: Delta)
 
-	function method CombineDeltas(newdelta: Delta, olddelta: Delta) : (result: Delta)
-	ensures newdelta == NopDelta() ==> result == olddelta
-	ensures olddelta == NopDelta() ==> result == newdelta
+  function method CombineDeltas(newdelta: Delta, olddelta: Delta) : (result: Delta)
+  ensures newdelta == NopDelta() ==> result == olddelta
+  ensures olddelta == NopDelta() ==> result == newdelta
 
-	function method ApplyDelta(delta: Delta, value: Value) : (result: Value)
-	ensures delta == NopDelta() ==> result == value
+  function method ApplyDelta(delta: Delta, value: Value) : (result: Value)
+  ensures delta == NopDelta() ==> result == value
 
-	function method Merge(newmessage: Message, oldmessage: Message) : Message {
-		match (newmessage, oldmessage) {
-			case (Define(newvalue), _) => Define(newvalue)
-			case (Update(newdelta), Update(olddelta)) => Update(CombineDeltas(newdelta, olddelta))
-			case (Update(delta), Define(value)) => Define(ApplyDelta(delta, value))
-		}
-	}
-
-	function method IdentityMessage() : Message {
-	  Update(NopDelta())
+  function method Merge(newmessage: Message, oldmessage: Message) : Message {
+    match (newmessage, oldmessage) {
+      case (Define(newvalue), _) => Define(newvalue)
+      case (Update(newdelta), Update(olddelta)) => Update(CombineDeltas(newdelta, olddelta))
+      case (Update(delta), Define(value)) => Define(ApplyDelta(delta, value))
+    }
   }
 
-	function method DefineDefault() : Message {
-	  Define(DefaultValue())
+  function method IdentityMessage() : Message {
+    Update(NopDelta())
   }
 
-	lemma DeltaIsAssociative(a: Delta, b: Delta, c: Delta)
-		ensures CombineDeltas(CombineDeltas(a, b), c) == CombineDeltas(a, CombineDeltas(b, c))
+  function method DefineDefault() : Message {
+    Define(DefaultValue())
+  }
 
-	lemma ApplyIsAssociative(a: Delta, b: Delta, value: Value)
-		ensures ApplyDelta(CombineDeltas(a, b), value) == ApplyDelta(a, ApplyDelta(b, value))
+  lemma DeltaIsAssociative(a: Delta, b: Delta, c: Delta)
+    ensures CombineDeltas(CombineDeltas(a, b), c) == CombineDeltas(a, CombineDeltas(b, c))
 
-	lemma MergeIsAssociative(a: Message, b: Message, c: Message)
-		ensures Merge(Merge(a, b), c) == Merge(a, Merge(b, c))
-		{
-			match a {
-			  case Define(a) => { }
-			  case Update(a) => {
-			    match b {
+  lemma ApplyIsAssociative(a: Delta, b: Delta, value: Value)
+    ensures ApplyDelta(CombineDeltas(a, b), value) == ApplyDelta(a, ApplyDelta(b, value))
+
+  lemma MergeIsAssociative(a: Message, b: Message, c: Message)
+    ensures Merge(Merge(a, b), c) == Merge(a, Merge(b, c))
+    {
+      match a {
+        case Define(a) => { }
+        case Update(a) => {
+          match b {
             case Define(b) => { }
             case Update(b) => {
               match c {
@@ -70,10 +70,10 @@ abstract module Message {
                 }
               }
             }
-			    }
-			  }
-			}
-		}
+          }
+        }
+      }
+    }
 }
 
 module ValueMessage refines Message {
@@ -91,13 +91,13 @@ module ValueMessage refines Message {
   function method CombineDeltas(newdelta: Delta, olddelta: Delta) : Delta { NoDelta }
   function method ApplyDelta(delta: Delta, value: Value) : Value { value }
 
-	lemma DeltaIsAssociative(a: Delta, b: Delta, c: Delta)
-	{
-	}
+  lemma DeltaIsAssociative(a: Delta, b: Delta, c: Delta)
+  {
+  }
 
-	lemma ApplyIsAssociative(a: Delta, b: Delta, value: Value)
-	{
-	}
+  lemma ApplyIsAssociative(a: Delta, b: Delta, value: Value)
+  {
+  }
 
   function method bytestring_to_Message(s: seq<byte>) : Message
   requires |s| < 0x1_0000_0000
@@ -201,40 +201,9 @@ module ValueMessage refines Message {
 
     result := aresult[..i];
   }
-
   
-  
-	export S provides * reveals Message, Merge, IdentityMessage, DefineDefault, Value
-	export extends S
-	export Internal reveals *
+  export S provides * reveals Message, Merge, IdentityMessage, DefineDefault, Value
+  export extends S
+  export Internal reveals *
 }
-
-// module IntMessage refines Message {
-// 	type Value = int
-// 	type Delta = int	
-// 
-// 	function NopDelta() : Delta {
-// 		0
-// 	}
-// 
-// 	function DefaultValue() : Value {
-// 		0
-// 	}
-// 
-// 	function CombineDeltas(newdelta: Delta, olddelta: Delta) : Delta {
-// 		newdelta + olddelta
-// 	}
-// 
-// 	function ApplyDelta(delta: Delta, value: Value) : Value {
-// 		value + delta
-// 	}
-// 
-// 	lemma DeltaIsAssociative(a: Delta, b: Delta, c: Delta)
-// 		ensures CombineDeltas(CombineDeltas(a, b), c) == CombineDeltas(a, CombineDeltas(b, c))
-// 		{ }
-// 
-// 	lemma ApplyIsAssociative(a: Delta, b: Delta, value: Value)
-// 		ensures ApplyDelta(CombineDeltas(a, b), value) == ApplyDelta(a, ApplyDelta(b, value))
-// 		{ }
-// }
 

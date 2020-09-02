@@ -18,7 +18,7 @@ module MainHandlers refines Main {
   import DOM = DiskOpModel
   import SM = StateModel
   import SI = StateImpl
-  import opened EvictImpl // jonh hack
+  import opened EvictImpl // (jonh) only used for unverified debug hooks
   import CoordinationImpl
   import HandleReadResponseImpl
   import HandleReadResponseModel
@@ -28,7 +28,7 @@ module MainHandlers refines Main {
   import FullImpl
   import MkfsImpl
   import MkfsModel
-  import Bounds  // jonh hack for metadata recording
+  import Bounds  // (jonh) only used for metadata recording hook
 
   import BlockJournalCache
   import BBC = BetreeCache
@@ -112,7 +112,9 @@ module MainHandlers refines Main {
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), uiop, io.diskOp()); // observe
   }
 
-  // jonh hack UNVERIFIED DEBUG ONLY
+  // (jonh) unverified debug hook: Note "requires false" which prevents calling
+  // this hook from any real handler code. It's only reachable from hooks
+  // in the trusted benchmark driver; we used it to diagnose memory leaks.
   method handleEvictEverything(k: Constants, hs: HeapState, io: DiskIOHandler)
   requires false
   {
@@ -133,7 +135,9 @@ module MainHandlers refines Main {
     DebugAccumulator.Display(acc, 0);
   }
 
-  // jonh hack UNVERIFIED DEBUG ONLY
+  // (jonh) unverified debug hook: Note "requires false" which prevents calling
+  // this hook from any real handler code. It's only reachable from hooks
+  // in the trusted benchmark driver; we used it to diagnose memory leaks.
   method handleCountAmassAllocations(k: Constants, hs: HeapState, io: DiskIOHandler)
   requires false
   {

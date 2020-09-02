@@ -1227,26 +1227,6 @@ module KVList {
   ensures WeightKvl(kvl) == WeightBucket(I(kvl))
   decreases |kvl.keys|
   {
-    // reveal_BucketMapOfSeq();
-    // if |kvl.keys| == 0 {
-    //   WeightBucketEmpty();
-    // } else {
-    //   WFPrefix(kvl, |kvl.keys| - 1);
-    //   kvlWeightEq(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)));
-    //   if Last(kvl.keys) in IMap(Kvl(DropLast(kvl.keys), DropLast(kvl.messages))) {
-    //     var i := IndexOfKey(Kvl(DropLast(kvl.keys), DropLast(kvl.messages)), Last(kvl.keys));
-    //     reveal_IsStrictlySorted();
-    //   }
-    //   var prekvl := prefix(kvl, |kvl.keys| - 1);
-    //   WFPrefix(kvl, |kvl.keys| - 1);
-    //   WFImpliesWFBucket(prekvl);
-    //   WeightBucketInduct(I(prekvl), Last(kvl.keys), Last(kvl.messages));
-    //   calc {
-    //     WeightKvl(kvl);
-    //     WeightKvl(prekvl) + WeightKey(Last(kvl.keys)) + WeightMessage(Last(kvl.messages));
-    //     WeightBucket(I(prekvl)) + WeightKey(Last(kvl.keys)) + WeightMessage(Last(kvl.messages));
-    //   }
-    // }
   }
 
   lemma kvlSeqWeightEq(kvls: seq<Kvl>)

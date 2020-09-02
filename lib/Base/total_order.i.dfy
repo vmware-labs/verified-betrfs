@@ -7,19 +7,19 @@ include "Option.s.dfy"
 abstract module Total_Preorder {
   import Seq = Sequences
   
-	type Element(!new,==)
+  type Element(!new,==)
 
-	predicate lt(a: Element, b: Element)
-	{
-		lte(a, b) && a != b
-	}
-		
-	predicate lte(a: Element, b: Element)
-		ensures lte(a, b) == ltedef(a, b);
-		ensures ltedef(a, b) || ltedef(b, a); // Total
-		ensures forall a, b, c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c); // Transitive
+  predicate lt(a: Element, b: Element)
+  {
+    lte(a, b) && a != b
+  }
+    
+  predicate lte(a: Element, b: Element)
+    ensures lte(a, b) == ltedef(a, b);
+    ensures ltedef(a, b) || ltedef(b, a); // Total
+    ensures forall a, b, c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c); // Transitive
 
-	predicate ltedef(a: Element, b: Element)
+  predicate ltedef(a: Element, b: Element)
 
   function Min(a: Element, b: Element) : Element
   {
@@ -122,29 +122,6 @@ abstract module Total_Preorder {
     reveal_IsStrictlySorted();
   }
 
-//~  lemma FlattenSorted(seqs: seq<seq<Element>>)
-//~    requires forall i :: 0 <= i < |seqs| ==> IsSorted(seqs[i])
-//~    requires forall i, j, k1, k2 :: 0 <= i < j < |seqs| && k1 in seqs[i] && k2 in seqs[j] ==> lte(k1, k2)
-//~    ensures IsSorted(Seq.Flatten(seqs))
-//~  {
-//~    var shape := Seq.FlattenShape(seqs);
-//~    var fseqs := Seq.Flatten(seqs);
-//~    forall i, j | 0 <= i < j < |fseqs|
-//~      ensures lte(fseqs[i], fseqs[j])
-//~    {
-//~      var (il, io) := Seq.UnflattenIndex(shape, i);
-//~      var (jl, jo) := Seq.UnflattenIndex(shape, j);
-//~      Seq.UnflattenIndexIsCorrect(seqs, i);
-//~      Seq.UnflattenIndexIsCorrect(seqs, j);
-//~      Seq.UnflattenIndexOrdering(shape, i, j);
-//~      if il < jl {
-//~      } else {
-//~        IsSortedImpliesLte(seqs[il], io, jo);
-//~      }
-//~    }
-//~    reveal_IsSorted();
-//~  }
-
   lemma SortedAugment(run: seq<Element>, key: Element)
   requires IsSorted(run)
   requires |run| > 0 ==> lte(Seq.Last(run), key)
@@ -152,23 +129,6 @@ abstract module Total_Preorder {
   {
     reveal_IsSorted();
   }
-
-//~  lemma SortedPrepend(key: Element, run: seq<Element>)
-//~    requires IsSorted(run)
-//~    requires 0 < |run| ==> lte(key, run[0])
-//~    ensures IsSorted([key] + run)
-//~  {
-//~    reveal_IsSorted();
-//~  }
-  
-//~  lemma StrictlySortedPop(run: seq<Element>)
-//~  requires IsStrictlySorted(run)
-//~  requires |run| > 0
-//~  ensures IsStrictlySorted(Seq.DropLast(run))
-//~  {
-//~    reveal_IsStrictlySorted();
-//~  }
-  
 }
 
 abstract module Total_Order refines Total_Preorder {
@@ -177,17 +137,17 @@ abstract module Total_Order refines Total_Preorder {
   import opened Options
   import NativeArrays
   
-	type Element(!new,==)
+  type Element(!new,==)
 
-	function SomeElement() : Element
+  function SomeElement() : Element
 
-	predicate lte(a: Element, b: Element)
-		ensures lte(a, b) == ltedef(a, b);
-		ensures ltedef(a, b) || ltedef(b, a); // Total
-		ensures ltedef(a, b) && ltedef(b, a) ==> a == b; // Antisymmetric
-		ensures forall a, b, c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c); // Transitive
+  predicate lte(a: Element, b: Element)
+    ensures lte(a, b) == ltedef(a, b);
+    ensures ltedef(a, b) || ltedef(b, a); // Total
+    ensures ltedef(a, b) && ltedef(b, a) ==> a == b; // Antisymmetric
+    ensures forall a, b, c :: ltedef(a, b) && ltedef(b, c) ==> ltedef(a, c); // Transitive
 
-	predicate ltedef(a: Element, b: Element)
+  predicate ltedef(a: Element, b: Element)
 
   lemma transitivity_le_lt(a: Element, b: Element, c: Element)
     requires lte(a,b)
@@ -261,13 +221,6 @@ abstract module Total_Order refines Total_Preorder {
     if |run| == 0 || lt(needle, run[0]) then -1
     else 1 + LargestLte(run[1..], needle)
   }
-
-//~  lemma LargestLteIsOrderPreserving(run: seq<Element>, smaller: Element, larger: Element)
-//~    requires IsSorted(run)
-//~    requires lte(smaller, larger)
-//~    ensures LargestLte(run, smaller) <= LargestLte(run, larger)
-//~  {
-//~  }
 
   lemma LargestLteIsUnique(run: seq<Element>, needle: Element, pos: int)
     requires IsSorted(run)
@@ -411,13 +364,6 @@ abstract module Total_Order refines Total_Preorder {
     reveal_IsSorted();
   }
 
-//~  lemma IndexOfFirstGteIsOrderPreserving(run: seq<Element>, needle1: Element, needle2: Element)
-//~    requires IsSorted(run)
-//~    requires lte(needle1, needle2)
-//~    ensures IndexOfFirstGte(run, needle1) <= IndexOfFirstGte(run, needle2)
-//~  {
-//~  }
-
   function binarySearchIndexOfFirstKeyGteIter(s: seq<Element>, key: Element, lo: int, hi: int) : (i: int)
   requires 0 <= lo < hi <= |s| + 1
   requires lo > 0 ==> lt(s[lo-1], key)
@@ -472,13 +418,6 @@ abstract module Total_Order refines Total_Preorder {
     reveal_IsSorted();
   }
 
-//~  lemma IndexOfFirstGtIsOrderPreserving(run: seq<Element>, needle1: Element, needle2: Element)
-//~    requires IsSorted(run)
-//~    requires lte(needle1, needle2)
-//~    ensures IndexOfFirstGt(run, needle1) <= IndexOfFirstGt(run, needle2)
-//~  {
-//~  }
-  
   function binarySearchIndexOfFirstKeyGtIter(s: seq<Element>, key: Element, lo: int, hi: int) : (i: int)
     requires 0 <= lo < hi <= |s| + 1
     requires lo > 0 ==> lte(s[lo-1], key)
@@ -535,30 +474,6 @@ abstract module Total_Order refines Total_Preorder {
     Seq.reveal_insert();
     reveal_IsStrictlySorted();
   }
-
-//~  lemma strictlySortedReplace(l: seq<Element>, k: Element, pos: int)
-//~    requires IsStrictlySorted(l)
-//~    requires 0 <= pos < |l|
-//~    requires 0 < pos ==> lt(l[pos-1], k)
-//~    requires pos < |l|-1 ==> lt(k, l[pos+1])
-//~    ensures IsStrictlySorted(l[pos := k])
-//~  {
-//~    var l' := l[pos := k];
-//~    reveal_IsStrictlySorted();
-//~    forall i, j | 0 <= i < j < |l'|
-//~      ensures lt(l'[i], l'[j])
-//~    {
-//~      if i == pos {
-//~        if pos < |l|-1 {
-//~          assert lte(l[pos+1], l[j]);
-//~        }
-//~      } else if j == pos {
-//~        if 0 < pos {
-//~          assert lte(l[i], l[pos-1]);
-//~        }
-//~      }
-//~    }
-//~  }
 
   lemma StrictlySortedAugment(run: seq<Element>, key: Element)
     requires IsStrictlySorted(run)
@@ -688,11 +603,6 @@ abstract module Total_Order refines Total_Preorder {
   {
   }
   
-//~  lemma SetAllLtImpliesDisjoint(a: set<Element>, b: set<Element>)
-//~    requires SetAllLt(a, b);
-//~    ensures a !! b;
-//~  {}
-
   predicate {:opaque} NotMinimum(a: Element) {
     exists b :: lt(b, a)
   }
@@ -739,22 +649,6 @@ abstract module Total_Order refines Total_Preorder {
     SetSuccessor(set x | x in m, key)
   }
 
-//~  lemma StrictlySortedSeqSuccessor(s: seq<Element>, key: Element, pos: int)
-//~    requires IsStrictlySorted(s)
-//~    requires 0 < pos < |s|
-//~    requires lte(s[pos-1], key)
-//~    requires lt(key, s[pos])
-//~    ensures SeqSuccessor(s, key) == Some(s[pos])
-//~  {
-//~    forall other | other in s && other != s[pos] && lt(key, other)
-//~      ensures lt(s[pos], other)
-//~    {
-//~      var otherpos := Seq.IndexOf(s, other);
-//~      IsStrictlySortedImpliesLtIndices(s, pos-1, otherpos);
-//~      IsStrictlySortedImpliesLt(s, pos, otherpos);
-//~    }
-//~  }
-  
   predicate {:opaque} SortedSeqForMap<V>(s: seq<(Element, V)>, m: map<Element, V>)
   {
     && IsStrictlySorted(Seq.Unzip(s).0)
@@ -902,21 +796,6 @@ module Char_Order refines Total_Order {
     a <= b
   }
 }
-
-//module Bounded_Integer_Order refines Bounded_Total_Order {
-//  import Base_Order = Integer_Order
-//}
-
-// method Main() {
-//   print Integer_Order.lt(10, 11);
-//   print "\n";
-//   print Integer_Order.lt(11, 10);
-//   print "\n";
-//   print Integer_Order.lt(11, 11);
-//   print "\n";
-//   print Integer_Order.lte(11, 11);
-//   print "\n";
-// }
 
 module Byte_Order refines Total_Order {
   type Element = byte

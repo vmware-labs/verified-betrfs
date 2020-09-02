@@ -205,47 +205,6 @@ abstract module LMutableBtree {
     Model.reveal_Interpretation();
   }
 
-//  method LeafFromSeqs(keys: seq<Key>, values: seq<Value>)
-//    returns (node: Node)
-//    requires |keys| == |values| <= MaxKeysPerLeaf() as int
-//    ensures WFShape(node)
-//    ensures node.Leaf?
-//    ensures fresh(node.repr)
-//    ensures node.keys[..|node.keys|] == keys
-//    ensures node.values[..|node.keys|] == values
-//  {
-//    node := EmptyTree();
-//    CopySeqIntoArray(keys, 0, node.keys, 0, |keys| as uint64);
-//    CopySeqIntoArray(values, 0, node.values, 0, |values| as uint64);
-//    node := node.(nkeys := |keys| as uint64);
-//    assert node.keys[..|node.keys|] == keys;
-//  }
-//
-//  method IndexFromChildren(pivots: seq<Key>, children: seq<Node>, ghost height: nat) returns (node: Node)
-//    requires 0 < |children| <= MaxChildren() as int
-//    requires |pivots| == |children|-1
-//    ensures node.Index?
-//    ensures node.pivots.Length == MaxChildren() as int - 1
-//    ensures node.children.Length == MaxChildren() as int
-//    ensures |node.children| == |children| as uint64
-//    ensures node.pivots[..|node.children|-1] == pivots
-//    ensures node.children[..|node.children|] == children
-//    ensures fresh(node)
-//    ensures fresh(node.pivots)
-//    ensures fresh(node.children)
-//    ensures node.repr == {node, node.pivots, node.children} + SeqRepr(children)
-//    ensures node.height == height
-//  {
-//    var pivotarray := newArrayFill(MaxChildren()-1, DefaultKey());
-//    var childarray := newArrayFill(MaxChildren(), null);
-//    CopySeqIntoArray(pivots, 0, pivotarray, 0, |pivots| as uint64);
-//    CopySeqIntoArray(children, 0, childarray, 0, |children| as uint64);
-//    node := new Node;
-//    node := Index(|children| as uint64, pivotarray, childarray);
-//    node.repr := {node, node.pivots, node.children} + SeqRepr(children);
-//    node.height := height;
-//  }
-
   predicate method Full(shared node: Node)
     requires WF(node)
   {
@@ -393,13 +352,9 @@ abstract module LMutableBtree {
     } else {
       var len := lseq_length_uint64(node.children);
       var boundary := len / 2;
-//      assert 2 <= |node.children|;
-//      assert 0 < boundary as nat < |node.children|;
       left, right, pivot := SplitIndex(node, boundary);
     }
     Model.reveal_AllKeys();
-//    assert !Full(left);
-//    assert !Full(right);
   }
 
   method SplitChildOfIndex(linear node: Node, childidx: uint64)

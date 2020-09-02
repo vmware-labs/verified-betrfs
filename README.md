@@ -1,23 +1,23 @@
 # Setting things up
 
-Make sure you have `make`, `mono`, and `wget`
+Use this script to install necessary tools, including an appropriately-recent
+version of `mono`. The script will also build a copy of Dafny in the local
+.dafny/ dir (using the veribetrfs variant of Dafny with support for linear
+types).
 
 ```
-mono -V
-which wget
+sudo tools/prep-environment.sh
 ```
 
-## Set up dafny (and boogie, z3)
+You can run veribetrfs-dafny manuall with `tools/local-dafny.sh`.
+The Makefile will use veribetrfs-dafny by default.
 
-*From the project root*, run:
+## Verify the software stack
 
+Adjust -j# to exploit all of your cores.
 ```
-./tools/install-dafny.sh
+make -j4 status
 ```
-
-This will download and compile boogie, veri-dafny, z3.
-
-You can run veri-dafny with `./.dafny/bin/dafny`, the Makefile will use veri-dafny by default
 
 ## YCSB
 

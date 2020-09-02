@@ -1051,7 +1051,6 @@ module LinearMutableMap {
             < |newUnderlying.storage| - 1;*/
         LemmaFixedSizeInsertResult(newUnderlying, item.key, item.value);
         LemmaEntryKeyInContents(self, i);
-        //assert item.key in self.contents.Keys;
         linear var FixedSizeInsertResult(updatedUnderlying, _) := FixedSizeInsert(newUnderlying, item.key, item.value);
         updatedUnderlying
       ) else (
@@ -1295,9 +1294,6 @@ module LinearMutableMap {
     );
     // --------------
 
-    //assert MapFromStorage(self1.underlying.storage) == self1.contents;
-    //assert self1.underlying.count as nat < |self1.underlying.storage| - 2;
-
     // -- mutation --
     linear var LinearHashMap(self1Underlying, self1Count, self1Contents) := self1;
     linear var FixedSizeInsertResult(underlying', replaced) := FixedSizeInsert(self1Underlying, key, value);
@@ -1309,15 +1305,7 @@ module LinearMutableMap {
 
     LemmaFixedSizeInsertResult(self1.underlying, key, value);
 
-    //assert replaced.None? ==> key !in self.contents;
-    //assert !replaced.None? ==> key in self'.contents;
-
-    //assert self'.underlying.count as nat < |self'.underlying.storage| - 1;
-
     UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents);
-    //assert MapFromStorage(self'.underlying.storage[..]) == self'.contents;
-    //assert UnderlyingInv(self', self'.underlying);
-    //assert Inv(self');
 
     InsertAndGetOldResult(self', replaced)
   }

@@ -187,29 +187,6 @@ module Sequences {
     s[.. i] + s[i + 1 ..]
   }
 
-//  function {:opaque} RemoveValue<V>(s: seq<V>, v: V) : seq<V>
-//  // ensures forall i: nat | i < |RemoveValue(s, v)| :: RemoveValue(s, v)[i] != v
-//  ensures Set(RemoveValue(s, v)) == Set(s) - {v}
-//  {
-//    if s == [] then s
-//      else (if s[0] == v then [] else [s[0]]) + RemoveValue(s[1..], v)
-//  }
-//
-//  lemma RemoveValueMultiset<V>(s: seq<V>, v: V) returns (res: seq<V>)
-//  ensures Set(RemoveValue(s, v)) == Set(s) - {v}
-//  {
-//    reveal_RemoveValue();
-//    if s == [] {
-//      assert Set(RemoveValue(s, v)) == Set(s) - {v};
-//    } else {
-//      assert s == [s[0]] + s[1..];
-//      var _ := RemoveValueMultiset(s[1..], v);
-//      assert Set(s) == Set([s[0]]) + Set(s[1..]);
-//      // TODO(andreal)
-//      assume Set(RemoveValue(s, v)) == Set(s) - {v};
-//    }
-//  }
-
   function {:opaque} insert<A>(s: seq<A>, a: A, pos: int) : seq<A>
   requires 0 <= pos <= |s|;
   ensures |insert(s,a,pos)| == |s| + 1;
@@ -352,26 +329,6 @@ module Sequences {
     && |a| <= |b|
     && a == b[|b|-|a|..]
   }
-
-//~  lemma SelfIsPrefix<A>(a: seq<A>)
-//~  ensures IsPrefix(a, a);
-//~  {
-//~    reveal_IsPrefix();
-//~  }
-
-//~  lemma IsPrefixFromEqSums<A>(a: seq<A>, b: seq<A>, c: seq<A>, d: seq<A>)
-//~  requires a + b == c + d
-//~  requires IsSuffix(b, d);
-//~  ensures IsPrefix(c, a);
-//~  {
-//~    reveal_IsPrefix();
-//~    reveal_IsSuffix();
-//~    assert |c| <= |a|;
-//~    assert c
-//~        == (c + d)[..|c|]
-//~        == (a + b)[..|c|]
-//~        == a[..|c|];
-//~  }
 
   function {:opaque} SeqIndexIterate<A(==)>(run: seq<A>, needle: A, i: int) : (res : Option<int>)
   requires 0 <= i <= |run|
@@ -589,26 +546,6 @@ module Sequences {
     }
   }
   
-//~  lemma FlattenIndexOrdering(shape: seq<nat>, il: nat, io: nat, jl: nat, jo: nat)
-//~    requires il < |shape|
-//~    requires io < shape[il]
-//~    requires jl < |shape|
-//~    requires jo < shape[jl]
-//~    requires il <= jl
-//~    requires il == jl ==> io < jo
-//~    ensures FlattenIndex(shape, il, io) < FlattenIndex(shape, jl, jo)
-//~  {
-//~    reveal_FlattenLength();
-//~    if il < jl-1 {
-//~      assert shape[..il] == shape[..il+1][..il];
-//~      FlattenLengthSubSeq(shape[..jl], 0, il+1);
-//~      assert shape[..jl][..il+1] == shape[..il+1];
-//~    } else if il == jl - 1 {
-//~      assert shape[..il] == shape[..il+1][..il];
-//~    } else {
-//~    }
-//~  }
-
   lemma UnflattenIndexOrdering(shape: seq<nat>, i: nat, j: nat)
     requires i < j < FlattenLength(shape)
     ensures UnflattenIndex(shape, i).0 <= UnflattenIndex(shape, j).0

@@ -256,8 +256,6 @@ module CommitterInitModel {
   requires cm.status.StatusLoadingOther?
   requires cm.superblock.journalLen > 0
   requires io.IOInit?
-  //requires cm.journalFrontRead.None?
-  //requires I(jm.journalist).journalFront.None?
   {
     var len :=
       if cm.superblock.journalStart + cm.superblock.journalLen
@@ -327,8 +325,6 @@ module CommitterInitModel {
   requires cm.superblock.journalLen > 0
   requires io.IOInit?
   requires cm.superblock.journalStart + cm.superblock.journalLen > NumJournalBlocks()
-  //requires cm.journalBackRead.None?
-  //requires I(jm.journalist).journalBack.None?
   {
     var len := cm.superblock.journalStart + cm.superblock.journalLen - NumJournalBlocks();
     var loc := JournalRangeLocation(0, len);

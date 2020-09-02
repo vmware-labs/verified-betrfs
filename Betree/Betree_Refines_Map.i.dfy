@@ -270,17 +270,6 @@ module Betree_Refines_Map {
     assert I(k, s) == I(k, s');
   }
 
-//~  lemma RedirectStepRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, uiop: UI.Op, redirect: DB.BetreeSpec.Redirect)
-//~    requires Inv(k, s)
-//~    requires uiop.NoOp?
-//~    requires DBI.Redirect(k.bck, s.bcv, s'.bcv, redirect)
-//~    requires Inv(k, s')
-//~    ensures MS.NextStep(Ik(k), I(k, s), I(k, s'), uiop, MS.StutterStep)
-//~  {
-//~    RedirectPreservesLookups(k, s, s', redirect);
-//~    PreservesLookupsImplInterpsEqual(k, s, s');
-//~    assert I(k, s) == I(k, s');
-//~  }
 
   lemma RedirectRefinesMap(k: DB.Constants, s: DB.Variables, s': DB.Variables, uiop: UI.Op, r: DB.BetreeSpec.Redirect)
     requires Inv(k, s)

@@ -58,7 +58,7 @@ abstract module Iterator refines ReadonlyMap {
 }
 
 
-// Let's see if we can build one of these mofos from the builtin map
+// Let's see if we can build one of these monsters from the builtin map
 
 abstract module BuiltinMap refines Map {
   type Map = map<Key, Value>
@@ -154,96 +154,8 @@ abstract module Builtin_Map_Sequence_Iterator refines Iterator {
         var v := UnderlyingMap.Interpretation(m);
       }
       
-      // assert m == Underlying_Map.Interpretation(m);
-      //assert forall i :: i in Interpretation(iter).Keys <==> 0 <= i < |iter|;
-      // assert forall i :: i in Interpretation(iter) ==> Interpretation(iter)[i] == iter[i];
-      
-      // assert Interpretation(iter) == Interpretation(tail)[|tail| := KVPair(k, v)];
-      // assert |tail| !in Interpretation(tail);
-      // assert iter[|iter|-1] == KVPair(k, v);
-      
       assert m_without_key.Keys == m.Keys - {key}; // Observe?
       assert |m_without_key.Keys| == |m.Keys|-1; // Observe?
     }
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// abstract module Mutable_Map {
-
-//   type Key(==)
-//   type Value
-
-//   datatype QueryResult = DNE | QueryResult(Value)
-  
-//   trait Map {
-//     function method Interpretation() : map<Key, Value>
-//       reads this;
-
-//     method Define(key: Key, value: Value)
-//       ensures Interpretation() == old(this.Interpretation())[key := value];
-//       modifies this;
-        
-//     method Undefine(key: Key)
-//       ensures Interpretation().Keys == old(this.Interpretation().Keys) - {key};
-//       ensures forall key' :: key' in Interpretation() ==> Interpretation()[key'] == old(this.Interpretation())[key'];
-//       modifies this;
-          
-//      method Query(key: Key)
-//       returns (result: QueryResult)
-//       ensures key in Interpretation() ==> result == QueryResult(Interpretation()[key]);
-//       ensures key !in Interpretation() ==> result == DNE;
-//   }
-
-//   class BuiltinMap extends Map {
-//     var contents: map<Key, Value>
-
-//     function method Interpretation() : map<Key, Value>
-//       reads this;
-//     {
-//       contents
-//     }
-
-//     method Define(key: Key, value: Value)
-//       ensures Interpretation() == old(this.Interpretation())[key := value];
-//       modifies this;
-//     {
-//       contents := contents[key := value];
-//     }
-    
-//     method Undefine(key: Key)
-//       ensures Interpretation().Keys == old(this.Interpretation().Keys) - {key};
-//       ensures forall key' :: key' in Interpretation() ==> Interpretation()[key'] == old(this.Interpretation())[key'];
-//       modifies this;
-//     {
-//       contents := map key' : Key | key' in contents && key' != key :: contents[key'];
-//     }
-
-//     // I don't know why this won't compile.  Seems like a dafny bug to me...
-//     method Query(key: Key)
-//       returns (result: QueryResult)
-//       ensures key in Interpretation() ==> result == QueryResult(Interpretation()[key]);
-//       ensures key !in Interpretation() ==> result == DNE;
-//     {
-//       if key in contents {
-//         result := QueryResult(contents[key]);
-//       } else {
-//         result := DNE;
-//       }
-//     }
-//   }
-// }
