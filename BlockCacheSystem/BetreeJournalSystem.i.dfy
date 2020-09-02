@@ -99,11 +99,6 @@ module BetreeJournalSystem {
     CompositeView.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
   }
 
-//~  lemma InvImpliesPersistentLocInGraph(k: Constants, s: Variables)
-//~  requires Inv(k, s)
-//~  ensures JS.PersistentLoc(s.js) in BS.BetreeDisk(k.bs, s.bs)
-//~  {
-//~  }
 
   lemma OkaySendPersistentLocStep(k: Constants, s: Variables, s': Variables, vop: VOp)
   requires Inv(k, s)

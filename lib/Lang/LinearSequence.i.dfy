@@ -14,36 +14,6 @@ module LinearSequence_i {
     reveals lseq_length, lseq_full, linLast, ldroplast, lseq_has_all
     reveals operator'cardinality?lseq, operator'in?lseq, operator'subscript?lseq
 
-  // method seq_alloc_init<A>(length:nat, a:A) returns(linear s:seq<A>)
-  //     ensures |s| == length
-  //     ensures forall i:nat | i < |s| :: s[i] == a
-  // {
-  //     s := seq_alloc(length);
-  //     var n := 0;
-  //     while (n < length)
-  //         invariant |s| == length;
-  //         invariant n <= length;
-  //         invariant forall i:nat | i < n :: s[i] == a
-  //     {
-  //         s := seq_set(s, n, a);
-  //         n := n + 1;
-  //     }
-  // }
-
-  // function method seq_alloc_init_iterate<A>(length:uint64, a:A, i:uint64, linear sofar:seq<A>) : (linear s:seq<A>)
-  //   requires i<=length;
-  //   requires |sofar| == length as nat;
-  //   requires forall j:nat | j < i as nat :: sofar[j] == a
-  //   ensures |s| == length as nat;
-  //   ensures forall j:nat | j < length as nat :: s[j] == a
-  //   decreases length - i;
-  // {
-  //   if i == length then
-  //     sofar
-  //   else
-  //     seq_alloc_init_iterate(length, a, i + 1, seq_set(sofar, i, a))
-  // }
-
   function method seq_alloc_init<A>(length:uint64, a:A) : (linear s:seq<A>)
       ensures |s| == length as int
       ensures forall i:nat | i < |s| :: s[i] == a

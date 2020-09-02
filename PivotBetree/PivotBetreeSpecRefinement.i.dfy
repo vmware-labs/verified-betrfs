@@ -89,11 +89,6 @@ module PivotBetreeSpecRefinement {
     B.G.Node(IChildren(node), IBuffer(node))
   }
 
-//~  lemma WFNodeRefinesWFNode(node: PNode)
-//~  requires P.WFNode(node)
-//~  ensures B.WFNode(INode(node))
-//~  {
-//~  }
 
   predicate ReadOpsBucketsWellMarshalled(readOps: seq<P.G.ReadOp>)
   {

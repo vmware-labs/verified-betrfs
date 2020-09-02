@@ -319,7 +319,6 @@ module CoordinationModel {
   ensures M.Next(Ik(k), IVars(s), IVars(s'),
         UI.NoOp, diskOp(io'))
   {
-    //reveal_doSync();
     if s.jc.isFrozen {
       if s.jc.frozenLoc.Some? {
         CommitterCommitModel.tryAdvanceLocationCorrect(k, s.jc, io, s'.jc, io');
@@ -442,7 +441,6 @@ module CoordinationModel {
         diskOp(io'))
   {
     reveal_popSync();
-    //CommitterInitModel.reveal_isReplayEmpty();
     if id in s.jc.syncReqs.contents && s.jc.syncReqs.contents[id] == JC.State1 {
       CommitterCommitModel.popSyncCorrect(k, s.jc, id);
 
@@ -487,7 +485,6 @@ module CoordinationModel {
           diskOp(io'))
   {
     reveal_query();
-    //CommitterInitModel.reveal_isReplayEmpty();
     if !isInitialized(s) {
       initializationCorrect(k, s, io, s', io');
     } else {
@@ -552,7 +549,6 @@ module CoordinationModel {
           diskOp(io'))
   {
     reveal_succ();
-    //CommitterInitModel.reveal_isReplayEmpty();
     if !isInitialized(s) {
       initializationCorrect(k, s, io, s', io');
     } else {
@@ -625,7 +621,6 @@ module CoordinationModel {
           diskOp(io'))
   {
     reveal_insert();
-    //CommitterInitModel.reveal_isReplayEmpty();
     if !isInitialized(s) {
       initializationCorrect(k, s, io, s', io');
     } else if JournalistModel.canAppend(s.jc.journalist, Journal.JournalInsert(key, value)) {

@@ -199,7 +199,7 @@ module LKMBPKVOps {
     PKV.PSA.psaCanAppendSeqAdditive(pkv.messages, ValueMessage.messageSeq_to_bytestringSeq(msgseqs[0]), ValueMessage.messageSeq_to_bytestringSeq(Flatten(msgseqs[1..])));
   }
   
-  // TODO(robj): Break this mofo up.
+  // TODO(robj): Break this monster up.
   method IndexFillDpkv(shared node: LKMB.Model.Node, dpkv: DPKV.DynamicPkv)
     requires LKMB.WF(node)
     requires node.Index?
@@ -217,15 +217,6 @@ module LKMBPKVOps {
     ghost var children := lseqs(node.children);
     var nchildren := lseq_length_uint64(node.children);
 
-//    assert LKMB.WFShapeChildren(children[..nchildren], node.repr, node.height);
-//    ghost var inode := LKMB.I(node);
-//    ghost var ichildren := inode.children;
-//    forall i | 0 <= i < |ichildren|
-//      ensures ichildren[i] == LKMB.IChildren(children[..nchildren], node.height)[i]
-//    {
-//      LKMB.IOfChild(node, i);
-//    }
-//    assert ichildren == LKMB.IChildren(children[..nchildren], node.height);
     ghost var childSeqs := LKMB.Model.ToSeqChildren(children);
     assert forall i | 0 <= i < |childSeqs.0| :: childSeqs.0[i] == LKMB.Model.ToSeq(children[i]).0 by {
       LKMB.Model.reveal_ToSeq();

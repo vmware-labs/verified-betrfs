@@ -585,14 +585,6 @@ module BucketImpl {
       }
     }
 
-//~    static lemma Isuffix(buckets: seq<MutBucket>, a: int)
-//~    requires 0 <= a <= |buckets|
-//~    requires forall i | 0 <= i < |buckets| :: buckets[i].Inv()
-//~    ensures forall i | 0 <= i < |buckets[a..]| :: buckets[a..][i].Inv()
-//~    ensures ISeq(buckets[a..]) == ISeq(buckets)[a..]
-//~    {
-//~      Islice(buckets, a, |buckets|);
-//~    }
 
     shared method Clone() returns (linear bucket': MutBucket)
     requires Inv()

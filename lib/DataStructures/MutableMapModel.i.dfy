@@ -1249,9 +1249,6 @@ module MutableMapModel {
     );
     // --------------
 
-    //assert MapFromStorage(self1.underlying.storage) == self1.contents;
-    //assert self1.underlying.count as nat < |self1.underlying.storage| - 2;
-
     // -- mutation --
     var (underlying', replaced) := FixedSizeInsert(self1.underlying, key, value);
     var self' := self1
@@ -1262,15 +1259,7 @@ module MutableMapModel {
 
     LemmaFixedSizeInsertResult(self1.underlying, key, value);
 
-    //assert replaced.None? ==> key !in self.contents;
-    //assert !replaced.None? ==> key in self'.contents;
-
-    //assert self'.underlying.count as nat < |self'.underlying.storage| - 1;
-
     UnderlyingInvImpliesMapFromStorageMatchesContents(self'.underlying, self'.contents);
-    //assert MapFromStorage(self'.underlying.storage[..]) == self'.contents;
-    //assert UnderlyingInv(self', self'.underlying);
-    //assert Inv(self');
 
     (self', replaced)
   }

@@ -131,7 +131,6 @@ module CoordinationImpl {
   ensures CoordinationModel.doSync(
       Ic(k), old(s.I()), old(IIO(io)), graphSync, s.I(), IIO(io))
   {
-    //CoordinationModel.reveal_doSync();
     s.reveal_ReprInv();
 
     wait := false;
@@ -150,7 +149,6 @@ module CoordinationImpl {
           && old(s.I()).jc == s.I().jc;*/
       }
     } else if s.jc.superblockWrite.Some? {
-      //print "doSync: doing nothing, superblock write out\n";
       wait := true;
     } else {
       if graphSync {

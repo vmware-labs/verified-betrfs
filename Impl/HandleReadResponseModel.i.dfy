@@ -82,7 +82,6 @@ module HandleReadResponseModel {
 
   lemma noop_respread(k: Constants, s: Variables, io: IO)
   requires WFVars(s)
-  //requires ValidDiskOp(diskOp(io))
   requires diskOp(io).RespReadOp?
   ensures M.Next(Ik(k), IVars(s), IVars(s), UI.NoOp, diskOp(io))
   {
@@ -195,7 +194,6 @@ module HandleReadResponseModel {
 
   lemma readResponseCorrect(k: Constants, s: Variables, io: IO)
   requires diskOp(io).RespReadOp?
-  //requires ValidDiskOp(diskOp(io))
   requires Inv(k, s)
   requires |io.respRead.bytes| < 0x1_0000_0000_0000_0000
   ensures var s' := readResponse(k, s, io);
