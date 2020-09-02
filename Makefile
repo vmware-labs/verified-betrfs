@@ -64,7 +64,7 @@ OPT_FLAGS=$(MALLOC_ACCOUNTING_DEFINE) \
 ##############################################################################
 # Automatic targets
 
-all: status elf
+all: build/osdi20-artifact/paper.pdf
 
 clean:
 	rm -rf build
