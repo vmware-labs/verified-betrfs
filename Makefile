@@ -524,4 +524,5 @@ build/%Ycsb.csv: build/%Ycsb.data
 # Build a PDF summarizing results
 
 build/osdi20-artifact/paper.pdf: osdi20-artifact/paper.tex build/Impl/Bundle.i.lcreport build/linear-line-counts.tex build/verification-times.pdf build/automation-figure.pdf build/mutable-map-benchmark.csv build/mutable-btree-benchmark.csv build/Impl/Bundle.i.status.pdf build/VeribetrfsYcsb.csv build/RocksYcsb.csv build/BerkeleyYcsb.csv 
+	mkdir -p build/osdi20-artifact
 	pdflatex -shell-escape -output-directory build/osdi20-artifact $<
