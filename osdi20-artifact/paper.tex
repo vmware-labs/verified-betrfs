@@ -295,49 +295,40 @@ Storage Systems are Distributed Systems\\
     RocksStyle/.style={red, fill=red!05!white, postaction={pattern=crosshatch, pattern color=red!50!white}},
 }
 
-%% \begin{figure*}
-%% \centering
-%% %\ref{ycsb-legend}
-%% \begin{subfigure}[c]{\textwidth}
-%%   \centering
-%%   \parbox[c]{0.1\textwidth}{\subcaption{HDD}} ~
-%%   \parbox[c]{0.7\textwidth}{
-%%   \begin{tikzpicture}
-%%     \begin{axis}[
-%%         YcsbLoadThroughput,
-%%         ymode = log,
-%%         ymax = 100000,
-%%         ytick = { 100, 1000, 10000, 100000, 1000000 },
-%%         legend columns=1,
-%%         legend to name={ycsb-legend},
-%%       ]
-%%       \addplot+ [BerkeleyStyle] table {\ycsbHddDataDir/berkeleydb.csv};
-%%       \addlegendentry{BerkeleyDB}
-%%       \addplot+ [VeriHeapStyle] table {\ycsbHddDataDir/veribetrkv.csv};
-%%       \addlegendentry{\name-DF}
-%%       \addplot+ [VeriLinearStyle] table {\ycsbHddDataDir/veribetrkv-linear.csv};
-%%       \addlegendentry{\name}
-%%       \addplot+ [RocksStyle] table {\ycsbHddDataDir/rocksdb.csv};
-%%       \addlegendentry{RocksDB}
-%%     \end{axis}
-%%   \end{tikzpicture}
-%%   \begin{tikzpicture}
-%%     \begin{axis}[
-%%         YcsbRunThroughput,
-%%         ymin = 0,
-%%         ymax = 800,
-%%       ]
-%%       \addplot+ [BerkeleyStyle] table {\ycsbHddDataDir/berkeleydb.csv};
-%%       \addplot+ [VeriHeapStyle] table {\ycsbHddDataDir/veribetrkv.csv};
-%%       \addplot+ [VeriLinearStyle] table {\ycsbHddDataDir/veribetrkv-linear.csv};
-%%       \addplot+ [RocksStyle] table {\ycsbHddDataDir/rocksdb.csv};
-%%     \end{axis}
-%%   \end{tikzpicture}
-%%   }%
-%%   \hspace{-0.6in}%
-%%   \ref{ycsb-legend}
-%%   \label{subfig:ycsb-hdd}
-%% \end{subfigure}
+\begin{figure*}
+\centering
+%\ref{ycsb-legend}
+  \begin{tikzpicture}
+    \begin{axis}[
+        YcsbLoadThroughput,
+        ymode = log,
+        %ymax = 100000,
+        %ytick = { 100, 1000, 10000, 100000, 1000000 },
+        legend columns=1,
+        legend to name={ycsb-legend},
+      ]
+      \addplot+ [BerkeleyStyle] table {build/BerkeleyYcsb.csv};
+      \addlegendentry{BerkeleyDB}
+      \addplot+ [VeriHeapStyle] table {build/VeribetrfsYcsb.csv};
+      \addlegendentry{\name-DF}
+      %% \addplot+ [VeriLinearStyle] table {\ycsbHddDataDir/veribetrkv-linear.csv};
+      %% \addlegendentry{\name}
+      \addplot+ [RocksStyle] table {build/RocksYcsb.csv};
+      \addlegendentry{RocksDB}
+    \end{axis}
+  \end{tikzpicture}
+  \begin{tikzpicture}
+    \begin{axis}[
+        YcsbRunThroughput,
+        %ymin = 0,
+        %ymax = 800,
+      ]
+      \addplot+ [BerkeleyStyle] table {build/BerkeleyYcsb.csv};
+      \addplot+ [VeriHeapStyle] table {build/VeribetrfsYcsb.csv};
+      %\addplot+ [VeriLinearStyle] table {\ycsbHddDataDir/veribetrkv-linear.csv};
+      \addplot+ [RocksStyle] table {build/RocksYcsb.csv};
+    \end{axis}
+  \end{tikzpicture}
 
 %% \begin{subfigure}{\textwidth}
 %%   \centering
@@ -377,26 +368,21 @@ Storage Systems are Distributed Systems\\
 %%   \hspace{0.9in}
 %%   \label{subfig:ycsb-ssd}
 %% \end{subfigure}
-%% % %   \caption{
-%% % %     Median throughput of YCSB workloads with 24B keys and 512B
-%% % %     values running on a HDD and 2GB of RAM.  Load is 10M operations
-%% % %     ($\approx$ 5GB of data) and runs are 10000 operations each.
-%% % %     Workload ``U'' is a workload of uniformly random queries.
-%% % %     Error
-%% % %     bars indicate min/max of 6 runs.  Higher is
-%% % %     better.}\label{fig:ycsb-hdd-512B}
-%% \caption{
-%% Median throughput of YCSB workloads values running on an HDD (\subref{subfig:ycsb-hdd}) and SSD (\subref{subfig:ycsb-ssd}) and 2GB of RAM. \name-DF is a version of our system with hand-tuned code using dynamic frames reasoning.  Load is 10M operations
-%% ($\approx$ 5GB of data) and runs are 10000 operations each.
-%% Error bars indicate min/max of 6 runs.  Higher is better.
-%% On an HDD (\subref{subfig:ycsb-hdd}), \name insertions are over $25\times$ faster than in
-%% BerkeleyDB, but lag RocksDB, by about $9\times$.
-%% \name queries are are about $4\times$ slower than both.
-%% On an SSD (\subref{subfig:ycsb-ssd}), \name still beats BerkleyDB on random
-%% insertions, but \name queries are slower than BerkeleyDB.
-%% }
-%% \label{fig:ycsb}
-%% \end{figure*}
+% %   \caption{
+% %     Median throughput of YCSB workloads with 24B keys and 512B
+% %     values running on a HDD and 2GB of RAM.  Load is 10M operations
+% %     ($\approx$ 5GB of data) and runs are 10000 operations each.
+% %     Workload ``U'' is a workload of uniformly random queries.
+% %     Error
+% %     bars indicate min/max of 6 runs.  Higher is
+% %     better.}\label{fig:ycsb-hdd-512B}
+\caption{
+Median throughput of YCSB workloads values.  Load is 10M operations
+($\approx$ 5GB of data) and runs are 10000 operations each.
+Higher is better.
+}
+\label{fig:ycsb}
+\end{figure*}
 
 \begin{figure}
 \centering
