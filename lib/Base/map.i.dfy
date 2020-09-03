@@ -58,7 +58,7 @@ abstract module Iterator refines ReadonlyMap {
 }
 
 
-// Let's see if we can build one of these mofos from the builtin map
+// Let's see if we can build one of these from the builtin map
 
 abstract module BuiltinMap refines Map {
   type Map = map<Key, Value>

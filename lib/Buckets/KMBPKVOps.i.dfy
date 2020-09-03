@@ -203,7 +203,7 @@ module KMBPKVOps {
     PKV.PSA.psaCanAppendSeqAdditive(pkv.messages, ValueMessage.messageSeq_to_bytestringSeq(msgseqs[0]), ValueMessage.messageSeq_to_bytestringSeq(Flatten(msgseqs[1..])));
   }
   
-  // TODO(robj): Break this mofo up.
+  // TODO(robj): Break this method up.
   method IndexFillDpkv(node: KMB.Node, dpkv: DPKV.DynamicPkv)
     requires KMB.WF(node)
     requires node.contents.Index?
