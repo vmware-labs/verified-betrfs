@@ -19,10 +19,6 @@ module CacheImpl {
   import opened ValueMessage
   import NodeModel
 
-  // TODO ARARGHGHESGKSG it sucks that we have to wrap this in a new object type
-  // just to have a Repr field. It also sucks that we have to have a Repr field
-  // at all instead of an opaque Repr() function, see
-  // https://github.com/dafny-lang/dafny/issues/377
   class MutCache
   {
     var cache: MM.ResizingHashMap<Node>;

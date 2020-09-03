@@ -18,7 +18,7 @@ module MainHandlers refines Main {
   import DOM = DiskOpModel
   import SM = StateModel
   import SI = StateImpl
-  import opened EvictImpl // jonh hack
+  import opened EvictImpl
   import CoordinationImpl
   import HandleReadResponseImpl
   import HandleReadResponseModel
@@ -28,7 +28,7 @@ module MainHandlers refines Main {
   import FullImpl
   import MkfsImpl
   import MkfsModel
-  import Bounds  // jonh hack for metadata recording
+  import Bounds
 
   import BlockJournalCache
   import BBC = BetreeCache
@@ -112,7 +112,9 @@ module MainHandlers refines Main {
     assert ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), uiop, io.diskOp()); // observe
   }
 
-  // jonh hack UNVERIFIED DEBUG ONLY
+  // This is only called from trusting code for debugging purposes,
+  // doesn't need to be verified
+  // (and therefore can't be called from verified code).
   method handleEvictEverything(k: Constants, hs: HeapState, io: DiskIOHandler)
   requires false
   {
@@ -133,7 +135,9 @@ module MainHandlers refines Main {
     DebugAccumulator.Display(acc, 0);
   }
 
-  // jonh hack UNVERIFIED DEBUG ONLY
+  // This is only called from trusting code for debugging purposes,
+  // doesn't need to be verified
+  // (and therefore can't be called from verified code).
   method handleCountAmassAllocations(k: Constants, hs: HeapState, io: DiskIOHandler)
   requires false
   {
