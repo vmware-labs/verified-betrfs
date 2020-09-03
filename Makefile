@@ -467,3 +467,76 @@ build/BerkeleyYcsb: ycsb/YcsbMain.cpp ycsb/build/libycsbc-libcpp.a
 
 
 ycsb: build/VeribetrfsYcsb build/RocksYcsb build/KyotoYcsb build/BerkeleyYcsb
+
+##############################################################################
+# Verification time and automation study results
+
+build/verification-times.tgz: build/Impl/Bundle.i.verified
+	tar cvzf $@ `find build -name "*.verchk"`
+
+build/verification-times.pdf: build/verification-times.tgz
+	./tools/plot/plot-verification-time.py
+
+# Hrm. Not clear how to depend on all source files, so we just depend on
+# this verification result, which transitively depends on all sources.
+build/automation-figure.pdf: build/Impl/Bundle.i.verified
+	./tools/automation-study.py
+
+build/linear-line-counts.tex build/linear-line-count-table.tex: tools/linear_line_counts.py lib/DataStructures/BtreeModel.i.dfy lib/DataStructures/MutableBtree.i.dfy lib/DataStructures/MutableMapModel.i.dfy lib/DataStructures/MutableMapImpl.i.dfy $(wildcard lib/DataStructures/LinearMutableMap.i.dfy)
+	./tools/linear_line_counts.py
+
+##############################################################################
+# Linear/Dynamic Frames benchmarks of hashtable and btree
+
+build/bench/run-mutable-map.o: bench/run-mutable-map.cpp build/bench/MutableMap.h
+	$(CC) -c $< -o $@ $(STDLIB) -I build -I .dafny/dafny/Binaries/ -std=c++17 -O3
+
+build/bench/run-mutable-map: build/bench/run-mutable-map.o build/bench/MutableMap.o build/framework/NativeArithmetic.o 
+	$(CC)    $^ -o $@ $(STDLIB)
+
+build/mutable-map-benchmark.data: build/bench/run-mutable-map
+	$(call tee_capture,$@,$< 17 false)
+
+build/mutable-map-benchmark.csv: build/mutable-map-benchmark.data tools/mutablemap-cook.sh
+	$(call tee_capture,$@,tools/mutablemap-cook.sh $<)
+
+build/bench/run-mutable-btree.o: bench/run-mutable-btree.cpp build/lib/DataStructures/MutableBtree.i.h
+	$(CC) -c $< -o $@ $(STDLIB) -I build -I .dafny/dafny/Binaries/ -std=c++17 -O3
+
+build/bench/run-mutable-btree: build/bench/run-mutable-btree.o build/lib/DataStructures/MutableBtree.i.o build/framework/NativeArithmetic.o build/framework/NativeArrays.o
+	$(CC)    $^ -o $@ $(STDLIB)
+
+build/mutable-btree-benchmark.data: build/bench/run-mutable-btree
+	$(call tee_capture,$@,$< 17 64000000 false)
+
+build/mutable-btree-benchmark.csv: build/mutable-btree-benchmark.data tools/mutablebtree-cook-2.sh
+	$(call tee_capture,$@,tools/mutablebtree-cook-2.sh 64000000 $<)
+
+##############################################################################
+# YCSB benchmark runs
+
+build/VeribetrfsYcsb.data: build/VeribetrfsYcsb ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec
+	rm -f build/veribetrkv.img
+	$(call tee_capture,$@,./build/VeribetrfsYcsb build/veribetrkv.img ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec)
+	rm -f build/veribetrkv.img
+
+build/RocksYcsb.data: build/RocksYcsb ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec
+	rm -rf build/RocksYcsb.db
+	mkdir build/RocksYcsb.db
+	$(call tee_capture,$@,./build/RocksYcsb build/RocksYcsb.db ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec)
+	rm -rf build/RocksYcsb.db
+
+build/BerkeleyYcsb.data: build/BerkeleyYcsb ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec
+	rm -f build/berkeley.db
+	$(call tee_capture,$@,./build/BerkeleyYcsb build/berkeley.db ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec)
+	rm -f build/berkeley.db
+
+build/%Ycsb.csv: build/%Ycsb.data
+	$(call tee_capture,$@,./tools/ycsb-cook.sh $<)
+
+##############################################################################
+# Build a PDF summarizing results
+
+build/osdi20-artifact/paper.pdf: osdi20-artifact/paper.tex build/Impl/Bundle.i.lcreport build/linear-line-counts.tex build/verification-times.pdf build/automation-figure.pdf build/mutable-map-benchmark.csv build/mutable-btree-benchmark.csv build/Impl/Bundle.i.status.pdf build/VeribetrfsYcsb.csv build/RocksYcsb.csv build/BerkeleyYcsb.csv 
+	mkdir -p build/osdi20-artifact
+	pdflatex -shell-escape -output-directory build/osdi20-artifact $<
