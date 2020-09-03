@@ -482,16 +482,16 @@ build/verification-times.pdf: build/verification-times.tgz
 build/automation-figure.pdf: build/Impl/Bundle.i.verified
 	./tools/automation-study.py
 
-build/linear-line-counts.tex build/linear-line-count-table.tex: tools/linear_line_counts.py lib/DataStructures/BtreeModel.i.dfy lib/DataStructures/MutableBtree.i.dfy lib/DataStructures/MutableMapModel.i.dfy lib/DataStructures/MutableMapImpl.i.dfy $(wildcard lib/DataStructures/LinearMutableMap.i.dfy)
+build/linear-line-counts.tex build/linear-line-count-table.tex: tools/linear_line_counts.py lib/DataStructures/BtreeModel.i.dfy lib/DataStructures/LinearMutableBtree.i.dfy lib/DataStructures/LinearMutableMap.i.dfy
 	./tools/linear_line_counts.py
 
 ##############################################################################
 # Linear/Dynamic Frames benchmarks of hashtable and btree
 
-build/bench/run-mutable-map.o: bench/run-mutable-map.cpp build/bench/MutableMap.h
+build/bench/run-mutable-map.o: bench/run-mutable-map.cpp build/bench/LinearMutableMap.h
 	$(CC) -c $< -o $@ $(STDLIB) -I build -I .dafny/dafny/Binaries/ -std=c++17 -O3
 
-build/bench/run-mutable-map: build/bench/run-mutable-map.o build/bench/MutableMap.o build/framework/NativeArithmetic.o 
+build/bench/run-mutable-map: build/bench/run-mutable-map.o build/bench/LinearMutableMap.o build/framework/NativeArithmetic.o
 	$(CC)    $^ -o $@ $(STDLIB)
 
 build/mutable-map-benchmark.data: build/bench/run-mutable-map
@@ -500,10 +500,10 @@ build/mutable-map-benchmark.data: build/bench/run-mutable-map
 build/mutable-map-benchmark.csv: build/mutable-map-benchmark.data tools/mutablemap-cook.sh
 	$(call tee_capture,$@,tools/mutablemap-cook.sh $<)
 
-build/bench/run-mutable-btree.o: bench/run-mutable-btree.cpp build/lib/DataStructures/MutableBtree.i.h
+build/bench/run-mutable-btree.o: bench/run-mutable-btree.cpp build/lib/DataStructures/LinearMutableBtree.i.h
 	$(CC) -c $< -o $@ $(STDLIB) -I build -I .dafny/dafny/Binaries/ -std=c++17 -O3
 
-build/bench/run-mutable-btree: build/bench/run-mutable-btree.o build/lib/DataStructures/MutableBtree.i.o build/framework/NativeArithmetic.o build/framework/NativeArrays.o
+build/bench/run-mutable-btree: build/bench/run-mutable-btree.o build/lib/DataStructures/LinearMutableBtree.i.o build/framework/NativeArithmetic.o build/framework/NativeArrays.o
 	$(CC)    $^ -o $@ $(STDLIB)
 
 build/mutable-btree-benchmark.data: build/bench/run-mutable-btree
