@@ -422,10 +422,6 @@ module BucketGeneratorModel {
     var b1 := BucketOf(g).b;
     var b2 := ClampStart(bucket, start).b;
 
-    //forall k | k in b1 ensures k in b2 && b2[k] == b1[k]
-    //{
-    //}
-
     forall k | k in b2 ensures k in b1
     {
       match start {
