@@ -477,7 +477,7 @@ build/verification-times.pdf: build/verification-times.tgz
 build/automation-figure.pdf: build/Impl/Bundle.i.verified
 	./tools/automation-study.py
 
-build/linear-line-counts.tex build/linear-line-count-table.tex:
+build/linear-line-counts.tex build/linear-line-count-table.tex: tools/linear_line_counts.py lib/DataStructures/BtreeModel.i.dfy lib/DataStructures/MutableBtree.i.dfy lib/DataStructures/MutableMapModel.i.dfy lib/DataStructures/MutableMapImpl.i.dfy $(wildcard lib/DataStructures/LinearMutableMap.i.dfy)
 	./tools/linear_line_counts.py
 
 ##############################################################################

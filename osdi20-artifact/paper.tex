@@ -181,15 +181,16 @@ Storage Systems are Distributed Systems\\
 
 \begin{figure}
   \begin{center}
-    \begin{tabular}{|l|rr|rr|}
-      \hline
-      & \multicolumn{2}{c|}{hash table} & \multicolumn{2}{c|}{search tree} \\
-      Aliasing reasoning & impl & proof & impl & proof \\
-      \hline
-      Dynamic frames & \HashtableReprImpl & \HashtableReprProof & \BTreeReprImpl & \BTreeReprProof \\
-      %Linear type system & 289 & 1063 & 373 & 1531  \\
-      \hline
-    \end{tabular}
+    \input{build/linear-line-count-table}
+    %% \begin{tabular}{|l|rr|rr|}
+    %%   \hline
+    %%   & \multicolumn{2}{c|}{hash table} & \multicolumn{2}{c|}{search tree} \\
+    %%   Aliasing reasoning & impl & proof & impl & proof \\
+    %%   \hline
+    %%   Dynamic frames & \HashtableReprImpl & \HashtableReprProof & \BTreeReprImpl & \BTreeReprProof \\
+    %%   %Linear type system & 289 & 1063 & 373 & 1531  \\
+    %%   \hline
+    %% \end{tabular}
 
   \end{center}
   \vspace{-3mm}

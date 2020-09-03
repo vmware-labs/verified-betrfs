@@ -3,6 +3,7 @@
 A hand-tuned script for doing head-to-head line counts of linear component across branches.
 """
 
+import os
 import json
 import collections
 import subprocess
@@ -14,15 +15,12 @@ def do_cmd(cmd):
     subprocess.call(cmd)
 
 class Package:
-    def __init__(self, label, branch, sources):
+    def __init__(self, label, sources):
         self.label = label
-        self.branch = branch
         self.sources = sources
         self.counter = collections.Counter()
 
     def count(self):
-        do_cmd(["git", "checkout", self.branch])
-        print("NOW ON", cur_branch())
         for source in self.sources:
             self.count_one(source)
 
@@ -41,46 +39,37 @@ class Package:
     def jsondict(self):
         d = dict(self.counter)
         d["label"] = self.label
-        d["branch"] = self.branch
         d["sources"] = self.sources
         return d
 
 packages = [
-    # Package("Hashtable-linear", branch="osdi20-artifact-linear", sources=
-    #         ["lib/DataStructures/LinearMutableMap.i.dfy"]),
     # Package("BTree-linear", branch="osdi20-artifact-linear", sources=
     #         ["lib/DataStructures/BtreeModel.i.dfy",
     #             "lib/DataStructures/MutableBtree.i.dfy"]),
-    Package("Hashtable-master", branch="osdi20-artifact-dynamic-frames", sources=
-            ["lib/DataStructures/MutableMapModel.i.dfy",
-                "lib/DataStructures/MutableMapImpl.i.dfy"]),
-    Package("BTree-master", branch="osdi20-artifact-dynamic-frames", sources=
+    Package("BTree", sources=
             ["lib/DataStructures/BtreeModel.i.dfy",
-                "lib/DataStructures/MutableBtree.i.dfy"]),
+             "lib/DataStructures/MutableBtree.i.dfy"]),
+    Package("Hashtable-master", sources=
+            ["lib/DataStructures/MutableMapModel.i.dfy",
+             "lib/DataStructures/MutableMapImpl.i.dfy"]),
     ]
 
-def cur_branch():
-    return subprocess.run("git rev-parse --abbrev-ref HEAD".split(), stdout=subprocess.PIPE).stdout.decode("utf-8").strip()
+if os.path.exists("lib/DataStructures/LinearMutableMap.i.dfy"):
+    packages = packages + [ Package("Hashtable-linear", sources=["lib/DataStructures/LinearMutableMap.i.dfy"]) ]
 
 DATA_FILE = "data/linear_lines.json"
 def collect():
-    start_branch = cur_branch()
-
-    try:
-        accum = []
-        for package in packages:
-            package.count()
-            accum.append(package.jsondict())
-        open(DATA_FILE, "w").write(json.dumps(accum, indent=2))
-    finally:
-        do_cmd(["git", "checkout", start_branch])
+    accum = []
+    for package in packages:
+        package.count()
+        accum.append(package.jsondict())
+    open(DATA_FILE, "w").write(json.dumps(accum, indent=2))
 
 # Translation table from package labels to tex macro names & table labels.
 tex_names = {
         "Hashtable-linear": {"macroPrefix": "HashtableLinear", "tableModule": "Hashtable", "tableMode": "linear"},
         "Hashtable-master": {"macroPrefix": "HashtableRepr", "tableModule": "Hashtable", "tableMode": "dyn. frames"},
-        "BTree-linear": {"macroPrefix": "BTreeLinear", "tableModule": "BTree", "tableMode": "linear"},
-        "BTree-master": {"macroPrefix": "BTreeRepr", "tableModule": "BTree", "tableMode": "dyn. frames"},
+        "BTree": {"macroPrefix": "BTree", "tableModule": "BTree", "tableMode": "(curr. branch)"},
         }
 
 def report():
@@ -96,15 +85,15 @@ def report():
 
     fp = open("build/linear-line-count-table.tex", "w")
     fp.write("\\begin{tabular}{|ll|rrr|}\n")
-    fp.write("\\\\ \\hline\n")
+    fp.write("\\hline\n")
     fp.write("component & style & impl. & proof & ratio \\\\\n")
-    fp.write("\\\\ \\hline\n")
+    fp.write("\\hline\n")
     for row in data:
         tex = tex_names[row["label"]]
         macroPrefix = tex["macroPrefix"]
         fp.write("%s & %s & \\%sImpl & \\%sProof & \\%sRatio \\\\\n" %
             (tex["tableModule"], tex["tableMode"], macroPrefix, macroPrefix, macroPrefix))
-    fp.write("\\\\ \\hline\n")
+    fp.write("\\hline\n")
     fp.write("\\end{tabular}\n")
     fp.close()
 
