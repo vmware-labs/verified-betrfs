@@ -109,10 +109,20 @@ build%/.:
 # Use bash so PIPESTATUS works
 SHELL=/bin/bash
 define tee_capture
-	$(eval TMPNAME=$(patsubst %.verified,%.verified-tmp,$1))
-	$(2) 2&>1 | tee $(TMPNAME); test $${PIPESTATUS[0]} -eq 0
+	$(eval TMPNAME=$(patsubst build/%,build/tmp/%,$1))
+	mkdir -p $(shell dirname $(TMPNAME))
+	$(2) 2>&1 | tee $(TMPNAME); test $${PIPESTATUS[0]} -eq 0
 	mv $(TMPNAME) $1
 endef
+
+# This version only breaks on abnormal exits, e.g. segfaults
+define tee_capture_allow_errors
+	$(eval TMPNAME=$(patsubst build/%,build/tmp/%,$1))
+	mkdir -p $(shell dirname $(TMPNAME))
+	$(2) 2>&1 | tee $(TMPNAME); test $${PIPESTATUS[0]} -lt 128
+	mv $(TMPNAME) $1
+endef
+
 
 ##############################################################################
 ##############################################################################
@@ -183,16 +193,12 @@ build/%.dummydep: %.dfy | $$(@D)/.
 ##############################################################################
 # .synchk: Dafny syntax check
 build/%.synchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
-	$(eval TMPNAME=$(patsubst %.synchk,%.synchk-tmp,$@))
-	( $(TIME) $(DAFNY_CMD) /compile:0 /dafnyVerify:0 $< ) 2>&1 | tee $(TMPNAME)
-	mv $(TMPNAME) $@
+	$(call tee_capture_allow_errors,$@,$(TIME) $(DAFNY_CMD) /compile:0 /dafnyVerify:0 $<)
 
 ##############################################################################
 # .verchk: Dafny file-local verification
 build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
-	$(eval TMPNAME=$(patsubst %.verchk,%.verchk-tmp,$@))
-	( $(TIME) $(DAFNY_CMD) $(DAFNY_FLAGS) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
-	mv $(TMPNAME) $@
+	$(call tee_capture_allow_errors,$@,$(TIME) $(DAFNY_CMD) /compile:0 /trace $(TIMELIMIT) $<)
 
 build/lib/DataStructures/MutableBtree.i.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/Buckets/KMBPKVOps.i.verchk: DAFNY_FLAGS=/noNLarith
@@ -264,12 +270,17 @@ build/%.cs: %.dfy $(DAFNY_BINS) | $$(@D)/.
 ##############################################################################
 # .cpp: C++ output from compiling a Dafny file (which includes all deps)
 # Slow, but useful for iterating when working on the cpp compiler.
-build/%.cpp: %.dfy $(DAFNY_BINS) | $$(@D)/.
+build/%.cpp build/%.h: %.dfy $(DAFNY_BINS) | $$(@D)/.
 #eval trick to assign make var inside rule
-	$(eval TMPNAME=$(abspath $(patsubst %.cpp,%-i.cpp,$@)))
+	$(eval CPPNAME=$(abspath build/$*.cpp))
+	$(eval TMPCPPNAME=$(abspath $(patsubst build/%,build/tmp/%,build/$*.cpp)))
+	$(eval HNAME=$(abspath build/$*.h))
+	$(eval TMPHNAME=$(abspath $(patsubst build/%,build/tmp/%,build/$*.h)))
+	mkdir -p $(shell dirname $(TMPCPPNAME))
 # Dafny irritatingly removes the '.i' presuffix.
-	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPNAME) /compileTarget:cpp $< Framework.h
-	mv $(TMPNAME) $@
+	$(TIME) $(DAFNY_CMD) /compile:0 /noVerify /spillTargetCode:3 /countVerificationErrors:0 /out:$(TMPCPPNAME) /compileTarget:cpp $< Framework.h
+	mv $(TMPCPPNAME) $(CPPNAME)
+	mv $(TMPHNAME) $(HNAME)
 
 # Build the main cpp file without building all the partial cpp files.
 build/Bundle.cpp: Impl/Bundle.i.dfy build/Impl/Bundle.i.dummydep $(DAFNY_BINS) | $$(@D)/.
@@ -342,16 +353,23 @@ VERIBETRFS_YCSB_O_FILES=\
 	$(VERIBETRFS_AUX_FILES)\
 	build/framework/leakfinder.o \
 
-libycsbc: build/libycsbc-libcpp.a \
-				  build/libycsbc-default.a
+# Ideally, we'd fix this to build these in the top-level build directory.
+libycsbc: ycsb/build/libycsbc-libcpp.a \
+				  ycsb/build/libycsbc-default.a
 
-build/libycsbc-libcpp.a:
+ycsb/build/libycsbc-libcpp.a:
 	STDLIB=libcpp $(MAKE) -C ycsb build/libycsbc-libcpp.a
 
-build/libycsbc-default.a:
+ycsb/build/libycsbc-default.a:
 	STDLIB=default $(MAKE) -C ycsb build/libycsbc-default.a
 
-librocksdb:
+NEED_TO_REBUILD_LIBROCKSDB=$(shell $(MAKE) -q -C vendor/rocksdb static_lib; echo "$?")
+
+ifeq ($(NEED_TO_REBUILD_LIBROCKSDB),1)
+.PHONY: vendor/rocksdb/librocksdb.a
+endif
+
+vendor/rocksdb/librocksdb.a:
 	@env \
 		ROCKSDB_DISABLE_BZIP=1 \
 		ROCKSDB_DISABLE_ZLIB=1 \
@@ -361,7 +379,7 @@ librocksdb:
 		ROCKSDB_DISABLE_SNAPPY=1 \
 		$(MAKE) -C vendor/rocksdb static_lib
 
-.PHONY: libycsbc
+.PHONY: libycsbc 
 
 build/YcsbMain.o: ycsb/YcsbMain.cpp
 	$(CC) $(STDLIB) -c -o $@ \
@@ -379,7 +397,7 @@ build/YcsbMain.o: ycsb/YcsbMain.cpp
 			$(GPROF_FLAGS) \
 			$^
 
-build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/YcsbMain.o
+build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) ycsb/build/libycsbc-libcpp.a build/YcsbMain.o
 	# NOTE: this uses c++17, which is required by hdrhist
 	$(CC) $(STDLIB) -o $@ \
 			-Winline -std=c++17 $(O3FLAG) \
@@ -390,8 +408,7 @@ build/VeribetrfsYcsb: $(VERIBETRFS_YCSB_O_FILES) build/libycsbc-libcpp.a build/Y
 			build/YcsbMain.o \
 			-lycsbc-libcpp -lpthread -ldl $(LDFLAGS)
 
-build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp
-	# NOTE: this uses c++17, which is required by hdrhist
+build/RocksYcsb: ycsb/build/libycsbc-default.a vendor/rocksdb/librocksdb.a ycsb/YcsbMain.cpp
 	$(CC) -o $@ \
 			-L ycsb/build \
 			-L vendor/rocksdb \
@@ -410,7 +427,7 @@ build/RocksYcsb: build/libycsbc-default.a librocksdb ycsb/YcsbMain.cpp
 vendor/kyoto/kyotocabinet/libkyotocabinet.a:
 	(cd vendor/kyoto/kyotocabinet; CXX=clang++ CXXFLAGS=$(STDLIB) ./configure; make)
 
-build/KyotoYcsb: ycsb/YcsbMain.cpp build/libycsbc-libcpp.a vendor/kyoto/kyotocabinet/libkyotocabinet.a
+build/KyotoYcsb: ycsb/YcsbMain.cpp ycsb/build/libycsbc-libcpp.a vendor/kyoto/kyotocabinet/libkyotocabinet.a
 	# NOTE: this uses c++17, which is required by hdrhist
 	$(CC) \
       $(STDLIB) \
@@ -431,7 +448,7 @@ build/KyotoYcsb: ycsb/YcsbMain.cpp build/libycsbc-libcpp.a vendor/kyoto/kyotocab
 			-lycsbc-libcpp -lpthread -ldl -lz $(LDFLAGS)
 
 # Requires libdb-stl-dev to be installed (on debian, libdbb5.3-stl-dev)
-build/BerkeleyYcsb: ycsb/YcsbMain.cpp build/libycsbc-libcpp.a
+build/BerkeleyYcsb: ycsb/YcsbMain.cpp ycsb/build/libycsbc-libcpp.a
 	# NOTE: this uses c++17, which is required by hdrhist
 	$(CC) \
       $(STDLIB) \
