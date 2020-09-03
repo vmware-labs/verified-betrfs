@@ -4,6 +4,11 @@ include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
 include "../lib/Base/NativeTypes.s.dfy"
 include "MainDiskIOHandler.s.dfy"
 
+// Contains the abstract 'Main' module, which an implementation
+// must refine, that is, it must define the global state type,
+// implement the handle methods, and meet all of the contracts
+// demanded by this file. (See MainHandlers.i.dfy)
+
 module DiskTypes {
   import opened NativeTypes
   type LBA = uint64

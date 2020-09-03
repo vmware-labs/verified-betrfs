@@ -1,6 +1,8 @@
 include "NativeTypes.s.dfy"
 include "SeqComparison.s.dfy"
 
+// Language augmentation with faster array methods.
+
 module {:extern} NativeArrays {
   import opened NativeTypes
   import SeqComparison

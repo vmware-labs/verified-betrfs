@@ -1,5 +1,7 @@
 include "../Base/NativeTypes.s.dfy"
 
+// Language augmentation with faster array methods.
+
 module {:extern} Native {
   import opened NativeTypes
 

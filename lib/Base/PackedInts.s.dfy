@@ -1,5 +1,7 @@
 include "../Base/NativeTypes.s.dfy"
 
+// Language augmentation providing access to byte-level integer casting.
+
 module {:extern} NativePackedInts {
   import opened NativeTypes
 
