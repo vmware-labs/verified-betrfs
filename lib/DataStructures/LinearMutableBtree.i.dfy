@@ -695,7 +695,7 @@ module MainModule {
     assume (write_end as int - write_start as int) < 0xffff_ffff_ffff_ffff;
     assume write_end >= write_start;
     var write_duration: uint64 := write_end - write_start;
-    print(n, "\twrite\tlinear\t", write_duration, "\n");
+    print(n, "\twrite\t", write_duration, "\n");
 
     i := 0;
 
@@ -726,7 +726,7 @@ module MainModule {
     assume (read_end as int - read_start as int) < 0xffff_ffff_ffff_ffff;
     assume read_end >= read_start;
     var read_duration: uint64 := read_end - read_start;
-    print(n, "\tread\tlinear\t", read_duration, "\n");
+    print(n, "\tread\t", read_duration, "\n");
 
     TMB.Free(t);
   }

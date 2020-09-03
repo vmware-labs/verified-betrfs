@@ -9,8 +9,7 @@ import collections
 import tarfile
 
 #EXPERIMENT="expresults/veri_time_13-*"
-EXPERIMENT="expresults/veri_time_13.tgz"
-SLOW_THRESH = 20
+EXPERIMENT="build/verification-times.tgz"
 
 class Observation:
     def __init__(self, time, worker_name, source_filename):
@@ -32,26 +31,41 @@ class SymbolReport:
     def times(self):
         return [obs.time for obs in self.observations]
 
-    def mean(self):
-        return np.mean(self.times())
+    def avg(self):
+        # called "avg" so I don't feel bad changing from mean to median
+        return np.median(self.times())
 
     def stdev(self):
         return np.std(self.times())
 
     def cv(self):
-        return self.stdev() / self.mean()
+        return self.stdev() / self.avg()
 
 class SymbolPile:
     def __init__(self):
         self.symbols = {}
+        self.avg_times_ = None
 
     def put_replica(self, name, obs):
+        assert not self.avg_times_
         if name not in self.symbols:
             self.symbols[name] = SymbolReport(name)
         self.symbols[name].add(obs)
 
     def reports(self):
         return list(self.symbols.values())
+
+    def avg_times(self):
+        if self.avg_times_ == None:
+            self.avg_times_ = [report.avg() for report in self.reports()]
+            self.avg_times_.sort()
+        return self.avg_times_ 
+
+    def N(self):
+        return len(self.avg_times())
+
+    def cdist(self, i):
+        return i*1.0/self.N()
 
 def parse_one(opener, pile):
     symbol_parts = {}
@@ -182,36 +196,13 @@ def get_declaration(source_filename, symbol):
 def report_slowest_symbols(pile):
     """report on slowest symbols. Are they dynamic-frames-repr disasters?"""
 
-    reports = pile.reports()
-    reports.sort(key = lambda r: -r.mean())
-    repr_set = set()
-    no_repr_set = set()
-    for r in reports:
-        if r.mean()<=SLOW_THRESH: break
-        #print("slowest", r.name, r.mean())
-        source_filename = r.observations[0].source_filename
-        decl = get_declaration(source_filename, r.name)
-        if decl and decl.is_repr():
-            repr_set.add(r)
-        elif decl and decl.decl_type == "lemma":
-            no_repr_set.add(r)
-        else:
-            # not 100% sure; maybe refines method?
-            no_repr_set.add(r)
-            print("unsure", r.name, r.mean(), source_filename)
-    all_slow_count = len(repr_set)+len(no_repr_set)
-    print("all_slow_count", all_slow_count)
-    pct_slow = 100.0*len(repr_set)/all_slow_count
+    bySlow = list(pile.reports())
+    bySlow.sort(key=lambda r: -r.avg())
+    for slowest in bySlow[:10]:
+        print("slowest %s %.1fs" % (slowest.name, slowest.avg()))
 
-    slowest = max(reports, key=lambda r: r.mean())
-    print("slowest", slowest.name, slowest.mean())
-
-    return {
-        "slowThresholdSecs": SLOW_THRESH,
-        "numSlowVerifications": all_slow_count,
-        "pctOfSlowVerifsInvolvingHeap": ("%d\\%%" % pct_slow),
-        "fasterPctile": ("%s\\%%" % CDFStuff(pile).pct_text),
-        }
+def report_sequential_time(pile):
+    print("Total sequential time: %.1fs" % sum(pile.avg_times()))
 
 def emit_constants(defs):
     with open("../veripapers/osdi2020/data/verification-constants.tex", "w") as fp:
@@ -219,22 +210,60 @@ def emit_constants(defs):
         for k,v in defs.items():
             fp.write("\\newcommand{\\%s}{%s}\n" % (k, v))
 
-class CDFStuff:
-    def __init__(self, pile):
-        def cdist(i):
-            return i*1.0/self.N
+class CdfPoint:
+    def __init__(self, tex_label, thresh_sec, pile):
+        self.tex_label = tex_label
+        self.thresh_sec = thresh_sec
 
-        self.mean_times = [report.mean() for report in pile.reports()]
-        self.mean_times.sort()
-        self.N = len(self.mean_times)
-        self.ys = [cdist(i) for i in range(self.N)]
-        idx,t = next((idx,t) for idx,t in enumerate(self.mean_times) if t>SLOW_THRESH)
+        idx,t = next((idx,t) for idx,t in enumerate(pile.avg_times()) if t>thresh_sec)
         self.idx = idx - 1
 
-        self.tThr = self.mean_times[self.idx]
-        self.yThr = cdist(self.idx)
-        self.pct = cdist(self.idx)*100
+        self.tThr = pile.avg_times()[self.idx]
+        self.yThr = pile.cdist(self.idx)
+        self.pct = pile.cdist(self.idx)*100
         self.pct_text = "%.1f" % self.pct
+
+        reports = pile.reports()
+        reports.sort(key = lambda r: -r.avg())
+        repr_set = set()
+        no_repr_set = set()
+        for r in reports:
+            if r.avg()<=thresh_sec: break
+            #print("slowest", r.name, r.avg())
+            source_filename = r.observations[0].source_filename
+            decl = get_declaration(source_filename, r.name)
+            if decl and decl.is_repr():
+                repr_set.add(r)
+            elif decl and decl.decl_type == "lemma":
+                no_repr_set.add(r)
+            else:
+                # not 100% sure; maybe refines method?
+                no_repr_set.add(r)
+                if thresh_sec==20:
+                    print("unsure", r.name, r.avg(), source_filename)
+        all_slow_count = len(repr_set)+len(no_repr_set)
+        print("all_slow_count", all_slow_count)
+        pct_slow = 100.0*len(repr_set)/all_slow_count
+        self.defs = dict((self.tex_label + k,v) for k,v in {
+            "SlowThresholdSecs": self.thresh_sec,
+            "NumSlowVerifications": all_slow_count,
+            "PctOfSlowVerifsInvolvingHeap": ("%d\\%%" % pct_slow),
+            "FasterPctile": ("%s\\%%" % self.pct_text),
+            }.items())
+
+class CDFStuff:
+    def __init__(self, pile):
+        self.pile = pile
+        self.ys = [pile.cdist(i) for i in range(pile.N())]
+
+        self.point10s = CdfPoint("tenSec", 10, pile)
+        self.point20s = CdfPoint("twentySec", 20, pile)
+
+    def defs(self):
+        defs = {}
+        defs.update(self.point10s.defs)
+        defs.update(self.point20s.defs)
+        return defs
 
 def plot_all(pile):
     cdf = CDFStuff(pile)
@@ -242,22 +271,25 @@ def plot_all(pile):
         return -math.log10(1-y)
     ys = [complog(y) for y in cdf.ys]
 
-    fig = plt.figure()
+    fig = plt.figure(figsize=(6*0.8,2.5*0.8))
     ax = fig.add_subplot(111)
-    ax.plot(cdf.mean_times, ys)
+    ax.plot(cdf.pile.avg_times(), ys)
 
-    ylogThr = complog(cdf.yThr)
-    y0 = complog(0)
-    ax.plot([0, cdf.tThr, cdf.tThr], [ylogThr, ylogThr, y0])
-    ax.text(cdf.tThr*1.01, ylogThr*0.99, va="top", s="%s%% faster than %ds" % (cdf.pct_text, SLOW_THRESH))
+    for point in (cdf.point20s, cdf.point10s):
+        ylogThr = complog(point.yThr)
+        y0 = complog(0)
+        ax.plot([0, point.tThr, point.tThr], [ylogThr, ylogThr, y0], color="gray")
+        yOff = 0.80 if point==cdf.point10s else 0.99
+        ax.text(point.tThr*1.01, ylogThr*yOff, va="top", s="%s%% faster than %ds" % (point.pct_text, point.thresh_sec))
 
     yticks = range(4)
     ax.set_yticks(yticks)
     ax.set_yticklabels([1-math.pow(10, -y) for y in yticks])
     ax.set_xlabel("time to verify definition, method or lemma (s)")
-    ax.set_ylabel("cumulative fraction (log scale)")
+    ax.set_ylabel("cumulative frac.\n(log scale)")
+    plt.tight_layout()
 
-    fig.savefig("../veripapers/osdi2020/figures/verification-times.pdf")
+    fig.savefig("build/verification-times.pdf")
 
 def main():
     pile = parse_all()
@@ -265,8 +297,9 @@ def main():
     print("Rejecting bogus workers: ", bogus_workers)
     pile = reject_bogus_workers(pile, bogus_workers)
     detect_bogus_workers(pile)
-    defs = report_slowest_symbols(pile)
-    emit_constants(defs)
+    report_slowest_symbols(pile)
+    report_sequential_time(pile)
+    #emit_constants(CDFStuff(pile).defs())
     plot_all(pile)
 
 main()

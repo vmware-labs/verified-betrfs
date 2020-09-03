@@ -10,7 +10,7 @@ DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
 DAFNY_FLAGS=
 
 ifndef TL
-	TL=20
+	TL=0
 endif
 ifeq "$(TL)" "0"
   TIMELIMIT=
@@ -65,7 +65,7 @@ OPT_FLAGS=$(MALLOC_ACCOUNTING_DEFINE) \
 ##############################################################################
 # Automatic targets
 
-all: status elf
+all: build/osdi20-artifact/paper.pdf
 
 clean:
 	rm -rf build
