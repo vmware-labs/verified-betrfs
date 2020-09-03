@@ -1536,6 +1536,10 @@ abstract module BtreeModel {
 
     assert AllKeysBelowBound(node, |node.pivots|-1);
     assert AllKeysAboveBound(node, |node.pivots|);
+    calc {
+      lseqs(right.children);
+      lseqs(SubIndex(node, |left.children|, |node.children|).children);
+    }
     assert lseqs(right.children) == lseqs(SubIndex(node, |left.children|, |node.children|).children);
     assert SplitIndex(node, left, right, pivot);
     SplitNodeInterpretation(node, left, right, pivot);
