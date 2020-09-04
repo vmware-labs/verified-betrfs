@@ -620,16 +620,6 @@ abstract module MutableBtree {
     assert pivots !in subrepr;
     assert children !in subrepr;
     assert subrepr <= node.repr - {node, pivots, children};
-    
-    forall i | from <= i < to
-      ensures children[i].repr <= subrepr
-    {
-      forall o | o in children[i].repr
-        ensures o in subrepr
-      {
-        //assert ObjectIsInSubtree(node, o, i);
-      }
-    }
   }
 
   
