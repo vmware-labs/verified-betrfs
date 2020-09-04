@@ -107,11 +107,11 @@ module LinearSequence_i {
     forall i :: 0<=i<|l| ==> lseq_has(l)[i]
   }
 
-  method lseq_length_uint64<A>(shared s:lseq<A>) returns (n:uint64)
+  function method lseq_length_uint64<A>(shared s:lseq<A>) : (n:uint64)
+    requires lseq_length(s) <= 0xffff_ffff_ffff_ffff
     ensures n as nat == |lseqs(s)|
   {
-      lseq_length_bound(s);
-      n := lseq_length_raw(s);
+    lseq_length_raw(s)
   }
 
   function lseq_length<A>(s:lseq<A>):(n:nat)

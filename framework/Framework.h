@@ -5,6 +5,7 @@
 #include "NativeArrays.h"
 #include "LinearExtern.h"
 #include "LinearBox.h"
+#include "LinearCongruentialGenerator.h"
 
 #include <map>
 #include <unordered_map>

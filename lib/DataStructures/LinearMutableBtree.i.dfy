@@ -7,7 +7,7 @@ include "../Base/Maps.s.dfy"
 include "../Base/Option.s.dfy"
 include "../Base/mathematics.i.dfy"
 include "../Math/LinearCongruentialGenerator.s.dfy"
-include "BtreeModel.i.dfy"
+include "LinearBtreeModel.i.dfy"
 
 abstract module MutableBtree {
   import opened LinearSequence_s
@@ -341,8 +341,9 @@ abstract module MutableBtree {
     ensures Height(left) <= Height(node)
     ensures Height(right) <= Height(node)
   {
-    assert nleft as nat < |node.children| == lseq_length_uint64(node.children) as nat;
-    var nright:uint64 := lseq_length_uint64(node.children) - nleft;
+    assert nleft as nat < |node.children| == lseq_length(node.children);
+    var childrenlength: uint64 := lseq_length_uint64(node.children);
+    var nright:uint64 :=  childrenlength - nleft;
     linear var Index(pivots, children) := node;
     pivot := seq_get(pivots, nleft-1);
 
@@ -388,7 +389,8 @@ abstract module MutableBtree {
       Model.Keys.IsStrictlySortedImpliesLt(node.keys, boundary as int - 1, boundary as int);
       left, right := SplitLeaf(node, boundary, pivot);
     } else {
-      var boundary := lseq_length_uint64(node.children) / 2;
+      var childrenlength := lseq_length_uint64(node.children);
+      var boundary := childrenlength / 2;
 //      assert 2 <= |node.children|;
 //      assert 0 < boundary as nat < |node.children|;
       left, right, pivot := SplitIndex(node, boundary);
@@ -659,6 +661,7 @@ module MainModule {
   }
 
   method Run(seed: uint64, n: uint64, dry: bool)
+    requires false;
   {
     // var n: uint64 := 1_000_000;
     // var p: uint64 := 300_007;
@@ -692,8 +695,6 @@ module MainModule {
       i := i + 1;
     }
     var write_end: uint64 := steadyClockMillis();
-    assume (write_end as int - write_start as int) < 0xffff_ffff_ffff_ffff;
-    assume write_end >= write_start;
     var write_duration: uint64 := write_end - write_start;
     print(n, "\twrite\t", write_duration, "\n");
 
@@ -723,8 +724,6 @@ module MainModule {
       i := i + 1;
     }
     var read_end: uint64 := steadyClockMillis();
-    assume (read_end as int - read_start as int) < 0xffff_ffff_ffff_ffff;
-    assume read_end >= read_start;
     var read_duration: uint64 := read_end - read_start;
     print(n, "\tread\t", read_duration, "\n");
 
