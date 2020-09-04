@@ -298,7 +298,7 @@ Storage Systems are Distributed Systems\\
 
 \begin{figure*}
 \centering
-%\ref{ycsb-legend}
+\ref{ycsb-legend}
   \begin{tikzpicture}
     \begin{axis}[
         YcsbLoadThroughput,
@@ -310,10 +310,8 @@ Storage Systems are Distributed Systems\\
       ]
       \addplot+ [BerkeleyStyle] table {build/BerkeleyYcsb.csv};
       \addlegendentry{BerkeleyDB}
-      \addplot+ [VeriHeapStyle] table {build/VeribetrfsYcsb.csv};
-      \addlegendentry{\name-DF}
-      %% \addplot+ [VeriLinearStyle] table {\ycsbHddDataDir/veribetrkv-linear.csv};
-      %% \addlegendentry{\name}
+      \addplot+ [VeriLinearStyle] table {build/VeribetrfsYcsb.csv};
+      \addlegendentry{\name}
       \addplot+ [RocksStyle] table {build/RocksYcsb.csv};
       \addlegendentry{RocksDB}
     \end{axis}
@@ -325,8 +323,7 @@ Storage Systems are Distributed Systems\\
         %ymax = 800,
       ]
       \addplot+ [BerkeleyStyle] table {build/BerkeleyYcsb.csv};
-      \addplot+ [VeriHeapStyle] table {build/VeribetrfsYcsb.csv};
-      %\addplot+ [VeriLinearStyle] table {\ycsbHddDataDir/veribetrkv-linear.csv};
+      \addplot+ [VeriLinearStyle] table {build/VeribetrfsYcsb.csv};
       \addplot+ [RocksStyle] table {build/RocksYcsb.csv};
     \end{axis}
   \end{tikzpicture}
