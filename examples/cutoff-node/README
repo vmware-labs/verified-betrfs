@@ -1,4 +1,0 @@
-NodeImpl.i.dfy is a simplified, pared-down example of a method
-from Veribetrfs that dafny takes a while to verify.
-
-Also here are my attempts to translate it into Viper.
