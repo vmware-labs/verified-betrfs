@@ -8,6 +8,7 @@ module MutableMapBench {
   import opened LinearCongruentialGenerator
 
   method Run(seed: uint64, dry: bool)
+    requires false
   {
     var hashMap := new ResizingHashMap<uint64>(1024 * 1024);
     assert hashMap.Inv();
@@ -44,7 +45,6 @@ module MutableMapBench {
       assert fresh(hashMap);
     }
     var write_end: uint64 := steadyClockMillis();
-    assume write_end >= write_start;
     var write_duration: uint64 := write_end - write_start;
     print("insert\t", write_duration, "\n");
 
@@ -72,13 +72,11 @@ module MutableMapBench {
       i := i + 1;
     }
     var readpositive_end: uint64 := steadyClockMillis();
-    assume readpositive_end >= readpositive_start;
     var readpositive_duration: uint64 := readpositive_end - readpositive_start;
     print("readpositive\t", readpositive_duration, "\n");
 
     // READ NEGATIVE
     i := 0;
-    assume seed as nat + 1 < 0x1_0000_0000_0000_0000;
     lcg := new LCG(seed + 1);
     var readnegative_start: uint64 := steadyClockMillis();
     while i < nOperations
@@ -99,7 +97,6 @@ module MutableMapBench {
       i := i + 1;
     }
     var readnegative_end: uint64 := steadyClockMillis();
-    assume readnegative_end >= readnegative_start;
     var readnegative_duration: uint64 := readnegative_end - readnegative_start;
     print("readnegative\t", readnegative_duration, "\n");
 
@@ -122,7 +119,6 @@ module MutableMapBench {
       i := i + 1;
     }
     var remove_end: uint64 := steadyClockMillis();
-    assume remove_end >= remove_start;
     var remove_duration: uint64 := remove_end - remove_start;
     print("remove\t", remove_duration, "\n");
 

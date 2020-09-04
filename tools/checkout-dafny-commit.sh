@@ -18,7 +18,7 @@
 set -e
 set -x
 
-commit=0c324a76930c7710732dfd271d3fe2ba4d528868
+commit=51e6315a040b3316f00a8542f19be0487c5e2353
 if [ $1 ]; then
    commit=$1
 fi
