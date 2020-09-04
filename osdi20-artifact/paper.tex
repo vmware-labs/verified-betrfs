@@ -308,12 +308,8 @@ Storage Systems are Distributed Systems\\
         legend columns=1,
         legend to name={ycsb-legend},
       ]
-      \addplot+ [BerkeleyStyle] table {build/BerkeleyYcsb.csv};
-      \addlegendentry{BerkeleyDB}
       \addplot+ [VeriLinearStyle] table {build/VeribetrfsYcsb.csv};
       \addlegendentry{\name}
-      \addplot+ [RocksStyle] table {build/RocksYcsb.csv};
-      \addlegendentry{RocksDB}
     \end{axis}
   \end{tikzpicture}
   \begin{tikzpicture}
@@ -322,9 +318,7 @@ Storage Systems are Distributed Systems\\
         %ymin = 0,
         %ymax = 800,
       ]
-      \addplot+ [BerkeleyStyle] table {build/BerkeleyYcsb.csv};
       \addplot+ [VeriLinearStyle] table {build/VeribetrfsYcsb.csv};
-      \addplot+ [RocksStyle] table {build/RocksYcsb.csv};
     \end{axis}
   \end{tikzpicture}
 

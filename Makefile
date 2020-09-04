@@ -521,16 +521,16 @@ build/VeribetrfsYcsb.data: build/VeribetrfsYcsb ycsb/workloada-onefield.spec ycs
 	$(call tee_capture,$@,./build/VeribetrfsYcsb build/veribetrkv.img ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec)
 	rm -f build/veribetrkv.img
 
-build/RocksYcsb.data: build/RocksYcsb ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec
-	rm -rf build/RocksYcsb.db
-	mkdir build/RocksYcsb.db
-	$(call tee_capture,$@,./build/RocksYcsb build/RocksYcsb.db ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec)
-	rm -rf build/RocksYcsb.db
-
-build/BerkeleyYcsb.data: build/BerkeleyYcsb ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec
-	rm -f build/berkeley.db
-	$(call tee_capture,$@,./build/BerkeleyYcsb build/berkeley.db ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec)
-	rm -f build/berkeley.db
+# build/RocksYcsb.data: build/RocksYcsb ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec
+# 	rm -rf build/RocksYcsb.db
+# 	mkdir build/RocksYcsb.db
+# 	$(call tee_capture,$@,./build/RocksYcsb build/RocksYcsb.db ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec)
+# 	rm -rf build/RocksYcsb.db
+# 
+# build/BerkeleyYcsb.data: build/BerkeleyYcsb ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec
+# 	rm -f build/berkeley.db
+# 	$(call tee_capture,$@,./build/BerkeleyYcsb build/berkeley.db ycsb/workloada-onefield.spec ycsb/workloada-onefield.spec ycsb/workloadb-onefield.spec ycsb/workloadc-onefield.spec ycsb/workloadd-onefield.spec ycsb/workloadf-onefield.spec ycsb/workloadc-uniform.spec)
+# 	rm -f build/berkeley.db
 
 build/%Ycsb.csv: build/%Ycsb.data
 	$(call tee_capture,$@,./tools/ycsb-cook.sh $<)
@@ -538,7 +538,7 @@ build/%Ycsb.csv: build/%Ycsb.data
 ##############################################################################
 # Build a PDF summarizing results
 
-build/osdi20-artifact/paper.pdf: osdi20-artifact/paper.tex build/Impl/Bundle.i.lcreport build/linear-line-counts.tex build/verification-times.pdf build/automation-figure.pdf build/mutable-map-benchmark.csv build/mutable-btree-benchmark.csv build/Impl/Bundle.i.status.pdf build/VeribetrfsYcsb.csv build/RocksYcsb.csv build/BerkeleyYcsb.csv 
+build/osdi20-artifact/paper.pdf: osdi20-artifact/paper.tex build/Impl/Bundle.i.lcreport build/linear-line-counts.tex build/verification-times.pdf build/automation-figure.pdf build/mutable-map-benchmark.csv build/mutable-btree-benchmark.csv build/Impl/Bundle.i.status.pdf build/VeribetrfsYcsb.csv
 	mkdir -p build/osdi20-artifact
 	pdflatex -shell-escape -output-directory build/osdi20-artifact $<
 	pdflatex -shell-escape -output-directory build/osdi20-artifact $<
