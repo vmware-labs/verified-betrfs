@@ -381,7 +381,8 @@ vendor/rocksdb/librocksdb.a:
 
 .PHONY: libycsbc 
 
-build/YcsbMain.o: ycsb/YcsbMain.cpp
+# The dependency on libycsbc is just to force some headers to be copied into place
+build/YcsbMain.o: ycsb/YcsbMain.cpp ycsb/build/libycsbc-default.a
 	$(CC) $(STDLIB) -c -o $@ \
 			-I ycsb/build/include \
 			-I $(DAFNY_ROOT)/Binaries/ \
