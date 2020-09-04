@@ -25,7 +25,7 @@ class DafnyFile:
     return self.filename.endswith(".s.dfy")
 
 # We'll leave copies of counted files here so we can inspect the counting filters for sanity.
-INSPECT_DIR = "./tmp/inspect"
+INSPECT_DIR = "./build/inspect"
 
 class Counter:
     def __init__(self, iron_base):
@@ -177,7 +177,7 @@ class Counter:
       return int(sloc)
 
     def make_tmp_dir(self):
-      tmp_dir = self.iron_base + "/tmp/linecounts_%x" % random.randint(0, 1<<31)
+      tmp_dir = self.iron_base + "/build/linecounts_%x" % random.randint(0, 1<<31)
       if not os.path.exists(tmp_dir):
         os.makedirs(tmp_dir)
       #print("tmp dir: %s" % tmp_dir)
