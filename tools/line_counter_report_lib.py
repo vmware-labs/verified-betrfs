@@ -3,11 +3,6 @@ import lib_deps
 import json
 import os
 
-# make build/Impl/Bundle.i.lcreport -j4
-# (incremental report redraw:)
-# tools/line_counter.py --mode report --input Impl/Bundle.i.dfy --output build/Impl/Bundle.i.lcreport
-# cp build/Impl/Bundle.i.lcreport ../veripapers/osdi2020/data/line-counts.tex
-
 def loadReport(iref):
     fp = open(lib_deps.targetName(iref, ".lc"))
     values = json.load(fp)

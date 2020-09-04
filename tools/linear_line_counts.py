@@ -53,7 +53,7 @@ packages = [
             ["lib/DataStructures/LinearMutableMap.i.dfy"]),
     ]
 
-DATA_FILE = "data/linear_lines.json"
+DATA_FILE = "build/linear_lines.json"
 def collect():
     accum = []
     for package in packages:
