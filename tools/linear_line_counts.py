@@ -49,13 +49,10 @@ packages = [
     Package("BTree", sources=
             ["lib/DataStructures/BtreeModel.i.dfy",
              "lib/DataStructures/MutableBtree.i.dfy"]),
-    Package("Hashtable-master", sources=
+    Package("Hashtable", sources=
             ["lib/DataStructures/MutableMapModel.i.dfy",
              "lib/DataStructures/MutableMapImpl.i.dfy"]),
     ]
-
-if os.path.exists("lib/DataStructures/LinearMutableMap.i.dfy"):
-    packages = packages + [ Package("Hashtable-linear", sources=["lib/DataStructures/LinearMutableMap.i.dfy"]) ]
 
 DATA_FILE = "data/linear_lines.json"
 def collect():
@@ -67,8 +64,7 @@ def collect():
 
 # Translation table from package labels to tex macro names & table labels.
 tex_names = {
-        "Hashtable-linear": {"macroPrefix": "HashtableLinear", "tableModule": "Hashtable", "tableMode": "linear"},
-        "Hashtable-master": {"macroPrefix": "HashtableRepr", "tableModule": "Hashtable", "tableMode": "dyn. frames"},
+        "Hashtable": {"macroPrefix": "Hashtable", "tableModule": "Hashtable", "tableMode": "(curr. branch)"},
         "BTree": {"macroPrefix": "BTree", "tableModule": "BTree", "tableMode": "(curr. branch)"},
         }
 

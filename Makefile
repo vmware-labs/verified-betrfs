@@ -7,6 +7,7 @@ DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy
 DAFNY_ROOT?=.dafny/dafny/
 DAFNY_CMD=$(DAFNY_ROOT)/Binaries/dafny
 DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
+DAFNY_FLAGS=
 
 ifndef TL
 	TL=0
@@ -376,7 +377,8 @@ vendor/rocksdb/librocksdb.a:
 
 .PHONY: libycsbc 
 
-build/YcsbMain.o: ycsb/YcsbMain.cpp
+# The dependency on libycsbc is just to force some headers to be copied into place
+build/YcsbMain.o: ycsb/YcsbMain.cpp ycsb/build/libycsbc-default.a
 	$(CC) $(STDLIB) -c -o $@ \
 			-I ycsb/build/include \
 			-I $(DAFNY_ROOT)/Binaries/ \
@@ -477,7 +479,7 @@ build/verification-times.pdf: build/verification-times.tgz
 build/automation-figure.pdf: build/Impl/Bundle.i.verified
 	./tools/automation-study.py
 
-build/linear-line-counts.tex build/linear-line-count-table.tex: tools/linear_line_counts.py lib/DataStructures/BtreeModel.i.dfy lib/DataStructures/MutableBtree.i.dfy lib/DataStructures/MutableMapModel.i.dfy lib/DataStructures/MutableMapImpl.i.dfy $(wildcard lib/DataStructures/LinearMutableMap.i.dfy)
+build/linear-line-counts.tex build/linear-line-count-table.tex: tools/linear_line_counts.py lib/DataStructures/BtreeModel.i.dfy lib/DataStructures/MutableBtree.i.dfy lib/DataStructures/MutableMapModel.i.dfy lib/DataStructures/MutableMapImpl.i.dfy
 	./tools/linear_line_counts.py
 
 ##############################################################################
