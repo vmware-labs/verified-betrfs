@@ -19,6 +19,6 @@ set -e
 set -x
 
 # https://github.com/secure-foundations/dafny.git
-# cpp branch
-git checkout 791f0e14f28c25dfb2cc2720f18772a2f22d76b5
+# osdi20-artifact branch
+git checkout 0c324a76930c7710732dfd271d3fe2ba4d528868
 
