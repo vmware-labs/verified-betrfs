@@ -24,7 +24,7 @@ module MarshallingModel {
   import opened Bounds
   import BC = BlockCache
   import SM = StateModel
-  import Crypto
+  import CRC32_C
   import NativeArrays
   import IndirectionTableModel
   import SeqComparison
@@ -211,7 +211,7 @@ module MarshallingModel {
   {
     Marshalling.reveal_parseCheckedSector();
 
-    if |data| >= 32 && Crypto.Crc32C(data[32..]) == data[..32] then
+    if |data| >= 32 && CRC32_C.crc32_c_padded(data[32..]) == data[..32] then
       parseSector(data[32..])
     else
       None

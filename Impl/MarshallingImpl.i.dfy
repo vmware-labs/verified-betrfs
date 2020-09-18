@@ -6,6 +6,8 @@ include "../lib/Base/Option.s.dfy"
 include "../lib/Lang/System/NativeArrays.s.dfy"
 include "../lib/Base/NativeBenchmarking.s.dfy"
 include "../lib/Base/LinearOption.i.dfy"
+include "../lib/Crypto/CRC32CArrayImpl.i.dfy"
+include "../lib/Crypto/CRC32CImpl.i.dfy"
 
 include "../ByteBlockCacheSystem/Marshalling.i.dfy"
 include "MarshallingModel.i.dfy"
@@ -31,7 +33,9 @@ module MarshallingImpl {
   import BC = BlockCache
   import JC = JournalCache
   import StateImpl
-  import Crypto
+  import CRC32_C
+  import CRC32_C_Impl
+  import CRC32_C_Array_Impl
   import NativeArrays
   import MutableMapModel
   import IndirectionTableImpl
@@ -660,7 +664,7 @@ module MarshallingImpl {
   /////// Marshalling and de-marshalling with checksums
 
   method ParseCheckedSector(data: seq<byte>) returns (s : Option<Sector>)
-  requires |data| < 0x1_0000_0000_0000_0000;
+  requires |data| < 0x1_0000_0000;
   ensures s.Some? ==> StateImpl.WFSector(s.value)
   ensures s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
   ensures ISectorOpt(s) == IMM.parseCheckedSector(data)
@@ -671,7 +675,8 @@ module MarshallingImpl {
     s := None;
 
     if |data| as uint64 >= 32 {
-      var hash := Crypto.Crc32C(data[32 as uint64..]);
+      // TODO unnecessary copy here
+      var hash := CRC32_C_Impl.compute_crc32c_padded(data[32 as uint64..]);
       if hash == data[..32 as uint64] {
         s := ParseSector(data, 32);
       }
@@ -708,10 +713,10 @@ module MarshallingImpl {
       IMM.reveal_parseSector();
       IMM.reveal_parseCheckedSector();
 
-      var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
+      var hash := CRC32_C_Array_Impl.compute_crc32c_padded(data, 32, data.Length as uint32 - 32);
 
       assert data[32..] == data[32..data.Length];
-      assert hash == Crypto.Crc32C(data[32..]);
+      assert hash == CRC32_C.crc32_c_padded(data[32..]);
       ghost var data_suffix := data[32..];
       NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
       assert data_suffix == data[32..];
@@ -745,10 +750,10 @@ module MarshallingImpl {
       IMM.reveal_parseSector();
       IMM.reveal_parseCheckedSector();
 
-      var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
+      var hash := CRC32_C_Array_Impl.compute_crc32c_padded(data, 32, data.Length as uint32 - 32);
 
       assert data[32..] == data[32..data.Length];
-      assert hash == Crypto.Crc32C(data[32..]);
+      assert hash == CRC32_C.crc32_c_padded(data[32..]);
       ghost var data_suffix := data[32..];
       NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
       assert data_suffix == data[32..];
@@ -764,7 +769,7 @@ module MarshallingImpl {
       Pack_LittleEndian_Uint64_into_Array(1, data, 32);
 
       //NativeBenchmarking.start("crc32");
-      var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
+      var hash := CRC32_C_Array_Impl.compute_crc32c_padded(data, 32, data.Length as uint64 - 32);
       NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
       //NativeBenchmarking.end("crc32");
 
@@ -787,10 +792,10 @@ module MarshallingImpl {
       IMM.reveal_parseSector();
       IMM.reveal_parseCheckedSector();
 
-      var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
+      var hash := CRC32_C_Array_Impl.compute_crc32c_padded(data, 32, data.Length as uint32 - 32);
 
       assert data[32..] == data[32..data.Length];
-      assert hash == Crypto.Crc32C(data[32..]);
+      assert hash == CRC32_C.crc32_c_padded(data[32..]);
       ghost var data_suffix := data[32..];
       NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
       assert data_suffix == data[32..];

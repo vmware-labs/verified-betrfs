@@ -1,7 +1,7 @@
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../lib/Base/Message.i.dfy"
-include "../lib/Base/Crypto.s.dfy"
+include "../lib/Crypto/CRC32C.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../BlockCacheSystem/BlockCache.i.dfy"
 include "../BlockCacheSystem/JournalCache.i.dfy"
@@ -29,7 +29,7 @@ module Marshalling {
   import opened Bounds
   import DiskLayout
   import ReferenceType`Internal
-  import Crypto
+  import CRC32_C
   import PackedKV
   import opened SectorType
   import PackedKVMarshalling
@@ -404,7 +404,7 @@ module Marshalling {
 
   function {:opaque} parseCheckedSector(data: seq<byte>) : (s : Option<Sector>)
   {
-    if |data| >= 32 && Crypto.Crc32C(data[32..]) == data[..32] then
+    if |data| >= 32 && CRC32_C.crc32_c_padded(data[32..]) == data[..32] then
       parseSector(data[32..])
     else
       None

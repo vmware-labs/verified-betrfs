@@ -20,4 +20,8 @@ module NativeTypes {
   function Uint64UpperBound() : int { 0x1_0000_0000_0000_0000 }
   function Uint32UpperBound() : int { 0x1_0000_0000 }
 
+  type uint8 = byte
+
+  newtype/*{:nativeType "__m128i"}*/ uint128 = i:int |
+      0 <= i < 0x1_0000_0000_0000_0000_0000_0000_0000_0000
 }

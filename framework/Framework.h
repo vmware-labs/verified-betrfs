@@ -24,20 +24,112 @@ namespace NativeArithmetic_Compile {
   uint64_t u64add(uint64_t a, uint64_t b);
 }
 
+namespace F2__X__s_Compile {
+  inline uint32 bitxor32(uint32 a, uint32 b) { return a ^ b; }
+  inline uint64 bitxor64(uint64 a, uint64 b) { return a ^ b; }
+
+  inline uint32 intrinsic_mm_crc32_u8(uint32 crc, uint8 v) {
+    return _mm_crc32_u8(crc, v);
+  }
+
+  inline uint64 intrinsic_mm_crc32_u64(uint64 crc, uint64 v) {
+    return _mm_crc32_u64(crc, v);
+  }
+
+  inline __m128i intrinsic_mm_xor_si128(__m128i a, __m128i b) {
+    return _mm_xor_si128(a, b);
+  }
+
+  inline __m128i intrinsic_mm_clmulepi64_si128_0(__m128i a, __m128i b) {
+    return _mm_clmulepi64_si128(a, b, 0);
+  }
+  inline __m128i intrinsic_mm_clmulepi64_si128_16(__m128i a, __m128i b) {
+    return _mm_clmulepi64_si128(a, b, 16);
+  }
+}
+
+namespace Bits__s_Compile {
+  inline __m128i intrinsic_mm_loadu_si128(DafnySequence<uint64> const& seq, uint32 idx) {
+    return _mm_loadu_si128((__m128i*)(seq.ptr() + idx));
+  }
+
+  inline __m128i intrinsic_mm_cvtepu32_epi64(__m128i a) {
+    return _mm_cvtepu32_epi64(a);
+  }
+
+  inline __m128i intrinsic_mm_cvtsi64_si128(uint64 a)
+  {
+    return _mm_cvtsi64_si128(a);
+  }
+
+  inline uint64 intrinsic_mm_cvtsi128_si64(__m128i a)
+  {
+    return _mm_cvtsi128_si64(a);
+  }
+}
+
 namespace NativePackedInts_Compile {
   static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__, "current implementation of NativePackedInts assumes little endian");
   static_assert(sizeof(uint32) == 4, "uint32 is aliased wrong");
   static_assert(sizeof(uint64) == 8, "uint64 is aliased wrong");
 
-  uint32 Unpack__LittleEndian__Uint32(DafnySequence<uint8> const& packed, uint64 idx);
-  uint64 Unpack__LittleEndian__Uint64(DafnySequence<uint8> const& packed, uint64 idx);
-  void Pack__LittleEndian__Uint32__into__Array(uint32 i, DafnyArray<uint8> const& ar, uint64 idx);
-  void Pack__LittleEndian__Uint64__into__Array(uint64 i, DafnyArray<uint8> const& ar, uint64 idx);
-  DafnySequence<uint32> Unpack__LittleEndian__Uint32__Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len);
-  DafnySequence<uint64> Unpack__LittleEndian__Uint64__Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len);
-  void Pack__LittleEndian__Uint32__Seq__into__Array(DafnySequence<uint32> const& unpacked, DafnyArray<uint8> const& ar, uint64 idx);
-  void Pack__LittleEndian__Uint64__Seq__into__Array(DafnySequence<uint64> const& unpacked, DafnyArray<uint8> const& ar, uint64 idx);
+  inline uint32 Unpack__LittleEndian__Uint32(DafnySequence<uint8> const& packed, uint64 idx)
+  {
+    uint32 res;
+    memcpy(&res, packed.ptr() + idx, sizeof(uint32));
+    return res;
+  }
+
+  inline uint64 Unpack__LittleEndian__Uint64(DafnySequence<uint8> const& packed, uint64 idx)
+  {
+    uint64 res;
+    memcpy(&res, packed.ptr() + idx, sizeof(uint64));
+    return res;
+  }
+
+  inline uint64 Unpack__LittleEndian__Uint64__From__Array(DafnyArray<uint8> const& packed, uint64 idx)
+  {
+    uint64 res;
+    memcpy(&res, packed.ptr() + idx, sizeof(uint64));
+    return res;
+  }
+
+  inline void Pack__LittleEndian__Uint32__into__Array(uint32 i, DafnyArray<uint8> const& ar, uint64 idx)
+  {
+    memcpy(&ar.at(idx), &i, sizeof(uint32));
+  }
+
+  inline void Pack__LittleEndian__Uint64__into__Array(uint64 i, DafnyArray<uint8> const& ar, uint64 idx)
+  {
+    memcpy(&ar.at(idx), &i, sizeof(uint64));
+  }
+
+  inline DafnySequence<uint32> Unpack__LittleEndian__Uint32__Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len)
+  {
+    // TODO is there a safe way to do this without a copy?
+    DafnySequence<uint32> res(len);
+    memcpy(res.ptr(), packed.ptr() + idx, sizeof(uint32) * len);
+    return res;
+  }
+
+  inline DafnySequence<uint64> Unpack__LittleEndian__Uint64__Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len)
+  {
+    DafnySequence<uint64> res(len);
+    memcpy(res.ptr(), packed.ptr() + idx, sizeof(uint64) * len);
+    return res;
+  }
+
+  inline void Pack__LittleEndian__Uint32__Seq__into__Array(DafnySequence<uint32> const& unpacked, DafnyArray<uint8> const& ar, uint64 idx)
+  {
+    memcpy(&ar.at(idx), unpacked.ptr(), sizeof(uint32) * unpacked.size());
+  }
+
+  inline void Pack__LittleEndian__Uint64__Seq__into__Array(DafnySequence<uint64> const& unpacked, DafnyArray<uint8> const& ar, uint64 idx)
+  {
+    memcpy(&ar.at(idx), unpacked.ptr(), sizeof(uint64) * unpacked.size());
+  }
 }
+
 
 namespace Crypto_Compile {
   DafnySequence<uint8> Sha256(DafnySequence<uint8>);

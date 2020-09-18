@@ -1,7 +1,75 @@
 #include "Application.h"
 #include "Benchmarks.h"
 
+#include <chrono>
+
 using namespace std;
+using namespace std::chrono;
+
+namespace CRC32__C__Impl_Compile {
+  class __default {
+    public:
+    // Default constructor
+ __default() {}
+    static uint32 alignment(uint32 idx);static uint32 compute__crc32__main(DafnySequence<uint8> data, uint32 idx0, uint32 len0, uint32 prev);
+    static DafnySequence<uint8> compute__crc32(DafnySequence<uint8> data);
+  };
+}
+
+namespace Crypto_Compile {
+  DafnySequence<uint8> Crc32C(DafnySequence<uint8> bytes);
+}
+
+/*namespace CryptoTest_Compile  {
+  class __default {
+    public:
+    // Default constructor
+ __default() {}
+    static void test();
+  };
+}*/
+
+void dump(DafnySequence<uint8> const& s) {
+  cout << "[";
+  for (int i = 0; i < 4; i++) {
+    if (i == 3)
+      cout << (uint64)s.ptr()[i];
+    else
+      cout << (uint64)s.ptr()[i] << ", ";
+  }
+  cout << "]" << endl;
+}
+
+/*int main(int argc, char* argv[]) {
+  int N = 3276800;
+  DafnySequence<uint8> seq(32768);
+  for (int i = 0; i < N; i++) {
+    seq.ptr()[i] = i % 256;
+  }
+
+  dump(CRC32__C__Impl_Compile::__default::compute__crc32(seq));
+  dump(Crypto_Compile::Crc32C(seq));
+
+  for (int i = 0; i < 8; i++) {
+    if (i % 2) {
+      auto start = high_resolution_clock::now();
+      for (int j = 0; j < 400; j++) {
+        CRC32__C__Impl_Compile::__default::compute__crc32(seq);
+      }
+      auto stop = high_resolution_clock::now();
+      auto duration = duration_cast<microseconds>(stop - start);
+      cout << "new " << duration.count() << endl;
+    } else {
+      auto start = high_resolution_clock::now();
+      for (int j = 0; j < 400; j++) {
+        Crypto_Compile::Crc32C(seq);
+      }
+      auto stop = high_resolution_clock::now();
+      auto duration = duration_cast<microseconds>(stop - start);
+      cout << "old " << duration.count() << endl;
+    }
+  }
+}*/
 
 int main(int argc, char* argv[]) {
   bool allBenchmarks = false;
