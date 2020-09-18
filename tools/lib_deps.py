@@ -145,8 +145,8 @@ def childrenForIref(iref):
             raise InvalidDafnyIncludePath(subIref)
         if not subIref.declaresTrustedness():
             raise UndeclaredTrustedness(subIref)
-        if not subIref.compatiblePath():
-            raise IncompatibleIncludeTrustedness(subIref, iref)
+        #if not subIref.compatiblePath():
+        #    raise IncompatibleIncludeTrustedness(subIref, iref)
         subIrefs.append(subIref)
     return subIrefs
 
