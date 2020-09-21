@@ -1,0 +1,15 @@
+2020 Sept 20
+Trying to resurrect interactive plotting infrastructure.
+Mystery #1: Where did TimeSeries.py and parser.py go!?
+    - There is no trace of them in github.
+    - They appear in my 2020-05-06 backup, and are gone by 2020-05-23.
+
+    One explanation: perf-compare.py somehow got onto master, but TimeSeries
+    only made it onto an experimental branch. When I switched my local repo
+    to master, git helpfully removed it from my local fs for me, which is
+    why it's not appearing in the backup.
+    ...but then why doesn't it appear in searching github.com?
+
+Mystery #2: How are we generating the summary graphs for the paper / artifact
+    eval? It's possible that's a totally orthogonal framework; maybe Andrea
+    excised everything matplotlib-ish?

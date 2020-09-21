@@ -199,20 +199,33 @@ class Experiment:
             fields = line.split()
 
             # op count is the independent variable for all traces.
-            if line.startswith("elapsed"):
-                phase = fields[4]
-                if phase != cur_phase:
+            def process_elapsed(phase, ms_text, opnum_text):
+                nonlocal cur_phase
+                nonlocal cur_op
+                nonlocal cur_t
+                nonlocal phase_t_base
+                nonlocal phase_op_base
+                if cur_phase != phase:
                     cur_phase = phase
                     phase_op_base = cur_op
                     phase_t_base = cur_t
                     self.phase_starts[phase] = phase_op_base
-                t_in_phase = int(fields[1])/1000.0
+                t_in_phase = int(ms_text)/1000.0
                 cur_t = t_in_phase + phase_t_base
                 self.elapsed[cur_op] = cur_t
-                op_in_phase = int(fields[3])
+                op_in_phase = int(opnum_text)
                 cur_op = op_in_phase + phase_op_base
                 self.operation[cur_op] = cur_op
-                #print(phase, t_in_phase, phase_t_base, t, op_in_phase, cur_op)
+                print(cur_op, cur_t)
+
+            # A format that only appears in branch leak-adventure-2
+            if line.startswith("elapsed"):
+                process_elapsed(fields[4], fields[1], fields[3])
+
+            # The format in branch osdi2020-artifact-*
+            if line.startswith("[step]"):
+                if fields[3]!="start":
+                    process_elapsed(fields[2], fields[4], fields[6])
 
 #            if line.startswith("veribetrkv [op] sync") or line.startswith("rocksdb [op] sync"):
 #                cur_op = int(fields[4])
