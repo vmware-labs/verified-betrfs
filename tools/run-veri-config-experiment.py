@@ -266,12 +266,16 @@ def main():
   actuallyprint(command)
   sys.stdout.flush()
 
-  start_time = time.time()
-  end_time = start_time + time_budget_sec
   proc = subprocess.Popen(command, shell=True, preexec_fn=os.setsid, stdout=fp)
   proc_grp_id = os.getpgid(proc.pid)
   actuallyprint("experiment pid %d pgid %d" % (proc.pid, proc_grp_id))
-  ret = proc.wait()
+  try:
+    ret = proc.wait(timeout = time_budget_sec)
+  except TimeoutExpired:
+    actuallyprint("timeout expired (%ds); killing" % time_budget_set)
+    proc.kill()
+    ret = proc.wait(timeout = 10)
+
   assert ret == 0
   actuallyprint("done")
 

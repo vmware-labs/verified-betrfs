@@ -1,4 +1,8 @@
 #!/usr/bin/python3
+"""
+This script runs on bastion; you don't run it remotely from your
+laptop.
+"""
 import argparse
 import urllib, json, sys
 import boto3
