@@ -6,16 +6,25 @@ from suite import *
 common_vars = [
     Variable("ram", "run_veri", [Value("2gb", "ram=2.0gb")]),
     Variable("device", "run_veri", [Value("disk", "device=disk")]),
-    Variable("workload", "run_veri", [Value("wka6m", "workload=ycsb/wka-uniform-rc6000k.spec")]),
-    Variable("duration", "run_veri", [Value("2h", "time_budget=2h")]),
-    Variable("replica", "silent", [Value("r0", "r=0"), Value("r1", "r=1")]),
+    Variable("workload", "run_veri", [Value("wkc", "workload=ycsb/workloadc-onefield.spec")]),
+    Variable("duration", "run_veri", [Value("30m", "time_budget=30m")]),
+#    Variable("replica", "silent", [Value("r0", "r=0"), Value("r1", "r=1")]),
     ]
 veri_suite = Suite(
     "veri",
-    Variable("git_branch", "git_branch", [Value("suspless", "suspend-less-la2"), Value("la2", "leak-adventure-2")]),
+    #Variable("git_branch", "git_branch", [Value("dynamic-frames", "osdi20-artifact-dynamic-frames"), Value("linear", "osdi20-artifact-linear")]),
+    Variable("git_branch", "git_branch", [Value("dynamic-frames", "osdi20-artifact-dynamic-frames")]),
+    Variable("row_cache", "run_veri", [
+        Value("env:ROW_CACHE_SIZE", "1"),
+        Value("env:ROW_CACHE_SIZE", "4096"),
+        Value("env:ROW_CACHE_SIZE", "32768"),
+        Value("env:ROW_CACHE_SIZE", "262144"),
+        Value("env:ROW_CACHE_SIZE", "2097152"),
+        ]),
     Variable("nodeCountFudge", "run_veri", [Value(str(f), "nodeCountFudge="+str(f)) for f in [0.5]]),
-    Variable("system", "run_veri", [Value("veri1m", "config-1mb")]),
-    Variable("max_children", "run_veri", [Value("fanout16", "max_children=16")]),
+#    Variable("system", "run_veri", [Value("veri2m", "config-2mb")]),
+#    Variable("max_children", "run_veri", [Value("fanout16", "max_children=16")]),
+    Variable("veri", "run_veri", [Value("veri", "veri")]),
     Variable("cgroup", "run_veri", [Value("yescgroup", "cgroup=True")]),
     *common_vars)
 rocks_suite = Suite(
@@ -23,7 +32,8 @@ rocks_suite = Suite(
     Variable("git_branch", "git_branch", [Value("la2", "leak-adventure-2")]),
     Variable("system", "run_veri", [Value("rocks", "rocks")]),
     *common_vars)
-suite = ConcatSuite("robj-010", veri_suite, rocks_suite)
+#suite = ConcatSuite("robj-010", veri_suite, rocks_suite)
+suite = ConcatSuite("row-cache-001", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
