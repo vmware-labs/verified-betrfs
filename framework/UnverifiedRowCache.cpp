@@ -1,12 +1,15 @@
 #include "Application.h"
 
-#define ROW_CACHE_SIZE (1 << 18)
+//#define ROW_CACHE_SIZE (1 << 18)
 
 using namespace std;
 
+unsigned long ROW_CACHE_SIZE = 0;
 
 RowCache::RowCache() : head(-1), tail(-1)
 {
+  ROW_CACHE_SIZE = atoi(getenv("ROW_CACHE_SIZE"));
+  printf("metadata ROW_CACHE_SIZE %lu\n", ROW_CACHE_SIZE);
   queue.resize(ROW_CACHE_SIZE);
 }
 

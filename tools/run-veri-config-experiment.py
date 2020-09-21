@@ -100,6 +100,7 @@ def main():
   time_budget_sec = 3600*24*365 # You get a year if you don't ask for a budget
 
   fp = None
+  envs = {}
 
   for arg in sys.argv[1:]:
     if arg.startswith("ram="):
@@ -116,6 +117,9 @@ def main():
       veri_bucket_weight = int(arg[len("bucketWeight=") : ])
     elif arg.startswith("nodeCountFudge="):
       nodeCountFudge = float(arg[len("nodeCountFudge=") : ])
+    elif arg.startswith("env:"):
+      k,v = arg[4:].split("=")
+      envs[k] = v
     elif "Uint64=" in arg:
       sp = arg.split("=")
       assert len(sp) == 2
@@ -268,7 +272,7 @@ def main():
 
   start_time = time.time()
   end_time = start_time + time_budget_sec
-  proc = subprocess.Popen(command, shell=True, preexec_fn=os.setsid, stdout=fp)
+  proc = subprocess.Popen(command, shell=True, preexec_fn=os.setsid, stdout=fp, env=envs)
   proc_grp_id = os.getpgid(proc.pid)
   actuallyprint("experiment pid %d pgid %d" % (proc.pid, proc_grp_id))
   ret = proc.wait()
