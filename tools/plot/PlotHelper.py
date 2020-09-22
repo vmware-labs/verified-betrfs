@@ -147,6 +147,9 @@ def plotThroughput(ax, experiments):
     a2.set_ylabel("s")
     for expi in range(len(experiments)):
         exp = experiments[expi]
+        #XXX
+        #print(exp, len(exp.operation), len(exp.elapsed))
+        #print(plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, scale=K)))
         line, = ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, scale=K)), color=spectrum(expi))
         line.set_label(exp.nickname + " tput")
         ax.plot(*plotVsKop(ax, exp, windowedPair(ax, exp.operation, exp.elapsed, window=1000*K(), scale=K)), color=spectrum(expi), linestyle="dotted")

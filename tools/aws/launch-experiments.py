@@ -6,8 +6,8 @@ from suite import *
 common_vars = [
     Variable("ram", "run_veri", [Value("2gb", "ram=2.0gb")]),
     Variable("device", "run_veri", [Value("disk", "device=disk")]),
-    Variable("workload", "run_veri", [Value("wkc", "workload=ycsb/workloadc-onefield.spec")]),
-    Variable("duration", "run_veri", [Value("30m", "time_budget=30m")]),
+    Variable("workload", "run_veri", [Value("wkc", "workload=ycsb/workloadc-big.spec")]),
+    Variable("duration", "run_veri", [Value("60m", "time_budget=60m")]),
 #    Variable("replica", "silent", [Value("r0", "r=0"), Value("r1", "r=1")]),
     ]
 veri_suite = Suite(
@@ -15,7 +15,7 @@ veri_suite = Suite(
     #Variable("git_branch", "git_branch", [Value("dynamic-frames", "osdi20-artifact-dynamic-frames"), Value("linear", "osdi20-artifact-linear")]),
     Variable("git_branch", "git_branch", [Value("row-cache-adventure", "row-cache-adventure")]),
     Variable("row_cache", "run_veri", [
-        Value("0i", "env:ROW_CACHE_SIZE=1"),
+        Value("3i", "env:ROW_CACHE_SIZE=8"),
         Value("12i", "env:ROW_CACHE_SIZE=4096"),
         Value("15i", "env:ROW_CACHE_SIZE=32768"),
         Value("18i", "env:ROW_CACHE_SIZE=262144"),
@@ -33,7 +33,7 @@ rocks_suite = Suite(
     Variable("system", "run_veri", [Value("rocks", "rocks")]),
     *common_vars)
 #suite = ConcatSuite("robj-010", veri_suite, rocks_suite)
-suite = ConcatSuite("row-cache-003", veri_suite)
+suite = ConcatSuite("row-cache-005", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
