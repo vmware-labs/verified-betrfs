@@ -33,7 +33,7 @@ rocks_suite = Suite(
     Variable("system", "run_veri", [Value("rocks", "rocks")]),
     *common_vars)
 #suite = ConcatSuite("robj-010", veri_suite, rocks_suite)
-suite = ConcatSuite("row-cache-005", veri_suite)
+suite = ConcatSuite("row-cache-006", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
