@@ -13,3 +13,7 @@ Mystery #1: Where did TimeSeries.py and parser.py go!?
 Mystery #2: How are we generating the summary graphs for the paper / artifact
     eval? It's possible that's a totally orthogonal framework; maybe Andrea
     excised everything matplotlib-ish?
+
+Resetting stuff:
+./run-all.py "cd veribetrfs; git pull; git checkout row-cache-adventure"
+
