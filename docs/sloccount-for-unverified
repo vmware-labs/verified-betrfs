@@ -1,0 +1,21 @@
+cd vendor/rocksdb
+rm -rf /tmp/sandbox
+mkdir /tmp/sandbox
+# These five dirs seem to have the bulk of the core Rocks code in them.
+# If you vary how many you include, you still get about the same
+# test-code ratio (50%).
+cp -r db java utilities third-party tools /tmp/sandbox/
+echo -n "all:"; sloccount /tmp/sandbox | grep "Total Physical"
+find /tmp/sandbox -name \*test\* -print0 | xargs -0 rm -rf
+echo -n "notest:"; sloccount /tmp/sandbox | grep "Total Physical"
+# 0.99 test:code
+
+rm -rf /tmp/sandbox
+mkdir /tmp/sandbox
+cd /tmp/sandbox
+git clone https://github.com/berkeleydb/libdb.git
+rm -rf libdb/.git
+echo -n "all:"; sloccount /tmp/sandbox | grep "Total Physical"
+find /tmp/sandbox -name \*test\* -print0 | xargs -0 rm -rf
+echo -n "notest:"; sloccount /tmp/sandbox | grep "Total Physical"
+# 0.45 test:code
