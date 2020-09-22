@@ -21,7 +21,7 @@ def plot_perf_compare(experiments):
     except: raise
 
     try: plotSlowIos(plotHelper.nextAxis(depth=2), experiments)
-    except: raise
+    except: pass
 
     try: plotCpuTime(plotHelper.nextAxis(depth=2), experiments)
     except: raise

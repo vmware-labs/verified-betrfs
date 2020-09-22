@@ -13,13 +13,13 @@ common_vars = [
 veri_suite = Suite(
     "veri",
     #Variable("git_branch", "git_branch", [Value("dynamic-frames", "osdi20-artifact-dynamic-frames"), Value("linear", "osdi20-artifact-linear")]),
-    Variable("git_branch", "git_branch", [Value("dynamic-frames", "osdi20-artifact-dynamic-frames")]),
+    Variable("git_branch", "git_branch", [Value("row-cache-adventure", "row-cache-adventure")]),
     Variable("row_cache", "run_veri", [
-        Value("env:ROW_CACHE_SIZE", "1"),
-        Value("env:ROW_CACHE_SIZE", "4096"),
-        Value("env:ROW_CACHE_SIZE", "32768"),
-        Value("env:ROW_CACHE_SIZE", "262144"),
-        Value("env:ROW_CACHE_SIZE", "2097152"),
+        Value("0i", "env:ROW_CACHE_SIZE=1"),
+        Value("12i", "env:ROW_CACHE_SIZE=4096"),
+        Value("15i", "env:ROW_CACHE_SIZE=32768"),
+        Value("18i", "env:ROW_CACHE_SIZE=262144"),
+        Value("21i", "env:ROW_CACHE_SIZE=2097152"),
         ]),
     Variable("nodeCountFudge", "run_veri", [Value(str(f), "nodeCountFudge="+str(f)) for f in [0.5]]),
 #    Variable("system", "run_veri", [Value("veri2m", "config-2mb")]),
@@ -33,7 +33,7 @@ rocks_suite = Suite(
     Variable("system", "run_veri", [Value("rocks", "rocks")]),
     *common_vars)
 #suite = ConcatSuite("robj-010", veri_suite, rocks_suite)
-suite = ConcatSuite("row-cache-001", veri_suite)
+suite = ConcatSuite("row-cache-003", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
