@@ -21,14 +21,14 @@ veri_suite = Suite(
 #    Variable("system", "run_veri", [Value("veri2m", "config-2mb")]),
 #    Variable("max_children", "run_veri", [Value("fanout16", "max_children=16")]),
     Variable("veri", "run_veri", [Value("veri", "veri")]),
-    Variable("cgroup", "run_veri", [Value("yescgroup", "cgroup=True")]),
+    Variable("cgroup", "run_veri", [Value("yescgroup", "cgroup=False")]),   #XXX
     *common_vars)
 rocks_suite = Suite(
     "rocks",
     Variable("git_branch", "git_branch", [Value("la2", "leak-adventure-2")]),
     Variable("system", "run_veri", [Value("rocks", "rocks")]),
     *common_vars)
-suite = ConcatSuite("row-cache-010", veri_suite)
+suite = ConcatSuite("row-cache-012", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 

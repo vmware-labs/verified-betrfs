@@ -219,7 +219,7 @@ class Experiment:
                 op_in_phase = int(opnum_text)
                 cur_op = op_in_phase + phase_op_base
                 self.operation[cur_op] = cur_op
-                print(cur_op, cur_t)
+                #print(cur_op, cur_t)
 
             # A format that only appears in branch leak-adventure-2
             if line.startswith("elapsed"):
