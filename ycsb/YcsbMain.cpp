@@ -220,6 +220,7 @@ public:
     db.scan(txscan.key, txscan.scan_length);
   }
 
+  // XXX need a switch to disable this for production runs
   void periodicReport(const char* phase, int elapsed_ms, int ops_completed) {
       printf("periodic-timestamp %s %s %d ms %d ops\n", name.c_str(), phase, elapsed_ms, ops_completed);
   //    printf("elapsed_ms %d ops %d %s\n", elapsed_ms, ops_completed, phase);
