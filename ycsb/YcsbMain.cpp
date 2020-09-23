@@ -72,7 +72,25 @@ static const vector<pair<ycsbc::Operation, string>> YcsbOperations =
    make_pair(ycsbc::SCAN, "scan"),
    make_pair(ycsbc::READMODIFYWRITE, "readmodifywrite"),
   };
-  
+
+void cgroups_report() {
+  FILE* fp = fopen("/sys/fs/cgroup/memory/VeribetrfsExp/memory.usage_in_bytes", "r");
+  char space[1000];
+  char* line = fgets(space, sizeof(space), fp);
+  fclose(fp);
+  printf("cgroups-memory.usage_in_bytes %s", line);
+
+  fp = fopen("/sys/fs/cgroup/memory/VeribetrfsExp/memory.stat", "r");
+  while (true) {
+    char* line = fgets(space, sizeof(space), fp);
+    if (line==NULL) {
+      break;
+    }
+    printf("cgroups-memory.stat %s", line);
+  }
+  fclose(fp);
+}
+
 template< class DB >
 class YcsbExecution {
   // Benchmark definition
@@ -202,6 +220,30 @@ public:
     db.scan(txscan.key, txscan.scan_length);
   }
 
+  void periodicReport(const char* phase, int elapsed_ms, int ops_completed) {
+      printf("periodic-timestamp %s %s %d ms %d ops\n", name.c_str(), phase, elapsed_ms, ops_completed);
+  //    printf("elapsed_ms %d ops %d %s\n", elapsed_ms, ops_completed, phase);
+  //
+  //    malloc_accounting_display("periodic");
+  //    db.memDebugFrequent();
+  //    infrequent_clock += 1;
+  //    if (infrequent_clock%3 == 0) {
+  //      db.memDebugInfrequent();
+  //    }
+  //
+  //    size_t heap, all_maps;
+  //    external_heap_size(&heap, &all_maps);
+  //    printf("os-map-total %8ld os-map-heap %8ld\n", all_maps, heap);
+  //
+  //    IOAccounting::report();
+  //    StatAccounting::report();
+  //    proc_io_report();
+  //    jemalloc_report();
+      cgroups_report();
+  //    db.cacheDebug();
+      fflush(stdout);
+  }
+
   void Load() {
     cout << "[step] " << name << " load start (num ops: " << record_count << ")" << endl;
 
@@ -220,9 +262,17 @@ public:
         auto duration_ms = duration_cast<milliseconds>(
                         clock_op_completed - clock_start).count();
         cout << "[step] " << name << " load progress " << duration_ms << " ms " << i << " ops" << endl;
+        periodicReport("load", duration_ms, i);
         malloc_accounting_status();
         clock_next_report = clock_op_completed + progress_report_interval;
       }
+    }
+    
+    {
+      auto clock_op_completed = steady_clock::now();
+      auto duration_ms = duration_cast<milliseconds>(
+                      clock_op_completed - clock_start).count();
+      periodicReport("load-final", duration_ms, record_count);
     }
 
     auto duration_ms = duration_cast<milliseconds>(clock_op_completed - clock_start);
@@ -309,6 +359,7 @@ public:
         malloc_accounting_display("periodic");
         auto elapsed_ms = duration_cast<milliseconds>(clock_op_completed - clock_start);
         cout << "[step] " << name << " run progress " << elapsed_ms.count() << " ms " <<  i << " ops" << endl;
+        periodicReport("run-progress", elapsed_ms.count(), i);
         next_display += progress_report_interval;
       }
 
@@ -338,6 +389,12 @@ public:
 #endif
         fflush(stdout);
       }
+    }
+
+    {
+      auto clock_op_completed = steady_clock::now();
+      auto elapsed_ms = duration_cast<milliseconds>(clock_op_completed - clock_start);
+      periodicReport("run-final", elapsed_ms.count(), num_ops);
     }
 
     if (have_done_insert_since_last_sync) {
