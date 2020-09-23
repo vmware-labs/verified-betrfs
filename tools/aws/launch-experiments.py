@@ -8,7 +8,7 @@ common_vars = [
     Variable("bucketWeight", "run_veri", [Value("bw", "bucketWeight=2031616")]),
     Variable("device", "run_veri", [Value("disk", "device=disk")]),
     Variable("workload", "run_veri", [Value("wkc", "workload=ycsb/workloadc-big.spec,ycsb/workloadc-big.spec")]),
-    Variable("duration", "run_veri", [Value("60m", "time_budget=60m")]),
+    Variable("duration", "run_veri", [Value("90m", "time_budget=90m")]),
 #    Variable("replica", "silent", [Value("r0", "r=0"), Value("r1", "r=1")]),
     ]
 veri_suite = Suite(
@@ -28,7 +28,7 @@ veri_suite = Suite(
 #    Variable("git_branch", "git_branch", [Value("la2", "leak-adventure-2")]),
 #    Variable("system", "run_veri", [Value("rocks", "rocks")]),
 #    *common_vars)
-suite = ConcatSuite("row-cache-012", veri_suite)
+suite = ConcatSuite("row-cache-014", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
