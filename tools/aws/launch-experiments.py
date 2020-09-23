@@ -5,8 +5,9 @@ from suite import *
 
 common_vars = [
     Variable("ram", "run_veri", [Value("2gb", "ram=2.0gb")]),
+    Variable("bucketWeight", "run_veri", [Value("bw", "bucketWeight=2031616")]),
     Variable("device", "run_veri", [Value("disk", "device=disk")]),
-    Variable("workload", "run_veri", [Value("wkc", "workload=ycsb/workloadc-big.spec")]),
+    Variable("workload", "run_veri", [Value("wkc", "workload=ycsb/workloadc-big.spec,ycsb/workloadc-big.spec")]),
     Variable("duration", "run_veri", [Value("60m", "time_budget=60m")]),
 #    Variable("replica", "silent", [Value("r0", "r=0"), Value("r1", "r=1")]),
     ]
@@ -15,12 +16,7 @@ veri_suite = Suite(
     #Variable("git_branch", "git_branch", [Value("dynamic-frames", "osdi20-artifact-dynamic-frames"), Value("linear", "osdi20-artifact-linear")]),
     Variable("git_branch", "git_branch", [Value("row-cache-adventure", "row-cache-adventure")]),
     Variable("row_cache", "run_veri", [
-        Value("3i", "env:ROW_CACHE_SIZE=8"),
-        Value("12i", "env:ROW_CACHE_SIZE=4096"),
-        Value("15i", "env:ROW_CACHE_SIZE=32768"),
-        Value("18i", "env:ROW_CACHE_SIZE=262144"),
-        Value("21i", "env:ROW_CACHE_SIZE=2097152"),
-        ]),
+        Value("%di" % bi, "env:ROW_CACHE_SIZE=%d cacheSize=%d" % (1<<bi, 0.7*(1<<30) - (1<<bi))) for bi in [3, 12, 15, 18, 21]]),
     Variable("nodeCountFudge", "run_veri", [Value(str(f), "nodeCountFudge="+str(f)) for f in [0.5]]),
 #    Variable("system", "run_veri", [Value("veri2m", "config-2mb")]),
 #    Variable("max_children", "run_veri", [Value("fanout16", "max_children=16")]),
@@ -32,8 +28,7 @@ rocks_suite = Suite(
     Variable("git_branch", "git_branch", [Value("la2", "leak-adventure-2")]),
     Variable("system", "run_veri", [Value("rocks", "rocks")]),
     *common_vars)
-#suite = ConcatSuite("robj-010", veri_suite, rocks_suite)
-suite = ConcatSuite("row-cache-006", veri_suite)
+suite = ConcatSuite("row-cache-010", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
