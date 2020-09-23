@@ -16,12 +16,12 @@ veri_suite = Suite(
     #Variable("git_branch", "git_branch", [Value("dynamic-frames", "osdi20-artifact-dynamic-frames"), Value("linear", "osdi20-artifact-linear")]),
     Variable("git_branch", "git_branch", [Value("row-cache-adventure", "row-cache-adventure")]),
     Variable("row_cache", "run_veri", [
-        Value("%di" % bi, "env:ROW_CACHE_SIZE=%d cacheSize=%d" % (1<<bi, 0.7*(1<<30) - (1<<bi))) for bi in [3, 12, 15, 18, 21]]),
+        Value("%di" % bi, "env:ROW_CACHE_SIZE=%d cacheSize=%d" % (1<<bi, 0.7*(1<<30) - (1<<bi)*600)) for bi in [3, 12, 15, 18, 21]]),
     Variable("nodeCountFudge", "run_veri", [Value(str(f), "nodeCountFudge="+str(f)) for f in [0.5]]),
 #    Variable("system", "run_veri", [Value("veri2m", "config-2mb")]),
 #    Variable("max_children", "run_veri", [Value("fanout16", "max_children=16")]),
     Variable("veri", "run_veri", [Value("veri", "veri")]),
-    Variable("cgroup", "run_veri", [Value("yescgroup", "cgroup=False")]),   #XXX
+    Variable("cgroup", "run_veri", [Value("yescgroup", "cgroup=True")]),   #XXX
     *common_vars)
 #rocks_suite = Suite(
 #    "rocks",
