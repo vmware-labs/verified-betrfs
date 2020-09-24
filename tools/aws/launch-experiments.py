@@ -4,7 +4,8 @@ from automation import *
 from suite import *
 
 common_vars = [
-    Variable("infrastructure_branch", "infrastructure_branch", [Value("aws-tweaks", "aws-tweaks")]),
+    Variable("infrastructure_branch", "infrastructure_branch",
+        [Value("row-cache-adventure", "row-cache-adventure")]),
     Variable("ram", "run_veri", [Value("2gb", "ram=2.0gb")]),
     Variable("bucketWeight", "run_veri", [Value("bw", "bucketWeight=2031616")]),
     Variable("device", "run_veri", [Value("disk", "device=disk")]),
