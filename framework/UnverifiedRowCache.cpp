@@ -41,8 +41,14 @@ optional<ByteString> RowCache::get(ByteString key)
   }
 }
 
-void RowCache::set(ByteString key, ByteString val)
+void RowCache::set(ByteString in_key, ByteString in_val)
 {
+  // The input are substrings of big Dafny strings. Copy out the values
+  // to avoid keeping a 1MB string alive behind every 500-byte val we tuck
+  // into this cache.
+  ByteString key = ByteString(in_key.as_string());
+  ByteString val = ByteString(in_val.as_string());
+
   auto iter = m.find(key);
   if (iter == m.end()) {
     if (m.size() < ROW_CACHE_SIZE) {
