@@ -13,8 +13,8 @@ from lib_deps import *
 # tools/aws/run-all.py "cd veribetrfs; tools/update-submodules.sh; tools/update-dafny.sh"
 ROOT="Impl/Bundle.i.dfy"
 #ROOT="lib/DataStructures/MutableBtree.i.dfy"   # a small test case
-SUITE_NAME="veri_time_16"   # one big parallel build
-N_REPLICAS=1
+SUITE_NAME="veri_time_september_02"   # one big parallel build
+N_REPLICAS=5
 
 def listSources():
     paths = set()
@@ -31,7 +31,11 @@ def listSources():
 def constructSuite(nReplicas):
     sourceVariable = Variable("source", "source", listSources()[::-1])
     replicaVariable = Variable("replica", "silent", [Value("r%d"%i, "r%d"%i) for i in range(nReplicas)])
-    suite = Suite(SUITE_NAME, sourceVariable, replicaVariable)
+    branchVariable = Variable("git_branch", "git_branch", [
+        Value("dynamic-frames", "osdi20-artifact-dynamic-frames-vertime"),
+        Value("linear", "osdi20-artifact-linear-vertime"),
+        ])
+    suite = Suite(SUITE_NAME, sourceVariable, replicaVariable, branchVariable)
     return suite
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
@@ -43,6 +47,7 @@ def main():
         output_path = "../" + variant.outfile()
         cmd = (ssh_cmd_for_worker(worker) + [
             "cd", "veribetrfs", ";",
+            "sh", "tools/clean-for-build.sh", variant.git_branch(), ";",
             "echo", "WORKER", worker["Name"], ">", output_path, ";",
     #        "sleep", "1",
             "tools/local-dafny.sh", source_path, "/compile:0", "/trace", ">>", output_path
@@ -60,7 +65,7 @@ def main():
     log("NUM_SOURCES %s" % len(listSources()))
     log("NUM_VARIANTS %s" % len(suite.variants))
 
-    workers = retrieve_running_workers()
+    workers = retrieve_running_workers(ssd=False)
     sequenced_launcher(workers, len(suite.variants), cmd_for_idx, dry_run=False)
 
 main()
