@@ -10,7 +10,8 @@ import tarfile
 import sys
 
 #EXPERIMENT="expresults/veri_time_13-*"
-EXPERIMENT="expresults/veri_time_september_*"
+#EXPERIMENT="expresults/veri_time_september_*"
+EXPERIMENT="expresults/veri_time_september_bb_branch*"
 
 class Observation:
     def __init__(self, time, worker_name, source_filename):
@@ -119,8 +120,8 @@ def parse_all():
         openers = [(fn,opener(fn)) for fn in resultsfiles]
 
     groups = [
-        ("dynamic-frames", re.compile(".*dynamic-frames.data")),
-        ("linear", re.compile(".*linear.data"))
+        ("dynamic-frames", re.compile(".*branch-dynamic-frames.*.data")),
+        ("linear", re.compile(".*branch-linear.*.data"))
     ]
 
     groups = [
