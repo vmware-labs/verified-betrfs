@@ -33,7 +33,6 @@ def constructSuite(nReplicas):
     replicaVariable = Variable("replica", "silent", [Value("r%d"%i, "r%d"%i) for i in range(nReplicas)])
     branchVariable = Variable("git_branch", "git_branch", [
         Value("dynamic-frames", "osdi20-artifact-dynamic-frames-vertime"),
-        Value("linear", "osdi20-artifact-linear-vertime"),
         ])
     suite = Suite(SUITE_NAME, sourceVariable, replicaVariable, branchVariable)
     return suite
