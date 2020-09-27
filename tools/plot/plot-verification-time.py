@@ -7,9 +7,11 @@ import matplotlib.pyplot as plt
 import glob
 import collections
 import tarfile
+import sys
 
 #EXPERIMENT="expresults/veri_time_13-*"
-EXPERIMENT="build/verification-times.tgz"
+#EXPERIMENT="expresults/veri_time_september_*"
+EXPERIMENT="expresults/veri_time_september_bb_branch*"
 
 class Observation:
     def __init__(self, time, worker_name, source_filename):
@@ -102,27 +104,44 @@ def parse_one(opener, pile):
         pile.put_replica(symbol, max(observations, key=lambda obs: obs.time))
 
 def parse_all():
-    pile = SymbolPile()
     openers = []
     if "*" in EXPERIMENT:
         # Load a glob out of the filesystem for interactive experimenting
         resultsfiles = glob.glob(EXPERIMENT)
         def opener(fn):
             return lambda: (fn,open(fn))
-        openers = [opener(fn) for fn in resultsfiles]
+        openers = [(fn,opener(fn)) for fn in resultsfiles]
     else:
         # Load from a tarball for git recorded raw data.
         tf = tarfile.open(EXPERIMENT, "r")
         resultsfiles = tf.getnames()
         def opener(fn):
             return lambda: (fn,tf.extractfile(fn))
-        openers = [opener(fn) for fn in resultsfiles]
-        
-    if len(openers) == 0:
-        raise Exception("No files match %s" % EXPERIMENT)
-    for opener in openers:
-        parse_one(opener, pile)
-    return pile
+        openers = [(fn,opener(fn)) for fn in resultsfiles]
+
+    groups = [
+        ("dynamic-frames", re.compile(".*branch-dynamic-frames.*.data")),
+        ("linear", re.compile(".*branch-linear.*.data"))
+    ]
+
+    groups = [
+        (groupname, [(fn, opener) for fn, opener in openers if group_re.match(fn) is not None])
+        for groupname, group_re in groups
+    ]
+
+    def parse_all_group(groupname, group_openers):
+        pile = SymbolPile()
+        if len(group_openers) == 0:
+            raise Exception("No files match %s" % EXPERIMENT)
+        for fn, opener in group_openers:
+            # print(groupname, fn)
+            parse_one(opener, pile)
+        return pile
+
+    return [
+        (groupname, parse_all_group(groupname, groupfiles))
+        for groupname, groupfiles in groups
+    ]
 
 def detect_bogus_workers(pile):
     """identify workers that consistently produce absurdly high results"""
@@ -265,7 +284,7 @@ class CDFStuff:
         defs.update(self.point20s.defs)
         return defs
 
-def plot_all(pile):
+def plot_all(groupname, pile):
     cdf = CDFStuff(pile)
     def complog(y):
         return -math.log10(1-y)
@@ -289,17 +308,22 @@ def plot_all(pile):
     ax.set_ylabel("cumulative frac.\n(log scale)")
     plt.tight_layout()
 
-    fig.savefig("build/verification-times.pdf")
+    fig.savefig("../veripapers/osdi2020/figures/verification-times-{}.pdf".format(groupname))
 
 def main():
-    pile = parse_all()
-    bogus_workers = detect_bogus_workers(pile)
-    print("Rejecting bogus workers: ", bogus_workers)
-    pile = reject_bogus_workers(pile, bogus_workers)
-    detect_bogus_workers(pile)
-    report_slowest_symbols(pile)
-    report_sequential_time(pile)
-    #emit_constants(CDFStuff(pile).defs())
-    plot_all(pile)
+    piles = parse_all()
+
+    bogus_workers = set()
+    for groupname, pile in piles:
+        bogus_workers = bogus_workers | detect_bogus_workers(pile)
+    print("bogus: ", bogus_workers)
+
+    for groupname, pile in piles:
+        pile = reject_bogus_workers(pile, bogus_workers)
+        detect_bogus_workers(pile)
+        report_slowest_symbols(pile)
+        report_sequential_time(pile)
+        emit_constants(CDFStuff(pile).defs())
+        plot_all(groupname, pile)
 
 main()
