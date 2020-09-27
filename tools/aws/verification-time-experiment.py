@@ -13,7 +13,7 @@ from lib_deps import *
 # tools/aws/run-all.py "cd veribetrfs; tools/update-submodules.sh; tools/update-dafny.sh"
 ROOT="Impl/Bundle.i.dfy"
 #ROOT="lib/DataStructures/MutableBtree.i.dfy"   # a small test case
-SUITE_NAME="veri_time_september_02"   # one big parallel build
+SUITE_NAME="veri_time_september_bb_branch-linear"   # one big parallel build
 N_REPLICAS=5
 
 def listSources():
@@ -32,7 +32,6 @@ def constructSuite(nReplicas):
     sourceVariable = Variable("source", "source", listSources()[::-1])
     replicaVariable = Variable("replica", "silent", [Value("r%d"%i, "r%d"%i) for i in range(nReplicas)])
     branchVariable = Variable("git_branch", "git_branch", [
-        Value("dynamic-frames", "osdi20-artifact-dynamic-frames-vertime"),
         Value("linear", "osdi20-artifact-linear-vertime"),
         ])
     suite = Suite(SUITE_NAME, sourceVariable, replicaVariable, branchVariable)
