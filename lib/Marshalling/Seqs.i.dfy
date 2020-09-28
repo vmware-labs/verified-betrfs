@@ -1,4 +1,4 @@
-include "../Base/NativeArrays.s.dfy"
+include "../Lang/System/NativeArrays.s.dfy"
 include "../Lang/NativeTypes.s.dfy"
 
 module Collections__Seqs_i {

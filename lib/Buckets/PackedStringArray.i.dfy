@@ -1,6 +1,6 @@
 include "../Lang/NativeTypes.s.dfy"
 include "../Lang/LinearSequence.s.dfy"
-include "../Base/PackedInts.s.dfy"
+include "../Lang/System/PackedInts.s.dfy"
 include "../Base/Option.s.dfy"
 include "../Base/total_order_impl.i.dfy"
 

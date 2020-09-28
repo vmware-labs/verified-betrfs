@@ -1,5 +1,5 @@
 include "../lib/Base/Option.s.dfy"
-include "../lib/Base/SeqComparison.s.dfy"
+include "../lib/Lang/System/SeqComparison.s.dfy"
 include "../MapSpec/UI.s.dfy"
 include "../MapSpec/UIStateMachine.s.dfy"
 

@@ -1,5 +1,5 @@
 include "../Lang/NativeTypes.s.dfy"
-include "../Base/NativeArrays.s.dfy"
+include "../Lang/System/NativeArrays.s.dfy"
 include "../Lang/LinearMaybe.s.dfy"
 include "../Lang/LinearBox.i.dfy"
 include "../Base/LinearOption.i.dfy"

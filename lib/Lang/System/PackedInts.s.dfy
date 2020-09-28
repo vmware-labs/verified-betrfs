@@ -1,4 +1,4 @@
-include "../Lang/NativeTypes.s.dfy"
+include "../NativeTypes.s.dfy"
 
 // Language augmentation providing access to byte-level integer casting.
 

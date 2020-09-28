@@ -1,4 +1,4 @@
-include "PackedInts.s.dfy"
+include "../Lang/System/PackedInts.s.dfy"
 
 module PackedIntsLib {
   import opened NativePackedInts

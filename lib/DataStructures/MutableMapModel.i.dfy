@@ -4,7 +4,7 @@ include "../Base/sequences.i.dfy"
 include "../Base/Sets.i.dfy"
 include "../Base/Maps.s.dfy"
 include "../Base/SetBijectivity.i.dfy"
-include "../Base/Arithmetic.s.dfy"
+include "../Lang/System/Arithmetic.s.dfy"
 //
 // Immutable (functional) model to support MutableMapImpl.  API provides an
 // iterator interface with a deterministic order for parsing/marshaling.

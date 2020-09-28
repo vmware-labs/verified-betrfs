@@ -1,4 +1,4 @@
-include "../Lang/NativeTypes.s.dfy"
+include "../NativeTypes.s.dfy"
 
 module {:extern} NativeArithmetic {
   import opened NativeTypes

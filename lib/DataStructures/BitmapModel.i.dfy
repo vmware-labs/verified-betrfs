@@ -1,7 +1,7 @@
 include "../Lang/NativeTypes.s.dfy"
 include "../Base/Option.s.dfy"
 include "../Base/BitsetLemmas.i.dfy"
-include "../Base/NativeArrays.s.dfy"
+include "../Lang/System/NativeArrays.s.dfy"
 //
 // Maintains a compact set of integers using a packed-uint64 bitmap
 // representation.

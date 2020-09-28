@@ -3,7 +3,7 @@ include "StateImpl.i.dfy"
 include "StateModel.i.dfy"
 include "../lib/Buckets/BucketImpl.i.dfy"
 include "../lib/Base/Option.s.dfy"
-include "../lib/Base/NativeArrays.s.dfy"
+include "../lib/Lang/System/NativeArrays.s.dfy"
 include "../lib/Base/NativeBenchmarking.s.dfy"
 include "../lib/Base/LinearOption.i.dfy"
 

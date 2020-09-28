@@ -1,5 +1,5 @@
 include "JournalistModel.i.dfy"
-include "../lib/Base/NativeArrays.s.dfy"
+include "../lib/Lang/System/NativeArrays.s.dfy"
 include "JournalistMarshallingImpl.i.dfy"
 include "JournalistParsingImpl.i.dfy"
 

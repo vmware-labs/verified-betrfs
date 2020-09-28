@@ -1,6 +1,6 @@
 include "../MapSpec/Journal.i.dfy"
 include "../lib/Base/Option.s.dfy"
-include "../lib/Base/PackedInts.s.dfy"
+include "../lib/Lang/System/PackedInts.s.dfy"
 
 module JournalRanges {
   export Spec provides KeyType, Options, ValueMessage, Journal, JournalBlock, parseJournalRange, JournalRangePrefix, JournalRangeSuffix, JournalBlocks, parseJournalRangeEmpty, parseJournalRangeAdditive, JournalRangeConcatAssoc, JournalRangeConcatEmpty, JournalRangeConcatEmpty', JournalRangePrefixGet, JournalRangeSuffixGet

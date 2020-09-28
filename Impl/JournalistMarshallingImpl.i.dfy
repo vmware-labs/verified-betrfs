@@ -1,7 +1,7 @@
 include "../ByteBlockCacheSystem/JournalBytes.i.dfy"
 include "../BlockCacheSystem/DiskLayout.i.dfy"
 include "JournalistMarshallingModel.i.dfy"
-include "../lib/Base/NativeArrays.s.dfy"
+include "../lib/Lang/System/NativeArrays.s.dfy"
 
 module JournalistMarshallingImpl {
   import opened JournalRanges`Internal

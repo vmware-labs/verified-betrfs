@@ -1,5 +1,5 @@
 include "../ByteBlockCacheSystem/JournalBytes.i.dfy"
-include "../lib/Base/NativeArrays.s.dfy"
+include "../lib/Lang/System/NativeArrays.s.dfy"
 
 module JournalistParsingImpl {
   import opened NativeTypes
