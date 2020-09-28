@@ -35,7 +35,7 @@ module Bounds {
   function method SuperblockSizeUint64() : uint64 { 4096 }  // Bytes
 
   function method JournalBlockSizeUint64() : uint64 { 4096 } // Bytes
-  function method DiskNumJournalBlocksUint64() : uint64 { 64*1024 /* 512MB */ } // JournalBlockSize() blocks
+  function method DiskNumJournalBlocksUint64() : uint64 { 64*1024 /* 256MB */ } // JournalBlockSize() blocks
 
   function method IndirectionTableBlockSizeUint64() : uint64 { 24*1024*1024 } // Bytes
 
