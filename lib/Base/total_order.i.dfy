@@ -1,5 +1,5 @@
 include "sequences.i.dfy"
-include "Maps.s.dfy"
+include "Maps.i.dfy"
 include "../Lang/NativeTypes.s.dfy"
 include "../Lang/System/NativeArrays.s.dfy"
 include "Option.s.dfy"

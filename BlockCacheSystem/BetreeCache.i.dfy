@@ -1,5 +1,5 @@
 include "BlockCache.i.dfy"
-include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/Maps.i.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../PivotBetree/PivotBetree.i.dfy"

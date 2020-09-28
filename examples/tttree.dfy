@@ -1,6 +1,6 @@
 include "../lib/total_order.s.dfy"
 include "../lib/lexical.i.dfy"
-include "../lib/Maps.s.dfy"
+include "../lib/Maps.i.dfy"
 include "../lib/mathematics.i.dfy"
 
 abstract module TwoThreeTree {

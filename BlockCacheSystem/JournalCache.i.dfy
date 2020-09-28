@@ -1,5 +1,5 @@
 include "../lib/Base/sequences.i.dfy"
-include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/Maps.i.dfy"
 include "../BlockCacheSystem/JournalDisk.i.dfy"
 include "JournalRange.i.dfy"
 include "JournalInterval.i.dfy"

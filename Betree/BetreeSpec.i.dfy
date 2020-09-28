@@ -1,6 +1,6 @@
 include "../Betree/BlockInterface.i.dfy"  
 include "../lib/Base/sequences.i.dfy"
-include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/Maps.i.dfy"
 include "../MapSpec/MapSpec.s.dfy"
 include "../Betree/Graph.i.dfy"
 include "../lib/Base/Message.i.dfy"

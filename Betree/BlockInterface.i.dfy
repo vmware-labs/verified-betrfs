@@ -1,4 +1,4 @@
-include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/Maps.i.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../Betree/Graph.i.dfy"
 include "../Betree/Transactable.i.dfy"

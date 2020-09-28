@@ -1,6 +1,6 @@
 include "../Base/Message.i.dfy"
 include "../Base/sequences.i.dfy"
-include "../Base/Maps.s.dfy"
+include "../Base/Maps.i.dfy"
 include "../Lang/System/NativeArrays.s.dfy"
 include "BucketsLib.i.dfy"
 include "BucketWeights.i.dfy"

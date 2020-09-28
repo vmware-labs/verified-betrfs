@@ -1,5 +1,5 @@
 include "../MapSpec/MapSpec.s.dfy"
-include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/MapRemove.s.dfy"
 include "../lib/Base/Crypto.s.dfy"
 //
 // An async disk allows concurrent outstanding I/Os. The disk is a sequence of bytes.
@@ -15,7 +15,7 @@ module AsyncDiskModelTypes {
 
 module AsyncDisk {
   import opened NativeTypes
-  import opened Maps
+  import opened MapRemove_s
   import Crypto
 
   type ReqId = uint64

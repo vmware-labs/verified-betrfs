@@ -1,7 +1,7 @@
 include "../MapSpec/UIStateMachine.s.dfy"
 include "../MapSpec/Journal.i.dfy"
 include "../lib/Base/Option.s.dfy"
-include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/Maps.i.dfy"
 include "VOp.i.dfy"
 include "../MapSpec/ThreeStateVersioned.s.dfy"
 

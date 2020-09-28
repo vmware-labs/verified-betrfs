@@ -1,6 +1,6 @@
 include "../MapSpec/MapSpec.s.dfy"
 include "../MapSpec/UIStateMachine.s.dfy"
-include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/MapRemove.s.dfy"
 //
 // Our definition of crash-safety.
 //
@@ -41,7 +41,7 @@ module ThreeStateTypes {
 abstract module ThreeStateVersioned {
   import SM : UIStateMachine
 
-  import opened Maps
+  import opened MapRemove_s
   import UI
   import opened ThreeStateTypes
 

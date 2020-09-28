@@ -1,6 +1,6 @@
 include "../MapSpec/MapSpec.s.dfy"
 include "../MapSpec/UIStateMachine.s.dfy"
-include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/Maps.i.dfy"
 include "../MapSpec/ThreeStateVersioned.s.dfy"
 include "Journal.i.dfy"
 

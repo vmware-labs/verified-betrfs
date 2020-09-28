@@ -1,4 +1,4 @@
-include "Maps.s.dfy"
+include "Maps.i.dfy"
 include "sequences.i.dfy"
 
 module Multisets {
@@ -372,7 +372,7 @@ module Multisets {
   
   // TODO(rob): not really the right place for this, but can't put it
   // in Maps, since that's trusted, which precludes including this
-  // file in Maps.s.dfy.
+  // file in Maps.i.dfy.
   function ValueMultisetFn<A,B>(m: map<A,B>) : (result: A ~> B)
   {
     x requires x in m => m[x]

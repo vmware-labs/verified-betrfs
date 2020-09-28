@@ -5,7 +5,7 @@ include "../lib/Lang/NativeTypes.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Sets.i.dfy"
-include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/Maps.i.dfy"
 include "../lib/Base/SetBijectivity.i.dfy"
 include "../lib/Lang/System/Arithmetic.s.dfy"
 

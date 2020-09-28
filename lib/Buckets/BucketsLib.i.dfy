@@ -1,6 +1,6 @@
 include "PivotsLib.i.dfy"
 include "../Base/Message.i.dfy"
-include "../Base/Maps.s.dfy"
+include "../Base/Maps.i.dfy"
 include "../Base/Multisets.i.dfy"
 include "../Base/total_order.i.dfy"
 include "../../MapSpec/UI.s.dfy"

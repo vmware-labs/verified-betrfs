@@ -1,11 +1,11 @@
-// TODO most of this doesn't need to be .s
-
 // TODO(rob): Split into Maps and IMaps
 
 include "Option.s.dfy"
+include "MapRemove.s.dfy"
 
-module {:extern} Maps {
+module Maps {
   import opened Options
+  import MapRemove_s
     
   predicate IMapsTo<K,V>(m: imap<K, V>, k: K, v: V) {
     k in m && m[k] == v
@@ -55,21 +55,16 @@ module {:extern} Maps {
     MapRemove(m, ks)
   }
  
-  function {:opaque} MapRemove1<K,V>(m:map<K,V>, k:K) : (m':map<K,V>)
-    ensures forall j :: j in m && j != k ==> j in m'
-    ensures forall j :: j in m' ==> j in m && j != k
-    ensures forall j :: j in m' ==> m'[j] == m[j]
-    ensures |m'.Keys| <= |m.Keys|
-    ensures k in m ==> |m'| == |m| - 1
-    ensures k !in m ==> |m'| == |m|
+  function MapRemove1<K,V>(m:map<K,V>, k:K) : (m':map<K,V>)
+  ensures forall j :: j in m && j != k ==> j in m'
+  ensures forall j :: j in m' ==> j in m && j != k
+  ensures forall j :: j in m' ==> m'[j] == m[j]
+  ensures |m'.Keys| <= |m.Keys|
+  ensures k in m ==> |m'| == |m| - 1
+  ensures k !in m ==> |m'| == |m|
   {
-    var m' := map j | j in m && j != k :: m[j];
-    assert m'.Keys == m.Keys - {k};
-    m'
+    MapRemove_s.MapRemove1(m, k)
   }
-
-  method {:extern "Maps_Compile", "ComputeMapRemove1"} ComputeMapRemove1<K,V>(m: map<K,V>, k:K) returns (m' : map<K,V>)
-  ensures m' == MapRemove1(m, k)
 
   function {:opaque} MapRemove1Strong<K,V>(m:map<K,V>, k:K) : (m':map<K,V>)
     ensures m'.Keys == m.Keys - {k}
@@ -77,7 +72,7 @@ module {:extern} Maps {
     ensures |m'.Keys| <= |m.Keys|
     ensures |m'| <= |m|
   {
-    reveal_MapRemove1();
+    MapRemove_s.reveal_MapRemove1();
     MapRemove1(m, k)
   }
   

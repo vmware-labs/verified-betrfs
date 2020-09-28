@@ -1,4 +1,4 @@
-include "../../lib/Maps.s.dfy"
+include "../../lib/Maps.i.dfy"
 
 module Disk {
   import opened Maps

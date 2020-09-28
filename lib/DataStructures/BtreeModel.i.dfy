@@ -1,7 +1,7 @@
 include "../Lang/LinearSequence.s.dfy"
 include "../Lang/LinearSequence.i.dfy"
 include "../Base/sequences.i.dfy"
-include "../Base/Maps.s.dfy"
+include "../Base/Maps.i.dfy"
 include "../Base/total_order_impl.i.dfy"
 include "../Base/mathematics.i.dfy"
 

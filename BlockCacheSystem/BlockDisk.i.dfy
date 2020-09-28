@@ -1,5 +1,5 @@
 include "../MapSpec/MapSpec.s.dfy"
-include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/Maps.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 include "../Versions/VOp.i.dfy"
 include "DiskLayout.i.dfy"

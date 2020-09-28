@@ -1,6 +1,6 @@
 include "BlockDisk.i.dfy"
 include "../PivotBetree/PivotBetree_Refines_Betree.i.dfy"
-include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/Maps.i.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "BlockSystem.i.dfy"
 include "BetreeCache.i.dfy"

@@ -127,6 +127,17 @@ def includePaths(iref):
         irefs.append(subIref)
     return irefs
 
+class IncompatibleIncludeTrustedness(Exception):
+    def __init__(self, i_file, s_file):
+        self.s_file = s_file
+        self.i_file = i_file
+
+    def msg(self):
+        return ".s file includes .i file: '" + self.s_file.normPath + "' includes '" + self.i_file.normPath + "'"
+
+    def __str__(self):
+        return self.msg()
+
 def childrenForIref(iref):
     subIrefs = []
     for subIref in includePaths(iref):

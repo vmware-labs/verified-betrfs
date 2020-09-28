@@ -6,7 +6,7 @@ module IOImpl {
   import opened MainDiskIOHandler
   import opened NativeTypes
   import opened Options
-  import opened Maps
+  import opened MapRemove_s
   import opened BoxNodeImpl
   import opened CacheImpl
   import opened DiskLayout

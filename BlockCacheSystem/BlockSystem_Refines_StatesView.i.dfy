@@ -1,6 +1,6 @@
 include "../BlockCacheSystem/BlockSystem.i.dfy"
 include "../Versions/StatesView.i.dfy"
-include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/Maps.i.dfy"
 include "../lib/Base/sequences.i.dfy"
 
 module BlockSystem_Refines_StatesView {

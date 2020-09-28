@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <cstring>
 
-namespace Maps_Compile {
+namespace MapRemove__s_Compile {
   template <typename K, typename V>
   DafnyMap<K, V> ComputeMapRemove1(DafnyMap<K, V> m, K key)
   {
