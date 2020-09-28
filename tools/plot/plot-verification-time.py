@@ -11,7 +11,7 @@ import sys
 
 #EXPERIMENT="expresults/veri_time_13-*"
 #EXPERIMENT="expresults/veri_time_september_*"
-EXPERIMENT="expresults/veri_time_september_bb_branch*"
+EXPERIMENT="expresults/veri_time_september_bb_branch-linear*"
 
 class Observation:
     def __init__(self, time, worker_name, source_filename):
@@ -120,7 +120,7 @@ def parse_all():
         openers = [(fn,opener(fn)) for fn in resultsfiles]
 
     groups = [
-        ("dynamic-frames", re.compile(".*branch-dynamic-frames.*.data")),
+        # ("dynamic-frames", re.compile(".*branch-dynamic-frames.*.data")),
         ("linear", re.compile(".*branch-linear.*.data"))
     ]
 
