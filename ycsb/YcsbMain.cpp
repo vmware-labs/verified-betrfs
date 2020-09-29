@@ -240,7 +240,7 @@ public:
   //    StatAccounting::report();
   //    proc_io_report();
   //    jemalloc_report();
-      cgroups_report();
+//      cgroups_report();
   //    db.cacheDebug();
       fflush(stdout);
   }

@@ -187,7 +187,7 @@ def main():
 
   if veri:
     print("Building Bundle.cpp...")
-    ret = os.system("make build/Bundle.cpp > /dev/null 2> /dev/null")
+    ret = os.system("make build/Bundle.cpp")# > /dev/null 2> /dev/null")
     assert ret == 0
 
   for (name, value) in value_updates:
@@ -225,7 +225,8 @@ def main():
     loc = "/tmp/veribetrfs"
   elif device == "disk":
     #loc = "/home/tjhance/ycsb/"
-    loc = "/mnt/xvde/scratch"
+    #loc = "/mnt/xvde/scratch"
+    loc = "/tmp/scratch/"
   else:
     assert False
 

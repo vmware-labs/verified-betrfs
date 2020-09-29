@@ -1,3 +1,4 @@
+#include <unistd.h> // debug
 #include "Application.h"
 
 //#define ROW_CACHE_SIZE (1 << 18)
@@ -13,8 +14,26 @@ RowCache::RowCache() : head(-1), tail(-1)
   queue.resize(ROW_CACHE_SIZE);
 }
 
+void jonh_debug() {
+    static int count = 0;
+    count += 1;
+    if (count%10 == 0) {
+        char cmd[1024];
+        sprintf(cmd, "grep VmSize /proc/%d/status", getpid());
+        system(cmd);
+        printf("get count %d\n", count);
+        fflush(stdout);
+    }
+}
+
 optional<ByteString> RowCache::get(ByteString key)
 {
+//  printf("calling jonh_debug\n");
+//  fflush(stdout);
+  jonh_debug();
+//  printf("called jonh_debug\n");
+  fflush(stdout);
+
   auto iter = m.find(key);
   if (iter == m.end()) {
     return nullopt;
