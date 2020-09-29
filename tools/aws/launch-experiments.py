@@ -30,7 +30,7 @@ veri_suite = Suite(
 #    Variable("git_branch", "git_branch", [Value("la2", "leak-adventure-2")]),
 #    Variable("system", "run_veri", [Value("rocks", "rocks")]),
 #    *common_vars)
-suite = ConcatSuite("infra-test-004", veri_suite)
+suite = ConcatSuite("infra-test-005", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
