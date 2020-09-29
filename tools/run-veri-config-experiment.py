@@ -248,7 +248,7 @@ def main():
   ret = os.system("rm -rf build/")
   assert ret == 0
 
-  ret = os.system("./tools/clean-for-build.sh " + git_branch)
+  ret = os.system("sh ./tools/clean-for-build.sh " + git_branch)
   assert ret == 0
   
   if veri:

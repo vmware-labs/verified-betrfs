@@ -54,6 +54,9 @@ class Variant:
     def git_branch(self):
         return self.valmap[self.vars_of_type("git_branch")[0]].param_value
 
+    def infrastructure_branch(self):
+        return self.valmap[self.vars_of_type("infrastructure_branch")[0]].param_value
+
     def run_veri_params(self):
         return [self.valmap[var].param_value for var in self.vars_of_type("run_veri")]
 
