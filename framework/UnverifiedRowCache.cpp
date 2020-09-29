@@ -14,24 +14,23 @@ RowCache::RowCache() : head(-1), tail(-1)
   queue.resize(ROW_CACHE_SIZE);
 }
 
-void jonh_debug() {
-    static int count = 0;
-    count += 1;
-    if (count%10 == 0) {
+void jonh_debug(int set_incr, int get_incr) {
+    static int set_count = 0;
+    static int get_count = 0;
+    set_count += set_incr;
+    get_count += get_incr;
+    if ((set_count + get_count) %1000 == 0) {
         char cmd[1024];
         sprintf(cmd, "grep VmSize /proc/%d/status", getpid());
         system(cmd);
-        printf("get count %d\n", count);
+        printf("set_count %d get_count %d\n", set_count, get_count);
         fflush(stdout);
     }
 }
 
 optional<ByteString> RowCache::get(ByteString key)
 {
-//  printf("calling jonh_debug\n");
-//  fflush(stdout);
   jonh_debug();
-//  printf("called jonh_debug\n");
   fflush(stdout);
 
   auto iter = m.find(key);
@@ -62,6 +61,7 @@ optional<ByteString> RowCache::get(ByteString key)
 
 void RowCache::set(ByteString in_key, ByteString in_val)
 {
+  jonh_debug();
   // The input are substrings of big Dafny strings. Copy out the values
   // to avoid keeping a 1MB string alive behind every 500-byte val we tuck
   // into this cache.
