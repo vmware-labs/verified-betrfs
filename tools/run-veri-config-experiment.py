@@ -77,6 +77,7 @@ def splice_value_into_bundle(name, value):
     f.write(cpp)
 
 def main():
+  git_branch = None
   archive_dir = "/mnt/xvde/archives"
   workload = None
   device = None
@@ -84,14 +85,16 @@ def main():
   value_updates = []
   config = None
   log_stats = False
-  nodeCountFudge = 1.0  # Pretend we have more memory when computing node count budget, since mean node is 75% utilized. This lets us tune veri to exploit all available cgroup memory.
   max_children = None   # Default
   cgroup_enabled = True
   use_unverified_row_cache = None
   use_filters = None
   from_archive = None
-  veri_cache_size = None
-  veri_bucket_weight = None
+  nodeCountFudge           = None  # Pretend we have more memory when computing node count budget, since mean node is 75% utilized. This lets us tune veri to exploit all available cgroup memory.
+  veri_cache_size_in_bytes = None
+  veri_cache_size_in_nodes = None
+  veri_bucket_weight       = None
+  veri_log_size_in_blocks  = None
   
   veri = None
   rocks = None
@@ -104,18 +107,24 @@ def main():
   for arg in sys.argv[1:]:
     if arg.startswith("ram="):
       ram = arg[len("ram=") : ]
+    elif arg.startswith("git_branch="):
+        git_branch = arg[len("git_branch=") : ]
     elif arg.startswith("workload="):
       workload = arg[len("workload=") : ]
     elif arg.startswith("device="):
       device = arg[len("device=") : ]
     elif arg.startswith("fromArchive="):
       from_archive = arg[len("fromArchive=") : ]
-    elif arg.startswith("cacheSize="):
-      veri_cache_size = int(arg[len("cacheSize=") : ])
+    # elif arg.startswith("nodeCountFudge="):
+    #   nodeCountFudge = float(arg[len("nodeCountFudge=") : ])
+    # elif arg.startswith("cacheSizeInBytes="):
+    #   veri_cache_size_in_bytes = int(arg[len("cacheSizeInBytes=") : ])
+    elif arg.startswith("cacheSizeInNodes="):
+      veri_cache_size_in_nodes = int(arg[len("cacheSizeInNodes=") : ])
     elif arg.startswith("bucketWeight="):
       veri_bucket_weight = int(arg[len("bucketWeight=") : ])
-    elif arg.startswith("nodeCountFudge="):
-      nodeCountFudge = float(arg[len("nodeCountFudge=") : ])
+    elif arg.startswith("veriLogSizeInBlocks="):
+      veri_log_size_in_blocks = int(arg[len("veriLogSizeInBlocks=") : ])
     elif "Uint64=" in arg:
       sp = arg.split("=")
       assert len(sp) == 2
@@ -154,9 +163,16 @@ def main():
       assert False, "unrecognized argument: " + arg
 
   assert fp is not None
-      
-  actuallyprint("Experiment time budget %s" % (datetime.timedelta(seconds=time_budget_sec)))
-  actuallyprint("metadata time_budget %s seconds" % time_budget_sec)
+  assert git_branch is not None
+  
+  assert veri_cache_size_in_nodes is not None
+  assert veri_cache_size_in_bytes is None or veri_cache_size_in_nodes is None
+  assert nodeCountFudge is None or veri_cache_size_in_nodes is not None
+  assert nodeCountFudge is None or veri_cache_size_in_bytes is not None
+  assert veri_bucket_weight is None or veri
+  
+  assert workload != None
+  assert device != None
 
   assert veri or rocks or berkeley or kyoto
 
@@ -166,31 +182,16 @@ def main():
   if use_filters:
       assert rocks
       
+  actuallyprint("Experiment time budget %s" % (datetime.timedelta(seconds=time_budget_sec)))
+  actuallyprint("metadata time_budget %s seconds" % time_budget_sec)
+
   if veri_bucket_weight is not None:
-    assert veri
-    assert veri_cache_size is not None
-    value_updates = autoconfig(veri_bucket_weight, veri_cache_size) + value_updates
-
-  assert workload != None
-  assert device != None
-
-  cgroup_defaults()
-  if ram != None:
-    set_mem_limit(ram)
-
-  ret = os.system("rm -rf build/")
-  assert ret == 0
-
-  if veri:
-    print("Building Bundle.cpp...")
-    ret = os.system("make build/Bundle.cpp > /dev/null 2> /dev/null")
-    assert ret == 0
-
-  for (name, value) in value_updates:
-    assert veri
-    print("setting " + name + " to " + value)
-    splice_value_into_bundle(name, value)
-
+      value_updates = value_updates + [ ("MaxTotalBucketWeightUint64", str(veri_bucket_weight)) ]
+  if veri_cache_size_in_nodes is not None:
+      value_updates = value_updates + [ ("MaxCacheSizeUint64", str(veri_cache_size_in_nodes)) ]
+  if veri_log_size_in_blocks is not None:
+      value_updates = value_updates + [ ("DiskNumJournalBlocksUint64", str(veri_log_size_in_blocks)) ]
+      
   if rocks:
     exe = "build/RocksYcsb"
   elif berkeley:
@@ -200,22 +201,6 @@ def main():
   else:
     assert veri
     exe = "build/VeribetrfsYcsb"
-
-  make_options = ""
-  if log_stats:
-    make_options += "LOG_QUERY_STATS=1 "
-  if use_unverified_row_cache:
-    make_options += "WANT_UNVERIFIED_ROW_CACHE=true "
-      
-  actuallyprint("Building executable...")
-  sys.stdout.flush()
-  #cmd = make_options + "make " + exe + " -j4 > /dev/null 2> /dev/null"
-  cmd = make_options + "make " + exe
-  actuallyprint(cmd)
-  ret = os.system(cmd)
-  assert ret == 0
-
-  workload_cmd = " ".join(workload.split(","))
 
   if device == "ssd":
     loc = "/tmp/veribetrfs"
@@ -228,11 +213,6 @@ def main():
   print("Device type: " + device)
   print("Using " + loc)
 
-  ret = os.system("rm -rf " + loc)
-  assert ret == 0
-  ret = os.system("mkdir " + loc)
-  assert ret == 0
-
   if rocks:
     loc = loc
   elif berkeley:
@@ -243,24 +223,68 @@ def main():
     assert veri
     loc = loc + "/veribetrkv.img"
 
-  if from_archive:
-    if rocks:
-      os.system("cp -a " + from_archive + "/* " + loc + "/")
-    else:
-      os.system("cp -a " + from_archive + " " + loc)
-    
   driver_options = ""
   if use_filters:
     driver_options += "--filters "
   if from_archive:
     driver_options += "--preloaded "
 
+  workload_cmd = " ".join(workload.split(","))
+
+  make_options = ""
+  if log_stats:
+    make_options += "LOG_QUERY_STATS=1 "
+  if use_unverified_row_cache:
+    make_options += "WANT_UNVERIFIED_ROW_CACHE=true "
+      
+
+
+    
+  
+  cgroup_defaults()
+  if ram != None:
+    set_mem_limit(ram)
+
+  ret = os.system("rm -rf build/")
+  assert ret == 0
+
+  ret = os.system("./tools/clean-for-build.sh " + git_branch)
+  assert ret == 0
+  
+  if veri:
+    print("Building Bundle.cpp...")
+    ret = os.system("make build/Bundle.cpp > /dev/null 2> /dev/null")
+    assert ret == 0
+
+  for (name, value) in value_updates:
+    assert veri
+    print("setting " + name + " to " + value)
+    splice_value_into_bundle(name, value)
+
+  actuallyprint("Building executable...")
+  sys.stdout.flush()
+  #cmd = make_options + "make " + exe + " -j4 > /dev/null 2> /dev/null"
+  cmd = make_options + "make " + exe
+  actuallyprint(cmd)
+  ret = os.system(cmd)
+  assert ret == 0
+
+  ret = os.system("rm -rf " + loc)
+  assert ret == 0
+  ret = os.system("mkdir " + loc)
+  assert ret == 0
+
+  if from_archive:
+    if rocks:
+      os.system("cp -a " + from_archive + "/* " + loc + "/")
+    else:
+      os.system("cp -a " + from_archive + " " + loc)
+    
   clear_page_cache()
 
   # bitmask indicating which CPUs we can use
   # See https://linux.die.net/man/1/taskset
   taskset_cmd = "taskset 4 "
-
   cgroup_prefix = "cgexec -g memory:VeribetrfsExp " if cgroup_enabled else ""
   command = taskset_cmd + cgroup_prefix + "./" + exe + " " + loc + " " + driver_options + " " + workload_cmd
   actuallyprint(command)
