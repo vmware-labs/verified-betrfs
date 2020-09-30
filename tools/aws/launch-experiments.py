@@ -3,6 +3,9 @@
 from automation import *
 from suite import *
 
+parser = argparse.ArgumentParser(parents=[automation_argparser])
+args = parser.parse_args()
+
 common_vars = [
     Variable("infrastructure_branch", "infrastructure_branch", [Value("aws-tweaks", "aws-tweaks")]),
     Variable("ram", "run_veri", [Value("2gb", "ram=2.0gb")]),
@@ -52,8 +55,8 @@ def main():
     log("PLOT tools/aws/pull-results.py && %s && eog %s" % (suite.plot_command(), suite.png_filename()))
     log("VARIANTS %s" % suite.variants)
 
-    workers = retrieve_running_workers()
-    worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=False)
+    workers = retrieve_running_workers(workers_file=args.workers_file, ssd=args.ssd)
+    worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=args.dry_run)
     monitor_worker_pipes(worker_pipes)
 
 main()
