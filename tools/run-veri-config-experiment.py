@@ -117,8 +117,8 @@ def main():
       from_archive = arg[len("fromArchive=") : ]
     # elif arg.startswith("nodeCountFudge="):
     #   nodeCountFudge = float(arg[len("nodeCountFudge=") : ])
-    # elif arg.startswith("cacheSizeInBytes="):
-    #   veri_cache_size_in_bytes = int(arg[len("cacheSizeInBytes=") : ])
+    elif arg.startswith("cacheSizeInBytes="):
+      veri_cache_size_in_bytes = int(arg[len("cacheSizeInBytes=") : ])
     elif arg.startswith("cacheSizeInNodes="):
       veri_cache_size_in_nodes = int(arg[len("cacheSizeInNodes=") : ])
     elif arg.startswith("bucketWeight="):
@@ -165,10 +165,8 @@ def main():
   assert fp is not None
   assert git_branch is not None
   
-  assert veri_cache_size_in_nodes is not None
   assert veri_cache_size_in_bytes is None or veri_cache_size_in_nodes is None
-  assert nodeCountFudge is None or veri_cache_size_in_nodes is not None
-  assert nodeCountFudge is None or veri_cache_size_in_bytes is not None
+  assert veri_cache_size_in_bytes is None or veri_bucket_weight is not None
   assert veri_bucket_weight is None or veri
   
   assert workload != None
@@ -181,10 +179,13 @@ def main():
 
   if use_filters:
       assert rocks
-      
+
   actuallyprint("Experiment time budget %s" % (datetime.timedelta(seconds=time_budget_sec)))
   actuallyprint("metadata time_budget %s seconds" % time_budget_sec)
 
+  if veri_cache_size_in_bytes:
+      veri_cache_size_in_nodes = veri_cache_size_in_bytes // veri_bucket_weight
+      
   if veri_bucket_weight is not None:
       value_updates = value_updates + [ ("MaxTotalBucketWeightUint64", str(veri_bucket_weight)) ]
   if veri_cache_size_in_nodes is not None:
