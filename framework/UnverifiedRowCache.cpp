@@ -9,7 +9,12 @@ unsigned long ROW_CACHE_SIZE = 0;
 
 RowCache::RowCache() : head(-1), tail(-1)
 {
-  ROW_CACHE_SIZE = atoi(getenv("ROW_CACHE_SIZE"));
+  const char* row_cache_size_str = getenv("ROW_CACHE_SIZE");
+  if (row_cache_size_str == nullptr) {
+    ROW_CACHE_SIZE = 0;
+  } else {
+    ROW_CACHE_SIZE = atoi(row_cache_size_str);
+  }
   printf("metadata ROW_CACHE_SIZE %lu\n", ROW_CACHE_SIZE);
   if (ROW_CACHE_SIZE == 0) { return; }
 
