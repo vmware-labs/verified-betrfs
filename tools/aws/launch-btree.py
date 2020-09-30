@@ -3,6 +3,9 @@
 from automation import *
 from suite import *
 
+parser = argparse.ArgumentParser(parents=[automation_argparser])
+args = parser.parse_args()
+
 common_vars = [
     Variable("ops", "run_btree", [
         Value("2pows", "ops=[1,2,3,4,5,6,7,8]") ]),
@@ -42,7 +45,7 @@ def main():
     log("PLOT tools/aws/pull-results.py")
     log("VARIANTS %s" % suite.variants)
 
-    workers = retrieve_running_workers(ssd=False)
+    workers = retrieve_running_workers(workers_file=args.workers_file, ssd=False)
     blacklist = [
         "veri-worker-b00",
         "veri-worker-b01",
@@ -52,7 +55,7 @@ def main():
         "veri-worker-b05",
     ]
     workers = [w for w in workers if w["Name"] not in blacklist]
-    worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=False)
+    worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=args.dry_run)
     monitor_worker_pipes(worker_pipes)
 
 main()

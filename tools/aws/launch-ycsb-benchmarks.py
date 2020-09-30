@@ -3,6 +3,9 @@
 from automation import *
 from suite import *
 
+parser = argparse.ArgumentParser(parents=[automation_argparser])
+args = parser.parse_args()
+
 replica_count = 6
 
 common_vars = [
@@ -74,12 +77,8 @@ def main():
     #log("PLOT tools/aws/pull-results.py && %s && eog %s" % (suite.plot_command(), suite.png_filename()))
     log("VARIANTS %s" % suite.variants)
 
-    workers = retrieve_running_workers(ssd=True)
-    blacklist = [
-    ]
-    workers = [w for w in workers if w["Name"] not in blacklist]
-    print(workers)
-    worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=False)
+    workers = retrieve_running_workers(workers_file=args.workers_file, ssd=True)
+    worker_pipes = launch_worker_pipes(workers, len(suite.variants), cmd_for_idx, dry_run=args.dry_run)
     monitor_worker_pipes(worker_pipes)
 
 main()

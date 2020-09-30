@@ -8,7 +8,8 @@ import sys
 import os
 import fcntl
 import termcolor    # pip3 install termcolor
-
+import re
+import argparse
 logfile = None
 
 def set_logfile(path):
@@ -25,10 +26,38 @@ def log(msg):
         logfile.write(msg + "\n")
         logfile.flush()
 
-def retrieve_running_workers(ssd=False):
+automation_argparser = argparse.ArgumentParser(description='Options to the automation system.', add_help=False)
+automation_argparser.add_argument('--ssd',          action='store_true')
+automation_argparser.add_argument('--dry-run',      action='store_true')
+automation_argparser.add_argument('--workers-file', default='.awsworkers')
+
+def load_worker_regex_list(filename):
+    regexes = []
+    with open(filename) as f:
+        for line in f:
+            line = line.partition('#')[0]
+            line = line.strip()
+            if not line.startswith("^"):
+                line = "^" + line
+            if not line.endswith("$"):
+                line = line + "$"
+            regexes = regexes + [line]
+    return regexes
+        
+def filter_workers(workers, regexes):
+    filtered_workers = []
+    for w in workers:
+        for regex in regexes:
+            if re.search(regex, w["Name"]) is not None:
+                filtered_workers = filtered_workers + [w]
+    return filtered_workers
+
+def retrieve_running_workers(workers_file=".awsworkers", ssd=False):
+    filter_regexes = load_worker_regex_list(workers_file)
     workers_pipe = subprocess.Popen("ssh bastion veribetrfs/tools/aws/describe-instances.py --running --json".split() + (["--ssd"] if ssd else []), stdout=subprocess.PIPE)
     workers_json,_ = workers_pipe.communicate()
     workers = json.loads(workers_json)
+    workers = filter_workers(workers, filter_regexes)
     return workers
 
 def ssh_preamble():
