@@ -203,25 +203,25 @@ def main():
     exe = "build/VeribetrfsYcsb"
 
   if device == "ssd":
-    loc = "/tmp/veribetrfs"
+    datadir = "/tmp/veribetrfs"
   elif device == "disk":
     #loc = "/home/tjhance/ycsb/"
-    loc = "/mnt/xvde/scratch"
+    datadir = "/mnt/xvde/scratch"
   else:
     assert False
 
   print("Device type: " + device)
-  print("Using " + loc)
+  print("Using " + datadir)
 
   if rocks:
-    loc = loc
+    loc = datadir
   elif berkeley:
-    loc = loc + "/berkeley.db"
+    loc = datadir + "/berkeley.db"
   elif kyoto:
-    loc = loc + "/kyoto.cbt"
+    loc = datadir + "/kyoto.cbt"
   else:
     assert veri
-    loc = loc + "/veribetrkv.img"
+    loc = datadir + "/veribetrkv.img"
 
   driver_options = ""
   if use_filters:
@@ -269,14 +269,14 @@ def main():
   ret = os.system(cmd)
   assert ret == 0
 
-  ret = os.system("rm -rf " + loc)
+  ret = os.system("rm -rf " + datadir)
   assert ret == 0
-  ret = os.system("mkdir " + loc)
+  ret = os.system("mkdir " + datadir)
   assert ret == 0
 
   if from_archive:
     if rocks:
-      os.system("cp -a " + from_archive + "/* " + loc + "/")
+      os.system("cp -a " + from_archive + "/* " + datadir + "/")
     else:
       os.system("cp -a " + from_archive + " " + loc)
     
