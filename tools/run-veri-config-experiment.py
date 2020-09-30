@@ -271,7 +271,7 @@ def main():
 
   ret = os.system("rm -rf " + datadir)
   assert ret == 0
-  ret = os.system("mkdir " + datadir)
+  ret = os.system("mkdir -p " + datadir)
   assert ret == 0
 
   if from_archive:
