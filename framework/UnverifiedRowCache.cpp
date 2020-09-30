@@ -11,6 +11,8 @@ RowCache::RowCache() : head(-1), tail(-1)
 {
   ROW_CACHE_SIZE = atoi(getenv("ROW_CACHE_SIZE"));
   printf("metadata ROW_CACHE_SIZE %lu\n", ROW_CACHE_SIZE);
+  if (ROW_CACHE_SIZE == 0) { return; }
+
   queue.resize(ROW_CACHE_SIZE);
 }
 
@@ -30,6 +32,8 @@ void jonh_debug(int set_incr, int get_incr) {
 
 optional<ByteString> RowCache::get(ByteString key)
 {
+  if (ROW_CACHE_SIZE == 0) { return; }
+
   jonh_debug(0, 1);
   fflush(stdout);
 
@@ -61,6 +65,8 @@ optional<ByteString> RowCache::get(ByteString key)
 
 void RowCache::set(ByteString in_key, ByteString in_val)
 {
+  if (ROW_CACHE_SIZE == 0) { return; }
+
   jonh_debug(1, 0);
   // The input are substrings of big Dafny strings. Copy out the values
   // to avoid keeping a 1MB string alive behind every 500-byte val we tuck
