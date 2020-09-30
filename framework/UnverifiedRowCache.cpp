@@ -16,58 +16,70 @@ RowCache::RowCache() : head(-1), tail(-1)
   queue.resize(ROW_CACHE_SIZE);
 }
 
-void jonh_debug(int set_incr, int get_incr) {
+void jonh_debug(int set_incr, int get_incr, int hit_incr) {
     static int set_count = 0;
     static int get_count = 0;
+    static int hit_count = 0;
     set_count += set_incr;
     get_count += get_incr;
+    hit_count += hit_incr;
     if ((set_count + get_count) %100000 == 0) {
         char cmd[1024];
         sprintf(cmd, "grep VmSize /proc/%d/status", getpid());
         system(cmd);
-        printf("set_count %d get_count %d\n", set_count, get_count);
+        printf("set_count %d get_count %d hit_count %d\n", set_count, get_count, hit_count);
         fflush(stdout);
     }
 }
 
 optional<ByteString> RowCache::get(ByteString key)
 {
-  if (ROW_CACHE_SIZE == 0) { return; }
+  int hit = 0;
 
-  jonh_debug(0, 1);
+  optional<ByteString> result;
+  if (ROW_CACHE_SIZE == 0) {
+    hit = 0;
+    result = nullopt;
+  } else {
+    auto iter = m.find(key);
+    if (iter == m.end()) {
+      result = nullopt;
+      hit = 0;
+    } else {
+      int idx = iter->second;
+
+      if (queue[idx].prev != -1) {
+        int prev = queue[idx].prev;
+        int next = queue[idx].next;
+
+        queue[idx].prev = -1;
+        queue[idx].next = this->head;
+        queue[head].prev = idx;
+        this->head = idx;
+        queue[prev].next = next;
+        if (next == -1) {
+          tail = prev;
+        } else {
+          queue[next].prev = prev;
+        }
+      }
+
+      result = optional<ByteString>(queue[idx].value);
+      hit = 1;
+    }
+  }
+
+  jonh_debug(0, 1, hit);
   fflush(stdout);
 
-  auto iter = m.find(key);
-  if (iter == m.end()) {
-    return nullopt;
-  } else {
-    int idx = iter->second;
-
-    if (queue[idx].prev != -1) {
-      int prev = queue[idx].prev;
-      int next = queue[idx].next;
-
-      queue[idx].prev = -1;
-      queue[idx].next = this->head;
-      queue[head].prev = idx;
-      this->head = idx;
-      queue[prev].next = next;
-      if (next == -1) {
-        tail = prev;
-      } else {
-        queue[next].prev = prev;
-      }
-    }
-
-    return optional<ByteString>(queue[idx].value);
-  }
+  return result;
 }
 
 void RowCache::set(ByteString in_key, ByteString in_val)
 {
   if (ROW_CACHE_SIZE == 0) { return; }
 
-  jonh_debug(1, 0);
+  jonh_debug(1, 0, 0);
   // The input are substrings of big Dafny strings. Copy out the values
   // to avoid keeping a 1MB string alive behind every 500-byte val we tuck
   // into this cache.

@@ -60,7 +60,7 @@ public:
   void set(ByteString key, ByteString val);
 
 private:
-  std::unordered_map<ByteString, int> m;
+  std::map<ByteString, int> m;
   std::vector<QueueEntry> queue;
   int head;
   int tail;
