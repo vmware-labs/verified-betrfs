@@ -19,7 +19,7 @@ void jonh_debug(int set_incr, int get_incr) {
     static int get_count = 0;
     set_count += set_incr;
     get_count += get_incr;
-    if ((set_count + get_count) %1000 == 0) {
+    if ((set_count + get_count) %100000 == 0) {
         char cmd[1024];
         sprintf(cmd, "grep VmSize /proc/%d/status", getpid());
         system(cmd);
@@ -30,7 +30,7 @@ void jonh_debug(int set_incr, int get_incr) {
 
 optional<ByteString> RowCache::get(ByteString key)
 {
-  jonh_debug();
+  jonh_debug(0, 1);
   fflush(stdout);
 
   auto iter = m.find(key);
@@ -61,7 +61,7 @@ optional<ByteString> RowCache::get(ByteString key)
 
 void RowCache::set(ByteString in_key, ByteString in_val)
 {
-  jonh_debug();
+  jonh_debug(1, 0);
   // The input are substrings of big Dafny strings. Copy out the values
   // to avoid keeping a 1MB string alive behind every 500-byte val we tuck
   // into this cache.
