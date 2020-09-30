@@ -27,7 +27,6 @@ module JournalView {
   //   -------------------------->  ---------------->
   //              gamma                   delta
 
-  datatype Constants = Constants
   datatype Variables = Variables(
       j1: seq<JournalEntry>,
       j2: seq<JournalEntry>,
@@ -41,7 +40,7 @@ module JournalView {
       ghost syncReqs: map<SyncReqId, SyncReqStatus>
   )
 
-  predicate Init(k: Constants, s: Variables, loc: Loc)
+  predicate Init(s: Variables, loc: Loc)
   {
     && s.j1 == []
     && s.j2 == []
@@ -72,7 +71,7 @@ module JournalView {
     | PopSyncStep
     | StutterStep
 
-  predicate PresentPersistentLoc(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate PresentPersistentLoc(s: Variables, s': Variables, vop: VOp)
   {
     && vop.SendPersistentLocOp?
     && vop.loc == s.persistentLoc
@@ -80,21 +79,21 @@ module JournalView {
     && s' == s
   }
 
-  predicate ObtainFrozenLoc(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate ObtainFrozenLoc(s: Variables, s': Variables, vop: VOp)
   {
     && vop.SendFrozenLocOp?
 
     && s' == s.(frozenLoc := Some(vop.loc))
   }
 
-  predicate CleanUp(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate CleanUp(s: Variables, s': Variables, vop: VOp)
   {
     && vop.CleanUpOp?
     && s.frozenLoc == Some(s.persistentLoc)
     && s' == s.(frozenLoc := None)
   }
 
-  predicate Crash(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate Crash(s: Variables, s': Variables, vop: VOp)
   {
     && vop.CrashOp?
 
@@ -108,7 +107,7 @@ module JournalView {
     && s'.syncReqs == map[]
   }
 
-  predicate Move1to2(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate Move1to2(s: Variables, s': Variables, vop: VOp)
   {
     && vop.JournalInternalOp?
     && s.frozenLoc.Some?
@@ -123,7 +122,7 @@ module JournalView {
       SyncReqs2to1(s.syncReqs))
   }
 
-  predicate Move2to3(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate Move2to3(s: Variables, s': Variables, vop: VOp)
   {
     && vop.FreezeOp?
     && s.frozenLoc != Some(s.persistentLoc)
@@ -138,7 +137,7 @@ module JournalView {
       SyncReqs3to2(s.syncReqs))
   }
 
-  predicate ExtendLog1(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate ExtendLog1(s: Variables, s': Variables, vop: VOp)
   {
     && vop.JournalInternalOp?
     && s' == Variables(
@@ -152,7 +151,7 @@ module JournalView {
       SyncReqs2to1(s.syncReqs))
   }
 
-  predicate ExtendLog2(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate ExtendLog2(s: Variables, s': Variables, vop: VOp)
   {
     && vop.JournalInternalOp?
     && s' == Variables(
@@ -166,7 +165,7 @@ module JournalView {
       SyncReqs3to2(s.syncReqs))
   }
 
-  predicate Move3(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate Move3(s: Variables, s': Variables, vop: VOp)
   {
     && vop.AdvanceOp?
     && !vop.replay
@@ -183,7 +182,7 @@ module JournalView {
       s.syncReqs)
   }
 
-  predicate Replay(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate Replay(s: Variables, s': Variables, vop: VOp)
   {
     && vop.AdvanceOp?
     && vop.replay
@@ -199,7 +198,7 @@ module JournalView {
       s.syncReqs)
   }
 
-  predicate PushSync(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate PushSync(s: Variables, s': Variables, vop: VOp)
   {
     && vop.PushSyncOp?
 
@@ -207,7 +206,7 @@ module JournalView {
     && s' == s.(syncReqs := s.syncReqs[vop.id := State3])
   }
 
-  predicate PopSync(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate PopSync(s: Variables, s': Variables, vop: VOp)
   {
     && vop.PopSyncOp?
 
@@ -216,32 +215,32 @@ module JournalView {
     && s' == s.(syncReqs := MapRemove1(s.syncReqs, vop.id))
   }
 
-  predicate Stutter(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate Stutter(s: Variables, s': Variables, vop: VOp)
   {
     && (vop.JournalInternalOp? || vop.StatesInternalOp?)
     && s' == s
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, vop: VOp, step: Step)
+  predicate NextStep(s: Variables, s': Variables, vop: VOp, step: Step)
   {
     match step {
-      case PresentPersistentLocStep => PresentPersistentLoc(k, s, s', vop)
-      case ObtainFrozenLocStep => ObtainFrozenLoc(k, s, s', vop)
-      case CleanUpStep => CleanUp(k, s, s', vop)
-      case CrashStep => Crash(k, s, s', vop)
-      case Move1to2Step => Move1to2(k, s, s', vop)
-      case Move2to3Step => Move2to3(k, s, s', vop)
-      case ExtendLog1Step => ExtendLog1(k, s, s', vop)
-      case ExtendLog2Step => ExtendLog2(k, s, s', vop)
-      case Move3Step => Move3(k, s, s', vop)
-      case ReplayStep => Replay(k, s, s', vop)
-      case PushSyncStep => PushSync(k, s, s', vop)
-      case PopSyncStep => PopSync(k, s, s', vop)
-      case StutterStep => Stutter(k, s, s', vop)
+      case PresentPersistentLocStep => PresentPersistentLoc(s, s', vop)
+      case ObtainFrozenLocStep => ObtainFrozenLoc(s, s', vop)
+      case CleanUpStep => CleanUp(s, s', vop)
+      case CrashStep => Crash(s, s', vop)
+      case Move1to2Step => Move1to2(s, s', vop)
+      case Move2to3Step => Move2to3(s, s', vop)
+      case ExtendLog1Step => ExtendLog1(s, s', vop)
+      case ExtendLog2Step => ExtendLog2(s, s', vop)
+      case Move3Step => Move3(s, s', vop)
+      case ReplayStep => Replay(s, s', vop)
+      case PushSyncStep => PushSync(s, s', vop)
+      case PopSyncStep => PopSync(s, s', vop)
+      case StutterStep => Stutter(s, s', vop)
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, vop: VOp) {
-    exists step :: NextStep(k, s, s', vop, step)
+  predicate Next(s: Variables, s': Variables, vop: VOp) {
+    exists step :: NextStep(s, s', vop, step)
   }
 }

@@ -20,9 +20,9 @@ module LeafModel {
 
   import opened NativeTypes
 
-  function {:opaque} repivotLeaf(k: Constants, s: BCVariables, ref: BT.G.Reference, node: Node)
+  function {:opaque} repivotLeaf(s: BCVariables, ref: BT.G.Reference, node: Node)
   : (s': BCVariables)
-  requires BCInv(k, s)
+  requires BCInv(s)
   requires s.Ready?
   requires ref in s.ephemeralIndirectionTable.graph
   requires ref in s.cache
@@ -45,14 +45,14 @@ module LeafModel {
           SplitBucketRight(node.buckets[0], pivot)
       ];
       var newnode := Node(pivots, None, buckets');
-      var s1 := writeBookkeeping(k, s, ref, None);
+      var s1 := writeBookkeeping(s, ref, None);
       var s' := s1.(cache := s1.cache[ref := newnode]);
       s'
     )
   }
 
-  lemma repivotLeafCorrect(k: Constants, s: BCVariables, ref: BT.G.Reference, node: Node)
-  requires BCInv(k, s)
+  lemma repivotLeafCorrect(s: BCVariables, ref: BT.G.Reference, node: Node)
+  requires BCInv(s)
   requires s.Ready?
   requires ref in s.ephemeralIndirectionTable.graph
   requires ref in s.cache
@@ -60,13 +60,13 @@ module LeafModel {
   requires node.children.None?
   requires |node.buckets| == 1
   requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 1
-  ensures var s' := repivotLeaf(k, s, ref, node);
+  ensures var s' := repivotLeaf(s, ref, node);
     && WFBCVars(s')
-    && betree_next(k, IBlockCache(s), IBlockCache(s'))
+    && betree_next(IBlockCache(s), IBlockCache(s'))
   {
     reveal_SplitBucketLeft();
     reveal_SplitBucketRight();
-    var s' := repivotLeaf(k, s, ref, node);
+    var s' := repivotLeaf(s, ref, node);
 
     reveal_repivotLeaf();
 
@@ -76,7 +76,7 @@ module LeafModel {
     ) {
       assert s' == s;
       assert WFBCVars(s');
-      assert noop(k, IBlockCache(s), IBlockCache(s));
+      assert noop(IBlockCache(s), IBlockCache(s));
       return;
     }
 
@@ -93,7 +93,7 @@ module LeafModel {
     //reveal_WFBucket();
 
     var newnode := Node(pivots, None, buckets');
-    var s1 := writeWithNode(k, s, ref, newnode);
+    var s1 := writeWithNode(s, ref, newnode);
     reveal_writeBookkeeping();
 
     assert s1 == s';
@@ -105,7 +105,7 @@ module LeafModel {
         SplitBucketRight(node.buckets[0], pivot));
 
     assert WFNode(newnode);
-    writeCorrect(k, s, ref, newnode);
+    writeCorrect(s, ref, newnode);
     assert WFBCVars(s');
 
     //assert IBlockCache(s1).cache == IBlockCache(s).cache[ref := INode(newnode)];
@@ -124,11 +124,11 @@ module LeafModel {
     var step := BT.BetreeRepivot(BT.Repivot(ref, INode(node), pivots));
     assert BT.ValidBetreeStep(step);
     assert |BT.BetreeStepOps(step)| == 1; // TODO
-    assert BC.Dirty(Ik(k).bc, IBlockCache(s), IBlockCache(s'), ref, INode(newnode));
-    assert BC.OpStep(Ik(k).bc, IBlockCache(s), IBlockCache(s'), BT.BetreeStepOps(step)[0]);
-    BC.MakeTransaction1(Ik(k).bc, IBlockCache(s), IBlockCache(s'), BT.BetreeStepOps(step));
-    //assert BC.ReadStep(k, IBlockCache(s), BT.BetreeStepReads(step)[0]);
-    //assert BBC.BetreeMove(Ik(k), IBlockCache(s), IBlockCache(s'), UI.NoOp, SD.NoDiskOp, step);
-    assert stepsBetree(k, IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), step);
+    assert BC.Dirty(IBlockCache(s), IBlockCache(s'), ref, INode(newnode));
+    assert BC.OpStep(IBlockCache(s), IBlockCache(s'), BT.BetreeStepOps(step)[0]);
+    BC.MakeTransaction1(IBlockCache(s), IBlockCache(s'), BT.BetreeStepOps(step));
+    //assert BC.ReadStep(IBlockCache(s), BT.BetreeStepReads(step)[0]);
+    //assert BBC.BetreeMove(IBlockCache(s), IBlockCache(s'), UI.NoOp, SD.NoDiskOp, step);
+    assert stepsBetree(IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), step);
   }
 }

@@ -22,88 +22,84 @@ module StatesViewPivotBetree_Refines_StatesViewMap {
   import opened ViewOp
   import opened Options
  
-  function Ik(k: A.Constants) : B.Constants {
-    B.Constants(Ref.Ik(k.k))
+  function IDisk(disk: imap<Loc, A.SM.Variables>) : imap<Loc, B.SM.Variables>
+  {
+    imap loc | loc in disk && A.SM.Inv(disk[loc])
+      :: Ref.I(disk[loc])
   }
 
-  function IDisk(k: A.SM.Constants, disk: imap<Loc, A.SM.Variables>) : imap<Loc, B.SM.Variables>
+  function IOptState(state: Option<A.SM.Variables>) : Option<B.SM.Variables>
+  requires state.Some? ==> A.SM.Inv(state.value)
   {
-    imap loc | loc in disk && A.SM.Inv(k, disk[loc])
-      :: Ref.I(k, disk[loc])
-  }
-
-  function IOptState(k: A.SM.Constants, state: Option<A.SM.Variables>) : Option<B.SM.Variables>
-  requires state.Some? ==> A.SM.Inv(k, state.value)
-  {
-    if state.Some? then Some(Ref.I(k, state.value)) else None
+    if state.Some? then Some(Ref.I(state.value)) else None
   }
   
-  function I(k: A.Constants, s: A.Variables) : B.Variables
-    requires A.Inv(k, s)
+  function I(s: A.Variables) : B.Variables
+    requires A.Inv(s)
   {
     B.Variables(
-      IDisk(k.k, s.disk),
+      IDisk(s.disk),
       s.persistentLoc,
       s.frozenLoc,
-      IOptState(k.k, s.frozenState),
-      IOptState(k.k, s.ephemeralState))
+      IOptState(s.frozenState),
+      IOptState(s.ephemeralState))
   }
 
-  lemma RefinesInit(k: A.Constants, s: A.Variables, loc: Loc)
-    requires A.Init(k, s, loc)
-    ensures A.Inv(k, s)
-    ensures B.Init(Ik(k), I(k, s), loc)
+  lemma RefinesInit(s: A.Variables, loc: Loc)
+    requires A.Init(s, loc)
+    ensures A.Inv(s)
+    ensures B.Init(I(s), loc)
   {
-    A.SM.InitImpliesInv(k.k, s.disk[loc]);
-    Ref.RefinesInit(k.k, s.disk[loc]);
+    A.SM.InitImpliesInv(s.disk[loc]);
+    Ref.RefinesInit(s.disk[loc]);
   }
 
-  lemma RefinesNextStep(k: A.Constants, s: A.Variables, s': A.Variables, vop: VOp, step: A.Step)
-    requires A.Inv(k, s)
-    requires A.NextStep(k, s, s', vop, step)
-    ensures A.Inv(k, s')
-    ensures B.Next(Ik(k), I(k, s), I(k, s'), vop)
+  lemma RefinesNextStep(s: A.Variables, s': A.Variables, vop: VOp, step: A.Step)
+    requires A.Inv(s)
+    requires A.NextStep(s, s', vop, step)
+    ensures A.Inv(s')
+    ensures B.Next(I(s), I(s'), vop)
   {
-    A.NextPreservesInv(k, s, s', vop);
+    A.NextPreservesInv(s, s', vop);
     match step {
       case ObtainPersistentLocStep => {
-        assert B.NextStep(Ik(k), I(k, s), I(k, s'), vop, B.ObtainPersistentLocStep);
+        assert B.NextStep(I(s), I(s'), vop, B.ObtainPersistentLocStep);
       }
       case AdvanceStep => {
-        Ref.RefinesNext(k.k,
+        Ref.RefinesNext(
           s.ephemeralState.value,
           s'.ephemeralState.value,
           vop.uiop);
-        assert B.NextStep(Ik(k), I(k, s), I(k, s'), vop, B.AdvanceStep);
+        assert B.NextStep(I(s), I(s'), vop, B.AdvanceStep);
       }
       case CrashStep => {
-        assert B.NextStep(Ik(k), I(k, s), I(k, s'), vop, B.CrashStep);
+        assert B.NextStep(I(s), I(s'), vop, B.CrashStep);
       }
       case FreezeStep => {
-        assert B.NextStep(Ik(k), I(k, s), I(k, s'), vop, B.FreezeStep);
+        assert B.NextStep(I(s), I(s'), vop, B.FreezeStep);
       }
       case DiskChangeStep => {
-        assert B.NextStep(Ik(k), I(k, s), I(k, s'), vop, B.DiskChangeStep);
+        assert B.NextStep(I(s), I(s'), vop, B.DiskChangeStep);
       }
       case ProvideFrozenLocStep => {
-        assert B.NextStep(Ik(k), I(k, s), I(k, s'), vop, B.ProvideFrozenLocStep);
+        assert B.NextStep(I(s), I(s'), vop, B.ProvideFrozenLocStep);
       }
       case ForgetOldStep => {
-        assert B.NextStep(Ik(k), I(k, s), I(k, s'), vop, B.ForgetOldStep);
+        assert B.NextStep(I(s), I(s'), vop, B.ForgetOldStep);
       }
       case StutterStep => {
-        assert B.NextStep(Ik(k), I(k, s), I(k, s'), vop, B.StutterStep);
+        assert B.NextStep(I(s), I(s'), vop, B.StutterStep);
       }
     }
   }
 
-  lemma RefinesNext(k: A.Constants, s: A.Variables, s': A.Variables, vop: VOp)
-    requires A.Inv(k, s)
-    requires A.Next(k, s, s', vop)
-    ensures A.Inv(k, s')
-    ensures B.Next(Ik(k), I(k, s), I(k, s'), vop)
+  lemma RefinesNext(s: A.Variables, s': A.Variables, vop: VOp)
+    requires A.Inv(s)
+    requires A.Next(s, s', vop)
+    ensures A.Inv(s')
+    ensures B.Next(I(s), I(s'), vop)
   {
-    var step :| A.NextStep(k, s, s', vop, step);
-    RefinesNextStep(k, s, s', vop, step);
+    var step :| A.NextStep(s, s', vop, step);
+    RefinesNextStep(s, s', vop, step);
   }
 }

@@ -18,7 +18,6 @@ module HandleReadResponseImpl {
   import IOImpl
 
   method readSuperblockResp(
-      k: ImplConstants,
       cm: Committer,
       io: DiskIOHandler,
       which: uint64)
@@ -29,7 +28,7 @@ module HandleReadResponseImpl {
   ensures cm.W()
   ensures cm.Repr == old(cm.Repr)
   ensures cm.I() == HandleReadResponseModel.readSuperblockResp(
-      Ic(k), old(cm.I()), old(IIO(io)), which)
+      old(cm.I()), old(IIO(io)), which)
   {
     cm.reveal_ReprInv();
     HandleReadResponseModel.reveal_readSuperblockResp();
@@ -57,8 +56,8 @@ module HandleReadResponseImpl {
     cm.reveal_ReprInv();
   }
 
-  method readResponse(k: ImplConstants, s: Full, io: DiskIOHandler)
-  requires s.Inv(k)
+  method readResponse(s: Full, io: DiskIOHandler)
+  requires s.Inv()
   requires io.diskOp().RespReadOp?
   requires io !in s.Repr
   modifies s.Repr
@@ -66,7 +65,7 @@ module HandleReadResponseImpl {
   ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
   ensures |old(io.diskOp()).respRead.bytes| < 0x1_0000_0000_0000_0000
   ensures s.I() == HandleReadResponseModel.readResponse(
-      Ic(k), old(s.I()), old(IIO(io)))
+      old(s.I()), old(IIO(io)))
   {
     HandleReadResponseModel.reveal_readResponse();
     s.reveal_ReprInv();
@@ -77,24 +76,24 @@ module HandleReadResponseImpl {
 
     if ValidNodeLocation(loc) {
       if s.bc.ready {
-        IOImpl.PageInNodeResp(k, s.bc, io);
+        IOImpl.PageInNodeResp(s.bc, io);
       } else {
         print "readResponse: doing nothing\n";
       }
     } else if ValidIndirectionTableLocation(loc) {
       if !s.bc.ready && s.bc.loading {
-        IOImpl.PageInIndirectionTableResp(k, s.bc, io);
+        IOImpl.PageInIndirectionTableResp(s.bc, io);
       } else {
         print "readResponse: doing nothing\n";
       }
     } else if ValidJournalLocation(loc) {
       if s.jc.status.StatusLoadingOther? {
-        CommitterInitImpl.PageInJournalResp(k, s.jc, io);
+        CommitterInitImpl.PageInJournalResp(s.jc, io);
       }
     } else if loc == Superblock1Location() {
-      readSuperblockResp(k, s.jc, io, 0);
+      readSuperblockResp(s.jc, io, 0);
     } else if loc == Superblock2Location() {
-      readSuperblockResp(k, s.jc, io, 1);
+      readSuperblockResp(s.jc, io, 1);
     } else {
       print "readResponse: doing nothing\n";
     }

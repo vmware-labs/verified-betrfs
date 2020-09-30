@@ -19,41 +19,34 @@ module PivotBetree_Refines_Map {
   import MS = MapSpec
   type UIOp = MS.UI.Op
 
-  function Ik(k: PB.Constants) : MS.Constants {
-    BetreeRefinesMap.Ik(PivotBetreeRefinesBetree.Ik(k))
-  }
-
-  function I(k: PB.Constants, s: PB.Variables) : MS.Variables
-  requires PB.Inv(k, s)
+  function I(s: PB.Variables) : MS.Variables
+  requires PB.Inv(s)
   {
     BetreeRefinesMap.I(
-      PivotBetreeRefinesBetree.Ik(k),
-      PivotBetreeRefinesBetree.I(k, s)
+      PivotBetreeRefinesBetree.I(s)
     )
   }
 
-  lemma RefinesInit(k: PB.Constants, s: PB.Variables)
-    requires PB.Init(k, s)
-    ensures PB.Inv(k, s)
-    ensures MS.Init(Ik(k), I(k, s))
+  lemma RefinesInit(s: PB.Variables)
+    requires PB.Init(s)
+    ensures PB.Inv(s)
+    ensures MS.Init(I(s))
   {
-    PivotBetreeRefinesBetree.RefinesInit(k, s);
+    PivotBetreeRefinesBetree.RefinesInit(s);
     BetreeRefinesMap.RefinesInit(
-      PivotBetreeRefinesBetree.Ik(k),
-      PivotBetreeRefinesBetree.I(k, s));
+      PivotBetreeRefinesBetree.I(s));
   }
 
-  lemma RefinesNext(k: PB.Constants, s: PB.Variables, s': PB.Variables, uiop: UIOp)
-    requires PB.Inv(k, s)
-    requires PB.Next(k, s, s', uiop)
-    ensures PB.Inv(k, s')
-    ensures MS.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  lemma RefinesNext(s: PB.Variables, s': PB.Variables, uiop: UIOp)
+    requires PB.Inv(s)
+    requires PB.Next(s, s', uiop)
+    ensures PB.Inv(s')
+    ensures MS.Next(I(s), I(s'), uiop)
   {
-    PivotBetreeRefinesBetree.RefinesNext(k, s, s', uiop);
+    PivotBetreeRefinesBetree.RefinesNext(s, s', uiop);
     BetreeRefinesMap.RefinesNext(
-      PivotBetreeRefinesBetree.Ik(k),
-      PivotBetreeRefinesBetree.I(k, s),
-      PivotBetreeRefinesBetree.I(k, s'),
+      PivotBetreeRefinesBetree.I(s),
+      PivotBetreeRefinesBetree.I(s'),
       uiop);
   }
 }

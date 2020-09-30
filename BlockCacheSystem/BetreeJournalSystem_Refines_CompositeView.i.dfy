@@ -12,50 +12,45 @@ module BetreeJournalSystem_Refines_CompositeView {
   import JournalSystemRef = JournalSystem_Refines_JournalView
   import opened ViewOp
 
-  function Ik(k: BJS.Constants) : CompositeView.Constants
+  function I(s: BJS.Variables) : CompositeView.Variables
+  requires BJS.Inv(s)
   {
-    BJS.Ik(k)
+    BJS.I(s)
   }
 
-  function I(k: BJS.Constants, s: BJS.Variables) : CompositeView.Variables
-  requires BJS.Inv(k, s)
+  lemma RefinesInit(s: BJS.Variables)
+  requires BJS.Init(s)
+  ensures BJS.Inv(s)
+  ensures CompositeView.Init(I(s))
   {
-    BJS.I(k, s)
-  }
-
-  lemma RefinesInit(k: BJS.Constants, s: BJS.Variables)
-  requires BJS.Init(k, s)
-  ensures BJS.Inv(k, s)
-  ensures CompositeView.Init(Ik(k), I(k, s))
-  {
-    BJS.InitImpliesInv(k, s);
+    BJS.InitImpliesInv(s);
     var loc :|
-      && BS.Init(k.bs, s.bs, loc)
-      && JS.Init(k.js, s.js, loc);
-    BS.InitImpliesInv(k.bs, s.bs, loc);
-    JS.InitImpliesInv(k.js, s.js, loc);
-    BetreeSystemRef.RefinesInit(k.bs, s.bs, loc);
-    JournalSystemRef.RefinesInit(k.js, s.js, loc);
+      && BS.Init(s.bs, loc)
+      && JS.Init(s.js, loc);
+    BS.InitImpliesInv(s.bs, loc);
+    JS.InitImpliesInv(s.js, loc);
+    BetreeSystemRef.RefinesInit(s.bs, loc);
+    JournalSystemRef.RefinesInit(s.js, loc);
   }
 
-  lemma RefinesNext(k: BJS.Constants, s: BJS.Variables, s': BJS.Variables, uiop: UI.Op)
-  requires BJS.Inv(k, s)
-  requires BJS.Next(k, s, s', uiop)
-  ensures BJS.Inv(k, s')
-  ensures CompositeView.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  lemma RefinesNext(s: BJS.Variables, s': BJS.Variables, uiop: UI.Op)
+  requires BJS.Inv(s)
+  requires BJS.Next(s, s', uiop)
+  ensures BJS.Inv(s')
+  ensures CompositeView.Next(I(s), I(s'), uiop)
   {
-    BJS.NextPreservesInv(k, s, s', uiop);
+    BJS.NextPreservesInv(s, s', uiop);
     var vop :|
       && VOpAgreesUIOp(vop, uiop)
-      && BS.Next(k.bs, s.bs, s'.bs, vop)
-      && JS.Next(k.js, s.js, s'.js, vop);
-    BS.NextPreservesInv(k.bs, s.bs, s'.bs, vop);
-    JS.NextPreservesInv(k.js, s.js, s'.js, vop);
-    BetreeSystemRef.RefinesNext(k.bs, s.bs, s'.bs, vop);
-    JournalSystemRef.RefinesNext(k.js, s.js, s'.js, vop);
+      && BS.Next(s.bs, s'.bs, vop)
+      && JS.Next(s.js, s'.js, vop);
+    BS.NextPreservesInv(s.bs, s'.bs, vop);
+    JS.NextPreservesInv(s.js, s'.js, vop);
+    BetreeSystemRef.RefinesNext(s.bs, s'.bs, vop);
+    JournalSystemRef.RefinesNext(s.js, s'.js, vop);
     var step := CompositeView.Step(vop);
-    assert CompositeView.NextStep(Ik(k), I(k, s), I(k, s'),
+    assert CompositeView.NextStep(I(s), I(s'),
       step.vop, uiop);
-    CompositeView.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
+    CompositeView.NextPreservesInv(I(s), I(s'), uiop);
   }
 }

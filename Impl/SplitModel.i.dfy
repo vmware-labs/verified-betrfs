@@ -22,12 +22,12 @@ module SplitModel {
 
   import opened NativeTypes
 
-  lemma lemmaChildrenConditionsCutoffNode(k: Constants, s: BCVariables, 
+  lemma lemmaChildrenConditionsCutoffNode(s: BCVariables, 
       node: Node, lbound: Option<Key>, rbound: Option<Key>)
   requires WFNode(node)
   requires s.Ready?
-  requires ChildrenConditions(k, s, node.children)
-  ensures ChildrenConditions(k, s, CutoffNode(node, lbound, rbound).children)
+  requires ChildrenConditions(s, node.children)
+  ensures ChildrenConditions(s, CutoffNode(node, lbound, rbound).children)
   {
     reveal_CutoffNode();
     reveal_CutoffNodeAndKeepLeft();
@@ -35,13 +35,13 @@ module SplitModel {
   }
 
   lemma lemmaChildrenConditionsSplitChild(
-      k: Constants, s: BCVariables, child: Node, num_children_left: int)
+      s: BCVariables, child: Node, num_children_left: int)
   requires SplitChildLeft.requires(child, num_children_left)
   requires SplitChildRight.requires(child, num_children_left)
   requires s.Ready?
-  requires ChildrenConditions(k, s, child.children)
-  ensures ChildrenConditions(k, s, SplitChildLeft(child, num_children_left).children)
-  ensures ChildrenConditions(k, s, SplitChildRight(child, num_children_left).children)
+  requires ChildrenConditions(s, child.children)
+  ensures ChildrenConditions(s, SplitChildLeft(child, num_children_left).children)
+  ensures ChildrenConditions(s, SplitChildRight(child, num_children_left).children)
   {
     reveal_SplitChildLeft();
     reveal_SplitChildRight();
@@ -91,33 +91,33 @@ module SplitModel {
     }
   }
 
-  function {:opaque} splitBookkeeping(k: Constants, s: BCVariables, left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference, fused_parent_children: seq<BT.G.Reference>, left_child: Node, right_child: Node, slot: int) : (s': BCVariables)
+  function {:opaque} splitBookkeeping(s: BCVariables, left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference, fused_parent_children: seq<BT.G.Reference>, left_child: Node, right_child: Node, slot: int) : (s': BCVariables)
   requires 0 <= slot < |fused_parent_children|
   requires s.Ready?
-  requires WriteAllocConditions(k, s)
-  requires ChildrenConditions(k, s, left_child.children)
-  requires ChildrenConditions(k, s, right_child.children)
-  requires ChildrenConditions(k, s, Some(fused_parent_children))
+  requires WriteAllocConditions(s)
+  requires ChildrenConditions(s, left_child.children)
+  requires ChildrenConditions(s, right_child.children)
+  requires ChildrenConditions(s, Some(fused_parent_children))
   requires |fused_parent_children| < MaxNumChildren()
   requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
   ensures s'.Ready?
   ensures s'.cache == s.cache
   {
-    lemmaChildrenConditionsPreservedWriteBookkeeping(k, s, left_childref, left_child.children, right_child.children);
-    lemmaChildrenConditionsPreservedWriteBookkeeping(k, s, left_childref, left_child.children, Some(fused_parent_children));
-    lemmaRefInGraphOfWriteBookkeeping(k, s, left_childref, left_child.children);
+    lemmaChildrenConditionsPreservedWriteBookkeeping(s, left_childref, left_child.children, right_child.children);
+    lemmaChildrenConditionsPreservedWriteBookkeeping(s, left_childref, left_child.children, Some(fused_parent_children));
+    lemmaRefInGraphOfWriteBookkeeping(s, left_childref, left_child.children);
 
-    var s1 := writeBookkeeping(k, s, left_childref, left_child.children);
+    var s1 := writeBookkeeping(s, left_childref, left_child.children);
 
-    lemmaChildrenConditionsPreservedWriteBookkeeping(k, s1, right_childref, right_child.children, Some(fused_parent_children));
-    lemmaRefInGraphOfWriteBookkeeping(k, s1, right_childref, right_child.children);
-    lemmaRefInGraphPreservedWriteBookkeeping(k, s1, right_childref, right_child.children, left_childref);
+    lemmaChildrenConditionsPreservedWriteBookkeeping(s1, right_childref, right_child.children, Some(fused_parent_children));
+    lemmaRefInGraphOfWriteBookkeeping(s1, right_childref, right_child.children);
+    lemmaRefInGraphPreservedWriteBookkeeping(s1, right_childref, right_child.children, left_childref);
 
-    var s2 := writeBookkeeping(k, s1, right_childref, right_child.children);
+    var s2 := writeBookkeeping(s1, right_childref, right_child.children);
 
-    lemmaChildrenConditionsOfReplace1With2(k, s2, fused_parent_children, slot, left_childref, right_childref);
+    lemmaChildrenConditionsOfReplace1With2(s2, fused_parent_children, slot, left_childref, right_childref);
 
-    var s3 := writeBookkeeping(k, s2, parentref, Some(replace1with2(fused_parent_children, left_childref, right_childref, slot)));
+    var s3 := writeBookkeeping(s2, parentref, Some(replace1with2(fused_parent_children, left_childref, right_childref, slot)));
 
     s3
   }
@@ -138,7 +138,7 @@ module SplitModel {
         [parentref := split_parent])
   }
 
-  function {:opaque} splitDoChanges(k: Constants, s: BCVariables, child: Node,
+  function {:opaque} splitDoChanges(s: BCVariables, child: Node,
       left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference,
       fused_parent_children: seq<BT.G.Reference>, slot: int) : (s': BCVariables)
   requires s.Ready?
@@ -149,29 +149,29 @@ module SplitModel {
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires 0 <= slot < |fused_parent_children|
   requires |child.buckets| >= 2
-  requires WriteAllocConditions(k, s)
-  requires ChildrenConditions(k, s, Some(fused_parent_children))
-  requires ChildrenConditions(k, s, child.children)
+  requires WriteAllocConditions(s)
+  requires ChildrenConditions(s, Some(fused_parent_children))
+  requires ChildrenConditions(s, child.children)
   requires |fused_parent_children| < MaxNumChildren()
   requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
   {
     var num_children_left := |child.buckets| / 2;
     var pivot := child.pivotTable[num_children_left - 1];
 
-    lemmaChildrenConditionsSplitChild(k, s, child, num_children_left);
+    lemmaChildrenConditionsSplitChild(s, child, num_children_left);
 
     var left_child := SplitChildLeft(child, num_children_left);
     var right_child := SplitChildRight(child, num_children_left);
 
-    var s3 := splitBookkeeping(k, s, left_childref, right_childref, parentref, fused_parent_children, left_child, right_child, slot);
+    var s3 := splitBookkeeping(s, left_childref, right_childref, parentref, fused_parent_children, left_child, right_child, slot);
     var s' := splitCacheChanges(s3, left_childref, right_childref, parentref, slot, num_children_left, pivot, left_child, right_child);
     s'
   }
 
-  function {:opaque} doSplit(k: Constants, s: BCVariables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
+  function {:opaque} doSplit(s: BCVariables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
   : (s': BCVariables)
   requires s.Ready?
-  requires BCInv(k, s)
+  requires BCInv(s)
   requires childref in s.ephemeralIndirectionTable.graph
   requires parentref in s.ephemeralIndirectionTable.graph
   requires childref in s.cache
@@ -191,13 +191,13 @@ module SplitModel {
       var fused_parent := s.cache[parentref];
       var fused_child := s.cache[childref];
 
-      lemmaChildrenConditionsOfNode(k, s, parentref);
-      lemmaChildrenConditionsOfNode(k, s, childref);
+      lemmaChildrenConditionsOfNode(s, parentref);
+      lemmaChildrenConditionsOfNode(s, childref);
 
       var lbound := (if slot > 0 then Some(fused_parent.pivotTable[slot - 1]) else None);
       var ubound := (if slot < |fused_parent.pivotTable| then Some(fused_parent.pivotTable[slot]) else None);
       
-      lemmaChildrenConditionsCutoffNode(k, s, fused_child, lbound, ubound);
+      lemmaChildrenConditionsCutoffNode(s, fused_child, lbound, ubound);
       CutoffNodeCorrect(fused_child, lbound, ubound);
       var child := CutoffNode(fused_child, lbound, ubound);
 
@@ -214,7 +214,7 @@ module SplitModel {
           if right_childref.None? then (
             s
           ) else (
-            splitDoChanges(k, s, child, left_childref.value,
+            splitDoChanges(s, child, left_childref.value,
                 right_childref.value, parentref, fused_parent.children.value,
                 slot)
           )
@@ -223,9 +223,9 @@ module SplitModel {
     )
   }
 
-  lemma doSplitCorrect(k: Constants, s: BCVariables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
+  lemma doSplitCorrect(s: BCVariables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
   requires s.Ready?
-  requires BCInv(k, s)
+  requires BCInv(s)
   requires childref in s.ephemeralIndirectionTable.graph
   requires parentref in s.ephemeralIndirectionTable.graph
   requires childref in s.cache
@@ -236,49 +236,49 @@ module SplitModel {
   requires s.cache[parentref].children.value[slot] == childref
   requires TotalCacheSize(s) <= MaxCacheSize() - 2
   requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
-  ensures var s' := doSplit(k, s, parentref, childref, slot);
+  ensures var s' := doSplit(s, parentref, childref, slot);
     && WFBCVars(s')
-    && betree_next(k, IBlockCache(s), IBlockCache(s'))
+    && betree_next(IBlockCache(s), IBlockCache(s'))
   {
-    var s' := doSplit(k, s, parentref, childref, slot);
+    var s' := doSplit(s, parentref, childref, slot);
     reveal_doSplit();
 
     if (
       && s.frozenIndirectionTable.Some?
       && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, parentref)
     ) {
-      assert noop(k, IBlockCache(s), IBlockCache(s));
+      assert noop(IBlockCache(s), IBlockCache(s));
     } else {
       var fused_parent := s.cache[parentref];
       var fused_child := s.cache[childref];
 
-      lemmaChildrenConditionsOfNode(k, s, parentref);
-      lemmaChildrenConditionsOfNode(k, s, childref);
+      lemmaChildrenConditionsOfNode(s, parentref);
+      lemmaChildrenConditionsOfNode(s, childref);
 
       var lbound := (if slot > 0 then Some(fused_parent.pivotTable[slot - 1]) else None);
       var ubound := (if slot < |fused_parent.pivotTable| then Some(fused_parent.pivotTable[slot]) else None);
       var child := CutoffNode(fused_child, lbound, ubound);
-      lemmaChildrenConditionsCutoffNode(k, s, fused_child, lbound, ubound);
+      lemmaChildrenConditionsCutoffNode(s, fused_child, lbound, ubound);
       CutoffNodeCorrect(fused_child, lbound, ubound);
 
       if (|child.pivotTable| == 0) {
         // TODO there should be an operation which just
         // cuts off the node and doesn't split it.
-        assert noop(k, IBlockCache(s), IBlockCache(s));
+        assert noop(IBlockCache(s), IBlockCache(s));
       } else {
         var left_childref := getFreeRef(s);
         if left_childref.None? {
-          assert noop(k, IBlockCache(s), IBlockCache(s));
+          assert noop(IBlockCache(s), IBlockCache(s));
         } else {
           var right_childref := getFreeRef2(s, left_childref.value);
           if right_childref.None? {
-            assert noop(k, IBlockCache(s), IBlockCache(s));
+            assert noop(IBlockCache(s), IBlockCache(s));
           } else {
             var num_children_left := |child.buckets| / 2;
             var pivot := child.pivotTable[num_children_left - 1];
             PivotsLib.PivotNotMinimum(child.pivotTable, num_children_left - 1);
 
-            lemmaChildrenConditionsSplitChild(k, s, child, num_children_left);
+            lemmaChildrenConditionsSplitChild(s, child, num_children_left);
 
             var left_child := SplitChildLeft(child, num_children_left);
             var right_child := SplitChildRight(child, num_children_left);
@@ -290,32 +290,32 @@ module SplitModel {
             reveal_splitDoChanges();
             reveal_splitBookkeeping();
 
-            lemmaChildrenConditionsPreservedWriteBookkeeping(k, s, left_childref.value, left_child.children, right_child.children);
-            lemmaChildrenConditionsPreservedWriteBookkeeping(k, s, left_childref.value, left_child.children, fused_parent.children);
-            lemmaRefInGraphOfWriteBookkeeping(k, s, left_childref.value, left_child.children);
+            lemmaChildrenConditionsPreservedWriteBookkeeping(s, left_childref.value, left_child.children, right_child.children);
+            lemmaChildrenConditionsPreservedWriteBookkeeping(s, left_childref.value, left_child.children, fused_parent.children);
+            lemmaRefInGraphOfWriteBookkeeping(s, left_childref.value, left_child.children);
 
-            var s1 := writeWithNode(k, s, left_childref.value, left_child);
-            var s2 := writeWithNode(k, s1, right_childref.value, right_child);
+            var s1 := writeWithNode(s, left_childref.value, left_child);
+            var s2 := writeWithNode(s1, right_childref.value, right_child);
 
-            lemmaChildrenConditionsOfReplace1With2(k, s2, fused_parent.children.value, slot, left_childref.value, right_childref.value);
+            lemmaChildrenConditionsOfReplace1With2(s2, fused_parent.children.value, slot, left_childref.value, right_childref.value);
 
-            var s3 := writeWithNode(k, s2, parentref, split_parent);
+            var s3 := writeWithNode(s2, parentref, split_parent);
             assert s' == s3;
 
             lemmaSplitChild(child, num_children_left);
             SplitParentCorrect(parentref, fused_parent, pivot, slot, left_childref.value, right_childref.value);
 
-            lemmaBlockPointsToValidReferences(k, s, childref);
+            lemmaBlockPointsToValidReferences(s, childref);
             assert BC.BlockPointsToValidReferences(INode(fused_child), IIndirectionTable(s.ephemeralIndirectionTable).graph);
             lemmaSplitChildValidReferences(INode(fused_child), INode(child), num_children_left, IIndirectionTable(s.ephemeralIndirectionTable).graph, lbound, ubound);
 
-            writeNewRefIsAlloc(k, s, left_childref.value, left_child);
-            writeNewRefIsAlloc(k, s1, right_childref.value, right_child);
+            writeNewRefIsAlloc(s, left_childref.value, left_child);
+            writeNewRefIsAlloc(s1, right_childref.value, right_child);
 
             var inodeFusedParent := INode(fused_parent);
             var inodeSplitParent := INode(split_parent);
 
-            lemmaBlockPointsToValidReferences(k, s, parentref);
+            lemmaBlockPointsToValidReferences(s, parentref);
             assert BC.BlockPointsToValidReferences(inodeFusedParent, IIndirectionTable(s2.ephemeralIndirectionTable).graph);
             lemmaSplitParentValidReferences(inodeFusedParent, pivot, slot, left_childref.value, right_childref.value, IIndirectionTable(s2.ephemeralIndirectionTable).graph);
 
@@ -355,8 +355,8 @@ module SplitModel {
               BT.G.WriteOp(parentref, inodeSplitParent)
             ];
             assert ops == BT.BetreeStepOps(step);
-            BC.MakeTransaction3(Ik(k).bc, IBlockCache(s), IBlockCache(s1), IBlockCache(s2), IBlockCache(s'), ops);
-            assert stepsBetree(k, IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), step);
+            BC.MakeTransaction3(IBlockCache(s), IBlockCache(s1), IBlockCache(s2), IBlockCache(s'), ops);
+            assert stepsBetree(IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), step);
           }
         }
       }

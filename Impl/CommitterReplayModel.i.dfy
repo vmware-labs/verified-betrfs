@@ -17,7 +17,7 @@ module CommitterReplayModel {
   import opened CommitterModel
   import opened DiskOpModel
 
-  function {:opaque} JournalReplayOne(k: Constants, cm: CM) : (cm' : CM)
+  function {:opaque} JournalReplayOne(cm: CM) : (cm' : CM)
   requires CommitterModel.WF(cm)
   requires cm.status == StatusReady
   requires !JournalistModel.isReplayEmpty(cm.journalist)
@@ -26,26 +26,26 @@ module CommitterReplayModel {
     cm.(journalist := journalist')
   }
 
-  lemma JournalReplayOneCorrect(k: Constants,
+  lemma JournalReplayOneCorrect(
       cm: CM, je: JournalEntry)
   requires CommitterModel.WF(cm)
   requires cm.status == StatusReady
   requires !JournalistModel.isReplayEmpty(cm.journalist)
   requires je == JournalistModel.I(cm.journalist).replayJournal[0]
-  ensures var cm' := JournalReplayOne(k, cm);
+  ensures var cm' := JournalReplayOne(cm);
     && CommitterModel.WF(cm')
-    && JournalCache.Next(Ik(k).jc,
+    && JournalCache.Next(
         CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp,
         AdvanceOp(UI.PutOp(je.key, je.value), true));
   {
-    var cm' := JournalReplayOne(k, cm);
+    var cm' := JournalReplayOne(cm);
     reveal_JournalReplayOne();
     var vop := AdvanceOp(UI.PutOp(je.key, je.value), true);
 
-    assert JournalCache.Replay(Ik(k).jc,
+    assert JournalCache.Replay(
         CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp,
         vop);
-    assert JournalCache.NextStep(Ik(k).jc,
+    assert JournalCache.NextStep(
         CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp,
         vop,
         JournalCache.ReplayStep);

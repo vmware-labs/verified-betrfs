@@ -22,7 +22,7 @@ module HandleWriteResponseImpl {
   import MarshallingModel
 
   method writeBackJournalResp(
-      k: ImplConstants, cm: Committer, io: DiskIOHandler)
+      cm: Committer, io: DiskIOHandler)
   requires cm.W()
   requires io.diskOp().RespWriteOp?
   requires io !in cm.Repr
@@ -30,7 +30,7 @@ module HandleWriteResponseImpl {
   ensures cm.W()
   ensures cm.Repr == old(cm.Repr)
   ensures cm.I() == HandleWriteResponseModel.writeBackJournalResp(
-      Ic(k), old(cm.I()), old(IIO(io)))
+      old(cm.I()), old(IIO(io)))
   {
     cm.reveal_ReprInv();
     HandleWriteResponseModel.reveal_writeBackJournalResp();
@@ -42,15 +42,15 @@ module HandleWriteResponseImpl {
     cm.reveal_ReprInv();
   }
 
-  method writeResponse(k: ImplConstants, s: Full, io: DiskIOHandler)
-  requires s.Inv(k)
+  method writeResponse(s: Full, io: DiskIOHandler)
+  requires s.Inv()
   requires io.diskOp().RespWriteOp?
   requires io !in s.Repr
   modifies s.Repr
   ensures s.W()
   ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
   ensures s.I() == HandleWriteResponseModel.writeResponse(
-      Ic(k), old(s.I()), old(IIO(io)))
+      old(s.I()), old(IIO(io)))
   {
     HandleWriteResponseModel.reveal_writeResponse();
     s.reveal_ReprInv();
@@ -61,19 +61,19 @@ module HandleWriteResponseImpl {
 
     if ValidNodeLocation(loc) &&
         s.bc.ready && id in s.bc.outstandingBlockWrites {
-      IOImpl.writeNodeResponse(k, s.bc, io);
+      IOImpl.writeNodeResponse(s.bc, io);
     } else if ValidIndirectionTableLocation(loc)
         && s.bc.ready
         && s.bc.outstandingIndirectionTableWrite == Some(id) {
-      var frozen_loc := IOImpl.writeIndirectionTableResponse(k, s.bc, io);
-      CommitterCommitImpl.receiveFrozenLoc(k, s.jc, frozen_loc);
+      var frozen_loc := IOImpl.writeIndirectionTableResponse(s.bc, io);
+      CommitterCommitImpl.receiveFrozenLoc(s.jc, frozen_loc);
     } else if s.jc.status.StatusReady? && ValidJournalLocation(loc) {
-      writeBackJournalResp(k, s.jc, io);
+      writeBackJournalResp(s.jc, io);
     } else if ValidSuperblockLocation(loc) && Some(id) == s.jc.superblockWrite {
       if s.jc.status.StatusReady? && s.jc.commitStatus.CommitAdvanceLocation? {
-        IOImpl.cleanUp(k, s.bc);
+        IOImpl.cleanUp(s.bc);
       }
-      CommitterCommitImpl.writeBackSuperblockResp(k, s.jc);
+      CommitterCommitImpl.writeBackSuperblockResp(s.jc);
     } else {
       print "writeResponse: doing nothing\n";
     }

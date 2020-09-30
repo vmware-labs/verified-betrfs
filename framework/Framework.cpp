@@ -516,7 +516,6 @@ Application::Application(string filename) {
 void Application::initialize() {
   init_malloc_accounting();
   auto tup2 = handle_InitState();
-  this->k = tup2.first;
   this->hs = tup2.second;
   malloc_accounting_set_scope("Application::initialize DiskIOHandler");
   this->io = make_shared<DiskIOHandler>(this->filename);
@@ -541,11 +540,11 @@ void Application::crash() {
 }
 
 void Application::EvictEverything() {
-  handle_EvictEverything(k, hs, io);
+  handle_EvictEverything(hs, io);
 }
 
 void Application::CountAmassAllocations() {
-  handle_CountAmassAllocations(k, hs, io);
+  handle_CountAmassAllocations(hs, io);
 }
 
 void Application::Sync(bool graphSync) {
@@ -556,7 +555,7 @@ void Application::Sync(bool graphSync) {
 
   LOG("Sync");
 
-  uint64 id = handle_PushSync(k, hs, io);
+  uint64 id = handle_PushSync(hs, io);
   if (id == 0) {
     fail("pushSync failed to allocate id");
   }
@@ -564,7 +563,7 @@ void Application::Sync(bool graphSync) {
 
   for (int i = 0; i < 500000; i++) {
     while (this->maybeDoResponse()) { }
-    auto tup2 = handle_PopSync(k, hs, io, id, graphSync);
+    auto tup2 = handle_PopSync(hs, io, id, graphSync);
     bool wait = tup2.first;
     bool success = tup2.second;
     if (success) {
@@ -618,7 +617,7 @@ void Application::Insert(ByteString key, ByteString val)
     int oldnios;
     do {
       oldnios = MainDiskIOHandler_Compile::nWriteReqsOut;
-      success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
+      success = handle_Insert(hs, io, key.as_dafny_seq(), val.as_dafny_seq());
     } while (!success && oldnios < MainDiskIOHandler_Compile::nWriteReqsOut);
 
     if (io->has_write_task()) {
@@ -686,7 +685,7 @@ ByteString Application::Query(ByteString key)
   }
 
   for (int i = 0; i < 500000; i++) {
-    auto result = handle_Query(k, hs, io, key.as_dafny_seq());
+    auto result = handle_Query(hs, io, key.as_dafny_seq());
 
     #ifdef LOG_QUERY_STATS
     if (io->has_write_task()) {
@@ -755,12 +754,12 @@ void Application::QueryAndExpect(ByteString key, ByteString expected_val)
 bool Application::maybeDoResponse()
 {
   if (io->prepareReadResponse()) {
-    handle_ReadResponse(k, hs, io);
+    handle_ReadResponse(hs, io);
     LOG("doing read response...");
     return true;
   }
   else if (io->prepareWriteResponse()) {
-    handle_WriteResponse(k, hs, io);
+    handle_WriteResponse(hs, io);
     LOG("doing write response...");
     return true;
   }
@@ -788,7 +787,7 @@ UI_Compile::SuccResultList Application::SuccOnce(UI_Compile::RangeStart start, u
   }
 
   for (int i = 0; i < 500000; i++) {
-    auto result = handle_Succ(k, hs, io, start, maxToFind);
+    auto result = handle_Succ(hs, io, start, maxToFind);
     this->maybeDoResponse();
     if (result.has_value()) {
       LOG("doing succ ... success!");

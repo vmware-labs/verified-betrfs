@@ -12,13 +12,8 @@ module CompositeView_Refines_TSJMap {
   import MapSpec
   import JournalView
 
-  function Ik(k: CompositeView.Constants) : TSJ.Constants
-  {
-    TSJ.Constants(k.tsm.k)
-  }
-
-  function I(k: CompositeView.Constants, s: CompositeView.Variables) : TSJ.Variables
-  requires CompositeView.Inv(k, s)
+  function I(s: CompositeView.Variables) : TSJ.Variables
+  requires CompositeView.Inv(s)
   {
     TSJ.Variables(
       CompositeView.s1(s),
@@ -33,157 +28,157 @@ module CompositeView_Refines_TSJMap {
     )
   }
 
-  lemma RefinesInit(k: CompositeView.Constants, s: CompositeView.Variables)
-    requires CompositeView.Init(k, s)
-    ensures CompositeView.Inv(k, s)
-    ensures TSJ.Init(Ik(k), I(k, s))
+  lemma RefinesInit(s: CompositeView.Variables)
+    requires CompositeView.Init(s)
+    ensures CompositeView.Inv(s)
+    ensures TSJ.Init(I(s))
   {
-    CompositeView.InitImpliesInv(k, s);
+    CompositeView.InitImpliesInv(s);
   }
 
-  lemma SendPersistentLocRefines(k: CompositeView.Constants, s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
-    requires CompositeView.Inv(k, s)
-    requires CompositeView.Inv(k, s')
-    requires CompositeView.NextStep(k, s, s', vop, uiop)
+  lemma SendPersistentLocRefines(s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
+    requires CompositeView.Inv(s)
+    requires CompositeView.Inv(s')
+    requires CompositeView.NextStep(s, s', vop, uiop)
     requires vop.SendPersistentLocOp?
-    ensures TSJ.Next(Ik(k), I(k, s), I(k, s'), uiop)
+    ensures TSJ.Next(I(s), I(s'), uiop)
   {
-    assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.StutterStep);
+    assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.StutterStep);
   }
 
-  lemma AdvanceRefines(k: CompositeView.Constants, s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
-    requires CompositeView.Inv(k, s)
-    requires CompositeView.Inv(k, s')
-    requires CompositeView.NextStep(k, s, s', vop, uiop)
+  lemma AdvanceRefines(s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
+    requires CompositeView.Inv(s)
+    requires CompositeView.Inv(s')
+    requires CompositeView.NextStep(s, s', vop, uiop)
     requires vop.AdvanceOp?
-    ensures TSJ.Next(Ik(k), I(k, s), I(k, s'), uiop)
+    ensures TSJ.Next(I(s), I(s'), uiop)
   {
-    if JournalView.Move3(k.jc, s.jc, s'.jc, vop) {
-      assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.Move3Step);
-    } else if JournalView.Replay(k.jc, s.jc, s'.jc, vop) {
-      assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.ReplayStep(vop.uiop));
+    if JournalView.Move3(s.jc, s'.jc, vop) {
+      assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.Move3Step);
+    } else if JournalView.Replay(s.jc, s'.jc, vop) {
+      assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.ReplayStep(vop.uiop));
     }
   }
 
-  lemma CrashRefines(k: CompositeView.Constants, s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
-    requires CompositeView.Inv(k, s)
-    requires CompositeView.Inv(k, s')
-    requires CompositeView.NextStep(k, s, s', vop, uiop)
+  lemma CrashRefines(s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
+    requires CompositeView.Inv(s)
+    requires CompositeView.Inv(s')
+    requires CompositeView.NextStep(s, s', vop, uiop)
     requires vop.CrashOp?
-    ensures TSJ.Next(Ik(k), I(k, s), I(k, s'), uiop)
+    ensures TSJ.Next(I(s), I(s'), uiop)
   {
-    assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.CrashStep);
+    assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.CrashStep);
   }
 
-  lemma FreezeRefines(k: CompositeView.Constants, s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
-    requires CompositeView.Inv(k, s)
-    requires CompositeView.Inv(k, s')
-    requires CompositeView.NextStep(k, s, s', vop, uiop)
+  lemma FreezeRefines(s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
+    requires CompositeView.Inv(s)
+    requires CompositeView.Inv(s')
+    requires CompositeView.NextStep(s, s', vop, uiop)
     requires vop.FreezeOp?
-    ensures TSJ.Next(Ik(k), I(k, s), I(k, s'), uiop)
+    ensures TSJ.Next(I(s), I(s'), uiop)
   {
-    assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.Move2to3Step);
+    assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.Move2to3Step);
   }
 
-  lemma StatesInternalRefines(k: CompositeView.Constants, s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
-    requires CompositeView.Inv(k, s)
-    requires CompositeView.Inv(k, s')
-    requires CompositeView.NextStep(k, s, s', vop, uiop)
+  lemma StatesInternalRefines(s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
+    requires CompositeView.Inv(s)
+    requires CompositeView.Inv(s')
+    requires CompositeView.NextStep(s, s', vop, uiop)
     requires vop.StatesInternalOp?
-    ensures TSJ.Next(Ik(k), I(k, s), I(k, s'), uiop)
+    ensures TSJ.Next(I(s), I(s'), uiop)
   {
-    assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.StutterStep);
+    assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.StutterStep);
   }
 
-  lemma JournalInternalRefines(k: CompositeView.Constants, s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
-    requires CompositeView.Inv(k, s)
-    requires CompositeView.Inv(k, s')
-    requires CompositeView.NextStep(k, s, s', vop, uiop)
+  lemma JournalInternalRefines(s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
+    requires CompositeView.Inv(s)
+    requires CompositeView.Inv(s')
+    requires CompositeView.NextStep(s, s', vop, uiop)
     requires vop.JournalInternalOp?
-    ensures TSJ.Next(Ik(k), I(k, s), I(k, s'), uiop)
+    ensures TSJ.Next(I(s), I(s'), uiop)
   {
-    if JournalView.Move1to2(k.jc, s.jc, s'.jc, vop) {
-      assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.Move1to2Step);
+    if JournalView.Move1to2(s.jc, s'.jc, vop) {
+      assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.Move1to2Step);
     }
-    else if JournalView.ExtendLog1(k.jc, s.jc, s'.jc, vop) {
-      assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.ExtendLog1Step);
+    else if JournalView.ExtendLog1(s.jc, s'.jc, vop) {
+      assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.ExtendLog1Step);
     }
-    else if JournalView.ExtendLog2(k.jc, s.jc, s'.jc, vop) {
-      assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.ExtendLog2Step);
+    else if JournalView.ExtendLog2(s.jc, s'.jc, vop) {
+      assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.ExtendLog2Step);
     }
-    else if JournalView.Stutter(k.jc, s.jc, s'.jc, vop) {
-      assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.StutterStep);
+    else if JournalView.Stutter(s.jc, s'.jc, vop) {
+      assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.StutterStep);
     }
   }
 
-  lemma SendFrozenLocRefines(k: CompositeView.Constants, s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
-    requires CompositeView.Inv(k, s)
-    requires CompositeView.Inv(k, s')
-    requires CompositeView.NextStep(k, s, s', vop, uiop)
+  lemma SendFrozenLocRefines(s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
+    requires CompositeView.Inv(s)
+    requires CompositeView.Inv(s')
+    requires CompositeView.NextStep(s, s', vop, uiop)
     requires vop.SendFrozenLocOp?
-    ensures TSJ.Next(Ik(k), I(k, s), I(k, s'), uiop)
+    ensures TSJ.Next(I(s), I(s'), uiop)
   {
-    assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.StutterStep);
+    assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.StutterStep);
   }
 
-  lemma CleanUpRefines(k: CompositeView.Constants, s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
-    requires CompositeView.Inv(k, s)
-    requires CompositeView.Inv(k, s')
-    requires CompositeView.NextStep(k, s, s', vop, uiop)
+  lemma CleanUpRefines(s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
+    requires CompositeView.Inv(s)
+    requires CompositeView.Inv(s')
+    requires CompositeView.NextStep(s, s', vop, uiop)
     requires vop.CleanUpOp?
-    ensures TSJ.Next(Ik(k), I(k, s), I(k, s'), uiop)
+    ensures TSJ.Next(I(s), I(s'), uiop)
   {
-    assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.StutterStep);
+    assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.StutterStep);
   }
 
-  lemma PushSyncRefines(k: CompositeView.Constants, s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
-    requires CompositeView.Inv(k, s)
-    requires CompositeView.Inv(k, s')
-    requires CompositeView.NextStep(k, s, s', vop, uiop)
+  lemma PushSyncRefines(s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
+    requires CompositeView.Inv(s)
+    requires CompositeView.Inv(s')
+    requires CompositeView.NextStep(s, s', vop, uiop)
     requires vop.PushSyncOp?
-    ensures TSJ.Next(Ik(k), I(k, s), I(k, s'), uiop)
+    ensures TSJ.Next(I(s), I(s'), uiop)
   {
-    assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.PushSyncStep(vop.id));
+    assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.PushSyncStep(vop.id));
   }
 
-  lemma PopSyncRefines(k: CompositeView.Constants, s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
-    requires CompositeView.Inv(k, s)
-    requires CompositeView.Inv(k, s')
-    requires CompositeView.NextStep(k, s, s', vop, uiop)
+  lemma PopSyncRefines(s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
+    requires CompositeView.Inv(s)
+    requires CompositeView.Inv(s')
+    requires CompositeView.NextStep(s, s', vop, uiop)
     requires vop.PopSyncOp?
-    ensures TSJ.Next(Ik(k), I(k, s), I(k, s'), uiop)
+    ensures TSJ.Next(I(s), I(s'), uiop)
   {
-    assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.PopSyncStep(vop.id));
+    assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.PopSyncStep(vop.id));
   }
 
-  lemma RefinesNextStep(k: CompositeView.Constants, s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
-    requires CompositeView.Inv(k, s)
-    requires CompositeView.Inv(k, s')
-    requires CompositeView.NextStep(k, s, s', vop, uiop)
-    ensures TSJ.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  lemma RefinesNextStep(s: CompositeView.Variables, s':CompositeView.Variables, uiop: UI.Op, vop: VOp)
+    requires CompositeView.Inv(s)
+    requires CompositeView.Inv(s')
+    requires CompositeView.NextStep(s, s', vop, uiop)
+    ensures TSJ.Next(I(s), I(s'), uiop)
   {
     match vop {
-      case SendPersistentLocOp(loc) => { SendPersistentLocRefines(k, s, s', uiop, vop); }
-      case AdvanceOp(_, replay) => { AdvanceRefines(k, s, s', uiop, vop); }
-      case CrashOp => { CrashRefines(k, s, s', uiop, vop); }
-      case FreezeOp => { FreezeRefines(k, s, s', uiop, vop); }
-      case StatesInternalOp => { StatesInternalRefines(k, s, s', uiop, vop); }
-      case JournalInternalOp => { JournalInternalRefines(k, s, s', uiop, vop); }
-      case SendFrozenLocOp(loc) => { SendFrozenLocRefines(k, s, s', uiop, vop); }
-      case CleanUpOp => { CleanUpRefines(k, s, s', uiop, vop); }
-      case PushSyncOp(id) => { PushSyncRefines(k, s, s', uiop, vop); }
-      case PopSyncOp(id) => { PopSyncRefines(k, s, s', uiop, vop); }
+      case SendPersistentLocOp(loc) => { SendPersistentLocRefines(s, s', uiop, vop); }
+      case AdvanceOp(_, replay) => { AdvanceRefines(s, s', uiop, vop); }
+      case CrashOp => { CrashRefines(s, s', uiop, vop); }
+      case FreezeOp => { FreezeRefines(s, s', uiop, vop); }
+      case StatesInternalOp => { StatesInternalRefines(s, s', uiop, vop); }
+      case JournalInternalOp => { JournalInternalRefines(s, s', uiop, vop); }
+      case SendFrozenLocOp(loc) => { SendFrozenLocRefines(s, s', uiop, vop); }
+      case CleanUpOp => { CleanUpRefines(s, s', uiop, vop); }
+      case PushSyncOp(id) => { PushSyncRefines(s, s', uiop, vop); }
+      case PopSyncOp(id) => { PopSyncRefines(s, s', uiop, vop); }
     }
   }
 
-  lemma RefinesNext(k: CompositeView.Constants, s: CompositeView.Variables, s': CompositeView.Variables, uiop: UI.Op)
-    requires CompositeView.Inv(k, s)
-    requires CompositeView.Next(k, s, s', uiop)
-    ensures CompositeView.Inv(k, s')
-    ensures TSJ.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  lemma RefinesNext(s: CompositeView.Variables, s': CompositeView.Variables, uiop: UI.Op)
+    requires CompositeView.Inv(s)
+    requires CompositeView.Next(s, s', uiop)
+    ensures CompositeView.Inv(s')
+    ensures TSJ.Next(I(s), I(s'), uiop)
   {
-    CompositeView.NextPreservesInv(k, s, s', uiop);
-    var vop :| CompositeView.NextStep(k, s, s', vop, uiop);
-    RefinesNextStep(k, s, s', uiop, vop);
+    CompositeView.NextPreservesInv(s, s', uiop);
+    var vop :| CompositeView.NextStep(s, s', vop, uiop);
+    RefinesNextStep(s, s', uiop, vop);
   }
 }

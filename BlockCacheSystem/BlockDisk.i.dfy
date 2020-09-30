@@ -43,7 +43,6 @@ module BlockDisk {
 
     | NoDiskOp
 
-  datatype Constants = Constants()
   datatype Variables = Variables(
     ghost reqReadIndirectionTables: map<ReqId, Location>,
     ghost reqReadNodes: map<ReqId, Location>,
@@ -56,7 +55,7 @@ module BlockDisk {
     ghost nodes: imap<Location, Node>
   )
 
-  predicate Init(k: Constants, s: Variables)
+  predicate Init(s: Variables)
   {
     && s.reqReadIndirectionTables == map[]
     && s.reqReadNodes == map[]
@@ -67,14 +66,14 @@ module BlockDisk {
 
   ///////// RecvRead
 
-  predicate RecvReadIndirectionTable(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate RecvReadIndirectionTable(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.ReqReadIndirectionTableOp?
     && dop.id !in s.reqReadIndirectionTables
     && s' == s.(reqReadIndirectionTables := s.reqReadIndirectionTables[dop.id := dop.loc])
   }
 
-  predicate RecvReadNode(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate RecvReadNode(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.ReqReadNodeOp?
     && dop.id !in s.reqReadNodes
@@ -90,7 +89,7 @@ module BlockDisk {
     && (forall loc | loc in disk && !overlap(loc, updateLoc) :: loc in disk' && disk'[loc] == disk[loc])
   }
 
-  predicate RecvWriteIndirectionTable(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate RecvWriteIndirectionTable(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.ReqWriteIndirectionTableOp?
     && dop.id !in s.reqWriteIndirectionTables
@@ -99,7 +98,7 @@ module BlockDisk {
               .(indirectionTables := s'.indirectionTables)
   }
 
-  predicate RecvWriteNode(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate RecvWriteNode(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.ReqWriteNodeOp?
     && dop.id !in s.reqWriteNodes
@@ -110,7 +109,7 @@ module BlockDisk {
 
   ///////// AckRead
 
-  predicate AckReadIndirectionTable(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate AckReadIndirectionTable(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.RespReadIndirectionTableOp?
     && dop.id in s.reqReadIndirectionTables
@@ -120,7 +119,7 @@ module BlockDisk {
     && s' == s.(reqReadIndirectionTables := MapRemove1(s.reqReadIndirectionTables, dop.id))
   }
 
-  predicate AckReadNode(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate AckReadNode(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.RespReadNodeOp?
     && dop.id in s.reqReadNodes
@@ -132,14 +131,14 @@ module BlockDisk {
 
   ///////// AckWrite
 
-  predicate AckWriteIndirectionTable(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate AckWriteIndirectionTable(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.RespWriteIndirectionTableOp?
     && dop.id in s.reqWriteIndirectionTables
     && s' == s.(reqWriteIndirectionTables := MapRemove1(s.reqWriteIndirectionTables, dop.id))
   }
 
-  predicate AckWriteNode(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate AckWriteNode(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.RespWriteNodeOp?
     && dop.id in s.reqWriteNodes
@@ -148,26 +147,26 @@ module BlockDisk {
 
   //// Stutter
 
-  predicate Stutter(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate Stutter(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.NoDiskOp?
     && s' == s
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, dop: DiskOp) {
-    && (dop.ReqReadIndirectionTableOp? ==> RecvReadIndirectionTable(k, s, s', dop))
-    && (dop.ReqReadNodeOp? ==> RecvReadNode(k, s, s', dop))
+  predicate Next(s: Variables, s': Variables, dop: DiskOp) {
+    && (dop.ReqReadIndirectionTableOp? ==> RecvReadIndirectionTable(s, s', dop))
+    && (dop.ReqReadNodeOp? ==> RecvReadNode(s, s', dop))
 
-    && (dop.ReqWriteIndirectionTableOp? ==> RecvWriteIndirectionTable(k, s, s', dop))
-    && (dop.ReqWriteNodeOp? ==> RecvWriteNode(k, s, s', dop))
+    && (dop.ReqWriteIndirectionTableOp? ==> RecvWriteIndirectionTable(s, s', dop))
+    && (dop.ReqWriteNodeOp? ==> RecvWriteNode(s, s', dop))
 
-    && (dop.RespReadIndirectionTableOp? ==> AckReadIndirectionTable(k, s, s', dop))
-    && (dop.RespReadNodeOp? ==> AckReadNode(k, s, s', dop))
+    && (dop.RespReadIndirectionTableOp? ==> AckReadIndirectionTable(s, s', dop))
+    && (dop.RespReadNodeOp? ==> AckReadNode(s, s', dop))
 
-    && (dop.RespWriteIndirectionTableOp? ==> AckWriteIndirectionTable(k, s, s', dop))
-    && (dop.RespWriteNodeOp? ==> AckWriteNode(k, s, s', dop))
+    && (dop.RespWriteIndirectionTableOp? ==> AckWriteIndirectionTable(s, s', dop))
+    && (dop.RespWriteNodeOp? ==> AckWriteNode(s, s', dop))
 
-    && (dop.NoDiskOp? ==> Stutter(k, s, s', dop))
+    && (dop.NoDiskOp? ==> Stutter(s, s', dop))
   }
 
   predicate UntouchedLoc(loc: Location, reqs: map<ReqId, Location>)
@@ -185,7 +184,7 @@ module BlockDisk {
             loc in m' && m'[loc] == m[loc]
   }
 
-  predicate Crash(k: Constants, s: Variables, s': Variables)
+  predicate Crash(s: Variables, s': Variables)
   {
     && s'.reqReadIndirectionTables == map[]
     && s'.reqReadNodes == map[]
@@ -203,11 +202,10 @@ abstract module BlockMachine {
   import UI
 
   type Variables
-  type Constants
   import opened ViewOp
 
-  predicate Init(k: Constants, s: Variables)
-  predicate Next(k: Constants, s: Variables, s': Variables, dop: D.DiskOp, vop: VOp)
+  predicate Init(s: Variables)
+  predicate Next(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp)
 }
 
 // A disk attached to a program ("Machine"), modeling the nondeterministic crashes that reset the
@@ -221,47 +219,46 @@ abstract module BlockSystemModel {
   import opened ViewOp
   import opened DiskLayout
 
-  type Constants = AsyncSectorDiskModelTypes.AsyncSectorDiskModelConstants<M.Constants, D.Constants>
   type Variables = AsyncSectorDiskModelTypes.AsyncSectorDiskModelVariables<M.Variables, D.Variables>
 
   datatype Step =
     | MachineStep(dop: D.DiskOp)
     | CrashStep
   
-  predicate Machine(k: Constants, s: Variables, s': Variables, dop: D.DiskOp, vop: VOp)
+  predicate Machine(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp)
   {
-    && M.Next(k.machine, s.machine, s'.machine, dop, vop)
-    && D.Next(k.disk, s.disk, s'.disk, dop)
+    && M.Next(s.machine, s'.machine, dop, vop)
+    && D.Next(s.disk, s'.disk, dop)
   }
 
-  predicate Crash(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate Crash(s: Variables, s': Variables, vop: VOp)
   {
     && vop.CrashOp?
-    && M.Init(k.machine, s'.machine)
-    && D.Crash(k.disk, s.disk, s'.disk)
+    && M.Init(s'.machine)
+    && D.Crash(s.disk, s'.disk)
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, vop: VOp, step: Step)
+  predicate NextStep(s: Variables, s': Variables, vop: VOp, step: Step)
   {
     match step {
-      case MachineStep(dop) => Machine(k, s, s', dop, vop)
-      case CrashStep => Crash(k, s, s', vop)
+      case MachineStep(dop) => Machine(s, s', dop, vop)
+      case CrashStep => Crash(s, s', vop)
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, vop: VOp) {
-    exists step :: NextStep(k, s, s', vop, step)
+  predicate Next(s: Variables, s': Variables, vop: VOp) {
+    exists step :: NextStep(s, s', vop, step)
   }
 
-  predicate Init(k: Constants, s: Variables, loc: Location)
-  predicate Inv(k: Constants, s: Variables)
+  predicate Init(s: Variables, loc: Location)
+  predicate Inv(s: Variables)
 
-  lemma InitImpliesInv(k: Constants, s: Variables, loc: Location)
-    requires Init(k, s, loc)
-    ensures Inv(k, s)
+  lemma InitImpliesInv(s: Variables, loc: Location)
+    requires Init(s, loc)
+    ensures Inv(s)
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp)
-    requires Inv(k, s)
-    requires Next(k, s, s', vop)
-    ensures Inv(k, s')
+  lemma NextPreservesInv(s: Variables, s': Variables, vop: VOp)
+    requires Inv(s)
+    requires Next(s, s', vop)
+    ensures Inv(s')
 }

@@ -22,104 +22,103 @@ module BetreeCache refines BlockMachine {
   import PivotBetreeSpecWFNodes
 
   type Variables = BC.Variables
-  type Constants = BC.Constants
 
   type Op = BC.Op
 
-  predicate Init(k: Constants, s: Variables) {
-    BC.Init(k, s)
+  predicate Init(s: Variables) {
+    BC.Init(s)
   }
 
   datatype Step =
     | BetreeMoveStep(betreeStep: BetreeStep)
     | BlockCacheMoveStep(blockCacheStep: BC.Step)
 
-  predicate BetreeMove(k: Constants, s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, betreeStep: BetreeStep)
+  predicate BetreeMove(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, betreeStep: BetreeStep)
   {
     && vop.AdvanceOp?
     && dop.NoDiskOp?
     && s.Ready?
     && ValidBetreeStep(betreeStep)
-    && BC.Reads(k, s, BetreeStepReads(betreeStep))
-    && BC.Transaction(k, s, s', dop, vop, BetreeStepOps(betreeStep))
+    && BC.Reads(s, BetreeStepReads(betreeStep))
+    && BC.Transaction(s, s', dop, vop, BetreeStepOps(betreeStep))
     && BetreeStepUI(betreeStep, vop.uiop)
   }
 
-  predicate BlockCacheMove(k: Constants, s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, step: BC.Step) {
+  predicate BlockCacheMove(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, step: BC.Step) {
     && !step.TransactionStep?
 
-    && BC.NextStep(k, s, s', dop, vop, step)
+    && BC.NextStep(s, s', dop, vop, step)
     && (dop.RespReadNodeOp? && dop.node.Some? ==>
       WFNode(dop.node.value)
     )
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, step: Step) {
+  predicate NextStep(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, step: Step) {
     match step {
-      case BetreeMoveStep(step) => BetreeMove(k, s, s', dop, vop, step)
-      case BlockCacheMoveStep(step) => BlockCacheMove(k, s, s', dop, vop, step)
+      case BetreeMoveStep(step) => BetreeMove(s, s', dop, vop, step)
+      case BlockCacheMoveStep(step) => BlockCacheMove(s, s', dop, vop, step)
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, dop: D.DiskOp, vop: VOp) {
-    exists step: Step :: NextStep(k, s, s', dop, vop, step)
+  predicate Next(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp) {
+    exists step: Step :: NextStep(s, s', dop, vop, step)
   }
 
-  predicate Inv(k: Constants, s: Variables)
+  predicate Inv(s: Variables)
   {
-    && BC.Inv(k, s)
+    && BC.Inv(s)
     && (s.Ready? ==> (forall ref | ref in s.cache :: PivotBetreeSpec.WFNode(s.cache[ref])))
   }
 
-  lemma InitImpliesInv(k: Constants, s: Variables)
-  requires Init(k, s)
-  ensures Inv(k, s)
+  lemma InitImpliesInv(s: Variables)
+  requires Init(s)
+  ensures Inv(s)
   {
-    BC.InitImpliesInv(k, s);
+    BC.InitImpliesInv(s);
   }
 
-  lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, betreeStep: BetreeStep)
-  requires Inv(k, s)
-  requires BetreeMove(k, s, s', dop, vop, betreeStep)
-  ensures Inv(k, s')
+  lemma BetreeMoveStepPreservesInv(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, betreeStep: BetreeStep)
+  requires Inv(s)
+  requires BetreeMove(s, s', dop, vop, betreeStep)
+  ensures Inv(s')
   {
     var ops := BetreeStepOps(betreeStep);
-    BC.TransactionStepPreservesInv(k, s, s', D.NoDiskOp, vop, ops);
+    BC.TransactionStepPreservesInv(s, s', D.NoDiskOp, vop, ops);
 
     forall i | 0 <= i < |BetreeStepReads(betreeStep)|
     ensures WFNode(BetreeStepReads(betreeStep)[i].node)
     {
-      assert BC.ReadStep(k, s, BetreeStepReads(betreeStep)[i]);
+      assert BC.ReadStep(s, BetreeStepReads(betreeStep)[i]);
     }
 
     PivotBetreeSpecWFNodes.ValidStepWritesWFNodes(betreeStep);
   }
 
-  lemma BlockCacheMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, step: BC.Step)
-  requires Inv(k, s)
-  requires BlockCacheMove(k, s, s', dop, vop, step)
-  ensures Inv(k, s')
+  lemma BlockCacheMoveStepPreservesInv(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, step: BC.Step)
+  requires Inv(s)
+  requires BlockCacheMove(s, s', dop, vop, step)
+  ensures Inv(s')
   {
-    BC.NextStepPreservesInv(k, s, s', dop, vop, step);
+    BC.NextStepPreservesInv(s, s', dop, vop, step);
   }
 
-  lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, step: Step)
-  requires Inv(k, s)
-  requires NextStep(k, s, s', dop, vop, step)
-  ensures Inv(k, s')
+  lemma NextStepPreservesInv(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, step: Step)
+  requires Inv(s)
+  requires NextStep(s, s', dop, vop, step)
+  ensures Inv(s')
   {
     match step {
-      case BetreeMoveStep(step) => BetreeMoveStepPreservesInv(k, s, s', dop, vop, step);
-      case BlockCacheMoveStep(step) => BlockCacheMoveStepPreservesInv(k, s, s', dop, vop, step);
+      case BetreeMoveStep(step) => BetreeMoveStepPreservesInv(s, s', dop, vop, step);
+      case BlockCacheMoveStep(step) => BlockCacheMoveStepPreservesInv(s, s', dop, vop, step);
     }
   }
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, dop: D.DiskOp, vop: VOp)
-  requires Inv(k, s)
-  requires Next(k, s, s', dop, vop)
-  ensures Inv(k, s')
+  lemma NextPreservesInv(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp)
+  requires Inv(s)
+  requires Next(s, s', dop, vop)
+  ensures Inv(s')
   {
-    var step: Step :| NextStep(k, s, s', dop, vop, step);
-    NextStepPreservesInv(k, s, s', dop, vop, step);
+    var step: Step :| NextStep(s, s', dop, vop, step);
+    NextStepPreservesInv(s, s', dop, vop, step);
   }
 }

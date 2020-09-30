@@ -20,7 +20,6 @@ module JournalCache {
   import Disk = JournalDisk
 
   type ReqId = Disk.ReqId
-  datatype Constants = Constants()
 
   type DiskOp = Disk.DiskOp
 
@@ -178,7 +177,7 @@ module JournalCache {
     | PopSyncReqStep(id: uint64)
     | NoOpStep
 
-  predicate WriteBackJournalReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, jr: JournalRange)
+  predicate WriteBackJournalReq(s: Variables, s': Variables, dop: DiskOp, vop: VOp, jr: JournalRange)
   {
     && vop.JournalInternalOp?
 
@@ -235,7 +234,7 @@ module JournalCache {
         .(syncReqs := syncReqs')
   }
 
-  predicate WriteBackJournalResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate WriteBackJournalResp(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && vop.JournalInternalOp?
 
@@ -246,7 +245,7 @@ module JournalCache {
        .(outstandingJournalWrites := s.outstandingJournalWrites - {dop.id})
   }
 
-  predicate WriteBackSuperblockReq_AdvanceLog(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate WriteBackSuperblockReq_AdvanceLog(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && vop.JournalInternalOp?
 
@@ -270,7 +269,7 @@ module JournalCache {
         .(commitStatus := CommitAdvanceLog)
   }
 
-  predicate WriteBackSuperblockReq_AdvanceLocation(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate WriteBackSuperblockReq_AdvanceLocation(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && vop.JournalInternalOp?
 
@@ -300,7 +299,7 @@ module JournalCache {
         .(commitStatus := CommitAdvanceLocation)
   }
 
-  predicate WriteBackSuperblockResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate WriteBackSuperblockResp(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && s.Ready?
     && dop.RespWriteSuperblockOp?
@@ -333,7 +332,7 @@ module JournalCache {
     )
   }
 
-  predicate PageInJournalReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
+  predicate PageInJournalReq(s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
   {
     && vop.JournalInternalOp?
 
@@ -364,7 +363,7 @@ module JournalCache {
     )
   }
 
-  predicate PageInJournalResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
+  predicate PageInJournalResp(s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
   {
     && vop.JournalInternalOp?
 
@@ -386,7 +385,7 @@ module JournalCache {
     )
   }
 
-  predicate PageInSuperblockReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
+  predicate PageInSuperblockReq(s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
   {
     && vop.JournalInternalOp?
 
@@ -406,7 +405,7 @@ module JournalCache {
     )
   }
 
-  predicate PageInSuperblockResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
+  predicate PageInSuperblockResp(s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
   {
     && vop.JournalInternalOp?
 
@@ -435,7 +434,7 @@ module JournalCache {
     )
   }
 
-  predicate FinishLoadingSuperblockPhase(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate FinishLoadingSuperblockPhase(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && vop.SendPersistentLocOp?
 
@@ -474,7 +473,7 @@ module JournalCache {
     )*/
   }
 
-  predicate FinishLoadingOtherPhase(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate FinishLoadingOtherPhase(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && vop.JournalInternalOp?
 
@@ -510,7 +509,7 @@ module JournalCache {
     && s'.commitStatus == CommitNone
   }
 
-  predicate Freeze(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate Freeze(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && vop.FreezeOp?
 
@@ -528,7 +527,7 @@ module JournalCache {
          .(isFrozen := true)
   }
 
-  predicate ReceiveFrozenLoc(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate ReceiveFrozenLoc(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && vop.SendFrozenLocOp?
     && dop.NoDiskOp?
@@ -539,7 +538,7 @@ module JournalCache {
     && s' == s.(frozenLoc := Some(vop.loc))
   }
 
-  predicate Advance(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate Advance(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && vop.AdvanceOp?
     && !vop.replay
@@ -550,7 +549,7 @@ module JournalCache {
     && s' == s.(inMemoryJournal := s.inMemoryJournal + new_je)
   }
 
-  predicate Replay(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate Replay(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && vop.AdvanceOp?
     && vop.replay
@@ -562,7 +561,7 @@ module JournalCache {
     && s.replayJournal == replayed_je + s'.replayJournal
   }
 
-  predicate PushSyncReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
+  predicate PushSyncReq(s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
   {
     && vop.PushSyncOp?
     && vop.id == id as int
@@ -572,7 +571,7 @@ module JournalCache {
     && s' == s.(syncReqs := s.syncReqs[id := State3])
   }
 
-  predicate PopSyncReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
+  predicate PopSyncReq(s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
   {
     && vop.PopSyncOp?
     && vop.id == id as int
@@ -583,7 +582,7 @@ module JournalCache {
     && s' == s.(syncReqs := MapRemove1(s.syncReqs, id))
   }
 
-  predicate NoOp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate NoOp(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && (vop.JournalInternalOp? || vop.StatesInternalOp?)
 
@@ -631,39 +630,39 @@ module JournalCache {
     }
   }
 
-  predicate Init(k: Constants, s: Variables)
+  predicate Init(s: Variables)
   {
     s == LoadingSuperblock(None, None, SuperblockUnfinished, SuperblockUnfinished, map[])
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: Step) {
+  predicate NextStep(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: Step) {
     match step {
-      case WriteBackJournalReqStep(jr: JournalRange) => WriteBackJournalReq(k, s, s', dop, vop, jr)
-      case WriteBackJournalRespStep => WriteBackJournalResp(k, s, s', dop, vop)
-      case WriteBackSuperblockReq_AdvanceLog_Step => WriteBackSuperblockReq_AdvanceLog(k, s, s', dop, vop)
-      case WriteBackSuperblockReq_AdvanceLocation_Step => WriteBackSuperblockReq_AdvanceLocation(k, s, s', dop, vop)
-      case WriteBackSuperblockRespStep => WriteBackSuperblockResp(k, s, s', dop, vop)
-      case PageInJournalReqStep(which: int) => PageInJournalReq(k, s, s', dop, vop, which)
-      case PageInJournalRespStep(which: int) => PageInJournalResp(k, s, s', dop, vop, which)
-      case PageInSuperblockReqStep(which: int) => PageInSuperblockReq(k, s, s', dop, vop, which)
-      case PageInSuperblockRespStep(which: int) => PageInSuperblockResp(k, s, s', dop, vop, which)
-      case FinishLoadingSuperblockPhaseStep => FinishLoadingSuperblockPhase(k, s, s', dop, vop)
-      case FinishLoadingOtherPhaseStep => FinishLoadingOtherPhase(k, s, s', dop, vop)
-      case FreezeStep => Freeze(k, s, s', dop, vop)
-      case ReceiveFrozenLocStep => ReceiveFrozenLoc(k, s, s', dop, vop)
-      case AdvanceStep => Advance(k, s, s', dop, vop)
-      case ReplayStep => Replay(k, s, s', dop, vop)
-      case PushSyncReqStep(id: uint64) => PushSyncReq(k, s, s', dop, vop, id)
-      case PopSyncReqStep(id: uint64) => PopSyncReq(k, s, s', dop, vop, id)
-      case NoOpStep => NoOp(k, s, s', dop, vop)
+      case WriteBackJournalReqStep(jr: JournalRange) => WriteBackJournalReq(s, s', dop, vop, jr)
+      case WriteBackJournalRespStep => WriteBackJournalResp(s, s', dop, vop)
+      case WriteBackSuperblockReq_AdvanceLog_Step => WriteBackSuperblockReq_AdvanceLog(s, s', dop, vop)
+      case WriteBackSuperblockReq_AdvanceLocation_Step => WriteBackSuperblockReq_AdvanceLocation(s, s', dop, vop)
+      case WriteBackSuperblockRespStep => WriteBackSuperblockResp(s, s', dop, vop)
+      case PageInJournalReqStep(which: int) => PageInJournalReq(s, s', dop, vop, which)
+      case PageInJournalRespStep(which: int) => PageInJournalResp(s, s', dop, vop, which)
+      case PageInSuperblockReqStep(which: int) => PageInSuperblockReq(s, s', dop, vop, which)
+      case PageInSuperblockRespStep(which: int) => PageInSuperblockResp(s, s', dop, vop, which)
+      case FinishLoadingSuperblockPhaseStep => FinishLoadingSuperblockPhase(s, s', dop, vop)
+      case FinishLoadingOtherPhaseStep => FinishLoadingOtherPhase(s, s', dop, vop)
+      case FreezeStep => Freeze(s, s', dop, vop)
+      case ReceiveFrozenLocStep => ReceiveFrozenLoc(s, s', dop, vop)
+      case AdvanceStep => Advance(s, s', dop, vop)
+      case ReplayStep => Replay(s, s', dop, vop)
+      case PushSyncReqStep(id: uint64) => PushSyncReq(s, s', dop, vop, id)
+      case PopSyncReqStep(id: uint64) => PopSyncReq(s, s', dop, vop, id)
+      case NoOpStep => NoOp(s, s', dop, vop)
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp) {
-    exists step: Step :: NextStep(k, s, s', dop, vop, step)
+  predicate Next(s: Variables, s': Variables, dop: DiskOp, vop: VOp) {
+    exists step: Step :: NextStep(s, s', dop, vop, step)
   }
 
-  predicate InvLoadingSuperblock(k: Constants, s: Variables)
+  predicate InvLoadingSuperblock(s: Variables)
   requires s.LoadingSuperblock?
   {
     && (s.superblock1.SuperblockSuccess? ==>
@@ -682,7 +681,7 @@ module JournalCache {
         )
   }
 
-  predicate InvLoadingOther(k: Constants, s: Variables)
+  predicate InvLoadingOther(s: Variables)
   requires s.LoadingOther?
   {
     && WFSuperblock(s.superblock)
@@ -697,7 +696,7 @@ module JournalCache {
       JournalBackIntervalOfSuperblock(s.superblock).Some?)
   }
 
-  predicate InvReady(k: Constants, s: Variables)
+  predicate InvReady(s: Variables)
   requires s.Ready?
   {
     && (s.superblockWrite.Some? <==> s.newSuperblock.Some?)
@@ -760,63 +759,63 @@ module JournalCache {
     )
   }
 
-  predicate Inv(k: Constants, s: Variables)
+  predicate Inv(s: Variables)
   {
-    && (s.LoadingSuperblock? ==> InvLoadingSuperblock(k, s))
-    && (s.LoadingOther? ==> InvLoadingOther(k, s))
-    && (s.Ready? ==> InvReady(k, s))
+    && (s.LoadingSuperblock? ==> InvLoadingSuperblock(s))
+    && (s.LoadingOther? ==> InvLoadingOther(s))
+    && (s.Ready? ==> InvReady(s))
   }
 
-  lemma InitImpliesInv(k: Constants, s: Variables)
-    requires Init(k, s)
-    ensures Inv(k, s)
+  lemma InitImpliesInv(s: Variables)
+    requires Init(s)
+    ensures Inv(s)
   {
   }
 
-  lemma WriteBackJournalReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, jr: JournalRange)
-    requires Inv(k, s)
-    requires WriteBackJournalReq(k, s, s', dop, vop, jr)
-    ensures Inv(k, s')
+  lemma WriteBackJournalReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, jr: JournalRange)
+    requires Inv(s)
+    requires WriteBackJournalReq(s, s', dop, vop, jr)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma WriteBackJournalRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires WriteBackJournalResp(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma WriteBackJournalRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires WriteBackJournalResp(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma WriteBackSuperblockReq_AdvanceLog_StepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires WriteBackSuperblockReq_AdvanceLog(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma WriteBackSuperblockReq_AdvanceLog_StepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires WriteBackSuperblockReq_AdvanceLog(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma WriteBackSuperblockReq_AdvanceLocation_StepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires WriteBackSuperblockReq_AdvanceLocation(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma WriteBackSuperblockReq_AdvanceLocation_StepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires WriteBackSuperblockReq_AdvanceLocation(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma WriteBackSuperblockRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires WriteBackSuperblockResp(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma WriteBackSuperblockRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires WriteBackSuperblockResp(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
       /*if s'.frozenIndirectionTable.Some? {
@@ -828,170 +827,170 @@ module JournalCache {
       }*/
 
       if s.commitStatus.CommitAdvanceLog? {
-        assert InvReady(k, s');
+        assert InvReady(s');
       } else if s.commitStatus.CommitAdvanceLocation? {
         //assert s.isFrozen;
         //assert s.frozenJournalPosition <= s.writtenJournalLen;
         //assert s'.writtenJournalLen == s.writtenJournalLen - s.frozenJournalPosition;
         //assert 0 <= s'.writtenJournalLen;
-        assert InvReady(k, s');
+        assert InvReady(s');
       }
     }
   }
 
-  lemma PageInJournalReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
-    requires Inv(k, s)
-    requires PageInJournalReq(k, s, s', dop, vop, which)
-    ensures Inv(k, s')
+  lemma PageInJournalReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
+    requires Inv(s)
+    requires PageInJournalReq(s, s', dop, vop, which)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma PageInJournalRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
-    requires Inv(k, s)
-    requires PageInJournalResp(k, s, s', dop, vop, which)
-    ensures Inv(k, s')
+  lemma PageInJournalRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
+    requires Inv(s)
+    requires PageInJournalResp(s, s', dop, vop, which)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma PageInSuperblockReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
-    requires Inv(k, s)
-    requires PageInSuperblockReq(k, s, s', dop, vop, which)
-    ensures Inv(k, s')
+  lemma PageInSuperblockReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
+    requires Inv(s)
+    requires PageInSuperblockReq(s, s', dop, vop, which)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma PageInSuperblockRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
-    requires Inv(k, s)
-    requires PageInSuperblockResp(k, s, s', dop, vop, which)
-    ensures Inv(k, s')
+  lemma PageInSuperblockRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
+    requires Inv(s)
+    requires PageInSuperblockResp(s, s', dop, vop, which)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma FinishLoadingSuperblockPhaseStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires FinishLoadingSuperblockPhase(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma FinishLoadingSuperblockPhaseStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires FinishLoadingSuperblockPhase(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma FinishLoadingOtherPhaseStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires FinishLoadingOtherPhase(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma FinishLoadingOtherPhaseStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires FinishLoadingOtherPhase(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma FreezeStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires Freeze(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma FreezeStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires Freeze(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma ReceiveFrozenLocStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires ReceiveFrozenLoc(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma ReceiveFrozenLocStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires ReceiveFrozenLoc(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma AdvanceStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires Advance(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma AdvanceStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires Advance(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma ReplayStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires Replay(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma ReplayStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires Replay(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma PushSyncReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
-    requires Inv(k, s)
-    requires PushSyncReq(k, s, s', dop, vop, id)
-    ensures Inv(k, s')
+  lemma PushSyncReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
+    requires Inv(s)
+    requires PushSyncReq(s, s', dop, vop, id)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma PopSyncReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
-    requires Inv(k, s)
-    requires PopSyncReq(k, s, s', dop, vop, id)
-    ensures Inv(k, s')
+  lemma PopSyncReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
+    requires Inv(s)
+    requires PopSyncReq(s, s', dop, vop, id)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: Step)
-    requires Inv(k, s)
-    requires NextStep(k, s, s', dop, vop, step)
-    ensures Inv(k, s')
+  lemma NextStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: Step)
+    requires Inv(s)
+    requires NextStep(s, s', dop, vop, step)
+    ensures Inv(s')
   {
     match step {
-      case WriteBackJournalReqStep(jr: JournalRange) => WriteBackJournalReqStepPreservesInv(k, s, s', dop, vop, jr);
-      case WriteBackJournalRespStep => WriteBackJournalRespStepPreservesInv(k, s, s', dop, vop);
-      case WriteBackSuperblockReq_AdvanceLog_Step => WriteBackSuperblockReq_AdvanceLog_StepPreservesInv(k, s, s', dop, vop);
-      case WriteBackSuperblockReq_AdvanceLocation_Step => WriteBackSuperblockReq_AdvanceLocation_StepPreservesInv(k, s, s', dop, vop);
-      case WriteBackSuperblockRespStep => WriteBackSuperblockRespStepPreservesInv(k, s, s', dop, vop);
-      case PageInJournalReqStep(which) => PageInJournalReqStepPreservesInv(k, s, s', dop, vop, which);
-      case PageInJournalRespStep(which) => PageInJournalRespStepPreservesInv(k, s, s', dop, vop, which);
-      case PageInSuperblockReqStep(which) => PageInSuperblockReqStepPreservesInv(k, s, s', dop, vop, which);
-      case PageInSuperblockRespStep(which) => PageInSuperblockRespStepPreservesInv(k, s, s', dop, vop, which);
-      case FinishLoadingSuperblockPhaseStep => FinishLoadingSuperblockPhaseStepPreservesInv(k, s, s', dop, vop);
-      case FinishLoadingOtherPhaseStep => FinishLoadingOtherPhaseStepPreservesInv(k, s, s', dop, vop);
-      case FreezeStep => FreezeStepPreservesInv(k, s, s', dop, vop);
-      case ReceiveFrozenLocStep => ReceiveFrozenLocStepPreservesInv(k, s, s', dop, vop);
-      case AdvanceStep => AdvanceStepPreservesInv(k, s, s', dop, vop);
-      case ReplayStep => ReplayStepPreservesInv(k, s, s', dop, vop);
-      case PushSyncReqStep(id) => PushSyncReqStepPreservesInv(k, s, s', dop, vop, id);
-      case PopSyncReqStep(id) => PopSyncReqStepPreservesInv(k, s, s', dop, vop, id);
+      case WriteBackJournalReqStep(jr: JournalRange) => WriteBackJournalReqStepPreservesInv(s, s', dop, vop, jr);
+      case WriteBackJournalRespStep => WriteBackJournalRespStepPreservesInv(s, s', dop, vop);
+      case WriteBackSuperblockReq_AdvanceLog_Step => WriteBackSuperblockReq_AdvanceLog_StepPreservesInv(s, s', dop, vop);
+      case WriteBackSuperblockReq_AdvanceLocation_Step => WriteBackSuperblockReq_AdvanceLocation_StepPreservesInv(s, s', dop, vop);
+      case WriteBackSuperblockRespStep => WriteBackSuperblockRespStepPreservesInv(s, s', dop, vop);
+      case PageInJournalReqStep(which) => PageInJournalReqStepPreservesInv(s, s', dop, vop, which);
+      case PageInJournalRespStep(which) => PageInJournalRespStepPreservesInv(s, s', dop, vop, which);
+      case PageInSuperblockReqStep(which) => PageInSuperblockReqStepPreservesInv(s, s', dop, vop, which);
+      case PageInSuperblockRespStep(which) => PageInSuperblockRespStepPreservesInv(s, s', dop, vop, which);
+      case FinishLoadingSuperblockPhaseStep => FinishLoadingSuperblockPhaseStepPreservesInv(s, s', dop, vop);
+      case FinishLoadingOtherPhaseStep => FinishLoadingOtherPhaseStepPreservesInv(s, s', dop, vop);
+      case FreezeStep => FreezeStepPreservesInv(s, s', dop, vop);
+      case ReceiveFrozenLocStep => ReceiveFrozenLocStepPreservesInv(s, s', dop, vop);
+      case AdvanceStep => AdvanceStepPreservesInv(s, s', dop, vop);
+      case ReplayStep => ReplayStepPreservesInv(s, s', dop, vop);
+      case PushSyncReqStep(id) => PushSyncReqStepPreservesInv(s, s', dop, vop, id);
+      case PopSyncReqStep(id) => PopSyncReqStepPreservesInv(s, s', dop, vop, id);
       case NoOpStep => { }
     }
   }
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires Next(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma NextPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires Next(s, s', dop, vop)
+    ensures Inv(s')
   {
-    var step :| NextStep(k, s, s', dop, vop, step);
-    NextStepPreservesInv(k, s, s', dop, vop, step);
+    var step :| NextStep(s, s', dop, vop, step);
+    NextStepPreservesInv(s, s', dop, vop, step);
   }
 }

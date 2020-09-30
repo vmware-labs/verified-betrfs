@@ -9,7 +9,6 @@ include "../lib/Base/Crypto.s.dfy"
 //
 
 module AsyncDiskModelTypes {
-  datatype AsyncDiskModelConstants<M,D> = AsyncDiskModelConstants(machine: M, disk: D)
   datatype AsyncDiskModelVariables<M,D> = AsyncDiskModelVariables(machine: M, disk: D)
 }
 
@@ -34,7 +33,6 @@ module AsyncDisk {
     | RespWriteOp(id: ReqId, respWrite: RespWrite)
     | NoDiskOp
 
-  datatype Constants = Constants()
   datatype Variables = Variables(
     // Queue of requests and responses:
     reqReads: map<ReqId, ReqRead>,
@@ -46,7 +44,7 @@ module AsyncDisk {
     contents: seq<byte>
   )
 
-  predicate Init(k: Constants, s: Variables)
+  predicate Init(s: Variables)
   {
     && s.reqReads == map[]
     && s.reqWrites == map[]
@@ -62,7 +60,7 @@ module AsyncDisk {
     | AckWriteStep
     | StutterStep
 
-  predicate RecvRead(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate RecvRead(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.ReqReadOp?
     && dop.id !in s.reqReads
@@ -70,7 +68,7 @@ module AsyncDisk {
     && s' == s.(reqReads := s.reqReads[dop.id := dop.reqRead])
   }
 
-  predicate RecvWrite(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate RecvWrite(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.ReqWriteOp?
     && dop.id !in s.reqWrites
@@ -78,7 +76,7 @@ module AsyncDisk {
     && s' == s.(reqWrites := s.reqWrites[dop.id := dop.reqWrite])
   }
 
-  predicate RecvWrite2(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate RecvWrite2(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.ReqWrite2Op?
     && dop.id1 !in s.reqWrites
@@ -92,7 +90,7 @@ module AsyncDisk {
        )
   }
 
-  predicate AckRead(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate AckRead(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.RespReadOp?
     && dop.id in s.respReads
@@ -100,7 +98,7 @@ module AsyncDisk {
     && s' == s.(respReads := MapRemove1(s.respReads, dop.id))
   }
 
-  predicate AckWrite(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate AckWrite(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.RespWriteOp?
     && dop.id in s.respWrites
@@ -108,25 +106,25 @@ module AsyncDisk {
     && s' == s.(respWrites := MapRemove1(s.respWrites, dop.id))
   }
 
-  predicate Stutter(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate Stutter(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.NoDiskOp?
     && s' == s
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, dop: DiskOp, step: Step) {
+  predicate NextStep(s: Variables, s': Variables, dop: DiskOp, step: Step) {
     match step {
-      case RecvReadStep => RecvRead(k, s, s', dop)
-      case RecvWriteStep => RecvWrite(k, s, s', dop)
-      case RecvWrite2Step => RecvWrite2(k, s, s', dop)
-      case AckReadStep => AckRead(k, s, s', dop)
-      case AckWriteStep => AckWrite(k, s, s', dop)
-      case StutterStep => Stutter(k, s, s', dop)
+      case RecvReadStep => RecvRead(s, s', dop)
+      case RecvWriteStep => RecvWrite(s, s', dop)
+      case RecvWrite2Step => RecvWrite2(s, s', dop)
+      case AckReadStep => AckRead(s, s', dop)
+      case AckWriteStep => AckWrite(s, s', dop)
+      case StutterStep => Stutter(s, s', dop)
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, dop: DiskOp) {
-    exists step :: NextStep(k, s, s', dop, step)
+  predicate Next(s: Variables, s': Variables, dop: DiskOp) {
+    exists step :: NextStep(s, s', dop, step)
   }
 
   datatype InternalStep =
@@ -136,7 +134,7 @@ module AsyncDisk {
     | HavocConflictingWritesStep(id: ReqId, id': ReqId)
     | HavocConflictingWriteReadStep(id: ReqId, id': ReqId)
 
-  /*predicate ProcessRead(k: Constants, s: Variables, s': Variables, id: ReqId)
+  /*predicate ProcessRead(s: Variables, s': Variables, id: ReqId)
   {
     && id in s.reqReads
     && var req := s.reqReads[id];
@@ -174,7 +172,7 @@ module AsyncDisk {
       ChecksumsCheckOutForSlice(realContents, fakeContents, i, j)
   }
 
-  predicate ProcessReadFailure(k: Constants, s: Variables, s': Variables, id: ReqId, fakeContents: seq<byte>)
+  predicate ProcessReadFailure(s: Variables, s': Variables, id: ReqId, fakeContents: seq<byte>)
   {
     && id in s.reqReads
     && var req := s.reqReads[id];
@@ -196,7 +194,7 @@ module AsyncDisk {
     bytes[.. start] + ins + bytes[start + |ins| ..]
   }
 
-  predicate ProcessWrite(k: Constants, s: Variables, s': Variables, id: ReqId)
+  predicate ProcessWrite(s: Variables, s': Variables, id: ReqId)
   {
     && id in s.reqWrites
     && var req := s.reqWrites[id];
@@ -217,7 +215,7 @@ module AsyncDisk {
     && start' + len' > start
   }
 
-  predicate HavocConflictingWrites(k: Constants, s: Variables, s': Variables, id: ReqId, id': ReqId)
+  predicate HavocConflictingWrites(s: Variables, s': Variables, id: ReqId, id': ReqId)
   {
     && id != id'
     && id in s.reqWrites
@@ -227,7 +225,7 @@ module AsyncDisk {
         s.reqWrites[id'].addr as int, |s.reqWrites[id'].bytes|)
   }
 
-  predicate HavocConflictingWriteRead(k: Constants, s: Variables, s': Variables, id: ReqId, id': ReqId)
+  predicate HavocConflictingWriteRead(s: Variables, s': Variables, id: ReqId, id': ReqId)
   {
     && id in s.reqWrites
     && id' in s.reqReads
@@ -236,23 +234,23 @@ module AsyncDisk {
         s.reqReads[id'].addr as int, s.reqReads[id'].len as int)
   }
 
-  predicate NextInternalStep(k: Constants, s: Variables, s': Variables, step: InternalStep)
+  predicate NextInternalStep(s: Variables, s': Variables, step: InternalStep)
   {
     match step {
-      //case ProcessReadStep(id) => ProcessRead(k, s, s', id)
-      case ProcessReadFailureStep(id, fakeContents) => ProcessReadFailure(k, s, s', id, fakeContents)
-      case ProcessWriteStep(id) => ProcessWrite(k, s, s', id)
-      case HavocConflictingWritesStep(id, id') => HavocConflictingWrites(k, s, s', id, id')
-      case HavocConflictingWriteReadStep(id, id') => HavocConflictingWriteRead(k, s, s', id, id')
+      //case ProcessReadStep(id) => ProcessRead(s, s', id)
+      case ProcessReadFailureStep(id, fakeContents) => ProcessReadFailure(s, s', id, fakeContents)
+      case ProcessWriteStep(id) => ProcessWrite(s, s', id)
+      case HavocConflictingWritesStep(id, id') => HavocConflictingWrites(s, s', id, id')
+      case HavocConflictingWriteReadStep(id, id') => HavocConflictingWriteRead(s, s', id, id')
     }
   }
 
-  predicate NextInternal(k: Constants, s: Variables, s': Variables)
+  predicate NextInternal(s: Variables, s': Variables)
   {
-    exists step :: NextInternalStep(k, s, s', step)
+    exists step :: NextInternalStep(s, s', step)
   }
 
-  predicate Crash(k: Constants, s: Variables, s': Variables)
+  predicate Crash(s: Variables, s': Variables)
   {
     s' == Variables(map[], map[], map[], map[], s.contents)
   }
@@ -264,7 +262,6 @@ abstract module AsyncDiskMachine {
   import UI
 
   type Variables
-  type Constants
   type UIOp = UI.Op
 
   type DiskOp = D.DiskOp
@@ -273,8 +270,8 @@ abstract module AsyncDiskMachine {
   type RespRead = D.RespRead
   type RespWrite = D.RespWrite
 
-  predicate Init(k: Constants, s: Variables)
-  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+  predicate Init(s: Variables)
+  predicate Next(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
 }
 
 // TODO(jonh): Rename to a "System", because its job is to explain how a trusted disk interacts
@@ -286,7 +283,6 @@ abstract module AsyncDiskModel {
   import opened NativeTypes
 
   type DiskOp = M.DiskOp
-  type Constants = AsyncDiskModelTypes.AsyncDiskModelConstants<M.Constants, D.Constants>
   type Variables = AsyncDiskModelTypes.AsyncDiskModelVariables<M.Variables, D.Variables>
   type UIOp = M.UIOp
 
@@ -295,50 +291,50 @@ abstract module AsyncDiskModel {
     | DiskInternalStep(step: D.InternalStep)
     | CrashStep
   
-  predicate Machine(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+  predicate Machine(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
   {
-    && M.Next(k.machine, s.machine, s'.machine, uiop, dop)
-    && D.Next(k.disk, s.disk, s'.disk, dop)
+    && M.Next(s.machine, s'.machine, uiop, dop)
+    && D.Next(s.disk, s'.disk, dop)
   }
 
-  predicate DiskInternal(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: D.InternalStep)
+  predicate DiskInternal(s: Variables, s': Variables, uiop: UIOp, step: D.InternalStep)
   {
     && uiop.NoOp?
     && s.machine == s'.machine
-    && D.NextInternalStep(k.disk, s.disk, s'.disk, step)
+    && D.NextInternalStep(s.disk, s'.disk, step)
   }
 
-  predicate Crash(k: Constants, s: Variables, s': Variables, uiop: UIOp)
+  predicate Crash(s: Variables, s': Variables, uiop: UIOp)
   {
     && uiop.CrashOp?
-    && M.Init(k.machine, s'.machine)
-    && D.Crash(k.disk, s.disk, s'.disk)
+    && M.Init(s'.machine)
+    && D.Crash(s.disk, s'.disk)
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: Step)
+  predicate NextStep(s: Variables, s': Variables, uiop: UIOp, step: Step)
   {
     match step {
-      case MachineStep(dop) => Machine(k, s, s', uiop, dop)
-      case DiskInternalStep(step) => DiskInternal(k, s, s', uiop, step)
-      case CrashStep => Crash(k, s, s', uiop)
+      case MachineStep(dop) => Machine(s, s', uiop, dop)
+      case DiskInternalStep(step) => DiskInternal(s, s', uiop, step)
+      case CrashStep => Crash(s, s', uiop)
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp) {
-    exists step :: NextStep(k, s, s', uiop, step)
+  predicate Next(s: Variables, s': Variables, uiop: UIOp) {
+    exists step :: NextStep(s, s', uiop, step)
   }
 
-  predicate Init(k: Constants, s: Variables)
-  predicate Inv(k: Constants, s: Variables)
+  predicate Init(s: Variables)
+  predicate Inv(s: Variables)
 
-  lemma InitImpliesInv(k: Constants, s: Variables)
-    requires Init(k, s)
-    ensures Inv(k, s)
+  lemma InitImpliesInv(s: Variables)
+    requires Init(s)
+    ensures Inv(s)
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
-    requires Inv(k, s)
-    requires Next(k, s, s', uiop)
-    ensures Inv(k, s')
+  lemma NextPreservesInv(s: Variables, s': Variables, uiop: UIOp)
+    requires Inv(s)
+    requires Next(s, s', uiop)
+    ensures Inv(s')
 
   predicate BlocksWrittenInByteSeq(
       contents: map<uint64, seq<byte>>,

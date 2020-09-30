@@ -7,13 +7,8 @@ module JournalSystem_Refines_JournalView {
   import opened DiskLayout
   import opened ViewOp
 
-  function Ik(k: System.Constants) : View.Constants
-  {
-    View.Constants
-  }
-
-  function I(k: System.Constants, s: System.Variables) : View.Variables
-  requires System.Inv(k, s)
+  function I(s: System.Variables) : View.Variables
+  requires System.Inv(s)
   {
     View.Variables(
         System.PersistentJournal(s),
@@ -26,142 +21,142 @@ module JournalSystem_Refines_JournalView {
         System.SyncReqs(s))
   }
 
-  lemma RefinesInit(k: System.Constants, s: System.Variables, loc: Location)
-    requires System.Init(k, s, loc)
-    ensures System.Inv(k, s)
-    ensures View.Init(Ik(k), I(k, s), loc)
+  lemma RefinesInit(s: System.Variables, loc: Location)
+    requires System.Init(s, loc)
+    ensures System.Inv(s)
+    ensures View.Init(I(s), loc)
   {
-    System.InitJournals(k, s, loc);
-    System.InitImpliesInv(k, s, loc);
+    System.InitJournals(s, loc);
+    System.InitImpliesInv(s, loc);
   }
 
-  lemma RefinesNextStep(k: System.Constants, s: System.Variables, s': System.Variables, vop: VOp, step: System.Step)
-    requires System.Inv(k, s)
-    requires System.NextStep(k, s, s', vop, step)
-    requires System.Inv(k, s')
-    ensures View.Next(Ik(k), I(k, s), I(k, s'), vop);
+  lemma RefinesNextStep(s: System.Variables, s': System.Variables, vop: VOp, step: System.Step)
+    requires System.Inv(s)
+    requires System.NextStep(s, s', vop, step)
+    requires System.Inv(s')
+    ensures View.Next(I(s), I(s'), vop);
   {
-    assert System.M.Inv(k.machine, s.machine);
+    assert System.M.Inv(s.machine);
     match step {
       case MachineStep(dop, machineStep) => {
         match machineStep {
           case WriteBackJournalReqStep(jr) => {
-            System.WriteBackJournalReqStepPreservesJournals(k, s, s', dop, vop, jr);
+            System.WriteBackJournalReqStepPreservesJournals(s, s', dop, vop, jr);
             if !(s.machine.Ready? && s.machine.inMemoryJournalFrozen == []) {
-              assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.StutterStep);
+              assert View.NextStep(I(s), I(s'), vop, View.StutterStep);
             } else {
-              assert View.ExtendLog2(Ik(k), I(k, s), I(k, s'), vop);
-              assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.ExtendLog2Step);
+              assert View.ExtendLog2(I(s), I(s'), vop);
+              assert View.NextStep(I(s), I(s'), vop, View.ExtendLog2Step);
             }
           }
           case WriteBackJournalRespStep => {
-            System.WriteBackJournalRespStepPreservesJournals(k, s, s', dop, vop);
-            assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.StutterStep);
+            System.WriteBackJournalRespStepPreservesJournals(s, s', dop, vop);
+            assert View.NextStep(I(s), I(s'), vop, View.StutterStep);
           }
           case WriteBackSuperblockReq_AdvanceLog_Step => {
-            System.WriteBackSuperblockReq_AdvanceLog_StepPreservesJournals(k, s, s', dop, vop);
-            assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.StutterStep);
+            System.WriteBackSuperblockReq_AdvanceLog_StepPreservesJournals(s, s', dop, vop);
+            assert View.NextStep(I(s), I(s'), vop, View.StutterStep);
           }
           case WriteBackSuperblockReq_AdvanceLocation_Step => {
-            System.WriteBackSuperblockReq_AdvanceLocation_StepPreservesJournals(k, s, s', dop, vop);
-            assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.StutterStep);
+            System.WriteBackSuperblockReq_AdvanceLocation_StepPreservesJournals(s, s', dop, vop);
+            assert View.NextStep(I(s), I(s'), vop, View.StutterStep);
           }
           case WriteBackSuperblockRespStep => {
-            System.WriteBackSuperblockRespStepPreservesJournals(k, s, s', dop, vop);
+            System.WriteBackSuperblockRespStepPreservesJournals(s, s', dop, vop);
             if vop.CleanUpOp? {
-              assert View.CleanUp(Ik(k), I(k, s), I(k, s'), vop);
-              assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.CleanUpStep);
+              assert View.CleanUp(I(s), I(s'), vop);
+              assert View.NextStep(I(s), I(s'), vop, View.CleanUpStep);
             } else {
               assert vop.JournalInternalOp?;
-              assert I(k, s) == I(k, s');
-              assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.StutterStep);
+              assert I(s) == I(s');
+              assert View.NextStep(I(s), I(s'), vop, View.StutterStep);
             }
           }
           case PageInJournalReqStep(which) => {
-            System.PageInJournalReqStepPreservesJournals(k, s, s', dop, vop, which);
-            assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.StutterStep);
+            System.PageInJournalReqStepPreservesJournals(s, s', dop, vop, which);
+            assert View.NextStep(I(s), I(s'), vop, View.StutterStep);
           }
           case PageInJournalRespStep(which) => {
-            System.PageInJournalRespStepPreservesJournals(k, s, s', dop, vop, which);
-            assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.StutterStep);
+            System.PageInJournalRespStepPreservesJournals(s, s', dop, vop, which);
+            assert View.NextStep(I(s), I(s'), vop, View.StutterStep);
           }
           case PageInSuperblockReqStep(which) => {
-            System.PageInSuperblockReqStepPreservesJournals(k, s, s', dop, vop, which);
-            assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.StutterStep);
+            System.PageInSuperblockReqStepPreservesJournals(s, s', dop, vop, which);
+            assert View.NextStep(I(s), I(s'), vop, View.StutterStep);
           }
           case PageInSuperblockRespStep(which) => {
-            System.PageInSuperblockRespStepPreservesJournals(k, s, s', dop, vop, which);
-            assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.StutterStep);
+            System.PageInSuperblockRespStepPreservesJournals(s, s', dop, vop, which);
+            assert View.NextStep(I(s), I(s'), vop, View.StutterStep);
           }
           case FinishLoadingSuperblockPhaseStep => {
-            System.FinishLoadingSuperblockPhaseStepPreservesJournals(k, s, s', dop, vop);
-            assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.PresentPersistentLocStep);
+            System.FinishLoadingSuperblockPhaseStepPreservesJournals(s, s', dop, vop);
+            assert View.NextStep(I(s), I(s'), vop, View.PresentPersistentLocStep);
           }
           case FinishLoadingOtherPhaseStep => {
-            System.FinishLoadingOtherPhaseStepPreservesJournals(k, s, s', dop, vop);
-            assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.StutterStep);
+            System.FinishLoadingOtherPhaseStepPreservesJournals(s, s', dop, vop);
+            assert View.NextStep(I(s), I(s'), vop, View.StutterStep);
           }
           case FreezeStep => {
-            System.FreezeStepPreservesJournals(k, s, s', dop, vop);
-            assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.Move2to3Step);
+            System.FreezeStepPreservesJournals(s, s', dop, vop);
+            assert View.NextStep(I(s), I(s'), vop, View.Move2to3Step);
           }
           case ReceiveFrozenLocStep => {
-            System.ReceiveFrozenLocStepPreservesJournals(k, s, s', dop, vop);
-            assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.ObtainFrozenLocStep);
+            System.ReceiveFrozenLocStepPreservesJournals(s, s', dop, vop);
+            assert View.NextStep(I(s), I(s'), vop, View.ObtainFrozenLocStep);
           }
           case AdvanceStep => {
-            System.AdvanceStepPreservesJournals(k, s, s', dop, vop);
-            assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.Move3Step);
+            System.AdvanceStepPreservesJournals(s, s', dop, vop);
+            assert View.NextStep(I(s), I(s'), vop, View.Move3Step);
           }
           case ReplayStep => {
-            System.ReplayStepPreservesJournals(k, s, s', dop, vop);
-            assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.ReplayStep);
+            System.ReplayStepPreservesJournals(s, s', dop, vop);
+            assert View.NextStep(I(s), I(s'), vop, View.ReplayStep);
           }
           case PushSyncReqStep(id) => {
-            System.PushSyncReqStepPreservesJournals(k, s, s', dop, vop, id);
-            assert View.PushSync(Ik(k), I(k, s), I(k, s'), vop);
-            assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.PushSyncStep);
+            System.PushSyncReqStepPreservesJournals(s, s', dop, vop, id);
+            assert View.PushSync(I(s), I(s'), vop);
+            assert View.NextStep(I(s), I(s'), vop, View.PushSyncStep);
           }
           case PopSyncReqStep(id) => {
-            System.PopSyncReqStepPreservesJournals(k, s, s', dop, vop, id);
-            assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.PopSyncStep);
+            System.PopSyncReqStepPreservesJournals(s, s', dop, vop, id);
+            assert View.NextStep(I(s), I(s'), vop, View.PopSyncStep);
           }
           case NoOpStep => {
-            System.NoOpStepPreservesJournals(k, s, s', dop, vop);
-            assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.StutterStep);
+            System.NoOpStepPreservesJournals(s, s', dop, vop);
+            assert View.NextStep(I(s), I(s'), vop, View.StutterStep);
           }
         }
       }
       case DiskInternalStep(step) => {
         match step {
           case ProcessWriteSuperblockStep(which) => {
-            System.ProcessWriteSuperblockPreservesJournals(k, s, s', vop, which);
-            if System.ProcessWriteIsGraphUpdate(k, s) {
-              assert View.Move1to2(Ik(k), I(k, s), I(k, s'), vop);
-              assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.Move1to2Step);
+            System.ProcessWriteSuperblockPreservesJournals(s, s', vop, which);
+            if System.ProcessWriteIsGraphUpdate(s) {
+              assert View.Move1to2(I(s), I(s'), vop);
+              assert View.NextStep(I(s), I(s'), vop, View.Move1to2Step);
             } else {
-              assert View.ExtendLog1(Ik(k), I(k, s), I(k, s'), vop);
-              assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.ExtendLog1Step);
+              assert View.ExtendLog1(I(s), I(s'), vop);
+              assert View.NextStep(I(s), I(s'), vop, View.ExtendLog1Step);
             }
           }
         }
       }
       case CrashStep => {
-        System.CrashPreservesJournals(k, s, s', vop);
-        assert View.Crash(Ik(k), I(k, s), I(k, s'), vop);
-        assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.CrashStep);
+        System.CrashPreservesJournals(s, s', vop);
+        assert View.Crash(I(s), I(s'), vop);
+        assert View.NextStep(I(s), I(s'), vop, View.CrashStep);
       }
     }
   }
 
-  lemma RefinesNext(k: System.Constants, s: System.Variables, s': System.Variables, vop: VOp)
-    requires System.Inv(k, s)
-    requires System.Next(k, s, s', vop)
-    ensures System.Inv(k, s')
-    ensures View.Next(Ik(k), I(k, s), I(k, s'), vop);
+  lemma RefinesNext(s: System.Variables, s': System.Variables, vop: VOp)
+    requires System.Inv(s)
+    requires System.Next(s, s', vop)
+    ensures System.Inv(s')
+    ensures View.Next(I(s), I(s'), vop);
   {
-    System.NextPreservesInv(k, s, s', vop);
-    var step :| System.NextStep(k, s, s', vop, step);
-    RefinesNextStep(k, s, s', vop, step);
+    System.NextPreservesInv(s, s', vop);
+    var step :| System.NextStep(s, s', vop, step);
+    RefinesNextStep(s, s', vop, step);
   }
 }

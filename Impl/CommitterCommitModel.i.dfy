@@ -150,7 +150,7 @@ module CommitterCommitModel {
       else a + b
   }
 
-  function {:opaque} WriteOutJournal(k: Constants, cm: CM, io: IO)
+  function {:opaque} WriteOutJournal(cm: CM, io: IO)
       : (res : (CM, IO))
   requires io.IOInit?
   requires CommitterModel.WF(cm)
@@ -207,20 +207,20 @@ module CommitterCommitModel {
     (cm', io')
   }
 
-  lemma WriteOutJournalCorrect(k: Constants, cm: CM, io: IO)
-  requires WriteOutJournal.requires(k, cm, io)
+  lemma WriteOutJournalCorrect(cm: CM, io: IO)
+  requires WriteOutJournal.requires(cm, io)
   requires cm.superblockWrite.None?
-  ensures var (cm', io') := WriteOutJournal(k, cm, io);
+  ensures var (cm', io') := WriteOutJournal(cm, io);
     && CommitterModel.WF(cm')
     && ValidDiskOp(diskOp(io'))
     && IDiskOp(diskOp(io')).bdop.NoDiskOp?
-    && JC.Next(Ik(k).jc,
+    && JC.Next(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
         JournalInternalOp)
   {
-    var (cm', io') := WriteOutJournal(k, cm, io);
+    var (cm', io') := WriteOutJournal(cm, io);
     reveal_WriteOutJournal();
 
     var writtenJournalLen :=
@@ -261,13 +261,13 @@ module CommitterCommitModel {
 
     SyncReqs3to2Correct(cm.syncReqs);
 
-    assert JC.WriteBackJournalReq(Ik(k).jc,
+    assert JC.WriteBackJournalReq(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
         JournalInternalOp,
         jr);
-    assert JC.NextStep(Ik(k).jc,
+    assert JC.NextStep(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
@@ -275,7 +275,7 @@ module CommitterCommitModel {
         JC.WriteBackJournalReqStep(jr));
   }
 
-  predicate writeOutSuperblockAdvanceLog(k: Constants, cm: CM, io: IO,
+  predicate writeOutSuperblockAdvanceLog(cm: CM, io: IO,
       cm': CM, io': IO)
   requires io.IOInit?
   requires CommitterModel.WF(cm)
@@ -302,11 +302,11 @@ module CommitterCommitModel {
       .(commitStatus := JC.CommitAdvanceLog)
   }
 
-  lemma writeOutSuperblockAdvanceLogCorrect(k: Constants, cm: CM, io: IO,
+  lemma writeOutSuperblockAdvanceLogCorrect(cm: CM, io: IO,
       cm': CM, io': IO)
   requires io.IOInit?
   requires CommitterModel.WF(cm)
-  requires writeOutSuperblockAdvanceLog(k, cm, io, cm', io')
+  requires writeOutSuperblockAdvanceLog(cm, io, cm', io')
   requires cm.status == StatusReady
   requires cm.commitStatus.CommitNone?
   requires cm.outstandingJournalWrites == {}
@@ -314,7 +314,7 @@ module CommitterCommitModel {
   ensures CommitterModel.WF(cm')
   ensures ValidDiskOp(diskOp(io'))
   ensures IDiskOp(diskOp(io')).bdop.NoDiskOp?
-  ensures JC.Next(Ik(k).jc,
+  ensures JC.Next(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
@@ -339,12 +339,12 @@ module CommitterCommitModel {
 
     assert ValidDiskOp(diskOp(io'));
 
-    assert JC.WriteBackSuperblockReq_AdvanceLog(Ik(k).jc,
+    assert JC.WriteBackSuperblockReq_AdvanceLog(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
         JournalInternalOp);
-    assert JC.NextStep(Ik(k).jc,
+    assert JC.NextStep(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
@@ -352,7 +352,7 @@ module CommitterCommitModel {
         JC.WriteBackSuperblockReq_AdvanceLog_Step);
   }
 
-  predicate {:opaque} writeOutSuperblockAdvanceLocation(k: Constants, cm: CM, io: IO,
+  predicate {:opaque} writeOutSuperblockAdvanceLocation(cm: CM, io: IO,
       cm': CM, io': IO)
   requires io.IOInit?
   requires CommitterModel.Inv(cm)
@@ -383,7 +383,7 @@ module CommitterCommitModel {
       .(commitStatus := JC.CommitAdvanceLocation)
   }
 
-  lemma writeOutSuperblockAdvanceLocationCorrect(k: Constants, cm: CM, io: IO,
+  lemma writeOutSuperblockAdvanceLocationCorrect(cm: CM, io: IO,
       cm': CM, io': IO)
   requires io.IOInit?
   requires CommitterModel.Inv(cm)
@@ -391,12 +391,12 @@ module CommitterCommitModel {
   requires cm.commitStatus.CommitNone?
   requires cm.outstandingJournalWrites == {}
   requires cm.frozenLoc.Some?
-  requires writeOutSuperblockAdvanceLocation(k, cm, io, cm', io')
+  requires writeOutSuperblockAdvanceLocation(cm, io, cm', io')
   requires JournalistModel.I(cm.journalist).inMemoryJournalFrozen == []
   ensures CommitterModel.WF(cm')
   ensures ValidDiskOp(diskOp(io'))
   ensures IDiskOp(diskOp(io')).bdop.NoDiskOp?
-  ensures JC.Next(Ik(k).jc,
+  ensures JC.Next(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
@@ -425,12 +425,12 @@ module CommitterCommitModel {
 
     assert ValidDiskOp(diskOp(io'));
 
-    assert JC.WriteBackSuperblockReq_AdvanceLocation(Ik(k).jc,
+    assert JC.WriteBackSuperblockReq_AdvanceLocation(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
         JournalInternalOp);
-    assert JC.NextStep(Ik(k).jc,
+    assert JC.NextStep(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
@@ -438,7 +438,7 @@ module CommitterCommitModel {
         JC.WriteBackSuperblockReq_AdvanceLocation_Step);
   }
 
-  function {:opaque} freeze(k: Constants, cm: CM) : (cm': CM)
+  function {:opaque} freeze(cm: CM) : (cm': CM)
   requires CommitterModel.WF(cm)
   {
     var writtenJournalLen :=
@@ -450,7 +450,7 @@ module CommitterCommitModel {
       .(syncReqs := SyncReqs3to2(cm.syncReqs))
   }
 
-  lemma freezeCorrect(k: Constants, cm: CM)
+  lemma freezeCorrect(cm: CM)
   requires CommitterModel.WF(cm)
   requires cm.superblockWrite.None?
 
@@ -460,24 +460,24 @@ module CommitterCommitModel {
   requires cm.frozenLoc != Some(cm.superblock.indirectionTableLoc)
   requires JournalistModel.I(cm.journalist).replayJournal == []
 
-  ensures var cm' := freeze(k, cm);
+  ensures var cm' := freeze(cm);
     && CommitterModel.WF(cm')
-    && JC.Next(Ik(k).jc,
+    && JC.Next(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         JournalDisk.NoDiskOp,
         FreezeOp)
   {
     reveal_freeze();
-    var cm' := freeze(k, cm);
+    var cm' := freeze(cm);
     SyncReqs3to2Correct(cm.syncReqs);
 
-    assert JC.Freeze(Ik(k).jc,
+    assert JC.Freeze(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         JournalDisk.NoDiskOp,
         FreezeOp);
-    assert JC.NextStep(Ik(k).jc,
+    assert JC.NextStep(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         JournalDisk.NoDiskOp,
@@ -486,34 +486,34 @@ module CommitterCommitModel {
   }
 
   function {:opaque} receiveFrozenLoc(
-      k: Constants, cm: CM, loc: Location) : (cm': CM)
+      cm: CM, loc: Location) : (cm': CM)
   {
     cm.(frozenLoc := Some(loc))
   }
 
-  lemma receiveFrozenLocCorrect(k: Constants, cm: CM, loc: Location)
+  lemma receiveFrozenLocCorrect(cm: CM, loc: Location)
   requires CommitterModel.WF(cm)
   requires cm.status == StatusReady
   requires cm.isFrozen
   requires !cm.frozenLoc.Some?
   requires ValidIndirectionTableLocation(loc)
 
-  ensures var cm' := receiveFrozenLoc(k, cm, loc);
+  ensures var cm' := receiveFrozenLoc(cm, loc);
     && CommitterModel.WF(cm')
-    && JC.Next(Ik(k).jc,
+    && JC.Next(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         JournalDisk.NoDiskOp,
         SendFrozenLocOp(loc))
   {
     reveal_receiveFrozenLoc();
-    var cm' := receiveFrozenLoc(k, cm, loc);
-    assert JC.ReceiveFrozenLoc(Ik(k).jc,
+    var cm' := receiveFrozenLoc(cm, loc);
+    assert JC.ReceiveFrozenLoc(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         JournalDisk.NoDiskOp,
         SendFrozenLocOp(loc));
-    assert JC.NextStep(Ik(k).jc,
+    assert JC.NextStep(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         JournalDisk.NoDiskOp,
@@ -535,7 +535,7 @@ module CommitterCommitModel {
     )
   }
 
-  function pushSync(k: Constants, cm: CM) : (CM, uint64)
+  function pushSync(cm: CM) : (CM, uint64)
   requires CommitterModel.WF(cm)
   {
     var id := freeId(cm.syncReqs);
@@ -547,37 +547,37 @@ module CommitterCommitModel {
     )
   }
 
-  lemma pushSyncCorrect(k: Constants, cm: CM)
+  lemma pushSyncCorrect(cm: CM)
   requires CommitterModel.WF(cm)
 
-  ensures var (cm', id) := pushSync(k, cm);
+  ensures var (cm', id) := pushSync(cm);
     && CommitterModel.WF(cm')
-    && JC.Next(Ik(k).jc,
+    && JC.Next(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         JournalDisk.NoDiskOp,
         if id == 0 then JournalInternalOp else PushSyncOp(id as int))
   {
-    var (cm', id) := pushSync(k, cm);
+    var (cm', id) := pushSync(cm);
     if id == 0 || cm.syncReqs.count as int >= 0x1_0000_0000_0000_0000 / 8 {
-      assert JC.NoOp(Ik(k).jc,
+      assert JC.NoOp(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           JournalDisk.NoDiskOp,
           JournalInternalOp);
-      assert JC.NextStep(Ik(k).jc,
+      assert JC.NextStep(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           JournalDisk.NoDiskOp,
           JournalInternalOp,
           JC.NoOpStep);
     } else {
-      assert JC.PushSyncReq(Ik(k).jc,
+      assert JC.PushSyncReq(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           JournalDisk.NoDiskOp,
           PushSyncOp(id as int), id);
-      assert JC.NextStep(Ik(k).jc,
+      assert JC.NextStep(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           JournalDisk.NoDiskOp,
@@ -588,32 +588,32 @@ module CommitterCommitModel {
 
   // == popSync ==
 
-  function {:opaque} popSync(k: Constants, cm: CM, id: uint64) : (cm' : CM)
+  function {:opaque} popSync(cm: CM, id: uint64) : (cm' : CM)
   requires CommitterModel.WF(cm)
   {
     cm.(syncReqs := MutableMapModel.Remove(cm.syncReqs, id))
   }
 
-  lemma popSyncCorrect(k: Constants, cm: CM, id: uint64)
+  lemma popSyncCorrect(cm: CM, id: uint64)
   requires CommitterModel.WF(cm)
   requires id in cm.syncReqs.contents
   requires cm.syncReqs.contents[id] == JC.State1
-  ensures var cm' := popSync(k, cm, id);
+  ensures var cm' := popSync(cm, id);
     && CommitterModel.WF(cm')
-    && JC.Next(Ik(k).jc,
+    && JC.Next(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         JournalDisk.NoDiskOp,
         PopSyncOp(id as int))
   {
-    var cm' := popSync(k, cm, id);
+    var cm' := popSync(cm, id);
     reveal_popSync();
-    assert JC.PopSyncReq(Ik(k).jc,
+    assert JC.PopSyncReq(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         JournalDisk.NoDiskOp,
         PopSyncOp(id as int), id);
-    assert JC.NextStep(Ik(k).jc,
+    assert JC.NextStep(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         JournalDisk.NoDiskOp,
@@ -623,7 +623,7 @@ module CommitterCommitModel {
 
   // == AdvanceLog ==
 
-  predicate {:opaque} tryAdvanceLog(k: Constants, cm: CM, io: IO,
+  predicate {:opaque} tryAdvanceLog(cm: CM, io: IO,
       cm': CM, io': IO)
   requires CommitterModel.WF(cm)
   requires io.IOInit?
@@ -632,9 +632,9 @@ module CommitterCommitModel {
     var hasInMem := JournalistModel.hasInMemoryJournal(cm.journalist);
     if cm.superblockWrite.None? then (
       if hasFrozen || hasInMem then (
-        (cm', io') == WriteOutJournal(k, cm, io)
+        (cm', io') == WriteOutJournal(cm, io)
       ) else if cm.outstandingJournalWrites == {} then (
-        writeOutSuperblockAdvanceLog(k, cm, io, cm', io')
+        writeOutSuperblockAdvanceLog(cm, io, cm', io')
       ) else (
         && cm' == cm
         && io' == io
@@ -645,16 +645,16 @@ module CommitterCommitModel {
     )
   }
 
-  lemma tryAdvanceLogCorrect(k: Constants, cm: CM, io: IO,
+  lemma tryAdvanceLogCorrect(cm: CM, io: IO,
       cm': CM, io': IO)
   requires CommitterModel.Inv(cm)
   requires io.IOInit?
   requires cm.status.StatusReady?
-  requires tryAdvanceLog(k, cm, io, cm', io')
+  requires tryAdvanceLog(cm, io, cm', io')
   ensures CommitterModel.WF(cm')
   ensures ValidDiskOp(diskOp(io'))
   ensures IDiskOp(diskOp(io')).bdop.NoDiskOp?
-  ensures JC.Next(Ik(k).jc,
+  ensures JC.Next(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
@@ -665,20 +665,20 @@ module CommitterCommitModel {
     var hasInMem := JournalistModel.hasInMemoryJournal(cm.journalist);
     if cm.superblockWrite.None? {
       if hasFrozen || hasInMem {
-        WriteOutJournalCorrect(k, cm, io);
+        WriteOutJournalCorrect(cm, io);
       } else if (cm.outstandingJournalWrites == {}) {
-        writeOutSuperblockAdvanceLogCorrect(k, cm, io, cm', io');
+        writeOutSuperblockAdvanceLogCorrect(cm, io, cm', io');
       } else {
-        assert JC.NoOp(Ik(k).jc, CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp, JournalInternalOp);
-        assert JC.NextStep(Ik(k).jc, CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp, JournalInternalOp, JC.NoOpStep);
+        assert JC.NoOp( CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp, JournalInternalOp);
+        assert JC.NextStep( CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp, JournalInternalOp, JC.NoOpStep);
       }
     } else {
-      assert JC.NoOp(Ik(k).jc, CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp, JournalInternalOp);
-      assert JC.NextStep(Ik(k).jc, CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp, JournalInternalOp, JC.NoOpStep);
+      assert JC.NoOp( CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp, JournalInternalOp);
+      assert JC.NextStep( CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp, JournalInternalOp, JC.NoOpStep);
     }
   }
 
-  predicate {:opaque} tryAdvanceLocation(k: Constants, cm: CM, io: IO,
+  predicate {:opaque} tryAdvanceLocation(cm: CM, io: IO,
       cm': CM, io': IO)
   requires CommitterModel.Inv(cm)
   requires io.IOInit?
@@ -689,9 +689,9 @@ module CommitterCommitModel {
     var hasInMem := JournalistModel.hasInMemoryJournal(cm.journalist);
     if cm.superblockWrite.None? then (
       if hasFrozen || hasInMem then (
-        (cm', io') == WriteOutJournal(k, cm, io)
+        (cm', io') == WriteOutJournal(cm, io)
       ) else if cm.outstandingJournalWrites == {} then (
-        writeOutSuperblockAdvanceLocation(k, cm, io, cm', io')
+        writeOutSuperblockAdvanceLocation(cm, io, cm', io')
       ) else (
         && cm' == cm
         && io' == io
@@ -702,17 +702,17 @@ module CommitterCommitModel {
     )
   }
 
-  lemma tryAdvanceLocationCorrect(k: Constants, cm: CM, io: IO,
+  lemma tryAdvanceLocationCorrect(cm: CM, io: IO,
       cm': CM, io': IO)
   requires CommitterModel.Inv(cm)
   requires io.IOInit?
   requires cm.status.StatusReady?
   requires cm.frozenLoc.Some?
-  requires tryAdvanceLocation(k, cm, io, cm', io')
+  requires tryAdvanceLocation(cm, io, cm', io')
   ensures CommitterModel.WF(cm')
   ensures ValidDiskOp(diskOp(io'))
   ensures IDiskOp(diskOp(io')).bdop.NoDiskOp?
-  ensures JC.Next(Ik(k).jc,
+  ensures JC.Next(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
@@ -723,21 +723,21 @@ module CommitterCommitModel {
     var hasInMem := JournalistModel.hasInMemoryJournal(cm.journalist);
     if cm.superblockWrite.None? {
       if hasFrozen || hasInMem {
-        WriteOutJournalCorrect(k, cm, io);
+        WriteOutJournalCorrect(cm, io);
       } else if (cm.outstandingJournalWrites == {}) {
-        writeOutSuperblockAdvanceLocationCorrect(k, cm, io, cm', io');
+        writeOutSuperblockAdvanceLocationCorrect(cm, io, cm', io');
       } else {
-        assert JC.NoOp(Ik(k).jc, CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp, JournalInternalOp);
-        assert JC.NextStep(Ik(k).jc, CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp, JournalInternalOp, JC.NoOpStep);
+        assert JC.NoOp( CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp, JournalInternalOp);
+        assert JC.NextStep( CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp, JournalInternalOp, JC.NoOpStep);
       }
     } else {
-      assert JC.NoOp(Ik(k).jc, CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp, JournalInternalOp);
-      assert JC.NextStep(Ik(k).jc, CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp, JournalInternalOp, JC.NoOpStep);
+      assert JC.NoOp( CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp, JournalInternalOp);
+      assert JC.NextStep( CommitterModel.I(cm), CommitterModel.I(cm'), JournalDisk.NoDiskOp, JournalInternalOp, JC.NoOpStep);
     }
   }
 
   function {:opaque} writeBackSuperblockResp(
-      k: Constants, cm: CommitterModel.CM) : CommitterModel.CM
+      cm: CommitterModel.CM) : CommitterModel.CM
   requires CommitterModel.Inv(cm)
   {
     if cm.status.StatusReady? &&
@@ -774,14 +774,14 @@ module CommitterCommitModel {
   }
 
   lemma writeBackSuperblockRespCorrect(
-      k: Constants, cm: CommitterModel.CM, io: IO)
+      cm: CommitterModel.CM, io: IO)
   requires CommitterModel.Inv(cm)
   requires ValidDiskOp(diskOp(io))
   requires IDiskOp(diskOp(io)).jdop.RespWriteSuperblockOp?
   requires Some(io.id) == cm.superblockWrite
-  ensures var cm' := writeBackSuperblockResp(k, cm);
+  ensures var cm' := writeBackSuperblockResp(cm);
     && CommitterModel.WF(cm')
-    && JC.Next(Ik(k).jc,
+    && JC.Next(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io)).jdop,
@@ -789,16 +789,16 @@ module CommitterCommitModel {
     )
   {
     reveal_writeBackSuperblockResp();
-    var cm' := writeBackSuperblockResp(k, cm);
+    var cm' := writeBackSuperblockResp(cm);
     SyncReqs2to1Correct(cm.syncReqs);
     if cm.status.StatusReady? &&
         cm.commitStatus.CommitAdvanceLocation? {
-      assert JC.WriteBackSuperblockResp(Ik(k).jc,
+      assert JC.WriteBackSuperblockResp(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           IDiskOp(diskOp(io)).jdop,
           CleanUpOp);
-      assert JC.NextStep(Ik(k).jc,
+      assert JC.NextStep(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           IDiskOp(diskOp(io)).jdop,
@@ -807,12 +807,12 @@ module CommitterCommitModel {
     }
     else if cm.status.StatusReady? &&
         cm.commitStatus.CommitAdvanceLog? {
-      assert JC.WriteBackSuperblockResp(Ik(k).jc,
+      assert JC.WriteBackSuperblockResp(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           IDiskOp(diskOp(io)).jdop,
           JournalInternalOp);
-      assert JC.NextStep(Ik(k).jc,
+      assert JC.NextStep(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           IDiskOp(diskOp(io)).jdop,
@@ -820,12 +820,12 @@ module CommitterCommitModel {
           JC.WriteBackSuperblockRespStep);
     }
     else {
-      assert JC.NoOp(Ik(k).jc,
+      assert JC.NoOp(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           IDiskOp(diskOp(io)).jdop,
           JournalInternalOp);
-      assert JC.NextStep(Ik(k).jc,
+      assert JC.NextStep(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           IDiskOp(diskOp(io)).jdop,

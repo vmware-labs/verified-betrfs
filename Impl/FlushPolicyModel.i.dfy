@@ -72,7 +72,7 @@ module FlushPolicyModel {
     biggestSlotIterate(buckets, 1, 0, WeightBucket(buckets[0]) as uint64)
   }
 
-  predicate ValidStackSlots(k: Constants, s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
+  predicate ValidStackSlots(s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
   {
     && |stack| == |slots| + 1
     && s.Ready?
@@ -82,7 +82,7 @@ module FlushPolicyModel {
     && (forall j | 0 <= j < |stack| - 1 :: slots[j] as int < |s.cache[stack[j]].children.value| <= MaxNumChildren())
   }
 
-  predicate ValidAction(k: Constants, s: BCVariables, action: Action)
+  predicate ValidAction(s: BCVariables, action: Action)
   {
     && s.Ready?
     && (action.ActionPageIn? ==> (
@@ -118,10 +118,10 @@ module FlushPolicyModel {
     ))
   }
 
-  function {:opaque} getActionToSplit(k: Constants, s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64) : (action : Action)
+  function {:opaque} getActionToSplit(s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64) : (action : Action)
   requires 0 <= i as int < |stack|
   requires WFBCVars(s)
-  requires ValidStackSlots(k, s, stack, slots)
+  requires ValidStackSlots(s, stack, slots)
   {
     if i == 0 then
       // Can't split root until we grow it.
@@ -142,14 +142,14 @@ module FlushPolicyModel {
           )
         )
       ) else (
-        getActionToSplit(k, s, stack, slots, i-1)
+        getActionToSplit(s, stack, slots, i-1)
       )
     )
   }
 
-  function {:opaque} getActionToFlush(k: Constants, s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>) : (BCVariables, Action)
+  function {:opaque} getActionToFlush(s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>) : (BCVariables, Action)
   requires |stack| <= 40
-  requires ValidStackSlots(k, s, stack, slots)
+  requires ValidStackSlots(s, stack, slots)
   requires WFBCVars(s)
   decreases 0x1_0000_0000_0000_0000 - |stack|
   {
@@ -159,7 +159,7 @@ module FlushPolicyModel {
       var ref := stack[|stack| as uint64 - 1];
       var node := s.cache[ref];
       if node.children.None? || |node.buckets| == MaxNumChildren() then (
-        (s, getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1))
+        (s, getActionToSplit(s, stack, slots, |stack| as uint64 - 1))
       ) else (
         var (slot, slotWeight) := biggestSlot(node.buckets);
         // TODO:
@@ -183,7 +183,7 @@ module FlushPolicyModel {
                 (s1, ActionEvict)
               )
             ) else (
-              getActionToFlush(k, s1, stack + [childref], slots + [slot])
+              getActionToFlush(s1, stack + [childref], slots + [slot])
             )
           ) else (
             if TotalCacheSize(s) <= MaxCacheSize() - 1 then (
@@ -193,95 +193,95 @@ module FlushPolicyModel {
             )
           )
         ) else (
-          (s, getActionToSplit(k, s, stack, slots, |stack| as uint64 - 1))
+          (s, getActionToSplit(s, stack, slots, |stack| as uint64 - 1))
         )
       )
     )
   }
 
-  lemma getActionToSplitValidAction(k: Constants, s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64)
+  lemma getActionToSplitValidAction(s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64)
   requires 0 <= i as int < |stack|
-  requires BCInv(k, s)
-  requires ValidStackSlots(k, s, stack, slots)
+  requires BCInv(s)
+  requires ValidStackSlots(s, stack, slots)
   requires forall j | 0 <= j < |stack| :: stack[j] in s.ephemeralIndirectionTable.graph
   requires forall j | 0 <= j < |stack| - 1 :: s.cache[stack[j]].children.value[slots[j]] == stack[j+1]
   requires s.cache[stack[|stack| - 1]].children.Some? ==> |s.cache[stack[|stack| - 1]].buckets| >= 2
   requires i as int < |stack| - 1 ==> |s.cache[stack[i]].buckets| >= MaxNumChildren()
-  ensures ValidAction(k, s, getActionToSplit(k, s, stack, slots, i))
-  ensures var action := getActionToSplit(k, s, stack, slots, i);
+  ensures ValidAction(s, getActionToSplit(s, stack, slots, i))
+  ensures var action := getActionToSplit(s, stack, slots, i);
       action.ActionGrow? || action.ActionRepivot? || action.ActionSplit? || action.ActionEvict?
   {
     reveal_getActionToSplit();
-    var action := getActionToSplit(k, s, stack, slots, i);
+    var action := getActionToSplit(s, stack, slots, i);
 
     if i == 0 {
-      //assert ValidAction(k, s, action);
+      //assert ValidAction(s, action);
     } else {
       if |s.cache[stack[i-1]].children.value| as uint64 < MaxNumChildren() as uint64 {
         /*if |s.cache[stack[i]].buckets| as uint64 == 1 {
-          assert ValidAction(k, s, action);
+          assert ValidAction(s, action);
         } else {
-          assert ValidAction(k, s, action);
+          assert ValidAction(s, action);
         }*/
       } else {
-        getActionToSplitValidAction(k, s, stack, slots, i-1);
+        getActionToSplitValidAction(s, stack, slots, i-1);
       }
     }
   }
 
-  lemma getActionToFlushValidAction(k: Constants, s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
+  lemma getActionToFlushValidAction(s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
   requires |stack| <= 40
-  requires ValidStackSlots(k, s, stack, slots)
-  requires BCInv(k, s)
+  requires ValidStackSlots(s, stack, slots)
+  requires BCInv(s)
   requires forall j | 0 <= j < |stack| :: stack[j] in s.ephemeralIndirectionTable.graph
   requires forall j | 0 <= j < |stack| - 1 :: s.cache[stack[j]].children.value[slots[j]] == stack[j+1]
   decreases 0x1_0000_0000_0000_0000 - |stack|
-  ensures var (s', action) := getActionToFlush(k, s, stack, slots);
+  ensures var (s', action) := getActionToFlush(s, stack, slots);
     && WFBCVars(s')
     && IBlockCache(s) == IBlockCache(s')
-    && ValidAction(k, s', action)
+    && ValidAction(s', action)
   {
     reveal_getActionToFlush();
-    var action := getActionToFlush(k, s, stack, slots).1;
+    var action := getActionToFlush(s, stack, slots).1;
 
     if |stack| as uint64 == 40 {
     } else {
       var ref := stack[|stack| as uint64 - 1];
       var node := s.cache[ref];
       if node.children.None? || |node.buckets| == MaxNumChildren() {
-        getActionToSplitValidAction(k, s, stack, slots, |stack| as uint64 - 1);
+        getActionToSplitValidAction(s, stack, slots, |stack| as uint64 - 1);
       } else {
         var (slot, slotWeight) := biggestSlot(node.buckets);
         //if slotWeight >= FlushTriggerWeight() as uint64 {
         if |node.buckets| < 8 {
           var childref := node.children.value[slot];
-          lemmaChildInGraph(k, s, ref, childref);
+          lemmaChildInGraph(s, ref, childref);
           if childref in s.cache {
             var child := s.cache[childref];
             var s1 := s.(lru := LruModel.Use(s.lru, childref));
             LruModel.LruUse(s.lru, childref);
             var childTotalWeight: uint64 := WeightBucketList(child.buckets) as uint64;
             if childTotalWeight + FlushTriggerWeight() as uint64 <= MaxTotalBucketWeight() as uint64 {
-              assert ValidAction(k, s1, action);
+              assert ValidAction(s1, action);
             } else {
-              getActionToFlushValidAction(k, s1, stack + [childref], slots + [slot]);
+              getActionToFlushValidAction(s1, stack + [childref], slots + [slot]);
             }
           } else {
             assert childref !in IBlockCache(s).cache;
             assert childref in IIndirectionTable(s.ephemeralIndirectionTable).graph;
             assert childref in IIndirectionTable(s.ephemeralIndirectionTable).locs;
-            assert ValidAction(k, s, action);
+            assert ValidAction(s, action);
           }
         } else {
-          getActionToSplitValidAction(k, s, stack, slots, |stack| as uint64 - 1);
+          getActionToSplitValidAction(s, stack, slots, |stack| as uint64 - 1);
         }
       }
     }
   }
 
-  predicate {:opaque} runFlushPolicy(k: Constants, s: BCVariables, io: IO,
+  predicate {:opaque} runFlushPolicy(s: BCVariables, io: IO,
       s': BCVariables, io': IO)
-  requires BCInv(k, s)
+  requires BCInv(s)
   requires io.IOInit?
   requires s.Ready?
   requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
@@ -291,33 +291,33 @@ module FlushPolicyModel {
     LruModel.LruUse(s.lru, BT.G.Root());
     assert IBlockCache(s0) == IBlockCache(s);
 
-    var (s1, action) := getActionToFlush(k, s0, [BT.G.Root()], []);
-    getActionToFlushValidAction(k, s0, [BT.G.Root()], []);
+    var (s1, action) := getActionToFlush(s0, [BT.G.Root()], []);
+    getActionToFlushValidAction(s0, [BT.G.Root()], []);
 
     match action {
       case ActionPageIn(ref) => (
-        (s', io') == PageInNodeReq(k, s1, io, ref)
+        (s', io') == PageInNodeReq(s1, io, ref)
       )
       case ActionSplit(parentref, slot) => (
-        && s' == doSplit(k, s1, parentref, s1.cache[parentref].children.value[slot], slot as int)
+        && s' == doSplit(s1, parentref, s1.cache[parentref].children.value[slot], slot as int)
         && io' == io
       )
       case ActionRepivot(ref) => (
-        && s' == repivotLeaf(k, s1, ref, s1.cache[ref])
+        && s' == repivotLeaf(s1, ref, s1.cache[ref])
         && io' == io
       )
       case ActionFlush(parentref, slot) => (
-        && s' == flush(k, s1, parentref, slot as int, 
+        && s' == flush(s1, parentref, slot as int, 
             s1.cache[parentref].children.value[slot],
             s1.cache[s1.cache[parentref].children.value[slot]])
         && io' == io
       )
       case ActionGrow => (
-        && s' == grow(k, s1)
+        && s' == grow(s1)
         && io' == io
       )
       case ActionEvict => (
-        EvictOrDealloc(k, s1, io, s', io')
+        EvictOrDealloc(s1, io, s', io')
       )
       case ActionFail => (
         && s' == s1
@@ -326,50 +326,50 @@ module FlushPolicyModel {
     }
   }
 
-  lemma runFlushPolicyCorrect(k: Constants, s: BCVariables, io: IO, s': BCVariables, io': IO)
-  requires BCInv(k, s)
+  lemma runFlushPolicyCorrect(s: BCVariables, io: IO, s': BCVariables, io': IO)
+  requires BCInv(s)
   requires io.IOInit?
   requires s.Ready?
   requires BT.G.Root() in s.cache
   requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
-  requires runFlushPolicy(k, s, io, s', io')
+  requires runFlushPolicy(s, io, s', io')
   ensures WFBCVars(s')
   ensures ValidDiskOp(diskOp(io'))
   ensures IDiskOp(diskOp(io')).jdop.NoDiskOp?
-  ensures betree_next_dop(k, IBlockCache(s), IBlockCache(s'),
+  ensures betree_next_dop(IBlockCache(s), IBlockCache(s'),
       IDiskOp(diskOp(io')).bdop)
   {
     var s0 := s.(lru := LruModel.Use(s.lru, BT.G.Root()));
     LruModel.LruUse(s.lru, BT.G.Root());
     assert IBlockCache(s0) == IBlockCache(s);
-    var (s1, action) := getActionToFlush(k, s0, [BT.G.Root()], []);
-    getActionToFlushValidAction(k, s0, [BT.G.Root()], []);
+    var (s1, action) := getActionToFlush(s0, [BT.G.Root()], []);
+    getActionToFlushValidAction(s0, [BT.G.Root()], []);
 
     reveal_runFlushPolicy();
 
     match action {
       case ActionPageIn(ref) => {
-        PageInNodeReqCorrect(k, s1, io, ref);
+        PageInNodeReqCorrect(s1, io, ref);
       }
       case ActionSplit(parentref, slot) => {
-        doSplitCorrect(k, s1, parentref, s1.cache[parentref].children.value[slot], slot as int);
+        doSplitCorrect(s1, parentref, s1.cache[parentref].children.value[slot], slot as int);
       }
       case ActionRepivot(ref) => {
-        repivotLeafCorrect(k, s1, ref, s1.cache[ref]);
+        repivotLeafCorrect(s1, ref, s1.cache[ref]);
       }
       case ActionFlush(parentref, slot) => {
-        flushCorrect(k, s1, parentref, slot as int, 
+        flushCorrect(s1, parentref, slot as int, 
             s1.cache[parentref].children.value[slot],
             s1.cache[s1.cache[parentref].children.value[slot]]);
       }
       case ActionGrow => {
-        growCorrect(k, s1);
+        growCorrect(s1);
       }
       case ActionEvict => {
-        EvictOrDeallocCorrect(k, s1, io, s', io');
+        EvictOrDeallocCorrect(s1, io, s', io');
       }
       case ActionFail => {
-        assert noop(k, IBlockCache(s), IBlockCache(s1));
+        assert noop(IBlockCache(s), IBlockCache(s1));
       }
     }
   }

@@ -20,7 +20,7 @@ module CommitterAppendImpl {
   import JournalistImpl
 
   method JournalAppend(
-      k: ImplConstants, cm: Committer,
+      cm: Committer,
       key: Key, value: Value)
   requires cm.Inv()
   requires cm.status == CommitterModel.StatusReady
@@ -30,7 +30,7 @@ module CommitterAppendImpl {
   ensures cm.Inv()
   ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
   ensures cm.I() == CommitterAppendModel.JournalAppend(
-      Ic(k), old(cm.I()), key, value)
+      old(cm.I()), key, value)
   {
     CommitterAppendModel.reveal_JournalAppend();
     cm.reveal_ReprInv();

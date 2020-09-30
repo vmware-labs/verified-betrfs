@@ -30,149 +30,143 @@ module BetreeSystem {
   import BI = PivotBetreeBlockInterface
   import Ref = BlockSystem_Refines_StatesView
 
-  type Constants = AsyncSectorDiskModelTypes.AsyncSectorDiskModelConstants<M.Constants, D.Constants>
   type Variables = AsyncSectorDiskModelTypes.AsyncSectorDiskModelVariables<M.Variables, D.Variables>
 
   datatype Step =
     | MachineStep(dop: D.DiskOp)
     | CrashStep
   
-  predicate Machine(k: Constants, s: Variables, s': Variables, dop: D.DiskOp, vop: VOp)
+  predicate Machine(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp)
   {
-    && M.Next(k.machine, s.machine, s'.machine, dop, vop)
-    && D.Next(k.disk, s.disk, s'.disk, dop)
+    && M.Next(s.machine, s'.machine, dop, vop)
+    && D.Next(s.disk, s'.disk, dop)
     && (vop.SendPersistentLocOp? ==>
-      BCS.Inv(k, s) ==>
-        && vop.loc in Ref.DiskGraphMap(k, s)
-        && BT.Inv(Ik(k), BT.Variables(BI.Variables(Ref.DiskGraphMap(k, s)[vop.loc])))
+      BCS.Inv(s) ==>
+        && vop.loc in Ref.DiskGraphMap(s)
+        && BT.Inv(BT.Variables(BI.Variables(Ref.DiskGraphMap(s)[vop.loc])))
     )
   }
 
-  predicate Crash(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate Crash(s: Variables, s': Variables, vop: VOp)
   {
     && vop.CrashOp?
-    && M.Init(k.machine, s'.machine)
-    && D.Crash(k.disk, s.disk, s'.disk)
+    && M.Init(s'.machine)
+    && D.Crash(s.disk, s'.disk)
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, vop: VOp, step: Step)
+  predicate NextStep(s: Variables, s': Variables, vop: VOp, step: Step)
   {
     match step {
-      case MachineStep(dop) => Machine(k, s, s', dop, vop)
-      case CrashStep => Crash(k, s, s', vop)
+      case MachineStep(dop) => Machine(s, s', dop, vop)
+      case CrashStep => Crash(s, s', vop)
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, vop: VOp) {
-    exists step :: NextStep(k, s, s', vop, step)
+  predicate Next(s: Variables, s': Variables, vop: VOp) {
+    exists step :: NextStep(s, s', vop, step)
   }
 
-  function Ik(k: Constants) : BT.Constants
+  function BetreeDisk(s: Variables) : imap<Location, BT.Variables>
+  requires BCS.Inv(s)
   {
-    BT.Constants(BI.Constants())
+    imap loc | loc in Ref.DiskGraphMap(s) ::
+      BT.Variables(BI.Variables(Ref.DiskGraphMap(s)[loc]))
   }
 
-  function BetreeDisk(k: Constants, s: Variables) : imap<Location, BT.Variables>
-  requires BCS.Inv(k, s)
+  function FrozenBetree(s: Variables) : Option<BT.Variables>
+  requires BCS.Inv(s)
   {
-    imap loc | loc in Ref.DiskGraphMap(k, s) ::
-      BT.Variables(BI.Variables(Ref.DiskGraphMap(k, s)[loc]))
-  }
-
-  function FrozenBetree(k: Constants, s: Variables) : Option<BT.Variables>
-  requires BCS.Inv(k, s)
-  {
-    if Ref.FrozenGraph(k, s).Some? then
-      Some(BT.Variables(BI.Variables(Ref.FrozenGraph(k, s).value)))
+    if Ref.FrozenGraph(s).Some? then
+      Some(BT.Variables(BI.Variables(Ref.FrozenGraph(s).value)))
     else
       None
   }
 
-  function EphemeralBetree(k: Constants, s: Variables) : Option<BT.Variables>
-  requires BCS.Inv(k, s)
+  function EphemeralBetree(s: Variables) : Option<BT.Variables>
+  requires BCS.Inv(s)
   {
-    if Ref.EphemeralGraph(k, s).Some? then
-      Some(BT.Variables(BI.Variables(Ref.EphemeralGraph(k, s).value)))
+    if Ref.EphemeralGraph(s).Some? then
+      Some(BT.Variables(BI.Variables(Ref.EphemeralGraph(s).value)))
     else
       None
   }
 
-  predicate Init(k: Constants, s: Variables, loc: Location)
+  predicate Init(s: Variables, loc: Location)
   {
-    && M.Init(k.machine, s.machine)
-    && D.Init(k.disk, s.disk)
-    && BCS.Init(k, s, loc)
+    && M.Init(s.machine)
+    && D.Init(s.disk)
+    && BCS.Init(s, loc)
     && (
-      BCS.InitImpliesInv(k, s, loc);
-      && loc in BetreeDisk(k, s)
-      && BT.Init(Ik(k), BetreeDisk(k, s)[loc])
+      BCS.InitImpliesInv(s, loc);
+      && loc in BetreeDisk(s)
+      && BT.Init(BetreeDisk(s)[loc])
     )
   }
 
-  predicate Inv(k: Constants, s: Variables) {
-    && BCS.Inv(k, s)
-    && (Ref.PersistentLoc(k, s).Some? ==>
-      && Ref.PersistentLoc(k, s).value in BetreeDisk(k, s)
-      && BT.Inv(Ik(k), BetreeDisk(k, s)[Ref.PersistentLoc(k, s).value])
+  predicate Inv(s: Variables) {
+    && BCS.Inv(s)
+    && (Ref.PersistentLoc(s).Some? ==>
+      && Ref.PersistentLoc(s).value in BetreeDisk(s)
+      && BT.Inv(BetreeDisk(s)[Ref.PersistentLoc(s).value])
     )
-    && (FrozenBetree(k, s).Some? ==> BT.Inv(Ik(k), FrozenBetree(k, s).value))
-    && (EphemeralBetree(k, s).Some? ==> BT.Inv(Ik(k), EphemeralBetree(k, s).value))
-    && (Ref.FrozenLoc(k, s).Some? ==>
-      && Ref.FrozenLoc(k, s).value in BetreeDisk(k, s)
-      && FrozenBetree(k, s).Some?
-      && BetreeDisk(k, s)[Ref.FrozenLoc(k, s).value] == FrozenBetree(k, s).value
+    && (FrozenBetree(s).Some? ==> BT.Inv(FrozenBetree(s).value))
+    && (EphemeralBetree(s).Some? ==> BT.Inv(EphemeralBetree(s).value))
+    && (Ref.FrozenLoc(s).Some? ==>
+      && Ref.FrozenLoc(s).value in BetreeDisk(s)
+      && FrozenBetree(s).Some?
+      && BetreeDisk(s)[Ref.FrozenLoc(s).value] == FrozenBetree(s).value
     )
   }
 
   // Proofs
 
-  lemma InitImpliesInv(k: Constants, s: Variables, loc: Location)
-    requires Init(k, s, loc)
-    ensures Inv(k, s)
-    ensures loc in BetreeDisk(k, s)
+  lemma InitImpliesInv(s: Variables, loc: Location)
+    requires Init(s, loc)
+    ensures Inv(s)
+    ensures loc in BetreeDisk(s)
   {
-    BCS.InitImpliesInv(k, s, loc);
-    BT.InitImpliesInv(Ik(k), BetreeDisk(k, s)[loc]);
-    BCS.InitGraphs(k, s, loc);
+    BCS.InitImpliesInv(s, loc);
+    BT.InitImpliesInv(BetreeDisk(s)[loc]);
+    BCS.InitGraphs(s, loc);
   }
 
-  lemma BetreeMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, betreeStep: BetreeStep)
-    requires Inv(k, s)
-    requires M.BetreeMove(k.machine, s.machine, s'.machine, dop, vop, betreeStep)
-    requires D.Next(k.disk, s.disk, s'.disk, dop)
-    ensures Inv(k, s')
+  lemma BetreeMoveStepPreservesInv(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, betreeStep: BetreeStep)
+    requires Inv(s)
+    requires M.BetreeMove(s.machine, s'.machine, dop, vop, betreeStep)
+    requires D.Next(s.disk, s'.disk, dop)
+    ensures Inv(s')
   {
-    Ref.StepGraphs(k, s, s', vop, BCS.MachineStep(dop, BC.TransactionStep(BetreeStepOps(betreeStep))));
-    Ref.RefinesReads(k, s, BetreeStepReads(betreeStep));
-    //assert BT.Betree(Ik(k), EphemeralBetree(k, s), EphemeralBetree(k, s'), uiop, betreeStep);
-    assert BT.NextStep(Ik(k), EphemeralBetree(k, s).value, EphemeralBetree(k, s').value, vop.uiop, BT.BetreeStep(betreeStep));
-    BT.NextPreservesInv(Ik(k), EphemeralBetree(k, s).value, EphemeralBetree(k, s').value, vop.uiop);
+    Ref.StepGraphs(s, s', vop, BCS.MachineStep(dop, BC.TransactionStep(BetreeStepOps(betreeStep))));
+    Ref.RefinesReads(s, BetreeStepReads(betreeStep));
+    //assert BT.Betree(EphemeralBetree(s), EphemeralBetree(s'), uiop, betreeStep);
+    assert BT.NextStep(EphemeralBetree(s).value, EphemeralBetree(s').value, vop.uiop, BT.BetreeStep(betreeStep));
+    BT.NextPreservesInv(EphemeralBetree(s).value, EphemeralBetree(s').value, vop.uiop);
   }
 
-  lemma BlockCacheMoveStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, step: BC.Step)
-    requires Inv(k, s)
+  lemma BlockCacheMoveStepPreservesInv(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp, step: BC.Step)
+    requires Inv(s)
     requires !step.TransactionStep?
-    requires M.BlockCacheMove(k.machine, s.machine, s'.machine, dop, vop, step)
-    requires D.Next(k.disk, s.disk, s'.disk, dop)
+    requires M.BlockCacheMove(s.machine, s'.machine, dop, vop, step)
+    requires D.Next(s.disk, s'.disk, dop)
     requires (vop.SendPersistentLocOp? ==>
-      && vop.loc in BetreeDisk(k, s)
-      && BT.Inv(Ik(k), BetreeDisk(k, s)[vop.loc])
+      && vop.loc in BetreeDisk(s)
+      && BT.Inv(BetreeDisk(s)[vop.loc])
     )
-    ensures Inv(k, s')
+    ensures Inv(s')
   {
-    assert BCS.Machine(k, s, s', dop, vop, step);
-    Ref.StepGraphs(k, s, s', vop, BCS.MachineStep(dop, step));
+    assert BCS.Machine(s, s', dop, vop, step);
+    Ref.StepGraphs(s, s', vop, BCS.MachineStep(dop, step));
     if (step.UnallocStep?) {
-      //assert BI.GC(Ik(k).bck, EphemeralBetree(k, s).bcv, s'.bcv, refs)
-      Ref.UnallocStepMeetsGCConditions(k, s, s', dop, vop, step.ref);
-      assert step.ref in EphemeralBetree(k, s).value.bcv.view;
-      assert iset{step.ref} !! BI.LiveReferences(Ik(k).bck, EphemeralBetree(k, s).value.bcv);
-      assert BI.ClosedUnderPredecessor(EphemeralBetree(k, s).value.bcv.view, iset{step.ref});
-      assert IMapRemove1(EphemeralBetree(k, s).value.bcv.view, step.ref)
-          == IMapRemove(EphemeralBetree(k, s).value.bcv.view, iset{step.ref});
-      assert BI.GC(Ik(k).bck, EphemeralBetree(k, s).value.bcv, EphemeralBetree(k, s').value.bcv, iset{step.ref});
-      assert BT.GC(Ik(k), EphemeralBetree(k, s).value, EphemeralBetree(k, s').value, UI.NoOp, iset{step.ref});
-      BT.GCStepRefines(Ik(k), EphemeralBetree(k, s).value, EphemeralBetree(k, s').value, UI.NoOp, iset{step.ref});
+      //assert BI.GC(EphemeralBetree(s).bcv, s'.bcv, refs)
+      Ref.UnallocStepMeetsGCConditions(s, s', dop, vop, step.ref);
+      assert step.ref in EphemeralBetree(s).value.bcv.view;
+      assert iset{step.ref} !! BI.LiveReferences(EphemeralBetree(s).value.bcv);
+      assert BI.ClosedUnderPredecessor(EphemeralBetree(s).value.bcv.view, iset{step.ref});
+      assert IMapRemove1(EphemeralBetree(s).value.bcv.view, step.ref)
+          == IMapRemove(EphemeralBetree(s).value.bcv.view, iset{step.ref});
+      assert BI.GC(EphemeralBetree(s).value.bcv, EphemeralBetree(s').value.bcv, iset{step.ref});
+      assert BT.GC(EphemeralBetree(s).value, EphemeralBetree(s').value, UI.NoOp, iset{step.ref});
+      BT.GCStepRefines(EphemeralBetree(s).value, EphemeralBetree(s').value, UI.NoOp, iset{step.ref});
     }
 
     if vop.FreezeOp? {
@@ -188,23 +182,23 @@ module BetreeSystem {
     else if Ref.IsTransactionStep(BCS.MachineStep(dop, step)) {
     }
     else if vop.StatesInternalOp? {
-      if Ref.UpdateAllEq(k, s, s') {
+      if Ref.UpdateAllEq(s, s') {
       }
-      else if Ref.UpdateDiskChange(k, s, s') {
+      else if Ref.UpdateDiskChange(s, s') {
       }
-      else if Ref.UpdateUnalloc(k, s, s', BCS.MachineStep(dop, step)) {
+      else if Ref.UpdateUnalloc(s, s', BCS.MachineStep(dop, step)) {
       }
       else {
       }
     }
     else if vop.JournalInternalOp? {
-      assert Ref.UpdateAllEq(k, s, s');
+      assert Ref.UpdateAllEq(s, s');
     }
     else if vop.PushSyncOp? {
-      assert Ref.UpdateAllEq(k, s, s');
+      assert Ref.UpdateAllEq(s, s');
     }
     else if vop.PopSyncOp? {
-      assert Ref.UpdateAllEq(k, s, s');
+      assert Ref.UpdateAllEq(s, s');
     }
     else if vop.AdvanceOp? {
     }
@@ -213,37 +207,37 @@ module BetreeSystem {
     }
   }
 
-  lemma CrashStepPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp)
-    requires Inv(k, s)
-    requires Crash(k, s, s', vop)
-    ensures Inv(k, s')
+  lemma CrashStepPreservesInv(s: Variables, s': Variables, vop: VOp)
+    requires Inv(s)
+    requires Crash(s, s', vop)
+    ensures Inv(s')
   {
-    Ref.StepGraphs(k, s, s', vop, BCS.CrashStep);
+    Ref.StepGraphs(s, s', vop, BCS.CrashStep);
   }
 
-  lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, step: Step)
-    requires Inv(k, s)
-    requires NextStep(k, s, s', vop, step)
-    ensures Inv(k, s')
+  lemma NextStepPreservesInv(s: Variables, s': Variables, vop: VOp, step: Step)
+    requires Inv(s)
+    requires NextStep(s, s', vop, step)
+    ensures Inv(s')
   {
     match step {
       case MachineStep(dop) => {
-        var machineStep :| M.NextStep(k.machine, s.machine, s'.machine, dop, vop, machineStep);
+        var machineStep :| M.NextStep(s.machine, s'.machine, dop, vop, machineStep);
         match machineStep {
-          case BetreeMoveStep(betreeStep) => BetreeMoveStepPreservesInv(k, s, s', dop, vop, betreeStep);
-          case BlockCacheMoveStep(blockCacheStep) => BlockCacheMoveStepPreservesInv(k, s, s', dop, vop, blockCacheStep);
+          case BetreeMoveStep(betreeStep) => BetreeMoveStepPreservesInv(s, s', dop, vop, betreeStep);
+          case BlockCacheMoveStep(blockCacheStep) => BlockCacheMoveStepPreservesInv(s, s', dop, vop, blockCacheStep);
         }
       }
-      case CrashStep => CrashStepPreservesInv(k, s, s', vop);
+      case CrashStep => CrashStepPreservesInv(s, s', vop);
     }
   }
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp)
-  requires Inv(k, s)
-  requires Next(k, s, s', vop)
-  ensures Inv(k, s')
+  lemma NextPreservesInv(s: Variables, s': Variables, vop: VOp)
+  requires Inv(s)
+  requires Next(s, s', vop)
+  ensures Inv(s')
   {
-    var step :| NextStep(k, s, s', vop, step);
-    NextStepPreservesInv(k, s, s', vop, step);
+    var step :| NextStep(s, s', vop, step);
+    NextStepPreservesInv(s, s', vop, step);
   }
 }

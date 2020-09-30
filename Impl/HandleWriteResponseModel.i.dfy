@@ -16,43 +16,43 @@ module HandleWriteResponseModel {
   import MarshallingModel
 
   function {:opaque} writeBackJournalResp(
-      k: Constants, cm: CommitterModel.CM, io: IO) : CommitterModel.CM
+      cm: CommitterModel.CM, io: IO) : CommitterModel.CM
   {
     cm.(outstandingJournalWrites :=
         cm.outstandingJournalWrites - {io.id})
   }
 
-  lemma writeBackJournalRespCorrect(k: Constants, cm: CommitterModel.CM, io: IO)
+  lemma writeBackJournalRespCorrect(cm: CommitterModel.CM, io: IO)
   requires CommitterModel.Inv(cm)
   requires diskOp(io).RespWriteOp?
   requires ValidJournalLocation(LocOfRespWrite(diskOp(io).respWrite))
   requires cm.status.StatusReady?
-  ensures var cm' := writeBackJournalResp(k, cm, io);
+  ensures var cm' := writeBackJournalResp(cm, io);
     && CommitterModel.WF(cm')
-    && JC.Next(Ik(k).jc, CommitterModel.I(cm), CommitterModel.I(cm'), 
+    && JC.Next(CommitterModel.I(cm), CommitterModel.I(cm'), 
         IDiskOp(diskOp(io)).jdop, JournalInternalOp)
   {
     reveal_writeBackJournalResp();
-    var cm' := writeBackJournalResp(k, cm, io);
+    var cm' := writeBackJournalResp(cm, io);
     if diskOp(io).id in cm.outstandingJournalWrites {
-      assert JC.WriteBackJournalResp(Ik(k).jc,
+      assert JC.WriteBackJournalResp(
             CommitterModel.I(cm),
             CommitterModel.I(cm'),
             IDiskOp(diskOp(io)).jdop,
             JournalInternalOp);
-      assert JC.NextStep(Ik(k).jc,
+      assert JC.NextStep(
             CommitterModel.I(cm),
             CommitterModel.I(cm'),
             IDiskOp(diskOp(io)).jdop,
             JournalInternalOp,
             JC.WriteBackJournalRespStep);
     } else {
-      assert JC.NoOp(Ik(k).jc,
+      assert JC.NoOp(
             CommitterModel.I(cm),
             CommitterModel.I(cm'),
             IDiskOp(diskOp(io)).jdop,
             JournalInternalOp);
-      assert JC.NextStep(Ik(k).jc,
+      assert JC.NextStep(
             CommitterModel.I(cm),
             CommitterModel.I(cm'),
             IDiskOp(diskOp(io)).jdop,
@@ -63,9 +63,9 @@ module HandleWriteResponseModel {
     }
   }
 
-  function {:opaque} writeResponse(k: Constants, s: Variables, io: IO)
+  function {:opaque} writeResponse(s: Variables, io: IO)
       : Variables
-  requires Inv(k, s)
+  requires Inv(s)
   requires diskOp(io).RespWriteOp?
   {
     var loc := DiskLayout.Location(
@@ -74,25 +74,25 @@ module HandleWriteResponseModel {
 
     if ValidNodeLocation(loc) &&
         s.bc.Ready? && io.id in s.bc.outstandingBlockWrites then (
-      var bc' := IOModel.writeNodeResponse(k, s.bc, io);
+      var bc' := IOModel.writeNodeResponse(s.bc, io);
       s.(bc := bc')
     ) else if ValidIndirectionTableLocation(loc)
         && s.bc.Ready?
         && s.bc.outstandingIndirectionTableWrite == Some(io.id) then (
-      var (bc', frozen_loc) := IOModel.writeIndirectionTableResponse(k, s.bc, io);
-      var jc' := CommitterCommitModel.receiveFrozenLoc(k, s.jc, frozen_loc);
+      var (bc', frozen_loc) := IOModel.writeIndirectionTableResponse(s.bc, io);
+      var jc' := CommitterCommitModel.receiveFrozenLoc(s.jc, frozen_loc);
       s.(bc := bc')
        .(jc := jc')
     ) else if s.jc.status.StatusReady? && ValidJournalLocation(loc) then (
-      var jc' := writeBackJournalResp(k, s.jc, io);
+      var jc' := writeBackJournalResp(s.jc, io);
       s.(jc := jc')
     ) else if ValidSuperblockLocation(loc) && Some(io.id) == s.jc.superblockWrite then (
       var bc' := if s.jc.status.StatusReady? && s.jc.commitStatus.CommitAdvanceLocation? then (
-        IOModel.cleanUp(k, s.bc)
+        IOModel.cleanUp(s.bc)
       ) else (
         s.bc
       );
-      var jc' := CommitterCommitModel.writeBackSuperblockResp(k, s.jc);
+      var jc' := CommitterCommitModel.writeBackSuperblockResp(s.jc);
       s.(jc := jc')
        .(bc := bc')
     ) else (
@@ -100,75 +100,75 @@ module HandleWriteResponseModel {
     )
   }
 
-  lemma writeResponseCorrect(k: Constants, s: Variables, io: IO)
-  requires Inv(k, s)
+  lemma writeResponseCorrect(s: Variables, io: IO)
+  requires Inv(s)
   requires diskOp(io).RespWriteOp?
-  ensures var s' := writeResponse(k, s, io);
+  ensures var s' := writeResponse(s, io);
     && WFVars(s')
-    && M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io))
+    && M.Next(IVars(s), IVars(s'), UI.NoOp, diskOp(io))
   {
     var loc := DiskLayout.Location(
         io.respWrite.addr,
         io.respWrite.len);
-    var s' := writeResponse(k, s, io);
+    var s' := writeResponse(s, io);
     reveal_writeResponse();
 
     if ValidNodeLocation(loc) &&
         s.bc.Ready? && io.id in s.bc.outstandingBlockWrites {
-      IOModel.writeNodeResponseCorrect(k, s.bc, io);
-      assert JC.NextStep(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), IDiskOp(diskOp(io)).jdop, StatesInternalOp, JC.NoOpStep);
-      assert JC.Next(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), IDiskOp(diskOp(io)).jdop, StatesInternalOp);
-      assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), StatesInternalOp);
-      assert BJC.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
-      assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io));
+      IOModel.writeNodeResponseCorrect(s.bc, io);
+      assert JC.NextStep(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), IDiskOp(diskOp(io)).jdop, StatesInternalOp, JC.NoOpStep);
+      assert JC.Next(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), IDiskOp(diskOp(io)).jdop, StatesInternalOp);
+      assert BJC.NextStep(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), StatesInternalOp);
+      assert BJC.Next(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
+      assert M.Next(IVars(s), IVars(s'), UI.NoOp, diskOp(io));
     } else if ValidIndirectionTableLocation(loc)
         && s.bc.Ready?
         && s.bc.outstandingIndirectionTableWrite == Some(io.id) {
-      IOModel.writeIndirectionTableResponseCorrect(k, s.bc, io);
-      var (bc', frozen_loc) := IOModel.writeIndirectionTableResponse(k, s.bc, io);
-      CommitterCommitModel.receiveFrozenLocCorrect(k, s.jc, frozen_loc);
-      assert s'.jc == CommitterCommitModel.receiveFrozenLoc(k, s.jc, frozen_loc);
+      IOModel.writeIndirectionTableResponseCorrect(s.bc, io);
+      var (bc', frozen_loc) := IOModel.writeIndirectionTableResponse(s.bc, io);
+      CommitterCommitModel.receiveFrozenLocCorrect(s.jc, frozen_loc);
+      assert s'.jc == CommitterCommitModel.receiveFrozenLoc(s.jc, frozen_loc);
 
-      assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), SendFrozenLocOp(frozen_loc));
-      assert BJC.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
-      assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io));
+      assert BJC.NextStep(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), SendFrozenLocOp(frozen_loc));
+      assert BJC.Next(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
+      assert M.Next(IVars(s), IVars(s'), UI.NoOp, diskOp(io));
     } else if s.jc.status.StatusReady? && ValidJournalLocation(loc) {
-      writeBackJournalRespCorrect(k, s.jc, io);
+      writeBackJournalRespCorrect(s.jc, io);
 
-      assert BC.NextStep(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp, BC.NoOpStep);
-      assert BBC.NextStep(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep));
-      assert BBC.Next(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp);
-      assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), JournalInternalOp);
-      assert BJC.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
-      assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io));
+      assert BC.NextStep(IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp, BC.NoOpStep);
+      assert BBC.NextStep(IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep));
+      assert BBC.Next(IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp);
+      assert BJC.NextStep(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), JournalInternalOp);
+      assert BJC.Next(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
+      assert M.Next(IVars(s), IVars(s'), UI.NoOp, diskOp(io));
     } else if ValidSuperblockLocation(loc) && Some(io.id) == s.jc.superblockWrite {
-      CommitterCommitModel.writeBackSuperblockRespCorrect(k, s.jc, io);
+      CommitterCommitModel.writeBackSuperblockRespCorrect(s.jc, io);
       if s.jc.status.StatusReady? && s.jc.commitStatus.CommitAdvanceLocation? {
-        IOModel.cleanUpCorrect(k, s.bc);
-        assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), CleanUpOp);
-        assert BJC.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
+        IOModel.cleanUpCorrect(s.bc);
+        assert BJC.NextStep(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), CleanUpOp);
+        assert BJC.Next(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
       } else {
-        assert BC.NextStep(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp, BC.NoOpStep);
-        assert BBC.NextStep(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep));
-        assert BBC.Next(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp);
+        assert BC.NextStep(IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp, BC.NoOpStep);
+        assert BBC.NextStep(IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep));
+        assert BBC.Next(IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp);
 
-        assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), JournalInternalOp);
-        assert BJC.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
+        assert BJC.NextStep(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), JournalInternalOp);
+        assert BJC.Next(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
       }
-      assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io));
+      assert M.Next(IVars(s), IVars(s'), UI.NoOp, diskOp(io));
     } else {
       if ValidDiskOp(diskOp(io)) {
-        assert JC.NextStep(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), IDiskOp(diskOp(io)).jdop, JournalInternalOp, JC.NoOpStep);
-        assert JC.Next(Ik(k).jc, CommitterModel.I(s.jc), CommitterModel.I(s'.jc), IDiskOp(diskOp(io)).jdop, JournalInternalOp);
-        assert BC.NextStep(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp, BC.NoOpStep);
-        assert BBC.NextStep(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep));
-        assert BBC.Next(Ik(k).bc, IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp);
+        assert JC.NextStep(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), IDiskOp(diskOp(io)).jdop, JournalInternalOp, JC.NoOpStep);
+        assert JC.Next(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), IDiskOp(diskOp(io)).jdop, JournalInternalOp);
+        assert BC.NextStep(IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp, BC.NoOpStep);
+        assert BBC.NextStep(IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep));
+        assert BBC.Next(IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io)).bdop, JournalInternalOp);
 
-        assert BJC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), JournalInternalOp);
-        assert BJC.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
+        assert BJC.NextStep(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)), JournalInternalOp);
+        assert BJC.Next(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io)));
       }
 
-      assert M.Next(Ik(k), IVars(s), IVars(s'), UI.NoOp, diskOp(io));
+      assert M.Next(IVars(s), IVars(s'), UI.NoOp, diskOp(io));
     }
   }
 

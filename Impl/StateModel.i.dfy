@@ -233,23 +233,23 @@ module StateModel {
     BJC.Variables(IBlockCache(vars.bc), CommitterModel.I(vars.jc))
   }
 
-  function I(k: Constants, s: Variables) : BJC.Variables
+  function I(s: Variables) : BJC.Variables
   requires WFVars(s)
   {
     IVars(s)
   }
 
-  predicate BCInv(k: Constants, s: BCVariables)
+  predicate BCInv(s: BCVariables)
   {
     && WFBCVars(s)
-    && BBC.Inv(Ik(k).bc, IBlockCache(s))
+    && BBC.Inv(IBlockCache(s))
   }
 
-  predicate Inv(k: Constants, s: Variables)
+  predicate Inv(s: Variables)
   {
     && WFVars(s)
-    && BCInv(k, s.bc)
+    && BCInv(s.bc)
     && CommitterModel.Inv(s.jc)
-    && BJC.Inv(Ik(k), I(k, s))
+    && BJC.Inv(I(s))
   }
 }

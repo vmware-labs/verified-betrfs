@@ -16,33 +16,29 @@ module CompositeView {
 
   import UI
 
-  datatype Constants = Constants(
-      tsm: StatesViewMap.Constants,
-      jc: JournalView.Constants)
-
   datatype Variables = Variables(
       tsm: StatesViewMap.Variables,
       jc: JournalView.Variables)
 
   datatype Step = Step(vop: VOp) 
 
-  predicate Init(k: Constants, s: Variables)
+  predicate Init(s: Variables)
   {
     exists loc ::
-      && StatesViewMap.Init(k.tsm, s.tsm, loc)
-      && JournalView.Init(k.jc, s.jc, loc)
+      && StatesViewMap.Init(s.tsm, loc)
+      && JournalView.Init(s.jc, loc)
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
+  predicate NextStep(s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
   {
-    && StatesViewMap.Next(k.tsm, s.tsm, s'.tsm, vop)
-    && JournalView.Next(k.jc, s.jc, s'.jc, vop)
+    && StatesViewMap.Next(s.tsm, s'.tsm, vop)
+    && JournalView.Next(s.jc, s'.jc, vop)
     && VOpAgreesUIOp(vop, uiop)
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
+  predicate Next(s: Variables, s': Variables, uiop: UI.Op)
   {
-    exists step: Step :: NextStep(k, s, s', step.vop, uiop)
+    exists step: Step :: NextStep(s, s', step.vop, uiop)
   }
 
   /// Invariant definition
@@ -71,12 +67,7 @@ module CompositeView {
       s1(s)
   }
 
-  function Ik(k: Constants) : TSJ.Constants
-  {
-    TSJ.Constants(k.tsm.k)
-  }
-
-  function I(k: Constants, s: Variables) : TSJ.Variables
+  function I(s: Variables) : TSJ.Variables
   requires s.jc.persistentLoc in s.tsm.disk
   {
     TSJ.Variables(
@@ -92,7 +83,7 @@ module CompositeView {
     )
   }
 
-  predicate Inv(k: Constants, s: Variables)
+  predicate Inv(s: Variables)
   {
     && (s.jc.frozenLoc.Some? ==>
       && s.tsm.frozenLoc == s.jc.frozenLoc
@@ -115,84 +106,83 @@ module CompositeView {
     )
     && s.jc.persistentLoc in s.tsm.disk
 
-    && SM.Inv(k.tsm.k, s1(s))
-    && SM.Inv(k.tsm.k, s2(s))
-    && SM.Inv(k.tsm.k, s3(s))
+    && SM.Inv(s1(s))
+    && SM.Inv(s2(s))
+    && SM.Inv(s3(s))
 
-    && TSJ.Inv(Ik(k), I(k, s))
+    && TSJ.Inv(I(s))
   }
 
-  lemma InitImpliesInv(k: Constants, s: Variables)
-  requires Init(k, s)
-  ensures Inv(k, s)
+  lemma InitImpliesInv(s: Variables)
+  requires Init(s)
+  ensures Inv(s)
   {
-    SM.InitImpliesInv(k.tsm.k, s1(s));
-    TSJ.InitImpliesInv(Ik(k), I(k, s));
+    SM.InitImpliesInv(s1(s));
+    TSJ.InitImpliesInv(I(s));
   }
 
-  lemma Move3PreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
+  lemma Move3PreservesInv(s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
   requires vop.AdvanceOp?
   requires VOpAgreesUIOp(vop, uiop)
-  requires JournalView.Move3(k.jc, s.jc, s'.jc, vop)
-  requires StatesViewMap.Advance(k.tsm, s.tsm, s'.tsm, vop)
-  requires Inv(k, s)
-  ensures Inv(k, s')
-  ensures TSJ.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  requires JournalView.Move3(s.jc, s'.jc, vop)
+  requires StatesViewMap.Advance(s.tsm, s'.tsm, vop)
+  requires Inv(s)
+  ensures Inv(s')
+  ensures TSJ.Next(I(s), I(s'), uiop)
   {
-    /*assert SM.Inv(k.tsm.k, s1(s'));
-    assert SM.Inv(k.tsm.k, s2(s'));
-    assert SM.Inv(k.tsm.k, s3(s'));
-    assert s.tsm.ephemeralState.value == s3(s) == I(k,s).s3;
-    assert s'.tsm.ephemeralState.value == s3(s') == I(k,s').s3;
-    assert k.tsm.k == Ik(k).k;
-    assert SM.Next(k.tsm.k, s.tsm.ephemeralState.value, s'.tsm.ephemeralState.value, vop.uiop);
-    assert SM.Next(Ik(k).k, I(k,s).s3, I(k,s').s3, vop.uiop);
-    assert TSJ.Move3(Ik(k), I(k, s), I(k, s'), uiop);*/
-    assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.Move3Step);
-    TSJ.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
+    /*assert SM.Inv(s1(s'));
+    assert SM.Inv(s2(s'));
+    assert SM.Inv(s3(s'));
+    assert s.tsm.ephemeralState.value == s3(s) == I(s).s3;
+    assert s'.tsm.ephemeralState.value == s3(s') == I(s').s3;
+    assert SM.Next(s.tsm.ephemeralState.value, s'.tsm.ephemeralState.value, vop.uiop);
+    assert SM.Next(I(s).s3, I(s').s3, vop.uiop);
+    assert TSJ.Move3(I(s), I(s'), uiop);*/
+    assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.Move3Step);
+    TSJ.NextPreservesInv(I(s), I(s'), uiop);
   }
 
-  lemma ReplayPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
+  lemma ReplayPreservesInv(s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
   requires vop.AdvanceOp?
   requires VOpAgreesUIOp(vop, uiop)
-  requires JournalView.Replay(k.jc, s.jc, s'.jc, vop)
-  requires StatesViewMap.Advance(k.tsm, s.tsm, s'.tsm, vop)
-  requires Inv(k, s)
-  ensures Inv(k, s')
-  ensures TSJ.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  requires JournalView.Replay(s.jc, s'.jc, vop)
+  requires StatesViewMap.Advance(s.tsm, s'.tsm, vop)
+  requires Inv(s)
+  ensures Inv(s')
+  ensures TSJ.Next(I(s), I(s'), uiop)
   {
-    assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.ReplayStep(vop.uiop));
-    TSJ.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
+    assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.ReplayStep(vop.uiop));
+    TSJ.NextPreservesInv(I(s), I(s'), uiop);
   }
 
-  lemma AdvancePreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
-  requires NextStep(k, s, s', vop, uiop)
+  lemma AdvancePreservesInv(s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
+  requires NextStep(s, s', vop, uiop)
   requires vop.AdvanceOp?
   requires VOpAgreesUIOp(vop, uiop)
-  requires Inv(k, s)
-  ensures Inv(k, s')
-  ensures TSJ.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  requires Inv(s)
+  ensures Inv(s')
+  ensures TSJ.Next(I(s), I(s'), uiop)
   {
-    if JournalView.Move3(k.jc, s.jc, s'.jc, vop) {
-      Move3PreservesInv(k, s, s', vop, uiop);
-    } else if JournalView.Replay(k.jc, s.jc, s'.jc, vop) {
-      ReplayPreservesInv(k, s, s', vop, uiop);
+    if JournalView.Move3(s.jc, s'.jc, vop) {
+      Move3PreservesInv(s, s', vop, uiop);
+    } else if JournalView.Replay(s.jc, s'.jc, vop) {
+      ReplayPreservesInv(s, s', vop, uiop);
     }
   }
 
-  lemma FreezePreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
-  requires NextStep(k, s, s', vop, uiop)
+  lemma FreezePreservesInv(s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
+  requires NextStep(s, s', vop, uiop)
   requires vop.FreezeOp?
   requires VOpAgreesUIOp(vop, uiop)
-  requires Inv(k, s)
-  ensures Inv(k, s')
-  ensures TSJ.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  requires Inv(s)
+  ensures Inv(s')
+  ensures TSJ.Next(I(s), I(s'), uiop)
   {
-    assert JournalView.Move2to3(k.jc, s.jc, s'.jc, vop);
-    assert StatesViewMap.Freeze(k.tsm, s.tsm, s'.tsm, vop);
+    assert JournalView.Move2to3(s.jc, s'.jc, vop);
+    assert StatesViewMap.Freeze(s.tsm, s'.tsm, vop);
 
-    assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.Move2to3Step);
-    TSJ.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
+    assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.Move2to3Step);
+    TSJ.NextPreservesInv(I(s), I(s'), uiop);
 
     /*assert s.jc.frozenLoc != Some(s.jc.persistentLoc);
     if s.tsm.persistentLoc.Some? {
@@ -203,56 +193,56 @@ module CompositeView {
     }*/
   }
 
-  lemma CrashPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
-  requires NextStep(k, s, s', vop, uiop)
+  lemma CrashPreservesInv(s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
+  requires NextStep(s, s', vop, uiop)
   requires vop.CrashOp?
   requires VOpAgreesUIOp(vop, uiop)
-  requires Inv(k, s)
-  ensures Inv(k, s')
-  ensures TSJ.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  requires Inv(s)
+  ensures Inv(s')
+  ensures TSJ.Next(I(s), I(s'), uiop)
   {
     assert s1(s) == s1(s') == s2(s') == s3(s');
-    assert JournalView.Crash(k.jc, s.jc, s'.jc, vop);
-    assert StatesViewMap.Crash(k.tsm, s.tsm, s'.tsm, vop);
+    assert JournalView.Crash(s.jc, s'.jc, vop);
+    assert StatesViewMap.Crash(s.tsm, s'.tsm, vop);
 
-    assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.CrashStep);
-    TSJ.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
+    assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.CrashStep);
+    TSJ.NextPreservesInv(I(s), I(s'), uiop);
   }
 
-  lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
-  requires NextStep(k, s, s', vop, uiop)
-  requires Inv(k, s)
-  ensures Inv(k, s')
+  lemma NextStepPreservesInv(s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
+  requires NextStep(s, s', vop, uiop)
+  requires Inv(s)
+  ensures Inv(s')
   {
-    var tsm_step :| StatesViewMap.NextStep(k.tsm, s.tsm, s'.tsm, vop, tsm_step);
-    var jc_step :| JournalView.NextStep(k.jc, s.jc, s'.jc, vop, jc_step);
+    var tsm_step :| StatesViewMap.NextStep(s.tsm, s'.tsm, vop, tsm_step);
+    var jc_step :| JournalView.NextStep(s.jc, s'.jc, vop, jc_step);
 
     match vop {
       case SendPersistentLocOp(loc) => { }
       case AdvanceOp(_, _) => {
-        AdvancePreservesInv(k, s, s', vop, uiop);
+        AdvancePreservesInv(s, s', vop, uiop);
       }
       case CrashOp => {
-        CrashPreservesInv(k, s, s', vop, uiop);
+        CrashPreservesInv(s, s', vop, uiop);
       }
       case FreezeOp => {
-        FreezePreservesInv(k, s, s', vop, uiop);
+        FreezePreservesInv(s, s', vop, uiop);
       }
       case StatesInternalOp => { }
       case JournalInternalOp => {
         assert s.tsm == s'.tsm;
-        if JournalView.Move1to2(k.jc, s.jc, s'.jc, vop) {
-          assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.Move1to2Step);
-          TSJ.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
-          assert Inv(k, s');
+        if JournalView.Move1to2(s.jc, s'.jc, vop) {
+          assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.Move1to2Step);
+          TSJ.NextPreservesInv(I(s), I(s'), uiop);
+          assert Inv(s');
         }
-        else if JournalView.ExtendLog1(k.jc, s.jc, s'.jc, vop) {
-          assert Inv(k, s');
+        else if JournalView.ExtendLog1(s.jc, s'.jc, vop) {
+          assert Inv(s');
         }
-        else if JournalView.ExtendLog2(k.jc, s.jc, s'.jc, vop) {
-          assert TSJ.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSJ.ExtendLog2Step);
-          TSJ.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
-          assert Inv(k, s');
+        else if JournalView.ExtendLog2(s.jc, s'.jc, vop) {
+          assert TSJ.NextStep(I(s), I(s'), uiop, TSJ.ExtendLog2Step);
+          TSJ.NextPreservesInv(I(s), I(s'), uiop);
+          assert Inv(s');
         }
         else {
           assert s.jc == s'.jc;
@@ -260,21 +250,21 @@ module CompositeView {
       }
       case SendFrozenLocOp(loc) => { }
       case CleanUpOp => {
-        assert JournalView.CleanUp(k.jc, s.jc, s'.jc, vop);
-        assert StatesViewMap.ForgetOld(k.tsm, s.tsm, s'.tsm, vop);
-        assert Inv(k, s');
+        assert JournalView.CleanUp(s.jc, s'.jc, vop);
+        assert StatesViewMap.ForgetOld(s.tsm, s'.tsm, vop);
+        assert Inv(s');
       }
       case PushSyncOp(id) => { }
       case PopSyncOp(id) => { }
     }
   }
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
-  requires Next(k, s, s', uiop)
-  requires Inv(k, s)
-  ensures Inv(k, s')
+  lemma NextPreservesInv(s: Variables, s': Variables, uiop: UI.Op)
+  requires Next(s, s', uiop)
+  requires Inv(s)
+  ensures Inv(s')
   {
-    var step: Step :| NextStep(k, s, s', step.vop, uiop);
-    NextStepPreservesInv(k, s, s', step.vop, uiop);
+    var step: Step :| NextStep(s, s', step.vop, uiop);
+    NextStepPreservesInv(s, s', step.vop, uiop);
   }
 }

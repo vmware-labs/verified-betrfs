@@ -18,14 +18,14 @@ module GrowModel {
   import opened NativeTypes
 
   /// The root was found to be too big: grow
-  function {:opaque} grow(k: Constants, s: BCVariables)
+  function {:opaque} grow(s: BCVariables)
   : (BCVariables)
-  requires BCInv(k, s)
+  requires BCInv(s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
   requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 2
   {
-    lemmaChildrenConditionsOfNode(k, s, BT.G.Root());
+    lemmaChildrenConditionsOfNode(s, BT.G.Root());
 
     if (
       && s.frozenIndirectionTable.Some?
@@ -34,9 +34,9 @@ module GrowModel {
       s
     ) else (
       var oldroot := s.cache[BT.G.Root()];
-      var (s1, newref) := allocBookkeeping(k, s, oldroot.children);
+      var (s1, newref) := allocBookkeeping(s, oldroot.children);
 
-      lemmaChildrenConditionsSingleOfAllocBookkeeping(k, s, oldroot.children);
+      lemmaChildrenConditionsSingleOfAllocBookkeeping(s, oldroot.children);
 
       match newref {
         case None => (
@@ -44,7 +44,7 @@ module GrowModel {
         )
         case Some(newref) => (
           var newroot := Node([], Some([newref]), [B(map[])]);
-          var s2 := writeBookkeeping(k, s1, BT.G.Root(), newroot.children);
+          var s2 := writeBookkeeping(s1, BT.G.Root(), newroot.children);
           var s' := s2.(cache := s2.cache[newref := oldroot][BT.G.Root() := newroot]);
           s'
         )
@@ -52,38 +52,38 @@ module GrowModel {
     )
   }
 
-  lemma growCorrect(k: Constants, s: BCVariables)
-  requires BCInv(k, s)
+  lemma growCorrect(s: BCVariables)
+  requires BCInv(s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
   requires TotalCacheSize(s) <= MaxCacheSize() - 1
   requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 2
-  ensures var s' := grow(k, s);
+  ensures var s' := grow(s);
     && WFBCVars(s')
-    && betree_next(k, IBlockCache(s), IBlockCache(s'))
+    && betree_next(IBlockCache(s), IBlockCache(s'))
   {
     reveal_grow();
 
-    var s' := grow(k, s);
+    var s' := grow(s);
 
-    lemmaChildrenConditionsOfNode(k, s, BT.G.Root());
+    lemmaChildrenConditionsOfNode(s, BT.G.Root());
 
     if (
       && s.frozenIndirectionTable.Some?
       && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, BT.G.Root())
     ) {
-      assert noop(k, IBlockCache(s), IBlockCache(s));
+      assert noop(IBlockCache(s), IBlockCache(s));
       return;
     }
 
     var oldroot := s.cache[BT.G.Root()];
-    var (s1, newref) := allocWithNode(k, s, oldroot);
+    var (s1, newref) := allocWithNode(s, oldroot);
     reveal_allocBookkeeping();
     reveal_writeBookkeeping();
 
     match newref {
       case None => {
-        assert noop(k, IBlockCache(s), IBlockCache(s1));
+        assert noop(IBlockCache(s), IBlockCache(s1));
       }
       case Some(newref) => {
         var newroot := Node([], Some([newref]), [B(map[])]);
@@ -94,18 +94,18 @@ module GrowModel {
         assert BT.G.Root() in ICache(s1.cache);
         assert BT.G.Root() in s1.cache;
 
-        var s2 := writeWithNode(k, s1, BT.G.Root(), newroot);
+        var s2 := writeWithNode(s1, BT.G.Root(), newroot);
         assert s2 == s';
 
-        allocCorrect(k, s, oldroot);
-        writeCorrect(k, s1, BT.G.Root(), newroot);
+        allocCorrect(s, oldroot);
+        writeCorrect(s1, BT.G.Root(), newroot);
 
         var growth := BT.RootGrowth(INode(oldroot), newref);
         assert INode(newroot) == BT.G.Node([], Some([growth.newchildref]), [B(map[])]);
         var step := BT.BetreeGrow(growth);
-        BC.MakeTransaction2(Ik(k).bc, IBlockCache(s), IBlockCache(s1), IBlockCache(s'), BT.BetreeStepOps(step));
-        assert BBC.BetreeMove(Ik(k).bc, IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, AdvanceOp(UI.NoOp, true), step);
-        assert stepsBetree(k, IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), step);
+        BC.MakeTransaction2(IBlockCache(s), IBlockCache(s1), IBlockCache(s'), BT.BetreeStepOps(step));
+        assert BBC.BetreeMove(IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, AdvanceOp(UI.NoOp, true), step);
+        assert stepsBetree(IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), step);
       }
     }
   }

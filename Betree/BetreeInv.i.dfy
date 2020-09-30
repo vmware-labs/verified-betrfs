@@ -19,9 +19,9 @@ module BetreeInv {
   import opened ValueType
   import UI
 
-  predicate KeyHasSatisfyingLookup(k: Constants, view: BI.View, key: Key)
+  predicate KeyHasSatisfyingLookup(view: BI.View, key: Key)
   {
-    exists lookup, value :: IsSatisfyingLookup(k, view, key, value, lookup)
+    exists lookup, value :: IsSatisfyingLookup(view, key, value, lookup)
   }
 
   function PathOfLookup(lookup: Lookup) : (path : G.Path)
@@ -36,42 +36,42 @@ module BetreeInv {
     forall i, j :: 0 <= i < |lookup| && 0 <= j < |lookup| && i != j ==> lookup[i].ref != lookup[j].ref
   }
   
-  predicate Acyclic(k: Constants, s: Variables) {
+  predicate Acyclic(s: Variables) {
     forall key, lookup ::
-      IsPathFromRootLookup(k, s.bcv.view, key, lookup) ==>
+      IsPathFromRootLookup(s.bcv.view, key, lookup) ==>
       LookupIsAcyclic(lookup)
   }
 
-  predicate Inv(k: Constants, s: Variables)
+  predicate Inv(s: Variables)
   {
-    && BI.Inv(k.bck, s.bcv)
+    && BI.Inv(s.bcv)
     && G.IsAcyclic(s.bcv.view)
-    && Acyclic(k, s)
-    && (forall key | MS.InDomain(key) :: KeyHasSatisfyingLookup(k, s.bcv.view, key))
+    && Acyclic(s)
+    && (forall key | MS.InDomain(key) :: KeyHasSatisfyingLookup(s.bcv.view, key))
   }
 
   //// Definitions for lookup preservation
 
   // One-way preservation
 
-  predicate PreservesLookups(k: Constants, s: Variables, s': Variables)
+  predicate PreservesLookups(s: Variables, s': Variables)
   {
-    forall lookup, key, value :: IsSatisfyingLookup(k, s.bcv.view, key, value, lookup) ==>
-      exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+    forall lookup, key, value :: IsSatisfyingLookup(s.bcv.view, key, value, lookup) ==>
+      exists lookup' :: IsSatisfyingLookup(s'.bcv.view, key, value, lookup')
   }
 
-  predicate PreservesLookupsExcept(k: Constants, s: Variables, s': Variables, exceptQuery: Key)
+  predicate PreservesLookupsExcept(s: Variables, s': Variables, exceptQuery: Key)
   {
-    forall lookup, key, value :: key != exceptQuery && IsSatisfyingLookup(k, s.bcv.view, key, value, lookup) ==>
-      exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+    forall lookup, key, value :: key != exceptQuery && IsSatisfyingLookup(s.bcv.view, key, value, lookup) ==>
+      exists lookup' :: IsSatisfyingLookup(s'.bcv.view, key, value, lookup')
   }
 
   // TODO generalize this to explain how the value changes when a non-Define
   // message is inserted
-  predicate PreservesLookupsPut(k: Constants, s: Variables, s': Variables, key: Key, value: Value)
+  predicate PreservesLookupsPut(s: Variables, s': Variables, key: Key, value: Value)
   {
-    && PreservesLookupsExcept(k, s, s', key)
-    && exists lookup :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup)
+    && PreservesLookupsExcept(s, s', key)
+    && exists lookup :: IsSatisfyingLookup(s'.bcv.view, key, value, lookup)
   }
 
   //
@@ -116,24 +116,24 @@ module BetreeInv {
   // CantEquivocate
   // It's a lemma here (follows from structure of Lookups) - not an invariant!
 
-  lemma SatisfyingLookupsForKeyAgree(k: Constants, s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup, idx: int)
-  requires IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
-  requires IsSatisfyingLookup(k, s.bcv.view, key, value', lookup');
+  lemma SatisfyingLookupsForKeyAgree(s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup, idx: int)
+  requires IsSatisfyingLookup(s.bcv.view, key, value, lookup);
+  requires IsSatisfyingLookup(s.bcv.view, key, value', lookup');
   requires 0 <= idx < |lookup|;
   requires 0 <= idx < |lookup'|;
   ensures lookup[idx] == lookup'[idx];
   {
     if (idx == 0) {
     } else {
-      SatisfyingLookupsForKeyAgree(k, s, key, value, value', lookup, lookup', idx - 1);
+      SatisfyingLookupsForKeyAgree(s, key, value, value', lookup, lookup', idx - 1);
       assert LookupFollowsChildRefAtLayer(key, lookup, idx-1);
       assert LookupFollowsChildRefAtLayer(key, lookup', idx-1);
     }
   }
 
-  lemma CantEquivocateWlog(k: Constants, s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
-  requires IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
-  requires IsSatisfyingLookup(k, s.bcv.view, key, value', lookup');
+  lemma CantEquivocateWlog(s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
+  requires IsSatisfyingLookup(s.bcv.view, key, value, lookup);
+  requires IsSatisfyingLookup(s.bcv.view, key, value', lookup');
   requires |lookup| <= |lookup'|
   ensures value == value';
   {
@@ -142,79 +142,79 @@ module BetreeInv {
     forall idx | 0 <= idx < |lookup|
     ensures lookup'[idx] == lookup[idx];
     {
-        SatisfyingLookupsForKeyAgree(k, s, key, value, value', lookup, lookup', idx);
+        SatisfyingLookupsForKeyAgree(s, key, value, value', lookup, lookup', idx);
     }
     assert lookup' == lookup + junk; // observe
     InterpretLookupAdditive(lookup, junk, key);
   }
 
-  lemma CantEquivocate(k: Constants, s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
-  requires IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
-  requires IsSatisfyingLookup(k, s.bcv.view, key, value', lookup');
+  lemma CantEquivocate(s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
+  requires IsSatisfyingLookup(s.bcv.view, key, value, lookup);
+  requires IsSatisfyingLookup(s.bcv.view, key, value', lookup');
   ensures value == value';
   {
     if (|lookup| <= |lookup'|) {
-      CantEquivocateWlog(k, s, key, value, value', lookup, lookup');
+      CantEquivocateWlog(s, key, value, value', lookup, lookup');
     } else {
-      CantEquivocateWlog(k, s, key, value', value, lookup', lookup);
+      CantEquivocateWlog(s, key, value', value, lookup', lookup);
     }
   }
 
   // Old definitions
   // TODO clean these up; remove them or change them to use BetreeStep objects instead
 
-  predicate InsertMessage(k: BI.Constants, s: BI.Variables, s': BI.Variables, key: Key, msg: BufferEntry, oldroot: Node)
+  predicate InsertMessage(s: BI.Variables, s': BI.Variables, key: Key, msg: BufferEntry, oldroot: Node)
   {
     && ValidInsertion(MessageInsertion(key, msg, oldroot))
-    && BI.Reads(k, s, InsertionReads(MessageInsertion(key, msg, oldroot)))
-    && BI.OpTransaction(k, s, s', InsertionOps(MessageInsertion(key, msg, oldroot)))
+    && BI.Reads(s, InsertionReads(MessageInsertion(key, msg, oldroot)))
+    && BI.OpTransaction(s, s', InsertionOps(MessageInsertion(key, msg, oldroot)))
   }
 
-  predicate Flush(k: BI.Constants, s: BI.Variables, s': BI.Variables, flush:NodeFlush)
+  predicate Flush(s: BI.Variables, s': BI.Variables, flush:NodeFlush)
   {
     && ValidFlush(flush)
-    && BI.Reads(k, s, FlushReads(flush))
-    && BI.OpTransaction(k, s, s', FlushOps(flush))
+    && BI.Reads(s, FlushReads(flush))
+    && BI.OpTransaction(s, s', FlushOps(flush))
   }
 
-  predicate Grow(k: BI.Constants, s: BI.Variables, s': BI.Variables, oldroot: Node, newchildref: Reference)
+  predicate Grow(s: BI.Variables, s': BI.Variables, oldroot: Node, newchildref: Reference)
   {
     && ValidGrow(RootGrowth(oldroot, newchildref))
-    && BI.Reads(k, s, GrowReads(RootGrowth(oldroot, newchildref)))
-    && BI.OpTransaction(k, s, s', GrowOps(RootGrowth(oldroot, newchildref)))
+    && BI.Reads(s, GrowReads(RootGrowth(oldroot, newchildref)))
+    && BI.OpTransaction(s, s', GrowOps(RootGrowth(oldroot, newchildref)))
   }
 
-  predicate Redirect(k: BI.Constants, s: BI.Variables, s': BI.Variables, redirect: Redirect)
+  predicate Redirect(s: BI.Variables, s': BI.Variables, redirect: Redirect)
   {
     && ValidRedirect(redirect)
-    && BI.Reads(k, s, RedirectReads(redirect))
-    && BI.OpTransaction(k, s, s', RedirectOps(redirect))
+    && BI.Reads(s, RedirectReads(redirect))
+    && BI.OpTransaction(s, s', RedirectOps(redirect))
   }
 
-  predicate Query(k: BI.Constants, s: BI.Variables, s': BI.Variables, key: Key, value: Value, lookup: Lookup)
+  predicate Query(s: BI.Variables, s': BI.Variables, key: Key, value: Value, lookup: Lookup)
   {
     && ValidQuery(LookupQuery(key, value, lookup))
-    && BI.Reads(k, s, QueryReads(LookupQuery(key, value, lookup)))
-    && BI.OpTransaction(k, s, s', QueryOps(LookupQuery(key, value, lookup)))
+    && BI.Reads(s, QueryReads(LookupQuery(key, value, lookup)))
+    && BI.OpTransaction(s, s', QueryOps(LookupQuery(key, value, lookup)))
   }
 
-  predicate SuccQuery(k: BI.Constants, s: BI.Variables, s': BI.Variables, start: UI.RangeStart, results: seq<UI.SuccResult>, end: UI.RangeEnd, lookup: Lookup)
+  predicate SuccQuery(s: BI.Variables, s': BI.Variables, start: UI.RangeStart, results: seq<UI.SuccResult>, end: UI.RangeEnd, lookup: Lookup)
   {
     && ValidSuccQuery(BetreeSpec.SuccQuery(start, results, end, lookup))
-    && BI.Reads(k, s, SuccQueryReads(BetreeSpec.SuccQuery(start, results, end, lookup)))
-    && BI.OpTransaction(k, s, s', SuccQueryOps(BetreeSpec.SuccQuery(start, results, end, lookup)))
+    && BI.Reads(s, SuccQueryReads(BetreeSpec.SuccQuery(start, results, end, lookup)))
+    && BI.OpTransaction(s, s', SuccQueryOps(BetreeSpec.SuccQuery(start, results, end, lookup)))
   }
 
   //
   // Acyclicity proofs
   //
   
-  lemma AcyclicGraphImpliesAcyclic(k: Constants, s: Variables)
+  lemma AcyclicGraphImpliesAcyclic(s: Variables)
     requires IsAcyclic(s.bcv.view)
-    ensures Acyclic(k, s)
+    ensures Acyclic(s)
   {
     var g := s.bcv.view;
-    forall key, lookup: Lookup | IsPathFromRootLookup(k, s.bcv.view, key, lookup)
+    forall key, lookup: Lookup | IsPathFromRootLookup(s.bcv.view, key, lookup)
       ensures LookupIsAcyclic(lookup)
     {
       var path := PathOfLookup(lookup);
@@ -228,11 +228,11 @@ module BetreeInv {
   }
 
 
-  lemma FlushPreservesAcyclic(k: Constants, s: Variables, s': Variables, flush:NodeFlush)
-    requires Inv(k, s)
-    requires Flush(k.bck, s.bcv, s'.bcv, flush)
+  lemma FlushPreservesAcyclic(s: Variables, s': Variables, flush:NodeFlush)
+    requires Inv(s)
+    requires Flush(s.bcv, s'.bcv, flush)
     ensures G.IsAcyclic(s'.bcv.view)
-    ensures Acyclic(k, s')
+    ensures Acyclic(s')
   {
     var f := flush;
     forall ref | ref in G.NewlyReachableReferences(s.bcv.view, s'.bcv.view, f.parentref)
@@ -247,14 +247,14 @@ module BetreeInv {
         }
       }
     G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, f.parentref);
-    AcyclicGraphImpliesAcyclic(k, s');
+    AcyclicGraphImpliesAcyclic(s');
   }
 
-  lemma GrowPreservesAcyclic(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
-    requires Inv(k, s)
-    requires Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
+  lemma GrowPreservesAcyclic(s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
+    requires Inv(s)
+    requires Grow(s.bcv, s'.bcv, oldroot, newchildref)
     ensures G.IsAcyclic(s'.bcv.view)
-    ensures Acyclic(k, s')
+    ensures Acyclic(s')
   {
     forall ref | ref in G.NewlyReachableReferences(s.bcv.view, s'.bcv.view, Root())
       ensures ref in G.ReachableReferences(s.bcv.view, Root())
@@ -264,14 +264,14 @@ module BetreeInv {
       assert G.IsPath(s.bcv.view, [Root(), ref]);
      }
     G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, Root());
-    AcyclicGraphImpliesAcyclic(k, s');
+    AcyclicGraphImpliesAcyclic(s');
   }
 
-  lemma RedirectResultingGraphAfterAllocs(k: BI.Constants, s: BI.Variables, s': BI.Variables, childrefs: seq<Reference>, children: imap<Reference, Node>)
+  lemma RedirectResultingGraphAfterAllocs(s: BI.Variables, s': BI.Variables, childrefs: seq<Reference>, children: imap<Reference, Node>)
   requires forall ref :: ref in childrefs ==> ref in children
-  requires BI.Inv(k, s)
-  requires BI.OpTransaction(k, s, s', RedirectChildAllocs(childrefs, children))
-  ensures BI.Inv(k, s')
+  requires BI.Inv(s)
+  requires BI.OpTransaction(s, s', RedirectChildAllocs(childrefs, children))
+  ensures BI.Inv(s')
   ensures forall childref | childref in childrefs :: IMapsTo(s'.view, childref, children[childref])
   ensures forall childref | childref in childrefs :: childref !in s.view
   ensures s.view.Keys <= s'.view.Keys
@@ -282,8 +282,8 @@ module BetreeInv {
     if |childrefs| == 0 {
     } else {
       var ops := RedirectChildAllocs(childrefs, children);
-      var smid := BI.GetPenultimateState(k, s, s', ops);
-      RedirectResultingGraphAfterAllocs(k, s, smid, DropLast(childrefs), children);
+      var smid := BI.GetPenultimateState(s, s', ops);
+      RedirectResultingGraphAfterAllocs(s, smid, DropLast(childrefs), children);
       assert s'.view.Keys - s.view.Keys
           == (smid.view.Keys + iset{Last(childrefs)}) - s.view.Keys
           == (smid.view.Keys - s.view.Keys) + iset{Last(childrefs)}
@@ -292,9 +292,9 @@ module BetreeInv {
     }
   }
 
-  lemma RedirectResultingGraph(k: Constants, s: Variables, s': Variables, redirect: Redirect)
-  requires Inv(k, s);
-  requires Redirect(k.bck, s.bcv, s'.bcv, redirect);
+  lemma RedirectResultingGraph(s: Variables, s': Variables, redirect: Redirect)
+  requires Inv(s);
+  requires Redirect(s.bcv, s'.bcv, redirect);
   ensures IMapsTo(s'.bcv.view, redirect.parentref, redirect.new_parent);
   ensures forall childref | childref in redirect.new_childrefs :: IMapsTo(s'.bcv.view, childref, redirect.new_children[childref])
   ensures forall childref | childref in redirect.new_childrefs :: childref !in s.bcv.view
@@ -302,20 +302,20 @@ module BetreeInv {
   ensures forall ref | ref in s.bcv.view && ref != redirect.parentref :: IMapsTo(s'.bcv.view, ref, s.bcv.view[ref])
   {
     var ops := RedirectOps(redirect);
-    var smid := BI.GetPenultimateState(k.bck, s.bcv, s'.bcv, ops);
-    RedirectResultingGraphAfterAllocs(k.bck, s.bcv, smid, redirect.new_childrefs, redirect.new_children);
+    var smid := BI.GetPenultimateState(s.bcv, s'.bcv, ops);
+    RedirectResultingGraphAfterAllocs(s.bcv, smid, redirect.new_childrefs, redirect.new_children);
     assert s'.bcv.view.Keys == smid.view.Keys;
   }
 
-  lemma RedirectOnlyPredOfChildIsParent(k: Constants, s: Variables, s': Variables, redirect: Redirect, parentref: Reference, ref: Reference)
-  requires Inv(k, s);
-  requires Redirect(k.bck, s.bcv, s'.bcv, redirect);
+  lemma RedirectOnlyPredOfChildIsParent(s: Variables, s': Variables, redirect: Redirect, parentref: Reference, ref: Reference)
+  requires Inv(s);
+  requires Redirect(s.bcv, s'.bcv, redirect);
   requires ref in redirect.new_children
   requires parentref in s'.bcv.view
   requires ref in Successors(s'.bcv.view[parentref])
   ensures parentref == redirect.parentref
   {
-    RedirectResultingGraph(k, s, s', redirect);
+    RedirectResultingGraph(s, s', redirect);
     if (parentref == redirect.parentref) {
     } else if (parentref in redirect.new_children.Keys) {
       assert ref in redirect.new_children.Keys;
@@ -328,7 +328,7 @@ module BetreeInv {
       var key :| IMapsTo(redirect.new_parent.children, key, new_childref) && IMapsTo(new_child.children, key, ref) && key in redirect.keys && key in redirect.old_parent.children;
       var old_childref := redirect.old_parent.children[key];
       var i :| 0 <= i < |redirect.old_childrefs| && redirect.old_childrefs[i] == old_childref;
-      assert BI.ReadStep(k.bck, s.bcv, RedirectReads(redirect)[i+1]);
+      assert BI.ReadStep(s.bcv, RedirectReads(redirect)[i+1]);
 
       assert ref in s.bcv.view;
       assert false;
@@ -337,13 +337,13 @@ module BetreeInv {
     }
   }
 
-  lemma RedirectPreservesAcyclic(k: Constants, s: Variables, s': Variables, redirect: Redirect)
-    requires Inv(k, s);
-    requires Redirect(k.bck, s.bcv, s'.bcv, redirect);
-    ensures Acyclic(k, s');
+  lemma RedirectPreservesAcyclic(s: Variables, s': Variables, redirect: Redirect)
+    requires Inv(s);
+    requires Redirect(s.bcv, s'.bcv, redirect);
+    ensures Acyclic(s');
     ensures G.IsAcyclic(s'.bcv.view);
   {
-    RedirectResultingGraph(k, s, s', redirect);
+    RedirectResultingGraph(s, s', redirect);
 
     forall ref | ref in G.NewlyReachableReferences(s.bcv.view, s'.bcv.view, redirect.parentref)
       ensures ref in G.ReachableReferences(s.bcv.view, redirect.parentref)
@@ -361,7 +361,7 @@ module BetreeInv {
         var key :| IMapsTo(redirect.new_parent.children, key, new_childref) && IMapsTo(new_child.children, key, ref) && key in redirect.keys && key in redirect.old_parent.children;
         var old_childref := redirect.old_parent.children[key];
         var i :| 0 <= i < |redirect.old_childrefs| && redirect.old_childrefs[i] == old_childref;
-        assert BI.ReadStep(k.bck, s.bcv, RedirectReads(redirect)[i+1]);
+        assert BI.ReadStep(s.bcv, RedirectReads(redirect)[i+1]);
         assert G.IsPath(s.bcv.view, [redirect.parentref, old_childref, ref]);
       }
     }
@@ -372,7 +372,7 @@ module BetreeInv {
     ensures !IsCycle(s'.bcv.view, path)
     {
       if (IsCycle(s'.bcv.view, path)) {
-        RedirectOnlyPredOfChildIsParent(k, s, s', redirect, Last(path), path[0]);
+        RedirectOnlyPredOfChildIsParent(s, s', redirect, Last(path), path[0]);
         assert false;
         /*
         assert path[0] in redirect.new_children.Keys;
@@ -388,7 +388,7 @@ module BetreeInv {
         var key :| IMapsTo(redirect.new_parent.children, key, new_childref) && IMapsTo(new_child.children, key, ref) && key in redirect.keys && key in redirect.old_parent.children;
         var old_childref := redirect.old_parent.children[key];
         var i :| 0 <= i < |redirect.old_childrefs| && redirect.old_childrefs[i] == old_childref;
-        assert BI.ReadStep(k.bck, s.bcv, RedirectReads(redirect)[i+1]);
+        assert BI.ReadStep(s.bcv, RedirectReads(redirect)[i+1]);
 
         assert path[0] in s.bcv.view;
         assert false;
@@ -397,20 +397,20 @@ module BetreeInv {
     }
 
     G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, redirect.parentref); // observe
-    AcyclicGraphImpliesAcyclic(k, s'); // observe
+    AcyclicGraphImpliesAcyclic(s'); // observe
   }
 
   //
   // Preservation proofs
   //
   
-  lemma GrowPreservesLookups(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
-  requires Inv(k, s)
-  requires Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
-  ensures PreservesLookups(k, s, s')
+  lemma GrowPreservesLookups(s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
+  requires Inv(s)
+  requires Grow(s.bcv, s'.bcv, oldroot, newchildref)
+  ensures PreservesLookups(s, s')
   {
-    forall lookup:Lookup, key, value | IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
-    ensures exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+    forall lookup:Lookup, key, value | IsSatisfyingLookup(s.bcv.view, key, value, lookup)
+    ensures exists lookup' :: IsSatisfyingLookup(s'.bcv.view, key, value, lookup')
     {
       // Add one for the new root
       var rootref := Root();
@@ -437,7 +437,7 @@ module BetreeInv {
         }
       }
       
-      assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup');
+      assert IsSatisfyingLookup(s'.bcv.view, key, value, lookup');
     }
   }
 
@@ -463,10 +463,10 @@ module BetreeInv {
     InterpretLookupAdditive3(lookup'[..i], middle', lookup'[i+2..], key);
   }
 
-  lemma FlushPreservesLookups(k: Constants, s: Variables, s': Variables, flush:NodeFlush)
-  requires Inv(k, s)
-  requires Flush(k.bck, s.bcv, s'.bcv, flush)
-  ensures PreservesLookups(k, s, s')
+  lemma FlushPreservesLookups(s: Variables, s': Variables, flush:NodeFlush)
+  requires Inv(s)
+  requires Flush(s.bcv, s'.bcv, flush)
+  ensures PreservesLookups(s, s')
   {
     var f := flush;
     var newbuffer := imap k :: (if k in f.flushedKeys then G.M.Merge(f.parent.buffer[k], f.child.buffer[k]) else f.child.buffer[k]);
@@ -475,8 +475,8 @@ module BetreeInv {
     var newparentchildren := imap k | k in f.parent.children :: (if k in f.movedKeys then f.newchildref else f.parent.children[k]);
     var newparent := Node(newparentchildren, newparentbuffer);
 
-    forall lookup:Lookup, key, value | IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
-      ensures exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+    forall lookup:Lookup, key, value | IsSatisfyingLookup(s.bcv.view, key, value, lookup)
+      ensures exists lookup' :: IsSatisfyingLookup(s'.bcv.view, key, value, lookup')
     {
       if parentLayer :| 0 <= parentLayer < |lookup| && lookup[parentLayer].ref == f.parentref {
         if key !in f.movedKeys {
@@ -498,7 +498,7 @@ module BetreeInv {
           {
             assert LookupFollowsChildRefAtLayer(key, lookup, j);
           }
-          assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
+          assert IsSatisfyingLookup(s'.bcv.view, key, value, lookup'); // observe
         } else {
           if |lookup| - 1 == parentLayer { // we stopped at f.parent
             var lookup' := lookup[..parentLayer] + [ ReadOp(f.parentref, newparent) ] + [ ReadOp(f.newchildref, newchild) ];
@@ -512,7 +512,7 @@ module BetreeInv {
                 assert LookupFollowsChildRefAtLayer(key, lookup, j);
               }
             }
-            assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
+            assert IsSatisfyingLookup(s'.bcv.view, key, value, lookup'); // observe
           } else {
             var middle := [ lookup[parentLayer] ] + [ lookup[parentLayer+1] ];
             var middle' := ([ ReadOp(f.parentref, newparent) ] + [ ReadOp(f.newchildref, newchild) ]);
@@ -544,11 +544,11 @@ module BetreeInv {
 
             PropagateInterperetation(lookup, lookup', parentLayer, middle, middle', key);
 
-            assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup'); // observe
+            assert IsSatisfyingLookup(s'.bcv.view, key, value, lookup'); // observe
           }
         }
       } else {
-        assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup);
+        assert IsSatisfyingLookup(s'.bcv.view, key, value, lookup);
       }
     }
   }
@@ -558,13 +558,13 @@ module BetreeInv {
   //////// Redirect
   ////////
 
-  lemma RedirectPreservesLookups(k: Constants, s: Variables, s': Variables, redirect: Redirect)
-    requires Inv(k, s)
-    requires Redirect(k.bck, s.bcv, s'.bcv, redirect)
-    ensures PreservesLookups(k, s, s')
+  lemma RedirectPreservesLookups(s: Variables, s': Variables, redirect: Redirect)
+    requires Inv(s)
+    requires Redirect(s.bcv, s'.bcv, redirect)
+    ensures PreservesLookups(s, s')
   {
-    forall lookup:Lookup, key, value | IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
-      ensures exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+    forall lookup:Lookup, key, value | IsSatisfyingLookup(s.bcv.view, key, value, lookup)
+      ensures exists lookup' :: IsSatisfyingLookup(s'.bcv.view, key, value, lookup')
     {
       if i :| 0 <= i < |lookup| && lookup[i].ref == redirect.parentref {
         if key in redirect.keys && i < |lookup| - 1 {
@@ -576,7 +576,7 @@ module BetreeInv {
           var old_childref := redirect.old_parent.children[key];
           var old_child := redirect.old_children[old_childref];
           var idx :| 0 <= idx < |redirect.old_childrefs| && redirect.old_childrefs[idx] == old_childref;
-          assert BI.ReadStep(k.bck, s.bcv, RedirectReads(redirect)[idx+1]);
+          assert BI.ReadStep(s.bcv, RedirectReads(redirect)[idx+1]);
           assert lookup[i+1].ref == old_childref;
           assert lookup[i+1].node == old_child;
           
@@ -610,8 +610,8 @@ module BetreeInv {
           assert middle == lookup[i..i+2];
           assert lookup == lookup[..i] + middle + lookup[i+2..];
 
-          RedirectResultingGraph(k, s, s', redirect);
-          assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup');
+          RedirectResultingGraph(s, s', redirect);
+          assert IsSatisfyingLookup(s'.bcv.view, key, value, lookup');
         } else {
           var lookup' := lookup[i := G.ReadOp(redirect.parentref, redirect.new_parent)];
           forall j | 0 <= j < |lookup'|-1
@@ -626,13 +626,13 @@ module BetreeInv {
           InterpretLookupAdditive3(lookup[..i], [lookup[i]], lookup[i+1..], key);
           assert lookup == lookup[..i] + [lookup[i]] + lookup[i+1..];
           
-          RedirectResultingGraph(k, s, s', redirect);
-          assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup');
+          RedirectResultingGraph(s, s', redirect);
+          assert IsSatisfyingLookup(s'.bcv.view, key, value, lookup');
           
         }
       } else {
-        RedirectResultingGraph(k, s, s', redirect);
-        assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup);
+        RedirectResultingGraph(s, s', redirect);
+        assert IsSatisfyingLookup(s'.bcv.view, key, value, lookup);
       }
     }
   }
@@ -641,15 +641,15 @@ module BetreeInv {
   //////// Invariant proofs
   ////////
 
-  lemma InitImpliesInv(k: Constants, s: Variables)
-    requires Init(k, s)
-    ensures Inv(k, s)
+  lemma InitImpliesInv(s: Variables)
+    requires Init(s)
+    ensures Inv(s)
   {
     forall key | MS.InDomain(key)
-    ensures IsSatisfyingLookup(k, s.bcv.view, key, G.M.DefaultValue(), [ReadOp(Root(), EmptyNode())]);
+    ensures IsSatisfyingLookup(s.bcv.view, key, G.M.DefaultValue(), [ReadOp(Root(), EmptyNode())]);
     {
     }
-    forall key, lookup:Lookup | IsPathFromRootLookup(k, s.bcv.view, key, lookup)
+    forall key, lookup:Lookup | IsPathFromRootLookup(s.bcv.view, key, lookup)
       ensures LookupIsAcyclic(lookup)
     {
       forall i, j | 0 <= i < |lookup| && 0 <= j < |lookup| && i != j
@@ -660,32 +660,32 @@ module BetreeInv {
     }
   }
 
-  lemma QueryStepPreservesInvariant(k: Constants, s: Variables, s': Variables)
-    requires Inv(k, s)
-    requires BI.OpTransaction(k.bck, s.bcv, s'.bcv, [])
-    ensures Inv(k, s')
+  lemma QueryStepPreservesInvariant(s: Variables, s': Variables)
+    requires Inv(s)
+    requires BI.OpTransaction(s.bcv, s'.bcv, [])
+    ensures Inv(s')
   {
   }
 
-  lemma InsertMessagePreservesAcyclicAndReachablePointersValid(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
-    requires Inv(k, s)
-    requires InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
+  lemma InsertMessagePreservesAcyclicAndReachablePointersValid(s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
+    requires Inv(s)
+    requires InsertMessage(s.bcv, s'.bcv, key, msg, oldroot)
     ensures G.IsAcyclic(s'.bcv.view)
-    ensures Acyclic(k, s')
+    ensures Acyclic(s')
   {
     G.LocalEditPreservesAcyclic(s.bcv.view, s'.bcv.view, G.Root());
-    AcyclicGraphImpliesAcyclic(k, s');
+    AcyclicGraphImpliesAcyclic(s');
   }
 
-  lemma InsertMessagePreservesLookupsPut(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
-    requires Inv(k, s)
-    requires InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
+  lemma InsertMessagePreservesLookupsPut(s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
+    requires Inv(s)
+    requires InsertMessage(s.bcv, s'.bcv, key, msg, oldroot)
     requires msg.Define?
-    //ensures forall key1 | MS.InDomain(key1) :: KeyHasSatisfyingLookup(k, s'.bcv.view, key1)
-    ensures PreservesLookupsPut(k, s, s', key, msg.value);
+    //ensures forall key1 | MS.InDomain(key1) :: KeyHasSatisfyingLookup(s'.bcv.view, key1)
+    ensures PreservesLookupsPut(s, s', key, msg.value);
   {
-    forall lookup, key1, value | key1 != key && IsSatisfyingLookup(k, s.bcv.view, key1, value, lookup)
-      ensures exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key1, value, lookup')
+    forall lookup, key1, value | key1 != key && IsSatisfyingLookup(s.bcv.view, key1, value, lookup)
+      ensures exists lookup' :: IsSatisfyingLookup(s'.bcv.view, key1, value, lookup')
     {
       var lookup' := Apply((x: Layer) => x.(node := if x.ref in s'.bcv.view then s'.bcv.view[x.ref] else EmptyNode()), lookup);
       InterpsEqualOfAllBuffersEqual(lookup, lookup', key1);
@@ -699,12 +699,12 @@ module BetreeInv {
         assert LookupFollowsChildRefAtLayer(key1, lookup, idx);
       }
 
-      assert IsSatisfyingLookup(k, s'.bcv.view, key1, value, lookup');
+      assert IsSatisfyingLookup(s'.bcv.view, key1, value, lookup');
     }
 
     {
-      assert KeyHasSatisfyingLookup(k, s.bcv.view, key);
-      var value, lookup: Lookup :| IsSatisfyingLookup(k, s.bcv.view, key, value, lookup);
+      assert KeyHasSatisfyingLookup(s.bcv.view, key);
+      var value, lookup: Lookup :| IsSatisfyingLookup(s.bcv.view, key, value, lookup);
       var lookup' := Apply((x: Layer) => x.(node := if x.ref in s'.bcv.view then s'.bcv.view[x.ref] else EmptyNode()), lookup);
       assert lookup' == [lookup'[0]] + lookup'[1..];
       InterpretLookupAdditive([lookup'[0]], lookup'[1..], key);
@@ -721,160 +721,160 @@ module BetreeInv {
         assert LookupFollowsChildRefAtLayer(key, lookup, idx);
       }
 
-      assert IsSatisfyingLookup(k, s'.bcv.view, key, message'.value, lookup');
+      assert IsSatisfyingLookup(s'.bcv.view, key, message'.value, lookup');
     }
   }
     
-  lemma InsertMessageStepPreservesInvariant(k: Constants, s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
-    requires Inv(k, s)
-    requires InsertMessage(k.bck, s.bcv, s'.bcv, key, msg, oldroot)
+  lemma InsertMessageStepPreservesInvariant(s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
+    requires Inv(s)
+    requires InsertMessage(s.bcv, s'.bcv, key, msg, oldroot)
     // We can have this msg.Define? condition becasue right now the uiop condition
     // enforces that the inserted message must be a Define. Eventually we'll need
     // to expand the semantics of the map and the proof to support non-Define messages.
     requires msg.Define?
-    ensures Inv(k, s')
+    ensures Inv(s')
   {
-    InsertMessagePreservesAcyclicAndReachablePointersValid(k, s, s', key, msg, oldroot);
-    InsertMessagePreservesLookupsPut(k, s, s', key, msg, oldroot);
+    InsertMessagePreservesAcyclicAndReachablePointersValid(s, s', key, msg, oldroot);
+    InsertMessagePreservesLookupsPut(s, s', key, msg, oldroot);
   }
 
-  lemma FlushStepPreservesInvariant(k: Constants, s: Variables, s': Variables, flush:NodeFlush)
-    requires Inv(k, s)
-    requires Flush(k.bck, s.bcv, s'.bcv, flush)
-    ensures Inv(k, s')
+  lemma FlushStepPreservesInvariant(s: Variables, s': Variables, flush:NodeFlush)
+    requires Inv(s)
+    requires Flush(s.bcv, s'.bcv, flush)
+    ensures Inv(s')
   {
-    FlushPreservesAcyclic(k, s, s', flush);
-    FlushPreservesLookups(k, s, s', flush);
+    FlushPreservesAcyclic(s, s', flush);
+    FlushPreservesLookups(s, s', flush);
   }
   
-  lemma GrowStepPreservesInvariant(k: Constants, s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
-    requires Inv(k, s)
-    requires Grow(k.bck, s.bcv, s'.bcv, oldroot, newchildref)
-    ensures Inv(k, s')
+  lemma GrowStepPreservesInvariant(s: Variables, s': Variables, oldroot: Node, newchildref: Reference)
+    requires Inv(s)
+    requires Grow(s.bcv, s'.bcv, oldroot, newchildref)
+    ensures Inv(s')
   {
-    GrowPreservesAcyclic(k, s, s', oldroot, newchildref);
-    GrowPreservesLookups(k, s, s', oldroot, newchildref);
+    GrowPreservesAcyclic(s, s', oldroot, newchildref);
+    GrowPreservesLookups(s, s', oldroot, newchildref);
   }
  
   // Redirect
-  lemma RedirectStepPreservesInvariant(k: Constants, s: Variables, s': Variables, redirect: Redirect)
-    requires Inv(k, s)
-    requires Redirect(k.bck, s.bcv, s'.bcv, redirect)
-    ensures Inv(k, s')
+  lemma RedirectStepPreservesInvariant(s: Variables, s': Variables, redirect: Redirect)
+    requires Inv(s)
+    requires Redirect(s.bcv, s'.bcv, redirect)
+    ensures Inv(s')
   {
-    RedirectPreservesAcyclic(k, s, s', redirect);
-    RedirectPreservesLookups(k, s, s', redirect);
-    BI.TransactionPreservesInv(k.bck, s.bcv, s'.bcv, RedirectOps(redirect));
+    RedirectPreservesAcyclic(s, s', redirect);
+    RedirectPreservesLookups(s, s', redirect);
+    BI.TransactionPreservesInv(s.bcv, s'.bcv, RedirectOps(redirect));
   }
 
 
   // GC Step
 
-  lemma IsPathFromRootLookupImpliesReachable(k: Constants, s: Variables, key: Key, lookup: Lookup, i: int)
-    requires Inv(k, s)
-    requires IsPathFromRootLookup(k, s.bcv.view, key, lookup)
+  lemma IsPathFromRootLookupImpliesReachable(s: Variables, key: Key, lookup: Lookup, i: int)
+    requires Inv(s)
+    requires IsPathFromRootLookup(s.bcv.view, key, lookup)
     requires 0 <= i < |lookup|
-    ensures BI.ReachableReference(k.bck, s.bcv, lookup[i].ref);
+    ensures BI.ReachableReference(s.bcv, lookup[i].ref);
   {
     if (i == 0) {
       var l := [lookup[0].ref];
-      assert BI.LookupIsValid(k.bck, s.bcv, l) && Last(l) == lookup[0].ref;
-      assert BI.ReachableReference(k.bck, s.bcv, lookup[0].ref);
+      assert BI.LookupIsValid(s.bcv, l) && Last(l) == lookup[0].ref;
+      assert BI.ReachableReference(s.bcv, lookup[0].ref);
     } else {
-      IsPathFromRootLookupImpliesReachable(k, s, key, lookup, i-1);
-      var l: BI.Lookup :| BI.LookupIsValid(k.bck, s.bcv, l) && Last(l) == lookup[i-1].ref;
+      IsPathFromRootLookupImpliesReachable(s, key, lookup, i-1);
+      var l: BI.Lookup :| BI.LookupIsValid(s.bcv, l) && Last(l) == lookup[i-1].ref;
       var l' := l + [lookup[i].ref];
       assert LookupFollowsChildRefAtLayer(key, lookup, i-1);
-      assert BI.LookupIsValid(k.bck, s.bcv, l') && Last(l') == lookup[i].ref;
-      assert BI.ReachableReference(k.bck, s.bcv, lookup[i].ref);
+      assert BI.LookupIsValid(s.bcv, l') && Last(l') == lookup[i].ref;
+      assert BI.ReachableReference(s.bcv, lookup[i].ref);
     }
   }
 
-  lemma GCStepPreservesIsPathFromRootLookup(k: Constants, s: Variables, s': Variables, refs: iset<Reference>, lookup: Lookup, key: Key)
-    requires Inv(k, s)
-    requires BI.GC(k.bck, s.bcv, s'.bcv, refs)
-    requires IsPathFromRootLookup(k, s.bcv.view, key, lookup);
-    ensures IsPathFromRootLookup(k, s'.bcv.view, key, lookup);
+  lemma GCStepPreservesIsPathFromRootLookup(s: Variables, s': Variables, refs: iset<Reference>, lookup: Lookup, key: Key)
+    requires Inv(s)
+    requires BI.GC(s.bcv, s'.bcv, refs)
+    requires IsPathFromRootLookup(s.bcv.view, key, lookup);
+    ensures IsPathFromRootLookup(s'.bcv.view, key, lookup);
   {
     forall i | 0 <= i < |lookup|
     ensures IMapsTo(s'.bcv.view, lookup[i].ref, lookup[i].node)
     {
       assert IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node);
-      IsPathFromRootLookupImpliesReachable(k, s, key, lookup, i);
-      assert BI.ReachableReference(k.bck, s.bcv, lookup[i].ref);
+      IsPathFromRootLookupImpliesReachable(s, key, lookup, i);
+      assert BI.ReachableReference(s.bcv, lookup[i].ref);
       assert lookup[i].ref !in refs;
     }
   }
 
 
-  lemma GCStepPreservesAcyclicity(k: Constants, s: Variables, s': Variables, refs: iset<Reference>)
-    requires Inv(k, s)
-    requires BI.GC(k.bck, s.bcv, s'.bcv, refs)
+  lemma GCStepPreservesAcyclicity(s: Variables, s': Variables, refs: iset<Reference>)
+    requires Inv(s)
+    requires BI.GC(s.bcv, s'.bcv, refs)
     ensures G.IsAcyclic(s'.bcv.view)
-    ensures Acyclic(k, s')
+    ensures Acyclic(s')
   {
     G.UnallocPreservesAcyclic(s.bcv.view, s'.bcv.view);
-    AcyclicGraphImpliesAcyclic(k, s');
+    AcyclicGraphImpliesAcyclic(s');
   }
 
-  lemma GCStepPreservesLookups(k: Constants, s: Variables, s': Variables, refs: iset<Reference>)
-    requires Inv(k, s)
-    requires BI.GC(k.bck, s.bcv, s'.bcv, refs)
-    ensures PreservesLookups(k, s, s')
+  lemma GCStepPreservesLookups(s: Variables, s': Variables, refs: iset<Reference>)
+    requires Inv(s)
+    requires BI.GC(s.bcv, s'.bcv, refs)
+    ensures PreservesLookups(s, s')
   {
-    forall lookup:Lookup, key, value | IsSatisfyingLookup(k, s.bcv.view, key, value, lookup)
-    ensures exists lookup' :: IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup')
+    forall lookup:Lookup, key, value | IsSatisfyingLookup(s.bcv.view, key, value, lookup)
+    ensures exists lookup' :: IsSatisfyingLookup(s'.bcv.view, key, value, lookup')
     {
-      GCStepPreservesIsPathFromRootLookup(k, s, s', refs, lookup, key);
-      assert IsSatisfyingLookup(k, s'.bcv.view, key, value, lookup);
+      GCStepPreservesIsPathFromRootLookup(s, s', refs, lookup, key);
+      assert IsSatisfyingLookup(s'.bcv.view, key, value, lookup);
     }
   }
 
-  lemma GCStepPreservesInvariant(k: Constants, s: Variables, s': Variables, refs: iset<Reference>)
-    requires Inv(k, s)
-    requires BI.GC(k.bck, s.bcv, s'.bcv, refs)
-    ensures Inv(k, s')
+  lemma GCStepPreservesInvariant(s: Variables, s': Variables, refs: iset<Reference>)
+    requires Inv(s)
+    requires BI.GC(s.bcv, s'.bcv, refs)
+    ensures Inv(s')
   {
-    BI.GCPreservesInv(k.bck, s.bcv, s'.bcv, refs);
-    GCStepPreservesAcyclicity(k, s, s', refs);
-    GCStepPreservesLookups(k, s, s', refs);
+    BI.GCPreservesInv(s.bcv, s'.bcv, refs);
+    GCStepPreservesAcyclicity(s, s', refs);
+    GCStepPreservesLookups(s, s', refs);
   }
 
   // Putting it all together
 
-  lemma BetreeStepPreservesInvariant(k: Constants, s: Variables, s': Variables, uiop: UI.Op, betreeStep: BetreeStep)
-    requires Inv(k, s)
-    requires Betree(k, s, s', uiop, betreeStep)
-    ensures Inv(k, s')
+  lemma BetreeStepPreservesInvariant(s: Variables, s': Variables, uiop: UI.Op, betreeStep: BetreeStep)
+    requires Inv(s)
+    requires Betree(s, s', uiop, betreeStep)
+    ensures Inv(s')
   {
     match betreeStep {
-      case BetreeQuery(q) => QueryStepPreservesInvariant(k, s, s');
-      case BetreeSuccQuery(sq) => QueryStepPreservesInvariant(k, s, s');
-      case BetreeInsert(ins) => InsertMessageStepPreservesInvariant(k, s, s', ins.key, ins.msg, ins.oldroot);
-      case BetreeFlush(flush) => FlushStepPreservesInvariant(k, s, s', flush);
-      case BetreeGrow(growth) => GrowStepPreservesInvariant(k, s, s', growth.oldroot, growth.newchildref);
-      case BetreeRedirect(redirect) => RedirectStepPreservesInvariant(k, s, s', redirect);
+      case BetreeQuery(q) => QueryStepPreservesInvariant(s, s');
+      case BetreeSuccQuery(sq) => QueryStepPreservesInvariant(s, s');
+      case BetreeInsert(ins) => InsertMessageStepPreservesInvariant(s, s', ins.key, ins.msg, ins.oldroot);
+      case BetreeFlush(flush) => FlushStepPreservesInvariant(s, s', flush);
+      case BetreeGrow(growth) => GrowStepPreservesInvariant(s, s', growth.oldroot, growth.newchildref);
+      case BetreeRedirect(redirect) => RedirectStepPreservesInvariant(s, s', redirect);
     }
   }
 
-  lemma NextStepPreservesInvariant(k: Constants, s: Variables, s': Variables, uiop: UI.Op, step: Step)
-    requires Inv(k, s)
-    requires NextStep(k, s, s', uiop, step)
-    ensures Inv(k, s')
+  lemma NextStepPreservesInvariant(s: Variables, s': Variables, uiop: UI.Op, step: Step)
+    requires Inv(s)
+    requires NextStep(s, s', uiop, step)
+    ensures Inv(s')
   {
     match step {
-      case GCStep(refs) => GCStepPreservesInvariant(k, s, s', refs);
-      case BetreeStep(betreeStep) => BetreeStepPreservesInvariant(k, s, s', uiop, betreeStep);
+      case GCStep(refs) => GCStepPreservesInvariant(s, s', refs);
+      case BetreeStep(betreeStep) => BetreeStepPreservesInvariant(s, s', uiop, betreeStep);
       case StutterStep => {}
     }
   }
   
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
-    requires Inv(k, s)
-    requires Next(k, s, s', uiop)
-    ensures Inv(k, s')
+  lemma NextPreservesInv(s: Variables, s': Variables, uiop: UI.Op)
+    requires Inv(s)
+    requires Next(s, s', uiop)
+    ensures Inv(s')
   {
-    var step :| NextStep(k, s, s', uiop, step);
-    NextStepPreservesInvariant(k, s, s', uiop, step);
+    var step :| NextStep(s, s', uiop, step);
+    NextStepPreservesInvariant(s, s', uiop, step);
   }
 }

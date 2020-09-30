@@ -34,19 +34,19 @@ module InsertImpl {
 
   import opened PBS = PivotBetreeSpec`Spec
 
-  method InsertKeyValue(k: ImplConstants, s: ImplVariables, key: Key, value: Value)
+  method InsertKeyValue(s: ImplVariables, key: Key, value: Value)
   returns (success: bool)
-  requires Inv(k, s)
+  requires Inv(s)
   requires s.ready
   requires BT.G.Root() in s.cache.I()
   requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 1
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures (s.I(), success) == InsertModel.InsertKeyValue(Ic(k), old(s.I()), key, value)
+  ensures (s.I(), success) == InsertModel.InsertKeyValue(old(s.I()), key, value)
   {
     InsertModel.reveal_InsertKeyValue();
 
-    BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
+    BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), BT.G.Root());
 
     if s.frozenIndirectionTable != null {
       var b := s.frozenIndirectionTable.HasEmptyLoc(BT.G.Root());
@@ -60,21 +60,21 @@ module InsertImpl {
     var msg := ValueMessage.Define(value);
     s.cache.InsertKeyValue(BT.G.Root(), key, msg);
 
-    writeBookkeepingNoSuccsUpdate(k, s, BT.G.Root());
+    writeBookkeepingNoSuccsUpdate(s, BT.G.Root());
 
     success := true;
   }
 
-  method insert(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: Key, value: Value)
+  method insert(s: ImplVariables, io: DiskIOHandler, key: Key, value: Value)
   returns (success: bool)
   requires io.initialized()
-  requires Inv(k, s)
+  requires Inv(s)
   requires io !in s.Repr()
   requires s.ready
   modifies s.Repr()
   modifies io
   ensures WellUpdated(s)
-  ensures InsertModel.insert(Ic(k), old(s.I()), old(IIO(io)), key, value, s.I(), success, IIO(io))
+  ensures InsertModel.insert(old(s.I()), old(IIO(io)), key, value, s.I(), success, IIO(io))
   {
     InsertModel.reveal_insert();
 
@@ -87,7 +87,7 @@ module InsertImpl {
     var rootLookup := s.cache.GetOpt(BT.G.Root());
     if (rootLookup.None?) {
       if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
-        PageInNodeReq(k, s, io, BT.G.Root());
+        PageInNodeReq(s, io, BT.G.Root());
         success := false;
       } else {
         print "insert: root not in cache, but cache is full\n";
@@ -99,9 +99,9 @@ module InsertImpl {
     var weightSeq := MutBucket.computeWeightOfSeq(rootLookup.value.box.Borrow().buckets);
     if WeightKeyUint64(key) + WeightMessageUint64(ValueMessage.Define(value)) + weightSeq
         <= MaxTotalBucketWeightUint64() {
-      success := InsertKeyValue(k, s, key, value);
+      success := InsertKeyValue(s, key, value);
     } else {
-      runFlushPolicy(k, s, io);
+      runFlushPolicy(s, io);
       success := false;
     }
   }

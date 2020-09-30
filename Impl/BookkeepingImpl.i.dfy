@@ -90,17 +90,17 @@ module BookkeepingImpl {
     }
   }
 
-  method writeBookkeeping(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
+  method writeBookkeeping(s: ImplVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
   requires s.W()
   requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
-  requires BookkeepingModel.WriteAllocConditions(Ic(k), s.I())
-  requires BookkeepingModel.ChildrenConditions(Ic(k), s.I(), children)
+  requires BookkeepingModel.WriteAllocConditions(s.I())
+  requires BookkeepingModel.ChildrenConditions(s.I(), children)
   requires |s.ephemeralIndirectionTable.I().graph| < IndirectionTableModel.MaxSize()
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
   modifies s.blockAllocator.Repr
   ensures s.W()
-  ensures s.I() == BookkeepingModel.writeBookkeeping(Ic(k), old(s.I()), ref, children)
+  ensures s.I() == BookkeepingModel.writeBookkeeping(old(s.I()), ref, children)
   ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
   ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
   ensures forall o | o in s.blockAllocator.Repr :: o in old(s.blockAllocator.Repr) || fresh(o)
@@ -108,7 +108,7 @@ module BookkeepingImpl {
   {
     BookkeepingModel.reveal_writeBookkeeping();
 
-    BookkeepingModel.lemmaIndirectionTableLocIndexValid(Ic(k), s.I(), ref);
+    BookkeepingModel.lemmaIndirectionTableLocIndexValid(s.I(), ref);
 
     var oldLoc := s.ephemeralIndirectionTable.UpdateAndRemoveLoc(ref, (if children.Some? then children.value else []));
 
@@ -125,16 +125,16 @@ module BookkeepingImpl {
         == |LruModel.I(old(s.lru.Queue))| + 1;
   }
 
-  method writeBookkeepingNoSuccsUpdate(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference)
+  method writeBookkeepingNoSuccsUpdate(s: ImplVariables, ref: BT.G.Reference)
   requires s.W()
   requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
-  requires BookkeepingModel.WriteAllocConditions(Ic(k), s.I())
+  requires BookkeepingModel.WriteAllocConditions(s.I())
   requires ref in s.ephemeralIndirectionTable.I().graph
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
   modifies s.blockAllocator.Repr
   ensures s.W()
-  ensures s.I() == BookkeepingModel.writeBookkeepingNoSuccsUpdate(Ic(k), old(s.I()), ref)
+  ensures s.I() == BookkeepingModel.writeBookkeepingNoSuccsUpdate(old(s.I()), ref)
   ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
   ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
   ensures forall o | o in s.blockAllocator.Repr :: o in old(s.blockAllocator.Repr) || fresh(o)
@@ -142,7 +142,7 @@ module BookkeepingImpl {
   {
     BookkeepingModel.reveal_writeBookkeepingNoSuccsUpdate();
 
-    BookkeepingModel.lemmaIndirectionTableLocIndexValid(Ic(k), s.I(), ref);
+    BookkeepingModel.lemmaIndirectionTableLocIndexValid(s.I(), ref);
 
     var oldLoc := s.ephemeralIndirectionTable.RemoveLoc(ref);
 
@@ -160,19 +160,19 @@ module BookkeepingImpl {
   }
 
 
-  method allocBookkeeping(k: ImplConstants, s: ImplVariables, children: Option<seq<BT.G.Reference>>)
+  method allocBookkeeping(s: ImplVariables, children: Option<seq<BT.G.Reference>>)
   returns (ref: Option<BT.G.Reference>)
   requires s.W()
   requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
-  requires BookkeepingModel.WriteAllocConditions(Ic(k), s.I())
-  requires BookkeepingModel.ChildrenConditions(Ic(k), s.I(), children)
+  requires BookkeepingModel.WriteAllocConditions(s.I())
+  requires BookkeepingModel.ChildrenConditions(s.I(), children)
   requires |s.ephemeralIndirectionTable.I().graph| < IndirectionTableModel.MaxSize()
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
   modifies s.blockAllocator.Repr
   ensures s.ready
   ensures s.W()
-  ensures (s.I(), ref) == BookkeepingModel.allocBookkeeping(Ic(k), old(s.I()), children)
+  ensures (s.I(), ref) == BookkeepingModel.allocBookkeeping(old(s.I()), children)
   ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
   ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
   ensures forall o | o in s.blockAllocator.Repr :: o in old(s.blockAllocator.Repr) || fresh(o)
@@ -182,7 +182,7 @@ module BookkeepingImpl {
     
     ref := getFreeRef(s);
     if (ref.Some?) {
-      writeBookkeeping(k, s, ref.value, children);
+      writeBookkeeping(s, ref.value, children);
     }
   }
 }

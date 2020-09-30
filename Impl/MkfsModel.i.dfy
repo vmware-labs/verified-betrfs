@@ -62,14 +62,13 @@ module MkfsModel {
   }
 
   lemma InitialStateSatisfiesSystemInit(
-      k: ADM.Constants, 
       s: ADM.Variables,
       diskContents: map<uint64, seq<byte>>)
-  requires ADM.M.Init(k.machine, s.machine)
-  requires ADM.D.Init(k.disk, s.disk)
+  requires ADM.M.Init(s.machine)
+  requires ADM.D.Init(s.disk)
   requires InitDiskContents(diskContents)
   requires ADM.BlocksWrittenInByteSeq(diskContents, s.disk.contents)
-  ensures ADM.Init(k, s)
+  ensures ADM.Init(s)
   {
     Marshalling.reveal_parseCheckedSector();
 
@@ -155,46 +154,39 @@ module MkfsModel {
         AsyncSectorDiskModelTypes.AsyncSectorDiskModelVariables(
             journalCache, journalDisk);
 
-    var betreeK := ByteSystem.Ik(k).bs;
-    var journalK := ByteSystem.Ik(k).js;
-
-    var betreeJournalK := BetreeJournalSystem.Constants(betreeK, journalK);
     var betreeJournalSystem := BetreeJournalSystem.Variables(betreeSystem, journalSystem);
 
-    assert BlockSystem.Init(betreeK, betreeSystem, indirectionTableLoc);
-    BlockSystem.InitGraphsValue(betreeK, betreeSystem, indirectionTableLoc);
+    assert BlockSystem.Init(betreeSystem, indirectionTableLoc);
+    BlockSystem.InitGraphsValue(betreeSystem, indirectionTableLoc);
 
-    JournalSystem.InitJournals(journalK, journalSystem, indirectionTableLoc);
+    JournalSystem.InitJournals(journalSystem, indirectionTableLoc);
 
-    assert BetreeSystem.Init(betreeK, betreeSystem, indirectionTableLoc);
-    assert JournalSystem.Init(journalK, journalSystem, indirectionTableLoc);
+    assert BetreeSystem.Init(betreeSystem, indirectionTableLoc);
+    assert JournalSystem.Init(journalSystem, indirectionTableLoc);
 
-    JournalSystem.InitImpliesInv(journalK, journalSystem, indirectionTableLoc);
-    BetreeSystem.InitImpliesInv(betreeK, betreeSystem, indirectionTableLoc);
+    JournalSystem.InitImpliesInv(journalSystem, indirectionTableLoc);
+    BetreeSystem.InitImpliesInv(betreeSystem, indirectionTableLoc);
 
     var pivotBt := BT.Variables(BI.Variables(
           imap[BT.G.Root() := BT.G.Node([], None, [B(map[])])]));
-    BT.InitImpliesInv(BT.Constants(BI.Constants()), pivotBt);
-    PivotBetree_Refines_Map.RefinesInit(
-        BT.Constants(BI.Constants()), pivotBt);
+    BT.InitImpliesInv(pivotBt);
+    PivotBetree_Refines_Map.RefinesInit(pivotBt);
 
-    assert BetreeSystem.BetreeDisk(betreeK, betreeSystem)[indirectionTableLoc]
+    assert BetreeSystem.BetreeDisk(betreeSystem)[indirectionTableLoc]
         == pivotBt;
 
-    var ck := BetreeJournalSystem.Ik(betreeJournalK);
-    var cview := BetreeJournalSystem.I(betreeJournalK, betreeJournalSystem);
+    var cview := BetreeJournalSystem.I(betreeJournalSystem);
 
-    assert StatesViewMap.Init(ck.tsm, cview.tsm, indirectionTableLoc);
-    assert JournalView.Init(ck.jc, cview.jc, indirectionTableLoc);
+    assert StatesViewMap.Init(cview.tsm, indirectionTableLoc);
+    assert JournalView.Init(cview.jc, indirectionTableLoc);
 
-    assert BetreeJournalSystem.InitWithLoc(betreeJournalK, betreeJournalSystem, indirectionTableLoc);
-    assert BetreeJournalSystem.Init(betreeJournalK, betreeJournalSystem);
+    assert BetreeJournalSystem.InitWithLoc(betreeJournalSystem, indirectionTableLoc);
+    assert BetreeJournalSystem.Init(betreeJournalSystem);
 
-    /*assert BCS.Init(ADM.Ik(k), ADM.I(k, s));
+    /*assert BCS.Init(ADM.ADM.I(s));
     assert BT.Init(
-        BBCS.Ik(ADM.Ik(k)),
-        BBCS.PersistentBetree(ADM.Ik(k), ADM.I(k, s)));
+        BBCS.PersistentBetree(ADM.ADM.I(s)));
 
-    assert BBCS.Init(ADM.Ik(k), ADM.I(k, s));*/
+    assert BBCS.Init(ADM.ADM.I(s));*/
   }
 }

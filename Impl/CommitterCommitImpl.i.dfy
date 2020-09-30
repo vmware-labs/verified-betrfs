@@ -82,7 +82,7 @@ module CommitterCommitImpl {
     m' := m0;
   }
 
-  method WriteOutJournal(k: ImplConstants, cm: Committer, io: DiskIOHandler)
+  method WriteOutJournal(cm: Committer, io: DiskIOHandler)
   requires io.initialized()
   requires cm.Inv()
   requires JournalistModel.I(cm.I().journalist).inMemoryJournalFrozen != []
@@ -93,7 +93,7 @@ module CommitterCommitImpl {
   ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
   ensures cm.W()
   ensures (cm.I(), IIO(io)) == CommitterCommitModel.WriteOutJournal(
-      Ic(k), old(cm.I()), old(IIO(io)))
+      old(cm.I()), old(IIO(io)))
   {
     CommitterCommitModel.reveal_WriteOutJournal();
     cm.reveal_ReprInv();
@@ -137,11 +137,11 @@ module CommitterCommitImpl {
     cm.reveal_ReprInv();
 
     assert (cm.I(), IIO(io)) == CommitterCommitModel.WriteOutJournal(
-        Ic(k), old(cm.I()), old(IIO(io)));
+        old(cm.I()), old(IIO(io)));
   }
 
   method writeOutSuperblockAdvanceLog(
-      k: ImplConstants, cm: Committer, io: DiskIOHandler)
+      cm: Committer, io: DiskIOHandler)
   requires io.initialized()
   requires cm.Inv()
   requires io !in cm.Repr
@@ -151,7 +151,7 @@ module CommitterCommitImpl {
   ensures cm.W()
   ensures cm.Repr == old(cm.Repr)
   ensures CommitterCommitModel.writeOutSuperblockAdvanceLog(
-      Ic(k), old(cm.I()), old(IIO(io)), cm.I(), IIO(io))
+      old(cm.I()), old(IIO(io)), cm.I(), IIO(io))
   {
     //CommitterCommitModel.reveal_writeOutSuperblockAdvanceLog();
     cm.reveal_ReprInv();
@@ -180,7 +180,7 @@ module CommitterCommitImpl {
   }
   
   method writeOutSuperblockAdvanceLocation(
-      k: ImplConstants, cm: Committer, io: DiskIOHandler)
+      cm: Committer, io: DiskIOHandler)
   requires io.initialized()
   requires cm.Inv()
   requires io !in cm.Repr
@@ -191,7 +191,7 @@ module CommitterCommitImpl {
   ensures cm.W()
   ensures cm.Repr == old(cm.Repr)
   ensures CommitterCommitModel.writeOutSuperblockAdvanceLocation(
-      Ic(k), old(cm.I()), old(IIO(io)), cm.I(), IIO(io))
+      old(cm.I()), old(IIO(io)), cm.I(), IIO(io))
   {
     CommitterCommitModel.reveal_writeOutSuperblockAdvanceLocation();
     cm.reveal_ReprInv();
@@ -221,12 +221,12 @@ module CommitterCommitImpl {
     cm.reveal_ReprInv();
   }
 
-  method freeze(k: ImplConstants, cm: Committer)
+  method freeze(cm: Committer)
   requires cm.WF()
   modifies cm.Repr
   ensures cm.W()
   ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
-  ensures cm.I() == CommitterCommitModel.freeze(Ic(k), old(cm.I()))
+  ensures cm.I() == CommitterCommitModel.freeze(old(cm.I()))
   {
     CommitterCommitModel.reveal_freeze();
     cm.reveal_ReprInv();
@@ -245,13 +245,13 @@ module CommitterCommitImpl {
   }
 
   method receiveFrozenLoc(
-      k: ImplConstants, cm: Committer, loc: Location)
+      cm: Committer, loc: Location)
   requires cm.W()
   modifies cm.Repr
   ensures cm.W()
   ensures cm.Repr == old(cm.Repr)
   ensures cm.I() == CommitterCommitModel.receiveFrozenLoc(
-        Ic(k), old(cm.I()), loc)
+        old(cm.I()), loc)
   {
     CommitterCommitModel.reveal_receiveFrozenLoc();
     cm.reveal_ReprInv();
@@ -276,14 +276,14 @@ module CommitterCommitImpl {
     }
   }
 
-  method pushSync(k: ImplConstants, cm: Committer)
+  method pushSync(cm: Committer)
   returns (id: uint64)
   requires cm.Inv()
   modifies cm.Repr
   ensures cm.W()
   ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
   ensures (cm.I(), id) == CommitterCommitModel.pushSync(
-      Ic(k), old(cm.I()))
+      old(cm.I()))
   {
     cm.reveal_ReprInv();
 
@@ -300,13 +300,13 @@ module CommitterCommitImpl {
 
   // == popSync ==
 
-  method popSync(k: ImplConstants, cm: Committer, id: uint64)
+  method popSync(cm: Committer, id: uint64)
   requires cm.Inv()
   modifies cm.Repr
   ensures cm.W()
   ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
   ensures cm.I() == CommitterCommitModel.popSync(
-      Ic(k), old(cm.I()), id)
+      old(cm.I()), id)
   {
     CommitterCommitModel.reveal_popSync();
     cm.reveal_ReprInv();
@@ -319,7 +319,7 @@ module CommitterCommitImpl {
 
   // == AdvanceLog ==
 
-  method tryAdvanceLog(k: ImplConstants, cm: Committer, io: DiskIOHandler)
+  method tryAdvanceLog(cm: Committer, io: DiskIOHandler)
   returns (wait: bool)
   requires cm.Inv()
   requires io.initialized()
@@ -330,7 +330,7 @@ module CommitterCommitImpl {
   ensures cm.W()
   ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
   ensures CommitterCommitModel.tryAdvanceLog(
-      Ic(k), old(cm.I()), old(IIO(io)), cm.I(), IIO(io))
+      old(cm.I()), old(IIO(io)), cm.I(), IIO(io))
   {
     CommitterCommitModel.reveal_tryAdvanceLog();
 
@@ -340,9 +340,9 @@ module CommitterCommitImpl {
     var hasInMem := cm.journalist.hasInMemoryJournal();
     if cm.superblockWrite.None? {
       if hasFrozen || hasInMem {
-        WriteOutJournal(k, cm, io);
+        WriteOutJournal(cm, io);
       } else if (cm.outstandingJournalWrites == {}) {
-        writeOutSuperblockAdvanceLog(k, cm, io);
+        writeOutSuperblockAdvanceLog(cm, io);
       } else {
         wait := true;
       }
@@ -351,7 +351,7 @@ module CommitterCommitImpl {
     }
   }
 
-  method tryAdvanceLocation(k: ImplConstants, cm: Committer, io: DiskIOHandler)
+  method tryAdvanceLocation(cm: Committer, io: DiskIOHandler)
   returns (wait: bool)
   requires cm.Inv()
   requires io.initialized()
@@ -363,7 +363,7 @@ module CommitterCommitImpl {
   ensures cm.W()
   ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
   ensures CommitterCommitModel.tryAdvanceLocation(
-      Ic(k), old(cm.I()), old(IIO(io)), cm.I(), IIO(io))
+      old(cm.I()), old(IIO(io)), cm.I(), IIO(io))
   {
     CommitterCommitModel.reveal_tryAdvanceLocation();
 
@@ -373,9 +373,9 @@ module CommitterCommitImpl {
     var hasInMem := cm.journalist.hasInMemoryJournal();
     if cm.superblockWrite.None? {
       if hasFrozen || hasInMem {
-        WriteOutJournal(k, cm, io);
+        WriteOutJournal(cm, io);
       } else if (cm.outstandingJournalWrites == {}) {
-        writeOutSuperblockAdvanceLocation(k, cm, io);
+        writeOutSuperblockAdvanceLocation(cm, io);
       } else {
         wait := true;
       }
@@ -384,13 +384,13 @@ module CommitterCommitImpl {
     }
   }
 
-  method writeBackSuperblockResp(k: ImplConstants, cm: Committer)
+  method writeBackSuperblockResp(cm: Committer)
   requires cm.Inv()
   modifies cm.Repr
   ensures cm.W()
   ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
   ensures cm.I() == CommitterCommitModel.writeBackSuperblockResp(
-      Ic(k), old(cm.I()));
+      old(cm.I()));
   {
     CommitterCommitModel.reveal_writeBackSuperblockResp();
     cm.reveal_ReprInv();

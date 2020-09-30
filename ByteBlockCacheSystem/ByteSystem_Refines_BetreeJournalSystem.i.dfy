@@ -6,32 +6,27 @@ module ByteSystem_Refines_BetreeJournalSystem {
   import BetreeJournalSystem
   import UI
 
-  function Ik(k: ByteSystem.Constants) : BetreeJournalSystem.Constants
+  function I(s: ByteSystem.Variables) : BetreeJournalSystem.Variables
+  requires ByteSystem.Inv(s)
   {
-    ByteSystem.Ik(k)
+    ByteSystem.I(s)
   }
 
-  function I(k: ByteSystem.Constants, s: ByteSystem.Variables) : BetreeJournalSystem.Variables
-  requires ByteSystem.Inv(k, s)
+  lemma RefinesInit(s: ByteSystem.Variables)
+  requires ByteSystem.Init(s)
+  ensures ByteSystem.Inv(s)
+  ensures BetreeJournalSystem.Init(I(s))
   {
-    ByteSystem.I(k, s)
+    ByteSystem.InitImpliesInv(s);
   }
 
-  lemma RefinesInit(k: ByteSystem.Constants, s: ByteSystem.Variables)
-  requires ByteSystem.Init(k, s)
-  ensures ByteSystem.Inv(k, s)
-  ensures BetreeJournalSystem.Init(Ik(k), I(k, s))
+  lemma RefinesNext(s: ByteSystem.Variables, s': ByteSystem.Variables, uiop: UI.Op)
+  requires ByteSystem.Inv(s)
+  requires ByteSystem.Next(s, s', uiop)
+  ensures ByteSystem.Inv(s')
+  ensures BetreeJournalSystem.Next(I(s), I(s'), uiop)
   {
-    ByteSystem.InitImpliesInv(k, s);
-  }
-
-  lemma RefinesNext(k: ByteSystem.Constants, s: ByteSystem.Variables, s': ByteSystem.Variables, uiop: UI.Op)
-  requires ByteSystem.Inv(k, s)
-  requires ByteSystem.Next(k, s, s', uiop)
-  ensures ByteSystem.Inv(k, s')
-  ensures BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop)
-  {
-    var step :| ByteSystem.NextStep(k, s, s', uiop, step);
-    ByteSystem.NextStepPreservesInv(k, s, s', uiop, step);
+    var step :| ByteSystem.NextStep(s, s', uiop, step);
+    ByteSystem.NextStepPreservesInv(s, s', uiop, step);
   }
 }

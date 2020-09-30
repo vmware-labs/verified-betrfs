@@ -38,7 +38,7 @@ module QueryImpl {
   // == query ==
 
   method queryIterate(
-    k: ImplConstants,
+    
     s: ImplVariables,
     key: Key,
     msg: Message,
@@ -47,7 +47,7 @@ module QueryImpl {
     counter: uint64)
   returns (res: Option<Value>)
   requires io.initialized()
-  requires Inv(k, s)
+  requires Inv(s)
   requires io !in s.Repr()
   requires s.ready
   requires ref in SM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph
@@ -55,7 +55,7 @@ module QueryImpl {
   modifies s.Repr()
   decreases counter
   ensures WellUpdated(s)
-  ensures QueryModel.queryIterate(Ic(k), old(s.I()), key, msg, ref, old(IIO(io)), counter, s.I(), res, IIO(io))
+  ensures QueryModel.queryIterate(old(s.I()), key, msg, ref, old(IIO(io)), counter, s.I(), res, IIO(io))
   {
     QueryModel.reveal_queryIterate();
 
@@ -66,7 +66,7 @@ module QueryImpl {
 
     var nodeOpt := s.cache.GetOpt(ref);
     if (nodeOpt.None?) {
-      PageInNodeReqOrMakeRoom(k, s, io, ref);
+      PageInNodeReqOrMakeRoom(s, io, ref);
       res := None;
       return;
     } else {
@@ -90,8 +90,8 @@ module QueryImpl {
       } else {
         var children := node.GetChildren();
         if children.Some? {
-          BookkeepingModel.lemmaChildInGraph(Ic(k), s.I(), ref, children.value[r]);
-          res := queryIterate(k, s, key, newmsg, children.value[r], io, counter - 1);
+          BookkeepingModel.lemmaChildInGraph(s.I(), ref, children.value[r]);
+          res := queryIterate(s, key, newmsg, children.value[r], io, counter - 1);
         } else {
           res := Some(ValueType.DefaultValue());
           return;
@@ -100,16 +100,16 @@ module QueryImpl {
     }
   }
 
-  method query(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, key: Key)
+  method query(s: ImplVariables, io: DiskIOHandler, key: Key)
   returns (res: Option<Value>)
   requires io.initialized()
-  requires Inv(k, s)
+  requires Inv(s)
   requires io !in s.Repr()
   requires s.ready
   modifies io
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures QueryModel.query(Ic(k), old(s.I()), old(IIO(io)), key, s.I(), res, IIO(io))
+  ensures QueryModel.query(old(s.I()), old(IIO(io)), key, s.I(), res, IIO(io))
   {
     QueryModel.reveal_query();
 
@@ -117,6 +117,6 @@ module QueryImpl {
     var msg := ValueMessage.IdentityMessage();
     var counter: uint64 := 40;
 
-    res := queryIterate(k, s, key, msg, ref, io, counter);
+    res := queryIterate(s, key, msg, ref, io, counter);
   }
 }

@@ -33,28 +33,28 @@ module CoordinationImpl {
   import CoordinationModel
   import opened MainDiskIOHandler
 
-  method pushSync(k: ImplConstants, s: Full)
+  method pushSync(s: Full)
   returns (id: uint64)
-  requires s.Inv(k)
+  requires s.Inv()
   modifies s.Repr
   ensures s.W()
   ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
-  ensures (s.I(), id) == CoordinationModel.pushSync(Ic(k), old(s.I()))
+  ensures (s.I(), id) == CoordinationModel.pushSync(old(s.I()))
   {
     s.reveal_ReprInv();
     CoordinationModel.reveal_pushSync();
 
-    id := CommitterCommitImpl.pushSync(k, s.jc);
+    id := CommitterCommitImpl.pushSync(s.jc);
 
     s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
     s.reveal_ReprInv();
   }
 
-  method receiveLoc(k: ImplConstants, s: Variables, loc: DiskLayout.Location)
+  method receiveLoc(s: Variables, loc: DiskLayout.Location)
   requires s.WF()
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures s.I() == CoordinationModel.receiveLoc(Ic(k), old(s.I()), loc)
+  ensures s.I() == CoordinationModel.receiveLoc(old(s.I()), loc)
   {
     CoordinationModel.reveal_receiveLoc();
 
@@ -64,15 +64,15 @@ module CoordinationImpl {
     s.indirectionTableRead := None;
   }
 
-  method initialization(k: ImplConstants, s: Full, io: DiskIOHandler)
-  requires s.Inv(k)
+  method initialization(s: Full, io: DiskIOHandler)
+  requires s.Inv()
   requires io.initialized()
   requires io !in s.Repr
   modifies s.Repr
   modifies io
   ensures s.W()
   ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
-  ensures CoordinationModel.initialization(Ic(k), old(s.I()), old(IIO(io)), s.I(), IIO(io))
+  ensures CoordinationModel.initialization(old(s.I()), old(IIO(io)), s.I(), IIO(io))
   {
     CoordinationModel.reveal_initialization();
     s.reveal_ReprInv();
@@ -80,29 +80,29 @@ module CoordinationImpl {
     if s.jc.status.StatusLoadingSuperblock? {
       if s.jc.superblock1.SuperblockSuccess?
           && s.jc.superblock2.SuperblockSuccess? {
-        CommitterInitImpl.FinishLoadingSuperblockPhase(k, s.jc);
-        receiveLoc(k, s.bc, s.jc.superblock.indirectionTableLoc);
+        CommitterInitImpl.FinishLoadingSuperblockPhase(s.jc);
+        receiveLoc(s.bc, s.jc.superblock.indirectionTableLoc);
       } else if s.jc.superblock1Read.None?
           && s.jc.superblock1.SuperblockUnfinished? {
-        CommitterInitImpl.PageInSuperblockReq(k, s.jc, io, 0);
+        CommitterInitImpl.PageInSuperblockReq(s.jc, io, 0);
       } else if s.jc.superblock2Read.None?
           && s.jc.superblock2.SuperblockUnfinished? {
-        CommitterInitImpl.PageInSuperblockReq(k, s.jc, io, 1);
+        CommitterInitImpl.PageInSuperblockReq(s.jc, io, 1);
       } else {
         print "initialization: doing nothing, superblock reads out\n";
       }
     } else if s.jc.status.StatusLoadingOther? {
-      CommitterInitImpl.tryFinishLoadingOtherPhase(k, s.jc, io);
+      CommitterInitImpl.tryFinishLoadingOtherPhase(s.jc, io);
     } else if s.bc.loading && !s.bc.ready
         && s.bc.indirectionTableRead.None? {
-      IOImpl.PageInIndirectionTableReq(k, s.bc, io);
+      IOImpl.PageInIndirectionTableReq(s.bc, io);
     } else if s.bc.ready {
       var isEmpty := CommitterInitImpl.isReplayEmpty(s.jc);
       if !isEmpty {
         var je := s.jc.journalist.replayJournalTop();
-        var success := InsertImpl.insert(k, s.bc, io, je.key, je.value);
+        var success := InsertImpl.insert(s.bc, io, je.key, je.value);
         if success {
-          CommitterReplayImpl.JournalReplayOne(k, s.jc);
+          CommitterReplayImpl.JournalReplayOne(s.jc);
         }
       } else {
         print "initialization: doing nothing, no replay journal\n";
@@ -117,9 +117,9 @@ module CoordinationImpl {
   }
 
   method doSync(
-      k: ImplConstants, s: Full, io: DiskIOHandler, graphSync: bool)
+      s: Full, io: DiskIOHandler, graphSync: bool)
   returns (wait: bool)
-  requires s.Inv(k)
+  requires s.Inv()
   requires io.initialized()
   requires io !in s.Repr
   requires s.bc.ready
@@ -129,7 +129,7 @@ module CoordinationImpl {
   ensures s.W()
   ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
   ensures CoordinationModel.doSync(
-      Ic(k), old(s.I()), old(IIO(io)), graphSync, s.I(), IIO(io))
+      old(s.I()), old(IIO(io)), graphSync, s.I(), IIO(io))
   {
     s.reveal_ReprInv();
 
@@ -137,28 +137,28 @@ module CoordinationImpl {
 
     if s.jc.isFrozen {
       if s.jc.frozenLoc.Some? {
-        wait := CommitterCommitImpl.tryAdvanceLocation(k, s.jc, io);
+        wait := CommitterCommitImpl.tryAdvanceLocation(s.jc, io);
       } else {
-        var froze, wait0 := SyncImpl.sync(k, s.bc, io);
+        var froze, wait0 := SyncImpl.sync(s.bc, io);
         wait := wait0;
 
         /*s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
         s.reveal_ReprInv();
         assert 
-          && SyncModel.sync(Ic(k), old(s.I()).bc, old(IIO(io)), s.I().bc, IIO(io), froze)
+          && SyncModel.sync(old(s.I()).bc, old(IIO(io)), s.I().bc, IIO(io), froze)
           && old(s.I()).jc == s.I().jc;*/
       }
     } else if s.jc.superblockWrite.Some? {
       wait := true;
     } else {
       if graphSync {
-        var froze, wait0 := SyncImpl.sync(k, s.bc, io);
+        var froze, wait0 := SyncImpl.sync(s.bc, io);
         wait := wait0;
         if froze {
-          CommitterCommitImpl.freeze(k, s.jc);
+          CommitterCommitImpl.freeze(s.jc);
         }
       } else {
-        wait := CommitterCommitImpl.tryAdvanceLog(k, s.jc, io);
+        wait := CommitterCommitImpl.tryAdvanceLog(s.jc, io);
       }
     }
 
@@ -167,11 +167,11 @@ module CoordinationImpl {
   }
 
   method popSync(
-      k: ImplConstants, s: Full, io: DiskIOHandler, id: uint64, graphSync: bool)
+      s: Full, io: DiskIOHandler, id: uint64, graphSync: bool)
   returns (success: bool, wait: bool)
-  requires s.Inv(k)
+  requires s.Inv()
   requires io.initialized()
-  requires s.Inv(k)
+  requires s.Inv()
   requires io.initialized()
   requires io !in s.Repr
   modifies s.Repr
@@ -179,7 +179,7 @@ module CoordinationImpl {
   ensures s.W()
   ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
   ensures CoordinationModel.popSync(
-      Ic(k), old(s.I()), old(IIO(io)), id, graphSync,
+      old(s.I()), old(IIO(io)), id, graphSync,
       s.I(), IIO(io), success)
   {
     CoordinationModel.reveal_popSync();
@@ -189,7 +189,7 @@ module CoordinationImpl {
 
     var syncState := s.jc.syncReqs.Get(id);
     if syncState == Some(JC.State1) {
-      CommitterCommitImpl.popSync(k, s.jc, id);
+      CommitterCommitImpl.popSync(s.jc, id);
       success := true;
 
       s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
@@ -198,10 +198,10 @@ module CoordinationImpl {
     } else {
       var isInit := isInitialized(s);
       if !isInit {
-        initialization(k, s, io);
+        initialization(s, io);
         success := false;
       } else {
-        wait := doSync(k, s, io, graphSync);
+        wait := doSync(s, io, graphSync);
         success := false;
       }
     }
@@ -221,9 +221,9 @@ module CoordinationImpl {
     }
   }
 
-  method query(k: ImplConstants, s: Full, io: DiskIOHandler, key: Key)
+  method query(s: Full, io: DiskIOHandler, key: Key)
   returns (result: Option<Value>) 
-  requires s.Inv(k) 
+  requires s.Inv() 
   requires io.initialized()
   requires io !in s.Repr
   modifies s.Repr
@@ -231,7 +231,7 @@ module CoordinationImpl {
   ensures s.W()
   ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
   ensures CoordinationModel.query(
-      Ic(k), old(s.I()), old(IIO(io)), key,
+      old(s.I()), old(IIO(io)), key,
       s.I(), result, IIO(io))
   {
     CoordinationModel.reveal_query();
@@ -239,10 +239,10 @@ module CoordinationImpl {
 
     var is_init := isInitialized(s);
     if !is_init {
-      initialization(k, s, io);
+      initialization(s, io);
       result := None;
     } else {
-      result := QueryImpl.query(k, s.bc, io, key);
+      result := QueryImpl.query(s.bc, io, key);
 
       s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
       s.reveal_ReprInv();
@@ -251,10 +251,10 @@ module CoordinationImpl {
   }
 
   method succ(
-      k: ImplConstants, s: Full, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
+      s: Full, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
   returns (result: Option<UI.SuccResultList>)
   requires maxToFind >= 1
-  requires s.Inv(k) 
+  requires s.Inv() 
   requires io.initialized()
   requires io !in s.Repr
   modifies s.Repr
@@ -262,7 +262,7 @@ module CoordinationImpl {
   ensures s.W()
   ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
   ensures CoordinationModel.succ(
-      Ic(k), old(s.I()), old(IIO(io)), start, maxToFind as int,
+      old(s.I()), old(IIO(io)), start, maxToFind as int,
       s.I(), result, IIO(io))
   {
     CoordinationModel.reveal_succ();
@@ -270,10 +270,10 @@ module CoordinationImpl {
 
     var is_init := isInitialized(s);
     if !is_init {
-      initialization(k, s, io);
+      initialization(s, io);
       result := None;
     } else {
-      result := SuccImpl.doSucc(k, s.bc, io, start, maxToFind);
+      result := SuccImpl.doSucc(s.bc, io, start, maxToFind);
 
       s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
       s.reveal_ReprInv();
@@ -282,9 +282,9 @@ module CoordinationImpl {
   }
 
   method insert(
-      k: ImplConstants, s: Full, io: DiskIOHandler, key: Key, value: Value)
+      s: Full, io: DiskIOHandler, key: Key, value: Value)
   returns (success: bool)
-  requires s.Inv(k) 
+  requires s.Inv() 
   requires io.initialized()
   requires io !in s.Repr
   modifies s.Repr
@@ -292,7 +292,7 @@ module CoordinationImpl {
   ensures s.W()
   ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
   ensures CoordinationModel.insert(
-      Ic(k), old(s.I()), old(IIO(io)), key, value,
+      old(s.I()), old(IIO(io)), key, value,
       s.I(), success, IIO(io))
 
   {
@@ -301,22 +301,22 @@ module CoordinationImpl {
 
     var is_init := isInitialized(s);
     if !is_init {
-      initialization(k, s, io);
+      initialization(s, io);
       success := false;
     } else {
       var can_append := s.jc.journalist.canAppend(
           Journal.JournalInsert(key, value));
       if can_append {
-        success := InsertImpl.insert(k, s.bc, io, key, value);
+        success := InsertImpl.insert(s.bc, io, key, value);
         if success {
-          CommitterAppendImpl.JournalAppend(k, s.jc, key, value);
+          CommitterAppendImpl.JournalAppend(s.jc, key, value);
         }
 
         s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
         s.reveal_ReprInv();
         assert s.ProtectedReprInv();
       } else {
-        var wait := doSync(k, s, io, true /* graphSync */);
+        var wait := doSync(s, io, true /* graphSync */);
         success := false;
       }
     }

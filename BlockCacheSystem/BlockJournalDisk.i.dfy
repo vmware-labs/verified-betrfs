@@ -5,10 +5,6 @@ module BlockJournalDisk {
   import BlockDisk
   import JournalDisk
 
-  datatype Constants = Constants(
-    bd: BlockDisk.Constants,
-    jd: JournalDisk.Constants)
-
   datatype Variables = Variables(
     bd: BlockDisk.Variables,
     jd: JournalDisk.Variables)
@@ -17,9 +13,9 @@ module BlockJournalDisk {
     bdop: BlockDisk.DiskOp,
     jdop: JournalDisk.DiskOp)
 
-  predicate Next(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate Next(s: Variables, s': Variables, dop: DiskOp)
   {
-    && BlockDisk.Next(k.bd, s.bd, s'.bd, dop.bdop)
-    && JournalDisk.Next(k.jd, s.jd, s'.jd, dop.jdop)
+    && BlockDisk.Next(s.bd, s'.bd, dop.bdop)
+    && JournalDisk.Next(s.jd, s'.jd, dop.jdop)
   }
 }

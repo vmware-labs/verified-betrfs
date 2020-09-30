@@ -39,8 +39,8 @@ module TSJMap_Refines_ThreeStateVersionedMap {
       ApplyUIOp(ApplyUIOpSeq(m, DropLast(uiops)), Last(uiops))
   }
 
-  lemma apply_uiops_path(k: MapSpec.Constants, m: MapSpec.Variables, uiops: seq<UI.Op>, m': MapSpec.Variables, states: seq<MapSpec.Variables>)
-  requires TSJ.IsPath(k, m, uiops, m', states)
+  lemma apply_uiops_path(m: MapSpec.Variables, uiops: seq<UI.Op>, m': MapSpec.Variables, states: seq<MapSpec.Variables>)
+  requires TSJ.IsPath(m, uiops, m', states)
   ensures m' == ApplyUIOpSeq(m, uiops)
   {
     if uiops == [] {
@@ -49,11 +49,11 @@ module TSJMap_Refines_ThreeStateVersionedMap {
         ApplyUIOpSeq(m, uiops);
         ApplyUIOp(ApplyUIOpSeq(m, DropLast(uiops)), Last(uiops));
         {
-          apply_uiops_path(k, m, DropLast(uiops), states[|states| - 2], DropLast(states));
+          apply_uiops_path(m, DropLast(uiops), states[|states| - 2], DropLast(states));
         }
         ApplyUIOp(states[|states| - 2], Last(uiops));
         {
-          assert MapSpec.Next(k, states[|states| - 2], states[|states| - 1], uiops[|states| - 2]);
+          assert MapSpec.Next(states[|states| - 2], states[|states| - 1], uiops[|states| - 2]);
         }
         m';
       }
@@ -87,15 +87,15 @@ module TSJMap_Refines_ThreeStateVersionedMap {
     }
   }
 
-  lemma apply_path(k: MapSpec.Constants, m: MapSpec.Variables, jes: seq<JournalEntry>, m': MapSpec.Variables)
-  requires TSJ.path(k, m, jes, m')
+  lemma apply_path(m: MapSpec.Variables, jes: seq<JournalEntry>, m': MapSpec.Variables)
+  requires TSJ.path(m, jes, m')
   ensures m' == ApplySeq(m, jes)
   {
     var states, uiops :|
         && jes == JournalEntriesForUIOps(uiops)
-        && TSJ.IsPath(k, m, uiops, m', states);
+        && TSJ.IsPath(m, uiops, m', states);
     apply_eq_apply_uiops(m, uiops);
-    apply_uiops_path(k, m, uiops, m', states);
+    apply_uiops_path(m, uiops, m', states);
   }
 
   lemma ApplySeqAdditive(m: MapSpec.Variables, a: seq<JournalEntry>,
@@ -128,8 +128,8 @@ module TSJMap_Refines_ThreeStateVersionedMap {
     }
   }
 
-  lemma ApplySeqPrepend(k: MapSpec.Constants, m: MapSpec.Variables, uiop: UI.Op, m': MapSpec.Variables, j: seq<JournalEntry>)
-  requires MapSpec.Next(k, m, m', uiop)
+  lemma ApplySeqPrepend(m: MapSpec.Variables, uiop: UI.Op, m': MapSpec.Variables, j: seq<JournalEntry>)
+  requires MapSpec.Next(m, m', uiop)
   ensures ApplySeq(m, JournalEntriesForUIOp(uiop) + j)
        == ApplySeq(m', j)
   {
@@ -137,12 +137,7 @@ module TSJMap_Refines_ThreeStateVersionedMap {
     ApplySeqAdditive(m, JournalEntriesForUIOp(uiop), j);
   }
 
-  function Ik(k: TSJ.Constants) : TSV.Constants
-  {
-    TSV.Constants(k.k)
-  }
-
-  function I(k: TSJ.Constants, s: TSJ.Variables) : TSV.Variables
+  function I(s: TSJ.Variables) : TSV.Variables
   {
     TSV.Variables(
       ApplySeq(s.s1, s.j1),
@@ -152,40 +147,40 @@ module TSJMap_Refines_ThreeStateVersionedMap {
     )
   }
 
-  lemma RefinesInit(k: TSJ.Constants, s: TSJ.Variables)
-    requires TSJ.Init(k, s)
-    ensures TSV.Init(Ik(k), I(k, s))
+  lemma RefinesInit(s: TSJ.Variables)
+    requires TSJ.Init(s)
+    ensures TSV.Init(I(s))
   {
   }
 
-  lemma RefinesCrash(k: TSJ.Constants, s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
-    requires TSJ.Inv(k, s)
-    requires TSJ.Crash(k, s, s', uiop)
-    ensures TSV.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  lemma RefinesCrash(s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
+    requires TSJ.Inv(s)
+    requires TSJ.Crash(s, s', uiop)
+    ensures TSV.Next(I(s), I(s'), uiop)
   {
-    assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.CrashStep);
+    assert TSV.NextStep(I(s), I(s'), uiop, TSV.CrashStep);
   }
 
-  lemma RefinesMove1to2(k: TSJ.Constants, s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
-    requires TSJ.Inv(k, s)
-    requires TSJ.Move1to2(k, s, s', uiop)
-    ensures TSV.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  lemma RefinesMove1to2(s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
+    requires TSJ.Inv(s)
+    requires TSJ.Move1to2(s, s', uiop)
+    ensures TSV.Next(I(s), I(s'), uiop)
   {
-    assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.Move1to2Step);
+    assert TSV.NextStep(I(s), I(s'), uiop, TSV.Move1to2Step);
   }
 
-  lemma RefinesMove2to3(k: TSJ.Constants, s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
-    requires TSJ.Inv(k, s)
-    requires TSJ.Move2to3(k, s, s', uiop)
-    ensures TSV.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  lemma RefinesMove2to3(s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
+    requires TSJ.Inv(s)
+    requires TSJ.Move2to3(s, s', uiop)
+    ensures TSV.Next(I(s), I(s'), uiop)
   {
-    assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.Move2to3Step);
+    assert TSV.NextStep(I(s), I(s'), uiop, TSV.Move2to3Step);
   }
 
-  lemma RefinesExtendLog1(k: TSJ.Constants, s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
-    requires TSJ.Inv(k, s)
-    requires TSJ.ExtendLog1(k, s, s', uiop)
-    ensures TSV.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  lemma RefinesExtendLog1(s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
+    requires TSJ.Inv(s)
+    requires TSJ.ExtendLog1(s, s', uiop)
+    ensures TSV.Next(I(s), I(s'), uiop)
   {
     calc {
       ApplySeq(s'.s1, s'.j1);
@@ -199,30 +194,30 @@ module TSJMap_Refines_ThreeStateVersionedMap {
       }
       ApplySeq(ApplySeq(s.s1, TSJ.SeqSub(s.j_gamma, s.j2)), s.j2);
       {
-        apply_path(k.k, s.s1, TSJ.SeqSub(s.j_gamma, s.j2), s.s2);
+        apply_path(s.s1, TSJ.SeqSub(s.j_gamma, s.j2), s.s2);
       }
       ApplySeq(s.s2, s.j2);
     }
     //assert ApplySeq(s.s2, s.j2)
     //    == ApplySeq(s'.s2, s'.j2);
-    //assert I(k, s').s1 == I(k, s).s2;
-    //assert I(k, s').s2 == I(k, s).s2;
-    //assert I(k, s').s3 == I(k, s).s3;
-    //assert I(k, s').outstandingSyncReqs
-    //    == SyncReqs2to1(I(k, s).outstandingSyncReqs);
-    //assert TSV.Move1to2(Ik(k), I(k, s), I(k, s'), uiop);
-    assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.Move1to2Step);
+    //assert I(s').s1 == I(s).s2;
+    //assert I(s').s2 == I(s).s2;
+    //assert I(s').s3 == I(s).s3;
+    //assert I(s').outstandingSyncReqs
+    //    == SyncReqs2to1(I(s).outstandingSyncReqs);
+    //assert TSV.Move1to2(I(s), I(s'), uiop);
+    assert TSV.NextStep(I(s), I(s'), uiop, TSV.Move1to2Step);
   }
 
-  lemma RefinesExtendLog2(k: TSJ.Constants, s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
-    requires TSJ.Inv(k, s)
-    requires TSJ.ExtendLog2(k, s, s', uiop)
-    ensures TSV.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  lemma RefinesExtendLog2(s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
+    requires TSJ.Inv(s)
+    requires TSJ.ExtendLog2(s, s', uiop)
+    ensures TSV.Next(I(s), I(s'), uiop)
   {
     calc {
       ApplySeq(s.s3, s.j3);
       {
-        apply_path(k.k, s.s2, TSJ.SeqSub(s.j2 + s.j_delta, s.j3), s.s3);
+        apply_path(s.s2, TSJ.SeqSub(s.j2 + s.j_delta, s.j3), s.s3);
       }
       ApplySeq(ApplySeq(s.s2, TSJ.SeqSub(s.j2 + s.j_delta, s.j3)), s.j3);
       {
@@ -233,98 +228,98 @@ module TSJMap_Refines_ThreeStateVersionedMap {
       ApplySeq(s'.s2, s'.j2);
     }
 
-    assert I(k, s').s1 == I(k, s).s1;
-    assert I(k, s').s2 == I(k, s).s3;
-    assert I(k, s').s3 == I(k, s).s3;
-    assert I(k, s').outstandingSyncReqs
-        == SyncReqs3to2(I(k, s).outstandingSyncReqs);
+    assert I(s').s1 == I(s).s1;
+    assert I(s').s2 == I(s).s3;
+    assert I(s').s3 == I(s).s3;
+    assert I(s').outstandingSyncReqs
+        == SyncReqs3to2(I(s).outstandingSyncReqs);
 
-    assert TSV.Move2to3(Ik(k), I(k, s), I(k, s'), uiop);
-    assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.Move2to3Step);
+    assert TSV.Move2to3(I(s), I(s'), uiop);
+    assert TSV.NextStep(I(s), I(s'), uiop, TSV.Move2to3Step);
   }
 
-  lemma RefinesMove3(k: TSJ.Constants, s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
-    requires TSJ.Inv(k, s)
-    requires TSJ.Move3(k, s, s', uiop)
-    ensures TSV.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  lemma RefinesMove3(s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
+    requires TSJ.Inv(s)
+    requires TSJ.Move3(s, s', uiop)
+    ensures TSV.Next(I(s), I(s'), uiop)
   {
-    assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.Move3Step);
+    assert TSV.NextStep(I(s), I(s'), uiop, TSV.Move3Step);
   }
 
-  lemma RefinesReplay(k: TSJ.Constants, s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op, replayedUIOp: UI.Op)
-    requires TSJ.Inv(k, s)
-    requires TSJ.Replay(k, s, s', uiop, replayedUIOp)
-    ensures TSV.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  lemma RefinesReplay(s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op, replayedUIOp: UI.Op)
+    requires TSJ.Inv(s)
+    requires TSJ.Replay(s, s', uiop, replayedUIOp)
+    ensures TSV.Next(I(s), I(s'), uiop)
   {
     //assert uiop.NoOp?;
-    //assert I(k, s').s1 == I(k, s).s1;
-    //assert I(k, s').s2 == I(k, s).s2;
+    //assert I(s').s1 == I(s).s1;
+    //assert I(s').s2 == I(s).s2;
     calc {
-      I(k, s').s3;
+      I(s').s3;
       ApplySeq(s'.s3, s'.j3);
       {
-        ApplySeqPrepend(k.k, s.s3, replayedUIOp, s'.s3, s'.j3);
+        ApplySeqPrepend(s.s3, replayedUIOp, s'.s3, s'.j3);
       }
       ApplySeq(s.s3, JournalEntriesForUIOp(replayedUIOp) + s'.j3);
       ApplySeq(s.s3, s.j3);
-      I(k, s).s3;
+      I(s).s3;
     }
-    assert MapSpec.NextStep(Ik(k).k, I(k, s).s3, I(k, s').s3, uiop, MapSpec.StutterStep);
-    assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.Move3Step);
+    assert MapSpec.NextStep(I(s).s3, I(s').s3, uiop, MapSpec.StutterStep);
+    assert TSV.NextStep(I(s), I(s'), uiop, TSV.Move3Step);
   }
 
-  lemma RefinesPushSync(k: TSJ.Constants, s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op, id: int)
-    requires TSJ.Inv(k, s)
-    requires TSJ.PushSync(k, s, s', uiop, id)
-    ensures TSV.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  lemma RefinesPushSync(s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op, id: int)
+    requires TSJ.Inv(s)
+    requires TSJ.PushSync(s, s', uiop, id)
+    ensures TSV.Next(I(s), I(s'), uiop)
   {
-    assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop,
+    assert TSV.NextStep(I(s), I(s'), uiop,
         TSV.PushSyncStep(id));
   }
 
-  lemma RefinesPopSync(k: TSJ.Constants, s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op, id: int)
-    requires TSJ.Inv(k, s)
-    requires TSJ.PopSync(k, s, s', uiop, id)
-    ensures TSV.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  lemma RefinesPopSync(s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op, id: int)
+    requires TSJ.Inv(s)
+    requires TSJ.PopSync(s, s', uiop, id)
+    ensures TSV.Next(I(s), I(s'), uiop)
   {
-    assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop,
+    assert TSV.NextStep(I(s), I(s'), uiop,
         TSV.PopSyncStep(id));
   }
 
-  lemma RefinesStutter(k: TSJ.Constants, s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
-    requires TSJ.Inv(k, s)
-    requires TSJ.Stutter(k, s, s', uiop)
-    ensures TSV.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  lemma RefinesStutter(s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
+    requires TSJ.Inv(s)
+    requires TSJ.Stutter(s, s', uiop)
+    ensures TSV.Next(I(s), I(s'), uiop)
   {
-    assert MapSpec.NextStep(Ik(k).k, I(k, s).s3, I(k, s').s3, uiop, MapSpec.StutterStep);
-    assert TSV.NextStep(Ik(k), I(k, s), I(k, s'), uiop, TSV.Move3Step);
+    assert MapSpec.NextStep(I(s).s3, I(s').s3, uiop, MapSpec.StutterStep);
+    assert TSV.NextStep(I(s), I(s'), uiop, TSV.Move3Step);
   }
 
-  lemma RefinesNextStep(k: TSJ.Constants, s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op, step: TSJ.Step)
-    requires TSJ.Inv(k, s)
-    requires TSJ.NextStep(k, s, s', uiop, step)
-    ensures TSV.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  lemma RefinesNextStep(s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op, step: TSJ.Step)
+    requires TSJ.Inv(s)
+    requires TSJ.NextStep(s, s', uiop, step)
+    ensures TSV.Next(I(s), I(s'), uiop)
   {
     match step {
-      case CrashStep => RefinesCrash(k, s, s', uiop);
-      case Move1to2Step => RefinesMove1to2(k, s, s', uiop);
-      case Move2to3Step => RefinesMove2to3(k, s, s', uiop);
-      case ExtendLog1Step => RefinesExtendLog1(k, s, s', uiop);
-      case ExtendLog2Step => RefinesExtendLog2(k, s, s', uiop);
-      case Move3Step => RefinesMove3(k, s, s', uiop);
-      case ReplayStep(replayedUIOp) => RefinesReplay(k, s, s', uiop, replayedUIOp);
-      case PushSyncStep(id) => RefinesPushSync(k, s, s', uiop, id);
-      case PopSyncStep(id) => RefinesPopSync(k, s, s', uiop, id);
-      case StutterStep => RefinesStutter(k, s, s', uiop);
+      case CrashStep => RefinesCrash(s, s', uiop);
+      case Move1to2Step => RefinesMove1to2(s, s', uiop);
+      case Move2to3Step => RefinesMove2to3(s, s', uiop);
+      case ExtendLog1Step => RefinesExtendLog1(s, s', uiop);
+      case ExtendLog2Step => RefinesExtendLog2(s, s', uiop);
+      case Move3Step => RefinesMove3(s, s', uiop);
+      case ReplayStep(replayedUIOp) => RefinesReplay(s, s', uiop, replayedUIOp);
+      case PushSyncStep(id) => RefinesPushSync(s, s', uiop, id);
+      case PopSyncStep(id) => RefinesPopSync(s, s', uiop, id);
+      case StutterStep => RefinesStutter(s, s', uiop);
     }
   }
 
-  lemma RefinesNext(k: TSJ.Constants, s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
-    requires TSJ.Inv(k, s)
-    requires TSJ.Next(k, s, s', uiop)
-    ensures TSV.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  lemma RefinesNext(s: TSJ.Variables, s':TSJ.Variables, uiop: UI.Op)
+    requires TSJ.Inv(s)
+    requires TSJ.Next(s, s', uiop)
+    ensures TSV.Next(I(s), I(s'), uiop)
   {
-    var step :| TSJ.NextStep(k, s, s', uiop, step);
-    RefinesNextStep(k, s, s', uiop, step);
+    var step :| TSJ.NextStep(s, s', uiop, step);
+    RefinesNextStep(s, s', uiop, step);
   }
 }

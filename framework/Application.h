@@ -86,7 +86,6 @@ public:
       ByteString lowerBound, bool inclusive, uint64 targetCount);
 
 private:
-  Constants k;
   Variables hs;
   std::string filename;
   std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io;

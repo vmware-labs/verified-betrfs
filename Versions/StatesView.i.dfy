@@ -9,7 +9,6 @@ abstract module StatesView {
   import opened Options
   import opened ViewOp
 
-  datatype Constants = Constants(k: SM.Constants)
   datatype Variables = Variables(
       ghost disk: imap<Loc, SM.Variables>,
       ghost persistentLoc: Option<Loc>,
@@ -18,10 +17,10 @@ abstract module StatesView {
       ghost ephemeralState: Option<SM.Variables>
   )
 
-  predicate Init(k: Constants, s: Variables, loc: Loc)
+  predicate Init(s: Variables, loc: Loc)
   {
     && loc in s.disk
-    && SM.Init(k.k, s.disk[loc])
+    && SM.Init(s.disk[loc])
     && s.persistentLoc == None
     && s.frozenLoc == None
     && s.frozenState == None
@@ -38,7 +37,7 @@ abstract module StatesView {
     | ForgetOldStep
     | StutterStep
 
-  predicate ObtainPersistentLoc(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate ObtainPersistentLoc(s: Variables, s': Variables, vop: VOp)
   {
     && vop.SendPersistentLocOp?
 
@@ -49,11 +48,11 @@ abstract module StatesView {
     && s'.frozenLoc == s.frozenLoc
     && s'.frozenState == s.frozenState
     && vop.loc in s.disk
-    && SM.Inv(k.k, s.disk[vop.loc])
+    && SM.Inv(s.disk[vop.loc])
     && s'.ephemeralState == Some(s.disk[vop.loc])
   }
 
-  predicate Advance(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate Advance(s: Variables, s': Variables, vop: VOp)
   {
     && vop.AdvanceOp?
 
@@ -64,7 +63,7 @@ abstract module StatesView {
 
     && s.ephemeralState.Some?
     && s'.ephemeralState.Some?
-    && SM.Next(k.k, s.ephemeralState.value, s'.ephemeralState.value, vop.uiop)
+    && SM.Next(s.ephemeralState.value, s'.ephemeralState.value, vop.uiop)
   }
 
   predicate DiskChangesPreservesPersistentAndFrozen(
@@ -90,7 +89,7 @@ abstract module StatesView {
     )
   }
 
-  predicate Crash(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate Crash(s: Variables, s': Variables, vop: VOp)
   {
     && vop.CrashOp?
 
@@ -101,7 +100,7 @@ abstract module StatesView {
     && s'.ephemeralState == None
   }
 
-  predicate Freeze(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate Freeze(s: Variables, s': Variables, vop: VOp)
   {
     && vop.FreezeOp?
 
@@ -112,7 +111,7 @@ abstract module StatesView {
     && s'.ephemeralState == s.ephemeralState
   }
 
-  predicate DiskChange(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate DiskChange(s: Variables, s': Variables, vop: VOp)
   {
     && vop.StatesInternalOp?
 
@@ -123,7 +122,7 @@ abstract module StatesView {
     && s'.ephemeralState == s.ephemeralState
   }
 
-  predicate ProvideFrozenLoc(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate ProvideFrozenLoc(s: Variables, s': Variables, vop: VOp)
   {
     && vop.SendFrozenLocOp?
 
@@ -140,7 +139,7 @@ abstract module StatesView {
     && s'.ephemeralState == s.ephemeralState
   }
 
-  predicate ForgetOld(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate ForgetOld(s: Variables, s': Variables, vop: VOp)
   {
     && vop.CleanUpOp?
 
@@ -151,84 +150,84 @@ abstract module StatesView {
     && s'.ephemeralState == s.ephemeralState
   }
 
-  predicate Stutter(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate Stutter(s: Variables, s': Variables, vop: VOp)
   {
     && (vop.JournalInternalOp? || vop.StatesInternalOp? ||
         vop.PushSyncOp? || vop.PopSyncOp?)
     && s' == s
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, vop: VOp, step: Step)
+  predicate NextStep(s: Variables, s': Variables, vop: VOp, step: Step)
   {
     match step {
-      case ObtainPersistentLocStep => ObtainPersistentLoc(k, s, s', vop)
-      case AdvanceStep => Advance(k, s, s', vop)
-      case CrashStep => Crash(k, s, s', vop)
-      case FreezeStep => Freeze(k, s, s', vop)
-      case DiskChangeStep => DiskChange(k, s, s', vop)
-      case ProvideFrozenLocStep => ProvideFrozenLoc(k, s, s', vop)
-      case ForgetOldStep => ForgetOld(k, s, s', vop)
-      case StutterStep => Stutter(k, s, s', vop)
+      case ObtainPersistentLocStep => ObtainPersistentLoc(s, s', vop)
+      case AdvanceStep => Advance(s, s', vop)
+      case CrashStep => Crash(s, s', vop)
+      case FreezeStep => Freeze(s, s', vop)
+      case DiskChangeStep => DiskChange(s, s', vop)
+      case ProvideFrozenLocStep => ProvideFrozenLoc(s, s', vop)
+      case ForgetOldStep => ForgetOld(s, s', vop)
+      case StutterStep => Stutter(s, s', vop)
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, vop: VOp) {
-    exists step :: NextStep(k, s, s', vop, step)
+  predicate Next(s: Variables, s': Variables, vop: VOp) {
+    exists step :: NextStep(s, s', vop, step)
   }
 
-  predicate Inv(k: Constants, s: Variables)
+  predicate Inv(s: Variables)
   {
     && (s.persistentLoc.Some? ==>
         && s.persistentLoc.value in s.disk
-        && SM.Inv(k.k, s.disk[s.persistentLoc.value]))
+        && SM.Inv(s.disk[s.persistentLoc.value]))
     && (s.frozenLoc.Some? ==>
         && s.frozenLoc.value in s.disk
-        && SM.Inv(k.k, s.disk[s.frozenLoc.value]))
-    //&& (forall loc | loc in s.disk :: SM.Inv(k.k, s.disk[loc]))
-    && (s.frozenState.Some? ==> SM.Inv(k.k, s.frozenState.value))
-    && (s.ephemeralState.Some? ==> SM.Inv(k.k, s.ephemeralState.value))
+        && SM.Inv(s.disk[s.frozenLoc.value]))
+    //&& (forall loc | loc in s.disk :: SM.Inv(s.disk[loc]))
+    && (s.frozenState.Some? ==> SM.Inv(s.frozenState.value))
+    && (s.ephemeralState.Some? ==> SM.Inv(s.ephemeralState.value))
   }
 
-  lemma InitImpliesInv(k: Constants, s: Variables, loc: Loc)
-  requires Init(k, s, loc)
-  ensures Inv(k, s)
+  lemma InitImpliesInv(s: Variables, loc: Loc)
+  requires Init(s, loc)
+  ensures Inv(s)
   {
   }
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp)
-  requires Inv(k, s)
-  requires Next(k, s, s', vop)
-  ensures Inv(k, s')
+  lemma NextPreservesInv(s: Variables, s': Variables, vop: VOp)
+  requires Inv(s)
+  requires Next(s, s', vop)
+  ensures Inv(s')
   {
-    var step :| NextStep(k, s, s', vop, step);
+    var step :| NextStep(s, s', vop, step);
     match step {
       case ObtainPersistentLocStep => {
-        assert Inv(k, s');
+        assert Inv(s');
       }
       case AdvanceStep => {
-        SM.NextPreservesInv(k.k,
+        SM.NextPreservesInv(
           s.ephemeralState.value,
           s'.ephemeralState.value,
           vop.uiop);
-        assert Inv(k, s');
+        assert Inv(s');
       }
       case CrashStep => {
-        assert Inv(k, s');
+        assert Inv(s');
       }
       case FreezeStep => {
-        assert Inv(k, s');
+        assert Inv(s');
       }
       case DiskChangeStep => {
-        assert Inv(k, s');
+        assert Inv(s');
       }
       case ProvideFrozenLocStep => {
-        assert Inv(k, s');
+        assert Inv(s');
       }
       case ForgetOldStep => {
-        assert Inv(k, s');
+        assert Inv(s');
       }
       case StutterStep => {
-        assert Inv(k, s');
+        assert Inv(s');
       }
     }
   }

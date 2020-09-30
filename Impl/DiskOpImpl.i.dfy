@@ -10,13 +10,6 @@ module DiskOpImpl {
   import ByteCache
   import opened MainDiskIOHandler
 
-  type ImplConstants = ByteCache.Constants
-
-  function Ic(k: ImplConstants) : DiskOpModel.Constants
-  {
-    DiskOpModel.Constants()
-  }
-
   function IIO(io: DiskIOHandler) : DiskOpModel.IO
   reads io
   {

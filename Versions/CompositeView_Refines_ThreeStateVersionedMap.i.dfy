@@ -22,41 +22,34 @@ module CompositeView_Refines_ThreeStateVersionedMap {
   
   import UI
 
-  function Ik(k: A.Constants) : C.Constants {
-    Ref_B.Ik(Ref_A.Ik(k))
-  }
-
-  function I(k: A.Constants, s: A.Variables) : C.Variables
-  requires A.Inv(k, s)
+  function I(s: A.Variables) : C.Variables
+  requires A.Inv(s)
   {
     Ref_B.I(
-      Ref_A.Ik(k),
-      Ref_A.I(k, s)
+      Ref_A.I(s)
     )
   }
 
-  lemma RefinesInit(k: A.Constants, s: A.Variables)
-    requires A.Init(k, s)
-    ensures A.Inv(k, s)
-    ensures C.Init(Ik(k), I(k, s))
+  lemma RefinesInit(s: A.Variables)
+    requires A.Init(s)
+    ensures A.Inv(s)
+    ensures C.Init(I(s))
   {
-    Ref_A.RefinesInit(k, s);
+    Ref_A.RefinesInit(s);
     Ref_B.RefinesInit(
-      Ref_A.Ik(k),
-      Ref_A.I(k, s));
+      Ref_A.I(s));
   }
 
-  lemma RefinesNext(k: A.Constants, s: A.Variables, s': A.Variables, uiop: UI.Op)
-    requires A.Inv(k, s)
-    requires A.Next(k, s, s', uiop)
-    ensures A.Inv(k, s')
-    ensures C.Next(Ik(k), I(k, s), I(k, s'), uiop)
+  lemma RefinesNext(s: A.Variables, s': A.Variables, uiop: UI.Op)
+    requires A.Inv(s)
+    requires A.Next(s, s', uiop)
+    ensures A.Inv(s')
+    ensures C.Next(I(s), I(s'), uiop)
   {
-    Ref_A.RefinesNext(k, s, s', uiop);
+    Ref_A.RefinesNext(s, s', uiop);
     Ref_B.RefinesNext(
-      Ref_A.Ik(k),
-      Ref_A.I(k, s),
-      Ref_A.I(k, s'),
+      Ref_A.I(s),
+      Ref_A.I(s'),
       uiop);
   }
 }

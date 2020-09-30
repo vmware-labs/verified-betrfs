@@ -19,8 +19,8 @@ module DeallocImpl {
 
   import opened NativeTypes
 
-  method Dealloc(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
-  requires Inv(k, s)
+  method Dealloc(s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
+  requires Inv(s)
   requires io.initialized()
   requires DeallocModel.deallocable(s.I(), ref)
   requires io !in s.Repr()
@@ -28,7 +28,7 @@ module DeallocImpl {
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
-  ensures (s.I(), IIO(io)) == DeallocModel.Dealloc(Ic(k), old(s.I()), old(IIO(io)), ref);
+  ensures (s.I(), IIO(io)) == DeallocModel.Dealloc(old(s.I()), old(IIO(io)), ref);
   {
     DeallocModel.reveal_Dealloc();
 
@@ -45,7 +45,7 @@ module DeallocImpl {
       return;
     }
 
-    BookkeepingModel.lemmaIndirectionTableLocIndexValid(Ic(k), s.I(), ref);
+    BookkeepingModel.lemmaIndirectionTableLocIndexValid(s.I(), ref);
 
     var oldLoc := s.ephemeralIndirectionTable.RemoveRef(ref);
 
@@ -57,7 +57,7 @@ module DeallocImpl {
     }
 
     ghost var s1 := s.I();
-    ghost var s2 := DeallocModel.Dealloc(Ic(k), old(s.I()), old(IIO(io)), ref).0;
+    ghost var s2 := DeallocModel.Dealloc(old(s.I()), old(IIO(io)), ref).0;
 
     assert s1.cache == s2.cache;
   }

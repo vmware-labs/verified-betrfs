@@ -22,19 +22,19 @@ module GrowImpl {
   import opened NativeTypes
 
   /// The root was found to be too big: grow
-  method grow(k: ImplConstants, s: ImplVariables)
-  requires Inv(k, s)
+  method grow(s: ImplVariables)
+  requires Inv(s)
   requires s.ready
   requires BT.G.Root() in s.cache.I()
   requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 2
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
-  ensures s.I() == GrowModel.grow(Ic(k), old(s.I()))
+  ensures s.I() == GrowModel.grow(old(s.I()))
   {
     GrowModel.reveal_grow();
 
-    BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), BT.G.Root());
+    BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), BT.G.Root());
 
     assert s.blockAllocator.Repr <= s.Repr();
 
@@ -49,9 +49,9 @@ module GrowImpl {
     var oldrootOpt := s.cache.GetOpt(BT.G.Root());
     var oldroot := oldrootOpt.value;
 
-    BookkeepingModel.lemmaChildrenConditionsSingleOfAllocBookkeeping(Ic(k), s.I(), oldroot.Read().children);
+    BookkeepingModel.lemmaChildrenConditionsSingleOfAllocBookkeeping(s.I(), oldroot.Read().children);
     var children := oldroot.GetChildren();
-    var newref := allocBookkeeping(k, s, children);
+    var newref := allocBookkeeping(s, children);
 
     match newref {
       case None => {
@@ -70,12 +70,12 @@ module GrowImpl {
         assert s.I().cache[BT.G.Root()] == old(s.I().cache[BT.G.Root()]);
         assert fresh(newroot.Repr);
 
-        writeBookkeeping(k, s, BT.G.Root(), Some([newref]));
+        writeBookkeeping(s, BT.G.Root(), Some([newref]));
 
         s.cache.MoveAndReplace(BT.G.Root(), newref, newroot);
 
         ghost var a := s.I();
-        ghost var b := GrowModel.grow(Ic(k), old(s.I()));
+        ghost var b := GrowModel.grow(old(s.I()));
         assert a.cache == b.cache;
         assert a.ephemeralIndirectionTable == b.ephemeralIndirectionTable;
         assert a.lru == b.lru;

@@ -18,7 +18,7 @@ module CommitterInitModel {
   import opened IOModel
   import opened DiskOpModel
 
-  function {:opaque} PageInSuperblockReq(k: Constants, cm: CM, io: IO, which: uint64) : (res : (CM, IO))
+  function {:opaque} PageInSuperblockReq(cm: CM, io: IO, which: uint64) : (res : (CM, IO))
   requires which == 0 || which == 1
   requires which == 0 ==> cm.superblock1.SuperblockUnfinished?
   requires which == 1 ==> cm.superblock2.SuperblockUnfinished?
@@ -46,22 +46,21 @@ module CommitterInitModel {
     )
   }
 
-  lemma PageInSuperblockReqCorrect(k: Constants,
-      cm: CM, io: IO, which: uint64)
+  lemma PageInSuperblockReqCorrect(cm: CM, io: IO, which: uint64)
   requires CommitterModel.WF(cm)
-  requires PageInSuperblockReq.requires(k, cm, io, which)
-  ensures var (cm', io') := PageInSuperblockReq(k, cm, io, which);
+  requires PageInSuperblockReq.requires(cm, io, which)
+  ensures var (cm', io') := PageInSuperblockReq(cm, io, which);
     && CommitterModel.WF(cm')
     && ValidDiskOp(diskOp(io'))
     && IDiskOp(diskOp(io')).bdop.NoDiskOp?
-    && JournalCache.Next(Ik(k).jc,
+    && JournalCache.Next(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
         JournalInternalOp)
   {
     reveal_PageInSuperblockReq();
-    var (cm', io') := PageInSuperblockReq(k, cm, io, which);
+    var (cm', io') := PageInSuperblockReq(cm, io, which);
 
     var loc;
     if which == 0 {
@@ -74,24 +73,24 @@ module CommitterInitModel {
     if (which == 0 && cm.superblock1Read.None?)
       || (which == 1 && cm.superblock2Read.None?)
     {
-      assert JournalCache.PageInSuperblockReq(Ik(k).jc,
+      assert JournalCache.PageInSuperblockReq(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           IDiskOp(diskOp(io')).jdop,
           JournalInternalOp, which as int);
-      assert JournalCache.NextStep(Ik(k).jc,
+      assert JournalCache.NextStep(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           IDiskOp(diskOp(io')).jdop,
           JournalInternalOp,
           JournalCache.PageInSuperblockReqStep(which as int));
     } else {
-      assert JournalCache.NoOp(Ik(k).jc,
+      assert JournalCache.NoOp(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           IDiskOp(diskOp(io')).jdop,
           JournalInternalOp);
-      assert JournalCache.NextStep(Ik(k).jc,
+      assert JournalCache.NextStep(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           IDiskOp(diskOp(io')).jdop,
@@ -101,7 +100,7 @@ module CommitterInitModel {
     }
   }
 
-  function {:opaque} FinishLoadingSuperblockPhase(k: Constants, cm: CM) : (cm' : CM)
+  function {:opaque} FinishLoadingSuperblockPhase(cm: CM) : (cm' : CM)
   requires cm.status.StatusLoadingSuperblock?
   requires cm.superblock1.SuperblockSuccess?
   requires cm.superblock2.SuperblockSuccess?
@@ -122,28 +121,28 @@ module CommitterInitModel {
       .(journalBackRead := None)
   }
 
-  lemma FinishLoadingSuperblockPhaseCorrect(k: Constants, cm: CM)
+  lemma FinishLoadingSuperblockPhaseCorrect(cm: CM)
   requires cm.status.StatusLoadingSuperblock?
   requires cm.superblock1.SuperblockSuccess?
   requires cm.superblock2.SuperblockSuccess?
   requires CommitterModel.WF(cm)
-  ensures var cm' := FinishLoadingSuperblockPhase(k, cm);
+  ensures var cm' := FinishLoadingSuperblockPhase(cm);
     && CommitterModel.WF(cm')
-    && JournalCache.Next(Ik(k).jc,
+    && JournalCache.Next(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         JournalDisk.NoDiskOp,
         SendPersistentLocOp(cm'.superblock.indirectionTableLoc))
   {
-    var cm' := FinishLoadingSuperblockPhase(k, cm);
+    var cm' := FinishLoadingSuperblockPhase(cm);
     var vop := SendPersistentLocOp(cm'.superblock.indirectionTableLoc);
     reveal_FinishLoadingSuperblockPhase();
-    assert JournalCache.FinishLoadingSuperblockPhase(Ik(k).jc,
+    assert JournalCache.FinishLoadingSuperblockPhase(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         JournalDisk.NoDiskOp,
         vop);
-    assert JournalCache.NextStep(Ik(k).jc,
+    assert JournalCache.NextStep(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         JournalDisk.NoDiskOp,
@@ -151,7 +150,7 @@ module CommitterInitModel {
         JournalCache.FinishLoadingSuperblockPhaseStep);
   }
 
-  function {:opaque} FinishLoadingOtherPhase(k: Constants, cm: CM) : (cm' : CM)
+  function {:opaque} FinishLoadingOtherPhase(cm: CM) : (cm' : CM)
   requires cm.status.StatusLoadingOther?
   requires CommitterModel.WF(cm)
   {
@@ -174,22 +173,22 @@ module CommitterInitModel {
     )
   }
 
-  lemma FinishLoadingOtherPhaseCorrect(k: Constants, cm: CM)
+  lemma FinishLoadingOtherPhaseCorrect(cm: CM)
   requires cm.status.StatusLoadingOther?
   requires CommitterModel.Inv(cm)
   requires JournalCache.JournalFrontIntervalOfSuperblock(cm.superblock).Some? ==>
       JournalistModel.hasFront(cm.journalist)
   requires JournalCache.JournalBackIntervalOfSuperblock(cm.superblock).Some? ==>
       JournalistModel.hasBack(cm.journalist)
-  ensures var cm' := FinishLoadingOtherPhase(k, cm);
+  ensures var cm' := FinishLoadingOtherPhase(cm);
     && CommitterModel.WF(cm')
-    && JournalCache.Next(Ik(k).jc,
+    && JournalCache.Next(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         JournalDisk.NoDiskOp,
         JournalInternalOp)
   {
-    var cm' := FinishLoadingOtherPhase(k, cm);
+    var cm' := FinishLoadingOtherPhase(cm);
     reveal_FinishLoadingOtherPhase();
 
     var (journalist1, success) :=
@@ -218,24 +217,24 @@ module CommitterInitModel {
         (if JournalistModel.I(jm).journalBack.Some? then JournalistModel.I(jm).journalBack.value
             else []);
 
-      assert JournalCache.FinishLoadingOtherPhase(Ik(k).jc,
+      assert JournalCache.FinishLoadingOtherPhase(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           JournalDisk.NoDiskOp,
           JournalInternalOp);
-      assert JournalCache.NextStep(Ik(k).jc,
+      assert JournalCache.NextStep(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           JournalDisk.NoDiskOp,
           JournalInternalOp,
           JournalCache.FinishLoadingOtherPhaseStep);
     } else {
-      assert JournalCache.NoOp(Ik(k).jc,
+      assert JournalCache.NoOp(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           JournalDisk.NoDiskOp,
           JournalInternalOp);
-      assert JournalCache.NextStep(Ik(k).jc,
+      assert JournalCache.NextStep(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           JournalDisk.NoDiskOp,
@@ -250,7 +249,7 @@ module CommitterInitModel {
     JournalistModel.isReplayEmpty(cm.journalist)
   }
 
-  function {:opaque} PageInJournalReqFront(k: Constants, cm: CM, io: IO)
+  function {:opaque} PageInJournalReqFront(cm: CM, io: IO)
     : (CM, IO)
   requires CommitterModel.WF(cm)
   requires cm.status.StatusLoadingOther?
@@ -273,7 +272,7 @@ module CommitterInitModel {
     (cm', io')
   }
 
-  lemma PageInJournalReqFrontCorrect(k: Constants, cm: CM, io: IO)
+  lemma PageInJournalReqFrontCorrect(cm: CM, io: IO)
   requires CommitterModel.WF(cm)
   requires cm.status.StatusLoadingOther?
   requires cm.superblock.journalLen > 0
@@ -281,18 +280,18 @@ module CommitterInitModel {
   requires cm.journalFrontRead.None?
   requires JournalistModel.I(cm.journalist).journalFront.None?
 
-  ensures var (cm', io') := PageInJournalReqFront(k, cm, io);
+  ensures var (cm', io') := PageInJournalReqFront(cm, io);
     && CommitterModel.WF(cm')
     && ValidDiskOp(diskOp(io'))
     && IDiskOp(diskOp(io')).bdop.NoDiskOp?
-    && JournalCache.Next(Ik(k).jc,
+    && JournalCache.Next(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
         JournalInternalOp)
   {
     reveal_PageInJournalReqFront();
-    var (cm', io') := PageInJournalReqFront(k, cm, io);
+    var (cm', io') := PageInJournalReqFront(cm, io);
 
     var len :=
       if cm.superblock.journalStart + cm.superblock.journalLen
@@ -304,13 +303,13 @@ module CommitterInitModel {
     var loc := JournalRangeLocation(cm.superblock.journalStart, len);
     RequestReadCorrect(io, loc);
 
-    assert JournalCache.PageInJournalReq(Ik(k).jc,
+    assert JournalCache.PageInJournalReq(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
         JournalInternalOp,
         0);
-    assert JournalCache.NextStep(Ik(k).jc,
+    assert JournalCache.NextStep(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
@@ -318,7 +317,7 @@ module CommitterInitModel {
         JournalCache.PageInJournalReqStep(0));
   }
 
-  function {:opaque} PageInJournalReqBack(k: Constants, cm: CM, io: IO)
+  function {:opaque} PageInJournalReqBack(cm: CM, io: IO)
     : (CM, IO)
   requires CommitterModel.WF(cm)
   requires cm.status.StatusLoadingOther?
@@ -336,7 +335,7 @@ module CommitterInitModel {
     (cm', io')
   }
 
-  lemma PageInJournalReqBackCorrect(k: Constants, cm: CM, io: IO)
+  lemma PageInJournalReqBackCorrect(cm: CM, io: IO)
   requires CommitterModel.WF(cm)
   requires cm.status.StatusLoadingOther?
   requires cm.superblock.journalLen > 0
@@ -345,30 +344,30 @@ module CommitterInitModel {
   requires JournalistModel.I(cm.journalist).journalBack.None?
   requires cm.superblock.journalStart + cm.superblock.journalLen > NumJournalBlocks()
 
-  ensures var (cm', io') := PageInJournalReqBack(k, cm, io);
+  ensures var (cm', io') := PageInJournalReqBack(cm, io);
     && CommitterModel.WF(cm')
     && ValidDiskOp(diskOp(io'))
     && IDiskOp(diskOp(io')).bdop.NoDiskOp?
-    && JournalCache.Next(Ik(k).jc,
+    && JournalCache.Next(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
         JournalInternalOp)
   {
     reveal_PageInJournalReqBack();
-    var (cm', io') := PageInJournalReqBack(k, cm, io);
+    var (cm', io') := PageInJournalReqBack(cm, io);
 
     var len := cm.superblock.journalStart + cm.superblock.journalLen - NumJournalBlocks();
     var loc := JournalRangeLocation(0, len);
     RequestReadCorrect(io, loc);
 
-    assert JournalCache.PageInJournalReq(Ik(k).jc,
+    assert JournalCache.PageInJournalReq(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
         JournalInternalOp,
         1);
-    assert JournalCache.NextStep(Ik(k).jc,
+    assert JournalCache.NextStep(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
@@ -376,7 +375,7 @@ module CommitterInitModel {
         JournalCache.PageInJournalReqStep(1));
   }
 
-  function {:opaque} PageInJournalResp(k: Constants, cm: CM, io: IO)
+  function {:opaque} PageInJournalResp(cm: CM, io: IO)
     : CM
   requires CommitterModel.WF(cm)
   requires cm.status.StatusLoadingOther?
@@ -405,14 +404,14 @@ module CommitterInitModel {
     )
   }
 
-  lemma PageInJournalRespCorrect(k: Constants, cm: CM, io: IO)
-  requires PageInJournalResp.requires(k, cm, io)
+  lemma PageInJournalRespCorrect(cm: CM, io: IO)
+  requires PageInJournalResp.requires(cm, io)
   requires CommitterModel.WF(cm)
-  ensures var cm' := PageInJournalResp(k, cm, io);
+  ensures var cm' := PageInJournalResp(cm, io);
     && CommitterModel.WF(cm')
     && ValidDiskOp(diskOp(io))
     && IDiskOp(diskOp(io)).bdop.NoDiskOp?
-    && JournalCache.Next(Ik(k).jc,
+    && JournalCache.Next(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io)).jdop,
@@ -420,45 +419,45 @@ module CommitterInitModel {
   {
     reveal_PageInJournalResp();
     var jr := JournalBytes.JournalRangeOfByteSeq(io.respRead.bytes);
-    var cm' := PageInJournalResp(k, cm, io);
+    var cm' := PageInJournalResp(cm, io);
     if jr.Some? {
       assert |jr.value| <= NumJournalBlocks() as int by {
         reveal_ValidJournalLocation();
       }
 
       if cm.journalFrontRead == Some(io.id) {
-        assert JournalCache.PageInJournalResp(Ik(k).jc,
+        assert JournalCache.PageInJournalResp(
             CommitterModel.I(cm),
             CommitterModel.I(cm'),
             IDiskOp(diskOp(io)).jdop,
             JournalInternalOp,
             0);
-        assert JournalCache.NextStep(Ik(k).jc,
+        assert JournalCache.NextStep(
             CommitterModel.I(cm),
             CommitterModel.I(cm'),
             IDiskOp(diskOp(io)).jdop,
             JournalInternalOp,
             JournalCache.PageInJournalRespStep(0));
       } else if cm.journalBackRead == Some(io.id) {
-        assert JournalCache.PageInJournalResp(Ik(k).jc,
+        assert JournalCache.PageInJournalResp(
             CommitterModel.I(cm),
             CommitterModel.I(cm'),
             IDiskOp(diskOp(io)).jdop,
             JournalInternalOp,
             1);
-        assert JournalCache.NextStep(Ik(k).jc,
+        assert JournalCache.NextStep(
             CommitterModel.I(cm),
             CommitterModel.I(cm'),
             IDiskOp(diskOp(io)).jdop,
             JournalInternalOp,
             JournalCache.PageInJournalRespStep(1));
       } else {
-        assert JournalCache.NoOp(Ik(k).jc,
+        assert JournalCache.NoOp(
             CommitterModel.I(cm),
             CommitterModel.I(cm'),
             IDiskOp(diskOp(io)).jdop,
             JournalInternalOp);
-        assert JournalCache.NextStep(Ik(k).jc,
+        assert JournalCache.NextStep(
             CommitterModel.I(cm),
             CommitterModel.I(cm'),
             IDiskOp(diskOp(io)).jdop,
@@ -466,12 +465,12 @@ module CommitterInitModel {
             JournalCache.NoOpStep);
       }
     } else {
-      assert JournalCache.NoOp(Ik(k).jc,
+      assert JournalCache.NoOp(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           IDiskOp(diskOp(io)).jdop,
           JournalInternalOp);
-      assert JournalCache.NextStep(Ik(k).jc,
+      assert JournalCache.NextStep(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           IDiskOp(diskOp(io)).jdop,
@@ -480,7 +479,7 @@ module CommitterInitModel {
     }
   }
 
-  function {:opaque} tryFinishLoadingOtherPhase(k: Constants, cm: CM, io: IO) : (res: (CM, IO))
+  function {:opaque} tryFinishLoadingOtherPhase(cm: CM, io: IO) : (res: (CM, IO))
   requires CommitterModel.Inv(cm)
   requires cm.status.StatusLoadingOther?
   requires io.IOInit?
@@ -488,50 +487,50 @@ module CommitterInitModel {
     var hasFront := JournalistModel.hasFront(cm.journalist);
     var hasBack := JournalistModel.hasBack(cm.journalist);
     if cm.superblock.journalLen > 0 && !cm.journalFrontRead.Some? && !hasFront then (
-      PageInJournalReqFront(k, cm, io)
+      PageInJournalReqFront(cm, io)
     ) else if cm.superblock.journalStart + cm.superblock.journalLen > NumJournalBlocks() && !cm.journalBackRead.Some? && !hasBack then (
-      PageInJournalReqBack(k, cm, io)
+      PageInJournalReqBack(cm, io)
     ) else if (cm.superblock.journalLen > 0 ==> hasFront)
         && (cm.superblock.journalStart + cm.superblock.journalLen > NumJournalBlocks() ==> hasBack) then (
-      var cm' := FinishLoadingOtherPhase(k, cm);
+      var cm' := FinishLoadingOtherPhase(cm);
       (cm', io)
     ) else (
       (cm, io)
     )
   }
 
-  lemma tryFinishLoadingOtherPhaseCorrect(k: Constants, cm: CM, io: IO)
+  lemma tryFinishLoadingOtherPhaseCorrect(cm: CM, io: IO)
   requires cm.status.StatusLoadingOther?
   requires CommitterModel.Inv(cm)
   requires io.IOInit?
-  ensures var (cm', io') := tryFinishLoadingOtherPhase(k, cm, io);
+  ensures var (cm', io') := tryFinishLoadingOtherPhase(cm, io);
     && CommitterModel.WF(cm')
     && ValidDiskOp(diskOp(io'))
     && IDiskOp(diskOp(io')).bdop.NoDiskOp?
-    && JournalCache.Next(Ik(k).jc,
+    && JournalCache.Next(
         CommitterModel.I(cm),
         CommitterModel.I(cm'),
         IDiskOp(diskOp(io')).jdop,
         JournalInternalOp)
   {
     reveal_tryFinishLoadingOtherPhase();
-    var (cm', io') := tryFinishLoadingOtherPhase(k, cm, io);
+    var (cm', io') := tryFinishLoadingOtherPhase(cm, io);
     var hasFront := JournalistModel.hasFront(cm.journalist);
     var hasBack := JournalistModel.hasBack(cm.journalist);
     if cm.superblock.journalLen > 0 && !cm.journalFrontRead.Some? && !hasFront {
-      PageInJournalReqFrontCorrect(k, cm, io);
+      PageInJournalReqFrontCorrect(cm, io);
     } else if cm.superblock.journalStart + cm.superblock.journalLen > NumJournalBlocks() && !cm.journalBackRead.Some? && !hasBack {
-      PageInJournalReqBackCorrect(k, cm, io);
+      PageInJournalReqBackCorrect(cm, io);
     } else if (cm.superblock.journalLen > 0 ==> hasFront)
         && (cm.superblock.journalStart + cm.superblock.journalLen > NumJournalBlocks() ==> hasBack) {
-      FinishLoadingOtherPhaseCorrect(k, cm);
+      FinishLoadingOtherPhaseCorrect(cm);
     } else {
-      assert JournalCache.NoOp(Ik(k).jc,
+      assert JournalCache.NoOp(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           IDiskOp(diskOp(io)).jdop,
           JournalInternalOp);
-      assert JournalCache.NextStep(Ik(k).jc,
+      assert JournalCache.NextStep(
           CommitterModel.I(cm),
           CommitterModel.I(cm'),
           IDiskOp(diskOp(io)).jdop,

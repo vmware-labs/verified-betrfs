@@ -24,7 +24,7 @@ module CommitterInitImpl {
   import CommitterInitModel
 
   method PageInSuperblockReq(
-      k: ImplConstants, cm: Committer, io: DiskIOHandler, which: uint64)
+      cm: Committer, io: DiskIOHandler, which: uint64)
   requires cm.Inv()
   requires which == 0 || which == 1
   requires which == 0 ==> cm.superblock1.SuperblockUnfinished?
@@ -38,7 +38,7 @@ module CommitterInitImpl {
   ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
   ensures (cm.I(), IIO(io)) ==
       CommitterInitModel.PageInSuperblockReq(
-          Ic(k), old(cm.I()), old(IIO(io)), which)
+          old(cm.I()), old(IIO(io)), which)
   {
     CommitterInitModel.reveal_PageInSuperblockReq();
     cm.reveal_ReprInv();
@@ -65,7 +65,7 @@ module CommitterInitImpl {
     cm.reveal_ReprInv();
   }
 
-  method FinishLoadingSuperblockPhase(k: ImplConstants, cm: Committer)
+  method FinishLoadingSuperblockPhase(cm: Committer)
   requires cm.Inv()
   requires cm.status.StatusLoadingSuperblock?
   requires cm.superblock1.SuperblockSuccess?
@@ -76,7 +76,7 @@ module CommitterInitImpl {
   ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
   ensures cm.I() ==
       CommitterInitModel.FinishLoadingSuperblockPhase(
-          Ic(k), old(cm.I()));
+          old(cm.I()));
   {
     CommitterInitModel.reveal_FinishLoadingSuperblockPhase();
     cm.reveal_ReprInv();
@@ -100,7 +100,7 @@ module CommitterInitImpl {
     cm.reveal_ReprInv();
   }
 
-  method FinishLoadingOtherPhase(k: ImplConstants, cm: Committer)
+  method FinishLoadingOtherPhase(cm: Committer)
   requires cm.Inv()
   requires cm.status.StatusLoadingOther?
   modifies cm.Repr
@@ -108,7 +108,7 @@ module CommitterInitImpl {
   ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
   ensures cm.I() ==
       CommitterInitModel.FinishLoadingOtherPhase(
-          Ic(k), old(cm.I()));
+          old(cm.I()));
   {
     CommitterInitModel.reveal_FinishLoadingOtherPhase();
     cm.reveal_ReprInv();
@@ -142,7 +142,7 @@ module CommitterInitImpl {
     b := cm.journalist.isReplayEmpty();
   }
 
-  method PageInJournalReqFront(k: ImplConstants, cm: Committer, io: DiskIOHandler)
+  method PageInJournalReqFront(cm: Committer, io: DiskIOHandler)
   requires cm.WF()
   requires cm.status.StatusLoadingOther?
   requires cm.superblock.journalLen > 0
@@ -153,7 +153,7 @@ module CommitterInitImpl {
   ensures cm.W()
   ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
   ensures (cm.I(), IIO(io)) == CommitterInitModel.PageInJournalReqFront(
-      Ic(k), old(cm.I()), old(IIO(io)))
+      old(cm.I()), old(IIO(io)))
   {
     CommitterInitModel.reveal_PageInJournalReqFront();
     cm.reveal_ReprInv();
@@ -176,7 +176,7 @@ module CommitterInitImpl {
     cm.reveal_ReprInv();
   }
   
-  method PageInJournalReqBack(k: ImplConstants, cm: Committer, io: DiskIOHandler)
+  method PageInJournalReqBack(cm: Committer, io: DiskIOHandler)
   requires cm.WF()
   requires cm.status.StatusLoadingOther?
   requires cm.superblock.journalLen > 0
@@ -188,7 +188,7 @@ module CommitterInitImpl {
   ensures cm.W()
   ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
   ensures (cm.I(), IIO(io)) == CommitterInitModel.PageInJournalReqBack(
-      Ic(k), old(cm.I()), old(IIO(io)))
+      old(cm.I()), old(IIO(io)))
   {
     CommitterInitModel.reveal_PageInJournalReqBack();
     cm.reveal_ReprInv();
@@ -206,7 +206,7 @@ module CommitterInitImpl {
   }
 
   method PageInJournalResp(
-      k: ImplConstants,
+      
       cm: Committer,
       io: DiskIOHandler)
   requires cm.WF()
@@ -219,7 +219,7 @@ module CommitterInitImpl {
   ensures cm.W()
   ensures cm.Repr == old(cm.Repr)
   ensures cm.I() == CommitterInitModel.PageInJournalResp(
-      Ic(k), old(cm.I()), old(IIO(io)))
+      old(cm.I()), old(IIO(io)))
   {
     CommitterInitModel.reveal_PageInJournalResp();
     cm.reveal_ReprInv();
@@ -244,7 +244,7 @@ module CommitterInitImpl {
     cm.reveal_ReprInv();
   }
 
-  method tryFinishLoadingOtherPhase(k: ImplConstants, cm: Committer, io: DiskIOHandler)
+  method tryFinishLoadingOtherPhase(cm: Committer, io: DiskIOHandler)
   requires cm.Inv()
   requires cm.status.StatusLoadingOther?
   requires io.initialized()
@@ -254,7 +254,7 @@ module CommitterInitImpl {
   ensures cm.W()
   ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
   ensures (cm.I(), IIO(io)) == CommitterInitModel.tryFinishLoadingOtherPhase(
-      Ic(k), old(cm.I()), old(IIO(io)))
+      old(cm.I()), old(IIO(io)))
   {
     CommitterInitModel.reveal_tryFinishLoadingOtherPhase();
     cm.reveal_ReprInv();
@@ -262,12 +262,12 @@ module CommitterInitImpl {
     var hasFront := cm.journalist.hasFront();
     var hasBack := cm.journalist.hasBack();
     if cm.superblock.journalLen > 0 && !cm.journalFrontRead.Some? && !hasFront {
-      PageInJournalReqFront(k, cm, io);
+      PageInJournalReqFront(cm, io);
     } else if cm.superblock.journalStart + cm.superblock.journalLen > NumJournalBlocks() && !cm.journalBackRead.Some? && !hasBack {
-      PageInJournalReqBack(k, cm, io);
+      PageInJournalReqBack(cm, io);
     } else if (cm.superblock.journalLen > 0 ==> hasFront)
         && (cm.superblock.journalStart + cm.superblock.journalLen > NumJournalBlocks() ==> hasBack) {
-      FinishLoadingOtherPhase(k, cm);
+      FinishLoadingOtherPhase(cm);
     } else {
     }
   }

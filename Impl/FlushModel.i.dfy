@@ -23,9 +23,9 @@ module FlushModel {
   import opened NativeTypes
   import D = AsyncDisk
 
-  function flush(k: Constants, s: BCVariables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
+  function flush(s: BCVariables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
   : BCVariables
-  requires BCInv(k, s)
+  requires BCInv(s)
   requires s.Ready?
 
   requires parentref in s.ephemeralIndirectionTable.graph
@@ -50,16 +50,16 @@ module FlushModel {
       var parent := s.cache[parentref];
 
       WeightBucketLeBucketList(parent.buckets, slot);
-      lemmaChildrenConditionsOfNode(k, s, childref);
-      lemmaChildrenConditionsOfNode(k, s, parentref);
+      lemmaChildrenConditionsOfNode(s, childref);
+      lemmaChildrenConditionsOfNode(s, parentref);
 
       var partialFlushResult(newparentBucket, newbuckets) :=
           BucketModel.partialFlush(
             parent.buckets[slot], child.pivotTable, child.buckets);
       var newchild := child.(buckets := newbuckets);
-      var (s2, newchildref) := allocBookkeeping(k, s, newchild.children);
+      var (s2, newchildref) := allocBookkeeping(s, newchild.children);
       lemmaChildrenConditionsUpdateOfAllocBookkeeping(
-        k, s, newchild.children, parent.children.value, slot);
+        s, newchild.children, parent.children.value, slot);
       if newchildref.None? then (
         s2
       ) else (
@@ -68,34 +68,34 @@ module FlushModel {
           Some(parent.children.value[slot := newchildref.value]),
           parent.buckets[slot := newparentBucket]
         );
-        var s2 := writeBookkeeping(k, s2, parentref, newparent.children);
+        var s2 := writeBookkeeping(s2, parentref, newparent.children);
         var s' := s2.(cache := s2.cache[newchildref.value := newchild][parentref := newparent]);
         s'
       )
     )
   }
 
-  lemma flushCorrect(k: Constants, s: BCVariables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
-  requires flush.requires(k, s, parentref, slot, childref, child)
+  lemma flushCorrect(s: BCVariables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
+  requires flush.requires(s, parentref, slot, childref, child)
   requires TotalCacheSize(s) <= MaxCacheSize() - 1
   ensures
-      var s' := flush(k, s, parentref, slot, childref, child);
+      var s' := flush(s, parentref, slot, childref, child);
       && WFBCVars(s')
-      && betree_next(k, IBlockCache(s), IBlockCache(s'))
+      && betree_next(IBlockCache(s), IBlockCache(s'))
   {
-    var s' := flush(k, s, parentref, slot, childref, child);
+    var s' := flush(s, parentref, slot, childref, child);
 
     if (
       && s.frozenIndirectionTable.Some?
       && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, parentref)
     ) {
-      assert noop(k, IBlockCache(s), IBlockCache(s));
+      assert noop(IBlockCache(s), IBlockCache(s));
     } else {
       var parent := s.cache[parentref];
 
       WeightBucketLeBucketList(parent.buckets, slot);
-      lemmaChildrenConditionsOfNode(k, s, childref);
-      lemmaChildrenConditionsOfNode(k, s, parentref);
+      lemmaChildrenConditionsOfNode(s, childref);
+      lemmaChildrenConditionsOfNode(s, parentref);
 
       var partialFlushResult(newparentBucket, newbuckets) :=
         BucketModel.partialFlush(
@@ -130,10 +130,10 @@ module FlushModel {
       assert parent == s.cache[parentref];
 
       var newchild := child.(buckets := newbuckets);
-      var (s2, newchildref) := allocWithNode(k, s, newchild);
+      var (s2, newchildref) := allocWithNode(s, newchild);
       reveal_allocBookkeeping();
       if newchildref.None? {
-        assert noop(k, IBlockCache(s), IBlockCache(s2));
+        assert noop(IBlockCache(s), IBlockCache(s2));
       } else {
         var newparent := Node(
           parent.pivotTable,
@@ -142,7 +142,7 @@ module FlushModel {
         );
         reveal_BucketComplement();
 
-        var s3 := writeWithNode(k, s2, parentref, newparent);
+        var s3 := writeWithNode(s2, parentref, newparent);
         reveal_writeBookkeeping();
         assert s3 == s';
 
@@ -150,20 +150,20 @@ module FlushModel {
           if (ref == newchildref.value) {
           } else {
             assert ref in BT.G.Successors(INode(parent));
-            lemmaChildInGraph(k, s, parentref, ref);
+            lemmaChildInGraph(s, parentref, ref);
             assert ref in IIndirectionTable(s2.ephemeralIndirectionTable).graph;
           }
         }
         assert BC.BlockPointsToValidReferences(INode(newparent), IIndirectionTable(s2.ephemeralIndirectionTable).graph);
 
         forall ref | ref in BT.G.Successors(INode(newchild)) ensures ref in IIndirectionTable(s.ephemeralIndirectionTable).graph {
-          lemmaChildInGraph(k, s, childref, ref);
+          lemmaChildInGraph(s, childref, ref);
         }
 
         WeightBucketListClearEntry(parent.buckets, slot);
 
-        allocCorrect(k, s, newchild);
-        writeCorrect(k, s2, parentref, newparent);
+        allocCorrect(s, newchild);
+        writeCorrect(s2, parentref, newparent);
 
         var flushStep := BT.NodeFlush(
           parentref,
@@ -179,12 +179,12 @@ module FlushModel {
         assert BT.ValidFlush(flushStep);
         var step := BT.BetreeFlush(flushStep);
         assert INode(newparent) == BT.FlushOps(flushStep)[1].node;
-        assert BC.Alloc(Ik(k).bc, IBlockCache(s), IBlockCache(s2), newchildref.value, INode(newchild));
-        assert BC.Dirty(Ik(k).bc, IBlockCache(s2), IBlockCache(s'), parentref, INode(newparent));
-        BC.MakeTransaction2(Ik(k).bc, IBlockCache(s), IBlockCache(s2), IBlockCache(s'), BT.BetreeStepOps(step));
-        assert BBC.BetreeMove(Ik(k).bc, IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, AdvanceOp(UI.NoOp, true), step);
-        assert stepsBetree(k, IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), step);
-        assert stepsBetree(k, IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), step);
+        assert BC.Alloc(IBlockCache(s), IBlockCache(s2), newchildref.value, INode(newchild));
+        assert BC.Dirty(IBlockCache(s2), IBlockCache(s'), parentref, INode(newparent));
+        BC.MakeTransaction2(IBlockCache(s), IBlockCache(s2), IBlockCache(s'), BT.BetreeStepOps(step));
+        assert BBC.BetreeMove(IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, AdvanceOp(UI.NoOp, true), step);
+        assert stepsBetree(IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), step);
+        assert stepsBetree(IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), step);
       }
     }
   }

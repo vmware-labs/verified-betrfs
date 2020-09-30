@@ -24,9 +24,9 @@ module DeallocModel {
     && IndirectionTableModel.deallocable(s.ephemeralIndirectionTable, ref)
   }
 
-  function {:opaque} Dealloc(k: Constants, s: BCVariables, io: IO, ref: BT.G.Reference)
+  function {:opaque} Dealloc(s: BCVariables, io: IO, ref: BT.G.Reference)
   : (res : (BCVariables, IO))
-  requires BCInv(k, s)
+  requires BCInv(s)
   requires io.IOInit?
   requires deallocable(s, ref)
   {
@@ -40,7 +40,7 @@ module DeallocModel {
     ) else (
       var (eph, oldLoc) := IndirectionTableModel.RemoveRef(s.ephemeralIndirectionTable, ref);
 
-      lemmaIndirectionTableLocIndexValid(k, s, ref);
+      lemmaIndirectionTableLocIndexValid(s, ref);
 
       var blockAllocator' := if oldLoc.Some?
         then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / NodeBlockSize())
@@ -55,21 +55,21 @@ module DeallocModel {
     )
   }
 
-  lemma DeallocCorrect(k: Constants, s: BCVariables, io: IO, ref: BT.G.Reference)
-  requires BCInv(k, s)
+  lemma DeallocCorrect(s: BCVariables, io: IO, ref: BT.G.Reference)
+  requires BCInv(s)
   requires io.IOInit?
   requires deallocable(s, ref)
-  ensures var (s', io') := Dealloc(k, s, io, ref);
+  ensures var (s', io') := Dealloc(s, io, ref);
       && WFBCVars(s')
       && ValidDiskOp(diskOp(io'))
       && IDiskOp(diskOp(io')).jdop.NoDiskOp?
       && (
-        || BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, AdvanceOp(UI.NoOp, true))
-        || BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp)
+        || BBC.Next(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, AdvanceOp(UI.NoOp, true))
+        || BBC.Next(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp)
       )
   {
     reveal_Dealloc();
-    var (s', io') := Dealloc(k, s, io, ref);
+    var (s', io') := Dealloc(s, io, ref);
 
     LruModel.LruRemove(s.lru, ref);
 
@@ -77,18 +77,18 @@ module DeallocModel {
       && s.frozenIndirectionTable.Some?
       && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, ref)
     ) {
-      assert noop(k, IBlockCache(s), IBlockCache(s'));
+      assert noop(IBlockCache(s), IBlockCache(s'));
       return;
     }
 
     if BC.OutstandingRead(ref) in s.outstandingBlockReads.Values {
-      assert noop(k, IBlockCache(s), IBlockCache(s'));
+      assert noop(IBlockCache(s), IBlockCache(s'));
       return;
     }
 
     assert BC.OutstandingBlockReadsDoesNotHaveRef(s.outstandingBlockReads, ref);
 
-    lemmaIndirectionTableLocIndexValid(k, s, ref);
+    lemmaIndirectionTableLocIndexValid(s, ref);
 
     var (eph, oldLoc) := IndirectionTableModel.RemoveRef(s.ephemeralIndirectionTable, ref);
 
@@ -96,7 +96,7 @@ module DeallocModel {
       then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / NodeBlockSize())
       else s.blockAllocator;
 
-    freeIndirectionTableLocCorrect(k, s, s', ref,
+    freeIndirectionTableLocCorrect(s, s', ref,
       if oldLoc.Some?
       then Some(oldLoc.value.addr as int / NodeBlockSize())
       else None);
@@ -105,10 +105,10 @@ module DeallocModel {
     assert WFBCVars(s');
 
     var iDiskOp := IDiskOp(diskOp(io)).bdop;
-    assert BC.Unalloc(Ik(k).bc, IBlockCache(s), IBlockCache(s'), iDiskOp, AdvanceOp(UI.NoOp, true), ref);
-    assert BBC.BlockCacheMove(Ik(k).bc, IBlockCache(s), IBlockCache(s'), iDiskOp, AdvanceOp(UI.NoOp, true), BC.UnallocStep(ref));
-    //assert stepsBC(k, IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), io, BC.UnallocStep(ref));
-    assert BBC.NextStep(Ik(k).bc, IBlockCache(s), IBlockCache(s'), iDiskOp, AdvanceOp(UI.NoOp, true), BBC.BlockCacheMoveStep(BC.UnallocStep(ref)));
+    assert BC.Unalloc(IBlockCache(s), IBlockCache(s'), iDiskOp, AdvanceOp(UI.NoOp, true), ref);
+    assert BBC.BlockCacheMove(IBlockCache(s), IBlockCache(s'), iDiskOp, AdvanceOp(UI.NoOp, true), BC.UnallocStep(ref));
+    //assert stepsBC(IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), io, BC.UnallocStep(ref));
+    assert BBC.NextStep(IBlockCache(s), IBlockCache(s'), iDiskOp, AdvanceOp(UI.NoOp, true), BBC.BlockCacheMoveStep(BC.UnallocStep(ref)));
   }
 
   function {:opaque} FindDeallocable(s: BCVariables)

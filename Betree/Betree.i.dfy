@@ -25,7 +25,6 @@ module Betree {
 
   import opened G = BetreeGraph
 
-  datatype Constants = Constants(bck: BI.Constants)
   datatype Variables = Variables(bcv: BI.Variables)
   
   // TODO(jonh): [cleanup] Not sure why these 3 are in this file.
@@ -33,15 +32,15 @@ module Betree {
     forall i :: 0 <= i < |lookup| ==> IMapsTo(view, lookup[i].ref, lookup[i].node)
   }
 
-  predicate IsPathFromRootLookup(k: Constants, view: BI.View, key: Key, lookup: Lookup) {
+  predicate IsPathFromRootLookup(view: BI.View, key: Key, lookup: Lookup) {
     && |lookup| > 0
     && lookup[0].ref == Root()
     && LookupRespectsDisk(view, lookup)
     && LookupFollowsChildRefs(key, lookup)
   }
 
-  predicate IsSatisfyingLookup(k: Constants, view: BI.View, key: Key, value: Value, lookup: Lookup) {
-    && IsPathFromRootLookup(k, view, key, lookup)
+  predicate IsSatisfyingLookup(view: BI.View, key: Key, value: Value, lookup: Lookup) {
+    && IsPathFromRootLookup(view, key, lookup)
     && LookupVisitsWFNodes(lookup)
     && BufferDefinesValue(InterpretLookup(lookup, key), value)
   }
@@ -51,22 +50,22 @@ module Betree {
     Node(imap[], buffer)
   }
 
-  predicate Init(k: Constants, s: Variables) {
-    && BI.Init(k.bck, s.bcv)
+  predicate Init(s: Variables) {
+    && BI.Init(s.bcv)
     && s.bcv.view[Root()] == EmptyNode()
   }
 
-  predicate GC(k: Constants, s: Variables, s': Variables, uiop: UI.Op, refs: iset<Reference>) {
+  predicate GC(s: Variables, s': Variables, uiop: UI.Op, refs: iset<Reference>) {
     && uiop.NoOp?
-    && BI.GC(k.bck, s.bcv, s'.bcv, refs)
+    && BI.GC(s.bcv, s'.bcv, refs)
   }
 
-  predicate Betree(k: Constants, s: Variables, s': Variables, uiop: UI.Op, betreeStep: BetreeStep)
+  predicate Betree(s: Variables, s': Variables, uiop: UI.Op, betreeStep: BetreeStep)
   {
     && ValidBetreeStep(betreeStep)
     && BetreeStepUI(betreeStep, uiop)
-    && BI.Reads(k.bck, s.bcv, BetreeStepReads(betreeStep))
-    && BI.OpTransaction(k.bck, s.bcv, s'.bcv, BetreeStepOps(betreeStep))
+    && BI.Reads(s.bcv, BetreeStepReads(betreeStep))
+    && BI.OpTransaction(s.bcv, s'.bcv, BetreeStepOps(betreeStep))
   }
   
   datatype Step =
@@ -74,15 +73,15 @@ module Betree {
     | GCStep(refs: iset<Reference>)
     | StutterStep
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: UI.Op, step: Step) {
+  predicate NextStep(s: Variables, s': Variables, uiop: UI.Op, step: Step) {
     match step {
-      case BetreeStep(betreeStep) => Betree(k, s, s', uiop, betreeStep)
-      case GCStep(refs) => GC(k, s, s', uiop, refs)
+      case BetreeStep(betreeStep) => Betree(s, s', uiop, betreeStep)
+      case GCStep(refs) => GC(s, s', uiop, refs)
       case StutterStep => s == s' && uiop.NoOp?
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UI.Op) {
-    exists step: Step :: NextStep(k, s, s', uiop, step)
+  predicate Next(s: Variables, s': Variables, uiop: UI.Op) {
+    exists step: Step :: NextStep(s, s', uiop, step)
   }
 }

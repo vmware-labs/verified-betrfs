@@ -137,7 +137,7 @@ module IOImpl {
     id := io.read(loc.addr, loc.len);
   }
 
-  method PageInIndirectionTableReq(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  method PageInIndirectionTableReq(s: ImplVariables, io: DiskIOHandler)
   requires s.WF()
   requires io.initialized();
   requires !s.ready
@@ -148,7 +148,7 @@ module IOImpl {
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures (s.I(), IIO(io)) == IOModel.PageInIndirectionTableReq(
-      Ic(k), old(s.I()), old(IIO(io)))
+      old(s.I()), old(IIO(io)))
   {
     IOModel.reveal_PageInIndirectionTableReq();
 
@@ -160,7 +160,7 @@ module IOImpl {
     }
   }
 
-  method PageInNodeReq(k: ImplConstants, s: ImplVariables, io: DiskIOHandler, ref: BC.Reference)
+  method PageInNodeReq(s: ImplVariables, io: DiskIOHandler, ref: BC.Reference)
   requires io.initialized();
   requires s.ready
   requires s.WF()
@@ -170,7 +170,7 @@ module IOImpl {
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
-  ensures (s.I(), IIO(io)) == IOModel.PageInNodeReq(Ic(k), old(s.I()), old(IIO(io)), ref)
+  ensures (s.I(), IIO(io)) == IOModel.PageInNodeReq(old(s.I()), old(IIO(io)), ref)
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       print "giving up; already an outstanding read for this ref\n";
@@ -222,7 +222,7 @@ module IOImpl {
     }
   }
 
-  method PageInIndirectionTableResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  method PageInIndirectionTableResp(s: ImplVariables, io: DiskIOHandler)
   requires s.W()
   requires io.diskOp().RespReadOp?
   requires !s.ready
@@ -230,7 +230,7 @@ module IOImpl {
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures s.I() == IOModel.PageInIndirectionTableResp(Ic(k), old(s.I()), old(IIO(io)))
+  ensures s.I() == IOModel.PageInIndirectionTableResp(old(s.I()), old(IIO(io)))
   {
     var id, sector := ReadSector(io);
     if (Some(id) == s.indirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
@@ -267,7 +267,7 @@ module IOImpl {
     }
   }
 
-  method PageInNodeResp(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  method PageInNodeResp(s: ImplVariables, io: DiskIOHandler)
   requires s.W()
   requires s.WF()
   requires io.diskOp().RespReadOp?
@@ -275,7 +275,7 @@ module IOImpl {
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures s.I() == IOModel.PageInNodeResp(Ic(k), old(s.I()), old(IIO(io)))
+  ensures s.I() == IOModel.PageInNodeResp(old(s.I()), old(IIO(io)))
   {
     var id, sector := ReadSector(io);
     assert sector.Some? ==> SI.WFSector(sector.value);
@@ -334,50 +334,50 @@ module IOImpl {
 
   // == writeResponse ==
 
-  method writeNodeResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  method writeNodeResponse(s: ImplVariables, io: DiskIOHandler)
   requires io.diskOp().RespWriteOp?
   requires ValidDiskOp(io.diskOp())
-  requires SI.Inv(k, s)
+  requires SI.Inv(s)
   requires s.ready && IIO(io).id in s.outstandingBlockWrites
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures s.I() == IOModel.writeNodeResponse(Ic(k), old(s.I()), IIO(io))
+  ensures s.I() == IOModel.writeNodeResponse(old(s.I()), IIO(io))
   {
     var id, addr, len := io.getWriteResult();
-    IOModel.lemmaOutstandingLocIndexValid(Ic(k), s.I(), id);
+    IOModel.lemmaOutstandingLocIndexValid(s.I(), id);
 
     s.blockAllocator.MarkFreeOutstanding(s.outstandingBlockWrites[id].loc.addr / NodeBlockSizeUint64());
     s.outstandingBlockWrites := ComputeMapRemove1(s.outstandingBlockWrites, id);
   }
 
-  method writeIndirectionTableResponse(k: ImplConstants, s: ImplVariables, io: DiskIOHandler)
+  method writeIndirectionTableResponse(s: ImplVariables, io: DiskIOHandler)
   returns (loc: Location)
   requires io.diskOp().RespWriteOp?
   requires ValidDiskOp(io.diskOp())
-  requires SI.Inv(k, s)
+  requires SI.Inv(s)
   requires s.ready
   requires s.frozenIndirectionTableLoc.Some?
   requires io !in s.Repr()
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures (s.I(), loc) == IOModel.writeIndirectionTableResponse(
-      Ic(k), old(s.I()), IIO(io))
+      old(s.I()), IIO(io))
   {
     s.outstandingIndirectionTableWrite := None;
     loc := s.frozenIndirectionTableLoc.value;
   }
 
-  method cleanUp(k: ImplConstants, s: ImplVariables)
-  requires SI.Inv(k, s)
+  method cleanUp(s: ImplVariables)
+  requires SI.Inv(s)
   requires s.ready
   requires s.frozenIndirectionTable != null
   requires s.frozenIndirectionTableLoc.Some?
   modifies s.Repr()
   ensures WellUpdated(s)
-  ensures s.I() == IOModel.cleanUp(Ic(k), old(s.I()))
+  ensures s.I() == IOModel.cleanUp(old(s.I()))
   {
-    IOModel.lemmaBlockAllocatorFrozenSome(Ic(k), s.I());
+    IOModel.lemmaBlockAllocatorFrozenSome(s.I());
     s.persistentIndirectionTableLoc := s.frozenIndirectionTableLoc.value;
     s.persistentIndirectionTable := s.frozenIndirectionTable;
     s.frozenIndirectionTable := null;

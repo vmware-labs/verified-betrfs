@@ -28,7 +28,6 @@ module BlockCache refines Transactable {
   import Disk = BlockDisk
 
   type ReqId = Disk.ReqId
-  datatype Constants = Constants()
 
   type DiskOp = Disk.DiskOp
 
@@ -135,7 +134,7 @@ module BlockCache refines Transactable {
     forall reqId | reqId in outstandingBlockReads :: outstandingBlockReads[reqId].ref != ref
   }
 
-  predicate WriteBackNodeReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
+  predicate WriteBackNodeReq(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
   {
     && vop.StatesInternalOp?
 
@@ -167,7 +166,7 @@ module BlockCache refines Transactable {
     && s'.persistentIndirectionTableLoc == s.persistentIndirectionTableLoc
   }
 
-  predicate WriteBackNodeResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate WriteBackNodeResp(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && vop.StatesInternalOp?
 
@@ -177,7 +176,7 @@ module BlockCache refines Transactable {
     && s' == s.(outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, dop.id))
   }
 
-  predicate WriteBackIndirectionTableReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate WriteBackIndirectionTableReq(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && vop.StatesInternalOp?
 
@@ -202,7 +201,7 @@ module BlockCache refines Transactable {
       .(frozenIndirectionTableLoc := Some(loc))
   }
 
-  predicate WriteBackIndirectionTableResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate WriteBackIndirectionTableResp(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && s.Ready?
 
@@ -219,7 +218,7 @@ module BlockCache refines Transactable {
     forall r | r in graph :: ref !in graph[r]
   }
 
-  predicate Unalloc(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
+  predicate Unalloc(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
   {
     && vop.AdvanceOp?
     && vop.uiop.NoOp?
@@ -251,7 +250,7 @@ module BlockCache refines Transactable {
     && s'.persistentIndirectionTableLoc == s.persistentIndirectionTableLoc
   }
 
-  predicate PageInNodeReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
+  predicate PageInNodeReq(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
   {
     && vop.StatesInternalOp?
 
@@ -265,7 +264,7 @@ module BlockCache refines Transactable {
     && s' == s.(outstandingBlockReads := s.outstandingBlockReads[dop.id := OutstandingRead(ref)])
   }
 
-  predicate PageInNodeResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate PageInNodeResp(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && vop.StatesInternalOp?
 
@@ -282,7 +281,7 @@ module BlockCache refines Transactable {
               .(outstandingBlockReads := MapRemove1(s.outstandingBlockReads, dop.id))
   }
 
-  predicate PageInIndirectionTableReq(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate PageInIndirectionTableReq(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && vop.StatesInternalOp?
 
@@ -294,7 +293,7 @@ module BlockCache refines Transactable {
     && s' == s.(indirectionTableRead := Some(dop.id))
   }
 
-  predicate PageInIndirectionTableResp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate PageInIndirectionTableResp(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && vop.StatesInternalOp?
 
@@ -318,7 +317,7 @@ module BlockCache refines Transactable {
     && s'.cache == map[]
   }
 
-  predicate ReceiveLoc(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate ReceiveLoc(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && dop.NoDiskOp?
 
@@ -331,7 +330,7 @@ module BlockCache refines Transactable {
     && s'.indirectionTableLoc == vop.loc
   }
 
-  predicate Evict(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
+  predicate Evict(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
   {
     && vop.StatesInternalOp?
 
@@ -347,7 +346,7 @@ module BlockCache refines Transactable {
     && s' == s.(cache := MapRemove(s.cache, {ref}))
   }
 
-  predicate Freeze(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate Freeze(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && vop.FreezeOp?
 
@@ -359,7 +358,7 @@ module BlockCache refines Transactable {
          .(frozenIndirectionTableLoc := None)
   }
 
-  predicate CleanUp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate CleanUp(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && vop.CleanUpOp?
 
@@ -374,7 +373,7 @@ module BlockCache refines Transactable {
               .(frozenIndirectionTableLoc := None)
   }
 
-  predicate NoOp(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  predicate NoOp(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
   {
     && (vop.StatesInternalOp? || vop.JournalInternalOp?
         || vop.PushSyncOp? || vop.PopSyncOp?)
@@ -406,7 +405,7 @@ module BlockCache refines Transactable {
     forall ref | ref in G.Successors(block) :: ref in graph
   }
 
-  predicate Dirty(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
+  predicate Dirty(s: Variables, s': Variables, ref: Reference, block: Node)
   {
     // Possibly allocs ref, possibly overwrites it.
     && s.Ready?
@@ -434,7 +433,7 @@ module BlockCache refines Transactable {
     && s'.persistentIndirectionTableLoc == s.persistentIndirectionTableLoc
   }
 
-  predicate Alloc(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
+  predicate Alloc(s: Variables, s': Variables, ref: Reference, block: Node)
   {
     // Possibly allocs ref, possibly overwrites it.
     && s.Ready?
@@ -461,54 +460,54 @@ module BlockCache refines Transactable {
     && s'.persistentIndirectionTableLoc == s.persistentIndirectionTableLoc
   }
 
-  predicate ReadStep(k: Constants, s: Variables, op: ReadOp)
+  predicate ReadStep(s: Variables, op: ReadOp)
   {
     s.Ready? && op.ref in s.ephemeralIndirectionTable.graph && MapsTo(s.cache, op.ref, op.node)
   }
 
-  predicate OpStep(k: Constants, s: Variables, s': Variables, op: Op)
+  predicate OpStep(s: Variables, s': Variables, op: Op)
   {
     match op {
-      case WriteOp(ref, block) => Dirty(k, s, s', ref, block)
-      case AllocOp(ref, block) => Alloc(k, s, s', ref, block)
+      case WriteOp(ref, block) => Dirty(s, s', ref, block)
+      case AllocOp(ref, block) => Alloc(s, s', ref, block)
     }
   }
 
-  predicate Transaction(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ops: seq<Op>)
+  predicate Transaction(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ops: seq<Op>)
   {
     && vop.AdvanceOp?
     && dop.NoDiskOp?
     && s.Ready?
-    && OpTransaction(k, s, s', ops)
+    && OpTransaction(s, s', ops)
   }
 
-  predicate Init(k: Constants, s: Variables)
+  predicate Init(s: Variables)
   {
     s == Unready
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: Step) {
+  predicate NextStep(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: Step) {
     match step {
-      case WriteBackNodeReqStep(ref) => WriteBackNodeReq(k, s, s', dop, vop, ref)
-      case WriteBackNodeRespStep => WriteBackNodeResp(k, s, s', dop, vop)
-      case WriteBackIndirectionTableReqStep => WriteBackIndirectionTableReq(k, s, s', dop, vop)
-      case WriteBackIndirectionTableRespStep => WriteBackIndirectionTableResp(k, s, s', dop, vop)
-      case UnallocStep(ref) => Unalloc(k, s, s', dop, vop, ref)
-      case PageInNodeReqStep(ref) => PageInNodeReq(k, s, s', dop, vop, ref)
-      case PageInNodeRespStep => PageInNodeResp(k, s, s', dop, vop)
-      case PageInIndirectionTableReqStep => PageInIndirectionTableReq(k, s, s', dop, vop)
-      case PageInIndirectionTableRespStep => PageInIndirectionTableResp(k, s, s', dop, vop)
-      case ReceiveLocStep => ReceiveLoc(k, s, s', dop, vop)
-      case EvictStep(ref) => Evict(k, s, s', dop, vop, ref)
-      case FreezeStep => Freeze(k, s, s', dop, vop)
-      case CleanUpStep => CleanUp(k, s, s', dop, vop)
-      case NoOpStep => NoOp(k, s, s', dop, vop)
-      case TransactionStep(ops) => Transaction(k, s, s', dop, vop, ops)
+      case WriteBackNodeReqStep(ref) => WriteBackNodeReq(s, s', dop, vop, ref)
+      case WriteBackNodeRespStep => WriteBackNodeResp(s, s', dop, vop)
+      case WriteBackIndirectionTableReqStep => WriteBackIndirectionTableReq(s, s', dop, vop)
+      case WriteBackIndirectionTableRespStep => WriteBackIndirectionTableResp(s, s', dop, vop)
+      case UnallocStep(ref) => Unalloc(s, s', dop, vop, ref)
+      case PageInNodeReqStep(ref) => PageInNodeReq(s, s', dop, vop, ref)
+      case PageInNodeRespStep => PageInNodeResp(s, s', dop, vop)
+      case PageInIndirectionTableReqStep => PageInIndirectionTableReq(s, s', dop, vop)
+      case PageInIndirectionTableRespStep => PageInIndirectionTableResp(s, s', dop, vop)
+      case ReceiveLocStep => ReceiveLoc(s, s', dop, vop)
+      case EvictStep(ref) => Evict(s, s', dop, vop, ref)
+      case FreezeStep => Freeze(s, s', dop, vop)
+      case CleanUpStep => CleanUp(s, s', dop, vop)
+      case NoOpStep => NoOp(s, s', dop, vop)
+      case TransactionStep(ops) => Transaction(s, s', dop, vop, ops)
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp) {
-    exists step: Step :: NextStep(k, s, s', dop, vop, step)
+  predicate Next(s: Variables, s': Variables, dop: DiskOp, vop: VOp) {
+    exists step: Step :: NextStep(s, s', dop, vop, step)
   }
 
   predicate CacheConsistentWithSuccessors(cache: map<Reference, Node>, graph: map<Reference, seq<Reference>>)
@@ -521,7 +520,7 @@ module BlockCache refines Transactable {
     && indirectionTable.graph.Keys <= cache.Keys + indirectionTable.locs.Keys
   }
 
-  predicate EphemeralTableEntriesInCacheOrNotBeingWritten(k: Constants, s: Variables)
+  predicate EphemeralTableEntriesInCacheOrNotBeingWritten(s: Variables)
   requires s.Ready?
   requires IndirectionTableCacheConsistent(s.ephemeralIndirectionTable, s.cache)
   {
@@ -540,7 +539,7 @@ module BlockCache refines Transactable {
     loc1.addr == loc2.addr ==> loc1 == loc2
   }
 
-  predicate OverlappingWritesEqForIndirectionTable(k: Constants, s: Variables, indirectionTable: IndirectionTable)
+  predicate OverlappingWritesEqForIndirectionTable(s: Variables, indirectionTable: IndirectionTable)
   requires s.Ready?
   {
     forall ref | ref in indirectionTable.locs ::
@@ -581,7 +580,7 @@ module BlockCache refines Transactable {
         OutstandingBlockWritesDontOverlap(outstandingBlockWrites, id1, id2)
   }
 
-  predicate InvReady(k: Constants, s: Variables)
+  predicate InvReady(s: Variables)
   requires s.Ready?
   {
     && WFCompleteIndirectionTable(s.persistentIndirectionTable)
@@ -589,10 +588,10 @@ module BlockCache refines Transactable {
     && WFIndirectionTable(s.ephemeralIndirectionTable)
     && IndirectionTableCacheConsistent(s.ephemeralIndirectionTable, s.cache)
     && CacheConsistentWithSuccessors(s.cache, s.ephemeralIndirectionTable.graph)
-    && EphemeralTableEntriesInCacheOrNotBeingWritten(k, s)
+    && EphemeralTableEntriesInCacheOrNotBeingWritten(s)
     && OutstandingReadRefsUnique(s.outstandingBlockReads)
-    && OverlappingWritesEqForIndirectionTable(k, s, s.ephemeralIndirectionTable)
-    && OverlappingWritesEqForIndirectionTable(k, s, s.persistentIndirectionTable)
+    && OverlappingWritesEqForIndirectionTable(s, s.ephemeralIndirectionTable)
+    && OverlappingWritesEqForIndirectionTable(s, s.persistentIndirectionTable)
     && OutstandingWriteValidNodeLocation(s.outstandingBlockWrites)
     && AllOutstandingBlockWritesDontOverlap(s.outstandingBlockWrites)
     && (s.frozenIndirectionTableLoc.Some? ==> s.frozenIndirectionTable.Some?)
@@ -604,7 +603,7 @@ module BlockCache refines Transactable {
     && (s.frozenIndirectionTable.Some? ==> (
       && WFIndirectionTable(s.frozenIndirectionTable.value)
       && IndirectionTableCacheConsistent(s.frozenIndirectionTable.value, s.cache)
-      && OverlappingWritesEqForIndirectionTable(k, s, s.frozenIndirectionTable.value)
+      && OverlappingWritesEqForIndirectionTable(s, s.frozenIndirectionTable.value)
     ))
 
     && (s.outstandingIndirectionTableWrite.Some? ==> (
@@ -624,237 +623,237 @@ module BlockCache refines Transactable {
     ))
   }
 
-  predicate Inv(k: Constants, s: Variables)
+  predicate Inv(s: Variables)
   {
-    && (s.Ready? ==> InvReady(k, s))
+    && (s.Ready? ==> InvReady(s))
     && (s.LoadingIndirectionTable? ==>
       && ValidIndirectionTableLocation(s.indirectionTableLoc)
     )
   }
 
-  lemma InitImpliesInv(k: Constants, s: Variables)
-    requires Init(k, s)
-    ensures Inv(k, s)
+  lemma InitImpliesInv(s: Variables)
+    requires Init(s)
+    ensures Inv(s)
   {
   }
 
-  lemma WriteBackNodeReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
-    requires Inv(k, s)
-    requires WriteBackNodeReq(k, s, s', dop, vop, ref)
-    ensures Inv(k, s')
+  lemma WriteBackNodeReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
+    requires Inv(s)
+    requires WriteBackNodeReq(s, s', dop, vop, ref)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma WriteBackNodeRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires WriteBackNodeResp(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma WriteBackNodeRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires WriteBackNodeResp(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma WriteBackIndirectionTableReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires WriteBackIndirectionTableReq(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma WriteBackIndirectionTableReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires WriteBackIndirectionTableReq(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma WriteBackIndirectionTableRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires WriteBackIndirectionTableResp(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma WriteBackIndirectionTableRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires WriteBackIndirectionTableResp(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma DirtyStepPreservesInv(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
-    requires Inv(k, s)
-    requires Dirty(k, s, s', ref, block)
-    ensures Inv(k, s')
+  lemma DirtyStepPreservesInv(s: Variables, s': Variables, ref: Reference, block: Node)
+    requires Inv(s)
+    requires Dirty(s, s', ref, block)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma AllocStepPreservesInv(k: Constants, s: Variables, s': Variables, ref: Reference, block: Node)
-    requires Inv(k, s)
-    requires Alloc(k, s, s', ref, block)
-    ensures Inv(k, s')
+  lemma AllocStepPreservesInv(s: Variables, s': Variables, ref: Reference, block: Node)
+    requires Inv(s)
+    requires Alloc(s, s', ref, block)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma OpPreservesInv(k: Constants, s: Variables, s': Variables, op: Op)
-    requires Inv(k, s)
-    requires OpStep(k, s, s', op)
-    ensures Inv(k, s')
+  lemma OpPreservesInv(s: Variables, s': Variables, op: Op)
+    requires Inv(s)
+    requires OpStep(s, s', op)
+    ensures Inv(s')
   {
     match op {
-      case WriteOp(ref, block) => DirtyStepPreservesInv(k, s, s', ref, block);
-      case AllocOp(ref, block) => AllocStepPreservesInv(k, s, s', ref, block);
+      case WriteOp(ref, block) => DirtyStepPreservesInv(s, s', ref, block);
+      case AllocOp(ref, block) => AllocStepPreservesInv(s, s', ref, block);
     }
   }
 
-  lemma OpTransactionStepPreservesInv(k: Constants, s: Variables, s': Variables, ops: seq<Op>)
-    requires Inv(k, s)
-    requires OpTransaction(k, s, s', ops)
-    ensures Inv(k, s')
+  lemma OpTransactionStepPreservesInv(s: Variables, s': Variables, ops: seq<Op>)
+    requires Inv(s)
+    requires OpTransaction(s, s', ops)
+    ensures Inv(s')
     decreases |ops|
   {
     if (|ops| == 0) {
     } else if (|ops| == 1) {
-      OpPreservesInv(k, s, s', ops[0]);
+      OpPreservesInv(s, s', ops[0]);
     } else {
-      var ops1, smid, ops2 := SplitTransaction(k, s, s', ops);
-      OpTransactionStepPreservesInv(k, s, smid, ops1);
-      OpTransactionStepPreservesInv(k, smid, s', ops2);
+      var ops1, smid, ops2 := SplitTransaction(s, s', ops);
+      OpTransactionStepPreservesInv(s, smid, ops1);
+      OpTransactionStepPreservesInv(smid, s', ops2);
     }
   }
 
 
-  lemma TransactionStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ops: seq<Op>)
-    requires Inv(k, s)
-    requires Transaction(k, s, s', dop, vop, ops)
-    ensures Inv(k, s')
+  lemma TransactionStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ops: seq<Op>)
+    requires Inv(s)
+    requires Transaction(s, s', dop, vop, ops)
+    ensures Inv(s')
     decreases |ops|
   {
-    OpTransactionStepPreservesInv(k, s, s', ops);
+    OpTransactionStepPreservesInv(s, s', ops);
   }
 
-  lemma UnallocStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
-    requires Inv(k, s)
-    requires Unalloc(k, s, s', dop, vop, ref)
-    ensures Inv(k, s')
+  lemma UnallocStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
+    requires Inv(s)
+    requires Unalloc(s, s', dop, vop, ref)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma PageInNodeReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
-    requires Inv(k, s)
-    requires PageInNodeReq(k, s, s', dop, vop, ref)
-    ensures Inv(k, s')
+  lemma PageInNodeReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
+    requires Inv(s)
+    requires PageInNodeReq(s, s', dop, vop, ref)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma PageInNodeRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires PageInNodeResp(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma PageInNodeRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires PageInNodeResp(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma PageInIndirectionTableReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires PageInIndirectionTableReq(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma PageInIndirectionTableReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires PageInIndirectionTableReq(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma PageInIndirectionTableRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires PageInIndirectionTableResp(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma PageInIndirectionTableRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires PageInIndirectionTableResp(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma ReceiveLocStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires ReceiveLoc(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma ReceiveLocStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires ReceiveLoc(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma EvictStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
-    requires Inv(k, s)
-    requires Evict(k, s, s', dop, vop, ref)
-    ensures Inv(k, s')
+  lemma EvictStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
+    requires Inv(s)
+    requires Evict(s, s', dop, vop, ref)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma FreezeStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires Freeze(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma FreezeStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires Freeze(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma CleanUpStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires CleanUp(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma CleanUpStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires CleanUp(s, s', dop, vop)
+    ensures Inv(s')
   {
     if (s'.Ready?) {
-      assert InvReady(k, s');
+      assert InvReady(s');
     }
   }
 
-  lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: Step)
-    requires Inv(k, s)
-    requires NextStep(k, s, s', dop, vop, step)
-    ensures Inv(k, s')
+  lemma NextStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: Step)
+    requires Inv(s)
+    requires NextStep(s, s', dop, vop, step)
+    ensures Inv(s')
   {
     match step {
-      case WriteBackNodeReqStep(ref) => WriteBackNodeReqStepPreservesInv(k, s, s', dop, vop, ref);
-      case WriteBackNodeRespStep => WriteBackNodeRespStepPreservesInv(k, s, s', dop, vop);
-      case WriteBackIndirectionTableReqStep => WriteBackIndirectionTableReqStepPreservesInv(k, s, s', dop, vop);
-      case WriteBackIndirectionTableRespStep => WriteBackIndirectionTableRespStepPreservesInv(k, s, s', dop, vop);
-      case UnallocStep(ref) => UnallocStepPreservesInv(k, s, s', dop, vop, ref);
-      case PageInNodeReqStep(ref) => PageInNodeReqStepPreservesInv(k, s, s', dop, vop, ref);
-      case PageInNodeRespStep => PageInNodeRespStepPreservesInv(k, s, s', dop, vop);
-      case PageInIndirectionTableReqStep => PageInIndirectionTableReqStepPreservesInv(k, s, s', dop, vop);
-      case PageInIndirectionTableRespStep => PageInIndirectionTableRespStepPreservesInv(k, s, s', dop, vop);
-      case ReceiveLocStep => ReceiveLocStepPreservesInv(k, s, s', dop, vop);
-      case EvictStep(ref) => EvictStepPreservesInv(k, s, s', dop, vop, ref);
-      case FreezeStep => FreezeStepPreservesInv(k, s, s', dop, vop);
-      case CleanUpStep => CleanUpStepPreservesInv(k, s, s', dop, vop);
+      case WriteBackNodeReqStep(ref) => WriteBackNodeReqStepPreservesInv(s, s', dop, vop, ref);
+      case WriteBackNodeRespStep => WriteBackNodeRespStepPreservesInv(s, s', dop, vop);
+      case WriteBackIndirectionTableReqStep => WriteBackIndirectionTableReqStepPreservesInv(s, s', dop, vop);
+      case WriteBackIndirectionTableRespStep => WriteBackIndirectionTableRespStepPreservesInv(s, s', dop, vop);
+      case UnallocStep(ref) => UnallocStepPreservesInv(s, s', dop, vop, ref);
+      case PageInNodeReqStep(ref) => PageInNodeReqStepPreservesInv(s, s', dop, vop, ref);
+      case PageInNodeRespStep => PageInNodeRespStepPreservesInv(s, s', dop, vop);
+      case PageInIndirectionTableReqStep => PageInIndirectionTableReqStepPreservesInv(s, s', dop, vop);
+      case PageInIndirectionTableRespStep => PageInIndirectionTableRespStepPreservesInv(s, s', dop, vop);
+      case ReceiveLocStep => ReceiveLocStepPreservesInv(s, s', dop, vop);
+      case EvictStep(ref) => EvictStepPreservesInv(s, s', dop, vop, ref);
+      case FreezeStep => FreezeStepPreservesInv(s, s', dop, vop);
+      case CleanUpStep => CleanUpStepPreservesInv(s, s', dop, vop);
       case NoOpStep => { }
-      case TransactionStep(ops) => TransactionStepPreservesInv(k, s, s', dop, vop, ops);
+      case TransactionStep(ops) => TransactionStepPreservesInv(s, s', dop, vop, ops);
     }
   }
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires Next(k, s, s', dop, vop)
-    ensures Inv(k, s')
+  lemma NextPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires Next(s, s', dop, vop)
+    ensures Inv(s')
   {
-    var step :| NextStep(k, s, s', dop, vop, step);
-    NextStepPreservesInv(k, s, s', dop, vop, step);
+    var step :| NextStep(s, s', dop, vop, step);
+    NextStepPreservesInv(s, s', dop, vop, step);
   }
 }

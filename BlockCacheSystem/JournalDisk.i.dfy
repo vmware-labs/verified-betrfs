@@ -40,7 +40,6 @@ module JournalDisk {
 
     | NoDiskOp
 
-  datatype Constants = Constants()
   datatype Variables = Variables(
     ghost reqReadSuperblock1: set<ReqId>,
     ghost reqReadSuperblock2: set<ReqId>,
@@ -56,7 +55,7 @@ module JournalDisk {
     ghost journal: seq<Option<JournalBlock>>
   )
 
-  predicate Init(k: Constants, s: Variables)
+  predicate Init(s: Variables)
   {
     && s.reqReadSuperblock1 == {}
     && s.reqReadSuperblock2 == {}
@@ -71,7 +70,7 @@ module JournalDisk {
 
   ///////// RecvRead
 
-  predicate RecvReadSuperblock(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate RecvReadSuperblock(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.ReqReadSuperblockOp?
     && dop.id !in s.reqReadSuperblock1
@@ -83,7 +82,7 @@ module JournalDisk {
       s' == s.(reqReadSuperblock2 := s.reqReadSuperblock2 + {dop.id}))
   }
 
-  predicate RecvReadJournal(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate RecvReadJournal(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.ReqReadJournalOp?
     && dop.id !in s.reqReadJournals
@@ -93,7 +92,7 @@ module JournalDisk {
 
   ///////// RecvWrite
 
-  predicate RecvWriteSuperblock(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate RecvWriteSuperblock(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.ReqWriteSuperblockOp?
     && (s.reqWriteSuperblock1.Some? ==> s.reqWriteSuperblock1.value.id != dop.id)
@@ -113,7 +112,7 @@ module JournalDisk {
     && 0 <= interval.len <= NumJournalBlocks() as int
   }
 
-  predicate RecvWriteJournal(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate RecvWriteJournal(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.ReqWriteJournalOp?
     && dop.id1 !in s.reqWriteJournals.Keys
@@ -137,7 +136,7 @@ module JournalDisk {
 
   ///////// AckRead
 
-  predicate AckReadSuperblock(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate AckReadSuperblock(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.RespReadSuperblockOp?
     && (dop.which == 0 || dop.which == 1)
@@ -153,7 +152,7 @@ module JournalDisk {
     )
   }
 
-  predicate AckReadJournal(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate AckReadJournal(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.RespReadJournalOp?
     && dop.id in s.reqReadJournals
@@ -169,7 +168,7 @@ module JournalDisk {
 
   ///////// AckWrite
 
-  predicate AckWriteSuperblock(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate AckWriteSuperblock(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.RespWriteSuperblockOp?
     && (dop.which == 0 || dop.which == 1)
@@ -187,7 +186,7 @@ module JournalDisk {
     )
   }
 
-  predicate AckWriteJournal(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate AckWriteJournal(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.RespWriteJournalOp?
     && dop.id in s.reqWriteJournals
@@ -196,32 +195,32 @@ module JournalDisk {
 
   //// Stutter
 
-  predicate Stutter(k: Constants, s: Variables, s': Variables, dop: DiskOp)
+  predicate Stutter(s: Variables, s': Variables, dop: DiskOp)
   {
     && dop.NoDiskOp?
     && s' == s
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, dop: DiskOp) {
-    && (dop.ReqReadSuperblockOp? ==> RecvReadSuperblock(k, s, s', dop))
-    && (dop.ReqReadJournalOp? ==> RecvReadJournal(k, s, s', dop))
+  predicate Next(s: Variables, s': Variables, dop: DiskOp) {
+    && (dop.ReqReadSuperblockOp? ==> RecvReadSuperblock(s, s', dop))
+    && (dop.ReqReadJournalOp? ==> RecvReadJournal(s, s', dop))
 
-    && (dop.ReqWriteSuperblockOp? ==> RecvWriteSuperblock(k, s, s', dop))
-    && (dop.ReqWriteJournalOp? ==> RecvWriteJournal(k, s, s', dop))
+    && (dop.ReqWriteSuperblockOp? ==> RecvWriteSuperblock(s, s', dop))
+    && (dop.ReqWriteJournalOp? ==> RecvWriteJournal(s, s', dop))
 
-    && (dop.RespReadSuperblockOp? ==> AckReadSuperblock(k, s, s', dop))
-    && (dop.RespReadJournalOp? ==> AckReadJournal(k, s, s', dop))
+    && (dop.RespReadSuperblockOp? ==> AckReadSuperblock(s, s', dop))
+    && (dop.RespReadJournalOp? ==> AckReadJournal(s, s', dop))
 
-    && (dop.RespWriteSuperblockOp? ==> AckWriteSuperblock(k, s, s', dop))
-    && (dop.RespWriteJournalOp? ==> AckWriteJournal(k, s, s', dop))
+    && (dop.RespWriteSuperblockOp? ==> AckWriteSuperblock(s, s', dop))
+    && (dop.RespWriteJournalOp? ==> AckWriteJournal(s, s', dop))
 
-    && (dop.NoDiskOp? ==> Stutter(k, s, s', dop))
+    && (dop.NoDiskOp? ==> Stutter(s, s', dop))
   }
 
   datatype InternalStep =
   | ProcessWriteSuperblockStep(ghost which: int)
 
-  predicate ProcessWriteSuperblock(k: Constants, s: Variables, s': Variables, which: int)
+  predicate ProcessWriteSuperblock(s: Variables, s': Variables, which: int)
   {
     && (which == 0 || which == 1)
     && (which == 0 ==>
@@ -234,16 +233,16 @@ module JournalDisk {
     )
   }
 
-  predicate NextInternalStep(k: Constants, s: Variables, s': Variables, step: InternalStep)
+  predicate NextInternalStep(s: Variables, s': Variables, step: InternalStep)
   {
     match step {
-      case ProcessWriteSuperblockStep(which) => ProcessWriteSuperblock(k, s, s', which)
+      case ProcessWriteSuperblockStep(which) => ProcessWriteSuperblock(s, s', which)
     }
   }
 
-  predicate NextInternal(k: Constants, s: Variables, s': Variables)
+  predicate NextInternal(s: Variables, s': Variables)
   {
-    exists step :: NextInternalStep(k, s, s', step)
+    exists step :: NextInternalStep(s, s', step)
   }
 
   predicate JournalUntouched(
@@ -265,7 +264,7 @@ module JournalDisk {
             journal[i] == journal'[i]
   }
 
-  predicate Crash(k: Constants, s: Variables, s': Variables)
+  predicate Crash(s: Variables, s': Variables)
   {
     && s'.reqReadSuperblock1 == {}
     && s'.reqReadSuperblock2 == {}
@@ -286,13 +285,12 @@ abstract module JournalMachine {
   import UI
 
   type Variables
-  type Constants
   type Location(==)
   type Sector
   type UIOp = UI.Op
 
-  predicate Init(k: Constants, s: Variables)
-  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: D.DiskOp)
+  predicate Init(s: Variables)
+  predicate Next(s: Variables, s': Variables, uiop: UIOp, dop: D.DiskOp)
 }
 
 // A disk attached to a program ("Machine"), modeling the nondeterministic crashes that reset the
@@ -304,7 +302,6 @@ abstract module JournalSystemModel {
   import AsyncSectorDiskModelTypes
   import opened SectorType
 
-  type Constants = AsyncSectorDiskModelTypes.AsyncSectorDiskModelConstants<M.Constants, D.Constants>
   type Variables = AsyncSectorDiskModelTypes.AsyncSectorDiskModelVariables<M.Variables, D.Variables>
   type UIOp = M.UIOp
 
@@ -312,40 +309,40 @@ abstract module JournalSystemModel {
     | MachineStep(dop: D.DiskOp)
     | CrashStep
   
-  predicate Machine(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: D.DiskOp)
+  predicate Machine(s: Variables, s': Variables, uiop: UIOp, dop: D.DiskOp)
   {
-    && M.Next(k.machine, s.machine, s'.machine, uiop, dop)
-    && D.Next(k.disk, s.disk, s'.disk, dop)
+    && M.Next(s.machine, s'.machine, uiop, dop)
+    && D.Next(s.disk, s'.disk, dop)
   }
 
-  predicate Crash(k: Constants, s: Variables, s': Variables, uiop: UIOp)
+  predicate Crash(s: Variables, s': Variables, uiop: UIOp)
   {
     && uiop.CrashOp?
-    && M.Init(k.machine, s'.machine)
-    && D.Crash(k.disk, s.disk, s'.disk)
+    && M.Init(s'.machine)
+    && D.Crash(s.disk, s'.disk)
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: Step)
+  predicate NextStep(s: Variables, s': Variables, uiop: UIOp, step: Step)
   {
     match step {
-      case MachineStep(dop) => Machine(k, s, s', uiop, dop)
-      case CrashStep => Crash(k, s, s', uiop)
+      case MachineStep(dop) => Machine(s, s', uiop, dop)
+      case CrashStep => Crash(s, s', uiop)
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp) {
-    exists step :: NextStep(k, s, s', uiop, step)
+  predicate Next(s: Variables, s': Variables, uiop: UIOp) {
+    exists step :: NextStep(s, s', uiop, step)
   }
 
-  predicate Init(k: Constants, s: Variables)
-  predicate Inv(k: Constants, s: Variables)
+  predicate Init(s: Variables)
+  predicate Inv(s: Variables)
 
-  lemma InitImpliesInv(k: Constants, s: Variables)
-    requires Init(k, s)
-    ensures Inv(k, s)
+  lemma InitImpliesInv(s: Variables)
+    requires Init(s)
+    ensures Inv(s)
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
-    requires Inv(k, s)
-    requires Next(k, s, s', uiop)
-    ensures Inv(k, s')
+  lemma NextPreservesInv(s: Variables, s': Variables, uiop: UIOp)
+    requires Inv(s)
+    requires Next(s, s', uiop)
+    ensures Inv(s')
 }

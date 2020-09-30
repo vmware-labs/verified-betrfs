@@ -8,13 +8,6 @@ module DiskOpModel {
   import BC = BlockCache
   import JC = JournalCache
 
-  datatype Constants = Constants()
-
-  function Ik(k: Constants) : BJC.Constants
-  {
-    BJC.Constants(BC.Constants(), JC.Constants())
-  }
-
   // Functional model of the DiskIOHandler
 
   datatype IO =

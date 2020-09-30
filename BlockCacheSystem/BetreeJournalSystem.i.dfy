@@ -16,108 +16,100 @@ module BetreeJournalSystem {
   import BlockDisk
   import JournalDisk
 
-  datatype Constants = Constants(bs: BS.Constants, js: JS.Constants)
   datatype Variables = Variables(bs: BS.Variables, js: JS.Variables)
 
-  function Ik(k: Constants) : CompositeView.Constants {
-    CompositeView.Constants(
-      BetreeSystemRef.Ik(k.bs),
-      JournalSystemRef.Ik(k.js)
-    )
-  }
-
-  function I(k: Constants, s: Variables) : CompositeView.Variables
-  requires BS.Inv(k.bs, s.bs)
-  requires JS.Inv(k.js, s.js)
+  function I(s: Variables) : CompositeView.Variables
+  requires BS.Inv(s.bs)
+  requires JS.Inv(s.js)
   {
     CompositeView.Variables(
-      BetreeSystemRef.I(k.bs, s.bs),
-      JournalSystemRef.I(k.js, s.js)
+      BetreeSystemRef.I(s.bs),
+      JournalSystemRef.I(s.js)
     )
   }
 
-  predicate InitWithLoc(k: Constants, s: Variables, loc: Loc)
+  predicate InitWithLoc(s: Variables, loc: Loc)
   {
-    && BS.Init(k.bs, s.bs, loc)
-    && JS.Init(k.js, s.js, loc)
+    && BS.Init(s.bs, loc)
+    && JS.Init(s.js, loc)
     && (
-      BS.InitImpliesInv(k.bs, s.bs, loc);
-      JS.InitImpliesInv(k.js, s.js, loc);
-      CompositeView.Init(Ik(k), I(k, s))
+      BS.InitImpliesInv(s.bs, loc);
+      JS.InitImpliesInv(s.js, loc);
+      CompositeView.Init(I(s))
     )
   }
 
-  predicate Init(k: Constants, s: Variables)
+  predicate Init(s: Variables)
   {
-    exists loc :: InitWithLoc(k, s, loc)
+    exists loc :: InitWithLoc(s, loc)
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
+  predicate Next(s: Variables, s': Variables, uiop: UI.Op)
   {
     exists vop ::
       && VOpAgreesUIOp(vop, uiop)
-      && BS.Next(k.bs, s.bs, s'.bs, vop)
-      && JS.Next(k.js, s.js, s'.js, vop)
+      && BS.Next(s.bs, s'.bs, vop)
+      && JS.Next(s.js, s'.js, vop)
   }
 
-  predicate Inv(k: Constants, s: Variables)
+  predicate Inv(s: Variables)
   {
-    && BS.Inv(k.bs, s.bs)
-    && JS.Inv(k.js, s.js)
-    //&& JS.PersistentLoc(s.js) in BS.BetreeDisk(k.bs, s.bs)
-    && CompositeView.Inv(Ik(k), I(k, s))
+    && BS.Inv(s.bs)
+    && JS.Inv(s.js)
+    //&& JS.PersistentLoc(s.js) in BS.BetreeDisk(s.bs)
+    && CompositeView.Inv(I(s))
   }
 
-  lemma InitImpliesInv(k: Constants, s: Variables)
-  requires Init(k, s)
-  ensures Inv(k, s)
+  lemma InitImpliesInv(s: Variables)
+  requires Init(s)
+  ensures Inv(s)
   {
     var loc :|
-      && BS.Init(k.bs, s.bs, loc)
-      && JS.Init(k.js, s.js, loc);
-    BS.InitImpliesInv(k.bs, s.bs, loc);
-    JS.InitImpliesInv(k.js, s.js, loc);
-    CompositeView.InitImpliesInv(Ik(k), I(k, s));
+      && BS.Init(s.bs, loc)
+      && JS.Init(s.js, loc);
+    BS.InitImpliesInv(s.bs, loc);
+    JS.InitImpliesInv(s.js, loc);
+    CompositeView.InitImpliesInv(I(s));
   }
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UI.Op)
-  requires Inv(k, s)
-  requires Next(k, s, s', uiop)
-  ensures Inv(k, s')
+  lemma NextPreservesInv(s: Variables, s': Variables, uiop: UI.Op)
+  requires Inv(s)
+  requires Next(s, s', uiop)
+  ensures Inv(s')
   {
     var vop :|
       && VOpAgreesUIOp(vop, uiop)
-      && BS.Next(k.bs, s.bs, s'.bs, vop)
-      && JS.Next(k.js, s.js, s'.js, vop);
-    BS.NextPreservesInv(k.bs, s.bs, s'.bs, vop);
-    JS.NextPreservesInv(k.js, s.js, s'.js, vop);
-    BetreeSystemRef.RefinesNext(k.bs, s.bs, s'.bs, vop);
-    JournalSystemRef.RefinesNext(k.js, s.js, s'.js, vop);
+      && BS.Next(s.bs, s'.bs, vop)
+      && JS.Next(s.js, s'.js, vop);
+    BS.NextPreservesInv(s.bs, s'.bs, vop);
+    JS.NextPreservesInv(s.js, s'.js, vop);
+    BetreeSystemRef.RefinesNext(s.bs, s'.bs, vop);
+    JournalSystemRef.RefinesNext(s.js, s'.js, vop);
     var step := CompositeView.Step(vop);
-    assert CompositeView.NextStep(Ik(k), I(k, s), I(k, s'),
+    assert CompositeView.NextStep(I(s), I(s'),
       step.vop, uiop);
-    CompositeView.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
+    CompositeView.NextPreservesInv(I(s), I(s'), uiop);
   }
 
 
-  lemma OkaySendPersistentLocStep(k: Constants, s: Variables, s': Variables, vop: VOp)
-  requires Inv(k, s)
-  //requires BS.Machine(k.bs, s.bs, s'.bs, BlockDisk.NoDiskOp, vop)
-  //requires BS.M.Next(k.bs.machine, s.bs.machine, s'.bs.machine, BlockDisk.NoDiskOp, vop)
-  //requires BS.D.Next(k.bs.disk, s.bs.disk, s'.bs.disk, BlockDisk.NoDiskOp)
-  requires JS.Next(k.js, s.js, s'.js, vop)
+  lemma OkaySendPersistentLocStep(s: Variables, s': Variables, vop: VOp)
+  requires Inv(s)
+  //requires BS.Machine(s.bs, s'.bs, BlockDisk.NoDiskOp, vop)
+  //requires BS.M.Next(s.bs.machine, s'.bs.machine, BlockDisk.NoDiskOp, vop)
+  //requires BS.D.Next(s.bs.disk, s'.bs.disk, BlockDisk.NoDiskOp)
+  requires JS.Next(s.js, s'.js, vop)
   ensures
     (vop.SendPersistentLocOp? ==>
-      BS.Inv(k.bs, s.bs) ==>
-        && vop.loc in BS.Ref.DiskGraphMap(k.bs, s.bs)
-        && BS.BT.Inv(BS.Ik(k.bs), BS.BT.Variables(BS.BI.Variables(BS.Ref.DiskGraphMap(k.bs, s.bs)[vop.loc])))
+      BS.Inv(s.bs) ==>
+        && vop.loc in BS.Ref.DiskGraphMap(s.bs)
+        && BS.BT.Inv(BS.BT.Variables(BS.BI.Variables(BS.Ref.DiskGraphMap(s.bs)[vop.loc])))
     )
   {
     if vop.SendPersistentLocOp? {
-      assert I(k,s).jc.persistentLoc in I(k,s).tsm.disk;
+      assert I(s).jc.persistentLoc in I(s).tsm.disk;
       JS.FinishLoadingSuperblockPhaseStepPreservesJournals(
-          k.js, s.js, s'.js, JournalDisk.NoDiskOp, vop);
-      assert vop.loc == I(k,s).jc.persistentLoc;
+          s.js, s'.js, JournalDisk.NoDiskOp, vop);
+      assert vop.loc == I(s).jc.persistentLoc;
     }
   }
 }

@@ -75,15 +75,15 @@ module FullImpl {
       && this.jc.WF()
     }
 
-    predicate Inv(k: ImplConstants)
+    predicate Inv()
     reads this, this.Repr
     {
       && W()
-      && StateModel.Inv(Ic(k), I())
+      && StateModel.Inv(I())
     }
 
-    constructor(k: ImplConstants)
-    ensures Inv(k)
+    constructor()
+    ensures Inv()
     ensures fresh(Repr)
     ensures !bc.ready
     ensures CommitterModel.I(jc.I())
@@ -99,7 +99,7 @@ module FullImpl {
       new;
       Repr := {this} + this.bc.Repr() + this.jc.Repr;
 
-      assert StateModel.Inv(Ic(k), I());
+      assert StateModel.Inv(I());
     }
   }
 }

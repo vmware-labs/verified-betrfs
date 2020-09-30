@@ -746,11 +746,11 @@ module InterpretationDisk {
     && readIdsDistinct(disk.reqReads, disk.respReads)
   }
 
-  lemma RefinesReqReadOp(k: D.Constants, disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  lemma RefinesReqReadOp(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
   requires Inv(disk)
   requires dop.ReqReadOp?
   requires ValidDiskOp(dop)
-  requires D.RecvRead(k, disk, disk', dop)
+  requires D.RecvRead(disk, disk', dop)
 
   requires forall id | id in disk.reqWrites
       :: !writeReqReadOverlap(disk.reqWrites[id], dop.reqRead)
@@ -768,10 +768,10 @@ module InterpretationDisk {
       IJournalDisk(disk).superblock2.Some?
 
   ensures Inv(disk')
-  ensures BlockDisk.Next(BlockDisk.Constants(),
+  ensures BlockDisk.Next(
       IBlockDisk(disk), IBlockDisk(disk'),
       BlockDiskOp_of_ReqRead(dop.id, dop.reqRead))
-  ensures JournalDisk.Next(JournalDisk.Constants(),
+  ensures JournalDisk.Next(
       IJournalDisk(disk), IJournalDisk(disk'),
       JournalDiskOp_of_ReqRead(dop.id, dop.reqRead))
   {
@@ -832,19 +832,19 @@ module InterpretationDisk {
       :: !writeRespReadOverlap(reqWrite, disk.respReads[id]))
   }
 
-  lemma RefinesReqWriteOp(k: D.Constants, disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  lemma RefinesReqWriteOp(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
   requires Inv(disk)
   requires dop.ReqWriteOp?
   requires ValidDiskOp(dop)
-  requires D.RecvWrite(k, disk, disk', dop)
+  requires D.RecvWrite(disk, disk', dop)
 
   requires reqWriteDisjointFromCurrent(disk, dop.reqWrite)
 
   ensures Inv(disk')
-  ensures BlockDisk.Next(BlockDisk.Constants(),
+  ensures BlockDisk.Next(
       IBlockDisk(disk), IBlockDisk(disk'),
       BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite))
-  ensures JournalDisk.Next(JournalDisk.Constants(),
+  ensures JournalDisk.Next(
       IJournalDisk(disk), IJournalDisk(disk'),
       JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite))
   {
@@ -935,10 +935,10 @@ module InterpretationDisk {
       assert IJournalDisk(disk).reqWriteJournals
           == IJournalDisk(disk').reqWriteJournals;
 
-      assert BlockDisk.Next(BlockDisk.Constants(),
+      assert BlockDisk.Next(
           IBlockDisk(disk), IBlockDisk(disk'),
           BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
-      assert JournalDisk.Next(JournalDisk.Constants(),
+      assert JournalDisk.Next(
           IJournalDisk(disk), IJournalDisk(disk'),
           JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
     }
@@ -950,10 +950,10 @@ module InterpretationDisk {
         overlappingLocsSameType(l, loc);
       }
 
-      assert BlockDisk.Next(BlockDisk.Constants(),
+      assert BlockDisk.Next(
           IBlockDisk(disk), IBlockDisk(disk'),
           BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
-      assert JournalDisk.Next(JournalDisk.Constants(),
+      assert JournalDisk.Next(
           IJournalDisk(disk), IJournalDisk(disk'),
           JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
     }
@@ -996,10 +996,10 @@ module InterpretationDisk {
         reveal_JournalUpdate();
       }
 
-      assert BlockDisk.Next(BlockDisk.Constants(),
+      assert BlockDisk.Next(
           IBlockDisk(disk), IBlockDisk(disk'),
           BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
-      assert JournalDisk.Next(JournalDisk.Constants(),
+      assert JournalDisk.Next(
           IJournalDisk(disk), IJournalDisk(disk'),
           JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
     }
@@ -1011,29 +1011,29 @@ module InterpretationDisk {
         overlappingLocsSameType(l, loc);
       }
 
-      assert BlockDisk.Next(BlockDisk.Constants(),
+      assert BlockDisk.Next(
           IBlockDisk(disk), IBlockDisk(disk'),
           BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
-      assert JournalDisk.Next(JournalDisk.Constants(),
+      assert JournalDisk.Next(
           IJournalDisk(disk), IJournalDisk(disk'),
           JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
     }
   }
 
-  lemma RefinesReqWrite2Op(k: D.Constants, disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  lemma RefinesReqWrite2Op(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
   requires Inv(disk)
   requires dop.ReqWrite2Op?
   requires ValidDiskOp(dop)
-  requires D.RecvWrite2(k, disk, disk', dop)
+  requires D.RecvWrite2(disk, disk', dop)
 
   requires reqWriteDisjointFromCurrent(disk, dop.reqWrite1)
   requires reqWriteDisjointFromCurrent(disk, dop.reqWrite2)
 
   ensures Inv(disk')
-  ensures BlockDisk.Next(BlockDisk.Constants(),
+  ensures BlockDisk.Next(
       IBlockDisk(disk), IBlockDisk(disk'),
       BlockDisk.NoDiskOp)
-  ensures JournalDisk.Next(JournalDisk.Constants(),
+  ensures JournalDisk.Next(
       IJournalDisk(disk), IJournalDisk(disk'),
       JournalDiskOp_of_ReqWrite2(dop.id1, dop.id2, dop.reqWrite1, dop.reqWrite2))
   {
@@ -1143,24 +1143,24 @@ module InterpretationDisk {
       reveal_JournalUpdate();
     }
 
-    assert BlockDisk.Next(BlockDisk.Constants(),
+    assert BlockDisk.Next(
         IBlockDisk(disk), IBlockDisk(disk'),
         BlockDisk.NoDiskOp);
-    assert JournalDisk.Next(JournalDisk.Constants(),
+    assert JournalDisk.Next(
         IJournalDisk(disk), IJournalDisk(disk'),
         JournalDiskOp_of_ReqWrite2(dop.id1, dop.id2, dop.reqWrite1, dop.reqWrite2));
   }
 
-  lemma RefinesRespReadOp(k: D.Constants, disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  lemma RefinesRespReadOp(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
   requires Inv(disk)
   requires dop.RespReadOp?
   requires ValidDiskOp(dop)
-  requires D.AckRead(k, disk, disk', dop)
+  requires D.AckRead(disk, disk', dop)
   ensures Inv(disk')
-  ensures BlockDisk.Next(BlockDisk.Constants(),
+  ensures BlockDisk.Next(
       IBlockDisk(disk), IBlockDisk(disk'),
       BlockDiskOp_of_RespRead(dop.id, dop.respRead))
-  ensures JournalDisk.Next(JournalDisk.Constants(),
+  ensures JournalDisk.Next(
       IJournalDisk(disk), IJournalDisk(disk'),
       JournalDiskOp_of_RespRead(dop.id, dop.respRead))
   {
@@ -1242,10 +1242,10 @@ module InterpretationDisk {
           jr.value);
       }
 
-      assert BlockDisk.Next(BlockDisk.Constants(),
+      assert BlockDisk.Next(
           IBlockDisk(disk), IBlockDisk(disk'),
           BlockDiskOp_of_RespRead(dop.id, dop.respRead));
-      assert JournalDisk.Next(JournalDisk.Constants(),
+      assert JournalDisk.Next(
           IJournalDisk(disk), IJournalDisk(disk'),
           JournalDiskOp_of_RespRead(dop.id, dop.respRead));
 
@@ -1268,59 +1268,59 @@ module InterpretationDisk {
         }
       }
 
-      assert BlockDisk.Next(BlockDisk.Constants(),
+      assert BlockDisk.Next(
           IBlockDisk(disk), IBlockDisk(disk'),
           BlockDiskOp_of_RespRead(dop.id, dop.respRead));
-      assert JournalDisk.Next(JournalDisk.Constants(),
+      assert JournalDisk.Next(
           IJournalDisk(disk), IJournalDisk(disk'),
           JournalDiskOp_of_RespRead(dop.id, dop.respRead));
     }
   }
 
-  lemma RefinesRespWriteOp(k: D.Constants, disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  lemma RefinesRespWriteOp(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
   requires Inv(disk)
   requires dop.RespWriteOp?
   requires ValidDiskOp(dop)
-  requires D.AckWrite(k, disk, disk', dop)
+  requires D.AckWrite(disk, disk', dop)
   ensures Inv(disk')
-  ensures BlockDisk.Next(BlockDisk.Constants(),
+  ensures BlockDisk.Next(
       IBlockDisk(disk), IBlockDisk(disk'),
       BlockDiskOp_of_RespWrite(dop.id, dop.respWrite))
-  ensures JournalDisk.Next(JournalDisk.Constants(),
+  ensures JournalDisk.Next(
       IJournalDisk(disk), IJournalDisk(disk'),
       JournalDiskOp_of_RespWrite(dop.id, dop.respWrite))
   {
     var loc := LocOfRespWrite(dop.respWrite);
     if ValidSuperblockLocation(loc) {
       //assert ValidSuperblockBytes(atLoc(LocOfRespWrite(respWrites[id]), contents));
-      assert JournalDisk.Next(JournalDisk.Constants(),
+      assert JournalDisk.Next(
           IJournalDisk(disk), IJournalDisk(disk'),
           JournalDiskOp_of_RespWrite(dop.id, dop.respWrite));
     } else if ValidJournalLocation(loc) {
-      assert JournalDisk.Next(JournalDisk.Constants(),
+      assert JournalDisk.Next(
           IJournalDisk(disk), IJournalDisk(disk'),
           JournalDiskOp_of_RespWrite(dop.id, dop.respWrite));
     }
   }
 
-  lemma RefinesStutterOp(k: D.Constants, disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  lemma RefinesStutterOp(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
   requires Inv(disk)
   requires dop.NoDiskOp?
   requires ValidDiskOp(dop)
-  requires D.Stutter(k, disk, disk', dop)
+  requires D.Stutter(disk, disk', dop)
   ensures Inv(disk')
-  ensures BlockDisk.Next(BlockDisk.Constants(),
+  ensures BlockDisk.Next(
       IBlockDisk(disk), IBlockDisk(disk'),
       BlockDisk.NoDiskOp)
-  ensures JournalDisk.Next(JournalDisk.Constants(),
+  ensures JournalDisk.Next(
       IJournalDisk(disk), IJournalDisk(disk'),
       JournalDisk.NoDiskOp)
   {
   }
 
-  lemma RefinesProcessRead(k: D.Constants, disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  lemma RefinesProcessRead(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
   requires Inv(disk)
-  requires D.ProcessReadFailure(k, disk, disk', id, fakeContents)
+  requires D.ProcessReadFailure(disk, disk', id, fakeContents)
   ensures Inv(disk')
   ensures IBlockDisk(disk) == IBlockDisk(disk')
   ensures IJournalDisk(disk) == IJournalDisk(disk')
@@ -1328,15 +1328,15 @@ module InterpretationDisk {
     reveal_atLoc();
   }
 
-  lemma RefinesProcessWrite(k: D.Constants, disk: D.Variables, disk': D.Variables, id: D.ReqId)
+  lemma RefinesProcessWrite(disk: D.Variables, disk': D.Variables, id: D.ReqId)
   requires Inv(disk)
-  requires D.ProcessWrite(k, disk, disk', id)
+  requires D.ProcessWrite(disk, disk', id)
   ensures Inv(disk')
   ensures IBlockDisk(disk) == IBlockDisk(disk')
   ensures IJournalDisk(disk) == IJournalDisk(disk')
-    || JournalDisk.ProcessWriteSuperblock(JournalDisk.Constants(),   
+    || JournalDisk.ProcessWriteSuperblock(
           IJournalDisk(disk), IJournalDisk(disk'), 0)
-    || JournalDisk.ProcessWriteSuperblock(JournalDisk.Constants(),   
+    || JournalDisk.ProcessWriteSuperblock(
           IJournalDisk(disk), IJournalDisk(disk'), 1)
   {
     forall l
@@ -1420,7 +1420,6 @@ module InterpretationDisk {
       //    IJournalDisk(disk).reqWriteJournals;
 
       assert JournalDisk.ProcessWriteSuperblock(
-          JournalDisk.Constants(),   
           IJournalDisk(disk), IJournalDisk(disk'), 0);
     } else if loc == Superblock2Location() {
       assert IJournalDisk(disk').reqWriteSuperblock2 ==
@@ -1450,7 +1449,6 @@ module InterpretationDisk {
       //    Some(SuperblockOfBytes(disk.reqWrites[id].bytes));
 
       assert JournalDisk.ProcessWriteSuperblock(
-          JournalDisk.Constants(),   
           IJournalDisk(disk), IJournalDisk(disk'), 1);
     } else {
       assert IJournalDisk(disk').reqWriteSuperblock1 ==
@@ -1510,27 +1508,27 @@ module InterpretationDisk {
     }
   }
 
-  lemma RefinesHavocConflictingWrites(k: D.Constants, disk: D.Variables, disk': D.Variables, id: D.ReqId, id': D.ReqId)
+  lemma RefinesHavocConflictingWrites(disk: D.Variables, disk': D.Variables, id: D.ReqId, id': D.ReqId)
   requires Inv(disk)
-  requires D.HavocConflictingWrites(k, disk, disk', id, id')
+  requires D.HavocConflictingWrites(disk, disk', id, id')
   ensures false
   {
   }
 
-  lemma RefinesHavocConflictingWriteRead(k: D.Constants, disk: D.Variables, disk': D.Variables, id: D.ReqId, id': D.ReqId)
+  lemma RefinesHavocConflictingWriteRead(disk: D.Variables, disk': D.Variables, id: D.ReqId, id': D.ReqId)
   requires Inv(disk)
-  requires D.HavocConflictingWriteRead(k, disk, disk', id, id')
+  requires D.HavocConflictingWriteRead(disk, disk', id, id')
   ensures false
   {
   }
 
-  lemma RefinesCrash(k: D.Constants, disk: D.Variables, disk': D.Variables)
+  lemma RefinesCrash(disk: D.Variables, disk': D.Variables)
   requires Inv(disk)
-  requires D.Crash(k, disk, disk')
+  requires D.Crash(disk, disk')
   ensures Inv(disk')
-  ensures BlockDisk.Crash(BlockDisk.Constants(),
+  ensures BlockDisk.Crash(
       IBlockDisk(disk), IBlockDisk(disk'))
-  ensures JournalDisk.Crash(JournalDisk.Constants(),
+  ensures JournalDisk.Crash(
       IJournalDisk(disk), IJournalDisk(disk'))
   {
     var bd := IBlockDisk(disk);

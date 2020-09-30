@@ -34,33 +34,33 @@ module IOModel {
 
   // Misc utilities
 
-  predicate stepsBetree(k: Constants, s: BBC.Variables, s': BBC.Variables, vop: VOp, step: BT.BetreeStep)
+  predicate stepsBetree(s: BBC.Variables, s': BBC.Variables, vop: VOp, step: BT.BetreeStep)
   {
-    BBC.NextStep(Ik(k).bc, s, s', BlockDisk.NoDiskOp, vop, BBC.BetreeMoveStep(step))
+    BBC.NextStep(s, s', BlockDisk.NoDiskOp, vop, BBC.BetreeMoveStep(step))
   }
 
-  predicate stepsBC(k: Constants, s: BBC.Variables, s': BBC.Variables, vop: VOp, io: IO, step: BC.Step)
+  predicate stepsBC(s: BBC.Variables, s': BBC.Variables, vop: VOp, io: IO, step: BC.Step)
   {
     && ValidDiskOp(diskOp(io))
-    && BBC.NextStep(Ik(k).bc, s, s', IDiskOp(diskOp(io)).bdop, vop, BBC.BlockCacheMoveStep(step))
+    && BBC.NextStep(s, s', IDiskOp(diskOp(io)).bdop, vop, BBC.BlockCacheMoveStep(step))
   }
 
-  predicate noop(k: Constants, s: BBC.Variables, s': BBC.Variables)
+  predicate noop(s: BBC.Variables, s': BBC.Variables)
   {
-    BBC.NextStep(Ik(k).bc, s, s', BlockDisk.NoDiskOp, StatesInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep))
+    BBC.NextStep(s, s', BlockDisk.NoDiskOp, StatesInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep))
   }
 
   // TODO(jonh): rename to indicate this is only nops.
-  predicate betree_next(k: Constants, s: BBC.Variables, s': BBC.Variables)
+  predicate betree_next(s: BBC.Variables, s': BBC.Variables)
   {
-    || BBC.Next(Ik(k).bc, s, s', BlockDisk.NoDiskOp, StatesInternalOp)
-    || BBC.Next(Ik(k).bc, s, s', BlockDisk.NoDiskOp, AdvanceOp(UI.NoOp, true))
+    || BBC.Next(s, s', BlockDisk.NoDiskOp, StatesInternalOp)
+    || BBC.Next(s, s', BlockDisk.NoDiskOp, AdvanceOp(UI.NoOp, true))
   }
 
-  predicate betree_next_dop(k: Constants, s: BBC.Variables, s': BBC.Variables, dop: BlockDisk.DiskOp)
+  predicate betree_next_dop(s: BBC.Variables, s': BBC.Variables, dop: BlockDisk.DiskOp)
   {
-    || BBC.Next(Ik(k).bc, s, s', dop, StatesInternalOp)
-    || BBC.Next(Ik(k).bc, s, s', dop, AdvanceOp(UI.NoOp, true))
+    || BBC.Next(s, s', dop, StatesInternalOp)
+    || BBC.Next(s, s', dop, AdvanceOp(UI.NoOp, true))
   }
 
   // models of IO-related methods
@@ -262,8 +262,8 @@ module IOModel {
     ))
   }
 
-  lemma FindIndirectionTableLocationAndRequestWriteCorrect(k: Constants, io: IO, s: BCVariables, sector: Sector, id: Option<D.ReqId>, loc: Option<DiskLayout.Location>, io': IO)
-  requires BCInv(k, s)
+  lemma FindIndirectionTableLocationAndRequestWriteCorrect(io: IO, s: BCVariables, sector: Sector, id: Option<D.ReqId>, loc: Option<DiskLayout.Location>, io': IO)
+  requires BCInv(s)
   requires s.Ready?
   requires WFSector(sector)
   requires sector.SectorIndirectionTable?
@@ -317,7 +317,7 @@ module IOModel {
   {
   }
 
-  function {:opaque} PageInIndirectionTableReq(k: Constants, s: BCVariables, io: IO)
+  function {:opaque} PageInIndirectionTableReq(s: BCVariables, io: IO)
   : (res : (BCVariables, IO))
   requires io.IOInit?
   requires s.LoadingIndirectionTable?
@@ -332,31 +332,31 @@ module IOModel {
     )
   }
 
-  lemma PageInIndirectionTableReqCorrect(k: Constants, s: BCVariables, io: IO)
+  lemma PageInIndirectionTableReqCorrect(s: BCVariables, io: IO)
   requires WFBCVars(s)
   requires io.IOInit?
   requires s.LoadingIndirectionTable?
   requires ValidIndirectionTableLocation(s.indirectionTableLoc)
-  ensures var (s', io') := PageInIndirectionTableReq(k, s, io);
+  ensures var (s', io') := PageInIndirectionTableReq(s, io);
     && WFBCVars(s')
     && ValidDiskOp(diskOp(io'))
     && IDiskOp(diskOp(io')).jdop.NoDiskOp?
-    && BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp)
+    && BBC.Next(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp)
   {
     reveal_PageInIndirectionTableReq();
-    var (s', io') := PageInIndirectionTableReq(k, s, io);
+    var (s', io') := PageInIndirectionTableReq(s, io);
     if (s.indirectionTableRead.None?) {
       RequestReadCorrect(io, s.indirectionTableLoc);
-      //assert BC.PageInIndirectionTableReq(Ik(k), IVars(s), IVars(s'), IDiskOp(diskOp(io')));
-      //assert BBC.BlockCacheMove(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')), BC.PageInIndirectionTableReqStep);
-      //assert BBC.NextStep(Ik(k), IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')), BBC.BlockCacheMoveStep(BC.PageInIndirectionTableReqStep));
-      assert stepsBC(k, IBlockCache(s), IBlockCache(s'), StatesInternalOp, io', BC.PageInIndirectionTableReqStep);
+      //assert BC.PageInIndirectionTableReq(IVars(s), IVars(s'), IDiskOp(diskOp(io')));
+      //assert BBC.BlockCacheMove(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')), BC.PageInIndirectionTableReqStep);
+      //assert BBC.NextStep(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')), BBC.BlockCacheMoveStep(BC.PageInIndirectionTableReqStep));
+      assert stepsBC(IBlockCache(s), IBlockCache(s'), StatesInternalOp, io', BC.PageInIndirectionTableReqStep);
     } else {
-      assert noop(k, IBlockCache(s), IBlockCache(s'));
+      assert noop(IBlockCache(s), IBlockCache(s'));
     }
   }
 
-  function PageInNodeReq(k: Constants, s: BCVariables, io: IO, ref: BC.Reference)
+  function PageInNodeReq(s: BCVariables, io: IO, ref: BC.Reference)
   : (res : (BCVariables, IO))
   requires s.Ready?
   requires io.IOInit?
@@ -373,21 +373,21 @@ module IOModel {
     )
   }
 
-  lemma PageInNodeReqCorrect(k: Constants, s: BCVariables, io: IO, ref: BC.Reference)
+  lemma PageInNodeReqCorrect(s: BCVariables, io: IO, ref: BC.Reference)
   requires io.IOInit?
   requires s.Ready?
   requires WFBCVars(s)
-  requires BBC.Inv(Ik(k).bc, IBlockCache(s))
+  requires BBC.Inv(IBlockCache(s))
   requires ref in s.ephemeralIndirectionTable.locs;
   requires ref !in s.cache
   requires TotalCacheSize(s) <= MaxCacheSize() - 1
-  ensures var (s', io') := PageInNodeReq(k, s, io, ref);
+  ensures var (s', io') := PageInNodeReq(s, io, ref);
     && WFBCVars(s')
     && ValidDiskOp(diskOp(io'))
-    && BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp)
+    && BBC.Next(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp)
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
-      assert noop(k, IBlockCache(s), IBlockCache(s));
+      assert noop(IBlockCache(s), IBlockCache(s));
     } else {
       var loc := s.ephemeralIndirectionTable.locs[ref];
       assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs;
@@ -397,8 +397,8 @@ module IOModel {
 
       assert WFBCVars(s');
 
-      assert BC.PageInNodeReq(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp, ref);
-      assert stepsBC(k, IBlockCache(s), IBlockCache(s'), StatesInternalOp, io', BC.PageInNodeReqStep(ref));
+      assert BC.PageInNodeReq(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp, ref);
+      assert stepsBC(IBlockCache(s), IBlockCache(s'), StatesInternalOp, io', BC.PageInNodeReqStep(ref));
     }
   }
 
@@ -466,7 +466,7 @@ module IOModel {
     D.reveal_ChecksumChecksOut();
   }
 
-  function PageInIndirectionTableResp(k: Constants, s: BCVariables, io: IO)
+  function PageInIndirectionTableResp(s: BCVariables, io: IO)
   : (s' : BCVariables)
   requires diskOp(io).RespReadOp?
   requires s.LoadingIndirectionTable?
@@ -488,17 +488,17 @@ module IOModel {
     )
   }
 
-  lemma PageInIndirectionTableRespCorrect(k: Constants, s: BCVariables, io: IO)
-  requires BCInv(k, s)
+  lemma PageInIndirectionTableRespCorrect(s: BCVariables, io: IO)
+  requires BCInv(s)
   requires diskOp(io).RespReadOp?
   requires s.LoadingIndirectionTable?
   requires ValidDiskOp(diskOp(io))
   requires ValidIndirectionTableLocation(LocOfRespRead(diskOp(io).respRead))
-  ensures var s' := PageInIndirectionTableResp(k, s, io);
+  ensures var s' := PageInIndirectionTableResp(s, io);
     && WFBCVars(s')
     && ValidDiskOp(diskOp(io))
     && IDiskOp(diskOp(io)).jdop.NoDiskOp?
-    && BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop, StatesInternalOp)
+    && BBC.Next(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop, StatesInternalOp)
   {
     var (id, sector) := ReadSector(io);
     ReadSectorCorrect(io);
@@ -507,7 +507,7 @@ module IOModel {
     reveal_SectorOfBytes();
     reveal_Parse();
 
-    var s' := PageInIndirectionTableResp(k, s, io);
+    var s' := PageInIndirectionTableResp(s, io);
     if (Some(id) == s.indirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
       var ephemeralIndirectionTable := sector.value.indirectionTable;
       var (succ, bm) := IndirectionTableModel.InitLocBitmap(ephemeralIndirectionTable);
@@ -520,8 +520,8 @@ module IOModel {
           s'.persistentIndirectionTable, s'.outstandingBlockWrites, s'.blockAllocator);
 
         assert WFBCVars(s');
-        assert stepsBC(k, IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.PageInIndirectionTableRespStep);
-        assert BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop, StatesInternalOp);
+        assert stepsBC(IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.PageInIndirectionTableRespStep);
+        assert BBC.Next(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop, StatesInternalOp);
 
         return;
       }
@@ -529,13 +529,13 @@ module IOModel {
 
     assert s == s';
     assert ValidDiskOp(diskOp(io));
-    assert BC.NoOp(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop, StatesInternalOp);
-    assert BBC.BlockCacheMove(Ik(k).bc, IBlockCache(s), IBlockCache(s), IDiskOp(diskOp(io)).bdop, StatesInternalOp, BC.NoOpStep);
-    assert BBC.NextStep(Ik(k).bc, IBlockCache(s), IBlockCache(s), IDiskOp(diskOp(io)).bdop, StatesInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep));
-    assert stepsBC(k, IBlockCache(s), IBlockCache(s), StatesInternalOp, io, BC.NoOpStep);
+    assert BC.NoOp(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop, StatesInternalOp);
+    assert BBC.BlockCacheMove(IBlockCache(s), IBlockCache(s), IDiskOp(diskOp(io)).bdop, StatesInternalOp, BC.NoOpStep);
+    assert BBC.NextStep(IBlockCache(s), IBlockCache(s), IDiskOp(diskOp(io)).bdop, StatesInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep));
+    assert stepsBC(IBlockCache(s), IBlockCache(s), StatesInternalOp, io, BC.NoOpStep);
   }
 
-  function PageInNodeResp(k: Constants, s: BCVariables, io: IO)
+  function PageInNodeResp(s: BCVariables, io: IO)
   : (s': BCVariables)
   requires diskOp(io).RespReadOp?
   requires s.Ready?
@@ -573,18 +573,18 @@ module IOModel {
     )
   }
 
-  lemma PageInNodeRespCorrect(k: Constants, s: BCVariables, io: IO)
+  lemma PageInNodeRespCorrect(s: BCVariables, io: IO)
   requires diskOp(io).RespReadOp?
   requires ValidDiskOp(diskOp(io))
   requires s.Ready?
   requires WFBCVars(s)
-  requires BBC.Inv(Ik(k).bc, IBlockCache(s))
-  ensures var s' := PageInNodeResp(k, s, io);
+  requires BBC.Inv(IBlockCache(s))
+  ensures var s' := PageInNodeResp(s, io);
     && WFBCVars(s')
     && ValidDiskOp(diskOp(io))
-    && BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop, StatesInternalOp)
+    && BBC.Next(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop, StatesInternalOp)
   {
-    var s' := PageInNodeResp(k, s, io);
+    var s' := PageInNodeResp(s, io);
 
     var (id, sector) := ReadSector(io);
     ReadSectorCorrect(io);
@@ -594,7 +594,7 @@ module IOModel {
     reveal_Parse();
 
     if (id !in s.outstandingBlockReads) {
-      assert stepsBC(k, IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.NoOpStep);
+      assert stepsBC(IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.NoOpStep);
       return;
     }
 
@@ -602,7 +602,7 @@ module IOModel {
     
     var locGraph := IndirectionTableModel.GetEntry(s.ephemeralIndirectionTable, ref);
     if (locGraph.None? || locGraph.value.loc.None? || ref in s.cache) { // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
-      assert stepsBC(k, IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.NoOpStep);
+      assert stepsBC(IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.NoOpStep);
       return;
     }
 
@@ -620,20 +620,20 @@ module IOModel {
         assert |s'.outstandingBlockReads| == |s.outstandingBlockReads| - 1;
 
         assert WFBCVars(s');
-        assert BC.PageInNodeResp(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop, StatesInternalOp);
-        assert stepsBC(k, IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.PageInNodeRespStep);
+        assert BC.PageInNodeResp(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop, StatesInternalOp);
+        assert stepsBC(IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.PageInNodeRespStep);
       } else {
-        assert stepsBC(k, IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.NoOpStep);
+        assert stepsBC(IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.NoOpStep);
       }
     } else {
-      assert stepsBC(k, IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.NoOpStep);
+      assert stepsBC(IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.NoOpStep);
     }
   }
 
   // == writeResponse ==
 
-  lemma lemmaOutstandingLocIndexValid(k: Constants, s: BCVariables, id: uint64)
-  requires BCInv(k, s)
+  lemma lemmaOutstandingLocIndexValid(s: BCVariables, id: uint64)
+  requires BCInv(s)
   requires s.Ready?
   requires id in s.outstandingBlockWrites
   ensures 0 <= s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize() < NumBlocks()
@@ -645,8 +645,8 @@ module IOModel {
     assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
   }
 
-  lemma lemmaBlockAllocatorFrozenSome(k: Constants, s: BCVariables)
-  requires BCInv(k, s)
+  lemma lemmaBlockAllocatorFrozenSome(s: BCVariables)
+  requires BCInv(s)
   requires s.Ready?
   ensures s.frozenIndirectionTable.Some?
       ==> s.blockAllocator.frozen.Some?
@@ -654,38 +654,38 @@ module IOModel {
     reveal_ConsistentBitmap();
   }
 
-  function writeNodeResponse(k: Constants, s: BCVariables, io: IO)
+  function writeNodeResponse(s: BCVariables, io: IO)
     : BCVariables
-  requires BCInv(k, s)
+  requires BCInv(s)
   requires ValidDiskOp(diskOp(io))
   requires diskOp(io).RespWriteOp?
   requires s.Ready? && io.id in s.outstandingBlockWrites
   {
     var id := io.id;
 
-    lemmaOutstandingLocIndexValid(k, s, id);
+    lemmaOutstandingLocIndexValid(s, id);
     var s' := s.(outstandingBlockWrites := MapRemove1(s.outstandingBlockWrites, id))
      .(blockAllocator := BlockAllocatorModel.MarkFreeOutstanding(s.blockAllocator, s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize()));
     s'
   }
 
-  lemma writeNodeResponseCorrect(k: Constants, s: BCVariables, io: IO)
-  requires BCInv(k, s)
+  lemma writeNodeResponseCorrect(s: BCVariables, io: IO)
+  requires BCInv(s)
   requires diskOp(io).RespWriteOp?
   requires ValidDiskOp(diskOp(io))
   requires ValidNodeLocation(LocOfRespWrite(diskOp(io).respWrite))
   requires s.Ready? && io.id in s.outstandingBlockWrites
-  ensures var s' := writeNodeResponse(k, s, io);
+  ensures var s' := writeNodeResponse(s, io);
     && WFBCVars(s')
-    && BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
+    && BBC.Next(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
         StatesInternalOp)
   {
     reveal_ConsistentBitmap();
     var id := io.id;
-    var s' := writeNodeResponse(k, s, io);
+    var s' := writeNodeResponse(s, io);
 
     var locIdx := s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize();
-    lemmaOutstandingLocIndexValid(k, s, id);
+    lemmaOutstandingLocIndexValid(s, id);
 
     DiskLayout.reveal_ValidNodeAddr();
     assert locIdx * NodeBlockSize() == s.outstandingBlockWrites[id].loc.addr as int;
@@ -750,12 +750,12 @@ module IOModel {
     }
 
     assert WFBCVars(s');
-    assert stepsBC(k, IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.WriteBackNodeRespStep);
+    assert stepsBC(IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.WriteBackNodeRespStep);
   }
 
-  function writeIndirectionTableResponse(k: Constants, s: BCVariables, io: IO)
+  function writeIndirectionTableResponse(s: BCVariables, io: IO)
     : (BCVariables, Location)
-  requires BCInv(k, s)
+  requires BCInv(s)
   requires ValidDiskOp(diskOp(io))
   requires diskOp(io).RespWriteOp?
   requires s.Ready?
@@ -765,38 +765,38 @@ module IOModel {
     (s', s.frozenIndirectionTableLoc.value)
   }
 
-  lemma writeIndirectionTableResponseCorrect(k: Constants, s: BCVariables, io: IO)
-  requires BCInv(k, s)
+  lemma writeIndirectionTableResponseCorrect(s: BCVariables, io: IO)
+  requires BCInv(s)
   requires diskOp(io).RespWriteOp?
   requires ValidDiskOp(diskOp(io))
   requires s.Ready? && s.outstandingIndirectionTableWrite == Some(io.id)
   requires ValidIndirectionTableLocation(LocOfRespWrite(diskOp(io).respWrite))
-  ensures var (s', loc) := writeIndirectionTableResponse(k, s, io);
+  ensures var (s', loc) := writeIndirectionTableResponse(s, io);
     && WFBCVars(s')
-    && BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
+    && BBC.Next(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
         SendFrozenLocOp(loc))
   {
     reveal_ConsistentBitmap();
     var id := io.id;
-    var (s', loc) := writeIndirectionTableResponse(k, s, io);
+    var (s', loc) := writeIndirectionTableResponse(s, io);
     assert WFBCVars(s');
-    assert BC.WriteBackIndirectionTableResp(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
+    assert BC.WriteBackIndirectionTableResp(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
       SendFrozenLocOp(loc));
-    assert BC.NextStep(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
+    assert BC.NextStep(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
       SendFrozenLocOp(loc), BC.WriteBackIndirectionTableRespStep);
-    assert BBC.NextStep(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
+    assert BBC.NextStep(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
       SendFrozenLocOp(loc), BBC.BlockCacheMoveStep(BC.WriteBackIndirectionTableRespStep));
-    assert BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
+    assert BBC.Next(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
       SendFrozenLocOp(loc));
   }
 
-  function cleanUp(k: Constants, s: BCVariables) : BCVariables
-  requires BCInv(k, s)
+  function cleanUp(s: BCVariables) : BCVariables
+  requires BCInv(s)
   requires s.Ready?
   requires s.frozenIndirectionTable.Some?
   requires s.frozenIndirectionTableLoc.Some?
   {
-    lemmaBlockAllocatorFrozenSome(k, s);
+    lemmaBlockAllocatorFrozenSome(s);
     var s' := s
            .(frozenIndirectionTable := None)
            .(frozenIndirectionTableLoc := None)
@@ -806,25 +806,25 @@ module IOModel {
     s'
   }
 
-  lemma cleanUpCorrect(k: Constants, s: BCVariables)
-  requires BCInv(k, s)
+  lemma cleanUpCorrect(s: BCVariables)
+  requires BCInv(s)
   requires s.Ready?
   requires s.frozenIndirectionTable.Some?
   requires s.outstandingIndirectionTableWrite.None?
   requires s.frozenIndirectionTableLoc.Some?
-  ensures var s' := cleanUp(k, s);
+  ensures var s' := cleanUp(s);
     && WFBCVars(s')
-    && BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, CleanUpOp)
+    && BBC.Next(IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, CleanUpOp)
   {
     reveal_ConsistentBitmap();
-    var s' := cleanUp(k, s);
-    lemmaBlockAllocatorFrozenSome(k, s);
+    var s' := cleanUp(s);
+    lemmaBlockAllocatorFrozenSome(s);
     assert WFBCVars(s');
-    assert BC.CleanUp(Ik(k).bc, IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, CleanUpOp);
-    assert BC.NextStep(Ik(k).bc, IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp,
+    assert BC.CleanUp(IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, CleanUpOp);
+    assert BC.NextStep(IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp,
       CleanUpOp, BC.CleanUpStep);
-    assert BBC.NextStep(Ik(k).bc, IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp,
+    assert BBC.NextStep(IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp,
       CleanUpOp, BBC.BlockCacheMoveStep(BC.CleanUpStep));
-    assert BBC.Next(Ik(k).bc, IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, CleanUpOp);
+    assert BBC.Next(IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, CleanUpOp);
   }
 }

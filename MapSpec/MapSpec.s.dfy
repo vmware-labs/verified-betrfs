@@ -16,7 +16,6 @@ module MapSpec refines UIStateMachine {
     ValueType.DefaultValue()
   }
 
-  datatype Constants = Constants()
   type View = imap<Key, Value>
   datatype Variables = Variables(ghost view:View)
 
@@ -43,14 +42,14 @@ module MapSpec refines UIStateMachine {
     imap k | InDomain(k) :: EmptyValue()
   }
 
-  predicate Init(k:Constants, s:Variables)
-      ensures Init(k, s) ==> WF(s)
+  predicate Init(s:Variables)
+      ensures Init(s) ==> WF(s)
   {
     s == Variables(EmptyMap())
   }
 
   // Can collapse key and result; use the ones that came in uiop for free.
-  predicate Query(k:Constants, s:Variables, s':Variables, uiop: UIOp, key:Key, result:Value)
+  predicate Query(s:Variables, s':Variables, uiop: UIOp, key:Key, result:Value)
   {
     && uiop == UI.GetOp(key, result)
     && WF(s)
@@ -84,7 +83,7 @@ module MapSpec refines UIStateMachine {
     || SeqComparison.lt(start.key, end.key)
   }
 
-  predicate Succ(k: Constants, s: Variables, s': Variables, uiop: UIOp,
+  predicate Succ(s: Variables, s': Variables, uiop: UIOp,
       start: UI.RangeStart, results: seq<UI.SuccResult>, end: UI.RangeEnd)
   {
     && uiop == UI.SuccOp(start, results, end)
@@ -99,8 +98,8 @@ module MapSpec refines UIStateMachine {
         exists i :: 0 <= i < |results| && results[i].key == key)
   }
 
-  predicate Write(k:Constants, s:Variables, s':Variables, uiop: UIOp, key:Key, new_value:Value)
-      ensures Write(k, s, s', uiop, key, new_value) ==> WF(s')
+  predicate Write(s:Variables, s':Variables, uiop: UIOp, key:Key, new_value:Value)
+      ensures Write(s, s', uiop, key, new_value) ==> WF(s')
   {
     && uiop == UI.PutOp(key, new_value)
     && WF(s)
@@ -108,7 +107,7 @@ module MapSpec refines UIStateMachine {
     && s'.view == s.view[key := new_value]
   }
 
-  predicate Stutter(k:Constants, s:Variables, s':Variables, uiop: UIOp)
+  predicate Stutter(s:Variables, s':Variables, uiop: UIOp)
   {
     && uiop.NoOp?
     && s' == s
@@ -121,31 +120,31 @@ module MapSpec refines UIStateMachine {
       | SuccStep(start: UI.RangeStart, results: seq<UI.SuccResult>, end: UI.RangeEnd)
       | StutterStep
 
-  predicate NextStep(k:Constants, s:Variables, s':Variables, uiop: UIOp, step:Step)
+  predicate NextStep(s:Variables, s':Variables, uiop: UIOp, step:Step)
   {
     match step {
-      case QueryStep(key, result) => Query(k, s, s', uiop, key, result)
-      case WriteStep(key, new_value) => Write(k, s, s', uiop, key, new_value)
-      case SuccStep(start, results, end) => Succ(k, s, s', uiop, start, results, end)
-      case StutterStep() => Stutter(k, s, s', uiop)
+      case QueryStep(key, result) => Query(s, s', uiop, key, result)
+      case WriteStep(key, new_value) => Write(s, s', uiop, key, new_value)
+      case SuccStep(start, results, end) => Succ(s, s', uiop, start, results, end)
+      case StutterStep() => Stutter(s, s', uiop)
     }
   }
 
-  predicate Next(k:Constants, s:Variables, s':Variables, uiop: UIOp)
+  predicate Next(s:Variables, s':Variables, uiop: UIOp)
   {
-    exists step :: NextStep(k, s, s', uiop, step)
+    exists step :: NextStep(s, s', uiop, step)
   }
 
-  predicate Inv(k:Constants, s:Variables)
+  predicate Inv(s:Variables)
   {
     WF(s)
   }
 
-  lemma InitImpliesInv(k: Constants, s: Variables)
+  lemma InitImpliesInv(s: Variables)
   {
   }
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
+  lemma NextPreservesInv(s: Variables, s': Variables, uiop: UIOp)
   {
   }
 }

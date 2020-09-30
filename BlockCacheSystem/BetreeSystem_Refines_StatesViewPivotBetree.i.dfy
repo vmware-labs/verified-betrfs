@@ -30,124 +30,119 @@ module BetreeSystem_Refines_StatesViewPivotBetree {
 
   import M = BetreeCache
 
-  function Ik(k: System.Constants) : View.Constants
-  {
-    View.Constants(BT.Constants(BI.Constants()))
-  }
-
-  function I(k: System.Constants, s: System.Variables) : View.Variables
-  requires System.Inv(k, s)
+  function I(s: System.Variables) : View.Variables
+  requires System.Inv(s)
   {
     View.Variables(
-      System.BetreeDisk(k, s),
-      BCS.PersistentLoc(k, s),
-      BCS.FrozenLoc(k, s),
-      System.FrozenBetree(k, s),
-      System.EphemeralBetree(k, s)
+      System.BetreeDisk(s),
+      BCS.PersistentLoc(s),
+      BCS.FrozenLoc(s),
+      System.FrozenBetree(s),
+      System.EphemeralBetree(s)
     )
   }
 
   // Proofs
 
-  lemma RefinesInit(k: System.Constants, s: System.Variables, loc: Location)
-    requires System.Init(k, s, loc)
-    ensures System.Inv(k, s)
-    ensures View.Init(Ik(k), I(k, s), loc)
+  lemma RefinesInit(s: System.Variables, loc: Location)
+    requires System.Init(s, loc)
+    ensures System.Inv(s)
+    ensures View.Init(I(s), loc)
   {
-    BCS.InitImpliesInv(k, s, loc);
-    BT.InitImpliesInv(Ik(k).k, System.BetreeDisk(k, s)[loc]);
-    BCS.InitGraphs(k, s, loc);
+    BCS.InitImpliesInv(s, loc);
+    BT.InitImpliesInv(System.BetreeDisk(s)[loc]);
+    BCS.InitGraphs(s, loc);
   }
 
-  lemma BetreeMoveStepRefines(k: System.Constants, s: System.Variables, s': System.Variables, dop: D.DiskOp, vop: VOp, betreeStep: BetreeStep)
-    requires System.Inv(k, s)
-    requires M.BetreeMove(k.machine, s.machine, s'.machine, dop, vop, betreeStep)
-    requires D.Next(k.disk, s.disk, s'.disk, dop)
-    ensures System.Inv(k, s')
-    ensures View.Next(Ik(k), I(k, s), I(k, s'), vop)
+  lemma BetreeMoveStepRefines(s: System.Variables, s': System.Variables, dop: D.DiskOp, vop: VOp, betreeStep: BetreeStep)
+    requires System.Inv(s)
+    requires M.BetreeMove(s.machine, s'.machine, dop, vop, betreeStep)
+    requires D.Next(s.disk, s'.disk, dop)
+    ensures System.Inv(s')
+    ensures View.Next(I(s), I(s'), vop)
   {
     var transactionStep := BC.TransactionStep(BetreeStepOps(betreeStep));
-    Ref.StepGraphs(k, s, s', vop, BCS.MachineStep(dop, transactionStep));
-    Ref.RefinesReads(k, s, BetreeStepReads(betreeStep));
-    assert BT.NextStep(Ik(k).k, System.EphemeralBetree(k, s).value, System.EphemeralBetree(k, s').value, vop.uiop, BT.BetreeStep(betreeStep));
-    BT.NextPreservesInv(Ik(k).k, System.EphemeralBetree(k, s).value, System.EphemeralBetree(k, s').value, vop.uiop);
-    assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.AdvanceStep);
+    Ref.StepGraphs(s, s', vop, BCS.MachineStep(dop, transactionStep));
+    Ref.RefinesReads(s, BetreeStepReads(betreeStep));
+    assert BT.NextStep(System.EphemeralBetree(s).value, System.EphemeralBetree(s').value, vop.uiop, BT.BetreeStep(betreeStep));
+    BT.NextPreservesInv(System.EphemeralBetree(s).value, System.EphemeralBetree(s').value, vop.uiop);
+    assert View.NextStep(I(s), I(s'), vop, View.AdvanceStep);
   }
 
-  lemma BlockCacheMoveStepRefines(k: System.Constants, s: System.Variables, s': System.Variables, dop: D.DiskOp, vop: VOp, step: BC.Step)
-    requires System.Inv(k, s)
+  lemma BlockCacheMoveStepRefines(s: System.Variables, s': System.Variables, dop: D.DiskOp, vop: VOp, step: BC.Step)
+    requires System.Inv(s)
     requires !step.TransactionStep?
-    requires M.BlockCacheMove(k.machine, s.machine, s'.machine, dop, vop, step)
-    requires D.Next(k.disk, s.disk, s'.disk, dop)
+    requires M.BlockCacheMove(s.machine, s'.machine, dop, vop, step)
+    requires D.Next(s.disk, s'.disk, dop)
     requires (vop.SendPersistentLocOp? ==>
-      BCS.Inv(k, s) ==>
-        && vop.loc in Ref.DiskGraphMap(k, s)
-        && BT.Inv(Ik(k).k, BT.Variables(BI.Variables(Ref.DiskGraphMap(k, s)[vop.loc])))
+      BCS.Inv(s) ==>
+        && vop.loc in Ref.DiskGraphMap(s)
+        && BT.Inv(BT.Variables(BI.Variables(Ref.DiskGraphMap(s)[vop.loc])))
     )
 
-    ensures System.Inv(k, s')
-    ensures View.Next(Ik(k), I(k, s), I(k, s'), vop)
+    ensures System.Inv(s')
+    ensures View.Next(I(s), I(s'), vop)
   {
-    Ref.StepGraphs(k, s, s', vop, BCS.MachineStep(dop, step));
+    Ref.StepGraphs(s, s', vop, BCS.MachineStep(dop, step));
     if (step.UnallocStep?) {
-      //assert BI.GC(Ik(k).bck, EphemeralBetree(k, s).bcv, s'.bcv, refs)
-      Ref.UnallocStepMeetsGCConditions(k, s, s', dop, vop, step.ref);
-      /*assert step.ref in EphemeralBetree(k, s).bcv.view;
-      assert iset{step.ref} !! BI.LiveReferences(Ik(k).bck, EphemeralBetree(k, s).bcv);
-      assert BI.ClosedUnderPredecessor(EphemeralBetree(k, s).bcv.view, iset{step.ref});
-      assert IMapRemove1(EphemeralBetree(k, s).bcv.view, step.ref)
-          == IMapRemove(EphemeralBetree(k, s).bcv.view, iset{step.ref});*/
-      assert BT.GC(Ik(k).k, System.EphemeralBetree(k, s).value, System.EphemeralBetree(k, s').value, UI.NoOp, iset{step.ref});
-      BT.GCStepRefines(Ik(k).k, System.EphemeralBetree(k, s).value, System.EphemeralBetree(k, s').value, UI.NoOp, iset{step.ref});
+      //assert BI.GC(EphemeralBetree(s).bcv, s'.bcv, refs)
+      Ref.UnallocStepMeetsGCConditions(s, s', dop, vop, step.ref);
+      /*assert step.ref in EphemeralBetree(s).bcv.view;
+      assert iset{step.ref} !! BI.LiveReferences(EphemeralBetree(s).bcv);
+      assert BI.ClosedUnderPredecessor(EphemeralBetree(s).bcv.view, iset{step.ref});
+      assert IMapRemove1(EphemeralBetree(s).bcv.view, step.ref)
+          == IMapRemove(EphemeralBetree(s).bcv.view, iset{step.ref});*/
+      assert BT.GC(System.EphemeralBetree(s).value, System.EphemeralBetree(s').value, UI.NoOp, iset{step.ref});
+      BT.GCStepRefines(System.EphemeralBetree(s).value, System.EphemeralBetree(s').value, UI.NoOp, iset{step.ref});
 
-      assert BT.NextStep(Ik(k).k, I(k, s).ephemeralState.value, I(k, s').ephemeralState.value, UI.NoOp, BT.GCStep(iset{step.ref}));
+      assert BT.NextStep(I(s).ephemeralState.value, I(s').ephemeralState.value, UI.NoOp, BT.GCStep(iset{step.ref}));
 
-      assert View.Advance(Ik(k), I(k, s), I(k, s'), vop);
-      assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.AdvanceStep);
+      assert View.Advance(I(s), I(s'), vop);
+      assert View.NextStep(I(s), I(s'), vop, View.AdvanceStep);
     } else {
       if vop.FreezeOp? {
-        assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.FreezeStep);
+        assert View.NextStep(I(s), I(s'), vop, View.FreezeStep);
       }
       else if vop.CrashOp? {
-        assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.CrashStep);
+        assert View.NextStep(I(s), I(s'), vop, View.CrashStep);
       }
       else if vop.SendPersistentLocOp? {
-        assert View.ObtainPersistentLoc(Ik(k), I(k, s), I(k, s'), vop);
-        assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.ObtainPersistentLocStep);
+        assert View.ObtainPersistentLoc(I(s), I(s'), vop);
+        assert View.NextStep(I(s), I(s'), vop, View.ObtainPersistentLocStep);
       }
       else if vop.SendFrozenLocOp? {
-        assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.ProvideFrozenLocStep);
+        assert View.NextStep(I(s), I(s'), vop, View.ProvideFrozenLocStep);
       }
       else if vop.CleanUpOp? {
-        assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.ForgetOldStep);
+        assert View.NextStep(I(s), I(s'), vop, View.ForgetOldStep);
       }
       else if vop.AdvanceOp? {
         assert false;
       }
       else if vop.StatesInternalOp? {
-        if Ref.UpdateAllEq(k, s, s') {
-          assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.StutterStep);
+        if Ref.UpdateAllEq(s, s') {
+          assert View.NextStep(I(s), I(s'), vop, View.StutterStep);
         }
-        else if Ref.UpdateDiskChange(k, s, s') {
-          assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.DiskChangeStep);
+        else if Ref.UpdateDiskChange(s, s') {
+          assert View.NextStep(I(s), I(s'), vop, View.DiskChangeStep);
         }
-        else if Ref.UpdateUnalloc(k, s, s', BCS.MachineStep(dop, step)) {
+        else if Ref.UpdateUnalloc(s, s', BCS.MachineStep(dop, step)) {
           assert false;
         }
         else {
         }
       }
       else if vop.JournalInternalOp? {
-        assert Ref.UpdateAllEq(k, s, s');
-        assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.StutterStep);
+        assert Ref.UpdateAllEq(s, s');
+        assert View.NextStep(I(s), I(s'), vop, View.StutterStep);
       }
       else if vop.PushSyncOp? {
-        assert Ref.UpdateAllEq(k, s, s');
-        assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.StutterStep);
+        assert Ref.UpdateAllEq(s, s');
+        assert View.NextStep(I(s), I(s'), vop, View.StutterStep);
       }
       else if vop.PopSyncOp? {
-        assert Ref.UpdateAllEq(k, s, s');
-        assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.StutterStep);
+        assert Ref.UpdateAllEq(s, s');
+        assert View.NextStep(I(s), I(s'), vop, View.StutterStep);
       }
       else {
         assert false;
@@ -155,41 +150,41 @@ module BetreeSystem_Refines_StatesViewPivotBetree {
     }
   }
 
-  lemma CrashStepRefines(k: System.Constants, s: System.Variables, s': System.Variables, vop: VOp)
-    requires System.Inv(k, s)
-    requires System.Crash(k, s, s', vop)
-    ensures System.Inv(k, s')
-    ensures View.Next(Ik(k), I(k, s), I(k, s'), vop)
+  lemma CrashStepRefines(s: System.Variables, s': System.Variables, vop: VOp)
+    requires System.Inv(s)
+    requires System.Crash(s, s', vop)
+    ensures System.Inv(s')
+    ensures View.Next(I(s), I(s'), vop)
   {
-    Ref.StepGraphs(k, s, s', vop, BCS.CrashStep);
-    assert View.NextStep(Ik(k), I(k, s), I(k, s'), vop, View.CrashStep);
+    Ref.StepGraphs(s, s', vop, BCS.CrashStep);
+    assert View.NextStep(I(s), I(s'), vop, View.CrashStep);
   }
 
-  lemma NextStepRefines(k: System.Constants, s: System.Variables, s': System.Variables, vop: VOp, step: System.Step)
-    requires System.Inv(k, s)
-    requires System.NextStep(k, s, s', vop, step)
-    ensures System.Inv(k, s')
-    ensures View.Next(Ik(k), I(k, s), I(k, s'), vop)
+  lemma NextStepRefines(s: System.Variables, s': System.Variables, vop: VOp, step: System.Step)
+    requires System.Inv(s)
+    requires System.NextStep(s, s', vop, step)
+    ensures System.Inv(s')
+    ensures View.Next(I(s), I(s'), vop)
   {
     match step {
       case MachineStep(dop) => {
-        var machineStep :| M.NextStep(k.machine, s.machine, s'.machine, dop, vop, machineStep);
+        var machineStep :| M.NextStep(s.machine, s'.machine, dop, vop, machineStep);
         match machineStep {
-          case BetreeMoveStep(betreeStep) => BetreeMoveStepRefines(k, s, s', dop, vop, betreeStep);
-          case BlockCacheMoveStep(blockCacheStep) => BlockCacheMoveStepRefines(k, s, s', dop, vop, blockCacheStep);
+          case BetreeMoveStep(betreeStep) => BetreeMoveStepRefines(s, s', dop, vop, betreeStep);
+          case BlockCacheMoveStep(blockCacheStep) => BlockCacheMoveStepRefines(s, s', dop, vop, blockCacheStep);
         }
       }
-      case CrashStep => CrashStepRefines(k, s, s', vop);
+      case CrashStep => CrashStepRefines(s, s', vop);
     }
   }
 
-  lemma RefinesNext(k: System.Constants, s: System.Variables, s': System.Variables, vop: VOp)
-    requires System.Inv(k, s)
-    requires System.Next(k, s, s', vop)
-    ensures System.Inv(k, s')
-    ensures View.Next(Ik(k), I(k, s), I(k, s'), vop);
+  lemma RefinesNext(s: System.Variables, s': System.Variables, vop: VOp)
+    requires System.Inv(s)
+    requires System.Next(s, s', vop)
+    ensures System.Inv(s')
+    ensures View.Next(I(s), I(s'), vop);
   {
-    var step :| System.NextStep(k, s, s', vop, step);
-    NextStepRefines(k, s, s', vop, step);
+    var step :| System.NextStep(s, s', vop, step);
+    NextStepRefines(s, s', vop, step);
   }
 }

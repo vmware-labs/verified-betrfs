@@ -27,15 +27,7 @@ module ByteSystem refines AsyncDiskModel {
   import JournalSystem
   import UI
   
-  function Ik(k: Constants) : BetreeJournalSystem.Constants
-  {
-    BetreeJournalSystem.Constants(
-      AsyncSectorDiskModelConstants(k.machine.bc, BlockDisk.Constants()),
-      AsyncSectorDiskModelConstants(k.machine.jc, JournalDisk.Constants())
-    )
-  }
-
-  function I(k: Constants, s: Variables) : BetreeJournalSystem.Variables
+  function I(s: Variables) : BetreeJournalSystem.Variables
   requires reqWritesHaveValidSuperblocks(s.disk.reqWrites)
   {
     BetreeJournalSystem.Variables(
@@ -44,42 +36,42 @@ module ByteSystem refines AsyncDiskModel {
     )
   }
 
-  predicate Init(k: Constants, s: Variables)
+  predicate Init(s: Variables)
   {
-    && D.Init(k.disk, s.disk)
-    && BetreeJournalSystem.Init(Ik(k), I(k, s))
+    && D.Init(s.disk)
+    && BetreeJournalSystem.Init(I(s))
   }
 
   ///// Define Inv
 
-  predicate Inv(k: Constants, s: Variables)
+  predicate Inv(s: Variables)
   {
     && InterpretationDisk.Inv(s.disk)
-    && BetreeJournalSystem.Inv(Ik(k), I(k, s))
+    && BetreeJournalSystem.Inv(I(s))
   }
   
-  lemma InitImpliesInv(k: Constants, s: Variables)
+  lemma InitImpliesInv(s: Variables)
     // Inherited from abstract module:
-    //requires Init(k, s)
-    //ensures Inv(k, s)
+    //requires Init(s)
+    //ensures Inv(s)
   {
-    BetreeJournalSystem.InitImpliesInv(Ik(k), I(k, s));
+    BetreeJournalSystem.InitImpliesInv(I(s));
   }
 
-  lemma ReqReadStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
-    requires Inv(k, s)
-    requires Machine(k, s, s', uiop, dop)
+  lemma ReqReadStepPreservesInv(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+    requires Inv(s)
+    requires Machine(s, s', uiop, dop)
     requires dop.ReqReadOp?
-    ensures BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop)
-    ensures Inv(k, s')
+    ensures BetreeJournalSystem.Next(I(s), I(s'), uiop)
+    ensures Inv(s')
   {
     var idop := IDiskOp(dop);
-    var vop :| BJC.NextStep(k.machine, s.machine, s'.machine,
+    var vop :| BJC.NextStep(s.machine, s'.machine,
         uiop, idop, vop);
-    assert BetreeCache.Next(k.machine.bc, s.machine.bc, s'.machine.bc, idop.bdop, vop);
-    assert JournalCache.Next(k.machine.jc, s.machine.jc, s'.machine.jc, idop.jdop, vop);
-    var bstep :| BetreeCache.NextStep(k.machine.bc, s.machine.bc, s'.machine.bc, idop.bdop, vop, bstep);
-    var jstep :| JournalCache.NextStep(k.machine.jc, s.machine.jc, s'.machine.jc, idop.jdop, vop, jstep);
+    assert BetreeCache.Next(s.machine.bc, s'.machine.bc, idop.bdop, vop);
+    assert JournalCache.Next(s.machine.jc, s'.machine.jc, idop.jdop, vop);
+    var bstep :| BetreeCache.NextStep(s.machine.bc, s'.machine.bc, idop.bdop, vop, bstep);
+    var jstep :| JournalCache.NextStep(s.machine.jc, s'.machine.jc, idop.jdop, vop, jstep);
     assert bstep.BlockCacheMoveStep?;
     var bcstep := bstep.blockCacheStep;
 
@@ -93,51 +85,51 @@ module ByteSystem refines AsyncDiskModel {
       overlappingLocsSameType(loc1, loc);
       if ValidNodeLocation(loc) {
         BlockSystem.NewRequestReadNodeDoesntOverlap(
-            Ik(k).bs, I(k, s).bs, I(k, s').bs, idop.bdop, vop, bcstep, id1);
+            I(s).bs, I(s').bs, idop.bdop, vop, bcstep, id1);
       }
       else if ValidIndirectionTableLocation(loc) {
         //assert ReqReadIndirectionTables(s'.disk)
         //    == ReqReadIndirectionTables(s.disk)[dop.id := loc];
         BlockSystem.NewRequestReadIndirectionTableDoesntOverlap(
-            Ik(k).bs, I(k, s).bs, I(k, s').bs, idop.bdop, vop, bcstep, id1);
+            I(s).bs, I(s').bs, idop.bdop, vop, bcstep, id1);
       }
       else if ValidJournalLocation(loc) {
         JournalSystem.NewRequestReadJournalDoesntOverlap(
-            Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep, id1);
+            I(s).js, I(s').js, idop.jdop, vop, jstep, id1);
       }
       else if ValidSuperblockLocation(loc) {
         JournalSystem.NewRequestReadSuperblockDoesntOverlap(
-            Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep);
+            I(s).js, I(s').js, idop.jdop, vop, jstep);
       }
     }
 
     if ValidNodeLocation(loc) {
       BlockSystem.NewRequestReadNodeIsValid(
-        Ik(k).bs, I(k, s).bs, I(k, s').bs, idop.bdop, vop, bcstep);
+        I(s).bs, I(s').bs, idop.bdop, vop, bcstep);
     }
     else if ValidIndirectionTableLocation(loc) {
       BlockSystem.NewRequestReadIndirectionTableIsValid(
-        Ik(k).bs, I(k, s).bs, I(k, s').bs, idop.bdop, vop, bcstep);
+        I(s).bs, I(s').bs, idop.bdop, vop, bcstep);
     }
     else if ValidJournalLocation(loc) {
       JournalSystem.NewRequestReadJournalIsValid(
-        Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep);
+        I(s).js, I(s').js, idop.jdop, vop, jstep);
     }
     else if ValidSuperblockLocation(loc) {
       JournalSystem.NewRequestReadSuperblockIsValid(
-        Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep);
+        I(s).js, I(s').js, idop.jdop, vop, jstep);
     }
 
-    RefinesReqReadOp(k.disk, s.disk, s'.disk, dop);
+    RefinesReqReadOp(s.disk, s'.disk, dop);
 
-   /* assert BlockSystem.Machine(Ik(k).bs, I(k,s).bs, I(k,s').bs, idop.bdop, vop, bcstep);
-    assert BlockSystem.NextStep(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop, BlockSystem.MachineStep(idop.bdop, bcstep));
-    assert BlockSystem.Next(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop);*/
+   /* assert BlockSystem.Machine(I(s).bs, I(s').bs, idop.bdop, vop, bcstep);
+    assert BlockSystem.NextStep(I(s).bs, I(s').bs, vop, BlockSystem.MachineStep(idop.bdop, bcstep));
+    assert BlockSystem.Next(I(s).bs, I(s').bs, vop);*/
 
-    assert BetreeCache.Next(Ik(k).bs.machine, I(k,s).bs.machine, I(k,s').bs.machine, idop.bdop, vop);
-    assert BetreeSystem.Machine(Ik(k).bs, I(k,s).bs, I(k,s').bs, idop.bdop, vop);
-    assert BetreeSystem.NextStep(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop, BetreeSystem.MachineStep(idop.bdop));
-    assert BetreeSystem.Next(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop);
+    assert BetreeCache.Next(I(s).bs.machine, I(s').bs.machine, idop.bdop, vop);
+    assert BetreeSystem.Machine(I(s).bs, I(s').bs, idop.bdop, vop);
+    assert BetreeSystem.NextStep(I(s).bs, I(s').bs, vop, BetreeSystem.MachineStep(idop.bdop));
+    assert BetreeSystem.Next(I(s).bs, I(s').bs, vop);
 
     if ValidJournalLocation(loc) {
       /*assert ReqReadJournals(s'.disk)
@@ -146,34 +138,34 @@ module ByteSystem refines AsyncDiskModel {
           == ReqReadSuperblock1(s.disk);
       assert ReqReadSuperblock2(s'.disk)
           == ReqReadSuperblock2(s.disk);*/
-      assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
+      assert JournalSystem.Machine(I(s).js, I(s').js, idop.jdop, vop, jstep);
     } else if ValidSuperblockLocation(loc) {
-      assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
+      assert JournalSystem.Machine(I(s).js, I(s').js, idop.jdop, vop, jstep);
     } else {
-      assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
+      assert JournalSystem.Machine(I(s).js, I(s').js, idop.jdop, vop, jstep);
     }
 
-    assert JournalSystem.NextStep(Ik(k).js, I(k,s).js, I(k,s').js, vop, JournalSystem.MachineStep(idop.jdop, jstep));
-    assert JournalSystem.Next(Ik(k).js, I(k,s).js, I(k,s').js, vop);
+    assert JournalSystem.NextStep(I(s).js, I(s').js, vop, JournalSystem.MachineStep(idop.jdop, jstep));
+    assert JournalSystem.Next(I(s).js, I(s').js, vop);
 
-    assert BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop);
-    BetreeJournalSystem.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
+    assert BetreeJournalSystem.Next(I(s), I(s'), uiop);
+    BetreeJournalSystem.NextPreservesInv(I(s), I(s'), uiop);
   }
 
-  lemma ReqWriteStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
-    requires Inv(k, s)
-    requires Machine(k, s, s', uiop, dop)
+  lemma ReqWriteStepPreservesInv(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+    requires Inv(s)
+    requires Machine(s, s', uiop, dop)
     requires dop.ReqWriteOp?
-    ensures BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop)
-    ensures Inv(k, s')
+    ensures BetreeJournalSystem.Next(I(s), I(s'), uiop)
+    ensures Inv(s')
   {
     var idop := IDiskOp(dop);
-    var vop :| BJC.NextStep(k.machine, s.machine, s'.machine,
+    var vop :| BJC.NextStep(s.machine, s'.machine,
         uiop, idop, vop);
-    assert BetreeCache.Next(k.machine.bc, s.machine.bc, s'.machine.bc, idop.bdop, vop);
-    assert JournalCache.Next(k.machine.jc, s.machine.jc, s'.machine.jc, idop.jdop, vop);
-    var bstep :| BetreeCache.NextStep(k.machine.bc, s.machine.bc, s'.machine.bc, idop.bdop, vop, bstep);
-    var jstep :| JournalCache.NextStep(k.machine.jc, s.machine.jc, s'.machine.jc, idop.jdop, vop, jstep);
+    assert BetreeCache.Next(s.machine.bc, s'.machine.bc, idop.bdop, vop);
+    assert JournalCache.Next(s.machine.jc, s'.machine.jc, idop.jdop, vop);
+    var bstep :| BetreeCache.NextStep(s.machine.bc, s'.machine.bc, idop.bdop, vop, bstep);
+    var jstep :| JournalCache.NextStep(s.machine.jc, s'.machine.jc, idop.jdop, vop, jstep);
     assert bstep.BlockCacheMoveStep?;
     var bcstep := bstep.blockCacheStep;
 
@@ -187,22 +179,22 @@ module ByteSystem refines AsyncDiskModel {
       overlappingLocsSameType(loc1, loc);
       if ValidNodeLocation(loc) {
         BlockSystem.NewRequestWriteNodeDoesntOverlap(
-            Ik(k).bs, I(k, s).bs, I(k, s').bs, idop.bdop, vop, bcstep, id1);
+            I(s).bs, I(s').bs, idop.bdop, vop, bcstep, id1);
         assert false;
       }
       else if ValidIndirectionTableLocation(loc) {
         BlockSystem.NewRequestWriteIndirectionTableDoesntOverlap(
-            Ik(k).bs, I(k, s).bs, I(k, s').bs, idop.bdop, vop, bcstep, id1);
+            I(s).bs, I(s').bs, idop.bdop, vop, bcstep, id1);
         assert false;
       }
       else if ValidJournalLocation(loc) {
         JournalSystem.NewRequestWriteJournalDoesntOverlap(
-            Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep, id1);
+            I(s).js, I(s').js, idop.jdop, vop, jstep, id1);
         assert false;
       }
       else if ValidSuperblockLocation(loc) {
         JournalSystem.NewRequestWriteSuperblockDoesntOverlap(
-            Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep);
+            I(s).js, I(s').js, idop.jdop, vop, jstep);
         assert false;
       }
     }
@@ -215,22 +207,22 @@ module ByteSystem refines AsyncDiskModel {
       overlappingLocsSameType(loc1, loc);
       if ValidNodeLocation(loc) {
         BlockSystem.NewRequestWriteNodeDoesntOverlap(
-            Ik(k).bs, I(k, s).bs, I(k, s').bs, idop.bdop, vop, bcstep, id1);
+            I(s).bs, I(s').bs, idop.bdop, vop, bcstep, id1);
         assert false;
       }
       else if ValidIndirectionTableLocation(loc) {
         BlockSystem.NewRequestWriteIndirectionTableDoesntOverlap(
-            Ik(k).bs, I(k, s).bs, I(k, s').bs, idop.bdop, vop, bcstep, id1);
+            I(s).bs, I(s').bs, idop.bdop, vop, bcstep, id1);
         assert false;
       }
       else if ValidJournalLocation(loc) {
         JournalSystem.NewRequestWriteJournalDoesntOverlap(
-            Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep, id1);
+            I(s).js, I(s').js, idop.jdop, vop, jstep, id1);
         assert false;
       }
       else if ValidSuperblockLocation(loc) {
         JournalSystem.NewRequestWriteSuperblockDoesntOverlap(
-            Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep);
+            I(s).js, I(s').js, idop.jdop, vop, jstep);
         assert false;
       }
     }
@@ -243,32 +235,32 @@ module ByteSystem refines AsyncDiskModel {
       overlappingLocsSameType(loc1, loc);
       if ValidNodeLocation(loc) {
         BlockSystem.NewRequestWriteNodeDoesntOverlapRead(
-            Ik(k).bs, I(k, s).bs, I(k, s').bs, idop.bdop, vop, bcstep, id1);
+            I(s).bs, I(s').bs, idop.bdop, vop, bcstep, id1);
         assert false;
       }
       else if ValidIndirectionTableLocation(loc) {
         BlockSystem.NewRequestWriteIndirectionTableDoesntOverlapRead(
-            Ik(k).bs, I(k, s).bs, I(k, s').bs, idop.bdop, vop, bcstep, id1);
+            I(s).bs, I(s').bs, idop.bdop, vop, bcstep, id1);
         assert false;
       }
       else if ValidJournalLocation(loc) {
         JournalSystem.NewRequestWriteJournalDoesntOverlapRead(
-            Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep, id1);
+            I(s).js, I(s').js, idop.jdop, vop, jstep, id1);
         assert false;
       }
       else if ValidSuperblockLocation(loc) {
         JournalSystem.NewRequestWriteSuperblockDoesntOverlapRead(
-            Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep);
+            I(s).js, I(s').js, idop.jdop, vop, jstep);
         assert loc == loc1;
         if idop.jdop.which == 0 {
           assert loc == Superblock1Location();
           assert loc1 == Superblock1Location();
-          assert id1 in I(k, s).js.disk.reqReadSuperblock1;
+          assert id1 in I(s).js.disk.reqReadSuperblock1;
         }
         if idop.jdop.which == 1 {
           assert loc == Superblock2Location();
           assert loc1 == Superblock2Location();
-          assert id1 in I(k, s).js.disk.reqReadSuperblock2;
+          assert id1 in I(s).js.disk.reqReadSuperblock2;
         }
         assert false;
       }
@@ -282,83 +274,83 @@ module ByteSystem refines AsyncDiskModel {
       overlappingLocsSameType(loc1, loc);
       if ValidNodeLocation(loc) {
         BlockSystem.NewRequestWriteNodeDoesntOverlapRead(
-            Ik(k).bs, I(k, s).bs, I(k, s').bs, idop.bdop, vop, bcstep, id1);
+            I(s).bs, I(s').bs, idop.bdop, vop, bcstep, id1);
         assert false;
       }
       else if ValidIndirectionTableLocation(loc) {
         BlockSystem.NewRequestWriteIndirectionTableDoesntOverlapRead(
-            Ik(k).bs, I(k, s).bs, I(k, s').bs, idop.bdop, vop, bcstep, id1);
+            I(s).bs, I(s').bs, idop.bdop, vop, bcstep, id1);
         assert false;
       }
       else if ValidJournalLocation(loc) {
         JournalSystem.NewRequestWriteJournalDoesntOverlapRead(
-            Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep, id1);
+            I(s).js, I(s').js, idop.jdop, vop, jstep, id1);
         assert false;
       }
       else if ValidSuperblockLocation(loc) {
         JournalSystem.NewRequestWriteSuperblockDoesntOverlapRead(
-            Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep);
+            I(s).js, I(s').js, idop.jdop, vop, jstep);
         assert loc == loc1;
         if idop.jdop.which == 0 {
           assert loc == Superblock1Location();
           assert loc1 == Superblock1Location();
-          assert id1 in I(k, s).js.disk.reqReadSuperblock1;
+          assert id1 in I(s).js.disk.reqReadSuperblock1;
         }
         if idop.jdop.which == 1 {
           assert loc == Superblock2Location();
           assert loc1 == Superblock2Location();
-          assert id1 in I(k, s).js.disk.reqReadSuperblock2;
+          assert id1 in I(s).js.disk.reqReadSuperblock2;
         }
         assert false;
       }
     }
 
-    RefinesReqWriteOp(k.disk, s.disk, s'.disk, dop);
+    RefinesReqWriteOp(s.disk, s'.disk, dop);
 
-    assert BlockDisk.Next(Ik(k).bs.disk,
+    assert BlockDisk.Next(
         IBlockDisk(s.disk),
         IBlockDisk(s'.disk),
         idop.bdop);
-    assert JournalDisk.Next(Ik(k).js.disk,
+    assert JournalDisk.Next(
         IJournalDisk(s.disk),
         IJournalDisk(s'.disk),
         idop.jdop);
 
-    assert BetreeCache.Next(Ik(k).bs.machine, I(k,s).bs.machine, I(k,s').bs.machine, idop.bdop, vop);
-    assert BetreeSystem.Machine(Ik(k).bs, I(k,s).bs, I(k,s').bs, idop.bdop, vop);
-    assert BetreeSystem.NextStep(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop, BetreeSystem.MachineStep(idop.bdop));
-    assert BetreeSystem.Next(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop);
+    assert BetreeCache.Next(I(s).bs.machine, I(s').bs.machine, idop.bdop, vop);
+    assert BetreeSystem.Machine(I(s).bs, I(s').bs, idop.bdop, vop);
+    assert BetreeSystem.NextStep(I(s).bs, I(s').bs, vop, BetreeSystem.MachineStep(idop.bdop));
+    assert BetreeSystem.Next(I(s).bs, I(s').bs, vop);
 
     if ValidJournalLocation(loc) {
-      assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
+      assert JournalSystem.Machine(I(s).js, I(s').js, idop.jdop, vop, jstep);
     } else if ValidSuperblockLocation(loc) {
-      assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
+      assert JournalSystem.Machine(I(s).js, I(s').js, idop.jdop, vop, jstep);
     } else {
-      assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
+      assert JournalSystem.Machine(I(s).js, I(s').js, idop.jdop, vop, jstep);
     }
 
-    assert JournalSystem.NextStep(Ik(k).js, I(k,s).js, I(k,s').js, vop, JournalSystem.MachineStep(idop.jdop, jstep));
-    assert JournalSystem.Next(Ik(k).js, I(k,s).js, I(k,s').js, vop);
+    assert JournalSystem.NextStep(I(s).js, I(s').js, vop, JournalSystem.MachineStep(idop.jdop, jstep));
+    assert JournalSystem.Next(I(s).js, I(s').js, vop);
 
-    assert BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop);
-    BetreeJournalSystem.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
+    assert BetreeJournalSystem.Next(I(s), I(s'), uiop);
+    BetreeJournalSystem.NextPreservesInv(I(s), I(s'), uiop);
 
   }
 
-  lemma ReqWrite2StepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
-    requires Inv(k, s)
-    requires Machine(k, s, s', uiop, dop)
+  lemma ReqWrite2StepPreservesInv(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+    requires Inv(s)
+    requires Machine(s, s', uiop, dop)
     requires dop.ReqWrite2Op?
-    ensures BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop)
-    ensures Inv(k, s')
+    ensures BetreeJournalSystem.Next(I(s), I(s'), uiop)
+    ensures Inv(s')
   {
     var idop := IDiskOp(dop);
-    var vop :| BJC.NextStep(k.machine, s.machine, s'.machine,
+    var vop :| BJC.NextStep(s.machine, s'.machine,
         uiop, idop, vop);
-    assert BetreeCache.Next(k.machine.bc, s.machine.bc, s'.machine.bc, idop.bdop, vop);
-    assert JournalCache.Next(k.machine.jc, s.machine.jc, s'.machine.jc, idop.jdop, vop);
-    var bstep :| BetreeCache.NextStep(k.machine.bc, s.machine.bc, s'.machine.bc, idop.bdop, vop, bstep);
-    var jstep :| JournalCache.NextStep(k.machine.jc, s.machine.jc, s'.machine.jc, idop.jdop, vop, jstep);
+    assert BetreeCache.Next(s.machine.bc, s'.machine.bc, idop.bdop, vop);
+    assert JournalCache.Next(s.machine.jc, s'.machine.jc, idop.jdop, vop);
+    var bstep :| BetreeCache.NextStep(s.machine.bc, s'.machine.bc, idop.bdop, vop, bstep);
+    var jstep :| JournalCache.NextStep(s.machine.jc, s'.machine.jc, idop.jdop, vop, jstep);
     assert bstep.BlockCacheMoveStep?;
     var bcstep := bstep.blockCacheStep;
 
@@ -381,7 +373,7 @@ module ByteSystem refines AsyncDiskModel {
 
       if ValidJournalLocation(loc) {
         JournalSystem.NewRequestWrite2JournalDoesntOverlap(
-            Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep, id);
+            I(s).js, I(s').js, idop.jdop, vop, jstep, id);
       }
     }
 
@@ -399,7 +391,7 @@ module ByteSystem refines AsyncDiskModel {
 
       if ValidJournalLocation(loc) {
         JournalSystem.NewRequestWrite2JournalDoesntOverlap(
-            Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep, id);
+            I(s).js, I(s').js, idop.jdop, vop, jstep, id);
       }
     }
 
@@ -417,7 +409,7 @@ module ByteSystem refines AsyncDiskModel {
 
       if ValidJournalLocation(loc) {
         JournalSystem.NewRequestWrite2JournalDoesntOverlapRead(
-            Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep, id);
+            I(s).js, I(s').js, idop.jdop, vop, jstep, id);
       }
     }
 
@@ -435,261 +427,261 @@ module ByteSystem refines AsyncDiskModel {
 
       if ValidJournalLocation(loc) {
         JournalSystem.NewRequestWrite2JournalDoesntOverlapRead(
-            Ik(k).js, I(k, s).js, I(k, s').js, idop.jdop, vop, jstep, id);
+            I(s).js, I(s').js, idop.jdop, vop, jstep, id);
       }
     }
 
-    RefinesReqWrite2Op(k.disk, s.disk, s'.disk, dop);
+    RefinesReqWrite2Op(s.disk, s'.disk, dop);
 
-    assert BetreeCache.Next(Ik(k).bs.machine, I(k,s).bs.machine, I(k,s').bs.machine, idop.bdop, vop);
-    assert BetreeSystem.Machine(Ik(k).bs, I(k,s).bs, I(k,s').bs, idop.bdop, vop);
-    assert BetreeSystem.NextStep(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop, BetreeSystem.MachineStep(idop.bdop));
-    assert BetreeSystem.Next(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop);
+    assert BetreeCache.Next(I(s).bs.machine, I(s').bs.machine, idop.bdop, vop);
+    assert BetreeSystem.Machine(I(s).bs, I(s').bs, idop.bdop, vop);
+    assert BetreeSystem.NextStep(I(s).bs, I(s').bs, vop, BetreeSystem.MachineStep(idop.bdop));
+    assert BetreeSystem.Next(I(s).bs, I(s').bs, vop);
 
-    assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
-    assert JournalSystem.NextStep(Ik(k).js, I(k,s).js, I(k,s').js, vop, JournalSystem.MachineStep(idop.jdop, jstep));
-    assert JournalSystem.Next(Ik(k).js, I(k,s).js, I(k,s').js, vop);
+    assert JournalSystem.Machine(I(s).js, I(s').js, idop.jdop, vop, jstep);
+    assert JournalSystem.NextStep(I(s).js, I(s').js, vop, JournalSystem.MachineStep(idop.jdop, jstep));
+    assert JournalSystem.Next(I(s).js, I(s').js, vop);
 
-    assert BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop);
-    BetreeJournalSystem.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
+    assert BetreeJournalSystem.Next(I(s), I(s'), uiop);
+    BetreeJournalSystem.NextPreservesInv(I(s), I(s'), uiop);
   }
 
-  lemma RespReadStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
-    requires Inv(k, s)
-    requires Machine(k, s, s', uiop, dop)
+  lemma RespReadStepPreservesInv(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+    requires Inv(s)
+    requires Machine(s, s', uiop, dop)
     requires dop.RespReadOp?
-    ensures BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop)
-    ensures Inv(k, s')
+    ensures BetreeJournalSystem.Next(I(s), I(s'), uiop)
+    ensures Inv(s')
   {
     var idop := IDiskOp(dop);
-    var vop :| BJC.NextStep(k.machine, s.machine, s'.machine,
+    var vop :| BJC.NextStep(s.machine, s'.machine,
         uiop, idop, vop);
-    assert BetreeCache.Next(k.machine.bc, s.machine.bc, s'.machine.bc, idop.bdop, vop);
-    assert JournalCache.Next(k.machine.jc, s.machine.jc, s'.machine.jc, idop.jdop, vop);
-    var bstep :| BetreeCache.NextStep(k.machine.bc, s.machine.bc, s'.machine.bc, idop.bdop, vop, bstep);
-    var jstep :| JournalCache.NextStep(k.machine.jc, s.machine.jc, s'.machine.jc, idop.jdop, vop, jstep);
+    assert BetreeCache.Next(s.machine.bc, s'.machine.bc, idop.bdop, vop);
+    assert JournalCache.Next(s.machine.jc, s'.machine.jc, idop.jdop, vop);
+    var bstep :| BetreeCache.NextStep(s.machine.bc, s'.machine.bc, idop.bdop, vop, bstep);
+    var jstep :| JournalCache.NextStep(s.machine.jc, s'.machine.jc, idop.jdop, vop, jstep);
     assert bstep.BlockCacheMoveStep?;
     var bcstep := bstep.blockCacheStep;
 
-    RefinesRespReadOp(k.disk, s.disk, s'.disk, dop);
+    RefinesRespReadOp(s.disk, s'.disk, dop);
 
-    assert BetreeCache.Next(Ik(k).bs.machine, I(k,s).bs.machine, I(k,s').bs.machine, idop.bdop, vop);
-    assert BetreeSystem.Machine(Ik(k).bs, I(k,s).bs, I(k,s').bs, idop.bdop, vop);
-    assert BetreeSystem.NextStep(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop, BetreeSystem.MachineStep(idop.bdop));
-    assert BetreeSystem.Next(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop);
+    assert BetreeCache.Next(I(s).bs.machine, I(s').bs.machine, idop.bdop, vop);
+    assert BetreeSystem.Machine(I(s).bs, I(s').bs, idop.bdop, vop);
+    assert BetreeSystem.NextStep(I(s).bs, I(s').bs, vop, BetreeSystem.MachineStep(idop.bdop));
+    assert BetreeSystem.Next(I(s).bs, I(s').bs, vop);
 
-    assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
-    assert JournalSystem.NextStep(Ik(k).js, I(k,s).js, I(k,s').js, vop, JournalSystem.MachineStep(idop.jdop, jstep));
-    assert JournalSystem.Next(Ik(k).js, I(k,s).js, I(k,s').js, vop);
+    assert JournalSystem.Machine(I(s).js, I(s').js, idop.jdop, vop, jstep);
+    assert JournalSystem.NextStep(I(s).js, I(s').js, vop, JournalSystem.MachineStep(idop.jdop, jstep));
+    assert JournalSystem.Next(I(s).js, I(s').js, vop);
 
-    assert BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop);
-    BetreeJournalSystem.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
+    assert BetreeJournalSystem.Next(I(s), I(s'), uiop);
+    BetreeJournalSystem.NextPreservesInv(I(s), I(s'), uiop);
   }
 
-  lemma RespWriteStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
-    requires Inv(k, s)
-    requires Machine(k, s, s', uiop, dop)
+  lemma RespWriteStepPreservesInv(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+    requires Inv(s)
+    requires Machine(s, s', uiop, dop)
     requires dop.RespWriteOp?
-    ensures BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop)
-    ensures Inv(k, s')
+    ensures BetreeJournalSystem.Next(I(s), I(s'), uiop)
+    ensures Inv(s')
   {
     var idop := IDiskOp(dop);
-    var vop :| BJC.NextStep(k.machine, s.machine, s'.machine,
+    var vop :| BJC.NextStep(s.machine, s'.machine,
         uiop, idop, vop);
-    assert BetreeCache.Next(k.machine.bc, s.machine.bc, s'.machine.bc, idop.bdop, vop);
-    assert JournalCache.Next(k.machine.jc, s.machine.jc, s'.machine.jc, idop.jdop, vop);
-    var bstep :| BetreeCache.NextStep(k.machine.bc, s.machine.bc, s'.machine.bc, idop.bdop, vop, bstep);
-    var jstep :| JournalCache.NextStep(k.machine.jc, s.machine.jc, s'.machine.jc, idop.jdop, vop, jstep);
+    assert BetreeCache.Next(s.machine.bc, s'.machine.bc, idop.bdop, vop);
+    assert JournalCache.Next(s.machine.jc, s'.machine.jc, idop.jdop, vop);
+    var bstep :| BetreeCache.NextStep(s.machine.bc, s'.machine.bc, idop.bdop, vop, bstep);
+    var jstep :| JournalCache.NextStep(s.machine.jc, s'.machine.jc, idop.jdop, vop, jstep);
     assert bstep.BlockCacheMoveStep?;
     var bcstep := bstep.blockCacheStep;
 
-    RefinesRespWriteOp(k.disk, s.disk, s'.disk, dop);
+    RefinesRespWriteOp(s.disk, s'.disk, dop);
 
-    assert BetreeCache.Next(Ik(k).bs.machine, I(k,s).bs.machine, I(k,s').bs.machine, idop.bdop, vop);
-    assert BetreeSystem.Machine(Ik(k).bs, I(k,s).bs, I(k,s').bs, idop.bdop, vop);
-    assert BetreeSystem.NextStep(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop, BetreeSystem.MachineStep(idop.bdop));
-    assert BetreeSystem.Next(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop);
+    assert BetreeCache.Next(I(s).bs.machine, I(s').bs.machine, idop.bdop, vop);
+    assert BetreeSystem.Machine(I(s).bs, I(s').bs, idop.bdop, vop);
+    assert BetreeSystem.NextStep(I(s).bs, I(s').bs, vop, BetreeSystem.MachineStep(idop.bdop));
+    assert BetreeSystem.Next(I(s).bs, I(s').bs, vop);
 
-    assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
-    assert JournalSystem.NextStep(Ik(k).js, I(k,s).js, I(k,s').js, vop, JournalSystem.MachineStep(idop.jdop, jstep));
-    assert JournalSystem.Next(Ik(k).js, I(k,s).js, I(k,s').js, vop);
+    assert JournalSystem.Machine(I(s).js, I(s').js, idop.jdop, vop, jstep);
+    assert JournalSystem.NextStep(I(s).js, I(s').js, vop, JournalSystem.MachineStep(idop.jdop, jstep));
+    assert JournalSystem.Next(I(s).js, I(s').js, vop);
 
-    assert BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop);
-    BetreeJournalSystem.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
+    assert BetreeJournalSystem.Next(I(s), I(s'), uiop);
+    BetreeJournalSystem.NextPreservesInv(I(s), I(s'), uiop);
   }
 
-  lemma NoDiskOpStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
-    requires Inv(k, s)
-    requires Machine(k, s, s', uiop, dop)
+  lemma NoDiskOpStepPreservesInv(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+    requires Inv(s)
+    requires Machine(s, s', uiop, dop)
     requires dop.NoDiskOp?
-    ensures BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop)
-    ensures Inv(k, s')
+    ensures BetreeJournalSystem.Next(I(s), I(s'), uiop)
+    ensures Inv(s')
   {
     var idop := IDiskOp(dop);
-    var vop :| BJC.NextStep(k.machine, s.machine, s'.machine,
+    var vop :| BJC.NextStep(s.machine, s'.machine,
         uiop, idop, vop);
-    assert BetreeCache.Next(k.machine.bc, s.machine.bc, s'.machine.bc, idop.bdop, vop);
-    assert JournalCache.Next(k.machine.jc, s.machine.jc, s'.machine.jc, idop.jdop, vop);
-    var bstep :| BetreeCache.NextStep(k.machine.bc, s.machine.bc, s'.machine.bc, idop.bdop, vop, bstep);
-    var jstep :| JournalCache.NextStep(k.machine.jc, s.machine.jc, s'.machine.jc, idop.jdop, vop, jstep);
+    assert BetreeCache.Next(s.machine.bc, s'.machine.bc, idop.bdop, vop);
+    assert JournalCache.Next(s.machine.jc, s'.machine.jc, idop.jdop, vop);
+    var bstep :| BetreeCache.NextStep(s.machine.bc, s'.machine.bc, idop.bdop, vop, bstep);
+    var jstep :| JournalCache.NextStep(s.machine.jc, s'.machine.jc, idop.jdop, vop, jstep);
     //assert bstep.BlockCacheMoveStep?;
     //var bcstep := bstep.blockCacheStep;
 
-    RefinesStutterOp(k.disk, s.disk, s'.disk, dop);
+    RefinesStutterOp(s.disk, s'.disk, dop);
 
-    assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, idop.jdop, vop, jstep);
-    assert JournalSystem.NextStep(Ik(k).js, I(k,s).js, I(k,s').js, vop, JournalSystem.MachineStep(idop.jdop, jstep));
-    assert JournalSystem.Next(Ik(k).js, I(k,s).js, I(k,s').js, vop);
+    assert JournalSystem.Machine(I(s).js, I(s').js, idop.jdop, vop, jstep);
+    assert JournalSystem.NextStep(I(s).js, I(s').js, vop, JournalSystem.MachineStep(idop.jdop, jstep));
+    assert JournalSystem.Next(I(s).js, I(s').js, vop);
 
-    assert BetreeCache.Next(Ik(k).bs.machine, I(k,s).bs.machine, I(k,s').bs.machine, idop.bdop, vop);
-    BetreeJournalSystem.OkaySendPersistentLocStep(Ik(k), I(k, s), I(k, s'), vop);
-    assert BetreeSystem.Machine(Ik(k).bs, I(k,s).bs, I(k,s').bs, idop.bdop, vop);
-    assert BetreeSystem.NextStep(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop, BetreeSystem.MachineStep(idop.bdop));
-    assert BetreeSystem.Next(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop);
+    assert BetreeCache.Next(I(s).bs.machine, I(s').bs.machine, idop.bdop, vop);
+    BetreeJournalSystem.OkaySendPersistentLocStep(I(s), I(s'), vop);
+    assert BetreeSystem.Machine(I(s).bs, I(s').bs, idop.bdop, vop);
+    assert BetreeSystem.NextStep(I(s).bs, I(s').bs, vop, BetreeSystem.MachineStep(idop.bdop));
+    assert BetreeSystem.Next(I(s).bs, I(s').bs, vop);
 
-    assert BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop);
-    BetreeJournalSystem.NextPreservesInv(Ik(k), I(k, s), I(k, s'), uiop);
+    assert BetreeJournalSystem.Next(I(s), I(s'), uiop);
+    BetreeJournalSystem.NextPreservesInv(I(s), I(s'), uiop);
   }
 
-  lemma MachineStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
-    requires Inv(k, s)
-    requires Machine(k, s, s', uiop, dop)
-    ensures BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop)
-    ensures Inv(k, s')
+  lemma MachineStepPreservesInv(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+    requires Inv(s)
+    requires Machine(s, s', uiop, dop)
+    ensures BetreeJournalSystem.Next(I(s), I(s'), uiop)
+    ensures Inv(s')
   {
     match dop {
-      case ReqReadOp(_, _) => ReqReadStepPreservesInv(k, s, s', uiop, dop);
-      case ReqWriteOp(_, _) => ReqWriteStepPreservesInv(k, s, s', uiop, dop);
-      case ReqWrite2Op(_, _, _, _) => ReqWrite2StepPreservesInv(k, s, s', uiop, dop);
-      case RespReadOp(_, _) => RespReadStepPreservesInv(k, s, s', uiop, dop);
-      case RespWriteOp(_, _) => RespWriteStepPreservesInv(k, s, s', uiop, dop);
-      case NoDiskOp => NoDiskOpStepPreservesInv(k, s, s', uiop, dop);
+      case ReqReadOp(_, _) => ReqReadStepPreservesInv(s, s', uiop, dop);
+      case ReqWriteOp(_, _) => ReqWriteStepPreservesInv(s, s', uiop, dop);
+      case ReqWrite2Op(_, _, _, _) => ReqWrite2StepPreservesInv(s, s', uiop, dop);
+      case RespReadOp(_, _) => RespReadStepPreservesInv(s, s', uiop, dop);
+      case RespWriteOp(_, _) => RespWriteStepPreservesInv(s, s', uiop, dop);
+      case NoDiskOp => NoDiskOpStepPreservesInv(s, s', uiop, dop);
     }
   }
 
-  lemma ProcessReadFailurePreservesInv(k: Constants, s: Variables, s': Variables, id: D.ReqId, fakeContents: seq<byte>)
-    requires Inv(k, s)
+  lemma ProcessReadFailurePreservesInv(s: Variables, s': Variables, id: D.ReqId, fakeContents: seq<byte>)
+    requires Inv(s)
     requires s.machine == s'.machine
-    requires D.ProcessReadFailure(k.disk, s.disk, s'.disk, id, fakeContents)
-    ensures BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), UI.NoOp)
-    ensures Inv(k, s')
+    requires D.ProcessReadFailure(s.disk, s'.disk, id, fakeContents)
+    ensures BetreeJournalSystem.Next(I(s), I(s'), UI.NoOp)
+    ensures Inv(s')
   {
-    RefinesProcessRead(k.disk, s.disk, s'.disk, id, fakeContents);
+    RefinesProcessRead(s.disk, s'.disk, id, fakeContents);
 
     var vop := StatesInternalOp;
     var jstep := JournalCache.NoOpStep;
     var bstep := BC.NoOpStep;
 
-    assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, JournalDisk.NoDiskOp, vop, jstep);
-    assert JournalSystem.NextStep(Ik(k).js, I(k,s).js, I(k,s').js, vop, JournalSystem.MachineStep(JournalDisk.NoDiskOp, jstep));
-    assert JournalSystem.Next(Ik(k).js, I(k,s).js, I(k,s').js, vop);
+    assert JournalSystem.Machine(I(s).js, I(s').js, JournalDisk.NoDiskOp, vop, jstep);
+    assert JournalSystem.NextStep(I(s).js, I(s').js, vop, JournalSystem.MachineStep(JournalDisk.NoDiskOp, jstep));
+    assert JournalSystem.Next(I(s).js, I(s').js, vop);
 
-    assert BetreeCache.NextStep(Ik(k).bs.machine, I(k,s).bs.machine, I(k,s').bs.machine, BlockDisk.NoDiskOp, vop, BetreeCache.BlockCacheMoveStep(bstep));
-    assert BetreeCache.Next(Ik(k).bs.machine, I(k,s).bs.machine, I(k,s').bs.machine, BlockDisk.NoDiskOp, vop);
-    assert BetreeSystem.Machine(Ik(k).bs, I(k,s).bs, I(k,s').bs, BlockDisk.NoDiskOp, vop);
-    assert BetreeSystem.NextStep(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop, BetreeSystem.MachineStep(BlockDisk.NoDiskOp));
-    assert BetreeSystem.Next(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop);
+    assert BetreeCache.NextStep(I(s).bs.machine, I(s').bs.machine, BlockDisk.NoDiskOp, vop, BetreeCache.BlockCacheMoveStep(bstep));
+    assert BetreeCache.Next(I(s).bs.machine, I(s').bs.machine, BlockDisk.NoDiskOp, vop);
+    assert BetreeSystem.Machine(I(s).bs, I(s').bs, BlockDisk.NoDiskOp, vop);
+    assert BetreeSystem.NextStep(I(s).bs, I(s').bs, vop, BetreeSystem.MachineStep(BlockDisk.NoDiskOp));
+    assert BetreeSystem.Next(I(s).bs, I(s').bs, vop);
 
-    assert BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), UI.NoOp);
-    BetreeJournalSystem.NextPreservesInv(Ik(k), I(k, s), I(k, s'), UI.NoOp);
+    assert BetreeJournalSystem.Next(I(s), I(s'), UI.NoOp);
+    BetreeJournalSystem.NextPreservesInv(I(s), I(s'), UI.NoOp);
   }
 
-  lemma ProcessWritePreservesInv(k: Constants, s: Variables, s': Variables, id: D.ReqId)
-    requires Inv(k, s)
+  lemma ProcessWritePreservesInv(s: Variables, s': Variables, id: D.ReqId)
+    requires Inv(s)
     requires s.machine == s'.machine
-    requires D.ProcessWrite(k.disk, s.disk, s'.disk, id)
-    ensures BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), UI.NoOp)
-    ensures Inv(k, s')
+    requires D.ProcessWrite(s.disk, s'.disk, id)
+    ensures BetreeJournalSystem.Next(I(s), I(s'), UI.NoOp)
+    ensures Inv(s')
   {
-    RefinesProcessWrite(k.disk, s.disk, s'.disk, id);
+    RefinesProcessWrite(s.disk, s'.disk, id);
 
     var vop := JournalInternalOp;
     var bstep := BC.NoOpStep;
 
     if IJournalDisk(s.disk) == IJournalDisk(s'.disk) {
       var jstep := JournalCache.NoOpStep;
-      assert JournalSystem.Machine(Ik(k).js, I(k,s).js, I(k,s').js, JournalDisk.NoDiskOp, vop, jstep);
-      assert JournalSystem.NextStep(Ik(k).js, I(k,s).js, I(k,s').js, vop, JournalSystem.MachineStep(JournalDisk.NoDiskOp, jstep));
-      assert JournalSystem.Next(Ik(k).js, I(k,s).js, I(k,s').js, vop);
+      assert JournalSystem.Machine(I(s).js, I(s').js, JournalDisk.NoDiskOp, vop, jstep);
+      assert JournalSystem.NextStep(I(s).js, I(s').js, vop, JournalSystem.MachineStep(JournalDisk.NoDiskOp, jstep));
+      assert JournalSystem.Next(I(s).js, I(s').js, vop);
     } else {
       var which :| (which == 0 || which == 1) &&
-        JournalDisk.ProcessWriteSuperblock(JournalDisk.Constants(),   
+        JournalDisk.ProcessWriteSuperblock(
           IJournalDisk(s.disk), IJournalDisk(s'.disk), which);
       var diskStep := JournalDisk.ProcessWriteSuperblockStep(which);
-      assert JournalSystem.DiskInternal(Ik(k).js, I(k,s).js, I(k,s').js, diskStep, vop);
-      assert JournalSystem.NextStep(Ik(k).js, I(k,s).js, I(k,s').js, vop, JournalSystem.DiskInternalStep(diskStep));
-      assert JournalSystem.Next(Ik(k).js, I(k,s).js, I(k,s').js, vop);
+      assert JournalSystem.DiskInternal(I(s).js, I(s').js, diskStep, vop);
+      assert JournalSystem.NextStep(I(s).js, I(s').js, vop, JournalSystem.DiskInternalStep(diskStep));
+      assert JournalSystem.Next(I(s).js, I(s').js, vop);
     }
 
-    assert BetreeCache.NextStep(Ik(k).bs.machine, I(k,s).bs.machine, I(k,s').bs.machine, BlockDisk.NoDiskOp, vop, BetreeCache.BlockCacheMoveStep(bstep));
-    assert BetreeCache.Next(Ik(k).bs.machine, I(k,s).bs.machine, I(k,s').bs.machine, BlockDisk.NoDiskOp, vop);
-    assert BetreeSystem.Machine(Ik(k).bs, I(k,s).bs, I(k,s').bs, BlockDisk.NoDiskOp, vop);
-    assert BetreeSystem.NextStep(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop, BetreeSystem.MachineStep(BlockDisk.NoDiskOp));
-    assert BetreeSystem.Next(Ik(k).bs, I(k,s).bs, I(k,s').bs, vop);
+    assert BetreeCache.NextStep(I(s).bs.machine, I(s').bs.machine, BlockDisk.NoDiskOp, vop, BetreeCache.BlockCacheMoveStep(bstep));
+    assert BetreeCache.Next(I(s).bs.machine, I(s').bs.machine, BlockDisk.NoDiskOp, vop);
+    assert BetreeSystem.Machine(I(s).bs, I(s').bs, BlockDisk.NoDiskOp, vop);
+    assert BetreeSystem.NextStep(I(s).bs, I(s').bs, vop, BetreeSystem.MachineStep(BlockDisk.NoDiskOp));
+    assert BetreeSystem.Next(I(s).bs, I(s').bs, vop);
 
-    assert BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), UI.NoOp);
-    BetreeJournalSystem.NextPreservesInv(Ik(k), I(k, s), I(k, s'), UI.NoOp);
+    assert BetreeJournalSystem.Next(I(s), I(s'), UI.NoOp);
+    BetreeJournalSystem.NextPreservesInv(I(s), I(s'), UI.NoOp);
   }
 
-  lemma DiskInternalStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: D.InternalStep)
-    requires Inv(k, s)
-    requires DiskInternal(k, s, s', uiop, step)
-    ensures BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop)
-    ensures Inv(k, s')
+  lemma DiskInternalStepPreservesInv(s: Variables, s': Variables, uiop: UIOp, step: D.InternalStep)
+    requires Inv(s)
+    requires DiskInternal(s, s', uiop, step)
+    ensures BetreeJournalSystem.Next(I(s), I(s'), uiop)
+    ensures Inv(s')
   {
     match step {
-      case ProcessReadFailureStep(id, fakeContents) => ProcessReadFailurePreservesInv(k, s, s', id, fakeContents);
-      case ProcessWriteStep(id) => ProcessWritePreservesInv(k, s, s', id);
-      case HavocConflictingWritesStep(id, id') => RefinesHavocConflictingWrites(k.disk, s.disk, s'.disk, id, id');
-      case HavocConflictingWriteReadStep(id, id') => RefinesHavocConflictingWriteRead(k.disk, s.disk, s'.disk, id, id');
+      case ProcessReadFailureStep(id, fakeContents) => ProcessReadFailurePreservesInv(s, s', id, fakeContents);
+      case ProcessWriteStep(id) => ProcessWritePreservesInv(s, s', id);
+      case HavocConflictingWritesStep(id, id') => RefinesHavocConflictingWrites(s.disk, s'.disk, id, id');
+      case HavocConflictingWriteReadStep(id, id') => RefinesHavocConflictingWriteRead(s.disk, s'.disk, id, id');
     }
   }
 
-  lemma CrashStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
-    requires Inv(k, s)
-    requires Crash(k, s, s', uiop)
-    ensures BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop)
-    ensures Inv(k, s')
+  lemma CrashStepPreservesInv(s: Variables, s': Variables, uiop: UIOp)
+    requires Inv(s)
+    requires Crash(s, s', uiop)
+    ensures BetreeJournalSystem.Next(I(s), I(s'), uiop)
+    ensures Inv(s')
   {
-    RefinesCrash(k.disk, s.disk, s'.disk);
+    RefinesCrash(s.disk, s'.disk);
 
     var vop := StatesInternalOp;
     var jstep := JournalCache.NoOpStep;
     var bstep := BC.NoOpStep;
 
-    assert JournalSystem.Crash(Ik(k).js, I(k,s).js, I(k,s').js, CrashOp);
-    assert JournalSystem.NextStep(Ik(k).js, I(k,s).js, I(k,s').js, CrashOp, JournalSystem.CrashStep);
-    assert JournalSystem.Next(Ik(k).js, I(k,s).js, I(k,s').js, CrashOp);
+    assert JournalSystem.Crash(I(s).js, I(s').js, CrashOp);
+    assert JournalSystem.NextStep(I(s).js, I(s').js, CrashOp, JournalSystem.CrashStep);
+    assert JournalSystem.Next(I(s).js, I(s').js, CrashOp);
 
-    assert BetreeSystem.Crash(Ik(k).bs, I(k,s).bs, I(k,s').bs, CrashOp);
-    assert BetreeSystem.NextStep(Ik(k).bs, I(k,s).bs, I(k,s').bs, CrashOp, BetreeSystem.CrashStep);
-    assert BetreeSystem.Next(Ik(k).bs, I(k,s).bs, I(k,s').bs, CrashOp);
+    assert BetreeSystem.Crash(I(s).bs, I(s').bs, CrashOp);
+    assert BetreeSystem.NextStep(I(s).bs, I(s').bs, CrashOp, BetreeSystem.CrashStep);
+    assert BetreeSystem.Next(I(s).bs, I(s').bs, CrashOp);
 
-    assert BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), UI.CrashOp);
-    BetreeJournalSystem.NextPreservesInv(Ik(k), I(k, s), I(k, s'), UI.CrashOp);
+    assert BetreeJournalSystem.Next(I(s), I(s'), UI.CrashOp);
+    BetreeJournalSystem.NextPreservesInv(I(s), I(s'), UI.CrashOp);
 
   }
 
-  lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp, step: Step)
-    requires Inv(k, s)
-    requires NextStep(k, s, s', uiop, step)
-    ensures BetreeJournalSystem.Next(Ik(k), I(k, s), I(k, s'), uiop)
-    ensures Inv(k, s')
+  lemma NextStepPreservesInv(s: Variables, s': Variables, uiop: UIOp, step: Step)
+    requires Inv(s)
+    requires NextStep(s, s', uiop, step)
+    ensures BetreeJournalSystem.Next(I(s), I(s'), uiop)
+    ensures Inv(s')
   {
     match step {
-      case MachineStep(dop) => MachineStepPreservesInv(k, s, s', uiop, dop);
-      case DiskInternalStep(step) => DiskInternalStepPreservesInv(k, s, s', uiop, step);
-      case CrashStep => CrashStepPreservesInv(k, s, s', uiop);
+      case MachineStep(dop) => MachineStepPreservesInv(s, s', uiop, dop);
+      case DiskInternalStep(step) => DiskInternalStepPreservesInv(s, s', uiop, step);
+      case CrashStep => CrashStepPreservesInv(s, s', uiop);
     }
   }
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, uiop: UIOp)
+  lemma NextPreservesInv(s: Variables, s': Variables, uiop: UIOp)
     // Inherited from abstract module:
-    //requires Inv(k, s)
-    //requires Next(k, s, s', uiop)
-    //ensures Inv(k, s')
+    //requires Inv(s)
+    //requires Next(s, s', uiop)
+    //ensures Inv(s')
   {
-    var step :| NextStep(k, s, s', uiop, step);
-    NextStepPreservesInv(k, s, s', uiop, step);
+    var step :| NextStep(s, s', uiop, step);
+    NextStepPreservesInv(s, s', uiop, step);
   }
 }

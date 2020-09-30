@@ -26,8 +26,8 @@ module LeafImpl {
     k2 := [] + k;
   }
 
-  method repivotLeaf(k: ImplConstants, s: ImplVariables, ref: BT.G.Reference, node: Node)
-  requires Inv(k, s)
+  method repivotLeaf(s: ImplVariables, ref: BT.G.Reference, node: Node)
+  requires Inv(s)
   requires s.ready
   requires ref in s.ephemeralIndirectionTable.I().graph
   requires s.cache.ptr(ref) == Some(node)
@@ -38,7 +38,7 @@ module LeafImpl {
   modifies s.Repr()
   ensures s.ready
   ensures WellUpdated(s)
-  ensures s.I() == LeafModel.repivotLeaf(Ic(k), old(s.I()), ref, old(node.I()));
+  ensures s.I() == LeafModel.repivotLeaf(old(s.I()), ref, old(node.I()));
   {
     LeafModel.reveal_repivotLeaf();
 
@@ -61,7 +61,7 @@ module LeafImpl {
 
     var newnode := new Node(pivots, None, buckets');
 
-    writeBookkeeping(k, s, ref, None);
+    writeBookkeeping(s, ref, None);
 
     assert fresh(newnode.Repr);
     assert s.cache.Repr !! newnode.Repr;
@@ -70,7 +70,7 @@ module LeafImpl {
     assert s.W();
 
     ghost var a := s.I();
-    ghost var b := LeafModel.repivotLeaf(Ic(k), old(s.I()), ref, old(node.I()));
+    ghost var b := LeafModel.repivotLeaf(old(s.I()), ref, old(node.I()));
     assert newnode.I() == old(IM.Node(pivots, None, [
           SplitBucketLeft(node.I().buckets[0], pivot),
           SplitBucketRight(node.I().buckets[0], pivot)

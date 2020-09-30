@@ -17,7 +17,7 @@ module CommitterReplayImpl {
   import opened CommitterImpl
   import JournalistImpl
 
-  method JournalReplayOne(k: ImplConstants, cm: Committer)
+  method JournalReplayOne(cm: Committer)
   requires cm.Inv()
   requires cm.status == CommitterModel.StatusReady
   requires !JournalistModel.isReplayEmpty(cm.journalist.I())
@@ -25,7 +25,7 @@ module CommitterReplayImpl {
   ensures cm.Inv()
   ensures cm.Repr == old(cm.Repr)
   ensures cm.I() == CommitterReplayModel.JournalReplayOne(
-      Ic(k), old(cm.I()))
+      old(cm.I()))
   {
     CommitterReplayModel.reveal_JournalReplayOne();
     cm.reveal_ReprInv();

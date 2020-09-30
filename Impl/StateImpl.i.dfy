@@ -287,13 +287,13 @@ module StateImpl {
     }
   }
 
-  predicate Inv(k: ImplConstants, s: Variables)
+  predicate Inv(s: Variables)
   reads s, s.persistentIndirectionTable, s.ephemeralIndirectionTable,
         s.frozenIndirectionTable, s.lru, s.cache, s.blockAllocator
   reads s.Repr()
   {
     && s.W()
-    && SM.BCInv(Ic(k), s.I())
+    && SM.BCInv(s.I())
   }
 
   twostate predicate WellUpdated(s: Variables)

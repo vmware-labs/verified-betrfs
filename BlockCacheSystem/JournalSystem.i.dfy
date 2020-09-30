@@ -24,7 +24,6 @@ module JournalSystem {
 
   type DiskOp = M.DiskOp
 
-  type Constants = AsyncSectorDiskModelConstants<M.Constants, D.Constants>
   type Variables = AsyncSectorDiskModelVariables<M.Variables, D.Variables>
 
   predicate DiskHasSuperblock1(disk: D.Variables)
@@ -267,10 +266,10 @@ module JournalSystem {
 
   ///// Init
 
-  predicate Init(k: Constants, s: Variables, loc: Location)
+  predicate Init(s: Variables, loc: Location)
   {
-    && M.Init(k.machine, s.machine)
-    && D.Init(k.disk, s.disk)
+    && M.Init(s.machine)
+    && D.Init(s.disk)
     && WFDisk(s.disk)
     && s.disk.superblock1.Some?
     && s.disk.superblock2.Some?
@@ -286,37 +285,37 @@ module JournalSystem {
     | DiskInternalStep(ghost step: D.InternalStep)
     | CrashStep
   
-  predicate Machine(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, machineStep: M.Step)
+  predicate Machine(s: Variables, s': Variables, dop: DiskOp, vop: VOp, machineStep: M.Step)
   {
-    && M.NextStep(k.machine, s.machine, s'.machine, dop, vop, machineStep)
-    && D.Next(k.disk, s.disk, s'.disk, dop)
+    && M.NextStep(s.machine, s'.machine, dop, vop, machineStep)
+    && D.Next(s.disk, s'.disk, dop)
   }
 
-  predicate DiskInternal(k: Constants, s: Variables, s': Variables, step: D.InternalStep, vop: VOp)
+  predicate DiskInternal(s: Variables, s': Variables, step: D.InternalStep, vop: VOp)
   {
     && s.machine == s'.machine
-    && D.NextInternalStep(k.disk, s.disk, s'.disk, step)
+    && D.NextInternalStep(s.disk, s'.disk, step)
     && vop.JournalInternalOp?
   }
 
-  predicate Crash(k: Constants, s: Variables, s': Variables, vop: VOp)
+  predicate Crash(s: Variables, s': Variables, vop: VOp)
   {
     && vop.CrashOp?
-    && M.Init(k.machine, s'.machine)
-    && D.Crash(k.disk, s.disk, s'.disk)
+    && M.Init(s'.machine)
+    && D.Crash(s.disk, s'.disk)
   }
 
-  predicate NextStep(k: Constants, s: Variables, s': Variables, vop: VOp, step: Step)
+  predicate NextStep(s: Variables, s': Variables, vop: VOp, step: Step)
   {
     match step {
-      case MachineStep(dop, machineStep) => Machine(k, s, s', dop, vop, machineStep)
-      case DiskInternalStep(step) => DiskInternal(k, s, s', step, vop)
-      case CrashStep => Crash(k, s, s', vop)
+      case MachineStep(dop, machineStep) => Machine(s, s', dop, vop, machineStep)
+      case DiskInternalStep(step) => DiskInternal(s, s', step, vop)
+      case CrashStep => Crash(s, s', vop)
     }
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, vop: VOp) {
-    exists step :: NextStep(k, s, s', vop, step)
+  predicate Next(s: Variables, s': Variables, vop: VOp) {
+    exists step :: NextStep(s, s', vop, step)
   }
 
   ////// Invariants
@@ -324,7 +323,7 @@ module JournalSystem {
   // Any outstanding read we have recorded should be consistent with
   // whatever is in the queue.
 
-  predicate CorrectInflightJournalReads(k: Constants, s: Variables)
+  predicate CorrectInflightJournalReads(s: Variables)
   requires s.machine.LoadingOther?
   requires WFDisk(s.disk)
   {
@@ -345,7 +344,7 @@ module JournalSystem {
     ))
   }
 
-  predicate CorrectInflightSuperblockReads(k: Constants, s: Variables)
+  predicate CorrectInflightSuperblockReads(s: Variables)
   requires s.machine.LoadingSuperblock?
   {
     true
@@ -367,7 +366,7 @@ module JournalSystem {
   // Any outstanding write we have recorded should be consistent with
   // whatever is in the queue.
 
-  predicate CorrectInflightJournalWrite(k: Constants, s: Variables, id: D.ReqId)
+  predicate CorrectInflightJournalWrite(s: Variables, id: D.ReqId)
   requires s.machine.Ready?
   {
     && (id in s.disk.reqWriteJournals ==>
@@ -389,14 +388,14 @@ module JournalSystem {
     )
   }
 
-  predicate CorrectInflightJournalWrites(k: Constants, s: Variables)
+  predicate CorrectInflightJournalWrites(s: Variables)
   requires s.machine.Ready?
   {
     forall id | id in s.machine.outstandingJournalWrites ::
-      CorrectInflightJournalWrite(k, s, id)
+      CorrectInflightJournalWrite(s, id)
   }
 
-  predicate CorrectInflightSuperblockWrites(k: Constants, s: Variables)
+  predicate CorrectInflightSuperblockWrites(s: Variables)
   requires s.machine.Ready?
   {
     s.machine.superblockWrite.Some? ==> (
@@ -414,19 +413,19 @@ module JournalSystem {
 
   // If there's a write in progress, then the in-memory state must know about it.
 
-  predicate RecordedWriteSuperblockRequest(k: Constants, s: Variables, id: D.ReqId)
+  predicate RecordedWriteSuperblockRequest(s: Variables, id: D.ReqId)
   {
     && s.machine.Ready?
     && s.machine.superblockWrite == Some(id)
   }
 
-  predicate RecordedWriteJournalRequest(k: Constants, s: Variables, id: D.ReqId)
+  predicate RecordedWriteJournalRequest(s: Variables, id: D.ReqId)
   {
     && s.machine.Ready?
     && id in s.machine.outstandingJournalWrites
   }
 
-  predicate RecordedReadSuperblockRequest(k: Constants, s: Variables, id: D.ReqId)
+  predicate RecordedReadSuperblockRequest(s: Variables, id: D.ReqId)
   {
     && s.machine.LoadingSuperblock?
     && (
@@ -435,7 +434,7 @@ module JournalSystem {
     )
   }
 
-  predicate RecordedReadJournalRequest(k: Constants, s: Variables, id: D.ReqId)
+  predicate RecordedReadJournalRequest(s: Variables, id: D.ReqId)
   {
     && s.machine.LoadingOther?
     && (
@@ -444,13 +443,13 @@ module JournalSystem {
     )
   }
 
-  predicate RecordedWriteSuperblockRequests(k: Constants, s: Variables)
+  predicate RecordedWriteSuperblockRequests(s: Variables)
   {
     && (s.disk.reqWriteSuperblock1.Some? ==>
-      RecordedWriteSuperblockRequest(k, s, s.disk.reqWriteSuperblock1.value.id)
+      RecordedWriteSuperblockRequest(s, s.disk.reqWriteSuperblock1.value.id)
     )
     && (s.disk.reqWriteSuperblock2.Some? ==>
-      RecordedWriteSuperblockRequest(k, s, s.disk.reqWriteSuperblock2.value.id)
+      RecordedWriteSuperblockRequest(s, s.disk.reqWriteSuperblock2.value.id)
     )
     && (s.disk.reqWriteSuperblock1.Some? ==>
         s.disk.reqWriteSuperblock2.Some? ==>
@@ -459,25 +458,25 @@ module JournalSystem {
     )
   }
 
-  predicate RecordedReadSuperblockRequests(k: Constants, s: Variables)
+  predicate RecordedReadSuperblockRequests(s: Variables)
   {
     && (forall id | id in s.disk.reqReadSuperblock1 ::
-      RecordedReadSuperblockRequest(k, s, id)
+      RecordedReadSuperblockRequest(s, id)
     )
     && (forall id | id in s.disk.reqReadSuperblock2 ::
-      RecordedReadSuperblockRequest(k, s, id)
+      RecordedReadSuperblockRequest(s, id)
     )
     && s.disk.reqReadSuperblock1 !! s.disk.reqReadSuperblock2
   }
 
-  predicate RecordedWriteJournalRequests(k: Constants, s: Variables)
+  predicate RecordedWriteJournalRequests(s: Variables)
   {
-    forall id | id in s.disk.reqWriteJournals :: RecordedWriteJournalRequest(k, s, id)
+    forall id | id in s.disk.reqWriteJournals :: RecordedWriteJournalRequest(s, id)
   }
 
-  predicate RecordedReadJournalRequests(k: Constants, s: Variables)
+  predicate RecordedReadJournalRequests(s: Variables)
   {
-    forall id | id in s.disk.reqReadJournals :: RecordedReadJournalRequest(k, s, id)
+    forall id | id in s.disk.reqReadJournals :: RecordedReadJournalRequest(s, id)
   }
 
   predicate WriteJournalRequestsDontOverlap(reqWrites: map<D.ReqId, JournalInterval>)
@@ -497,16 +496,16 @@ module JournalSystem {
         !journalIntervalOverlap(reqReads[id1], reqWrites[id2]))
   }
 
-  protected predicate Inv(k: Constants, s: Variables)
-  ensures Inv(k, s) ==>
+  protected predicate Inv(s: Variables)
+  ensures Inv(s) ==>
     && WFPersistentJournal(s)
     && WFFrozenJournal(s)
     && WFEphemeralJournal(s)
     && WFGammaJournal(s)
     && WFPersistentLoc(s)
-    && M.Inv(k.machine, s.machine)
+    && M.Inv(s.machine)
   {
-    && M.Inv(k.machine, s.machine)
+    && M.Inv(s.machine)
     && WFDisk(s.disk)
     && s.disk.superblock1.Some?
     && s.disk.superblock2.Some?
@@ -522,8 +521,8 @@ module JournalSystem {
                 s.machine.frozenLoc.value
         ))
       )
-      && CorrectInflightJournalWrites(k, s)
-      && CorrectInflightSuperblockWrites(k, s)
+      && CorrectInflightJournalWrites(s)
+      && CorrectInflightSuperblockWrites(s)
       && (s.machine.whichSuperblock == 0 ==> (
         && s.disk.superblock1 == Some(s.machine.superblock)
       ))
@@ -532,7 +531,7 @@ module JournalSystem {
       ))
     )
     && (s.machine.LoadingSuperblock? ==>
-      && CorrectInflightSuperblockReads(k, s)
+      && CorrectInflightSuperblockReads(s)
       && (s.machine.superblock1.SuperblockSuccess? ==>
         && DiskHasSuperblock1(s.disk)
         && s.machine.superblock1.value == Superblock1OfDisk(s.disk)
@@ -546,7 +545,7 @@ module JournalSystem {
     )
     && (s.machine.LoadingOther? ==>
       && s.machine.superblock == SuperblockOfDisk(s.disk)
-      && CorrectInflightJournalReads(k, s)
+      && CorrectInflightJournalReads(s)
       && (s.machine.journalFrontRead.Some? && s.machine.journalBackRead.Some?
           ==> s.machine.journalFrontRead.value != s.machine.journalBackRead.value)
       && (s.machine.journalFront.Some? ==> (
@@ -578,10 +577,10 @@ module JournalSystem {
     )
     && WriteJournalRequestsDontOverlap(s.disk.reqWriteJournals)
     && ReadWritesJournalDontOverlap(s.disk.reqReadJournals, s.disk.reqWriteJournals)
-    && RecordedWriteSuperblockRequests(k, s)
-    && RecordedWriteJournalRequests(k, s)
-    && RecordedReadSuperblockRequests(k, s)
-    && RecordedReadJournalRequests(k, s)
+    && RecordedWriteSuperblockRequests(s)
+    && RecordedWriteJournalRequests(s)
+    && RecordedReadSuperblockRequests(s)
+    && RecordedReadJournalRequests(s)
     && WFPersistentJournal(s)
     && WFFrozenJournal(s)
     && WFEphemeralJournal(s)
@@ -595,8 +594,8 @@ module JournalSystem {
   ////////////////////// Init
   //////////////////////
 
-  lemma InitJournals(k: Constants, s: Variables, loc: Location)
-    requires Init(k, s, loc)
+  lemma InitJournals(s: Variables, loc: Location)
+    requires Init(s, loc)
     ensures WFPersistentJournal(s)
     ensures WFFrozenJournal(s)
     ensures WFEphemeralJournal(s)
@@ -614,22 +613,22 @@ module JournalSystem {
     Disk_Journal_empty(s.disk.journal, 0);
   }
 
-  lemma InitImpliesInv(k: Constants, s: Variables, loc: Location)
-    requires Init(k, s, loc)
-    ensures Inv(k, s)
+  lemma InitImpliesInv(s: Variables, loc: Location)
+    requires Init(s, loc)
+    ensures Inv(s)
     ensures loc == PersistentLoc(s)
   {
-    InitJournals(k, s, loc);
+    InitJournals(s, loc);
   }
 
   ////////////////////////////////////////////////////
   ////////////////////// WriteBackJournalReq
   //////////////////////
 
-  lemma WriteBackJournalReqStep_WriteRequestsDontOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, jr: JournalRange)
-    requires Inv(k, s)
-    requires M.WriteBackJournalReq(k.machine, s.machine, s'.machine, dop, vop, jr)
-    requires D.RecvWriteJournal(k.disk, s.disk, s'.disk, dop)
+  lemma WriteBackJournalReqStep_WriteRequestsDontOverlap(s: Variables, s': Variables, dop: DiskOp, vop: VOp, jr: JournalRange)
+    requires Inv(s)
+    requires M.WriteBackJournalReq(s.machine, s'.machine, dop, vop, jr)
+    requires D.RecvWriteJournal(s.disk, s'.disk, dop)
     ensures WriteJournalRequestsDontOverlap(s'.disk.reqWriteJournals)
   {
     /*var interval := JournalInterval(dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
@@ -663,10 +662,10 @@ module JournalSystem {
     }*/
   }
 
-  lemma WriteBackJournalReqStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, jr: JournalRange)
-    requires Inv(k, s)
-    requires M.WriteBackJournalReq(k.machine, s.machine, s'.machine, dop, vop, jr)
-    requires D.RecvWriteJournal(k.disk, s.disk, s'.disk, dop)
+  lemma WriteBackJournalReqStepPreservesJournals(s: Variables, s': Variables, dop: DiskOp, vop: VOp, jr: JournalRange)
+    requires Inv(s)
+    requires M.WriteBackJournalReq(s.machine, s'.machine, dop, vop, jr)
+    requires D.RecvWriteJournal(s.disk, s'.disk, dop)
 
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
@@ -694,7 +693,7 @@ module JournalSystem {
     assert HasUpdateOccurredUnacked(s)
         == HasUpdateOccurredUnacked(s');
 
-    WriteBackJournalReqStep_WriteRequestsDontOverlap(k, s, s', dop, vop, jr);
+    WriteBackJournalReqStep_WriteRequestsDontOverlap(s, s', dop, vop, jr);
 
     var interval := JournalInterval(dop.reqWriteJournal.start,
         |dop.reqWriteJournal.journal|);
@@ -734,21 +733,21 @@ module JournalSystem {
     }
   }
 
-  lemma WriteBackJournalReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, jr: JournalRange)
-    requires Inv(k, s)
-    requires M.WriteBackJournalReq(k.machine, s.machine, s'.machine, dop, vop, jr)
-    requires D.RecvWriteJournal(k.disk, s.disk, s'.disk, dop)
-    ensures Inv(k, s')
+  lemma WriteBackJournalReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, jr: JournalRange)
+    requires Inv(s)
+    requires M.WriteBackJournalReq(s.machine, s'.machine, dop, vop, jr)
+    requires D.RecvWriteJournal(s.disk, s'.disk, dop)
+    ensures Inv(s')
   {
     //assert s'.machine.superblockWrite == s.machine.superblockWrite;
     //assert s'.disk.reqWriteSuperblock1 == s.disk.reqWriteSuperblock1;
     //assert s'.disk.reqWriteSuperblock2 == s.disk.reqWriteSuperblock2;
     if s'.disk.reqWriteSuperblock2.Some? {
-      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+      assert RecordedWriteSuperblockRequest(s', s'.disk.reqWriteSuperblock2.value.id); // ???
     }
 
-    WriteBackJournalReqStepPreservesJournals(k, s, s', dop, vop, jr);
-    WriteBackJournalReqStep_WriteRequestsDontOverlap(k, s, s', dop, vop, jr);
+    WriteBackJournalReqStepPreservesJournals(s, s', dop, vop, jr);
+    WriteBackJournalReqStep_WriteRequestsDontOverlap(s, s', dop, vop, jr);
 
     forall id1 | id1 in s'.disk.reqReadJournals
     ensures s'.disk.reqReadJournals[id1] != s'.disk.reqWriteJournals[dop.id]
@@ -762,7 +761,7 @@ module JournalSystem {
     assert 0 <= s.machine.superblock.journalLen <= s.machine.writtenJournalLen as uint64;
 
     forall id | id in s'.machine.outstandingJournalWrites
-    ensures CorrectInflightJournalWrite(k, s', id)
+    ensures CorrectInflightJournalWrite(s', id)
     {
       if id == dop.id {
         var startPos := JournalPosAdd(
@@ -805,9 +804,9 @@ module JournalSystem {
                 - s.machine.superblock.journalLen);
 
 
-        assert CorrectInflightJournalWrite(k, s', id);
+        assert CorrectInflightJournalWrite(s', id);
       } else {
-        assert CorrectInflightJournalWrite(k, s', id);
+        assert CorrectInflightJournalWrite(s', id);
       }
     }*/
   }
@@ -816,10 +815,10 @@ module JournalSystem {
   ////////////////////// WriteBackJournalResp
   //////////////////////
 
-  lemma WriteBackJournalRespStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.WriteBackJournalResp(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.AckWriteJournal(k.disk, s.disk, s'.disk, dop);
+  lemma WriteBackJournalRespStepPreservesJournals(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.WriteBackJournalResp(s.machine, s'.machine, dop, vop)
+    requires D.AckWriteJournal(s.disk, s'.disk, dop);
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
@@ -837,16 +836,16 @@ module JournalSystem {
   {
   }
 
-  lemma WriteBackJournalRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.WriteBackJournalResp(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.AckWriteJournal(k.disk, s.disk, s'.disk, dop);
-    ensures Inv(k, s')
+  lemma WriteBackJournalRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.WriteBackJournalResp(s.machine, s'.machine, dop, vop)
+    requires D.AckWriteJournal(s.disk, s'.disk, dop);
+    ensures Inv(s')
   {
-    WriteBackJournalRespStepPreservesJournals(k, s, s', dop, vop);
+    WriteBackJournalRespStepPreservesJournals(s, s', dop, vop);
 
     if s'.disk.reqWriteSuperblock2.Some? {
-      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+      assert RecordedWriteSuperblockRequest(s', s'.disk.reqWriteSuperblock2.value.id); // ???
     }
   }
 
@@ -854,10 +853,10 @@ module JournalSystem {
   ////////////////////// WriteBackSuperblockReq_AdvanceLog
   //////////////////////
 
-  lemma WriteBackSuperblockReq_AdvanceLog_StepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.WriteBackSuperblockReq_AdvanceLog(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.RecvWriteSuperblock(k.disk, s.disk, s'.disk, dop);
+  lemma WriteBackSuperblockReq_AdvanceLog_StepPreservesJournals(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.WriteBackSuperblockReq_AdvanceLog(s.machine, s'.machine, dop, vop)
+    requires D.RecvWriteSuperblock(s.disk, s'.disk, dop);
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
@@ -875,23 +874,23 @@ module JournalSystem {
   {
   }
 
-  lemma WriteBackSuperblockReq_AdvanceLog_StepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.WriteBackSuperblockReq_AdvanceLog(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.RecvWriteSuperblock(k.disk, s.disk, s'.disk, dop);
-    ensures Inv(k, s')
+  lemma WriteBackSuperblockReq_AdvanceLog_StepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.WriteBackSuperblockReq_AdvanceLog(s.machine, s'.machine, dop, vop)
+    requires D.RecvWriteSuperblock(s.disk, s'.disk, dop);
+    ensures Inv(s')
   {
-    WriteBackSuperblockReq_AdvanceLog_StepPreservesJournals(k, s, s', dop, vop);
+    WriteBackSuperblockReq_AdvanceLog_StepPreservesJournals(s, s', dop, vop);
   }
 
   ////////////////////////////////////////////////////
   ////////////////////// WriteBackSuperblockReq_AdvanceLocation
   //////////////////////
 
-  lemma WriteBackSuperblockReq_AdvanceLocation_StepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.WriteBackSuperblockReq_AdvanceLocation(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.RecvWriteSuperblock(k.disk, s.disk, s'.disk, dop);
+  lemma WriteBackSuperblockReq_AdvanceLocation_StepPreservesJournals(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.WriteBackSuperblockReq_AdvanceLocation(s.machine, s'.machine, dop, vop)
+    requires D.RecvWriteSuperblock(s.disk, s'.disk, dop);
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
@@ -909,23 +908,23 @@ module JournalSystem {
   {
   }
 
-  lemma WriteBackSuperblockReq_AdvanceLocation_StepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.WriteBackSuperblockReq_AdvanceLocation(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.RecvWriteSuperblock(k.disk, s.disk, s'.disk, dop);
-    ensures Inv(k, s')
+  lemma WriteBackSuperblockReq_AdvanceLocation_StepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.WriteBackSuperblockReq_AdvanceLocation(s.machine, s'.machine, dop, vop)
+    requires D.RecvWriteSuperblock(s.disk, s'.disk, dop);
+    ensures Inv(s')
   {
-    WriteBackSuperblockReq_AdvanceLocation_StepPreservesJournals(k, s, s', dop, vop);
+    WriteBackSuperblockReq_AdvanceLocation_StepPreservesJournals(s, s', dop, vop);
   }
 
   ////////////////////////////////////////////////////
   ////////////////////// WriteBackSuperblockResp
   //////////////////////
 
-  lemma WriteBackSuperblockRespStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-  requires Inv(k, s)
-  requires M.WriteBackSuperblockResp(k.machine, s.machine, s'.machine, dop, vop)
-  requires D.AckWriteSuperblock(k.disk, s.disk, s'.disk, dop);
+  lemma WriteBackSuperblockRespStepPreservesJournals(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  requires Inv(s)
+  requires M.WriteBackSuperblockResp(s.machine, s'.machine, dop, vop)
+  requires D.AckWriteSuperblock(s.disk, s'.disk, dop);
   ensures WFPersistentJournal(s')
   ensures WFFrozenJournal(s')
   ensures WFEphemeralJournal(s')
@@ -945,7 +944,7 @@ module JournalSystem {
     /*if s.machine.commitStatus.CommitAdvanceLocation? {
       if s.machine.whichSuperblock == 1 {
         if (s.disk.reqWriteSuperblock2.Some?) {
-          assert RecordedWriteSuperblockRequest(k, s, s.disk.reqWriteSuperblock2.value.id);
+          assert RecordedWriteSuperblockRequest(s, s.disk.reqWriteSuperblock2.value.id);
         }
         assert s.disk.reqWriteSuperblock2.None?;
         assert dop.which == 0;
@@ -963,17 +962,17 @@ module JournalSystem {
     }*/
   }
 
-  lemma WriteBackSuperblockRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.WriteBackSuperblockResp(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.AckWriteSuperblock(k.disk, s.disk, s'.disk, dop);
-    ensures Inv(k, s')
+  lemma WriteBackSuperblockRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.WriteBackSuperblockResp(s.machine, s'.machine, dop, vop)
+    requires D.AckWriteSuperblock(s.disk, s'.disk, dop);
+    ensures Inv(s')
   {
-    WriteBackSuperblockRespStepPreservesJournals(k, s, s', dop, vop);
+    WriteBackSuperblockRespStepPreservesJournals(s, s', dop, vop);
     forall id | id in s'.machine.outstandingJournalWrites
-    ensures CorrectInflightJournalWrite(k, s', id)
+    ensures CorrectInflightJournalWrite(s', id)
     {
-      assert CorrectInflightJournalWrite(k, s, id);
+      assert CorrectInflightJournalWrite(s, id);
     }
   }
 
@@ -981,10 +980,10 @@ module JournalSystem {
   ////////////////////// PageInJournalReq
   //////////////////////
 
-  lemma PageInJournalReqStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
-    requires Inv(k, s)
-    requires M.PageInJournalReq(k.machine, s.machine, s'.machine, dop, vop, which)
-    requires D.RecvReadJournal(k.disk, s.disk, s'.disk, dop);
+  lemma PageInJournalReqStepPreservesJournals(s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
+    requires Inv(s)
+    requires M.PageInJournalReq(s.machine, s'.machine, dop, vop, which)
+    requires D.RecvReadJournal(s.disk, s'.disk, dop);
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
@@ -1002,14 +1001,14 @@ module JournalSystem {
   {
   }
 
-  lemma PageInJournalReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
-    requires Inv(k, s)
-    requires M.PageInJournalReq(k.machine, s.machine, s'.machine, dop, vop, which)
-    requires D.RecvReadJournal(k.disk, s.disk, s'.disk, dop);
-    ensures Inv(k, s')
+  lemma PageInJournalReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
+    requires Inv(s)
+    requires M.PageInJournalReq(s.machine, s'.machine, dop, vop, which)
+    requires D.RecvReadJournal(s.disk, s'.disk, dop);
+    ensures Inv(s')
   {
     if s'.disk.reqWriteSuperblock2.Some? {
-      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+      assert RecordedWriteSuperblockRequest(s', s'.disk.reqWriteSuperblock2.value.id); // ???
     }
     /*if s'.machine.journalFrontRead.Some?
       && s'.machine.journalBackRead.Some?
@@ -1026,9 +1025,9 @@ module JournalSystem {
               == s'.disk.reqReadJournals[reqId];
         }
       }
-      assert CorrectInflightJournalReads(k, s');
+      assert CorrectInflightJournalReads(s');
     } else {
-      assert CorrectInflightJournalReads(k, s');
+      assert CorrectInflightJournalReads(s');
     }*/
   }
 
@@ -1036,10 +1035,10 @@ module JournalSystem {
   ////////////////////// PageInJournalResp
   //////////////////////
 
-  lemma PageInJournalRespStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
-    requires Inv(k, s)
-    requires M.PageInJournalResp(k.machine, s.machine, s'.machine, dop, vop, which)
-    requires D.AckReadJournal(k.disk, s.disk, s'.disk, dop);
+  lemma PageInJournalRespStepPreservesJournals(s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
+    requires Inv(s)
+    requires M.PageInJournalResp(s.machine, s'.machine, dop, vop, which)
+    requires D.AckReadJournal(s.disk, s'.disk, dop);
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
@@ -1056,20 +1055,20 @@ module JournalSystem {
   {
   }
 
-  lemma PageInJournalRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
-    requires Inv(k, s)
-    requires M.PageInJournalResp(k.machine, s.machine, s'.machine, dop, vop, which)
-    requires D.AckReadJournal(k.disk, s.disk, s'.disk, dop);
-    ensures Inv(k, s')
+  lemma PageInJournalRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
+    requires Inv(s)
+    requires M.PageInJournalResp(s.machine, s'.machine, dop, vop, which)
+    requires D.AckReadJournal(s.disk, s'.disk, dop);
+    ensures Inv(s')
   {
     if s'.disk.reqWriteSuperblock2.Some? {
-      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+      assert RecordedWriteSuperblockRequest(s', s'.disk.reqWriteSuperblock2.value.id); // ???
     }
 
     /*forall id | id in s'.disk.reqReads
-    ensures RecordedReadRequest(k, s', id)
+    ensures RecordedReadRequest(s', id)
     {
-      assert RecordedReadRequest(k, s, id);
+      assert RecordedReadRequest(s, id);
       if which == 0 {
         if Some(id) == s.machine.indirectionTableRead {
           assert Some(id) == s'.machine.indirectionTableRead;
@@ -1098,10 +1097,10 @@ module JournalSystem {
   ////////////////////// PageInSuperblockReq
   //////////////////////
 
-  lemma PageInSuperblockReqStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
-    requires Inv(k, s)
-    requires M.PageInSuperblockReq(k.machine, s.machine, s'.machine, dop, vop, which)
-    requires D.RecvReadSuperblock(k.disk, s.disk, s'.disk, dop);
+  lemma PageInSuperblockReqStepPreservesJournals(s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
+    requires Inv(s)
+    requires M.PageInSuperblockReq(s.machine, s'.machine, dop, vop, which)
+    requires D.RecvReadSuperblock(s.disk, s'.disk, dop);
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
@@ -1118,14 +1117,14 @@ module JournalSystem {
   {
   }
 
-  lemma PageInSuperblockReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
-    requires Inv(k, s)
-    requires M.PageInSuperblockReq(k.machine, s.machine, s'.machine, dop, vop, which)
-    requires D.RecvReadSuperblock(k.disk, s.disk, s'.disk, dop);
-    ensures Inv(k, s')
+  lemma PageInSuperblockReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
+    requires Inv(s)
+    requires M.PageInSuperblockReq(s.machine, s'.machine, dop, vop, which)
+    requires D.RecvReadSuperblock(s.disk, s'.disk, dop);
+    ensures Inv(s')
   {
     if s'.disk.reqWriteSuperblock2.Some? {
-      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+      assert RecordedWriteSuperblockRequest(s', s'.disk.reqWriteSuperblock2.value.id); // ???
     }
   }
 
@@ -1133,10 +1132,10 @@ module JournalSystem {
   ////////////////////// PageInSuperblockResp
   //////////////////////
 
-  lemma PageInSuperblockRespStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
-    requires Inv(k, s)
-    requires M.PageInSuperblockResp(k.machine, s.machine, s'.machine, dop, vop, which)
-    requires D.AckReadSuperblock(k.disk, s.disk, s'.disk, dop);
+  lemma PageInSuperblockRespStepPreservesJournals(s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
+    requires Inv(s)
+    requires M.PageInSuperblockResp(s.machine, s'.machine, dop, vop, which)
+    requires D.AckReadSuperblock(s.disk, s'.disk, dop);
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
@@ -1154,17 +1153,17 @@ module JournalSystem {
   {
   }
 
-  lemma PageInSuperblockRespStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
-    requires Inv(k, s)
-    requires M.PageInSuperblockResp(k.machine, s.machine, s'.machine, dop, vop, which)
-    requires D.AckReadSuperblock(k.disk, s.disk, s'.disk, dop);
-    ensures Inv(k, s')
+  lemma PageInSuperblockRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, which: int)
+    requires Inv(s)
+    requires M.PageInSuperblockResp(s.machine, s'.machine, dop, vop, which)
+    requires D.AckReadSuperblock(s.disk, s'.disk, dop);
+    ensures Inv(s')
   {
     if s'.disk.reqWriteSuperblock2.Some? {
-      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+      assert RecordedWriteSuperblockRequest(s', s'.disk.reqWriteSuperblock2.value.id); // ???
     }
     forall id | id in s'.disk.reqReadSuperblock2
-    ensures RecordedReadSuperblockRequest(k, s', id)
+    ensures RecordedReadSuperblockRequest(s', id)
     {
     }
   }
@@ -1173,10 +1172,10 @@ module JournalSystem {
   ////////////////////// FinishLoadingSuperblockPhase
   //////////////////////
 
-  lemma FinishLoadingSuperblockPhaseStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.FinishLoadingSuperblockPhase(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+  lemma FinishLoadingSuperblockPhaseStepPreservesJournals(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.FinishLoadingSuperblockPhase(s.machine, s'.machine, dop, vop)
+    requires D.Stutter(s.disk, s'.disk, dop);
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
@@ -1197,14 +1196,14 @@ module JournalSystem {
   {
   }
 
-  lemma FinishLoadingSuperblockPhaseStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.FinishLoadingSuperblockPhase(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
-    ensures Inv(k, s')
+  lemma FinishLoadingSuperblockPhaseStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.FinishLoadingSuperblockPhase(s.machine, s'.machine, dop, vop)
+    requires D.Stutter(s.disk, s'.disk, dop);
+    ensures Inv(s')
   {
     if s'.disk.reqWriteSuperblock2.Some? {
-      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+      assert RecordedWriteSuperblockRequest(s', s'.disk.reqWriteSuperblock2.value.id); // ???
     }
   }
 
@@ -1212,10 +1211,10 @@ module JournalSystem {
   ////////////////////// FinishLoadingOtherPhase
   //////////////////////
 
-  lemma FinishLoadingOtherPhaseStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.FinishLoadingOtherPhase(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+  lemma FinishLoadingOtherPhaseStepPreservesJournals(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.FinishLoadingOtherPhase(s.machine, s'.machine, dop, vop)
+    requires D.Stutter(s.disk, s'.disk, dop);
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
@@ -1250,14 +1249,14 @@ module JournalSystem {
     }
   }
 
-  lemma FinishLoadingOtherPhaseStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.FinishLoadingOtherPhase(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
-    ensures Inv(k, s')
+  lemma FinishLoadingOtherPhaseStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.FinishLoadingOtherPhase(s.machine, s'.machine, dop, vop)
+    requires D.Stutter(s.disk, s'.disk, dop);
+    ensures Inv(s')
   {
     if s'.disk.reqWriteSuperblock2.Some? {
-      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+      assert RecordedWriteSuperblockRequest(s', s'.disk.reqWriteSuperblock2.value.id); // ???
     }
   }
 
@@ -1265,10 +1264,10 @@ module JournalSystem {
   ////////////////////// Freeze
   //////////////////////
 
-  lemma FreezeStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.Freeze(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+  lemma FreezeStepPreservesJournals(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.Freeze(s.machine, s'.machine, dop, vop)
+    requires D.Stutter(s.disk, s'.disk, dop);
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
@@ -1312,17 +1311,17 @@ module JournalSystem {
     }*/
   }
 
-  lemma FreezeStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.Freeze(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
-    ensures Inv(k, s')
+  lemma FreezeStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.Freeze(s.machine, s'.machine, dop, vop)
+    requires D.Stutter(s.disk, s'.disk, dop);
+    ensures Inv(s')
   {
-    M.FreezeStepPreservesInv(k.machine, s.machine, s'.machine, dop, vop);
-    FreezeStepPreservesJournals(k, s, s', dop, vop);
+    M.FreezeStepPreservesInv(s.machine, s'.machine, dop, vop);
+    FreezeStepPreservesJournals(s, s', dop, vop);
 
     if s'.disk.reqWriteSuperblock2.Some? {
-      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+      assert RecordedWriteSuperblockRequest(s', s'.disk.reqWriteSuperblock2.value.id); // ???
     }
   }
 
@@ -1330,10 +1329,10 @@ module JournalSystem {
   ////////////////////// ReceiveFrozenLoc
   //////////////////////
 
-  lemma ReceiveFrozenLocStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.ReceiveFrozenLoc(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+  lemma ReceiveFrozenLocStepPreservesJournals(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.ReceiveFrozenLoc(s.machine, s'.machine, dop, vop)
+    requires D.Stutter(s.disk, s'.disk, dop);
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
@@ -1351,15 +1350,15 @@ module JournalSystem {
   {
   }
 
-  lemma ReceiveFrozenLocStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.ReceiveFrozenLoc(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
-    ensures Inv(k, s')
+  lemma ReceiveFrozenLocStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.ReceiveFrozenLoc(s.machine, s'.machine, dop, vop)
+    requires D.Stutter(s.disk, s'.disk, dop);
+    ensures Inv(s')
   {
-    ReceiveFrozenLocStepPreservesJournals(k, s, s', dop, vop);
+    ReceiveFrozenLocStepPreservesJournals(s, s', dop, vop);
     if s'.disk.reqWriteSuperblock2.Some? {
-      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+      assert RecordedWriteSuperblockRequest(s', s'.disk.reqWriteSuperblock2.value.id); // ???
     }
   }
 
@@ -1367,10 +1366,10 @@ module JournalSystem {
   ////////////////////// Advance
   //////////////////////
 
-  lemma AdvanceStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.Advance(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+  lemma AdvanceStepPreservesJournals(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.Advance(s.machine, s'.machine, dop, vop)
+    requires D.Stutter(s.disk, s'.disk, dop);
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
@@ -1389,15 +1388,15 @@ module JournalSystem {
   {
   }
 
-  lemma AdvanceStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.Advance(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
-    ensures Inv(k, s')
+  lemma AdvanceStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.Advance(s.machine, s'.machine, dop, vop)
+    requires D.Stutter(s.disk, s'.disk, dop);
+    ensures Inv(s')
   {
-    AdvanceStepPreservesJournals(k, s, s', dop, vop);
+    AdvanceStepPreservesJournals(s, s', dop, vop);
     if s'.disk.reqWriteSuperblock2.Some? {
-      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+      assert RecordedWriteSuperblockRequest(s', s'.disk.reqWriteSuperblock2.value.id); // ???
     }
   }
 
@@ -1405,10 +1404,10 @@ module JournalSystem {
   ////////////////////// Replay
   //////////////////////
 
-  lemma ReplayStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.Replay(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+  lemma ReplayStepPreservesJournals(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.Replay(s.machine, s'.machine, dop, vop)
+    requires D.Stutter(s.disk, s'.disk, dop);
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
@@ -1426,15 +1425,15 @@ module JournalSystem {
   {
   }
 
-  lemma ReplayStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.Replay(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
-    ensures Inv(k, s')
+  lemma ReplayStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.Replay(s.machine, s'.machine, dop, vop)
+    requires D.Stutter(s.disk, s'.disk, dop);
+    ensures Inv(s')
   {
-    ReplayStepPreservesJournals(k, s, s', dop, vop);
+    ReplayStepPreservesJournals(s, s', dop, vop);
     if s'.disk.reqWriteSuperblock2.Some? {
-      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+      assert RecordedWriteSuperblockRequest(s', s'.disk.reqWriteSuperblock2.value.id); // ???
     }
   }
 
@@ -1442,10 +1441,10 @@ module JournalSystem {
   ////////////////////// PushSync
   //////////////////////
 
-  lemma PushSyncReqStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
-    requires Inv(k, s)
-    requires M.PushSyncReq(k.machine, s.machine, s'.machine, dop, vop, id)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+  lemma PushSyncReqStepPreservesJournals(s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
+    requires Inv(s)
+    requires M.PushSyncReq(s.machine, s'.machine, dop, vop, id)
+    requires D.Stutter(s.disk, s'.disk, dop);
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
@@ -1464,14 +1463,14 @@ module JournalSystem {
   {
   }
 
-  lemma PushSyncReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
-    requires Inv(k, s)
-    requires M.PushSyncReq(k.machine, s.machine, s'.machine, dop, vop, id)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
-    ensures Inv(k, s')
+  lemma PushSyncReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
+    requires Inv(s)
+    requires M.PushSyncReq(s.machine, s'.machine, dop, vop, id)
+    requires D.Stutter(s.disk, s'.disk, dop);
+    ensures Inv(s')
   {
     if s'.disk.reqWriteSuperblock2.Some? {
-      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+      assert RecordedWriteSuperblockRequest(s', s'.disk.reqWriteSuperblock2.value.id); // ???
     }
   }
 
@@ -1479,10 +1478,10 @@ module JournalSystem {
   ////////////////////// PopSync
   //////////////////////
 
-  lemma PopSyncReqStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
-    requires Inv(k, s)
-    requires M.PopSyncReq(k.machine, s.machine, s'.machine, dop, vop, id)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
+  lemma PopSyncReqStepPreservesJournals(s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
+    requires Inv(s)
+    requires M.PopSyncReq(s.machine, s'.machine, dop, vop, id)
+    requires D.Stutter(s.disk, s'.disk, dop);
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
@@ -1502,14 +1501,14 @@ module JournalSystem {
   {
   }
 
-  lemma PopSyncReqStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
-    requires Inv(k, s)
-    requires M.PopSyncReq(k.machine, s.machine, s'.machine, dop, vop, id)
-    requires D.Stutter(k.disk, s.disk, s'.disk, dop);
-    ensures Inv(k, s')
+  lemma PopSyncReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, id: uint64)
+    requires Inv(s)
+    requires M.PopSyncReq(s.machine, s'.machine, dop, vop, id)
+    requires D.Stutter(s.disk, s'.disk, dop);
+    ensures Inv(s')
   {
     if s'.disk.reqWriteSuperblock2.Some? {
-      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id); // ???
+      assert RecordedWriteSuperblockRequest(s', s'.disk.reqWriteSuperblock2.value.id); // ???
     }
   }
 
@@ -1517,10 +1516,10 @@ module JournalSystem {
   ////////////////////// No-Op
   //////////////////////
 
-  lemma NoOpStepPreservesJournals(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.NoOp(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.Next(k.disk, s.disk, s'.disk, dop);
+  lemma NoOpStepPreservesJournals(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.NoOp(s.machine, s'.machine, dop, vop)
+    requires D.Next(s.disk, s'.disk, dop);
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
@@ -1537,25 +1536,25 @@ module JournalSystem {
     ensures SyncReqs(s') == SyncReqs(s)
   {
     /*if (dop.NoDiskOp?) {
-      assert D.Stutter(k.disk, s.disk, s'.disk, dop);
+      assert D.Stutter(s.disk, s'.disk, dop);
     } else if (dop.RespReadOp?) {
-      assert D.AckRead(k.disk, s.disk, s'.disk, dop);
+      assert D.AckRead(s.disk, s'.disk, dop);
     } else if (dop.RespWriteOp?) {
-      assert D.AckWrite(k.disk, s.disk, s'.disk, dop);
+      assert D.AckWrite(s.disk, s'.disk, dop);
     } else {
       assert false;
     }*/
   }
 
-  lemma NoOpStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(k, s)
-    requires M.NoOp(k.machine, s.machine, s'.machine, dop, vop)
-    requires D.Next(k.disk, s.disk, s'.disk, dop);
-    ensures Inv(k, s')
+  lemma NoOpStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+    requires Inv(s)
+    requires M.NoOp(s.machine, s'.machine, dop, vop)
+    requires D.Next(s.disk, s'.disk, dop);
+    ensures Inv(s')
   {
-    NoOpStepPreservesJournals(k, s, s', dop, vop);
+    NoOpStepPreservesJournals(s, s', dop, vop);
     if s'.disk.reqWriteSuperblock2.Some? {
-      assert RecordedWriteSuperblockRequest(k, s', s'.disk.reqWriteSuperblock2.value.id);
+      assert RecordedWriteSuperblockRequest(s', s'.disk.reqWriteSuperblock2.value.id);
     }
   }
 
@@ -1563,30 +1562,30 @@ module JournalSystem {
   ////////////////////// MachineStep
   //////////////////////
 
-  lemma MachineStepPreservesInv(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, machineStep: M.Step)
-    requires Inv(k, s)
-    requires Machine(k, s, s', dop, vop, machineStep)
-    ensures Inv(k, s')
+  lemma MachineStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, machineStep: M.Step)
+    requires Inv(s)
+    requires Machine(s, s', dop, vop, machineStep)
+    ensures Inv(s')
   {
     match machineStep {
-      case WriteBackJournalReqStep(jr) => WriteBackJournalReqStepPreservesInv(k, s, s', dop, vop, jr);
-      case WriteBackJournalRespStep => WriteBackJournalRespStepPreservesInv(k, s, s', dop, vop);
-      case WriteBackSuperblockReq_AdvanceLog_Step => WriteBackSuperblockReq_AdvanceLog_StepPreservesInv(k, s, s', dop, vop);
-      case WriteBackSuperblockReq_AdvanceLocation_Step => WriteBackSuperblockReq_AdvanceLocation_StepPreservesInv(k, s, s', dop, vop);
-      case WriteBackSuperblockRespStep => WriteBackSuperblockRespStepPreservesInv(k, s, s', dop, vop);
-      case PageInJournalReqStep(which) => PageInJournalReqStepPreservesInv(k, s, s', dop, vop, which);
-      case PageInJournalRespStep(which) => PageInJournalRespStepPreservesInv(k, s, s', dop, vop, which);
-      case PageInSuperblockReqStep(which) => PageInSuperblockReqStepPreservesInv(k, s, s', dop, vop, which);
-      case PageInSuperblockRespStep(which) => PageInSuperblockRespStepPreservesInv(k, s, s', dop, vop, which);
-      case FinishLoadingSuperblockPhaseStep => FinishLoadingSuperblockPhaseStepPreservesInv(k, s, s', dop, vop);
-      case FinishLoadingOtherPhaseStep => FinishLoadingOtherPhaseStepPreservesInv(k, s, s', dop, vop);
-      case FreezeStep => FreezeStepPreservesInv(k, s, s', dop, vop);
-      case ReceiveFrozenLocStep => ReceiveFrozenLocStepPreservesInv(k, s, s', dop, vop);
-      case AdvanceStep => AdvanceStepPreservesInv(k, s, s', dop, vop);
-      case ReplayStep => ReplayStepPreservesInv(k, s, s', dop, vop);
-      case PushSyncReqStep(id) => PushSyncReqStepPreservesInv(k, s, s', dop, vop, id);
-      case PopSyncReqStep(id) => PopSyncReqStepPreservesInv(k, s, s', dop, vop, id);
-      case NoOpStep => { NoOpStepPreservesInv(k, s, s', dop, vop); }
+      case WriteBackJournalReqStep(jr) => WriteBackJournalReqStepPreservesInv(s, s', dop, vop, jr);
+      case WriteBackJournalRespStep => WriteBackJournalRespStepPreservesInv(s, s', dop, vop);
+      case WriteBackSuperblockReq_AdvanceLog_Step => WriteBackSuperblockReq_AdvanceLog_StepPreservesInv(s, s', dop, vop);
+      case WriteBackSuperblockReq_AdvanceLocation_Step => WriteBackSuperblockReq_AdvanceLocation_StepPreservesInv(s, s', dop, vop);
+      case WriteBackSuperblockRespStep => WriteBackSuperblockRespStepPreservesInv(s, s', dop, vop);
+      case PageInJournalReqStep(which) => PageInJournalReqStepPreservesInv(s, s', dop, vop, which);
+      case PageInJournalRespStep(which) => PageInJournalRespStepPreservesInv(s, s', dop, vop, which);
+      case PageInSuperblockReqStep(which) => PageInSuperblockReqStepPreservesInv(s, s', dop, vop, which);
+      case PageInSuperblockRespStep(which) => PageInSuperblockRespStepPreservesInv(s, s', dop, vop, which);
+      case FinishLoadingSuperblockPhaseStep => FinishLoadingSuperblockPhaseStepPreservesInv(s, s', dop, vop);
+      case FinishLoadingOtherPhaseStep => FinishLoadingOtherPhaseStepPreservesInv(s, s', dop, vop);
+      case FreezeStep => FreezeStepPreservesInv(s, s', dop, vop);
+      case ReceiveFrozenLocStep => ReceiveFrozenLocStepPreservesInv(s, s', dop, vop);
+      case AdvanceStep => AdvanceStepPreservesInv(s, s', dop, vop);
+      case ReplayStep => ReplayStepPreservesInv(s, s', dop, vop);
+      case PushSyncReqStep(id) => PushSyncReqStepPreservesInv(s, s', dop, vop, id);
+      case PopSyncReqStep(id) => PopSyncReqStepPreservesInv(s, s', dop, vop, id);
+      case NoOpStep => { NoOpStepPreservesInv(s, s', dop, vop); }
     }
   }
 
@@ -1594,16 +1593,16 @@ module JournalSystem {
   ////////////////////// ProcessWriteSuperblock
   //////////////////////
 
-  predicate ProcessWriteIsGraphUpdate(k: Constants, s: Variables)
+  predicate ProcessWriteIsGraphUpdate(s: Variables)
   {
     && s.machine.Ready?
     && s.machine.commitStatus.CommitAdvanceLocation?
   }
 
-  lemma ProcessWriteSuperblockPreservesJournals(k: Constants, s: Variables, s': Variables, vop: VOp, which: int)
-    requires Inv(k, s)
+  lemma ProcessWriteSuperblockPreservesJournals(s: Variables, s': Variables, vop: VOp, which: int)
+    requires Inv(s)
     requires s.machine == s'.machine
-    requires D.ProcessWriteSuperblock(k.disk, s.disk, s'.disk, which)
+    requires D.ProcessWriteSuperblock(s.disk, s'.disk, which)
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
@@ -1614,7 +1613,7 @@ module JournalSystem {
     ensures EphemeralJournal(s') == EphemeralJournal(s)
 
     ensures 
-        if ProcessWriteIsGraphUpdate(k, s) then (
+        if ProcessWriteIsGraphUpdate(s) then (
           && GammaJournal(s') == FrozenJournal(s)
           && PersistentJournal(s') == FrozenJournal(s)
           && FrozenLoc(s).Some?
@@ -1645,7 +1644,7 @@ module JournalSystem {
     }*/
     assert SuperblockOfDisk(s'.disk)
         == s.machine.newSuperblock.value;
-    if ProcessWriteIsGraphUpdate(k, s) {
+    if ProcessWriteIsGraphUpdate(s) {
       //locDisjointFromCircularJournalRangeOfNonJournalLoc(
       //    s.disk.reqWrites[id].loc,
       //    FrozenStartPos(s) as uint64,
@@ -1677,26 +1676,26 @@ module JournalSystem {
     }
   }
 
-  lemma ProcessWriteSuperblockPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, which: int)
-    requires Inv(k, s)
+  lemma ProcessWriteSuperblockPreservesInv(s: Variables, s': Variables, vop: VOp, which: int)
+    requires Inv(s)
     requires s.machine == s'.machine
-    requires D.ProcessWriteSuperblock(k.disk, s.disk, s'.disk, which)
-    ensures Inv(k, s')
+    requires D.ProcessWriteSuperblock(s.disk, s'.disk, which)
+    ensures Inv(s')
   {
-    ProcessWriteSuperblockPreservesJournals(k, s, s', vop, which);
+    ProcessWriteSuperblockPreservesJournals(s, s', vop, which);
   }
 
   ////////////////////////////////////////////////////
   ////////////////////// DiskInternal
   //////////////////////
 
-  lemma DiskInternalStepPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, step: D.InternalStep)
-    requires Inv(k, s)
-    requires DiskInternal(k, s, s', step, vop)
-    ensures Inv(k, s')
+  lemma DiskInternalStepPreservesInv(s: Variables, s': Variables, vop: VOp, step: D.InternalStep)
+    requires Inv(s)
+    requires DiskInternal(s, s', step, vop)
+    ensures Inv(s')
   {
     match step {
-      case ProcessWriteSuperblockStep(which) => ProcessWriteSuperblockPreservesInv(k, s, s', vop, which);
+      case ProcessWriteSuperblockStep(which) => ProcessWriteSuperblockPreservesInv(s, s', vop, which);
     }
   }
 
@@ -1704,9 +1703,9 @@ module JournalSystem {
   ////////////////////// Crash
   //////////////////////
 
-  lemma CrashPreservesJournals(k: Constants, s: Variables, s': Variables, vop: VOp)
-    requires Inv(k, s)
-    requires Crash(k, s, s', vop)
+  lemma CrashPreservesJournals(s: Variables, s': Variables, vop: VOp)
+    requires Inv(s)
+    requires Crash(s, s', vop)
     ensures WFPersistentJournal(s')
     ensures WFFrozenJournal(s')
     ensures WFEphemeralJournal(s')
@@ -1731,41 +1730,41 @@ module JournalSystem {
     Disk_Journal_Preserves(s.disk.journal, s'.disk.journal, interval);
   }
 
-  lemma CrashStepPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp)
-    requires Inv(k, s)
-    requires Crash(k, s, s', vop)
-    ensures Inv(k, s')
+  lemma CrashStepPreservesInv(s: Variables, s': Variables, vop: VOp)
+    requires Inv(s)
+    requires Crash(s, s', vop)
+    ensures Inv(s')
   {
-    CrashPreservesJournals(k, s, s', vop);
+    CrashPreservesJournals(s, s', vop);
   }
 
   ////////////////////////////////////////////////////
   ////////////////////// NextStep
   //////////////////////
 
-  lemma NextStepPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp, step: Step)
-    requires Inv(k, s)
-    requires NextStep(k, s, s', vop, step)
-    ensures Inv(k, s')
+  lemma NextStepPreservesInv(s: Variables, s': Variables, vop: VOp, step: Step)
+    requires Inv(s)
+    requires NextStep(s, s', vop, step)
+    ensures Inv(s')
   {
     match step {
-      case MachineStep(dop, machineStep) => MachineStepPreservesInv(k, s, s', dop, vop, machineStep);
-      case DiskInternalStep(step) => DiskInternalStepPreservesInv(k, s, s', vop, step);
-      case CrashStep => CrashStepPreservesInv(k, s, s', vop);
+      case MachineStep(dop, machineStep) => MachineStepPreservesInv(s, s', dop, vop, machineStep);
+      case DiskInternalStep(step) => DiskInternalStepPreservesInv(s, s', vop, step);
+      case CrashStep => CrashStepPreservesInv(s, s', vop);
     }
   }
 
-  lemma NextPreservesInv(k: Constants, s: Variables, s': Variables, vop: VOp)
-    requires Inv(k, s)
-    requires Next(k, s, s', vop)
-    ensures Inv(k, s')
+  lemma NextPreservesInv(s: Variables, s': Variables, vop: VOp)
+    requires Inv(s)
+    requires Next(s, s', vop)
+    ensures Inv(s')
   {
-    var step :| NextStep(k, s, s', vop, step);
-    NextStepPreservesInv(k, s, s', vop, step);
+    var step :| NextStep(s, s', vop, step);
+    NextStepPreservesInv(s, s', vop, step);
   }
 
-  /*lemma ReadReqIdIsValid(k: Constants, s: Variables, id: D.ReqId)
-  requires Inv(k, s)
+  /*lemma ReadReqIdIsValid(s: Variables, id: D.ReqId)
+  requires Inv(s)
   requires id in s.disk.reqReads
   ensures s.disk.reqReads[id].loc in s.disk.blocks
   {
@@ -1777,21 +1776,21 @@ module JournalSystem {
 
   // Used by ByteBetreeBlockCacheSystem.i.dfy
 
-  /*lemma RequestsDontOverlap(k: Constants, s: Variables)
-  requires Inv(k, s)
+  /*lemma RequestsDontOverlap(s: Variables)
+  requires Inv(s)
   ensures WriteJournalRequestsDontOverlap(s.disk.reqWriteJournals)
   ensures ReadWritesJournalDontOverlap(s.disk.reqReadJournals, s.disk.reqWriteJournals)
   {
   }*/
 
-  lemma NewRequestReadJournalDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
-  requires Inv(k, s)
-  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  lemma NewRequestReadJournalDoesntOverlap(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  requires Inv(s)
+  requires M.NextStep(s.machine, s'.machine, dop, vop, step)
   requires dop.ReqReadJournalOp?
   requires id in s.disk.reqWriteJournals
   ensures !journalIntervalOverlap(dop.interval, s.disk.reqWriteJournals[id])
   {
-    MachineStepPreservesInv(k, s, s', dop, vop, step);
+    MachineStepPreservesInv(s, s', dop, vop, step);
     forall id | id in s.disk.reqWriteJournals
     ensures !journalIntervalOverlap(dop.interval, s.disk.reqWriteJournals[id]);
     {
@@ -1804,9 +1803,9 @@ module JournalSystem {
     }
   }
 
-  lemma NewRequestWriteJournalDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
-  requires Inv(k, s)
-  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  lemma NewRequestWriteJournalDoesntOverlap(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  requires Inv(s)
+  requires M.NextStep(s.machine, s'.machine, dop, vop, step)
   requires dop.ReqWriteJournalOp?
   requires var interval := JournalInterval(
           dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
@@ -1818,9 +1817,9 @@ module JournalSystem {
   {
   }
 
-  lemma NewRequestWrite2JournalDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
-  requires Inv(k, s)
-  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  lemma NewRequestWrite2JournalDoesntOverlap(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  requires Inv(s)
+  requires M.NextStep(s.machine, s'.machine, dop, vop, step)
   requires dop.ReqWriteJournalOp?
   requires var interval := JournalInterval(
           dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
@@ -1836,9 +1835,9 @@ module JournalSystem {
   {
   }
 
-  lemma NewRequestWrite2JournalDoesntOverlapRead(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
-  requires Inv(k, s)
-  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  lemma NewRequestWrite2JournalDoesntOverlapRead(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  requires Inv(s)
+  requires M.NextStep(s.machine, s'.machine, dop, vop, step)
   requires dop.ReqWriteJournalOp?
   requires var interval := JournalInterval(
           dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
@@ -1854,33 +1853,33 @@ module JournalSystem {
   {
   }
 
-  lemma NewRequestReadSuperblockDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
-  requires Inv(k, s)
-  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  lemma NewRequestReadSuperblockDoesntOverlap(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
+  requires Inv(s)
+  requires M.NextStep(s.machine, s'.machine, dop, vop, step)
   requires dop.ReqReadSuperblockOp?
   ensures dop.which == 0 ==> s.disk.reqWriteSuperblock1.None?
   ensures dop.which == 1 ==> s.disk.reqWriteSuperblock2.None?
   {
     if s.disk.reqWriteSuperblock2.Some? {
-      assert RecordedWriteSuperblockRequest(k, s, s.disk.reqWriteSuperblock2.value.id);
+      assert RecordedWriteSuperblockRequest(s, s.disk.reqWriteSuperblock2.value.id);
     }
   }
 
-  lemma NewRequestWriteSuperblockDoesntOverlap(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
-  requires Inv(k, s)
-  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  lemma NewRequestWriteSuperblockDoesntOverlap(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
+  requires Inv(s)
+  requires M.NextStep(s.machine, s'.machine, dop, vop, step)
   requires dop.ReqWriteSuperblockOp?
   ensures dop.which == 0 ==> s.disk.reqWriteSuperblock1.None?
   ensures dop.which == 1 ==> s.disk.reqWriteSuperblock2.None?
   {
     if s.disk.reqWriteSuperblock2.Some? {
-      assert RecordedWriteSuperblockRequest(k, s, s.disk.reqWriteSuperblock2.value.id);
+      assert RecordedWriteSuperblockRequest(s, s.disk.reqWriteSuperblock2.value.id);
     }
   }
 
-  lemma NewRequestReadJournalIsValid(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
-  requires Inv(k, s)
-  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  lemma NewRequestReadJournalIsValid(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
+  requires Inv(s)
+  requires M.NextStep(s.machine, s'.machine, dop, vop, step)
   requires dop.ReqReadJournalOp?
   ensures Disk_HasJournalRange(s.disk.journal, dop.interval)
   {
@@ -1891,18 +1890,18 @@ module JournalSystem {
         dop.interval);
   }
 
-  lemma NewRequestReadSuperblockIsValid(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
-  requires Inv(k, s)
-  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  lemma NewRequestReadSuperblockIsValid(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
+  requires Inv(s)
+  requires M.NextStep(s.machine, s'.machine, dop, vop, step)
   requires dop.ReqReadSuperblockOp?
   ensures dop.which == 0 ==> s.disk.superblock1.Some?
   ensures dop.which == 1 ==> s.disk.superblock2.Some?
   {
   }
 
-  lemma NewRequestWriteJournalDoesntOverlapRead(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
-  requires Inv(k, s)
-  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  lemma NewRequestWriteJournalDoesntOverlapRead(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  requires Inv(s)
+  requires M.NextStep(s.machine, s'.machine, dop, vop, step)
   requires dop.ReqWriteJournalOp?
   requires var interval := JournalInterval(
           dop.reqWriteJournal.start, |dop.reqWriteJournal.journal|);
@@ -1914,9 +1913,9 @@ module JournalSystem {
   {
   }
 
-  lemma NewRequestWriteSuperblockDoesntOverlapRead(k: Constants, s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
-  requires Inv(k, s)
-  requires M.NextStep(k.machine, s.machine, s'.machine, dop, vop, step)
+  lemma NewRequestWriteSuperblockDoesntOverlapRead(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
+  requires Inv(s)
+  requires M.NextStep(s.machine, s'.machine, dop, vop, step)
   requires dop.ReqWriteSuperblockOp?
   ensures dop.which == 0 ==> s.disk.reqReadSuperblock1 == {}
   ensures dop.which == 1 ==> s.disk.reqReadSuperblock2 == {}

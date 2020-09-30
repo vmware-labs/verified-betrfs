@@ -22,42 +22,35 @@ module BetreeSystem_Refines_StatesViewMap {
   
   import opened ViewOp
 
-  function Ik(k: A.Constants) : C.Constants {
-    Ref_B.Ik(Ref_A.Ik(k))
-  }
-
-  function I(k: A.Constants, s: A.Variables) : C.Variables
-  requires A.Inv(k, s)
+  function I(s: A.Variables) : C.Variables
+  requires A.Inv(s)
   {
     Ref_B.I(
-      Ref_A.Ik(k),
-      Ref_A.I(k, s)
+      Ref_A.I(s)
     )
   }
 
-  lemma RefinesInit(k: A.Constants, s: A.Variables, loc: Loc)
-    requires A.Init(k, s, loc)
-    ensures A.Inv(k, s)
-    ensures C.Init(Ik(k), I(k, s), loc)
+  lemma RefinesInit(s: A.Variables, loc: Loc)
+    requires A.Init(s, loc)
+    ensures A.Inv(s)
+    ensures C.Init(I(s), loc)
   {
-    Ref_A.RefinesInit(k, s, loc);
+    Ref_A.RefinesInit(s, loc);
     Ref_B.RefinesInit(
-      Ref_A.Ik(k),
-      Ref_A.I(k, s),
+      Ref_A.I(s),
       loc);
   }
 
-  lemma RefinesNext(k: A.Constants, s: A.Variables, s': A.Variables, vop: VOp)
-    requires A.Inv(k, s)
-    requires A.Next(k, s, s', vop)
-    ensures A.Inv(k, s')
-    ensures C.Next(Ik(k), I(k, s), I(k, s'), vop)
+  lemma RefinesNext(s: A.Variables, s': A.Variables, vop: VOp)
+    requires A.Inv(s)
+    requires A.Next(s, s', vop)
+    ensures A.Inv(s')
+    ensures C.Next(I(s), I(s'), vop)
   {
-    Ref_A.RefinesNext(k, s, s', vop);
+    Ref_A.RefinesNext(s, s', vop);
     Ref_B.RefinesNext(
-      Ref_A.Ik(k),
-      Ref_A.I(k, s),
-      Ref_A.I(k, s'),
+      Ref_A.I(s),
+      Ref_A.I(s'),
       vop);
   }
 }

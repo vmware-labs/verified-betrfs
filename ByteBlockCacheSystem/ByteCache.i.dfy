@@ -21,21 +21,20 @@ module ByteCache refines AsyncDiskMachine {
 
   import opened InterpretationDiskOps
 
-  type Constants = BJC.Constants
   type Variables = BJC.Variables
   
-  predicate Init(k: Constants, s: Variables)
+  predicate Init(s: Variables)
   {
-    BJC.Init(k, s)
+    BJC.Init(s)
   }
 
-  predicate Next(k: Constants, s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+  predicate Next(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
   {
     && (dop.ReqReadOp? ==> ValidDiskOp(dop))
     && (dop.ReqWriteOp? ==> ValidDiskOp(dop))
     && (dop.ReqWrite2Op? ==> ValidDiskOp(dop))
     && (ValidDiskOp(dop) ==>
-      BJC.Next(k, s, s', uiop, IDiskOp(dop)))
+      BJC.Next(s, s', uiop, IDiskOp(dop)))
     && (!ValidDiskOp(dop) ==> s == s')
   }
 }

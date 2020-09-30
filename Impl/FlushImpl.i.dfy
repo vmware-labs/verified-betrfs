@@ -26,8 +26,8 @@ module FlushImpl {
   import FlushModel
   //import BucketModel
 
-  method flush(k: ImplConstants, s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference, child: Node)
-  requires Inv(k, s)
+  method flush(s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference, child: Node)
+  requires Inv(s)
   requires s.ready
 
   requires Some(child) == s.cache.ptr(childref)
@@ -47,7 +47,7 @@ module FlushImpl {
 
   ensures WellUpdated(s)
   ensures s.ready
-  ensures FlushModel.flush(Ic(k), old(s.I()), parentref, slot as int, childref, old(child.I())) == s.I()
+  ensures FlushModel.flush(old(s.I()), parentref, slot as int, childref, old(child.I())) == s.I()
   {
     if s.frozenIndirectionTable != null {
       var b := s.frozenIndirectionTable.HasEmptyLoc(parentref);
@@ -68,8 +68,8 @@ module FlushImpl {
 
     assert Some(parent) == s.cache.ptr(parentref);
 
-    BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), childref);
-    BookkeepingModel.lemmaChildrenConditionsOfNode(Ic(k), s.I(), parentref);
+    BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), childref);
+    BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), parentref);
 
     assert s.I().cache[parentref] == parent.I();
     assert parent.I().children == s.I().cache[parentref].children;
@@ -90,10 +90,10 @@ module FlushImpl {
     assert Some(parent) == s.cache.ptr(parentref);
 
     BookkeepingModel.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
-        Ic(k), s.I(), newchild.Read().children, parent.Read().children.value, slot as int);
+        s.I(), newchild.Read().children, parent.Read().children.value, slot as int);
 
-    BookkeepingModel.allocRefDoesntEqual(Ic(k), s.I(), newchild.Read().children, parentref);
-    var newchildref := allocBookkeeping(k, s, childchildren);
+    BookkeepingModel.allocRefDoesntEqual(s.I(), newchild.Read().children, parentref);
+    var newchildref := allocBookkeeping(s, childchildren);
     if newchildref.None? {
       newchild.Destructor();
       newparentBucket.Free();
@@ -105,7 +105,7 @@ module FlushImpl {
       var newparent_children := SeqIndexUpdate(
         children.value, slot, newchildref.value);
 
-      writeBookkeeping(k, s, parentref, Some(newparent_children));
+      writeBookkeeping(s, parentref, Some(newparent_children));
       assert Some(parent) == s.cache.ptr(parentref);
       assert parentref != newchildref.value;
 
@@ -133,7 +133,7 @@ module FlushImpl {
       //assert c2 == old(s.I()).cache
       //      [newchildref.value := old(child.I()).(buckets := MutBucket.ISeq(newbuckets))];
 
-      ghost var a := FlushModel.flush(Ic(k), old(s.I()), parentref, slot as int, childref, old(child.I()));
+      ghost var a := FlushModel.flush(old(s.I()), parentref, slot as int, childref, old(child.I()));
       ghost var b := s.I();
 
       assert a.cache.Keys == c3.Keys;

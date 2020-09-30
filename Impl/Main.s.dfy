@@ -31,7 +31,6 @@ abstract module Main {
 
   // impl defined stuff
 
-  type Constants // impl defined
   type Variables // impl defined
 
   class HeapState {
@@ -50,100 +49,99 @@ abstract module Main {
   function HeapSet(hs: HeapState) : set<object>
     reads hs
 
-  predicate Inv(k: Constants, hs: HeapState)
+  predicate Inv(hs: HeapState)
     reads hs, HeapSet(hs)
-  function Ik(k: Constants): ADM.M.Constants
-  function I(k: Constants, hs: HeapState): ADM.M.Variables
-    requires Inv(k, hs)
+  function I(hs: HeapState): ADM.M.Variables
+    requires Inv(hs)
     reads hs, HeapSet(hs)
 
-  method InitState() returns (k: Constants, hs: HeapState)
-    ensures Inv(k, hs)
-    ensures ADM.M.Init(Ik(k), I(k, hs))
+  method InitState() returns (hs: HeapState)
+    ensures Inv(hs)
+    ensures ADM.M.Init(I(hs))
 
   // Implementation of the state transitions
 
-  method handlePushSync(k: Constants, hs: HeapState, io: DiskIOHandler)
+  method handlePushSync(hs: HeapState, io: DiskIOHandler)
   returns (id: uint64)
   requires io.initialized()
-  requires Inv(k, hs)
+  requires Inv(hs)
   requires io !in HeapSet(hs)
   modifies hs, HeapSet(hs)
   modifies io
   ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
-  ensures Inv(k, hs)
-  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
+  ensures Inv(hs)
+  ensures ADM.M.Next(old(I(hs)), I(hs),
       if id == 0 then UI.NoOp else UI.PushSyncOp(id as int),
       io.diskOp())
 
-  method handlePopSync(k: Constants, hs: HeapState, io: DiskIOHandler, id: uint64, graphSync: bool)
+  method handlePopSync(hs: HeapState, io: DiskIOHandler, id: uint64, graphSync: bool)
   returns (wait: bool, success: bool)
   requires io.initialized()
-  requires Inv(k, hs)
+  requires Inv(hs)
   requires io !in HeapSet(hs)
   modifies hs, HeapSet(hs)
   modifies io
   ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
-  ensures Inv(k, hs)
-  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
+  ensures Inv(hs)
+  ensures ADM.M.Next(old(I(hs)), I(hs),
       if success then UI.PopSyncOp(id as int) else UI.NoOp,
       io.diskOp())
 
-  method handleReadResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
+  method handleReadResponse(hs: HeapState, io: DiskIOHandler)
   requires io.diskOp().RespReadOp?
-  requires Inv(k, hs)
+  requires Inv(hs)
   requires io !in HeapSet(hs)
   modifies hs, HeapSet(hs)
   ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
-  ensures Inv(k, hs)
-  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp())
+  ensures Inv(hs)
+  ensures ADM.M.Next(old(I(hs)), I(hs), UI.NoOp, io.diskOp())
 
-  method handleWriteResponse(k: Constants, hs: HeapState, io: DiskIOHandler)
+  method handleWriteResponse(hs: HeapState, io: DiskIOHandler)
   requires io.diskOp().RespWriteOp?
-  requires Inv(k, hs)
+  requires Inv(hs)
   requires io !in HeapSet(hs)
   modifies hs, HeapSet(hs)
   ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
-  ensures Inv(k, hs)
-  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs), UI.NoOp, io.diskOp())
+  ensures Inv(hs)
+  ensures ADM.M.Next(old(I(hs)), I(hs), UI.NoOp, io.diskOp())
 
-  method handleQuery(k: Constants, hs: HeapState, io: DiskIOHandler, key: Key)
+  method handleQuery(hs: HeapState, io: DiskIOHandler, key: Key)
   returns (v: Option<Value>)
   requires io.initialized()
-  requires Inv(k, hs)
+  requires Inv(hs)
   requires io !in HeapSet(hs)
   modifies hs, HeapSet(hs)
   modifies io
   ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
-  ensures Inv(k, hs)
-  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
+  ensures Inv(hs)
+  ensures ADM.M.Next(old(I(hs)), I(hs),
     if v.Some? then UI.GetOp(key, v.value) else UI.NoOp,
     io.diskOp())
 
-  method handleInsert(k: Constants, hs: HeapState, io: DiskIOHandler, key: Key, value: Value)
+  method handleInsert(hs: HeapState, io: DiskIOHandler, key: Key, value: Value)
   returns (success: bool)
   requires io.initialized()
-  requires Inv(k, hs)
+  requires Inv(hs)
   requires io !in HeapSet(hs)
   modifies hs, HeapSet(hs)
   modifies io
   ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
-  ensures Inv(k, hs)
-  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
+  ensures Inv(hs)
+  ensures ADM.M.Next(old(I(hs)), I(hs),
     if success then UI.PutOp(key, value) else UI.NoOp,
     io.diskOp())
 
-  method handleSucc(k: Constants, hs: HeapState, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
+  method handleSucc(hs: HeapState, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
   returns (res: Option<UI.SuccResultList>)
   requires io.initialized()
-  requires Inv(k, hs)
+  requires Inv(hs)
   requires maxToFind >= 1
   requires io !in HeapSet(hs)
   modifies hs, HeapSet(hs)
   modifies io
   ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
-  ensures Inv(k, hs)
-  ensures ADM.M.Next(Ik(k), old(I(k, hs)), I(k, hs),
+  ensures Inv(hs)
+  ensures ADM.M.Next(old(I(hs)), I(hs),
     if res.Some? then UI.SuccOp(start, res.value.results, res.value.end) else UI.NoOp,
     io.diskOp())
 
@@ -160,14 +158,13 @@ abstract module Main {
   ensures ADM.BlocksDontIntersect(diskContents)
 
   lemma InitialStateSatisfiesSystemInit(
-      k: ADM.Constants, 
       s: ADM.Variables,
       diskContents: map<uint64, seq<byte>>)
-  requires ADM.M.Init(k.machine, s.machine)
-  requires ADM.D.Init(k.disk, s.disk)
+  requires ADM.M.Init(s.machine)
+  requires ADM.D.Init(s.disk)
   requires InitDiskContents(diskContents)
   requires ADM.BlocksWrittenInByteSeq(diskContents, s.disk.contents)
-  ensures ADM.Init(k, s)
+  ensures ADM.Init(s)
 
   // These are proof obligations for the refining module to fill in.
   // The refining module must
@@ -179,20 +176,19 @@ abstract module Main {
   //  * Prove the lemmas that show that this abstraction function
   //    yields a valid state machine refinement.
 
-  function SystemIk(k: ADM.Constants) : ThreeStateVersionedMap.Constants
-  function SystemI(k: ADM.Constants, s: ADM.Variables) : ThreeStateVersionedMap.Variables
-  requires ADM.Inv(k, s)
+  function SystemI(s: ADM.Variables) : ThreeStateVersionedMap.Variables
+  requires ADM.Inv(s)
 
   lemma SystemRefinesCrashSafeMapInit(
-    k: ADM.Constants, s: ADM.Variables)
-  requires ADM.Init(k, s)
-  ensures ADM.Inv(k, s)
-  ensures ThreeStateVersionedMap.Init(SystemIk(k), SystemI(k, s))
+    s: ADM.Variables)
+  requires ADM.Init(s)
+  ensures ADM.Inv(s)
+  ensures ThreeStateVersionedMap.Init(SystemI(s))
 
   lemma SystemRefinesCrashSafeMapNext(
-    k: ADM.Constants, s: ADM.Variables, s': ADM.Variables, uiop: ADM.UIOp)
-  requires ADM.Inv(k, s)
-  requires ADM.Next(k, s, s', uiop)
-  ensures ADM.Inv(k, s')
-  ensures ThreeStateVersionedMap.Next(SystemIk(k), SystemI(k, s), SystemI(k, s'), uiop)
+    s: ADM.Variables, s': ADM.Variables, uiop: ADM.UIOp)
+  requires ADM.Inv(s)
+  requires ADM.Next(s, s', uiop)
+  ensures ADM.Inv(s')
+  ensures ThreeStateVersionedMap.Next(SystemI(s), SystemI(s'), uiop)
 }
