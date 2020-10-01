@@ -12,16 +12,16 @@ common_vars = [
     Variable("ram", "run_veri", [Value("2gb", "ram=2.0gb")]),
     Variable("bucketWeight", "run_veri", [Value("bw", "bucketWeight=2031616")]),
     Variable("device", "run_veri", [Value("disk", "device=disk")]),
-    Variable("workload", "run_veri", [Value("wkc", "workload=ycsb/workloada-onefield.spec,ycsb/workloadc-onefield.spec")]),
+    Variable("workload", "run_veri", [Value("wkc", "workload=ycsb/workloada-onefield.spec,ycsb/workloadc-big.spec")]),
     Variable("duration", "run_veri", [Value("90m", "time_budget=90m")]),
-#    Variable("replica", "silent", [Value("r0", "r=0"), Value("r1", "r=1")]),
+    Variable("replica", "silent", [Value("r%d"%r, "r=%d"%r) for r in range(4)]),
     ]
 veri_suite = Suite(
     "veri",
     Variable("git_branch", "run_veri", [Value("row-cache-adventure", "git_branch=row-cache-adventure")]),
-    Variable("row_cache", "run_veri", [
+    Variable("row_cache", "run_veri", [Value("0", "env:ROW_CACHE_SIZE=0")] + [
         Value("%di" % bi,
-            "env:ROW_CACHE_SIZE=%d" % (1<<bi)) for bi in [3, 15, 17, 19]]),
+            "env:ROW_CACHE_SIZE=%d" % (1<<bi)) for bi in [13, 16, 19]]),
     Variable("cache_size", "run_veri", [Value("cache100nodes", "cacheSizeInNodes=100")]),
 #    Variable("system", "run_veri", [Value("veri2m", "config-2mb")]),
 #    Variable("max_children", "run_veri", [Value("fanout16", "max_children=16")]),
@@ -33,7 +33,7 @@ veri_suite = Suite(
 #    Variable("git_branch", "git_branch", [Value("la2", "leak-adventure-2")]),
 #    Variable("system", "run_veri", [Value("rocks", "rocks")]),
 #    *common_vars)
-suite = ConcatSuite("row-cache-025", veri_suite)
+suite = ConcatSuite("row-cache-029", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
