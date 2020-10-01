@@ -20,8 +20,12 @@ module {:extern} UI {
     | PushSyncOp(ghost id: int)
     | PopSyncOp(ghost id: int)
 
-    // TODO make these async? any value from it?
     | GetOp(key: Key, value: Value)
+    
+    | GetBeginOp(key: Key, ghost id: int)
+    | GetEndOp(value: Value, ghost id: int)
+
+    // TODO make this async? any value from it?
     | PutOp(key: Key, value: Value)
 
     | SuccOp(start: RangeStart,

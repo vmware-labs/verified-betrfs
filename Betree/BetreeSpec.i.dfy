@@ -65,12 +65,10 @@ module BetreeSpec {
     && (forall k:Key :: k !in node.children ==> BufferIsDefining(node.buffer[k]))
   }
 
-  // Now we define the state machine
-
-  //// Query
-
   type Layer = G.ReadOp
   type Lookup = seq<Layer>
+
+  //// Query
 
   datatype LookupQuery = LookupQuery(key: Key, value: Value, lookup: Lookup)
 
@@ -101,7 +99,7 @@ module BetreeSpec {
     && LookupVisitsWFNodes(lookup)
   }
 
-  function InterpretLookup(lookup: Lookup, key: Key) : G.M.Message
+  function InterpretLookup(lookup: Lookup, key: Key) : (m : G.M.Message)
   requires LookupVisitsWFNodes(lookup)
   {
     if |lookup| == 0
@@ -343,7 +341,7 @@ module BetreeSpec {
     [ ReadOp(redirect.parentref, redirect.old_parent) ]
       + RedirectChildReads(redirect.old_childrefs, redirect.old_children)
   }
- 
+
   function RedirectChildAllocs(childrefs: seq<Reference>, children: imap<Reference, Node>) : (ops: seq<Op>)
     requires forall ref :: ref in childrefs ==> ref in children
     ensures |ops| == |childrefs|
