@@ -227,7 +227,10 @@ module JournalistImpl {
     ensures b == JournalistModel.canAppend(I(), je)
     {
       JournalistModel.reveal_canAppend();
-
+      if NumJournalBlocks() == 0 {
+        return true;
+      }
+      
       b := 4064 * (writtenJournalBlocks + frozenJournalBlocks)
           + inMemoryWeight
           + WeightJournalEntryUint64(je)
@@ -245,6 +248,10 @@ module JournalistImpl {
     {
       JournalistModel.reveal_append();
 
+      if NumJournalBlocks() == 0 {
+        return;
+      }
+      
       if this.len1 + this.len2 < this.journalEntries.Length as uint64 {
         var idx := JournalistModel.basic_mod(
             start + len1 + len2,
