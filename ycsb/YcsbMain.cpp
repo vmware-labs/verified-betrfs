@@ -17,6 +17,9 @@
 #include "rocksdb/filter_policy.h"
 #endif
 
+#include "ioaccounting.h"
+#include "stataccounting.h"
+
 #ifdef _YCSB_KYOTO
 #include <kchashdb.h>
 #endif
@@ -236,8 +239,8 @@ public:
   //    external_heap_size(&heap, &all_maps);
   //    printf("os-map-total %8ld os-map-heap %8ld\n", all_maps, heap);
   //
-  //    IOAccounting::report();
-  //    StatAccounting::report();
+      IOAccounting::report();
+      StatAccounting::report();
   //    proc_io_report();
   //    jemalloc_report();
 //      cgroups_report();

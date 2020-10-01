@@ -4,6 +4,7 @@
 #include "Bundle.i.h"
 
 #include "MallocAccounting.h"
+#include "../ycsb/ioaccounting.h"
 
 //#include <filesystem> // c++17 lol
 #include <sys/types.h>
@@ -108,6 +109,7 @@ namespace NativePackedInts_Compile {
 }
 
 namespace MainDiskIOHandler_Compile {
+
 #if USE_DIRECT
   uint8_t *aligned_copy(uint8_t* buf, size_t len, size_t *aligned_len) {
     uint8_t *aligned_bytes;
@@ -137,6 +139,7 @@ namespace MainDiskIOHandler_Compile {
     size_t aligned_len;
     uint8_t *aligned_bytes;
     aiocb aio_req_write;
+    unsigned long clockStart;
 
     bool made_req;
     bool done;
@@ -175,6 +178,7 @@ namespace MainDiskIOHandler_Compile {
     }
 
     void start() {
+      clockStart = __rdtsc();
       int ret = aio_write(&aio_req_write);
       if (ret != 0) {
         cout << "number of writeReqs " << endl;
@@ -198,7 +202,11 @@ namespace MainDiskIOHandler_Compile {
       if (!done) {
         aiocb* aiolist[1];
         aiolist[0] = &aio_req_write; //&aio_req_fsync;
+
+        unsigned long suspendStart = __rdtsc();
         aio_suspend(aiolist, 1, NULL);
+        unsigned long suspendEnd = __rdtsc();
+        IOAccounting::record_suspend(suspendEnd - suspendStart);
 
         check_if_complete();
         if (!done) {
@@ -216,6 +224,10 @@ namespace MainDiskIOHandler_Compile {
             fail("write did not write all bytes");
           }
           done = true;
+          unsigned long clockEnd = __rdtsc();
+          IOAccounting::record_write_latency(clockEnd - clockStart);
+          IOAccounting::record.write_count += 1;
+          IOAccounting::record.write_bytes += aligned_len;
           nWriteReqsOut--;
         } else if (status != EINPROGRESS) {
           fail("aio_error returned that write has failed");
@@ -237,8 +249,13 @@ namespace MainDiskIOHandler_Compile {
     #ifdef LOG_QUERY_STATS
     auto t1 = chrono::high_resolution_clock::now();
     #endif
+    unsigned long clockStart = __rdtsc();
 
     ssize_t count = pread(fd, res, len, addr);
+    unsigned long clockEnd = __rdtsc();
+    IOAccounting::record_read_latency(clockEnd - clockStart);
+    IOAccounting::record.read_count += 1;
+    IOAccounting::record.read_bytes += len;
 
     #ifdef LOG_QUERY_STATS
     auto t2 = chrono::high_resolution_clock::now();
@@ -466,7 +483,10 @@ namespace MainDiskIOHandler_Compile {
         break;
       }
 
+      unsigned long suspendStart = __rdtsc();
       aio_suspend(&tasks[0], i, NULL);
+      unsigned long suspendEnd = __rdtsc();
+      IOAccounting::record_suspend(suspendEnd - suspendStart);
 
       maybeStartWriteReq();
     }
@@ -489,7 +509,10 @@ namespace MainDiskIOHandler_Compile {
       fail("waitForOne called with no tasks\n");
     }
 
+    unsigned long suspendStart = __rdtsc();
     aio_suspend(&tasks[0], i, NULL);
+    unsigned long suspendEnd = __rdtsc();
+    IOAccounting::record_suspend(suspendEnd - suspendStart);
 
     maybeStartWriteReq();
   }
