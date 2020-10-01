@@ -227,7 +227,7 @@ module JournalistImpl {
     ensures b == JournalistModel.canAppend(I(), je)
     {
       JournalistModel.reveal_canAppend();
-      if NumJournalBlocks() == 0 {
+      if NumJournalBlocks() == 1 {
         return true;
       }
       
@@ -248,7 +248,7 @@ module JournalistImpl {
     {
       JournalistModel.reveal_append();
 
-      if NumJournalBlocks() == 0 {
+      if NumJournalBlocks() == 1 {
         return;
       }
       
