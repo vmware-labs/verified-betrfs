@@ -26,24 +26,6 @@ module Betree {
   import opened G = BetreeGraph
 
   datatype Variables = Variables(bcv: BI.Variables)
-  
-  // TODO(jonh): [cleanup] Not sure why these 3 are in this file.
-  predicate LookupRespectsDisk(view: BI.View, lookup: Lookup) {
-    forall i :: 0 <= i < |lookup| ==> IMapsTo(view, lookup[i].ref, lookup[i].node)
-  }
-
-  predicate IsPathFromRootLookup(view: BI.View, key: Key, lookup: Lookup) {
-    && |lookup| > 0
-    && lookup[0].ref == Root()
-    && LookupRespectsDisk(view, lookup)
-    && LookupFollowsChildRefs(key, lookup)
-  }
-
-  predicate IsSatisfyingLookup(view: BI.View, key: Key, value: Value, lookup: Lookup) {
-    && IsPathFromRootLookup(view, key, lookup)
-    && LookupVisitsWFNodes(lookup)
-    && BufferDefinesValue(InterpretLookup(lookup, key), value)
-  }
 
   function EmptyNode() : Node {
     var buffer := imap key | MS.InDomain(key) :: G.M.Define(G.M.DefaultValue());
@@ -67,7 +49,7 @@ module Betree {
     && BI.Reads(s.bcv, BetreeStepReads(betreeStep))
     && BI.OpTransaction(s.bcv, s'.bcv, BetreeStepOps(betreeStep))
   }
-  
+
   datatype Step =
     | BetreeStep(step: BetreeStep)
     | GCStep(refs: iset<Reference>)

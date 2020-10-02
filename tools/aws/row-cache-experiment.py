@@ -20,7 +20,8 @@ veri_suite = Suite(
     "veri",
     Variable("git_branch", "run_veri", [Value("row-cache-adventure", "git_branch=row-cache-adventure")]),
     Variable("row_cache", "run_veri", [
-        Value("%di" % bi, "env:ROW_CACHE_SIZE=%d cacheSize=%d" % (1<<bi, 0.7*(1<<30) - (1<<bi)*600)) for bi in [3, 12, 15, 18]]),
+        Value("%di" % bi,
+            "env:ROW_CACHE_SIZE=%d" % (1<<bi)) for bi in [3, 15, 17, 19]]),
     Variable("cache_size", "run_veri", [Value("cache100nodes", "cacheSizeInNodes=100")]),
 #    Variable("system", "run_veri", [Value("veri2m", "config-2mb")]),
 #    Variable("max_children", "run_veri", [Value("fanout16", "max_children=16")]),
@@ -32,7 +33,7 @@ veri_suite = Suite(
 #    Variable("git_branch", "git_branch", [Value("la2", "leak-adventure-2")]),
 #    Variable("system", "run_veri", [Value("rocks", "rocks")]),
 #    *common_vars)
-suite = ConcatSuite("row-cache-022", veri_suite)
+suite = ConcatSuite("row-cache-025", veri_suite)
 
 RUN_VERI_PATH="tools/run-veri-config-experiment.py"
 
