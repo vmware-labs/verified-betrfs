@@ -29,6 +29,13 @@ STDLIB=-stdlib=libc++
 # Uncomment to enable gprof
 #GPROF_FLAGS=-pg
 
+WANT_O_DIRECT=false
+ifeq "$(WANT_O_DIRECT)" "true"
+	O_DIRECT_COMMAND_LINE_FLAG=-DUSE_DIRECT=1
+else
+	O_DIRECT_COMMAND_LINE_FLAG=
+endif
+
 WANT_UNVERIFIED_ROW_CACHE=true
 ifeq "$(WANT_UNVERIFIED_ROW_CACHE)" "true"
 	UNVERIFIED_ROW_CACHE_DEFINE=-DUSE_UNVERIFIED_ROW_CACHE
@@ -52,15 +59,23 @@ else
 	OPT_FLAG=-O3
 endif
 
+WANT_PROFILING=false
+ifeq "$(WANT_PROFILING)" "true"
+	PROFILING_FLAG=-pg
+else
+	PROFILING_FLAG=
+endif
+
 # _LIBCPP_HAS_NO_THREADS makes shared_ptr faster
 # (but also makes stuff not thread-safe)
 # Note: this optimization only works with stdlib=libc++
 OPT_FLAGS=$(MALLOC_ACCOUNTING_DEFINE) \
           $(UNVERIFIED_ROW_CACHE_DEFINE) \
+					$(O_DIRECT_COMMAND_LINE_FLAG) \
           $(DBG_SYMBOLS_FLAG) \
+					$(PROFILING_FLAG) \
           $(OPT_FLAG) \
-          -D_LIBCPP_HAS_NO_THREADS \
-          $(GPROF_FLAGS)
+          -D_LIBCPP_HAS_NO_THREADS
 
 ##############################################################################
 # Automatic targets
@@ -340,7 +355,7 @@ LDFLAGS += -lrt
 endif
 
 build/Veribetrfs: $(VERIBETRFS_O_FILES)
-	$(CC) $(STDLIB) -o $@ $(VERIBETRFS_O_FILES) $(LDFLAGS) $(GPROF_FLAGS)
+	$(CC) $(STDLIB) -o $@ $(VERIBETRFS_O_FILES) $(LDFLAGS) $(PROFILING_FLAGS)
 
 ##############################################################################
 # YCSB
@@ -391,7 +406,7 @@ build/YcsbMain.o: ycsb/YcsbMain.cpp ycsb/build/libycsbc-default.a
 			$(POUND_DEFINES) \
 			$(MALLOC_ACCOUNTING_DEFINE) \
 			$(DBG_SYMBOLS_FLAG) \
-			$(GPROF_FLAGS) \
+			$(PROFILING_FLAGS) \
 			$^
 
 # Our build rules are a nightmare. we're actually using make's default g++ rule!
