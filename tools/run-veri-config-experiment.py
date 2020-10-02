@@ -247,7 +247,7 @@ def main():
   make_options = ""
   
   if veri_o_direct == True:
-      make_options = make_options + " WANT_O_DIRECT "
+      make_options = make_options + " WANT_O_DIRECT=true "
   
   cgroup_defaults()
   if ram != None:
