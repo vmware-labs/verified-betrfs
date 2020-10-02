@@ -492,6 +492,10 @@ public:
 
     inline void CountAmassAllocations() {
     }
+
+    inline void cacheDebug() {
+        asm volatile ("nop");
+    }
 };
 
 const string RocksdbFacade::name = string("rocksdb");
@@ -549,6 +553,10 @@ public:
     }
 
     inline void CountAmassAllocations() {
+    }
+
+    inline void cacheDebug() {
+        asm volatile ("nop");
     }
 };
 
@@ -621,6 +629,10 @@ public:
     }
 
     inline void CountAmassAllocations() {
+    }
+
+    inline void cacheDebug() {
+        asm volatile ("nop");
     }
 };
 
