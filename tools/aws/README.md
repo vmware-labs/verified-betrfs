@@ -26,5 +26,8 @@ have 3 workers, this command will only spool up one more.
 ssh bastion veribetrfs/tools/aws/scale-workers.py --scale-up 4
 ```
 
+# Pull a new branch to the workers
+./run-all.py '(cd veribetrfs; git checkout row-cache-adventure; git pull; tools/update-submodules.sh)'
+
 # Running an experiment suite.
 Edit suite configuration in launch-experiments.py, and run that.
