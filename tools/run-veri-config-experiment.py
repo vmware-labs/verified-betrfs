@@ -95,6 +95,7 @@ def main():
   veri_cache_size_in_nodes = None
   veri_bucket_weight       = None
   veri_log_size_in_blocks  = None
+  veri_o_direct            = None
   
   veri = None
   rocks = None
@@ -125,6 +126,8 @@ def main():
       veri_bucket_weight = int(arg[len("bucketWeight=") : ])
     elif arg.startswith("veriLogSizeInBlocks="):
       veri_log_size_in_blocks = int(arg[len("veriLogSizeInBlocks=") : ])
+    elif arg == "veriUseODirect":
+        veri_o_direct = True
     elif "Uint64=" in arg:
       sp = arg.split("=")
       assert len(sp) == 2
@@ -177,6 +180,9 @@ def main():
   if use_unverified_row_cache:
       assert veri
 
+  if veri_o_direct:
+      assert veri
+      
   if use_filters:
       assert rocks
 
@@ -237,10 +243,11 @@ def main():
     make_options += "LOG_QUERY_STATS=1 "
   if use_unverified_row_cache:
     make_options += "WANT_UNVERIFIED_ROW_CACHE=true "
-      
 
-
-    
+  make_options = ""
+  
+  if veri_o_direct == True:
+      make_options = make_options + " WANT_O_DIRECT "
   
   cgroup_defaults()
   if ram != None:
@@ -254,7 +261,7 @@ def main():
   
   if veri:
     print("Building Bundle.cpp...")
-    ret = os.system("make build/Bundle.cpp > /dev/null 2> /dev/null")
+    ret = os.system("make " + make_options + " build/Bundle.cpp > /dev/null 2> /dev/null")
     assert ret == 0
 
   for (name, value) in value_updates:
@@ -265,7 +272,7 @@ def main():
   actuallyprint("Building executable...")
   sys.stdout.flush()
   #cmd = make_options + "make " + exe + " -j4 > /dev/null 2> /dev/null"
-  cmd = make_options + "make " + exe
+  cmd = make_options + "make " + make_options + " " + exe
   actuallyprint(cmd)
   ret = os.system(cmd)
   assert ret == 0
