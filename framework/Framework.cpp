@@ -20,7 +20,9 @@ using namespace std;
 //#define LOG_QUERY_STATS
 
 //#define USE_DIRECT (1)
-#define USE_DIRECT (0)
+#ifndef USE_DIRECT
+#  define USE_DIRECT (0)
+#endif
 
 #ifndef O_NOATIME
 #define O_NOATIME (0)
