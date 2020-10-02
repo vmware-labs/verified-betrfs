@@ -7,6 +7,7 @@ include "NodeModel.i.dfy"
 //
 
 module NodeImpl {
+  import DebugAccumulator
   import opened Options
   import opened Sequences
   import opened NativeTypes
@@ -32,6 +33,32 @@ module NodeImpl {
     var buckets: seq<BucketImpl.MutBucket>;
     ghost var Repr: set<object>;
 
+    method DebugCountBytes(acc:DebugAccumulator.DebugCounter) {
+      var i:uint64 := 0;
+      //print("pivots-one-node ", |pivotTable| as uint64, " buckets ", |buckets| as uint64, "\n");
+      while i < |pivotTable| as uint64 {
+        acc.pivotCount := acc.pivotCount + 1;
+        acc.pivotWeight := acc.pivotWeight + |pivotTable[i]| as uint64;
+        i := i + 1;
+      }
+      var hasTreeBucket := false;
+      i:=0;
+      while i < |buckets| as uint64 {
+        var bucket := buckets[i];
+
+        if bucket.format.BFPkv? {
+          acc.pkvBuckets := acc.pkvBuckets + 1;
+          // Could separate out these weights by bucket type, but probably not interesting
+          // as Rob's going to turn everything into pkvs anyway.
+          acc.keyCount := acc.keyCount + |bucket.pkv.keys.offsets| as uint64;
+          acc.keyWeight := acc.keyWeight + |bucket.pkv.keys.data| as uint64;
+          acc.messageCount := acc.messageCount + |bucket.pkv.messages.offsets| as uint64;
+          acc.messageWeight := acc.messageWeight + |bucket.pkv.messages.data| as uint64;
+        }
+        i := i + 1;
+      } // while buckets
+    }
+        
     constructor(
       pivotTable: Pivots.PivotTable,
       children: Option<seq<BT.G.Reference>>,

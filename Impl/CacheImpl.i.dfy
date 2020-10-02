@@ -35,6 +35,30 @@ module CacheImpl {
       acc := DebugAccumulator.EmptyAccumulator();
       var a := new DebugAccumulator.AccRec(cache.Count, "Node");
       acc := DebugAccumulator.AccPut(acc, "cache", a);
+
+      var counter := new DebugAccumulator.DebugCounter();
+      var iter := cache.SimpleIterStart();
+      var output := cache.SimpleIterOutput(iter);
+      while (!output.Done?) {
+        var node := output.value;
+        node.DebugCountBytes(counter);
+
+        iter := cache.SimpleIterInc(iter);
+        output := cache.SimpleIterOutput(iter);
+      }
+      
+      a := new DebugAccumulator.AccRec(counter.pivotCount, "pivot-key-count");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
+      a := new DebugAccumulator.AccRec(counter.keyCount, "bucket-key-count");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
+      a := new DebugAccumulator.AccRec(counter.messageCount, "bucket-message-count");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
+      a := new DebugAccumulator.AccRec(counter.pivotWeight, "pivot-key-bytes");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
+      a := new DebugAccumulator.AccRec(counter.keyWeight, "bucket-key-bytes");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
+      a := new DebugAccumulator.AccRec(counter.messageWeight, "bucket-message-bytes");
+      acc := DebugAccumulator.AccPut(acc, "cache", a);
     }
 
     constructor()

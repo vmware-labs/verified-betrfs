@@ -222,6 +222,7 @@ def main():
   elif device == "disk":
     #loc = "/home/tjhance/ycsb/"
     loc = "/mnt/xvde/scratch"
+    loc = "/tmp/scratch" #XXX
   else:
     assert False
 

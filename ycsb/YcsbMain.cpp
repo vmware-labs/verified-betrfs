@@ -222,6 +222,7 @@ public:
         cout << "[step] " << name << " load progress " << duration_ms << " ms " << i << " ops" << endl;
         malloc_accounting_status();
         clock_next_report = clock_op_completed + progress_report_interval;
+        db.cacheDebug();  // TODO Note that this will slow down perf runs!
       }
     }
 
@@ -428,6 +429,7 @@ public:
     }
 
     inline void cacheDebug() {
+      app.DebugAccumulator();
       //app.CacheDebug();
     }
 };
