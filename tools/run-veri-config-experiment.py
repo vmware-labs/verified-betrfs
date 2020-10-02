@@ -290,6 +290,8 @@ def main():
     
   clear_page_cache()
 
+  os.system("iostat")
+  
   # bitmask indicating which CPUs we can use
   # See https://linux.die.net/man/1/taskset
   taskset_cmd = "taskset 4 "
@@ -309,6 +311,7 @@ def main():
     ret = proc.wait(timeout = 10)
 
   assert ret == 0
+  os.system("iostat")
   actuallyprint("done")
 
 if __name__ == "__main__":
