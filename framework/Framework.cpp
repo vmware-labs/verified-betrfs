@@ -206,7 +206,7 @@ namespace MainDiskIOHandler_Compile {
       }
 
       this->made_req = true;
-      nWriteReqsOut++;
+      //nWriteReqsOut++;
       nWriteReqsWaiting--;
     }
 
