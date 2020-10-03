@@ -296,7 +296,7 @@ def main():
   # See https://linux.die.net/man/1/taskset
   taskset_cmd = "taskset 4 "
   cgroup_prefix = "cgexec -g memory:VeribetrfsExp " if cgroup_enabled else ""
-  command = taskset_cmd + cgroup_prefix + "./" + exe + " " + loc + " " + driver_options + " " + workload_cmd
+  command = taskset_cmd + cgroup_prefix + "time ./" + exe + " " + loc + " " + driver_options + " " + workload_cmd
   actuallyprint(command)
   sys.stdout.flush()
 
