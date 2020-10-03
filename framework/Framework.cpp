@@ -59,6 +59,11 @@ namespace NativeArithmetic_Compile {
   }
 }
 
+uint64 timespec_to_nsec(struct timespec *ts)
+{
+  return ts->tv_sec * 1000ULL * 1000ULL * 1000ULL + ts->tv_nsec;
+}
+
 namespace NativePackedInts_Compile {
   static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__, "current implementation of NativePackedInts assumes little endian");
   static_assert(sizeof(uint32) == 4, "uint32 is aliased wrong");
@@ -151,6 +156,8 @@ namespace MainDiskIOHandler_Compile {
     uint64 addr;
     uint64 len;
 
+    struct timespec issue_time;
+    
     ~WriteTask() {
       free(aligned_bytes);
     }
@@ -182,6 +189,7 @@ namespace MainDiskIOHandler_Compile {
     }
 
     void start() {
+      clock_gettime(CLOCK_MONOTONIC, &issue_time);
       int ret = aio_write(&aio_req_write);
       if (ret != 0) {
         cout << "number of writeReqs " << endl;
@@ -223,6 +231,17 @@ namespace MainDiskIOHandler_Compile {
             fail("write did not write all bytes");
           }
           done = true;
+
+          struct timespec completion_time;
+          clock_gettime(CLOCK_MONOTONIC, &completion_time);
+          uint64 issue_time_ns = timespec_to_nsec(&issue_time);
+          uint64 completion_time_ns = timespec_to_nsec(&completion_time);
+          printf("WRITE_COMPLETED len=%lu aligned_len=%lu start=%lu finish=%lu duration=%lu\n",
+                 len,
+                 aligned_len,
+                 issue_time_ns,
+                 completion_time_ns,
+                 completion_time_ns - issue_time_ns);
           nWriteReqsOut--;
         } else if (status != EINPROGRESS) {
           fail("aio_error returned that write has failed");
