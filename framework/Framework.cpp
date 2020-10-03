@@ -264,8 +264,17 @@ namespace MainDiskIOHandler_Compile {
     auto t1 = chrono::high_resolution_clock::now();
     #endif
 
+    
+    auto t1 = chrono::high_resolution_clock::now();
     ssize_t count = pread(fd, res, len, addr);
-
+    auto t2 = chrono::high_resolution_clock::now();
+    long long ns = std::chrono::duration_cast<
+        std::chrono::nanoseconds>(t2 - t1).count();
+    printf("READ_FROM_FILE len=%u duration=%lld\n",
+           len,
+           ns);
+    
+    
     #ifdef LOG_QUERY_STATS
     auto t2 = chrono::high_resolution_clock::now();
     long long ns = std::chrono::duration_cast<
@@ -295,7 +304,15 @@ namespace MainDiskIOHandler_Compile {
       fail("Couldn't create aligned copy of buffer");
     }    
     
+    auto t1 = chrono::high_resolution_clock::now();
     ssize_t res = pwrite(fd, aligned_sector, aligned_len, addr);
+    auto t2 = chrono::high_resolution_clock::now();
+    long long ns = std::chrono::duration_cast<
+        std::chrono::nanoseconds>(t2 - t1).count();
+    printf("WRITE_SYNC len=%lu aligned_len=%lu duration=%lld\n",
+           len,
+           aligned_len,
+           ns);
 
     free(aligned_sector);
     
