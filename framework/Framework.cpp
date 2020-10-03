@@ -208,6 +208,15 @@ namespace MainDiskIOHandler_Compile {
       this->made_req = true;
       //nWriteReqsOut++;
       nWriteReqsWaiting--;
+
+      uint64 issue_time_ns = timespec_to_nsec(&issue_time);
+      uint64 real_completion_time_ns = timespec_to_nsec(&real_completion_time);
+      printf("WRITE_REAL_COMPLETED len=%lu aligned_len=%lu start=%lu finish=%lu duration=%lu\n",
+             len,
+             aligned_len,
+             issue_time_ns,
+             real_completion_time_ns,
+             real_completion_time_ns - issue_time_ns);
     }
 
     void wait() {
@@ -227,15 +236,6 @@ namespace MainDiskIOHandler_Compile {
     }
 
     void check_if_complete() {
-      if (!done && made_req) {
-        int status = aio_error(&aio_req_write);
-        if (status == 0) {
-          ssize_t ret = aio_return(&aio_req_write);
-          if (ret < 0 || (size_t)ret != aligned_len) {
-            fail("write did not write all bytes");
-          }
-          done = true;
-
           struct timespec completion_time;
           clock_gettime(CLOCK_MONOTONIC, &completion_time);
           uint64 issue_time_ns = timespec_to_nsec(&issue_time);
@@ -249,6 +249,16 @@ namespace MainDiskIOHandler_Compile {
                  completion_time_ns,
                  real_completion_time_ns - issue_time_ns,
                  completion_time_ns - real_completion_time_ns);
+
+      if (!done && made_req) {
+        int status = aio_error(&aio_req_write);
+        if (status == 0) {
+          ssize_t ret = aio_return(&aio_req_write);
+          if (ret < 0 || (size_t)ret != aligned_len) {
+            fail("write did not write all bytes");
+          }
+          done = true;
+
           nWriteReqsOut--;
         } else if (status != EINPROGRESS) {
           fail("aio_error returned that write has failed");
