@@ -287,7 +287,7 @@ def main():
       os.system("cp -a " + from_archive + "/* " + datadir + "/")
     else:
       os.system("cp -a " + from_archive + " " + loc)
-  else if veri:
+  elif veri:
       os.system("head -c 17179869184 /dev/zero > " + loc)
       
   clear_page_cache()
