@@ -157,6 +157,7 @@ namespace MainDiskIOHandler_Compile {
     uint64 len;
 
     struct timespec issue_time;
+    struct timespec real_completion_time;
     
     ~WriteTask() {
       free(aligned_bytes);
@@ -190,8 +191,11 @@ namespace MainDiskIOHandler_Compile {
 
     void start() {
       clock_gettime(CLOCK_MONOTONIC, &issue_time);
-      int ret = aio_write(&aio_req_write);
-      if (ret != 0) {
+      int ret = pwrite(aio_req_write.aio_fildes, (void *)aio_req_write.aio_buf, aio_req_write.aio_nbytes, aio_req_write.aio_offset);
+      clock_gettime(CLOCK_MONOTONIC, &real_completion_time);
+      done = true;
+      //int ret = aio_write(&aio_req_write);
+      if ((size_t)ret != aio_req_write.aio_nbytes) {
         cout << "number of writeReqs " << endl;
         if (errno == EAGAIN) { fail("aio_write failed EAGAIN"); }
         else if (errno == EBADF) { fail("aio_write failed EBADF"); }
@@ -235,13 +239,16 @@ namespace MainDiskIOHandler_Compile {
           struct timespec completion_time;
           clock_gettime(CLOCK_MONOTONIC, &completion_time);
           uint64 issue_time_ns = timespec_to_nsec(&issue_time);
+          uint64 real_completion_time_ns = timespec_to_nsec(&real_completion_time);
           uint64 completion_time_ns = timespec_to_nsec(&completion_time);
-          printf("WRITE_COMPLETED len=%lu aligned_len=%lu start=%lu finish=%lu duration=%lu\n",
+          printf("WRITE_COMPLETED len=%lu aligned_len=%lu start=%lu finish=%lu noticed=%lu duration=%lu, delay=%lu\n",
                  len,
                  aligned_len,
                  issue_time_ns,
+                 real_completion_time_ns,
                  completion_time_ns,
-                 completion_time_ns - issue_time_ns);
+                 real_completion_time_ns - issue_time_ns,
+                 completion_time_ns - real_completion_time_ns);
           nWriteReqsOut--;
         } else if (status != EINPROGRESS) {
           fail("aio_error returned that write has failed");
