@@ -64,6 +64,25 @@ uint64 timespec_to_nsec(struct timespec *ts)
   return ts->tv_sec * 1000ULL * 1000ULL * 1000ULL + ts->tv_nsec;
 }
 
+int logged_aio_suspend(const struct aiocb * const aiocb_list[],
+                       int nitems, const struct timespec *timeout)
+{
+  struct timespec suspend_times[2];
+  uint64 suspend_times_ns[2];
+  clock_gettime(CLOCK_MONOTONIC, &suspend_times[0]);
+  int ret = aio_suspend(aiocb_list, nitems, timeout);
+  clock_gettime(CLOCK_MONOTONIC, &suspend_times[1]);
+  suspend_times_ns[0] = timespec_to_nsec(&suspend_times[0]);
+  suspend_times_ns[1] = timespec_to_nsec(&suspend_times[1]);
+  printf("aio_suspend: nitems=%d start=%ld start=%ld duration=%ld\n",
+         nitems,
+         suspend_times_ns[0],
+         suspend_times_ns[1],
+         suspend_times_ns[1] - suspend_times_ns[0]);
+  return ret;
+}
+
+
 namespace NativePackedInts_Compile {
   static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__, "current implementation of NativePackedInts assumes little endian");
   static_assert(sizeof(uint32) == 4, "uint32 is aliased wrong");
@@ -206,21 +225,21 @@ namespace MainDiskIOHandler_Compile {
       nWriteReqsWaiting--;
     }
 
-    void wait() {
-      if (!this->made_req) {
-        fail("wait() failed - request not made yet");
-      }
-      if (!done) {
-        aiocb* aiolist[1];
-        aiolist[0] = &aio_req_write; //&aio_req_fsync;
-        aio_suspend(aiolist, 1, NULL);
+    // void wait() {
+    //   if (!this->made_req) {
+    //     fail("wait() failed - request not made yet");
+    //   }
+    //   if (!done) {
+    //     aiocb* aiolist[1];
+    //     aiolist[0] = &aio_req_write; //&aio_req_fsync;
+    //     aio_suspend(aiolist, 1, NULL);
 
-        check_if_complete();
-        if (!done) {
-          fail("wait failed to complete");
-        }
-      }
-    }
+    //     check_if_complete();
+    //     if (!done) {
+    //       fail("wait failed to complete");
+    //     }
+    //   }
+    // }
 
     void check_if_complete() {
       if (!done && made_req) {
@@ -509,8 +528,7 @@ namespace MainDiskIOHandler_Compile {
         break;
       }
 
-      aio_suspend(&tasks[0], i, NULL);
-
+      logged_aio_suspend(&tasks[0], i, NULL);
       maybeStartWriteReq();
     }
   }
@@ -532,7 +550,7 @@ namespace MainDiskIOHandler_Compile {
       fail("waitForOne called with no tasks\n");
     }
 
-    aio_suspend(&tasks[0], i, NULL);
+    logged_aio_suspend(&tasks[0], i, NULL);
 
     maybeStartWriteReq();
   }
