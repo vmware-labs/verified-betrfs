@@ -693,6 +693,7 @@ void Application::Insert(ByteString key, ByteString val)
       #endif
 
       io->waitForOne();
+      last_wait = i;
 
       #ifdef LOG_QUERY_STATS
       benchmark_end("write (insert)");
