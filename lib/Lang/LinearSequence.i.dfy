@@ -166,9 +166,7 @@ module LinearSequence_i {
       ensures lseq_has(s) == lseq_has(old_s)
       ensures lseqs(s) == lseqs(old_s)[i as nat := a1]
   {
-      linear var x1:maybe<A> := give(a1);
-      linear var x2 := lseq_swap_inout_raw(inout s, i, x1);
-      a2 := unwrap(x2);
+    s, a2 := lseq_swap(s, i, a1);
   }
 
   method lseq_take<A>(linear s1:lseq<A>, i:uint64) returns(linear s2:lseq<A>, linear a:A)
@@ -189,8 +187,7 @@ module LinearSequence_i {
       ensures lseq_has(s) == lseq_has(old_s)[i as nat := false]
       ensures forall j:nat | j < |s| && j != i as nat :: lseqs(s)[j] == lseqs(old_s)[j]
   {
-      linear var x := lseq_take_inout_raw(inout s, i);
-      a := unwrap(x);
+    s, a := lseq_take(s, i);
   }
 
   function method lseq_take_fun<A>(linear s1:lseq<A>, i:uint64) : (linear p:(linear lseq<A>, linear A))
@@ -222,8 +219,7 @@ module LinearSequence_i {
       ensures lseq_has(s1) == lseq_has(old_s1)[i as nat := true]
       ensures lseqs(s1) == lseqs(old_s1)[i as nat := a]
   {
-      linear var x1:maybe<A> := give(a);
-      lseq_give_inout_raw(inout s1, i, x1);
+    s1 := lseq_give(s1, i, a);
   }
 
 
