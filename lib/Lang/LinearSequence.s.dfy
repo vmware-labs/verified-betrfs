@@ -55,6 +55,14 @@ module {:extern "LinearExtern"} LinearSequence_s {
   function {:axiom} lseqs_raw<A>(l:lseq<A>):(s:seq<maybe<A>>) // contents of an lseq, as ghost seq
     ensures rank_is_less_than(s, l)
 
+
+  function lseq_has<A>(l:lseq<A>):(s:seq<bool>)
+      ensures |s| == |lseqs_raw(l)|
+  {
+    seq(|lseqs_raw(l)|, i requires 0 <= i < |lseqs_raw(l)| => has(lseqs_raw(l)[i]))
+  }
+
+
   lemma {:axiom} axiom_lseqs_rank<A>(l:lseq<A>, s:seq<A>)
     requires |lseqs_raw(l)| == |s|
     requires forall i :: 0 <= i < |s| ==> s[i] == read(lseqs_raw(l)[i])
@@ -85,6 +93,18 @@ module {:extern "LinearExtern"} LinearSequence_s {
       ensures p.1 == lseqs_raw(s1)[i]
       ensures lseqs_raw(p.0) == lseqs_raw(s1)[i as int := a1]
 
+  method {:extern "LinearExtern", "lseq_swap_inout_raw"} lseq_swap_inout_raw<A>(linear inout s1:lseq<A>, i:uint64, linear a1:maybe<A>) returns(linear a2:maybe<A>)
+      requires i as nat < |lseqs_raw(old_s1)|// && i as nat in lseqs_raw(old_s1)
+      ensures a2 == lseqs_raw(old_s1)[i as nat]
+      ensures lseq_has(s1) == lseq_has(old_s1)
+      ensures lseqs_raw(s1) == lseqs_raw(old_s1)[i as nat := a1]
+
+  method {:extern "LinearExtern", "lseq_take_inout_raw"} lseq_take_inout_raw<A>(linear inout s1:lseq<A>, i:uint64) returns(linear a:maybe<A>)
+      requires i as nat < |lseqs_raw(old_s1)| //&& i as nat in old_s1
+      ensures a == lseqs_raw(old_s1)[i as nat]
+      ensures lseq_has(s1) == lseq_has(old_s1)[i as nat := false]
+      ensures forall j:nat | j < |lseqs_raw(s1)| && j != i as nat :: lseqs_raw(s1)[j] == lseqs_raw(old_s1)[j]
+
   function method {:extern "LinearExtern", "lseq_share_raw"} lseq_share_raw<A>(shared s:lseq<A>, i:uint64):(shared a:maybe<A>)
       requires i as int < |lseqs_raw(s)|
       ensures a == lseqs_raw(s)[i]
@@ -92,5 +112,17 @@ module {:extern "LinearExtern"} LinearSequence_s {
   // must be a method, not a function method, so that we know s is a run-time value, not a ghost value
   method {:extern "LinearExtern", "lseq_length_bound"} lseq_length_bound<A>(shared s:lseq<A>)
     ensures |lseqs_raw(s)| < 0xffff_ffff_ffff_ffff
+
+  method {:extern "LinearExtern", "TrustedRuntimeSeqResize"} TrustedRuntimeSeqResize<A>(linear s: seq<A>, newlen: uint64)
+    returns (linear s2: seq<A>)
+    ensures |s2| == newlen as nat
+    ensures forall j :: 0 <= j < newlen as nat && j < |s| ==> s2[j] == s[j]
+
+  method {:extern "LinearExtern", "TrustedRuntimeLSeqResize"} TrustedRuntimeLSeqResize<A>(linear s: lseq<A>, newlen: uint64)
+    returns (linear s2: lseq<A>)
+    ensures |lseqs_raw(s2)| == newlen as nat
+    ensures forall j :: 0 <= j < newlen as nat && j < |lseqs_raw(s)| ==> lseq_has(s2)[j] == lseq_has(s)[j]
+    ensures forall j :: |lseqs_raw(s)| <= j < newlen as nat ==> lseq_has(s2)[j] == false
+    ensures forall j :: 0 <= j < newlen as nat && j < |lseqs_raw(s)| ==> lseqs_raw(s2)[j] == lseqs_raw(s)[j]
 
 } // module

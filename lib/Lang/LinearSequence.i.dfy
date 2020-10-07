@@ -8,7 +8,7 @@ module LinearSequence_i {
   export
     provides LinearSequence_s
     provides NativeTypes
-    provides seq_alloc_init, lseqs, imagine_lseq, lseq_has, lseq_peek, lseq_free_fun, lseq_take_fun, lseq_swap_inout, lseq_take_inout, lseq_give_inout
+    provides seq_alloc_init, lseqs, imagine_lseq, lseq_peek, lseq_free_fun, lseq_take_fun, lseq_give_inout
     provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give, lseq_length_uint64, lseq_length_as_uint64, lseq_add
     provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, SeqResize, InsertSeq, InsertLSeq, Replace1With2Lseq, Replace1With2Lseq_inout
     reveals lseq_length, lseq_full, linLast, ldroplast, lseq_has_all
@@ -56,12 +56,6 @@ module LinearSequence_i {
     ensures forall i :: 0 <= i < |l'| ==> l'[i] == l[i]
   {
     imagine_lseq(lseqs(l)[..|l|-1])
-  }
-
-  function lseq_has<A>(l:lseq<A>):(s:seq<bool>)
-      ensures |s| == |lseqs(l)|
-  {
-    seq(|lseqs_raw(l)|, i requires 0 <= i < |lseqs_raw(l)| => has(lseqs_raw(l)[i]))
   }
 
   lemma lemma_lseqs_extensional<A>(l1:lseq<A>, l2:lseq<A>)
@@ -165,12 +159,18 @@ module LinearSequence_i {
       s2 := s2tmp;
       a2 := unwrap(x2);
   }
-
-  method lseq_swap_inout<A>(linear inout s1:lseq<A>, i:uint64, linear a1:A) returns(linear a2:A)
-      requires i as nat < |old_s1| && i as nat in old_s1
-      ensures a2 == old_s1[i as nat]
-      ensures lseq_has(s1) == lseq_has(old_s1)
-      ensures lseqs(s1) == lseqs(old_s1)[i as nat := a1]
+  
+  method lseq_swap_inout<A>(linear inout s:lseq<A>, i:uint64, linear a1:A) returns(linear a2:A)
+      requires i as nat < |old_s| && i as nat in old_s
+      ensures a2 == s[i as nat]
+      ensures lseq_has(s) == lseq_has(old_s)
+      ensures lseqs(s) == lseqs(old_s)[i as nat := a1]
+  {
+      linear var x1:maybe<A> := give(a1);
+      linear var (s2tmp, x2) := lseq_swap_inout_raw(s, i, x1);
+      s := s2tmp;
+      a2 := unwrap(x2);
+  }
 
   method lseq_take<A>(linear s1:lseq<A>, i:uint64) returns(linear s2:lseq<A>, linear a:A)
       requires i as nat < |s1| && i as nat in s1
@@ -184,6 +184,18 @@ module LinearSequence_i {
       a := unwrap(x2);
   }
 
+  method lseq_take_inout<A>(linear inout s:lseq<A>, i:uint64) returns(linear a:A)
+      requires i as nat < |old_s| && i as nat in old_s 
+      ensures a == s[i as nat]
+      ensures lseq_has(s2) == lseq_has(s)[i as nat := false]
+      ensures forall j:nat | j < |s| && j != i as nat :: lseqs(s2)[j] == lseqs(s)[j]
+  {
+      linear var x1:maybe<A> := empty();
+      linear var (s2tmp, x2) := lseq_take_raw(s, i);
+      s := s2tmp;
+      a := unwrap(x2);
+  }
+
   function method lseq_take_fun<A>(linear s1:lseq<A>, i:uint64) : (linear p:(linear lseq<A>, linear A))
       requires i as nat < |s1| && i as nat in s1
       ensures p.1 == s1[i as nat]
@@ -194,12 +206,6 @@ module LinearSequence_i {
       linear var (s2tmp, x2) := lseq_swap_raw_fun(s1, i, x1);
       (linear s2tmp, linear unwrap(x2))
   }
-
-  method lseq_take_inout<A>(linear inout s1:lseq<A>, i:uint64) returns(linear a:A)
-      requires i as nat < |old_s1| && i as nat in old_s1
-      ensures a == old_s1[i as nat]
-      ensures lseq_has(s1) == lseq_has(old_s1)[i as nat := false]
-      ensures forall j:nat | j < |s1| && j != i as nat :: lseqs(s1)[j] == lseqs(old_s1)[j]
 
   method lseq_give<A>(linear s1:lseq<A>, i:uint64, linear a:A) returns(linear s2:lseq<A>)
       requires i as nat < |s1|
@@ -281,18 +287,6 @@ module LinearSequence_i {
       i := i + 1;
     }
   }
-
-  method {:extern "LinearExtern", "TrustedRuntimeSeqResize"} TrustedRuntimeSeqResize<A>(linear s: seq<A>, newlen: uint64)
-    returns (linear s2: seq<A>)
-    ensures |s2| == newlen as nat
-    ensures forall j :: 0 <= j < newlen as nat && j < |s| ==> s2[j] == s[j]
-
-  method {:extern "LinearExtern", "TrustedRuntimeLSeqResize"} TrustedRuntimeLSeqResize<A>(linear s: lseq<A>, newlen: uint64)
-    returns (linear s2: lseq<A>)
-    ensures |s2| == newlen as nat
-    ensures forall j :: 0 <= j < newlen as nat && j < |s| ==> lseq_has(s2)[j] == lseq_has(s)[j]
-    ensures forall j :: |s| <= j < newlen as nat ==> lseq_has(s2)[j] == false
-    ensures forall j :: 0 <= j < newlen as nat && j < |s| ==> s2[j] == s[j]
 
   method SeqResize<A>(linear s: seq<A>, newlen: uint64, a: A) returns (linear s2: seq<A>)
     ensures |s2| == newlen as nat
