@@ -70,6 +70,7 @@ namespace MainDiskIOHandler_Compile {
 
     bool has_read_task() { return !readReqs.empty(); }
     bool has_write_task() { return !writeReqs.empty(); }
+    bool write_queue_is_full();
 
     private:
     int fd;

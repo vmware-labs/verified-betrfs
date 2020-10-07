@@ -504,6 +504,10 @@ namespace MainDiskIOHandler_Compile {
     return false;
   }
 
+  bool DiskIOHandler::write_queue_is_full() {
+    return writeReqs.size() == MAX_WRITE_REQS_OUT;
+  }
+  
   void DiskIOHandler::completeWriteTasks() {
     while (true) {
       vector<aiocb*> tasks;
@@ -532,6 +536,7 @@ namespace MainDiskIOHandler_Compile {
       maybeStartWriteReq();
     }
   }
+
   void DiskIOHandler::waitForOne() {
     std::vector<aiocb*> tasks;
     malloc_accounting_set_scope("waitForOne.resize");
@@ -681,7 +686,7 @@ void Application::Insert(ByteString key, ByteString val)
       success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
     } while (!success && oldnios < MainDiskIOHandler_Compile::nWriteReqsOut);
 
-    if (io->has_write_task()) {
+    if (io->write_queue_is_full()) {
       #ifdef LOG_QUERY_STATS
       benchmark_start("write (insert)");
       #endif
