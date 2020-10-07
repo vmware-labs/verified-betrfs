@@ -97,7 +97,7 @@ namespace MallocAccounting_Compile {
 }
 
 namespace NodeImpl_Compile {
-class Node;
+struct Node;
 }
 
 namespace AllocationReport_Compile {

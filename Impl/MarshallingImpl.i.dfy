@@ -453,9 +453,9 @@ module MarshallingImpl {
     PackedKVMarshalling.SizeOfVPackedKVIsBucketWeight(pkv);
   }
 
-  method bucketsToVal(shared buckets: lseq<BucketImpl.MutBucket>, end: int)
+  method bucketsToVal(shared buckets: lseq<BucketImpl.MutBucket>, end: uint64)
   returns (v: V, size: uint64)
-  requires 0 <= end <= |buckets|
+  requires 0 <= end as int <= |buckets|
   requires BucketImpl.MutBucket.InvLseq(buckets)
   requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i].bucket)
   requires BucketsLib.BucketListWellMarshalled(BucketImpl.MutBucket.ILseq(buckets))
@@ -463,21 +463,21 @@ module MarshallingImpl {
   requires WeightBucketList(BucketImpl.MutBucket.ILseq(buckets)) <= MaxTotalBucketWeight()
   ensures ValidVal(v)
   ensures ValInGrammar(v, GArray(Marshalling.BucketGrammar()))
-  ensures |v.a| == end
+  ensures |v.a| == end as int
   ensures Marshalling.valToBuckets(v.a) == Some(BucketImpl.MutBucket.ILseq(buckets)[..end])
-  ensures SizeOfV(v) <= 8 + WeightBucketList(BucketImpl.MutBucket.ILseq(buckets)[..end]) + end * 32
+  ensures SizeOfV(v) <= 8 + WeightBucketList(BucketImpl.MutBucket.ILseq(buckets)[..end]) + end as int * 32
   ensures SizeOfV(v) == size as int
   {
     if end == 0 {
       v := VArray([]);
       size := 8;
     } else {
-      WeightBucketListSlice(BucketImpl.MutBucket.ILseq(buckets), 0, end - 1);
-      WeightBucketLeBucketList(BucketImpl.MutBucket.ILseq(buckets), end - 1);
-      BucketImpl.MutBucket.Islice(buckets, 0, end - 1);
+      WeightBucketListSlice(BucketImpl.MutBucket.ILseq(buckets), 0, end as int - 1);
+      WeightBucketLeBucketList(BucketImpl.MutBucket.ILseq(buckets), end as int - 1);
+      BucketImpl.MutBucket.Islice(buckets, 0, end as int - 1);
 
       var pref, pref_size := bucketsToVal(buckets, end-1);
-      shared var bucket := lseq_peek(buckets, (end-1) as uint64);
+      shared var bucket := lseq_peek(buckets, end-1);
 
       var bucketVal, bucket_size := bucketToVal(bucket);
       
@@ -524,7 +524,7 @@ module MarshallingImpl {
   ensures SizeOfV(v) == size as int
   {
     var end := node.GetBucketsLen();
-    var buckets, size_buckets := bucketsToVal(node.box.Borrow().buckets, end as int);
+    var buckets, size_buckets := bucketsToVal(node.box.Borrow().buckets, end);
     assert BucketImpl.MutBucket.ILseq(node.Read().buckets)[..end] == BucketImpl.MutBucket.ILseq(node.Read().buckets);
 
     var pivots, size_pivots := pivotsToVal(node.box.Borrow().pivotTable);
