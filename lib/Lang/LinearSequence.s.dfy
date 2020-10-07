@@ -105,6 +105,14 @@ module {:extern "LinearExtern"} LinearSequence_s {
       ensures lseq_has(s1) == lseq_has(old_s1)[i as nat := false]
       ensures forall j:nat | j < |lseqs_raw(s1)| && j != i as nat :: lseqs_raw(s1)[j] == lseqs_raw(old_s1)[j]
 
+  method {:extern "LinearExtern", "lseq_give_inout_raw"} lseq_give_inout_raw<A>(linear inout s1:lseq<A>, i:uint64, linear a:maybe<A>)
+      requires i as nat < |old_s1|
+      requires i as nat !in old_s1
+      //requires i as nat !in old_s1 // Huh?
+      //requires i as nat !in old_s1 // Huh?
+      ensures lseq_has(s1) == lseq_has(old_s1)[i as nat := true]
+      ensures lseqs_raw(s1) == lseqs_raw(old_s1)[i as nat := a]
+
   function method {:extern "LinearExtern", "lseq_share_raw"} lseq_share_raw<A>(shared s:lseq<A>, i:uint64):(shared a:maybe<A>)
       requires i as int < |lseqs_raw(s)|
       ensures a == lseqs_raw(s)[i]
