@@ -696,7 +696,7 @@ void dump_metadata(const char* workload_filename, const char* database_filename)
   //   printf("metadata cgroups-memory.limit_in_bytes %s", line);
   // }
 
-  printf("metadata workload_filename %s", workload_filename);
+  printf("metadata workload_filename %s\n", workload_filename);
   fp = fopen(workload_filename, "r");
   while (true) {
     char* line = fgets(space, sizeof(space), fp);
@@ -707,7 +707,7 @@ void dump_metadata(const char* workload_filename, const char* database_filename)
   }
   fclose(fp);
 
-  printf("metadata database_filename %s", database_filename);
+  printf("metadata database_filename %s\n", database_filename);
   fflush(stdout);
   char cmdbuf[1000];
   // yes, this is a security hole. In the measurement framework,
@@ -733,7 +733,7 @@ void runOneWorkload(DbFacade db, string workload_filename, string database_filen
   int sync_interval_ops = 0;
 
   string workload_name;
-  
+
   if (properties_map.find("syncintervalms") != properties_map.end()) {
     sync_interval_ms= stoi(props["syncintervalms"]);
   }

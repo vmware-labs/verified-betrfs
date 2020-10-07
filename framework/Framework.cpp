@@ -666,6 +666,7 @@ void Application::Sync(bool graphSync) {
 
 void Application::Insert(ByteString key, ByteString val)
 {
+  int last_wait = 0;
   #ifdef LOG_QUERY_STATS
   currently_doing_action = ACTION_INSERT;
   auto t1 = chrono::high_resolution_clock::now();
@@ -686,7 +687,7 @@ void Application::Insert(ByteString key, ByteString val)
       success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
     } while (!success && oldnios < MainDiskIOHandler_Compile::nWriteReqsOut);
 
-    if (io->write_queue_is_full()) {
+    if (io->write_queue_is_full() || (io->has_write_task() && i - last_wait > 100)) {
       #ifdef LOG_QUERY_STATS
       benchmark_start("write (insert)");
       #endif
