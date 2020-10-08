@@ -81,20 +81,27 @@ class Blktrace:
     self.killall()
 
   def killall(self):
+    actuallyprint("Blktrace.killall")
     subprocess.call(["sudo", "killall", "blktrace"])
 
   def start(self, device):
+    actuallyprint("Blktrace.start")
     self.blktrace_process = subprocess.Popen(
         ["sudo", "blktrace", device], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   
   def stop(self, fp):
+    actuallyprint("Blktrace.stop")
     self.killall()
+    actuallyprint("Blktrace.wait")
     self.blktrace_process.wait()
 
+    actuallyprint("Blktrace.emit")
     (stdout,stderr) = blktrace_process.communicate()
     lines = (stdout.decode("utf-8") + stderr.decode("utf-8")).split("\n")
     for line in lines:
       fp.write("blktrace "+line+"\n")
+      stdout.write("blktrace "+line+"\n")
+    actuallyprint("Blktrace.done")
 
 def main():
   git_branch = None
