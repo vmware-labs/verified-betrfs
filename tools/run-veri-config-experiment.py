@@ -76,6 +76,26 @@ def splice_value_into_bundle(name, value):
   with open("build/Bundle.cpp","w") as f:
     f.write(cpp)
 
+class Blktrace:
+  def __init__(self):
+    self.killall()
+
+  def killall(self):
+    subprocess.call(["sudo", "killall", "blktrace"])
+
+  def start(self, device):
+    self.blktrace_process = subprocess.Popen(
+        ["sudo", "blktrace", device], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  
+  def stop(self, fp):
+    self.killall()
+    self.blktrace_process.wait()
+
+    (stdout,stderr) = blktrace_process.communicate()
+    lines = (stdout.decode("utf-8") + stderr.decode("utf-8")).split("\n")
+    for line in lines:
+      fp.write("blktrace "+line+"\n")
+
 def main():
   git_branch = None
   archive_dir = "/mnt/xvde/archives"
@@ -294,7 +314,8 @@ def main():
 
   os.system("iostat")
 
-  blktrace_process = subprocess.Popen(["sudo", "blktrace", "/dev/xvde"], stdout=fp, stderr=fp)
+  blktrace = Blktrace()
+  blktrace.start("/dev/xvde")   # alert jonh hack hardcoded blktrace device
   
   # bitmask indicating which CPUs we can use
   # See https://linux.die.net/man/1/taskset
@@ -314,9 +335,7 @@ def main():
     proc.kill()
     ret = proc.wait(timeout = 10)
 
-  # Ask blktrace to die and emit totals
-  blktrace_process.kill()
-  blktrace_process.wait()
+  blktrace.stop(fp)
 
   assert ret == 0
   os.system("iostat")
