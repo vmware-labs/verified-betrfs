@@ -135,10 +135,11 @@ module EvictImpl {
     } else {
       headroom := MaxCacheSizeUint64() - s.cache.Count();
     }
-    if 10 <= headroom {
+    var minHeadroom: uint64 := 2;
+    if minHeadroom <= headroom {
       return;
     }
-    var count := 10 - headroom;
+    var count := minHeadroom - headroom;
     var refs := s.lru.NextN(count);
     var i: uint64 := 0;
     while i < |refs| as uint64 {
