@@ -316,11 +316,20 @@ namespace MainDiskIOHandler_Compile {
     }
 
     #if USE_DIRECT
+    printf("metadata USE_DIRECT true\n");
+    #else
+    printf("metadata USE_DIRECT false\n");
+    #endif
+
+    #if USE_DIRECT
     #ifdef F_NOCACHE
     int res = fcntl(fd, F_NOCACHE, 1);
     if (res == -1) {
       fail("fcntl F_NOCACHE failed");
     }
+    printf("metadata F_NOCACHE true\n");
+    #else
+    printf("metadata F_NOCACHE false\n");
     #endif
     #endif
   }
