@@ -177,21 +177,21 @@ module FlushPolicyImpl {
 
     match action {
       case ActionPageIn(ref) => {
-        print "page in ", ref, "\n";
+        //print "page in ", ref, "\n";
         PageInNodeReq(k, s, io, ref);
       }
       case ActionSplit(parentref, slot) => {
-        print "split ", parentref, " ", slot, "\n";
+        //print "split ", parentref, " ", slot, "\n";
         var parent := s.cache.GetOpt(parentref);
         doSplit(k, s, parentref, parent.value.children.value[slot], slot);
       }
       case ActionRepivot(ref) => {
-        print "repivot ", ref, "\n";
+        //print "repivot ", ref, "\n";
         var node := s.cache.GetOpt(ref);
         repivotLeaf(k, s, ref, node.value);
       }
       case ActionFlush(parentref, slot) => {
-        print "flush ", parentref, " ", slot, "\n";
+        //print "flush ", parentref, " ", slot, "\n";
         var parent := s.cache.GetOpt(parentref);
         var childref := parent.value.children.value[slot];
         var child := s.cache.GetOpt(childref);
@@ -200,11 +200,11 @@ module FlushPolicyImpl {
             child.value);
       }
       case ActionGrow => {
-        print "grow\n";
+        //print "grow\n";
         grow(k, s);
       }
       case ActionEvict => {
-        print "evict\n";
+        //print "evict\n";
         EvictOrDealloc(k, s, io);
       }
       case ActionFail => {
