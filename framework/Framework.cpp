@@ -681,17 +681,22 @@ void Application::Insert(ByteString key, ByteString val)
 
   for (int i = 0; i < 500000; i++) {
     bool success;
-    int oldnios;
-    do {
-      oldnios = MainDiskIOHandler_Compile::nWriteReqsOut;
-      success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
-    } while (!success && oldnios < MainDiskIOHandler_Compile::nWriteReqsOut);
+    //int oldnios;
+    //do {
+    //oldnios = MainDiskIOHandler_Compile::nWriteReqsOut;
+    success = handle_Insert(k, hs, io, key.as_dafny_seq(), val.as_dafny_seq());
+    //} while (!success && oldnios < MainDiskIOHandler_Compile::nWriteReqsOut);
 
     if (io->write_queue_is_full() || (io->has_write_task() && i - last_wait > 100)) {
       #ifdef LOG_QUERY_STATS
       benchmark_start("write (insert)");
       #endif
 
+      printf("Doing forced wait %d %d %d %d\n",
+             io->write_queue_is_full(),
+             io->has_write_task(),
+             i,
+             last_wait);
       io->waitForOne();
       last_wait = i;
 
@@ -700,7 +705,8 @@ void Application::Insert(ByteString key, ByteString val)
       #endif
     }
 
-    this->maybeDoResponse();
+    while (this->maybeDoResponse())
+      ;
 
     if (success) {
       #ifdef USE_UNVERIFIED_ROW_CACHE

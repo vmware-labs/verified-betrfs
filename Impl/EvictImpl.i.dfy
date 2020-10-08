@@ -89,23 +89,29 @@ module EvictImpl {
     DeallocModel.FindDeallocableCorrect(s.I());
 
     if ref.Some? {
+      print "dealloc\n";
       Dealloc(k, s, io, ref.value);
     } else {
       var refOpt := s.lru.NextOpt();
       if refOpt.None? {
+        print "lru none\n";
       } else {
         var ref := refOpt.value;
         var needToWrite := NeedToWrite(s, ref);
         if needToWrite {
           if s.outstandingIndirectionTableWrite.None? {
+            print "trying to write block ", ref, "\n";
             TryToWriteBlock(k, s, io, ref);
           } else {
+            print "not writing due to indirection table ", ref, "\n";
           }
         } else {
           var canEvict := CanEvict(s, ref);
           if canEvict {
+            print "evict ", ref, "\n";
             Evict(k, s, ref);
           } else {
+            print "can't evict ", ref, "\n";
           }
         }
       }
