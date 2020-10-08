@@ -293,6 +293,8 @@ def main():
   clear_page_cache()
 
   os.system("iostat")
+
+  blktrace_process = subprocess.Popen(["sudo", "blktrace", "/dev/xvde"], stdout=fp, stderr=fp)
   
   # bitmask indicating which CPUs we can use
   # See https://linux.die.net/man/1/taskset
@@ -311,6 +313,10 @@ def main():
     actuallyprint("timeout expired (%ds); killing" % time_budget_set)
     proc.kill()
     ret = proc.wait(timeout = 10)
+
+  # Ask blktrace to die and emit totals
+  blktrace_process.kill()
+  blktrace_process.wait()
 
   assert ret == 0
   os.system("iostat")
