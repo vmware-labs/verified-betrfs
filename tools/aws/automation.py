@@ -61,7 +61,7 @@ def retrieve_running_workers(workers_file=".awsworkers", ssd=False):
     return workers
 
 def ssh_preamble():
-    return "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i".split() + [SSH_ID_PEM]
+    return "ssh -T -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i".split() + [SSH_ID_PEM]
 
 def ssh_target_for_worker(worker):
     return"ubuntu@%s" % worker["PublicIpAddress"]

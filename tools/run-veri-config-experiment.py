@@ -342,7 +342,9 @@ def main():
     proc.kill()
     ret = proc.wait(timeout = 10)
 
+  actuallyprint("main blktrace stop");
   blktrace.stop(fp)
+  actuallyprint("main blktrace stopped");
 
   assert ret == 0
   os.system("iostat")
