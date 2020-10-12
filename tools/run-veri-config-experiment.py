@@ -78,7 +78,12 @@ def splice_value_into_bundle(name, value):
 
 class Blktrace:
   def __init__(self):
+    self.cleanall()
     self.killall()
+
+  def cleanall(self):
+    actuallyprint("Blktrace.cleanall")
+    os.system("rm xvde.blktrace.*") # XXX hacky hack
 
   def killall(self):
     actuallyprint("Blktrace.killall")
