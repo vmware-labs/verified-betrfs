@@ -96,7 +96,7 @@ class Blktrace:
     self.blktrace_process.wait()
 
     actuallyprint("Blktrace.emit")
-    (stdout,stderr) = blktrace_process.communicate()
+    (stdout,stderr) = self.blktrace_process.communicate()
     lines = (stdout.decode("utf-8") + stderr.decode("utf-8")).split("\n")
     for line in lines:
       fp.write("blktrace "+line+"\n")
