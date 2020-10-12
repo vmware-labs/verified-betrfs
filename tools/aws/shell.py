@@ -19,6 +19,6 @@ def main():
         sys.stderr.write(" ".join([w["Name"] for w in matches])+"\n")
         sys.exit(-1)
     worker = matches[0]
-    subprocess.call(ssh_cmd_for_worker(worker))
+    subprocess.call(ssh_cmd_for_worker(worker, want_pty=True))
 
 main()

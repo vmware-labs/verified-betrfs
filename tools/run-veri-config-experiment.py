@@ -329,6 +329,7 @@ def main():
   taskset_cmd = "taskset 4 "
   cgroup_prefix = "cgexec -g memory:VeribetrfsExp " if cgroup_enabled else ""
   command = taskset_cmd + cgroup_prefix + "time ./" + exe + " " + loc + " " + driver_options + " " + workload_cmd
+  command = "sleep 10"  # XXX
   actuallyprint(command)
   sys.stdout.flush()
 

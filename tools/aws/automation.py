@@ -60,14 +60,18 @@ def retrieve_running_workers(workers_file=".awsworkers", ssd=False):
     workers = filter_workers(workers, filter_regexes)
     return workers
 
-def ssh_preamble():
-    return "ssh -T -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i".split() + [SSH_ID_PEM]
+def ssh_preamble(want_pty):
+    kill_pty = [] if want_pty else ["-T"]
+    # kill_pty doesn't actually do anything, because no-pty is the default
+    # when launching ssh from a script. I think Popen(stdin=DEVNULL)
+    # is what I really wanted to solve the remote-hanging problem.
+    return ["ssh"]+kill_pty+("-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i").split() + [SSH_ID_PEM]
 
 def ssh_target_for_worker(worker):
     return"ubuntu@%s" % worker["PublicIpAddress"]
 
-def ssh_cmd_for_worker(worker):
-    return ssh_preamble() + [ssh_target_for_worker(worker)]
+def ssh_cmd_for_worker(worker, want_pty=None):
+    return ssh_preamble(want_pty) + [ssh_target_for_worker(worker)]
 
 next_index = 0
 def get_index():
@@ -104,7 +108,7 @@ class WorkerMonitor:
 
     def launch(self):
         log("%s LAUNCH_CMD %s" % (self.linetag(), self.cmd.text_cmd_line()))
-        self.set_pipe(subprocess.Popen(self.cmd.cmd_ary, stdout=subprocess.PIPE, stderr=subprocess.STDOUT))
+        self.set_pipe(subprocess.Popen(self.cmd.cmd_ary, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT))
 
 def running(monitors):
     return [m for m in monitors if m.running]
