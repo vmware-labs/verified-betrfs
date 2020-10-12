@@ -100,7 +100,7 @@ class Blktrace:
     lines = (stdout.decode("utf-8") + stderr.decode("utf-8")).split("\n")
     for line in lines:
       fp.write("blktrace "+line+"\n")
-      stdout.write("blktrace "+line+"\n")
+      sys.stdout.write("blktrace "+line+"\n")
     actuallyprint("Blktrace.done")
 
 def main():
