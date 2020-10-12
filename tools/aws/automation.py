@@ -60,7 +60,7 @@ def retrieve_running_workers(workers_file=".awsworkers", ssd=False):
     workers = filter_workers(workers, filter_regexes)
     return workers
 
-def ssh_preamble(want_pty):
+def ssh_preamble(want_pty=None):
     kill_pty = [] if want_pty else ["-T"]
     # kill_pty doesn't actually do anything, because no-pty is the default
     # when launching ssh from a script. I think Popen(stdin=DEVNULL)

@@ -94,7 +94,7 @@ class Blktrace:
     self.blktrace_process = subprocess.Popen(
         ["sudo", "blktrace", device], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   
-  def stop(self, fp):
+  def stop(self):
     actuallyprint("Blktrace.stop")
     self.killall()
     actuallyprint("Blktrace.wait")
@@ -104,7 +104,7 @@ class Blktrace:
     (stdout,stderr) = self.blktrace_process.communicate()
     lines = (stdout.decode("utf-8") + stderr.decode("utf-8")).split("\n")
     for line in lines:
-      fp.write("blktrace "+line+"\n")
+      #fp.write("blktrace "+line+"\n") overwrites all collected data; and besides it's in the log.
       sys.stdout.write("blktrace "+line+"\n")
     actuallyprint("Blktrace.done")
 
@@ -334,7 +334,6 @@ def main():
   taskset_cmd = "taskset 4 "
   cgroup_prefix = "cgexec -g memory:VeribetrfsExp " if cgroup_enabled else ""
   command = taskset_cmd + cgroup_prefix + "time ./" + exe + " " + loc + " " + driver_options + " " + workload_cmd
-  command = "sleep 10"  # XXX
   actuallyprint(command)
   sys.stdout.flush()
 
@@ -349,7 +348,7 @@ def main():
     ret = proc.wait(timeout = 10)
 
   actuallyprint("main blktrace stop");
-  blktrace.stop(fp)
+  blktrace.stop()
   actuallyprint("main blktrace stopped");
 
   assert ret == 0
