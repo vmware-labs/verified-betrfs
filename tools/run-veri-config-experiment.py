@@ -353,6 +353,8 @@ def main():
 
   assert ret == 0
   os.system("iostat")
+  actuallyprint("zip up trace")
+  os.system('blkparse -q -a issue -f"%S %n\n" -i xvde.blktrace.0 | bzip2 > '+outpath+'.trace..bz2')
   actuallyprint("done")
 
 if __name__ == "__main__":
