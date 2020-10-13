@@ -20,17 +20,17 @@ DafnyMap<uint64, DafnySequence<uint8>> handle_Mkfs()
 
 void handle_EvictEverything(Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
 {
-  __default::handleEvictEverything(*k.k, hs.hs, io);
+  __default::handleEvictEverything(hs.hs, io);
 }
 
 void handle_CountAmassAllocations(Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
 {
-  __default::handleCountAmassAllocations(*k.k, hs.hs, io);
+  __default::handleCountAmassAllocations(hs.hs, io);
 }
 
 uint64 handle_PushSync(Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
 {
-  return __default::handlePushSync(*k.k, hs.hs, io);
+  return __default::handlePushSync(hs.hs, io);
 }
 
 std::pair<bool, bool> handle_PopSync(
@@ -39,18 +39,18 @@ std::pair<bool, bool> handle_PopSync(
   uint64 id,
   bool graphSync)
 {
-  auto p = __default::handlePopSync(*k.k, hs.hs, io, id, graphSync);
+  auto p = __default::handlePopSync(hs.hs, io, id, graphSync);
   return std::make_pair(p.t0, p.t1);
 }
 
 bool handle_Insert(Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io, DafnySequence<uint8> key, DafnySequence<uint8> value)
 {
-  return __default::handleInsert(*k.k, hs.hs, io, key, value);
+  return __default::handleInsert(hs.hs, io, key, value);
 }
 
 std::optional<DafnySequence<uint8>> handle_Query(Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io, DafnySequence<uint8> key)
 {
-  auto p = __default::handleQuery(*k.k, hs.hs, io, key);
+  auto p = __default::handleQuery(hs.hs, io, key);
   if (p.is_Option_Some()) {
     return std::optional<DafnySequence<uint8>>(p.dtor_value());
   } else {
@@ -60,7 +60,7 @@ std::optional<DafnySequence<uint8>> handle_Query(Variables hs, std::shared_ptr<M
 
 std::optional<UI_Compile::SuccResultList> handle_Succ(Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io, UI_Compile::RangeStart start, uint64 maxToFind)
 {
-  auto p = __default::handleSucc(*k.k, hs.hs, io, start, maxToFind);
+  auto p = __default::handleSucc(hs.hs, io, start, maxToFind);
   if (p.is_Option_Some()) {
     return std::optional<UI_Compile::SuccResultList>(p.dtor_value());
   } else {
@@ -70,12 +70,12 @@ std::optional<UI_Compile::SuccResultList> handle_Succ(Variables hs, std::shared_
 
 void handle_ReadResponse(Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
 {
-  __default::handleReadResponse(*k.k, hs.hs, io);
+  __default::handleReadResponse(hs.hs, io);
 }
 
 void handle_WriteResponse(Variables hs, std::shared_ptr<MainDiskIOHandler_Compile::DiskIOHandler> io)
 {
-  __default::handleWriteResponse(*k.k, hs.hs, io);
+  __default::handleWriteResponse(hs.hs, io);
 }
 
 uint64 MaxKeyLen()
