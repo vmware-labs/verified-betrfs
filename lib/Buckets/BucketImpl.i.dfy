@@ -4,7 +4,7 @@ include "../../PivotBetree/Bounds.i.dfy"
 include "BucketIteratorModel.i.dfy"
 include "BucketModel.i.dfy"
 include "LKMBPKVOps.i.dfy"
-include "../Lang/Inout.s.dfy"
+include "../Lang/Inout.i.dfy"
 
 //
 // Collects singleton message insertions efficiently, avoiding repeated
