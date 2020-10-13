@@ -59,7 +59,7 @@ namespace LinearBox_s {
   };
 
   template<typename A>
-  DestructorFunction_fun<A> ToDestructor(Tuple0 (*f)(A)) {
+  DestructorFunction<A> ToDestructor(Tuple0 (*f)(A)) {
     struct DestructorFunction<A> df;
     df.f = f;
     return df;
