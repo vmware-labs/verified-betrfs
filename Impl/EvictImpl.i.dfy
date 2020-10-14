@@ -172,7 +172,7 @@ module EvictImpl {
   {
     EvictModel.reveal_PageInNodeReqOrMakeRoom();
 
-    cleanOldestNodes(k, s, io);
+    //cleanOldestNodes(k, s, io);
     
     if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
       PageInNodeReq(k, s, io, ref);

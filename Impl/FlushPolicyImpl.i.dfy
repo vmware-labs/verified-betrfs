@@ -164,7 +164,7 @@ module FlushPolicyImpl {
   ensures s.ready
   ensures FlushPolicyModel.runFlushPolicy(Ic(k), old(s.I()), old(IIO(io)), s.I(), IIO(io))
   {
-    cleanOldestNodes(k, s, io);
+    //cleanOldestNodes(k, s, io);
     
     FlushPolicyModel.reveal_runFlushPolicy();
 
