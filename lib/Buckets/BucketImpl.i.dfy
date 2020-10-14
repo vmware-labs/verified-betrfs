@@ -1027,6 +1027,8 @@ module BucketImpl {
   {
     MutBucket.AllocatedReprSeq(bots);
 
+    var oldtopbucketweight := top.Weight;
+    
     var i: uint64 := 0;
     var botPkvs: array<PKV.Pkv> := new PKV.Pkv[|bots| as uint64];
     var sorted := true;
@@ -1083,6 +1085,9 @@ module BucketImpl {
     }
     newtop := new MutBucket.InitFromPkv(result.top, sorted);
     newbots := pkvList2BucketList(result.bots, sorted);
+
+    var newtopbucketweight := newtop.Weight;
+    print "FLUSH old-top-weight: ", oldtopbucketweight, " new-top-weight: ", newtopbucketweight, " fanout: ", |bots| as uint64, "\n";
   }
 }
 
