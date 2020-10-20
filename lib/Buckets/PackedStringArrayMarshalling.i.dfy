@@ -1,12 +1,15 @@
 include "../Marshalling/GenericMarshalling.i.dfy"
 include "PackedStringArray.i.dfy"
+include "../Marshalling/MarshalledAccessors.i.dfy"
 
 module PackedStringArrayMarshalling {
   import opened Options
   import opened PackedStringArray
-  import opened GenericMarshalling
+  import opened GenericMarshalling`Internal
   import Uint32_Order_Impl
   import opened NativeTypes
+  import opened NativePackedInts
+  import opened MarshalledAccessors
   
   function method grammar() : G
   ensures ValidGrammar(grammar())
@@ -51,7 +54,54 @@ module PackedStringArrayMarshalling {
     ensures toVal(fromVal(v).value) == v
   {
   }
-  
+
+  method ReadNumStrings(marshalledPsa: seq<byte>, start: uint64) returns (numStrings: uint64)
+    requires |marshalledPsa| < Uint64UpperBound()
+    requires start as int <= |marshalledPsa|
+    requires
+      && var oval := parse_Val(marshalledPsa[start..], grammar()).0;
+      && oval.Some?
+      && var opsa := fromVal(oval.value);
+      && opsa.Some?
+    ensures 
+      var psa := fromVal(parse_Val(marshalledPsa[start..], grammar()).0.value).value;
+      numStrings == psaNumStrings(psa)
+  {
+    reveal_parse_Val();
+    numStrings := Uint32ArrayLength(marshalledPsa, start);
+  }
+
+  method ReadElement(marshalledPsa: seq<byte>, start: uint64, i: uint64)
+    returns (s: seq<byte>)
+    requires |marshalledPsa| < Uint64UpperBound()
+    requires start as int <= |marshalledPsa|
+    requires
+      && var oval := parse_Val(marshalledPsa[start..], grammar()).0;
+      && oval.Some?
+      && var opsa := fromVal(oval.value);
+      && opsa.Some?
+      && i < psaNumStrings(opsa.value)
+    ensures 
+      var psa := fromVal(parse_Val(marshalledPsa[start..], grammar()).0.value).value;
+      s == psaElement(psa, i)
+  {
+    reveal_parse_Val();
+    ghost var psa := fromVal(parse_Val(marshalledPsa[start..], grammar()).0.value).value;
+    var begin := 0;
+    if 0 < i {
+      var begin32 := Uint32ArrayElement(marshalledPsa, start, i-1);
+      begin := begin32 as uint64;
+    }
+    var end32 := Uint32ArrayElement(marshalledPsa, start, i);
+    var end := end32 as uint64;
+    var offsetsSize := Uint32ArraySize(marshalledPsa, start);
+    if 0 < i {
+      Uint32_Order.IsSortedImpliesLte(psa.offsets, i as int - 1,  i as int);
+    }
+    Uint32_Order.IsSortedImpliesLte(psa.offsets, i as int, |psa.offsets|-1);
+    s := ByteArraySlice(marshalledPsa, start + offsetsSize, begin, end);
+  }
+
   method ComputeWF(psa: Psa) returns (result: bool)
     requires |psa.offsets| < Uint64UpperBound()
     requires |psa.data| < Uint64UpperBound()
