@@ -1,4 +1,4 @@
-include "/home/rob/projects/veribetrfs/lib/Lang/NativeTypes.s.dfy"
+include "../Lang/NativeTypes.s.dfy"
 
 module StaticallySizedMarshalling {
 import opened NativeTypes
