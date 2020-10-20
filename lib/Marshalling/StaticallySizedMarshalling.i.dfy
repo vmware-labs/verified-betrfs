@@ -12,7 +12,8 @@ datatype StaticallySizedGrammar =
   | SSGUint32Array(len: nat)
   | SSGUint64Array(len: nat)
   | SSGTaggedUnion(cases: seq<StaticallySizedGrammar>, names: seq<string>)
-  | SSGPadded(size: nat, delt: G)
+  | SSGPadded(size: nat, delt: G)   // size: max size in bytes
+    // TODO(robj): what does 'delt' mean?
   
 datatype G = StaticallySizedElement(g: StaticallySizedGrammar)
            | GArray(elt:G)
@@ -23,9 +24,22 @@ datatype G = StaticallySizedElement(g: StaticallySizedGrammar)
            | GUint64Array
            | GTaggedUnion(cases:seq<G>)
 
-datatype V = VUint32(v:uint32)
-           | VUint64(u:uint64)
+datatype StaticallySizedValue = 
+           | SSVUint32(v:uint32)
+           | SSVUint64(u:uint64)
+           // what does it even mean for a value to be SS vs DS?
+           | SSVArray(a:seq<StaticallySizedValue>)
+           | SSVTuple(t:seq<StaticallySizedValue>)
+           | SSVByteArray(b:seq<byte>)
+           | SSVUint32Array(va:seq<uint32>)
+           | SSVUint64Array(ua:seq<uint64>)
+           | SSVCase(c:uint64, casev:StaticallySizedValue)
+           | SSVPadded(padv:V)
+
+datatype V =
+           | StaticallySizedValue(v: StaticallySizedValue)
            | VArray(a:seq<V>)
+           | VSSArray(sa:seq<StaticallySizedValue>)
            | VTuple(t:seq<V>)
            | VByteArray(b:seq<byte>)
            | VUint32Array(va:seq<uint32>)
@@ -86,7 +100,7 @@ function SizeOfV(val:V, grammar: G) : nat
   match grammar
     case StaticallySizedElement(g) => SizeOfStaticallySizedGrammar(g)
     case GArray(elt)    => 8 + 8 * |val.a| + SizeOfVSeq(val.a, elt)
-    case GSSArray(selt) => |val.a| * SizeOfStaticallySizedGrammar(selt)
+    case GSSArray(selt) => |val.sa| * SizeOfStaticallySizedGrammar(selt)
     case GTuple(t)      => 8 * |t| + SizeOfVGSeq(val.t, t)
     case GByteArray     => |val.b|
     case GUint32Array   => 4 * |val.va|
@@ -94,41 +108,42 @@ function SizeOfV(val:V, grammar: G) : nat
     case GTaggedUnion(cases) => 8 + SizeOfV(val.val, cases[val.c])
 }
            
-predicate ValInStaticallySizedGrammar(val:V, grammar:StaticallySizedGrammar)
-  decreases grammar
+predicate StaticallySizedValInStaticallySizedGrammar(val:StaticallySizedValue, grammar:StaticallySizedGrammar)
+  decreases grammar, val, 1
 {
   match grammar
-    case SSGUint32 => val.VUint32?
-    case SSGUint64 => val.VUint64?
+    case SSGUint32 => val.SSVUint32?
+    case SSGUint64 => val.SSVUint64?
     case SSGArray(len, elt) =>
-      && val.VArray?
+      && val.SSVArray?
       && |val.a| == len
-      && (forall v :: v in val.a ==> ValInStaticallySizedGrammar(v, grammar.elt))
+      && (forall v :: v in val.a ==> StaticallySizedValInStaticallySizedGrammar(v, grammar.elt))
     case SSGTuple(t, names) =>
-      && val.VTuple?
+      && val.SSVTuple?
       && |val.t| == |t|
-      && forall i :: 0 <= i < |t| ==> ValInStaticallySizedGrammar(val.t[i], t[i])
+      && forall i :: 0 <= i < |t| ==> StaticallySizedValInStaticallySizedGrammar(val.t[i], t[i])
       
-    case SSGByteArray(len)   => val.VByteArray? && |val.b| == len
-    case SSGUint32Array(len) => val.VUint32Array? && |val.va| == len
-    case SSGUint64Array(len) => val.VUint64Array? && |val.ua| == len
+    case SSGByteArray(len)   => val.SSVByteArray? && |val.b| == len
+    case SSGUint32Array(len) => val.SSVUint32Array? && |val.va| == len
+    case SSGUint64Array(len) => val.SSVUint64Array? && |val.ua| == len
 
     case SSGTaggedUnion(cases, names) =>
-      && val.VCase?
+      && val.SSVCase?
       && (val.c as int) < |cases|
-      && ValInStaticallySizedGrammar(val.val, cases[val.c])
+      && StaticallySizedValInStaticallySizedGrammar(val.casev, cases[val.c])
     case SSGPadded(size, delt) =>
-      && ValInGrammar(val, delt)
-      && SizeOfV(val, delt) <= size
+      && val.SSVPadded?
+      && ValInGrammar(val.padv, delt)
+      && SizeOfV(val.padv, delt) <= size
 }
 
 predicate ValInGrammar(val:V, grammar:G)
   decreases grammar, val, 0
 {
   match grammar
-    case StaticallySizedElement(g) => ValInStaticallySizedGrammar(val, g)
+    case StaticallySizedElement(g) => val.StaticallySizedValue? && StaticallySizedValInStaticallySizedGrammar(val.v, g)
     case GArray(elt) => val.VArray? && forall v :: v in val.a ==> ValInGrammar(v, elt)
-    case GSSArray(selt) => val.VArray? && forall v :: v in val.a ==> ValInStaticallySizedGrammar(v, selt)
+    case GSSArray(selt) => val.VSSArray? && forall v :: v in val.sa ==> StaticallySizedValInStaticallySizedGrammar(v, selt)
     case GTuple(t) =>
       && val.VTuple?
       && |t| == |val.t|
