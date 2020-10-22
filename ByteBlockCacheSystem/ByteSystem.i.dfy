@@ -534,7 +534,7 @@ module ByteSystem refines AsyncDiskModel {
     assert JournalSystem.Next(I(s).js, I(s').js, vop);
 
     assert BetreeCache.Next(I(s).bs.machine, I(s').bs.machine, idop.bdop, vop);
-    BetreeJournalSystem.OkaySendPersistentLocStep(I(s), I(s'), vop);
+    //BetreeJournalSystem.OkaySendPersistentLocStep(I(s), I(s'), vop);
     assert BetreeSystem.Machine(I(s).bs, I(s').bs, idop.bdop, vop);
     assert BetreeSystem.NextStep(I(s).bs, I(s').bs, vop, BetreeSystem.MachineStep(idop.bdop));
     assert BetreeSystem.Next(I(s).bs, I(s').bs, vop);

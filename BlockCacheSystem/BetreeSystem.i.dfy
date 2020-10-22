@@ -40,11 +40,11 @@ module BetreeSystem {
   {
     && M.Next(s.machine, s'.machine, dop, vop)
     && D.Next(s.disk, s'.disk, dop)
-    && (vop.SendPersistentLocOp? ==>
-      BCS.Inv(s) ==>
-        && vop.loc in Ref.DiskGraphMap(s)
-        && BT.Inv(BT.Variables(BI.Variables(Ref.DiskGraphMap(s)[vop.loc])))
-    )
+    //&& (vop.SendPersistentLocOp? ==>
+    //  BCS.Inv(s) ==>
+    //    && vop.loc in Ref.DiskGraphMap(s)
+    //    && BT.Inv(BT.Variables(BI.Variables(Ref.DiskGraphMap(s)[vop.loc])))
+    //)
   }
 
   predicate Crash(s: Variables, s': Variables, vop: VOp)

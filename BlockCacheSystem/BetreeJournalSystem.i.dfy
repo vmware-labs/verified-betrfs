@@ -2,7 +2,6 @@ include "BetreeSystem.i.dfy"
 include "JournalSystem.i.dfy"
 include "BetreeSystem_Refines_StatesViewMap.i.dfy"
 include "JournalSystem_Refines_JournalView.i.dfy"
-include "../Versions/CompositeView.i.dfy"
 
 module BetreeJournalSystem {
   import BS = BetreeSystem
@@ -10,7 +9,6 @@ module BetreeJournalSystem {
 
   import BetreeSystemRef = BetreeSystem_Refines_StatesViewMap
   import JournalSystemRef = JournalSystem_Refines_JournalView
-  import CompositeView
   import opened ViewOp
   import UI
   import BlockDisk
@@ -18,25 +16,10 @@ module BetreeJournalSystem {
 
   datatype Variables = Variables(bs: BS.Variables, js: JS.Variables)
 
-  function I(s: Variables) : CompositeView.Variables
-  requires BS.Inv(s.bs)
-  requires JS.Inv(s.js)
-  {
-    CompositeView.Variables(
-      BetreeSystemRef.I(s.bs),
-      JournalSystemRef.I(s.js)
-    )
-  }
-
   predicate InitWithLoc(s: Variables, loc: Loc)
   {
     && BS.Init(s.bs, loc)
     && JS.Init(s.js, loc)
-    && (
-      BS.InitImpliesInv(s.bs, loc);
-      JS.InitImpliesInv(s.js, loc);
-      CompositeView.Init(I(s))
-    )
   }
 
   predicate Init(s: Variables)
@@ -56,8 +39,6 @@ module BetreeJournalSystem {
   {
     && BS.Inv(s.bs)
     && JS.Inv(s.js)
-    //&& JS.PersistentLoc(s.js) in BS.BetreeDisk(s.bs)
-    && CompositeView.Inv(I(s))
   }
 
   lemma InitImpliesInv(s: Variables)
@@ -69,7 +50,6 @@ module BetreeJournalSystem {
       && JS.Init(s.js, loc);
     BS.InitImpliesInv(s.bs, loc);
     JS.InitImpliesInv(s.js, loc);
-    CompositeView.InitImpliesInv(I(s));
   }
 
   lemma NextPreservesInv(s: Variables, s': Variables, uiop: UI.Op)
@@ -83,16 +63,9 @@ module BetreeJournalSystem {
       && JS.Next(s.js, s'.js, vop);
     BS.NextPreservesInv(s.bs, s'.bs, vop);
     JS.NextPreservesInv(s.js, s'.js, vop);
-    BetreeSystemRef.RefinesNext(s.bs, s'.bs, vop);
-    JournalSystemRef.RefinesNext(s.js, s'.js, vop);
-    var step := CompositeView.Step(vop);
-    assert CompositeView.NextStep(I(s), I(s'),
-      step.vop, uiop);
-    CompositeView.NextPreservesInv(I(s), I(s'), uiop);
   }
 
-
-  lemma OkaySendPersistentLocStep(s: Variables, s': Variables, vop: VOp)
+  /*lemma OkaySendPersistentLocStep(s: Variables, s': Variables, vop: VOp)
   requires Inv(s)
   //requires BS.Machine(s.bs, s'.bs, BlockDisk.NoDiskOp, vop)
   //requires BS.M.Next(s.bs.machine, s'.bs.machine, BlockDisk.NoDiskOp, vop)
@@ -106,10 +79,11 @@ module BetreeJournalSystem {
     )
   {
     if vop.SendPersistentLocOp? {
-      assert I(s).jc.persistentLoc in I(s).tsm.disk;
+      //assert I(s).jc.persistentLoc in I(s).tsm.disk;
+      assert JS.PersistentLoc(s.js) in BS.Ref.DiskGraphMap(s.bs);
       JS.FinishLoadingSuperblockPhaseStepPreservesJournals(
           s.js, s'.js, JournalDisk.NoDiskOp, vop);
-      assert vop.loc == I(s).jc.persistentLoc;
+      //assert vop.loc == I(s).jc.persistentLoc;
     }
-  }
+  }*/
 }

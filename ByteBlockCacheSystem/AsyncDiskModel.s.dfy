@@ -261,7 +261,7 @@ abstract module AsyncDiskMachine {
   import D = AsyncDisk
   import UI
 
-  type Variables
+  type Variables(!new)
   type UIOp = UI.Op
 
   type DiskOp = D.DiskOp

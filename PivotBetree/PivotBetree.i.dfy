@@ -346,5 +346,4 @@ module PivotBetree refines UIStateMachine {
     var step :| NextStep(s, s', uiop, step);
     PivotBetreeRefinesBetreeNextStep(s, s', uiop, step);
   }
-
 }

@@ -176,19 +176,24 @@ abstract module Main {
   //  * Prove the lemmas that show that this abstraction function
   //    yields a valid state machine refinement.
 
+  inductive predicate SystemReachable(s: ADM.Variables)
+  {
+    ADM.Init(s) || (exists s0, u :: SystemReachable(s0) && ADM.Next(s0, s, u))
+  }
+
   function SystemI(s: ADM.Variables) : ThreeStateVersionedMap.Variables
-  requires ADM.Inv(s)
+  requires SystemReachable(s)
 
   lemma SystemRefinesCrashSafeMapInit(
     s: ADM.Variables)
   requires ADM.Init(s)
-  ensures ADM.Inv(s)
+  ensures SystemReachable(s)
   ensures ThreeStateVersionedMap.Init(SystemI(s))
 
   lemma SystemRefinesCrashSafeMapNext(
     s: ADM.Variables, s': ADM.Variables, uiop: ADM.UIOp)
-  requires ADM.Inv(s)
+  requires SystemReachable(s)
   requires ADM.Next(s, s', uiop)
-  ensures ADM.Inv(s')
+  ensures SystemReachable(s')
   ensures ThreeStateVersionedMap.Next(SystemI(s), SystemI(s'), uiop)
 }

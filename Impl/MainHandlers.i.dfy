@@ -278,8 +278,15 @@ module MainHandlers refines Main {
     MkfsModel.InitialStateSatisfiesSystemInit(s, diskContents);
   }
 
+  inductive lemma SystemReachableImpliesReachable(s: ADM.Variables)
+  requires SystemReachable(s)
+  ensures System_Ref.Reachable(s)
+  {
+  }
+
   function SystemI(s: ADM.Variables) : ThreeStateVersionedMap.Variables
   {
+    SystemReachableImpliesReachable(s);
     System_Ref.I(s)
   }
 
@@ -292,6 +299,7 @@ module MainHandlers refines Main {
   lemma SystemRefinesCrashSafeMapNext(
     s: ADM.Variables, s': ADM.Variables, uiop: ADM.UIOp)
   {
+    SystemReachableImpliesReachable(s);
     System_Ref.RefinesNext(s, s', uiop);
   }
 }

@@ -12,13 +12,37 @@ module CompositeView_Refines_TSJMap {
   import MapSpec
   import JournalView
 
+  function s1(s: CompositeView.Variables) : MapSpec.Variables
+  requires s.jc.persistentLoc in s.tsm.disk
+  {
+    s.tsm.disk[s.jc.persistentLoc]
+  }
+
+  function s2(s: CompositeView.Variables) : MapSpec.Variables
+  requires s.jc.persistentLoc in s.tsm.disk
+  {
+    if s.tsm.frozenState.Some? then
+      s.tsm.frozenState.value
+    else
+      s1(s)
+  }
+
+  function s3(s: CompositeView.Variables) : MapSpec.Variables
+  requires s.jc.persistentLoc in s.tsm.disk
+  {
+    if s.tsm.ephemeralState.Some? then
+      s.tsm.ephemeralState.value
+    else
+      s1(s)
+  }
+
   function I(s: CompositeView.Variables) : TSJ.Variables
   requires CompositeView.Inv(s)
   {
     TSJ.Variables(
-      CompositeView.s1(s),
-      CompositeView.s2(s),
-      CompositeView.s3(s),
+      s1(s),
+      s2(s),
+      s3(s),
       s.jc.j1,
       s.jc.j2,
       s.jc.j3,

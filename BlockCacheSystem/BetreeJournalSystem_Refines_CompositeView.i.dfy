@@ -15,7 +15,10 @@ module BetreeJournalSystem_Refines_CompositeView {
   function I(s: BJS.Variables) : CompositeView.Variables
   requires BJS.Inv(s)
   {
-    BJS.I(s)
+    CompositeView.Variables(
+      BetreeSystemRef.I(s.bs),
+      JournalSystemRef.I(s.js)
+    )
   }
 
   lemma RefinesInit(s: BJS.Variables)
@@ -51,6 +54,5 @@ module BetreeJournalSystem_Refines_CompositeView {
     var step := CompositeView.Step(vop);
     assert CompositeView.NextStep(I(s), I(s'),
       step.vop, uiop);
-    CompositeView.NextPreservesInv(I(s), I(s'), uiop);
   }
 }
