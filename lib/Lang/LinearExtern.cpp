@@ -129,16 +129,6 @@ Tuple2<lseq<A>, LinearMaybe::maybe<A>> lseq_swap_raw_fun(lseq<A> s1, uint64 i, L
 }
 
 template <typename A>
-Tuple2<LinearMaybe::maybe<A>, lseq<A>> lseq_swap_inout_raw(lseq<A> s1, uint64 i,  LinearMaybe::maybe<A> a1) {
-  return lseq_swap_raw_fun(s1, i, a1);
-}
-
-template <typename A>
-Tuple2< LinearMaybe::maybe<A>, lseq<A>> lseq_take_inout_raw(lseq<A> s1, uint64 i) {
-  return (*s1)[i];
-}
-
-template <typename A>
 LinearMaybe::maybe<A> lseq_share_raw(lseq<A> s, uint64 i) {
   return (*s)[i];
 }
