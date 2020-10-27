@@ -7,10 +7,10 @@ include "../Lang/System/PackedInts.s.dfy"
 include "../Lang/System/NativeArrays.s.dfy"
 include "BitLemmas.i.dfy"
 
-// From https://github.com/komrad36/CRC
+// based on https://github.com/komrad36/CRC
 
 module CRC32_C_Impl {
-  export Spec provides compute_crc32_padded, NativeTypes, A
+  export Spec provides compute_crc32c_padded, NativeTypes, A
   export extends Spec
 
   import opened NativeTypes
@@ -366,7 +366,7 @@ module CRC32_C_Impl {
     return crcA as uint32;
   }
 
-  method compute_crc32_padded(data: seq<byte>)
+  method compute_crc32c_padded(data: seq<byte>)
   returns (checksum: seq<byte>)
   requires |data| < 0x1_0000_0000
   ensures checksum == A.crc32_c_padded(data)
