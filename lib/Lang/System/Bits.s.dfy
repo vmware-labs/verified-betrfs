@@ -1,4 +1,4 @@
-include "../Base/NativeTypes.s.dfy"
+include "../NativeTypes.s.dfy"
 
 // Provides access to hardware functions for bit manipulation,
 // including 128-bit registers.

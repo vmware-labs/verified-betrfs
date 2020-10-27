@@ -1,5 +1,5 @@
 include "CRC32C.s.dfy"
-include "../Base/PackedInts.s.dfy"
+include "../Lang/System/PackedInts.s.dfy"
 include "CRC32LutLemma.i.dfy"
 include "F2_X_Lemmas.i.dfy"
 
@@ -8,7 +8,7 @@ module CRC32_C_Lemmas {
   import opened F2_X_s
   import opened NativeTypes
   import opened NativePackedInts
-  import opened CRC32_C
+  import opened CRC32_C`Internal
   import opened CRC32_C_Lut_Lemma
   import opened F2_X_Lemmas
 

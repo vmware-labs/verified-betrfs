@@ -1,4 +1,4 @@
-include "../Base/NativeTypes.s.dfy"
+include "../Lang/NativeTypes.s.dfy"
 include "../Lang/System/F2_X.s.dfy"
 include "CRC32LutPowers.i.dfy"
 include "CRC32LutLemma.i.dfy"

@@ -1,6 +1,10 @@
 include "../Lang/System/F2_X.s.dfy"
 
 module CRC32_C {
+	export S provides crc32_c_padded, NativeTypes
+	export Internal reveals *
+	export extends S
+
   import opened Bits_s
   import opened F2_X_s
   import opened NativeTypes
@@ -40,5 +44,11 @@ module CRC32_C {
       byte_of_bits(m1[16..24]),
       byte_of_bits(m1[24..32])
     ]
+  }
+
+  function crc32_c_padded(s: seq<byte>) : (checksum : seq<byte>)
+  ensures |checksum| == 32
+  {
+    crc32_c(s) + seq(28, i => 0)
   }
 }

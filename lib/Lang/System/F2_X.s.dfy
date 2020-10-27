@@ -1,4 +1,4 @@
-include "../Base/NativeTypes.s.dfy"
+include "../NativeTypes.s.dfy"
 include "Bits.s.dfy"
 
 // Provides access to hardware functions for mod 2 polynomial

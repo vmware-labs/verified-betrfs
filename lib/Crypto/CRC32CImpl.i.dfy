@@ -3,13 +3,14 @@ include "CRC32Lemmas.i.dfy"
 include "CRC32Lut.i.dfy"
 include "CRC32LutLemma.i.dfy"
 include "CRC32C.s.dfy"
-include "../Base/PackedInts.s.dfy"
+include "../Lang/System/PackedInts.s.dfy"
+include "../Lang/System/NativeArrays.s.dfy"
 include "BitLemmas.i.dfy"
 
 // From https://github.com/komrad36/CRC
 
 module CRC32_C_Impl {
-  export Spec provides compute_crc32, NativeTypes, CRC32_C
+  export Spec provides compute_crc32_padded, NativeTypes, A
   export extends Spec
 
   import opened NativeTypes
@@ -19,8 +20,10 @@ module CRC32_C_Impl {
   import opened CRC32_C_Lemmas
   import opened CRC32_C_Lut
   import opened CRC32_C_Lut_Lemma
-  import opened CRC32_C
+  import A = CRC32_C
+  import opened CRC32_C`Internal
   import opened BitLemmas
+  import NativeArrays
 
   function method {:opaque} alignment(idx: uint32) : (res : uint32)
   {
@@ -363,20 +366,29 @@ module CRC32_C_Impl {
     return crcA as uint32;
   }
 
-  method compute_crc32(data: seq<byte>)
+  method compute_crc32_padded(data: seq<byte>)
   returns (checksum: seq<byte>)
   requires |data| < 0x1_0000_0000
-  ensures checksum == crc32_c(data)
+  ensures checksum == A.crc32_c_padded(data)
   {
     var s := compute_crc32_main(data, 0, |data| as uint32, 0xffffffff);
     var t := bitxor32(s, 0xffffffff);
 
-    var ar := new byte[4];
+    var ar := NativeArrays.newArrayFill(32, 0);
     Pack_LittleEndian_Uint32_into_Array(t, ar, 0);
 
-    assert ar[0..4] == ar[..];
-    final_comp(data, s, 0, |data|, ar[..]);
+    final_comp(data, s, 0, |data|, ar[0..4]);
     assert data[0..|data|] == data;
+
+    calc {
+      ar[..];
+      ar[0..4] + ar[4..32];
+      {
+        assert ar[0..4] == crc32_c(data);
+        assert ar[4..32] == seq(28, i => 0);
+      }
+      crc32_c(data) + seq(28, i => 0);
+    }
 
     return ar[..];
   }

@@ -2,12 +2,12 @@ include "../Lang/System/Bits.s.dfy"
 include "../Lang/System/F2_X.s.dfy"
 include "CRC32C.s.dfy"
 include "../Marshalling/Math.i.dfy"
-include "../Base/PackedInts.s.dfy"
+include "../Lang/System/PackedInts.s.dfy"
 
 module BitLemmas {
   import opened Bits_s
   import opened F2_X_s
-  import opened CRC32_C
+  import opened CRC32_C`Internal
   import opened NativeTypes
   import opened NativePackedInts
   import opened Math
