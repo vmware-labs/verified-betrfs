@@ -21,7 +21,7 @@ make -j4 status
 
 ## Lightweight benchmarking
 
-We have a very brief benchmark for a quick sanity check that everything is working
+We have a very brief benchmark for a quick sanity check that everything is working. Note that you don't need to run verification before building and running the system.
 
 ```
 make elf
