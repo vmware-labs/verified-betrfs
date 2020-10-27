@@ -516,7 +516,7 @@ Application::Application(string filename) {
 void Application::initialize() {
   init_malloc_accounting();
   auto tup2 = handle_InitState();
-  this->hs = tup2.second;
+  this->hs = tup2; //tup2.second;
   malloc_accounting_set_scope("Application::initialize DiskIOHandler");
   this->io = make_shared<DiskIOHandler>(this->filename);
   malloc_accounting_default_scope();

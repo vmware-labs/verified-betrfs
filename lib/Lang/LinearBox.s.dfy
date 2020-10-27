@@ -51,7 +51,7 @@ module {:extern "LinearBox_s"} LinearBox_s {
       ensures a == Read()
   }
 
-  type {:extern} DestructorFunction<A>
+  type {:extern "struct"} DestructorFunction<A>
 
   function {:axiom} OfDestructor<A>(d:DestructorFunction<A>) : (linear A)-->()
 

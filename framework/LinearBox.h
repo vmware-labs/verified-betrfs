@@ -5,7 +5,12 @@
 namespace LinearBox_s {
 
   template<typename A>
-  using DestructorFunction = Tuple0 (*)(A);
+  using DestructorFunction_fun = Tuple0 (*)(A);
+  
+  template<typename A>
+  struct DestructorFunction {
+    DestructorFunction_fun<A> f;
+  };
 
   template <typename A>
   class SwapAffine {
@@ -46,7 +51,7 @@ namespace LinearBox_s {
       }
 
       ~SwapLinear() {
-        d(a);
+        d.f(a);
       }
     private:
       A a;
@@ -55,7 +60,9 @@ namespace LinearBox_s {
 
   template<typename A>
   DestructorFunction<A> ToDestructor(Tuple0 (*f)(A)) {
-    return f;
+    struct DestructorFunction<A> df;
+    df.f = f;
+    return df;
   }
 
 }

@@ -55,6 +55,14 @@ module {:extern "LinearExtern"} LinearSequence_s {
   function {:axiom} lseqs_raw<A>(l:lseq<A>):(s:seq<maybe<A>>) // contents of an lseq, as ghost seq
     ensures rank_is_less_than(s, l)
 
+
+  function lseq_has<A>(l:lseq<A>):(s:seq<bool>)
+      ensures |s| == |lseqs_raw(l)|
+  {
+    seq(|lseqs_raw(l)|, i requires 0 <= i < |lseqs_raw(l)| => has(lseqs_raw(l)[i]))
+  }
+
+
   lemma {:axiom} axiom_lseqs_rank<A>(l:lseq<A>, s:seq<A>)
     requires |lseqs_raw(l)| == |s|
     requires forall i :: 0 <= i < |s| ==> s[i] == read(lseqs_raw(l)[i])
@@ -92,5 +100,17 @@ module {:extern "LinearExtern"} LinearSequence_s {
   // must be a method, not a function method, so that we know s is a run-time value, not a ghost value
   method {:extern "LinearExtern", "lseq_length_bound"} lseq_length_bound<A>(shared s:lseq<A>)
     ensures |lseqs_raw(s)| < 0xffff_ffff_ffff_ffff
+
+  method {:extern "LinearExtern", "TrustedRuntimeSeqResize"} TrustedRuntimeSeqResize<A>(linear s: seq<A>, newlen: uint64)
+    returns (linear s2: seq<A>)
+    ensures |s2| == newlen as nat
+    ensures forall j :: 0 <= j < newlen as nat && j < |s| ==> s2[j] == s[j]
+
+  method {:extern "LinearExtern", "TrustedRuntimeLSeqResize"} TrustedRuntimeLSeqResize<A>(linear s: lseq<A>, newlen: uint64)
+    returns (linear s2: lseq<A>)
+    ensures |lseqs_raw(s2)| == newlen as nat
+    ensures forall j :: 0 <= j < newlen as nat && j < |lseqs_raw(s)| ==> lseq_has(s2)[j] == lseq_has(s)[j]
+    ensures forall j :: |lseqs_raw(s)| <= j < newlen as nat ==> lseq_has(s2)[j] == false
+    ensures forall j :: 0 <= j < newlen as nat && j < |lseqs_raw(s)| ==> lseqs_raw(s2)[j] == lseqs_raw(s)[j]
 
 } // module
