@@ -11,10 +11,10 @@ module JournalistMarshallingImpl {
   import opened NativeTypes
   import opened Options
   import opened Sequences
-  import opened Crypto
   import opened NativePackedInts
   import opened PackedIntsLib
   import NativeArrays
+  import CRC32_C_Array_Impl
 
   import JournalistMarshallingModel
 
@@ -126,7 +126,7 @@ module JournalistMarshallingImpl {
   {
     JournalistMarshallingModel.reveal_fillInChecksums();
     if i != numBlocks {
-      var c := Crc32CArray(buf, 4096*i + 32, 4064);
+      var c := CRC32_C_Array_Impl.compute_crc32c_padded(buf, 4096*i as uint32 + 32, 4064);
       NativeArrays.CopySeqIntoArray(c, 0, buf, 4096*i, 32);
       assert buf[..] == JournalistMarshallingModel.splice(
           old(buf[..]), 4096*i, c) by {

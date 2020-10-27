@@ -10,9 +10,9 @@ module JournalistMarshallingModel {
   import opened NativeTypes
   import opened Options
   import opened Sequences
-  import opened Crypto
   import opened NativePackedInts
   import opened PackedIntsLib
+  import CRC32_C
 
   function {:opaque} cyclicSlice<T>(t: seq<T>, start: uint64, l: uint64) : (res: seq<T>)
   requires 0 <= start as int < |t|
@@ -392,7 +392,7 @@ module JournalistMarshallingModel {
     if i == numBlocks then
       buf
     else (
-      var buf1 := splice(buf, 4096*i, Crc32C(buf[4096*i + 32 .. 4096*i + 4096]));
+      var buf1 := splice(buf, 4096*i, CRC32_C.crc32_c_padded(buf[4096*i + 32 .. 4096*i + 4096]));
       fillInChecksums(buf1, numBlocks, i+1)
     )
   }
@@ -442,7 +442,7 @@ module JournalistMarshallingModel {
   requires 0 <= i
   requires |buf| >= 4096 * (i + 1)
   {
-    Crc32C(buf[4096*i + 32 .. 4096*i + 4096]) == buf[4096*i .. 4096*i + 32]
+    CRC32_C.crc32_c_padded(buf[4096*i + 32 .. 4096*i + 4096]) == buf[4096*i .. 4096*i + 32]
   }
 
   predicate hasChecksums(buf: seq<byte>, numBlocks: int)
@@ -639,7 +639,7 @@ module JournalistMarshallingModel {
     reveal_fillInChecksums();
     if i == numBlocks {
     } else {
-      var buf1 := splice(buf, 4096*i, Crc32C(buf[4096*i + 32 .. 4096*i + 4096]));
+      var buf1 := splice(buf, 4096*i, CRC32_C.crc32_c_padded(buf[4096*i + 32 .. 4096*i + 4096]));
       var c0 := withoutChecksums(buf, numBlocks);
       var c1 := withoutChecksums(buf1, numBlocks);
       assert |c0| == |c1|;
@@ -670,19 +670,19 @@ module JournalistMarshallingModel {
     reveal_fillInChecksums();
     if i == numBlocks {
     } else {
-      var buf1 := splice(buf, 4096*i, Crc32C(buf[4096*i + 32 .. 4096*i + 4096]));
+      var buf1 := splice(buf, 4096*i, CRC32_C.crc32_c_padded(buf[4096*i + 32 .. 4096*i + 4096]));
 
       forall j | 0 <= j < i as int
       ensures hasChecksumAt(buf1, j)
       {
         calc {
-          Crc32C(buf1[4096*j + 32 .. 4096*j + 4096]);
+          CRC32_C.crc32_c_padded(buf1[4096*j + 32 .. 4096*j + 4096]);
             {
               reveal_splice();
               assert buf[4096*j + 32 .. 4096*j + 4096]
                   == buf1[4096*j + 32 .. 4096*j + 4096];
             }
-          Crc32C(buf[4096*j + 32 .. 4096*j + 4096]);
+          CRC32_C.crc32_c_padded(buf[4096*j + 32 .. 4096*j + 4096]);
             { assert hasChecksumAt(buf, j); }
           buf[4096*j .. 4096*j + 32];
             { reveal_splice(); }
@@ -693,9 +693,9 @@ module JournalistMarshallingModel {
       assert hasChecksumAt(buf1, i as int) by {
         calc {
           buf1[4096*i .. 4096*i + 32];
-          splice(buf, 4096*i, Crc32C(buf[4096*i + 32 .. 4096*i + 4096]))[4096*i .. 4096*i + 32];
+          splice(buf, 4096*i, CRC32_C.crc32_c_padded(buf[4096*i + 32 .. 4096*i + 4096]))[4096*i .. 4096*i + 32];
             { reveal_splice(); }
-          Crc32C(buf[4096*i + 32 .. 4096*i + 4096]);
+          CRC32_C.crc32_c_padded(buf[4096*i + 32 .. 4096*i + 4096]);
             {
               var t0 := buf[4096*i + 32 .. 4096*i + 4096];
               var t1 := buf1[4096*i + 32 .. 4096*i + 4096];
@@ -712,7 +712,7 @@ module JournalistMarshallingModel {
               }
               assert t0 == t1;
             }
-          Crc32C(buf1[4096*i + 32 .. 4096*i + 4096]);
+          CRC32_C.crc32_c_padded(buf1[4096*i + 32 .. 4096*i + 4096]);
         }
       }
 

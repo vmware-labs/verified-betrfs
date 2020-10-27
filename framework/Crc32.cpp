@@ -1,7 +1,8 @@
 // Needs to be compiled with -msse4.2
 
 // From https://github.com/komrad36/CRC
-// TODO verify this
+// This file is no longer in our TCB, replaced by lib/Crypto/
+// which verifies essentially exactly the algorithm here.
 
 #include <iostream>
 #include <cstring>

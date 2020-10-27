@@ -8,11 +8,11 @@ module JournalistParsingImpl {
   import opened JournalRanges`Internal
   import opened Sequences
   import opened Options
-  import opened Crypto
   import opened NativePackedInts
   import opened KeyType
   import opened ValueType`Internal
   import NativeArrays
+  import CRC32_C_Impl
 
   /*method computeJournalRangeOfByteSeqIter(
     s: seq<byte>, 
@@ -49,7 +49,7 @@ module JournalistParsingImpl {
 
     var chunk := s[i + 32 .. i + 4096];
     D.reveal_ChecksumChecksOut();
-    var c := Crc32C(chunk);
+    var c := CRC32_C_Impl.compute_crc32c_padded(chunk);
     if c == s[i .. i + 32] {
       jb := Some(chunk);
     } else {
