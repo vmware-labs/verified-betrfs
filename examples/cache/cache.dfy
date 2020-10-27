@@ -20,15 +20,12 @@ abstract module TrustedConcurrencyPrimitives {
   type YieldGlobals /*ghost*/ /* impl defined */
   predicate Inv(yg: YieldGlobals) /* impl defined */
 
-  /*ghost*/ method do_yield(
-      linear /*ghost*/ yg: YieldGlobals,
-      linear /* ghost */ p: Phase)
-  returns (
-      linear /*ghost*/ yg': YieldGlobals,
-      linear /* ghost*/ p': Phase)
-  requires Inv(yg)
-  ensures Inv(yg')
-  ensures is_rising(p')
+  method do_yield(
+      inout linear yg: YieldGlobals,
+      inout linear p: Phase)
+  requires Inv(old_yg)
+  ensures Inv(yg)
+  ensures is_rising(p)
 
   ///////////////
   // Mutex library
@@ -49,41 +46,31 @@ abstract module TrustedConcurrencyPrimitives {
 
   method {:axiom} acquire_mutex<V>(
       ref: MutexRef<V>,
-      /*ghost*/ linear m: Mutex<V>,
-      /*ghost*/ linear t: Thread,
-      /*ghost*/ linear p: Phase)
-  returns (
-    linear v: V,
-    /*ghost*/ linear m': Mutex<V>,
-    /*ghost*/ linear t': Thread,
-    /*ghost*/ linear p': Phase
-  )
-  requires mutex_ref(m, ref)
-  requires is_rising(p)
-  ensures mutex_ref(m', ref)
-  ensures is_rising(p')
-  ensures t' == t
-  ensures mutex_has(m) == None
-  ensures mutex_has(m') == Some(tid(t))
-  ensures v == mutex_value(m)
+      inout linear m: Mutex<V>,
+      inout linear t: Thread,
+      inout linear p: Phase)
+  returns (linear v: V)
+  requires mutex_ref(old_m, ref)
+  requires is_rising(old_p)
+  ensures mutex_ref(m, ref)
+  ensures is_rising(p)
+  ensures t == old_t
+  ensures mutex_has(old_m) == None
+  ensures mutex_has(m) == Some(tid(t))
+  ensures v == mutex_value(old_m)
 
   method {:axiom} release_mutex<V>(
       ref: MutexRef<V>,
       linear v: V,
-      /*ghost*/ linear m: Mutex<V>,
-      /*ghost*/ linear t: Thread,
-      /*ghost*/ linear p: Phase)
-  returns (
-    /*ghost*/ linear m': Mutex<V>,
-    /*ghost*/ linear t': Thread,
-    /*ghost*/ linear p': Phase
-  )
-  requires mutex_ref(m, ref)
-  requires mutex_has(m) == Some(tid(t))
-  ensures mutex_ref(m', ref)
-  ensures t' == t
-  ensures mutex_has(m') == None
-  ensures mutex_value(m') == v
+      inout linear m: Mutex<V>,
+      inout linear t: Thread,
+      inout linear p: Phase)
+  requires mutex_ref(old_m, ref)
+  requires mutex_has(old_m) == Some(tid(old_t))
+  ensures mutex_ref(m, ref)
+  ensures t == old_t
+  ensures mutex_has(m) == None
+  ensures mutex_value(m) == v
 
   ///////////////
   // Compare-and-exchange library
@@ -101,19 +88,16 @@ abstract module TrustedConcurrencyPrimitives {
 
   method {:axiom} compare_and_set<V>(
     ref: CellRef<V>,
-    /*ghost*/ linear c: Cell<V>,
+    inout linear c: Cell<V>,
     old_v: V,
     new_v: V,
-    linear p: Phase)
-  returns (
-    did_set: bool,
-    /*ghost*/ linear c': Cell<V>,
-    linear p': Phase)
-  requires cell_ref(c, ref)
-  requires is_rising(p)
-  ensures cell_ref(c', ref)
-  ensures did_set ==> cell_value(c) == old_v && cell_value(c') == new_v
-  ensures !did_set ==> cell_value(c) != old_v && cell_value(c') == cell_value(c)
+    inout linear p: Phase)
+  returns (did_set: bool)
+  requires cell_ref(old_c, ref)
+  requires is_rising(old_p)
+  ensures cell_ref(c, ref)
+  ensures did_set ==> cell_value(old_c) == old_v && cell_value(c) == new_v
+  ensures !did_set ==> cell_value(old_c) != old_v && cell_value(c) == cell_value(old_c)
 }
 
 module StateObjects {
@@ -199,48 +183,41 @@ module Impl refines TrustedConcurrencyPrimitives {
   }
 
   method page_in(
-      linear yg: YieldGlobals,
-      linear p: Phase,
-      linear t: Thread,
+      inout linear yg: YieldGlobals,
+      inout linear p: Phase,
+      inout linear t: Thread,
       disk_idx: int,
       cache_idx: int)
-  returns (
-      linear yg': YieldGlobals,
-      linear p': Phase,
-      linear t': Thread)
-  requires is_rising(p)
+  requires is_rising(old_p)
   requires 0 <= disk_idx < |cache.disk_idx_to_cache_idx| < 0x1_0000_0000_0000_0000
   requires 0 <= cache_idx < |cache.cache_data| < 0x1_0000_0000_0000_0000
-  requires Inv(yg)
-  ensures Inv(yg')
+  requires Inv(old_yg)
+  ensures Inv(yg)
   {
     linear var YieldGlobals(disk_entries, cache_entries) := yg;
 
     linear var mutexes, m := lseq_take(cache_entries, cache_idx as uint64);
     linear var cells, de := lseq_take(disk_entries, disk_idx as uint64);
 
-    linear var cache_entry, m1, t1, p1 := acquire_mutex(cache.cache_data[cache_idx], m, t, p);
+    linear var cache_entry := acquire_mutex(cache.cache_data[cache_idx], inout m, inout t, inout p);
 
     if cache_entry.status != Unmatched {
       // bail out
-      linear var m2, t2, p2 := release_mutex(cache.cache_data[cache_idx], cache_entry, m1, t1, p1);
+      release_mutex(cache.cache_data[cache_idx], cache_entry, inout m, inout t, inout p);
 
-      linear var mutexes1 := lseq_give(mutexes, cache_idx as uint64, m2);
+      linear var mutexes1 := lseq_give(mutexes, cache_idx as uint64, m);
       linear var cells1 := lseq_give(cells, disk_idx as uint64, de);
-      yg' := YieldGlobals(cells1, mutexes1);
-      t' := t2;
-      p' := p2;
+      yg := YieldGlobals(cells1, mutexes1);
     } else {
       assert DiskEntryInv(de, disk_idx);
 
       var compare_and_set_succ;
       linear var DiskEntry(c, o) := de;
-      linear var c', p2;
-      compare_and_set_succ, c', p2 := compare_and_set(
+      compare_and_set_succ := compare_and_set(
             cache.disk_idx_to_cache_idx[disk_idx],
-            c,
+            inout c,
             -1, cache_idx,
-            p1);
+            inout p);
 
       linear var cache_entry';
       linear var o';
@@ -261,14 +238,12 @@ module Impl refines TrustedConcurrencyPrimitives {
         o' := o;
       }
 
-      linear var m2, t3, p3 := release_mutex(cache.cache_data[cache_idx], cache_entry', m1, t1, p2);
+      release_mutex(cache.cache_data[cache_idx], cache_entry', inout m, inout t, inout p);
 
-      linear var mutexes1 := lseq_give(mutexes, cache_idx as uint64, m2);
+      linear var mutexes1 := lseq_give(mutexes, cache_idx as uint64, m);
       linear var cells1 :=
-          lseq_give(cells, disk_idx as uint64, DiskEntry(c', o'));
-      yg' := YieldGlobals(cells1, mutexes1);
-      t' := t3;
-      p' := p3;
+          lseq_give(cells, disk_idx as uint64, DiskEntry(c, o'));
+      yg := YieldGlobals(cells1, mutexes1);
     }
   }
 }
