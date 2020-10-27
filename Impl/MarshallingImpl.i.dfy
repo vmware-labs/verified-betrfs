@@ -664,7 +664,7 @@ module MarshallingImpl {
   /////// Marshalling and de-marshalling with checksums
 
   method ParseCheckedSector(data: seq<byte>) returns (s : Option<Sector>)
-  requires |data| < 0x1_0000_0000_0000_0000;
+  requires |data| < 0x1_0000_0000;
   ensures s.Some? ==> StateImpl.WFSector(s.value)
   ensures s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
   ensures ISectorOpt(s) == IMM.parseCheckedSector(data)
