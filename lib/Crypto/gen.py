@@ -63,7 +63,8 @@ module CRC32_C_Lut_Powers {
     """
 
     if i > 1:
-      print("    assert " + pow_str(k-32) + " by { pow_" + str(k-64) + "(); }")
+      print("    assert " + pow_str(k-21) + " by { ")
+      print("    assert " + pow_str(k-42) + " by { pow_" + str(k-64) + "(); } }")
 
     
     print("  }")

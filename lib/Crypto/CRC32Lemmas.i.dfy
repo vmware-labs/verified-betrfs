@@ -2,6 +2,7 @@ include "CRC32C.s.dfy"
 include "../Lang/System/PackedInts.s.dfy"
 include "CRC32LutLemma.i.dfy"
 include "F2_X_Lemmas.i.dfy"
+include "BitLemmas.i.dfy"
 
 module CRC32_C_Lemmas {
   import opened Bits_s
@@ -11,6 +12,7 @@ module CRC32_C_Lemmas {
   import opened CRC32_C`Internal
   import opened CRC32_C_Lut_Lemma
   import opened F2_X_Lemmas
+  import BitLemmas
 
   function {:opaque} advance(acc: Bits, data: Bits) : (acc': Bits)
   requires |acc| == 32
@@ -1155,64 +1157,6 @@ module CRC32_C_Lemmas {
     }
   }
 
-  lemma unpacked_bits(t: seq<byte>, s: uint32, m: Bits)
-  requires |t| == 4
-  requires |m| == 32
-  requires m == bits_of_int(s as int, 32)
-  requires unpack_LittleEndian_Uint32(t) == s
-  ensures [
-        byte_of_bits(m[0..8]),
-        byte_of_bits(m[8..16]),
-        byte_of_bits(m[16..24]),
-        byte_of_bits(m[24..32])
-      ] == t
-  {
-    /*calc {
-      unpack_LittleEndian_Uint32([
-        byte_of_bits(m[0..8]),
-        byte_of_bits(m[8..16]),
-        byte_of_bits(m[16..24]),
-        byte_of_bits(m[24..32])
-      ]);
-      {
-        reveal_unpack_LittleEndian_Uint32();
-      }
-      m[0..8][0] * 1 +
-      m[0..8][1] * 2 +
-      m[0..8][2] * 4 +
-      m[0..8][3] * 8 +
-      m[0..8][4] * 16 +
-      m[0..8][5] * 32 +
-      m[0..8][6] * 64 +
-      m[0..8][7] * 128 +
-      m[8..16][0] * 256 +
-      m[8..16][1] * 512 +
-      m[8..16][2] * 1024 +
-      m[8..16][3] * 2048 +
-      m[8..16][4] * 4096 +
-      m[8..16][5] * 8192 +
-      m[8..16][6] * 16384 +
-      m[8..16][7] * 32768 +
-      m[16..24][0] * 65536 +
-      m[16..24][1] * 131072 +
-      m[16..24][2] * 262144 +
-      m[16..24][3] * 524288 +
-      m[16..24][4] * 1048576 +
-      m[16..24][5] * 2097152 +
-      m[16..24][6] * 4194304 +
-      m[16..24][7] * 8388608 +
-      m[24..32][0] * 16777216 +
-      m[24..32][1] * 33554432 +
-      m[24..32][2] * 67108864 +
-      m[24..32][3] * 134217728 +
-      m[24..32][4] * 268435456 +
-      m[24..32][5] * 536870912 +
-      m[24..32][6] * 1073741824 +
-      m[24..32][7] * 2147483648;
-      s;
-    }*/
-  }
-
   lemma bits_of_int_ffffffff()
   ensures bits_of_int(0xffffffff, 32) == ones(32)
   {
@@ -1287,7 +1231,7 @@ module CRC32_C_Lemmas {
           xor(bits_of_int(s as int, 32), bits_of_int(0xffffffff, 32));
           bits_of_int(bitxor32(s, 0xffffffff) as int, 32);
         }
-        unpacked_bits(t, bitxor32(s, 0xffffffff), m1);
+        BitLemmas.unpacked_bits(t, bitxor32(s, 0xffffffff), m1);
       }
       t;
     }
