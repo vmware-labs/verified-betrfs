@@ -80,7 +80,7 @@ module {:extern} NativePackedInts {
   ensures i == unpack_LittleEndian_Uint64(packed[idx .. idx + 8])
 
   method {:extern "NativePackedInts_Compile", 
-      "Unpack__LittleEndian__Uint64"} 
+      "Unpack__LittleEndian__Uint64__From__Array"} 
   Unpack_LittleEndian_Uint64_From_Array(packed: array<byte>, idx: uint64)
   returns (i: uint64)
   requires 0 <= idx
