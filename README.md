@@ -47,3 +47,9 @@ To run the benchmark, use
 
 where `<data_dir>` should be an empty (or non-existing) directory that will contain the benchmark's files.
 
+You can also run a very lightweight benchmark / unit-test:
+
+```
+make elf
+./build/Veribetrfs --benchmark=random-queries
+```
