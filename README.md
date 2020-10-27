@@ -19,7 +19,18 @@ Adjust -j# to exploit all of your cores.
 make -j4 status
 ```
 
+## Lightweight benchmarking
+
+We have a very brief benchmark for a quick sanity check that everything is working
+
+```
+make elf
+./build/Veribetrfs --benchmark=random-queries
+```
+
 ## YCSB
+
+YCSB is a serious benchmark suite for production key-value stores.
 
 The c++ ycsb benchmark library and rocksdb are vendored as a git submodule. Run
 
@@ -47,9 +58,3 @@ To run the benchmark, use
 
 where `<data_dir>` should be an empty (or non-existing) directory that will contain the benchmark's files.
 
-You can also run a very lightweight benchmark / unit-test:
-
-```
-make elf
-./build/Veribetrfs --benchmark=random-queries
-```
