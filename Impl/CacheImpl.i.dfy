@@ -160,7 +160,10 @@ module CacheImpl {
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
       LemmaSizeEqCount();
-      var _ := cache.RemoveAndGet(ref);
+      var res := cache.RemoveAndGet(ref);
+      if res.Some? {
+        res.value.Destructor();
+      }
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
 
       assert Inv();
