@@ -79,7 +79,23 @@ module BitLemmas {
   requires |p| >= |q| - 1
   ensures mod_F2_X(p + zeroes(n), q)
       == mod_F2_X(p, q)
-
+  {
+    if n == 0 {
+      assert p + zeroes(n) == p;
+    } else {
+      calc {
+        mod_F2_X(p + zeroes(n), q);
+        {
+          assert (p + zeroes(n))[..|p| + n - 1] == p + zeroes(n-1);
+        }
+        mod_F2_X(p + zeroes(n-1), q);
+        {
+          mod_F2_X_ignore_trailing_zeroes(p, q, n-1);
+        }
+        mod_F2_X(p, q);
+      }
+    }
+  }
 
   lemma xor_slice(a: Bits, b: Bits, i: int, j: int)
   requires 0 <= i <= j <= |a| == |b|
