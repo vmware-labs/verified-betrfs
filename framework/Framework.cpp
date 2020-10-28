@@ -50,13 +50,6 @@ void fail(std::string err)
 
 constexpr int MAX_WRITE_REQS_OUT = 8;
 
-
-namespace NativeArithmetic_Compile {
-  uint64_t u64add(uint64_t a, uint64_t b) {
-    return a + b;
-  }
-}
-
 namespace MainDiskIOHandler_Compile {
 #if USE_DIRECT
   uint8_t *aligned_copy(uint8_t* buf, size_t len, size_t *aligned_len) {

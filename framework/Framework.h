@@ -21,7 +21,7 @@ namespace MapRemove__s_Compile {
 }
 
 namespace NativeArithmetic_Compile {
-  uint64_t u64add(uint64_t a, uint64_t b);
+  inline uint64_t u64add(uint64_t a, uint64_t b) { return a + b; }
 }
 
 namespace F2__X__s_Compile {

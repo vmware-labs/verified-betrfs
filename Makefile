@@ -321,7 +321,6 @@ VERIBETRFS_AUX_FILES=\
 	build/framework/UnverifiedRowCache.o \
 	build/framework/Framework.o \
 	build/framework/MallocAccounting.o \
-	build/framework/NativeArrays.o \
 
 VERIBETRFS_O_FILES=\
 	$(VERIBETRFS_AUX_FILES)\
