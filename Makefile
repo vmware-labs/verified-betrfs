@@ -318,7 +318,6 @@ rwildcard=$(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2))
 VERIBETRFS_AUX_FILES=\
 	build/framework/Benchmarks.o \
 	build/framework/BundleWrapper.o \
-	build/framework/Crc32.o \
 	build/framework/UnverifiedRowCache.o \
 	build/framework/Framework.o \
 	build/framework/MallocAccounting.o \
