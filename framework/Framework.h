@@ -130,13 +130,6 @@ namespace NativePackedInts_Compile {
   }
 }
 
-
-namespace Crypto_Compile {
-  DafnySequence<uint8> Sha256(DafnySequence<uint8>);
-  DafnySequence<uint8> Crc32C(DafnySequence<uint8>);
-  DafnySequence<uint8> Crc32CArray(DafnyArray<uint8>, uint64 start, uint64 len);
-}
-
 namespace MainDiskIOHandler_Compile {
   struct ReadTask;
   struct WriteTask;
