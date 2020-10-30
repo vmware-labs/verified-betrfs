@@ -7,7 +7,11 @@ include "../Lang/System/PackedInts.s.dfy"
 include "../Lang/System/NativeArrays.s.dfy"
 include "BitLemmas.i.dfy"
 
-// based on https://github.com/komrad36/CRC
+// Implementation of CRC32-C, using the 
+// using the _mm_crc32_u64 intrinsic, pipelined and proven
+// correct using fancy polynomial math.
+//
+// See https://github.com/komrad36/CRC for a more detailed explanation.
 
 module CRC32_C_Impl {
   export Spec provides compute_crc32c_padded, NativeTypes, A

@@ -5,6 +5,10 @@ include "../Lang/System/F2_X.s.dfy"
 // become corrupted to another block with a valid checksum).
 // Thus, we need the CRC-32 algorithm in our TCB. The validity of our
 // disk model is dependent upon its mathematical properties.
+//
+// Here, CRC32-C is defined mathematically, in terms of the remainder
+// of polynomial division, where bit strings are interpreted as polynomials
+// over F_2.
 
 module CRC32_C {
 	export S provides crc32_c_padded, NativeTypes

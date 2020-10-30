@@ -1,5 +1,7 @@
 include "../NativeTypes.s.dfy"
 
+// unsigned integer addition with overflow allowed
+
 module {:extern} NativeArithmetic {
   import opened NativeTypes
 

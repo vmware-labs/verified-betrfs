@@ -1,6 +1,10 @@
 include "../MapSpec/UI.s.dfy"
 include "../BlockCacheSystem/DiskLayout.i.dfy"
 
+// Labels for transitions of the JournalView and StatesView.
+// This allows us to tie their behaviors together. Unfortunately,
+// it's a little clunky.
+
 module ViewOp {
   import UI
   import opened DiskLayout

@@ -1,10 +1,17 @@
 # Trusted crash-safe dictionary spec
 
-**MapSpec/UI.s.dfy** 
+**MapSpec/UI.s.dfy** Defines the "UI Op", used as labels on transitions of many of our
+state machines. These labels correspond to the user-visible behavior
+of the state machine. So for example: implementation handlers (Main.s.dfy)
+connect their inputs and outputs to the UI ops of the transitions they perform,
+and state machine refinements preserve UI ops. This is how we connect the
+behavior of our main handlers with the behavior of the MapSpec.
 
-**MapSpec/UIStateMachine.s.dfy** 
+**MapSpec/UIStateMachine.s.dfy** Abstract module for state machines with transitions labeled by UIOps.
+Provides a little bit of convenience for abstracting things over
+state machines.
 
-**MapSpec/MapSpec.s.dfy** 
+**MapSpec/MapSpec.s.dfy** Basic dictionary state machine.
 
 **MapSpec/ThreeStateVersioned.s.dfy** Our definition of crash-safety.
 
@@ -44,11 +51,13 @@ states.
 
 # Verified crash-safe refinements
 
-**Versions/VOp.i.dfy** 
+**Versions/VOp.i.dfy** Labels for transitions of the JournalView and StatesView.
+This allows us to tie their behaviors together. Unfortunately,
+it's a little clunky.
 
-**Versions/JournalView.i.dfy** 
+**Versions/JournalView.i.dfy** Abstraction of the journal side of the system.
 
-**Versions/StatesView.i.dfy** 
+**Versions/StatesView.i.dfy** Abstraction of the cache/betree side of the system.
 
 **Versions/StatesViewMap.i.dfy** 
 
@@ -499,7 +508,14 @@ from map<Reference, Node>.
 
 # Trusted libraries
 
-**lib/Base/MapRemove.s.dfy** 
+**lib/Base/MapRemove.s.dfy** Defines a MapRemove1 operation for removing a key from a
+the built-in map<K,V> type, and declares a trusted, compilable
+version.
+
+TODO On principle, it'd be nice to remove our dependence
+on compiling the built-in map<K, V> entirely, and just
+replace them with our own hash tables. There are only
+a few minor usages left.
 
 **lib/Base/MathAxioms.s.dfy** This files contains math axioms which seem to be missing
 from Dafny's (Boogie's?) math reasoning, resulting in
@@ -507,7 +523,7 @@ an incomplete theory.
 TODO follow up on these: file a ticket with Dafny about
 shoring up these holes.
 
-**lib/Base/NativeBenchmarking.s.dfy** 
+**lib/Base/NativeBenchmarking.s.dfy** Some utilities for benchmarking via explicit instrumentation.
 
 **lib/Base/Option.s.dfy** 
 
@@ -660,14 +676,14 @@ representation.
 
 **lib/Lang/LinearSequence.s.dfy** 
 
-**lib/Lang/System/Arithmetic.s.dfy** 
+**lib/Lang/System/Arithmetic.s.dfy** unsigned integer addition with overflow allowed
 
 **lib/Lang/System/Bits.s.dfy** Provides access to hardware functions for bit manipulation,
 including 128-bit registers.
 
 **lib/Lang/System/PackedInts.s.dfy** Language augmentation providing access to byte-level integer casting.
 
-**lib/Lang/System/SeqComparison.s.dfy** 
+**lib/Lang/System/SeqComparison.s.dfy** Trusted access to memcmp
 
 **lib/Lang/LinearSequence.i.dfy** 
 
@@ -689,7 +705,8 @@ a lot of dependencies.
 
 **lib/Marshalling/Util.i.dfy** 
 
-**lib/Marshalling/GenericMarshalling.i.dfy** 
+**lib/Marshalling/GenericMarshalling.i.dfy** Main marshalling library for marshalling generic datatypes
+out of tuples, arrays, unions, bytes, uint32, and uint64.
 
 # Math library
 
@@ -704,6 +721,10 @@ algorithm, CRC-32 (namely that a block with a valid checksum cannot
 become corrupted to another block with a valid checksum).
 Thus, we need the CRC-32 algorithm in our TCB. The validity of our
 disk model is dependent upon its mathematical properties.
+
+Here, CRC32-C is defined mathematically, in terms of the remainder
+of polynomial division, where bit strings are interpreted as polynomials
+over F_2.
 
 # CRC32-C Implementation
 
@@ -726,5 +747,9 @@ disk model is dependent upon its mathematical properties.
 **lib/Crypto/CRC32CArrayImpl.i.dfy** Yeah this is basically a copy of CRC32_C_Impl but with seq replaced by array.
 TODO if we use (linear) sequences everywhere instead of arrays we can remove this.
 
-**lib/Crypto/CRC32CImpl.i.dfy** based on https://github.com/komrad36/CRC
+**lib/Crypto/CRC32CImpl.i.dfy** Implementation of CRC32-C, using the
+using the _mm_crc32_u64 intrinsic, pipelined and proven
+correct using fancy polynomial math.
+
+See https://github.com/komrad36/CRC for a more detailed explanation.
 
