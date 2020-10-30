@@ -9,9 +9,20 @@ def readVeriDoc(path):
     veridoc = []
     while lines[offset].startswith("include"):
         offset += 1
-    while lines[offset].startswith("//"):
-        veridoc.append(lines[offset][2:].strip())
-        offset += 1
+    while True:
+      line = lines[offset].strip()
+      offset += 1
+
+      if line.startswith("//"):
+        veridoc.append(line[2:].strip())
+      elif line == "":
+        pass
+      else:
+        break
+    
+    while len(veridoc) > 0 and veridoc[0] == "":
+      veridoc = veridoc[1:]
+
     return "\n".join(veridoc)
 
 def toposortFiles(candidates):
@@ -22,23 +33,68 @@ def separate(irefs, l):
     remainder = irefs - match
     return (match, remainder)
 
+class FileBucket(object):
+  def __init__(self, start, end, title, comment=None):
+    self.start = start
+    self.end = end
+    self.title = title
+    self.comment = comment
+
+  def contains(self, filename):
+    return filename.startswith(self.start) and filename.endswith(self.end)
+
+dirs = [
+  FileBucket("MapSpec", ".s.dfy", "Trusted crash-safe dictionary spec"),
+  FileBucket("ByteBlockCacheSystem", ".s.dfy", "Environment spec"),
+  FileBucket("Impl", ".s.dfy", "Implementation spec"),
+
+  FileBucket("MapSpec", ".i.dfy", "Verified crash-safe refinements"),
+  FileBucket("Versions", ".i.dfy", "Verified crash-safe refinements"),
+  FileBucket("Betree", ".i.dfy", "Abstract B-epsilon tree"),
+  FileBucket("PivotBetree", ".i.dfy", "Pivot B-epsilon tree"),
+  FileBucket("BlockCache", ".i.dfy", "BlockCache"),
+  FileBucket("ByteBlockCacheSystem", ".i.dfy", "ByteCache"),
+  FileBucket("Impl", ".i.dfy", "Implementation"),
+
+
+  FileBucket("lib/Base/", ".s.dfy", "Trusted libraries"),
+  FileBucket("lib/Base/", ".i.dfy", "Verified libraries"),
+  FileBucket("lib/Buckets/", ".i.dfy", "Bucket implementation"),
+
+  FileBucket("lib/DataStructures/", ".i.dfy", "Data structure library"),
+  FileBucket("lib/Lang/", "", "Language utilities"),
+  FileBucket("lib/Marshalling/", ".i.dfy", "Marshalling library"),
+  FileBucket("lib/Math/", "", "Math library", comment="From IronFleet, but mostly unused in VeriBetrKV"),
+
+  FileBucket("lib/Crypto/", ".s.dfy", "CRC32-C Specification"),
+  FileBucket("lib/Crypto/", ".i.dfy", "CRC32-C Implementation"),
+]
+
 class Documentater:
     def __init__(self):
         TOP=IncludeReference(None, 0, "Impl/Bundle.i.dfy")
-        allIrefs = set(depsFromDfySource(TOP))
-        (allLibs, allBetree) = separate(allIrefs, lambda p: p.startswith("lib/"))
-        (sLibs, iLibs) = separate(allLibs, lambda p: p.endswith(".s.dfy"))
-        (sBetree, iBetree) = separate(allBetree, lambda p: p.endswith(".s.dfy"))
+        deps = depsFromDfySource(TOP)
 
-        self.veridoc_fp = open("docs/veridoc.md", "w")
-        self.present(sLibs, "Trusted Libraries")
-        self.present(iLibs, "Verified Libraries")
-        self.present(sBetree, "Trusted Map Spec")
-        self.present(iBetree, "Verified B-epsilon Tree")
+        buckets = [(fb, []) for fb in dirs]
+
+        for dep in deps:
+          for (b, filelist) in buckets:
+            if b.contains(dep.normPath):
+              filelist.append(dep)
+              break
+          else:
+            raise Exception("no FileBucket for " + dep.normPath)
+
+        with open("docs/veridoc.md", "w") as f:
+          self.veridoc_fp = f
+          for (b, filelist) in buckets:
+            self.present(filelist, b.title, b.comment)
     
-    def present(self, irefs, headerText):
+    def present(self, irefs, headerText, commentText):
         files = [i.normPath for i in irefs]
         self.veridoc_fp.write("# %s\n\n" % headerText)
+        if commentText:
+          self.veridoc_fp.write("%s\n\n" % commentText)
         for iref in toposortFiles(files):
             self.veridoc_fp.write("**%s** " % iref.normPath)
             self.veridoc_fp.write(readVeriDoc(iref.normPath))
