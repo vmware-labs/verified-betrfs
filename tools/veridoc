@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 """Builds the docs/veridoc.md documentation file."""
 
 from lib_deps import *
@@ -24,7 +24,7 @@ def separate(irefs, l):
 
 class Documentater:
     def __init__(self):
-        TOP=IncludeReference(None, 0, "disk-betree/Bundle.i.dfy")
+        TOP=IncludeReference(None, 0, "Impl/Bundle.i.dfy")
         allIrefs = set(depsFromDfySource(TOP))
         (allLibs, allBetree) = separate(allIrefs, lambda p: p.startswith("lib/"))
         (sLibs, iLibs) = separate(allLibs, lambda p: p.endswith(".s.dfy"))
@@ -33,7 +33,7 @@ class Documentater:
         self.veridoc_fp = open("docs/veridoc.md", "w")
         self.present(sLibs, "Trusted Libraries")
         self.present(iLibs, "Verified Libraries")
-        self.present(sBetree, "Trusted B-epsilon Tree")
+        self.present(sBetree, "Trusted Map Spec")
         self.present(iBetree, "Verified B-epsilon Tree")
     
     def present(self, irefs, headerText):

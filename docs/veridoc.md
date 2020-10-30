@@ -1,27 +1,50 @@
 # Trusted Libraries
 
-**lib/Base/MathAxioms.s.dfy** This files contains math axioms which, for whatever reason,
-don't seem to be provable with Dafny.
+**lib/Base/MapRemove.s.dfy** 
 
-**lib/Base/NativeTypes.s.dfy** 
+**lib/Base/MathAxioms.s.dfy** This files contains math axioms which seem to be missing
+from Dafny's (Boogie's?) math reasoning, resulting in
+an incomplete theory.
+
+**lib/Base/NativeBenchmarking.s.dfy** 
 
 **lib/Base/Option.s.dfy** 
 
-**lib/Base/Crypto.s.dfy** 
+**lib/Lang/LinearBox.s.dfy** 
+
+**lib/Lang/LinearMaybe.s.dfy** 
+
+**lib/Lang/NativeTypes.s.dfy** 
 
 **lib/Base/KeyType.s.dfy** 
 
-**lib/Base/Maps.s.dfy** TODO most of this doesn't need to be .s
+**lib/Lang/LinearSequence.s.dfy** 
 
-**lib/Base/SeqComparison.s.dfy** 
+**lib/Lang/System/Arithmetic.s.dfy** 
 
-**lib/Base/NativeArrays.s.dfy** 
+**lib/Lang/System/Bits.s.dfy** 
+
+**lib/Lang/System/PackedInts.s.dfy** 
+
+**lib/Lang/System/SeqComparison.s.dfy** 
+
+**lib/Lang/System/F2_X.s.dfy** 
+
+**lib/Lang/System/NativeArrays.s.dfy** 
+
+**lib/Crypto/CRC32C.s.dfy** 
 
 # Verified Libraries
 
 **lib/Base/SetBijectivity.i.dfy** 
 
+**lib/Base/Sets.i.dfy** 
+
 **lib/Base/mathematics.i.dfy** 
+
+**lib/Crypto/CRC32PowDef.i.dfy** 
+
+**lib/Lang/Inout.i.dfy** 
 
 **lib/Marshalling/Maps.i.dfy** 
 
@@ -36,29 +59,48 @@ a lot of dependencies.
 Some support math to support Bitmap module.
 
 
-**lib/Base/Message.i.dfy** 
-The messages propagated down a B-epsilon tree. Each message either
-completely defines the value of the key, or is a delta that modifies the
-value defined by prior messages.
+**lib/Base/DebugAccumulator.i.dfy** 
 
+**lib/Base/LinearOption.i.dfy** 
 
-**lib/Base/Sets.i.dfy** 
+**lib/Base/Maps.i.dfy** TODO(rob): Split into Maps and IMaps
+
+**lib/Base/PackedIntsLib.i.dfy** 
 
 **lib/Base/sequences.i.dfy** 
+
+**lib/Crypto/BitLemmas.i.dfy** 
+
+**lib/Crypto/CRC32LutBitUnrolling.i.dfy** 
+
+**lib/Crypto/CRC32LutPowers.i.dfy** 
+
+**lib/Crypto/F2_X_Lemmas.i.dfy** 
+
+**lib/Lang/LinearSequence.i.dfy** 
 
 **lib/Marshalling/Seqs.i.dfy** 
 
 **lib/Marshalling/Util.i.dfy** include "../../Common/Native/Io.s.dfy"
 
+**lib/Base/Arrays.i.dfy** include "Marshalling/Native.s.dfy"
+
+**lib/Base/Message.i.dfy** 
+
+**lib/Base/Multisets.i.dfy** 
+
 **lib/Base/total_order.i.dfy** 
 
-**lib/DataStructures/Bitmap.i.dfy** 
-A module that maintains a compact set of integers using a packed-uint64
-bitmap representation.
+**lib/Crypto/CRC32LutLemma.i.dfy** 
 
-TODO(thance): This module has both the Model (BytemapModel) and the
-Impl (class Bitmap) that implements it efficiently.
+**lib/DataStructures/BitmapModel.i.dfy** 
+Maintains a compact set of integers using a packed-uint64 bitmap
+representation.
 
+
+**lib/DataStructures/LinearDList.i.dfy** 
+
+**lib/DataStructures/LinearMutableMap.i.dfy** 
 
 **lib/DataStructures/MutableMapModel.i.dfy** 
 Immutable (functional) model to support MutableMapImpl.  API provides an
@@ -72,60 +114,100 @@ proof (the logic half of the behavior of the Impl). It would be
 nice to cleanly separate these concerns.
 
 
-**lib/Marshalling/MarshallInt.i.dfy** include "../../../Libraries/Util/seqs_transforms.i.dfy"
+**lib/Lang/LinearBox.i.dfy** 
+
+**lib/Base/total_order_impl.i.dfy** 
+
+**lib/Crypto/CRC32Lemmas.i.dfy** 
+
+**lib/Crypto/CRC32Lut.i.dfy** 
+
+**lib/DataStructures/BitmapImpl.i.dfy** 
+Maintains a compact set of integers using a packed-uint64 bitmap
+representation.
+
+
+**lib/DataStructures/LinearUSeq.i.dfy** 
 
 **lib/DataStructures/MutableMapImpl.i.dfy** 
 A map implemented as a fast, mutable hash table.
 
 
-**lib/DataStructures/tttree.i.dfy** 
-
 **lib/Marshalling/GenericMarshalling.i.dfy** 
 
-**lib/DataStructures/LRU.i.dfy** 
+**lib/Buckets/PackedStringArray.i.dfy** 
+
+**lib/Buckets/PivotsLib.i.dfy** 
+
+**lib/Crypto/CRC32CArrayImpl.i.dfy** 
+
+**lib/Crypto/CRC32CImpl.i.dfy** 
+
+**lib/DataStructures/BtreeModel.i.dfy** 
+
+**lib/DataStructures/LruModel.i.dfy** 
 An LRU-queue.
 
 
-# Trusted B-epsilon Tree
+**lib/Buckets/BucketsLib.i.dfy** 
 
-**disk-betree/UI.s.dfy** 
+**lib/Buckets/PackedStringArrayMarshalling.i.dfy** 
 
-**disk-betree/UIStateMachine.s.dfy** 
+**lib/DataStructures/LruImpl.i.dfy** 
+An LRU-queue.
 
-**disk-betree/MapSpec.s.dfy** 
 
-**disk-betree/AsyncDiskModel.s.dfy** 
+**lib/DataStructures/MutableBtree.i.dfy** 
+
+**lib/Buckets/BucketIteratorModel.i.dfy** 
+A mathematical description of bucket iterators.
+The implementation is defined in BucketImpl together with MutBucket.
+
+
+**lib/Buckets/BucketWeights.i.dfy** 
+
+**lib/DataStructures/KMBtree.i.dfy** 
+
+**lib/Buckets/BucketModel.i.dfy** 
+
+**lib/Buckets/PackedKV.i.dfy** 
+
+**lib/Buckets/LKMBPKVOps.i.dfy** 
+
+**lib/Buckets/PackedKVMarshalling.i.dfy** 
+
+**lib/Buckets/BucketImpl.i.dfy** 
+
+# Trusted Map Spec
+
+**MapSpec/UI.s.dfy** 
+
+**MapSpec/UIStateMachine.s.dfy** 
+
+**MapSpec/MapSpec.s.dfy** 
+
+**ByteBlockCacheSystem/AsyncDiskModel.s.dfy** 
 An async disk allows concurrent outstanding I/Os. The disk is a sequence of bytes.
 
 (Real disks constrain I/Os to fall on logical-block-address boundaries, but we're
 ignoring constraint for now.)
 
 
-**disk-betree/ThreeStateVersioned.s.dfy** 
+**MapSpec/ThreeStateVersioned.s.dfy** 
 Our definition of crash-safety.
 
 
-**disk-betree/MainDiskIOHandler.s.dfy** DiskInterface
+**Impl/MainDiskIOHandler.s.dfy** DiskInterface
 
-**disk-betree/ThreeStateVersionedMap.s.dfy** 
+**MapSpec/ThreeStateVersionedMap.s.dfy** 
 
-**disk-betree/Main.s.dfy** 
+**Impl/Main.s.dfy** 
 
 # Verified B-epsilon Tree
 
-**disk-betree/AsyncSectorDiskModel.i.dfy** 
-An AsyncSectorDiskModel allows concurrent outstanding I/Os to a disk where each "sector"
-is some higher-level Node datatype. A later refinement step shows how to marshall and align
-these Nodes to the byte-ranges of the (trusted) AsyncDiskModel.
+**BlockCacheSystem/AsyncSectorDiskModelTypes.i.dfy** 
 
-TODO disallow concurrent spatially-overlapping writes/reads
-
-**disk-betree/Bounds.i.dfy** 
-Defines bounds on various abstract quantities, such as the number
-of children of a node.
-
-
-**disk-betree/Graph.i.dfy** 
+**Betree/Graph.i.dfy** 
 An abstract graph that tracks dependencies.
 It is an interface implemented by BetreeGraph (and the refined
 PivotBetreeGraph): trees whose dependencies are child pointers that
@@ -134,32 +216,42 @@ It is used by the BlockInterface to identify which blocks can be
 garbage-collected because they're unreachable from the graph roots.
 
 
-**disk-betree/PivotsLib.i.dfy** 
-Provides definitions and libraries for pivot tables. A pivot
-table is a sorted list of *pivot* keys that divides the keyspace into
-contiguous ranges.
+**Impl/BucketGeneratorModel.i.dfy** 
+A mathematical description of bucket generators.
+It's like an iterator, but it doesn't directly refer to an actual bucket.
+The bucket may be implicit.
 
 
-**disk-betree/BlockAllocator.i.dfy** 
-A BlockAllocator tracks which blocks are allocated, to safely allocate
-blocks unused by any view.
+**MapSpec/Journal.i.dfy** 
+
+**PivotBetree/Bounds.i.dfy** 
+Defines bounds on various abstract quantities, such as the number
+of children of a node.
 
 
-**disk-betree/BucketsLib.i.dfy** 
-A Bucket maps keys to Messages. A BucketList imparts a Message meaning
-to every key obeying the Message composition rules. This module shows
-how pushing messages down a tree towards a child still produces equivalent
-values as viewed through the Message chain.
-
-
-**disk-betree/Transactable.i.dfy** 
+**Betree/Transactable.i.dfy** 
 A Transactable is a state machine defined by atomically gluing together
 groups of a few step primitives. Each BetreeSpec operation performs
 an atomic sequence of cache updates, such as a block allocation
 followed by a write (which includes a reference to the allocated block).
 
 
-**disk-betree/BlockInterface.i.dfy** 
+**BlockCacheSystem/DiskLayout.i.dfy** 
+
+**BlockCacheSystem/JournalRange.i.dfy** 
+
+**Impl/BlockAllocatorModel.i.dfy** 
+A BlockAllocator tracks which blocks are allocated, to safely allocate
+blocks unused by any view.
+
+
+**Impl/BucketGeneratorImpl.i.dfy** 
+
+**Impl/BucketSuccessorLoopModel.i.dfy** 
+
+**MapSpec/TSJ.i.dfy** 
+
+**Betree/BlockInterface.i.dfy** 
 A BlockInterface lets its client code (the Betree) perform atomic sequences
 of block allocation (assigning a new value),
 block write (replacing an existing value),
@@ -167,30 +259,44 @@ and read steps.
 It also supports a GC step that frees some subset of unreferenced blocks.
 
 
-**disk-betree/BucketWeights.i.dfy** 
-Assigning weights to buckets guides the flushing algorithm to decide
-which child to push messages towards. TODO(thance): help!
+**BlockCacheSystem/JournalInterval.i.dfy** 
+
+**ByteBlockCacheSystem/JournalBytes.i.dfy** 
+
+**Impl/BlockAllocatorImpl.i.dfy** 
+A BlockAllocator tracks which blocks are allocated, to safely allocate
+blocks unused by any view.
 
 
-**disk-betree/BetreeSpec.i.dfy** 
+**Impl/BucketSuccessorLoopImpl.i.dfy** 
+
+**MapSpec/TSJMap.i.dfy** 
+
+**Versions/VOp.i.dfy** 
+
+**Betree/BetreeSpec.i.dfy** 
 Defines the basic B-e-tree-shaped operations.
 
 * A Query is satisfied by examining enough of the tree to observe a
 terminating message list.
 * Insert shoves a single message into the root.
-(Do we still use that, now that we have a mutable write buffer at the top?)
 * Flush moves a bundle of messages from a node to one of its children.
 * Grow inserts a new layer at the top of the tree to admit growth.
 * Redirect replaces a subtree with a semantically-equivalent one.
 (when do we use that?)
 
 
-**disk-betree/KVList.i.dfy** 
-A list of key-message pairs, with unique, sorted keys.
-TODO(robj,thance): How is it used... in MutableBucket?
+**Impl/JournalistMarshallingModel.i.dfy** 
 
+**Impl/JournalistParsingImpl.i.dfy** 
 
-**disk-betree/Betree.i.dfy** 
+**MapSpec/TSJMap_Refines_ThreeStateVersionedMap.i.dfy** 
+
+**Versions/JournalView.i.dfy** 
+
+**Versions/StatesView.i.dfy** 
+
+**Betree/Betree.i.dfy** 
 Betree lowers the "lifted" op-sequences of BetreeSpec down to concrete state machine
 steps that advance the BetreeBlockInterface as required by BetreeSpec.
 It also interleaves Betree operations with BlockInterface garbage collection.
@@ -199,107 +305,92 @@ TODO(jonh): This probably should get renamed; its place in the heirarchy
 is confusing.
 
 
-**disk-betree/KVListPartialFlush.i.dfy** 
-I guess sometimes we want to flush only part of a node's effective KVList,
-and KVList only specified full flushes?
-TODO(robj,thance): Improve this doc.
+**Impl/JournalistMarshallingImpl.i.dfy** 
 
+**Impl/JournalistModel.i.dfy** 
 
-**disk-betree/BetreeInv.i.dfy** 
+**Versions/StatesViewMap.i.dfy** 
+
+**Betree/BetreeInv.i.dfy** 
 Invariants about Betrees: lookup structure, non-equivocation, and
 preservation.
 TODO(jonh) and apparently a bunch of dead code! See TODO inline.
 
 
-**disk-betree/MutableBucket.i.dfy** 
-Collects singleton message insertions efficiently, avoiding repeated
-replacement of the immutable root Node. Once this bucket is full,
-it is flushed into the root in a batch.
-TODO(robj): Littered with assume false!?
+**Impl/JournalistImpl.i.dfy** 
 
-
-**disk-betree/PivotBetreeSpec.i.dfy** 
+**PivotBetree/PivotBetreeSpec.i.dfy** 
 A PivotBetree refines a Betree, carrying forward the tree structure
 but refining the abstract infinite key maps with key ranges separated
 by pivot keys.
 
 
-**disk-betree/Betree_Refines_Map.i.dfy** 
+**Versions/CompositeView.i.dfy** 
+
+**Betree/Betree_Refines_Map.i.dfy** 
 Refinement proof from Betree to Map.
 
 
-**disk-betree/BlockCache.i.dfy** 
-A BlockCache implements the BlockInterface by caching over an
-AsyncSectorDisk. At this layer, the disk provides high-level sectors
-(containing either this module's indirection tables or the Node
-type of the application, a not-yet-bound parameter).
+**BlockCacheSystem/SectorType.i.dfy** 
 
-The BlockCache provides Persistent, Frozen, and Ephemeral views of the
-application data, facilitating the crash-safety and crash recovery behavior.
+**PivotBetree/PivotBetreeSpecWFNodes.i.dfy** 
+
+**Versions/CompositeView_Refines_TSJMap.i.dfy** 
+
+**BlockCacheSystem/BlockDisk.i.dfy** 
+
+**BlockCacheSystem/JournalDisk.i.dfy** 
+
+**PivotBetree/PivotBetreeSpecRefinement.i.dfy** 
+Lays out the abstraction function between the datatypes, setting
+up for PivotBetree_Refines_Betree.
 
 
-**disk-betree/PivotBetree.i.dfy** 
+**Versions/CompositeView_Refines_ThreeStateVersionedMap.i.dfy** 
+
+**BlockCacheSystem/BlockCache.i.dfy** 
+
+**BlockCacheSystem/BlockJournalDisk.i.dfy** 
+
+**BlockCacheSystem/JournalCache.i.dfy** 
+
+**PivotBetree/PivotBetree.i.dfy** 
 Like Betree, PivetBetree lowers the "lifted" op-sequences of PivotBetreeSpec
 down to concrete state machine steps that advance the PivotBetreeBlockInterface
 as required by BetreeSpec. The only difference is that the interface has a more
 concrete (pivot-y) type.
 
 
-**disk-betree/PivotBetreeSpecRefinement.i.dfy** 
-Lays out the abstraction function between the datatypes, setting
-up for PivotBetree_Refines_Betree.
-
-
-**disk-betree/BetreeBlockCache.i.dfy** 
+**BlockCacheSystem/BetreeCache.i.dfy** 
 Bind a Betree to a BlockCache to get the behavior of both: the map implementation of a Betree,
 and the crash-safety implementation of a BlockCache.
 
 
-**disk-betree/BlockCacheSystem.i.dfy** 
-Attach a BlockCache to a Disk
+**BlockCacheSystem/BlockSystem.i.dfy** 
 
+**BlockCacheSystem/JournalSystem.i.dfy** 
 
-**disk-betree/PivotBetree_Refines_Betree.i.dfy** 
-"Boilerplate" for the refinement/invariant proof for PivotBetree.
-Reasons about refinement between generic Ops.
-Relies on logic about specific ops from PivotBetreeSpecRefinement.
+**ByteBlockCacheSystem/Marshalling.i.dfy** 
 
-This is "boilerplate" in that the difficult logic is about the Node and Op refinement
-in PivotBetreeSpecRefinement; this file just "lowers" that logic from ops down to
-concrete state machine steps.
+**Impl/CommitterModel.i.dfy** 
 
+**PivotBetree/PivotBetree_Refines_Betree.i.dfy** 
 
-**disk-betree/ThreeStateVersionedPivotBetree.i.dfy** 
-Defines a 3-state instantiation PivotBetree. That is, defines what state a disk can return to
-if the storage system (a PivotBetree) crashes.
+**PivotBetree/StatesViewPivotBetree.i.dfy** 
 
+**BlockCacheSystem/BlockJournalCache.i.dfy** 
 
-**disk-betree/BlockCacheSystem_Refines_ThreeStateVersionedBlockInterface.i.dfy** 
-A BlockCacheSystem -- a crash-safe block cache running a client program and
-attached to our disk model -- correctly provides three-state crash safety
-for the state of its program.
+**BlockCacheSystem/BlockSystem_Refines_StatesView.i.dfy** 
 
-Ideally we would prove the refinement for an arbitrary graph, but if we
-imported the abstract BlockCacheSystem and CrashSafeBlockInterface
-separately then we wouldn't know they were using the same graph.  So for
-now, we just prove the refinement specifically for BetreeGraph.
+**BlockCacheSystem/JournalSystem_Refines_JournalView.i.dfy** 
 
+**ByteBlockCacheSystem/InterpretationDiskOps.i.dfy** 
 
-**disk-betree/IndirectionTableModel.i.dfy** 
-An IndirectionTable maps references to locations and tracks
-dependencies (accounts for locations containing references).
-This module includes a reference-counting map and free list
-that make discovering free blocks (and maintaining the list of
-them) cheap.
+**Impl/CommitterImpl.i.dfy** 
 
-TODO(thance): separate API from refcount-y implementation using
-a layer of Dafny refinement.
+**Impl/IndirectionTableModel.i.dfy** 
 
-TODO(jonh): Here "Model" means "lowest functional model of the mutable
-impl". Maybe move Model to the beginning of all such usages?
-
-
-**disk-betree/PivotBetree_Refines_Map.i.dfy** 
+**PivotBetree/PivotBetree_Refines_Map.i.dfy** 
 Composes the two refinements:
 
 PivotBetree -> Betree
@@ -310,12 +401,37 @@ To yield
 PivotBetree -> Map
 
 
-**disk-betree/BetreeBlockCacheSystem.i.dfy** 
+**BlockCacheSystem/BetreeSystem.i.dfy** 
 Instantiate the {PivotBetree, BlockCache} code in a System (model of the environment).
 ("Bottom lettuce")
 
 
-**disk-betree/ImplModel.i.dfy** 
+**ByteBlockCacheSystem/ByteCache.i.dfy** 
+
+**ByteBlockCacheSystem/InterpretationDiskContents.i.dfy** 
+
+**Impl/DiskOpModel.i.dfy** 
+
+**Impl/IndirectionTableImpl.i.dfy** 
+The heap-y implementation of IndirectionTableModel.
+
+
+**PivotBetree/StatesViewPivotBetree_Refines_StatesViewMap.i.dfy** 
+
+**BlockCacheSystem/BetreeSystem_Refines_StatesViewPivotBetree.i.dfy** 
+Take the whole crash-safe BlockCacheSystem, and constrain it to
+run the (Pivot)Betree as its client, thereby yielding a 3-state-crash-safe
+Betree. (We'll eventually tie that up the stack to get a 3-state-crash-safe
+map.)
+
+
+**ByteBlockCacheSystem/InterpretationDisk.i.dfy** 
+
+**Impl/CommitterReplayModel.i.dfy** 
+
+**Impl/DiskOpImpl.i.dfy** 
+
+**Impl/StateModel.i.dfy** 
 This file represents immutability's last stand.
 It is the highest-fidelity representation of the implementation
 that can be represented with immutable datatypes.
@@ -325,135 +441,122 @@ BlockCache.  It also represents indirection table as a map to pairs, rather
 than two maps, because real, mutable implementation uses a map to pairs.
 
 
-**disk-betree/IndirectionTableImpl.i.dfy** 
-The heap-y implementation of IndirectionTableModel.
+**BlockCacheSystem/BetreeSystem_Refines_StatesViewMap.i.dfy** 
+
+**Impl/CommitterReplayImpl.i.dfy** 
+
+**Impl/MarshallingModel.i.dfy** 
+
+**Impl/NodeModel.i.dfy** 
+
+**BlockCacheSystem/BetreeJournalSystem.i.dfy** 
+
+**Impl/IOModel.i.dfy** 
+
+**Impl/NodeImpl.i.dfy** 
+
+**BlockCacheSystem/BetreeJournalSystem_Refines_CompositeView.i.dfy** 
+
+**ByteBlockCacheSystem/ByteSystem.i.dfy** 
+
+**Impl/AllocationReport.i.dfy** 
+
+**Impl/BookkeepingModel.i.dfy** 
+
+**Impl/CacheImpl.i.dfy** 
+Implements map<Reference, Node>
+
+TODO(thance): We need a CacheModel, because this is taking too big a leap
+from map<Reference, Node>.
 
 
-**disk-betree/BetreeBlockCacheSystem_Refines_ThreeStateVersionedPivotBetree.i.dfy** 
-Take the whole crash-safe BlockCacheSystem, and constrain it to
-run the (Pivot)Betree as its client, thereby yielding a 3-state-crash-safe
-Betree. (We'll eventually tie that up the stack to get a 3-state-crash-safe
-map.)
+**Impl/CommitterAppendModel.i.dfy** 
 
+**Impl/CommitterCommitModel.i.dfy** 
 
-**disk-betree/ImplMarshallingModel.i.dfy** 
-Parses bytes and returns the data structure (a Pivot-Node Sector) used by
-the Model.
+**Impl/CommitterInitModel.i.dfy** 
 
-Annoyingly, our marshaling framework doesn't enforce bijectivity.
-So we talk only about parsing, and define marshal(X) as anything
-that produces an output that parses to X.
+**BlockCacheSystem/BetreeJournalSystem_Refines_ThreeStateVersionedMap.i.dfy** 
 
-TODO(jonh): rename to ModelParsing.
+**ByteBlockCacheSystem/ByteSystem_Refines_BetreeJournalSystem.i.dfy** 
 
+**Impl/CommitterAppendImpl.i.dfy** 
 
-**disk-betree/Marshalling.i.dfy** 
-Raises ImpLMarshallingModel by converting indirection table sectors
-up from IndirectionTableModel.IndirectionTable to
-BlockCache.IndirectionTable (and leaving pivot node sectors alone).
-(This gets used as part of the interpretation function in a refinement
-proof.)
+**Impl/DeallocModel.i.dfy** 
 
-TODO(thance): This structure is convoluted. Travis has some ideas
-for rearranging it. In particular, we might want to make the on-disk
-representation stand alone, so that we could later prove properties
-about version mutationts in the file system: that you can read old disks.
+**Impl/FlushModel.i.dfy** 
 
+**Impl/GrowModel.i.dfy** 
 
-**disk-betree/ByteBetreeBlockCache.i.dfy** 
-Wraps a BetreeBlockCache (which does I/O in high-level Node sectors) into
-a state machine that is an AsyncDiskMachine: a client of a disk that does
-I/O in bytes.
+**Impl/HandleReadResponseModel.i.dfy** 
 
-You (or past Jon) might ask: why do we refine Betree and BlockCache mostly
-separately, but join them up at the Pivot level, even though we still have
-a layer of refinement (pivot->byte) to go? The answer is that we never have
-a "byte betree block cache" in memory; we want our program to manipulate
-cooked data structures, not have to unmarshall every time we inspect a block
-of bytes from the cache. We want the parsing step to be specific to the
-memory->disk boundary, rather than having a refinement layer that eliminates
-the Pivot Node data structure entirely.
+**Impl/HandleWriteResponseModel.i.dfy** 
 
+**Impl/LeafModel.i.dfy** 
 
-**disk-betree/ByteBetreeBlockCacheSystem.i.dfy** 
-Instantiates the ByteBetreeBlockCache program in the (trusted, byte-level)
-disk model to get a System.
-Proves invariants to prepare for refinement from the resulting system to the
-BetreeBlockCacheSystem.
+**Impl/MkfsModel.i.dfy** 
 
-TODO(jonh): fold together/regularize ByteBetreeBlockCacheSystem_Refines_BetreeBlockCacheSystem.
+**Impl/SplitModel.i.dfy** 
 
+**Impl/StateImpl.i.dfy** 
 
-**disk-betree/ImplModelIO.i.dfy** 
-IO functions used by various ImplModel verbs.
-Updates data structures as defined in ImplModel.
-Interacts with the disk via ImplModel.IO, which abstracts
-MainDiskIOHandlers.s.dfy.
+**Impl/SuccModel.i.dfy** 
 
-Also, the code that reads in indirection tables and nodes.
+**ByteBlockCacheSystem/ByteSystem_Refines_ThreeStateVersionedMap.i.dfy** 
 
+**Impl/FullImpl.i.dfy** 
 
-**disk-betree/ByteBetreeBlockCacheSystem_Refines_BetreeBlockCacheSystem.i.dfy** 
-Proves refinement from the Byte (disk-parse-y) Betree system to the Pivot-y
-Betree system.  This proof is simple because all the work happens in the
-invariant prep in ByteBetreeBlockCacheSystem.
+**Impl/MarshallingImpl.i.dfy** 
 
+**Impl/SyncModel.i.dfy** 
 
-**disk-betree/ImplModelCache.i.dfy** 
+**Impl/EvictModel.i.dfy** 
 
-**disk-betree/ImplModelDealloc.i.dfy** 
+**Impl/IOImpl.i.dfy** 
 
-**disk-betree/ImplModelFlush.i.dfy** 
+**Impl/Mkfs.i.dfy** 
 
-**disk-betree/ImplModelGrow.i.dfy** 
+**Impl/BookkeepingImpl.i.dfy** 
 
-**disk-betree/ImplModelLeaf.i.dfy** 
+**Impl/CommitterCommitImpl.i.dfy** 
 
-**disk-betree/ImplModelQuery.i.dfy** 
+**Impl/CommitterInitImpl.i.dfy** 
 
-**disk-betree/ImplModelSplit.i.dfy** 
+**Impl/FlushPolicyModel.i.dfy** 
 
-**disk-betree/ImplModelSync.i.dfy** 
+**Impl/QueryModel.i.dfy** 
 
-**disk-betree/ImplModelEvict.i.dfy** 
+**Impl/DeallocImpl.i.dfy** 
 
-**disk-betree/ImplModelFlushPolicy.i.dfy** 
+**Impl/FlushImpl.i.dfy** 
 
-**disk-betree/ImplModelInsert.i.dfy** 
+**Impl/GrowImpl.i.dfy** 
 
-**disk-betree/ImplNodes.i.dfy** 
+**Impl/HandleReadResponseImpl.i.dfy** 
 
-**disk-betree/ImplState.i.dfy** 
+**Impl/HandleWriteResponseImpl.i.dfy** 
 
-**disk-betree/Impl.i.dfy** 
+**Impl/InsertModel.i.dfy** 
 
-**disk-betree/ImplMarshalling.i.dfy** 
+**Impl/LeafImpl.i.dfy** 
 
-**disk-betree/ImplIO.i.dfy** 
+**Impl/SplitImpl.i.dfy** 
 
-**disk-betree/Mkfs.i.dfy** 
+**Impl/CoordinationModel.i.dfy** 
 
-**disk-betree/ImplCache.i.dfy** 
+**Impl/SyncImpl.i.dfy** 
 
-**disk-betree/ImplDealloc.i.dfy** 
+**Impl/EvictImpl.i.dfy** 
 
-**disk-betree/ImplFlush.i.dfy** 
+**Impl/SuccImpl.i.dfy** 
 
-**disk-betree/ImplGrow.i.dfy** 
+**Impl/FlushPolicyImpl.i.dfy** 
 
-**disk-betree/ImplLeaf.i.dfy** 
+**Impl/QueryImpl.i.dfy** 
 
-**disk-betree/ImplSplit.i.dfy** 
+**Impl/InsertImpl.i.dfy** 
 
-**disk-betree/ImplSync.i.dfy** 
+**Impl/CoordinationImpl.i.dfy** 
 
-**disk-betree/ImplEvict.i.dfy** 
-
-**disk-betree/ImplQuery.i.dfy** 
-
-**disk-betree/ImplFlushPolicy.i.dfy** 
-
-**disk-betree/ImplInsert.i.dfy** 
-
-**disk-betree/MainImpl.i.dfy** 
+**Impl/MainHandlers.i.dfy** 
 
