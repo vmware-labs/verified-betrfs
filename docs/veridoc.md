@@ -583,7 +583,23 @@ to every key obeying the Message composition rules. This module shows
 how pushing messages down a tree towards a child still produces equivalent
 values as viewed through the Message chain.
 
-NOTE(travis): this should probably be split up into two things: (i) a library of utilities for describing the relationship between a map and a pair of (possibly sorted) lists and (ii) actual application-bucket operations. Furthermore, the whole thing where a Bucket has *both* the list representation and map representation was a bit of a crutch and should probably be changed.
+Unfortunately this currently has a lot of tech debt. Here is the situation:
+Originally, a "bucket" was defined to be a map<Key, Value>, and the PivotBetree
+was defined in terms of the Buckets.
+Many operations (split, flush) were defined on these Buckets.
+The implementation used data structures whose
+interpretations were these map<Key, Value> objects.
+
+However, key/value pairs are stored on disk as sequences. In order to avoid demarshalling
+costs, it slowly became clear that it would be more useful that the PivotBetree should
+use sequences, and that it should maintain an invariant that the sequences are sorted,
+and that the implementation should primarily operate on sequences.
+
+Unfortunately (blame tjhance) the move to this second option is a little undercooked,
+and this file
+remains in a messy mid-refactor state where a Bucket is *both* a BucketMap and
+a key/value sequence. TODO fix all of this
+
 
 **lib/Buckets/PackedStringArrayMarshalling.i.dfy** 
 
