@@ -90,7 +90,7 @@ module InsertModel {
     var root := s.cache[BT.G.Root()];
     var r := Pivots.Route(root.pivotTable, key);
     var bucket := root.buckets[r];
-    var newBucket := B(bucket.b[key := msg]);
+    var newBucket := B(bucket.as_map()[key := msg]);
     var newRoot := root.(buckets := root.buckets[r := newBucket]);
     var newCache := s.cache[BT.G.Root() := newRoot];
 

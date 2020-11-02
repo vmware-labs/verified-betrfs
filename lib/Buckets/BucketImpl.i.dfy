@@ -2,7 +2,7 @@ include "../DataStructures/KMBtree.i.dfy"
 include "PackedKV.i.dfy"
 include "../../PivotBetree/Bounds.i.dfy"
 include "BucketIteratorModel.i.dfy"
-include "BucketModel.i.dfy"
+include "BucketFlushModel.i.dfy"
 include "LKMBPKVOps.i.dfy"
 include "../Lang/Inout.i.dfy"
 
@@ -32,12 +32,13 @@ module BucketImpl {
   import opened KeyType
   import BucketIteratorModel
   import Pivots = BoundedPivotsLib
-  import opened BucketModel
+  import opened BucketFlushModel
   import opened DPKV = DynamicPkv
   import LKMBPKVOps
   import opened LinearSequence_s
   import opened LinearSequence_i
   import opened Inout
+  import Lexicographic_Byte_Order
 
   type TreeMap = LKMB.Model.Node
 
@@ -46,7 +47,7 @@ module BucketImpl {
   requires PackedKV.WF(pkv)
   ensures LKMB.WF(tree)
   ensures LKMBPKVOps.IsKeyMessageTree(tree)
-  ensures PackedKV.I(pkv).b == B(LKMB.Interpretation(tree)).b
+  ensures PackedKV.I(pkv).as_map() == LKMB.Interpretation(tree)
   ensures weight as nat == BucketWeights.WeightBucket(BucketsLib.B(LKMB.Interpretation(tree)))
   {
     tree, weight := LKMBPKVOps.FromPkv(pkv);
@@ -116,6 +117,8 @@ module BucketImpl {
     {
       linear var tmp := LKMB.EmptyTree();
       mb := MutBucket(BFTree(tmp), 0, true, EmptyBucket());
+
+      B_empty_map();
     }
 
     static method AllocPkv(pkv: PackedKV.Pkv, is_sorted: bool) returns (linear mb: MutBucket)
@@ -129,57 +132,59 @@ module BucketImpl {
       WeightBucketIs(pkv);
     }
 
-    static lemma WeightKeySeqIs(psa: PackedKV.PSA.Psa, k: int)
+    static lemma WeightKeyListIs(psa: PackedKV.PSA.Psa, k: int)
     requires PSA.WF(psa)
     requires 0 <= k <= |psa.offsets|
     requires PackedKV.ValidKeyLens(PSA.I(psa))
-    ensures WeightKeySeq(PackedKV.IKeys(psa)[.. k]) ==
+    ensures WeightKeyList(PackedKV.IKeys(psa)[.. k]) ==
       4 * k + (if k == 0 then 0 else PSA.psaEnd(psa, (k - 1) as uint64) as int);
     {
       if k == 0 {
-        reveal_WeightKeySeq();
       } else {
         var keys:seq<Key> := PackedKV.IKeys(psa);
         var weights := ApplyOpaque(WeightKey, keys[.. k]);
         var weights' := ApplyOpaque(WeightKey, keys[.. k - 1]);
         var key := keys[k - 1];
         calc {
-          WeightKeySeq(keys[.. k]);
-          { reveal_WeightKeySeq(); }
-          FoldFromRight<nat, nat>(MSets.AddNat, 0, weights);
-          WeightKey(key) + FoldFromRight<nat, nat>(MSets.AddNat, 0, DropLast(weights));
-          { reveal_WeightKeySeq(); }
-          { assert weights' == DropLast(weights); }
-          WeightKey(key) + WeightKeySeq(keys[.. k - 1]);
-          { WeightKeySeqIs(psa, k - 1); }
+          WeightKeyList(keys[.. k]);
+          {
+            assert keys[.. k-1] + [key] == keys[.. k];
+          //}
+          //WeightKeyList(keys[.. k - 1] + [key]);
+          //{
+            WeightKeyListPushBack(keys[.. k - 1], key);
+          }
+          WeightKey(key) + WeightKeyList(keys[.. k - 1]);
+          { WeightKeyListIs(psa, k - 1); }
           4 * k + PackedKV.PSA.psaEnd(psa, (k - 1) as uint64) as int;
         }
       }
     }
 
-    static lemma WeightMessageSeqIs(psa: PackedKV.PSA.Psa, k: int)
+    static lemma WeightMessageListIs(psa: PackedKV.PSA.Psa, k: int)
     requires PSA.WF(psa)
     requires 0 <= k <= |psa.offsets|
     requires ValueType.ValidMessageBytestrings(PSA.I(psa));
-    ensures WeightMessageSeq(PackedKV.IMessages(psa)[.. k]) ==
+    ensures WeightMessageList(PackedKV.IMessages(psa)[.. k]) ==
       4 * k + (if k == 0 then 0 else PSA.psaEnd(psa, (k - 1) as uint64) as int);
     {
       if k == 0 {
-        reveal_WeightMessageSeq();
       } else {
         var msgs:seq<Message> := PackedKV.IMessages(psa);
         var weights := ApplyOpaque(WeightMessage, msgs[.. k]);
         var weights' := ApplyOpaque(WeightMessage, msgs[.. k - 1]);
         var msg := msgs[k - 1];
         calc {
-          WeightMessageSeq(msgs[.. k]);
-          { reveal_WeightMessageSeq(); }
-          FoldFromRight<nat, nat>(MSets.AddNat, 0, weights);
-          WeightMessage(msg) + FoldFromRight<nat, nat>(MSets.AddNat, 0, DropLast(weights));
-          { reveal_WeightMessageSeq(); }
-          { assert weights' == DropLast(weights); }
-          WeightMessage(msg) + WeightMessageSeq(msgs[.. k - 1]);
-          { WeightMessageSeqIs(psa, k - 1); }
+          WeightMessageList(msgs[.. k]);
+          {
+            assert msgs[.. k-1] + [msg] == msgs[.. k];
+          //}
+          //WeightMessageList(msgs[.. k - 1] + [msg]);
+          //{
+            WeightMessageListPushBack(msgs[.. k - 1], msg);
+          }
+          WeightMessage(msg) + WeightMessageList(msgs[.. k - 1]);
+          { WeightMessageListIs(psa, k - 1); }
           { PackedKV.DefineIMessage(psa, k - 1); }
           4 * k + PackedKV.PSA.psaEnd(psa, (k - 1) as uint64) as int;
         }
@@ -196,18 +201,15 @@ module BucketImpl {
       var msgs:seq<Message> := PackedKV.IMessages(pkv.messages);
       assert keys == keys[0..n];
       assert msgs == msgs[0..n];
-      WeightKeySeqIs(pkv.keys, n);
-      WeightMessageSeqIs(pkv.messages, n);
-      WeightKeySeqList(keys);
-      WeightMessageSeqList(msgs);
+      WeightKeyListIs(pkv.keys, n);
+      WeightMessageListIs(pkv.messages, n);
     }
 
     shared method GetPkvSorted(must_be_sorted:bool) returns (pkv: PKV.Pkv)
     requires Inv()
     ensures PKV.WF(pkv)
-    ensures PKV.I(pkv).b == bucket.b
     ensures !must_be_sorted ==> PKV.I(pkv) == bucket
-    ensures must_be_sorted ==> PKV.SortedKeys(pkv)
+    ensures must_be_sorted ==> PKV.I(pkv) == B(bucket.as_map())
     ensures WeightBucket(PKV.I(pkv)) <= weight as nat
     {
       if (format.BFTree?) {
@@ -215,11 +217,20 @@ module BucketImpl {
         pkv := tree_to_pkv(format.tree);
       } else if !must_be_sorted || sorted {
         pkv := this.format.pkv;
+
+        assert PKV.WF(pkv);
+        assert !must_be_sorted ==> PKV.I(pkv) == bucket;
+        assert sorted ==> PKV.I(pkv) == B(bucket.as_map()) by {
+          if sorted {
+            B_of_as_map_sorted(bucket);
+          }
+        }
       } else {
         linear var tree;
         var weight;
         tree, weight := pkv_to_tree(this.format.pkv);
-        BucketWeights.WeightWellMarshalledLe(PKV.I(this.format.pkv), B(LKMB.Interpretation(tree)));
+        BucketWeights.Weight_SortedBucket_le_UnsortedBucket(
+            PKV.I(this.format.pkv), B(LKMB.Interpretation(tree)));
         NumElementsLteWeight(bucket);
         pkv := tree_to_pkv(tree);
         var _ := LKMB.FreeNode(tree);
@@ -252,7 +263,7 @@ module BucketImpl {
 
     shared method Empty() returns (result: bool)
     requires Inv()
-    ensures result == (|I().b| == 0)
+    ensures result == (|I().keys| == 0)
     {
       if (format.BFTree?) {
         result := LKMB.Empty(format.tree);
@@ -275,8 +286,8 @@ module BucketImpl {
         return true;
       }
 
-      assert forall k :: k in bucket.keys <==> k in I().b;
-      
+      Lexicographic_Byte_Order.reveal_IsStrictlySorted();
+
       var firstkey := GetFirstKey();
       var c := Pivots.KeyspaceImpl.cmp(pivots[i], Pivots.Keyspace.Element(firstkey));
       if 0 < c {
@@ -366,6 +377,8 @@ module BucketImpl {
     ensures result in bucket.keys
     ensures forall k | k in bucket.keys :: Ord.lte(result, k)
     {
+      MapSeqs.key_sets_eq(bucket.keys, bucket.msgs);
+
       if format.BFTree? {
         result := LKMB.MinKey(format.tree);
       } else {
@@ -408,6 +421,8 @@ module BucketImpl {
     ensures result in bucket.keys
     ensures forall k | k in bucket.keys :: Ord.lte(k, result)
     {
+      MapSeqs.key_sets_eq(bucket.keys, bucket.msgs);
+
       if format.BFTree? {
         result := LKMB.MaxKey(format.tree);
       } else {
@@ -424,6 +439,49 @@ module BucketImpl {
     ensures self.Inv()
     ensures self.bucket == BucketInsert(old_self.bucket, key, value)
     {
+      WFBucketInsert(self.bucket, key, value);
+
+      // the semantics of the insert operation (defined in terms of a bucket)
+      // tells us to (i) interpret it as a map (as_map)
+      // (ii) do the insertion
+      // (iii) convert it back to sequence form
+      //
+      // on the other hand,
+      // the tree gives a map, and B is an interpretation of that map
+      // which gives us a bucket in sequence form.
+      //
+      // If we start in tree form, then the bucket interpreation is sorted.
+      // B and as_map are inverses for a sorted "bucket" object, so what
+      // happens is something like this:
+      //
+      //            B
+      // old tree ------> old bucket
+      //    |     <-----
+      //    |     as_map
+      //    |
+      //    |
+      //    | do insert
+      //    |
+      //    v       B
+      // new tree -----> new bucket
+      //
+      // if we start in pkv form, what happens is more like this:
+      //
+      //         PKV.I()
+      // pkv ------------ old bucket
+      //    |            /
+      //    |           /
+      //    |          /   as_map
+      //    v         /
+      // old tree  <--
+      //    |   
+      //    |
+      //    | do insert
+      //    |
+      //    v       B
+      // new tree -----> new bucket
+      //
+
       if self.format.BFPkv? {
         linear var tree;
         var weight;
@@ -431,9 +489,17 @@ module BucketImpl {
         inout self.weight := weight;
         linear var prevformat := Replace(inout self.format, BFTree(tree));
         var _ := FreeBucketFormat(prevformat);
-        inout ghost self.bucket := B(self.bucket.b);
-        WeightWellMarshalledLe(old_self.bucket, self.bucket);
+        inout ghost self.bucket := B(self.bucket.as_map());
+        Weight_SortedBucket_le_UnsortedBucket(old_self.bucket, self.bucket);
       }
+
+      ghost var old_bucket_map := LKMB.Interpretation(self.format.tree);
+      ghost var old_bucket := self.bucket;
+      Weight_BucketMap_eq_Bucket(self.bucket);
+
+      assert old_bucket.as_map() == old_bucket_map;
+      assert B(old_bucket_map) == old_bucket;
+      assert old_bucket_map == old_self.bucket.as_map();
 
       if value.Define? {
         linear var MutBucket(format, weight, sorted, bucket) := self;
@@ -441,22 +507,32 @@ module BucketImpl {
         var cur;
         tree, cur := LKMB.Insert(tree, key, value);
         if (cur.Some?) {
-          ghost var map0 := Maps.MapRemove1(bucket.b, key);
-          WeightBucketInduct(B(map0), key, cur.value);
-          WeightBucketInduct(B(map0), key, value);
-          assert bucket.b[key := value] == map0[key := value];
-          assert bucket.b == map0[key := cur.value];
+          ghost var map0 := Maps.MapRemove1(old_bucket_map, key);
+          WeightBucketInduct(map0, key, cur.value);
+          WeightBucketInduct(map0, key, value);
+          assert bucket.as_map()[key := value] == map0[key := value];
+          assert bucket.as_map() == map0[key := cur.value];
           weight := weight - WeightMessageUint64(cur.value) + WeightMessageUint64(value) as uint64;
         } else {
-          WeightBucketInduct(bucket, key, value);
+          WeightBucketInduct(bucket.as_map(), key, value);
           weight := weight + WeightKeyUint64(key) + WeightMessageUint64(value);
         }
         self := MutBucket(BFTree(tree), weight, sorted, B(LKMB.Interpretation(tree)));
       }
 
-      ghost var mergedMsg := Merge(value, BucketGet(old_self.bucket, key));
-      assert mergedMsg == IdentityMessage() ==> LKMB.Interpretation(self.format.tree) == MapRemove1(self.bucket.b, key);
-      assert mergedMsg != IdentityMessage() ==> LKMB.Interpretation(self.format.tree) == self.bucket.b[key := mergedMsg];
+      ghost var mergedMsg := Merge(value, BucketMaps.BucketGet(old_bucket_map, key));
+      assert mergedMsg == IdentityMessage() ==> LKMB.Interpretation(self.format.tree) == MapRemove1(old_self.bucket.as_map(), key) by {
+        // NOTE: according to the state machine model, wee're supposed to remove
+        // the value in this case, but it turns out that the structure of the messages
+        // means we can infer it wasn't there to begin with.
+        if (key in old_bucket_map) {
+          var j := MapSeqs.GetIndex(old_self.bucket.keys, old_self.bucket.msgs, key);
+          assert old_bucket_map[key] != IdentityMessage();
+        }
+      }
+      assert mergedMsg != IdentityMessage() ==> LKMB.Interpretation(self.format.tree) == old_self.bucket.as_map()[key := mergedMsg];
+
+      Weight_BucketMap_eq_Bucket(self.bucket);
     }
 
     shared method Query(key: Key)
@@ -477,12 +553,15 @@ module BucketImpl {
     ensures left.Inv()
     ensures left.bucket == SplitBucketLeft(bucket, pivot)
     {
-      var pkv := GetPkvSorted(true);
-      //WeightSplitBucketLeft(bucket, pivot);
-      var pkvleft := PKV.SplitLeft(pkv, pivot);
       reveal_SplitBucketLeft();
-      WeightWellMarshalledSubsetLe(PKV.I(pkvleft), PKV.I(pkv));
-      DPKV.WeightBucketPkv_eq_WeightPkv(pkvleft);
+      var pkv := GetPkvSorted(false);
+      var pkvleft := PKV.SplitLeft(pkv, pivot);
+      WeightSplitBucketLeft(PKV.I(pkv), pivot);
+      WeightBucketPkv_eq_WeightPkv(pkvleft);
+      assert sorted ==> BucketWellMarshalled(PackedKV.I(pkvleft)) by {
+        reveal_SplitBucketLeft();
+        Lexicographic_Byte_Order.reveal_IsStrictlySorted();
+      }
       left := AllocPkv(pkvleft, sorted);
     }
 
@@ -492,12 +571,15 @@ module BucketImpl {
     ensures right.Inv()
     ensures right.bucket == SplitBucketRight(bucket, pivot)
     {
-      var pkv := GetPkvSorted(true);
+      var pkv := GetPkvSorted(false);
       //WeightSplitBucketRight(bucket, pivot);
       var pkvright := PKV.SplitRight(pkv, pivot);
-      reveal_SplitBucketRight();
-      WeightWellMarshalledSubsetLe(PKV.I(pkvright), PKV.I(pkv));
-      DPKV.WeightBucketPkv_eq_WeightPkv(pkvright);
+      WeightSplitBucketRight(PKV.I(pkv), pivot);
+      WeightBucketPkv_eq_WeightPkv(pkvright);
+      assert sorted ==> BucketWellMarshalled(PackedKV.I(pkvright)) by {
+        reveal_SplitBucketRight();
+        Lexicographic_Byte_Order.reveal_IsStrictlySorted();
+      }
       right := AllocPkv(pkvright, sorted);
     }
 
@@ -796,7 +878,7 @@ module BucketImpl {
     ensures MutBucket.InvLseq(newbots)
     ensures newtop.Inv()
     ensures partialFlushResult(newtop.I(), MutBucket.ILseq(newbots))
-        == BucketModel.partialFlush(top.I(), pivots, MutBucket.ILseq(bots))
+        == BucketFlushModel.partialFlush(top.I(), pivots, MutBucket.ILseq(bots))
   {
     var i: uint64 := 0;
     var bots_len := lseq_length_raw(bots);
@@ -843,7 +925,7 @@ module BucketImpl {
           BucketWellMarshalled(PKV.I(result.bots[j])))
     by {
       if sorted {
-        partialFlushWeightPreservesSorted(top.bucket, pivots, MutBucket.ILseq(bots));
+        partialFlushPreservesSorted(top.bucket, pivots, MutBucket.ILseq(bots));
       }
     }
 
