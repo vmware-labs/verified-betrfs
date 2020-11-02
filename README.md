@@ -29,8 +29,13 @@ This will install VeriBetrFS's [custom version of Dafny](https://github.com/secu
 pip3 install toposort
 ```
 
-# Running VeriBetrFS dafny
+4. Install clang and libc++. You probably already have this if you're on a Mac.
 
+# Building and running
+
+## VeriBetrFS dafny
+
+The above steps should have created a local installation of Dafny into `.dafny/`.
 You can run veribetrfs-dafny manually with `tools/local-dafny.sh`.
 The Makefile will use veribetrfs-dafny by default.
 
@@ -48,7 +53,7 @@ Expect this to take at least a couple of hours of CPU time.
 We have a very brief benchmark for a quick sanity check that everything is working. Note that you don't need to run verification before building and running the system.
 
 ```
-make elf
+make elf # Compile VeriBetrFS via the C++ backend
 ./build/Veribetrfs --benchmark=random-queries
 ```
 
@@ -62,8 +67,8 @@ The C++ YCSB benchmark library and rocksdb are vendored as a git submodule. Run
 $ ./tools/update-submodules.sh
 ```
 
-to initialise git submodules and to update the checkouts of the modules. We also recommend
-setting:
+to initialise git submodules and to update the checkouts of the modules.
+We also recommend setting:
 
 ```
 git config --global submodule.recurse true
