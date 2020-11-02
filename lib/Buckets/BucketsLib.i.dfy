@@ -5,6 +5,8 @@ include "../Base/Multisets.i.dfy"
 include "../Base/total_order.i.dfy"
 include "../../MapSpec/UI.s.dfy"
 include "../../MapSpec/MapSpec.s.dfy"
+include "MapSeqs.i.dfy"
+include "BucketMap.i.dfy"
 
 //
 // A Bucket maps keys to Messages. A BucketList imparts a Message meaning
@@ -41,117 +43,21 @@ module BucketsLib {
   import UI
   import MS = MapSpec
   import Multisets
-  
-  type BucketMap = map<Key, Message>
-  datatype Bucket = BucketMapWithSeq(b: BucketMap, keys: seq<Key>, msgs: seq<Message>)
-  type BucketList = seq<Bucket>
+  import opened MapSeqs
+  import opened BucketMaps
+  import BoundedKeyspace = Lexicographic_Byte_Order
+  import Upperbounded_Lexicographic_Byte_Order
 
-  function maximumKey(b: set<Key>) : Option<Key>
+  datatype Bucket = Bucket(keys: seq<Key>, msgs: seq<Message>)
   {
-    var m := Lexicographic_Byte_Order.maximumOpt(b);
-    if m.Some? then
-      assert |m.value| <= KeyType.MaxLen() as nat;
-      var k: Key := m.value;
-      Some(k)
-    else
-      None
-  }
-  
-  function minimumKey(b: set<Key>) : Option<Key>
-  {
-    var m := Lexicographic_Byte_Order.minimumOpt(b);
-    if m.Some? then
-      assert |m.value| <= KeyType.MaxLen() as nat;
-      var k: Key := m.value;
-      Some(k)
-    else
-      None
-  }
-
-  function {:opaque} BucketMapOfSeq(keys: seq<Key>, msgs: seq<Message>) : (result: BucketMap)
-    requires |keys| == |msgs|
-    ensures result.Keys == Set(keys)
-    ensures result.Values <= Set(msgs)
-  {
-    if |keys| == 0 then
-      map[]
-    else
-      var r' := BucketMapOfSeq(DropLast(keys), DropLast(msgs));
-      var r := r'[Last(keys) := Last(msgs)];
-      assert r.Values <= r'.Values + {Last(msgs)};
-      r
-  }
-
-  lemma StrictlySortedIsBucketMapOfSeq(keys: seq<Key>, msgs: seq<Message>, bmap: BucketMap)
-    requires IsStrictlySorted(keys)
-    requires Set(keys) == bmap.Keys
-    requires |keys| == |msgs|
-    requires forall i | 0 <= i < |keys| :: bmap[keys[i]] == msgs[i]
-    ensures bmap == BucketMapOfSeq(keys, msgs)
-  {
-    reveal_BucketMapOfSeq();
-    if |keys| == 0 {
-    } else {
-      var prebmap := MapRemove1(bmap, Last(keys));
-      StrictlySortedSubsequence(keys, 0, |keys| - 1);
-      reveal_IsStrictlySorted();
-      StrictlySortedIsBucketMapOfSeq(DropLast(keys), DropLast(msgs), prebmap);
-    }
-  }
-  
-  function BucketOfSeq(keys: seq<Key>, msgs: seq<Message>) : (result: Bucket)
-  requires |keys| == |msgs|
-  {
-    BucketMapWithSeq(BucketMapOfSeq(keys, msgs), keys, msgs)
-  }
-
-  lemma BucketMapOfSeqGetIndex(keys: seq<Key>, msgs: seq<Message>, key: Key)
-  returns (i: int)
-  requires |keys| == |msgs|
-  requires key in BucketMapOfSeq(keys, msgs)
-  ensures 0 <= i < |keys|
-  ensures keys[i] == key
-  ensures msgs[i] == BucketMapOfSeq(keys, msgs)[key]
-  {
-    reveal_BucketMapOfSeq();
-    if key == keys[|keys| - 1] && msgs[|keys| - 1] == BucketMapOfSeq(keys, msgs)[key] {
-      i := |keys| - 1;
-    } else {
-      i := BucketMapOfSeqGetIndex(DropLast(keys), DropLast(msgs), key);
-    }
-  }
-
-  lemma BucketMapOfSeqMapsIndex(keys: seq<Key>, msgs: seq<Message>, i: int)
-  requires |keys| == |msgs|
-  requires 0 <= i < |keys|
-  requires IsStrictlySorted(keys)
-  ensures keys[i] in BucketMapOfSeq(keys, msgs)
-  ensures msgs[i] == BucketMapOfSeq(keys, msgs)[keys[i]]
-  {
-    reveal_BucketMapOfSeq();
-    if i == |keys| - 1 {
-    } else {
-      reveal_IsStrictlySorted();
-      BucketMapOfSeqMapsIndex(DropLast(keys), DropLast(msgs), i);
-    }
-  }
-
-  lemma WFBucketMapOfWFMessageSeq(keys: seq<Key>, msgs: seq<Message>)
-  requires |keys| == |msgs|
-  requires WFMessageSeq(msgs)
-  ensures WFBucketMap(BucketMapOfSeq(keys, msgs))
-  {
-    forall key | key in BucketMapOfSeq(keys, msgs)
-    ensures BucketMapOfSeq(keys, msgs)[key] != IdentityMessage()
+    function as_map() : BucketMap
+    requires |this.keys| == |this.msgs|
     {
-      var i := BucketMapOfSeqGetIndex(keys, msgs, key);
+      map_of_seqs(keys, msgs)
     }
   }
-  
-  predicate WFBucketMap(bucket: BucketMap)
-  {
-    forall key | key in bucket :: bucket[key] != IdentityMessage()
-  }
+
+  type BucketList = seq<Bucket>
 
   predicate WFMessageSeq(messages: seq<Message>)
   {
@@ -162,13 +68,11 @@ module BucketsLib {
   predicate PreWFBucket(bucket: Bucket)
   {
     && |bucket.keys| == |bucket.msgs|
-    && BucketMapOfSeq(bucket.keys, bucket.msgs) == bucket.b
   }
   
   predicate WFBucket(bucket: Bucket)
   {
     && PreWFBucket(bucket)
-    && WFBucketMap(bucket.b)
     && WFMessageSeq(bucket.msgs)
   }
 
@@ -177,95 +81,18 @@ module BucketsLib {
     IsStrictlySorted(bucket.keys)
   }
 
-  lemma WellMarshalledKeyMultiset(bucket: Bucket)
-    requires PreWFBucket(bucket)
-    requires BucketWellMarshalled(bucket)
-    ensures multiset(Set(bucket.keys)) == multiset(bucket.keys)
-    ensures bucket.b.Keys == Set(bucket.keys)
-  {
-    StrictlySortedImpliesNoDupes(bucket.keys);
-    assert NoDupes(bucket.keys) by {
-      // StrictlySortedImpliesNoDupes() gives us
-      //    NoDupes<Element>().
-      // We need
-      //    NoDupes<Key>().
-      reveal_NoDupes();
-    }
-    NoDupesMultiset(bucket.keys);
-  }
-
   predicate BucketListWellMarshalled(blist: BucketList)
   {
     forall i | 0 <= i < |blist| :: BucketWellMarshalled(blist[i])
   }
 
-  function BInternal(m: BucketMap) : (bucket: Bucket)
-    ensures bucket.b == m
-    ensures |bucket.keys| == |bucket.msgs|
-  {
-    if |m.Keys| == 0 then
-      BucketMapWithSeq(m, [], [])
-    else 
-      var maxkey := maximum(m.Keys);
-      var maxmsg := m[maxkey];
-      var subm := MapRemove1(m, maxkey);
-      var subbucket := BInternal(subm);
-      BucketMapWithSeq(m, subbucket.keys + [maxkey], subbucket.msgs + [maxmsg])
-  }
-
-  lemma BInternalPreWFWellMarshalled(m: BucketMap)
-    ensures PreWFBucket(BInternal(m))
-    ensures BucketWellMarshalled(BInternal(m))
-  //ensures WFBucketMap(m) ==> WFBucket(BInternal(m))
-  {
-    if |m| == 0 {
-      reveal_IsStrictlySorted();
-    // } else if |m| == 1 {
-    //   reveal_BucketMapOfSeq();
-    //   reveal_IsStrictlySorted();
-    } else {
-      var maxkey := maximum(m.Keys);
-      var subm := MapRemove1(m, maxkey);
-      var subbucket := BInternal(subm);      
-      BInternalPreWFWellMarshalled(subm);
-      StrictlySortedAugment(subbucket.keys, maxkey);
-      reveal_BucketMapOfSeq();
-      assert BucketWellMarshalled(BInternal(m));
-    }
-  }
-  
-  lemma BInternalWFBucket(m: BucketMap)
-    requires WFBucketMap(m)
-    ensures WFBucket(BInternal(m))
-  {
-    reveal_BucketMapOfSeq();
-  }
-
-  function {:opaque} B(m: BucketMap) : (bucket: Bucket)
-    ensures bucket.b == m
-    ensures PreWFBucket(bucket)
-    ensures BucketWellMarshalled(bucket)
-    ensures |bucket.keys| == |bucket.msgs|
-    ensures WFBucketMap(m) ==> WFBucket(bucket)
-  {
-    BInternalPreWFWellMarshalled(m);
-    if WFBucketMap(m) then
-      BInternalWFBucket(m);
-      BInternal(m)
-    else 
-      BInternal(m)
-  }
-
   function EmptyBucket() : (result: Bucket)
-    ensures EmptyBucket() == B(map[])
     ensures WFBucket(result)
+    ensures result.as_map() == map[]
     ensures BucketWellMarshalled(result)
   {
-    var b := BucketMapWithSeq(map[], [], []);
-    assert b == B(map[]) by {
-      reveal_B();
-    }
-    b
+    MapOfEmptySeq();
+    Bucket([], [])
   }
   
   function SingletonBucket(key: Key, msg: Message) : (result: Bucket)
@@ -273,30 +100,22 @@ module BucketsLib {
     ensures BucketWellMarshalled(result)
     ensures msg != IdentityMessage() ==> WFBucket(result)
   {
-    assert map[key := msg] == BucketMapOfSeq([key], [msg]) by {
-      reveal_BucketMapOfSeq();
-    }
-    BucketMapWithSeq(map[key := msg], [key], [msg])
+    Bucket([key], [msg])
   }
   
   function BucketDropLast(bucket: Bucket) : Bucket
     requires PreWFBucket(bucket)
-    requires BucketWellMarshalled(bucket)
     requires 0 < |bucket.keys|
   {
-    var submap := MapRemove1(bucket.b, Last(bucket.keys));
-    BucketMapWithSeq(submap, DropLast(bucket.keys), DropLast(bucket.msgs))
+    Bucket(DropLast(bucket.keys), DropLast(bucket.msgs))
   }
 
   lemma BucketDropLastWF(bucket: Bucket)
     requires PreWFBucket(bucket)
-    requires BucketWellMarshalled(bucket)
     requires 0 < |bucket.keys|
     ensures PreWFBucket(BucketDropLast(bucket))
     ensures WFBucket(bucket) ==> WFBucket(BucketDropLast(bucket))
   {
-    reveal_IsStrictlySorted();
-    reveal_BucketMapOfSeq();
   }
 
   lemma BucketDropLastWellMarshalled(bucket: Bucket)
@@ -307,41 +126,18 @@ module BucketsLib {
   {
     reveal_IsStrictlySorted();
   }
-  
-  lemma WFWellMarshalledBucketMap(bucket: Bucket, key: Key)
-    requires PreWFBucket(bucket)
-    requires BucketWellMarshalled(bucket)
-    requires key in bucket.b
-    ensures bucket.b[key] == bucket.msgs[LargestLte(bucket.keys, key)]
-    decreases |bucket.keys|
-  {
-    reveal_BucketMapOfSeq();
-    var i :| 0 <= i < |bucket.keys| && bucket.keys[i] == key;
-    PosEqLargestLte(bucket.keys, key, i);
-    if i == |bucket.keys| - 1 {
-      assert bucket.b[key] == Last(bucket.msgs);
-    } else {
-      var bdl := BucketDropLast(bucket);
-      BucketDropLastWF(bucket);
-      BucketDropLastWellMarshalled(bucket);
-      WFWellMarshalledBucketMap(bdl, key);
-    }
-  }
 
-  lemma WFWellMarshalledBucketMapI(bucket: Bucket, i: int)
+  lemma BucketMapMapsIndex(bucket: Bucket, i: int)
   requires PreWFBucket(bucket)
   requires BucketWellMarshalled(bucket)
   requires 0 <= i < |bucket.keys|
-  ensures bucket.keys[i] in bucket.b
-  ensures bucket.b[bucket.keys[i]] == bucket.msgs[i]
+  ensures bucket.keys[i] in bucket.as_map()
+  ensures bucket.as_map()[bucket.keys[i]] == bucket.msgs[i]
   {
-    WFWellMarshalledBucketMap(bucket, bucket.keys[i]);
-    assert LargestLte(bucket.keys, bucket.keys[i]) == i by {
-      reveal_IsStrictlySorted();
-    }
+    MapMapsIndex(bucket.keys, bucket.msgs, i);
   }
 
-  lemma WFMessageMultiset(bucket: Bucket)
+  /*lemma WFMessageMultiset(bucket: Bucket)
     requires PreWFBucket(bucket)
     ensures Multisets.ValueMultiset(bucket.b) <= multiset(bucket.msgs)
     ensures BucketWellMarshalled(bucket) ==> Multisets.ValueMultiset(bucket.b) == multiset(bucket.msgs)
@@ -423,15 +219,14 @@ module BucketsLib {
 
       assert bucket.msgs == prebucket.msgs + [ lastmsg ];
     }
-  }
+  }*/
   
   predicate WFBucketAt(bucket: Bucket, pivots: PivotTable, i: int)
   requires WFPivots(pivots)
   {
     && WFBucket(bucket)
-    && (forall key | key in bucket.b :: bucket.b[key] != IdentityMessage())
-    && (forall key | key in bucket.b :: BoundedKey(pivots, key))
-    && (forall key | key in bucket.b :: Route(pivots, key) == i)
+    && (forall key | key in bucket.keys :: BoundedKey(pivots, key))
+    && (forall key | key in bucket.keys :: Route(pivots, key) == i)
   }
 
   lemma WellMarshalledBucketsEq(a: Bucket, b: Bucket)
@@ -439,33 +234,11 @@ module BucketsLib {
     requires PreWFBucket(b)
     requires BucketWellMarshalled(a)
     requires BucketWellMarshalled(b)
-    requires a.b == b.b
+    requires a.as_map() == b.as_map()
     ensures a == b
     decreases |a.keys|
   {
-    if |a.b| == 0 {
-      if 0 < |a.keys| {
-        assert a.keys[0] in Set(a.keys);
-        assert false;
-      }
-      if 0 < |b.keys| {
-        assert b.keys[0] in Set(b.keys);
-        assert false;
-      }
-    } else {
-      var maxkey := Last(a.keys);
-      var maxval := Last(a.msgs);
-      WFWellMarshalledBucketMap(a, maxkey);
-      WFWellMarshalledBucketMap(b, maxkey);
-      
-      var adl := BucketDropLast(a);
-      BucketDropLastWF(a);
-      BucketDropLastWellMarshalled(a);
-      var bdl := BucketDropLast(b);
-      BucketDropLastWF(b);
-      BucketDropLastWellMarshalled(b);
-      WellMarshalledBucketsEq(adl, bdl);
-    }
+    SeqsEqOfMapsEq(a.keys, a.msgs, b.keys, b.msgs);
   }
 
   predicate WFBucketList(blist: BucketList, pivots: PivotTable)
@@ -481,30 +254,65 @@ module BucketsLib {
     && (forall i | 0 <= i < |blist| :: WFBucketAt(blist[i], pivots, i))
   }
 
+  predicate BoundedBucket(bucket: map<Key, Message>, pivots: PivotTable)
+  {
+    && WFPivots(pivots)
+    && (forall key | key in bucket :: BoundedKey(pivots, key))
+  }
+
   predicate BoundedBucketList(blist: BucketList, pivots: PivotTable)
   {
     && WFPivots(pivots)
-    && (forall i | 0 <= i < |blist| :: BoundedBucket(blist[i], pivots))
+    && (forall i | 0 <= i < |blist| ::
+        && PreWFBucket(blist[i])
+        && BoundedBucket(blist[i].as_map(), pivots))
   }
 
-  predicate BoundedBucket(bucket: Bucket, pivots: PivotTable)
+  function {:opaque} B(m: map<Key, Message>) : (b : Bucket)
+  ensures PreWFBucket(b)
+  ensures IsStrictlySorted(b.keys)
+  ensures b.as_map() == m
   {
-    && WFPivots(pivots)
-    && (forall key | key in bucket.b.Keys :: BoundedKey(pivots, key))
+    IsStrictlySorted_seqs_of_map(m);
+    map_of_seqs_of_seqs_of_map(m);
+    var sp := seqs_of_map(m);
+    Bucket(sp.keys, sp.msgs)
   }
 
-  function BucketGet(bucket: Bucket, key: Key) : Message
+  function BucketInsert(bucket: Bucket, key: Key, msg: Message) : Bucket
+  requires PreWFBucket(bucket)
   {
-    if key in bucket.b then bucket.b[key] else IdentityMessage()
+    var m := bucket.as_map();
+    var mergedMsg := Merge(msg, BucketGet(m, key));
+    if mergedMsg == IdentityMessage() then
+      B(MapRemove1(m, key))
+    else
+      B(m[key := mergedMsg])
   }
+
+  function BucketListInsert(blist: BucketList, pivots: PivotTable, key: Key, msg: Message) : BucketList
+  requires WFBucketList(blist, pivots)
+  requires BoundedKey(pivots, key)
+  {
+    var i := Route(pivots, key);
+    blist[i := BucketInsert(blist[i], key, msg)]
+  }
+
 
   function BucketListGet(blist: BucketList, pivots: PivotTable, key: Key) : Message
   requires WFBucketList(blist, pivots)
   requires BoundedKey(pivots, key)
   {
-    BucketGet(blist[Route(pivots, key)], key)
+    BucketGet(blist[Route(pivots, key)].as_map(), key)
   }
 
+  lemma WFBucketInsert(bucket: Bucket, key: Key, msg: Message)
+  requires WFBucket(bucket)
+  ensures WFBucket(BucketInsert(bucket, key, msg))
+  {
+  }
+
+  /*
   function BucketInsert(bucket: Bucket, key: Key, msg: Message) : Bucket
   {
     var mergedMsg := Merge(msg, BucketGet(bucket, key));
@@ -520,104 +328,22 @@ module BucketsLib {
   {
     var i := Route(pivots, key);
     blist[i := BucketInsert(blist[i], key, msg)]
-  }
+  }*/
 
-  // Gives a new child bucket that merges the old child bucket plus the
-  // messages from the parent destined for this child.
-  function BucketListItemFlush(parent: Bucket, child: Bucket, pivots: PivotTable, i: int) : Bucket
-  requires WFPivots(pivots)
-  {
-    B(map key
-    | && (key in (child.b.Keys + parent.b.Keys)) // this is technically redundant but allows Dafny to figure out that the domain is finite
-      && BoundedKey(pivots, key)
-      && Route(pivots, key) == i
-      && Merge(BucketGet(parent, key), BucketGet(child, key)) != IdentityMessage()
-    :: Merge(BucketGet(parent, key), BucketGet(child, key))
-    )
-  }
-
-  lemma BucketListItemFlushDependsOnlyOnB(parent: Bucket, child: Bucket,
-                                          parent': Bucket, child': Bucket, 
-                                          pivots: PivotTable, i: int)
-    requires WFPivots(pivots)
-    requires parent.b == parent'.b
-    requires ClampToSlot(child, pivots, i) == ClampToSlot(child', pivots, i)
-    ensures BucketListItemFlush(parent, child, pivots, i) == BucketListItemFlush(parent', child', pivots, i)
-  {
-    var c := ClampToSlot(child, pivots, i);
-    var c' := ClampToSlot(child', pivots, i);
-    var m := map key
-    | && (key in (child.b.Keys + parent.b.Keys)) // this is technically redundant but allows Dafny to figure out that the domain is finite
-      && BoundedKey(pivots, key)
-      && Route(pivots, key) == i
-      && Merge(BucketGet(parent, key), BucketGet(child, key)) != IdentityMessage()
-      :: Merge(BucketGet(parent, key), BucketGet(child, key));
-    var cm := map key
-    | && (key in (c.b.Keys + parent.b.Keys)) // this is technically redundant but allows Dafny to figure out that the domain is finite
-      && BoundedKey(pivots, key)
-      && Route(pivots, key) == i
-      && Merge(BucketGet(parent, key), BucketGet(c, key)) != IdentityMessage()
-      :: Merge(BucketGet(parent, key), BucketGet(c, key));
-
-   assert m == cm;
-
-   var m' := map key
-    | && (key in (child'.b.Keys + parent'.b.Keys)) // this is technically redundant but allows Dafny to figure out that the domain is finite
-      && BoundedKey(pivots, key)
-      && Route(pivots, key) == i
-      && Merge(BucketGet(parent', key), BucketGet(child', key)) != IdentityMessage()
-      :: Merge(BucketGet(parent', key), BucketGet(child', key));
-
-    assert m == m';
-  }
-                                          
-  function BucketListFlushPartial(parent: Bucket, children: BucketList, pivots: PivotTable, i: int) : (res : BucketList)
-  requires WFPivots(pivots)
-  requires 0 <= i <= |children|
-  ensures |res| == i
-  ensures forall h :: 0 <= h < i ==> res[h] == BucketListItemFlush(parent, children[h], pivots, h);
-  {
-    if i == 0 then [] else (
-      BucketListFlushPartial(parent, children, pivots, i-1) + [BucketListItemFlush(parent, children[i-1], pivots, i-1)]
-    )
-  }
-
-  lemma BucketListFlushPartialDependsOnlyOnB(parent: Bucket, children: BucketList,
-                                             parent': Bucket, children': BucketList,
-                                             pivots: PivotTable, i: int)
-    requires WFPivots(pivots)
-    requires 0 <= i <= |children|
-    requires parent.b == parent'.b
-    requires |children| == |children'|
-    requires forall j | 0 <= j < |children| :: ClampToSlot(children[j], pivots, j) == ClampToSlot(children'[j], pivots, j)
-    ensures BucketListFlushPartial(parent, children, pivots, i) == BucketListFlushPartial(parent', children', pivots, i)
-  {
-    if i == 0 {
-    } else {
-      BucketListFlushPartialDependsOnlyOnB(parent, children, parent', children', pivots, i-1);
-      BucketListItemFlushDependsOnlyOnB(parent, children[i-1], parent', children'[i-1], pivots, i-1);
-      assert BucketListItemFlush(parent, children[i-1], pivots, i-1) == BucketListItemFlush(parent', children'[i-1], pivots, i-1);
-    }
-  }
-  
-  function BucketListFlush(parent: Bucket, children: BucketList, pivots: PivotTable) : (res : BucketList)
-  requires WFPivots(pivots)
-  ensures |res| == |children|
-  ensures BucketListWellMarshalled(res)
-  ensures forall h :: 0 <= h < |res| ==> res[h] == BucketListItemFlush(parent, children[h], pivots, h);
-  {
-    BucketListFlushPartial(parent, children, pivots, |children|)
-  }
-
-  function JoinBucketList(buckets: seq<Bucket>) : (bucket : Bucket)
+  /*function JoinBucketList(buckets: seq<Bucket>) : (bucket : Bucket)
+    requires forall i | 0 <= i < |buckets| :: PreWFBucket(buckets[i])
     ensures PreWFBucket(bucket)
-    ensures BucketWellMarshalled(bucket)
-    ensures (forall i | 0 <= i < |buckets| :: WFBucketMap(buckets[i].b)) ==> WFBucket(bucket)
+    //ensures (forall i | 0 <= i < |buckets| :: WFBucketMap(buckets[i].b)) ==> WFBucket(bucket)
   {
-    if |buckets| == 0 then B(map[]) else B(MapUnion(JoinBucketList(DropLast(buckets)).b, Last(buckets).b))
-  }
+    if |buckets| == 0 then
+      EmptyBucket()
+    else
+      MergeBuckets(
+        JoinBucketList(DropLast(buckets)),
+        Last(buckets))
+  }*/
 
-  function SplitBucketOnPivots(bucket: Bucket, pivots: PivotTable) : (buckets: BucketList)
+  /*function SplitBucketOnPivots(bucket: Bucket, pivots: PivotTable) : (buckets: BucketList)
     requires BoundedBucket(bucket, pivots)
     ensures |buckets| == NumBuckets(pivots)
     ensures forall i | 0 <= i < |buckets| :: PreWFBucket(buckets[i])
@@ -643,43 +369,15 @@ module BucketsLib {
       WFPivotsRemoved(pivots, NumBuckets(pivots)-1);
       SplitBucketOnPivots(l, pivots') + [r]
     )
-  }
+  }*/
 
-  function ClampToSlot(bucket: Bucket, pivots: PivotTable, i: int) : (res : Bucket)
+  /*function ClampToSlot(bucket: Bucket, pivots: PivotTable, i: int) : (res : Bucket)
   requires WFPivots(pivots)
   {
     B(map key | key in bucket.b && BoundedKey(pivots, key) && Route(pivots, key) == i :: bucket.b[key])
-  }
+  }*/
 
-  function {:opaque} BucketIntersect(bucket: Bucket, keys: set<Key>) : (res : Bucket)
-  ensures BucketWellMarshalled(res)
-  {
-    B(map key | key in bucket.b && key in keys :: bucket.b[key])
-  }
-
-  function {:opaque} BucketComplement(bucket: Bucket, keys: set<Key>) : (res : Bucket)
-  ensures BucketWellMarshalled(res)
-  {
-    B(map key | key in bucket.b && key !in keys :: bucket.b[key])
-  }
-
-  lemma WFBucketIntersect(bucket: Bucket, keys: set<Key>)
-  requires WFBucket(bucket)
-  ensures WFBucket(BucketIntersect(bucket, keys))
-  {
-    reveal_BucketIntersect();
-  }
-
-  lemma WFBucketComplement(bucket: Bucket, keys: set<Key>)
-  requires WFBucket(bucket)
-  ensures WFBucket(BucketComplement(bucket, keys))
-  {
-    reveal_BucketComplement();
-  }
-
-  ///// Composing
-
-  predicate BucketsEquivalentForKey(a: Bucket, b: Bucket, key: Key)
+  /*predicate BucketsEquivalentForKey(a: Bucket, b: Bucket, key: Key)
   {
     BucketGet(a, key) == BucketGet(b, key)
   }
@@ -687,87 +385,9 @@ module BucketsLib {
   predicate BucketsEquivalent(a: Bucket, b: Bucket)
   {
     forall key :: BucketsEquivalentForKey(a, b, key)
-  }
-  
-  // Note: does NOT necessarily return a WFBucket!
-  // It might contain NoOp messages
-  function {:opaque} Compose(top: Bucket, bot: Bucket) : (res : Bucket)
-  ensures BucketWellMarshalled(res)
-  {
-    B(map key
-    | key in (top.b.Keys + bot.b.Keys)
-    :: Merge(BucketGet(top, key), BucketGet(bot, key))
-    )
-  }
-  
-  function {:opaque} ComposeSeq(buckets: seq<Bucket>) : (res : Bucket)
-  ensures BucketWellMarshalled(res)
-  {
-    if |buckets| == 0 then B(map[]) else Compose(ComposeSeq(DropLast(buckets)), Last(buckets))
-  }
-
-  lemma ComposeSeq1(b: Bucket)
-  ensures ComposeSeq([b]).b == b.b
-  {
-    calc {
-      ComposeSeq([b]).b;
-        { reveal_ComposeSeq(); }
-      Compose(ComposeSeq([]), b).b;
-        { reveal_ComposeSeq(); }
-      Compose(B(map[]), b).b;
-        {
-          reveal_Compose();
-        }
-      b.b;
-    }
-  }
-
-  lemma ComposeAssoc(a: Bucket, b: Bucket, c: Bucket)
-  ensures Compose(Compose(a, b), c).b == Compose(a, Compose(b, c)).b
-  {
-    reveal_Compose();
-    var ab_c := Compose(Compose(a, b), c).b;
-    var a_bc := Compose(a, Compose(b, c)).b;
-
-    forall key | key in ab_c.Keys
-      ensures ab_c[key] == a_bc[key]
-    {
-      var av := BucketGet(a, key);
-      var bv := BucketGet(b, key);
-      var cv := BucketGet(c, key);
-      MergeIsAssociative(av, bv, cv);
-    }
-  }
-
-  lemma ComposeSeqAdditive(a: seq<Bucket>, b: seq<Bucket>)
-  ensures BucketListWellMarshalled(a) && BucketListWellMarshalled(b)
-      ==> BucketListWellMarshalled(a + b)
-  ensures ComposeSeq(a + b).b == Compose(ComposeSeq(a), ComposeSeq(b)).b
-  {
-    reveal_ComposeSeq();
-    reveal_Compose();
-    if |b| == 0 {
-      assert b == [];
-      assert a + b == a;
-      assert ComposeSeq(a + b).b
-          == ComposeSeq(a).b
-          == Compose(ComposeSeq(a), B(map[])).b
-          == Compose(ComposeSeq(a), ComposeSeq(b)).b;
-    } else {
-      ComposeSeqAdditive(a, b[..|b|-1]);
-      assert (a + b)[..|a+b|-1] == a + b[..|b|-1];
-      assert (a+b)[|a+b|-1] == b[|b|-1];
-      ComposeAssoc(ComposeSeq(a), ComposeSeq(b[..|b|-1]), b[|b|-1]);
-      assert ComposeSeq(a + b).b
-          == Compose(ComposeSeq((a + b)[..|a+b|-1]), (a+b)[|a+b|-1]).b
-          == Compose(ComposeSeq(a + b[..|b|-1]), b[|b|-1]).b
-          == Compose(Compose(ComposeSeq(a), ComposeSeq(b[..|b|-1])), b[|b|-1]).b
-          == Compose(ComposeSeq(a), Compose(ComposeSeq(b[..|b|-1]), b[|b|-1])).b
-          == Compose(ComposeSeq(a), ComposeSeq(b)).b;
-    }
-  }
-
-  predicate FlushEquivalentParentChild(oldparent: Bucket, oldchild: Bucket, newparent: Bucket, newchild: Bucket)
+  }*/
+ 
+  /*predicate FlushEquivalentParentChild(oldparent: Bucket, oldchild: Bucket, newparent: Bucket, newchild: Bucket)
   {
     Compose(oldparent, oldchild) == Compose(newparent, newchild)
   }
@@ -776,137 +396,48 @@ module BucketsLib {
   {
     && |oldchildren| == |newchildren|
     && (forall i | 0 <= i < |oldchildren| :: FlushEquivalentParentChild(oldparent, oldchildren[i], newparent, newchildren[i]))
-  }
-  
-  function InterpretBucketStack(buckets: seq<Bucket>, key: Key) : Message
+  }*/
+ 
+  /*function {:opaque} SplitBucketLeftAtIdx(bucket: Bucket, idx: int) : (res: Bucket)
+  requires 0 <= idx <= |bucket.keys|
+  requires PreWFBucket(bucket)
+  ensures PreWFBucket(res)
   {
-    if |buckets| == 0 then
-      Update(NopDelta())
-    else
-      Merge(InterpretBucketStack(DropLast(buckets), key), BucketGet(Last(buckets), key))
+    Bucket(bucket.keys[..idx], bucket.msgs[..idx])
   }
 
-  lemma BucketGetComposeSeq(buckets: seq<Bucket>, key: Key)
-  ensures BucketGet(ComposeSeq(buckets), key) == InterpretBucketStack(buckets, key);
+  function {:opaque} SplitBucketRightAtIdx(bucket: Bucket, idx: int) : (res: Bucket)
+  requires 0 <= idx <= |bucket.keys|
+  requires PreWFBucket(bucket)
+  ensures PreWFBucket(res)
   {
-    reveal_ComposeSeq();
-    reveal_Compose();
-    if |buckets| == 0 {
-    } else {
-      BucketGetComposeSeq(DropLast(buckets), key);
-    }
-  }
+    Bucket(bucket.keys[idx..], bucket.msgs[idx..])
+  }*/
 
-  ////// Clamping based on RangeStart and RangeEnd
-
-  function {:opaque} ClampRange(bucket: Bucket, start: UI.RangeStart, end: UI.RangeEnd) : (res : Bucket)
-  ensures BucketWellMarshalled(res)
+  function {:opaque} SplitBucketLeft(bucket: Bucket, pivot: Key) : (res: Bucket)
+  requires PreWFBucket(bucket)
+  ensures PreWFBucket(res)
   {
-    B(map key | key in bucket.b && MS.InRange(start, key, end) :: bucket.b[key])
+    var i := BoundedKeyspace.binarySearchIndexOfFirstKeyGte(bucket.keys, pivot);
+    Bucket(bucket.keys[..i], bucket.msgs[..i])
   }
 
-  function {:opaque} ClampStart(bucket: Bucket, start: UI.RangeStart) : (res : Bucket)
-  ensures BucketWellMarshalled(res)
+  function {:opaque} SplitBucketRight(bucket: Bucket, pivot: Key) : (res: Bucket)
+  requires PreWFBucket(bucket)
+  ensures PreWFBucket(res)
   {
-    B(map key | key in bucket.b && MS.LowerBound(start, key) :: bucket.b[key])
+    var i := BoundedKeyspace.binarySearchIndexOfFirstKeyGte(bucket.keys, pivot);
+    Bucket(bucket.keys[i..], bucket.msgs[i..])
   }
 
-  function {:opaque} ClampEnd(bucket: Bucket, end: UI.RangeEnd) : (res : Bucket)
-  ensures BucketWellMarshalled(res)
+  /*lemma SplitBucketLeftRightCmp(bucket: Bucket, pivot: Key)
+  requires PreWFBucket(bucket)
+  requires IsStrictlySorted(bucket.keys)
+  ensures forall k | k in SplitBucketLeft(bucket, pivot).keys :: Lexicographic_Byte_Order.lt(k, pivot)
+  ensures forall k | k in SplitBucketRight(bucket, pivot).keys :: Lexicographic_Byte_Order.lte(pivot, k)
   {
-    B(map key | key in bucket.b && MS.UpperBound(key, end) :: bucket.b[key])
-  }
+  }*/
 
-  ///// KeyValueMapOfBucket
-
-  function {:opaque} KeyValueMapOfBucket(bucket: Bucket) : map<Key, Value>
-  {
-    map key | key in bucket.b && Merge(bucket.b[key], DefineDefault()).value != DefaultValue()
-      :: Merge(bucket.b[key], DefineDefault()).value
-  }
-
-  function {:opaque} SortedSeqOfKeyValueMap(m: map<Key, Value>) : seq<UI.SuccResult>
-  {
-    var max := maximumKey(m.Keys);
-    if max.None? then
-      []
-    else
-      SortedSeqOfKeyValueMap(MapRemove1(m, max.value))
-          + [UI.SuccResult(max.value, m[max.value])]
-  }
-
-  lemma SortedSeqOfKeyValueHasKey(m: map<Key, Value>, key: Key)
-  requires key in m
-  ensures var s := SortedSeqOfKeyValueMap(m);
-      exists i :: 0 <= i < |s| && s[i].key == key
-  {
-    reveal_SortedSeqOfKeyValueMap();
-    var max := maximumKey(m.Keys);
-    if max.Some? {
-      if key != max.value {
-        SortedSeqOfKeyValueHasKey(MapRemove1(m, max.value), key);
-        var i :| 0 <= i < |SortedSeqOfKeyValueMap(MapRemove1(m, max.value))| &&
-            SortedSeqOfKeyValueMap(MapRemove1(m, max.value))[i].key == key;
-        assert SortedSeqOfKeyValueMap(m)[i].key == key;
-      } else {
-        assert Last(SortedSeqOfKeyValueMap(m)).key == key;
-      }
-    }
-  }
-
-  lemma SortedSeqOfKeyValueMaps(m: map<Key, Value>, i: int)
-  requires 0 <= i < |SortedSeqOfKeyValueMap(m)|
-  ensures MapsTo(m, SortedSeqOfKeyValueMap(m)[i].key, SortedSeqOfKeyValueMap(m)[i].value)
-  {
-    reveal_SortedSeqOfKeyValueMap();
-    var max := maximumKey(m.Keys);
-    if max.Some? && i != |SortedSeqOfKeyValueMap(m)| - 1 {
-      SortedSeqOfKeyValueMaps(MapRemove1(m, max.value), i);
-    }
-  }
-
-  lemma SortedSeqOfKeyValueMapHasSortedKeys(m: map<Key, Value>)
-  ensures var s := SortedSeqOfKeyValueMap(m);
-      forall i, j | 0 <= i < j < |s| :: Lexicographic_Byte_Order.lt(s[i].key, s[j].key)
-  {
-    var s := SortedSeqOfKeyValueMap(m);
-    reveal_SortedSeqOfKeyValueMap();
-    var max := maximumKey(m.Keys);
-    if max.Some? {
-      SortedSeqOfKeyValueMapHasSortedKeys(MapRemove1(m, max.value));
-    }
-    forall i, j | 0 <= i < j < |s| ensures Lexicographic_Byte_Order.lt(s[i].key, s[j].key)
-    {
-      if j == |s| - 1 {
-        SortedSeqOfKeyValueMaps(MapRemove1(m, max.value), i);
-        assert Lexicographic_Byte_Order.lt(s[i].key, s[j].key);
-      } else {
-        var s1 := SortedSeqOfKeyValueMap(MapRemove1(m, max.value));
-        assert Lexicographic_Byte_Order.lt(s1[i].key, s1[j].key);
-      }
-    }
-  }
-
-  ///// Splitting stuff
-
-  // NB(jonh): These definitions are timeout monsters.
-  function {:opaque} SplitBucketLeft(bucket: Bucket, pivot: Key) : (res : Bucket)
-  ensures BucketWellMarshalled(res)
-  ensures |res.keys| == |res.msgs|
-  ensures WFBucketMap(bucket.b) ==> WFBucket(res)
-  ensures BucketWellMarshalled(res)
-  {
-    B(map key | key in bucket.b && Keyspace.lt(KeyToElement(key), KeyToElement(pivot)) :: bucket.b[key])
-  }
-
-  function {:opaque} SplitBucketRight(bucket: Bucket, pivot: Key) : (res : Bucket)
-  ensures BucketWellMarshalled(res)
-  ensures |res.keys| == |res.msgs|
-  ensures WFBucketMap(bucket.b) ==> WFBucket(res)
-  ensures BucketWellMarshalled(res)
-  {
-    B(map key | key in bucket.b && Keyspace.lte(KeyToElement(pivot), KeyToElement(key)) :: bucket.b[key])
-  }
 
   function SplitBucketListLeft(blist: BucketList, pivots: PivotTable, cLeft: int, key: Key) : BucketList
   requires WFBucketList(blist, pivots)
@@ -926,6 +457,7 @@ module BucketsLib {
 
   function {:opaque} SplitBucketInList(blist: BucketList, slot: int, pivot: Key) : BucketList
   requires 0 <= slot < |blist|
+  requires PreWFBucket(blist[slot])
   {
     replace1with2(blist,
         SplitBucketLeft(blist[slot], pivot),
@@ -934,17 +466,19 @@ module BucketsLib {
   }
 
   function {:opaque} MergeBuckets(left: Bucket, right: Bucket) : (res : Bucket)
-    ensures BucketWellMarshalled(res)
-    ensures PreWFBucket(res)
-    ensures WFBucketMap(left.b) && WFBucketMap(right.b) ==> WFBucket(res)
+  requires PreWFBucket(left)
+  requires PreWFBucket(right)
+  ensures PreWFBucket(res)
   {
-    B(MapUnionPreferA(left.b, right.b))
+    Bucket(left.keys + right.keys, left.msgs + right.msgs)
   }
 
   function {:opaque} MergeBucketsInList(blist: BucketList, slot: int) : (blist' : BucketList)
     requires 0 <= slot < |blist| - 1
+    requires PreWFBucket(blist[slot])
+    requires PreWFBucket(blist[slot+1])
     ensures |blist'| == |blist| - 1
-    ensures BucketWellMarshalled(blist'[slot])
+    ensures PreWFBucket(blist'[slot])
   {
     replace2with1(blist,
         MergeBuckets(blist[slot], blist[slot+1]),
@@ -964,6 +498,7 @@ module BucketsLib {
   requires WFBucketListProper(blist, pivots)
   requires ValidLeftCutOffKey(pivots, key)
   requires CutoffForLeft(pivots, key) == cLeft
+  requires IsStrictlySorted(blist[cLeft].keys)
   ensures WFBucketListProper(SplitBucketListLeft(blist, pivots, cLeft, key), SplitLeft(pivots, key))
   {
     reveal_SplitBucketLeft();
@@ -971,6 +506,30 @@ module BucketsLib {
     var blist' := SplitBucketListLeft(blist, pivots, cLeft, key); 
     BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist', pivots', 0, cLeft-1, 0);
     assert pivots[cLeft] == pivots'[cLeft]; // observe
+
+    //SplitBucketLeftRightCmp(blist[cLeft], key);
+    //reveal_IsStrictlySorted();
+
+    //assert WFBucket(blist'[cLeft]);
+    assert WFBucketAt(blist'[cLeft], pivots', cLeft) by {
+      reveal_IsStrictlySorted();
+      forall k | k in blist'[cLeft].keys
+      ensures BoundedKey(pivots', k)
+      ensures Route(pivots', k) == cLeft
+      {
+        assert k in blist[cLeft].keys;
+        //assert WFBucketAt(blist[cLeft], pivots, cLeft);
+
+        //assert BoundedKey(pivots, k);
+        //assert Route(pivots, k) == cLeft;
+
+        //var i := BoundedKeyspace.binarySearchIndexOfFirstKeyGte(blist[cLeft].keys, key);
+        //assert Lexicographic_Byte_Order.lt(k, blist[cLeft].keys
+        //assert Lexicographic_Byte_Order.lt(k, key);
+        //assert Upperbounded_Lexicographic_Byte_Order.lt(KeyToElement(k), pivots'[cLeft+1]);
+        //RouteIs(pivots', k, cLeft);
+      }
+    }
   }
 
   lemma WFSplitBucketListRight(blist: BucketList, pivots: PivotTable, cRight: int, key: Key)
@@ -987,6 +546,7 @@ module BucketsLib {
   requires WFBucketListProper(blist, pivots)
   requires BoundedKey(pivots, (key))
   requires CutoffForRight(pivots, key) == cRight
+  requires IsStrictlySorted(blist[cRight].keys)
   ensures WFBucketListProper(SplitBucketListRight(blist, pivots, cRight, key), SplitRight(pivots, key))
   {
     reveal_SplitBucketRight();
@@ -996,6 +556,21 @@ module BucketsLib {
 
     assert pivots[cRight+1] == pivots'[1]; // observe
     BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist', pivots', 1, |blist'|-1, 0-cRight);
+
+    assert WFBucketAt(blist'[0], pivots', 0) by {
+      reveal_IsStrictlySorted();
+      forall k | k in blist'[0].keys
+      ensures BoundedKey(pivots', k)
+      ensures Route(pivots', k) == 0
+      {
+        assert k in blist[cRight].keys;
+
+        assert WFBucketAt(blist[cRight], pivots, cRight);
+
+        assert BoundedKey(pivots, k);
+        assert Route(pivots, k) == cRight;
+      }
+    }
   }
 
   lemma WFSplitBucketInList(blist: BucketList, slot: int, pivot: Key, pivots: PivotTable)
@@ -1029,35 +604,63 @@ module BucketsLib {
   requires BoundedKey(pivots, pivot)
   requires 1 <= slot <= |blist|
   requires PivotInsertable(pivots, slot, pivot)
+  requires IsStrictlySorted(blist[slot-1].keys)
   ensures WFPivots(InsertPivot(pivots, slot, pivot))
   ensures WFBucketListProper(SplitBucketInList(blist, slot-1, pivot), InsertPivot(pivots, slot, pivot))
   {
-    reveal_SplitBucketLeft();
-    reveal_SplitBucketRight();
-    reveal_SplitBucketInList();
-
     var blist' := SplitBucketInList(blist, slot-1, pivot);
-    assert |blist'| == |blist|+1;
+    assert |blist'| == |blist|+1 by { reveal_SplitBucketInList(); }
     var pivots' := InsertPivot(pivots, slot, pivot);
     WFPivotsInsert(pivots, slot, pivot);
 
+    assert WFBucketAt(blist[slot-1], pivots, slot-1);
+    assert WFBucketAt(blist'[slot-1], pivots', slot-1) by {
+      assert blist'[slot - 1] == SplitBucketLeft(blist[slot - 1], pivot)
+        by { reveal_SplitBucketInList(); }
+      reveal_SplitBucketLeft();
+      assert WFBucket(blist'[slot-1]);
+      forall k | k in blist'[slot-1].keys
+      ensures BoundedKey(pivots', k)
+      ensures Route(pivots', k) == slot - 1
+      {
+        assert k in blist[slot-1].keys;
+        reveal_IsStrictlySorted();
+        assert Keyspace.lte(pivots'[slot - 1], KeyToElement(k));
+        assert Keyspace.lte(KeyToElement(k), pivots'[slot]);
+      }
+    }
+    assert WFBucketAt(blist'[slot], pivots', slot) by {
+      assert blist'[slot] == SplitBucketRight(blist[slot - 1], pivot)
+        by { reveal_SplitBucketInList(); }
+      reveal_IsStrictlySorted();
+      reveal_SplitBucketRight();
+      assert WFBucket(blist'[slot]);
+      forall k | k in blist'[slot].keys
+      ensures BoundedKey(pivots', k)
+      ensures Route(pivots', k) == slot
+      {
+        assert k in blist[slot-1].keys;
+        reveal_IsStrictlySorted();
+      }
+    }
+
+    reveal_SplitBucketInList();
     BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist', pivots', 0, slot-2, 0);
     BucketListHasWFBucketAtIdenticalSlice(blist, pivots, blist', pivots', slot+1, |blist'|-1, 1);
-    assert WFBucketAt(blist'[slot-1], pivots', slot-1);
-    assert WFBucketAt(blist'[slot], pivots', slot);
   }
 
   lemma WellMarshalledSplitBucketInList(blist: BucketList, slot: int, pivot: Key)
   requires 0 <= slot < |blist|
   requires BucketListWellMarshalled(blist)
+  requires PreWFBucket(blist[slot])
   ensures BucketListWellMarshalled(SplitBucketInList(blist, slot, pivot))
   {
     var blist' := SplitBucketInList(blist, slot, pivot);
     reveal_SplitBucketInList();
     assert BucketWellMarshalled(SplitBucketLeft(blist[slot], pivot))
-      by { reveal_SplitBucketLeft(); }
+      by { reveal_SplitBucketLeft(); reveal_IsStrictlySorted(); }
     assert BucketWellMarshalled(SplitBucketRight(blist[slot], pivot))
-      by { reveal_SplitBucketRight(); }
+      by { reveal_SplitBucketRight(); reveal_IsStrictlySorted(); }
     forall i | 0 <= i < |blist'|
     ensures BucketWellMarshalled(blist'[i])
     {
@@ -1076,10 +679,13 @@ module BucketsLib {
   {
   }
 
+
   // This is useful for proving NodeHasWFBuckets(node')
   // for indices over the given interval [a, b],
   // assuming we already know the buckets and pivots come from some other
   // well-formed node (possibly shifted by the amount d).
+  // TODO(travis) I think(?) this lemma and some others are only used in
+  // PivotBetreeSpecWFNodes.i.dfy so maybe move these there to reduce clutter here
   lemma BucketListHasWFBucketAtIdenticalSlice(
       blist: BucketList, pivots: PivotTable, blist': BucketList, pivots': PivotTable, a: int, b: int, d: int)
   requires WFBucketListProper(blist, pivots)
@@ -1091,14 +697,14 @@ module BucketsLib {
   requires b-d < |blist|
   requires forall i | a <= i <= b :: blist'[i] == blist[i-d]
   requires forall i | a <= i <= b :: pivots'[i] == pivots[i-d]
-  requires 0 <= (b-d+1) && 0 <= (b+1) ==> Keyspace.lte(pivots[b-d+1], pivots'[b+1])
+  requires 0 <= (b-d+1) && 0 <= (b+1) ==> Upperbounded_Lexicographic_Byte_Order.lte(pivots[b-d+1], pivots'[b+1])
   requires b >= a && b < |pivots'| ==> (
       || (b-d < |pivots| && pivots'[b] == pivots[b-d])
-      || (forall key | key in blist'[b].b :: Keyspace.lt(KeyToElement(key), pivots'[b]))
+      || (forall key | key in blist'[b].keys :: Upperbounded_Lexicographic_Byte_Order.lt(KeyToElement(key), pivots'[b]))
     )
   requires b >= a && a-1 >= 0 ==> (
       || (a-1-d >= 0 && pivots'[a-1] == pivots[a-1-d])
-      || (forall key | key in blist'[a].b :: Keyspace.lte(pivots'[a-1], KeyToElement(key)))
+      || (forall key | key in blist'[a].keys :: Upperbounded_Lexicographic_Byte_Order.lte(pivots'[a-1], KeyToElement(key)))
     )
   ensures forall i | a <= i <= b :: WFBucketAt(blist'[i], pivots', i)
   {
@@ -1106,10 +712,11 @@ module BucketsLib {
     ensures WFBucketAt(blist'[i], pivots', i)
     {
       assert pivots[i-d] == pivots'[i];
-      assert Keyspace.lte(pivots[i-d+1], pivots'[i+1]);
+      assert Upperbounded_Lexicographic_Byte_Order.lte(pivots[i-d+1], pivots'[i+1]);
     }
   }
   
+  /*
   // merge needs to remove the pivot after slot
   lemma WFMergeBucketsInList(blist: BucketList, slot: int, pivots: PivotTable)
   requires 0 <= slot < |blist| - 1
@@ -1135,8 +742,8 @@ module BucketsLib {
     BucketListHasWFBucketAtIdenticalSlice(
         blist, pivots, blist', pivots', slot+1, |blist'|-1, -1);
     reveal_MergeBuckets();
-    Keyspace.reveal_IsStrictlySorted();
-    assert Keyspace.lt(pivots'[slot], pivots'[slot+1]); // observe
+    BoundedKeyspace.reveal_IsStrictlySorted();
+    assert BoundedKeyspace.lt(pivots'[slot], pivots'[slot+1]); // observe
   }
 
   lemma WellMarshalledMergeBucketsInList(blist: BucketList, slot: int)
@@ -1196,18 +803,6 @@ module BucketsLib {
   {
   }
 
-  lemma GetBucketListFlushEqMerge(parent: Bucket, blist: BucketList, pivots: PivotTable, key: Key)
-  requires WFBucketListProper(blist, pivots)
-  requires BoundedKey(pivots, key)
-  ensures WFBucketListProper(BucketListFlush(parent, blist, pivots), pivots)
-  ensures BucketListGet(BucketListFlush(parent, blist, pivots), pivots, key)
-      == Merge(BucketGet(parent, key), BucketListGet(blist, pivots, key))
-  {
-    WFBucketListFlush(parent, blist, pivots);
-    var i := Route(pivots, key);
-    BucketListFlushAt(parent, blist, pivots, i);
-  }
-
   lemma KeyInJoinedBucketsInSomeBucket(buckets: seq<Bucket>, key: Key)
   returns (i : int)
   requires key in JoinBucketList(buckets).b
@@ -1247,7 +842,7 @@ module BucketsLib {
       }
       GetJoinBucketListEq(DropLast(blist), pivots', key);
 
-      if Keyspace.lt(KeyToElement(key), piv) {
+      if BoundedKeyspace.lt(KeyToElement(key), piv) {
         assert WFBucketAt(blist[|blist| - 1], pivots, |blist| - 1);
         assert key !in b2.b;
         assert BucketGet(blist[Route(pivots, key)], key) == BucketGet(JoinBucketList(blist), key);
@@ -1277,7 +872,7 @@ module BucketsLib {
       var pivots' := remove(pivots, NumBuckets(pivots)-1);
       WFPivotsRemoved(pivots, NumBuckets(pivots)-1);
 
-      var l := map key | key in bucket.b && Keyspace.lt(KeyToElement(key), piv) :: bucket.b[key];
+      var l := map key | key in bucket.b && BoundedKeyspace.lt(KeyToElement(key), piv) :: bucket.b[key];
       SplitBucketOnPivotsAt(B(l), pivots', i);
 
       var a := SplitBucketOnPivots(bucket, pivots)[i].b;
@@ -1388,8 +983,8 @@ module BucketsLib {
       var pivots' := remove(pivots, NumBuckets(pivots)-1);
       WFPivotsRemoved(pivots, NumBuckets(pivots)-1);
 
-      var l := map key | key in bucket.b && Keyspace.lt(KeyToElement(key), piv) :: bucket.b[key];
-      var r := map key | key in bucket.b && Keyspace.lte(piv, KeyToElement(key)) :: bucket.b[key];
+      var l := map key | key in bucket.b && BoundedKeyspace.lt(KeyToElement(key), piv) :: bucket.b[key];
+      var r := map key | key in bucket.b && BoundedKeyspace.lte(piv, KeyToElement(key)) :: bucket.b[key];
 
       var bucketsPref := SplitBucketOnPivots(B(l), pivots');
       JoinBucketsSplitBucketOnPivotsCancel(B(l), pivots');
@@ -1424,7 +1019,7 @@ module BucketsLib {
   requires 1 <= i <= |blist|
   ensures WFBucketList(blist[.. i], pivots[.. i+1])
   {
-    Keyspace.StrictlySortedSubsequence(pivots, 0, i+1);
+    BoundedKeyspace.StrictlySortedSubsequence(pivots, 0, i+1);
   }
 
   lemma WFBucketListSplitRight(blist: BucketList, pivots: PivotTable, i: int)
@@ -1433,9 +1028,9 @@ module BucketsLib {
   ensures WFBucketList(blist[i ..], pivots[i ..])
   {
     assert pivots[i..] == pivots[i..|pivots|];
-    Keyspace.StrictlySortedSubsequence(pivots, i, |pivots|);
+    BoundedKeyspace.StrictlySortedSubsequence(pivots, i, |pivots|);
     if 0 < i < |pivots| {
-      Keyspace.IsStrictlySortedImpliesLt(pivots, 0, i);
+      BoundedKeyspace.IsStrictlySortedImpliesLt(pivots, 0, i);
     }
   }
 
@@ -1444,7 +1039,10 @@ module BucketsLib {
   ensures BoundedBucket(JoinBucketList(blist), pivots)
   {
   }
+  */
 
+  // TODO(travis) there is already some binary search functionality in the
+  // total_order file. Move this there, standardize the patterns used, etc.
   function binarySearch(keys: seq<Key>, key: Key) : (i : Option<nat>)
     ensures IsStrictlySorted(keys) ==> i.None? ==> key !in keys
     ensures i.Some? ==> 0 <= i.value < |keys| && key == keys[i.value]
@@ -1472,19 +1070,25 @@ module BucketsLib {
   function bucketBinarySearchLookup(bucket: Bucket, key: Key)
     : (msg : Option<Message>)
     requires WFBucket(bucket)
-    ensures BucketWellMarshalled(bucket) ==> msg.None? ==> key !in bucket.b
+    ensures BucketWellMarshalled(bucket) ==> msg.None? ==> key !in bucket.as_map()
     ensures BucketWellMarshalled(bucket) ==> msg.Some? ==>
-      key in bucket.b && bucket.b[key] == msg.value
+      key in bucket.as_map() && bucket.as_map()[key] == msg.value
   {
     var i := binarySearch(bucket.keys, key);
     if i.Some? then 
       (if BucketWellMarshalled(bucket) then
-        WFWellMarshalledBucketMap(bucket, key);
+        //WFWellMarshalledBucketMap(bucket, key);
         PosEqLargestLte(bucket.keys, key, i.value);
+        MapMapsIndex(bucket.keys, bucket.msgs, i.value);
         Some(bucket.msgs[i.value])
       else
         Some(bucket.msgs[i.value]))
     else
+      assert BucketWellMarshalled(bucket) ==> key !in bucket.as_map() by {
+        if key in bucket.as_map() {
+          var j := GetIndex(bucket.keys, bucket.msgs, key);
+        }
+      }
       None
   }
   
@@ -1510,5 +1114,30 @@ module BucketsLib {
     SeqComparison.reveal_lte();
     assert InitPivotTable()[1].Max_Element?; // observe
     WFPivotsInsert(InitPivotTable(), 1, getMiddleKey(bucket));
+  }
+
+  function {:opaque} MapsOfBucketList(blist: BucketList) : (res : seq<BucketMap>)
+  requires forall i | 0 <= i < |blist| :: PreWFBucket(blist[i])
+  ensures |res| == |blist|
+  ensures forall i | 0 <= i < |res| :: res[i] == blist[i].as_map()
+  {
+    seq(|blist|,
+      i requires 0 <= i < |blist| => blist[i].as_map())
+  }
+
+  lemma B_empty_map()
+  ensures B(map[]) == EmptyBucket();
+  {
+    reveal_B();
+  }
+
+  lemma B_of_as_map_sorted(b: Bucket)
+  requires PreWFBucket(b)
+  requires IsStrictlySorted(b.keys)
+  ensures B(b.as_map()) == b;
+  {
+    assert B(b.as_map()).as_map() == b.as_map();
+    SeqsEqOfMapsEq(b.keys, b.msgs,
+        B(b.as_map()).keys, B(b.as_map()).msgs);
   }
 }

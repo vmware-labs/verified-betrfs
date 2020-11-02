@@ -71,7 +71,7 @@ module NodeImpl {
       lseq_give_inout(inout buckets, 0, mutbucket);
       
       node := Node(Pivots.InitPivotTable(), None, buckets);
-      assert node.I().buckets == [B(map[])];
+      assert node.I().buckets == [EmptyBucket()];
       WeightBucketListOneEmpty();
     }
 

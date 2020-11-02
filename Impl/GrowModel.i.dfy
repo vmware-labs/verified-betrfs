@@ -49,7 +49,7 @@ module GrowModel {
             s1
           )
           case Some(newref) => (
-            var newroot := BT.G.Node(InitPivotTable(), Some([newref]), [B(map[])]);
+            var newroot := BT.G.Node(InitPivotTable(), Some([newref]), [EmptyBucket()]);
             var s2 := writeBookkeeping(s1, BT.G.Root(), newroot.children);
             var s' := s2.(cache := s2.cache[BT.G.Root() := newroot][newref := oldroot]);
             s'
@@ -95,7 +95,7 @@ module GrowModel {
         assert noop(IBlockCache(s), IBlockCache(s1));
       }
       case Some(newref) => {
-        var newroot := BT.G.Node(InitPivotTable(), Some([newref]), [B(map[])]);
+        var newroot := BT.G.Node(InitPivotTable(), Some([newref]), [EmptyBucket()]);
         WeightBucketListOneEmpty();
 
         assert BT.G.Root() in s.cache;
@@ -110,7 +110,7 @@ module GrowModel {
         writeCorrect(s1, BT.G.Root(), newroot);
 
         var growth := BT.RootGrowth(INode(oldroot), newref);
-        assert INode(newroot) == BT.G.Node(InitPivotTable(), Some([growth.newchildref]), [B(map[])]);
+        assert INode(newroot) == BT.G.Node(InitPivotTable(), Some([growth.newchildref]), [EmptyBucket()]);
         var step := BT.BetreeGrow(growth);
         assert BT.ValidGrow(growth);
         BC.MakeTransaction2(IBlockCache(s), IBlockCache(s1), IBlockCache(s'), BT.BetreeStepOps(step));

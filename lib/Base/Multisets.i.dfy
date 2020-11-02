@@ -381,4 +381,11 @@ module Multisets {
   {
     Apply(ValueMultisetFn(m), multiset(m.Keys))
   }
+
+  lemma ValueMultisetInduct<A,B>(m: map<A,B>, a: A, b: B)
+  requires a !in m
+  ensures ValueMultiset(m[a := b]) == ValueMultiset(m) + multiset{b}
+  {
+    assume false;
+  }
 }
