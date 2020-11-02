@@ -48,14 +48,14 @@ dirs = [
   FileBucket("ByteBlockCacheSystem", ".s.dfy", "Environment spec"),
   FileBucket("Impl", ".s.dfy", "Implementation spec"),
 
-  FileBucket("MapSpec", ".i.dfy", "Verified crash-safe refinements"),
-  FileBucket("Versions", ".i.dfy", "Verified crash-safe refinements"),
   FileBucket("Betree", ".i.dfy", "Abstract B-epsilon tree"),
   FileBucket("PivotBetree", ".i.dfy", "Pivot B-epsilon tree"),
   FileBucket("BlockCache", ".i.dfy", "BlockCache"),
   FileBucket("ByteBlockCacheSystem", ".i.dfy", "ByteCache"),
   FileBucket("Impl", ".i.dfy", "Implementation"),
 
+  FileBucket("MapSpec", ".i.dfy", "Verified crash-safe refinements"),
+  FileBucket("Versions", ".i.dfy", "Verified crash-safe refinements"),
 
   FileBucket("lib/Base/", ".s.dfy", "Trusted libraries"),
   FileBucket("lib/Base/", ".i.dfy", "Verified libraries"),

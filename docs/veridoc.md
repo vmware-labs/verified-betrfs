@@ -35,46 +35,6 @@ must refine, that is, it must define the global state type,
 implement the handle methods, and meet all of the contracts
 demanded by this file. (See MainHandlers.i.dfy)
 
-# Verified crash-safe refinements
-
-**MapSpec/Journal.i.dfy** 
-
-**MapSpec/TSJ.i.dfy** TSJ = Three-State-Journaled.
-There are three states, and each one has a journal.
-We also track two extra journals ("gamma" and "delta")
-which describe the relationships between the three
-states.
-
-**MapSpec/TSJMap.i.dfy** 
-
-**MapSpec/TSJMap_Refines_ThreeStateVersionedMap.i.dfy** 
-
-# Verified crash-safe refinements
-
-**Versions/VOp.i.dfy** Labels for transitions of the JournalView and StatesView.
-This allows us to tie their behaviors together. Unfortunately,
-it's a little clunky.
-
-**Versions/JournalView.i.dfy** Abstraction of the journal side of the system.
-
-**Versions/StatesView.i.dfy** Abstraction of the cache/betree side of the system.
-
-**Versions/StatesViewMap.i.dfy** 
-
-**Versions/CompositeView.i.dfy** Combine StatesView and JournalView.
-
-**Versions/CompositeView_Refines_TSJMap.i.dfy** 
-
-**Versions/CompositeView_Refines_ThreeStateVersionedMap.i.dfy** Composes the two refinements:
-
-CompositeView -> TSJMap
-TSJMap -> ThreeStateVersioned Map
-
-To yield
-
-CompositeView -> ThreeStateVersioned Map
-
-
 # Abstract B-epsilon tree
 
 **Betree/Graph.i.dfy** An abstract graph that tracks dependencies.
@@ -83,10 +43,6 @@ PivotBetreeGraph): trees whose dependencies are child pointers that
 reference other nodes.
 It is used by the BlockInterface to identify which blocks can be
 garbage-collected because they're unreachable from the graph roots.
-
-a tree uses
-This module
-interfaces between things that are graphs (
 
 
 **Betree/Transactable.i.dfy** A Transactable is a state machine defined by atomically gluing together
@@ -118,7 +74,7 @@ terminating message list.
 * Flush moves a bundle of messages from a node to one of its children.
 * Grow inserts a new layer at the top of the tree to admit growth.
 * Redirect replaces a subtree with a semantically-equivalent one.
-(when do we use that?)
+'Merge' and 'Split' are both special cases.
 
 
 **Betree/Betree.i.dfy** Betree lowers the "lifted" op-sequences of BetreeSpec down to concrete state machine
@@ -504,6 +460,46 @@ from map<Reference, Node>.
 **Impl/CoordinationImpl.i.dfy** 
 
 **Impl/MainHandlers.i.dfy** Implements the application-API-handler obligations laid out by Main.s.dfy. TODO rename in a way that emphasizes that this is a module-refinement of the abstract Main that satisfies its obligations.
+
+
+# Verified crash-safe refinements
+
+**MapSpec/Journal.i.dfy** 
+
+**MapSpec/TSJ.i.dfy** TSJ = Three-State-Journaled.
+There are three states, and each one has a journal.
+We also track two extra journals ("gamma" and "delta")
+which describe the relationships between the three
+states.
+
+**MapSpec/TSJMap.i.dfy** 
+
+**MapSpec/TSJMap_Refines_ThreeStateVersionedMap.i.dfy** 
+
+# Verified crash-safe refinements
+
+**Versions/VOp.i.dfy** Labels for transitions of the JournalView and StatesView.
+This allows us to tie their behaviors together. Unfortunately,
+it's a little clunky.
+
+**Versions/JournalView.i.dfy** Abstraction of the journal side of the system.
+
+**Versions/StatesView.i.dfy** Abstraction of the cache/betree side of the system.
+
+**Versions/StatesViewMap.i.dfy** 
+
+**Versions/CompositeView.i.dfy** Combine StatesView and JournalView.
+
+**Versions/CompositeView_Refines_TSJMap.i.dfy** 
+
+**Versions/CompositeView_Refines_ThreeStateVersionedMap.i.dfy** Composes the two refinements:
+
+CompositeView -> TSJMap
+TSJMap -> ThreeStateVersioned Map
+
+To yield
+
+CompositeView -> ThreeStateVersioned Map
 
 
 # Trusted libraries

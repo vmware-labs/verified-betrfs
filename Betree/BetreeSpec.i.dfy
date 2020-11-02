@@ -14,7 +14,7 @@ include "../lib/Base/total_order.i.dfy"
 // * Flush moves a bundle of messages from a node to one of its children.
 // * Grow inserts a new layer at the top of the tree to admit growth.
 // * Redirect replaces a subtree with a semantically-equivalent one.
-//   (when do we use that?)
+//    'Merge' and 'Split' are both special cases.
 //
 
 module BetreeGraph refines Graph {

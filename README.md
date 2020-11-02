@@ -46,7 +46,11 @@ Adjust -j# to exploit all of your cores.
 make -j4 status
 ```
 
-Expect this to take at least a couple of hours of CPU time.
+Expect this to take at least a couple of hours of CPU time. When it completes, it will
+produce the result file `build/Impl/Bundle.i.status.pdf`. You should expect the results,
+ideally, to be all green (passes verification). In practice, there will often be some
+non-green files where work is in progress, unless we've recently made a push to get
+everything green for a release build.
 
 ## Lightweight benchmarking
 
@@ -93,3 +97,7 @@ To run the benchmark, use
 ```
 
 where `<data_dir>` should be an empty (or non-existing) directory that will contain the benchmark's files.
+
+# Contributing
+
+You can check out `docs/veridoc.md` for an overview of our source code.
