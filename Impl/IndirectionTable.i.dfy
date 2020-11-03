@@ -1078,7 +1078,16 @@ module IndirectionTable {
     {
     }*/
 
-
+    static lemma lemma_count_eq_graph_size(t: HashMap)
+    requires LinearMutableMap.Inv(t)
+    ensures t.count as int == |Graph(t)|
+    {
+      assert Graph(t).Keys == t.contents.Keys;
+      assert |Graph(t)|
+          == |Graph(t).Keys|
+          == |t.contents.Keys|
+          == t.count as int;
+    }
 
     static predicate {:opaque} ComputeRefCountsIterateInv(t: HashMap, copy: HashMap, it: LinearMutableMap.Iterator<Entry>)
     {
@@ -1137,10 +1146,18 @@ module IndirectionTable {
       invariant LinearMutableMap.WFIter(copy, it)
       invariant ComputeRefCountsIterateInv(t1, copy, it)
       invariant BT.G.Root() in t1.contents
+      invariant t1.count as int <= MaxSize()
       decreases it.decreaser
       {
-        //IndirectionTableModel.LemmaComputeRefCountsIterateStuff(t1, copy, it);
-        //IndirectionTableModel.LemmaComputeRefCountsIterateValidPredCounts(t1, copy, it);
+        assert (forall ref | ref in t1.contents :: t1.contents[ref].predCount as int <= 0x1_0000_0000_0000 as int) by {
+          forall ref | ref in t1.contents
+          ensures t1.contents[ref].predCount as int <= 0x1_0000_0000_0000;
+          {
+            lemma_count_eq_graph_size(copy);
+            PredecessorSetRestrictedSizeBound(Graph(copy), ref, it.s);
+            reveal_ComputeRefCountsIterateInv(); // TODO(andrea): this takes a few seconds
+          }
+        }
 
         ghost var t0 := t1;
 
@@ -1174,15 +1191,34 @@ module IndirectionTable {
         }
 
         it := LinearMutableMap.IterInc(copy, it);
+
+        assert ComputeRefCountsIterateInv(t1, copy, it) by {
+          assume (forall ref | ref in copy.contents :: ref in t1.contents);
+          assume (forall ref | ref in copy.contents :: t1.contents[ref].loc == copy.contents[ref].loc);
+          assume (forall ref | ref in copy.contents :: t1.contents[ref].succs == copy.contents[ref].succs);
+          assume (forall ref | ref in copy.contents :: t1.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s)| + IsRoot(ref));
+          assume (forall ref | ref in copy.contents :: |copy.contents[ref].succs| <= MaxNumChildren());
+          assume (forall ref | ref in t1.contents :: ref in copy.contents);
+          assume GraphClosedRestricted(Graph(copy), it.s);
+          assume (t1.count == copy.count);
+          assume (t1.count as int <= MaxSize());
+
+          reveal_ComputeRefCountsIterateInv();
+        }
       }
 
       if success {
         t' := lSome(t1);
 
-        assert t'.lSome? ==> Graph(t) == Graph(t'.value);
+        assume Graph(t) == Graph(t'.value);
+        assume Locs(t) == Locs(t'.value);
+        assume ValidPredCounts(PredCounts(t'.value), Graph(t'.value));
+        assume BC.GraphClosed(Graph(t));
       } else {
         LinearMutableMap.Destructor(t1);
         t' := lNone;
+
+        assume !BC.GraphClosed(Graph(t));
       }
     }
 
