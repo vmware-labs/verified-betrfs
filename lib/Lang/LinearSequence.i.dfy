@@ -10,7 +10,7 @@ module LinearSequence_i {
     provides NativeTypes
     provides seq_alloc_init, lseqs, imagine_lseq, lseq_peek, lseq_free_fun, lseq_take_fun, lseq_swap_inout, lseq_take_inout, lseq_give_inout
     provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give, lseq_length_uint64, lseq_length_as_uint64, lseq_add
-    provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, SeqResize, InsertSeq, InsertLSeq, Replace1With2Lseq, Replace1With2Lseq_inout
+    provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, SeqResize, SeqResizeMut, InsertSeq, InsertLSeq, Replace1With2Lseq, Replace1With2Lseq_inout
     reveals lseq_length, lseq_full, linLast, ldroplast, lseq_has_all
     reveals operator'cardinality?lseq, operator'in?lseq, operator'subscript?lseq
 
