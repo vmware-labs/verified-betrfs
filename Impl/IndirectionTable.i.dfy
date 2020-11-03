@@ -1,5 +1,5 @@
 include "../lib/Base/DebugAccumulator.i.dfy"
-include "../lib/Base/Maps.s.dfy"
+include "../lib/Base/Maps.i.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/LinearOption.i.dfy"
