@@ -975,77 +975,95 @@ module IndirectionTable {
     }
 
     // // Parsing and marshalling
+    static predicate ValIsHashMap(a: seq<V>, s: Option<HashMap>)
+    requires |a| <= MaxSize()
+    requires forall i | 0 <= i < |a| :: ValidVal(a[i])
+    requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+    {
+      && (s.Some? ==> s.value.count as int == |a|)
+      && (s.Some? ==> forall v | v in s.value.contents.Values :: v.loc.Some? && ValidNodeLocation(v.loc.value))
+      && (s.Some? ==> forall ref | ref in s.value.contents :: s.value.contents[ref].predCount == 0)
+      && (s.Some? ==> forall ref | ref in s.value.contents :: |s.value.contents[ref].succs| <= MaxNumChildren())
+      && (s.Some? ==> Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(s.value)))
+      && (s.None? ==> Marshalling.valToIndirectionTableMaps(a).None?)
+    }
 
-    // static lemma lemma_valToHashMapNonePrefix(a: seq<V>, i: int)
-    // requires IndirectionTableModel.valToHashMap.requires(a)
-    // requires 0 <= i <= |a|
-    // requires IndirectionTableModel.valToHashMap(a[..i]).None?
-    // ensures IndirectionTableModel.valToHashMap(a).None?
-    // decreases |a| - i
-    // {
-    //   if (i == |a|) {
-    //     assert a[..i] == a;
-    //   } else {
-    //     assert IndirectionTableModel.valToHashMap(a[..i+1]).None? by {
-    //       assert DropLast(a[..i+1]) == a[..i];
-    //       assert Last(a[..i+1]) == a[i];
-    //     }
-    //     lemma_valToHashMapNonePrefix(a, i+1);
-    //   }
-    // }
-  
+    static lemma lemma_valToHashMapNonePrefix(a: seq<V>, i: int)
+    requires forall i | 0 <= i < |a| :: ValidVal(a[i])
+    requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+    requires 0 <= i <= |a| <= MaxSize()
+    requires ValIsHashMap(a[..i], None)
+    ensures ValIsHashMap(a, None)
+    decreases |a| - i
+    {
+      if (i == |a|) {
+        assert a[..i] == a;
+      } else {
+        assert ValIsHashMap(a[..i+1], None) by {
+          assert DropLast(a[..i+1]) == a[..i];
+          assert Last(a[..i+1]) == a[i];
+        }
+        lemma_valToHashMapNonePrefix(a, i+1);
+      }
+    }
 
-    // static method {:fuel ValInGrammar,3} ValToHashMap(a: seq<V>) returns (linear s : lOption<HashMap>)
-    // requires IndirectionTableModel.valToHashMap.requires(a)
-    // ensures s.lNone? ==> IndirectionTableModel.valToHashMap(a).None?
-    // ensures s.lSome? ==> s.value.Inv()
-    // ensures s.lSome? ==> Some(s.value) == IndirectionTableModel.valToHashMap(a)
-    // ensures s.lSome? ==> s.value.count as nat == |a|
-    // ensures s.lSome? ==> s.value.count as nat < 0x1_0000_0000_0000_0000 / 8
-    // {
-    //   var i: uint64 := 0;
-    //   var success := true;
-    //   linear var mutMap := LinearMutableMap.Constructor<Entry>(1024); // TODO(alattuada) magic numbers
+    static method {:fuel ValInGrammar,3} ValToHashMap(a: seq<V>) returns (linear s : lOption<HashMap>)
+    requires |a| <= MaxSize()
+    requires forall i | 0 <= i < |a| :: ValidVal(a[i])
+    requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+    ensures ValIsHashMap(a, s.Option())
+    ensures s.lSome? ==> s.value.Inv()
+    ensures s.lSome? ==> s.value.count as nat < 0x1_0000_0000_0000_0000 / 8
+    {
+      var i: uint64 := 0;
+      var success := true;
+      linear var mutMap := LinearMutableMap.Constructor<Entry>(1024); // TODO(alattuada) magic numbers
 
-    //   while i < |a| as uint64
-    //   invariant 0 <= i as int <= |a|
-    //   invariant mutMap.Inv()
-    //   invariant IndirectionTableModel.valToHashMap(a[..i]) == Some(mutMap)
-    //   {
-    //     var tuple := a[i];
-    //     var ref := tuple.t[0 as uint64].u;
-    //     var addr := tuple.t[1 as uint64].u;
-    //     var len := tuple.t[2 as uint64].u;
-    //     var succs := tuple.t[3 as uint64].ua;
-    //     var graphRef := LinearMutableMap.Get(mutMap, ref);
-    //     var loc := Location(addr, len);
+      assert Locs(mutMap) == map[]; // observe
+      assert Graph(mutMap) == map[]; // observe
 
-    //     assert ValidVal(tuple);
-    //     assert ValidVal(tuple.t[3]);
-    //     assert |succs| < 0x1_0000_0000_0000_0000;
+      while i < |a| as uint64
+      invariant 0 <= i as int <= |a|
+      invariant mutMap.Inv()
+      invariant ValIsHashMap(a[..i], Some(mutMap))
+      {
+        var tuple := a[i];
+        var ref := tuple.t[0 as uint64].u;
+        var addr := tuple.t[1 as uint64].u;
+        var len := tuple.t[2 as uint64].u;
+        var succs := tuple.t[3 as uint64].ua;
+        var graphRef := LinearMutableMap.Get(mutMap, ref);
+        var loc := Location(addr, len);
 
-    //     assert DropLast(a[..i+1]) == a[..i];
-    //     assert Last(a[..i+1]) == a[i];
+        assert ValidVal(tuple);
+        assert ValidVal(tuple.t[3]);
+        assert |succs| < 0x1_0000_0000_0000_0000;
 
-    //     if graphRef.Some? || !ValidNodeLocation(loc)
-    //         || |succs| as uint64 > MaxNumChildrenUint64() {
-    //       lemma_valToHashMapNonePrefix(a, (i+1) as int);
-    //       success := false;
-    //       break;
-    //     } else {
-    //       mutMap := LinearMutableMap.Insert(mutMap, ref, Entry(Some(loc), succs, 0));
-    //       i := i + 1;
-    //     }
-    //   }
+        assert DropLast(a[..i+1]) == a[..i];
+        assert Last(a[..i+1]) == a[i];
 
-    //   if success {
-    //     assert a[..i] == a;
-    //     s := lSome(mutMap);
-    //   } else {
-    //     LinearMutableMap.Destructor(mutMap);
-    //     s := lNone;
-    //   }
-    // }
+        if graphRef.Some? || !ValidNodeLocation(loc)
+            || |succs| as uint64 > MaxNumChildrenUint64() {
+          lemma_valToHashMapNonePrefix(a, (i+1) as int);
+          success := false;
+          break;
+        } else {
+          ghost var mutMapBeforeInsert := mutMap;
+          LinearMutableMap.Insert(inout mutMap, ref, Entry(Some(loc), succs, 0));
+          assert Locs(mutMap) == Locs(mutMapBeforeInsert)[ref := loc];
+          assert Graph(mutMap) == Graph(mutMapBeforeInsert)[ref := succs];
+          i := i + 1;
+        }
+      }
+
+      if success {
+        assert a[..i] == a;
+        s := lSome(mutMap);
+      } else {
+        LinearMutableMap.Destructor(mutMap);
+        s := lNone;
+      }
+    }
 
     /*lemma LemmaComputeRefCountsIterateInvInit(t: HashMap)
     requires LinearMutableMap.Inv(t)
@@ -1555,7 +1573,7 @@ module IndirectionTable {
     //   return idx;
     // }
 
-    function IHashMap(m: HashMap) : SectorType.IndirectionTable
+    static function IHashMap(m: HashMap) : SectorType.IndirectionTable
     {
       SectorType.IndirectionTable(Locs(m), Graph(m))
     }
