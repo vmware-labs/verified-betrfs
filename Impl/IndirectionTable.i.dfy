@@ -1867,63 +1867,73 @@ module IndirectionTable {
     //   }
     // }
 
-    // static method BitmapInitUpTo(bm: BitmapImpl.Bitmap, upTo: uint64)
-    // requires bm.Inv()
-    // requires upTo as int <= BitmapModel.Len(bm.I())
-    // modifies bm.Repr
-    // ensures bm.Inv()
+    static method BitmapInitUpTo(bm: BitmapImpl.Bitmap, upTo: uint64)
+    requires bm.Inv()
+    requires upTo as int <= BitmapModel.Len(bm.I())
+    modifies bm.Repr
+    ensures bm.Inv()
     // ensures bm.I() == IndirectionTableModel.BitmapInitUpTo(old(bm.I()), upTo)
-    // ensures bm.Repr == old(bm.Repr)
-    // {
-    //   IndirectionTableModel.reveal_BitmapInitUpTo();
-    //   BitmapInitUpToIterate(bm, 0, upTo);
-    // }
+    ensures bm.Repr == old(bm.Repr)
+    {
+      var i := 0;
+      while i < upTo
+      invariant i <= upTo
+      invariant bm.Inv()
+      invariant bm.Repr == old(bm.Repr)
+      invariant upTo as int <= BitmapModel.Len(bm.I())
+      {
+        bm.Set(i);
+        i := i + 1;
+      }
+    }
 
-    // static method InitLocBitmap(shared me: IndirectionTable)
-    // returns (success: bool, bm: BitmapImpl.Bitmap)
-    // requires Inv(me)
-    // requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I(me)))
-    // ensures bm.Inv()
-    // ensures (success, bm.I()) == IndirectionTableModel.InitLocBitmap(old(I(me)))
-    // ensures fresh(bm.Repr)
-    // {
-    //   IndirectionTableModel.reveal_InitLocBitmap();
+    shared method InitLocBitmap()
+    returns (success: bool, bm: BitmapImpl.Bitmap)
+    requires this.Inv()
+    requires BC.WFCompleteIndirectionTable(this.I())
+    ensures bm.Inv()
+    // ensures (success, bm.I()) == IndirectionTableModel.InitLocBitmap(old(I(this)))
+    ensures BitmapModel.Len(bm.I()) == NumBlocks()
+    ensures fresh(bm.Repr)
+    {
+      bm := new BitmapImpl.Bitmap(NumBlocksUint64());
+      BitmapInitUpTo(bm, MinNodeBlockIndexUint64());
+      var it := LinearMutableMap.IterStart(this.t);
 
-    //   bm := new BitmapImpl.Bitmap(NumBlocksUint64());
-    //   BitmapInitUpTo(bm, MinNodeBlockIndexUint64());
-    //   var it := LinearMutableMap.IterStart(me.t);
-    //   while it.next.Next?
-    //   invariant me.t.Inv()
-    //   invariant BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I(me)))
-    //   invariant bm.Inv()
-    //   invariant LinearMutableMap.WFIter(me.t, it)
-    //   invariant BitmapModel.Len(bm.I()) == NumBlocks()
-    //   invariant IndirectionTableModel.InitLocBitmapIterate(I(me), it, bm.I())
-    //          == IndirectionTableModel.InitLocBitmap(I(me))
-    //   invariant fresh(bm.Repr)
-    //   decreases it.decreaser
-    //   {
-    //     assert it.next.key in IndirectionTableModel.I(I(me)).locs;
+      assume BitmapModel.Len(bm.I()) == NumBlocks();
 
-    //     var loc: uint64 := it.next.value.loc.value.addr;
-    //     var locIndex: uint64 := loc / NodeBlockSizeUint64();
-    //     if locIndex < NumBlocksUint64() {
-    //       var isSet := bm.GetIsSet(locIndex);
-    //       if !isSet {
-    //         it := LinearMutableMap.IterInc(me.t, it);
-    //         bm.Set(locIndex);
-    //       } else {
-    //         success := false;
-    //         return;
-    //       }
-    //     } else {
-    //       success := false;
-    //       return;
-    //     }
-    //   }
+      while it.next.Next?
+      invariant this.t.Inv()
+      invariant BC.WFCompleteIndirectionTable(this.I())
+      invariant bm.Inv()
+      invariant LinearMutableMap.WFIter(this.t, it)
+      invariant BitmapModel.Len(bm.I()) == NumBlocks()
+      // invariant IndirectionTableModel.InitLocBitmapIterate(I(this), it, bm.I())
+      //        == IndirectionTableModel.InitLocBitmap(I(this))
+      invariant fresh(bm.Repr)
+      decreases it.decreaser
+      {
+        assert it.next.key in this.I().locs;
 
-    //   success := true;
-    // }
+        var loc: uint64 := it.next.value.loc.value.addr;
+        var locIndex: uint64 := loc / NodeBlockSizeUint64();
+        if locIndex < NumBlocksUint64() {
+          var isSet := bm.GetIsSet(locIndex);
+          if !isSet {
+            it := LinearMutableMap.IterInc(this.t, it);
+            bm.Set(locIndex);
+          } else {
+            success := false;
+            return;
+          }
+        } else {
+          success := false;
+          return;
+        }
+      }
+
+      success := true;
+    }
     // 
     // ///// Dealloc stuff
 
@@ -2229,16 +2239,16 @@ module IndirectionTable {
       v, size := box.Borrow().IndirectionTableToVal();
     }
 
-    // method InitLocBitmap() returns (success: bool, bm: BitmapImpl.Bitmap)
-    //   requires Inv()
-    //   requires BC.WFCompleteIndirectionTable(IndirectionTableModel.I(I()))
-    //   ensures bm.Inv()
-    //   ensures (success, bm.I()) == IndirectionTableModel.InitLocBitmap(old(I()))
-    //   ensures fresh(bm.Repr)
-    // {
-    //   success, bm := It.InitLocBitmap(box.Borrow());
-    // }
-    // 
+    method InitLocBitmap() returns (success: bool, bm: BitmapImpl.Bitmap)
+      requires Inv()
+      requires BC.WFCompleteIndirectionTable(this.I())
+      ensures bm.Inv()
+      // ensures (success, bm.I()) == IndirectionTableModel.InitLocBitmap(old(I()))
+      ensures fresh(bm.Repr)
+    {
+      success, bm := box.Borrow().InitLocBitmap();
+    }
+    
     // function method FindDeallocable() : (ref: Option<BT.G.Reference>)
     //   requires Inv()
     //   requires IndirectionTableModel.TrackingGarbage(I())
