@@ -34,7 +34,7 @@ datatype StaticallySizedValue =
            | SSVUint32Array(va:seq<uint32>)
            | SSVUint64Array(ua:seq<uint64>)
            | SSVCase(c:uint64, casev:StaticallySizedValue)
-           | SSVPadded(padv:V)
+           | SSVPadded(size: uint64, padv:V)
 
 datatype V =
            | StaticallySizedValue(v: StaticallySizedValue)
