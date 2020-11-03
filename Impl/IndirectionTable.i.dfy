@@ -1222,104 +1222,117 @@ module IndirectionTable {
       }
     }
 
-    // static method MakeGarbageQueue(shared t: HashMap)
-    // returns (linear q : USeq.USeq)
-    // requires t.Inv()
-    // requires |t.contents| <= 0x1_0000_0000
-    // ensures USeq.Inv(q)
-    // ensures USeq.I(q) == IndirectionTableModel.makeGarbageQueue(t)
-    // {
-    //   IndirectionTableModel.reveal_makeGarbageQueue();
+    static method MakeGarbageQueue(shared t: HashMap)
+    returns (linear q : USeq.USeq)
+    requires t.Inv()
+    requires |t.contents| <= 0x1_0000_0000
+    ensures q.Inv() // USeq.Inv(q)
+    ensures forall ref | ref in t.contents && t.contents[ref].predCount == 0 :: ref in q.I()
+    ensures forall ref | ref in q.I() :: ref in t.contents && t.contents[ref].predCount == 0
+    {
+      // IndirectionTableModel.reveal_makeGarbageQueue();
 
-    //   q := USeq.Alloc();
-    //   var it := LinearMutableMap.IterStart(t);
-    //   while it.next.Next?
-    //   invariant USeq.Inv(q)
-    //   invariant LinearMutableMap.Inv(t)
-    //   invariant LinearMutableMap.WFIter(t, it)
-    //   invariant IndirectionTableModel.makeGarbageQueue(t)
-    //          == IndirectionTableModel.makeGarbageQueueIterate(t, USeq.I(q), it)
-    //   invariant Set(USeq.I(q)) <= t.contents.Keys
-    //   invariant |t.contents| <= 0x1_0000_0000
-    //   decreases it.decreaser
-    //   {
-    //     if it.next.value.predCount == 0 {
-    //       NoDupesSetCardinality(USeq.I(q));
-    //       SetInclusionImpliesSmallerCardinality(
-    //           Set(USeq.I(q)), t.contents.Keys);
-    //       assert |t.contents.Keys| == |t.contents|;
+      q := USeq.USeq.Alloc();
+      var it := LinearMutableMap.IterStart(t);
+      while it.next.Next?
+      invariant q.Inv()
+      invariant LinearMutableMap.Inv(t)
+      invariant LinearMutableMap.WFIter(t, it)
+      // invariant IndirectionTableModel.makeGarbageQueue(t)
+      //        == IndirectionTableModel.makeGarbageQueueIterate(t, USeq.I(q), it)
+      invariant Set(q.I()) <= t.contents.Keys
+      invariant |t.contents| <= 0x1_0000_0000
+      decreases it.decreaser
+      {
+        if it.next.value.predCount == 0 {
+          NoDupesSetCardinality(q.I());
+          SetInclusionImpliesSmallerCardinality(Set(q.I()), t.contents.Keys);
+          assert |t.contents.Keys| == |t.contents|;
 
-    //       q := USeq.Add(q, it.next.key);
-    //     }
-    //     it := LinearMutableMap.IterInc(t, it);
-    //   }
-    // }
+          inout q.Add(it.next.key);
+        }
+        it := LinearMutableMap.IterInc(t, it);
+      }
 
-    // static method ComputeRefUpperBound(shared t: HashMap)
-    // returns (r: uint64)
-    // requires t.Inv()
-    // ensures r == IndirectionTableModel.computeRefUpperBound(t)
-    // {
-    //   var it := LinearMutableMap.IterStart(t);
-    //   var refUpperBound := 0;
-    //   while it.next.Next?
-    //   invariant LinearMutableMap.Inv(t)
-    //   invariant LinearMutableMap.WFIter(t, it)
-    //   invariant forall ref | ref in it.s :: ref <= refUpperBound
-    //   invariant IndirectionTableModel.computeRefUpperBoundIterate(t, it, refUpperBound)
-    //          == IndirectionTableModel.computeRefUpperBound(t)
-    //   decreases it.decreaser
-    //   {
-    //     if it.next.key > refUpperBound {
-    //       refUpperBound := it.next.key;
-    //     }
-    //     it := LinearMutableMap.IterInc(t, it);
-    //   }
-    //   r := refUpperBound;
-    // }
+      assume forall ref | ref in t.contents && t.contents[ref].predCount == 0 :: ref in q.I();
+      assume forall ref | ref in q.I() :: ref in t.contents && t.contents[ref].predCount == 0;
+    }
 
-    // static method ValToIndirectionTable(v: V)
-    // returns (linear s : lOption<IndirectionTable>)
-    // requires IndirectionTableModel.valToIndirectionTable.requires(v)
-    // ensures s.lSome? ==> Inv(s.value)
+    static method ComputeRefUpperBound(shared t: HashMap)
+    returns (r: uint64)
+    requires t.Inv()
+    ensures forall ref | ref in t.contents :: ref <= r
+    {
+      var it := LinearMutableMap.IterStart(t);
+      var refUpperBound := 0;
+      while it.next.Next?
+      invariant LinearMutableMap.Inv(t)
+      invariant LinearMutableMap.WFIter(t, it)
+      invariant forall ref | ref in it.s :: ref <= refUpperBound
+      decreases it.decreaser
+      {
+        if it.next.key > refUpperBound {
+          refUpperBound := it.next.key;
+        }
+        it := LinearMutableMap.IterInc(t, it);
+      }
+      r := refUpperBound;
+    }
+
+    static method ValToIndirectionTable(v: V)
+    returns (linear s : lOption<IndirectionTable>)
+    requires ValidVal(v)
+    requires ValInGrammar(v, IndirectionTableGrammar())
+    ensures s.lSome? ==> s.value.Inv()
     // ensures s.lNone? ==> IndirectionTableModel.valToIndirectionTable(v).None?
     // ensures s.lSome? ==> IndirectionTableModel.valToIndirectionTable(v) == Some(I(s.value))
-    // {
-    //   if |v.a| as uint64 <= IndirectionTableModel.MaxSizeUint64() {
-    //     linear var res := ValToHashMap(v.a);
-    //     linear match res {
-    //       case lSome(t) => {
-    //         var rootRef := LinearMutableMap.Get(t, BT.G.Root());
-    //         if rootRef.Some? {
-    //           linear var t1opt := ComputeRefCounts(t);
-    //           LinearMutableMap.Destructor(t);
-    //           linear match t1opt {
-    //             case lSome(t1) => {
-    //               IndirectionTableModel.lemmaMakeGarbageQueueCorrect(t1);
-    //               IndirectionTableModel.lemma_count_eq_graph_size(t);
-    //               IndirectionTableModel.lemma_count_eq_graph_size(t1);
+    ensures s.lSome? ==> Marshalling.valToIndirectionTable(v) == Some(s.value.I())
+    ensures s.lNone? ==> Marshalling.valToIndirectionTable(v).None?
+    {
+      if |v.a| as uint64 <= MaxSizeUint64() {
+        linear var res := ValToHashMap(v.a);
+        linear match res {
+          case lSome(t) => {
+            var rootRef := LinearMutableMap.Get(t, BT.G.Root());
+            if rootRef.Some? {
+              linear var t1opt := ComputeRefCounts(t);
+              LinearMutableMap.Destructor(t);
+              linear match t1opt {
+                case lSome(t1) => {
+                  // IndirectionTableModel.lemmaMakeGarbageQueueCorrect(t1);
+                  // IndirectionTableModel.lemma_count_eq_graph_size(t);
+                  // IndirectionTableModel.lemma_count_eq_graph_size(t1);
 
-    //               linear var q := MakeGarbageQueue(t1);
-    //               var refUpperBound := ComputeRefUpperBound(t1);
-    //               s := lSome(IndirectionTable(t1, lSome(q), refUpperBound, None));
-    //             }
-    //             case lNone => {
-    //               s := lNone;
-    //             }
-    //           }
-    //         } else {
-    //           LinearMutableMap.Destructor(t);
-    //           s := lNone;
-    //         }
-    //       }
-    //       case lNone => {
-    //         s := lNone;
-    //       }
-    //     }
-    //   } else {
-    //     s := lNone;
-    //   }
-    // }
+                  assume t1.Inv();
+                  assume |t1.contents| <= 0x1_0000_0000;
+
+                  linear var q := MakeGarbageQueue(t1);
+                  var refUpperBound := ComputeRefUpperBound(t1);
+                  s := lSome(IndirectionTable(
+                    t1, lSome(q), refUpperBound, None,
+                    /* r.locs */ Locs(t1),
+                    /* r.graph */ Graph(t1),
+                    /* r.predCounts */ PredCounts(t1)));
+
+                  assert s.lSome? ==> s.value.Inv();
+                }
+                case lNone => {
+                  s := lNone;
+                }
+              }
+            } else {
+              LinearMutableMap.Destructor(t);
+              s := lNone;
+            }
+          }
+          case lNone => {
+            s := lNone;
+          }
+        }
+      } else {
+        s := lNone;
+      }
+    }
 
     // static function MaxIndirectionTableByteSize() : int {
     //   8 + IndirectionTableModel.MaxSize() * (8 + 8 + 8 + (8 + MaxNumChildren() * 8))
@@ -1615,13 +1628,13 @@ module IndirectionTable {
     }
 
 
-//    function method IndirectionTableGrammar() : G
-//    ensures ValidGrammar(IndirectionTableGrammar())
-//    {
-//      // (Reference, address, len, successor-list) triples
-//      GArray(GTuple([GUint64, GUint64, GUint64, GUint64Array]))
-//    }
-//
+    static function method IndirectionTableGrammar() : G
+    ensures ValidGrammar(IndirectionTableGrammar())
+    {
+      // (Reference, address, len, successor-list) triples
+      GArray(GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+    }
+
 //    method {:fuel ValInGrammar,3} valToHashMap(a: seq<V>) returns (s : Option<HashMap>)
 //    requires |a| <= MaxSize()
 //    requires forall i | 0 <= i < |a| :: ValidVal(a[i])
@@ -2184,22 +2197,23 @@ module IndirectionTable {
       box.Give(x);
     }
 
-    // static method ValToIndirectionTable(v: V) returns (s: BoxedIndirectionTable?)
-    //   requires IndirectionTableModel.valToIndirectionTable.requires(v)
-    //   ensures s != null ==> s.Inv()
-    //   ensures s != null ==> fresh(s.Repr)
-    //   ensures s == null ==> IndirectionTableModel.valToIndirectionTable(v).None?
-    //   ensures s != null ==> IndirectionTableModel.valToIndirectionTable(v) == Some(s.I())
-    // {
-    //   linear var opt := It.ValToIndirectionTable(v);
-    //   linear match opt {
-    //     case lNone => {s := null;}
-    //     case lSome(it) => {
-    //       var box := new BoxedLinear(it);
-    //       s := new IndirectionTable.Box(box);
-    //     }
-    //   }
-    // }
+    static method ValToIndirectionTable(v: V) returns (s: BoxedIndirectionTable?)
+      requires ValidVal(v)
+      requires ValInGrammar(v, IndirectionTable.IndirectionTableGrammar())
+      ensures s != null ==> s.Inv()
+      ensures s != null ==> fresh(s.Repr)
+      ensures s != null ==> Marshalling.valToIndirectionTable(v) == Some(s.I())
+      ensures s == null ==> Marshalling.valToIndirectionTable(v).None?
+    {
+      linear var opt := IndirectionTable.ValToIndirectionTable(v);
+      linear match opt {
+        case lNone => {s := null;}
+        case lSome(it) => {
+          var box := new BoxedLinear(it);
+          s := new BoxedIndirectionTable.Box(box);
+        }
+      }
+    }
 
     // method IndirectionTableToVal() returns (v: V, size: uint64)
     //   requires Inv()

@@ -49,7 +49,7 @@ module USeq
       this.dlist.Seq()
     }
 
-    method Alloc() returns(linear useq:USeq)
+    static method Alloc() returns(linear useq:USeq)
       ensures useq.Inv()
       ensures useq.I() == []
     {
