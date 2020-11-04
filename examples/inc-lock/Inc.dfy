@@ -78,7 +78,7 @@ module Impl {
 
 
   // Dafny doesn't have fork/join built-ins but if it did, this is what
-  // `fork inc` and `join` would look like...
+  // `fork inc` and `join inc` would look like...
 
   type ForkHandle
 
@@ -86,7 +86,7 @@ module Impl {
   returns (linear fh: ForkHandle)
   requires ticket == IncTicket
 
-  method fork_join(linear fh: ForkHandle)
+  method join_inc(linear fh: ForkHandle)
   returns (linear stub: StateObject)
   ensures stub == IncStub
 
@@ -104,8 +104,8 @@ module Impl {
     linear var fh1 := fork_inc(m, inc_ticket1);
     linear var fh2 := fork_inc(m, inc_ticket2);
 
-    linear var inc_stub1 := fork_join(fh1);
-    linear var inc_stub2 := fork_join(fh2);
+    linear var inc_stub1 := join_inc(fh1);
+    linear var inc_stub2 := join_inc(fh2);
 
     linear var entry := NumMutex.acquire(m);
 
