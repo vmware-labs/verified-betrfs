@@ -1,10 +1,6 @@
 include "Mutex.dfy"
 
 module StateObjects {
-  datatype Status = Unmatched | Reading | Clean | Dirty | Writing
-
-  type Data
-
   datatype StateObject =
     | Ticket
     | Stub(n: int)
