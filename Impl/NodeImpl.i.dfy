@@ -14,6 +14,7 @@ module NodeImpl {
   import opened NativeTypes
   import opened LinearSequence_s
   import opened LinearSequence_i
+  import opened LinearOption
   import opened KeyType
   import opened ValueMessage
 
@@ -29,7 +30,6 @@ module NodeImpl {
   import MM = MutableMap
   import ReferenceType`Internal
 
-  // update to linear, lseq loption (elements of the sequence)
   linear datatype Node = Node(pivotTable: Pivots.PivotTable, children: Option<seq<BT.G.Reference>>, linear buckets: lseq<BucketImpl.MutBucket>)
   {
     static method Alloc(pivotTable: Pivots.PivotTable, children: Option<seq<BT.G.Reference>>, linear buckets: lseq<BucketImpl.MutBucket>) returns (linear node: Node)
@@ -52,13 +52,6 @@ module NodeImpl {
     {
       IM.Node(pivotTable, children,
         BucketImpl.MutBucket.ILseq(buckets))
-    }
-
-    linear method Free()
-    requires Inv()
-    {
-      linear var Node(_,_,buckets) := this;
-      MutBucket.FreeSeq(buckets);
     }
 
     static method GetBucketsLen(shared node: Node) returns (len: uint64)
@@ -129,7 +122,7 @@ module NodeImpl {
     {
       linear var replaced := lseq_swap_inout(inout self.buckets, slot, bucket);
       inout self.children := Some(SeqIndexUpdate(self.children.value, slot, childref));
-      replaced.Free();
+      var _ := FreeMutBucket(replaced);
       assert self.Inv();
     }
 
@@ -227,7 +220,7 @@ module NodeImpl {
               linear var node1 := node.CutoffNodeAndKeepLeft(rbound);
               NodeModel.CutoffNodeAndKeepLeftCorrect(node.I(), rbound);
               node' := node1.CutoffNodeAndKeepRight(lbound);
-              node1.Free();
+              var _ := FreeNode(lSome(node1));
             }
           }
         }
@@ -258,7 +251,6 @@ module NodeImpl {
     requires 0 <= num_children_left as int <= |node.pivotTable|
     requires node.children.Some? ==> 0 <= num_children_left as int <= |node.children.value|
     requires 0 <= num_children_left as int <= |node.buckets|
-    // requires |this.buckets| < 0x1_0000_0000_0000_0000
     ensures node'.Inv()
     ensures node'.I() == NodeModel.SplitChildRight(node.I(), num_children_left as int)
     {
@@ -297,6 +289,19 @@ module NodeImpl {
       assert self.I().buckets == NodeModel.NodeInsertKeyValue(old_self.I(), key, msg).buckets;
     }
   }
+
+  function method FreeNode(linear opt: lOption<Node>) : ()
+  requires opt.lSome? ==> opt.value.Inv()
+  {
+    linear match opt {
+      case lNone =>
+        ()
+      case lSome(node) =>
+        assert node.Inv();
+        linear var Node(_,_,buckets) := node;
+        FreeMutBucketSeq(buckets)
+    }
+  }
 }
 
 // boxed linear node, use till we have linear mutable map with linear items
@@ -319,7 +324,7 @@ module BoxNodeImpl {
   import L : NodeImpl
 
   class Node {
-    var box: BoxedLinear<L.Node>;
+    var box: BoxedLinearOption<L.Node>;
     ghost var Repr: set<object>
 
     function Read() : L.Node
@@ -338,7 +343,7 @@ module BoxNodeImpl {
     ensures fresh(this.Repr)
     {
       linear var node := L.Node.Alloc(pivotTable, children, buckets);
-      box := new BoxedLinear(node);
+      box := new BoxedLinearOption(node, ToDestructor(L.FreeNode));
       new;
       Repr := {this} + box.Repr;
     }
@@ -349,7 +354,7 @@ module BoxNodeImpl {
     ensures Read() == node
     ensures fresh(this.Repr)
     {
-      box := new BoxedLinear(node);
+      box := new BoxedLinearOption(node, ToDestructor(L.FreeNode));
       new;
       Repr := {this} + box.Repr;
     }
@@ -369,16 +374,8 @@ module BoxNodeImpl {
       && this.Repr == {this} + this.box.Repr
       && this.box.Inv()
       && this.box.Has()
+      && this.box.DataInv == L.FreeNode.requires
       && this.Read().Inv()
-    }
-
-    // need to call manually, cannot use boxedoption bc inout doesn't deal with function method
-    method Destructor()
-    requires Inv()
-    modifies Repr
-    {
-      linear var x := box.Take();
-      x.Free();
     }
 
     method SplitParent(slot: uint64, pivot: Key, left_childref: L.BT.G.Reference, right_childref: L.BT.G.Reference)
@@ -401,7 +398,7 @@ module BoxNodeImpl {
     requires Inv()
     requires L.IM.WFNode(I())
     requires WeightBucketList(MutBucket.ILseq(Read().buckets)) + WeightKey(key) + WeightMessage(msg) < 0x1_0000_0000_0000_0000
-    ensures Inv();
+    ensures Inv()
     ensures I() == old(L.NodeModel.NodeInsertKeyValue(I(), key, msg))
     ensures Repr == old(Repr)
     modifies this.Repr
@@ -502,4 +499,3 @@ module BoxNodeImpl {
     }
   }
 }
-
