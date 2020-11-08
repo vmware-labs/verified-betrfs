@@ -210,7 +210,7 @@ module MarshallingImpl {
           invariant forall k: nat | j as int <= k < i as int :: WFBucket(buckets[k].bucket)
           {
             linear var b := lseq_take_inout(inout buckets, j);
-            b.Free();
+            var _ := BucketImpl.FreeMutBucket(b);
             j := j + 1;
           }
           error := true;
@@ -282,7 +282,7 @@ module MarshallingImpl {
 
         var w: uint64 := BucketImpl.MutBucket.computeWeightOfSeq(buckets);
         if (w > MaxTotalBucketWeightUint64()) {
-          BucketImpl.MutBucket.FreeSeq(buckets);
+          var _ := BucketImpl.FreeMutBucketSeq(buckets);
           s := None;
         } else {
           var node := new Node(pivots, if |children| as uint64 == 0 then None else childrenOpt, buckets);

@@ -95,8 +95,7 @@ module FlushImpl {
     BookkeepingModel.allocRefDoesntEqual(s.I(), newchild.Read().children, parentref);
     var newchildref := allocBookkeeping(s, childchildren);
     if newchildref.None? {
-      newchild.Destructor();
-      newparentBucket.Free();
+      var _ := FreeMutBucket(newparentBucket);
       print "giving up; could not get parentref\n";
     } else {
       assert Some(parent) == s.cache.ptr(parentref);

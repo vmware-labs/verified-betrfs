@@ -75,15 +75,17 @@ module BucketImpl {
 
   linear datatype BucketFormat =
       | BFTree(linear tree: TreeMap)
-      | BFPkv(pkv: PackedKV.Pkv) {
-    linear method Free()
-    requires this.BFTree? ==> LKMB.WF(this.tree)
-    {
-      linear match this {
-        case BFTree(tree) => 
-          var _ := LKMB.FreeNode(tree);
-        case BFPkv(_) =>
-      }
+      | BFPkv(pkv: PackedKV.Pkv)
+  
+  function method FreeBucketFormat(linear format: BucketFormat) : ()
+  requires format.BFTree? ==> LKMB.WF(format.tree)
+  {
+    linear match format {
+      case BFTree(tree) => 
+        var _ := LKMB.FreeNode(tree);
+        ()
+      case BFPkv(_) =>
+        ()
     }
   }
 
@@ -106,13 +108,6 @@ module BucketImpl {
       && (weight as int == WeightBucket(bucket))
       && weight as int < Uint32UpperBound()
       && (sorted ==> BucketWellMarshalled(bucket))
-    }
-
-    linear method Free()
-    requires Inv()
-    {
-      linear var MutBucket(format, _ ,_ ,_) := this;
-      format.Free();
     }
   
     static method Alloc() returns (linear mb: MutBucket)
@@ -438,7 +433,7 @@ module BucketImpl {
         tree, weight := pkv_to_tree(self.format.pkv);
         inout self.weight := weight;
         linear var prevformat := Replace(inout self.format, BFTree(tree));
-        prevformat.Free();
+        var _ := FreeBucketFormat(prevformat);
         inout ghost self.bucket := B(self.bucket.b);
         WeightWellMarshalledLe(old_self.bucket, self.bucket);
       }
@@ -531,7 +526,7 @@ module BucketImpl {
       linear var l, r := SplitLeftRight(lseq_peek(buckets, slot), pivot);
       linear var replaced;
       replaced := Replace1With2Lseq_inout(inout buckets, l, r, slot);
-      replaced.Free();
+      var _ := FreeMutBucket(replaced);
 
       ghost var ghosty := true;
       if ghosty {
@@ -627,28 +622,45 @@ module BucketImpl {
         j := j + 1;
       }
     }
+  }
 
-    static method FreeSeq(linear buckets: lseq<MutBucket>)
-    requires InvLseq(buckets)
-    requires |buckets| < 0x1_0000_0000_0000_0000;
-    {
-      var j := 0;
-      linear var buckets' := buckets;
+  function method FreeMutBucket(linear bucket: MutBucket) : ()
+  requires bucket.Inv()
+  {
+    linear var MutBucket(format, _ ,_ ,_) := bucket;
+    var _ := FreeBucketFormat(format);
+    ()
+  }
 
-      while j < lseq_length_raw(buckets')
-      invariant j as int <= |buckets'|
-      invariant |buckets'| == |buckets| as int
-      invariant forall i | j as int <= i < |buckets'| :: lseq_has(buckets')[i] 
-      invariant forall i | 0 <= i < j as int :: !lseq_has(buckets')[i]
-      invariant forall i | j as int <= i < |buckets'| :: lseqs(buckets')[i].Inv()
-      {
-        linear var wastebucket;
-        buckets', wastebucket := lseq_take(buckets', j);
-        wastebucket.Free();
-        j := j + 1;
-      }
-      lseq_free(buckets');
-    }
+  function method FreeMutBucketSeqRecur(linear buckets: lseq<MutBucket>, i: uint64) : (linear ebuckets: lseq<MutBucket>)
+  requires |buckets| < Uint64UpperBound()
+  requires 0 <= i as nat < |buckets|
+  requires MutBucket.InvSeq(lseqs(buckets)[i..])
+  requires forall j | i as nat <= j < |buckets| :: j in buckets
+  ensures |ebuckets| == |buckets|
+  ensures forall j | 0 <= j < |buckets| :: j !in buckets ==> j !in ebuckets
+  ensures forall j | i as nat <= j < |ebuckets| :: j !in ebuckets
+  decreases |buckets| as uint64 - i
+  {
+    linear var (buckets', wastebucket) := lseq_take_fun(buckets, i);
+    var _ := FreeMutBucket(wastebucket);
+
+    if i+1 == lseq_length_as_uint64(buckets') then
+      buckets'
+    else
+      linear var e := FreeMutBucketSeqRecur(buckets', i+1);
+      e
+  }
+
+  function method FreeMutBucketSeq(linear buckets: lseq<MutBucket>) : ()
+  requires |buckets| < Uint64UpperBound()
+  requires MutBucket.InvLseq(buckets)
+  {
+    if lseq_length_as_uint64(buckets) == 0 then
+      lseq_free_fun(buckets)
+    else 
+      linear var buckets' := FreeMutBucketSeqRecur(buckets, 0);
+      lseq_free_fun(buckets')
   }
 
   linear datatype BucketIter = BucketIter(it: Iterator, pkv: PackedKV.Pkv, ghost bucket: Bucket)
@@ -658,7 +670,7 @@ module BucketImpl {
       && PackedKV.WF(pkv)
       && bucket == PackedKV.I(pkv)
       && BucketIteratorModel.WFIter(bucket, IIterator(it))
-    }
+    } 
 
     linear method Free()
     {
