@@ -8,7 +8,7 @@
 
 workloadname=F
 
-recordcount=600000
+recordcount=10000000
 operationcount=10000
 workload=com.yahoo.ycsb.workloads.CoreWorkload
 
