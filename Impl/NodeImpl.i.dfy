@@ -220,7 +220,7 @@ module NodeImpl {
               linear var node1 := node.CutoffNodeAndKeepLeft(rbound);
               NodeModel.CutoffNodeAndKeepLeftCorrect(node.I(), rbound);
               node' := node1.CutoffNodeAndKeepRight(lbound);
-              var _ := FreeNode(lSome(node1));
+              var _ := FreeNode(node1);
             }
           }
         }
@@ -290,17 +290,11 @@ module NodeImpl {
     }
   }
 
-  function method FreeNode(linear opt: lOption<Node>) : ()
-  requires opt.lSome? ==> opt.value.Inv()
+  function method FreeNode(linear node: Node) : ()
+  requires node.Inv()
   {
-    linear match opt {
-      case lNone =>
-        ()
-      case lSome(node) =>
-        assert node.Inv();
-        linear var Node(_,_,buckets) := node;
-        FreeMutBucketSeq(buckets)
-    }
+    linear var Node(_, _, buckets) := node;
+    FreeMutBucketSeq(buckets)
   }
 }
 
