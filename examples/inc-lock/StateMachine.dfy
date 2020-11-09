@@ -31,7 +31,7 @@ module StateMachine {
   predicate Next(s: Variables, s': Variables)
   {
 		exists a, b, c ::
-			s == a + c && s' == b + c
+			s == a + c && s' == b + c     // BP: Why the extra c?
 			&& transform(a, b)
 	}
 

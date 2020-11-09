@@ -64,7 +64,7 @@ module Impl {
     linear var V(num, r) := entry;
 
     num := num + 1;
-
+https://www.kosbie.net/cmu/
     linear var r';
     stub, r' := transform_inc(ticket, r);
 
@@ -91,7 +91,7 @@ module Impl {
   method main(linear ticket: StateObject)
   returns (n: int, linear stub: StateObject)
   requires ticket == Ticket
-  ensures stub == Stub(n)
+  ensures stub == Stub(n)     // BP: So this proves that we return a Stub for _some_ value n, and the StateMachine proves n == 2?
   {
     linear var inc_ticket1, inc_ticket2, curv := transform_init(ticket);
 
@@ -103,7 +103,7 @@ module Impl {
     linear var inc_stub1 := join_inc(fh1);
     linear var inc_stub2 := join_inc(fh2);
 
-    linear var entry := NumMutex.acquire(m);
+    linear var entry := NumMutex.acquire(m);      // BP: Need to release?
 
     linear var V(num, r) := entry;
 
