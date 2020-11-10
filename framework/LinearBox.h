@@ -1,15 +1,13 @@
 #pragma once
 
+#include <functional>
 #include "DafnyRuntime.h"
 
 namespace LinearBox_s {
 
   template<typename A>
-  using DestructorFunction_fun = Tuple0 (*)(A);
-  
-  template<typename A>
   struct DestructorFunction {
-    DestructorFunction_fun<A> f;
+    std::function<Tuple0(A)> f;
   };
 
   template <typename A>
@@ -63,6 +61,18 @@ namespace LinearBox_s {
     struct DestructorFunction<A> df;
     df.f = f;
     return df;
+  }
+
+  template<typename A, typename E>
+  DestructorFunction<A> ToDestructorEnv(Tuple0 (*f)(A, E), E e) {
+    struct DestructorFunction<A> df;
+    df.f = [=](A a) {return f(a, e);};
+    return df;
+  }
+
+  template<typename A>
+  Tuple0 CallDestructor(DestructorFunction<A> d, A a) {
+    return d.f(a);
   }
 
 }
