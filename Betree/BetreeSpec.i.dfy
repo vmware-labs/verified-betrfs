@@ -226,7 +226,7 @@ module BetreeSpec {
     var newchildref := flush.newchildref;
     var newbuffer := imap k :: (if k in flush.flushedKeys then G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
     var newchild := Node(child.children, newbuffer);
-    var newparentbuffer := imap k :: (if k in flush.flushedKeys then G.M.Update(G.M.NopDelta()) else parent.buffer[k]);
+    var newparentbuffer := imap k :: (if k in flush.flushedKeys then G.M.IdentityMessage() else parent.buffer[k]);
     var newparentchildren := imap k | k in parent.children :: (if k in flush.movedKeys then newchildref else parent.children[k]);
     var newparent := Node(newparentchildren, newparentbuffer);
     var allocop := G.AllocOp(newchildref, newchild);

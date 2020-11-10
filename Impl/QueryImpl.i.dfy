@@ -31,7 +31,7 @@ module QueryImpl {
 
   import opened Bounds
   import opened BucketsLib
-  import PivotsLib
+  import opened BoundedPivotsLib
 
   import opened PBS = PivotBetreeSpec`Spec
 
@@ -71,14 +71,19 @@ module QueryImpl {
       return;
     } else {
       var node := nodeOpt.value;
-      s.cache.LemmaNodeReprLeRepr(ref);
+      var pivots := node.GetPivots();
+      var boundedkey := ComputeBoundedKey(pivots, key);
+      if !boundedkey {
+        res := None;
+        return;
+      }
 
+      s.cache.LemmaNodeReprLeRepr(ref);
       ghost var oldIVars := s.I();
       LruModel.LruUse(s.lru.Queue, ref);
       s.lru.Use(ref);
       assert SM.IBlockCache(oldIVars) == SM.IBlockCache(s.I());
 
-      var pivots := node.GetPivots();
       var r := Pivots.ComputeRoute(pivots, key);
 
       var kmtMsg := lseq_peek(node.box.Borrow().buckets, r).Query(key);

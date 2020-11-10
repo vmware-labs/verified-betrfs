@@ -357,3 +357,23 @@ module Lexicographic_Byte_Order_Impl refines Total_Order_Impl {
     c := NativeArrays.ByteSeqCmpByteSeq(a, b);
   }
 }
+
+module Upperbounded_Lexicographic_Byte_Order_Impl refines Total_Order_Impl {
+  import opened Ord = Upperbounded_Lexicographic_Byte_Order
+  method cmp(a: Element, b: Element) returns (c: int32)
+    ensures c < 0 ==> lt(a, b)
+    ensures c > 0 ==> lt(b, a)
+    ensures c == 0 ==> a == b
+  {
+    if a == Ord.Max_Element == b {
+      return 0;
+    } else if a == Ord.Max_Element != b {
+      return 1;
+    } else if b == Ord.Max_Element {
+      return -1;
+    } else {
+      c := NativeArrays.ByteSeqCmpByteSeq(a.e, b.e);
+      return c;
+    }
+  }
+}

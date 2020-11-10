@@ -26,6 +26,7 @@ module PivotBetree refines UIStateMachine {
   import opened Maps
   import opened Options
   import opened BucketsLib
+  import opened BoundedPivotsLib
 
   import opened G = PivotBetreeGraph
 
@@ -33,7 +34,7 @@ module PivotBetree refines UIStateMachine {
 
   function EmptyNode() : Node
   {
-    Node([], None, [BucketsLib.B(map[])])
+    Node(InitPivotTable(), None, [BucketsLib.B(map[])])
   }
 
   predicate Init(s: Variables) {
@@ -333,6 +334,7 @@ module PivotBetree refines UIStateMachine {
   {
     reveal_WeightBucketList();
     //reveal_WeightBucket();
+
     assert SpecRef.INode(EmptyNode()) == B.EmptyNode();
     BInv.InitImpliesInv(I(s));
   }
