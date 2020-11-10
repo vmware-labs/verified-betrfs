@@ -37,7 +37,7 @@ module SuccImpl {
 
   import opened Bounds
   import opened BucketsLib
-  import PivotsLib
+  import opened BoundedPivotsLib
 
   import opened PBS = PivotBetreeSpec`Spec
 
@@ -65,7 +65,6 @@ module SuccImpl {
   }
 
   method getPathInternal(
-      
       s: ImplVariables,
       io: DiskIOHandler,
       key: Key,
@@ -92,6 +91,7 @@ module SuccImpl {
   requires g.lSome? <==> |acc| >= 1
   requires g.lSome? ==> g.value.Inv() && g.value.I() == BGM.GenFromBucketStackWithLowerBound(acc, start)
   requires io !in s.Repr()
+  requires BoundedKey(node.I().pivotTable, key)
   modifies s.Repr()
   modifies io
   decreases counter, 0
@@ -108,10 +108,10 @@ module SuccImpl {
     ghost var acc' := acc + [bucket];
 
     var upTo';
-    if r == |pivots| as uint64 {
+    if pivots[r+1].Max_Element? {
       upTo' := upTo;
     } else {
-      var ub := pivots[r];
+      var ub := ComputeGetKey(pivots, r+1);
       if upTo.Some? {
         var c := cmp(upTo.value, ub);
         var k: Key := if c < 0 then upTo.value else ub;
@@ -143,29 +143,15 @@ module SuccImpl {
          == SuccModel.getPathInternal(old(s.I()), old(IIO(io)), key, old(acc), start, upTo, maxToFind as int, ref, counter, old(node.I()));
       }
     } else {
-      //assert old(MutBucket.ISeq(acc)) == MutBucket.ISeq(acc);
-
-      //assert BucketSuccessorLoopModel.GetSuccessorInBucketStack(MutBucket.ISeq(acc'), maxToFind as int, start, upTo')
-      //    == BucketSuccessorLoopModel.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo');
-      // now we are ready!
       linear var g' := composeGenerator(node, r, g, acc, bucket, start);
       var res0 := BucketSuccessorLoopImpl.GetSuccessorInBucketStack(g', acc', maxToFind, start, upTo');
       res := Some(res0);
-
-      //assert res0
-      //    == BucketSuccessorLoopModel.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo');
-
-      //assert SuccModel.getPathInternal(old(s.I()), old(IIO(io)), key, old(MutBucket.ISeq(acc)), start, upTo, maxToFind as int, ref, counter, old(node.I())).2
-      //    == Some(BucketSuccessorLoopModel.GetSuccessorInBucketStack(old(MutBucket.ISeq(acc)) + [old(node.I()).buckets[r]], maxToFind as int, start, upTo'))
-      //    == res;
-
       assert (s.I(), IIO(io), res)
        == SuccModel.getPathInternal(old(s.I()), old(IIO(io)), key, old(acc), start, upTo, maxToFind as int, ref, counter, old(node.I()));
     }
   }
 
   method getPath(
-      
       s: ImplVariables,
       io: DiskIOHandler,
       key: Key,
@@ -201,10 +187,21 @@ module SuccImpl {
       var node := nodeOpt.value;
 
       assert node.I() == s.I().cache[ref];
-      res := getPathInternal(s, io, key, acc, g, start, upTo, maxToFind, ref, counter, node);
-
-      LruModel.LruUse(s.I().lru, ref);
-      s.lru.Use(ref);
+      var pivots := node.GetPivots();
+      var boundedkey := ComputeBoundedKey(pivots, key);
+      if boundedkey {
+        res := getPathInternal(s, io, key, acc, g, start, upTo, maxToFind, ref, counter, node);
+        LruModel.LruUse(s.I().lru, ref);
+        s.lru.Use(ref);
+      } else {
+        linear match g {
+          case lSome(g1) =>
+            g1.Free();
+          case lNone() =>
+        }
+        print "getPath: look up key is not bounded in path nodes\n";
+        res := None;
+      }
     } else {
       linear match g {
         case lSome(g1) =>

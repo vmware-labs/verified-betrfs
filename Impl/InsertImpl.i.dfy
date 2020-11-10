@@ -32,13 +32,15 @@ module InsertImpl {
   import opened BucketWeights
   import opened Bounds
 
-  import opened PBS = PivotBetreeSpec`Spec
+  import opened BoxNodeImpl
+  import opened BoundedPivotsLib
 
   method InsertKeyValue(s: ImplVariables, key: Key, value: Value)
   returns (success: bool)
   requires Inv(s)
   requires s.ready
   requires BT.G.Root() in s.cache.I()
+  requires BoundedKey(s.cache.I()[BT.G.Root()].pivotTable, key)
   requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 1
   modifies s.Repr()
   ensures WellUpdated(s)
@@ -95,7 +97,15 @@ module InsertImpl {
       }
       return;
     }
-    
+
+    var pivots := rootLookup.value.GetPivots();
+    var bounded := ComputeBoundedKey(pivots, key);
+    if !bounded {
+      success := false;
+      print "giving up; can't insert key at root because root is incorrects";
+      return;
+    }
+
     var weightSeq := MutBucket.computeWeightOfSeq(rootLookup.value.box.Borrow().buckets);
     if WeightKeyUint64(key) + WeightMessageUint64(ValueMessage.Define(value)) + weightSeq
         <= MaxTotalBucketWeightUint64() {

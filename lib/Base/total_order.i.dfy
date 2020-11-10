@@ -209,7 +209,7 @@ abstract module Total_Order refines Total_Preorder {
       StrictlySortedEq(Seq.DropLast(run1), Seq.DropLast(run2));
     }
   }
-  
+
   function LargestLte(run: seq<Element>, needle: Element) : int
     requires IsSorted(run);
     ensures -1 <= LargestLte(run, needle) < |run|;
@@ -483,6 +483,13 @@ abstract module Total_Order refines Total_Preorder {
     reveal_IsStrictlySorted();
   }
 
+  lemma StrictlySortedPrepend(key: Element, run: seq<Element>)
+  requires IsStrictlySorted(run)
+  requires 0 < |run| ==> lt(key, run[0])
+  ensures IsStrictlySorted([key] + run)
+  {
+    reveal_IsStrictlySorted();
+  }
 
   lemma FlattenStrictlySorted(seqs: seq<seq<Element>>)
     requires forall i :: 0 <= i < |seqs| ==> IsStrictlySorted(seqs[i])
@@ -723,18 +730,40 @@ abstract module Total_Order refines Total_Preorder {
 
   function SomeElement() : Element { Min_Element }
 
-  predicate method lte(a: Element, b: Element) {
+  predicate lte(a: Element, b: Element) {
       || a.Min_Element?
       || b.Max_Element?
       || (a.Element? && b.Element? && Base_Order.lte(a.e, b.e))
   }
 
-  predicate method ltedef(a: Element, b: Element) {
+  predicate ltedef(a: Element, b: Element) {
       || a.Min_Element?
       || b.Max_Element?
       || (a.Element? && b.Element? && Base_Order.lte(a.e, b.e))
   }
 }*/
+
+abstract module Upperbounded_Total_Order refines Total_Order {
+  import Base_Order : Total_Order
+  datatype Element = Element(e: Base_Order.Element) | Max_Element
+
+  function SomeElement() : Element { Max_Element }
+
+  function ToElements(es: seq<Base_Order.Element>) : seq<Element>
+  {
+    seq (|es|, i requires 0 <= i < |es| => Element(es[i]))
+  }
+
+  predicate lte(a: Element, b: Element) {
+      || b.Max_Element?
+      || (a.Element? && b.Element? && Base_Order.lte(a.e, b.e))
+  }
+
+  predicate ltedef(a: Element, b: Element) {
+      || b.Max_Element?
+      || (a.Element? && b.Element? && Base_Order.lte(a.e, b.e))
+  }
+}
 
 
 module Integer_Order refines Total_Order {
@@ -812,6 +841,7 @@ module Byte_Order refines Total_Order {
   }
 }
 
+// export lemmas to be reused
 module Lexicographic_Byte_Order refines Total_Order {
   import SeqComparison
   type Element = seq<NativeTypes.byte>
@@ -896,6 +926,27 @@ module Lexicographic_Byte_Order refines Total_Order {
       }
     }
   }
+} // module 
 
+module Upperbounded_Lexicographic_Byte_Order refines Upperbounded_Total_Order {
+  import Base_Order = Lexicographic_Byte_Order
+  import SeqComparison
 
+  lemma SmallestElement() returns (b: Element)
+    ensures b.Element?
+    ensures |b.e| == 0
+    ensures forall a | NotMinimum(a) :: lt(b, a)
+  {
+    SeqComparison.reveal_lte();
+    b := Element([]);
+    forall a | NotMinimum(a)
+      ensures lt(b, a)
+    {
+      var wit := SmallerElement(a);
+      if a == Element([]) {
+        assert lte(a, wit);
+        assert false;
+      }
+    }
+  }
 }

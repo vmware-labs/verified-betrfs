@@ -18,6 +18,7 @@ module GrowImpl {
   import opened BucketsLib
   import opened LinearSequence_s
   import opened LinearSequence_i
+  import opened BoundedPivotsLib
 
   import opened NativeTypes
 
@@ -48,6 +49,13 @@ module GrowImpl {
 
     var oldrootOpt := s.cache.GetOpt(BT.G.Root());
     var oldroot := oldrootOpt.value;
+    var oldpivots := oldroot.GetPivots();
+
+    var containsall := ComputeContainsAllKeys(oldpivots);
+    if !containsall {
+      print "giving up; grow can't run because root node is incorrect";
+      return;
+    }
 
     BookkeepingModel.lemmaChildrenConditionsSingleOfAllocBookkeeping(s.I(), oldroot.Read().children);
     var children := oldroot.GetChildren();
@@ -58,15 +66,14 @@ module GrowImpl {
         print "giving up; could not allocate ref\n";
       }
       case Some(newref) => {
-        //var emptyPkv := PKV.EmptyPkv();
         WeightBucketEmpty();
 
         linear var mutbucket := MutBucket.Alloc();
         linear var buckets := lseq_alloc(1);
         lseq_give_inout(inout buckets, 0, mutbucket);
 
-        var newroot := new Node([], Some([newref]), buckets);
-        assert newroot.I() == IM.Node([], Some([newref]), [B(map[])]);
+        var newroot := new Node(InitPivotTable(), Some([newref]), buckets);
+        assert newroot.I() == BT.G.Node(InitPivotTable(), Some([newref]), [B(map[])]);
         assert s.I().cache[BT.G.Root()] == old(s.I().cache[BT.G.Root()]);
         assert fresh(newroot.Repr);
 

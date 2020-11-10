@@ -17,6 +17,7 @@ module LeafImpl {
   import opened LinearSequence_s
   import opened LinearSequence_i
   import opened BucketsLib
+  import opened BoundedPivotsLib
 
   import opened NativeTypes
 
@@ -50,9 +51,21 @@ module LeafImpl {
       }
     }
 
+    var oldpivots := node.GetPivots();
+    var bounded := node.BoundedBucket(oldpivots, 0);
+    
+    ghost var buckets := node.I().buckets;
+    assert bounded == BoundedBucketList(buckets, oldpivots);
+
+    if !bounded {
+      print "giving up; repivotLeaf can't run because current leaf is incorrect";
+      return;
+    }
+
     var pivot := lseq_peek(node.box.Borrow().buckets, 0).GetMiddleKey();
     pivot := CopyKey(pivot);
-    var pivots := [pivot];
+    var pivots := InitPivotTable();
+    pivots := Insert(pivots, Keyspace.Element(pivot), 1);
 
     linear var left, right := MutBucket.SplitLeftRight(lseq_peek(node.box.Borrow().buckets, 0), pivot);
     linear var buckets' := lseq_alloc(2);
@@ -71,7 +84,7 @@ module LeafImpl {
 
     ghost var a := s.I();
     ghost var b := LeafModel.repivotLeaf(old(s.I()), ref, old(node.I()));
-    assert newnode.I() == old(IM.Node(pivots, None, [
+    assert newnode.I() == old(BT.G.Node(pivots, None, [
           SplitBucketLeft(node.I().buckets[0], pivot),
           SplitBucketRight(node.I().buckets[0], pivot)
         ]));

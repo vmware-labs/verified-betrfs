@@ -17,7 +17,7 @@ include "BucketsLib.i.dfy"
 
 module BucketWeights {
   import Sets
-  import opened PivotsLib
+  import opened BoundedPivotsLib
   import opened Lexicographic_Byte_Order
   import opened ValueMessage`Internal
   import ValueType`Internal
@@ -635,8 +635,8 @@ module BucketWeights {
     }
   }
 
-  function ILeftKeys(pivot: Key) : iset<Key> { iset k | Keyspace.lt(k, pivot) }
-  function IRightKeys(pivot: Key) : iset<Key> { iset k | Keyspace.lte(pivot, k) }
+  function ILeftKeys(pivot: Key) : iset<Key> { iset k | Lexicographic_Byte_Order.lt(k, pivot) }
+  function IRightKeys(pivot: Key) : iset<Key> { iset k | Lexicographic_Byte_Order.lte(pivot, k) }
 
   // used internally
   lemma SplitBucketImage(bucket: Bucket, pivot: Key)
@@ -780,8 +780,8 @@ module BucketWeights {
       WeightBucketList(blist);
     }
   }
-
-  lemma WeightSplitBucketListLeft(blist: BucketList, pivots: seq<Key>, cLeft: int, key: Key)
+  
+  lemma WeightSplitBucketListLeft(blist: BucketList, pivots: PivotTable, cLeft: int, key: Key)
     requires SplitBucketListLeft.requires(blist, pivots, cLeft, key)
     //requires BucketWellMarshalled(blist[cLeft])
     ensures WeightBucketList(SplitBucketListLeft(blist, pivots, cLeft, key))
@@ -808,7 +808,7 @@ module BucketWeights {
     }
   }
 
-  lemma WeightSplitBucketListRight(blist: BucketList, pivots: seq<Key>, cRight: int, key: Key)
+  lemma WeightSplitBucketListRight(blist: BucketList, pivots: PivotTable, cRight: int, key: Key)
     requires SplitBucketListRight.requires(blist, pivots, cRight, key)
     //requires BucketWellMarshalled(blist[cRight])
     ensures WeightBucketList(SplitBucketListRight(blist, pivots, cRight, key))
@@ -840,7 +840,7 @@ module BucketWeights {
   function RouteRange(pivots: PivotTable, i: int) : iset<Key>
     requires WFPivots(pivots)
   {
-    iset k | Route(pivots, k) == i
+    iset k | BoundedKey(pivots, k) && Route(pivots, k) == i
   }
 
   // used internally
@@ -1040,7 +1040,7 @@ module BucketWeights {
     // Keys that route to children < i
     requires WFPivots(pivots)
   {
-    iset k | Route(pivots, k) < i
+    iset k | BoundedKey(pivots, k) && Route(pivots, k) < i
   }
 
   // The sequence axioms were responsible for creating a timeout in the rich
@@ -1122,7 +1122,8 @@ module BucketWeights {
   requires |children| == NumBuckets(pivots)
   requires WFBucket(parent)
   requires BucketWellMarshalled(parent)
-  //requires forall i | 0 <= i < |children| :: WFBucket(children[i])
+  requires forall key | key in parent.b.Keys :: BoundedKey(pivots, key)
+  // requires forall i | 0 <= i < |children| :: WFBucket(children[i])
   requires BucketListWellMarshalled(children)
   ensures WeightBucketList(BucketListFlush(parent, children, pivots))
       <= WeightBucket(parent) + WeightBucketList(children)
@@ -1141,6 +1142,7 @@ module BucketWeights {
   requires WFBucketList(children, pivots)
   requires |children| == NumBuckets(pivots)
   requires WFBucket(parent)
+  requires forall key | key in parent.b.Keys :: BoundedKey(pivots, key)
   //requires forall i | 0 <= i < |children| :: WFBucket(children[i])
   //requires BucketListWellMarshalled(children)
   ensures WeightBucketList(BucketListFlush(parent, children, pivots))
@@ -1508,13 +1510,14 @@ module BucketWeights {
   }
 
   // used internaly
-  lemma WMWeightSplitBucketOnPivots(bucket: Bucket, pivots: seq<Key>)
+  lemma WMWeightSplitBucketOnPivots(bucket: Bucket, pivots: PivotTable)
     requires PreWFBucket(bucket)
+    requires BoundedBucket(bucket, pivots)
     requires BucketWellMarshalled(bucket)
     ensures WeightBucketList(SplitBucketOnPivots(bucket, pivots)) == WeightBucket(bucket)
     decreases |pivots|
   {
-    if |pivots| == 0 {
+    if |pivots| == 2 {
       calc {
         WeightBucketList(SplitBucketOnPivots(bucket, pivots));
         WeightBucketList([B(bucket.b)]);
@@ -1524,17 +1527,24 @@ module BucketWeights {
         WeightBucket(bucket);
       }
     } else {
-      var l := B(map key | key in bucket.b && Keyspace.lt(key, Last(pivots)) :: bucket.b[key]);
-      var r := B(map key | key in bucket.b && Keyspace.lte(Last(pivots), key) :: bucket.b[key]);
+      var piv := GetKey(pivots, NumBuckets(pivots)-1);
+      var pivots' := remove(pivots, NumBuckets(pivots)-1);
+      WFPivotsRemoved(pivots, NumBuckets(pivots)-1);
+
+      var l := SplitBucketLeft(bucket, piv);
+      var r := SplitBucketRight(bucket, piv);
+      reveal_SplitBucketLeft();
+      reveal_SplitBucketRight();
+
       var lKeys := iset k | k in l.b;
       var rKeys := iset k | k in r.b;
       
       calc {
         WeightBucketList(SplitBucketOnPivots(bucket, pivots));  // defn.
-        WeightBucketList(SplitBucketOnPivots(l, DropLast(pivots)) + [r]);  // defn.
-          { WeightBucketListConcatOne(SplitBucketOnPivots(l, DropLast(pivots)), r); } // break off tail
-        WeightBucketList(SplitBucketOnPivots(l, DropLast(pivots))) + WeightBucket(r);
-          { WMWeightSplitBucketOnPivots(l, DropLast(pivots)); }
+        WeightBucketList(SplitBucketOnPivots(l, pivots') + [r]);  // defn.
+          { WeightBucketListConcatOne(SplitBucketOnPivots(l, pivots'), r); } // break off tail
+        WeightBucketList(SplitBucketOnPivots(l, pivots')) + WeightBucket(r);
+          { WMWeightSplitBucketOnPivots(l, pivots'); }
         WeightBucket(l) + WeightBucket(r);
           {
             ImageTrim(bucket, lKeys, l);
@@ -1551,8 +1561,10 @@ module BucketWeights {
     }
   }
 
-  lemma WeightSplitBucketOnPivots(bucket: Bucket, pivots: seq<Key>)
+  lemma WeightSplitBucketOnPivots(bucket: Bucket, pivots: PivotTable)
     requires PreWFBucket(bucket)
+    requires WFPivots(pivots)
+    requires BoundedBucket(bucket, pivots)
     ensures WeightBucketList(SplitBucketOnPivots(bucket, pivots)) <= WeightBucket(bucket)
     decreases |pivots|
   {
@@ -1560,6 +1572,8 @@ module BucketWeights {
     ImageMapIdentity(bucket, AllKeys());
     WeightWellMarshalledLe(bucket, wmbucket);
     WMWeightSplitBucketOnPivots(wmbucket, pivots);
+    reveal_SplitBucketLeft();
+    reveal_SplitBucketRight();
   }
   
   // used (in KVList)
@@ -1634,6 +1648,7 @@ module BucketWeights {
   // used internally
   lemma WMWeightBucketListInsert(blist: BucketList, pivots: PivotTable, key: Key, msg: Message)
     requires WFBucketList(blist, pivots)
+    requires BoundedKey(pivots, key)
     requires BucketWellMarshalled(blist[Route(pivots, key)])
     ensures WeightBucketList(BucketListInsert(blist, pivots, key, msg)) <=
     WeightBucketList(blist) + WeightKey(key) + WeightMessage(msg)
@@ -1676,6 +1691,7 @@ module BucketWeights {
 
   lemma WeightBucketListInsert(blist: BucketList, pivots: PivotTable, key: Key, msg: Message)
     requires WFBucketList(blist, pivots)
+    requires BoundedKey(pivots, key)
     ensures WeightBucketList(BucketListInsert(blist, pivots, key, msg)) <=
     WeightBucketList(blist) + WeightKey(key) + WeightMessage(msg)
   {
@@ -1687,8 +1703,7 @@ module BucketWeights {
     ImageMapIdentity(bucket, AllKeys());
     WeightWellMarshalledLe(bucket, wmbucket);
     assert BucketListInsert(blist', pivots, key, msg) == BucketListInsert(blist, pivots, key, msg);
-    
-    
+  
     WeightWellMarshalledListPointwiseLe(blist, blist');
     WMWeightBucketListInsert(blist', pivots, key, msg);
   }

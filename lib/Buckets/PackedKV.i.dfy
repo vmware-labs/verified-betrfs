@@ -7,6 +7,7 @@ module PackedKV {
   import opened NativeTypes
   import KeyspaceImpl = Lexicographic_Byte_Order_Impl
   import Keyspace = KeyspaceImpl.Ord
+  import P = BoundedPivotsLib
   import opened KeyType
   import opened ValueType`Internal
   import opened ValueMessage`Internal
@@ -439,17 +440,6 @@ module PackedKV {
       PSA.psaAppendTotalLength(prepsa, Last(ipsa));
     }
   }
-  
-  function pivotIndexes(keys: seq<Key>, pivots: seq<Key>) : (result: seq<nat>)
-    requires Keyspace.IsStrictlySorted(keys)
-    ensures |result| == |pivots|
-    ensures forall i | 0 <= i < |result| :: result[i] == Keyspace.IndexOfFirstGte(keys, pivots[i])
-  {
-    if |pivots| == 0 then
-      []
-    else
-      pivotIndexes(keys, Sequences.DropLast(pivots)) + [ Keyspace.IndexOfFirstGte(keys, Last(pivots)) ]
-  }
 }
 
 module DynamicPkv {
@@ -461,8 +451,8 @@ module DynamicPkv {
   import opened NativeTypes
   import Seq = Sequences
   import Uint64_Order
-  import LexOrder = Lexicographic_Byte_Order
   import opened BucketsLib
+  import P = BoundedPivotsLib
   import BucketModel
   import opened BucketWeights
   import opened Bounds
@@ -1095,7 +1085,7 @@ module DynamicPkv {
   requires 0 < |bots|
   requires results.Length == |bots|
   requires 0 <= i as int <= |bots|
-  requires |idxs| == |bots| - 1
+  requires |idxs| == |bots| + 1
   requires forall i | 0 <= i < |idxs| :: 0 <= idxs[i] as int <= |PKV.IKeys(top.keys)|
   requires tmp.SlackExhausted? ==> 0 <= tmp.end as int <= |PKV.IKeys(top.keys)|
   requires tmp.WF()
@@ -1138,8 +1128,8 @@ module DynamicPkv {
       }
     } else {
       if tmp.MergeCompleted? {
-        var from := if i == 0 then 0 else idxs[i-1];
-        var to1 := if i == |idxs| as uint64 then PKV.NumKVPairs(top) else idxs[i];
+        var from := idxs[i];
+        var to1 := idxs[i+1];
         var to := if to1 < from then from else to1;
 
         WeightIthBucketLe(bots, i);
@@ -1192,23 +1182,23 @@ module DynamicPkv {
     }
   }
 
-  method computePivotIndexes(keys: PSA.Psa, pivots: seq<Key>)
+  method computePivotIndexes(keys: PSA.Psa, pivots: P.PivotTable)
   returns (pivotIdxs: seq<uint64>)
     requires PSA.WF(keys)
     requires |PSA.I(keys)| < Uint64UpperBound()
-    requires |pivots| < Uint64UpperBound() - 1
+    requires |pivots| < Uint64UpperBound()
     ensures |pivotIdxs| == |pivots|
-    ensures forall i | 0 <= i < |pivots| :: pivotIdxs[i] as nat
-        == LexOrder.binarySearchIndexOfFirstKeyGte(PSA.I(keys), pivots[i])
+    ensures forall i | 0 <= i < |pivotIdxs| :: pivotIdxs[i] as nat
+        == P.Keyspace.binarySearchIndexOfFirstKeyGte(P.Keyspace.ToElements(PSA.I(keys)), pivots[i])
   {
     var results := new uint64[|pivots| as uint64];
     var i : uint64 := 0;
     while i < |pivots| as uint64
       invariant i <= |pivots| as uint64
       invariant forall j | 0 <= j < i :: results[j] as nat
-          == LexOrder.binarySearchIndexOfFirstKeyGte(PSA.I(keys), pivots[j])
+          == P.Keyspace.binarySearchIndexOfFirstKeyGte(P.Keyspace.ToElements(PSA.I(keys)), pivots[j as int])
     {
-      results[i] := PSA.BinarySearchIndexOfFirstKeyGte(keys, pivots[i]);
+      results[i] := PSA.BinarySearchIndexOfFirstKeyGtePivot(keys, pivots[i]);
       i := i + 1;
     }
 
@@ -1217,7 +1207,7 @@ module DynamicPkv {
  
   method MergeToChildren(
       top: PKV.Pkv,
-      pivots: seq<Key>,
+      pivots: P.PivotTable,
       bots: seq<PKV.Pkv>,
       slack: uint64)
   returns (result: MergeResult)
@@ -1225,7 +1215,8 @@ module DynamicPkv {
   requires forall i | 0 <= i < |bots| :: PKV.WF(bots[i])
   requires 0 <= |PKV.IKeys(top.keys)| < 0x1000_0000
   requires forall i | 0 <= i < |bots| :: |PKV.IKeys(bots[i].keys)| < 0x1000_0000
-  requires 0 < |bots| == |pivots| + 1 < Uint64UpperBound()
+  requires |pivots| < Uint64UpperBound()
+  requires 0 < |bots| == P.NumBuckets(pivots)
   requires WeightBucketList(PKVISeq(bots)) + slack as int == MaxTotalBucketWeight()
 
   ensures result.WF()
@@ -1233,7 +1224,6 @@ module DynamicPkv {
       PKV.I(top), pivots, PKVISeq(bots), slack as int)
   {
     BucketModel.reveal_mergeToChildren();
-
     var idxs := computePivotIndexes(top.keys, pivots);
     var tmp := MergeCompleted(PKV.EmptyPkv(), slack);
     var ar := new PKV.Pkv[|bots| as uint64];
@@ -1262,14 +1252,15 @@ module DynamicPkv {
 
   method PartialFlush(
       top: PKV.Pkv,
-      pivots: seq<Key>,
+      pivots: P.PivotTable,
       bots: seq<PKV.Pkv>)
   returns (result: PartialFlushResult)
   requires PKV.WF(top)
   requires forall i | 0 <= i < |bots| :: PKV.WF(bots[i])
   requires 0 <= |PKV.IKeys(top.keys)| < 0x1000_0000
   requires forall i | 0 <= i < |bots| :: |PKV.IKeys(bots[i].keys)| < 0x1000_0000
-  requires 0 < |bots| == |pivots| + 1 < Uint64UpperBound()
+  requires |pivots| < Uint64UpperBound()
+  requires 0 < |bots| == P.NumBuckets(pivots)
   requires WeightBucketList(PKVISeq(bots)) <= MaxTotalBucketWeight()
   ensures result.WF()
   ensures result.I() == BucketModel.partialFlush(

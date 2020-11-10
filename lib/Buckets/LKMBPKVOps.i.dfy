@@ -321,8 +321,8 @@ module LKMBPKVOps {
         { FlattenSingleton(childSeqs.1[i]); }
         PKV.PSA.psaAppendSeq(oldpkvmsgs, ValueMessage.messageSeq_to_bytestringSeq(Flatten(childSeqs.1[..i]) + Flatten([ childSeqs.1[i] ])));
         { FlattenAdditive(childSeqs.1[..i], [ childSeqs.1[i] ]); }
-        assert childSeqs.1[..i+1] == childSeqs.1[..i] + [ childSeqs.1[i] ];
         PKV.PSA.psaAppendSeq(oldpkvmsgs, ValueMessage.messageSeq_to_bytestringSeq(Flatten(childSeqs.1[..i] + [ childSeqs.1[i] ])));
+        assert childSeqs.1[..i+1] == childSeqs.1[..i] + [ childSeqs.1[i] ];
         PKV.PSA.psaAppendSeq(oldpkvmsgs, ValueMessage.messageSeq_to_bytestringSeq(Flatten(childSeqs.1[..i+1])));
       }
       

@@ -1,5 +1,4 @@
 include "BucketsLib.i.dfy"
-include "PivotsLib.i.dfy"
 include "BucketWeights.i.dfy"
 include "../Base/Message.i.dfy"
 include "../Base/Maps.i.dfy"
@@ -11,9 +10,8 @@ include "../../PivotBetree/Bounds.i.dfy"
 module BucketModel {
   import opened BucketsLib
   import opened BucketWeights
-  import opened PivotsLib
-  import opened Lexicographic_Byte_Order
-  import Keyspace = Lexicographic_Byte_Order
+  import opened BoundedPivotsLib
+  import opened Lexi = Lexicographic_Byte_Order
   import opened ValueMessage
   import opened Maps
   import opened Sequences
@@ -92,6 +90,7 @@ module BucketModel {
   ensures |result.keys| == |result.msgs|
   ensures result.SlackExhausted? ==> from <= result.end <= to
   {
+    // case 1: all relevant keys in the parent bucket is merged
     if from == to then
       MergeCompleted(
         acc_keys + bot_keys[bot_from..],
@@ -102,6 +101,8 @@ module BucketModel {
     //    acc_keys + top_keys[from..to],
     //    acc_msgs + top_msgs[from..to],
     //    slack)
+    // case 2: mergeable key at the child's bucket
+    // same key in parent and child, can merge message
     else if bot_from < |bot_keys| &&
         top_keys[from] == bot_keys[bot_from] then
       var key := top_keys[from];
@@ -125,8 +126,9 @@ module BucketModel {
               acc_keys + [key], acc_msgs + [msg],
               slack - delta)
       )
+    // case 3: no more keys to go through at the child, just take parent key, msg
     else if bot_from == |bot_keys| ||
-        Keyspace.lt(top_keys[from], bot_keys[bot_from]) then
+        Lexi.lt(top_keys[from], bot_keys[bot_from]) then
       var key := top_keys[from];
       var msg := top_msgs[from];
       var delta := WeightKey(key) + WeightMessage(msg);
@@ -138,6 +140,7 @@ module BucketModel {
             bot_keys, bot_msgs, bot_from,
             acc_keys + [key], acc_msgs + [msg],
             slack - delta)
+    // case 4: no mergeable keys from parent, just take child key and message
     else
       var key := bot_keys[bot_from];
       var msg := bot_msgs[bot_from];
@@ -174,7 +177,7 @@ module BucketModel {
       keys: seq<Key>, msgs: seq<Message>, key: Key, msg: Message)
   requires |keys| == |msgs|
   requires IsStrictlySorted(keys)
-  requires forall k | k in keys :: Keyspace.lt(k, key)
+  requires forall k | k in keys :: Lexi.lt(k, key)
   ensures BucketMapOfSeq(keys + [key], msgs + [msg])
        == BucketMapOfSeq(keys, msgs)[key := msg]
   ensures key !in BucketMapOfSeq(keys, msgs)
@@ -182,7 +185,7 @@ module BucketModel {
     reveal_BucketMapOfSeq();
     if key in BucketMapOfSeq(keys, msgs) {
       var i := BucketMapOfSeqGetIndex(keys, msgs, key);
-      assert Keyspace.lt(keys[i], key);
+      assert Lexi.lt(keys[i], key);
     }
   }
 
@@ -258,7 +261,7 @@ module BucketModel {
   requires 0 <= start <= |b|
   {
     forall i, j | 0 <= i < |a| && start <= j < |b| ::
-      Keyspace.lt(a[i], b[j])
+      Lexi.lt(a[i], b[j])
   }
 
   lemma topBotAccMerge_concat_lists(
@@ -508,7 +511,7 @@ module BucketModel {
           }
         }
       }
-    } else if bot_from == |bot_keys| || Keyspace.lt(top_keys[from], bot_keys[bot_from]) {
+    } else if bot_from == |bot_keys| || Lexi.lt(top_keys[from], bot_keys[bot_from]) {
       var key := top_keys[from];
       var msg := top_msgs[from];
       var delta := WeightKey(key) + WeightMessage(msg);
@@ -598,16 +601,18 @@ module BucketModel {
     }
   }
 
-  function bucketStartIdx(top_keys: seq<Key>, pivots: PivotTable, r: int) : int
-  requires 0 <= r <= |pivots|
+  function bucketStartIdx(top_keys: seq<Key>, pivots: PivotTable, r: int) : (i: int)
+  requires WFPivots(pivots)
+  requires 0 <= r < NumBuckets(pivots)
   {
-    if r == 0 then 0 else binarySearchIndexOfFirstKeyGte(top_keys, pivots[r-1])
+    Keyspace.binarySearchIndexOfFirstKeyGte(KeysToElements(top_keys), pivots[r])
   }
 
-  function bucketEndIdx(top_keys: seq<Key>, pivots: PivotTable, r: int) : int
-  requires 0 <= r <= |pivots|
+  function bucketEndIdx(top_keys: seq<Key>, pivots: PivotTable, r: int) : (i: int)
+  requires WFPivots(pivots)
+  requires 0 <= r < NumBuckets(pivots)
   {
-    if r < |pivots| then binarySearchIndexOfFirstKeyGte(top_keys, pivots[r]) else |top_keys|
+    Keyspace.binarySearchIndexOfFirstKeyGte(KeysToElements(top_keys), pivots[r+1])
   }
 
   lemma mergeToOneOneChild_eq_BucketList(
@@ -623,15 +628,15 @@ module BucketModel {
   requires |top_keys| == |top_msgs|
   requires |bot_keys| == |bot_msgs|
   requires from <= to <= |top_keys|
-  requires 0 <= r <= |pivots|
+  requires 0 <= r < NumBuckets(pivots)
+  requires WFPivots(pivots)
   requires from == bucketStartIdx(top_keys, pivots, r)
   requires to == bucketEndIdx(top_keys, pivots, r)
   requires IsStrictlySorted(top_keys)
   requires IsStrictlySorted(bot_keys)
   requires forall i | 0 <= i < |bot_msgs| :: bot_msgs[i] != IdentityMessage()
   requires forall i | 0 <= i < |top_msgs| :: top_msgs[i] != IdentityMessage()
-  requires WFPivots(pivots)
-  requires forall i | 0 <= i < |bot_keys| :: Route(pivots, bot_keys[i]) == r
+  requires forall i | 0 <= i < |bot_keys| :: BoundedKey(pivots, bot_keys[i]) && Route(pivots, bot_keys[i]) == r
   ensures
       var res := mergeToOneChild(
             top_keys, top_msgs, from, to,
@@ -651,7 +656,6 @@ module BucketModel {
           [], [], slack);
     var top := BucketMapOfSeq(top_keys, top_msgs);
     var bot := BucketMapOfSeq(bot_keys, bot_msgs);
-
     var itop := BucketIntersect(B(top), res.flushedKeys(top_keys, top_msgs, from, to));
 
     calc {
@@ -668,6 +672,7 @@ module BucketModel {
         ensures k in a
         {
           reveal_BucketIntersect();
+          reveal_IsStrictlySorted();
           RouteIs(pivots, k, r);
         }
       }
@@ -794,7 +799,7 @@ module BucketModel {
         }
       }
     } else if bot_from == |bot_keys| ||
-        Keyspace.lt(top_keys[from], bot_keys[bot_from]) {
+        Lexi.lt(top_keys[from], bot_keys[bot_from]) {
       var key := top_keys[from];
       var msg := top_msgs[from];
       var delta := WeightKey(key) + WeightMessage(msg);
@@ -885,7 +890,7 @@ module BucketModel {
         }
       }
     } else if bot_from == |bot_keys| ||
-        Keyspace.lt(top_keys[from], bot_keys[bot_from]) {
+        Lexi.lt(top_keys[from], bot_keys[bot_from]) {
       var key := top_keys[from];
       var msg := top_msgs[from];
       var delta := WeightKey(key) + WeightMessage(msg);
@@ -909,17 +914,17 @@ module BucketModel {
     }
   }
 
-
-  function pivotIndexes(top_keys: seq<Key>, pivots: seq<Key>) : (res: seq<int>)
+ function pivotIndexes(top_keys: seq<Key>, pivots: PivotTable) : (res: seq<int>)
   ensures |res| == |pivots|
   ensures forall i | 0 <= i < |res| :: res[i]
-      == binarySearchIndexOfFirstKeyGte(top_keys, pivots[i])
+      == Keyspace.binarySearchIndexOfFirstKeyGte(KeysToElements(top_keys), pivots[i])
+  decreases |pivots|
   {
-    if |pivots| == 0 then (
-      []
-    ) else (
+    if |pivots| == 0 
+    then []
+    else (
       pivotIndexes(top_keys, DropLast(pivots)) +
-        [binarySearchIndexOfFirstKeyGte(top_keys, Last(pivots))]
+      [ Keyspace.binarySearchIndexOfFirstKeyGte(KeysToElements(top_keys), Last(pivots)) ]
     )
   }
 
@@ -940,7 +945,7 @@ module BucketModel {
   requires 0 < |bots|
   requires |results| == i
   requires 0 <= i <= |bots|
-  requires |idxs| == |bots| - 1
+  requires |idxs| == |bots|+1
   requires forall i | 0 <= i < |idxs| :: 0 <= idxs[i] <= |top.keys|
   requires tmp.SlackExhausted? ==> 0 <= tmp.end <= |top.keys|
   decreases |bots| - i
@@ -955,8 +960,8 @@ module BucketModel {
       )
     ) else (
       if tmp.MergeCompleted? then (
-        var from := if i == 0 then 0 else idxs[i-1];
-        var to1 := if i == |idxs| then |top.keys| else idxs[i];
+        var from := idxs[i];
+        var to1 := idxs[i+1];
         var to := if to1 < from then from else to1;
         var tmp' := mergeToOneChild(
             top.keys, top.msgs, from, to,
@@ -973,12 +978,12 @@ module BucketModel {
  
   function {:opaque} mergeToChildren(
       top: Bucket,
-      pivots: seq<Key>,
+      pivots: PivotTable,
       bots: seq<Bucket>,
       slack: nat) : (result: mergeResult)
   requires WFBucket(top)
   requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
-  requires 0 < |bots| == |pivots| + 1
+  requires 0 < |bots| == NumBuckets(pivots)
   ensures |result.bots| == |bots|
   {
     var idxs := pivotIndexes(top.keys, pivots);
@@ -986,8 +991,9 @@ module BucketModel {
     mergeToChildrenIter(top, bots, idxs, tmp, 0, [])
   }
 
-  function getFlushedKeys(tmp: singleMergeResult, top: Bucket) : set<Key>
+  function getFlushedKeys(tmp: singleMergeResult, top: Bucket) : (keys: set<Key>)
   requires tmp.SlackExhausted? ==> tmp.end <= |top.keys|
+  ensures forall k | k in keys :: k in top.keys
   {
     if tmp.SlackExhausted? then (
       set i | 0 <= i < tmp.end :: top.keys[i]
@@ -1045,13 +1051,13 @@ module BucketModel {
     }
   }
 
-  lemma BucketListItemFlush_eq(top: Bucket, keys1: set<Key>, keys2: set<Key>, bot: Bucket, pivots: seq<Key>, i: int)
-  requires 0 <= i <= |pivots|
+  lemma BucketListItemFlush_eq(top: Bucket, keys1: set<Key>, keys2: set<Key>, bot: Bucket, pivots: PivotTable, i: int)
+  requires 0 <= i < NumBuckets(pivots)
   requires WFBucket(top)
   requires WFBucket(bot)
   requires WFPivots(pivots)
-  requires forall k | Route(pivots, k) == i && k in keys1 :: k in keys2
-  requires forall k | Route(pivots, k) == i && k in keys2 :: k in keys1
+  requires forall k | BoundedKey(pivots, k) && Route(pivots, k) == i && k in keys1 :: k in keys2
+  requires forall k | BoundedKey(pivots, k) && Route(pivots, k) == i && k in keys2 :: k in keys1
   ensures BucketListItemFlush(BucketIntersect(top, keys1), bot, pivots, i)
        == BucketListItemFlush(BucketIntersect(top, keys2), bot, pivots, i)
   {
@@ -1060,27 +1066,28 @@ module BucketModel {
 
   lemma mergeToChildrenIterCorrect(
       top: Bucket,
-      pivots: seq<Key>,
+      pivots: PivotTable,
       bots: seq<Bucket>,
       idxs: seq<int>,
       tmp: singleMergeResult,
       i: int,
       results: seq<Bucket>)
   returns (flushedKeys: set<Key>)
+  requires WFPivots(pivots)
   requires WFBucket(top)
+  requires forall k | k in top.keys :: BoundedKey(pivots, k)
   requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
-  requires 0 < |bots| == |pivots| + 1
+  requires 0 < |bots| == NumBuckets(pivots)
   requires |results| == i
-  requires |idxs| == |pivots|
+  requires |idxs| == |bots|+1
   requires 0 <= i <= |bots|
   requires forall i | 0 <= i < |idxs| ::
-    idxs[i] == binarySearchIndexOfFirstKeyGte(top.keys, pivots[i])
+    idxs[i] == Keyspace.binarySearchIndexOfFirstKeyGte(KeysToElements(top.keys), pivots[i])
   requires tmp.SlackExhausted? ==> 0 <= tmp.end <= |top.keys|
   requires IsStrictlySorted(top.keys)
   requires forall i | 0 <= i < |bots| :: IsStrictlySorted(bots[i].keys)
-  requires WFPivots(pivots)
   requires WFBucketListProper(bots, pivots)
-  requires i <= |pivots| ==> tmp.SlackExhausted? ==> tmp.end <= bucketStartIdx(top.keys, pivots, i)
+  requires i < NumBuckets(pivots) ==> tmp.SlackExhausted? ==> tmp.end <= bucketStartIdx(top.keys, pivots, i)
   requires forall r | 0 <= r < i :: results[r] ==
       BucketListItemFlush(BucketIntersect(top, getFlushedKeys(tmp, top)), bots[r], pivots, r)
 
@@ -1091,6 +1098,7 @@ module BucketModel {
     && res.top == BucketComplement(top, flushedKeys)
     && forall r | 0 <= r < |res.bots| :: res.bots[r] ==
       BucketListItemFlush(BucketIntersect(top, flushedKeys), bots[r], pivots, r)
+  ensures forall k | k in flushedKeys :: k in top.keys
   {
     if i == |bots| {
       flushedKeys := getFlushedKeys(tmp, top);
@@ -1116,66 +1124,43 @@ module BucketModel {
       }
     } else {
       if tmp.MergeCompleted? {
-        var from := if i == 0 then 0 else idxs[i-1];
-        var to1 := if i == |idxs| then |top.keys| else idxs[i];
-
+        var from := idxs[i];
+        var to := idxs[i+1];
         assert from == bucketStartIdx(top.keys, pivots, i);
-        assert to1 == bucketEndIdx(top.keys, pivots, i);
-        assert from <= to1 by { reveal_IsStrictlySorted(); }
-
-        var to := if to1 < from then from else to1;
-        assert to == to1;
+        assert to == bucketEndIdx(top.keys, pivots, i);
+        assert from <= to by {
+          reveal_IsStrictlySorted(); 
+          Keyspace.reveal_IsStrictlySorted(); 
+        }
 
         var tmp' := mergeToOneChild(
             top.keys, top.msgs, from, to,
             bots[i].keys, bots[i].msgs, 0,
             [], [], tmp.slack);
-
         all_msgs_not_eq_identity(top);
         all_msgs_not_eq_identity(bots[i]);
-        forall j | 0 <= j < |bots[i].keys|
-        ensures Route(pivots, bots[i].keys[j]) == i
-        {
-          assert WFBucketAt(bots[i], pivots, i);
-          assert bots[i].keys[j] in bots[i].b;
-        }
         mergeToOneOneChild_eq_BucketList(top.keys, top.msgs, from, to,
             bots[i].keys, bots[i].msgs, tmp.slack, pivots, i);
 
-        var results' := results + [BucketOfSeq(tmp'.keys, tmp'.msgs)];
-        var res := mergeToChildrenIter(top, bots, idxs, tmp', i+1, results');
-
-        forall r | 0 <= r < i
-        ensures results[r] ==
-          BucketListItemFlush(BucketIntersect(top, getFlushedKeys(tmp', top)), bots[r], pivots, r)
+        // show tmp' key range
+        forall k | k in top.keys && Route(pivots, k) < i 
+        ensures k in getFlushedKeys(tmp', top)
         {
-          calc {
-            results[r];
-            BucketListItemFlush(BucketIntersect(top, getFlushedKeys(tmp, top)), bots[r], pivots, r);
-            {
-              if tmp'.SlackExhausted? {
-                assert tmp'.end >= from;
-              }
-              reveal_BucketIntersect();
-              assert WFBucketAt(bots[r], pivots, r);
-              forall k | Route(pivots, k) == r
-                && k in getFlushedKeys(tmp', top)
-              ensures k in getFlushedKeys(tmp, top)
-              {
-              }
-              forall k | Route(pivots, k) == r
-                && k in getFlushedKeys(tmp, top)
-              ensures k in getFlushedKeys(tmp', top)
-              {
-              }
-              BucketListItemFlush_eq(top, 
-                getFlushedKeys(tmp', top),
-                getFlushedKeys(tmp, top),
-                bots[r], pivots, r);
-            }
-            BucketListItemFlush(BucketIntersect(top, getFlushedKeys(tmp', top)), bots[r], pivots, r);
+          if tmp'.SlackExhausted? && tmp'.end < |top.keys| {
+            reveal_IsStrictlySorted();
           }
         }
+        // show previous results hold up
+        var results' := results + [BucketOfSeq(tmp'.keys, tmp'.msgs)];
+        forall r | 0 <= r < i
+        ensures results'[r] ==
+          BucketListItemFlush(BucketIntersect(top, getFlushedKeys(tmp', top)), bots[r], pivots, r) {
+          BucketListItemFlush_eq(top, 
+            getFlushedKeys(tmp', top),
+            getFlushedKeys(tmp, top), 
+            bots[r], pivots, r);
+        }
+        // show current result
         calc {
           results'[i];
           {
@@ -1217,12 +1202,13 @@ module BucketModel {
               assert tmp'.end >= from;
             }
             assert WFBucketAt(bots[i], pivots, i);
-            forall k | Route(pivots, k) == i
+            forall k | BoundedKey(pivots, k) && Route(pivots, k) == i
               && k in getFlushedKeys(tmp', top)
             ensures k in tmp'.flushedKeys(top.keys, top.msgs, from, to)
             {
+              reveal_IsStrictlySorted();
             }
-            forall k | Route(pivots, k) == i
+            forall k | BoundedKey(pivots, k) && Route(pivots, k) == i
               && k in tmp'.flushedKeys(top.keys, top.msgs, from, to)
             ensures k in getFlushedKeys(tmp', top)
             {
@@ -1241,17 +1227,10 @@ module BucketModel {
             pivots, i
           );
         }
-
         flushedKeys := mergeToChildrenIterCorrect(top, pivots, bots, idxs, tmp', i+1, results');
       } else {
         var results' := results + [bots[i]];
         var res := mergeToChildrenIter(top, bots, idxs, tmp, i+1, results');
-
-        forall r | 0 <= r < i
-        ensures results[r] ==
-          BucketListItemFlush(BucketIntersect(top, getFlushedKeys(tmp, top)), bots[r], pivots, r)
-        {
-        }
         calc {
           results'[i];
           bots[i];
@@ -1273,7 +1252,8 @@ module BucketModel {
           }
           BucketListItemFlush(BucketIntersect(top, {}), bots[i], pivots, i);
           {
-            BucketListItemFlush_eq(top, 
+            reveal_IsStrictlySorted();
+            BucketListItemFlush_eq(top,
               getFlushedKeys(tmp, top),
               {},
               bots[i], pivots, i);
@@ -1281,13 +1261,13 @@ module BucketModel {
           BucketListItemFlush(BucketIntersect(top, getFlushedKeys(tmp, top)), bots[i], pivots, i);
         }
 
-        if i+1 <= |pivots| {
-          assert bucketStartIdx(top.keys, pivots, i)
-              <= bucketStartIdx(top.keys, pivots, i+1) by {
+        if i+1 < NumBuckets(pivots) {
+          assert bucketStartIdx(top.keys, pivots, i) <= bucketStartIdx(top.keys, pivots, i+1)
+          by {
             reveal_IsStrictlySorted();
+            Keyspace.reveal_IsStrictlySorted();
           }
         }
-
         flushedKeys := mergeToChildrenIterCorrect(top, pivots, bots, idxs, tmp, i+1, results');
       }
     }
@@ -1306,7 +1286,7 @@ module BucketModel {
   requires 0 < |bots|
   requires |results| == i
   requires 0 <= i <= |bots|
-  requires |idxs| == |bots| - 1
+  requires |idxs| == |bots|+1
   requires forall i | 0 <= i < |idxs| :: 0 <= idxs[i] <= |top.keys|
   requires tmp.SlackExhausted? ==> 0 <= tmp.end <= |top.keys|
 
@@ -1356,8 +1336,8 @@ module BucketModel {
       assert WeightBucketList([]) == 0 by { reveal_WeightBucketList(); }
 
       if tmp.MergeCompleted? {
-        var from := if i == 0 then 0 else idxs[i-1];
-        var to1 := if i == |idxs| then |top.keys| else idxs[i];
+        var from := idxs[i];
+        var to1 := idxs[i+1];
         var to := if to1 < from then from else to1;
 
         var tmp' := mergeToOneChild(
@@ -1420,7 +1400,7 @@ module BucketModel {
   requires 0 < |bots|
   requires |results| == i
   requires 0 <= i <= |bots|
-  requires |idxs| == |bots| - 1
+  requires |idxs| == |bots|+1
   requires forall i | 0 <= i < |idxs| :: 0 <= idxs[i] <= |top.keys|
   requires tmp.SlackExhausted? ==> 0 <= tmp.end <= |top.keys|
 
@@ -1441,8 +1421,8 @@ module BucketModel {
       WFBucketMapOfWFMessageSeq(res.top.keys, res.top.msgs);
     } else {
       if tmp.MergeCompleted? {
-        var from := if i == 0 then 0 else idxs[i-1];
-        var to1 := if i == |idxs| then |top.keys| else idxs[i];
+        var from := idxs[i];
+        var to1 := idxs[i+1];
         var to := if to1 < from then from else to1;
 
         var tmp' := mergeToOneChild(
@@ -1467,23 +1447,25 @@ module BucketModel {
  
   lemma mergeToChildrenCorrect(
       top: Bucket,
-      pivots: seq<Key>,
+      pivots: PivotTable,
       bots: seq<Bucket>,
       slack: nat)
   returns (flushedKeys: set<Key>)
 
   requires WFBucket(top)
   requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
-  requires 0 < |bots| == |pivots| + 1
+  requires 0 < |bots| == NumBuckets(pivots)
   requires BucketWellMarshalled(top)
   requires forall i | 0 <= i < |bots| :: BucketWellMarshalled(bots[i])
   requires WFPivots(pivots)
   requires WFBucketListProper(bots, pivots)
+  requires forall k | k in top.keys :: BoundedKey(pivots, k)
 
   ensures var res := mergeToChildren(top, pivots, bots, slack);
     && res.top == BucketComplement(top, flushedKeys)
     && res.bots ==
       BucketListFlush(BucketIntersect(top, flushedKeys), bots, pivots)
+  ensures forall k | k in flushedKeys :: k in top.keys
   {
     reveal_mergeToChildren();
     var idxs := pivotIndexes(top.keys, pivots);
@@ -1511,12 +1493,13 @@ module BucketModel {
  
   lemma mergeToChildrenSlack(
       top: Bucket,
-      pivots: seq<Key>,
+      pivots: PivotTable,
       bots: seq<Bucket>,
       slack: nat)
+  requires WFPivots(pivots)
   requires WFBucket(top)
   requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
-  requires 0 < |bots| == |pivots| + 1
+  requires 0 < |bots| == NumBuckets(pivots)
   ensures var res := mergeToChildren(top, pivots, bots, slack);
     && WFBucket(res.top)
     && |res.bots| == |bots|
@@ -1533,14 +1516,15 @@ module BucketModel {
  
   lemma mergeToChildrenPreservesSorted(
       top: Bucket,
-      pivots: seq<Key>,
+      pivots: PivotTable,
       bots: seq<Bucket>,
       slack: nat)
+  requires WFPivots(pivots)
   requires WFBucket(top)
   requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
   requires IsStrictlySorted(top.keys)
   requires forall i | 0 <= i < |bots| :: IsStrictlySorted(bots[i].keys)
-  requires 0 < |bots| == |pivots| + 1
+  requires 0 < |bots| == NumBuckets(pivots)
   ensures var res := mergeToChildren(top, pivots, bots, slack);
       && IsStrictlySorted(res.top.keys)
       && forall i | 0 <= i < |res.bots| :: IsStrictlySorted(res.bots[i].keys)
@@ -1555,11 +1539,11 @@ module BucketModel {
 
   function {:opaque} partialFlush(
       top: Bucket,
-      pivots: seq<Key>,
+      pivots: PivotTable,
       bots: seq<Bucket>) : (res : partialFlushResult)
   requires WFBucket(top)
   requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
-  requires 0 < |bots| == |pivots| + 1
+  requires 0 < |bots| == NumBuckets(pivots)
   requires WeightBucketList(bots) <= MaxTotalBucketWeight()
   ensures |res.bots| == |bots|
   {
@@ -1570,21 +1554,24 @@ module BucketModel {
 
   lemma partialFlushCorrect(
       top: Bucket,
-      pivots: seq<Key>,
+      pivots: PivotTable,
       bots: seq<Bucket>)
   returns (flushedKeys: set<Key>)
+  requires WFPivots(pivots)
   requires WFBucket(top)
   requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
-  requires 0 < |bots| == |pivots| + 1
+  requires 0 < |bots| == NumBuckets(pivots)
   requires BucketWellMarshalled(top)
   requires forall i | 0 <= i < |bots| :: BucketWellMarshalled(bots[i])
   requires WFPivots(pivots)
   requires WFBucketListProper(bots, pivots)
   requires WeightBucketList(bots) <= MaxTotalBucketWeight()
+  requires forall k | k in top.keys :: BoundedKey(pivots, k)
   ensures var res := partialFlush(top, pivots, bots);
     && res.top == BucketComplement(top, flushedKeys)
     && res.bots ==
       BucketListFlush(BucketIntersect(top, flushedKeys), bots, pivots)
+  ensures forall k | k in flushedKeys :: k in top.keys
   {
     reveal_partialFlush();
     flushedKeys := mergeToChildrenCorrect(
@@ -1593,11 +1580,12 @@ module BucketModel {
 
   lemma partialFlushWeightBound(
       top: Bucket,
-      pivots: seq<Key>,
+      pivots: PivotTable,
       bots: seq<Bucket>)
+  requires WFPivots(pivots)
   requires WFBucket(top)
   requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
-  requires 0 < |bots| == |pivots| + 1
+  requires 0 < |bots| == NumBuckets(pivots)
   requires WeightBucketList(bots) <= MaxTotalBucketWeight()
   ensures var res := partialFlush(top, pivots, bots);
       && WFBucket(res.top)
@@ -1613,11 +1601,12 @@ module BucketModel {
 
   lemma partialFlushWeightPreservesSorted(
       top: Bucket,
-      pivots: seq<Key>,
+      pivots: PivotTable,
       bots: seq<Bucket>)
+  requires WFPivots(pivots)
   requires WFBucket(top)
   requires forall i | 0 <= i < |bots| :: WFBucket(bots[i])
-  requires 0 < |bots| == |pivots| + 1
+  requires 0 < |bots| == NumBuckets(pivots)
   requires IsStrictlySorted(top.keys)
   requires forall i | 0 <= i < |bots| :: IsStrictlySorted(bots[i].keys)
   requires WeightBucketList(bots) <= MaxTotalBucketWeight()

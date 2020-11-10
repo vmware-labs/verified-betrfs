@@ -31,7 +31,7 @@ module BucketImpl {
   import opened NativeTypes
   import opened KeyType
   import BucketIteratorModel
-  import Pivots = PivotsLib
+  import Pivots = BoundedPivotsLib
   import opened BucketModel
   import opened DPKV = DynamicPkv
   import LKMBPKVOps
@@ -266,7 +266,8 @@ module BucketImpl {
     requires Inv()
     requires BucketWellMarshalled(I())
     requires Pivots.WFPivots(pivots)
-    requires i as nat <= |pivots| < Uint64UpperBound()
+    requires forall k | k in bucket.keys :: Pivots.BoundedKey(pivots, k)
+    requires i as nat < Pivots.NumBuckets(pivots) < Uint64UpperBound()
     ensures result == BucketsLib.WFBucketAt(I(), pivots, i as nat)
     {
       var e := Empty();
@@ -276,20 +277,16 @@ module BucketImpl {
 
       assert forall k :: k in bucket.keys <==> k in I().b;
       
-      if i < |pivots| as uint64 {
-        var lastkey := GetLastKey();
-        var c := cmp(lastkey, pivots[i]);
-        if c >= 0 {
-          return false;   // Need to fill in defs in BucketsLib to prove correctness.
-        }
+      var firstkey := GetFirstKey();
+      var c := Pivots.KeyspaceImpl.cmp(pivots[i], Pivots.Keyspace.Element(firstkey));
+      if 0 < c {
+        return false;    // Need to fill in defs in BucketsLib to prove correctness.
       }
 
-      if 0 < i {
-        var firstkey := GetFirstKey();
-        var c := cmp(pivots[i-1], firstkey);
-        if 0 < c {
-          return false;    // Need to fill in defs in BucketsLib to prove correctness.
-        }
+      var lastkey := GetLastKey();
+      c := Pivots.KeyspaceImpl.cmp(Pivots.Keyspace.Element(lastkey), pivots[i+1]);
+      if c >= 0 {
+        return false;   // Need to fill in defs in BucketsLib to prove correctness.
       }
 
       return true;
@@ -787,12 +784,13 @@ module BucketImpl {
     }
   }
 
-  method PartialFlush(shared top: MutBucket, shared bots: lseq<MutBucket>, pivots: seq<Key>)
+  method PartialFlush(shared top: MutBucket, shared bots: lseq<MutBucket>, pivots: Pivots.PivotTable)
     returns (linear newtop: MutBucket, linear newbots: lseq<MutBucket>)
     requires top.Inv()
     requires MutBucket.InvLseq(bots)
-    requires |pivots| + 1 == |bots| < Uint64UpperBound()
-    requires PivotsLib.WFPivots(pivots)
+    requires Pivots.WFPivots(pivots)
+    requires |pivots| < Uint64UpperBound()
+    requires Pivots.NumBuckets(pivots) == |bots|
     requires WeightBucket(top.I()) <= MaxTotalBucketWeight()
     requires WeightBucketList(MutBucket.ILseq(bots)) <= MaxTotalBucketWeight()
     ensures MutBucket.InvLseq(newbots)
