@@ -45,7 +45,7 @@ void read_page(uint32_t cache_idx, uint32_t disk_page);
 // Synchronously write page from cache_data[cache_idx] onto disk
 void write_page(uint32_t cache_idx, uint32_t disk_page);
 
-// Returns an Empty cache entry
+// Returns a cache entry that is empty, clean, or can be evicted
 uint32_t lock_free_cache_idx() {
   while (true) {
     if (recently_accessed[clockpointer]) {
@@ -56,21 +56,22 @@ uint32_t lock_free_cache_idx() {
         clockpointer = 0;
       }
     } else {
-      uint32_t res = clockpointer;
+      uint32_t cache_idx = clockpointer;
 
       clockpointer++;
       if (clockpointer == CACHE_SIZE) {
         clockpointer = 0;
       }
 
-      mutices[res].lock();
+      if (mutices[cache_idx].try_lock()) {
+        if (cache_metadata[cache_idx].status == Status::Dirty) {
+          write_page(cache_idx, cache_metadata[cache_idx].disk_idx);
+          cache_idx_of_disk_idx[cache_metadata[cache_idx].disk_idx] = NO_CACHE_PAGE_ASSIGNED;
+        }
+        cache_metadata[cache_idx].status = Status::Empty;
 
-      if (cache_metadata[res].status == Status::Dirty) {
-        cache_idx_of_disk_idx[cache_metadata[res].disk_idx] = NO_CACHE_PAGE_ASSIGNED;
-        write_page(res, cache_metadata[res].disk_idx);
+        return cache_idx;
       }
-
-      return res;
     }
   }
 }
@@ -89,6 +90,7 @@ beginning:
         cache_idx_of_disk_idx[disk_page].compare_exchange_strong(expected, cache_idx);
 
     if (cas_success) {
+
       read_page(cache_idx, disk_page);
       cache_metadata[cache_idx].status = Status::Clean;
       cache_metadata[cache_idx].disk_idx = disk_page;
@@ -99,7 +101,11 @@ beginning:
       goto beginning;
     }
   } else {
-    mutices[cache_idx].lock();
+    bool lock_succ = mutices[cache_idx].try_lock();
+
+    if (!lock_succ) {
+      goto beginning;
+    }
 
     if (!(
       cache_metadata[cache_idx].status != Status::Empty &&
@@ -121,12 +127,12 @@ void release_handle(PageHandle handle) {
 
 void sync_all() {
   // TODO this should be done async
-  for (int i = 0; i < CACHE_SIZE) {
-    mutices[i].lock();
-    if (cache_metadata[i].status == Dirty) {
+  for (int i = 0; i < CACHE_SIZE; i++) {
+    mutices[i].lock_shared();
+    if (cache_metadata[i].status == Status::Dirty) {
       write_page(i, cache_metadata[i].disk_idx);
-      cache_metadata[i].status = clean;
+      cache_metadata[i].status = Status::Clean;
     }
-    mutices[i].unlock();
+    mutices[i].unlock_shared();
   }
 }
