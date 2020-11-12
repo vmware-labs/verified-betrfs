@@ -15,6 +15,9 @@ abstract module DonateImplSpec {
   // An infinite number of transform functions that the impl
   // will have access to
 
+  // TODO we still need to enforce that the impl can not conjure
+  // a `linear StateObject` out of nowhere.
+
   method {:axiom} transform_2_1(
       linear a1: StateObject,
       linear a2: StateObject,
