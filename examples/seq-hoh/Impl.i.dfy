@@ -1,8 +1,9 @@
-include "StateMachine.dfy"
-include "Mutex.dfy"
+include "StateMachine.i.dfy"
+include "Mutex.s.dfy"
+include "ImplSpec.s.dfy"
 
 module NumMutex refines AbstractMutex {
-  import opened StateObjects
+  import opened WellStateObjects
 
   type ConstType = nat
 
@@ -17,10 +18,8 @@ module NumMutex refines AbstractMutex {
   }
 }
 
-
-module DonateImpl {
-  import opened Options
-  import opened StateObjects
+module DonateImpl refines DonateImplSpec {
+  import opened SM = WellStateObjects
   import opened NumMutex
 
   method transform_init(tid: ThreadId, victim: nat,
@@ -85,8 +84,6 @@ module DonateImpl {
 
   method donate(victim: nat, linear ticket: StateObject)
   returns (outidx: Option<nat>, linear stub: StateObject)
-  requires ticket.Ticket? && ticket.victim == victim
-  ensures stub.Stub? && stub.outidx == outidx
   {
     linear var entry0 := acquire(global_seq()[0]);
     linear var V(num, r, l) := entry0;
@@ -136,5 +133,7 @@ module DonateImpl {
 
       outidx := None;
     }
+
+    assert stub == donate_stub(tid, outidx);
   }
 }

@@ -1,8 +1,7 @@
 include "../concurrency-strategies/spec.s.dfy"
+include "StateMachine.s.dfy"
 
-module StateObjects {
-  import opened Options
-
+module WellStateObjects refines StateMachine {
   // State: a sequence of integers a_1,...,a_n
   //
   // Input:
@@ -17,8 +16,6 @@ module StateObjects {
   //    a_i := a_i + 1
   //    outidx := Some(i)
 
-  type ThreadId = int
-
   function method len(): int { 20 }
 
   datatype StateObject =
@@ -27,6 +24,16 @@ module StateObjects {
      | ThreadPos(tid: ThreadId, n: nat, victim: nat)
      | Ticket(tid: ThreadId, victim: nat)
      | Stub(tid: ThreadId, outidx: Option<nat>)
+
+  function donate_ticket(tid: ThreadId, victim: nat) : StateObject
+  {
+    Ticket(tid, victim)
+  }
+
+  function donate_stub(tid: ThreadId, outidx: Option<nat>) : StateObject
+  {
+    Stub(tid, outidx)
+  }
 
   predicate transform(a: multiset<StateObject>, b: multiset<StateObject>)
   {
@@ -49,31 +56,5 @@ module StateObjects {
       && a == multiset{ThreadPos(tid, i, victim), StoneValue(i, victim)}
       && b == multiset{Stub(tid, Some(i)), StoneLock(i), StoneValue(i, victim+1)}
      )
-  }
-
-  type Variables = multiset<StateObject>
-
-  predicate Init(s: Variables)
-  {
-    s == multiset{}
-  }
-
-  predicate DonateStart(s: Variables, s': Variables,
-      tid: ThreadId, victim: nat)
-  {
-    s' == s + multiset{Ticket(tid, victim)}
-  }
-
-  predicate DonateEnd(s: Variables, s': Variables,
-      tid: ThreadId, outidx: Option<nat>)
-  {
-    s == s' + multiset{Stub(tid, outidx)}
-  }
-
-  predicate Next(s: Variables, s': Variables)
-  {
-		exists a, b, c ::
-			s == a + c && s' == b + c
-			&& transform(a, b)
   }
 }
