@@ -136,7 +136,7 @@ module SplitImpl {
     var pivots := child.GetPivots();
     var pivot := ComputeGetKey(pivots, num_children_left);
     
-    SplitModel.reveal_splitDoChanges();
+    // SplitModel.reveal_splitDoChanges();
 
     var parent_pivots := fused_parent.GetPivots();
     var insertable := ComputePivotInsertable(parent_pivots, slot+1, pivot);

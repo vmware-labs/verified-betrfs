@@ -651,9 +651,10 @@ abstract module Total_Order refines Total_Preorder {
     SetSuccessor(m.Keys, key)
   }
 
-  function SeqSuccessor(m: seq<Element>, key: Element) : Option<Element>
+  function {:opaque} SeqSuccessor(m: seq<Element>, key: Element) : Option<Element>
   {
-    SetSuccessor(set x | x in m, key)
+    SetSuccessor(
+      set x | x in m, key)
   }
 
   predicate {:opaque} SortedSeqForMap<V>(s: seq<(Element, V)>, m: map<Element, V>)

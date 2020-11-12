@@ -214,7 +214,7 @@ module StateImpl {
         && this !in blockAllocator.Repr
     }
 
-    predicate W()
+    predicate {:opaque} W()
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
         frozenIndirectionTable, lru, cache, blockAllocator
     reads Repr()
@@ -287,7 +287,7 @@ module StateImpl {
     }
   }
 
-  predicate Inv(s: Variables)
+  predicate {:opaque} Inv(s: Variables)
   reads s, s.persistentIndirectionTable, s.ephemeralIndirectionTable,
         s.frozenIndirectionTable, s.lru, s.cache, s.blockAllocator
   reads s.Repr()

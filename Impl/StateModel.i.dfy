@@ -233,7 +233,7 @@ module StateModel {
     IVars(s)
   }
 
-  predicate BCInv(s: BCVariables)
+  predicate {:opaque} BCInv(s: BCVariables)
   {
     && WFBCVars(s)
     && BBC.Inv(IBlockCache(s))
