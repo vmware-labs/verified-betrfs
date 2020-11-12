@@ -4,12 +4,16 @@ abstract module DonateImplSpec {
   import opened SM : StateMachine
   import opened Options
 
+  // TODO create abstract async Donate spec
+  // and add proof obligation that SM refines it
+
   method donate(victim: nat, linear ticket: StateObject)
   returns (outidx: Option<nat>, linear stub: StateObject)
   requires exists tid :: ticket == donate_ticket(tid, victim)
   ensures exists tid :: stub == donate_stub(tid, outidx)
 
-  // An infinite number of transform functions
+  // An infinite number of transform functions that the impl
+  // will have access to
 
   method {:axiom} transform_2_1(
       linear a1: StateObject,

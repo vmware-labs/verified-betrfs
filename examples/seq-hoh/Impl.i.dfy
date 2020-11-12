@@ -30,6 +30,9 @@ module DonateImpl refines DonateImplSpec {
   requires s1 == Ticket(tid, victim)
   requires s2 == StoneLock(0)
   ensures t1 == ThreadPos(tid, 0, victim)
+  {
+    t1 := transform_2_1(s1, s2, ThreadPos(tid, 0, victim));
+  }
 
   method transform_advance(
       tid: ThreadId, i: nat, victim: nat, v: nat,
@@ -48,6 +51,12 @@ module DonateImpl refines DonateImplSpec {
   ensures t1 == ThreadPos(tid, i+1, victim)
   ensures t2 == StoneLock(i)
   ensures t3 == StoneValue(i, v)
+  {
+    t1, t2, t3 := transform_3_3(s1, s2, s3,
+      ThreadPos(tid, i+1, victim),
+      StoneLock(i),
+      StoneValue(i, v));
+  }
 
   method transform_fail(
       tid: ThreadId, victim: nat, v: nat,
@@ -63,6 +72,12 @@ module DonateImpl refines DonateImplSpec {
   ensures t1 == Stub(tid, None)
   ensures t2 == StoneLock(len()-1)
   ensures t3 == StoneValue(len()-1, v)
+  {
+    t1, t2, t3 := transform_2_3(s1, s2,
+        Stub(tid, None),
+        StoneLock(len()-1),
+        StoneValue(len()-1, v));
+  }
 
   method transform_finish(
       tid: ThreadId, i: nat, victim: nat,
@@ -77,6 +92,12 @@ module DonateImpl refines DonateImplSpec {
   ensures t1 == Stub(tid, Some(i))
   ensures t2 == StoneLock(i)
   ensures t3 == StoneValue(i, victim+1)
+  {
+    t1, t2, t3 := transform_2_3(s1, s2,
+        Stub(tid, Some(i)),
+        StoneLock(i),
+        StoneValue(i, victim+1));
+  }
 
   function method global_seq() : (res : seq<Mutex>)
   ensures |res| == len()
