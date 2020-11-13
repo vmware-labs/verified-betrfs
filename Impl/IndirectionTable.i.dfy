@@ -1295,7 +1295,6 @@ module IndirectionTable {
       }
     }
 
-    // TODO left off here due to ref counts:
     static method ComputeRefCounts(shared t: HashMap)
       returns (linear t' : lOption<HashMap>)
       requires t.Inv()
@@ -1372,22 +1371,20 @@ module IndirectionTable {
     returns (linear q : USeq.USeq)
     requires t.Inv()
     requires |t.contents| <= 0x1_0000_0000
-    ensures q.Inv() // USeq.Inv(q)
+    ensures q.Inv()
     ensures forall ref | ref in t.contents && t.contents[ref].predCount == 0 :: ref in q.I()
     ensures forall ref | ref in q.I() :: ref in t.contents && t.contents[ref].predCount == 0
     {
-      // IndirectionTableModel.reveal_makeGarbageQueue();
-
       q := USeq.USeq.Alloc();
       var it := LinearMutableMap.IterStart(t);
       while it.next.Next?
       invariant q.Inv()
       invariant LinearMutableMap.Inv(t)
       invariant LinearMutableMap.WFIter(t, it)
-      // invariant IndirectionTableModel.makeGarbageQueue(t)
-      //        == IndirectionTableModel.makeGarbageQueueIterate(t, USeq.I(q), it)
       invariant Set(q.I()) <= t.contents.Keys
       invariant |t.contents| <= 0x1_0000_0000
+      invariant forall ref | ref in t.contents && t.contents[ref].predCount == 0 && ref in it.s :: ref in q.I()
+      invariant forall ref | ref in q.I() :: ref in t.contents && t.contents[ref].predCount == 0 && ref in it.s
       decreases it.decreaser
       {
         if it.next.value.predCount == 0 {
@@ -1399,9 +1396,6 @@ module IndirectionTable {
         }
         it := LinearMutableMap.IterInc(t, it);
       }
-
-      assume forall ref | ref in t.contents && t.contents[ref].predCount == 0 :: ref in q.I();
-      assume forall ref | ref in q.I() :: ref in t.contents && t.contents[ref].predCount == 0;
     }
 
     static method ComputeRefUpperBound(shared t: HashMap)
@@ -2360,6 +2354,8 @@ module IndirectionTable {
       ensures s != null ==> fresh(s.Repr)
       ensures s != null ==> Marshalling.valToIndirectionTable(v) == Some(s.I())
       ensures s == null ==> Marshalling.valToIndirectionTable(v).None?
+      // TODO maybe these are needed at call sites?  ensures s.Some? ==> TrackingGarbage(s.value)
+      // TODO maybe these are needed at call sites?  ensures s.Some? ==> BC.WFCompleteIndirectionTable(I(s.value))
     {
       linear var opt := IndirectionTable.ValToIndirectionTable(v);
       linear match opt {
