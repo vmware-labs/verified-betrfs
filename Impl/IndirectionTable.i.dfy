@@ -1065,7 +1065,7 @@ module IndirectionTable {
       }
     }
 
-    /*lemma LemmaComputeRefCountsIterateInvInit(t: HashMap)
+    /*lemma LemmaComputeRefCountsOuterLoopInvInit(t: HashMap)
     requires LinearMutableMap.Inv(t)
     requires forall ref | ref in t.contents :: t.contents[ref].predCount == 0
     requires forall ref | ref in t.contents :: |t.contents[ref].succs| <= MaxNumChildren()
@@ -1074,7 +1074,7 @@ module IndirectionTable {
     ensures
       var oldEntry := t.contents[BT.G.Root()];
       var t0 := LinearMutableMap.Insert(t, BT.G.Root(), oldEntry.(predCount := 1));
-      ComputeRefCountsIterateInv(t0, t, LinearMutableMap.IterStart(t))
+      ComputeRefCountsOuterLoopInv(t0, t, LinearMutableMap.IterStart(t))
     {
     }*/
 
@@ -1089,17 +1089,210 @@ module IndirectionTable {
           == t.count as int;
     }
 
-    static predicate {:opaque} ComputeRefCountsIterateInv(t: HashMap, copy: HashMap, it: LinearMutableMap.Iterator<Entry>)
+    static lemma RevealComputeRefCountsSharedDomainInv(t: HashMap, copy: HashMap)
+    requires ComputeRefCountsSharedInv(t, copy)
+    ensures forall ref | ref in copy.contents :: ref in t.contents
+    ensures forall ref | ref in t.contents :: ref in copy.contents
     {
+      reveal_ComputeRefCountsSharedInv();
+    }
+
+    static predicate {:opaque} ComputeRefCountsSharedInv(t: HashMap, copy: HashMap)
+    ensures ComputeRefCountsSharedInv(t, copy) ==> t.count as int <= MaxSize()
+    {
+      && (t.count as int <= MaxSize())
       && (forall ref | ref in copy.contents :: ref in t.contents)
+      && (forall ref | ref in t.contents :: ref in copy.contents)
       && (forall ref | ref in copy.contents :: t.contents[ref].loc == copy.contents[ref].loc)
       && (forall ref | ref in copy.contents :: t.contents[ref].succs == copy.contents[ref].succs)
-      && (forall ref | ref in copy.contents :: t.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s)| + IsRoot(ref))
       && (forall ref | ref in copy.contents :: |copy.contents[ref].succs| <= MaxNumChildren())
-      && (forall ref | ref in t.contents :: ref in copy.contents)
+    }
+
+    static predicate {:opaque} ComputeRefCountsOuterLoopInv0(t: HashMap, copy: HashMap, it: LinearMutableMap.Iterator<Entry>)
+    requires (forall ref | ref in copy.contents :: ref in t.contents)
+    {
+      && (forall ref | ref in t.contents :: t.contents[ref].predCount as int <= 0x1_0000_0000_0000) // ???
+      && (forall ref | ref in copy.contents :: t.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s)| + IsRoot(ref))
+    }
+
+    static predicate ComputeRefCountsOuterLoopInv(t: HashMap, copy: HashMap, it: LinearMutableMap.Iterator<Entry>)
+    {
+      && LinearMutableMap.Inv(t)
+      && LinearMutableMap.Inv(copy)
+      && LinearMutableMap.WFIter(copy, it)
+      && BT.G.Root() in t.contents
+      && ComputeRefCountsSharedInv(t, copy)
+      && (RevealComputeRefCountsSharedDomainInv(t, copy);
+          ComputeRefCountsOuterLoopInv0(t, copy, it))
       && GraphClosedRestricted(Graph(copy), it.s)
+      && t.count as int <= MaxSize()
       && (t.count == copy.count)
-      && (t.count as int <= MaxSize())
+    }
+
+    static predicate {:opaque} ComputeRefCountsInnerLoopInv0(t: HashMap, copy: HashMap, it: LinearMutableMap.Iterator<Entry>, succs: seq<BT.G.Reference>, i: uint64)
+    requires it.next.Next?
+    requires ComputeRefCountsSharedInv(t, copy)
+    {
+      && (forall ref | ref in t.contents :: t.contents[ref].predCount as int <= 0x1_0000_0000_0000 + i as int)
+      && (RevealComputeRefCountsSharedDomainInv(t, copy);
+          forall ref | ref in t.contents :: t.contents[ref].loc == copy.contents[ref].loc)
+      && (forall ref | ref in t.contents :: t.contents[ref].predCount as int == |PredecessorSetRestrictedPartial(Graph(copy), ref, it.s, it.next.key, i as int)| + IsRoot(ref))
+    }
+
+    static predicate ComputeRefCountsInnerLoopInv(t: HashMap, copy: HashMap, it: LinearMutableMap.Iterator<Entry>, succs: seq<BT.G.Reference>, i: uint64)
+    requires it.next.Next?
+    {
+      && LinearMutableMap.Inv(t)
+      && LinearMutableMap.Inv(copy)
+      && LinearMutableMap.WFIter(copy, it)
+      && 0 <= i as int <= |succs|
+      && |succs| <= MaxNumChildren()
+      && (t.count == copy.count)
+      && BT.G.Root() in t.contents
+      && ComputeRefCountsSharedInv(t, copy)
+      && (RevealComputeRefCountsSharedDomainInv(t, copy);
+          ComputeRefCountsInnerLoopInv0(t, copy, it, succs, i))
+    }
+
+    static lemma ComputeRefCountsOuterLoopInvImpliesInnerLoopInv(
+      t: HashMap, copy: HashMap, it: LinearMutableMap.Iterator<Entry>, succs: seq<BT.G.Reference>)
+    requires it.next.Next?
+    requires succs == it.next.value.succs
+    requires ComputeRefCountsOuterLoopInv(t, copy, it)
+    ensures ComputeRefCountsInnerLoopInv(t, copy, it, succs, 0)
+    {
+      reveal_ComputeRefCountsSharedInv();
+      reveal_ComputeRefCountsInnerLoopInv0();
+      reveal_ComputeRefCountsOuterLoopInv0();
+
+      forall ref | ref in t.contents
+      ensures  t.contents[ref].predCount as int == |PredecessorSetRestrictedPartial(Graph(copy), ref, it.s, it.next.key, 0)| + IsRoot(ref) {
+        assert PredecessorSetRestricted(Graph(copy), ref, it.s) == PredecessorSetRestrictedPartial(Graph(copy), ref, it.s, it.next.key, 0);
+      }
+    }
+
+    static lemma ComputeRefCountsInnerLoopInvImpliesOuterLoopInv(
+      t: HashMap,
+      copy: HashMap,
+      it: LinearMutableMap.Iterator<Entry>,
+      it':  LinearMutableMap.Iterator<Entry>,
+      succs: seq<BT.G.Reference>,
+      i: uint64)
+    requires it.next.Next?
+    requires succs == it.next.value.succs
+    requires LinearMutableMap.WFIter(copy, it')
+    requires it'.s == it.s + {it.next.key}
+    requires it'.decreaser < it.decreaser
+    requires it'.next.Done? ==> it'.s == copy.contents.Keys
+    requires i as int == |succs|
+    requires ComputeRefCountsInnerLoopInv(t, copy, it, succs, i)
+    requires BT.G.Root() in t.contents
+    ensures ComputeRefCountsOuterLoopInv(t, copy, it')
+    {
+      assume GraphClosedRestricted(Graph(copy), it'.s);
+      RevealComputeRefCountsSharedDomainInv(t, copy);
+      assume (forall ref | ref in t.contents :: t.contents[ref].predCount as int <= 0x1_0000_0000_0000); // ???
+      forall ref | ref in copy.contents
+      ensures t.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it'.s)| + IsRoot(ref) {
+        reveal_ComputeRefCountsInnerLoopInv0();
+        assert PredecessorSetRestricted(Graph(copy), ref, it.s + {it.next.key}) == PredecessorSetRestrictedPartial(Graph(copy), ref, it.s, it.next.key, i as int);
+      }
+      assert ComputeRefCountsOuterLoopInv0(t, copy, it') by {
+        reveal_ComputeRefCountsOuterLoopInv0();
+      }
+    }
+
+    static lemma LemmaPredecessorSetRestrictedPartialAdd1Self(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference, domain: set<BT.G.Reference>, next: BT.G.Reference, j: int)
+    requires next in graph
+    requires 0 <= j < |graph[next]|
+    requires dest == graph[next][j]
+    requires next !in domain
+    ensures |PredecessorSetRestrictedPartial(graph, dest, domain, next, j + 1)|
+         == |PredecessorSetRestrictedPartial(graph, dest, domain, next, j)| + 1
+    {
+      assert PredecessorSetRestrictedPartial(graph, dest, domain, next, j + 1)
+          == PredecessorSetRestrictedPartial(graph, dest, domain, next, j) + {PredecessorEdge(next, j)};
+    }
+
+    static lemma LemmaPredecessorSetRestrictedPartialAdd1Other(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference, domain: set<BT.G.Reference>, next: BT.G.Reference, j: int)
+    requires next in graph
+    requires 0 <= j < |graph[next]|
+    requires dest != graph[next][j]
+    ensures |PredecessorSetRestrictedPartial(graph, dest, domain, next, j + 1)|
+         == |PredecessorSetRestrictedPartial(graph, dest, domain, next, j)|
+    {
+      assert PredecessorSetRestrictedPartial(graph, dest, domain, next, j + 1)
+          == PredecessorSetRestrictedPartial(graph, dest, domain, next, j);
+    }
+
+    static method ComputeRefCountsInnerLoop(linear inout t: HashMap, shared copy: HashMap, it: LinearMutableMap.Iterator<Entry>)
+    returns (success: bool, it': LinearMutableMap.Iterator<Entry>)
+    requires it.next.Next?
+    requires ComputeRefCountsOuterLoopInv(old_t, copy, it)
+    ensures LinearMutableMap.Inv(t)
+    ensures success ==> (
+      && ComputeRefCountsOuterLoopInv(t, copy, it')
+      && BT.G.Root() in t.contents
+    )
+    ensures success ==> it'.decreaser < it.decreaser
+    ensures LinearMutableMap.WFIter(copy, it')
+    ensures !success ==> !BC.GraphClosed(Graph(copy))
+    {
+      var succs := it.next.value.succs;
+      var i: uint64 := 0;
+
+      assert |succs| <= MaxNumChildren() by {
+        reveal_ComputeRefCountsSharedInv();
+      }
+      ComputeRefCountsOuterLoopInvImpliesInnerLoopInv(t, copy, it, succs);
+
+      success := true;
+      while i < |succs| as uint64
+      invariant i as int <= |succs|
+      invariant LinearMutableMap.Inv(copy)
+      invariant LinearMutableMap.WFIter(copy, it)
+      invariant BT.G.Root() in t.contents
+      invariant ComputeRefCountsInnerLoopInv(t, copy, it, succs, i)
+      decreases |succs| - i as int
+      {
+        var ref := succs[i];
+        var oldEntry := LinearMutableMap.Get(t, ref);
+        if oldEntry.Some? {
+          reveal_ComputeRefCountsInnerLoopInv0();
+          var newEntry := oldEntry.value.(predCount := oldEntry.value.predCount + 1);
+          LinearMutableMap.Insert(inout t, ref, newEntry);
+
+          forall r | r in t.contents
+          ensures t.contents[r].predCount as int == |PredecessorSetRestrictedPartial(Graph(copy), r, it.s, it.next.key, (i+1) as int)| + IsRoot(r)
+          {
+            if r == ref {
+              LemmaPredecessorSetRestrictedPartialAdd1Self(Graph(copy), r, it.s, it.next.key, i as int);
+            } else {
+              LemmaPredecessorSetRestrictedPartialAdd1Other(Graph(copy), r, it.s, it.next.key, i as int);
+            }
+          }
+
+          i := i + 1;
+
+          assert ComputeRefCountsInnerLoopInv(t, copy, it, succs, i) by {
+            reveal_ComputeRefCountsSharedInv();
+            assert ComputeRefCountsSharedInv(t, copy);
+            assert ComputeRefCountsInnerLoopInv0(t, copy, it, succs, i);
+          }
+        } else {
+          assert ref in Graph(copy)[it.next.key];
+          success := false;
+          break;
+        }
+      }
+
+      it' := LinearMutableMap.IterInc(copy, it);
+      
+      if (success) {
+        ComputeRefCountsInnerLoopInvImpliesOuterLoopInv(t, copy, it, it', succs, i);
+      } else {
+        assume !BC.GraphClosed(Graph(copy));
+      }
     }
 
     // TODO left off here due to ref counts:
@@ -1117,8 +1310,6 @@ module IndirectionTable {
       ensures t'.lSome? ==> ValidPredCounts(PredCounts(t'.value), Graph(t'.value))
       ensures t'.lSome? ==> BT.G.Root() in t'.value.contents
     {
-      //LemmaComputeRefCountsIterateInvInit(t);
-
       shared var copy := t;
       linear var t1 := LinearMutableMap.Clone(t);
 
@@ -1128,25 +1319,20 @@ module IndirectionTable {
 
       var it := LinearMutableMap.IterStart(copy);
 
-      assert ComputeRefCountsIterateInv(t1, copy, it) by {
+      assert ComputeRefCountsOuterLoopInv(t1, copy, it) by {
         forall ref | ref in t1.contents
         ensures t1.contents[ref].predCount as int
             == |PredecessorSetRestricted(Graph(t1), ref, it.s)| + IsRoot(ref)
         {
           assert PredecessorSetRestricted(Graph(t1), ref, it.s) == {};
         }
-
-        reveal_ComputeRefCountsIterateInv();
+        reveal_ComputeRefCountsSharedInv();
+        reveal_ComputeRefCountsOuterLoopInv0();
       }
 
       var success := true;
       while it.next.Next?
-      invariant LinearMutableMap.Inv(t1)
-      invariant LinearMutableMap.Inv(copy)
-      invariant LinearMutableMap.WFIter(copy, it)
-      invariant ComputeRefCountsIterateInv(t1, copy, it)
-      invariant BT.G.Root() in t1.contents
-      invariant t1.count as int <= MaxSize()
+      invariant ComputeRefCountsOuterLoopInv(t1, copy, it)
       decreases it.decreaser
       {
         assert (forall ref | ref in t1.contents :: t1.contents[ref].predCount as int <= 0x1_0000_0000_0000 as int) by {
@@ -1155,56 +1341,16 @@ module IndirectionTable {
           {
             lemma_count_eq_graph_size(copy);
             PredecessorSetRestrictedSizeBound(Graph(copy), ref, it.s);
-            reveal_ComputeRefCountsIterateInv(); // TODO(andrea): this takes a few seconds
+            reveal_ComputeRefCountsOuterLoopInv0();
           }
         }
 
-        ghost var t0 := t1;
-
-        var succs := it.next.value.succs;
-        var i: uint64 := 0;
-        while i < |succs| as uint64
-        invariant LinearMutableMap.Inv(t1)
-        invariant LinearMutableMap.Inv(copy)
-        invariant LinearMutableMap.WFIter(copy, it)
-        invariant BT.G.Root() in t1.contents
-        invariant 0 <= i as int <= |succs|
-        invariant |succs| <= MaxNumChildren()
-        invariant t1.count as int <= MaxSize()
-        invariant forall ref | ref in t1.contents :: t1.contents[ref].predCount as int <= 0x1_0000_0000_0000 + i as int
-        /*invariant IndirectionTableModel.ComputeRefCounts(old(t))
-               == IndirectionTableModel.ComputeRefCountsIterate(t0, copy, it)
-        invariant IndirectionTableModel.ComputeRefCountsEntryIterate(t0, succs, 0)
-               == IndirectionTableModel.ComputeRefCountsEntryIterate(t1, succs, i)*/
-        decreases |succs| - i as int
-        {
-          var ref := succs[i];
-          var oldEntry := LinearMutableMap.Get(t1, ref);
-          if oldEntry.Some? {
-            var newEntry := oldEntry.value.(predCount := oldEntry.value.predCount + 1);
-            LinearMutableMap.Insert(inout t1, ref, newEntry);
-            i := i + 1;
-          } else {
-            success := false;
-            break break;
-          }
+        success, it := ComputeRefCountsInnerLoop(inout t1, copy, it);
+        if (!success) {
+          break;
         }
 
-        it := LinearMutableMap.IterInc(copy, it);
-
-        assert ComputeRefCountsIterateInv(t1, copy, it) by {
-          assume (forall ref | ref in copy.contents :: ref in t1.contents);
-          assume (forall ref | ref in copy.contents :: t1.contents[ref].loc == copy.contents[ref].loc);
-          assume (forall ref | ref in copy.contents :: t1.contents[ref].succs == copy.contents[ref].succs);
-          assume (forall ref | ref in copy.contents :: t1.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(copy), ref, it.s)| + IsRoot(ref));
-          assume (forall ref | ref in copy.contents :: |copy.contents[ref].succs| <= MaxNumChildren());
-          assume (forall ref | ref in t1.contents :: ref in copy.contents);
-          assume GraphClosedRestricted(Graph(copy), it.s);
-          assume (t1.count == copy.count);
-          assume (t1.count as int <= MaxSize());
-
-          reveal_ComputeRefCountsIterateInv();
-        }
+        assert ComputeRefCountsOuterLoopInv(t1, copy, it);
       }
 
       if success {
