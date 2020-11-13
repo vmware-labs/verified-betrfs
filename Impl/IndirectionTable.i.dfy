@@ -47,9 +47,20 @@ module IndirectionTable {
   type GarbageQueue = USeq.USeq
 
   // == UTILS ==
+  function MapLocs(t: map<uint64, Entry>) : map<BT.G.Reference, Location>
+
+  {
+    map ref | ref in t && t[ref].loc.Some? :: t[ref].loc.value
+  }
+
   function Locs(t: HashMap) : map<BT.G.Reference, Location>
   {
     map ref | ref in t.contents && t.contents[ref].loc.Some? :: t.contents[ref].loc.value
+  }
+
+  function MapGraph(t: map<uint64, Entry>) : map<BT.G.Reference, seq<BT.G.Reference>>
+  {
+    map ref | ref in t :: t[ref].succs
   }
 
   function Graph(t: HashMap) : map<BT.G.Reference, seq<BT.G.Reference>>
@@ -974,17 +985,26 @@ module IndirectionTable {
       // ==============
     }
 
-    // // Parsing and marshalling
     static predicate ValIsHashMap(a: seq<V>, s: Option<HashMap>)
     requires |a| <= MaxSize()
     requires forall i | 0 <= i < |a| :: ValidVal(a[i])
     requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
     {
-      && (s.Some? ==> s.value.count as int == |a|)
-      && (s.Some? ==> forall v | v in s.value.contents.Values :: v.loc.Some? && ValidNodeLocation(v.loc.value))
-      && (s.Some? ==> forall ref | ref in s.value.contents :: s.value.contents[ref].predCount == 0)
-      && (s.Some? ==> forall ref | ref in s.value.contents :: |s.value.contents[ref].succs| <= MaxNumChildren())
-      && (s.Some? ==> Marshalling.valToIndirectionTableMaps(a) == Some(IHashMap(s.value)))
+      // TODO(andrea) does this need to say something about s.value.count == |s.value.contents| ?
+      && ValIsMap(a, MapOption(s, (x: HashMap) => x.contents))
+    }
+
+    // // Parsing and marshalling
+    static predicate ValIsMap(a: seq<V>, s: Option<map<uint64, Entry>>)
+    requires |a| <= MaxSize()
+    requires forall i | 0 <= i < |a| :: ValidVal(a[i])
+    requires forall i | 0 <= i < |a| :: ValInGrammar(a[i], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
+    {
+      && (s.Some? ==> |s.value| as int == |a|)
+      && (s.Some? ==> forall v | v in s.value.Values :: v.loc.Some? && ValidNodeLocation(v.loc.value))
+      && (s.Some? ==> forall ref | ref in s.value :: s.value[ref].predCount == 0)
+      && (s.Some? ==> forall ref | ref in s.value :: |s.value[ref].succs| <= MaxNumChildren())
+      && (s.Some? ==> Marshalling.valToIndirectionTableMaps(a) == Some(IMapAsIndirectionTable(s.value)))
       && (s.None? ==> Marshalling.valToIndirectionTableMaps(a).None?)
     }
 
@@ -1495,10 +1515,15 @@ module IndirectionTable {
       reveal_SeqSum();
     }
 
-    static function IHashMap(m: HashMap) : SectorType.IndirectionTable
+    static function IMapAsIndirectionTable(m: map<uint64, Entry>) : SectorType.IndirectionTable
     {
-      SectorType.IndirectionTable(Locs(m), Graph(m))
+      SectorType.IndirectionTable(MapLocs(m), MapGraph(m))
     }
+
+    // TODO remove static function IHashMapAsIndirectionTable(m: HashMap) : SectorType.IndirectionTable
+    // TODO remove {
+    // TODO remove   SectorType.IndirectionTable(Locs(m), Graph(m))
+    // TODO remove }
 
     static function method IndirectionTableGrammar() : G
     ensures ValidGrammar(IndirectionTableGrammar())
@@ -1519,7 +1544,7 @@ module IndirectionTable {
     // but it's kind of annoying. However, I think that it won't
     // be a big deal as long as most syncs are journaling syncs?
     // So I've moved back to this one which is slower but cleaner.
-    shared method IndirectionTableToVal() 
+    shared method IndirectionTableToVal()  // HashMapToVal
     returns (v : V, size: uint64)
     requires this.Inv()
     requires BC.WFCompleteIndirectionTable(this.I())
@@ -1539,24 +1564,26 @@ module IndirectionTable {
       size := 0;
 
       ghost var partial := map[];
+
+      assert MapLocs(map[]) == map[];
+      assert MapGraph(map[]) == map[];
+      assert ValIsMap(a[..i], Some(partial));
+
       while it.next.Next?
+      // TODO(remove)?
       invariant this.Inv()
       invariant BC.WFCompleteIndirectionTable(this.I())
       invariant 0 <= i as int <= a.Length
       invariant LinearMutableMap.WFIter(this.t, it);
       invariant forall j | 0 <= j < i :: ValidVal(a[j])
       invariant forall j | 0 <= j < i :: ValInGrammar(a[j], GTuple([GUint64, GUint64, GUint64, GUint64Array]))
-      // NOALIAS/CONST table doesn't need to be mutable, if we could say so we wouldn't need this
-      // TODO(andrea) invariant IndirectionTableModel.valToHashMap(a[..i]).Some?
-      // TODO(andrea) invariant IndirectionTableModel.valToHashMap(a[..i]).value.contents == partial
       invariant |partial.Keys| == i as nat
       invariant partial.Keys == it.s
       invariant partial.Keys <= this.t.contents.Keys
-      // TODO(andrea) AAAA invariant forall r | r in partial :: r in this.t.contents
-      // TODO(andrea) AAAA     && partial[r].loc == this.t.contents[r].loc
-      // TODO(andrea) AAAA     && partial[r].succs == this.t.contents[r].succs
-      // NOALIAS/CONST t doesn't need to be mutable, if we could say so we wouldn't need this
-      invariant this.t.contents == old(this.t.contents)
+      invariant ValIsMap(a[..i], Some(partial))
+      invariant forall r | r in partial :: r in this.t.contents
+          && partial[r].loc == this.t.contents[r].loc
+          && partial[r].succs == this.t.contents[r].succs
       invariant size as int <=
           |it.s| * (8 + 8 + 8 + (8 + MaxNumChildren() * 8))
       invariant SeqSum(a[..i]) == size as int;
@@ -1622,6 +1649,8 @@ module IndirectionTable {
         }
 
         size := size + 32 + 8 * |succs| as uint64;
+
+        assume ValIsMap(a[..i], Some(partial));
       }
 
       /* (doc) assert |partial.Keys| == |this.t.contents.Keys|; */
@@ -1641,7 +1670,7 @@ module IndirectionTable {
 
       size := size + 8;
 
-      assume Marshalling.valToIndirectionTable(v).Some?;
+      assert Marshalling.valToIndirectionTable(v).Some?;
       assume Marshalling.valToIndirectionTable(v) == Some(this.I());
     }
 
