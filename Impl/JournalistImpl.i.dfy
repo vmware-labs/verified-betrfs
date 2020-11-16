@@ -242,106 +242,97 @@ module JournalistImpl {
       assert self.I() == JournalistModel.append(old_self.I(), je);
     }
 
-  //   method isReplayEmpty()
-  //   returns (b: bool)
-  //   requires Inv()
-  //   ensures b == JournalistModel.isReplayEmpty(I())
-  //   {
-  //     JournalistModel.reveal_isReplayEmpty();
-  //     b := (replayIdx == |replayJournal| as uint64);
-  //   }
+    shared method isReplayEmpty()
+    returns (b: bool)
+    requires Inv()
+    ensures b == JournalistModel.isReplayEmpty(I())
+    {
+      JournalistModel.reveal_isReplayEmpty();
+      b := (replayIdx == |replayJournal| as uint64);
+    }
 
-  //   method replayJournalTop()
-  //   returns (je: JournalEntry)
-  //   requires Inv()
-  //   requires JournalistModel.I(I()).replayJournal != []
-  //   ensures je == JournalistModel.replayJournalTop(I())
-  //   {
-  //     JournalistModel.reveal_replayJournalTop();
-  //     JournalistModel.reveal_I(I());
-  //     je := replayJournal[replayIdx];
-  //   }
+    shared method replayJournalTop()
+    returns (je: JournalEntry)
+    requires Inv()
+    requires JournalistModel.I(I()).replayJournal != []
+    ensures je == JournalistModel.replayJournalTop(I())
+    {
+      JournalistModel.reveal_replayJournalTop();
+      JournalistModel.reveal_I(I());
+      je := replayJournal[replayIdx];
+    }
 
-  //   method replayJournalPop()
-  //   requires Inv()
-  //   requires JournalistModel.I(I()).replayJournal != []
-  //   modifies Repr
-  //   ensures Inv()
-  //   ensures Repr == old(Repr)
-  //   ensures I() == JournalistModel.replayJournalPop(old_self.I())
-  //   {
-  //     JournalistModel.reveal_replayJournalPop();
-  //     JournalistModel.reveal_I(I());
-  //     replayIdx := replayIdx + 1;
-  //   }
+    inout linear method replayJournalPop()
+    requires old_self.Inv()
+    requires JournalistModel.I(old_self.I()).replayJournal != []
+    ensures self.Inv()
+    ensures self.I() == JournalistModel.replayJournalPop(old_self.I())
+    {
+      JournalistModel.reveal_replayJournalPop();
+      JournalistModel.reveal_I(old_self.I());
+      inout self.replayIdx := self.replayIdx + 1;
+    }
 
-  //   method setFront(jr: JournalRange)
-  //   requires Inv()
-  //   requires forall i | 0 <= i < |jr| :: |jr[i]| == 4064
-  //   requires |jr| <= NumJournalBlocks() as int
-  //   modifies Repr
-  //   ensures Inv()
-  //   ensures Repr == old(Repr)
-  //   ensures I() == JournalistModel.setFront(old_self.I(), jr)
-  //   {
-  //     JournalistModel.reveal_setFront();
-  //     journalFront := Some(jr);
-  //   }
+    inout linear method setFront(jr: JournalRange)
+    requires old_self.Inv()
+    requires forall i | 0 <= i < |jr| :: |jr[i]| == 4064
+    requires |jr| <= NumJournalBlocks() as int
+    ensures self.Inv()
+    ensures self.I() == JournalistModel.setFront(old_self.I(), jr)
+    {
+      JournalistModel.reveal_setFront();
+      inout self.journalFront := Some(jr);
+    }
 
-  //   method setBack(jr: JournalRange)
-  //   requires Inv()
-  //   requires forall i | 0 <= i < |jr| :: |jr[i]| == 4064
-  //   requires |jr| <= NumJournalBlocks() as int
-  //   modifies Repr
-  //   ensures Inv()
-  //   ensures Repr == old(Repr)
-  //   ensures I() == JournalistModel.setBack(old_self.I(), jr)
-  //   {
-  //     JournalistModel.reveal_setBack();
-  //     journalBack := Some(jr);
-  //   }
+    inout linear method setBack(jr: JournalRange)
+    requires old_self.Inv()
+    requires forall i | 0 <= i < |jr| :: |jr[i]| == 4064
+    requires |jr| <= NumJournalBlocks() as int
+    ensures self.Inv()
+    ensures self.I() == JournalistModel.setBack(old_self.I(), jr)
+    {
+      JournalistModel.reveal_setBack();
+      inout self.journalBack := Some(jr);
+    }
 
-  //   method parseJournals()
-  //   returns (success: bool)
-  //   requires Inv()
-  //   modifies Repr
-  //   ensures Inv()
-  //   ensures Repr == old(Repr)
-  //   ensures (I(), success) == JournalistModel.parseJournals(old_self.I())
-  //   {
-  //     JournalistModel.reveal_parseJournals();
-  //     JournalistModel.reveal_I(I());
-  //     var fullRange :=
-  //       (if journalFront.Some? then journalFront.value else []) +
-  //       (if journalBack.Some? then journalBack.value else []);
-  //     var p := JournalistParsingImpl.ParseJournalRange(fullRange);
-  //     if p.Some? && |p.value| as uint64 <= JournalistModel.MaxPossibleEntries() {
-  //       journalFront := None;
-  //       journalBack := None;
-  //       replayJournal := p.value;
-  //       replayIdx := 0;
-  //       return true;
-  //     } else {
-  //       return false;
-  //     }
-  //   }
+    inout linear method parseJournals() returns (success: bool)
+    requires old_self.Inv()
+    ensures self.Inv()
+    ensures (self.I(), success) == JournalistModel.parseJournals(old_self.I())
+    {
+      JournalistModel.reveal_parseJournals();
+      JournalistModel.reveal_I(old_self.I());
+      var fullRange :=
+        (if self.journalFront.Some? then self.journalFront.value else []) +
+        (if self.journalBack.Some? then self.journalBack.value else []);
+      var p := JournalistParsingImpl.ParseJournalRange(fullRange);
+      if p.Some? && |p.value| as uint64 <= JournalistModel.MaxPossibleEntries() {
+        inout self.journalFront := None;
+        inout self.journalBack := None;
+        inout self.replayJournal := p.value;
+        inout self.replayIdx := 0;
+        success := true;
+      } else {
+        success := false;
+      }
+    }
 
-  //   method hasFront()
-  //   returns (b: bool)
-  //   requires Inv()
-  //   ensures b == JournalistModel.hasFront(I())
-  //   {
-  //     JournalistModel.reveal_hasFront();
-  //     b := journalFront.Some?;
-  //   }
+    shared method hasFront()
+    returns (b: bool)
+    requires Inv()
+    ensures b == JournalistModel.hasFront(I())
+    {
+      JournalistModel.reveal_hasFront();
+      b := journalFront.Some?;
+    }
 
-  //   method hasBack()
-  //   returns (b: bool)
-  //   requires Inv()
-  //   ensures b == JournalistModel.hasBack(I())
-  //   {
-  //     JournalistModel.reveal_hasBack();
-  //     b := journalBack.Some?;
-  //   }
+    shared method hasBack()
+    returns (b: bool)
+    requires Inv()
+    ensures b == JournalistModel.hasBack(I())
+    {
+      JournalistModel.reveal_hasBack();
+      b := journalBack.Some?;
+    }
   }
 }
