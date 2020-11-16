@@ -54,10 +54,10 @@ module JournalistImpl {
     ensures j.Inv()
     ensures j.I() == JournalistModel.JournalistConstructor()
     {
-      var temp := NativeArrays.newArrayFill(4096, JournalInsert([], [])); 
+      var newArray := NativeArrays.newArrayFill(4096, JournalInsert([], [])); 
     
       j := Journalist(
-        temp[..], 0, 0, 0,
+        newArray[..], 0, 0, 0,
         [], 0, None, None, 0, 0, 0);
 
       JournalistModel.reveal_JournalistConstructor();
@@ -187,57 +187,60 @@ module JournalistImpl {
         <= 4064 * NumJournalBlocks();
     }
 
-    // linear inout method append(je: JournalEntry)
-    // requires old_self.Inv()
-    // requires JournalistModel.canAppend(I(), je)
-    // ensures self.Inv()
-    // ensures self.I() == JournalistModel.append(old_self.I(), je)
-    // {
-    //   JournalistModel.reveal_append();
+    linear inout method append(je: JournalEntry)
+    requires old_self.Inv()
+    requires JournalistModel.canAppend(old_self.I(), je)
+    ensures self.Inv()
+    ensures self.I() == JournalistModel.append(old_self.I(), je)
+    {
+      JournalistModel.reveal_append();
 
-    //   if self.len1 + self.len2 < |self.journalEntries| as uint64 {
-    //     var idx := JournalistModel.basic_mod(
-    //         start + len1 + len2,
-    //         |self.journalEntries| as uint64);
-    //     inout self.journalEntries[idx] := je;
-    //   } else {
-    //     var newLen: uint64 := |self.journalEntries| as uint64 * 2;
-    //     var newArray := NativeArrays.newArrayFill(
-    //         newLen,
-    //         JournalInsert([], []));
-    //     NativeArrays.CopyArrayIntoDifferentArray(
-    //         self.journalEntries,
-    //         self.start,
-    //         newArray,
-    //         0,
-    //         |self.journalEntries| as uint64 - self.start);
-    //     NativeArrays.CopyArrayIntoDifferentArray(
-    //         self.journalEntries,
-    //         0,
-    //         newArray,
-    //         |self.journalEntries| as uint64 - self.start,
-    //         self.start);
-    //     newArray[|self.journalEntries| as uint64] := je;
+      if self.len1 + self.len2 < |self.journalEntries| as uint64 {
+        var idx := JournalistModel.basic_mod(
+            self.start + self.len1 + self.len2,
+            |self.journalEntries| as uint64);
+        inout self.journalEntries := self.journalEntries[idx as int := je];
+      } else {
+        var newLen: uint64 := |self.journalEntries| as uint64 * 2;
+        var newArray := NativeArrays.newArrayFill(
+            newLen,
+            JournalInsert([], []));
 
-    //     calc {
-    //       newArray[..];
-    //       self.journalEntries[start..]
-    //         + self.journalEntries[..start]
-    //         + [je]
-    //         + fill((newLen as int - |self.journalEntries| - 1) as int, JournalInsert([], []));
-    //     }
+        NativeArrays.CopySeqIntoArray(
+            self.journalEntries,
+            self.start,
+            newArray,
+            0,
+            |self.journalEntries| as uint64 - self.start);
 
-    //     inout self.journalEntries := newArray;
-    //     inout self.start := 0;
-    //   }
+        NativeArrays.CopySeqIntoArray(
+            self.journalEntries,
+            0,
+            newArray,
+            |self.journalEntries| as uint64 - self.start,
+            self.start);
 
-    //   inout self.inMemoryWeight := self.inMemoryWeight
-    //       + WeightJournalEntryUint64(je)
-    //       + (if self.len2 == 0 then 8 else 0);
-    //   inout self.len2 := self.len2 + 1;
+        newArray[|self.journalEntries| as uint64] := je;
 
-    //   assert self.I() == JournalistModel.append(old_self.I(), je);
-    // }
+        calc {
+          newArray[..];
+          self.journalEntries[self.start..]
+            + self.journalEntries[..self.start]
+            + [je]
+            + fill((newLen as int - |self.journalEntries| - 1) as int, JournalInsert([], []));
+        }
+
+        inout self.journalEntries := newArray[..];
+        inout self.start := 0;
+      }
+
+      inout self.inMemoryWeight := self.inMemoryWeight
+          + WeightJournalEntryUint64(je)
+          + (if self.len2 == 0 then 8 else 0);
+      inout self.len2 := self.len2 + 1;
+
+      assert self.I() == JournalistModel.append(old_self.I(), je);
+    }
 
   //   method isReplayEmpty()
   //   returns (b: bool)
