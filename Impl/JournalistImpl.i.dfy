@@ -54,8 +54,10 @@ module JournalistImpl {
     ensures j.Inv()
     ensures j.I() == JournalistModel.JournalistConstructor()
     {
+      var temp := NativeArrays.newArrayFill(4096, JournalInsert([], [])); 
+    
       j := Journalist(
-        [JournalInsert([], [])], 0, 0, 0,
+        temp[..], 0, 0, 0,
         [], 0, None, None, 0, 0, 0);
 
       JournalistModel.reveal_JournalistConstructor();
