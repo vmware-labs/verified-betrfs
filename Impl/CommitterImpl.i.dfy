@@ -109,6 +109,11 @@ linear datatype Committer = Committer(
         JC.SuperblockUnfinished,
         m
       );
+      assert CommitterModel.I(cm.I()) == JC.LoadingSuperblock(
+            None, None,
+            JC.SuperblockUnfinished,
+            JC.SuperblockUnfinished,
+            map[]);
     }
   }
 }
