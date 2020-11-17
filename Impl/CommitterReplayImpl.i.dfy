@@ -14,24 +14,23 @@ module CommitterReplayImpl {
   import opened DiskOpImpl
   import opened CommitterModel
   import CommitterReplayModel
-  import opened CommitterImpl
   import JournalistImpl
 
-  method JournalReplayOne(cm: Committer)
-  requires cm.Inv()
-  requires cm.status == CommitterModel.StatusReady
-  requires !JournalistModel.isReplayEmpty(cm.journalist.I())
-  modifies cm.Repr
-  ensures cm.Inv()
-  ensures cm.Repr == old(cm.Repr)
-  ensures cm.I() == CommitterReplayModel.JournalReplayOne(
-      old(cm.I()))
-  {
-    CommitterReplayModel.reveal_JournalReplayOne();
-    cm.reveal_ReprInv();
+//   method JournalReplayOne(cm: Committer)
+//   requires cm.Inv()
+//   requires cm.status == CommitterModel.StatusReady
+//   requires !JournalistModel.isReplayEmpty(cm.journalist.I())
+//   modifies cm.Repr
+//   ensures cm.Inv()
+//   ensures cm.Repr == old(cm.Repr)
+//   ensures cm.I() == CommitterReplayModel.JournalReplayOne(
+//       old(cm.I()))
+//   {
+//     CommitterReplayModel.reveal_JournalReplayOne();
+//     cm.reveal_ReprInv();
 
-    cm.journalist.replayJournalPop();
+//     cm.journalist.replayJournalPop();
 
-    cm.reveal_ReprInv();
-  }
+//     cm.reveal_ReprInv();
+//   }
 }

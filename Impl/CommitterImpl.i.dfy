@@ -2,6 +2,7 @@ include "CommitterModel.i.dfy"
 include "JournalistImpl.i.dfy"
 include "../lib/DataStructures/LinearMutableMap.i.dfy"
 include "CommitterAppendModel.i.dfy"
+include "CommitterReplayModel.i.dfy"
 
 // for when you have commitment issues
 
@@ -23,6 +24,9 @@ module CommitterImpl {
   import opened StateModel
   import opened IOModel
   import CommitterAppendModel
+
+  // import opened DiskOpImpl
+  import CommitterReplayModel
 
 linear datatype Committer = Committer(
     status: CommitterModel.Status,
@@ -137,6 +141,18 @@ linear datatype Committer = Committer(
       CommitterAppendModel.reveal_JournalAppend();
       var je := JournalInsert(key, value);
       inout self.journalist.append(je);
+    }
+
+    linear inout method JournalReplayOne()
+    requires old_self.Inv()
+    requires old_self.status == CommitterModel.StatusReady
+    requires !JournalistModel.isReplayEmpty(old_self.journalist.I())
+    ensures self.Inv()
+    ensures self.I() == CommitterReplayModel.JournalReplayOne(old_self.I())
+    {
+      CommitterReplayModel.reveal_JournalReplayOne();
+
+      inout self.journalist.replayJournalPop();
     }
   }
 }
