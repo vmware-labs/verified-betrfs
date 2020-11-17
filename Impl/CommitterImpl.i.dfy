@@ -1,6 +1,7 @@
 include "CommitterModel.i.dfy"
 include "JournalistImpl.i.dfy"
 include "../lib/DataStructures/LinearMutableMap.i.dfy"
+include "CommitterAppendModel.i.dfy"
 
 // for when you have commitment issues
 
@@ -14,6 +15,14 @@ module CommitterImpl {
   import LinearMutableMap
   import JournalistImpl
   import CommitterModel
+
+  import opened KeyType
+  import opened ValueType
+  import opened Journal
+
+  import opened StateModel
+  import opened IOModel
+  import CommitterAppendModel
 
 linear datatype Committer = Committer(
     status: CommitterModel.Status,
@@ -114,6 +123,20 @@ linear datatype Committer = Committer(
             JC.SuperblockUnfinished,
             JC.SuperblockUnfinished,
             map[]);
+    }
+
+    linear inout method JournalAppend(key: Key, value: Value)
+    requires old_self.Inv()
+    requires old_self.status == CommitterModel.StatusReady
+    requires JournalistModel.canAppend(
+        old_self.journalist.I(), JournalInsert(key, value))
+    ensures self.Inv()
+    ensures self.I() == CommitterAppendModel.JournalAppend(
+        old_self.I(), key, value)
+    {
+      CommitterAppendModel.reveal_JournalAppend();
+      var je := JournalInsert(key, value);
+      inout self.journalist.append(je);
     }
   }
 }
