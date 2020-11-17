@@ -50,7 +50,7 @@ module JournalistImpl {
       && JournalistModel.Inv(I())
     }
 
-    static method NewJournal() returns (linear j: Journalist)
+    static method Constructor() returns (linear j: Journalist)
     ensures j.Inv()
     ensures j.I() == JournalistModel.JournalistConstructor()
     {

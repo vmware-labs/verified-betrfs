@@ -1,12 +1,15 @@
 include "../BlockCacheSystem/JournalCache.i.dfy"
 include "JournalistModel.i.dfy"
-include "../lib/DataStructures/MutableMapModel.i.dfy"
+// include "../lib/DataStructures/MutableMapModel.i.dfy"
+include "../lib/DataStructures/LinearMutableMap.i.dfy"
 
 // for when you have commitment issues
 
 module CommitterModel {
   import JournalistModel
-  import MutableMapModel
+//   import MutableMapModel
+  import LinearMutableMap
+
   import JC = JournalCache
   import opened SectorType
   import opened DiskLayout
@@ -42,12 +45,13 @@ module CommitterModel {
     superblock1: JC.SuperblockReadResult,
     superblock2: JC.SuperblockReadResult,
 
-    syncReqs: MutableMapModel.LinearHashMap<JC.SyncReqStatus>
-  )
+    syncReqs: LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
+// syncReqs: MutableMapModel.LinearHashMap<JC.SyncReqStatus>
 
   predicate WF(cm: CM)
   {
-    && MutableMapModel.Inv(cm.syncReqs)
+    // && MutableMapModel.Inv(cm.syncReqs)
+    && cm.syncReqs.Inv()
     && JournalistModel.Inv(cm.journalist)
     && (cm.status == StatusLoadingSuperblock ==>
       && JournalistModel.I(cm.journalist).inMemoryJournalFrozen == []

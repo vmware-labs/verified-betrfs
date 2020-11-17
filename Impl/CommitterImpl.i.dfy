@@ -1,6 +1,6 @@
 include "CommitterModel.i.dfy"
 include "JournalistImpl.i.dfy"
-include "../lib/DataStructures/MutableMapImpl.i.dfy"
+include "../lib/DataStructures/LinearMutableMap.i.dfy"
 
 // for when you have commitment issues
 
@@ -11,72 +11,37 @@ module CommitterImpl {
   import opened DiskLayout
   import opened Options
   import opened NativeTypes
-  import MutableMap
+  import LinearMutableMap
   import JournalistImpl
   import CommitterModel
 
-  class Committer {
-    var status: CommitterModel.Status;
-
-    var journalist: JournalistImpl.Journalist;
-    var frozenLoc: Option<Location>;
-    var isFrozen: bool;
-
-    var frozenJournalPosition: uint64;
-    var superblockWrite: Option<JC.ReqId>;
-
-    var outstandingJournalWrites: set<JC.ReqId>;
-
-    var superblock: Superblock;
-    var newSuperblock: Option<Superblock>;
-    var whichSuperblock: uint64;
-    var commitStatus: JC.CommitStatus;
-
-    var journalFrontRead: Option<JC.ReqId>;
-    var journalBackRead: Option<JC.ReqId>;
-    var superblock1Read: Option<JC.ReqId>;
-    var superblock2Read: Option<JC.ReqId>;
-    var superblock1: JC.SuperblockReadResult;
-    var superblock2: JC.SuperblockReadResult;
-
-    var syncReqs: MutableMap.ResizingHashMap<JC.SyncReqStatus>;
-
-    ghost var Repr: set<object>;
-
-    predicate ProtectedReprInv()
-    reads this, this.Repr
-    {
-      && this in Repr
-      && this.syncReqs in Repr
-      && this.journalist in Repr
-      && this.Repr == {this} + this.syncReqs.Repr + this.journalist.Repr
-      && this !in this.syncReqs.Repr
-      && this !in this.journalist.Repr
-      && this.syncReqs.Repr !! this.journalist.Repr
-    }
-
-    protected predicate ReprInv()
-    reads this, this.Repr
-    ensures ReprInv() ==> this in this.Repr
-    {
-      ProtectedReprInv()
-    }
-
-    lemma reveal_ReprInv()
-    ensures ReprInv() <==> ProtectedReprInv()
-    {
-    }
-
+linear datatype Committer = Committer(
+    status: CommitterModel.Status,
+    linear journalist: JournalistImpl.Journalist,
+    frozenLoc: Option<Location>,
+    isFrozen: bool,
+    frozenJournalPosition: uint64,
+    superblockWrite: Option<JC.ReqId>,
+    outstandingJournalWrites: set<JC.ReqId>,
+    superblock: Superblock,
+    newSuperblock: Option<Superblock>,
+    whichSuperblock: uint64,
+    commitStatus: JC.CommitStatus,
+    journalFrontRead: Option<JC.ReqId>,
+    journalBackRead: Option<JC.ReqId>,
+    superblock1Read: Option<JC.ReqId>,
+    superblock2Read: Option<JC.ReqId>,
+    superblock1: JC.SuperblockReadResult,
+    superblock2: JC.SuperblockReadResult,
+    linear syncReqs: LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
+{
     predicate W()
-    reads this, this.Repr
     {
-      && ReprInv()
       && this.syncReqs.Inv()
       && this.journalist.Inv()
     }
 
     function I() : CommitterModel.CM
-    reads this, this.Repr
     requires W()
     {
       CommitterModel.CM(
@@ -97,44 +62,53 @@ module CommitterImpl {
         superblock2Read,
         superblock1,
         superblock2,
-        syncReqs.I()
+        syncReqs
       )
     }
 
     predicate WF()
-    reads this, this.Repr
     {
       && W()
       && CommitterModel.WF(I())
     }
 
     predicate Inv()
-    reads this, this.Repr
     {
       && W()
       && CommitterModel.Inv(I())
     }
 
-    constructor()
-    ensures Inv()
-    ensures fresh(Repr)
-    ensures CommitterModel.I(I())
+    static method Constructor() returns (linear cm: Committer)
+    ensures cm.Inv()
+    ensures CommitterModel.I(cm.I())
         == JC.LoadingSuperblock(
             None, None,
             JC.SuperblockUnfinished,
             JC.SuperblockUnfinished,
             map[])
     {
-      journalist := new JournalistImpl.Journalist();
-      syncReqs := new MutableMap.ResizingHashMap(128);
-      status := CommitterModel.StatusLoadingSuperblock;
-      superblock1Read := None;
-      superblock2Read := None;
-      superblock1 := JC.SuperblockUnfinished;
-      superblock2 := JC.SuperblockUnfinished;
-
-      new;
-      Repr := {this} + this.syncReqs.Repr + this.journalist.Repr;
+      linear var j := JournalistImpl.Journalist.Constructor();
+      linear var m := LinearMutableMap.Constructor(128);
+      cm := Committer(
+        CommitterModel.StatusLoadingSuperblock,
+        j,
+        None,
+        false,
+        0,
+        None,
+        {},
+        Superblock(0, 0, 0, Location(0, 0)),
+        None,
+        0,
+        JC.CommitStatus.CommitNone,
+        None,
+        None,
+        None,
+        None,
+        JC.SuperblockUnfinished,
+        JC.SuperblockUnfinished,
+        m
+      );
     }
   }
 }
