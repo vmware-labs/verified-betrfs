@@ -1,5 +1,10 @@
 include "StateMachine.s.dfy"
 
+/*
+  this = new KeyValueStore();
+  this->insert(5);
+*/
+
 abstract module DonateImplSpec {
   import opened SM : StateMachine
   import opened Options
@@ -7,7 +12,15 @@ abstract module DonateImplSpec {
   // TODO create abstract async Donate spec
   // and add proof obligation that SM refines it
 
-  method donate(victim: nat, linear ticket: StateObject)
+  type Object
+
+  predicate Inv(o: Object)
+
+  method init()
+  returns (o: Object)
+  ensures Inv(o)
+
+  method donate(o: Object, victim: nat, linear ticket: StateObject)
   returns (outidx: Option<nat>, linear stub: StateObject)
   requires exists tid :: ticket == donate_ticket(tid, victim)
   ensures exists tid :: stub == donate_stub(tid, outidx)

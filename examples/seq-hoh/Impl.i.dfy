@@ -103,7 +103,14 @@ module DonateImpl refines DonateImplSpec {
   ensures |res| == len()
   ensures forall i | 0 <= i < |res| :: res[i].constant() == i
 
-  method donate(victim: nat, linear ticket: StateObject)
+  method constructo()
+  returns (self: seq<Mutex>)
+  ensures Inv(global_seq)
+
+  method donate(
+    self: seq<Mutex>,
+    victim: nat, linear ticket: StateObject)
+  requires Inv(global_seq)
   returns (outidx: Option<nat>, linear stub: StateObject)
   {
     linear var entry0 := acquire(global_seq()[0]);
