@@ -141,7 +141,6 @@ module CommitterCommitModel {
       it := LinearMutableMap.IterInc(m, it);
     }
   }
-/*
 
   function method start_pos_add(a: uint64, b: uint64) : uint64
   requires 0 <= a <= NumJournalBlocks()
@@ -525,11 +524,11 @@ module CommitterCommitModel {
 
   // == pushSync ==
 
-  function {:opaque} freeId<A>(syncReqs: MutableMapModel.LinearHashMap<A>) : (id: uint64)
-  requires MutableMapModel.Inv(syncReqs)
+  function {:opaque} freeId<A>(syncReqs: LinearMutableMap.LinearHashMap<A>) : (id: uint64)
+  requires LinearMutableMap.Inv(syncReqs)
   ensures id != 0 ==> id !in syncReqs.contents
   {
-    var maxId := MutableMapModel.MaxKey(syncReqs);
+    var maxId := LinearMutableMap.MaxKey(syncReqs);
     if maxId == 0xffff_ffff_ffff_ffff then (
       0
     ) else (
@@ -544,7 +543,7 @@ module CommitterCommitModel {
     if id == 0 || cm.syncReqs.count as int >= 0x1_0000_0000_0000_0000 / 8 then (
       (cm, 0)
     ) else (
-      var cm' := cm.(syncReqs := MutableMapModel.Insert(cm.syncReqs, id, JC.State3));
+      var cm' := cm.(syncReqs := LinearMutableMap.Insert(cm.syncReqs, id, JC.State3));
       (cm', id)
     )
   }
@@ -593,7 +592,7 @@ module CommitterCommitModel {
   function {:opaque} popSync(cm: CM, id: uint64) : (cm' : CM)
   requires CommitterModel.WF(cm)
   {
-    cm.(syncReqs := MutableMapModel.Remove(cm.syncReqs, id))
+    cm.(syncReqs := LinearMutableMap.Remove(cm.syncReqs, id))
   }
 
   lemma popSyncCorrect(cm: CM, id: uint64)
@@ -835,5 +834,4 @@ module CommitterCommitModel {
           JC.NoOpStep);
     }
   }
-  */
 }
