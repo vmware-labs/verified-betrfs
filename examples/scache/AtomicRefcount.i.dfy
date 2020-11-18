@@ -4,7 +4,7 @@ include "ArrayPtr.s.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "../../lib/Lang/LinearMaybe.s.dfy"
 
-module AtomicRefcount {
+module AtomicRefcountImpl {
   import opened NativeTypes
   import opened Ptrs
   import opened AtomicSpec

@@ -1,11 +1,11 @@
 include "ArrayPtr.s.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
+include "Constants.i.dfy"
 
 module ReadWriteLockResources {
   import Ptrs
   import opened NativeTypes
-
-  function NThreads() : int { 24 }
+  import opened Constants
 
   /*
    * We consider two bits of the status field, WriteLock and WriteBack.
