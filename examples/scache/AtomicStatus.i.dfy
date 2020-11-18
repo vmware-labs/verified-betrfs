@@ -16,9 +16,9 @@ module AtomicStatusImpl {
   const flag_write : uint8 := 2;
   const flag_back_write : uint8 := 3;
 
-  type AtomicStatus = Atomic<uint8, ReadWriteLockResources.R>
+  type AtomicStatus = Atomic<uint8, ReadWriteLockResources.Q>
 
-  predicate state_inv(v: uint8, g: ReadWriteLockResources.R, ptr: Ptr)
+  predicate state_inv(v: uint8, g: ReadWriteLockResources.Q, ptr: Ptr)
   {
     && g.FlagsField?
     && g.ptr == ptr
@@ -34,11 +34,11 @@ module AtomicStatusImpl {
     forall v, g :: atomic_inv(a, v, g) <==> state_inv(v, g, ptr)
   }
 
-  method unsafe_obtain<R>() returns (linear r: R)
-  method unsafe_dispose<R>(linear r: R)
+  method unsafe_obtain<Q>() returns (linear r: Q)
+  method unsafe_dispose<Q>(linear r: Q)
 
   method try_acquire_writeback(a: AtomicStatus, ptr: Ptr)
-  returns (success: bool, linear m: maybe<ReadWriteLockResources.R>)
+  returns (success: bool, linear m: maybe<ReadWriteLockResources.Q>)
   requires atomic_status_inv(a, ptr)
   ensures !success ==> !has(m)
   ensures success ==> has(m)
@@ -52,7 +52,7 @@ module AtomicStatusImpl {
     var v2 := flag_back;
     var old_v: uint8;
     var new_v: uint8;
-    linear var old_g: ReadWriteLockResources.R := unsafe_obtain();
+    linear var old_g: ReadWriteLockResources.Q := unsafe_obtain();
     assume old_v == v1 ==> new_v == v2 && did_set;
     assume old_v != v1 ==> new_v == old_v && !did_set;
     assume atomic_inv(a, old_v, old_g);
@@ -76,7 +76,7 @@ module AtomicStatusImpl {
   }
 
   method try_set_write_lock(a: AtomicStatus, ptr: Ptr)
-  returns (success: bool, linear m: maybe<ReadWriteLockResources.R>)
+  returns (success: bool, linear m: maybe<ReadWriteLockResources.Q>)
   requires atomic_status_inv(a, ptr)
   ensures !success ==> !has(m)
   ensures success ==> has(m)
@@ -89,7 +89,7 @@ module AtomicStatusImpl {
     var v := flag_write;
     var old_v: uint8;
     var new_v: uint8;
-    linear var old_g: ReadWriteLockResources.R := unsafe_obtain();
+    linear var old_g: ReadWriteLockResources.Q := unsafe_obtain();
     assume orig_value == old_v;
     assume new_v == bit_or(old_v, v);
     assume atomic_inv(a, old_v, old_g);
@@ -117,8 +117,8 @@ module AtomicStatusImpl {
   }
 
   method try_check_writeback_isnt_set(a: AtomicStatus, ptr: Ptr,
-      linear m: ReadWriteLockResources.R)
-  returns (success: bool, linear m': ReadWriteLockResources.R)
+      linear m: ReadWriteLockResources.Q)
+  returns (success: bool, linear m': ReadWriteLockResources.Q)
   requires atomic_status_inv(a, ptr)
   requires m == ReadWriteLockResources.WritePendingAwaitBack(ptr)
   ensures !success ==> m' == m
@@ -128,10 +128,9 @@ module AtomicStatusImpl {
 
     ///// Begin jank
     ///// Setup:
-    var v := flag_write;
     var old_v: uint8;
     var new_v: uint8;
-    linear var old_g: ReadWriteLockResources.R := unsafe_obtain();
+    linear var old_g: ReadWriteLockResources.Q := unsafe_obtain();
     assume new_v == old_v;
     assume f == old_v;
     assume atomic_inv(a, old_v, old_g);
