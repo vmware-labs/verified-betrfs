@@ -151,7 +151,6 @@ linear datatype Committer = Committer(
     ensures self.I() == CommitterReplayModel.JournalReplayOne(old_self.I())
     {
       CommitterReplayModel.reveal_JournalReplayOne();
-
       inout self.journalist.replayJournalPop();
     }
   }
