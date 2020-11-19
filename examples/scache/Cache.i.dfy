@@ -11,7 +11,8 @@ module CacheImpl {
   datatype Cache = Cache(
     data: seq<Ptr>,
     status: seq<AtomicStatus>,
-    read_refcounts: seq<seq<AtomicRefcount>>
+    read_refcounts: seq<seq<AtomicRefcount>>,
+    disk_idx_lookup: seq<AtomicIndexLookup>
   )
 
   predicate Inv(c: Cache)
@@ -25,9 +26,11 @@ module CacheImpl {
         |c.read_refcounts[j]| == CacheSize())
     && (forall j, i | 0 <= j < NThreads() && 0 <= i < CacheSize() ::
         atomic_refcount_inv(c.read_refcounts[j][i], c.data[i], j))
+    && (forall d | 0 <= d < NDiskPages() ::
+        |c.disk_idx_lookup| == NDiskPages())
   }
 
-  method take_write_lock(c: Cache, cache_idx: int)
+  method take_write_lock_on_cache_entry(c: Cache, cache_idx: int)
   returns (linear w: ReadWriteLockResources.Q)
   requires Inv(c)
   requires 0 <= cache_idx < CacheSize()
@@ -84,4 +87,10 @@ module CacheImpl {
       j := j + 1;
     }
   }
+
+  /*method take_write_lock_on_disk_entry(c: Cache, disk_idx: int)
+  requires 0 
+  {
+    
+  }*/
 }

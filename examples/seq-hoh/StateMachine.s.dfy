@@ -15,7 +15,7 @@ abstract module StateMachine {
 
   predicate Init(s: Variables)
   {
-    s == multiset{}
+    s == multiset{init_ticket}
   }
 
   predicate DonateStart(s: Variables, s': Variables,
