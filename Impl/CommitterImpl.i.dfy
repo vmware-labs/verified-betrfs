@@ -27,13 +27,13 @@ module CommitterImpl {
   import opened DiskOpImpl
 
   import opened StateModel
-  // import opened IOModel
   import CommitterReplayModel
   import CommitterAppendModel
   import CommitterInitModel
   import opened IOImpl
-
+  import opened InterpretationDiskOps
   import opened MainDiskIOHandler
+  import JournalistParsingImpl
 
   linear datatype Committer = Committer(
   status: CommitterModel.Status,
@@ -161,39 +161,206 @@ module CommitterImpl {
       inout self.journalist.replayJournalPop();
     }
 
-  linear inout method PageInSuperblockReq(io: DiskIOHandler, which: uint64)
-  requires old_self.Inv()
-  requires which == 0 || which == 1
-  requires which == 0 ==> old_self.superblock1.SuperblockUnfinished?
-  requires which == 1 ==> old_self.superblock2.SuperblockUnfinished?
-  requires old_self.status.StatusLoadingSuperblock?
-  requires io.initialized()
-  modifies io
-  ensures self.W()
-  ensures (self.I(), IIO(io)) ==
-      CommitterInitModel.PageInSuperblockReq(
-          old_self.I(), old(IIO(io)), which)
-  {
-    CommitterInitModel.reveal_PageInSuperblockReq();
+    linear inout method PageInSuperblockReq(io: DiskIOHandler, which: uint64)
+    requires old_self.Inv()
+    requires which == 0 || which == 1
+    requires which == 0 ==> old_self.superblock1.SuperblockUnfinished?
+    requires which == 1 ==> old_self.superblock2.SuperblockUnfinished?
+    requires old_self.status.StatusLoadingSuperblock?
+    requires io.initialized()
+    modifies io
+    ensures self.W()
+    ensures (self.I(), IIO(io)) ==
+        CommitterInitModel.PageInSuperblockReq(
+            old_self.I(), old(IIO(io)), which)
+    {
+      CommitterInitModel.reveal_PageInSuperblockReq();
 
-    if which == 0 {
-      if self.superblock1Read.None? {
-        var loc := Superblock1Location();
-        var id := RequestRead(io, loc);
-        inout self.superblock1Read := Some(id);
-      } else {
-        print "PageInSuperblockReq: doing nothing\n";
-      }
-    } else {
-      if self.superblock2Read.None? {
-          var loc := Superblock2Location();
+      if which == 0 {
+        if self.superblock1Read.None? {
+          var loc := Superblock1Location();
           var id := RequestRead(io, loc);
-          inout self.superblock2Read := Some(id);
-      } else {
+          inout self.superblock1Read := Some(id);
+        } else {
           print "PageInSuperblockReq: doing nothing\n";
+        }
+      } else {
+        if self.superblock2Read.None? {
+            var loc := Superblock2Location();
+            var id := RequestRead(io, loc);
+            inout self.superblock2Read := Some(id);
+        } else {
+            print "PageInSuperblockReq: doing nothing\n";
+        }
       }
     }
-  }
+  
+    linear inout method FinishLoadingSuperblockPhase()
+    requires old_self.Inv()
+    requires old_self.status.StatusLoadingSuperblock?
+    requires old_self.superblock1.SuperblockSuccess?
+    requires old_self.superblock2.SuperblockSuccess?
 
+    ensures self.W()
+    ensures self.I() ==
+        CommitterInitModel.FinishLoadingSuperblockPhase(
+            old_self.I());
+    {
+      CommitterInitModel.reveal_FinishLoadingSuperblockPhase();
+
+      var idx := if JC.increments1(
+          self.superblock1.value.counter, self.superblock2.value.counter)
+          then 1 else 0;
+
+      var sup := if idx == 1 then
+        self.superblock2.value
+      else
+        self.superblock1.value;
+
+      inout self.whichSuperblock := idx;
+      inout self.superblock := sup;
+      inout self.status := CommitterModel.StatusLoadingOther;
+      inout self.journalFrontRead := None;
+      inout self.journalBackRead := None;
+    }
+
+    linear inout method FinishLoadingOtherPhase()
+    requires old_self.Inv()
+    requires old_self.status.StatusLoadingOther?
+    ensures self.W()
+    ensures self.I() ==
+        CommitterInitModel.FinishLoadingOtherPhase(
+            old_self.I());
+    {
+      CommitterInitModel.reveal_FinishLoadingOtherPhase();
+
+      var success := inout self.journalist.parseJournals();
+
+      if success {
+        inout self.status := CommitterModel.StatusReady;
+        inout self.frozenLoc := None;
+        inout self.isFrozen := false;
+        inout self.frozenJournalPosition := 0;
+        inout self.superblockWrite := None;
+        inout self.outstandingJournalWrites := {};
+        inout self.newSuperblock := None;
+        inout self.commitStatus := JC.CommitNone;
+        // [original] self.journalist.setWrittenJournalLen(self.superblock.journalLen);
+        var len := self.superblock.journalLen;
+        inout self.journalist.setWrittenJournalLen(len);
+      } else {
+        print "FinishLoadingOtherPhase: there is replay journal\n";
+      }
+    }
+
+    shared method isReplayEmpty()
+    returns (b : bool)
+    requires this.WF()
+    ensures b == CommitterInitModel.isReplayEmpty(this.I())
+    {
+      b := this.journalist.isReplayEmpty();
+    }
+
+    linear inout method PageInJournalReqFront(io: DiskIOHandler)
+    requires old_self.WF()
+    requires old_self.status.StatusLoadingOther?
+    requires old_self.superblock.journalLen > 0
+    requires io.initialized()
+    modifies io
+    ensures self.W()
+    ensures (self.I(), IIO(io)) == CommitterInitModel.PageInJournalReqFront(
+        old_self.I(), old(IIO(io)))
+    {
+      CommitterInitModel.reveal_PageInJournalReqFront();
+
+      var len :=
+        if self.superblock.journalStart + self.superblock.journalLen
+            >= NumJournalBlocks()
+        then
+          NumJournalBlocks() - self.superblock.journalStart
+        else
+          self.superblock.journalLen;
+      var loc := JournalRangeLocation(self.superblock.journalStart, len);
+      var id := RequestRead(io, loc);
+      inout self.journalFrontRead := Some(id);
+      inout self.journalBackRead :=
+          if self.journalBackRead == Some(id)
+            then None else self.journalBackRead;
+    }
+
+    linear inout method PageInJournalReqBack(io: DiskIOHandler)
+    requires old_self.WF()
+    requires old_self.status.StatusLoadingOther?
+    requires old_self.superblock.journalLen > 0
+    requires old_self.superblock.journalStart + old_self.superblock.journalLen > NumJournalBlocks()
+    requires io.initialized()
+    modifies io
+    ensures self.W()
+    ensures (self.I(), IIO(io)) == CommitterInitModel.PageInJournalReqBack(
+        old_self.I(), old(IIO(io)))
+    {
+      CommitterInitModel.reveal_PageInJournalReqBack();
+
+      var len := self.superblock.journalStart + self.superblock.journalLen - NumJournalBlocks();
+      var loc := JournalRangeLocation(0, len);
+      var id := RequestRead(io, loc);
+      inout self.journalBackRead := Some(id);
+      inout self.journalFrontRead :=
+          if self.journalFrontRead == Some(id)
+            then None else self.journalFrontRead;
+    }
+
+    linear inout method PageInJournalResp(io: DiskIOHandler)
+    requires old_self.WF()
+    requires old_self.status.StatusLoadingOther?
+    requires io.diskOp().RespReadOp?
+    requires ValidDiskOp(io.diskOp())
+    requires ValidJournalLocation(LocOfRespRead(io.diskOp().respRead))
+    ensures self.W()
+    ensures self.I() == CommitterInitModel.PageInJournalResp(
+        old_self.I(), old(IIO(io)))
+    {
+      CommitterInitModel.reveal_PageInJournalResp();
+
+      var id, addr, bytes := io.getReadResult();
+      var jr := JournalistParsingImpl.computeJournalRangeOfByteSeq(bytes);
+      if jr.Some? {
+        assert |jr.value| <= NumJournalBlocks() as int by {
+          reveal_ValidJournalLocation();
+        }
+
+        if self.journalFrontRead == Some(id) {
+          inout self.journalist.setFront(jr.value);
+          inout self.journalFrontRead := None;
+        } else if self.journalBackRead == Some(id) {
+          inout self.journalist.setBack(jr.value);
+          inout self.journalBackRead := None;
+        }
+      }
+    }
+
+    linear inout method tryFinishLoadingOtherPhase(io: DiskIOHandler)
+    requires old_self.Inv()
+    requires old_self.status.StatusLoadingOther?
+    requires io.initialized()
+    modifies io
+    ensures self.W()
+    ensures (self.I(), IIO(io)) == CommitterInitModel.tryFinishLoadingOtherPhase(
+        old_self.I(), old(IIO(io)))
+    {
+      CommitterInitModel.reveal_tryFinishLoadingOtherPhase();
+
+      var hasFront := self.journalist.hasFront();
+      var hasBack := self.journalist.hasBack();
+      if self.superblock.journalLen > 0 && !self.journalFrontRead.Some? && !hasFront {
+        inout self.PageInJournalReqFront(io);
+      } else if self.superblock.journalStart + self.superblock.journalLen > NumJournalBlocks() && !self.journalBackRead.Some? && !hasBack {
+        inout self.PageInJournalReqBack(io);
+      } else if (self.superblock.journalLen > 0 ==> hasFront)
+          && (self.superblock.journalStart + self.superblock.journalLen > NumJournalBlocks() ==> hasBack) {
+        inout self.FinishLoadingOtherPhase();
+      } else {
+      }
+    }
   }
 }
