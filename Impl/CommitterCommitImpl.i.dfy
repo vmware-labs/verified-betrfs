@@ -21,6 +21,7 @@ module CommitterCommitImpl {
   import opened CommitterImpl
   import CommitterCommitModel
 
+/*
   // TODO we could have these do the modification in-place instead.
 
   method SyncReqs2to1(m: MutableMap.ResizingHashMap<JC.SyncReqStatus>)
@@ -52,7 +53,6 @@ module CommitterCommitImpl {
     m' := m0;
   }
 
-
   method SyncReqs3to2(m: MutableMap.ResizingHashMap<JC.SyncReqStatus>)
   returns (m' : MutableMap.ResizingHashMap<JC.SyncReqStatus>)
   requires m.Inv()
@@ -81,6 +81,7 @@ module CommitterCommitImpl {
     }
     m' := m0;
   }
+*/
 
   method WriteOutJournal(cm: Committer, io: DiskIOHandler)
   requires io.initialized()

@@ -6,6 +6,7 @@ include "CommitterReplayModel.i.dfy"
 include "CommitterInitModel.i.dfy"
 include "DiskOpImpl.i.dfy"
 include "IOImpl.i.dfy"
+include "CommitterCommitModel.i.dfy"
 
 // for when you have commitment issues
 
@@ -34,6 +35,65 @@ module CommitterImpl {
   import opened InterpretationDiskOps
   import opened MainDiskIOHandler
   import JournalistParsingImpl
+  import CommitterCommitModel
+
+  // TODO we could have these do the modification in-place instead.
+
+  method SyncReqs2to1(linear m: LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
+  returns (linear m' : LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
+  requires m.Inv()
+  ensures m'.Inv()
+  ensures m' == CommitterCommitModel.SyncReqs2to1(m)
+  {
+    CommitterCommitModel.reveal_SyncReqs2to1();
+    var it := LinearMutableMap.IterStart(m);
+    linear var m0 := LinearMutableMap.Constructor(128);
+    while !it.next.Done?
+    invariant m.Inv()
+    invariant m0.Inv()
+    invariant LinearMutableMap.WFIter(m, it)
+    invariant m0.Inv()
+    invariant m0.contents.Keys == it.s
+    invariant CommitterCommitModel.SyncReqs2to1(m) == CommitterCommitModel.SyncReqs2to1Iterate(m, it, m0)
+
+    decreases it.decreaser
+    {
+      LinearMutableMap.LemmaIterIndexLtCount(m, it);
+      LinearMutableMap.CountBound(m);
+      m0 := LinearMutableMap.Insert(m0, it.next.key, (if it.next.value == JC.State2 then JC.State1 else it.next.value));
+      it := LinearMutableMap.IterInc(m, it);
+    }
+    LinearMutableMap.Destructor(m);
+    m' := m0;
+  }
+
+  method SyncReqs3to2(linear m: LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
+  returns (linear m' : LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
+  requires m.Inv()
+  ensures m'.Inv()
+  ensures m' == CommitterCommitModel.SyncReqs3to2(m)
+  {
+    CommitterCommitModel.reveal_SyncReqs3to2();
+    var it := LinearMutableMap.IterStart(m);
+    linear var m0 := LinearMutableMap.Constructor(128);
+    while !it.next.Done?
+    invariant m.Inv()
+    invariant m0.Inv()
+    invariant LinearMutableMap.WFIter(m, it)
+    invariant m0.Inv()
+    invariant m0.contents.Keys == it.s
+    invariant CommitterCommitModel.SyncReqs3to2(m) == CommitterCommitModel.SyncReqs3to2Iterate(m, it, m0)
+
+    decreases it.decreaser
+    {
+      LinearMutableMap.LemmaIterIndexLtCount(m, it);
+      LinearMutableMap.CountBound(m);
+      m0 := LinearMutableMap.Insert(m0, it.next.key, (if it.next.value == JC.State3 then JC.State2 else it.next.value));
+      it := LinearMutableMap.IterInc(m, it);
+    }
+    LinearMutableMap.Destructor(m);
+    m' := m0;
+  }
 
   linear datatype Committer = Committer(
   status: CommitterModel.Status,
