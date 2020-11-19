@@ -22,7 +22,7 @@ module CommitterInitImpl {
 
   import opened CommitterImpl
   import CommitterInitModel
-
+/*
   method PageInSuperblockReq(
       cm: Committer, io: DiskIOHandler, which: uint64)
   requires cm.Inv()
@@ -64,7 +64,7 @@ module CommitterInitImpl {
     cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
     cm.reveal_ReprInv();
   }
-
+*/
   method FinishLoadingSuperblockPhase(cm: Committer)
   requires cm.Inv()
   requires cm.status.StatusLoadingSuperblock?

@@ -1,8 +1,11 @@
+include "../lib/DataStructures/LinearMutableMap.i.dfy"
 include "CommitterModel.i.dfy"
 include "JournalistImpl.i.dfy"
-include "../lib/DataStructures/LinearMutableMap.i.dfy"
 include "CommitterAppendModel.i.dfy"
 include "CommitterReplayModel.i.dfy"
+include "CommitterInitModel.i.dfy"
+include "DiskOpImpl.i.dfy"
+include "IOImpl.i.dfy"
 
 // for when you have commitment issues
 
@@ -21,33 +24,37 @@ module CommitterImpl {
   import opened ValueType
   import opened Journal
 
+  import opened DiskOpImpl
+
   import opened StateModel
-  import opened IOModel
-  import CommitterAppendModel
-
-  // import opened DiskOpImpl
+  // import opened IOModel
   import CommitterReplayModel
+  import CommitterAppendModel
+  import CommitterInitModel
+  import opened IOImpl
 
-linear datatype Committer = Committer(
-    status: CommitterModel.Status,
-    linear journalist: JournalistImpl.Journalist,
-    frozenLoc: Option<Location>,
-    isFrozen: bool,
-    frozenJournalPosition: uint64,
-    superblockWrite: Option<JC.ReqId>,
-    outstandingJournalWrites: set<JC.ReqId>,
-    superblock: Superblock,
-    newSuperblock: Option<Superblock>,
-    whichSuperblock: uint64,
-    commitStatus: JC.CommitStatus,
-    journalFrontRead: Option<JC.ReqId>,
-    journalBackRead: Option<JC.ReqId>,
-    superblock1Read: Option<JC.ReqId>,
-    superblock2Read: Option<JC.ReqId>,
-    superblock1: JC.SuperblockReadResult,
-    superblock2: JC.SuperblockReadResult,
-    linear syncReqs: LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
-{
+  import opened MainDiskIOHandler
+
+  linear datatype Committer = Committer(
+  status: CommitterModel.Status,
+  linear journalist: JournalistImpl.Journalist,
+  frozenLoc: Option<Location>,
+  isFrozen: bool,
+  frozenJournalPosition: uint64,
+  superblockWrite: Option<JC.ReqId>,
+  outstandingJournalWrites: set<JC.ReqId>,
+  superblock: Superblock,
+  newSuperblock: Option<Superblock>,
+  whichSuperblock: uint64,
+  commitStatus: JC.CommitStatus,
+  journalFrontRead: Option<JC.ReqId>,
+  journalBackRead: Option<JC.ReqId>,
+  superblock1Read: Option<JC.ReqId>,
+  superblock2Read: Option<JC.ReqId>,
+  superblock1: JC.SuperblockReadResult,
+  superblock2: JC.SuperblockReadResult,
+  linear syncReqs: LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
+  {
     predicate W()
     {
       && this.syncReqs.Inv()
@@ -153,5 +160,40 @@ linear datatype Committer = Committer(
       CommitterReplayModel.reveal_JournalReplayOne();
       inout self.journalist.replayJournalPop();
     }
+
+  linear inout method PageInSuperblockReq(io: DiskIOHandler, which: uint64)
+  requires old_self.Inv()
+  requires which == 0 || which == 1
+  requires which == 0 ==> old_self.superblock1.SuperblockUnfinished?
+  requires which == 1 ==> old_self.superblock2.SuperblockUnfinished?
+  requires old_self.status.StatusLoadingSuperblock?
+  requires io.initialized()
+  modifies io
+  ensures self.W()
+  ensures (self.I(), IIO(io)) ==
+      CommitterInitModel.PageInSuperblockReq(
+          old_self.I(), old(IIO(io)), which)
+  {
+    CommitterInitModel.reveal_PageInSuperblockReq();
+
+    if which == 0 {
+      if self.superblock1Read.None? {
+        var loc := Superblock1Location();
+        var id := RequestRead(io, loc);
+        inout self.superblock1Read := Some(id);
+      } else {
+        print "PageInSuperblockReq: doing nothing\n";
+      }
+    } else {
+      if self.superblock2Read.None? {
+          var loc := Superblock2Location();
+          var id := RequestRead(io, loc);
+          inout self.superblock2Read := Some(id);
+      } else {
+          print "PageInSuperblockReq: doing nothing\n";
+      }
+    }
+  }
+
   }
 }
