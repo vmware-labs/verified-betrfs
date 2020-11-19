@@ -12,6 +12,17 @@ module Ptrs {
   // TODO there needs to be some way to enforce that the
   // impl cannot conjure these out of nowhere
 
+  // Normal ptrs
+
+  datatype Deref<V> = Deref(ptr: Ptr, v: V)
+
+  method {:extern} ptr_read<V>(p: Ptr, shared d: Deref<V>)
+  returns (v: V)
+  requires d.ptr == p
+  ensures v == d.v
+
+  // Array ptrs
+
   datatype R<V> =
     | ArrayReadCount(ptr: Ptr, s: seq<V>, refcount: int)
     | ConstArrayDeref(ptr: Ptr, s: seq<V>)

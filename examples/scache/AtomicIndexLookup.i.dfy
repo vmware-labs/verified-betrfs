@@ -3,13 +3,16 @@ include "../../lib/Lang/NativeTypes.s.dfy"
 include "../../lib/Lang/LinearMaybe.s.dfy"
 include "CacheResources.i.dfy"
 include "Constants.i.dfy"
+include "ArrayPtr.s.dfy"
 
 module AtomicIndexLookupImpl {
   import opened NativeTypes
   import opened Ptrs
   import opened AtomicSpec
   import opened LinearMaybe
-  import opened NDiskPages
+  import opened Constants
+  import opened CacheResources
+  import opened Options
 
   type AtomicIndexLookup = Atomic<uint64, CacheResources.R>
 
@@ -22,9 +25,9 @@ module AtomicIndexLookupImpl {
         (if v == NOT_MAPPED then None else Some(v as int)))
   }
 
-  predicate atomic_index_lookup_inv(a: AtomicStatus, ptr: Ptr)
+  predicate atomic_index_lookup_inv(a: AtomicIndexLookup, disk_idx: int)
   {
-    forall v, g :: atomic_inv(a, v, g) <==> state_inv(v, g, ptr)
+    forall v, g :: atomic_inv(a, v, g) <==> state_inv(v, g, disk_idx)
   }
 
   method atomic_index_lookup_read(
@@ -44,9 +47,9 @@ module AtomicIndexLookupImpl {
     linear m': CacheResources.R
   )
   requires m.CacheEntry?
-  requires m.disk_idx == None
+  requires m.disk_idx_opt == None
   requires m.cache_idx == cache_idx
-  ensures success ==> m' == m.(disk_idx := Some(disk_idx))
-  ensures success ==> m' == m.(disk_idx := Some(disk_idx))
+  ensures !success ==> m' == m
+  ensures success ==> m' == m.(disk_idx_opt := Some(disk_idx))
 
 }

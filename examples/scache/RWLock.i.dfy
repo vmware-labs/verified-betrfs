@@ -170,5 +170,4 @@ module ReadWriteLockResources {
   requires s2 == WritePending(ptr, idx)
   ensures t1 == ReadRefCount(ptr, idx, 0)
   ensures t2 == WritePending(ptr, idx + 1)
-
 }
