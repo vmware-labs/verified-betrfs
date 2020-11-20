@@ -17,15 +17,33 @@ module Ptrs {
   datatype Deref<V> = Deref(ptr: Ptr, v: V)
   datatype ConstDeref<V> = ConstDeref(ptr: Ptr, v: V)
 
+  // linear Deref
+  // linear ConstDeref
+
+  // linear Deref
+  // readonly-linear Deref
+
+  // ptr p
+  // Deref(p, 5)
+  //
+  // var x := read(p, deref)
+  // x == 5
+  //
+
+  method {:extern} ptr_write<V>(p: Ptr, v: V, inout linear d: Deref<V>)
+  requires old_d.ptr == p
+  ensures d.ptr == p
+  ensures d.v == v
+
   method {:extern} ptr_read<V>(p: Ptr, shared d: Deref<V>)
   returns (v: V)
   requires d.ptr == p
   ensures v == d.v
 
-  method {:extern} ptr_const_read<V>(p: Ptr, shared d: ConstDeref<V>)
+  /*method {:extern} ptr_const_read<V>(p: Ptr, shared d: ConstDeref<V>)
   returns (v: V)
   requires d.ptr == p
-  ensures v == d.v
+  ensures v == d.v*/
 
 
   // Array ptrs
