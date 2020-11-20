@@ -656,77 +656,25 @@ module CommitterImpl {
         old_self.I())
     {
       id := self.freeId();
-
       if id != 0 && self.syncReqs.count < 0x2000_0000_0000_0000 {
-        // old version       cm.syncReqs.Insert(id, JC.State3);
-
-        // [yizhou7] FIXME: very inelegant to deconstruct and reconstruct
-        linear var Committer(status,
-            journalist,
-            frozenLoc,
-            isFrozen,
-            frozenJournalPosition,
-            superblockWrite,
-            outstandingJournalWrites,
-            superblock,
-            newSuperblock,
-            whichSuperblock,
-            commitStatus,
-            journalFrontRead,
-            journalBackRead,
-            superblock1Read,
-            superblock2Read,
-            superblock1,
-            superblock2,
-            syncReqs) := self;
-
-        syncReqs := LinearMutableMap.Insert(syncReqs, id, JC.State3);
-
-        self := Committer(status,
-            journalist,
-            frozenLoc,
-            isFrozen,
-            frozenJournalPosition,
-            superblockWrite,
-            outstandingJournalWrites,
-            superblock,
-            newSuperblock,
-            whichSuperblock,
-            commitStatus,
-            journalFrontRead,
-            journalBackRead,
-            superblock1Read,
-            superblock2Read,
-            superblock1,
-            superblock2,
-            syncReqs);
-
-        assert self.syncReqs == LinearMutableMap.Insert(old_self.syncReqs, id, JC.State3);
-        assert self == old_self.(syncReqs := LinearMutableMap.Insert(old_self.syncReqs, id, JC.State3));
-        assert (self.I(), id) == CommitterCommitModel.pushSync(
-        old_self.I());
+        LinearMutableMap.InOutInsert(inout self.syncReqs, id, JC.State3);
       } else {
         id := 0;
       }
     }
 
-/*
     // == popSync ==
-    method popSync(cm: Committer, id: uint64)
-    requires cm.Inv()
-    modifies cm.Repr
-    ensures cm.W()
-    ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
-    ensures cm.I() == CommitterCommitModel.popSync(
-        old(cm.I()), id)
+    linear inout method popSync(id: uint64)
+    requires old_self.Inv()
+    ensures self.W()
+    ensures self.I() == CommitterCommitModel.popSync(
+        old_self.I(), id)
     {
       CommitterCommitModel.reveal_popSync();
-      cm.reveal_ReprInv();
-      cm.syncReqs.Remove(id);
-      cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
-      cm.reveal_ReprInv();
+      LinearMutableMap.InOutRemove(inout self.syncReqs, id);
     }
 
+/*
     // == AdvanceLog ==
     method tryAdvanceLog(cm: Committer, io: DiskIOHandler)
     returns (wait: bool)

@@ -1324,6 +1324,14 @@ module LinearMutableMap {
     self'
   }
 
+  method InOutInsert<V>(inout linear self: LinearHashMap, key: uint64, value: V)
+    requires old_self.Inv()
+    requires old_self.count as nat < 0x1_0000_0000_0000_0000 / 8
+    ensures self == Insert(old_self, key, value)
+  {
+    self := Insert(self, key, value);
+  }
+
   linear datatype RemoveResult<V> = RemoveResult(linear self': LinearHashMap, removed: Option<V>)
   function method RemoveInternal<V>(linear self: LinearHashMap, key: uint64)
   : (linear res: RemoveResult<V>)
@@ -1409,6 +1417,13 @@ module LinearMutableMap {
   {
     linear var RemoveResult(self', _) := RemoveAndGet(self, key);
     self'
+  }
+
+  method InOutRemove<V>(linear inout self: LinearHashMap, key: uint64)
+    requires old_self.Inv()
+    ensures self == Remove(old_self, key)
+  {
+    self := Remove(self, key);
   }
 
   function method Get<V>(shared self: LinearHashMap, key: uint64)
