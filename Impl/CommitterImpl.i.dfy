@@ -41,11 +41,9 @@ module CommitterImpl {
 
   // TODO we could have these do the modification in-place instead.
 
-  method SyncReqs2to1(linear m: LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
-  returns (linear m' : LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
-  requires m.Inv()
-  ensures m'.Inv()
-  ensures m' == CommitterCommitModel.SyncReqs2to1(m)
+  method SyncReqs2to1(inout linear m: LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
+  requires old_m.Inv()
+  ensures m == CommitterCommitModel.SyncReqs2to1(old_m)
   {
     CommitterCommitModel.reveal_SyncReqs2to1();
     var it := LinearMutableMap.IterStart(m);
@@ -66,14 +64,13 @@ module CommitterImpl {
       it := LinearMutableMap.IterInc(m, it);
     }
     LinearMutableMap.Destructor(m);
-    m' := m0;
+    m := m0;
   }
 
-  method SyncReqs3to2(linear m: LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
-  returns (linear m' : LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
-  requires m.Inv()
-  ensures m'.Inv()
-  ensures m' == CommitterCommitModel.SyncReqs3to2(m)
+  method SyncReqs3to2(inout linear m: LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
+  requires old_m.Inv()
+  ensures m.Inv()
+  ensures m == CommitterCommitModel.SyncReqs3to2(old_m)
   {
     CommitterCommitModel.reveal_SyncReqs3to2();
     var it := LinearMutableMap.IterStart(m);
@@ -94,7 +91,7 @@ module CommitterImpl {
       it := LinearMutableMap.IterInc(m, it);
     }
     LinearMutableMap.Destructor(m);
-    m' := m0;
+    m := m0;
   }
 
   linear datatype Committer = Committer(
@@ -160,9 +157,9 @@ module CommitterImpl {
       && CommitterModel.Inv(I())
     }
 
-    static method Constructor() returns (linear cm: Committer)
-    ensures cm.Inv()
-    ensures CommitterModel.I(cm.I())
+    static method Constructor() returns (linear self: Committer)
+    ensures self.Inv()
+    ensures CommitterModel.I(self.I())
         == JC.LoadingSuperblock(
             None, None,
             JC.SuperblockUnfinished,
@@ -171,7 +168,7 @@ module CommitterImpl {
     {
       linear var j := JournalistImpl.Journalist.Constructor();
       linear var m := LinearMutableMap.Constructor(128);
-      cm := Committer(
+      self := Committer(
         CommitterModel.StatusLoadingSuperblock,
         j,
         None,
@@ -191,7 +188,7 @@ module CommitterImpl {
         JC.SuperblockUnfinished,
         m
       );
-      assert CommitterModel.I(cm.I()) == JC.LoadingSuperblock(
+      assert CommitterModel.I(self.I()) == JC.LoadingSuperblock(
             None, None,
             JC.SuperblockUnfinished,
             JC.SuperblockUnfinished,
@@ -307,7 +304,6 @@ module CommitterImpl {
         inout self.outstandingJournalWrites := {};
         inout self.newSuperblock := None;
         inout self.commitStatus := JC.CommitNone;
-        // [original] self.journalist.setWrittenJournalLen(self.superblock.journalLen);
         var len := self.superblock.journalLen;
         inout self.journalist.setWrittenJournalLen(len);
       } else {
@@ -469,45 +465,7 @@ module CommitterImpl {
       if doingFrozen {
         inout self.frozenJournalPosition := self.journalist.getWrittenJournalLen();
       } else {
-        // [yizhou7] FIXME: very inelegant to deconstruct and reconstruct
-        linear var Committer(status,
-            journalist,
-            frozenLoc,
-            isFrozen,
-            frozenJournalPosition,
-            superblockWrite,
-            outstandingJournalWrites,
-            superblock,
-            newSuperblock,
-            whichSuperblock,
-            commitStatus,
-            journalFrontRead,
-            journalBackRead,
-            superblock1Read,
-            superblock2Read,
-            superblock1,
-            superblock2,
-            syncReqs) := self;
-
-        syncReqs := SyncReqs3to2(syncReqs);
-        self := Committer(status,
-            journalist,
-            frozenLoc,
-            isFrozen,
-            frozenJournalPosition,
-            superblockWrite,
-            outstandingJournalWrites,
-            superblock,
-            newSuperblock,
-            whichSuperblock,
-            commitStatus,
-            journalFrontRead,
-            journalBackRead,
-            superblock1Read,
-            superblock2Read,
-            superblock1,
-            superblock2,
-            syncReqs);
+        SyncReqs3to2(inout self.syncReqs);
       }
 
       assert (self.I(), IIO(io)) == CommitterCommitModel.WriteOutJournal(
@@ -579,49 +537,7 @@ module CommitterImpl {
       inout self.frozenLoc := None;
       inout self.frozenJournalPosition := writtenJournalLen;
       inout self.isFrozen := true;
-      // inout self.syncReqs := SyncReqs3to2(self.syncReqs);
-
-        // [yizhou7] FIXME: very inelegant to deconstruct and reconstruct
-        linear var Committer(status,
-            journalist,
-            frozenLoc,
-            isFrozen,
-            frozenJournalPosition,
-            superblockWrite,
-            outstandingJournalWrites,
-            superblock,
-            newSuperblock,
-            whichSuperblock,
-            commitStatus,
-            journalFrontRead,
-            journalBackRead,
-            superblock1Read,
-            superblock2Read,
-            superblock1,
-            superblock2,
-            syncReqs) := self;
-
-        syncReqs := SyncReqs3to2(syncReqs);
-
-        self := Committer(status,
-            journalist,
-            frozenLoc,
-            isFrozen,
-            frozenJournalPosition,
-            superblockWrite,
-            outstandingJournalWrites,
-            superblock,
-            newSuperblock,
-            whichSuperblock,
-            commitStatus,
-            journalFrontRead,
-            journalBackRead,
-            superblock1Read,
-            superblock2Read,
-            superblock1,
-            superblock2,
-            syncReqs);
-
+      SyncReqs3to2(inout self.syncReqs);
     }
 
     linear inout method receiveFrozenLoc(loc: Location)
@@ -674,30 +590,26 @@ module CommitterImpl {
       LinearMutableMap.InOutRemove(inout self.syncReqs, id);
     }
 
-/*
     // == AdvanceLog ==
-    method tryAdvanceLog(cm: Committer, io: DiskIOHandler)
+    linear inout method tryAdvanceLog(io: DiskIOHandler)
     returns (wait: bool)
-    requires cm.Inv()
+    requires old_self.Inv()
     requires io.initialized()
-    requires io !in cm.Repr
-    requires cm.status == CommitterModel.StatusReady
-    modifies cm.Repr
+    requires old_self.status == CommitterModel.StatusReady
     modifies io
-    ensures cm.W()
-    ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
+    ensures self.W()
     ensures CommitterCommitModel.tryAdvanceLog(
-        old(cm.I()), old(IIO(io)), cm.I(), IIO(io))
+        old_self.I(), old(IIO(io)), self.I(), IIO(io))
     {
       CommitterCommitModel.reveal_tryAdvanceLog();
       wait := false;
-      var hasFrozen := cm.journalist.hasFrozenJournal();
-      var hasInMem := cm.journalist.hasInMemoryJournal();
-      if cm.superblockWrite.None? {
+      var hasFrozen := self.journalist.hasFrozenJournal();
+      var hasInMem := self.journalist.hasInMemoryJournal();
+      if self.superblockWrite.None? {
         if hasFrozen || hasInMem {
-          WriteOutJournal(cm, io);
-        } else if (cm.outstandingJournalWrites == {}) {
-          writeOutSuperblockAdvanceLog(cm, io);
+          inout self.WriteOutJournal(io);
+        } else if (self.outstandingJournalWrites == {}) {
+          inout self.writeOutSuperblockAdvanceLog(io);
         } else {
           wait := true;
         }
@@ -706,29 +618,26 @@ module CommitterImpl {
       }
     }
 
-    method tryAdvanceLocation(cm: Committer, io: DiskIOHandler)
+    linear inout method tryAdvanceLocation(io: DiskIOHandler)
     returns (wait: bool)
-    requires cm.Inv()
+    requires old_self.Inv()
     requires io.initialized()
-    requires io !in cm.Repr
-    requires cm.status == CommitterModel.StatusReady
-    requires cm.frozenLoc.Some?
-    modifies cm.Repr
+    requires old_self.status == CommitterModel.StatusReady
+    requires old_self.frozenLoc.Some?
     modifies io
-    ensures cm.W()
-    ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
+    ensures self.W()
     ensures CommitterCommitModel.tryAdvanceLocation(
-        old(cm.I()), old(IIO(io)), cm.I(), IIO(io))
+        old_self.I(), old(IIO(io)), self.I(), IIO(io))
     {
       CommitterCommitModel.reveal_tryAdvanceLocation();
       wait := false;
-      var hasFrozen := cm.journalist.hasFrozenJournal();
-      var hasInMem := cm.journalist.hasInMemoryJournal();
-      if cm.superblockWrite.None? {
+      var hasFrozen := self.journalist.hasFrozenJournal();
+      var hasInMem := self.journalist.hasInMemoryJournal();
+      if self.superblockWrite.None? {
         if hasFrozen || hasInMem {
-          WriteOutJournal(cm, io);
-        } else if (cm.outstandingJournalWrites == {}) {
-          writeOutSuperblockAdvanceLocation(cm, io);
+          inout self.WriteOutJournal(io);
+        } else if (self.outstandingJournalWrites == {}) {
+          inout self.writeOutSuperblockAdvanceLocation(io);
         } else {
           wait := true;
         }
@@ -737,42 +646,36 @@ module CommitterImpl {
       }
     }
 
-    method writeBackSuperblockResp(cm: Committer)
-    requires cm.Inv()
-    modifies cm.Repr
-    ensures cm.W()
-    ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
-    ensures cm.I() == CommitterCommitModel.writeBackSuperblockResp(
-        old(cm.I()));
-    {
-      CommitterCommitModel.reveal_writeBackSuperblockResp();
-      cm.reveal_ReprInv();
-      if cm.status.StatusReady? && cm.commitStatus.CommitAdvanceLocation? {
-        var writtenJournalLen := cm.journalist.getWrittenJournalLen();
-        cm.superblockWrite := None;
-        cm.superblock := cm.newSuperblock.value;
-        cm.newSuperblock := None;
-        cm.whichSuperblock := if cm.whichSuperblock == 0 then 1 else 0;
-        cm.syncReqs := SyncReqs2to1(cm.syncReqs);
-        cm.journalist.updateWrittenJournalLen(
-              writtenJournalLen - cm.frozenJournalPosition);
-        cm.frozenJournalPosition := 0;
-        cm.frozenLoc := None;
-        cm.isFrozen := false;
-        cm.commitStatus := JC.CommitNone;
-      } else if cm.status.StatusReady? && cm.commitStatus.CommitAdvanceLog? {
-        cm.superblockWrite := None;
-        cm.superblock := cm.newSuperblock.value;
-        cm.newSuperblock := None;
-        cm.whichSuperblock := if cm.whichSuperblock == 0 then 1 else 0;
-        cm.syncReqs := SyncReqs2to1(cm.syncReqs);
-        cm.commitStatus := JC.CommitNone;
-      } else {
-        print "writeBackSuperblockResp: didn't do anything\n";
-      }
-      cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
-      cm.reveal_ReprInv();
-    }
-    */
+    // linear inout method writeBackSuperblockResp(cm: Committer)
+    // requires old_self.Inv()
+    // ensures self.W()
+    // ensures self.I() == CommitterCommitModel.writeBackSuperblockResp(
+    //     old_self.I());
+    // {
+    //   CommitterCommitModel.reveal_writeBackSuperblockResp();
+    //   if self.status.StatusReady? && self.commitStatus.CommitAdvanceLocation? {
+    //     var writtenJournalLen := self.journalist.getWrittenJournalLen();
+    //     inout self.superblockWrite := None;
+    //     inout self.superblock := self.newSuperblock.value;
+    //     inout self.newSuperblock := None;
+    //     inout self.whichSuperblock := if self.whichSuperblock == 0 then 1 else 0;
+    //     inout self.syncReqs := SyncReqs2to1(self.syncReqs);
+    //     inout self.journalist.updateWrittenJournalLen(
+    //           writtenJournalLen - self.frozenJournalPosition);
+    //     inout self.frozenJournalPosition := 0;
+    //     inout self.frozenLoc := None;
+    //     inout self.isFrozen := false;
+    //     inout self.commitStatus := JC.CommitNone;
+    //   } else if self.status.StatusReady? && self.commitStatus.CommitAdvanceLog? {
+    //     inout self.superblockWrite := None;
+    //     inout self.superblock := self.newSuperblock.value;
+    //     inout self.newSuperblock := None;
+    //     inout self.whichSuperblock := if self.whichSuperblock == 0 then 1 else 0;
+    //     inout self.syncReqs := SyncReqs2to1(self.syncReqs);
+    //     inout self.commitStatus := JC.CommitNone;
+    //   } else {
+    //     print "writeBackSuperblockResp: didn't do anything\n";
+    //   }
+    // }
   }
 }
