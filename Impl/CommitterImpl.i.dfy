@@ -37,6 +37,8 @@ module CommitterImpl {
   import JournalistParsingImpl
   import CommitterCommitModel
 
+  import StateImpl
+
   // TODO we could have these do the modification in-place instead.
 
   method SyncReqs2to1(linear m: LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
@@ -506,114 +508,133 @@ module CommitterImpl {
             superblock1,
             superblock2,
             syncReqs);
-
       }
 
       assert (self.I(), IIO(io)) == CommitterCommitModel.WriteOutJournal(
         old_self.I(), old(IIO(io)));
     }
 
-/*
-    method writeOutSuperblockAdvanceLog(
-        cm: Committer, io: DiskIOHandler)
+    linear inout method writeOutSuperblockAdvanceLog(io: DiskIOHandler)
     requires io.initialized()
-    requires cm.Inv()
-    requires io !in cm.Repr
-    requires cm.status == CommitterModel.StatusReady
-    modifies cm.Repr
+    requires old_self.Inv()
+    requires old_self.status == CommitterModel.StatusReady
     modifies io
-    ensures cm.W()
-    ensures cm.Repr == old(cm.Repr)
+    ensures self.W()
     ensures CommitterCommitModel.writeOutSuperblockAdvanceLog(
-        old(cm.I()), old(IIO(io)), cm.I(), IIO(io))
+        old_self.I(), old(IIO(io)), self.I(), IIO(io))
     {
-      //CommitterCommitModel.reveal_writeOutSuperblockAdvanceLog();
-      cm.reveal_ReprInv();
-      var writtenJournalLen := cm.journalist.getWrittenJournalLen();
+      var writtenJournalLen := self.journalist.getWrittenJournalLen();
       var newSuperblock := SectorType.Superblock(
-        JC.IncrementSuperblockCounter(cm.superblock.counter),
-        cm.superblock.journalStart,
+        JC.IncrementSuperblockCounter(self.superblock.counter),
+        self.superblock.journalStart,
         writtenJournalLen,
-        cm.superblock.indirectionTableLoc
+        self.superblock.indirectionTableLoc
       );
       assert JC.WFSuperblock(newSuperblock);
-      var loc := if cm.whichSuperblock == 0 then Superblock2Location() else Superblock1Location();
+      var loc := if self.whichSuperblock == 0 then Superblock2Location() else Superblock1Location();
       var id := RequestWrite(io, loc,
           StateImpl.SectorSuperblock(newSuperblock));
-      cm.newSuperblock := Some(newSuperblock);
-      cm.superblockWrite := Some(id);
-      cm.commitStatus := JC.CommitAdvanceLog;
-      cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
-      cm.reveal_ReprInv();
+      inout self.newSuperblock := Some(newSuperblock);
+      inout self.superblockWrite := Some(id);
+      inout self.commitStatus := JC.CommitAdvanceLog;
     }
-    
-    method writeOutSuperblockAdvanceLocation(
-        cm: Committer, io: DiskIOHandler)
+
+    linear inout method writeOutSuperblockAdvanceLocation(io: DiskIOHandler)
     requires io.initialized()
-    requires cm.Inv()
-    requires io !in cm.Repr
-    requires cm.status == CommitterModel.StatusReady
-    requires cm.frozenLoc.Some?
-    modifies cm.Repr
+    requires old_self.Inv()
+    requires old_self.status == CommitterModel.StatusReady
+    requires old_self.frozenLoc.Some?
     modifies io
-    ensures cm.W()
-    ensures cm.Repr == old(cm.Repr)
+    ensures self.W()
     ensures CommitterCommitModel.writeOutSuperblockAdvanceLocation(
-        old(cm.I()), old(IIO(io)), cm.I(), IIO(io))
+        old_self.I(), old(IIO(io)), self.I(), IIO(io))
     {
       CommitterCommitModel.reveal_writeOutSuperblockAdvanceLocation();
-      cm.reveal_ReprInv();
-      var writtenJournalLen := cm.journalist.getWrittenJournalLen();
+      var writtenJournalLen := self.journalist.getWrittenJournalLen();
       var newSuperblock := SectorType.Superblock(
-        JC.IncrementSuperblockCounter(cm.superblock.counter),
+        JC.IncrementSuperblockCounter(self.superblock.counter),
         CommitterCommitModel.start_pos_add(
-            cm.superblock.journalStart,
-            cm.frozenJournalPosition),
-        writtenJournalLen - cm.frozenJournalPosition,
-        cm.frozenLoc.value
+            self.superblock.journalStart,
+            self.frozenJournalPosition),
+        writtenJournalLen - self.frozenJournalPosition,
+        self.frozenLoc.value
       );
       assert JC.WFSuperblock(newSuperblock);
-      var loc := if cm.whichSuperblock == 0 then Superblock2Location() else Superblock1Location();
+      var loc := if self.whichSuperblock == 0 then Superblock2Location() else Superblock1Location();
       var id := RequestWrite(io, loc,
           StateImpl.SectorSuperblock(newSuperblock));
-      cm.newSuperblock := Some(newSuperblock);
-      cm.superblockWrite := Some(id);
-      cm.commitStatus := JC.CommitAdvanceLocation;
-      cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
-      cm.reveal_ReprInv();
+      inout self.newSuperblock := Some(newSuperblock);
+      inout self.superblockWrite := Some(id);
+      inout self.commitStatus := JC.CommitAdvanceLocation;
     }
-    method freeze(cm: Committer)
-    requires cm.WF()
-    modifies cm.Repr
-    ensures cm.W()
-    ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
-    ensures cm.I() == CommitterCommitModel.freeze(old(cm.I()))
+
+    linear inout method freeze()
+    requires old_self.WF()
+    ensures self.W()
+    ensures self.I() == CommitterCommitModel.freeze(old_self.I())
     {
       CommitterCommitModel.reveal_freeze();
-      cm.reveal_ReprInv();
-      var writtenJournalLen := cm.journalist.getWrittenJournalLen();
-      cm.journalist.freeze();
-      cm.frozenLoc := None;
-      cm.frozenJournalPosition := writtenJournalLen;
-      cm.isFrozen := true;
-      cm.syncReqs := SyncReqs3to2(cm.syncReqs);
-      cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
-      cm.reveal_ReprInv();
+      var writtenJournalLen := self.journalist.getWrittenJournalLen();
+      inout self.journalist.freeze();
+      inout self.frozenLoc := None;
+      inout self.frozenJournalPosition := writtenJournalLen;
+      inout self.isFrozen := true;
+      // inout self.syncReqs := SyncReqs3to2(self.syncReqs);
+
+        // [yizhou7] FIXME: very inelegant to deconstruct and reconstruct
+        linear var Committer(status,
+            journalist,
+            frozenLoc,
+            isFrozen,
+            frozenJournalPosition,
+            superblockWrite,
+            outstandingJournalWrites,
+            superblock,
+            newSuperblock,
+            whichSuperblock,
+            commitStatus,
+            journalFrontRead,
+            journalBackRead,
+            superblock1Read,
+            superblock2Read,
+            superblock1,
+            superblock2,
+            syncReqs) := self;
+
+        syncReqs := SyncReqs3to2(syncReqs);
+
+        self := Committer(status,
+            journalist,
+            frozenLoc,
+            isFrozen,
+            frozenJournalPosition,
+            superblockWrite,
+            outstandingJournalWrites,
+            superblock,
+            newSuperblock,
+            whichSuperblock,
+            commitStatus,
+            journalFrontRead,
+            journalBackRead,
+            superblock1Read,
+            superblock2Read,
+            superblock1,
+            superblock2,
+            syncReqs);
+
     }
-    method receiveFrozenLoc(
-        cm: Committer, loc: Location)
-    requires cm.W()
-    modifies cm.Repr
-    ensures cm.W()
-    ensures cm.Repr == old(cm.Repr)
-    ensures cm.I() == CommitterCommitModel.receiveFrozenLoc(
-          old(cm.I()), loc)
+
+    linear inout method receiveFrozenLoc(loc: Location)
+    requires old_self.W()
+    ensures self.W()
+    ensures self.I() == CommitterCommitModel.receiveFrozenLoc(
+          old_self.I(), loc)
     {
       CommitterCommitModel.reveal_receiveFrozenLoc();
-      cm.reveal_ReprInv();
-      cm.frozenLoc := Some(loc);
-      cm.reveal_ReprInv();
+      inout self.frozenLoc := Some(loc);
     }
+
+/*
     // == pushSync ==
     method freeId<A>(syncReqs: MutableMap.ResizingHashMap<A>) returns (id: uint64)
     requires syncReqs.Inv()
@@ -627,6 +648,7 @@ module CommitterImpl {
         return maxId + 1;
       }
     }
+
     method pushSync(cm: Committer)
     returns (id: uint64)
     requires cm.Inv()
@@ -646,6 +668,7 @@ module CommitterImpl {
       cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
       cm.reveal_ReprInv();
     }
+
     // == popSync ==
     method popSync(cm: Committer, id: uint64)
     requires cm.Inv()
@@ -661,6 +684,7 @@ module CommitterImpl {
       cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
       cm.reveal_ReprInv();
     }
+
     // == AdvanceLog ==
     method tryAdvanceLog(cm: Committer, io: DiskIOHandler)
     returns (wait: bool)
@@ -691,6 +715,7 @@ module CommitterImpl {
         wait := true;
       }
     }
+
     method tryAdvanceLocation(cm: Committer, io: DiskIOHandler)
     returns (wait: bool)
     requires cm.Inv()
@@ -721,6 +746,7 @@ module CommitterImpl {
         wait := true;
       }
     }
+
     method writeBackSuperblockResp(cm: Committer)
     requires cm.Inv()
     modifies cm.Repr
