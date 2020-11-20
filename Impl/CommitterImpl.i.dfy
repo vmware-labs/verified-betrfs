@@ -646,36 +646,37 @@ module CommitterImpl {
       }
     }
 
-    // linear inout method writeBackSuperblockResp(cm: Committer)
-    // requires old_self.Inv()
-    // ensures self.W()
-    // ensures self.I() == CommitterCommitModel.writeBackSuperblockResp(
-    //     old_self.I());
-    // {
-    //   CommitterCommitModel.reveal_writeBackSuperblockResp();
-    //   if self.status.StatusReady? && self.commitStatus.CommitAdvanceLocation? {
-    //     var writtenJournalLen := self.journalist.getWrittenJournalLen();
-    //     inout self.superblockWrite := None;
-    //     inout self.superblock := self.newSuperblock.value;
-    //     inout self.newSuperblock := None;
-    //     inout self.whichSuperblock := if self.whichSuperblock == 0 then 1 else 0;
-    //     inout self.syncReqs := SyncReqs2to1(self.syncReqs);
-    //     inout self.journalist.updateWrittenJournalLen(
-    //           writtenJournalLen - self.frozenJournalPosition);
-    //     inout self.frozenJournalPosition := 0;
-    //     inout self.frozenLoc := None;
-    //     inout self.isFrozen := false;
-    //     inout self.commitStatus := JC.CommitNone;
-    //   } else if self.status.StatusReady? && self.commitStatus.CommitAdvanceLog? {
-    //     inout self.superblockWrite := None;
-    //     inout self.superblock := self.newSuperblock.value;
-    //     inout self.newSuperblock := None;
-    //     inout self.whichSuperblock := if self.whichSuperblock == 0 then 1 else 0;
-    //     inout self.syncReqs := SyncReqs2to1(self.syncReqs);
-    //     inout self.commitStatus := JC.CommitNone;
-    //   } else {
-    //     print "writeBackSuperblockResp: didn't do anything\n";
-    //   }
-    // }
+    linear inout method writeBackSuperblockResp()
+    requires old_self.Inv()
+    ensures self.W()
+    ensures self.I() == CommitterCommitModel.writeBackSuperblockResp(
+        old_self.I());
+    {
+      CommitterCommitModel.reveal_writeBackSuperblockResp();
+      if self.status.StatusReady? && self.commitStatus.CommitAdvanceLocation? {
+        var writtenJournalLen := self.journalist.getWrittenJournalLen();
+        inout self.superblockWrite := None;
+        inout self.superblock := self.newSuperblock.value;
+        inout self.newSuperblock := None;
+        inout self.whichSuperblock := if self.whichSuperblock == 0 then 1 else 0;
+        SyncReqs2to1(inout self.syncReqs);
+        var position := self.frozenJournalPosition;
+        inout self.journalist.updateWrittenJournalLen(
+              writtenJournalLen - position);
+        inout self.frozenJournalPosition := 0;
+        inout self.frozenLoc := None;
+        inout self.isFrozen := false;
+        inout self.commitStatus := JC.CommitNone;
+      } else if self.status.StatusReady? && self.commitStatus.CommitAdvanceLog? {
+        inout self.superblockWrite := None;
+        inout self.superblock := self.newSuperblock.value;
+        inout self.newSuperblock := None;
+        inout self.whichSuperblock := if self.whichSuperblock == 0 then 1 else 0;
+        SyncReqs2to1(inout self.syncReqs);
+        inout self.commitStatus := JC.CommitNone;
+      } else {
+        print "writeBackSuperblockResp: didn't do anything\n";
+      }
+    }
   }
 }

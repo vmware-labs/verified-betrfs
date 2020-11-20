@@ -81,7 +81,6 @@ module CommitterCommitImpl {
     }
     m' := m0;
   }
-*/
 
   method WriteOutJournal(cm: Committer, io: DiskIOHandler)
   requires io.initialized()
@@ -424,4 +423,5 @@ module CommitterCommitImpl {
     cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
     cm.reveal_ReprInv();
   }
+*/
 }
