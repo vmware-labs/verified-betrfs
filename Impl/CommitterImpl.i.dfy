@@ -634,14 +634,13 @@ module CommitterImpl {
       inout self.frozenLoc := Some(loc);
     }
 
-/*
     // == pushSync ==
-    method freeId<A>(syncReqs: MutableMap.ResizingHashMap<A>) returns (id: uint64)
+    shared method freeId() returns (id: uint64)
     requires syncReqs.Inv()
-    ensures id == CommitterCommitModel.freeId(syncReqs.I())
+    ensures id == CommitterCommitModel.freeId(syncReqs)
     {
       CommitterCommitModel.reveal_freeId();
-      var maxId := syncReqs.MaxKey();
+      var maxId := LinearMutableMap.MaxKey(this.syncReqs);
       if maxId == 0xffff_ffff_ffff_ffff {
         return 0;
       } else {
@@ -649,26 +648,69 @@ module CommitterImpl {
       }
     }
 
-    method pushSync(cm: Committer)
+    linear inout method pushSync()
     returns (id: uint64)
-    requires cm.Inv()
-    modifies cm.Repr
-    ensures cm.W()
-    ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
-    ensures (cm.I(), id) == CommitterCommitModel.pushSync(
-        old(cm.I()))
+    requires old_self.Inv()
+    ensures self.W()
+    ensures (self.I(), id) == CommitterCommitModel.pushSync(
+        old_self.I())
     {
-      cm.reveal_ReprInv();
-      id := freeId(cm.syncReqs);
-      if id != 0 && cm.syncReqs.Count < 0x2000_0000_0000_0000 {
-        cm.syncReqs.Insert(id, JC.State3);
+      id := self.freeId();
+
+      if id != 0 && self.syncReqs.count < 0x2000_0000_0000_0000 {
+        // old version       cm.syncReqs.Insert(id, JC.State3);
+
+        // [yizhou7] FIXME: very inelegant to deconstruct and reconstruct
+        linear var Committer(status,
+            journalist,
+            frozenLoc,
+            isFrozen,
+            frozenJournalPosition,
+            superblockWrite,
+            outstandingJournalWrites,
+            superblock,
+            newSuperblock,
+            whichSuperblock,
+            commitStatus,
+            journalFrontRead,
+            journalBackRead,
+            superblock1Read,
+            superblock2Read,
+            superblock1,
+            superblock2,
+            syncReqs) := self;
+
+        syncReqs := LinearMutableMap.Insert(syncReqs, id, JC.State3);
+
+        self := Committer(status,
+            journalist,
+            frozenLoc,
+            isFrozen,
+            frozenJournalPosition,
+            superblockWrite,
+            outstandingJournalWrites,
+            superblock,
+            newSuperblock,
+            whichSuperblock,
+            commitStatus,
+            journalFrontRead,
+            journalBackRead,
+            superblock1Read,
+            superblock2Read,
+            superblock1,
+            superblock2,
+            syncReqs);
+
+        assert self.syncReqs == LinearMutableMap.Insert(old_self.syncReqs, id, JC.State3);
+        assert self == old_self.(syncReqs := LinearMutableMap.Insert(old_self.syncReqs, id, JC.State3));
+        assert (self.I(), id) == CommitterCommitModel.pushSync(
+        old_self.I());
       } else {
         id := 0;
       }
-      cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
-      cm.reveal_ReprInv();
     }
 
+/*
     // == popSync ==
     method popSync(cm: Committer, id: uint64)
     requires cm.Inv()
