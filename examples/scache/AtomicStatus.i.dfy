@@ -44,35 +44,43 @@ module AtomicStatusImpl {
   ensures success ==> has(m)
       && read(m) == ReadWriteLockResources.BackObtained(ptr)
   {
-    var did_set := compare_and_set(a, flag_free, flag_back);
+    // TODO check if the acquire flag is set
 
-    ///// Begin jank
-    ///// Setup:
-    var v1 := flag_free;
-    var v2 := flag_back;
-    var old_v: uint8;
-    var new_v: uint8;
-    linear var old_g: ReadWriteLockResources.Q := unsafe_obtain();
-    assume old_v == v1 ==> new_v == v2 && did_set;
-    assume old_v != v1 ==> new_v == old_v && !did_set;
-    assume atomic_inv(a, old_v, old_g);
-    linear var new_g;
-    ///// Transfer:
-    if did_set {
-      linear var res;
-      new_g, res := ReadWriteLockResources.transform_TakeBack(ptr, old_g);
-      m := give(res);
-    } else {
+    var cur_flag := atomic_read(a);
+    if cur_flag != flag_free {
       m := empty();
-      new_g := old_g;
-    }
-    assert state_inv(new_v, new_g, ptr);
-    ///// Teardown:
-    assert atomic_inv(a, new_v, new_g);
-    unsafe_dispose(new_g);
-    ///// End jank
+      success := false;
+    } else {
+      var did_set := compare_and_set(a, flag_free, flag_back);
 
-    success := did_set;
+      ///// Begin jank
+      ///// Setup:
+      var v1 := flag_free;
+      var v2 := flag_back;
+      var old_v: uint8;
+      var new_v: uint8;
+      linear var old_g: ReadWriteLockResources.Q := unsafe_obtain();
+      assume old_v == v1 ==> new_v == v2 && did_set;
+      assume old_v != v1 ==> new_v == old_v && !did_set;
+      assume atomic_inv(a, old_v, old_g);
+      linear var new_g;
+      ///// Transfer:
+      if did_set {
+        linear var res;
+        new_g, res := ReadWriteLockResources.transform_TakeBack(ptr, old_g);
+        m := give(res);
+      } else {
+        m := empty();
+        new_g := old_g;
+      }
+      assert state_inv(new_v, new_g, ptr);
+      ///// Teardown:
+      assert atomic_inv(a, new_v, new_g);
+      unsafe_dispose(new_g);
+      ///// End jank
+
+      success := did_set;
+    }
   }
 
   method try_set_write_lock(a: AtomicStatus, ptr: Ptr)

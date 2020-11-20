@@ -1,9 +1,11 @@
 module AtomicSpec {
   type {:extern} Atomic<V, G>
 
+  linear datatype NullGhostType = NullGhostType
+
   predicate {:extern} atomic_inv<V, G>(atomic: Atomic<V, G>, v: V, g: G)
 
-  method new_atomic<V, G>(v: V, g: G,
+  method {:extern} new_atomic<V, G>(v: V, g: G,
       inv: (V, G) -> bool)
   returns (a: Atomic<V, G>)
   requires inv(v, g)
@@ -12,13 +14,13 @@ module AtomicSpec {
   // TODO haven't found a good way to specify this right now, missing
   // language support to do the things I'd really like.
   // See the usages of this method for the unenforced jank.
-  method compare_and_set<V, G>(
+  method {:extern} compare_and_set<V, G>(
       a: Atomic<V, G>,
       v1: V,
       v2: V)
   returns (did_set: bool)
 
-  method atomic_read<V, G>(a: Atomic<V, G>)
+  method {:extern} atomic_read<V, G>(a: Atomic<V, G>)
   returns (v: V)
 
   import opened NativeTypes
@@ -31,13 +33,18 @@ module AtomicSpec {
     ((a as bv8) & (b as bv8)) as uint8
   }
 
-  method fetch_or<G>(
+  method {:extern} fetch_or<G>(
       a: Atomic<uint8, G>,
       v: uint8) 
   returns (orig_value: uint8)
 
-  method fetch_and<G>(
+  method {:extern} fetch_and<G>(
       a: Atomic<uint8, G>,
       v: uint8) 
   returns (orig_value: uint8)
+
+  method {:extern} fetch_add<G>(
+      a: Atomic<uint32, G>,
+      v: uint32)
+  returns (orig_value: uint32)
 }

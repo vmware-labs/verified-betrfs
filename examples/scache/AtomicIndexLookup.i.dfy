@@ -20,7 +20,7 @@ module AtomicIndexLookupImpl {
 
   predicate state_inv(v: uint64, g: CacheResources.R, disk_idx: int)
   {
-    && (0 <= v as int < CacheSize() || v == NOT_MAPPED)
+    && (0 <= v as int < CACHE_SIZE || v == NOT_MAPPED)
     && g == CacheResources.DiskPageMap(disk_idx,
         (if v == NOT_MAPPED then None else Some(v as int)))
   }
@@ -35,7 +35,7 @@ module AtomicIndexLookupImpl {
       disk_idx: int)
   returns (cache_idx: uint64)
   requires atomic_index_lookup_inv(a, disk_idx)
-  ensures 0 <= cache_idx as int < CacheSize() || cache_idx == NOT_MAPPED
+  ensures 0 <= cache_idx as int < CACHE_SIZE || cache_idx == NOT_MAPPED
 
   method atomic_index_lookup_add_mapping(
       a: AtomicIndexLookup,

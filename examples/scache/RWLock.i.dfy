@@ -97,7 +97,7 @@ module ReadWriteLockResources {
   predicate TakeWriteFinish(a: multiset<Q>, b: multiset<Q>, ptr: Ptrs.Ptr)
   {
     && a == multiset{
-      WritePending(ptr, NThreads())
+      WritePending(ptr, NUM_THREADS)
     }
     && b == multiset{
       WriteObtained(ptr)

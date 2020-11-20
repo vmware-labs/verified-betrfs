@@ -15,11 +15,18 @@ module Ptrs {
   // Normal ptrs
 
   datatype Deref<V> = Deref(ptr: Ptr, v: V)
+  datatype ConstDeref<V> = ConstDeref(ptr: Ptr, v: V)
 
   method {:extern} ptr_read<V>(p: Ptr, shared d: Deref<V>)
   returns (v: V)
   requires d.ptr == p
   ensures v == d.v
+
+  method {:extern} ptr_const_read<V>(p: Ptr, shared d: ConstDeref<V>)
+  returns (v: V)
+  requires d.ptr == p
+  ensures v == d.v
+
 
   // Array ptrs
 
