@@ -35,6 +35,7 @@ module HandleWriteResponseImpl {
         cm.outstandingJournalWrites - {id};
   }
 
+  // [yizhou7][FIXME]: this takes long to verify
   method writeResponse(s: Full, io: DiskIOHandler)
   requires s.Inv()
   requires io.diskOp().RespWriteOp?

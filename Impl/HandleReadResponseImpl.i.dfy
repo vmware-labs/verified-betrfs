@@ -18,19 +18,15 @@ module HandleReadResponseImpl {
   import IOImpl
 
   method readSuperblockResp(
-      cm: Committer,
+      linear inout cm: Committer,
       io: DiskIOHandler,
       which: uint64)
-  requires cm.W()
+  requires old_cm.W()
   requires io.diskOp().RespReadOp?
-  requires io !in cm.Repr
-  modifies cm.Repr
   ensures cm.W()
-  ensures cm.Repr == old(cm.Repr)
   ensures cm.I() == HandleReadResponseModel.readSuperblockResp(
-      old(cm.I()), old(IIO(io)), which)
+      old_cm.I(), old(IIO(io)), which)
   {
-    cm.reveal_ReprInv();
     HandleReadResponseModel.reveal_readSuperblockResp();
 
     var id, sector := IOImpl.ReadSector(io);
@@ -39,23 +35,22 @@ module HandleReadResponseImpl {
         else JC.SuperblockCorruption);
     if which == 0 {
       if Some(id) == cm.superblock1Read {
-        cm.superblock1 := res;
-        cm.superblock1Read := None;
+        inout cm.superblock1 := res;
+        inout cm.superblock1Read := None;
       } else {
         print "readSuperblockResp did nothing\n";
       }
     } else {
       if Some(id) == cm.superblock2Read {
-        cm.superblock2 := res;
-        cm.superblock2Read := None;
+        inout cm.superblock2 := res;
+        inout cm.superblock2Read := None;
       } else {
         print "readSuperblockResp did nothing\n";
       }
     }
-
-    cm.reveal_ReprInv();
   }
 
+  // [yizhou7][FIXME]: this takes long to verify
   method readResponse(s: Full, io: DiskIOHandler)
   requires s.Inv()
   requires io.diskOp().RespReadOp?
@@ -73,6 +68,7 @@ module HandleReadResponseImpl {
     var id, addr, bytes := io.getReadResult();
 
     var loc := DiskLayout.Location(addr, |bytes| as uint64);
+    linear var jc := s.jc.Take();
 
     if ValidNodeLocation(loc) {
       if s.bc.ready {
@@ -87,17 +83,18 @@ module HandleReadResponseImpl {
         print "readResponse: doing nothing\n";
       }
     } else if ValidJournalLocation(loc) {
-      if s.jc.status.StatusLoadingOther? {
-        CommitterInitImpl.PageInJournalResp(s.jc, io);
+      if jc.status.StatusLoadingOther? {
+        inout jc.PageInJournalResp(io);
       }
     } else if loc == Superblock1Location() {
-      readSuperblockResp(s.jc, io, 0);
+      readSuperblockResp(inout jc, io, 0);
     } else if loc == Superblock2Location() {
-      readSuperblockResp(s.jc, io, 1);
+      readSuperblockResp(inout jc, io, 1);
     } else {
       print "readResponse: doing nothing\n";
     }
 
+    s.jc.Give(jc);
     s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
     s.reveal_ReprInv();
     assert s.ProtectedReprInv();
