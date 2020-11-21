@@ -32,6 +32,7 @@ module CoordinationImpl {
   import SyncModel
   import CoordinationModel
   import opened MainDiskIOHandler
+  import opened LinearMutableMap
 
   method pushSync(s: Full)
   returns (id: uint64)
@@ -44,7 +45,9 @@ module CoordinationImpl {
     s.reveal_ReprInv();
     CoordinationModel.reveal_pushSync();
 
-    id := CommitterCommitImpl.pushSync(s.jc);
+    linear var jc := s.jc.Take();
+    id := inout jc.pushSync();
+    s.jc.Give(jc);
 
     s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
     s.reveal_ReprInv();
@@ -64,6 +67,7 @@ module CoordinationImpl {
     s.indirectionTableRead := None;
   }
 
+  // [yizhou7][FIXME]: this takes long to verify
   method initialization(s: Full, io: DiskIOHandler)
   requires s.Inv()
   requires io.initialized()
@@ -77,32 +81,34 @@ module CoordinationImpl {
     CoordinationModel.reveal_initialization();
     s.reveal_ReprInv();
 
-    if s.jc.status.StatusLoadingSuperblock? {
-      if s.jc.superblock1.SuperblockSuccess?
-          && s.jc.superblock2.SuperblockSuccess? {
-        CommitterInitImpl.FinishLoadingSuperblockPhase(s.jc);
-        receiveLoc(s.bc, s.jc.superblock.indirectionTableLoc);
-      } else if s.jc.superblock1Read.None?
-          && s.jc.superblock1.SuperblockUnfinished? {
-        CommitterInitImpl.PageInSuperblockReq(s.jc, io, 0);
-      } else if s.jc.superblock2Read.None?
-          && s.jc.superblock2.SuperblockUnfinished? {
-        CommitterInitImpl.PageInSuperblockReq(s.jc, io, 1);
+    linear var jc := s.jc.Take();
+
+    if jc.status.StatusLoadingSuperblock? {
+      if jc.superblock1.SuperblockSuccess?
+          && jc.superblock2.SuperblockSuccess? {
+        inout jc.FinishLoadingSuperblockPhase();
+        receiveLoc(s.bc, jc.superblock.indirectionTableLoc);
+      } else if jc.superblock1Read.None?
+          && jc.superblock1.SuperblockUnfinished? {
+        inout jc.PageInSuperblockReq(io, 0);
+      } else if jc.superblock2Read.None?
+          && jc.superblock2.SuperblockUnfinished? {
+        inout jc.PageInSuperblockReq(io, 1);
       } else {
         print "initialization: doing nothing, superblock reads out\n";
       }
-    } else if s.jc.status.StatusLoadingOther? {
-      CommitterInitImpl.tryFinishLoadingOtherPhase(s.jc, io);
+    } else if jc.status.StatusLoadingOther? {
+      inout jc.tryFinishLoadingOtherPhase(io);
     } else if s.bc.loading && !s.bc.ready
         && s.bc.indirectionTableRead.None? {
       IOImpl.PageInIndirectionTableReq(s.bc, io);
     } else if s.bc.ready {
-      var isEmpty := CommitterInitImpl.isReplayEmpty(s.jc);
+      var isEmpty := jc.isReplayEmpty();
       if !isEmpty {
-        var je := s.jc.journalist.replayJournalTop();
+        var je := jc.journalist.replayJournalTop();
         var success := InsertImpl.insert(s.bc, io, je.key, je.value);
         if success {
-          CommitterReplayImpl.JournalReplayOne(s.jc);
+          inout jc.JournalReplayOne();
         }
       } else {
         print "initialization: doing nothing, no replay journal\n";
@@ -111,6 +117,7 @@ module CoordinationImpl {
       print "initialization: doing nothing\n";
     }
 
+    s.jc.Give(jc);
     s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
     s.reveal_ReprInv();
     assert s.ProtectedReprInv();
@@ -123,7 +130,8 @@ module CoordinationImpl {
   requires io.initialized()
   requires io !in s.Repr
   requires s.bc.ready
-  requires s.jc.status.StatusReady?
+  requires s.jc.Inv() // [yizhou7][NOTE]: this is implied by s.Inv(), but opaqued
+  requires s.jc.Read().status.StatusReady?
   modifies s.Repr
   modifies io
   ensures s.W()
@@ -133,11 +141,12 @@ module CoordinationImpl {
   {
     s.reveal_ReprInv();
 
+    linear var jc := s.jc.Take();
     wait := false;
 
-    if s.jc.isFrozen {
-      if s.jc.frozenLoc.Some? {
-        wait := CommitterCommitImpl.tryAdvanceLocation(s.jc, io);
+    if jc.isFrozen {
+      if jc.frozenLoc.Some? {
+        wait := inout jc.tryAdvanceLocation(io);
       } else {
         var froze, wait0 := SyncImpl.sync(s.bc, io);
         wait := wait0;
@@ -148,22 +157,54 @@ module CoordinationImpl {
           && SyncModel.sync(old(s.I()).bc, old(IIO(io)), s.I().bc, IIO(io), froze)
           && old(s.I()).jc == s.I().jc;*/
       }
-    } else if s.jc.superblockWrite.Some? {
+    } else if jc.superblockWrite.Some? {
       wait := true;
     } else {
       if graphSync {
         var froze, wait0 := SyncImpl.sync(s.bc, io);
         wait := wait0;
         if froze {
-          CommitterCommitImpl.freeze(s.jc);
+          inout jc.freeze();
         }
       } else {
-        wait := CommitterCommitImpl.tryAdvanceLog(s.jc, io);
+        wait := inout jc.tryAdvanceLog(io);
       }
     }
 
+    s.jc.Give(jc);
     s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
     s.reveal_ReprInv();
+  }
+
+  function method getCommitterSyncState(s: Full, id: uint64) : Option<JC.SyncReqStatus>
+  requires s.WF()
+  reads s.Repr
+  {
+    s.reveal_ReprInv();
+    LinearMutableMap.Get(s.jc.Borrow().syncReqs, id)
+  }
+
+  function method isCommitterStatusReady(s: Full) : bool
+  requires s.WF()
+  reads s.Repr
+  {
+    s.reveal_ReprInv();
+    s.jc.Borrow().status.StatusReady?
+  }
+
+  method isInitialized(s: Full) returns (b: bool)
+  requires s.WF()
+  ensures b == CoordinationModel.isInitialized(s.I())
+  {
+    s.reveal_ReprInv();
+    if (
+      && s.bc.ready
+      && isCommitterStatusReady(s)
+    ) {
+      b := s.jc.Borrow().isReplayEmpty();
+    } else {
+      b := false;
+    }
   }
 
   method popSync(
@@ -187,11 +228,11 @@ module CoordinationImpl {
 
     wait := false;
 
-    var syncState := s.jc.syncReqs.Get(id);
-    if syncState == Some(JC.State1) {
-      CommitterCommitImpl.popSync(s.jc, id);
+    if getCommitterSyncState(s, id) == Some(JC.State1) {
+      linear var jc := s.jc.Take();
+      inout jc.popSync(id);
       success := true;
-
+      s.jc.Give(jc);
       s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
       s.reveal_ReprInv();
       assert s.ProtectedReprInv();
@@ -207,19 +248,7 @@ module CoordinationImpl {
     }
   }
 
-  method isInitialized(s: Full) returns (b: bool)
-  requires s.WF()
-  ensures b == CoordinationModel.isInitialized(s.I())
-  {
-    if (
-      && s.bc.ready
-      && s.jc.status.StatusReady?
-    ) {
-      b := CommitterInitImpl.isReplayEmpty(s.jc);
-    } else {
-      b := false;
-    }
-  }
+/*
 
   method query(s: Full, io: DiskIOHandler, key: Key)
   returns (result: Option<Value>) 
@@ -321,4 +350,5 @@ module CoordinationImpl {
       }
     }
   }
+  */
 }
