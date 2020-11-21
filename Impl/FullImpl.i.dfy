@@ -1,5 +1,6 @@
 include "StateImpl.i.dfy"
 include "CommitterImpl.i.dfy"
+include "../lib/Lang/LinearBox.i.dfy"
 
 module FullImpl {
   import opened Options
@@ -9,10 +10,11 @@ module FullImpl {
   import StateModel
   import CommitterModel
   import JC = JournalCache
+  import opened LinearBox
 
   class Full {
     var bc: Variables;
-    var jc: Committer;
+    var jc: BoxedLinear<Committer>;
     
     ghost var Repr: set<object>;
 
@@ -38,6 +40,7 @@ module FullImpl {
       && this !in this.bc.Repr()
       && this !in this.jc.Repr
       && this.bc.Repr() !! this.jc.Repr
+      && this.jc.Inv()
     }
 
     protected predicate ReprInv()
@@ -57,14 +60,15 @@ module FullImpl {
     {
       && ReprInv()
       && this.bc.W()
-      && this.jc.W()
+      && this.jc.Has()
+      && this.jc.Read().W()
     }
 
     function I() : StateModel.Variables
     reads this, this.Repr
     requires W()
     {
-      StateModel.Variables(this.bc.I(), this.jc.I())
+      StateModel.Variables(this.bc.I(), this.jc.Read().I())
     }
 
     predicate WF()
@@ -72,7 +76,7 @@ module FullImpl {
     {
       && W()
       && this.bc.WF()
-      && this.jc.WF()
+      && this.jc.Read().WF()
     }
 
     predicate Inv()
@@ -86,7 +90,7 @@ module FullImpl {
     ensures Inv()
     ensures fresh(Repr)
     ensures !bc.ready
-    ensures CommitterModel.I(jc.I())
+    ensures CommitterModel.I(jc.Read().I())
         == JC.LoadingSuperblock(
             None, None,
             JC.SuperblockUnfinished,
@@ -94,7 +98,8 @@ module FullImpl {
             map[])
     {
       bc := new Variables();
-      jc := new Committer();
+      linear var cm := CommitterImpl.Committer.Constructor();
+      jc := new BoxedLinear(cm);
 
       new;
       Repr := {this} + this.bc.Repr() + this.jc.Repr;
