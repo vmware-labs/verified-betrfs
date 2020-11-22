@@ -173,18 +173,18 @@ module JournalistImpl {
       assert self.I() == JournalistModel.freeze(old_self.I());
     }
 
-    shared method canAppend(je: JournalEntry)
-    returns (b: bool)
+    protected shared function method canAppend(je: JournalEntry) : (b : bool)
+    // returns (b: bool)
     requires Inv()
     ensures b == JournalistModel.canAppend(I(), je)
     {
       JournalistModel.reveal_canAppend();
 
-      b := 4064 * (writtenJournalBlocks + frozenJournalBlocks)
+      4064 * (writtenJournalBlocks + frozenJournalBlocks)
           + inMemoryWeight
           + WeightJournalEntryUint64(je)
           + (if len2 == 0 then 8 else 0)
-        <= 4064 * NumJournalBlocks();
+        <= 4064 * NumJournalBlocks()
     }
 
     linear inout method append(je: JournalEntry)

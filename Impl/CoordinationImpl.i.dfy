@@ -248,8 +248,6 @@ module CoordinationImpl {
     }
   }
 
-/*
-
   method query(s: Full, io: DiskIOHandler, key: Key)
   returns (result: Option<Value>) 
   requires s.Inv() 
@@ -310,6 +308,15 @@ module CoordinationImpl {
     }
   }
 
+  function method canJournalistAppend(s: Full, key: Key, value: Value) : (b: bool)
+  requires s.WF()
+  reads s.Repr
+  {
+    s.reveal_ReprInv();
+    s.jc.Borrow().journalist.canAppend(Journal.JournalInsert(key, value))
+  }
+
+  // [yizhou7][FIXME]: this takes long to verify
   method insert(
       s: Full, io: DiskIOHandler, key: Key, value: Value)
   returns (success: bool)
@@ -323,7 +330,6 @@ module CoordinationImpl {
   ensures CoordinationModel.insert(
       old(s.I()), old(IIO(io)), key, value,
       s.I(), success, IIO(io))
-
   {
     CoordinationModel.reveal_insert();
     s.reveal_ReprInv();
@@ -333,14 +339,14 @@ module CoordinationImpl {
       initialization(s, io);
       success := false;
     } else {
-      var can_append := s.jc.journalist.canAppend(
-          Journal.JournalInsert(key, value));
+      var can_append := canJournalistAppend(s, key, value);
       if can_append {
         success := InsertImpl.insert(s.bc, io, key, value);
         if success {
-          CommitterAppendImpl.JournalAppend(s.jc, key, value);
+          linear var jc := s.jc.Take();
+          inout jc.JournalAppend(key, value);
+          s.jc.Give(jc);
         }
-
         s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
         s.reveal_ReprInv();
         assert s.ProtectedReprInv();
@@ -350,5 +356,4 @@ module CoordinationImpl {
       }
     }
   }
-  */
 }
