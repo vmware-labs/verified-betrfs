@@ -1,15 +1,34 @@
 include "ArrayPtr.s.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "Constants.i.dfy"
-include "ResourceSpec.s.dfy"
+include "ResourceBuilderSpec.s.dfy"
 include "CacheResources.i.dfy"
 
-module RWLock refines ResourceSpec {
+module RWLock refines ResourceBuilderSpec {
   import Ptrs
   import CacheResources
   import opened NativeTypes
   import opened Constants
   import opened Options
+
+  datatype Key = Key(data_ptr: Ptrs.Ptr, idx_ptr: Ptrs.Ptr, cache_idx: int)
+
+  linear datatype Handle = CacheEntryHandle(
+      linear cache_entry: CacheResources.R,
+      linear data: Ptrs.ArrayDeref<byte>,
+      linear idx: Ptrs.Deref<int>
+  )
+  {
+    predicate is_handle(key: Key)
+    {
+      && this.cache_entry.CacheEntry?
+      && this.cache_entry.cache_idx == key.cache_idx
+      && this.data.ptr == key.data_ptr
+      && this.idx.ptr == key.idx_ptr
+    }
+  }
+
+  type V = Handle
 
   /*
    * We consider two bits of the status field, WriteLock and WriteBack.
@@ -27,26 +46,18 @@ module RWLock refines ResourceSpec {
     | Write
     | Back_PendingWrite
 
-  datatype Key = Key(data_ptr: Ptrs.Ptr, idx_ptr: Ptrs.Ptr, cache_idx: int)
-
   datatype WriteLockState = 
     | WLSNone
     | WLSPendingAwaitBack
     | WLSPending(visited: int)
     | WLSObtained
 
-  datatype ProtectedData = ProtectedData(
-      cache_entry: CacheResources.R,
-      data: Ptrs.ArrayDeref<byte>,
-      idx: Ptrs.Deref<int>)
-
   datatype RWLockState = RWLockState(
     writeLock: WriteLockState,
     backHeld: bool,
-    readCounts: seq<int>,
-    protectedData: Option<ProtectedData>)
+    readCounts: seq<int>)
 
-  datatype R =
+  datatype Q =
     | Global(g: map<Key, RWLockState>)
     | FlagsField(key: Key, flags: Flag)
     | ReadRefCount(key: Key, t: int, refcount: uint8)
@@ -59,8 +70,6 @@ module RWLock refines ResourceSpec {
     | WritePendingAwaitBack(key: Key)
     | WritePending(key: Key, visited: int)
     | WriteObtained(key: Key)
-
-    | ConstHandle(key: Key, data: ProtectedData)
 
   /*datatype QStep =
     | TakeBackStep(key: Key)
@@ -75,17 +84,17 @@ module RWLock refines ResourceSpec {
     && g' == g[key := g'[key]]
     && g'[key] == g[key].(backHeld := true)
     && a == multiset{
-      Global(g),
-      FlagsField(key, Free)
+      Internal(Global(g)),
+      Internal(FlagsField(key, Free))
     }
     && b == multiset{
-      Global(g'),
-      FlagsField(key, Back),
-      BackObtained(key)
+      Internal(Global(g')),
+      Internal(FlagsField(key, Back)),
+      Internal(BackObtained(key))
     }
   }
 
-  predicate TakeWrite(a: multiset<R>, b: multiset<R>, key: Key)
+  predicate TakeWrite(a: multiset<Q>, b: multiset<Q>, key: Key)
   {
     && a == multiset{ FlagsField(key, Free) }
     && b == multiset{
@@ -94,7 +103,7 @@ module RWLock refines ResourceSpec {
     }
   }
 
-  predicate TakeWriteAwaitBack(a: multiset<R>, b: multiset<R>, key: Key)
+  predicate TakeWriteAwaitBack(a: multiset<Q>, b: multiset<Q>, key: Key)
   {
     && a == multiset{ FlagsField(key, Back) }
     && b == multiset{
@@ -103,7 +112,7 @@ module RWLock refines ResourceSpec {
     }
   }
 
-  predicate TakeWriteFinishBack(a: multiset<R>, b: multiset<R>, key: Key, fl: Flag)
+  predicate TakeWriteFinishBack(a: multiset<Q>, b: multiset<Q>, key: Key, fl: Flag)
   {
     // The 'free' case cannot actually occur, but it's convenient to allow it.
     && (fl == Write || fl == Free)
@@ -117,7 +126,7 @@ module RWLock refines ResourceSpec {
     }
   }
 
-  predicate TakeWriteCheckReadZero(a: multiset<R>, b: multiset<R>, key: Key, idx: int)
+  predicate TakeWriteCheckReadZero(a: multiset<Q>, b: multiset<Q>, key: Key, idx: int)
   {
     && a == multiset{
       WritePending(key, idx),
@@ -129,7 +138,7 @@ module RWLock refines ResourceSpec {
     }
   }
 
-  predicate TakeWriteFinish(a: multiset<R>, b: multiset<R>, key: Key)
+  predicate TakeWriteFinish(a: multiset<Q>, b: multiset<Q>, key: Key)
   {
     && a == multiset{
       WritePending(key, NUM_THREADS)
@@ -139,7 +148,7 @@ module RWLock refines ResourceSpec {
     }
   }
 
-  predicate TakeRead(a: multiset<R>, b: multiset<R>, key: Key, t: int, r: uint8)
+  predicate TakeRead(a: multiset<Q>, b: multiset<Q>, key: Key, t: int, r: uint8)
   {
     && a == multiset{
       ReadRefCount(key, t, r)
@@ -150,7 +159,7 @@ module RWLock refines ResourceSpec {
     }
   }
 
-  predicate TakeReadFinish(a: multiset<R>, b: multiset<R>, key: Key, t: int, r: uint8, fl: Flag)
+  predicate TakeReadFinish(a: multiset<Q>, b: multiset<Q>, key: Key, t: int, r: uint8, fl: Flag)
   {
     && (fl == Free || fl == Back)
     && a == multiset{
@@ -162,7 +171,7 @@ module RWLock refines ResourceSpec {
     }
   }
 
-  predicate TakeReadBail(a: multiset<R>, b: multiset<R>, key: Key, t: int, r: uint8)
+  predicate TakeReadBail(a: multiset<Q>, b: multiset<Q>, key: Key, t: int, r: uint8)
   {
     && a == multiset{
       ReadRefCount(key, t, r),
@@ -172,39 +181,6 @@ module RWLock refines ResourceSpec {
       ReadRefCount(key, t, if r == 0 then 255 else r-1)
     }
   }
-
-  /*method transform_TakeBack(key: Key, linear s: R)
-  returns (linear t: R, linear u: R)
-  requires s == FlagsField(key, Free)
-  ensures t == FlagsField(key, Back)
-  ensures u == BackObtained(key)
-
-  method transform_TakeWrite(key: Key, linear s: R)
-  returns (linear t: R, linear u: R)
-  requires s == FlagsField(key, Free)
-  ensures t == FlagsField(key, Write)
-  ensures u == WritePendingAwaitBack(key)
-
-  method transform_TakeWriteAwaitBack(key: Key, linear s: R)
-  returns (linear t: R, linear u: R)
-  requires s == FlagsField(key, Back)
-  ensures t == FlagsField(key, Back_PendingWrite)
-  ensures u == WritePendingAwaitBack(key)
-
-  method transform_TakeWriteFinishBack(key: Key, fl: Flag, linear s1: R, linear s2: R)
-  returns (linear t1: R, linear t2: R)
-  requires fl == Write || fl == Free
-  requires s1 == FlagsField(key, fl)
-  requires s2 == WritePendingAwaitBack(key)
-  ensures t1 == FlagsField(key, fl)
-  ensures t2 == WritePending(key, 0)
-
-  method transform_TakeWriteCheckReadZero(key: Key, idx: int, linear s1: R, linear s2: R)
-  returns (linear t1: R, linear t2: R)
-  requires s1 == ReadRefCount(key, idx, 0)
-  requires s2 == WritePending(key, idx)
-  ensures t1 == ReadRefCount(key, idx, 0)
-  ensures t2 == WritePending(key, idx + 1)*/
 
   predicate InvRWLockState(state: RWLockState)
   {
@@ -222,7 +198,7 @@ module RWLock refines ResourceSpec {
     forall key | key in g :: InvRWLockState(g[key])
   }
 
-  predicate InvObjectState(q: R, state: RWLockState)
+  predicate InvObjectState(q: Q, state: RWLockState)
   {
     && InvRWLockState(state)
     && (q.FlagsField? ==>
@@ -252,36 +228,44 @@ module RWLock refines ResourceSpec {
 
   predicate InvObject(q: R, g: map<Key, RWLockState>)
   {
-    && !q.Global?
-    && q.key in g
-    && InvObjectState(q, g[q.key])
+    && q.Internal?
+    && !q.q.Global?
+    && q.q.key in g
+    && InvObjectState(q.q, g[q.q.key])
   }
 
   predicate Inv2(q: R, r: R)
   {
-    && !(q.Global? && r.Global?)
-    && (q.FlagsField? && r.FlagsField? ==> q.key != r.key)
-    && (q.ReadRefCount? && r.ReadRefCount? ==> !(q.key == r.key && q.t == r.t))
-    && (q.BackObtained? && r.BackObtained? ==> q.key != r.key)
-    && (q.WritePendingAwaitBack? && r.WritePendingAwaitBack? ==> q.key != r.key)
-    && (q.WritePending? && r.WritePending? ==> q.key != r.key)
-    && (q.WriteObtained? && r.WriteObtained? ==> q.key != r.key)
-    && (q.Global? ==>
-      && InvObject(r, q.g)
+    && q.Internal?
+    && r.Internal?
+    && !(q.q.Global? && r.q.Global?)
+    && (q.q.FlagsField? && r.q.FlagsField? ==> q.q.key != r.q.key)
+    && (q.q.ReadRefCount? && r.q.ReadRefCount? ==> !(q.q.key == r.q.key && q.q.t == r.q.t))
+    && (q.q.BackObtained? && r.q.BackObtained? ==> q.q.key != r.q.key)
+    && (q.q.WritePendingAwaitBack? && r.q.WritePendingAwaitBack? ==> q.q.key != r.q.key)
+    && (q.q.WritePending? && r.q.WritePending? ==> q.q.key != r.q.key)
+    && (q.q.WriteObtained? && r.q.WriteObtained? ==> q.q.key != r.q.key)
+    && (q.q.Global? ==>
+      && InvObject(r, q.q.g)
     )
   }
 
-  predicate Inv(s: multiset<R>)
+  predicate Inv(s: Variables)
   {
-    && (forall g | g in s :: g.Global? ==> InvGlobal(g.g))
-    && (forall a, b | multiset{a,b} <= s :: Inv2(a, b))
+    && (forall g | g in s.m :: g.Internal? && g.q.Global? ==> InvGlobal(g.q.g))
+    && (forall a, b | multiset{a,b} <= s.m :: Inv2(a, b))
   }
 
-  lemma TakeBackPreservesInv(a: multiset<R>, b: multiset<R>, c: multiset<R>,
+  lemma TakeBackPreservesInv(
+    s: Variables, s': Variables,
+    a: multiset<R>, b: multiset<R>, c: multiset<R>,
     key: Key, g: map<Key, RWLockState>, g': map<Key, RWLockState>)
   requires TakeBack(a, b, key, g, g')
-  requires Inv(a + c)
-  ensures Inv(b + c)
+  requires Inv(s)
+  requires s.m == a + c
+  requires s'.m == b + c
+  requires s'.saved == s.saved
+  ensures Inv(s')
   {
     var y := b + c;
     forall q, r | multiset{q, r} <= y
@@ -290,17 +274,50 @@ module RWLock refines ResourceSpec {
       if multiset{q, r} <= c {
         assert Inv2(q, r);
       } else if q in b && r in c {
-        assert Inv2(Global(g), r);
-        assert Inv2(FlagsField(key, Free), r);
+        assert Inv2(Internal(Global(g)), r);
+        assert Inv2(Internal(FlagsField(key, Free)), r);
         assert Inv2(q, r);
       } else if q in c && r in b {
-        assert Inv2(q, Global(g));
-        assert Inv2(q, FlagsField(key, Free));
+        assert Inv2(q, Internal(Global(g)));
+        assert Inv2(q, Internal(FlagsField(key, Free)));
         assert Inv2(q, r);
       } else if multiset{q, r} <= b {
         assert Inv2(q, r);
       }
     }
-    assert Inv(y);
+    assert Inv(s');
   }
+
+  method transform_TakeBack(key: Key, linear s: R)
+  returns (linear t: R, linear u: R)
+  requires s == Internal(FlagsField(key, Free))
+  ensures t == Internal(FlagsField(key, Back))
+  ensures u == Internal(BackObtained(key))
+
+  method transform_TakeWrite(key: Key, linear s: R)
+  returns (linear t: R, linear u: R)
+  requires s == Internal(FlagsField(key, Free))
+  ensures t == Internal(FlagsField(key, Write))
+  ensures u == Internal(WritePendingAwaitBack(key))
+
+  method transform_TakeWriteAwaitBack(key: Key, linear s: R)
+  returns (linear t: R, linear u: R)
+  requires s == Internal(FlagsField(key, Back))
+  ensures t == Internal(FlagsField(key, Back_PendingWrite))
+  ensures u == Internal(WritePendingAwaitBack(key))
+
+  method transform_TakeWriteFinishBack(key: Key, fl: Flag, linear s1: R, linear s2: R)
+  returns (linear t1: R, linear t2: R)
+  requires fl == Write || fl == Free
+  requires s1 == Internal(FlagsField(key, fl))
+  requires s2 == Internal(WritePendingAwaitBack(key))
+  ensures t1 == Internal(FlagsField(key, fl))
+  ensures t2 == Internal(WritePending(key, 0))
+
+  method transform_TakeWriteCheckReadZero(key: Key, idx: int, linear s1: R, linear s2: R)
+  returns (linear t1: R, linear t2: R)
+  requires s1 == Internal(ReadRefCount(key, idx, 0))
+  requires s2 == Internal(WritePending(key, idx))
+  ensures t1 == Internal(ReadRefCount(key, idx, 0))
+  ensures t2 == Internal(WritePending(key, idx + 1))
 }
