@@ -1,0 +1,38 @@
+a = mutex
+  A
+  linear gA
+  inv A = gA
+
+b = mutex
+  B
+  linear gB
+  inv B = gB
+
+
+
+implementation:
+
+  A, gA = acquire a
+  B, gB = acquire b
+
+  A = A - 1
+  B = B + 1
+
+  gA, gB := transform(gA, gB, 1)
+
+  release a, (A, gA)
+  release b, (B, gB)
+
+
+
+abstracted ghost implementation:
+
+  gA, gB := transform(gA, gB, 1)
+
+======
+
+state machine
+
+transform: (gA, gB) -> (gA - x, gB + x)
+
+invariant gA + gB == 0

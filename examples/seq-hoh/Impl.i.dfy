@@ -31,6 +31,8 @@ module DonateImpl refines DonateImplSpec {
   requires s2 == StoneLock(0)
   ensures t1 == ThreadPos(tid, 0, victim)
   {
+    assert transform_step(multiset{s1, s2}, multiset{ThreadPos(tid, 0, victim)},
+        StartStep(tid, victim));
     t1 := transform_2_1(s1, s2, ThreadPos(tid, 0, victim));
   }
 
@@ -52,6 +54,7 @@ module DonateImpl refines DonateImplSpec {
   ensures t2 == StoneLock(i)
   ensures t3 == StoneValue(i, v)
   {
+    assert transform_step(multiset{s1, s2, s3}, multiset{ ThreadPos(tid, i+1, victim), StoneLock(i), StoneValue(i, v) }, AdvanceStep(tid, i, victim, v));
     t1, t2, t3 := transform_3_3(s1, s2, s3,
       ThreadPos(tid, i+1, victim),
       StoneLock(i),
@@ -73,6 +76,10 @@ module DonateImpl refines DonateImplSpec {
   ensures t2 == StoneLock(len()-1)
   ensures t3 == StoneValue(len()-1, v)
   {
+    assert transform_step(multiset{s1, s2}, multiset{ 
+        Stub(tid, None),
+        StoneLock(len()-1),
+        StoneValue(len()-1, v)}, FailStep(tid, victim, v));
     t1, t2, t3 := transform_2_3(s1, s2,
         Stub(tid, None),
         StoneLock(len()-1),
@@ -93,27 +100,34 @@ module DonateImpl refines DonateImplSpec {
   ensures t2 == StoneLock(i)
   ensures t3 == StoneValue(i, victim+1)
   {
+    assert transform_step(multiset{s1, s2}, multiset{ 
+        Stub(tid, Some(i)),
+        StoneLock(i),
+        StoneValue(i, victim+1)}, DoneStep(tid, i, victim));
     t1, t2, t3 := transform_2_3(s1, s2,
         Stub(tid, Some(i)),
         StoneLock(i),
         StoneValue(i, victim+1));
   }
 
-  function method global_seq() : (res : seq<Mutex>)
-  ensures |res| == len()
-  ensures forall i | 0 <= i < |res| :: res[i].constant() == i
+  type Object = seq<Mutex>
 
-  method constructo()
-  returns (self: seq<Mutex>)
-  ensures Inv(global_seq)
+  predicate Inv(o: Object)
+  {
+    && |o| == len()
+    && (forall i | 0 <= i < |o| :: o[i].constant() == i)
+  }
+
+  // TODO
+  method init(linear ticket: StateObject)
+  returns (self: Object)
 
   method donate(
-    self: seq<Mutex>,
+    self: Object,
     victim: nat, linear ticket: StateObject)
-  requires Inv(global_seq)
   returns (outidx: Option<nat>, linear stub: StateObject)
   {
-    linear var entry0 := acquire(global_seq()[0]);
+    linear var entry0 := acquire(self[0]);
     linear var V(num, r, l) := entry0;
 
     var tid := ticket.tid;
@@ -132,13 +146,13 @@ module DonateImpl refines DonateImplSpec {
     invariant r == StoneValue(i, num)
     decreases len() - i
     {
-      linear var entry := acquire(global_seq()[i+1]);
+      linear var entry := acquire(self[i+1]);
       linear var V(num', r', l') := entry;
   
       tstate, l, r := transform_advance(tid, i, victim, num,
           tstate, l', r);
 
-      release(global_seq()[i], V(num, r, l));
+      release(self[i], V(num, r, l));
 
       r := r';
       i := i + 1;
@@ -150,14 +164,14 @@ module DonateImpl refines DonateImplSpec {
 
       num := num + 1;
 
-      release(global_seq()[i], V(num, r, l));
+      release(self[i], V(num, r, l));
 
       outidx := Some(i);
     } else {
       stub, l, r := transform_fail(tid, victim, num,
           tstate, r);
 
-      release(global_seq()[i], V(num, r, l));
+      release(self[i], V(num, r, l));
 
       outidx := None;
     }

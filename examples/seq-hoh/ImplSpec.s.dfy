@@ -17,16 +17,13 @@ abstract module DonateImplSpec {
   predicate Inv(o: Object)
 
   method init(linear ticket: StateObject)
-  returns (o: Object)
-  requires ticket == init_ticket
-  ensures Inv(o)
-  {
-    // create some mutexes
-    new_mutex
-  }
+  returns (self: Object)
+  requires ticket == init_ticket()
+  ensures Inv(self)
 
-  method donate(o: Object, victim: nat, linear ticket: StateObject)
+  method donate(self: Object, victim: nat, linear ticket: StateObject)
   returns (outidx: Option<nat>, linear stub: StateObject)
+  requires Inv(self)
   requires exists tid :: ticket == donate_ticket(tid, victim)
   ensures exists tid :: stub == donate_stub(tid, outidx)
 

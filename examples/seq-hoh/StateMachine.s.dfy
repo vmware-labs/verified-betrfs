@@ -10,12 +10,13 @@ abstract module StateMachine {
   predicate transform(a: multiset<StateObject>, b: multiset<StateObject>)
   function donate_ticket(tid: ThreadId, victim: nat) : StateObject
   function donate_stub(tid: ThreadId, outidx: Option<nat>) : StateObject
+  function init_ticket() : StateObject
 
   type Variables = multiset<StateObject>
 
   predicate Init(s: Variables)
   {
-    s == multiset{init_ticket}
+    s == multiset{init_ticket()}
   }
 
   predicate DonateStart(s: Variables, s': Variables,
