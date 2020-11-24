@@ -25,6 +25,10 @@ module RWLock refines ResourceBuilderSpec {
       && this.cache_entry.cache_idx == key.cache_idx
       && this.data.ptr == key.data_ptr
       && this.idx.ptr == key.idx_ptr
+      && |this.data.s| == 4096
+      && this.cache_entry.data == this.data.s
+      && this.cache_entry.disk_idx_opt ==
+          (if this.idx.v == -1 then None else Some(this.idx.v))
     }
   }
 

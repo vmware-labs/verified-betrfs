@@ -27,6 +27,14 @@ module CacheImpl {
 
     global_clockpointer: Atomic<uint32, NullGhostType>
   )
+  {
+    function method key(i: int) : RWLock.Key
+    requires 0 <= i < |this.data|
+    requires 0 <= i < |this.disk_idx_of_entry|
+    {
+      RWLock.Key(this.data[i], this.disk_idx_of_entry[i], i)
+    }
+  }
 
   predicate Inv(c: Cache)
   {
@@ -34,73 +42,31 @@ module CacheImpl {
     && |c.disk_idx_of_entry| == CACHE_SIZE
     && |c.status| == CACHE_SIZE
     && (forall i | 0 <= i < CACHE_SIZE ::
-       atomic_status_inv(c.status[i], c.data[i]))
+       atomic_status_inv(c.status[i], c.key(i)))
     && |c.read_refcounts| == NUM_THREADS
     && (forall j | 0 <= j < NUM_THREADS ::
         |c.read_refcounts[j]| == CACHE_SIZE)
     && (forall j, i | 0 <= j < NUM_THREADS && 0 <= i < CACHE_SIZE ::
-        atomic_refcount_inv(c.read_refcounts[j][i], c.data[i], j))
+        atomic_refcount_inv(c.read_refcounts[j][i], c.key(i), j))
     && |c.cache_idx_of_page| == NUM_DISK_PAGES
     && (forall d | 0 <= d < NUM_DISK_PAGES ::
         atomic_index_lookup_inv(c.cache_idx_of_page[d], d))
   }
 
-  linear datatype CacheEntryHandle = CacheEntryHandle(
-      linear cache_entry: CacheResources.R,
-      linear data: ArrayDeref<byte>,
-      linear idx: Deref<int>
-  )
+  predicate is_page_handle(handle: RWLock.Handle, c: Cache, disk_idx: int)
+  requires Inv(c)
   {
-    predicate is_handle(c: Cache, cache_idx: int)
-    requires Inv(c)
-    {
-      && 0 <= cache_idx < CACHE_SIZE
-      && data.ptr == c.data[cache_idx]
-      && idx.ptr == c.disk_idx_of_entry[cache_idx]
-      && cache_entry == CacheResources.CacheEntry(Some(idx.v), cache_idx, data.s)
-      && |data.s| == 4096
-    }
-
-    predicate is_page_handle(c: Cache, disk_idx: int)
-    requires Inv(c)
-    {
-      && cache_entry.CacheEntry?
-      && is_handle(c, cache_entry.cache_idx)
-      && cache_entry.disk_idx_opt == Some(disk_idx)
-    }
+    && handle.cache_entry.CacheEntry?
+    && handle.cache_entry.disk_idx_opt == Some(disk_idx)
+    && 0 <= handle.cache_entry.cache_idx < CACHE_SIZE
+    && handle.is_handle(c.key(handle.cache_entry.cache_idx))
   }
-
-  linear datatype CacheEntryReadOnlyHandle = CacheEntryReadOnlyHandle(
-      linear cache_entry: CacheResources.R, // TODO should be readonly
-      linear data: ConstArrayDeref<byte>,
-      linear idx: ConstDeref<int>
-  )
-  {
-    predicate is_handle(c: Cache, cache_idx: int)
-    requires Inv(c)
-    {
-      && 0 <= cache_idx < CACHE_SIZE
-      && data.ptr == c.data[cache_idx]
-      && idx.ptr == c.disk_idx_of_entry[cache_idx]
-      && cache_entry == CacheResources.CacheEntry(Some(idx.v), cache_idx, data.s)
-      && |data.s| == 4096
-    }
-
-    predicate is_page_handle(c: Cache, disk_idx: int)
-    requires Inv(c)
-    {
-      && cache_entry.CacheEntry?
-      && is_handle(c, cache_entry.cache_idx)
-      && cache_entry.disk_idx_opt == Some(disk_idx)
-    }
-  }
-
 
   method take_write_lock_on_cache_entry(c: Cache, cache_idx: int)
-  returns (linear handle: CacheEntryHandle)
+  returns (linear handle: RWLock.Handle)
   requires Inv(c)
   requires 0 <= cache_idx < CACHE_SIZE
-  ensures handle.is_handle(c, cache_idx)
+  ensures handle.is_handle(c.key(cache_idx))
   decreases *
   {
     linear var w_maybe := empty();
@@ -108,13 +74,13 @@ module CacheImpl {
 
     while !success 
     invariant success ==> w_maybe == give(
-        ReadWriteLockResources.WritePendingAwaitBack(c.data[cache_idx]))
+        RWLock.Internal(RWLock.WritePendingAwaitBack(c.key(cache_idx))))
     invariant !success ==> !has(w_maybe)
     decreases *
     {
       var _ := discard(w_maybe);
       success, w_maybe := try_set_write_lock(
-          c.status[cache_idx], c.data[cache_idx]);
+          c.status[cache_idx], c.key(cache_idx));
     }
 
     linear var w;
@@ -124,32 +90,32 @@ module CacheImpl {
 
     while !success 
     invariant !success ==> w ==
-        ReadWriteLockResources.WritePendingAwaitBack(c.data[cache_idx])
+        RWLock.Internal(RWLock.WritePendingAwaitBack(c.key(cache_idx)))
     invariant success ==> w ==
-        ReadWriteLockResources.WritePending(c.data[cache_idx], 0)
+        RWLock.Internal(RWLock.WritePending(c.key(cache_idx), 0))
     decreases *
     {
       success, w := try_check_writeback_isnt_set(
-          c.status[cache_idx], c.data[cache_idx], w);
+          c.status[cache_idx], c.key(cache_idx), w);
     }
 
     var j := 0;
     while j < NUM_THREADS
     invariant 0 <= j <= NUM_THREADS
     invariant w == 
-        ReadWriteLockResources.WritePending(c.data[cache_idx], j)
+        RWLock.Internal(RWLock.WritePending(c.key(cache_idx), j))
     {
       success := false;
 
       while !success 
       invariant !success ==> w ==
-          ReadWriteLockResources.WritePending(c.data[cache_idx], j)
+          RWLock.Internal(RWLock.WritePending(c.key(cache_idx), j))
       invariant success ==> w ==
-          ReadWriteLockResources.WritePending(c.data[cache_idx], j+1)
+          RWLock.Internal(RWLock.WritePending(c.key(cache_idx), j+1))
       decreases *
       {
         success, w := is_refcount_zero(c.read_refcounts[j][cache_idx],
-            c.data[cache_idx], j, w);
+            c.key(cache_idx), j, w);
       }
 
       j := j + 1;
@@ -162,10 +128,10 @@ module CacheImpl {
   }
 
   method release_write_lock_on_cache_entry(c: Cache, cache_idx: int,
-      linear handle: CacheEntryHandle)
+      linear handle: RWLock.Handle)
   requires Inv(c)
   requires 0 <= cache_idx < CACHE_SIZE
-  requires handle.is_handle(c, cache_idx)
+  requires handle.is_handle(c.key(cache_idx))
 
   /*method take_write_lock_on_disk_entry(c: Cache, disk_idx: int)
   requires 0 
@@ -188,17 +154,17 @@ module CacheImpl {
       linear var write_back_r;
       var do_write_back;
       do_write_back, write_back_r :=
-          try_acquire_writeback(c.status[cache_idx], c.data[cache_idx]);
+          try_acquire_writeback(c.status[cache_idx], c.key(cache_idx as int));
 
       if do_write_back {
-        linear var readonly_handle: CacheEntryReadOnlyHandle :=
+        /*reaonly*/ linear var readonly_handle: RWLock.Handle :=
             AtomicRefcountImpl.unsafe_obtain(); // TODO
-        assume readonly_handle.is_handle(c, cache_idx as int);
+        assume readonly_handle.is_handle(c.key(cache_idx as int));
 
-        linear var CacheEntryReadOnlyHandle(
+        /*readonly*/ linear var CacheEntryHandle(
             cache_entry, data, idx) := readonly_handle;
 
-        var disk_idx := ptr_const_read(c.disk_idx_of_entry[cache_idx], idx);
+        var disk_idx := ptr_read(c.disk_idx_of_entry[cache_idx], idx);
         assume 0 <= disk_idx as int < NUM_DISK_PAGES;
 
         linear var wgs := DiskIO.WritebackGhostState(
@@ -215,12 +181,12 @@ module CacheImpl {
   }
 
   method try_take_write_lock_disk_page(c: Cache, disk_idx: int)
-  returns (success: bool, linear handle_out: maybe<CacheEntryHandle>)
+  returns (success: bool, linear handle_out: maybe<RWLock.Handle>)
   requires Inv(c)
   requires 0 <= disk_idx < NUM_DISK_PAGES
   ensures !success ==> handle_out == empty()
   ensures success ==> has(handle_out) &&
-      peek(handle_out).is_page_handle(c, disk_idx)
+      is_page_handle(peek(handle_out), c, disk_idx)
   decreases *
   {
     var cache_idx := atomic_index_lookup_read(c.cache_idx_of_page[disk_idx], disk_idx);
@@ -236,6 +202,7 @@ module CacheImpl {
           handle.idx);
       if this_disk_idx == disk_idx {
         success := true;
+        assert is_page_handle(handle, c, disk_idx);
         handle_out := give(handle);
       } else {
         release_write_lock_on_cache_entry(c, cache_idx as int, handle);
