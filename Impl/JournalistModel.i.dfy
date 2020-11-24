@@ -13,67 +13,53 @@ module JournalistModel {
   import opened Journal
   import opened JournalistMarshallingModel
 
-  datatype JournalInfo = JournalInfo(
-    inMemoryJournalFrozen: seq<JournalEntry>,
-    inMemoryJournal: seq<JournalEntry>,
-    replayJournal: seq<JournalEntry>,
+//   datatype JournalInfo = JournalInfo(
+//     inMemoryJournalFrozen: seq<JournalEntry>,
+//     inMemoryJournal: seq<JournalEntry>,
+//     replayJournal: seq<JournalEntry>,
 
-    journalFront: Option<JournalRange>,
-    journalBack: Option<JournalRange>,
+//     journalFront: Option<JournalRange>,
+//     journalBack: Option<JournalRange>,
 
-    ghost writtenJournalLen: int
-  )
+//     ghost writtenJournalLen: int
+//   )
 
-  datatype JournalistModel = JournalistModel(
-    journalEntries: seq<JournalEntry>,
-    start: uint64,
-    len1: uint64,
-    len2: uint64,
+//   datatype JournalistModel = JournalistModel(
+//     journalEntries: seq<JournalEntry>,
+//     start: uint64,
+//     len1: uint64,
+//     len2: uint64,
 
-    replayJournal: seq<JournalEntry>,
-    replayIdx: uint64,
+//     replayJournal: seq<JournalEntry>,
+//     replayIdx: uint64,
 
-    journalFront: Option<seq<JournalBlock>>,
-    journalBack: Option<seq<JournalBlock>>,
+//     journalFront: Option<seq<JournalBlock>>,
+//     journalBack: Option<seq<JournalBlock>>,
     
-    // number of blocks already written on disk:
-    writtenJournalBlocks: uint64,
-    // number of *blocks* of inMemoryJournalFrozen:
-    frozenJournalBlocks: uint64,
-    // number of *bytes* of inMemoryJournal:
-    inMemoryWeight: uint64
-  )
+//     // number of blocks already written on disk:
+//     writtenJournalBlocks: uint64,
+//     // number of *blocks* of inMemoryJournalFrozen:
+//     frozenJournalBlocks: uint64,
+//     // number of *bytes* of inMemoryJournal:
+//     inMemoryWeight: uint64
+//   )
 
-  function method MaxPossibleEntries() : uint64 { 32*1048576 }
-
-  function method basic_mod(x: uint64, len: uint64) : uint64
-  requires len <= 2 * MaxPossibleEntries()
-  {
-    if x >= len then x - len else x
-  }
-
-  predicate CorrectJournalBlockSizes(jr: JournalRange)
-  {
-    && |jr| <= NumJournalBlocks() as int
-    && (forall i | 0 <= i < |jr| :: |jr[i]| == 4064)
-  }
-
-  predicate WF(jm: JournalistModel)
-  {
-    && 1 <= |jm.journalEntries| <= 2 * MaxPossibleEntries() as int
-    && 0 <= jm.start < |jm.journalEntries| as uint64
-    && 0 <= jm.len1 <= |jm.journalEntries| as uint64
-    && 0 <= jm.len2 <= |jm.journalEntries| as uint64
-    && 0 <= jm.len1 + jm.len2 <= |jm.journalEntries| as uint64
-    && 0 <= jm.replayIdx as int <= |jm.replayJournal| <= MaxPossibleEntries() as int
-    && (jm.journalFront.Some? ==>
-        CorrectJournalBlockSizes(jm.journalFront.value))
-    && (jm.journalBack.Some? ==>
-        CorrectJournalBlockSizes(jm.journalBack.value))
-    && 0 <= jm.writtenJournalBlocks <= NumJournalBlocks()
-    && 0 <= jm.frozenJournalBlocks <= NumJournalBlocks()
-    && 0 <= jm.inMemoryWeight <= NumJournalBlocks() * 4096
-  }
+//   predicate WF(jm: JournalistModel)
+//   {
+//     && 1 <= |jm.journalEntries| <= 2 * MaxPossibleEntries() as int
+//     && 0 <= jm.start < |jm.journalEntries| as uint64
+//     && 0 <= jm.len1 <= |jm.journalEntries| as uint64
+//     && 0 <= jm.len2 <= |jm.journalEntries| as uint64
+//     && 0 <= jm.len1 + jm.len2 <= |jm.journalEntries| as uint64
+//     && 0 <= jm.replayIdx as int <= |jm.replayJournal| <= MaxPossibleEntries() as int
+//     && (jm.journalFront.Some? ==>
+//         CorrectJournalBlockSizes(jm.journalFront.value))
+//     && (jm.journalBack.Some? ==>
+//         CorrectJournalBlockSizes(jm.journalBack.value))
+//     && 0 <= jm.writtenJournalBlocks <= NumJournalBlocks()
+//     && 0 <= jm.frozenJournalBlocks <= NumJournalBlocks()
+//     && 0 <= jm.inMemoryWeight <= NumJournalBlocks() * 4096
+//   }
 
   /*function IJournalRead(j: Option<seq<byte>>) : Option<JournalRange>
   requires j.Some? ==> JournalRangeOfByteSeq(j.value).Some?
@@ -81,77 +67,6 @@ module JournalistModel {
     if j.Some? then JournalRangeOfByteSeq(j.value) else None
   }*/
 
-  function start(jm: JournalistModel) : uint64
-  {
-    jm.start
-  }
-
-  function mid(jm: JournalistModel, len: uint64) : uint64
-  requires len <= 2 * MaxPossibleEntries()
-  requires jm.start < len
-  requires jm.len1 <= len
-  {
-    basic_mod(jm.start + jm.len1, len)
-  }
-
-  function end(jm: JournalistModel, len: uint64) : uint64
-  requires len <= 2 * MaxPossibleEntries()
-  requires jm.start < len
-  requires jm.len1 <= len
-  requires jm.len2 <= len
-  {
-    basic_mod(jm.start + jm.len1 + jm.len2, len)
-  }
-
-  function InMemoryJournalFrozen(jm: JournalistModel) : seq<JournalEntry>
-  requires WF(jm)
-  {
-    cyclicSlice(jm.journalEntries, start(jm), jm.len1)
-  }
-
-  function InMemoryJournal(jm: JournalistModel) : seq<JournalEntry>
-  requires WF(jm)
-  {
-    cyclicSlice(jm.journalEntries,
-      mid(jm, |jm.journalEntries| as uint64),
-      jm.len2)
-  }
-
-  function ReplayJournal(jm: JournalistModel) : seq<JournalEntry>
-  requires 0 <= jm.replayIdx as int <= |jm.replayJournal|
-  {
-    jm.replayJournal[jm.replayIdx..]
-  }
-
-  function JournalFrontRead(jm: JournalistModel) : Option<JournalRange>
-  requires WF(jm)
-  {
-    jm.journalFront
-  }
-
-  function JournalBackRead(jm: JournalistModel) : Option<JournalRange>
-  requires WF(jm)
-  {
-    jm.journalBack
-  }
-
-  function WrittenJournalLen(jm: JournalistModel) : int
-  {
-    jm.writtenJournalBlocks as int
-  }
-
-  function Iprivate(jm: JournalistModel) : JournalInfo
-  requires WF(jm)
-  {
-    JournalInfo(
-      InMemoryJournalFrozen(jm),
-      InMemoryJournal(jm),
-      ReplayJournal(jm),
-      JournalFrontRead(jm),
-      JournalBackRead(jm),
-      WrittenJournalLen(jm)
-    )
-  }
 
   protected function I(jm: JournalistModel) : JournalInfo
   requires WF(jm)
@@ -165,32 +80,8 @@ module JournalistModel {
   {
   }
 
-  predicate Inv(jm: JournalistModel)
-  {
-    && WF(jm)
-    && (jm.writtenJournalBlocks + jm.frozenJournalBlocks) * 4064 +
-        jm.inMemoryWeight <= 4064 * NumJournalBlocks()
-    && WeightJournalEntries(InMemoryJournalFrozen(jm)) <= jm.frozenJournalBlocks as int * 4064
-    && WeightJournalEntries(InMemoryJournal(jm)) == jm.inMemoryWeight as int
-  }
 
-  //// Journalist operations
 
-  function {:opaque} JournalistConstructor() : (jm : JournalistModel)
-  ensures Inv(jm)
-  ensures I(jm).inMemoryJournalFrozen == []
-  ensures I(jm).inMemoryJournal == []
-  ensures I(jm).replayJournal == []
-  ensures I(jm).journalFront == None
-  ensures I(jm).journalBack == None
-  ensures I(jm).writtenJournalLen == 0
-  {
-    reveal_cyclicSlice();
-    reveal_WeightJournalEntries();
-    JournalistModel(
-        fill(4096, JournalInsert([], [])), // fill with dummies
-        0, 0, 0, [], 0, None, None, 0, 0, 0)
-  }
 
   function {:opaque} hasFrozenJournal(jm: JournalistModel) : (b: bool)
   requires Inv(jm)

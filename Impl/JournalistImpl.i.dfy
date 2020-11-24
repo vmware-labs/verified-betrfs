@@ -1,7 +1,7 @@
-include "JournalistModel.i.dfy"
 include "../lib/Lang/System/NativeArrays.s.dfy"
 include "JournalistMarshallingImpl.i.dfy"
 include "JournalistParsingImpl.i.dfy"
+include "JournalistMarshallingModel.i.dfy"
 
 module JournalistImpl {
   import opened DiskLayout
@@ -13,57 +13,179 @@ module JournalistImpl {
   import opened JournalRanges`Internal
   import opened JournalBytes
   import opened Journal
-  import JournalistMarshallingModel
+  import opened JournalistMarshallingModel
   import opened JournalistMarshallingImpl
   import JournalistParsingImpl
 
-  import JournalistModel
+  datatype JournalInfo = JournalInfo(
+    inMemoryJournalFrozen: seq<JournalEntry>,
+    inMemoryJournal: seq<JournalEntry>,
+    replayJournal: seq<JournalEntry>,
 
-  linear datatype Journalist = Journalist(journalEntries: seq<JournalEntry>, start: uint64,
-    len1: uint64, len2: uint64, replayJournal: seq<JournalEntry>, replayIdx: uint64, 
-    journalFront: Option<seq<JournalBlock>>, journalBack: Option<seq<JournalBlock>>, writtenJournalBlocks: uint64,
-    frozenJournalBlocks: uint64, inMemoryWeight: uint64)
+    journalFront: Option<JournalRange>,
+    journalBack: Option<JournalRange>,
+
+    ghost writtenJournalLen: int
+  )
+
+  function method basic_mod(x: uint64, len: uint64) : uint64
+  requires len <= 2 * MaxPossibleEntries()
   {
-    function I() : JournalistModel.JournalistModel
-    {
-      JournalistModel.JournalistModel(
-        this.journalEntries[..],
-        this.start,
-        this.len1,
-        this.len2,
-        this.replayJournal,
-        this.replayIdx,
-        this.journalFront,
-        this.journalBack,
-        this.writtenJournalBlocks,
-        this.frozenJournalBlocks,
-        this.inMemoryWeight)
-    }
+      if x >= len then x - len else x
+  }
+
+  predicate CorrectJournalBlockSizes(jr: JournalRange)
+  {
+      && |jr| <= NumJournalBlocks() as int
+      && (forall i | 0 <= i < |jr| :: |jr[i]| == 4064)
+  }
+
+  linear datatype Journalist = Journalist(
+    journalEntries: seq<JournalEntry>,
+    start: uint64,
+    len1: uint64,
+    len2: uint64,
+
+    replayJournal: seq<JournalEntry>,
+    replayIdx: uint64, 
+
+    journalFront: Option<seq<JournalBlock>>,
+    journalBack: Option<seq<JournalBlock>>, 
+
+    // number of blocks already written on disk:
+    writtenJournalBlocks: uint64,
+    // number of *blocks* of inMemoryJournalFrozen:
+    frozenJournalBlocks: uint64, 
+    // number of *bytes* of inMemoryJournal:
+    inMemoryWeight: uint64)
+  {
+    function method MaxPossibleEntries() : uint64 { 32*1048576 }
 
     predicate WF()
     {
-      && JournalistModel.WF(I())
+      && 1 <= |this.journalEntries| <= 2 * MaxPossibleEntries() as int
+      && 0 <= this.start < |this.journalEntries| as uint64
+      && 0 <= this.len1 <= |this.journalEntries| as uint64
+      && 0 <= this.len2 <= |this.journalEntries| as uint64
+      && 0 <= this.len1 + this.len2 <= |this.journalEntries| as uint64
+      && 0 <= this.replayIdx as int <= |this.replayJournal| <= MaxPossibleEntries() as int
+      && (this.journalFront.Some? ==>
+          CorrectJournalBlockSizes(this.journalFront.value))
+      && (this.journalBack.Some? ==>
+          CorrectJournalBlockSizes(this.journalBack.value))
+      && 0 <= this.writtenJournalBlocks <= NumJournalBlocks()
+      && 0 <= this.frozenJournalBlocks <= NumJournalBlocks()
+      && 0 <= this.inMemoryWeight <= NumJournalBlocks() * 4096
     }
 
     predicate Inv()
     {
-      && JournalistModel.Inv(I())
+      && WF()
+      && (this.writtenJournalBlocks + this.frozenJournalBlocks) * 4064 +
+          this.inMemoryWeight <= 4064 * NumJournalBlocks()
+      && WeightJournalEntries(InMemoryJournalFrozen()) <= this.frozenJournalBlocks as int * 4064
+      && WeightJournalEntries(InMemoryJournal()) == this.inMemoryWeight as int
+    }
+
+    function mid(len: uint64) : uint64
+    requires len <= 2 * MaxPossibleEntries()
+    requires this.start < len
+    requires this.len1 <= len
+    {
+      basic_mod(this.start + this.len1, len)
+    }
+
+    function end(len: uint64) : uint64
+    requires len <= 2 * MaxPossibleEntries()
+    requires this.start < len
+    requires this.len1 <= len
+    requires this.len2 <= len
+    {
+      basic_mod(this.start + this.len1 + this.len2, len)
+    }
+
+    function InMemoryJournalFrozen() : seq<JournalEntry>
+    requires WF()
+    {
+      cyclicSlice(this.journalEntries, this.start, this.len1)
+    }
+
+    function InMemoryJournal() : seq<JournalEntry>
+    requires WF()
+    {
+      cyclicSlice(this.journalEntries,
+        mid(|this.journalEntries| as uint64),
+        this.len2)
+    }
+
+    function ReplayJournal() : seq<JournalEntry>
+    requires 0 <= this.replayIdx as int <= |this.replayJournal|
+    {
+      this.replayJournal[this.replayIdx..]
+    }
+
+    function JournalFrontRead() : Option<JournalRange>
+    requires WF()
+    {
+      this.journalFront
+    }
+
+    function JournalBackRead() : Option<JournalRange>
+    requires WF()
+    {
+      this.journalBack
+    }
+
+    function WrittenJournalLen() : int
+    {
+      this.writtenJournalBlocks as int
+    }
+
+    function Iprivate() : JournalInfo
+    requires WF()
+    {
+      JournalInfo(
+        InMemoryJournalFrozen(),
+        InMemoryJournal(),
+        ReplayJournal(),
+        JournalFrontRead(),
+        JournalBackRead(),
+        WrittenJournalLen()
+      )
+    }
+
+    protected function I() : JournalInfo
+    requires WF()
+    {
+      Iprivate()
+    }
+
+    lemma reveal_I()
+    requires WF()
+    ensures I() == Iprivate()
+    {
     }
 
     static method Constructor() returns (linear j: Journalist)
     ensures j.Inv()
-    ensures j.I() == JournalistModel.JournalistConstructor()
+    ensures j.I().inMemoryJournalFrozen == []
+    ensures j.I().inMemoryJournal == []
+    ensures j.I().replayJournal == []
+    ensures j.I().journalFront == None
+    ensures j.I().journalBack == None
+    ensures j.I().writtenJournalLen == 0
     {
+      reveal_cyclicSlice();
+      reveal_WeightJournalEntries();
+
       var newArray := NativeArrays.newArrayFill(4096, JournalInsert([], [])); 
     
       j := Journalist(
         newArray[..], 0, 0, 0,
         [], 0, None, None, 0, 0, 0);
-
-      JournalistModel.reveal_JournalistConstructor();
-      assert j.I() == JournalistModel.JournalistConstructor();
     }
 
+/*
     shared method hasFrozenJournal() returns (b: bool)
     requires Inv()
     ensures b == JournalistModel.hasFrozenJournal(I())
@@ -334,5 +456,6 @@ module JournalistImpl {
       JournalistModel.reveal_hasBack();
       b := journalBack.Some?;
     }
+  */
   }
 }
