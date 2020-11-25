@@ -43,7 +43,7 @@ class DafnyVerified(DafnyCondition):
 
 class DafnyDynamicFrames(DafnyCondition):
     def __init__(self):
-        super().__init__(6, "dynamic frames", "fillcolor=olive; shape=egg")
+        super().__init__(6, "dynamic frames", "fillcolor=blue; shape=egg")
 
 class DafnySyntaxOK(DafnyCondition):
     def __init__(self):
