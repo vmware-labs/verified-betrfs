@@ -41,9 +41,13 @@ class DafnyVerified(DafnyCondition):
     def __init__(self):
         super().__init__(5, "verified successfully", "fillcolor=green; shape=ellipse")
 
+class DafnyDynamicFrames(DafnyCondition):
+    def __init__(self):
+        super().__init__(6, "dynamic frames", "fillcolor=olive; shape=egg")
+
 class DafnySyntaxOK(DafnyCondition):
     def __init__(self):
-        super().__init__(6, "syntax ok", "fillcolor=green; shape=ellipse")
+        super().__init__(7, "syntax ok", "fillcolor=green; shape=ellipse")
 
 def dafnyFromVerchk(verchk):
     return verchk.replace("build/", "./").replace(".verchk", ".dfy").replace(".synchk", ".dfy")
@@ -57,6 +61,15 @@ def hasDisallowedAssumptions(verchk):
         # TODO: or maybe instead use /noCheating!?
         line = re.sub("//.*$", "", line)    # ignore single-line comments
         if "assume" in line:
+            return True
+    return False
+
+def hasDynamicFrames(verchk):
+    dfy = dafnyFromVerchk(verchk)
+    for line in open(dfy).readlines():
+        if re.compile("^\s*modifies").search(line):
+            return True
+        if re.compile("^\s*reads").search(line):
             return True
     return False
 
@@ -84,6 +97,8 @@ def extractCondition(reportType, report, content):
         #  Report assumes even in syntax-only mode.
         if hasDisallowedAssumptions(report):
             return DafnyAssumeError()
+        if hasDynamicFrames(report):
+            return DafnyDynamicFrames()
         return DafnySyntaxOK()
     else:
         raise Exception("build system error: unknown report type %s\n" % reportType)
