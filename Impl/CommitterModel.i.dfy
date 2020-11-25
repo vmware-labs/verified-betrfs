@@ -46,11 +46,9 @@ module CommitterModel {
     superblock2: JC.SuperblockReadResult,
 
     syncReqs: LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
-// syncReqs: MutableMapModel.LinearHashMap<JC.SyncReqStatus>
 
   predicate WF(cm: CM)
   {
-    // && MutableMapModel.Inv(cm.syncReqs)
     && cm.syncReqs.Inv()
     && JournalistModel.Inv(cm.journalist)
     && (cm.status == StatusLoadingSuperblock ==>

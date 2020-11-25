@@ -1,5 +1,4 @@
 include "../lib/DataStructures/LinearMutableMap.i.dfy"
-include "CommitterModel.i.dfy"
 include "JournalistImpl.i.dfy"
 include "CommitterAppendModel.i.dfy"
 include "CommitterReplayModel.i.dfy"
@@ -19,7 +18,6 @@ module CommitterImpl {
   import opened NativeTypes
   import LinearMutableMap
   import JournalistImpl
-  import CommitterModel
 
   import opened KeyType
   import opened ValueType
@@ -94,73 +92,114 @@ module CommitterImpl {
     m := m0;
   }
 
+  datatype Status =
+    | StatusLoadingSuperblock
+    | StatusLoadingOther
+    | StatusReady
+
   linear datatype Committer = Committer(
-  status: CommitterModel.Status,
+  status: Status,
+
   linear journalist: JournalistImpl.Journalist,
   frozenLoc: Option<Location>,
   isFrozen: bool,
+
   frozenJournalPosition: uint64,
   superblockWrite: Option<JC.ReqId>,
+
   outstandingJournalWrites: set<JC.ReqId>,
+
   superblock: Superblock,
   newSuperblock: Option<Superblock>,
   whichSuperblock: uint64,
   commitStatus: JC.CommitStatus,
+
   journalFrontRead: Option<JC.ReqId>,
   journalBackRead: Option<JC.ReqId>,
   superblock1Read: Option<JC.ReqId>,
   superblock2Read: Option<JC.ReqId>,
   superblock1: JC.SuperblockReadResult,
   superblock2: JC.SuperblockReadResult,
+
   linear syncReqs: LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
   {
-    predicate W()
+    predicate WF()
     {
-      && this.syncReqs.Inv()
-      && this.journalist.Inv()
-    }
-
-    function I() : CommitterModel.CM
-    requires W()
-    {
-      CommitterModel.CM(
-        status,
-        journalist.I(),
-        frozenLoc,
-        isFrozen,
-        frozenJournalPosition,
-        superblockWrite,
-        outstandingJournalWrites,
-        superblock,
-        newSuperblock,
-        whichSuperblock,
-        commitStatus,
-        journalFrontRead,
-        journalBackRead,
-        superblock1Read,
-        superblock2Read,
-        superblock1,
-        superblock2,
-        syncReqs
+      && syncReqs.Inv()
+      && journalist.Inv()
+      && (status == StatusLoadingSuperblock ==>
+        && journalist.I().inMemoryJournalFrozen == []
+        && journalist.I().inMemoryJournal == []
+        && journalist.I().replayJournal == []
+        && journalist.I().journalFront == None
+        && journalist.I().journalBack == None
+        && (superblock1.SuperblockSuccess? ==>
+            JC.WFSuperblock(superblock1.value))
+        && (superblock2.SuperblockSuccess? ==>
+            JC.WFSuperblock(superblock2.value))
+      )
+      && (status == StatusLoadingOther ==>
+        && journalist.I().inMemoryJournalFrozen == []
+        && journalist.I().inMemoryJournal == []
+        && journalist.I().replayJournal == []
+        && JC.WFSuperblock(superblock)
+      )
+      && (status == StatusReady ==>
+        && JC.WFSuperblock(superblock)
       )
     }
 
-    predicate WF()
+    function I() : JC.Variables
+    requires WF()
     {
-      && W()
-      && CommitterModel.WF(I())
+      match status {
+        case StatusLoadingSuperblock =>
+          JC.LoadingSuperblock(
+            superblock1Read,
+            superblock2Read,
+            superblock1,
+            superblock2,
+            syncReqs.contents
+          )
+        case StatusLoadingOther =>
+          JC.LoadingOther(
+            superblock,
+            whichSuperblock as int,
+            journalFrontRead,
+            journalBackRead,
+            journalist.I().journalFront,
+            journalist.I().journalBack,
+            syncReqs.contents
+          )
+        case StatusReady =>
+          JC.Ready(
+            frozenLoc,
+            isFrozen,
+            frozenJournalPosition as int,
+            superblockWrite,
+            journalist.I().inMemoryJournalFrozen,
+            journalist.I().inMemoryJournal,
+            outstandingJournalWrites,
+            journalist.I().writtenJournalLen,
+            journalist.I().replayJournal,
+            superblock,
+            whichSuperblock as int,
+            commitStatus,
+            newSuperblock,
+            syncReqs.contents
+          )
+      }
     }
 
     predicate Inv()
     {
-      && W()
-      && CommitterModel.Inv(I())
+      && WF()
+      && JC.Inv(I())
     }
 
     static method Constructor() returns (linear self: Committer)
     ensures self.Inv()
-    ensures CommitterModel.I(self.I())
-        == JC.LoadingSuperblock(
+    ensures self.I() == JC.LoadingSuperblock(
             None, None,
             JC.SuperblockUnfinished,
             JC.SuperblockUnfinished,
@@ -169,7 +208,7 @@ module CommitterImpl {
       linear var j := JournalistImpl.Journalist.Constructor();
       linear var m := LinearMutableMap.Constructor(128);
       self := Committer(
-        CommitterModel.StatusLoadingSuperblock,
+        StatusLoadingSuperblock,
         j,
         None,
         false,
@@ -188,16 +227,17 @@ module CommitterImpl {
         JC.SuperblockUnfinished,
         m
       );
-      assert CommitterModel.I(self.I()) == JC.LoadingSuperblock(
+      assert self.I() == JC.LoadingSuperblock(
             None, None,
             JC.SuperblockUnfinished,
             JC.SuperblockUnfinished,
             map[]);
     }
 
+/*
     linear inout method JournalAppend(key: Key, value: Value)
     requires old_self.Inv()
-    requires old_self.status == CommitterModel.StatusReady
+    requires old_self.status == StatusReady
     requires JournalistModel.canAppend(
         old_self.journalist.I(), JournalInsert(key, value))
     ensures self.Inv()
@@ -211,7 +251,7 @@ module CommitterImpl {
 
     linear inout method JournalReplayOne()
     requires old_self.Inv()
-    requires old_self.status == CommitterModel.StatusReady
+    requires old_self.status == StatusReady
     requires !JournalistModel.isReplayEmpty(old_self.journalist.I())
     ensures self.Inv()
     ensures self.I() == CommitterReplayModel.JournalReplayOne(old_self.I())
@@ -278,7 +318,7 @@ module CommitterImpl {
 
       inout self.whichSuperblock := idx;
       inout self.superblock := sup;
-      inout self.status := CommitterModel.StatusLoadingOther;
+      inout self.status := StatusLoadingOther;
       inout self.journalFrontRead := None;
       inout self.journalBackRead := None;
     }
@@ -296,7 +336,7 @@ module CommitterImpl {
       var success := inout self.journalist.parseJournals();
 
       if success {
-        inout self.status := CommitterModel.StatusReady;
+        inout self.status := StatusReady;
         inout self.frozenLoc := None;
         inout self.isFrozen := false;
         inout self.frozenJournalPosition := 0;
@@ -475,7 +515,7 @@ module CommitterImpl {
     linear inout method writeOutSuperblockAdvanceLog(io: DiskIOHandler)
     requires io.initialized()
     requires old_self.Inv()
-    requires old_self.status == CommitterModel.StatusReady
+    requires old_self.status == StatusReady
     modifies io
     ensures self.W()
     ensures CommitterCommitModel.writeOutSuperblockAdvanceLog(
@@ -500,7 +540,7 @@ module CommitterImpl {
     linear inout method writeOutSuperblockAdvanceLocation(io: DiskIOHandler)
     requires io.initialized()
     requires old_self.Inv()
-    requires old_self.status == CommitterModel.StatusReady
+    requires old_self.status == StatusReady
     requires old_self.frozenLoc.Some?
     modifies io
     ensures self.W()
@@ -595,7 +635,7 @@ module CommitterImpl {
     returns (wait: bool)
     requires old_self.Inv()
     requires io.initialized()
-    requires old_self.status == CommitterModel.StatusReady
+    requires old_self.status == StatusReady
     modifies io
     ensures self.W()
     ensures CommitterCommitModel.tryAdvanceLog(
@@ -622,7 +662,7 @@ module CommitterImpl {
     returns (wait: bool)
     requires old_self.Inv()
     requires io.initialized()
-    requires old_self.status == CommitterModel.StatusReady
+    requires old_self.status == StatusReady
     requires old_self.frozenLoc.Some?
     modifies io
     ensures self.W()
@@ -678,5 +718,6 @@ module CommitterImpl {
         print "writeBackSuperblockResp: didn't do anything\n";
       }
     }
+  */
   }
 }
