@@ -401,7 +401,6 @@ module JournalistImpl {
       lemma_weight_append(old_self.InMemoryJournal(), je);
     }
 
-/*
     shared method isReplayEmpty()
     returns (b: bool)
     requires Inv()
@@ -410,25 +409,22 @@ module JournalistImpl {
       b := (replayIdx == |replayJournal| as uint64);
     }
 
-    shared method replayJournalTop()
-    returns (je: JournalEntry)
+    shared function method replayJournalTop() : (je: JournalEntry)
     requires Inv()
     requires I().replayJournal != []
     ensures je == I().replayJournal[0]
     {
-      JournalistModel.reveal_replayJournalTop();
-      JournalistModel.reveal_I(I());
-      je := replayJournal[replayIdx];
+      replayJournal[replayIdx]
     }
 
     inout linear method replayJournalPop()
     requires old_self.Inv()
-    requires JournalistModel.I(old_self.I()).replayJournal != []
+    requires old_self.I().replayJournal != []
     ensures self.Inv()
-    ensures self.I() == JournalistModel.replayJournalPop(old_self.I())
+    ensures self.I() == old_self.I().(replayJournal := self.I().replayJournal)
+    ensures old_self.I().replayJournal
+        == [old_self.replayJournalTop()] + self.I().replayJournal
     {
-      JournalistModel.reveal_replayJournalPop();
-      JournalistModel.reveal_I(old_self.I());
       inout self.replayIdx := self.replayIdx + 1;
     }
 
@@ -437,9 +433,8 @@ module JournalistImpl {
     requires forall i | 0 <= i < |jr| :: |jr[i]| == 4064
     requires |jr| <= NumJournalBlocks() as int
     ensures self.Inv()
-    ensures self.I() == JournalistModel.setFront(old_self.I(), jr)
+    ensures self.I() == old_self.I().(journalFront := Some(jr))
     {
-      JournalistModel.reveal_setFront();
       inout self.journalFront := Some(jr);
     }
 
@@ -448,24 +443,35 @@ module JournalistImpl {
     requires forall i | 0 <= i < |jr| :: |jr[i]| == 4064
     requires |jr| <= NumJournalBlocks() as int
     ensures self.Inv()
-    ensures self.I() == JournalistModel.setBack(old_self.I(), jr)
+    ensures self.I() == old_self.I().(journalBack := Some(jr))
     {
-      JournalistModel.reveal_setBack();
       inout self.journalBack := Some(jr);
     }
 
     inout linear method parseJournals() returns (success: bool)
     requires old_self.Inv()
     ensures self.Inv()
-    ensures (self.I(), success) == JournalistModel.parseJournals(old_self.I())
+    ensures
+      var old_I := old_self.I();
+      && self.Inv()
+      && (!success ==> self.I() == old_I)
+      && (success ==>
+        var fullRange :=
+          (if old_I.journalFront.Some? then old_I.journalFront.value
+              else []) +
+          (if old_I.journalBack.Some? then old_I.journalBack.value
+              else []);
+        && parseJournalRange(fullRange).Some?
+        && self.I() == old_I
+            .(journalFront := None)
+            .(journalBack := None)
+            .(replayJournal := parseJournalRange(fullRange).value));
     {
-      JournalistModel.reveal_parseJournals();
-      JournalistModel.reveal_I(old_self.I());
       var fullRange :=
         (if self.journalFront.Some? then self.journalFront.value else []) +
         (if self.journalBack.Some? then self.journalBack.value else []);
       var p := JournalistParsingImpl.ParseJournalRange(fullRange);
-      if p.Some? && |p.value| as uint64 <= JournalistModel.MaxPossibleEntries() {
+      if p.Some? && |p.value| as uint64 <= MaxPossibleEntries() {
         inout self.journalFront := None;
         inout self.journalBack := None;
         inout self.replayJournal := p.value;
@@ -479,20 +485,17 @@ module JournalistImpl {
     shared method hasFront()
     returns (b: bool)
     requires Inv()
-    ensures b == JournalistModel.hasFront(I())
+    ensures b == I().journalFront.Some?
     {
-      JournalistModel.reveal_hasFront();
       b := journalFront.Some?;
     }
 
     shared method hasBack()
     returns (b: bool)
     requires Inv()
-    ensures b == JournalistModel.hasBack(I())
+    ensures b == I().journalBack.Some?
     {
-      JournalistModel.reveal_hasBack();
       b := journalBack.Some?;
     }
-  */
   }
 }
