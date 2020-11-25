@@ -14,6 +14,8 @@ module PackedStringArray {
   import Uint32_Order
   import LexOrderImpl = Lexicographic_Byte_Order_Impl
   import LexOrder = LexOrderImpl.Ord
+  import UpperLexOrderImpl = Upperbounded_Lexicographic_Byte_Order_Impl
+  import UpperLexOrder = UpperLexOrderImpl.Ord
 
   type Key = LexOrder.Element
   
@@ -526,6 +528,34 @@ module PackedStringArray {
     result := hi - 1;
   }
 
+  method BinarySearchIndexOfFirstKeyGtePivot(psa: Psa, key: UpperLexOrder.Element)
+  returns (idx: uint64)
+  requires WF(psa)
+  ensures idx as int
+    == UpperLexOrder.binarySearchIndexOfFirstKeyGte(UpperLexOrder.ToElements(I(psa)), key)
+  {
+    UpperLexOrder.reveal_binarySearchIndexOfFirstKeyGte();
+    var lo: uint64 := 0;
+    var hi: uint64 := psaNumStrings(psa) + 1;
+
+    while lo + 1 < hi
+    invariant 0 <= lo as int < hi as int <= |I(psa)| + 1
+    invariant lo > 0 ==> UpperLexOrder.lt(UpperLexOrder.Element(I(psa)[lo-1]), key)
+    invariant hi as int <= |I(psa)| ==> UpperLexOrder.lte(key, UpperLexOrder.Element(I(psa)[hi-1]))
+    invariant UpperLexOrder.binarySearchIndexOfFirstKeyGte(UpperLexOrder.ToElements(I(psa)), key)
+        == UpperLexOrder.binarySearchIndexOfFirstKeyGteIter(UpperLexOrder.ToElements(I(psa)), key, lo as int, hi as int)
+    {
+      var mid := (lo + hi) / 2;
+      var c := UpperLexOrderImpl.cmp(key, UpperLexOrder.Element(psaElement(psa, mid-1)));
+      if c > 0 {
+        lo := mid;
+      } else {
+        hi := mid;
+      }
+    }
+    return lo;
+  }
+
   method BinarySearchIndexOfFirstKeyGte(psa: Psa, key: Key)
   returns (idx: uint64)
   requires WF(psa)
@@ -667,28 +697,28 @@ module PackedStringArray {
     LexOrder.IndexOfFirstGtIsUnique(I(psa), key, idx as nat);
   }
 
-  method PivotIndexes(keys: Psa, pivots: seq<Key>) returns (pivotIdxs: seq<uint64>)
-    requires WF(keys)
-    requires LexOrder.IsSorted(I(keys))
-    requires |I(keys)| < Uint64UpperBound()
-    requires |pivots| < Uint64UpperBound() - 1
-    ensures |pivotIdxs| == |pivots| + 1
-    ensures forall i | 0 <= i < |pivots| :: pivotIdxs[i] as nat == LexOrder.IndexOfFirstGte(I(keys), pivots[i])
-    ensures Last(pivotIdxs) as nat == |I(keys)|
-  {
-    var results := new uint64[|pivots| as uint64 + 1];
-    var i : uint64 := 0;
-    while i < |pivots| as uint64
-      invariant i <= |pivots| as uint64
-      invariant forall j | 0 <= j < i :: results[j] as nat == LexOrder.IndexOfFirstGte(I(keys), pivots[j])
-    {
-      results[i] := IndexOfFirstKeyGte(keys, pivots[i]);
-      i := i + 1;
-    }
+  //~ method PivotIndexes(keys: Psa, pivots: seq<Key>) returns (pivotIdxs: seq<uint64>)
+  //~   requires WF(keys)
+  //~  requires LexOrder.IsSorted(I(keys))
+  //~   requires |I(keys)| < Uint64UpperBound()
+  //~   requires |pivots| < Uint64UpperBound() - 1
+  //~   ensures |pivotIdxs| == |pivots| + 1
+  //~  ensures forall i | 0 <= i < |pivots| :: pivotIdxs[i] as nat == LexOrder.IndexOfFirstGte(I(keys), pivots[i])
+  //~   ensures Last(pivotIdxs) as nat == |I(keys)|
+  //~ {s
+  //~   var results := new uint64[|pivots| as uint64 + 1];
+  //~   var i : uint64 := 0;
+  //~   while i < |pivots| as uint64
+  //~     invariant i <= |pivots| as uint64
+  //~     invariant forall j | 0 <= j < i :: results[j] as nat == LexOrder.IndexOfFirstGte(I(keys), pivots[j])
+  //~   {
+  //~     results[i] := IndexOfFirstKeyGte(keys, pivots[i]);
+  //~     i := i + 1;
+  //~   }
 
-    results[|pivots| as uint64] := psaNumStrings(keys);
-    pivotIdxs := results[..];
-  }
+  //~   results[|pivots| as uint64] := psaNumStrings(keys);
+  //~   pivotIdxs := results[..];
+  //~s }
 
   class DynamicPsa {
     var nstrings: uint64

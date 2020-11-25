@@ -4,7 +4,6 @@ module BucketSuccessorLoopModel {
   import opened Options
   import opened Maps
   import opened BucketsLib
-  import opened PivotsLib
   import opened ValueMessage
   import opened Sequences
   import opened BucketIteratorModel
@@ -122,8 +121,8 @@ module BucketSuccessorLoopModel {
 
         assert forall k | k in KeyValueMapOfBucket(left').Keys :: Keyspace.lte(k, next.key);
         assert next.key in KeyValueMapOfBucket(left').Keys;
-        assert next.key == Keyspace.maximum(KeyValueMapOfBucket(left').Keys);
-        assert MapRemove1(KeyValueMapOfBucket(left'), Keyspace.maximum(KeyValueMapOfBucket(left').Keys)) == KeyValueMapOfBucket(left);
+        assert next.key == maximumKey(KeyValueMapOfBucket(left').Keys).value;
+        assert MapRemove1(KeyValueMapOfBucket(left'), next.key) == KeyValueMapOfBucket(left);
         assert results' == SortedSeqOfKeyValueMap(KeyValueMapOfBucket(left'));
 
         if |results'| < maxToFind {

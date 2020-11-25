@@ -3,6 +3,8 @@ include "../lib/Lang/System/SeqComparison.s.dfy"
 include "../MapSpec/UI.s.dfy"
 include "../MapSpec/UIStateMachine.s.dfy"
 
+// Basic dictionary state machine.
+
 module MapSpec refines UIStateMachine {
   import opened ValueType
   import opened KeyType

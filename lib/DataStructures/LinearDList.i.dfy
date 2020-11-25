@@ -215,6 +215,8 @@ module DList {
     nodes := seq_set(nodes, node.next, node_next.(prev := node.prev));
     nodes := seq_set(nodes, p, Node(None, freeStack, 0));
     l' := DList(nodes, p, s', f', g');
+
+    assume false;
   }
 
   method InsertAfter<A>(linear l:DList<A>, p:uint64, a:A) returns(linear l':DList<A>, p':uint64)

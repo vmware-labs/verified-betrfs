@@ -12,6 +12,7 @@ module MkfsImpl {
   import SM = StateModel
   import opened BucketImpl
   import opened BoxNodeImpl
+  import opened BoundedPivotsLib
   import IndirectionTableModel
   import IndirectionTableImpl
   import Marshalling
@@ -45,7 +46,7 @@ module MkfsImpl {
     linear var empty := MutBucket.Alloc();
     linear var buckets := lseq_alloc(1);
     lseq_give_inout(inout buckets,0, empty);
-    var node := new Node([], None, buckets);
+    var node := new Node(InitPivotTable(), None, buckets);
 
     WeightBucketListOneEmpty();
     assert node.I().buckets == [empty.I()];    // OBSERVE (trigger)

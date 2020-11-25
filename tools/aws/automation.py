@@ -8,7 +8,8 @@ import sys
 import os
 import fcntl
 import termcolor    # pip3 install termcolor
-
+import re
+import argparse
 logfile = None
 
 def set_logfile(path):
@@ -25,20 +26,52 @@ def log(msg):
         logfile.write(msg + "\n")
         logfile.flush()
 
-def retrieve_running_workers(ssd=False):
+automation_argparser = argparse.ArgumentParser(description='Options to the automation system.', add_help=False)
+automation_argparser.add_argument('--ssd',          action='store_true')
+automation_argparser.add_argument('--dry-run',      action='store_true')
+automation_argparser.add_argument('--workers-file', default='.awsworkers')
+
+def load_worker_regex_list(filename):
+    regexes = []
+    with open(filename) as f:
+        for line in f:
+            line = line.partition('#')[0]
+            line = line.strip()
+            if not line.startswith("^"):
+                line = "^" + line
+            if not line.endswith("$"):
+                line = line + "$"
+            regexes = regexes + [line]
+    return regexes
+        
+def filter_workers(workers, regexes):
+    filtered_workers = []
+    for w in workers:
+        for regex in regexes:
+            if re.search(regex, w["Name"]) is not None:
+                filtered_workers = filtered_workers + [w]
+    return filtered_workers
+
+def retrieve_running_workers(workers_file=".awsworkers", ssd=False):
+    filter_regexes = load_worker_regex_list(workers_file)
     workers_pipe = subprocess.Popen("ssh bastion veribetrfs/tools/aws/describe-instances.py --running --json".split() + (["--ssd"] if ssd else []), stdout=subprocess.PIPE)
     workers_json,_ = workers_pipe.communicate()
     workers = json.loads(workers_json)
+    workers = filter_workers(workers, filter_regexes)
     return workers
 
-def ssh_preamble():
-    return "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i".split() + [SSH_ID_PEM]
+def ssh_preamble(want_pty=None):
+    kill_pty = [] if want_pty else ["-T"]
+    # kill_pty doesn't actually do anything, because no-pty is the default
+    # when launching ssh from a script. I think Popen(stdin=DEVNULL)
+    # is what I really wanted to solve the remote-hanging problem.
+    return ["ssh"]+kill_pty+("-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i").split() + [SSH_ID_PEM]
 
 def ssh_target_for_worker(worker):
     return"ubuntu@%s" % worker["PublicIpAddress"]
 
-def ssh_cmd_for_worker(worker):
-    return ssh_preamble() + [ssh_target_for_worker(worker)]
+def ssh_cmd_for_worker(worker, want_pty=None):
+    return ssh_preamble(want_pty) + [ssh_target_for_worker(worker)]
 
 next_index = 0
 def get_index():
@@ -75,7 +108,7 @@ class WorkerMonitor:
 
     def launch(self):
         log("%s LAUNCH_CMD %s" % (self.linetag(), self.cmd.text_cmd_line()))
-        self.set_pipe(subprocess.Popen(self.cmd.cmd_ary, stdout=subprocess.PIPE, stderr=subprocess.STDOUT))
+        self.set_pipe(subprocess.Popen(self.cmd.cmd_ary, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT))
 
 def running(monitors):
     return [m for m in monitors if m.running]

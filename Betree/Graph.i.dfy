@@ -9,11 +9,6 @@ include "../lib/Lang/NativeTypes.s.dfy"
 // garbage-collected because they're unreachable from the graph roots.
 //
 
-// a tree uses 
-// This module
-// interfaces between things that are graphs (
-// 
-
 module ReferenceType {
   import NativeTypes
 

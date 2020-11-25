@@ -1,5 +1,4 @@
 include "../Lang/NativeTypes.s.dfy"
-//include "Marshalling/Native.s.dfy"
 include "sequences.i.dfy"
 
 module Arrays {

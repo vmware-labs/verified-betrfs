@@ -1,5 +1,9 @@
 include "../MapSpec/UI.s.dfy"
 
+// Abstract module for state machines with transitions labeled by UIOps.
+// Provides a little bit of convenience for abstracting things over
+// state machines.
+
 abstract module UIStateMachine {
   import _UI = UI
   type UIOp = _UI.Op

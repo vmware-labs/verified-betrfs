@@ -1,7 +1,7 @@
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../lib/Base/Message.i.dfy"
-include "../lib/Base/Crypto.s.dfy"
+include "../lib/Crypto/CRC32C.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../BlockCacheSystem/BlockCache.i.dfy"
 include "../BlockCacheSystem/JournalCache.i.dfy"
@@ -23,13 +23,12 @@ module Marshalling {
   import JC = JournalCache
   import BT = PivotBetreeSpec`Internal
   import M = ValueMessage`Internal
-  import Pivots = PivotsLib
-  import Keyspace = Lexicographic_Byte_Order
+  import Pivots = BoundedPivotsLib
   import SeqComparison
   import opened Bounds
   import DiskLayout
   import ReferenceType`Internal
-  import Crypto
+  import CRC32_C
   import PackedKV
   import opened SectorType
   import PackedKVMarshalling
@@ -96,116 +95,105 @@ module Marshalling {
 
   /////// Conversion to PivotNode
 
-  function pivotTableWeight(keys: seq<Key>) : nat
+  function pivotTableWeight(pivots: Pivots.PivotTable) : nat
+  requires Pivots.ElementsAreKeys(pivots)
   {
-    if |keys| == 0 then
+    if |pivots| == 0 then
       0
-    else
-      pivotTableWeight(DropLast(keys)) + SizeOfV(VUint64(0)) + |Last(keys)|
+    else 
+      pivotTableWeight(DropLast(pivots)) + SizeOfV(VUint64(0)) + Pivots.PivotSize(Last(pivots)) as int
   }
 
-  lemma pivotTableWeightUpperBound(keys: seq<Key>)
-    ensures pivotTableWeight(keys) <= |keys| * (SizeOfV(VUint64(0)) + KeyType.MaxLen() as int)
+  lemma pivotTableWeightUpperBound(pivots: Pivots.PivotTable)
+    requires Pivots.ElementsAreKeys(pivots)
+    ensures pivotTableWeight(pivots) <= |pivots| * (SizeOfV(VUint64(0)) + KeyType.MaxLen() as int)
   {
-    // if |keys| == 0 {
-    // } else {
-    //   pivotTableWeightUpperBound(DropLast(keys));
-    //   calc <= {
-    //     pivotTableWeight(keys);
-    //     pivotTableWeight(DropLast(keys)) + SizeOfV(VUint64(0)) + |Last(keys)|;
-    //     (|keys| - 1) * (SizeOfV(VUint64(0)) + KeyType.MaxLen() as int) + SizeOfV(VUint64(0)) + |Last(keys)|;
-    //     (|keys| - 1) * (SizeOfV(VUint64(0)) + KeyType.MaxLen() as int) + SizeOfV(VUint64(0)) + KeyType.MaxLen() as nat;
-    //     |keys| * (SizeOfV(VUint64(0)) + KeyType.MaxLen() as int) - (SizeOfV(VUint64(0)) + KeyType.MaxLen() as int) + SizeOfV(VUint64(0)) + KeyType.MaxLen() as nat;
-    //     |keys| * (SizeOfV(VUint64(0)) + KeyType.MaxLen() as int);
-    //   }
-    // }
-      
   }
-  
-  predicate isStrictlySortedKeySeqIterate(a: seq<Key>, i: int)
-  requires 1 <= i <= |a|
-  decreases |a| - i
-  ensures isStrictlySortedKeySeqIterate(a, i) <==> Keyspace.IsStrictlySorted(a[i-1..])
-  {
-    Keyspace.reveal_IsStrictlySorted();
 
-    if i == |a| then (
+  predicate isStrictlySortedPivotsIterate(pivots: Pivots.PivotTable, i: int)
+  requires 1 <= i <= |pivots|
+  decreases |pivots| - i
+  ensures isStrictlySortedPivotsIterate(pivots, i) <==> Pivots.Keyspace.IsStrictlySorted(pivots[i-1..])
+  {
+    Pivots.Keyspace.reveal_IsStrictlySorted();
+
+    if i == |pivots| then (
       true
     ) else (
-      if (Keyspace.lt(a[i-1], a[i])) then (
-        isStrictlySortedKeySeqIterate(a, i+1)
+      if (Pivots.Keyspace.lt(pivots[i-1], pivots[i])) then (
+        isStrictlySortedPivotsIterate(pivots, i+1)
       ) else (
         false
       )
     )
   }
 
-
-  predicate {:opaque} isStrictlySortedKeySeq(a: seq<Key>)
-  ensures isStrictlySortedKeySeq(a) <==> Keyspace.IsStrictlySorted(a)
+  predicate {:opaque} isStrictlySortedPivots(pivots: Pivots.PivotTable)
+  ensures isStrictlySortedPivots(pivots) <==> Pivots.Keyspace.IsStrictlySorted(pivots)
   {
-    Keyspace.reveal_IsStrictlySorted();
+    Pivots.Keyspace.reveal_IsStrictlySorted();
 
-    if |a| >= 2 then (
-      isStrictlySortedKeySeqIterate(a, 1)
+    if |pivots| >= 2 then (
+      isStrictlySortedPivotsIterate(pivots, 1)
     ) else (
       true
     )
   }
 
-  function keyValSeqToKeySeq(vs: seq<V>) : (result: Option<seq<Key>>)
+  function method keyToPivot(k: Key, convert: bool) : Pivots.Element
+  {
+    if |k| == 0 && convert
+      then Pivots.Keyspace.Max_Element
+      else Pivots.Keyspace.Element(k)
+  }
+
+  function keyValSeqToPivots(vs: seq<V>) : (result: Option<Pivots.PivotTable>)
     requires forall i | 0 <= i < |vs| :: ValidVal(vs[i])
     requires forall i | 0 <= i < |vs| :: ValInGrammar(vs[i], GByteArray)
-    ensures result.Some? <==> (forall i | 0 <= i < |vs| :: |vs[i].b| <= KeyType.MaxLen() as int)
     ensures result.Some? ==> |result.value| == |vs|
-    ensures result.Some? ==> (forall i | 0 <= i < |vs| :: result.value[i] == vs[i].b)
+    ensures result.Some? <==> (forall i | 0 <= i < |vs| :: |vs[i].b| <= KeyType.MaxLen() as int)
+    ensures result.Some? ==> (forall i | 0 <= i < |vs| :: result.value[i] == keyToPivot(vs[i].b, i >= 1))
+    ensures result.Some? ==> Pivots.ElementsAreKeys(result.value)
   {
     if |vs| == 0 then
       Some([])
     else (
-      var prefix := keyValSeqToKeySeq(DropLast(vs));
+      var prefix := keyValSeqToPivots(DropLast(vs));
       var last := Last(vs).b;
       if prefix.Some? && |last| <= KeyType.MaxLen() as int then (
-        var klast: Key := last;
-        Some(prefix.value + [ klast ])
+        var klast : Key := last;
+        Some(prefix.value + [ keyToPivot(klast, |vs| >= 2) ])
       ) else
         None
     )
   }
-  
-  function valToStrictlySortedKeySeq(v: V) : (s : Option<seq<Key>>)
+
+  function valToStrictlySortedPivots(v: V) : (s : Option<Pivots.PivotTable>)
   requires ValidVal(v)
   requires ValInGrammar(v, PivotTableGrammar())
-  ensures s.Some? ==> Keyspace.IsStrictlySorted(s.value)
+  requires |v.a| >= 2
+  ensures s.Some? ==> Pivots.Keyspace.IsStrictlySorted(s.value)
   ensures s.Some? ==> |s.value| == |v.a|
   decreases |v.a|
   {
-    var keys := keyValSeqToKeySeq(v.a);
-    
-    if keys.Some? && isStrictlySortedKeySeq(keys.value) then
+    var keys := keyValSeqToPivots(v.a);
+    if keys.Some? && isStrictlySortedPivots(keys.value) then
       keys
     else
       None
   }
 
-  function valToPivots(v: V) : (s : Option<seq<Key>>)
+  function valToPivots(v: V) : (s : Option<Pivots.PivotTable>)
   requires ValidVal(v)
   requires ValInGrammar(v, PivotTableGrammar())
   ensures s.Some? ==> Pivots.WFPivots(s.value)
   ensures s.Some? ==> |s.value| == |v.a|
   {
-    var s := valToStrictlySortedKeySeq(v);
-    if s.Some? && (|s.value| > 0 ==> |s.value[0]| != 0) then (
-      if |s.value| > 0 then (
-        SeqComparison.reveal_lte();
-        Keyspace.IsNotMinimum([], s.value[0]);
-        s
-      ) else (
-        s
-      )
-    ) else (
+    if |v.a| >= 2 then (
+      Pivots.Keyspace.reveal_IsStrictlySorted();
+      valToStrictlySortedPivots(v)
+    ) else
       None
-    )
   }
 
   function {:fuel ValInGrammar,2} valToBucket(v: V) : (s : Option<Bucket>)
@@ -247,7 +235,6 @@ module Marshalling {
   function {:fuel ValInGrammar,2} valToNode(v: V) : (s : Option<Node>)
   requires ValidVal(v)
   requires ValInGrammar(v, PivotNodeGrammar())
-  // Pivots.NumBuckets(node.pivotTable) == |node.buckets|
   ensures s.Some? ==> BT.WFNode(s.value)
   {
     assert ValidVal(v.t[0]);
@@ -258,9 +245,9 @@ module Marshalling {
     var buckets_len := |v.t[2].a| as uint64;
 
     if (
-       && pivots_len <= MaxNumChildrenUint64() - 1
-       && (children_len == 0 || children_len == pivots_len + 1)
-       && buckets_len == pivots_len + 1
+       && 2 <= pivots_len <= MaxNumChildrenUint64() + 1
+       && (children_len == 0 || children_len == pivots_len - 1)
+       && buckets_len == pivots_len - 1
     ) then (
       assert ValidVal(v.t[0]);
       match valToPivots(v.t[0]) {
@@ -404,7 +391,7 @@ module Marshalling {
 
   function {:opaque} parseCheckedSector(data: seq<byte>) : (s : Option<Sector>)
   {
-    if |data| >= 32 && Crypto.Crc32C(data[32..]) == data[..32] then
+    if |data| >= 32 && CRC32_C.crc32_c_padded(data[32..]) == data[..32] then
       parseSector(data[32..])
     else
       None

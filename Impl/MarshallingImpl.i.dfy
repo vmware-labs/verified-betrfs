@@ -6,6 +6,8 @@ include "../lib/Base/Option.s.dfy"
 include "../lib/Lang/System/NativeArrays.s.dfy"
 include "../lib/Base/NativeBenchmarking.s.dfy"
 include "../lib/Base/LinearOption.i.dfy"
+include "../lib/Crypto/CRC32CArrayImpl.i.dfy"
+include "../lib/Crypto/CRC32CImpl.i.dfy"
 
 include "../ByteBlockCacheSystem/Marshalling.i.dfy"
 include "MarshallingModel.i.dfy"
@@ -31,7 +33,9 @@ module MarshallingImpl {
   import BC = BlockCache
   import JC = JournalCache
   import StateImpl
-  import Crypto
+  import CRC32_C
+  import CRC32_C_Impl
+  import CRC32_C_Array_Impl
   import NativeArrays
   import MutableMapModel
   import IndirectionTableImpl
@@ -49,10 +53,12 @@ module MarshallingImpl {
   import ValueType`Internal
   import M = ValueMessage`Internal
 
-  import Pivots = PivotsLib
+  import Pivots = BoundedPivotsLib
   import MS = MapSpec
-  import KeyspaceImpl = Lexicographic_Byte_Order_Impl
-  import Keyspace = KeyspaceImpl.Ord
+  // test
+  // import KeyspaceImpl = Lexicographic_Byte_Order_Impl
+  // import Keyspace = KeyspaceImpl.Ord
+  // end test
   import PackedKVMarshalling
   import PackedKV
   import DPKV = DynamicPkv
@@ -65,21 +71,21 @@ module MarshallingImpl {
 
   /////// Conversion to PivotNode
 
-  method IsStrictlySortedKeySeq(a: seq<Key>) returns (b : bool)
-  requires |a| < 0x1_0000_0000_0000_0000
-  ensures b == Marshalling.isStrictlySortedKeySeq(a)
+  method IsStrictlySortedPivots(pivots: Pivots.PivotTable) returns (b : bool)
+  requires |pivots| < 0x1_0000_0000_0000_0000
+  ensures b == Marshalling.isStrictlySortedPivots(pivots)
   {
-    Marshalling.reveal_isStrictlySortedKeySeq();
+    Marshalling.reveal_isStrictlySortedPivots();
 
-    if |a| as uint64 < 2 {
+    if |pivots| as uint64 < 2 {
       return true;
     }
     var i: uint64 := 1;
-    while i < |a| as uint64
-    invariant 0 <= i as int <= |a|
-    invariant Marshalling.isStrictlySortedKeySeq(a) == Marshalling.isStrictlySortedKeySeqIterate(a, i as int)
+    while i < |pivots| as uint64
+    invariant 0 <= i as int <= |pivots|
+    invariant Marshalling.isStrictlySortedPivots(pivots) == Marshalling.isStrictlySortedPivotsIterate(pivots, i as int)
     {
-      var c := KeyspaceImpl.cmp(a[i-1], a[i]);
+      var c := Pivots.KeyspaceImpl.cmp(pivots[i-1], pivots[i]);
       if c >= 0 {
         return false;
       }
@@ -89,53 +95,51 @@ module MarshallingImpl {
     return true;
   }
 
-  method KeyValSeqToKeySeq(vs: seq<V>) returns (result: Option<seq<Key>>)
+  method KeyValSeqToPivots(vs: seq<V>) returns (result: Option<Pivots.PivotTable>)
     requires |vs| < Uint64UpperBound()
     requires forall i | 0 <= i < |vs| :: ValidVal(vs[i])
     requires forall i | 0 <= i < |vs| :: ValInGrammar(vs[i], GByteArray)
-    ensures result == Marshalling.keyValSeqToKeySeq(vs)
+    ensures result == Marshalling.keyValSeqToPivots(vs)
   {
-    var aresult: array<Key> := new Key[|vs| as uint64];
+    var aresult: array<Pivots.Element> := new Pivots.Element[|vs| as uint64];
 
     var i: uint64 := 0;
     while i < |vs| as uint64
       invariant i as nat <= |vs|
-      invariant Marshalling.keyValSeqToKeySeq(vs[..i]).Some?
-      invariant aresult[..i] == Marshalling.keyValSeqToKeySeq(vs[..i]).value
+      invariant Marshalling.keyValSeqToPivots(vs[..i]).Some?
+      invariant aresult[..i] == Marshalling.keyValSeqToPivots(vs[..i]).value
     {
       if KeyType.MaxLen() < |vs[i].b| as uint64 {
         return None;
       }
-      aresult[i] := vs[i].b;
+      aresult[i] := Marshalling.keyToPivot(vs[i].b, i >= 1);
       i := i + 1;
     }
     assert vs[..i] == vs;
     return Some(aresult[..i]);
   }
   
-  method ValToStrictlySortedKeySeq(v: V) returns (s : Option<seq<Key>>)
-  requires Marshalling.valToStrictlySortedKeySeq.requires(v)
-  ensures s == Marshalling.valToStrictlySortedKeySeq(v)
+  method valToStrictlySortedPivots(v: V) returns (s : Option<Pivots.PivotTable>)
+  requires Marshalling.valToStrictlySortedPivots.requires(v)
+  ensures s == Marshalling.valToStrictlySortedPivots(v)
   {
-    var okeys := KeyValSeqToKeySeq(v.a);
-    if okeys == None {
-      return None;
+    var okeys := KeyValSeqToPivots(v.a);
+    if okeys.Some? {
+      var is_sorted := IsStrictlySortedPivots(okeys.value);
+      if is_sorted {
+        return okeys;
+      }
     }
-    
-    var is_sorted := IsStrictlySortedKeySeq(okeys.value);
-    if is_sorted {
-      return okeys;
-    } else {
-      return None;
-    }
+    return None;
   }
 
-  method ValToPivots(v: V) returns (s : Option<seq<Key>>)
+  method ValToPivots(v: V) returns (s : Option<Pivots.PivotTable>)
   requires Marshalling.valToPivots.requires(v)
   ensures s == Marshalling.valToPivots(v)
   {
-    s := ValToStrictlySortedKeySeq(v);
-    if (s.Some? && |s.value| as uint64 > 0 && |s.value[0 as uint64]| as uint64 == 0) {
+    if |v.a| >= 2 {
+      s := valToStrictlySortedPivots(v);
+    } else {
       s := None;
     }
   }
@@ -206,7 +210,7 @@ module MarshallingImpl {
           invariant forall k: nat | j as int <= k < i as int :: WFBucket(buckets[k].bucket)
           {
             linear var b := lseq_take_inout(inout buckets, j);
-            b.Free();
+            var _ := BucketImpl.FreeMutBucket(b);
             j := j + 1;
           }
           error := true;
@@ -241,9 +245,9 @@ module MarshallingImpl {
     var buckets_len := |v.t[2 as uint64].a| as uint64;
 
     if !(
-       && pivots_len <= MaxNumChildrenUint64() - 1
-       && (children_len == 0 || children_len == pivots_len + 1)
-       && buckets_len == pivots_len + 1
+       && 2 <= pivots_len <= MaxNumChildrenUint64() + 1
+       && (children_len == 0 || children_len == pivots_len - 1)
+       && buckets_len == pivots_len - 1
     ) {
       return None;
     }
@@ -278,7 +282,7 @@ module MarshallingImpl {
 
         var w: uint64 := BucketImpl.MutBucket.computeWeightOfSeq(buckets);
         if (w > MaxTotalBucketWeightUint64()) {
-          BucketImpl.MutBucket.FreeSeq(buckets);
+          var _ := BucketImpl.FreeMutBucketSeq(buckets);
           s := None;
         } else {
           var node := new Node(pivots, if |children| as uint64 == 0 then None else childrenOpt, buckets);
@@ -346,27 +350,52 @@ module MarshallingImpl {
     return VUint64Array(children);
   }
 
-  lemma WeightKeySeqLe(keys: seq<Key>)
-  ensures WeightKeyList(keys) <= |keys| * (8 + KeyType.MaxLen() as int)
+  function method pivotToKey(pivots: Pivots.PivotTable, i: uint64) : (k: Key)
+  requires 0 <= i as int < |pivots|
+  requires Pivots.WFPivots(pivots)
   {
-    WeightKeyMultisetUpperBound(multiset(keys));
+    if pivots[i].Element? then
+      pivots[i].e 
+    else
+      []
   }
 
-  method strictlySortedKeySeqToVal(keys: seq<Key>)
+  lemma pivotToKeyEqualskeyToPivot(pivots: Pivots.PivotTable, i: int)
+  requires 0 <= i < |pivots|
+  requires |pivots| < 0x4000_0000_0000_0000
+  requires Pivots.WFPivots(pivots)
+  ensures var k := pivotToKey(pivots, i as uint64);
+    && Marshalling.keyToPivot(k, i >= 1) == pivots[i]
+  {
+    var k := pivotToKey(pivots, i as uint64);
+    var pivot := Marshalling.keyToPivot(k, i >= 1);
+
+    if pivots[i].Element? && pivots[i].e == [] {
+      if i >= 1 {
+        var b := Pivots.Keyspace.SmallestElement();
+        assert b == pivots[i];
+        Pivots.Keyspace.reveal_IsStrictlySorted();
+        assert Pivots.Keyspace.lt(pivots[i-1], pivots[i]);
+        Pivots.Keyspace.IsNotMinimum(pivots[i-1], pivots[i]);
+        Pivots.Keyspace.reveal_NotMinimum();
+        assert false;
+      }
+    }
+  }
+
+  method strictlySortedPivotsToVal(pivots: Pivots.PivotTable)
   returns (v : V, size: uint64)
-  requires Keyspace.IsStrictlySorted(keys)
-  requires |keys| < (Uint64UpperBound() - 8) / (8 + KeyType.MaxLen() as nat)
+  requires Pivots.WFPivots(pivots)
+  requires |pivots| < (Uint64UpperBound() - 8) / (8 + KeyType.MaxLen() as nat)
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.PivotTableGrammar())
-  ensures |v.a| == |keys|
-  ensures Marshalling.valToStrictlySortedKeySeq(v) == Some(keys)
-  ensures SizeOfV(v) <= 8 + |keys| * (8 + KeyType.MaxLen() as int)
-  ensures SizeOfV(v) == 8 + Marshalling.pivotTableWeight(keys)
+  ensures |v.a| == |pivots|
+  ensures Marshalling.valToStrictlySortedPivots(v) == Some(pivots)
+  ensures SizeOfV(v) <= 8 + |pivots| * (8 + KeyType.MaxLen() as int)
+  ensures SizeOfV(v) == 8 + Marshalling.pivotTableWeight(pivots)
   ensures size as nat == SizeOfV(v)
   {
-    WeightKeySeqLe(keys);
-
-    var vs: array<V> := new V[|keys| as uint64];
+    var vs: array<V> := new V[|pivots| as uint64];
 
     assert SeqSum(vs[..0]) == 0 by {
       reveal_SeqSum();
@@ -374,48 +403,34 @@ module MarshallingImpl {
 
     size := 0;
     var i: uint64 := 0;
-    while i < |keys| as uint64
-      invariant i as nat <= |keys|
-      invariant forall j | 0 <= j < i :: ValidVal(vs[j])
-      invariant forall j | 0 <= j < i :: vs[j] == VByteArray(keys[j])
-      invariant Marshalling.keyValSeqToKeySeq(vs[..i]).value == keys[..i]
-      invariant SeqSum(vs[..i]) == Marshalling.pivotTableWeight(keys[..i])
-      invariant size as nat == SeqSum(vs[..i])
+    while i < |pivots| as uint64
+    invariant i as nat <= |pivots|
+    invariant forall j | 0 <= j < i :: ValidVal(vs[j])
+    invariant forall j | 0 <= j < i :: vs[j] == VByteArray(pivotToKey(pivots, j))
+    invariant Marshalling.keyValSeqToPivots(vs[..i]).value == pivots[..i]
+    invariant SeqSum(vs[..i]) == Marshalling.pivotTableWeight(pivots[..i])
+    invariant size as nat == SeqSum(vs[..i])
     {
-      vs[i] := VByteArray(keys[i]);
+      vs[i] := VByteArray(pivotToKey(pivots, i));
       assert vs[..i+1] == vs[..i] + [ vs[i] ];
       lemma_SeqSum_prefix(vs[..i], vs[i]);
-      Marshalling.pivotTableWeightUpperBound(keys[..i]);
-      calc <= {
-        size as nat + 8 + |keys[i]|;
-        SeqSum(vs[..i+1]);
-        |keys| * (8 + KeyType.MaxLen() as int);
-        (Uint64UpperBound() - 8) / (8 + KeyType.MaxLen() as nat) * (8 + KeyType.MaxLen() as int);
-        Uint64UpperBound() - 8;
-      }
-      size := size + 8 + |keys[i]| as uint64;
+      Marshalling.pivotTableWeightUpperBound(pivots[..i]);
+      pivotToKeyEqualskeyToPivot(pivots, i as int);
+      size := size + 8 + Pivots.PivotSize(pivots[i]);
       i := i + 1;
     }
 
-    assert keys[..i] == keys;
-    Marshalling.pivotTableWeightUpperBound(keys);
+    assert pivots[..i] == pivots;
+    Marshalling.pivotTableWeightUpperBound(pivots);
     v := VArray(vs[..i]);
     size := size + 8;
+    assert SizeOfV(v) <= 8 + |pivots| * (8 + KeyType.MaxLen() as int); // reduce verification time
   }
 
-  lemma KeyInPivotsIsNonempty(pivots: seq<Key>)
-  requires Pivots.WFPivots(pivots)
-  requires |pivots| > 0
-  ensures |pivots[0]| != 0;
-  {
-    var e := Keyspace.SmallerElement(pivots[0]);
-    SeqComparison.reveal_lte();
-  }
-
-  method pivotsToVal(pivots: seq<Key>)
+  method pivotsToVal(pivots: Pivots.PivotTable)
   returns (v : V, size: uint64)
   requires Pivots.WFPivots(pivots)
-  requires |pivots| <= MaxNumChildren() as int - 1
+  requires |pivots| <= MaxNumChildren() as int + 1
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.PivotTableGrammar())
   ensures |v.a| == |pivots|
@@ -423,12 +438,7 @@ module MarshallingImpl {
   ensures SizeOfV(v) <= 8 + |pivots| * (8 + KeyType.MaxLen() as int)
   ensures SizeOfV(v) == size as int
   {
-    v, size := strictlySortedKeySeqToVal(pivots);
-
-    ghost var ghosty := true;
-    if ghosty && |pivots| > 0 {
-      KeyInPivotsIsNonempty(pivots);
-    }
+    v, size := strictlySortedPivotsToVal(pivots);
   }
 
   method {:fuel SizeOfV,3}
@@ -453,9 +463,9 @@ module MarshallingImpl {
     PackedKVMarshalling.SizeOfVPackedKVIsBucketWeight(pkv);
   }
 
-  method bucketsToVal(shared buckets: lseq<BucketImpl.MutBucket>, end: int)
+  method bucketsToVal(shared buckets: lseq<BucketImpl.MutBucket>, end: uint64)
   returns (v: V, size: uint64)
-  requires 0 <= end <= |buckets|
+  requires 0 <= end as int <= |buckets|
   requires BucketImpl.MutBucket.InvLseq(buckets)
   requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i].bucket)
   requires BucketsLib.BucketListWellMarshalled(BucketImpl.MutBucket.ILseq(buckets))
@@ -463,21 +473,21 @@ module MarshallingImpl {
   requires WeightBucketList(BucketImpl.MutBucket.ILseq(buckets)) <= MaxTotalBucketWeight()
   ensures ValidVal(v)
   ensures ValInGrammar(v, GArray(Marshalling.BucketGrammar()))
-  ensures |v.a| == end
+  ensures |v.a| == end as int
   ensures Marshalling.valToBuckets(v.a) == Some(BucketImpl.MutBucket.ILseq(buckets)[..end])
-  ensures SizeOfV(v) <= 8 + WeightBucketList(BucketImpl.MutBucket.ILseq(buckets)[..end]) + end * 32
+  ensures SizeOfV(v) <= 8 + WeightBucketList(BucketImpl.MutBucket.ILseq(buckets)[..end]) + end as int * 32
   ensures SizeOfV(v) == size as int
   {
     if end == 0 {
       v := VArray([]);
       size := 8;
     } else {
-      WeightBucketListSlice(BucketImpl.MutBucket.ILseq(buckets), 0, end - 1);
-      WeightBucketLeBucketList(BucketImpl.MutBucket.ILseq(buckets), end - 1);
-      BucketImpl.MutBucket.Islice(buckets, 0, end - 1);
+      WeightBucketListSlice(BucketImpl.MutBucket.ILseq(buckets), 0, end as int - 1);
+      WeightBucketLeBucketList(BucketImpl.MutBucket.ILseq(buckets), end as int - 1);
+      BucketImpl.MutBucket.Islice(buckets, 0, end as int - 1);
 
       var pref, pref_size := bucketsToVal(buckets, end-1);
-      shared var bucket := lseq_peek(buckets, (end-1) as uint64);
+      shared var bucket := lseq_peek(buckets, end-1);
 
       var bucketVal, bucket_size := bucketToVal(bucket);
       
@@ -524,7 +534,7 @@ module MarshallingImpl {
   ensures SizeOfV(v) == size as int
   {
     var end := node.GetBucketsLen();
-    var buckets, size_buckets := bucketsToVal(node.box.Borrow().buckets, end as int);
+    var buckets, size_buckets := bucketsToVal(node.box.Borrow().buckets, end);
     assert BucketImpl.MutBucket.ILseq(node.Read().buckets)[..end] == BucketImpl.MutBucket.ILseq(node.Read().buckets);
 
     var pivots, size_pivots := pivotsToVal(node.box.Borrow().pivotTable);
@@ -542,7 +552,7 @@ module MarshallingImpl {
 
     v := VTuple([pivots, children, buckets]);
 
-    assert SizeOfV(pivots) <= (8 + (MaxNumChildren()-1)*(8 + KeyType.MaxLen() as int));
+    assert SizeOfV(pivots) <= (8 + (MaxNumChildren()+1)*(8 + KeyType.MaxLen() as int));
     assert SizeOfV(children) <= (8 + MaxNumChildren() * 8);
     assert SizeOfV(buckets) <= 8 + MaxNumChildren() * (32) + MaxTotalBucketWeight();
 
@@ -660,7 +670,7 @@ module MarshallingImpl {
   /////// Marshalling and de-marshalling with checksums
 
   method ParseCheckedSector(data: seq<byte>) returns (s : Option<Sector>)
-  requires |data| < 0x1_0000_0000_0000_0000;
+  requires |data| < 0x1_0000_0000;
   ensures s.Some? ==> StateImpl.WFSector(s.value)
   ensures s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
   ensures ISectorOpt(s) == IMM.parseCheckedSector(data)
@@ -671,7 +681,8 @@ module MarshallingImpl {
     s := None;
 
     if |data| as uint64 >= 32 {
-      var hash := Crypto.Crc32C(data[32 as uint64..]);
+      // TODO unnecessary copy here
+      var hash := CRC32_C_Impl.compute_crc32c_padded(data[32 as uint64..]);
       if hash == data[..32 as uint64] {
         s := ParseSector(data, 32);
       }
@@ -708,10 +719,10 @@ module MarshallingImpl {
       IMM.reveal_parseSector();
       IMM.reveal_parseCheckedSector();
 
-      var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
+      var hash := CRC32_C_Array_Impl.compute_crc32c_padded(data, 32, data.Length as uint32 - 32);
 
       assert data[32..] == data[32..data.Length];
-      assert hash == Crypto.Crc32C(data[32..]);
+      assert hash == CRC32_C.crc32_c_padded(data[32..]);
       ghost var data_suffix := data[32..];
       NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
       assert data_suffix == data[32..];
@@ -745,10 +756,10 @@ module MarshallingImpl {
       IMM.reveal_parseSector();
       IMM.reveal_parseCheckedSector();
 
-      var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
+      var hash := CRC32_C_Array_Impl.compute_crc32c_padded(data, 32, data.Length as uint32 - 32);
 
       assert data[32..] == data[32..data.Length];
-      assert hash == Crypto.Crc32C(data[32..]);
+      assert hash == CRC32_C.crc32_c_padded(data[32..]);
       ghost var data_suffix := data[32..];
       NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
       assert data_suffix == data[32..];
@@ -764,7 +775,7 @@ module MarshallingImpl {
       Pack_LittleEndian_Uint64_into_Array(1, data, 32);
 
       //NativeBenchmarking.start("crc32");
-      var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
+      var hash := CRC32_C_Array_Impl.compute_crc32c_padded(data, 32, data.Length as uint64 - 32);
       NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
       //NativeBenchmarking.end("crc32");
 
@@ -787,10 +798,10 @@ module MarshallingImpl {
       IMM.reveal_parseSector();
       IMM.reveal_parseCheckedSector();
 
-      var hash := Crypto.Crc32CArray(data, 32, data.Length as uint64 - 32);
+      var hash := CRC32_C_Array_Impl.compute_crc32c_padded(data, 32, data.Length as uint32 - 32);
 
       assert data[32..] == data[32..data.Length];
-      assert hash == Crypto.Crc32C(data[32..]);
+      assert hash == CRC32_C.crc32_c_padded(data[32..]);
       ghost var data_suffix := data[32..];
       NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
       assert data_suffix == data[32..];

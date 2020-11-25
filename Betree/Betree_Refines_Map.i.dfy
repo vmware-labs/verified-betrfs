@@ -7,7 +7,8 @@ include "../Betree/BetreeInv.i.dfy"
 
 module Betree_Refines_Map {
   import MS = MapSpec
-  import opened DBI = BetreeInv
+  import opened Betree
+  import opened BetreeInv
   import opened G = BetreeGraph
   import opened BetreeSpec`Internal
   import ValueMessage`Internal
@@ -19,44 +20,45 @@ module Betree_Refines_Map {
 
   datatype LookupResult = LookupResult(lookup: Lookup, result: Value)
   
-  function GetLookup(view: DB.BI.View, key: Key) : LookupResult
-    requires KeyHasSatisfyingLookup(view, key);
+  function GetLookup(view: Betree.BI.View, key: Key, start: Reference) : LookupResult
+    requires KeyHasSatisfyingLookup(view, key, start)
   {
-    var lookup, value :| DB.IsSatisfyingLookup(view, key, value, lookup);
+    var lookup: Lookup, value :|
+        BetreeInv.IsSatisfyingLookupFrom(view, key, value, lookup, start);
     LookupResult(lookup, value)
   }
 
-  function GetValue(view: DB.BI.View, key: Key) : Value
-    requires KeyHasSatisfyingLookup(view, key);
+  function GetValue(view: Betree.BI.View, key: Key) : Value
+    requires KeyHasSatisfyingLookup(view, key, Root());
   {
-    GetLookup(view, key).result
+    GetLookup(view, key, Root()).result
   }
 
-  function IView(view: DB.BI.View) : imap<Key, Value>
-    requires forall key | MS.InDomain(key) :: KeyHasSatisfyingLookup(view, key);
+  function IView(view: Betree.BI.View) : imap<Key, Value>
+    requires forall key | MS.InDomain(key) :: KeyHasSatisfyingLookup(view, key, Root());
   {
     imap key | MS.InDomain(key) :: GetValue(view, key)
   }
   
-  function I(s: DB.Variables) : MS.Variables
+  function I(s: Betree.Variables) : MS.Variables
     requires Inv(s)
   {
     MS.Variables(IView(s.bcv.view))
   }
 
-  lemma RefinesInit(s: DB.Variables)
-    requires DB.Init(s)
+  lemma RefinesInit(s: Betree.Variables)
+    requires Betree.Init(s)
     ensures Inv(s)
     ensures MS.Init(I(s))
   {
     InitImpliesInv(s);
 
     forall key | MS.InDomain(key)
-    ensures KeyHasSatisfyingLookup(s.bcv.view, key)
+    ensures KeyHasSatisfyingLookup(s.bcv.view, key, Root())
     ensures key in IView(s.bcv.view)
     ensures IView(s.bcv.view)[key] == MS.EmptyMap()[key]
     {
-      var l := GetLookup(s.bcv.view, key);
+      var l := GetLookup(s.bcv.view, key, Root());
       var lookup := l.lookup;
       var value := l.result;
       assert InterpretLookup(lookup, key) == G.M.Define(G.M.DefaultValue()); // observe
@@ -73,27 +75,29 @@ module Betree_Refines_Map {
     //assert I(s) == MS.Variables(MS.EmptyMap());
   }
 
-  lemma PreservesLookupsRev(s: DB.Variables, s': DB.Variables)
+  lemma PreservesLookupsRev(s: Betree.Variables, s': Betree.Variables)
   requires Inv(s);
   requires Inv(s');
-  requires PreservesLookups(s, s');
-  ensures PreservesLookups(s', s);
+  requires PreservesLookups(s, s', Root());
+  ensures PreservesLookups(s', s, Root());
   {
-    forall lookup', key, value' | DB.IsSatisfyingLookup(s'.bcv.view, key, value', lookup')
-      ensures exists lookup :: DB.IsSatisfyingLookup(s.bcv.view, key, value', lookup)
+    forall lookup': Lookup, key, value' | BetreeInv.IsSatisfyingLookupFrom(s'.bcv.view, key, value', lookup', Root())
+      ensures exists lookup: Lookup :: BetreeInv.IsSatisfyingLookupFrom(s.bcv.view, key, value', lookup, Root())
     {
-      assert KeyHasSatisfyingLookup(s.bcv.view, key);
-      var lookup, value :| DB.IsSatisfyingLookup(s.bcv.view, key, value, lookup);
-      var lookup'2 :| DB.IsSatisfyingLookup(s'.bcv.view, key, value, lookup'2);
+      assert KeyHasSatisfyingLookup(s.bcv.view, key, Root());
+      var lookup: Lookup, value :| BetreeInv.IsSatisfyingLookupFrom(
+          s.bcv.view, key, value, lookup, Root());
+      var lookup'2: Lookup :| BetreeInv.IsSatisfyingLookupFrom(
+          s'.bcv.view, key, value, lookup'2, Root());
       CantEquivocate(s', key, value, value', lookup'2, lookup');
-      assert DB.IsSatisfyingLookup(s.bcv.view, key, value', lookup);
+      assert BetreeInv.IsSatisfyingLookupFrom(s.bcv.view, key, value', lookup, Root());
     }
   }
 
-  lemma PreservesLookupsImplInterpsEqual(s: DB.Variables, s': DB.Variables)
+  lemma PreservesLookupsImplInterpsEqual(s: Betree.Variables, s': Betree.Variables)
   requires Inv(s);
   requires Inv(s');
-  requires PreservesLookups(s, s');
+  requires PreservesLookups(s, s', Root());
   ensures I(s) == I(s');
   {
     forall key
@@ -103,16 +107,16 @@ module Betree_Refines_Map {
       var view := s.bcv.view;
       var view' := s'.bcv.view;
 
-      var res := GetLookup(view, key);
-      var res' := GetLookup(view', key);
+      var res := GetLookup(view, key, Root());
+      var res' := GetLookup(view', key, Root());
       var value := res.result;
       var lookup := res.lookup;
       var value' := res'.result;
       var lookup' := res'.lookup;
 
-      assert DB.IsSatisfyingLookup(view, key, value, lookup);
+      assert BetreeInv.IsSatisfyingLookupFrom(view, key, value, lookup, Root());
       PreservesLookupsRev(s, s');
-      var lookup'' :| DB.IsSatisfyingLookup(view, key, value', lookup'');
+      var lookup'' :| BetreeInv.IsSatisfyingLookupFrom(view, key, value', lookup'', Root());
       CantEquivocate(s, key, value, value', lookup, lookup'');
       assert value == value';
     }
@@ -120,25 +124,25 @@ module Betree_Refines_Map {
         == IView(s'.bcv.view);
   }
 
-  lemma PreservesLookupsRevExcept(s: DB.Variables, s': DB.Variables, except: Key)
+  lemma PreservesLookupsRevExcept(s: Betree.Variables, s': Betree.Variables, except: Key)
   requires Inv(s);
   requires Inv(s');
-  requires PreservesLookupsExcept(s, s', except);
-  ensures PreservesLookupsExcept(s', s, except);
+  requires PreservesLookupsExcept(s, s', Root(), except);
+  ensures PreservesLookupsExcept(s', s, Root(), except);
   {
-    forall lookup', key, value' | key != except && DB.IsSatisfyingLookup(s'.bcv.view, key, value', lookup')
-      ensures exists lookup :: DB.IsSatisfyingLookup(s.bcv.view, key, value', lookup)
+    forall lookup', key, value' | key != except && BetreeInv.IsSatisfyingLookupFrom(s'.bcv.view, key, value', lookup', Root())
+      ensures exists lookup :: BetreeInv.IsSatisfyingLookupFrom(s.bcv.view, key, value', lookup, Root())
     {
-      assert KeyHasSatisfyingLookup(s.bcv.view, key);
-      var lookup, value :| DB.IsSatisfyingLookup(s.bcv.view, key, value, lookup);
-      var lookup'2 :| DB.IsSatisfyingLookup(s'.bcv.view, key, value, lookup'2);
+      assert KeyHasSatisfyingLookup(s.bcv.view, key, Root());
+      var lookup, value :| BetreeInv.IsSatisfyingLookupFrom(s.bcv.view, key, value, lookup, Root());
+      var lookup'2 :| BetreeInv.IsSatisfyingLookupFrom(s'.bcv.view, key, value, lookup'2, Root());
       CantEquivocate(s', key, value, value', lookup'2, lookup');
-      assert DB.IsSatisfyingLookup(s.bcv.view, key, value', lookup);
+      assert BetreeInv.IsSatisfyingLookupFrom(s.bcv.view, key, value', lookup, Root());
     }
   }
 
 
-  lemma PreservesLookupsPutImplInterpsPut(s: DB.Variables, s': DB.Variables, key: Key, value: Value)
+  lemma PreservesLookupsPutImplInterpsPut(s: Betree.Variables, s': Betree.Variables, key: Key, value: Value)
   requires Inv(s);
   requires Inv(s');
   requires PreservesLookupsPut(s, s', key, value);
@@ -151,62 +155,62 @@ module Betree_Refines_Map {
     ensures IView(s'.bcv.view)[key'] == IView(s.bcv.view)[key := value][key'];
     {
       if (key' == key) {
-        var res := GetLookup(view', key);
+        var res := GetLookup(view', key, Root());
         var value' := res.result;
         var lookup' := res.lookup;
-        assert DB.IsSatisfyingLookup(view', key, value', lookup');
-        var lookup :| DB.IsSatisfyingLookup(view', key, value, lookup);
+        assert BetreeInv.IsSatisfyingLookupFrom(view', key, value', lookup', Root());
+        var lookup :| BetreeInv.IsSatisfyingLookupFrom(view', key, value, lookup, Root());
         CantEquivocate(s', key, value, value', lookup, lookup');
         assert IView(view')[key] == value;
       } else {
-        var res := GetLookup(view, key');
-        var res' := GetLookup(view', key');
+        var res := GetLookup(view, key', Root());
+        var res' := GetLookup(view', key', Root());
         var value := res.result;
         var lookup := res.lookup;
         var value' := res'.result;
         var lookup' := res'.lookup;
 
-        assert DB.IsSatisfyingLookup(view, key', value, lookup);
+        assert BetreeInv.IsSatisfyingLookupFrom(view, key', value, lookup, Root());
         PreservesLookupsRevExcept(s, s', key);
-        var lookup'' :| DB.IsSatisfyingLookup(view, key', value', lookup'');
+        var lookup'' :| BetreeInv.IsSatisfyingLookupFrom(view, key', value', lookup'', Root());
         CantEquivocate(s, key', value, value', lookup, lookup'');
         assert value == value';
       }
     }
   }
 
-  lemma LookupImpliesMap(s: DB.Variables, key: Key, value: Value, lookup: Lookup)
+  lemma LookupImpliesMap(s: Betree.Variables, key: Key, value: Value, lookup: Lookup)
   requires Inv(s)
   requires LookupKeyValue(lookup, key, value)
-  requires DB.BI.Reads(s.bcv, lookup)
+  requires Betree.BI.Reads(s.bcv, lookup)
   ensures I(s).view[key] == value
   {
-    var lookupResult := GetLookup(s.bcv.view, key);
+    var lookupResult := GetLookup(s.bcv.view, key, Root());
     var lookup' := lookupResult.lookup;
     var value' := lookupResult.result;
 
     forall i | 0 <= i < |lookup|
     ensures IMapsTo(s.bcv.view, lookup[i].ref, lookup[i].node)
     {
-      assert DB.BI.ReadStep(s.bcv, lookup[i]);
+      assert Betree.BI.ReadStep(s.bcv, lookup[i]);
     }
     CantEquivocate(s, key, value, value', lookup, lookup');
   }
 
-  lemma QueryStepRefinesMap(s: DB.Variables, s': DB.Variables, uiop: UI.Op, key: Key, value: Value, lookup: Lookup)
+  lemma QueryStepRefinesMap(s: Betree.Variables, s': Betree.Variables, uiop: UI.Op, key: Key, value: Value, lookup: Lookup)
     requires Inv(s)
     requires BetreeStepUI(BetreeQuery(LookupQuery(key, value, lookup)), uiop)
-    requires DBI.Query(s.bcv, s'.bcv, key, value, lookup)
+    requires BetreeInv.Query(s.bcv, s'.bcv, key, value, lookup)
     requires Inv(s')
     ensures MS.NextStep(I(s), I(s'), uiop, MS.QueryStep(key, value))
   {
     LookupImpliesMap(s, key, value, lookup);
   }
 
-  lemma SuccQueryStepRefinesMap(s: DB.Variables, s': DB.Variables, uiop: UI.Op, start: UI.RangeStart, results: seq<UI.SuccResult>, end: UI.RangeEnd, lookup: Lookup)
+  lemma SuccQueryStepRefinesMap(s: Betree.Variables, s': Betree.Variables, uiop: UI.Op, start: UI.RangeStart, results: seq<UI.SuccResult>, end: UI.RangeEnd, lookup: Lookup)
     requires Inv(s)
     requires BetreeStepUI(BetreeSuccQuery(SuccQuery(start, results, end, lookup)), uiop)
-    requires DBI.SuccQuery(s.bcv, s'.bcv, start, results, end, lookup)
+    requires BetreeInv.SuccQuery(s.bcv, s'.bcv, start, results, end, lookup)
     requires Inv(s')
     ensures MS.NextStep(I(s), I(s'), uiop, MS.SuccStep(start, results, end))
   {
@@ -227,10 +231,10 @@ module Betree_Refines_Map {
     assert MS.Succ(I(s), I(s'), uiop, start, results, end);
   }
   
-  lemma InsertMessageStepRefinesMap(s: DB.Variables, s': DB.Variables, uiop: UI.Op, key: Key, msg: BufferEntry, oldroot: Node)
+  lemma InsertMessageStepRefinesMap(s: Betree.Variables, s': Betree.Variables, uiop: UI.Op, key: Key, msg: BufferEntry, oldroot: Node)
     requires Inv(s)
     requires BetreeStepUI(BetreeInsert(MessageInsertion(key, msg, oldroot)), uiop)
-    requires DBI.InsertMessage(s.bcv, s'.bcv, key, msg, oldroot)
+    requires BetreeInv.InsertMessage(s.bcv, s'.bcv, key, msg, oldroot)
     requires Inv(s')
     ensures MS.Next(I(s), I(s'), uiop)
   {
@@ -242,47 +246,47 @@ module Betree_Refines_Map {
     assert MS.NextStep(I(s), I(s'), uiop, MS.WriteStep(key, value));
   }
 
-  lemma FlushStepRefinesMap(s: DB.Variables, s': DB.Variables, uiop: UI.Op, flush:NodeFlush)
+  lemma FlushStepRefinesMap(s: Betree.Variables, s': Betree.Variables, uiop: UI.Op, flush:NodeFlush)
     requires Inv(s)
     requires uiop.NoOp?
-    requires DBI.Flush(s.bcv, s'.bcv, flush)
+    requires BetreeInv.Flush(s.bcv, s'.bcv, flush)
     requires Inv(s')
     ensures MS.NextStep(I(s), I(s'), uiop, MS.StutterStep)
   {
-    FlushPreservesLookups(s, s', flush);
+    FlushPreservesLookups(s, s', Root(), flush);
     PreservesLookupsImplInterpsEqual(s, s');
     assert I(s) == I(s');
   }
 
-  lemma GrowStepRefinesMap(s: DB.Variables, s': DB.Variables, uiop: UI.Op, oldroot: Node, newchildref: Reference)
+  lemma GrowStepRefinesMap(s: Betree.Variables, s': Betree.Variables, uiop: UI.Op, oldroot: Node, newchildref: Reference)
     requires Inv(s)
     requires uiop.NoOp?
-    requires DBI.Grow(s.bcv, s'.bcv, oldroot, newchildref)
+    requires BetreeInv.Grow(s.bcv, s'.bcv, oldroot, newchildref)
     requires Inv(s')
     ensures MS.NextStep(I(s), I(s'), uiop, MS.StutterStep)
   {
-    GrowPreservesLookups(s, s', oldroot, newchildref);
+    GrowPreservesLookups(s, s', Root(), oldroot, newchildref);
     PreservesLookupsImplInterpsEqual(s, s');
     assert I(s) == I(s');
   }
 
 
-  lemma RedirectRefinesMap(s: DB.Variables, s': DB.Variables, uiop: UI.Op, r: DB.BetreeSpec.Redirect)
+  lemma RedirectRefinesMap(s: Betree.Variables, s': Betree.Variables, uiop: UI.Op, r: Betree.BetreeSpec.Redirect)
     requires Inv(s)
     requires uiop.NoOp?
-    requires DBI.Redirect(s.bcv, s'.bcv, r)
+    requires BetreeInv.Redirect(s.bcv, s'.bcv, r)
     requires Inv(s')
     ensures MS.NextStep(I(s), I(s'), uiop, MS.StutterStep)
   {
-    RedirectPreservesLookups(s, s', r);
+    RedirectPreservesLookups(s, s', Root(), r);
     PreservesLookupsImplInterpsEqual(s, s');
     assert I(s) == I(s');
   }
 
-  lemma BetreeStepRefinesMap(s: DB.Variables, s':DB.Variables, uiop: UI.Op, betreeStep: DBI.BetreeSpec.BetreeStep)
+  lemma BetreeStepRefinesMap(s: Betree.Variables, s':Betree.Variables, uiop: UI.Op, betreeStep: BetreeInv.BetreeSpec.BetreeStep)
     requires Inv(s)
     requires BetreeStepUI(betreeStep, uiop)
-    requires DB.NextStep(s, s', uiop, DB.BetreeStep(betreeStep))
+    requires Betree.NextStep(s, s', uiop, Betree.BetreeStep(betreeStep))
     ensures Inv(s')
     ensures MS.Next(I(s), I(s'), uiop)
   {
@@ -297,20 +301,20 @@ module Betree_Refines_Map {
     }
   }
 
-  lemma GCStepRefinesMap(s: DB.Variables, s':DB.Variables, uiop: UI.Op, refs: iset<DB.BI.Reference>)
+  lemma GCStepRefinesMap(s: Betree.Variables, s':Betree.Variables, uiop: UI.Op, refs: iset<Betree.BI.Reference>)
     requires Inv(s)
-    requires DB.NextStep(s, s', uiop, DB.GCStep(refs))
+    requires Betree.NextStep(s, s', uiop, Betree.GCStep(refs))
     requires Inv(s')
     ensures MS.NextStep(I(s), I(s'), uiop, MS.StutterStep)
   {
-    GCStepPreservesLookups(s, s', refs);
+    GCStepPreservesLookups(s, s', Root(), refs);
     PreservesLookupsImplInterpsEqual(s, s');
     assert I(s) == I(s');
   }
 
-  lemma RefinesNextStep(s: DB.Variables, s':DB.Variables, uiop: UI.Op, step: DB.Step)
+  lemma RefinesNextStep(s: Betree.Variables, s':Betree.Variables, uiop: UI.Op, step: Betree.Step)
     requires Inv(s)
-    requires DB.NextStep(s, s', uiop, step)
+    requires Betree.NextStep(s, s', uiop, step)
     ensures Inv(s')
     ensures MS.Next(I(s), I(s'), uiop)
   {
@@ -324,14 +328,14 @@ module Betree_Refines_Map {
     }
   }
     
-  lemma RefinesNext(s: DB.Variables, s':DB.Variables, uiop: UI.Op)
+  lemma RefinesNext(s: Betree.Variables, s':Betree.Variables, uiop: UI.Op)
     requires Inv(s)
-    requires DB.Next(s, s', uiop)
+    requires Betree.Next(s, s', uiop)
     ensures Inv(s')
     ensures MS.Next(I(s), I(s'), uiop)
   {
     NextPreservesInv(s, s', uiop);
-    var step :| DB.NextStep(s, s', uiop, step);
+    var step :| Betree.NextStep(s, s', uiop, step);
     RefinesNextStep(s, s', uiop, step);
   }
 }

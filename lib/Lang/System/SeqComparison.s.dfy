@@ -1,5 +1,7 @@
 include "../NativeTypes.s.dfy"
 
+// Trusted access to memcmp
+
 module SeqComparison {
   import opened NativeTypes
 

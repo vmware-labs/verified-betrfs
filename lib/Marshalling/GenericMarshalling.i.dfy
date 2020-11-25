@@ -7,6 +7,9 @@ include "Util.i.dfy"
 include "../Lang/System/NativeArrays.s.dfy"
 include "../Lang/System/PackedInts.s.dfy"
 
+// Main marshalling library for marshalling generic datatypes
+// out of tuples, arrays, unions, bytes, uint32, and uint64.
+
 module GenericMarshalling {
 //import opened Util__be_sequences_s
 import opened NativeTypes

@@ -2,6 +2,8 @@ include "../MapSpec/UIStateMachine.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "VOp.i.dfy"
 
+// Abstraction of the cache/betree side of the system.
+
 abstract module StatesView {
   import SM : UIStateMachine
 

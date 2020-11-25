@@ -14,7 +14,7 @@ include "../lib/Base/total_order.i.dfy"
 // * Flush moves a bundle of messages from a node to one of its children.
 // * Grow inserts a new layer at the top of the tree to admit growth.
 // * Redirect replaces a subtree with a semantically-equivalent one.
-//   (when do we use that?)
+//    'Merge' and 'Split' are both special cases.
 //
 
 module BetreeGraph refines Graph {
@@ -65,12 +65,10 @@ module BetreeSpec {
     && (forall k:Key :: k !in node.children ==> BufferIsDefining(node.buffer[k]))
   }
 
-  // Now we define the state machine
-
-  //// Query
-
   type Layer = G.ReadOp
   type Lookup = seq<Layer>
+
+  //// Query
 
   datatype LookupQuery = LookupQuery(key: Key, value: Value, lookup: Lookup)
 
@@ -101,7 +99,7 @@ module BetreeSpec {
     && LookupVisitsWFNodes(lookup)
   }
 
-  function InterpretLookup(lookup: Lookup, key: Key) : G.M.Message
+  function InterpretLookup(lookup: Lookup, key: Key) : (m : G.M.Message)
   requires LookupVisitsWFNodes(lookup)
   {
     if |lookup| == 0
@@ -228,7 +226,7 @@ module BetreeSpec {
     var newchildref := flush.newchildref;
     var newbuffer := imap k :: (if k in flush.flushedKeys then G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
     var newchild := Node(child.children, newbuffer);
-    var newparentbuffer := imap k :: (if k in flush.flushedKeys then G.M.Update(G.M.NopDelta()) else parent.buffer[k]);
+    var newparentbuffer := imap k :: (if k in flush.flushedKeys then G.M.IdentityMessage() else parent.buffer[k]);
     var newparentchildren := imap k | k in parent.children :: (if k in flush.movedKeys then newchildref else parent.children[k]);
     var newparent := Node(newparentchildren, newparentbuffer);
     var allocop := G.AllocOp(newchildref, newchild);
@@ -343,7 +341,7 @@ module BetreeSpec {
     [ ReadOp(redirect.parentref, redirect.old_parent) ]
       + RedirectChildReads(redirect.old_childrefs, redirect.old_children)
   }
- 
+
   function RedirectChildAllocs(childrefs: seq<Reference>, children: imap<Reference, Node>) : (ops: seq<Op>)
     requires forall ref :: ref in childrefs ==> ref in children
     ensures |ops| == |childrefs|

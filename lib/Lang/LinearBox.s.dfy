@@ -51,22 +51,30 @@ module {:extern "LinearBox_s"} LinearBox_s {
       ensures a == Read()
   }
 
-  type {:extern} DestructorFunction<A>
+  type {:extern "struct"} DestructorFunction<A>
 
-  function {:axiom} OfDestructor<A>(d:DestructorFunction<A>) : (linear A)-->()
+  function {:axiom} OfDestructor<A(!new)>(d:DestructorFunction<A>) : (linear A)-->()
+    ensures forall a:A :: OfDestructor(d).reads(a) == {}
 
   function method {:extern} ToDestructor<A>(f:(linear A)-->()) : (d:DestructorFunction<A>)
     ensures OfDestructor(d) == f
+
+  function method {:extern} ToDestructorEnv<A(!new), E>(f:(linear A, E)-->(), env:E) : (d:DestructorFunction<A>)
+    ensures forall a:A :: f.requires(a, env) == OfDestructor(d).requires(a)
+    ensures forall a:A :: f.requires(a, env) ==> OfDestructor(d)(a) == f(a, env)
+
+  function method {:extern} CallDestructor<A>(d:DestructorFunction<A>, linear a:A):()
+    requires OfDestructor(d).requires(a)
 
 } // module
 
 module Test_LinearBox_s {
   import opened LinearBox_s
   linear datatype q = Q(b:bool)
-  function method D(linear x:q):() {linear var Q(_) := x; ()}
+  function method D(linear x:q, b:bool):() {linear var Q(_) := x; ()}
   function method D2(shared x:q):() {()}
   method M()
   {
-    var s := new SwapLinear<q>(Q(true), ToDestructor<q>(D));
+    var s := new SwapLinear<q>(Q(true), ToDestructorEnv<q, bool>(D, false));
   }
 }

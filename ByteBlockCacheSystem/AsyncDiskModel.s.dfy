@@ -1,6 +1,6 @@
 include "../MapSpec/MapSpec.s.dfy"
 include "../lib/Base/MapRemove.s.dfy"
-include "../lib/Base/Crypto.s.dfy"
+include "../lib/Crypto/CRC32C.s.dfy"
 //
 // An async disk allows concurrent outstanding I/Os. The disk is a sequence of bytes.
 //
@@ -15,7 +15,7 @@ module AsyncDiskModelTypes {
 module AsyncDisk {
   import opened NativeTypes
   import opened MapRemove_s
-  import Crypto
+  import CRC32_C
 
   type ReqId = uint64
 
@@ -145,7 +145,7 @@ module AsyncDisk {
 
   predicate {:opaque} ChecksumChecksOut(s: seq<byte>) {
     && |s| >= 32
-    && s[0..32] == Crypto.Crc32C(s[32..])
+    && s[0..32] == CRC32_C.crc32_c_padded(s[32..])
   }
 
   predicate ChecksumsCheckOutForSlice(realContents: seq<byte>, fakeContents: seq<byte>, i: int, j: int)

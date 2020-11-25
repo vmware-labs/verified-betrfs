@@ -56,7 +56,7 @@ module MkfsModel {
         map[BT.G.Root() := []]
       )))
     && Marshalling.parseCheckedSector(bNode)
-      == Some(SectorNode(BT.G.Node([], None, [B(map[])])))
+      == Some(SectorNode(BT.EmptyNode()))
     && Marshalling.parseCheckedSector(bSuperblock)
       == Some(SectorSuperblock(Superblock(0, 0, 0, indirectionTableLoc)))
   }
@@ -91,7 +91,7 @@ module MkfsModel {
     assert ValidIndirectionTableLocation(indirectionTableLoc);
 
     assert ValidNodeBytes(bNode)
-        && NodeOfBytes(bNode) == BT.G.Node([], None, [B(map[])])
+        && NodeOfBytes(bNode) == BT.EmptyNode()
       by {
         reveal_SectorOfBytes();
         reveal_ValidCheckedBytes();
@@ -168,7 +168,7 @@ module MkfsModel {
     BetreeSystem.InitImpliesInv(betreeSystem, indirectionTableLoc);
 
     var pivotBt := BT.Variables(BI.Variables(
-          imap[BT.G.Root() := BT.G.Node([], None, [B(map[])])]));
+          imap[BT.G.Root() := BT.EmptyNode()]));
     BT.InitImpliesInv(pivotBt);
     PivotBetree_Refines_Map.RefinesInit(pivotBt);
 

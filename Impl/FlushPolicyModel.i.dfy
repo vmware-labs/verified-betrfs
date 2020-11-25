@@ -19,6 +19,7 @@ module FlushPolicyModel {
 
   import opened Sequences
 
+  import opened BoundedPivotsLib
   import opened Bounds
   import opened NativeTypes
   import opened BucketsLib
@@ -299,7 +300,9 @@ module FlushPolicyModel {
         (s', io') == PageInNodeReq(s1, io, ref)
       )
       case ActionSplit(parentref, slot) => (
-        && s' == doSplit(s1, parentref, s1.cache[parentref].children.value[slot], slot as int)
+        && var childref := s1.cache[parentref].children.value[slot];
+        && doSplit.requires(s1, parentref, childref, slot as int)
+        && s' == doSplit(s1, parentref, childref, slot as int)
         && io' == io
       )
       case ActionRepivot(ref) => (
@@ -307,12 +310,16 @@ module FlushPolicyModel {
         && io' == io
       )
       case ActionFlush(parentref, slot) => (
+        && flush.requires(s1, parentref, slot as int, 
+            s1.cache[parentref].children.value[slot],
+            s1.cache[s1.cache[parentref].children.value[slot]])
         && s' == flush(s1, parentref, slot as int, 
             s1.cache[parentref].children.value[slot],
             s1.cache[s1.cache[parentref].children.value[slot]])
         && io' == io
       )
       case ActionGrow => (
+        && grow.requires(s1)
         && s' == grow(s1)
         && io' == io
       )

@@ -5,6 +5,8 @@ include "../lib/Base/Maps.i.dfy"
 include "VOp.i.dfy"
 include "../MapSpec/ThreeStateVersioned.s.dfy"
 
+// Abstraction of the journal side of the system.
+
 module JournalView {
   import UI
   import opened Options

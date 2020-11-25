@@ -76,6 +76,38 @@ def splice_value_into_bundle(name, value):
   with open("build/Bundle.cpp","w") as f:
     f.write(cpp)
 
+class Blktrace:
+  def __init__(self):
+    self.cleanall()
+    self.killall()
+
+  def cleanall(self):
+    actuallyprint("Blktrace.cleanall")
+    os.system("rm xvde.blktrace.*") # XXX hacky hack
+
+  def killall(self):
+    actuallyprint("Blktrace.killall")
+    subprocess.call(["sudo", "killall", "blktrace"])
+
+  def start(self, device):
+    actuallyprint("Blktrace.start")
+    self.blktrace_process = subprocess.Popen(
+        ["sudo", "blktrace", device], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  
+  def stop(self):
+    actuallyprint("Blktrace.stop")
+    self.killall()
+    actuallyprint("Blktrace.wait")
+    self.blktrace_process.wait()
+
+    actuallyprint("Blktrace.emit")
+    (stdout,stderr) = self.blktrace_process.communicate()
+    lines = (stdout.decode("utf-8") + stderr.decode("utf-8")).split("\n")
+    for line in lines:
+      #fp.write("blktrace "+line+"\n") overwrites all collected data; and besides it's in the log.
+      sys.stdout.write("blktrace "+line+"\n")
+    actuallyprint("Blktrace.done")
+
 def main():
   git_branch = None
   archive_dir = "/mnt/xvde/archives"
@@ -95,6 +127,7 @@ def main():
   veri_cache_size_in_nodes = None
   veri_bucket_weight       = None
   veri_log_size_in_blocks  = None
+  veri_o_direct            = None
   
   veri = None
   rocks = None
@@ -125,6 +158,8 @@ def main():
       veri_bucket_weight = int(arg[len("bucketWeight=") : ])
     elif arg.startswith("veriLogSizeInBlocks="):
       veri_log_size_in_blocks = int(arg[len("veriLogSizeInBlocks=") : ])
+    elif arg == "veriUseODirect":
+        veri_o_direct = True
     elif "Uint64=" in arg:
       sp = arg.split("=")
       assert len(sp) == 2
@@ -177,6 +212,9 @@ def main():
   if use_unverified_row_cache:
       assert veri
 
+  if veri_o_direct:
+      assert veri
+      
   if use_filters:
       assert rocks
 
@@ -237,10 +275,11 @@ def main():
     make_options += "LOG_QUERY_STATS=1 "
   if use_unverified_row_cache:
     make_options += "WANT_UNVERIFIED_ROW_CACHE=true "
-      
 
-
-    
+  make_options = ""
+  
+  if veri_o_direct == True:
+      make_options = make_options + " WANT_O_DIRECT=true "
   
   cgroup_defaults()
   if ram != None:
@@ -254,7 +293,7 @@ def main():
   
   if veri:
     print("Building Bundle.cpp...")
-    ret = os.system("make build/Bundle.cpp > /dev/null 2> /dev/null")
+    ret = os.system("make " + make_options + " build/Bundle.cpp > /dev/null 2> /dev/null")
     assert ret == 0
 
   for (name, value) in value_updates:
@@ -265,7 +304,7 @@ def main():
   actuallyprint("Building executable...")
   sys.stdout.flush()
   #cmd = make_options + "make " + exe + " -j4 > /dev/null 2> /dev/null"
-  cmd = make_options + "make " + exe
+  cmd = make_options + "make " + make_options + " " + exe
   actuallyprint(cmd)
   ret = os.system(cmd)
   assert ret == 0
@@ -280,14 +319,21 @@ def main():
       os.system("cp -a " + from_archive + "/* " + datadir + "/")
     else:
       os.system("cp -a " + from_archive + " " + loc)
-    
+  elif veri:
+      os.system("head -c 17179869184 /dev/zero > " + loc)
+      
   clear_page_cache()
 
+  os.system("iostat")
+
+  blktrace = Blktrace()
+  blktrace.start("/dev/xvde")   # alert jonh hack hardcoded blktrace device
+  
   # bitmask indicating which CPUs we can use
   # See https://linux.die.net/man/1/taskset
   taskset_cmd = "taskset 4 "
   cgroup_prefix = "cgexec -g memory:VeribetrfsExp " if cgroup_enabled else ""
-  command = taskset_cmd + cgroup_prefix + "./" + exe + " " + loc + " " + driver_options + " " + workload_cmd
+  command = taskset_cmd + cgroup_prefix + "time ./" + exe + " " + loc + " " + driver_options + " " + workload_cmd
   actuallyprint(command)
   sys.stdout.flush()
 
@@ -301,7 +347,14 @@ def main():
     proc.kill()
     ret = proc.wait(timeout = 10)
 
+  actuallyprint("main blktrace stop");
+  blktrace.stop()
+  actuallyprint("main blktrace stopped");
+
   assert ret == 0
+  os.system("iostat")
+  actuallyprint("zip up trace")
+  os.system('blkparse -q -a issue -f"%S %n\n" -i xvde.blktrace.0 | bzip2 > '+outpath+'.trace..bz2')
   actuallyprint("done")
 
 if __name__ == "__main__":

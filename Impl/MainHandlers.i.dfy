@@ -137,6 +137,7 @@ module MainHandlers refines Main {
   method handleCountAmassAllocations(hs: HeapState, io: DiskIOHandler)
   requires false
   {
+    /*
     AllocationReport.start();
     var s := hs.s;
 
@@ -161,6 +162,7 @@ module MainHandlers refines Main {
     }
 
     AllocationReport.stop();
+    */
   }
 
   method handlePopSync(hs: HeapState, io: DiskIOHandler, id: uint64, graphSync: bool)

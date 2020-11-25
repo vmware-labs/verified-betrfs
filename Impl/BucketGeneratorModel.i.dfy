@@ -9,7 +9,7 @@ module BucketGeneratorModel {
   import opened Options
   import opened Maps
   import opened BucketsLib
-  import opened PivotsLib
+  import opened Lexicographic_Byte_Order
   import opened ValueMessage
   import opened Sequences
   import opened BucketIteratorModel
@@ -90,7 +90,7 @@ module BucketGeneratorModel {
         Next(GenLeft(top).key,
             Merge(GenLeft(top).msg, GenLeft(bot).msg)))
     ) else if GenLeft(top).Next?
-        && (GenLeft(bot).Next? ==> Keyspace.lt(GenLeft(top).key, GenLeft(bot).key)) then (
+        && (GenLeft(bot).Next? ==> lt(GenLeft(top).key, GenLeft(bot).key)) then (
       ComposeGenerator(
         GenPop(top),
         bot,
@@ -140,7 +140,7 @@ module BucketGeneratorModel {
         Next(GenLeft(top).key,
             Merge(GenLeft(top).msg, GenLeft(bot).msg)))
     ) else if GenLeft(top).Next?
-        && (GenLeft(bot).Next? ==> Keyspace.lt(GenLeft(top).key, GenLeft(bot).key)) then (
+        && (GenLeft(bot).Next? ==> lt(GenLeft(top).key, GenLeft(bot).key)) then (
       ComposeGenerator(
         GenPop(top),
         bot,
@@ -191,8 +191,8 @@ module BucketGeneratorModel {
   predicate {:opaque} Monotonic(g: Generator)
   {
     g.ComposeGenerator? ==> (
-      && (g.next.Next? && GenLeft(g.top).Next? ==> Keyspace.lt(g.next.key, GenLeft(g.top).key))
-      && (g.next.Next? && GenLeft(g.bot).Next? ==> Keyspace.lt(g.next.key, GenLeft(g.bot).key))
+      && (g.next.Next? && GenLeft(g.top).Next? ==> lt(g.next.key, GenLeft(g.top).key))
+      && (g.next.Next? && GenLeft(g.bot).Next? ==> lt(g.next.key, GenLeft(g.bot).key))
       && (g.next.Done? ==> GenLeft(g.top).Done?)
       && (g.next.Done? ==> GenLeft(g.bot).Done?)
       && Monotonic(g.top)
@@ -206,7 +206,7 @@ module BucketGeneratorModel {
     match g {
       case BasicGenerator(bucket, it) =>
         if it.next.Done? then B(map[])
-        else B(map k | k in bucket.b && Keyspace.lte(it.next.key, k) :: bucket.b[k])
+        else B(map k | k in bucket.b && lte(it.next.key, k) :: bucket.b[k])
       case ComposeGenerator(top, bot, next) =>
         if next.Done? then B(map[])
         else B(Compose(BucketOf(top), BucketOf(bot)).b[next.key := next.msg])
@@ -246,13 +246,13 @@ module BucketGeneratorModel {
         GenLeftIsMinimum(g.top);
         GenLeftIsMinimum(g.bot);
         assert GenLeft(g).key in BucketOf(g).b;
-        assert forall k | k in BucketOf(g).b :: Keyspace.lte(GenLeft(g).key, k) by {
+        assert forall k | k in BucketOf(g).b :: lte(GenLeft(g).key, k) by {
           reveal_Monotonic();
         }
         assert minimumKey(BucketOf(g).b.Keys) == Some(GenLeft(g).key);
       } else {
         assert GenLeft(g).key in BucketOf(g).b;
-        assert forall k | k in BucketOf(g).b :: Keyspace.lte(GenLeft(g).key, k);
+        assert forall k | k in BucketOf(g).b :: lte(GenLeft(g).key, k);
         assert minimumKey(BucketOf(g).b.Keys) == Some(GenLeft(g).key);
       }
     }
@@ -278,7 +278,7 @@ module BucketGeneratorModel {
       IterIncKeyGreater(g.bucket, g.it);
 
       var b1 := BucketOf(g').b;
-      var b2 := MapRemove1(BucketOf(g).b, Keyspace.minimum(BucketOf(g).b.Keys));
+      var b2 := MapRemove1(BucketOf(g).b, minimum(BucketOf(g).b.Keys));
       forall k | k in b1 ensures k in b2 && b1[k] == b2[k]
       {
       }
@@ -317,15 +317,15 @@ module BucketGeneratorModel {
         BucketOf(GenPop(g)).b;
         {
           assert
-            && (g.next.Next? && GenLeft(g.top).Next? ==> Keyspace.lt(g.next.key, GenLeft(g.top).key))
-            && (g.next.Next? && GenLeft(g.bot).Next? ==> Keyspace.lt(g.next.key, GenLeft(g.bot).key)) by {
+            && (g.next.Next? && GenLeft(g.top).Next? ==> lt(g.next.key, GenLeft(g.top).key))
+            && (g.next.Next? && GenLeft(g.bot).Next? ==> lt(g.next.key, GenLeft(g.bot).key)) by {
             reveal_Monotonic();
           }
         }
-        MapRemove1(BucketOf(g).b, Keyspace.minimum(BucketOf(g).b.Keys));
+        MapRemove1(BucketOf(g).b, minimum(BucketOf(g).b.Keys));
       }
       assert YieldsSortedBucket(GenPop(g),
-        B(MapRemove1(BucketOf(g).b, Keyspace.minimum(BucketOf(g).b.Keys))));
+        B(MapRemove1(BucketOf(g).b, minimum(BucketOf(g).b.Keys))));
     }
   }
 

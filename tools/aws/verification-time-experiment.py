@@ -8,6 +8,9 @@ from automation import *
 from suite import *
 from lib_deps import *
 
+parser = argparse.ArgumentParser(parents=[automation_argparser])
+args = parser.parse_args()
+
 # Consider updating all the workers before running the experiment!
 # tools/aws/run-all.py "cd veribetrfs; git checkout master; git pull"
 # tools/aws/run-all.py "cd veribetrfs; tools/update-submodules.sh; tools/update-dafny.sh"
@@ -65,7 +68,7 @@ def main():
     log("NUM_SOURCES %s" % len(listSources()))
     log("NUM_VARIANTS %s" % len(suite.variants))
 
-    workers = retrieve_running_workers(ssd=False)
-    sequenced_launcher(workers, len(suite.variants), cmd_for_idx, dry_run=False)
+    workers = retrieve_running_workers(workers_file=args.workers_file, ssd=args.ssd)
+    sequenced_launcher(workers, len(suite.variants), cmd_for_idx, dry_run=args.dry_run)
 
 main()
