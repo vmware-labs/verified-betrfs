@@ -341,6 +341,48 @@ module JournalistImpl {
         <= 4064 * NumJournalBlocks()
     }
 
+    // [yizhou7][TODO] probably not efficient to create arrray and convert into sequence
+    shared method reallocJournalEntries(je: JournalEntry, newLen: uint64)
+    returns (x: seq<JournalEntry>)
+    requires Inv()
+    requires newLen == |journalEntries| as uint64 * 2;
+    ensures x == journalEntries[start..]
+      + journalEntries[..start]
+      + [je]
+      + fill((newLen as int - |journalEntries| - 1),
+          JournalInsert([], []));
+    {
+      var newArray := NativeArrays.newArrayFill(
+        newLen,
+        JournalInsert([], []));
+
+      NativeArrays.CopySeqIntoArray(
+        journalEntries,
+        start,
+        newArray,
+        0,
+        |journalEntries| as uint64 - start);
+
+      NativeArrays.CopySeqIntoArray(
+        journalEntries,
+        0,
+        newArray,
+        |journalEntries| as uint64 - start,
+        start);
+
+      newArray[|journalEntries| as uint64] := je;
+
+      calc {
+        newArray[..];
+        journalEntries[start..]
+          + journalEntries[..start]
+          + [je]
+          + fill((newLen as int - |journalEntries| - 1) as int, JournalInsert([], []));
+      }
+      
+      x := newArray[..];
+    }
+
     linear inout method append(je: JournalEntry)
     requires old_self.Inv()
     requires old_self.canAppend(je)
@@ -357,35 +399,7 @@ module JournalistImpl {
         inout self.journalEntries := self.journalEntries[idx as int := je];
       } else {
         var newLen: uint64 := |self.journalEntries| as uint64 * 2;
-        var newArray := NativeArrays.newArrayFill(
-            newLen,
-            JournalInsert([], []));
-
-        NativeArrays.CopySeqIntoArray(
-            self.journalEntries,
-            self.start,
-            newArray,
-            0,
-            |self.journalEntries| as uint64 - self.start);
-
-        NativeArrays.CopySeqIntoArray(
-            self.journalEntries,
-            0,
-            newArray,
-            |self.journalEntries| as uint64 - self.start,
-            self.start);
-
-        newArray[|self.journalEntries| as uint64] := je;
-
-        calc {
-          newArray[..];
-          self.journalEntries[self.start..]
-            + self.journalEntries[..self.start]
-            + [je]
-            + fill((newLen as int - |self.journalEntries| - 1) as int, JournalInsert([], []));
-        }
-
-        inout self.journalEntries := newArray[..];
+        inout self.journalEntries := self.reallocJournalEntries(je, newLen);
         inout self.start := 0;
       }
 
