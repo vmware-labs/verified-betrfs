@@ -234,21 +234,19 @@ module CommitterImpl {
             map[]);
     }
 
-/*
     linear inout method JournalAppend(key: Key, value: Value)
     requires old_self.Inv()
     requires old_self.status == StatusReady
-    requires JournalistModel.canAppend(
-        old_self.journalist.I(), JournalInsert(key, value))
+    requires old_self.journalist.canAppend(JournalInsert(key, value))
     ensures self.Inv()
-    ensures self.I() == CommitterAppendModel.JournalAppend(
-        old_self.I(), key, value)
+    ensures var je := JournalInsert(key, value);
+      self.I() == old_self.I().(inMemoryJournal := old_self.I().inMemoryJournal + [je])
     {
-      CommitterAppendModel.reveal_JournalAppend();
       var je := JournalInsert(key, value);
       inout self.journalist.append(je);
     }
 
+/*
     linear inout method JournalReplayOne()
     requires old_self.Inv()
     requires old_self.status == StatusReady
