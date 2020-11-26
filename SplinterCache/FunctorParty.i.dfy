@@ -1,42 +1,21 @@
-abstract module UIfc {
-  type UIOp(==)
+include FunctorParty.s.dfy
+
+module CrashSafeIfc(AppIfc : UIfc) {
+  datatype UIOp = Crash | SyncStart | SyncDone | AppOp(a: AppIfc.UIOp)
 }
 
-abstract module UIStateMachine(Ifc:UIfc) {
+module CrashSafe(AppIfc: UIfc, App: UIStateMachine(AppIfc))
+  refines UIStateMachine(CrashSafeIfc(AppIfc))
+{
+  // XXX TODO fill in
+}
+
+// A CacheClientProgram is a state machine like UIStateMachine, except that
+// it's bound both up (to a UIfc.UIOp) and down (to a cache DiskOp).
+module CacheClientProgram(Ifc : UIOp, B : BlockIfc) {
   type Vars(==, !new)
   predicate Init(s:Vars)
-  predicate Next(s:Vars, s':Vars, uiop:Ifc.UIOp)
-}
-
-// The "unwinding condition" necessary to prove the TLA expression:
-// L.Init && []L.Next ==> H.Init && []H.Next
-abstract module StateMachinesRefine(L:UIStateMachine, H:UIStateMachine) {
-
-  // Implementation must supply an interpretation function.
-  function I(s:L.Vars) : H.Vars
-
-  // Implementation provides an invariant to support induction.
-  predicate Inv(s:L.Vars)
-
-  lemma InterpPreservesInit(s:L.Vars)
-      requires L.Init(s)
-      ensures H.Init(I(s))
-
-  lemma InvInit(s:L.Vars)
-      requires L.Init(s)
-      ensures Inv(s)
-
-  lemma InvNext(s:L.Vars, s':L.Vars)
-      requires Inv(s)
-      requires L.Next(s, s')
-      ensures Inv(s')
-      ensures H.Next(I(s), I(s'))
-}
-
-module CacheClientProgram(Ifc : UIOp) {
-  type Vars(==, !new)
-  predicate Init(s:Vars)
-  predicate Next(s:Vars, s':Vars, uiop:Ifc.UIOp, cop:CacheOp)
+  predicate Next(s:Vars, s':Vars, uiop:Ifc.UIOp, cop:BlockOp)
 }
 
 // Run the program directly against the Disk interface, without a cache.
@@ -64,28 +43,6 @@ module DirectStorageSystem(Client : CacheClientProgram)
   }
 }
 
-abstract module BlockType {
-  type Block(==)
-}
-
-abstract module BlockIfc(B : BlockType) {
-  type Addr(==)
-  datatype SingletonBlockOp = Read(a:Addr, b:B) | Write(a:Addr, b:B)
-  datatype BlockOp = seq<SingletonBlockOp>
-
-  // IOSystem demands that IOs be one-at-a-time to make room for crashes.
-  SingleIO(dop:BlockOp) { |dop| == 1 }
-}
-
-abstract module DiskProgram(Ifc : UIfc, B : BlockType) {
-  import BlockIfc(B = B)
-
-  type Vars(==, !new)
-  // TODO could we declare that type Vars has these predicates as namespace predicates? That'd be keen.
-  predicate Init(s:Vars)
-  predicate Next(s:Vars, s':Vars, uiop:Ifc.UIOp, dop:BlockOp)
-}
-
 // XXX there are a few ways we could do this:
 //  * CacheClientProgram and CacheImpl are complete state machines tied together
 //    with a binding variable in a wrapper compound state machine,
@@ -100,10 +57,13 @@ abstract module DiskProgram(Ifc : UIfc, B : BlockType) {
 //    there'd be no way to do that here. And it's asymmetrical.
 // So I think the way I've got it here is the goal.
 
-// XXX Do we need to offer different up vs down BlockTypes?
+// A CacheImpl is a state machine like UIStateMachine, except that
+// it's bound up to a DiskOp from the program and down to a DiskOp on the disk.
+// XXX Do we need to offer different up vs down BlockTypes? I conjecture no.
 abstract module CacheImpl(B : BlockType) {
   type Vars(==, !new)
-  // TODO could we declare that type Vars has these predicates as namespace predicates? That'd be keen.
+  // TODO could we declare that type Vars has these predicates as namespace
+  // predicates? That'd be keen.
   predicate Init(s:Vars)
   predicate Next(s:Vars, s':Vars, cop:BlockOp, dop:BlockOp)
 }
@@ -127,27 +87,6 @@ abstract module CachedStorageSystem(Client : CacheClientProgram, Cache : CacheIm
   }
 }
 
-module IOSystem(Program : DiskProgram)
-  refines UIStateMachine(Ifc = Program.Client.Ifc)
-{
-  datatype Vars = Vars(p: Program.Vars, d: Disk.Vars)
-
-  predicate Init(s:Vars)
-  {
-    && Program.Init(s.p)
-    && Program.Mkfs(s.d)
-  }
-
-  predicate Next(s:Vars, s':Vars, uiop:Ifc.UIOp)
-  {
-    // XXX add crash steps
-    exists dop ::
-    && SingleIO(dop)
-    && Program.Next(s.p, s'.p, uiop, dop)
-    && Disk.Next(s.d, s'.d, dop)
-  }
-}
-
 // This is just the StateMachineRefines obligation, typed specifically for the structure
 // of our system, plugging in a trusted Disk/IOSystem, and inside that a ThruCcahe
 // that's a placeholder for plugging in a CrashSafeCache later.
@@ -156,6 +95,27 @@ abstract module CachedStorageSystemImplementsSpec(X:CacheClientProgram, Y:UIStat
         L = DirectStorageSystem(CacheClient = X),
         H = Y)
 { }
+
+module MapIfc refines UIfc {
+  type K(==)
+  type V(==)
+  datatype UIOp = Put(k:K, v:V) | Get(k:K, v:V)
+}
+
+abstract module MapSpec refines UIStateMachine(Ifc=MapIfc) {
+  type V = Ifc.V
+  type K = Ifc.K
+
+  datatype Vars = Vars(m:map<K,V>)
+  predicate Init(s:Vars) {
+    s.m == map[]
+  }
+  predicate Next(s:Vars, s':Vars, uiop:Ifc.UIOp) {
+    match uiop
+      case Get(k,v) => k in s.m && s.m[k]==v && s'==s
+      case Put(k,v) => s'.m == s.m[k := v]
+  }
+}
 
 module Betree refines CacheClientProgram(Ifc = Map)
 {
@@ -181,26 +141,20 @@ module CrashSafeCacheProvidesCrashSafety(
   X:CacheClientProgram, Y:UIStateMachine, Antecedent:CachedStorageSystemImplementsSpec(X, Y))
   refines StateMachinesRefine(
     L = IOSystem(
-      DiskProgram = CachedStorageSystem(CacheClient = X, Cache = CrashSafeCache),
-      Disk = Disk),
+      DiskProgram = CachedStorageSystem(CacheClient = X, Cache = CrashSafeCache)),
     H = CrashSafe(Spec = Y)
 {
    // ... XXX supply here a proof to show the refinement. Call into Antecedent to get necessary lemmas.
 }
 
-// .s This is the climax of the system. Build system demands that it be instantiatied
-// as a non-abstract module, hence supplying a proof.
-abstract module SystemTheorem(
-  Proof : StateMachinesRefine(
-    L = IOSystem(
-      DiskProgram = CachedStorageSystem(CacheClient = Betree, Cache = CrashSafeCache),
-      Disk = Disk),
-    H = CrashSafe(Spec = Map)))
-
 // The proof is easy; just apply CrashSafeCacheProvidesCrashSafety.
 // This module declaration (with empty body) *is* the entire proof.
 module SystemProof refines SystemTheorem(
+  Ifc = MapIfc, B = Something,
+  P = CachedStorageSystem(CacheClient = Betree, Cache = CrashSafeCache),
+  Spec = Map,
   Proof = CrashSafeCacheProvidesCrashSafety(
     X = Betree,
     Y = Map,
     Antecedent = BetreeImplementsMap))
+{ /* proof is supplied in the module signature */ }
