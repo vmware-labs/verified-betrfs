@@ -86,15 +86,29 @@ abstract module DiskProgram(Ifc : UIfc, B : BlockType) {
   predicate Next(s:Vars, s':Vars, uiop:Ifc.UIOp, dop:BlockOp)
 }
 
+// XXX there are a few ways we could do this:
+//  * CacheClientProgram and CacheImpl are complete state machines tied together
+//    with a binding variable in a wrapper compound state machine,
+//    CachedStorageSystem. That's what I'm doing here.
+//  * CacheImpl takes CacheClientProgram as a module argument. We could get away
+//    with that here, using placeholder program modules so we could reason about
+//    the cache in the abstract. This is analogous to how the current system works,
+//    and is a little unsatisfyingly asymmetrical. It does remove one state machine
+//    from the soup.
+//  * CacheClientProgram takes CacheImpl as an argument. I think this is the worst of
+//    all worlds. Right now, we need to plug program into a cacheless DirectStorageSystem;
+//    there'd be no way to do that here. And it's asymmetrical.
+// So I think the way I've got it here is the goal.
+
 // XXX Do we need to offer different up vs down BlockTypes?
-abstract module CacheProgram(B : BlockType) {
+abstract module CacheImpl(B : BlockType) {
   type Vars(==, !new)
   // TODO could we declare that type Vars has these predicates as namespace predicates? That'd be keen.
   predicate Init(s:Vars)
   predicate Next(s:Vars, s':Vars, cop:BlockOp, dop:BlockOp)
 }
 
-abstract module CachedStorageSystem(Client : CacheClientProgram, Cache : CacheProgram)
+abstract module CachedStorageSystem(Client : CacheClientProgram, Cache : CacheImpl)
   refines DiskProgram(Ifc = Client.Ifc, B = Cache.BlockType)
 {
   datatype Vars = Vars(p: Client.Vars, c: Cache.Vars)
@@ -153,7 +167,7 @@ module BetreeImplementsMap refines CachedStorageSystemImplementsSpec(X = Betree,
    // ... XXX supply here a proof to show this specific refinement.
 }
 
-module CrashSafeCache(B : BlockType) refines CacheProgram(B = B)
+module CrashSafeCache(B : BlockType) refines CacheImpl(B = B)
 {
   // ... XXX add implementation
 }
