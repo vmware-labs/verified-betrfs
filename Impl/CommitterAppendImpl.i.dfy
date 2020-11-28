@@ -18,26 +18,29 @@ module CommitterAppendImpl {
   import CommitterAppendModel
   import JournalistImpl
 
-//   method JournalAppend(
-//       cm: Committer,
-//       key: Key, value: Value)
-//   requires cm.Inv()
-//   requires cm.status == CommitterModel.StatusReady
-//   requires JournalistModel.canAppend(
-//     cm.journalist.I(), JournalInsert(key, value))
-//   modifies cm.Repr
-//   ensures cm.Inv()
-//   ensures forall o | o in cm.Repr :: o in old(cm.Repr) || fresh(o)
-//   ensures cm.I() == CommitterAppendModel.JournalAppend(
-//       old(cm.I()), key, value)
-//   {
-//     CommitterAppendModel.reveal_JournalAppend();
-//     cm.reveal_ReprInv();
+    // linear inout method JournalAppend(key: Key, value: Value)
+    // requires old_self.Inv()
+    // requires old_self.status == StatusReady
+    // requires old_self.journalist.canAppend(JournalInsert(key, value))
+    // ensures self.Inv()
+    // // ensures var je := JournalInsert(key, value);
+    // //   self.I() == old_self.I().(inMemoryJournal := old_self.I().inMemoryJournal + [je])
+    // // ensures self.I() == CommitterAppendModel.JournalAppend(
+    // //     old_self.I(), key, value)
+    // ensures JournalCache.Next(
+    //     old_self.I(), self.I(), JournalDisk.NoDiskOp,
+    //     AdvanceOp(UI.PutOp(key, value), false));
+    // {
+    //   var je := JournalInsert(key, value);
+    //   inout self.journalist.append(je);
 
-//     var je := JournalInsert(key, value);
-//     cm.journalist.append(je);
+    //   assert JournalCache.Advance(
+    //       old_self.I(), self.I(), JournalDisk.NoDiskOp,
+    //       AdvanceOp(UI.PutOp(key, value), false));
+    //   assert JournalCache.NextStep(
+    //       old_self.I(), self.I(), JournalDisk.NoDiskOp,
+    //       AdvanceOp(UI.PutOp(key, value), false),
+    //       JournalCache.AdvanceStep);
+    // }
 
-//     cm.Repr := {cm} + cm.syncReqs.Repr + cm.journalist.Repr;
-//     cm.reveal_ReprInv();
-//   }
 }

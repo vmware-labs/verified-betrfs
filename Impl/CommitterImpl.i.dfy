@@ -6,6 +6,7 @@ include "CommitterInitModel.i.dfy"
 include "DiskOpImpl.i.dfy"
 include "IOImpl.i.dfy"
 include "CommitterCommitModel.i.dfy"
+include "../Versions/VOp.i.dfy"
 
 // for when you have commitment issues
 
@@ -36,6 +37,7 @@ module CommitterImpl {
   import CommitterCommitModel
 
   import StateImpl
+  import opened ViewOp
 
   // TODO we could have these do the modification in-place instead.
 
@@ -239,22 +241,37 @@ module CommitterImpl {
     requires old_self.status == StatusReady
     requires old_self.journalist.canAppend(JournalInsert(key, value))
     ensures self.Inv()
-    ensures var je := JournalInsert(key, value);
-      self.I() == old_self.I().(inMemoryJournal := old_self.I().inMemoryJournal + [je])
+    ensures self.I() == old_self.I().(inMemoryJournal := old_self.I().inMemoryJournal + [je]);
+    ensures (old_self.I().replayJournal == []) ==> 
+        JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, 
+            AdvanceOp(UI.PutOp(key, value), false));
     {
       var je := JournalInsert(key, value);
       inout self.journalist.append(je);
+
+      if old_self.I().replayJournal == [] {
+        assert JC.Advance(
+            old_self.I(), self.I(), JournalDisk.NoDiskOp,
+            AdvanceOp(UI.PutOp(key, value), false));
+        assert JC.NextStep(
+            old_self.I(), self.I(), JournalDisk.NoDiskOp,
+            AdvanceOp(UI.PutOp(key, value), false),
+            JC.AdvanceStep);
+      }
     }
 
 /*
     linear inout method JournalReplayOne()
     requires old_self.Inv()
     requires old_self.status == StatusReady
-    requires !JournalistModel.isReplayEmpty(old_self.journalist.I())
+    requires old_self.I().replayJournal != []
+
     ensures self.Inv()
-    ensures self.I() == CommitterReplayModel.JournalReplayOne(old_self.I())
+    ensures self.status == StatusReady
+    ensures self.I() == old_self.I().(replayJournal := self.I().replayJournal)
+    ensures old_self.I().replayJournal
+        == [old_self.journalist.replayJournalTop()] + self.I().replayJournal
     {
-      CommitterReplayModel.reveal_JournalReplayOne();
       inout self.journalist.replayJournalPop();
     }
 
