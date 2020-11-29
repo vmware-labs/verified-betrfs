@@ -38,6 +38,7 @@ module CommitterImpl {
 
   import StateImpl
   import opened ViewOp
+  import opened DiskOpModel
 
   // TODO we could have these do the modification in-place instead.
 
@@ -281,17 +282,11 @@ module CommitterImpl {
       if je == old_self.I().replayJournal[0] {
         ghost var vop := AdvanceOp(UI.PutOp(je.key, je.value), true);
 
-        assert JC.Replay(
-            old_self.I(), self.I(), JournalDisk.NoDiskOp,
-            vop);
-        assert JC.NextStep(
-            old_self.I(), self.I(), JournalDisk.NoDiskOp,
-            vop,
-            JC  .ReplayStep);
+        assert JC.Replay(old_self.I(), self.I(), JournalDisk.NoDiskOp, vop);
+        assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, vop,
+            JC.ReplayStep);
       }
     }
-
-/*
 
     linear inout method PageInSuperblockReq(io: DiskIOHandler, which: uint64)
     requires old_self.Inv()
@@ -301,31 +296,70 @@ module CommitterImpl {
     requires old_self.status.StatusLoadingSuperblock?
     requires io.initialized()
     modifies io
-    ensures self.W()
-    ensures (self.I(), IIO(io)) ==
-        CommitterInitModel.PageInSuperblockReq(
-            old_self.I(), old(IIO(io)), which)
+    ensures self.Inv()
+    ensures 
+      && ValidDiskOp(diskOp(IIO(io)))
+      && IDiskOp(diskOp(IIO(io))).bdop.NoDiskOp?
+      && JC.Next(
+        old_self.I(),
+        self.I(),
+        IDiskOp(diskOp(IIO(io))).jdop,
+        JournalInternalOp)
     {
-      CommitterInitModel.reveal_PageInSuperblockReq();
+      var loc;
+      ghost var step := false;
 
       if which == 0 {
+        loc := Superblock1Location();
+
         if self.superblock1Read.None? {
-          var loc := Superblock1Location();
           var id := RequestRead(io, loc);
           inout self.superblock1Read := Some(id);
+          step := true;
         } else {
           print "PageInSuperblockReq: doing nothing\n";
         }
       } else {
+        loc := Superblock2Location();
+
         if self.superblock2Read.None? {
-            var loc := Superblock2Location();
-            var id := RequestRead(io, loc);
-            inout self.superblock2Read := Some(id);
+          var id := RequestRead(io, loc);
+          inout self.superblock2Read := Some(id);
+          step := true;
         } else {
-            print "PageInSuperblockReq: doing nothing\n";
+          print "PageInSuperblockReq: doing nothing\n";
         }
       }
+
+      ghost var jdop := IDiskOp(diskOp(IIO(io))).jdop;
+
+      if step {
+        assert JC.PageInSuperblockReq(
+            old_self.I(),
+            self.I(),
+            jdop,
+            JournalInternalOp, which as int);
+        assert JC.NextStep(
+            old_self.I(),
+            self.I(),
+            jdop,
+            JournalInternalOp,
+            JC.PageInSuperblockReqStep(which as int));
+      } else {
+        assert JC.NoOp(
+            old_self.I(),
+            self.I(),
+            jdop,
+            JournalInternalOp);
+        assert JC.NextStep(
+            old_self.I(),
+            self.I(),
+            jdop,
+            JournalInternalOp,
+            JC.NoOpStep);
+      }
     }
+/*
   
     linear inout method FinishLoadingSuperblockPhase()
     requires old_self.Inv()

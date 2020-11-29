@@ -18,87 +18,86 @@ module CommitterInitModel {
   import opened IOModel
   import opened DiskOpModel
 
-  function {:opaque} PageInSuperblockReq(cm: CM, io: IO, which: uint64) : (res : (CM, IO))
-  requires which == 0 || which == 1
-  requires which == 0 ==> cm.superblock1.SuperblockUnfinished?
-  requires which == 1 ==> cm.superblock2.SuperblockUnfinished?
-  requires io.IOInit?
-  requires cm.status.StatusLoadingSuperblock?
-  {
-    if which == 0 then (
-      if cm.superblock1Read.None? then (
-        var loc := Superblock1Location();
-        var (id, io') := RequestRead(io, loc);
-        var cm' := cm.(superblock1Read := Some(id));
-        (cm', io')
-      ) else (
-        (cm, io)
-      )
-    ) else (
-      if cm.superblock2Read.None? then (
-        var loc := Superblock2Location();
-        var (id, io') := RequestRead(io, loc);
-        var cm' := cm.(superblock2Read := Some(id));
-        (cm', io')
-      ) else (
-        (cm, io)
-      )
-    )
-  }
+//   function {:opaque} PageInSuperblockReq(cm: CM, io: IO, which: uint64) : (res : (CM, IO))
+//   requires which == 0 || which == 1
+//   requires which == 0 ==> cm.superblock1.SuperblockUnfinished?
+//   requires which == 1 ==> cm.superblock2.SuperblockUnfinished?
+//   requires io.IOInit?
+//   requires cm.status.StatusLoadingSuperblock?
+//   {
+//     if which == 0 then (
+//       if cm.superblock1Read.None? then (
+//         var loc := Superblock1Location();
+//         var (id, io') := RequestRead(io, loc);
+//         var cm' := cm.(superblock1Read := Some(id));
+//         (cm', io')
+//       ) else (
+//         (cm, io)
+//       )
+//     ) else (
+//       if cm.superblock2Read.None? then (
+//         var loc := Superblock2Location();
+//         var (id, io') := RequestRead(io, loc);
+//         var cm' := cm.(superblock2Read := Some(id));
+//         (cm', io')
+//       ) else (
+//         (cm, io)
+//       )
+//     )
+//   }
 
-  lemma PageInSuperblockReqCorrect(cm: CM, io: IO, which: uint64)
-  requires CommitterModel.WF(cm)
-  requires PageInSuperblockReq.requires(cm, io, which)
-  ensures var (cm', io') := PageInSuperblockReq(cm, io, which);
-    && CommitterModel.WF(cm')
-    && ValidDiskOp(diskOp(io'))
-    && IDiskOp(diskOp(io')).bdop.NoDiskOp?
-    && JournalCache.Next(
-        CommitterModel.I(cm),
-        CommitterModel.I(cm'),
-        IDiskOp(diskOp(io')).jdop,
-        JournalInternalOp)
-  {
-    reveal_PageInSuperblockReq();
-    var (cm', io') := PageInSuperblockReq(cm, io, which);
+//   lemma PageInSuperblockReqCorrect(cm: CM, io: IO, which: uint64)
+//   requires CommitterModel.WF(cm)
+//   requires PageInSuperblockReq.requires(cm, io, which)
+//   ensures var (cm', io') := PageInSuperblockReq(cm, io, which);
+//     && CommitterModel.WF(cm')
+//     && ValidDiskOp(diskOp(io'))
+//     && IDiskOp(diskOp(io')).bdop.NoDiskOp?
+//     && JournalCache.Next(
+//         CommitterModel.I(cm),
+//         CommitterModel.I(cm'),
+//         IDiskOp(diskOp(io')).jdop,
+//         JournalInternalOp)
+//   {
+//     reveal_PageInSuperblockReq();
+//     var (cm', io') := PageInSuperblockReq(cm, io, which);
 
-    var loc;
-    if which == 0 {
-      loc := Superblock1Location();
-    } else {
-      loc := Superblock2Location();
-    }
-    RequestReadCorrect(io, loc);
+//     var loc;
+//     if which == 0 {
+//       loc := Superblock1Location();
+//     } else {
+//       loc := Superblock2Location();
+//     }
+//     RequestReadCorrect(io, loc);
 
-    if (which == 0 && cm.superblock1Read.None?)
-      || (which == 1 && cm.superblock2Read.None?)
-    {
-      assert JournalCache.PageInSuperblockReq(
-          CommitterModel.I(cm),
-          CommitterModel.I(cm'),
-          IDiskOp(diskOp(io')).jdop,
-          JournalInternalOp, which as int);
-      assert JournalCache.NextStep(
-          CommitterModel.I(cm),
-          CommitterModel.I(cm'),
-          IDiskOp(diskOp(io')).jdop,
-          JournalInternalOp,
-          JournalCache.PageInSuperblockReqStep(which as int));
-    } else {
-      assert JournalCache.NoOp(
-          CommitterModel.I(cm),
-          CommitterModel.I(cm'),
-          IDiskOp(diskOp(io')).jdop,
-          JournalInternalOp);
-      assert JournalCache.NextStep(
-          CommitterModel.I(cm),
-          CommitterModel.I(cm'),
-          IDiskOp(diskOp(io')).jdop,
-          JournalInternalOp,
-          JournalCache.NoOpStep);
-
-    }
-  }
+//     if (which == 0 && cm.superblock1Read.None?)
+//       || (which == 1 && cm.superblock2Read.None?)
+//     {
+//       assert JournalCache.PageInSuperblockReq(
+//           CommitterModel.I(cm),
+//           CommitterModel.I(cm'),
+//           IDiskOp(diskOp(io')).jdop,
+//           JournalInternalOp, which as int);
+//       assert JournalCache.NextStep(
+//           CommitterModel.I(cm),
+//           CommitterModel.I(cm'),
+//           IDiskOp(diskOp(io')).jdop,
+//           JournalInternalOp,
+//           JournalCache.PageInSuperblockReqStep(which as int));
+//     } else {
+//       assert JournalCache.NoOp(
+//           CommitterModel.I(cm),
+//           CommitterModel.I(cm'),
+//           IDiskOp(diskOp(io')).jdop,
+//           JournalInternalOp);
+//       assert JournalCache.NextStep(
+//           CommitterModel.I(cm),
+//           CommitterModel.I(cm'),
+//           IDiskOp(diskOp(io')).jdop,
+//           JournalInternalOp,
+//           JournalCache.NoOpStep);
+//     }
+//   }
 
   function {:opaque} FinishLoadingSuperblockPhase(cm: CM) : (cm' : CM)
   requires cm.status.StatusLoadingSuperblock?
