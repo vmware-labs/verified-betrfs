@@ -496,20 +496,18 @@ module JournalistImpl {
       }
     }
 
-    shared method hasFront()
-    returns (b: bool)
+    shared function method hasFront() : (b: bool)
     requires Inv()
     ensures b == I().journalFront.Some?
     {
-      b := journalFront.Some?;
+      journalFront.Some?
     }
 
-    shared method hasBack()
-    returns (b: bool)
+    shared function method hasBack() : (b: bool)
     requires Inv()
     ensures b == I().journalBack.Some?
     {
-      b := journalBack.Some?;
+      journalBack.Some?
     }
   }
 }
