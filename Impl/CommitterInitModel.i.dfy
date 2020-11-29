@@ -99,55 +99,55 @@ module CommitterInitModel {
 //     }
 //   }
 
-  function {:opaque} FinishLoadingSuperblockPhase(cm: CM) : (cm' : CM)
-  requires cm.status.StatusLoadingSuperblock?
-  requires cm.superblock1.SuperblockSuccess?
-  requires cm.superblock2.SuperblockSuccess?
-  {
-    var idx := if JournalCache.increments1(
-        cm.superblock1.value.counter, cm.superblock2.value.counter)
-        then 1 else 0;
+//   function {:opaque} FinishLoadingSuperblockPhase(cm: CM) : (cm' : CM)
+//   requires cm.status.StatusLoadingSuperblock?
+//   requires cm.superblock1.SuperblockSuccess?
+//   requires cm.superblock2.SuperblockSuccess?
+//   {
+//     var idx := if JournalCache.increments1(
+//         cm.superblock1.value.counter, cm.superblock2.value.counter)
+//         then 1 else 0;
 
-    var sup := if idx == 1 then
-      cm.superblock2.value
-    else
-      cm.superblock1.value;
+//     var sup := if idx == 1 then
+//       cm.superblock2.value
+//     else
+//       cm.superblock1.value;
 
-    cm.(whichSuperblock := idx)
-      .(superblock := sup)
-      .(status := StatusLoadingOther)
-      .(journalFrontRead := None)
-      .(journalBackRead := None)
-  }
+//     cm.(whichSuperblock := idx)
+//       .(superblock := sup)
+//       .(status := StatusLoadingOther)
+//       .(journalFrontRead := None)
+//       .(journalBackRead := None)
+//   }
 
-  lemma FinishLoadingSuperblockPhaseCorrect(cm: CM)
-  requires cm.status.StatusLoadingSuperblock?
-  requires cm.superblock1.SuperblockSuccess?
-  requires cm.superblock2.SuperblockSuccess?
-  requires CommitterModel.WF(cm)
-  ensures var cm' := FinishLoadingSuperblockPhase(cm);
-    && CommitterModel.WF(cm')
-    && JournalCache.Next(
-        CommitterModel.I(cm),
-        CommitterModel.I(cm'),
-        JournalDisk.NoDiskOp,
-        SendPersistentLocOp(cm'.superblock.indirectionTableLoc))
-  {
-    var cm' := FinishLoadingSuperblockPhase(cm);
-    var vop := SendPersistentLocOp(cm'.superblock.indirectionTableLoc);
-    reveal_FinishLoadingSuperblockPhase();
-    assert JournalCache.FinishLoadingSuperblockPhase(
-        CommitterModel.I(cm),
-        CommitterModel.I(cm'),
-        JournalDisk.NoDiskOp,
-        vop);
-    assert JournalCache.NextStep(
-        CommitterModel.I(cm),
-        CommitterModel.I(cm'),
-        JournalDisk.NoDiskOp,
-        vop,
-        JournalCache.FinishLoadingSuperblockPhaseStep);
-  }
+//   lemma FinishLoadingSuperblockPhaseCorrect(cm: CM)
+//   requires cm.status.StatusLoadingSuperblock?
+//   requires cm.superblock1.SuperblockSuccess?
+//   requires cm.superblock2.SuperblockSuccess?
+//   requires CommitterModel.WF(cm)
+//   ensures var cm' := FinishLoadingSuperblockPhase(cm);
+//     && CommitterModel.WF(cm')
+//     && JournalCache.Next(
+//         CommitterModel.I(cm),
+//         CommitterModel.I(cm'),
+//         JournalDisk.NoDiskOp,
+//         SendPersistentLocOp(cm'.superblock.indirectionTableLoc))
+//   {
+//     var cm' := FinishLoadingSuperblockPhase(cm);
+//     var vop := SendPersistentLocOp(cm'.superblock.indirectionTableLoc);
+//     reveal_FinishLoadingSuperblockPhase();
+//     assert JournalCache.FinishLoadingSuperblockPhase(
+//         CommitterModel.I(cm),
+//         CommitterModel.I(cm'),
+//         JournalDisk.NoDiskOp,
+//         vop);
+//     assert JournalCache.NextStep(
+//         CommitterModel.I(cm),
+//         CommitterModel.I(cm'),
+//         JournalDisk.NoDiskOp,
+//         vop,
+//         JournalCache.FinishLoadingSuperblockPhaseStep);
+//   }
 
   function {:opaque} FinishLoadingOtherPhase(cm: CM) : (cm' : CM)
   requires cm.status.StatusLoadingOther?

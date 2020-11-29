@@ -1,8 +1,8 @@
 include "../lib/DataStructures/LinearMutableMap.i.dfy"
 include "JournalistImpl.i.dfy"
-include "CommitterAppendModel.i.dfy"
-include "CommitterReplayModel.i.dfy"
-include "CommitterInitModel.i.dfy"
+// include "CommitterAppendModel.i.dfy"
+// include "CommitterReplayModel.i.dfy"
+// include "CommitterInitModel.i.dfy"
 include "DiskOpImpl.i.dfy"
 include "IOImpl.i.dfy"
 include "CommitterCommitModel.i.dfy"
@@ -27,9 +27,9 @@ module CommitterImpl {
   import opened DiskOpImpl
 
   import opened StateModel
-  import CommitterReplayModel
-  import CommitterAppendModel
-  import CommitterInitModel
+  // import CommitterReplayModel
+  // import CommitterAppendModel
+  // import CommitterInitModel
   import opened IOImpl
   import opened InterpretationDiskOps
   import opened MainDiskIOHandler
@@ -359,7 +359,6 @@ module CommitterImpl {
             JC.NoOpStep);
       }
     }
-/*
   
     linear inout method FinishLoadingSuperblockPhase()
     requires old_self.Inv()
@@ -367,13 +366,13 @@ module CommitterImpl {
     requires old_self.superblock1.SuperblockSuccess?
     requires old_self.superblock2.SuperblockSuccess?
 
-    ensures self.W()
-    ensures self.I() ==
-        CommitterInitModel.FinishLoadingSuperblockPhase(
-            old_self.I());
+    ensures self.Inv()
+    ensures JC.Next(
+        old_self.I(),
+        self.I(),
+        JournalDisk.NoDiskOp,
+        SendPersistentLocOp(self.superblock.indirectionTableLoc))
     {
-      CommitterInitModel.reveal_FinishLoadingSuperblockPhase();
-
       var idx := if JC.increments1(
           self.superblock1.value.counter, self.superblock2.value.counter)
           then 1 else 0;
@@ -388,8 +387,23 @@ module CommitterImpl {
       inout self.status := StatusLoadingOther;
       inout self.journalFrontRead := None;
       inout self.journalBackRead := None;
+
+      ghost var vop := SendPersistentLocOp(self.superblock.indirectionTableLoc);
+
+      assert JC.FinishLoadingSuperblockPhase(
+          old_self.I(),
+          self.I(),
+          JournalDisk.NoDiskOp,
+          vop);
+      assert JC.NextStep(
+          old_self.I(),
+          self.I(),
+          JournalDisk.NoDiskOp,
+          vop,
+          JC.FinishLoadingSuperblockPhaseStep);
     }
 
+/*
     linear inout method FinishLoadingOtherPhase()
     requires old_self.Inv()
     requires old_self.status.StatusLoadingOther?
