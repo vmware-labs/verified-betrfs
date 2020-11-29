@@ -241,7 +241,8 @@ module CommitterImpl {
     requires old_self.status == StatusReady
     requires old_self.journalist.canAppend(JournalInsert(key, value))
     ensures self.Inv()
-    ensures self.I() == old_self.I().(inMemoryJournal := old_self.I().inMemoryJournal + [je]);
+    // ensures self.I() == 
+    //   old_self.I().(inMemoryJournal := old_self.I().inMemoryJournal + [je]);
     ensures (old_self.I().replayJournal == []) ==> 
         JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, 
             AdvanceOp(UI.PutOp(key, value), false));
@@ -260,20 +261,37 @@ module CommitterImpl {
       }
     }
 
-/*
-    linear inout method JournalReplayOne()
+    linear inout method JournalReplayOne(ghost je: JournalEntry)
     requires old_self.Inv()
     requires old_self.status == StatusReady
     requires old_self.I().replayJournal != []
 
     ensures self.Inv()
     ensures self.status == StatusReady
-    ensures self.I() == old_self.I().(replayJournal := self.I().replayJournal)
-    ensures old_self.I().replayJournal
-        == [old_self.journalist.replayJournalTop()] + self.I().replayJournal
+    // ensures self.I() == old_self.I().(replayJournal := self.I().replayJournal)
+    // ensures old_self.I().replayJournal
+    //     == [old_self.journalist.replayJournalTop()] + self.I().replayJournal
+    ensures (je == old_self.I().replayJournal[0])
+        ==>
+      JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp,
+        AdvanceOp(UI.PutOp(je.key, je.value), true))
     {
       inout self.journalist.replayJournalPop();
+
+      if je == old_self.I().replayJournal[0] {
+        ghost var vop := AdvanceOp(UI.PutOp(je.key, je.value), true);
+
+        assert JC.Replay(
+            old_self.I(), self.I(), JournalDisk.NoDiskOp,
+            vop);
+        assert JC.NextStep(
+            old_self.I(), self.I(), JournalDisk.NoDiskOp,
+            vop,
+            JC  .ReplayStep);
+      }
     }
+
+/*
 
     linear inout method PageInSuperblockReq(io: DiskIOHandler, which: uint64)
     requires old_self.Inv()
