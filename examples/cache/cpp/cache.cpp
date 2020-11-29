@@ -12,11 +12,12 @@ constexpr uint32_t NO_CACHE_PAGE_ASSIGNED = 0xffffffff;
 enum class Status {
   Empty,
   Clean,
-  Dirty
+  Dirty,
+  Writing
 };
 
 struct CacheEntryMetadata {
-  Status status;
+  std::atomic<Status> status;
   uint32_t disk_idx;
 };
 
@@ -24,8 +25,13 @@ volatile uint8_t cache_data[CACHE_SIZE][PAGE_SIZE];
 volatile CacheEntryMetadata cache_metadata[CACHE_SIZE];
 shared_mutex mutices[CACHE_SIZE];
 
+constexpr CHUNK_SIZE = 64;
+constexpr NUM_CHUNKS = CACHE_SIZE / CHUNK_SIZE;
+constexpr CLEAN_AHEAD = NUM_CHUNKS / 3;
+
 volatile bool recently_accessed[CACHE_SIZE];
-thread_local uint32_t clockpointer = 0;
+thread_local uint32_t local_chunk = 0;
+std::atomic<uint32_t> global_clockpointer = 0;
 
 std::atomic<uint32_t> cache_idx_of_disk_idx[NUM_DISK_PAGES];
 
@@ -39,94 +45,61 @@ struct PageHandle {
   }
 };
 
-// Synchronously read page from disk into cache_data[cache_idx]
-void read_page(uint32_t cache_idx, uint32_t disk_page);
+void io_write_async(uint32_t cache_idx, uint32_t disk_idx);
 
-// Synchronously write page from cache_data[cache_idx] onto disk
-void write_page(uint32_t cache_idx, uint32_t disk_page);
+void io_write_callback(uint32_t cache_idx, uint32_t disk_idx)
+{
+  cache_metadata[cache_idx].write_in_progress.store(Status::Dirty);
+  mutices[cache_idx].unlock_shared();
+}
 
-// Returns an Empty cache entry
-uint32_t lock_free_cache_idx() {
+void get_next_chunk()
+{
+  uint32_t l = global_clockpointer.fetch_add(1) % CACHE_SIZE;
+  uint32_t c = (l + CLEAN_AHEAD) % CACHE_SIZE;
+
+  for (int i = 0; i < CHUNK_SIZE; i++) {
+    uint32_t cache_idx = c * CHUNK_SIZE + i;
+    if (mutices[cache_idx].try_lock_shared()) {
+      bool do_write = false;
+
+      if (cache_metadata[cache_idx].status.load() == Status::Dirty
+       && cache_metadata[cache_idx].write_in_progress.compare_exchange_strong(
+                Status::Dirty, Status::Writing)
+      {
+        io_write_async(cache_idx, disk_idx);
+      } else {
+        mutices[cache_idx].unlock_shared();
+      }
+    }
+  }
+
+  local_chunk = l;
+}
+
+uint32_t lock_free_cache_idx()
+{
   while (true) {
-    if (recently_accessed[clockpointer]) {
-      recently_accessed[clockpointer] = true;
-
-      clockpointer++;
-      if (clockpointer == CACHE_SIZE) {
-        clockpointer = 0;
+    for (int i = 0; i < CHUNK_SIZE; i++) {
+      uint32_t cache_idx = local_chunk * CHUNK_SIZE + i;
+      if (!recently_accessed[cache_idx]) {
+        if (mutices[cache_idx].try_lock()) {
+          if (cache_metadata[cache_idx].status == Status::Empty) {
+            return cache_idx;
+          }
+          else if (cache_metadata[cache_idx].status == Status::Clean) {
+            uint32_t disk_idx = cache_metadata[cache_idx].disk_idx;
+            cache_idx_of_disk_idx[disk_idx].store(NO_CACHE_PAGE_ASSIGNED);
+            return cache_idx;
+          }
+        } 
       }
-    } else {
-      uint32_t res = clockpointer;
-
-      clockpointer++;
-      if (clockpointer == CACHE_SIZE) {
-        clockpointer = 0;
-      }
-
-      mutices[res].lock();
-
-      if (cache_metadata[res].status == Status::Dirty) {
-        cache_idx_of_disk_idx[cache_metadata[res].disk_idx] = NO_CACHE_PAGE_ASSIGNED;
-        write_page(res, cache_metadata[res].disk_idx);
-      }
-
-      return res;
-    }
-  }
-}
-
-// Acquire a handle on a page
-PageHandle acquire_disk_page(uint32_t disk_page) {
-beginning:
-  
-  uint32_t cache_idx = cache_idx_of_disk_idx[disk_page].load();
-
-  if (cache_idx == NO_CACHE_PAGE_ASSIGNED) {
-    cache_idx = lock_free_cache_idx();
-
-    uint32_t expected = NO_CACHE_PAGE_ASSIGNED;
-    bool cas_success =
-        cache_idx_of_disk_idx[disk_page].compare_exchange_strong(expected, cache_idx);
-
-    if (cas_success) {
-      read_page(cache_idx, disk_page);
-      cache_metadata[cache_idx].status = Status::Clean;
-      cache_metadata[cache_idx].disk_idx = disk_page;
-
-      return PageHandle(cache_idx);
-    } else {
-      mutices[cache_idx].unlock();
-      goto beginning;
-    }
-  } else {
-    mutices[cache_idx].lock();
-
-    if (!(
-      cache_metadata[cache_idx].status != Status::Empty &&
-      cache_metadata[cache_idx].disk_idx == disk_page
-    )) {
-      mutices[cache_idx].unlock();
-      goto beginning;
     }
 
-    return PageHandle(cache_idx);
-  }
-}
-
-void release_handle(PageHandle handle) {
-  uint32_t cache_idx = handle.metadata - cache_metadata;
-  recently_accessed[cache_idx] = true;
-  mutices[cache_idx].unlock();
-}
-
-void sync_all() {
-  // TODO this should be done async
-  for (int i = 0; i < CACHE_SIZE) {
-    mutices[i].lock();
-    if (cache_metadata[i].status == Dirty) {
-      write_page(i, cache_metadata[i].disk_idx);
-      cache_metadata[i].status = clean;
+    for (int i = 0; i < CHUNK_SIZE; i++) {
+      recently_accessed[i] = false;
     }
-    mutices[i].unlock();
+
+    next_chunk();
   }
 }
