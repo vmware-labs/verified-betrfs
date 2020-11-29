@@ -149,98 +149,98 @@ module CommitterInitModel {
 //         JournalCache.FinishLoadingSuperblockPhaseStep);
 //   }
 
-  function {:opaque} FinishLoadingOtherPhase(cm: CM) : (cm' : CM)
-  requires cm.status.StatusLoadingOther?
-  requires CommitterModel.WF(cm)
-  {
-    var (journalist1, success) :=
-        JournalistModel.parseJournals(cm.journalist);
-    if success then (
-      var journalist2 := JournalistModel.setWrittenJournalLen(
-            journalist1, cm.superblock.journalLen);
-      cm.(status := StatusReady)
-        .(frozenLoc := None)
-        .(isFrozen := false)
-        .(frozenJournalPosition := 0)
-        .(superblockWrite := None)
-        .(outstandingJournalWrites := {})
-        .(newSuperblock := None)
-        .(commitStatus := JournalCache.CommitNone)
-        .(journalist := journalist2)
-    ) else (
-      cm.(journalist := journalist1)
-    )
-  }
+//   function {:opaque} FinishLoadingOtherPhase(cm: CM) : (cm' : CM)
+//   requires cm.status.StatusLoadingOther?
+//   requires CommitterModel.WF(cm)
+//   {
+//     var (journalist1, success) :=
+//         JournalistModel.parseJournals(cm.journalist);
+//     if success then (
+//       var journalist2 := JournalistModel.setWrittenJournalLen(
+//             journalist1, cm.superblock.journalLen);
+//       cm.(status := StatusReady)
+//         .(frozenLoc := None)
+//         .(isFrozen := false)
+//         .(frozenJournalPosition := 0)
+//         .(superblockWrite := None)
+//         .(outstandingJournalWrites := {})
+//         .(newSuperblock := None)
+//         .(commitStatus := JournalCache.CommitNone)
+//         .(journalist := journalist2)
+//     ) else (
+//       cm.(journalist := journalist1)
+//     )
+//   }
 
-  lemma FinishLoadingOtherPhaseCorrect(cm: CM)
-  requires cm.status.StatusLoadingOther?
-  requires CommitterModel.Inv(cm)
-  requires JournalCache.JournalFrontIntervalOfSuperblock(cm.superblock).Some? ==>
-      JournalistModel.hasFront(cm.journalist)
-  requires JournalCache.JournalBackIntervalOfSuperblock(cm.superblock).Some? ==>
-      JournalistModel.hasBack(cm.journalist)
-  ensures var cm' := FinishLoadingOtherPhase(cm);
-    && CommitterModel.WF(cm')
-    && JournalCache.Next(
-        CommitterModel.I(cm),
-        CommitterModel.I(cm'),
-        JournalDisk.NoDiskOp,
-        JournalInternalOp)
-  {
-    var cm' := FinishLoadingOtherPhase(cm);
-    reveal_FinishLoadingOtherPhase();
+//   lemma FinishLoadingOtherPhaseCorrect(cm: CM)
+//   requires cm.status.StatusLoadingOther?
+//   requires CommitterModel.Inv(cm)
+//   requires JournalCache.JournalFrontIntervalOfSuperblock(cm.superblock).Some? ==>
+//       JournalistModel.hasFront(cm.journalist)
+//   requires JournalCache.JournalBackIntervalOfSuperblock(cm.superblock).Some? ==>
+//       JournalistModel.hasBack(cm.journalist)
+//   ensures var cm' := FinishLoadingOtherPhase(cm);
+//     && CommitterModel.WF(cm')
+//     && JournalCache.Next(
+//         CommitterModel.I(cm),
+//         CommitterModel.I(cm'),
+//         JournalDisk.NoDiskOp,
+//         JournalInternalOp)
+//   {
+//     var cm' := FinishLoadingOtherPhase(cm);
+//     reveal_FinishLoadingOtherPhase();
 
-    var (journalist1, success) :=
-        JournalistModel.parseJournals(cm.journalist);
+//     var (journalist1, success) :=
+//         JournalistModel.parseJournals(cm.journalist);
 
-    assert JournalCache.JournalFrontIntervalOfSuperblock(cm.superblock).Some? <==>
-        JournalistModel.hasFront(cm.journalist);
-    assert JournalCache.JournalBackIntervalOfSuperblock(cm.superblock).Some? <==>
-        JournalistModel.hasBack(cm.journalist);
+//     assert JournalCache.JournalFrontIntervalOfSuperblock(cm.superblock).Some? <==>
+//         JournalistModel.hasFront(cm.journalist);
+//     assert JournalCache.JournalBackIntervalOfSuperblock(cm.superblock).Some? <==>
+//         JournalistModel.hasBack(cm.journalist);
 
-    if success {
-      var s := CommitterModel.I(cm);
-      var fullRange := (
-        if JournalCache.JournalBackIntervalOfSuperblock(s.superblock).Some? then
-          JournalRanges.JournalRangeConcat(s.journalFront.value, s.journalBack.value)
-        else if JournalCache.JournalFrontIntervalOfSuperblock(s.superblock).Some? then
-          s.journalFront.value
-        else
-          JournalRanges.JournalRangeEmpty()
-      );
+//     if success {
+//       var s := CommitterModel.I(cm);
+//       var fullRange := (
+//         if JournalCache.JournalBackIntervalOfSuperblock(s.superblock).Some? then
+//           JournalRanges.JournalRangeConcat(s.journalFront.value, s.journalBack.value)
+//         else if JournalCache.JournalFrontIntervalOfSuperblock(s.superblock).Some? then
+//           s.journalFront.value
+//         else
+//           JournalRanges.JournalRangeEmpty()
+//       );
 
-      var jm := cm.journalist;
-      assert fullRange ==
-        (if JournalistModel.I(jm).journalFront.Some? then JournalistModel.I(jm).journalFront.value
-            else []) +
-        (if JournalistModel.I(jm).journalBack.Some? then JournalistModel.I(jm).journalBack.value
-            else []);
+//       var jm := cm.journalist;
+//       assert fullRange ==
+//         (if JournalistModel.I(jm).journalFront.Some? then JournalistModel.I(jm).journalFront.value
+//             else []) +
+//         (if JournalistModel.I(jm).journalBack.Some? then JournalistModel.I(jm).journalBack.value
+//             else []);
 
-      assert JournalCache.FinishLoadingOtherPhase(
-          CommitterModel.I(cm),
-          CommitterModel.I(cm'),
-          JournalDisk.NoDiskOp,
-          JournalInternalOp);
-      assert JournalCache.NextStep(
-          CommitterModel.I(cm),
-          CommitterModel.I(cm'),
-          JournalDisk.NoDiskOp,
-          JournalInternalOp,
-          JournalCache.FinishLoadingOtherPhaseStep);
-    } else {
-      assert JournalCache.NoOp(
-          CommitterModel.I(cm),
-          CommitterModel.I(cm'),
-          JournalDisk.NoDiskOp,
-          JournalInternalOp);
-      assert JournalCache.NextStep(
-          CommitterModel.I(cm),
-          CommitterModel.I(cm'),
-          JournalDisk.NoDiskOp,
-          JournalInternalOp,
-          JournalCache.NoOpStep);
-    }
-  }
+//       assert JournalCache.FinishLoadingOtherPhase(
+//           CommitterModel.I(cm),
+//           CommitterModel.I(cm'),
+//           JournalDisk.NoDiskOp,
+//           JournalInternalOp);
+//       assert JournalCache.NextStep(
+//           CommitterModel.I(cm),
+//           CommitterModel.I(cm'),
+//           JournalDisk.NoDiskOp,
+//           JournalInternalOp,
+//           JournalCache.FinishLoadingOtherPhaseStep);
+//     } else {
+//       assert JournalCache.NoOp(
+//           CommitterModel.I(cm),
+//           CommitterModel.I(cm'),
+//           JournalDisk.NoDiskOp,
+//           JournalInternalOp);
+//       assert JournalCache.NextStep(
+//           CommitterModel.I(cm),
+//           CommitterModel.I(cm'),
+//           JournalDisk.NoDiskOp,
+//           JournalInternalOp,
+//           JournalCache.NoOpStep);
+//     }
+//   }
 
   function isReplayEmpty(cm: CM) : bool
   requires JournalistModel.Inv(cm.journalist)

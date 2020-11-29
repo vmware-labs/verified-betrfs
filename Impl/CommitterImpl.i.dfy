@@ -403,17 +403,18 @@ module CommitterImpl {
           JC.FinishLoadingSuperblockPhaseStep);
     }
 
-/*
     linear inout method FinishLoadingOtherPhase()
     requires old_self.Inv()
     requires old_self.status.StatusLoadingOther?
-    ensures self.W()
-    ensures self.I() ==
-        CommitterInitModel.FinishLoadingOtherPhase(
-            old_self.I());
+    ensures self.Inv()
+    ensures 
+        ((JC.JournalFrontIntervalOfSuperblock(old_self.superblock).Some? ==>
+          old_self.journalist.hasFront())
+        && (JC.JournalBackIntervalOfSuperblock(old_self.superblock).Some? ==>
+          old_self.journalist.hasBack()))
+          ==> 
+        JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp)
     {
-      CommitterInitModel.reveal_FinishLoadingOtherPhase();
-
       var success := inout self.journalist.parseJournals();
 
       if success {
@@ -430,8 +431,58 @@ module CommitterImpl {
       } else {
         print "FinishLoadingOtherPhase: there is replay journal\n";
       }
+
+      if ((JC.JournalFrontIntervalOfSuperblock(old_self.superblock).Some? ==> old_self.journalist.hasFront()) && (JC.JournalBackIntervalOfSuperblock(old_self.superblock).Some? ==> old_self.journalist.hasBack())) {
+        assert JC.JournalFrontIntervalOfSuperblock(old_self.superblock).Some? <==>
+            old_self.journalist.hasFront();
+        assert JC.JournalBackIntervalOfSuperblock(old_self.superblock).Some? <==>
+            old_self.journalist.hasBack();
+
+        if success {
+          ghost var s := old_self.I();
+          ghost var fullRange := (
+            if JC.JournalBackIntervalOfSuperblock(s.superblock).Some? then
+              JournalRanges.JournalRangeConcat(s.journalFront.value, s.journalBack.value)
+            else if JC.JournalFrontIntervalOfSuperblock(s.superblock).Some? then
+              s.journalFront.value
+            else
+              JournalRanges.JournalRangeEmpty()
+          );
+
+          ghost var jm := old_self.journalist;
+
+          assert fullRange ==
+            (if jm.I().journalFront.Some? then jm.I().journalFront.value else []) +
+            (if jm.I().journalBack.Some? then jm.I().journalBack.value else []);
+
+          assert JC.FinishLoadingOtherPhase(
+              old_self.I(),
+              self.I(),
+              JournalDisk.NoDiskOp,
+              JournalInternalOp);
+          assert JC.NextStep(
+              old_self.I(),
+              self.I(),
+              JournalDisk.NoDiskOp,
+              JournalInternalOp,
+              JC.FinishLoadingOtherPhaseStep);
+        } else {
+          assert JC.NoOp(
+              old_self.I(),
+              self.I(),
+              JournalDisk.NoDiskOp,
+              JournalInternalOp);
+          assert JC.NextStep(
+              old_self.I(),
+              self.I(),
+              JournalDisk.NoDiskOp,
+              JournalInternalOp,
+              JC.NoOpStep);
+        }
+      }
     }
 
+/*
     shared method isReplayEmpty()
     returns (b : bool)
     requires this.WF()
