@@ -39,17 +39,23 @@ module AtomicStatusImpl {
   method unsafe_dispose<Q>(linear r: Q)
 
   method try_acquire_writeback(a: AtomicStatus, key: RWLock.Key)
-  returns (success: bool, linear m: maybe<RWLock.R>)
+  returns (success: bool,
+      linear m: maybe<RWLock.R>,
+      /* readonly */ linear handle_out: maybe<RWLock.Handle>)
   requires atomic_status_inv(a, key)
   ensures !success ==> !has(m)
   ensures success ==> has(m)
       && read(m) == RWLock.Internal(RWLock.BackObtained(key))
+  ensures !success ==> !has(handle_out)
+  ensures success ==> has(handle_out)
+      && read(handle_out).is_handle(key)
   {
     // TODO check if the acquire flag is set
 
     var cur_flag := atomic_read(a);
     if cur_flag != flag_free {
       m := empty();
+      handle_out := empty();
       success := false;
     } else {
       var did_set := compare_and_set(a, flag_free, flag_back);
@@ -67,12 +73,14 @@ module AtomicStatusImpl {
       linear var new_g;
       ///// Transfer:
       if did_set {
-        linear var res;
-        new_g, res := RWLock.transform_TakeBack(key, old_g);
+        linear var res, handle;
+        new_g, res, handle := RWLock.transform_TakeBack(key, old_g);
+        handle_out := give(handle);
         m := give(res);
       } else {
         m := empty();
         new_g := old_g;
+        handle_out := empty();
       }
       assert state_inv(new_v, new_g, key);
       ///// Teardown:
@@ -83,6 +91,39 @@ module AtomicStatusImpl {
       success := did_set;
     }
   }
+
+  method release_writeback(a: AtomicStatus, key: RWLock.Key,
+      linear r: RWLock.R,
+      /* readonly */ linear handle: RWLock.Handle)
+  requires atomic_status_inv(a, key)
+  requires r == RWLock.Internal(RWLock.BackObtained(key))
+  requires handle.is_handle(key)
+  {
+    // TODO check if the acquire flag is set
+
+    var orig_value := fetch_and(a, 0xff - flag_back);
+
+    ///// Begin jank
+    ///// Setup:
+    var v := 0xff - flag_back;
+    var old_v: uint8;
+    var new_v: uint8;
+    linear var old_g: RWLock.R := unsafe_obtain();
+    assume orig_value == old_v;
+    assume new_v == bit_and(old_v, v);
+    assume atomic_inv(a, old_v, old_g);
+    linear var new_g;
+    ///// Transfer:
+    var fl := old_g.q.flags;
+    new_g := RWLock.transform_ReleaseBack(key, fl, old_g, r, handle);
+
+    assert state_inv(new_v, new_g, key);
+    ///// Teardown:
+    assert atomic_inv(a, new_v, new_g);
+    unsafe_dispose(new_g);
+    ///// End jank
+  }
+
 
   method try_set_write_lock(a: AtomicStatus, key: RWLock.Key)
   returns (success: bool, linear m: maybe<RWLock.R>)

@@ -29,6 +29,7 @@ module RWLock refines ResourceBuilderSpec {
       && this.cache_entry.data == this.data.s
       && this.cache_entry.disk_idx_opt ==
           (if this.idx.v == -1 then None else Some(this.idx.v))
+      && -1 <= this.idx.v < NUM_DISK_PAGES
     }
   }
 
@@ -293,10 +294,22 @@ module RWLock refines ResourceBuilderSpec {
   }
 
   method transform_TakeBack(key: Key, linear s: R)
-  returns (linear t: R, linear u: R)
+  returns (linear t: R, linear u: R, /*readonly*/ linear v: Handle)
   requires s == Internal(FlagsField(key, Free))
   ensures t == Internal(FlagsField(key, Back))
   ensures u == Internal(BackObtained(key))
+  ensures v.is_handle(key)
+
+  method transform_ReleaseBack(key: Key, fl: Flag,
+    linear t: R, linear u: R, /*readonly*/ linear v: Handle)
+  returns (linear s: R)
+  requires t == Internal(FlagsField(key, fl))
+  requires u == Internal(BackObtained(key))
+  requires v.is_handle(key)
+  ensures fl == Free ==> s == Internal(FlagsField(key, Free))
+  ensures fl == Back ==> s == Internal(FlagsField(key, Free))
+  ensures fl == Write ==> s == Internal(FlagsField(key, Write))
+  ensures fl == Back_PendingWrite ==> s == Internal(FlagsField(key, Write))
 
   method transform_TakeWrite(key: Key, linear s: R)
   returns (linear t: R, linear u: R)

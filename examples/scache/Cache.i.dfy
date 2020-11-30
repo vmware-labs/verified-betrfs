@@ -165,27 +165,30 @@ module CacheImpl {
       var cache_idx := ci * (CHUNK_SIZE as uint32) + i;   
 
       linear var write_back_r;
+      /*readonly*/ linear var readonly_handle_maybe: maybe<RWLock.Handle>;
       var do_write_back;
-      do_write_back, write_back_r :=
+      do_write_back, write_back_r, readonly_handle_maybe :=
           try_acquire_writeback(c.status[cache_idx], c.key(cache_idx as int));
 
       if do_write_back {
-        /*reaonly*/ linear var readonly_handle: RWLock.Handle :=
-            AtomicRefcountImpl.unsafe_obtain(); // TODO
-        assume readonly_handle.is_handle(c.key(cache_idx as int));
-
+        linear var readonly_handle: RWLock.Handle := unwrap(readonly_handle_maybe);
         /*readonly*/ linear var CacheEntryHandle(
             cache_entry, data, idx) := readonly_handle;
 
         var disk_idx := ptr_read(c.disk_idx_of_entry[cache_idx], idx);
-        assume 0 <= disk_idx as int < NUM_DISK_PAGES;
+        if disk_idx != -1 {
+          linear var wgs := DiskIO.WritebackGhostState(
+              unwrap(write_back_r), cache_entry, idx);
 
-        linear var wgs := DiskIO.WritebackGhostState(
-            unwrap(write_back_r), cache_entry, idx);
-
-        DiskIO.disk_writeback_async(disk_idx as uint64, c.data[cache_idx],
-            data, wgs);
+          DiskIO.disk_writeback_async(disk_idx as uint64, c.data[cache_idx],
+              data, wgs);
+        } else {
+          readonly_handle := RWLock.CacheEntryHandle(cache_entry, data, idx);
+          release_writeback(c.status[cache_idx], c.key(cache_idx as int),
+              unwrap(write_back_r), readonly_handle);
+        }
       } else {
+        var _ := discard(readonly_handle_maybe);
         var _ := discard(write_back_r);
       }
 
