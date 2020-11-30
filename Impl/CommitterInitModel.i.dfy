@@ -242,11 +242,11 @@ module CommitterInitModel {
 //     }
 //   }
 
-  function isReplayEmpty(cm: CM) : bool
-  requires JournalistModel.Inv(cm.journalist)
-  {
-    JournalistModel.isReplayEmpty(cm.journalist)
-  }
+//   function isReplayEmpty(cm: CM) : bool
+//   requires JournalistModel.Inv(cm.journalist)
+//   {
+//     JournalistModel.isReplayEmpty(cm.journalist)
+//   }
 
   function {:opaque} PageInJournalReqFront(cm: CM, io: IO)
     : (CM, IO)

@@ -415,12 +415,11 @@ module JournalistImpl {
       lemma_weight_append(old_self.InMemoryJournal(), je);
     }
 
-    shared method isReplayEmpty()
-    returns (b: bool)
+    shared function method isReplayEmpty() : (b: bool)
     requires Inv()
     ensures b == (I().replayJournal == [])
     {
-      b := (replayIdx == |replayJournal| as uint64);
+      (replayIdx == |replayJournal| as uint64)
     }
 
     shared function method replayJournalTop() : (je: JournalEntry)
