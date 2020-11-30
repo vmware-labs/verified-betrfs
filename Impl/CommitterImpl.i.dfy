@@ -242,8 +242,6 @@ module CommitterImpl {
     requires old_self.status == StatusReady
     requires old_self.journalist.canAppend(JournalInsert(key, value))
     ensures self.Inv()
-    // ensures self.I() == 
-    //   old_self.I().(inMemoryJournal := old_self.I().inMemoryJournal + [je]);
     ensures (old_self.I().replayJournal == []) ==> 
         JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, 
             AdvanceOp(UI.PutOp(key, value), false));
@@ -252,13 +250,8 @@ module CommitterImpl {
       inout self.journalist.append(je);
 
       if old_self.I().replayJournal == [] {
-        assert JC.Advance(
-            old_self.I(), self.I(), JournalDisk.NoDiskOp,
-            AdvanceOp(UI.PutOp(key, value), false));
-        assert JC.NextStep(
-            old_self.I(), self.I(), JournalDisk.NoDiskOp,
-            AdvanceOp(UI.PutOp(key, value), false),
-            JC.AdvanceStep);
+        assert JC.Advance(old_self.I(), self.I(), JournalDisk.NoDiskOp, AdvanceOp(UI.PutOp(key, value), false));
+        assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, AdvanceOp(UI.PutOp(key, value), false), JC.AdvanceStep);
       }
     }
 
@@ -269,9 +262,6 @@ module CommitterImpl {
 
     ensures self.Inv()
     ensures self.status == StatusReady
-    // ensures self.I() == old_self.I().(replayJournal := self.I().replayJournal)
-    // ensures old_self.I().replayJournal
-    //     == [old_self.journalist.replayJournalTop()] + self.I().replayJournal
     ensures (je == old_self.I().replayJournal[0])
         ==>
       JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp,
@@ -283,8 +273,7 @@ module CommitterImpl {
         ghost var vop := AdvanceOp(UI.PutOp(je.key, je.value), true);
 
         assert JC.Replay(old_self.I(), self.I(), JournalDisk.NoDiskOp, vop);
-        assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, vop,
-            JC.ReplayStep);
+        assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, vop, JC.ReplayStep);
       }
     }
 
@@ -334,29 +323,11 @@ module CommitterImpl {
       ghost var jdop := IDiskOp(diskOp(IIO(io))).jdop;
 
       if step {
-        assert JC.PageInSuperblockReq(
-            old_self.I(),
-            self.I(),
-            jdop,
-            JournalInternalOp, which as int);
-        assert JC.NextStep(
-            old_self.I(),
-            self.I(),
-            jdop,
-            JournalInternalOp,
-            JC.PageInSuperblockReqStep(which as int));
+        assert JC.PageInSuperblockReq(old_self.I(), self.I(), jdop, JournalInternalOp, which as int);
+        assert JC.NextStep(old_self.I(), self.I(), jdop, JournalInternalOp, JC.PageInSuperblockReqStep(which as int));
       } else {
-        assert JC.NoOp(
-            old_self.I(),
-            self.I(),
-            jdop,
-            JournalInternalOp);
-        assert JC.NextStep(
-            old_self.I(),
-            self.I(),
-            jdop,
-            JournalInternalOp,
-            JC.NoOpStep);
+        assert JC.NoOp(old_self.I(), self.I(),jdop, JournalInternalOp);
+        assert JC.NextStep(old_self.I(), self.I(), jdop, JournalInternalOp, JC.NoOpStep);
       }
     }
   
@@ -455,29 +426,11 @@ module CommitterImpl {
           (if jm.I().journalFront.Some? then jm.I().journalFront.value else []) +
           (if jm.I().journalBack.Some? then jm.I().journalBack.value else []);
 
-        assert JC.FinishLoadingOtherPhase(
-            old_self.I(),
-            self.I(),
-            JournalDisk.NoDiskOp,
-            JournalInternalOp);
-        assert JC.NextStep(
-            old_self.I(),
-            self.I(),
-            JournalDisk.NoDiskOp,
-            JournalInternalOp,
-            JC.FinishLoadingOtherPhaseStep);
+        assert JC.FinishLoadingOtherPhase(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp);
+        assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp, JC.FinishLoadingOtherPhaseStep);
       } else {
-        assert JC.NoOp(
-            old_self.I(),
-            self.I(),
-            JournalDisk.NoDiskOp,
-            JournalInternalOp);
-        assert JC.NextStep(
-            old_self.I(),
-            self.I(),
-            JournalDisk.NoDiskOp,
-            JournalInternalOp,
-            JC.NoOpStep);
+        assert JC.NoOp(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp);
+        assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp, JC.NoOpStep);
       }
     }
 
@@ -520,18 +473,8 @@ module CommitterImpl {
       
       ghost var jdop := IDiskOp(diskOp(IIO(io))).jdop;
 
-      assert JC.PageInJournalReq(
-        old_self.I(),
-        self.I(),
-        jdop,
-        JournalInternalOp,
-        0);
-      assert JC.NextStep(
-        old_self.I(),
-        self.I(),
-        jdop,
-        JournalInternalOp,
-        JC.PageInJournalReqStep(0));
+      assert JC.PageInJournalReq(old_self.I(), self.I(), jdop, JournalInternalOp, 0);
+      assert JC.NextStep(old_self.I(), self.I(), jdop, JournalInternalOp, JC.PageInJournalReqStep(0));
     }
   
     linear inout method PageInJournalReqBack(io: DiskIOHandler)
@@ -562,18 +505,8 @@ module CommitterImpl {
       
       ghost var jdop := IDiskOp(diskOp(IIO(io))).jdop;
 
-      assert JC.PageInJournalReq(
-        old_self.I(),
-        self.I(),
-        jdop,
-        JournalInternalOp,
-        1);
-      assert JC.NextStep(
-        old_self.I(),
-        self.I(),
-        jdop,
-        JournalInternalOp,
-        JC.PageInJournalReqStep(1));
+      assert JC.PageInJournalReq(old_self.I(), self.I(), jdop, JournalInternalOp, 1);
+      assert JC.NextStep(old_self.I(), self.I(), jdop, JournalInternalOp, JC.PageInJournalReqStep(1));
     }
 
     linear inout method PageInJournalResp(io: DiskIOHandler)
@@ -605,59 +538,21 @@ module CommitterImpl {
           inout self.journalist.setFront(jr.value);
           inout self.journalFrontRead := None;
 
-          assert JC.PageInJournalResp(
-              old_self.I(),
-              self.I(),
-              jdop,
-              JournalInternalOp,
-              0);
-          assert JC.NextStep(
-              old_self.I(),
-              self.I(),
-              jdop,
-              JournalInternalOp,
-              JC.PageInJournalRespStep(0));
+          assert JC.PageInJournalResp(old_self.I(), self.I(), jdop, JournalInternalOp, 0);
+          assert JC.NextStep(old_self.I(), self.I(), jdop, JournalInternalOp, JC.PageInJournalRespStep(0));
         } else if self.journalBackRead == Some(id) {
           inout self.journalist.setBack(jr.value);
           inout self.journalBackRead := None;
           
-          assert JC.PageInJournalResp(
-              old_self.I(),
-              self.I(),
-              jdop,
-              JournalInternalOp,
-              1);
-          assert JC.NextStep(
-              old_self.I(),
-              self.I(),
-              jdop,
-              JournalInternalOp,
-              JC.PageInJournalRespStep(1));
+          assert JC.PageInJournalResp(old_self.I(), self.I(), jdop, JournalInternalOp, 1);
+          assert JC.NextStep(old_self.I(), self.I(), jdop, JournalInternalOp, JC.PageInJournalRespStep(1));
         } else {
-          assert JC.NoOp(
-              old_self.I(),
-              self.I(),
-              jdop,
-              JournalInternalOp);
-          assert JC.NextStep(
-              old_self.I(),
-              self.I(),
-              jdop,
-              JournalInternalOp,
-              JC.NoOpStep);
+          assert JC.NoOp(old_self.I(), self.I(), jdop, JournalInternalOp);
+          assert JC.NextStep(old_self.I(), self.I(), jdop, JournalInternalOp, JC.NoOpStep);
         }
       } else {
-        assert JC.NoOp(
-            old_self.I(),
-            self.I(),
-            jdop,
-            JournalInternalOp);
-        assert JC.NextStep(
-            old_self.I(),
-            self.I(),
-            jdop,
-            JournalInternalOp,
-            JC.NoOpStep);
+        assert JC.NoOp(old_self.I(), self.I(), jdop, JournalInternalOp);
+        assert JC.NextStep(old_self.I(), self.I(), jdop, JournalInternalOp, JC.NoOpStep);
       }
     }
 
@@ -683,7 +578,6 @@ module CommitterImpl {
         inout self.FinishLoadingOtherPhase();
       } else {
         ghost var jdop := IDiskOp(diskOp(IIO(io))).jdop;
-
         assert JC.NoOp(old_self.I(), self.I(), jdop, JournalInternalOp);
         assert JC.NextStep(old_self.I(), self.I(), jdop, JournalInternalOp, JC.NoOpStep);
       }
