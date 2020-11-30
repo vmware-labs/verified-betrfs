@@ -406,10 +406,13 @@ module CommitterImpl {
     linear inout method FinishLoadingOtherPhase()
     requires old_self.Inv()
     requires old_self.status.StatusLoadingOther?
+
+    // [yizhou7] additional preconditions
     requires JC.JournalFrontIntervalOfSuperblock(old_self.superblock).Some? ==>
           old_self.journalist.hasFront()
     requires JC.JournalBackIntervalOfSuperblock(old_self.superblock).Some? ==>
           old_self.journalist.hasBack()
+
     ensures self.Inv()
     ensures JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp)
     {
@@ -489,13 +492,18 @@ module CommitterImpl {
     requires old_self.status.StatusLoadingOther?
     requires old_self.superblock.journalLen > 0
     requires io.initialized()
+    
+    // [yizhou7] additional preconditions
+    requires old_self.journalFrontRead.None?
+    requires old_self.I().journalFront.None?
+
     modifies io
     ensures self.WF()
-    // ensures (self.I(), IIO(io)) == CommitterInitModel.PageInJournalReqFront(
-    //     old_self.I(), old(IIO(io)))
+    ensures var dop := diskOp(IIO(io));
+      && ValidDiskOp(dop)
+      && IDiskOp(dop).bdop.NoDiskOp?
+      && JC.Next(old_self.I(), self.I(), IDiskOp(dop).jdop, JournalInternalOp)
     {
-      // CommitterInitModel.reveal_PageInJournalReqFront();
-
       var len :=
         if self.superblock.journalStart + self.superblock.journalLen
             >= NumJournalBlocks()
@@ -509,23 +517,41 @@ module CommitterImpl {
       inout self.journalBackRead :=
           if self.journalBackRead == Some(id)
             then None else self.journalBackRead;
+      
+      ghost var jdop := IDiskOp(diskOp(IIO(io))).jdop;
+
+      assert JC.PageInJournalReq(
+        old_self.I(),
+        self.I(),
+        jdop,
+        JournalInternalOp,
+        0);
+      assert JC.NextStep(
+        old_self.I(),
+        self.I(),
+        jdop,
+        JournalInternalOp,
+        JC.PageInJournalReqStep(0));
     }
   
-/*
-
     linear inout method PageInJournalReqBack(io: DiskIOHandler)
     requires old_self.WF()
     requires old_self.status.StatusLoadingOther?
     requires old_self.superblock.journalLen > 0
     requires old_self.superblock.journalStart + old_self.superblock.journalLen > NumJournalBlocks()
     requires io.initialized()
-    modifies io
-    ensures self.W()
-    ensures (self.I(), IIO(io)) == CommitterInitModel.PageInJournalReqBack(
-        old_self.I(), old(IIO(io)))
-    {
-      CommitterInitModel.reveal_PageInJournalReqBack();
 
+    // [yizhou7] additional preconditions
+    requires old_self.journalBackRead.None?
+    requires old_self.I().journalBack.None?
+
+    modifies io
+    ensures self.WF()
+    ensures var dop := diskOp(IIO(io));
+      && ValidDiskOp(dop)
+      && IDiskOp(dop).bdop.NoDiskOp?
+      && JC.Next(old_self.I(), self.I(), IDiskOp(dop).jdop, JournalInternalOp)
+    {
       var len := self.superblock.journalStart + self.superblock.journalLen - NumJournalBlocks();
       var loc := JournalRangeLocation(0, len);
       var id := RequestRead(io, loc);
@@ -533,7 +559,23 @@ module CommitterImpl {
       inout self.journalFrontRead :=
           if self.journalFrontRead == Some(id)
             then None else self.journalFrontRead;
+      
+      ghost var jdop := IDiskOp(diskOp(IIO(io))).jdop;
+
+      assert JC.PageInJournalReq(
+        old_self.I(),
+        self.I(),
+        jdop,
+        JournalInternalOp,
+        1);
+      assert JC.NextStep(
+        old_self.I(),
+        self.I(),
+        jdop,
+        JournalInternalOp,
+        JC.PageInJournalReqStep(1));
     }
+/*
 
     linear inout method PageInJournalResp(io: DiskIOHandler)
     requires old_self.WF()

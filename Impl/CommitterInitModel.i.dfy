@@ -248,131 +248,131 @@ module CommitterInitModel {
 //     JournalistModel.isReplayEmpty(cm.journalist)
 //   }
 
-  function {:opaque} PageInJournalReqFront(cm: CM, io: IO)
-    : (CM, IO)
-  requires CommitterModel.WF(cm)
-  requires cm.status.StatusLoadingOther?
-  requires cm.superblock.journalLen > 0
-  requires io.IOInit?
-  {
-    var len :=
-      if cm.superblock.journalStart + cm.superblock.journalLen
-          >= NumJournalBlocks()
-      then
-        NumJournalBlocks() - cm.superblock.journalStart
-      else
-        cm.superblock.journalLen;
-    var loc := JournalRangeLocation(cm.superblock.journalStart, len);
-    var (id, io') := RequestRead(io, loc);
-    var cm' := cm.(journalFrontRead := Some(id))
-      .(journalBackRead :=
-        if cm.journalBackRead == Some(id)
-          then None else cm.journalBackRead);
-    (cm', io')
-  }
+//   function {:opaque} PageInJournalReqFront(cm: CM, io: IO)
+//     : (CM, IO)
+//   requires CommitterModel.WF(cm)
+//   requires cm.status.StatusLoadingOther?
+//   requires cm.superblock.journalLen > 0
+//   requires io.IOInit?
+//   {
+//     var len :=
+//       if cm.superblock.journalStart + cm.superblock.journalLen
+//           >= NumJournalBlocks()
+//       then
+//         NumJournalBlocks() - cm.superblock.journalStart
+//       else
+//         cm.superblock.journalLen;
+//     var loc := JournalRangeLocation(cm.superblock.journalStart, len);
+//     var (id, io') := RequestRead(io, loc);
+//     var cm' := cm.(journalFrontRead := Some(id))
+//       .(journalBackRead :=
+//         if cm.journalBackRead == Some(id)
+//           then None else cm.journalBackRead);
+//     (cm', io')
+//   }
 
-  lemma PageInJournalReqFrontCorrect(cm: CM, io: IO)
-  requires CommitterModel.WF(cm)
-  requires cm.status.StatusLoadingOther?
-  requires cm.superblock.journalLen > 0
-  requires io.IOInit?
-  requires cm.journalFrontRead.None?
-  requires JournalistModel.I(cm.journalist).journalFront.None?
+//   lemma PageInJournalReqFrontCorrect(cm: CM, io: IO)
+//   requires CommitterModel.WF(cm)
+//   requires cm.status.StatusLoadingOther?
+//   requires cm.superblock.journalLen > 0
+//   requires io.IOInit?
+//   requires cm.journalFrontRead.None?
+//   requires JournalistModel.I(cm.journalist).journalFront.None?
 
-  ensures var (cm', io') := PageInJournalReqFront(cm, io);
-    && CommitterModel.WF(cm')
-    && ValidDiskOp(diskOp(io'))
-    && IDiskOp(diskOp(io')).bdop.NoDiskOp?
-    && JournalCache.Next(
-        CommitterModel.I(cm),
-        CommitterModel.I(cm'),
-        IDiskOp(diskOp(io')).jdop,
-        JournalInternalOp)
-  {
-    reveal_PageInJournalReqFront();
-    var (cm', io') := PageInJournalReqFront(cm, io);
+//   ensures var (cm', io') := PageInJournalReqFront(cm, io);
+//     && CommitterModel.WF(cm')
+//     && ValidDiskOp(diskOp(io'))
+//     && IDiskOp(diskOp(io')).bdop.NoDiskOp?
+//     && JournalCache.Next(
+//         CommitterModel.I(cm),
+//         CommitterModel.I(cm'),
+//         IDiskOp(diskOp(io')).jdop,
+//         JournalInternalOp)
+//   {
+//     reveal_PageInJournalReqFront();
+//     var (cm', io') := PageInJournalReqFront(cm, io);
 
-    var len :=
-      if cm.superblock.journalStart + cm.superblock.journalLen
-          >= NumJournalBlocks()
-      then
-        NumJournalBlocks() - cm.superblock.journalStart
-      else
-        cm.superblock.journalLen;
-    var loc := JournalRangeLocation(cm.superblock.journalStart, len);
-    RequestReadCorrect(io, loc);
+//     var len :=
+//       if cm.superblock.journalStart + cm.superblock.journalLen
+//           >= NumJournalBlocks()
+//       then
+//         NumJournalBlocks() - cm.superblock.journalStart
+//       else
+//         cm.superblock.journalLen;
+//     var loc := JournalRangeLocation(cm.superblock.journalStart, len);
+//     RequestReadCorrect(io, loc);
 
-    assert JournalCache.PageInJournalReq(
-        CommitterModel.I(cm),
-        CommitterModel.I(cm'),
-        IDiskOp(diskOp(io')).jdop,
-        JournalInternalOp,
-        0);
-    assert JournalCache.NextStep(
-        CommitterModel.I(cm),
-        CommitterModel.I(cm'),
-        IDiskOp(diskOp(io')).jdop,
-        JournalInternalOp,
-        JournalCache.PageInJournalReqStep(0));
-  }
+//     assert JournalCache.PageInJournalReq(
+//         CommitterModel.I(cm),
+//         CommitterModel.I(cm'),
+//         IDiskOp(diskOp(io')).jdop,
+//         JournalInternalOp,
+//         0);
+//     assert JournalCache.NextStep(
+//         CommitterModel.I(cm),
+//         CommitterModel.I(cm'),
+//         IDiskOp(diskOp(io')).jdop,
+//         JournalInternalOp,
+//         JournalCache.PageInJournalReqStep(0));
+//   }
 
-  function {:opaque} PageInJournalReqBack(cm: CM, io: IO)
-    : (CM, IO)
-  requires CommitterModel.WF(cm)
-  requires cm.status.StatusLoadingOther?
-  requires cm.superblock.journalLen > 0
-  requires io.IOInit?
-  requires cm.superblock.journalStart + cm.superblock.journalLen > NumJournalBlocks()
-  {
-    var len := cm.superblock.journalStart + cm.superblock.journalLen - NumJournalBlocks();
-    var loc := JournalRangeLocation(0, len);
-    var (id, io') := RequestRead(io, loc);
-    var cm' := cm.(journalBackRead := Some(id))
-      .(journalFrontRead :=
-        if cm.journalFrontRead == Some(id)
-          then None else cm.journalFrontRead);
-    (cm', io')
-  }
+//   function {:opaque} PageInJournalReqBack(cm: CM, io: IO)
+//     : (CM, IO)
+//   requires CommitterModel.WF(cm)
+//   requires cm.status.StatusLoadingOther?
+//   requires cm.superblock.journalLen > 0
+//   requires io.IOInit?
+//   requires cm.superblock.journalStart + cm.superblock.journalLen > NumJournalBlocks()
+//   {
+//     var len := cm.superblock.journalStart + cm.superblock.journalLen - NumJournalBlocks();
+//     var loc := JournalRangeLocation(0, len);
+//     var (id, io') := RequestRead(io, loc);
+//     var cm' := cm.(journalBackRead := Some(id))
+//       .(journalFrontRead :=
+//         if cm.journalFrontRead == Some(id)
+//           then None else cm.journalFrontRead);
+//     (cm', io')
+//   }
 
-  lemma PageInJournalReqBackCorrect(cm: CM, io: IO)
-  requires CommitterModel.WF(cm)
-  requires cm.status.StatusLoadingOther?
-  requires cm.superblock.journalLen > 0
-  requires io.IOInit?
-  requires cm.journalBackRead.None?
-  requires JournalistModel.I(cm.journalist).journalBack.None?
-  requires cm.superblock.journalStart + cm.superblock.journalLen > NumJournalBlocks()
+//   lemma PageInJournalReqBackCorrect(cm: CM, io: IO)
+//   requires CommitterModel.WF(cm)
+//   requires cm.status.StatusLoadingOther?
+//   requires cm.superblock.journalLen > 0
+//   requires io.IOInit?
+//   requires cm.journalBackRead.None?
+//   requires JournalistModel.I(cm.journalist).journalBack.None?
+//   requires cm.superblock.journalStart + cm.superblock.journalLen > NumJournalBlocks()
 
-  ensures var (cm', io') := PageInJournalReqBack(cm, io);
-    && CommitterModel.WF(cm')
-    && ValidDiskOp(diskOp(io'))
-    && IDiskOp(diskOp(io')).bdop.NoDiskOp?
-    && JournalCache.Next(
-        CommitterModel.I(cm),
-        CommitterModel.I(cm'),
-        IDiskOp(diskOp(io')).jdop,
-        JournalInternalOp)
-  {
-    reveal_PageInJournalReqBack();
-    var (cm', io') := PageInJournalReqBack(cm, io);
+//   ensures var (cm', io') := PageInJournalReqBack(cm, io);
+//     && CommitterModel.WF(cm')
+//     && ValidDiskOp(diskOp(io'))
+//     && IDiskOp(diskOp(io')).bdop.NoDiskOp?
+//     && JournalCache.Next(
+//         CommitterModel.I(cm),
+//         CommitterModel.I(cm'),
+//         IDiskOp(diskOp(io')).jdop,
+//         JournalInternalOp)
+//   {
+//     reveal_PageInJournalReqBack();
+//     var (cm', io') := PageInJournalReqBack(cm, io);
 
-    var len := cm.superblock.journalStart + cm.superblock.journalLen - NumJournalBlocks();
-    var loc := JournalRangeLocation(0, len);
-    RequestReadCorrect(io, loc);
+//     var len := cm.superblock.journalStart + cm.superblock.journalLen - NumJournalBlocks();
+//     var loc := JournalRangeLocation(0, len);
+//     RequestReadCorrect(io, loc);
 
-    assert JournalCache.PageInJournalReq(
-        CommitterModel.I(cm),
-        CommitterModel.I(cm'),
-        IDiskOp(diskOp(io')).jdop,
-        JournalInternalOp,
-        1);
-    assert JournalCache.NextStep(
-        CommitterModel.I(cm),
-        CommitterModel.I(cm'),
-        IDiskOp(diskOp(io')).jdop,
-        JournalInternalOp,
-        JournalCache.PageInJournalReqStep(1));
-  }
+//     assert JournalCache.PageInJournalReq(
+//         CommitterModel.I(cm),
+//         CommitterModel.I(cm'),
+//         IDiskOp(diskOp(io')).jdop,
+//         JournalInternalOp,
+//         1);
+//     assert JournalCache.NextStep(
+//         CommitterModel.I(cm),
+//         CommitterModel.I(cm'),
+//         IDiskOp(diskOp(io')).jdop,
+//         JournalInternalOp,
+//         JournalCache.PageInJournalReqStep(1));
+//   }
 
   function {:opaque} PageInJournalResp(cm: CM, io: IO)
     : CM
