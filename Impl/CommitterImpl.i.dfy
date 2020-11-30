@@ -575,7 +575,6 @@ module CommitterImpl {
         JournalInternalOp,
         JC.PageInJournalReqStep(1));
     }
-/*
 
     linear inout method PageInJournalResp(io: DiskIOHandler)
     requires old_self.WF()
@@ -583,14 +582,20 @@ module CommitterImpl {
     requires io.diskOp().RespReadOp?
     requires ValidDiskOp(io.diskOp())
     requires ValidJournalLocation(LocOfRespRead(io.diskOp().respRead))
-    ensures self.W()
-    ensures self.I() == CommitterInitModel.PageInJournalResp(
-        old_self.I(), old(IIO(io)))
+    ensures self.WF()
+    ensures var dop := diskOp(IIO(io));
+      && ValidDiskOp(dop)
+      && IDiskOp(dop).bdop.NoDiskOp?
+      && JC.Next(
+          old_self.I(),
+          self.I(),
+          IDiskOp(dop).jdop,
+          JournalInternalOp)
     {
-      CommitterInitModel.reveal_PageInJournalResp();
-
       var id, addr, bytes := io.getReadResult();
       var jr := JournalistParsingImpl.computeJournalRangeOfByteSeq(bytes);
+      ghost var jdop := IDiskOp(diskOp(IIO(io))).jdop;
+
       if jr.Some? {
         assert |jr.value| <= NumJournalBlocks() as int by {
           reveal_ValidJournalLocation();
@@ -599,10 +604,60 @@ module CommitterImpl {
         if self.journalFrontRead == Some(id) {
           inout self.journalist.setFront(jr.value);
           inout self.journalFrontRead := None;
+
+          assert JC.PageInJournalResp(
+              old_self.I(),
+              self.I(),
+              jdop,
+              JournalInternalOp,
+              0);
+          assert JC.NextStep(
+              old_self.I(),
+              self.I(),
+              jdop,
+              JournalInternalOp,
+              JC.PageInJournalRespStep(0));
         } else if self.journalBackRead == Some(id) {
           inout self.journalist.setBack(jr.value);
           inout self.journalBackRead := None;
+          
+          assert JC.PageInJournalResp(
+              old_self.I(),
+              self.I(),
+              jdop,
+              JournalInternalOp,
+              1);
+          assert JC.NextStep(
+              old_self.I(),
+              self.I(),
+              jdop,
+              JournalInternalOp,
+              JC.PageInJournalRespStep(1));
+        } else {
+          assert JC.NoOp(
+              old_self.I(),
+              self.I(),
+              jdop,
+              JournalInternalOp);
+          assert JC.NextStep(
+              old_self.I(),
+              self.I(),
+              jdop,
+              JournalInternalOp,
+              JC.NoOpStep);
         }
+      } else {
+        assert JC.NoOp(
+            old_self.I(),
+            self.I(),
+            jdop,
+            JournalInternalOp);
+        assert JC.NextStep(
+            old_self.I(),
+            self.I(),
+            jdop,
+            JournalInternalOp,
+            JC.NoOpStep);
       }
     }
 
@@ -611,12 +666,12 @@ module CommitterImpl {
     requires old_self.status.StatusLoadingOther?
     requires io.initialized()
     modifies io
-    ensures self.W()
-    ensures (self.I(), IIO(io)) == CommitterInitModel.tryFinishLoadingOtherPhase(
-        old_self.I(), old(IIO(io)))
+    ensures self.WF()
+    ensures var dop := diskOp(IIO(io));
+      && ValidDiskOp(dop)
+      && IDiskOp(dop).bdop.NoDiskOp?
+      && JC.Next(old_self.I(), self.I(), IDiskOp(dop).jdop, JournalInternalOp)
     {
-      CommitterInitModel.reveal_tryFinishLoadingOtherPhase();
-
       var hasFront := self.journalist.hasFront();
       var hasBack := self.journalist.hasBack();
       if self.superblock.journalLen > 0 && !self.journalFrontRead.Some? && !hasFront {
@@ -627,8 +682,13 @@ module CommitterImpl {
           && (self.superblock.journalStart + self.superblock.journalLen > NumJournalBlocks() ==> hasBack) {
         inout self.FinishLoadingOtherPhase();
       } else {
+        ghost var jdop := IDiskOp(diskOp(IIO(io))).jdop;
+
+        assert JC.NoOp(old_self.I(), self.I(), jdop, JournalInternalOp);
+        assert JC.NextStep(old_self.I(), self.I(), jdop, JournalInternalOp, JC.NoOpStep);
       }
     }
+/*
 
     linear inout method WriteOutJournal(io: DiskIOHandler)
     requires io.initialized()
