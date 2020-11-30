@@ -53,7 +53,7 @@ module CacheImpl {
         atomic_index_lookup_inv(c.cache_idx_of_page[d], d))
   }
 
-  predicate is_page_handle(handle: RWLock.Handle, c: Cache, disk_idx: int)
+  predicate is_disk_page_handle(handle: RWLock.Handle, c: Cache, disk_idx: int)
   requires Inv(c)
   {
     && handle.cache_entry.CacheEntry?
@@ -62,10 +62,24 @@ module CacheImpl {
     && handle.is_handle(c.key(handle.cache_entry.cache_idx))
   }
 
+  linear datatype PageHandle = PageHandle(
+      linear w: RWLock.R,
+      linear handle: RWLock.Handle)
+  {
+    predicate is_page_handle(c: Cache, disk_idx: int)
+    requires Inv(c)
+    {
+      && is_disk_page_handle(this.handle, c, disk_idx)
+      && w == RWLock.Internal(RWLock.WriteObtained(
+          c.key(this.handle.cache_entry.cache_idx)))
+    }
+  }
+
   method take_write_lock_on_cache_entry(c: Cache, cache_idx: int)
-  returns (linear handle: RWLock.Handle)
+  returns (linear r: RWLock.R, linear handle: RWLock.Handle)
   requires Inv(c)
   requires 0 <= cache_idx < CACHE_SIZE
+  ensures r == RWLock.Internal(RWLock.WriteObtained(c.key(cache_idx)))
   ensures handle.is_handle(c.key(cache_idx))
   decreases *
   {
@@ -121,17 +135,16 @@ module CacheImpl {
       j := j + 1;
     }
 
-    // TODO
-    handle := AtomicRefcountImpl.unsafe_obtain();
-    AtomicRefcountImpl.unsafe_dispose(w);
-    assume false;
+    r, handle := RWLock.transform_TakeWriteFinish(c.key(cache_idx), w);
   }
 
   method release_write_lock_on_cache_entry(c: Cache, cache_idx: int,
+      linear r: RWLock.R,
       linear handle: RWLock.Handle)
   requires Inv(c)
   requires 0 <= cache_idx < CACHE_SIZE
   requires handle.is_handle(c.key(cache_idx))
+  requires r == RWLock.Internal(RWLock.WriteObtained(c.key(cache_idx)))
 
   /*method take_write_lock_on_disk_entry(c: Cache, disk_idx: int)
   requires 0 
@@ -181,12 +194,12 @@ module CacheImpl {
   }
 
   method try_take_write_lock_disk_page(c: Cache, disk_idx: int)
-  returns (success: bool, linear handle_out: maybe<RWLock.Handle>)
+  returns (success: bool, linear handle_out: maybe<PageHandle>)
   requires Inv(c)
   requires 0 <= disk_idx < NUM_DISK_PAGES
   ensures !success ==> handle_out == empty()
   ensures success ==> has(handle_out) &&
-      is_page_handle(peek(handle_out), c, disk_idx)
+      peek(handle_out).is_page_handle(c, disk_idx)
   decreases *
   {
     var cache_idx := atomic_index_lookup_read(c.cache_idx_of_page[disk_idx], disk_idx);
@@ -196,16 +209,15 @@ module CacheImpl {
       success := false;
       handle_out := empty();
     } else {
-      linear var handle := take_write_lock_on_cache_entry(c, cache_idx as int);
+      linear var r, handle := take_write_lock_on_cache_entry(c, cache_idx as int);
       var this_disk_idx := ptr_read(
           c.disk_idx_of_entry[cache_idx],
           handle.idx);
       if this_disk_idx == disk_idx {
         success := true;
-        assert is_page_handle(handle, c, disk_idx);
-        handle_out := give(handle);
+        handle_out := give(PageHandle(r, handle));
       } else {
-        release_write_lock_on_cache_entry(c, cache_idx as int, handle);
+        release_write_lock_on_cache_entry(c, cache_idx as int, r, handle);
         success := false;
         handle_out := empty();
       }

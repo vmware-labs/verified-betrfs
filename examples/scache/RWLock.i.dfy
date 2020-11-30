@@ -324,4 +324,10 @@ module RWLock refines ResourceBuilderSpec {
   requires s2 == Internal(WritePending(key, idx))
   ensures t1 == Internal(ReadRefCount(key, idx, 0))
   ensures t2 == Internal(WritePending(key, idx + 1))
+
+  method transform_TakeWriteFinish(key: Key, linear s1: R)
+  returns (linear t1: R, linear t2: Handle)
+  requires s1 == Internal(WritePending(key, NUM_THREADS))
+  ensures t1 == Internal(WriteObtained(key))
+  ensures t2.is_handle(key)
 }
