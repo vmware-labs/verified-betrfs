@@ -168,7 +168,10 @@ module CacheImpl {
       /*readonly*/ linear var readonly_handle_maybe: maybe<RWLock.Handle>;
       var do_write_back;
       do_write_back, write_back_r, readonly_handle_maybe :=
-          try_acquire_writeback(c.status[cache_idx], c.key(cache_idx as int));
+          try_acquire_writeback(
+              c.status[cache_idx],
+              c.key(cache_idx as int),
+              false);
 
       if do_write_back {
         linear var readonly_handle: RWLock.Handle := unwrap(readonly_handle_maybe);
@@ -227,4 +230,3 @@ module CacheImpl {
     }
   }
 }
-

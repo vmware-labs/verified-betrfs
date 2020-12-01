@@ -11,10 +11,16 @@ module AtomicStatusImpl {
   import opened LinearMaybe
   import RWLock
 
-  const flag_free : uint8 := 0;
+  const flag_empty : uint8 := 0;
+
   const flag_back : uint8 := 1;
   const flag_write : uint8 := 2;
+  const flag_accessed : uint8 := 4;
+
   const flag_back_write : uint8 := 3;
+  const flag_back_accessed : uint8 := 5;
+  const flag_write_accessed : uint8 := 6;
+  const flag_back_write_accessed : uint8 := 7;
 
   type AtomicStatus = Atomic<uint8, RWLock.R>
 
@@ -23,11 +29,11 @@ module AtomicStatusImpl {
     && g.Internal?
     && g.q.FlagsField?
     && g.q.key == key
-    && (g.q.flags == RWLock.Free ==> v == flag_free)
-    && (g.q.flags == RWLock.Back ==> v == flag_back)
-    && (g.q.flags == RWLock.Write ==> v == flag_write)
+    && (g.q.flags == RWLock.Free ==> v == flag_empty || v == flag_accessed)
+    && (g.q.flags == RWLock.Back ==> v == flag_back || v == flag_back_accessed)
+    && (g.q.flags == RWLock.Write ==> v == flag_write || v == flag_write_accessed)
     && (g.q.flags == RWLock.Back_PendingWrite ==>
-        v == flag_back_write)
+        v == flag_back_write || v == flag_back_write_accessed)
   }
 
   predicate atomic_status_inv(a: AtomicStatus, key: RWLock.Key)
@@ -38,7 +44,7 @@ module AtomicStatusImpl {
   method unsafe_obtain<Q>() returns (linear r: Q)
   method unsafe_dispose<Q>(linear r: Q)
 
-  method try_acquire_writeback(a: AtomicStatus, key: RWLock.Key)
+  method try_acquire_writeback(a: AtomicStatus, key: RWLock.Key, with_access: bool)
   returns (success: bool,
       linear m: maybe<RWLock.R>,
       /* readonly */ linear handle_out: maybe<RWLock.Handle>)
@@ -50,19 +56,17 @@ module AtomicStatusImpl {
   ensures success ==> has(handle_out)
       && read(handle_out).is_handle(key)
   {
-    // TODO check if the acquire flag is set
-
     var cur_flag := atomic_read(a);
-    if cur_flag != flag_free {
+    if !(cur_flag == flag_empty || (with_access && cur_flag == flag_accessed)) {
       m := empty();
       handle_out := empty();
       success := false;
     } else {
-      var did_set := compare_and_set(a, flag_free, flag_back);
+      var did_set := compare_and_set(a, flag_empty, flag_back);
 
       ///// Begin jank
       ///// Setup:
-      var v1 := flag_free;
+      var v1 := flag_empty;
       var v2 := flag_back;
       var old_v: uint8;
       var new_v: uint8;
@@ -88,7 +92,46 @@ module AtomicStatusImpl {
       unsafe_dispose(new_g);
       ///// End jank
 
-      success := did_set;
+      if did_set {
+        success := true;
+      } else if !with_access {
+        success := false;
+      } else {
+        var did_set := compare_and_set(a, flag_accessed, flag_back_accessed);
+
+        ///// Begin jank
+        ///// Setup:
+        var v1 := flag_accessed;
+        var v2 := flag_back_accessed;
+        var old_v: uint8;
+        var new_v: uint8;
+        linear var old_g: RWLock.R := unsafe_obtain();
+        assume old_v == v1 ==> new_v == v2 && did_set;
+        assume old_v != v1 ==> new_v == old_v && !did_set;
+        assume atomic_inv(a, old_v, old_g);
+        linear var new_g;
+        ///// Transfer:
+        var _ := discard(m);
+        var _ := discard(handle_out);
+
+        if did_set {
+          linear var res, handle;
+          new_g, res, handle := RWLock.transform_TakeBack(key, old_g);
+          handle_out := give(handle);
+          m := give(res);
+        } else {
+          m := empty();
+          new_g := old_g;
+          handle_out := empty();
+        }
+        assert state_inv(new_v, new_g, key);
+        ///// Teardown:
+        assert atomic_inv(a, new_v, new_g);
+        unsafe_dispose(new_g);
+        ///// End jank
+
+        success := did_set;
+      }
     }
   }
 
@@ -99,8 +142,6 @@ module AtomicStatusImpl {
   requires r == RWLock.Internal(RWLock.BackObtained(key))
   requires handle.is_handle(key)
   {
-    // TODO check if the acquire flag is set
-
     var orig_value := fetch_and(a, 0xff - flag_back);
 
     ///// Begin jank
@@ -123,7 +164,6 @@ module AtomicStatusImpl {
     unsafe_dispose(new_g);
     ///// End jank
   }
-
 
   method try_set_write_lock(a: AtomicStatus, key: RWLock.Key)
   returns (success: bool, linear m: maybe<RWLock.R>)
