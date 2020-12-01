@@ -39,6 +39,7 @@ module CommitterImpl {
   import StateImpl
   import opened ViewOp
   import opened DiskOpModel
+  import opened JournalBytes
 
   // TODO we could have these do the modification in-place instead.
 
@@ -582,20 +583,27 @@ module CommitterImpl {
         assert JC.NextStep(old_self.I(), self.I(), jdop, JournalInternalOp, JC.NoOpStep);
       }
     }
-/*
 
     linear inout method WriteOutJournal(io: DiskIOHandler)
     requires io.initialized()
     requires old_self.Inv()
-    requires JournalistModel.I(old_self.I().journalist).inMemoryJournalFrozen != []
-          || JournalistModel.I(old_self.I().journalist).inMemoryJournal != []
-    modifies io
-    ensures self.W()
-    ensures (self.I(), IIO(io)) == CommitterCommitModel.WriteOutJournal(
-        old_self.I(), old(IIO(io)))
-    {
-      CommitterCommitModel.reveal_WriteOutJournal();
+    requires old_self.journalist.I().inMemoryJournalFrozen != []
+          || old_self.journalist.I().inMemoryJournal != []
 
+    // [yizhou7] additional precondition
+    requires old_self.superblockWrite.None?
+
+    modifies io
+    ensures self.WF()
+    ensures var dop := diskOp(IIO(io));
+        && ValidDiskOp(dop)
+        && IDiskOp(dop).bdop.NoDiskOp?
+        && JC.Next(
+          old_self.I(),
+          self.I(),
+          IDiskOp(dop).jdop,
+          JournalInternalOp)
+    {
       var writtenJournalLen := self.journalist.getWrittenJournalLen();
       var doingFrozen := self.journalist.hasFrozenJournal();
 
@@ -631,9 +639,41 @@ module CommitterImpl {
         SyncReqs3to2(inout self.syncReqs);
       }
 
-      assert (self.I(), IIO(io)) == CommitterCommitModel.WriteOutJournal(
-        old_self.I(), old(IIO(io)));
+      ghost var jr := JournalRangeOfByteSeq(j).value;
+      assert |jr| == len as int;
+
+      ghost var dop := diskOp(IIO(io));
+
+      if contiguous {
+        assert LocOfReqWrite(dop.reqWrite)
+            == JournalRangeLocation(start, len);
+        assert ValidDiskOp(dop);
+      } else {
+        assert LocOfReqWrite(dop.reqWrite1)
+            == JournalRangeLocation(start, NumJournalBlocks() - start);
+        assert LocOfReqWrite(dop.reqWrite2)
+            == JournalRangeLocation(0, len - (NumJournalBlocks() - start));
+        JournalBytesSplit(j, len as int,
+            NumJournalBlocks() as int - start as int);
+        assert ValidDiskOp(dop);
+      }
+
+      CommitterCommitModel.SyncReqs3to2Correct(old_self.syncReqs);
+
+      assert JC.WriteBackJournalReq(
+          old_self.I(),
+          self.I(),
+          IDiskOp(dop).jdop,
+          JournalInternalOp,
+          jr);
+      assert JC.NextStep(
+          old_self.I(),
+          self.I(),
+          IDiskOp(dop).jdop,
+          JournalInternalOp,
+          JC.WriteBackJournalReqStep(jr));
     }
+/*
 
     linear inout method writeOutSuperblockAdvanceLog(io: DiskIOHandler)
     requires io.initialized()
