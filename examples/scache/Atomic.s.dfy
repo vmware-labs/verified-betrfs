@@ -23,6 +23,8 @@ module AtomicSpec {
   method {:extern} atomic_read<V, G>(a: Atomic<V, G>)
   returns (v: V)
 
+  method {:extern} atomic_write<V, G>(a: Atomic<V, G>, v: V)
+
   import opened NativeTypes
 
   function method bit_or(a: uint8, b: uint8): uint8 {
