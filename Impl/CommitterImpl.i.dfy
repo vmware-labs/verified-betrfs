@@ -826,17 +826,37 @@ module CommitterImpl {
           JC.FreezeStep);
     }
 
-/*
     linear inout method receiveFrozenLoc(loc: Location)
-    requires old_self.W()
-    ensures self.W()
-    ensures self.I() == CommitterCommitModel.receiveFrozenLoc(
-          old_self.I(), loc)
+    requires old_self.WF()
+
+    requires old_self.status == StatusReady
+    requires old_self.isFrozen
+    requires !old_self.frozenLoc.Some?
+    requires ValidIndirectionTableLocation(loc)
+
+    ensures self.WF()
+    ensures JC.Next(
+        old_self.I(),
+        self.I(),
+        JournalDisk.NoDiskOp,
+        SendFrozenLocOp(loc))
     {
-      CommitterCommitModel.reveal_receiveFrozenLoc();
       inout self.frozenLoc := Some(loc);
+
+      assert JC.ReceiveFrozenLoc(
+        old_self.I(),
+        self.I(),
+        JournalDisk.NoDiskOp,
+        SendFrozenLocOp(loc));
+      assert JC.NextStep(
+        old_self.I(),
+        self.I(),
+        JournalDisk.NoDiskOp,
+        SendFrozenLocOp(loc),
+        JC.ReceiveFrozenLocStep);
     }
 
+/*
     // == pushSync ==
     shared method freeId() returns (id: uint64)
     requires syncReqs.Inv()
