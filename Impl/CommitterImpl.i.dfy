@@ -902,16 +902,33 @@ module CommitterImpl {
       }
     }
 
-/*
     // == popSync ==
     linear inout method popSync(id: uint64)
     requires old_self.Inv()
-    ensures self.W()
-    ensures self.I() == CommitterCommitModel.popSync(
-        old_self.I(), id)
+
+    // [yizhou7] additional preconditions
+    requires id in old_self.syncReqs.contents
+    requires old_self.syncReqs.contents[id] == JC.State1
+
+    ensures self.WF()
+    ensures JC.Next(
+        old_self.I(),
+        self.I(),
+        JournalDisk.NoDiskOp,
+        PopSyncOp(id as int))
     {
-      CommitterCommitModel.reveal_popSync();
       LinearMutableMap.InOutRemove(inout self.syncReqs, id);
+      assert JC.PopSyncReq(
+        old_self.I(),
+        self.I(),
+        JournalDisk.NoDiskOp,
+        PopSyncOp(id as int), id);
+      assert JC.NextStep(
+        old_self.I(),
+        self.I(),
+        JournalDisk.NoDiskOp,
+        PopSyncOp(id as int),
+        JC.PopSyncReqStep(id));
     }
 
     // == AdvanceLog ==
@@ -921,11 +938,16 @@ module CommitterImpl {
     requires io.initialized()
     requires old_self.status == StatusReady
     modifies io
-    ensures self.W()
-    ensures CommitterCommitModel.tryAdvanceLog(
-        old_self.I(), old(IIO(io)), self.I(), IIO(io))
+    ensures self.WF()
+    ensures var dop := diskOp(IIO(io));
+        && ValidDiskOp(dop)
+        && IDiskOp(dop).bdop.NoDiskOp?
+        && JC.Next(
+          old_self.I(),
+          self.I(),
+          IDiskOp(dop).jdop,
+          JournalInternalOp)
     {
-      CommitterCommitModel.reveal_tryAdvanceLog();
       wait := false;
       var hasFrozen := self.journalist.hasFrozenJournal();
       var hasInMem := self.journalist.hasInMemoryJournal();
@@ -936,9 +958,15 @@ module CommitterImpl {
           inout self.writeOutSuperblockAdvanceLog(io);
         } else {
           wait := true;
+
+          assert JC.NoOp(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp);
+          assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp, JC.NoOpStep);
         }
       } else {
         wait := true;
+
+        assert JC.NoOp(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp);
+        assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp, JC.NoOpStep);
       }
     }
 
@@ -949,9 +977,15 @@ module CommitterImpl {
     requires old_self.status == StatusReady
     requires old_self.frozenLoc.Some?
     modifies io
-    ensures self.W()
-    ensures CommitterCommitModel.tryAdvanceLocation(
-        old_self.I(), old(IIO(io)), self.I(), IIO(io))
+    ensures self.WF()
+    ensures var dop := diskOp(IIO(io));
+        && ValidDiskOp(dop)
+        && IDiskOp(dop).bdop.NoDiskOp?
+        && JC.Next(
+          old_self.I(),
+          self.I(),
+          IDiskOp(dop).jdop,
+          JournalInternalOp)
     {
       CommitterCommitModel.reveal_tryAdvanceLocation();
       wait := false;
@@ -964,19 +998,36 @@ module CommitterImpl {
           inout self.writeOutSuperblockAdvanceLocation(io);
         } else {
           wait := true;
+
+          assert JC.NoOp(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp);
+          assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp, JC.NoOpStep);
         }
       } else {
         wait := true;
+
+        assert JC.NoOp(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp);
+        assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp, JC.NoOpStep);
       }
     }
 
-    linear inout method writeBackSuperblockResp()
+    linear inout method writeBackSuperblockResp(ghost io: IO)
     requires old_self.Inv()
-    ensures self.W()
-    ensures self.I() == CommitterCommitModel.writeBackSuperblockResp(
-        old_self.I());
+    
+    // [yizhou7] additional preconditions
+    requires ValidDiskOp(diskOp(io))
+    requires IDiskOp(diskOp(io)).jdop.RespWriteSuperblockOp?
+    requires Some(io.id) == old_self.superblockWrite
+
+    ensures self.WF()
+    ensures JC.Next(
+          old_self.I(),
+          self.I(),
+          IDiskOp(diskOp(io)).jdop,
+          if old_self.status.StatusReady? && old_self.commitStatus.CommitAdvanceLocation? then CleanUpOp else JournalInternalOp
+    )
     {
-      CommitterCommitModel.reveal_writeBackSuperblockResp();
+      CommitterCommitModel.SyncReqs2to1Correct(old_self.syncReqs);
+
       if self.status.StatusReady? && self.commitStatus.CommitAdvanceLocation? {
         var writtenJournalLen := self.journalist.getWrittenJournalLen();
         inout self.superblockWrite := None;
@@ -991,6 +1042,9 @@ module CommitterImpl {
         inout self.frozenLoc := None;
         inout self.isFrozen := false;
         inout self.commitStatus := JC.CommitNone;
+
+        assert JC.WriteBackSuperblockResp(old_self.I(), self.I(), IDiskOp(diskOp(io)).jdop, CleanUpOp);
+        assert JC.NextStep(old_self.I(), self.I(), IDiskOp(diskOp(io)).jdop, CleanUpOp,JC.WriteBackSuperblockRespStep);
       } else if self.status.StatusReady? && self.commitStatus.CommitAdvanceLog? {
         inout self.superblockWrite := None;
         inout self.superblock := self.newSuperblock.value;
@@ -998,10 +1052,22 @@ module CommitterImpl {
         inout self.whichSuperblock := if self.whichSuperblock == 0 then 1 else 0;
         SyncReqs2to1(inout self.syncReqs);
         inout self.commitStatus := JC.CommitNone;
+        assert JC.WriteBackSuperblockResp(
+          old_self.I(),
+          self.I(),
+          IDiskOp(diskOp(io)).jdop,
+          JournalInternalOp);
+        assert JC.NextStep(
+          old_self.I(),
+          self.I(),
+          IDiskOp(diskOp(io)).jdop,
+          JournalInternalOp,
+          JC.WriteBackSuperblockRespStep);
       } else {
         print "writeBackSuperblockResp: didn't do anything\n";
+        assert JC.NoOp(old_self.I(), self.I(), IDiskOp(diskOp(io)).jdop, JournalInternalOp);
+        assert JC.NextStep(old_self.I(), self.I(), IDiskOp(diskOp(io)).jdop, JournalInternalOp, JC.NoOpStep);
       }
     }
-  */
   }
 }
