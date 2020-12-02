@@ -46,10 +46,11 @@ module RWLock refines ResourceBuilderSpec {
    * pending, with the 'Back' being in progress.
    */
   datatype Flag =
-    | Free
+    | Available
     | Back
     | Write
     | Back_PendingWrite
+    | Unmapped
 
   datatype WriteLockState = 
     | WLSNone
@@ -90,7 +91,7 @@ module RWLock refines ResourceBuilderSpec {
     && g'[key] == g[key].(backHeld := true)
     && a == multiset{
       Internal(Global(g)),
-      Internal(FlagsField(key, Free))
+      Internal(FlagsField(key, Available))
     }
     && b == multiset{
       Internal(Global(g')),
@@ -101,7 +102,7 @@ module RWLock refines ResourceBuilderSpec {
 
   predicate TakeWrite(a: multiset<Q>, b: multiset<Q>, key: Key)
   {
-    && a == multiset{ FlagsField(key, Free) }
+    && a == multiset{ FlagsField(key, Available) }
     && b == multiset{
       FlagsField(key, Write),
       WritePendingAwaitBack(key)
@@ -120,7 +121,7 @@ module RWLock refines ResourceBuilderSpec {
   predicate TakeWriteFinishBack(a: multiset<Q>, b: multiset<Q>, key: Key, fl: Flag)
   {
     // The 'free' case cannot actually occur, but it's convenient to allow it.
-    && (fl == Write || fl == Free)
+    && (fl == Write || fl == Available)
     && a == multiset{
       FlagsField(key, fl),
       WritePendingAwaitBack(key)
@@ -166,7 +167,7 @@ module RWLock refines ResourceBuilderSpec {
 
   predicate TakeReadFinish(a: multiset<Q>, b: multiset<Q>, key: Key, t: int, r: uint8, fl: Flag)
   {
-    && (fl == Free || fl == Back)
+    && (fl == Available || fl == Back)
     && a == multiset{
       ReadPending(key, t),
       FlagsField(key, fl)
@@ -207,7 +208,7 @@ module RWLock refines ResourceBuilderSpec {
   {
     && InvRWLockState(state)
     && (q.FlagsField? ==>
-      && (q.flags == Free ==> state.writeLock == WLSNone && !state.backHeld)
+      && (q.flags == Available ==> state.writeLock == WLSNone && !state.backHeld)
       && (q.flags == Back ==> state.writeLock == WLSNone && state.backHeld)
       && (q.flags == Write ==> state.writeLock != WLSNone && !state.backHeld)
       && (q.flags == Back_PendingWrite ==>
@@ -280,11 +281,11 @@ module RWLock refines ResourceBuilderSpec {
         assert Inv2(q, r);
       } else if q in b && r in c {
         assert Inv2(Internal(Global(g)), r);
-        assert Inv2(Internal(FlagsField(key, Free)), r);
+        assert Inv2(Internal(FlagsField(key, Available)), r);
         assert Inv2(q, r);
       } else if q in c && r in b {
         assert Inv2(q, Internal(Global(g)));
-        assert Inv2(q, Internal(FlagsField(key, Free)));
+        assert Inv2(q, Internal(FlagsField(key, Available)));
         assert Inv2(q, r);
       } else if multiset{q, r} <= b {
         assert Inv2(q, r);
@@ -295,7 +296,7 @@ module RWLock refines ResourceBuilderSpec {
 
   method transform_TakeBack(key: Key, linear s: R)
   returns (linear t: R, linear u: R, /*readonly*/ linear v: Handle)
-  requires s == Internal(FlagsField(key, Free))
+  requires s == Internal(FlagsField(key, Available))
   ensures t == Internal(FlagsField(key, Back))
   ensures u == Internal(BackObtained(key))
   ensures v.is_handle(key)
@@ -306,14 +307,13 @@ module RWLock refines ResourceBuilderSpec {
   requires t == Internal(FlagsField(key, fl))
   requires u == Internal(BackObtained(key))
   requires v.is_handle(key)
-  ensures fl == Free ==> s == Internal(FlagsField(key, Free))
-  ensures fl == Back ==> s == Internal(FlagsField(key, Free))
-  ensures fl == Write ==> s == Internal(FlagsField(key, Write))
+  ensures fl == Back || fl == Back_PendingWrite
+  ensures fl == Back ==> s == Internal(FlagsField(key, Available))
   ensures fl == Back_PendingWrite ==> s == Internal(FlagsField(key, Write))
 
   method transform_TakeWrite(key: Key, linear s: R)
   returns (linear t: R, linear u: R)
-  requires s == Internal(FlagsField(key, Free))
+  requires s == Internal(FlagsField(key, Available))
   ensures t == Internal(FlagsField(key, Write))
   ensures u == Internal(WritePendingAwaitBack(key))
 
@@ -325,7 +325,7 @@ module RWLock refines ResourceBuilderSpec {
 
   method transform_TakeWriteFinishBack(key: Key, fl: Flag, linear s1: R, linear s2: R)
   returns (linear t1: R, linear t2: R)
-  requires fl == Write || fl == Free
+  requires fl == Write || fl == Available
   requires s1 == Internal(FlagsField(key, fl))
   requires s2 == Internal(WritePendingAwaitBack(key))
   ensures t1 == Internal(FlagsField(key, fl))

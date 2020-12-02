@@ -16,6 +16,7 @@ module AtomicStatusImpl {
   const flag_back : uint8 := 1;
   const flag_write : uint8 := 2;
   const flag_accessed : uint8 := 4;
+  const flag_unmapped : uint8 := 8;
 
   const flag_back_write : uint8 := 3;
   const flag_back_accessed : uint8 := 5;
@@ -29,11 +30,12 @@ module AtomicStatusImpl {
     && g.Internal?
     && g.q.FlagsField?
     && g.q.key == key
-    && (g.q.flags == RWLock.Free ==> v == flag_empty || v == flag_accessed)
+    && (g.q.flags == RWLock.Available ==> v == flag_empty || v == flag_accessed)
     && (g.q.flags == RWLock.Back ==> v == flag_back || v == flag_back_accessed)
     && (g.q.flags == RWLock.Write ==> v == flag_write || v == flag_write_accessed)
     && (g.q.flags == RWLock.Back_PendingWrite ==>
         v == flag_back_write || v == flag_back_write_accessed)
+    && (g.q.flags == RWLock.Unmapped ==> v == flag_unmapped)
   }
 
   predicate atomic_status_inv(a: AtomicStatus, key: RWLock.Key)
@@ -186,7 +188,7 @@ module AtomicStatusImpl {
     linear var new_g;
     ///// Transfer:
     var fl := old_g.q.flags;
-    if fl == RWLock.Free {
+    if fl == RWLock.Available {
       linear var r;
       new_g, r := RWLock.transform_TakeWrite(key, old_g);
       m := give(r);
@@ -227,7 +229,7 @@ module AtomicStatusImpl {
     linear var new_g;
     ///// Transfer:
     var fl := old_g.q.flags;
-    if fl == RWLock.Free
+    if fl == RWLock.Available
         || fl == RWLock.Write
     {
       new_g, m' := RWLock.transform_TakeWriteFinishBack(key, fl, old_g, m);
