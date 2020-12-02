@@ -389,9 +389,9 @@ module CommitterCommitModel {
   requires io.IOInit?
   requires CommitterModel.Inv(cm)
   requires cm.status == StatusReady
+  requires cm.frozenLoc.Some?
   requires cm.commitStatus.CommitNone?
   requires cm.outstandingJournalWrites == {}
-  requires cm.frozenLoc.Some?
   requires writeOutSuperblockAdvanceLocation(cm, io, cm', io')
   requires JournalistModel.I(cm.journalist).inMemoryJournalFrozen == []
   ensures CommitterModel.WF(cm')

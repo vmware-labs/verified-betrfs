@@ -730,18 +730,28 @@ module CommitterImpl {
           JC.WriteBackSuperblockReq_AdvanceLog_Step);
     }
 
-/*
     linear inout method writeOutSuperblockAdvanceLocation(io: DiskIOHandler)
     requires io.initialized()
     requires old_self.Inv()
     requires old_self.status == StatusReady
     requires old_self.frozenLoc.Some?
+
+    // [yizhou7] additional preconditions
+    requires old_self.commitStatus.CommitNone?
+    requires old_self.outstandingJournalWrites == {}
+    requires old_self.journalist.I().inMemoryJournalFrozen == []
+
     modifies io
-    ensures self.W()
-    ensures CommitterCommitModel.writeOutSuperblockAdvanceLocation(
-        old_self.I(), old(IIO(io)), self.I(), IIO(io))
+    ensures self.WF()
+    ensures var dop := diskOp(IIO(io));
+        && ValidDiskOp(dop)
+        && IDiskOp(dop).bdop.NoDiskOp?
+        && JC.Next(
+          old_self.I(),
+          self.I(),
+          IDiskOp(dop).jdop,
+          JournalInternalOp))
     {
-      CommitterCommitModel.reveal_writeOutSuperblockAdvanceLocation();
       var writtenJournalLen := self.journalist.getWrittenJournalLen();
       var newSuperblock := SectorType.Superblock(
         JC.IncrementSuperblockCounter(self.superblock.counter),
@@ -758,8 +768,27 @@ module CommitterImpl {
       inout self.newSuperblock := Some(newSuperblock);
       inout self.superblockWrite := Some(id);
       inout self.commitStatus := JC.CommitAdvanceLocation;
+
+      reveal IOModel.RequestWrite();
+
+      IOModel.RequestWriteCorrect(IIO(old(io)), loc, StateModel.SectorSuperblock(newSuperblock), id, IIO(io));
+
+      assert ValidDiskOp(diskOp(IIO(io)));
+
+      assert JC.WriteBackSuperblockReq_AdvanceLocation(
+          old_self.I(),
+          self.I(),
+          IDiskOp(diskOp(IIO(io))).jdop,
+          JournalInternalOp);
+      assert JC.NextStep(
+          old_self.I(),
+          self.I(),
+          IDiskOp(diskOp(IIO(io))).jdop,
+          JournalInternalOp,
+          JC.WriteBackSuperblockReq_AdvanceLocation_Step);
     }
 
+/*
     linear inout method freeze()
     requires old_self.WF()
     ensures self.W()
