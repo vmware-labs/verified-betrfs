@@ -750,7 +750,7 @@ module CommitterImpl {
           old_self.I(),
           self.I(),
           IDiskOp(dop).jdop,
-          JournalInternalOp))
+          JournalInternalOp)
     {
       var writtenJournalLen := self.journalist.getWrittenJournalLen();
       var newSuperblock := SectorType.Superblock(
@@ -788,21 +788,45 @@ module CommitterImpl {
           JC.WriteBackSuperblockReq_AdvanceLocation_Step);
     }
 
-/*
     linear inout method freeze()
     requires old_self.WF()
-    ensures self.W()
-    ensures self.I() == CommitterCommitModel.freeze(old_self.I())
+
+    // [yizhou7] additional preconditions
+    requires old_self.superblockWrite.None?
+    requires old_self.status == StatusReady
+    requires old_self.frozenLoc != Some(old_self.superblock.indirectionTableLoc)
+    requires old_self.journalist.I().replayJournal == []
+
+    ensures self.WF()
+    ensures JC.Next(
+        old_self.I(),
+        self.I(),
+        JournalDisk.NoDiskOp,
+        FreezeOp)
     {
-      CommitterCommitModel.reveal_freeze();
       var writtenJournalLen := self.journalist.getWrittenJournalLen();
       inout self.journalist.freeze();
       inout self.frozenLoc := None;
       inout self.frozenJournalPosition := writtenJournalLen;
       inout self.isFrozen := true;
       SyncReqs3to2(inout self.syncReqs);
+
+      CommitterCommitModel.SyncReqs3to2Correct(old_self.syncReqs);
+
+      assert JC.Freeze(
+          old_self.I(),
+          self.I(),
+          JournalDisk.NoDiskOp,
+          FreezeOp);
+      assert JC.NextStep(
+          old_self.I(),
+          self.I(),
+          JournalDisk.NoDiskOp,
+          FreezeOp,
+          JC.FreezeStep);
     }
 
+/*
     linear inout method receiveFrozenLoc(loc: Location)
     requires old_self.W()
     ensures self.W()
