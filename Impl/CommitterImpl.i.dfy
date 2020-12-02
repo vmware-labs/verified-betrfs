@@ -856,36 +856,53 @@ module CommitterImpl {
         JC.ReceiveFrozenLocStep);
     }
 
-/*
     // == pushSync ==
-    shared method freeId() returns (id: uint64)
+    shared function method freeId() : (id: uint64)
     requires syncReqs.Inv()
-    ensures id == CommitterCommitModel.freeId(syncReqs)
+    // ensures id == CommitterCommitModel.freeId(syncReqs)
     {
-      CommitterCommitModel.reveal_freeId();
+      // CommitterCommitModel.reveal_freeId();
       var maxId := LinearMutableMap.MaxKey(this.syncReqs);
-      if maxId == 0xffff_ffff_ffff_ffff {
-        return 0;
-      } else {
-        return maxId + 1;
-      }
+      if maxId == 0xffff_ffff_ffff_ffff then
+        0
+      else
+        maxId + 1
     }
 
     linear inout method pushSync()
     returns (id: uint64)
     requires old_self.Inv()
-    ensures self.W()
-    ensures (self.I(), id) == CommitterCommitModel.pushSync(
-        old_self.I())
+    ensures self.WF()
+    ensures JC.Next(
+        old_self.I(),
+        self.I(),
+        JournalDisk.NoDiskOp,
+        if id == 0 then JournalInternalOp else PushSyncOp(id as int))
     {
       id := self.freeId();
       if id != 0 && self.syncReqs.count < 0x2000_0000_0000_0000 {
         LinearMutableMap.InOutInsert(inout self.syncReqs, id, JC.State3);
+
+        assert JC.PushSyncReq(
+          old_self.I(),
+          self.I(),
+          JournalDisk.NoDiskOp,
+          PushSyncOp(id as int), id);
+        assert JC.NextStep(
+          old_self.I(),
+          self.I(),
+          JournalDisk.NoDiskOp,
+          PushSyncOp(id as int),
+          JC.PushSyncReqStep(id));
       } else {
         id := 0;
+
+        assert JC.NoOp(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp);
+        assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp, JC.NoOpStep);
       }
     }
 
+/*
     // == popSync ==
     linear inout method popSync(id: uint64)
     requires old_self.Inv()
