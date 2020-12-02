@@ -31,7 +31,6 @@ module IOModel {
   import JournalDisk
   import BlockJournalDisk
   import UI
-
   // Misc utilities
 
   predicate stepsBetree(s: BBC.Variables, s': BBC.Variables, vop: VOp, step: BT.BetreeStep)

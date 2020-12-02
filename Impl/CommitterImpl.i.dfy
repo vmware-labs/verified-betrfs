@@ -40,6 +40,7 @@ module CommitterImpl {
   import opened ViewOp
   import opened DiskOpModel
   import opened JournalBytes
+  import IOModel
 
   // TODO we could have these do the modification in-place instead.
 
@@ -673,16 +674,27 @@ module CommitterImpl {
           JournalInternalOp,
           JC.WriteBackJournalReqStep(jr));
     }
-/*
 
     linear inout method writeOutSuperblockAdvanceLog(io: DiskIOHandler)
     requires io.initialized()
     requires old_self.Inv()
     requires old_self.status == StatusReady
+
+    // [yizhou7] additional preconditions
+    requires old_self.commitStatus.CommitNone?
+    requires old_self.outstandingJournalWrites == {}
+    requires old_self.journalist.I().inMemoryJournalFrozen == []
+
     modifies io
-    ensures self.W()
-    ensures CommitterCommitModel.writeOutSuperblockAdvanceLog(
-        old_self.I(), old(IIO(io)), self.I(), IIO(io))
+    ensures self.WF()
+    ensures var dop := diskOp(IIO(io));
+        && ValidDiskOp(dop)
+        && IDiskOp(dop).bdop.NoDiskOp?
+        && JC.Next(
+          old_self.I(),
+          self.I(),
+          IDiskOp(dop).jdop,
+          JournalInternalOp)
     {
       var writtenJournalLen := self.journalist.getWrittenJournalLen();
       var newSuperblock := SectorType.Superblock(
@@ -698,8 +710,27 @@ module CommitterImpl {
       inout self.newSuperblock := Some(newSuperblock);
       inout self.superblockWrite := Some(id);
       inout self.commitStatus := JC.CommitAdvanceLog;
+
+      reveal IOModel.RequestWrite();
+
+      IOModel.RequestWriteCorrect(IIO(old(io)), loc, StateModel.SectorSuperblock(newSuperblock), id, IIO(io));
+
+      assert ValidDiskOp(diskOp(IIO(io)));
+
+      assert JC.WriteBackSuperblockReq_AdvanceLog(
+          old_self.I(),
+          self.I(),
+          IDiskOp(diskOp(IIO(io))).jdop,
+          JournalInternalOp);
+      assert JC.NextStep(
+          old_self.I(),
+          self.I(),
+          IDiskOp(diskOp(IIO(io))).jdop,
+          JournalInternalOp,
+          JC.WriteBackSuperblockReq_AdvanceLog_Step);
     }
 
+/*
     linear inout method writeOutSuperblockAdvanceLocation(io: DiskIOHandler)
     requires io.initialized()
     requires old_self.Inv()
