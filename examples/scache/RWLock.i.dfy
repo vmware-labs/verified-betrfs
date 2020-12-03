@@ -448,6 +448,20 @@ module RWLock refines ResourceBuilderSpec {
   requires s2 == Internal(FlagsField(key, fl))
   ensures t1 == Internal(SharedLockPending2(key, t))
 
+  method transform_SharedCheckReading(
+      key: Key, t: int, fl: Flag,
+      linear s1: R, shared s2: R
+  )
+  returns (
+      linear t1: R,
+      /*readonly*/ linear handle: Handle
+  )
+  requires fl != Reading && fl != Reading_ExcLock
+  requires s1 == Internal(SharedLockPending2(key, t))
+  requires s2 == Internal(FlagsField(key, fl))
+  ensures t1 == Internal(SharedLockObtained(key, t))
+  ensures handle.is_handle(key)
+
   method possible_flags_SharedLockPending2(key: Key, t: int, fl: Flag,
       shared r: R, shared f: R)
   requires r == Internal(SharedLockPending2(key, t))

@@ -108,6 +108,7 @@ module CacheImpl {
   requires Inv(c)
   requires localState.WF()
   requires 0 <= cache_idx < CACHE_SIZE
+  decreases *
   {
     // 1. check if writelocked
 
@@ -142,11 +143,41 @@ module CacheImpl {
             c.key(cache_idx), localState.t, r);
         }
 
-        AtomicStatusImpl.unsafe_dispose(r);
-
+        // This is the ideal order:
+        //
         // 5. check the disk_idx is correct
         //        otherwise, dec and abort
         // 6. if LOADING, then block until it's done
+        //
+        // but it's also a little annoying so we do it in reverse.
+
+        // Wait for loading to be done:
+
+        linear var handle_maybe: maybe<RWLock.Handle> := empty();
+        var is_done_reading := false;
+        while !is_done_reading
+        invariant !is_done_reading ==>
+          && !has(handle_maybe)
+          && r == RWLock.Internal(RWLock.SharedLockPending2(
+              c.key(cache_idx), localState.t))
+        invariant is_done_reading ==>
+          && has(handle_maybe)
+          && read(handle_maybe).is_handle(c.key(cache_idx))
+          && r == RWLock.Internal(RWLock.SharedLockObtained(
+              c.key(cache_idx), localState.t))
+        decreases *
+        {
+          var _ := discard(handle_maybe);
+          is_done_reading, r, handle_maybe := is_reading(
+              c.status[cache_idx],
+              c.key(cache_idx),
+              localState.t,
+              r);
+        }
+
+        AtomicStatusImpl.unsafe_dispose(r);
+        AtomicStatusImpl.unsafe_dispose(handle_maybe);
+
       }
     }
   }

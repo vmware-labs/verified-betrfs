@@ -601,4 +601,54 @@ module AtomicStatusImpl {
     unsafe_dispose(new_g);
     ///// End jank
   }
+
+  method is_reading(a: AtomicStatus,
+      key: RWLock.Key, t: int,
+      linear r: RWLock.R)
+  returns (
+    success: bool,
+    linear r': RWLock.R,
+    /*readonly*/ linear handle: maybe<RWLock.Handle>
+  )
+  requires atomic_status_inv(a, key)
+  requires r == RWLock.Internal(RWLock.SharedLockPending2(key, t))
+  ensures !success ==> r == r'
+  ensures !success ==> handle == empty()
+  ensures success ==>
+      && r' == RWLock.Internal(RWLock.SharedLockObtained(key, t))
+      && has(handle)
+      && read(handle).is_handle(key)
+  {
+    var f := atomic_read(a);
+
+    ///// Begin jank
+    ///// Setup:
+    var old_v: uint8;
+    var new_v: uint8;
+    linear var old_g: G := unsafe_obtain();
+    assume new_v == old_v;
+    assume f == old_v;
+    assume atomic_inv(a, old_v, old_g);
+    linear var new_g;
+    ///// Transfer:
+    var fl := old_g.rwlock.q.flags;
+    if fl != RWLock.Reading && fl != RWLock.Reading_ExcLock {
+      linear var hand;
+      r', hand := RWLock.transform_SharedCheckReading(
+          key, t, old_g.rwlock.q.flags,
+          r, old_g.rwlock);
+      new_g := old_g;
+      handle := give(hand);
+    } else {
+      r' := r;
+      new_g := old_g;
+      handle := empty();
+    }
+    ///// Teardown:
+    assert atomic_inv(a, new_v, new_g);
+    unsafe_dispose(new_g);
+    ///// End jank
+
+    success := bit_and(f, flag_reading) == 0;
+  }
 }
