@@ -340,11 +340,7 @@ module CommitterImpl {
     requires old_self.superblock2.SuperblockSuccess?
 
     ensures self.Inv()
-    ensures JC.Next(
-        old_self.I(),
-        self.I(),
-        JournalDisk.NoDiskOp,
-        SendPersistentLocOp(self.superblock.indirectionTableLoc))
+    ensures JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, SendPersistentLocOp(self.superblock.indirectionTableLoc))
     {
       var idx := if JC.increments1(
           self.superblock1.value.counter, self.superblock2.value.counter)
@@ -690,11 +686,7 @@ module CommitterImpl {
     ensures var dop := diskOp(IIO(io));
         && ValidDiskOp(dop)
         && IDiskOp(dop).bdop.NoDiskOp?
-        && JC.Next(
-          old_self.I(),
-          self.I(),
-          IDiskOp(dop).jdop,
-          JournalInternalOp)
+        && JC.Next(old_self.I(), self.I(), IDiskOp(dop).jdop, JournalInternalOp)
     {
       var writtenJournalLen := self.journalist.getWrittenJournalLen();
       var newSuperblock := SectorType.Superblock(
@@ -717,17 +709,8 @@ module CommitterImpl {
 
       assert ValidDiskOp(diskOp(IIO(io)));
 
-      assert JC.WriteBackSuperblockReq_AdvanceLog(
-          old_self.I(),
-          self.I(),
-          IDiskOp(diskOp(IIO(io))).jdop,
-          JournalInternalOp);
-      assert JC.NextStep(
-          old_self.I(),
-          self.I(),
-          IDiskOp(diskOp(IIO(io))).jdop,
-          JournalInternalOp,
-          JC.WriteBackSuperblockReq_AdvanceLog_Step);
+      assert JC.WriteBackSuperblockReq_AdvanceLog(old_self.I(), self.I(), IDiskOp(diskOp(IIO(io))).jdop, JournalInternalOp);
+      assert JC.NextStep(old_self.I(), self.I(), IDiskOp(diskOp(IIO(io))).jdop, JournalInternalOp, JC.WriteBackSuperblockReq_AdvanceLog_Step);
     }
 
     linear inout method writeOutSuperblockAdvanceLocation(io: DiskIOHandler)
@@ -775,17 +758,8 @@ module CommitterImpl {
 
       assert ValidDiskOp(diskOp(IIO(io)));
 
-      assert JC.WriteBackSuperblockReq_AdvanceLocation(
-          old_self.I(),
-          self.I(),
-          IDiskOp(diskOp(IIO(io))).jdop,
-          JournalInternalOp);
-      assert JC.NextStep(
-          old_self.I(),
-          self.I(),
-          IDiskOp(diskOp(IIO(io))).jdop,
-          JournalInternalOp,
-          JC.WriteBackSuperblockReq_AdvanceLocation_Step);
+      assert JC.WriteBackSuperblockReq_AdvanceLocation(old_self.I(), self.I(), IDiskOp(diskOp(IIO(io))).jdop, JournalInternalOp);
+      assert JC.NextStep(old_self.I(), self.I(), IDiskOp(diskOp(IIO(io))).jdop, JournalInternalOp, JC.WriteBackSuperblockReq_AdvanceLocation_Step);
     }
 
     linear inout method freeze()
@@ -813,17 +787,8 @@ module CommitterImpl {
 
       CommitterCommitModel.SyncReqs3to2Correct(old_self.syncReqs);
 
-      assert JC.Freeze(
-          old_self.I(),
-          self.I(),
-          JournalDisk.NoDiskOp,
-          FreezeOp);
-      assert JC.NextStep(
-          old_self.I(),
-          self.I(),
-          JournalDisk.NoDiskOp,
-          FreezeOp,
-          JC.FreezeStep);
+      assert JC.Freeze(old_self.I(), self.I(), JournalDisk.NoDiskOp,FreezeOp);
+      assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, FreezeOp, JC.FreezeStep);
     }
 
     linear inout method receiveFrozenLoc(loc: Location)
@@ -843,17 +808,8 @@ module CommitterImpl {
     {
       inout self.frozenLoc := Some(loc);
 
-      assert JC.ReceiveFrozenLoc(
-        old_self.I(),
-        self.I(),
-        JournalDisk.NoDiskOp,
-        SendFrozenLocOp(loc));
-      assert JC.NextStep(
-        old_self.I(),
-        self.I(),
-        JournalDisk.NoDiskOp,
-        SendFrozenLocOp(loc),
-        JC.ReceiveFrozenLocStep);
+      assert JC.ReceiveFrozenLoc(old_self.I(), self.I(), JournalDisk.NoDiskOp, SendFrozenLocOp(loc));
+      assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, SendFrozenLocOp(loc), JC.ReceiveFrozenLocStep);
     }
 
     // == pushSync ==
@@ -883,17 +839,8 @@ module CommitterImpl {
       if id != 0 && self.syncReqs.count < 0x2000_0000_0000_0000 {
         LinearMutableMap.InOutInsert(inout self.syncReqs, id, JC.State3);
 
-        assert JC.PushSyncReq(
-          old_self.I(),
-          self.I(),
-          JournalDisk.NoDiskOp,
-          PushSyncOp(id as int), id);
-        assert JC.NextStep(
-          old_self.I(),
-          self.I(),
-          JournalDisk.NoDiskOp,
-          PushSyncOp(id as int),
-          JC.PushSyncReqStep(id));
+        assert JC.PushSyncReq(old_self.I(), self.I(), JournalDisk.NoDiskOp, PushSyncOp(id as int), id);
+        assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, PushSyncOp(id as int),JC.PushSyncReqStep(id));
       } else {
         id := 0;
 
@@ -918,17 +865,8 @@ module CommitterImpl {
         PopSyncOp(id as int))
     {
       LinearMutableMap.InOutRemove(inout self.syncReqs, id);
-      assert JC.PopSyncReq(
-        old_self.I(),
-        self.I(),
-        JournalDisk.NoDiskOp,
-        PopSyncOp(id as int), id);
-      assert JC.NextStep(
-        old_self.I(),
-        self.I(),
-        JournalDisk.NoDiskOp,
-        PopSyncOp(id as int),
-        JC.PopSyncReqStep(id));
+      assert JC.PopSyncReq(old_self.I(), self.I(), JournalDisk.NoDiskOp, PopSyncOp(id as int), id);
+      assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, PopSyncOp(id as int), JC.PopSyncReqStep(id));
     }
 
     // == AdvanceLog ==
