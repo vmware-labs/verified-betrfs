@@ -35,12 +35,21 @@ module AtomicSpec {
     ((a as bv8) & (b as bv8)) as uint8
   }
 
+  function method bit_xor(a: uint8, b: uint8): uint8 {
+    ((a as bv8) ^ (b as bv8)) as uint8
+  }
+
   method {:extern} fetch_or<G>(
       a: Atomic<uint8, G>,
       v: uint8) 
   returns (orig_value: uint8)
 
   method {:extern} fetch_and<G>(
+      a: Atomic<uint8, G>,
+      v: uint8) 
+  returns (orig_value: uint8)
+
+  method {:extern} fetch_xor<G>(
       a: Atomic<uint8, G>,
       v: uint8) 
   returns (orig_value: uint8)

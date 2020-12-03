@@ -19,6 +19,9 @@ module CacheResources refines ResourceSpec {
     | DiskReadTicket(addr: uint64)
     | DiskReadStub(addr: uint64, contents: seq<byte>)
 
+    | DiskWriteTicket(addr: uint64, contents: seq<byte>)
+    | DiskWriteStub(addr: uint64)
+
   method initiate_page_in(
       cache_idx: int,
       disk_idx: uint64,
@@ -58,4 +61,36 @@ module CacheResources refines ResourceSpec {
   requires s3.DiskReadStub? && s3.addr == disk_idx
   ensures t1 == CacheStatus(cache_idx, Clean)
   ensures t2 == s2.(data := s3.contents)
+
+  method initiate_writeback(
+      shared cache_entry: R,
+      linear status: R
+  )
+  returns (
+      linear status': R,
+      linear ticket: R
+  )
+  requires cache_entry.CacheEntry?
+  requires status == CacheStatus(cache_entry.cache_idx, Dirty)
+  ensures status' == CacheStatus(cache_entry.cache_idx, WriteBack)
+  ensures cache_entry.disk_idx_opt.Some?
+  ensures 0 <= cache_entry.disk_idx_opt.value < 0x1_0000_0000_0000_0000
+  ensures ticket == DiskWriteTicket(
+      cache_entry.disk_idx_opt.value as uint64,
+      cache_entry.data)
+
+  method finish_writeback(
+      shared cache_entry: R,
+      linear status: R,
+      linear stub: R
+  )
+  returns (
+      linear status': R
+  )
+  requires cache_entry.CacheEntry?
+  requires status == CacheStatus(cache_entry.cache_idx, WriteBack)
+  requires cache_entry.disk_idx_opt.Some?
+  requires 0 <= cache_entry.disk_idx_opt.value < 0x1_0000_0000_0000_0000
+  requires stub == DiskWriteStub(cache_entry.disk_idx_opt.value as uint64)
+  ensures status' == CacheStatus(cache_entry.cache_idx, Clean)
 }

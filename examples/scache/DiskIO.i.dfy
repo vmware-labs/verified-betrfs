@@ -16,9 +16,11 @@ module DiskIO {
   method disk_writeback_async(addr: uint64,
       ptr: Ptr,
       /*readonly*/ linear contents: Ptrs.ArrayDeref<byte>,
-      linear g: WritebackGhostState)
+      linear g: WritebackGhostState,
+      linear ticket: CacheResources.R)
   requires contents.ptr == ptr
   requires |contents.s| == 4096
+  requires ticket == CacheResources.DiskWriteTicket(addr, contents.s)
 
   method disk_read_sync(
       addr: uint64,

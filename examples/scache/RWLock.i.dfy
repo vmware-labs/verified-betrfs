@@ -327,6 +327,12 @@ module RWLock refines ResourceBuilderSpec {
   ensures u == Internal(WriteBackObtained(key))
   ensures v.is_handle(key)
 
+  method pre_ReleaseWriteBack(key: Key, fl: Flag,
+    shared t: R, shared u: R)
+  requires t == Internal(FlagsField(key, fl))
+  requires u == Internal(WriteBackObtained(key))
+  ensures fl == WriteBack || fl == WriteBack_PendingExcLock
+
   method transform_ReleaseWriteBack(key: Key, fl: Flag,
     linear t: R, linear u: R, /*readonly*/ linear v: Handle)
   returns (linear s: R)
@@ -378,6 +384,7 @@ module RWLock refines ResourceBuilderSpec {
   ensures t1 == Internal(FlagsField(key, Reading_ExcLock))
   ensures t2 == Internal(ReadingPending(key))
   ensures handle.is_handle(key)
+  ensures handle.idx.v == -1
 
   method transform_ReadingIncCount(key: Key, t: int, refcount: uint8,
       linear s1: R, linear s2: R)
@@ -396,6 +403,12 @@ module RWLock refines ResourceBuilderSpec {
   ensures fl == Reading_ExcLock
   ensures t1 == Internal(FlagsField(key, Reading))
   ensures t2 == Internal(ReadingObtained(key, t))
+
+  method pre_ReadingToShared(key: Key, t: int, fl: Flag,
+      shared s1: R, shared s2: R)
+  requires s1 == Internal(FlagsField(key, fl))
+  requires s2 == Internal(ReadingObtained(key, t))
+  ensures fl == Reading
 
   method transform_ReadingToShared(key: Key, t: int, fl: Flag,
       linear s1: R, linear s2: R, linear handle: Handle)
