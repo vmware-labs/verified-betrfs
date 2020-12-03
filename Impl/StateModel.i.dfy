@@ -84,7 +84,7 @@ module StateModel {
 
   datatype Variables = Variables(
     bc: BCVariables,
-    jc: JC.Variables)
+    jc: CommitterModel.CM)
 
   datatype Sector =
     | SectorNode(node: Node)
@@ -218,13 +218,13 @@ module StateModel {
   predicate WFVars(s: Variables)
   {
     && WFBCVars(s.bc)
-    // && CommitterModel.WF(s.jc)
+    && CommitterModel.WF(s.jc)
   }
 
   function IVars(vars: Variables) : BJC.Variables
   requires WFVars(vars)
   {
-    BJC.Variables(IBlockCache(vars.bc), vars.jc)
+    BJC.Variables(IBlockCache(vars.bc), CommitterModel.I(vars.jc))
   }
 
   function I(s: Variables) : BJC.Variables
@@ -243,7 +243,7 @@ module StateModel {
   {
     && WFVars(s)
     && BCInv(s.bc)
-    && JC.Inv(s.jc)
+    && CommitterModel.Inv(s.jc)
     && BJC.Inv(I(s))
   }
 }
