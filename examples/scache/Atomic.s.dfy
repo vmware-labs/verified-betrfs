@@ -63,4 +63,9 @@ module AtomicSpec {
       a: Atomic<uint8, G>,
       v: uint8)
   returns (orig_value: uint8)
+
+  method {:extern} fetch_sub_uint8<G>(
+      a: Atomic<uint8, G>,
+      v: uint8)
+  returns (orig_value: uint8)
 }

@@ -101,6 +101,56 @@ module CacheImpl {
     }
   }
 
+  method try_take_read_lock_on_cache_entry(
+      c: Cache, cache_idx: int,
+      shared localState: LocalState)
+  returns (success: bool)
+  requires Inv(c)
+  requires localState.WF()
+  requires 0 <= cache_idx < CACHE_SIZE
+  {
+    // 1. check if writelocked
+
+    var is_exc_locked := quicktest_is_exc_locked(c.status[cache_idx]);
+    if is_exc_locked {
+      success := false;
+    } else {
+      // 2. inc ref
+
+      linear var r := inc_refcount_for_shared(
+          c.read_refcounts[localState.t][cache_idx],
+          c.key(cache_idx), localState.t);
+
+      // 3. check not writelocked, not free
+      //        otherwise, dec and abort
+
+      var is_accessed: bool;
+      success, is_accessed, r := is_exc_locked_or_free(
+          c.status[cache_idx],
+          c.key(cache_idx), localState.t,
+          r);
+
+      if !success {
+        dec_refcount_for_shared(
+            c.read_refcounts[localState.t][cache_idx],
+            c.key(cache_idx), localState.t,
+            r);
+      } else {
+        // 4. if !access, then mark accessed
+        if !is_accessed {
+          mark_accessed(c.status[cache_idx],
+            c.key(cache_idx), localState.t, r);
+        }
+
+        AtomicStatusImpl.unsafe_dispose(r);
+
+        // 5. check the disk_idx is correct
+        //        otherwise, dec and abort
+        // 6. if LOADING, then block until it's done
+      }
+    }
+  }
+
   /*method take_write_lock_on_cache_entry(c: Cache, cache_idx: int)
   returns (linear r: RWLock.R, linear handle: RWLock.Handle)
   requires Inv(c)
@@ -395,11 +445,10 @@ module CacheImpl {
         }
       }
     } else {
-      // TODO
       success := false;
       handle_out := empty();
-
-      /*linear var r, handle := take_write_lock_on_cache_entry(c, cache_idx as int);
+      /*linear var r, handle := try_take_read_lock_on_cache_entry(
+          c, cache_idx as int, localState);
       var this_disk_idx := ptr_read(
           c.disk_idx_of_entry[cache_idx],
           handle.idx);

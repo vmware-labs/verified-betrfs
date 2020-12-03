@@ -74,7 +74,8 @@ module RWLock refines ResourceBuilderSpec {
     // Standard flow for obtaining a 'shared' lock
 
     | SharedLockPending(key: Key, t: int)     // inc refcount
-    | SharedLockObtained(key: Key, t: int)    // check status bit
+    | SharedLockPending2(key: Key, t: int)    // !free & !writelocked
+    | SharedLockObtained(key: Key, t: int)    // !reading
 
     // Standard flow for obtaining an 'exclusive' lock
 
@@ -420,4 +421,36 @@ module RWLock refines ResourceBuilderSpec {
   ensures t2 == Internal(SharedLockObtained(key, t))
   ensures handle_out == handle
 
+  method transform_SharedIncCount(
+      key: Key, t: int, refcount: uint8,
+      linear s1: R)
+  returns (linear t1: R, linear t2: R)
+  requires s1 == Internal(SharedLockRefCount(key, t, refcount))
+  ensures refcount < 0xff
+  ensures t1 == Internal(SharedLockRefCount(key, t, refcount + 1))
+  ensures t2 == Internal(SharedLockPending(key, t))
+
+  method transform_SharedDecCount(
+      key: Key, t: int, refcount: uint8,
+      linear s1: R, linear s2: R)
+  returns (linear t1: R)
+  requires s1 == Internal(SharedLockRefCount(key, t, refcount))
+  requires s2 == Internal(SharedLockPending(key, t))
+  ensures refcount > 0
+  ensures t1 == Internal(SharedLockRefCount(key, t, refcount - 1))
+
+  method transform_SharedCheckExcFree(
+      key: Key, t: int, fl: Flag,
+      linear s1: R, shared s2: R)
+  returns (linear t1: R)
+  requires fl == Available || fl == WriteBack || fl == Reading
+  requires s1 == Internal(SharedLockPending(key, t))
+  requires s2 == Internal(FlagsField(key, fl))
+  ensures t1 == Internal(SharedLockPending2(key, t))
+
+  method possible_flags_SharedLockPending2(key: Key, t: int, fl: Flag,
+      shared r: R, shared f: R)
+  requires r == Internal(SharedLockPending2(key, t))
+  requires f == Internal(FlagsField(key, fl))
+  ensures fl != Unmapped
 }

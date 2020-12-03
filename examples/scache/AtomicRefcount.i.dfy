@@ -90,4 +90,65 @@ module AtomicRefcountImpl {
     unsafe_dispose(new_g);
     ///// End jank
   }
+
+  method inc_refcount_for_shared(a: AtomicRefcount,
+      key: RWLock.Key, t: int)
+  returns (linear m': RWLock.R)
+  requires atomic_refcount_inv(a, key, t)
+  ensures m' == RWLock.Internal(RWLock.SharedLockPending(key, t))
+  {
+    var orig_value := fetch_add_uint8(a, 1);
+
+    ///// Begin jank
+    ///// Setup:
+    var added: uint8 := 1;
+    var old_v: uint8;
+    var new_v: uint8;
+    linear var old_g: RWLock.R := unsafe_obtain();
+    assume new_v == (
+        if old_v as int + added as int < 0x100 then
+          (old_v as int + added as int) as uint8
+        else
+          (old_v as int + added as int - 0x100) as uint8
+    );
+    assume orig_value == old_v;
+    assume atomic_inv(a, old_v, old_g);
+    linear var new_g;
+    ///// Transfer:
+    new_g, m' := RWLock.transform_SharedIncCount(key, t, old_v, old_g);
+    ///// Teardown:
+    assert atomic_inv(a, new_v, new_g);
+    unsafe_dispose(new_g);
+    ///// End jank
+  }
+
+  method dec_refcount_for_shared(a: AtomicRefcount,
+      key: RWLock.Key, t: int, linear m: RWLock.R)
+  requires atomic_refcount_inv(a, key, t)
+  requires m == RWLock.Internal(RWLock.SharedLockPending(key, t))
+  {
+    var orig_value := fetch_sub_uint8(a, 1);
+
+    ///// Begin jank
+    ///// Setup:
+    var added: uint8 := 1;
+    var old_v: uint8;
+    var new_v: uint8;
+    linear var old_g: RWLock.R := unsafe_obtain();
+    assume new_v == (
+        if old_v as int - added as int >= 0 then
+          (old_v as int - added as int) as uint8
+        else
+          (old_v as int - added as int + 0x100) as uint8
+    );
+    assume orig_value == old_v;
+    assume atomic_inv(a, old_v, old_g);
+    linear var new_g;
+    ///// Transfer:
+    new_g := RWLock.transform_SharedDecCount(key, t, old_v, old_g, m);
+    ///// Teardown:
+    assert atomic_inv(a, new_v, new_g);
+    unsafe_dispose(new_g);
+    ///// End jank
+  }
 }

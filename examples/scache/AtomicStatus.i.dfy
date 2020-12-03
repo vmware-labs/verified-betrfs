@@ -28,19 +28,18 @@ module AtomicStatusImpl {
   const flag_reading_clean : uint8 := 48;
   const flag_writeback_exc : uint8 := 3;
   const flag_writeback_accessed : uint8 := 5;
-  const flag_write_accessed : uint8 := 6;
+  const flag_exc_accessed : uint8 := 6;
   const flag_writeback_exc_accessed : uint8 := 7;
   const flag_accessed_reading : uint8 := 20;
   const flag_exc_reading : uint8 := 18;
   const flag_exc_accessed_reading : uint8 := 22;
   const flag_writeback_exc_clean : uint8 := 35;
   const flag_writeback_accessed_clean : uint8 := 37;
-  const flag_write_accessed_clean : uint8 := 38;
+  const flag_exc_accessed_clean : uint8 := 38;
   const flag_writeback_exc_accessed_clean : uint8 := 39;
   const flag_accessed_reading_clean : uint8 := 52;
   const flag_exc_reading_clean : uint8 := 50;
   const flag_exc_accessed_reading_clean : uint8 := 54;
-  const flag_exc_accessed_clean : uint8 := 38;
 
   linear datatype G = G(
     linear rwlock: RWLock.R,
@@ -58,7 +57,10 @@ module AtomicStatusImpl {
     )*/
     && (!has(g.status) ==> (
         || v == flag_exc
+        || v == flag_exc_accessed
         || v == flag_exc_reading
+        || v == flag_exc_accessed_reading
+        || v == flag_reading_clean
         || v == flag_accessed_reading_clean
     ))
     && (has(g.status) ==> (
@@ -82,9 +84,9 @@ module AtomicStatusImpl {
     ))
     && (f.flags == RWLock.ExcLock ==> (
       || v == flag_exc
-      || v == flag_write_accessed
+      || v == flag_exc_accessed
       || v == flag_exc_clean
-      || v == flag_write_accessed_clean
+      || v == flag_exc_accessed_clean
     ))
     && (f.flags == RWLock.WriteBack_PendingExcLock ==> (
       || v == flag_writeback_exc
@@ -515,6 +517,84 @@ module AtomicStatusImpl {
         RWLock.transform_ReadingToShared(key, t, fl, rwlock, r, handle);
     new_g := G(rwlock, give(status));
 
+    assert state_inv(new_v, new_g, key);
+    ///// Teardown:
+    assert atomic_inv(a, new_v, new_g);
+    unsafe_dispose(new_g);
+    ///// End jank
+  }
+
+  method quicktest_is_exc_locked(a: AtomicStatus)
+  returns (is_exc_locked: bool)
+  {
+    var v := atomic_read(a);
+    return ((v as bv8) & (flag_exc as bv8)) as uint8 != 0;
+  }
+
+  method is_exc_locked_or_free(a: AtomicStatus,
+      key: RWLock.Key, t: int,
+      linear r: RWLock.R)
+  returns (success: bool, is_accessed: bool, linear r': RWLock.R)
+  requires atomic_status_inv(a, key)
+  requires r == RWLock.Internal(RWLock.SharedLockPending(key, t))
+  ensures !success ==> r == r'
+  ensures success ==> r' == 
+      RWLock.Internal(RWLock.SharedLockPending2(key, t))
+  {
+    var f := atomic_read(a);
+
+    ///// Begin jank
+    ///// Setup:
+    var old_v: uint8;
+    var new_v: uint8;
+    linear var old_g: G := unsafe_obtain();
+    assume new_v == old_v;
+    assume f == old_v;
+    assume atomic_inv(a, old_v, old_g);
+    linear var new_g;
+    ///// Transfer:
+    var fl := old_g.rwlock.q.flags;
+    if fl == RWLock.Available || fl == RWLock.WriteBack
+        || fl == RWLock.Reading {
+      r' := RWLock.transform_SharedCheckExcFree(
+          key, t, old_g.rwlock.q.flags,
+          r, old_g.rwlock);
+      new_g := old_g;
+    } else {
+      r' := r;
+      new_g := old_g;
+    }
+    ///// Teardown:
+    assert atomic_inv(a, new_v, new_g);
+    unsafe_dispose(new_g);
+    ///// End jank
+
+    success := bit_and(f, bit_or(flag_exc, flag_unmapped)) == 0;
+    is_accessed := bit_and(f, flag_accessed) != 0;
+  }
+
+  method mark_accessed(a: AtomicStatus,
+      key: RWLock.Key, t: int,
+      shared r: RWLock.R)
+  requires atomic_status_inv(a, key)
+  requires r == RWLock.Internal(RWLock.SharedLockPending2(key, t))
+  {
+    var orig_value := fetch_or(a, flag_accessed);
+
+    ///// Begin jank
+    ///// Setup:
+    var v := flag_accessed;
+    var old_v: uint8;
+    var new_v: uint8;
+    linear var old_g: G := unsafe_obtain();
+    assume orig_value == old_v;
+    assume new_v == bit_or(old_v, v);
+    assume atomic_inv(a, old_v, old_g);
+    linear var new_g;
+    ///// Transfer:
+    RWLock.possible_flags_SharedLockPending2(key, t, old_g.rwlock.q.flags,
+        r, old_g.rwlock);
+    new_g := old_g;
     assert state_inv(new_v, new_g, key);
     ///// Teardown:
     assert atomic_inv(a, new_v, new_g);
