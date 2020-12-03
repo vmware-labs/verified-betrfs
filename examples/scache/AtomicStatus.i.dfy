@@ -10,6 +10,7 @@ module AtomicStatusImpl {
   import opened AtomicSpec
   import opened LinearMaybe
   import RWLock
+  import CacheResources
 
   const flag_zero : uint8 := 0;
 
@@ -27,21 +28,48 @@ module AtomicStatusImpl {
   const flag_exc_reading : uint8 := 18;
   const flag_exc_accessed_reading : uint8 := 22;
 
-  type AtomicStatus = Atomic<uint8, RWLock.R>
+  linear datatype G = G(
+    linear rwlock: RWLock.R,
+    linear status: maybe<CacheResources.R>
+  )
 
-  predicate state_inv(v: uint8, g: RWLock.R, key: RWLock.Key)
+  type AtomicStatus = Atomic<uint8, G>
+
+  predicate state_inv(v: uint8, g: G, key: RWLock.Key)
   {
-    && g.Internal?
-    && g.q.FlagsField?
-    && g.q.key == key
-    && (g.q.flags == RWLock.Available ==> v == flag_zero || v == flag_accessed)
-    && (g.q.flags == RWLock.WriteBack ==> v == flag_writeback || v == flag_writeback_accessed)
-    && (g.q.flags == RWLock.ExcLock ==> v == flag_exc || v == flag_write_accessed)
-    && (g.q.flags == RWLock.WriteBack_PendingExcLock ==>
+    && g.rwlock.Internal?
+    && flags_field_inv(v, g.rwlock.q, key)
+    && (!has(g.status) ==> (
+      v == flag_exc || v == flag_reading || v == flag_exc_reading
+        || v == flag_exc_accessed_reading
+    ))
+    && (has(g.status) ==> (
+      && status_inv(v, read(g.status), key)
+    ))
+  }
+
+  predicate flags_field_inv(v: uint8, f: RWLock.Q, key: RWLock.Key)
+  {
+    && f.FlagsField?
+    && f.key == key
+    && (f.flags == RWLock.Available ==> v == flag_zero || v == flag_accessed)
+    && (f.flags == RWLock.WriteBack ==> v == flag_writeback || v == flag_writeback_accessed)
+    && (f.flags == RWLock.ExcLock ==> v == flag_exc || v == flag_write_accessed)
+    && (f.flags == RWLock.WriteBack_PendingExcLock ==>
         v == flag_writeback_exc || v == flag_writeback_exc_accessed)
-    && (g.q.flags == RWLock.Unmapped ==> v == flag_unmapped)
-    && (g.q.flags == RWLock.Reading ==> v == flag_reading || v == flag_accessed_reading)
-    && (g.q.flags == RWLock.Reading_ExcLock ==> v == flag_exc_reading || v == flag_exc_accessed_reading)
+    && (f.flags == RWLock.Unmapped ==> v == flag_unmapped)
+    && (f.flags == RWLock.Reading ==> v == flag_reading || v == flag_accessed_reading)
+    && (f.flags == RWLock.Reading_ExcLock ==> v == flag_exc_reading || v == flag_exc_accessed_reading)
+  }
+  
+  predicate status_inv(v: uint8, f: CacheResources.R,
+      key: RWLock.Key)
+  {
+    && f.CacheStatus?
+    && f.cache_idx == key.cache_idx
+    && (f.status == CacheResources.Empty ==> (
+      v == flag_unmapped
+    ))
   }
 
   predicate atomic_status_inv(a: AtomicStatus, key: RWLock.Key)
@@ -78,7 +106,7 @@ module AtomicStatusImpl {
       var v2 := flag_writeback;
       var old_v: uint8;
       var new_v: uint8;
-      linear var old_g: RWLock.R := unsafe_obtain();
+      linear var old_g: G := unsafe_obtain();
       assume old_v == v1 ==> new_v == v2 && did_set;
       assume old_v != v1 ==> new_v == old_v && !did_set;
       assume atomic_inv(a, old_v, old_g);
@@ -86,7 +114,11 @@ module AtomicStatusImpl {
       ///// Transfer:
       if did_set {
         linear var res, handle;
-        new_g, res, handle := RWLock.transform_TakeWriteBack(key, old_g);
+        linear var G(rwlock, status) := old_g;
+
+        rwlock, res, handle := RWLock.transform_TakeWriteBack(
+            key, rwlock);
+        new_g := G(rwlock, status);
         handle_out := give(handle);
         m := give(res);
       } else {
@@ -113,7 +145,7 @@ module AtomicStatusImpl {
         var v2 := flag_writeback_accessed;
         var old_v: uint8;
         var new_v: uint8;
-        linear var old_g: RWLock.R := unsafe_obtain();
+        linear var old_g: G := unsafe_obtain();
         assume old_v == v1 ==> new_v == v2 && did_set;
         assume old_v != v1 ==> new_v == old_v && !did_set;
         assume atomic_inv(a, old_v, old_g);
@@ -124,7 +156,10 @@ module AtomicStatusImpl {
 
         if did_set {
           linear var res, handle;
-          new_g, res, handle := RWLock.transform_TakeWriteBack(key, old_g);
+          linear var G(rwlock, status) := old_g;
+          rwlock, res, handle := RWLock.transform_TakeWriteBack(
+              key, rwlock);
+          new_g := G(rwlock, status);
           handle_out := give(handle);
           m := give(res);
         } else {
@@ -157,14 +192,16 @@ module AtomicStatusImpl {
     var v := 0xff - flag_writeback;
     var old_v: uint8;
     var new_v: uint8;
-    linear var old_g: RWLock.R := unsafe_obtain();
+    linear var old_g: G := unsafe_obtain();
     assume orig_value == old_v;
     assume new_v == bit_and(old_v, v);
     assume atomic_inv(a, old_v, old_g);
     linear var new_g;
     ///// Transfer:
-    var fl := old_g.q.flags;
-    new_g := RWLock.transform_ReleaseWriteBack(key, fl, old_g, r, handle);
+    var fl := old_g.rwlock.q.flags;
+    linear var G(rwlock, status) := old_g;
+    rwlock := RWLock.transform_ReleaseWriteBack(key, fl, rwlock, r, handle);
+    new_g := G(rwlock, status);
 
     assert state_inv(new_v, new_g, key);
     ///// Teardown:
@@ -187,7 +224,7 @@ module AtomicStatusImpl {
     var v := flag_exc;
     var old_v: uint8;
     var new_v: uint8;
-    linear var old_g: RWLock.R := unsafe_obtain();
+    linear var old_g: G := unsafe_obtain();
     assume orig_value == old_v;
     assume new_v == bit_or(old_v, v);
     assume atomic_inv(a, old_v, old_g);
@@ -228,20 +265,22 @@ module AtomicStatusImpl {
     ///// Setup:
     var old_v: uint8;
     var new_v: uint8;
-    linear var old_g: RWLock.R := unsafe_obtain();
+    linear var old_g: G := unsafe_obtain();
     assume new_v == old_v;
     assume f == old_v;
     assume atomic_inv(a, old_v, old_g);
     linear var new_g;
     ///// Transfer:
-    var fl := old_g.q.flags;
+    var fl := old_g.rwlock.q.flags;
     if fl == RWLock.Available
         || fl == RWLock.ExcLock
         || fl == RWLock.Reading
         || fl == RWLock.Reading_ExcLock
         || fl == RWLock.Unmapped
     {
-      new_g, m' := RWLock.transform_TakeExcLockFinishWriteBack(key, fl, old_g, m);
+      linear var G(rwlock, status) := old_g;
+      rwlock, m' := RWLock.transform_TakeExcLockFinishWriteBack(key, fl, rwlock, m);
+      new_g := G(rwlock, status);
     } else {
       new_g := old_g;
       m' := m;
@@ -257,14 +296,20 @@ module AtomicStatusImpl {
   method try_alloc(a: AtomicStatus, key: RWLock.Key)
   returns (success: bool,
       linear m: maybe<RWLock.R>,
-      linear handle_maybe: maybe<RWLock.Handle>)
+      linear handle_maybe: maybe<RWLock.Handle>,
+      linear status: maybe<CacheResources.R>)
   requires atomic_status_inv(a, key)
   ensures !success ==> !has(m)
+  ensures !success ==> !has(handle_maybe)
+  ensures !success ==> !has(status)
   ensures success ==> has(m)
       && read(m) == RWLock.Internal(RWLock.ReadingPending(key))
-  ensures !success ==> !has(handle_maybe)
   ensures success ==> has(handle_maybe)
       && read(handle_maybe).is_handle(key)
+      && read(handle_maybe).idx.v == -1
+  ensures success ==> has(status)
+    && read(status) == CacheResources.CacheStatus(
+        key.cache_idx, CacheResources.Empty)
   {
     // check first to reduce contention
     var f := atomic_read(a);
@@ -272,6 +317,7 @@ module AtomicStatusImpl {
       success := false;
       m := empty();
       handle_maybe := empty();
+      status := empty();
     } else {
       var did_set := compare_and_set(a, flag_unmapped, flag_exc_reading);
 
@@ -281,7 +327,7 @@ module AtomicStatusImpl {
       var v2 := flag_exc_reading;
       var old_v: uint8;
       var new_v: uint8;
-      linear var old_g: RWLock.R := unsafe_obtain();
+      linear var old_g: G := unsafe_obtain();
       assume old_v == v1 ==> new_v == v2 && did_set;
       assume old_v != v1 ==> new_v == old_v && !did_set;
       assume atomic_inv(a, old_v, old_g);
@@ -289,12 +335,18 @@ module AtomicStatusImpl {
       ///// Transfer:
       if did_set {
         linear var res, handle;
-        new_g, res, handle := RWLock.transform_Alloc(key, old_g);
+        linear var G(rwlock, status0) := old_g;
+        rwlock, res, handle := RWLock.transform_Alloc(key, rwlock);
+        status := status0;
+        new_g := G(rwlock, empty());
         m := give(res);
         handle_maybe := give(handle);
+        assume has(status);
+        assume read(status).status == CacheResources.Empty; // TODO
       } else {
         m := empty();
         handle_maybe := empty();
+        status := empty();
         new_g := old_g;
       }
       assert state_inv(new_v, new_g, key);
@@ -321,13 +373,15 @@ module AtomicStatusImpl {
     var v := flag_accessed_reading;
     var old_v: uint8;
     var new_v: uint8;
-    linear var old_g: RWLock.R := unsafe_obtain();
+    linear var old_g: G := unsafe_obtain();
     assume new_v == v;
     assume atomic_inv(a, old_v, old_g);
     linear var new_g;
     ///// Transfer:
-    var fl := old_g.q.flags;
-    new_g, q := RWLock.transform_ObtainReading(key, t, fl, old_g, r);
+    var fl := old_g.rwlock.q.flags;
+    linear var G(rwlock, status) := old_g;
+    rwlock, q := RWLock.transform_ObtainReading(key, t, fl, rwlock, r);
+    new_g := G(rwlock, status);
     ///// Teardown:
     assert atomic_inv(a, new_v, new_g);
     unsafe_dispose(new_g);
@@ -335,11 +389,14 @@ module AtomicStatusImpl {
   }
 
   method load_phase_finish(a: AtomicStatus, key: RWLock.Key, t: int,
-      linear r: RWLock.R, linear handle: RWLock.Handle)
+      linear r: RWLock.R, linear handle: RWLock.Handle,
+      linear status: CacheResources.R)
   returns (linear q: RWLock.R, /*readonly*/ linear handle_out: RWLock.Handle)
   requires atomic_status_inv(a, key)
   requires r == RWLock.Internal(RWLock.ReadingObtained(key, t))
   requires handle.is_handle(key)
+  requires status == CacheResources.CacheStatus(key.cache_idx,
+      CacheResources.Clean)
   ensures q == RWLock.Internal(RWLock.SharedLockObtained(key, t))
   ensures handle_out == handle
   {
@@ -350,15 +407,18 @@ module AtomicStatusImpl {
     var v := 0xff - flag_reading;
     var old_v: uint8;
     var new_v: uint8;
-    linear var old_g: RWLock.R := unsafe_obtain();
+    linear var old_g: G := unsafe_obtain();
     assume orig_value == old_v;
     assume new_v == bit_and(old_v, v);
     assume atomic_inv(a, old_v, old_g);
     linear var new_g;
     ///// Transfer:
-    var fl := old_g.q.flags;
-    new_g, q, handle_out :=
-        RWLock.transform_ReadingToShared(key, t, fl, old_g, r, handle);
+    var fl := old_g.rwlock.q.flags;
+    linear var G(rwlock, status_empty) := old_g;
+    var _ := discard(status_empty);
+    rwlock, q, handle_out :=
+        RWLock.transform_ReadingToShared(key, t, fl, rwlock, r, handle);
+    new_g := G(rwlock, give(status));
 
     assert state_inv(new_v, new_g, key);
     ///// Teardown:

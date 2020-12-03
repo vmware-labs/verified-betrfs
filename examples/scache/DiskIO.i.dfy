@@ -19,4 +19,17 @@ module DiskIO {
       linear g: WritebackGhostState)
   requires contents.ptr == ptr
   requires |contents.s| == 4096
+
+  method disk_read_sync(
+      addr: uint64,
+      ptr: Ptr,
+      inout linear contents: ArrayDeref<byte>,
+      linear ticket: CacheResources.R)
+  returns (linear stub: CacheResources.R)
+  requires |old_contents.s| == 4096
+  requires ticket == CacheResources.DiskReadTicket(addr)
+  requires old_contents.ptr == ptr
+  ensures contents.ptr == ptr
+  ensures |contents.s| == 4096
+  ensures stub == CacheResources.DiskReadStub(addr, contents.s)
 }

@@ -15,6 +15,7 @@ module CacheImpl {
   import opened NativeTypes
   import opened Options
   import DiskIO
+  import CacheResources
 
   datatype Cache = Cache(
     data: seq<Ptr>,
@@ -232,18 +233,23 @@ module CacheImpl {
   returns (
     cache_idx: uint64,
     linear m: maybe<RWLock.R>,
-    linear handle_maybe: maybe<RWLock.Handle>
+    linear handle_maybe: maybe<RWLock.Handle>,
+    linear status_maybe: maybe<CacheResources.R>
   )
   requires Inv(c)
   requires old_localState.WF()
   ensures localState.WF()
   ensures cache_idx == 0xffff_ffff ==> !has(m)
   ensures cache_idx == 0xffff_ffff ==> !has(handle_maybe)
+  ensures cache_idx == 0xffff_ffff ==> !has(status_maybe)
   ensures cache_idx != 0xffff_ffff ==> 0 <= cache_idx as int < CACHE_SIZE
   ensures cache_idx != 0xffff_ffff ==> has(m)
       && read(m) == RWLock.Internal(RWLock.ReadingPending(c.key(cache_idx as int)))
   ensures cache_idx != 0xffff_ffff ==> has(handle_maybe)
       && read(handle_maybe).is_handle(c.key(cache_idx as int))
+      && read(handle_maybe).idx.v == -1
+  ensures cache_idx != 0xffff_ffff ==> has(status_maybe)
+      && read(status_maybe) == CacheResources.CacheStatus(cache_idx as int, CacheResources.Empty)
   decreases *
   {
     var chunk: uint64 := localState.cur_chunk;
@@ -251,34 +257,44 @@ module CacheImpl {
     var success := false;
     m := empty();
     handle_maybe := empty();
+    status_maybe := empty();
 
     while !success
     decreases *
     invariant localState.WF()
     invariant !success ==> !has(m)
     invariant !success ==> !has(handle_maybe)
+    invariant !success ==> !has(status_maybe)
     invariant success ==> 0 <= cache_idx as int < CACHE_SIZE
     invariant success ==> has(m)
         && read(m) == RWLock.Internal(RWLock.ReadingPending(c.key(cache_idx as int)))
     invariant success ==> has(handle_maybe)
         && read(handle_maybe).is_handle(c.key(cache_idx as int))
+        && read(handle_maybe).idx.v == -1
+    invariant success ==> has(status_maybe)
+        && read(status_maybe) == CacheResources.CacheStatus(cache_idx as int, CacheResources.Empty)
     {
       var i: uint64 := 0; 
       while i < CHUNK_SIZE as uint64 && !success
       invariant 0 <= i as int <= CHUNK_SIZE
       invariant !success ==> !has(m)
       invariant !success ==> !has(handle_maybe)
+      invariant !success ==> !has(status_maybe)
       invariant success ==> 0 <= cache_idx as int < CACHE_SIZE
       invariant success ==> has(m)
           && read(m) == RWLock.Internal(RWLock.ReadingPending(c.key(cache_idx as int)))
       invariant success ==> has(handle_maybe)
           && read(handle_maybe).is_handle(c.key(cache_idx as int))
+          && read(handle_maybe).idx.v == -1
+      invariant success ==> has(status_maybe)
+          && read(status_maybe) == CacheResources.CacheStatus(cache_idx as int, CacheResources.Empty)
       {
         cache_idx := chunk * CHUNK_SIZE as uint64 + i;
 
         var _ := discard(m);
         var _ := discard(handle_maybe);
-        success, m, handle_maybe := try_alloc(
+        var _ := discard(status_maybe);
+        success, m, handle_maybe, status_maybe := try_alloc(
             c.status[cache_idx],
             c.key(cache_idx as int));
 
@@ -307,36 +323,71 @@ module CacheImpl {
     var cache_idx := atomic_index_lookup_read(c.cache_idx_of_page[disk_idx], disk_idx);
 
     if cache_idx == NOT_MAPPED {
-      linear var m, handle_maybe;
-      cache_idx, m, handle_maybe := get_free_page(c, inout localState);
+      linear var m, handle_maybe, status_maybe;
+      cache_idx, m, handle_maybe, status_maybe := get_free_page(c, inout localState);
 
       if cache_idx == 0xffff_ffff {
         var _ := discard(m);
         var _ := discard(handle_maybe);
+        var _ := discard(status_maybe);
         success := false;
         handle_out := empty();
       } else {
         linear var r := unwrap(m);
-        linear var handle := unwrap(handle_maybe);
+        linear var handle: RWLock.Handle := unwrap(handle_maybe);
+        linear var status := unwrap(status_maybe);
+        linear var read_stub;
+        linear var read_ticket_maybe;
 
-        r := inc_refcount_for_reading(
-            c.read_refcounts[localState.t][cache_idx],
-            c.key(cache_idx as int), localState.t, r);
+        linear var CacheEntryHandle(cache_entry, data, idx) := handle;
 
-        r := clear_exc_bit_during_load_phase(
-            c.status[cache_idx],
-            c.key(cache_idx as int), localState.t, r);
-        
-        // TODO set the disk_idx lookup
-        // TODO do the read in
+        success, cache_entry, status, read_ticket_maybe := 
+            atomic_index_lookup_add_mapping(
+              c.cache_idx_of_page[disk_idx],
+              disk_idx as uint64,
+              cache_idx as uint64,
+              cache_entry,
+              status);
 
-        /*readonly*/ linear var readonly_handle;
-        r, readonly_handle := load_phase_finish(
-            c.status[cache_idx],
-            c.key(cache_idx as int), localState.t, r, handle);
+        if !success {
+          success := false;
+          handle_out := empty();
+          var _ := discard(read_ticket_maybe);
+          AtomicStatusImpl.unsafe_dispose(r);
+          AtomicStatusImpl.unsafe_dispose(status);
+          AtomicStatusImpl.unsafe_dispose(cache_entry);
+          AtomicStatusImpl.unsafe_dispose(data);
+          AtomicStatusImpl.unsafe_dispose(idx);
+        } else {
+          r := inc_refcount_for_reading(
+              c.read_refcounts[localState.t][cache_idx],
+              c.key(cache_idx as int), localState.t, r);
 
-        success := true;
-        handle_out := give(ReadonlyPageHandle(r, readonly_handle));
+          r := clear_exc_bit_during_load_phase(
+              c.status[cache_idx],
+              c.key(cache_idx as int), localState.t, r);
+
+          read_stub := DiskIO.disk_read_sync(
+              disk_idx as uint64, c.data[cache_idx], inout data, 
+              unwrap(read_ticket_maybe));
+
+          status, cache_entry := CacheResources.finish_page_in(
+              cache_idx as int, disk_idx as uint64,
+              status, cache_entry, read_stub);
+
+          ptr_write(c.disk_idx_of_entry[cache_idx],
+              inout idx, disk_idx);
+
+          /*readonly*/ linear var readonly_handle;
+          r, readonly_handle := load_phase_finish(
+              c.status[cache_idx],
+              c.key(cache_idx as int), localState.t, r,
+              RWLock.CacheEntryHandle(cache_entry, data, idx),
+              status);
+
+          success := true;
+          handle_out := give(ReadonlyPageHandle(r, readonly_handle));
+        }
       }
     } else {
       // TODO

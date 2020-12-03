@@ -72,15 +72,17 @@ module RWLock refines ResourceBuilderSpec {
     | FlagsField(key: Key, flags: Flag)
     | SharedLockRefCount(key: Key, t: int, refcount: uint8)
 
-    // Standard flow for obtained a 'shared' lock
+    // Standard flow for obtaining a 'shared' lock
 
-    | SharedLockPending(key: Key, t: int)
-    | SharedLockObtained(key: Key, t: int)
+    | SharedLockPending(key: Key, t: int)     // inc refcount
+    | SharedLockObtained(key: Key, t: int)    // check status bit
 
-    // Standard flow for obtained an 'exclusive' lock
+    // Standard flow for obtaining an 'exclusive' lock
 
-    | ExcLockPendingAwaitWriteBack(key: Key)
-    | ExcLockPending(key: Key, visited: int)
+    | ExcLockPendingAwaitWriteBack(key: Key)  // set ExcLock bit
+    | ExcLockPending(key: Key, visited: int)  // check WriteBack bit unset
+                                              //   and `visited` of the
+                                              //   refcounts
     | ExcLockObtained(key: Key)
 
     // Flow for the phase of reading in a page from disk.
@@ -89,15 +91,16 @@ module RWLock refines ResourceBuilderSpec {
     // exclusive access to the underlying memory and resources.
     // End-game for this flow is to become an ordinary 'shared' lock
 
-    | ReadingPending(key: Key)
-    | ReadingPendingCounted(key: Key, t: int)
-    | ReadingObtained(key: Key, t: int)
+    | ReadingPending(key: Key)                // set status bit to 
+                                              //   ExcLock | Reading
+    | ReadingPendingCounted(key: Key, t: int) // inc refcount
+    | ReadingObtained(key: Key, t: int)       // clear ExcLock bit
 
     // Flow for the phase of doing a write-back.
     // Special case in part because it can be initiated by any thread
     // and completed by any thread (not necessarily the same one).
     
-    | WriteBackObtained(key: Key)
+    | WriteBackObtained(key: Key)             // set WriteBack status bit
 
 
   /*datatype QStep =
@@ -390,6 +393,7 @@ module RWLock refines ResourceBuilderSpec {
   returns (linear t1: R, linear t2: R)
   requires s1 == Internal(FlagsField(key, fl))
   requires s2 == Internal(ReadingPendingCounted(key, t))
+  ensures fl == Reading_ExcLock
   ensures t1 == Internal(FlagsField(key, Reading))
   ensures t2 == Internal(ReadingObtained(key, t))
 
