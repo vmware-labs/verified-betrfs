@@ -59,9 +59,9 @@ module FullImpl {
     reads this, this.Repr
     {
       && ReprInv()
-      && this.bc.W()
+      && this.bc.WF()
       && this.jc.Has()
-      && this.jc.Read().W()
+      && this.jc.Read().WF()
     }
 
     function I() : StateModel.Variables
@@ -90,7 +90,7 @@ module FullImpl {
     ensures Inv()
     ensures fresh(Repr)
     ensures !bc.ready
-    ensures CommitterModel.I(jc.Read().I())
+    ensures jc.Read().I()
         == JC.LoadingSuperblock(
             None, None,
             JC.SuperblockUnfinished,
