@@ -45,8 +45,13 @@ module AtomicSpec {
       v: uint8) 
   returns (orig_value: uint8)
 
-  method {:extern} fetch_add<G>(
+  method {:extern} fetch_add_uint32<G>(
       a: Atomic<uint32, G>,
       v: uint32)
   returns (orig_value: uint32)
+
+  method {:extern} fetch_add_uint8<G>(
+      a: Atomic<uint8, G>,
+      v: uint8)
+  returns (orig_value: uint8)
 }

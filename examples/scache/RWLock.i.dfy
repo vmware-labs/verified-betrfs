@@ -376,6 +376,15 @@ module RWLock refines ResourceBuilderSpec {
   ensures t2 == Internal(ReadingPending(key))
   ensures handle.is_handle(key)
 
+  method transform_ReadingIncCount(key: Key, t: int, refcount: uint8,
+      linear s1: R, linear s2: R)
+  returns (linear t1: R, linear t2: R)
+  requires s1 == Internal(SharedLockRefCount(key, t, refcount))
+  requires s2 == Internal(ReadingPending(key))
+  ensures refcount < 0xff
+  ensures t1 == Internal(SharedLockRefCount(key, t, refcount + 1))
+  ensures t2 == Internal(ReadingPendingCounted(key, t))
+
   method transform_ObtainReading(key: Key, t: int, fl: Flag,
       linear s1: R, linear s2: R)
   returns (linear t1: R, linear t2: R)

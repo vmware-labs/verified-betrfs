@@ -36,6 +36,18 @@ module CacheImpl {
     }
   }
 
+  datatype LocalState = LocalState(
+    t: int,
+    cur_chunk: uint64
+  )
+  {
+    predicate WF()
+    {
+      && 0 <= this.cur_chunk as int < NUM_CHUNKS
+      && 0 <= t < NUM_THREADS
+    }
+  }
+
   predicate Inv(c: Cache)
   {
     && |c.data| == CACHE_SIZE
@@ -70,16 +82,29 @@ module CacheImpl {
     requires Inv(c)
     {
       && is_disk_page_handle(this.handle, c, disk_idx)
-      && w == RWLock.Internal(RWLock.WriteObtained(
+      && w == RWLock.Internal(RWLock.ExcLockObtained(
           c.key(this.handle.cache_entry.cache_idx)))
     }
   }
 
-  method take_write_lock_on_cache_entry(c: Cache, cache_idx: int)
+  linear datatype ReadonlyPageHandle = ReadonlyPageHandle(
+      linear w: RWLock.R,
+      /*readonly*/ linear handle: RWLock.Handle)
+  {
+    predicate is_page_handle(c: Cache, disk_idx: int, t: int)
+    requires Inv(c)
+    {
+      && is_disk_page_handle(this.handle, c, disk_idx)
+      && w == RWLock.Internal(RWLock.SharedLockObtained(
+          c.key(this.handle.cache_entry.cache_idx), t))
+    }
+  }
+
+  /*method take_write_lock_on_cache_entry(c: Cache, cache_idx: int)
   returns (linear r: RWLock.R, linear handle: RWLock.Handle)
   requires Inv(c)
   requires 0 <= cache_idx < CACHE_SIZE
-  ensures r == RWLock.Internal(RWLock.WriteObtained(c.key(cache_idx)))
+  ensures r == RWLock.Internal(RWLock.ExcLockObtained(c.key(cache_idx)))
   ensures handle.is_handle(c.key(cache_idx))
   decreases *
   {
@@ -88,7 +113,7 @@ module CacheImpl {
 
     while !success 
     invariant success ==> w_maybe == give(
-        RWLock.Internal(RWLock.WritePendingAwaitBack(c.key(cache_idx))))
+        RWLock.Internal(RWLock.ExcLockPendingAwaitWriteBack(c.key(cache_idx))))
     invariant !success ==> !has(w_maybe)
     decreases *
     {
@@ -104,9 +129,9 @@ module CacheImpl {
 
     while !success 
     invariant !success ==> w ==
-        RWLock.Internal(RWLock.WritePendingAwaitBack(c.key(cache_idx)))
+        RWLock.Internal(RWLock.ExcLockPendingAwaitWriteBack(c.key(cache_idx)))
     invariant success ==> w ==
-        RWLock.Internal(RWLock.WritePending(c.key(cache_idx), 0))
+        RWLock.Internal(RWLock.ExcLockPending(c.key(cache_idx), 0))
     decreases *
     {
       success, w := try_check_writeback_isnt_set(
@@ -117,15 +142,15 @@ module CacheImpl {
     while j < NUM_THREADS
     invariant 0 <= j <= NUM_THREADS
     invariant w == 
-        RWLock.Internal(RWLock.WritePending(c.key(cache_idx), j))
+        RWLock.Internal(RWLock.ExcLockPending(c.key(cache_idx), j))
     {
       success := false;
 
       while !success 
       invariant !success ==> w ==
-          RWLock.Internal(RWLock.WritePending(c.key(cache_idx), j))
+          RWLock.Internal(RWLock.ExcLockPending(c.key(cache_idx), j))
       invariant success ==> w ==
-          RWLock.Internal(RWLock.WritePending(c.key(cache_idx), j+1))
+          RWLock.Internal(RWLock.ExcLockPending(c.key(cache_idx), j+1))
       decreases *
       {
         success, w := is_refcount_zero(c.read_refcounts[j][cache_idx],
@@ -136,7 +161,7 @@ module CacheImpl {
     }
 
     r, handle := RWLock.transform_TakeWriteFinish(c.key(cache_idx), w);
-  }
+  }*/
 
   method release_write_lock_on_cache_entry(c: Cache, cache_idx: int,
       linear r: RWLock.R,
@@ -144,7 +169,7 @@ module CacheImpl {
   requires Inv(c)
   requires 0 <= cache_idx < CACHE_SIZE
   requires handle.is_handle(c.key(cache_idx))
-  requires r == RWLock.Internal(RWLock.WriteObtained(c.key(cache_idx)))
+  requires r == RWLock.Internal(RWLock.ExcLockObtained(c.key(cache_idx)))
 
   /*method take_write_lock_on_disk_entry(c: Cache, disk_idx: int)
   requires 0 
@@ -153,9 +178,11 @@ module CacheImpl {
   }*/
 
   method get_next_chunk(c: Cache)
+  returns (new_chunk: uint64)
   requires Inv(c)
+  ensures 0 <= new_chunk as int < NUM_CHUNKS
   {
-    var l: uint32 := fetch_add(c.global_clockpointer, 1);
+    var l: uint32 := fetch_add_uint32(c.global_clockpointer, 1);
     l := l % (NUM_CHUNKS as uint32);
     var ci: uint32 := (l + CLEAN_AHEAD as uint32) % (NUM_CHUNKS as uint32);
 
@@ -197,25 +224,126 @@ module CacheImpl {
 
       i := i + 1;
     }
+
+    new_chunk := l as uint64;
   }
 
-  method try_take_write_lock_disk_page(c: Cache, disk_idx: int)
-  returns (success: bool, linear handle_out: maybe<PageHandle>)
+  method get_free_page(c: Cache, linear inout localState: LocalState)
+  returns (
+    cache_idx: uint64,
+    linear m: maybe<RWLock.R>,
+    linear handle_maybe: maybe<RWLock.Handle>
+  )
+  requires Inv(c)
+  requires old_localState.WF()
+  ensures localState.WF()
+  ensures cache_idx == 0xffff_ffff ==> !has(m)
+  ensures cache_idx == 0xffff_ffff ==> !has(handle_maybe)
+  ensures cache_idx != 0xffff_ffff ==> 0 <= cache_idx as int < CACHE_SIZE
+  ensures cache_idx != 0xffff_ffff ==> has(m)
+      && read(m) == RWLock.Internal(RWLock.ReadingPending(c.key(cache_idx as int)))
+  ensures cache_idx != 0xffff_ffff ==> has(handle_maybe)
+      && read(handle_maybe).is_handle(c.key(cache_idx as int))
+  decreases *
+  {
+    var chunk: uint64 := localState.cur_chunk;
+
+    var success := false;
+    m := empty();
+    handle_maybe := empty();
+
+    while !success
+    decreases *
+    invariant localState.WF()
+    invariant !success ==> !has(m)
+    invariant !success ==> !has(handle_maybe)
+    invariant success ==> 0 <= cache_idx as int < CACHE_SIZE
+    invariant success ==> has(m)
+        && read(m) == RWLock.Internal(RWLock.ReadingPending(c.key(cache_idx as int)))
+    invariant success ==> has(handle_maybe)
+        && read(handle_maybe).is_handle(c.key(cache_idx as int))
+    {
+      var i: uint64 := 0; 
+      while i < CHUNK_SIZE as uint64 && !success
+      invariant 0 <= i as int <= CHUNK_SIZE
+      invariant !success ==> !has(m)
+      invariant !success ==> !has(handle_maybe)
+      invariant success ==> 0 <= cache_idx as int < CACHE_SIZE
+      invariant success ==> has(m)
+          && read(m) == RWLock.Internal(RWLock.ReadingPending(c.key(cache_idx as int)))
+      invariant success ==> has(handle_maybe)
+          && read(handle_maybe).is_handle(c.key(cache_idx as int))
+      {
+        cache_idx := chunk * CHUNK_SIZE as uint64 + i;
+
+        var _ := discard(m);
+        var _ := discard(handle_maybe);
+        success, m, handle_maybe := try_alloc(
+            c.status[cache_idx],
+            c.key(cache_idx as int));
+
+        i := i + 1;
+      }
+
+      if !success {
+        var new_chunk := get_next_chunk(c);
+        inout localState.cur_chunk := new_chunk;
+      }
+    }
+  }
+
+  method try_take_read_lock_disk_page(c: Cache, disk_idx: int,
+      linear inout localState: LocalState)
+  returns (success: bool, linear handle_out: maybe<ReadonlyPageHandle>)
   requires Inv(c)
   requires 0 <= disk_idx < NUM_DISK_PAGES
+  requires old_localState.WF()
   ensures !success ==> handle_out == empty()
   ensures success ==> has(handle_out) &&
-      peek(handle_out).is_page_handle(c, disk_idx)
+      peek(handle_out).is_page_handle(c, disk_idx, localState.t)
+  ensures old_localState.WF()
   decreases *
   {
     var cache_idx := atomic_index_lookup_read(c.cache_idx_of_page[disk_idx], disk_idx);
 
     if cache_idx == NOT_MAPPED {
+      linear var m, handle_maybe;
+      cache_idx, m, handle_maybe := get_free_page(c, inout localState);
+
+      if cache_idx == 0xffff_ffff {
+        var _ := discard(m);
+        var _ := discard(handle_maybe);
+        success := false;
+        handle_out := empty();
+      } else {
+        linear var r := unwrap(m);
+        linear var handle := unwrap(handle_maybe);
+
+        r := inc_refcount_for_reading(
+            c.read_refcounts[localState.t][cache_idx],
+            c.key(cache_idx as int), localState.t, r);
+
+        r := clear_exc_bit_during_load_phase(
+            c.status[cache_idx],
+            c.key(cache_idx as int), localState.t, r);
+        
+        // TODO set the disk_idx lookup
+        // TODO do the read in
+
+        /*readonly*/ linear var readonly_handle;
+        r, readonly_handle := load_phase_finish(
+            c.status[cache_idx],
+            c.key(cache_idx as int), localState.t, r, handle);
+
+        success := true;
+        handle_out := give(ReadonlyPageHandle(r, readonly_handle));
+      }
+    } else {
       // TODO
       success := false;
       handle_out := empty();
-    } else {
-      linear var r, handle := take_write_lock_on_cache_entry(c, cache_idx as int);
+
+      /*linear var r, handle := take_write_lock_on_cache_entry(c, cache_idx as int);
       var this_disk_idx := ptr_read(
           c.disk_idx_of_entry[cache_idx],
           handle.idx);
@@ -226,7 +354,7 @@ module CacheImpl {
         release_write_lock_on_cache_entry(c, cache_idx as int, r, handle);
         success := false;
         handle_out := empty();
-      }
+      }*/
     }
   }
 }

@@ -13,7 +13,7 @@ module AtomicRefcountImpl {
 
   predicate state_inv(v: uint8, g: RWLock.R, key: RWLock.Key, t: int)
   {
-    g == RWLock.Internal(RWLock.ReadRefCount(key, t, v))
+    g == RWLock.Internal(RWLock.SharedLockRefCount(key, t, v))
   }
 
   predicate atomic_refcount_inv(a: AtomicRefcount, key: RWLock.Key, t: int)
@@ -28,9 +28,9 @@ module AtomicRefcountImpl {
       linear m: RWLock.R)
   returns (is_zero: bool, linear m': RWLock.R)
   requires atomic_refcount_inv(a, key, t)
-  requires m == RWLock.Internal(RWLock.WritePending(key, t))
-  ensures is_zero ==> m' == RWLock.Internal(RWLock.WritePending(key, t + 1))
-  ensures !is_zero ==> m' == RWLock.Internal(RWLock.WritePending(key, t))
+  requires m == RWLock.Internal(RWLock.ExcLockPending(key, t))
+  ensures is_zero ==> m' == RWLock.Internal(RWLock.ExcLockPending(key, t + 1))
+  ensures !is_zero ==> m' == RWLock.Internal(RWLock.ExcLockPending(key, t))
   {
     var c := atomic_read(a);
 
@@ -45,7 +45,7 @@ module AtomicRefcountImpl {
     linear var new_g;
     ///// Transfer:
     if c == 0 {
-      new_g, m' := RWLock.transform_TakeWriteCheckReadZero(
+      new_g, m' := RWLock.transform_TakeExcLockCheckSharedLockZero(
           key, t, old_g, m);
     } else {
       m' := m;
@@ -57,5 +57,37 @@ module AtomicRefcountImpl {
     ///// End jank
 
     is_zero := (c == 0);
+  }
+
+  method inc_refcount_for_reading(a: AtomicRefcount, key: RWLock.Key, t: int,
+      linear m: RWLock.R)
+  returns (linear m': RWLock.R)
+  requires atomic_refcount_inv(a, key, t)
+  requires m == RWLock.Internal(RWLock.ReadingPending(key))
+  ensures m' == RWLock.Internal(RWLock.ReadingPendingCounted(key, t))
+  {
+    var orig_value := fetch_add_uint8(a, 1);
+
+    ///// Begin jank
+    ///// Setup:
+    var added: uint8 := 1;
+    var old_v: uint8;
+    var new_v: uint8;
+    linear var old_g: RWLock.R := unsafe_obtain();
+    assume new_v == (
+        if old_v as int + added as int < 0x100 then
+          (old_v as int + added as int) as uint8
+        else
+          (old_v as int + added as int - 0x100) as uint8
+    );
+    assume orig_value == old_v;
+    assume atomic_inv(a, old_v, old_g);
+    linear var new_g;
+    ///// Transfer:
+    new_g, m' := RWLock.transform_ReadingIncCount(key, t, old_v, old_g, m);
+    ///// Teardown:
+    assert atomic_inv(a, new_v, new_g);
+    unsafe_dispose(new_g);
+    ///// End jank
   }
 }

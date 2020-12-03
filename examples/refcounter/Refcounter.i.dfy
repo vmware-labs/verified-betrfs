@@ -4,7 +4,7 @@ include "Multisets.i.dfy"
 module Refcounter refines ResourceBuilderSpec {
   import opened Multisets
 
-  datatype Q = Refcount(v: V, count: int) 
+  datatype Q = Refcount(v: V, count: int)
 
   predicate from_exc(a: multiset<R>, b: multiset<R>, v: V)
   {
@@ -264,4 +264,40 @@ module Refcounter refines ResourceBuilderSpec {
       assert v == v1;
     }
   }
+
+/*
+  // EVERYTHING IS GHOST
+  method client_method(linear v: V)
+  returns (linear read_only_v: Reader<V>)
+  {
+    // m = {} , saved = {}
+
+    linear var exc := new_exc(v);
+
+    // m = {Exc(v)} , saved = {v}
+
+    // transform exc into Internal(Refcount(v, 0))
+    linear var rc := transform(exc, Refcount(v, 0));
+
+    // m = {Refcount(v, 0)} , saved = {v}
+
+    // transform Internal(Refcount(v, 0)) into
+    // Internal(Refcount(v, 1)) and Const(v)
+    linear var rc', readOnlyRef := transform(rc, ...)
+
+    // m = {Refcount(v, 1), Const(v)} , saved = {v}
+
+    transform(...)
+
+    // m = {Refcount(v, 0)} , saved = {v}
+
+    transform(...)
+
+    // m = {Exc(v)} , saved = {v}
+
+
+
+  }
+
+*/
 }
