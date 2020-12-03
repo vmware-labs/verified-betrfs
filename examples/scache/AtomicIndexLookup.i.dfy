@@ -54,13 +54,12 @@ module AtomicIndexLookupImpl {
   )
   requires atomic_index_lookup_inv(a, disk_idx as int)
   requires cache_entry.CacheEntry?
-  requires cache_entry.disk_idx_opt == None
   requires cache_entry.cache_idx == cache_idx as int
   requires status == CacheStatus(cache_idx as int, Empty)
   requires 0 <= cache_idx as int < CACHE_SIZE
   ensures !success ==> cache_entry' == cache_entry
   ensures success ==> cache_entry' ==
-      cache_entry.(disk_idx_opt := Some(disk_idx as int))
+      cache_entry.(disk_idx := disk_idx as int)
   ensures !success ==> status' == status
   ensures success ==> status' == CacheStatus(cache_idx as int, Reading)
   ensures success ==> has(read_ticket)

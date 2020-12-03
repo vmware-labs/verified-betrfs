@@ -11,7 +11,9 @@ module CacheResources refines ResourceSpec {
 
   datatype R =
     | DiskPageMap(disk_idx: int, cache_idx_opt: Option<int>)
-    | CacheEntry(disk_idx_opt: Option<int>,
+    | CacheEntry(
+        // this field is meaningless if status == Empty
+        disk_idx: int,
         cache_idx: int, data: seq<byte>)
 
     | CacheStatus(cache_idx: int, status: Status)
@@ -37,10 +39,9 @@ module CacheResources refines ResourceSpec {
   )
   requires s1 == CacheStatus(cache_idx, Empty)
   requires s2.CacheEntry? && s2.cache_idx == cache_idx
-      && s2.disk_idx_opt == None
   requires s3 == DiskPageMap(disk_idx as int, None)
   ensures t1 == CacheStatus(cache_idx, Reading)
-  ensures t2 == s2.(disk_idx_opt := Some(disk_idx as int))
+  ensures t2 == s2.(disk_idx := disk_idx as int)
   ensures t3 == DiskPageMap(disk_idx as int, Some(cache_idx))
   ensures t4 == DiskReadTicket(disk_idx)
 
@@ -56,7 +57,7 @@ module CacheResources refines ResourceSpec {
       linear t2: R
   )
   requires s1 == CacheStatus(cache_idx, Reading)
-  requires s2.CacheEntry? && s2.disk_idx_opt == Some(disk_idx as int)
+  requires s2.CacheEntry? && s2.disk_idx == disk_idx as int
       && s2.cache_idx == cache_idx
   requires s3.DiskReadStub? && s3.addr == disk_idx
   ensures t1 == CacheStatus(cache_idx, Clean)
@@ -73,10 +74,9 @@ module CacheResources refines ResourceSpec {
   requires cache_entry.CacheEntry?
   requires status == CacheStatus(cache_entry.cache_idx, Dirty)
   ensures status' == CacheStatus(cache_entry.cache_idx, WriteBack)
-  ensures cache_entry.disk_idx_opt.Some?
-  ensures 0 <= cache_entry.disk_idx_opt.value < 0x1_0000_0000_0000_0000
+  ensures 0 <= cache_entry.disk_idx < 0x1_0000_0000_0000_0000
   ensures ticket == DiskWriteTicket(
-      cache_entry.disk_idx_opt.value as uint64,
+      cache_entry.disk_idx as uint64,
       cache_entry.data)
 
   method finish_writeback(
@@ -89,8 +89,7 @@ module CacheResources refines ResourceSpec {
   )
   requires cache_entry.CacheEntry?
   requires status == CacheStatus(cache_entry.cache_idx, WriteBack)
-  requires cache_entry.disk_idx_opt.Some?
-  requires 0 <= cache_entry.disk_idx_opt.value < 0x1_0000_0000_0000_0000
-  requires stub == DiskWriteStub(cache_entry.disk_idx_opt.value as uint64)
+  requires 0 <= cache_entry.disk_idx < 0x1_0000_0000_0000_0000
+  requires stub == DiskWriteStub(cache_entry.disk_idx as uint64)
   ensures status' == CacheStatus(cache_entry.cache_idx, Clean)
 }

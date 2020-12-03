@@ -148,10 +148,14 @@ module AtomicStatusImpl {
   ensures !success ==> !has(disk_write_ticket)
   ensures success ==> has(m)
       && read(m) == RWLock.Internal(RWLock.WriteBackObtained(key))
-  ensures success ==> has(handle_out)
+  ensures success ==>
+      && has(handle_out)
+      && has(disk_write_ticket)
       && read(handle_out).is_handle(key)
-  ensures success ==> has(disk_write_ticket)
-      && read(handle_out).is_handle(key)
+      && read(disk_write_ticket)
+        == CacheResources.DiskWriteTicket(
+            read(handle_out).cache_entry.disk_idx as uint64,
+            read(handle_out).cache_entry.data)
   {
     var cur_flag := atomic_read(a);
     if !(cur_flag == flag_zero
@@ -261,11 +265,10 @@ module AtomicStatusImpl {
   requires atomic_status_inv(a, key)
   requires r == RWLock.Internal(RWLock.WriteBackObtained(key))
   requires handle.is_handle(key)
-  requires handle.cache_entry.disk_idx_opt.Some?
-  requires 0 <= handle.cache_entry.disk_idx_opt.value
+  requires 0 <= handle.cache_entry.disk_idx
              < 0x1_0000_0000_0000_0000
   requires stub == CacheResources.DiskWriteStub(
-      handle.cache_entry.disk_idx_opt.value as uint64)
+      handle.cache_entry.disk_idx as uint64)
   {
     // Unset WriteBack; set Clean
     var orig_value := fetch_xor(a, flag_writeback_clean);

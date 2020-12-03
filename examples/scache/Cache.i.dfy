@@ -70,7 +70,7 @@ module CacheImpl {
   requires Inv(c)
   {
     && handle.cache_entry.CacheEntry?
-    && handle.cache_entry.disk_idx_opt == Some(disk_idx)
+    && handle.cache_entry.disk_idx == disk_idx
     && 0 <= handle.cache_entry.cache_idx < CACHE_SIZE
     && handle.is_handle(c.key(handle.cache_entry.cache_idx))
   }
