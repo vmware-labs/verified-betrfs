@@ -1762,14 +1762,44 @@ module IndirectionTable {
     // 
     // ///// Dealloc stuff
 
-    // static function method FindDeallocable(shared me: IndirectionTable) : (ref: Option<BT.G.Reference>)
-    // requires Inv(me)
-    // requires IndirectionTableModel.TrackingGarbage(I(me))
-    // ensures ref == IndirectionTableModel.FindDeallocable(I(me))
-    // {
-    //   IndirectionTableModel.reveal_FindDeallocable();
-    //   USeq.FirstOpt(me.garbageQueue.value)
-    // }
+    predicate deallocable(ref: BT.G.Reference)
+    {
+      && ref in this.I().graph
+      && ref != BT.G.Root()
+      && (forall r | r in this.I().graph :: ref !in this.I().graph[r])
+    }
+
+    shared method FindDeallocable() returns (ref: Option<BT.G.Reference>)
+    requires this.Inv()
+    requires this.TrackingGarbage()
+    ensures ref.Some? ==> ref.value in this.I().graph
+    ensures ref.Some? ==> this.deallocable(ref.value)
+    ensures ref.None? ==> forall r | r in this.I().graph :: !this.deallocable(r)
+    {
+      ref := this.garbageQueue.value.FirstOpt();
+      if ref.None? {
+        forall r | r in this.I().graph ensures !this.deallocable(r)
+        {
+          assert this.t.contents[r].predCount != 0;
+          if r == BT.G.Root() {
+            assert !this.deallocable(r);
+          } else {
+            reveal_PredCounts();
+            var y : PredecessorEdge :| y in PredecessorSet(this.graph, r); // observe
+          }
+        }
+      } else {
+        reveal_PredCounts();
+        assert this.predCounts[ref.value] == |PredecessorSet(this.graph, ref.value)| + IsRoot(ref.value);
+        forall r | r in this.I().graph ensures ref.value !in this.I().graph[r]
+        {
+          if ref.value in this.I().graph[r] {
+            var i :| 0 <= i < |this.I().graph[r]| && this.I().graph[r][i] == ref.value;
+            assert PredecessorEdge(r, i) in PredecessorSet(this.graph, ref.value);
+          }
+        }
+      }
+    }
 
     // static function method GetSize(shared me: IndirectionTable) : (size: uint64)
     // requires Inv(me)
@@ -2076,14 +2106,15 @@ module IndirectionTable {
       success, bm := box.Borrow().InitLocBitmap();
     }
     
-    // function method FindDeallocable() : (ref: Option<BT.G.Reference>)
-    //   requires Inv()
-    //   requires IndirectionTableModel.TrackingGarbage(I())
-    //   reads Repr
-    //   ensures ref == IndirectionTableModel.FindDeallocable(I())
-    // {
-    //   It.FindDeallocable(box.Borrow())
-    // }
+    method FindDeallocable() returns (ref: Option<BT.G.Reference>)
+      requires this.Inv()
+      requires this.Read().TrackingGarbage()
+      ensures ref.Some? ==> ref.value in this.Read().I().graph
+      ensures ref.Some? ==> this.Read().deallocable(ref.value)
+      ensures ref.None? ==> forall r | r in this.I().graph :: !this.Read().deallocable(r)
+    {
+      ref := box.Borrow().FindDeallocable();
+    }
 
     // function method GetSize() : (size: uint64)
     //   requires Inv()
