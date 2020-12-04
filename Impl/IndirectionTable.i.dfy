@@ -1801,63 +1801,71 @@ module IndirectionTable {
       }
     }
 
-    // static function method GetSize(shared me: IndirectionTable) : (size: uint64)
-    // requires Inv(me)
-    // ensures size as int == |I(me).graph|
-    // {
-    //   IndirectionTableModel.lemma_count_eq_graph_size(I(me).t);
-    //   me.t.count
-    // }
+    shared function method GetSize() : (size: uint64)
+    requires this.Inv()
+    ensures size as int == |this.I().graph|
+    {
+      lemma_count_eq_graph_size(this.t);
+      this.t.count
+    }
 
-    // static method FindRefWithNoLoc(linear me: IndirectionTable) returns (linear self: IndirectionTable, ref: Option<BT.G.Reference>)
-    // requires Inv(me)
-    // ensures Inv(self)
-    // ensures (I(self), ref) == IndirectionTableModel.FindRefWithNoLoc(I(me))
-    // {
-    //   IndirectionTableModel.reveal_FindRefWithNoLoc();
+    linear inout method FindRefWithNoLoc() returns (ref: Option<BT.G.Reference>)
+    requires old_self.Inv()
+    ensures self.Inv()
+    ensures self.Inv()
+    ensures self.locs == old_self.locs
+    ensures self.graph == old_self.graph
+    ensures ref.Some? ==> ref.value in old_self.graph
+    ensures ref.Some? ==> ref.value !in old_self.locs
+    ensures ref.None? ==> forall r | r in old_self.graph :: r in old_self.locs
+    {
 
-    //   linear var IndirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator) := me;
-    //   var it;
-    //   if findLoclessIterator.Some? {
-    //     it := findLoclessIterator.value;
-    //   } else {
-    //     it := LinearMutableMap.SimpleIterStart(t);
-    //   }
+      var findLoclessIterator := self.findLoclessIterator;
+      var it;
+      if findLoclessIterator.Some? {
+        it := findLoclessIterator.value;
+      } else {
+        it := LinearMutableMap.SimpleIterStart(self.t);
+      }
 
-    //   while true
-    //   invariant Inv(me)
-    //   invariant LinearMutableMap.WFSimpleIter(t, it)
-    //   invariant forall r | r in it.s :: r in I(me).locs
-    //   invariant IndirectionTableModel.FindRefWithNoLoc(I(me))
-    //       == IndirectionTableModel.FindRefWithNoLocIterate(
-    //           I(IndirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator)), it)
-    //   decreases it.decreaser
-    //   {
-    //     var next := LinearMutableMap.SimpleIterOutput(t, it);
-    //     if next.Next? {
-    //       if next.value.loc.None? {
-    //         findLoclessIterator := Some(it);
-    //         ref := Some(next.key);
-    //         break;
-    //       } else {
-    //         it := LinearMutableMap.SimpleIterInc(t, it);
-    //       }
-    //     } else {
-    //       findLoclessIterator := Some(it);
-    //       ref := None;
-    //       break;
-    //     }
-    //   }
-    //   self := IndirectionTable(t, garbageQueue, refUpperBound, findLoclessIterator);
-    // }
+      while true
+      invariant self.Inv()
+      invariant self == old_self.(t := self.t)
+      invariant LinearMutableMap.WFSimpleIter(self.t, it)
+      invariant forall r | r in it.s :: r in self.I().locs
+      decreases it.decreaser
+      {
+        var next := LinearMutableMap.SimpleIterOutput(self.t, it);
+        if next.Next? {
+          if next.value.loc.None? {
+            inout self.findLoclessIterator := Some(it);
+            ref := Some(next.key);
+            break;
+          } else {
+            it := LinearMutableMap.SimpleIterInc(self.t, it);
+          }
+        } else {
+          inout self.findLoclessIterator := Some(it);
+          ref := None;
+          break;
+        }
+      }
+    }
 
-    // static function method GetRefUpperBound(shared me: IndirectionTable) : (r: uint64)
-    // requires Inv(me)
-    // ensures r == IndirectionTableModel.getRefUpperBound(I(me))
-    // {
-    //   IndirectionTableModel.reveal_getRefUpperBound();
-    //   me.refUpperBound
-    // }
+    function {:opaque} getRefUpperBound() : (r: uint64)
+    requires Inv()
+    ensures forall ref | ref in this.graph :: ref <= r
+    {
+      this.refUpperBound
+    }
+
+    shared method GetRefUpperBound() returns (r: uint64)
+    requires this.Inv()
+    ensures r == this.getRefUpperBound()
+    {
+      reveal_getRefUpperBound();
+      r := this.refUpperBound;
+    }
   }
 
   class BoxedIndirectionTable {
@@ -2116,32 +2124,36 @@ module IndirectionTable {
       ref := box.Borrow().FindDeallocable();
     }
 
-    // function method GetSize() : (size: uint64)
-    //   requires Inv()
-    //   reads Repr
-    //   ensures size as int == |I().graph|
-    // {
-    //   It.GetSize(box.Borrow())
-    // }
+    function method GetSize() : (size: uint64)
+      requires Inv()
+      reads Repr
+      ensures size as int == |I().graph|
+    {
+      box.Borrow().GetSize()
+    }
 
-    // method FindRefWithNoLoc() returns (ref: Option<BT.G.Reference>)
-    //   requires Inv()
-    //   modifies Repr
-    //   ensures Inv()
-    //   ensures Repr == old(Repr)
-    //   ensures (I(), ref) == IndirectionTableModel.FindRefWithNoLoc(old(I()))
-    // {
-    //   linear var x := box.Take();
-    //   x, ref := It.FindRefWithNoLoc(x);
-    //   box.Give(x);
-    // }
+    method FindRefWithNoLoc() returns (ref: Option<BT.G.Reference>)
+      requires Inv()
+      modifies Repr
+      ensures Inv()
+      ensures Repr == old(Repr)
+      ensures this.Read().locs == old(this.Read().locs)
+      ensures this.Read().graph == old(this.Read().graph)
+      ensures ref.Some? ==> ref.value in old(this.Read().graph)
+      ensures ref.Some? ==> ref.value !in old(this.Read().locs)
+      ensures ref.None? ==> forall r | r in old(this.Read().graph) :: r in old(this.Read().locs)
+    {
+      linear var x := box.Take();
+      ref := inout x.FindRefWithNoLoc();
+      box.Give(x);
+    }
 
-    // function method GetRefUpperBound() : (r: uint64)
-    //   requires Inv()
-    //   reads Repr
-    //   ensures r == IndirectionTableModel.getRefUpperBound(this.I())
-    // {
-    //   It.GetRefUpperBound(box.Borrow())
-    // }
+
+    method GetRefUpperBound() returns (r: uint64)
+      requires Inv()
+      ensures r == this.Read().getRefUpperBound()
+    {
+      r := box.Borrow().GetRefUpperBound();
+    }
   }
 }
