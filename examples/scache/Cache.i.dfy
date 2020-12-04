@@ -39,12 +39,12 @@ module CacheImpl {
 
   datatype LocalState = LocalState(
     t: int,
-    cur_chunk: uint64
+    chunk_idx: uint64,
   )
   {
     predicate WF()
     {
-      && 0 <= this.cur_chunk as int < NUM_CHUNKS
+      && 0 <= this.chunk_idx as int < NUM_CHUNKS
       && 0 <= t < NUM_THREADS
     }
   }
@@ -103,11 +103,20 @@ module CacheImpl {
 
   method try_take_read_lock_on_cache_entry(
       c: Cache, cache_idx: int,
+      expected_disk_idx: int,
       shared localState: LocalState)
-  returns (success: bool)
+  returns (
+    success: bool,
+    linear handle_out: maybe<ReadonlyPageHandle>
+  )
   requires Inv(c)
   requires localState.WF()
   requires 0 <= cache_idx < CACHE_SIZE
+  ensures !success ==> !has(handle_out)
+  ensures success ==>
+      && has(handle_out)
+      && read(handle_out).is_page_handle(
+          c, expected_disk_idx, localState.t)
   decreases *
   {
     // 1. check if writelocked
@@ -115,6 +124,7 @@ module CacheImpl {
     var is_exc_locked := quicktest_is_exc_locked(c.status[cache_idx]);
     if is_exc_locked {
       success := false;
+      handle_out := empty();
     } else {
       // 2. inc ref
 
@@ -132,10 +142,12 @@ module CacheImpl {
           r);
 
       if !success {
-        dec_refcount_for_shared(
+        dec_refcount_for_shared_pending(
             c.read_refcounts[localState.t][cache_idx],
             c.key(cache_idx), localState.t,
             r);
+
+        handle_out := empty();
       } else {
         // 4. if !access, then mark accessed
         if !is_accessed {
@@ -149,7 +161,10 @@ module CacheImpl {
         //        otherwise, dec and abort
         // 6. if LOADING, then block until it's done
         //
-        // but it's also a little annoying so we do it in reverse.
+        // but it's also a little annoying to set that up
+        // (as it is, we currently don't have access to the disk_idx
+        // field) so we do it in reverse. It ought to be an uncommon
+        // race case, anyway.
 
         // Wait for loading to be done:
 
@@ -173,11 +188,31 @@ module CacheImpl {
               c.key(cache_idx),
               localState.t,
               r);
+
+          // TODO
+          // if !is_done_reading, then spend the time to handle
+          // some IO responses
         }
 
-        AtomicStatusImpl.unsafe_dispose(r);
-        AtomicStatusImpl.unsafe_dispose(handle_maybe);
+        // Check the disk_idx
 
+        var actual_disk_idx := ptr_read(
+            c.disk_idx_of_entry[cache_idx],
+            peek(handle_maybe).idx);
+
+        if actual_disk_idx != expected_disk_idx {
+          dec_refcount_for_shared_obtained(
+              c.read_refcounts[localState.t][cache_idx],
+              c.key(cache_idx), localState.t,
+              r, unwrap(handle_maybe));
+
+          success := false;
+          handle_out := empty();
+        } else {
+          success := true;
+          handle_out := give(
+              ReadonlyPageHandle(r, unwrap(handle_maybe)));
+        }
       }
     }
   }
@@ -315,6 +350,95 @@ module CacheImpl {
     new_chunk := l as uint64;
   }
 
+  method try_evict_page(c: Cache, cache_idx: uint64,
+      shared localState: LocalState)
+  requires 0 <= cache_idx < CACHE_SIZE
+  {
+    // 1. get status
+
+    var status := atomic_read(c.status[cache_idx]);
+
+    // 2. if accessed, then clear 'access'
+
+    if bit_or(status, flag_accessed) != 0 {
+      clear_accessed(c.status[cache_idx]);
+    }
+
+    // 3. if status != CLEAN, abort
+
+    if status != flag_clean {
+      // no cleanup to do
+    } else {
+      // 4. inc ref count for shared lock
+      // TODO I think we could probably skip doing a refcount?
+
+      linear var r := inc_refcount_for_shared(
+          c.read_refcounts[localState.t][cache_idx],
+          c.key(cache_idx), localState.t);
+
+      // 5. get the exc lock (Clean -> Clean | Exc) (or bail)
+
+      var success;
+      linear var status;
+      success, r, status := take_exc_if_eq_clean(
+            c.status[cache_idx], 
+            c.key(cache_idx), localState.t,
+            r);
+
+      if !success {
+        var _ := discard(status);
+      } else {
+        // 6. try the rest of the read refcounts (or bail)
+        
+        success, r, handle := check_all_refcounts_dont_wait(
+            localState.t, r);
+
+        if !success {
+        } else {
+          // 7. clear cache_idx_of_page lookup
+
+          var disk_idx := ptr_read(
+              c.disk_idx_of_entry[cache_idx],
+              handle.idx);
+
+          linear var CacheEntryHandle(cache_entry, data, idx) := handle;
+
+          cache_entry, status := atomic_index_lookup_clear_mapping(
+                c.cache_idx_of_page[disk_idx],
+                disk_idx,
+                cache_idx,
+                cache_entry,
+                status);
+
+          // 8. set to FREE
+
+          r := set_to_free(
+              c.status[cache_idx],
+              c.key(cache_idx),
+              localState.t,
+              CacheEntryHandle(cache_entry, data, idx),
+              status,
+              r);
+
+          dec_refcount_for_zombie(
+              c.read_refcounts[localState.t][cache_idx],
+              c.key(cache_idx), localState.t, r);
+        }
+      }
+    }
+  }
+
+  method evict_chunk(c: Cache, chunk: uint64)
+  requires 0 <= chunk < NUM_CHUNKS
+  {
+    var i: uint64 := 0;
+    while i < CHUNK_SIZE
+    {
+      var j := chunk * CHUNK_SIZE + i;
+      try_evict_page(c, j);
+    }
+  }
+
   method get_free_page(c: Cache, linear inout localState: LocalState)
   returns (
     cache_idx: uint64,
@@ -338,7 +462,7 @@ module CacheImpl {
       && read(status_maybe) == CacheResources.CacheStatus(cache_idx as int, CacheResources.Empty)
   decreases *
   {
-    var chunk: uint64 := localState.cur_chunk;
+    var chunk: uint64 := localState.chunk_idx;
 
     var success := false;
     m := empty();
@@ -360,7 +484,8 @@ module CacheImpl {
     invariant success ==> has(status_maybe)
         && read(status_maybe) == CacheResources.CacheStatus(cache_idx as int, CacheResources.Empty)
     {
-      var i: uint64 := 0; 
+      var i: uint64 := localState.chunk_elem;
+
       while i < CHUNK_SIZE as uint64 && !success
       invariant 0 <= i as int <= CHUNK_SIZE
       invariant !success ==> !has(m)
@@ -388,10 +513,13 @@ module CacheImpl {
       }
 
       if !success {
-        var new_chunk := get_next_chunk(c);
-        inout localState.cur_chunk := new_chunk;
+        // TODO mark stuff as 'not accessed'
+        chunk := get_next_chunk(c);
+        evict_chunk(c, chunk);
       }
     }
+
+    inout localState.chunk_idx := chunk;
   }
 
   method try_take_read_lock_disk_page(c: Cache, disk_idx: int,
@@ -400,7 +528,7 @@ module CacheImpl {
   requires Inv(c)
   requires 0 <= disk_idx < NUM_DISK_PAGES
   requires old_localState.WF()
-  ensures !success ==> handle_out == empty()
+  ensures !success ==> !has(handle_out)
   ensures success ==> has(handle_out) &&
       peek(handle_out).is_page_handle(c, disk_idx, localState.t)
   ensures old_localState.WF()
@@ -476,21 +604,8 @@ module CacheImpl {
         }
       }
     } else {
-      success := false;
-      handle_out := empty();
-      /*linear var r, handle := try_take_read_lock_on_cache_entry(
-          c, cache_idx as int, localState);
-      var this_disk_idx := ptr_read(
-          c.disk_idx_of_entry[cache_idx],
-          handle.idx);
-      if this_disk_idx == disk_idx {
-        success := true;
-        handle_out := give(PageHandle(r, handle));
-      } else {
-        release_write_lock_on_cache_entry(c, cache_idx as int, r, handle);
-        success := false;
-        handle_out := empty();
-      }*/
+      success, handle_out := try_take_read_lock_on_cache_entry(
+          c, cache_idx as int, disk_idx as int, localState);
     }
   }
 }

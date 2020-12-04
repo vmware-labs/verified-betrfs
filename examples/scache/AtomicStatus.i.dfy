@@ -602,6 +602,30 @@ module AtomicStatusImpl {
     ///// End jank
   }
 
+  method clear_accessed(a: AtomicStatus,
+      key: RWLock.Key, t: int)
+  {
+    var orig_value := fetch_and(a, 0xff - flag_accessed);
+
+    ///// Begin jank
+    ///// Setup:
+    var v := 0xff - flag_accessed;
+    var old_v: uint8;
+    var new_v: uint8;
+    linear var old_g: G := unsafe_obtain();
+    assume orig_value == old_v;
+    assume new_v == bit_and(old_v, v);
+    assume atomic_inv(a, old_v, old_g);
+    linear var new_g;
+    ///// Transfer:
+    new_g := old_g;
+    assert state_inv(new_v, new_g, key);
+    ///// Teardown:
+    assert atomic_inv(a, new_v, new_g);
+    unsafe_dispose(new_g);
+    ///// End jank
+  }
+
   method is_reading(a: AtomicStatus,
       key: RWLock.Key, t: int,
       linear r: RWLock.R)
@@ -650,5 +674,61 @@ module AtomicStatusImpl {
     ///// End jank
 
     success := bit_and(f, flag_reading) == 0;
+  }
+
+  method take_exc_if_eq_clean(a: AtomicRefcount,
+      key: RWLock.Key, t: int, linear m: RWLock.R)
+  returns (
+    success: bool,
+    linear m': RWLock.R,
+    linear status: maybe<CacheResources.Status>,
+  )
+  requires atomic_refcount_inv(a, key, t)
+  requires m == RWLock.Internal(RWLock.SharedLockPending(key, t))
+  ensures !success ==> m' == m && !has(status)
+  ensures success ==>
+      && m' == RWLock.Internal(RWLock.ExcLockPending(key, t, 0))
+      && has(status)
+      && read(status) == CacheStatus(key.cache_idx, CacheResources.Clean)
+  {
+    var did_set := compare_and_set(a, flag_clean, flag_exc_clean);
+
+    ///// Begin jank
+    ///// Setup:
+    var v1 := flag_clean;
+    var v2 := flag_exc_clean;
+    var old_v: uint8;
+    var new_v: uint8;
+    linear var old_g: G := unsafe_obtain();
+    assume old_v == v1 ==> new_v == v2 && did_set;
+    assume old_v != v1 ==> new_v == old_v && !did_set;
+    assume atomic_inv(a, old_v, old_g);
+    linear var new_g;
+    ///// Transfer:
+    if did_set {
+      m' := transform_SharedCheckExcFree(
+          key, t, RWLock.Available, m, old_g.rwlock);
+      m' := transform_SharedCheckReading(
+          key, t, RWLock.Available, m', old_g.rwlock);
+      
+      linear var G(rwlock, status0) := old_g;
+      m', rwlock := transform_SharedToExc(
+          key, t, RWLock.Available, m', rwlock);
+
+      m', rwlock := transform_ExcCheckWriteBack(
+          key, t, RWLock.Available, m', rwlock);
+
+      new_g := G(rwlock, empty());
+      status := status0;
+    } else {
+      new_g := old_g;
+      m' := m;
+    }
+    ///// Teardown:
+    assert atomic_inv(a, new_v, new_g);
+    unsafe_dispose(new_g);
+    ///// End jank
+
+    success := did_set;
   }
 }

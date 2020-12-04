@@ -79,11 +79,11 @@ module RWLock refines ResourceBuilderSpec {
 
     // Standard flow for obtaining an 'exclusive' lock
 
-    | ExcLockPendingAwaitWriteBack(key: Key)  // set ExcLock bit
-    | ExcLockPending(key: Key, visited: int)  // check WriteBack bit unset
-                                              //   and `visited` of the
-                                              //   refcounts
-    | ExcLockObtained(key: Key)
+    | ExcLockPendingAwaitWriteBack(key: Key, t: int)  // set ExcLock bit
+        // check WriteBack bit unset
+        //   and `visited` of the refcounts
+    | ExcLockPending(key: Key, t: int, visited: int)
+    | ExcLockObtained(key: Key, t: int)
 
     // Flow for the phase of reading in a page from disk.
     // This is a special-case flow, because it needs to be performed
@@ -430,12 +430,22 @@ module RWLock refines ResourceBuilderSpec {
   ensures t1 == Internal(SharedLockRefCount(key, t, refcount + 1))
   ensures t2 == Internal(SharedLockPending(key, t))
 
-  method transform_SharedDecCount(
+  method transform_SharedDecCountPending(
       key: Key, t: int, refcount: uint8,
       linear s1: R, linear s2: R)
   returns (linear t1: R)
   requires s1 == Internal(SharedLockRefCount(key, t, refcount))
   requires s2 == Internal(SharedLockPending(key, t))
+  ensures refcount > 0
+  ensures t1 == Internal(SharedLockRefCount(key, t, refcount - 1))
+
+  method transform_SharedDecCountObtained(
+      key: Key, t: int, refcount: uint8,
+      linear s1: R, linear s2: R, linear s3: Handle)
+  returns (linear t1: R)
+  requires s1 == Internal(SharedLockRefCount(key, t, refcount))
+  requires s2 == Internal(SharedLockObtained(key, t))
+  requires s3.is_handle(key)
   ensures refcount > 0
   ensures t1 == Internal(SharedLockRefCount(key, t, refcount - 1))
 

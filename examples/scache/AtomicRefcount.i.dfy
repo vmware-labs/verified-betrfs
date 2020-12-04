@@ -122,7 +122,7 @@ module AtomicRefcountImpl {
     ///// End jank
   }
 
-  method dec_refcount_for_shared(a: AtomicRefcount,
+  method dec_refcount_for_shared_pending(a: AtomicRefcount,
       key: RWLock.Key, t: int, linear m: RWLock.R)
   requires atomic_refcount_inv(a, key, t)
   requires m == RWLock.Internal(RWLock.SharedLockPending(key, t))
@@ -145,10 +145,45 @@ module AtomicRefcountImpl {
     assume atomic_inv(a, old_v, old_g);
     linear var new_g;
     ///// Transfer:
-    new_g := RWLock.transform_SharedDecCount(key, t, old_v, old_g, m);
+    new_g := RWLock.transform_SharedDecCountPending(
+        key, t, old_v, old_g, m);
     ///// Teardown:
     assert atomic_inv(a, new_v, new_g);
     unsafe_dispose(new_g);
     ///// End jank
   }
+
+  method dec_refcount_for_shared_obtained(a: AtomicRefcount,
+      key: RWLock.Key, t: int, linear m: RWLock.R,
+      linear handle: RWLock.Handle)
+  requires atomic_refcount_inv(a, key, t)
+  requires m == RWLock.Internal(RWLock.SharedLockObtained(key, t))
+  requires handle.is_handle(key)
+  {
+    var orig_value := fetch_sub_uint8(a, 1);
+
+    ///// Begin jank
+    ///// Setup:
+    var added: uint8 := 1;
+    var old_v: uint8;
+    var new_v: uint8;
+    linear var old_g: RWLock.R := unsafe_obtain();
+    assume new_v == (
+        if old_v as int - added as int >= 0 then
+          (old_v as int - added as int) as uint8
+        else
+          (old_v as int - added as int + 0x100) as uint8
+    );
+    assume orig_value == old_v;
+    assume atomic_inv(a, old_v, old_g);
+    linear var new_g;
+    ///// Transfer:
+    new_g := RWLock.transform_SharedDecCountObtained(
+        key, t, old_v, old_g, m, handle);
+    ///// Teardown:
+    assert atomic_inv(a, new_v, new_g);
+    unsafe_dispose(new_g);
+    ///// End jank
+  }
+
 }
