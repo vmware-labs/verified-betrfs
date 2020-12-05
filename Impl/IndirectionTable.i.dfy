@@ -1676,6 +1676,22 @@ module IndirectionTable {
 
     // // To bitmap
 
+    static predicate IsLocAllocIndirectionTable(indirectionTable: SectorType.IndirectionTable, i: int)
+    {
+      // Can't use the lower values, so they're always marked "allocated"
+      || 0 <= i < MinNodeBlockIndex()
+      || (!(
+        forall ref | ref in indirectionTable.locs ::
+          indirectionTable.locs[ref].addr as int != i * NodeBlockSize() as int
+      ))
+    }
+
+    static predicate IsLocAllocBitmap(bm: BitmapModel.BitmapModelT, i: int)
+    {
+      && 0 <= i < BitmapModel.Len(bm)
+      && BitmapModel.IsSet(bm, i)
+    }
+
     // static method BitmapInitUpToIterate(bm: BitmapImpl.Bitmap, i: uint64, upTo: uint64)
     // requires bm.Inv()
     // requires 0 <= i as int <= upTo as int <= BitmapModel.Len(bm.I())
@@ -2147,7 +2163,6 @@ module IndirectionTable {
       ref := inout x.FindRefWithNoLoc();
       box.Give(x);
     }
-
 
     method GetRefUpperBound() returns (r: uint64)
       requires Inv()

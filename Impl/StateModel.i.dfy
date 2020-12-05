@@ -8,7 +8,7 @@ include "../lib/DataStructures/LruModel.i.dfy"
 include "../lib/DataStructures/MutableMapModel.i.dfy"
 include "../lib/DataStructures/BitmapModel.i.dfy"
 include "BlockAllocatorModel.i.dfy"
-include "IndirectionTableModel.i.dfy"
+include "IndirectionTable.i.dfy"
 include "CommitterModel.i.dfy"
 include "../BlockCacheSystem/BlockJournalDisk.i.dfy"
 include "../BlockCacheSystem/BlockJournalCache.i.dfy"
@@ -48,7 +48,7 @@ module StateModel {
   import UI
   import MutableMapModel
   import BlockAllocatorModel
-  import IndirectionTableModel
+  import IT = IndirectionTable
   import SectorType
   import DiskLayout
   import CommitterModel
@@ -59,7 +59,7 @@ module StateModel {
   type Reference = BT.G.Reference
   type DiskOp = BJD.DiskOp
   
-  type IndirectionTable = IndirectionTableModel.IndirectionTable
+  type IndirectionTable = IT.IndirectionTable
 
   datatype Node = Node(
       pivotTable: Pivots.PivotTable,
@@ -95,38 +95,28 @@ module StateModel {
     | SectorIndirectionTable(indirectionTable: IndirectionTable)
     | SectorSuperblock(superblock: SectorType.Superblock)
 
-  predicate IsLocAllocIndirectionTable(indirectionTable: IndirectionTable, i: int)
-  {
-    IndirectionTableModel.IsLocAllocIndirectionTable(indirectionTable, i)
-  }
-
   predicate IsLocAllocOutstanding(outstanding: map<BC.ReqId, BC.OutstandingWrite>, i: int)
   {
     !(forall id | id in outstanding :: outstanding[id].loc.addr as int != i * NodeBlockSize() as int)
   }
 
-  predicate IsLocAllocBitmap(bm: BitmapModel.BitmapModelT, i: int)
-  {
-    IndirectionTableModel.IsLocAllocBitmap(bm, i)
-  }
-
   predicate {:opaque} ConsistentBitmap(
-      ephemeralIndirectionTable: IndirectionTable,
-      frozenIndirectionTable: Option<IndirectionTable>,
-      persistentIndirectionTable: IndirectionTable,
+      ephemeralIndirectionTable: SectorType.IndirectionTable,
+      frozenIndirectionTable: Option<SectorType.IndirectionTable>,
+      persistentIndirectionTable: SectorType.IndirectionTable,
       outstandingBlockWrites: map<BC.ReqId, BC.OutstandingWrite>,
       blockAllocator: BlockAllocatorModel.BlockAllocatorModel)
   {
-    && (forall i: int :: IsLocAllocIndirectionTable(ephemeralIndirectionTable, i)
-      <==> IsLocAllocBitmap(blockAllocator.ephemeral, i))
-    && (forall i: int :: IsLocAllocIndirectionTable(persistentIndirectionTable, i)
-      <==> IsLocAllocBitmap(blockAllocator.persistent, i))
+    && (forall i: int :: IT.IndirectionTable.IsLocAllocIndirectionTable(ephemeralIndirectionTable, i)
+      <==> IT.IndirectionTable.IsLocAllocBitmap(blockAllocator.ephemeral, i))
+    && (forall i: int :: IT.IndirectionTable.IsLocAllocIndirectionTable(persistentIndirectionTable, i)
+      <==> IT.IndirectionTable.IsLocAllocBitmap(blockAllocator.persistent, i))
     && (frozenIndirectionTable.Some? <==> blockAllocator.frozen.Some?)
     && (frozenIndirectionTable.Some? ==>
-      (forall i: int :: IsLocAllocIndirectionTable(frozenIndirectionTable.value, i)
-        <==> IsLocAllocBitmap(blockAllocator.frozen.value, i)))
+      (forall i: int :: IT.IndirectionTable.IsLocAllocIndirectionTable(frozenIndirectionTable.value, i)
+        <==> IT.IndirectionTable.IsLocAllocBitmap(blockAllocator.frozen.value, i)))
     && (forall i: int :: IsLocAllocOutstanding(outstandingBlockWrites, i)
-      <==> IsLocAllocBitmap(blockAllocator.outstanding, i))
+      <==> IT.IndirectionTable.IsLocAllocBitmap(blockAllocator.outstanding, i))
   }
 
   predicate WFNode(node: Node)
@@ -155,13 +145,13 @@ module StateModel {
     && LruModel.WF(lru)
     && LruModel.I(lru) == cache.Keys
     && TotalCacheSize(s) <= MaxCacheSize()
-    && IndirectionTableModel.Inv(ephemeralIndirectionTable)
-    && IndirectionTableModel.TrackingGarbage(ephemeralIndirectionTable)
-    && IndirectionTableModel.Inv(persistentIndirectionTable)
-    && (frozenIndirectionTable.Some? ==> IndirectionTableModel.Inv(frozenIndirectionTable.value))
+    && ephemeralIndirectionTable.Inv()
+    && ephemeralIndirectionTable.TrackingGarbage()
+    && persistentIndirectionTable.Inv()
+    && (frozenIndirectionTable.Some? ==> frozenIndirectionTable.value.Inv())
     && BlockAllocatorModel.Inv(s.blockAllocator)
-    && ConsistentBitmap(s.ephemeralIndirectionTable, s.frozenIndirectionTable,
-        s.persistentIndirectionTable, s.outstandingBlockWrites, s.blockAllocator)
+    && ConsistentBitmap(s.ephemeralIndirectionTable.I(), MapOption(s.frozenIndirectionTable, (x: IndirectionTable) => x.I()),
+        s.persistentIndirectionTable.I(), s.outstandingBlockWrites, s.blockAllocator)
   }
   predicate WFBCVars(vars: BCVariables)
   {
@@ -172,8 +162,8 @@ module StateModel {
     match sector {
       case SectorNode(node) => WFNode(node)
       case SectorIndirectionTable(indirectionTable) => (
-        && IndirectionTableModel.Inv(indirectionTable)
-        && BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
+        && indirectionTable.Inv()
+        && BC.WFCompleteIndirectionTable(indirectionTable.I())
       )
       case SectorSuperblock(superblock) =>
         JC.WFSuperblock(superblock)
@@ -189,14 +179,10 @@ module StateModel {
   {
     map ref | ref in cache :: INode(cache[ref])
   }
-  function IIndirectionTable(table: IndirectionTable) : (result: SectorType.IndirectionTable)
-  {
-    IndirectionTableModel.I(table)
-  }
   function IIndirectionTableOpt(table: Option<IndirectionTable>) : (result: Option<SectorType.IndirectionTable>)
   {
     if table.Some? then
-      Some(IIndirectionTable(table.value))
+      Some(table.value.I())
     else
       None
   }
@@ -205,7 +191,7 @@ module StateModel {
   {
     match vars {
       case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, persistentIndirectionTableLoc, frozenIndirectionTableLoc, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, cache, lru, locBitmap) =>
-        BC.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable),  persistentIndirectionTableLoc, frozenIndirectionTableLoc, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, ICache(cache))
+        BC.Ready(persistentIndirectionTable.I(), IIndirectionTableOpt(frozenIndirectionTable), ephemeralIndirectionTable.I(),  persistentIndirectionTableLoc, frozenIndirectionTableLoc, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, ICache(cache))
       case LoadingIndirectionTable(loc, read) =>
         BC.LoadingIndirectionTable(loc, read)
       case Unready => BC.Unready
@@ -216,7 +202,7 @@ module StateModel {
   {
     match sector {
       case SectorNode(node) => SectorType.SectorNode(INode(node))
-      case SectorIndirectionTable(indirectionTable) => SectorType.SectorIndirectionTable(IIndirectionTable(indirectionTable))
+      case SectorIndirectionTable(indirectionTable) => SectorType.SectorIndirectionTable(indirectionTable.I())
       case SectorSuperblock(superblock) => SectorType.SectorSuperblock(superblock)
     }
   }
