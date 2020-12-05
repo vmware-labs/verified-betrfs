@@ -41,6 +41,8 @@ module StateImpl {
   import MM = MutableMap
   import ReferenceType`Internal
 
+  import SSM = StateSectorModel
+
   type ImplVariables = Variables
 
   type Reference = BT.G.Reference
@@ -99,15 +101,15 @@ module StateImpl {
       None
   }
  
-  function ISector(sector: Sector) : SM.Sector
+  function ISector(sector: Sector) : SSM.Sector
   requires WFSector(sector)
   reads SectorObjectSet(sector)
   reads SectorRepr(sector)
   {
     match sector {
-      case SectorSuperblock(superblock) => SM.SectorSuperblock(superblock)
-      case SectorNode(node) => SM.SectorNode(node.I())
-      case SectorIndirectionTable(indirectionTable) => SM.SectorIndirectionTable(IIndirectionTable(indirectionTable))
+      case SectorSuperblock(superblock) => SSM.SectorSuperblock(superblock)
+      case SectorNode(node) => SSM.SectorNode(node.I())
+      case SectorIndirectionTable(indirectionTable) => SSM.SectorIndirectionTable(IIndirectionTable(indirectionTable))
     }
   }
 

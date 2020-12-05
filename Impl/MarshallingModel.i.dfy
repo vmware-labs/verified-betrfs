@@ -43,8 +43,10 @@ module MarshallingModel {
   import ReferenceType`Internal
   import ValueType`Internal
 
+  import SSM = StateSectorModel
+
   type Reference = BC.Reference
-  type Sector = SM.Sector
+  type Sector = SSM.Sector
   type Node = SM.Node
 
   /////// Some lemmas that are useful in Impl
@@ -155,17 +157,17 @@ module MarshallingModel {
   {
     if v.c == 0 then (
       match Marshalling.valToSuperblock(v.val) {
-        case Some(s) => Some(SM.SectorSuperblock(s))
+        case Some(s) => Some(SSM.SectorSuperblock(s))
         case None => None
       }
     ) else if v.c == 1 then (
       match IndirectionTableModel.valToIndirectionTable(v.val) {
-        case Some(s) => Some(SM.SectorIndirectionTable(s))
+        case Some(s) => Some(SSM.SectorIndirectionTable(s))
         case None => None
       }
     ) else (
       match valToNode(v.val) {
-        case Some(s) => Some(SM.SectorNode(s))
+        case Some(s) => Some(SSM.SectorNode(s))
         case None => None
       }
     )
