@@ -14,6 +14,7 @@ include "../BlockCacheSystem/BlockJournalDisk.i.dfy"
 include "../BlockCacheSystem/BlockJournalCache.i.dfy"
 include "../ByteBlockCacheSystem/ByteCache.i.dfy"
 include "DiskOpModel.i.dfy"
+include "StateSectorModel.i.dfy"
 //
 // This file represents immutability's last stand.
 // It is the highest-fidelity representation of the implementation
@@ -55,6 +56,7 @@ module StateModel {
   import opened DiskOpModel
 
   import ReferenceType`Internal
+  import SSM = StateSectorModel
 
   type Node = BT.G.Node  
   type Reference = BT.G.Reference
@@ -84,7 +86,12 @@ module StateModel {
 
   datatype Variables = Variables(
     bc: BCVariables,
-    jc: Committer)
+    jc: CommitterModel.CM)
+
+  // datatype Sector =
+  //   | SectorNode(node: Node)
+  //   | SectorIndirectionTable(indirectionTable: IndirectionTable)
+  //   | SectorSuperblock(superblock: SectorType.Superblock)
 
   predicate IsLocAllocIndirectionTable(indirectionTable: IndirectionTable, i: int)
   {
@@ -156,6 +163,18 @@ module StateModel {
   {
     && (vars.Ready? ==> WFVarsReady(vars))
   }
+  predicate WFSector(sector: SSM.Sector)
+  {
+    match sector {
+      case SectorNode(node) => WFNode(node)
+      case SectorIndirectionTable(indirectionTable) => (
+        && IndirectionTableModel.Inv(indirectionTable)
+        && BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
+      )
+      case SectorSuperblock(superblock) =>
+        JC.WFSuperblock(superblock)
+    }
+  }
 
   function INode(node: Node) : (result: BT.G.Node)
   {
@@ -186,6 +205,15 @@ module StateModel {
       case LoadingIndirectionTable(loc, read) =>
         BC.LoadingIndirectionTable(loc, read)
       case Unready => BC.Unready
+    }
+  }
+  function ISector(sector: SSM.Sector) : SectorType.Sector
+  requires WFSector(sector)
+  {
+    match sector {
+      case SectorNode(node) => SectorType.SectorNode(INode(node))
+      case SectorIndirectionTable(indirectionTable) => SectorType.SectorIndirectionTable(IIndirectionTable(indirectionTable))
+      case SectorSuperblock(superblock) => SectorType.SectorSuperblock(superblock)
     }
   }
 
