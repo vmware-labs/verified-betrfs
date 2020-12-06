@@ -56,11 +56,14 @@ module StateModel {
   import opened DiskOpModel
 
   import ReferenceType`Internal
-  import opened StateSectorModel
+  import SSM = StateSectorModel
 
   // type Node = BT.G.Node  
   type Reference = BT.G.Reference
   type DiskOp = BJD.DiskOp
+  type IndirectionTable = SSM.IndirectionTable
+  type Node = SSM.Node
+  type Sector = SSM.Sector
 
   // type IndirectionTable = IndirectionTableModel.IndirectionTable
 
