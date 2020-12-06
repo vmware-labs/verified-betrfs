@@ -32,7 +32,10 @@ module IOModel {
   import BlockJournalDisk
   import UI
   // Misc utilities
+  import SSM = StateSectorModel
 
+  type Sector = SSM.Sector
+  
   predicate stepsBetree(s: BBC.Variables, s': BBC.Variables, vop: VOp, step: BT.BetreeStep)
   {
     BBC.NextStep(s, s', BlockDisk.NoDiskOp, vop, BBC.BetreeMoveStep(step))

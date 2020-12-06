@@ -22,6 +22,10 @@ module IOImpl {
   import opened SI = StateImpl
   import MutableMapModel
 
+  import SSM = StateSectorModel
+
+  type Sector = SSM.Sector
+
   // TODO does ImplVariables make sense? Should it be a Variables? Or just the fields of a class we live in?
   method getFreeLoc(s: ImplVariables, len: uint64)
   returns (loc : Option<Location>)
@@ -185,7 +189,7 @@ module IOImpl {
 
   // == readResponse ==
 
-  function ISectorOpt(sector: Option<SI.Sector>) : Option<IM.Sector>
+  function ISectorOpt(sector: Option<SI.Sector>) : Option<SSM.Sector>
   reads if sector.Some? then SectorObjectSet(sector.value) else {}
   reads if sector.Some? then SectorRepr(sector.value) else {}
   requires sector.Some? ==> SI.WFSector(sector.value)
