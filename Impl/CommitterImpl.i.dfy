@@ -705,7 +705,7 @@ module CommitterImpl {
 
       reveal IOModel.RequestWrite();
 
-      IOModel.RequestWriteCorrect(IIO(old(io)), loc, StateModel.SectorSuperblock(newSuperblock), id, IIO(io));
+      IOModel.RequestWriteCorrect(IIO(old(io)), loc, SSM.SectorSuperblock(newSuperblock), id, IIO(io));
 
       assert ValidDiskOp(diskOp(IIO(io)));
 
@@ -754,7 +754,7 @@ module CommitterImpl {
 
       reveal IOModel.RequestWrite();
 
-      IOModel.RequestWriteCorrect(IIO(old(io)), loc, StateModel.SectorSuperblock(newSuperblock), id, IIO(io));
+      IOModel.RequestWriteCorrect(IIO(old(io)), loc, SSM.SectorSuperblock(newSuperblock), id, IIO(io));
 
       assert ValidDiskOp(diskOp(IIO(io)));
 
