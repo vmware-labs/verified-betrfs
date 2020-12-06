@@ -46,6 +46,8 @@ module StateImpl {
   type ImplVariables = Variables
 
   type Reference = BT.G.Reference
+  type IndirectionTable = SSM.IndirectionTable
+  type Node = SSM.Node
 
   type MutIndirectionTable = IndirectionTableImpl.IndirectionTable
   type MutIndirectionTableNullable = IndirectionTableImpl.IndirectionTable?
