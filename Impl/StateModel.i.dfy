@@ -56,13 +56,13 @@ module StateModel {
   import opened DiskOpModel
 
   import ReferenceType`Internal
-  import SSM = StateSectorModel
+  import opened StateSectorModel
 
-  type Node = BT.G.Node  
+  // type Node = BT.G.Node  
   type Reference = BT.G.Reference
   type DiskOp = BJD.DiskOp
 
-  type IndirectionTable = IndirectionTableModel.IndirectionTable
+  // type IndirectionTable = IndirectionTableModel.IndirectionTable
 
   datatype BCVariables =
     | Ready(
@@ -163,7 +163,7 @@ module StateModel {
   {
     && (vars.Ready? ==> WFVarsReady(vars))
   }
-  predicate WFSector(sector: SSM.Sector)
+  predicate WFSector(sector: Sector)
   {
     match sector {
       case SectorNode(node) => WFNode(node)
@@ -207,7 +207,7 @@ module StateModel {
       case Unready => BC.Unready
     }
   }
-  function ISector(sector: SSM.Sector) : SectorType.Sector
+  function ISector(sector: Sector) : SectorType.Sector
   requires WFSector(sector)
   {
     match sector {
