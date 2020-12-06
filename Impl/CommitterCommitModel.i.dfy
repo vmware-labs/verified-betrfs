@@ -295,7 +295,7 @@ module CommitterCommitModel {
     && cm'.superblockWrite.Some?
     && var id := cm'.superblockWrite.value;
 
-    && RequestWrite(io, loc, SectorSuperblock(newSuperblock),
+    && RequestWrite(io, loc, SSM.SectorSuperblock(newSuperblock),
         id, io')
     && cm' == cm
       .(newSuperblock := Some(newSuperblock))
@@ -335,7 +335,7 @@ module CommitterCommitModel {
 
     var id := cm'.superblockWrite.value;
 
-    RequestWriteCorrect(io, loc, SectorSuperblock(newSuperblock),
+    RequestWriteCorrect(io, loc, SSM.SectorSuperblock(newSuperblock),
         id, io');
 
     assert ValidDiskOp(diskOp(io'));
@@ -376,7 +376,7 @@ module CommitterCommitModel {
     && cm'.superblockWrite.Some?
     && var id := cm'.superblockWrite.value;
 
-    && RequestWrite(io, loc, SectorSuperblock(newSuperblock),
+    && RequestWrite(io, loc, SSM.SectorSuperblock(newSuperblock),
         id, io')
     && cm' == cm
       .(newSuperblock := Some(newSuperblock))
@@ -421,7 +421,7 @@ module CommitterCommitModel {
 
     var id := cm'.superblockWrite.value;
 
-    RequestWriteCorrect(io, loc, SectorSuperblock(newSuperblock),
+    RequestWriteCorrect(io, loc, SSM.SectorSuperblock(newSuperblock),
         id, io');
 
     assert ValidDiskOp(diskOp(io'));

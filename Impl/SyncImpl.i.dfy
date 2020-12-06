@@ -152,7 +152,7 @@ module SyncImpl {
       print "sync: giving up; write req failed\n";
     }
 
-    assert IOModel.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(SM.SectorNode(s.cache.I()[ref])), id, loc, IIO(io));
+    assert IOModel.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(SSM.SectorNode(s.cache.I()[ref])), id, loc, IIO(io));
     assert SyncModel.WriteBlockUpdateState(old(s.I()), ref, id, loc, s.I());
   }
 
