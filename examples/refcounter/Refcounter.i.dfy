@@ -60,13 +60,31 @@ module Refcounter refines ResourceBuilderSpec {
     var refSum := Sum((r) => refcount_of(r, v), s.m);
     var constCount := Count((r) => is_const(r, v), s.m);
 
-    savedCount == qCount && refSum == constCount
+    && savedCount == qCount
+    && refSum == constCount
   }
 
   predicate Inv(s: Variables)
   {
     forall v: V :: InvV(s, v)
   }
+
+  lemma forall_CountReduce<A>()
+  ensures forall fn: A->bool, a, b {:trigger Count<A>(fn, a + b) }
+    :: Count<A>(fn, a + b) == Count<A>(fn, a) + Count<A>(fn, b)
+  ensures forall fn: A->bool, a {:trigger Count<A>(fn, multiset{a}) }
+    :: Count<A>(fn, multiset{a}) == (if fn(a) then 1 else 0)
+  ensures forall fn: A->bool, a, b {:trigger Count<A>(fn, multiset{a,b}) }
+    :: Count<A>(fn, multiset{a,b}) ==
+        (if fn(a) then 1 else 0) + (if fn(b) then 1 else 0)
+
+  lemma forall_SumReduce<A>()
+  ensures forall fn: A->int, a, b {:trigger Sum<A>(fn, a + b) }
+    :: Sum<A>(fn, a + b) == Sum<A>(fn, a) + Sum<A>(fn, b)
+  ensures forall fn: A->int, a {:trigger Sum<A>(fn, multiset{a}) }
+    :: Sum<A>(fn, multiset{a}) == fn(a)
+  ensures forall fn: A->int, a, b {:trigger Sum<A>(fn, multiset{a,b}) }
+    :: Sum<A>(fn, multiset{a,b}) == fn(a) + fn(b)
 
   lemma NewExcPreservesInvV(s: Variables, s': Variables, v: V)
   requires NewExc(s, s')
@@ -85,6 +103,11 @@ module Refcounter refines ResourceBuilderSpec {
     && constCount == constCount'
     && savedCount + qCount' == savedCount' + qCount
   {
+    forall_SumReduce<R>();
+    forall_CountReduce<R>();
+    forall_CountReduce<V>();
+  }
+  /*{
     var savedCount := Count((v0: V) => v0 == v, s.saved);
     var qCount := Count((r) => is_exc_or_refcount(r, v), s.m);
     var refSum := Sum((r) => refcount_of(r, v), s.m);
@@ -164,7 +187,7 @@ module Refcounter refines ResourceBuilderSpec {
           + Count((r) => is_exc_or_refcount(r, v), s.m);
       savedCount' + qCount;
     }
-  }
+  }*/
 
   lemma NewExcPreservesInv(s: Variables, s': Variables)
   requires Inv(s)
@@ -197,6 +220,16 @@ module Refcounter refines ResourceBuilderSpec {
   requires Inv(s)
   requires InternalStep(s, s')
   ensures Inv(s')
+  {
+    forall v
+    ensures InvV(s', v)
+    {
+      assert InvV(s, v);
+      forall_SumReduce<R>();
+      forall_CountReduce<R>();
+      forall_CountReduce<V>();
+    }
+  }
 
   lemma NextPreservesInv(s: Variables, s': Variables)
   //requires Inv(s)
