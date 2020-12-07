@@ -1442,15 +1442,25 @@ module IndirectionTable {
       r := refUpperBound;
     }
 
+    // TODO temporary; useful to maintain the Marshalling Model/Impl split
+    static function valToIndirectionTable(v: V) : (s : Option<IndirectionTable>)
+    requires ValidVal(v)
+    requires ValInGrammar(v, IndirectionTableGrammar())
+    ensures s.Some? ==> s.value.Inv()
+    ensures s.Some? ==> s.value.TrackingGarbage()
+    ensures s.Some? ==> BC.WFCompleteIndirectionTable(s.value.I())
+    ensures s.Some? ==> Marshalling.valToIndirectionTable(v) == Some(s.value.I())
+    ensures s.None? ==> Marshalling.valToIndirectionTable(v).None?
+
     static method ValToIndirectionTable(v: V)
     returns (linear s : lOption<IndirectionTable>)
     requires ValidVal(v)
     requires ValInGrammar(v, IndirectionTableGrammar())
     ensures s.lSome? ==> s.value.Inv()
-    // ensures s.lNone? ==> IndirectionTableModel.valToIndirectionTable(v).None?
-    // ensures s.lSome? ==> IndirectionTableModel.valToIndirectionTable(v) == Some(I(s.value))
     ensures s.lSome? ==> Marshalling.valToIndirectionTable(v) == Some(s.value.I())
+    ensures s.lSome? ==> s.value.TrackingGarbage()
     ensures s.lNone? ==> Marshalling.valToIndirectionTable(v).None?
+    ensures s.Option() == valToIndirectionTable(v)
     {
       if |v.a| as uint64 <= MaxSizeUint64() {
         linear var res := ValToHashMap(v.a);

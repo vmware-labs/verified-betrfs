@@ -162,6 +162,10 @@ module MarshallingModel {
   function valToSector(v: V) : (s : Option<Sector>)
   requires ValidVal(v)
   requires ValInGrammar(v, Marshalling.SectorGrammar())
+  ensures s.Some? ==> SM.WFSector(s.value)
+  ensures s.Some? ==> Some(SM.ISector(s.value)) == Marshalling.valToSector(v)
+  ensures s.None? ==> Marshalling.valToSector(v).None?
+  ensures s.Some? && s.value.SectorIndirectionTable? ==> s.value.indirectionTable.TrackingGarbage()
   {
     if v.c == 0 then (
       match Marshalling.valToSuperblock(v.val) {
@@ -169,8 +173,7 @@ module MarshallingModel {
         case None => None
       }
     ) else if v.c == 1 then (
-      // match IndirectionTableModel.valToIndirectionTable(v.val) {
-      match Marshalling.ValToIndirectionTable(v.val) {
+      match IndirectionTable.IndirectionTable.valToIndirectionTable(v.val) {
         case Some(s) => Some(SM.SectorIndirectionTable(s))
         case None => None
       }
@@ -186,8 +189,7 @@ module MarshallingModel {
   ensures s.Some? ==> SM.WFSector(s.value)
   ensures s.Some? ==> Some(SM.ISector(s.value)) == Marshalling.parseSector(data)
   ensures s.None? ==> Marshalling.parseSector(data).None?
-  ensures s.Some? && s.value.SectorIndirectionTable? ==>
-      IndirectionTableModel.TrackingGarbage(s.value.indirectionTable)
+  ensures s.Some? && s.value.SectorIndirectionTable? ==> s.value.indirectionTable.TrackingGarbage()
   {
     Marshalling.reveal_parseSector();
 
@@ -207,8 +209,7 @@ module MarshallingModel {
   ensures s.Some? ==> SM.WFSector(s.value)
   ensures s.Some? ==> Some(SM.ISector(s.value)) == Marshalling.parseCheckedSector(data)
   ensures s.None? ==> Marshalling.parseCheckedSector(data).None?
-  ensures s.Some? && s.value.SectorIndirectionTable? ==>
-      IndirectionTableModel.TrackingGarbage(s.value.indirectionTable)
+  ensures s.Some? && s.value.SectorIndirectionTable? ==> s.value.indirectionTable.TrackingGarbage()
   {
     Marshalling.reveal_parseCheckedSector();
 
