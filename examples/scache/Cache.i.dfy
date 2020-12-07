@@ -356,12 +356,14 @@ module CacheImpl {
   returns (success: bool, linear r': RWLock.R)
   requires Inv(c)
   requires 0 <= cache_idx as int < CACHE_SIZE
+  requires r.Internal? && r.q.ExcLockPending?
   requires r == RWLock.Internal(RWLock.ExcLockPending(
-      c.key(cache_idx as int), -1, 0))
+      c.key(cache_idx as int), -1, 0, r.q.clean))
   ensures r'.Internal?
   ensures r'.q.ExcLockPending?
   ensures r'.q.key == c.key(cache_idx as int)
   ensures r'.q.t == -1
+  ensures r'.q.clean == r.q.clean
   ensures success ==> r'.q.visited == NUM_THREADS
 
   method try_evict_page(c: Cache, cache_idx: uint64)
@@ -418,8 +420,9 @@ module CacheImpl {
               status, r);
         } else {
           linear var handle;
+          var clean := r.q.clean;
           r, handle := RWLock.transform_TakeExcLockFinish(
-              c.key(cache_idx as int), -1, r);
+              c.key(cache_idx as int), -1, clean, r);
 
           // 7. clear cache_idx_of_page lookup
 
@@ -547,6 +550,8 @@ module CacheImpl {
 
     inout localState.chunk_idx := chunk;
   }
+
+  // Top level method
 
   method try_take_read_lock_disk_page(c: Cache, disk_idx: int,
       linear inout localState: LocalState)

@@ -31,9 +31,10 @@ module AtomicRefcountImpl {
   requires t == my_t ==> val == 1
   requires t != my_t ==> val == 0
   requires atomic_refcount_inv(a, key, t)
-  requires m == RWLock.Internal(RWLock.ExcLockPending(key, my_t, t))
-  ensures is_zero ==> m' == RWLock.Internal(RWLock.ExcLockPending(key, my_t, t + 1))
-  ensures !is_zero ==> m' == RWLock.Internal(RWLock.ExcLockPending(key, my_t, t))
+  requires m.Internal? && m.q.ExcLockPending?
+  requires m == RWLock.Internal(RWLock.ExcLockPending(key, my_t, t, m.q.clean))
+  ensures is_zero ==> m' == RWLock.Internal(RWLock.ExcLockPending(key, my_t, t + 1, m.q.clean))
+  ensures !is_zero ==> m' == RWLock.Internal(RWLock.ExcLockPending(key, my_t, t, m.q.clean))
   {
     var c := atomic_read(a);
 
@@ -48,8 +49,9 @@ module AtomicRefcountImpl {
     linear var new_g;
     ///// Transfer:
     if c == val {
+      var clean := m.q.clean;
       m' := RWLock.transform_TakeExcLockCheckSharedLockZero(
-          key, my_t, t, old_g, m);
+          key, my_t, t, clean, old_g, m);
       new_g := old_g;
     } else {
       m' := m;
