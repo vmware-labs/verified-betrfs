@@ -127,25 +127,6 @@ module IndirectionTable {
     IndirectionTableMaxSizeUint64()
   }
 
-  // // Dummy constructor only used when ImplVariables is in a state with no indirection
-  // // table. We could use a null indirection table instead, it's just slightly more
-  // // annoying to do that because we'd need additional invariants.
-  // function method IndirectionTableEmptyConstructor() : linear indirectionTable
-  // ensures It.Inv(IndirectionTableEmptyConstructor())
-  // {
-  //   linear var t0 := LinearMutableMap.Constructor<Entry>(128);
-  //   // This is not important, but needed to satisfy the Inv:
-  //   linear var t1 := LinearMutableMap.Insert(t0, BT.G.Root(), Entry(None, [], 1));
-
-  //   indirectionTable(
-  //     t1,
-  //     lNone,
-  //     /* refUpperBound = */ 0,
-  //     None)
-  // }
-
-
-
   // TODO move bitmap in here?
   linear datatype IndirectionTable = IndirectionTable(
     linear t: HashMap,
@@ -213,6 +194,28 @@ module IndirectionTable {
         hashMap,
         lNone,
         /* refUpperBound = */ BT.G.Root(),
+        /* findLoclessIterator */ None,
+        /* r.locs */ Locs(hashMap),
+        /* r.graph */ Graph(hashMap),
+        /* r.predCounts */ PredCounts(hashMap));
+
+      assert r.Inv() by { reveal_PredCounts(); }
+    }
+
+    // Dummy constructor only used when ImplVariables is in a state with no indirection
+    // table. We could use a null indirection table instead, it's just slightly more
+    // annoying to do that because we'd need additional invariants.
+    static method AllocEmpty() returns (linear r: IndirectionTable)
+    ensures r.Inv()
+    {
+      linear var hashMap := LinearMutableMap.Constructor<Entry>(128);
+      // This is not important, but needed to satisfy the Inv:
+      LinearMutableMap.Insert(inout hashMap, BT.G.Root(), Entry(None, [], 1));
+
+      r := IndirectionTable(
+        hashMap,
+        lNone,
+        /* refUpperBound = */ 0,
         /* findLoclessIterator */ None,
         /* r.locs */ Locs(hashMap),
         /* r.graph */ Graph(hashMap),
@@ -1895,6 +1898,13 @@ module IndirectionTable {
       box.Read()
     }
 
+    function ReadWithInv() : IndirectionTable
+      requires Inv()
+      reads this, Repr
+    {
+      box.Read()
+    }
+
 //     method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator)
 //       requires false
 //     {
@@ -1952,14 +1962,15 @@ module IndirectionTable {
       Repr := {this} + box.Repr;
     }
 
-    // TODO constructor Empty()
-    // TODO   ensures Inv()
-    // TODO   ensures fresh(Repr)
-    // TODO {
-    // TODO   box := new BoxedLinear(IndirectionTableEmptyConstructor());
-    // TODO   new;
-    // TODO   Repr := {this} + box.Repr;
-    // TODO }
+    constructor Empty()
+      ensures Inv()
+      ensures fresh(Repr)
+    {
+      linear var allocd := IndirectionTable.AllocEmpty();
+      box := new BoxedLinear(allocd);
+      new;
+      Repr := {this} + box.Repr;
+    }
 
     constructor (loc: Location)
       ensures Inv()

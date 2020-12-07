@@ -5,7 +5,7 @@ include "StateModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "../lib/Buckets/BucketImpl.i.dfy"
 include "CacheImpl.i.dfy"
-include "IndirectionTableImpl.i.dfy"
+include "IndirectionTable.i.dfy"
 include "BlockAllocatorImpl.i.dfy"
 include "DiskOpImpl.i.dfy"
 
@@ -19,8 +19,7 @@ module StateImpl {
   import opened CacheImpl
   import BlockAllocatorImpl
   import BitmapImpl
-  import IndirectionTableImpl
-  import IndirectionTableModel
+  import IndirectionTable
   import MutableMap
   import MutableMapModel
 
@@ -45,8 +44,8 @@ module StateImpl {
 
   type Reference = BT.G.Reference
 
-  type MutIndirectionTable = IndirectionTableImpl.IndirectionTable
-  type MutIndirectionTableNullable = IndirectionTableImpl.IndirectionTable?
+  type MutIndirectionTable = IndirectionTable.BoxedIndirectionTable
+  type MutIndirectionTableNullable = IndirectionTable.BoxedIndirectionTable?
 
   datatype Sector =
     | SectorNode(node: Node)
@@ -81,24 +80,6 @@ module StateImpl {
     && (sector.SectorSuperblock? ==> JC.WFSuperblock(sector.superblock))
   }
 
-  // TODO remove this and just replace with .I() because it's easier
-  function IIndirectionTable(table: MutIndirectionTable) : (result: IndirectionTableModel.IndirectionTable)
-  reads table, table.Repr
-  requires table.Inv()
-  {
-    table.I()
-  }
- 
-  function IIndirectionTableOpt(table: MutIndirectionTableNullable) : (result: Option<SM.IndirectionTable>)
-  reads if table != null then {table} + table.Repr else {}
-  requires table != null ==> table.Inv()
-  {
-    if table != null then
-      Some(IIndirectionTable(table))
-    else
-      None
-  }
- 
   function ISector(sector: Sector) : SM.Sector
   requires WFSector(sector)
   reads SectorObjectSet(sector)
@@ -107,7 +88,7 @@ module StateImpl {
     match sector {
       case SectorSuperblock(superblock) => SM.SectorSuperblock(superblock)
       case SectorNode(node) => SM.SectorNode(node.I())
-      case SectorIndirectionTable(indirectionTable) => SM.SectorIndirectionTable(IIndirectionTable(indirectionTable))
+      case SectorIndirectionTable(indirectionTable) => SM.SectorIndirectionTable(indirectionTable.ReadWithInv())
     }
   }
 
@@ -136,47 +117,47 @@ module StateImpl {
     // Unready
     // no fields
 
-    method DebugAccumulate()
-    returns (acc:DebugAccumulator.DebugAccumulator)
-    requires false
-    {
-      acc := DebugAccumulator.EmptyAccumulator();
-      //var r := new DebugAccumulator.AccRec(syncReqs.Count, "SyncReqStatus");
-      //acc := DebugAccumulator.AccPut(acc, "syncReqs", r);
-      var i := DebugAccumulator.EmptyAccumulator();
-      if persistentIndirectionTable != null {
-        i := persistentIndirectionTable.DebugAccumulate();
-      }
-      var a := new DebugAccumulator.AccRec.Index(i);
-      acc := DebugAccumulator.AccPut(acc, "persistentIndirectionTable", a);
-      i := DebugAccumulator.EmptyAccumulator();
-      if frozenIndirectionTable != null {
-        i := frozenIndirectionTable.DebugAccumulate();
-      }
-      a := new DebugAccumulator.AccRec.Index(i);
-      acc := DebugAccumulator.AccPut(acc, "frozenIndirectionTable", a);
-      i := DebugAccumulator.EmptyAccumulator();
-      if ephemeralIndirectionTable != null {
-        i := ephemeralIndirectionTable.DebugAccumulate();
-      }
-      a := new DebugAccumulator.AccRec.Index(i);
-      acc := DebugAccumulator.AccPut(acc, "ephemeralIndirectionTable", a);
-      //r := new DebugAccumulator.AccRec(if outstandingIndirectionTableWrite.Some? then 1 else 0, "ReqId");
-      //acc := DebugAccumulator.AccPut(acc, "outstandingIndirectionTableWrite", r);
-      //r := new DebugAccumulator.AccRec(|outstandingBlockWrites| as uint64, "OutstandingWrites");
-      //acc := DebugAccumulator.AccPut(acc, "outstandingBlockWrites", r);
-      //r := new DebugAccumulator.AccRec(|outstandingBlockReads| as uint64, "OutstandingReads");
-      //acc := DebugAccumulator.AccPut(acc, "outstandingBlockReads", r);
-      i := cache.DebugAccumulate();
-      a := new DebugAccumulator.AccRec.Index(i);
-      acc := DebugAccumulator.AccPut(acc, "cache", a);
-      i := lru.DebugAccumulate();
-      a := new DebugAccumulator.AccRec.Index(i);
-      acc := DebugAccumulator.AccPut(acc, "lru", a);
-      i := blockAllocator.DebugAccumulate();
-      a := new DebugAccumulator.AccRec.Index(i);
-      acc := DebugAccumulator.AccPut(acc, "blockAllocator", a);
-    }
+    // method DebugAccumulate()
+    // returns (acc:DebugAccumulator.DebugAccumulator)
+    // requires false
+    // {
+    //   acc := DebugAccumulator.EmptyAccumulator();
+    //   //var r := new DebugAccumulator.AccRec(syncReqs.Count, "SyncReqStatus");
+    //   //acc := DebugAccumulator.AccPut(acc, "syncReqs", r);
+    //   var i := DebugAccumulator.EmptyAccumulator();
+    //   if persistentIndirectionTable != null {
+    //     i := persistentIndirectionTable.DebugAccumulate();
+    //   }
+    //   var a := new DebugAccumulator.AccRec.Index(i);
+    //   acc := DebugAccumulator.AccPut(acc, "persistentIndirectionTable", a);
+    //   i := DebugAccumulator.EmptyAccumulator();
+    //   if frozenIndirectionTable != null {
+    //     i := frozenIndirectionTable.DebugAccumulate();
+    //   }
+    //   a := new DebugAccumulator.AccRec.Index(i);
+    //   acc := DebugAccumulator.AccPut(acc, "frozenIndirectionTable", a);
+    //   i := DebugAccumulator.EmptyAccumulator();
+    //   if ephemeralIndirectionTable != null {
+    //     i := ephemeralIndirectionTable.DebugAccumulate();
+    //   }
+    //   a := new DebugAccumulator.AccRec.Index(i);
+    //   acc := DebugAccumulator.AccPut(acc, "ephemeralIndirectionTable", a);
+    //   //r := new DebugAccumulator.AccRec(if outstandingIndirectionTableWrite.Some? then 1 else 0, "ReqId");
+    //   //acc := DebugAccumulator.AccPut(acc, "outstandingIndirectionTableWrite", r);
+    //   //r := new DebugAccumulator.AccRec(|outstandingBlockWrites| as uint64, "OutstandingWrites");
+    //   //acc := DebugAccumulator.AccPut(acc, "outstandingBlockWrites", r);
+    //   //r := new DebugAccumulator.AccRec(|outstandingBlockReads| as uint64, "OutstandingReads");
+    //   //acc := DebugAccumulator.AccPut(acc, "outstandingBlockReads", r);
+    //   i := cache.DebugAccumulate();
+    //   a := new DebugAccumulator.AccRec.Index(i);
+    //   acc := DebugAccumulator.AccPut(acc, "cache", a);
+    //   i := lru.DebugAccumulate();
+    //   a := new DebugAccumulator.AccRec.Index(i);
+    //   acc := DebugAccumulator.AccPut(acc, "lru", a);
+    //   i := blockAllocator.DebugAccumulate();
+    //   a := new DebugAccumulator.AccRec.Index(i);
+    //   acc := DebugAccumulator.AccPut(acc, "blockAllocator", a);
+    // }
 
     function Repr() : set<object>
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
@@ -236,9 +217,9 @@ module StateImpl {
     {
       if ready then (
         SM.Ready(
-          IIndirectionTable(persistentIndirectionTable),
-          IIndirectionTableOpt(frozenIndirectionTable),
-          IIndirectionTable(ephemeralIndirectionTable),
+          persistentIndirectionTable.ReadWithInv(),
+          if frozenIndirectionTable != null then Some(frozenIndirectionTable.ReadWithInv()) else None,
+          ephemeralIndirectionTable.ReadWithInv(),
           persistentIndirectionTableLoc,
           frozenIndirectionTableLoc,
           outstandingIndirectionTableWrite,
@@ -277,8 +258,8 @@ module StateImpl {
       // Unused for the `ready = false` state but we need to initialize them.
       // (could make them nullable instead).
       lru := new LruImpl.LruImplQueue();
-      ephemeralIndirectionTable := new IndirectionTableImpl.IndirectionTable.Empty();
-      persistentIndirectionTable := new IndirectionTableImpl.IndirectionTable.Empty();
+      ephemeralIndirectionTable := new MutIndirectionTable.Empty();
+      persistentIndirectionTable := new MutIndirectionTable.Empty();
       frozenIndirectionTable := null;
       cache := new MutCache();
 

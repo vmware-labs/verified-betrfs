@@ -1,6 +1,6 @@
 include "../ByteBlockCacheSystem/Marshalling.i.dfy"
 include "StateModel.i.dfy"
-include "IndirectionTableModel.i.dfy"
+include "IndirectionTable.i.dfy"
 
 //
 // Parses bytes and returns the data structure (a Pivot-Node Sector) used by
@@ -26,7 +26,7 @@ module MarshallingModel {
   import SM = StateModel
   import CRC32_C
   import NativeArrays
-  import IndirectionTableModel
+  import IndirectionTable
   import SeqComparison
   import Marshalling
   import PackedKVMarshalling
@@ -169,7 +169,8 @@ module MarshallingModel {
         case None => None
       }
     ) else if v.c == 1 then (
-      match IndirectionTableModel.valToIndirectionTable(v.val) {
+      // match IndirectionTableModel.valToIndirectionTable(v.val) {
+      match Marshalling.ValToIndirectionTable(v.val) {
         case Some(s) => Some(SM.SectorIndirectionTable(s))
         case None => None
       }

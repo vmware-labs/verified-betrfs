@@ -1,4 +1,4 @@
-include "../Lang/Inout.s.dfy"
+include "../Lang/Inout.i.dfy"
 include "../Lang/LinearSequence.s.dfy"
 include "../Lang/LinearSequence.i.dfy"
 
