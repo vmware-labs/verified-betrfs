@@ -40,6 +40,24 @@ module AtomicIndexLookupImpl {
   requires atomic_index_lookup_inv(a, disk_idx)
   ensures 0 <= cache_idx as int < CACHE_SIZE || cache_idx == NOT_MAPPED
 
+  method atomic_index_lookup_clear_mapping(
+      a: AtomicIndexLookup,
+      disk_idx: int,
+      linear cache_entry: CacheResources.R,
+      linear status: CacheResources.R
+  )
+  returns (
+      linear cache_entry': CacheResources.R,
+      linear status': CacheResources.R
+  )
+  requires atomic_index_lookup_inv(a, disk_idx)
+  requires status.CacheStatus?
+  requires status.status == CacheResources.Clean
+  requires cache_entry.CacheEntry?
+  requires cache_entry.cache_idx == status.cache_idx
+  ensures status' == status.(status := CacheResources.Empty)
+  ensures cache_entry' == cache_entry
+
   method atomic_index_lookup_add_mapping(
       a: AtomicIndexLookup,
       disk_idx: uint64,

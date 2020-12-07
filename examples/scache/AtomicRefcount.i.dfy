@@ -24,13 +24,16 @@ module AtomicRefcountImpl {
   method unsafe_obtain<R>() returns (linear r: R)
   method unsafe_dispose<R>(linear r: R)
 
-  method is_refcount_zero(a: AtomicRefcount, key: RWLock.Key, t: int,
+  method is_refcount_eq(a: AtomicRefcount, val: uint8,
+      key: RWLock.Key, my_t: int, t: int,
       linear m: RWLock.R)
   returns (is_zero: bool, linear m': RWLock.R)
+  requires t == my_t ==> val == 1
+  requires t != my_t ==> val == 0
   requires atomic_refcount_inv(a, key, t)
-  requires m == RWLock.Internal(RWLock.ExcLockPending(key, t))
-  ensures is_zero ==> m' == RWLock.Internal(RWLock.ExcLockPending(key, t + 1))
-  ensures !is_zero ==> m' == RWLock.Internal(RWLock.ExcLockPending(key, t))
+  requires m == RWLock.Internal(RWLock.ExcLockPending(key, my_t, t))
+  ensures is_zero ==> m' == RWLock.Internal(RWLock.ExcLockPending(key, my_t, t + 1))
+  ensures !is_zero ==> m' == RWLock.Internal(RWLock.ExcLockPending(key, my_t, t))
   {
     var c := atomic_read(a);
 
@@ -44,9 +47,10 @@ module AtomicRefcountImpl {
     assume atomic_inv(a, old_v, old_g);
     linear var new_g;
     ///// Transfer:
-    if c == 0 {
-      new_g, m' := RWLock.transform_TakeExcLockCheckSharedLockZero(
-          key, t, old_g, m);
+    if c == val {
+      m' := RWLock.transform_TakeExcLockCheckSharedLockZero(
+          key, my_t, t, old_g, m);
+      new_g := old_g;
     } else {
       m' := m;
       new_g := old_g;
@@ -56,7 +60,7 @@ module AtomicRefcountImpl {
     unsafe_dispose(new_g);
     ///// End jank
 
-    is_zero := (c == 0);
+    is_zero := (c == val);
   }
 
   method inc_refcount_for_reading(a: AtomicRefcount, key: RWLock.Key, t: int,

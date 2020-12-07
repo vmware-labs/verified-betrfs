@@ -79,10 +79,11 @@ module RWLock refines ResourceBuilderSpec {
 
     // Standard flow for obtaining an 'exclusive' lock
 
-    | ExcLockPendingAwaitWriteBack(key: Key, t: int)  // set ExcLock bit
+    | ExcLockPendingAwaitWriteBack(key: Key, t: int)
+        // set ExcLock bit
+    | ExcLockPending(key: Key, t: int, visited: int)
         // check WriteBack bit unset
         //   and `visited` of the refcounts
-    | ExcLockPending(key: Key, t: int, visited: int)
     | ExcLockObtained(key: Key, t: int)
 
     // Flow for the phase of reading in a page from disk.
@@ -126,7 +127,7 @@ module RWLock refines ResourceBuilderSpec {
     }
   }
 
-  predicate TakeExcLock(a: multiset<Q>, b: multiset<Q>, key: Key)
+  /*predicate TakeExcLock(a: multiset<Q>, b: multiset<Q>, key: Key)
   {
     && a == multiset{ FlagsField(key, Available) }
     && b == multiset{
@@ -178,7 +179,7 @@ module RWLock refines ResourceBuilderSpec {
     && b == multiset{
       ExcLockObtained(key)
     }
-  }
+  }*/
 
   predicate TakeSharedLock(a: multiset<Q>, b: multiset<Q>, key: Key, t: int, r: uint8)
   {
@@ -347,35 +348,35 @@ module RWLock refines ResourceBuilderSpec {
   returns (linear t: R, linear u: R)
   requires s == Internal(FlagsField(key, Available))
   ensures t == Internal(FlagsField(key, ExcLock))
-  ensures u == Internal(ExcLockPendingAwaitWriteBack(key))
+  ensures u == Internal(ExcLockPendingAwaitWriteBack(key, -1))
 
   method transform_TakeExcLockAwaitWriteBack(key: Key, linear s: R)
   returns (linear t: R, linear u: R)
   requires s == Internal(FlagsField(key, WriteBack))
   ensures t == Internal(FlagsField(key, WriteBack_PendingExcLock))
-  ensures u == Internal(ExcLockPendingAwaitWriteBack(key))
+  ensures u == Internal(ExcLockPendingAwaitWriteBack(key, -1))
 
-  method transform_TakeExcLockFinishWriteBack(key: Key, fl: Flag, linear s1: R, linear s2: R)
+  method transform_TakeExcLockFinishWriteBack(key: Key, t: int, fl: Flag, linear s1: R, linear s2: R)
   returns (linear t1: R, linear t2: R)
   requires fl == ExcLock || fl == Available
       // vacuous cases:
       || fl == Reading || fl == Reading_ExcLock || fl == Unmapped
   requires s1 == Internal(FlagsField(key, fl))
-  requires s2 == Internal(ExcLockPendingAwaitWriteBack(key))
+  requires s2 == Internal(ExcLockPendingAwaitWriteBack(key, t))
   ensures t1 == Internal(FlagsField(key, fl))
-  ensures t2 == Internal(ExcLockPending(key, 0))
+  ensures t2 == Internal(ExcLockPending(key, t, 0))
 
-  method transform_TakeExcLockCheckSharedLockZero(key: Key, idx: int, linear s1: R, linear s2: R)
-  returns (linear t1: R, linear t2: R)
-  requires s1 == Internal(SharedLockRefCount(key, idx, 0))
-  requires s2 == Internal(ExcLockPending(key, idx))
-  ensures t1 == Internal(SharedLockRefCount(key, idx, 0))
-  ensures t2 == Internal(ExcLockPending(key, idx + 1))
+  method transform_TakeExcLockCheckSharedLockZero(key: Key, t: int, idx: int, shared s1: R, linear s2: R)
+  returns (linear t2: R)
+  requires s1 == Internal(SharedLockRefCount(key, idx,
+      if t == idx then 1 else 0))
+  requires s2 == Internal(ExcLockPending(key, t, idx))
+  ensures t2 == Internal(ExcLockPending(key, t, idx + 1))
 
-  method transform_TakeExcLockFinish(key: Key, linear s1: R)
+  method transform_TakeExcLockFinish(key: Key, t: int, linear s1: R)
   returns (linear t1: R, linear t2: Handle)
-  requires s1 == Internal(ExcLockPending(key, NUM_THREADS))
-  ensures t1 == Internal(ExcLockObtained(key))
+  requires s1 == Internal(ExcLockPending(key, t, NUM_THREADS))
+  ensures t1 == Internal(ExcLockObtained(key, t))
   ensures t2.is_handle(key)
 
   method transform_Alloc(key: Key, linear s1: R)
@@ -477,4 +478,26 @@ module RWLock refines ResourceBuilderSpec {
   requires r == Internal(SharedLockPending2(key, t))
   requires f == Internal(FlagsField(key, fl))
   ensures fl != Unmapped
+
+  method transform_unmap(key: Key, fl: Flag,
+      linear flags: R,
+      linear handle: Handle,
+      linear r: R
+  )
+  returns (
+      linear flags': R
+  )
+  requires flags == Internal(FlagsField(key, fl))
+  requires handle.is_handle(key)
+  requires r == Internal(ExcLockObtained(key, -1))
+  ensures flags' == Internal(FlagsField(key, Unmapped))
+  ensures fl == ExcLock
+
+  method abandon_ExcLockPending(key: Key, fl: Flag, visited: int,
+      linear r: R, linear f: R)
+  returns (linear f': R)
+  requires r == Internal(ExcLockPending(key, -1, visited))
+  requires f == Internal(FlagsField(key, fl))
+  ensures fl == ExcLock
+  ensures f' == Internal(FlagsField(key, Available))
 }

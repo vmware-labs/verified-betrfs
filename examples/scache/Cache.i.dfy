@@ -39,7 +39,7 @@ module CacheImpl {
 
   datatype LocalState = LocalState(
     t: int,
-    chunk_idx: uint64,
+    chunk_idx: uint64
   )
   {
     predicate WF()
@@ -75,7 +75,7 @@ module CacheImpl {
     && handle.is_handle(c.key(handle.cache_entry.cache_idx))
   }
 
-  linear datatype PageHandle = PageHandle(
+  /*linear datatype PageHandle = PageHandle(
       linear w: RWLock.R,
       linear handle: RWLock.Handle)
   {
@@ -86,7 +86,7 @@ module CacheImpl {
       && w == RWLock.Internal(RWLock.ExcLockObtained(
           c.key(this.handle.cache_entry.cache_idx)))
     }
-  }
+  }*/
 
   linear datatype ReadonlyPageHandle = ReadonlyPageHandle(
       linear w: RWLock.R,
@@ -280,13 +280,13 @@ module CacheImpl {
     r, handle := RWLock.transform_TakeWriteFinish(c.key(cache_idx), w);
   }*/
 
-  method release_write_lock_on_cache_entry(c: Cache, cache_idx: int,
+  /*method release_write_lock_on_cache_entry(c: Cache, cache_idx: int,
       linear r: RWLock.R,
       linear handle: RWLock.Handle)
   requires Inv(c)
   requires 0 <= cache_idx < CACHE_SIZE
   requires handle.is_handle(c.key(cache_idx))
-  requires r == RWLock.Internal(RWLock.ExcLockObtained(c.key(cache_idx)))
+  requires r == RWLock.Internal(RWLock.ExcLockObtained(c.key(cache_idx)))*/
 
   /*method take_write_lock_on_disk_entry(c: Cache, disk_idx: int)
   requires 0 
@@ -350,9 +350,24 @@ module CacheImpl {
     new_chunk := l as uint64;
   }
 
-  method try_evict_page(c: Cache, cache_idx: uint64,
-      shared localState: LocalState)
-  requires 0 <= cache_idx < CACHE_SIZE
+  method check_all_refcounts_dont_wait(c: Cache,
+      cache_idx: uint64,
+      linear r: RWLock.R)
+  returns (success: bool, linear r': RWLock.R)
+  requires Inv(c)
+  requires 0 <= cache_idx as int < CACHE_SIZE
+  requires r == RWLock.Internal(RWLock.ExcLockPending(
+      c.key(cache_idx as int), -1, 0))
+  ensures r'.Internal?
+  ensures r'.q.ExcLockPending?
+  ensures r'.q.key == c.key(cache_idx as int)
+  ensures r'.q.t == -1
+  ensures success ==> r'.q.visited == NUM_THREADS
+
+  method try_evict_page(c: Cache, cache_idx: uint64)
+  requires Inv(c)
+  requires 0 <= cache_idx as int < CACHE_SIZE
+  requires 0 <= cache_idx as int < CACHE_SIZE
   {
     // 1. get status
 
@@ -361,7 +376,7 @@ module CacheImpl {
     // 2. if accessed, then clear 'access'
 
     if bit_or(status, flag_accessed) != 0 {
-      clear_accessed(c.status[cache_idx]);
+      clear_accessed(c.status[cache_idx], c.key(cache_idx as int));
     }
 
     // 3. if status != CLEAN, abort
@@ -370,31 +385,42 @@ module CacheImpl {
       // no cleanup to do
     } else {
       // 4. inc ref count for shared lock
-      // TODO I think we could probably skip doing a refcount?
-
-      linear var r := inc_refcount_for_shared(
-          c.read_refcounts[localState.t][cache_idx],
-          c.key(cache_idx), localState.t);
+      // skipping this step, we don't need it
+      //
+      //linear var r := inc_refcount_for_shared(
+      //    c.read_refcounts[localState.t][cache_idx],
+      //    c.key(cache_idx), localState.t);
 
       // 5. get the exc lock (Clean -> Clean | Exc) (or bail)
 
       var success;
-      linear var status;
-      success, r, status := take_exc_if_eq_clean(
+      linear var status, r, r_maybe, status_maybe;
+      success, r_maybe, status_maybe := take_exc_if_eq_clean(
             c.status[cache_idx], 
-            c.key(cache_idx), localState.t,
-            r);
+            c.key(cache_idx as int));
 
       if !success {
-        var _ := discard(status);
+        var _ := discard(status_maybe);
+        var _ := discard(r_maybe);
       } else {
         // 6. try the rest of the read refcounts (or bail)
-        
-        success, r, handle := check_all_refcounts_dont_wait(
-            localState.t, r);
+
+        status := unwrap(status_maybe);
+        r := unwrap(r_maybe);
+
+        success, r := check_all_refcounts_dont_wait(
+            c, cache_idx, r);
 
         if !success {
+          abandon_exc(
+              c.status[cache_idx],
+              c.key(cache_idx as int),
+              status, r);
         } else {
+          linear var handle;
+          r, handle := RWLock.transform_TakeExcLockFinish(
+              c.key(cache_idx as int), -1, r);
+
           // 7. clear cache_idx_of_page lookup
 
           var disk_idx := ptr_read(
@@ -406,36 +432,34 @@ module CacheImpl {
           cache_entry, status := atomic_index_lookup_clear_mapping(
                 c.cache_idx_of_page[disk_idx],
                 disk_idx,
-                cache_idx,
                 cache_entry,
                 status);
 
           // 8. set to FREE
 
-          r := set_to_free(
+          set_to_free(
               c.status[cache_idx],
-              c.key(cache_idx),
-              localState.t,
-              CacheEntryHandle(cache_entry, data, idx),
+              c.key(cache_idx as int),
+              RWLock.CacheEntryHandle(cache_entry, data, idx),
               status,
               r);
 
-          dec_refcount_for_zombie(
-              c.read_refcounts[localState.t][cache_idx],
-              c.key(cache_idx), localState.t, r);
+          // no need to decrement a refcount
         }
       }
     }
   }
 
   method evict_chunk(c: Cache, chunk: uint64)
-  requires 0 <= chunk < NUM_CHUNKS
+  requires Inv(c)
+  requires 0 <= chunk as int < NUM_CHUNKS
   {
     var i: uint64 := 0;
-    while i < CHUNK_SIZE
+    while i as int < CHUNK_SIZE
     {
-      var j := chunk * CHUNK_SIZE + i;
+      var j: uint64 := chunk * CHUNK_SIZE as uint64 + i;
       try_evict_page(c, j);
+      i := i + 1;
     }
   }
 
@@ -483,11 +507,13 @@ module CacheImpl {
         && read(handle_maybe).idx.v == -1
     invariant success ==> has(status_maybe)
         && read(status_maybe) == CacheResources.CacheStatus(cache_idx as int, CacheResources.Empty)
+    invariant 0 <= chunk as int < NUM_CHUNKS
     {
-      var i: uint64 := localState.chunk_elem;
+      var i: uint64 := 0;
 
       while i < CHUNK_SIZE as uint64 && !success
       invariant 0 <= i as int <= CHUNK_SIZE
+      invariant 0 <= chunk as int < NUM_CHUNKS
       invariant !success ==> !has(m)
       invariant !success ==> !has(handle_maybe)
       invariant !success ==> !has(status_maybe)
