@@ -60,11 +60,19 @@ module RWLock refines ResourceBuilderSpec {
   datatype ExcLockLockState = 
     | WLSNone
     | WLSPendingAwaitWriteBack
-    | WLSPending(visited: int)
-    | WLSObtained
+    | WLSPending(t: int, visited: int, clean: bool)
+    | WLSObtained(t: int, clean: bool)
+
+  datatype ReadState =
+    | RSNone
+    | RSPending
+    | RSPendingCounted(t: int)
+    | RSObtained(t: int)
 
   datatype RWLockState = RWLockState(
     writeLock: ExcLockLockState,
+    readState: ReadState,
+    unmapped: bool,
     backHeld: bool,
     readCounts: seq<int>)
 
@@ -111,7 +119,47 @@ module RWLock refines ResourceBuilderSpec {
     | TakeExcLock(key: Key)
     | TakeExcLockAwaitWriteBack(key: Key)*/
 
-  predicate TakeWriteBack(a: multiset<R>, b: multiset<R>, key: Key,
+  datatype BasicStep =
+    | TakeWriteBackStep(flags: R, flags': R, r': R)
+
+  datatype QStep =
+    | BasicStep(
+        a: multiset<R>, a': multiset<R>,
+        g: map<Key, RWLockState>,
+        key: Key, state: RWLockState, state': RWLockState,
+        basicStep: BasicStep)
+
+  predicate TakeWriteBack(
+    key: Key,
+    state: RWLockState,
+    state': RWLockState,
+    flags: R,
+    flags': R,
+    r': R)
+  {
+    && state' == state.(backHeld := true)
+    && flags == Internal(FlagsField(key, Available))
+    && flags' == Internal(FlagsField(key, WriteBack))
+    && r' == Internal(WriteBackObtained(key))
+  }
+
+  predicate transform_step(a: multiset<R>, a': multiset<R>, step: QStep)
+  {
+    && a == multiset{Internal(Global(step.g))} + step.a
+    && a' == multiset{
+        Internal(Global(step.g[step.key := step.state']))} + step.a'
+    && step.key in step.g
+    && step.g[step.key] == step.state
+    && match step.basicStep {
+      case TakeWriteBackStep(flags, flags', r') =>
+        && step.a == multiset{flags}
+        && step.a' == multiset{flags', r'}
+        && TakeWriteBack(step.key, step.state, step.state',
+            flags, flags', r')
+    }
+  }
+
+  /*predicate TakeWriteBack(a: multiset<R>, b: multiset<R>, key: Key,
       g: map<Key, RWLockState>, g': map<Key, RWLockState>)
   {
     && key in g
@@ -127,7 +175,7 @@ module RWLock refines ResourceBuilderSpec {
       Internal(FlagsField(key, WriteBack)),
       Internal(WriteBackObtained(key))
     }
-  }
+  }*/
 
   /*predicate TakeExcLock(a: multiset<Q>, b: multiset<Q>, key: Key)
   {
@@ -183,6 +231,7 @@ module RWLock refines ResourceBuilderSpec {
     }
   }*/
 
+  /*
   predicate TakeSharedLock(a: multiset<Q>, b: multiset<Q>, key: Key, t: int, r: uint8)
   {
     && a == multiset{
@@ -215,17 +264,52 @@ module RWLock refines ResourceBuilderSpec {
     && b == multiset{
       SharedLockRefCount(key, t, if r == 0 then 255 else r-1)
     }
-  }
+  }*/
 
   predicate InvRWLockState(state: RWLockState)
   {
     && |state.readCounts| == NUM_THREADS
-    && (state.writeLock != WLSNone ==>
-      && !state.backHeld
-      && (forall i | 0 <= i < |state.readCounts| :: state.readCounts[i] == 0)
-    )
+    && (state.writeLock.WLSPendingAwaitWriteBack? ==>
+        && state.readState == RSNone
+        && !state.unmapped
+      )
     && (state.writeLock.WLSPending? ==>
-        0 <= state.writeLock.visited < NUM_THREADS)
+      && state.readState == RSNone
+      && !state.unmapped
+      && 0 <= state.writeLock.visited < NUM_THREADS
+      && (forall i | 0 <= i < state.writeLock.visited
+          :: state.readCounts[i] == 0)
+      && 0 <= state.writeLock.t < NUM_THREADS
+    )
+    && (state.writeLock.WLSObtained? ==>
+      && state.readState == RSNone
+      && !state.unmapped
+      && (forall i | 0 <= i < |state.readCounts|
+          :: state.readCounts[i] == 0)
+      && 0 <= state.writeLock.t < NUM_THREADS
+    )
+    && (
+      (
+        || state.readState == RSPending
+        || state.readState.RSPendingCounted?
+      ) ==> (
+        && !state.unmapped
+        && !state.backHeld
+        && (forall i | 0 <= i < |state.readCounts|
+            :: state.readCounts[i] == 0)
+      )
+    )
+    && (state.readState.RSPendingCounted? ==>
+      0 <= state.readState.t < NUM_THREADS
+    )
+    && (state.readState.RSObtained? ==>
+      0 <= state.readState.t < NUM_THREADS
+    )
+    && (state.unmapped ==>
+      && !state.backHeld
+      && (forall i | 0 <= i < |state.readCounts|
+          :: state.readCounts[i] == 0)
+    )
   }
 
   predicate InvGlobal(g: map<Key, RWLockState>)
@@ -237,28 +321,77 @@ module RWLock refines ResourceBuilderSpec {
   {
     && InvRWLockState(state)
     && (q.FlagsField? ==>
-      && (q.flags == Available ==> state.writeLock == WLSNone && !state.backHeld)
-      && (q.flags == WriteBack ==> state.writeLock == WLSNone && state.backHeld)
-      && (q.flags == ExcLock_Clean ==> state.writeLock != WLSNone && !state.backHeld)
-      && (q.flags == ExcLock_Dirty ==> state.writeLock != WLSNone && !state.backHeld)
+      && (q.flags == Unmapped ==>
+        && state.unmapped
+      )
+      && (q.flags == Reading ==>
+        && state.readState.RSObtained?
+      )
+      && (q.flags == Reading_ExcLock ==>
+        && (state.readState.RSPending?
+          || state.readState.RSPendingCounted?)
+      )
+      && (q.flags == Available ==>
+        && state.writeLock == WLSNone
+        && state.readState == RSNone
+        && !state.backHeld
+        && !state.unmapped
+      )
+      && (q.flags == WriteBack ==>
+        && state.writeLock == WLSNone
+        && state.readState == RSNone
+        && state.backHeld
+        && !state.unmapped
+      )
+      && (q.flags == ExcLock_Clean ==>
+        && (state.writeLock.WLSPending? || state.writeLock.WLSObtained?)
+        && state.writeLock.clean
+      )
+      && (q.flags == ExcLock_Dirty ==>
+        && (state.writeLock.WLSPending? || state.writeLock.WLSObtained?)
+        && !state.writeLock.clean
+      )
       && (q.flags == WriteBack_PendingExcLock ==>
-          state.writeLock == WLSPendingAwaitWriteBack && state.backHeld)
+        && state.writeLock == WLSPendingAwaitWriteBack
+        && state.backHeld
+      )
     )
     && (q.SharedLockRefCount? ==>
       && 0 <= q.t < NUM_THREADS
       && state.readCounts[q.t] == q.refcount as int
     )
-    && (q.WriteBackObtained? ==>
-      state.backHeld
+
+    && (q.SharedLockPending2? ==>
+      && state.writeLock == WLSNone
+      && (state.readState == RSNone || state.readState.RSObtained?)
     )
+    && (q.SharedLockObtained? ==>
+      && state.writeLock == WLSNone
+      && state.readState == RSNone
+    )
+
     && (q.ExcLockPendingAwaitWriteBack? ==>
-      state.writeLock == WLSPendingAwaitWriteBack
+      && state.writeLock == WLSPendingAwaitWriteBack
     )
     && (q.ExcLockPending? ==>
-      state.writeLock == WLSPending(q.visited)
+      && state.writeLock == WLSPending(q.t, q.visited, q.clean)
     )
     && (q.ExcLockObtained? ==>
-      state.writeLock == WLSObtained
+      && state.writeLock == WLSObtained(q.t, q.clean)
+    )
+
+    && (q.ReadingPending? ==>
+      && state.readState.RSPending?
+    )
+    && (q.ReadingPendingCounted? ==>
+      && state.readState == RSPendingCounted(q.t)
+    )
+    && (q.ReadingObtained? ==>
+      && state.readState == RSObtained(q.t)
+    )
+
+    && (q.WriteBackObtained? ==>
+      && state.backHeld
     )
   }
 
@@ -292,36 +425,53 @@ module RWLock refines ResourceBuilderSpec {
     && (forall a, b | multiset{a,b} <= s.m :: Inv2(a, b))
   }
 
-  lemma TakeWriteBackPreservesInv(
-    s: Variables, s': Variables,
-    a: multiset<R>, b: multiset<R>, c: multiset<R>,
-    key: Key, g: map<Key, RWLockState>, g': map<Key, RWLockState>)
-  requires TakeWriteBack(a, b, key, g, g')
-  requires Inv(s)
-  requires s.m == a + c
-  requires s'.m == b + c
+  lemma BasicStepPreservesInv(
+      s: Variables, s': Variables, step: QStep,
+      a: multiset<R>, a': multiset<R>, rest: multiset<R>)
   requires s'.saved == s.saved
+  requires s.m == a + rest
+  requires s'.m == a' + rest
+  requires transform_step(a, a', step)
+  requires Inv(s)
   ensures Inv(s')
   {
-    var y := b + c;
-    forall q, r | multiset{q, r} <= y
+    forall t | t in a && !(t.Internal? && t.q.Global?)
+    ensures Inv2(Internal(Global(step.g)), t)
+    {
+    }
+
+    assert InvRWLockState(step.state);
+
+    assert InvRWLockState(step.state') by {
+      forall t | t in a && !(t.Internal? && t.q.Global?)
+      ensures Inv2(Internal(Global(step.g)), t)
+      {
+      }
+    }
+
+    forall q, r | multiset{q, r} <= s'.m
     ensures Inv2(q, r)
     {
-      if multiset{q, r} <= c {
+      if multiset{q, r} <= rest {
         assert Inv2(q, r);
-      } else if q in b && r in c {
-        assert Inv2(Internal(Global(g)), r);
-        assert Inv2(Internal(FlagsField(key, Available)), r);
+      } else if q in a' && r in rest {
+        forall t | t in a
+        ensures Inv2(t, r)
+        ensures Inv2(r, t)
+        {
+        }
         assert Inv2(q, r);
-      } else if q in c && r in b {
-        assert Inv2(q, Internal(Global(g)));
-        assert Inv2(q, Internal(FlagsField(key, Available)));
+      } else if q in rest && r in a' {
+        forall t | t in a
+        ensures Inv2(t, q)
+        ensures Inv2(q, t)
+        {
+        }
         assert Inv2(q, r);
-      } else if multiset{q, r} <= b {
+      } else if multiset{q, r} <= a' {
         assert Inv2(q, r);
       }
     }
-    assert Inv(s');
   }
 
   method transform_TakeWriteBack(key: Key, linear s: R)
