@@ -453,6 +453,10 @@ module RWLock refines ResourceBuilderSpec {
     && (forall a, b | multiset{a,b} <= s.m :: Inv2(a, b))
   }
 
+  //lemma TakeWriteBackStepPreservesInv(
+  //    s: Variables, s': Variables, step: QStep,
+  //    a: multiset<R>, a': multiset<R>, rest: multiset<R>)
+
   lemma BasicStepPreservesInv(
       s: Variables, s': Variables, step: QStep,
       a: multiset<R>, a': multiset<R>, rest: multiset<R>)
@@ -463,23 +467,29 @@ module RWLock refines ResourceBuilderSpec {
   requires Inv(s)
   ensures Inv(s')
   {
-    forall t | t in a && !(t.Internal? && t.q.Global?)
+    // Relevant assertions to trigger all relevant Inv2(x, y) expressions
+
+    assert forall x, y //{:trigger a[x], rest[y]}
+        | x in a && y in rest :: Inv2(x, y) && Inv2(y, x);
+    assert forall x, y //{:trigger a[x], a[y]}
+        | x in a && y in a && x != y ::
+        Inv2(x, y) && Inv2(y, x);
+
+    //assert forall x, y //{:trigger a[x], rest[y]}
+    //    | x in step.a && y in rest :: Inv2(x, y) && Inv2(y, x);
+    assert forall x | x in step.a :: x in a;
+
+    /*forall t | t in a && !(t.Internal? && t.q.Global?)
     ensures Inv2(Internal(Global(step.g)), t)
     {
     }
-    forall t | t in rest && !(t.Internal? && t.q.Global?)
+    forall t | t in rest
     ensures Inv2(Internal(Global(step.g)), t)
     {
-    }
+    }*/
 
     assert InvRWLockState(step.state);
-
-    assert InvRWLockState(step.state') by {
-      forall t | t in a && !(t.Internal? && t.q.Global?)
-      ensures Inv2(Internal(Global(step.g)), t)
-      {
-      }
-    }
+    assert InvRWLockState(step.state');
 
     forall q, p | multiset{q, p} <= s'.m
     ensures Inv2(q, p)
@@ -487,17 +497,14 @@ module RWLock refines ResourceBuilderSpec {
       if multiset{q, p} <= rest {
         assert Inv2(q, p);
       } else if q in a' && p in rest {
-        forall t | t in a
-        ensures Inv2(t, p)
-        ensures Inv2(p, t)
-        {
-        }
         match step.basicStep {
           case TakeWriteBackStep(flags, flags', r') => {
             assert Inv2(q, p);
           }
           case ReleaseWriteBackStep(flags, r, flags', fl) => {
-            /*assert step.state.backHeld;
+            assert Inv2(Internal(Global(step.g)), 
+                Internal(WriteBackObtained(step.key)));
+            assert step.state.backHeld;
             assert fl != Unmapped;
             assert fl != Reading;
             assert fl != Reading_ExcLock;
@@ -510,17 +517,12 @@ module RWLock refines ResourceBuilderSpec {
             assert Internal(WriteBackObtained(step.key)) in a;
             assert Inv2(Internal(WriteBackObtained(step.key)), p);
             assert !(p.Internal? && p.q.WriteBackObtained? &&
-                p.q.key == step.key);*/
+                p.q.key == step.key);
             assert Inv2(q, p);
           }
         }
         assert Inv2(q, p);
       } else if q in rest && p in a' {
-        forall t | t in a
-        ensures Inv2(t, q)
-        ensures Inv2(q, t)
-        {
-        }
         assert Inv2(q, p);
       } else if multiset{q, p} <= a' {
         assert Inv2(q, p);
