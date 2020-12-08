@@ -126,6 +126,7 @@ module RWLock refines ResourceBuilderSpec {
     | TakeExcLockSharedLockZeroStep(rc_rc': R, r: R, r': R,
           t: int, idx: int, clean: bool)
     | TakeExcLockFinishStep(r: R, r': R, handle': R, t: int, clean: bool) 
+    | AllocStep(flags: R, flags': R, r': R, handle': R)
 
   predicate TakeWriteBack(
     key: Key, state: RWLockState, state': RWLockState,
@@ -198,6 +199,22 @@ module RWLock refines ResourceBuilderSpec {
     && (state.handle.Some? ==> handle' == Exc(state.handle.value))
   }
 
+  predicate Alloc(
+    key: Key, state: RWLockState, state': RWLockState,
+    flags: R,
+    flags': R, r': R, handle': R)
+  {
+    && state' == state
+        .(unmapped := false)
+        .(handle := None)
+        .(readState := RSPending)
+    && flags == Internal(FlagsField(key, Unmapped))
+    && flags' == Internal(FlagsField(key, Reading_ExcLock))
+    && r' == Internal(ReadingPending(key))
+    && (state.handle.Some? ==>
+      handle' == Exc(state.handle.value))
+  }
+
   datatype QStep =
     | BasicStep(
         a: multiset<R>, a': multiset<R>,
@@ -236,6 +253,10 @@ module RWLock refines ResourceBuilderSpec {
         && step.a == multiset{r}
         && step.a' == multiset{r',handle'}
         && TakeExcLockFinish(step.key, step.state, step.state', r, r', handle', t, clean)
+      case AllocStep(flags, flags', r', handle') =>
+        && step.a == multiset{flags}
+        && step.a' == multiset{flags', r', handle'}
+        && Alloc(step.key, step.state, step.state', flags, flags', r', handle')
     }
   }
 
@@ -290,11 +311,14 @@ module RWLock refines ResourceBuilderSpec {
     )
     && (state.unmapped ==>
       && !state.backHeld
+      && state.readState == RSNone
       && (forall i | 0 <= i < |state.readCounts|
           :: state.readCounts[i] == 0)
     )
     && (state.excState.WLSObtained? ==> state.handle.None?)
-    && (!state.excState.WLSObtained? ==> state.handle.Some?)
+    && (!state.readState.RSNone? ==> state.handle.None?)
+    && (!state.excState.WLSObtained? && state.readState.RSNone?
+        ==> state.handle.Some?)
     && (state.handle.Some? ==>
       state.handle.value.is_handle(key)
     )
@@ -302,7 +326,7 @@ module RWLock refines ResourceBuilderSpec {
       :: state.readCounts[i] == CountCountedRefs(m, key, i))
   }
 
-  predicate is_counted_ref(r: R, key: Key, t: int)
+  predicate is_counted_ref_type(r: R)
   {
     && r.Internal?
     && (r.q.SharedLockPending? || r.q.SharedLockPending2?
@@ -312,6 +336,11 @@ module RWLock refines ResourceBuilderSpec {
         || r.q.ExcLockObtained?
         || r.q.ReadingPendingCounted?
         || r.q.ReadingObtained?)
+  }
+
+  predicate is_counted_ref(r: R, key: Key, t: int)
+  {
+    && is_counted_ref_type(r)
     && r.q.key == key
     && r.q.t == t
   }
@@ -397,22 +426,32 @@ module RWLock refines ResourceBuilderSpec {
       && state.readCounts[q.t] == q.refcount as int
     )
 
+    && (q.SharedLockPending? ==>
+      && 0 <= q.t < NUM_THREADS
+    )
     && (q.SharedLockPending2? ==>
+      && 0 <= q.t < NUM_THREADS
       && state.excState == WLSNone
       && (state.readState == RSNone || state.readState.RSObtained?)
+      && !state.unmapped
     )
     && (q.SharedLockObtained? ==>
+      && 0 <= q.t < NUM_THREADS
       && state.excState == WLSNone
       && state.readState == RSNone
+      && !state.unmapped
     )
 
     && (q.ExcLockPendingAwaitWriteBack? ==>
+      && 0 <= q.t < NUM_THREADS
       && state.excState == WLSPendingAwaitWriteBack(q.t)
     )
     && (q.ExcLockPending? ==>
+      && 0 <= q.t < NUM_THREADS
       && state.excState == WLSPending(q.t, q.visited, q.clean)
     )
     && (q.ExcLockObtained? ==>
+      && 0 <= q.t < NUM_THREADS
       && state.excState == WLSObtained(q.t, q.clean)
     )
 
@@ -420,9 +459,11 @@ module RWLock refines ResourceBuilderSpec {
       && state.readState.RSPending?
     )
     && (q.ReadingPendingCounted? ==>
+      && 0 <= q.t < NUM_THREADS
       && state.readState == RSPendingCounted(q.t)
     )
     && (q.ReadingObtained? ==>
+      && 0 <= q.t < NUM_THREADS
       && state.readState == RSObtained(q.t)
     )
 
@@ -708,6 +749,75 @@ module RWLock refines ResourceBuilderSpec {
     }
   }
 
+  lemma AllocStepPreservesInv(
+      s: Variables, s': Variables, step: QStep,
+      a: multiset<R>, a': multiset<R>, rest: multiset<R>)
+  requires s'.saved == s.saved
+  requires s.m == a + rest
+  requires s'.m == a' + rest
+  requires transform_step(a, a', step)
+  requires Inv(s)
+  requires step.basicStep.AllocStep?
+  ensures Inv(s')
+  {
+    UsefulTriggers(s, s', step, a, a', rest);
+    forall_CountReduce<R>();
+
+    assert InvRWLockState(step.key, step.state, s.m);
+
+    assert step.state.handle.Some?;
+
+    forall i | 0 <= i < |step.state'.readCounts|
+    ensures step.state'.readCounts[i] == CountCountedRefs(s'.m, step.key, i)
+    {
+      assert step.state.readCounts[i] == CountCountedRefs(s.m, step.key, i);
+      assert CountCountedRefs(s'.m, step.key, i)
+          == CountCountedRefs(s.m, step.key, i);
+      assert step.state'.readCounts[i]
+          == step.state.readCounts[i];
+    }
+
+    assert InvRWLockState(step.key, step.state', s'.m);
+
+    forall q, p | multiset{q, p} <= s'.m
+    ensures Inv2(q, p)
+    {
+      if multiset{q, p} <= rest {
+        assert Inv2(q, p);
+      } else if q in a' && p in rest {
+
+        if is_counted_ref_type(p) && p.q.key == step.key {
+          Count_ge_1((r) => is_counted_ref(r, p.q.key, p.q.t), s.m, p);
+          assert step.state.readCounts[p.q.t] != 0;
+          assert false;
+        }
+
+        if p.Const? && p.v.key == step.key {
+          // If a Const exists, then there is either
+          // a SharedLockObtained or a WriteBackObtained object
+          // to certify it, and that would lead to a contradiction.
+          Count_ge_1((r) => is_const(r, step.key), s.m, p);
+          assert CountConsts(s.m, step.key)
+              == CountConstRefs(s.m, step.key);
+          var o := get_true_elem((r) => is_const_ref(r, step.key), s.m);
+          assert false;
+        }
+
+        assert Inv2(q, p);
+      } else if q in rest && p in a' {
+        assert Inv2(q, p);
+      } else if multiset{q, p} <= a' {
+        assert Inv2(q, p);
+      }
+    }
+
+    forall k
+    ensures CountConsts(s'.m, k) == CountConstRefs(s'.m, k)
+    {
+      assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
+    }
+  }
+
   lemma BasicStepPreservesInv(
       s: Variables, s': Variables, step: QStep,
       a: multiset<R>, a': multiset<R>, rest: multiset<R>)
@@ -735,6 +845,9 @@ module RWLock refines ResourceBuilderSpec {
       }
       case TakeExcLockFinishStep(_,_,_,_,_) => {
          TakeExcLockFinishStepPreservesInv(s, s', step, a, a', rest);
+      }
+      case AllocStep(_,_,_,_) => {
+         AllocStepPreservesInv(s, s', step, a, a', rest);
       }
     }
   }
