@@ -115,8 +115,8 @@ module RWLock refines ResourceBuilderSpec {
     | WriteBackObtained(key: Key)             // set WriteBack status bit
 
   datatype BasicStep =
-    | TakeWriteBackStep(flags: R, flags': R, r': R)
-    | ReleaseWriteBackStep(flags: R, r: R, flags': R, fl: Flag)
+    | TakeWriteBackStep(flags: R, flags': R, r': R, handle': R)
+    | ReleaseWriteBackStep(flags: R, r: R, handle: R, flags': R, fl: Flag)
 
   predicate TakeWriteBack(
     key: Key,
@@ -124,12 +124,15 @@ module RWLock refines ResourceBuilderSpec {
     state': RWLockState,
     flags: R,
     flags': R,
-    r': R)
+    r': R,
+    handle': R)
   {
     && state' == state.(backHeld := true)
     && flags == Internal(FlagsField(key, Available))
     && flags' == Internal(FlagsField(key, WriteBack))
     && r' == Internal(WriteBackObtained(key))
+    && (state.handle.Some? ==>
+      handle' == Const(state.handle.value))
   }
 
   predicate ReleaseWriteBack(
@@ -138,6 +141,7 @@ module RWLock refines ResourceBuilderSpec {
     state': RWLockState,
     flags: R,
     r: R,
+    handle: R,
     flags': R,
     fl: Flag)
   {
@@ -148,6 +152,7 @@ module RWLock refines ResourceBuilderSpec {
         flags' == Internal(FlagsField(key, Available)))
     && (fl == WriteBack_PendingExcLock ==>
         flags' == Internal(FlagsField(key, PendingExcLock)))
+    && handle.Const? && handle.v.is_handle(key)
   }
 
   datatype QStep =
@@ -157,7 +162,6 @@ module RWLock refines ResourceBuilderSpec {
         key: Key, state: RWLockState, state': RWLockState,
         basicStep: BasicStep)
 
-
   predicate transform_step(a: multiset<R>, a': multiset<R>, step: QStep)
   {
     && a == multiset{Internal(Global(step.g))} + step.a
@@ -166,16 +170,16 @@ module RWLock refines ResourceBuilderSpec {
     && step.key in step.g
     && step.g[step.key] == step.state
     && match step.basicStep {
-      case TakeWriteBackStep(flags, flags', r') =>
+      case TakeWriteBackStep(flags, flags', r', handle') =>
         && step.a == multiset{flags}
-        && step.a' == multiset{flags', r'}
+        && step.a' == multiset{flags', r', handle'}
         && TakeWriteBack(step.key, step.state, step.state',
-            flags, flags', r')
-      case ReleaseWriteBackStep(flags, r, flags', fl) =>
-        && step.a == multiset{flags, r}
+            flags, flags', r', handle')
+      case ReleaseWriteBackStep(flags, r, handle, flags', fl) =>
+        && step.a == multiset{flags, r, handle}
         && step.a' == multiset{flags'}
         && ReleaseWriteBack(step.key, step.state, step.state',
-            flags, r, flags', fl)
+            flags, r, handle, flags', fl)
     }
   }
 
@@ -436,17 +440,19 @@ module RWLock refines ResourceBuilderSpec {
 
   predicate Inv2(q: R, r: R)
   {
-    && q.Internal?
-    && r.Internal?
-    && !(q.q.Global? && r.q.Global?)
-    && (q.q.FlagsField? && r.q.FlagsField? ==> q.q.key != r.q.key)
-    && (q.q.SharedLockRefCount? && r.q.SharedLockRefCount? ==> !(q.q.key == r.q.key && q.q.t == r.q.t))
-    && (q.q.WriteBackObtained? && r.q.WriteBackObtained? ==> q.q.key != r.q.key)
-    && (q.q.ExcLockPendingAwaitWriteBack? && r.q.ExcLockPendingAwaitWriteBack? ==> q.q.key != r.q.key)
-    && (q.q.ExcLockPending? && r.q.ExcLockPending? ==> q.q.key != r.q.key)
-    && (q.q.ExcLockObtained? && r.q.ExcLockObtained? ==> q.q.key != r.q.key)
-    && (q.q.Global? ==>
-      && InvObject(r, q.q.g)
+    && q.Internal? ==> (
+      && r.Internal? ==> (
+        && !(q.q.Global? && r.q.Global?)
+        && (q.q.FlagsField? && r.q.FlagsField? ==> q.q.key != r.q.key)
+        && (q.q.SharedLockRefCount? && r.q.SharedLockRefCount? ==> !(q.q.key == r.q.key && q.q.t == r.q.t))
+        && (q.q.WriteBackObtained? && r.q.WriteBackObtained? ==> q.q.key != r.q.key)
+        && (q.q.ExcLockPendingAwaitWriteBack? && r.q.ExcLockPendingAwaitWriteBack? ==> q.q.key != r.q.key)
+        && (q.q.ExcLockPending? && r.q.ExcLockPending? ==> q.q.key != r.q.key)
+        && (q.q.ExcLockObtained? && r.q.ExcLockObtained? ==> q.q.key != r.q.key)
+        && (q.q.Global? ==>
+          && InvObject(r, q.q.g)
+        )
+      )
     )
   }
 
@@ -548,10 +554,10 @@ module RWLock refines ResourceBuilderSpec {
   ensures Inv(s')
   {
     match step.basicStep {
-      case TakeWriteBackStep(_,_,_) => {
+      case TakeWriteBackStep(_,_,_,_) => {
         TakeWriteBackStepPreservesInv(s, s', step, a, a', rest);
       }
-      case ReleaseWriteBackStep(_,_,_,_) => {
+      case ReleaseWriteBackStep(_,_,_,_,_) => {
         ReleaseWriteBackStepPreservesInv(s, s', step, a, a', rest);
       }
     }
