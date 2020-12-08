@@ -113,21 +113,9 @@ module RWLock refines ResourceBuilderSpec {
     
     | WriteBackObtained(key: Key)             // set WriteBack status bit
 
-
-  /*datatype QStep =
-    | TakeWriteBackStep(key: Key)
-    | TakeExcLock(key: Key)
-    | TakeExcLockAwaitWriteBack(key: Key)*/
-
   datatype BasicStep =
     | TakeWriteBackStep(flags: R, flags': R, r': R)
-
-  datatype QStep =
-    | BasicStep(
-        a: multiset<R>, a': multiset<R>,
-        g: map<Key, RWLockState>,
-        key: Key, state: RWLockState, state': RWLockState,
-        basicStep: BasicStep)
+    | ReleaseWriteBackStep(flags: R, r: R, flags': R, fl: Flag)
 
   predicate TakeWriteBack(
     key: Key,
@@ -143,6 +131,32 @@ module RWLock refines ResourceBuilderSpec {
     && r' == Internal(WriteBackObtained(key))
   }
 
+  predicate ReleaseWriteBack(
+    key: Key,
+    state: RWLockState,
+    state': RWLockState,
+    flags: R,
+    r: R,
+    flags': R,
+    fl: Flag)
+  {
+    && state' == state.(backHeld := false)
+    && flags == Internal(FlagsField(key, fl))
+    && r == Internal(WriteBackObtained(key))
+    && (fl == WriteBack ==>
+        flags' == Internal(FlagsField(key, Available)))
+    && (fl == WriteBack_PendingExcLock ==>
+        flags' == Internal(FlagsField(key, PendingExcLock)))
+  }
+
+  datatype QStep =
+    | BasicStep(
+        a: multiset<R>, a': multiset<R>,
+        g: map<Key, RWLockState>,
+        key: Key, state: RWLockState, state': RWLockState,
+        basicStep: BasicStep)
+
+
   predicate transform_step(a: multiset<R>, a': multiset<R>, step: QStep)
   {
     && a == multiset{Internal(Global(step.g))} + step.a
@@ -156,6 +170,11 @@ module RWLock refines ResourceBuilderSpec {
         && step.a' == multiset{flags', r'}
         && TakeWriteBack(step.key, step.state, step.state',
             flags, flags', r')
+      case ReleaseWriteBackStep(flags, r, flags', fl) =>
+        && step.a == multiset{flags, r}
+        && step.a' == multiset{flags'}
+        && ReleaseWriteBack(step.key, step.state, step.state',
+            flags, r, flags', fl)
     }
   }
 
@@ -276,6 +295,7 @@ module RWLock refines ResourceBuilderSpec {
     && (state.writeLock.WLSPending? ==>
       && state.readState == RSNone
       && !state.unmapped
+      && !state.backHeld
       && 0 <= state.writeLock.visited < NUM_THREADS
       && (forall i | 0 <= i < state.writeLock.visited
           :: state.readCounts[i] == 0)
@@ -284,9 +304,13 @@ module RWLock refines ResourceBuilderSpec {
     && (state.writeLock.WLSObtained? ==>
       && state.readState == RSNone
       && !state.unmapped
+      && !state.backHeld
       && (forall i | 0 <= i < |state.readCounts|
           :: state.readCounts[i] == 0)
       && 0 <= state.writeLock.t < NUM_THREADS
+    )
+    && (state.backHeld ==>
+      && state.readState == RSNone
     )
     && (
       (
@@ -354,6 +378,10 @@ module RWLock refines ResourceBuilderSpec {
       && (q.flags == WriteBack_PendingExcLock ==>
         && state.writeLock == WLSPendingAwaitWriteBack
         && state.backHeld
+      )
+      && (q.flags == PendingExcLock ==>
+        && state.writeLock == WLSPendingAwaitWriteBack
+        && !state.backHeld
       )
     )
     && (q.SharedLockRefCount? ==>
@@ -439,6 +467,10 @@ module RWLock refines ResourceBuilderSpec {
     ensures Inv2(Internal(Global(step.g)), t)
     {
     }
+    forall t | t in rest && !(t.Internal? && t.q.Global?)
+    ensures Inv2(Internal(Global(step.g)), t)
+    {
+    }
 
     assert InvRWLockState(step.state);
 
@@ -449,27 +481,49 @@ module RWLock refines ResourceBuilderSpec {
       }
     }
 
-    forall q, r | multiset{q, r} <= s'.m
-    ensures Inv2(q, r)
+    forall q, p | multiset{q, p} <= s'.m
+    ensures Inv2(q, p)
     {
-      if multiset{q, r} <= rest {
-        assert Inv2(q, r);
-      } else if q in a' && r in rest {
+      if multiset{q, p} <= rest {
+        assert Inv2(q, p);
+      } else if q in a' && p in rest {
         forall t | t in a
-        ensures Inv2(t, r)
-        ensures Inv2(r, t)
+        ensures Inv2(t, p)
+        ensures Inv2(p, t)
         {
         }
-        assert Inv2(q, r);
-      } else if q in rest && r in a' {
+        match step.basicStep {
+          case TakeWriteBackStep(flags, flags', r') => {
+            assert Inv2(q, p);
+          }
+          case ReleaseWriteBackStep(flags, r, flags', fl) => {
+            /*assert step.state.backHeld;
+            assert fl != Unmapped;
+            assert fl != Reading;
+            assert fl != Reading_ExcLock;
+            assert fl != Available;
+            assert fl != ExcLock_Clean;
+            assert fl != ExcLock_Dirty;
+            assert fl != PendingExcLock;
+            assert fl == WriteBack || fl == WriteBack_PendingExcLock;
+            assert Internal(WriteBackObtained(step.key)) in step.a;
+            assert Internal(WriteBackObtained(step.key)) in a;
+            assert Inv2(Internal(WriteBackObtained(step.key)), p);
+            assert !(p.Internal? && p.q.WriteBackObtained? &&
+                p.q.key == step.key);*/
+            assert Inv2(q, p);
+          }
+        }
+        assert Inv2(q, p);
+      } else if q in rest && p in a' {
         forall t | t in a
         ensures Inv2(t, q)
         ensures Inv2(q, t)
         {
         }
-        assert Inv2(q, r);
-      } else if multiset{q, r} <= a' {
-        assert Inv2(q, r);
+        assert Inv2(q, p);
+      } else if multiset{q, p} <= a' {
+        assert Inv2(q, p);
       }
     }
   }
