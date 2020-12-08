@@ -66,7 +66,6 @@ module StateModel {
   type Sector = SSM.Sector
 
   // type IndirectionTable = IndirectionTableModel.IndirectionTable
-
   datatype BCVariables =
     | Ready(
         persistentIndirectionTable: IndirectionTable, // this lets us keep track of available LBAs
@@ -130,14 +129,14 @@ module StateModel {
       <==> IsLocAllocBitmap(blockAllocator.outstanding, i))
   }
 
-  predicate WFNode(node: Node)
-  {
-    BT.WFNode(node)
-  }
+  // predicate WFNode(node: Node)
+  // {
+  //   BT.WFNode(node)
+  // }
 
   predicate WFCache(cache: map<Reference, Node>)
   {
-    forall ref | ref in cache :: WFNode(cache[ref])
+    forall ref | ref in cache :: SSM.WFNode(cache[ref])
   }
 
   function TotalCacheSize(s: BCVariables) : int
@@ -166,18 +165,18 @@ module StateModel {
   {
     && (vars.Ready? ==> WFVarsReady(vars))
   }
-  predicate WFSector(sector: Sector)
-  {
-    match sector {
-      case SectorNode(node) => WFNode(node)
-      case SectorIndirectionTable(indirectionTable) => (
-        && IndirectionTableModel.Inv(indirectionTable)
-        && BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
-      )
-      case SectorSuperblock(superblock) =>
-        JC.WFSuperblock(superblock)
-    }
-  }
+  // predicate WFSector(sector: Sector)
+  // {
+  //   match sector {
+  //     case SectorNode(node) => WFNode(node)
+  //     case SectorIndirectionTable(indirectionTable) => (
+  //       && IndirectionTableModel.Inv(indirectionTable)
+  //       && BC.WFCompleteIndirectionTable(IIndirectionTable(indirectionTable))
+  //     )
+  //     case SectorSuperblock(superblock) =>
+  //       JC.WFSuperblock(superblock)
+  //   }
+  // }
 
   function INode(node: Node) : (result: BT.G.Node)
   {
@@ -188,14 +187,14 @@ module StateModel {
   {
     map ref | ref in cache :: INode(cache[ref])
   }
-  function IIndirectionTable(table: IndirectionTable) : (result: SectorType.IndirectionTable)
-  {
-    IndirectionTableModel.I(table)
-  }
+  // function IIndirectionTable(table: IndirectionTable) : (result: SectorType.IndirectionTable)
+  // {
+  //   IndirectionTableModel.I(table)
+  // }
   function IIndirectionTableOpt(table: Option<IndirectionTable>) : (result: Option<SectorType.IndirectionTable>)
   {
     if table.Some? then
-      Some(IIndirectionTable(table.value))
+      Some(SSM.IIndirectionTable(table.value))
     else
       None
   }
@@ -204,18 +203,18 @@ module StateModel {
   {
     match vars {
       case Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, persistentIndirectionTableLoc, frozenIndirectionTableLoc, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, cache, lru, locBitmap) =>
-        BC.Ready(IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), IIndirectionTable(ephemeralIndirectionTable),  persistentIndirectionTableLoc, frozenIndirectionTableLoc, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, ICache(cache))
+        BC.Ready(SSM.IIndirectionTable(persistentIndirectionTable), IIndirectionTableOpt(frozenIndirectionTable), SSM.IIndirectionTable(ephemeralIndirectionTable),  persistentIndirectionTableLoc, frozenIndirectionTableLoc, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, ICache(cache))
       case LoadingIndirectionTable(loc, read) =>
         BC.LoadingIndirectionTable(loc, read)
       case Unready => BC.Unready
     }
   }
   function ISector(sector: Sector) : SectorType.Sector
-  requires WFSector(sector)
+  requires SSM.WFSector(sector)
   {
     match sector {
       case SectorNode(node) => SectorType.SectorNode(INode(node))
-      case SectorIndirectionTable(indirectionTable) => SectorType.SectorIndirectionTable(IIndirectionTable(indirectionTable))
+      case SectorIndirectionTable(indirectionTable) => SectorType.SectorIndirectionTable(SSM.IIndirectionTable(indirectionTable))
       case SectorSuperblock(superblock) => SectorType.SectorSuperblock(superblock)
     }
   }
