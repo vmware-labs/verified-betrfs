@@ -57,7 +57,7 @@ module RWLock refines ResourceBuilderSpec {
     | ExcLock_Clean
     | ExcLock_Dirty
 
-  datatype ExcLockLockState = 
+  datatype ExcState = 
     | WLSNone
     | WLSPendingAwaitWriteBack
     | WLSPending(t: int, visited: int, clean: bool)
@@ -70,11 +70,12 @@ module RWLock refines ResourceBuilderSpec {
     | RSObtained(t: int)
 
   datatype RWLockState = RWLockState(
-    writeLock: ExcLockLockState,
+    excState: ExcState,
     readState: ReadState,
     unmapped: bool,
     backHeld: bool,
-    readCounts: seq<int>)
+    readCounts: seq<int>,
+    handle: Option<Handle>)
 
   datatype Q =
     | Global(g: map<Key, RWLockState>)
@@ -285,29 +286,29 @@ module RWLock refines ResourceBuilderSpec {
     }
   }*/
 
-  predicate InvRWLockState(state: RWLockState)
+  predicate InvRWLockState(key: Key, state: RWLockState)
   {
     && |state.readCounts| == NUM_THREADS
-    && (state.writeLock.WLSPendingAwaitWriteBack? ==>
+    && (state.excState.WLSPendingAwaitWriteBack? ==>
         && state.readState == RSNone
         && !state.unmapped
       )
-    && (state.writeLock.WLSPending? ==>
+    && (state.excState.WLSPending? ==>
       && state.readState == RSNone
       && !state.unmapped
       && !state.backHeld
-      && 0 <= state.writeLock.visited < NUM_THREADS
-      && (forall i | 0 <= i < state.writeLock.visited
+      && 0 <= state.excState.visited < NUM_THREADS
+      && (forall i | 0 <= i < state.excState.visited
           :: state.readCounts[i] == 0)
-      && 0 <= state.writeLock.t < NUM_THREADS
+      && 0 <= state.excState.t < NUM_THREADS
     )
-    && (state.writeLock.WLSObtained? ==>
+    && (state.excState.WLSObtained? ==>
       && state.readState == RSNone
       && !state.unmapped
       && !state.backHeld
       && (forall i | 0 <= i < |state.readCounts|
           :: state.readCounts[i] == 0)
-      && 0 <= state.writeLock.t < NUM_THREADS
+      && 0 <= state.excState.t < NUM_THREADS
     )
     && (state.backHeld ==>
       && state.readState == RSNone
@@ -334,16 +335,18 @@ module RWLock refines ResourceBuilderSpec {
       && (forall i | 0 <= i < |state.readCounts|
           :: state.readCounts[i] == 0)
     )
+    && (state.excState.WLSObtained? ==> state.handle.None?)
+    && (!state.excState.WLSObtained? ==> state.handle.Some?)
   }
 
   predicate InvGlobal(g: map<Key, RWLockState>)
   {
-    forall key | key in g :: InvRWLockState(g[key])
+    forall key | key in g :: InvRWLockState(key, g[key])
   }
 
-  predicate InvObjectState(q: Q, state: RWLockState)
+  predicate InvObjectState(key: Key, q: Q, state: RWLockState)
   {
-    && InvRWLockState(state)
+    && InvRWLockState(key, state)
     && (q.FlagsField? ==>
       && (q.flags == Unmapped ==>
         && state.unmapped
@@ -356,31 +359,31 @@ module RWLock refines ResourceBuilderSpec {
           || state.readState.RSPendingCounted?)
       )
       && (q.flags == Available ==>
-        && state.writeLock == WLSNone
+        && state.excState == WLSNone
         && state.readState == RSNone
         && !state.backHeld
         && !state.unmapped
       )
       && (q.flags == WriteBack ==>
-        && state.writeLock == WLSNone
+        && state.excState == WLSNone
         && state.readState == RSNone
         && state.backHeld
         && !state.unmapped
       )
       && (q.flags == ExcLock_Clean ==>
-        && (state.writeLock.WLSPending? || state.writeLock.WLSObtained?)
-        && state.writeLock.clean
+        && (state.excState.WLSPending? || state.excState.WLSObtained?)
+        && state.excState.clean
       )
       && (q.flags == ExcLock_Dirty ==>
-        && (state.writeLock.WLSPending? || state.writeLock.WLSObtained?)
-        && !state.writeLock.clean
+        && (state.excState.WLSPending? || state.excState.WLSObtained?)
+        && !state.excState.clean
       )
       && (q.flags == WriteBack_PendingExcLock ==>
-        && state.writeLock == WLSPendingAwaitWriteBack
+        && state.excState == WLSPendingAwaitWriteBack
         && state.backHeld
       )
       && (q.flags == PendingExcLock ==>
-        && state.writeLock == WLSPendingAwaitWriteBack
+        && state.excState == WLSPendingAwaitWriteBack
         && !state.backHeld
       )
     )
@@ -390,22 +393,22 @@ module RWLock refines ResourceBuilderSpec {
     )
 
     && (q.SharedLockPending2? ==>
-      && state.writeLock == WLSNone
+      && state.excState == WLSNone
       && (state.readState == RSNone || state.readState.RSObtained?)
     )
     && (q.SharedLockObtained? ==>
-      && state.writeLock == WLSNone
+      && state.excState == WLSNone
       && state.readState == RSNone
     )
 
     && (q.ExcLockPendingAwaitWriteBack? ==>
-      && state.writeLock == WLSPendingAwaitWriteBack
+      && state.excState == WLSPendingAwaitWriteBack
     )
     && (q.ExcLockPending? ==>
-      && state.writeLock == WLSPending(q.t, q.visited, q.clean)
+      && state.excState == WLSPending(q.t, q.visited, q.clean)
     )
     && (q.ExcLockObtained? ==>
-      && state.writeLock == WLSObtained(q.t, q.clean)
+      && state.excState == WLSObtained(q.t, q.clean)
     )
 
     && (q.ReadingPending? ==>
@@ -428,7 +431,7 @@ module RWLock refines ResourceBuilderSpec {
     && q.Internal?
     && !q.q.Global?
     && q.q.key in g
-    && InvObjectState(q.q, g[q.q.key])
+    && InvObjectState(q.q.key, q.q, g[q.q.key])
   }
 
   predicate Inv2(q: R, r: R)
@@ -485,8 +488,8 @@ module RWLock refines ResourceBuilderSpec {
   {
     UsefulTriggers(s, s', step, a, a', rest);
 
-    assert InvRWLockState(step.state);
-    assert InvRWLockState(step.state');
+    assert InvRWLockState(step.key, step.state);
+    assert InvRWLockState(step.key, step.state');
 
     forall q, p | multiset{q, p} <= s'.m
     ensures Inv2(q, p)
@@ -516,8 +519,8 @@ module RWLock refines ResourceBuilderSpec {
   {
     UsefulTriggers(s, s', step, a, a', rest);
 
-    assert InvRWLockState(step.state);
-    assert InvRWLockState(step.state');
+    assert InvRWLockState(step.key, step.state);
+    assert InvRWLockState(step.key, step.state');
 
     forall q, p | multiset{q, p} <= s'.m
     ensures Inv2(q, p)
