@@ -126,11 +126,12 @@ module RWLock refines ResourceBuilderSpec {
   datatype BasicStep =
     | TakeWriteBackStep(flags: R, flags': R, r': R, handle': R)
     | ReleaseWriteBackStep(flags: R, r: R, handle: R, flags': R, fl: Flag)
+    | SharedToExcStep(flags: R, r: R, flags': R, r': R, t: int, fl: Flag)
     | TakeExcLockFinishWriteBackStep(flags: R, r: R, flags': R, r': R,
           t: int, fl: Flag, clean: bool)
     | TakeExcLockSharedLockZeroStep(rc_rc': R, r: R, r': R,
           t: int, idx: int, clean: bool)
-    | TakeExcLockFinishStep(r: R, r': R, handle': R, t: int, clean: bool) 
+    | TakeExcLockFinishStep(r: R, handle: R, r': R, handle': R, t: int, clean: bool) 
     | AllocStep(flags: R, flags': R, r': R, handle': R)
     | ReadingIncCountStep(client: R, rc: R, r: R, rc': R, r': R, t: int, refcount: uint8)
     | ObtainReadingStep(flags: R, r: R, flags': R, r': R, t: int, fl: Flag)
@@ -178,6 +179,24 @@ module RWLock refines ResourceBuilderSpec {
     && handle.Const? && handle.v.is_handle(key)
   }
 
+  predicate SharedToExc(
+    key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
+    flags: R, r: R,
+    flags': R, r': R,
+    t: int, fl: Flag)
+  {
+    && a == multiset{flags, r}
+    && a' == multiset{flags', r'}
+    && (fl == Available || fl == WriteBack)
+    && flags == Internal(FlagsField(key, fl))
+    && flags' == Internal(FlagsField(key,
+        if fl == Available then PendingExcLock else WriteBack_PendingExcLock))
+    && r == Internal(SharedLockObtained(key, t))
+    && r' == Internal(ExcLockPendingAwaitWriteBack(key, t))
+    && state' == state.(excState := WLSPendingAwaitWriteBack(t))
+  }
+
   predicate TakeExcLockFinishWriteBack(
     key: Key, state: RWLockState, state': RWLockState,
     a: multiset<R>, a': multiset<R>,
@@ -215,18 +234,20 @@ module RWLock refines ResourceBuilderSpec {
   predicate TakeExcLockFinish(
     key: Key, state: RWLockState, state': RWLockState,
     a: multiset<R>, a': multiset<R>,
-    r: R,
+    r: R, handle: R,
     r': R, handle': R,
     t: int, clean: bool)
   {
-    && a == multiset{r}
+    && a == multiset{r, handle}
     && a' == multiset{r',handle'}
     && state' == state
         .(excState := WLSObtained(t, clean))
         .(handle := None)
     && r == Internal(ExcLockPending(key, t, NUM_THREADS, clean))
     && r' == Internal(ExcLockObtained(key, t, clean))
-    && (state.handle.Some? ==> handle' == Exc(state.handle.value))
+    && handle.Const?
+    && handle.v.is_handle(key)
+    && handle' == Exc(handle.v)
   }
 
   predicate Alloc(
@@ -449,6 +470,10 @@ module RWLock refines ResourceBuilderSpec {
         && ReleaseWriteBack(step.key, step.state, step.state',
             step.a, step.a',
             flags, r, handle, flags', fl)
+      case SharedToExcStep(flags, r, flags', r', t, fl) =>
+        && SharedToExc(step.key, step.state, step.state',
+            step.a, step.a',
+            flags, r, flags', r', t, fl)
       case TakeExcLockFinishWriteBackStep(flags, r, flags', r', t, fl, clean) =>
         && TakeExcLockFinishWriteBack(step.key, step.state, step.state',
             step.a, step.a',
@@ -457,10 +482,10 @@ module RWLock refines ResourceBuilderSpec {
         && TakeExcLockSharedLockZero(step.key, step.state, step.state', 
             step.a, step.a',
             rc_rc', r, r', t, idx, clean)
-      case TakeExcLockFinishStep(r, r', handle', t, clean) =>
+      case TakeExcLockFinishStep(r, handle, r', handle', t, clean) =>
         && TakeExcLockFinish(step.key, step.state, step.state',
             step.a, step.a',
-            r, r', handle', t, clean)
+            r, handle, r', handle', t, clean)
       case AllocStep(flags, flags', r', handle') =>
         && Alloc(step.key, step.state, step.state', step.a, step.a',
             flags, flags', r', handle')
@@ -590,7 +615,8 @@ module RWLock refines ResourceBuilderSpec {
   predicate is_const_ref(r: R, key: Key)
   {
     && r.Internal?
-    && (r.q.SharedLockObtained? || r.q.WriteBackObtained?)
+    && (r.q.SharedLockObtained? || r.q.WriteBackObtained?
+      || r.q.ExcLockPendingAwaitWriteBack? || r.q.ExcLockPending?)
     && r.q.key == key
   }
 
@@ -897,6 +923,48 @@ module RWLock refines ResourceBuilderSpec {
         CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
   }
 
+  lemma SharedToExcStepPreservesInv(
+      s: Variables, s': Variables, step: QStep,
+      a: multiset<R>, a': multiset<R>, rest: multiset<R>)
+  requires s'.saved == s.saved
+  requires s.m == a + rest
+  requires s'.m == a' + rest
+  requires transform_step(a, a', step)
+  requires Inv(s)
+  requires step.basicStep.SharedToExcStep?
+  ensures Inv(s')
+  {
+    UsefulTriggers(s, s', step, a, a', rest);
+    forall_CountReduce<R>();
+
+    assert InvRWLockState(step.key, step.state, s.m);
+    assert InvRWLockState(step.key, step.state', s'.m);
+
+    forall q, p | multiset{q, p} <= s'.m
+    ensures Inv2(q, p)
+    {
+      if multiset{q, p} <= rest {
+        assert Inv2(q, p);
+      } else if q in a' && p in rest {
+        assert Inv2(q, p);
+      } else if q in rest && p in a' {
+        assert Inv2(q, p);
+      } else if multiset{q, p} <= a' {
+        assert Inv2(q, p);
+      }
+    }
+
+    forall k
+    ensures CountConsts(s'.m, k) == CountConstRefs(s'.m, k)
+    {
+      assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
+    }
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
+  }
+
+
   lemma TakeExcLockFinishWriteBackStepPreservesInv(
       s: Variables, s': Variables, step: QStep,
       a: multiset<R>, a': multiset<R>, rest: multiset<R>)
@@ -1017,13 +1085,16 @@ module RWLock refines ResourceBuilderSpec {
         assert Inv2(q, p);
       } else if q in a' && p in rest {
         if p.Const? && p.v.key == step.key {
-          // If a Const exists, then there is either
-          // a SharedObtained or a WriteBackObtained object
+          // If a Const exists (one other than the one being turned into an Exc
+          // by this step), then there is either
+          // a SharedObtained or a WriteBackObtained object (etc.)
           // to certify it, and that would lead to a contradiction.
-          Count_ge_1((r) => is_const(r, step.key), s.m, p);
+          Count_ge_1((r) => is_const(r, step.key), rest, p);
+          assert CountConsts(s.m, step.key) >= 2;
           assert CountConsts(s.m, step.key)
               == CountConstRefs(s.m, step.key);
-          var o := get_true_elem((r) => is_const_ref(r, step.key), s.m);
+          //var o := get_true_elem((r) => is_const_ref(r, step.key), s.m);
+          var o, o2 := get_2_true_elems((r) => is_const_ref(r, step.key), s.m);
           assert false;
         }
 
@@ -1570,7 +1641,7 @@ module RWLock refines ResourceBuilderSpec {
          TakeExcLockSharedLockZeroStepPreservesInv(
             s, s', step, a, a', rest);
       }
-      case TakeExcLockFinishStep(_,_,_,_,_) => {
+      case TakeExcLockFinishStep(_,_,_,_,_,_) => {
          TakeExcLockFinishStepPreservesInv(s, s', step, a, a', rest);
       }
       case AllocStep(_,_,_,_) => {
@@ -1605,6 +1676,9 @@ module RWLock refines ResourceBuilderSpec {
       }
       case ReadingIncCountStep(_,_,_,_,_,_,_) => {
         ReadingIncCountStepPreservesInv(s, s', step, a, a', rest);
+      }
+      case SharedToExcStep(_,_,_,_,_,_) => {
+        SharedToExcStepPreservesInv(s, s', step, a, a', rest);
       }
     }
   }
