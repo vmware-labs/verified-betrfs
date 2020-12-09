@@ -338,7 +338,7 @@ def plot_all(groupname, pile):
     fig.savefig("../veripapers/osdi2020/figures/verification-times-indirectiontable-{}.pdf".format(groupname))
 
 def percentiles(groupname, pile):
-    percentiles = [50, 75, 95, 99, 99.5, 99.9]
+    percentiles = [50, 75, 90, 95, 99, 99.5, 99.9]
     output = []
     for pct_thresh_percent in percentiles:
         pct_thresh = pct_thresh_percent / 100
