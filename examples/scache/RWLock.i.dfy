@@ -133,6 +133,7 @@ module RWLock refines ResourceBuilderSpec {
     | TakeExcLockSharedLockZeroStep(rc_rc': R, r: R, r': R,
           t: int, idx: int, clean: bool)
     | TakeExcLockFinishStep(r: R, handle: R, r': R, handle': R, t: int, clean: bool) 
+    | DowngradeExcLockStep(r: R, handle: R, flags: R, r': R, handle': R, flags': R, fl: Flag, t: int, clean: bool) 
     | AllocStep(flags: R, flags': R, r': R, handle': R)
     | ReadingIncCountStep(client: R, rc: R, r: R, rc': R, r': R, t: int, refcount: uint8)
     | ObtainReadingStep(flags: R, r: R, flags': R, r': R, t: int, fl: Flag)
@@ -267,6 +268,27 @@ module RWLock refines ResourceBuilderSpec {
     && handle.Const?
     && handle.v.is_handle(key)
     && handle' == Exc(handle.v)
+  }
+
+  predicate DowngradeExcLock(
+    key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
+    r: R, handle: R, flags: R,
+    r': R, handle': R, flags': R,
+    fl: Flag, t: int, clean: bool)
+  {
+    && a == multiset{r, handle, flags}
+    && a' == multiset{r', handle', flags'}
+    && handle.Exc? && handle.v.is_handle(key)
+    && state' == state
+        .(excState := WLSNone)
+        .(handle := Some(handle.v))
+    && r == Internal(ExcLockObtained(key, t, clean))
+    && 0 <= t < NUM_THREADS
+    && flags == Internal(FlagsField(key, fl))
+    && flags' == Internal(FlagsField(key, Available))
+    && r' == Internal(SharedLockObtained(key, t))
+    && handle' == Const(handle.v)
   }
 
   predicate Alloc(
@@ -511,6 +533,10 @@ module RWLock refines ResourceBuilderSpec {
         && TakeExcLockFinish(step.key, step.state, step.state',
             step.a, step.a',
             r, handle, r', handle', t, clean)
+      case DowngradeExcLockStep(r, handle, flags, r', handle', flags', fl, t, clean) =>
+        && DowngradeExcLock(step.key, step.state, step.state',
+            step.a, step.a',
+            r, handle, flags, r', handle', flags', fl, t, clean)
       case AllocStep(flags, flags', r', handle') =>
         && Alloc(step.key, step.state, step.state', step.a, step.a',
             flags, flags', r', handle')
@@ -1182,6 +1208,47 @@ module RWLock refines ResourceBuilderSpec {
         CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
   }
 
+  lemma DowngradeExcLockStepPreservesInv(
+      s: Variables, s': Variables, step: QStep,
+      a: multiset<R>, a': multiset<R>, rest: multiset<R>)
+  requires s'.saved == s.saved
+  requires s.m == a + rest
+  requires s'.m == a' + rest
+  requires transform_step(a, a', step)
+  requires Inv(s)
+  requires step.basicStep.DowngradeExcLockStep?
+  ensures Inv(s')
+  {
+    UsefulTriggers(s, s', step, a, a', rest);
+    forall_CountReduce<R>();
+
+    assert InvRWLockState(step.key, step.state, s.m);
+    assert InvRWLockState(step.key, step.state', s'.m);
+
+    forall q, p | multiset{q, p} <= s'.m
+    ensures Inv2(q, p)
+    {
+      if multiset{q, p} <= rest {
+        assert Inv2(q, p);
+      } else if q in a' && p in rest {
+        assert Inv2(q, p);
+      } else if q in rest && p in a' {
+        assert Inv2(q, p);
+      } else if multiset{q, p} <= a' {
+        assert Inv2(q, p);
+      }
+    }
+
+    forall k
+    ensures CountConsts(s'.m, k) == CountConstRefs(s'.m, k)
+    {
+      assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
+    }
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
+  }
+
   lemma AllocStepPreservesInv(
       s: Variables, s': Variables, step: QStep,
       a: multiset<R>, a': multiset<R>, rest: multiset<R>)
@@ -1748,6 +1815,9 @@ module RWLock refines ResourceBuilderSpec {
       }
       case ThreadlessExcStep(_,_,_,_,_) => {
         ThreadlessExcStepPreservesInv(s, s', step, a, a', rest);
+      }
+      case DowngradeExcLockStep(_,_,_,_,_,_,_,_,_) => {
+        DowngradeExcLockStepPreservesInv(s, s', step, a, a', rest);
       }
     }
   }
