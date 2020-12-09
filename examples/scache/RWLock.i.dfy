@@ -372,6 +372,7 @@ module RWLock refines ResourceBuilderSpec {
     && flags_flags' == Internal(FlagsField(key, fl))
     && r' == Internal(SharedLockPending2(key, t))
     && state' == state
+    && (fl == Available || fl == WriteBack || fl == Reading)
   }
 
   predicate SharedCheckReading(
@@ -387,6 +388,7 @@ module RWLock refines ResourceBuilderSpec {
     && (state.handle.Some? ==>
         handle' == Const(state.handle.value))
     && state' == state
+    && fl != Reading && fl != Reading_ExcLock
   }
 
   predicate Unmap(
@@ -681,13 +683,15 @@ module RWLock refines ResourceBuilderSpec {
     )
     && (q.SharedLockPending2? ==>
       && 0 <= q.t < NUM_THREADS
-      && state.excState == WLSNone
+      && (state.excState == WLSNone || state.excState.WLSPendingAwaitWriteBack?
+          || (state.excState.WLSPending? && state.excState.visited <= q.t))
       && (state.readState == RSNone || state.readState.RSObtained?)
       && !state.unmapped
     )
     && (q.SharedLockObtained? ==>
       && 0 <= q.t < NUM_THREADS
-      && state.excState == WLSNone
+      && (state.excState == WLSNone || state.excState.WLSPendingAwaitWriteBack?
+          || (state.excState.WLSPending? && state.excState.visited <= q.t))
       && state.readState == RSNone
       && !state.unmapped
     )
@@ -957,6 +961,20 @@ module RWLock refines ResourceBuilderSpec {
       if multiset{q, p} <= rest {
         assert Inv2(q, p);
       } else if q in a' && p in rest {
+        if p.Internal? && (p.q.SharedLockPending2? || p.q.SharedLockObtained?) &&
+            p.q.key == step.key && p.q.t == step.basicStep.idx {
+          if step.basicStep.t == step.basicStep.idx {
+            Count_ge_2((r) => is_counted_ref(r, p.q.key, p.q.t), s.m, p, step.basicStep.r);
+            assert CountCountedRefs(s.m, p.q.key, p.q.t) >= 2;
+            assert false;
+          } else {
+            Count_ge_1((r) => is_counted_ref(r, p.q.key, p.q.t), s.m, p);
+            assert CountCountedRefs(s.m, p.q.key, p.q.t) >= 1;
+            assert step.state.readCounts[p.q.t] >= 1;
+            assert false;
+          }
+        }
+
         assert Inv2(q, p);
       } else if q in rest && p in a' {
         assert Inv2(q, p);
@@ -1557,6 +1575,36 @@ module RWLock refines ResourceBuilderSpec {
       }
       case AllocStep(_,_,_,_) => {
          AllocStepPreservesInv(s, s', step, a, a', rest);
+      }
+      case AbandonExcLockPendingStep(_,_,_,_,_,_) => {
+        AbandonExcLockPendingStepPreservesInv(s, s', step, a, a', rest);
+      }
+      case UnmapStep(_,_,_,_,_,_) => {
+        UnmapStepPreservesInv(s, s', step, a, a', rest);
+      }
+      case SharedCheckReadingStep(_,_,_,_,_,_) => {
+        SharedCheckReadingStepPreservesInv(s, s', step, a, a', rest);
+      }
+      case SharedCheckExcFreeStep(_,_,_,_,_) => {
+        SharedCheckExcFreeStepPreservesInv(s, s', step, a, a', rest);
+      }
+      case SharedDecCountObtainedStep(_,_,_,_,_,_,_) => {
+        SharedDecCountObtainedStepPreservesInv(s, s', step, a, a', rest);
+      }
+      case SharedDecCountPendingStep(_,_,_,_,_,_) => {
+        SharedDecCountPendingStepPreservesInv(s, s', step, a, a', rest);
+      }
+      case SharedIncCountStep(_,_,_,_,_,_) => {
+        SharedIncCountStepPreservesInv(s, s', step, a, a', rest);
+      }
+      case ReadingToSharedStep(_,_,_,_,_,_,_,_) => {
+        ReadingToSharedStepPreservesInv(s, s', step, a, a', rest);
+      }
+      case ObtainReadingStep(_,_,_,_,_,_) => {
+        ObtainReadingStepPreservesInv(s, s', step, a, a', rest);
+      }
+      case ReadingIncCountStep(_,_,_,_,_,_,_) => {
+        ReadingIncCountStepPreservesInv(s, s', step, a, a', rest);
       }
     }
   }
