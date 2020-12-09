@@ -49,6 +49,9 @@ module RWLock refines ResourceBuilderSpec {
    *
    * Those 2 bits gives 2x2 = 4 states. We then have 2 more:
    * Unmapped and Reading.
+   *
+   * NOTE: in retrospect, it might have made sense to have this
+   * just be a struct of 5-6 booleans.
    */
   datatype Flag =
     | Unmapped
@@ -127,12 +130,25 @@ module RWLock refines ResourceBuilderSpec {
           t: int, idx: int, clean: bool)
     | TakeExcLockFinishStep(r: R, r': R, handle': R, t: int, clean: bool) 
     | AllocStep(flags: R, flags': R, r': R, handle': R)
+    | ReadingIncCountStep(rc: R, r: R, rc': R, r': R, t: int, refcount: uint8)
+    | ObtainReadingStep(flags: R, r: R, flags': R, r': R, t: int, fl: Flag)
+    | ReadingToSharedStep(flags: R, r: R, handle: R, flags': R, r': R, handle': R, t: int, fl: Flag)
+    | SharedIncCountStep(rc: R, rc': R, r': R, t: int, refcount: uint8)
+    | SharedDecCountPendingStep(rc: R, r: R, rc': R, t: int, refcount: uint8)
+    | SharedDecCountObtainedStep(rc: R, r: R, handle: R, rc': R, t: int, refcount: uint8)
+    | SharedCheckExcFreeStep(r: R, flags_flags': R, r': R, t: int, fl: Flag)
+    | SharedCheckReadingStep(r: R, flags_flags': R, r': R, handle': R, t: int, fl: Flag)
+    | UnmapStep(flags: R, r: R, handle: R, flags': R, fl: Flag, clean: bool)
+    | AbandonExcLockPendingStep(flags: R, r: R, flags': R, fl: Flag, visited: int, clean: bool)
 
   predicate TakeWriteBack(
     key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
     flags: R,
     flags': R, r': R, handle': R)
   {
+    && a == multiset{flags}
+    && a' == multiset{flags', r', handle'}
     && state' == state.(backHeld := true)
     && flags == Internal(FlagsField(key, Available))
     && flags' == Internal(FlagsField(key, WriteBack))
@@ -143,10 +159,13 @@ module RWLock refines ResourceBuilderSpec {
 
   predicate ReleaseWriteBack(
     key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
     flags: R, r: R, handle: R,
     flags': R,
     fl: Flag)
   {
+    && a == multiset{flags, r, handle}
+    && a' == multiset{flags'}
     && state' == state.(backHeld := false)
     && flags == Internal(FlagsField(key, fl))
     && r == Internal(WriteBackObtained(key))
@@ -159,10 +178,13 @@ module RWLock refines ResourceBuilderSpec {
 
   predicate TakeExcLockFinishWriteBack(
     key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
     flags: R, r: R,
     flags': R, r': R,
     t: int, fl: Flag, clean: bool)
   {
+    && a == multiset{flags, r}
+    && a' == multiset{flags', r'}
     && fl != WriteBack && fl != WriteBack_PendingExcLock
     && state' == state.(excState := WLSPending(t, 0, clean))
     && flags == Internal(FlagsField(key, fl))
@@ -174,10 +196,13 @@ module RWLock refines ResourceBuilderSpec {
 
   predicate TakeExcLockSharedLockZero(
     key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
     rc_rc': R,
     r: R, r': R,
     t: int, idx: int, clean: bool)
   {
+    && a == multiset{r, rc_rc'}
+    && a' == multiset{r', rc_rc'}
     && state' == state.(excState := WLSPending(t, idx + 1, clean))
     && rc_rc' == Internal(SharedLockRefCount(key, idx,
         if t == idx then 1 else 0))
@@ -187,10 +212,13 @@ module RWLock refines ResourceBuilderSpec {
 
   predicate TakeExcLockFinish(
     key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
     r: R,
     r': R, handle': R,
     t: int, clean: bool)
   {
+    && a == multiset{r}
+    && a' == multiset{r',handle'}
     && state' == state
         .(excState := WLSObtained(t, clean))
         .(handle := None)
@@ -201,9 +229,12 @@ module RWLock refines ResourceBuilderSpec {
 
   predicate Alloc(
     key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
     flags: R,
     flags': R, r': R, handle': R)
   {
+    && a == multiset{flags}
+    && a' == multiset{flags', r', handle'}
     && state' == state
         .(unmapped := false)
         .(handle := None)
@@ -215,6 +246,173 @@ module RWLock refines ResourceBuilderSpec {
       handle' == Exc(state.handle.value))
   }
 
+  predicate ReadingIncCount(
+    key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
+    rc: R, r: R, rc': R, r': R, t: int, refcount: uint8)
+  {
+    && a == multiset{rc, r}
+    && a' == multiset{rc', r'}
+    && (0 <= t < |state.readCounts| ==>
+        state' == state
+          .(readCounts := state.readCounts[t := state.readCounts[t] + 1])
+          .(readState := RSPendingCounted(t))
+    )
+    && rc == Internal(SharedLockRefCount(key, t, refcount))
+    && r == Internal(ReadingPending(key))
+    && rc' == Internal(SharedLockRefCount(key, t,
+        // uint8 addition
+        // (we'll need to prove invariant that this doesn't overflow)
+        if refcount == 255 then 0 else refcount + 1))
+    && r' == Internal(ReadingPendingCounted(key, t))
+  }
+
+  predicate ObtainReading(
+    key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
+    flags: R, r: R, flags': R, r': R, t: int, fl: Flag)
+  {
+    && a == multiset{flags, r}
+    && a' == multiset{flags', r'}
+    && state' == state.(readState := RSObtained(t))
+    && flags == Internal(FlagsField(key, fl))
+    && r == Internal(ReadingPendingCounted(key, t))
+    && flags' == Internal(FlagsField(key, Reading))
+    && r' == Internal(ReadingObtained(key, t))
+  }
+
+  predicate ReadingToShared(
+    key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
+    flags: R, r: R, handle: R, flags': R, r': R, handle': R, t: int, fl: Flag)
+  {
+    && a == multiset{flags, r, handle}
+    && a' == multiset{flags', r', handle'}
+    && flags == Internal(FlagsField(key, fl))
+    && r == Internal(ReadingObtained(key, t))
+    && handle.Exc?  && handle.v.is_handle(key)
+    && flags' == Internal(FlagsField(key, Available))
+    && r' == Internal(SharedLockObtained(key, t))
+    && handle'.Const? && handle'.v == handle.v
+
+    && state' == state
+      .(readState := RSNone)
+      .(handle := Some(handle.v))
+  }
+
+  predicate SharedIncCount(
+    key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
+    rc: R, rc': R, r': R, t: int, refcount: uint8)
+  {
+    && a == multiset{rc}
+    && a' == multiset{rc', r'}
+    && rc == Internal(SharedLockRefCount(key, t, refcount))
+    && rc' == Internal(SharedLockRefCount(key, t,
+        if refcount == 255 then 0 else refcount + 1))
+    && r' == Internal(SharedLockPending(key, t))
+
+    && (0 <= t < |state.readCounts| ==>
+        state' == state
+          .(readCounts := state.readCounts[t := state.readCounts[t] + 1])
+    )
+  }
+
+  predicate SharedDecCountPending(
+    key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
+    rc: R, r: R, rc': R, t: int, refcount: uint8)
+  {
+    && a == multiset{rc, r}
+    && a' == multiset{rc'}
+    && rc == Internal(SharedLockRefCount(key, t, refcount))
+    && r == Internal(SharedLockPending(key, t))
+    && rc' == Internal(SharedLockRefCount(key, t,
+        if refcount == 0 then 255 else refcount - 1))
+
+    && (0 <= t < |state.readCounts| ==>
+        state' == state
+          .(readCounts := state.readCounts[t := state.readCounts[t] - 1])
+    )
+  }
+
+  predicate SharedDecCountObtained(
+    key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
+    rc: R, r: R, handle: R, rc': R, t: int, refcount: uint8)
+  {
+    && a == multiset{rc, r, handle}
+    && a' == multiset{rc'}
+    && rc == Internal(SharedLockRefCount(key, t, refcount))
+    && r == Internal(SharedLockPending(key, t))
+    && handle.Const? && handle.v.is_handle(key)
+    && rc' == Internal(SharedLockRefCount(key, t,
+        if refcount == 0 then 255 else refcount - 1))
+
+    && (0 <= t < |state.readCounts| ==>
+        state' == state
+          .(readCounts := state.readCounts[t := state.readCounts[t] - 1])
+    )
+  }
+
+  predicate SharedCheckExcFree(
+    key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
+    r: R, flags_flags': R, r': R, t: int, fl: Flag)
+  {
+    && a == multiset{r, flags_flags'}
+    && a' == multiset{r', flags_flags'}
+    && r == Internal(SharedLockPending(key, t))
+    && flags_flags' == Internal(FlagsField(key, fl))
+    && r' == Internal(SharedLockPending2(key, t))
+    && state' == state
+  }
+
+  predicate SharedCheckReading(
+    key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
+    r: R, flags_flags': R, r': R, handle': R, t: int, fl: Flag)
+  {
+    && a == multiset{r, flags_flags'}
+    && a' == multiset{r', flags_flags', handle'}
+    && r == Internal(SharedLockPending2(key, t))
+    && flags_flags' == Internal(FlagsField(key, fl))
+    && r' == Internal(SharedLockObtained(key, t))
+    && (state.handle.Some? ==>
+        handle' == Const(state.handle.value))
+    && state' == state
+  }
+
+  predicate Unmap(
+    key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
+    flags: R, r: R, handle: R, flags': R, fl: Flag, clean: bool)
+  {
+    && a == multiset{flags, r, handle}
+    && a' == multiset{flags'}
+    && flags == Internal(FlagsField(key, fl))
+    && handle.Exc? && handle.v.is_handle(key)
+    && r == Internal(ExcLockObtained(key, -1, clean))
+    && flags' == Internal(FlagsField(key, Unmapped))
+    && state' == state
+      .(unmapped := true)
+      .(excState := WLSNone)
+  }
+
+  predicate AbandonExcLockPending(
+    key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
+    flags: R, r: R, flags': R, fl: Flag, visited: int, clean: bool)
+  {
+    && a == multiset{flags, r}
+    && a' == multiset{flags'}
+    && r == Internal(ExcLockPending(key, -1, visited, clean))
+    && flags == Internal(FlagsField(key, fl))
+    && flags' == Internal(FlagsField(key, Available))
+
+    && state' == state.(excState := WLSNone)
+  }
+
   datatype QStep =
     | BasicStep(
         a: multiset<R>, a': multiset<R>,
@@ -222,41 +420,72 @@ module RWLock refines ResourceBuilderSpec {
         key: Key, state: RWLockState, state': RWLockState,
         basicStep: BasicStep)
 
-  predicate transform_step(a: multiset<R>, a': multiset<R>, step: QStep)
+  predicate step_common(a: multiset<R>, a': multiset<R>, step: QStep)
   {
     && a == multiset{Internal(Global(step.g))} + step.a
     && a' == multiset{
         Internal(Global(step.g[step.key := step.state']))} + step.a'
     && step.key in step.g
     && step.g[step.key] == step.state
+  }
+
+  predicate transform_step(a: multiset<R>, a': multiset<R>, step: QStep)
+  {
+    && step_common(a, a', step)
     && match step.basicStep {
       case TakeWriteBackStep(flags, flags', r', handle') =>
-        && step.a == multiset{flags}
-        && step.a' == multiset{flags', r', handle'}
         && TakeWriteBack(step.key, step.state, step.state',
+            step.a, step.a',
             flags, flags', r', handle')
       case ReleaseWriteBackStep(flags, r, handle, flags', fl) =>
-        && step.a == multiset{flags, r, handle}
-        && step.a' == multiset{flags'}
         && ReleaseWriteBack(step.key, step.state, step.state',
+            step.a, step.a',
             flags, r, handle, flags', fl)
       case TakeExcLockFinishWriteBackStep(flags, r, flags', r', t, fl, clean) =>
-        && step.a == multiset{flags, r}
-        && step.a' == multiset{flags', r'}
         && TakeExcLockFinishWriteBack(step.key, step.state, step.state',
+            step.a, step.a',
             flags, r, flags', r', t, fl, clean)
       case TakeExcLockSharedLockZeroStep(rc_rc', r, r', t, idx, clean) =>
-        && step.a == multiset{r, rc_rc'}
-        && step.a' == multiset{r', rc_rc'}
-        && TakeExcLockSharedLockZero(step.key, step.state, step.state', rc_rc', r, r', t, idx, clean)
+        && TakeExcLockSharedLockZero(step.key, step.state, step.state', 
+            step.a, step.a',
+            rc_rc', r, r', t, idx, clean)
       case TakeExcLockFinishStep(r, r', handle', t, clean) =>
-        && step.a == multiset{r}
-        && step.a' == multiset{r',handle'}
-        && TakeExcLockFinish(step.key, step.state, step.state', r, r', handle', t, clean)
+        && TakeExcLockFinish(step.key, step.state, step.state',
+            step.a, step.a',
+            r, r', handle', t, clean)
       case AllocStep(flags, flags', r', handle') =>
-        && step.a == multiset{flags}
-        && step.a' == multiset{flags', r', handle'}
-        && Alloc(step.key, step.state, step.state', flags, flags', r', handle')
+        && Alloc(step.key, step.state, step.state', step.a, step.a',
+            flags, flags', r', handle')
+      case ReadingIncCountStep(rc, r, rc', r', t, refcount) =>
+        && ReadingIncCount(step.key, step.state, step.state', step.a, step.a',
+            rc, r, rc', r', t, refcount)
+      case ObtainReadingStep(flags, r, flags', r', t, fl) =>
+        && ObtainReading(step.key, step.state, step.state', step.a, step.a',
+            flags, r, flags', r', t, fl)
+      case ReadingToSharedStep(flags, r, handle, flags', r', handle', t, fl) =>
+        && ReadingToShared(step.key, step.state, step.state', step.a, step.a',
+            flags, r, handle, flags', r', handle', t, fl)
+      case SharedIncCountStep(rc, rc', r', t, refcount) =>
+        && SharedIncCount(step.key, step.state, step.state', step.a, step.a',
+            rc, rc', r', t, refcount)
+      case SharedDecCountPendingStep(rc, r, rc', t, refcount) =>
+        && SharedDecCountPending(step.key, step.state, step.state', step.a, step.a',
+            rc, r, rc', t, refcount)
+      case SharedDecCountObtainedStep(rc, r, handle, rc', t, refcount) =>
+        && SharedDecCountObtained(step.key, step.state, step.state', step.a, step.a',
+            rc, r, handle, rc', t, refcount)
+      case SharedCheckExcFreeStep(r, flags_flags', r', t, fl) =>
+        && SharedCheckExcFree(step.key, step.state, step.state', step.a, step.a',
+            r, flags_flags', r', t, fl)
+      case SharedCheckReadingStep(r, flags_flags', r', handle', t, fl) =>
+        && SharedCheckReading(step.key, step.state, step.state', step.a, step.a',
+            r, flags_flags', r', handle', t, fl)
+      case UnmapStep(flags, r, handle, flags', fl, clean) =>
+        && Unmap(step.key, step.state, step.state', step.a, step.a',
+            flags, r, handle, flags', fl, clean)
+      case AbandonExcLockPendingStep(flags, r, flags', fl, visited, clean) =>
+        && AbandonExcLockPending(step.key, step.state, step.state', step.a, step.a',
+            flags, r, flags', fl, visited, clean)
     }
   }
 
@@ -547,9 +776,14 @@ module RWLock refines ResourceBuilderSpec {
   requires s'.saved == s.saved
   requires s.m == a + rest
   requires s'.m == a' + rest
+  //requires step_common(a, a', step)
+  requires step.basicStep.TakeWriteBackStep?
+  /*requires TakeWriteBack(step.key, step.state, step.state',
+        step.a, step.a',
+        step.basicStep.flags, step.basicStep.flags',
+        step.basicStep.r', step.basicStep.handle')*/
   requires transform_step(a, a', step)
   requires Inv(s)
-  requires step.basicStep.TakeWriteBackStep?
   ensures Inv(s')
   {
     UsefulTriggers(s, s', step, a, a', rest);
@@ -803,6 +1037,386 @@ module RWLock refines ResourceBuilderSpec {
           assert false;
         }
 
+        assert Inv2(q, p);
+      } else if q in rest && p in a' {
+        assert Inv2(q, p);
+      } else if multiset{q, p} <= a' {
+        assert Inv2(q, p);
+      }
+    }
+
+    forall k
+    ensures CountConsts(s'.m, k) == CountConstRefs(s'.m, k)
+    {
+      assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
+    }
+  }
+
+  lemma ReadingIncCountStepPreservesInv(
+      s: Variables, s': Variables, step: QStep,
+      a: multiset<R>, a': multiset<R>, rest: multiset<R>)
+  requires s'.saved == s.saved
+  requires s.m == a + rest
+  requires s'.m == a' + rest
+  requires transform_step(a, a', step)
+  requires Inv(s)
+  requires step.basicStep.ReadingIncCountStep?
+  ensures Inv(s')
+  {
+    UsefulTriggers(s, s', step, a, a', rest);
+    forall_CountReduce<R>();
+
+    assert InvRWLockState(step.key, step.state, s.m);
+    assert InvRWLockState(step.key, step.state', s'.m);
+
+    forall q, p | multiset{q, p} <= s'.m
+    ensures Inv2(q, p)
+    {
+      if multiset{q, p} <= rest {
+        assert Inv2(q, p);
+      } else if q in a' && p in rest {
+        assert Inv2(q, p);
+      } else if q in rest && p in a' {
+        assert Inv2(q, p);
+      } else if multiset{q, p} <= a' {
+        assert Inv2(q, p);
+      }
+    }
+
+    forall k
+    ensures CountConsts(s'.m, k) == CountConstRefs(s'.m, k)
+    {
+      assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
+    }
+  }
+
+  lemma ObtainReadingStepPreservesInv(
+      s: Variables, s': Variables, step: QStep,
+      a: multiset<R>, a': multiset<R>, rest: multiset<R>)
+  requires s'.saved == s.saved
+  requires s.m == a + rest
+  requires s'.m == a' + rest
+  requires transform_step(a, a', step)
+  requires Inv(s)
+  requires step.basicStep.ObtainReadingStep?
+  ensures Inv(s')
+  {
+    UsefulTriggers(s, s', step, a, a', rest);
+    forall_CountReduce<R>();
+
+    assert InvRWLockState(step.key, step.state, s.m);
+    assert InvRWLockState(step.key, step.state', s'.m);
+
+    forall q, p | multiset{q, p} <= s'.m
+    ensures Inv2(q, p)
+    {
+      if multiset{q, p} <= rest {
+        assert Inv2(q, p);
+      } else if q in a' && p in rest {
+        assert Inv2(q, p);
+      } else if q in rest && p in a' {
+        assert Inv2(q, p);
+      } else if multiset{q, p} <= a' {
+        assert Inv2(q, p);
+      }
+    }
+
+    forall k
+    ensures CountConsts(s'.m, k) == CountConstRefs(s'.m, k)
+    {
+      assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
+    }
+  }
+
+  lemma ReadingToSharedStepPreservesInv(
+      s: Variables, s': Variables, step: QStep,
+      a: multiset<R>, a': multiset<R>, rest: multiset<R>)
+  requires s'.saved == s.saved
+  requires s.m == a + rest
+  requires s'.m == a' + rest
+  requires transform_step(a, a', step)
+  requires Inv(s)
+  requires step.basicStep.ReadingToSharedStep?
+  ensures Inv(s')
+  {
+    UsefulTriggers(s, s', step, a, a', rest);
+    forall_CountReduce<R>();
+
+    assert InvRWLockState(step.key, step.state, s.m);
+    assert InvRWLockState(step.key, step.state', s'.m);
+
+    forall q, p | multiset{q, p} <= s'.m
+    ensures Inv2(q, p)
+    {
+      if multiset{q, p} <= rest {
+        assert Inv2(q, p);
+      } else if q in a' && p in rest {
+        assert Inv2(q, p);
+      } else if q in rest && p in a' {
+        assert Inv2(q, p);
+      } else if multiset{q, p} <= a' {
+        assert Inv2(q, p);
+      }
+    }
+
+    forall k
+    ensures CountConsts(s'.m, k) == CountConstRefs(s'.m, k)
+    {
+      assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
+    }
+  }
+
+  lemma SharedIncCountStepPreservesInv(
+      s: Variables, s': Variables, step: QStep,
+      a: multiset<R>, a': multiset<R>, rest: multiset<R>)
+  requires s'.saved == s.saved
+  requires s.m == a + rest
+  requires s'.m == a' + rest
+  requires transform_step(a, a', step)
+  requires Inv(s)
+  requires step.basicStep.SharedIncCountStep?
+  ensures Inv(s')
+  {
+    UsefulTriggers(s, s', step, a, a', rest);
+    forall_CountReduce<R>();
+
+    assert InvRWLockState(step.key, step.state, s.m);
+    assert InvRWLockState(step.key, step.state', s'.m);
+
+    forall q, p | multiset{q, p} <= s'.m
+    ensures Inv2(q, p)
+    {
+      if multiset{q, p} <= rest {
+        assert Inv2(q, p);
+      } else if q in a' && p in rest {
+        assert Inv2(q, p);
+      } else if q in rest && p in a' {
+        assert Inv2(q, p);
+      } else if multiset{q, p} <= a' {
+        assert Inv2(q, p);
+      }
+    }
+
+    forall k
+    ensures CountConsts(s'.m, k) == CountConstRefs(s'.m, k)
+    {
+      assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
+    }
+  }
+
+  lemma SharedDecCountPendingStepPreservesInv(
+      s: Variables, s': Variables, step: QStep,
+      a: multiset<R>, a': multiset<R>, rest: multiset<R>)
+  requires s'.saved == s.saved
+  requires s.m == a + rest
+  requires s'.m == a' + rest
+  requires transform_step(a, a', step)
+  requires Inv(s)
+  requires step.basicStep.SharedDecCountPendingStep?
+  ensures Inv(s')
+  {
+    UsefulTriggers(s, s', step, a, a', rest);
+    forall_CountReduce<R>();
+
+    assert InvRWLockState(step.key, step.state, s.m);
+    assert InvRWLockState(step.key, step.state', s'.m);
+
+    forall q, p | multiset{q, p} <= s'.m
+    ensures Inv2(q, p)
+    {
+      if multiset{q, p} <= rest {
+        assert Inv2(q, p);
+      } else if q in a' && p in rest {
+        assert Inv2(q, p);
+      } else if q in rest && p in a' {
+        assert Inv2(q, p);
+      } else if multiset{q, p} <= a' {
+        assert Inv2(q, p);
+      }
+    }
+
+    forall k
+    ensures CountConsts(s'.m, k) == CountConstRefs(s'.m, k)
+    {
+      assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
+    }
+  }
+
+  lemma SharedDecCountObtainedStepPreservesInv(
+      s: Variables, s': Variables, step: QStep,
+      a: multiset<R>, a': multiset<R>, rest: multiset<R>)
+  requires s'.saved == s.saved
+  requires s.m == a + rest
+  requires s'.m == a' + rest
+  requires transform_step(a, a', step)
+  requires Inv(s)
+  requires step.basicStep.SharedDecCountObtainedStep?
+  ensures Inv(s')
+  {
+    UsefulTriggers(s, s', step, a, a', rest);
+    forall_CountReduce<R>();
+
+    assert InvRWLockState(step.key, step.state, s.m);
+    assert InvRWLockState(step.key, step.state', s'.m);
+
+    forall q, p | multiset{q, p} <= s'.m
+    ensures Inv2(q, p)
+    {
+      if multiset{q, p} <= rest {
+        assert Inv2(q, p);
+      } else if q in a' && p in rest {
+        assert Inv2(q, p);
+      } else if q in rest && p in a' {
+        assert Inv2(q, p);
+      } else if multiset{q, p} <= a' {
+        assert Inv2(q, p);
+      }
+    }
+
+    forall k
+    ensures CountConsts(s'.m, k) == CountConstRefs(s'.m, k)
+    {
+      assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
+    }
+  }
+
+  lemma SharedCheckExcFreeStepPreservesInv(
+      s: Variables, s': Variables, step: QStep,
+      a: multiset<R>, a': multiset<R>, rest: multiset<R>)
+  requires s'.saved == s.saved
+  requires s.m == a + rest
+  requires s'.m == a' + rest
+  requires transform_step(a, a', step)
+  requires Inv(s)
+  requires step.basicStep.SharedCheckExcFreeStep?
+  ensures Inv(s')
+  {
+    UsefulTriggers(s, s', step, a, a', rest);
+    forall_CountReduce<R>();
+
+    assert InvRWLockState(step.key, step.state, s.m);
+    assert InvRWLockState(step.key, step.state', s'.m);
+
+    forall q, p | multiset{q, p} <= s'.m
+    ensures Inv2(q, p)
+    {
+      if multiset{q, p} <= rest {
+        assert Inv2(q, p);
+      } else if q in a' && p in rest {
+        assert Inv2(q, p);
+      } else if q in rest && p in a' {
+        assert Inv2(q, p);
+      } else if multiset{q, p} <= a' {
+        assert Inv2(q, p);
+      }
+    }
+
+    forall k
+    ensures CountConsts(s'.m, k) == CountConstRefs(s'.m, k)
+    {
+      assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
+    }
+  }
+
+  lemma SharedCheckReadingStepPreservesInv(
+      s: Variables, s': Variables, step: QStep,
+      a: multiset<R>, a': multiset<R>, rest: multiset<R>)
+  requires s'.saved == s.saved
+  requires s.m == a + rest
+  requires s'.m == a' + rest
+  requires transform_step(a, a', step)
+  requires Inv(s)
+  requires step.basicStep.SharedCheckReadingStep?
+  ensures Inv(s')
+  {
+    UsefulTriggers(s, s', step, a, a', rest);
+    forall_CountReduce<R>();
+
+    assert InvRWLockState(step.key, step.state, s.m);
+    assert InvRWLockState(step.key, step.state', s'.m);
+
+    forall q, p | multiset{q, p} <= s'.m
+    ensures Inv2(q, p)
+    {
+      if multiset{q, p} <= rest {
+        assert Inv2(q, p);
+      } else if q in a' && p in rest {
+        assert Inv2(q, p);
+      } else if q in rest && p in a' {
+        assert Inv2(q, p);
+      } else if multiset{q, p} <= a' {
+        assert Inv2(q, p);
+      }
+    }
+
+    forall k
+    ensures CountConsts(s'.m, k) == CountConstRefs(s'.m, k)
+    {
+      assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
+    }
+  }
+
+  lemma UnmapStepPreservesInv(
+      s: Variables, s': Variables, step: QStep,
+      a: multiset<R>, a': multiset<R>, rest: multiset<R>)
+  requires s'.saved == s.saved
+  requires s.m == a + rest
+  requires s'.m == a' + rest
+  requires transform_step(a, a', step)
+  requires Inv(s)
+  requires step.basicStep.UnmapStep?
+  ensures Inv(s')
+  {
+    UsefulTriggers(s, s', step, a, a', rest);
+    forall_CountReduce<R>();
+
+    assert InvRWLockState(step.key, step.state, s.m);
+    assert InvRWLockState(step.key, step.state', s'.m);
+
+    forall q, p | multiset{q, p} <= s'.m
+    ensures Inv2(q, p)
+    {
+      if multiset{q, p} <= rest {
+        assert Inv2(q, p);
+      } else if q in a' && p in rest {
+        assert Inv2(q, p);
+      } else if q in rest && p in a' {
+        assert Inv2(q, p);
+      } else if multiset{q, p} <= a' {
+        assert Inv2(q, p);
+      }
+    }
+
+    forall k
+    ensures CountConsts(s'.m, k) == CountConstRefs(s'.m, k)
+    {
+      assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
+    }
+  }
+
+  lemma AbandonExcLockPendingStepPreservesInv(
+      s: Variables, s': Variables, step: QStep,
+      a: multiset<R>, a': multiset<R>, rest: multiset<R>)
+  requires s'.saved == s.saved
+  requires s.m == a + rest
+  requires s'.m == a' + rest
+  requires transform_step(a, a', step)
+  requires Inv(s)
+  requires step.basicStep.AbandonExcLockPendingStep?
+  ensures Inv(s')
+  {
+    UsefulTriggers(s, s', step, a, a', rest);
+    forall_CountReduce<R>();
+
+    assert InvRWLockState(step.key, step.state, s.m);
+    assert InvRWLockState(step.key, step.state', s'.m);
+
+    forall q, p | multiset{q, p} <= s'.m
+    ensures Inv2(q, p)
+    {
+      if multiset{q, p} <= rest {
+        assert Inv2(q, p);
+      } else if q in a' && p in rest {
         assert Inv2(q, p);
       } else if q in rest && p in a' {
         assert Inv2(q, p);
