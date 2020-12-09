@@ -89,6 +89,8 @@ module RWLock refines ResourceBuilderSpec {
     | FlagsField(key: Key, flags: Flag)
     | SharedLockRefCount(key: Key, t: int, refcount: uint8)
 
+    | Client(t: int)
+
     // Standard flow for obtaining a 'shared' lock
 
     | SharedLockPending(key: Key, t: int)     // inc refcount
@@ -130,12 +132,12 @@ module RWLock refines ResourceBuilderSpec {
           t: int, idx: int, clean: bool)
     | TakeExcLockFinishStep(r: R, r': R, handle': R, t: int, clean: bool) 
     | AllocStep(flags: R, flags': R, r': R, handle': R)
-    | ReadingIncCountStep(rc: R, r: R, rc': R, r': R, t: int, refcount: uint8)
+    | ReadingIncCountStep(client: R, rc: R, r: R, rc': R, r': R, t: int, refcount: uint8)
     | ObtainReadingStep(flags: R, r: R, flags': R, r': R, t: int, fl: Flag)
     | ReadingToSharedStep(flags: R, r: R, handle: R, flags': R, r': R, handle': R, t: int, fl: Flag)
-    | SharedIncCountStep(rc: R, rc': R, r': R, t: int, refcount: uint8)
-    | SharedDecCountPendingStep(rc: R, r: R, rc': R, t: int, refcount: uint8)
-    | SharedDecCountObtainedStep(rc: R, r: R, handle: R, rc': R, t: int, refcount: uint8)
+    | SharedIncCountStep(client: R, rc: R, rc': R, r': R, t: int, refcount: uint8)
+    | SharedDecCountPendingStep(rc: R, r: R, rc': R, client': R, t: int, refcount: uint8)
+    | SharedDecCountObtainedStep(rc: R, r: R, handle: R, rc': R, client': R, t: int, refcount: uint8)
     | SharedCheckExcFreeStep(r: R, flags_flags': R, r': R, t: int, fl: Flag)
     | SharedCheckReadingStep(r: R, flags_flags': R, r': R, handle': R, t: int, fl: Flag)
     | UnmapStep(flags: R, r: R, handle: R, flags': R, fl: Flag, clean: bool)
@@ -249,9 +251,9 @@ module RWLock refines ResourceBuilderSpec {
   predicate ReadingIncCount(
     key: Key, state: RWLockState, state': RWLockState,
     a: multiset<R>, a': multiset<R>,
-    rc: R, r: R, rc': R, r': R, t: int, refcount: uint8)
+    client: R, rc: R, r: R, rc': R, r': R, t: int, refcount: uint8)
   {
-    && a == multiset{rc, r}
+    && a == multiset{rc, r, client}
     && a' == multiset{rc', r'}
     && (0 <= t < |state.readCounts| ==>
         state' == state
@@ -260,6 +262,7 @@ module RWLock refines ResourceBuilderSpec {
     )
     && rc == Internal(SharedLockRefCount(key, t, refcount))
     && r == Internal(ReadingPending(key))
+    && client == Internal(Client(t))
     && rc' == Internal(SharedLockRefCount(key, t,
         // uint8 addition
         // (we'll need to prove invariant that this doesn't overflow)
@@ -303,11 +306,12 @@ module RWLock refines ResourceBuilderSpec {
   predicate SharedIncCount(
     key: Key, state: RWLockState, state': RWLockState,
     a: multiset<R>, a': multiset<R>,
-    rc: R, rc': R, r': R, t: int, refcount: uint8)
+    client: R, rc: R, rc': R, r': R, t: int, refcount: uint8)
   {
-    && a == multiset{rc}
+    && a == multiset{client, rc}
     && a' == multiset{rc', r'}
     && rc == Internal(SharedLockRefCount(key, t, refcount))
+    && client == Internal(Client(t))
     && rc' == Internal(SharedLockRefCount(key, t,
         if refcount == 255 then 0 else refcount + 1))
     && r' == Internal(SharedLockPending(key, t))
@@ -321,10 +325,10 @@ module RWLock refines ResourceBuilderSpec {
   predicate SharedDecCountPending(
     key: Key, state: RWLockState, state': RWLockState,
     a: multiset<R>, a': multiset<R>,
-    rc: R, r: R, rc': R, t: int, refcount: uint8)
+    rc: R, r: R, rc': R, client': R, t: int, refcount: uint8)
   {
     && a == multiset{rc, r}
-    && a' == multiset{rc'}
+    && a' == multiset{rc', client'}
     && rc == Internal(SharedLockRefCount(key, t, refcount))
     && r == Internal(SharedLockPending(key, t))
     && rc' == Internal(SharedLockRefCount(key, t,
@@ -334,17 +338,18 @@ module RWLock refines ResourceBuilderSpec {
         state' == state
           .(readCounts := state.readCounts[t := state.readCounts[t] - 1])
     )
+    && client' == Internal(Client(t))
   }
 
   predicate SharedDecCountObtained(
     key: Key, state: RWLockState, state': RWLockState,
     a: multiset<R>, a': multiset<R>,
-    rc: R, r: R, handle: R, rc': R, t: int, refcount: uint8)
+    rc: R, r: R, handle: R, rc': R, client': R, t: int, refcount: uint8)
   {
     && a == multiset{rc, r, handle}
-    && a' == multiset{rc'}
+    && a' == multiset{rc', client'}
     && rc == Internal(SharedLockRefCount(key, t, refcount))
-    && r == Internal(SharedLockPending(key, t))
+    && r == Internal(SharedLockObtained(key, t))
     && handle.Const? && handle.v.is_handle(key)
     && rc' == Internal(SharedLockRefCount(key, t,
         if refcount == 0 then 255 else refcount - 1))
@@ -353,6 +358,7 @@ module RWLock refines ResourceBuilderSpec {
         state' == state
           .(readCounts := state.readCounts[t := state.readCounts[t] - 1])
     )
+    && client' == Internal(Client(t))
   }
 
   predicate SharedCheckExcFree(
@@ -456,24 +462,24 @@ module RWLock refines ResourceBuilderSpec {
       case AllocStep(flags, flags', r', handle') =>
         && Alloc(step.key, step.state, step.state', step.a, step.a',
             flags, flags', r', handle')
-      case ReadingIncCountStep(rc, r, rc', r', t, refcount) =>
+      case ReadingIncCountStep(client, rc, r, rc', r', t, refcount) =>
         && ReadingIncCount(step.key, step.state, step.state', step.a, step.a',
-            rc, r, rc', r', t, refcount)
+            client, rc, r, rc', r', t, refcount)
       case ObtainReadingStep(flags, r, flags', r', t, fl) =>
         && ObtainReading(step.key, step.state, step.state', step.a, step.a',
             flags, r, flags', r', t, fl)
       case ReadingToSharedStep(flags, r, handle, flags', r', handle', t, fl) =>
         && ReadingToShared(step.key, step.state, step.state', step.a, step.a',
             flags, r, handle, flags', r', handle', t, fl)
-      case SharedIncCountStep(rc, rc', r', t, refcount) =>
+      case SharedIncCountStep(client, rc, rc', r', t, refcount) =>
         && SharedIncCount(step.key, step.state, step.state', step.a, step.a',
-            rc, rc', r', t, refcount)
-      case SharedDecCountPendingStep(rc, r, rc', t, refcount) =>
+            client, rc, rc', r', t, refcount)
+      case SharedDecCountPendingStep(rc, r, rc', client', t, refcount) =>
         && SharedDecCountPending(step.key, step.state, step.state', step.a, step.a',
-            rc, r, rc', t, refcount)
-      case SharedDecCountObtainedStep(rc, r, handle, rc', t, refcount) =>
+            rc, r, rc', client', t, refcount)
+      case SharedDecCountObtainedStep(rc, r, handle, rc', client', t, refcount) =>
         && SharedDecCountObtained(step.key, step.state, step.state', step.a, step.a',
-            rc, r, handle, rc', t, refcount)
+            rc, r, handle, rc', client', t, refcount)
       case SharedCheckExcFreeStep(r, flags_flags', r', t, fl) =>
         && SharedCheckExcFree(step.key, step.state, step.state', step.a, step.a',
             r, flags_flags', r', t, fl)
@@ -533,7 +539,7 @@ module RWLock refines ResourceBuilderSpec {
       && 0 <= state.readState.t < NUM_THREADS
       //&& (forall i | 0 <= i < |state.readCounts| && i != state.readState.t
       //    :: state.readCounts[i] == 0)
-      && state.readCounts[state.readState.t] == 1
+      //&& state.readCounts[state.readState.t] == 1
     )
     && (state.readState.RSObtained? ==>
       0 <= state.readState.t < NUM_THREADS
@@ -600,6 +606,21 @@ module RWLock refines ResourceBuilderSpec {
   function CountConsts(m: multiset<R>, key: Key) : nat
   {
     MultisetUtil.Count((r) => is_const(r, key), m)
+  }
+
+  predicate is_thread_owned(r: R, t: int)
+  {
+    && r.Internal?
+    && (r.q.Client? || r.q.SharedLockPending? || r.q.SharedLockPending2? ||
+        r.q.SharedLockObtained? || r.q.ExcLockPendingAwaitWriteBack? ||
+        r.q.ExcLockPending? || r.q.ExcLockObtained? ||
+        r.q.ReadingPendingCounted? || r.q.ReadingObtained?)
+    && r.q.t == t
+  }
+
+  function CountThreadOwned(m: multiset<R>, t: int) : nat
+  {
+    MultisetUtil.Count((r) => is_thread_owned(r, t), m)
   }
 
   predicate InvGlobal(g: map<Key, RWLockState>, m: multiset<R>)
@@ -705,8 +726,10 @@ module RWLock refines ResourceBuilderSpec {
   {
     && (r.Internal? ==> (
       && !r.q.Global?
-      && r.q.key in g
-      && InvObjectState(r.q.key, r.q, g[r.q.key])
+      && (!r.q.Client? ==>
+        && r.q.key in g
+        && InvObjectState(r.q.key, r.q, g[r.q.key])
+      )
     ))
     && (r.Const? ==> (
       && r.v.key in g
@@ -726,18 +749,23 @@ module RWLock refines ResourceBuilderSpec {
         && (q.q.ExcLockPending? && r.q.ExcLockPending? ==> q.q.key != r.q.key)
         && (q.q.ExcLockObtained? && r.q.ExcLockObtained? ==> q.q.key != r.q.key)
         && (q.q.ReadingPending? && r.q.ReadingPending? ==> q.q.key != r.q.key)
+        && (q.q.ReadingPendingCounted? && r.q.ReadingPendingCounted? ==> q.q.key != r.q.key)
+        && (q.q.ReadingObtained? && r.q.ReadingObtained? ==> q.q.key != r.q.key)
       ))
       && (q.q.Global? ==> (
         && InvObject(r, q.q.g)
       ))
     ))
   }
+  
+  const NUM_CLIENTS := 255;
 
   predicate Inv(s: Variables)
   {
     && (forall g | g in s.m :: g.Internal? && g.q.Global? ==> InvGlobal(g.q.g, s.m))
     && (forall a, b | multiset{a,b} <= s.m :: Inv2(a, b))
     && (forall key :: CountConsts(s.m, key) == CountConstRefs(s.m, key))
+    && (forall t | 0 <= t < NUM_THREADS :: CountThreadOwned(s.m, t) == NUM_CLIENTS)
   }
 
   lemma forall_CountReduce<A>()
@@ -814,6 +842,9 @@ module RWLock refines ResourceBuilderSpec {
     {
       assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
     }
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
   }
 
   lemma ReleaseWriteBackStepPreservesInv(
@@ -857,6 +888,9 @@ module RWLock refines ResourceBuilderSpec {
     {
       assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
     }
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
   }
 
   lemma TakeExcLockFinishWriteBackStepPreservesInv(
@@ -895,6 +929,9 @@ module RWLock refines ResourceBuilderSpec {
     {
       assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
     }
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
   }
 
   lemma TakeExcLockSharedLockZeroStepPreservesInv(
@@ -933,6 +970,9 @@ module RWLock refines ResourceBuilderSpec {
     {
       assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
     }
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
   }
 
   lemma TakeExcLockFinishStepPreservesInv(
@@ -982,6 +1022,9 @@ module RWLock refines ResourceBuilderSpec {
     {
       assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
     }
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
   }
 
   lemma AllocStepPreservesInv(
@@ -1045,6 +1088,9 @@ module RWLock refines ResourceBuilderSpec {
     {
       assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
     }
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
   }
 
   lemma ReadingIncCountStepPreservesInv(
@@ -1063,6 +1109,21 @@ module RWLock refines ResourceBuilderSpec {
 
     assert InvRWLockState(step.key, step.state, s.m);
     assert InvRWLockState(step.key, step.state', s'.m);
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
+    calc {
+      step.state'.readCounts[step.basicStep.t];
+      CountCountedRefs(s'.m, step.key, step.basicStep.t);
+      <= {
+        CountSubset(
+            (r) => is_counted_ref(r, step.key, step.basicStep.t),
+            (r) => is_thread_owned(r, step.basicStep.t),
+            s'.m);
+      }
+      CountThreadOwned(s'.m, step.basicStep.t);
+    }
+    assert step.state'.readCounts[step.basicStep.t] <= 255;
 
     forall q, p | multiset{q, p} <= s'.m
     ensures Inv2(q, p)
@@ -1121,6 +1182,9 @@ module RWLock refines ResourceBuilderSpec {
     {
       assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
     }
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
   }
 
   lemma ReadingToSharedStepPreservesInv(
@@ -1159,6 +1223,9 @@ module RWLock refines ResourceBuilderSpec {
     {
       assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
     }
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
   }
 
   lemma SharedIncCountStepPreservesInv(
@@ -1177,6 +1244,21 @@ module RWLock refines ResourceBuilderSpec {
 
     assert InvRWLockState(step.key, step.state, s.m);
     assert InvRWLockState(step.key, step.state', s'.m);
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
+    calc {
+      step.state'.readCounts[step.basicStep.t];
+      CountCountedRefs(s'.m, step.key, step.basicStep.t);
+      <= {
+        CountSubset(
+            (r) => is_counted_ref(r, step.key, step.basicStep.t),
+            (r) => is_thread_owned(r, step.basicStep.t),
+            s'.m);
+      }
+      CountThreadOwned(s'.m, step.basicStep.t);
+    }
+    assert step.state'.readCounts[step.basicStep.t] <= 255;
 
     forall q, p | multiset{q, p} <= s'.m
     ensures Inv2(q, p)
@@ -1235,6 +1317,9 @@ module RWLock refines ResourceBuilderSpec {
     {
       assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
     }
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
   }
 
   lemma SharedDecCountObtainedStepPreservesInv(
@@ -1273,6 +1358,9 @@ module RWLock refines ResourceBuilderSpec {
     {
       assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
     }
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
   }
 
   lemma SharedCheckExcFreeStepPreservesInv(
@@ -1311,6 +1399,9 @@ module RWLock refines ResourceBuilderSpec {
     {
       assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
     }
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
   }
 
   lemma SharedCheckReadingStepPreservesInv(
@@ -1349,6 +1440,9 @@ module RWLock refines ResourceBuilderSpec {
     {
       assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
     }
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
   }
 
   lemma UnmapStepPreservesInv(
@@ -1387,6 +1481,9 @@ module RWLock refines ResourceBuilderSpec {
     {
       assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
     }
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
   }
 
   lemma AbandonExcLockPendingStepPreservesInv(
@@ -1425,6 +1522,9 @@ module RWLock refines ResourceBuilderSpec {
     {
       assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
     }
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
   }
 
   lemma BasicStepPreservesInv(
