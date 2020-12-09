@@ -126,6 +126,7 @@ module RWLock refines ResourceBuilderSpec {
   datatype BasicStep =
     | TakeWriteBackStep(flags: R, flags': R, r': R, handle': R)
     | ReleaseWriteBackStep(flags: R, r: R, handle: R, flags': R, fl: Flag)
+    | ThreadlessExcStep(flags: R, flags': R, r': R, handle': R, fl: Flag)
     | SharedToExcStep(flags: R, r: R, flags': R, r': R, t: int, fl: Flag)
     | TakeExcLockFinishWriteBackStep(flags: R, r: R, flags': R, r': R,
           t: int, fl: Flag, clean: bool)
@@ -142,7 +143,7 @@ module RWLock refines ResourceBuilderSpec {
     | SharedCheckExcFreeStep(r: R, flags_flags': R, r': R, t: int, fl: Flag)
     | SharedCheckReadingStep(r: R, flags_flags': R, r': R, handle': R, t: int, fl: Flag)
     | UnmapStep(flags: R, r: R, handle: R, flags': R, fl: Flag, clean: bool)
-    | AbandonExcLockPendingStep(flags: R, r: R, flags': R, fl: Flag, visited: int, clean: bool)
+    | AbandonExcLockPendingStep(flags: R, r: R, handle: R, flags': R, fl: Flag, visited: int, clean: bool)
 
   predicate TakeWriteBack(
     key: Key, state: RWLockState, state': RWLockState,
@@ -177,6 +178,24 @@ module RWLock refines ResourceBuilderSpec {
     && (fl == WriteBack_PendingExcLock ==>
         flags' == Internal(FlagsField(key, PendingExcLock)))
     && handle.Const? && handle.v.is_handle(key)
+  }
+
+  predicate ThreadlessExc(
+    key: Key, state: RWLockState, state': RWLockState,
+    a: multiset<R>, a': multiset<R>,
+    flags: R,
+    flags': R, r': R, handle': R,
+    fl: Flag)
+  {
+    && a == multiset{flags}
+    && a' == multiset{flags', r', handle'}
+    && (fl == Available || fl == WriteBack)
+    && flags == Internal(FlagsField(key, fl))
+    && flags' == Internal(FlagsField(key,
+        if fl == Available then PendingExcLock else WriteBack_PendingExcLock))
+    && r' == Internal(ExcLockPendingAwaitWriteBack(key, -1))
+    && state' == state.(excState := WLSPendingAwaitWriteBack(-1))
+    && (state.handle.Some? ==> handle' == Const(state.handle.value))
   }
 
   predicate SharedToExc(
@@ -426,18 +445,20 @@ module RWLock refines ResourceBuilderSpec {
     && state' == state
       .(unmapped := true)
       .(excState := WLSNone)
+      .(handle := Some(handle.v))
   }
 
   predicate AbandonExcLockPending(
     key: Key, state: RWLockState, state': RWLockState,
     a: multiset<R>, a': multiset<R>,
-    flags: R, r: R, flags': R, fl: Flag, visited: int, clean: bool)
+    flags: R, r: R, handle: R, flags': R, fl: Flag, visited: int, clean: bool)
   {
-    && a == multiset{flags, r}
+    && a == multiset{flags, handle, r}
     && a' == multiset{flags'}
     && r == Internal(ExcLockPending(key, -1, visited, clean))
     && flags == Internal(FlagsField(key, fl))
     && flags' == Internal(FlagsField(key, Available))
+    && handle.Const? && handle.v.is_handle(key)
 
     && state' == state.(excState := WLSNone)
   }
@@ -470,6 +491,10 @@ module RWLock refines ResourceBuilderSpec {
         && ReleaseWriteBack(step.key, step.state, step.state',
             step.a, step.a',
             flags, r, handle, flags', fl)
+      case ThreadlessExcStep(flags, flags', r', handle', fl) =>
+        && ThreadlessExc(step.key, step.state, step.state',
+            step.a, step.a',
+            flags, flags', r', handle', fl)
       case SharedToExcStep(flags, r, flags', r', t, fl) =>
         && SharedToExc(step.key, step.state, step.state',
             step.a, step.a',
@@ -516,9 +541,9 @@ module RWLock refines ResourceBuilderSpec {
       case UnmapStep(flags, r, handle, flags', fl, clean) =>
         && Unmap(step.key, step.state, step.state', step.a, step.a',
             flags, r, handle, flags', fl, clean)
-      case AbandonExcLockPendingStep(flags, r, flags', fl, visited, clean) =>
+      case AbandonExcLockPendingStep(flags, r, handle, flags', fl, visited, clean) =>
         && AbandonExcLockPending(step.key, step.state, step.state', step.a, step.a',
-            flags, r, flags', fl, visited, clean)
+            flags, r, handle, flags', fl, visited, clean)
     }
   }
 
@@ -528,7 +553,7 @@ module RWLock refines ResourceBuilderSpec {
     && (state.excState.WLSPendingAwaitWriteBack? ==>
         && state.readState == RSNone
         && !state.unmapped
-        && 0 <= state.excState.t < NUM_THREADS
+        && -1 <= state.excState.t < NUM_THREADS
       )
     && (state.excState.WLSPending? ==>
       && state.readState == RSNone
@@ -539,7 +564,7 @@ module RWLock refines ResourceBuilderSpec {
       //    && i != state.excState.t :: state.readCounts[i] == 0)
       //&& (0 <= state.excState.t < state.excState.visited ==>
       //      state.readCounts[state.excState.t] == 1)
-      && 0 <= state.excState.t < NUM_THREADS
+      && -1 <= state.excState.t < NUM_THREADS
     )
     && (state.excState.WLSObtained? ==>
       && state.readState == RSNone
@@ -549,7 +574,7 @@ module RWLock refines ResourceBuilderSpec {
       //    && i != state.excState.t :: state.readCounts[i] == 0)
       //&& (0 <= state.excState.t < |state.readCounts| ==>
       //      state.readCounts[state.excState.t] == 1)
-      && 0 <= state.excState.t < NUM_THREADS
+      && -1 <= state.excState.t < NUM_THREADS
     )
     && (state.backHeld ==>
       && state.readState == RSNone
@@ -723,15 +748,15 @@ module RWLock refines ResourceBuilderSpec {
     )
 
     && (q.ExcLockPendingAwaitWriteBack? ==>
-      && 0 <= q.t < NUM_THREADS
+      && -1 <= q.t < NUM_THREADS
       && state.excState == WLSPendingAwaitWriteBack(q.t)
     )
     && (q.ExcLockPending? ==>
-      && 0 <= q.t < NUM_THREADS
+      && -1 <= q.t < NUM_THREADS
       && state.excState == WLSPending(q.t, q.visited, q.clean)
     )
     && (q.ExcLockObtained? ==>
-      && 0 <= q.t < NUM_THREADS
+      && -1 <= q.t < NUM_THREADS
       && state.excState == WLSObtained(q.t, q.clean)
     )
 
@@ -898,6 +923,47 @@ module RWLock refines ResourceBuilderSpec {
     ensures InvGlobal(g.q.g, s'.m)
     {
     }
+
+    forall q, p | multiset{q, p} <= s'.m
+    ensures Inv2(q, p)
+    {
+      if multiset{q, p} <= rest {
+        assert Inv2(q, p);
+      } else if q in a' && p in rest {
+        assert Inv2(q, p);
+      } else if q in rest && p in a' {
+        assert Inv2(q, p);
+      } else if multiset{q, p} <= a' {
+        assert Inv2(q, p);
+      }
+    }
+
+    forall k
+    ensures CountConsts(s'.m, k) == CountConstRefs(s'.m, k)
+    {
+      assert CountConsts(s.m, k) == CountConstRefs(s.m, k); // trigger
+    }
+
+    assert forall t | 0 <= t < NUM_THREADS :: 
+        CountThreadOwned(s.m, t) == CountThreadOwned(s'.m, t);
+  }
+
+  lemma ThreadlessExcStepPreservesInv(
+      s: Variables, s': Variables, step: QStep,
+      a: multiset<R>, a': multiset<R>, rest: multiset<R>)
+  requires s'.saved == s.saved
+  requires s.m == a + rest
+  requires s'.m == a' + rest
+  requires transform_step(a, a', step)
+  requires Inv(s)
+  requires step.basicStep.ThreadlessExcStep?
+  ensures Inv(s')
+  {
+    UsefulTriggers(s, s', step, a, a', rest);
+    forall_CountReduce<R>();
+
+    assert InvRWLockState(step.key, step.state, s.m);
+    assert InvRWLockState(step.key, step.state', s'.m);
 
     forall q, p | multiset{q, p} <= s'.m
     ensures Inv2(q, p)
@@ -1647,7 +1713,7 @@ module RWLock refines ResourceBuilderSpec {
       case AllocStep(_,_,_,_) => {
          AllocStepPreservesInv(s, s', step, a, a', rest);
       }
-      case AbandonExcLockPendingStep(_,_,_,_,_,_) => {
+      case AbandonExcLockPendingStep(_,_,_,_,_,_,_) => {
         AbandonExcLockPendingStepPreservesInv(s, s', step, a, a', rest);
       }
       case UnmapStep(_,_,_,_,_,_) => {
@@ -1679,6 +1745,9 @@ module RWLock refines ResourceBuilderSpec {
       }
       case SharedToExcStep(_,_,_,_,_,_) => {
         SharedToExcStepPreservesInv(s, s', step, a, a', rest);
+      }
+      case ThreadlessExcStep(_,_,_,_,_) => {
+        ThreadlessExcStepPreservesInv(s, s', step, a, a', rest);
       }
     }
   }
