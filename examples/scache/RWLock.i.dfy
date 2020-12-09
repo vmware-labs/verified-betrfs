@@ -502,38 +502,38 @@ module RWLock refines ResourceBuilderSpec {
       && !state.unmapped
       && !state.backHeld
       && 0 <= state.excState.visited <= NUM_THREADS
-      && (forall i | 0 <= i < state.excState.visited
-          && i != state.excState.t :: state.readCounts[i] == 0)
-      && (0 <= state.excState.t < state.excState.visited ==>
-            state.readCounts[state.excState.t] == 1)
+      //&& (forall i | 0 <= i < state.excState.visited
+      //    && i != state.excState.t :: state.readCounts[i] == 0)
+      //&& (0 <= state.excState.t < state.excState.visited ==>
+      //      state.readCounts[state.excState.t] == 1)
       && 0 <= state.excState.t < NUM_THREADS
     )
     && (state.excState.WLSObtained? ==>
       && state.readState == RSNone
       && !state.unmapped
       && !state.backHeld
-      && (forall i | 0 <= i < |state.readCounts|
-          && i != state.excState.t :: state.readCounts[i] == 0)
-      && (0 <= state.excState.t < |state.readCounts| ==>
-            state.readCounts[state.excState.t] == 1)
+      //&& (forall i | 0 <= i < |state.readCounts|
+      //    && i != state.excState.t :: state.readCounts[i] == 0)
+      //&& (0 <= state.excState.t < |state.readCounts| ==>
+      //      state.readCounts[state.excState.t] == 1)
       && 0 <= state.excState.t < NUM_THREADS
     )
     && (state.backHeld ==>
       && state.readState == RSNone
     )
-    && (
-      (
-        || state.readState == RSPending
-        || state.readState.RSPendingCounted?
-      ) ==> (
-        && !state.unmapped
-        && !state.backHeld
-        && (forall i | 0 <= i < |state.readCounts|
-            :: state.readCounts[i] == 0)
-      )
+    && (state.readState.RSPending? ==>
+      && !state.unmapped
+      && !state.backHeld
+      //&& (forall i | 0 <= i < |state.readCounts|
+      //    :: state.readCounts[i] == 0)
     )
     && (state.readState.RSPendingCounted? ==>
-      0 <= state.readState.t < NUM_THREADS
+      && !state.unmapped
+      && !state.backHeld
+      && 0 <= state.readState.t < NUM_THREADS
+      //&& (forall i | 0 <= i < |state.readCounts| && i != state.readState.t
+      //    :: state.readCounts[i] == 0)
+      && state.readCounts[state.readState.t] == 1
     )
     && (state.readState.RSObtained? ==>
       0 <= state.readState.t < NUM_THREADS
@@ -541,8 +541,8 @@ module RWLock refines ResourceBuilderSpec {
     && (state.unmapped ==>
       && !state.backHeld
       && state.readState == RSNone
-      && (forall i | 0 <= i < |state.readCounts|
-          :: state.readCounts[i] == 0)
+      //&& (forall i | 0 <= i < |state.readCounts|
+      //    :: state.readCounts[i] == 0)
     )
     && (state.excState.WLSObtained? ==> state.handle.None?)
     && (!state.readState.RSNone? ==> state.handle.None?)
@@ -725,6 +725,7 @@ module RWLock refines ResourceBuilderSpec {
         && (q.q.ExcLockPendingAwaitWriteBack? && r.q.ExcLockPendingAwaitWriteBack? ==> q.q.key != r.q.key)
         && (q.q.ExcLockPending? && r.q.ExcLockPending? ==> q.q.key != r.q.key)
         && (q.q.ExcLockObtained? && r.q.ExcLockObtained? ==> q.q.key != r.q.key)
+        && (q.q.ReadingPending? && r.q.ReadingPending? ==> q.q.key != r.q.key)
       ))
       && (q.q.Global? ==> (
         && InvObject(r, q.q.g)
@@ -1019,12 +1020,6 @@ module RWLock refines ResourceBuilderSpec {
       if multiset{q, p} <= rest {
         assert Inv2(q, p);
       } else if q in a' && p in rest {
-
-        if is_counted_ref_type(p) && p.q.key == step.key {
-          Count_ge_1((r) => is_counted_ref(r, p.q.key, p.q.t), s.m, p);
-          assert step.state.readCounts[p.q.t] != 0;
-          assert false;
-        }
 
         if p.Const? && p.v.key == step.key {
           // If a Const exists, then there is either
