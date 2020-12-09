@@ -38,7 +38,7 @@ abstract module StateMachine(ifc: Ifc) {
   // ...
 }
 
-abstract module StateMachineRefinement(ifc: Ifc, L: StateMachine, R: StateMachine) {
+abstract module StateMachineRefinement(ifc: Ifc, L: StateMachine(ifc), R: StateMachine(ifc)) {
   // ...
 }
 
@@ -218,3 +218,23 @@ import AwesomeTheorem = BlockCacheRefinementThm(
   MapIfc(K, V),
   PivotBetreeGraph(K, V, M),
   PivotBetreeGraphOps(K, V, M))
+
+// Suppose in our implementation, we have a bunch of
+// nested modules from the top level: Impl
+// imports A which imports B ...
+// all parameterized over KeyType
+//
+// Impl(K) -> A(K) -> B(K) -> C(K) -> D(K) -> E(K) -> TotalOrderImpl(K)
+//
+// As mentioned above, TotalOrderImpl(K) is abstract, so this whole chain
+// is abstract. What's the best way to instantiate this module?
+//
+// In this system, we could make TotalOrderImpl a concrete argument,
+//
+// module Impl(K: KeyType, KI: TotalOrderImpl(K))
+//
+// and pass KI down the entire module chain.
+//
+// Thus any module which depends (even indirectly) on TotalOrderImpl will
+// need to declare this in their signature and pass it down to the child module.
+// I don't think this is necessarily a bad thing.
