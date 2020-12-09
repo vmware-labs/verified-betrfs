@@ -1,5 +1,5 @@
 include "../ByteBlockCacheSystem/Marshalling.i.dfy"
-include "StateModel.i.dfy"
+include "StateSectorModel.i.dfy"
 include "IndirectionTableModel.i.dfy"
 
 //
@@ -23,7 +23,7 @@ module MarshallingModel {
   import opened BucketWeights
   import opened Bounds
   import BC = BlockCache
-  import SM = StateModel
+  // import SM = StateModel
   import CRC32_C
   import NativeArrays
   import IndirectionTableModel
@@ -47,7 +47,7 @@ module MarshallingModel {
 
   type Reference = BC.Reference
   type Sector = SSM.Sector
-  type Node = SM.Node
+  type Node = SSM.Node
 
   /////// Some lemmas that are useful in Impl
 
@@ -174,8 +174,8 @@ module MarshallingModel {
   }
 
   function {:opaque} parseSector(data: seq<byte>) : (s : Option<Sector>)
-  ensures s.Some? ==> SM.WFSector(s.value)
-  ensures s.Some? ==> Some(SM.ISector(s.value)) == Marshalling.parseSector(data)
+  ensures s.Some? ==> SSM.WFSector(s.value)
+  ensures s.Some? ==> Some(SSM.ISector(s.value)) == Marshalling.parseSector(data)
   ensures s.None? ==> Marshalling.parseSector(data).None?
   ensures s.Some? && s.value.SectorIndirectionTable? ==>
       IndirectionTableModel.TrackingGarbage(s.value.indirectionTable)
@@ -195,8 +195,8 @@ module MarshallingModel {
   /////// Marshalling and de-marshalling with checksums
 
   function {:opaque} parseCheckedSector(data: seq<byte>) : (s : Option<Sector>)
-  ensures s.Some? ==> SM.WFSector(s.value)
-  ensures s.Some? ==> Some(SM.ISector(s.value)) == Marshalling.parseCheckedSector(data)
+  ensures s.Some? ==> SSM.WFSector(s.value)
+  ensures s.Some? ==> Some(SSM.ISector(s.value)) == Marshalling.parseCheckedSector(data)
   ensures s.None? ==> Marshalling.parseCheckedSector(data).None?
   ensures s.Some? && s.value.SectorIndirectionTable? ==>
       IndirectionTableModel.TrackingGarbage(s.value.indirectionTable)

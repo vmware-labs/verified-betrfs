@@ -1,8 +1,11 @@
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "IndirectionTableModel.i.dfy"
 include "../BlockCacheSystem/SectorType.i.dfy"
+include "../lib/Base/Option.s.dfy"
 
 module StateSectorModel {
+  import opened Options
+
   import BT = PivotBetreeSpec`Internal
   import IndirectionTableModel
   import SectorType
@@ -38,5 +41,28 @@ module StateSectorModel {
   function IIndirectionTable(table: IndirectionTable) : (result: SectorType.IndirectionTable)
   {
     IndirectionTableModel.I(table)
+  }
+
+  function IIndirectionTableOpt(table: Option<IndirectionTable>) : (result: Option<SectorType.IndirectionTable>)
+  {
+    if table.Some? then
+      Some(IIndirectionTable(table.value))
+    else
+      None
+  }
+
+  function INode(node: Node) : (result: BT.G.Node)
+  {
+    BT.G.Node(node.pivotTable, node.children, node.buckets)
+  }
+
+  function ISector(sector: Sector) : SectorType.Sector
+  requires WFSector(sector)
+  {
+    match sector {
+      case SectorNode(node) => SectorType.SectorNode(INode(node))
+      case SectorIndirectionTable(indirectionTable) => SectorType.SectorIndirectionTable(IIndirectionTable(indirectionTable))
+      case SectorSuperblock(superblock) => SectorType.SectorSuperblock(superblock)
+    }
   }
 }

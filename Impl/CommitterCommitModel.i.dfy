@@ -1,5 +1,5 @@
 include "CommitterModel.i.dfy"
-include "StateModel.i.dfy"
+// include "StateModel.i.dfy"
 include "IOModel.i.dfy"
 include "../lib/DataStructures/LinearMutableMap.i.dfy"
 
@@ -17,7 +17,7 @@ module CommitterCommitModel {
   import SectorType
 
   import opened CommitterModel
-  import opened StateModel
+  // import opened StateModel
   import opened IOModel
 
   function SyncReqs2to1Iterate(

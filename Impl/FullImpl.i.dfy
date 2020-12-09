@@ -61,14 +61,14 @@ module FullImpl {
       && ReprInv()
       && this.bc.W()
       && this.jc.Has()
-      && this.jc.Read().W()
+      && this.jc.Read().WF()
     }
 
     function I() : StateModel.Variables
     reads this, this.Repr
     requires W()
     {
-      StateModel.Variables(this.bc.I(), this.jc.Read().I())
+      StateModel.Variables(this.bc.I(), this.jc.Read())
     }
 
     predicate WF()
@@ -90,7 +90,7 @@ module FullImpl {
     ensures Inv()
     ensures fresh(Repr)
     ensures !bc.ready
-    ensures CommitterModel.I(jc.Read().I())
+    ensures jc.Read().I()
         == JC.LoadingSuperblock(
             None, None,
             JC.SuperblockUnfinished,

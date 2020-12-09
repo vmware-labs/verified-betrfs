@@ -1,6 +1,5 @@
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
-include "StateImpl.i.dfy"
-include "StateModel.i.dfy"
+include "StateSectorImpl.i.dfy"
 include "../lib/Buckets/BucketImpl.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Lang/System/NativeArrays.s.dfy"
@@ -11,10 +10,11 @@ include "../lib/Crypto/CRC32CImpl.i.dfy"
 
 include "../ByteBlockCacheSystem/Marshalling.i.dfy"
 include "MarshallingModel.i.dfy"
+include "CacheImpl.i.dfy"
 
 module MarshallingImpl {
-  import IM = StateModel
-  import SI = StateImpl
+  import SSI = StateSectorImpl
+  // import SI = StateImpl
   import opened BoxNodeImpl
   import opened CacheImpl
   import Marshalling
@@ -32,7 +32,7 @@ module MarshallingImpl {
   import BucketImpl
   import BC = BlockCache
   import JC = JournalCache
-  import StateImpl
+  // import StateImpl
   import CRC32_C
   import CRC32_C_Impl
   import CRC32_C_Array_Impl
@@ -64,6 +64,8 @@ module MarshallingImpl {
   import DPKV = DynamicPkv
   import PSA = PackedStringArray
   import PSAM = PackedStringArrayMarshalling
+
+  import SSM = StateSectorModel
 
   type Key = KeyType.Key
   type Reference = IMM.Reference
@@ -295,9 +297,9 @@ module MarshallingImpl {
 
   function ISectorOpt(s : Option<Sector>): Option<IMM.Sector>
   requires s.Some? ==> StateImpl.WFSector(s.value)
-  requires s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
+  requires s.Some? ==> SSM.WFSector(StateImpl.ISector(s.value))
   reads if s.Some? then StateImpl.SectorObjectSet(s.value) else {}
-  reads if s.Some? then SI.SectorRepr(s.value) else {}
+  reads if s.Some? then SSI.SectorRepr(s.value) else {}
   {
     if s.Some? then
       Some(StateImpl.ISector(s.value))
@@ -309,9 +311,9 @@ module MarshallingImpl {
   requires IMM.valToSector.requires(v)
   requires SizeOfV(v) < 0x1_0000_0000_0000_0000
   ensures s.Some? ==> StateImpl.WFSector(s.value)
-  ensures s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
+  ensures s.Some? ==> SSM.WFSector(StateImpl.ISector(s.value))
   ensures MapOption(s, SI.ISector) == IMM.valToSector(v)
-  ensures s.Some? ==> fresh(SI.SectorRepr(s.value));
+  ensures s.Some? ==> fresh(SSI.SectorRepr(s.value));
   {
     if v.c == 0 {
       var s := Marshalling.valToSuperblock(v.val);
@@ -524,8 +526,8 @@ module MarshallingImpl {
   method {:fuel SizeOfV,4} nodeToVal(node: Node)
   returns (v : V, size: uint64)
   requires node.Inv()
-  requires IM.WFNode(node.I())
-  requires BT.WFNode(IM.INode(node.I()))
+  requires SSM.WFNode(node.I())
+  requires BT.WFNode(SSM.INode(node.I()))
   requires BucketsLib.BucketListWellMarshalled(BucketImpl.MutBucket.ILseq(node.Read().buckets))
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.PivotNodeGrammar())
@@ -584,14 +586,14 @@ module MarshallingImpl {
   method sectorToVal(sector: StateImpl.Sector)
   returns (v : V, size: uint64)
   requires StateImpl.WFSector(sector)
-  requires IM.WFSector(StateImpl.ISector(sector))
+  requires SSM.WFSector(StateImpl.ISector(sector))
   requires sector.SectorNode?
-  requires sector.SectorNode? ==> IM.WFNode(sector.node.I())
-  requires sector.SectorNode? ==> BT.WFNode(IM.INode(sector.node.I()))
+  requires sector.SectorNode? ==> SSM.WFNode(sector.node.I())
+  requires sector.SectorNode? ==> BT.WFNode(SSM.INode(sector.node.I()))
   requires sector.SectorNode? ==> BucketsLib.BucketListWellMarshalled(BucketImpl.MutBucket.ILseq(sector.node.Read().buckets))
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.SectorGrammar());
-  ensures Marshalling.valToSector(v) == Some(IM.ISector(StateImpl.ISector(sector)))
+  ensures Marshalling.valToSector(v) == Some(SSM.ISector(StateImpl.ISector(sector)))
   ensures sector.SectorNode? ==> SizeOfV(v) <= NodeBlockSize() as int - 32
   ensures SizeOfV(v) < 0x1_0000_0000_0000_0000 - 32
   ensures SizeOfV(v) == size as int
@@ -608,15 +610,15 @@ module MarshallingImpl {
   method indirectionTableSectorToVal(sector: StateImpl.Sector)
   returns (v : V, size: uint64)
   requires StateImpl.WFSector(sector)
-  requires IM.WFSector(StateImpl.ISector(sector))
+  requires SSM.WFSector(StateImpl.ISector(sector))
   requires sector.SectorIndirectionTable?
   requires sector.indirectionTable.Inv()
-  requires BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.I()))
+  requires BC.WFCompleteIndirectionTable(SSM.IIndirectionTable(sector.indirectionTable.I()))
   modifies sector.indirectionTable.Repr
   ensures sector.indirectionTable.Inv() && sector.indirectionTable.I() == old(sector.indirectionTable.I()) && sector.indirectionTable.Repr == old(sector.indirectionTable.Repr)
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.SectorGrammar());
-  ensures Marshalling.valToSector(v) == Some(IM.ISector(StateImpl.ISector(sector)))
+  ensures Marshalling.valToSector(v) == Some(SSM.ISector(StateImpl.ISector(sector)))
   ensures SizeOfV(v) < 0x1_0000_0000_0000_0000 - 32
   ensures SizeOfV(v) == size as int
   {
@@ -630,11 +632,11 @@ module MarshallingImpl {
   method ParseSector(data: seq<byte>, start: uint64) returns (s : Option<Sector>)
   requires start as int <= |data| < 0x1_0000_0000_0000_0000;
   ensures s.Some? ==> StateImpl.WFSector(s.value)
-  ensures s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
+  ensures s.Some? ==> SSM.WFSector(StateImpl.ISector(s.value))
   ensures ISectorOpt(s) == IMM.parseSector(data[start..])
-  ensures s.Some? && s.value.SectorNode? ==> IM.WFNode(s.value.node.I())
-  ensures s.Some? && s.value.SectorNode? ==> BT.WFNode(IM.INode(s.value.node.I()))
-  ensures s.Some? ==> fresh(SI.SectorRepr(s.value));
+  ensures s.Some? && s.value.SectorNode? ==> SSM.WFNode(s.value.node.I())
+  ensures s.Some? && s.value.SectorNode? ==> BT.WFNode(SSM.INode(s.value.node.I()))
+  ensures s.Some? ==> fresh(SSI.SectorRepr(s.value));
   {
     IMM.reveal_parseSector();
     var success, v, rest_index := ParseVal(data, start, Marshalling.SectorGrammar());
@@ -672,11 +674,11 @@ module MarshallingImpl {
   method ParseCheckedSector(data: seq<byte>) returns (s : Option<Sector>)
   requires |data| < 0x1_0000_0000;
   ensures s.Some? ==> StateImpl.WFSector(s.value)
-  ensures s.Some? ==> IM.WFSector(StateImpl.ISector(s.value))
+  ensures s.Some? ==> SSM.WFSector(StateImpl.ISector(s.value))
   ensures ISectorOpt(s) == IMM.parseCheckedSector(data)
-  ensures s.Some? && s.value.SectorNode? ==> IM.WFNode(s.value.node.I())
-  ensures s.Some? && s.value.SectorNode? ==> BT.WFNode(IM.INode(s.value.node.I()))
-  ensures s.Some? ==> fresh(SI.SectorRepr(s.value))
+  ensures s.Some? && s.value.SectorNode? ==> SSM.WFNode(s.value.node.I())
+  ensures s.Some? && s.value.SectorNode? ==> BT.WFNode(SSM.INode(s.value.node.I()))
+  ensures s.Some? ==> fresh(SSI.SectorRepr(s.value))
   {
     s := None;
 
@@ -693,16 +695,16 @@ module MarshallingImpl {
 
   method MarshallCheckedSector(sector: Sector) returns (data : array?<byte>)
   requires StateImpl.WFSector(sector)
-  requires IM.WFSector(StateImpl.ISector(sector))
-  requires sector.SectorNode? ==> IM.WFNode(sector.node.I())
-  requires sector.SectorNode? ==> BT.WFNode(IM.INode(sector.node.I()))
+  requires SSM.WFSector(StateImpl.ISector(sector))
+  requires sector.SectorNode? ==> SSM.WFNode(sector.node.I())
+  requires sector.SectorNode? ==> BT.WFNode(SSM.INode(sector.node.I()))
   requires sector.SectorSuperblock? ==> JC.WFSuperblock(sector.superblock)
   modifies if sector.SectorIndirectionTable? then sector.indirectionTable.Repr else {}
   ensures sector.SectorIndirectionTable? ==> (sector.indirectionTable.Inv() && sector.indirectionTable.I() == old(sector.indirectionTable.I()) && sector.indirectionTable.Repr == old(sector.indirectionTable.Repr))
   ensures data != null ==> IMM.parseCheckedSector(data[..]).Some?
   ensures data != null ==>
-      && IM.ISector(IMM.parseCheckedSector(data[..]).value)
-      == IM.ISector(StateImpl.ISector(sector))
+      && SSM.ISector(IMM.parseCheckedSector(data[..]).value)
+      == SSM.ISector(StateImpl.ISector(sector))
   ensures data != null ==> 32 <= data.Length
   ensures data != null && sector.SectorNode? ==> data.Length <= NodeBlockSize() as int
   ensures data != null && sector.SectorIndirectionTable? ==> data.Length <= IndirectionTableBlockSize() as int

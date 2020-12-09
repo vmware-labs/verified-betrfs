@@ -1,6 +1,7 @@
-include "StateImpl.i.dfy"
+// include "StateImpl.i.dfy"
 include "IOModel.i.dfy"
 include "MarshallingImpl.i.dfy"
+include "../lib/DataStructures/LruImpl.i.dfy"
 
 module IOImpl { 
   import opened MainDiskIOHandler
@@ -11,7 +12,7 @@ module IOImpl {
   import opened CacheImpl
   import opened DiskLayout
   import opened DiskOpImpl
-  import StateModel
+  // import StateModel
   import opened InterpretationDiskOps
   import MarshallingImpl
   import IOModel
@@ -19,7 +20,7 @@ module IOImpl {
   import LruModel
   import LruImpl
   import opened Bounds
-  import opened SI = StateImpl
+  // import opened SI = StateImpl
   import MutableMapModel
 
   import SSM = StateSectorModel
@@ -46,7 +47,7 @@ module IOImpl {
   method RequestWrite(io: DiskIOHandler, loc: Location, sector: SI.Sector)
   returns (id: D.ReqId)
   requires SI.WFSector(sector)
-  requires IM.WFSector(SI.ISector(sector))
+  requires SSM.WFSector(SI.ISector(sector))
   requires io.initialized()
   requires sector.SectorSuperblock?
   requires ValidSuperblockLocation(loc)
@@ -65,7 +66,7 @@ module IOImpl {
   requires s.WF()
   requires s.ready
   requires SI.WFSector(sector)
-  requires IM.WFSector(SI.ISector(sector))
+  requires SSM.WFSector(SI.ISector(sector))
   requires io.initialized()
   requires io !in s.Repr()
   requires sector.SectorNode?
@@ -100,7 +101,7 @@ module IOImpl {
   requires s.WF()
   requires s.ready
   requires SI.WFSector(sector)
-  requires IM.WFSector(SI.ISector(sector))
+  requires SSM.WFSector(SI.ISector(sector))
   requires io.initialized()
   requires io !in s.Repr()
   requires sector.SectorIndirectionTable?

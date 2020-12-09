@@ -26,7 +26,7 @@ module CommitterImpl {
 
   import opened DiskOpImpl
 
-  import opened StateModel
+  // import opened StateModel
   // import CommitterReplayModel
   // import CommitterAppendModel
   // import CommitterInitModel
@@ -36,11 +36,13 @@ module CommitterImpl {
   import JournalistParsingImpl
   import CommitterCommitModel
 
-  import StateImpl
+  // import StateImpl
   import opened ViewOp
   import opened DiskOpModel
   import opened JournalBytes
   import IOModel
+
+  import SSM = StateSectorModel
 
   // TODO we could have these do the modification in-place instead.
 
