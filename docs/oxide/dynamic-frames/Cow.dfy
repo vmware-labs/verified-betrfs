@@ -2,30 +2,21 @@
 module Cow {
   type {:extern "predefined"} cow<A>
 
-  predicate cow_has<A>(self: cow<A>)
-
   function cow_content<A>(self: cow<A>): A
-  requires cow_has(self)
 
   static method {:extern} cow_alloc<A>(linear a: A, /*do what LinearBox does*/ cloner:(linear A)->(linear A, linear A)) returns (linear cow: cow<A>)
-  ensures cow_has(cow)
 
   method {:extern} cow_clone<A>(shared self: cow<A>) returns (linear cloned: cow<A>)
-  requires cow_has(self)
-  ensures cow_has(cloned)
   ensures cow_content(cloned) == cow_content(self)
 
   method {:extern} cow_borrow<A>(shared self: cow<A>) returns (shared borrowed: A)
-  requires cow_has(self)
   ensures borrowed == cow_content(self)
 
   method {:extern} cow_unwrap<A>(linear self: cow<A>) returns (linear taken: A)
-  requires cow_has(self)
   ensures taken == cow_content(self)
 
   // decrements the reference count
   method {:extern} cow_free<A>(linear self: cow<A>)
-  requires cow_has(self)
 }
 
 module User {
