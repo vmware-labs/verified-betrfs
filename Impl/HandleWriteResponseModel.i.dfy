@@ -1,10 +1,13 @@
 include "IOModel.i.dfy"
 include "DiskOpImpl.i.dfy"
+include "StateModel.i.dfy"
 include "CommitterCommitModel.i.dfy"
 
 module HandleWriteResponseModel {
   import opened NativeTypes
   import opened StateModel
+  import opened StateSectorModel
+  import opened StateBCModel
   import opened DiskLayout
   import opened InterpretationDiskOps
   import opened ViewOp

@@ -1,9 +1,9 @@
-include "StateModel.i.dfy"
 include "IOModel.i.dfy"
 include "../lib/Base/Sets.i.dfy"
 
 module BookkeepingModel { 
-  import opened StateModel
+  import opened StateBCModel
+  import opened StateSectorModel
   import opened IOModel
   import opened DiskOpModel
 
