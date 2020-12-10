@@ -1,10 +1,11 @@
-include "StateImpl.i.dfy"
+include "StateBCImpl.i.dfy"
+include "StateModel.i.dfy"
 include "CommitterImpl.i.dfy"
 include "../lib/Lang/LinearBox.i.dfy"
 
 module FullImpl {
   import opened Options
-  import opened StateImpl
+  import opened StateBCImpl
   import opened CommitterImpl
   import opened DiskOpImpl
   import StateModel

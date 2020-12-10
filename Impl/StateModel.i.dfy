@@ -59,25 +59,25 @@ module StateModel {
   // import ReferenceType`Internal
 
   import opened CommitterImpl
-  import StateBCModel
+  import opened StateBCModel
 
   // type Node = BT.G.Node  
   // type IndirectionTable = IndirectionTableModel.IndirectionTable
 
   datatype Variables = Variables(
     bc: BCVariables,
-    jc: CommitterModel.CM)
+    jc: Committer)
 
   predicate WFVars(s: Variables)
   {
     && WFBCVars(s.bc)
-    && CommitterModel.WF(s.jc)
+    && s.jc.WF()
   }
 
   function IVars(vars: Variables) : BJC.Variables
   requires WFVars(vars)
   {
-    BJC.Variables(IBlockCache(vars.bc), CommitterModel.I(vars.jc))
+    BJC.Variables(IBlockCache(vars.bc), vars.jc.I())
   }
 
   function I(s: Variables) : BJC.Variables
@@ -90,7 +90,7 @@ module StateModel {
   {
     && WFVars(s)
     && BCInv(s.bc)
-    && CommitterModel.Inv(s.jc)
+    && s.jc.Inv()
     && BJC.Inv(I(s))
   }
 }
