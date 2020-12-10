@@ -1,6 +1,7 @@
-// include "StateModel.i.dfy"
+include "StateBCModel.i.dfy"
 include "../ByteBlockCacheSystem/ByteCache.i.dfy"
 include "MarshallingModel.i.dfy"
+include "DiskOpModel.i.dfy"
 
 //
 // IO functions used by various StateModel verbs.
@@ -32,9 +33,13 @@ module IOModel {
   import BlockJournalDisk
   import UI
   // Misc utilities
+  import BBC = BetreeCache
   import SSM = StateSectorModel
+  import IndirectionTableModel
 
-  // type Sector = SSM.Sector
+  import opened StateBCModel
+
+  type Sector = SSM.Sector
   
   predicate stepsBetree(s: BBC.Variables, s': BBC.Variables, vop: VOp, step: BT.BetreeStep)
   {
@@ -130,7 +135,7 @@ module IOModel {
     //     IMM.parseCheckedSector(bytes).value == sector
     // because the indirection table might not parse to an indirection table
     // with exactly the same internals.
-    && ISector(IMM.parseCheckedSector(bytes).value) == ISector(sector)
+    && SSM.ISector(IMM.parseCheckedSector(bytes).value) == SSM.ISector(sector)
 
     && |bytes| == loc.len as int
     && id == dop.id
@@ -141,7 +146,7 @@ module IOModel {
   lemma RequestWriteCorrect(io: IO, loc: DiskLayout.Location, sector: Sector,
       id: D.ReqId, io': IO)
   requires SSM.WFSector(sector)
-  requires sector.SectorNode? ==> BT.WFNode(INode(sector.node))
+  requires sector.SectorNode? ==> BT.WFNode(SSM.INode(sector.node))
   requires DiskLayout.ValidLocation(loc)
   requires DiskLayout.ValidSuperblockLocation(loc)
   requires sector.SectorSuperblock?
@@ -183,7 +188,7 @@ module IOModel {
       && 32 <= |bytes|
       && IMM.parseCheckedSector(bytes).Some?
       && SSM.WFSector(sector)
-      && ISector(IMM.parseCheckedSector(bytes).value) == ISector(sector)
+      && SSM.ISector(IMM.parseCheckedSector(bytes).value) == SSM.ISector(sector)
 
       && var len := |bytes| as uint64;
       && loc == getFreeLoc(s, len)
@@ -200,7 +205,7 @@ module IOModel {
   requires s.Ready?
   requires SSM.WFSector(sector)
   requires sector.SectorNode?
-  requires sector.SectorNode? ==> BT.WFNode(INode(sector.node))
+  requires sector.SectorNode? ==> BT.WFNode(SSM.INode(sector.node))
   requires FindLocationAndRequestWrite(io, s, sector, id, loc, io')
   ensures ValidDiskOp(diskOp(io'))
   ensures id.Some? ==> loc.Some?
@@ -208,8 +213,8 @@ module IOModel {
   ensures id.Some? ==> sector.SectorNode? ==> BC.ValidAllocation(IBlockCache(s), loc.value)
   ensures id.Some? ==> sector.SectorNode? ==> ValidNodeLocation(loc.value)
   //ensures id.Some? ==> sector.SectorIndirectionTable? ==> ValidIndirectionTableLocation(loc.value)
-  ensures sector.SectorNode? ==> id.Some? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteNodeOp(id.value, BlockDisk.ReqWriteNode(loc.value, ISector(sector).node)), JournalDisk.NoDiskOp)
-  //ensures sector.SectorIndirectionTable? ==> id.Some? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteIndirectionTableOp(id.value, BlockDisk.ReqWriteIndirectionTable(loc.value, ISector(sector).indirectionTable)), JournalDisk.NoDiskOp)
+  ensures sector.SectorNode? ==> id.Some? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteNodeOp(id.value, BlockDisk.ReqWriteNode(loc.value, SSM.ISector(sector).node)), JournalDisk.NoDiskOp)
+  //ensures sector.SectorIndirectionTable? ==> id.Some? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteIndirectionTableOp(id.value, BlockDisk.ReqWriteIndirectionTable(loc.value, SSM.ISector(sector).indirectionTable)), JournalDisk.NoDiskOp)
   ensures id.None? ==> io' == io
   {
     reveal_FindLocationAndRequestWrite();
@@ -251,7 +256,7 @@ module IOModel {
       && 32 <= |bytes|
       && IMM.parseCheckedSector(bytes).Some?
       && SSM.WFSector(sector)
-      && ISector(IMM.parseCheckedSector(bytes).value) == ISector(sector)
+      && SSM.ISector(IMM.parseCheckedSector(bytes).value) == SSM.ISector(sector)
 
       && var len := |bytes| as uint64;
       && loc == Some(DiskLayout.Location(
@@ -273,7 +278,7 @@ module IOModel {
   ensures ValidDiskOp(diskOp(io'))
   ensures id.Some? ==> loc.Some?
   ensures id.Some? ==> DiskLayout.ValidIndirectionTableLocation(loc.value)
-  ensures id.Some? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteIndirectionTableOp(id.value, BlockDisk.ReqWriteIndirectionTable(loc.value, ISector(sector).indirectionTable)), JournalDisk.NoDiskOp)
+  ensures id.Some? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteIndirectionTableOp(id.value, BlockDisk.ReqWriteIndirectionTable(loc.value, SSM.ISector(sector).indirectionTable)), JournalDisk.NoDiskOp)
   ensures loc.Some? ==> !overlap(loc.value, s.persistentIndirectionTableLoc)
   ensures id.None? ==> io' == io
   {
@@ -411,7 +416,7 @@ module IOModel {
   {
     match sector {
       case None => None
-      case Some(sector) => Some(ISector(sector))
+      case Some(sector) => Some(SSM.ISector(sector))
     }
   }
 
@@ -445,7 +450,7 @@ module IOModel {
     && (sector.Some? ==> (
       && SSM.WFSector(sector.value)
       && ValidDiskOp(diskOp(io))
-      && (sector.value.SectorNode? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadNodeOp(id, Some(INode(sector.value.node))), JournalDisk.NoDiskOp))
+      && (sector.value.SectorNode? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadNodeOp(id, Some(SSM.INode(sector.value.node))), JournalDisk.NoDiskOp))
       && (sector.value.SectorIndirectionTable? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadIndirectionTableOp(id, Some(SSM.IIndirectionTable(sector.value.indirectionTable))), JournalDisk.NoDiskOp))
       && (sector.value.SectorSuperblock? ==>
         && IDiskOp(diskOp(io)).bdop == BlockDisk.NoDiskOp

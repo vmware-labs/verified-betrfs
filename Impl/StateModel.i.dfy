@@ -11,7 +11,7 @@
 // include "IndirectionTableModel.i.dfy"
 // include "CommitterModel.i.dfy"
 // include "../BlockCacheSystem/BlockJournalDisk.i.dfy"
-// include "../BlockCacheSystem/BlockJournalCache.i.dfy"
+include "../BlockCacheSystem/BlockJournalCache.i.dfy"
 // include "../ByteBlockCacheSystem/ByteCache.i.dfy"
 // include "DiskOpModel.i.dfy"
 include "CommitterImpl.i.dfy"
@@ -39,7 +39,7 @@ module StateModel {
   // import JC = JournalCache
   // // import BBC = BetreeCache
   // // import BJD = BlockJournalDisk
-  // import BJC = BlockJournalCache
+  import BJC = BlockJournalCache
   // import D = AsyncDisk
   // import M = ByteCache
   // import opened BucketsLib
