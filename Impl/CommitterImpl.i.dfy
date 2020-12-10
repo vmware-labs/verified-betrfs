@@ -36,7 +36,7 @@ module CommitterImpl {
   import JournalistParsingImpl
   import CommitterCommitModel
 
-  // import StateImpl
+  import SSI = StateSectorImpl
   import opened ViewOp
   import opened DiskOpModel
   import opened JournalBytes
@@ -700,7 +700,7 @@ module CommitterImpl {
       assert JC.WFSuperblock(newSuperblock);
       var loc := if self.whichSuperblock == 0 then Superblock2Location() else Superblock1Location();
       var id := RequestWrite(io, loc,
-          StateImpl.SectorSuperblock(newSuperblock));
+          SSI.SectorSuperblock(newSuperblock));
       inout self.newSuperblock := Some(newSuperblock);
       inout self.superblockWrite := Some(id);
       inout self.commitStatus := JC.CommitAdvanceLog;
@@ -749,7 +749,7 @@ module CommitterImpl {
       assert JC.WFSuperblock(newSuperblock);
       var loc := if self.whichSuperblock == 0 then Superblock2Location() else Superblock1Location();
       var id := RequestWrite(io, loc,
-          StateImpl.SectorSuperblock(newSuperblock));
+          SSI.SectorSuperblock(newSuperblock));
       inout self.newSuperblock := Some(newSuperblock);
       inout self.superblockWrite := Some(id);
       inout self.commitStatus := JC.CommitAdvanceLocation;
