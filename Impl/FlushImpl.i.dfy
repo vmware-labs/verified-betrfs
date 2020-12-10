@@ -3,7 +3,7 @@ include "FlushModel.i.dfy"
 
 module FlushImpl { 
   import opened BookkeepingImpl
-  import opened StateImpl
+  import opened StateBCImpl
   import opened BoxNodeImpl
   import opened DiskOpImpl
 

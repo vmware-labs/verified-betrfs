@@ -19,7 +19,7 @@ module SyncImpl {
   import DeallocModel
   import BlockAllocatorModel
   import opened DiskOpImpl
-  import opened StateImpl
+  import opened StateBCImpl
   import opened MainDiskIOHandler
 
   import opened Options

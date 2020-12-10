@@ -13,7 +13,7 @@ module SuccImpl {
   import opened IOImpl
   import SuccModel
   import BookkeepingModel
-  import opened StateImpl
+  import opened StateBCImpl
   import opened BucketImpl
   import opened Lexicographic_Byte_Order_Impl
   import opened BoxNodeImpl

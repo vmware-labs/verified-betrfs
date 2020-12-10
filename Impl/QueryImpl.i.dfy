@@ -13,7 +13,7 @@ module QueryImpl {
   import opened IOImpl
   import QueryModel
   import BookkeepingModel
-  import opened StateImpl
+  import opened StateBCImpl
   import opened BucketImpl
   import opened EvictImpl
   import opened DiskOpImpl

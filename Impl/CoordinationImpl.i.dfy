@@ -9,7 +9,7 @@ include "InsertImpl.i.dfy"
 include "SuccImpl.i.dfy"
 
 module CoordinationImpl {
-  import opened StateImpl
+  import opened StateBCImpl
   import opened Options
   import CommitterCommitImpl
   import CommitterInitImpl

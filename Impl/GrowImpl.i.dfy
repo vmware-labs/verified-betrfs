@@ -4,7 +4,7 @@ include "GrowModel.i.dfy"
 module GrowImpl { 
   import opened IOImpl
   import opened BookkeepingImpl
-  import opened StateImpl
+  import opened StateBCImpl
   import opened BoxNodeImpl
   import opened BucketImpl
   import opened DiskOpImpl

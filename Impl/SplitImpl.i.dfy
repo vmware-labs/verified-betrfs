@@ -5,7 +5,7 @@ module SplitImpl {
   import opened IOImpl
   import opened BookkeepingImpl
   import SplitModel
-  import opened StateImpl
+  import opened StateBCImpl
   import opened BoxNodeImpl
   import opened DiskOpImpl
 

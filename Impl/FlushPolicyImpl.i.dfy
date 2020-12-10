@@ -14,7 +14,7 @@ module FlushPolicyImpl {
   import opened LeafImpl
   import opened EvictImpl
   import FlushPolicyModel
-  import opened StateImpl
+  import opened StateBCImpl
   import opened BucketImpl
   import opened DiskOpImpl
   import opened MainDiskIOHandler

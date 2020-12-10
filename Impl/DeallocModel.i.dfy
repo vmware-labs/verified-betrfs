@@ -1,7 +1,8 @@
 include "BookkeepingModel.i.dfy"
 
 module DeallocModel { 
-  import opened StateModel
+  import opened StateBCModel
+  import opened StateSectorModel
   import opened IOModel
   import opened DiskOpModel
   import opened BookkeepingModel
