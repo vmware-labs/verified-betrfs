@@ -5,6 +5,7 @@ module Cow {
   function cow_content<A>(self: cow<A>): A
 
   static method {:extern} cow_alloc<A>(linear a: A, /*do what LinearBox does*/ cloner:(linear A)->(linear A, linear A)) returns (linear cow: cow<A>)
+  ensures cow_content(cow) == a
 
   method {:extern} cow_clone<A>(shared self: cow<A>) returns (linear cloned: cow<A>)
   ensures cow_content(cloned) == cow_content(self)
@@ -31,9 +32,15 @@ module User {
       // --> Error: to use a pattern, the type of the source/RHS expression must be a datatype (instead found ?)
   // }
 
+  function method CloneThing(linear t: Thing) : (linear Thing, linear Thing) {
+    linear var t1 := Thing(t.a);
+    linear var t2 := t;
+    (t1, t2)
+  }
+
   method AllocDealloc() {
     linear var t := Thing(12);
-    linear var cowt := Cow.cow_alloc(t);
+    linear var cowt := Cow.cow_alloc(t, CloneThing);
     Cow.cow_free(cowt);
   }
 }
