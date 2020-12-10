@@ -7,7 +7,7 @@ module Cow {
   function cow_content<A>(self: cow<A>): A
   requires cow_has(self)
 
-  static method {:extern} cow_alloc<A>(linear a: A) returns (linear cow: cow<A>)
+  static method {:extern} cow_alloc<A>(linear a: A, /*do what LinearBox does*/ cloner:(linear A)->(linear A, linear A)) returns (linear cow: cow<A>)
   ensures cow_has(cow)
 
   method {:extern} cow_clone<A>(shared self: cow<A>) returns (linear cloned: cow<A>)
@@ -19,7 +19,6 @@ module Cow {
   requires cow_has(self)
   ensures borrowed == cow_content(self)
 
-  // this should be a deep copy!
   method {:extern} cow_unwrap<A>(linear self: cow<A>) returns (linear taken: A)
   requires cow_has(self)
   ensures taken == cow_content(self)
