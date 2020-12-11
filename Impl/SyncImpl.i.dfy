@@ -19,17 +19,19 @@ module SyncImpl {
   import DeallocModel
   import BlockAllocatorModel
   import opened DiskOpImpl
-  import opened StateBCImpl
   import opened MainDiskIOHandler
 
   import opened Options
   import opened Maps
   import opened Sequences
   import opened Sets
-
   import opened BucketsLib
-
   import opened NativeTypes
+
+  import opened StateBCImpl
+  import opened StateSectorImpl
+  import SBCM = StateBCModel
+  import SSM = StateSectorModel
 
   method AssignRefToLocEphemeral(s: ImplVariables, ref: BT.G.Reference, loc: Location)
   requires s.W()
@@ -140,10 +142,10 @@ module SyncImpl {
     var node := nodeOpt.value;
 
     assert node.I() == s.cache.I()[ref];
-    var id, loc := FindLocationAndRequestWrite(io, s, SectorNode(node));
+    var id, loc := FindLocationAndRequestWrite(io, s, SSI.SectorNode(node));
 
     if (id.Some?) {
-      SM.reveal_ConsistentBitmap();
+      SBCM.reveal_ConsistentBitmap();
 
       AssignRefToLocEphemeral(s, ref, loc.value);
       AssignRefToLocFrozen(s, ref, loc.value);
@@ -171,8 +173,8 @@ module SyncImpl {
   ensures WellUpdated(s)
   ensures SyncModel.syncFoundInFrozen(old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
   {
-    assert ref in SM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph;
-    assert ref !in SM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs;
+    assert ref in SSM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph;
+    assert ref !in SSM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs;
 
     var ephemeralRef := s.ephemeralIndirectionTable.GetEntry(ref);
     if ephemeralRef.Some? && ephemeralRef.value.loc.Some? {
@@ -211,7 +213,7 @@ module SyncImpl {
     }
     var foundInFrozen := s.frozenIndirectionTable.FindRefWithNoLoc();
 
-    assert Inv(s) by { StateModel.reveal_ConsistentBitmap(); }
+    assert Inv(s) by { SBCM.reveal_ConsistentBitmap(); }
 
     if foundInFrozen.Some? {
       syncFoundInFrozen(s, io, foundInFrozen.value);

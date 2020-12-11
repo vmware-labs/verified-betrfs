@@ -1,6 +1,6 @@
 include "IOImpl.i.dfy"
 include "FullImpl.i.dfy"
-include "CommitterInitImpl.i.dfy"
+// include "CommitterInitImpl.i.dfy"
 include "HandleReadResponseModel.i.dfy"
 
 module HandleReadResponseImpl {
@@ -13,7 +13,7 @@ module HandleReadResponseImpl {
   import opened DiskOpImpl
   import opened CommitterImpl
   import opened MainDiskIOHandler
-  import CommitterInitImpl
+  // import CommitterInitImpl
   import HandleReadResponseModel
   import IOImpl
 

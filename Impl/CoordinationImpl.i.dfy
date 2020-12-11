@@ -1,9 +1,9 @@
 include "CoordinationModel.i.dfy"
 include "FullImpl.i.dfy"
-include "CommitterCommitImpl.i.dfy"
-include "CommitterInitImpl.i.dfy"
-include "CommitterAppendImpl.i.dfy"
-include "CommitterReplayImpl.i.dfy"
+// include "CommitterCommitImpl.i.dfy"
+// include "CommitterInitImpl.i.dfy"
+// include "CommitterAppendImpl.i.dfy"
+// include "CommitterReplayImpl.i.dfy"
 include "QueryImpl.i.dfy"
 include "InsertImpl.i.dfy"
 include "SuccImpl.i.dfy"
@@ -11,10 +11,10 @@ include "SuccImpl.i.dfy"
 module CoordinationImpl {
   import opened StateBCImpl
   import opened Options
-  import CommitterCommitImpl
-  import CommitterInitImpl
-  import CommitterAppendImpl
-  import CommitterReplayImpl
+  // import CommitterCommitImpl
+  // import CommitterInitImpl
+  // import CommitterAppendImpl
+  // import CommitterReplayImpl
   import QueryImpl
   import SuccImpl
   import InsertImpl

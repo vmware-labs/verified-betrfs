@@ -1,4 +1,4 @@
-include "StateModel.i.dfy"
+include "StateBCModel.i.dfy"
 include "BookkeepingModel.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
@@ -8,7 +8,8 @@ include "BucketSuccessorLoopModel.i.dfy"
 // See dependency graph in MainHandlers.dfy
 
 module SuccModel { 
-  import opened StateModel
+  import opened StateBCModel
+  import opened StateSectorModel
   import opened IOModel
   import opened BookkeepingModel
   import opened KeyType
@@ -251,7 +252,7 @@ module SuccModel {
     if ref in s.cache {
       var node := s.cache[ref];
       if BoundedKey(node.pivotTable, startKey) {
-        var r := Pivots.Route(node.pivotTable, startKey);
+        var r := Route(node.pivotTable, startKey);
         var bucket := node.buckets[r];
         var acc1 := acc + [bucket];
         var lookup1 := lookup + [BT.G.ReadOp(ref, INode(node))];

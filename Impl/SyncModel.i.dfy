@@ -1,4 +1,4 @@
-include "StateModel.i.dfy"
+include "StateBCModel.i.dfy"
 include "IOModel.i.dfy"
 include "DeallocModel.i.dfy"
 include "../lib/Base/Option.s.dfy"
@@ -7,7 +7,6 @@ include "../lib/Base/Sets.i.dfy"
 // See dependency graph in MainHandlers.dfy
 
 module SyncModel { 
-  import opened StateModel
   import opened IOModel
   import opened BookkeepingModel
   import opened DeallocModel
@@ -25,8 +24,9 @@ module SyncModel {
   import opened BucketsLib
 
   import opened NativeTypes
-  import SSM = StateSectorModel
 
+  import opened StateBCModel
+  import opened StateSectorModel
 
   function {:opaque} AssignRefToLocEphemeral(s: BCVariables, ref: BT.G.Reference, loc: Location) : (s' : BCVariables)
   requires s.Ready?
@@ -452,7 +452,7 @@ module SyncModel {
   requires ref in s.cache
   {
     exists id, loc ::
-      && FindLocationAndRequestWrite(io, s, SSM.SectorNode(s.cache[ref]), id, loc, io')
+      && FindLocationAndRequestWrite(io, s, SectorNode(s.cache[ref]), id, loc, io')
       && WriteBlockUpdateState(s, ref, id, loc, s')
   }
 
@@ -468,10 +468,10 @@ module SyncModel {
   ensures BBC.Next(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp)
   {
     var id, loc :| 
-      && FindLocationAndRequestWrite(io, s, SSM.SectorNode(s.cache[ref]), id, loc, io')
+      && FindLocationAndRequestWrite(io, s, SectorNode(s.cache[ref]), id, loc, io')
       && WriteBlockUpdateState(s, ref, id, loc, s');
 
-    FindLocationAndRequestWriteCorrect(io, s, SSM.SectorNode(s.cache[ref]), id, loc, io');
+    FindLocationAndRequestWriteCorrect(io, s, SectorNode(s.cache[ref]), id, loc, io');
 
     if id.Some? {
       reveal_ConsistentBitmap();
@@ -587,7 +587,7 @@ module SyncModel {
             && var id := Some(diskOp(io').id);
             && var loc := s'.frozenIndirectionTableLoc;
             && FindIndirectionTableLocationAndRequestWrite(
-                io, s0, SSM.SectorIndirectionTable(s0.frozenIndirectionTable.value),
+                io, s0, SectorIndirectionTable(s0.frozenIndirectionTable.value),
                 id, loc, io')
             && loc.Some?
             && s' ==
@@ -642,7 +642,7 @@ module SyncModel {
             var id := Some(diskOp(io').id);
             var loc := s'.frozenIndirectionTableLoc;
             FindIndirectionTableLocationAndRequestWriteCorrect(
-                io, s0, SSM.SectorIndirectionTable(s0.frozenIndirectionTable.value),
+                io, s0, SectorIndirectionTable(s0.frozenIndirectionTable.value),
                 id, loc, io');
             assert BC.WriteBackIndirectionTableReq(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp);
             assert stepsBC(IBlockCache(s), IBlockCache(s'), StatesInternalOp, io', BC.WriteBackIndirectionTableReqStep);
