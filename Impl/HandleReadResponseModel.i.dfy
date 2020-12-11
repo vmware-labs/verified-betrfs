@@ -4,6 +4,9 @@ include "CommitterInitModel.i.dfy"
 module HandleReadResponseModel {
   import opened NativeTypes
   import opened StateModel
+  import opened StateBCModel
+  import opened StateSectorModel
+
   import opened DiskLayout
   import opened InterpretationDiskOps
   import opened ViewOp

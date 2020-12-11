@@ -14,6 +14,7 @@ module InsertImpl {
   import opened BookkeepingImpl
   import opened InsertModel
   import opened StateBCImpl
+  import opened StateSectorImpl
   import opened FlushPolicyImpl
   import opened BucketImpl
   import opened DiskOpImpl

@@ -5,6 +5,7 @@ include "../lib/Buckets/BucketModel.i.dfy"
 
 module FlushModel { 
   import opened StateBCModel
+  import opened StateSectorModel
 
   import opened IOModel
   import opened BookkeepingModel

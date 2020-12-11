@@ -169,7 +169,7 @@ module FlushPolicyImpl {
 
     LruModel.LruUse(s.lru.Queue, BT.G.Root());
     s.lru.Use(BT.G.Root());
-    assert SM.IBlockCache(s.I()) == SM.IBlockCache(old(s.I()));
+    assert SBCM.IBlockCache(s.I()) == SBCM.IBlockCache(old(s.I()));
 
     FlushPolicyModel.getActionToFlushValidAction(s.I(), [BT.G.Root()], []);
     var action := getActionToFlush(s, [BT.G.Root()], []);

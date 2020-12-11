@@ -19,6 +19,9 @@ module StateBCModel {
   import opened Bounds
   import opened StateSectorModel
 
+  import Pivots = BoundedPivotsLib
+  import Messages = ValueMessage`Internal
+
   type Reference = BT.G.Reference
   type DiskOp = BJD.DiskOp
 

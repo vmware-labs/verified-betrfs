@@ -32,10 +32,7 @@ module QueryModel {
   import opened Bounds
   import opened BoundedPivotsLib
 
-  import Pivots = BoundedPivotsLib
   import PBS = PivotBetreeSpec`Internal
-  import Messages = ValueMessage`Internal
-
   // == query ==
 
   predicate {:opaque} queryIterate(s: BCVariables, key: Key, msg: Message, ref: BT.G.Reference, io: IO, counter: uint64,

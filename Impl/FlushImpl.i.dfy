@@ -4,6 +4,8 @@ include "FlushModel.i.dfy"
 module FlushImpl { 
   import opened BookkeepingImpl
   import opened StateBCImpl
+  import opened StateSectorImpl
+
   import opened BoxNodeImpl
   import opened DiskOpImpl
 
@@ -22,11 +24,10 @@ module FlushImpl {
   import opened BoundedPivotsLib
 
   import opened NativeTypes
-  import StateModel
   import BookkeepingModel
   import FlushModel
 
-  method flush(s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference, child: Node)
+  method flush(s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference, child: BoxNodeImpl.Node)
   requires Inv(s)
   requires s.ready
 
