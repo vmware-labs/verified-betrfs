@@ -13,7 +13,6 @@ module HandleWriteResponseModel {
   import opened Options
   import opened DiskOpModel
   import IOModel
-  // import CommitterModel
   import MarshallingModel
   import M = ByteCache
   import opened CommitterImpl

@@ -508,7 +508,20 @@ module CommitterImpl {
       assert JC.NextStep(old_self.I(), self.I(), jdop, JournalInternalOp, JC.PageInJournalReqStep(1));
     }
 
-    linear inout method PageInJournalResp(io: DiskIOHandler)
+    // [yizhou7] scaffolding remove later
+    function PageInJournalResp(io: IO) : (cm': Committer)
+    requires WF()
+    requires status.StatusLoadingOther?
+    requires diskOp(io).RespReadOp?
+    requires ValidDiskOp(diskOp(io))
+    requires ValidJournalLocation(LocOfRespRead(diskOp(io).respRead))
+    ensures cm'.WF()
+    ensures var dop := diskOp(io);
+      && ValidDiskOp(dop)
+      && IDiskOp(dop).bdop.NoDiskOp?
+      && JC.Next(I(), cm'.I(), IDiskOp(dop).jdop, JournalInternalOp)
+
+    linear inout method pageInJournalResp(io: DiskIOHandler)
     requires old_self.WF()
     requires old_self.status.StatusLoadingOther?
     requires io.diskOp().RespReadOp?
@@ -518,11 +531,7 @@ module CommitterImpl {
     ensures var dop := diskOp(IIO(io));
       && ValidDiskOp(dop)
       && IDiskOp(dop).bdop.NoDiskOp?
-      && JC.Next(
-          old_self.I(),
-          self.I(),
-          IDiskOp(dop).jdop,
-          JournalInternalOp)
+      && JC.Next(old_self.I(), self.I(), IDiskOp(dop).jdop, JournalInternalOp)
     {
       var id, addr, bytes := io.getReadResult();
       var jr := JournalistParsingImpl.computeJournalRangeOfByteSeq(bytes);
@@ -792,7 +801,7 @@ module CommitterImpl {
       assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, FreezeOp, JC.FreezeStep);
     }
 
-    // [yizhou7] scaffolding remove later 
+    // [yizhou7] scaffolding remove later
     function ReceiveFrozenLoc(loc: Location) : (cm': Committer)
     requires status == StatusReady
     requires isFrozen
@@ -1077,6 +1086,20 @@ module CommitterImpl {
       }
     }
 
+    // [yizhou7] scaffolding remove later
+    function ReadSuperblockResp(io: IO, which: uint64) : (cm' : Committer)
+    requires diskOp(io).RespReadOp?
+    requires WF()
+    requires ValidDiskOp(diskOp(io))
+    requires diskOp(io).RespReadOp?
+    requires which == 0 || which == 1
+    requires which == 0 ==>
+      LocOfRespRead(diskOp(io).respRead) == Superblock1Location()
+    requires which == 1 ==>
+      LocOfRespRead(diskOp(io).respRead) == Superblock2Location()
+    ensures cm'.WF()
+    ensures JC.Next(I(), cm'.I(), IDiskOp(diskOp(io)).jdop, JournalInternalOp)
+
     linear inout method readSuperblockResp(io: DiskIOHandler, which: uint64)
     requires old_self.WF()
     requires io.diskOp().RespReadOp?
@@ -1091,11 +1114,7 @@ module CommitterImpl {
       LocOfRespRead(diskOp(IIO(io)).respRead) == Superblock2Location()
 
     ensures self.WF()
-    ensures JC.Next(
-        old_self.I(),
-        self.I(),
-        IDiskOp(diskOp(IIO(io))).jdop,
-        JournalInternalOp)
+    ensures JC.Next(old_self.I(), self.I(), IDiskOp(diskOp(IIO(io))).jdop, JournalInternalOp)
     {
       var id, sector := IOImpl.ReadSector(io);
       var res := (if sector.Some? && sector.value.SectorSuperblock?
@@ -1134,5 +1153,6 @@ module CommitterImpl {
         assert JC.NextStep(old_self.I(), self.I(), dop, JournalInternalOp, JC.NoOpStep);
       }
     }
+    
   }
 }
