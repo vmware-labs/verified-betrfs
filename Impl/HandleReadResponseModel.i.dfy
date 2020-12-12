@@ -13,35 +13,90 @@ module HandleReadResponseModel {
   import opened Options
   import opened DiskOpModel
   import IOModel
-  import CommitterModel
   import CommitterInitModel
   import MarshallingModel
 
-  function {:opaque} readSuperblockResp(
-      
-      cm: CommitterModel.CM,
-      io: IO,
-      which: uint64) : CommitterModel.CM
-  requires diskOp(io).RespReadOp?
-  {
-    var (id, sector) := IOModel.ReadSector(io);
-    var res := (if sector.Some? && sector.value.SectorSuperblock?
-        then JC.SuperblockSuccess(sector.value.superblock)
-        else JC.SuperblockCorruption);
-    if which == 0 then (
-      if Some(id) == cm.superblock1Read then
-        cm.(superblock1 := res)
-          .(superblock1Read := None)
-      else
-        cm
-    ) else (
-      if Some(id) == cm.superblock2Read then
-        cm.(superblock2 := res)
-          .(superblock2Read := None)
-      else
-        cm
-    )
-  }
+  // function {:opaque} readSuperblockResp(
+  //     cm: Committer,
+  //     io: IO,
+  //     which: uint64) : Committer
+  // requires diskOp(io).RespReadOp?
+  // {
+  //   var (id, sector) := IOModel.ReadSector(io);
+  //   var res := (if sector.Some? && sector.value.SectorSuperblock?
+  //       then JC.SuperblockSuccess(sector.value.superblock)
+  //       else JC.SuperblockCorruption);
+  //   if which == 0 then (
+  //     if Some(id) == cm.superblock1Read then
+  //       cm.(superblock1 := res)
+  //         .(superblock1Read := None)
+  //     else
+  //       cm
+  //   ) else (
+  //     if Some(id) == cm.superblock2Read then
+  //       cm.(superblock2 := res)
+  //         .(superblock2Read := None)
+  //     else
+  //       cm
+  //   )
+  // }
+
+  // lemma readSuperblockRespCorrect(
+  //     cm: Committer,
+  //     io: IO,
+  //     which: uint64)
+  // requires CommitterModel.WF(cm)
+  // requires ValidDiskOp(diskOp(io))
+  // requires diskOp(io).RespReadOp?
+  // requires which == 0 || which == 1
+  // requires which == 0 ==>
+  //     LocOfRespRead(diskOp(io).respRead) == Superblock1Location()
+  // requires which == 1 ==>
+  //     LocOfRespRead(diskOp(io).respRead) == Superblock2Location()
+  // ensures var cm' := readSuperblockResp(cm, io, which);
+  //   && CommitterModel.WF(cm')
+  //   && JC.Next(
+  //       CommitterModel.I(cm),
+  //       CommitterModel.I(cm'),
+  //       IDiskOp(diskOp(io)).jdop,
+  //       JournalInternalOp)
+  // {
+  //   var cm' := readSuperblockResp(cm, io, which);
+  //   reveal_readSuperblockResp();
+  //   IOModel.ReadSectorCorrect(io);
+  //   var dop := IDiskOp(diskOp(io)).jdop;
+  //   assert dop.RespReadSuperblockOp?;
+  //   assert dop.which == which as int;
+
+  //   if cm.status.StatusLoadingSuperblock?
+  //       && (which == 0 ==> Some(dop.id) == cm.superblock1Read)
+  //       && (which == 1 ==> Some(dop.id) == cm.superblock2Read)
+  //   {
+  //     assert JC.PageInSuperblockResp(
+  //         CommitterModel.I(cm),
+  //         CommitterModel.I(cm'),
+  //         dop,
+  //         JournalInternalOp, which as int);
+  //     assert JC.NextStep(
+  //         CommitterModel.I(cm),
+  //         CommitterModel.I(cm'),
+  //         dop,
+  //         JournalInternalOp,
+  //         JC.PageInSuperblockRespStep(which as int));
+  //   } else {
+  //     assert JC.NoOp(
+  //         CommitterModel.I(cm),
+  //         CommitterModel.I(cm'),
+  //         dop,
+  //         JournalInternalOp);
+  //     assert JC.NextStep(
+  //         CommitterModel.I(cm),
+  //         CommitterModel.I(cm'),
+  //         dop,
+  //         JournalInternalOp,
+  //         JC.NoOpStep);
+  //   }
+  // }
 
   lemma jcNoOp_respread(s: Variables, s': Variables, vop: VOp, io: IO)
   requires CommitterModel.WF(s.jc)
@@ -92,64 +147,6 @@ module HandleReadResponseModel {
       jcNoOp_respread(s, s, StatesInternalOp, io);
       bcNoOp_respread(s, s, StatesInternalOp, io);
       assert BJC.NextStep(IVars(s), IVars(s), UI.NoOp, IDiskOp(diskOp(io)), StatesInternalOp);
-    }
-  }
-
-  lemma readSuperblockRespCorrect(
-      
-      cm: CommitterModel.CM,
-      io: IO,
-      which: uint64)
-  requires CommitterModel.WF(cm)
-  requires ValidDiskOp(diskOp(io))
-  requires diskOp(io).RespReadOp?
-  requires which == 0 || which == 1
-  requires which == 0 ==>
-      LocOfRespRead(diskOp(io).respRead) == Superblock1Location()
-  requires which == 1 ==>
-      LocOfRespRead(diskOp(io).respRead) == Superblock2Location()
-  ensures var cm' := readSuperblockResp(cm, io, which);
-    && CommitterModel.WF(cm')
-    && JC.Next(
-        CommitterModel.I(cm),
-        CommitterModel.I(cm'),
-        IDiskOp(diskOp(io)).jdop,
-        JournalInternalOp)
-  {
-    var cm' := readSuperblockResp(cm, io, which);
-    reveal_readSuperblockResp();
-    IOModel.ReadSectorCorrect(io);
-    var dop := IDiskOp(diskOp(io)).jdop;
-    assert dop.RespReadSuperblockOp?;
-    assert dop.which == which as int;
-
-    if cm.status.StatusLoadingSuperblock?
-        && (which == 0 ==> Some(dop.id) == cm.superblock1Read)
-        && (which == 1 ==> Some(dop.id) == cm.superblock2Read)
-    {
-      assert JC.PageInSuperblockResp(
-          CommitterModel.I(cm),
-          CommitterModel.I(cm'),
-          dop,
-          JournalInternalOp, which as int);
-      assert JC.NextStep(
-          CommitterModel.I(cm),
-          CommitterModel.I(cm'),
-          dop,
-          JournalInternalOp,
-          JC.PageInSuperblockRespStep(which as int));
-    } else {
-      assert JC.NoOp(
-          CommitterModel.I(cm),
-          CommitterModel.I(cm'),
-          dop,
-          JournalInternalOp);
-      assert JC.NextStep(
-          CommitterModel.I(cm),
-          CommitterModel.I(cm'),
-          dop,
-          JournalInternalOp,
-          JC.NoOpStep);
     }
   }
 

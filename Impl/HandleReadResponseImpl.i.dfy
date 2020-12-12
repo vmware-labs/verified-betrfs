@@ -17,39 +17,6 @@ module HandleReadResponseImpl {
   import HandleReadResponseModel
   import IOImpl
 
-  method readSuperblockResp(
-      linear inout cm: Committer,
-      io: DiskIOHandler,
-      which: uint64)
-  requires old_cm.W()
-  requires io.diskOp().RespReadOp?
-  ensures cm.W()
-  ensures cm.I() == HandleReadResponseModel.readSuperblockResp(
-      old_cm.I(), old(IIO(io)), which)
-  {
-    HandleReadResponseModel.reveal_readSuperblockResp();
-
-    var id, sector := IOImpl.ReadSector(io);
-    var res := (if sector.Some? && sector.value.SectorSuperblock?
-        then JC.SuperblockSuccess(sector.value.superblock)
-        else JC.SuperblockCorruption);
-    if which == 0 {
-      if Some(id) == cm.superblock1Read {
-        inout cm.superblock1 := res;
-        inout cm.superblock1Read := None;
-      } else {
-        print "readSuperblockResp did nothing\n";
-      }
-    } else {
-      if Some(id) == cm.superblock2Read {
-        inout cm.superblock2 := res;
-        inout cm.superblock2Read := None;
-      } else {
-        print "readSuperblockResp did nothing\n";
-      }
-    }
-  }
-
   // [yizhou7][FIXME]: this takes long to verify
   method readResponse(s: Full, io: DiskIOHandler)
   requires s.Inv()

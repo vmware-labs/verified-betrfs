@@ -1075,6 +1075,64 @@ module CommitterImpl {
               JournalInternalOp,
               JC.NoOpStep);
       }
-    }    
+    }
+
+    linear inout method readSuperblockResp(io: DiskIOHandler, which: uint64)
+    requires old_self.WF()
+    requires io.diskOp().RespReadOp?
+
+    // [yizhou7] addtional preconditions
+    requires ValidDiskOp(diskOp(IIO(io)))
+    requires diskOp(IIO(io)).RespReadOp?
+    requires which == 0 || which == 1
+    requires which == 0 ==>
+      LocOfRespRead(diskOp(IIO(io)).respRead) == Superblock1Location()
+    requires which == 1 ==>
+      LocOfRespRead(diskOp(IIO(io)).respRead) == Superblock2Location()
+
+    ensures self.WF()
+    ensures JC.Next(
+        old_self.I(),
+        self.I(),
+        IDiskOp(diskOp(IIO(io))).jdop,
+        JournalInternalOp)
+    {
+      var id, sector := IOImpl.ReadSector(io);
+      var res := (if sector.Some? && sector.value.SectorSuperblock?
+          then JC.SuperblockSuccess(sector.value.superblock)
+          else JC.SuperblockCorruption);
+      if which == 0 {
+        if Some(id) == self.superblock1Read {
+          inout self.superblock1 := res;
+          inout self.superblock1Read := None;
+        } else {
+          print "readSuperblockResp did nothing\n";
+        }
+      } else {
+        if Some(id) == self.superblock2Read {
+          inout self.superblock2 := res;
+          inout self.superblock2Read := None;
+        } else {
+          print "readSuperblockResp did nothing\n";
+        }
+      }
+
+      IOModel.ReadSectorCorrect(IIO(io));
+      ghost var dop := IDiskOp(diskOp(IIO(io))).jdop;
+
+      assert dop.RespReadSuperblockOp?;
+      assert dop.which == which as int;
+
+      if old_self.status.StatusLoadingSuperblock?
+          && (which == 0 ==> Some(dop.id) == old_self.superblock1Read)
+          && (which == 1 ==> Some(dop.id) == old_self.superblock2Read)
+      {
+        assert JC.PageInSuperblockResp(old_self.I(), self.I(), dop, JournalInternalOp, which as int);
+        assert JC.NextStep(old_self.I(), self.I(), dop, JournalInternalOp, JC.PageInSuperblockRespStep(which as int));
+      } else {
+        assert JC.NoOp(old_self.I(), self.I(), dop, JournalInternalOp);
+        assert JC.NextStep(old_self.I(), self.I(), dop, JournalInternalOp, JC.NoOpStep);
+      }
+    }
   }
 }
