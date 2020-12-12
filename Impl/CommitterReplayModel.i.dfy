@@ -1,4 +1,3 @@
-include "CommitterModel.i.dfy"
 include "../ByteBlockCacheSystem/InterpretationDiskOps.i.dfy"
 include "DiskOpModel.i.dfy"
 
@@ -14,7 +13,6 @@ module CommitterReplayModel {
   import opened ValueType
   import opened Journal
 
-  import opened CommitterModel
   import opened DiskOpModel
 
 //   function {:opaque} JournalReplayOne(cm: CM) : (cm' : CM)

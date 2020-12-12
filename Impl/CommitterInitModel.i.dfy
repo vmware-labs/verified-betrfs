@@ -1,4 +1,3 @@
-include "CommitterModel.i.dfy"
 include "StateModel.i.dfy"
 include "IOModel.i.dfy"
 
@@ -13,7 +12,6 @@ module CommitterInitModel {
   import JournalBytes
   import JournalRanges
 
-  import opened CommitterModel
   import opened StateModel
   import opened IOModel
   import opened DiskOpModel

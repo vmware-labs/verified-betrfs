@@ -1,4 +1,3 @@
-include "CommitterModel.i.dfy"
 include "IOModel.i.dfy"
 
 module CommitterAppendModel {
@@ -13,7 +12,6 @@ module CommitterAppendModel {
   import opened ValueType
   import opened Journal
 
-  import opened CommitterModel
   import opened IOModel
   import opened DiskOpModel
 

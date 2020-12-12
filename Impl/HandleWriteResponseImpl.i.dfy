@@ -1,5 +1,4 @@
 include "CommitterImpl.i.dfy"
-include "CommitterCommitImpl.i.dfy"
 include "HandleWriteResponseModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "IOImpl.i.dfy"
@@ -17,7 +16,6 @@ module HandleWriteResponseImpl {
   import opened MainDiskIOHandler
   import opened FullImpl
   import IOImpl
-  import CommitterCommitImpl
   import HandleWriteResponseModel
   import MarshallingModel
 
