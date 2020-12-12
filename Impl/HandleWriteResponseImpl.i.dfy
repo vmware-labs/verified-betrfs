@@ -21,20 +21,6 @@ module HandleWriteResponseImpl {
   import HandleWriteResponseModel
   import MarshallingModel
 
-  method writeBackJournalResp(linear inout cm: Committer, io: DiskIOHandler)
-  requires old_cm.W()
-  requires io.diskOp().RespWriteOp?
-  ensures cm.W()
-  ensures cm.I() == HandleWriteResponseModel.writeBackJournalResp(
-      old_cm.I(), old(IIO(io)))
-  {
-    HandleWriteResponseModel.reveal_writeBackJournalResp();
-
-    var id, addr, len := io.getWriteResult();
-    inout cm.outstandingJournalWrites :=
-        cm.outstandingJournalWrites - {id};
-  }
-
   // [yizhou7][FIXME]: this takes long to verify
   method writeResponse(s: Full, io: DiskIOHandler)
   requires s.Inv()

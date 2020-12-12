@@ -11,7 +11,6 @@ include "../Versions/VOp.i.dfy"
 // for when you have commitment issues
 
 module CommitterImpl {
-  import JournalistModel
   import JC = JournalCache
   import opened SectorType
   import opened DiskLayout
@@ -793,9 +792,19 @@ module CommitterImpl {
       assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, FreezeOp, JC.FreezeStep);
     }
 
+    // [yizhou7] scaffolding remove later 
+    function ReceiveFrozenLoc(loc: Location) : (cm': Committer)
+    requires status == StatusReady
+    requires isFrozen
+    requires !frozenLoc.Some?
+    requires ValidIndirectionTableLocation(loc)
+    ensures cm'.WF()
+    ensures JC.Next(I(), cm'.I(), JournalDisk.NoDiskOp, SendFrozenLocOp(loc))
+
     linear inout method receiveFrozenLoc(loc: Location)
     requires old_self.WF()
 
+    // [yizhou7] additional preconditions
     requires old_self.status == StatusReady
     requires old_self.isFrozen
     requires !old_self.frozenLoc.Some?
@@ -927,7 +936,6 @@ module CommitterImpl {
           IDiskOp(dop).jdop,
           JournalInternalOp)
     {
-      CommitterCommitModel.reveal_tryAdvanceLocation();
       wait := false;
       var hasFrozen := self.journalist.hasFrozenJournal();
       var hasInMem := self.journalist.hasInMemoryJournal();
@@ -950,6 +958,15 @@ module CommitterImpl {
       }
     }
 
+    // [yizhou7] scaffolding remove later
+    function WriteBackSuperblockResp(io: IO) : (cm': Committer)
+    requires Inv()
+    requires ValidDiskOp(diskOp(io))
+    requires IDiskOp(diskOp(io)).jdop.RespWriteSuperblockOp?
+    requires Some(io.id) == superblockWrite
+    ensures cm'.WF()
+    ensures JC.Next(I(), cm'.I(), IDiskOp(diskOp(io)).jdop, if status.StatusReady? && commitStatus.CommitAdvanceLocation? then CleanUpOp else JournalInternalOp)
+
     linear inout method writeBackSuperblockResp(ghost io: IO)
     requires old_self.Inv()
     
@@ -962,9 +979,8 @@ module CommitterImpl {
     ensures JC.Next(
           old_self.I(),
           self.I(),
-          IDiskOp(diskOp(io)).jdop,
-          if old_self.status.StatusReady? && old_self.commitStatus.CommitAdvanceLocation? then CleanUpOp else JournalInternalOp
-    )
+          IDiskOp(diskOp(io)).jdop, 
+          if old_self.status.StatusReady? && old_self.commitStatus.CommitAdvanceLocation? then CleanUpOp else JournalInternalOp)
     {
       CommitterCommitModel.SyncReqs2to1Correct(old_self.syncReqs);
 
@@ -1009,5 +1025,56 @@ module CommitterImpl {
         assert JC.NextStep(old_self.I(), self.I(), IDiskOp(diskOp(io)).jdop, JournalInternalOp, JC.NoOpStep);
       }
     }
+
+    // [yizhou7] scaffolding remove later
+    function WriteBackJournalResp(io: IO) : (cm': Committer)
+    requires WF()
+    requires diskOp(io).RespWriteOp?
+    requires ValidJournalLocation(LocOfRespWrite(diskOp(io).respWrite))
+    requires status.StatusReady?
+    ensures cm'.WF()
+    ensures JC.Next(I(), cm'.I(), IDiskOp(diskOp(io)).jdop, JournalInternalOp)
+
+    linear inout method writeBackJournalResp(io: DiskIOHandler)
+    requires old_self.WF()
+    requires io.diskOp().RespWriteOp?
+
+    // [yizhou7] addtional preconditions
+    requires ValidJournalLocation(LocOfRespWrite(diskOp(IIO(io)).respWrite))
+    requires old_self.status.StatusReady?
+
+    ensures self.WF()
+    ensures JC.Next(old_self.I(), self.I(), IDiskOp(diskOp(IIO(io))).jdop, JournalInternalOp)
+    {
+      var id, addr, len := io.getWriteResult();
+      ghost var contained := id in self.outstandingJournalWrites;
+  
+      inout self.outstandingJournalWrites :=
+          self.outstandingJournalWrites - {id};
+
+      ghost var jdop := IDiskOp(diskOp(IIO(io))).jdop;
+
+      if contained {
+        assert JC.WriteBackJournalResp(
+              old_self.I(), self.I(),
+              IDiskOp(diskOp(IIO(io))).jdop,
+              JournalInternalOp);
+        assert JC.NextStep(
+              old_self.I(), self.I(),
+              IDiskOp(diskOp(IIO(io))).jdop,
+              JournalInternalOp,
+              JC.WriteBackJournalRespStep);
+      } else {
+        assert JC.NoOp(
+              old_self.I(), self.I(),
+              IDiskOp(diskOp(IIO(io))).jdop,
+              JournalInternalOp);
+        assert JC.NextStep(
+              old_self.I(), self.I(),
+              IDiskOp(diskOp(IIO(io))).jdop,
+              JournalInternalOp,
+              JC.NoOpStep);
+      }
+    }    
   }
 }
