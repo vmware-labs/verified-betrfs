@@ -310,8 +310,7 @@ module CoordinationModel {
   requires s.jc.journalist.I().replayJournal == []
   requires doSync(s, io, graphSync, s', io')
   ensures WFVars(s')
-  ensures M.Next(IVars(s), IVars(s'),
-        UI.NoOp, diskOp(io'))
+  ensures M.Next(IVars(s), IVars(s'), UI.NoOp, diskOp(io'))
   {
     if s.jc.isFrozen {
       if s.jc.frozenLoc.Some? {

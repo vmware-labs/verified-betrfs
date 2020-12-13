@@ -283,22 +283,20 @@ module CommitterImpl {
     requires old_self.Inv()
     requires old_self.status == StatusReady
     requires old_self.I().replayJournal != []
+    requires je == I().replayJournal[0]
 
     ensures self.Inv()
     ensures self.status == StatusReady
-    ensures (je == old_self.I().replayJournal[0])
-        ==>
-      JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp,
-        AdvanceOp(UI.PutOp(je.key, je.value), true))
+    ensures JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, AdvanceOp(UI.PutOp(je.key, je.value), true))
+    ensures old_self.JournalReplayOne(je) == self
     {
       inout self.journalist.replayJournalPop();
 
-      if je == old_self.I().replayJournal[0] {
-        ghost var vop := AdvanceOp(UI.PutOp(je.key, je.value), true);
+      ghost var vop := AdvanceOp(UI.PutOp(je.key, je.value), true);
+      assert JC.Replay(old_self.I(), self.I(), JournalDisk.NoDiskOp, vop);
+      assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, vop, JC.ReplayStep);
 
-        assert JC.Replay(old_self.I(), self.I(), JournalDisk.NoDiskOp, vop);
-        assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, vop, JC.ReplayStep);
-      }
+      assume old_self.JournalReplayOne(je) == self;
     }
 
     // [yizhou7] scaffolding remove later
@@ -328,6 +326,7 @@ module CommitterImpl {
       && ValidDiskOp(diskOp(IIO(io)))
       && IDiskOp(diskOp(IIO(io))).bdop.NoDiskOp?
       && JC.Next(old_self.I(), self.I(), IDiskOp(diskOp(IIO(io))).jdop, JournalInternalOp)
+    ensures old_self.PageInSuperblockReq(IIO(old(io)), which) == (self, IIO(io))
     {
       var loc;
       ghost var step := false;
@@ -363,6 +362,8 @@ module CommitterImpl {
         assert JC.NoOp(old_self.I(), self.I(),jdop, JournalInternalOp);
         assert JC.NextStep(old_self.I(), self.I(), jdop, JournalInternalOp, JC.NoOpStep);
       }
+
+      assume old_self.PageInSuperblockReq(IIO(old(io)), which) == (self, IIO(io));
     }
 
     // [yizhou7] scaffolding remove later
@@ -382,6 +383,7 @@ module CommitterImpl {
 
     ensures self.Inv()
     ensures JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, SendPersistentLocOp(self.superblock.indirectionTableLoc))
+    ensures old_self.FinishLoadingSuperblockPhase() == self
     {
       var idx := if JC.increments1(
           self.superblock1.value.counter, self.superblock2.value.counter)
@@ -400,17 +402,10 @@ module CommitterImpl {
 
       ghost var vop := SendPersistentLocOp(self.superblock.indirectionTableLoc);
 
-      assert JC.FinishLoadingSuperblockPhase(
-          old_self.I(),
-          self.I(),
-          JournalDisk.NoDiskOp,
-          vop);
-      assert JC.NextStep(
-          old_self.I(),
-          self.I(),
-          JournalDisk.NoDiskOp,
-          vop,
-          JC.FinishLoadingSuperblockPhaseStep);
+      assert JC.FinishLoadingSuperblockPhase(old_self.I(), self.I(), JournalDisk.NoDiskOp, vop);
+      assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, vop,JC.FinishLoadingSuperblockPhaseStep);
+
+      assume old_self.FinishLoadingSuperblockPhase() == self;
     }
 
     linear inout method FinishLoadingOtherPhase()
@@ -474,7 +469,7 @@ module CommitterImpl {
     }
 
     shared function method isReplayEmpty() : (b : bool)
-    requires WF()
+    requires journalist.Inv()
     {
       journalist.isReplayEmpty()
     }
@@ -630,6 +625,7 @@ module CommitterImpl {
       && ValidDiskOp(dop)
       && IDiskOp(dop).bdop.NoDiskOp?
       && JC.Next(old_self.I(), self.I(), IDiskOp(dop).jdop, JournalInternalOp)
+    ensures old_self.TryFinishLoadingOtherPhase(IIO(old(io))) == (self, IIO(io));
     {
       var hasFront := self.journalist.hasFront();
       var hasBack := self.journalist.hasBack();
@@ -645,6 +641,7 @@ module CommitterImpl {
         assert JC.NoOp(old_self.I(), self.I(), jdop, JournalInternalOp);
         assert JC.NextStep(old_self.I(), self.I(), jdop, JournalInternalOp, JC.NoOpStep);
       }
+      assume old_self.TryFinishLoadingOtherPhase(IIO(old(io))) == (self, IIO(io));
     }
 
     linear inout method WriteOutJournal(io: DiskIOHandler)
@@ -973,6 +970,7 @@ module CommitterImpl {
         && ValidDiskOp(dop)
         && IDiskOp(dop).bdop.NoDiskOp?
         && JC.Next(old_self.I(), self.I(), IDiskOp(dop).jdop, JournalInternalOp)
+    ensures old_self.TryAdvanceLog(IIO(old(io)), self, IIO(io))
     {
       wait := false;
       var hasFrozen := self.journalist.hasFrozenJournal();
@@ -1020,6 +1018,7 @@ module CommitterImpl {
         && ValidDiskOp(dop)
         && IDiskOp(dop).bdop.NoDiskOp?
         && JC.Next(old_self.I(), self.I(), IDiskOp(dop).jdop, JournalInternalOp)
+    ensures old_self.TryAdvanceLocation(IIO(old(io)), self, IIO(io))
     {
       wait := false;
       var hasFrozen := self.journalist.hasFrozenJournal();
@@ -1041,6 +1040,8 @@ module CommitterImpl {
         assert JC.NoOp(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp);
         assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp, JC.NoOpStep);
       }
+
+      assume old_self.TryAdvanceLocation(IIO(old(io)), self, IIO(io));
     }
 
     // [yizhou7] scaffolding remove later

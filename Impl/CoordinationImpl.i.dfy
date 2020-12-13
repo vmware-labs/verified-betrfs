@@ -86,14 +86,14 @@ module CoordinationImpl {
     if jc.status.StatusLoadingSuperblock? {
       if jc.superblock1.SuperblockSuccess?
           && jc.superblock2.SuperblockSuccess? {
-        inout jc.FinishLoadingSuperblockPhase();
+        inout jc.finishLoadingSuperblockPhase();
         receiveLoc(s.bc, jc.superblock.indirectionTableLoc);
       } else if jc.superblock1Read.None?
           && jc.superblock1.SuperblockUnfinished? {
-        inout jc.PageInSuperblockReq(io, 0);
+        inout jc.pageInSuperblockReq(io, 0);
       } else if jc.superblock2Read.None?
           && jc.superblock2.SuperblockUnfinished? {
-        inout jc.PageInSuperblockReq(io, 1);
+        inout jc.pageInSuperblockReq(io, 1);
       } else {
         print "initialization: doing nothing, superblock reads out\n";
       }
@@ -108,7 +108,7 @@ module CoordinationImpl {
         var je := jc.journalist.replayJournalTop();
         var success := InsertImpl.insert(s.bc, io, je.key, je.value);
         if success {
-          inout jc.JournalReplayOne();
+          inout jc.journalReplayOne(je);
         }
       } else {
         print "initialization: doing nothing, no replay journal\n";
@@ -132,6 +132,10 @@ module CoordinationImpl {
   requires s.bc.ready
   requires s.jc.Inv() // [yizhou7][NOTE]: this is implied by s.Inv(), but opaqued
   requires s.jc.Read().status.StatusReady?
+
+  // [yizhou7] this additional precondition is added
+  requires s.jc.Read().journalist.I().replayJournal == []
+
   modifies s.Repr
   modifies io
   ensures s.W()
@@ -176,6 +180,7 @@ module CoordinationImpl {
     s.reveal_ReprInv();
   }
 
+  /*
   function method getCommitterSyncState(s: Full, id: uint64) : Option<JC.SyncReqStatus>
   requires s.WF()
   reads s.Repr
@@ -356,4 +361,5 @@ module CoordinationImpl {
       }
     }
   }
+  */
 }
