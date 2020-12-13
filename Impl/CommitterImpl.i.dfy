@@ -948,12 +948,13 @@ module CommitterImpl {
     }
 
     // [yizhou7] scaffolding remove later
-    predicate TryAdvanceLog(io: IO, cm': Committer, io': IO)
+    function TryAdvanceLog(io: IO) : (Committer, IO)
     requires Inv()
     requires io.IOInit?
     requires status == StatusReady
-    ensures cm'.WF()
-    ensures var dop := diskOp(io');
+    ensures var (cm', io') := TryAdvanceLog(io);
+        var dop := diskOp(io');
+        && cm'.WF()
         && ValidDiskOp(dop)
         && IDiskOp(dop).bdop.NoDiskOp?
         && JC.Next(I(), cm'.I(), IDiskOp(dop).jdop, JournalInternalOp)
@@ -970,7 +971,7 @@ module CommitterImpl {
         && ValidDiskOp(dop)
         && IDiskOp(dop).bdop.NoDiskOp?
         && JC.Next(old_self.I(), self.I(), IDiskOp(dop).jdop, JournalInternalOp)
-    ensures old_self.TryAdvanceLog(IIO(old(io)), self, IIO(io))
+    ensures old_self.TryAdvanceLog(IIO(old(io))) == (self, IIO(io))
     {
       wait := false;
       var hasFrozen := self.journalist.hasFrozenJournal();
@@ -992,15 +993,18 @@ module CommitterImpl {
         assert JC.NoOp(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp);
         assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp, JC.NoOpStep);
       }
+
+      assume old_self.TryAdvanceLog(IIO(old(io))) == (self, IIO(io));
     }
 
     // [yizhou7] scaffolding remove later
-    predicate TryAdvanceLocation(io: IO, cm': Committer, io': IO)
+    function TryAdvanceLocation(io: IO) : (Committer, IO)
       requires Inv()
       requires io.IOInit?
       requires status == StatusReady
       requires frozenLoc.Some?
-      ensures var dop := diskOp(io');
+      ensures var (cm', io') := TryAdvanceLocation(io);
+        var dop := diskOp(io');
         && cm'.WF()
         && ValidDiskOp(dop)
         && IDiskOp(dop).bdop.NoDiskOp?
@@ -1018,7 +1022,7 @@ module CommitterImpl {
         && ValidDiskOp(dop)
         && IDiskOp(dop).bdop.NoDiskOp?
         && JC.Next(old_self.I(), self.I(), IDiskOp(dop).jdop, JournalInternalOp)
-    ensures old_self.TryAdvanceLocation(IIO(old(io)), self, IIO(io))
+    ensures old_self.TryAdvanceLocation(IIO(old(io))) == (self, IIO(io))
     {
       wait := false;
       var hasFrozen := self.journalist.hasFrozenJournal();
@@ -1041,7 +1045,7 @@ module CommitterImpl {
         assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp, JC.NoOpStep);
       }
 
-      assume old_self.TryAdvanceLocation(IIO(old(io)), self, IIO(io));
+      assume old_self.TryAdvanceLocation(IIO(old(io))) == (self, IIO(io));
     }
 
     // [yizhou7] scaffolding remove later

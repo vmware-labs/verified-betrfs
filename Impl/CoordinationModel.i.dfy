@@ -271,7 +271,7 @@ module CoordinationModel {
   {
     if s.jc.isFrozen then (
       if s.jc.frozenLoc.Some? then (
-        && s.jc.TryAdvanceLocation(io, s'.jc, io')
+        && s.jc.TryAdvanceLocation(io) == (s'.jc, io')
         && s.bc == s'.bc
       ) else (
         && (
@@ -294,7 +294,7 @@ module CoordinationModel {
           && (s'.jc == s.jc)
         )
       ) else (
-        && s.jc.TryAdvanceLog(io, s'.jc, io')
+        && s.jc.TryAdvanceLog(io) == (s'.jc, io')
         && s.bc == s'.bc
       )
     )
