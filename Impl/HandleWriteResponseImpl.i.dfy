@@ -48,12 +48,12 @@ module HandleWriteResponseImpl {
       var frozen_loc := IOImpl.writeIndirectionTableResponse(s.bc, io);
       inout jc.receiveFrozenLoc(frozen_loc);
     } else if jc.status.StatusReady? && ValidJournalLocation(loc) {
-      writeBackJournalResp(inout jc, io);
+      inout jc.writeBackJournalResp(io);
     } else if ValidSuperblockLocation(loc) && Some(id) == jc.superblockWrite {
       if jc.status.StatusReady? && jc.commitStatus.CommitAdvanceLocation? {
         IOImpl.cleanUp(s.bc);
       }
-      inout jc.writeBackSuperblockResp();
+      inout jc.writeBackSuperblockResp(IIO(io));
     } else {
       print "writeResponse: doing nothing\n";
     }
