@@ -9,7 +9,6 @@ module FullImpl {
   import opened CommitterImpl
   import opened DiskOpImpl
   import StateModel
-  import CommitterModel
   import JC = JournalCache
   import opened LinearBox
 

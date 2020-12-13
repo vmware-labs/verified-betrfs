@@ -51,12 +51,12 @@ module HandleReadResponseImpl {
       }
     } else if ValidJournalLocation(loc) {
       if jc.status.StatusLoadingOther? {
-        inout jc.PageInJournalResp(io);
+        inout jc.pageInJournalResp(io);
       }
     } else if loc == Superblock1Location() {
-      readSuperblockResp(inout jc, io, 0);
+      inout jc.readSuperblockResp(io, 0);
     } else if loc == Superblock2Location() {
-      readSuperblockResp(inout jc, io, 1);
+      inout jc.readSuperblockResp(io, 1);
     } else {
       print "readResponse: doing nothing\n";
     }

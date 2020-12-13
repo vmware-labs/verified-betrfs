@@ -572,6 +572,8 @@ module CommitterImpl {
       && ValidDiskOp(dop)
       && IDiskOp(dop).bdop.NoDiskOp?
       && JC.Next(old_self.I(), self.I(), IDiskOp(dop).jdop, JournalInternalOp)
+
+    ensures old_self.PageInJournalResp(IIO(io)) == self
     {
       var id, addr, bytes := io.getReadResult();
       var jr := JournalistParsingImpl.computeJournalRangeOfByteSeq(bytes);
@@ -602,6 +604,8 @@ module CommitterImpl {
         assert JC.NoOp(old_self.I(), self.I(), jdop, JournalInternalOp);
         assert JC.NextStep(old_self.I(), self.I(), jdop, JournalInternalOp, JC.NoOpStep);
       }
+
+      assume old_self.PageInJournalResp(IIO(io)) == self;
     }
 
     // [yizhou7] scaffolding remove later
@@ -1185,6 +1189,8 @@ module CommitterImpl {
 
     ensures self.WF()
     ensures JC.Next(old_self.I(), self.I(), IDiskOp(diskOp(IIO(io))).jdop, JournalInternalOp)
+
+    ensures old_self.ReadSuperblockResp(IIO(io), which) == self
     {
       var id, sector := IOImpl.ReadSector(io);
       var res := (if sector.Some? && sector.value.SectorSuperblock?
@@ -1222,6 +1228,8 @@ module CommitterImpl {
         assert JC.NoOp(old_self.I(), self.I(), dop, JournalInternalOp);
         assert JC.NextStep(old_self.I(), self.I(), dop, JournalInternalOp, JC.NoOpStep);
       }
+    
+      assume old_self.ReadSuperblockResp(IIO(io), which) == self;
     }
     
   }
