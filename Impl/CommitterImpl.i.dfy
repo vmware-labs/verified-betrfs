@@ -283,7 +283,7 @@ module CommitterImpl {
     requires old_self.Inv()
     requires old_self.status == StatusReady
     requires old_self.I().replayJournal != []
-    requires je == I().replayJournal[0]
+    requires je == old_self.I().replayJournal[0]
 
     ensures self.Inv()
     ensures self.status == StatusReady
