@@ -400,14 +400,13 @@ module CoordinationModel {
       }
     }
   }
-/*
 
   predicate isInitialized(s: Variables)
   {
     && s.bc.Ready?
     && s.jc.status.StatusReady?
-    && JournalistModel.Inv(s.jc.journalist)
-    && CommitterInitModel.isReplayEmpty(s.jc)
+    && s.jc.journalist.Inv()
+    && s.jc.isReplayEmpty()
   }
 
   predicate {:opaque} popSync(
@@ -417,7 +416,7 @@ module CoordinationModel {
   requires io.IOInit?
   {
     if id in s.jc.syncReqs.contents && s.jc.syncReqs.contents[id] == JC.State1 then (
-      var jc' := CommitterCommitModel.popSync(s.jc, id);
+      var jc' := s.jc.PopSync(id);
       && s' == s.(jc := jc')
       && io' == io
       && success == true
@@ -444,7 +443,7 @@ module CoordinationModel {
   {
     reveal_popSync();
     if id in s.jc.syncReqs.contents && s.jc.syncReqs.contents[id] == JC.State1 {
-      CommitterCommitModel.popSyncCorrect(s.jc, id);
+      // CommitterCommitModel.popSyncCorrect(s.jc, id);
 
       var uiop := if success then UI.PopSyncOp(id as int) else UI.NoOp;
       var vop := if success then PopSyncOp(id as int) else JournalInternalOp;
@@ -460,6 +459,7 @@ module CoordinationModel {
       doSyncCorrect(s, io, graphSync, s', io');
     }
   }
+/*
 
   predicate {:opaque} query(
       s: Variables, io: IO, key: Key,

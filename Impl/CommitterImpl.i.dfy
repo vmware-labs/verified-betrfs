@@ -911,6 +911,13 @@ module CommitterImpl {
     }
 
     // == popSync ==
+    function PopSync(id: uint64) : (cm': Committer)
+    requires Inv()
+    requires id in syncReqs.contents
+    requires syncReqs.contents[id] == JC.State1
+    ensures cm'.WF()
+    ensures JC.Next(I(), cm'.I(), JournalDisk.NoDiskOp,PopSyncOp(id as int))
+
     linear inout method popSync(id: uint64)
     requires old_self.Inv()
 
