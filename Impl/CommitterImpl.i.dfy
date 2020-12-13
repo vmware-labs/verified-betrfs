@@ -322,11 +322,12 @@ module CommitterImpl {
     requires io.initialized()
     modifies io
     ensures self.Inv()
-    ensures 
-      && ValidDiskOp(diskOp(IIO(io)))
+    ensures && ValidDiskOp(diskOp(IIO(io)))
       && IDiskOp(diskOp(IIO(io))).bdop.NoDiskOp?
       && JC.Next(old_self.I(), self.I(), IDiskOp(diskOp(IIO(io))).jdop, JournalInternalOp)
-    ensures old_self.PageInSuperblockReq(IIO(old(io)), which) == (self, IIO(io))
+    ensures var old_io := old(IIO(io));
+      && old_io.IOInit?
+      && old_self.PageInSuperblockReq(old_io, which) == (self, IIO(io))
     {
       var loc;
       ghost var step := false;
@@ -363,7 +364,7 @@ module CommitterImpl {
         assert JC.NextStep(old_self.I(), self.I(), jdop, JournalInternalOp, JC.NoOpStep);
       }
 
-      assume old_self.PageInSuperblockReq(IIO(old(io)), which) == (self, IIO(io));
+      assume old_self.PageInSuperblockReq(old(IIO(io)), which) == (self, IIO(io));
     }
 
     // [yizhou7] scaffolding remove later
