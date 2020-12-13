@@ -1,8 +1,4 @@
 include "SyncModel.i.dfy"
-// include "CommitterCommitModel.i.dfy"
-// include "CommitterInitModel.i.dfy"
-// include "CommitterAppendModel.i.dfy"
-// include "CommitterReplayModel.i.dfy"
 include "QueryModel.i.dfy"
 include "SuccModel.i.dfy"
 include "InsertModel.i.dfy"
@@ -14,10 +10,7 @@ module CoordinationModel {
   import opened Options
   import IOModel
   import SyncModel
-  // import CommitterCommitModel
-  // import CommitterInitModel
-  // import CommitterAppendModel
-  // import CommitterReplayModel
+
   import QueryModel
   import SuccModel
   import InsertModel
@@ -459,7 +452,6 @@ module CoordinationModel {
       doSyncCorrect(s, io, graphSync, s', io');
     }
   }
-/*
 
   predicate {:opaque} query(
       s: Variables, io: IO, key: Key,
@@ -596,15 +588,13 @@ module CoordinationModel {
     if !isInitialized(s) then (
       && initialization(s, io, s', io')
       && success == false
-    ) else if JournalistModel.canAppend(s.jc.journalist,
-        Journal.JournalInsert(key, value))
+    ) else if s.jc.journalist.canAppend(Journal.JournalInsert(key, value))
     then (
       && InsertModel.insert(s.bc, io, key, value,
               s'.bc, success, io')
       && (!success ==> s.jc == s'.jc)
       && (success ==>
-          s'.jc == CommitterAppendModel.JournalAppend(
-              s.jc, key, value)
+          s'.jc == s.jc.JournalAppend(key, value)
       )
     ) else (
       && doSync(s, io, true /* graphSync */, s', io')
@@ -625,13 +615,13 @@ module CoordinationModel {
     reveal_insert();
     if !isInitialized(s) {
       initializationCorrect(s, io, s', io');
-    } else if JournalistModel.canAppend(s.jc.journalist, Journal.JournalInsert(key, value)) {
+    } else if s.jc.journalist.canAppend(Journal.JournalInsert(key, value)) {
       InsertModel.insertCorrect(s.bc, io, key, value, s'.bc, success, io', false /* replay */);
       if success {
         var uiop := UI.PutOp(key, value);
         var vop := AdvanceOp(uiop, false);
 
-         CommitterAppendModel.JournalAppendCorrect(s.jc, key, value);
+        //  CommitterAppendModel.JournalAppendCorrect(s.jc, key, value);
 
         assert BJC.NextStep(IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);
         assert BJC.Next(IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
@@ -658,5 +648,4 @@ module CoordinationModel {
       doSyncCorrect(s, io, true, s', io');
     }
   }
-  */
 }

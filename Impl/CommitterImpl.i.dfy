@@ -240,13 +240,24 @@ module CommitterImpl {
             map[]);
     }
 
-    linear inout method JournalAppend(key: Key, value: Value)
+    // [yizhou7] scaffolding remove later
+    function JournalAppend(key: Key, value: Value) : (cm' : Committer)
+    requires Inv()
+    requires status == StatusReady
+    requires journalist.canAppend(JournalInsert(key, value))
+    requires I().replayJournal == []
+    ensures cm'.Inv()
+    ensures JC.Next(I(), cm'.I(), JournalDisk.NoDiskOp, AdvanceOp(UI.PutOp(key, value), false));
+
+    linear inout method journalAppend(key: Key, value: Value)
     requires old_self.Inv()
     requires old_self.status == StatusReady
     requires old_self.journalist.canAppend(JournalInsert(key, value))
+
+    // [yizhou7] addtional precondition
+    requires old_self.I().replayJournal == []
     ensures self.Inv()
-    ensures (old_self.I().replayJournal == []) ==> 
-        JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, 
+    ensures JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, 
             AdvanceOp(UI.PutOp(key, value), false));
     {
       var je := JournalInsert(key, value);
