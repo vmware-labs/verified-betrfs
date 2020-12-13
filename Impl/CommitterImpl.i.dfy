@@ -780,11 +780,7 @@ module CommitterImpl {
     ensures var dop := diskOp(IIO(io));
         && ValidDiskOp(dop)
         && IDiskOp(dop).bdop.NoDiskOp?
-        && JC.Next(
-          old_self.I(),
-          self.I(),
-          IDiskOp(dop).jdop,
-          JournalInternalOp)
+        && JC.Next(old_self.I(), self.I(), IDiskOp(dop).jdop, JournalInternalOp)
     {
       var writtenJournalLen := self.journalist.getWrittenJournalLen();
       var newSuperblock := SectorType.Superblock(
@@ -813,6 +809,16 @@ module CommitterImpl {
       assert JC.NextStep(old_self.I(), self.I(), IDiskOp(diskOp(IIO(io))).jdop, JournalInternalOp, JC.WriteBackSuperblockReq_AdvanceLocation_Step);
     }
 
+    // [yizhou7] scaffolding remove later
+    function Freeze() : (cm': Committer)
+    requires WF()
+    requires superblockWrite.None?
+    requires status == StatusReady
+    requires frozenLoc != Some(superblock.indirectionTableLoc)
+    requires journalist.I().replayJournal == []
+    ensures cm'.WF()
+    ensures JC.Next(I(), cm'.I(), JournalDisk.NoDiskOp, FreezeOp)
+
     linear inout method freeze()
     requires old_self.WF()
 
@@ -823,11 +829,7 @@ module CommitterImpl {
     requires old_self.journalist.I().replayJournal == []
 
     ensures self.WF()
-    ensures JC.Next(
-        old_self.I(),
-        self.I(),
-        JournalDisk.NoDiskOp,
-        FreezeOp)
+    ensures JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, FreezeOp)
     {
       var writtenJournalLen := self.journalist.getWrittenJournalLen();
       inout self.journalist.freeze();
@@ -861,11 +863,7 @@ module CommitterImpl {
     requires ValidIndirectionTableLocation(loc)
 
     ensures self.WF()
-    ensures JC.Next(
-        old_self.I(),
-        self.I(),
-        JournalDisk.NoDiskOp,
-        SendFrozenLocOp(loc))
+    ensures JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, SendFrozenLocOp(loc))
     {
       inout self.frozenLoc := Some(loc);
 
@@ -921,16 +919,23 @@ module CommitterImpl {
     requires old_self.syncReqs.contents[id] == JC.State1
 
     ensures self.WF()
-    ensures JC.Next(
-        old_self.I(),
-        self.I(),
-        JournalDisk.NoDiskOp,
-        PopSyncOp(id as int))
+    ensures JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp,PopSyncOp(id as int))
     {
       LinearMutableMap.InOutRemove(inout self.syncReqs, id);
       assert JC.PopSyncReq(old_self.I(), self.I(), JournalDisk.NoDiskOp, PopSyncOp(id as int), id);
       assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, PopSyncOp(id as int), JC.PopSyncReqStep(id));
     }
+
+    // [yizhou7] scaffolding remove later
+    predicate TryAdvanceLog(io: IO, cm': Committer, io': IO)
+    requires Inv()
+    requires io.IOInit?
+    requires status == StatusReady
+    ensures cm'.WF()
+    ensures var dop := diskOp(io');
+        && ValidDiskOp(dop)
+        && IDiskOp(dop).bdop.NoDiskOp?
+        && JC.Next(I(), cm'.I(), IDiskOp(dop).jdop, JournalInternalOp)
 
     // == AdvanceLog ==
     linear inout method tryAdvanceLog(io: DiskIOHandler)
@@ -943,11 +948,7 @@ module CommitterImpl {
     ensures var dop := diskOp(IIO(io));
         && ValidDiskOp(dop)
         && IDiskOp(dop).bdop.NoDiskOp?
-        && JC.Next(
-          old_self.I(),
-          self.I(),
-          IDiskOp(dop).jdop,
-          JournalInternalOp)
+        && JC.Next(old_self.I(), self.I(), IDiskOp(dop).jdop, JournalInternalOp)
     {
       wait := false;
       var hasFrozen := self.journalist.hasFrozenJournal();
@@ -971,6 +972,18 @@ module CommitterImpl {
       }
     }
 
+    // [yizhou7] scaffolding remove later
+    predicate TryAdvanceLocation(io: IO, cm': Committer, io': IO)
+      requires Inv()
+      requires io.IOInit?
+      requires status == StatusReady
+      requires frozenLoc.Some?
+      ensures var dop := diskOp(io');
+        && cm'.WF()
+        && ValidDiskOp(dop)
+        && IDiskOp(dop).bdop.NoDiskOp?
+        && JC.Next(I(), cm'.I(), IDiskOp(dop).jdop, JournalInternalOp)
+
     linear inout method tryAdvanceLocation(io: DiskIOHandler)
     returns (wait: bool)
     requires old_self.Inv()
@@ -982,11 +995,7 @@ module CommitterImpl {
     ensures var dop := diskOp(IIO(io));
         && ValidDiskOp(dop)
         && IDiskOp(dop).bdop.NoDiskOp?
-        && JC.Next(
-          old_self.I(),
-          self.I(),
-          IDiskOp(dop).jdop,
-          JournalInternalOp)
+        && JC.Next(old_self.I(), self.I(), IDiskOp(dop).jdop, JournalInternalOp)
     {
       wait := false;
       var hasFrozen := self.journalist.hasFrozenJournal();

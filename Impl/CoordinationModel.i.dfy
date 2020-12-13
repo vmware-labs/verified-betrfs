@@ -265,7 +265,6 @@ module CoordinationModel {
       noop(s);
     }
   }
-/*
 
   predicate doSync(
       s: Variables, io: IO, graphSync: bool,
@@ -274,10 +273,12 @@ module CoordinationModel {
   requires io.IOInit?
   requires s.bc.Ready?
   requires s.jc.status.StatusReady?
+  // [yizhou7] this additional precondition is added
+  requires s.jc.journalist.I().replayJournal == []
   {
     if s.jc.isFrozen then (
       if s.jc.frozenLoc.Some? then (
-        && CommitterCommitModel.tryAdvanceLocation(s.jc, io, s'.jc, io')
+        && s.jc.TryAdvanceLocation(io, s'.jc, io')
         && s.bc == s'.bc
       ) else (
         && (
@@ -293,14 +294,14 @@ module CoordinationModel {
       if graphSync then (
         || (
           && SyncModel.sync(s.bc, io, s'.bc, io', true /* froze */)
-          && (s'.jc == CommitterCommitModel.freeze(s.jc))
+          && (s'.jc == s.jc.Freeze())
         )
         || (
           && SyncModel.sync(s.bc, io, s'.bc, io', false /* froze */)
           && (s'.jc == s.jc)
         )
       ) else (
-        && CommitterCommitModel.tryAdvanceLog(s.jc, io, s'.jc, io')
+        && s.jc.TryAdvanceLog(io, s'.jc, io')
         && s.bc == s'.bc
       )
     )
@@ -313,7 +314,7 @@ module CoordinationModel {
   requires io.IOInit?
   requires s.bc.Ready?
   requires s.jc.status.StatusReady?
-  requires JournalistModel.I(s.jc.journalist).replayJournal == []
+  requires s.jc.journalist.I().replayJournal == []
   requires doSync(s, io, graphSync, s', io')
   ensures WFVars(s')
   ensures M.Next(IVars(s), IVars(s'),
@@ -321,7 +322,7 @@ module CoordinationModel {
   {
     if s.jc.isFrozen {
       if s.jc.frozenLoc.Some? {
-        CommitterCommitModel.tryAdvanceLocationCorrect(s.jc, io, s'.jc, io');
+        // CommitterCommitModel.tryAdvanceLocationCorrect(s.jc, io, s'.jc, io');
 
         var uiop := UI.NoOp;
         var vop := JournalInternalOp;
@@ -359,12 +360,12 @@ module CoordinationModel {
       if graphSync {
         var froze :|
           && SyncModel.sync(s.bc, io, s'.bc, io', froze)
-          && (froze ==> s'.jc == CommitterCommitModel.freeze(s.jc))
+          && (froze ==> s'.jc == s.jc.Freeze())
           && (!froze ==> s'.jc == s.jc);
 
           SyncModel.syncCorrect(s.bc, io, s'.bc, io', froze);
           if froze {
-            CommitterCommitModel.freezeCorrect(s.jc);
+            // CommitterCommitModel.freezeCorrect(s.jc);
             assert BJC.NextStep(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')), FreezeOp);
             assert BJC.Next(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')));
             assert M.Next(IVars(s), IVars(s'), UI.NoOp, diskOp(io'));
@@ -388,7 +389,7 @@ module CoordinationModel {
             assert M.Next(IVars(s), IVars(s'), UI.NoOp, diskOp(io'));
           }
       } else {
-        CommitterCommitModel.tryAdvanceLogCorrect(s.jc, io, s'.jc, io');
+        // CommitterCommitModel.tryAdvanceLogCorrect(s.jc, io, s'.jc, io');
 
         var uiop := UI.NoOp;
         var vop := JournalInternalOp;
@@ -399,6 +400,7 @@ module CoordinationModel {
       }
     }
   }
+/*
 
   predicate isInitialized(s: Variables)
   {
