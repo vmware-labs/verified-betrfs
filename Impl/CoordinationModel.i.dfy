@@ -1,26 +1,26 @@
 include "SyncModel.i.dfy"
-include "CommitterCommitModel.i.dfy"
-include "CommitterInitModel.i.dfy"
-include "CommitterAppendModel.i.dfy"
-include "CommitterReplayModel.i.dfy"
+// include "CommitterCommitModel.i.dfy"
+// include "CommitterInitModel.i.dfy"
+// include "CommitterAppendModel.i.dfy"
+// include "CommitterReplayModel.i.dfy"
 include "QueryModel.i.dfy"
 include "SuccModel.i.dfy"
 include "InsertModel.i.dfy"
 
 module CoordinationModel {
   import opened StateModel
+  import opened StateBCModel
+  import opened StateSectorModel
   import opened Options
-  import CommitterModel
   import IOModel
   import SyncModel
-  import CommitterCommitModel
-  import CommitterInitModel
-  import CommitterAppendModel
-  import CommitterReplayModel
+  // import CommitterCommitModel
+  // import CommitterInitModel
+  // import CommitterAppendModel
+  // import CommitterReplayModel
   import QueryModel
   import SuccModel
   import InsertModel
-  import JournalistModel
   import Journal
   import opened InterpretationDiskOps
   import opened ViewOp
@@ -30,8 +30,10 @@ module CoordinationModel {
   import opened ValueType
   import opened DiskOpModel
 
+  import M = ByteCache
+
   lemma jcNoOp(s: Variables, s': Variables, vop: VOp)
-  requires CommitterModel.WF(s.jc)
+  requires s.jc.WF()
   requires s.jc == s'.jc
   requires vop.StatesInternalOp? || vop.JournalInternalOp?
       || (vop.AdvanceOp?
@@ -39,25 +41,25 @@ module CoordinationModel {
         && s.jc.status.StatusReady?
         && vop.replay
       )
-  ensures JC.Next(CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
+  ensures JC.Next(s.jc.I(), s'.jc.I(),
       JournalDisk.NoDiskOp, vop);
   {
     if vop.AdvanceOp? {
       //if vop.replay {
-        assert JC.Replay(CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
+        assert JC.Replay(s.jc.I(), s'.jc.I(),
             JournalDisk.NoDiskOp, vop);
-        assert JC.NextStep(CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
+        assert JC.NextStep(s.jc.I(), s'.jc.I(),
           JournalDisk.NoDiskOp, vop, JC.ReplayStep);
       /*} else {
-        assert JC.Advance(CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
+        assert JC.Advance(s.jc.I(), s'.jc.I(),
             JournalDisk.NoDiskOp, vop);
-        assert JC.NextStep(CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
+        assert JC.NextStep(s.jc.I(), s'.jc.I(),
           JournalDisk.NoDiskOp, vop, JC.AdvanceStep);
       }*/
     } else {
-      assert JC.NoOp(CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
+      assert JC.NoOp(s.jc.I(), s'.jc.I(),
           JournalDisk.NoDiskOp, vop);
-      assert JC.NextStep(CommitterModel.I(s.jc), CommitterModel.I(s'.jc),
+      assert JC.NextStep(s.jc.I(), s'.jc.I(),
           JournalDisk.NoDiskOp, vop, JC.NoOpStep);
     }
   }
@@ -87,11 +89,11 @@ module CoordinationModel {
     assert BJC.NextStep(IVars(s), IVars(s), UI.NoOp, IDiskOp(D.NoDiskOp), StatesInternalOp);
   }
 
-  function {:opaque} pushSync(s: Variables)
-      : (Variables, uint64)
-  requires WFVars(s)
+  function {:opaque} pushSync(s: Variables) : (Variables, uint64)
+  // [yizhou7] strengthened pre-condition
+  requires Inv(s)
   {
-    var (jc', id) := CommitterCommitModel.pushSync(s.jc);
+    var (jc', id) := s.jc.PushSync();
     var s' := s.(jc := jc');
     (s', id)
   }
@@ -106,7 +108,6 @@ module CoordinationModel {
   {
     reveal_pushSync();
     var (s', id) := pushSync(s);
-    CommitterCommitModel.pushSyncCorrect(s.jc);
 
     var uiop := if id == 0 then UI.NoOp else UI.PushSyncOp(id as int);
     var vop := if id == 0 then JournalInternalOp else PushSyncOp(id as int);
@@ -149,40 +150,38 @@ module CoordinationModel {
     if s.jc.status.StatusLoadingSuperblock? then (
       if s.jc.superblock1.SuperblockSuccess?
           && s.jc.superblock2.SuperblockSuccess? then (
-        var cm' := CommitterInitModel.FinishLoadingSuperblockPhase(s.jc);
+        var cm' := s.jc.FinishLoadingSuperblockPhase();
         var bc' := receiveLoc(
             s.bc, cm'.superblock.indirectionTableLoc);
         && s' == s.(jc := cm').(bc := bc')
         && io' == io
       ) else if s.jc.superblock1Read.None?
           && s.jc.superblock1.SuperblockUnfinished? then (
-        && (s'.jc, io') == CommitterInitModel.PageInSuperblockReq(s.jc, io, 0)
+        && (s'.jc, io') == s.jc.PageInSuperblockReq(io, 0)
         && s'.bc == s.bc
       ) else if s.jc.superblock2Read.None?
           && s.jc.superblock2.SuperblockUnfinished? then (
-        && (s'.jc, io') == CommitterInitModel.PageInSuperblockReq(s.jc, io, 1)
+        && (s'.jc, io') == s.jc.PageInSuperblockReq(io, 1)
         && s'.bc == s.bc
       ) else (
         && s' == s
         && io' == io
       )
     ) else if s.jc.status.StatusLoadingOther? then (
-      && (s'.jc, io') == CommitterInitModel.tryFinishLoadingOtherPhase(s.jc, io)
+      && (s'.jc, io') == s.jc.TryFinishLoadingOtherPhase(io)
       && s'.bc == s.bc
     ) else if s.bc.LoadingIndirectionTable? &&
         s.bc.indirectionTableRead.None? then (
       && (s'.bc, io') == IOModel.PageInIndirectionTableReq(s.bc, io)
       && s'.jc == s.jc
-    ) else if s.bc.Ready? &&
-          !CommitterInitModel.isReplayEmpty(s.jc) then (
-      var je := JournalistModel.replayJournalTop(s.jc.journalist);
+    ) else if s.bc.Ready? && !s.jc.isReplayEmpty() then (
+      var je := s.jc.journalist.replayJournalTop();
       && ((
         && InsertModel.insert(s.bc, io, je.key, je.value, s'.bc, false, io')
         && s'.jc == s.jc
       ) || (
         && InsertModel.insert(s.bc, io, je.key, je.value, s'.bc, true, io')
-        && s'.jc ==
-            CommitterReplayModel.JournalReplayOne(s.jc)
+        && s'.jc == s.jc.JournalReplayOne(s.jc.I().replayJournal[0])
       ))
     ) else (
       && s' == s
@@ -201,8 +200,8 @@ module CoordinationModel {
     reveal_initialization();
     if s.jc.status.StatusLoadingSuperblock? {
       if s.jc.superblock1.SuperblockSuccess?  && s.jc.superblock2.SuperblockSuccess? {
-        CommitterInitModel.FinishLoadingSuperblockPhaseCorrect(s.jc);
-        var cm' := CommitterInitModel.FinishLoadingSuperblockPhase(s.jc);
+        // CommitterInitModel.FinishLoadingSuperblockPhaseCorrect(s.jc);
+        var cm' := s.jc.FinishLoadingSuperblockPhase();
         receiveLocCorrect(s.bc, cm'.superblock.indirectionTableLoc);
         var bc' := receiveLoc(
             s.bc, cm'.superblock.indirectionTableLoc);
@@ -211,13 +210,13 @@ module CoordinationModel {
         assert BJC.Next(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')));
         assert M.Next(IVars(s), IVars(s'), UI.NoOp, diskOp(io'));
       } else if s.jc.superblock1Read.None?  && s.jc.superblock1.SuperblockUnfinished? {
-        CommitterInitModel.PageInSuperblockReqCorrect(s.jc, io, 0);
+        // CommitterInitModel.PageInSuperblockReqCorrect(s.jc, io, 0);
         bcNoOp(s, s', JournalInternalOp);
         assert BJC.NextStep(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')), JournalInternalOp);
         assert BJC.Next(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')));
         assert M.Next(IVars(s), IVars(s'), UI.NoOp, diskOp(io'));
       } else if s.jc.superblock2Read.None?  && s.jc.superblock2.SuperblockUnfinished? {
-        CommitterInitModel.PageInSuperblockReqCorrect(s.jc, io, 1);
+        // CommitterInitModel.PageInSuperblockReqCorrect(s.jc, io, 1);
         bcNoOp(s, s', JournalInternalOp);
         assert BJC.NextStep(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')), JournalInternalOp);
         assert BJC.Next(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')));
@@ -226,7 +225,7 @@ module CoordinationModel {
         noop(s);
       }
     } else if s.jc.status.StatusLoadingOther? {
-      CommitterInitModel.tryFinishLoadingOtherPhaseCorrect(s.jc, io);
+      // CommitterInitModel.tryFinishLoadingOtherPhaseCorrect(s.jc, io);
       bcNoOp(s, s', JournalInternalOp);
       assert BJC.NextStep(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')), JournalInternalOp);
       assert BJC.Next(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')));
@@ -239,8 +238,8 @@ module CoordinationModel {
       assert BJC.Next(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')));
       assert M.Next(IVars(s), IVars(s'), UI.NoOp, diskOp(io'));
     } else if s.bc.Ready? &&
-          !CommitterInitModel.isReplayEmpty(s.jc) {
-      var je := JournalistModel.replayJournalTop(s.jc.journalist);
+          !s.jc.isReplayEmpty() {
+      var je := s.jc.journalist.replayJournalTop();
       if InsertModel.insert(s.bc, io, je.key, je.value, s'.bc, false, io') && s'.jc == s.jc {
         InsertModel.insertCorrect(s.bc, io, je.key, je.value, s'.bc, false, io', true);
         var vop;
@@ -256,7 +255,7 @@ module CoordinationModel {
       } else {
         assert InsertModel.insert(s.bc, io, je.key, je.value, s'.bc, true, io');
         InsertModel.insertCorrect(s.bc, io, je.key, je.value, s'.bc, true, io', true);
-        CommitterReplayModel.JournalReplayOneCorrect(s.jc, je);
+        // CommitterReplayModel.JournalReplayOneCorrect(s.jc, je);
         var vop := AdvanceOp(UI.PutOp(je.key, je.value), true);
         assert BJC.NextStep(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')), vop);
         assert BJC.Next(IVars(s), IVars(s'), UI.NoOp, IDiskOp(diskOp(io')));
@@ -266,6 +265,7 @@ module CoordinationModel {
       noop(s);
     }
   }
+/*
 
   predicate doSync(
       s: Variables, io: IO, graphSync: bool,
@@ -493,9 +493,9 @@ module CoordinationModel {
         var uiop := UI.GetOp(key, result.value);
         var vop := AdvanceOp(uiop, false);
 
-        assert JC.Advance(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
-        assert JC.NextStep(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop, JC.AdvanceStep);
-        assert JC.Next(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
+        assert JC.Advance(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop);
+        assert JC.NextStep(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop, JC.AdvanceStep);
+        assert JC.Next(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop);
 
         assert BJC.NextStep(IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);
         assert BJC.Next(IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
@@ -503,17 +503,17 @@ module CoordinationModel {
         var uiop := UI.NoOp;
         if BBC.Next(IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io')).bdop, StatesInternalOp) {
           var vop := StatesInternalOp;
-          assert JC.NoOp(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
-          assert JC.NextStep(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop, JC.NoOpStep);
-          assert JC.Next(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
+          assert JC.NoOp(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop);
+          assert JC.NextStep(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop, JC.NoOpStep);
+          assert JC.Next(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop);
           assert BJC.NextStep(IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);
           assert BJC.Next(IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
         } else {
           var vop := AdvanceOp(uiop, true);
           // Not a true replay (empty journal entry list).
-          assert JC.Replay(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
-          assert JC.NextStep(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop, JC.ReplayStep);
-          assert JC.Next(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
+          assert JC.Replay(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop);
+          assert JC.NextStep(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop, JC.ReplayStep);
+          assert JC.Next(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop);
           assert BJC.NextStep(IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);
           assert BJC.Next(IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
         }
@@ -557,9 +557,9 @@ module CoordinationModel {
         var uiop := UI.SuccOp(start, result.value.results, result.value.end);
         var vop := AdvanceOp(uiop, false);
 
-        assert JC.Advance(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
-        assert JC.NextStep(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop, JC.AdvanceStep);
-        assert JC.Next(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
+        assert JC.Advance(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop);
+        assert JC.NextStep(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop, JC.AdvanceStep);
+        assert JC.Next(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop);
 
         assert BJC.NextStep(IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);
         assert BJC.Next(IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
@@ -567,17 +567,17 @@ module CoordinationModel {
         var uiop := UI.NoOp;
         if BBC.Next(IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io')).bdop, StatesInternalOp) {
           var vop := StatesInternalOp;
-          assert JC.NoOp(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
-          assert JC.NextStep(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop, JC.NoOpStep);
-          assert JC.Next(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
+          assert JC.NoOp(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop);
+          assert JC.NextStep(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop, JC.NoOpStep);
+          assert JC.Next(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop);
           assert BJC.NextStep(IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);
           assert BJC.Next(IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
         } else {
           var vop := AdvanceOp(uiop, true);
           // Not a true replay (empty journal entry list).
-          assert JC.Replay(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
-          assert JC.NextStep(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop, JC.ReplayStep);
-          assert JC.Next(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
+          assert JC.Replay(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop);
+          assert JC.NextStep(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop, JC.ReplayStep);
+          assert JC.Next(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop);
           assert BJC.NextStep(IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);
           assert BJC.Next(IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
         }
@@ -637,17 +637,17 @@ module CoordinationModel {
         var uiop := UI.NoOp;
         if BBC.Next(IBlockCache(s.bc), IBlockCache(s'.bc), IDiskOp(diskOp(io')).bdop, StatesInternalOp) {
           var vop := StatesInternalOp;
-          assert JC.NoOp(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
-          assert JC.NextStep(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop, JC.NoOpStep);
-          assert JC.Next(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
+          assert JC.NoOp(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop);
+          assert JC.NextStep(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop, JC.NoOpStep);
+          assert JC.Next(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop);
           assert BJC.NextStep(IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);
           assert BJC.Next(IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
         } else {
           var vop := AdvanceOp(uiop, true);
           // Not a true replay (empty journal entry list).
-          assert JC.Replay(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
-          assert JC.NextStep(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop, JC.ReplayStep);
-          assert JC.Next(CommitterModel.I(s.jc), CommitterModel.I(s'.jc), JournalDisk.NoDiskOp, vop);
+          assert JC.Replay(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop);
+          assert JC.NextStep(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop, JC.ReplayStep);
+          assert JC.Next(s.jc.I(), s'.jc.I(), JournalDisk.NoDiskOp, vop);
           assert BJC.NextStep(IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')), vop);
           assert BJC.Next(IVars(s), IVars(s'), uiop, IDiskOp(diskOp(io')));
         }
@@ -656,4 +656,5 @@ module CoordinationModel {
       doSyncCorrect(s, io, true, s', io');
     }
   }
+  */
 }

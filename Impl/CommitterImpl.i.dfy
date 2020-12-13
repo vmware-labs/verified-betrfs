@@ -258,7 +258,17 @@ module CommitterImpl {
       }
     }
 
-    linear inout method JournalReplayOne(ghost je: JournalEntry)
+    // [yizhou7] scaffolding remove later
+    function JournalReplayOne(je: JournalEntry) : (cm' : Committer)
+    requires Inv()
+    requires status == StatusReady
+    requires I().replayJournal != []
+    requires je == I().replayJournal[0]
+    ensures cm'.Inv()
+    ensures cm'.status == StatusReady
+    ensures JC.Next(I(), cm'.I(), JournalDisk.NoDiskOp, AdvanceOp(UI.PutOp(je.key, je.value), true))    
+
+    linear inout method journalReplayOne(ghost je: JournalEntry)
     requires old_self.Inv()
     requires old_self.status == StatusReady
     requires old_self.I().replayJournal != []
@@ -280,7 +290,21 @@ module CommitterImpl {
       }
     }
 
-    linear inout method PageInSuperblockReq(io: DiskIOHandler, which: uint64)
+    // [yizhou7] scaffolding remove later
+    function PageInSuperblockReq(io: IO, which: uint64) : (Committer, IO)
+    requires Inv()
+    requires which == 0 || which == 1
+    requires which == 0 ==> superblock1.SuperblockUnfinished?
+    requires which == 1 ==> superblock2.SuperblockUnfinished?
+    requires status.StatusLoadingSuperblock?
+    requires io.IOInit?
+    ensures var (cm', io') := PageInSuperblockReq(io, which);
+      && cm'.Inv()
+      && ValidDiskOp(diskOp(io'))
+      && IDiskOp(diskOp(io')).bdop.NoDiskOp?
+      && JC.Next(I(), cm'.I(), IDiskOp(diskOp(io')).jdop, JournalInternalOp)
+
+    linear inout method pageInSuperblockReq(io: DiskIOHandler, which: uint64)
     requires old_self.Inv()
     requires which == 0 || which == 1
     requires which == 0 ==> old_self.superblock1.SuperblockUnfinished?
@@ -292,11 +316,7 @@ module CommitterImpl {
     ensures 
       && ValidDiskOp(diskOp(IIO(io)))
       && IDiskOp(diskOp(IIO(io))).bdop.NoDiskOp?
-      && JC.Next(
-        old_self.I(),
-        self.I(),
-        IDiskOp(diskOp(IIO(io))).jdop,
-        JournalInternalOp)
+      && JC.Next(old_self.I(), self.I(), IDiskOp(diskOp(IIO(io))).jdop, JournalInternalOp)
     {
       var loc;
       ghost var step := false;
@@ -333,8 +353,17 @@ module CommitterImpl {
         assert JC.NextStep(old_self.I(), self.I(), jdop, JournalInternalOp, JC.NoOpStep);
       }
     }
+
+    // [yizhou7] scaffolding remove later
+    function FinishLoadingSuperblockPhase() : (cm': Committer)
+    requires Inv()
+    requires status.StatusLoadingSuperblock?
+    requires superblock1.SuperblockSuccess?
+    requires superblock2.SuperblockSuccess?
+    ensures cm'.Inv()
+    ensures JC.Next(I(), cm'.I(), JournalDisk.NoDiskOp, SendPersistentLocOp(cm'.superblock.indirectionTableLoc))
   
-    linear inout method FinishLoadingSuperblockPhase()
+    linear inout method finishLoadingSuperblockPhase()
     requires old_self.Inv()
     requires old_self.status.StatusLoadingSuperblock?
     requires old_self.superblock1.SuperblockSuccess?
@@ -563,6 +592,18 @@ module CommitterImpl {
         assert JC.NextStep(old_self.I(), self.I(), jdop, JournalInternalOp, JC.NoOpStep);
       }
     }
+
+    // [yizhou7] scaffolding remove later
+    function TryFinishLoadingOtherPhase(io: IO) : (Committer, IO)
+    requires Inv()
+    requires status.StatusLoadingOther?
+    requires io.IOInit?
+    ensures var (cm', io') := TryFinishLoadingOtherPhase(io);
+      var dop := diskOp(io');
+      && cm'.WF()
+      && ValidDiskOp(dop)
+      && IDiskOp(dop).bdop.NoDiskOp?
+      && JC.Next(I(), cm'.I(), IDiskOp(dop).jdop, JournalInternalOp)   
 
     linear inout method tryFinishLoadingOtherPhase(io: DiskIOHandler)
     requires old_self.Inv()
@@ -845,15 +886,17 @@ module CommitterImpl {
         maxId + 1
     }
 
+    // [yizhou7] scaffolding remove later
+    function PushSync() : (Committer, uint64)
+    requires Inv()
+    ensures var (cm', id) := PushSync();
+      cm'.WF() && JC.Next(I(), cm'.I(), JournalDisk.NoDiskOp, if id == 0 then JournalInternalOp else PushSyncOp(id as int))
+
     linear inout method pushSync()
     returns (id: uint64)
     requires old_self.Inv()
     ensures self.WF()
-    ensures JC.Next(
-        old_self.I(),
-        self.I(),
-        JournalDisk.NoDiskOp,
-        if id == 0 then JournalInternalOp else PushSyncOp(id as int))
+    ensures JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, if id == 0 then JournalInternalOp else PushSyncOp(id as int))
     {
       id := self.freeId();
       if id != 0 && self.syncReqs.count < 0x2000_0000_0000_0000 {
