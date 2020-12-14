@@ -162,7 +162,7 @@ module LinearSequence_i {
   
   method lseq_swap_inout<A>(linear inout s:lseq<A>, i:uint64, linear a1:A) returns(linear a2:A)
       requires i as nat < |old_s| && i as nat in old_s
-      ensures a2 == s[i as nat]
+      ensures a2 == old_s[i as nat]
       ensures lseq_has(s) == lseq_has(old_s)
       ensures lseqs(s) == lseqs(old_s)[i as nat := a1]
   {
@@ -183,7 +183,7 @@ module LinearSequence_i {
 
   method lseq_take_inout<A>(linear inout s:lseq<A>, i:uint64) returns(linear a:A)
       requires i as nat < |old_s| && i as nat in old_s 
-      ensures a == s[i as nat]
+      ensures a == old_s[i as nat]
       ensures lseq_has(s) == lseq_has(old_s)[i as nat := false]
       ensures forall j:nat | j < |s| && j != i as nat :: lseqs(s)[j] == lseqs(old_s)[j]
   {
