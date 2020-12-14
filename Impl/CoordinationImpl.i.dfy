@@ -174,7 +174,6 @@ module CoordinationImpl {
     s.reveal_ReprInv();
   }
 
-  /*
   function method getCommitterSyncState(s: Full, id: uint64) : Option<JC.SyncReqStatus>
   requires s.WF()
   reads s.Repr
@@ -191,7 +190,7 @@ module CoordinationImpl {
     s.jc.Borrow().status.StatusReady?
   }
 
-  method isInitialized(s: Full) returns (b: bool)
+  function method isInitialized(s: Full) : (b: bool)
   requires s.WF()
   ensures b == CoordinationModel.isInitialized(s.I())
   {
@@ -199,11 +198,10 @@ module CoordinationImpl {
     if (
       && s.bc.ready
       && isCommitterStatusReady(s)
-    ) {
-      b := s.jc.Borrow().isReplayEmpty();
-    } else {
-      b := false;
-    }
+    ) then
+      s.jc.Borrow().isReplayEmpty()
+    else
+      false
   }
 
   method popSync(
@@ -275,6 +273,7 @@ module CoordinationImpl {
       assert s.ProtectedReprInv();
     }
   }
+  /*
 
   method succ(
       s: Full, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
