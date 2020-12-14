@@ -38,8 +38,7 @@ module MarshallingImpl {
   import CRC32_C_Array_Impl
   import NativeArrays
   import MutableMapModel
-  import IndirectionTableImpl
-  import IndirectionTableModel
+  import IndirectionTable
   import KeyType
   import SeqComparison
   import NativeBenchmarking
@@ -209,7 +208,12 @@ module MarshallingImpl {
           invariant forall k: nat | j as int <= k < i as int :: buckets[k].Inv()
           invariant forall k: nat | j as int <= k < i as int :: WFBucket(buckets[k].bucket)
           {
+            assert forall k: nat | j as int <= k < i as int :: buckets[k].Inv();
+            ghost var bucketsSeq := lseqs(buckets);
+            ghost var takenB := bucketsSeq[j as nat];
             linear var b := lseq_take_inout(inout buckets, j);
+            // assert b == bucketsSeq[j as nat];
+            assert b == takenB;
             b.Free();
             j := j + 1;
           }
@@ -321,8 +325,9 @@ module MarshallingImpl {
         return None;
       }
     } else if v.c == 1 {
-      var mutMap := IndirectionTableImpl.IndirectionTable.ValToIndirectionTable(v.val);
+      var mutMap := IndirectionTable.BoxedIndirectionTable.ValToIndirectionTable(v.val);
       if mutMap != null {
+        mutMap.RevealI();
         return Some(StateImpl.SectorIndirectionTable(mutMap));
       } else {
         return None;
@@ -605,16 +610,19 @@ module MarshallingImpl {
   requires IM.WFSector(StateImpl.ISector(sector))
   requires sector.SectorIndirectionTable?
   requires sector.indirectionTable.Inv()
-  requires BC.WFCompleteIndirectionTable(IM.IIndirectionTable(sector.indirectionTable.I()))
-  modifies sector.indirectionTable.Repr
+  requires BC.WFCompleteIndirectionTable(sector.indirectionTable.I())
   ensures sector.indirectionTable.Inv() && sector.indirectionTable.I() == old(sector.indirectionTable.I()) && sector.indirectionTable.Repr == old(sector.indirectionTable.Repr)
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.SectorGrammar());
-  ensures Marshalling.valToSector(v) == Some(IM.ISector(StateImpl.ISector(sector)))
+  ensures (
+    if sector.SectorIndirectionTable? then 
+      (sector.indirectionTable.RevealI(); true)
+      else true) &&
+    Marshalling.valToSector(v) == Some(IM.ISector(StateImpl.ISector(sector)))
   ensures SizeOfV(v) < 0x1_0000_0000_0000_0000 - 32
   ensures SizeOfV(v) == size as int
   {
-    var w, s := sector.indirectionTable.indirectionTableToVal();
+    var w, s := sector.indirectionTable.IndirectionTableToVal();
     v := VCase(1, w);
     size := s + 8;
   }
@@ -691,7 +699,6 @@ module MarshallingImpl {
   requires sector.SectorNode? ==> IM.WFNode(sector.node.I())
   requires sector.SectorNode? ==> BT.WFNode(IM.INode(sector.node.I()))
   requires sector.SectorSuperblock? ==> JC.WFSuperblock(sector.superblock)
-  modifies if sector.SectorIndirectionTable? then sector.indirectionTable.Repr else {}
   ensures sector.SectorIndirectionTable? ==> (sector.indirectionTable.Inv() && sector.indirectionTable.I() == old(sector.indirectionTable.I()) && sector.indirectionTable.Repr == old(sector.indirectionTable.Repr))
   ensures data != null ==> IMM.parseCheckedSector(data[..]).Some?
   ensures data != null ==>
@@ -701,7 +708,7 @@ module MarshallingImpl {
   ensures data != null && sector.SectorNode? ==> data.Length <= NodeBlockSize() as int
   ensures data != null && sector.SectorIndirectionTable? ==> data.Length <= IndirectionTableBlockSize() as int
   ensures sector.SectorSuperblock? ==> data != null && data.Length == 4096;
-  ensures sector.SectorIndirectionTable? && Marshalling.IsInitIndirectionTable(IndirectionTableModel.I(sector.indirectionTable.I())) ==> data != null;
+  ensures sector.SectorIndirectionTable? && Marshalling.IsInitIndirectionTable(sector.indirectionTable.I()) ==> data != null;
   ensures sector.SectorNode? && BucketListWellMarshalled(BucketImpl.MutBucket.ILseq(sector.node.Read().buckets)) ==> data != null
   {
     if sector.SectorSuperblock? {
@@ -730,14 +737,16 @@ module MarshallingImpl {
       //NativeBenchmarking.start("marshallIndirectionTable");
       //NativeBenchmarking.end("marshallIndirectionTable");
 
+      sector.indirectionTable.RevealI();
       var v, computedSize := indirectionTableSectorToVal(sector);
       var size: uint64 := computedSize + 32;
 
       ghost var ghosty := true;
       if ghosty {
-        if Marshalling.IsInitIndirectionTable(IndirectionTableModel.I(sector.indirectionTable.I()))
+        if Marshalling.IsInitIndirectionTable(sector.indirectionTable.I())
         {
-          Marshalling.InitIndirectionTableSizeOfV(IndirectionTableModel.I(sector.indirectionTable.I()), v);
+          sector.indirectionTable.RevealI();
+          Marshalling.InitIndirectionTableSizeOfV(sector.indirectionTable.I(), v);
         }
       }
 

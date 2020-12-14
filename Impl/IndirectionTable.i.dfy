@@ -1478,7 +1478,7 @@ module IndirectionTable {
     ensures s.lSome? ==> Marshalling.valToIndirectionTable(v) == Some(s.value.I())
     ensures s.lSome? ==> s.value.TrackingGarbage()
     ensures s.lNone? ==> Marshalling.valToIndirectionTable(v).None?
-    ensures s.Option() == valToIndirectionTable(v)
+    /* TODO(andrea) ModelImpl */ ensures s.Option() == valToIndirectionTable(v)
     {
       if |v.a| as uint64 <= MaxSizeUint64() {
         linear var res := ValToHashMap(v.a);
@@ -1586,6 +1586,8 @@ module IndirectionTable {
     ensures Marshalling.valToIndirectionTable(v) == Some(this.I())
     ensures SizeOfV(v) <= MaxIndirectionTableByteSize()
     ensures SizeOfV(v) == size as int
+    /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v).Some?
+    /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v) == Some(this)
     {
       assert this.t.count <= MaxSizeUint64();
       lemma_SeqSum_empty();
@@ -1704,6 +1706,8 @@ module IndirectionTable {
 
       assert Marshalling.valToIndirectionTable(v).Some?;
       assume Marshalling.valToIndirectionTable(v) == Some(this.I());
+
+      /* TODO(andrea) ModelImpl */ assume valToIndirectionTable(v) == Some(this);
     }
 
     // // To bitmap
@@ -1927,8 +1931,9 @@ module IndirectionTable {
       box.Read()
     }
 
-    function ReadWithInv() : IndirectionTable
+    function ReadWithInv() : (t: IndirectionTable)
       requires Inv()
+      ensures t.Inv()
       reads this, Repr
     {
       box.Read()
@@ -1963,6 +1968,12 @@ module IndirectionTable {
       requires Inv()
     {
       this.Read().I()
+    }
+
+    lemma RevealI()
+      requires Inv()
+      ensures I() == this.Read().I()
+    {
     }
 
     protected predicate TrackingGarbage()
@@ -2133,6 +2144,8 @@ module IndirectionTable {
       ensures s != null ==> fresh(s.Repr)
       ensures s != null ==> Marshalling.valToIndirectionTable(v) == Some(s.I())
       ensures s == null ==> Marshalling.valToIndirectionTable(v).None?
+      /* TODO(andrea) ModelImpl */ ensures s != null ==> IndirectionTable.valToIndirectionTable(v).Some?
+      /* TODO(andrea) ModelImpl */ ensures s.Read() == IndirectionTable.valToIndirectionTable(v).value
       // TODO maybe these are needed at call sites?  ensures s.Some? ==> TrackingGarbage(s.value)
       // TODO maybe these are needed at call sites?  ensures s.Some? ==> BC.WFCompleteIndirectionTable(I(s.value))
     {
@@ -2153,6 +2166,9 @@ module IndirectionTable {
       ensures ValidVal(v)
       ensures Marshalling.valToIndirectionTable(v).Some?
       ensures Marshalling.valToIndirectionTable(v) == Some(this.I())
+
+      /* TODO(andrea) ModelImpl */ ensures IndirectionTable.valToIndirectionTable(v).Some?
+      /* TODO(andrea) ModelImpl */ ensures IndirectionTable.valToIndirectionTable(v) == Some(this.Read())
 
       ensures SizeOfV(v) <= IndirectionTable.MaxIndirectionTableByteSize()
       ensures SizeOfV(v) == size as int
