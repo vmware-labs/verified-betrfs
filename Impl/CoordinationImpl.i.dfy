@@ -154,12 +154,6 @@ module CoordinationImpl {
       } else {
         var froze, wait0 := SyncImpl.sync(s.bc, io);
         wait := wait0;
-
-        /*s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
-        s.reveal_ReprInv();
-        assert 
-          && SyncModel.sync(old(s.I()).bc, old(IIO(io)), s.I().bc, IIO(io), froze)
-          && old(s.I()).jc == s.I().jc;*/
       }
     } else if jc.superblockWrite.Some? {
       wait := true;

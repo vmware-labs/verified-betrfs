@@ -257,16 +257,15 @@ module CommitterImpl {
     // [yizhou7] addtional precondition
     requires old_self.I().replayJournal == []
     ensures self.Inv()
-    ensures JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, 
-            AdvanceOp(UI.PutOp(key, value), false));
+    ensures JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, AdvanceOp(UI.PutOp(key, value), false))
+    ensures old_self.JournalAppend(key, value) == self
     {
       var je := JournalInsert(key, value);
       inout self.journalist.append(je);
 
-      if old_self.I().replayJournal == [] {
-        assert JC.Advance(old_self.I(), self.I(), JournalDisk.NoDiskOp, AdvanceOp(UI.PutOp(key, value), false));
-        assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, AdvanceOp(UI.PutOp(key, value), false), JC.AdvanceStep);
-      }
+      assert JC.Advance(old_self.I(), self.I(), JournalDisk.NoDiskOp, AdvanceOp(UI.PutOp(key, value), false));
+      assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, AdvanceOp(UI.PutOp(key, value), false), JC.AdvanceStep);
+      assume old_self.JournalAppend(key, value) == self;
     }
 
     // [yizhou7] scaffolding remove later
@@ -624,9 +623,8 @@ module CommitterImpl {
       && ValidDiskOp(dop)
       && IDiskOp(dop).bdop.NoDiskOp?
       && JC.Next(old_self.I(), self.I(), IDiskOp(dop).jdop, JournalInternalOp)
-    ensures var old_io := old(IIO(io));
-      && old_io.IOInit?
-      && old_self.TryFinishLoadingOtherPhase(old_io) == (self, IIO(io));
+
+    ensures old_self.TryFinishLoadingOtherPhase(old(IIO(io))) == (self, IIO(io))
     {
       var hasFront := self.journalist.hasFront();
       var hasBack := self.journalist.hasBack();
@@ -843,6 +841,8 @@ module CommitterImpl {
 
     ensures self.WF()
     ensures JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, FreezeOp)
+
+    ensures old_self.Freeze() == self
     {
       var writtenJournalLen := self.journalist.getWrittenJournalLen();
       inout self.journalist.freeze();
@@ -855,6 +855,7 @@ module CommitterImpl {
 
       assert JC.Freeze(old_self.I(), self.I(), JournalDisk.NoDiskOp,FreezeOp);
       assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, FreezeOp, JC.FreezeStep);
+      assume old_self.Freeze() == self;
     }
 
     // [yizhou7] scaffolding remove later
@@ -911,6 +912,8 @@ module CommitterImpl {
     requires old_self.Inv()
     ensures self.WF()
     ensures JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp, if id == 0 then JournalInternalOp else PushSyncOp(id as int))
+
+    ensures old_self.PushSync() == (self, id)
     {
       id := self.freeId();
       if id != 0 && self.syncReqs.count < 0x2000_0000_0000_0000 {
@@ -924,6 +927,7 @@ module CommitterImpl {
         assert JC.NoOp(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp);
         assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, JournalInternalOp, JC.NoOpStep);
       }
+      assume old_self.PushSync() == (self, id);
     }
 
     // == popSync ==
@@ -973,6 +977,7 @@ module CommitterImpl {
         && ValidDiskOp(dop)
         && IDiskOp(dop).bdop.NoDiskOp?
         && JC.Next(old_self.I(), self.I(), IDiskOp(dop).jdop, JournalInternalOp)
+
     ensures old_self.TryAdvanceLog(old(IIO(io))) == (self, IIO(io))
     {
       wait := false;
@@ -1024,6 +1029,7 @@ module CommitterImpl {
         && ValidDiskOp(dop)
         && IDiskOp(dop).bdop.NoDiskOp?
         && JC.Next(old_self.I(), self.I(), IDiskOp(dop).jdop, JournalInternalOp)
+
     ensures old_self.TryAdvanceLocation(old(IIO(io))) == (self, IIO(io))
     {
       wait := false;
@@ -1071,6 +1077,7 @@ module CommitterImpl {
     ensures self.WF()
     ensures JC.Next(old_self.I(), self.I(), IDiskOp(diskOp(io)).jdop, 
       if old_self.status.StatusReady? && old_self.commitStatus.CommitAdvanceLocation? then CleanUpOp else JournalInternalOp)
+
     ensures old_self.WriteBackSuperblockResp(io) == self
     {
       CommitterCommitModel.SyncReqs2to1Correct(old_self.syncReqs);
@@ -1137,6 +1144,7 @@ module CommitterImpl {
 
     ensures self.WF()
     ensures JC.Next(old_self.I(), self.I(), IDiskOp(diskOp(IIO(io))).jdop, JournalInternalOp)
+
     ensures old_self.WriteBackJournalResp(IIO(io)) == self
     {
       var id, addr, len := io.getWriteResult();
