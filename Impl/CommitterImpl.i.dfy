@@ -931,6 +931,8 @@ module CommitterImpl {
     }
 
     // == popSync ==
+
+    // [yizhou7] scaffolding remove later
     function PopSync(id: uint64) : (cm': Committer)
     requires Inv()
     requires id in syncReqs.contents
@@ -947,6 +949,8 @@ module CommitterImpl {
 
     ensures self.WF()
     ensures JC.Next(old_self.I(), self.I(), JournalDisk.NoDiskOp,PopSyncOp(id as int))
+
+    ensures old_self.PopSync(id) == self
     {
       LinearMutableMap.InOutRemove(inout self.syncReqs, id);
       assert JC.PopSyncReq(old_self.I(), self.I(), JournalDisk.NoDiskOp, PopSyncOp(id as int), id);

@@ -184,7 +184,6 @@ module CoordinationImpl {
 
   function method isCommitterStatusReady(s: Full) : bool
   requires s.WF()
-  reads s.Repr
   {
     s.reveal_ReprInv();
     s.jc.Borrow().status.StatusReady?
@@ -192,6 +191,7 @@ module CoordinationImpl {
 
   function method isInitialized(s: Full) : (b: bool)
   requires s.WF()
+  reads s.Repr
   ensures b == CoordinationModel.isInitialized(s.I())
   {
     s.reveal_ReprInv();
@@ -273,7 +273,6 @@ module CoordinationImpl {
       assert s.ProtectedReprInv();
     }
   }
-  /*
 
   method succ(
       s: Full, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
@@ -342,7 +341,7 @@ module CoordinationImpl {
         success := InsertImpl.insert(s.bc, io, key, value);
         if success {
           linear var jc := s.jc.Take();
-          inout jc.JournalAppend(key, value);
+          inout jc.journalAppend(key, value);
           s.jc.Give(jc);
         }
         s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
@@ -354,5 +353,4 @@ module CoordinationImpl {
       }
     }
   }
-  */
 }
