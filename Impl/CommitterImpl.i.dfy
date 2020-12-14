@@ -859,6 +859,7 @@ module CommitterImpl {
 
     // [yizhou7] scaffolding remove later
     function ReceiveFrozenLoc(loc: Location) : (cm': Committer)
+    requires WF()
     requires status == StatusReady
     requires isFrozen
     requires !frozenLoc.Some?
