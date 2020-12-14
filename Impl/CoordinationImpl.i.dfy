@@ -184,13 +184,14 @@ module CoordinationImpl {
 
   function method isCommitterStatusReady(s: Full) : bool
   requires s.WF()
+  reads s.Repr
   {
     s.reveal_ReprInv();
     s.jc.Borrow().status.StatusReady?
   }
 
   function method isInitialized(s: Full) : (b: bool)
-  requires s.WF()
+  requires s.Inv()
   reads s.Repr
   ensures b == CoordinationModel.isInitialized(s.I())
   {
