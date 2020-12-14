@@ -955,6 +955,7 @@ module CommitterImpl {
       LinearMutableMap.InOutRemove(inout self.syncReqs, id);
       assert JC.PopSyncReq(old_self.I(), self.I(), JournalDisk.NoDiskOp, PopSyncOp(id as int), id);
       assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, PopSyncOp(id as int), JC.PopSyncReqStep(id));
+      assume old_self.PopSync(id) == self;
     }
 
     // [yizhou7] scaffolding remove later
