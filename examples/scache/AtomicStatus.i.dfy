@@ -3,13 +3,13 @@ include "RWLock.i.dfy"
 include "RWLockMethods.i.dfy"
 include "ArrayPtr.s.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
-include "../../lib/Lang/LinearMaybe.s.dfy"
+include "../../lib/Base/LinearOption.i.dfy"
 
 module AtomicStatusImpl {
   import opened NativeTypes
   import opened Ptrs
   import opened AtomicSpec
-  import opened LinearMaybe
+  import opened LinearOption
   import RWLock
   import RWLockMethods
   import CacheResources
@@ -45,7 +45,7 @@ module AtomicStatusImpl {
 
   linear datatype G = G(
     linear rwlock: RWLock.R,
-    linear status: maybe<CacheResources.R>
+    linear status: lOption<CacheResources.R>
   )
 
   type AtomicStatus = Atomic<uint8, G>
@@ -55,9 +55,9 @@ module AtomicStatusImpl {
     && g.rwlock.Internal?
     && flags_field_inv(v, g.rwlock.q, key)
     /*&& (g.rwlock.q.flags == RWLock.Reading_ExcLock ==>
-      !has(g.status)
+      g.status.lNone?
     )*/
-    && (!has(g.status) ==> (
+    && (!g.status.lSome? ==> (
         || v == flag_exc
         || v == flag_exc_accessed
         || v == flag_exc_reading
@@ -69,12 +69,12 @@ module AtomicStatusImpl {
         || v == flag_reading_clean
         || v == flag_accessed_reading_clean
     ))
-    && (has(g.status) ==> (
-      && status_inv(v, read(g.status), key)
+    && (g.status.lSome? ==> (
+      && status_inv(v, g.status.value, key)
     ))
-    && (g.rwlock.q.flags == RWLock.ExcLock_Clean ==> !has(g.status))
-    && (g.rwlock.q.flags == RWLock.ExcLock_Dirty ==> !has(g.status))
-    && (g.rwlock.q.flags == RWLock.PendingExcLock ==> has(g.status))
+    && (g.rwlock.q.flags == RWLock.ExcLock_Clean ==> g.status.lNone?)
+    && (g.rwlock.q.flags == RWLock.ExcLock_Dirty ==> g.status.lNone?)
+    && (g.rwlock.q.flags == RWLock.PendingExcLock ==> g.status.lSome?)
   }
 
   predicate flags_field_inv(v: uint8, f: RWLock.Q, key: RWLock.Key)
@@ -159,30 +159,29 @@ module AtomicStatusImpl {
 
   method try_acquire_writeback(a: AtomicStatus, key: RWLock.Key, with_access: bool)
   returns (success: bool,
-      linear m: maybe<RWLock.R>,
-      /* readonly */ linear handle_out: maybe<RWLock.Handle>,
-      linear disk_write_ticket: maybe<CacheResources.R>)
+      linear m: lOption<RWLock.R>,
+      /* readonly */ linear handle_out: lOption<RWLock.Handle>,
+      linear disk_write_ticket: lOption<CacheResources.R>)
   requires atomic_status_inv(a, key)
-  ensures !success ==> !has(m)
-  ensures !success ==> !has(handle_out)
-  ensures !success ==> !has(disk_write_ticket)
-  ensures success ==> has(m)
-      && read(m) == RWLock.Internal(RWLock.WriteBackObtained(key))
+  ensures !success ==> m.lNone?
+  ensures !success ==> handle_out.lNone?
+  ensures !success ==> disk_write_ticket.lNone?
   ensures success ==>
-      && has(handle_out)
-      && has(disk_write_ticket)
-      && read(handle_out).is_handle(key)
-      && read(disk_write_ticket)
-        == CacheResources.DiskWriteTicket(
-            read(handle_out).cache_entry.disk_idx as uint64,
-            read(handle_out).cache_entry.data)
+      && m == lSome(RWLock.Internal(RWLock.WriteBackObtained(key)))
+  ensures success ==>
+      && handle_out.lSome?
+      && handle_out.value.is_handle(key)
+      && disk_write_ticket
+        == lSome(CacheResources.DiskWriteTicket(
+            handle_out.value.cache_entry.disk_idx as uint64,
+            handle_out.value.cache_entry.data))
   {
     var cur_flag := atomic_read(a);
     if !(cur_flag == flag_zero
         || (with_access && cur_flag == flag_accessed)) {
-      m := empty();
-      handle_out := empty();
-      disk_write_ticket := empty();
+      m := lNone;
+      handle_out := lNone;
+      disk_write_ticket := lNone;
       success := false;
     } else {
       var did_set := compare_and_set(a, flag_zero, flag_writeback);
@@ -207,18 +206,18 @@ module AtomicStatusImpl {
             key, rwlock);
 
         stat, ticket := CacheResources.initiate_writeback(
-            handle.cache_entry, unwrap(status));
+            handle.cache_entry, unwrap_value(status));
 
-        new_g := G(rwlock, give(stat));
-        handle_out := give(handle);
-        m := give(res);
-        disk_write_ticket := give(ticket);
+        new_g := G(rwlock, lSome(stat));
+        handle_out := lSome(handle);
+        m := lSome(res);
+        disk_write_ticket := lSome(ticket);
         assert state_inv(new_v, new_g, key);
       } else {
-        m := empty();
+        m := lNone;
         new_g := old_g;
-        handle_out := empty();
-        disk_write_ticket := empty();
+        handle_out := lNone;
+        disk_write_ticket := lNone;
         assert state_inv(new_v, new_g, key);
       }
       assert state_inv(new_v, new_g, key);
@@ -246,9 +245,9 @@ module AtomicStatusImpl {
         assume atomic_inv(a, old_v, old_g);
         linear var new_g;
         ///// Transfer:
-        var _ := discard(m);
-        var _ := discard(handle_out);
-        var _ := discard(disk_write_ticket);
+        dispose_lnone(handle_out);
+        dispose_lnone(m);
+        dispose_lnone(disk_write_ticket);
 
         if did_set {
           linear var res, handle, stat, ticket;
@@ -256,16 +255,16 @@ module AtomicStatusImpl {
           rwlock, res, handle := RWLockMethods.transform_TakeWriteBack(
               key, rwlock);
           stat, ticket := CacheResources.initiate_writeback(
-              handle.cache_entry, unwrap(status));
-          new_g := G(rwlock, give(stat));
-          handle_out := give(handle);
-          m := give(res);
-          disk_write_ticket := give(ticket);
+              handle.cache_entry, unwrap_value(status));
+          new_g := G(rwlock, lSome(stat));
+          handle_out := lSome(handle);
+          m := lSome(res);
+          disk_write_ticket := lSome(ticket);
         } else {
-          m := empty();
+          m := lNone;
           new_g := old_g;
-          handle_out := empty();
-          disk_write_ticket := empty();
+          handle_out := lNone;
+          disk_write_ticket := lNone;
         }
         assert state_inv(new_v, new_g, key);
         ///// Teardown:
@@ -310,10 +309,10 @@ module AtomicStatusImpl {
     RWLockMethods.pre_ReleaseWriteBack(key, fl, rwlock, r);
 
     linear var stat := CacheResources.finish_writeback(
-        handle.cache_entry, unwrap(status), stub);
+        handle.cache_entry, unwrap_value(status), stub);
 
     rwlock := RWLockMethods.transform_ReleaseWriteBack(key, fl, rwlock, r, handle);
-    new_g := G(rwlock, give(stat));
+    new_g := G(rwlock, lSome(stat));
 
     assert state_inv(new_v, new_g, key);
     ///// Teardown:
@@ -323,9 +322,9 @@ module AtomicStatusImpl {
   }
 
   /*method try_set_write_lock(a: AtomicStatus, key: RWLock.Key)
-  returns (success: bool, linear m: maybe<RWLock.R>)
+  returns (success: bool, linear m: lOption<RWLock.R>)
   requires atomic_status_inv(a, key)
-  ensures !success ==> !has(m)
+  ensures !success ==> m.lNone?
   ensures success ==> has(m)
       && read(m) == RWLock.Internal(RWLock.ExcLockPendingAwaitWriteBack(key))
   {
@@ -346,14 +345,14 @@ module AtomicStatusImpl {
     if fl == RWLock.Available {
       linear var r;
       new_g, r := RWLockMethods.transform_TakeExcLock(key, old_g);
-      m := give(r);
+      m := lSome(r);
     } else if fl == RWLock.WriteBack {
       linear var r;
       new_g, r := RWLockMethods.transform_TakeExcLockAwaitWriteBack(key, old_g);
-      m := give(r);
+      m := lSome(r);
     } else {
       new_g := old_g;
-      m := empty();
+      m := lNone;
     }
     ///// Teardown:
     assert atomic_inv(a, new_v, new_g);
@@ -366,17 +365,16 @@ module AtomicStatusImpl {
   method try_check_writeback_isnt_set(a: AtomicStatus, key: RWLock.Key,
       t: int, linear m: RWLock.R)
   returns (success: bool, clean: bool, linear m': RWLock.R,
-      linear status: maybe<CacheResources.R>)
+      linear status: lOption<CacheResources.R>)
   requires atomic_status_inv(a, key)
   requires m == RWLock.Internal(
       RWLock.ExcLockPendingAwaitWriteBack(key, t))
   ensures !success ==> m' == m
-  ensures !success ==> !has(status)
+  ensures !success ==> status.lNone?
   ensures success ==> m' == RWLock.Internal(RWLock.ExcLockPending(key, t, 0, clean))
   ensures success ==>
-    && has(status)
-    && read(status) == CacheResources.CacheStatus(key.cache_idx,
-        (if clean then CacheResources.Clean else CacheResources.Dirty))
+    && status == lSome(CacheResources.CacheStatus(key.cache_idx,
+        (if clean then CacheResources.Clean else CacheResources.Dirty)))
   {
     var f := atomic_read(a);
 
@@ -395,7 +393,7 @@ module AtomicStatusImpl {
     {
       new_g := old_g;
       m' := m;
-      status := empty();
+      status := lNone;
       assert state_inv(new_v, new_g, key);
     } else {
       linear var G(rwlock, status0) := old_g;
@@ -403,7 +401,7 @@ module AtomicStatusImpl {
         key, t,fl, bit_and(f, flag_clean) != 0,
         rwlock, m);
       status := status0;
-      new_g := G(rwlock, empty());
+      new_g := G(rwlock, lNone);
       assert state_inv(new_v, new_g, key);
     }
     ///// Teardown:
@@ -417,28 +415,28 @@ module AtomicStatusImpl {
 
   method try_alloc(a: AtomicStatus, key: RWLock.Key)
   returns (success: bool,
-      linear m: maybe<RWLock.R>,
-      linear handle_maybe: maybe<RWLock.Handle>,
-      linear status: maybe<CacheResources.R>)
+      linear m: lOption<RWLock.R>,
+      linear handle_opt: lOption<RWLock.Handle>,
+      linear status: lOption<CacheResources.R>)
   requires atomic_status_inv(a, key)
-  ensures !success ==> !has(m)
-  ensures !success ==> !has(handle_maybe)
-  ensures !success ==> !has(status)
-  ensures success ==> has(m)
-      && read(m) == RWLock.Internal(RWLock.ReadingPending(key))
-  ensures success ==> has(handle_maybe)
-      && read(handle_maybe).is_handle(key)
-  ensures success ==> has(status)
-    && read(status) == CacheResources.CacheStatus(
-        key.cache_idx, CacheResources.Empty)
+  ensures !success ==> m.lNone?
+  ensures !success ==> handle_opt.lNone?
+  ensures !success ==> status.lNone?
+  ensures success ==>
+      && m == lSome(RWLock.Internal(RWLock.ReadingPending(key)))
+  ensures success ==> handle_opt.lSome?
+      && handle_opt.value.is_handle(key)
+  ensures success ==>
+    && status == lSome(CacheResources.CacheStatus(
+        key.cache_idx, CacheResources.Empty))
   {
     // check first to reduce contention
     var f := atomic_read(a);
     if f != flag_unmapped {
       success := false;
-      m := empty();
-      handle_maybe := empty();
-      status := empty();
+      m := lNone;
+      handle_opt := lNone;
+      status := lNone;
     } else {
       var did_set := compare_and_set(a, flag_unmapped, flag_exc_reading);
 
@@ -459,15 +457,15 @@ module AtomicStatusImpl {
         linear var G(rwlock, status0) := old_g;
         rwlock, res, handle := RWLockMethods.transform_Alloc(key, rwlock);
         status := status0;
-        new_g := G(rwlock, empty());
-        m := give(res);
-        handle_maybe := give(handle);
-        assume has(status);
-        assume read(status).status == CacheResources.Empty; // TODO
+        new_g := G(rwlock, lNone);
+        m := lSome(res);
+        handle_opt := lSome(handle);
+        assume status.lSome?;
+        assume status.value.status == CacheResources.Empty; // TODO
       } else {
-        m := empty();
-        handle_maybe := empty();
-        status := empty();
+        m := lNone;
+        handle_opt := lNone;
+        status := lNone;
         new_g := old_g;
       }
       assert state_inv(new_v, new_g, key);
@@ -503,7 +501,7 @@ module AtomicStatusImpl {
     linear var G(rwlock, status) := old_g;
     rwlock, q := RWLockMethods.transform_ObtainReading(key, t, fl, rwlock, r);
     new_g := G(rwlock, status);
-    assert !has(status);
+    assert status.lNone?;
     assert state_inv(new_v, new_g, key);
     ///// Teardown:
     assert atomic_inv(a, new_v, new_g);
@@ -539,10 +537,10 @@ module AtomicStatusImpl {
     var fl := old_g.rwlock.q.flags;
     linear var G(rwlock, status_empty) := old_g;
     RWLockMethods.pre_ReadingToShared(key, t, fl, rwlock, r);
-    var _ := discard(status_empty);
+    dispose_lnone(status_empty);
     rwlock, q, handle_out :=
         RWLockMethods.transform_ReadingToShared(key, t, fl, rwlock, r, handle);
-    new_g := G(rwlock, give(status));
+    new_g := G(rwlock, lSome(status));
 
     assert state_inv(new_v, new_g, key);
     ///// Teardown:
@@ -659,16 +657,16 @@ module AtomicStatusImpl {
   returns (
     success: bool,
     linear r': RWLock.R,
-    /*readonly*/ linear handle: maybe<RWLock.Handle>
+    /*readonly*/ linear handle: lOption<RWLock.Handle>
   )
   requires atomic_status_inv(a, key)
   requires r == RWLock.Internal(RWLock.SharedLockPending2(key, t))
   ensures !success ==> r == r'
-  ensures !success ==> handle == empty()
+  ensures !success ==> handle == lNone
   ensures success ==>
       && r' == RWLock.Internal(RWLock.SharedLockObtained(key, t))
-      && has(handle)
-      && read(handle).is_handle(key)
+      && handle.lSome?
+      && handle.value.is_handle(key)
   {
     var f := atomic_read(a);
 
@@ -689,11 +687,11 @@ module AtomicStatusImpl {
           key, t, old_g.rwlock.q.flags,
           r, old_g.rwlock);
       new_g := old_g;
-      handle := give(hand);
+      handle := lSome(hand);
     } else {
       r' := r;
       new_g := old_g;
-      handle := empty();
+      handle := lNone;
     }
     ///// Teardown:
     assert atomic_inv(a, new_v, new_g);
@@ -707,21 +705,19 @@ module AtomicStatusImpl {
       key: RWLock.Key)
   returns (
     success: bool,
-    linear m': maybe<RWLock.R>,
-    linear status: maybe<CacheResources.R>,
-    /*readonly*/ linear handle: maybe<RWLock.Handle>
+    linear m': lOption<RWLock.R>,
+    linear status: lOption<CacheResources.R>,
+    /*readonly*/ linear handle: lOption<RWLock.Handle>
   )
   requires atomic_status_inv(a, key)
   //requires m == RWLock.Internal(RWLock.SharedLockPending(key, t))
-  ensures !success ==> !has(m') && !has(status) && !has(handle)
+  ensures !success ==> m'.lNone? && status.lNone? && handle.lNone?
   ensures success ==>
-      && has(status)
-      && has(m')
-      && has(handle)
-      && read(m') == RWLock.Internal(RWLock.ExcLockPending(key, -1, 0, true))
-      && read(status) == CacheResources.CacheStatus(
-          key.cache_idx, CacheResources.Clean)
-      && read(handle).is_handle(key)
+      && m' == lSome(RWLock.Internal(RWLock.ExcLockPending(key, -1, 0, true)))
+      && status == lSome(CacheResources.CacheStatus(
+          key.cache_idx, CacheResources.Clean))
+      && handle.lSome?
+      && handle.value.is_handle(key)
   {
     var did_set := compare_and_set(a, flag_clean, flag_exc_clean);
 
@@ -755,16 +751,16 @@ module AtomicStatusImpl {
       rwlock, m0 := RWLockMethods.transform_TakeExcLockFinishWriteBack(
           key, -1, RWLock.PendingExcLock, true, rwlock, m0);
 
-      new_g := G(rwlock, empty());
+      new_g := G(rwlock, lNone);
       status := status0;
-      m' := give(m0);
-      handle := give(handle');
+      m' := lSome(m0);
+      handle := lSome(handle');
       assert state_inv(new_v, new_g, key);
     } else {
       new_g := old_g;
-      m' := empty();
-      status := empty();
-      handle := empty();
+      m' := lNone;
+      status := lNone;
+      handle := lNone;
       assert state_inv(new_v, new_g, key);
     }
     ///// Teardown:
@@ -804,8 +800,8 @@ module AtomicStatusImpl {
     var fl := rwlock.q.flags;
     rwlock := RWLockMethods.transform_unmap(key, fl, true, rwlock, handle, r);
 
-    var _ := discard(empty_status);
-    new_g := G(rwlock, give(status));
+    dispose_lnone(empty_status);
+    new_g := G(rwlock, lSome(status));
 
     assert state_inv(new_v, new_g, key);
     ///// Teardown:
@@ -849,9 +845,8 @@ module AtomicStatusImpl {
     var visited := r.q.visited;
     rwlock := RWLockMethods.abandon_ExcLockPending(key, fl, visited, true, r, rwlock, handle);
 
-    // TODO to prove this I think we need to do the PendingExc thing
-    var _ := discard(empty_status);
-    new_g := G(rwlock, give(status));
+    dispose_lnone(empty_status);
+    new_g := G(rwlock, lSome(status));
 
     assert state_inv(new_v, new_g, key);
     ///// Teardown:

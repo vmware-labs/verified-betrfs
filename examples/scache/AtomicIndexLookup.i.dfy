@@ -1,6 +1,6 @@
 include "Atomic.s.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
-include "../../lib/Lang/LinearMaybe.s.dfy"
+include "../../lib/Base/LinearOption.i.dfy"
 include "CacheResources.i.dfy"
 include "Constants.i.dfy"
 include "ArrayPtr.s.dfy"
@@ -9,10 +9,10 @@ module AtomicIndexLookupImpl {
   import opened NativeTypes
   import opened Ptrs
   import opened AtomicSpec
-  import opened LinearMaybe
   import opened Constants
   import opened CacheResources
   import opened Options
+  import opened LinearOption
 
   type AtomicIndexLookup = Atomic<uint64, CacheResources.R>
 
@@ -68,7 +68,7 @@ module AtomicIndexLookupImpl {
     success: bool,
     linear cache_entry': CacheResources.R,
     linear status': CacheResources.R,
-    linear read_ticket: maybe<CacheResources.R>
+    linear read_ticket: lOption<CacheResources.R>
   )
   requires atomic_index_lookup_inv(a, disk_idx as int)
   requires cache_entry.CacheEntry?
@@ -80,9 +80,9 @@ module AtomicIndexLookupImpl {
       cache_entry.(disk_idx := disk_idx as int)
   ensures !success ==> status' == status
   ensures success ==> status' == CacheStatus(cache_idx as int, Reading)
-  ensures success ==> has(read_ticket)
-      && read(read_ticket) == DiskReadTicket(disk_idx)
-  ensures !success ==> !has(read_ticket)
+  ensures success ==>
+      && read_ticket == lSome(DiskReadTicket(disk_idx))
+  ensures !success ==> read_ticket == lNone
   {
     var did_set := compare_and_set(a, NOT_MAPPED, cache_idx);
 
@@ -102,11 +102,11 @@ module AtomicIndexLookupImpl {
       linear var ticket;
       status', cache_entry', new_g, ticket :=
         initiate_page_in(cache_idx as int, disk_idx, status, cache_entry, old_g);
-      read_ticket := give(ticket);
+      read_ticket := lSome(ticket);
     } else {
       cache_entry' := cache_entry;
       status' := status;
-      read_ticket := empty();
+      read_ticket := lNone;
       new_g := old_g;
     }
     assert state_inv(new_v, new_g, disk_idx as int);

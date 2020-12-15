@@ -27,6 +27,21 @@ module LinearOption {
       }
     }
   }
+
+  function method unwrap_value<V>(linear opt: lOption<V>) : linear V
+  requires opt.lSome?
+  {
+    linear var lSome(v) := opt;
+    v
+  }
+
+  method dispose_lnone<V>(linear opt: lOption<V>)
+  requires opt.lNone?
+  {
+    linear match opt {
+      case lNone => { }
+    }
+  }
 }
 
 module Test {
