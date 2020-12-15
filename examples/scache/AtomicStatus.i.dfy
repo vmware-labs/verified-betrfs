@@ -854,4 +854,46 @@ module AtomicStatusImpl {
     unsafe_dispose(new_g);
     ///// End jank
   }
+
+  method abandon_reading_pending(
+      a: AtomicStatus,
+      key: RWLock.Key,
+      linear status: CacheResources.R,
+      linear r: RWLock.R,
+      /*readonly*/ linear handle: RWLock.Handle)
+  requires atomic_status_inv(a, key)
+  requires status == CacheResources.CacheStatus(
+      key.cache_idx,
+      CacheResources.Empty)
+  requires r == RWLock.Internal(RWLock.ReadingPending(key))
+  requires handle.is_handle(key)
+  {
+    atomic_write(a, flag_unmapped);
+
+    ///// Begin jank
+    ///// Setup:
+    var v := flag_unmapped;
+    var old_v: uint8;
+    var new_v: uint8;
+    linear var old_g: G := unsafe_obtain();
+    assume new_v == v;
+    assume atomic_inv(a, old_v, old_g);
+    linear var new_g;
+
+    ///// Transfer:
+
+    linear var G(rwlock, empty_status) := old_g;
+
+    var fl := rwlock.q.flags;
+    rwlock := RWLockMethods.abandon_ReadingPending(key, fl, r, rwlock, handle);
+
+    dispose_lnone(empty_status);
+    new_g := G(rwlock, lSome(status));
+
+    assert state_inv(new_v, new_g, key);
+    ///// Teardown:
+    assert atomic_inv(a, new_v, new_g);
+    unsafe_dispose(new_g);
+    ///// End jank
+  }
 }

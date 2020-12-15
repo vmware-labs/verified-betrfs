@@ -617,12 +617,15 @@ module CacheImpl {
           success := false;
           handle_out := lNone;
           dispose_lnone(read_ticket_opt);
-          AtomicStatusImpl.unsafe_dispose(r);
-          AtomicStatusImpl.unsafe_dispose(status);
-          AtomicStatusImpl.unsafe_dispose(cache_entry);
-          AtomicStatusImpl.unsafe_dispose(data);
-          AtomicStatusImpl.unsafe_dispose(idx);
           client_out := lSome(client);
+          abandon_reading_pending(
+              c.status[cache_idx],
+              c.key(cache_idx as int),
+              status,
+              r,
+              RWLock.CacheEntryHandle(
+                  c.key(cache_idx as int),
+                  cache_entry, data, idx));
         } else {
           r := inc_refcount_for_reading(
               c.read_refcounts[localState.t][cache_idx],

@@ -794,4 +794,35 @@ module RWLockMethods {
 
     unsafe_dispose_g(g');
   }
+
+  method abandon_ReadingPending(key: Key, fl: Flag,
+      linear r: R, linear flags: R, /*readonly*/ linear handle: Handle)
+  returns (linear flags': R)
+  requires r == Internal(ReadingPending(key))
+  requires flags == Internal(FlagsField(key, fl))
+  requires handle.is_handle(key)
+  ensures fl == Reading_ExcLock
+  ensures flags' == Internal(FlagsField(key, Unmapped))
+  {
+    linear var g := unsafe_obtain_g();
+    linear var g';
+
+    GetGlobalInvs(g);
+    GetInv2(g, flags);
+    GetInv2(g, r);
+
+    var state := g.q.g[key];
+    ghost var newState := state.(readState := RSNone);
+
+    ghost var step := AbandonReadingPendingStep(flags, r, Const(handle),
+      Internal(FlagsField(key, Unmapped)),
+      fl);
+
+    g', flags' := transform_4_2(g, flags, Const(handle), r,
+        Internal(Global(g.q.g[key := newState])),
+        step.flags',
+        g.q.g, key, state, newState, step);
+
+    unsafe_dispose_g(g');
+  }
 }
