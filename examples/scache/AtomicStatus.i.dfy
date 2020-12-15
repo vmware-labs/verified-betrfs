@@ -717,6 +717,7 @@ module AtomicStatusImpl {
   ensures success ==>
       && has(status)
       && has(m')
+      && has(handle)
       && read(m') == RWLock.Internal(RWLock.ExcLockPending(key, -1, 0, true))
       && read(status) == CacheResources.CacheStatus(
           key.cache_idx, CacheResources.Clean)
@@ -813,9 +814,12 @@ module AtomicStatusImpl {
     ///// End jank
   }
 
-  method abandon_exc(a: AtomicStatus, key: RWLock.Key,
+  method abandon_exc(
+      a: AtomicStatus,
+      key: RWLock.Key,
       linear status: CacheResources.R,
-      linear r: RWLock.R)
+      linear r: RWLock.R,
+      /*readonly*/ linear handle: RWLock.Handle)
   requires atomic_status_inv(a, key)
   requires status == CacheResources.CacheStatus(
       key.cache_idx,
@@ -823,16 +827,18 @@ module AtomicStatusImpl {
   requires r.Internal? && r.q.ExcLockPending?
   requires r == RWLock.Internal(RWLock.ExcLockPending(key, -1,
       r.q.visited, true))
-  /*{
-    atomic_write(a, flag_unmapped);
+  requires handle.is_handle(key)
+  {
+    var orig_value := fetch_and(a, 0xff - flag_exc);
 
     ///// Begin jank
     ///// Setup:
-    var v := flag_unmapped;
+    var v := 0xff - flag_exc;
     var old_v: uint8;
     var new_v: uint8;
     linear var old_g: G := unsafe_obtain();
-    assume new_v == v;
+    assume orig_value == old_v;
+    assume new_v == bit_and(old_v, v);
     assume atomic_inv(a, old_v, old_g);
     linear var new_g;
     ///// Transfer:
@@ -840,7 +846,8 @@ module AtomicStatusImpl {
     linear var G(rwlock, empty_status) := old_g;
 
     var fl := rwlock.q.flags;
-    rwlock := RWLockMethods.transform_unmap(key, fl, rwlock, handle, r);
+    var visited := r.q.visited;
+    rwlock := RWLockMethods.abandon_ExcLockPending(key, fl, visited, true, r, rwlock, handle);
 
     // TODO to prove this I think we need to do the PendingExc thing
     var _ := discard(empty_status);
@@ -851,5 +858,5 @@ module AtomicStatusImpl {
     assert atomic_inv(a, new_v, new_g);
     unsafe_dispose(new_g);
     ///// End jank
-  }*/
+  }
 }
