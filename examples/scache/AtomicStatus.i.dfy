@@ -460,8 +460,8 @@ module AtomicStatusImpl {
         new_g := G(rwlock, lNone);
         m := lSome(res);
         handle_opt := lSome(handle);
-        assume status.lSome?;
-        assume status.value.status == CacheResources.Empty; // TODO
+        assert status.lSome?;
+        assert status.value.status == CacheResources.Empty;
       } else {
         m := lNone;
         handle_opt := lNone;
