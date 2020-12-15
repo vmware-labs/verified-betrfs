@@ -240,6 +240,7 @@ module RWLockMethods {
   ensures flags' == Internal(FlagsField(key,
       if fl == Available then PendingExcLock else WriteBack_PendingExcLock))
   ensures r' == Internal(ExcLockPendingAwaitWriteBack(key, -1))
+  ensures handle'.is_handle(key)
   {
     linear var g := unsafe_obtain_g();
     linear var g';

@@ -1,5 +1,6 @@
 include "Atomic.s.dfy"
 include "RWLock.i.dfy"
+include "RWLockMethods.i.dfy"
 include "ArrayPtr.s.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "../../lib/Lang/LinearMaybe.s.dfy"
@@ -8,6 +9,7 @@ module AtomicRefcountImpl {
   import opened NativeTypes
   import opened AtomicSpec
   import RWLock
+  import RWLockMethods
 
   type AtomicRefcount = Atomic<uint8, RWLock.R>
 
@@ -50,7 +52,7 @@ module AtomicRefcountImpl {
     ///// Transfer:
     if c == val {
       var clean := m.q.clean;
-      m' := RWLock.transform_TakeExcLockCheckSharedLockZero(
+      m' := RWLockMethods.transform_TakeExcLockSharedLockZero(
           key, my_t, t, clean, old_g, m);
       new_g := old_g;
     } else {
@@ -66,9 +68,10 @@ module AtomicRefcountImpl {
   }
 
   method inc_refcount_for_reading(a: AtomicRefcount, key: RWLock.Key, t: int,
-      linear m: RWLock.R)
+      linear client: RWLock.R, linear m: RWLock.R)
   returns (linear m': RWLock.R)
   requires atomic_refcount_inv(a, key, t)
+  requires client == RWLock.Internal(RWLock.Client(t))
   requires m == RWLock.Internal(RWLock.ReadingPending(key))
   ensures m' == RWLock.Internal(RWLock.ReadingPendingCounted(key, t))
   {
@@ -90,7 +93,7 @@ module AtomicRefcountImpl {
     assume atomic_inv(a, old_v, old_g);
     linear var new_g;
     ///// Transfer:
-    new_g, m' := RWLock.transform_ReadingIncCount(key, t, old_v, old_g, m);
+    new_g, m' := RWLockMethods.transform_ReadingIncCount(key, t, old_v, client, old_g, m);
     ///// Teardown:
     assert atomic_inv(a, new_v, new_g);
     unsafe_dispose(new_g);
@@ -98,9 +101,11 @@ module AtomicRefcountImpl {
   }
 
   method inc_refcount_for_shared(a: AtomicRefcount,
-      key: RWLock.Key, t: int)
+      key: RWLock.Key, t: int,
+      linear client: RWLock.R)
   returns (linear m': RWLock.R)
   requires atomic_refcount_inv(a, key, t)
+  requires client == RWLock.Internal(RWLock.Client(t))
   ensures m' == RWLock.Internal(RWLock.SharedLockPending(key, t))
   {
     var orig_value := fetch_add_uint8(a, 1);
@@ -121,7 +126,7 @@ module AtomicRefcountImpl {
     assume atomic_inv(a, old_v, old_g);
     linear var new_g;
     ///// Transfer:
-    new_g, m' := RWLock.transform_SharedIncCount(key, t, old_v, old_g);
+    new_g, m' := RWLockMethods.transform_SharedIncCount(key, t, old_v, client, old_g);
     ///// Teardown:
     assert atomic_inv(a, new_v, new_g);
     unsafe_dispose(new_g);
@@ -130,8 +135,10 @@ module AtomicRefcountImpl {
 
   method dec_refcount_for_shared_pending(a: AtomicRefcount,
       key: RWLock.Key, t: int, linear m: RWLock.R)
+  returns (linear client: RWLock.R)
   requires atomic_refcount_inv(a, key, t)
   requires m == RWLock.Internal(RWLock.SharedLockPending(key, t))
+  ensures client == RWLock.Internal(RWLock.Client(t))
   {
     var orig_value := fetch_sub_uint8(a, 1);
 
@@ -151,7 +158,7 @@ module AtomicRefcountImpl {
     assume atomic_inv(a, old_v, old_g);
     linear var new_g;
     ///// Transfer:
-    new_g := RWLock.transform_SharedDecCountPending(
+    new_g, client := RWLockMethods.transform_SharedDecCountPending(
         key, t, old_v, old_g, m);
     ///// Teardown:
     assert atomic_inv(a, new_v, new_g);
@@ -162,9 +169,11 @@ module AtomicRefcountImpl {
   method dec_refcount_for_shared_obtained(a: AtomicRefcount,
       key: RWLock.Key, t: int, linear m: RWLock.R,
       linear handle: RWLock.Handle)
+  returns (linear client: RWLock.R)
   requires atomic_refcount_inv(a, key, t)
   requires m == RWLock.Internal(RWLock.SharedLockObtained(key, t))
   requires handle.is_handle(key)
+  ensures client == RWLock.Internal(RWLock.Client(t))
   {
     var orig_value := fetch_sub_uint8(a, 1);
 
@@ -184,7 +193,7 @@ module AtomicRefcountImpl {
     assume atomic_inv(a, old_v, old_g);
     linear var new_g;
     ///// Transfer:
-    new_g := RWLock.transform_SharedDecCountObtained(
+    new_g, client := RWLockMethods.transform_SharedDecCountObtained(
         key, t, old_v, old_g, m, handle);
     ///// Teardown:
     assert atomic_inv(a, new_v, new_g);

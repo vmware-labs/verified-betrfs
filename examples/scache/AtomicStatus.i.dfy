@@ -1,5 +1,6 @@
 include "Atomic.s.dfy"
 include "RWLock.i.dfy"
+include "RWLockMethods.i.dfy"
 include "ArrayPtr.s.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "../../lib/Lang/LinearMaybe.s.dfy"
@@ -10,6 +11,7 @@ module AtomicStatusImpl {
   import opened AtomicSpec
   import opened LinearMaybe
   import RWLock
+  import RWLockMethods
   import CacheResources
 
   const flag_zero : uint8 := 0;
@@ -201,7 +203,7 @@ module AtomicStatusImpl {
         linear var res, handle, ticket, stat;
         linear var G(rwlock, status) := old_g;
 
-        rwlock, res, handle := RWLock.transform_TakeWriteBack(
+        rwlock, res, handle := RWLockMethods.transform_TakeWriteBack(
             key, rwlock);
 
         stat, ticket := CacheResources.initiate_writeback(
@@ -251,7 +253,7 @@ module AtomicStatusImpl {
         if did_set {
           linear var res, handle, stat, ticket;
           linear var G(rwlock, status) := old_g;
-          rwlock, res, handle := RWLock.transform_TakeWriteBack(
+          rwlock, res, handle := RWLockMethods.transform_TakeWriteBack(
               key, rwlock);
           stat, ticket := CacheResources.initiate_writeback(
               handle.cache_entry, unwrap(status));
@@ -305,12 +307,12 @@ module AtomicStatusImpl {
     var fl := old_g.rwlock.q.flags;
     linear var G(rwlock, status) := old_g;
 
-    RWLock.pre_ReleaseWriteBack(key, fl, rwlock, r);
+    RWLockMethods.pre_ReleaseWriteBack(key, fl, rwlock, r);
 
     linear var stat := CacheResources.finish_writeback(
         handle.cache_entry, unwrap(status), stub);
 
-    rwlock := RWLock.transform_ReleaseWriteBack(key, fl, rwlock, r, handle);
+    rwlock := RWLockMethods.transform_ReleaseWriteBack(key, fl, rwlock, r, handle);
     new_g := G(rwlock, give(stat));
 
     assert state_inv(new_v, new_g, key);
@@ -343,11 +345,11 @@ module AtomicStatusImpl {
     var fl := old_g.q.flags;
     if fl == RWLock.Available {
       linear var r;
-      new_g, r := RWLock.transform_TakeExcLock(key, old_g);
+      new_g, r := RWLockMethods.transform_TakeExcLock(key, old_g);
       m := give(r);
     } else if fl == RWLock.WriteBack {
       linear var r;
-      new_g, r := RWLock.transform_TakeExcLockAwaitWriteBack(key, old_g);
+      new_g, r := RWLockMethods.transform_TakeExcLockAwaitWriteBack(key, old_g);
       m := give(r);
     } else {
       new_g := old_g;
@@ -397,7 +399,7 @@ module AtomicStatusImpl {
       assert state_inv(new_v, new_g, key);
     } else {
       linear var G(rwlock, status0) := old_g;
-      rwlock, m' := RWLock.transform_TakeExcLockFinishWriteBack(
+      rwlock, m' := RWLockMethods.transform_TakeExcLockFinishWriteBack(
         key, t,fl, bit_and(f, flag_clean) != 0,
         rwlock, m);
       status := status0;
@@ -426,7 +428,6 @@ module AtomicStatusImpl {
       && read(m) == RWLock.Internal(RWLock.ReadingPending(key))
   ensures success ==> has(handle_maybe)
       && read(handle_maybe).is_handle(key)
-      && read(handle_maybe).idx.v == -1
   ensures success ==> has(status)
     && read(status) == CacheResources.CacheStatus(
         key.cache_idx, CacheResources.Empty)
@@ -456,7 +457,7 @@ module AtomicStatusImpl {
       if did_set {
         linear var res, handle;
         linear var G(rwlock, status0) := old_g;
-        rwlock, res, handle := RWLock.transform_Alloc(key, rwlock);
+        rwlock, res, handle := RWLockMethods.transform_Alloc(key, rwlock);
         status := status0;
         new_g := G(rwlock, empty());
         m := give(res);
@@ -500,7 +501,7 @@ module AtomicStatusImpl {
     ///// Transfer:
     var fl := old_g.rwlock.q.flags;
     linear var G(rwlock, status) := old_g;
-    rwlock, q := RWLock.transform_ObtainReading(key, t, fl, rwlock, r);
+    rwlock, q := RWLockMethods.transform_ObtainReading(key, t, fl, rwlock, r);
     new_g := G(rwlock, status);
     assert !has(status);
     assert state_inv(new_v, new_g, key);
@@ -537,10 +538,10 @@ module AtomicStatusImpl {
     ///// Transfer:
     var fl := old_g.rwlock.q.flags;
     linear var G(rwlock, status_empty) := old_g;
-    RWLock.pre_ReadingToShared(key, t, fl, rwlock, r);
+    RWLockMethods.pre_ReadingToShared(key, t, fl, rwlock, r);
     var _ := discard(status_empty);
     rwlock, q, handle_out :=
-        RWLock.transform_ReadingToShared(key, t, fl, rwlock, r, handle);
+        RWLockMethods.transform_ReadingToShared(key, t, fl, rwlock, r, handle);
     new_g := G(rwlock, give(status));
 
     assert state_inv(new_v, new_g, key);
@@ -582,7 +583,7 @@ module AtomicStatusImpl {
     var fl := old_g.rwlock.q.flags;
     if fl == RWLock.Available || fl == RWLock.WriteBack
         || fl == RWLock.Reading {
-      r' := RWLock.transform_SharedCheckExcFree(
+      r' := RWLockMethods.transform_SharedCheckExcFree(
           key, t, old_g.rwlock.q.flags,
           r, old_g.rwlock);
       new_g := old_g;
@@ -618,7 +619,7 @@ module AtomicStatusImpl {
     assume atomic_inv(a, old_v, old_g);
     linear var new_g;
     ///// Transfer:
-    RWLock.possible_flags_SharedLockPending2(key, t, old_g.rwlock.q.flags,
+    RWLockMethods.possible_flags_SharedLockPending2(key, t, old_g.rwlock.q.flags,
         r, old_g.rwlock);
     new_g := old_g;
     assert state_inv(new_v, new_g, key);
@@ -684,7 +685,7 @@ module AtomicStatusImpl {
     var fl := old_g.rwlock.q.flags;
     if fl != RWLock.Reading && fl != RWLock.Reading_ExcLock {
       linear var hand;
-      r', hand := RWLock.transform_SharedCheckReading(
+      r', hand := RWLockMethods.transform_SharedCheckReading(
           key, t, old_g.rwlock.q.flags,
           r, old_g.rwlock);
       new_g := old_g;
@@ -707,17 +708,19 @@ module AtomicStatusImpl {
   returns (
     success: bool,
     linear m': maybe<RWLock.R>,
-    linear status: maybe<CacheResources.R>
+    linear status: maybe<CacheResources.R>,
+    /*readonly*/ linear handle: maybe<RWLock.Handle>
   )
   requires atomic_status_inv(a, key)
   //requires m == RWLock.Internal(RWLock.SharedLockPending(key, t))
-  ensures !success ==> !has(m') && !has(status)
+  ensures !success ==> !has(m') && !has(status) && !has(handle)
   ensures success ==>
       && has(status)
       && has(m')
       && read(m') == RWLock.Internal(RWLock.ExcLockPending(key, -1, 0, true))
       && read(status) == CacheResources.CacheStatus(
           key.cache_idx, CacheResources.Clean)
+      && read(handle).is_handle(key)
   {
     var did_set := compare_and_set(a, flag_clean, flag_exc_clean);
 
@@ -740,24 +743,27 @@ module AtomicStatusImpl {
       //    key, t, RWLock.Available, m', old_g.rwlock);
       
       linear var G(rwlock, status0) := old_g;
-      linear var m0;
+      linear var m0, handle';
 
-      rwlock, m0 := RWLock.transform_TakeExcLock(key, rwlock);
+      var fl := rwlock.q.flags;
+      rwlock, m0, handle' := RWLockMethods.transform_ThreadlessExc(key, rwlock, fl);
 
       //m', rwlock := transform_SharedToExc(
       //    key, t, RWLock.Available, m', rwlock);
 
-      rwlock, m0 := RWLock.transform_TakeExcLockFinishWriteBack(
+      rwlock, m0 := RWLockMethods.transform_TakeExcLockFinishWriteBack(
           key, -1, RWLock.PendingExcLock, true, rwlock, m0);
 
       new_g := G(rwlock, empty());
       status := status0;
       m' := give(m0);
+      handle := give(handle');
       assert state_inv(new_v, new_g, key);
     } else {
       new_g := old_g;
       m' := empty();
       status := empty();
+      handle := empty();
       assert state_inv(new_v, new_g, key);
     }
     ///// Teardown:
@@ -795,7 +801,7 @@ module AtomicStatusImpl {
     linear var G(rwlock, empty_status) := old_g;
 
     var fl := rwlock.q.flags;
-    rwlock := RWLock.transform_unmap(key, fl, true, rwlock, handle, r);
+    rwlock := RWLockMethods.transform_unmap(key, fl, true, rwlock, handle, r);
 
     var _ := discard(empty_status);
     new_g := G(rwlock, give(status));
@@ -834,7 +840,7 @@ module AtomicStatusImpl {
     linear var G(rwlock, empty_status) := old_g;
 
     var fl := rwlock.q.flags;
-    rwlock := RWLock.transform_unmap(key, fl, rwlock, handle, r);
+    rwlock := RWLockMethods.transform_unmap(key, fl, rwlock, handle, r);
 
     // TODO to prove this I think we need to do the PendingExc thing
     var _ := discard(empty_status);
