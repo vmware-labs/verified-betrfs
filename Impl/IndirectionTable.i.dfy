@@ -237,6 +237,12 @@ module IndirectionTable {
       }
     }
 
+    function clone() : (cloned : IndirectionTable)
+    requires this.Inv()
+    ensures cloned.Inv()
+    ensures cloned.graph == this.graph
+    ensures cloned.locs == this.locs
+
     shared method Clone()
     returns (linear cloned : IndirectionTable)
     requires this.Inv()
@@ -251,6 +257,15 @@ module IndirectionTable {
       cloned := IndirectionTable(t', lNone, refUpperBound, None, locs, graph, predCounts);
     }
 
+    /* TODO(andrea) ModelImpl */ function getEntry(ref: BT.G.Reference) : (e : Option<Entry>)
+    /* TODO(andrea) ModelImpl */ requires this.Inv()
+    /* TODO(andrea) ModelImpl */ ensures e.None? ==> ref !in this.graph
+    /* TODO(andrea) ModelImpl */ ensures e.Some? ==> ref in this.graph
+    /* TODO(andrea) ModelImpl */ ensures e.Some? ==> this.graph[ref] == e.value.succs
+    /* TODO(andrea) ModelImpl */ ensures e.Some? && e.value.loc.Some? ==>
+    /* TODO(andrea) ModelImpl */     ref in this.locs && this.locs[ref] == e.value.loc.value
+    /* TODO(andrea) ModelImpl */ ensures ref in this.locs ==> e.Some? && e.value.loc.Some?
+
     shared method GetEntry(ref: BT.G.Reference) returns (e : Option<Entry>)
     requires this.Inv()
     ensures e.None? ==> ref !in this.graph
@@ -259,8 +274,10 @@ module IndirectionTable {
     ensures e.Some? && e.value.loc.Some? ==>
         ref in this.locs && this.locs[ref] == e.value.loc.value
     ensures ref in this.locs ==> e.Some? && e.value.loc.Some?
+    /* TODO(andrea) ModelImpl */ ensures e == getEntry(ref)
     {
       e := LinearMutableMap.Get(this.t, ref);
+      assume e == getEntry(ref);
     }
 
     shared method HasEmptyLoc(ref: BT.G.Reference) returns (b: bool)
@@ -1764,12 +1781,25 @@ module IndirectionTable {
       }
     }
 
+    /* TODO(andrea) ModelImpl */ function initLocBitmap() : (res : (bool, BitmapModel.BitmapModelT))
+    /* TODO(andrea) ModelImpl */ requires this.Inv()
+    /* TODO(andrea) ModelImpl */ requires BC.WFCompleteIndirectionTable(this.I())
+    /* TODO(andrea) ModelImpl */ ensures BitmapModel.Len(res.1) == NumBlocks()
+    /* TODO(andrea) ModelImpl */ ensures var (succ, bm) := this.initLocBitmap();
+    /* TODO(andrea) ModelImpl */  (succ ==>
+    /* TODO(andrea) ModelImpl */    && (forall i: int :: IsLocAllocIndirectionTable(this.I(), i)
+    /* TODO(andrea) ModelImpl */      <==> IsLocAllocBitmap(bm, i)
+    /* TODO(andrea) ModelImpl */    )
+    /* TODO(andrea) ModelImpl */    && BC.AllLocationsForDifferentRefsDontOverlap(this.I())
+    /* TODO(andrea) ModelImpl */  )
+
+
     shared method InitLocBitmap()
     returns (success: bool, bm: BitmapImpl.Bitmap)
     requires this.Inv()
     requires BC.WFCompleteIndirectionTable(this.I())
     ensures bm.Inv()
-    // ensures (success, bm.I()) == IndirectionTableModel.InitLocBitmap(old(I(this)))
+    /* TODO(andrea) ModelImpl */ ensures (success, bm.I()) == this.initLocBitmap()
     ensures BitmapModel.Len(bm.I()) == NumBlocks()
     ensures fresh(bm.Repr)
     {
@@ -1801,15 +1831,18 @@ module IndirectionTable {
             bm.Set(locIndex);
           } else {
             success := false;
+            /* TODO(andrea) ModelImpl */ assume (success, bm.I()) == this.initLocBitmap();
             return;
           }
         } else {
           success := false;
+          /* TODO(andrea) ModelImpl */ assume (success, bm.I()) == this.initLocBitmap();
           return;
         }
       }
 
       success := true;
+      /* TODO(andrea) ModelImpl */ assume (success, bm.I()) == this.initLocBitmap();
     }
     // 
     // ///// Dealloc stuff
@@ -2054,6 +2087,7 @@ module IndirectionTable {
       ensures e.Some? && e.value.loc.Some? ==>
           ref in this.Read().locs && this.Read().locs[ref] == e.value.loc.value
       ensures ref in this.Read().locs ==> e.Some? && e.value.loc.Some?
+      /* TODO(andrea) ModelImpl */ ensures e == this.ReadWithInv().getEntry(ref)
     {
       e := box.Borrow().GetEntry(ref);
     }
@@ -2145,7 +2179,7 @@ module IndirectionTable {
       ensures s != null ==> Marshalling.valToIndirectionTable(v) == Some(s.I())
       ensures s == null ==> Marshalling.valToIndirectionTable(v).None?
       /* TODO(andrea) ModelImpl */ ensures s != null ==> IndirectionTable.valToIndirectionTable(v).Some?
-      /* TODO(andrea) ModelImpl */ ensures s.Read() == IndirectionTable.valToIndirectionTable(v).value
+      /* TODO(andrea) ModelImpl */ ensures s != null ==> s.Read() == IndirectionTable.valToIndirectionTable(v).value
       // TODO maybe these are needed at call sites?  ensures s.Some? ==> TrackingGarbage(s.value)
       // TODO maybe these are needed at call sites?  ensures s.Some? ==> BC.WFCompleteIndirectionTable(I(s.value))
     {
@@ -2180,7 +2214,7 @@ module IndirectionTable {
       requires Inv()
       requires BC.WFCompleteIndirectionTable(this.I())
       ensures bm.Inv()
-      // ensures (success, bm.I()) == IndirectionTableModel.InitLocBitmap(old(I()))
+      /* TODO(andrea) ModelImpl */ ensures (success, bm.I()) == this.ReadWithInv().initLocBitmap()
       ensures fresh(bm.Repr)
     {
       success, bm := box.Borrow().InitLocBitmap();
