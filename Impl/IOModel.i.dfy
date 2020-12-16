@@ -103,11 +103,11 @@ module IOModel {
       var i := BlockAllocatorModel.Alloc(s.blockAllocator);
 
       BlockAllocatorModel.LemmaAllocResult(s.blockAllocator);
-      assert !IsLocAllocBitmap(s.blockAllocator.ephemeral, i.value);
+      assert !IndirectionTable.IsLocAllocBitmap(s.blockAllocator.ephemeral, i.value);
       assert s.blockAllocator.frozen.Some? ==>
-          !IsLocAllocBitmap(s.blockAllocator.frozen.value, i.value);
-      assert !IsLocAllocBitmap(s.blockAllocator.persistent, i.value);
-      assert !IsLocAllocBitmap(s.blockAllocator.outstanding, i.value);
+          !IndirectionTable.IsLocAllocBitmap(s.blockAllocator.frozen.value, i.value);
+      assert !IndirectionTable.IsLocAllocBitmap(s.blockAllocator.persistent, i.value);
+      assert !IndirectionTable.IsLocAllocBitmap(s.blockAllocator.outstanding, i.value);
 
       //assert BC.ValidNodeLocation(loc.value);
       //assert BC.ValidAllocation(IVars(s), loc.value);
@@ -360,7 +360,7 @@ module IOModel {
   : (res : (BCVariables, IO))
   requires s.Ready?
   requires io.IOInit?
-  requires ref in s.ephemeralIndirectionTable.locs;
+  requires ref in s.ephemeralIndirectionTable.I().locs;
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) then (
       (s, io)
@@ -390,7 +390,7 @@ module IOModel {
       assert noop(IBlockCache(s), IBlockCache(s));
     } else {
       var loc := s.ephemeralIndirectionTable.locs[ref];
-      assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs;
+      assert ref in s.ephemeralIndirectionTable.I().locs;
       assert ValidNodeLocation(loc);
       var (id, io') := RequestRead(io, loc);
       var s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
@@ -444,7 +444,7 @@ module IOModel {
       && WFSector(sector.value)
       && ValidDiskOp(diskOp(io))
       && (sector.value.SectorNode? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadNodeOp(id, Some(INode(sector.value.node))), JournalDisk.NoDiskOp))
-      && (sector.value.SectorIndirectionTable? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadIndirectionTableOp(id, Some(IIndirectionTable(sector.value.indirectionTable))), JournalDisk.NoDiskOp))
+      && (sector.value.SectorIndirectionTable? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadIndirectionTableOp(id, Some(sector.value.indirectionTable.I())), JournalDisk.NoDiskOp))
       && (sector.value.SectorSuperblock? ==>
         && IDiskOp(diskOp(io)).bdop == BlockDisk.NoDiskOp
         && IDiskOp(diskOp(io)).jdop.RespReadSuperblockOp?
@@ -474,11 +474,10 @@ module IOModel {
     var (id, sector) := ReadSector(io);
     if (Some(id) == s.indirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) then (
       var ephemeralIndirectionTable := sector.value.indirectionTable;
-      var (succ, bm) := IndirectionTableModel.InitLocBitmap(ephemeralIndirectionTable);
+      var (succ, bm) := ephemeralIndirectionTable.initLocBitmap();
       if succ then (
         var blockAllocator := BlockAllocatorModel.InitBlockAllocator(bm);
-        var persistentIndirectionTable :=
-            IndirectionTableModel.clone(sector.value.indirectionTable);
+        var persistentIndirectionTable := sector.value.indirectionTable.clone();
         Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, s.indirectionTableLoc, None, None, map[], map[], map[], LruModel.Empty(), blockAllocator)
       ) else (
         s
@@ -510,14 +509,13 @@ module IOModel {
     var s' := PageInIndirectionTableResp(s, io);
     if (Some(id) == s.indirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
       var ephemeralIndirectionTable := sector.value.indirectionTable;
-      var (succ, bm) := IndirectionTableModel.InitLocBitmap(ephemeralIndirectionTable);
+      var (succ, bm) := ephemeralIndirectionTable.initLocBitmap();
       if succ {
         WeightBucketEmpty();
 
         reveal_ConsistentBitmap();
-        IndirectionTableModel.InitLocBitmapCorrect(ephemeralIndirectionTable);
-        assert ConsistentBitmap(s'.ephemeralIndirectionTable, s'.frozenIndirectionTable,
-          s'.persistentIndirectionTable, s'.outstandingBlockWrites, s'.blockAllocator);
+        assert ConsistentBitmap(s'.ephemeralIndirectionTable.I(), MapOption(s'.frozenIndirectionTable, (x: IndirectionTable) => x.I()),
+          s'.persistentIndirectionTable.I(), s'.outstandingBlockWrites, s'.blockAllocator);
 
         assert WFBCVars(s');
         assert stepsBC(IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.PageInIndirectionTableRespStep);
@@ -539,7 +537,7 @@ module IOModel {
   : (s': BCVariables)
   requires diskOp(io).RespReadOp?
   requires s.Ready?
-  requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
+  requires s.ephemeralIndirectionTable.Inv()
   {
     var (id, sector) := ReadSector(io);
 
@@ -551,7 +549,7 @@ module IOModel {
 
       var ref := s.outstandingBlockReads[id].ref;
 
-      var locGraph := IndirectionTableModel.GetEntry(s.ephemeralIndirectionTable, ref);
+      var locGraph := s.ephemeralIndirectionTable.getEntry(ref);
       if (locGraph.None? || locGraph.value.loc.None? || ref in s.cache) then ( // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
         s
       ) else (
@@ -600,7 +598,7 @@ module IOModel {
 
     var ref := s.outstandingBlockReads[id].ref;
     
-    var locGraph := IndirectionTableModel.GetEntry(s.ephemeralIndirectionTable, ref);
+    var locGraph := s.ephemeralIndirectionTable.getEntry(ref);
     if (locGraph.None? || locGraph.value.loc.None? || ref in s.cache) { // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
       assert stepsBC(IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.NoOpStep);
       return;
@@ -642,7 +640,7 @@ module IOModel {
     var i := s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize();
     DiskLayout.reveal_ValidNodeAddr();
     assert i * NodeBlockSize() == s.outstandingBlockWrites[id].loc.addr as int;
-    assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
+    assert IndirectionTable.IsLocAllocBitmap(s.blockAllocator.outstanding, i);
   }
 
   lemma lemmaBlockAllocatorFrozenSome(s: BCVariables)
@@ -719,12 +717,12 @@ module IOModel {
 
     forall i: int
     | IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
-    ensures IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
+    ensures IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
     {
       if i != locIdx {
         assert IsLocAllocOutstanding(s.outstandingBlockWrites, i);
-        assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
-        assert IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
+        assert IndirectionTable.IsLocAllocBitmap(s.blockAllocator.outstanding, i);
+        assert IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
       } else {
         var id1 :| id1 in s'.outstandingBlockWrites && s'.outstandingBlockWrites[id1].loc.addr as int == i * NodeBlockSize() as int;
         assert BC.OutstandingBlockWritesDontOverlap(s.outstandingBlockWrites, id, id1);
@@ -738,11 +736,11 @@ module IOModel {
     }
 
     forall i: int
-    | IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
+    | IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
     ensures IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
     {
       if i != locIdx {
-        assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
+        assert IndirectionTable.IsLocAllocBitmap(s.blockAllocator.outstanding, i);
         assert IsLocAllocOutstanding(s'.outstandingBlockWrites, i);
       } else {
         assert IsLocAllocOutstanding(s'.outstandingBlockWrites, i);

@@ -164,17 +164,25 @@ module IOImpl {
   requires io.initialized();
   requires s.ready
   requires s.WF()
-  requires ref in SI.IIndirectionTable(s.ephemeralIndirectionTable).locs
+  requires ref in s.ephemeralIndirectionTable.I().locs
   requires io !in s.Repr()
   modifies io
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready
-  ensures (s.I(), IIO(io)) == IOModel.PageInNodeReq(old(s.I()), old(IIO(io)), ref)
+  ensures (
+    assert old(s.ephemeralIndirectionTable.I().locs ==
+      s.ephemeralIndirectionTable.ReadWithInv().locs) by {
+        s.ephemeralIndirectionTable.RevealI();
+        assume false; // TODO(andreal) ??????
+      }
+    (s.I(), IIO(io)) == IOModel.PageInNodeReq(old(s.I()), old(IIO(io)), ref)
+    )
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       print "giving up; already an outstanding read for this ref\n";
     } else {
+      s.ephemeralIndirectionTable.RevealI();
       var locGraph := s.ephemeralIndirectionTable.GetEntry(ref);
       assert locGraph.Some?;
       var loc := locGraph.value.loc;
@@ -240,7 +248,9 @@ module IOImpl {
       //assert fresh({ephemeralIndirectionTable} + ephemeralIndirectionTable.Repr);
       //assert fresh(ephemeralIndirectionTable.Repr);
 
+      ephemeralIndirectionTable.RevealI();
       var succ, bm := ephemeralIndirectionTable.InitLocBitmap();
+      assert (succ, bm.I()) == ephemeralIndirectionTable.ReadWithInv().initLocBitmap(); // TODO(andreal) unnecessary
       if succ {
         var blockAllocator := new BlockAllocatorImpl.BlockAllocator(bm);
         var persistentIndirectionTable := sector.value.indirectionTable.Clone();
@@ -259,6 +269,7 @@ module IOImpl {
         s.cache := new MutCache();
         s.lru := new LruImpl.LruImplQueue();
         s.blockAllocator := blockAllocator;
+        assert s.I() == IOModel.PageInIndirectionTableResp(old(s.I()), old(IIO(io))); // TODO(andreal)
       } else {
         print "InitLocBitmap failed\n";
       }

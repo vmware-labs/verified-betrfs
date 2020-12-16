@@ -1967,6 +1967,7 @@ module IndirectionTable {
     function ReadWithInv() : (t: IndirectionTable)
       requires Inv()
       ensures t.Inv()
+      ensures t == this.Read()
       reads this, Repr
     {
       box.Read()
@@ -2005,7 +2006,7 @@ module IndirectionTable {
 
     lemma RevealI()
       requires Inv()
-      ensures I() == this.Read().I()
+      ensures I() == this.Read().I() == this.ReadWithInv().I()
     {
     }
 
