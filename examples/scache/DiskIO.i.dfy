@@ -12,6 +12,11 @@ module DiskIO {
       linear q: RWLock.R,
       /*readonly*/ linear cache_entry: CacheResources.R,
       /*readonly*/ linear idx: Deref<int>)
+  {
+    predicate WF(addr: uint64)
+    {
+    }
+  }
 
   method disk_writeback_async(addr: uint64,
       ptr: Ptr,

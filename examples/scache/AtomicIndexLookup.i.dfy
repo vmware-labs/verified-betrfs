@@ -13,6 +13,7 @@ module AtomicIndexLookupImpl {
   import opened CacheResources
   import opened Options
   import opened LinearOption
+  import opened DiskInterfaceSpec
 
   type AtomicIndexLookup = Atomic<uint64, CacheResources.R>
 
@@ -68,7 +69,7 @@ module AtomicIndexLookupImpl {
     success: bool,
     linear cache_entry': CacheResources.R,
     linear status': CacheResources.R,
-    linear read_ticket: lOption<CacheResources.R>
+    linear read_ticket: lOption<DiskReadTicket>
   )
   requires atomic_index_lookup_inv(a, disk_idx as int)
   requires cache_entry.CacheEntry?

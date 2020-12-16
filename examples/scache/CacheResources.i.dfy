@@ -2,10 +2,12 @@ include "ResourceSpec.s.dfy"
 include "../../lib/Base/Multisets.i.dfy"
 include "../../lib/Base/Option.s.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
+include "DiskInterface.s.dfy"
 
 module CacheResources refines ResourceSpec {
   import opened Options
   import opened NativeTypes
+  import opened DiskInterfaceSpec
 
   datatype Status = Empty | Reading | Clean | Dirty | WriteBack
 
@@ -18,11 +20,11 @@ module CacheResources refines ResourceSpec {
 
     | CacheStatus(cache_idx: int, status: Status)
 
-    | DiskReadTicket(addr: uint64)
+    /*| DiskReadTicket(addr: uint64)
     | DiskReadStub(addr: uint64, contents: seq<byte>)
 
     | DiskWriteTicket(addr: uint64, contents: seq<byte>)
-    | DiskWriteStub(addr: uint64)
+    | DiskWriteStub(addr: uint64)*/
 
   method initiate_page_in(
       cache_idx: int,
@@ -35,7 +37,7 @@ module CacheResources refines ResourceSpec {
       linear t1: R,
       linear t2: R,
       linear t3: R,
-      linear t4: R
+      linear t4: DiskReadTicket
   )
   requires s1 == CacheStatus(cache_idx, Empty)
   requires s2.CacheEntry? && s2.cache_idx == cache_idx
@@ -50,7 +52,7 @@ module CacheResources refines ResourceSpec {
       disk_idx: uint64,
       linear s1: R,
       linear s2: R,
-      linear s3: R
+      linear s3: DiskReadStub
   )
   returns (
       linear t1: R,
@@ -59,7 +61,7 @@ module CacheResources refines ResourceSpec {
   requires s1 == CacheStatus(cache_idx, Reading)
   requires s2.CacheEntry? && s2.disk_idx == disk_idx as int
       && s2.cache_idx == cache_idx
-  requires s3.DiskReadStub? && s3.addr == disk_idx
+  requires s3.addr == disk_idx
   ensures t1 == CacheStatus(cache_idx, Clean)
   ensures t2 == s2.(data := s3.contents)
 
@@ -69,7 +71,7 @@ module CacheResources refines ResourceSpec {
   )
   returns (
       linear status': R,
-      linear ticket: R
+      linear ticket: DiskWriteTicket
   )
   requires cache_entry.CacheEntry?
   requires status == CacheStatus(cache_entry.cache_idx, Dirty)
@@ -82,7 +84,7 @@ module CacheResources refines ResourceSpec {
   method finish_writeback(
       shared cache_entry: R,
       linear status: R,
-      linear stub: R
+      linear stub: DiskWriteStub
   )
   returns (
       linear status': R
