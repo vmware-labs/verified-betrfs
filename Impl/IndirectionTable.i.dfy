@@ -301,6 +301,18 @@ module IndirectionTable {
       inout ghost self.predCounts :=  PredCounts(self.t);
     }
 
+    /* TODO(andrea) ModelImpl */ function removeLoc(ref: BT.G.Reference) : (res : (IndirectionTable, Option<Location>))
+    /* TODO(andrea) ModelImpl */ requires this.Inv()
+    /* TODO(andrea) ModelImpl */ requires this.TrackingGarbage()
+    /* TODO(andrea) ModelImpl */ requires ref in this.graph
+    /* TODO(andrea) ModelImpl */ ensures var (self', oldLoc) := res;
+    /* TODO(andrea) ModelImpl */   && self'.Inv()
+    /* TODO(andrea) ModelImpl */   && self'.TrackingGarbage()
+    /* TODO(andrea) ModelImpl */   && self'.locs == MapRemove1(this.locs, ref)
+    /* TODO(andrea) ModelImpl */   && self'.graph == this.graph
+    /* TODO(andrea) ModelImpl */   && (oldLoc.None? ==> ref !in this.locs)
+    /* TODO(andrea) ModelImpl */   && (oldLoc.Some? ==> ref in this.locs && this.locs[ref] == oldLoc.value)
+
     linear inout method RemoveLoc(ref: BT.G.Reference) returns (oldLoc: Option<Location>)
     requires old_self.Inv()
     requires old_self.TrackingGarbage()
@@ -311,6 +323,7 @@ module IndirectionTable {
     ensures self.graph == old_self.graph
     ensures (oldLoc.None? ==> ref !in old_self.locs)
     ensures (oldLoc.Some? ==> ref in old_self.locs && old_self.locs[ref] == oldLoc.value)
+    /* TODO(andrea) ModelImpl */ ensures (self, oldLoc) == old_self.removeLoc(ref)
     {
       var it := LinearMutableMap.FindSimpleIter(self.t, ref);
       var oldEntry := LinearMutableMap.SimpleIterOutput(self.t, it);
@@ -326,6 +339,8 @@ module IndirectionTable {
 
       assert PredCounts(self.t) == PredCounts(old_self.t) by { reveal_PredCounts(); }
       assert Graph(self.t) == Graph(old_self.t);
+
+      /* TODO(andrea) ModelImpl */ assume (self, oldLoc) == old_self.removeLoc(ref);
     }
 
     linear inout method AddLocIfPresent(ref: BT.G.Reference, loc: Location)
@@ -913,6 +928,21 @@ module IndirectionTable {
       }
     }
 
+    /* TODO(andrea) ModelImpl */ function updateAndRemoveLoc(ref: BT.G.Reference, succs: seq<BT.G.Reference>)
+    /* TODO(andrea) ModelImpl */ : (res : (IndirectionTable, Option<Location>))
+    /* TODO(andrea) ModelImpl */ requires this.Inv()
+    /* TODO(andrea) ModelImpl */ requires this.TrackingGarbage()
+    /* TODO(andrea) ModelImpl */ requires |this.graph| < MaxSize()
+    /* TODO(andrea) ModelImpl */ requires |succs| <= MaxNumChildren()
+    /* TODO(andrea) ModelImpl */ requires SuccsValid(succs, this.graph)
+    /* TODO(andrea) ModelImpl */ ensures var (self', oldLoc) := res;
+    /* TODO(andrea) ModelImpl */   && self'.Inv()
+    /* TODO(andrea) ModelImpl */   && self'.TrackingGarbage()
+    /* TODO(andrea) ModelImpl */   && self'.locs == MapRemove1(this.locs, ref)
+    /* TODO(andrea) ModelImpl */   && self'.graph == this.graph[ref := succs]
+    /* TODO(andrea) ModelImpl */   && (oldLoc.None? ==> ref !in this.locs)
+    /* TODO(andrea) ModelImpl */   && (oldLoc.Some? ==> ref in this.locs && this.locs[ref] == oldLoc.value)
+
     linear inout method UpdateAndRemoveLoc(ref: BT.G.Reference, succs: seq<BT.G.Reference>)
     returns (oldLoc : Option<Location>)
     requires old_self.Inv()
@@ -929,6 +959,7 @@ module IndirectionTable {
     ensures self.graph == old_self.graph[ref := succs]
     ensures (oldLoc.None? ==> ref !in old_self.locs)
     ensures (oldLoc.Some? ==> ref in old_self.locs && old_self.locs[ref] == oldLoc.value)
+    /* TODO(andrea) ModelImpl */ ensures old_self.updateAndRemoveLoc(ref, succs) == (self, oldLoc)
     {
       self.QueueSizeBound();
       TCountEqGraphSize(self.t);
@@ -1003,6 +1034,8 @@ module IndirectionTable {
       inout self.findLoclessIterator := None;
       inout self.UpdateGhost();
       // ==============
+
+      /* TODO(andrea) ModelImpl */ assume old_self.updateAndRemoveLoc(ref, succs) == (self, oldLoc);
     }
 
     static predicate ValIsHashMap(a: seq<V>, s: Option<HashMap>)
@@ -2124,6 +2157,7 @@ module IndirectionTable {
       ensures this.I().graph == old(this.I()).graph
       ensures oldLoc.None? ==> ref !in old(this.I()).locs
       ensures oldLoc.Some? ==> ref in old(this.I()).locs && old(this.I()).locs[ref] == oldLoc.value
+      /* TODO(andrea) ModelImpl */ ensures (this.Read(), oldLoc) == old(this.Read()).removeLoc(ref)
     {
       linear var x := box.Take();
       oldLoc := inout x.RemoveLoc(ref);
@@ -2178,6 +2212,7 @@ module IndirectionTable {
       ensures this.I().graph == old(this.I()).graph[ref := succs]
       ensures (oldLoc.None? ==> ref !in old(this.I()).locs)
       ensures (oldLoc.Some? ==> ref in old(this.I()).locs && old(this.I()).locs[ref] == oldLoc.value)
+      /* TODO(andrea) ModelImpl */ ensures old(this.Read()).updateAndRemoveLoc(ref, succs) == (this.Read(), oldLoc)
     {
       linear var x := box.Take();
       oldLoc := inout x.UpdateAndRemoveLoc(ref, succs);
