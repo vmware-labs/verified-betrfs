@@ -1239,7 +1239,15 @@ module IndirectionTable {
       }
       assert ComputeRefCountsOuterLoopInv0(tbl', tbl, it') by {
         reveal_ComputeRefCountsOuterLoopInv0();
-        assume (forall ref | ref in tbl'.contents :: tbl'.contents[ref].predCount as int <= 0x1_0000_0000_0000); // ???
+
+        forall ref | ref in tbl'.contents
+        ensures tbl'.contents[ref].predCount as int <= 0x1_0000_0000_0000 {
+          lemma_count_eq_graph_size(tbl);
+          assert forall ref | ref in Graph(tbl) :: |Graph(tbl)[ref]| <= MaxNumChildren() by {
+            reveal_ComputeRefCountsSharedInv();
+          }
+          PredecessorSetRestrictedSizeBound(Graph(tbl), ref, it'.s);
+        }
       }
     }
 
@@ -1384,16 +1392,6 @@ module IndirectionTable {
       invariant ComputeRefCountsOuterLoopInv(t1, tbl, it)
       decreases it.decreaser
       {
-        assert (forall ref | ref in t1.contents :: t1.contents[ref].predCount as int <= 0x1_0000_0000_0000 as int) by {
-          forall ref | ref in t1.contents
-          ensures t1.contents[ref].predCount as int <= 0x1_0000_0000_0000;
-          {
-            lemma_count_eq_graph_size(tbl);
-            PredecessorSetRestrictedSizeBound(Graph(tbl), ref, it.s);
-            reveal_ComputeRefCountsOuterLoopInv0();
-          }
-        }
-
         success, it := ComputeRefCountsInnerLoop(inout t1, tbl, it);
         if (!success) {
           break;
