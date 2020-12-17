@@ -277,7 +277,7 @@ module IndirectionTable {
     /* TODO(andrea) ModelImpl */ ensures e == getEntry(ref)
     {
       e := LinearMutableMap.Get(this.t, ref);
-      assume e == getEntry(ref);
+      /* TODO(andrea) ModelImpl */ assume e == getEntry(ref);
     }
 
     shared method HasEmptyLoc(ref: BT.G.Reference) returns (b: bool)
@@ -1192,6 +1192,8 @@ module IndirectionTable {
       && ComputeRefCountsSharedInv(tbl', tbl)
       && (RevealComputeRefCountsSharedDomainInv(tbl', tbl);
           ComputeRefCountsInnerLoopInv0(tbl', tbl, it, succs, i))
+      && succs == Graph(tbl)[it.next.key]
+      && GraphClosedRestrictedPartial(Graph(tbl), it.s, it.next.key, i as int)
     }
 
     static lemma ComputeRefCountsOuterLoopInvImpliesInnerLoopInv(
@@ -1229,9 +1231,7 @@ module IndirectionTable {
     requires BT.G.Root() in tbl'.contents
     ensures ComputeRefCountsOuterLoopInv(tbl', tbl, it')
     {
-      assume GraphClosedRestricted(Graph(tbl), it'.s);
       RevealComputeRefCountsSharedDomainInv(tbl', tbl);
-      assume (forall ref | ref in tbl'.contents :: tbl'.contents[ref].predCount as int <= 0x1_0000_0000_0000); // ???
       forall ref | ref in tbl.contents
       ensures tbl'.contents[ref].predCount as int == |PredecessorSetRestricted(Graph(tbl), ref, it'.s)| + IsRoot(ref) {
         reveal_ComputeRefCountsInnerLoopInv0();
@@ -1239,6 +1239,7 @@ module IndirectionTable {
       }
       assert ComputeRefCountsOuterLoopInv0(tbl', tbl, it') by {
         reveal_ComputeRefCountsOuterLoopInv0();
+        assume (forall ref | ref in tbl'.contents :: tbl'.contents[ref].predCount as int <= 0x1_0000_0000_0000); // ???
       }
     }
 
@@ -1298,6 +1299,10 @@ module IndirectionTable {
         var ref := succs[i];
         var oldEntry := LinearMutableMap.Get(tbl', ref);
         if oldEntry.Some? {
+          assert Graph(tbl)[it.next.key][i] in Graph(tbl) by {
+            RevealComputeRefCountsSharedDomainInv(tbl', tbl);
+          }
+
           reveal_ComputeRefCountsInnerLoopInv0();
           var newEntry := oldEntry.value.(predCount := oldEntry.value.predCount + 1);
           LinearMutableMap.Insert(inout tbl', ref, newEntry);
@@ -1315,8 +1320,9 @@ module IndirectionTable {
           i := i + 1;
 
           assert ComputeRefCountsInnerLoopInv(tbl', tbl, it, succs, i) by {
-            reveal_ComputeRefCountsSharedInv();
-            assert ComputeRefCountsSharedInv(tbl', tbl);
+            assert ComputeRefCountsSharedInv(tbl', tbl) by {
+              reveal_ComputeRefCountsSharedInv();
+            }
             assert ComputeRefCountsInnerLoopInv0(tbl', tbl, it, succs, i);
           }
         } else {
