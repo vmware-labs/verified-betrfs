@@ -1678,6 +1678,8 @@ module IndirectionTable {
 
         //assert SizeOfV(vi) <= (8 + 8 + 8 + (8 + MaxNumChildren() * 8));
 
+        ghost var partialBefore := partial;
+
         // == mutation ==
         ghost var itBeforeInc := it;
         partial := partial[ref := Entry(locOpt, succs, 0)];
@@ -1705,7 +1707,11 @@ module IndirectionTable {
 
         size := size + 32 + 8 * |succs| as uint64;
 
-        assume ValIsMap(a[..i], Some(partial));
+        assert ValIsMap(a[..i], Some(partial)) by {
+          ghost var aBefore := Marshalling.valToIndirectionTableMaps(DropLast(a[..i]));
+          assert aBefore.value.locs[ref := loc] == MapLocs(partial); // observe
+          assert aBefore.value.graph[ref := succs] == MapGraph(partial); // observe
+        }
       }
 
       /* (doc) assert |partial.Keys| == |this.t.contents.Keys|; */
@@ -1725,8 +1731,10 @@ module IndirectionTable {
 
       size := size + 8;
 
+      assert this.I() == IMapAsIndirectionTable(partial); // observe
+
       assert Marshalling.valToIndirectionTable(v).Some?;
-      assume Marshalling.valToIndirectionTable(v) == Some(this.I());
+      assert Marshalling.valToIndirectionTable(v) == Some(this.I());
 
       /* TODO(andrea) ModelImpl */ assume valToIndirectionTable(v) == Some(this);
     }
@@ -1811,7 +1819,7 @@ module IndirectionTable {
       BitmapInitUpTo(bm, MinNodeBlockIndexUint64());
       var it := LinearMutableMap.IterStart(this.t);
 
-      assume BitmapModel.Len(bm.I()) == NumBlocks();
+      assert BitmapModel.Len(bm.I()) == NumBlocks();
 
       while it.next.Next?
       invariant this.t.Inv()
