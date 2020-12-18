@@ -171,8 +171,8 @@ module SyncImpl {
   ensures WellUpdated(s)
   ensures SyncModel.syncFoundInFrozen(old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
   {
-    assert ref in SM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph;
-    assert ref !in SM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs;
+    assert ref in s.frozenIndirectionTable.I().graph;
+    assert ref !in s.frozenIndirectionTable.I().locs;
 
     var ephemeralRef := s.ephemeralIndirectionTable.GetEntry(ref);
     if ephemeralRef.Some? && ephemeralRef.value.loc.Some? {

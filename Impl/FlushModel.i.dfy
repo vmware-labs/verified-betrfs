@@ -20,6 +20,7 @@ module FlushModel {
   import BucketModel
   import opened Bounds
 
+  import IT = IndirectionTable
   import opened NativeTypes
   import D = AsyncDisk
 
@@ -39,11 +40,11 @@ module FlushModel {
   requires childref in s.cache
   requires s.cache[childref] == child
 
-  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 2
+  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
   {
     if (
       && s.frozenIndirectionTable.Some?
-      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, parentref)
+      && s.frozenIndirectionTable.value.hasEmptyLoc(parentref)
     ) then (
       s
     ) else (
@@ -87,7 +88,7 @@ module FlushModel {
 
     if (
       && s.frozenIndirectionTable.Some?
-      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, parentref)
+      && s.frozenIndirectionTable.value.hasEmptyLoc(parentref)
     ) {
       assert noop(IBlockCache(s), IBlockCache(s));
     } else {
@@ -146,17 +147,17 @@ module FlushModel {
         reveal_writeBookkeeping();
         assert s3 == s';
 
-        forall ref | ref in BT.G.Successors(INode(newparent)) ensures ref in IIndirectionTable(s2.ephemeralIndirectionTable).graph {
+        forall ref | ref in BT.G.Successors(INode(newparent)) ensures ref in s2.ephemeralIndirectionTable.I().graph {
           if (ref == newchildref.value) {
           } else {
             assert ref in BT.G.Successors(INode(parent));
             lemmaChildInGraph(s, parentref, ref);
-            assert ref in IIndirectionTable(s2.ephemeralIndirectionTable).graph;
+            assert ref in s2.ephemeralIndirectionTable.I().graph;
           }
         }
-        assert BC.BlockPointsToValidReferences(INode(newparent), IIndirectionTable(s2.ephemeralIndirectionTable).graph);
+        assert BC.BlockPointsToValidReferences(INode(newparent), s2.ephemeralIndirectionTable.I().graph);
 
-        forall ref | ref in BT.G.Successors(INode(newchild)) ensures ref in IIndirectionTable(s.ephemeralIndirectionTable).graph {
+        forall ref | ref in BT.G.Successors(INode(newchild)) ensures ref in s.ephemeralIndirectionTable.I().graph {
           lemmaChildInGraph(s, childref, ref);
         }
 

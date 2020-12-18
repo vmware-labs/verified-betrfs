@@ -18,6 +18,7 @@ module LeafModel {
   import PivotsLib
   import PivotBetreeSpec`Internal
 
+  import IT = IndirectionTable
   import opened NativeTypes
 
   function {:opaque} repivotLeaf(s: BCVariables, ref: BT.G.Reference, node: Node)
@@ -29,11 +30,11 @@ module LeafModel {
   requires node == s.cache[ref]
   requires node.children.None?
   requires |node.buckets| == 1
-  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 1
+  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 1
   {
     if (
       && s.frozenIndirectionTable.Some?
-      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, ref)
+      && s.frozenIndirectionTable.value.hasEmptyLoc(ref)
     ) then (
       s
     ) else (
@@ -59,7 +60,7 @@ module LeafModel {
   requires node == s.cache[ref]
   requires node.children.None?
   requires |node.buckets| == 1
-  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 1
+  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 1
   ensures var s' := repivotLeaf(s, ref, node);
     && WFBCVars(s')
     && betree_next(IBlockCache(s), IBlockCache(s'))
@@ -72,7 +73,7 @@ module LeafModel {
 
     if (
       && s.frozenIndirectionTable.Some?
-      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, ref)
+      && s.frozenIndirectionTable.value.hasEmptyLoc(ref)
     ) {
       assert s' == s;
       assert WFBCVars(s');
