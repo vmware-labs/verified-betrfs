@@ -103,13 +103,8 @@ module DiskInterfaceSpec {
       old_v.readTasks)
   ensures disk_interface_inv(disk_interface, old_v, old_g)
 
-  method {:extern} disk_interface_op_cleanup<G>(
-      disk_interface: DiskInterface<G>,
-      new_v: PendingTaskSet,
-      linear new_g: G)
-  requires disk_interface_inv(disk_interface, new_v, new_g)
-
   method {:extern} async_read(
+      disk_interface: DiskInterface<G>,
       aiocb_ptr: Ptr,
       linear aiocb: Deref<Aiocb>,
       linear data: ArrayDeref<byte>,
@@ -120,4 +115,37 @@ module DiskInterfaceSpec {
   requires aiocb.v.len() > 0
   requires data.ptr == aiocb.v.ptr()
   requires ticket == DiskReadTicket(aiocb.v.addr())
+
+  method {:extern} get_finished_req<G>(
+      disk_interface: DiskInterface<G>)
+  returns (
+    aiocb_ptr: Ptr,
+    old_v: PendingTaskSet,
+    new_v: PendingTaskSet,
+    linear old_g: G,
+    linear aiocb: lOption<Deref<Aiocb>>
+    linear read_stub: lOption<DiskReadStub>,
+    linear write_stub: lOption<DiskWriteStub>
+  )
+  ensures disk_interface_inv(disk_interface, old_v, old_g)
+  ensures aiocb_ptr == nullptr() ==>
+    && new_v == old_v
+    && read_stub.lNone?
+    && write_stub.lNone?
+    && aiocb.lNone?
+  ensures aiocb_ptr != nullptr() ==>
+    aiocb_ptr in old_v.writeTasks || aiocb_ptr in old_v.readTasks
+  ensures aiocb_ptr != nullptr() && aiocb_ptr in old_v.writeTasks ==>
+    && aiocb_ptr !in old_v.readTasks
+    && new_v == old_v.(writeTasks := MapRemove1(old_v.writeTasks, aiocb_ptr))
+    && read_stub.lNone?
+    && write_stub == lSome(DiskWriteStub(old_v.writeTasks[aiocb_ptr].addr))
+    && aiocb == lSome(Deref(aiocb_ptr, aiocb_constructor(
+        
+
+  method {:extern} disk_interface_op_cleanup<G>(
+      disk_interface: DiskInterface<G>,
+      new_v: PendingTaskSet,
+      linear new_g: G)
+  requires disk_interface_inv(disk_interface, new_v, new_g)
 }
