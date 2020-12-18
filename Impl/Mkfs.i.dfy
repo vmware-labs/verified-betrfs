@@ -12,8 +12,6 @@ module MkfsImpl {
   import SM = StateModel
   import opened BucketImpl
   import opened BoxNodeImpl
-  import IndirectionTableModel
-  import IndirectionTableImpl
   import Marshalling
   import MkfsModel
   import opened LinearSequence_s
@@ -28,6 +26,7 @@ module MkfsImpl {
   import ValueType`Internal
   import SI = StateImpl
   import D = AsyncDisk
+  import IT = IndirectionTable
 
   import ADM = ByteSystem
 
@@ -64,14 +63,14 @@ module MkfsImpl {
         ValidNodeAddrMul(MinNodeBlockIndexUint64());
       }
 
-    var sectorIndirectionTable := new IndirectionTableImpl.IndirectionTable.RootOnly(nodeLoc);
+    var sectorIndirectionTable := new IT.BoxedIndirectionTable(nodeLoc);
 
-    assert SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)) == IndirectionTable(
+    assert sectorIndirectionTable.I() == IndirectionTable(
       map[0 := nodeLoc],
       map[0 := []]
     );
 
-    assert BC.WFCompleteIndirectionTable(SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)));
+    assert BC.WFCompleteIndirectionTable(sectorIndirectionTable.I());
     assert SM.WFSector(SI.ISector(SI.SectorIndirectionTable(sectorIndirectionTable)));
     var bIndirectionTable_array := MarshallingImpl.MarshallCheckedSector(SI.SectorIndirectionTable(sectorIndirectionTable));
 
