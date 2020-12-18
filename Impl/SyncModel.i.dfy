@@ -293,6 +293,8 @@ module SyncModel {
           ref,
           loc);
     } else {
+      var (table', added) := table.addLocIfPresent(ref, loc);
+      assert !added; // observe
     }
   }
 
