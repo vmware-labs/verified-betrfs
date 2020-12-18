@@ -89,17 +89,26 @@ module LinearBox {
     }
   }
 
-  class BoxedLinearOption<A>
+  function method MakeDestructor<A>(linear opt:lOption<A>, d:DestructorFunction<A>):()
+    requires match opt case lNone => true case lSome(a) => OfDestructor(d).requires(a)
+  {
+    linear match opt
+      case lNone => ()
+      case lSome(a) => CallDestructor(d, a)
+  }
+
+  class BoxedLinearOption<A(!new)>
   {
     var data:SwapLinear<lOption<A>>
     ghost var Repr:set<object>
-    ghost var DataInv:(lOption<A>)->bool
+    ghost var DataInv:(A)->bool
 
     predicate Inv()
       reads this, Repr
     {
       && Repr == {this, this.data}
-      && DataInv == data.Inv()
+      && data.Inv()(lNone)
+      && (forall a:A :: DataInv(a) == data.Inv()(lSome(a)))
     }
 
     function Has():bool
@@ -117,43 +126,42 @@ module LinearBox {
       match data.Read() case lNone => a case lSome(a) => a
     }
 
-    // TODO: it would be nice if this were DestructorFunction<A>, or just (linear A)->()
-    constructor Empty(d:DestructorFunction<lOption<A>>)
-      requires OfDestructor(d).requires(lNone)
+    constructor Empty(f:DestructorFunction<A>)
       ensures Inv()
       ensures !Has()
       ensures fresh(Repr)
-      ensures DataInv == OfDestructor(d).requires
+      ensures DataInv == OfDestructor(f).requires
     {
+      var d := ToDestructorEnv(MakeDestructor, f);
       data := new SwapLinear(lNone, d);
       Repr := {this, this.data};
-      DataInv := OfDestructor(d).requires;
+      DataInv := OfDestructor(f).requires;
     }
 
-    constructor(linear a:A, d:DestructorFunction<lOption<A>>)
-      requires OfDestructor(d).requires(lSome(a))
+    constructor(linear a:A, f:DestructorFunction<A>)
+      requires OfDestructor(f).requires(a)
       ensures Inv()
       ensures Read() == a
       ensures Has()
       ensures fresh(Repr)
-      ensures DataInv == OfDestructor(d).requires
+      ensures DataInv == OfDestructor(f).requires
     {
+      var d := ToDestructorEnv(MakeDestructor, f);
       data := new SwapLinear(lSome(a), d);
       Repr := {this, this.data};
-      DataInv := OfDestructor(d).requires;
+      DataInv := OfDestructor(f).requires;
     }
 
     method Take() returns(linear a:A)
       modifies this, Repr
       requires Inv()
       requires Has()
-      requires DataInv(lNone)
       ensures Inv()
       ensures !Has()
       ensures Repr == old(Repr)
       ensures DataInv == old(DataInv)
       ensures a == old(Read())
-      ensures DataInv(lSome(a))
+      ensures DataInv(a)
     {
       linear var x := data.Swap(lNone);
       linear var lSome(y) := x;
@@ -164,7 +172,7 @@ module LinearBox {
       modifies this, Repr
       requires Inv()
       requires !Has()
-      requires DataInv(lSome(a))
+      requires DataInv(a)
       ensures Inv()
       ensures Has()
       ensures a == Read()

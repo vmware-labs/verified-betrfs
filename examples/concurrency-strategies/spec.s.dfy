@@ -1,6 +1,4 @@
-module Options {
-  datatype Option<V> = None | Some(value:V)
-}
+include "../../lib/Base/Option.s.dfy"
 
 module Abstract {
   import opened Options

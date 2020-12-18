@@ -1,0 +1,17 @@
+PROS
+
+ * Seems extensible
+ * Seems feasible to verify something whose complexity is on the order of splinter cache without compromise or modification
+
+CONS
+
+ * Mysterious .s file
+ * Difficult way of thinking to teach?
+
+Language support needed
+
+  * ghost, opaque linear resources
+  * 'readonly linear'
+  * some mechanism for ghost resource transitions on atomic calls
+  * compiler support for atomics, pointers
+  * classic Dafny 'class' forbidden

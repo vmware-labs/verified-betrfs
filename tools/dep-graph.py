@@ -43,7 +43,7 @@ class Traverser:
     def legend(self):
         if self.reportType == "synchk":
             samples = [
-                DafnyParseError(), DafnyTypeError(), DafnyAssumeError(), DafnySyntaxOK() ]
+                DafnyParseError(), DafnyTypeError(), DafnyAssumeError(), DafnyDynamicFrames(), DafnySyntaxOK() ]
         elif self.reportType == "verchk":
             samples = [
                 DafnyParseError(), DafnyTypeError(), DafnyVerificationError(), DafnyAssumeError(),

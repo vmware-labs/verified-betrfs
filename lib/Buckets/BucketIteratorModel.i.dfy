@@ -9,7 +9,7 @@ module BucketIteratorModel {
   import opened Options
   import opened Sets
   import opened BucketsLib
-  import opened PivotsLib
+  import Keyspace = Lexicographic_Byte_Order
   import opened ValueMessage
   import opened Sequences
   import opened KeyType

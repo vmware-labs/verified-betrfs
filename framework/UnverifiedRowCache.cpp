@@ -19,13 +19,17 @@ optional<ByteString> RowCache::get(ByteString key)
     int idx = iter->second;
 
     if (queue[idx].prev != -1) {
+      // Record idx' neighbors
       int prev = queue[idx].prev;
       int next = queue[idx].next;
 
+      // Put idx at the head of the list
       queue[idx].prev = -1;
       queue[idx].next = this->head;
       queue[head].prev = idx;
       this->head = idx;
+      // Stitch over the gap we left by removing idx from the middle of the
+      // list
       queue[prev].next = next;
       if (next == -1) {
         tail = prev;

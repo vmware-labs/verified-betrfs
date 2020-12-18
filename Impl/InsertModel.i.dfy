@@ -6,7 +6,6 @@ module InsertModel {
   import opened IOModel
   import opened BookkeepingModel
   import opened FlushPolicyModel
-  import opened NodeModel
   import opened InterpretationDiskOps
   import opened ViewOp
   import opened DiskOpModel
@@ -22,10 +21,11 @@ module InsertModel {
   import opened Bounds
   import opened KeyType
   import opened ValueMessage
+  import opened BoundedPivotsLib
 
   import IT = IndirectionTable
 
-  import PBS = PivotBetreeSpec`Spec
+  import BT = PivotBetreeSpec`Internal
 
   // == insert ==
 
@@ -35,6 +35,7 @@ module InsertModel {
   requires s.Ready?
   requires BT.G.Root() in s.cache
   requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 1
+  requires BoundedKey(s.cache[BT.G.Root()].pivotTable, key)
   {
     lemmaChildrenConditionsOfNode(s, BT.G.Root());
 
@@ -45,7 +46,8 @@ module InsertModel {
       (s, false)
     ) else (
       var msg := Messages.Define(value);
-      var newCache := CacheInsertKeyValue(s.cache, BT.G.Root(), key, msg);
+      var rootref := BT.G.Root();
+      var newCache := s.cache[rootref := BT.NodeInsertKeyValue(s.cache[rootref], key, msg)];
 
       var s0 := s.(cache := newCache);
       var s' := writeBookkeepingNoSuccsUpdate(s0, BT.G.Root());
@@ -54,10 +56,7 @@ module InsertModel {
   }
 
   lemma InsertKeyValueCorrect(s: BCVariables, key: Key, value: Value, replay: bool)
-  requires BCInv(s)
-  requires s.Ready?
-  requires BT.G.Root() in s.cache
-  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 1
+  requires InsertKeyValue.requires(s, key, value)
   requires WeightKey(key) + WeightMessage(Messages.Define(value)) +
       WeightBucketList(s.cache[BT.G.Root()].buckets) 
       <= MaxTotalBucketWeight()
@@ -73,8 +72,7 @@ module InsertModel {
       )
   {
     reveal_InsertKeyValue();
-    reveal_CacheInsertKeyValue();
-    reveal_NodeInsertKeyValue();
+    BT.reveal_NodeInsertKeyValue();
     if (
       && s.frozenIndirectionTable.Some?
       && s.frozenIndirectionTable.value.hasEmptyLoc(BT.G.Root())
@@ -98,7 +96,6 @@ module InsertModel {
 
     assert BC.BlockPointsToValidReferences(INode(root), s.ephemeralIndirectionTable.I().graph);
 
-    //reveal_WFBucket();
     assert WFBucket(newBucket);
     assert WFNode(newRoot);
 
@@ -150,6 +147,10 @@ module InsertModel {
         && io' == io
         && success == false
       )
+    ) else if !BoundedKey(s.cache[BT.G.Root()].pivotTable, key) then (
+        && s' == s
+        && io' == io
+        && success == false
     ) else if WeightKey(key) + WeightMessage(Messages.Define(value)) +
         WeightBucketList(s.cache[BT.G.Root()].buckets) 
         <= MaxTotalBucketWeight() then (
@@ -163,9 +164,7 @@ module InsertModel {
 
   lemma insertCorrect(s: BCVariables, io: IO, key: Key, value: Value,
       s': BCVariables, success: bool, io': IO, replay: bool)
-  requires io.IOInit?
-  requires s.Ready?
-  requires BCInv(s)
+  requires insert.requires(s, io, key, value, s', success, io')
   requires insert(s, io, key, value, s', success, io');
   ensures WFBCVars(s')
   ensures ValidDiskOp(diskOp(io'))
@@ -188,10 +187,13 @@ module InsertModel {
       } else {
         assert noop(IBlockCache(s), IBlockCache(s));
       }
+    } else if !BoundedKey(s.cache[BT.G.Root()].pivotTable, key) {
+      assert noop(IBlockCache(s), IBlockCache(s));
+      return;
     } else if WeightKey(key) + WeightMessage(Messages.Define(value)) +
         WeightBucketList(s.cache[BT.G.Root()].buckets) 
         <= MaxTotalBucketWeight() {
-      InsertKeyValueCorrect(s, key, value, replay);
+        InsertKeyValueCorrect(s, key, value, replay);
     } else {
       runFlushPolicyCorrect(s, io, s', io');
     }

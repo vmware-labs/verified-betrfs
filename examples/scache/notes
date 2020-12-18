@@ -1,0 +1,4 @@
+1. do we really want to share the cache
+    why put allocator in the cache
+    different syncing strats
+2. big honkin state machine steps

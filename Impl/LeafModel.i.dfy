@@ -15,8 +15,7 @@ module LeafModel {
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
-  import PivotsLib
-  import PivotBetreeSpec`Internal
+  import opened BoundedPivotsLib
 
   import IT = IndirectionTable
   import opened NativeTypes
@@ -38,17 +37,22 @@ module LeafModel {
     ) then (
       s
     ) else (
-      var pivot := getMiddleKey(node.buckets[0]);
-      var pivots := [pivot];
+      // if data was corrupted before we won't allow access to it after repivot
+      if !BoundedBucketList(node.buckets, node.pivotTable) then (
+        s
+      ) else (
+        var pivot := getMiddleKey(node.buckets[0]);
+        var pivots := insert(InitPivotTable(), KeyToElement(pivot), 1);
 
-      var buckets' := [
-          SplitBucketLeft(node.buckets[0], pivot),
-          SplitBucketRight(node.buckets[0], pivot)
-      ];
-      var newnode := Node(pivots, None, buckets');
-      var s1 := writeBookkeeping(s, ref, None);
-      var s' := s1.(cache := s1.cache[ref := newnode]);
-      s'
+        var buckets' := [
+            SplitBucketLeft(node.buckets[0], pivot),
+            SplitBucketRight(node.buckets[0], pivot)
+        ];
+        var newnode := BT.G.Node(pivots, None, buckets');
+        var s1 := writeBookkeeping(s, ref, None);
+        var s' := s1.(cache := s1.cache[ref := newnode]);
+        s'
+      )
     )
   }
 
@@ -81,8 +85,14 @@ module LeafModel {
       return;
     }
 
+    if !BoundedBucketList(node.buckets, node.pivotTable) {
+      assert noop(IBlockCache(s), IBlockCache(s));
+      return;
+    }
+
     var pivot := getMiddleKey(node.buckets[0]);
-    var pivots := [pivot];
+    var pivots := insert(InitPivotTable(), KeyToElement(pivot), 1);
+    assert Last(InitPivotTable()) == Keyspace.Max_Element;
 
     WFPivotsOfGetMiddleKey(node.buckets[0]);
 
@@ -93,7 +103,7 @@ module LeafModel {
 
     //reveal_WFBucket();
 
-    var newnode := Node(pivots, None, buckets');
+    var newnode := BT.G.Node(pivots, None, buckets');
     var s1 := writeWithNode(s, ref, newnode);
     reveal_writeBookkeeping();
 
@@ -115,11 +125,15 @@ module LeafModel {
         == MapUnion(JoinBucketList([]).b, node.buckets[0].b)
         == MapUnion(map[], node.buckets[0].b)
         == node.buckets[0].b;
+
+    BT.PivotsHasAllKeys(pivots);
+    BoundedBucketListJoin(node.buckets, pivots);
+
     assert SplitBucketOnPivots(JoinBucketList(node.buckets), pivots)
         == SplitBucketOnPivots(node.buckets[0], pivots)
         == buckets';
 
-    assert PivotBetreeSpec.ApplyRepivot(INode(node), [pivot]) == INode(newnode);
+    assert BT.ApplyRepivot(BT.Repivot(ref, INode(node), pivots)) == INode(newnode);
 
     assert BT.ValidRepivot(BT.Repivot(ref, INode(node), pivots));
     var step := BT.BetreeRepivot(BT.Repivot(ref, INode(node), pivots));

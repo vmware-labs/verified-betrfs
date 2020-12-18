@@ -32,7 +32,7 @@ module StateModel {
   import BT = PivotBetreeSpec`Internal
   import Messages = ValueMessage
   import MS = MapSpec
-  import Pivots = PivotsLib
+  import Pivots = BoundedPivotsLib
   import BC = BlockCache
   import JC = JournalCache
   import BBC = BetreeCache
@@ -56,16 +56,12 @@ module StateModel {
 
   import ReferenceType`Internal
 
+  type Node = BT.G.Node  
   type Reference = BT.G.Reference
   type DiskOp = BJD.DiskOp
   
   type IndirectionTable = IT.IndirectionTable
 
-  datatype Node = Node(
-      pivotTable: Pivots.PivotTable,
-      children: Option<seq<Reference>>,
-      buckets: seq<Bucket>
-    )
   datatype BCVariables =
     | Ready(
         persistentIndirectionTable: IndirectionTable, // this lets us keep track of available LBAs
@@ -121,11 +117,9 @@ module StateModel {
 
   predicate WFNode(node: Node)
   {
-    && WFBucketList(node.buckets, node.pivotTable)
-    && (node.children.Some? ==> |node.buckets| == |node.children.value|)
-    && |node.buckets| <= MaxNumChildren()
-    && WeightBucketList(node.buckets) <= MaxTotalBucketWeight()
+    BT.WFNode(node)
   }
+
   predicate WFCache(cache: map<Reference, Node>)
   {
     forall ref | ref in cache :: WFNode(cache[ref])

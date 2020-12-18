@@ -17,7 +17,8 @@ module CacheImpl {
   import opened BucketWeights
   import opened KeyType
   import opened ValueMessage
-  import NodeModel
+  import BT = PivotBetreeSpec`Internal
+  import Pivots = BoundedPivotsLib
 
   // TODO(travis): it's ugly that we have to wrap this in a new object type
   // just to have a Repr field. It also sucks that we have to have a Repr field
@@ -78,7 +79,7 @@ module CacheImpl {
       && (forall ref | ref in cache.Contents :: cache.Contents[ref].Inv()) // unhappy
     }
 
-    protected function I() : map<BT.G.Reference, L.IM.Node>
+    protected function I() : map<BT.G.Reference, BT.G.Node>
     reads this, Repr
     requires Inv()
     {
@@ -160,10 +161,7 @@ module CacheImpl {
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
       LemmaSizeEqCount();
-      var res := cache.RemoveAndGet(ref);
-      if res.Some? {
-        res.value.Destructor();
-      }
+      var _ := cache.RemoveAndGet(ref);
       Repr := {this} + cache.Repr + MutCacheBucketRepr();
 
       assert Inv();
@@ -223,7 +221,7 @@ module CacheImpl {
     requires ptr(ref) == Some(node)
     modifies Repr
     ensures Inv()
-    ensures I() == old(I()[ref := L.IM.Node(
+    ensures I() == old(I()[ref := BT.G.Node(
         I()[ref].pivotTable,
         Some(I()[ref].children.value[slot as int := childref]),
         I()[ref].buckets[slot as int := bucket.bucket]
@@ -241,14 +239,14 @@ module CacheImpl {
     method SplitParent(ref: BT.G.Reference, slot: uint64, pivot: Key, left_childref: BT.G.Reference, right_childref: BT.G.Reference)
     requires Inv()
     requires ref in I()
-    requires L.IM.WFNode(I()[ref])
+    requires BT.WFNode(I()[ref])
     requires I()[ref].children.Some?
     requires 0 <= slot as int < |I()[ref].children.value|
     requires 0 <= slot as int < |I()[ref].buckets|
     requires |I()| <= 0x10000
     modifies Repr
     ensures Inv()
-    ensures I() == old(I()[ref := NodeModel.SplitParent(I()[ref], pivot, slot as int, left_childref, right_childref)])
+    ensures I() == old(I()[ref := BT.SplitParent(I()[ref], pivot, slot as int, left_childref, right_childref)])
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
       var nodeOpt := GetOpt(ref);
@@ -262,15 +260,14 @@ module CacheImpl {
     method InsertKeyValue(ref: BT.G.Reference, key: Key, msg: Message)
     requires Inv()
     requires ref in I()
-    requires L.IM.WFNode(I()[ref])
+    requires BT.WFNode(I()[ref])
+    requires Pivots.BoundedKey(I()[ref].pivotTable, key)
     requires WeightBucketList(I()[ref].buckets) + WeightKey(key) + WeightMessage(msg) < 0x1_0000_0000_0000_0000
     modifies Repr
     ensures Inv()
-    ensures I() == NodeModel.CacheInsertKeyValue(old(I()), ref, key, msg)
+    ensures I() == old(I())[ref := BT.NodeInsertKeyValue(old(I())[ref], key, msg)]
     ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
     {
-      NodeModel.reveal_CacheInsertKeyValue();
-
       var nodeOpt := GetOpt(ref);
       var node := nodeOpt.value;
       node.InsertKeyValue(key, msg);

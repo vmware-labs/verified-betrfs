@@ -43,13 +43,6 @@ module MarshallingModel {
   import ReferenceType`Internal
   import ValueType`Internal
 
-  import Pivots = PivotsLib
-  import MS = MapSpec
-  import Keyspace = Lexicographic_Byte_Order
-
-  import MM = MutableMap
-
-  type Key = Keyspace.Element
   type Reference = BC.Reference
   type Sector = SM.Sector
   type Node = SM.Node
@@ -144,14 +137,11 @@ module MarshallingModel {
   function {:fuel ValInGrammar,2} valToNode(v: V) : (s : Option<Node>)
   requires ValidVal(v)
   requires ValInGrammar(v, Marshalling.PivotNodeGrammar())
-  ensures s.Some? ==> SM.WFNode(s.value)
-  ensures s.Some? ==> BT.WFNode(SM.INode(s.value))
+  ensures s.Some? ==> BT.WFNode(s.value)
   {
-    // TODO(travis): is there any reason to SM.Node be a different
-    // type than BC.G.Node?
     var node := Marshalling.valToNode(v);
     if node.Some? then (
-      Some(SM.Node(node.value.pivotTable, node.value.children, node.value.buckets))
+      Some(BT.G.Node(node.value.pivotTable, node.value.children, node.value.buckets))
     ) else (
       None
     )

@@ -25,8 +25,8 @@ module SuccModel {
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
-  import PivotsLib
 
+  import opened BoundedPivotsLib
   import opened Lexicographic_Byte_Order
   import BucketSuccessorLoopModel
 
@@ -55,6 +55,7 @@ module SuccModel {
   requires ref in s.ephemeralIndirectionTable.graph
   requires node == s.cache[ref]
   requires maxToFind >= 1
+  requires BoundedKey(node.pivotTable, key)
   requires forall i | 0 <= i < |acc| :: WFBucket(acc[i])
   ensures var (s', io, sr) := res;
     && s'.Ready?
@@ -62,15 +63,19 @@ module SuccModel {
     && s'.cache == s.cache
   decreases counter, 0
   {
-    var r := Pivots.Route(node.pivotTable, key);
+    var r := Route(node.pivotTable, key);
     var bucket := node.buckets[r];
     var acc' := acc + [bucket];
+
+    var pivot := node.pivotTable[r+1];
     var upTo' := 
-      if r == |node.pivotTable| then (
+      if pivot.Max_Element?
+      then (
         upTo
       ) else (
-        var ub := node.pivotTable[r];
-        if upTo.Some? then (
+        var ub := GetKey(node.pivotTable, r+1);
+        if upTo.Some?
+        then (
           var k: Key := if lt(upTo.value, ub) then upTo.value else ub;
           Some(k)
         ) else (
@@ -118,13 +123,15 @@ module SuccModel {
   {
     if ref in s.cache then (
       var node := s.cache[ref];
-      var (s0, io', pr) := getPathInternal(s, io, key, acc, start, upTo, maxToFind, ref, counter, node);
-
-      LruModel.LruUse(s0.lru, ref);
-      var s' := s0.(lru := LruModel.Use(s0.lru, ref));
-
-      assert WFBCVars(s');
-      (s', io', pr)
+      if BoundedKey(node.pivotTable, key) then ( 
+        var (s0, io', pr) := getPathInternal(s, io, key, acc, start, upTo, maxToFind, ref, counter, node);
+        LruModel.LruUse(s0.lru, ref);
+        var s' := s0.(lru := LruModel.Use(s0.lru, ref));
+        assert WFBCVars(s');
+        (s', io', pr)
+      ) else (
+        (s, io, None)
+      )
     ) else (
       if TotalCacheSize(s) <= MaxCacheSize() - 1 then (
         var (s', io') := PageInNodeReq(s, io, ref);
@@ -159,7 +166,8 @@ module SuccModel {
     && upTo == PBS.LookupUpperBound(lookup, startKey)
     && Last(lookup).node.children.None?
     && |lookup| == |buckets|
-    && (forall i | 0 <= i < |lookup| :: buckets[i] == lookup[i].node.buckets[Pivots.Route(lookup[i].node.pivotTable, startKey)])
+    && (forall i | 0 <= i < |lookup| :: BoundedKey(lookup[i].node.pivotTable, startKey))
+    && (forall i | 0 <= i < |lookup| :: buckets[i] == lookup[i].node.buckets[Route(lookup[i].node.pivotTable, startKey)])
   }
 
   lemma SatisfiesSuccBetreeStep(s: BCVariables, io: IO, start: UI.RangeStart,
@@ -207,11 +215,11 @@ module SuccModel {
   requires ref in s.ephemeralIndirectionTable.graph
   requires |lookup| > 0 ==> PBS.WFLookupForKey(lookup, startKey)
   requires |lookup| > 0 ==> Last(lookup).node.children.Some?
-  requires |lookup| > 0 ==> ref == Last(lookup).node.children.value[Pivots.Route(Last(lookup).node.pivotTable, startKey)]
+  requires |lookup| > 0 ==> ref == Last(lookup).node.children.value[Route(Last(lookup).node.pivotTable, startKey)]
   requires |lookup| == 0 ==> ref == BT.G.Root()
   requires upTo == PBS.LookupUpperBound(lookup, startKey)
   requires |lookup| == |acc|
-  requires forall i | 0 <= i < |lookup| :: acc[i] == lookup[i].node.buckets[Pivots.Route(lookup[i].node.pivotTable, startKey)]
+  requires forall i | 0 <= i < |lookup| :: acc[i] == lookup[i].node.buckets[Route(lookup[i].node.pivotTable, startKey)]
   requires (forall i | 0 <= i < |lookup| :: lookup[i].ref in s.ephemeralIndirectionTable.I().graph)
   requires forall i | 0 <= i < |lookup| :: lookup[i].ref in s.cache && lookup[i].node == INode(s.cache[lookup[i].ref])
   requires upTo.Some? ==> lt(startKey, upTo.value)
@@ -242,51 +250,56 @@ module SuccModel {
 
     if ref in s.cache {
       var node := s.cache[ref];
-      var r := Pivots.Route(node.pivotTable, startKey);
-      var bucket := node.buckets[r];
-      var acc1 := acc + [bucket];
-      var lookup1 := lookup + [BT.G.ReadOp(ref, INode(node))];
+      if BoundedKey(node.pivotTable, startKey) {
+        var r := Pivots.Route(node.pivotTable, startKey);
+        var bucket := node.buckets[r];
+        var acc1 := acc + [bucket];
+        var lookup1 := lookup + [BT.G.ReadOp(ref, INode(node))];
 
-      forall idx | PBS.ValidLayerIndex(lookup1, idx) && idx < |lookup1| - 1
-      ensures PBS.LookupFollowsChildRefAtLayer(startKey, lookup1, idx)
-      {
-        if idx == |lookup1| - 2 {
-          assert PBS.LookupFollowsChildRefAtLayer(startKey, lookup1, idx);
-        } else {
-          assert PBS.LookupFollowsChildRefAtLayer(startKey, lookup, idx);
-          assert PBS.LookupFollowsChildRefAtLayer(startKey, lookup1, idx);
+        forall idx | PBS.ValidLayerIndex(lookup1, idx) && idx < |lookup1| - 1
+        ensures PBS.LookupFollowsChildRefAtLayer(startKey, lookup1, idx)
+        {
+          if idx == |lookup1| - 2 {
+            assert PBS.LookupFollowsChildRefAtLayer(startKey, lookup1, idx);
+          } else {
+            assert PBS.LookupFollowsChildRefAtLayer(startKey, lookup, idx);
+            assert PBS.LookupFollowsChildRefAtLayer(startKey, lookup1, idx);
+          }
         }
-      }
 
-      var upTo' := 
-        if r == |node.pivotTable| then (
-          upTo
-        ) else (
-          var ub := node.pivotTable[r];
-          if upTo.Some? then (
-            var k: Key := if lt(upTo.value, ub) then upTo.value else ub;
-            Some(k)
+        var pivot := node.pivotTable[r+1];
+        var upTo' := 
+          if pivot.Max_Element? then (
+            upTo
           ) else (
-            Some(ub)
-          )
-        );
+            var ub := GetKey(node.pivotTable, r+1);
+            if upTo.Some?
+            then (
+              var k: Key := if lt(upTo.value, ub) then upTo.value else ub;
+              Some(k)
+            ) else (
+              Some(ub)
+            )
+          );
 
-      assert upTo'.Some? ==> lt(startKey, upTo'.value);
+        assert upTo'.Some? ==> lt(startKey, upTo'.value);
 
-      PBS.reveal_LookupUpperBound();
+        PBS.reveal_LookupUpperBound();
 
-      if node.children.Some? {
-        if counter == 0 {
-          assert noop(IBlockCache(s), IBlockCache(s));
+        if node.children.Some? {
+          if counter == 0 {
+            assert noop(IBlockCache(s), IBlockCache(s));
+          } else {
+            lemmaChildInGraph(s, ref, node.children.value[r]);
+            lemmaGetPathResult(s, io, startKey, acc1, lookup1, start, upTo', maxToFind, node.children.value[r], counter - 1);
+          }
         } else {
-          lemmaChildInGraph(s, ref, node.children.value[r]);
-
-          lemmaGetPathResult(s, io, startKey, acc1, lookup1, start, upTo', maxToFind, node.children.value[r], counter - 1);
+          var res :=
+            BucketSuccessorLoopModel.GetSuccessorInBucketStack(acc1, maxToFind, start, upTo');
+          SatisfiesSuccBetreeStep(s, io, start, res, acc1, lookup1, maxToFind, startKey, upTo');
         }
       } else {
-        var res :=
-          BucketSuccessorLoopModel.GetSuccessorInBucketStack(acc1, maxToFind, start, upTo');
-        SatisfiesSuccBetreeStep(s, io, start, res, acc1, lookup1, maxToFind, startKey, upTo');
+        assert noop(IBlockCache(s), IBlockCache(s));
       }
     } else {
       if TotalCacheSize(s) <= MaxCacheSize() - 1 {
@@ -313,7 +326,6 @@ module SuccModel {
             AdvanceOp(UI.SuccOp(start, res.value.results, res.value.end), false)))
     && (res.None? ==>
             betree_next_dop(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop))
-
   {
     reveal_doSucc();
     PBS.reveal_LookupUpperBound();
