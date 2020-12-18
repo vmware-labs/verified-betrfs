@@ -348,6 +348,16 @@ module IndirectionTable {
       /* TODO(andrea) ModelImpl */ assume (self, oldLoc) == old_self.removeLoc(ref);
     }
 
+    /* TODO(andrea) ModelImpl */ function addLocIfPresent(ref: BT.G.Reference, loc: Location) : (IndirectionTable, bool)
+    /* TODO(andrea) ModelImpl */ requires this.Inv()
+    /* TODO(andrea) ModelImpl */ ensures var (self', added) := this.addLocIfPresent(ref, loc);
+    /* TODO(andrea) ModelImpl */   && self'.Inv()
+    /* TODO(andrea) ModelImpl */   && added == (ref in this.graph && ref !in this.locs)
+    /* TODO(andrea) ModelImpl */   && self'.graph == this.graph
+    /* TODO(andrea) ModelImpl */   && (added ==> self'.locs == this.locs[ref := loc])
+    /* TODO(andrea) ModelImpl */   && (!added ==> self'.locs == this.locs)
+    /* TODO(andrea) ModelImpl */   && (this.TrackingGarbage() ==> self'.TrackingGarbage())
+
     linear inout method AddLocIfPresent(ref: BT.G.Reference, loc: Location)
     returns (added: bool)
     requires old_self.Inv()
@@ -357,6 +367,7 @@ module IndirectionTable {
     ensures (added ==> self.locs == old_self.locs[ref := loc])
     ensures (!added ==> self.locs == old_self.locs)
     ensures (old_self.TrackingGarbage() ==> self.TrackingGarbage())
+    /* TODO(andrea) ModelImpl */ ensures old_self.addLocIfPresent(ref, loc) == (self, added)
     {
       var it := LinearMutableMap.FindSimpleIter(self.t, ref);
       var oldEntry := LinearMutableMap.SimpleIterOutput(self.t, it);
@@ -369,6 +380,8 @@ module IndirectionTable {
 
       assert Graph(self.t) == Graph(old_self.t);
       assert self.Inv() by { reveal_PredCounts(); }
+
+      /* TODO(andrea) ModelImpl */ assume old_self.addLocIfPresent(ref, loc) == (self, added);
     }
 
     predicate DeallocableRef(ref: BT.G.Reference)
@@ -1968,6 +1981,16 @@ module IndirectionTable {
       this.t.count
     }
 
+    /* TODO(andrea) ModelImpl */ function findRefWithNoLoc() : (res: (IndirectionTable, Option<BT.G.Reference>))
+    /* TODO(andrea) ModelImpl */ requires this.Inv()
+    /* TODO(andrea) ModelImpl */ ensures var (self', ref) := res;
+    /* TODO(andrea) ModelImpl */   && self'.Inv()
+    /* TODO(andrea) ModelImpl */   && self'.locs == this.locs
+    /* TODO(andrea) ModelImpl */   && self'.graph == this.graph
+    /* TODO(andrea) ModelImpl */   && (ref.Some? ==> ref.value in this.graph)
+    /* TODO(andrea) ModelImpl */   && (ref.Some? ==> ref.value !in this.locs)
+    /* TODO(andrea) ModelImpl */   && (ref.None? ==> forall r | r in this.graph :: r in this.locs)
+
     linear inout method FindRefWithNoLoc() returns (ref: Option<BT.G.Reference>)
     requires old_self.Inv()
     ensures self.Inv()
@@ -1977,6 +2000,7 @@ module IndirectionTable {
     ensures ref.Some? ==> ref.value in old_self.graph
     ensures ref.Some? ==> ref.value !in old_self.locs
     ensures ref.None? ==> forall r | r in old_self.graph :: r in old_self.locs
+    /* TODO(andrea) ModelImpl */ ensures (self, ref) == old_self.findRefWithNoLoc()
     {
 
       var findLoclessIterator := self.findLoclessIterator;
@@ -2009,6 +2033,8 @@ module IndirectionTable {
           break;
         }
       }
+
+      /* TODO(andrea) ModelImpl */ assume (self, ref) == old_self.findRefWithNoLoc();
     }
 
     function {:opaque} getRefUpperBound() : (r: uint64)
@@ -2204,6 +2230,7 @@ module IndirectionTable {
       ensures added ==> this.I().locs == old(this.I()).locs[ref := loc]
       ensures !added ==> this.I().locs == old(this.I()).locs
       ensures old(this.TrackingGarbage()) ==> this.TrackingGarbage()
+      /* TODO(andrea) ModelImpl */ ensures old(this.Read()).addLocIfPresent(ref, loc) == (this.Read(), added)
     {
       linear var x := box.Take();
       added := inout x.AddLocIfPresent(ref, loc);
@@ -2327,6 +2354,7 @@ module IndirectionTable {
       ensures ref.Some? ==> ref.value in old(this.Read().graph)
       ensures ref.Some? ==> ref.value !in old(this.Read().locs)
       ensures ref.None? ==> forall r | r in old(this.Read().graph) :: r in old(this.Read().locs)
+      /* TODO(andrea) ModelImpl */ ensures (this.Read(), ref) == old(this.Read()).findRefWithNoLoc()
     {
       linear var x := box.Take();
       ref := inout x.FindRefWithNoLoc();
