@@ -95,7 +95,7 @@ module BookkeepingImpl {
   requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
   requires BookkeepingModel.WriteAllocConditions(s.I())
   requires BookkeepingModel.ChildrenConditions(s.I(), children)
-  requires |s.ephemeralIndirectionTable.I().graph| < IndirectionTableModel.MaxSize()
+  requires |s.ephemeralIndirectionTable.I().graph| < IndirectionTable.MaxSize()
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
   modifies s.blockAllocator.Repr
@@ -166,7 +166,7 @@ module BookkeepingImpl {
   requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
   requires BookkeepingModel.WriteAllocConditions(s.I())
   requires BookkeepingModel.ChildrenConditions(s.I(), children)
-  requires |s.ephemeralIndirectionTable.I().graph| < IndirectionTableModel.MaxSize()
+  requires |s.ephemeralIndirectionTable.I().graph| < IndirectionTable.MaxSize()
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
   modifies s.blockAllocator.Repr

@@ -280,9 +280,14 @@ module IndirectionTable {
       /* TODO(andrea) ModelImpl */ assume e == getEntry(ref);
     }
 
+    /* TODO(andrea) ModelImpl */ predicate hasEmptyLoc(ref: BT.G.Reference)
+    /* TODO(andrea) ModelImpl */ requires this.Inv()
+    /* TODO(andrea) ModelImpl */ ensures this.hasEmptyLoc(ref) == (ref in this.graph && ref !in this.locs)
+
     shared method HasEmptyLoc(ref: BT.G.Reference) returns (b: bool)
     requires this.Inv()
     ensures b == (ref in this.graph && ref !in this.locs)
+    /* TODO(andrea) ModelImpl */ ensures this.hasEmptyLoc(ref) == b
     {
       var entry := LinearMutableMap.Get(this.t, ref);
       b := entry.Some? && entry.value.loc.None?;
@@ -476,6 +481,18 @@ module IndirectionTable {
       && BT.G.Root() in t.contents
     }
 
+    /* TODO(andrea) ModelImpl */ function removeRef(ref: BT.G.Reference) : (res : (IndirectionTable, Option<Location>))
+    /* TODO(andrea) ModelImpl */ requires this.Inv()
+    /* TODO(andrea) ModelImpl */ requires this.TrackingGarbage()
+    /* TODO(andrea) ModelImpl */ requires this.deallocable(ref)
+    /* TODO(andrea) ModelImpl */ ensures var (self', oldLoc) := res;
+    /* TODO(andrea) ModelImpl */   && self'.Inv()
+    /* TODO(andrea) ModelImpl */   && self'.TrackingGarbage()
+    /* TODO(andrea) ModelImpl */   && self'.graph == MapRemove1(this.graph, ref)
+    /* TODO(andrea) ModelImpl */   && self'.locs == MapRemove1(this.locs, ref)
+    /* TODO(andrea) ModelImpl */   && (ref in this.locs ==> oldLoc == Some(this.locs[ref]))
+    /* TODO(andrea) ModelImpl */   && (ref !in this.locs ==> oldLoc == None)
+
     linear inout method RemoveRef(ref: BT.G.Reference)
     returns (oldLoc : Option<Location>)
     requires old_self.Inv()
@@ -487,6 +504,7 @@ module IndirectionTable {
     ensures self.locs == MapRemove1(old_self.locs, ref)
     ensures (ref in old_self.locs ==> oldLoc == Some(old_self.locs[ref]))
     ensures (ref !in old_self.locs ==> oldLoc == None)
+    /* TODO(andrea) ModelImpl */ ensures old_self.removeRef(ref) == (self, oldLoc)
     {
       TCountEqGraphSize(self.t);
 
@@ -562,6 +580,8 @@ module IndirectionTable {
       // ==============
 
       assert self.graph == MapRemove1(old_self.graph, ref); // observe
+
+      /* TODO(andrea) ModelImpl */ assume old_self.removeRef(ref) == (self, oldLoc);
     }
 
     static predicate UnchangedExceptTAndGarbageQueue(old_self: IndirectionTable, self: IndirectionTable) {
@@ -1899,12 +1919,20 @@ module IndirectionTable {
       && (forall r | r in this.I().graph :: ref !in this.I().graph[r])
     }
 
+    /* TODO(andrea) ModelImpl */ function findDeallocable() : (ref: Option<BT.G.Reference>)
+    /* TODO(andrea) ModelImpl */ requires this.Inv()
+    /* TODO(andrea) ModelImpl */ requires this.TrackingGarbage()
+    /* TODO(andrea) ModelImpl */ ensures ref.Some? ==> ref.value in this.I().graph
+    /* TODO(andrea) ModelImpl */ ensures ref.Some? ==> this.deallocable(ref.value)
+    /* TODO(andrea) ModelImpl */ ensures ref.None? ==> forall r | r in this.I().graph :: !this.deallocable(r)
+
     shared method FindDeallocable() returns (ref: Option<BT.G.Reference>)
     requires this.Inv()
     requires this.TrackingGarbage()
     ensures ref.Some? ==> ref.value in this.I().graph
     ensures ref.Some? ==> this.deallocable(ref.value)
     ensures ref.None? ==> forall r | r in this.I().graph :: !this.deallocable(r)
+    /* TODO(andrea) ModelImpl */ ensures this.findDeallocable() == ref
     {
       ref := this.garbageQueue.value.FirstOpt();
       if ref.None? {
@@ -1929,6 +1957,7 @@ module IndirectionTable {
           }
         }
       }
+      /* TODO(andrea) ModelImpl */ assume this.findDeallocable() == ref;
     }
 
     shared function method GetSize() : (size: uint64)
@@ -2141,6 +2170,7 @@ module IndirectionTable {
     method HasEmptyLoc(ref: BT.G.Reference) returns (b: bool)
       requires Inv()
       ensures b == (ref in this.I().graph && ref !in this.I().locs)
+      /* TODO(andrea) ModelImpl */ ensures this.Read().hasEmptyLoc(ref) == b
     {
       b := box.Borrow().HasEmptyLoc(ref);
     }
@@ -2192,6 +2222,7 @@ module IndirectionTable {
       ensures this.I().locs == MapRemove1(old(this.I()).locs, ref)
       ensures (ref in old(this.I()).locs ==> oldLoc == Some(old(this.I()).locs[ref]))
       ensures (ref !in old(this.I()).locs ==> oldLoc == None)
+      /* TODO(andrea) ModelImpl */ ensures old(this.Read()).removeRef(ref) == (this.Read(), oldLoc)
     {
       linear var x := box.Take();
       oldLoc := inout x.RemoveRef(ref);

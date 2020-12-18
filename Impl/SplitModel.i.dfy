@@ -14,6 +14,7 @@ module SplitModel {
   import opened Sequences
   import opened Sets
 
+  import IT = IndirectionTable
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
@@ -99,7 +100,7 @@ module SplitModel {
   requires ChildrenConditions(s, right_child.children)
   requires ChildrenConditions(s, Some(fused_parent_children))
   requires |fused_parent_children| < MaxNumChildren()
-  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
+  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
   ensures s'.Ready?
   ensures s'.cache == s.cache
   {
@@ -153,7 +154,7 @@ module SplitModel {
   requires ChildrenConditions(s, Some(fused_parent_children))
   requires ChildrenConditions(s, child.children)
   requires |fused_parent_children| < MaxNumChildren()
-  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
+  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
   {
     var num_children_left := |child.buckets| / 2;
     var pivot := child.pivotTable[num_children_left - 1];
@@ -180,11 +181,11 @@ module SplitModel {
   requires |s.cache[parentref].buckets| <= MaxNumChildren() - 1
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires s.cache[parentref].children.value[slot] == childref
-  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
+  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
   {
     if (
       && s.frozenIndirectionTable.Some?
-      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, parentref)
+      && s.frozenIndirectionTable.value.hasEmptyLoc(parentref)
     ) then (
       s
     ) else (
@@ -235,7 +236,7 @@ module SplitModel {
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires s.cache[parentref].children.value[slot] == childref
   requires TotalCacheSize(s) <= MaxCacheSize() - 2
-  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
+  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
   ensures var s' := doSplit(s, parentref, childref, slot);
     && WFBCVars(s')
     && betree_next(IBlockCache(s), IBlockCache(s'))
@@ -245,7 +246,7 @@ module SplitModel {
 
     if (
       && s.frozenIndirectionTable.Some?
-      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, parentref)
+      && s.frozenIndirectionTable.value.hasEmptyLoc(parentref)
     ) {
       assert noop(IBlockCache(s), IBlockCache(s));
     } else {
@@ -306,8 +307,8 @@ module SplitModel {
             SplitParentCorrect(parentref, fused_parent, pivot, slot, left_childref.value, right_childref.value);
 
             lemmaBlockPointsToValidReferences(s, childref);
-            assert BC.BlockPointsToValidReferences(INode(fused_child), IIndirectionTable(s.ephemeralIndirectionTable).graph);
-            lemmaSplitChildValidReferences(INode(fused_child), INode(child), num_children_left, IIndirectionTable(s.ephemeralIndirectionTable).graph, lbound, ubound);
+            assert BC.BlockPointsToValidReferences(INode(fused_child), s.ephemeralIndirectionTable.I().graph);
+            lemmaSplitChildValidReferences(INode(fused_child), INode(child), num_children_left, s.ephemeralIndirectionTable.I().graph, lbound, ubound);
 
             writeNewRefIsAlloc(s, left_childref.value, left_child);
             writeNewRefIsAlloc(s1, right_childref.value, right_child);
@@ -316,8 +317,8 @@ module SplitModel {
             var inodeSplitParent := INode(split_parent);
 
             lemmaBlockPointsToValidReferences(s, parentref);
-            assert BC.BlockPointsToValidReferences(inodeFusedParent, IIndirectionTable(s2.ephemeralIndirectionTable).graph);
-            lemmaSplitParentValidReferences(inodeFusedParent, pivot, slot, left_childref.value, right_childref.value, IIndirectionTable(s2.ephemeralIndirectionTable).graph);
+            assert BC.BlockPointsToValidReferences(inodeFusedParent, s2.ephemeralIndirectionTable.I().graph);
+            lemmaSplitParentValidReferences(inodeFusedParent, pivot, slot, left_childref.value, right_childref.value, s2.ephemeralIndirectionTable.I().graph);
 
             reveal_SplitChildLeft();
             reveal_SplitChildRight();
