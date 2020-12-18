@@ -26,22 +26,24 @@ module FlushImpl {
   import FlushModel
   //import BucketModel
 
+  import IT = IndirectionTable
+
   method flush(s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference, child: Node)
   requires Inv(s)
   requires s.ready
 
   requires Some(child) == s.cache.ptr(childref)
 
-  requires parentref in IIndirectionTable(s.ephemeralIndirectionTable).graph
+  requires parentref in s.ephemeralIndirectionTable.I().graph
   requires parentref in s.cache.I()
 
   requires s.cache.I()[parentref].children.Some?
   requires 0 <= slot as int < |s.cache.I()[parentref].children.value|
   requires s.cache.I()[parentref].children.value[slot] == childref
 
-  requires childref in IIndirectionTable(s.ephemeralIndirectionTable).graph
+  requires childref in s.ephemeralIndirectionTable.I().graph
 
-  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 2
+  requires |s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 2
 
   modifies s.Repr()
 

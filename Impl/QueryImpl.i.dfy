@@ -50,7 +50,7 @@ module QueryImpl {
   requires Inv(s)
   requires io !in s.Repr()
   requires s.ready
-  requires ref in SM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph
+  requires ref in s.ephemeralIndirectionTable.I().graph
   modifies io
   modifies s.Repr()
   decreases counter

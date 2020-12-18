@@ -15,6 +15,7 @@ module GrowModel {
   import opened Bounds
   import opened BucketsLib
 
+  import IT = IndirectionTable
   import opened NativeTypes
 
   /// The root was found to be too big: grow
@@ -23,13 +24,13 @@ module GrowModel {
   requires BCInv(s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
-  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 2
+  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
   {
     lemmaChildrenConditionsOfNode(s, BT.G.Root());
 
     if (
       && s.frozenIndirectionTable.Some?
-      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, BT.G.Root())
+      && s.frozenIndirectionTable.value.hasEmptyLoc(BT.G.Root())
     ) then (
       s
     ) else (
@@ -57,7 +58,7 @@ module GrowModel {
   requires s.Ready?
   requires BT.G.Root() in s.cache
   requires TotalCacheSize(s) <= MaxCacheSize() - 1
-  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 2
+  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
   ensures var s' := grow(s);
     && WFBCVars(s')
     && betree_next(IBlockCache(s), IBlockCache(s'))
@@ -70,7 +71,7 @@ module GrowModel {
 
     if (
       && s.frozenIndirectionTable.Some?
-      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, BT.G.Root())
+      && s.frozenIndirectionTable.value.hasEmptyLoc(BT.G.Root())
     ) {
       assert noop(IBlockCache(s), IBlockCache(s));
       return;

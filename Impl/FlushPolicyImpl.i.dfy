@@ -22,6 +22,8 @@ module FlushPolicyImpl {
   import opened LinearSequence_s
   import opened LinearSequence_i
 
+  import IT = IndirectionTable
+
   import opened Sequences
 
   import opened Bounds
@@ -158,7 +160,7 @@ module FlushPolicyImpl {
   requires s.ready
   requires BT.G.Root() in s.cache.I()
   requires io !in s.Repr()
-  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
+  requires |s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
   modifies io
   modifies s.Repr()
   ensures WellUpdated(s)

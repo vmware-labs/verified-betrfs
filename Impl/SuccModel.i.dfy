@@ -169,7 +169,7 @@ module SuccModel {
   requires io.IOInit?
   requires maxToFind >= 1
   requires LookupBucketsProps(lookup, buckets, upTo, startKey);
-  requires forall i | 0 <= i < |lookup| :: lookup[i].ref in IIndirectionTable(s.ephemeralIndirectionTable).graph
+  requires forall i | 0 <= i < |lookup| :: lookup[i].ref in s.ephemeralIndirectionTable.I().graph
   requires forall i | 0 <= i < |lookup| :: MapsTo(ICache(s.cache), lookup[i].ref, lookup[i].node)
   requires (upTo.Some? ==> lt(startKey, upTo.value))
   requires startKey == (if start.NegativeInf? then [] else start.key)
@@ -212,7 +212,7 @@ module SuccModel {
   requires upTo == PBS.LookupUpperBound(lookup, startKey)
   requires |lookup| == |acc|
   requires forall i | 0 <= i < |lookup| :: acc[i] == lookup[i].node.buckets[Pivots.Route(lookup[i].node.pivotTable, startKey)]
-  requires (forall i | 0 <= i < |lookup| :: lookup[i].ref in IIndirectionTable(s.ephemeralIndirectionTable).graph)
+  requires (forall i | 0 <= i < |lookup| :: lookup[i].ref in s.ephemeralIndirectionTable.I().graph)
   requires forall i | 0 <= i < |lookup| :: lookup[i].ref in s.cache && lookup[i].node == INode(s.cache[lookup[i].ref])
   requires upTo.Some? ==> lt(startKey, upTo.value)
   requires startKey == (if start.NegativeInf? then [] else start.key)
@@ -232,7 +232,7 @@ module SuccModel {
       && (pr.Fetch? ==> pr.ref !in s.cache)
       && (pr.Path? ==> (
         && LookupBucketsProps(lookup', pr.buckets, pr.upTo, startKey))
-        && (forall i | 0 <= i < |lookup'| :: lookup'[i].ref in IIndirectionTable(s.ephemeralIndirectionTable).graph)
+        && (forall i | 0 <= i < |lookup'| :: lookup'[i].ref in s.ephemeralIndirectionTable.I().graph)
         && (forall i | 0 <= i < |lookup'| :: MapsTo(ICache(s.cache), lookup'[i].ref, lookup'[i].node))
         && (pr.upTo.Some? ==> lt(startKey, pr.upTo.value))
       ) */
