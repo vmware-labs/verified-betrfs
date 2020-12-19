@@ -2111,6 +2111,12 @@ module IndirectionTable {
       this.Read().I()
     }
 
+    lemma RevealI()
+    requires Inv()
+    ensures I() == this.Read().I()
+    {
+    }
+
     protected predicate TrackingGarbage()
       reads this, Repr
       requires Inv()

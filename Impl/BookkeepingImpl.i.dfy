@@ -32,6 +32,8 @@ module BookkeepingImpl {
 
     i := i + 1;
 
+    s.ephemeralIndirectionTable.RevealI();
+
     while true
     invariant i >= 1
     invariant forall r | r in s.ephemeralIndirectionTable.I().graph :: r < i
@@ -67,6 +69,8 @@ module BookkeepingImpl {
     }
 
     i := i + 1;
+
+    s.ephemeralIndirectionTable.RevealI();
 
     while true
     invariant i >= 1
