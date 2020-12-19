@@ -326,7 +326,6 @@ module MarshallingImpl {
     } else if v.c == 1 {
       var mutMap := IndirectionTable.BoxedIndirectionTable.ValToIndirectionTable(v.val);
       if mutMap != null {
-        mutMap.RevealI();
         return Some(StateImpl.SectorIndirectionTable(mutMap));
       } else {
         return None;
@@ -619,11 +618,7 @@ module MarshallingImpl {
   ensures sector.indirectionTable.Inv() && sector.indirectionTable.I() == old(sector.indirectionTable.I()) && sector.indirectionTable.Repr == old(sector.indirectionTable.Repr)
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.SectorGrammar());
-  ensures (
-    if sector.SectorIndirectionTable? then 
-      (sector.indirectionTable.RevealI(); true)
-      else true) &&
-    Marshalling.valToSector(v) == Some(IM.ISector(StateImpl.ISector(sector)))
+  ensures Marshalling.valToSector(v) == Some(IM.ISector(StateImpl.ISector(sector)))
   ensures SizeOfV(v) < 0x1_0000_0000_0000_0000 - 32
   ensures SizeOfV(v) == size as int
   {
@@ -742,7 +737,6 @@ module MarshallingImpl {
       //NativeBenchmarking.start("marshallIndirectionTable");
       //NativeBenchmarking.end("marshallIndirectionTable");
 
-      sector.indirectionTable.RevealI();
       var v, computedSize := indirectionTableSectorToVal(sector);
       var size: uint64 := computedSize + 32;
 
@@ -750,7 +744,6 @@ module MarshallingImpl {
       if ghosty {
         if Marshalling.IsInitIndirectionTable(sector.indirectionTable.I())
         {
-          sector.indirectionTable.RevealI();
           Marshalling.InitIndirectionTableSizeOfV(sector.indirectionTable.I(), v);
         }
       }

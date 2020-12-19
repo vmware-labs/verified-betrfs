@@ -2106,14 +2106,9 @@ module IndirectionTable {
     protected function I() : SectorType.IndirectionTable
       reads this, Repr
       requires Inv()
-    {
-      this.Read().I()
-    }
-
-    lemma RevealI()
-      requires Inv()
       ensures I() == this.Read().I() == this.ReadWithInv().I()
     {
+      this.Read().I()
     }
 
     protected predicate TrackingGarbage()
