@@ -456,7 +456,7 @@ module BookkeepingModel {
       writeBookkeepingBitmapCorrect(s, ref.value, node.children);
       reveal_writeBookkeeping();
 
-      var (s', ref0) := allocWithNode(s, node);
+      var s' := writeWithNode(s, ref.value, node);
     }
   }
   

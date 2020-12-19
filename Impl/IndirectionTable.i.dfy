@@ -157,6 +157,7 @@ module IndirectionTable {
     }
 
     protected predicate Inv()
+    ensures Inv() ==> this.locs.Keys <= this.graph.Keys
     {
       && LinearMutableMap.Inv(this.t)
       && this.locs == Locs(this.t)
