@@ -1845,6 +1845,7 @@ module IndirectionTable {
     requires upTo as int <= BitmapModel.Len(bm.I())
     modifies bm.Repr
     ensures bm.Inv()
+    ensures old(BitmapModel.Len(bm.I())) == BitmapModel.Len(bm.I())
     // ensures bm.I() == IndirectionTableModel.BitmapInitUpTo(old(bm.I()), upTo)
     ensures bm.Repr == old(bm.Repr)
     {
@@ -1854,6 +1855,7 @@ module IndirectionTable {
       invariant bm.Inv()
       invariant bm.Repr == old(bm.Repr)
       invariant upTo as int <= BitmapModel.Len(bm.I())
+      invariant old(BitmapModel.Len(bm.I())) == BitmapModel.Len(bm.I())
       {
         bm.Set(i);
         i := i + 1;
@@ -1883,10 +1885,13 @@ module IndirectionTable {
     ensures fresh(bm.Repr)
     {
       bm := new BitmapImpl.Bitmap(NumBlocksUint64());
+      assert BitmapModel.Len(bm.I()) == NumBlocks();
+
       BitmapInitUpTo(bm, MinNodeBlockIndexUint64());
       var it := LinearMutableMap.IterStart(this.t);
 
       assert BitmapModel.Len(bm.I()) == NumBlocks();
+      assert NumBlocks() == NumBlocksUint64() as int;
 
       while it.next.Next?
       invariant this.t.Inv()
