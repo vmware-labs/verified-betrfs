@@ -141,15 +141,6 @@ module CommitterCommitModel {
     }
   }
 
-  function method start_pos_add(a: uint64, b: uint64) : uint64
-  requires 0 <= a <= NumJournalBlocks()
-  requires 0 <= b <= NumJournalBlocks()
-  {
-    if a + b >= NumJournalBlocks()
-      then a + b - NumJournalBlocks()
-      else a + b
-  }
-
   // function {:opaque} WriteOutJournal(cm: CM, io: IO)
   //     : (res : (CM, IO))
   // requires io.IOInit?

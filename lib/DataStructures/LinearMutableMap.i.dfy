@@ -1780,6 +1780,8 @@ module LinearMutableMap {
   requires UpdateByIter.requires(self, it, value)
   requires WFSimpleIter(self, preserved)
   ensures WFSimpleIter(UpdateByIter(self, it, value), preserved)
+  ensures (it.i == preserved.i) ==> 
+    (SimpleIterOutput(UpdateByIter(self, it, value), preserved).key == SimpleIterOutput(self, preserved).key)
   {
     reveal_UpdateByIter();
     var self' := UpdateByIter(self, it, value);
@@ -1795,6 +1797,10 @@ module LinearMutableMap {
         && key == self.underlying.storage[j].key;
       assert self'.underlying.storage[j].Entry?;
       assert key == self'.underlying.storage[j].key;
+    }
+
+    if preserved.i == it.i {
+      assert SimpleIterOutput(self, it).key == SimpleIterOutput(self', preserved).key;
     }
   }
 

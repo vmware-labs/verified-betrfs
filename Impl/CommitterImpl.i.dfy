@@ -1,11 +1,7 @@
 include "../lib/DataStructures/LinearMutableMap.i.dfy"
 include "JournalistImpl.i.dfy"
-// include "CommitterAppendModel.i.dfy"
-// include "CommitterReplayModel.i.dfy"
-// include "CommitterInitModel.i.dfy"
 include "DiskOpImpl.i.dfy"
 include "IOImpl.i.dfy"
-include "CommitterCommitModel.i.dfy"
 include "../Versions/VOp.i.dfy"
 
 // for when you have commitment issues
@@ -24,16 +20,10 @@ module CommitterImpl {
   import opened Journal
 
   import opened DiskOpImpl
-
-  // import opened StateModel
-  // import CommitterReplayModel
-  // import CommitterAppendModel
-  // import CommitterInitModel
   import opened IOImpl
   import opened InterpretationDiskOps
   import opened MainDiskIOHandler
   import JournalistParsingImpl
-  import CommitterCommitModel
 
   import SSI = StateSectorImpl
   import opened ViewOp
@@ -43,59 +33,87 @@ module CommitterImpl {
 
   import SSM = StateSectorModel
 
-  // TODO we could have these do the modification in-place instead.
-
-  method SyncReqs2to1(inout linear m: LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
-  requires old_m.Inv()
-  ensures m == CommitterCommitModel.SyncReqs2to1(old_m)
-  {
-    CommitterCommitModel.reveal_SyncReqs2to1();
-    var it := LinearMutableMap.IterStart(m);
-    linear var m0 := LinearMutableMap.Constructor(128);
-    while !it.next.Done?
-    invariant m.Inv()
-    invariant m0.Inv()
-    invariant LinearMutableMap.WFIter(m, it)
-    invariant m0.Inv()
-    invariant m0.contents.Keys == it.s
-    invariant CommitterCommitModel.SyncReqs2to1(m) == CommitterCommitModel.SyncReqs2to1Iterate(m, it, m0)
-
-    decreases it.decreaser
-    {
-      LinearMutableMap.LemmaIterIndexLtCount(m, it);
-      LinearMutableMap.CountBound(m);
-      m0 := LinearMutableMap.Insert(m0, it.next.key, (if it.next.value == JC.State2 then JC.State1 else it.next.value));
-      it := LinearMutableMap.IterInc(m, it);
-    }
-    LinearMutableMap.Destructor(m);
-    m := m0;
-  }
-
-  method SyncReqs3to2(inout linear m: LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
+  method SyncReqs2to1(linear inout m: LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
   requires old_m.Inv()
   ensures m.Inv()
-  ensures m == CommitterCommitModel.SyncReqs3to2(old_m)
+  ensures JC.syncReqs2to1(old_m.contents) == m.contents
   {
-    CommitterCommitModel.reveal_SyncReqs3to2();
-    var it := LinearMutableMap.IterStart(m);
-    linear var m0 := LinearMutableMap.Constructor(128);
-    while !it.next.Done?
-    invariant m.Inv()
-    invariant m0.Inv()
-    invariant LinearMutableMap.WFIter(m, it)
-    invariant m0.Inv()
-    invariant m0.contents.Keys == it.s
-    invariant CommitterCommitModel.SyncReqs3to2(m) == CommitterCommitModel.SyncReqs3to2Iterate(m, it, m0)
+    var it := LinearMutableMap.SimpleIterStart(m);
 
+    var nextOut := LinearMutableMap.SimpleIterOutput(m, it);
+
+    assert it.s == {};
+    while !nextOut.Done?
+    invariant m.Inv()
+    invariant LinearMutableMap.WFSimpleIter(m, it)
+    invariant nextOut == LinearMutableMap.SimpleIterOutput(m, it)
+    invariant m.contents.Keys == old_m.contents.Keys
+    invariant it.s <= m.contents.Keys
+    invariant forall id | id in m.contents.Keys :: (
+      ((id in it.s) ==> (m.contents[id] == (if old_m.contents[id] == JC.State2 then JC.State1 else old_m.contents[id]))))
+    invariant forall id | id in m.contents.Keys :: (
+      ((id !in it.s) ==> m.contents[id] == old_m.contents[id])
+    )
     decreases it.decreaser
     {
-      LinearMutableMap.LemmaIterIndexLtCount(m, it);
+      ghost var keySet := m.contents.Keys;
       LinearMutableMap.CountBound(m);
-      m0 := LinearMutableMap.Insert(m0, it.next.key, (if it.next.value == JC.State3 then JC.State2 else it.next.value));
-      it := LinearMutableMap.IterInc(m, it);
+
+      var value := if nextOut.value == JC.State2 then JC.State1 else nextOut.value;
+
+      ghost var prev_m := m;
+      m := LinearMutableMap.UpdateByIter(m, it, value);
+      LinearMutableMap.UpdatePreservesSimpleIter(prev_m, it, value, it);
+
+      // seems like this is the missing knowledge 
+      // before and after the map update, the iterator has the same key
+      // of course the values could be different
+      assert LinearMutableMap.SimpleIterOutput(prev_m, it).key == 
+        LinearMutableMap.SimpleIterOutput(m, it).key;
+
+      it := LinearMutableMap.SimpleIterInc(m, it);
+      nextOut := LinearMutableMap.SimpleIterOutput(m, it);
     }
-    LinearMutableMap.Destructor(m);
-    m := m0;
+  }
+
+  method SyncReqs3to2(linear inout m: LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
+  requires old_m.Inv()
+  ensures m.Inv()
+  ensures JC.syncReqs3to2(old_m.contents) == m.contents
+  {
+    var it := LinearMutableMap.SimpleIterStart(m);
+
+    var nextOut := LinearMutableMap.SimpleIterOutput(m, it);
+
+    assert it.s == {};
+    while !nextOut.Done?
+    invariant m.Inv()
+    invariant LinearMutableMap.WFSimpleIter(m, it)
+    invariant nextOut == LinearMutableMap.SimpleIterOutput(m, it)
+    invariant m.contents.Keys == old_m.contents.Keys
+    invariant it.s <= m.contents.Keys
+    invariant forall id | id in m.contents.Keys :: (
+      ((id in it.s) ==> (m.contents[id] == (if old_m.contents[id] == JC.State3 then JC.State2 else old_m.contents[id]))))
+    invariant forall id | id in m.contents.Keys :: (
+      ((id !in it.s) ==> m.contents[id] == old_m.contents[id])
+    )
+    decreases it.decreaser
+    {
+      ghost var keySet := m.contents.Keys;
+      LinearMutableMap.CountBound(m);
+
+      var value := if nextOut.value == JC.State3 then JC.State2 else nextOut.value;
+
+      ghost var prev_m := m;
+      m := LinearMutableMap.UpdateByIter(m, it, value);
+      LinearMutableMap.UpdatePreservesSimpleIter(prev_m, it, value, it);
+
+      assert LinearMutableMap.SimpleIterOutput(prev_m, it).key == 
+        LinearMutableMap.SimpleIterOutput(m, it).key;
+
+      it := LinearMutableMap.SimpleIterInc(m, it);
+      nextOut := LinearMutableMap.SimpleIterOutput(m, it);
+    }
   }
 
   datatype Status =
@@ -643,6 +661,15 @@ module CommitterImpl {
       assume old_self.TryFinishLoadingOtherPhase(old(IIO(io))) == (self, IIO(io));
     }
 
+    static function method start_pos_add(a: uint64, b: uint64) : uint64
+    requires 0 <= a <= NumJournalBlocks()
+    requires 0 <= b <= NumJournalBlocks()
+    {
+      if a + b >= NumJournalBlocks()
+        then a + b - NumJournalBlocks()
+        else a + b
+    }
+
     linear inout method WriteOutJournal(io: DiskIOHandler)
     requires io.initialized()
     requires old_self.Inv()
@@ -673,7 +700,7 @@ module CommitterImpl {
         j := inout self.journalist.packageInMemoryJournal();
       }
 
-      var start := CommitterCommitModel.start_pos_add(
+      var start := start_pos_add(
           self.superblock.journalStart,
           writtenJournalLen);
 
@@ -716,8 +743,6 @@ module CommitterImpl {
             NumJournalBlocks() as int - start as int);
         assert ValidDiskOp(dop);
       }
-
-      CommitterCommitModel.SyncReqs3to2Correct(old_self.syncReqs);
 
       assert JC.WriteBackJournalReq(
           old_self.I(),
@@ -796,7 +821,7 @@ module CommitterImpl {
       var writtenJournalLen := self.journalist.getWrittenJournalLen();
       var newSuperblock := SectorType.Superblock(
         JC.IncrementSuperblockCounter(self.superblock.counter),
-        CommitterCommitModel.start_pos_add(
+        start_pos_add(
             self.superblock.journalStart,
             self.frozenJournalPosition),
         writtenJournalLen - self.frozenJournalPosition,
@@ -851,8 +876,6 @@ module CommitterImpl {
       inout self.isFrozen := true;
       SyncReqs3to2(inout self.syncReqs);
 
-      CommitterCommitModel.SyncReqs3to2Correct(old_self.syncReqs);
-
       assert JC.Freeze(old_self.I(), self.I(), JournalDisk.NoDiskOp,FreezeOp);
       assert JC.NextStep(old_self.I(), self.I(), JournalDisk.NoDiskOp, FreezeOp, JC.FreezeStep);
       assume old_self.Freeze() == self;
@@ -891,9 +914,7 @@ module CommitterImpl {
     // == pushSync ==
     shared function method freeId() : (id: uint64)
     requires syncReqs.Inv()
-    // ensures id == CommitterCommitModel.freeId(syncReqs)
     {
-      // CommitterCommitModel.reveal_freeId();
       var maxId := LinearMutableMap.MaxKey(this.syncReqs);
       if maxId == 0xffff_ffff_ffff_ffff then
         0
@@ -1085,7 +1106,7 @@ module CommitterImpl {
 
     ensures old_self.WriteBackSuperblockResp(io) == self
     {
-      CommitterCommitModel.SyncReqs2to1Correct(old_self.syncReqs);
+      // CommitterCommitModel.SyncReqs2to1Correct(old_self.syncReqs);
 
       if self.status.StatusReady? && self.commitStatus.CommitAdvanceLocation? {
         var writtenJournalLen := self.journalist.getWrittenJournalLen();
