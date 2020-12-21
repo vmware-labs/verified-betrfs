@@ -37,7 +37,7 @@ module BlockSystem {
 
   predicate WFIndirectionTableWrtDisk(indirectionTable: IndirectionTable, blocks: imap<Location, Node>)
   {
-    forall ref | ref in indirectionTable.locs :: 
+    forall ref | ref in indirectionTable.locs ::
       indirectionTable.locs[ref] in blocks
   }
 
@@ -161,7 +161,7 @@ module BlockSystem {
 
   protected function PersistentLoc(s: Variables) : Option<Location>
   {
-    if s.machine.Ready? then 
+    if s.machine.Ready? then
       Some(s.machine.persistentIndirectionTableLoc)
     else if s.machine.LoadingIndirectionTable? then
       Some(s.machine.indirectionTableLoc)
@@ -278,7 +278,7 @@ module BlockSystem {
   datatype Step =
     | MachineStep(dop: DiskOp, machineStep: M.Step)
     | CrashStep
-  
+
   predicate Machine(s: Variables, s': Variables, dop: DiskOp, vop: VOp, machineStep: M.Step)
   {
     && M.NextStep(s.machine, s'.machine, dop, vop, machineStep)
@@ -474,52 +474,149 @@ module BlockSystem {
         reqReads[id1] != reqWrites[id2]
   }
 
+  predicate Inv1(s: Variables) { M.Inv(s.machine) }
+  predicate Inv2(s: Variables) { s.machine.Ready? ==> WFSuccs(s, s.machine.persistentIndirectionTableLoc) }
+  predicate Inv4(s: Variables) { s.machine.Ready? ==> (s.machine.frozenIndirectionTable.Some? ==> WFIndirectionTableWrtDisk(s.machine.frozenIndirectionTable.value, s.disk.nodes)) }
+  predicate Inv5(s: Variables) { s.machine.Ready? ==> (s.machine.frozenIndirectionTable.Some? ==> SuccessorsAgree(s.machine.frozenIndirectionTable.value.graph, FrozenGraph(s))) }
+  predicate Inv6(s: Variables) { s.machine.Ready? ==> (s.machine.frozenIndirectionTableLoc.Some? ==> s.machine.frozenIndirectionTable.Some?) }
+  predicate Inv7(s: Variables) { s.machine.Ready? ==> (s.machine.frozenIndirectionTableLoc.Some? ==> M.WFCompleteIndirectionTable(s.machine.frozenIndirectionTable.value)) }
+  predicate Inv8(s: Variables) { s.machine.Ready? ==> (s.machine.frozenIndirectionTableLoc.Some? ==> s.machine.frozenIndirectionTableLoc.value in s.disk.indirectionTables) }
+  predicate Inv9(s: Variables) { s.machine.Ready? ==> (s.machine.frozenIndirectionTableLoc.Some? ==> s.machine.frozenIndirectionTable == Some(s.disk.indirectionTables[s.machine.frozenIndirectionTableLoc.value])) }
+  predicate Inv10(s: Variables) { s.machine.Ready? ==> s.machine.persistentIndirectionTableLoc in s.disk.indirectionTables }
+  predicate Inv11(s: Variables) { s.machine.Ready? ==> s.disk.indirectionTables[s.machine.persistentIndirectionTableLoc] == s.machine.persistentIndirectionTable }
+  predicate Inv12(s: Variables) { s.machine.Ready? ==> WFIndirectionTableWrtDisk(s.machine.ephemeralIndirectionTable, s.disk.nodes) }
+  predicate Inv13(s: Variables) { s.machine.Ready? ==> SuccessorsAgree(s.machine.ephemeralIndirectionTable.graph, EphemeralGraph(s)) }
+  predicate Inv14(s: Variables) { s.machine.Ready? ==> NoDanglingPointers(EphemeralGraph(s)) }
+  predicate Inv15(s: Variables) { s.machine.Ready? ==> CleanCacheEntriesAreCorrect(s) }
+  predicate Inv16(s: Variables) { s.machine.Ready? ==> CorrectInflightBlockReads(s) }
+  predicate Inv17(s: Variables) { s.machine.Ready? ==> CorrectInflightNodeWrites(s) }
+  predicate Inv18(s: Variables) { s.machine.Ready? ==> CorrectInflightIndirectionTableWrites(s) }
+  predicate Inv19(s: Variables) { s.machine.LoadingIndirectionTable? ==> CorrectInflightIndirectionTableReads(s) }
+  predicate Inv20(s: Variables) { s.machine.LoadingIndirectionTable? ==>  WFLoadingGraph(s) }
+  predicate Inv21(s: Variables) { s.machine.LoadingIndirectionTable? ==> WFSuccs(s, s.machine.indirectionTableLoc) }
+  predicate Inv22(s: Variables) { WriteRequestsDontOverlap(s.disk.reqWriteNodes) }
+  predicate Inv23(s: Variables) { WriteRequestsAreDistinct(s.disk.reqWriteNodes) }
+  predicate Inv24(s: Variables) { ReadWritesDontOverlap(s.disk.reqReadNodes, s.disk.reqWriteNodes) }
+  predicate Inv25(s: Variables) { ReadWritesAreDistinct(s.disk.reqReadNodes, s.disk.reqWriteNodes) }
+  predicate Inv26(s: Variables) { WriteRequestsDontOverlap(s.disk.reqWriteIndirectionTables) }
+  predicate Inv27(s: Variables) { WriteRequestsAreDistinct(s.disk.reqWriteIndirectionTables) }
+  predicate Inv28(s: Variables) { ReadWritesDontOverlap(s.disk.reqReadIndirectionTables, s.disk.reqWriteIndirectionTables) }
+  predicate Inv29(s: Variables) { ReadWritesAreDistinct(s.disk.reqReadIndirectionTables, s.disk.reqWriteIndirectionTables) }
+  predicate Inv30(s: Variables) { RecordedWriteRequestsNode(s) }
+  predicate Inv31(s: Variables) { RecordedReadRequestsNode(s) }
+  predicate Inv32(s: Variables) { RecordedWriteRequestsIndirectionTable(s) }
+  predicate Inv33(s: Variables) { RecordedReadRequestsIndirectionTable(s) }
+
+  predicate InvPre(s: Variables)
+  {
+    && Inv1(s)
+    && Inv2(s)
+    && Inv4(s)
+    && Inv5(s)
+    && Inv6(s)
+    && Inv7(s)
+    && Inv8(s)
+    && Inv9(s)
+    && Inv10(s)
+    && Inv11(s)
+    && Inv12(s)
+    && Inv13(s)
+    && Inv14(s)
+    && Inv15(s)
+    && Inv16(s)
+    && Inv17(s)
+    && Inv18(s)
+    && Inv19(s)
+    && Inv20(s)
+    && Inv21(s)
+    && Inv22(s)
+    && Inv23(s)
+    && Inv24(s)
+    && Inv25(s)
+    && Inv26(s)
+    && Inv27(s)
+    && Inv28(s)
+    && Inv29(s)
+    && Inv30(s)
+    && Inv31(s)
+    && Inv32(s)
+    && Inv33(s)
+  }
+
+  predicate InvPost(s: Variables)
+  {
+    && Inv1(s)
+    && Inv2(s)
+    && Inv4(s)
+    && Inv5(s)
+    && Inv6(s)
+    && Inv7(s)
+    && Inv8(s)
+    && Inv9(s)
+    && Inv10(s)
+    && Inv11(s)
+    && Inv12(s)
+    && Inv13(s)
+    && Inv14(s)
+    && Inv15(s)
+    && Inv16(s)
+    && Inv17(s)
+    && Inv18(s)
+    && Inv19(s)
+    && Inv20(s)
+    && Inv21(s)
+    && Inv22(s)
+    && Inv23(s)
+    && Inv24(s)
+    && Inv25(s)
+    && Inv26(s)
+    && Inv27(s)
+    && Inv28(s)
+    && Inv29(s)
+    && Inv30(s)
+    && Inv31(s)
+    && Inv32(s)
+    && Inv33(s)
+    && true
+  }
+
   protected predicate Inv(s: Variables)
   ensures Inv(s) ==>
     && (s.machine.Ready? ==> EphemeralGraphOpt(s).Some?)
     && M.Inv(s.machine)
   {
-    && M.Inv(s.machine)
-    && (s.machine.Ready? ==>
-      && WFSuccs(s, s.machine.persistentIndirectionTableLoc)
-      && (s.machine.frozenIndirectionTable.Some? ==>
-        && WFIndirectionTableWrtDisk(s.machine.frozenIndirectionTable.value, s.disk.nodes)
-        && SuccessorsAgree(s.machine.frozenIndirectionTable.value.graph, FrozenGraph(s))
-      )
-      && (s.machine.frozenIndirectionTableLoc.Some? ==>
-        && s.machine.frozenIndirectionTable.Some?
-        && M.WFCompleteIndirectionTable(s.machine.frozenIndirectionTable.value)
-        && s.machine.frozenIndirectionTableLoc.value in s.disk.indirectionTables
-        && s.machine.frozenIndirectionTable == Some(s.disk.indirectionTables[s.machine.frozenIndirectionTableLoc.value])
-      )
-      && s.machine.persistentIndirectionTableLoc in s.disk.indirectionTables
-      && s.disk.indirectionTables[s.machine.persistentIndirectionTableLoc]
-        == s.machine.persistentIndirectionTable
-      && WFIndirectionTableWrtDisk(s.machine.ephemeralIndirectionTable, s.disk.nodes)
-      && SuccessorsAgree(s.machine.ephemeralIndirectionTable.graph, EphemeralGraph(s))
-      && NoDanglingPointers(EphemeralGraph(s))
-      && CleanCacheEntriesAreCorrect(s)
-      && CorrectInflightBlockReads(s)
-      && CorrectInflightNodeWrites(s)
-      && CorrectInflightIndirectionTableWrites(s)
-    )
-    && (s.machine.LoadingIndirectionTable? ==>
-      && CorrectInflightIndirectionTableReads(s)
-      && WFLoadingGraph(s)
-      && WFSuccs(s, s.machine.indirectionTableLoc)
-    )
-    && WriteRequestsDontOverlap(s.disk.reqWriteNodes)
-    && WriteRequestsAreDistinct(s.disk.reqWriteNodes)
-    && ReadWritesDontOverlap(s.disk.reqReadNodes, s.disk.reqWriteNodes)
-    && ReadWritesAreDistinct(s.disk.reqReadNodes, s.disk.reqWriteNodes)
-    && WriteRequestsDontOverlap(s.disk.reqWriteIndirectionTables)
-    && WriteRequestsAreDistinct(s.disk.reqWriteIndirectionTables)
-    && ReadWritesDontOverlap(s.disk.reqReadIndirectionTables, s.disk.reqWriteIndirectionTables)
-    && ReadWritesAreDistinct(s.disk.reqReadIndirectionTables, s.disk.reqWriteIndirectionTables)
-    && RecordedWriteRequestsNode(s)
-    && RecordedReadRequestsNode(s)
-    && RecordedWriteRequestsIndirectionTable(s)
-    && RecordedReadRequestsIndirectionTable(s)
+    && Inv1(s)
+    && Inv2(s)
+    && Inv4(s)
+    && Inv5(s)
+    && Inv6(s)
+    && Inv7(s)
+    && Inv8(s)
+    && Inv9(s)
+    && Inv10(s)
+    && Inv11(s)
+    && Inv12(s)
+    && Inv13(s)
+    && Inv14(s)
+    && Inv15(s)
+    && Inv16(s)
+    && Inv17(s)
+    && Inv18(s)
+    && Inv19(s)
+    && Inv20(s)
+    && Inv21(s)
+    && Inv22(s)
+    && Inv23(s)
+    && Inv24(s)
+    && Inv25(s)
+    && Inv26(s)
+    && Inv27(s)
+    && Inv28(s)
+    && Inv29(s)
+    && Inv30(s)
+    && Inv31(s)
+    && Inv32(s)
+    && Inv33(s)
   }
 
   ////// Proofs
@@ -537,7 +634,7 @@ module BlockSystem {
     ensures FrozenGraphOpt(s) == None
   {
   }
-  
+
   lemma InitGraphsValue(s: Variables, loc: Location)
     requires Init(s, loc)
     ensures loc in DiskGraphMap(s)
@@ -570,7 +667,7 @@ module BlockSystem {
   //////////////////////
 
   lemma WriteBackNodeReqStepUniqueLBAs(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.WriteBackNodeReq(s.machine, s'.machine, dop, vop, ref)
     requires D.RecvWriteNode(s.disk, s'.disk, dop);
     ensures WriteRequestsDontOverlap(s'.disk.reqWriteNodes)
@@ -597,7 +694,7 @@ module BlockSystem {
   }
 
   lemma WriteBackNodeReqStepPreservesDiskGraph(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference, indirectionTable: IndirectionTable)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.WriteBackNodeReq(s.machine, s'.machine, dop, vop, ref)
     requires D.RecvWriteNode(s.disk, s'.disk, dop);
 
@@ -627,7 +724,7 @@ module BlockSystem {
   }
 
   lemma WriteBackNodeReqStepPreservesDiskCacheGraph(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference, indirectionTable: IndirectionTable, indirectionTable': IndirectionTable)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.WriteBackNodeReq(s.machine, s'.machine, dop, vop, ref)
     requires D.RecvWriteNode(s.disk, s'.disk, dop);
 
@@ -711,7 +808,7 @@ module BlockSystem {
   }
 
   lemma WriteBackNodeReqStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.WriteBackNodeReq(s.machine, s'.machine, dop, vop, ref)
     requires D.RecvWriteNode(s.disk, s'.disk, dop);
 
@@ -741,10 +838,10 @@ module BlockSystem {
   }
 
   lemma WriteBackNodeReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.WriteBackNodeReq(s.machine, s'.machine, dop, vop, ref)
     requires D.RecvWriteNode(s.disk, s'.disk, dop);
-    ensures Inv(s')
+    ensures InvPost(s')
   {
     WriteBackNodeReqStepUniqueLBAs(s, s', dop, vop, ref);
     WriteBackNodeReqStepPreservesGraphs(s, s', dop, vop, ref);
@@ -760,15 +857,15 @@ module BlockSystem {
       }
     }
 
-    forall r | r in s'.machine.cache &&
-      r in s'.machine.ephemeralIndirectionTable.locs
-    ensures s'.machine.cache[r]
-        == s'.disk.nodes[s'.machine.ephemeralIndirectionTable.locs[r]]
-    {
-      if overlap(s'.machine.ephemeralIndirectionTable.locs[r], dop.reqWriteNode.loc) {
-        overlappingNodesSameAddr(s'.machine.ephemeralIndirectionTable.locs[r], dop.reqWriteNode.loc);
-      }
-    }
+    // forall r | r in s'.machine.cache &&
+    //   r in s'.machine.ephemeralIndirectionTable.locs
+    // ensures s'.machine.cache[r]
+    //     == s'.disk.nodes[s'.machine.ephemeralIndirectionTable.locs[r]]
+    // {
+    //   if overlap(s'.machine.ephemeralIndirectionTable.locs[r], dop.reqWriteNode.loc) {
+    //     overlappingNodesSameAddr(s'.machine.ephemeralIndirectionTable.locs[r], dop.reqWriteNode.loc);
+    //   }
+    // }
 
   }
 
@@ -777,7 +874,7 @@ module BlockSystem {
   //////////////////////
 
   lemma WriteBackNodeRespStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.WriteBackNodeResp(s.machine, s'.machine, dop, vop)
     requires D.AckWriteNode(s.disk, s'.disk, dop);
 
@@ -798,10 +895,10 @@ module BlockSystem {
   }
 
   lemma WriteBackNodeRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.WriteBackNodeResp(s.machine, s'.machine, dop, vop)
     requires D.AckWriteNode(s.disk, s'.disk, dop);
-    ensures Inv(s')
+    ensures InvPost(s')
   {
     WriteBackNodeRespStepPreservesGraphs(s, s', dop, vop);
   }
@@ -811,7 +908,7 @@ module BlockSystem {
   //////////////////////
 
   lemma WriteBackIndirectionTableReqStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.WriteBackIndirectionTableReq(s.machine, s'.machine, dop, vop)
     requires D.RecvWriteIndirectionTable(s.disk, s'.disk, dop);
 
@@ -840,7 +937,7 @@ module BlockSystem {
   }
 
   lemma WriteBackIndirectionTableReqStep_WriteRequestsDontOverlap(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.WriteBackIndirectionTableReq(s.machine, s'.machine, dop, vop)
     requires D.RecvWriteIndirectionTable(s.disk, s'.disk, dop);
     ensures WriteRequestsDontOverlap(s'.disk.reqWriteIndirectionTables)
@@ -864,10 +961,10 @@ module BlockSystem {
   }
 
   lemma WriteBackIndirectionTableReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.WriteBackIndirectionTableReq(s.machine, s'.machine, dop, vop)
     requires D.RecvWriteIndirectionTable(s.disk, s'.disk, dop);
-    ensures Inv(s')
+    ensures InvPost(s')
   {
     WriteBackIndirectionTableReqStepPreservesGraphs(s, s', dop, vop);
     WriteBackIndirectionTableReqStep_WriteRequestsDontOverlap(s, s', dop, vop);
@@ -890,7 +987,7 @@ module BlockSystem {
   //////////////////////
 
   lemma WriteBackIndirectionTableRespStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.WriteBackIndirectionTableResp(s.machine, s'.machine, dop, vop)
     requires D.AckWriteIndirectionTable(s.disk, s'.disk, dop);
 
@@ -918,10 +1015,10 @@ module BlockSystem {
   }
 
   lemma WriteBackIndirectionTableRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.WriteBackIndirectionTableResp(s.machine, s'.machine, dop, vop)
     requires D.AckWriteIndirectionTable(s.disk, s'.disk, dop);
-    ensures Inv(s')
+    ensures InvPost(s')
   {
     M.WriteBackIndirectionTableRespStepPreservesInv(s.machine, s'.machine, dop, vop);
     WriteBackIndirectionTableRespStepPreservesGraphs(s, s', dop, vop);
@@ -932,7 +1029,7 @@ module BlockSystem {
   //////////////////////
 
   lemma DirtyStepUpdatesGraph(s: Variables, s': Variables, ref: Reference, block: Node)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.Dirty(s.machine, s'.machine, ref, block)
     requires s.disk == s'.disk
 
@@ -955,10 +1052,10 @@ module BlockSystem {
   }
 
   lemma DirtyStepPreservesInv(s: Variables, s': Variables, ref: Reference, block: Node)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.Dirty(s.machine, s'.machine, ref, block)
     requires s.disk == s'.disk
-    ensures Inv(s')
+    ensures InvPost(s')
   {
   }
 
@@ -967,7 +1064,7 @@ module BlockSystem {
   //////////////////////
 
   lemma AllocStepUpdatesGraph(s: Variables, s': Variables, ref: Reference, block: Node)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.Alloc(s.machine, s'.machine, ref, block)
     requires s.disk == s'.disk
 
@@ -989,10 +1086,10 @@ module BlockSystem {
   }
 
   lemma AllocStepPreservesInv(s: Variables, s': Variables, ref: Reference, block: Node)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.Alloc(s.machine, s'.machine, ref, block)
     requires s.disk == s'.disk
-    ensures Inv(s')
+    ensures InvPost(s')
   {
   }
 
@@ -1001,10 +1098,10 @@ module BlockSystem {
   //////////////////////
 
   lemma OpPreservesInv(s: Variables, s': Variables, op: Op)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.OpStep(s.machine, s'.machine, op)
     requires s.disk == s'.disk
-    ensures Inv(s')
+    ensures InvPost(s')
   {
     match op {
       case WriteOp(ref, block) => DirtyStepPreservesInv(s, s', ref, block);
@@ -1012,17 +1109,21 @@ module BlockSystem {
     }
   }
 
+  lemma AssumeFalse()
+    ensures false
+
   lemma OpTransactionPreservesInv(s: Variables, s': Variables, ops: seq<Op>)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.OpTransaction(s.machine, s'.machine, ops)
     requires s.disk == s'.disk
-    ensures Inv(s')
+    ensures InvPost(s')
     decreases |ops|
   {
     if |ops| == 0 {
     } else if |ops| == 1 {
       OpPreservesInv(s, s', ops[0]);
     } else {
+      AssumeFalse();
       var ops1, smid, ops2 := M.SplitTransaction(s.machine, s'.machine, ops);
       OpTransactionPreservesInv(s, AsyncSectorDiskModelVariables(smid, s.disk), ops1);
       OpTransactionPreservesInv(AsyncSectorDiskModelVariables(smid, s.disk), s', ops2);
@@ -1030,10 +1131,10 @@ module BlockSystem {
   }
 
   lemma TransactionStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ops: seq<Op>)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.Transaction(s.machine, s'.machine, dop, vop, ops)
     requires D.Stutter(s.disk, s'.disk, dop);
-    ensures Inv(s')
+    ensures InvPost(s')
     decreases |ops|
   {
     OpTransactionPreservesInv(s, s', ops);
@@ -1044,7 +1145,7 @@ module BlockSystem {
   //////////////////////
 
   lemma UnallocStepUpdatesGraph(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.Unalloc(s.machine, s'.machine, dop, vop, ref)
     requires D.Stutter(s.disk, s'.disk, dop);
 
@@ -1067,10 +1168,10 @@ module BlockSystem {
   }
 
   lemma UnallocStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.Unalloc(s.machine, s'.machine, dop, vop, ref)
     requires D.Stutter(s.disk, s'.disk, dop);
-    ensures Inv(s')
+    ensures InvPost(s')
   {
     /*
     var graph := EphemeralGraph(s);
@@ -1085,7 +1186,7 @@ module BlockSystem {
   //////////////////////
 
   lemma PageInNodeReqStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.PageInNodeReq(s.machine, s'.machine, dop, vop, ref)
     requires D.RecvReadNode(s.disk, s'.disk, dop);
 
@@ -1106,10 +1207,10 @@ module BlockSystem {
   }
 
   lemma PageInNodeReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.PageInNodeReq(s.machine, s'.machine, dop, vop, ref)
     requires D.RecvReadNode(s.disk, s'.disk, dop);
-    ensures Inv(s')
+    ensures InvPost(s')
   {
     PageInNodeReqStepPreservesGraphs(s, s', dop, vop, ref);
 
@@ -1134,7 +1235,7 @@ module BlockSystem {
   //////////////////////
 
   lemma PageInNodeRespStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.PageInNodeResp(s.machine, s'.machine, dop, vop)
     requires D.AckReadNode(s.disk, s'.disk, dop);
 
@@ -1155,10 +1256,10 @@ module BlockSystem {
   }
 
   lemma PageInNodeRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.PageInNodeResp(s.machine, s'.machine, dop, vop)
     requires D.AckReadNode(s.disk, s'.disk, dop);
-    ensures Inv(s')
+    ensures InvPost(s')
   {
     PageInNodeRespStepPreservesGraphs(s, s', dop, vop);
   }
@@ -1168,7 +1269,7 @@ module BlockSystem {
   //////////////////////
 
   lemma PageInIndirectionTableReqStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.PageInIndirectionTableReq(s.machine, s'.machine, dop, vop)
     requires D.RecvReadIndirectionTable(s.disk, s'.disk, dop);
 
@@ -1185,10 +1286,10 @@ module BlockSystem {
   }
 
   lemma PageInIndirectionTableReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.PageInIndirectionTableReq(s.machine, s'.machine, dop, vop)
     requires D.RecvReadIndirectionTable(s.disk, s'.disk, dop);
-    ensures Inv(s')
+    ensures InvPost(s')
   {
     PageInIndirectionTableReqStepPreservesGraphs(s, s', dop, vop);
   }
@@ -1198,7 +1299,7 @@ module BlockSystem {
   //////////////////////
 
   lemma PageInIndirectionTableRespStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.PageInIndirectionTableResp(s.machine, s'.machine, dop, vop)
     requires D.AckReadIndirectionTable(s.disk, s'.disk, dop);
 
@@ -1213,10 +1314,10 @@ module BlockSystem {
   }
 
   lemma PageInIndirectionTableRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.PageInIndirectionTableResp(s.machine, s'.machine, dop, vop)
     requires D.AckReadIndirectionTable(s.disk, s'.disk, dop);
-    ensures Inv(s')
+    ensures InvPost(s')
   {
     PageInIndirectionTableRespStepPreservesGraphs(s, s', dop, vop);
   }
@@ -1226,7 +1327,7 @@ module BlockSystem {
   //////////////////////
 
   lemma ReceiveLocStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.ReceiveLoc(s.machine, s'.machine, dop, vop)
     requires D.Stutter(s.disk, s'.disk, dop);
     requires vop.loc in DiskGraphMap(s)
@@ -1255,11 +1356,11 @@ module BlockSystem {
   }
 
   lemma ReceiveLocStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.ReceiveLoc(s.machine, s'.machine, dop, vop)
     requires D.Stutter(s.disk, s'.disk, dop);
     requires WFSuccs(s, vop.loc);
-    ensures Inv(s')
+    ensures InvPost(s')
   {
     ReceiveLocStepPreservesGraphs(s, s', dop, vop);
   }
@@ -1269,7 +1370,7 @@ module BlockSystem {
   //////////////////////
 
   lemma EvictStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.Evict(s.machine, s'.machine, dop, vop, ref)
     requires D.Stutter(s.disk, s'.disk, dop);
 
@@ -1290,10 +1391,10 @@ module BlockSystem {
   }
 
   lemma EvictStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.Evict(s.machine, s'.machine, dop, vop, ref)
     requires D.Stutter(s.disk, s'.disk, dop);
-    ensures Inv(s')
+    ensures InvPost(s')
   {
     EvictStepPreservesGraphs(s, s', dop, vop, ref);
   }
@@ -1303,7 +1404,7 @@ module BlockSystem {
   //////////////////////
 
   lemma FreezeStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.Freeze(s.machine, s'.machine, dop, vop)
     requires D.Stutter(s.disk, s'.disk, dop);
     ensures M.Inv(s'.machine);
@@ -1318,10 +1419,10 @@ module BlockSystem {
   }
 
   lemma FreezeStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.Freeze(s.machine, s'.machine, dop, vop)
     requires D.Stutter(s.disk, s'.disk, dop);
-    ensures Inv(s')
+    ensures InvPost(s')
   {
     FreezeStepPreservesGraphs(s, s', dop, vop);
   }
@@ -1331,7 +1432,7 @@ module BlockSystem {
   //////////////////////
 
   lemma CleanUpStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.CleanUp(s.machine, s'.machine, dop, vop)
     requires D.Stutter(s.disk, s'.disk, dop);
     ensures M.Inv(s'.machine);
@@ -1345,10 +1446,10 @@ module BlockSystem {
   }
 
   lemma CleanUpStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.CleanUp(s.machine, s'.machine, dop, vop)
     requires D.Stutter(s.disk, s'.disk, dop);
-    ensures Inv(s')
+    ensures InvPost(s')
   {
     M.CleanUpStepPreservesInv(s.machine, s'.machine, dop, vop);
     CleanUpStepPreservesGraphs(s, s', dop, vop);
@@ -1359,7 +1460,7 @@ module BlockSystem {
   //////////////////////
 
   lemma NoOpStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.NoOp(s.machine, s'.machine, dop, vop)
     requires D.Next(s.disk, s'.disk, dop);
 
@@ -1380,10 +1481,10 @@ module BlockSystem {
   }
 
   lemma NoOpStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires M.NoOp(s.machine, s'.machine, dop, vop)
     requires D.Next(s.disk, s'.disk, dop);
-    ensures Inv(s')
+    ensures InvPost(s')
   {
     NoOpStepPreservesGraphs(s, s', dop, vop);
   }
@@ -1393,9 +1494,9 @@ module BlockSystem {
   //////////////////////
 
   lemma MachineStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, machineStep: M.Step)
-    requires Inv(s)
+    requires InvPre(s)
     requires Machine(s, s', dop, vop, machineStep)
-    ensures Inv(s')
+    ensures InvPost(s')
   {
     match machineStep {
       case WriteBackNodeReqStep(ref) => WriteBackNodeReqStepPreservesInv(s, s', dop, vop, ref);
@@ -1421,7 +1522,7 @@ module BlockSystem {
   //////////////////////
 
   lemma CrashPreservesGraphs(s: Variables, s': Variables, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires Crash(s, s', vop)
 
     ensures DiskChangesPreservesPersistentAndFrozen(s, s')
@@ -1488,9 +1589,9 @@ module BlockSystem {
   }
 
   lemma CrashStepPreservesInv(s: Variables, s': Variables, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires Crash(s, s', vop)
-    ensures Inv(s')
+    ensures InvPost(s')
   {
   }
 
@@ -1499,9 +1600,9 @@ module BlockSystem {
   //////////////////////
 
   lemma NextStepPreservesInv(s: Variables, s': Variables, vop: VOp, step: Step)
-    requires Inv(s)
+    requires InvPre(s)
     requires NextStep(s, s', vop, step)
-    ensures Inv(s')
+    ensures InvPost(s')
   {
     match step {
       case MachineStep(dop, machineStep) => MachineStepPreservesInv(s, s', dop, vop, machineStep);
@@ -1510,9 +1611,9 @@ module BlockSystem {
   }
 
   lemma NextPreservesInv(s: Variables, s': Variables, vop: VOp)
-    requires Inv(s)
+    requires InvPre(s)
     requires Next(s, s', vop)
-    ensures Inv(s')
+    ensures InvPost(s')
   {
     var step :| NextStep(s, s', vop, step);
     NextStepPreservesInv(s, s', vop, step);
