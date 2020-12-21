@@ -1,20 +1,20 @@
-include "StateModel.i.dfy"
-include "IOModel.i.dfy"
+// include "StateModel.i.dfy"
+// include "IOModel.i.dfy"
 
-module CommitterInitModel {
-  import opened NativeTypes
-  import opened Options
+// module CommitterInitModel {
+//   import opened NativeTypes
+//   import opened Options
 
-  import opened DiskLayout
-  import opened InterpretationDiskOps
-  import opened ViewOp
-  import JournalCache
-  import JournalBytes
-  import JournalRanges
+//   import opened DiskLayout
+//   import opened InterpretationDiskOps
+//   import opened ViewOp
+//   import JournalCache
+//   import JournalBytes
+//   import JournalRanges
 
-  import opened StateModel
-  import opened IOModel
-  import opened DiskOpModel
+//   import opened StateModel
+//   import opened IOModel
+//   import opened DiskOpModel
 
 //   function {:opaque} PageInSuperblockReq(cm: CM, io: IO, which: uint64) : (res : (CM, IO))
 //   requires which == 0 || which == 1
@@ -535,4 +535,4 @@ module CommitterInitModel {
 //           JournalCache.NoOpStep);
 //     }
 //   }
-}
+// }

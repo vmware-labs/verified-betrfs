@@ -1,19 +1,19 @@
-include "../ByteBlockCacheSystem/InterpretationDiskOps.i.dfy"
-include "DiskOpModel.i.dfy"
+// include "../ByteBlockCacheSystem/InterpretationDiskOps.i.dfy"
+// include "DiskOpModel.i.dfy"
 
-module CommitterReplayModel {
-  import opened NativeTypes
-  import opened Options
+// module CommitterReplayModel {
+//   import opened NativeTypes
+//   import opened Options
 
-  import opened DiskLayout
-  import opened InterpretationDiskOps
-  import opened ViewOp
-  import JournalCache
-  import opened KeyType
-  import opened ValueType
-  import opened Journal
+//   import opened DiskLayout
+//   import opened InterpretationDiskOps
+//   import opened ViewOp
+//   import JournalCache
+//   import opened KeyType
+//   import opened ValueType
+//   import opened Journal
 
-  import opened DiskOpModel
+//   import opened DiskOpModel
 
 //   function {:opaque} JournalReplayOne(cm: CM) : (cm' : CM)
 //   requires CommitterModel.WF(cm)
@@ -48,4 +48,4 @@ module CommitterReplayModel {
 //         vop,
 //         JournalCache.ReplayStep);
 //   }
-}
+// }

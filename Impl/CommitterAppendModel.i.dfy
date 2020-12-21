@@ -1,19 +1,19 @@
-include "IOModel.i.dfy"
+// include "IOModel.i.dfy"
 
-module CommitterAppendModel {
-  import opened NativeTypes
-  import opened Options
+// module CommitterAppendModel {
+//   import opened NativeTypes
+//   import opened Options
 
-  import opened DiskLayout
-  import opened InterpretationDiskOps
-  import opened ViewOp
-  import JournalCache
-  import opened KeyType
-  import opened ValueType
-  import opened Journal
+//   import opened DiskLayout
+//   import opened InterpretationDiskOps
+//   import opened ViewOp
+//   import JournalCache
+//   import opened KeyType
+//   import opened ValueType
+//   import opened Journal
 
-  import opened IOModel
-  import opened DiskOpModel
+//   import opened IOModel
+//   import opened DiskOpModel
 
 //   function {:opaque} JournalAppend(cm: CM,
 //       key: Key, value: Value) : (cm' : CM)
@@ -49,4 +49,4 @@ module CommitterAppendModel {
 //         AdvanceOp(UI.PutOp(key, value), false),
 //         JournalCache.AdvanceStep);
 //   }
-}
+// }
