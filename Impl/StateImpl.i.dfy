@@ -15,7 +15,7 @@ module StateImpl {
   import opened Sequences
   import opened NativeTypes
   import SM = StateModel
-  import opened BoxNodeImpl
+  import opened NodeImpl
   import opened CacheImpl
   import BlockAllocatorImpl
   import BitmapImpl
@@ -48,16 +48,29 @@ module StateImpl {
   type MutIndirectionTable = IndirectionTableImpl.IndirectionTable
   type MutIndirectionTableNullable = IndirectionTableImpl.IndirectionTable?
 
-  datatype Sector =
-    | SectorNode(node: Node)
+  linear datatype Sector =
+    | SectorNode(linear node: Node)
     | SectorSuperblock(superblock: SectorType.Superblock)
     | SectorIndirectionTable(indirectionTable: MutIndirectionTable)
+  {
+    linear method Free()
+    requires this.SectorNode? ==> node.Inv()
+    {
+      linear match this {
+        case SectorNode(node) => {
+          var _ := FreeNode(node);
+        }
+        case SectorSuperblock(_) => {}
+        case SectorIndirectionTable(_) => {}
+      }
+    }
+  }
 
   function SectorObjectSet(sector: Sector) : set<object>
   {
     match sector {
       case SectorIndirectionTable(indirectionTable) => {indirectionTable}
-      case SectorNode(block) => {block}
+      case SectorNode(block) => {}
       case SectorSuperblock(superblock) => {}
     }
   }
@@ -67,7 +80,7 @@ module StateImpl {
   {
     match sector {
       case SectorIndirectionTable(indirectionTable) => {indirectionTable} + indirectionTable.Repr
-      case SectorNode(block) => block.Repr
+      case SectorNode(block) => {}
       case SectorSuperblock(superblock) => {}
     }
   }
@@ -230,7 +243,7 @@ module StateImpl {
 
     function I() : SM.BCVariables
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
-        frozenIndirectionTable, lru, cache, blockAllocator
+        frozenIndirectionTable, lru, cache.Repr, blockAllocator
     reads Repr()
     requires W()
     {

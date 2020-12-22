@@ -69,8 +69,8 @@ module FlushModel {
             Some(parent.children.value[slot := newchildref.value]),
             parent.buckets[slot := newparentBucket]
           );
-          var s2 := writeBookkeeping(s2, parentref, newparent.children);
-          var s' := s2.(cache := s2.cache[newchildref.value := newchild][parentref := newparent]);
+          var s2 := s2.(cache := s2.cache[newchildref.value := newchild][parentref := newparent]);
+          var s' := writeBookkeeping(s2, parentref, newparent.children);
           s'
         )
       ) else (

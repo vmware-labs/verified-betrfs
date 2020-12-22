@@ -11,7 +11,7 @@ module MkfsImpl {
   import opened BucketWeights
   import SM = StateModel
   import opened BucketImpl
-  import opened BoxNodeImpl
+  import opened NodeImpl
   import opened BoundedPivotsLib
   import IndirectionTableModel
   import IndirectionTableImpl
@@ -41,23 +41,16 @@ module MkfsImpl {
     var indirectionTableAddr := IndirectionTable1Addr();
     var nodeAddr := NodeBlockSizeUint64() * MinNodeBlockIndexUint64();
 
-    WeightBucketEmpty();
-    
-    linear var empty := MutBucket.Alloc();
-    linear var buckets := lseq_alloc(1);
-    lseq_give_inout(inout buckets,0, empty);
-    var node := new Node(InitPivotTable(), None, buckets);
-
-    WeightBucketListOneEmpty();
-    assert node.I().buckets == [empty.I()];    // OBSERVE (trigger)
-    ghost var sector:SI.Sector := SI.SectorNode(node);
-    ghost var is:SM.Sector := SI.ISector(sector);
-
+    linear var node := Node.EmptyNode();
+    ghost var is:SM.Sector := SI.ISector(SI.SectorNode(node));
     assert SM.WFNode(is.node) by {
       reveal_WeightBucketList();
     }
-    var bNode_array := MarshallingImpl.MarshallCheckedSector(SI.SectorNode(node));
+
+    linear var sector := SI.SectorNode(node);
+    var bNode_array := MarshallingImpl.MarshallCheckedSector(sector);
     var bNode := bNode_array[..];
+    sector.Free();
 
     var nodeLoc := Location(nodeAddr, |bNode| as uint64);
     assert ValidNodeLocation(nodeLoc)
@@ -67,25 +60,25 @@ module MkfsImpl {
 
     var sectorIndirectionTable := new IndirectionTableImpl.IndirectionTable.RootOnly(nodeLoc);
 
-    assert SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)) == IndirectionTable(
-      map[0 := nodeLoc],
-      map[0 := []]
-    );
+    assert SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)) == 
+      IndirectionTable(map[0 := nodeLoc], map[0 := []]);
 
     assert BC.WFCompleteIndirectionTable(SM.IIndirectionTable(SI.IIndirectionTable(sectorIndirectionTable)));
     assert SM.WFSector(SI.ISector(SI.SectorIndirectionTable(sectorIndirectionTable)));
-    var bIndirectionTable_array := MarshallingImpl.MarshallCheckedSector(SI.SectorIndirectionTable(sectorIndirectionTable));
 
+    linear var sectorIndirect := SI.SectorIndirectionTable(sectorIndirectionTable);
+    var bIndirectionTable_array := MarshallingImpl.MarshallCheckedSector(sectorIndirect);
     assert bIndirectionTable_array != null;
-
     var bIndirectionTable := bIndirectionTable_array[..];
+    sectorIndirect.Free();
 
     var indirectionTableLoc := Location(indirectionTableAddr, |bIndirectionTable| as uint64);
     assert ValidIndirectionTableLocation(indirectionTableLoc);
 
-    var sectorSuperblock := SI.SectorSuperblock(Superblock(0, 0, 0, indirectionTableLoc));
+    linear var sectorSuperblock := SI.SectorSuperblock(Superblock(0, 0, 0, indirectionTableLoc));
     var bSuperblock_array := MarshallingImpl.MarshallCheckedSector(sectorSuperblock);
     var bSuperblock := bSuperblock_array[..];
+    sectorSuperblock.Free();
 
     ghost var ghosty := true;
     if ghosty {
@@ -100,12 +93,6 @@ module MkfsImpl {
       }
     }
 
-    ghost var gnode := Marshalling.parseCheckedSector(bNode).value.node;
-    assert gnode.pivotTable == [];
-    assert gnode.children == None;
-    //assert gnode.buckets == [ EmptyBucket() ];
-    //assert Marshalling.parseCheckedSector(bNode).Some?;// == Some(SectorNode(BT.G.Node([], None, [MkfsModel.B(map[])])));
-    
     diskContents := map[
       // Map ref 0 to lba 1
       s1addr := bSuperblock,

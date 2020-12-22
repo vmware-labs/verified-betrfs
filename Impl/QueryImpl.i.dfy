@@ -38,7 +38,6 @@ module QueryImpl {
   // == query ==
 
   method queryIterate(
-    
     s: ImplVariables,
     key: Key,
     msg: Message,
@@ -64,39 +63,41 @@ module QueryImpl {
       return;
     }
 
-    var nodeOpt := s.cache.GetOpt(ref);
-    if (nodeOpt.None?) {
+    var incache := s.cache.InCache(ref);
+    if !incache {
       PageInNodeReqOrMakeRoom(s, io, ref);
       res := None;
       return;
     } else {
-      var node := nodeOpt.value;
-      var pivots := node.GetPivots();
+      assert s.cache.I() == old(s.cache.I());
+      var pivots, children := s.cache.GetNodeInfo(ref);
+
       var boundedkey := ComputeBoundedKey(pivots, key);
       if !boundedkey {
         res := None;
         return;
       }
 
-      s.cache.LemmaNodeReprLeRepr(ref);
       ghost var oldIVars := s.I();
       LruModel.LruUse(s.lru.Queue, ref);
       s.lru.Use(ref);
       assert SM.IBlockCache(oldIVars) == SM.IBlockCache(s.I());
 
       var r := Pivots.ComputeRoute(pivots, key);
-
-      var kmtMsg := lseq_peek(node.box.Borrow().buckets, r).Query(key);
+      var kmtMsg := s.cache.GetMessage(ref, r, key);
       var newmsg := if kmtMsg.Some? then ValueMessage.Merge(msg, kmtMsg.value) else msg;
 
       if (newmsg.Define?) {
         res := Some(newmsg.value);
         return;
       } else {
-        var children := node.GetChildren();
         if children.Some? {
           BookkeepingModel.lemmaChildInGraph(s.I(), ref, children.value[r]);
           res := queryIterate(s, key, newmsg, children.value[r], io, counter - 1);
+
+          ghost var a := QueryModel.queryIterate(old(s.I()), key, msg, ref, 
+            old(IIO(io)), counter, s.I(), res, IIO(io));
+          assert a;
         } else {
           res := Some(ValueType.DefaultValue());
           return;

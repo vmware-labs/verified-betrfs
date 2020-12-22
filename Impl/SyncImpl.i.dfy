@@ -9,12 +9,14 @@ include "../lib/Base/Sets.i.dfy"
 // See dependency graph in MainHandlers.dfy
 
 module SyncImpl { 
+  import opened NodeImpl
   import opened IOImpl
   import opened BookkeepingImpl
   import opened DeallocImpl
   import opened Bounds
   import opened DiskLayout
   import SyncModel
+  import StateModel
   import BookkeepingModel
   import DeallocModel
   import BlockAllocatorModel
@@ -136,11 +138,24 @@ module SyncImpl {
   ensures s.ready
   ensures SyncModel.TryToWriteBlock(old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
   {
-    var nodeOpt := s.cache.GetOpt(ref);
-    var node := nodeOpt.value;
+    linear var placeholder := Node.EmptyNode();
+    linear var node := s.cache.ReplaceAndGet(ref, placeholder);
+    linear var sector := SectorNode(node);
+  
+    assert |s.cache.I()| <= 0x10000;
+    assert s.cache.ptr(ref).Some?;
+    
+    var id, loc := FindLocationAndRequestWrite(io, s, sector);
+    ghost var s' := s.I();
 
-    assert node.I() == s.cache.I()[ref];
-    var id, loc := FindLocationAndRequestWrite(io, s, SectorNode(node));
+    linear var SectorNode(n) := sector;
+    linear var replaced:= s.cache.ReplaceAndGet(ref, n);
+    var _ := FreeNode(replaced);
+
+    assert IOModel.SimilarVariables(s', s.I());
+    IOModel.SimilarVariablesGuarantees(old(IIO(io)), s', old(s.I()),
+      old(SM.SectorNode(s.cache.I()[ref])), id, loc, IIO(io));
+    assert s.cache.I() == old(s.cache.I());
 
     if (id.Some?) {
       SM.reveal_ConsistentBitmap();
@@ -151,8 +166,9 @@ module SyncImpl {
     } else {
       print "sync: giving up; write req failed\n";
     }
-
-    assert IOModel.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(SM.SectorNode(s.cache.I()[ref])), id, loc, IIO(io));
+  
+    assert IOModel.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()),
+      old(SM.SectorNode(s.cache.I()[ref])), id, loc, IIO(io));
     assert SyncModel.WriteBlockUpdateState(old(s.I()), ref, id, loc, s.I());
   }
 

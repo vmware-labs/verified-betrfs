@@ -39,8 +39,8 @@ module BookkeepingImpl {
            == BookkeepingModel.getFreeRef(s.I())
     decreases 0x1_0000_0000_0000_0000 - i as int
     {
-      var cacheLookup := s.cache.GetOpt(i);
-      if cacheLookup.None? {
+      var cacheLookup := s.cache.InCache(i);
+      if !cacheLookup {
         return Some(i);
       }
       
@@ -76,8 +76,8 @@ module BookkeepingImpl {
     decreases 0x1_0000_0000_0000_0000 - i as int
     {
       if i != avoid {
-        var cacheLookup := s.cache.GetOpt(i);
-        if cacheLookup.None? {
+        var cacheLookup := s.cache.InCache(i);
+        if !cacheLookup {
           return Some(i);
         }
       }

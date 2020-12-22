@@ -1,17 +1,19 @@
 include "StateImpl.i.dfy"
 include "IOModel.i.dfy"
 include "MarshallingImpl.i.dfy"
+include "../lib/Base/LinearOption.i.dfy"
 
 module IOImpl { 
   import opened MainDiskIOHandler
   import opened NativeTypes
   import opened Options
+  import opened LinearOption
   import opened MapRemove_s
-  import opened BoxNodeImpl
+  import opened NodeImpl
   import opened CacheImpl
   import opened DiskLayout
   import opened DiskOpImpl
-  import StateModel
+  import SM = StateModel
   import opened InterpretationDiskOps
   import MarshallingImpl
   import IOModel
@@ -39,10 +41,21 @@ module IOImpl {
     }
   }
 
-  method RequestWrite(io: DiskIOHandler, loc: Location, sector: SI.Sector)
+  method FreeSectorOpt(linear sector: lOption<Sector>)
+  requires sector.lSome? ==> SI.WFSector(sector.value)
+  {
+    linear match sector {
+      case lSome(value) => { 
+        value.Free();
+      }
+      case lNone() => {}
+    }
+  }
+
+  method RequestWrite(io: DiskIOHandler, loc: Location, linear sector: SI.Sector)
   returns (id: D.ReqId)
   requires SI.WFSector(sector)
-  requires IM.WFSector(SI.ISector(sector))
+  requires SM.WFSector(SI.ISector(sector))
   requires io.initialized()
   requires sector.SectorSuperblock?
   requires ValidSuperblockLocation(loc)
@@ -54,14 +67,16 @@ module IOImpl {
 
     var bytes := MarshallingImpl.MarshallCheckedSector(sector);
     id := io.write(loc.addr, bytes[..]);
+
+    sector.Free();
   }
 
-  method FindLocationAndRequestWrite(io: DiskIOHandler, s: ImplVariables, sector: SI.Sector)
+  method FindLocationAndRequestWrite(io: DiskIOHandler, s: ImplVariables, shared sector: SI.Sector)
   returns (id: Option<D.ReqId>, loc: Option<Location>)
   requires s.WF()
   requires s.ready
   requires SI.WFSector(sector)
-  requires IM.WFSector(SI.ISector(sector))
+  requires SM.WFSector(SI.ISector(sector))
   requires io.initialized()
   requires io !in s.Repr()
   requires sector.SectorNode?
@@ -91,12 +106,12 @@ module IOImpl {
   }
 
   method FindIndirectionTableLocationAndRequestWrite(
-      io: DiskIOHandler, s: ImplVariables, sector: SI.Sector)
+      io: DiskIOHandler, s: ImplVariables, linear sector: SI.Sector)
   returns (id: Option<D.ReqId>, loc: Option<Location>)
   requires s.WF()
   requires s.ready
   requires SI.WFSector(sector)
-  requires IM.WFSector(SI.ISector(sector))
+  requires SM.WFSector(SI.ISector(sector))
   requires io.initialized()
   requires io !in s.Repr()
   requires sector.SectorIndirectionTable?
@@ -126,6 +141,7 @@ module IOImpl {
       var i := io.write(loc.value.addr, bytes[..]);
       id := Some(i);
     }
+    sector.Free();
   }
 
   method RequestRead(io: DiskIOHandler, loc: Location)
@@ -185,7 +201,7 @@ module IOImpl {
 
   // == readResponse ==
 
-  function ISectorOpt(sector: Option<SI.Sector>) : Option<IM.Sector>
+  function ISectorOpt(sector: Option<SI.Sector>) : Option<SM.Sector>
   reads if sector.Some? then SectorObjectSet(sector.value) else {}
   reads if sector.Some? then SectorRepr(sector.value) else {}
   requires sector.Some? ==> SI.WFSector(sector.value)
@@ -197,28 +213,29 @@ module IOImpl {
   }
 
   method ReadSector(io: DiskIOHandler)
-  returns (id: D.ReqId, sector: Option<SI.Sector>)
+  returns (id: D.ReqId, linear sector: lOption<SI.Sector>)
   requires io.diskOp().RespReadOp?
-  ensures sector.Some? ==> SI.WFSector(sector.value)
-  ensures sector.Some? ==> fresh(SectorRepr(sector.value))
-  ensures (id, ISectorOpt(sector)) == IOModel.ReadSector(old(IIO(io)))
+  ensures sector.lSome? ==> SI.WFSector(sector.value)
+  ensures sector.lSome? ==> fresh(SectorRepr(sector.value))
+  ensures (id, ISectorOpt(sector.Option())) == IOModel.ReadSector(old(IIO(io)))
   {
     var id1, addr, bytes := io.getReadResult();
     id := id1;
     if |bytes| as uint64 <= LargestBlockSizeOfAnyTypeUint64() {
       var loc := DiskLayout.Location(addr, |bytes| as uint64);
-      var sectorOpt := MarshallingImpl.ParseCheckedSector(bytes);
-      if sectorOpt.Some? && (
+      linear var sectorOpt := MarshallingImpl.ParseCheckedSector(bytes);
+      if sectorOpt.lSome? && (
         || (ValidNodeLocation(loc) && sectorOpt.value.SectorNode?)
         || (ValidSuperblockLocation(loc) && sectorOpt.value.SectorSuperblock?)
         || (ValidIndirectionTableLocation(loc) && sectorOpt.value.SectorIndirectionTable?)
       ) {
         sector := sectorOpt;
       } else {
-        sector := None;
+        FreeSectorOpt(sectorOpt);
+        sector := lNone;
       }
     } else {
-      sector := None;
+      sector := lNone;
     }
   }
 
@@ -232,20 +249,19 @@ module IOImpl {
   ensures WellUpdated(s)
   ensures s.I() == IOModel.PageInIndirectionTableResp(old(s.I()), old(IIO(io)))
   {
-    var id, sector := ReadSector(io);
-    if (Some(id) == s.indirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
-      var ephemeralIndirectionTable := sector.value.indirectionTable;
-      //assert fresh(SectorRepr(sector.value));
-      assert SectorRepr(sector.value) == {ephemeralIndirectionTable} + ephemeralIndirectionTable.Repr; // why is this needed??
-      //assert fresh({ephemeralIndirectionTable} + ephemeralIndirectionTable.Repr);
-      //assert fresh(ephemeralIndirectionTable.Repr);
+    var id;
+    linear var sectorOpt;
+    id, sectorOpt := ReadSector(io);
+    if (Some(id) == s.indirectionTableRead && sectorOpt.lSome? && sectorOpt.value.SectorIndirectionTable?) {
+      linear var lSome(sector) := sectorOpt;
+      linear var SectorIndirectionTable(ephemeralIndirectionTable) := sector;
+      assert SectorRepr(sector) == 
+        {ephemeralIndirectionTable} + ephemeralIndirectionTable.Repr; // why is this needed??
 
       var succ, bm := ephemeralIndirectionTable.InitLocBitmap();
       if succ {
         var blockAllocator := new BlockAllocatorImpl.BlockAllocator(bm);
-        var persistentIndirectionTable := sector.value.indirectionTable.Clone();
-        //assert fresh(ephemeralIndirectionTable.Repr);
-        //assert fresh(persistentIndirectionTable.Repr);
+        var persistentIndirectionTable := ephemeralIndirectionTable.Clone();
 
         s.ready := true;
         s.persistentIndirectionTable := persistentIndirectionTable;
@@ -257,12 +273,14 @@ module IOImpl {
         s.outstandingBlockWrites := map[];
         s.outstandingBlockReads := map[];
         s.cache := new MutCache();
+        assert s.cache.I() == map[];
         s.lru := new LruImpl.LruImplQueue();
         s.blockAllocator := blockAllocator;
       } else {
         print "InitLocBitmap failed\n";
       }
     } else {
+      FreeSectorOpt(sectorOpt);
       print "giving up; did not get indirectionTable when reading\n";
     }
   }
@@ -277,58 +295,63 @@ module IOImpl {
   ensures WellUpdated(s)
   ensures s.I() == IOModel.PageInNodeResp(old(s.I()), old(IIO(io)))
   {
-    var id, sector := ReadSector(io);
-    assert sector.Some? ==> SI.WFSector(sector.value);
-    assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
-
-    if (id !in s.outstandingBlockReads) {
-      print "PageInNodeResp: unrecognized id from Read\n";
-      return;
-    }
+    var id;
+    linear var sector;
+    id, sector := ReadSector(io);
+    assert sector.lSome? ==> SI.WFSector(sector.value);
+    assert sector.lSome? ==> SectorRepr(sector.value) !! s.Repr();
 
     // TODO we should probably remove the id from outstandingBlockReads
     // even in the case we don't do anything with it
+    if (id in s.outstandingBlockReads) {
+      var ref := s.outstandingBlockReads[id].ref;
+      var lbaGraph := s.ephemeralIndirectionTable.GetEntry(ref);
+      if (lbaGraph.Some? && lbaGraph.value.loc.Some?) {
+        var cacheLookup := s.cache.InCache(ref);
+        if cacheLookup {
+          FreeSectorOpt(sector);
+          print "PageInNodeResp: ref in s.cache\n";
+        } else {
+          assert sector.lSome? ==> SI.WFSector(sector.value);
+          assert sector.lSome? ==> SectorRepr(sector.value) !! s.Repr();
 
-    var ref := s.outstandingBlockReads[id].ref;
+          var lba := lbaGraph.value.loc.value;
+          var graph := lbaGraph.value.succs;
 
-    var lbaGraph := s.ephemeralIndirectionTable.GetEntry(ref);
-    if (lbaGraph.None? || lbaGraph.value.loc.None?) {
-      print "PageInNodeResp: ref !in lbas\n";
-      return;
-    }
-    var cacheLookup := s.cache.GetOpt(ref);
-    if cacheLookup.Some? {
-      print "PageInNodeResp: ref in s.cache\n";
-      return;
-    }
+          if (sector.lSome? && sector.value.SectorNode?) {
+            linear var lSome(value) := sector;
+            linear var SectorNode(node) := value;
 
-    assert sector.Some? ==> SI.WFSector(sector.value);
-    assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
+            var children := node.children;
+            if (graph == (if children.Some? then children.value else [])) {
+              assert|LruModel.I(s.lru.Queue)| <= 0x10000;
+              assert sector.lSome? ==> SI.WFSector(value);
+              assert sector.lSome? ==> SectorRepr(value) !! s.Repr();
+              s.lru.Use(ref);
 
-    var lba := lbaGraph.value.loc.value;
-    var graph := lbaGraph.value.succs;
+              assert sector.lSome? ==> SI.WFSector(value);
+              assert sector.lSome? ==> SectorRepr(value) !! s.Repr();
 
-    if (sector.Some? && sector.value.SectorNode?) {
-      var node := sector.value.node;
-      var children := node.GetChildren();
-      if (graph == (if children.Some? then children.value else [])) {
-        assert|LruModel.I(s.lru.Queue)| <= 0x10000;
-        assert sector.Some? ==> SI.WFSector(sector.value);
-        assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
-        s.lru.Use(ref);
+              assert |s.cache.I()| <= MaxCacheSize();
+              s.cache.Insert(ref, node);
 
-        assert sector.Some? ==> SI.WFSector(sector.value);
-        assert sector.Some? ==> SectorRepr(sector.value) !! s.Repr();
-
-        assert |s.cache.I()| <= MaxCacheSize();
-        s.cache.Insert(ref, sector.value.node);
-
-        s.outstandingBlockReads := ComputeMapRemove1(s.outstandingBlockReads, id);
+              s.outstandingBlockReads := ComputeMapRemove1(s.outstandingBlockReads, id);
+            } else {
+              var _ := FreeNode(node);
+              print "giving up; block does not match graph\n";
+            }
+          } else {
+            FreeSectorOpt(sector);
+            print "giving up; block read in was not block\n";
+          }
+        }
       } else {
-        print "giving up; block does not match graph\n";
+        FreeSectorOpt(sector);
+        print "PageInNodeResp: ref !in lbas\n";
       }
     } else {
-      print "giving up; block read in was not block\n";
+      FreeSectorOpt(sector);
+      print "PageInNodeResp: unrecognized id from Read\n";
     }
   }
 

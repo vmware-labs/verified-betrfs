@@ -33,8 +33,10 @@ module HandleReadResponseImpl {
     cm.reveal_ReprInv();
     HandleReadResponseModel.reveal_readSuperblockResp();
 
-    var id, sector := IOImpl.ReadSector(io);
-    var res := (if sector.Some? && sector.value.SectorSuperblock?
+    var id;
+    linear var sector;
+    id, sector := IOImpl.ReadSector(io);
+    var res := (if sector.lSome? && sector.value.SectorSuperblock?
         then JC.SuperblockSuccess(sector.value.superblock)
         else JC.SuperblockCorruption);
     if which == 0 {
@@ -52,7 +54,10 @@ module HandleReadResponseImpl {
         print "readSuperblockResp did nothing\n";
       }
     }
-
+    linear match sector {
+      case lSome(value) => { value.Free(); }
+      case lNone() => { }
+    }
     cm.reveal_ReprInv();
   }
 
