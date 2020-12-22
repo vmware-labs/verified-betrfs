@@ -41,14 +41,15 @@ abstract module BlockType {
 abstract module BlockIfc(B : BlockType) {
   type Addr(==)
   datatype SingletonBlockOp = Read(a:Addr, b:B) | Write(a:Addr, b:B)
-  datatype BlockOp = seq<SingletonBlockOp>
+  type BlockOp = seq<SingletonBlockOp>
 
   // IOSystem demands that IOs be one-at-a-time to make room for crashes.
-  SingleIO(dop:BlockOp) { |dop| == 1 }
+  predicate SingleIO(dop:BlockOp) { |dop| == 1 }
 }
 
 abstract module DiskProgram(Ifc : UIfc, B : BlockType) {
-  import BlockIfc(B = B)
+  // import BlockIfc(B) TODO doesn't parse yet
+  import BlockIfc = BlockIfc(B)
 
   type Vars(==, !new)
   // TODO could we declare that type Vars has these predicates as namespace predicates? That'd be keen.
@@ -65,7 +66,7 @@ abstract module DiskProgram(Ifc : UIfc, B : BlockType) {
 // Happy to try it, but suspicious we'll be unable to fill in those holes later
 // to make them match other parameters. Try it with me?
 module IOSystem(Ifc: Ifc, B: BlockType, Program : DiskProgram(Ifc, B))
-  refines UIStateMachine(Ifc = Ifc)
+  refines UIStateMachine(Ifc)
 {
   datatype Vars = Vars(p: Program.Vars, d: Disk.Vars)
 
@@ -89,7 +90,7 @@ module IOSystem(Ifc: Ifc, B: BlockType, Program : DiskProgram(Ifc, B))
 // .s This is the climax of the system. Build system demands that it be instantiatied
 // as a non-abstract module, hence supplying a proof.
 abstract module SystemTheorem(
-  Ifc: UIfc, B: BlockType, P: DiskProgram(Ifc = Ifc, B = B), CrashSafeSpec: UIStateMachine(Ifc = Ifc),
+  Ifc: UIfc, B: BlockType, P: DiskProgram(Ifc, B), CrashSafeSpec: UIStateMachine(Ifc),
   Proof : StateMachinesRefine(
     L = IOSystem(DiskProgram = P),
     H = CrashSafeSpec)))
