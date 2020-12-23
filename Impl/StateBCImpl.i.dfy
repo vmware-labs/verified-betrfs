@@ -1,96 +1,33 @@
 include "../lib/Base/DebugAccumulator.i.dfy"
-include "../lib/DataStructures/MutableMapImpl.i.dfy"
 include "../lib/DataStructures/LruImpl.i.dfy"
-include "StateModel.i.dfy"
-include "MainDiskIOHandler.s.dfy"
-include "../lib/Buckets/BucketImpl.i.dfy"
-include "CacheImpl.i.dfy"
 include "IndirectionTable.i.dfy"
+include "StateBCModel.i.dfy"
+include "StateSectorImpl.i.dfy"
 include "BlockAllocatorImpl.i.dfy"
-include "DiskOpImpl.i.dfy"
+include "CacheImpl.i.dfy"
+include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
+include "StateBCModel.i.dfy"
 
-module StateImpl {
-  import DebugAccumulator
+module StateBCImpl {
   import opened Options
-  import opened Sequences
   import opened NativeTypes
-  import SM = StateModel
-  import opened BoxNodeImpl
+  import opened StateSectorImpl
   import opened CacheImpl
-  import BlockAllocatorImpl
-  import BitmapImpl
   import IndirectionTable
-  import MutableMap
-  import MutableMapModel
+  import opened Bounds
 
+  import BitmapImpl
+  import DebugAccumulator
+  import DiskLayout
   import BT = PivotBetreeSpec`Internal
   import BC = BlockCache
-  import JC = JournalCache
-  import M = BetreeCache
-  import D = AsyncDisk
-  import MainDiskIOHandler
   import LruImpl
-  import BucketImpl
-  import opened Bounds
-  import opened BucketsLib
-  import DiskLayout
-  import SectorType
-  import opened DiskOpImpl
-
-  import MM = MutableMap
-  import ReferenceType`Internal
+  import BlockAllocatorImpl
+  import D = AsyncDisk
+  import SBCM = StateBCModel
 
   type ImplVariables = Variables
-
   type Reference = BT.G.Reference
-
-  type MutIndirectionTable = IndirectionTable.BoxedIndirectionTable
-  type MutIndirectionTableNullable = IndirectionTable.BoxedIndirectionTable?
-
-  datatype Sector =
-    | SectorNode(node: Node)
-    | SectorSuperblock(superblock: SectorType.Superblock)
-    | SectorIndirectionTable(indirectionTable: MutIndirectionTable)
-
-  function SectorObjectSet(sector: Sector) : set<object>
-  {
-    match sector {
-      case SectorIndirectionTable(indirectionTable) => {indirectionTable}
-      case SectorNode(block) => {block}
-      case SectorSuperblock(superblock) => {}
-    }
-  }
-
-  function SectorRepr(sector: Sector) : set<object>
-  reads SectorObjectSet(sector)
-  {
-    match sector {
-      case SectorIndirectionTable(indirectionTable) => {indirectionTable} + indirectionTable.Repr
-      case SectorNode(block) => block.Repr
-      case SectorSuperblock(superblock) => {}
-    }
-  }
- 
-  predicate WFSector(sector: Sector)
-  reads SectorObjectSet(sector)
-  reads SectorRepr(sector)
-  {
-    && (sector.SectorIndirectionTable? ==> sector.indirectionTable.Inv())
-    && (sector.SectorNode? ==> sector.node.Inv())
-    && (sector.SectorSuperblock? ==> JC.WFSuperblock(sector.superblock))
-  }
-
-  function ISector(sector: Sector) : SM.Sector
-  requires WFSector(sector)
-  reads SectorObjectSet(sector)
-  reads SectorRepr(sector)
-  {
-    match sector {
-      case SectorSuperblock(superblock) => SM.SectorSuperblock(superblock)
-      case SectorNode(node) => SM.SectorNode(node.I())
-      case SectorIndirectionTable(indirectionTable) => SM.SectorIndirectionTable(indirectionTable.ReadWithInv())
-    }
-  }
 
   // TODO rename to like... BlockCache variables or smthn
   class Variables {
@@ -209,14 +146,14 @@ module StateImpl {
       && blockAllocator.Inv()
     }
 
-    function I() : SM.BCVariables
+    function I() : SBCM.BCVariables
     reads this, persistentIndirectionTable, ephemeralIndirectionTable,
         frozenIndirectionTable, lru, cache, blockAllocator
     reads Repr()
     requires W()
     {
       if ready then (
-        SM.Ready(
+        SBCM.Ready(
           persistentIndirectionTable.ReadWithInv(),
           if frozenIndirectionTable != null then Some(frozenIndirectionTable.ReadWithInv()) else None,
           ephemeralIndirectionTable.ReadWithInv(),
@@ -229,11 +166,11 @@ module StateImpl {
           lru.Queue,
           blockAllocator.I())
       ) else if loading then (
-        SM.LoadingIndirectionTable(
+        SBCM.LoadingIndirectionTable(
           indirectionTableLoc,
           indirectionTableRead)
       ) else (
-        SM.Unready
+        SBCM.Unready
       )
     }
 
@@ -243,7 +180,7 @@ module StateImpl {
     reads Repr()
     {
       && W()
-      && SM.WFBCVars(I())
+      && SBCM.WFBCVars(I())
     }
 
     constructor()
@@ -274,7 +211,7 @@ module StateImpl {
   reads s.Repr()
   {
     && s.W()
-    && SM.BCInv(s.I())
+    && SBCM.BCInv(s.I())
   }
 
   twostate predicate WellUpdated(s: Variables)

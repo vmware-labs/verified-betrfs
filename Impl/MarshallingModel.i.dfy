@@ -1,5 +1,5 @@
 include "../ByteBlockCacheSystem/Marshalling.i.dfy"
-include "StateModel.i.dfy"
+include "StateSectorModel.i.dfy"
 include "IndirectionTable.i.dfy"
 
 //
@@ -23,7 +23,6 @@ module MarshallingModel {
   import opened BucketWeights
   import opened Bounds
   import BC = BlockCache
-  import SM = StateModel
   import CRC32_C
   import NativeArrays
   import IndirectionTable
@@ -43,9 +42,11 @@ module MarshallingModel {
   import ReferenceType`Internal
   import ValueType`Internal
 
+  import SSM = StateSectorModel
+
   type Reference = BC.Reference
-  type Sector = SM.Sector
-  type Node = SM.Node
+  type Sector = SSM.Sector
+  type Node = SSM.Node
 
   /////// Some lemmas that are useful in Impl
 
@@ -152,32 +153,32 @@ module MarshallingModel {
   function valToSector(v: V) : (s : Option<Sector>)
   requires ValidVal(v)
   requires ValInGrammar(v, Marshalling.SectorGrammar())
-  ensures s.Some? ==> SM.WFSector(s.value)
-  ensures s.Some? ==> Some(SM.ISector(s.value)) == Marshalling.valToSector(v)
+  ensures s.Some? ==> SSM.WFSector(s.value)
+  ensures s.Some? ==> Some(SSM.ISector(s.value)) == Marshalling.valToSector(v)
   ensures s.None? ==> Marshalling.valToSector(v).None?
   ensures s.Some? && s.value.SectorIndirectionTable? ==> s.value.indirectionTable.TrackingGarbage()
   {
     if v.c == 0 then (
       match Marshalling.valToSuperblock(v.val) {
-        case Some(s) => Some(SM.SectorSuperblock(s))
+        case Some(s) => Some(SSM.SectorSuperblock(s))
         case None => None
       }
     ) else if v.c == 1 then (
       match IndirectionTable.IndirectionTable.valToIndirectionTable(v.val) {
-        case Some(s) => Some(SM.SectorIndirectionTable(s))
+        case Some(s) => Some(SSM.SectorIndirectionTable(s))
         case None => None
       }
     ) else (
       match valToNode(v.val) {
-        case Some(s) => Some(SM.SectorNode(s))
+        case Some(s) => Some(SSM.SectorNode(s))
         case None => None
       }
     )
   }
 
   function {:opaque} parseSector(data: seq<byte>) : (s : Option<Sector>)
-  ensures s.Some? ==> SM.WFSector(s.value)
-  ensures s.Some? ==> Some(SM.ISector(s.value)) == Marshalling.parseSector(data)
+  ensures s.Some? ==> SSM.WFSector(s.value)
+  ensures s.Some? ==> Some(SSM.ISector(s.value)) == Marshalling.parseSector(data)
   ensures s.None? ==> Marshalling.parseSector(data).None?
   ensures s.Some? && s.value.SectorIndirectionTable? ==> s.value.indirectionTable.TrackingGarbage()
   {
@@ -196,8 +197,8 @@ module MarshallingModel {
   /////// Marshalling and de-marshalling with checksums
 
   function {:opaque} parseCheckedSector(data: seq<byte>) : (s : Option<Sector>)
-  ensures s.Some? ==> SM.WFSector(s.value)
-  ensures s.Some? ==> Some(SM.ISector(s.value)) == Marshalling.parseCheckedSector(data)
+  ensures s.Some? ==> SSM.WFSector(s.value)
+  ensures s.Some? ==> Some(SSM.ISector(s.value)) == Marshalling.parseCheckedSector(data)
   ensures s.None? ==> Marshalling.parseCheckedSector(data).None?
   ensures s.Some? && s.value.SectorIndirectionTable? ==> s.value.indirectionTable.TrackingGarbage()
   {

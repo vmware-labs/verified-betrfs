@@ -5,7 +5,7 @@ module LeafImpl {
   import opened IOImpl
   import opened BookkeepingImpl
   import opened LeafModel
-  import opened StateImpl
+  import opened StateBCImpl
   import opened BoxNodeImpl
   import opened BucketImpl
   import opened DiskOpImpl

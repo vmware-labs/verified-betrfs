@@ -17,7 +17,7 @@ module MainHandlers refines Main {
   import DebugAccumulator
   import DOM = DiskOpModel
   import SM = StateModel
-  import SI = StateImpl
+  import SI = StateBCImpl
   import opened EvictImpl // (jonh) only used for unverified debug hooks
   import CoordinationImpl
   import HandleReadResponseImpl

@@ -19,17 +19,19 @@ module SyncImpl {
   import DeallocModel
   import BlockAllocatorModel
   import opened DiskOpImpl
-  import opened StateImpl
   import opened MainDiskIOHandler
 
   import opened Options
   import opened Maps
   import opened Sequences
   import opened Sets
-
   import opened BucketsLib
-
   import opened NativeTypes
+
+  import opened StateBCImpl
+  import opened StateSectorImpl
+  import SBCM = StateBCModel
+  import SSM = StateSectorModel
 
   method AssignRefToLocEphemeral(s: ImplVariables, ref: BT.G.Reference, loc: Location)
   requires s.W()
@@ -140,10 +142,10 @@ module SyncImpl {
     var node := nodeOpt.value;
 
     assert node.I() == s.cache.I()[ref];
-    var id, loc := FindLocationAndRequestWrite(io, s, SectorNode(node));
+    var id, loc := FindLocationAndRequestWrite(io, s, SSI.SectorNode(node));
 
     if (id.Some?) {
-      SM.reveal_ConsistentBitmap();
+      SBCM.reveal_ConsistentBitmap();
 
       AssignRefToLocEphemeral(s, ref, loc.value);
       AssignRefToLocFrozen(s, ref, loc.value);
@@ -152,7 +154,7 @@ module SyncImpl {
       print "sync: giving up; write req failed\n";
     }
 
-    assert IOModel.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(SM.SectorNode(s.cache.I()[ref])), id, loc, IIO(io));
+    assert IOModel.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(SSM.SectorNode(s.cache.I()[ref])), id, loc, IIO(io));
     assert SyncModel.WriteBlockUpdateState(old(s.I()), ref, id, loc, s.I());
   }
 
@@ -211,7 +213,7 @@ module SyncImpl {
     }
     var foundInFrozen := s.frozenIndirectionTable.FindRefWithNoLoc();
 
-    assert Inv(s) by { StateModel.reveal_ConsistentBitmap(); }
+    assert Inv(s) by { SBCM.reveal_ConsistentBitmap(); }
 
     if foundInFrozen.Some? {
       syncFoundInFrozen(s, io, foundInFrozen.value);

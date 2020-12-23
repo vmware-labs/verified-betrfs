@@ -13,7 +13,8 @@ module InsertImpl {
   import opened IOImpl
   import opened BookkeepingImpl
   import opened InsertModel
-  import opened StateImpl
+  import opened StateBCImpl
+  import opened StateSectorImpl
   import opened FlushPolicyImpl
   import opened BucketImpl
   import opened DiskOpImpl

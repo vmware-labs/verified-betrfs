@@ -4,7 +4,9 @@ include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
 include "../lib/Buckets/BucketModel.i.dfy"
 
 module FlushModel { 
-  import opened StateModel
+  import opened StateBCModel
+  import opened StateSectorModel
+
   import opened IOModel
   import opened BookkeepingModel
   import opened ViewOp

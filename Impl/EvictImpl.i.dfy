@@ -9,7 +9,7 @@ module EvictImpl {
   import opened SyncImpl
   import EvictModel
   import opened DiskOpImpl
-  import opened StateImpl
+  import opened StateBCImpl
   import opened Bounds
   import opened MainDiskIOHandler
 

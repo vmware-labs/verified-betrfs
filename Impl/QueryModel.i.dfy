@@ -8,7 +8,9 @@ include "../PivotBetree/PivotBetreeSpec.i.dfy"
 // See dependency graph in MainHandlers.dfy
 
 module QueryModel { 
-  import opened StateModel
+  import opened StateBCModel
+  import opened StateSectorModel
+
   import opened IOModel
   import opened BookkeepingModel
   import opened EvictModel
@@ -31,7 +33,6 @@ module QueryModel {
   import opened BoundedPivotsLib
 
   import PBS = PivotBetreeSpec`Internal
-
   // == query ==
 
   predicate {:opaque} queryIterate(s: BCVariables, key: Key, msg: Message, ref: BT.G.Reference, io: IO, counter: uint64,

@@ -1,4 +1,4 @@
-include "StateModel.i.dfy"
+include "StateBCModel.i.dfy"
 include "IOModel.i.dfy"
 include "DeallocModel.i.dfy"
 include "../lib/Base/Option.s.dfy"
@@ -7,7 +7,6 @@ include "../lib/Base/Sets.i.dfy"
 // See dependency graph in MainHandlers.dfy
 
 module SyncModel { 
-  import opened StateModel
   import opened IOModel
   import opened BookkeepingModel
   import opened DeallocModel
@@ -26,6 +25,8 @@ module SyncModel {
 
   import opened NativeTypes
 
+  import opened StateBCModel
+  import opened StateSectorModel
 
   function {:opaque} AssignRefToLocEphemeral(s: BCVariables, ref: BT.G.Reference, loc: Location) : (s' : BCVariables)
   requires s.Ready?
@@ -99,7 +100,7 @@ module SyncModel {
   lemma LemmaAssignIdRefLocOutstandingCorrect(s: BCVariables, id: D.ReqId, ref: BT.G.Reference, loc: Location)
   requires s.Ready?
   requires (forall i: int :: IsLocAllocOutstanding(s.outstandingBlockWrites, i)
-          <==> IndirectionTable.IsLocAllocBitmap(s.blockAllocator.outstanding, i))
+          <==> StateSectorModel.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.outstanding, i))
   requires BlockAllocatorModel.Inv(s.blockAllocator)
   requires ValidNodeLocation(loc);
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
@@ -108,7 +109,7 @@ module SyncModel {
   ensures var s' := AssignIdRefLocOutstanding(s, id, ref, loc);
       && s'.Ready?
       && (forall i: int :: IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
-          <==> IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.outstanding, i))
+          <==> StateSectorModel.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.outstanding, i))
       && BlockAllocatorModel.Inv(s'.blockAllocator)
   {
     reveal_AssignIdRefLocOutstanding();
@@ -125,11 +126,11 @@ module SyncModel {
 
     forall i: int
     | IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
-    ensures IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
+    ensures StateSectorModel.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
     {
       if id in s.outstandingBlockWrites && s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize() < NumBlocks() && i == s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize() {
         if i == j {
-          assert IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
+          assert StateSectorModel.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
         } else {
           var id0 :| id0 in s'.outstandingBlockWrites && s'.outstandingBlockWrites[id0].loc.addr as int == i * NodeBlockSize() as int;
           assert ValidNodeAddr(s.outstandingBlockWrites[id0].loc.addr);
@@ -142,19 +143,19 @@ module SyncModel {
         }
       } else if i != j {
         assert IsLocAllocOutstanding(s.outstandingBlockWrites, i);
-        assert IndirectionTable.IsLocAllocBitmap(s.blockAllocator.outstanding, i);
-        assert IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
+        assert StateSectorModel.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.outstanding, i);
+        assert StateSectorModel.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
       } else {
-        assert IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
+        assert StateSectorModel.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
       }
     }
 
     forall i: int
-    | IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
+    | StateSectorModel.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
     ensures IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
     {
       if i != j {
-        assert IndirectionTable.IsLocAllocBitmap(s.blockAllocator.outstanding, i);
+        assert StateSectorModel.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.outstanding, i);
         assert IsLocAllocOutstanding(s.outstandingBlockWrites, i);
         var id0 :| id0 in s.outstandingBlockWrites
           && s.outstandingBlockWrites[id0].loc.addr as int == i * NodeBlockSize() as int;
@@ -171,15 +172,15 @@ module SyncModel {
   }
 
   lemma LemmaAssignRefToLocBitmapConsistent(
-      indirectionTable: IndirectionTable,
+      indirectionTable: StateSectorModel.IndirectionTable,
       bm: BitmapModel.BitmapModelT,
-      indirectionTable': IndirectionTable,
+      indirectionTable': StateSectorModel.IndirectionTable,
       bm': BitmapModel.BitmapModelT,
       ref: BT.G.Reference,
       loc: Location)
   requires indirectionTable.Inv()
-  requires (forall i: int :: IndirectionTable.IsLocAllocIndirectionTable(indirectionTable.I(), i)
-          <==> IndirectionTable.IsLocAllocBitmap(bm, i))
+  requires (forall i: int :: StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(indirectionTable.I(), i)
+          <==> StateSectorModel.IndirectionTable.IsLocAllocBitmap(bm, i))
   requires ValidNodeLocation(loc);
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   requires ref in indirectionTable.graph
@@ -189,8 +190,8 @@ module SyncModel {
   requires BitmapModel.Len(bm) == NumBlocks()
   requires bm' == BitmapModel.BitSet(bm, loc.addr as int / NodeBlockSize())
   ensures 
-      && (forall i: int :: IndirectionTable.IsLocAllocIndirectionTable(indirectionTable'.I(), i)
-          <==> IndirectionTable.IsLocAllocBitmap(bm', i))
+      && (forall i: int :: StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(indirectionTable'.I(), i)
+          <==> StateSectorModel.IndirectionTable.IsLocAllocBitmap(bm', i))
   {
     BitmapModel.reveal_BitSet();
     BitmapModel.reveal_IsSet();
@@ -202,29 +203,29 @@ module SyncModel {
     assert j != 0;
     assert j * NodeBlockSize() == loc.addr as int;
 
-    forall i: int | IndirectionTable.IsLocAllocIndirectionTable(indirectionTable'.I(), i)
-    ensures IndirectionTable.IsLocAllocBitmap(bm', i)
+    forall i: int | StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(indirectionTable'.I(), i)
+    ensures StateSectorModel.IndirectionTable.IsLocAllocBitmap(bm', i)
     {
       if i == j {
-        assert IndirectionTable.IsLocAllocBitmap(bm', i);
+        assert StateSectorModel.IndirectionTable.IsLocAllocBitmap(bm', i);
       } else {
-        assert IndirectionTable.IsLocAllocIndirectionTable(indirectionTable.I(), i);
-        assert IndirectionTable.IsLocAllocBitmap(bm', i);
+        assert StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(indirectionTable.I(), i);
+        assert StateSectorModel.IndirectionTable.IsLocAllocBitmap(bm', i);
       }
     }
-    forall i: int | IndirectionTable.IsLocAllocBitmap(bm', i)
-    ensures IndirectionTable.IsLocAllocIndirectionTable(indirectionTable'.I(), i)
+    forall i: int | StateSectorModel.IndirectionTable.IsLocAllocBitmap(bm', i)
+    ensures StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(indirectionTable'.I(), i)
     {
       if i == j {
         assert ref in indirectionTable'.graph;
         assert ref in indirectionTable'.locs;
         assert indirectionTable'.locs[ref].addr as int == i * NodeBlockSize() as int;
-        assert IndirectionTable.IsLocAllocIndirectionTable(indirectionTable'.I(), i);
+        assert StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(indirectionTable'.I(), i);
       } else {
         if 0 <= i < MinNodeBlockIndex() {
-          assert IndirectionTable.IsLocAllocIndirectionTable(indirectionTable'.I(), i);
+          assert StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(indirectionTable'.I(), i);
         } else {
-          assert IndirectionTable.IsLocAllocIndirectionTable(indirectionTable.I(), i);
+          assert StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(indirectionTable.I(), i);
           var r :| r in indirectionTable.locs &&
             indirectionTable.locs[r].addr as int == i * NodeBlockSize() as int;
           assert MapsAgreeOnKey(
@@ -232,7 +233,7 @@ module SyncModel {
             indirectionTable'.I().locs, r);
           assert r in indirectionTable'.locs &&
             indirectionTable'.locs[r].addr as int == i * NodeBlockSize() as int;
-          assert IndirectionTable.IsLocAllocIndirectionTable(indirectionTable'.I(), i);
+          assert StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(indirectionTable'.I(), i);
         }
       }
     }
@@ -241,15 +242,15 @@ module SyncModel {
   lemma LemmaAssignRefToLocEphemeralCorrect(s: BCVariables, ref: BT.G.Reference, loc: Location)
   requires s.Ready?
   requires s.ephemeralIndirectionTable.Inv()
-  requires (forall i: int :: IndirectionTable.IsLocAllocIndirectionTable(s.ephemeralIndirectionTable.I(), i)
-          <==> IndirectionTable.IsLocAllocBitmap(s.blockAllocator.ephemeral, i))
+  requires (forall i: int :: StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(s.ephemeralIndirectionTable.I(), i)
+          <==> StateSectorModel.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.ephemeral, i))
   requires BlockAllocatorModel.Inv(s.blockAllocator)
   requires ValidNodeLocation(loc);
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   ensures var s' := AssignRefToLocEphemeral(s, ref, loc);
       && s'.Ready?
-      && (forall i: int :: IndirectionTable.IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable.I(), i)
-          <==> IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.ephemeral, i))
+      && (forall i: int :: StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable.I(), i)
+          <==> StateSectorModel.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.ephemeral, i))
       && BlockAllocatorModel.Inv(s'.blockAllocator)
   {
     reveal_AssignRefToLocEphemeral();
@@ -303,8 +304,8 @@ module SyncModel {
   requires s.frozenIndirectionTable.Some? ==> s.frozenIndirectionTable.value.Inv()
   requires s.frozenIndirectionTable.Some? ==> s.blockAllocator.frozen.Some?
   requires s.frozenIndirectionTable.Some? ==>
-        (forall i: int :: IndirectionTable.IsLocAllocIndirectionTable(s.frozenIndirectionTable.value.I(), i)
-          <==> IndirectionTable.IsLocAllocBitmap(s.blockAllocator.frozen.value, i))
+        (forall i: int :: StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(s.frozenIndirectionTable.value.I(), i)
+          <==> StateSectorModel.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.frozen.value, i))
   requires BlockAllocatorModel.Inv(s.blockAllocator)
   requires ValidNodeLocation(loc);
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
@@ -312,8 +313,8 @@ module SyncModel {
       && s'.Ready?
       && (s'.frozenIndirectionTable.Some? ==> s'.blockAllocator.frozen.Some?)
       && (s'.frozenIndirectionTable.Some? ==>
-          (forall i: int :: IndirectionTable.IsLocAllocIndirectionTable(s'.frozenIndirectionTable.value.I(), i)
-          <==> IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.frozen.value, i)))
+          (forall i: int :: StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(s'.frozenIndirectionTable.value.I(), i)
+          <==> StateSectorModel.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.frozen.value, i)))
       && BlockAllocatorModel.Inv(s'.blockAllocator)
   {
     reveal_AssignRefToLocFrozen();

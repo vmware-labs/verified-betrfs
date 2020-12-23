@@ -2,7 +2,9 @@ include "BookkeepingModel.i.dfy"
 include "FlushPolicyModel.i.dfy"
 
 module InsertModel { 
-  import opened StateModel
+  import opened StateBCModel
+  import opened StateSectorModel
+
   import opened IOModel
   import opened BookkeepingModel
   import opened FlushPolicyModel

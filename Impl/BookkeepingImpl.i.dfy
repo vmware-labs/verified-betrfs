@@ -3,7 +3,7 @@ include "BookkeepingModel.i.dfy"
 
 module BookkeepingImpl { 
   import opened IOImpl
-  import opened StateImpl
+  import opened StateBCImpl
   import opened DiskOpImpl
   import BookkeepingModel
   import LruModel
@@ -14,6 +14,7 @@ module BookkeepingImpl {
   import opened Sequences
   import opened Sets
   import opened NativeTypes
+  import IndirectionTable
 
   import opened Bounds
 

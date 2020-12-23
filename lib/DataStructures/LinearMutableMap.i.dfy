@@ -1505,7 +1505,11 @@ module LinearMutableMap {
   ensures self.contents == old_self.contents[SimpleIterOutput(old_self, it).key := value]
   ensures self.count == old_self.count
   ensures WFSimpleIter(self, it)
-  ensures (forall preserved :: WFSimpleIter(old_self, preserved) ==> WFSimpleIter(self, preserved))
+  ensures forall preserved :: WFSimpleIter(old_self, preserved) ==> (
+    && WFSimpleIter(self, preserved)
+    && ((it.i == preserved.i) ==>
+        (SimpleIterOutput(self, preserved).key == SimpleIterOutput(old_self, preserved).key))
+  )
   {
     ghost var key := SimpleIterOutput(self, it).key;
     FixedSizeUpdateBySlot(inout self.underlying, it.i, value);

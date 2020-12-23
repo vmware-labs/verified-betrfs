@@ -86,12 +86,12 @@ module JournalistMarshallingImpl {
 
   method WriteJournalEntries(
       buf: array<byte>, numBlocks: uint64, idx: uint64,
-      entries: array<JournalEntry>, start: uint64, len: uint64)
+      entries: seq<JournalEntry>, start: uint64, len: uint64)
   requires buf.Length == 4096 * numBlocks as int
   requires numBlocks <= NumJournalBlocks()
-  requires 0 <= start as int < entries.Length
-  requires 0 <= len as int <= entries.Length
-  requires entries.Length < 0xfff_ffff_ffff_ffff
+  requires 0 <= start as int < |entries|
+  requires 0 <= len as int <= |entries|
+  requires |entries| < 0xfff_ffff_ffff_ffff
   requires idx as int + SumJournalEntries(JournalistMarshallingModel.cyclicSlice(entries[..], start, len)) <= 4064 * numBlocks as int
   modifies buf
   decreases len
@@ -100,7 +100,7 @@ module JournalistMarshallingImpl {
   {
     JournalistMarshallingModel.reveal_writeJournalEntries();
     if len != 0 {
-      var start' := if start+1 == entries.Length as uint64 then 0 else start+1;
+      var start' := if start+1 == |entries| as uint64 then 0 else start+1;
       JournalistMarshallingModel.
           lemma_cyclicRange_popFront_Sum(entries[..], start, len);
 
@@ -138,17 +138,17 @@ module JournalistMarshallingImpl {
   }
 
   method MarshallJournalEntries(
-      entries: array<JournalEntry>,
+      entries: seq<JournalEntry>,
       start: uint64, len: uint64, numBlocks: uint64)
   returns (res: seq<byte>)
-  requires 0 <= start as int < entries.Length
-  requires 0 <= len as int <= entries.Length
-  requires entries.Length <= 0xffff_ffff
+  requires 0 <= start as int < |entries|
+  requires 0 <= len as int <= |entries|
+  requires |entries| <= 0xffff_ffff
   requires WeightJournalEntries(JournalistMarshallingModel.cyclicSlice(entries[..], start, len)) <= 4064 * numBlocks as int
   requires 1 <= numBlocks <= NumJournalBlocks()
 
   ensures res == JournalistMarshallingModel.marshallJournalEntries(
-      entries[..], start, len, numBlocks)
+      entries, start, len, numBlocks)
   {
     reveal_WeightJournalEntries();
     JournalistMarshallingModel.reveal_marshallJournalEntries();
