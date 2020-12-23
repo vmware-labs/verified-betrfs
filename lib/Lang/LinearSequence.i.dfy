@@ -10,7 +10,7 @@ module LinearSequence_i {
     provides NativeTypes
     provides seq_alloc_init, lseqs, imagine_lseq, lseq_peek, lseq_free_fun, lseq_take_fun, lseq_swap_inout, lseq_take_inout, lseq_give_inout
     provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give, lseq_length_uint64, lseq_length_as_uint64, lseq_add
-    provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, SeqResize, InsertSeq, InsertLSeq, Replace1With2Lseq, Replace1With2Lseq_inout
+    provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, SeqResize, SeqResizeMut, InsertSeq, InsertLSeq, Replace1With2Lseq, Replace1With2Lseq_inout
     reveals lseq_length, lseq_full, linLast, ldroplast, lseq_has_all
     reveals operator'cardinality?lseq, operator'in?lseq, operator'subscript?lseq
 
@@ -283,6 +283,7 @@ module LinearSequence_i {
       looted, elt := lseq_take(looted, i);
       loot := lseq_give(loot, i-from, elt);
       i := i + 1;
+      assert lseqs(loot)[..i-from] == lseqs(old(source))[from..i]; // observe
     }
   }
 
@@ -299,6 +300,28 @@ module LinearSequence_i {
       invariant forall j :: 0 <= j < i as nat && j < |s2| ==> s2[j] == (if j < |s| then s[j] else a)
     {
       s2 := seq_set(s2, i, a);
+      i := i + 1;
+    }
+  }
+
+  method {:extern "LinearExtern", "TrustedRuntimeSeqResizeMut"} TrustedRuntimeSeqResizeMut<A>(linear inout s: seq<A>, newlen: uint64)
+    ensures |s| == newlen as nat
+    ensures forall j :: 0 <= j < newlen as nat && j < |old_s| ==> s[j] == old_s[j]
+
+
+  method SeqResizeMut<A>(linear inout s: seq<A>, newlen: uint64, a: A)
+    ensures |s| == newlen as nat
+    ensures forall j :: 0 <= j < newlen as nat ==> s[j] == (if j < |old_s| then old_s[j] else a)
+  {
+    shared_seq_length_bound(s);
+    var i:uint64 := seq_length(s);
+    TrustedRuntimeSeqResizeMut(inout s, newlen);
+    while (i < newlen)
+      invariant |s| == newlen as nat
+      invariant |old_s| <= |s| ==> |old_s| <= i as nat <= |s|
+      invariant forall j :: 0 <= j < i as nat && j < |s| ==> s[j] == (if j < |old_s| then old_s[j] else a)
+    {
+      mut_seq_set(inout s, i, a);
       i := i + 1;
     }
   }

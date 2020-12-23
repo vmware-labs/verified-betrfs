@@ -8,7 +8,9 @@ include "../PivotBetree/PivotBetreeSpec.i.dfy"
 // See dependency graph in MainHandlers.dfy
 
 module QueryModel { 
-  import opened StateModel
+  import opened StateBCModel
+  import opened StateSectorModel
+
   import opened IOModel
   import opened BookkeepingModel
   import opened EvictModel
@@ -31,7 +33,6 @@ module QueryModel {
   import opened BoundedPivotsLib
 
   import PBS = PivotBetreeSpec`Internal
-
   // == query ==
 
   predicate {:opaque} queryIterate(s: BCVariables, key: Key, msg: Message, ref: BT.G.Reference, io: IO, counter: uint64,
@@ -107,10 +108,10 @@ module QueryModel {
     && (|lookup| > 0 ==> BT.WFLookupForKey(lookup, key))
     && (!msg.Define? ==> |lookup| > 0 ==> Last(lookup).node.children.Some?)
     && (!msg.Define? ==> |lookup| > 0 ==> Last(lookup).node.children.value[Pivots.Route(Last(lookup).node.pivotTable, key)] == ref)
-    && (forall i | 0 <= i < |lookup| :: lookup[i].ref in IIndirectionTable(s.ephemeralIndirectionTable).graph)
+    && (forall i | 0 <= i < |lookup| :: lookup[i].ref in s.ephemeralIndirectionTable.I().graph)
     && (forall i | 0 <= i < |lookup| :: MapsTo(ICache(s.cache), lookup[i].ref, lookup[i].node))
     && (forall i | 0 <= i < |lookup| :: BoundedKey(lookup[i].node.pivotTable, key))
-    && (ref in IIndirectionTable(s.ephemeralIndirectionTable).graph)
+    && (ref in s.ephemeralIndirectionTable.I().graph)
     && (PBS.LookupVisitsWellMarshalledBuckets(lookup, key) ==>
         msg == BT.InterpretLookup(lookup, key))
   }
@@ -199,7 +200,7 @@ module QueryModel {
           assert BucketWellMarshalled(bucket) ==> lookupMsg == BT.NodeLookup(node, key);
 
           var newlookup := new_lookup(lookup, ref, node);
-          AugmentLookup(newlookup, lookup, ref, node, key, ICache(s0.cache), IIndirectionTable(s0.ephemeralIndirectionTable).graph);
+          AugmentLookup(newlookup, lookup, ref, node, key, ICache(s0.cache), s0.ephemeralIndirectionTable.I().graph);
 
           assert PBS.LookupVisitsWellMarshalledBuckets(newlookup, key) ==> BucketWellMarshalled(bucket);
           assert PBS.LookupVisitsWellMarshalledBuckets(newlookup, key) ==> PBS.LookupVisitsWellMarshalledBuckets(lookup, key)

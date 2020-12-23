@@ -13,7 +13,8 @@ module InsertImpl {
   import opened IOImpl
   import opened BookkeepingImpl
   import opened InsertModel
-  import opened StateImpl
+  import opened StateBCImpl
+  import opened StateSectorImpl
   import opened FlushPolicyImpl
   import opened BucketImpl
   import opened DiskOpImpl
@@ -32,6 +33,7 @@ module InsertImpl {
   import opened BucketWeights
   import opened Bounds
 
+  import IT = IndirectionTable
   import opened BoxNodeImpl
   import opened BoundedPivotsLib
 
@@ -40,8 +42,8 @@ module InsertImpl {
   requires Inv(s)
   requires s.ready
   requires BT.G.Root() in s.cache.I()
+  requires |s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 1
   requires BoundedKey(s.cache.I()[BT.G.Root()].pivotTable, key)
-  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 1
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures (s.I(), success) == InsertModel.InsertKeyValue(old(s.I()), key, value)
@@ -81,7 +83,7 @@ module InsertImpl {
     InsertModel.reveal_insert();
 
     var indirectionTableSize := s.ephemeralIndirectionTable.GetSize();
-    if (!(indirectionTableSize <= IndirectionTableModel.MaxSizeUint64() - 3)) {
+    if (!(indirectionTableSize <= IT.MaxSizeUint64() - 3)) {
       success := false;
       return;
     }

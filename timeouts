@@ -1,0 +1,34 @@
+BetreeInv: RedirectResultingGraph
+
+  max 
+     17000 DafnyPre.1102:15
+     17000 DafnyPre.939:18
+     17000 DafnyPre.967:18
+     15000 DafnyPre.1035:18
+     15000 DafnyPre.1040:18
+      9266 DafnyPre.999:13
+      1000 DafnyPre.1120:18
+         8 DafnyPre.222:15
+         8 DafnyPre.909:18
+         8 DafnyPre.90:29
+         7 DafnyPre.262:15
+         6 DafnyPre.913:18
+         5 DafnyPre.142:18
+         5 DafnyPre.47:15
+         5 DafnyPre.48:15
+         5 DafnyPre.79:15
+         5 funType:$Box
+         5 funType:IMap#Domain
+         5 funType:MapType0Select
+         5 funType:TIMap
+         4 DafnyPre.270:15
+         4 DafnyPre.38:15
+         4 DafnyPre.77:15
+         4 DafnyPre.84:29
+         4 ctor:MapType0Type
+         4 funType:TSeq
+         4 typeInv:MapType0TypeInv0
+         4 typeInv:MapType0TypeInv1
+         3 BetreeSp.28:24
+
+

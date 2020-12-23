@@ -5,9 +5,11 @@ module SplitImpl {
   import opened IOImpl
   import opened BookkeepingImpl
   import SplitModel
-  import opened StateImpl
+  import opened StateBCImpl
   import opened BoxNodeImpl
   import opened DiskOpImpl
+
+  import IT = IndirectionTable
 
   import opened Options
   import opened Maps
@@ -37,7 +39,7 @@ module SplitImpl {
   requires BookkeepingModel.ChildrenConditions(s.I(), right_child.Read().children)
   requires BookkeepingModel.ChildrenConditions(s.I(), Some(fused_parent_children))
   requires |fused_parent_children| < MaxNumChildren()
-  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
+  requires |s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
   modifies s.blockAllocator.Repr
@@ -123,7 +125,7 @@ module SplitImpl {
   requires BookkeepingModel.ChildrenConditions(s.I(), Some(fused_parent_children))
   requires BookkeepingModel.ChildrenConditions(s.I(), child.Read().children)
   requires |fused_parent_children| < MaxNumChildren()
-  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
+  requires |s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
 
   modifies s.Repr()
 
@@ -199,8 +201,7 @@ module SplitImpl {
   requires 0 <= slot as int < |s.cache.I()[parentref].children.value|
   requires s.cache.I()[parentref].children.value[slot] == childref
   requires |s.cache.I()[parentref].buckets| <= MaxNumChildren() - 1
-  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
-
+  requires |s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready

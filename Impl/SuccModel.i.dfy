@@ -1,4 +1,4 @@
-include "StateModel.i.dfy"
+include "StateBCModel.i.dfy"
 include "BookkeepingModel.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
@@ -8,7 +8,8 @@ include "BucketSuccessorLoopModel.i.dfy"
 // See dependency graph in MainHandlers.dfy
 
 module SuccModel { 
-  import opened StateModel
+  import opened StateBCModel
+  import opened StateSectorModel
   import opened IOModel
   import opened BookkeepingModel
   import opened KeyType
@@ -177,7 +178,7 @@ module SuccModel {
   requires io.IOInit?
   requires maxToFind >= 1
   requires LookupBucketsProps(lookup, buckets, upTo, startKey);
-  requires forall i | 0 <= i < |lookup| :: lookup[i].ref in IIndirectionTable(s.ephemeralIndirectionTable).graph
+  requires forall i | 0 <= i < |lookup| :: lookup[i].ref in s.ephemeralIndirectionTable.I().graph
   requires forall i | 0 <= i < |lookup| :: MapsTo(ICache(s.cache), lookup[i].ref, lookup[i].node)
   requires (upTo.Some? ==> lt(startKey, upTo.value))
   requires startKey == (if start.NegativeInf? then [] else start.key)
@@ -220,7 +221,7 @@ module SuccModel {
   requires upTo == PBS.LookupUpperBound(lookup, startKey)
   requires |lookup| == |acc|
   requires forall i | 0 <= i < |lookup| :: acc[i] == lookup[i].node.buckets[Route(lookup[i].node.pivotTable, startKey)]
-  requires (forall i | 0 <= i < |lookup| :: lookup[i].ref in IIndirectionTable(s.ephemeralIndirectionTable).graph)
+  requires (forall i | 0 <= i < |lookup| :: lookup[i].ref in s.ephemeralIndirectionTable.I().graph)
   requires forall i | 0 <= i < |lookup| :: lookup[i].ref in s.cache && lookup[i].node == INode(s.cache[lookup[i].ref])
   requires upTo.Some? ==> lt(startKey, upTo.value)
   requires startKey == (if start.NegativeInf? then [] else start.key)
@@ -240,7 +241,7 @@ module SuccModel {
       && (pr.Fetch? ==> pr.ref !in s.cache)
       && (pr.Path? ==> (
         && LookupBucketsProps(lookup', pr.buckets, pr.upTo, startKey))
-        && (forall i | 0 <= i < |lookup'| :: lookup'[i].ref in IIndirectionTable(s.ephemeralIndirectionTable).graph)
+        && (forall i | 0 <= i < |lookup'| :: lookup'[i].ref in s.ephemeralIndirectionTable.I().graph)
         && (forall i | 0 <= i < |lookup'| :: MapsTo(ICache(s.cache), lookup'[i].ref, lookup'[i].node))
         && (pr.upTo.Some? ==> lt(startKey, pr.upTo.value))
       ) */
@@ -251,7 +252,7 @@ module SuccModel {
     if ref in s.cache {
       var node := s.cache[ref];
       if BoundedKey(node.pivotTable, startKey) {
-        var r := Pivots.Route(node.pivotTable, startKey);
+        var r := Route(node.pivotTable, startKey);
         var bucket := node.buckets[r];
         var acc1 := acc + [bucket];
         var lookup1 := lookup + [BT.G.ReadOp(ref, INode(node))];

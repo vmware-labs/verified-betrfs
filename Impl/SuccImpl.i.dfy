@@ -13,7 +13,7 @@ module SuccImpl {
   import opened IOImpl
   import SuccModel
   import BookkeepingModel
-  import opened StateImpl
+  import opened StateBCImpl
   import opened BucketImpl
   import opened Lexicographic_Byte_Order_Impl
   import opened BoxNodeImpl
@@ -45,7 +45,7 @@ module SuccImpl {
   requires node.Inv()
   requires r as nat < |node.Read().buckets|
   requires bucket == node.Read().buckets[r as nat].I()
-  requires StateModel.WFNode(node.I())
+  requires SSM.WFNode(node.I())
   requires WFBucket(bucket)
   requires forall i | 0 <= i < |acc| :: WFBucket(acc[i])
   requires g.lSome? <==> |acc| >= 1
@@ -79,7 +79,7 @@ module SuccImpl {
   returns (res : Option<UI.SuccResultList>)
   requires Inv(s)
   requires node.Inv()
-  requires StateModel.WFNode(node.I())
+  requires SSM.WFNode(node.I())
   requires s.ready
   requires io.initialized()
   requires ref in s.I().cache

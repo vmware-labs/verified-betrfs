@@ -6,7 +6,9 @@ include "EvictModel.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 
 module FlushPolicyModel {
-  import opened StateModel
+  import opened StateBCModel
+  import opened StateSectorModel
+
   import opened IOModel
   import opened BookkeepingModel
   import opened FlushModel
@@ -24,6 +26,8 @@ module FlushPolicyModel {
   import opened NativeTypes
   import opened BucketsLib
   import opened BucketWeights
+
+  import IT = IndirectionTable
 
   datatype Action =
     | ActionPageIn(ref: BT.G.Reference)
@@ -269,8 +273,8 @@ module FlushPolicyModel {
             }
           } else {
             assert childref !in IBlockCache(s).cache;
-            assert childref in IIndirectionTable(s.ephemeralIndirectionTable).graph;
-            assert childref in IIndirectionTable(s.ephemeralIndirectionTable).locs;
+            assert childref in s.ephemeralIndirectionTable.I().graph;
+            assert childref in s.ephemeralIndirectionTable.I().locs;
             assert ValidAction(s, action);
           }
         } else {
@@ -285,7 +289,7 @@ module FlushPolicyModel {
   requires BCInv(s)
   requires io.IOInit?
   requires s.Ready?
-  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
+  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
   requires BT.G.Root() in s.cache
   {
     var s0 := s.(lru := LruModel.Use(s.lru, BT.G.Root()));
@@ -338,7 +342,7 @@ module FlushPolicyModel {
   requires io.IOInit?
   requires s.Ready?
   requires BT.G.Root() in s.cache
-  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
+  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
   requires runFlushPolicy(s, io, s', io')
   ensures WFBCVars(s')
   ensures ValidDiskOp(diskOp(io'))
