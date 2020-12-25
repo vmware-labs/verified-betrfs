@@ -110,6 +110,38 @@ namespace NativePackedInts_Compile {
   {
     memcpy(&ar.at(idx), unpacked.ptr(), sizeof(uint64) * unpacked.size());
   }
+
+  DafnySequence<byte> Cast__LittleEndian_Uint32__Seq_to_ByteSeq(DafnySequence<uint32> const& unpacked)
+  {
+    DafnySequence<byte> res;
+    res.sptr = static_pointer_cast<byte>(unpacked.sptr);
+    res.start = (byte *)unpacked.start;
+    res.len = unpacked.len * sizeof(uint32);
+  }
+
+  DafnySequence<byte> Cast__ByteSeq__to__LittleEndian_Uint32__Seq(DafnySequence<byte> const& packed)
+  {
+    DafnySequence<uint32> res;
+    res.sptr = static_pointer_cast<uint32>(unpacked.sptr);
+    res.start = (uint32 *)unpacked.start;
+    res.len = unpacked.len / sizeof(uint32);
+  }
+
+  DafnySequence<byte> Cast__LittleEndian_Uint64__Seq_to_ByteSeq(DafnySequence<uint64> const& unpacked)
+  {
+    DafnySequence<byte> res;
+    res.sptr = static_pointer_cast<byte>(unpacked.sptr);
+    res.start = (byte *)unpacked.start;
+    res.len = unpacked.len * sizeof(uint64);
+  }
+
+  DafnySequence<byte> Cast__ByteSeq__to__LittleEndian_Uint64__Seq(DafnySequence<byte> const& packed)
+  {
+    DafnySequence<uint32> res;
+    res.sptr = static_pointer_cast<uint64>(unpacked.sptr);
+    res.start = (uint64 *)unpacked.start;
+    res.len = unpacked.len / sizeof(uint64);
+  }
 }
 
 namespace MainDiskIOHandler_Compile {

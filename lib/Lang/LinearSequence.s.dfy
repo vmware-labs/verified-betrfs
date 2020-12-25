@@ -37,6 +37,14 @@ module {:extern "LinearExtern"} LinearSequence_s {
   method {:extern "LinearExtern", "shared_seq_length_bound"} shared_seq_length_bound<A>(shared s:seq<A>)
     ensures |s| < 0xffff_ffff_ffff_ffff
 
+  method {:extern "LinearExtern", "copy_seq_into_seq"} copy_seq_into_seq<A>(linear inout dest: seq<A>, offset: uint64, src: seq<A>)
+    requires |old_dest| < Uint64UpperBound()
+    requires offset as nat + |src| <= |old_dest|
+    ensures |dest| == |old_dest|
+    ensures forall i | 0 <= i < offset :: dest[i] == old_dest[i]
+    ensures forall i | offset as nat <= i < offset as nat + |src| :: dest[i] == src[i - offset as nat]
+    ensures forall i | offset as nat + |src| <= i < |dest| :: dest[i] == old_dest[i]
+    
 //  // a wrapper object for borrowing immutable sequences. Necessary so that the C++ translation
 //  // can use its construction/destruction to track the reference to the borrowed sequence.
 //  linear datatype as_linear<A> = AsLinear(a:A)

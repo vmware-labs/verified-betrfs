@@ -51,5 +51,19 @@ module Mathematics {
   {
   }
 
+  lemma DivPreservesOrder(num1: nat, num2: nat, denom: nat)
+    requires num1 <= num2
+    requires 0 < denom
+    ensures num1 / denom <= num2 / denom
+  {
+    if num2 / denom < num1 / denom {
+      assert (num2 / denom + 1) * denom <= (num1 / denom) * denom;
+    }
+  }
 
+  lemma DivMulOrder(a: nat, b: nat)
+    requires 0 < b
+    ensures (a / b) * b <= a
+  {
+  }
 }

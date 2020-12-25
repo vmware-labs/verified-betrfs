@@ -1,6 +1,6 @@
 include "../Marshalling/GenericMarshalling.i.dfy"
 include "PackedStringArray.i.dfy"
-include "../Marshalling/MarshalledAccessors.i.dfy"
+//include "../Marshalling/MarshalledAccessors.i.dfy"
 
 module PackedStringArrayMarshalling {
   import opened Options
@@ -9,7 +9,7 @@ module PackedStringArrayMarshalling {
   import Uint32_Order_Impl
   import opened NativeTypes
   import opened NativePackedInts
-  import opened MarshalledAccessors
+  //import opened Marshalling
   
   function method grammar() : G
   ensures ValidGrammar(grammar())
