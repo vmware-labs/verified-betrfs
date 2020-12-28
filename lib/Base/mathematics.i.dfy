@@ -26,6 +26,43 @@ module Mathematics {
     iset x : T | x in ms
   }
 
+  lemma DivMulOrder(a: nat, b: nat)
+    requires 0 < b
+    ensures (a / b) * b <= a
+  {
+  }
+
+  lemma DivisionAlgorithm(x: nat, q: nat, d: nat, r: nat) 
+    requires 0 < d
+    requires x == q * d + r
+    requires 0 <= r < d
+    ensures q == x / d
+    ensures r == x % d
+  {
+    if q < x / d {
+      calc <= {
+        q * d + r;
+        (x / d - 1) * d + r;
+        x / d * d - d + r;
+        x - d + r;
+        < x;
+      }
+    } else if x / d < q {
+      calc <= {
+        x;
+        (x/d + 1) * d + r;
+        q * d + r;
+      }
+    }
+  }
+  
+  lemma MulDivCancel(x: nat, d: nat)
+    requires 0 < d
+    ensures (x * d) / d == x
+  {
+    DivisionAlgorithm(x * d, x, d, 0);
+  }
+
   lemma PosMulPosIsPos(x: int, y: int)
     requires 0 < x
     requires 0 < y
@@ -61,9 +98,14 @@ module Mathematics {
     }
   }
 
-  lemma DivMulOrder(a: nat, b: nat)
-    requires 0 < b
-    ensures (a / b) * b <= a
+  lemma InequalityMoveDivisor(a: nat, b: nat, d: nat)
+    requires 0 < d
+    ensures a <= b / d <==> a * d <= b
   {
+    MulDivCancel(a, d);
+    MulDivCancel(b, d);
+    if a * d <= b {
+      DivPreservesOrder(a * d, b, d);
+    }
   }
 }
