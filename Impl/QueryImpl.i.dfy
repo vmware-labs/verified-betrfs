@@ -13,7 +13,8 @@ module QueryImpl {
   import opened IOImpl
   import QueryModel
   import BookkeepingModel
-  import opened StateImpl
+  import opened StateBCImpl
+  import opened StateSectorImpl
   import opened BucketImpl
   import opened EvictImpl
   import opened DiskOpImpl
@@ -49,7 +50,7 @@ module QueryImpl {
   requires Inv(s)
   requires io !in s.Repr()
   requires s.ready
-  requires ref in SM.IIndirectionTable(IIndirectionTable(s.ephemeralIndirectionTable)).graph
+  requires ref in s.ephemeralIndirectionTable.I().graph
   modifies io
   modifies s.Repr()
   decreases counter
@@ -81,7 +82,7 @@ module QueryImpl {
       ghost var oldIVars := s.I();
       LruModel.LruUse(s.lru.Queue, ref);
       s.lru.Use(ref);
-      assert SM.IBlockCache(oldIVars) == SM.IBlockCache(s.I());
+      assert SBCM.IBlockCache(oldIVars) == SBCM.IBlockCache(s.I());
 
       var r := Pivots.ComputeRoute(pivots, key);
       var kmtMsg := s.cache.GetMessage(ref, r, key);

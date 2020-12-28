@@ -4,13 +4,13 @@ include "SplitModel.i.dfy"
 module SplitImpl { 
   import opened IOImpl
   import opened BookkeepingImpl
-  import SplitModel
-  import SM = StateModel
-  import IM = IOModel
-  import opened StateImpl
+  import opened StateBCImpl
   import opened NodeImpl
-  import CacheImpl
   import opened DiskOpImpl
+  import SplitModel
+  import CacheImpl
+
+  import IT = IndirectionTable
 
   import opened Options
   import opened Maps
@@ -79,7 +79,7 @@ module SplitImpl {
   requires BookkeepingModel.ChildrenConditions(s.I(), right_child.children)
   requires BookkeepingModel.ChildrenConditions(s.I(), Some(fparent_children))
   requires |fparent_children| < MaxNumChildren()
-  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
+  requires |s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
   modifies s.blockAllocator.Repr
@@ -157,7 +157,7 @@ module SplitImpl {
   requires right_childref != parentref
   requires BookkeepingModel.ChildrenConditions(s.I(), Some(fparent_children))
   requires BookkeepingModel.ChildrenConditions(s.I(), child.children)
-  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
+  requires |s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.I() == SplitModel.splitDoChanges(old(s.I()), old(child.I()), left_childref,
@@ -203,7 +203,7 @@ module SplitImpl {
   requires BT.ValidSplitKey(s.cache.I()[childref], lbound, ubound)
   requires BookkeepingModel.ChildrenConditions(s.I(), fparent_children)
   requires BookkeepingModel.ChildrenConditions(s.I(), s.cache.I()[childref].children)
-  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
+  requires |s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
   modifies s.Repr()
   ensures s.ready
   ensures WellUpdated(s)
@@ -257,7 +257,7 @@ module SplitImpl {
   requires 0 <= slot as int < |s.cache.I()[parentref].children.value|
   requires s.cache.I()[parentref].children.value[slot] == childref
   requires |s.cache.I()[parentref].buckets| <= MaxNumChildren() - 1
-  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
+  requires |s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready

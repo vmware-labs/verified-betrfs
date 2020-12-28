@@ -17,7 +17,7 @@ module MainHandlers refines Main {
   import DebugAccumulator
   import DOM = DiskOpModel
   import SM = StateModel
-  import SI = StateImpl
+  import SI = StateBCImpl
   import opened EvictImpl // (jonh) only used for unverified debug hooks
   import CoordinationImpl
   import HandleReadResponseImpl
@@ -116,8 +116,8 @@ module MainHandlers refines Main {
   {
     var s := hs.s;
     print "\nBefore\n";
-    var acc := s.bc.DebugAccumulate();
-    DebugAccumulator.Display(acc, 0);
+    // var acc := s.bc.DebugAccumulate();
+    // DebugAccumulator.Display(acc, 0);
     var count:uint64 := s.bc.cache.cache.Count;
 //    var last_count:uint64 := count;
 //    var last_at_this_count:uint64 = 0;
@@ -127,8 +127,8 @@ module MainHandlers refines Main {
       count := s.bc.cache.cache.Count;
     }
     print "\nAfter\n";
-    acc := s.bc.DebugAccumulate();
-    DebugAccumulator.Display(acc, 0);
+    // acc := s.bc.DebugAccumulate();
+    // DebugAccumulator.Display(acc, 0);
   }
 
   // (jonh) unverified debug hook: Note "requires false" which prevents calling

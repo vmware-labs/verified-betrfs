@@ -5,7 +5,7 @@ module LeafImpl {
   import opened IOImpl
   import opened BookkeepingImpl
   import opened LeafModel
-  import opened StateImpl
+  import opened StateBCImpl
   import opened NodeImpl
   import opened BucketImpl
   import opened DiskOpImpl
@@ -18,6 +18,8 @@ module LeafImpl {
   import opened LinearSequence_i
   import opened BucketsLib
   import opened BoundedPivotsLib
+
+  import IT = IndirectionTable
 
   import opened NativeTypes
 
@@ -34,8 +36,7 @@ module LeafImpl {
   requires s.cache.ptr(ref).Some?
   requires s.cache.I()[ref].children.None?
   requires |s.cache.I()[ref].buckets| == 1
-  requires |s.ephemeralIndirectionTable.I().graph|
-    <= IndirectionTableModel.MaxSize() - 1
+  requires |s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 1
   modifies s.Repr()
   ensures s.ready
   ensures WellUpdated(s)

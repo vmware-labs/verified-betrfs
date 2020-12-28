@@ -16,22 +16,23 @@ module SyncImpl {
   import opened Bounds
   import opened DiskLayout
   import SyncModel
-  import StateModel
   import BookkeepingModel
   import DeallocModel
   import BlockAllocatorModel
   import opened DiskOpImpl
-  import opened StateImpl
   import opened MainDiskIOHandler
 
   import opened Options
   import opened Maps
   import opened Sequences
   import opened Sets
-
   import opened BucketsLib
-
   import opened NativeTypes
+
+  import opened StateBCImpl
+  import opened StateSectorImpl
+  import SBCM = StateBCModel
+  import SSM = StateSectorModel
 
   method AssignRefToLocEphemeral(s: ImplVariables, ref: BT.G.Reference, loc: Location)
   requires s.W()
@@ -154,11 +155,11 @@ module SyncImpl {
 
     assert IOModel.SimilarVariables(s', s.I());
     IOModel.SimilarVariablesGuarantees(old(IIO(io)), s', old(s.I()),
-      old(SM.SectorNode(s.cache.I()[ref])), id, loc, IIO(io));
+      old(SSM.SectorNode(s.cache.I()[ref])), id, loc, IIO(io));
     assert s.cache.I() == old(s.cache.I());
 
     if (id.Some?) {
-      SM.reveal_ConsistentBitmap();
+      SBCM.reveal_ConsistentBitmap();
 
       AssignRefToLocEphemeral(s, ref, loc.value);
       AssignRefToLocFrozen(s, ref, loc.value);
@@ -168,7 +169,7 @@ module SyncImpl {
     }
   
     assert IOModel.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()),
-      old(SM.SectorNode(s.cache.I()[ref])), id, loc, IIO(io));
+      old(SSM.SectorNode(s.cache.I()[ref])), id, loc, IIO(io));
     assert SyncModel.WriteBlockUpdateState(old(s.I()), ref, id, loc, s.I());
   }
 
@@ -187,8 +188,8 @@ module SyncImpl {
   ensures WellUpdated(s)
   ensures SyncModel.syncFoundInFrozen(old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
   {
-    assert ref in SM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).graph;
-    assert ref !in SM.IIndirectionTable(IIndirectionTable(s.frozenIndirectionTable)).locs;
+    assert ref in s.frozenIndirectionTable.I().graph;
+    assert ref !in s.frozenIndirectionTable.I().locs;
 
     var ephemeralRef := s.ephemeralIndirectionTable.GetEntry(ref);
     if ephemeralRef.Some? && ephemeralRef.value.loc.Some? {
@@ -227,7 +228,7 @@ module SyncImpl {
     }
     var foundInFrozen := s.frozenIndirectionTable.FindRefWithNoLoc();
 
-    assert Inv(s) by { StateModel.reveal_ConsistentBitmap(); }
+    assert Inv(s) by { SBCM.reveal_ConsistentBitmap(); }
 
     if foundInFrozen.Some? {
       syncFoundInFrozen(s, io, foundInFrozen.value);

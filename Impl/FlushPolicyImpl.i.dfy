@@ -14,13 +14,15 @@ module FlushPolicyImpl {
   import opened LeafImpl
   import opened EvictImpl
   import FlushPolicyModel
-  import opened StateImpl
+  import opened StateBCImpl
   import opened BucketImpl
   import opened DiskOpImpl
   import opened MainDiskIOHandler
 
   import opened LinearSequence_s
   import opened LinearSequence_i
+
+  import IT = IndirectionTable
 
   import opened Sequences
 
@@ -153,7 +155,7 @@ module FlushPolicyImpl {
   requires s.ready
   requires BT.G.Root() in s.cache.I()
   requires io !in s.Repr()
-  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 3
+  requires |s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
   modifies io
   modifies s.Repr()
   ensures WellUpdated(s)
@@ -164,7 +166,7 @@ module FlushPolicyImpl {
 
     LruModel.LruUse(s.lru.Queue, BT.G.Root());
     s.lru.Use(BT.G.Root());
-    assert SM.IBlockCache(s.I()) == SM.IBlockCache(old(s.I()));
+    assert SBCM.IBlockCache(s.I()) == SBCM.IBlockCache(old(s.I()));
 
     FlushPolicyModel.getActionToFlushValidAction(s.I(), [BT.G.Root()], []);
     var action := getActionToFlush(s, [BT.G.Root()], []);

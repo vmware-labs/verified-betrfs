@@ -4,7 +4,7 @@ include "GrowModel.i.dfy"
 module GrowImpl { 
   import opened IOImpl
   import opened BookkeepingImpl
-  import opened StateImpl
+  import opened StateBCImpl
   import opened NodeImpl
   import opened BucketImpl
   import opened DiskOpImpl
@@ -20,6 +20,8 @@ module GrowImpl {
   import opened LinearSequence_i
   import opened BoundedPivotsLib
 
+  import IT = IndirectionTable
+
   import opened NativeTypes
 
   /// The root was found to be too big: grow
@@ -27,7 +29,7 @@ module GrowImpl {
   requires Inv(s)
   requires s.ready
   requires BT.G.Root() in s.cache.I()
-  requires |s.ephemeralIndirectionTable.I().graph| <= IndirectionTableModel.MaxSize() - 2
+  requires |s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 2
   modifies s.Repr()
   ensures WellUpdated(s)
   ensures s.ready

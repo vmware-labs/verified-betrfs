@@ -1,6 +1,8 @@
-include "StateModel.i.dfy"
 include "../lib/Buckets/BucketImpl.i.dfy"
 include "../lib/Lang/LinearBox.i.dfy"
+include "../PivotBetree/PivotBetreeSpec.i.dfy"
+include "../PivotBetree/PivotBetree.i.dfy"
+include "../lib/DataStructures/MutableMapImpl.i.dfy"
 
 //
 // Implements PivotBetree/PivotBetreeSpec.Node. (There's no Model file

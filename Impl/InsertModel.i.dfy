@@ -2,7 +2,9 @@ include "BookkeepingModel.i.dfy"
 include "FlushPolicyModel.i.dfy"
 
 module InsertModel { 
-  import opened StateModel
+  import opened StateBCModel
+  import opened StateSectorModel
+
   import opened IOModel
   import opened BookkeepingModel
   import opened FlushPolicyModel
@@ -23,6 +25,8 @@ module InsertModel {
   import opened ValueMessage
   import opened BoundedPivotsLib
 
+  import IT = IndirectionTable
+
   import BT = PivotBetreeSpec`Internal
 
   // == insert ==
@@ -32,14 +36,14 @@ module InsertModel {
   requires BCInv(s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
+  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 1
   requires BoundedKey(s.cache[BT.G.Root()].pivotTable, key)
-  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 1
   {
     lemmaChildrenConditionsOfNode(s, BT.G.Root());
 
     if (
       && s.frozenIndirectionTable.Some?
-      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, BT.G.Root())
+      && s.frozenIndirectionTable.value.hasEmptyLoc(BT.G.Root())
     ) then (
       (s, false)
     ) else (
@@ -73,10 +77,10 @@ module InsertModel {
     BT.reveal_NodeInsertKeyValue();
     if (
       && s.frozenIndirectionTable.Some?
-      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, BT.G.Root())
+      && s.frozenIndirectionTable.value.hasEmptyLoc(BT.G.Root())
     ) {
-      assert (s.frozenIndirectionTable.Some? && BT.G.Root() in IIndirectionTable(s.frozenIndirectionTable.value).graph) &&
-          !(BT.G.Root() in IIndirectionTable(s.frozenIndirectionTable.value).locs);
+      assert (s.frozenIndirectionTable.Some? && BT.G.Root() in s.frozenIndirectionTable.value.I().graph) &&
+          !(BT.G.Root() in s.frozenIndirectionTable.value.I().locs);
       // TODO write out the root here instead of giving up
       assert noop(IBlockCache(s), IBlockCache(s));
       return;
@@ -92,7 +96,7 @@ module InsertModel {
 
     WeightBucketListInsert(root.buckets, root.pivotTable, key, msg);
 
-    assert BC.BlockPointsToValidReferences(INode(root), IIndirectionTable(s.ephemeralIndirectionTable).graph);
+    assert BC.BlockPointsToValidReferences(INode(root), s.ephemeralIndirectionTable.I().graph);
 
     assert WFBucket(newBucket);
     assert WFNode(newRoot);
@@ -131,7 +135,7 @@ module InsertModel {
   requires s.Ready?
   requires BCInv(s)
   {
-    if !(|s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3) then (
+    if !(|s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3) then (
       && s' == s
       && io' == io
       && success == false
@@ -177,7 +181,7 @@ module InsertModel {
   {
     reveal_insert();
 
-    if !(|s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3) {
+    if !(|s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3) {
       assert noop(IBlockCache(s), IBlockCache(s));
     } else if (BT.G.Root() !in s.cache) {
       if TotalCacheSize(s) <= MaxCacheSize() - 1 {

@@ -1,7 +1,9 @@
 include "BookkeepingModel.i.dfy"
 
 module DeallocModel { 
-  import opened StateModel
+  import IT = IndirectionTable
+  import opened StateBCModel
+  import opened StateSectorModel
   import opened IOModel
   import opened DiskOpModel
   import opened BookkeepingModel
@@ -21,7 +23,7 @@ module DeallocModel {
   predicate deallocable(s: BCVariables, ref: BT.G.Reference)
   {
     && s.Ready?
-    && IndirectionTableModel.deallocable(s.ephemeralIndirectionTable, ref)
+    && s.ephemeralIndirectionTable.deallocable(ref)
   }
 
   function {:opaque} Dealloc(s: BCVariables, io: IO, ref: BT.G.Reference)
@@ -32,13 +34,13 @@ module DeallocModel {
   {
     if (
       && s.frozenIndirectionTable.Some?
-      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, ref)
+      && s.frozenIndirectionTable.value.hasEmptyLoc(ref)
     ) then (
       (s, io)
     ) else if BC.OutstandingRead(ref) in s.outstandingBlockReads.Values then (
       (s, io)
     ) else (
-      var (eph, oldLoc) := IndirectionTableModel.RemoveRef(s.ephemeralIndirectionTable, ref);
+      var (eph, oldLoc) := s.ephemeralIndirectionTable.removeRef(ref);
 
       lemmaIndirectionTableLocIndexValid(s, ref);
 
@@ -75,7 +77,7 @@ module DeallocModel {
 
     if (
       && s.frozenIndirectionTable.Some?
-      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, ref)
+      && s.frozenIndirectionTable.value.hasEmptyLoc(ref)
     ) {
       assert noop(IBlockCache(s), IBlockCache(s'));
       return;
@@ -90,7 +92,7 @@ module DeallocModel {
 
     lemmaIndirectionTableLocIndexValid(s, ref);
 
-    var (eph, oldLoc) := IndirectionTableModel.RemoveRef(s.ephemeralIndirectionTable, ref);
+    var (eph, oldLoc) := s.ephemeralIndirectionTable.removeRef(ref);
 
     var blockAllocator' := if oldLoc.Some?
       then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / NodeBlockSize())
@@ -116,18 +118,17 @@ module DeallocModel {
   requires WFBCVars(s)
   requires s.Ready?
   {
-    IndirectionTableModel.FindDeallocable(s.ephemeralIndirectionTable)
+    s.ephemeralIndirectionTable.findDeallocable()
   }
 
   lemma FindDeallocableCorrect(s: BCVariables)
   requires WFBCVars(s)
   requires s.Ready?
   ensures var ref := FindDeallocable(s);
-      && (ref.Some? ==> ref.value in IIndirectionTable(s.ephemeralIndirectionTable).graph)
+      && (ref.Some? ==> ref.value in s.ephemeralIndirectionTable.I().graph)
       && (ref.Some? ==> deallocable(s, ref.value))
-      && (ref.None? ==> forall r | r in IIndirectionTable(s.ephemeralIndirectionTable).graph :: !deallocable(s, r))
+      && (ref.None? ==> forall r | r in s.ephemeralIndirectionTable.I().graph :: !deallocable(s, r))
   {
     reveal_FindDeallocable();
-    IndirectionTableModel.FindDeallocableCorrect(s.ephemeralIndirectionTable);
   }
 }

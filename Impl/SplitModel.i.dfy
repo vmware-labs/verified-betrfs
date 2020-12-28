@@ -1,7 +1,9 @@
 include "BookkeepingModel.i.dfy"
 
 module SplitModel {
-  import opened StateModel
+  import opened StateBCModel
+  import opened StateSectorModel
+
   import opened IOModel
   import opened BookkeepingModel
   import opened ViewOp
@@ -12,6 +14,7 @@ module SplitModel {
   import opened Sequences
   import opened Sets
 
+  import IT = IndirectionTable
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
@@ -100,7 +103,7 @@ module SplitModel {
   requires ChildrenConditions(s, right_child.children)
   requires ChildrenConditions(s, Some(fused_parent_children))
   requires |fused_parent_children| < MaxNumChildren()
-  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
+  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
   ensures s'.Ready?
   ensures s'.cache == s.cache
   {
@@ -155,7 +158,7 @@ module SplitModel {
   requires ChildrenConditions(s, Some(fused_parent_children))
   requires ChildrenConditions(s, child.children)
   requires |fused_parent_children| < MaxNumChildren()
-  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
+  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
   {
     var num_children_left := |child.buckets| / 2;
     var pivot := GetKey(child.pivotTable, num_children_left);
@@ -188,7 +191,7 @@ module SplitModel {
   requires ChildrenConditions(s, s.cache[childref].children)
   requires ChildrenConditions(s, s.cache[parentref].children)
   requires |s.cache[parentref].children.value| < MaxNumChildren()
-  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
+  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
   {
     var fused_parent := s.cache[parentref];
     var fused_child := s.cache[childref];
@@ -227,11 +230,11 @@ module SplitModel {
   requires |s.cache[parentref].buckets| <= MaxNumChildren() - 1
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires s.cache[parentref].children.value[slot] == childref
-  requires |s.ephemeralIndirectionTable.graph| <= IndirectionTableModel.MaxSize() - 3
+  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
   {
     if (
       && s.frozenIndirectionTable.Some?
-      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, parentref)
+      && s.frozenIndirectionTable.value.hasEmptyLoc(parentref)
     ) then (
       s
     ) else (
@@ -274,7 +277,7 @@ module SplitModel {
 
     if (
       && s.frozenIndirectionTable.Some?
-      && IndirectionTableModel.HasEmptyLoc(s.frozenIndirectionTable.value, parentref)
+      && s.frozenIndirectionTable.value.hasEmptyLoc(parentref)
     ) {
       assert noop(IBlockCache(s), IBlockCache(s));
       return;
@@ -374,15 +377,15 @@ module SplitModel {
 
     PBSWF.ValidSplitWritesWFNodes(splitStep);
     lemmaBlockPointsToValidReferences(s, childref);
-    assert BC.BlockPointsToValidReferences(fused_child, IIndirectionTable(s.ephemeralIndirectionTable).graph);
-    lemmaSplitChildValidReferences(fused_child, child, num_children_left, IIndirectionTable(s.ephemeralIndirectionTable).graph, lbound, ubound);
+    assert BC.BlockPointsToValidReferences(fused_child, s.ephemeralIndirectionTable.I().graph);
+    lemmaSplitChildValidReferences(fused_child, child, num_children_left, s.ephemeralIndirectionTable.I().graph, lbound, ubound);
 
     writeNewRefIsAlloc(s, left_childref.value, left_child);
     writeNewRefIsAlloc(s1, right_childref.value, right_child);
 
     lemmaBlockPointsToValidReferences(s, parentref);
-    assert BC.BlockPointsToValidReferences(fused_parent, IIndirectionTable(s2.ephemeralIndirectionTable).graph);
-    lemmaSplitParentValidReferences(fused_parent, pivot, slot, left_childref.value, right_childref.value, IIndirectionTable(s2.ephemeralIndirectionTable).graph);
+    assert BC.BlockPointsToValidReferences(fused_parent, s2.ephemeralIndirectionTable.I().graph);
+    lemmaSplitParentValidReferences(fused_parent, pivot, slot, left_childref.value, right_childref.value, s2.ephemeralIndirectionTable.I().graph);
 
     assert child == CutoffNode(fused_child, lbound, ubound);
     assert 1 <= num_children_left < |child.buckets|;

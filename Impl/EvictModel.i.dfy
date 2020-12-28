@@ -2,7 +2,6 @@ include "DeallocModel.i.dfy"
 include "SyncModel.i.dfy"
 
 module EvictModel {
-  import opened StateModel
   import opened IOModel
   import opened BookkeepingModel
   import opened DeallocModel
@@ -21,6 +20,9 @@ module EvictModel {
   import opened NativeTypes
 
   import LruModel
+
+  import opened StateBCModel
+  import opened StateSectorModel
 
   function Evict(s: BCVariables, ref: BT.G.Reference) : (s' : BCVariables)
   requires s.Ready?

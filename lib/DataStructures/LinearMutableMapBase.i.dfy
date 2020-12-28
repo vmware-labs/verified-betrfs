@@ -177,6 +177,12 @@ module LinearMutableMapBase {
     && FilledWithKey(elements, foundSlot, key)
   }
 
+  predicate {:opaque} SomeSkipCountExplainsKey<V>(elements: seq<Item<V>>, key: uint64)
+  requires ValidElements(elements)
+  {
+    exists skips :: SlotExplainsKey(elements, skips, key)
+  }
+
   // hide forall trigger
   predicate TwoNonEmptyValidSlotsWithSameKey<V>(elements: seq<Item<V>>, slot1: Slot, slot2: Slot)
   requires ValidElements(elements)

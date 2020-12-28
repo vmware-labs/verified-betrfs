@@ -15,106 +15,103 @@ module LinearLru
   export
     provides NativeTypes, Options, LruModel
     provides LinearLru
-    provides Inv, Queue
-    provides Alloc, Free, Remove, Use, Next, NextOpt
+    provides LinearLru.Inv, LinearLru.Queue
+    provides LinearLru.Alloc, LinearLru.Free, LinearLru.Remove, LinearLru.Use, LinearLru.Next, LinearLru.NextOpt
 
   linear datatype LinearLru = LinearLru(
     linear dlist:DList.DList<uint64>,  // list of values
     linear ptr_map:LinearMutableMap.LinearHashMap<uint64> // map of pointers into dlist
     )
-
-  predicate Inv(lru:LinearLru) {
-    var q := DList.Seq(lru.dlist);
-    && LinearMutableMap.Inv(lru.ptr_map)
-    && DList.Inv(lru.dlist)
-    && LruModel.WF(q)
-    && LruModel.I(q) == lru.ptr_map.contents.Keys
-    && (forall i {:trigger q[i] in lru.ptr_map.contents} :: 0 <= i < |q| ==>
-      && q[i] in lru.ptr_map.contents
-      && DList.Index(lru.dlist, lru.ptr_map.contents[q[i]]) as int == i)
-    && (forall x :: x in lru.ptr_map.contents ==>
-      && DList.ValidPtr(lru.dlist, lru.ptr_map.contents[x])
-      && DList.Get(lru.dlist, lru.ptr_map.contents[x]) == x)
-  }
-
-  function Queue(lru:LinearLru):(q:LruModel.LruQueue)
-    ensures Inv(lru) ==> LruModel.WF(q)
   {
-    DList.Seq(lru.dlist)
-  }
 
-  method Alloc() returns(linear lru:LinearLru)
-    ensures Inv(lru)
-  {
-    var size := 128;
-    linear var dlist := DList.Alloc<uint64>(size + 1);
-    linear var ptr_map := LinearMutableMap.Constructor(size);
-    lru := LinearLru(dlist, ptr_map);
-  }
-
-  method Free(linear lru:LinearLru)
-  {
-    linear var LinearLru(dlist, ptr_map) := lru;
-    DList.Free(dlist);
-    LinearMutableMap.Destructor(ptr_map);
-  }
-
-  method Remove(linear lru:LinearLru, x:uint64) returns(linear lru':LinearLru)
-    requires Inv(lru)
-    ensures Inv(lru')
-    ensures Queue(lru') == LruModel.Remove(Queue(lru), x)
-  {
-    linear var LinearLru(dlist, ptr_map) := lru;
-    ghost var q := DList.Seq(dlist);
-    LruModel.LruRemove'(q, x);
-
-    linear var RemoveResult(ptr_map', removed) := LinearMutableMap.RemoveAndGet(ptr_map, x);
-    if (removed.Some?) {
-      var Some(p) := removed;
-      dlist := DList.Remove(dlist, p);
+    predicate Inv() {
+      var q := this.dlist.Seq();
+      && LinearMutableMap.Inv(this.ptr_map)
+      && this.dlist.Inv()
+      && LruModel.WF(q)
+      && LruModel.I(q) == this.ptr_map.contents.Keys
+      && (forall i {:trigger q[i] in this.ptr_map.contents} :: 0 <= i < |q| ==>
+        && q[i] in this.ptr_map.contents
+        && this.dlist.Index(this.ptr_map.contents[q[i]]) as int == i)
+      && (forall x :: x in this.ptr_map.contents ==>
+        && this.dlist.ValidPtr(this.ptr_map.contents[x])
+        && this.dlist.Get(this.ptr_map.contents[x]) == x)
     }
-    lru' := LinearLru(dlist, ptr_map');
-  }
 
-  method Use(linear lru:LinearLru, x:uint64) returns(linear lru':LinearLru)
-    requires Inv(lru)
-    requires |LruModel.I(Queue(lru))| < 0x1_0000_0000_0000_0000 / 8
-    ensures Inv(lru')
-    ensures Queue(lru') == LruModel.Use(Queue(lru), x)
-  {
-    LruModel.QueueCount(Queue(lru));
-    LruModel.LruRemove'(Queue(lru), x);
-    lru' := Remove(lru, x);
-    LruModel.QueueCount(Queue(lru'));
+    function Queue():(q:LruModel.LruQueue)
+      ensures this.Inv() ==> LruModel.WF(q)
+    {
+      this.dlist.Seq()
+    }
 
-    linear var LinearLru(dlist, ptr_map) := lru';
-    var p;
-    dlist, p := DList.InsertBefore(dlist, 0, x);
-    ptr_map := LinearMutableMap.Insert(ptr_map, x, p);
-    lru' := LinearLru(dlist, ptr_map);
-  }
+    static method Alloc() returns (linear lru:LinearLru)
+      ensures lru.Inv()
+    {
+      var size := 128;
+      linear var dlist := DList.DList<uint64>.Alloc(size + 1);
+      linear var ptr_map := LinearMutableMap.Constructor(size);
+      lru := LinearLru(dlist, ptr_map);
+    }
 
-  method Next(shared lru:LinearLru) returns(x:uint64)
-    requires Inv(lru)
-    requires |LruModel.I(Queue(lru))| > 0
-    ensures x == LruModel.Next(Queue(lru))
-  {
-    LruModel.QueueCount(DList.Seq(lru.dlist));
-    var p := DList.Next(lru.dlist, 0);
-    x := DList.Get(lru.dlist, p);
-  }
+    linear method Free()
+    {
+      linear var LinearLru(dlist, ptr_map) := this;
+      dlist.Free();
+      LinearMutableMap.Destructor(ptr_map);
+    }
 
-  method NextOpt(shared lru:LinearLru) returns(x:Option<uint64>)
-    requires Inv(lru)
-    ensures x == LruModel.NextOpt(Queue(lru))
-  {
-    LruModel.QueueCount(DList.Seq(lru.dlist));
-    var p := DList.Next(lru.dlist, 0);
-    if (p == 0) {
-      x := None;
-    } else {
-      LruModel.reveal_NextOpt();
-      x := Some(DList.Get(lru.dlist, p));
+    linear inout method Remove(x:uint64)
+      requires old_self.Inv()
+      ensures self.Inv()
+      ensures self.Queue() == LruModel.Remove(old_self.Queue(), x)
+    {
+      ghost var q := self.dlist.Seq();
+      LruModel.LruRemove'(q, x);
+
+      var removed := LinearMutableMap.RemoveAndGet(inout self.ptr_map, x);
+      if (removed.Some?) {
+        var Some(p) := removed;
+        inout self.dlist.Remove(p);
+      }
+    }
+
+    linear inout method Use(x:uint64)
+      requires old_self.Inv()
+      requires |LruModel.I(old_self.Queue())| < 0x1_0000_0000_0000_0000 / 8
+      ensures self.Inv()
+      ensures self.Queue() == LruModel.Use(old_self.Queue(), x)
+    {
+      LruModel.QueueCount(self.Queue());
+      LruModel.LruRemove'(self.Queue(), x);
+      Remove(inout self, x);
+      LruModel.QueueCount(self.Queue());
+
+      var p := inout self.dlist.InsertBefore(0, x);
+      LinearMutableMap.Insert(inout self.ptr_map, x, p);
+    }
+
+    shared method Next() returns(x:uint64)
+      requires this.Inv()
+      requires |LruModel.I(this.Queue())| > 0
+      ensures x == LruModel.Next(this.Queue())
+    {
+      LruModel.QueueCount(this.dlist.Seq());
+      var p := this.dlist.Next(0);
+      x := this.dlist.Get(p);
+    }
+
+    shared method NextOpt() returns(x:Option<uint64>)
+      requires this.Inv()
+      ensures x == LruModel.NextOpt(this.Queue())
+    {
+      LruModel.QueueCount(this.dlist.Seq());
+      var p := this.dlist.Next(0);
+      if (p == 0) {
+        x := None;
+      } else {
+        LruModel.reveal_NextOpt();
+        x := Some(this.dlist.Get(p));
+      }
     }
   }
 }

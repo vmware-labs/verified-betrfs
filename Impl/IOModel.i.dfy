@@ -1,6 +1,7 @@
-include "StateModel.i.dfy"
+include "StateBCModel.i.dfy"
 include "../ByteBlockCacheSystem/ByteCache.i.dfy"
 include "MarshallingModel.i.dfy"
+include "DiskOpModel.i.dfy"
 
 //
 // IO functions used by various StateModel verbs.
@@ -12,7 +13,7 @@ include "MarshallingModel.i.dfy"
 //
 
 module IOModel { 
-  import opened StateModel
+  // import opened StateModel
   import opened DiskOpModel
   import opened NativeTypes
   import opened Options
@@ -31,9 +32,15 @@ module IOModel {
   import JournalDisk
   import BlockJournalDisk
   import UI
-
   // Misc utilities
+  import BBC = BetreeCache
+  import SSM = StateSectorModel
+  import IndirectionTable
 
+  import opened StateBCModel
+
+  type Sector = SSM.Sector
+  
   predicate stepsBetree(s: BBC.Variables, s': BBC.Variables, vop: VOp, step: BT.BetreeStep)
   {
     BBC.NextStep(s, s', BlockDisk.NoDiskOp, vop, BBC.BetreeMoveStep(step))
@@ -103,11 +110,11 @@ module IOModel {
       var i := BlockAllocatorModel.Alloc(s.blockAllocator);
 
       BlockAllocatorModel.LemmaAllocResult(s.blockAllocator);
-      assert !IsLocAllocBitmap(s.blockAllocator.ephemeral, i.value);
+      assert !IndirectionTable.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.ephemeral, i.value);
       assert s.blockAllocator.frozen.Some? ==>
-          !IsLocAllocBitmap(s.blockAllocator.frozen.value, i.value);
-      assert !IsLocAllocBitmap(s.blockAllocator.persistent, i.value);
-      assert !IsLocAllocBitmap(s.blockAllocator.outstanding, i.value);
+          !IndirectionTable.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.frozen.value, i.value);
+      assert !IndirectionTable.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.persistent, i.value);
+      assert !IndirectionTable.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.outstanding, i.value);
 
       //assert BC.ValidNodeLocation(loc.value);
       //assert BC.ValidAllocation(IVars(s), loc.value);
@@ -123,12 +130,12 @@ module IOModel {
     && var bytes: seq<byte> := dop.reqWrite.bytes;
     && |bytes| == 4096
     && IMM.parseCheckedSector(bytes).Some?
-    && WFSector(sector)
+    && SSM.WFSector(sector)
     // Note: we have to say this instead of just
     //     IMM.parseCheckedSector(bytes).value == sector
     // because the indirection table might not parse to an indirection table
     // with exactly the same internals.
-    && ISector(IMM.parseCheckedSector(bytes).value) == ISector(sector)
+    && SSM.ISector(IMM.parseCheckedSector(bytes).value) == SSM.ISector(sector)
 
     && |bytes| == loc.len as int
     && id == dop.id
@@ -138,8 +145,8 @@ module IOModel {
 
   lemma RequestWriteCorrect(io: IO, loc: DiskLayout.Location, sector: Sector,
       id: D.ReqId, io': IO)
-  requires WFSector(sector)
-  requires sector.SectorNode? ==> BT.WFNode(INode(sector.node))
+  requires SSM.WFSector(sector)
+  requires sector.SectorNode? ==> BT.WFNode(SSM.INode(sector.node))
   requires DiskLayout.ValidLocation(loc)
   requires DiskLayout.ValidSuperblockLocation(loc)
   requires sector.SectorSuperblock?
@@ -180,8 +187,8 @@ module IOModel {
       && |bytes| <= NodeBlockSize() as int
       && 32 <= |bytes|
       && IMM.parseCheckedSector(bytes).Some?
-      && WFSector(sector)
-      && ISector(IMM.parseCheckedSector(bytes).value) == ISector(sector)
+      && SSM.WFSector(sector)
+      && SSM.ISector(IMM.parseCheckedSector(bytes).value) == SSM.ISector(sector)
 
       && var len := |bytes| as uint64;
       && loc == getFreeLoc(s, len)
@@ -235,9 +242,9 @@ module IOModel {
   lemma FindLocationAndRequestWriteCorrect(io: IO, s: BCVariables, sector: Sector, id: Option<D.ReqId>, loc: Option<DiskLayout.Location>, io': IO)
   requires WFBCVars(s)
   requires s.Ready?
-  requires WFSector(sector)
+  requires SSM.WFSector(sector)
   requires sector.SectorNode?
-  requires sector.SectorNode? ==> BT.WFNode(INode(sector.node))
+  requires sector.SectorNode? ==> BT.WFNode(SSM.INode(sector.node))
   requires FindLocationAndRequestWrite(io, s, sector, id, loc, io')
   ensures ValidDiskOp(diskOp(io'))
   ensures id.Some? ==> loc.Some?
@@ -245,8 +252,8 @@ module IOModel {
   ensures id.Some? ==> sector.SectorNode? ==> BC.ValidAllocation(IBlockCache(s), loc.value)
   ensures id.Some? ==> sector.SectorNode? ==> ValidNodeLocation(loc.value)
   //ensures id.Some? ==> sector.SectorIndirectionTable? ==> ValidIndirectionTableLocation(loc.value)
-  ensures sector.SectorNode? ==> id.Some? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteNodeOp(id.value, BlockDisk.ReqWriteNode(loc.value, ISector(sector).node)), JournalDisk.NoDiskOp)
-  //ensures sector.SectorIndirectionTable? ==> id.Some? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteIndirectionTableOp(id.value, BlockDisk.ReqWriteIndirectionTable(loc.value, ISector(sector).indirectionTable)), JournalDisk.NoDiskOp)
+  ensures sector.SectorNode? ==> id.Some? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteNodeOp(id.value, BlockDisk.ReqWriteNode(loc.value, SSM.ISector(sector).node)), JournalDisk.NoDiskOp)
+  //ensures sector.SectorIndirectionTable? ==> id.Some? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteIndirectionTableOp(id.value, BlockDisk.ReqWriteIndirectionTable(loc.value, SSM.ISector(sector).indirectionTable)), JournalDisk.NoDiskOp)
   ensures id.None? ==> io' == io
   {
     reveal_FindLocationAndRequestWrite();
@@ -287,8 +294,8 @@ module IOModel {
       && |bytes| <= IndirectionTableMaxLength() as int
       && 32 <= |bytes|
       && IMM.parseCheckedSector(bytes).Some?
-      && WFSector(sector)
-      && ISector(IMM.parseCheckedSector(bytes).value) == ISector(sector)
+      && SSM.WFSector(sector)
+      && SSM.ISector(IMM.parseCheckedSector(bytes).value) == SSM.ISector(sector)
 
       && var len := |bytes| as uint64;
       && loc == Some(DiskLayout.Location(
@@ -304,13 +311,13 @@ module IOModel {
   lemma FindIndirectionTableLocationAndRequestWriteCorrect(io: IO, s: BCVariables, sector: Sector, id: Option<D.ReqId>, loc: Option<DiskLayout.Location>, io': IO)
   requires BCInv(s)
   requires s.Ready?
-  requires WFSector(sector)
+  requires SSM.WFSector(sector)
   requires sector.SectorIndirectionTable?
   requires FindIndirectionTableLocationAndRequestWrite(io, s, sector, id, loc, io')
   ensures ValidDiskOp(diskOp(io'))
   ensures id.Some? ==> loc.Some?
   ensures id.Some? ==> DiskLayout.ValidIndirectionTableLocation(loc.value)
-  ensures id.Some? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteIndirectionTableOp(id.value, BlockDisk.ReqWriteIndirectionTable(loc.value, ISector(sector).indirectionTable)), JournalDisk.NoDiskOp)
+  ensures id.Some? ==> IDiskOp(diskOp(io')) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteIndirectionTableOp(id.value, BlockDisk.ReqWriteIndirectionTable(loc.value, SSM.ISector(sector).indirectionTable)), JournalDisk.NoDiskOp)
   ensures loc.Some? ==> !overlap(loc.value, s.persistentIndirectionTableLoc)
   ensures id.None? ==> io' == io
   {
@@ -399,7 +406,7 @@ module IOModel {
   : (res : (BCVariables, IO))
   requires s.Ready?
   requires io.IOInit?
-  requires ref in s.ephemeralIndirectionTable.locs;
+  requires ref in s.ephemeralIndirectionTable.I().locs;
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) then (
       (s, io)
@@ -429,7 +436,7 @@ module IOModel {
       assert noop(IBlockCache(s), IBlockCache(s));
     } else {
       var loc := s.ephemeralIndirectionTable.locs[ref];
-      assert ref in IIndirectionTable(s.ephemeralIndirectionTable).locs;
+      assert ref in s.ephemeralIndirectionTable.I().locs;
       assert ValidNodeLocation(loc);
       var (id, io') := RequestRead(io, loc);
       var s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
@@ -444,11 +451,11 @@ module IOModel {
   // == readResponse ==
 
   function ISectorOpt(sector: Option<Sector>) : Option<SectorType.Sector>
-  requires sector.Some? ==> WFSector(sector.value)
+  requires sector.Some? ==> SSM.WFSector(sector.value)
   {
     match sector {
       case None => None
-      case Some(sector) => Some(ISector(sector))
+      case Some(sector) => Some(SSM.ISector(sector))
     }
   }
 
@@ -480,10 +487,10 @@ module IOModel {
   requires ValidDiskOp(diskOp(io))
   ensures var (id, sector) := ReadSector(io);
     && (sector.Some? ==> (
-      && WFSector(sector.value)
+      && SSM.WFSector(sector.value)
       && ValidDiskOp(diskOp(io))
-      && (sector.value.SectorNode? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadNodeOp(id, Some(INode(sector.value.node))), JournalDisk.NoDiskOp))
-      && (sector.value.SectorIndirectionTable? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadIndirectionTableOp(id, Some(IIndirectionTable(sector.value.indirectionTable))), JournalDisk.NoDiskOp))
+      && (sector.value.SectorNode? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadNodeOp(id, Some(SSM.INode(sector.value.node))), JournalDisk.NoDiskOp))
+      && (sector.value.SectorIndirectionTable? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadIndirectionTableOp(id, Some(sector.value.indirectionTable.I())), JournalDisk.NoDiskOp))
       && (sector.value.SectorSuperblock? ==>
         && IDiskOp(diskOp(io)).bdop == BlockDisk.NoDiskOp
         && IDiskOp(diskOp(io)).jdop.RespReadSuperblockOp?
@@ -513,11 +520,10 @@ module IOModel {
     var (id, sector) := ReadSector(io);
     if (Some(id) == s.indirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) then (
       var ephemeralIndirectionTable := sector.value.indirectionTable;
-      var (succ, bm) := IndirectionTableModel.InitLocBitmap(ephemeralIndirectionTable);
+      var (succ, bm) := ephemeralIndirectionTable.initLocBitmap();
       if succ then (
         var blockAllocator := BlockAllocatorModel.InitBlockAllocator(bm);
-        var persistentIndirectionTable :=
-            IndirectionTableModel.clone(sector.value.indirectionTable);
+        var persistentIndirectionTable := sector.value.indirectionTable.clone();
         Ready(persistentIndirectionTable, None, ephemeralIndirectionTable, s.indirectionTableLoc, None, None, map[], map[], map[], LruModel.Empty(), blockAllocator)
       ) else (
         s
@@ -549,14 +555,13 @@ module IOModel {
     var s' := PageInIndirectionTableResp(s, io);
     if (Some(id) == s.indirectionTableRead && sector.Some? && sector.value.SectorIndirectionTable?) {
       var ephemeralIndirectionTable := sector.value.indirectionTable;
-      var (succ, bm) := IndirectionTableModel.InitLocBitmap(ephemeralIndirectionTable);
+      var (succ, bm) := ephemeralIndirectionTable.initLocBitmap();
       if succ {
         WeightBucketEmpty();
 
         reveal_ConsistentBitmap();
-        IndirectionTableModel.InitLocBitmapCorrect(ephemeralIndirectionTable);
-        assert ConsistentBitmap(s'.ephemeralIndirectionTable, s'.frozenIndirectionTable,
-          s'.persistentIndirectionTable, s'.outstandingBlockWrites, s'.blockAllocator);
+        assert ConsistentBitmap(s'.ephemeralIndirectionTable.I(), MapOption(s'.frozenIndirectionTable, (x: IndirectionTable.IndirectionTable) => x.I()),
+          s'.persistentIndirectionTable.I(), s'.outstandingBlockWrites, s'.blockAllocator);
 
         assert WFBCVars(s');
         assert stepsBC(IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.PageInIndirectionTableRespStep);
@@ -578,7 +583,7 @@ module IOModel {
   : (s': BCVariables)
   requires diskOp(io).RespReadOp?
   requires s.Ready?
-  requires IndirectionTableModel.Inv(s.ephemeralIndirectionTable)
+  requires s.ephemeralIndirectionTable.Inv()
   {
     var (id, sector) := ReadSector(io);
 
@@ -590,7 +595,7 @@ module IOModel {
 
       var ref := s.outstandingBlockReads[id].ref;
 
-      var locGraph := IndirectionTableModel.GetEntry(s.ephemeralIndirectionTable, ref);
+      var locGraph := s.ephemeralIndirectionTable.getEntry(ref);
       if (locGraph.None? || locGraph.value.loc.None? || ref in s.cache) then ( // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
         s
       ) else (
@@ -639,7 +644,7 @@ module IOModel {
 
     var ref := s.outstandingBlockReads[id].ref;
     
-    var locGraph := IndirectionTableModel.GetEntry(s.ephemeralIndirectionTable, ref);
+    var locGraph := s.ephemeralIndirectionTable.getEntry(ref);
     if (locGraph.None? || locGraph.value.loc.None? || ref in s.cache) { // ref !in I(s.ephemeralIndirectionTable).locs || ref in s.cache
       assert stepsBC(IBlockCache(s), IBlockCache(s'), StatesInternalOp, io, BC.NoOpStep);
       return;
@@ -681,7 +686,7 @@ module IOModel {
     var i := s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize();
     DiskLayout.reveal_ValidNodeAddr();
     assert i * NodeBlockSize() == s.outstandingBlockWrites[id].loc.addr as int;
-    assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
+    assert IndirectionTable.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.outstanding, i);
   }
 
   lemma lemmaBlockAllocatorFrozenSome(s: BCVariables)
@@ -758,12 +763,12 @@ module IOModel {
 
     forall i: int
     | IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
-    ensures IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
+    ensures IndirectionTable.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
     {
       if i != locIdx {
         assert IsLocAllocOutstanding(s.outstandingBlockWrites, i);
-        assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
-        assert IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
+        assert IndirectionTable.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.outstanding, i);
+        assert IndirectionTable.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.outstanding, i);
       } else {
         var id1 :| id1 in s'.outstandingBlockWrites && s'.outstandingBlockWrites[id1].loc.addr as int == i * NodeBlockSize() as int;
         assert BC.OutstandingBlockWritesDontOverlap(s.outstandingBlockWrites, id, id1);
@@ -777,11 +782,11 @@ module IOModel {
     }
 
     forall i: int
-    | IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
+    | IndirectionTable.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.outstanding, i)
     ensures IsLocAllocOutstanding(s'.outstandingBlockWrites, i)
     {
       if i != locIdx {
-        assert IsLocAllocBitmap(s.blockAllocator.outstanding, i);
+        assert IndirectionTable.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.outstanding, i);
         assert IsLocAllocOutstanding(s'.outstandingBlockWrites, i);
       } else {
         assert IsLocAllocOutstanding(s'.outstandingBlockWrites, i);

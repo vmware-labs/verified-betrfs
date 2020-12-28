@@ -13,7 +13,7 @@ module SuccImpl {
   import opened IOImpl
   import SuccModel
   import BookkeepingModel
-  import opened StateImpl
+  import opened StateBCImpl
   import opened BucketImpl
   import opened Lexicographic_Byte_Order_Impl
   import opened NodeImpl
@@ -46,7 +46,7 @@ module SuccImpl {
   returns (linear g': BGI.Generator)
   requires cache.Inv()
   requires cache.ptr(ref).Some?
-  requires StateModel.WFNode(cache.I()[ref])
+  requires SSM.WFNode(cache.I()[ref])
   requires r as nat < |cache.I()[ref].buckets|
   requires bucket == cache.I()[ref].buckets[r as nat]
   requires WFBucket(bucket)
@@ -85,7 +85,7 @@ module SuccImpl {
   requires Inv(s)
   requires io.initialized()
   requires s.cache.ptr(ref).Some?
-  requires StateModel.WFNode(s.cache.I()[ref])
+  requires SSM.WFNode(s.cache.I()[ref])
   requires pivots == s.cache.I()[ref].pivotTable
   requires children == s.cache.I()[ref].children
   requires BoundedKey(pivots, key)

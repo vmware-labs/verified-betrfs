@@ -3,7 +3,7 @@ include "BookkeepingModel.i.dfy"
 
 module BookkeepingImpl { 
   import opened IOImpl
-  import opened StateImpl
+  import opened StateBCImpl
   import opened DiskOpImpl
   import BookkeepingModel
   import LruModel
@@ -14,6 +14,7 @@ module BookkeepingImpl {
   import opened Sequences
   import opened Sets
   import opened NativeTypes
+  import IndirectionTable
 
   import opened Bounds
 
@@ -31,6 +32,8 @@ module BookkeepingImpl {
     }
 
     i := i + 1;
+
+    s.ephemeralIndirectionTable.RevealI();
 
     while true
     invariant i >= 1
@@ -68,6 +71,8 @@ module BookkeepingImpl {
 
     i := i + 1;
 
+    s.ephemeralIndirectionTable.RevealI();
+
     while true
     invariant i >= 1
     invariant forall r | r in s.ephemeralIndirectionTable.I().graph :: r < i
@@ -95,7 +100,7 @@ module BookkeepingImpl {
   requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
   requires BookkeepingModel.WriteAllocConditions(s.I())
   requires BookkeepingModel.ChildrenConditions(s.I(), children)
-  requires |s.ephemeralIndirectionTable.I().graph| < IndirectionTableModel.MaxSize()
+  requires |s.ephemeralIndirectionTable.I().graph| < IndirectionTable.MaxSize()
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
   modifies s.blockAllocator.Repr
@@ -166,7 +171,7 @@ module BookkeepingImpl {
   requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
   requires BookkeepingModel.WriteAllocConditions(s.I())
   requires BookkeepingModel.ChildrenConditions(s.I(), children)
-  requires |s.ephemeralIndirectionTable.I().graph| < IndirectionTableModel.MaxSize()
+  requires |s.ephemeralIndirectionTable.I().graph| < IndirectionTable.MaxSize()
   modifies s.lru.Repr
   modifies s.ephemeralIndirectionTable.Repr
   modifies s.blockAllocator.Repr
