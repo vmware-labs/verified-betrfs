@@ -132,7 +132,7 @@ module NativePackedByte refines NativePackedInt{
   method {:extern} Pack_Seq_into_ByteSeq(value: seq<Integer>, linear inout packed: seq<byte>, idx: uint64)
 }
 
-module NativePackedUint32 refines NativePackedInt{
+module NativePackedUint32 refines NativePackedInt {
   type Integer = uint32
 
   function MinValue() : int { 0 }
@@ -162,8 +162,10 @@ module NativePackedUint32 refines NativePackedInt{
     + (s[3] as uint32 * 0x1_00_00_00)
   }
 
+  // framework/Framework.cpp
   method {:extern} Unpack(packed: seq<byte>, idx: uint64) returns (i: Integer)
   method {:extern} Pack_into_ByteSeq(i: Integer, linear inout s: seq<byte>, idx: uint64)
+  // Unpack currently copies.  Can it just be a cast?
   method {:extern} Unpack_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)
   method {:extern} Pack_Seq_into_ByteSeq(value: seq<Integer>, linear inout packed: seq<byte>, idx: uint64)
 }

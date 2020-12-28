@@ -94,7 +94,7 @@ namespace NativePackedInts_Compile {
     return res;
   }
 
-  DafnySequence<uint64> Unpack__LittleEndian__Uint64__Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len)
+  DafnySequence<uint64> Unpack__LittleEndian__Uint64__Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len)g
   {
     DafnySequence<uint64> res(len);
     memcpy(res.ptr(), packed.ptr() + idx, sizeof(uint64) * len);
@@ -119,12 +119,13 @@ namespace NativePackedInts_Compile {
     res.len = unpacked.len * sizeof(uint32);
   }
 
-  DafnySequence<byte> Cast__ByteSeq__to__LittleEndian_Uint32__Seq(DafnySequence<byte> const& packed)
+  DafnySequence<uint32> Cast__ByteSeq__to__LittleEndian_Uint32__Seq(DafnySequence<byte> const& packed)
   {
     DafnySequence<uint32> res;
     res.sptr = static_pointer_cast<uint32>(unpacked.sptr);
     res.start = (uint32 *)unpacked.start;
     res.len = unpacked.len / sizeof(uint32);
+    return res;
   }
 
   DafnySequence<byte> Cast__LittleEndian_Uint64__Seq_to_ByteSeq(DafnySequence<uint64> const& unpacked)

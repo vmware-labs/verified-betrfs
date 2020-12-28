@@ -1,6 +1,6 @@
 include "../Lang/NativeTypes.s.dfy"
 include "../Lang/System/PackedInts.s.dfy"
-//include "../Lang/LinearSequence.s.dfy"
+include "../Lang/LinearSequence.i.dfy"
 include "../Base/Option.s.dfy"
 include "../Base/mathematics.i.dfy"
 
@@ -575,7 +575,9 @@ abstract module AppendableIntegerSeqMarshalling refines AppendableSeqMarshalling
   import LengthMarshalling : IntegerMarshalling
   import LengthInt = LengthMarshalling.Int
   import opened Mathematics
-
+  import opened LinearSequence_s
+  import opened LinearSequence_i
+  
   // We put this in an internal helper function so we can use it in the
   // definition of parsable (and hence parse) without causing a
   // recursion problem.
@@ -720,12 +722,18 @@ abstract module AppendableIntegerSeqMarshalling refines AppendableSeqMarshalling
     return len < maxlen;
   }
 
-  // Grr
+  // Ugh
   method SharedLength(shared data: mseq<byte>, start: uint64, end: uint64) returns (len: uint64)
     requires start as nat <= end as nat <= |data|
     requires lengthable(data[start..end])
     ensures parsable(data[start..end]) ==> len as nat == |parse(data[start..end])|
-
+  {
+    linear var linear_marshalled_length := AllocAndCopy(data, start, start + LengthInt.Size());
+    var marshalled_length := seq_unleash(linear_marshalled_length);
+    var ilen := LengthInt.Unpack(marshalled_length, 0);
+    len := LengthInt.toUint64(ilen);
+  }
+  
   method Append(elt: Element, linear data: mseq<byte>, start: uint64, end: uint64)
     returns (linear newdata: mseq<byte>)
   {
