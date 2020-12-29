@@ -40,6 +40,19 @@ void dump(DafnySequence<uint8> const& s) {
   cout << "]" << endl;
 }
 
+namespace TestPackedInts_Compile {
+  class __default {
+    public:
+    // Default constructor
+ __default() {}
+    static void test();
+  };
+}
+
+int main(int argc, char* argv[]) {
+  TestPackedInts_Compile::__default::test();
+}
+
 /*int main(int argc, char* argv[]) {
   int N = 3276800;
   DafnySequence<uint8> seq(32768);
@@ -71,6 +84,7 @@ void dump(DafnySequence<uint8> const& s) {
   }
 }*/
 
+/*
 int main(int argc, char* argv[]) {
   bool allBenchmarks = false;
   string benchmark;
@@ -104,6 +118,7 @@ int main(int argc, char* argv[]) {
     cout << "Default disk image is .veribetrfs.img" << endl;
   }
 }
+*/
 
 /*void test_succ(Application& app, string s, bool inclusive, int num) {
   auto res = app.Succ(ByteString(s), inclusive, num);

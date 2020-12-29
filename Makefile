@@ -296,6 +296,10 @@ GEN_H_FILES=build/Bundle.i.h
 
 WARNINGS=-Wall -Wsign-compare
 
+# build/Impl/TestPackedInts.i.o: build/Impl/TestPackedInts.i.cpp | $$(@D)/.
+# 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
+# 	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++17 -msse4.2 $(POUND_DEFINES) -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAGS) $(WARNINGS)
+
 build/%.o: build/%.cpp $(GEN_H_FILES) | $$(@D)/.
 	@mkdir -p $(CPP_DEP_DIR)/$(basename $<)
 	$(CC) $(STDLIB) -c $< -o $@ -I$(DAFNY_ROOT)/Binaries/ -I framework/ -std=c++17 -msse4.2 $(POUND_DEFINES) -MMD -MP -MF "$(CPP_DEP_DIR)/$(<:.cpp=.d)" $(CCFLAGS) $(OPT_FLAGS) $(WARNINGS)
@@ -335,6 +339,9 @@ ifeq ($(UNAME), Darwin)
 else
 LDFLAGS += -lrt
 endif
+
+# build/Impl/TestPackedInts: build/Impl/TestPackedInts.i.o build/framework/Framework.o build/framework/BundleWrapper.o
+# 	$(CC) $(STDLIB) -I framework/ -std=c++17 $^ -o $@
 
 build/Veribetrfs: $(VERIBETRFS_O_FILES)
 	$(CC) $(STDLIB) -o $@ $(VERIBETRFS_O_FILES) $(LDFLAGS) $(GPROF_FLAGS)

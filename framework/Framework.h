@@ -24,6 +24,17 @@ namespace NativeArithmetic_Compile {
   inline uint64_t u64add(uint64_t a, uint64_t b) { return a + b; }
 }
 
+namespace NativePackedByte_Compile {
+  // namespace __default {
+    inline uint8 Unpack(DafnySequence<uint8> const& packed, uint64 idx)
+    {
+      uint8 res;
+      memcpy(&res, packed.ptr() + idx, sizeof(uint8));
+      return res;
+    }
+  // }
+}
+
 namespace F2__X__s_Compile {
   inline uint32 bitxor32(uint32 a, uint32 b) { return a ^ b; }
   inline uint64 bitxor64(uint64 a, uint64 b) { return a ^ b; }

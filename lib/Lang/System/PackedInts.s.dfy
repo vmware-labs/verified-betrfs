@@ -126,7 +126,7 @@ module NativePackedByte refines NativePackedInt{
     s[0]
   }
 
-  method {:extern} Unpack(packed: seq<byte>, idx: uint64) returns (i: Integer)
+  method  {:extern "NativePackedByte_Compile","Unpack" } Unpack(packed: seq<byte>, idx: uint64) returns (i: Integer)
   method {:extern} Pack_into_ByteSeq(i: Integer, linear inout s: seq<byte>, idx: uint64)
   method {:extern} Unpack_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)
   method {:extern} Pack_Seq_into_ByteSeq(value: seq<Integer>, linear inout packed: seq<byte>, idx: uint64)

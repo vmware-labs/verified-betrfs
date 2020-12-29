@@ -48,6 +48,17 @@ void fail(std::string err)
   exit(1);
 }
 
+// namespace NativePackedByte_Compile {
+//   // namespace __default {
+//     uint8 Unpack(DafnySequence<uint8> const& packed, uint64 idx)
+//     {
+//       uint8 res;
+//       memcpy(&res, packed.ptr() + idx, sizeof(uint8));
+//       return res;
+//     }
+//   // }
+// }
+
 constexpr int MAX_WRITE_REQS_OUT = 8;
 
 namespace MainDiskIOHandler_Compile {
