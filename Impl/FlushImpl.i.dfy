@@ -6,7 +6,7 @@ module FlushImpl {
   import opened StateBCImpl
   import opened StateSectorImpl
 
-  import opened BoxNodeImpl
+  import opened NodeImpl
   import opened DiskOpImpl
 
   import opened Options
@@ -29,11 +29,10 @@ module FlushImpl {
 
   import IT = IndirectionTable
 
-  method flush(s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference, child: BoxNodeImpl.Node)
+  method flush(s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference)
   requires Inv(s)
   requires s.ready
-
-  requires Some(child) == s.cache.ptr(childref)
+  requires s.cache.ptr(childref).Some?
 
   requires parentref in s.ephemeralIndirectionTable.I().graph
   requires parentref in s.cache.I()
@@ -50,7 +49,8 @@ module FlushImpl {
 
   ensures WellUpdated(s)
   ensures s.ready
-  ensures FlushModel.flush(old(s.I()), parentref, slot as int, childref, old(child.I())) == s.I()
+  ensures FlushModel.flush(old(s.I()), parentref, slot as int, childref, 
+    old(s.cache.I()[childref])) == s.I()
   {
     if s.frozenIndirectionTable != null {
       var b := s.frozenIndirectionTable.HasEmptyLoc(parentref);
@@ -60,98 +60,35 @@ module FlushImpl {
       }
     }
 
-    var nodeOpt := s.cache.GetOpt(parentref);
-    var parent := nodeOpt.value;
-
-    var children := parent.GetChildren();
-    var childref := children.value[slot];
-    var childpivots := child.GetPivots();
-
-    var bounded := parent.BoundedBucket(childpivots, slot);
+    var bounded := s.cache.NodeBoundedBucket(parentref, childref, slot);
     if bounded {
       //Native.BenchmarkingUtil.start();
-      ghost var parentI := parent.I();
-      assert Some(parent) == s.cache.ptr(parentref);
+
+      ghost var parentI := s.cache.I()[parentref];
+      ghost var childI := s.cache.I()[childref];
+
+      linear var newparentBucket, newchild := 
+        s.cache.NodePartialFlush(parentref, childref, slot);
 
       BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), childref);
       BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), parentref);
-
-      assert s.I().cache[parentref] == parent.I();
-      assert parent.I().children == s.I().cache[parentref].children;
-
-      WeightBucketLeBucketList(BucketImpl.MutBucket.ILseq(parent.box.Borrow().buckets), slot as int);
-
-      assert WeightBucketList(s.I().cache[childref].buckets) <= MaxTotalBucketWeight();
-      assert s.I().cache[childref].buckets == MutBucket.ILseq(child.Read().buckets);
-      assert WeightBucketList(MutBucket.ILseq(child.Read().buckets)) <= MaxTotalBucketWeight();
-
-      linear var newparentBucket, newbuckets := BucketImpl.PartialFlush(
-          lseq_peek(parent.box.Borrow().buckets, slot as uint64), child.box.Borrow().buckets, child.box.Borrow().pivotTable);
-
-      var childchildren := child.GetChildren();
-      var newchild := new Node(childpivots, childchildren, newbuckets);
-      
-      assert Some(parent) == s.cache.ptr(parentref);
       BookkeepingModel.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
-          s.I(), newchild.Read().children, parent.Read().children.value, slot as int);
-      BookkeepingModel.allocRefDoesntEqual(s.I(), newchild.Read().children, parentref);
+          s.I(), newchild.children, parentI.children.value, slot as int);
+      BookkeepingModel.allocRefDoesntEqual(s.I(), newchild.children, parentref);
 
-      var newchildref := allocBookkeeping(s, childchildren);
+      var newchildref := allocBookkeeping(s, newchild.children);
       if newchildref.None? {
         var _ := FreeMutBucket(newparentBucket);
+        var _ := FreeNode(newchild);
         print "giving up; could not get parentref\n";
       } else {
-        assert Some(parent) == s.cache.ptr(parentref);
-        assert parent.I().children == s.I().cache[parentref].children;
-
-        var newparent_children := SeqIndexUpdate(
-          children.value, slot, newchildref.value);
-
-        writeBookkeeping(s, parentref, Some(newparent_children));
-        assert Some(parent) == s.cache.ptr(parentref);
-        assert parentref != newchildref.value;
-
-        ghost var c1 := s.cache.I();
-        assert c1 == old(s.cache.I());
         s.cache.Insert(newchildref.value, newchild);
-        assert Some(parent) == s.cache.ptr(parentref);
 
-        ghost var c2 := s.cache.I();
-        assert c2 == c1[newchildref.value := newchild.I()];
+        var newparent_children := s.cache.NodeUpdateSlot(parentref,
+          slot, newparentBucket, newchildref.value);
+        writeBookkeeping(s, parentref, newparent_children);
 
-        ghost var newParentBucketI := newparentBucket.bucket;
-        s.cache.UpdateNodeSlot(parentref, parent, slot, newparentBucket, newchildref.value);
-
-        ghost var c3 := s.cache.I();
         //Native.BenchmarkingUtil.end();
-
-        assert c3 == c2[parentref := BT.G.Node(
-              parentI.pivotTable,
-              Some(parentI.children.value[slot as int := newchildref.value]),
-              parentI.buckets[slot as int := newParentBucketI]
-            )];
-
-        ghost var a := FlushModel.flush(old(s.I()), parentref, slot as int, childref, old(child.I()));
-        ghost var b := s.I();
-
-        assert a.cache.Keys == c3.Keys;
-        forall key | key in a.cache
-          ensures a.cache[key] == c3[key]
-        {
-          if key == parentref {
-            assert a.cache[key] == c3[key];
-          } else if key == newchildref.value {
-            assert a.cache[key] == c3[key];
-          } else if key == childref {
-            assert a.cache[key] == c3[key];
-          } else {
-            assert a.cache[key] == c3[key];
-          }
-        }
-      
-        assert a.cache
-            == c3
-            == b.cache;
       }
     } else {
         print "giving up; flush can't run because flushed keys are out of bound for its children";

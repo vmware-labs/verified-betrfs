@@ -51,7 +51,7 @@ module GrowModel {
           case Some(newref) => (
             var newroot := BT.G.Node(InitPivotTable(), Some([newref]), [B(map[])]);
             var s2 := writeBookkeeping(s1, BT.G.Root(), newroot.children);
-            var s' := s2.(cache := s2.cache[newref := oldroot][BT.G.Root() := newroot]);
+            var s' := s2.(cache := s2.cache[BT.G.Root() := newroot][newref := oldroot]);
             s'
           )
         }

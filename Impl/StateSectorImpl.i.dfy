@@ -4,7 +4,7 @@ include "StateSectorModel.i.dfy"
 
 module StateSectorImpl {
   import opened Options
-  import opened BoxNodeImpl
+  import opened NodeImpl
   import IndirectionTable
   import JC = JournalCache
 
@@ -14,16 +14,29 @@ module StateSectorImpl {
   type MutIndirectionTable = IndirectionTable.BoxedIndirectionTable
   type MutIndirectionTableNullable = IndirectionTable.BoxedIndirectionTable?
 
-  datatype Sector =
-    | SectorNode(node: Node)
+  linear datatype Sector =
+    | SectorNode(linear node: Node)
     | SectorSuperblock(superblock: SectorType.Superblock)
     | SectorIndirectionTable(indirectionTable: MutIndirectionTable)
+  {
+    linear method Free()
+    requires this.SectorNode? ==> node.Inv()
+    {
+      linear match this {
+        case SectorNode(node) => {
+          var _ := FreeNode(node);
+        }
+        case SectorSuperblock(_) => {}
+        case SectorIndirectionTable(_) => {}
+      }
+    }
+  }
 
   function SectorObjectSet(sector: Sector) : set<object>
   {
     match sector {
       case SectorIndirectionTable(indirectionTable) => {indirectionTable}
-      case SectorNode(block) => {block}
+      case SectorNode(block) => {}
       case SectorSuperblock(superblock) => {}
     }
   }
@@ -33,7 +46,7 @@ module StateSectorImpl {
   {
     match sector {
       case SectorIndirectionTable(indirectionTable) => {indirectionTable} + indirectionTable.Repr
-      case SectorNode(block) => block.Repr
+      case SectorNode(block) => {}
       case SectorSuperblock(superblock) => {}
     }
   }

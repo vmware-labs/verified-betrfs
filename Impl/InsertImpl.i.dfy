@@ -34,7 +34,7 @@ module InsertImpl {
   import opened Bounds
 
   import IT = IndirectionTable
-  import opened BoxNodeImpl
+  import opened NodeImpl
   import opened BoundedPivotsLib
 
   method InsertKeyValue(s: ImplVariables, key: Key, value: Value)
@@ -88,8 +88,8 @@ module InsertImpl {
       return;
     }
 
-    var rootLookup := s.cache.GetOpt(BT.G.Root());
-    if (rootLookup.None?) {
+    var rootLookup := s.cache.InCache(BT.G.Root());
+    if !rootLookup {
       if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
         PageInNodeReq(s, io, BT.G.Root());
         success := false;
@@ -99,8 +99,8 @@ module InsertImpl {
       }
       return;
     }
-
-    var pivots := rootLookup.value.GetPivots();
+ 
+    var pivots, _ := s.cache.GetNodeInfo(BT.G.Root());
     var bounded := ComputeBoundedKey(pivots, key);
     if !bounded {
       success := false;
@@ -108,7 +108,7 @@ module InsertImpl {
       return;
     }
 
-    var weightSeq := MutBucket.computeWeightOfSeq(rootLookup.value.box.Borrow().buckets);
+    var weightSeq := s.cache.NodeBucketsWeight(BT.G.Root());
     if WeightKeyUint64(key) + WeightMessageUint64(ValueMessage.Define(value)) + weightSeq
         <= MaxTotalBucketWeightUint64() {
       success := InsertKeyValue(s, key, value);

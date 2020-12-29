@@ -5,7 +5,7 @@ module GrowImpl {
   import opened IOImpl
   import opened BookkeepingImpl
   import opened StateBCImpl
-  import opened BoxNodeImpl
+  import opened NodeImpl
   import opened BucketImpl
   import opened DiskOpImpl
   import GrowModel
@@ -49,20 +49,15 @@ module GrowImpl {
       }
     }
 
-    var oldrootOpt := s.cache.GetOpt(BT.G.Root());
-    var oldroot := oldrootOpt.value;
-    var oldpivots := oldroot.GetPivots();
-
+    var oldpivots, oldchildren := s.cache.GetNodeInfo(BT.G.Root());
     var containsall := ComputeContainsAllKeys(oldpivots);
     if !containsall {
       print "giving up; grow can't run because root node is incorrect";
       return;
     }
 
-    BookkeepingModel.lemmaChildrenConditionsSingleOfAllocBookkeeping(s.I(), oldroot.Read().children);
-    var children := oldroot.GetChildren();
-    var newref := allocBookkeeping(s, children);
-
+    BookkeepingModel.lemmaChildrenConditionsSingleOfAllocBookkeeping(s.I(), oldchildren);
+    var newref := allocBookkeeping(s, oldchildren);
     match newref {
       case None => {
         print "giving up; could not allocate ref\n";
@@ -74,13 +69,11 @@ module GrowImpl {
         linear var buckets := lseq_alloc(1);
         lseq_give_inout(inout buckets, 0, mutbucket);
 
-        var newroot := new Node(InitPivotTable(), Some([newref]), buckets);
+        linear var newroot := Node(InitPivotTable(), Some([newref]), buckets);
         assert newroot.I() == BT.G.Node(InitPivotTable(), Some([newref]), [B(map[])]);
         assert s.I().cache[BT.G.Root()] == old(s.I().cache[BT.G.Root()]);
-        assert fresh(newroot.Repr);
 
         writeBookkeeping(s, BT.G.Root(), Some([newref]));
-
         s.cache.MoveAndReplace(BT.G.Root(), newref, newroot);
 
         ghost var a := s.I();

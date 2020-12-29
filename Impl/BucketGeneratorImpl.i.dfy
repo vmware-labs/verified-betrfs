@@ -12,8 +12,9 @@ module BucketGeneratorImpl {
   import opened LinearSequence_i
   import UI
 
-  linear datatype Generator = Basic(linear biter: BucketIter, ghost height: nat) | 
-      Compose(linear top: Generator, linear bot: Generator, next: BucketIteratorModel.IteratorOutput, ghost height: nat)
+  linear datatype Generator = Basic(linear biter: BucketIter, ghost height: nat)
+    | Compose(linear top: Generator, linear bot: Generator, 
+      next: BucketIteratorModel.IteratorOutput, ghost height: nat)
   {
     predicate {:opaque} Inv()
     decreases height, 1

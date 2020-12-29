@@ -57,7 +57,7 @@ module SplitModel {
   requires 1 <= num_children_left < |child.buckets|
   requires ValidSplitKey(child1, lbound, ubound)
   requires BC.BlockPointsToValidReferences(child1, graph);
-  requires child == BT.CutoffNode(child1, lbound, ubound);
+  requires child == CutoffNode(child1, lbound, ubound);
   ensures BC.BlockPointsToValidReferences(BT.SplitChildLeft(child, num_children_left), graph);
   ensures BC.BlockPointsToValidReferences(BT.SplitChildRight(child, num_children_left), graph);
   {
@@ -176,6 +176,48 @@ module SplitModel {
     )
   }
 
+  function {:opaque} splitChild(s: BCVariables, parentref: BT.G.Reference, 
+    childref: BT.G.Reference, slot: int, lbound: Key, ubound: Option<Key>): (s': BCVariables)
+  requires s.Ready?
+  requires BCInv(s)
+  requires parentref in s.cache
+  requires childref in s.cache
+  requires BT.WFNode(s.cache[parentref]);
+  requires BT.WFNode(s.cache[childref]);
+  requires s.cache[parentref].children.Some?
+  requires 0 <= slot < |s.cache[parentref].children.value|
+  requires s.cache[parentref].children.value[slot] == childref
+  requires ValidSplitKey(s.cache[childref], lbound, ubound)
+  requires ChildrenConditions(s, s.cache[childref].children)
+  requires ChildrenConditions(s, s.cache[parentref].children)
+  requires |s.cache[parentref].children.value| < MaxNumChildren()
+  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
+  {
+    var fused_parent := s.cache[parentref];
+    var fused_child := s.cache[childref];
+
+    var child := CutoffNode(fused_child, lbound, ubound);
+    lemmaChildrenConditionsCutoffNode(s, fused_child, lbound, ubound);
+    if (|child.pivotTable| == 2) then (
+      // TODO there should be an operation which just
+      // cuts off the node and doesn't split it.
+      s
+    ) else (
+      var left_childref := getFreeRef(s);
+      if left_childref.None? then (
+        s
+      ) else (
+        var right_childref := getFreeRef2(s, left_childref.value);
+        if right_childref.None? then (
+          s
+        ) else (
+          splitDoChanges(s, child, left_childref.value, right_childref.value,
+            parentref, fused_parent.children.value, slot)
+        )
+      )
+    )
+  }
+
   function {:opaque} doSplit(s: BCVariables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
   : (s': BCVariables)
   requires s.Ready?
@@ -215,27 +257,7 @@ module SplitModel {
           && ValidSplitKey(fused_child, lbound, ubound) 
           && ValidSplitKey(fused_parent, lbound, ubound)
         ) then (
-          lemmaChildrenConditionsCutoffNode(s, fused_child, lbound, ubound);
-          var child := CutoffNode(fused_child, lbound, ubound);
-          if (|child.pivotTable| == 2) then (
-            // TODO there should be an operation which just
-            // cuts off the node and doesn't split it.
-            s
-          ) else (
-            var left_childref := getFreeRef(s);
-            if left_childref.None? then (
-              s
-            ) else (
-              var right_childref := getFreeRef2(s, left_childref.value);
-              if right_childref.None? then (
-                s
-              ) else (
-                splitDoChanges(s, child, left_childref.value,
-                  right_childref.value, parentref, fused_parent.children.value,
-                  slot)
-              )
-            )
-          )
+          splitChild(s, parentref, childref, slot, lbound, ubound)
         ) else (
           s
         )
@@ -284,7 +306,8 @@ module SplitModel {
       assert noop(IBlockCache(s), IBlockCache(s));
       return;
     }
-      
+
+    reveal_splitChild();
     var child := CutoffNode(fused_child, lbound, ubound);
     lemmaChildrenConditionsCutoffNode(s, fused_child, lbound, ubound);
 

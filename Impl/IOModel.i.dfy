@@ -200,6 +200,45 @@ module IOModel {
     ))
   }
 
+  // ========= temporary solution ===========
+  predicate SimilarVariables(s: BCVariables, s': BCVariables)
+  requires s.Ready?
+  requires s'.Ready?
+  {
+    && s.persistentIndirectionTable == s'.persistentIndirectionTable
+    && s.frozenIndirectionTable == s'.frozenIndirectionTable
+    && s.ephemeralIndirectionTable == s'.ephemeralIndirectionTable
+    && s.persistentIndirectionTableLoc == s'.persistentIndirectionTableLoc
+    && s.frozenIndirectionTableLoc == s'.frozenIndirectionTableLoc
+    && s.outstandingIndirectionTableWrite == s'.outstandingIndirectionTableWrite
+    && s.outstandingBlockWrites == s'.outstandingBlockWrites
+    && s.outstandingBlockReads == s'.outstandingBlockReads
+    && s.cache.Keys == s'.cache.Keys
+    && s.lru == s'.lru
+    && s.blockAllocator == s'.blockAllocator
+  }
+
+  lemma SimilarVariablesGuarantees(io: IO, s: BCVariables, s': BCVariables, sector: Sector,
+      id: Option<D.ReqId>, loc: Option<DiskLayout.Location>, io': IO)
+  requires s.Ready?
+  requires WFBCVars(s)
+  requires FindLocationAndRequestWrite(io, s, sector, id, loc, io')
+  requires s'.Ready?
+  requires WFBCVars(s')
+  requires SimilarVariables(s, s')
+  ensures FindLocationAndRequestWrite(io, s', sector, id, loc, io')
+  {
+    reveal_FindLocationAndRequestWrite();
+    var dop := diskOp(io');
+    if dop.ReqWriteOp? {
+      var bytes: seq<byte> := dop.reqWrite.bytes;
+      var len := |bytes| as uint64;
+      reveal_getFreeLoc();
+      assert getFreeLoc(s, len) == getFreeLoc(s', len);
+    }
+  }
+  // ===================================
+
   lemma FindLocationAndRequestWriteCorrect(io: IO, s: BCVariables, sector: Sector, id: Option<D.ReqId>, loc: Option<DiskLayout.Location>, io': IO)
   requires WFBCVars(s)
   requires s.Ready?

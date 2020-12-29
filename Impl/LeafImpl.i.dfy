@@ -6,7 +6,7 @@ module LeafImpl {
   import opened BookkeepingImpl
   import opened LeafModel
   import opened StateBCImpl
-  import opened BoxNodeImpl
+  import opened NodeImpl
   import opened BucketImpl
   import opened DiskOpImpl
 
@@ -29,19 +29,18 @@ module LeafImpl {
     k2 := [] + k;
   }
 
-  method repivotLeaf(s: ImplVariables, ref: BT.G.Reference, node: Node)
+  method repivotLeaf(s: ImplVariables, ref: BT.G.Reference)
   requires Inv(s)
   requires s.ready
   requires ref in s.ephemeralIndirectionTable.I().graph
-  requires s.cache.ptr(ref) == Some(node)
-  requires node.Inv()
-  requires node.Read().children.None?
-  requires |node.Read().buckets| == 1
+  requires s.cache.ptr(ref).Some?
+  requires s.cache.I()[ref].children.None?
+  requires |s.cache.I()[ref].buckets| == 1
   requires |s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 1
   modifies s.Repr()
   ensures s.ready
   ensures WellUpdated(s)
-  ensures s.I() == LeafModel.repivotLeaf(old(s.I()), ref, old(node.I()));
+  ensures s.I() == LeafModel.repivotLeaf(old(s.I()), ref, old(s.cache.I()[ref]));
   {
     LeafModel.reveal_repivotLeaf();
 
@@ -53,44 +52,38 @@ module LeafImpl {
       }
     }
 
-    var oldpivots := node.GetPivots();
-    var bounded := node.BoundedBucket(oldpivots, 0);
-    
-    ghost var buckets := node.I().buckets;
-    assert bounded == BoundedBucketList(buckets, oldpivots);
-
+    var bounded := s.cache.NodeBoundedBucket(ref, ref, 0);
+    ghost var buckets := s.cache.I()[ref].buckets;
+    assert bounded == BoundedBucketList(buckets, s.cache.I()[ref].pivotTable);
     if !bounded {
       print "giving up; repivotLeaf can't run because current leaf is incorrect";
       return;
     }
 
-    var pivot := lseq_peek(node.box.Borrow().buckets, 0).GetMiddleKey();
-    pivot := CopyKey(pivot);
+    var pivot: KeyType.Key;
+    linear var left, right;
     var pivots := InitPivotTable();
-    pivots := Insert(pivots, Keyspace.Element(pivot), 1);
 
-    linear var left, right := MutBucket.SplitLeftRight(lseq_peek(node.box.Borrow().buckets, 0), pivot);
+    left, right, pivot := s.cache.NodeSplitMiddle(ref);
     linear var buckets' := lseq_alloc(2);
     lseq_give_inout(inout buckets', 0, left);
     lseq_give_inout(inout buckets', 1, right);
 
-    var newnode := new Node(pivots, None, buckets');
+    pivot := CopyKey(pivot);
+    pivots := Insert(pivots, Keyspace.Element(pivot), 1);
 
+    linear var newnode := Node(pivots, None, buckets');
     writeBookkeeping(s, ref, None);
-
-    assert fresh(newnode.Repr);
-    assert s.cache.Repr !! newnode.Repr;
     s.cache.Insert(ref, newnode);
-
     assert s.W();
 
     ghost var a := s.I();
-    ghost var b := LeafModel.repivotLeaf(old(s.I()), ref, old(node.I()));
+    ghost var oldnode := old(s.cache.I()[ref]);
+    ghost var b := LeafModel.repivotLeaf(old(s.I()), ref, oldnode);
     assert newnode.I() == old(BT.G.Node(pivots, None, [
-          SplitBucketLeft(node.I().buckets[0], pivot),
-          SplitBucketRight(node.I().buckets[0], pivot)
+          SplitBucketLeft(oldnode.buckets[0], pivot),
+          SplitBucketRight(oldnode.buckets[0], pivot)
         ]));
-      
     assert a.cache == b.cache;
   }
 }
