@@ -2,6 +2,215 @@ include "../NativeTypes.s.dfy"
 
 // Language augmentation providing access to byte-level integer casting.
 
+abstract module NativePackedInt {
+  import opened NativeTypes
+
+  type Integer
+
+  function method Size() : uint64
+    ensures 0 < Size()
+
+  function MinValue() : int
+    ensures MinValue() <= 0
+  function UpperBound() : int
+    ensures MinValue() < UpperBound()
+
+  // These exist because there's no way to promise dafny that Integer is an int type.
+  function fromInt(x: int) : (result: Integer)
+    requires MinValue() <= x < UpperBound()
+  function toInt(x: Integer) : (result: int)
+    ensures MinValue() <= result < UpperBound()
+    ensures fromInt(result) == x
+  predicate method fitsInInteger(x: uint64)
+  function method fromUint64(x: uint64) : (result: Integer)
+    requires MinValue() <= x as int < UpperBound()
+    ensures result == fromInt(x as nat)
+  predicate method fitsInUint64(x: Integer)
+    ensures fitsInUint64(x) <==> 0 <= toInt(x) < 0x1_0000_0000_0000_0000
+  function method toUint64(x: Integer) : (result: uint64)
+    requires 0 <= toInt(x) < 0x1_0000_0000_0000_0000
+    ensures MinValue() <= result as int < UpperBound()
+    ensures result as int == toInt(x)
+
+  function {:opaque} fromIntSeq(s: seq<int>) : (result: seq<Integer>)
+    requires forall i | 0 <= i < |s| :: fromInt.requires(s[i])
+    ensures |result| == |s|
+    ensures forall i | 0 <= i < |result| :: result[i] == fromInt(s[i])
+  {
+    if s == [] then
+      []
+    else
+      fromIntSeq(s[..|s|-1]) + [ fromInt(s[|s|-1]) ]
+  }
+
+  function {:opaque} toIntSeq(s: seq<Integer>) : (result: seq<int>)
+    requires forall i | 0 <= i < |s| :: toInt.requires(s[i])
+    ensures |result| == |s|
+    ensures forall i | 0 <= i < |result| :: result[i] == toInt(s[i])
+  {
+    if s == [] then
+      []
+    else
+      toIntSeq(s[..|s|-1]) + [ toInt(s[|s|-1]) ]
+  }
+
+  function unpack(s: seq<byte>) : Integer
+    requires |s| == Size() as nat
+
+  function {:opaque} unpack_Seq(packed: seq<byte>, len: nat) : (unpacked: seq<Integer>)
+    requires |packed| == len * Size() as nat
+    ensures |unpacked| == len
+    ensures forall i | 0 <= i < len :: unpacked[i] == unpack(packed[i * Size() as nat.. (i+1) * Size() as nat])
+  {
+    if len == 0 then
+      []
+    else (
+      var prefix := unpack_Seq(packed[..Size() as nat * (len-1)], len-1);
+      var last := unpack(packed[Size() as nat * (len-1)..Size() as nat * len]);
+      var result := prefix + [ last ];
+      assert forall i | 0 <= i < |prefix| :: packed[..Size() as nat * (len-1)][i * Size() as nat.. (i+1) * Size() as nat] == packed[i * Size() as nat.. (i+1) * Size() as nat];
+      result
+    )
+  }
+
+  method Unpack(packed: seq<byte>, idx: uint64) returns (i: Integer)
+    requires idx as nat + Size() as nat <= |packed|
+    requires |packed| < Uint64UpperBound()
+    ensures i == unpack(packed[idx .. idx as nat + Size() as nat])
+
+  method Pack_into_ByteSeq(i: Integer, linear inout s: seq<byte>, idx: uint64)
+    requires idx as int + Size() as nat <= |old_s|
+    requires |old_s| < Uint64UpperBound()
+    ensures |s| == |old_s|
+    ensures forall j | 0 <= j < idx :: s[j] == old_s[j]
+    ensures unpack(s[idx .. idx as nat + Size() as nat]) == i
+    ensures forall j | idx as nat + Size() as nat <= j < |s| :: s[j] == old_s[j]
+
+  method Unpack_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)
+    requires idx as nat + Size() as nat * len as nat <= |packed|
+    requires |packed| < Uint64UpperBound()
+    ensures unpacked == unpack_Seq(packed[idx .. idx as nat + Size() as nat * len as nat], len as nat)
+
+  method Pack_Seq_into_ByteSeq(value: seq<Integer>, linear inout packed: seq<byte>, idx: uint64)
+    requires idx as nat + |value| * Size() as nat <= |old_packed|
+    ensures |packed| == |old_packed|
+    ensures forall i | 0 <= i < idx :: packed[i] == old_packed[i]
+    ensures unpack_Seq(packed[idx..idx as nat + |value| * Size() as nat], |value|) == value
+    ensures forall i | idx as nat + |value| * Size() as nat <= i < |packed| :: packed[i] == old_packed[i]
+}
+
+module NativePackedByte refines NativePackedInt{
+  type Integer = byte
+
+  function method Size() : uint64 { 1 }
+  function MinValue() : int { 0 }
+  function UpperBound() : int { 0x100 }
+
+  function fromInt(x: int) : (result: Integer) {
+    x as byte
+  }
+
+  function toInt(x: Integer) : int {
+    x as int
+  }
+
+  function method fromUint64(x: uint64) : (result: Integer) {
+    x as byte
+  }
+
+  function method toUint64(x: Integer) : uint64 {
+    x as uint64
+  }
+
+  function {:opaque} unpack(s: seq<byte>) : Integer {
+    s[0]
+  }
+
+  method {:extern} Unpack(packed: seq<byte>, idx: uint64) returns (i: Integer)
+  method {:extern} Pack_into_ByteSeq(i: Integer, linear inout s: seq<byte>, idx: uint64)
+  method {:extern} Unpack_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)
+  method {:extern} Pack_Seq_into_ByteSeq(value: seq<Integer>, linear inout packed: seq<byte>, idx: uint64)
+}
+
+module NativePackedUint32 refines NativePackedInt {
+  type Integer = uint32
+
+  function MinValue() : int { 0 }
+  function UpperBound() : int { 0x1_0000_0000 }
+  function method Size() : uint64 { 4 }
+
+  function fromInt(x: int) : (result: Integer) {
+    x as uint32
+  }
+
+  function toInt(x: Integer) : int {
+    x as int
+  }
+
+  function method fromUint64(x: uint64) : (result: Integer) {
+    x as uint32
+  }
+
+  function method toUint64(x: Integer) : uint64 {
+    x as uint64
+  }
+
+  function {:opaque} unpack(s: seq<byte>) : Integer {
+    (s[0] as uint32)
+    + (s[1] as uint32 * 0x1_00)
+    + (s[2] as uint32 * 0x1_00_00)
+    + (s[3] as uint32 * 0x1_00_00_00)
+  }
+
+  // framework/Framework.cpp
+  method {:extern} Unpack(packed: seq<byte>, idx: uint64) returns (i: Integer)
+  method {:extern} Pack_into_ByteSeq(i: Integer, linear inout s: seq<byte>, idx: uint64)
+  // Unpack currently copies.  Can it just be a cast?
+  method {:extern} Unpack_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)
+  method {:extern} Pack_Seq_into_ByteSeq(value: seq<Integer>, linear inout packed: seq<byte>, idx: uint64)
+}
+
+module NativePackedUint64 refines NativePackedInt{
+  type Integer = uint64
+
+  function MinValue() : int { 0 }
+  function UpperBound() : int { 0x1_0000_0000_0000_0000 }
+  function method Size() : uint64 { 8 }
+
+  function fromInt(x: int) : (result: Integer) {
+    x as uint64
+  }
+
+  function toInt(x: Integer) : int {
+    x as int
+  }
+
+  function method fromUint64(x: uint64) : (result: Integer) {
+    x
+  }
+
+  function method toUint64(x: Integer) : uint64 {
+    x
+  }
+
+  function {:opaque} unpack(s: seq<byte>) : Integer
+  {
+    (s[0] as uint64)
+    + (s[1] as uint64 * 0x1_00)
+    + (s[2] as uint64 * 0x1_00_00)
+    + (s[3] as uint64 * 0x1_00_00_00)
+    + (s[4] as uint64 * 0x1_00_00_00_00)
+    + (s[5] as uint64 * 0x1_00_00_00_00_00)
+    + (s[6] as uint64 * 0x1_00_00_00_00_00_00)
+    + (s[7] as uint64 * 0x1_00_00_00_00_00_00_00)
+  }
+
+  method {:extern} Unpack(packed: seq<byte>, idx: uint64) returns (i: Integer)
+  method {:extern} Pack_into_ByteSeq(i: Integer, linear inout s: seq<byte>, idx: uint64)
+  method {:extern} Unpack_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)
+  method {:extern} Pack_Seq_into_ByteSeq(value: seq<Integer>, linear inout packed: seq<byte>, idx: uint64)
+}
+
 module {:extern} NativePackedInts {
   import opened NativeTypes
 
@@ -87,6 +296,28 @@ module {:extern} NativePackedInts {
   requires idx as int + 8 <= packed.Length
   requires packed.Length < 0x1_0000_0000_0000_0000
   ensures i == unpack_LittleEndian_Uint64(packed[idx .. idx + 8])
+
+  // method {:extern "NativePackedInts_Compile",
+  //     "Pack__LittleEndian__Uint32__into__Seq"}
+  // Pack_LittleEndian_Uint32_into_Seq(i: uint32, linear inout s: seq<byte>, idx: uint64)
+  // requires 0 <= idx
+  // requires idx as int + 4 <= |old_s|
+  // requires |old_s| < 0x1_0000_0000_0000_0000
+  // ensures |s| == |old_s|
+  // ensures forall j | 0 <= j < idx :: s[j] == old_s[j]
+  // ensures unpack_LittleEndian_Uint32(s[idx .. idx + 4]) == i
+  // ensures forall j | idx as int + 4 <= j < |s| :: s[j] == old_s[j]
+
+  // method {:extern "NativePackedInts_Compile",
+  //     "Pack__LittleEndian__Uint64__into__Seq"}
+  // Pack_LittleEndian_Uint64_into_Seq(i: uint64, linear inout s: seq<byte>, idx: uint64)
+  // requires 0 <= idx
+  // requires idx as int + 8 <= |old_s|
+  // requires |old_s| < 0x1_0000_0000_0000_0000
+  // ensures |s| == |old_s|
+  // ensures forall j | 0 <= j < idx :: s[j] == old_s[j]
+  // ensures unpack_LittleEndian_Uint64(s[idx .. idx + 8]) == i
+  // ensures forall j | idx as int + 8 <= j < |s| :: s[j] == old_s[j]
 
   method {:extern "NativePackedInts_Compile", 
       "Pack__LittleEndian__Uint32__into__Array"} 
