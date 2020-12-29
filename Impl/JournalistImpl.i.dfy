@@ -402,16 +402,19 @@ module JournalistImpl {
         inout self.journalEntries := self.reallocJournalEntries(je, newLen);
         inout self.start := 0;
       }
-
+  
       inout self.inMemoryWeight := self.inMemoryWeight
           + WeightJournalEntryUint64(je)
           + (if self.len2 == 0 then 8 else 0);
       inout self.len2 := self.len2 + 1;
+      
+      reveal_cyclicSlice();
 
       assert self.InMemoryJournal()
-        == old_self.InMemoryJournal() + [je] by { reveal_cyclicSlice(); }
+        == old_self.InMemoryJournal() + [je];
       assert self.InMemoryJournalFrozen()
-        == old_self.InMemoryJournalFrozen() by { reveal_cyclicSlice(); }
+        == old_self.InMemoryJournalFrozen();
+
       lemma_weight_append(old_self.InMemoryJournal(), je);
     }
 
