@@ -390,7 +390,6 @@ module MarshallingImpl {
     }
   }
 
-  // TODO(Jialin): fix timeout
   method strictlySortedPivotsToVal(pivots: Pivots.PivotTable)
   returns (v : V, size: uint64)
   requires Pivots.WFPivots(pivots)
@@ -431,6 +430,8 @@ module MarshallingImpl {
     Marshalling.pivotTableWeightUpperBound(pivots);
     v := VArray(vs[..i]);
     size := size + 8;
+
+    assert Marshalling.valToStrictlySortedPivots(v) == Some(pivots); // observe
     assert SizeOfV(v) <= 8 + |pivots| * (8 + KeyType.MaxLen() as int); // observe
   }
 
