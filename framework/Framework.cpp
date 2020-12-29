@@ -48,16 +48,19 @@ void fail(std::string err)
   exit(1);
 }
 
-// namespace NativePackedByte_Compile {
-//   // namespace __default {
-//     uint8 Unpack(DafnySequence<uint8> const& packed, uint64 idx)
-//     {
-//       uint8 res;
-//       memcpy(&res, packed.ptr() + idx, sizeof(uint8));
-//       return res;
-//     }
-//   // }
-// }
+namespace NativePackedByte_Compile {
+  uint8 Unpack(DafnySequence<uint8> const& packed, uint64 idx)
+  {
+    uint8 res;
+    memcpy(&res, packed.ptr() + idx, sizeof(uint8));
+    return res;
+  }
+
+  void Pack_into_ByteSeq(uint8 i, LinearExtern::linear_seq<uint8> s, uint64 idx)
+  {
+    memcpy(s->data() + idx, &i, sizeof(uint8));
+  }
+}
 
 constexpr int MAX_WRITE_REQS_OUT = 8;
 

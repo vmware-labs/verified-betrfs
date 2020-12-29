@@ -25,14 +25,9 @@ namespace NativeArithmetic_Compile {
 }
 
 namespace NativePackedByte_Compile {
-  // namespace __default {
-    inline uint8 Unpack(DafnySequence<uint8> const& packed, uint64 idx)
-    {
-      uint8 res;
-      memcpy(&res, packed.ptr() + idx, sizeof(uint8));
-      return res;
-    }
-  // }
+  uint8 Unpack(DafnySequence<uint8> const& packed, uint64 idx);
+
+  void Pack_into_ByteSeq(uint8 i, LinearExtern::linear_seq<uint8> packed, uint64 idx);
 }
 
 namespace F2__X__s_Compile {
