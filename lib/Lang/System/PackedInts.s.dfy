@@ -163,7 +163,7 @@ module NativePackedUint32 refines NativePackedInt {
   }
 
   // framework/Framework.cpp
-  method {:extern} Unpack(packed: seq<byte>, idx: uint64) returns (i: Integer)
+  method {:extern "NativePackedUint32_Compile", "Unpack"} Unpack(packed: seq<byte>, idx: uint64) returns (i: Integer)
   method {:extern} Pack_into_ByteSeq(i: Integer, linear inout s: seq<byte>, idx: uint64)
   // Unpack currently copies.  Can it just be a cast?
   method {:extern} Unpack_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)

@@ -24,7 +24,8 @@ ifdef LOG_QUERY_STATS
 endif
 
 CC=clang++
-STDLIB?=-stdlib=libc++
+# STDLIB?=-stdlib=libc++
+STDLIB?=
 
 # Uncomment to enable gprof
 #GPROF_FLAGS=-pg

@@ -9,6 +9,7 @@
 #include <map>
 #include <unordered_map>
 #include <cstring>
+#include <memory>
 
 namespace MapRemove__s_Compile {
   template <typename K, typename V>
@@ -25,10 +26,61 @@ namespace NativeArithmetic_Compile {
 }
 
 namespace NativePackedByte_Compile {
-  uint8 Unpack(DafnySequence<uint8> const& packed, uint64 idx);
-  void Pack_into_ByteSeq(uint8 i, LinearExtern::linear_seq<uint8> packed, uint64 idx);
-  DafnySequence<uint8> Unpack_Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len);
-  void Pack_Seq_into_ByteSeq(DafnySequence<uint8> const& value, LinearExtern::linear_seq<uint8> packed, uint64 idx);
+  inline uint8 Unpack(DafnySequence<uint8> const& packed, uint64 idx)
+  {
+    uint8 res;
+    memcpy(&res, packed.ptr() + idx, sizeof(uint8));
+    return res;
+  }
+
+  inline void Pack_into_ByteSeq(uint8 i, LinearExtern::linear_seq<uint8> s, uint64 idx)
+  {
+    memcpy(s->data() + idx, &i, sizeof(uint8));
+  }
+
+  inline DafnySequence<uint8> Unpack_Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len)
+  {
+    DafnySequence<uint8> res;
+    res.sptr = packed.sptr; // retain the same shared pointer
+    res.start = packed.start + idx; // offset to the start
+    res.len = len;
+
+    return res;
+  }
+
+  inline void Pack_Seq_into_ByteSeq(DafnySequence<uint8> const& value, LinearExtern::linear_seq<uint8> packed, uint64 idx)
+  {
+    memcpy(packed->data() + idx, value.start, sizeof(uint8) * value.len);
+  }
+}
+
+namespace NativePackedUint32_Compile {
+  inline uint32 Unpack(DafnySequence<uint8> const& packed, uint64 idx)
+  {
+    uint32 res;
+    memcpy(&res, packed.ptr() + idx, sizeof(uint32));
+    return res;
+  }
+
+  inline void Pack_into_ByteSeq(uint32 i, LinearExtern::linear_seq<uint8> s, uint64 idx)
+  {
+    memcpy(s->data() + idx, &i, sizeof(uint32));
+  }
+
+  inline DafnySequence<uint32> Unpack_Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len)
+  {
+    // yizhou7: test this
+    DafnySequence<uint32> res;
+    res.sptr = std::reinterpret_pointer_cast<uint32, uint8>(packed.sptr);
+    res.start = (uint32 *) (packed.start + idx);
+	  res.len = len;
+    return res;
+  }
+
+  inline void Pack_Seq_into_ByteSeq(DafnySequence<uint32> const& value, LinearExtern::linear_seq<uint8> packed, uint64 idx)
+  {
+    memcpy(packed->data() + idx, value.start, sizeof(uint32) * value.len);
+  }
 }
 
 namespace F2__X__s_Compile {

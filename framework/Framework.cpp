@@ -48,39 +48,6 @@ void fail(std::string err)
   exit(1);
 }
 
-namespace NativePackedByte_Compile {
-  uint8 Unpack(DafnySequence<uint8> const& packed, uint64 idx)
-  {
-    uint8 res;
-    memcpy(&res, packed.ptr() + idx, sizeof(uint8));
-    return res;
-  }
-
-  void Pack_into_ByteSeq(uint8 i, LinearExtern::linear_seq<uint8> s, uint64 idx)
-  {
-    memcpy(s->data() + idx, &i, sizeof(uint8));
-  }
-
-  DafnySequence<uint8> Unpack_Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len)
-  {
-    // DafnySequence<uint8> res(len);
-    // res.ptr() = packed.ptr();
-    // memcpy(res.ptr(), packed.ptr() + idx, len);
-
-    DafnySequence<uint8> res;
-    res.sptr = packed.sptr; // retain the same shared pointer
-    res.start = packed.start + idx; // offset to the start
-    res.len = len;
-
-    return res;
-  }
-
-  void Pack_Seq_into_ByteSeq(DafnySequence<uint8> const& value, LinearExtern::linear_seq<uint8> packed, uint64 idx)
-  {
-    memcpy(packed->data() + idx, value.start, sizeof(uint8) * value.len);
-  }
-}
-
 constexpr int MAX_WRITE_REQS_OUT = 8;
 
 namespace MainDiskIOHandler_Compile {
