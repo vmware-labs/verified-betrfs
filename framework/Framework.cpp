@@ -63,10 +63,21 @@ namespace NativePackedByte_Compile {
 
   DafnySequence<uint8> Unpack_Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len)
   {
-    DafnySequence<uint8> res(len);
-    res.ptr() = packed.ptr();
-    memcpy(res.ptr(), packed.ptr() + idx, len);
+    // DafnySequence<uint8> res(len);
+    // res.ptr() = packed.ptr();
+    // memcpy(res.ptr(), packed.ptr() + idx, len);
+
+    DafnySequence<uint8> res;
+    res.sptr = packed.sptr; // retain the same shared pointer
+    res.start = packed.start + idx; // offset to the start
+    res.len = len;
+
     return res;
+  }
+
+  void Pack_Seq_into_ByteSeq(DafnySequence<uint8> const& value, LinearExtern::linear_seq<uint8> packed, uint64 idx)
+  {
+    memcpy(packed->data() + idx, value.start, sizeof(uint8) * value.len);
   }
 }
 

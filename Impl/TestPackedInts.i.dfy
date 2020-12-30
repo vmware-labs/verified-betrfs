@@ -22,6 +22,7 @@ module TestPackedInts {
     TestUnpack();
     TestPack_into_ByteSeq();
     TestUnpack_Seq();
+    TestPack_Seq_into_ByteSeq();
   }
 
   method TestUnpack()
@@ -30,7 +31,7 @@ module TestPackedInts {
     var v := Unpack(packed, 0);
     Test("index 0", v == 1);
     v := Unpack(packed, 2);
-    Test("index 1", v == 2);
+    Test("index 1", v == 3);
   }
 
   method TestPack_into_ByteSeq()
@@ -50,10 +51,23 @@ module TestPackedInts {
   {
     var packed : seq<byte> := [1, 2, 3];
     var unpacked: seq<uint8> := Unpack_Seq(packed, 1, 2);
-    Test("index 0", unpacked[0] == 2);
-    Test("index 1", unpacked[1] == 3);
 
     Test("index 0", packed[0] == 1);
     Test("index 1", packed[1] == 2);
+
+    Test("index 0", unpacked[0] == 2);
+    Test("index 1", unpacked[1] == 3);
+  }
+
+  method TestPack_Seq_into_ByteSeq()
+  {
+    var value :seq<byte> := [22, 33, 24];
+    linear var packed := seq_alloc<byte>(10, 41);
+    Pack_Seq_into_ByteSeq(value, inout packed, 4);
+
+    Test("index 0", seq_get(packed, 0) == 41);
+    Test("index 4", seq_get(packed, 4) == 22);
+
+    var _ := seq_free(packed);
   }
 }

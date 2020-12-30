@@ -28,6 +28,7 @@ namespace NativePackedByte_Compile {
   uint8 Unpack(DafnySequence<uint8> const& packed, uint64 idx);
   void Pack_into_ByteSeq(uint8 i, LinearExtern::linear_seq<uint8> packed, uint64 idx);
   DafnySequence<uint8> Unpack_Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len);
+  void Pack_Seq_into_ByteSeq(DafnySequence<uint8> const& value, LinearExtern::linear_seq<uint8> packed, uint64 idx);
 }
 
 namespace F2__X__s_Compile {
