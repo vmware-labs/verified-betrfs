@@ -60,6 +60,14 @@ namespace NativePackedByte_Compile {
   {
     memcpy(s->data() + idx, &i, sizeof(uint8));
   }
+
+  DafnySequence<uint8> Unpack_Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len)
+  {
+    DafnySequence<uint8> res(len);
+    res.ptr() = packed.ptr();
+    memcpy(res.ptr(), packed.ptr() + idx, len);
+    return res;
+  }
 }
 
 constexpr int MAX_WRITE_REQS_OUT = 8;
