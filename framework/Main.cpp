@@ -45,12 +45,12 @@ namespace TestPackedInts_Compile {
     public:
     // Default constructor
  __default() {}
-    static void TestNativePackedByte();
+    static void TestPackedInts();
   };
 }
 
 int main(int argc, char* argv[]) {
-  TestPackedInts_Compile::__default::TestNativePackedByte();
+  TestPackedInts_Compile::__default::TestPackedInts();
 }
 
 /*int main(int argc, char* argv[]) {
