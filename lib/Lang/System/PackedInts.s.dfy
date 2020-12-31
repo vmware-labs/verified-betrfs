@@ -164,10 +164,9 @@ module NativePackedUint32 refines NativePackedInt {
 
   // framework/Framework.cpp
   method {:extern "NativePackedUint32_Compile", "Unpack"} Unpack(packed: seq<byte>, idx: uint64) returns (i: Integer)
-  method {:extern} Pack_into_ByteSeq(i: Integer, linear inout s: seq<byte>, idx: uint64)
-  // Unpack currently copies.  Can it just be a cast?
-  method {:extern} Unpack_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)
-  method {:extern} Pack_Seq_into_ByteSeq(value: seq<Integer>, linear inout packed: seq<byte>, idx: uint64)
+  method {:extern "NativePackedUint32_Compile", "Pack_into_ByteSeq"} Pack_into_ByteSeq(i: Integer, linear inout s: seq<byte>, idx: uint64)
+  method {:extern "NativePackedUint32_Compile", "Unpack_Seq"} Unpack_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)
+  method {:extern "NativePackedUint32_Compile", "Pack_Seq_into_ByteSeq"} Pack_Seq_into_ByteSeq(value: seq<Integer>, linear inout packed: seq<byte>, idx: uint64)
 }
 
 module NativePackedUint64 refines NativePackedInt{
@@ -205,10 +204,10 @@ module NativePackedUint64 refines NativePackedInt{
     + (s[7] as uint64 * 0x1_00_00_00_00_00_00_00)
   }
 
-  method {:extern} Unpack(packed: seq<byte>, idx: uint64) returns (i: Integer)
-  method {:extern} Pack_into_ByteSeq(i: Integer, linear inout s: seq<byte>, idx: uint64)
-  method {:extern} Unpack_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)
-  method {:extern} Pack_Seq_into_ByteSeq(value: seq<Integer>, linear inout packed: seq<byte>, idx: uint64)
+  method {:extern "NativePackedUint64_Compile", "Unpack"} Unpack(packed: seq<byte>, idx: uint64) returns (i: Integer)
+  method {:extern "NativePackedUint64_Compile", "Pack_into_ByteSeq"} Pack_into_ByteSeq(i: Integer, linear inout s: seq<byte>, idx: uint64)
+  method {:extern "NativePackedUint64_Compile", "Unpack_Seq"} Unpack_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)
+  method {:extern "NativePackedUint64_Compile", "Pack_Seq_into_ByteSeq"} Pack_Seq_into_ByteSeq(value: seq<Integer>, linear inout packed: seq<byte>, idx: uint64)
 }
 
 module {:extern} NativePackedInts {

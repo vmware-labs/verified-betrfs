@@ -69,7 +69,7 @@ namespace NativePackedUint32_Compile {
 
   inline DafnySequence<uint32> Unpack_Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len)
   {
-    // yizhou7: test this
+    // TODO yizhou7: test this
     DafnySequence<uint32> res;
     res.sptr = std::reinterpret_pointer_cast<uint32, uint8>(packed.sptr);
     res.start = (uint32 *) (packed.start + idx);
@@ -80,6 +80,37 @@ namespace NativePackedUint32_Compile {
   inline void Pack_Seq_into_ByteSeq(DafnySequence<uint32> const& value, LinearExtern::linear_seq<uint8> packed, uint64 idx)
   {
     memcpy(packed->data() + idx, value.start, sizeof(uint32) * value.len);
+  }
+}
+
+namespace NativePackedUint64_Compile {
+  inline uint64 Unpack(DafnySequence<uint8> const& packed, uint64 idx)
+  {
+    uint64 res;
+    memcpy(&res, packed.ptr() + idx, sizeof(uint64));
+    return res;
+  }
+
+  inline void Pack_into_ByteSeq(uint64 i, LinearExtern::linear_seq<uint8> s, uint64 idx)
+  {
+    memcpy(s->data() + idx, &i, sizeof(uint64));
+  }
+
+  inline DafnySequence<uint64> Unpack_Seq(DafnySequence<uint8> const& packed, uint64 idx, uint64 len)
+  {
+    // TODO yizhou7: test this
+    // DafnySequence<uint64> res(len);
+    // memcpy(res.ptr(), packed.ptr() + idx, sizeof(uint64) * len);
+    DafnySequence<uint64> res;
+    res.sptr = std::reinterpret_pointer_cast<uint64, uint8>(packed.sptr);
+    res.start = (uint64 *) (packed.start + idx);
+	  res.len = len;
+    return res;
+  }
+
+  inline void Pack_Seq_into_ByteSeq(DafnySequence<uint64> const& value, LinearExtern::linear_seq<uint8> packed, uint64 idx)
+  {
+    memcpy(packed->data() + idx, value.start, sizeof(uint64) * value.len);
   }
 }
 
