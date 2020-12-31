@@ -47,9 +47,11 @@ endif
 WANT_DEBUG=false
 ifeq "$(WANT_DEBUG)" "true"
 	DBG_SYMBOLS_FLAG=-g
+	ASAN_FLAG=-fsanitize=address
 	OPT_FLAG=-O0
 else
 	DBG_SYMBOLS_FLAG=
+	ASAN_FLAG=
 	OPT_FLAG=-O3
 endif
 
@@ -59,6 +61,7 @@ endif
 OPT_FLAGS=$(MALLOC_ACCOUNTING_DEFINE) \
           $(UNVERIFIED_ROW_CACHE_DEFINE) \
           $(DBG_SYMBOLS_FLAG) \
+		  $(ASAN_FLAG) \
           $(OPT_FLAG) \
           -D_LIBCPP_HAS_NO_THREADS \
           $(GPROF_FLAGS)
@@ -331,14 +334,14 @@ VERIBETRFS_O_FILES=\
 	$(VERIBETRFS_AUX_FILES)\
 	build/framework/Main.o \
 
-LDFLAGS=-msse4.2
+LDFLAGS=-msse4.2 $(ASAN_FLAG)
 
 # On linux we need the -lrt (for aio functions),
 # but on mac it doesn't exist.
 UNAME := $(shell uname)
 ifeq ($(UNAME), Darwin)
 else
-LDFLAGS += -lrt
+LDFLAGS += -lrt 
 endif
 
 # build/Impl/TestPackedInts: build/Impl/TestPackedInts.i.o build/framework/Framework.o build/framework/BundleWrapper.o
