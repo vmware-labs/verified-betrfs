@@ -20,13 +20,16 @@ abstract module NativePackedInt {
     requires MinValue() <= x < UpperBound()
   function toInt(x: Integer) : (result: int)
     ensures MinValue() <= result < UpperBound()
-    ensures fromInt(result) == x
+  lemma fromtoInverses()
+    ensures forall x :: fromInt(toInt(x)) == x
+    ensures forall y | MinValue() <= y < UpperBound() :: toInt(fromInt(y)) == y
+  predicate method fitsInUint64(x: Integer)
+    ensures fitsInUint64(x) <==> 0 <= toInt(x) < 0x1_0000_0000_0000_0000
   predicate method fitsInInteger(x: uint64)
+    ensures fitsInInteger(x) <==> MinValue() <= x as int < UpperBound()
   function method fromUint64(x: uint64) : (result: Integer)
     requires MinValue() <= x as int < UpperBound()
     ensures result == fromInt(x as nat)
-  predicate method fitsInUint64(x: Integer)
-    ensures fitsInUint64(x) <==> 0 <= toInt(x) < 0x1_0000_0000_0000_0000
   function method toUint64(x: Integer) : (result: uint64)
     requires 0 <= toInt(x) < 0x1_0000_0000_0000_0000
     ensures MinValue() <= result as int < UpperBound()

@@ -697,4 +697,8 @@ module Sequences {
   ensures (a+b)[i..j] == b[i-|a| .. j-|a|]
   {
   }
+
+  predicate agree<T>(a: seq<T>, b: seq<T>) {
+    forall i | 0 <= i < |a| && i < |b| :: a[i] == b[i]
+  }
 }
