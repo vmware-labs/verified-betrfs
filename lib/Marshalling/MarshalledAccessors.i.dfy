@@ -660,6 +660,12 @@ abstract module AppendableSeqMarshalling refines SeqMarshalling {
     ensures parsable(data[start..end]) ==> parse(newdata[start..end]) == parse(data[start..end]) + [ elt ]
 }
 
+////////////////////////////////////////////////////////
+// Appendable integer sequences.
+//
+// TODO: figure out interface for resizing and setting.
+////////////////////////////////////////////////////////
+
 abstract module AppendableIntegerSeqMarshalling refines AppendableSeqMarshalling {
   import ISM = IntegerSeqMarshalling
   import ElementMarshalling = ISM.ElementMarshalling
