@@ -11,10 +11,19 @@ module BucketGeneratorImpl {
   import opened LinearSequence_s
   import opened LinearSequence_i
   import UI
+  import opened BucketsLib
+  import opened Lexicographic_Byte_Order
+  import opened Options
 
-  linear datatype Generator = Basic(linear biter: BucketIter, ghost height: nat)
-    | Compose(linear top: Generator, linear bot: Generator, 
-      next: BucketIteratorModel.IteratorOutput, ghost height: nat)
+  linear datatype Generator = 
+    | Basic(
+        linear biter: BucketIter,
+        ghost height: nat)
+    | Compose(
+        linear top: Generator,
+        linear bot: Generator, 
+        next: BucketIteratorModel.IteratorOutput,
+        ghost height: nat)
   {
     predicate {:opaque} Inv()
     decreases height, 1
@@ -26,6 +35,7 @@ module BucketGeneratorImpl {
     decreases height, 0
     {
       && (this.Basic? ==> (
+        && WFBucket(biter.bucket)
         && biter.WFIter()
       ))
       && (this.Compose? ==> (
@@ -69,16 +79,94 @@ module BucketGeneratorImpl {
       )
     }
 
-    shared method GenLeft() returns (res : BucketIteratorModel.IteratorOutput)
+    predicate WM()
+    {
+      match this {
+        case Basic(biter, _) => 
+          BucketWellMarshalled(biter.bucket)
+        case Compose(top, bot, _, _) => 
+          && top.WM()
+          && bot.WM()
+      }
+    }
+
+    // predicate WF()
+    // {
+    //   && (BasicGenerator? ==> (
+    //     && WFBucket(bucket)
+    //     && WFIter(g.bucket, g.it)
+    //   ))
+    //   && (ComposeGenerator? ==> (
+    //     && WF(g.top)
+    //     && WF(g.bot)
+    //   ))
+    // }
+
+    predicate {:opaque} Monotonic()
+    {
+      this.Compose? ==> (
+        && (next.Next? && top.GenLeft().Next? ==> lt(next.key, top.GenLeft().key))
+        && (next.Next? && bot.GenLeft().Next? ==> lt(next.key, bot.GenLeft().key))
+        && (next.Done? ==> top.GenLeft().Done?)
+        && (next.Done? ==> bot.GenLeft().Done?)
+        && top.Monotonic()
+        && bot.Monotonic()
+      )
+    }
+
+    function {:opaque} BucketOf() : Bucket
+    ensures BucketWellMarshalled(BucketOf())
+    {
+      match this {
+        case Basic(biter, _) =>
+          if biter.it.next.Done? then B(map[])
+          else B(map k | k in biter.bucket.b && lte(biter.it.next.key, k) :: biter.bucket.b[k])
+        case Compose(top, bot, next, _) =>
+          if next.Done? then B(map[])
+          else B(BucketsLib.Compose(top.BucketOf(), bot.BucketOf()).b[next.key := next.msg])
+      }
+    }    
+
+    shared function method GenLeft() : (res : BucketIteratorModel.IteratorOutput)
     requires Inv()
-    ensures res == BucketGeneratorModel.GenLeft(I())
+    requires WM()
+    requires Monotonic()
     {
       reveal_Inv_for(this);
 
-      if this.Basic? {
-        res := biter.GetNext();
-      } else {
-        res := next;
+      if this.Basic? then
+        biter.GetNext()
+      else
+        next
+    }
+
+    lemma GenLeftIsMinimum()
+    requires WM()
+    requires Inv()
+    requires Monotonic()
+    ensures GenLeft().Done? ==> BucketOf().b == map[]
+    ensures GenLeft().Next? ==> BucketsLib.minimumKey(BucketOf().b.Keys) == Some(GenLeft().key)
+    ensures GenLeft().Next? ==> BucketOf().b[GenLeft().key] == GenLeft().msg
+    {
+      reveal_Inv_for(this);
+      reveal_BucketOf();
+      if GenLeft().Next? {
+        if Compose? {
+          reveal_Compose();
+          assert top.Monotonic() by { reveal_Monotonic(); }
+          assert bot.Monotonic() by { reveal_Monotonic(); }
+          top.GenLeftIsMinimum();
+          bot.GenLeftIsMinimum();
+          assert GenLeft().key in BucketOf().b;
+          assert forall k | k in BucketOf().b :: lte(GenLeft().key, k) by {
+            reveal_Monotonic();
+          }
+          assert minimumKey(BucketOf().b.Keys) == Some(GenLeft().key);
+        } else {
+          assert GenLeft().key in BucketOf().b;
+          assert forall k | k in BucketOf().b :: lte(GenLeft().key, k);
+          assert minimumKey(BucketOf().b.Keys) == Some(GenLeft().key);
+        }
       }
     }
 

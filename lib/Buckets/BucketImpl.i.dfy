@@ -743,17 +743,16 @@ module BucketImpl {
       inout self.it := makeIter(self.bucket, self.it.i + 1);
     }
 
-    shared method GetNext() returns (next : BucketIteratorModel.IteratorOutput)
+    shared function method GetNext() : (next : BucketIteratorModel.IteratorOutput)
     requires this.WFIter()
     ensures next == IIterator(this.it).next
     {
       BucketIteratorModel.lemma_NextFromIndex(bucket, IIterator(it));
         
-      if it.i == |pkv.keys.offsets| as uint64 {
-        next := BucketIteratorModel.Done;
-      } else {
-        next := BucketIteratorModel.Next(PackedKV.GetKey(pkv, it.i), PackedKV.GetMessage(pkv, it.i));
-      }
+      if it.i == |pkv.keys.offsets| as uint64 then
+        BucketIteratorModel.Done
+      else 
+        BucketIteratorModel.Next(PackedKV.GetKey(pkv, it.i), PackedKV.GetMessage(pkv, it.i))
     }
   }
 
