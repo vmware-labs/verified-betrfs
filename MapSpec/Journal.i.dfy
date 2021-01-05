@@ -9,7 +9,7 @@ module Journal {
   import opened Sequences
   import UI
 
-  datatype JournalEntry = JournalInsert(key: Key, value: Value)
+  datatype JournalEntry = JournalInsert(key: UKey, value: Value)
 
   function JournalEntriesForUIOp(uiop: UI.Op) : seq<JournalEntry>
   {

@@ -160,12 +160,10 @@ module AsyncBetree {
   requires ValidQueryDescent(qd)
   requires BI.Reads(betree.bcv, QueryDescentReads(qd))
   requires |lookup| > 0
-  requires lookup[0].ref == qd.query.ref
-  requires BetreeInv.IsSatisfyingLookup(betree.bcv.view, qd.query.key, value, lookup)
+  requires BetreeInv.IsSatisfyingLookupFrom(betree.bcv.view, qd.query.key, value, lookup, qd.query.ref)
   ensures qd.query'.InProgress? ==>
       && |lookup'| > 0
-      && lookup'[0].ref == qd.query'.ref
-      && BetreeInv.IsSatisfyingLookup(betree.bcv.view, qd.query'.key, value', lookup')
+      && BetreeInv.IsSatisfyingLookupFrom(betree.bcv.view, qd.query'.key, value', lookup', qd.query'.ref)
       && G.M.ApplyDelta(qd.query.delta, value)
           == G.M.ApplyDelta(qd.query'.delta, value')
   ensures qd.query'.Finished? ==>
@@ -216,8 +214,7 @@ module AsyncBetree {
   ensures QueryInv(betree, qd.query')
   {
     var lookup: Lookup, value :|
-      && BetreeInv.IsSatisfyingLookup(betree.bcv.view, qd.query.key, value, lookup)
-      && lookup[0].ref == qd.query.ref;
+      BetreeInv.IsSatisfyingLookupFrom(betree.bcv.view, qd.query.key, value, lookup, qd.query.ref);
     var lookup', value' := QueryAdvanceChangesLookup(betree, qd, lookup, value);
   }
  

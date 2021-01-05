@@ -20,7 +20,7 @@ module Betree_Refines_Map {
 
   datatype LookupResult = LookupResult(lookup: Lookup, result: Value)
   
-  function GetLookup(view: Betree.BI.View, key: Key, start: Reference) : LookupResult
+  function GetLookup(view: Betree.BI.View, key: UKey, start: Reference) : LookupResult
     requires KeyHasSatisfyingLookup(view, key, start)
   {
     var lookup: Lookup, value :|
@@ -28,13 +28,13 @@ module Betree_Refines_Map {
     LookupResult(lookup, value)
   }
 
-  function GetValue(view: Betree.BI.View, key: Key) : Value
+  function GetValue(view: Betree.BI.View, key: UKey) : Value
     requires KeyHasSatisfyingLookup(view, key, Root());
   {
     GetLookup(view, key, Root()).result
   }
 
-  function IView(view: Betree.BI.View) : imap<Key, Value>
+  function IView(view: Betree.BI.View) : imap<UKey, Value>
     requires forall key | MS.InDomain(key) :: KeyHasSatisfyingLookup(view, key, Root());
   {
     imap key | MS.InDomain(key) :: GetValue(view, key)
@@ -124,7 +124,7 @@ module Betree_Refines_Map {
         == IView(s'.bcv.view);
   }
 
-  lemma PreservesLookupsRevExcept(s: Betree.Variables, s': Betree.Variables, except: Key)
+  lemma PreservesLookupsRevExcept(s: Betree.Variables, s': Betree.Variables, except: UKey)
   requires Inv(s);
   requires Inv(s');
   requires PreservesLookupsExcept(s, s', Root(), except);
@@ -142,7 +142,7 @@ module Betree_Refines_Map {
   }
 
 
-  lemma PreservesLookupsPutImplInterpsPut(s: Betree.Variables, s': Betree.Variables, key: Key, value: Value)
+  lemma PreservesLookupsPutImplInterpsPut(s: Betree.Variables, s': Betree.Variables, key: UKey, value: Value)
   requires Inv(s);
   requires Inv(s');
   requires PreservesLookupsPut(s, s', key, value);
@@ -179,7 +179,7 @@ module Betree_Refines_Map {
     }
   }
 
-  lemma LookupImpliesMap(s: Betree.Variables, key: Key, value: Value, lookup: Lookup)
+  lemma LookupImpliesMap(s: Betree.Variables, key: UKey, value: Value, lookup: Lookup)
   requires Inv(s)
   requires LookupKeyValue(lookup, key, value)
   requires Betree.BI.Reads(s.bcv, lookup)
@@ -197,7 +197,7 @@ module Betree_Refines_Map {
     CantEquivocate(s, key, value, value', lookup, lookup');
   }
 
-  lemma QueryStepRefinesMap(s: Betree.Variables, s': Betree.Variables, uiop: UI.Op, key: Key, value: Value, lookup: Lookup)
+  lemma QueryStepRefinesMap(s: Betree.Variables, s': Betree.Variables, uiop: UI.Op, key: UKey, value: Value, lookup: Lookup)
     requires Inv(s)
     requires BetreeStepUI(BetreeQuery(LookupQuery(key, value, lookup)), uiop)
     requires BetreeInv.Query(s.bcv, s'.bcv, key, value, lookup)
@@ -231,7 +231,7 @@ module Betree_Refines_Map {
     assert MS.Succ(I(s), I(s'), uiop, start, results, end);
   }
   
-  lemma InsertMessageStepRefinesMap(s: Betree.Variables, s': Betree.Variables, uiop: UI.Op, key: Key, msg: BufferEntry, oldroot: Node)
+  lemma InsertMessageStepRefinesMap(s: Betree.Variables, s': Betree.Variables, uiop: UI.Op, key: UKey, msg: BufferEntry, oldroot: Node)
     requires Inv(s)
     requires BetreeStepUI(BetreeInsert(MessageInsertion(key, msg, oldroot)), uiop)
     requires BetreeInv.InsertMessage(s.bcv, s'.bcv, key, msg, oldroot)

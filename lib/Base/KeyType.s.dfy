@@ -5,6 +5,7 @@ module KeyType {
 
   function method MaxLen() : NativeTypes.uint64 { 1024 }
   type Key = s : seq<NativeTypes.byte> | |s| <= 1024
+  type UKey = seq<NativeTypes.byte> // unlimited key length
 }
 
 module ValueType {

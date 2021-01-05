@@ -14,10 +14,10 @@ module {:extern} UI {
   import opened ValueType
   import opened KeyType
 
-  datatype RangeStart = SInclusive(key: Key) | SExclusive(key: Key) | NegativeInf
-  datatype RangeEnd = EInclusive(key: Key) | EExclusive(key: Key) | PositiveInf
+  datatype RangeStart = SInclusive(key: UKey) | SExclusive(key: UKey) | NegativeInf
+  datatype RangeEnd = EInclusive(key: UKey) | EExclusive(key: UKey) | PositiveInf
 
-  datatype SuccResult = SuccResult(key: Key, value: Value)
+  datatype SuccResult = SuccResult(key: UKey, value: Value)
   datatype SuccResultList = SuccResultList(results: seq<SuccResult>, end: RangeEnd)
 
   datatype Op =
@@ -27,13 +27,13 @@ module {:extern} UI {
     | PushSyncOp(ghost id: int)
     | PopSyncOp(ghost id: int)
 
-    | GetOp(key: Key, value: Value)
+    | GetOp(key: UKey, value: Value)
     
-    | GetBeginOp(key: Key, ghost id: int)
+    | GetBeginOp(key: UKey, ghost id: int)
     | GetEndOp(value: Value, ghost id: int)
 
     // TODO make this async? any value from it?
-    | PutOp(key: Key, value: Value)
+    | PutOp(key: UKey, value: Value)
 
     | SuccOp(start: RangeStart,
         results: seq<SuccResult>, end: RangeEnd)

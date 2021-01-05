@@ -103,7 +103,7 @@ module JournalRanges {
       if idx + 4 <= |s| then (
         var keyLen := unpack_LittleEndian_Uint32(s[idx..idx+4]) as int;
         if idx + 4 + keyLen + 4 <= |s| && keyLen <= KeyType.MaxLen() as int then (
-          var key: Key := s[idx+4..idx+4+keyLen];
+          var key := s[idx+4..idx+4+keyLen];
           var valueLen := unpack_LittleEndian_Uint32(s[idx+4+keyLen..idx+4+keyLen+4]) as int;
           if idx + 4 + keyLen + 4 + valueLen <= |s| && valueLen <= ValueType.MaxLen() as int then (
             var value: Value := s[idx+4+keyLen+4 .. idx+4+keyLen+4+valueLen];

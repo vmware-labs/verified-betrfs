@@ -35,7 +35,7 @@ module BoundedPivotsLib {
     && (forall i | 0 <= i < |pt| && pt[i].Element? :: ElementIsKey(pt[i]))
   }
 
-  function KeyToElement(key: Key): Element
+  function KeyToElement(key: UKey): Element
   {
     Keyspace.Element(key)
   }
@@ -72,7 +72,7 @@ module BoundedPivotsLib {
     return (b1 == 0) && (b2 == 0);
   }
 
-  predicate BoundedKey(pt: PivotTable, key: Key)
+  predicate BoundedKey(pt: PivotTable, key: UKey)
   requires WFPivots(pt)
   {
     && Keyspace.lte(pt[0], KeyToElement(key))
@@ -87,7 +87,7 @@ module BoundedPivotsLib {
     && Keyspace.lte(KeyToElement(key), pt[|pt|-1])
   }
 
-  method ComputeBoundedKey(pt: PivotTable, key: Key) returns (b: bool)
+  method ComputeBoundedKey(pt: PivotTable, key: UKey) returns (b: bool)
   requires |pt| < 0x4000_0000_0000_0000
   requires WFPivots(pt)
   ensures b == BoundedKey(pt, key)
@@ -128,7 +128,7 @@ module BoundedPivotsLib {
     else 0
   }
  
-  function Route(pt: PivotTable, key: Key) : int
+  function Route(pt: PivotTable, key: UKey) : int
   requires WFPivots(pt)
   requires BoundedKey(pt, key)
   ensures 0 <= Route(pt, key) < NumBuckets(pt)
@@ -136,7 +136,7 @@ module BoundedPivotsLib {
     Keyspace.LargestLte(pt, KeyToElement(key))
   }
 
-  method ComputeRoute(pt: PivotTable, key: Key) returns (i: uint64)
+  method ComputeRoute(pt: PivotTable, key: UKey) returns (i: uint64)
   requires |pt| < 0x4000_0000_0000_0000
   requires WFPivots(pt)
   requires BoundedKey(pt, key)

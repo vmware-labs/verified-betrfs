@@ -18,7 +18,7 @@ module MapSpec refines UIStateMachine {
     ValueType.DefaultValue()
   }
 
-  type View = imap<Key, Value>
+  type View = imap<UKey, Value>
   datatype Variables = Variables(ghost view:View)
 
   predicate ViewComplete(view:View)
@@ -33,12 +33,12 @@ module MapSpec refines UIStateMachine {
 
   // Dafny black magic: This name is here to give EmptyMap's forall something to
   // trigger on. (Eliminates a /!\ Warning.)
-  predicate InDomain(k:Key)
+  predicate InDomain(k: UKey)
   {
     true
   }
 
-  function EmptyMap() : (zmap : imap<Key,Value>)
+  function EmptyMap() : (zmap : imap<UKey,Value>)
       ensures ViewComplete(zmap)
   {
     imap k | InDomain(k) :: EmptyValue()
@@ -51,7 +51,7 @@ module MapSpec refines UIStateMachine {
   }
 
   // Can collapse key and result; use the ones that came in uiop for free.
-  predicate Query(s:Variables, s':Variables, uiop: UIOp, key:Key, result:Value)
+  predicate Query(s:Variables, s':Variables, uiop: UIOp, key: UKey, result:Value)
   {
     && uiop == UI.GetOp(key, result)
     && WF(s)
@@ -59,19 +59,19 @@ module MapSpec refines UIStateMachine {
     && s' == s
   }
 
-  predicate LowerBound(start: UI.RangeStart, key: Key)
+  predicate LowerBound(start: UI.RangeStart, key: UKey)
   {
     && (start.SInclusive? ==> SeqComparison.lte(start.key, key))
     && (start.SExclusive? ==> SeqComparison.lt(start.key, key))
   }
 
-  predicate UpperBound(key: Key, end: UI.RangeEnd)
+  predicate UpperBound(key: UKey, end: UI.RangeEnd)
   {
     && (end.EInclusive? ==> SeqComparison.lte(key, end.key))
     && (end.EExclusive? ==> SeqComparison.lt(key, end.key))
   }
 
-  predicate InRange(start: UI.RangeStart, key: Key, end: UI.RangeEnd)
+  predicate InRange(start: UI.RangeStart, key: UKey, end: UI.RangeEnd)
   {
     && LowerBound(start, key)
     && UpperBound(key, end)
@@ -100,7 +100,7 @@ module MapSpec refines UIStateMachine {
         exists i :: 0 <= i < |results| && results[i].key == key)
   }
 
-  predicate Write(s:Variables, s':Variables, uiop: UIOp, key:Key, new_value:Value)
+  predicate Write(s:Variables, s':Variables, uiop: UIOp, key:UKey, new_value:Value)
       ensures Write(s, s', uiop, key, new_value) ==> WF(s')
   {
     && uiop == UI.PutOp(key, new_value)
@@ -117,8 +117,8 @@ module MapSpec refines UIStateMachine {
 
   // uiop should be in here, too.
   datatype Step =
-      | QueryStep(key: Key, result: Value)
-      | WriteStep(key: Key, new_value: Value)
+      | QueryStep(key: UKey, result: Value)
+      | WriteStep(key: UKey, new_value: Value)
       | SuccStep(start: UI.RangeStart, results: seq<UI.SuccResult>, end: UI.RangeEnd)
       | StutterStep
 

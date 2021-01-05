@@ -23,8 +23,8 @@ module BetreeGraph refines Graph {
   import opened ValueType
 
   type BufferEntry = M.Message
-  type Buffer = imap<Key, BufferEntry>
-  datatype Node = Node(children: imap<Key, Reference>, buffer: Buffer)
+  type Buffer = imap<UKey, BufferEntry>
+  datatype Node = Node(children: imap<UKey, Reference>, buffer: Buffer)
 
   function Successors(node: Node) : iset<Reference>
   {
@@ -61,8 +61,8 @@ module BetreeSpec {
   }
   
   predicate WFNode(node: Node) {
-    && (forall k:Key :: k in node.buffer)
-    && (forall k:Key :: k !in node.children ==> BufferIsDefining(node.buffer[k]))
+    && (forall k: UKey :: k in node.buffer)
+    && (forall k: UKey :: k !in node.children ==> BufferIsDefining(node.buffer[k]))
   }
 
   type Layer = G.ReadOp
@@ -70,7 +70,7 @@ module BetreeSpec {
 
   //// Query
 
-  datatype LookupQuery = LookupQuery(key: Key, value: Value, lookup: Lookup)
+  datatype LookupQuery = LookupQuery(key: UKey, value: Value, lookup: Lookup)
 
   predicate ValidLayerIndex(lookup: Lookup, idx: int) {
     && 0 <= idx < |lookup|
@@ -80,18 +80,17 @@ module BetreeSpec {
     forall i :: 0 <= i < |lookup| ==> WFNode(lookup[i].node)
   }
 
-  predicate LookupFollowsChildRefAtLayer(key: Key, lookup: Lookup, idx: int)
+  predicate LookupFollowsChildRefAtLayer(key: UKey, lookup: Lookup, idx: int)
     requires 0 <= idx < |lookup| - 1;
   {
     IMapsTo(lookup[idx].node.children, key, lookup[idx+1].ref)
   }
 
-  predicate LookupFollowsChildRefs(key: Key, lookup: Lookup) {
-    //&& (forall idx :: ValidLayerIndex(lookup, idx) && idx < |lookup| - 1 ==> key in lookup[idx].node.children)
+  predicate LookupFollowsChildRefs(key: UKey, lookup: Lookup) {
     && (forall idx :: 0 <= idx < |lookup| - 1 ==> LookupFollowsChildRefAtLayer(key, lookup, idx))
   }
 
-  predicate WFLookupForKey(lookup: Lookup, key: Key)
+  predicate WFLookupForKey(lookup: Lookup, key: UKey)
   {
     && |lookup| > 0
     && lookup[0].ref == Root()
@@ -99,7 +98,7 @@ module BetreeSpec {
     && LookupVisitsWFNodes(lookup)
   }
 
-  function InterpretLookup(lookup: Lookup, key: Key) : (m : G.M.Message)
+  function InterpretLookup(lookup: Lookup, key: UKey) : (m : G.M.Message)
   requires LookupVisitsWFNodes(lookup)
   {
     if |lookup| == 0
@@ -130,7 +129,7 @@ module BetreeSpec {
       end: UI.RangeEnd,
       lookup: Lookup)
 
-  predicate LookupKeyValue(l: Lookup, key: Key, value: Value)
+  predicate LookupKeyValue(l: Lookup, key: UKey, value: Value)
   {
     && WFLookupForKey(l,key)
     && BufferDefinesValue(InterpretLookup(l, key), value)
@@ -161,19 +160,19 @@ module BetreeSpec {
 
   //// Insert
 
-  function AddMessageToBuffer(buffer: Buffer, key: Key, msg: BufferEntry) : Buffer
+  function AddMessageToBuffer(buffer: Buffer, key: UKey, msg: BufferEntry) : Buffer
     requires key in buffer
   {
     buffer[key := G.M.Merge(msg, buffer[key])]
   }
   
-  function AddMessageToNode(node: Node, key: Key, msg: BufferEntry) : Node
+  function AddMessageToNode(node: Node, key: UKey, msg: BufferEntry) : Node
     requires WFNode(node)
   {
     Node(node.children, AddMessageToBuffer(node.buffer, key, msg))
   }
 
-  datatype MessageInsertion = MessageInsertion(key: Key, msg: BufferEntry, oldroot: Node)
+  datatype MessageInsertion = MessageInsertion(key: UKey, msg: BufferEntry, oldroot: Node)
 
   predicate ValidInsertion(ins: MessageInsertion) {
     && WFNode(ins.oldroot)
@@ -195,7 +194,7 @@ module BetreeSpec {
 
   //// Flush
 
-  datatype NodeFlush = NodeFlush(parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, movedKeys: iset<Key>, flushedKeys: iset<Key>)
+  datatype NodeFlush = NodeFlush(parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, movedKeys: iset<UKey>, flushedKeys: iset<UKey>)
 
   predicate ValidFlush(flush: NodeFlush)
   {
@@ -272,7 +271,7 @@ module BetreeSpec {
     new_childrefs: seq<Reference>,
     new_children: imap<Reference, Node>,
     
-    keys: iset<Key>
+    keys: iset<UKey>
   )
 
   predicate ValidRedirect(redirect: Redirect) {

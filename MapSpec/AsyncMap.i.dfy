@@ -14,10 +14,10 @@ module AsyncMapSpec {
       queries: map<int, Value>)
 
   datatype Step =
-      | QueryBeginStep(key: Key)
+      | QueryBeginStep(key: UKey)
       | QueryEndStep(result: Value)
-      | QueryStep(key: Key, result: Value)
-      | WriteStep(key: Key, new_value: Value)
+      | QueryStep(key: UKey, result: Value)
+      | WriteStep(key: UKey, new_value: Value)
       | SuccStep(start: UI.RangeStart, results: seq<UI.SuccResult>, end: UI.RangeEnd)
       | StutterStep
 
@@ -27,7 +27,7 @@ module AsyncMapSpec {
     && s.queries == map[]
   }
 
-  predicate QueryBegin(s: Variables, s': Variables, uiop: UI.Op, key: Key)
+  predicate QueryBegin(s: Variables, s': Variables, uiop: UI.Op, key: UKey)
   {
     && uiop.GetBeginOp?
     && uiop.key == key
@@ -47,13 +47,13 @@ module AsyncMapSpec {
     && result == s.queries[uiop.id]
   }
 
-  predicate Query(s: Variables, s': Variables, uiop: UI.Op, key: Key, result: Value)
+  predicate Query(s: Variables, s': Variables, uiop: UI.Op, key: UKey, result: Value)
   {
     && s'.queries == s.queries
     && MapSpec.Query(s.dict, s'.dict, uiop, key, result)
   }
 
-  predicate Write(s: Variables, s': Variables, uiop: UI.Op, key: Key, new_value: Value)
+  predicate Write(s: Variables, s': Variables, uiop: UI.Op, key: UKey, new_value: Value)
   {
     && s'.queries == s.queries
     && MapSpec.Write(s.dict, s'.dict, uiop, key, new_value)

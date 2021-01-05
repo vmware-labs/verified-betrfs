@@ -118,7 +118,7 @@ module PivotBetreeSpec {
   type Layer = G.ReadOp
   type Lookup = seq<Layer>
 
-  datatype LookupQuery = LookupQuery(key: Key, value: Value, lookup: Lookup)
+  datatype LookupQuery = LookupQuery(key: UKey, value: Value, lookup: Lookup)
 
   predicate BufferIsDefining(entry: Message)
   {
@@ -141,20 +141,20 @@ module PivotBetreeSpec {
     forall i :: 0 <= i < |lookup| ==> WFNode(lookup[i].node)
   }
 
-  predicate LookupVisitsWellMarshalledBuckets(lookup: Lookup, key: Key)
+  predicate LookupVisitsWellMarshalledBuckets(lookup: Lookup, key: UKey)
   requires LookupVisitsWFNodes(lookup)
   requires LookupBoundedKey(key, lookup)
   {
     forall i :: 0 <= i < |lookup| ==> BucketWellMarshalled(lookup[i].node.buckets[Route(lookup[i].node.pivotTable, key)])
   }
 
-  predicate LookupBoundedKey(key: Key, lookup: Lookup)
+  predicate LookupBoundedKey(key: UKey, lookup: Lookup)
   requires LookupVisitsWFNodes(lookup)
   {
     && (forall idx :: ValidLayerIndex(lookup, idx) ==> BoundedKey(lookup[idx].node.pivotTable, key))
   }
 
-  predicate LookupFollowsChildRefAtLayer(key: Key, lookup: Lookup, idx: int)
+  predicate LookupFollowsChildRefAtLayer(key: UKey, lookup: Lookup, idx: int)
   requires ValidLayerIndex(lookup, idx)
   requires idx < |lookup| - 1;
   requires WFNode(lookup[idx].node)
@@ -164,21 +164,23 @@ module PivotBetreeSpec {
     && lookup[idx].node.children.value[Route(lookup[idx].node.pivotTable, key)] == lookup[idx+1].ref
   }
 
-  predicate LookupFollowsChildRefs(key: Key, lookup: Lookup)
+  predicate LookupFollowsChildRefs(key: UKey, lookup: Lookup)
   requires LookupVisitsWFNodes(lookup)
   requires LookupBoundedKey(key, lookup)
   {
     && (forall idx :: ValidLayerIndex(lookup, idx) && idx < |lookup| - 1 ==> LookupFollowsChildRefAtLayer(key, lookup, idx))
   }
 
-  function NodeLookup(node: Node, key: Key) : Message
+  function NodeLookup(node: Node, key: UKey) : Message
   requires WFBucketList(node.buckets, node.pivotTable)
   requires BoundedKey(node.pivotTable, key)
   {
-    BucketListGet(node.buckets, node.pivotTable, key)
+    if |key| <= MaxLen() as nat then 
+      BucketListGet(node.buckets, node.pivotTable, key)
+    else IdentityMessage()
   }
 
-  function InterpretLookup(lookup: Lookup, key: Key) : Message
+  function InterpretLookup(lookup: Lookup, key: UKey) : Message
   requires LookupVisitsWFNodes(lookup)
   requires LookupBoundedKey(key, lookup)
   {
@@ -188,7 +190,7 @@ module PivotBetreeSpec {
       Merge(InterpretLookup(DropLast(lookup), key), NodeLookup(Last(lookup).node, key))
   }
 
-  function InterpretLookupAccountingForLeaf(lookup: Lookup, key: Key) : Message
+  function InterpretLookupAccountingForLeaf(lookup: Lookup, key: UKey) : Message
   requires |lookup| > 0
   requires LookupVisitsWFNodes(lookup)
   requires LookupBoundedKey(key, lookup)
@@ -199,7 +201,7 @@ module PivotBetreeSpec {
       Merge(InterpretLookup(lookup, key), DefineDefault())
   }
 
-  predicate WFLookupForKey(lookup: Lookup, key: Key)
+  predicate WFLookupForKey(lookup: Lookup, key: UKey)
   {
     && |lookup| > 0
     && lookup[0].ref == Root()
@@ -232,7 +234,7 @@ module PivotBetreeSpec {
       buckets: seq<Bucket>,
       lookup: Lookup)
 
-  function LookupUpperBoundAtLayer(layer: Layer, key: Key) : Option<Key>
+  function LookupUpperBoundAtLayer(layer: Layer, key: UKey) : Option<UKey>
   requires WFNode(layer.node)
   requires BoundedKey(layer.node.pivotTable, key)
   {
@@ -242,7 +244,7 @@ module PivotBetreeSpec {
     else None
   }
 
-  function OptionKeyMin(k1: Option<Key>, k2: Option<Key>) : Option<Key>
+  function OptionKeyMin(k1: Option<UKey>, k2: Option<UKey>) : Option<UKey>
   {
     match k1 {
       case Some(key1) => match k2 {
@@ -253,7 +255,7 @@ module PivotBetreeSpec {
     }
   }
 
-  function {:opaque} LookupUpperBound(lookup: Lookup, key: Key) : Option<Key>
+  function {:opaque} LookupUpperBound(lookup: Lookup, key: UKey) : Option<UKey>
   requires LookupVisitsWFNodes(lookup)
   requires LookupBoundedKey(key, lookup)
   {
@@ -281,7 +283,6 @@ module PivotBetreeSpec {
     && |sq.lookup| == |sq.buckets|
     && (forall i | 0 <= i < |sq.lookup| :: sq.buckets[i] == sq.lookup[i].node.buckets[Route(sq.lookup[i].node.pivotTable, startKey)])
 
-    // what if sq.end is positive infinity?
     && (BucketListWellMarshalled(sq.buckets) ==> (
       && MS.NonEmptyRange(sq.start, sq.end)
       && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, sq.end))

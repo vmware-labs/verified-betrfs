@@ -23,24 +23,24 @@ module BetreeInv {
     forall i :: 0 <= i < |lookup| ==> IMapsTo(view, lookup[i].ref, lookup[i].node)
   }
 
-  predicate IsPathLookup(view: BI.View, key: Key, lookup: Lookup) {
+  predicate IsPathLookup(view: BI.View, key: UKey, lookup: Lookup) {
     && |lookup| > 0
     && LookupRespectsView(view, lookup)
     && LookupFollowsChildRefs(key, lookup)
   }
 
-  predicate IsSatisfyingLookup(view: BI.View, key: Key, value: Value, lookup: Lookup) {
+  predicate IsSatisfyingLookup(view: BI.View, key: UKey, value: Value, lookup: Lookup) {
     && IsPathLookup(view, key, lookup)
     && LookupVisitsWFNodes(lookup)
     && BufferDefinesValue(InterpretLookup(lookup, key), value)
   }
 
-  predicate IsSatisfyingLookupFrom(view: BI.View, key: Key, value: Value, lookup: Lookup, start: Reference) {
+  predicate IsSatisfyingLookupFrom(view: BI.View, key: UKey, value: Value, lookup: Lookup, start: Reference) {
     && IsSatisfyingLookup(view, key, value, lookup)
     && lookup[0].ref == start
   }
 
-  predicate KeyHasSatisfyingLookup(view: BI.View, key: Key, start: Reference)
+  predicate KeyHasSatisfyingLookup(view: BI.View, key: UKey, start: Reference)
   {
     exists lookup: Lookup, value ::
       && IsSatisfyingLookupFrom(view, key, value, lookup, start)
@@ -83,7 +83,7 @@ module BetreeInv {
       exists lookup': Lookup :: IsSatisfyingLookupFrom(s'.bcv.view, key, value, lookup', start)
   }
 
-  predicate PreservesLookupsExcept(s: Variables, s': Variables, start: Reference, exceptQuery: Key)
+  predicate PreservesLookupsExcept(s: Variables, s': Variables, start: Reference, exceptQuery: UKey)
   {
     forall lookup: Lookup, key, value :: key != exceptQuery && IsSatisfyingLookupFrom(s.bcv.view, key, value, lookup, start) ==>
       exists lookup': Lookup :: IsSatisfyingLookupFrom(s'.bcv.view, key, value, lookup', start)
@@ -91,7 +91,7 @@ module BetreeInv {
 
   // TODO generalize this to explain how the value changes when a non-Define
   // message is inserted
-  predicate PreservesLookupsPut(s: Variables, s': Variables, key: Key, value: Value)
+  predicate PreservesLookupsPut(s: Variables, s': Variables, key: UKey, value: Value)
   {
     && PreservesLookupsExcept(s, s', Root(), key)
     && exists lookup: Lookup :: IsSatisfyingLookupFrom(s'.bcv.view, key, value, lookup, Root())
@@ -99,7 +99,7 @@ module BetreeInv {
 
   //
 
-  lemma InterpsEqualOfAllBuffersEqual(a: Lookup, b: Lookup, key: Key)
+  lemma InterpsEqualOfAllBuffersEqual(a: Lookup, b: Lookup, key: UKey)
   requires LookupVisitsWFNodes(a);
   requires LookupVisitsWFNodes(b);
   requires |a| == |b|
@@ -112,7 +112,7 @@ module BetreeInv {
     }
   }
 
-  lemma InterpretLookupAdditive(a: Lookup, b: Lookup, key: Key)
+  lemma InterpretLookupAdditive(a: Lookup, b: Lookup, key: UKey)
   requires LookupVisitsWFNodes(a);
   requires LookupVisitsWFNodes(b);
   ensures InterpretLookup(a + b, key) == G.M.Merge(InterpretLookup(a, key), InterpretLookup(b, key))
@@ -126,7 +126,7 @@ module BetreeInv {
     }
   }
 
-  lemma InterpretLookupAdditive3(a: Lookup, b: Lookup, c: Lookup, key: Key)
+  lemma InterpretLookupAdditive3(a: Lookup, b: Lookup, c: Lookup, key: UKey)
   requires LookupVisitsWFNodes(a);
   requires LookupVisitsWFNodes(b);
   requires LookupVisitsWFNodes(c);
@@ -139,7 +139,7 @@ module BetreeInv {
   // CantEquivocate
   // It's a lemma here (follows from structure of Lookups) - not an invariant!
 
-  lemma SatisfyingLookupsForKeyAgree(s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup, idx: int)
+  lemma SatisfyingLookupsForKeyAgree(s: Variables, key: UKey, value: Value, value': Value, lookup: Lookup, lookup': Lookup, idx: int)
   requires IsSatisfyingLookup(s.bcv.view, key, value, lookup);
   requires IsSatisfyingLookup(s.bcv.view, key, value', lookup');
   requires 0 <= idx < |lookup|;
@@ -155,7 +155,7 @@ module BetreeInv {
     }
   }
 
-  lemma CantEquivocateWlog(s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
+  lemma CantEquivocateWlog(s: Variables, key: UKey, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
   requires IsSatisfyingLookup(s.bcv.view, key, value, lookup);
   requires IsSatisfyingLookup(s.bcv.view, key, value', lookup');
   requires |lookup| <= |lookup'|
@@ -173,7 +173,7 @@ module BetreeInv {
     InterpretLookupAdditive(lookup, junk, key);
   }
 
-  lemma CantEquivocate(s: Variables, key: Key, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
+  lemma CantEquivocate(s: Variables, key: UKey, value: Value, value': Value, lookup: Lookup, lookup': Lookup)
   requires IsSatisfyingLookup(s.bcv.view, key, value, lookup);
   requires IsSatisfyingLookup(s.bcv.view, key, value', lookup');
   requires lookup[0].ref == lookup'[0].ref
@@ -189,7 +189,7 @@ module BetreeInv {
   // Old definitions
   // TODO clean these up; remove them or change them to use BetreeStep objects instead
 
-  predicate InsertMessage(s: BI.Variables, s': BI.Variables, key: Key, msg: BufferEntry, oldroot: Node)
+  predicate InsertMessage(s: BI.Variables, s': BI.Variables, key: UKey, msg: BufferEntry, oldroot: Node)
   {
     && ValidInsertion(MessageInsertion(key, msg, oldroot))
     && BI.Reads(s, InsertionReads(MessageInsertion(key, msg, oldroot)))
@@ -217,7 +217,7 @@ module BetreeInv {
     && BI.OpTransaction(s, s', RedirectOps(redirect))
   }
 
-  predicate Query(s: BI.Variables, s': BI.Variables, key: Key, value: Value, lookup: Lookup)
+  predicate Query(s: BI.Variables, s': BI.Variables, key: UKey, value: Value, lookup: Lookup)
   {
     && ValidQuery(LookupQuery(key, value, lookup))
     && BI.Reads(s, QueryReads(LookupQuery(key, value, lookup)))
@@ -480,7 +480,7 @@ module BetreeInv {
   // Preservation proofs
   //
 
-  lemma LookupAfterFirstHasNoRoot(s: Variables, lookup: Lookup, key: Key)
+  lemma LookupAfterFirstHasNoRoot(s: Variables, lookup: Lookup, key: UKey)
   requires Inv(s)
   requires IsPathLookup(s.bcv.view, key, lookup)
   ensures forall i | 1 <= i < |lookup| :: lookup[i].ref != Root()
@@ -538,7 +538,7 @@ module BetreeInv {
   //////// Flush
   ////////
 
-  lemma PropagateInterperetation(lookup:Lookup, lookup':Lookup, i:int, middle:Lookup, middle':Lookup, key:Key)
+  lemma PropagateInterperetation(lookup:Lookup, lookup':Lookup, i:int, middle:Lookup, middle':Lookup, key:UKey)
     requires 0 <= i < |lookup|-1
     requires |lookup'| == |lookup|
     requires lookup[..i] == lookup'[..i]
@@ -765,7 +765,7 @@ module BetreeInv {
   {
   }
 
-  lemma InsertMessagePreservesAcyclicAndReachablePointersValid(s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
+  lemma InsertMessagePreservesAcyclicAndReachablePointersValid(s: Variables, s': Variables, key: UKey, msg: BufferEntry, oldroot: Node)
     requires Inv(s)
     requires InsertMessage(s.bcv, s'.bcv, key, msg, oldroot)
     ensures G.IsAcyclic(s'.bcv.view)
@@ -775,7 +775,7 @@ module BetreeInv {
     AcyclicGraphImpliesAcyclic(s');
   }
 
-  lemma InsertMessagePreservesLookupsPut(s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
+  lemma InsertMessagePreservesLookupsPut(s: Variables, s': Variables, key: UKey, msg: BufferEntry, oldroot: Node)
     requires Inv(s)
     requires InsertMessage(s.bcv, s'.bcv, key, msg, oldroot)
     requires msg.Define?
@@ -823,7 +823,7 @@ module BetreeInv {
     }
   }
 
-  lemma InsertMessagePreservesNonrootLookups(s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node, start: Reference)
+  lemma InsertMessagePreservesNonrootLookups(s: Variables, s': Variables, key: UKey, msg: BufferEntry, oldroot: Node, start: Reference)
     requires Inv(s)
     requires InsertMessage(s.bcv, s'.bcv, key, msg, oldroot)
     requires start != Root()
@@ -838,7 +838,7 @@ module BetreeInv {
     }
   }
     
-  lemma InsertMessageStepPreservesInvariant(s: Variables, s': Variables, key: Key, msg: BufferEntry, oldroot: Node)
+  lemma InsertMessageStepPreservesInvariant(s: Variables, s': Variables, key: UKey, msg: BufferEntry, oldroot: Node)
     requires Inv(s)
     requires InsertMessage(s.bcv, s'.bcv, key, msg, oldroot)
     // We can have this msg.Define? condition becasue right now the uiop condition
@@ -893,7 +893,7 @@ module BetreeInv {
 
   // GC Step
 
-  lemma GCStepPreservesIsPathLookup(s: Variables, s': Variables, refs: iset<Reference>, lookup: Lookup, key: Key)
+  lemma GCStepPreservesIsPathLookup(s: Variables, s': Variables, refs: iset<Reference>, lookup: Lookup, key: UKey)
     requires Inv(s)
     requires BI.GC(s.bcv, s'.bcv, refs)
     requires IsPathLookup(s.bcv.view, key, lookup);

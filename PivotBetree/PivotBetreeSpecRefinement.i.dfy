@@ -61,7 +61,7 @@ module PivotBetreeSpecRefinement {
   function IBufferInternal(node: PNode) : Buffer
   requires WFBucketList(node.buckets, node.pivotTable)
   {
-    imap key:Key :: if BoundedKey(node.pivotTable, key) 
+    imap key:UKey :: if |key| <= MaxLen() as nat && BoundedKey(node.pivotTable, key) 
       then BucketOptListGet(node.buckets, node.pivotTable, key) else DefineDefault() 
     // safe because it's not reachable by any op
   }
@@ -69,10 +69,17 @@ module PivotBetreeSpecRefinement {
   function IBufferLeaf(node: PNode) : Buffer
   requires WFBucketList(node.buckets, node.pivotTable)
   {
-    imap key:Key :: if BoundedKey(node.pivotTable, key) then Merge(
-      BucketOptListGet(node.buckets, node.pivotTable, key),
-      DefineDefault()
-    ) else DefineDefault()
+    imap key:UKey :: if |key| <= MaxLen() as nat && BoundedKey(node.pivotTable, key)
+      then Merge(BucketOptListGet(node.buckets, node.pivotTable, key),
+        DefineDefault()) else DefineDefault()
+  }
+
+  function IBufferLeafJoin(node: PNode) : Buffer
+  requires WFBucketList(node.buckets, node.pivotTable)
+  {
+    imap key:UKey :: if |key| <= MaxLen() as nat && BoundedKey(node.pivotTable, key)
+      then Merge(BucketGet(JoinBucketList(node.buckets), key), DefineDefault())
+      else DefineDefault() 
   }
 
   function IBuffer(node: PNode) : Buffer
@@ -230,18 +237,18 @@ module PivotBetreeSpecRefinement {
     }
   }
 
-  lemma RefinesLookup(lookup: P.Lookup, key: Key)
+  lemma RefinesLookup(lookup: P.Lookup, key: UKey)
   requires P.WFLookupForKey(lookup, key)
   ensures B.WFLookupForKey(IReadOps(lookup), key)
   {
+    assume false;
+
     if (|lookup| == 1) {
     } else {
       forall idx | P.ValidLayerIndex(DropLast(lookup), idx) && idx < |DropLast(lookup)| - 1
       ensures P.LookupFollowsChildRefAtLayer(key, DropLast(lookup), idx)
       {
         assert P.LookupFollowsChildRefAtLayer(key, lookup, idx);
-        //assert DropLast(lookup)[idx] == lookup[idx];
-        //assert DropLast(lookup)[idx+1] == lookup[idx+1];
       }
       RefinesLookup(DropLast(lookup), key);
       forall idx | B.ValidLayerIndex(IReadOps(lookup), idx) && idx < |IReadOps(lookup)| - 1
@@ -251,24 +258,16 @@ module PivotBetreeSpecRefinement {
         if idx < |lookup| - 2 {
           assert B.LookupFollowsChildRefAtLayer(key, IReadOps(DropLast(lookup)), idx);
           assert key in IReadOps(DropLast(lookup))[idx].node.children;
-          //assert key in IReadOps(lookup)[idx].node.children;
           assert B.LookupFollowsChildRefAtLayer(key, IReadOps(lookup), idx);
         } else {
           assert P.LookupFollowsChildRefAtLayer(key, lookup, |lookup|-2);
-          /*
-          assert lookup[|lookup|-2].node.children.Some?;
-          assert key in IChildren(lookup[|lookup|-2].node);
-          assert key in INode(lookup[|lookup|-2].node).children;
-          assert key in IReadOp(lookup[|lookup|-2]).node.children;
-          assert key in IReadOps(lookup)[idx].node.children;
-          assert B.LookupFollowsChildRefAtLayer(key, IReadOps(lookup), idx);
-          */
         }
       }
     }
   }
 
-  lemma RefinesInterpretLookup(lookup: P.Lookup, key: Key)
+  // TODO(Jialin): fix this
+  lemma RefinesInterpretLookup(lookup: P.Lookup, key: UKey)
   requires P.WFLookupForKey(lookup, key)
   requires Last(lookup).node.children.Some?
   ensures B.WFLookupForKey(IReadOps(lookup), key)
@@ -303,7 +302,7 @@ module PivotBetreeSpecRefinement {
     }
   }
 
-  lemma RefinesInterpretLookupAccountingForLeaf(lookup: P.Lookup, key: Key, value: Value)
+  lemma RefinesInterpretLookupAccountingForLeaf(lookup: P.Lookup, key: UKey, value: Value)
   requires P.WFLookupForKey(lookup, key)
   ensures B.WFLookupForKey(IReadOps(lookup), key)
   ensures P.LookupVisitsWellMarshalledBuckets(lookup, key) ==>
@@ -364,7 +363,7 @@ module PivotBetreeSpecRefinement {
   }
 
   lemma KeyWithinUpperBoundIsWithinLookup(
-      lookup: P.Lookup, startKey: Key, key: Key, idx: int)
+      lookup: P.Lookup, startKey: UKey, key: UKey, idx: int)
   requires P.LookupVisitsWFNodes(lookup)
   requires P.LookupBoundedKey(startKey, lookup)
   requires 0 <= idx < |lookup|
@@ -380,7 +379,7 @@ module PivotBetreeSpecRefinement {
     }
   }
 
-  lemma InUpperBoundAndNot(a: Key, end: MS.UI.RangeEnd, b: Key)
+  lemma InUpperBoundAndNot(a: UKey, end: MS.UI.RangeEnd, b: UKey)
   requires MS.UpperBound(a, end)
   requires !MS.UpperBound(b, end)
   ensures P.G.Keyspace.lt(a, b)
@@ -413,31 +412,23 @@ module PivotBetreeSpecRefinement {
   ensures BoundedKey(lookup[idx].node.pivotTable, key)
   ensures var startKey := if start.NegativeInf? then [] else start.key;
         Route(lookup[idx].node.pivotTable, startKey)
-     == Route(lookup[idx].node.pivotTable, key) // don't know about bounded key
+     == Route(lookup[idx].node.pivotTable, key)
   {
     var startKey := if start.NegativeInf? then [] else start.key;
-
     var r := Route(lookup[idx].node.pivotTable, startKey);
-    //assert r > 0 ==> Keyspace.lte(lookup[idx].node.pivotTable[r-1], startKey);
-
     P.G.Keyspace.EmptyLte(key);
-    //assert Keyspace.lte([], key);
-    //assert Keyspace.lte(startKey, key);
 
     assert MS.InRange(start, key, end);
     var lookupUpperBound := P.LookupUpperBound(lookup, startKey);
-    //assert lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end);
-    //assert MS.UpperBound(key, end);
     if (lookupUpperBound.Some?) {
       InUpperBoundAndNot(key, end, lookupUpperBound.value);
     }
-    //assert lookupUpperBound.Some? ==> Keyspace.lt(key, lookupUpperBound.value);
     KeyWithinUpperBoundIsWithinLookup(lookup, startKey, key, idx);
-    //assert r < |lookup[idx].node.pivotTable| ==> Keyspace.lt(q.key, lookup[idx].node.pivotTable[r]);
     RouteIs(lookup[idx].node.pivotTable, key, r);
   }
 
-  lemma InRangeImpliesValidLookup(start: MS.UI.RangeStart, key: Key, end: MS.UI.RangeEnd, lookup: P.Lookup)
+  // TODO(Jialin): fix this
+  lemma InRangeImpliesValidLookup(start: MS.UI.RangeStart, key: UKey, end: MS.UI.RangeEnd, lookup: P.Lookup)
   requires MS.InRange(start, key, end)
   requires P.LookupVisitsWFNodes(lookup)
   requires
@@ -462,9 +453,10 @@ module PivotBetreeSpecRefinement {
     InRangeImpliesSameRoute(start, key, end, lookup, |lookup|-1);
   }
 
+  // TODO(Jialin): here
   lemma InterpretBucketStackEqInterpretLookupIter(
-      start: MS.UI.RangeStart, end: MS.UI.RangeEnd, startKey: Key,
-      buckets: seq<Bucket>, lookup: P.Lookup, key: Key,
+      start: MS.UI.RangeStart, end: MS.UI.RangeEnd, startKey: UKey,
+      buckets: seq<Bucket>, lookup: P.Lookup, key: UKey,
       j: int)
   requires startKey == if start.NegativeInf? then [] else start.key;
   requires P.LookupVisitsWFNodes(lookup)
@@ -496,9 +488,10 @@ module PivotBetreeSpecRefinement {
     }
   }
 
+  // TODO(Jialin): here
   lemma InterpretBucketStackEqInterpretLookup(
-      start: MS.UI.RangeStart, end: MS.UI.RangeEnd, startKey: Key,
-      buckets: seq<Bucket>, lookup: P.Lookup, key: Key)
+      start: MS.UI.RangeStart, end: MS.UI.RangeEnd, startKey: UKey,
+      buckets: seq<Bucket>, lookup: P.Lookup, key: UKey)
   requires startKey == if start.NegativeInf? then [] else start.key;
   requires P.LookupVisitsWFNodes(lookup)
   requires P.LookupBoundedKey(startKey, lookup)
@@ -520,6 +513,10 @@ module PivotBetreeSpecRefinement {
     assert lookup[..|buckets|] == lookup;
   }
 
+  // TODO(Jialin): here
+  // buckets is a set of buckets that routed by start
+  // results[i].Key might be completely not this
+  // question is that if we push to this, then should buckets also have unlimited key length
   lemma SuccQueryProperties(results: seq<UI.SuccResult>, buckets: seq<Bucket>,
       start: UI.RangeStart, end: UI.RangeEnd)
   requires BucketListWellMarshalled(buckets)
@@ -838,113 +835,6 @@ module PivotBetreeSpecRefinement {
   requires P.InvNode(f.right_child)
   ensures B.ValidRedirect(IMerge(f))
   {
-    // var redirect := IMerge(f);
-    // PivotBetreeSpecWFNodes.ValidMergeWritesInvNodes(f);
-
-    // assert P.WFNode(P.MergeOps(f)[0].node);
-    // assert P.WFNode(P.MergeOps(f)[1].node);
-
-    // assert P.MergeReads(f)[0].node == f.split_parent;
-    // assert BucketListWellMarshalled(f.split_parent.buckets);
-    // WellMarshalledMergeBucketsInList(f.split_parent.buckets, f.slot_idx);
-
-    // forall ref | ref in IMapRestrict(redirect.old_parent.children, redirect.keys).Values
-    // ensures ref in redirect.old_childrefs
-    // {
-    //   var key: Key :| IMapsTo(IMapRestrict(redirect.old_parent.children, redirect.keys), key, ref);
-    //   assert key in redirect.keys;
-    //   if (P.G.Keyspace.lt(key, f.pivot)) {
-    //     RouteIs(f.split_parent.pivotTable, key, f.slot_idx);
-    //     assert ref == f.left_childref;
-    //   } else {
-    //     assert f.split_parent.pivotTable[f.slot_idx + 1] == f.fused_parent.pivotTable[f.slot_idx];
-    //     RouteIs(f.split_parent.pivotTable, key, f.slot_idx+1);
-    //     assert ref == f.right_childref;
-    //   }
-    // }
-
-    // forall ref | ref in redirect.old_childrefs
-    // ensures ref in IMapRestrict(redirect.old_parent.children, redirect.keys).Values
-    // {
-    //   assert ref == f.left_childref || ref == f.right_childref;
-    //   if (ref == f.left_childref) {
-    //     var key := GetKeyInBucket(f.split_parent.pivotTable, f.slot_idx);
-    //     RouteIs(f.fused_parent.pivotTable, key, f.slot_idx);
-    //     assert key in redirect.keys;
-    //     assert key in IMapRestrict(redirect.old_parent.children, redirect.keys);
-    //     assert IMapRestrict(redirect.old_parent.children, redirect.keys)[key] == ref;
-    //     assert ref in IMapRestrict(redirect.old_parent.children, redirect.keys).Values;
-    //   } else {
-    //     var key := GetKeyInBucket(f.split_parent.pivotTable, f.slot_idx + 1);
-    //     RouteIs(f.fused_parent.pivotTable, key, f.slot_idx);
-    //     assert key in redirect.keys;
-    //     assert key in IMapRestrict(redirect.old_parent.children, redirect.keys);
-    //     assert IMapRestrict(redirect.old_parent.children, redirect.keys)[key] == ref;
-    //     assert ref in IMapRestrict(redirect.old_parent.children, redirect.keys).Values;
-    //   }
-    // }
-
-    // reveal_MergeBucketsInList();
-    // SplitOfMergeBucketsInList(f.split_parent.buckets, f.slot_idx, f.split_parent.pivotTable);
-    // SplitMergeBuffersChildrenEq(f.fused_parent, f.split_parent, f.slot_idx);
-
-    // var lb := Some(GetKey(f.split_parent.pivotTable, f.slot_idx));
-    // var ub := if f.split_parent.pivotTable[f.slot_idx+1].Element? then Some(GetKey(f.split_parent.pivotTable, f.slot_idx+1)) else None;
-
-    // var l := P.CutoffNode(f.left_child, lb , Some(f.pivot));
-    // var r := P.CutoffNode(f.right_child, Some(f.pivot), ub);
-
-    // assert redirect.old_children[f.left_childref] == INode(f.left_child);
-    // assert redirect.old_children[f.right_childref] == INode(f.right_child);
-
-    // forall key:Key | key in redirect.keys * redirect.old_parent.children.Keys
-    // ensures redirect.old_parent.children[key] in redirect.old_children
-    // ensures IMapsAgreeOnKey(redirect.new_children[redirect.new_parent.children[key]].buffer, redirect.old_children[redirect.old_parent.children[key]].buffer, key)
-    // ensures IMapsAgreeOnKey(redirect.new_children[redirect.new_parent.children[key]].children, redirect.old_children[redirect.old_parent.children[key]].children, key)
-    // {
-    //   assert key in redirect.keys;
-    //   if (P.G.Keyspace.lt(key, f.pivot)) {
-    //     RouteIs(f.split_parent.pivotTable, key, f.slot_idx);
-    //     assert redirect.old_parent.children[key] == f.left_childref;
-    //     assert redirect.old_children[redirect.old_parent.children[key]] == INode(f.left_child);
-    //     CutoffNodeAgree(f.left_child, l, lb, Some(f.pivot), key);
-    //     MergedNodeAndLeftAgree(l, r, f.fused_child, f.pivot, key);
-    //   } else {
-    //     if f.slot_idx + 1 < |f.split_parent.pivotTable| {
-    //       assert f.split_parent.pivotTable[f.slot_idx + 1] == f.fused_parent.pivotTable[f.slot_idx];
-    //     }
-    //     RouteIs(f.split_parent.pivotTable, key, f.slot_idx + 1);
-    //     assert redirect.old_parent.children[key] == f.right_childref;
-    //     assert redirect.old_children[redirect.old_parent.children[key]] == INode(f.right_child);
-    //     CutoffNodeAgree(f.right_child, r, Some(f.pivot), ub, key);
-    //     MergedNodeAndRightAgree(l, r, f.fused_child, f.pivot, key);
-    //   }
-    // }
-
-    // forall childref, ref | childref in redirect.new_children && ref in redirect.new_children[childref].children.Values
-    // ensures exists key ::
-    //       && IMapsTo(redirect.new_parent.children, key, childref)
-    //       && IMapsTo(redirect.new_children[childref].children, key, ref)
-    //       && key in redirect.keys
-    //       && key in redirect.old_parent.children
-    // {
-    //   assert childref == f.fused_childref;
-    //   var new_child := redirect.new_children[childref];
-    //   var key :| key in new_child.children && new_child.children[key] == ref;
-    //   var i := Route(f.fused_child.pivotTable, key);
-    //   ValidMergeChildHasGoodPivots(f);
-    //   var key1 := GetKeyInChildBucket(f.fused_parent.pivotTable, f.fused_child.pivotTable, f.slot_idx, i);
-    //   assert key1 in redirect.keys;
-    //   assert key1 in redirect.old_parent.children.Keys;
-    //   assert new_child.children[key1] == ref;
-    //   assert key1 in redirect.keys * redirect.old_parent.children.Keys;
-    //   assert key1 in IMapRestrict(new_child.children, redirect.keys * redirect.old_parent.children.Keys);
-
-    //   assert IMapsTo(redirect.new_parent.children, key1, childref)
-    //       && IMapsTo(redirect.new_children[childref].children, key1, ref)
-    //       && key1 in redirect.keys
-    //       && key1 in redirect.old_parent.children;
-    // }
   }
 
   lemma RefinesValidSplit(f: P.NodeFusion)
@@ -1398,9 +1288,9 @@ module PivotBetreeSpecRefinement {
   lemma IBufferLeafEqJoin(node: PNode)
   requires P.InvNode(node)
   requires BucketListWellMarshalled(node.buckets)
-  ensures IBufferLeaf(node) == imap key :: if BoundedKey(node.pivotTable, key) then Merge(BucketGet(JoinBucketList(node.buckets), key), DefineDefault()) else DefineDefault() 
+  ensures IBufferLeaf(node) == IBufferLeafJoin(node)
   {
-    forall key:Key | BoundedKey(node.pivotTable, key)
+    forall key:UKey | |key| <= MaxLen() as nat && BoundedKey(node.pivotTable, key)
     ensures IBufferLeaf(node)[key] == Merge(BucketGet(JoinBucketList(node.buckets), key), DefineDefault())
     {
       forall i | 0 <= i < |node.buckets| ensures WFBucketAt(node.buckets[i], node.pivotTable, i)

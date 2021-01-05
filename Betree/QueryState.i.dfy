@@ -10,8 +10,8 @@ module QueryStates {
   //// Query Descent
 
   datatype QueryState =
-    | InProgress(key: Key, delta: G.M.Delta, ref: Reference)
-    | Finished(key: Key, answer: Value)
+    | InProgress(key: UKey, delta: G.M.Delta, ref: Reference)
+    | Finished(key: UKey, answer: Value)
   
   datatype QueryDescent = QueryDescent(
       query: QueryState,
