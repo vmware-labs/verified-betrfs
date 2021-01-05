@@ -13,19 +13,18 @@ module BitmapImpl {
   import NativeArrays
   import BitsetLemmas
 
-  class Bitmap {
-    var bits: array<uint64>;
-
+  linear datatype Bitmap = Bitmap(
+    bits: seq<uint64>
+  )
+  {
     method DebugAccumulate()
     returns (acc:DebugAccumulator.DebugAccumulator)
     requires false
     {
       acc := DebugAccumulator.EmptyAccumulator();
-      var a := new DebugAccumulator.AccRec(bits.Length as uint64, "uint64");
+      var a := new DebugAccumulator.AccRec(|bits| as uint64, "uint64");
       acc := DebugAccumulator.AccPut(acc, "bits", a);
     }
-
-    ghost var Repr: set<object>;
 
     static predicate BitBSet(word: uint64, b: uint64)
     requires b < 64
@@ -60,18 +59,9 @@ module BitmapImpl {
       && i * 64 < 0x1_0000_0000_0000_0000
     }
 
-    predicate ReprInv()
-    reads this, this.Repr
-    {
-      && this.Repr == { this, this.bits }
-    }
-
     protected predicate Inv()
-    ensures Inv() ==> this in this.Repr
-    reads this, this.Repr
     {
-      && ReprInv()
-      && bits.Length < 0x1_0000_0000_0000_0000 / 128
+      && |bits| < 0x1_0000_0000_0000_0000 / 128
     }
 
     static function {:opaque} IPrefix(bits: seq<uint64>, i: int) : (res : BitmapModelT)
@@ -83,29 +73,26 @@ module BitmapImpl {
     }
 
     protected function I() : BitmapModelT
-    reads this, this.Repr
     requires Inv()
     {
-      IPrefix(bits[..], 64 * bits.Length)
+      IPrefix(bits, 64 * |bits|)
     }
 
-    constructor (len: uint64)
+    static method Constructor(len: uint64) returns (linear bm: Bitmap)
     requires len as int < 0x1_0000_0000_0000_0000 / 2
     requires len % 64 == 0
-    ensures Inv()
-    ensures I() == EmptyBitmap(len as int)
-    ensures fresh(Repr)
+    ensures bm.Inv()
+    ensures bm.I() == EmptyBitmap(len as int)
     {
-      new;
-      bits := NativeArrays.newArrayFill(len / 64, 0);
-      Repr := { this, this.bits };
+      var bits := NativeArrays.newArrayFill(len / 64, 0);
+      bm := Bitmap(bits[..]);
 
       ghost var ghosty := true;
       if ghosty {
         forall j | 0 <= j < len
-        ensures I()[j] == EmptyBitmap(len as int)[j];
+        ensures bm.I()[j] == EmptyBitmap(len as int)[j];
         {
-          BitBSet0(j % 64);
+          bm.BitBSet0(j % 64);
           reveal_IsSet();
           //assert I()[j] == false;
           assert !IsSet(EmptyBitmap(len as int), j as int);
@@ -120,6 +107,7 @@ module BitmapImpl {
     {
       BitsetLemmas.set_bit_to_1_uint64(word, b)
     }
+/*
 
     method Set(c: uint64)
     requires Inv()
@@ -372,5 +360,6 @@ module BitmapImpl {
 
       Repr := { this, this.bits };
     }
+  */
   }
 }
