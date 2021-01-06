@@ -720,28 +720,24 @@ module PackedStringArray {
   //~   pivotIdxs := results[..];
   //~s }
 
-  class DynamicPsa {
-    var nstrings: uint64
-    var offsets: array<uint32>
-    var data: array<byte>
-    ghost var Repr: set<object>
-    
+  linear datatype DynamicPsa = DynamicPsa(
+    nstrings: uint64,
+    offsets: seq<uint32>,
+    data: seq<byte>)
+  {
     predicate WF()
-      reads this, this.Repr
     {
-      && Repr == {this, offsets, data}
-      && offsets.Length < Uint64UpperBound()
-      && data.Length < 0x1_0000_0000 
-      && nstrings as int <= offsets.Length
+      && |offsets| < Uint64UpperBound()
+      && |data| < 0x1_0000_0000 
+      && nstrings as int <= |offsets|
       && nstrings < 0x1_0000_0000
       && (0 < nstrings ==> offsets[nstrings-1] as int < 0x1_0000_0000)
-      && (0 < nstrings ==> offsets[nstrings-1] as int <= data.Length)
+      && (0 < nstrings ==> offsets[nstrings-1] as int <= |data|)
       && Uint32_Order.IsSorted(offsets[..nstrings])
     }
 
     function method toPsa() : Psa
       requires WF()
-      reads this, this.Repr
     {
       if 0 == nstrings then
         EmptyPsa()
@@ -762,19 +758,18 @@ module PackedStringArray {
 
     function method weight() : uint64
       requires WF()
-      reads this, this.Repr
     {
       4 * nstrings + if nstrings == 0 then 0 else offsets[nstrings-1] as uint64
     }
 
     predicate canAppend(str: Key)
       requires WF()
-      reads this, this.Repr
     {
       && psaCanAppend(toPsa(), str)
-      && nstrings < offsets.Length as uint64
+      && nstrings < |offsets| as uint64
       && psaTotalLength(toPsa()) + |str| as uint64 <= data.Length as uint64
     }
+/*
     
     method CanAppendWORealloc(str: Key) returns (result: bool)
       requires WF()
@@ -783,7 +778,7 @@ module PackedStringArray {
     {
       var tl := TotalLength();
       result := 
-        && nstrings < offsets.Length as uint64
+        && nstrings < |offsets| as uint64
         && nstrings < 0x1_0000_0000 - 1
         && tl + |str| as uint64 <= data.Length as uint64;
     }
@@ -809,7 +804,7 @@ module PackedStringArray {
       ensures WF()
       ensures toPsa() == old(toPsa())
       ensures fresh(offsets)
-      ensures offsets.Length == new_offsets_len as int
+      ensures |offsets| == new_offsets_len as int
       ensures data == old(data)
       modifies this.Repr
     {
@@ -847,7 +842,7 @@ module PackedStringArray {
       ensures fresh(Repr - old(Repr))
       modifies this.Repr
     {
-      if nstrings == offsets.Length as uint64 {
+      if nstrings == |offsets| as uint64 {
         if 0x8000_0000 <= nstrings {
           realloc_offsets(0xffff_ffff);
         } else {
@@ -881,7 +876,7 @@ module PackedStringArray {
     method appendSeq(strs: seq<Key>)
       requires WF()
       requires psaCanAppendSeq(toPsa(), strs)
-      requires nstrings as int + |strs| <= offsets.Length
+      requires nstrings as int + |strs| <= |offsets|
       requires psaTotalLength(psaAppendSeq(toPsa(), strs)) as int <= data.Length
       ensures WF()
       ensures toPsa() == psaAppendSeq(old(toPsa()), strs)
@@ -915,7 +910,7 @@ module PackedStringArray {
       requires psaCanAppendSeq(toPsa(), strs)
       ensures WF()
       ensures toPsa() == old(toPsa())
-      ensures nstrings as int + |strs| <= offsets.Length
+      ensures nstrings as int + |strs| <= |offsets|
       ensures psaTotalLength(psaAppendSeq(toPsa(), strs)) as int <= data.Length
       ensures fresh(Repr - old(Repr))
       modifies this.Repr
@@ -928,7 +923,7 @@ module PackedStringArray {
         psaAppendSeqAdditive(toPsa(), strs[..i], strs[i..]);
       }
       
-      if offsets.Length as uint64 < nstrings as uint64 + seq_length(strs) as uint64 {
+      if |offsets| as uint64 < nstrings as uint64 + seq_length(strs) as uint64 {
         realloc_offsets(nstrings as uint64 + seq_length(strs) as uint64);
       }
 
@@ -1019,7 +1014,7 @@ module PackedStringArray {
     
     constructor PreSized(num_strings: uint32, total_len: uint32)
       ensures WF()
-      ensures offsets.Length == num_strings as int
+      ensures |offsets| == num_strings as int
       ensures data.Length == total_len as int
       ensures toPsa() == EmptyPsa()
       ensures fresh(Repr)
@@ -1033,7 +1028,7 @@ module PackedStringArray {
     constructor FromSeq(strs: seq<Key>)
       requires psaCanAppendSeq(EmptyPsa(), strs)
       ensures WF()
-      ensures offsets.Length == |strs|
+      ensures |offsets| == |strs|
       ensures data.Length == psaTotalLength(psaFromSeq(strs)) as int
       ensures toPsa() == psaFromSeq(strs)
       ensures fresh(Repr)
@@ -1046,8 +1041,10 @@ module PackedStringArray {
       new;
       appendSeq(strs);
     }
+    */
   }
 
+/*
   method FromSeq(strs: seq<Key>) returns (psa: Psa)
     requires psaCanAppendSeq(EmptyPsa(), strs)
     ensures WF(psa)
@@ -1091,4 +1088,5 @@ module PackedStringArray {
       assert psa1.data == pre1.data + last;
     }
   }
+  */
 }
