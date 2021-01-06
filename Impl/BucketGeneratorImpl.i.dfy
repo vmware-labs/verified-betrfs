@@ -14,6 +14,8 @@ module BucketGeneratorImpl {
   import opened BucketsLib
   import opened Lexicographic_Byte_Order
   import opened Options
+  import opened Maps
+  import Keyspace = Lexicographic_Byte_Order
 
   linear datatype Generator = 
     | Basic(
@@ -125,19 +127,47 @@ module BucketGeneratorImpl {
           if next.Done? then B(map[])
           else B(BucketsLib.Compose(top.BucketOf(), bot.BucketOf()).b[next.key := next.msg])
       }
-    }    
+    }
+
+    // lemma lemmaDecreaserDecreases()
+    // requires WF()
+    // ensures GenLeft().Next? ==> decreaser(GenPop()) < decreaser()
+    // {
+    //   reveal_GenPop();
+    //   reveal_MergeGenPop();
+    //   reveal_BasicGenPop();
+    //   reveal_decreaser();
+    //   if g.ComposeGenerator? {
+    //     lemmaDecreaserDecreases(g.top);
+    //     lemmaDecreaserDecreases(g.bot);
+    //   }
+    // }
+
+    // function {:opaque} decreaser() : nat
+    // requires WF()
+    // {
+    //   match this {
+    //     case Basic(biter, _) => (
+    //       biter.it.decreaser
+    //     )
+    //     case Compose(top, bot, next, _) => (
+    //       top.decreaser() + bot.decreaser() + (if next.Next? then 1 else 0)
+    //     )
+    //   }
+    // }
 
     shared function method GenLeft() : (res : BucketIteratorModel.IteratorOutput)
     requires Inv()
     requires WM()
-    requires Monotonic()
     {
       reveal_Inv_for(this);
 
-      if this.Basic? then
+      var res := if this.Basic? then
         biter.GetNext()
       else
-        next
+        next;
+      
+      res
     }
 
     lemma GenLeftIsMinimum()
@@ -170,23 +200,59 @@ module BucketGeneratorImpl {
       }
     }
 
+    predicate YieldsSortedBucket(b: Bucket)
+    {
+      && Inv()
+      && WM()
+      && Monotonic()
+      && BucketOf().b == b.b
+    }
+
     linear inout method GenPop()
     requires old_self.Inv()
+    requires old_self.WM()
+    requires old_self.Monotonic()
+
     requires BucketGeneratorModel.GenLeft(old_self.I()).Next?
+    requires old_self.GenLeft().Next?
     ensures self.Inv()
-    ensures self.I() == BucketGeneratorModel.GenPop(old_self.I()) // doesn't believe in this anymore
+    ensures |old_self.BucketOf().b.Keys| >= 1
+    ensures self.YieldsSortedBucket(
+      B(MapRemove1(old_self.BucketOf().b, Keyspace.minimum(old_self.BucketOf().b.Keys))))
     decreases old_self.height
     {
       reveal_Inv_for(self);
 
-      BucketGeneratorModel.reveal_BasicGenPop();
-      BucketGeneratorModel.reveal_MergeGenPop();
-      BucketGeneratorModel.reveal_GenPop();
+      reveal_BucketOf();
+      self.GenLeftIsMinimum();
+
       if self.Basic? {
         inout self.biter.IterInc();
+
+        BucketIteratorModel.IterIncKeyGreater(old_self.biter.bucket, IIterator(old_self.biter.it));
+
+        ghost var b1 := self.BucketOf().b;
+        ghost var b2 := MapRemove1(old_self.BucketOf().b, minimum(old_self.BucketOf().b.Keys));
+        forall k | k in b1 ensures k in b2 && b1[k] == b2[k]
+        {
+        }
+        forall k | k in b2 ensures k in b1
+        {
+          BucketIteratorModel.noKeyBetweenIterAndIterInc(old_self.biter.bucket, IIterator(old_self.biter.it), k);
+        }
+        assert b1 == b2;
+
+        assert self.Monotonic() by { reveal_Monotonic(); }
       } else {
+        assert self.top.Monotonic() by { reveal_Monotonic(); }
+        assert self.bot.Monotonic() by { reveal_Monotonic(); }
+
         var top_next := self.top.GenLeft();
         var bot_next := self.bot.GenLeft();
+
+        old_self.top.GenLeftIsMinimum();
+        old_self.bot.GenLeftIsMinimum();
+
         var c;
         if (top_next.Next? && bot_next.Next?) {
           c := cmp(top_next.key, bot_next.key);
@@ -207,6 +273,39 @@ module BucketGeneratorImpl {
           inout self.next := BucketIteratorModel.Done;
         }
         inout ghost self.height := self.top.height + self.bot.height + 1;
+
+        if (top_next.Next?) {
+          assert top_next.key in old_self.top.BucketOf().b.Keys;
+        }
+        if (bot_next.Next?) {
+          assert bot_next.key in old_self.bot.BucketOf().b.Keys;
+        }
+
+        assert (self.next.Next? && self.top.GenLeft().Next? ==> lt(self.next.key, self.top.GenLeft().key));
+        assert (self.next.Next? && self.bot.GenLeft().Next? ==> lt(self.next.key, self.bot.GenLeft().key));
+        // assert  (self.next.Done? ==> self.top.GenLeft().Done?);
+        // assert  (self.next.Done? ==> self.bot.GenLeft().Done?);
+
+        // assert self.Monotonic() by {
+        //   assert && self.top.Monotonic()
+        //     && self.bot.Monotonic();
+        //   reveal_Monotonic();
+        // }
+
+        assume false;
+        // assert GenPop(g).ComposeGenerator?;
+        // calc {
+        //   BucketOf(GenPop(g)).b;
+        //   {
+        //     assert
+        //       && (g.next.Next? && top_next.Next? ==> lt(g.next.key, top_next.key))
+        //       && (g.next.Next? && bot_next.Next? ==> lt(g.next.key, bot_next.key)) by {
+        //       reveal_Monotonic();
+        //     }
+        //   }
+        //   MapRemove1(BucketOf(g).b, minimum(BucketOf(g).b.Keys));
+        // }
+        // assert self.YieldsSortedBucket(B(MapRemove1(old_self.BucketOf().b, minimum(old_self.BucketOf().b.Keys))));
       }
 
       assert self.Inv1();
