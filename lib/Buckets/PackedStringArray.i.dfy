@@ -736,7 +736,7 @@ module PackedStringArray {
       && Uint32_Order.IsSorted(offsets[..nstrings])
     }
 
-    function method toPsa() : Psa
+    shared function method toPsa() : Psa
       requires WF()
     {
       if 0 == nstrings then
@@ -745,7 +745,7 @@ module PackedStringArray {
         Psa(offsets[..nstrings], data[..offsets[nstrings-1]])
     }
 
-    method TotalLength() returns (result: uint64)
+    shared method TotalLength() returns (result: uint64)
       requires WF()
       ensures result == psaTotalLength(toPsa())
     {
@@ -756,7 +756,7 @@ module PackedStringArray {
       }
     }
 
-    function method weight() : uint64
+    shared function method weight() : uint64
       requires WF()
     {
       4 * nstrings + if nstrings == 0 then 0 else offsets[nstrings-1] as uint64
@@ -767,11 +767,10 @@ module PackedStringArray {
     {
       && psaCanAppend(toPsa(), str)
       && nstrings < |offsets| as uint64
-      && psaTotalLength(toPsa()) + |str| as uint64 <= data.Length as uint64
+      && psaTotalLength(toPsa()) + |str| as uint64 <= |data| as uint64
     }
-/*
     
-    method CanAppendWORealloc(str: Key) returns (result: bool)
+    shared method CanAppendWORealloc(str: Key) returns (result: bool)
       requires WF()
       requires |str| < 0x1_0000_0000
       ensures result ==> psaCanAppend(toPsa(), str)
@@ -780,130 +779,132 @@ module PackedStringArray {
       result := 
         && nstrings < |offsets| as uint64
         && nstrings < 0x1_0000_0000 - 1
-        && tl + |str| as uint64 <= data.Length as uint64;
+        && tl + |str| as uint64 <= |data| as uint64;
     }
     
-    method append(str: Key)
-      requires WF()
-      requires canAppend(str)
-      ensures WF()
-      ensures toPsa() == psaAppend(old(toPsa()), str)
-      ensures Repr == old(Repr)
-      modifies this.Repr
+    linear inout method append(str: Key)
+      requires old_self.WF()
+      requires old_self.canAppend(str)
+      ensures self.WF()
+      ensures self.toPsa() == psaAppend(old_self.toPsa(), str)
     {
-      var start: uint32 := if nstrings == 0 then 0 else offsets[nstrings-1];
-      offsets[nstrings] := start + |str| as uint32;
-      CopySeqIntoArray(str, 0, data, start as uint64, |str| as uint64);
-      nstrings := nstrings + 1;
+      var start: uint32 := if self.nstrings == 0 then 0 else self.offsets[self.nstrings-1];
+      var offset := start + |str| as uint32;
+      inout self.offsets := self.offsets[self.nstrings as int := offset];
+      // [yizhou7][FIXME] : this is likely wrong/inefficient
+      inout self.data := self.data[..start] + str + self.data[offset..];
+      // CopySeqIntoArray(str, 0, data, start as uint64, |str| as uint64);
+
+      inout self.nstrings := self.nstrings + 1;
       Uint32_Order.reveal_IsSorted();
     }
 
-    method realloc_offsets(new_offsets_len: uint64)
-      requires WF()
-      requires nstrings <= new_offsets_len
-      ensures WF()
-      ensures toPsa() == old(toPsa())
-      ensures fresh(offsets)
-      ensures |offsets| == new_offsets_len as int
-      ensures data == old(data)
-      modifies this.Repr
+    linear inout method realloc_offsets(new_offsets_len: uint64)
+      requires old_self.WF()
+      requires old_self.nstrings <= new_offsets_len
+      ensures self.WF()
+      ensures self.toPsa() == old_self.toPsa()
+      ensures |self.offsets| == new_offsets_len as int
+      ensures self.data == old_self.data
     {
-      var new_offsets := new uint32[new_offsets_len];
-      CopyArrayIntoDifferentArray(offsets, 0, new_offsets, 0, nstrings);
-      offsets := new_offsets;
-      assert offsets[..nstrings] == old(offsets[..nstrings]);
-      Repr := {this, offsets, data};
+      if new_offsets_len >= |self.offsets| as uint64 {
+        var len := new_offsets_len - |self.offsets| as uint64;
+        var padding := new uint32[len];
+        inout self.offsets := self.offsets + padding[..];
+      } else {
+        inout self.offsets := self.offsets[..new_offsets_len];
+      }
+
+      assert self.offsets[..self.nstrings] == old_self.offsets[..old_self.nstrings];
     }
     
-    method realloc_data(new_data_len: uint64)
-      requires WF()
+    linear inout method realloc_data(new_data_len: uint64)
+      requires old_self.WF()
       requires new_data_len < 0x1_0000_0000 
-      requires 0 < nstrings ==> offsets[nstrings-1] as uint64 <= new_data_len
-      ensures WF()
-      ensures toPsa() == old(toPsa())
-      ensures offsets == old(offsets)
-      ensures fresh(data)
-      ensures data.Length == new_data_len as int
-      modifies this.Repr
+      requires 0 < old_self.nstrings ==> old_self.offsets[old_self.nstrings-1] as uint64 <= new_data_len
+      ensures self.WF()
+      ensures self.toPsa() == old_self.toPsa()
+      ensures self.offsets == old_self.offsets
+      ensures |self.data| == new_data_len as int
     {
-      var data_len := if 0 == nstrings then 0 else offsets[nstrings-1];
-      var new_data := new byte[new_data_len];
-      CopyArrayIntoDifferentArray(data, 0, new_data, 0, data_len as uint64);
-      data := new_data;
-      Repr := {this, offsets, data};
+      var data_len := if 0 == self.nstrings then 0 else self.offsets[self.nstrings-1];
+      if new_data_len >= |self.data| as uint64 {
+        var len := new_data_len - |self.data| as uint64;
+        var padding := new byte[len];
+        inout self.data := self.data + padding[..];
+      } else {
+        inout self.data := self.data[..new_data_len];
+      }
     }
 
-    method realloc_to_accomodate(str: Key)
-      requires WF()
-      requires psaCanAppend(toPsa(), str)
-      ensures WF()
-      ensures toPsa() == old(toPsa())
-      ensures canAppend(str)
-      ensures fresh(Repr - old(Repr))
-      modifies this.Repr
+    linear inout method realloc_to_accomodate(str: Key)
+      requires old_self.WF()
+      requires psaCanAppend(old_self.toPsa(), str)
+      ensures self.WF()
+      ensures self.toPsa() == old_self.toPsa()
+      ensures self.canAppend(str)
     {
-      if nstrings == |offsets| as uint64 {
+      var nstrings := self.nstrings;
+
+      if nstrings == |self.offsets| as uint64 {
         if 0x8000_0000 <= nstrings {
-          realloc_offsets(0xffff_ffff);
+          inout self.realloc_offsets(0xffff_ffff);
         } else {
-          realloc_offsets(2*nstrings + 1);
+          inout self.realloc_offsets(2*nstrings + 1);
         }
       }
-      var data_len: uint32 := if nstrings == 0 then 0 else offsets[nstrings-1];
-      assert data_len as uint64 == psaTotalLength(toPsa());
+      var data_len: uint32 := if nstrings == 0 then 0 else self.offsets[nstrings-1];
+      assert data_len as uint64 == psaTotalLength(self.toPsa());
+
       var new_len: uint64 := data_len as uint64 + |str| as uint64;
-      if data.Length as uint64 < new_len {
+      if |self.data| as uint64 < new_len {
         if 0x1_0000_0000 <= 2 * new_len {
-          realloc_data(0xffff_ffff);
+          inout self.realloc_data(0xffff_ffff);
         } else {
-          realloc_data(2*new_len);
+          inout self.realloc_data(2*new_len);
         }
       }
     }
     
-    method Append(str: Key)
-      requires WF()
-      requires psaCanAppend(toPsa(), str)
-      ensures WF()
-      ensures toPsa() == psaAppend(old(toPsa()), str)
-      ensures fresh(Repr - old(Repr))
-      modifies this.Repr
+    linear inout method Append(str: Key)
+      requires old_self.WF()
+      requires psaCanAppend(old_self.toPsa(), str)
+      ensures self.WF()
+      ensures self.toPsa() == psaAppend(old_self.toPsa(), str)
     {
-      realloc_to_accomodate(str);
-      append(str);
+      inout self.realloc_to_accomodate(str);
+      inout self.append(str);
     }
 
-    method appendSeq(strs: seq<Key>)
-      requires WF()
-      requires psaCanAppendSeq(toPsa(), strs)
-      requires nstrings as int + |strs| <= |offsets|
-      requires psaTotalLength(psaAppendSeq(toPsa(), strs)) as int <= data.Length
-      ensures WF()
-      ensures toPsa() == psaAppendSeq(old(toPsa()), strs)
-      ensures Repr == old(Repr)
-      modifies this, this.Repr
+    linear inout method appendSeq(strs: seq<Key>)
+      requires old_self.WF()
+      requires psaCanAppendSeq(old_self.toPsa(), strs)
+      requires old_self.nstrings as int + |strs| <= |old_self.offsets|
+      requires psaTotalLength(psaAppendSeq(old_self.toPsa(), strs)) as int <= |old_self.data|
+      // ensures self.WF()
+      // ensures self.toPsa() == psaAppendSeq(old_self.toPsa(), strs)
     {
       forall i | 0 <= i <= |strs|
-        ensures psaCanAppendSeq(toPsa(), strs[..i])
-        ensures psaTotalLength(psaAppendSeq(toPsa(), strs[..i])) <= psaTotalLength(psaAppendSeq(toPsa(), strs))
+        ensures psaCanAppendSeq(self.toPsa(), strs[..i])
+        ensures psaTotalLength(psaAppendSeq(self.toPsa(), strs[..i])) <= psaTotalLength(psaAppendSeq(self.toPsa(), strs))
       {
         assert strs == strs[..i] + strs[i..];
-        psaAppendSeqAdditive(toPsa(), strs[..i], strs[i..]);
+        psaAppendSeqAdditive(self.toPsa(), strs[..i], strs[i..]);
       }
       
-      var i: uint64 := 0;
-      while i < |strs| as uint64
-        invariant i as int <= |strs|
-        invariant WF()
-        invariant toPsa() == psaAppendSeq(old(toPsa()), strs[..i])
-        invariant Repr == old(Repr)
-      {
-        assert strs[..i+1] == strs[..i] + [strs[i]];
-        append(strs[i]);
-        i := i + 1;
-      }
-      assert strs[..|strs|] == strs;
+      // var i: uint64 := 0;
+      // while i < |strs| as uint64
+      //   invariant i as int <= |strs|
+      //   invariant self.WF()
+      //   invariant self.toPsa() == psaAppendSeq(old_self.toPsa(), strs[..i])
+      // {
+      //   assert strs[..i+1] == strs[..i] + [strs[i]];
+      //   append(strs[i]);
+      //   i := i + 1;
+      // }
+      // assert strs[..|strs|] == strs;
     }
+/*
     
     method realloc_to_accomodate_seq(shared strs: seq<Key>)
       requires WF()
