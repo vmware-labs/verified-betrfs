@@ -787,6 +787,8 @@ module PackedStringArray {
       requires old_self.canAppend(str)
       ensures self.WF()
       ensures self.toPsa() == psaAppend(old_self.toPsa(), str)
+      ensures |self.offsets| == |old_self.offsets|;
+      ensures |self.data| == |old_self.data|;
     {
       var start: uint32 := if self.nstrings == 0 then 0 else self.offsets[self.nstrings-1];
       var offset := start + |str| as uint32;
@@ -881,28 +883,33 @@ module PackedStringArray {
       requires psaCanAppendSeq(old_self.toPsa(), strs)
       requires old_self.nstrings as int + |strs| <= |old_self.offsets|
       requires psaTotalLength(psaAppendSeq(old_self.toPsa(), strs)) as int <= |old_self.data|
-      // ensures self.WF()
-      // ensures self.toPsa() == psaAppendSeq(old_self.toPsa(), strs)
+      ensures self.WF()
+      ensures self.toPsa() == psaAppendSeq(old_self.toPsa(), strs)
     {
       forall i | 0 <= i <= |strs|
-        ensures psaCanAppendSeq(self.toPsa(), strs[..i])
-        ensures psaTotalLength(psaAppendSeq(self.toPsa(), strs[..i])) <= psaTotalLength(psaAppendSeq(self.toPsa(), strs))
+        ensures psaCanAppendSeq(old_self.toPsa(), strs[..i])
+        ensures psaTotalLength(psaAppendSeq(old_self.toPsa(), strs[..i])) <= psaTotalLength(psaAppendSeq(old_self.toPsa(), strs))
       {
         assert strs == strs[..i] + strs[i..];
-        psaAppendSeqAdditive(self.toPsa(), strs[..i], strs[i..]);
+        psaAppendSeqAdditive(old_self.toPsa(), strs[..i], strs[i..]);
       }
       
-      // var i: uint64 := 0;
-      // while i < |strs| as uint64
-      //   invariant i as int <= |strs|
-      //   invariant self.WF()
-      //   invariant self.toPsa() == psaAppendSeq(old_self.toPsa(), strs[..i])
-      // {
-      //   assert strs[..i+1] == strs[..i] + [strs[i]];
-      //   append(strs[i]);
-      //   i := i + 1;
-      // }
-      // assert strs[..|strs|] == strs;
+      var i: uint64 := 0;
+      while i < |strs| as uint64
+        invariant i as int <= |strs|
+        invariant self.WF()
+        invariant self.nstrings as int + |strs[i..]| <= |self.offsets|;
+        invariant psaTotalLength(self.toPsa()) as int <= psaTotalLength(psaAppendSeq(old_self.toPsa(), strs)) as int <= |self.data|
+        invariant self.toPsa() == psaAppendSeq(old_self.toPsa(), strs[..i]);
+      {
+        assert psaTotalLength(self.toPsa()) <= psaTotalLength(psaAppendSeq(old_self.toPsa(), strs));
+        assert strs[..i+1] == strs[..i] + [strs[i]];
+        assert psaTotalLength(self.toPsa()) as int + |strs[i]| <= psaTotalLength(psaAppendSeq(old_self.toPsa(), strs)) as int;
+
+        inout self.append(strs[i]);
+        i := i + 1;
+      }
+      assert strs[..|strs|] == strs;
     }
 /*
     
