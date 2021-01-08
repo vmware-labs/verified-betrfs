@@ -202,17 +202,27 @@ module BlockAllocatorImpl {
       assert self.Inv();
     }
 
-    linear inout method MoveFrozenToPersistent()
-    requires old_self.Inv()
-    requires BlockAllocatorModel.Inv(old_self.I())
-    requires old_self.I().frozen.Some?
-    ensures self.Inv()
-    ensures self.I() == BlockAllocatorModel.MoveFrozenToPersistent(old_self.I())
+    linear method MoveFrozenToPersistent() returns (linear ba : BlockAllocator)
+    requires this.Inv()
+    requires BlockAllocatorModel.Inv(this.I())
+    requires this.I().frozen.Some?
+    ensures ba.Inv()
+    ensures ba.I() == BlockAllocatorModel.MoveFrozenToPersistent(old(I()))
     {
-      linear var fo := BitmapImpl.Bitmap.UnionConstructor(self.frozen.value, self.outstanding);
-      self.full := BitmapImpl.Bitmap.UnionConstructor(self.ephemeral, fo);
-      //self.persistent := self.frozen.value;
-      //self.frozen := lNone;
+      linear var BlockAllocator(eph, fro, pre, out, full) := this;
+
+      linear var frozen_val := unwrap_value(fro);
+
+      linear var fo := BitmapImpl.Bitmap.UnionConstructor(frozen_val, out);
+      linear var fu := BitmapImpl.Bitmap.UnionConstructor(eph, fo);
+
+      ba := BlockAllocator(
+        eph, lNone, frozen_val, out, fu
+      );
+
+      pre.Free();
+      full.Free();
+      fo.Free();
     }
 /*
     method CopyEphemeralToFrozen()

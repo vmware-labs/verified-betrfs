@@ -352,5 +352,11 @@ module BitmapImpl {
     {
       bm := Bitmap(a.bits);
     }
+
+    linear method Free()
+    requires Inv()
+    {
+      linear var Bitmap(_) := this;
+    }
   }
 }
