@@ -17,7 +17,7 @@ module BitmapImpl {
     bits: seq<uint64>
   )
   {
-    method DebugAccumulate()
+    shared method DebugAccumulate()
     returns (acc:DebugAccumulator.DebugAccumulator)
     requires false
     {

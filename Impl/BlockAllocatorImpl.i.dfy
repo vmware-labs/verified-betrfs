@@ -1,6 +1,7 @@
 include "../lib/Base/DebugAccumulator.i.dfy"
 include "BlockAllocatorModel.i.dfy"
 include "../lib/DataStructures/BitmapImpl.i.dfy"
+include "../lib/Base/LinearOption.i.dfy"
 //
 // A BlockAllocator tracks which blocks are allocated, to safely allocate
 // blocks unused by any view.
@@ -11,18 +12,21 @@ module BlockAllocatorImpl {
   import BitmapModel
   import BitmapImpl
   import opened Bounds
+  import opened LinearOption
   import opened Options
   import BlockAllocatorModel
   import opened NativeTypes
 
-  class BlockAllocator {
-    var ephemeral: BitmapImpl.Bitmap;
-    var frozen: BitmapImpl.Bitmap?;
-    var persistent: BitmapImpl.Bitmap;
-    var outstanding: BitmapImpl.Bitmap;
-    var full: BitmapImpl.Bitmap;
+  linear datatype BlockAllocator = BlockAllocator(
+    linear ephemeral: BitmapImpl.Bitmap,
+    linear frozen: lOption <BitmapImpl.Bitmap>,
+    linear persistent: BitmapImpl.Bitmap,
+    linear outstanding: BitmapImpl.Bitmap,
+    linear full: BitmapImpl.Bitmap
+  )
 
-    method DebugAccumulate()
+  { 
+    shared method DebugAccumulate()
     returns (acc:DebugAccumulator.DebugAccumulator)
     requires false
     {
@@ -30,8 +34,8 @@ module BlockAllocatorImpl {
       var r := ephemeral.DebugAccumulate();
       var a := new DebugAccumulator.AccRec.Index(r);
       acc := DebugAccumulator.AccPut(acc, "ephemeral", a);
-      if frozen != null {
-        r := frozen.DebugAccumulate();
+      if frozen.lSome?{
+        r := frozen.value.DebugAccumulate();
       } else {
         r := DebugAccumulator.EmptyAccumulator();
       }
@@ -48,131 +52,114 @@ module BlockAllocatorImpl {
       acc := DebugAccumulator.AccPut(acc, "full", a);
     }
 
-    ghost var Repr: set<object>
-
     protected predicate Inv()
-    reads this, Repr
-    ensures Inv() ==> this in Repr
     {
-      && this in Repr
-      && ephemeral in Repr
-      && (frozen != null ==> frozen in Repr)
-      && persistent in Repr
-      && outstanding in Repr
-      && full in Repr
-      && Repr == {this} + ephemeral.Repr + (if frozen == null then {} else frozen.Repr) + persistent.Repr + outstanding.Repr + full.Repr
-      && {this} !! ephemeral.Repr !! (if frozen == null then {} else frozen.Repr) !! persistent.Repr !! outstanding.Repr !! full.Repr
-
       && ephemeral.Inv()
-      && (frozen != null ==> frozen.Inv())
+      && (frozen.lSome? ==> frozen.value.Inv())
       && persistent.Inv()
       && outstanding.Inv()
       && full.Inv()
       && BitmapModel.Len(ephemeral.I()) == NumBlocks()
-      && (frozen != null ==> BitmapModel.Len(frozen.I()) == NumBlocks())
+      && (frozen.lSome? ==> BitmapModel.Len(frozen.value.I()) == NumBlocks())
       && BitmapModel.Len(persistent.I()) == NumBlocks()
       && BitmapModel.Len(outstanding.I()) == NumBlocks()
       && BitmapModel.Len(full.I()) == NumBlocks()
     }
 
     protected function I() : BlockAllocatorModel.BlockAllocatorModel
-    reads this, Repr
     requires Inv()
     {
       BlockAllocatorModel.BlockAllocatorModel(ephemeral.I(),
-          (if frozen == null then None else Some(frozen.I())),
+          (if frozen.lNone? then None else Some(frozen.value.I())),
           persistent.I(),
           outstanding.I(),
           full.I())
     }
 
-    constructor(bm: BitmapImpl.Bitmap)
+    //TODO Review this, mainly the linear bm for the input?
+    static method Constructor(linear bm: BitmapImpl.Bitmap) returns (linear ba: BlockAllocator)
     requires bm.Inv()
     requires BitmapModel.Len(bm.I()) == NumBlocks()
-    ensures Inv()
-    ensures forall o | o in Repr :: fresh(o) || o in bm.Repr
-    ensures I() == BlockAllocatorModel.InitBlockAllocator(bm.I())
+    ensures ba.Inv()
+    ensures ba.I() == BlockAllocatorModel.InitBlockAllocator(bm.I())
     {
-      ephemeral := bm;
-      frozen := null;
-      persistent := new BitmapImpl.Bitmap.Clone(bm);
-      outstanding := new BitmapImpl.Bitmap(NumBlocksUint64());
-      full := new BitmapImpl.Bitmap.Clone(bm);
+      linear var per := BitmapImpl.Bitmap.CloneConstructor(bm);
+      linear var out := BitmapImpl.Bitmap.Constructor(NumBlocksUint64());
+      linear var ful := BitmapImpl.Bitmap.CloneConstructor(bm);
 
-      new;
-
-      Repr := {this} + ephemeral.Repr + (if frozen == null then {} else frozen.Repr) + persistent.Repr + outstanding.Repr + full.Repr;
+      ba := BlockAllocator(
+        bm,
+        lNone,
+        per,
+        out,
+        ful
+      );
     }
+    
 
-    method Alloc() returns (res : Option<uint64>)
+    shared method Alloc() returns (res : Option<uint64>)
     requires Inv()
     ensures res.Some? <==> BlockAllocatorModel.Alloc(I()).Some?
     ensures res.Some? ==> res.value as int == BlockAllocatorModel.Alloc(I()).value
     {
       res := full.Alloc();
     }
-
-    method MarkUsedEphemeral(i: uint64)
-    requires Inv()
-    requires BlockAllocatorModel.Inv(I())
+  
+    linear inout method MarkUsedEphemeral(i: uint64)
+    requires old_self.Inv()
+    requires BlockAllocatorModel.Inv(old_self.I())
     requires i as int < NumBlocks()
-    modifies Repr
-    ensures Inv()
-    ensures Repr == old(Repr)
-    ensures I() == BlockAllocatorModel.MarkUsedEphemeral(old(I()), i as int)
+    ensures self.Inv()
+    ensures self.I() == BlockAllocatorModel.MarkUsedEphemeral(old_self.I(), i as int)
     {
-      ephemeral.Set(i);
-      full.Set(i);
+      inout self.ephemeral.Set(i);
+      inout self.full.Set(i);
     }
 
-    method MarkUsedFrozen(i: uint64)
-    requires Inv()
-    requires BlockAllocatorModel.Inv(I())
+    //TODO why is the requires for frozen a Option not loption
+    //why was frozen.Set done originally?
+    linear inout method MarkUsedFrozen(i: uint64)
+    requires old_self.Inv()
+    requires BlockAllocatorModel.Inv(old_self.I())
     requires i as int < NumBlocks()
-    requires I().frozen.Some?
-    modifies Repr
-    ensures Inv()
-    ensures Repr == old(Repr)
-    ensures I() == BlockAllocatorModel.MarkUsedFrozen(old(I()), i as int)
+    requires old_self.I().frozen.Some?
+    ensures self.Inv()
+    ensures self.I() == BlockAllocatorModel.MarkUsedFrozen(old_self.I(), i as int)
     {
-      frozen.Set(i);
-      full.Set(i);
+      inout self.frozen.value.Set(i);
+      inout self.full.Set(i);
     }
 
-    method MarkUsedOutstanding(i: uint64)
-    requires Inv()
-    requires BlockAllocatorModel.Inv(I())
+    linear inout method MarkUsedOutstanding(i: uint64)
+    requires old_self.Inv()
+    requires BlockAllocatorModel.Inv(old_self.I())
     requires i as int < NumBlocks()
-    modifies Repr
-    ensures Inv()
-    ensures Repr == old(Repr)
-    ensures I() == BlockAllocatorModel.MarkUsedOutstanding(old(I()), i as int)
+    ensures self.Inv()
+    ensures self.I() == BlockAllocatorModel.MarkUsedOutstanding(old_self.I(), i as int)
     {
-      outstanding.Set(i);
-      full.Set(i);
+      inout self.outstanding.Set(i);
+      inout self.full.Set(i);
     }
 
-    method MarkFreeOutstanding(i: uint64)
-    requires Inv()
-    requires BlockAllocatorModel.Inv(I())
+    linear inout method MarkFreeOutstanding(i: uint64)
+    requires old_self.Inv()
+    requires BlockAllocatorModel.Inv(old_self.I())
     requires i as int < NumBlocks()
-    modifies Repr
-    ensures Inv()
-    ensures Repr == old(Repr)
-    ensures I() == BlockAllocatorModel.MarkFreeOutstanding(old(I()), i as int)
+    ensures self.Inv()
+    ensures self.I() == BlockAllocatorModel.MarkFreeOutstanding(old_self.I(), i as int)
     {
-      outstanding.Unset(i);
+      inout self.outstanding.Unset(i);
 
       var b0 := false;
-      if frozen != null {
-        b0 := frozen.GetIsSet(i);
+      if self.frozen.lSome?{
+        b0 := self.frozen.value.GetIsSet(i);
       }
       if !b0 {
-        var b1 := ephemeral.GetIsSet(i);
+        var b1 := self.ephemeral.GetIsSet(i);
         if !b1 {
-          var b2 := persistent.GetIsSet(i);
+          var b2 := self.persistent.GetIsSet(i);
           if !b2 {
-            full.Unset(i);
+           inout self.full.Unset(i);
           }
         }
       }
@@ -180,30 +167,28 @@ module BlockAllocatorImpl {
       BitmapModel.reveal_BitUnset();
       BitmapModel.reveal_IsSet();
 
-      assert Inv();
+      assert self.Inv();
     }
 
-    method MarkFreeEphemeral(i: uint64)
-    requires Inv()
-    requires BlockAllocatorModel.Inv(I())
+    linear inout method MarkFreeEphemeral(i: uint64)
+    requires old_self.Inv()
+    requires BlockAllocatorModel.Inv(old_self.I())
     requires i as int < NumBlocks()
-    modifies Repr
-    ensures Inv()
-    ensures Repr == old(Repr)
-    ensures I() == BlockAllocatorModel.MarkFreeEphemeral(old(I()), i as int)
+    ensures self.Inv()
+    ensures self.I() == BlockAllocatorModel.MarkFreeEphemeral(old_self.I(), i as int)
     {
-      ephemeral.Unset(i);
+      inout self.ephemeral.Unset(i);
 
       var b0 := false;
-      if frozen != null {
-        b0 := frozen.GetIsSet(i);
+      if self.frozen.lSome?{
+        b0 := self.frozen.value.GetIsSet(i);
       }
       if !b0 {
-        var b1 := outstanding.GetIsSet(i);
+        var b1 := self.outstanding.GetIsSet(i);
         if !b1 {
-          var b2 := persistent.GetIsSet(i);
+          var b2 := self.persistent.GetIsSet(i);
           if !b2 {
-            full.Unset(i);
+            inout self.full.Unset(i);
           }
         }
       }
@@ -211,28 +196,25 @@ module BlockAllocatorImpl {
       BitmapModel.reveal_BitUnset();
       BitmapModel.reveal_IsSet();
 
-      assert forall j | 0 <= j < |ephemeral.I()| :: j != i as int ==> BitmapModel.IsSet(ephemeral.I(), j) == BitmapModel.IsSet(old(ephemeral.I()), j);
+      assert forall j | 0 <= j < |self.ephemeral.I()| :: j != i as int 
+      ==> BitmapModel.IsSet(self.ephemeral.I(), j) == BitmapModel.IsSet(old_self.ephemeral.I(), j);
 
-      assert Inv();
+      assert self.Inv();
     }
 
-    method MoveFrozenToPersistent()
-    requires Inv()
-    requires BlockAllocatorModel.Inv(I())
-    requires I().frozen.Some?
-    modifies Repr
-    ensures Inv()
-    ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
-    ensures I() == BlockAllocatorModel.MoveFrozenToPersistent(old(I()))
+    linear inout method MoveFrozenToPersistent()
+    requires old_self.Inv()
+    requires BlockAllocatorModel.Inv(old_self.I())
+    requires old_self.I().frozen.Some?
+    ensures self.Inv()
+    ensures self.I() == BlockAllocatorModel.MoveFrozenToPersistent(old_self.I())
     {
-      var fo := new BitmapImpl.Bitmap.Union(frozen, outstanding);
-      full := new BitmapImpl.Bitmap.Union(ephemeral, fo);
-      persistent := frozen;
-      frozen := null;
-
-      Repr := {this} + ephemeral.Repr + (if frozen == null then {} else frozen.Repr) + persistent.Repr + outstanding.Repr + full.Repr;
+      linear var fo := BitmapImpl.Bitmap.UnionConstructor(self.frozen.value, self.outstanding);
+      self.full := BitmapImpl.Bitmap.UnionConstructor(self.ephemeral, fo);
+      //self.persistent := self.frozen.value;
+      //self.frozen := lNone;
     }
-
+/*
     method CopyEphemeralToFrozen()
     requires Inv()
     requires BlockAllocatorModel.Inv(I())
@@ -245,6 +227,6 @@ module BlockAllocatorImpl {
 
       Repr := {this} + ephemeral.Repr + (if frozen == null then {} else frozen.Repr) + persistent.Repr + outstanding.Repr + full.Repr;
     }
-
+*/
   }
 }
