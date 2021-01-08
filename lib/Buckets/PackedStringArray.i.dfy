@@ -911,48 +911,48 @@ module PackedStringArray {
       }
       assert strs[..|strs|] == strs;
     }
-/*
     
-    method realloc_to_accomodate_seq(shared strs: seq<Key>)
-      requires WF()
-      requires psaCanAppendSeq(toPsa(), strs)
-      ensures WF()
-      ensures toPsa() == old(toPsa())
-      ensures nstrings as int + |strs| <= |offsets|
-      ensures psaTotalLength(psaAppendSeq(toPsa(), strs)) as int <= data.Length
-      ensures fresh(Repr - old(Repr))
-      modifies this.Repr
+    linear inout method realloc_to_accomodate_seq(shared strs: seq<Key>)
+      requires old_self.WF()
+      requires psaCanAppendSeq(old_self.toPsa(), strs)
+      ensures self.WF()
+      ensures self.toPsa() == old_self.toPsa()
+      ensures self.nstrings as int + |strs| <= |self.offsets|
+      ensures psaTotalLength(psaAppendSeq(self.toPsa(), strs)) as int <= |self.data|
     {
       forall i | 0 <= i <= |strs|
-        ensures psaCanAppendSeq(toPsa(), strs[..i])
-        ensures psaTotalLength(psaAppendSeq(toPsa(), strs[..i])) <= psaTotalLength(psaAppendSeq(toPsa(), strs))
+        ensures psaCanAppendSeq(self.toPsa(), strs[..i])
+        ensures psaTotalLength(psaAppendSeq(self.toPsa(), strs[..i])) <= psaTotalLength(psaAppendSeq(self.toPsa(), strs))
       {
         assert strs == strs[..i] + strs[i..];
-        psaAppendSeqAdditive(toPsa(), strs[..i], strs[i..]);
-      }
-      
-      if |offsets| as uint64 < nstrings as uint64 + seq_length(strs) as uint64 {
-        realloc_offsets(nstrings as uint64 + seq_length(strs) as uint64);
+        psaAppendSeqAdditive(self.toPsa(), strs[..i], strs[i..]);
       }
 
-      var total_len: uint64 := if nstrings == 0 then 0 else offsets[nstrings-1] as uint64;
+      var new_offsets_len := self.nstrings + seq_length(strs) as uint64;
+      if |self.offsets| as uint64 < new_offsets_len {
+        inout self.realloc_offsets(new_offsets_len);
+      }
+
+      var total_len: uint64 := if self.nstrings == 0 then 0 else self.offsets[self.nstrings-1] as uint64;
+
       var i: uint64 := 0;
       while i < seq_length(strs) as uint64
         invariant i as int <= |strs|
-        invariant  total_len as int == psaTotalLength(psaAppendSeq(toPsa(), strs[..i])) as int
-        modifies {}
+        invariant total_len == psaTotalLength(psaAppendSeq(self.toPsa(), strs[..i]))
       {
         assert strs[..i] == DropLast(strs[..i+1]);
-        psaAppendTotalLength(psaAppendSeq(toPsa(), strs[..i]), strs[i]);
+        psaAppendTotalLength(psaAppendSeq(self.toPsa(), strs[..i]), strs[i]);
         total_len := total_len + |seq_get(strs, i)| as uint64;
         i := i + 1;
       }
+  
       assert strs == strs[..|strs|];
-      if data.Length as uint64 < total_len {
-        realloc_data(total_len);
+      if |self.data| as uint64 < total_len {
+        inout self.realloc_data(total_len);
       }
     }
-    
+
+/*
     method AppendSeq(shared strs: seq<Key>)
       requires WF()
       requires psaCanAppendSeq(toPsa(), strs)
