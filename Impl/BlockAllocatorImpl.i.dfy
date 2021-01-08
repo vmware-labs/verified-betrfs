@@ -224,19 +224,27 @@ module BlockAllocatorImpl {
       full.Free();
       fo.Free();
     }
-/*
-    method CopyEphemeralToFrozen()
-    requires Inv()
-    requires BlockAllocatorModel.Inv(I())
-    modifies Repr
-    ensures Inv()
-    ensures forall o | o in Repr :: o in old(Repr) || fresh(o)
-    ensures I() == BlockAllocatorModel.CopyEphemeralToFrozen(old(I()))
-    {
-      frozen := new BitmapImpl.Bitmap.Clone(ephemeral);
 
-      Repr := {this} + ephemeral.Repr + (if frozen == null then {} else frozen.Repr) + persistent.Repr + outstanding.Repr + full.Repr;
+    linear method CopyEphemeralToFrozen() returns (linear ba : BlockAllocator)
+    requires this.Inv()
+    requires BlockAllocatorModel.Inv(this.I())
+    ensures ba.Inv()
+    ensures ba.I() == BlockAllocatorModel.CopyEphemeralToFrozen(old(I()))
+    {
+      linear var BlockAllocator(eph, fro, pre, out, full) := this;
+
+      if fro.lSome?{
+        linear var frozen_val := unwrap_value(fro);
+        frozen_val.Free();
+      } else {
+        dispose_lnone(fro);
+      }
+
+      linear var fo := BitmapImpl.Bitmap.CloneConstructor(eph);
+
+      ba := BlockAllocator(
+        eph, lSome(fo), pre, out, full
+      );
     }
-*/
   }
 }
