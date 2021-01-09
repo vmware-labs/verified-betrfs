@@ -885,6 +885,8 @@ module PackedStringArray {
       requires psaTotalLength(psaAppendSeq(old_self.toPsa(), strs)) as int <= |old_self.data|
       ensures self.WF()
       ensures self.toPsa() == psaAppendSeq(old_self.toPsa(), strs)
+      ensures |self.offsets| == |old_self.offsets|
+      ensures |self.data| == |old_self.data|
     {
       forall i | 0 <= i <= |strs|
         ensures psaCanAppendSeq(old_self.toPsa(), strs[..i])
@@ -901,6 +903,8 @@ module PackedStringArray {
         invariant self.nstrings as int + |strs[i..]| <= |self.offsets|;
         invariant psaTotalLength(self.toPsa()) as int <= psaTotalLength(psaAppendSeq(old_self.toPsa(), strs)) as int <= |self.data|
         invariant self.toPsa() == psaAppendSeq(old_self.toPsa(), strs[..i]);
+        invariant |self.offsets| == |old_self.offsets|
+        invariant |self.data| == |old_self.data|
       {
         assert psaTotalLength(self.toPsa()) <= psaTotalLength(psaAppendSeq(old_self.toPsa(), strs));
         assert strs[..i+1] == strs[..i] + [strs[i]];
@@ -987,56 +991,51 @@ module PackedStringArray {
       }
       assert strs[..|strs|] == strs;
     }
-/*
 
-    method Prefix(newlen: uint64)
-      requires WF()
-      requires newlen <= nstrings
-      ensures WF()
-      ensures toPsa() == psaSubSeq(old(toPsa()), 0, newlen)
-      ensures offsets == old(offsets)
-      ensures data == old(data)
-      ensures Repr == old(Repr)
-      modifies this
+    linear inout method Prefix(newlen: uint64)
+      requires old_self.WF()
+      requires newlen <= old_self.nstrings
+      ensures self.WF()
+      ensures self.toPsa() == psaSubSeq(old_self.toPsa(), 0, newlen)
+      ensures self.offsets == old_self.offsets
+      ensures self.data == old_self.data
     {
-      Uint32_Order.SortedSubsequence(offsets[..nstrings], 0, newlen as int);
-      assert offsets[..newlen] == offsets[..nstrings][..newlen];
+      var nstrings := self.nstrings;
+      Uint32_Order.SortedSubsequence(self.offsets[..nstrings], 0, newlen as int);
+      assert self.offsets[..newlen] == self.offsets[..nstrings][..newlen];
       if 0 < newlen {
-        Uint32_Order.IsSortedImpliesLte(offsets[..nstrings], newlen as int - 1, nstrings as int - 1);
+        Uint32_Order.IsSortedImpliesLte(self.offsets[..nstrings], newlen as int - 1, nstrings as int - 1);
       }
-      nstrings := newlen;
+      inout self.nstrings := newlen;
     }
     
-    constructor PreSized(num_strings: uint32, total_len: uint32)
-      ensures WF()
-      ensures |offsets| == num_strings as int
-      ensures data.Length == total_len as int
-      ensures toPsa() == EmptyPsa()
-      ensures fresh(Repr)
+    static method PreSizedConstructor(num_strings: uint32, total_len: uint32) returns (linear psa: DynamicPsa)
+      ensures psa.WF()
+      ensures |psa.offsets| == num_strings as int
+      ensures |psa.data| == total_len as int
+      ensures psa.toPsa() == EmptyPsa()
     {
-      nstrings := 0;
-      offsets := new uint32[num_strings];
-      data := new byte[total_len];
-      Repr := {this, offsets, data};
+      var offsets := new uint32[num_strings];
+      var data := new byte[total_len];
+
+      psa := DynamicPsa(0, offsets[..], data[..]);
     }
 
-    constructor FromSeq(strs: seq<Key>)
+    static method FromSeqConstructor(strs: seq<Key>) returns (linear psa: DynamicPsa)
       requires psaCanAppendSeq(EmptyPsa(), strs)
-      ensures WF()
-      ensures |offsets| == |strs|
-      ensures data.Length == psaTotalLength(psaFromSeq(strs)) as int
-      ensures toPsa() == psaFromSeq(strs)
-      ensures fresh(Repr)
+      ensures psa.WF()
+      ensures |psa.offsets| == |strs|
+      ensures |psa.data| == psaTotalLength(psaFromSeq(strs)) as int
+      ensures psa.toPsa() == psaFromSeq(strs)
     {
-      nstrings := 0;
-      offsets := new uint32[|strs| as uint64];
+      var offsets := new uint32[|strs| as uint64];
       var total_len := psaSeqTotalLength(strs);
-      data := new byte[total_len];
-      Repr := {this, offsets, data};
-      new;
-      appendSeq(strs);
+      var data := new byte[total_len];
+
+      psa := DynamicPsa(0, offsets[..], data[..]);
+
+      inout psa.appendSeq(strs);
     }
-    */
   }
 
 /*
