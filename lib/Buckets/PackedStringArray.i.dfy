@@ -1036,16 +1036,21 @@ module PackedStringArray {
 
       inout psa.appendSeq(strs);
     }
+
+    linear method Free() 
+    {
+      linear var DynamicPsa(_, _, _) := this;
+    }
   }
 
-/*
   method FromSeq(strs: seq<Key>) returns (psa: Psa)
     requires psaCanAppendSeq(EmptyPsa(), strs)
     ensures WF(psa)
     ensures I(psa) == strs
   {
-    var dpsa := new DynamicPsa.FromSeq(strs);
+    linear var dpsa := DynamicPsa.FromSeqConstructor(strs);
     psa := dpsa.toPsa();
+    dpsa.Free();
   }
 
   method ToSeq(psa: Psa) returns (strs: seq<seq<NativeTypes.byte>>)
@@ -1082,5 +1087,4 @@ module PackedStringArray {
       assert psa1.data == pre1.data + last;
     }
   }
-  */
 }
