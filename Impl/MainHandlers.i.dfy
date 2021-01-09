@@ -118,13 +118,17 @@ module MainHandlers refines Main {
     print "\nBefore\n";
     // var acc := s.bc.DebugAccumulate();
     // DebugAccumulator.Display(acc, 0);
-    var count:uint64 := s.bc.cache.cache.Count;
+
+    // var count:uint64 := s.bc.cache.cache.Count;
+    var count:uint64 := s.bc.cache.Count(); // [yizhou7][REVIEW]: replace the above to this
+
 //    var last_count:uint64 := count;
 //    var last_at_this_count:uint64 = 0;
     while (count > 0)
     { // somehow it gets to where we can't get rid of the last few...?
       EvictOrDealloc(s.bc, io);
-      count := s.bc.cache.cache.Count;
+      // count := s.bc.cache.cache.Count;
+      count := s.bc.cache.Count(); // [yizhou7][REVIEW]: replace the above to this
     }
     print "\nAfter\n";
     // acc := s.bc.DebugAccumulate();

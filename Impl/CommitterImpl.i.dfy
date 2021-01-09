@@ -912,6 +912,7 @@ module CommitterImpl {
     // == pushSync ==
     shared method freeId() returns (id: uint64)
     requires syncReqs.Inv()
+    ensures (id != 0) ==> (id !in syncReqs.contents)
     {
       var maxId := LinearMutableMap.MaxKey(this.syncReqs);
       if maxId == 0xffff_ffff_ffff_ffff {
