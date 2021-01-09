@@ -952,55 +952,42 @@ module PackedStringArray {
       }
     }
 
-/*
-    method AppendSeq(shared strs: seq<Key>)
-      requires WF()
-      requires psaCanAppendSeq(toPsa(), strs)
-      ensures WF()
-      ensures toPsa() == psaAppendSeq(old(toPsa()), strs)
-      ensures fresh(Repr - old(Repr))
-      modifies this, this.Repr
+    linear inout method AppendSeq(shared strs: seq<Key>)
+      requires old_self.WF()
+      requires psaCanAppendSeq(old_self.toPsa(), strs)
+      ensures self.WF()
+      ensures self.toPsa() == psaAppendSeq(old_self.toPsa(), strs)
     {
-      realloc_to_accomodate_seq(strs);
-      ghost var new_Repr := Repr;
+      inout self.realloc_to_accomodate_seq(strs);
       ghost var new_offsets := offsets;
       ghost var new_data := data;
 
-      assert psaTotalLength(psaAppendSeq(toPsa(), strs)) as int <= data.Length;
-      
       forall i | 0 <= i <= |strs|
-        ensures psaCanAppendSeq(toPsa(), strs[..i])
+        ensures psaCanAppendSeq(old_self.toPsa(), strs[..i])
+        ensures psaTotalLength(psaAppendSeq(old_self.toPsa(), strs[..i])) <= psaTotalLength(psaAppendSeq(old_self.toPsa(), strs))
       {
         assert strs == strs[..i] + strs[i..];
-        psaCanAppendSeqAdditive(toPsa(), strs[..i], strs[i..]);
+        psaAppendSeqAdditive(old_self.toPsa(), strs[..i], strs[i..]);
       }
 
-      forall i | 0 <= i < |strs|
-        ensures psaCanAppend(psaAppendSeq(toPsa(), strs[..i]), strs[i])
-        ensures psaTotalLength(psaAppendSeq(toPsa(), strs[..i])) as int + |strs[i]| <= data.Length
-      {
-        assert strs[..i+1] == strs[..i] + [strs[i]];
-        psaCanAppendSeqAdditive(toPsa(), strs[..i], [strs[i]]);
-        psaCanAppendOne(psaAppendSeq(toPsa(), strs[..i]), strs[i]);
-        assert strs == strs[..i+1] + strs[i+1..];
-        psaAppendSeqAdditive(toPsa(), strs[..i+1], strs[i+1..]);
-      }
-      
       var i: uint64 := 0;
       while i < seq_length(strs) as uint64
         invariant i as int <= |strs|
-        invariant WF()
-        invariant toPsa() == psaAppendSeq(old(toPsa()), strs[..i])
-        invariant Repr == new_Repr
-        invariant offsets == new_offsets
-        invariant data == new_data
+        invariant self.WF()
+        invariant self.nstrings as int + |strs[i..]| <= |self.offsets|;
+        invariant psaTotalLength(self.toPsa()) as int <= psaTotalLength(psaAppendSeq(old_self.toPsa(), strs)) as int <= |self.data|
+        invariant self.toPsa() == psaAppendSeq(old_self.toPsa(), strs[..i]);
       {
+        assert psaTotalLength(self.toPsa()) <= psaTotalLength(psaAppendSeq(old_self.toPsa(), strs));
         assert strs[..i+1] == strs[..i] + [strs[i]];
-        append(seq_get(strs, i));
+        assert psaTotalLength(self.toPsa()) as int + |strs[i]| <= psaTotalLength(psaAppendSeq(old_self.toPsa(), strs)) as int;
+
+        inout self.append(seq_get(strs, i));
         i := i + 1;
       }
       assert strs[..|strs|] == strs;
     }
+/*
 
     method Prefix(newlen: uint64)
       requires WF()
