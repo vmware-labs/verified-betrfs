@@ -76,7 +76,9 @@ abstract module NativePackedInt {
     )
   }
 
-  method Unpack(packed: seq<byte>, idx: uint64) returns (i: Integer)
+  // The Pack and Unpack methods copy data.  The Cast methods don't need to copy data.
+
+  method Unpack(shared packed: seq<byte>, idx: uint64) returns (i: Integer)
     requires idx as nat + Size() as nat <= |packed|
     requires |packed| < Uint64UpperBound()
     ensures i == unpack(packed[idx .. idx as nat + Size() as nat])
@@ -89,7 +91,8 @@ abstract module NativePackedInt {
     ensures unpack(s[idx .. idx as nat + Size() as nat]) == i
     ensures forall j | idx as nat + Size() as nat <= j < |s| :: s[j] == old_s[j]
 
-  method Unpack_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)
+  // If you want an ordinary sequence as a result, use seq_unleash()
+  method Unpack_Seq(shared packed: seq<byte>, idx: uint64, len: uint64) returns (linear unpacked: seq<Integer>)
     requires idx as nat + Size() as nat * len as nat <= |packed|
     requires |packed| < Uint64UpperBound()
     ensures unpacked == unpack_Seq(packed[idx .. idx as nat + Size() as nat * len as nat], len as nat)
@@ -100,6 +103,16 @@ abstract module NativePackedInt {
     ensures forall i | 0 <= i < idx :: packed[i] == old_packed[i]
     ensures unpack_Seq(packed[idx..idx as nat + |value| * Size() as nat], |value|) == value
     ensures forall i | idx as nat + |value| * Size() as nat <= i < |packed| :: packed[i] == old_packed[i]
+
+  method Cast(packed: seq<byte>, idx: uint64) returns (i: Integer)
+    requires idx as nat + Size() as nat <= |packed|
+    requires |packed| < Uint64UpperBound()
+    ensures i == unpack(packed[idx .. idx as nat + Size() as nat])
+
+  method Cast_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)
+    requires idx as nat + Size() as nat * len as nat <= |packed|
+    requires |packed| < Uint64UpperBound()
+    ensures unpacked == unpack_Seq(packed[idx .. idx as nat + Size() as nat * len as nat], len as nat)
 }
 
 module NativePackedByte refines NativePackedInt{
@@ -129,10 +142,12 @@ module NativePackedByte refines NativePackedInt{
     s[0]
   }
 
-  method {:extern} Unpack(packed: seq<byte>, idx: uint64) returns (i: Integer)
+  method {:extern} Unpack(shared packed: seq<byte>, idx: uint64) returns (i: Integer)
   method {:extern} Pack_into_ByteSeq(i: Integer, linear inout s: seq<byte>, idx: uint64)
-  method {:extern} Unpack_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)
+  method {:extern} Unpack_Seq(shared packed: seq<byte>, idx: uint64, len: uint64) returns (linear unpacked: seq<Integer>)
   method {:extern} Pack_Seq_into_ByteSeq(value: seq<Integer>, linear inout packed: seq<byte>, idx: uint64)
+  method {:extern} Cast(packed: seq<byte>, idx: uint64) returns (i: Integer)
+  method {:extern} Cast_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)
 }
 
 module NativePackedUint32 refines NativePackedInt {
@@ -166,11 +181,12 @@ module NativePackedUint32 refines NativePackedInt {
   }
 
   // framework/Framework.cpp
-  method {:extern} Unpack(packed: seq<byte>, idx: uint64) returns (i: Integer)
+  method {:extern} Unpack(shared packed: seq<byte>, idx: uint64) returns (i: Integer)
   method {:extern} Pack_into_ByteSeq(i: Integer, linear inout s: seq<byte>, idx: uint64)
-  // Unpack currently copies.  Can it just be a cast?
-  method {:extern} Unpack_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)
+  method {:extern} Unpack_Seq(shared packed: seq<byte>, idx: uint64, len: uint64) returns (linear unpacked: seq<Integer>)
   method {:extern} Pack_Seq_into_ByteSeq(value: seq<Integer>, linear inout packed: seq<byte>, idx: uint64)
+  method {:extern} Cast(packed: seq<byte>, idx: uint64) returns (i: Integer)
+  method {:extern} Cast_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)
 }
 
 module NativePackedUint64 refines NativePackedInt{
@@ -208,10 +224,12 @@ module NativePackedUint64 refines NativePackedInt{
     + (s[7] as uint64 * 0x1_00_00_00_00_00_00_00)
   }
 
-  method {:extern} Unpack(packed: seq<byte>, idx: uint64) returns (i: Integer)
+  method {:extern} Unpack(shared packed: seq<byte>, idx: uint64) returns (i: Integer)
   method {:extern} Pack_into_ByteSeq(i: Integer, linear inout s: seq<byte>, idx: uint64)
-  method {:extern} Unpack_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)
+  method {:extern} Unpack_Seq(shared packed: seq<byte>, idx: uint64, len: uint64) returns (linear unpacked: seq<Integer>)
   method {:extern} Pack_Seq_into_ByteSeq(value: seq<Integer>, linear inout packed: seq<byte>, idx: uint64)
+  method {:extern} Cast(packed: seq<byte>, idx: uint64) returns (i: Integer)
+  method {:extern} Cast_Seq(packed: seq<byte>, idx: uint64, len: uint64) returns (unpacked: seq<Integer>)
 }
 
 module {:extern} NativePackedInts {
