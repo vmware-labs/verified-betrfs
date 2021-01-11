@@ -541,53 +541,53 @@ module DynamicPkv {
   requires PKV.WF(pkv)
   decreases PKV.NumKVPairs(pkv)
   ensures PKV.WeightPkv(pkv) as int == WeightBucketPkv(pkv)
-  {
-    if |pkv.keys.offsets| == 0 {
-      calc {
-        PKV.WeightPkv(pkv) as int;
-        0;
-        WeightBucketPkv(pkv);
-      }
-    } else {
-      var pkv' := PKV.subPkv(pkv, 0, PKV.NumKVPairs(pkv) - 1);
-      var key := PKV.GetKey(pkv, PKV.NumKVPairs(pkv) -  1);
-      var msg := PKV.GetMessage(pkv, PKV.NumKVPairs(pkv) - 1);
-      var keys' := PKV.IKeys(pkv'.keys);
-      var msgs' := PKV.IMessages(pkv'.messages);
-      var keys := PKV.IKeys(pkv.keys);
-      var msgs := PKV.IMessages(pkv.messages);
-      calc {
-        PKV.WeightPkv(pkv) as int;
-        {
-          //assert |pkv'.keys.offsets| == |pkv.keys.offsets| - 1;
-          //assert |pkv'.messages.offsets| == |pkv.messages.offsets| - 1;
-          //assert |pkv'.keys.data| == |pkv.keys.data| - |key|;
-          assert |PSA.I(pkv.messages)[PKV.NumKVPairs(pkv) - 1]|
-              <= ValueType.MaxLen() as int;
-          /*assert PKV.Message_to_bytestring(msg)
-              == PKV.Message_to_bytestring(PKV.bytestring_to_Message(
-                    PSA.psaElement(pkv.messages, PKV.NumKVPairs(pkv) - 1)))
-              == PSA.psaElement(pkv.messages, PKV.NumKVPairs(pkv) - 1);
-          assert |pkv'.messages.data|
-              == |pkv.messages.data| - |PSA.psaElement(pkv.messages, PKV.NumKVPairs(pkv) - 1)|
-              == |pkv.messages.data| - |PKV.Message_to_bytestring(msg)|;*/
-        }
-        PKV.WeightPkv(pkv') as int + WeightKey(key) + WeightMessage(msg);
-        { WeightBucketPkv_eq_WeightPkv(pkv'); }
-        WeightBucketPkv(pkv') + WeightKey(key) + WeightMessage(msg);
-        WeightKeyList(keys') + WeightMessageList(msgs') + WeightKey(key) + WeightMessage(msg);
-        {
-          IMessagesSlice(pkv, 0, PKV.NumKVPairs(pkv) -  1);
-          assert keys' + [key] == keys;
-          assert msgs' + [msg] == msgs;
-          WeightKeyListPushBack(keys', key);
-          WeightMessageListPushBack(msgs', msg);
-        }
-        WeightKeyList(keys) + WeightMessageList(msgs);
-        WeightBucketPkv(pkv);
-      }
-    }
-  }
+  // {
+  //   if |pkv.keys.offsets| == 0 {
+  //     calc {
+  //       PKV.WeightPkv(pkv) as int;
+  //       0;
+  //       WeightBucketPkv(pkv);
+  //     }
+  //   } else {
+  //     var pkv' := PKV.subPkv(pkv, 0, PKV.NumKVPairs(pkv) - 1);
+  //     var key := PKV.GetKey(pkv, PKV.NumKVPairs(pkv) -  1);
+  //     var msg := PKV.GetMessage(pkv, PKV.NumKVPairs(pkv) - 1);
+  //     var keys' := PKV.IKeys(pkv'.keys);
+  //     var msgs' := PKV.IMessages(pkv'.messages);
+  //     var keys := PKV.IKeys(pkv.keys);
+  //     var msgs := PKV.IMessages(pkv.messages);
+  //     calc {
+  //       PKV.WeightPkv(pkv) as int;
+  //       {
+  //         //assert |pkv'.keys.offsets| == |pkv.keys.offsets| - 1;
+  //         //assert |pkv'.messages.offsets| == |pkv.messages.offsets| - 1;
+  //         //assert |pkv'.keys.data| == |pkv.keys.data| - |key|;
+  //         assert |PSA.I(pkv.messages)[PKV.NumKVPairs(pkv) - 1]|
+  //             <= ValueType.MaxLen() as int;
+  //         /*assert PKV.Message_to_bytestring(msg)
+  //             == PKV.Message_to_bytestring(PKV.bytestring_to_Message(
+  //                   PSA.psaElement(pkv.messages, PKV.NumKVPairs(pkv) - 1)))
+  //             == PSA.psaElement(pkv.messages, PKV.NumKVPairs(pkv) - 1);
+  //         assert |pkv'.messages.data|
+  //             == |pkv.messages.data| - |PSA.psaElement(pkv.messages, PKV.NumKVPairs(pkv) - 1)|
+  //             == |pkv.messages.data| - |PKV.Message_to_bytestring(msg)|;*/
+  //       }
+  //       PKV.WeightPkv(pkv') as int + WeightKey(key) + WeightMessage(msg);
+  //       { WeightBucketPkv_eq_WeightPkv(pkv'); }
+  //       WeightBucketPkv(pkv') + WeightKey(key) + WeightMessage(msg);
+  //       WeightKeyList(keys') + WeightMessageList(msgs') + WeightKey(key) + WeightMessage(msg);
+  //       {
+  //         IMessagesSlice(pkv, 0, PKV.NumKVPairs(pkv) -  1);
+  //         assert keys' + [key] == keys;
+  //         assert msgs' + [msg] == msgs;
+  //         WeightKeyListPushBack(keys', key);
+  //         WeightMessageListPushBack(msgs', msg);
+  //       }
+  //       WeightKeyList(keys) + WeightMessageList(msgs);
+  //       WeightBucketPkv(pkv);
+  //     }
+  //   }
+  // }
 
   function PkvWeightBound() : int
   {
@@ -595,77 +595,62 @@ module DynamicPkv {
   }
 
   
-  class DynamicPkv {
-    var keys: PKV.PSA.DynamicPsa
-    var messages: PKV.PSA.DynamicPsa
-    ghost var Repr: set<object>
-
+  linear datatype DynamicPkv = DynamicPkv(
+    linear keys: PKV.PSA.DynamicPsa,
+    linear messages: PKV.PSA.DynamicPsa)
+  {
     predicate WF()
-      reads this, this.Repr
     {
-      && this in Repr
-      && keys in Repr
-      && keys.Repr <= Repr
-      && messages in Repr
-      && messages.Repr <= Repr
-      && {this} !! keys.Repr !! messages.Repr 
       && keys.WF()
       && messages.WF()
       && PKV.WF(PKV.Pkv(keys.toPsa(), messages.toPsa()))
     }
 
-    function method toPkv() : PKV.Pkv
+    shared function method toPkv() : PKV.Pkv
       requires WF()
-      reads this, this.Repr
     {
       PKV.Pkv(keys.toPsa(), messages.toPsa())
     }
 
-    function method weight() : uint64
+    shared function method weight() : uint64
       requires WF()
-      reads this, this.Repr
     {
       keys.weight() + messages.weight()
     }
-    
-    method AppendEncodedMessage(key: Key, msg: seq<byte>)
-      requires WF()
-      requires PKV.canAppend(toPkv(), key, msg)
-      ensures WF()
-      ensures toPkv() == PKV.AppendEncodedMessage(old(toPkv()), key, msg)
-      ensures fresh(Repr - old(Repr))
-      modifies this, Repr
+
+    linear inout method AppendEncodedMessage(key: Key, msg: seq<byte>)
+      requires old_self.WF()
+      requires PKV.canAppend(old_self.toPkv(), key, msg)
+      ensures self.WF()
+      ensures self.toPkv() == PKV.AppendEncodedMessage(old_self.toPkv(), key, msg)
     {
-      keys.Append(key);
-      messages.Append(msg);
-      Repr := {this} + keys.Repr + messages.Repr;
-      assert PKV.Pkv(keys.toPsa(), messages.toPsa()) == PKV.AppendEncodedMessage(old(toPkv()), key, msg);
+      inout self.keys.Append(key);
+      inout self.messages.Append(msg);
+      assert PKV.Pkv(self.keys.toPsa(), self.messages.toPsa()) == PKV.AppendEncodedMessage(old_self.toPkv(), key, msg);
     }
     
-    method Append(key: Key, msg: Message)
-      requires WF()
+    linear inout method Append(key: Key, msg: Message)
+      requires old_self.WF()
       requires msg.Define?
-      requires PKV.NumKVPairs(toPkv()) < 0x1_0000_0000 - 1
-      requires WeightKey(key) + WeightMessage(msg) + WeightKeyList(PKV.IKeys(toPkv().keys)) + WeightMessageList(PKV.IMessages(toPkv().messages)) < 0x1_0000_0000
-      ensures WF()
-      //ensures toPkv() == PKV.Append(old(toPkv()), key, msg)
-      ensures PKV.IKeys(toPkv().keys) == PKV.IKeys(old(toPkv()).keys) + [key]
-      ensures PKV.IMessages(toPkv().messages)
-        == PKV.IMessages(old(toPkv()).messages) + [msg]
-      ensures fresh(Repr - old(Repr))
-      modifies this, Repr
+      requires PKV.NumKVPairs(old_self.toPkv()) < 0x1_0000_0000 - 1
+      requires WeightKey(key) + WeightMessage(msg) + WeightKeyList(PKV.IKeys(old_self.toPkv().keys)) + WeightMessageList(PKV.IMessages(old_self.toPkv().messages)) < 0x1_0000_0000
+      ensures self.WF()
+      //ensures toPkv() == PKV.Append(old_self.toPkv(), key, msg)
+      ensures PKV.IKeys(self.toPkv().keys) == PKV.IKeys(old_self.toPkv().keys) + [key]
+      ensures PKV.IMessages(self.toPkv().messages)
+        == PKV.IMessages(old_self.toPkv().messages) + [msg]
     {
-      WeightBucketPkv_eq_WeightPkv(toPkv());
-      PSA.psaAppendIAppend(toPkv().keys, key);
-      PSA.psaAppendIAppend(toPkv().messages, Message_to_bytestring(msg));
+      WeightBucketPkv_eq_WeightPkv(self.toPkv());
+      PSA.psaAppendIAppend(self.toPkv().keys, key);
+      PSA.psaAppendIAppend(self.toPkv().messages, Message_to_bytestring(msg));
 
-      AppendEncodedMessage(key, Message_to_bytestring(msg));
+      inout self.AppendEncodedMessage(key, Message_to_bytestring(msg));
 
       calc {
-        PKV.IMessages(toPkv().messages);
+        PKV.IMessages(self.toPkv().messages);
         {
-          var a := PKV.IMessages(toPkv().messages);
-          var b := PKV.IMessages(old(toPkv()).messages) + [msg];
+          var a := PKV.IMessages(self.toPkv().messages);
+          var b := PKV.IMessages(old_self.toPkv().messages) + [msg];
           assert |a| == |b|;
           forall i | 0 <= i < |a|
           ensures a[i] == b[i]
@@ -677,49 +662,46 @@ module DynamicPkv {
             }
           }
         }
-        PKV.IMessages(old(toPkv()).messages) + [msg];
+        PKV.IMessages(old_self.toPkv().messages) + [msg];
       }
     }
 
-    method AppendPkv(pkv: PKV.Pkv, start: uint64, end: uint64)
-    requires WF()
+    linear inout method AppendPkv(pkv: PKV.Pkv, start: uint64, end: uint64)
+    requires old_self.WF()
     requires PKV.WF(pkv)
     requires 0 <= start <= end <= PKV.NumKVPairs(pkv)
-    requires PKV.NumKVPairs(toPkv()) + end - start <= 0x1_0000_0000 - 1
-    requires WeightKeyList(PKV.IKeys(toPkv().keys)) + WeightKeyList(PSA.I(pkv.keys)[start..end])
-          + WeightMessageList(PKV.IMessages(toPkv().messages)) + WeightMessageList(PKV.IMessages(pkv.messages)[start..end]) < 0x1_0000_0000
-    ensures WF()
-    ensures fresh(Repr - old(Repr))
-    ensures PSA.I(toPkv().keys) == PSA.I(old(toPkv()).keys) + PSA.I(pkv.keys)[start..end]
-    ensures PKV.IMessages(toPkv().messages) == PKV.IMessages(old(toPkv().messages)) + PKV.IMessages(pkv.messages)[start..end]
-    ensures WeightKeyList(PKV.IKeys(toPkv().keys))
-      == WeightKeyList(PKV.IKeys(old(toPkv()).keys)) + WeightKeyList(PSA.I(pkv.keys)[start..end])
-    ensures WeightMessageList(PKV.IMessages(toPkv().messages))
-      == WeightMessageList(PKV.IMessages(old(toPkv()).messages)) + WeightMessageList(PKV.IMessages(pkv.messages)[start..end])
-    modifies this, Repr
+    requires PKV.NumKVPairs(old_self.toPkv()) + end - start <= 0x1_0000_0000 - 1
+    requires WeightKeyList(PKV.IKeys(old_self.toPkv().keys)) + WeightKeyList(PSA.I(pkv.keys)[start..end])
+          + WeightMessageList(PKV.IMessages(old_self.toPkv().messages)) + WeightMessageList(PKV.IMessages(pkv.messages)[start..end]) < 0x1_0000_0000
+    ensures self.WF()
+    ensures PSA.I(self.toPkv().keys) == PSA.I(old_self.toPkv().keys) + PSA.I(pkv.keys)[start..end]
+    ensures PKV.IMessages(self.toPkv().messages) == PKV.IMessages(old_self.toPkv().messages) + PKV.IMessages(pkv.messages)[start..end]
+    ensures WeightKeyList(PKV.IKeys(self.toPkv().keys))
+      == WeightKeyList(PKV.IKeys(old_self.toPkv().keys)) + WeightKeyList(PSA.I(pkv.keys)[start..end])
+    ensures WeightMessageList(PKV.IMessages(self.toPkv().messages))
+      == WeightMessageList(PKV.IMessages(old_self.toPkv().messages)) + WeightMessageList(PKV.IMessages(pkv.messages)[start..end])
     {
       var i := start;
       while i < end
       invariant start <= i <= end
-      invariant WF()
-      invariant PKV.NumKVPairs(old(toPkv())) + end - start <= 0x1_0000_0000 - 1
-      invariant fresh(Repr - old(Repr))
-      invariant PSA.I(toPkv().keys) == PSA.I(old(toPkv()).keys) + PSA.I(pkv.keys)[start..i]
-      invariant PKV.IMessages(toPkv().messages) == PKV.IMessages(old(toPkv().messages)) + PKV.IMessages(pkv.messages)[start..i]
-      invariant WeightKeyList(PKV.IKeys(toPkv().keys)) + WeightKeyList(PKV.IKeys(pkv.keys)[i..end])
-            + WeightMessageList(PKV.IMessages(toPkv().messages)) + WeightMessageList(PKV.IMessages(pkv.messages)[i..end]) < 0x1_0000_0000
-      invariant WeightKeyList(PKV.IKeys(toPkv().keys))
-        == WeightKeyList(PKV.IKeys(old(toPkv()).keys)) + WeightKeyList(PSA.I(pkv.keys)[start..i])
-      invariant WeightMessageList(PKV.IMessages(toPkv().messages))
-        == WeightMessageList(PKV.IMessages(old(toPkv()).messages)) + WeightMessageList(PKV.IMessages(pkv.messages)[start..i])
+      invariant self.WF()
+      invariant PKV.NumKVPairs(old_self.toPkv()) + end - start <= 0x1_0000_0000 - 1
+      invariant PSA.I(self.toPkv().keys) == PSA.I(old_self.toPkv().keys) + PSA.I(pkv.keys)[start..i]
+      invariant PKV.IMessages(self.toPkv().messages) == PKV.IMessages(old_self.toPkv().messages) + PKV.IMessages(pkv.messages)[start..i]
+      invariant WeightKeyList(PKV.IKeys(self.toPkv().keys)) + WeightKeyList(PKV.IKeys(pkv.keys)[i..end])
+            + WeightMessageList(PKV.IMessages(self.toPkv().messages)) + WeightMessageList(PKV.IMessages(pkv.messages)[i..end]) < 0x1_0000_0000
+      invariant WeightKeyList(PKV.IKeys(self.toPkv().keys))
+        == WeightKeyList(PKV.IKeys(old_self.toPkv().keys)) + WeightKeyList(PSA.I(pkv.keys)[start..i])
+      invariant WeightMessageList(PKV.IMessages(self.toPkv().messages))
+        == WeightMessageList(PKV.IMessages(old_self.toPkv().messages)) + WeightMessageList(PKV.IMessages(pkv.messages)[start..i])
       {
         var key := PKV.GetKey(pkv, i);
         var msg := PKV.GetMessage(pkv, i);
 
         PSAPopFrontWeight(pkv, i, end);
-        PSAPushBackWeight(toPkv(), key, msg);
+        PSAPushBackWeight(self.toPkv(), key, msg);
         
-        Append(key, msg);
+        inout self.Append(key, msg);
 
         calc {
           PSA.I(pkv.keys)[start..i+1];
@@ -747,24 +729,28 @@ module DynamicPkv {
 
     predicate hasCapacity(cap: Capacity)
       requires WF()
-      reads Repr
     {
-      && cap.num_kv_pairs as int <= keys.offsets.Length
-      && cap.total_key_len as int <= keys.data.Length
-      && cap.num_kv_pairs as int <= messages.offsets.Length
-      && cap.total_message_len as int <= messages.data.Length
+      && cap.num_kv_pairs as int <= |keys.offsets|
+      && cap.total_key_len as int <= |keys.data|
+      && cap.num_kv_pairs as int <= |messages.offsets|
+      && cap.total_message_len as int <= |messages.data|
     }
 
-    constructor PreSized(capacity: Capacity)
-      ensures WF()
-      ensures hasCapacity(capacity)
-      ensures toPkv() == PKV.EmptyPkv()
-      ensures fresh(Repr)
+    static method PreSizedConstructor(capacity: Capacity) returns (linear p: DynamicPkv)
+      ensures p.WF()
+      ensures p.hasCapacity(capacity)
+      ensures p.toPkv() == PKV.EmptyPkv()
     {
-      keys := new PKV.PSA.DynamicPsa.PreSized(capacity.num_kv_pairs, capacity.total_key_len);
-      messages := new PKV.PSA.DynamicPsa.PreSized(capacity.num_kv_pairs, capacity.total_message_len);
-      new;
-      Repr := {this} + keys.Repr + messages.Repr;
+      linear var keys := PKV.PSA.DynamicPsa.PreSizedConstructor(capacity.num_kv_pairs, capacity.total_key_len);
+      linear var messages := PKV.PSA.DynamicPsa.PreSizedConstructor(capacity.num_kv_pairs, capacity.total_message_len);
+      p := DynamicPkv(keys, messages);
+    }
+
+    linear method Free()
+    {
+      linear var DynamicPkv(keys, messages) := this;
+      keys.Free();
+      messages.Free();
     }
   }
 
@@ -842,7 +828,7 @@ module DynamicPkv {
     var maxkeyspace: uint32 := (PSA.psaTotalLength(bot.keys) + slack) as uint32;
     var maxmsgspace: uint32 := (PSA.psaTotalLength(bot.messages) + slack) as uint32;
     var cap := Capacity(maxkeys, maxkeyspace, maxmsgspace);
-    var dresult := new DynamicPkv.PreSized(cap);
+    linear var dresult := DynamicPkv.PreSizedConstructor(cap);
 
     //assert PKV.subPkv(bot, bot_from, PKV.NumKVPairs(bot))
     //    == bot;
@@ -854,7 +840,6 @@ module DynamicPkv {
     invariant from <= to
     invariant bot_from <= PKV.NumKVPairs(bot)
     invariant dresult.WF()
-    invariant fresh(dresult.Repr)
     invariant BucketModel.mergeToOneChild(
           PSA.I(top.keys), PKV.IMessages(top.messages),
           from0 as nat, to as nat,
@@ -888,9 +873,9 @@ module DynamicPkv {
         assert PKV.IMessages(bot.messages)[bot_from..]
             == PKV.IMessages(bot.messages)[bot_from..PKV.NumKVPairs(bot)];
 
-        dresult.AppendPkv(bot, bot_from, PKV.NumKVPairs(bot));
+        inout dresult.AppendPkv(bot, bot_from, PKV.NumKVPairs(bot));
         result := MergeCompleted(dresult.toPkv(), slack);
-        return;
+        break;
       } else {
         var topkey := PSA.psaElement(top.keys, from);
         var botkey;
@@ -920,15 +905,15 @@ module DynamicPkv {
               assert PKV.IMessages(bot.messages)[bot_from..]
                   == PKV.IMessages(bot.messages)[bot_from..PKV.NumKVPairs(bot)];
 
-              dresult.AppendPkv(bot, bot_from, PKV.NumKVPairs(bot));
+              inout dresult.AppendPkv(bot, bot_from, PKV.NumKVPairs(bot));
               result := SlackExhausted(dresult.toPkv(), from, slack);
-              return;
+              break;
             } else {
               PSAPopFrontWeight(top, from, to);
               PSAPopFrontWeightSuffix(bot, bot_from);
               PSAPushBackWeight(dresult.toPkv(), key, msg);
 
-              dresult.Append(key, msg);
+              inout dresult.Append(key, msg);
               from := from + 1;
               bot_from := bot_from + 1;
               slack := slack + wm2 - wm1;
@@ -944,14 +929,14 @@ module DynamicPkv {
             assert PKV.IMessages(bot.messages)[bot_from..]
                 == PKV.IMessages(bot.messages)[bot_from..PKV.NumKVPairs(bot)];
 
-            dresult.AppendPkv(bot, bot_from, PKV.NumKVPairs(bot));
+            inout dresult.AppendPkv(bot, bot_from, PKV.NumKVPairs(bot));
             result := SlackExhausted(dresult.toPkv(), from, slack);
-            return;
+            break;
           } else {
             PSAPopFrontWeight(top, from, to);
             PSAPushBackWeight(dresult.toPkv(), key, msg);
 
-            dresult.Append(key, msg);
+            inout dresult.Append(key, msg);
             from := from + 1;
             slack := slack - delta;
           }
@@ -962,13 +947,16 @@ module DynamicPkv {
           PSAPushBackWeight(dresult.toPkv(), key, msg);
           PSAPopFrontWeightSuffix(bot, bot_from);
 
-          dresult.Append(key, msg);
+          inout dresult.Append(key, msg);
           bot_from := bot_from + 1;
         }
       }
     }
+
+    dresult.Free();
   }
 
+/*
   function PKVISeq(s: seq<PKV.Pkv>) : (res: seq<Bucket>)
   requires forall i | 0 <= i < |s| :: PKV.WF(s[i])
   ensures |res| == |s|
@@ -1303,4 +1291,5 @@ module DynamicPkv {
     var res := MergeToChildren(top, pivots, bots, slack);
     return PartialFlushResult(res.top, res.bots);
   }
+  */
 }
