@@ -279,6 +279,7 @@ module LinearSequence_i {
       invariant forall j :: 0<=j<|looted|
       ==> lseq_has(looted)[j] == if from as nat <= j < i as nat then false else lseq_has(old(source))[j]
     {
+      assert lseqs(loot)[..i-from] == lseqs(old(source))[from..i]; // seems like the assertion below needs this
       linear var elt:A;
       looted, elt := lseq_take(looted, i);
       loot := lseq_give(loot, i-from, elt);
