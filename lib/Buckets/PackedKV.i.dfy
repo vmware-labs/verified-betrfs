@@ -1019,7 +1019,6 @@ module DynamicPkv {
       }
     }
   }
-/*
 
   lemma WeightPKVListPopFront(pkvs: seq<PKV.Pkv>, i: int)
   requires forall j | 0 <= j < |pkvs| :: PKV.WF(pkvs[j])
@@ -1291,5 +1290,4 @@ module DynamicPkv {
     var res := MergeToChildren(top, pivots, bots, slack);
     return PartialFlushResult(res.top, res.bots);
   }
-  */
 }
