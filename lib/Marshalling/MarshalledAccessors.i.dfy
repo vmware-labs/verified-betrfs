@@ -866,6 +866,73 @@ abstract module ResizableUniformSizedElementSeqMarshalling refines SeqMarshallin
     // }
   }
 
+  predicate resizable(data: mseq<byte>, newlen: nat) {
+    && lengthable(data)
+    && var maxlen := USESM.length(data[LengthInt.Size()..]);
+    && newlen <= maxlen
+    && LengthInt.fitsInInteger(newlen as uint64)
+  }
+
+  method Resizable(data: mseq<byte>, newlen: uint64)
+    returns (r: bool)
+    ensures r == resizable(data, newlen as nat)
+  {
+    var l := Lengthable(data);
+    if l {
+      var maxlen := USESM.Length(data[LengthInt.Size()..]);
+      r := newlen <= maxlen && LengthInt.fitsInInteger(newlen);
+    } else {
+      r := false;
+    }
+  }
+
+  method Resize(linear data: mseq<byte>, start: uint64, end: uint64, newlen: uint64)
+    returns (linear newdata: mseq<byte>)
+    requires start as nat <= end as nat <= |data|
+    requires resizable(data[start..end], newlen as nat)
+    requires newlen as nat <= length(data[start..end]) || forall x | |x| == USESM.UniformSize() as nat :: parsable(x)
+    ensures |newdata| == |data|
+    ensures forall i | 0 <= i < start :: newdata[i] == data[i]
+    ensures forall i | end as nat <= i < |newdata| :: newdata[i] == data[i]
+    ensures lengthable(newdata[start..end])
+    ensures length(newdata[start..end]) == newlen as nat
+    // ensures parsable(data[start..end]) ==> parsable(newdata[start..end])
+    // ensures parsable(data[start..end]) ==> |parse(newdata[start..end])| == newlen as nat
+    // ensures parsable(data[start..end]) ==> Seq.agree(parse(newdata[start..end]), parse(data[start..end]))
+  {
+    var newend;
+    newdata, newend := LengthMarshalling.Marshall(LengthInt.fromUint64(newlen), data, start);
+    assert newdata[start..end][..LengthInt.Size()] == newdata[start..start + LengthInt.Size()];
+    LengthInt.fromtoInverses();
+    //parse_length(newdata[start..end]);
+
+    // This is all ghosty.
+    // This proof is brittle AF (at least, in terms of verification time).
+    if parsable(data[start..end]) {
+    //   var op: seq<Element> := parse(data[start..end]);
+    //   var np: seq<Element> := parse(newdata[start..end]);
+
+    //   MulDivCancel(|op|, USESM.UniformSize() as nat);
+
+    //   forall i | 0 <= i < |op| && i < |np|
+    //     ensures op[i] == np[i]
+    //   {
+    //     assert i + 1 <= |op|;
+    //     assert (i + 1) * USESM.UniformSize() as nat <= |op| * USESM.UniformSize() as nat;
+
+    //     // ElementData(data, start as nat, end as nat, i);
+    //     // ElementData(newdata, start as nat, end as nat, i);
+
+    //     forall j | start as nat + LengthInt.Size() as nat + i * USESM.UniformSize() as nat <= j < start as nat + LengthInt.Size() as nat + (i+1) * USESM.UniformSize() as nat
+    //       ensures newdata[j] == data[j]
+    //     {
+    //       assert j < |newdata|;
+    //     }
+    //     Seq.lemma_seq_extensionality_slice(data, newdata, start as nat + LengthInt.Size() as nat + i * USESM.UniformSize() as nat, start as nat + LengthInt.Size() as nat + (i+1) * USESM.UniformSize() as nat);
+    //   }
+    }
+  }
+
   predicate parsable(data: mseq<byte>) {
     && lengthable'(data)
     && var len := length(data);
