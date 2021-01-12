@@ -91,20 +91,18 @@ module LKMBPKVOps {
     }
   }
 
-  method LeafFillDpkv(shared node: LKMB.Model.Node, dpkv: DPKV.DynamicPkv)
+  method LeafFillDpkv(shared node: LKMB.Model.Node, linear dpkv: DPKV.DynamicPkv) returns (linear dpkv': DPKV.DynamicPkv)
     requires LKMB.WF(node)
     requires node.Leaf?
     requires dpkv.WF()
     requires IsKeyMessageTree(node)
     requires PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, LKMB.Model.ToSeq(node).0)
     requires (LKMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(LKMB.Model.ToSeq(node).1)))
-    ensures dpkv.WF()
-    ensures fresh(dpkv.Repr - old(dpkv.Repr))
-    ensures dpkv.toPkv().keys == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().keys), LKMB.Model.ToSeq(node).0)
+    ensures dpkv'.WF()
+    ensures dpkv'.toPkv().keys == PKV.PSA.psaAppendSeq(dpkv.toPkv().keys, LKMB.Model.ToSeq(node).0)
     //ensures PKV.IKeys(dpkv.toPkv().keys) == old(PKV.IKeys(dpkv.toPkv().keys)) + LKMB.L.Model.ToSeq(node).0
-    ensures dpkv.toPkv().messages == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().messages), ValueMessage.messageSeq_to_bytestringSeq(LKMB.Model.ToSeq(node).1))
+    ensures dpkv'.toPkv().messages == PKV.PSA.psaAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(LKMB.Model.ToSeq(node).1))
     //ensures PKV.IMessages(dpkv.toPkv().messages) == old(PKV.IMessages(dpkv.toPkv().messages)) + LKMB.L.Model.ToSeq(node).1
-    modifies dpkv.Repr
   {
     LKMTreeEncodableToSeq(node); 
     shared var keys := node.keys;
@@ -124,13 +122,14 @@ module LKMBPKVOps {
     {
       LKMB.Model.reveal_Interpretation();
     }
-    
+
     linear var messages := ValueMessage.MessageSeq_to_bytestringSeq(values, nkeys);
     linear var keys_nkeys := AllocAndCopy(keys, 0, nkeys);
-    dpkv.keys.AppendSeq(keys_nkeys);
+    linear var DynamicPkv(dpkv_keys, dpkv_messages) := dpkv;
+    inout dpkv_keys.AppendSeq(keys_nkeys);
+    inout dpkv_messages.AppendSeq(messages);
+    dpkv' := DPKV.DynamicPkv(dpkv_keys, dpkv_messages);
     //dpkv.keys.AppendSeq(keys[..nkeys]);
-    dpkv.messages.AppendSeq(messages);
-    dpkv.Repr := {dpkv} + dpkv.keys.Repr + dpkv.messages.Repr;
     var _ := seq_free(keys_nkeys);
     var _ := seq_free(messages);
   }
@@ -200,18 +199,16 @@ module LKMBPKVOps {
   }
   
   // TODO(robj): Break this monster up.
-  method IndexFillDpkv(shared node: LKMB.Model.Node, dpkv: DPKV.DynamicPkv)
+  method IndexFillDpkv(shared node: LKMB.Model.Node, linear dpkv_in: DPKV.DynamicPkv) returns (linear dpkv: DPKV.DynamicPkv)
     requires LKMB.WF(node)
     requires node.Index?
-    requires dpkv.WF()
+    requires dpkv_in.WF()
     requires IsKeyMessageTree(node)
-    requires PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, LKMB.Model.ToSeq(node).0)
-    requires (LKMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(LKMB.Model.ToSeq(node).1)))
+    requires PKV.PSA.psaCanAppendSeq(dpkv_in.toPkv().keys, LKMB.Model.ToSeq(node).0)
+    requires (LKMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(dpkv_in.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(LKMB.Model.ToSeq(node).1)))
     ensures dpkv.WF()
-    ensures fresh(dpkv.Repr - old(dpkv.Repr))
-    ensures dpkv.toPkv().keys == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().keys), LKMB.Model.ToSeq(node).0)
-    ensures dpkv.toPkv().messages == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().messages), ValueMessage.messageSeq_to_bytestringSeq(LKMB.Model.ToSeq(node).1))
-    modifies dpkv.Repr
+    ensures dpkv.toPkv().keys == PKV.PSA.psaAppendSeq(dpkv_in.toPkv().keys, LKMB.Model.ToSeq(node).0)
+    ensures dpkv.toPkv().messages == PKV.PSA.psaAppendSeq(dpkv_in.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(LKMB.Model.ToSeq(node).1))
     decreases node, 0
   {
     ghost var children := lseqs(node.children);
@@ -242,8 +239,8 @@ module LKMBPKVOps {
       assert forall m | m in Flatten(childSeqs.1) :: ValueMessage.EncodableMessage(m);
     }
 
-    ghost var oldpkvkeys := old(dpkv.toPkv().keys);
-    ghost var oldpkvmsgs := old(dpkv.toPkv().messages);
+    ghost var oldpkvkeys := dpkv_in.toPkv().keys;
+    ghost var oldpkvmsgs := dpkv_in.toPkv().messages;
 
     forall i | 0 <= i <= nchildren
       ensures PKV.PSA.psaCanAppendSeq(oldpkvkeys, Flatten(childSeqs.0[..i]))
@@ -260,12 +257,12 @@ module LKMBPKVOps {
         ValueMessage.messageSeq_to_bytestringSeq(Flatten(childSeqs.1[i..])));
     }
     
+    dpkv := dpkv_in;
     var i: uint64 := 0;
 
     while i < nchildren
       invariant i <= nchildren
       invariant dpkv.WF()
-      invariant fresh(dpkv.Repr - old(dpkv.Repr))
       
       invariant dpkv.toPkv().keys == PKV.PSA.psaAppendSeq(oldpkvkeys, Flatten(childSeqs.0[..i]))
       invariant PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, Flatten(childSeqs.0[i..]))
@@ -288,7 +285,7 @@ module LKMBPKVOps {
 
       assert PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, LKMB.Model.ToSeq(children[i]).0);
       assume false;
-      FillDpkv(lseq_peek(node.children, i), dpkv);
+      dpkv := FillDpkv(lseq_peek(node.children, i), dpkv);
       
       calc {
         dpkv.toPkv().keys;
@@ -333,33 +330,31 @@ module LKMBPKVOps {
       dpkv.toPkv().keys;
       PKV.PSA.psaAppendSeq(oldpkvkeys, Flatten(childSeqs.0[..i]));
       { assert childSeqs.0[..i] == childSeqs.0; }
-      PKV.PSA.psaAppendSeq(old(dpkv.toPkv().keys), LKMB.Model.ToSeq(node).0);
+      PKV.PSA.psaAppendSeq(dpkv_in.toPkv().keys, LKMB.Model.ToSeq(node).0);
     }
     calc {
       dpkv.toPkv().messages;
       PKV.PSA.psaAppendSeq(oldpkvmsgs, ValueMessage.messageSeq_to_bytestringSeq(Flatten(childSeqs.1[..i])));
       { assert childSeqs.1[..i] == childSeqs.1; }
-      PKV.PSA.psaAppendSeq(old(dpkv.toPkv().messages), ValueMessage.messageSeq_to_bytestringSeq(LKMB.Model.ToSeq(node).1));
+      PKV.PSA.psaAppendSeq(dpkv_in.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(LKMB.Model.ToSeq(node).1));
     }
   }
 
-  method FillDpkv(shared node: LKMB.Model.Node, dpkv: DPKV.DynamicPkv)
+  method FillDpkv(shared node: LKMB.Model.Node, linear dpkv: DPKV.DynamicPkv) returns (linear dpkv': DPKV.DynamicPkv)
     requires LKMB.WF(node)
     requires dpkv.WF()
     requires IsKeyMessageTree(node)
     requires PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, LKMB.Model.ToSeq(node).0)
     requires (LKMTreeEncodableToSeq(node); PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(LKMB.Model.ToSeq(node).1)))
-    ensures dpkv.WF()
-    ensures fresh(dpkv.Repr - old(dpkv.Repr))
-    ensures dpkv.toPkv().keys == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().keys), LKMB.Model.ToSeq(node).0)
-    ensures dpkv.toPkv().messages == PKV.PSA.psaAppendSeq(old(dpkv.toPkv().messages), ValueMessage.messageSeq_to_bytestringSeq(LKMB.Model.ToSeq(node).1))
-    modifies dpkv.Repr
+    ensures dpkv'.WF()
+    ensures dpkv'.toPkv().keys == PKV.PSA.psaAppendSeq(dpkv.toPkv().keys, LKMB.Model.ToSeq(node).0)
+    ensures dpkv'.toPkv().messages == PKV.PSA.psaAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(LKMB.Model.ToSeq(node).1))
     decreases node, 1
   {
     if node.Leaf? {
-      LeafFillDpkv(node, dpkv);
+      dpkv' := LeafFillDpkv(node, dpkv);
     } else {
-      IndexFillDpkv(node, dpkv);
+      dpkv' := IndexFillDpkv(node, dpkv);
     }
   }
 
@@ -469,9 +464,10 @@ module LKMBPKVOps {
     var keydatasize := if nelts * KeyType.MaxLen() <= 0xffff_ffff then (nelts * KeyType.MaxLen()) as uint32 else 0xffff_ffff;
     var msgdatasize := if nelts * ValueType.MaxLen() <= 0xffff_ffff then (nelts * ValueType.MaxLen()) as uint32 else 0xffff_ffff;
     var cap := DPKV.Capacity(nelts as uint32, keydatasize, msgdatasize);
-    var dpkv := new DPKV.DynamicPkv.PreSized(cap);
-    FillDpkv(node, dpkv);
+    linear var dpkv := DPKV.DynamicPkv.PreSizedConstructor(cap);
+    dpkv := FillDpkv(node, dpkv);
     pkv := dpkv.toPkv();
+    dpkv.Free();
     ToPkvPreservesInterpretation(node, pkv);
   }
 
