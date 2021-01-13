@@ -154,7 +154,7 @@ abstract module Tuple2Marshalling refines Marshalling {
     assert newdata2[end1..end2] == newdata[end1..end2];
 
     Sequences.lemma_seq_slice_slice(newdata, start as int, end as int, fstSzSz as int, end2 as int- start as int);
-    assert newdata[start..end][fstSzSz..end2 - start] == newdata[end1.. end2];
+    assert newdata[start..end][fstSzSz..end2 - start] == newdata[end1..end2];
 
     ghost var size := SizeMarshalling.Int.toInt(SizeMarshalling.parse(newdata[start..end1]));
     SizeMarshalling.Int.fromtoInverses();
