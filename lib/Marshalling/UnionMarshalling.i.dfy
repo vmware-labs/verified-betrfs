@@ -15,40 +15,40 @@ abstract module Union2Marshalling refines Marshalling {
 
   type TagType = TagMarshalling.UnmarshalledType
 
-  function method tagSize(): uint64
+  function method getTagEnd(): uint64
   {
     TagMarshalling.Int.Size() as uint64
   }
 
   predicate parsable(data: mseq<byte>)
   {
-    var tagSize := tagSize() as int;
-    && |data| >= tagSize
-    && TagMarshalling.parsable(data[..tagSize])
-    && TagMarshalling.Int.fitsInUint64(TagMarshalling.parse(data[..tagSize]))
-    && var tag := TagMarshalling.Int.toInt(TagMarshalling.parse(data[..tagSize]));
-    (if tag == 0 then LeftMarshalling.parsable(data[tagSize..])
-        else RightMarshalling.parsable(data[tagSize..]))
+    var tagEnd := getTagEnd() as int;
+    && |data| >= tagEnd
+    && TagMarshalling.parsable(data[..tagEnd])
+    && TagMarshalling.Int.fitsInUint64(TagMarshalling.parse(data[..tagEnd]))
+    && var tag := TagMarshalling.Int.toInt(TagMarshalling.parse(data[..tagEnd]));
+    (if tag == 0 then LeftMarshalling.parsable(data[tagEnd..])
+        else RightMarshalling.parsable(data[tagEnd..]))
   }
 
   function parse(data: mseq<byte>) : UnmarshalledType
   {
-    var tagSize := tagSize() as int;
-    var tag := TagMarshalling.Int.toInt(TagMarshalling.parse(data[..tagSize]));
+    var tagEnd := getTagEnd() as int;
+    var tag := TagMarshalling.Int.toInt(TagMarshalling.parse(data[..tagEnd]));
 
-    if tag == 0 then Left(LeftMarshalling.parse(data[tagSize..]))
-      else Right(RightMarshalling.parse(data[tagSize..]))
+    if tag == 0 then Left(LeftMarshalling.parse(data[tagEnd..]))
+      else Right(RightMarshalling.parse(data[tagEnd..]))
   }
 
   method TryParse(data: mseq<byte>) returns (ovalue: Option<UnmarshalledType>)
   {
-    var tagSize := tagSize();
+    var tagEnd := getTagEnd();
 
-    if tagSize > |data| as uint64 {
+    if tagEnd > |data| as uint64 {
       return None;
     }
 
-    var tagOvalue := TagMarshalling.TryParse(data[..tagSize]);
+    var tagOvalue := TagMarshalling.TryParse(data[..tagEnd]);
     
     if tagOvalue.None? {
       return None;
@@ -62,12 +62,12 @@ abstract module Union2Marshalling refines Marshalling {
     ovalue := None;
 
     if tag == 0 {
-      var leftOvalue := LeftMarshalling.TryParse(data[tagSize..]);
+      var leftOvalue := LeftMarshalling.TryParse(data[tagEnd..]);
       if leftOvalue.Some? {
         ovalue := Some(Left(leftOvalue.value));
       }
     } else {
-      var rightOvalue := RightMarshalling.TryParse(data[tagSize..]);
+      var rightOvalue := RightMarshalling.TryParse(data[tagEnd..]);
       if rightOvalue.Some? {
         ovalue := Some(Right(rightOvalue.value));
       }
@@ -77,13 +77,13 @@ abstract module Union2Marshalling refines Marshalling {
 
   method Parsable(data: mseq<byte>) returns (p: bool)
   {
-    var tagSize := tagSize();
+    var tagEnd := getTagEnd();
 
-    if tagSize > |data| as uint64 {
+    if tagEnd > |data| as uint64 {
       return false;
     }
 
-    var tagOvalue := TagMarshalling.TryParse(data[..tagSize]);
+    var tagOvalue := TagMarshalling.TryParse(data[..tagEnd]);
     
     if tagOvalue.None? {
       return false;
@@ -96,23 +96,23 @@ abstract module Union2Marshalling refines Marshalling {
     var tag := TagMarshalling.Int.toUint64(tagOvalue.value);
 
     if tag == 0 {
-      p := LeftMarshalling.Parsable(data[tagSize..]);
+      p := LeftMarshalling.Parsable(data[tagEnd..]);
     } else {
-      p := RightMarshalling.Parsable(data[tagSize..]);
+      p := RightMarshalling.Parsable(data[tagEnd..]);
     }
   }
 
   method Parse(data: mseq<byte>) returns (value: UnmarshalledType)
   {
-    var tagSize := tagSize();
-    var tagOvalue := TagMarshalling.TryParse(data[..tagSize]);
+    var tagEnd := getTagEnd();
+    var tagOvalue := TagMarshalling.TryParse(data[..tagEnd]);
     var tag := TagMarshalling.Int.toUint64(tagOvalue.value);
 
     if tag == 0 {
-      var leftValue := LeftMarshalling.Parse(data[tagSize..]);
+      var leftValue := LeftMarshalling.Parse(data[tagEnd..]);
       value := Left(leftValue);
     } else {
-      var rightValue := RightMarshalling.Parse(data[tagSize..]);
+      var rightValue := RightMarshalling.Parse(data[tagEnd..]);
       value := Right(rightValue);
     }
   }
@@ -128,16 +128,16 @@ abstract module Union2Marshalling refines Marshalling {
 
   function size(value: UnmarshalledType) : nat
   {
-    var tagSize := tagSize();
+    var tagEnd := getTagEnd();
     match value {
-      case Left(leftValue) => tagSize as nat + LeftMarshalling.size(leftValue)
-      case Right(rightValue) => tagSize as nat + RightMarshalling.size(rightValue)
+      case Left(leftValue) => tagEnd as nat + LeftMarshalling.size(leftValue)
+      case Right(rightValue) => tagEnd as nat + RightMarshalling.size(rightValue)
     }
   }
 
   method Size(value: UnmarshalledType) returns (sz: uint64)
   {
-    sz := tagSize();
+    sz := getTagEnd();
     match value
     case Left(leftValue) => {
       var leftSize := LeftMarshalling.Size(leftValue);
@@ -152,7 +152,7 @@ abstract module Union2Marshalling refines Marshalling {
   method Marshall(value: UnmarshalledType, linear data: mseq<byte>, start: uint64)
     returns (linear newdata: mseq<byte>, end: uint64)
   {
-    ghost var tagSize : uint64 := tagSize();
+    ghost var tagEnd : uint64 := getTagEnd();
 
     match value
     case Left(leftValue) => {
@@ -165,7 +165,7 @@ abstract module Union2Marshalling refines Marshalling {
       TagMarshalling.Int.fromtoInverses();
       assert tag == 0;
 
-      assert newdata[start..end][..tagSize] == newdata[start..end1];
+      assert newdata[start..end][..tagEnd] == newdata[start..end1];
     }
     case Right(rightValue) => {
       newdata, end := TagMarshalling.Marshall(TagMarshalling.Int.fromUint64(1), data, start);
@@ -177,7 +177,7 @@ abstract module Union2Marshalling refines Marshalling {
       TagMarshalling.Int.fromtoInverses();
       assert tag == 1;
 
-      assert newdata[start..end][..tagSize] == newdata[start..end1];
+      assert newdata[start..end][..tagEnd] == newdata[start..end1];
     }
   }
 }
