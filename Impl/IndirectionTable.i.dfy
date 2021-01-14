@@ -2114,6 +2114,7 @@ module IndirectionTable {
     lemma RevealI()
     requires Inv()
     ensures I() == this.Read().I()
+    ensures this.Read().TrackingGarbage() ==> this.TrackingGarbage()
     {
     }
 
