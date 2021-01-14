@@ -238,11 +238,11 @@ module IndirectionTable {
       }
     }
 
-    function clone() : (cloned : IndirectionTable)
-    requires this.Inv()
-    ensures cloned.Inv()
-    ensures cloned.graph == this.graph
-    ensures cloned.locs == this.locs
+    /* TODO(andrea) ModelImpl */ function clone() : (cloned : IndirectionTable)
+    /* TODO(andrea) ModelImpl */ requires this.Inv()
+    /* TODO(andrea) ModelImpl */ ensures cloned.Inv()
+    /* TODO(andrea) ModelImpl */ ensures cloned.graph == this.graph
+    /* TODO(andrea) ModelImpl */ ensures cloned.locs == this.locs
 
     shared method Clone()
     returns (linear cloned : IndirectionTable)
@@ -251,11 +251,13 @@ module IndirectionTable {
     ensures cloned.graph == this.graph
     ensures cloned.locs == this.locs
     ensures cloned.I() == this.I()
+    /* TODO(andrea) ModelImpl */ ensures cloned == this.clone()
     {
       shared var IndirectionTable(
         t, garbageQueue, refUpperBound, findLoclessIterator, locs, graph, predCounts) := this;
       linear var t' := LinearMutableMap.Clone(t);
       cloned := IndirectionTable(t', lNone, refUpperBound, None, locs, graph, predCounts);
+      /* TODO(andrea) ModelImpl */ assume cloned == this.clone();
     }
 
     /* TODO(andrea) ModelImpl */ function getEntry(ref: BT.G.Reference) : (e : Option<Entry>)
@@ -2181,6 +2183,7 @@ module IndirectionTable {
       ensures table.Inv()
       ensures fresh(table.Repr)
       ensures table.I() == this.I()
+      /* TODO(andrea) ModelImpl */ ensures table.ReadWithInv() == this.ReadWithInv().clone()
     {
       linear var clone := box.Borrow().Clone();
       assert clone.I() == this.I();
