@@ -2340,6 +2340,7 @@ module IndirectionTable {
       ensures ref.Some? ==> ref.value in this.Read().I().graph
       ensures ref.Some? ==> this.Read().deallocable(ref.value)
       ensures ref.None? ==> forall r | r in this.I().graph :: !this.Read().deallocable(r)
+      /* TODO(andrea) ModelImpl */ ensures this.ReadWithInv().findDeallocable() == ref
     {
       ref := box.Borrow().FindDeallocable();
     }

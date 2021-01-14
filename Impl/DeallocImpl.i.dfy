@@ -47,6 +47,7 @@ module DeallocImpl {
 
     BookkeepingModel.lemmaIndirectionTableLocIndexValid(s.I(), ref);
 
+    assert s.ephemeralIndirectionTable.TrackingGarbage() by { s.ephemeralIndirectionTable.RevealI(); }
     var oldLoc := s.ephemeralIndirectionTable.RemoveRef(ref);
 
     s.lru.Remove(ref);
