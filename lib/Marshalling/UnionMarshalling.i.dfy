@@ -180,5 +180,4 @@ abstract module Union2Marshalling refines Marshalling {
       assert newdata[start..end][..tagSize] == newdata[start..end1];
     }
   }
-
 }

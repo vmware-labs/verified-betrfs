@@ -10,41 +10,42 @@ abstract module Tuple2Marshalling refines Marshalling {
   type UnmarshalledType = (FstMarshalling.UnmarshalledType, SndMarshalling.UnmarshalledType)
   type SizeType = SizeMarshalling.UnmarshalledType
 
-  function method fstSizeSize(): uint64
+  // the tag contains the size of the first value of the pair
+  function method getTagSize(): uint64
   {
     SizeMarshalling.Int.Size() as uint64
   }
 
   predicate parsable(data: mseq<byte>)
   {
-    var fstSizeSize := fstSizeSize() as int;
-    && |data| >= fstSizeSize
-    && SizeMarshalling.parsable(data[..fstSizeSize])
-    && var fstSize := SizeMarshalling.Int.toInt(SizeMarshalling.parse(data[..fstSizeSize]));
+    var tagSize := getTagSize() as int;
+    && |data| >= tagSize
+    && SizeMarshalling.parsable(data[..tagSize])
+    && var fstSize := SizeMarshalling.Int.toInt(SizeMarshalling.parse(data[..tagSize]));
     && fstSize >= 0
-    && |data| >= fstSizeSize + fstSize
-    && FstMarshalling.parsable(data[fstSizeSize..fstSizeSize + fstSize])
-    && SndMarshalling.parsable(data[fstSizeSize + fstSize..])
+    && |data| >= tagSize + fstSize
+    && FstMarshalling.parsable(data[tagSize..tagSize + fstSize])
+    && SndMarshalling.parsable(data[tagSize + fstSize..])
   }
 
   function parse(data: mseq<byte>) : UnmarshalledType
   {
-    var fstSizeSize := fstSizeSize() as int;
-    var size := SizeMarshalling.Int.toInt(SizeMarshalling.parse(data[..fstSizeSize]));
-    var fstElm := FstMarshalling.parse(data[fstSizeSize..fstSizeSize + size]);
-    var sndElm := SndMarshalling.parse(data[fstSizeSize + size..]);
-    (fstElm, sndElm)
+    var tagSize := getTagSize() as int;
+    var fstSize := SizeMarshalling.Int.toInt(SizeMarshalling.parse(data[..tagSize]));
+    var fstValue := FstMarshalling.parse(data[tagSize..tagSize + fstSize]);
+    var sndValue := SndMarshalling.parse(data[tagSize + fstSize..]);
+    (fstValue, sndValue)
   }
 
   method TryParse(data: mseq<byte>) returns (ovalue: Option<UnmarshalledType>)
   {
-    var fstSizeSize := fstSizeSize();
+    var tagSize := getTagSize();
 
-    if fstSizeSize > |data| as uint64 {
+    if tagSize > |data| as uint64 {
       return None;
     }
 
-    var sizeOvalue := SizeMarshalling.TryParse(data[..fstSizeSize]);
+    var sizeOvalue := SizeMarshalling.TryParse(data[..tagSize]);
     
     if sizeOvalue.None? {
       return None;
@@ -54,14 +55,14 @@ abstract module Tuple2Marshalling refines Marshalling {
       return None;
     }
 
-    var size := SizeMarshalling.Int.toUint64(sizeOvalue.value);
+    var fstSize := SizeMarshalling.Int.toUint64(sizeOvalue.value);
 
-    if size > |data| as uint64 - fstSizeSize {
+    if fstSize > |data| as uint64 - tagSize {
       return None;
     }
 
-    var fstOvalue := FstMarshalling.TryParse(data[fstSizeSize..fstSizeSize + size]);
-    var sndOvalue := SndMarshalling.TryParse(data[fstSizeSize + size..]);
+    var fstOvalue := FstMarshalling.TryParse(data[tagSize..tagSize + fstSize]);
+    var sndOvalue := SndMarshalling.TryParse(data[tagSize + fstSize..]);
     if fstOvalue.Some? && sndOvalue.Some? {
       ovalue := Some((fstOvalue.value, sndOvalue.value));
     } else {
@@ -71,13 +72,13 @@ abstract module Tuple2Marshalling refines Marshalling {
 
   method Parsable(data: mseq<byte>) returns (p: bool)
   {
-    var fstSizeSize := fstSizeSize();
+    var tagSize := getTagSize();
 
-    if fstSizeSize > |data| as uint64 {
+    if tagSize > |data| as uint64 {
       return false;
     }
 
-    var sizeOvalue := SizeMarshalling.TryParse(data[..fstSizeSize]);
+    var sizeOvalue := SizeMarshalling.TryParse(data[..tagSize]);
     
     if sizeOvalue.None? {
       return false;
@@ -87,27 +88,26 @@ abstract module Tuple2Marshalling refines Marshalling {
       return false;
     }
 
-    var size := SizeMarshalling.Int.toUint64(sizeOvalue.value);
+    var fstSize := SizeMarshalling.Int.toUint64(sizeOvalue.value);
 
-    if size > |data| as uint64 - fstSizeSize {
+    if fstSize > |data| as uint64 - tagSize {
       return false;
     }
 
-    var fstParsable := FstMarshalling.Parsable(data[fstSizeSize..fstSizeSize + size]);
-    var sndParsable := SndMarshalling.Parsable(data[fstSizeSize + size..]);
+    var fstParsable := FstMarshalling.Parsable(data[tagSize..tagSize + fstSize]);
+    var sndParsable := SndMarshalling.Parsable(data[tagSize + fstSize..]);
 
     return fstParsable && sndParsable;
   }
 
   method Parse(data: mseq<byte>) returns (value: UnmarshalledType)
   {
-    var fstSizeSize := fstSizeSize();
+    var tagSize := getTagSize();
+    var isize := SizeMarshalling.Parse(data[..tagSize]);
+    var fstSize := SizeMarshalling.Int.toUint64(isize); 
 
-    var isize := SizeMarshalling.Parse(data[..fstSizeSize]);
-    var size := SizeMarshalling.Int.toUint64(isize);
-
-    var fstValue := FstMarshalling.Parse(data[fstSizeSize..fstSizeSize + size]);
-    var sndValue := SndMarshalling.Parse(data[fstSizeSize + size..]);
+    var fstValue := FstMarshalling.Parse(data[tagSize..tagSize + fstSize]);
+    var sndValue := SndMarshalling.Parse(data[tagSize + fstSize..]);
     value := (fstValue, sndValue);
   }
 
@@ -116,15 +116,15 @@ abstract module Tuple2Marshalling refines Marshalling {
     && var (fstValue, sndValue) := value;
     && FstMarshalling.marshallable(fstValue)
     && SndMarshalling.marshallable(sndValue)
-    && var size := FstMarshalling.size(fstValue);
-    && SizeMarshalling.Int.MinValue() <= size < SizeMarshalling.Int.UpperBound()
-    && SizeMarshalling.marshallable(SizeMarshalling.Int.fromInt(size))
+    && var fstSize := FstMarshalling.size(fstValue);
+    && SizeMarshalling.Int.MinValue() <= fstSize < SizeMarshalling.Int.UpperBound()
+    && SizeMarshalling.marshallable(SizeMarshalling.Int.fromInt(fstSize))
   }
 
   function size(value: UnmarshalledType) : nat
   {
     var (fstValue, sndValue) := value;
-    fstSizeSize() as nat + FstMarshalling.size(fstValue) + SndMarshalling.size(sndValue)
+    getTagSize() as nat + FstMarshalling.size(fstValue) + SndMarshalling.size(sndValue)
   }
 
   method Size(value: UnmarshalledType) returns (sz: uint64)
@@ -132,13 +132,13 @@ abstract module Tuple2Marshalling refines Marshalling {
     var (fstValue, sndValue) := value;
     var fstSz := FstMarshalling.Size(fstValue);
     var sndSz := SndMarshalling.Size(sndValue);
-    sz := fstSizeSize() + fstSz + sndSz;
+    sz := getTagSize() + fstSz + sndSz;
   }
 
   method Marshall(value: UnmarshalledType, linear data: mseq<byte>, start: uint64)
     returns (linear newdata: mseq<byte>, end: uint64)
   {
-    ghost var fstSzSz : uint64 := fstSizeSize();
+    ghost var tagSize : uint64 := getTagSize();
     var (fstValue, sndValue) := value;
     var fstSz := FstMarshalling.Size(fstValue);
 
@@ -153,13 +153,37 @@ abstract module Tuple2Marshalling refines Marshalling {
     assert newdata1[start..end1] == newdata[start..end1];
     assert newdata2[end1..end2] == newdata[end1..end2];
 
-    Sequences.lemma_seq_slice_slice(newdata, start as int, end as int, fstSzSz as int, end2 as int- start as int);
-    assert newdata[start..end][fstSzSz..end2 - start] == newdata[end1..end2];
+    Sequences.lemma_seq_slice_slice(newdata, start as int, end as int, tagSize as int, end2 as int- start as int);
+    assert newdata[start..end][tagSize..end2 - start] == newdata[end1..end2];
 
     ghost var size := SizeMarshalling.Int.toInt(SizeMarshalling.parse(newdata[start..end1]));
     SizeMarshalling.Int.fromtoInverses();
 
-    assert newdata[start..end][..fstSzSz] == newdata[start..end1];
+    assert newdata[start..end][..tagSize] == newdata[start..end1];
     assert size == fstSz as int;
+  }
+
+  method GetFst(data: mseq<byte>) returns (edata: mseq<byte>)
+    requires parsable(data)
+    ensures FstMarshalling.parsable(edata)
+    ensures FstMarshalling.parse(edata) == parse(data).0
+  {
+    var tagSize := getTagSize();
+    var isize := SizeMarshalling.Parse(data[..tagSize]);
+    var fstSize := SizeMarshalling.Int.toUint64(isize); 
+
+    edata := data[tagSize..tagSize + fstSize];
+  }
+
+  method GetSnd(data: mseq<byte>) returns (edata: mseq<byte>)
+    requires parsable(data)
+    ensures SndMarshalling.parsable(edata)
+    ensures SndMarshalling.parse(edata) == parse(data).1
+  {
+    var tagSize := getTagSize();
+    var isize := SizeMarshalling.Parse(data[..tagSize]);
+    var fstSize := SizeMarshalling.Int.toUint64(isize); 
+
+    edata := data[tagSize + fstSize..];
   }
 }
