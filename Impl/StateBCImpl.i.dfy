@@ -179,15 +179,10 @@ module StateBCImpl {
         && SBCM.BCInv(I())
       }
 
-    // twostate predicate WellUpdated(s: Variables)
-    // {
-    //   && s.W()
-    //   && (forall o | o in s.Repr() :: o in old(s.Repr()) || fresh(o))
-    // }
-
     shared function method TotalCacheSize() : (res : uint64)
     requires cache.Inv()
     requires |cache.I()| + |outstandingBlockReads| < 0x1_0000_0000_0000_0000
+    // ensures res == StateBCModel.TotalCacheSize(this)
     {
       // cache.Count() + (|outstandingBlockReads| as uint64)
       CacheImpl.CacheCount(cache) + (|outstandingBlockReads| as uint64)

@@ -613,7 +613,7 @@ module MarshallingImpl {
   requires BC.WFCompleteIndirectionTable(sector.indirectionTable.I())
   // TODO(andreal) I believe this is unnecessary: modifies sector.indirectionTable.Repr
   ensures sector.indirectionTable.Inv() 
-  // && sector.indirectionTable.I() == old(sector.indirectionTable.I())
+  && sector.indirectionTable.I() == old(sector.indirectionTable.I())
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.SectorGrammar());
   ensures Marshalling.valToSector(v) == Some(SSM.ISector(SSI.ISector(sector)))
@@ -697,7 +697,7 @@ module MarshallingImpl {
   requires sector.SectorSuperblock? ==> JC.WFSuperblock(sector.superblock)
   ensures sector.SectorIndirectionTable? ==> 
     sector.indirectionTable.Inv()
-    // && sector.indirectionTable.I() == old(sector.indirectionTable.I())
+    && sector.indirectionTable.I() == old(sector.indirectionTable.I())
   ensures data != null ==> IMM.parseCheckedSector(data[..]).Some?
   ensures data != null ==>
       && SSM.ISector(IMM.parseCheckedSector(data[..]).value)

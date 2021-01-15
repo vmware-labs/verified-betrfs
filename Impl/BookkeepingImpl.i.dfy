@@ -55,6 +55,8 @@ module BookkeepingImpl {
     }
   }
 
+  /*
+
   method getFreeRef2(s: ImplVariables, avoid: BT.G.Reference)
   returns (ref : Option<BT.G.Reference>)
   requires s.ready
@@ -192,4 +194,5 @@ module BookkeepingImpl {
       writeBookkeeping(s, ref.value, children);
     }
   }
+  */
 }

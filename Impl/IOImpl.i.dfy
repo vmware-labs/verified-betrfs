@@ -34,7 +34,7 @@ module IOImpl {
   import SSM = StateSectorModel
 
   // TODO does ImplVariables make sense? Should it be a Variables? Or just the fields of a class we live in?
-  method getFreeLoc(s: ImplVariables, len: uint64)
+  method getFreeLoc(shared s: ImplVariables, len: uint64)
   returns (loc : Option<Location>)
   requires s.ready
   requires s.WF()
@@ -80,14 +80,13 @@ module IOImpl {
     sector.Free();
   }
 
-  method FindLocationAndRequestWrite(io: DiskIOHandler, s: ImplVariables, shared sector: SSI.Sector)
+  method FindLocationAndRequestWrite(io: DiskIOHandler, shared s: ImplVariables, shared sector: SSI.Sector)
   returns (id: Option<D.ReqId>, loc: Option<Location>)
   requires s.WF()
   requires s.ready
   requires SSI.WFSector(sector)
   requires SSM.WFSector(SSI.ISector(sector))
   requires io.initialized()
-  requires io !in s.Repr()
   requires sector.SectorNode?
   modifies io
   ensures s.W()
@@ -115,20 +114,19 @@ module IOImpl {
   }
 
   method FindIndirectionTableLocationAndRequestWrite(
-      io: DiskIOHandler, s: ImplVariables, linear sector: SSI.Sector)
+      io: DiskIOHandler, shared s: ImplVariables, linear sector: SSI.Sector)
   returns (id: Option<D.ReqId>, loc: Option<Location>)
   requires s.WF()
   requires s.ready
   requires SSI.WFSector(sector)
   requires SSM.WFSector(SSI.ISector(sector))
   requires io.initialized()
-  requires io !in s.Repr()
   requires sector.SectorIndirectionTable?
+  requires sector.SectorIndirectionTable? ==> (s.frozenIndirectionTable.lSome? && sector.indirectionTable == s.frozenIndirectionTable.value)
+
   modifies io
-  requires sector.SectorIndirectionTable? ==> sector.indirectionTable == s.frozenIndirectionTable
-  requires sector.SectorIndirectionTable? ==> io !in sector.indirectionTable.Repr
-  modifies if sector.SectorIndirectionTable? then sector.indirectionTable.Repr else {}
-  ensures sector.SectorIndirectionTable? ==> (sector.indirectionTable.Inv() && sector.indirectionTable.I() == old(sector.indirectionTable.I()) && sector.indirectionTable.Repr == old(sector.indirectionTable.Repr))
+
+  // ensures sector.SectorIndirectionTable? ==> (sector.indirectionTable.Inv() && sector.indirectionTable.I() == old(sector.indirectionTable.I()))
   ensures id.Some? ==> id.value == old(io.reservedId())
   ensures s.W()
   ensures IOModel.FindIndirectionTableLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(SSI.ISector(sector)), id, loc, IIO(io))
@@ -162,57 +160,55 @@ module IOImpl {
     id := io.read(loc.addr, loc.len);
   }
 
-  method PageInIndirectionTableReq(s: ImplVariables, io: DiskIOHandler)
-  requires s.WF()
-  requires io.initialized();
-  requires !s.ready
-  requires s.loading
-  requires io !in s.Repr()
-  requires ValidIndirectionTableLocation(s.indirectionTableLoc)
+  method PageInIndirectionTableReq(linear inout s: ImplVariables, io: DiskIOHandler)
+  requires old_s.WF()
+  requires io.initialized()
+  requires !old_s.ready
+  requires old_s.loading
+  requires ValidIndirectionTableLocation(old_s.indirectionTableLoc)
   modifies io
-  modifies s.Repr()
-  ensures WellUpdated(s)
+  ensures s.WF()
   ensures (s.I(), IIO(io)) == IOModel.PageInIndirectionTableReq(
-      old(s.I()), old(IIO(io)))
+      old_s.I(), old(IIO(io)))
   {
     IOModel.reveal_PageInIndirectionTableReq();
 
     if (s.indirectionTableRead.None?) {
       var id := RequestRead(io, s.indirectionTableLoc);
-      s.indirectionTableRead := Some(id);
+      inout s.indirectionTableRead := Some(id);
     } else {
       print "PageInIndirectionTableReq: request already out\n";
     }
   }
 
-  method PageInNodeReq(s: ImplVariables, io: DiskIOHandler, ref: BC.Reference)
+  method PageInNodeReq(linear inout s: ImplVariables, io: DiskIOHandler, ref: BC.Reference)
   requires io.initialized();
-  requires s.ready
-  requires s.WF()
-  requires ref in s.ephemeralIndirectionTable.I().locs
-  requires io !in s.Repr()
+  requires old_s.ready
+  requires old_s.WF()
+  requires ref in old_s.ephemeralIndirectionTable.I().locs
+
+  // [yizhou7]: this addtional precondition is needed
+  requires old_s.TotalCacheSize() as int <= MaxCacheSize() - 1
+
   modifies io
-  modifies s.Repr()
-  ensures WellUpdated(s)
+  ensures s.WF()
   ensures s.ready
-  ensures (s.I(), IIO(io)) == IOModel.PageInNodeReq(old(s.I()), old(IIO(io)), ref)
+  ensures (s.I(), IIO(io)) == IOModel.PageInNodeReq(old_s.I(), old(IIO(io)), ref)
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       print "giving up; already an outstanding read for this ref\n";
     } else {
       var locGraph := s.ephemeralIndirectionTable.GetEntry(ref);
-      assert locGraph.Some?;
       var loc := locGraph.value.loc;
       var id := RequestRead(io, loc.value);
-      s.outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)];
+      inout s.outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)];
     }
   }
+/*
 
   // == readResponse ==
 
   function ISectorOpt(sector: Option<SSI.Sector>) : Option<SSM.Sector>
-  reads if sector.Some? then SSI.SectorObjectSet(sector.value) else {}
-  reads if sector.Some? then SSI.SectorRepr(sector.value) else {}
   requires sector.Some? ==> SSI.WFSector(sector.value)
   {
     match sector {
@@ -225,7 +221,6 @@ module IOImpl {
   returns (id: D.ReqId, linear sector: lOption<SSI.Sector>)
   requires io.diskOp().RespReadOp?
   ensures sector.lSome? ==> SSI.WFSector(sector.value)
-  ensures sector.lSome? ==> fresh(SSI.SectorRepr(sector.value))
   ensures (id, ISectorOpt(sector.Option())) == IOModel.ReadSector(old(IIO(io)))
   {
     var id1, addr, bytes := io.getReadResult();
@@ -419,4 +414,5 @@ module IOImpl {
     s.frozenIndirectionTableLoc := None;
     s.blockAllocator.MoveFrozenToPersistent();
   }
+  */
 }
