@@ -115,6 +115,7 @@ module BookkeepingImpl {
 
     BookkeepingModel.lemmaIndirectionTableLocIndexValid(s.I(), ref);
 
+    assert s.ephemeralIndirectionTable.TrackingGarbage() by { s.ephemeralIndirectionTable.RevealI(); } 
     var oldLoc := s.ephemeralIndirectionTable.UpdateAndRemoveLoc(ref, (if children.Some? then children.value else []));
 
     s.lru.Use(ref);
@@ -149,6 +150,7 @@ module BookkeepingImpl {
 
     BookkeepingModel.lemmaIndirectionTableLocIndexValid(s.I(), ref);
 
+    assert s.ephemeralIndirectionTable.TrackingGarbage() by { s.ephemeralIndirectionTable.RevealI(); }
     var oldLoc := s.ephemeralIndirectionTable.RemoveLoc(ref);
 
     s.lru.Use(ref);
