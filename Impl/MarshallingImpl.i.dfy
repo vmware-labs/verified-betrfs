@@ -303,8 +303,6 @@ module MarshallingImpl {
   function ISectorOpt(s : Option<Sector>): Option<IMM.Sector>
   requires s.Some? ==> SSI.WFSector(s.value)
   requires s.Some? ==> SSM.WFSector(SSI.ISector(s.value))
-  reads if s.Some? then SSI.SectorObjectSet(s.value) else {}
-  reads if s.Some? then SSI.SectorRepr(s.value) else {}
   {
     if s.Some? then
       Some(SSI.ISector(s.value))
@@ -318,7 +316,6 @@ module MarshallingImpl {
   ensures s.lSome? ==> SSI.WFSector(s.value)
   ensures s.lSome? ==> SSM.WFSector(SSI.ISector(s.value))
   ensures MapOption(s.Option(), SSI.ISector) == IMM.valToSector(v)
-  ensures s.lSome? ==> fresh(SSI.SectorRepr(s.value));
   {
     if v.c == 0 {
       var sb := Marshalling.valToSuperblock(v.val);
@@ -328,10 +325,11 @@ module MarshallingImpl {
         s := lNone;
       }
     } else if v.c == 1 {
-      var mutMap := IndirectionTable.BoxedIndirectionTable.ValToIndirectionTable(v.val);
-      if mutMap != null {
-        s := lSome(SSI.SectorIndirectionTable(mutMap));
+      linear var tableOpt := IndirectionTable.IndirectionTable.ValToIndirectionTable(v.val);
+      if tableOpt.lSome? {
+        s := lSome(SSI.SectorIndirectionTable(unwrap_value(tableOpt)));
       } else {
+        dispose_lnone(tableOpt);
         s := lNone;
       }
     } else {
@@ -614,8 +612,8 @@ module MarshallingImpl {
   requires sector.indirectionTable.Inv()
   requires BC.WFCompleteIndirectionTable(sector.indirectionTable.I())
   // TODO(andreal) I believe this is unnecessary: modifies sector.indirectionTable.Repr
-  ensures sector.indirectionTable.Inv() && sector.indirectionTable.I() == 
-    old(sector.indirectionTable.I()) && sector.indirectionTable.Repr == old(sector.indirectionTable.Repr)
+  ensures sector.indirectionTable.Inv() 
+  // && sector.indirectionTable.I() == old(sector.indirectionTable.I())
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.SectorGrammar());
   ensures Marshalling.valToSector(v) == Some(SSM.ISector(SSI.ISector(sector)))
@@ -636,7 +634,6 @@ module MarshallingImpl {
   ensures ISectorOpt(s.Option()) == IMM.parseSector(data[start..])
   ensures s.lSome? && s.value.SectorNode? ==> SSM.WFNode(s.value.node.I())
   ensures s.lSome? && s.value.SectorNode? ==> BT.WFNode(SSM.INode(s.value.node.I()))
-  ensures s.lSome? ==> fresh(SSI.SectorRepr(s.value));
   {
     IMM.reveal_parseSector();
     var success, v, rest_index := ParseVal(data, start, Marshalling.SectorGrammar());
@@ -676,7 +673,6 @@ module MarshallingImpl {
   ensures ISectorOpt(s.Option()) == IMM.parseCheckedSector(data)
   ensures s.lSome? && s.value.SectorNode? ==> SSM.WFNode(s.value.node.I())
   ensures s.lSome? && s.value.SectorNode? ==> BT.WFNode(SSM.INode(s.value.node.I()))
-  ensures s.lSome? ==> fresh(SSI.SectorRepr(s.value))
   {
     if |data| as uint64 >= 32 {
       // TODO unnecessary copy here
@@ -700,9 +696,8 @@ module MarshallingImpl {
   requires sector.SectorNode? ==> BT.WFNode(SSM.INode(sector.node.I()))
   requires sector.SectorSuperblock? ==> JC.WFSuperblock(sector.superblock)
   ensures sector.SectorIndirectionTable? ==> 
-    (sector.indirectionTable.Inv() && sector.indirectionTable.I() 
-    == old(sector.indirectionTable.I()) && sector.indirectionTable.Repr
-    == old(sector.indirectionTable.Repr))
+    sector.indirectionTable.Inv()
+    // && sector.indirectionTable.I() == old(sector.indirectionTable.I())
   ensures data != null ==> IMM.parseCheckedSector(data[..]).Some?
   ensures data != null ==>
       && SSM.ISector(IMM.parseCheckedSector(data[..]).value)
