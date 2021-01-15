@@ -175,7 +175,10 @@ module CoordinationImpl {
   }
 
   method getCommitterSyncState(s: Full, id: uint64) returns (res: Option<JC.SyncReqStatus>)
-  requires s.WF()
+  requires s.Inv()
+  ensures var contents := s.jc.Read().syncReqs.contents;
+    && (if id in contents then res == Some(contents[id]) else res.None?)
+    && res.Some? <==> id in contents
   {
     s.reveal_ReprInv();
     res := LinearMutableMap.Get(s.jc.Borrow().syncReqs, id);
