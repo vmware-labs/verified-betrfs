@@ -5,19 +5,18 @@ include "StateSectorModel.i.dfy"
 module StateSectorImpl {
   import opened Options
   import opened NodeImpl
-  import IndirectionTable
+  import IT = IndirectionTable
   import JC = JournalCache
 
   import SectorType
   import SSM = StateSectorModel
 
-  type MutIndirectionTable = IndirectionTable.BoxedIndirectionTable
-  type MutIndirectionTableNullable = IndirectionTable.BoxedIndirectionTable?
+  // type MutIndirectionTableNullable = IndirectionTable.BoxedIndirectionTable?
 
   linear datatype Sector =
     | SectorNode(linear node: Node)
     | SectorSuperblock(superblock: SectorType.Superblock)
-    | SectorIndirectionTable(indirectionTable: MutIndirectionTable)
+    | SectorIndirectionTable(linear indirectionTable: IT.IndirectionTable)
   {
     linear method Free()
     requires this.SectorNode? ==> node.Inv()
@@ -27,33 +26,14 @@ module StateSectorImpl {
           var _ := FreeNode(node);
         }
         case SectorSuperblock(_) => {}
-        case SectorIndirectionTable(_) => {}
+        case SectorIndirectionTable(indirectionTable) => {
+          indirectionTable.Free();
+        }
       }
     }
   }
 
-  function SectorObjectSet(sector: Sector) : set<object>
-  {
-    match sector {
-      case SectorIndirectionTable(indirectionTable) => {indirectionTable}
-      case SectorNode(block) => {}
-      case SectorSuperblock(superblock) => {}
-    }
-  }
-
-  function SectorRepr(sector: Sector) : set<object>
-  reads SectorObjectSet(sector)
-  {
-    match sector {
-      case SectorIndirectionTable(indirectionTable) => {indirectionTable} + indirectionTable.Repr
-      case SectorNode(block) => {}
-      case SectorSuperblock(superblock) => {}
-    }
-  }
- 
   predicate WFSector(sector: Sector)
-  reads SectorObjectSet(sector)
-  reads SectorRepr(sector)
   {
     && (sector.SectorIndirectionTable? ==> sector.indirectionTable.Inv())
     && (sector.SectorNode? ==> sector.node.Inv())
@@ -62,13 +42,11 @@ module StateSectorImpl {
 
   function ISector(sector: Sector) : SSM.Sector
   requires WFSector(sector)
-  reads SectorObjectSet(sector)
-  reads SectorRepr(sector)
   {
     match sector {
       case SectorSuperblock(superblock) => SSM.SectorSuperblock(superblock)
       case SectorNode(node) => SSM.SectorNode(node.I())
-      case SectorIndirectionTable(indirectionTable) => SSM.SectorIndirectionTable(indirectionTable.ReadWithInv())
+      case SectorIndirectionTable(indirectionTable) => SSM.SectorIndirectionTable(indirectionTable)
     }
   }
 }
