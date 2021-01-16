@@ -24,7 +24,6 @@ module BlockAllocatorImpl {
     linear outstanding: BitmapImpl.Bitmap,
     linear full: BitmapImpl.Bitmap
   )
-
   { 
     shared method DebugAccumulate()
     returns (acc:DebugAccumulator.DebugAccumulator)
@@ -202,21 +201,21 @@ module BlockAllocatorImpl {
       assert self.Inv();
     }
 
-    linear method MoveFrozenToPersistent() returns (linear ba : BlockAllocator)
-    requires this.Inv()
-    requires BlockAllocatorModel.Inv(this.I())
-    requires this.I().frozen.Some?
-    ensures ba.Inv()
-    ensures ba.I() == BlockAllocatorModel.MoveFrozenToPersistent(old(I()))
+    linear inout method MoveFrozenToPersistent()
+    requires old_self.Inv()
+    requires BlockAllocatorModel.Inv(old_self.I())
+    requires old_self.I().frozen.Some?
+    ensures self.Inv()
+    ensures self.I() == BlockAllocatorModel.MoveFrozenToPersistent(old_self.I())
     {
-      linear var BlockAllocator(eph, fro, pre, out, full) := this;
+      linear var BlockAllocator(eph, fro, pre, out, full) := self;
 
       linear var frozen_val := unwrap_value(fro);
 
       linear var fo := BitmapImpl.Bitmap.UnionConstructor(frozen_val, out);
       linear var fu := BitmapImpl.Bitmap.UnionConstructor(eph, fo);
 
-      ba := BlockAllocator(
+      self := BlockAllocator(
         eph, lNone, frozen_val, out, fu
       );
 
@@ -225,13 +224,13 @@ module BlockAllocatorImpl {
       fo.Free();
     }
 
-    linear method CopyEphemeralToFrozen() returns (linear ba : BlockAllocator)
-    requires this.Inv()
-    requires BlockAllocatorModel.Inv(this.I())
-    ensures ba.Inv()
-    ensures ba.I() == BlockAllocatorModel.CopyEphemeralToFrozen(old(I()))
+    linear inout method CopyEphemeralToFrozen()
+    requires old_self.Inv()
+    requires BlockAllocatorModel.Inv(old_self.I())
+    ensures self.Inv()
+    ensures self.I() == BlockAllocatorModel.CopyEphemeralToFrozen(old_self.I())
     {
-      linear var BlockAllocator(eph, fro, pre, out, full) := this;
+      linear var BlockAllocator(eph, fro, pre, out, full) := self;
 
       if fro.lSome?{
         linear var frozen_val := unwrap_value(fro);
@@ -242,9 +241,26 @@ module BlockAllocatorImpl {
 
       linear var fo := BitmapImpl.Bitmap.CloneConstructor(eph);
 
-      ba := BlockAllocator(
+      self := BlockAllocator(
         eph, lSome(fo), pre, out, full
       );
+    }
+
+    linear method Free()
+    {
+      linear var BlockAllocator(
+        ephemeral, frozen, persistent, outstanding, full) := this;
+
+      ephemeral.Free();
+      if frozen.lSome? {
+        linear var value := unwrap_value(frozen);
+        value.Free();
+      } else {
+        dispose_lnone(frozen);
+      }
+      persistent.Free();
+      outstanding.Free();
+      full.Free();
     }
   }
 }
