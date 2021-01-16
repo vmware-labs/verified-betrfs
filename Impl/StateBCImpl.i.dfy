@@ -57,127 +57,127 @@ module StateBCImpl {
     // no fields
   )
   {
-      // method DebugAccumulate()
-      // returns (acc:DebugAccumulator.DebugAccumulator)
-      // requires false
-      // {
-      //   acc := DebugAccumulator.EmptyAccumulator();
-      //   //var r := new DebugAccumulator.AccRec(syncReqs.Count, "SyncReqStatus");
-      //   //acc := DebugAccumulator.AccPut(acc, "syncReqs", r);
-      //   var i := DebugAccumulator.EmptyAccumulator();
-      //   if persistentIndirectionTable != null {
-      //     i := persistentIndirectionTable.DebugAccumulate();
-      //   }
-      //   var a := new DebugAccumulator.AccRec.Index(i);
-      //   acc := DebugAccumulator.AccPut(acc, "persistentIndirectionTable", a);
-      //   i := DebugAccumulator.EmptyAccumulator();
-      //   if frozenIndirectionTable != null {
-      //     i := frozenIndirectionTable.DebugAccumulate();
-      //   }
-      //   a := new DebugAccumulator.AccRec.Index(i);
-      //   acc := DebugAccumulator.AccPut(acc, "frozenIndirectionTable", a);
-      //   i := DebugAccumulator.EmptyAccumulator();
-      //   if ephemeralIndirectionTable != null {
-      //     i := ephemeralIndirectionTable.DebugAccumulate();
-      //   }
-      //   a := new DebugAccumulator.AccRec.Index(i);
-      //   acc := DebugAccumulator.AccPut(acc, "ephemeralIndirectionTable", a);
-      //   //r := new DebugAccumulator.AccRec(if outstandingIndirectionTableWrite.Some? then 1 else 0, "ReqId");
-      //   //acc := DebugAccumulator.AccPut(acc, "outstandingIndirectionTableWrite", r);
-      //   //r := new DebugAccumulator.AccRec(|outstandingBlockWrites| as uint64, "OutstandingWrites");
-      //   //acc := DebugAccumulator.AccPut(acc, "outstandingBlockWrites", r);
-      //   //r := new DebugAccumulator.AccRec(|outstandingBlockReads| as uint64, "OutstandingReads");
-      //   //acc := DebugAccumulator.AccPut(acc, "outstandingBlockReads", r);
-      //   i := cache.DebugAccumulate();
-      //   a := new DebugAccumulator.AccRec.Index(i);
-      //   acc := DebugAccumulator.AccPut(acc, "cache", a);
-      //   i := lru.DebugAccumulate();
-      //   a := new DebugAccumulator.AccRec.Index(i);
-      //   acc := DebugAccumulator.AccPut(acc, "lru", a);
-      //   i := blockAllocator.DebugAccumulate();
-      //   a := new DebugAccumulator.AccRec.Index(i);
-      //   acc := DebugAccumulator.AccPut(acc, "blockAllocator", a);
-      // }
+    // method DebugAccumulate()
+    // returns (acc:DebugAccumulator.DebugAccumulator)
+    // requires false
+    // {
+    //   acc := DebugAccumulator.EmptyAccumulator();
+    //   //var r := new DebugAccumulator.AccRec(syncReqs.Count, "SyncReqStatus");
+    //   //acc := DebugAccumulator.AccPut(acc, "syncReqs", r);
+    //   var i := DebugAccumulator.EmptyAccumulator();
+    //   if persistentIndirectionTable != null {
+    //     i := persistentIndirectionTable.DebugAccumulate();
+    //   }
+    //   var a := new DebugAccumulator.AccRec.Index(i);
+    //   acc := DebugAccumulator.AccPut(acc, "persistentIndirectionTable", a);
+    //   i := DebugAccumulator.EmptyAccumulator();
+    //   if frozenIndirectionTable != null {
+    //     i := frozenIndirectionTable.DebugAccumulate();
+    //   }
+    //   a := new DebugAccumulator.AccRec.Index(i);
+    //   acc := DebugAccumulator.AccPut(acc, "frozenIndirectionTable", a);
+    //   i := DebugAccumulator.EmptyAccumulator();
+    //   if ephemeralIndirectionTable != null {
+    //     i := ephemeralIndirectionTable.DebugAccumulate();
+    //   }
+    //   a := new DebugAccumulator.AccRec.Index(i);
+    //   acc := DebugAccumulator.AccPut(acc, "ephemeralIndirectionTable", a);
+    //   //r := new DebugAccumulator.AccRec(if outstandingIndirectionTableWrite.Some? then 1 else 0, "ReqId");
+    //   //acc := DebugAccumulator.AccPut(acc, "outstandingIndirectionTableWrite", r);
+    //   //r := new DebugAccumulator.AccRec(|outstandingBlockWrites| as uint64, "OutstandingWrites");
+    //   //acc := DebugAccumulator.AccPut(acc, "outstandingBlockWrites", r);
+    //   //r := new DebugAccumulator.AccRec(|outstandingBlockReads| as uint64, "OutstandingReads");
+    //   //acc := DebugAccumulator.AccPut(acc, "outstandingBlockReads", r);
+    //   i := cache.DebugAccumulate();
+    //   a := new DebugAccumulator.AccRec.Index(i);
+    //   acc := DebugAccumulator.AccPut(acc, "cache", a);
+    //   i := lru.DebugAccumulate();
+    //   a := new DebugAccumulator.AccRec.Index(i);
+    //   acc := DebugAccumulator.AccPut(acc, "lru", a);
+    //   i := blockAllocator.DebugAccumulate();
+    //   a := new DebugAccumulator.AccRec.Index(i);
+    //   acc := DebugAccumulator.AccPut(acc, "blockAllocator", a);
+    // }
 
-      predicate W()
-      {
-        && persistentIndirectionTable.Inv()
-        && (frozenIndirectionTable.lSome? ==> frozenIndirectionTable.value.Inv())
-        && ephemeralIndirectionTable.Inv()
-        && lru.Inv()
-        && cache.Inv()
-        && blockAllocator.Inv()
-      }
+    predicate W()
+    {
+      && persistentIndirectionTable.Inv()
+      && (frozenIndirectionTable.lSome? ==> frozenIndirectionTable.value.Inv())
+      && ephemeralIndirectionTable.Inv()
+      && lru.Inv()
+      && cache.Inv()
+      && blockAllocator.Inv()
+    }
 
-      function I() : SBCM.BCVariables
-      requires W()
-      {
-        if ready then (
-          SBCM.Ready(
-            persistentIndirectionTable,
-            if frozenIndirectionTable.lSome? then Some(frozenIndirectionTable.value) else None,
-            ephemeralIndirectionTable,
-            persistentIndirectionTableLoc,
-            frozenIndirectionTableLoc,
-            outstandingIndirectionTableWrite,
-            outstandingBlockWrites,
-            outstandingBlockReads,
-            cache.I(),
-            lru.Queue(),
-            blockAllocator.I())
-        ) else if loading then (
-          SBCM.LoadingIndirectionTable(
-            indirectionTableLoc,
-            indirectionTableRead)
-        ) else (
-          SBCM.Unready
-        )
-      }
-
-      predicate WF()
-      {
-        && W()
-        && SBCM.WFBCVars(I())
-      }
-
-      static method Constructor() returns (linear v: Variables)
-      ensures !v.ready
-      ensures !v.loading
-      ensures v.WF()
-      {
-        linear var lru := LinearLru.LinearLru.Alloc();
-        // Unused for the `ready = false` state but we need to initialize them.
-        // (could make them nullable instead).
-        linear var ephemeralIndirectionTable := IT.IndirectionTable.AllocEmpty();
-        linear var persistentIndirectionTable := IT.IndirectionTable.AllocEmpty();
-        linear var cache := LMutCache.NewCache();
-
-        linear var bm := BitmapImpl.Bitmap.Constructor(NumBlocksUint64());
-        linear var blockAllocator := BlockAllocatorImpl.BlockAllocator.Constructor(bm);
-
-        v := Variables(
-          false,
-          false,
+    function I() : SBCM.BCVariables
+    requires W()
+    {
+      if ready then (
+        SBCM.Ready(
           persistentIndirectionTable,
-          lNone,
+          if frozenIndirectionTable.lSome? then Some(frozenIndirectionTable.value) else None,
           ephemeralIndirectionTable,
-          DiskLayout.Location(0, 0),
-          None,
-          None,
-          map[],
-          map[],
-          cache,
-          lru,
-          blockAllocator,
-          DiskLayout.Location(0, 0),
-          None);
-      }
+          persistentIndirectionTableLoc,
+          frozenIndirectionTableLoc,
+          outstandingIndirectionTableWrite,
+          outstandingBlockWrites,
+          outstandingBlockReads,
+          cache.I(),
+          lru.Queue(),
+          blockAllocator.I())
+      ) else if loading then (
+        SBCM.LoadingIndirectionTable(
+          indirectionTableLoc,
+          indirectionTableRead)
+      ) else (
+        SBCM.Unready
+      )
+    }
 
-      predicate Inv()
-      {
-        && W()
-        && SBCM.BCInv(I())
-      }
+    predicate WF()
+    {
+      && W()
+      && SBCM.WFBCVars(I())
+    }
+
+    static method Constructor() returns (linear v: Variables)
+    ensures !v.ready
+    ensures !v.loading
+    ensures v.WF()
+    {
+      linear var lru := LinearLru.LinearLru.Alloc();
+      // Unused for the `ready = false` state but we need to initialize them.
+      // (could make them nullable instead).
+      linear var ephemeralIndirectionTable := IT.IndirectionTable.AllocEmpty();
+      linear var persistentIndirectionTable := IT.IndirectionTable.AllocEmpty();
+      linear var cache := LMutCache.NewCache();
+
+      linear var bm := BitmapImpl.Bitmap.Constructor(NumBlocksUint64());
+      linear var blockAllocator := BlockAllocatorImpl.BlockAllocator.Constructor(bm);
+
+      v := Variables(
+        false,
+        false,
+        persistentIndirectionTable,
+        lNone,
+        ephemeralIndirectionTable,
+        DiskLayout.Location(0, 0),
+        None,
+        None,
+        map[],
+        map[],
+        cache,
+        lru,
+        blockAllocator,
+        DiskLayout.Location(0, 0),
+        None);
+    }
+
+    predicate Inv()
+    {
+      && W()
+      && SBCM.BCInv(I())
+    }
 
     shared function method TotalCacheSize() : (res : uint64)
     requires cache.Inv()
