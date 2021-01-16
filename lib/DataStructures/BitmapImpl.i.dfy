@@ -354,7 +354,6 @@ module BitmapImpl {
     }
 
     linear method Free()
-    requires Inv()
     {
       linear var Bitmap(_) := this;
     }

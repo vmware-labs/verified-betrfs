@@ -204,7 +204,6 @@ module IOImpl {
       inout s.outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)];
     }
   }
-/*
 
   // == readResponse ==
 
@@ -243,15 +242,13 @@ module IOImpl {
     }
   }
 
-  method PageInIndirectionTableResp(s: ImplVariables, io: DiskIOHandler)
-  requires s.W()
+  method PageInIndirectionTableResp(linear inout s: ImplVariables, io: DiskIOHandler)
+  requires old_s.W()
   requires io.diskOp().RespReadOp?
-  requires !s.ready
-  requires s.loading
-  requires io !in s.Repr()
-  modifies s.Repr()
-  ensures WellUpdated(s)
-  ensures s.I() == IOModel.PageInIndirectionTableResp(old(s.I()), old(IIO(io)))
+  requires !old_s.ready
+  requires old_s.loading
+  ensures s.W()
+  ensures s.I() == IOModel.PageInIndirectionTableResp(old_s.I(), old(IIO(io)))
   {
     var id;
     linear var sectorOpt;
@@ -260,30 +257,73 @@ module IOImpl {
     if (Some(id) == s.indirectionTableRead && sectorOpt.lSome? && sectorOpt.value.SectorIndirectionTable?) {
       linear var lSome(sector: SSI.Sector) := sectorOpt;
       linear var SectorIndirectionTable(ephemeralIndirectionTable) := sector;
-      assert SSI.SectorRepr(sector) == 
-        {ephemeralIndirectionTable} + ephemeralIndirectionTable.Repr; // why is this needed??
 
-      var succ, bm := ephemeralIndirectionTable.InitLocBitmap();
-      assert (succ, bm.I()) == ephemeralIndirectionTable.ReadWithInv().initLocBitmap(); // TODO(andreal) unnecessary
+      linear var bm; var succ;
+      succ, bm := ephemeralIndirectionTable.InitLocBitmap();
+      assert (succ, bm.I()) == ephemeralIndirectionTable.initLocBitmap(); // TODO(andreal) unnecessary
+
       if succ {
-        var blockAllocator := new BlockAllocatorImpl.BlockAllocator(bm);
-        var persistentIndirectionTable := ephemeralIndirectionTable.Clone();
+        linear var Variables(
+          loading,
+          _,
+          persistentIndirectionTable,
+          frozenIndirectionTable,
+          prevEphemeralIndirectionTable,
+          _,
+          _,
+          outstandingIndirectionTableWrite,
+          outstandingBlockWrites,
+          outstandingBlockReads,
+          cache,
+          lru,
+          blockAllocator,
+          indirectionTableLoc,
+          indirectionTableRead) := s;
 
-        s.ready := true;
-        s.persistentIndirectionTable := persistentIndirectionTable;
-        s.frozenIndirectionTable := null;
-        s.persistentIndirectionTableLoc := s.indirectionTableLoc;
-        s.frozenIndirectionTableLoc := None;
-        s.ephemeralIndirectionTable := ephemeralIndirectionTable;
-        s.outstandingIndirectionTableWrite := None;
-        s.outstandingBlockWrites := map[];
-        s.outstandingBlockReads := map[];
-        s.cache := new MutCache();
-        assert s.cache.I() == map[];
-        s.lru := new LruImpl.LruImplQueue();
-        s.blockAllocator := blockAllocator;
-        assert s.I() == IOModel.PageInIndirectionTableResp(old(s.I()), old(IIO(io))); // TODO(andreal)
+        prevEphemeralIndirectionTable.Free();
+
+        if frozenIndirectionTable.lSome? {
+          linear var value := unwrap_value(frozenIndirectionTable);
+          value.Free();
+        } else {
+          dispose_lnone(frozenIndirectionTable);
+        }
+
+        blockAllocator.Free();
+        blockAllocator := BlockAllocatorImpl.BlockAllocator.Constructor(bm);
+
+        persistentIndirectionTable.Free();
+        persistentIndirectionTable := ephemeralIndirectionTable.Clone();
+
+        lru.Free();
+        lru := LinearLru.LinearLru.Alloc();
+
+        s := Variables(
+          loading,
+          true,
+          persistentIndirectionTable,
+          lNone,
+          ephemeralIndirectionTable,
+          indirectionTableLoc,
+          None,
+          None,
+          map[],
+          map[],
+          cache,
+          lru,
+          blockAllocator,
+          indirectionTableLoc,
+          indirectionTableRead);
+
+        // [yizhou7][TODO]: fix these assumes
+        assume s.cache.I() == map[];
+        assume s.I().lru == IOModel.PageInIndirectionTableResp(old_s.I(), old(IIO(io))).lru;
+
+        assert s.I() == IOModel.PageInIndirectionTableResp(old_s.I(), old(IIO(io))); // TODO(andreal)
       } else {
+        bm.Free();
+        ephemeralIndirectionTable.Free();
+
         print "InitLocBitmap failed\n";
       }
     } else {
@@ -291,6 +331,7 @@ module IOImpl {
       print "giving up; did not get indirectionTable when reading\n";
     }
   }
+/*
 
   method PageInNodeResp(s: ImplVariables, io: DiskIOHandler)
   requires s.W()
