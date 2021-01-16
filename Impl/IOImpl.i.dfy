@@ -331,23 +331,18 @@ module IOImpl {
       print "giving up; did not get indirectionTable when reading\n";
     }
   }
-/*
 
-  method PageInNodeResp(s: ImplVariables, io: DiskIOHandler)
-  requires s.W()
-  requires s.WF()
+  method PageInNodeResp(linear inout s: ImplVariables, io: DiskIOHandler)
+  requires old_s.W()
+  requires old_s.WF()
   requires io.diskOp().RespReadOp?
-  requires s.ready
-  requires io !in s.Repr()
-  modifies s.Repr()
-  ensures WellUpdated(s)
-  ensures s.I() == IOModel.PageInNodeResp(old(s.I()), old(IIO(io)))
+  requires old_s.ready
+  ensures s.W()
+  ensures s.I() == IOModel.PageInNodeResp(old_s.I(), old(IIO(io)))
   {
-    var id;
-    linear var sector;
+    var id; linear var sector;
     id, sector := ReadSector(io);
     assert sector.lSome? ==> SSI.WFSector(sector.value);
-    assert sector.lSome? ==> SSI.SectorRepr(sector.value) !! s.Repr();
 
     // TODO we should probably remove the id from outstandingBlockReads
     // even in the case we don't do anything with it
@@ -361,7 +356,6 @@ module IOImpl {
           print "PageInNodeResp: ref in s.cache\n";
         } else {
           assert sector.lSome? ==> SSI.WFSector(sector.value);
-          assert sector.lSome? ==> SSI.SectorRepr(sector.value) !! s.Repr();
 
           var lba := lbaGraph.value.loc.value;
           var graph := lbaGraph.value.succs;
@@ -372,18 +366,16 @@ module IOImpl {
 
             var children := node.children;
             if (graph == (if children.Some? then children.value else [])) {
-              assert|LruModel.I(s.lru.Queue)| <= 0x10000;
+              assert|LruModel.I(s.lru.Queue())| <= 0x10000;
               assert sector.lSome? ==> SSI.WFSector(value);
-              assert sector.lSome? ==> SSI.SectorRepr(value) !! s.Repr();
-              s.lru.Use(ref);
+              inout s.lru.Use(ref);
 
               assert sector.lSome? ==> SSI.WFSector(value);
-              assert sector.lSome? ==> SSI.SectorRepr(value) !! s.Repr();
 
               assert |s.cache.I()| <= MaxCacheSize();
-              s.cache.Insert(ref, node);
+              inout s.cache.Insert(ref, node);
 
-              s.outstandingBlockReads := ComputeMapRemove1(s.outstandingBlockReads, id);
+              inout s.outstandingBlockReads := ComputeMapRemove1(s.outstandingBlockReads, id);
             } else {
               var _ := FreeNode(node);
               print "giving up; block does not match graph\n";
@@ -405,55 +397,86 @@ module IOImpl {
 
   // == writeResponse ==
 
-  method writeNodeResponse(s: ImplVariables, io: DiskIOHandler)
+  method writeNodeResponse(linear inout s: ImplVariables, io: DiskIOHandler)
   requires io.diskOp().RespWriteOp?
   requires ValidDiskOp(io.diskOp())
-  requires Inv(s)
-  requires s.ready && IIO(io).id in s.outstandingBlockWrites
-  requires io !in s.Repr()
-  modifies s.Repr()
-  ensures WellUpdated(s)
-  ensures s.I() == IOModel.writeNodeResponse(old(s.I()), IIO(io))
+  requires old_s.Inv()
+  requires old_s.ready && IIO(io).id in old_s.outstandingBlockWrites
+  ensures s.W()
+  ensures s.I() == IOModel.writeNodeResponse(old_s.I(), IIO(io))
   {
     var id, addr, len := io.getWriteResult();
     IOModel.lemmaOutstandingLocIndexValid(s.I(), id);
 
-    s.blockAllocator.MarkFreeOutstanding(s.outstandingBlockWrites[id].loc.addr / NodeBlockSizeUint64());
-    s.outstandingBlockWrites := ComputeMapRemove1(s.outstandingBlockWrites, id);
+    var i := s.outstandingBlockWrites[id].loc.addr / NodeBlockSizeUint64();
+    inout s.blockAllocator.MarkFreeOutstanding(i);
+    inout s.outstandingBlockWrites := ComputeMapRemove1(s.outstandingBlockWrites, id);
   }
 
-  method writeIndirectionTableResponse(s: ImplVariables, io: DiskIOHandler)
+  method writeIndirectionTableResponse(linear inout s: ImplVariables, io: DiskIOHandler)
   returns (loc: Location)
   requires io.diskOp().RespWriteOp?
   requires ValidDiskOp(io.diskOp())
-  requires Inv(s)
-  requires s.ready
-  requires s.frozenIndirectionTableLoc.Some?
-  requires io !in s.Repr()
-  modifies s.Repr()
-  ensures WellUpdated(s)
+  requires old_s.Inv()
+  requires old_s.ready
+  requires old_s.frozenIndirectionTableLoc.Some?
+  ensures s.W()
   ensures (s.I(), loc) == IOModel.writeIndirectionTableResponse(
-      old(s.I()), IIO(io))
+      old_s.I(), IIO(io))
   {
-    s.outstandingIndirectionTableWrite := None;
+    inout s.outstandingIndirectionTableWrite := None;
     loc := s.frozenIndirectionTableLoc.value;
   }
 
-  method cleanUp(s: ImplVariables)
-  requires Inv(s)
-  requires s.ready
-  requires s.frozenIndirectionTable != null
-  requires s.frozenIndirectionTableLoc.Some?
-  modifies s.Repr()
-  ensures WellUpdated(s)
-  ensures s.I() == IOModel.cleanUp(old(s.I()))
+  // [yizhou7]: this might not be the best way is to decompose and recompose
+  method cleanUp(linear inout s: ImplVariables)
+  requires old_s.Inv()
+  requires old_s.ready
+  requires old_s.frozenIndirectionTable.lSome?
+  requires old_s.frozenIndirectionTableLoc.Some?
+  ensures s.W()
+  ensures s.I() == IOModel.cleanUp(old_s.I())
   {
     IOModel.lemmaBlockAllocatorFrozenSome(s.I());
-    s.persistentIndirectionTableLoc := s.frozenIndirectionTableLoc.value;
-    s.persistentIndirectionTable := s.frozenIndirectionTable;
-    s.frozenIndirectionTable := null;
-    s.frozenIndirectionTableLoc := None;
-    s.blockAllocator.MoveFrozenToPersistent();
+
+    linear var Variables(
+      loading,
+      ready,
+      persistentIndirectionTable,
+      frozenIndirectionTable,
+      ephemeralIndirectionTable,
+      persistentIndirectionTableLoc,
+      frozenIndirectionTableLoc,
+      outstandingIndirectionTableWrite,
+      outstandingBlockWrites,
+      outstandingBlockReads,
+      cache,
+      lru,
+      blockAllocator,
+      indirectionTableLoc,
+      indirectionTableRead) := s;
+
+    persistentIndirectionTable.Free();
+    linear var value := unwrap_value(frozenIndirectionTable);
+
+    s := Variables(
+      loading,
+      ready,
+      value,
+      lNone,
+      ephemeralIndirectionTable,
+      frozenIndirectionTableLoc.value,
+      None,
+      outstandingIndirectionTableWrite,
+      outstandingBlockWrites,
+      outstandingBlockReads,
+      cache,
+      lru,
+      blockAllocator,
+      indirectionTableLoc,
+      indirectionTableRead);
+
+
+    inout s.blockAllocator.MoveFrozenToPersistent();
   }
-  */
 }
