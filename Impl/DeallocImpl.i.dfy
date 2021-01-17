@@ -60,12 +60,12 @@ module DeallocImpl {
     }
   }
 
-  // method FindDeallocable(s: ImplVariables) returns (ref: Option<Reference>)
-  // requires s.WF()
-  // requires s.ready
-  // ensures ref == DeallocModel.FindDeallocable(s.I())
-  // {
-  //   DeallocModel.reveal_FindDeallocable();
-  //   ref := s.ephemeralIndirectionTable.FindDeallocable();
-  // }
+  method FindDeallocable(shared s: ImplVariables) returns (ref: Option<Reference>)
+  requires s.WF()
+  requires s.ready
+  ensures ref == DeallocModel.FindDeallocable(s.I())
+  {
+    DeallocModel.reveal_FindDeallocable();
+    ref := s.ephemeralIndirectionTable.FindDeallocable();
+  }
 }
