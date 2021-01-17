@@ -122,16 +122,15 @@ module IOImpl {
   requires SSM.WFSector(SSI.ISector(sector))
   requires io.initialized()
   requires sector.SectorIndirectionTable?
-  requires sector.SectorIndirectionTable? ==> (s.frozenIndirectionTable.lSome? && sector.indirectionTable == s.frozenIndirectionTable.value)
+  requires s.frozenIndirectionTable.lSome? && sector.indirectionTable.I() == s.frozenIndirectionTable.value.I()
 
   modifies io
 
   // ensures sector.SectorIndirectionTable? ==> (sector.indirectionTable.Inv() && sector.indirectionTable.I() == old(sector.indirectionTable.I()))
   ensures id.Some? ==> id.value == old(io.reservedId())
   ensures s.W()
-  ensures IOModel.FindIndirectionTableLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(SSI.ISector(sector)), id, loc, IIO(io))
-  ensures old(s.I()) == s.I();
-  ensures id.Some? ==> loc.Some? && io.diskOp().ReqWriteOp? && io.diskOp().id == id.value
+  ensures IOModel.FindIndirectionTableLocationAndRequestWrite(old(IIO(io)), s.I(), SSI.ISector(sector), id, loc, IIO(io))
+  ensures id.Some? ==> (loc.Some? && io.diskOp().ReqWriteOp? && io.diskOp().id == id.value)
   ensures id.None? ==> IIO(io) == old(IIO(io))
   {
     IOModel.reveal_FindIndirectionTableLocationAndRequestWrite();
