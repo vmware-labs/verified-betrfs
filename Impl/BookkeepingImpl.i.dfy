@@ -18,7 +18,7 @@ module BookkeepingImpl {
 
   import opened Bounds
 
-  method getFreeRef(s: ImplVariables)
+  method getFreeRef(shared s: ImplVariables)
   returns (ref : Option<BT.G.Reference>)
   requires s.ready
   requires s.W()
@@ -32,8 +32,6 @@ module BookkeepingImpl {
     }
 
     i := i + 1;
-
-    s.ephemeralIndirectionTable.RevealI();
 
     while true
     invariant i >= 1
@@ -55,9 +53,7 @@ module BookkeepingImpl {
     }
   }
 
-  /*
-
-  method getFreeRef2(s: ImplVariables, avoid: BT.G.Reference)
+  method getFreeRef2(shared s: ImplVariables, avoid: BT.G.Reference)
   returns (ref : Option<BT.G.Reference>)
   requires s.ready
   requires s.W()
@@ -72,8 +68,6 @@ module BookkeepingImpl {
     }
 
     i := i + 1;
-
-    s.ephemeralIndirectionTable.RevealI();
 
     while true
     invariant i >= 1
@@ -97,102 +91,81 @@ module BookkeepingImpl {
     }
   }
 
-  method writeBookkeeping(s: ImplVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
-  requires s.W()
-  requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
-  requires BookkeepingModel.WriteAllocConditions(s.I())
-  requires BookkeepingModel.ChildrenConditions(s.I(), children)
-  requires |s.ephemeralIndirectionTable.I().graph| < IndirectionTable.MaxSize()
-  modifies s.lru.Repr
-  modifies s.ephemeralIndirectionTable.Repr
-  modifies s.blockAllocator.Repr
+  method writeBookkeeping(linear inout s: ImplVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
+  requires old_s.W()
+  requires |LruModel.I(old_s.lru.Queue())| <= 0x1_0000_0000
+  requires BookkeepingModel.WriteAllocConditions(old_s.I())
+  requires BookkeepingModel.ChildrenConditions(old_s.I(), children)
+  requires |old_s.ephemeralIndirectionTable.I().graph| < IndirectionTable.MaxSize()
   ensures s.W()
-  ensures s.I() == BookkeepingModel.writeBookkeeping(old(s.I()), ref, children)
-  ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
-  ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
-  ensures forall o | o in s.blockAllocator.Repr :: o in old(s.blockAllocator.Repr) || fresh(o)
-  ensures |LruModel.I(s.lru.Queue)| <= |LruModel.I(old(s.lru.Queue))| + 1
+  ensures s.I() == BookkeepingModel.writeBookkeeping(old_s.I(), ref, children)
+  ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
   {
     BookkeepingModel.reveal_writeBookkeeping();
 
     BookkeepingModel.lemmaIndirectionTableLocIndexValid(s.I(), ref);
 
-    assert s.ephemeralIndirectionTable.TrackingGarbage() by { s.ephemeralIndirectionTable.RevealI(); } 
-    var oldLoc := s.ephemeralIndirectionTable.UpdateAndRemoveLoc(ref, (if children.Some? then children.value else []));
+    assert s.ephemeralIndirectionTable.TrackingGarbage();
+    var oldLoc := inout s.ephemeralIndirectionTable.UpdateAndRemoveLoc(ref, (if children.Some? then children.value else []));
 
-    s.lru.Use(ref);
+    inout s.lru.Use(ref);
 
     if oldLoc.Some? {
-      s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / NodeBlockSizeUint64());
+      inout s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / NodeBlockSizeUint64());
     }
 
-    LruModel.LruUse(old(s.lru.Queue), ref);
-    assert LruModel.I(s.lru.Queue) == LruModel.I(old(s.lru.Queue)) + {ref};
-    assert |LruModel.I(s.lru.Queue)| == |LruModel.I(old(s.lru.Queue)) + {ref}|
-        <= |LruModel.I(old(s.lru.Queue))| + |{ref}|
-        == |LruModel.I(old(s.lru.Queue))| + 1;
+    LruModel.LruUse(old_s.lru.Queue(), ref);
+    assert LruModel.I(s.lru.Queue()) == LruModel.I(old_s.lru.Queue()) + {ref};
+    assert |LruModel.I(s.lru.Queue())| == |LruModel.I(old_s.lru.Queue()) + {ref}|
+        <= |LruModel.I(old_s.lru.Queue())| + |{ref}|
+        == |LruModel.I(old_s.lru.Queue())| + 1;
   }
 
-  method writeBookkeepingNoSuccsUpdate(s: ImplVariables, ref: BT.G.Reference)
-  requires s.W()
-  requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
-  requires BookkeepingModel.WriteAllocConditions(s.I())
-  requires ref in s.ephemeralIndirectionTable.I().graph
-  modifies s.lru.Repr
-  modifies s.ephemeralIndirectionTable.Repr
-  modifies s.blockAllocator.Repr
+  method writeBookkeepingNoSuccsUpdate(linear inout s: ImplVariables, ref: BT.G.Reference)
+  requires old_s.W()
+  requires |LruModel.I(old_s.lru.Queue())| <= 0x1_0000_0000
+  requires BookkeepingModel.WriteAllocConditions(old_s.I())
+  requires ref in old_s.ephemeralIndirectionTable.I().graph
   ensures s.W()
-  ensures s.I() == BookkeepingModel.writeBookkeepingNoSuccsUpdate(old(s.I()), ref)
-  ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
-  ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
-  ensures forall o | o in s.blockAllocator.Repr :: o in old(s.blockAllocator.Repr) || fresh(o)
-  ensures |LruModel.I(s.lru.Queue)| <= |LruModel.I(old(s.lru.Queue))| + 1
+  ensures s.I() == BookkeepingModel.writeBookkeepingNoSuccsUpdate(old_s.I(), ref)
+  ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
   {
     BookkeepingModel.reveal_writeBookkeepingNoSuccsUpdate();
 
     BookkeepingModel.lemmaIndirectionTableLocIndexValid(s.I(), ref);
 
-    assert s.ephemeralIndirectionTable.TrackingGarbage() by { s.ephemeralIndirectionTable.RevealI(); }
-    var oldLoc := s.ephemeralIndirectionTable.RemoveLoc(ref);
+    var oldLoc := inout s.ephemeralIndirectionTable.RemoveLoc(ref);
 
-    s.lru.Use(ref);
+    inout s.lru.Use(ref);
 
     if oldLoc.Some? {
-      s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / NodeBlockSizeUint64());
+      inout s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / NodeBlockSizeUint64());
     }
 
-    LruModel.LruUse(old(s.lru.Queue), ref);
-    assert LruModel.I(s.lru.Queue) == LruModel.I(old(s.lru.Queue)) + {ref};
-    assert |LruModel.I(s.lru.Queue)| == |LruModel.I(old(s.lru.Queue)) + {ref}|
-        <= |LruModel.I(old(s.lru.Queue))| + |{ref}|
-        == |LruModel.I(old(s.lru.Queue))| + 1;
+    LruModel.LruUse(old_s.lru.Queue(), ref);
+    assert LruModel.I(s.lru.Queue()) == LruModel.I(old_s.lru.Queue()) + {ref};
+    assert |LruModel.I(s.lru.Queue())| == |LruModel.I(old_s.lru.Queue()) + {ref}|
+        <= |LruModel.I(old_s.lru.Queue())| + |{ref}|
+        == |LruModel.I(old_s.lru.Queue())| + 1;
   }
 
-
-  method allocBookkeeping(s: ImplVariables, children: Option<seq<BT.G.Reference>>)
+  method allocBookkeeping(linear inout s: ImplVariables, children: Option<seq<BT.G.Reference>>)
   returns (ref: Option<BT.G.Reference>)
-  requires s.W()
-  requires |LruModel.I(s.lru.Queue)| <= 0x1_0000_0000
-  requires BookkeepingModel.WriteAllocConditions(s.I())
-  requires BookkeepingModel.ChildrenConditions(s.I(), children)
-  requires |s.ephemeralIndirectionTable.I().graph| < IndirectionTable.MaxSize()
-  modifies s.lru.Repr
-  modifies s.ephemeralIndirectionTable.Repr
-  modifies s.blockAllocator.Repr
+  requires old_s.W()
+  requires |LruModel.I(old_s.lru.Queue())| <= 0x1_0000_0000
+  requires BookkeepingModel.WriteAllocConditions(old_s.I())
+  requires BookkeepingModel.ChildrenConditions(old_s.I(), children)
+  requires |old_s.ephemeralIndirectionTable.I().graph| < IndirectionTable.MaxSize()
   ensures s.ready
   ensures s.W()
-  ensures (s.I(), ref) == BookkeepingModel.allocBookkeeping(old(s.I()), children)
-  ensures forall o | o in s.lru.Repr :: o in old(s.lru.Repr) || fresh(o)
-  ensures forall o | o in s.ephemeralIndirectionTable.Repr :: o in old(s.ephemeralIndirectionTable.Repr) || fresh(o)
-  ensures forall o | o in s.blockAllocator.Repr :: o in old(s.blockAllocator.Repr) || fresh(o)
-  ensures |LruModel.I(s.lru.Queue)| <= |LruModel.I(old(s.lru.Queue))| + 1
+  ensures (s.I(), ref) == BookkeepingModel.allocBookkeeping(old_s.I(), children)
+  ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
   {
     BookkeepingModel.reveal_allocBookkeeping();
     
     ref := getFreeRef(s);
     if (ref.Some?) {
-      writeBookkeeping(s, ref.value, children);
+      writeBookkeeping(inout s, ref.value, children);
     }
   }
-  */
 }
