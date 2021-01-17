@@ -19,56 +19,53 @@ module DeallocImpl {
 
   import opened NativeTypes
 
-  method Dealloc(s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
-  requires Inv(s)
+  method Dealloc(linear inout s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
+  requires old_s.Inv()
   requires io.initialized()
-  requires DeallocModel.deallocable(s.I(), ref)
-  requires io !in s.Repr()
+  requires DeallocModel.deallocable(old_s.I(), ref)
   modifies io
-  modifies s.Repr()
-  ensures WellUpdated(s)
+  ensures s.W()
   ensures s.ready
-  ensures (s.I(), IIO(io)) == DeallocModel.Dealloc(old(s.I()), old(IIO(io)), ref);
+  ensures (s.I(), IIO(io)) == DeallocModel.Dealloc(old_s.I(), old(IIO(io)), ref);
   {
     DeallocModel.reveal_Dealloc();
+    var nop := false;
 
-    if s.frozenIndirectionTable != null {
-      var b := s.frozenIndirectionTable.HasEmptyLoc(ref);
+    if s.frozenIndirectionTable.lSome? {
+      var b := s.frozenIndirectionTable.value.HasEmptyLoc(ref);
       if b {
         print "giving up; dealloc can't run because frozen isn't written";
-        return;
+        nop := true;
       }
     }
 
-    if BC.OutstandingRead(ref) in s.outstandingBlockReads.Values {
+    if nop || BC.OutstandingRead(ref) in s.outstandingBlockReads.Values {
       print "giving up; dealloc can't dealloc because of outstanding read\n";
-      return;
+    } else {
+      BookkeepingModel.lemmaIndirectionTableLocIndexValid(s.I(), ref);
+
+      var oldLoc := inout s.ephemeralIndirectionTable.RemoveRef(ref);
+
+      inout s.lru.Remove(ref);
+      inout s.cache.Remove(ref);
+
+      if oldLoc.Some? {
+        inout s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / NodeBlockSizeUint64());
+      }
+
+      ghost var s1 := s.I();
+      ghost var s2 := DeallocModel.Dealloc(old_s.I(), old(IIO(io)), ref).0;
+
+      assert s1.cache == s2.cache;
     }
-
-    BookkeepingModel.lemmaIndirectionTableLocIndexValid(s.I(), ref);
-
-    assert s.ephemeralIndirectionTable.TrackingGarbage() by { s.ephemeralIndirectionTable.RevealI(); }
-    var oldLoc := s.ephemeralIndirectionTable.RemoveRef(ref);
-
-    s.lru.Remove(ref);
-    s.cache.Remove(ref);
-
-    if oldLoc.Some? {
-      s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / NodeBlockSizeUint64());
-    }
-
-    ghost var s1 := s.I();
-    ghost var s2 := DeallocModel.Dealloc(old(s.I()), old(IIO(io)), ref).0;
-
-    assert s1.cache == s2.cache;
   }
 
-  method FindDeallocable(s: ImplVariables) returns (ref: Option<Reference>)
-  requires s.WF()
-  requires s.ready
-  ensures ref == DeallocModel.FindDeallocable(s.I())
-  {
-    DeallocModel.reveal_FindDeallocable();
-    ref := s.ephemeralIndirectionTable.FindDeallocable();
-  }
+  // method FindDeallocable(s: ImplVariables) returns (ref: Option<Reference>)
+  // requires s.WF()
+  // requires s.ready
+  // ensures ref == DeallocModel.FindDeallocable(s.I())
+  // {
+  //   DeallocModel.reveal_FindDeallocable();
+  //   ref := s.ephemeralIndirectionTable.FindDeallocable();
+  // }
 }
