@@ -22,21 +22,20 @@ module EvictImpl {
 
   import LruModel
 
-  method Evict(s: ImplVariables, ref: BT.G.Reference)
-  requires s.WF()
-  requires s.ready
-  requires ref in s.cache.I()
-  modifies s.Repr()
-  ensures WellUpdated(s)
+  method Evict(linear inout s: ImplVariables, ref: BT.G.Reference)
+  requires old_s.WF()
+  requires old_s.ready
+  requires ref in old_s.cache.I()
+  ensures s.W()
   ensures s.ready
-  ensures s.I() == EvictModel.Evict(old(s.I()), ref)
+  ensures s.I() == EvictModel.Evict(old_s.I(), ref)
   {
-    s.lru.Remove(ref);
-    s.cache.Remove(ref);
-    assert s.I().cache == EvictModel.Evict(old(s.I()), ref).cache;
+    inout s.lru.Remove(ref);
+    inout s.cache.Remove(ref);
+    assert s.I().cache == EvictModel.Evict(old_s.I(), ref).cache;
   }
 
-  method NeedToWrite(s: ImplVariables, ref: BT.G.Reference)
+  method NeedToWrite(shared s: ImplVariables, ref: BT.G.Reference)
   returns (b: bool)
   requires s.WF()
   requires s.ready
@@ -47,8 +46,8 @@ module EvictImpl {
       return true;
     }
 
-    if (s.frozenIndirectionTable != null) {
-      var fro := s.frozenIndirectionTable.GetEntry(ref);
+    if (s.frozenIndirectionTable.lSome?) {
+      var fro := s.frozenIndirectionTable.value.GetEntry(ref);
       if fro.Some? && fro.value.loc.None? {
         return true;
       }
@@ -57,7 +56,7 @@ module EvictImpl {
     return false;
   }
 
-  method CanEvict(s: ImplVariables, ref: BT.G.Reference)
+  method CanEvict(shared s: ImplVariables, ref: BT.G.Reference)
   returns (b: bool)
   requires s.WF()
   requires s.ready
@@ -73,23 +72,21 @@ module EvictImpl {
     }
   }
 
-  method EvictOrDealloc(s: ImplVariables, io: DiskIOHandler)
-  requires Inv(s)
-  requires s.ready
+  method EvictOrDealloc(linear inout s: ImplVariables, io: DiskIOHandler)
+  requires old_s.Inv()
+  requires old_s.ready
   requires io.initialized()
-  requires |s.cache.I()| > 0
-  requires io !in s.Repr()
+  requires |old_s.cache.I()| > 0
   modifies io
-  modifies s.Repr()
-  ensures WellUpdated(s)
+  ensures s.W()
   ensures s.ready
-  ensures EvictModel.EvictOrDealloc(old(s.I()), old(IIO(io)), s.I(), IIO(io))
+  ensures EvictModel.EvictOrDealloc(old_s.I(), old(IIO(io)), s.I(), IIO(io))
   {
     var ref := FindDeallocable(s);
     DeallocModel.FindDeallocableCorrect(s.I());
 
     if ref.Some? {
-      Dealloc(s, io, ref.value);
+      Dealloc(inout s, io, ref.value);
     } else {
       var refOpt := s.lru.NextOpt();
       if refOpt.None? {
@@ -98,41 +95,37 @@ module EvictImpl {
         var needToWrite := NeedToWrite(s, ref);
         if needToWrite {
           if s.outstandingIndirectionTableWrite.None? {
-            TryToWriteBlock(s, io, ref);
-          } else {
+            TryToWriteBlock(inout s, io, ref);
           }
         } else {
           var canEvict := CanEvict(s, ref);
           if canEvict {
-            Evict(s, ref);
-          } else {
+            Evict(inout s, ref);
           }
         }
       }
     }
   }
 
-  method PageInNodeReqOrMakeRoom(s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
-  requires Inv(s)
-  requires s.ready
+  method PageInNodeReqOrMakeRoom(linear inout s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
+  requires old_s.Inv()
+  requires old_s.ready
   requires io.initialized()
-  requires io !in s.Repr()
-  requires ref in s.ephemeralIndirectionTable.I().graph
-  requires ref !in s.cache.I()
+  requires ref in old_s.ephemeralIndirectionTable.I().graph
+  requires ref !in old_s.cache.I()
   modifies io
-  modifies s.Repr()
-  ensures WellUpdated(s)
+  ensures s.W()
   ensures s.ready
-  ensures EvictModel.PageInNodeReqOrMakeRoom(old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
+  ensures EvictModel.PageInNodeReqOrMakeRoom(old_s.I(), old(IIO(io)), ref, s.I(), IIO(io))
   {
     EvictModel.reveal_PageInNodeReqOrMakeRoom();
 
-    if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
-      PageInNodeReq(s, io, ref);
+    if s.TotalCacheSize() <= MaxCacheSizeUint64() - 1 {
+      PageInNodeReq(inout s, io, ref);
     } else {
-      var c := s.cache.Count(); 
+      var c := CacheImpl.CacheCount(s.cache); 
       if c > 0 {
-        EvictOrDealloc(s, io);
+        EvictOrDealloc(inout s, io);
       }
     }
   }
