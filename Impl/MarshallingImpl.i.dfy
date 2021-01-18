@@ -790,57 +790,7 @@ module MarshallingImpl {
       NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
       assert data_suffix == data[32..];
     } else if sector.SectorIndirectionTable? {
-      //NativeBenchmarking.start("MarshallCheckedSector");
-
-      //var data := new byte[IndirectionTableBlockSizeUint64()];
-
-      //NativeBenchmarking.start("marshallIndirectionTable");
-      //NativeBenchmarking.end("marshallIndirectionTable");
-
-      var v, computedSize := indirectionTableSectorToVal(sector);
-      var size: uint64 := computedSize + 32;
-
-      ghost var ghosty := true;
-      if ghosty {
-        if Marshalling.IsInitIndirectionTable(sector.indirectionTable.I())
-        {
-          Marshalling.InitIndirectionTableSizeOfV(sector.indirectionTable.I(), v);
-        }
-      }
-
-      if size > IndirectionTableBlockSizeUint64() {
-        data := null;
-      } else {
-        data := MarshallIntoFixedSize(v, Marshalling.SectorGrammar(), 32, size);
-
-        IMM.reveal_parseSector();
-        IMM.reveal_parseCheckedSector();
-
-        var hash := CRC32_C_Array_Impl.compute_crc32c_padded(data, 32, data.Length as uint32 - 32);
-
-        assert data[32..] == data[32..data.Length];
-        assert hash == CRC32_C.crc32_c_padded(data[32..]);
-        ghost var data_suffix := data[32..];
-        NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
-        assert data_suffix == data[32..];
-      }
-      /*
-      if end == 0 {
-        return null;
-      }
-
-      // case 1 indicates indirection table
-      Pack_LittleEndian_Uint64_into_Array(1, data, 32);
-
-      //NativeBenchmarking.start("crc32");
-      var hash := CRC32_C_Array_Impl.compute_crc32c_padded(data, 32, data.Length as uint64 - 32);
-      NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
-      //NativeBenchmarking.end("crc32");
-
-      //NativeBenchmarking.end("MarshallCheckedSector");
-
-      return data;
-      */
+      data := MarshallCheckedSectorIndirectionTable(sector.indirectionTable, sector);
     } else {
       var wellmarshalled := sector.node.BucketsWellMarshalled();
       assert wellmarshalled == BucketsLib.BucketListWellMarshalled(BucketImpl.MutBucket.ILseq(sector.node.buckets));
