@@ -231,7 +231,6 @@ module SyncImpl {
     }
   }
 
-  // [yizhou7][FIXME]: this should go through but does not
   method {:fuel BC.GraphClosed,0} sync(linear inout s: ImplVariables, io: DiskIOHandler)
   returns (froze: bool, wait: bool)
   requires old_s.Inv()
@@ -262,13 +261,12 @@ module SyncImpl {
         //print "sync: waiting; blocks are still being written\n";
         wait := true;
       } else {
-        linear var table := s.frozenIndirectionTable.value.Clone();
         var id, loc := FindIndirectionTableLocationAndRequestWrite(
-            io, s, SectorIndirectionTable(table));
-
-        assert s.I() == s0.I();
+            io, s, SectorIndirectionTable(s.frozenIndirectionTable.value));
 
         if id.Some? {
+          // assume IOModel.FindIndirectionTableLocationAndRequestWrite(
+          //   IIO(old(io)), s0.I(), SSM.SectorIndirectionTable(s0.I().frozenIndirectionTable.value), id, loc, IIO(io));
           inout s.outstandingIndirectionTableWrite := id;
           inout s.frozenIndirectionTableLoc := loc;
         } else {

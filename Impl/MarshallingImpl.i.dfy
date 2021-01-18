@@ -689,7 +689,71 @@ module MarshallingImpl {
     IMM.reveal_parseCheckedSector();
   }
 
-  method MarshallCheckedSector(shared sector: Sector) returns (data : array?<byte>)
+  method MarshallCheckedSectorIndirectionTable(shared table: IndirectionTable.IndirectionTable, ghost sector: Sector) returns (data : array?<byte>)
+  requires sector == SSI.SectorIndirectionTable(table);
+  requires SSI.WFSector(sector)
+  requires SSM.WFSector(SSI.ISector(sector))
+  // ensures sector.indirectionTable.Inv()
+  //   && sector.indirectionTable.I() == old(sector.indirectionTable.I())
+  ensures data != null ==> IMM.parseCheckedSector(data[..]).Some?
+  ensures data != null ==>
+      && SSM.ISector(IMM.parseCheckedSector(data[..]).value)
+      == SSM.ISector(SSI.ISector(sector))
+  ensures data != null ==> 32 <= data.Length
+  ensures data != null && sector.SectorIndirectionTable? ==> data.Length <= IndirectionTableBlockSize() as int
+  ensures sector.SectorIndirectionTable? && Marshalling.IsInitIndirectionTable(sector.indirectionTable.I()) ==> data != null;
+  {
+    var w, s := table.IndirectionTableToVal();
+    var v := VCase(1, w);
+    var computedSize := s + 8;
+
+    // var v, computedSize := indirectionTableSectorToVal(sector);
+    var size: uint64 := computedSize + 32;
+
+    ghost var ghosty := true;
+    if ghosty {
+      if Marshalling.IsInitIndirectionTable(sector.indirectionTable.I())
+      {
+        Marshalling.InitIndirectionTableSizeOfV(sector.indirectionTable.I(), v);
+      }
+    }
+
+    if size > IndirectionTableBlockSizeUint64() {
+      data := null;
+    } else {
+      data := MarshallIntoFixedSize(v, Marshalling.SectorGrammar(), 32, size);
+
+      IMM.reveal_parseSector();
+      IMM.reveal_parseCheckedSector();
+
+      var hash := CRC32_C_Array_Impl.compute_crc32c_padded(data, 32, data.Length as uint32 - 32);
+
+      assert data[32..] == data[32..data.Length];
+      assert hash == CRC32_C.crc32_c_padded(data[32..]);
+      ghost var data_suffix := data[32..];
+      NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
+      assert data_suffix == data[32..];
+    }
+    /*
+    if end == 0 {
+      return null;
+    }
+
+    // case 1 indicates indirection table
+    Pack_LittleEndian_Uint64_into_Array(1, data, 32);
+
+    //NativeBenchmarking.start("crc32");
+    var hash := CRC32_C_Array_Impl.compute_crc32c_padded(data, 32, data.Length as uint64 - 32);
+    NativeArrays.CopySeqIntoArray(hash, 0, data, 0, 32);
+    //NativeBenchmarking.end("crc32");
+
+    //NativeBenchmarking.end("MarshallCheckedSector");
+
+    return data;
+    */
+  }
+
+  method MarshallCheckedSector(sector: Sector) returns (data : array?<byte>)
   requires SSI.WFSector(sector)
   requires SSM.WFSector(SSI.ISector(sector))
   requires sector.SectorNode? ==> SSM.WFNode(sector.node.I())

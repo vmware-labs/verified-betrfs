@@ -114,19 +114,18 @@ module IOImpl {
   }
 
   method FindIndirectionTableLocationAndRequestWrite(
-      io: DiskIOHandler, shared s: ImplVariables, linear sector: SSI.Sector)
+      io: DiskIOHandler, shared s: ImplVariables, ghost sector: SSI.Sector)
   returns (id: Option<D.ReqId>, loc: Option<Location>)
   requires s.WF()
   requires s.ready
+  requires io.initialized()
   requires SSI.WFSector(sector)
   requires SSM.WFSector(SSI.ISector(sector))
-  requires io.initialized()
   requires sector.SectorIndirectionTable?
-  requires s.frozenIndirectionTable.lSome? && sector.indirectionTable.I() == s.frozenIndirectionTable.value.I()
+  requires s.frozenIndirectionTable.lSome? && sector.indirectionTable == s.frozenIndirectionTable.value
 
   modifies io
 
-  // ensures sector.SectorIndirectionTable? ==> (sector.indirectionTable.Inv() && sector.indirectionTable.I() == old(sector.indirectionTable.I()))
   ensures id.Some? ==> id.value == old(io.reservedId())
   ensures s.W()
   ensures IOModel.FindIndirectionTableLocationAndRequestWrite(old(IIO(io)), s.I(), SSI.ISector(sector), id, loc, IIO(io))
@@ -135,7 +134,7 @@ module IOImpl {
   {
     IOModel.reveal_FindIndirectionTableLocationAndRequestWrite();
 
-    var bytes := MarshallingImpl.MarshallCheckedSector(sector);
+    var bytes := MarshallingImpl.MarshallCheckedSectorIndirectionTable(s.frozenIndirectionTable.value, sector);
     if (bytes == null) {
       id := None;
       loc := None;
@@ -147,7 +146,6 @@ module IOImpl {
       var i := io.write(loc.value.addr, bytes[..]);
       id := Some(i);
     }
-    sector.Free();
   }
 
   method RequestRead(io: DiskIOHandler, loc: Location)
