@@ -753,7 +753,7 @@ module MarshallingImpl {
     */
   }
 
-  method MarshallCheckedSector(sector: Sector) returns (data : array?<byte>)
+  method MarshallCheckedSector(shared sector: Sector) returns (data : array?<byte>)
   requires SSI.WFSector(sector)
   requires SSM.WFSector(SSI.ISector(sector))
   requires sector.SectorNode? ==> SSM.WFNode(sector.node.I())
