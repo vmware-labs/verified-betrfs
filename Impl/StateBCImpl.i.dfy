@@ -182,7 +182,7 @@ module StateBCImpl {
     shared function method TotalCacheSize() : (res : uint64)
     requires cache.Inv()
     requires |cache.I()| + |outstandingBlockReads| < 0x1_0000_0000_0000_0000
-    // ensures res == StateBCModel.TotalCacheSize(this)
+    ensures res as int == SBCM.TotalCacheSize(I())
     {
       // cache.Count() + (|outstandingBlockReads| as uint64)
       CacheImpl.CacheCount(cache) + (|outstandingBlockReads| as uint64)
