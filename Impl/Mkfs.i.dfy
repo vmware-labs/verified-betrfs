@@ -53,12 +53,11 @@ module MkfsImpl {
     sector.Free();
 
     var nodeLoc := Location(nodeAddr, |bNode| as uint64);
-    assert ValidNodeLocation(nodeLoc)
-      by {
+    assert ValidNodeLocation(nodeLoc) by {
         ValidNodeAddrMul(MinNodeBlockIndexUint64());
       }
 
-    var sectorIndirectionTable := new IT.BoxedIndirectionTable(nodeLoc);
+    linear var sectorIndirectionTable := IT.IndirectionTable.Alloc(nodeLoc);
 
     assert sectorIndirectionTable.I() == IndirectionTable(
       map[0 := nodeLoc],
