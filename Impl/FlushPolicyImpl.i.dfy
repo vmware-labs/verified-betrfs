@@ -57,11 +57,11 @@ module FlushPolicyImpl {
   //   return (bestIdx, bestWeight);
   // }
 
-  method getActionToSplit(s: ImplVariables, stack: seq<BT.G.Reference>,
+  method getActionToSplit(shared s: ImplVariables, stack: seq<BT.G.Reference>,
     slots: seq<uint64>, i: uint64)
   returns (action : FlushPolicyModel.Action)
   requires 0 <= i as int < |stack|
-  requires Inv(s)
+  requires s.Inv()
   requires FlushPolicyModel.ValidStackSlots(s.I(), stack, slots)
   ensures action == FlushPolicyModel.getActionToSplit(s.I(), stack, slots, i)
   {
@@ -69,7 +69,7 @@ module FlushPolicyImpl {
 
     if i == 0 {
       // Can't split root until we grow it.
-      if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
+      if s.TotalCacheSize() <= MaxCacheSizeUint64() - 1 {
         action := FlushPolicyModel.ActionGrow;
       } else {
         action := FlushPolicyModel.ActionEvict;
@@ -81,7 +81,7 @@ module FlushPolicyImpl {
         if bucketslen == 1 {
           action := FlushPolicyModel.ActionRepivot(stack[i]);
         } else {
-          if TotalCacheSize(s) <= MaxCacheSizeUint64() - 2 {
+          if s.TotalCacheSize() <= MaxCacheSizeUint64() - 2 {
             action := FlushPolicyModel.ActionSplit(stack[i-1], slots[i-1]);
           } else {
             action := FlushPolicyModel.ActionEvict;
@@ -93,16 +93,15 @@ module FlushPolicyImpl {
     }
   }
 
-  method getActionToFlush(s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
+  method getActionToFlush(linear inout s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
   returns (action : FlushPolicyModel.Action)
   requires |stack| <= 40
-  requires Inv(s)
-  requires FlushPolicyModel.ValidStackSlots(s.I(), stack, slots)
+  requires old_s.Inv()
+  requires FlushPolicyModel.ValidStackSlots(old_s.I(), stack, slots)
   decreases 0x1_0000_0000_0000_0000 - |stack|
-  modifies s.Repr()
-  ensures WellUpdated(s)
+  ensures s.W()
   ensures s.ready
-  ensures (s.I(), action) == FlushPolicyModel.getActionToFlush(old(s.I()), stack, slots)
+  ensures (s.I(), action) == FlushPolicyModel.getActionToFlush(old_s.I(), stack, slots)
   {
     FlushPolicyModel.reveal_getActionToFlush();
 
@@ -122,21 +121,21 @@ module FlushPolicyImpl {
           var childref := children.value[slot];
           var childincache := s.cache.InCache(childref);
           if childincache {
-            s.lru.Use(childref);
-            LruModel.LruUse(old(s.lru.Queue), childref);
+            inout s.lru.Use(childref);
+            LruModel.LruUse(old_s.lru.Queue(), childref);
 
             var childTotalWeight := s.cache.NodeBucketsWeight(childref);
             if childTotalWeight + FlushTriggerWeightUint64() <= MaxTotalBucketWeightUint64() {
-              if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
+              if s.TotalCacheSize() <= MaxCacheSizeUint64() - 1 {
                 action := FlushPolicyModel.ActionFlush(ref, slot);
               } else {
                 action := FlushPolicyModel.ActionEvict;
               }
             } else {
-              action := getActionToFlush(s, stack + [childref], slots + [slot]);
+              action := getActionToFlush(inout s, stack + [childref], slots + [slot]);
             }
           } else {
-            if TotalCacheSize(s) <= MaxCacheSizeUint64() - 1 {
+            if s.TotalCacheSize() <= MaxCacheSizeUint64() - 1 {
               action := FlushPolicyModel.ActionPageIn(childref);
             } else {
               action := FlushPolicyModel.ActionEvict;
@@ -149,49 +148,47 @@ module FlushPolicyImpl {
     }
   }
 
-  method runFlushPolicy(s: ImplVariables, io: DiskIOHandler)
-  requires Inv(s)
+  method runFlushPolicy(linear inout s: ImplVariables, io: DiskIOHandler)
+  requires old_s.Inv()
   requires io.initialized()
-  requires s.ready
-  requires BT.G.Root() in s.cache.I()
-  requires io !in s.Repr()
-  requires |s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
+  requires old_s.ready
+  requires BT.G.Root() in old_s.cache.I()
+  requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
   modifies io
-  modifies s.Repr()
-  ensures WellUpdated(s)
+  ensures s.W()
   ensures s.ready
-  ensures FlushPolicyModel.runFlushPolicy(old(s.I()), old(IIO(io)), s.I(), IIO(io))
+  ensures FlushPolicyModel.runFlushPolicy(old_s.I(), old(IIO(io)), s.I(), IIO(io))
   {
     FlushPolicyModel.reveal_runFlushPolicy();
 
-    LruModel.LruUse(s.lru.Queue, BT.G.Root());
-    s.lru.Use(BT.G.Root());
-    assert SBCM.IBlockCache(s.I()) == SBCM.IBlockCache(old(s.I()));
+    LruModel.LruUse(s.lru.Queue(), BT.G.Root());
+    inout s.lru.Use(BT.G.Root());
+    assert SBCM.IBlockCache(s.I()) == SBCM.IBlockCache(old_s.I());
 
     FlushPolicyModel.getActionToFlushValidAction(s.I(), [BT.G.Root()], []);
-    var action := getActionToFlush(s, [BT.G.Root()], []);
+    var action := getActionToFlush(inout s, [BT.G.Root()], []);
 
     match action {
       case ActionPageIn(ref) => {
-        PageInNodeReq(s, io, ref);
+        PageInNodeReq(inout s, io, ref);
       }
       case ActionSplit(parentref, slot) => {
         var _, parent_children := s.cache.GetNodeInfo(parentref);
-        doSplit(s, parentref, parent_children.value[slot], slot);
+        doSplit(inout s, parentref, parent_children.value[slot], slot);
       }
       case ActionRepivot(ref) => {
-        repivotLeaf(s, ref);
+        repivotLeaf(inout s, ref);
       }
       case ActionFlush(parentref, slot) => {
         var _, parent_children := s.cache.GetNodeInfo(parentref);
         var childref := parent_children.value[slot];
-        flush(s, parentref, slot, childref);
+        flush(inout s, parentref, slot, childref);
       }
       case ActionGrow => {
-        grow(s);
+        grow(inout s);
       }
       case ActionEvict => {
-        EvictOrDealloc(s, io);
+        EvictOrDealloc(inout s, io);
       }
       case ActionFail => {
         print "ActionFail\n";
