@@ -100,6 +100,7 @@ module BookkeepingImpl {
   ensures s.W()
   ensures s.I() == BookkeepingModel.writeBookkeeping(old_s.I(), ref, children)
   ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
+  ensures s.cache.I() == old_s.cache.I()
   {
     BookkeepingModel.reveal_writeBookkeeping();
 
@@ -160,6 +161,7 @@ module BookkeepingImpl {
   ensures s.W()
   ensures (s.I(), ref) == BookkeepingModel.allocBookkeeping(old_s.I(), children)
   ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
+  ensures s.cache.I() == old_s.cache.I()
   {
     BookkeepingModel.reveal_allocBookkeeping();
     

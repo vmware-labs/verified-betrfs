@@ -15,53 +15,41 @@ module HandleReadResponseImpl {
   import HandleReadResponseModel
   import IOImpl
 
-  // [yizhou7][FIXME]: this takes long to verify
-  method readResponse(s: Full, io: DiskIOHandler)
-  requires s.Inv()
+  method readResponse(linear inout s: Full, io: DiskIOHandler)
+  requires old_s.Inv()
   requires io.diskOp().RespReadOp?
-  requires io !in s.Repr
-  modifies s.Repr
   ensures s.W()
-  ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
   ensures |old(io.diskOp()).respRead.bytes| < 0x1_0000_0000_0000_0000
   ensures s.I() == HandleReadResponseModel.readResponse(
-      old(s.I()), old(IIO(io)))
+      old_s.I(), old(IIO(io)))
   {
     HandleReadResponseModel.reveal_readResponse();
-    s.reveal_ReprInv();
-
     var id, addr, bytes := io.getReadResult();
 
     var loc := DiskLayout.Location(addr, |bytes| as uint64);
-    linear var jc := s.jc.Take();
 
     if ValidNodeLocation(loc) {
       if s.bc.ready {
-        IOImpl.PageInNodeResp(s.bc, io);
+        IOImpl.PageInNodeResp(inout s.bc, io);
       } else {
         print "readResponse: doing nothing\n";
       }
     } else if ValidIndirectionTableLocation(loc) {
       if !s.bc.ready && s.bc.loading {
-        IOImpl.PageInIndirectionTableResp(s.bc, io);
+        IOImpl.PageInIndirectionTableResp(inout s.bc, io);
       } else {
         print "readResponse: doing nothing\n";
       }
     } else if ValidJournalLocation(loc) {
-      if jc.status.StatusLoadingOther? {
-        inout jc.pageInJournalResp(io);
+      if s.jc.status.StatusLoadingOther? {
+        inout s.jc.pageInJournalResp(io);
       }
     } else if loc == Superblock1Location() {
-      inout jc.readSuperblockResp(io, 0);
+      inout s.jc.readSuperblockResp(io, 0);
     } else if loc == Superblock2Location() {
-      inout jc.readSuperblockResp(io, 1);
+      inout s.jc.readSuperblockResp(io, 1);
     } else {
       print "readResponse: doing nothing\n";
     }
-
-    s.jc.Give(jc);
-    s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
-    s.reveal_ReprInv();
-    assert s.ProtectedReprInv();
   }
 }
