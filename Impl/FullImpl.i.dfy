@@ -1,7 +1,6 @@
 include "StateBCImpl.i.dfy"
 include "StateModel.i.dfy"
 include "CommitterImpl.i.dfy"
-include "../lib/Lang/LinearBox.i.dfy"
 
 module FullImpl {
   import opened Options
@@ -10,7 +9,6 @@ module FullImpl {
   import opened DiskOpImpl
   import StateModel
   import JC = JournalCache
-  import opened LinearBox
 
   linear datatype Full = Full(
     linear bc: Variables,
