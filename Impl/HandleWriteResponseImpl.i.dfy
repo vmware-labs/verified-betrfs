@@ -19,49 +19,36 @@ module HandleWriteResponseImpl {
   import HandleWriteResponseModel
   import MarshallingModel
 
-  // [yizhou7][FIXME]: this takes long to verify
-  method writeResponse(s: Full, io: DiskIOHandler)
-  requires s.Inv()
+  method writeResponse(linear inout s: Full, io: DiskIOHandler)
+  requires old_s.Inv()
   requires io.diskOp().RespWriteOp?
-  requires io !in s.Repr
-  modifies s.Repr
   ensures s.W()
-  ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
   ensures s.I() == HandleWriteResponseModel.writeResponse(
-      old(s.I()), old(IIO(io)))
+      old_s.I(), old(IIO(io)))
   {
     HandleWriteResponseModel.reveal_writeResponse();
-    s.reveal_ReprInv();
 
     var id, addr, len := io.getWriteResult();
 
     var loc := DiskLayout.Location(addr, len);
 
-    linear var jc := s.jc.Take();
-
     if ValidNodeLocation(loc) &&
         s.bc.ready && id in s.bc.outstandingBlockWrites {
-      IOImpl.writeNodeResponse(s.bc, io);
+      IOImpl.writeNodeResponse(inout s.bc, io);
     } else if ValidIndirectionTableLocation(loc)
         && s.bc.ready
         && s.bc.outstandingIndirectionTableWrite == Some(id) {
-      var frozen_loc := IOImpl.writeIndirectionTableResponse(s.bc, io);
-      inout jc.receiveFrozenLoc(frozen_loc);
-    } else if jc.status.StatusReady? && ValidJournalLocation(loc) {
-      inout jc.writeBackJournalResp(io);
-    } else if ValidSuperblockLocation(loc) && Some(id) == jc.superblockWrite {
-      if jc.status.StatusReady? && jc.commitStatus.CommitAdvanceLocation? {
-        IOImpl.cleanUp(s.bc);
+      var frozen_loc := IOImpl.writeIndirectionTableResponse(inout s.bc, io);
+      inout s.jc.receiveFrozenLoc(frozen_loc);
+    } else if s.jc.status.StatusReady? && ValidJournalLocation(loc) {
+      inout s.jc.writeBackJournalResp(io);
+    } else if ValidSuperblockLocation(loc) && Some(id) == s.jc.superblockWrite {
+      if s.jc.status.StatusReady? && s.jc.commitStatus.CommitAdvanceLocation? {
+        IOImpl.cleanUp(inout s.bc);
       }
-      inout jc.writeBackSuperblockResp(IIO(io));
+      inout s.jc.writeBackSuperblockResp(IIO(io));
     } else {
       print "writeResponse: doing nothing\n";
     }
-
-    s.jc.Give(jc);
-
-    s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
-    s.reveal_ReprInv();
-    assert s.ProtectedReprInv();
   }
 }
