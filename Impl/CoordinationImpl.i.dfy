@@ -42,10 +42,7 @@ module CoordinationImpl {
   {
     CoordinationModel.reveal_pushSync();
 
-    //linear var jc := s.jc.Take();
     id := inout s.jc.pushSync();
-    //s.jc.Give(jc);
-
   }
 
   method receiveLoc(linear inout s: Variables, loc: DiskLayout.Location)
@@ -71,12 +68,12 @@ module CoordinationImpl {
   {
     CoordinationModel.reveal_initialization();
 
-
     if s.jc.status.StatusLoadingSuperblock? {
       if s.jc.superblock1.SuperblockSuccess?
           && s.jc.superblock2.SuperblockSuccess? {
         inout s.jc.finishLoadingSuperblockPhase();
-        receiveLoc(inout s.bc, s.jc.superblock.indirectionTableLoc);
+        var loc := s.jc.superblock.indirectionTableLoc;
+        receiveLoc(inout s.bc, loc);
       } else if s.jc.superblock1Read.None?
           && s.jc.superblock1.SuperblockUnfinished? {
         inout s.jc.pageInSuperblockReq(io, 0);
@@ -155,7 +152,7 @@ module CoordinationImpl {
   requires s.Inv()
   ensures var contents := s.jc.syncReqs.contents;
     && (if id in contents then res == Some(contents[id]) else res.None?)
-    && res.Some? <==> id in contents
+    && (res.Some? <==> id in s.jc.syncReqs.contents)
   {
     res := LinearMutableMap.Get(s.jc.syncReqs, id);
   }
@@ -184,8 +181,8 @@ module CoordinationImpl {
   returns (success: bool, wait: bool)
   requires old_s.Inv()
   requires io.initialized()
-  requires old_s.Inv()
-  requires io.initialized()
+  // requires old_s.Inv()
+  // requires io.initialized()
   modifies io
   ensures s.W()
   ensures CoordinationModel.popSync(
@@ -197,6 +194,8 @@ module CoordinationImpl {
     wait := false;
 
     var committerSyncState := getCommitterSyncState(s, id);
+    assert committerSyncState.Some? <==> id in s.jc.syncReqs.contents;
+
     if committerSyncState == Some(JC.State1) {
       inout s.jc.popSync(id);
       success := true;
