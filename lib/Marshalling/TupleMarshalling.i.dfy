@@ -186,3 +186,108 @@ abstract module Tuple2Marshalling refines Marshalling {
     edata := data[fstEnd..];
   }
 }
+
+abstract module Tuple3Marshalling refines Marshalling {
+  import ElemMarshalling0 : Marshalling
+  import ElemMarshalling1 : Marshalling
+  import ElemMarshalling2 : Marshalling
+  import TableMarshalling : IntegerSeqMarshalling
+  import Sequences
+  import BoundaryInt = TableMarshalling.Int
+
+  type UnmarshalledType = (ElemMarshalling0.UnmarshalledType, ElemMarshalling1.UnmarshalledType, ElemMarshalling2.UnmarshalledType)
+
+  type Boundary = BoundaryInt.Integer
+  type BoundaryTable = mseq<Boundary>
+
+  // datatype Structure = Structure(boundaries: mseq<Boundary>, elements: mseq<byte>)
+
+  function method sizeOfBoundaryEntry() : uint64
+  {
+    TableMarshalling.Int.Size()
+  }
+
+  function method sizeOfTable() : nat
+  {
+    2 * TableMarshalling.Int.Size() as nat
+  }
+
+  predicate parsable(data: mseq<byte>)
+  {
+    && var tableEnd := sizeOfTable();
+    && |data| >= tableEnd
+    && TableMarshalling.parsable(data[..tableEnd])
+    && var table :mseq<Boundary> := TableMarshalling.parse(data[..tableEnd]);
+
+    && var end0 := BoundaryInt.toInt(table[0]);
+    && tableEnd <= end0 <= |data|
+    && ElemMarshalling0.parsable(data[tableEnd..end0])
+
+    && var end1 := BoundaryInt.toInt(table[1]);
+    && end0 <= end1 <= |data|
+    && ElemMarshalling1.parsable(data[end0..end1])
+
+    && ElemMarshalling2.parsable(data[end1..])
+  }
+
+  function parse(data: mseq<byte>) : UnmarshalledType
+  {
+    var tableEnd := sizeOfTable();
+    var table :mseq<Boundary> := TableMarshalling.parse(data[..tableEnd]);
+    var end0 :=  BoundaryInt.toInt(table[0]);
+    var end1 :=  BoundaryInt.toInt(table[1]);
+    var elem0 := ElemMarshalling0.parse(data[tableEnd..end0]);
+    var elem1 := ElemMarshalling1.parse(data[end0..end1]);
+    var elem2 := ElemMarshalling2.parse(data[end1..]);
+    (elem0, elem1, elem2)
+  }
+
+  method TryParse(data: mseq<byte>) returns (ovalue: Option<UnmarshalledType>)
+  {
+    assume sizeOfTable() < Uint64UpperBound();
+    var tableEnd := sizeOfTable() as uint64;
+
+    if tableEnd > |data| as uint64 {
+      return None;
+    }
+
+    var tableOpt := TableMarshalling.TryParse(data[..tableEnd]);
+    
+    if tableOpt.None? {
+      return None;
+    }
+
+    var table :mseq<Boundary> := tableOpt.value;
+  
+    if !TableMarshalling.Int.fitsInUint64(table[0]) {
+      return None;
+    }
+
+    if !BoundaryInt.fitsInUint64(table[0]) 
+      || !BoundaryInt.fitsInUint64(table[1]) {
+      return None;
+    }
+
+    var end0 := BoundaryInt.toUint64(table[0]);
+    var end1 := BoundaryInt.toUint64(table[1]);
+
+    if end0 > |data| as uint64 || end0 < tableEnd {
+      return None;
+    }
+
+    if end1 > |data| as uint64 || end1 < end0 {
+      return None;
+    }
+
+    var elemOpt0 := ElemMarshalling0.TryParse(data[tableEnd..end0]);
+    var elemOpt1 := ElemMarshalling1.TryParse(data[end0..end1]);
+    var elemOpt2 := ElemMarshalling2.TryParse(data[end1..]);
+
+    if elemOpt0.None? || elemOpt1.None? || elemOpt2.None? {
+      return None;
+    }
+
+    return Some((elemOpt0.value, elemOpt1.value, elemOpt2.value));
+  }
+
+}
