@@ -119,9 +119,7 @@ module SyncImpl {
       froze := false;
     } else {
       // [yizhou7]: is there a better way to perfrom this kind of assignment?
-      linear var Variables(
-        loading,
-        ready,
+      linear var Ready(
         persistentIndirectionTable,
         frozenIndirectionTable,
         ephemeralIndirectionTable,
@@ -132,17 +130,13 @@ module SyncImpl {
         outstandingBlockReads,
         cache,
         lru,
-        blockAllocator,
-        indirectionTableLoc,
-        indirectionTableRead) := s;
+        blockAllocator) := s;
 
       linear var clonedEphemeralIndirectionTable := ephemeralIndirectionTable.Clone();
       dispose_lnone(frozenIndirectionTable);
       frozenIndirectionTable := lSome(clonedEphemeralIndirectionTable);
 
-      s := Variables(
-        loading,
-        ready,
+      s := Ready(
         persistentIndirectionTable,
         frozenIndirectionTable,
         ephemeralIndirectionTable,
@@ -153,9 +147,7 @@ module SyncImpl {
         outstandingBlockReads,
         cache,
         lru,
-        blockAllocator,
-        indirectionTableLoc,
-        indirectionTableRead);
+        blockAllocator);
 
       inout s.blockAllocator.CopyEphemeralToFrozen();
       froze := true;
