@@ -81,15 +81,17 @@ module CacheImpl {
 
       var len := lseq_length_as_uint64(storage);
 
-      while j != len
+      while j < len
         invariant |lseqs(storage)| == len as int;
         invariant |lseq_has(storage)| == len as int;
         invariant 0 <= j <= len;
         invariant forall i :: j <= i < len ==> lseq_has(storage)[i]
-        invariant forall k :: 0 <= k < j <= len ==> !lseq_has(storage)[k]
+        invariant forall k :: 0 <= k < j ==> !lseq_has(storage)[k]
       {
         linear var item;
         assert lseq_has(storage)[j];
+        assert j as nat < |storage|;
+
         storage, item := lseq_take(storage, j);
         linear match item {
           case Entry(_, node) => {
