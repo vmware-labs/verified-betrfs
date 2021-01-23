@@ -20,7 +20,7 @@ module BookkeepingImpl {
 
   method getFreeRef(shared s: ImplVariables)
   returns (ref : Option<BT.G.Reference>)
-  requires s.ready
+  requires s.Ready?
   requires s.W()
   ensures ref == BookkeepingModel.getFreeRef(s.I())
   {
@@ -55,7 +55,7 @@ module BookkeepingImpl {
 
   method getFreeRef2(shared s: ImplVariables, avoid: BT.G.Reference)
   returns (ref : Option<BT.G.Reference>)
-  requires s.ready
+  requires s.Ready?
   requires s.W()
   ensures ref == BookkeepingModel.getFreeRef2(s.I(), avoid)
   ensures ref.Some? ==> ref.value != avoid;
@@ -157,7 +157,7 @@ module BookkeepingImpl {
   requires BookkeepingModel.WriteAllocConditions(old_s.I())
   requires BookkeepingModel.ChildrenConditions(old_s.I(), children)
   requires |old_s.ephemeralIndirectionTable.I().graph| < IndirectionTable.MaxSize()
-  ensures s.ready
+  ensures s.Ready?
   ensures s.W()
   ensures (s.I(), ref) == BookkeepingModel.allocBookkeeping(old_s.I(), children)
   ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1

@@ -31,7 +31,7 @@ module FlushImpl {
 
   method flush(linear inout s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference)
   requires old_s.Inv()
-  requires old_s.ready
+  requires old_s.Ready?
   requires old_s.cache.ptr(childref).Some?
 
   requires parentref in old_s.ephemeralIndirectionTable.I().graph
@@ -46,7 +46,7 @@ module FlushImpl {
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 2
 
   ensures s.W()
-  ensures s.ready
+  ensures s.Ready?
   ensures FlushModel.flush(old_s.I(), parentref, slot as int, childref, 
     old_s.cache.I()[childref]) == s.I()
   {

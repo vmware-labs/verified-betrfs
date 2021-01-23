@@ -27,11 +27,11 @@ module GrowImpl {
   /// The root was found to be too big: grow
   method grow(linear inout s: ImplVariables)
   requires old_s.Inv()
-  requires old_s.ready
+  requires old_s.Ready?
   requires BT.G.Root() in old_s.I().cache
   requires |old_s.I().ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
   ensures s.W()
-  ensures s.ready
+  ensures s.Ready?
   ensures s.I() == GrowModel.grow(old_s.I())
   {
     GrowModel.reveal_grow();

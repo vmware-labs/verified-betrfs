@@ -39,13 +39,13 @@ module SyncImpl {
 
   method AssignRefToLocEphemeral(linear inout s: ImplVariables, ref: BT.G.Reference, loc: Location)
   requires old_s.W()
-  requires old_s.ready
+  requires old_s.Ready?
   requires BlockAllocatorModel.Inv(old_s.blockAllocator.I())
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
 
   ensures s.W()
   ensures s.I() == SyncModel.AssignRefToLocEphemeral(old_s.I(), ref, loc)
-  ensures s.ready
+  ensures s.Ready?
   {
     SyncModel.reveal_AssignRefToLocEphemeral();
 
@@ -57,14 +57,14 @@ module SyncImpl {
 
   method AssignRefToLocFrozen(linear inout s: ImplVariables, ref: BT.G.Reference, loc: Location)
   requires old_s.W()
-  requires old_s.ready
+  requires old_s.Ready?
   requires old_s.I().frozenIndirectionTable.Some? ==> old_s.I().blockAllocator.frozen.Some?
   requires BlockAllocatorModel.Inv(old_s.blockAllocator.I())
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
 
   ensures s.W()
   ensures s.I() == SyncModel.AssignRefToLocFrozen(old_s.I(), ref, loc)
-  ensures s.ready
+  ensures s.Ready?
   {
     SyncModel.reveal_AssignRefToLocFrozen();
 
@@ -78,12 +78,12 @@ module SyncImpl {
 
   method AssignIdRefLocOutstanding(linear inout s: ImplVariables, id: D.ReqId, ref: BT.G.Reference, loc: Location)
   requires old_s.W()
-  requires old_s.ready
+  requires old_s.Ready?
   requires BlockAllocatorModel.Inv(old_s.I().blockAllocator)
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   ensures s.W()
   ensures s.I() == SyncModel.AssignIdRefLocOutstanding(old_s.I(), id, ref, loc)
-  ensures s.ready
+  ensures s.Ready?
   {
     SyncModel.reveal_AssignIdRefLocOutstanding();
 
@@ -102,7 +102,7 @@ module SyncImpl {
   returns (froze: bool)
   requires io.initialized()
   requires old_s.Inv()
-  requires old_s.ready
+  requires old_s.Ready?
   requires old_s.outstandingIndirectionTableWrite.None?
   requires old_s.frozenIndirectionTable.lNone?
 
@@ -163,13 +163,13 @@ module SyncImpl {
   }
 
   method TryToWriteBlock(linear inout s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
-  requires old_s.ready
+  requires old_s.Ready?
   requires old_s.Inv()
   requires io.initialized()
   requires ref in old_s.cache.I()
   modifies io
   ensures s.W()
-  ensures s.ready
+  ensures s.Ready?
   ensures SyncModel.TryToWriteBlock(old_s.I(), old(IIO(io)), ref, s.I(), IIO(io))
   {
     linear var placeholder := Node.EmptyNode();
@@ -210,7 +210,7 @@ module SyncImpl {
   method {:fuel BC.GraphClosed,0} syncFoundInFrozen(linear inout s: ImplVariables, io: DiskIOHandler, ref: Reference)
   requires io.initialized()
   requires old_s.Inv()
-  requires old_s.ready
+  requires old_s.Ready?
   requires old_s.outstandingIndirectionTableWrite.None?
   requires old_s.frozenIndirectionTable.lSome?
   requires ref in old_s.frozenIndirectionTable.value.I().graph
@@ -235,7 +235,7 @@ module SyncImpl {
   returns (froze: bool, wait: bool)
   requires old_s.Inv()
   requires io.initialized()
-  requires old_s.ready
+  requires old_s.Ready?
   modifies io
   ensures s.W()
   ensures SyncModel.sync(old_s.I(), old(IIO(io)), s.I(), IIO(io), froze)

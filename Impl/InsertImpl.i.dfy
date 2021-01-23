@@ -40,7 +40,7 @@ module InsertImpl {
   method InsertKeyValue(linear inout s: ImplVariables, key: Key, value: Value)
   returns (success: bool)
   requires old_s.Inv()
-  requires old_s.ready
+  requires old_s.Ready?
   requires BT.G.Root() in old_s.cache.I()
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 1
   requires BoundedKey(old_s.cache.I()[BT.G.Root()].pivotTable, key)
@@ -74,7 +74,7 @@ module InsertImpl {
   returns (success: bool)
   requires io.initialized()
   requires old_s.Inv()
-  requires old_s.ready
+  requires old_s.Ready?
   modifies io
   ensures s.W()
   ensures InsertModel.insert(old_s.I(), old(IIO(io)), key, value, s.I(), success, IIO(io))

@@ -31,13 +31,13 @@ module LeafImpl {
 
   method repivotLeaf(linear inout s: ImplVariables, ref: BT.G.Reference)
   requires old_s.Inv()
-  requires old_s.ready
+  requires old_s.Ready?
   requires ref in old_s.ephemeralIndirectionTable.I().graph
   requires old_s.cache.ptr(ref).Some?
   requires old_s.cache.I()[ref].children.None?
   requires |old_s.cache.I()[ref].buckets| == 1
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 1
-  ensures s.ready
+  ensures s.Ready?
   ensures s.W()
   ensures s.I() == LeafModel.repivotLeaf(old_s.I(), ref, old_s.cache.I()[ref]);
   {

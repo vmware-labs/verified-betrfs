@@ -25,7 +25,7 @@ module DeallocImpl {
   requires DeallocModel.deallocable(old_s.I(), ref)
   modifies io
   ensures s.W()
-  ensures s.ready
+  ensures s.Ready?
   ensures (s.I(), IIO(io)) == DeallocModel.Dealloc(old_s.I(), old(IIO(io)), ref);
   {
     DeallocModel.reveal_Dealloc();
@@ -62,7 +62,7 @@ module DeallocImpl {
 
   method FindDeallocable(shared s: ImplVariables) returns (ref: Option<Reference>)
   requires s.WF()
-  requires s.ready
+  requires s.Ready?
   ensures ref == DeallocModel.FindDeallocable(s.I())
   {
     DeallocModel.reveal_FindDeallocable();

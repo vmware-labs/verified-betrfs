@@ -53,7 +53,7 @@ module CoordinationImpl {
     CoordinationModel.reveal_receiveLoc();
 
     inout s.loading := true;
-    inout s.ready := false;
+    inout s.Ready? := false;
     inout s.indirectionTableLoc := loc;
     inout s.indirectionTableRead := None;
   }

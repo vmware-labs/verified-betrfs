@@ -24,10 +24,10 @@ module EvictImpl {
 
   method Evict(linear inout s: ImplVariables, ref: BT.G.Reference)
   requires old_s.WF()
-  requires old_s.ready
+  requires old_s.Ready?
   requires ref in old_s.cache.I()
   ensures s.W()
-  ensures s.ready
+  ensures s.Ready?
   ensures s.I() == EvictModel.Evict(old_s.I(), ref)
   {
     inout s.lru.Remove(ref);
@@ -38,7 +38,7 @@ module EvictImpl {
   method NeedToWrite(shared s: ImplVariables, ref: BT.G.Reference)
   returns (b: bool)
   requires s.WF()
-  requires s.ready
+  requires s.Ready?
   ensures b == EvictModel.NeedToWrite(s.I(), ref)
   {
     var eph := s.ephemeralIndirectionTable.GetEntry(ref);
@@ -59,7 +59,7 @@ module EvictImpl {
   method CanEvict(shared s: ImplVariables, ref: BT.G.Reference)
   returns (b: bool)
   requires s.WF()
-  requires s.ready
+  requires s.Ready?
   requires ref in s.ephemeralIndirectionTable.I().graph ==>
       ref in s.ephemeralIndirectionTable.I().locs
   ensures b == EvictModel.CanEvict(s.I(), ref)
@@ -74,12 +74,12 @@ module EvictImpl {
 
   method EvictOrDealloc(linear inout s: ImplVariables, io: DiskIOHandler)
   requires old_s.Inv()
-  requires old_s.ready
+  requires old_s.Ready?
   requires io.initialized()
   requires |old_s.cache.I()| > 0
   modifies io
   ensures s.W()
-  ensures s.ready
+  ensures s.Ready?
   ensures EvictModel.EvictOrDealloc(old_s.I(), old(IIO(io)), s.I(), IIO(io))
   {
     var ref := FindDeallocable(s);
@@ -109,13 +109,13 @@ module EvictImpl {
 
   method PageInNodeReqOrMakeRoom(linear inout s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
   requires old_s.Inv()
-  requires old_s.ready
+  requires old_s.Ready?
   requires io.initialized()
   requires ref in old_s.ephemeralIndirectionTable.I().graph
   requires ref !in old_s.cache.I()
   modifies io
   ensures s.W()
-  ensures s.ready
+  ensures s.Ready?
   ensures EvictModel.PageInNodeReqOrMakeRoom(old_s.I(), old(IIO(io)), ref, s.I(), IIO(io))
   {
     EvictModel.reveal_PageInNodeReqOrMakeRoom();

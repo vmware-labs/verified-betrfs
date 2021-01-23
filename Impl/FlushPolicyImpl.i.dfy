@@ -100,7 +100,7 @@ module FlushPolicyImpl {
   requires FlushPolicyModel.ValidStackSlots(old_s.I(), stack, slots)
   decreases 0x1_0000_0000_0000_0000 - |stack|
   ensures s.W()
-  ensures s.ready
+  ensures s.Ready?
   ensures (s.I(), action) == FlushPolicyModel.getActionToFlush(old_s.I(), stack, slots)
   {
     FlushPolicyModel.reveal_getActionToFlush();
@@ -151,12 +151,12 @@ module FlushPolicyImpl {
   method runFlushPolicy(linear inout s: ImplVariables, io: DiskIOHandler)
   requires old_s.Inv()
   requires io.initialized()
-  requires old_s.ready
+  requires old_s.Ready?
   requires BT.G.Root() in old_s.cache.I()
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
   modifies io
   ensures s.W()
-  ensures s.ready
+  ensures s.Ready?
   ensures FlushPolicyModel.runFlushPolicy(old_s.I(), old(IIO(io)), s.I(), IIO(io))
   {
     FlushPolicyModel.reveal_runFlushPolicy();

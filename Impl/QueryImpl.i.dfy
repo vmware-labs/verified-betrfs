@@ -48,7 +48,7 @@ module QueryImpl {
   returns (res: Option<Value>)
   requires io.initialized()
   requires old_s.Inv()
-  requires old_s.ready
+  requires old_s.Ready?
   requires ref in old_s.ephemeralIndirectionTable.I().graph
   modifies io
   decreases counter
@@ -104,7 +104,7 @@ module QueryImpl {
   returns (res: Option<Value>)
   requires io.initialized()
   requires old_s.Inv()
-  requires old_s.ready
+  requires old_s.Ready?
   modifies io
   ensures s.W()
   ensures QueryModel.query(old_s.I(), old(IIO(io)), key, s.I(), res, IIO(io))

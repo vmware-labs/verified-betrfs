@@ -74,14 +74,14 @@ module SplitImpl {
   requires slot as int < MaxNumChildren()
   requires left_child.Inv()
   requires right_child.Inv()
-  requires old_s.ready
+  requires old_s.Ready?
   requires BookkeepingModel.ChildrenConditions(old_s.I(), left_child.children)
   requires BookkeepingModel.ChildrenConditions(old_s.I(), right_child.children)
   requires BookkeepingModel.ChildrenConditions(old_s.I(), Some(fparent_children))
   requires |fparent_children| < MaxNumChildren()
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
 
-  ensures s.ready
+  ensures s.Ready?
   ensures s.W()
   ensures s.I() == SplitModel.splitBookkeeping(old_s.I(), left_childref, right_childref, 
     parentref, fparent_children, left_child.I(), right_child.I(), slot as int)
@@ -109,7 +109,7 @@ module SplitImpl {
   method splitCacheChanges(linear inout s: ImplVariables, left_childref: BT.G.Reference,
       right_childref: BT.G.Reference, parentref: BT.G.Reference, slot: uint64, 
       num_children_left: uint64, pivot: Key, linear left_child: Node, linear right_child: Node)
-  requires old_s.ready
+  requires old_s.Ready?
   requires old_s.W()
   requires old_s.cache.ptr(parentref).Some?
   requires BT.WFNode(old_s.cache.I()[parentref])
@@ -125,7 +125,7 @@ module SplitImpl {
   ensures s.W()
   ensures s.I() == SplitModel.splitCacheChanges(old_s.I(), left_childref, right_childref,
     parentref, slot as int, num_children_left as int, pivot, left_child.I(), right_child.I())
-  ensures s.ready
+  ensures s.Ready?
   {
     SplitModel.reveal_splitCacheChanges();
     inout s.cache.Insert(left_childref, left_child);
@@ -136,7 +136,7 @@ module SplitImpl {
   method splitDoChanges(linear inout s: ImplVariables, linear child: Node, left_childref: BT.G.Reference,
       right_childref: BT.G.Reference, parentref: BT.G.Reference, fparent_pivots: PivotTable,
       fparent_children: seq<BT.G.Reference>, slot: uint64)
-  requires old_s.ready
+  requires old_s.Ready?
   requires old_s.Inv()
   requires child.Inv()
   requires BT.WFNode(child.I())
@@ -155,7 +155,7 @@ module SplitImpl {
   ensures s.W()
   ensures s.I() == SplitModel.splitDoChanges(old_s.I(), old(child.I()), left_childref,
     right_childref, parentref, fparent_children, slot as int)
-  ensures s.ready
+  ensures s.Ready?
   {
     var len := lseq_length_as_uint64(child.buckets);
     var num_children_left := len / 2;
@@ -183,7 +183,7 @@ module SplitImpl {
   method splitChild(linear inout s: ImplVariables, parentref: BT.G.Reference, 
     childref: BT.G.Reference, slot: uint64, lbound: Key, ubound: Option<Key>,
     fparent_pivots: PivotTable, fparent_children: Option<seq<BT.G.Reference>>)
-  requires old_s.ready
+  requires old_s.Ready?
   requires old_s.Inv()
   requires old_s.cache.ptr(childref).Some?
   requires old_s.cache.ptr(parentref).Some?
@@ -197,7 +197,7 @@ module SplitImpl {
   requires BookkeepingModel.ChildrenConditions(old_s.I(), fparent_children)
   requires BookkeepingModel.ChildrenConditions(old_s.I(), old_s.cache.I()[childref].children)
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
-  ensures s.ready
+  ensures s.Ready?
   ensures s.W()
   ensures s.I() == SplitModel.splitChild(old_s.I(), parentref, childref, slot as int, lbound, ubound)
   {
@@ -239,7 +239,7 @@ module SplitImpl {
   }
 
   method doSplit(linear inout s: ImplVariables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: uint64)
-  requires old_s.ready
+  requires old_s.Ready?
   requires old_s.Inv()
   requires old_s.cache.ptr(childref).Some?
   requires old_s.cache.ptr(parentref).Some?
@@ -251,7 +251,7 @@ module SplitImpl {
   requires |old_s.cache.I()[parentref].buckets| <= MaxNumChildren() - 1
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
   ensures s.W()
-  ensures s.ready
+  ensures s.Ready?
   ensures s.I() == SplitModel.doSplit(old_s.I(), parentref, childref, slot as int);
   {
     SplitModel.reveal_doSplit();

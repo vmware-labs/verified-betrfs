@@ -81,7 +81,7 @@ module SuccImpl {
       pivots: PivotTable,
       children: Option<seq<BT.G.Reference>>)
   returns (res : Option<UI.SuccResultList>)
-  requires old_s.ready
+  requires old_s.Ready?
   requires old_s.Inv()
   requires io.initialized()
   requires old_s.cache.ptr(ref).Some?
@@ -99,7 +99,7 @@ module SuccImpl {
   modifies io
   decreases counter, 0
   ensures s.W()
-  ensures s.ready
+  ensures s.Ready?
   ensures s.cache.I() == old_s.cache.I()
   ensures (s.I(), IIO(io), res)
        == SuccModel.getPathInternal(old_s.I(), old(IIO(io)), key, old(acc),
@@ -174,7 +174,7 @@ module SuccImpl {
       counter: uint64)
   returns (res : Option<UI.SuccResultList>)
   requires old_s.Inv()
-  requires old_s.ready
+  requires old_s.Ready?
   requires io.initialized()
   requires maxToFind >= 1
   requires ref in old_s.I().ephemeralIndirectionTable.graph
@@ -232,7 +232,7 @@ module SuccImpl {
   requires old_s.Inv()
   requires io.initialized()
   requires maxToFind >= 1
-  requires old_s.ready
+  requires old_s.Ready?
   modifies io
   ensures s.W()
   ensures (s.I(), IIO(io), res) == SuccModel.doSucc(old_s.I(), old(IIO(io)),
