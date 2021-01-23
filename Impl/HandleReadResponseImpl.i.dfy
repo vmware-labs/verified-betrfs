@@ -29,13 +29,13 @@ module HandleReadResponseImpl {
     var loc := DiskLayout.Location(addr, |bytes| as uint64);
 
     if ValidNodeLocation(loc) {
-      if s.bc.ready {
+      if s.bc.Ready? {
         IOImpl.PageInNodeResp(inout s.bc, io);
       } else {
         print "readResponse: doing nothing\n";
       }
     } else if ValidIndirectionTableLocation(loc) {
-      if !s.bc.ready && s.bc.loading {
+      if s.bc.Loading? {
         IOImpl.PageInIndirectionTableResp(inout s.bc, io);
       } else {
         print "readResponse: doing nothing\n";

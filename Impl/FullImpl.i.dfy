@@ -42,7 +42,7 @@ module FullImpl {
 
     static method Constructor() returns (linear f: Full)
     ensures f.Inv()
-    ensures !f.bc.ready
+    ensures f.bc.Unready?
     ensures f.jc.I() == JC.LoadingSuperblock(
             None, None,
             JC.SuperblockUnfinished,

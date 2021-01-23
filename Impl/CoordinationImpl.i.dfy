@@ -47,15 +47,13 @@ module CoordinationImpl {
 
   method receiveLoc(linear inout s: Variables, loc: DiskLayout.Location)
   requires old_s.WF()
+  requires old_s.Unready?
   ensures s.W()
   ensures s.I() == CoordinationModel.receiveLoc(old_s.I(), loc)
   {
     CoordinationModel.reveal_receiveLoc();
-
-    inout s.loading := true;
-    inout s.Ready? := false;
-    inout s.indirectionTableLoc := loc;
-    inout s.indirectionTableRead := None;
+    linear var Unready() := s;
+    s := Variables.Loading(loc, None);
   }
 
   // [yizhou7][FIXME]: this takes long to verify
@@ -85,10 +83,10 @@ module CoordinationImpl {
       }
     } else if s.jc.status.StatusLoadingOther? {
       inout s.jc.tryFinishLoadingOtherPhase(io);
-    } else if s.bc.loading && !s.bc.ready
+    } else if s.bc.Loading?
         && s.bc.indirectionTableRead.None? {
       IOImpl.PageInIndirectionTableReq(inout s.bc, io);
-    } else if s.bc.ready {
+    } else if s.bc.Ready? {
       var isEmpty := s.jc.isReplayEmpty();
       if !isEmpty {
         var je := s.jc.journalist.replayJournalTop();
@@ -110,7 +108,7 @@ module CoordinationImpl {
   returns (wait: bool)
   requires old_s.Inv()
   requires io.initialized()
-  requires old_s.bc.ready
+  requires old_s.bc.Ready?
   requires old_s.jc.Inv() // [yizhou7][NOTE]: this is implied by s.Inv(), but opaqued
   requires old_s.jc.status.StatusReady?
 
@@ -168,7 +166,7 @@ module CoordinationImpl {
   ensures b == CoordinationModel.isInitialized(s.I())
   {
     if (
-      && s.bc.ready
+      && s.bc.Ready?
       && isCommitterStatusReady(s)
     ) then
       s.jc.isReplayEmpty()

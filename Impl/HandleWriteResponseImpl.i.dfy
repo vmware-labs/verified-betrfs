@@ -33,10 +33,10 @@ module HandleWriteResponseImpl {
     var loc := DiskLayout.Location(addr, len);
 
     if ValidNodeLocation(loc) &&
-        s.bc.ready && id in s.bc.outstandingBlockWrites {
+        s.bc.Ready? && id in s.bc.outstandingBlockWrites {
       IOImpl.writeNodeResponse(inout s.bc, io);
     } else if ValidIndirectionTableLocation(loc)
-        && s.bc.ready
+        && s.bc.Ready?
         && s.bc.outstandingIndirectionTableWrite == Some(id) {
       var frozen_loc := IOImpl.writeIndirectionTableResponse(inout s.bc, io);
       inout s.jc.receiveFrozenLoc(frozen_loc);
