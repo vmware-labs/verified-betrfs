@@ -36,7 +36,7 @@ module IOImpl {
   // TODO does ImplVariables make sense? Should it be a Variables? Or just the fields of a class we live in?
   method getFreeLoc(shared s: ImplVariables, len: uint64)
   returns (loc : Option<Location>)
-  requires s.ready
+  requires s.Ready?
   requires s.WF()
   requires len <= NodeBlockSizeUint64()
   ensures loc == IOModel.getFreeLoc(s.I(), len)
@@ -83,7 +83,7 @@ module IOImpl {
   method FindLocationAndRequestWrite(io: DiskIOHandler, shared s: ImplVariables, shared sector: SSI.Sector)
   returns (id: Option<D.ReqId>, loc: Option<Location>)
   requires s.WF()
-  requires s.ready
+  requires s.Ready?
   requires SSI.WFSector(sector)
   requires SSM.WFSector(SSI.ISector(sector))
   requires io.initialized()
@@ -117,7 +117,7 @@ module IOImpl {
       io: DiskIOHandler, shared s: ImplVariables, ghost sector: SSI.Sector)
   returns (id: Option<D.ReqId>, loc: Option<Location>)
   requires s.WF()
-  requires s.ready
+  requires s.Ready?
   requires io.initialized()
   requires SSI.WFSector(sector)
   requires SSM.WFSector(SSI.ISector(sector))
@@ -160,8 +160,7 @@ module IOImpl {
   method PageInIndirectionTableReq(linear inout s: ImplVariables, io: DiskIOHandler)
   requires old_s.WF()
   requires io.initialized()
-  requires !old_s.ready
-  requires old_s.loading
+  requires old_s.Loading?
   requires ValidIndirectionTableLocation(old_s.indirectionTableLoc)
   modifies io
   ensures s.WF()
@@ -180,7 +179,7 @@ module IOImpl {
 
   method PageInNodeReq(linear inout s: ImplVariables, io: DiskIOHandler, ref: BC.Reference)
   requires io.initialized();
-  requires old_s.ready
+  requires old_s.Ready?
   requires old_s.WF()
   requires ref in old_s.ephemeralIndirectionTable.I().locs
 
@@ -189,7 +188,7 @@ module IOImpl {
 
   modifies io
   ensures s.WF()
-  ensures s.ready
+  ensures s.Ready?
   ensures (s.I(), IIO(io)) == IOModel.PageInNodeReq(old_s.I(), old(IIO(io)), ref)
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
@@ -242,8 +241,7 @@ module IOImpl {
   method PageInIndirectionTableResp(linear inout s: ImplVariables, io: DiskIOHandler)
   requires old_s.W()
   requires io.diskOp().RespReadOp?
-  requires !old_s.ready
-  requires old_s.loading
+  requires old_s.Loading?
   ensures s.W()
   ensures s.I() == IOModel.PageInIndirectionTableResp(old_s.I(), old(IIO(io)))
   {
@@ -260,47 +258,14 @@ module IOImpl {
       assert (succ, bm.I()) == ephemeralIndirectionTable.initLocBitmap(); // TODO(andreal) unnecessary
 
       if succ {
-        linear var Variables(
-          loading,
-          _,
-          persistentIndirectionTable,
-          frozenIndirectionTable,
-          prevEphemeralIndirectionTable,
-          _,
-          _,
-          outstandingIndirectionTableWrite,
-          outstandingBlockWrites,
-          outstandingBlockReads,
-          cache,
-          lru,
-          blockAllocator,
-          indirectionTableLoc,
-          indirectionTableRead) := s;
+        linear var Loading(indirectionTableLoc, indirectionTableRead) := s;
+  
+        linear var blockAllocator := BlockAllocatorImpl.BlockAllocator.Constructor(bm);
+        linear var persistentIndirectionTable := ephemeralIndirectionTable.Clone();
+        linear var lru := LinearLru.LinearLru.Alloc();
+        linear var cache := CacheImpl.LMutCache.NewCache();
 
-        prevEphemeralIndirectionTable.Free();
-
-        if frozenIndirectionTable.lSome? {
-          linear var value := unwrap_value(frozenIndirectionTable);
-          value.Free();
-        } else {
-          dispose_lnone(frozenIndirectionTable);
-        }
-
-        blockAllocator.Free();
-        blockAllocator := BlockAllocatorImpl.BlockAllocator.Constructor(bm);
-
-        persistentIndirectionTable.Free();
-        persistentIndirectionTable := ephemeralIndirectionTable.Clone();
-
-        lru.Free();
-        lru := LinearLru.LinearLru.Alloc();
-
-        cache.Free();
-        cache := CacheImpl.LMutCache.NewCache();
-
-        s := Variables(
-          loading,
-          true,
+        s := Variables.Ready(
           persistentIndirectionTable,
           lNone,
           ephemeralIndirectionTable,
@@ -311,9 +276,7 @@ module IOImpl {
           map[],
           cache,
           lru,
-          blockAllocator,
-          indirectionTableLoc,
-          indirectionTableRead);
+          blockAllocator);
 
         assert s.I() == IOModel.PageInIndirectionTableResp(old_s.I(), old(IIO(io))); // TODO(andreal)
       } else {
@@ -332,7 +295,7 @@ module IOImpl {
   requires old_s.W()
   requires old_s.WF()
   requires io.diskOp().RespReadOp?
-  requires old_s.ready
+  requires old_s.Ready?
   ensures s.W()
   ensures s.I() == IOModel.PageInNodeResp(old_s.I(), old(IIO(io)))
   {
@@ -397,7 +360,7 @@ module IOImpl {
   requires io.diskOp().RespWriteOp?
   requires ValidDiskOp(io.diskOp())
   requires old_s.Inv()
-  requires old_s.ready && IIO(io).id in old_s.outstandingBlockWrites
+  requires old_s.Ready? && IIO(io).id in old_s.outstandingBlockWrites
   ensures s.W()
   ensures s.I() == IOModel.writeNodeResponse(old_s.I(), IIO(io))
   {
@@ -414,7 +377,7 @@ module IOImpl {
   requires io.diskOp().RespWriteOp?
   requires ValidDiskOp(io.diskOp())
   requires old_s.Inv()
-  requires old_s.ready
+  requires old_s.Ready?
   requires old_s.frozenIndirectionTableLoc.Some?
   ensures s.W()
   ensures (s.I(), loc) == IOModel.writeIndirectionTableResponse(
@@ -427,7 +390,7 @@ module IOImpl {
   // [yizhou7]: this might not be the best way is to decompose and recompose
   method cleanUp(linear inout s: ImplVariables)
   requires old_s.Inv()
-  requires old_s.ready
+  requires old_s.Ready?
   requires old_s.frozenIndirectionTable.lSome?
   requires old_s.frozenIndirectionTableLoc.Some?
   ensures s.W()
@@ -435,9 +398,7 @@ module IOImpl {
   {
     IOModel.lemmaBlockAllocatorFrozenSome(s.I());
 
-    linear var Variables(
-      loading,
-      ready,
+    linear var Ready(
       persistentIndirectionTable,
       frozenIndirectionTable,
       ephemeralIndirectionTable,
@@ -448,16 +409,12 @@ module IOImpl {
       outstandingBlockReads,
       cache,
       lru,
-      blockAllocator,
-      indirectionTableLoc,
-      indirectionTableRead) := s;
+      blockAllocator) := s;
 
     persistentIndirectionTable.Free();
     linear var value := unwrap_value(frozenIndirectionTable);
 
-    s := Variables(
-      loading,
-      ready,
+    s := Ready(
       value,
       lNone,
       ephemeralIndirectionTable,
@@ -468,10 +425,7 @@ module IOImpl {
       outstandingBlockReads,
       cache,
       lru,
-      blockAllocator,
-      indirectionTableLoc,
-      indirectionTableRead);
-
+      blockAllocator);
 
     inout s.blockAllocator.MoveFrozenToPersistent();
   }
