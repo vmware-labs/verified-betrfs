@@ -67,54 +67,54 @@ module CacheImpl {
       && (forall ref | ref in cache.contents :: cache.contents[ref].Inv())
     }
 
-    linear method Free()
-      requires Inv()
-    {
-      linear var LMutCache(cache) := this;
-      linear var LinearHashMap(underlying, _, _) := cache;
-      linear var FixedSizeLinearHashMap(storage, _, _) := underlying;
+    // [yizhou7]: free method is tricker than I thought
+    // linear method Free()
+    //   requires Inv()
+    // {
+    //   linear var LMutCache(cache) := this;
+    //   linear var LinearHashMap(underlying, _, _) := cache;
+    //   linear var FixedSizeLinearHashMap(storage, _, _) := underlying;
 
-      var j : uint64 := 0;
+    //   var j : uint64 := 0;
 
-      assume lseq_has_all(storage);
-      assume |lseqs(storage)| <= 0xffff_ffff_ffff_ffff;
+    //   assume lseq_has_all(storage);
+    //   assume |lseqs(storage)| <= 0xffff_ffff_ffff_ffff;
 
-      var len := lseq_length_as_uint64(storage);
+    //   var len := lseq_length_as_uint64(storage);
 
-      while j < len
-        invariant |lseqs(storage)| == len as int;
-        invariant |lseq_has(storage)| == len as int;
-        invariant 0 <= j <= len;
-        invariant forall i :: j <= i < len ==> lseq_has(storage)[i]
-        invariant forall k :: 0 <= k < j ==> !lseq_has(storage)[k]
-      {
-        linear var item;
-        assert lseq_has(storage)[j];
-        assert j as nat < |storage|;
+    //   while j < len
+    //     invariant |lseqs(storage)| == len as int;
+    //     invariant |lseq_has(storage)| == len as int;
+    //     invariant 0 <= j <= len;
+    //     invariant forall i :: j <= i < len ==> lseq_has(storage)[i]
+    //     invariant forall k :: 0 <= k < j ==> !lseq_has(storage)[k]
+    //   {
+    //     linear var item;
+    //     assert lseq_has(storage)[j];
+    //     assert j as nat < |storage|;
 
-        storage, item := lseq_take(storage, j);
-        linear match item {
-          case Entry(_, node) => {
-            assume node.Inv();
-            var _ := FreeNode(node);
-          }
-          case Empty() => { }
-          case Tombstone(_) => { }
-        }
-        j := j + 1;
-      }
-
+    //     storage, item := lseq_take(storage, j);
+    //     linear match item {
+    //       case Entry(_, node) => {
+    //         assume node.Inv();
+    //         var _ := FreeNode(node);
+    //       }
+    //       case Empty() => { }
+    //       case Tombstone(_) => { }
+    //     }
+    //     j := j + 1;
+    //   }
   
-      forall i:nat | i < |storage|
-      ensures i !in storage
-      {
-        assert !lseq_has(storage)[i] by {
-          assert forall i :: 0 <= i < len ==> !lseq_has(storage)[i];
-        }
-      }
+    //   forall i:nat | i < |storage|
+    //   ensures i !in storage
+    //   {
+    //     assert !lseq_has(storage)[i] by {
+    //       assert forall i :: 0 <= i < len ==> !lseq_has(storage)[i];
+    //     }
+    //   }
 
-      lseq_free(storage);
-    }
+    //   lseq_free(storage);
+    // }
 
     function I() : map<BT.G.Reference, BT.G.Node>
     requires Inv()
