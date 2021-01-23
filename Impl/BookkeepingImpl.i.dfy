@@ -93,6 +93,7 @@ module BookkeepingImpl {
 
   method writeBookkeeping(linear inout s: ImplVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
   requires old_s.W()
+  requires s.Ready?
   requires |LruModel.I(old_s.lru.Queue())| <= 0x1_0000_0000
   requires BookkeepingModel.WriteAllocConditions(old_s.I())
   requires BookkeepingModel.ChildrenConditions(old_s.I(), children)
@@ -124,6 +125,7 @@ module BookkeepingImpl {
 
   method writeBookkeepingNoSuccsUpdate(linear inout s: ImplVariables, ref: BT.G.Reference)
   requires old_s.W()
+  requires s.Ready?
   requires |LruModel.I(old_s.lru.Queue())| <= 0x1_0000_0000
   requires BookkeepingModel.WriteAllocConditions(old_s.I())
   requires ref in old_s.ephemeralIndirectionTable.I().graph
@@ -152,6 +154,7 @@ module BookkeepingImpl {
 
   method allocBookkeeping(linear inout s: ImplVariables, children: Option<seq<BT.G.Reference>>)
   returns (ref: Option<BT.G.Reference>)
+  requires s.Ready?
   requires old_s.W()
   requires |LruModel.I(old_s.lru.Queue())| <= 0x1_0000_0000
   requires BookkeepingModel.WriteAllocConditions(old_s.I())
