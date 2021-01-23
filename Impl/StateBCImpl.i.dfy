@@ -32,30 +32,24 @@ module StateBCImpl {
   type Reference = BT.G.Reference
 
   // TODO rename to like... BlockCache variables or smthn
-  linear datatype Variables = Variables(
-    loading: bool,
-    ready: bool,
-
-    // Ready
-    linear persistentIndirectionTable: IT.IndirectionTable,
-    linear frozenIndirectionTable: lOption<IT.IndirectionTable>,
-    linear ephemeralIndirectionTable: IT.IndirectionTable,
-    persistentIndirectionTableLoc: DiskLayout.Location,
-    frozenIndirectionTableLoc: Option<DiskLayout.Location>,
-    outstandingIndirectionTableWrite: Option<BC.ReqId>,
-    outstandingBlockWrites: map<D.ReqId, BC.OutstandingWrite>,
-    outstandingBlockReads: map<D.ReqId, BC.OutstandingRead>,
-    linear cache: LMutCache,
-    linear lru: LinearLru.LinearLru,
-    linear blockAllocator: BlockAllocatorImpl.BlockAllocator,
-
-    // Loading
-    indirectionTableLoc: DiskLayout.Location,
-    indirectionTableRead: Option<BC.ReqId>
-    
-    // Unready
-    // no fields
-  )
+  linear datatype Variables = 
+    | Ready(
+        linear persistentIndirectionTable: IT.IndirectionTable, 
+        linear frozenIndirectionTable: lOption<IT.IndirectionTable>,
+        linear ephemeralIndirectionTable: IT.IndirectionTable,
+        persistentIndirectionTableLoc: DiskLayout.Location,
+        frozenIndirectionTableLoc: Option<DiskLayout.Location>,
+        outstandingIndirectionTableWrite: Option<BC.ReqId>,
+        outstandingBlockWrites: map<BC.ReqId, BC.OutstandingWrite>,
+        outstandingBlockReads: map<BC.ReqId, BC.OutstandingRead>,
+        linear cache: LMutCache,
+        linear lru: LinearLru.LinearLru,
+        linear blockAllocator: BlockAllocatorImpl.BlockAllocator
+      )
+    | Loading(
+        indirectionTableLoc: DiskLayout.Location,
+        indirectionTableRead: Option<BC.ReqId>)
+    | Unready
   {
     // method DebugAccumulate()
     // returns (acc:DebugAccumulator.DebugAccumulator)
@@ -101,18 +95,20 @@ module StateBCImpl {
 
     predicate W()
     {
-      && persistentIndirectionTable.Inv()
-      && (frozenIndirectionTable.lSome? ==> frozenIndirectionTable.value.Inv())
-      && ephemeralIndirectionTable.Inv()
-      && lru.Inv()
-      && cache.Inv()
-      && blockAllocator.Inv()
+      Ready? ==> (
+        && persistentIndirectionTable.Inv()
+        && (frozenIndirectionTable.lSome? ==> frozenIndirectionTable.value.Inv())
+        && ephemeralIndirectionTable.Inv()
+        && lru.Inv()
+        && cache.Inv()
+        && blockAllocator.Inv()
+      )
     }
 
     function I() : SBCM.BCVariables
     requires W()
     {
-      if ready then (
+      if Ready? then (
         SBCM.Ready(
           persistentIndirectionTable,
           if frozenIndirectionTable.lSome? then Some(frozenIndirectionTable.value) else None,
@@ -125,7 +121,7 @@ module StateBCImpl {
           cache.I(),
           lru.Queue(),
           blockAllocator.I())
-      ) else if loading then (
+      ) else if Loading? then (
         SBCM.LoadingIndirectionTable(
           indirectionTableLoc,
           indirectionTableRead)
@@ -141,36 +137,38 @@ module StateBCImpl {
     }
 
     static method Constructor() returns (linear v: Variables)
-    ensures !v.ready
-    ensures !v.loading
+    // ensures !v.ready
+    // ensures !v.loading
+    ensures v.Unready?
     ensures v.WF()
     {
-      linear var lru := LinearLru.LinearLru.Alloc();
-      // Unused for the `ready = false` state but we need to initialize them.
-      // (could make them nullable instead).
-      linear var ephemeralIndirectionTable := IT.IndirectionTable.AllocEmpty();
-      linear var persistentIndirectionTable := IT.IndirectionTable.AllocEmpty();
-      linear var cache := LMutCache.NewCache();
+      v := Unready;
+      // linear var lru := LinearLru.LinearLru.Alloc();
+      // // Unused for the `ready = false` state but we need to initialize them.
+      // // (could make them nullable instead).
+      // linear var ephemeralIndirectionTable := IT.IndirectionTable.AllocEmpty();
+      // linear var persistentIndirectionTable := IT.IndirectionTable.AllocEmpty();
+      // linear var cache := LMutCache.NewCache();
 
-      linear var bm := BitmapImpl.Bitmap.Constructor(NumBlocksUint64());
-      linear var blockAllocator := BlockAllocatorImpl.BlockAllocator.Constructor(bm);
+      // linear var bm := BitmapImpl.Bitmap.Constructor(NumBlocksUint64());
+      // linear var blockAllocator := BlockAllocatorImpl.BlockAllocator.Constructor(bm);
 
-      v := Variables(
-        false,
-        false,
-        persistentIndirectionTable,
-        lNone,
-        ephemeralIndirectionTable,
-        DiskLayout.Location(0, 0),
-        None,
-        None,
-        map[],
-        map[],
-        cache,
-        lru,
-        blockAllocator,
-        DiskLayout.Location(0, 0),
-        None);
+      // v := Variables(
+      //   false,
+      //   false,
+      //   persistentIndirectionTable,
+      //   lNone,
+      //   ephemeralIndirectionTable,
+      //   DiskLayout.Location(0, 0),
+      //   None,
+      //   None,
+      //   map[],
+      //   map[],
+      //   cache,
+      //   lru,
+      //   blockAllocator,
+      //   DiskLayout.Location(0, 0),
+      //   None);
     }
 
     predicate Inv()
@@ -180,6 +178,7 @@ module StateBCImpl {
     }
 
     shared function method TotalCacheSize() : (res : uint64)
+    requires Ready?
     requires cache.Inv()
     requires |cache.I()| + |outstandingBlockReads| < 0x1_0000_0000_0000_0000
     {
