@@ -296,7 +296,7 @@ module IOImpl {
         lru := LinearLru.LinearLru.Alloc();
 
         cache.Free();
-        cache := CacheImpl.NewCache();
+        cache := CacheImpl.LMutCache.NewCache();
 
         s := Variables(
           loading,
@@ -314,9 +314,6 @@ module IOImpl {
           blockAllocator,
           indirectionTableLoc,
           indirectionTableRead);
-
-        // [yizhou7][TODO]: fix assume
-        assume s.I().lru == LruModel.Empty();
 
         assert s.I() == IOModel.PageInIndirectionTableResp(old_s.I(), old(IIO(io))); // TODO(andreal)
       } else {
