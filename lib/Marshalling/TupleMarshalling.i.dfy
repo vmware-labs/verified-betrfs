@@ -202,19 +202,20 @@ abstract module Tuple3Marshalling refines Marshalling {
 
   // datatype Structure = Structure(boundaries: mseq<Boundary>, elements: mseq<byte>)
 
-  function method sizeOfBoundaryEntry() : uint64
+  function method SizeOfBoundaryEntry() : uint64
   {
-    TableMarshalling.Int.Size()
+    BoundaryInt.Size()
   }
 
   function method sizeOfTable() : nat
   {
-    2 * TableMarshalling.Int.Size() as nat
+    2 * SizeOfBoundaryEntry() as nat
   }
 
   predicate parsable(data: mseq<byte>)
   {
     && var tableEnd := sizeOfTable();
+    && tableEnd < Uint64UpperBound()
     && |data| >= tableEnd
     && TableMarshalling.parsable(data[..tableEnd])
     && var table :mseq<Boundary> := TableMarshalling.parse(data[..tableEnd]);
@@ -244,8 +245,13 @@ abstract module Tuple3Marshalling refines Marshalling {
 
   method TryParse(data: mseq<byte>) returns (ovalue: Option<UnmarshalledType>)
   {
-    assume sizeOfTable() < Uint64UpperBound();
-    var tableEnd := sizeOfTable() as uint64;
+    var entrySize := SizeOfBoundaryEntry();
+
+    if entrySize >= 0x8000_0000_0000_0000 {
+      return None;
+    }
+
+    var tableEnd := entrySize * 2;
 
     if tableEnd > |data| as uint64 {
       return None;
@@ -259,10 +265,6 @@ abstract module Tuple3Marshalling refines Marshalling {
 
     var table :mseq<Boundary> := tableOpt.value;
   
-    if !TableMarshalling.Int.fitsInUint64(table[0]) {
-      return None;
-    }
-
     if !BoundaryInt.fitsInUint64(table[0]) 
       || !BoundaryInt.fitsInUint64(table[1]) {
       return None;
@@ -288,6 +290,86 @@ abstract module Tuple3Marshalling refines Marshalling {
     }
 
     return Some((elemOpt0.value, elemOpt1.value, elemOpt2.value));
+  }
+
+  method Parsable(data: mseq<byte>) returns (p: bool)
+  {
+    var entrySize := SizeOfBoundaryEntry();
+
+    if entrySize >= 0x8000_0000_0000_0000 {
+      return false;
+    }
+
+    var tableEnd := sizeOfTable() as uint64;
+
+    if tableEnd > |data| as uint64 {
+      return false;
+    }
+
+    var tableOpt := TableMarshalling.TryParse(data[..tableEnd]);
+    
+    if tableOpt.None? {
+      return false;
+    }
+
+    var table :mseq<Boundary> := tableOpt.value;
+
+    if !BoundaryInt.fitsInUint64(table[0]) 
+      || !BoundaryInt.fitsInUint64(table[1]) {
+      return false;
+    }
+
+    var end0 := BoundaryInt.toUint64(table[0]);
+    var end1 := BoundaryInt.toUint64(table[1]);
+
+    if end0 > |data| as uint64 || end0 < tableEnd {
+      return false;
+    }
+
+    if end1 > |data| as uint64 || end1 < end0 {
+      return false;
+    }
+
+    var elemParsable0 := ElemMarshalling0.Parsable(data[tableEnd..end0]);
+    var elemParsable1 := ElemMarshalling1.Parsable(data[end0..end1]);
+    var elemParsable2 := ElemMarshalling2.Parsable(data[end1..]);
+
+    if !elemParsable0 || !elemParsable1 || !elemParsable2 {
+      return false;
+    }
+
+    return true;
+  }
+
+  method Parse(data: mseq<byte>) returns (value: UnmarshalledType)
+  {
+    var tableEnd := sizeOfTable() as uint64;
+    var table :mseq<Boundary> := TableMarshalling.Parse(data[..tableEnd]);
+  
+    var end0 := BoundaryInt.toUint64(table[0]);
+    var end1 := BoundaryInt.toUint64(table[1]);
+
+    var elem0 := ElemMarshalling0.Parse(data[tableEnd..end0]);
+    var elem1 := ElemMarshalling1.Parse(data[end0..end1]);
+    var elem2 := ElemMarshalling2.Parse(data[end1..]);
+    return (elem0, elem1, elem2);
+  }
+
+  predicate marshallable(value: UnmarshalledType)
+  {
+    && var (elem0, elem1, elem2) := value;
+    && ElemMarshalling0.marshallable(elem0)
+    && ElemMarshalling1.marshallable(elem1)
+    && ElemMarshalling2.marshallable(elem2)
+    && var tableEnd := sizeOfTable();
+    var size0 := ElemMarshalling0.size(elem0);
+    var size1 := ElemMarshalling1.size(elem1);
+    var end0 := tableEnd + size0;
+    var end1 := end0 + size1;
+    && BoundaryInt.MinValue() <= end0 < BoundaryInt.UpperBound()
+    && BoundaryInt.MinValue() <= end1 < BoundaryInt.UpperBound()
+    && var table := [BoundaryInt.fromInt(end0), BoundaryInt.fromInt(end1)];
+    && TableMarshalling.marshallable(table)
   }
 
 }
