@@ -417,10 +417,10 @@ abstract module Tuple3Marshalling refines Marshalling {
 
     newdata, end := ElemMarshalling2.Marshall(elem2, newdata, end);
 
-    assert BoundaryInt.toInt(table[0]) == bound0 as int by {
+    assert BoundaryInt.toInt(table[0]) == bound0 as int 
+      && BoundaryInt.toInt(table[1]) == bound1 as int by {
       BoundaryInt.fromtoInverses();
     }
-    assume BoundaryInt.toInt(table[1]) == bound1 as int;
 
     assert newdata[start..end][..tableSize] == newdata[start..end0] == newdata0[start..end0];
     assert TableMarshalling.parse(newdata[start..end0]) == table;
