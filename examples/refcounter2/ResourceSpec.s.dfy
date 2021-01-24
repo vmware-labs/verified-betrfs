@@ -7,13 +7,33 @@ abstract module ResourceSpec {
 
   // TODO create one general axiom (e.g., taking an lseq)
 
-  method {:axiom} is_allowed_1(linear a: R)
+  method {:axiom} is_allowed_1(shared a: R)
   returns (t: multiset<R>)
-  ensures Inv(multiset{a} + t)
+  ensures a in t
+  ensures Inv(t)
 
-  method {:axiom} is_allowed_2(linear a: R, linear b: R)
+  method {:axiom} is_allowed_2(shared a: R, shared b: R)
   returns (t: multiset<R>)
-  ensures Inv(multiset{a, b} + t)
+  ensures a in t
+  ensures b in t
+  ensures Inv(t)
+
+  method {:axiom} transform_1_2(
+      linear a1: R,
+      ghost b1: R,
+      ghost b2: R)
+  returns (linear b1': R, linear b2': R)
+  requires transform(multiset{a1}, multiset{b1, b2})
+  ensures b1' == b1 && b2' == b2
+
+  method {:axiom} transform_2_2(
+      linear a1: R,
+      linear a2: R,
+      ghost b1: R,
+      ghost b2: R)
+  returns (linear b1': R, linear b2': R)
+  requires transform(multiset{a1, a2}, multiset{b1, b2})
+  ensures b1' == b1 && b2' == b2
 
   // User needs to fill these in:
 

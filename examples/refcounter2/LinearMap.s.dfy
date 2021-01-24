@@ -9,12 +9,12 @@ module LinearMaps {
   method {:extern} discard<K, V>(linear m: LinearMap<K, V>)
   requires map_of(m) == map[]
 
-  function method {:extern} add<K, V>(linear m: LinearMap<K, V>, k: K, linear v: V)
+  function method {:extern} add<K, V>(linear m: LinearMap<K, V>, ghost k: K, linear v: V)
     : (linear m': LinearMap<K, V>)
   requires k !in map_of(m)
   ensures map_of(m') == map_of(m)[k := v]
 
-  method {:extern} remove<K, V>(linear m: LinearMap<K, V>, k: K)
+  method {:extern} remove<K, V>(linear m: LinearMap<K, V>, ghost k: K)
     returns (linear m': LinearMap<K, V>, linear v: V)
   requires k in map_of(m)
   ensures k !in map_of(m')

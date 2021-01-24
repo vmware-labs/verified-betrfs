@@ -1,5 +1,6 @@
 module Rationals {
-  export Spec provides PositiveRational, add, lt, minus, one
+  export Spec provides PositiveNat, add, lt, minus, one
+      reveals PositiveRational
   export extends Spec
 
   type PositiveNat = n: int | n > 0 witness 1

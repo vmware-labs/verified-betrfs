@@ -1,7 +1,17 @@
-module Multisets {
-  function Count<A>(fn: A ~> bool, s: multiset<A>) : nat
+include "../../lib/Base/Option.s.dfy"
 
-  function Sum<A>(fn: A ~> int, s: multiset<A>) : int
+module Multisets {
+  import opened Options
+
+  function Count<A>(fn: A -> bool, s: multiset<A>) : nat
+  function Sum<A>(fn: A -> int, s: multiset<A>) : int
+  function CountValue<A>(v: A, s: multiset<A>) : nat
+
+  function ApplyFilter<A, B>(fn: A -> Option<B>, s: multiset<A>) : multiset<B>
+
+  lemma CountValue_ge_1<A>(v: A, s: multiset<A>)
+  requires v in s
+  ensures CountValue(v, s) >= 1
 
   lemma Count_ge_1<A>(fn: A -> bool, s: multiset<A>, v: A)
   requires fn(v)
@@ -32,4 +42,9 @@ module Multisets {
   lemma CountMultiset1<A>(fn: A -> bool, v: A)
   ensures fn(v) ==> Count(fn, multiset{v}) == 1
   ensures !fn(v) ==> Count(fn, multiset{v}) == 0
+
+  lemma ApplyFilterInFwd<A,B>(fn: A -> Option<B>, s: multiset<A>, v: A)
+  requires fn(v).Some?
+  requires v in s
+  ensures fn(v).value in ApplyFilter(fn, s)
 }
