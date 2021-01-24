@@ -101,6 +101,20 @@ module CRC32_C_Lut {
 
 
 
+  lemma lut_entry_0_0()
+  ensures [true, true, true, false, false, true, false, false, true, false, true, true, true, true, true, false, false, false, true, true, true, true, false, false, true, false, false, true, false, false, true, false] == pow_mod_crc(128);
+  {
+    pow_95();
+    of_pow(128, false, true, false, false, true, false, false, true, false, false, true, true, true, true, false, false, false, true, true, true, true, true, false, true, false, false, true, false, false, true, true, true);
+  }
+
+  lemma lut_entry_0_1()
+  ensures [true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false] == pow_mod_crc(64);
+  {
+    pow_31();
+    of_pow(64, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true);
+  }
+
   lemma lut_entry_0()
   ensures bits_of_int(lut[0] as int, 64)
       == pow_mod_crc(128) + pow_mod_crc(64)
@@ -118,28 +132,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, false, false, true, false, false, true, false, true, true, true, true, true, false, false, false, true, true, true, true, false, false, true, false, false, true, false, false, true, false]+[true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
       {
-        calc {
-          [true, true, true, false, false, true, false, false, true, false, true, true, true, true, true, false, false, false, true, true, true, true, false, false, true, false, false, true, false, false, true, false];
-          {
-            pow_95();
-            of_pow(128, false, true, false, false, true, false, false, true, false, false, true, true, true, true, false, false, false, true, true, true, true, true, false, true, false, false, true, false, false, true, true, true);
-          }
-          pow_mod_crc(128);
-        }
-        calc {
-          [true, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
-          {
-            pow_31();
-            of_pow(64, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true);
-          }
-          pow_mod_crc(64);
-        }
+        lut_entry_0_0();
+        lut_entry_0_1();
       }
       pow_mod_crc(128) + pow_mod_crc(64);
     }
   }
 
 
+
+  lemma lut_entry_1_0()
+  ensures [false, true, true, true, false, false, false, true, false, true, false, false, false, false, true, true, true, true, true, true, false, false, true, false, false, true, false, true, true, true, false, true] == pow_mod_crc(256);
+  {
+    pow_223();
+    of_pow(256, true, false, true, true, true, false, true, false, false, true, false, false, true, true, true, true, true, true, false, false, false, false, true, false, true, false, false, false, true, true, true, false);
+  }
+
+  lemma lut_entry_1_1()
+  ensures [true, true, true, false, false, true, false, false, true, false, true, true, true, true, true, false, false, false, true, true, true, true, false, false, true, false, false, true, false, false, true, false] == pow_mod_crc(128);
+  {
+    pow_95();
+    of_pow(128, false, true, false, false, true, false, false, true, false, false, true, true, true, true, false, false, false, true, true, true, true, true, false, true, false, false, true, false, false, true, true, true);
+  }
 
   lemma lut_entry_1()
   ensures bits_of_int(lut[1] as int, 64)
@@ -158,28 +172,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, true, false, false, false, true, false, true, false, false, false, false, true, true, true, true, true, true, false, false, true, false, false, true, false, true, true, true, false, true]+[true, true, true, false, false, true, false, false, true, false, true, true, true, true, true, false, false, false, true, true, true, true, false, false, true, false, false, true, false, false, true, false];
       {
-        calc {
-          [false, true, true, true, false, false, false, true, false, true, false, false, false, false, true, true, true, true, true, true, false, false, true, false, false, true, false, true, true, true, false, true];
-          {
-            pow_223();
-            of_pow(256, true, false, true, true, true, false, true, false, false, true, false, false, true, true, true, true, true, true, false, false, false, false, true, false, true, false, false, false, true, true, true, false);
-          }
-          pow_mod_crc(256);
-        }
-        calc {
-          [true, true, true, false, false, true, false, false, true, false, true, true, true, true, true, false, false, false, true, true, true, true, false, false, true, false, false, true, false, false, true, false];
-          {
-            pow_95();
-            of_pow(128, false, true, false, false, true, false, false, true, false, false, true, true, true, true, false, false, false, true, true, true, true, true, false, true, false, false, true, false, false, true, true, true);
-          }
-          pow_mod_crc(128);
-        }
+        lut_entry_1_0();
+        lut_entry_1_1();
       }
       pow_mod_crc(256) + pow_mod_crc(128);
     }
   }
 
 
+
+  lemma lut_entry_2_0()
+  ensures [true, true, false, true, false, true, false, false, true, false, true, false, true, false, false, false, false, false, false, false, false, false, true, true, true, false, true, true, true, false, true, true] == pow_mod_crc(384);
+  {
+    pow_351();
+    of_pow(384, true, true, false, true, true, true, false, true, true, true, false, false, false, false, false, false, false, false, false, true, false, true, false, true, false, false, true, false, true, false, true, true);
+  }
+
+  lemma lut_entry_2_1()
+  ensures [false, true, true, true, true, true, true, true, true, false, true, true, false, false, false, false, false, false, true, true, false, false, false, false, false, true, false, false, true, true, true, true] == pow_mod_crc(192);
+  {
+    pow_159();
+    of_pow(192, true, true, true, true, false, false, true, false, false, false, false, false, true, true, false, false, false, false, false, false, true, true, false, true, true, true, true, true, true, true, true, false);
+  }
 
   lemma lut_entry_2()
   ensures bits_of_int(lut[2] as int, 64)
@@ -198,28 +212,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, false, true, false, false, true, false, true, false, true, false, false, false, false, false, false, false, false, false, true, true, true, false, true, true, true, false, true, true]+[false, true, true, true, true, true, true, true, true, false, true, true, false, false, false, false, false, false, true, true, false, false, false, false, false, true, false, false, true, true, true, true];
       {
-        calc {
-          [true, true, false, true, false, true, false, false, true, false, true, false, true, false, false, false, false, false, false, false, false, false, true, true, true, false, true, true, true, false, true, true];
-          {
-            pow_351();
-            of_pow(384, true, true, false, true, true, true, false, true, true, true, false, false, false, false, false, false, false, false, false, true, false, true, false, true, false, false, true, false, true, false, true, true);
-          }
-          pow_mod_crc(384);
-        }
-        calc {
-          [false, true, true, true, true, true, true, true, true, false, true, true, false, false, false, false, false, false, true, true, false, false, false, false, false, true, false, false, true, true, true, true];
-          {
-            pow_159();
-            of_pow(192, true, true, true, true, false, false, true, false, false, false, false, false, true, true, false, false, false, false, false, false, true, true, false, true, true, true, true, true, true, true, true, false);
-          }
-          pow_mod_crc(192);
-        }
+        lut_entry_2_0();
+        lut_entry_2_1();
       }
       pow_mod_crc(384) + pow_mod_crc(192);
     }
   }
 
 
+
+  lemma lut_entry_3_0()
+  ensures [false, false, false, true, true, true, true, true, true, false, true, true, true, false, true, true, false, true, false, true, false, false, true, false, false, true, true, true, true, false, false, true] == pow_mod_crc(512);
+  {
+    pow_479();
+    of_pow(512, true, false, false, true, true, true, true, false, false, true, false, false, true, false, true, false, true, true, false, true, true, true, false, true, true, true, true, true, true, false, false, false);
+  }
+
+  lemma lut_entry_3_1()
+  ensures [false, true, true, true, false, false, false, true, false, true, false, false, false, false, true, true, true, true, true, true, false, false, true, false, false, true, false, true, true, true, false, true] == pow_mod_crc(256);
+  {
+    pow_223();
+    of_pow(256, true, false, true, true, true, false, true, false, false, true, false, false, true, true, true, true, true, true, false, false, false, false, true, false, true, false, false, false, true, true, true, false);
+  }
 
   lemma lut_entry_3()
   ensures bits_of_int(lut[3] as int, 64)
@@ -238,28 +252,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, true, true, true, true, true, true, false, true, true, true, false, true, true, false, true, false, true, false, false, true, false, false, true, true, true, true, false, false, true]+[false, true, true, true, false, false, false, true, false, true, false, false, false, false, true, true, true, true, true, true, false, false, true, false, false, true, false, true, true, true, false, true];
       {
-        calc {
-          [false, false, false, true, true, true, true, true, true, false, true, true, true, false, true, true, false, true, false, true, false, false, true, false, false, true, true, true, true, false, false, true];
-          {
-            pow_479();
-            of_pow(512, true, false, false, true, true, true, true, false, false, true, false, false, true, false, true, false, true, true, false, true, true, true, false, true, true, true, true, true, true, false, false, false);
-          }
-          pow_mod_crc(512);
-        }
-        calc {
-          [false, true, true, true, false, false, false, true, false, true, false, false, false, false, true, true, true, true, true, true, false, false, true, false, false, true, false, true, true, true, false, true];
-          {
-            pow_223();
-            of_pow(256, true, false, true, true, true, false, true, false, false, true, false, false, true, true, true, true, true, true, false, false, false, false, true, false, true, false, false, false, true, true, true, false);
-          }
-          pow_mod_crc(256);
-        }
+        lut_entry_3_0();
+        lut_entry_3_1();
       }
       pow_mod_crc(512) + pow_mod_crc(256);
     }
   }
 
 
+
+  lemma lut_entry_4_0()
+  ensures [false, true, true, false, true, false, false, true, false, true, false, false, true, true, false, true, true, true, false, false, true, false, true, true, true, false, false, true, true, true, false, false] == pow_mod_crc(640);
+  {
+    pow_607();
+    of_pow(640, false, false, true, true, true, false, false, true, true, true, false, true, false, false, true, true, true, false, true, true, false, false, true, false, true, false, false, true, false, true, true, false);
+  }
+
+  lemma lut_entry_4_1()
+  ensures [true, true, false, true, false, false, true, true, false, false, false, false, true, false, true, true, false, true, true, false, false, true, false, true, true, false, true, true, true, true, false, false] == pow_mod_crc(320);
+  {
+    pow_287();
+    of_pow(320, false, false, true, true, true, true, false, true, true, false, true, false, false, true, true, false, true, true, false, true, false, false, false, false, true, true, false, false, true, false, true, true);
+  }
 
   lemma lut_entry_4()
   ensures bits_of_int(lut[4] as int, 64)
@@ -278,28 +292,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, false, true, false, false, true, false, true, false, false, true, true, false, true, true, true, false, false, true, false, true, true, true, false, false, true, true, true, false, false]+[true, true, false, true, false, false, true, true, false, false, false, false, true, false, true, true, false, true, true, false, false, true, false, true, true, false, true, true, true, true, false, false];
       {
-        calc {
-          [false, true, true, false, true, false, false, true, false, true, false, false, true, true, false, true, true, true, false, false, true, false, true, true, true, false, false, true, true, true, false, false];
-          {
-            pow_607();
-            of_pow(640, false, false, true, true, true, false, false, true, true, true, false, true, false, false, true, true, true, false, true, true, false, false, true, false, true, false, false, true, false, true, true, false);
-          }
-          pow_mod_crc(640);
-        }
-        calc {
-          [true, true, false, true, false, false, true, true, false, false, false, false, true, false, true, true, false, true, true, false, false, true, false, true, true, false, true, true, true, true, false, false];
-          {
-            pow_287();
-            of_pow(320, false, false, true, true, true, true, false, true, true, false, true, false, false, true, true, false, true, true, false, true, false, false, false, false, true, true, false, false, true, false, true, true);
-          }
-          pow_mod_crc(320);
-        }
+        lut_entry_4_0();
+        lut_entry_4_1();
       }
       pow_mod_crc(640) + pow_mod_crc(320);
     }
   }
 
 
+
+  lemma lut_entry_5_0()
+  ensures [true, true, false, false, true, false, true, false, false, true, true, true, false, false, true, true, true, false, true, false, true, false, false, false, true, true, true, false, false, false, false, false] == pow_mod_crc(768);
+  {
+    pow_735();
+    of_pow(768, false, false, false, false, false, true, true, true, false, false, false, true, false, true, false, true, true, true, false, false, true, true, true, false, false, true, false, true, false, false, true, true);
+  }
+
+  lemma lut_entry_5_1()
+  ensures [true, true, false, true, false, true, false, false, true, false, true, false, true, false, false, false, false, false, false, false, false, false, true, true, true, false, true, true, true, false, true, true] == pow_mod_crc(384);
+  {
+    pow_351();
+    of_pow(384, true, true, false, true, true, true, false, true, true, true, false, false, false, false, false, false, false, false, false, true, false, true, false, true, false, false, true, false, true, false, true, true);
+  }
 
   lemma lut_entry_5()
   ensures bits_of_int(lut[5] as int, 64)
@@ -318,28 +332,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, false, true, false, true, false, false, true, true, true, false, false, true, true, true, false, true, false, true, false, false, false, true, true, true, false, false, false, false, false]+[true, true, false, true, false, true, false, false, true, false, true, false, true, false, false, false, false, false, false, false, false, false, true, true, true, false, true, true, true, false, true, true];
       {
-        calc {
-          [true, true, false, false, true, false, true, false, false, true, true, true, false, false, true, true, true, false, true, false, true, false, false, false, true, true, true, false, false, false, false, false];
-          {
-            pow_735();
-            of_pow(768, false, false, false, false, false, true, true, true, false, false, false, true, false, true, false, true, true, true, false, false, true, true, true, false, false, true, false, true, false, false, true, true);
-          }
-          pow_mod_crc(768);
-        }
-        calc {
-          [true, true, false, true, false, true, false, false, true, false, true, false, true, false, false, false, false, false, false, false, false, false, true, true, true, false, true, true, true, false, true, true];
-          {
-            pow_351();
-            of_pow(384, true, true, false, true, true, true, false, true, true, true, false, false, false, false, false, false, false, false, false, true, false, true, false, true, false, false, true, false, true, false, true, true);
-          }
-          pow_mod_crc(384);
-        }
+        lut_entry_5_0();
+        lut_entry_5_1();
       }
       pow_mod_crc(768) + pow_mod_crc(384);
     }
   }
 
 
+
+  lemma lut_entry_6_0()
+  ensures [true, true, true, false, true, false, false, false, true, true, false, false, false, false, false, true, true, true, false, true, true, false, true, true, true, true, true, false, false, false, true, false] == pow_mod_crc(896);
+  {
+    pow_863();
+    of_pow(896, false, true, false, false, false, true, true, true, true, true, false, true, true, false, true, true, true, false, false, false, false, false, true, true, false, false, false, true, false, true, true, true);
+  }
+
+  lemma lut_entry_6_1()
+  ensures [false, false, true, false, false, false, false, false, true, false, true, true, true, false, false, false, true, false, false, true, false, true, false, false, false, false, true, true, true, false, false, false] == pow_mod_crc(448);
+  {
+    pow_415();
+    of_pow(448, false, false, false, true, true, true, false, false, false, false, true, false, true, false, false, true, false, false, false, true, true, true, false, true, false, false, false, false, false, true, false, false);
+  }
 
   lemma lut_entry_6()
   ensures bits_of_int(lut[6] as int, 64)
@@ -358,28 +372,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, false, true, false, false, false, true, true, false, false, false, false, false, true, true, true, false, true, true, false, true, true, true, true, true, false, false, false, true, false]+[false, false, true, false, false, false, false, false, true, false, true, true, true, false, false, false, true, false, false, true, false, true, false, false, false, false, true, true, true, false, false, false];
       {
-        calc {
-          [true, true, true, false, true, false, false, false, true, true, false, false, false, false, false, true, true, true, false, true, true, false, true, true, true, true, true, false, false, false, true, false];
-          {
-            pow_863();
-            of_pow(896, false, true, false, false, false, true, true, true, true, true, false, true, true, false, true, true, true, false, false, false, false, false, true, true, false, false, false, true, false, true, true, true);
-          }
-          pow_mod_crc(896);
-        }
-        calc {
-          [false, false, true, false, false, false, false, false, true, false, true, true, true, false, false, false, true, false, false, true, false, true, false, false, false, false, true, true, true, false, false, false];
-          {
-            pow_415();
-            of_pow(448, false, false, false, true, true, true, false, false, false, false, true, false, true, false, false, true, false, false, false, true, true, true, false, true, false, false, false, false, false, true, false, false);
-          }
-          pow_mod_crc(448);
-        }
+        lut_entry_6_0();
+        lut_entry_6_1();
       }
       pow_mod_crc(896) + pow_mod_crc(448);
     }
   }
 
 
+
+  lemma lut_entry_7_0()
+  ensures [false, true, false, false, true, false, false, true, false, false, false, false, false, true, true, false, true, true, false, true, true, true, false, false, true, false, true, true, false, false, false, false] == pow_mod_crc(1024);
+  {
+    pow_991();
+    of_pow(1024, false, false, false, false, true, true, false, true, false, false, true, true, true, false, true, true, false, true, true, false, false, false, false, false, true, false, false, true, false, false, true, false);
+  }
+
+  lemma lut_entry_7_1()
+  ensures [false, false, false, true, true, true, true, true, true, false, true, true, true, false, true, true, false, true, false, true, false, false, true, false, false, true, true, true, true, false, false, true] == pow_mod_crc(512);
+  {
+    pow_479();
+    of_pow(512, true, false, false, true, true, true, true, false, false, true, false, false, true, false, true, false, true, true, false, true, true, true, false, true, true, true, true, true, true, false, false, false);
+  }
 
   lemma lut_entry_7()
   ensures bits_of_int(lut[7] as int, 64)
@@ -398,28 +412,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, true, false, false, true, false, false, false, false, false, true, true, false, true, true, false, true, true, true, false, false, true, false, true, true, false, false, false, false]+[false, false, false, true, true, true, true, true, true, false, true, true, true, false, true, true, false, true, false, true, false, false, true, false, false, true, true, true, true, false, false, true];
       {
-        calc {
-          [false, true, false, false, true, false, false, true, false, false, false, false, false, true, true, false, true, true, false, true, true, true, false, false, true, false, true, true, false, false, false, false];
-          {
-            pow_991();
-            of_pow(1024, false, false, false, false, true, true, false, true, false, false, true, true, true, false, true, true, false, true, true, false, false, false, false, false, true, false, false, true, false, false, true, false);
-          }
-          pow_mod_crc(1024);
-        }
-        calc {
-          [false, false, false, true, true, true, true, true, true, false, true, true, true, false, true, true, false, true, false, true, false, false, true, false, false, true, true, true, true, false, false, true];
-          {
-            pow_479();
-            of_pow(512, true, false, false, true, true, true, true, false, false, true, false, false, true, false, true, false, true, true, false, true, true, true, false, true, true, true, true, true, true, false, false, false);
-          }
-          pow_mod_crc(512);
-        }
+        lut_entry_7_0();
+        lut_entry_7_1();
       }
       pow_mod_crc(1024) + pow_mod_crc(512);
     }
   }
 
 
+
+  lemma lut_entry_8_0()
+  ensures [false, false, false, false, false, false, true, true, true, false, true, true, true, true, true, true, false, false, true, true, false, true, true, false, true, false, false, true, false, false, true, true] == pow_mod_crc(1152);
+  {
+    pow_1119();
+    of_pow(1152, true, true, false, false, true, false, false, true, false, true, true, false, true, true, false, false, true, true, true, true, true, true, false, true, true, true, false, false, false, false, false, false);
+  }
+
+  lemma lut_entry_8_1()
+  ensures [false, true, false, false, false, false, false, false, true, true, true, true, false, true, true, true, false, true, true, true, false, false, false, false, false, false, true, false, true, true, true, false] == pow_mod_crc(576);
+  {
+    pow_543();
+    of_pow(576, false, true, true, true, false, true, false, false, false, false, false, false, true, true, true, false, true, true, true, false, true, true, true, true, false, false, false, false, false, false, true, false);
+  }
 
   lemma lut_entry_8()
   ensures bits_of_int(lut[8] as int, 64)
@@ -438,28 +452,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, false, false, false, true, true, true, false, true, true, true, true, true, true, false, false, true, true, false, true, true, false, true, false, false, true, false, false, true, true]+[false, true, false, false, false, false, false, false, true, true, true, true, false, true, true, true, false, true, true, true, false, false, false, false, false, false, true, false, true, true, true, false];
       {
-        calc {
-          [false, false, false, false, false, false, true, true, true, false, true, true, true, true, true, true, false, false, true, true, false, true, true, false, true, false, false, true, false, false, true, true];
-          {
-            pow_1119();
-            of_pow(1152, true, true, false, false, true, false, false, true, false, true, true, false, true, true, false, false, true, true, true, true, true, true, false, true, true, true, false, false, false, false, false, false);
-          }
-          pow_mod_crc(1152);
-        }
-        calc {
-          [false, true, false, false, false, false, false, false, true, true, true, true, false, true, true, true, false, true, true, true, false, false, false, false, false, false, true, false, true, true, true, false];
-          {
-            pow_543();
-            of_pow(576, false, true, true, true, false, true, false, false, false, false, false, false, true, true, true, false, true, true, true, false, true, true, true, true, false, false, false, false, false, false, true, false);
-          }
-          pow_mod_crc(576);
-        }
+        lut_entry_8_0();
+        lut_entry_8_1();
       }
       pow_mod_crc(1152) + pow_mod_crc(576);
     }
   }
 
 
+
+  lemma lut_entry_9_0()
+  ensures [true, true, true, false, false, true, false, true, false, true, false, false, true, false, false, true, false, true, false, true, false, false, false, true, true, true, true, false, false, false, false, true] == pow_mod_crc(1280);
+  {
+    pow_1247();
+    of_pow(1280, true, false, false, false, false, true, true, true, true, false, false, false, true, false, true, false, true, false, false, true, false, false, true, false, true, false, true, false, false, true, true, true);
+  }
+
+  lemma lut_entry_9_1()
+  ensures [false, true, true, false, true, false, false, true, false, true, false, false, true, true, false, true, true, true, false, false, true, false, true, true, true, false, false, true, true, true, false, false] == pow_mod_crc(640);
+  {
+    pow_607();
+    of_pow(640, false, false, true, true, true, false, false, true, true, true, false, true, false, false, true, true, true, false, true, true, false, false, true, false, true, false, false, true, false, true, true, false);
+  }
 
   lemma lut_entry_9()
   ensures bits_of_int(lut[9] as int, 64)
@@ -478,28 +492,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, false, false, true, false, true, false, true, false, false, true, false, false, true, false, true, false, true, false, false, false, true, true, true, true, false, false, false, false, true]+[false, true, true, false, true, false, false, true, false, true, false, false, true, true, false, true, true, true, false, false, true, false, true, true, true, false, false, true, true, true, false, false];
       {
-        calc {
-          [true, true, true, false, false, true, false, true, false, true, false, false, true, false, false, true, false, true, false, true, false, false, false, true, true, true, true, false, false, false, false, true];
-          {
-            pow_1247();
-            of_pow(1280, true, false, false, false, false, true, true, true, true, false, false, false, true, false, true, false, true, false, false, true, false, false, true, false, true, false, true, false, false, true, true, true);
-          }
-          pow_mod_crc(1280);
-        }
-        calc {
-          [false, true, true, false, true, false, false, true, false, true, false, false, true, true, false, true, true, true, false, false, true, false, true, true, true, false, false, true, true, true, false, false];
-          {
-            pow_607();
-            of_pow(640, false, false, true, true, true, false, false, true, true, true, false, true, false, false, true, true, true, false, true, true, false, false, true, false, true, false, false, true, false, true, true, false);
-          }
-          pow_mod_crc(640);
-        }
+        lut_entry_9_0();
+        lut_entry_9_1();
       }
       pow_mod_crc(1280) + pow_mod_crc(640);
     }
   }
 
 
+
+  lemma lut_entry_10_0()
+  ensures [false, true, true, true, true, true, false, false, true, true, true, false, false, true, true, true, false, false, true, true, false, true, true, true, false, true, false, true, true, false, true, true] == pow_mod_crc(1408);
+  {
+    pow_1375();
+    of_pow(1408, true, true, false, true, true, false, true, false, true, true, true, false, true, true, false, false, true, true, true, false, false, true, true, true, false, false, true, true, true, true, true, false);
+  }
+
+  lemma lut_entry_10_1()
+  ensures [false, false, true, true, false, true, true, true, false, true, true, true, false, true, true, false, false, true, false, true, true, true, false, false, false, false, false, true, false, false, false, false] == pow_mod_crc(704);
+  {
+    pow_671();
+    of_pow(704, false, false, false, false, true, false, false, false, false, false, true, true, true, false, true, false, false, true, true, false, true, true, true, false, true, true, true, false, true, true, false, false);
+  }
 
   lemma lut_entry_10()
   ensures bits_of_int(lut[10] as int, 64)
@@ -518,28 +532,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, true, true, true, false, false, true, true, true, false, false, true, true, true, false, false, true, true, false, true, true, true, false, true, false, true, true, false, true, true]+[false, false, true, true, false, true, true, true, false, true, true, true, false, true, true, false, false, true, false, true, true, true, false, false, false, false, false, true, false, false, false, false];
       {
-        calc {
-          [false, true, true, true, true, true, false, false, true, true, true, false, false, true, true, true, false, false, true, true, false, true, true, true, false, true, false, true, true, false, true, true];
-          {
-            pow_1375();
-            of_pow(1408, true, true, false, true, true, false, true, false, true, true, true, false, true, true, false, false, true, true, true, false, false, true, true, true, false, false, true, true, true, true, true, false);
-          }
-          pow_mod_crc(1408);
-        }
-        calc {
-          [false, false, true, true, false, true, true, true, false, true, true, true, false, true, true, false, false, true, false, true, true, true, false, false, false, false, false, true, false, false, false, false];
-          {
-            pow_671();
-            of_pow(704, false, false, false, false, true, false, false, false, false, false, true, true, true, false, true, false, false, true, true, false, true, true, true, false, true, true, true, false, true, true, false, false);
-          }
-          pow_mod_crc(704);
-        }
+        lut_entry_10_0();
+        lut_entry_10_1();
       }
       pow_mod_crc(1408) + pow_mod_crc(704);
     }
   }
 
 
+
+  lemma lut_entry_11_0()
+  ensures [false, true, false, true, false, true, false, false, true, true, true, true, true, true, true, true, false, true, false, true, true, true, true, false, true, true, false, true, false, true, false, true] == pow_mod_crc(1536);
+  {
+    pow_1503();
+    of_pow(1536, true, false, true, false, true, false, true, true, false, true, true, true, true, false, true, false, true, true, true, true, true, true, true, true, false, false, true, false, true, false, true, false);
+  }
+
+  lemma lut_entry_11_1()
+  ensures [true, true, false, false, true, false, true, false, false, true, true, true, false, false, true, true, true, false, true, false, true, false, false, false, true, true, true, false, false, false, false, false] == pow_mod_crc(768);
+  {
+    pow_735();
+    of_pow(768, false, false, false, false, false, true, true, true, false, false, false, true, false, true, false, true, true, true, false, false, true, true, true, false, false, true, false, true, false, false, true, true);
+  }
 
   lemma lut_entry_11()
   ensures bits_of_int(lut[11] as int, 64)
@@ -558,28 +572,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, false, true, false, false, true, true, true, true, true, true, true, true, false, true, false, true, true, true, true, false, true, true, false, true, false, true, false, true]+[true, true, false, false, true, false, true, false, false, true, true, true, false, false, true, true, true, false, true, false, true, false, false, false, true, true, true, false, false, false, false, false];
       {
-        calc {
-          [false, true, false, true, false, true, false, false, true, true, true, true, true, true, true, true, false, true, false, true, true, true, true, false, true, true, false, true, false, true, false, true];
-          {
-            pow_1503();
-            of_pow(1536, true, false, true, false, true, false, true, true, false, true, true, true, true, false, true, false, true, true, true, true, true, true, true, true, false, false, true, false, true, false, true, false);
-          }
-          pow_mod_crc(1536);
-        }
-        calc {
-          [true, true, false, false, true, false, true, false, false, true, true, true, false, false, true, true, true, false, true, false, true, false, false, false, true, true, true, false, false, false, false, false];
-          {
-            pow_735();
-            of_pow(768, false, false, false, false, false, true, true, true, false, false, false, true, false, true, false, true, true, true, false, false, true, true, true, false, false, true, false, true, false, false, true, true);
-          }
-          pow_mod_crc(768);
-        }
+        lut_entry_11_0();
+        lut_entry_11_1();
       }
       pow_mod_crc(1536) + pow_mod_crc(768);
     }
   }
 
 
+
+  lemma lut_entry_12_0()
+  ensures [true, false, true, false, false, false, false, true, true, true, false, false, true, false, true, true, false, true, false, false, false, true, true, false, true, false, false, false, false, true, false, false] == pow_mod_crc(1664);
+  {
+    pow_1631();
+    of_pow(1664, false, false, true, false, false, false, false, true, false, true, true, false, false, false, true, false, true, true, false, true, false, false, true, true, true, false, false, false, false, true, false, true);
+  }
+
+  lemma lut_entry_12_1()
+  ensures [true, true, true, false, false, true, true, false, true, true, true, true, false, false, true, false, true, true, true, true, true, false, false, true, false, false, true, false, false, false, true, true] == pow_mod_crc(832);
+  {
+    pow_799();
+    of_pow(832, true, true, false, false, false, true, false, false, true, false, false, true, true, true, true, true, false, true, false, false, true, true, true, true, false, true, true, false, false, true, true, true);
+  }
 
   lemma lut_entry_12()
   ensures bits_of_int(lut[12] as int, 64)
@@ -598,28 +612,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, false, false, false, false, true, true, true, false, false, true, false, true, true, false, true, false, false, false, true, true, false, true, false, false, false, false, true, false, false]+[true, true, true, false, false, true, true, false, true, true, true, true, false, false, true, false, true, true, true, true, true, false, false, true, false, false, true, false, false, false, true, true];
       {
-        calc {
-          [true, false, true, false, false, false, false, true, true, true, false, false, true, false, true, true, false, true, false, false, false, true, true, false, true, false, false, false, false, true, false, false];
-          {
-            pow_1631();
-            of_pow(1664, false, false, true, false, false, false, false, true, false, true, true, false, false, false, true, false, true, true, false, true, false, false, true, true, true, false, false, false, false, true, false, true);
-          }
-          pow_mod_crc(1664);
-        }
-        calc {
-          [true, true, true, false, false, true, true, false, true, true, true, true, false, false, true, false, true, true, true, true, true, false, false, true, false, false, true, false, false, false, true, true];
-          {
-            pow_799();
-            of_pow(832, true, true, false, false, false, true, false, false, true, false, false, true, true, true, true, true, false, true, false, false, true, true, true, true, false, true, true, false, false, true, true, true);
-          }
-          pow_mod_crc(832);
-        }
+        lut_entry_12_0();
+        lut_entry_12_1();
       }
       pow_mod_crc(1664) + pow_mod_crc(832);
     }
   }
 
 
+
+  lemma lut_entry_13_0()
+  ensures [false, true, false, false, true, true, false, false, false, false, false, true, false, false, false, true, false, false, true, false, true, true, false, false, true, true, false, false, false, false, false, true] == pow_mod_crc(1792);
+  {
+    pow_1759();
+    of_pow(1792, true, false, false, false, false, false, true, true, false, false, true, true, false, true, false, false, true, false, false, false, true, false, false, false, false, false, true, true, false, false, true, false);
+  }
+
+  lemma lut_entry_13_1()
+  ensures [true, true, true, false, true, false, false, false, true, true, false, false, false, false, false, true, true, true, false, true, true, false, true, true, true, true, true, false, false, false, true, false] == pow_mod_crc(896);
+  {
+    pow_863();
+    of_pow(896, false, true, false, false, false, true, true, true, true, true, false, true, true, false, true, true, true, false, false, false, false, false, true, true, false, false, false, true, false, true, true, true);
+  }
 
   lemma lut_entry_13()
   ensures bits_of_int(lut[13] as int, 64)
@@ -638,28 +652,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, true, true, false, false, false, false, false, true, false, false, false, true, false, false, true, false, true, true, false, false, true, true, false, false, false, false, false, true]+[true, true, true, false, true, false, false, false, true, true, false, false, false, false, false, true, true, true, false, true, true, false, true, true, true, true, true, false, false, false, true, false];
       {
-        calc {
-          [false, true, false, false, true, true, false, false, false, false, false, true, false, false, false, true, false, false, true, false, true, true, false, false, true, true, false, false, false, false, false, true];
-          {
-            pow_1759();
-            of_pow(1792, true, false, false, false, false, false, true, true, false, false, true, true, false, true, false, false, true, false, false, false, true, false, false, false, false, false, true, true, false, false, true, false);
-          }
-          pow_mod_crc(1792);
-        }
-        calc {
-          [true, true, true, false, true, false, false, false, true, true, false, false, false, false, false, true, true, true, false, true, true, false, true, true, true, true, true, false, false, false, true, false];
-          {
-            pow_863();
-            of_pow(896, false, true, false, false, false, true, true, true, true, true, false, true, true, false, true, true, true, false, false, false, false, false, true, true, false, false, false, true, false, true, true, true);
-          }
-          pow_mod_crc(896);
-        }
+        lut_entry_13_0();
+        lut_entry_13_1();
       }
       pow_mod_crc(1792) + pow_mod_crc(896);
     }
   }
 
 
+
+  lemma lut_entry_14_0()
+  ensures [true, false, true, false, true, false, true, true, true, true, true, false, false, false, true, false, false, false, false, true, true, false, false, true, true, false, false, true, false, true, false, false] == pow_mod_crc(1920);
+  {
+    pow_1887();
+    of_pow(1920, false, false, true, false, true, false, false, true, true, false, false, true, true, false, false, false, false, true, false, false, false, true, true, true, true, true, false, true, false, true, false, true);
+  }
+
+  lemma lut_entry_14_1()
+  ensures [false, false, false, false, true, true, false, false, false, false, true, true, true, false, false, false, true, false, false, true, true, false, true, true, false, true, false, true, false, true, false, false] == pow_mod_crc(960);
+  {
+    pow_927();
+    of_pow(960, false, false, true, false, true, false, true, false, true, true, false, true, true, false, false, true, false, false, false, true, true, true, false, false, false, false, true, true, false, false, false, false);
+  }
 
   lemma lut_entry_14()
   ensures bits_of_int(lut[14] as int, 64)
@@ -678,28 +692,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, false, true, false, true, true, true, true, true, false, false, false, true, false, false, false, false, true, true, false, false, true, true, false, false, true, false, true, false, false]+[false, false, false, false, true, true, false, false, false, false, true, true, true, false, false, false, true, false, false, true, true, false, true, true, false, true, false, true, false, true, false, false];
       {
-        calc {
-          [true, false, true, false, true, false, true, true, true, true, true, false, false, false, true, false, false, false, false, true, true, false, false, true, true, false, false, true, false, true, false, false];
-          {
-            pow_1887();
-            of_pow(1920, false, false, true, false, true, false, false, true, true, false, false, true, true, false, false, false, false, true, false, false, false, true, true, true, true, true, false, true, false, true, false, true);
-          }
-          pow_mod_crc(1920);
-        }
-        calc {
-          [false, false, false, false, true, true, false, false, false, false, true, true, true, false, false, false, true, false, false, true, true, false, true, true, false, true, false, true, false, true, false, false];
-          {
-            pow_927();
-            of_pow(960, false, false, true, false, true, false, true, false, true, true, false, true, true, false, false, true, false, false, false, true, true, true, false, false, false, false, true, true, false, false, false, false);
-          }
-          pow_mod_crc(960);
-        }
+        lut_entry_14_0();
+        lut_entry_14_1();
       }
       pow_mod_crc(1920) + pow_mod_crc(960);
     }
   }
 
 
+
+  lemma lut_entry_15_0()
+  ensures [false, true, true, false, false, false, false, true, true, true, false, true, false, true, false, false, false, false, false, false, false, true, true, true, true, false, false, true, true, true, false, true] == pow_mod_crc(2048);
+  {
+    pow_2015();
+    of_pow(2048, true, false, true, true, true, false, false, true, true, true, true, false, false, false, false, false, false, false, true, false, true, false, true, true, true, false, false, false, false, true, true, false);
+  }
+
+  lemma lut_entry_15_1()
+  ensures [false, true, false, false, true, false, false, true, false, false, false, false, false, true, true, false, true, true, false, true, true, true, false, false, true, false, true, true, false, false, false, false] == pow_mod_crc(1024);
+  {
+    pow_991();
+    of_pow(1024, false, false, false, false, true, true, false, true, false, false, true, true, true, false, true, true, false, true, true, false, false, false, false, false, true, false, false, true, false, false, true, false);
+  }
 
   lemma lut_entry_15()
   ensures bits_of_int(lut[15] as int, 64)
@@ -718,28 +732,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, false, false, false, false, true, true, true, false, true, false, true, false, false, false, false, false, false, false, true, true, true, true, false, false, true, true, true, false, true]+[false, true, false, false, true, false, false, true, false, false, false, false, false, true, true, false, true, true, false, true, true, true, false, false, true, false, true, true, false, false, false, false];
       {
-        calc {
-          [false, true, true, false, false, false, false, true, true, true, false, true, false, true, false, false, false, false, false, false, false, true, true, true, true, false, false, true, true, true, false, true];
-          {
-            pow_2015();
-            of_pow(2048, true, false, true, true, true, false, false, true, true, true, true, false, false, false, false, false, false, false, true, false, true, false, true, true, true, false, false, false, false, true, true, false);
-          }
-          pow_mod_crc(2048);
-        }
-        calc {
-          [false, true, false, false, true, false, false, true, false, false, false, false, false, true, true, false, true, true, false, true, true, true, false, false, true, false, true, true, false, false, false, false];
-          {
-            pow_991();
-            of_pow(1024, false, false, false, false, true, true, false, true, false, false, true, true, true, false, true, true, false, true, true, false, false, false, false, false, true, false, false, true, false, false, true, false);
-          }
-          pow_mod_crc(1024);
-        }
+        lut_entry_15_0();
+        lut_entry_15_1();
       }
       pow_mod_crc(2048) + pow_mod_crc(1024);
     }
   }
 
 
+
+  lemma lut_entry_16_0()
+  ensures [false, true, true, true, false, false, true, false, false, true, false, true, true, true, false, false, true, true, false, false, true, true, false, true, false, false, false, true, true, false, false, false] == pow_mod_crc(2176);
+  {
+    pow_2143();
+    of_pow(2176, false, false, false, true, true, false, false, false, true, false, true, true, false, false, true, true, false, false, true, true, true, false, true, false, false, true, false, false, true, true, true, false);
+  }
+
+  lemma lut_entry_16_1()
+  ensures [false, true, false, false, false, true, false, true, false, true, true, true, false, false, true, true, false, true, false, false, true, false, false, true, true, false, false, true, false, true, true, false] == pow_mod_crc(1088);
+  {
+    pow_1055();
+    of_pow(1088, false, true, true, false, true, false, false, true, true, false, false, true, false, false, true, false, true, true, false, false, true, true, true, false, true, false, true, false, false, false, true, false);
+  }
 
   lemma lut_entry_16()
   ensures bits_of_int(lut[16] as int, 64)
@@ -758,28 +772,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, true, false, false, true, false, false, true, false, true, true, true, false, false, true, true, false, false, true, true, false, true, false, false, false, true, true, false, false, false]+[false, true, false, false, false, true, false, true, false, true, true, true, false, false, true, true, false, true, false, false, true, false, false, true, true, false, false, true, false, true, true, false];
       {
-        calc {
-          [false, true, true, true, false, false, true, false, false, true, false, true, true, true, false, false, true, true, false, false, true, true, false, true, false, false, false, true, true, false, false, false];
-          {
-            pow_2143();
-            of_pow(2176, false, false, false, true, true, false, false, false, true, false, true, true, false, false, true, true, false, false, true, true, true, false, true, false, false, true, false, false, true, true, true, false);
-          }
-          pow_mod_crc(2176);
-        }
-        calc {
-          [false, true, false, false, false, true, false, true, false, true, true, true, false, false, true, true, false, true, false, false, true, false, false, true, true, false, false, true, false, true, true, false];
-          {
-            pow_1055();
-            of_pow(1088, false, true, true, false, true, false, false, true, true, false, false, true, false, false, true, false, true, true, false, false, true, true, true, false, true, false, true, false, false, false, true, false);
-          }
-          pow_mod_crc(1088);
-        }
+        lut_entry_16_0();
+        lut_entry_16_1();
       }
       pow_mod_crc(2176) + pow_mod_crc(1088);
     }
   }
 
 
+
+  lemma lut_entry_17_0()
+  ensures [true, true, false, true, true, false, false, true, false, false, true, false, true, false, false, true, true, false, true, true, true, false, true, true, false, true, true, false, true, true, false, true] == pow_mod_crc(2304);
+  {
+    pow_2271();
+    of_pow(2304, true, false, true, true, false, true, true, false, true, true, false, true, true, true, false, true, true, false, false, true, false, true, false, false, true, false, false, true, true, false, true, true);
+  }
+
+  lemma lut_entry_17_1()
+  ensures [false, false, false, false, false, false, true, true, true, false, true, true, true, true, true, true, false, false, true, true, false, true, true, false, true, false, false, true, false, false, true, true] == pow_mod_crc(1152);
+  {
+    pow_1119();
+    of_pow(1152, true, true, false, false, true, false, false, true, false, true, true, false, true, true, false, false, true, true, true, true, true, true, false, true, true, true, false, false, false, false, false, false);
+  }
 
   lemma lut_entry_17()
   ensures bits_of_int(lut[17] as int, 64)
@@ -798,28 +812,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, true, false, false, true, false, false, true, false, true, false, false, true, true, false, true, true, true, false, true, true, false, true, true, false, true, true, false, true]+[false, false, false, false, false, false, true, true, true, false, true, true, true, true, true, true, false, false, true, true, false, true, true, false, true, false, false, true, false, false, true, true];
       {
-        calc {
-          [true, true, false, true, true, false, false, true, false, false, true, false, true, false, false, true, true, false, true, true, true, false, true, true, false, true, true, false, true, true, false, true];
-          {
-            pow_2271();
-            of_pow(2304, true, false, true, true, false, true, true, false, true, true, false, true, true, true, false, true, true, false, false, true, false, true, false, false, true, false, false, true, true, false, true, true);
-          }
-          pow_mod_crc(2304);
-        }
-        calc {
-          [false, false, false, false, false, false, true, true, true, false, true, true, true, true, true, true, false, false, true, true, false, true, true, false, true, false, false, true, false, false, true, true];
-          {
-            pow_1119();
-            of_pow(1152, true, true, false, false, true, false, false, true, false, true, true, false, true, true, false, false, true, true, true, true, true, true, false, true, true, true, false, false, false, false, false, false);
-          }
-          pow_mod_crc(1152);
-        }
+        lut_entry_17_0();
+        lut_entry_17_1();
       }
       pow_mod_crc(2304) + pow_mod_crc(1152);
     }
   }
 
 
+
+  lemma lut_entry_18_0()
+  ensures [true, true, true, false, true, true, false, true, false, false, true, true, false, false, true, true, true, false, false, true, true, false, true, true, false, false, false, true, true, true, true, false] == pow_mod_crc(2432);
+  {
+    pow_2399();
+    of_pow(2432, false, true, true, true, true, false, false, false, true, true, false, true, true, false, false, true, true, true, false, false, true, true, false, false, true, false, true, true, false, true, true, true);
+  }
+
+  lemma lut_entry_18_1()
+  ensures [false, false, false, true, false, false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, true, false, false, true, false, true, true, true, true, true, true, false] == pow_mod_crc(1216);
+  {
+    pow_1183();
+    of_pow(1216, false, true, true, true, true, true, true, false, true, false, false, true, false, false, false, false, true, false, false, false, false, false, false, false, false, true, false, false, true, false, false, false);
+  }
 
   lemma lut_entry_18()
   ensures bits_of_int(lut[18] as int, 64)
@@ -838,28 +852,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, false, true, true, false, true, false, false, true, true, false, false, true, true, true, false, false, true, true, false, true, true, false, false, false, true, true, true, true, false]+[false, false, false, true, false, false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, true, false, false, true, false, true, true, true, true, true, true, false];
       {
-        calc {
-          [true, true, true, false, true, true, false, true, false, false, true, true, false, false, true, true, true, false, false, true, true, false, true, true, false, false, false, true, true, true, true, false];
-          {
-            pow_2399();
-            of_pow(2432, false, true, true, true, true, false, false, false, true, true, false, true, true, false, false, true, true, true, false, false, true, true, false, false, true, false, true, true, false, true, true, true);
-          }
-          pow_mod_crc(2432);
-        }
-        calc {
-          [false, false, false, true, false, false, true, false, false, false, false, false, false, false, false, true, false, false, false, false, true, false, false, true, false, true, true, true, true, true, true, false];
-          {
-            pow_1183();
-            of_pow(1216, false, true, true, true, true, true, true, false, true, false, false, true, false, false, false, false, true, false, false, false, false, false, false, false, false, true, false, false, true, false, false, false);
-          }
-          pow_mod_crc(1216);
-        }
+        lut_entry_18_0();
+        lut_entry_18_1();
       }
       pow_mod_crc(2432) + pow_mod_crc(1216);
     }
   }
 
 
+
+  lemma lut_entry_19_0()
+  ensures [true, true, false, true, true, true, true, false, true, false, true, true, true, true, true, true, false, true, false, false, false, false, true, true, false, true, false, true, true, true, false, true] == pow_mod_crc(2560);
+  {
+    pow_2527();
+    of_pow(2560, true, false, true, true, true, false, true, false, true, true, false, false, false, false, true, false, true, true, true, true, true, true, false, true, false, true, true, true, true, false, true, true);
+  }
+
+  lemma lut_entry_19_1()
+  ensures [true, true, true, false, false, true, false, true, false, true, false, false, true, false, false, true, false, true, false, true, false, false, false, true, true, true, true, false, false, false, false, true] == pow_mod_crc(1280);
+  {
+    pow_1247();
+    of_pow(1280, true, false, false, false, false, true, true, true, true, false, false, false, true, false, true, false, true, false, false, true, false, false, true, false, true, false, true, false, false, true, true, true);
+  }
 
   lemma lut_entry_19()
   ensures bits_of_int(lut[19] as int, 64)
@@ -878,28 +892,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, true, true, true, false, true, false, true, true, true, true, true, true, false, true, false, false, false, false, true, true, false, true, false, true, true, true, false, true]+[true, true, true, false, false, true, false, true, false, true, false, false, true, false, false, true, false, true, false, true, false, false, false, true, true, true, true, false, false, false, false, true];
       {
-        calc {
-          [true, true, false, true, true, true, true, false, true, false, true, true, true, true, true, true, false, true, false, false, false, false, true, true, false, true, false, true, true, true, false, true];
-          {
-            pow_2527();
-            of_pow(2560, true, false, true, true, true, false, true, false, true, true, false, false, false, false, true, false, true, true, true, true, true, true, false, true, false, true, true, true, true, false, true, true);
-          }
-          pow_mod_crc(2560);
-        }
-        calc {
-          [true, true, true, false, false, true, false, true, false, true, false, false, true, false, false, true, false, true, false, true, false, false, false, true, true, true, true, false, false, false, false, true];
-          {
-            pow_1247();
-            of_pow(1280, true, false, false, false, false, true, true, true, true, false, false, false, true, false, true, false, true, false, false, true, false, false, true, false, true, false, true, false, false, true, true, true);
-          }
-          pow_mod_crc(1280);
-        }
+        lut_entry_19_0();
+        lut_entry_19_1();
       }
       pow_mod_crc(2560) + pow_mod_crc(1280);
     }
   }
 
 
+
+  lemma lut_entry_20_0()
+  ensures [true, true, false, true, true, true, true, false, false, false, false, false, false, true, true, true, false, false, true, true, false, false, false, false, false, true, true, false, false, true, false, true] == pow_mod_crc(2688);
+  {
+    pow_2655();
+    of_pow(2688, true, false, true, false, false, true, true, false, false, false, false, false, true, true, false, false, true, true, true, false, false, false, false, false, false, true, true, true, true, false, true, true);
+  }
+
+  lemma lut_entry_20_1()
+  ensures [true, false, false, true, false, true, false, false, true, true, true, true, false, false, false, true, true, false, true, true, true, true, false, false, true, true, false, true, true, false, false, false] == pow_mod_crc(1344);
+  {
+    pow_1311();
+    of_pow(1344, false, false, false, true, true, false, true, true, false, false, true, true, true, true, false, true, true, false, false, false, true, true, true, true, false, false, true, false, true, false, false, true);
+  }
 
   lemma lut_entry_20()
   ensures bits_of_int(lut[20] as int, 64)
@@ -918,28 +932,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, true, true, true, false, false, false, false, false, false, true, true, true, false, false, true, true, false, false, false, false, false, true, true, false, false, true, false, true]+[true, false, false, true, false, true, false, false, true, true, true, true, false, false, false, true, true, false, true, true, true, true, false, false, true, true, false, true, true, false, false, false];
       {
-        calc {
-          [true, true, false, true, true, true, true, false, false, false, false, false, false, true, true, true, false, false, true, true, false, false, false, false, false, true, true, false, false, true, false, true];
-          {
-            pow_2655();
-            of_pow(2688, true, false, true, false, false, true, true, false, false, false, false, false, true, true, false, false, true, true, true, false, false, false, false, false, false, true, true, true, true, false, true, true);
-          }
-          pow_mod_crc(2688);
-        }
-        calc {
-          [true, false, false, true, false, true, false, false, true, true, true, true, false, false, false, true, true, false, true, true, true, true, false, false, true, true, false, true, true, false, false, false];
-          {
-            pow_1311();
-            of_pow(1344, false, false, false, true, true, false, true, true, false, false, true, true, true, true, false, true, true, false, false, false, true, true, true, true, false, false, true, false, true, false, false, true);
-          }
-          pow_mod_crc(1344);
-        }
+        lut_entry_20_0();
+        lut_entry_20_1();
       }
       pow_mod_crc(2688) + pow_mod_crc(1344);
     }
   }
 
 
+
+  lemma lut_entry_21_0()
+  ensures [false, false, true, false, true, true, true, true, true, false, false, true, true, true, false, false, true, true, true, true, true, true, true, false, false, true, true, true, false, false, true, true] == pow_mod_crc(2816);
+  {
+    pow_2783();
+    of_pow(2816, true, true, false, false, true, true, true, false, false, true, true, true, true, true, true, true, false, false, true, true, true, false, false, true, true, true, true, true, false, true, false, false);
+  }
+
+  lemma lut_entry_21_1()
+  ensures [false, true, true, true, true, true, false, false, true, true, true, false, false, true, true, true, false, false, true, true, false, true, true, true, false, true, false, true, true, false, true, true] == pow_mod_crc(1408);
+  {
+    pow_1375();
+    of_pow(1408, true, true, false, true, true, false, true, false, true, true, true, false, true, true, false, false, true, true, true, false, false, true, true, true, false, false, true, true, true, true, true, false);
+  }
 
   lemma lut_entry_21()
   ensures bits_of_int(lut[21] as int, 64)
@@ -958,28 +972,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, false, true, true, true, true, true, false, false, true, true, true, false, false, true, true, true, true, true, true, true, false, false, true, true, true, false, false, true, true]+[false, true, true, true, true, true, false, false, true, true, true, false, false, true, true, true, false, false, true, true, false, true, true, true, false, true, false, true, true, false, true, true];
       {
-        calc {
-          [false, false, true, false, true, true, true, true, true, false, false, true, true, true, false, false, true, true, true, true, true, true, true, false, false, true, true, true, false, false, true, true];
-          {
-            pow_2783();
-            of_pow(2816, true, true, false, false, true, true, true, false, false, true, true, true, true, true, true, true, false, false, true, true, true, false, false, true, true, true, true, true, false, true, false, false);
-          }
-          pow_mod_crc(2816);
-        }
-        calc {
-          [false, true, true, true, true, true, false, false, true, true, true, false, false, true, true, true, false, false, true, true, false, true, true, true, false, true, false, true, true, false, true, true];
-          {
-            pow_1375();
-            of_pow(1408, true, true, false, true, true, false, true, false, true, true, true, false, true, true, false, false, true, true, true, false, false, true, true, true, false, false, true, true, true, true, true, false);
-          }
-          pow_mod_crc(1408);
-        }
+        lut_entry_21_0();
+        lut_entry_21_1();
       }
       pow_mod_crc(2816) + pow_mod_crc(1408);
     }
   }
 
 
+
+  lemma lut_entry_22_0()
+  ensures [false, true, true, false, true, false, true, false, false, true, true, true, false, true, false, false, false, false, false, true, true, false, true, true, true, false, false, false, false, true, true, false] == pow_mod_crc(2944);
+  {
+    pow_2911();
+    of_pow(2944, false, true, true, false, false, false, false, true, true, true, false, true, true, false, false, false, false, false, true, false, true, true, true, false, false, true, false, true, false, true, true, false);
+  }
+
+  lemma lut_entry_22_1()
+  ensures [false, true, true, true, true, false, true, false, true, false, true, false, true, true, true, true, false, false, false, false, true, false, true, true, true, false, false, false, true, true, true, true] == pow_mod_crc(1472);
+  {
+    pow_1439();
+    of_pow(1472, true, true, true, true, false, false, false, true, true, true, false, true, false, false, false, false, true, true, true, true, false, true, false, true, false, true, false, true, true, true, true, false);
+  }
 
   lemma lut_entry_22()
   ensures bits_of_int(lut[22] as int, 64)
@@ -998,28 +1012,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, false, true, false, true, false, false, true, true, true, false, true, false, false, false, false, false, true, true, false, true, true, true, false, false, false, false, true, true, false]+[false, true, true, true, true, false, true, false, true, false, true, false, true, true, true, true, false, false, false, false, true, false, true, true, true, false, false, false, true, true, true, true];
       {
-        calc {
-          [false, true, true, false, true, false, true, false, false, true, true, true, false, true, false, false, false, false, false, true, true, false, true, true, true, false, false, false, false, true, true, false];
-          {
-            pow_2911();
-            of_pow(2944, false, true, true, false, false, false, false, true, true, true, false, true, true, false, false, false, false, false, true, false, true, true, true, false, false, true, false, true, false, true, true, false);
-          }
-          pow_mod_crc(2944);
-        }
-        calc {
-          [false, true, true, true, true, false, true, false, true, false, true, false, true, true, true, true, false, false, false, false, true, false, true, true, true, false, false, false, true, true, true, true];
-          {
-            pow_1439();
-            of_pow(1472, true, true, true, true, false, false, false, true, true, true, false, true, false, false, false, false, true, true, true, true, false, true, false, true, false, true, false, true, true, true, true, false);
-          }
-          pow_mod_crc(1472);
-        }
+        lut_entry_22_0();
+        lut_entry_22_1();
       }
       pow_mod_crc(2944) + pow_mod_crc(1472);
     }
   }
 
 
+
+  lemma lut_entry_23_0()
+  ensures [false, true, false, false, false, true, false, true, true, false, false, false, true, true, true, true, false, false, false, false, true, true, true, false, false, true, false, false, true, false, true, true] == pow_mod_crc(3072);
+  {
+    pow_3039();
+    of_pow(3072, true, true, false, true, false, false, true, false, false, true, true, true, false, false, false, false, true, true, true, true, false, false, false, true, true, false, true, false, false, false, true, false);
+  }
+
+  lemma lut_entry_23_1()
+  ensures [false, true, false, true, false, true, false, false, true, true, true, true, true, true, true, true, false, true, false, true, true, true, true, false, true, true, false, true, false, true, false, true] == pow_mod_crc(1536);
+  {
+    pow_1503();
+    of_pow(1536, true, false, true, false, true, false, true, true, false, true, true, true, true, false, true, false, true, true, true, true, true, true, true, true, false, false, true, false, true, false, true, false);
+  }
 
   lemma lut_entry_23()
   ensures bits_of_int(lut[23] as int, 64)
@@ -1038,28 +1052,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, false, true, false, true, true, false, false, false, true, true, true, true, false, false, false, false, true, true, true, false, false, true, false, false, true, false, true, true]+[false, true, false, true, false, true, false, false, true, true, true, true, true, true, true, true, false, true, false, true, true, true, true, false, true, true, false, true, false, true, false, true];
       {
-        calc {
-          [false, true, false, false, false, true, false, true, true, false, false, false, true, true, true, true, false, false, false, false, true, true, true, false, false, true, false, false, true, false, true, true];
-          {
-            pow_3039();
-            of_pow(3072, true, true, false, true, false, false, true, false, false, true, true, true, false, false, false, false, true, true, true, true, false, false, false, true, true, false, true, false, false, false, true, false);
-          }
-          pow_mod_crc(3072);
-        }
-        calc {
-          [false, true, false, true, false, true, false, false, true, true, true, true, true, true, true, true, false, true, false, true, true, true, true, false, true, true, false, true, false, true, false, true];
-          {
-            pow_1503();
-            of_pow(1536, true, false, true, false, true, false, true, true, false, true, true, true, true, false, true, false, true, true, true, true, true, true, true, true, false, false, true, false, true, false, true, false);
-          }
-          pow_mod_crc(1536);
-        }
+        lut_entry_23_0();
+        lut_entry_23_1();
       }
       pow_mod_crc(3072) + pow_mod_crc(1536);
     }
   }
 
 
+
+  lemma lut_entry_24_0()
+  ensures [true, false, true, true, true, false, false, true, false, false, false, false, false, false, false, true, true, false, false, true, true, false, false, false, false, true, true, false, false, false, true, true] == pow_mod_crc(3200);
+  {
+    pow_3167();
+    of_pow(3200, true, true, false, false, false, true, true, false, false, false, false, true, true, false, false, true, true, false, false, false, false, false, false, false, true, false, false, true, true, true, false, true);
+  }
+
+  lemma lut_entry_24_1()
+  ensures [false, false, false, true, false, true, false, true, false, false, false, true, true, true, false, true, false, true, false, true, true, true, true, false, false, false, false, true, false, true, false, true] == pow_mod_crc(1600);
+  {
+    pow_1567();
+    of_pow(1600, true, false, true, false, true, false, false, false, false, true, true, true, true, false, true, false, true, false, true, true, true, false, false, false, true, false, true, false, true, false, false, false);
+  }
 
   lemma lut_entry_24()
   ensures bits_of_int(lut[24] as int, 64)
@@ -1078,28 +1092,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, true, true, false, false, true, false, false, false, false, false, false, false, true, true, false, false, true, true, false, false, false, false, true, true, false, false, false, true, true]+[false, false, false, true, false, true, false, true, false, false, false, true, true, true, false, true, false, true, false, true, true, true, true, false, false, false, false, true, false, true, false, true];
       {
-        calc {
-          [true, false, true, true, true, false, false, true, false, false, false, false, false, false, false, true, true, false, false, true, true, false, false, false, false, true, true, false, false, false, true, true];
-          {
-            pow_3167();
-            of_pow(3200, true, true, false, false, false, true, true, false, false, false, false, true, true, false, false, true, true, false, false, false, false, false, false, false, true, false, false, true, true, true, false, true);
-          }
-          pow_mod_crc(3200);
-        }
-        calc {
-          [false, false, false, true, false, true, false, true, false, false, false, true, true, true, false, true, false, true, false, true, true, true, true, false, false, false, false, true, false, true, false, true];
-          {
-            pow_1567();
-            of_pow(1600, true, false, true, false, true, false, false, false, false, true, true, true, true, false, true, false, true, false, true, true, true, false, false, false, true, false, true, false, true, false, false, false);
-          }
-          pow_mod_crc(1600);
-        }
+        lut_entry_24_0();
+        lut_entry_24_1();
       }
       pow_mod_crc(3200) + pow_mod_crc(1600);
     }
   }
 
 
+
+  lemma lut_entry_25_0()
+  ensures [true, false, true, true, true, false, true, false, false, false, true, true, false, true, false, true, false, false, true, true, true, true, false, false, true, true, false, true, false, true, false, false] == pow_mod_crc(3328);
+  {
+    pow_3295();
+    of_pow(3328, false, false, true, false, true, false, true, true, false, false, true, true, true, true, false, false, true, false, true, false, true, true, false, false, false, true, false, true, true, true, false, true);
+  }
+
+  lemma lut_entry_25_1()
+  ensures [true, false, true, false, false, false, false, true, true, true, false, false, true, false, true, true, false, true, false, false, false, true, true, false, true, false, false, false, false, true, false, false] == pow_mod_crc(1664);
+  {
+    pow_1631();
+    of_pow(1664, false, false, true, false, false, false, false, true, false, true, true, false, false, false, true, false, true, true, false, true, false, false, true, true, true, false, false, false, false, true, false, true);
+  }
 
   lemma lut_entry_25()
   ensures bits_of_int(lut[25] as int, 64)
@@ -1118,28 +1132,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, true, true, false, true, false, false, false, true, true, false, true, false, true, false, false, true, true, true, true, false, false, true, true, false, true, false, true, false, false]+[true, false, true, false, false, false, false, true, true, true, false, false, true, false, true, true, false, true, false, false, false, true, true, false, true, false, false, false, false, true, false, false];
       {
-        calc {
-          [true, false, true, true, true, false, true, false, false, false, true, true, false, true, false, true, false, false, true, true, true, true, false, false, true, true, false, true, false, true, false, false];
-          {
-            pow_3295();
-            of_pow(3328, false, false, true, false, true, false, true, true, false, false, true, true, true, true, false, false, true, false, true, false, true, true, false, false, false, true, false, true, true, true, false, true);
-          }
-          pow_mod_crc(3328);
-        }
-        calc {
-          [true, false, true, false, false, false, false, true, true, true, false, false, true, false, true, true, false, true, false, false, false, true, true, false, true, false, false, false, false, true, false, false];
-          {
-            pow_1631();
-            of_pow(1664, false, false, true, false, false, false, false, true, false, true, true, false, false, false, true, false, true, true, false, true, false, false, true, true, true, false, false, false, false, true, false, true);
-          }
-          pow_mod_crc(1664);
-        }
+        lut_entry_25_0();
+        lut_entry_25_1();
       }
       pow_mod_crc(3328) + pow_mod_crc(1664);
     }
   }
 
 
+
+  lemma lut_entry_26_0()
+  ensures [false, false, true, false, false, true, true, false, true, true, false, true, true, true, false, false, false, true, true, false, false, false, false, true, true, false, true, false, false, true, true, false] == pow_mod_crc(3456);
+  {
+    pow_3423();
+    of_pow(3456, false, true, true, false, false, true, false, true, true, false, false, false, false, true, true, false, false, false, true, true, true, false, true, true, false, true, true, false, false, true, false, false);
+  }
+
+  lemma lut_entry_26_1()
+  ensures [false, false, false, false, false, false, false, false, false, false, false, true, true, false, true, true, false, true, false, false, false, true, true, false, false, false, true, false, false, false, false, true] == pow_mod_crc(1728);
+  {
+    pow_1695();
+    of_pow(1728, true, false, false, false, false, true, false, false, false, true, true, false, false, false, true, false, true, true, false, true, true, false, false, false, false, false, false, false, false, false, false, false);
+  }
 
   lemma lut_entry_26()
   ensures bits_of_int(lut[26] as int, 64)
@@ -1158,28 +1172,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, false, false, true, true, false, true, true, false, true, true, true, false, false, false, true, true, false, false, false, false, true, true, false, true, false, false, true, true, false]+[false, false, false, false, false, false, false, false, false, false, false, true, true, false, true, true, false, true, false, false, false, true, true, false, false, false, true, false, false, false, false, true];
       {
-        calc {
-          [false, false, true, false, false, true, true, false, true, true, false, true, true, true, false, false, false, true, true, false, false, false, false, true, true, false, true, false, false, true, true, false];
-          {
-            pow_3423();
-            of_pow(3456, false, true, true, false, false, true, false, true, true, false, false, false, false, true, true, false, false, false, true, true, true, false, true, true, false, true, true, false, false, true, false, false);
-          }
-          pow_mod_crc(3456);
-        }
-        calc {
-          [false, false, false, false, false, false, false, false, false, false, false, true, true, false, true, true, false, true, false, false, false, true, true, false, false, false, true, false, false, false, false, true];
-          {
-            pow_1695();
-            of_pow(1728, true, false, false, false, false, true, false, false, false, true, true, false, false, false, true, false, true, true, false, true, true, false, false, false, false, false, false, false, false, false, false, false);
-          }
-          pow_mod_crc(1728);
-        }
+        lut_entry_26_0();
+        lut_entry_26_1();
       }
       pow_mod_crc(3456) + pow_mod_crc(1728);
     }
   }
 
 
+
+  lemma lut_entry_27_0()
+  ensures [true, true, true, true, true, true, true, false, true, false, false, true, true, true, false, false, true, true, false, false, false, false, false, false, true, true, false, true, true, false, false, false] == pow_mod_crc(3584);
+  {
+    pow_3551();
+    of_pow(3584, false, false, false, true, true, false, true, true, false, false, false, false, false, false, true, true, false, false, true, true, true, false, false, true, false, true, true, true, true, true, true, true);
+  }
+
+  lemma lut_entry_27_1()
+  ensures [false, true, false, false, true, true, false, false, false, false, false, true, false, false, false, true, false, false, true, false, true, true, false, false, true, true, false, false, false, false, false, true] == pow_mod_crc(1792);
+  {
+    pow_1759();
+    of_pow(1792, true, false, false, false, false, false, true, true, false, false, true, true, false, true, false, false, true, false, false, false, true, false, false, false, false, false, true, true, false, false, true, false);
+  }
 
   lemma lut_entry_27()
   ensures bits_of_int(lut[27] as int, 64)
@@ -1198,28 +1212,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, true, true, true, true, false, true, false, false, true, true, true, false, false, true, true, false, false, false, false, false, false, true, true, false, true, true, false, false, false]+[false, true, false, false, true, true, false, false, false, false, false, true, false, false, false, true, false, false, true, false, true, true, false, false, true, true, false, false, false, false, false, true];
       {
-        calc {
-          [true, true, true, true, true, true, true, false, true, false, false, true, true, true, false, false, true, true, false, false, false, false, false, false, true, true, false, true, true, false, false, false];
-          {
-            pow_3551();
-            of_pow(3584, false, false, false, true, true, false, true, true, false, false, false, false, false, false, true, true, false, false, true, true, true, false, false, true, false, true, true, true, true, true, true, true);
-          }
-          pow_mod_crc(3584);
-        }
-        calc {
-          [false, true, false, false, true, true, false, false, false, false, false, true, false, false, false, true, false, false, true, false, true, true, false, false, true, true, false, false, false, false, false, true];
-          {
-            pow_1759();
-            of_pow(1792, true, false, false, false, false, false, true, true, false, false, true, true, false, true, false, false, true, false, false, false, true, false, false, false, false, false, true, true, false, false, true, false);
-          }
-          pow_mod_crc(1792);
-        }
+        lut_entry_27_0();
+        lut_entry_27_1();
       }
       pow_mod_crc(3584) + pow_mod_crc(1792);
     }
   }
 
 
+
+  lemma lut_entry_28_0()
+  ensures [true, false, true, true, true, true, false, true, true, true, false, false, false, false, false, true, false, false, false, true, true, true, false, true, true, true, false, true, false, true, true, true] == pow_mod_crc(3712);
+  {
+    pow_3679();
+    of_pow(3712, true, true, true, false, true, false, true, true, true, false, true, true, true, false, false, false, true, false, false, false, false, false, true, true, true, false, true, true, true, true, false, true);
+  }
+
+  lemma lut_entry_28_1()
+  ensures [false, false, false, true, false, true, false, true, true, false, false, false, true, false, false, false, true, false, false, false, true, false, true, true, true, false, false, false, true, true, true, false] == pow_mod_crc(1856);
+  {
+    pow_1823();
+    of_pow(1856, false, true, true, true, false, false, false, true, true, true, false, true, false, false, false, true, false, false, false, true, false, false, false, true, true, false, true, false, true, false, false, false);
+  }
 
   lemma lut_entry_28()
   ensures bits_of_int(lut[28] as int, 64)
@@ -1238,28 +1252,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, true, true, true, false, true, true, true, false, false, false, false, false, true, false, false, false, true, true, true, false, true, true, true, false, true, false, true, true, true]+[false, false, false, true, false, true, false, true, true, false, false, false, true, false, false, false, true, false, false, false, true, false, true, true, true, false, false, false, true, true, true, false];
       {
-        calc {
-          [true, false, true, true, true, true, false, true, true, true, false, false, false, false, false, true, false, false, false, true, true, true, false, true, true, true, false, true, false, true, true, true];
-          {
-            pow_3679();
-            of_pow(3712, true, true, true, false, true, false, true, true, true, false, true, true, true, false, false, false, true, false, false, false, false, false, true, true, true, false, true, true, true, true, false, true);
-          }
-          pow_mod_crc(3712);
-        }
-        calc {
-          [false, false, false, true, false, true, false, true, true, false, false, false, true, false, false, false, true, false, false, false, true, false, true, true, true, false, false, false, true, true, true, false];
-          {
-            pow_1823();
-            of_pow(1856, false, true, true, true, false, false, false, true, true, true, false, true, false, false, false, true, false, false, false, true, false, false, false, true, true, false, true, false, true, false, false, false);
-          }
-          pow_mod_crc(1856);
-        }
+        lut_entry_28_0();
+        lut_entry_28_1();
       }
       pow_mod_crc(3712) + pow_mod_crc(1856);
     }
   }
 
 
+
+  lemma lut_entry_29_0()
+  ensures [false, false, false, true, false, true, false, false, false, false, true, true, false, true, false, false, true, true, false, false, false, true, true, true, true, true, false, false, true, true, false, true] == pow_mod_crc(3840);
+  {
+    pow_3807();
+    of_pow(3840, true, false, true, true, false, false, true, true, true, true, true, false, false, false, true, true, false, false, true, false, true, true, false, false, false, false, true, false, true, false, false, false);
+  }
+
+  lemma lut_entry_29_1()
+  ensures [true, false, true, false, true, false, true, true, true, true, true, false, false, false, true, false, false, false, false, true, true, false, false, true, true, false, false, true, false, true, false, false] == pow_mod_crc(1920);
+  {
+    pow_1887();
+    of_pow(1920, false, false, true, false, true, false, false, true, true, false, false, true, true, false, false, false, false, true, false, false, false, true, true, true, true, true, false, true, false, true, false, true);
+  }
 
   lemma lut_entry_29()
   ensures bits_of_int(lut[29] as int, 64)
@@ -1278,28 +1292,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, true, false, true, false, false, false, false, true, true, false, true, false, false, true, true, false, false, false, true, true, true, true, true, false, false, true, true, false, true]+[true, false, true, false, true, false, true, true, true, true, true, false, false, false, true, false, false, false, false, true, true, false, false, true, true, false, false, true, false, true, false, false];
       {
-        calc {
-          [false, false, false, true, false, true, false, false, false, false, true, true, false, true, false, false, true, true, false, false, false, true, true, true, true, true, false, false, true, true, false, true];
-          {
-            pow_3807();
-            of_pow(3840, true, false, true, true, false, false, true, true, true, true, true, false, false, false, true, true, false, false, true, false, true, true, false, false, false, false, true, false, true, false, false, false);
-          }
-          pow_mod_crc(3840);
-        }
-        calc {
-          [true, false, true, false, true, false, true, true, true, true, true, false, false, false, true, false, false, false, false, true, true, false, false, true, true, false, false, true, false, true, false, false];
-          {
-            pow_1887();
-            of_pow(1920, false, false, true, false, true, false, false, true, true, false, false, true, true, false, false, false, false, true, false, false, false, true, true, true, true, true, false, true, false, true, false, true);
-          }
-          pow_mod_crc(1920);
-        }
+        lut_entry_29_0();
+        lut_entry_29_1();
       }
       pow_mod_crc(3840) + pow_mod_crc(1920);
     }
   }
 
 
+
+  lemma lut_entry_30_0()
+  ensures [false, true, true, false, false, true, false, false, true, true, true, true, true, true, true, false, true, true, true, true, false, false, true, false, false, true, true, false, false, false, false, false] == pow_mod_crc(3968);
+  {
+    pow_3935();
+    of_pow(3968, false, false, false, false, false, true, true, false, false, true, false, false, true, true, true, true, false, true, true, true, true, true, true, true, false, false, true, false, false, true, true, false);
+  }
+
+  lemma lut_entry_30_1()
+  ensures [false, true, true, false, false, false, true, true, false, true, false, false, true, false, true, false, false, false, false, true, true, false, true, true, true, true, true, true, true, true, true, true] == pow_mod_crc(1984);
+  {
+    pow_1951();
+    of_pow(1984, true, true, true, true, true, true, true, true, true, true, false, true, true, false, false, false, false, true, false, true, false, false, true, false, true, true, false, false, false, true, true, false);
+  }
 
   lemma lut_entry_30()
   ensures bits_of_int(lut[30] as int, 64)
@@ -1318,28 +1332,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, false, false, true, false, false, true, true, true, true, true, true, true, false, true, true, true, true, false, false, true, false, false, true, true, false, false, false, false, false]+[false, true, true, false, false, false, true, true, false, true, false, false, true, false, true, false, false, false, false, true, true, false, true, true, true, true, true, true, true, true, true, true];
       {
-        calc {
-          [false, true, true, false, false, true, false, false, true, true, true, true, true, true, true, false, true, true, true, true, false, false, true, false, false, true, true, false, false, false, false, false];
-          {
-            pow_3935();
-            of_pow(3968, false, false, false, false, false, true, true, false, false, true, false, false, true, true, true, true, false, true, true, true, true, true, true, true, false, false, true, false, false, true, true, false);
-          }
-          pow_mod_crc(3968);
-        }
-        calc {
-          [false, true, true, false, false, false, true, true, false, true, false, false, true, false, true, false, false, false, false, true, true, false, true, true, true, true, true, true, true, true, true, true];
-          {
-            pow_1951();
-            of_pow(1984, true, true, true, true, true, true, true, true, true, true, false, true, true, false, false, false, false, true, false, true, false, false, true, false, true, true, false, false, false, true, true, false);
-          }
-          pow_mod_crc(1984);
-        }
+        lut_entry_30_0();
+        lut_entry_30_1();
       }
       pow_mod_crc(3968) + pow_mod_crc(1984);
     }
   }
 
 
+
+  lemma lut_entry_31_0()
+  ensures [false, false, true, true, false, false, false, false, true, true, false, true, true, true, false, false, false, true, true, true, true, true, true, false, true, false, true, true, true, false, true, true] == pow_mod_crc(4096);
+  {
+    pow_4063();
+    of_pow(4096, true, true, false, true, true, true, false, true, false, true, true, true, true, true, true, false, false, false, true, true, true, false, true, true, false, false, false, false, true, true, false, false);
+  }
+
+  lemma lut_entry_31_1()
+  ensures [false, true, true, false, false, false, false, true, true, true, false, true, false, true, false, false, false, false, false, false, false, true, true, true, true, false, false, true, true, true, false, true] == pow_mod_crc(2048);
+  {
+    pow_2015();
+    of_pow(2048, true, false, true, true, true, false, false, true, true, true, true, false, false, false, false, false, false, false, true, false, true, false, true, true, true, false, false, false, false, true, true, false);
+  }
 
   lemma lut_entry_31()
   ensures bits_of_int(lut[31] as int, 64)
@@ -1358,28 +1372,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, false, false, false, false, true, true, false, true, true, true, false, false, false, true, true, true, true, true, true, false, true, false, true, true, true, false, true, true]+[false, true, true, false, false, false, false, true, true, true, false, true, false, true, false, false, false, false, false, false, false, true, true, true, true, false, false, true, true, true, false, true];
       {
-        calc {
-          [false, false, true, true, false, false, false, false, true, true, false, true, true, true, false, false, false, true, true, true, true, true, true, false, true, false, true, true, true, false, true, true];
-          {
-            pow_4063();
-            of_pow(4096, true, true, false, true, true, true, false, true, false, true, true, true, true, true, true, false, false, false, true, true, true, false, true, true, false, false, false, false, true, true, false, false);
-          }
-          pow_mod_crc(4096);
-        }
-        calc {
-          [false, true, true, false, false, false, false, true, true, true, false, true, false, true, false, false, false, false, false, false, false, true, true, true, true, false, false, true, true, true, false, true];
-          {
-            pow_2015();
-            of_pow(2048, true, false, true, true, true, false, false, true, true, true, true, false, false, false, false, false, false, false, true, false, true, false, true, true, true, false, false, false, false, true, true, false);
-          }
-          pow_mod_crc(2048);
-        }
+        lut_entry_31_0();
+        lut_entry_31_1();
       }
       pow_mod_crc(4096) + pow_mod_crc(2048);
     }
   }
 
 
+
+  lemma lut_entry_32_0()
+  ensures [false, false, true, true, true, false, false, false, true, false, true, false, false, true, true, false, true, false, true, false, false, false, false, true, false, true, false, false, true, true, true, true] == pow_mod_crc(4224);
+  {
+    pow_4191();
+    of_pow(4224, true, true, true, true, false, false, true, false, true, false, false, false, false, true, false, true, false, true, true, false, false, true, false, true, false, false, false, true, true, true, false, false);
+  }
+
+  lemma lut_entry_32_1()
+  ensures [false, false, true, false, false, true, false, true, false, true, false, true, true, true, true, false, true, false, false, false, true, true, false, true, false, false, true, true, true, false, true, true] == pow_mod_crc(2112);
+  {
+    pow_2079();
+    of_pow(2112, true, true, false, true, true, true, false, false, true, false, true, true, false, false, false, true, false, true, true, true, true, false, true, false, true, false, true, false, false, true, false, false);
+  }
 
   lemma lut_entry_32()
   ensures bits_of_int(lut[32] as int, 64)
@@ -1398,28 +1412,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, true, false, false, false, true, false, true, false, false, true, true, false, true, false, true, false, false, false, false, true, false, true, false, false, true, true, true, true]+[false, false, true, false, false, true, false, true, false, true, false, true, true, true, true, false, true, false, false, false, true, true, false, true, false, false, true, true, true, false, true, true];
       {
-        calc {
-          [false, false, true, true, true, false, false, false, true, false, true, false, false, true, true, false, true, false, true, false, false, false, false, true, false, true, false, false, true, true, true, true];
-          {
-            pow_4191();
-            of_pow(4224, true, true, true, true, false, false, true, false, true, false, false, false, false, true, false, true, false, true, true, false, false, true, false, true, false, false, false, true, true, true, false, false);
-          }
-          pow_mod_crc(4224);
-        }
-        calc {
-          [false, false, true, false, false, true, false, true, false, true, false, true, true, true, true, false, true, false, false, false, true, true, false, true, false, false, true, true, true, false, true, true];
-          {
-            pow_2079();
-            of_pow(2112, true, true, false, true, true, true, false, false, true, false, true, true, false, false, false, true, false, true, true, true, true, false, true, false, true, false, true, false, false, true, false, false);
-          }
-          pow_mod_crc(2112);
-        }
+        lut_entry_32_0();
+        lut_entry_32_1();
       }
       pow_mod_crc(4224) + pow_mod_crc(2112);
     }
   }
 
 
+
+  lemma lut_entry_33_0()
+  ensures [false, false, true, true, true, true, false, false, true, true, true, true, false, true, true, false, false, false, true, false, true, true, true, false, false, false, false, false, true, false, false, false] == pow_mod_crc(4352);
+  {
+    pow_4319();
+    of_pow(4352, false, false, false, true, false, false, false, false, false, true, true, true, false, true, false, false, false, true, true, false, true, true, true, true, false, false, true, true, true, true, false, false);
+  }
+
+  lemma lut_entry_33_1()
+  ensures [false, true, true, true, false, false, true, false, false, true, false, true, true, true, false, false, true, true, false, false, true, true, false, true, false, false, false, true, true, false, false, false] == pow_mod_crc(2176);
+  {
+    pow_2143();
+    of_pow(2176, false, false, false, true, true, false, false, false, true, false, true, true, false, false, true, true, false, false, true, true, true, false, true, false, false, true, false, false, true, true, true, false);
+  }
 
   lemma lut_entry_33()
   ensures bits_of_int(lut[33] as int, 64)
@@ -1438,28 +1452,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, true, true, false, false, true, true, true, true, false, true, true, false, false, false, true, false, true, true, true, false, false, false, false, false, true, false, false, false]+[false, true, true, true, false, false, true, false, false, true, false, true, true, true, false, false, true, true, false, false, true, true, false, true, false, false, false, true, true, false, false, false];
       {
-        calc {
-          [false, false, true, true, true, true, false, false, true, true, true, true, false, true, true, false, false, false, true, false, true, true, true, false, false, false, false, false, true, false, false, false];
-          {
-            pow_4319();
-            of_pow(4352, false, false, false, true, false, false, false, false, false, true, true, true, false, true, false, false, false, true, true, false, true, true, true, true, false, false, true, true, true, true, false, false);
-          }
-          pow_mod_crc(4352);
-        }
-        calc {
-          [false, true, true, true, false, false, true, false, false, true, false, true, true, true, false, false, true, true, false, false, true, true, false, true, false, false, false, true, true, false, false, false];
-          {
-            pow_2143();
-            of_pow(2176, false, false, false, true, true, false, false, false, true, false, true, true, false, false, true, true, false, false, true, true, true, false, true, false, false, true, false, false, true, true, true, false);
-          }
-          pow_mod_crc(2176);
-        }
+        lut_entry_33_0();
+        lut_entry_33_1();
       }
       pow_mod_crc(4352) + pow_mod_crc(2176);
     }
   }
 
 
+
+  lemma lut_entry_34_0()
+  ensures [true, false, true, false, true, false, true, false, false, false, false, true, false, false, false, true, false, true, true, false, false, true, false, true, true, true, true, false, false, false, true, true] == pow_mod_crc(4480);
+  {
+    pow_4447();
+    of_pow(4480, true, true, false, false, false, true, true, true, true, false, true, false, false, true, true, false, true, false, false, false, true, false, false, false, false, true, false, true, false, true, false, true);
+  }
+
+  lemma lut_entry_34_1()
+  ensures [false, true, true, true, false, true, true, true, false, true, false, true, true, false, true, false, false, false, true, true, true, true, true, false, true, true, false, false, true, true, true, true] == pow_mod_crc(2240);
+  {
+    pow_2207();
+    of_pow(2240, true, true, true, true, false, false, true, true, false, true, true, true, true, true, false, false, false, true, false, true, true, false, true, false, true, true, true, false, true, true, true, false);
+  }
 
   lemma lut_entry_34()
   ensures bits_of_int(lut[34] as int, 64)
@@ -1478,28 +1492,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, false, true, false, true, false, false, false, false, true, false, false, false, true, false, true, true, false, false, true, false, true, true, true, true, false, false, false, true, true]+[false, true, true, true, false, true, true, true, false, true, false, true, true, false, true, false, false, false, true, true, true, true, true, false, true, true, false, false, true, true, true, true];
       {
-        calc {
-          [true, false, true, false, true, false, true, false, false, false, false, true, false, false, false, true, false, true, true, false, false, true, false, true, true, true, true, false, false, false, true, true];
-          {
-            pow_4447();
-            of_pow(4480, true, true, false, false, false, true, true, true, true, false, true, false, false, true, true, false, true, false, false, false, true, false, false, false, false, true, false, true, false, true, false, true);
-          }
-          pow_mod_crc(4480);
-        }
-        calc {
-          [false, true, true, true, false, true, true, true, false, true, false, true, true, false, true, false, false, false, true, true, true, true, true, false, true, true, false, false, true, true, true, true];
-          {
-            pow_2207();
-            of_pow(2240, true, true, true, true, false, false, true, true, false, true, true, true, true, true, false, false, false, true, false, true, true, false, true, false, true, true, true, false, true, true, true, false);
-          }
-          pow_mod_crc(2240);
-        }
+        lut_entry_34_0();
+        lut_entry_34_1();
       }
       pow_mod_crc(4480) + pow_mod_crc(2240);
     }
   }
 
 
+
+  lemma lut_entry_35_0()
+  ensures [false, false, true, false, false, false, true, false, false, false, false, true, true, false, false, true, true, false, true, true, true, false, false, false, true, true, true, false, false, true, false, false] == pow_mod_crc(4608);
+  {
+    pow_4575();
+    of_pow(4608, false, false, true, false, false, true, true, true, false, false, false, true, true, true, false, true, true, false, false, true, true, false, false, false, false, true, false, false, false, true, false, false);
+  }
+
+  lemma lut_entry_35_1()
+  ensures [true, true, false, true, true, false, false, true, false, false, true, false, true, false, false, true, true, false, true, true, true, false, true, true, false, true, true, false, true, true, false, true] == pow_mod_crc(2304);
+  {
+    pow_2271();
+    of_pow(2304, true, false, true, true, false, true, true, false, true, true, false, true, true, true, false, true, true, false, false, true, false, true, false, false, true, false, false, true, true, false, true, true);
+  }
 
   lemma lut_entry_35()
   ensures bits_of_int(lut[35] as int, 64)
@@ -1518,28 +1532,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, false, false, false, true, false, false, false, false, true, true, false, false, true, true, false, true, true, true, false, false, false, true, true, true, false, false, true, false, false]+[true, true, false, true, true, false, false, true, false, false, true, false, true, false, false, true, true, false, true, true, true, false, true, true, false, true, true, false, true, true, false, true];
       {
-        calc {
-          [false, false, true, false, false, false, true, false, false, false, false, true, true, false, false, true, true, false, true, true, true, false, false, false, true, true, true, false, false, true, false, false];
-          {
-            pow_4575();
-            of_pow(4608, false, false, true, false, false, true, true, true, false, false, false, true, true, true, false, true, true, false, false, true, true, false, false, false, false, true, false, false, false, true, false, false);
-          }
-          pow_mod_crc(4608);
-        }
-        calc {
-          [true, true, false, true, true, false, false, true, false, false, true, false, true, false, false, true, true, false, true, true, true, false, true, true, false, true, true, false, true, true, false, true];
-          {
-            pow_2271();
-            of_pow(2304, true, false, true, true, false, true, true, false, true, true, false, true, true, true, false, true, true, false, false, true, false, true, false, false, true, false, false, true, true, false, true, true);
-          }
-          pow_mod_crc(2304);
-        }
+        lut_entry_35_0();
+        lut_entry_35_1();
       }
       pow_mod_crc(4608) + pow_mod_crc(2304);
     }
   }
 
 
+
+  lemma lut_entry_36_0()
+  ensures [false, false, true, true, false, false, false, false, false, true, false, true, false, true, true, false, false, true, true, false, true, true, true, false, false, true, true, true, false, false, false, true] == pow_mod_crc(4736);
+  {
+    pow_4703();
+    of_pow(4736, true, false, false, false, true, true, true, false, false, true, true, true, false, true, true, false, false, true, true, false, true, false, true, false, false, false, false, false, true, true, false, false);
+  }
+
+  lemma lut_entry_36_1()
+  ensures [false, true, false, false, false, true, false, true, true, false, true, false, true, false, true, true, true, false, false, false, true, false, true, false, false, false, false, false, false, true, true, false] == pow_mod_crc(2368);
+  {
+    pow_2335();
+    of_pow(2368, false, true, true, false, false, false, false, false, false, true, false, true, false, false, false, true, true, true, false, true, false, true, false, true, true, false, true, false, false, false, true, false);
+  }
 
   lemma lut_entry_36()
   ensures bits_of_int(lut[36] as int, 64)
@@ -1558,28 +1572,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, false, false, false, false, false, true, false, true, false, true, true, false, false, true, true, false, true, true, true, false, false, true, true, true, false, false, false, true]+[false, true, false, false, false, true, false, true, true, false, true, false, true, false, true, true, true, false, false, false, true, false, true, false, false, false, false, false, false, true, true, false];
       {
-        calc {
-          [false, false, true, true, false, false, false, false, false, true, false, true, false, true, true, false, false, true, true, false, true, true, true, false, false, true, true, true, false, false, false, true];
-          {
-            pow_4703();
-            of_pow(4736, true, false, false, false, true, true, true, false, false, true, true, true, false, true, true, false, false, true, true, false, true, false, true, false, false, false, false, false, true, true, false, false);
-          }
-          pow_mod_crc(4736);
-        }
-        calc {
-          [false, true, false, false, false, true, false, true, true, false, true, false, true, false, true, true, true, false, false, false, true, false, true, false, false, false, false, false, false, true, true, false];
-          {
-            pow_2335();
-            of_pow(2368, false, true, true, false, false, false, false, false, false, true, false, true, false, false, false, true, true, true, false, true, false, true, false, true, true, false, true, false, false, false, true, false);
-          }
-          pow_mod_crc(2368);
-        }
+        lut_entry_36_0();
+        lut_entry_36_1();
       }
       pow_mod_crc(4736) + pow_mod_crc(2368);
     }
   }
 
 
+
+  lemma lut_entry_37_0()
+  ensures [false, false, false, false, true, true, false, false, true, true, true, false, true, true, true, true, true, false, true, false, false, true, false, true, true, true, false, false, true, false, false, true] == pow_mod_crc(4864);
+  {
+    pow_4831();
+    of_pow(4864, true, false, false, true, false, false, true, true, true, false, true, false, false, true, false, true, true, true, true, true, false, true, true, true, false, false, true, true, false, false, false, false);
+  }
+
+  lemma lut_entry_37_1()
+  ensures [true, true, true, false, true, true, false, true, false, false, true, true, false, false, true, true, true, false, false, true, true, false, true, true, false, false, false, true, true, true, true, false] == pow_mod_crc(2432);
+  {
+    pow_2399();
+    of_pow(2432, false, true, true, true, true, false, false, false, true, true, false, true, true, false, false, true, true, true, false, false, true, true, false, false, true, false, true, true, false, true, true, true);
+  }
 
   lemma lut_entry_37()
   ensures bits_of_int(lut[37] as int, 64)
@@ -1598,28 +1612,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, false, true, true, false, false, true, true, true, false, true, true, true, true, true, false, true, false, false, true, false, true, true, true, false, false, true, false, false, true]+[true, true, true, false, true, true, false, true, false, false, true, true, false, false, true, true, true, false, false, true, true, false, true, true, false, false, false, true, true, true, true, false];
       {
-        calc {
-          [false, false, false, false, true, true, false, false, true, true, true, false, true, true, true, true, true, false, true, false, false, true, false, true, true, true, false, false, true, false, false, true];
-          {
-            pow_4831();
-            of_pow(4864, true, false, false, true, false, false, true, true, true, false, true, false, false, true, false, true, true, true, true, true, false, true, true, true, false, false, true, true, false, false, false, false);
-          }
-          pow_mod_crc(4864);
-        }
-        calc {
-          [true, true, true, false, true, true, false, true, false, false, true, true, false, false, true, true, true, false, false, true, true, false, true, true, false, false, false, true, true, true, true, false];
-          {
-            pow_2399();
-            of_pow(2432, false, true, true, true, true, false, false, false, true, true, false, true, true, false, false, true, true, true, false, false, true, true, false, false, true, false, true, true, false, true, true, true);
-          }
-          pow_mod_crc(2432);
-        }
+        lut_entry_37_0();
+        lut_entry_37_1();
       }
       pow_mod_crc(4864) + pow_mod_crc(2432);
     }
   }
 
 
+
+  lemma lut_entry_38_0()
+  ensures [false, false, true, true, true, false, true, false, false, true, true, true, false, false, false, true, false, false, false, false, true, true, false, true, false, false, true, true, false, true, true, false] == pow_mod_crc(4992);
+  {
+    pow_4959();
+    of_pow(4992, false, true, true, false, true, true, false, false, true, false, true, true, false, false, false, false, true, false, false, false, true, true, true, false, false, true, false, true, true, true, false, false);
+  }
+
+  lemma lut_entry_38_1()
+  ensures [true, true, true, true, true, true, true, true, false, false, true, false, true, false, true, true, false, false, false, false, true, true, false, true, false, false, false, true, true, false, false, false] == pow_mod_crc(2496);
+  {
+    pow_2463();
+    of_pow(2496, false, false, false, true, true, false, false, false, true, false, true, true, false, false, false, false, true, true, false, true, false, true, false, false, true, true, true, true, true, true, true, true);
+  }
 
   lemma lut_entry_38()
   ensures bits_of_int(lut[38] as int, 64)
@@ -1638,28 +1652,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, true, false, true, false, false, true, true, true, false, false, false, true, false, false, false, false, true, true, false, true, false, false, true, true, false, true, true, false]+[true, true, true, true, true, true, true, true, false, false, true, false, true, false, true, true, false, false, false, false, true, true, false, true, false, false, false, true, true, false, false, false];
       {
-        calc {
-          [false, false, true, true, true, false, true, false, false, true, true, true, false, false, false, true, false, false, false, false, true, true, false, true, false, false, true, true, false, true, true, false];
-          {
-            pow_4959();
-            of_pow(4992, false, true, true, false, true, true, false, false, true, false, true, true, false, false, false, false, true, false, false, false, true, true, true, false, false, true, false, true, true, true, false, false);
-          }
-          pow_mod_crc(4992);
-        }
-        calc {
-          [true, true, true, true, true, true, true, true, false, false, true, false, true, false, true, true, false, false, false, false, true, true, false, true, false, false, false, true, true, false, false, false];
-          {
-            pow_2463();
-            of_pow(2496, false, false, false, true, true, false, false, false, true, false, true, true, false, false, false, false, true, true, false, true, false, true, false, false, true, true, true, true, true, true, true, true);
-          }
-          pow_mod_crc(2496);
-        }
+        lut_entry_38_0();
+        lut_entry_38_1();
       }
       pow_mod_crc(4992) + pow_mod_crc(2496);
     }
   }
 
 
+
+  lemma lut_entry_39_0()
+  ensures [false, true, false, false, true, true, false, true, true, true, true, true, true, false, false, true, false, false, true, false, true, true, true, false, true, true, false, true, false, true, true, false] == pow_mod_crc(5120);
+  {
+    pow_5087();
+    of_pow(5120, false, true, true, false, true, false, true, true, false, true, true, true, false, true, false, false, true, false, false, true, true, true, true, true, true, false, true, true, false, false, true, false);
+  }
+
+  lemma lut_entry_39_1()
+  ensures [true, true, false, true, true, true, true, false, true, false, true, true, true, true, true, true, false, true, false, false, false, false, true, true, false, true, false, true, true, true, false, true] == pow_mod_crc(2560);
+  {
+    pow_2527();
+    of_pow(2560, true, false, true, true, true, false, true, false, true, true, false, false, false, false, true, false, true, true, true, true, true, true, false, true, false, true, true, true, true, false, true, true);
+  }
 
   lemma lut_entry_39()
   ensures bits_of_int(lut[39] as int, 64)
@@ -1678,28 +1692,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, true, true, false, true, true, true, true, true, true, false, false, true, false, false, true, false, true, true, true, false, true, true, false, true, false, true, true, false]+[true, true, false, true, true, true, true, false, true, false, true, true, true, true, true, true, false, true, false, false, false, false, true, true, false, true, false, true, true, true, false, true];
       {
-        calc {
-          [false, true, false, false, true, true, false, true, true, true, true, true, true, false, false, true, false, false, true, false, true, true, true, false, true, true, false, true, false, true, true, false];
-          {
-            pow_5087();
-            of_pow(5120, false, true, true, false, true, false, true, true, false, true, true, true, false, true, false, false, true, false, false, true, true, true, true, true, true, false, true, true, false, false, true, false);
-          }
-          pow_mod_crc(5120);
-        }
-        calc {
-          [true, true, false, true, true, true, true, false, true, false, true, true, true, true, true, true, false, true, false, false, false, false, true, true, false, true, false, true, true, true, false, true];
-          {
-            pow_2527();
-            of_pow(2560, true, false, true, true, true, false, true, false, true, true, false, false, false, false, true, false, true, true, true, true, true, true, false, true, false, true, true, true, true, false, true, true);
-          }
-          pow_mod_crc(2560);
-        }
+        lut_entry_39_0();
+        lut_entry_39_1();
       }
       pow_mod_crc(5120) + pow_mod_crc(2560);
     }
   }
 
 
+
+  lemma lut_entry_40_0()
+  ensures [true, true, false, false, false, false, false, false, false, true, false, false, false, true, true, true, true, true, false, false, true, false, false, true, true, true, false, false, true, false, false, false] == pow_mod_crc(5248);
+  {
+    pow_5215();
+    of_pow(5248, false, false, false, true, false, false, true, true, true, false, false, true, false, false, true, true, true, true, true, false, false, false, true, false, false, false, false, false, false, false, true, true);
+  }
+
+  lemma lut_entry_40_1()
+  ensures [false, false, true, true, true, false, false, true, true, false, false, true, true, false, true, true, true, true, false, false, true, true, true, true, true, false, false, false, false, true, false, false] == pow_mod_crc(2624);
+  {
+    pow_2591();
+    of_pow(2624, false, false, true, false, false, false, false, true, true, true, true, true, false, false, true, true, true, true, false, true, true, false, false, true, true, false, false, true, true, true, false, false);
+  }
 
   lemma lut_entry_40()
   ensures bits_of_int(lut[40] as int, 64)
@@ -1718,28 +1732,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, false, false, false, false, false, false, true, false, false, false, true, true, true, true, true, false, false, true, false, false, true, true, true, false, false, true, false, false, false]+[false, false, true, true, true, false, false, true, true, false, false, true, true, false, true, true, true, true, false, false, true, true, true, true, true, false, false, false, false, true, false, false];
       {
-        calc {
-          [true, true, false, false, false, false, false, false, false, true, false, false, false, true, true, true, true, true, false, false, true, false, false, true, true, true, false, false, true, false, false, false];
-          {
-            pow_5215();
-            of_pow(5248, false, false, false, true, false, false, true, true, true, false, false, true, false, false, true, true, true, true, true, false, false, false, true, false, false, false, false, false, false, false, true, true);
-          }
-          pow_mod_crc(5248);
-        }
-        calc {
-          [false, false, true, true, true, false, false, true, true, false, false, true, true, false, true, true, true, true, false, false, true, true, true, true, true, false, false, false, false, true, false, false];
-          {
-            pow_2591();
-            of_pow(2624, false, false, true, false, false, false, false, true, true, true, true, true, false, false, true, true, true, true, false, true, true, false, false, true, true, false, false, true, true, true, false, false);
-          }
-          pow_mod_crc(2624);
-        }
+        lut_entry_40_0();
+        lut_entry_40_1();
       }
       pow_mod_crc(5248) + pow_mod_crc(2624);
     }
   }
 
 
+
+  lemma lut_entry_41_0()
+  ensures [false, true, true, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, false, false, false, false, true, true, false, true, true, true, false, false, true, true] == pow_mod_crc(5376);
+  {
+    pow_5343();
+    of_pow(5376, true, true, false, false, true, true, true, false, true, true, false, false, false, false, true, true, false, true, true, false, false, true, true, false, false, false, true, false, true, true, true, false);
+  }
+
+  lemma lut_entry_41_1()
+  ensures [true, true, false, true, true, true, true, false, false, false, false, false, false, true, true, true, false, false, true, true, false, false, false, false, false, true, true, false, false, true, false, true] == pow_mod_crc(2688);
+  {
+    pow_2655();
+    of_pow(2688, true, false, true, false, false, true, true, false, false, false, false, false, true, true, false, false, true, true, true, false, false, false, false, false, false, true, true, true, true, false, true, true);
+  }
 
   lemma lut_entry_41()
   ensures bits_of_int(lut[41] as int, 64)
@@ -1758,28 +1772,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, false, false, false, false, true, true, false, true, true, true, false, false, true, true]+[true, true, false, true, true, true, true, false, false, false, false, false, false, true, true, true, false, false, true, true, false, false, false, false, false, true, true, false, false, true, false, true];
       {
-        calc {
-          [false, true, true, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, false, false, false, false, true, true, false, true, true, true, false, false, true, true];
-          {
-            pow_5343();
-            of_pow(5376, true, true, false, false, true, true, true, false, true, true, false, false, false, false, true, true, false, true, true, false, false, true, true, false, false, false, true, false, true, true, true, false);
-          }
-          pow_mod_crc(5376);
-        }
-        calc {
-          [true, true, false, true, true, true, true, false, false, false, false, false, false, true, true, true, false, false, true, true, false, false, false, false, false, true, true, false, false, true, false, true];
-          {
-            pow_2655();
-            of_pow(2688, true, false, true, false, false, true, true, false, false, false, false, false, true, true, false, false, true, true, true, false, false, false, false, false, false, true, true, true, true, false, true, true);
-          }
-          pow_mod_crc(2688);
-        }
+        lut_entry_41_0();
+        lut_entry_41_1();
       }
       pow_mod_crc(5376) + pow_mod_crc(2688);
     }
   }
 
 
+
+  lemma lut_entry_42_0()
+  ensures [true, true, false, true, true, true, false, true, true, false, true, false, true, false, false, false, true, false, true, false, false, false, true, true, false, true, true, false, true, false, false, true] == pow_mod_crc(5504);
+  {
+    pow_5471();
+    of_pow(5504, true, false, false, true, false, true, true, false, true, true, false, false, false, true, false, true, false, false, false, true, false, true, false, true, true, false, true, true, true, false, true, true);
+  }
+
+  lemma lut_entry_42_1()
+  ensures [false, false, true, false, true, false, false, false, false, false, false, false, false, false, false, true, true, false, true, false, true, false, false, false, true, true, true, true, false, false, false, true] == pow_mod_crc(2752);
+  {
+    pow_2719();
+    of_pow(2752, true, false, false, false, true, true, true, true, false, false, false, true, false, true, false, true, true, false, false, false, false, false, false, false, false, false, false, true, false, true, false, false);
+  }
 
   lemma lut_entry_42()
   ensures bits_of_int(lut[42] as int, 64)
@@ -1798,28 +1812,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, true, true, false, true, true, false, true, false, true, false, false, false, true, false, true, false, false, false, true, true, false, true, true, false, true, false, false, true]+[false, false, true, false, true, false, false, false, false, false, false, false, false, false, false, true, true, false, true, false, true, false, false, false, true, true, true, true, false, false, false, true];
       {
-        calc {
-          [true, true, false, true, true, true, false, true, true, false, true, false, true, false, false, false, true, false, true, false, false, false, true, true, false, true, true, false, true, false, false, true];
-          {
-            pow_5471();
-            of_pow(5504, true, false, false, true, false, true, true, false, true, true, false, false, false, true, false, true, false, false, false, true, false, true, false, true, true, false, true, true, true, false, true, true);
-          }
-          pow_mod_crc(5504);
-        }
-        calc {
-          [false, false, true, false, true, false, false, false, false, false, false, false, false, false, false, true, true, false, true, false, true, false, false, false, true, true, true, true, false, false, false, true];
-          {
-            pow_2719();
-            of_pow(2752, true, false, false, false, true, true, true, true, false, false, false, true, false, true, false, true, true, false, false, false, false, false, false, false, false, false, false, true, false, true, false, false);
-          }
-          pow_mod_crc(2752);
-        }
+        lut_entry_42_0();
+        lut_entry_42_1();
       }
       pow_mod_crc(5504) + pow_mod_crc(2752);
     }
   }
 
 
+
+  lemma lut_entry_43_0()
+  ensures [false, true, false, true, false, true, true, false, false, true, true, true, false, false, true, false, false, false, true, true, true, true, true, true, false, true, true, false, false, true, true, true] == pow_mod_crc(5632);
+  {
+    pow_5599();
+    of_pow(5632, true, true, true, false, false, true, true, false, true, true, true, true, true, true, false, false, false, true, false, false, true, true, true, false, false, true, true, false, true, false, true, false);
+  }
+
+  lemma lut_entry_43_1()
+  ensures [false, false, true, false, true, true, true, true, true, false, false, true, true, true, false, false, true, true, true, true, true, true, true, false, false, true, true, true, false, false, true, true] == pow_mod_crc(2816);
+  {
+    pow_2783();
+    of_pow(2816, true, true, false, false, true, true, true, false, false, true, true, true, true, true, true, true, false, false, true, true, true, false, false, true, true, true, true, true, false, true, false, false);
+  }
 
   lemma lut_entry_43()
   ensures bits_of_int(lut[43] as int, 64)
@@ -1838,28 +1852,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, false, true, true, false, false, true, true, true, false, false, true, false, false, false, true, true, true, true, true, true, false, true, true, false, false, true, true, true]+[false, false, true, false, true, true, true, true, true, false, false, true, true, true, false, false, true, true, true, true, true, true, true, false, false, true, true, true, false, false, true, true];
       {
-        calc {
-          [false, true, false, true, false, true, true, false, false, true, true, true, false, false, true, false, false, false, true, true, true, true, true, true, false, true, true, false, false, true, true, true];
-          {
-            pow_5599();
-            of_pow(5632, true, true, true, false, false, true, true, false, true, true, true, true, true, true, false, false, false, true, false, false, true, true, true, false, false, true, true, false, true, false, true, false);
-          }
-          pow_mod_crc(5632);
-        }
-        calc {
-          [false, false, true, false, true, true, true, true, true, false, false, true, true, true, false, false, true, true, true, true, true, true, true, false, false, true, true, true, false, false, true, true];
-          {
-            pow_2783();
-            of_pow(2816, true, true, false, false, true, true, true, false, false, true, true, true, true, true, true, true, false, false, true, true, true, false, false, true, true, true, true, true, false, true, false, false);
-          }
-          pow_mod_crc(2816);
-        }
+        lut_entry_43_0();
+        lut_entry_43_1();
       }
       pow_mod_crc(5632) + pow_mod_crc(2816);
     }
   }
 
 
+
+  lemma lut_entry_44_0()
+  ensures [false, true, false, true, false, false, false, true, true, true, false, true, true, true, false, true, true, true, true, false, false, true, false, false, false, true, false, false, false, false, false, true] == pow_mod_crc(5760);
+  {
+    pow_5727();
+    of_pow(5760, true, false, false, false, false, false, true, false, false, false, true, false, false, true, true, true, true, false, true, true, true, false, true, true, true, false, false, false, true, false, true, false);
+  }
+
+  lemma lut_entry_44_1()
+  ensures [true, true, true, false, true, true, true, true, true, true, true, false, true, false, true, false, false, false, true, false, false, false, false, false, false, false, false, false, false, true, false, true] == pow_mod_crc(2880);
+  {
+    pow_2847();
+    of_pow(2880, true, false, true, false, false, false, false, false, false, false, false, false, false, true, false, false, false, true, false, true, false, true, true, true, true, true, true, true, false, true, true, true);
+  }
 
   lemma lut_entry_44()
   ensures bits_of_int(lut[44] as int, 64)
@@ -1878,28 +1892,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, false, false, false, true, true, true, false, true, true, true, false, true, true, true, true, false, false, true, false, false, false, true, false, false, false, false, false, true]+[true, true, true, false, true, true, true, true, true, true, true, false, true, false, true, false, false, false, true, false, false, false, false, false, false, false, false, false, false, true, false, true];
       {
-        calc {
-          [false, true, false, true, false, false, false, true, true, true, false, true, true, true, false, true, true, true, true, false, false, true, false, false, false, true, false, false, false, false, false, true];
-          {
-            pow_5727();
-            of_pow(5760, true, false, false, false, false, false, true, false, false, false, true, false, false, true, true, true, true, false, true, true, true, false, true, true, true, false, false, false, true, false, true, false);
-          }
-          pow_mod_crc(5760);
-        }
-        calc {
-          [true, true, true, false, true, true, true, true, true, true, true, false, true, false, true, false, false, false, true, false, false, false, false, false, false, false, false, false, false, true, false, true];
-          {
-            pow_2847();
-            of_pow(2880, true, false, true, false, false, false, false, false, false, false, false, false, false, true, false, false, false, true, false, true, false, true, true, true, true, true, true, true, false, true, true, true);
-          }
-          pow_mod_crc(2880);
-        }
+        lut_entry_44_0();
+        lut_entry_44_1();
       }
       pow_mod_crc(5760) + pow_mod_crc(2880);
     }
   }
 
 
+
+  lemma lut_entry_45_0()
+  ensures [false, false, false, true, false, true, true, false, true, true, true, false, false, false, true, false, true, false, true, true, false, false, true, true, false, false, false, false, true, true, false, true] == pow_mod_crc(5888);
+  {
+    pow_5855();
+    of_pow(5888, true, false, true, true, false, false, false, false, true, true, false, false, true, true, false, true, false, true, false, false, false, true, true, true, false, true, true, false, true, false, false, false);
+  }
+
+  lemma lut_entry_45_1()
+  ensures [false, true, true, false, true, false, true, false, false, true, true, true, false, true, false, false, false, false, false, true, true, false, true, true, true, false, false, false, false, true, true, false] == pow_mod_crc(2944);
+  {
+    pow_2911();
+    of_pow(2944, false, true, true, false, false, false, false, true, true, true, false, true, true, false, false, false, false, false, true, false, true, true, true, false, false, true, false, true, false, true, true, false);
+  }
 
   lemma lut_entry_45()
   ensures bits_of_int(lut[45] as int, 64)
@@ -1918,28 +1932,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, true, false, true, true, false, true, true, true, false, false, false, true, false, true, false, true, true, false, false, true, true, false, false, false, false, true, true, false, true]+[false, true, true, false, true, false, true, false, false, true, true, true, false, true, false, false, false, false, false, true, true, false, true, true, true, false, false, false, false, true, true, false];
       {
-        calc {
-          [false, false, false, true, false, true, true, false, true, true, true, false, false, false, true, false, true, false, true, true, false, false, true, true, false, false, false, false, true, true, false, true];
-          {
-            pow_5855();
-            of_pow(5888, true, false, true, true, false, false, false, false, true, true, false, false, true, true, false, true, false, true, false, false, false, true, true, true, false, true, true, false, true, false, false, false);
-          }
-          pow_mod_crc(5888);
-        }
-        calc {
-          [false, true, true, false, true, false, true, false, false, true, true, true, false, true, false, false, false, false, false, true, true, false, true, true, true, false, false, false, false, true, true, false];
-          {
-            pow_2911();
-            of_pow(2944, false, true, true, false, false, false, false, true, true, true, false, true, true, false, false, false, false, false, true, false, true, true, true, false, false, true, false, true, false, true, true, false);
-          }
-          pow_mod_crc(2944);
-        }
+        lut_entry_45_0();
+        lut_entry_45_1();
       }
       pow_mod_crc(5888) + pow_mod_crc(2944);
     }
   }
 
 
+
+  lemma lut_entry_46_0()
+  ensures [true, false, true, false, true, true, false, false, true, true, true, true, true, true, true, true, true, true, true, false, false, false, true, true, true, false, false, true, true, true, false, false] == pow_mod_crc(6016);
+  {
+    pow_5983();
+    of_pow(6016, false, false, true, true, true, false, false, true, true, true, false, false, false, true, true, true, true, true, true, true, true, true, true, true, false, false, true, true, false, true, false, true);
+  }
+
+  lemma lut_entry_46_1()
+  ensures [true, true, false, false, false, false, true, false, false, false, true, true, false, true, false, false, true, false, true, true, false, true, true, false, true, false, true, true, false, false, false, true] == pow_mod_crc(3008);
+  {
+    pow_2975();
+    of_pow(3008, true, false, false, false, true, true, false, true, false, true, true, false, true, true, false, true, false, false, true, false, true, true, false, false, false, true, false, false, false, false, true, true);
+  }
 
   lemma lut_entry_46()
   ensures bits_of_int(lut[46] as int, 64)
@@ -1958,28 +1972,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, false, true, true, false, false, true, true, true, true, true, true, true, true, true, true, true, false, false, false, true, true, true, false, false, true, true, true, false, false]+[true, true, false, false, false, false, true, false, false, false, true, true, false, true, false, false, true, false, true, true, false, true, true, false, true, false, true, true, false, false, false, true];
       {
-        calc {
-          [true, false, true, false, true, true, false, false, true, true, true, true, true, true, true, true, true, true, true, false, false, false, true, true, true, false, false, true, true, true, false, false];
-          {
-            pow_5983();
-            of_pow(6016, false, false, true, true, true, false, false, true, true, true, false, false, false, true, true, true, true, true, true, true, true, true, true, true, false, false, true, true, false, true, false, true);
-          }
-          pow_mod_crc(6016);
-        }
-        calc {
-          [true, true, false, false, false, false, true, false, false, false, true, true, false, true, false, false, true, false, true, true, false, true, true, false, true, false, true, true, false, false, false, true];
-          {
-            pow_2975();
-            of_pow(3008, true, false, false, false, true, true, false, true, false, true, true, false, true, true, false, true, false, false, true, false, true, true, false, false, false, true, false, false, false, false, true, true);
-          }
-          pow_mod_crc(3008);
-        }
+        lut_entry_46_0();
+        lut_entry_46_1();
       }
       pow_mod_crc(6016) + pow_mod_crc(3008);
     }
   }
 
 
+
+  lemma lut_entry_47_0()
+  ensures [false, false, true, true, true, false, true, false, false, true, false, false, false, false, false, true, false, false, true, false, false, true, false, true, true, true, true, false, true, false, true, true] == pow_mod_crc(6144);
+  {
+    pow_6111();
+    of_pow(6144, true, true, false, true, false, true, true, true, true, false, true, false, false, true, false, false, true, false, false, false, false, false, true, false, false, true, false, true, true, true, false, false);
+  }
+
+  lemma lut_entry_47_1()
+  ensures [false, true, false, false, false, true, false, true, true, false, false, false, true, true, true, true, false, false, false, false, true, true, true, false, false, true, false, false, true, false, true, true] == pow_mod_crc(3072);
+  {
+    pow_3039();
+    of_pow(3072, true, true, false, true, false, false, true, false, false, true, true, true, false, false, false, false, true, true, true, true, false, false, false, true, true, false, true, false, false, false, true, false);
+  }
 
   lemma lut_entry_47()
   ensures bits_of_int(lut[47] as int, 64)
@@ -1998,28 +2012,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, true, false, true, false, false, true, false, false, false, false, false, true, false, false, true, false, false, true, false, true, true, true, true, false, true, false, true, true]+[false, true, false, false, false, true, false, true, true, false, false, false, true, true, true, true, false, false, false, false, true, true, true, false, false, true, false, false, true, false, true, true];
       {
-        calc {
-          [false, false, true, true, true, false, true, false, false, true, false, false, false, false, false, true, false, false, true, false, false, true, false, true, true, true, true, false, true, false, true, true];
-          {
-            pow_6111();
-            of_pow(6144, true, true, false, true, false, true, true, true, true, false, true, false, false, true, false, false, true, false, false, false, false, false, true, false, false, true, false, true, true, true, false, false);
-          }
-          pow_mod_crc(6144);
-        }
-        calc {
-          [false, true, false, false, false, true, false, true, true, false, false, false, true, true, true, true, false, false, false, false, true, true, true, false, false, true, false, false, true, false, true, true];
-          {
-            pow_3039();
-            of_pow(3072, true, true, false, true, false, false, true, false, false, true, true, true, false, false, false, false, true, true, true, true, false, false, false, true, true, false, true, false, false, false, true, false);
-          }
-          pow_mod_crc(3072);
-        }
+        lut_entry_47_0();
+        lut_entry_47_1();
       }
       pow_mod_crc(6144) + pow_mod_crc(3072);
     }
   }
 
 
+
+  lemma lut_entry_48_0()
+  ensures [true, true, false, true, false, false, true, false, false, false, true, false, false, false, false, true, true, true, false, false, true, true, false, true, false, true, false, true, false, false, false, false] == pow_mod_crc(6272);
+  {
+    pow_6239();
+    of_pow(6272, false, false, false, false, true, false, true, false, true, false, true, true, false, false, true, true, true, false, false, false, false, true, false, false, false, true, false, false, true, false, true, true);
+  }
+
+  lemma lut_entry_48_1()
+  ensures [true, true, true, true, false, false, true, true, true, false, false, true, false, true, false, false, false, false, true, true, false, true, false, true, false, false, false, false, false, false, false, false] == pow_mod_crc(3136);
+  {
+    pow_3103();
+    of_pow(3136, false, false, false, false, false, false, false, false, true, false, true, false, true, true, false, false, false, false, true, false, true, false, false, true, true, true, false, false, true, true, true, true);
+  }
 
   lemma lut_entry_48()
   ensures bits_of_int(lut[48] as int, 64)
@@ -2038,28 +2052,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, false, false, true, false, false, false, true, false, false, false, false, true, true, true, false, false, true, true, false, true, false, true, false, true, false, false, false, false]+[true, true, true, true, false, false, true, true, true, false, false, true, false, true, false, false, false, false, true, true, false, true, false, true, false, false, false, false, false, false, false, false];
       {
-        calc {
-          [true, true, false, true, false, false, true, false, false, false, true, false, false, false, false, true, true, true, false, false, true, true, false, true, false, true, false, true, false, false, false, false];
-          {
-            pow_6239();
-            of_pow(6272, false, false, false, false, true, false, true, false, true, false, true, true, false, false, true, true, true, false, false, false, false, true, false, false, false, true, false, false, true, false, true, true);
-          }
-          pow_mod_crc(6272);
-        }
-        calc {
-          [true, true, true, true, false, false, true, true, true, false, false, true, false, true, false, false, false, false, true, true, false, true, false, true, false, false, false, false, false, false, false, false];
-          {
-            pow_3103();
-            of_pow(3136, false, false, false, false, false, false, false, false, true, false, true, false, true, true, false, false, false, false, true, false, true, false, false, true, true, true, false, false, true, true, true, true);
-          }
-          pow_mod_crc(3136);
-        }
+        lut_entry_48_0();
+        lut_entry_48_1();
       }
       pow_mod_crc(6272) + pow_mod_crc(3136);
     }
   }
 
 
+
+  lemma lut_entry_49_0()
+  ensures [false, true, false, false, true, false, false, false, true, true, false, false, true, false, true, true, true, true, true, false, false, true, true, false, true, false, false, false, false, false, false, false] == pow_mod_crc(6400);
+  {
+    pow_6367();
+    of_pow(6400, false, false, false, false, false, false, false, true, false, true, true, false, false, true, true, true, true, true, false, true, false, false, true, true, false, false, false, true, false, false, true, false);
+  }
+
+  lemma lut_entry_49_1()
+  ensures [true, false, true, true, true, false, false, true, false, false, false, false, false, false, false, true, true, false, false, true, true, false, false, false, false, true, true, false, false, false, true, true] == pow_mod_crc(3200);
+  {
+    pow_3167();
+    of_pow(3200, true, true, false, false, false, true, true, false, false, false, false, true, true, false, false, true, true, false, false, false, false, false, false, false, true, false, false, true, true, true, false, true);
+  }
 
   lemma lut_entry_49()
   ensures bits_of_int(lut[49] as int, 64)
@@ -2078,28 +2092,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, true, false, false, false, true, true, false, false, true, false, true, true, true, true, true, false, false, true, true, false, true, false, false, false, false, false, false, false]+[true, false, true, true, true, false, false, true, false, false, false, false, false, false, false, true, true, false, false, true, true, false, false, false, false, true, true, false, false, false, true, true];
       {
-        calc {
-          [false, true, false, false, true, false, false, false, true, true, false, false, true, false, true, true, true, true, true, false, false, true, true, false, true, false, false, false, false, false, false, false];
-          {
-            pow_6367();
-            of_pow(6400, false, false, false, false, false, false, false, true, false, true, true, false, false, true, true, true, true, true, false, true, false, false, true, true, false, false, false, true, false, false, true, false);
-          }
-          pow_mod_crc(6400);
-        }
-        calc {
-          [true, false, true, true, true, false, false, true, false, false, false, false, false, false, false, true, true, false, false, true, true, false, false, false, false, true, true, false, false, false, true, true];
-          {
-            pow_3167();
-            of_pow(3200, true, true, false, false, false, true, true, false, false, false, false, true, true, false, false, true, true, false, false, false, false, false, false, false, true, false, false, true, true, true, false, true);
-          }
-          pow_mod_crc(3200);
-        }
+        lut_entry_49_0();
+        lut_entry_49_1();
       }
       pow_mod_crc(6400) + pow_mod_crc(3200);
     }
   }
 
 
+
+  lemma lut_entry_50_0()
+  ensures [false, false, true, false, false, false, true, false, true, false, true, false, false, true, true, false, true, true, true, false, false, false, false, false, false, true, true, false, true, true, true, true] == pow_mod_crc(6528);
+  {
+    pow_6495();
+    of_pow(6528, true, true, true, true, false, true, true, false, false, false, false, false, false, true, true, true, false, true, true, false, false, true, false, true, false, true, false, false, false, true, false, false);
+  }
+
+  lemma lut_entry_50_1()
+  ensures [false, true, true, false, true, false, false, true, true, true, true, false, true, true, true, true, true, false, true, true, false, true, false, true, true, false, false, true, false, true, true, true] == pow_mod_crc(3264);
+  {
+    pow_3231();
+    of_pow(3264, true, true, true, false, true, false, false, true, true, false, true, false, true, true, false, true, true, true, true, true, false, true, true, true, true, false, false, true, false, true, true, false);
+  }
 
   lemma lut_entry_50()
   ensures bits_of_int(lut[50] as int, 64)
@@ -2118,28 +2132,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, false, false, false, true, false, true, false, true, false, false, true, true, false, true, true, true, false, false, false, false, false, false, true, true, false, true, true, true, true]+[false, true, true, false, true, false, false, true, true, true, true, false, true, true, true, true, true, false, true, true, false, true, false, true, true, false, false, true, false, true, true, true];
       {
-        calc {
-          [false, false, true, false, false, false, true, false, true, false, true, false, false, true, true, false, true, true, true, false, false, false, false, false, false, true, true, false, true, true, true, true];
-          {
-            pow_6495();
-            of_pow(6528, true, true, true, true, false, true, true, false, false, false, false, false, false, true, true, true, false, true, true, false, false, true, false, true, false, true, false, false, false, true, false, false);
-          }
-          pow_mod_crc(6528);
-        }
-        calc {
-          [false, true, true, false, true, false, false, true, true, true, true, false, true, true, true, true, true, false, true, true, false, true, false, true, true, false, false, true, false, true, true, true];
-          {
-            pow_3231();
-            of_pow(3264, true, true, true, false, true, false, false, true, true, false, true, false, true, true, false, true, true, true, true, true, false, true, true, true, true, false, false, true, false, true, true, false);
-          }
-          pow_mod_crc(3264);
-        }
+        lut_entry_50_0();
+        lut_entry_50_1();
       }
       pow_mod_crc(6528) + pow_mod_crc(3264);
     }
   }
 
 
+
+  lemma lut_entry_51_0()
+  ensures [false, true, false, true, false, false, false, false, false, true, true, false, false, true, false, true, false, true, true, false, true, true, true, true, false, true, true, false, false, true, false, false] == pow_mod_crc(6656);
+  {
+    pow_6623();
+    of_pow(6656, false, false, true, false, false, true, true, false, true, true, true, true, false, true, true, false, true, false, true, false, false, true, true, false, false, false, false, false, true, false, true, false);
+  }
+
+  lemma lut_entry_51_1()
+  ensures [true, false, true, true, true, false, true, false, false, false, true, true, false, true, false, true, false, false, true, true, true, true, false, false, true, true, false, true, false, true, false, false] == pow_mod_crc(3328);
+  {
+    pow_3295();
+    of_pow(3328, false, false, true, false, true, false, true, true, false, false, true, true, true, true, false, false, true, false, true, false, true, true, false, false, false, true, false, true, true, true, false, true);
+  }
 
   lemma lut_entry_51()
   ensures bits_of_int(lut[51] as int, 64)
@@ -2158,28 +2172,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, false, false, false, false, false, true, true, false, false, true, false, true, false, true, true, false, true, true, true, true, false, true, true, false, false, true, false, false]+[true, false, true, true, true, false, true, false, false, false, true, true, false, true, false, true, false, false, true, true, true, true, false, false, true, true, false, true, false, true, false, false];
       {
-        calc {
-          [false, true, false, true, false, false, false, false, false, true, true, false, false, true, false, true, false, true, true, false, true, true, true, true, false, true, true, false, false, true, false, false];
-          {
-            pow_6623();
-            of_pow(6656, false, false, true, false, false, true, true, false, true, true, true, true, false, true, true, false, true, false, true, false, false, true, true, false, false, false, false, false, true, false, true, false);
-          }
-          pow_mod_crc(6656);
-        }
-        calc {
-          [true, false, true, true, true, false, true, false, false, false, true, true, false, true, false, true, false, false, true, true, true, true, false, false, true, true, false, true, false, true, false, false];
-          {
-            pow_3295();
-            of_pow(3328, false, false, true, false, true, false, true, true, false, false, true, true, true, true, false, false, true, false, true, false, true, true, false, false, false, true, false, true, true, true, false, true);
-          }
-          pow_mod_crc(3328);
-        }
+        lut_entry_51_0();
+        lut_entry_51_1();
       }
       pow_mod_crc(6656) + pow_mod_crc(3328);
     }
   }
 
 
+
+  lemma lut_entry_52_0()
+  ensures [true, true, true, true, true, true, false, true, true, false, false, false, false, false, true, true, true, false, false, false, false, false, true, false, true, true, true, false, false, true, false, true] == pow_mod_crc(6784);
+  {
+    pow_6751();
+    of_pow(6784, true, false, true, false, false, true, true, true, false, true, false, false, false, false, false, true, true, true, false, false, false, false, false, true, true, false, true, true, true, true, true, true);
+  }
+
+  lemma lut_entry_52_1()
+  ensures [false, false, true, false, true, true, false, false, true, true, false, true, false, false, false, true, true, true, false, false, false, true, true, false, false, true, true, false, true, false, false, true] == pow_mod_crc(3392);
+  {
+    pow_3359();
+    of_pow(3392, true, false, false, true, false, true, true, false, false, true, true, false, false, false, true, true, true, false, false, false, true, false, true, true, false, false, true, true, false, true, false, false);
+  }
 
   lemma lut_entry_52()
   ensures bits_of_int(lut[52] as int, 64)
@@ -2198,28 +2212,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, true, true, true, false, true, true, false, false, false, false, false, true, true, true, false, false, false, false, false, true, false, true, true, true, false, false, true, false, true]+[false, false, true, false, true, true, false, false, true, true, false, true, false, false, false, true, true, true, false, false, false, true, true, false, false, true, true, false, true, false, false, true];
       {
-        calc {
-          [true, true, true, true, true, true, false, true, true, false, false, false, false, false, true, true, true, false, false, false, false, false, true, false, true, true, true, false, false, true, false, true];
-          {
-            pow_6751();
-            of_pow(6784, true, false, true, false, false, true, true, true, false, true, false, false, false, false, false, true, true, true, false, false, false, false, false, true, true, false, true, true, true, true, true, true);
-          }
-          pow_mod_crc(6784);
-        }
-        calc {
-          [false, false, true, false, true, true, false, false, true, true, false, true, false, false, false, true, true, true, false, false, false, true, true, false, false, true, true, false, true, false, false, true];
-          {
-            pow_3359();
-            of_pow(3392, true, false, false, true, false, true, true, false, false, true, true, false, false, false, true, true, true, false, false, false, true, false, true, true, false, false, true, true, false, true, false, false);
-          }
-          pow_mod_crc(3392);
-        }
+        lut_entry_52_0();
+        lut_entry_52_1();
       }
       pow_mod_crc(6784) + pow_mod_crc(3392);
     }
   }
 
 
+
+  lemma lut_entry_53_0()
+  ensures [true, true, false, true, false, false, true, true, true, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, false, true] == pow_mod_crc(6912);
+  {
+    pow_6879();
+    of_pow(6912, true, false, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, true, true, true, false, false, true, false, true, true);
+  }
+
+  lemma lut_entry_53_1()
+  ensures [false, false, true, false, false, true, true, false, true, true, false, true, true, true, false, false, false, true, true, false, false, false, false, true, true, false, true, false, false, true, true, false] == pow_mod_crc(3456);
+  {
+    pow_3423();
+    of_pow(3456, false, true, true, false, false, true, false, true, true, false, false, false, false, true, true, false, false, false, true, true, true, false, true, true, false, true, true, false, false, true, false, false);
+  }
 
   lemma lut_entry_53()
   ensures bits_of_int(lut[53] as int, 64)
@@ -2238,28 +2252,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, false, false, true, true, true, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, false, true]+[false, false, true, false, false, true, true, false, true, true, false, true, true, true, false, false, false, true, true, false, false, false, false, true, true, false, true, false, false, true, true, false];
       {
-        calc {
-          [true, true, false, true, false, false, true, true, true, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, false, true];
-          {
-            pow_6879();
-            of_pow(6912, true, false, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, true, true, true, false, false, true, false, true, true);
-          }
-          pow_mod_crc(6912);
-        }
-        calc {
-          [false, false, true, false, false, true, true, false, true, true, false, true, true, true, false, false, false, true, true, false, false, false, false, true, true, false, true, false, false, true, true, false];
-          {
-            pow_3423();
-            of_pow(3456, false, true, true, false, false, true, false, true, true, false, false, false, false, true, true, false, false, false, true, true, true, false, true, true, false, true, true, false, false, true, false, false);
-          }
-          pow_mod_crc(3456);
-        }
+        lut_entry_53_0();
+        lut_entry_53_1();
       }
       pow_mod_crc(6912) + pow_mod_crc(3456);
     }
   }
 
 
+
+  lemma lut_entry_54_0()
+  ensures [false, false, true, true, true, false, false, true, false, false, true, true, false, false, true, true, true, true, false, false, false, false, true, true, true, false, false, true, false, false, true, false] == pow_mod_crc(7040);
+  {
+    pow_7007();
+    of_pow(7040, false, true, false, false, true, false, false, true, true, true, false, false, false, false, true, true, true, true, false, false, true, true, false, false, true, false, false, true, true, true, false, false);
+  }
+
+  lemma lut_entry_54_1()
+  ensures [true, false, false, false, true, false, true, false, true, true, false, false, true, true, true, true, true, false, false, true, false, true, true, true, false, false, false, false, false, true, true, true] == pow_mod_crc(3520);
+  {
+    pow_3487();
+    of_pow(3520, true, true, true, false, false, false, false, false, true, true, true, false, true, false, false, true, true, true, true, true, false, false, true, true, false, true, false, true, false, false, false, true);
+  }
 
   lemma lut_entry_54()
   ensures bits_of_int(lut[54] as int, 64)
@@ -2278,28 +2292,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, true, false, false, true, false, false, true, true, false, false, true, true, true, true, false, false, false, false, true, true, true, false, false, true, false, false, true, false]+[true, false, false, false, true, false, true, false, true, true, false, false, true, true, true, true, true, false, false, true, false, true, true, true, false, false, false, false, false, true, true, true];
       {
-        calc {
-          [false, false, true, true, true, false, false, true, false, false, true, true, false, false, true, true, true, true, false, false, false, false, true, true, true, false, false, true, false, false, true, false];
-          {
-            pow_7007();
-            of_pow(7040, false, true, false, false, true, false, false, true, true, true, false, false, false, false, true, true, true, true, false, false, true, true, false, false, true, false, false, true, true, true, false, false);
-          }
-          pow_mod_crc(7040);
-        }
-        calc {
-          [true, false, false, false, true, false, true, false, true, true, false, false, true, true, true, true, true, false, false, true, false, true, true, true, false, false, false, false, false, true, true, true];
-          {
-            pow_3487();
-            of_pow(3520, true, true, true, false, false, false, false, false, true, true, true, false, true, false, false, true, true, true, true, true, false, false, true, true, false, true, false, true, false, false, false, true);
-          }
-          pow_mod_crc(3520);
-        }
+        lut_entry_54_0();
+        lut_entry_54_1();
       }
       pow_mod_crc(7040) + pow_mod_crc(3520);
     }
   }
 
 
+
+  lemma lut_entry_55_0()
+  ensures [false, true, false, true, true, true, true, false, false, false, false, true, false, true, true, true, false, false, true, true, true, true, false, true, false, false, false, true, false, true, true, false] == pow_mod_crc(7168);
+  {
+    pow_7135();
+    of_pow(7168, false, true, true, false, true, false, false, false, true, false, true, true, true, true, false, false, true, true, true, false, true, false, false, false, false, true, true, true, true, false, true, false);
+  }
+
+  lemma lut_entry_55_1()
+  ensures [true, true, true, true, true, true, true, false, true, false, false, true, true, true, false, false, true, true, false, false, false, false, false, false, true, true, false, true, true, false, false, false] == pow_mod_crc(3584);
+  {
+    pow_3551();
+    of_pow(3584, false, false, false, true, true, false, true, true, false, false, false, false, false, false, true, true, false, false, true, true, true, false, false, true, false, true, true, true, true, true, true, true);
+  }
 
   lemma lut_entry_55()
   ensures bits_of_int(lut[55] as int, 64)
@@ -2318,28 +2332,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, true, true, true, false, false, false, false, true, false, true, true, true, false, false, true, true, true, true, false, true, false, false, false, true, false, true, true, false]+[true, true, true, true, true, true, true, false, true, false, false, true, true, true, false, false, true, true, false, false, false, false, false, false, true, true, false, true, true, false, false, false];
       {
-        calc {
-          [false, true, false, true, true, true, true, false, false, false, false, true, false, true, true, true, false, false, true, true, true, true, false, true, false, false, false, true, false, true, true, false];
-          {
-            pow_7135();
-            of_pow(7168, false, true, true, false, true, false, false, false, true, false, true, true, true, true, false, false, true, true, true, false, true, false, false, false, false, true, true, true, true, false, true, false);
-          }
-          pow_mod_crc(7168);
-        }
-        calc {
-          [true, true, true, true, true, true, true, false, true, false, false, true, true, true, false, false, true, true, false, false, false, false, false, false, true, true, false, true, true, false, false, false];
-          {
-            pow_3551();
-            of_pow(3584, false, false, false, true, true, false, true, true, false, false, false, false, false, false, true, true, false, false, true, true, true, false, false, true, false, true, true, true, true, true, true, true);
-          }
-          pow_mod_crc(3584);
-        }
+        lut_entry_55_0();
+        lut_entry_55_1();
       }
       pow_mod_crc(7168) + pow_mod_crc(3584);
     }
   }
 
 
+
+  lemma lut_entry_56_0()
+  ensures [true, true, true, false, true, true, false, false, false, false, false, false, true, false, true, true, true, true, false, false, false, true, false, true, true, true, true, false, true, false, true, false] == pow_mod_crc(7296);
+  {
+    pow_7263();
+    of_pow(7296, false, true, false, true, false, true, true, true, true, false, true, false, false, false, true, true, true, true, false, true, false, false, false, false, false, false, true, true, false, true, true, true);
+  }
+
+  lemma lut_entry_56_1()
+  ensures [true, false, true, true, false, true, false, false, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, false, true, false, true, true, false, false, true] == pow_mod_crc(3648);
+  {
+    pow_3615();
+    of_pow(3648, true, false, false, true, true, false, true, false, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, false, false, true, false, true, true, false, true);
+  }
 
   lemma lut_entry_56()
   ensures bits_of_int(lut[56] as int, 64)
@@ -2358,28 +2372,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, false, true, true, false, false, false, false, false, false, true, false, true, true, true, true, false, false, false, true, false, true, true, true, true, false, true, false, true, false]+[true, false, true, true, false, true, false, false, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, false, true, false, true, true, false, false, true];
       {
-        calc {
-          [true, true, true, false, true, true, false, false, false, false, false, false, true, false, true, true, true, true, false, false, false, true, false, true, true, true, true, false, true, false, true, false];
-          {
-            pow_7263();
-            of_pow(7296, false, true, false, true, false, true, true, true, true, false, true, false, false, false, true, true, true, true, false, true, false, false, false, false, false, false, true, true, false, true, true, true);
-          }
-          pow_mod_crc(7296);
-        }
-        calc {
-          [true, false, true, true, false, true, false, false, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, false, true, false, true, true, false, false, true];
-          {
-            pow_3615();
-            of_pow(3648, true, false, false, true, true, false, true, false, true, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, false, false, true, false, true, true, false, true);
-          }
-          pow_mod_crc(3648);
-        }
+        lut_entry_56_0();
+        lut_entry_56_1();
       }
       pow_mod_crc(7296) + pow_mod_crc(3648);
     }
   }
 
 
+
+  lemma lut_entry_57_0()
+  ensures [true, true, false, true, true, true, false, false, false, false, true, true, true, true, true, true, false, true, true, false, true, false, true, false, true, false, false, true, false, true, true, false] == pow_mod_crc(7424);
+  {
+    pow_7391();
+    of_pow(7424, false, true, true, false, true, false, false, true, false, true, false, true, false, true, true, false, true, true, true, true, true, true, false, false, false, false, true, true, true, false, true, true);
+  }
+
+  lemma lut_entry_57_1()
+  ensures [true, false, true, true, true, true, false, true, true, true, false, false, false, false, false, true, false, false, false, true, true, true, false, true, true, true, false, true, false, true, true, true] == pow_mod_crc(3712);
+  {
+    pow_3679();
+    of_pow(3712, true, true, true, false, true, false, true, true, true, false, true, true, true, false, false, false, true, false, false, false, false, false, true, true, true, false, true, true, true, true, false, true);
+  }
 
   lemma lut_entry_57()
   ensures bits_of_int(lut[57] as int, 64)
@@ -2398,28 +2412,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, true, true, false, false, false, false, true, true, true, true, true, true, false, true, true, false, true, false, true, false, true, false, false, true, false, true, true, false]+[true, false, true, true, true, true, false, true, true, true, false, false, false, false, false, true, false, false, false, true, true, true, false, true, true, true, false, true, false, true, true, true];
       {
-        calc {
-          [true, true, false, true, true, true, false, false, false, false, true, true, true, true, true, true, false, true, true, false, true, false, true, false, true, false, false, true, false, true, true, false];
-          {
-            pow_7391();
-            of_pow(7424, false, true, true, false, true, false, false, true, false, true, false, true, false, true, true, false, true, true, true, true, true, true, false, false, false, false, true, true, true, false, true, true);
-          }
-          pow_mod_crc(7424);
-        }
-        calc {
-          [true, false, true, true, true, true, false, true, true, true, false, false, false, false, false, true, false, false, false, true, true, true, false, true, true, true, false, true, false, true, true, true];
-          {
-            pow_3679();
-            of_pow(3712, true, true, true, false, true, false, true, true, true, false, true, true, true, false, false, false, true, false, false, false, false, false, true, true, true, false, true, true, true, true, false, true);
-          }
-          pow_mod_crc(3712);
-        }
+        lut_entry_57_0();
+        lut_entry_57_1();
       }
       pow_mod_crc(7424) + pow_mod_crc(3712);
     }
   }
 
 
+
+  lemma lut_entry_58_0()
+  ensures [false, false, false, true, false, false, false, true, false, false, false, true, false, false, false, true, true, false, false, true, true, false, true, true, false, true, false, false, false, false, true, false] == pow_mod_crc(7552);
+  {
+    pow_7519();
+    of_pow(7552, false, true, false, false, false, false, true, false, true, true, false, true, true, false, false, true, true, false, false, false, true, false, false, false, true, false, false, false, true, false, false, false);
+  }
+
+  lemma lut_entry_58_1()
+  ensures [true, true, true, true, false, false, true, true, false, true, false, false, false, false, true, false, true, true, true, true, true, true, true, true, false, false, true, true, false, true, false, false] == pow_mod_crc(3776);
+  {
+    pow_3743();
+    of_pow(3776, false, false, true, false, true, true, false, false, true, true, true, true, true, true, true, true, false, true, false, false, false, false, true, false, true, true, false, false, true, true, true, true);
+  }
 
   lemma lut_entry_58()
   ensures bits_of_int(lut[58] as int, 64)
@@ -2438,28 +2452,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, true, false, false, false, true, false, false, false, true, false, false, false, true, true, false, false, true, true, false, true, true, false, true, false, false, false, false, true, false]+[true, true, true, true, false, false, true, true, false, true, false, false, false, false, true, false, true, true, true, true, true, true, true, true, false, false, true, true, false, true, false, false];
       {
-        calc {
-          [false, false, false, true, false, false, false, true, false, false, false, true, false, false, false, true, true, false, false, true, true, false, true, true, false, true, false, false, false, false, true, false];
-          {
-            pow_7519();
-            of_pow(7552, false, true, false, false, false, false, true, false, true, true, false, true, true, false, false, true, true, false, false, false, true, false, false, false, true, false, false, false, true, false, false, false);
-          }
-          pow_mod_crc(7552);
-        }
-        calc {
-          [true, true, true, true, false, false, true, true, false, true, false, false, false, false, true, false, true, true, true, true, true, true, true, true, false, false, true, true, false, true, false, false];
-          {
-            pow_3743();
-            of_pow(3776, false, false, true, false, true, true, false, false, true, true, true, true, true, true, true, true, false, true, false, false, false, false, true, false, true, true, false, false, true, true, true, true);
-          }
-          pow_mod_crc(3776);
-        }
+        lut_entry_58_0();
+        lut_entry_58_1();
       }
       pow_mod_crc(7552) + pow_mod_crc(3776);
     }
   }
 
 
+
+  lemma lut_entry_59_0()
+  ensures [true, true, true, true, false, false, false, true, true, false, false, true, false, true, true, true, true, false, false, false, true, true, true, false, true, true, true, false, true, true, false, false] == pow_mod_crc(7680);
+  {
+    pow_7647();
+    of_pow(7680, false, false, true, true, false, true, true, true, false, true, true, true, false, false, false, true, true, true, true, false, true, false, false, true, true, false, false, false, true, true, true, true);
+  }
+
+  lemma lut_entry_59_1()
+  ensures [false, false, false, true, false, true, false, false, false, false, true, true, false, true, false, false, true, true, false, false, false, true, true, true, true, true, false, false, true, true, false, true] == pow_mod_crc(3840);
+  {
+    pow_3807();
+    of_pow(3840, true, false, true, true, false, false, true, true, true, true, true, false, false, false, true, true, false, false, true, false, true, true, false, false, false, false, true, false, true, false, false, false);
+  }
 
   lemma lut_entry_59()
   ensures bits_of_int(lut[59] as int, 64)
@@ -2478,28 +2492,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, true, false, false, false, true, true, false, false, true, false, true, true, true, true, false, false, false, true, true, true, false, true, true, true, false, true, true, false, false]+[false, false, false, true, false, true, false, false, false, false, true, true, false, true, false, false, true, true, false, false, false, true, true, true, true, true, false, false, true, true, false, true];
       {
-        calc {
-          [true, true, true, true, false, false, false, true, true, false, false, true, false, true, true, true, true, false, false, false, true, true, true, false, true, true, true, false, true, true, false, false];
-          {
-            pow_7647();
-            of_pow(7680, false, false, true, true, false, true, true, true, false, true, true, true, false, false, false, true, true, true, true, false, true, false, false, true, true, false, false, false, true, true, true, true);
-          }
-          pow_mod_crc(7680);
-        }
-        calc {
-          [false, false, false, true, false, true, false, false, false, false, true, true, false, true, false, false, true, true, false, false, false, true, true, true, true, true, false, false, true, true, false, true];
-          {
-            pow_3807();
-            of_pow(3840, true, false, true, true, false, false, true, true, true, true, true, false, false, false, true, true, false, false, true, false, true, true, false, false, false, false, true, false, true, false, false, false);
-          }
-          pow_mod_crc(3840);
-        }
+        lut_entry_59_0();
+        lut_entry_59_1();
       }
       pow_mod_crc(7680) + pow_mod_crc(3840);
     }
   }
 
 
+
+  lemma lut_entry_60_0()
+  ensures [true, false, false, true, true, false, true, true, true, true, false, false, false, true, true, true, false, true, false, true, false, true, false, false, false, false, true, false, true, true, false, true] == pow_mod_crc(7808);
+  {
+    pow_7775();
+    of_pow(7808, true, false, true, true, false, true, false, false, false, false, true, false, true, false, true, false, true, true, true, false, false, false, true, true, true, true, false, true, true, false, false, true);
+  }
+
+  lemma lut_entry_60_1()
+  ensures [false, true, false, true, true, true, false, false, false, true, false, true, true, false, true, false, false, true, false, false, true, true, true, true, false, false, false, true, false, false, false, true] == pow_mod_crc(3904);
+  {
+    pow_3871();
+    of_pow(3904, true, false, false, false, true, false, false, false, true, true, true, true, false, false, true, false, false, true, false, true, true, false, true, false, false, false, true, true, true, false, true, false);
+  }
 
   lemma lut_entry_60()
   ensures bits_of_int(lut[60] as int, 64)
@@ -2518,28 +2532,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, true, true, false, true, true, true, true, false, false, false, true, true, true, false, true, false, true, false, true, false, false, false, false, true, false, true, true, false, true]+[false, true, false, true, true, true, false, false, false, true, false, true, true, false, true, false, false, true, false, false, true, true, true, true, false, false, false, true, false, false, false, true];
       {
-        calc {
-          [true, false, false, true, true, false, true, true, true, true, false, false, false, true, true, true, false, true, false, true, false, true, false, false, false, false, true, false, true, true, false, true];
-          {
-            pow_7775();
-            of_pow(7808, true, false, true, true, false, true, false, false, false, false, true, false, true, false, true, false, true, true, true, false, false, false, true, true, true, true, false, true, true, false, false, true);
-          }
-          pow_mod_crc(7808);
-        }
-        calc {
-          [false, true, false, true, true, true, false, false, false, true, false, true, true, false, true, false, false, true, false, false, true, true, true, true, false, false, false, true, false, false, false, true];
-          {
-            pow_3871();
-            of_pow(3904, true, false, false, false, true, false, false, false, true, true, true, true, false, false, true, false, false, true, false, true, true, false, true, false, false, false, true, true, true, false, true, false);
-          }
-          pow_mod_crc(3904);
-        }
+        lut_entry_60_0();
+        lut_entry_60_1();
       }
       pow_mod_crc(7808) + pow_mod_crc(3904);
     }
   }
 
 
+
+  lemma lut_entry_61_0()
+  ensures [false, true, false, true, true, true, false, false, true, false, false, false, true, false, true, false, false, false, false, true, true, true, true, false, true, false, false, false, false, true, false, false] == pow_mod_crc(7936);
+  {
+    pow_7903();
+    of_pow(7936, false, false, true, false, false, false, false, true, false, true, true, true, true, false, false, false, false, true, false, true, false, false, false, true, false, false, true, true, true, false, true, false);
+  }
+
+  lemma lut_entry_61_1()
+  ensures [false, true, true, false, false, true, false, false, true, true, true, true, true, true, true, false, true, true, true, true, false, false, true, false, false, true, true, false, false, false, false, false] == pow_mod_crc(3968);
+  {
+    pow_3935();
+    of_pow(3968, false, false, false, false, false, true, true, false, false, true, false, false, true, true, true, true, false, true, true, true, true, true, true, true, false, false, true, false, false, true, true, false);
+  }
 
   lemma lut_entry_61()
   ensures bits_of_int(lut[61] as int, 64)
@@ -2558,28 +2572,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, true, true, false, false, true, false, false, false, true, false, true, false, false, false, false, true, true, true, true, false, true, false, false, false, false, true, false, false]+[false, true, true, false, false, true, false, false, true, true, true, true, true, true, true, false, true, true, true, true, false, false, true, false, false, true, true, false, false, false, false, false];
       {
-        calc {
-          [false, true, false, true, true, true, false, false, true, false, false, false, true, false, true, false, false, false, false, true, true, true, true, false, true, false, false, false, false, true, false, false];
-          {
-            pow_7903();
-            of_pow(7936, false, false, true, false, false, false, false, true, false, true, true, true, true, false, false, false, false, true, false, true, false, false, false, true, false, false, true, true, true, false, true, false);
-          }
-          pow_mod_crc(7936);
-        }
-        calc {
-          [false, true, true, false, false, true, false, false, true, true, true, true, true, true, true, false, true, true, true, true, false, false, true, false, false, true, true, false, false, false, false, false];
-          {
-            pow_3935();
-            of_pow(3968, false, false, false, false, false, true, true, false, false, true, false, false, true, true, true, true, false, true, true, true, true, true, true, true, false, false, true, false, false, true, true, false);
-          }
-          pow_mod_crc(3968);
-        }
+        lut_entry_61_0();
+        lut_entry_61_1();
       }
       pow_mod_crc(7936) + pow_mod_crc(3968);
     }
   }
 
 
+
+  lemma lut_entry_62_0()
+  ensures [false, true, true, true, true, false, false, true, true, true, false, false, true, false, false, false, false, false, true, true, false, true, false, true, false, false, false, false, false, true, true, true] == pow_mod_crc(8064);
+  {
+    pow_8031();
+    of_pow(8064, true, true, true, false, false, false, false, false, true, false, true, false, true, true, false, false, false, false, false, true, false, false, true, true, true, false, false, true, true, true, true, false);
+  }
+
+  lemma lut_entry_62_1()
+  ensures [false, false, false, false, true, true, false, true, false, false, false, false, true, true, true, true, false, true, true, false, true, true, false, false, false, true, true, true, false, false, true, false] == pow_mod_crc(4032);
+  {
+    pow_3999();
+    of_pow(4032, false, true, false, false, true, true, true, false, false, false, true, true, false, true, true, false, true, true, true, true, false, false, false, false, true, false, true, true, false, false, false, false);
+  }
 
   lemma lut_entry_62()
   ensures bits_of_int(lut[62] as int, 64)
@@ -2598,28 +2612,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, true, true, false, false, true, true, true, false, false, true, false, false, false, false, false, true, true, false, true, false, true, false, false, false, false, false, true, true, true]+[false, false, false, false, true, true, false, true, false, false, false, false, true, true, true, true, false, true, true, false, true, true, false, false, false, true, true, true, false, false, true, false];
       {
-        calc {
-          [false, true, true, true, true, false, false, true, true, true, false, false, true, false, false, false, false, false, true, true, false, true, false, true, false, false, false, false, false, true, true, true];
-          {
-            pow_8031();
-            of_pow(8064, true, true, true, false, false, false, false, false, true, false, true, false, true, true, false, false, false, false, false, true, false, false, true, true, true, false, false, true, true, true, true, false);
-          }
-          pow_mod_crc(8064);
-        }
-        calc {
-          [false, false, false, false, true, true, false, true, false, false, false, false, true, true, true, true, false, true, true, false, true, true, false, false, false, true, true, true, false, false, true, false];
-          {
-            pow_3999();
-            of_pow(4032, false, true, false, false, true, true, true, false, false, false, true, true, false, true, true, false, true, true, true, true, false, false, false, false, true, false, true, true, false, false, false, false);
-          }
-          pow_mod_crc(4032);
-        }
+        lut_entry_62_0();
+        lut_entry_62_1();
       }
       pow_mod_crc(8064) + pow_mod_crc(4032);
     }
   }
 
 
+
+  lemma lut_entry_63_0()
+  ensures [false, true, false, true, true, true, true, true, false, true, true, false, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, false, true, false, false, false] == pow_mod_crc(8192);
+  {
+    pow_8159();
+    of_pow(8192, false, false, false, true, false, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, false, true, true, false, true, true, true, true, true, false, true, false);
+  }
+
+  lemma lut_entry_63_1()
+  ensures [false, false, true, true, false, false, false, false, true, true, false, true, true, true, false, false, false, true, true, true, true, true, true, false, true, false, true, true, true, false, true, true] == pow_mod_crc(4096);
+  {
+    pow_4063();
+    of_pow(4096, true, true, false, true, true, true, false, true, false, true, true, true, true, true, true, false, false, false, true, true, true, false, true, true, false, false, false, false, true, true, false, false);
+  }
 
   lemma lut_entry_63()
   ensures bits_of_int(lut[63] as int, 64)
@@ -2638,28 +2652,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, true, true, true, true, false, true, true, false, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, false, true, false, false, false]+[false, false, true, true, false, false, false, false, true, true, false, true, true, true, false, false, false, true, true, true, true, true, true, false, true, false, true, true, true, false, true, true];
       {
-        calc {
-          [false, true, false, true, true, true, true, true, false, true, true, false, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, false, true, false, false, false];
-          {
-            pow_8159();
-            of_pow(8192, false, false, false, true, false, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, false, true, true, false, true, true, true, true, true, false, true, false);
-          }
-          pow_mod_crc(8192);
-        }
-        calc {
-          [false, false, true, true, false, false, false, false, true, true, false, true, true, true, false, false, false, true, true, true, true, true, true, false, true, false, true, true, true, false, true, true];
-          {
-            pow_4063();
-            of_pow(4096, true, true, false, true, true, true, false, true, false, true, true, true, true, true, true, false, false, false, true, true, true, false, true, true, false, false, false, false, true, true, false, false);
-          }
-          pow_mod_crc(4096);
-        }
+        lut_entry_63_0();
+        lut_entry_63_1();
       }
       pow_mod_crc(8192) + pow_mod_crc(4096);
     }
   }
 
 
+
+  lemma lut_entry_64_0()
+  ensures [true, true, false, false, true, false, false, false, false, false, true, false, true, false, true, true, true, false, true, true, false, false, true, false, false, false, true, false, false, false, true, false] == pow_mod_crc(8320);
+  {
+    pow_8287();
+    of_pow(8320, false, true, false, false, false, true, false, false, false, true, false, false, true, true, false, true, true, true, false, true, false, true, false, false, false, false, false, true, false, false, true, true);
+  }
+
+  lemma lut_entry_64_1()
+  ensures [false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, true, true, true, true, true, false, true, true, false, true, false, true, true, true, true, false, true] == pow_mod_crc(4160);
+  {
+    pow_4127();
+    of_pow(4160, true, false, true, true, true, true, false, true, false, true, true, false, true, true, true, true, true, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false);
+  }
 
   lemma lut_entry_64()
   ensures bits_of_int(lut[64] as int, 64)
@@ -2678,28 +2692,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, false, true, false, false, false, false, false, true, false, true, false, true, true, true, false, true, true, false, false, true, false, false, false, true, false, false, false, true, false]+[false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, true, true, true, true, true, false, true, true, false, true, false, true, true, true, true, false, true];
       {
-        calc {
-          [true, true, false, false, true, false, false, false, false, false, true, false, true, false, true, true, true, false, true, true, false, false, true, false, false, false, true, false, false, false, true, false];
-          {
-            pow_8287();
-            of_pow(8320, false, true, false, false, false, true, false, false, false, true, false, false, true, true, false, true, true, true, false, true, false, true, false, false, false, false, false, true, false, false, true, true);
-          }
-          pow_mod_crc(8320);
-        }
-        calc {
-          [false, false, false, true, true, true, true, true, true, false, false, false, false, false, false, true, true, true, true, true, false, true, true, false, true, false, true, true, true, true, false, true];
-          {
-            pow_4127();
-            of_pow(4160, true, false, true, true, true, true, false, true, false, true, true, false, true, true, true, true, true, false, false, false, false, false, false, true, true, true, true, true, true, false, false, false);
-          }
-          pow_mod_crc(4160);
-        }
+        lut_entry_64_0();
+        lut_entry_64_1();
       }
       pow_mod_crc(8320) + pow_mod_crc(4160);
     }
   }
 
 
+
+  lemma lut_entry_65_0()
+  ensures [true, false, true, false, false, false, true, false, false, true, true, true, true, false, true, false, false, false, true, false, true, true, false, false, true, true, true, true, false, true, true, false] == pow_mod_crc(8448);
+  {
+    pow_8415();
+    of_pow(8448, false, true, true, false, true, true, true, true, false, false, true, true, false, true, false, false, false, true, false, true, true, true, true, false, false, true, false, false, false, true, false, true);
+  }
+
+  lemma lut_entry_65_1()
+  ensures [false, false, true, true, true, false, false, false, true, false, true, false, false, true, true, false, true, false, true, false, false, false, false, true, false, true, false, false, true, true, true, true] == pow_mod_crc(4224);
+  {
+    pow_4191();
+    of_pow(4224, true, true, true, true, false, false, true, false, true, false, false, false, false, true, false, true, false, true, true, false, false, true, false, true, false, false, false, true, true, true, false, false);
+  }
 
   lemma lut_entry_65()
   ensures bits_of_int(lut[65] as int, 64)
@@ -2718,28 +2732,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, false, false, false, true, false, false, true, true, true, true, false, true, false, false, false, true, false, true, true, false, false, true, true, true, true, false, true, true, false]+[false, false, true, true, true, false, false, false, true, false, true, false, false, true, true, false, true, false, true, false, false, false, false, true, false, true, false, false, true, true, true, true];
       {
-        calc {
-          [true, false, true, false, false, false, true, false, false, true, true, true, true, false, true, false, false, false, true, false, true, true, false, false, true, true, true, true, false, true, true, false];
-          {
-            pow_8415();
-            of_pow(8448, false, true, true, false, true, true, true, true, false, false, true, true, false, true, false, false, false, true, false, true, true, true, true, false, false, true, false, false, false, true, false, true);
-          }
-          pow_mod_crc(8448);
-        }
-        calc {
-          [false, false, true, true, true, false, false, false, true, false, true, false, false, true, true, false, true, false, true, false, false, false, false, true, false, true, false, false, true, true, true, true];
-          {
-            pow_4191();
-            of_pow(4224, true, true, true, true, false, false, true, false, true, false, false, false, false, true, false, true, false, true, true, false, false, true, false, true, false, false, false, true, true, true, false, false);
-          }
-          pow_mod_crc(4224);
-        }
+        lut_entry_65_0();
+        lut_entry_65_1();
       }
       pow_mod_crc(8448) + pow_mod_crc(4224);
     }
   }
 
 
+
+  lemma lut_entry_66_0()
+  ensures [false, false, true, false, false, true, true, false, true, true, false, true, true, true, true, false, true, false, false, false, true, false, true, true, true, false, false, false, false, false, true, false] == pow_mod_crc(8576);
+  {
+    pow_8543();
+    of_pow(8576, false, true, false, false, false, false, false, true, true, true, false, true, false, false, false, true, false, true, true, true, true, false, true, true, false, true, true, false, false, true, false, false);
+  }
+
+  lemma lut_entry_66_1()
+  ensures [true, true, false, true, false, false, true, false, true, false, true, true, true, true, false, true, true, false, false, true, false, false, true, true, true, false, false, false, true, false, false, true] == pow_mod_crc(4288);
+  {
+    pow_4255();
+    of_pow(4288, true, false, false, true, false, false, false, true, true, true, false, false, true, false, false, true, true, false, true, true, true, true, false, true, false, true, false, false, true, false, true, true);
+  }
 
   lemma lut_entry_66()
   ensures bits_of_int(lut[66] as int, 64)
@@ -2758,28 +2772,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, false, false, true, true, false, true, true, false, true, true, true, true, false, true, false, false, false, true, false, true, true, true, false, false, false, false, false, true, false]+[true, true, false, true, false, false, true, false, true, false, true, true, true, true, false, true, true, false, false, true, false, false, true, true, true, false, false, false, true, false, false, true];
       {
-        calc {
-          [false, false, true, false, false, true, true, false, true, true, false, true, true, true, true, false, true, false, false, false, true, false, true, true, true, false, false, false, false, false, true, false];
-          {
-            pow_8543();
-            of_pow(8576, false, true, false, false, false, false, false, true, true, true, false, true, false, false, false, true, false, true, true, true, true, false, true, true, false, true, true, false, false, true, false, false);
-          }
-          pow_mod_crc(8576);
-        }
-        calc {
-          [true, true, false, true, false, false, true, false, true, false, true, true, true, true, false, true, true, false, false, true, false, false, true, true, true, false, false, false, true, false, false, true];
-          {
-            pow_4255();
-            of_pow(4288, true, false, false, true, false, false, false, true, true, true, false, false, true, false, false, true, true, false, true, true, true, true, false, true, false, true, false, false, true, false, true, true);
-          }
-          pow_mod_crc(4288);
-        }
+        lut_entry_66_0();
+        lut_entry_66_1();
       }
       pow_mod_crc(8576) + pow_mod_crc(4288);
     }
   }
 
 
+
+  lemma lut_entry_67_0()
+  ensures [true, true, true, false, true, false, false, true, false, true, false, true, true, true, false, true, true, false, true, true, false, false, false, false, true, true, true, true, true, true, true, true] == pow_mod_crc(8704);
+  {
+    pow_8671();
+    of_pow(8704, true, true, true, true, true, true, true, true, false, false, false, false, true, true, false, true, true, false, true, true, true, false, true, false, true, false, false, true, false, true, true, true);
+  }
+
+  lemma lut_entry_67_1()
+  ensures [false, false, true, true, true, true, false, false, true, true, true, true, false, true, true, false, false, false, true, false, true, true, true, false, false, false, false, false, true, false, false, false] == pow_mod_crc(4352);
+  {
+    pow_4319();
+    of_pow(4352, false, false, false, true, false, false, false, false, false, true, true, true, false, true, false, false, false, true, true, false, true, true, true, true, false, false, true, true, true, true, false, false);
+  }
 
   lemma lut_entry_67()
   ensures bits_of_int(lut[67] as int, 64)
@@ -2798,28 +2812,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, false, true, false, false, true, false, true, false, true, true, true, false, true, true, false, true, true, false, false, false, false, true, true, true, true, true, true, true, true]+[false, false, true, true, true, true, false, false, true, true, true, true, false, true, true, false, false, false, true, false, true, true, true, false, false, false, false, false, true, false, false, false];
       {
-        calc {
-          [true, true, true, false, true, false, false, true, false, true, false, true, true, true, false, true, true, false, true, true, false, false, false, false, true, true, true, true, true, true, true, true];
-          {
-            pow_8671();
-            of_pow(8704, true, true, true, true, true, true, true, true, false, false, false, false, true, true, false, true, true, false, true, true, true, false, true, false, true, false, false, true, false, true, true, true);
-          }
-          pow_mod_crc(8704);
-        }
-        calc {
-          [false, false, true, true, true, true, false, false, true, true, true, true, false, true, true, false, false, false, true, false, true, true, true, false, false, false, false, false, true, false, false, false];
-          {
-            pow_4319();
-            of_pow(4352, false, false, false, true, false, false, false, false, false, true, true, true, false, true, false, false, false, true, true, false, true, true, true, true, false, false, true, true, true, true, false, false);
-          }
-          pow_mod_crc(4352);
-        }
+        lut_entry_67_0();
+        lut_entry_67_1();
       }
       pow_mod_crc(8704) + pow_mod_crc(4352);
     }
   }
 
 
+
+  lemma lut_entry_68_0()
+  ensures [true, false, false, false, true, true, true, true, true, false, true, true, true, true, false, false, true, true, true, false, true, true, false, true, false, true, false, false, false, true, false, true] == pow_mod_crc(8832);
+  {
+    pow_8799();
+    of_pow(8832, true, false, true, false, false, false, true, false, true, false, true, true, false, true, true, true, false, false, true, true, true, true, false, true, true, true, true, true, false, false, false, true);
+  }
+
+  lemma lut_entry_68_1()
+  ensures [true, true, false, true, true, true, true, false, false, false, false, true, false, false, false, false, true, true, true, true, true, false, true, false, false, false, false, true, false, false, false, true] == pow_mod_crc(4416);
+  {
+    pow_4383();
+    of_pow(4416, true, false, false, false, true, false, false, false, false, true, false, true, true, true, true, true, false, false, false, false, true, false, false, false, false, true, true, true, true, false, true, true);
+  }
 
   lemma lut_entry_68()
   ensures bits_of_int(lut[68] as int, 64)
@@ -2838,28 +2852,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, false, true, true, true, true, true, false, true, true, true, true, false, false, true, true, true, false, true, true, false, true, false, true, false, false, false, true, false, true]+[true, true, false, true, true, true, true, false, false, false, false, true, false, false, false, false, true, true, true, true, true, false, true, false, false, false, false, true, false, false, false, true];
       {
-        calc {
-          [true, false, false, false, true, true, true, true, true, false, true, true, true, true, false, false, true, true, true, false, true, true, false, true, false, true, false, false, false, true, false, true];
-          {
-            pow_8799();
-            of_pow(8832, true, false, true, false, false, false, true, false, true, false, true, true, false, true, true, true, false, false, true, true, true, true, false, true, true, true, true, true, false, false, false, true);
-          }
-          pow_mod_crc(8832);
-        }
-        calc {
-          [true, true, false, true, true, true, true, false, false, false, false, true, false, false, false, false, true, true, true, true, true, false, true, false, false, false, false, true, false, false, false, true];
-          {
-            pow_4383();
-            of_pow(4416, true, false, false, false, true, false, false, false, false, true, false, true, true, true, true, true, false, false, false, false, true, false, false, false, false, true, true, true, true, false, true, true);
-          }
-          pow_mod_crc(4416);
-        }
+        lut_entry_68_0();
+        lut_entry_68_1();
       }
       pow_mod_crc(8832) + pow_mod_crc(4416);
     }
   }
 
 
+
+  lemma lut_entry_69_0()
+  ensures [false, false, true, true, false, false, true, false, true, false, true, false, false, true, true, true, false, true, false, false, true, true, true, false, false, false, false, true, true, true, true, true] == pow_mod_crc(8960);
+  {
+    pow_8927();
+    of_pow(8960, true, true, true, true, true, false, false, false, false, true, true, true, false, false, true, false, true, true, true, false, false, true, false, true, false, true, false, false, true, true, false, false);
+  }
+
+  lemma lut_entry_69_1()
+  ensures [true, false, true, false, true, false, true, false, false, false, false, true, false, false, false, true, false, true, true, false, false, true, false, true, true, true, true, false, false, false, true, true] == pow_mod_crc(4480);
+  {
+    pow_4447();
+    of_pow(4480, true, true, false, false, false, true, true, true, true, false, true, false, false, true, true, false, true, false, false, false, true, false, false, false, false, true, false, true, false, true, false, true);
+  }
 
   lemma lut_entry_69()
   ensures bits_of_int(lut[69] as int, 64)
@@ -2878,28 +2892,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, false, false, true, false, true, false, true, false, false, true, true, true, false, true, false, false, true, true, true, false, false, false, false, true, true, true, true, true]+[true, false, true, false, true, false, true, false, false, false, false, true, false, false, false, true, false, true, true, false, false, true, false, true, true, true, true, false, false, false, true, true];
       {
-        calc {
-          [false, false, true, true, false, false, true, false, true, false, true, false, false, true, true, true, false, true, false, false, true, true, true, false, false, false, false, true, true, true, true, true];
-          {
-            pow_8927();
-            of_pow(8960, true, true, true, true, true, false, false, false, false, true, true, true, false, false, true, false, true, true, true, false, false, true, false, true, false, true, false, false, true, true, false, false);
-          }
-          pow_mod_crc(8960);
-        }
-        calc {
-          [true, false, true, false, true, false, true, false, false, false, false, true, false, false, false, true, false, true, true, false, false, true, false, true, true, true, true, false, false, false, true, true];
-          {
-            pow_4447();
-            of_pow(4480, true, true, false, false, false, true, true, true, true, false, true, false, false, true, true, false, true, false, false, false, true, false, false, false, false, true, false, true, false, true, false, true);
-          }
-          pow_mod_crc(4480);
-        }
+        lut_entry_69_0();
+        lut_entry_69_1();
       }
       pow_mod_crc(8960) + pow_mod_crc(4480);
     }
   }
 
 
+
+  lemma lut_entry_70_0()
+  ensures [false, false, true, true, true, true, true, true, true, false, false, true, false, true, true, true, true, false, false, false, false, false, true, false, false, true, true, true, true, false, false, false] == pow_mod_crc(9088);
+  {
+    pow_9055();
+    of_pow(9088, false, false, false, true, true, true, true, false, false, true, false, false, false, false, false, true, true, true, true, false, true, false, false, true, true, true, true, true, true, true, false, false);
+  }
+
+  lemma lut_entry_70_1()
+  ensures [false, true, false, false, true, true, false, false, true, false, false, true, false, false, true, false, false, false, true, false, true, false, false, false, false, false, true, true, false, false, true, false] == pow_mod_crc(4544);
+  {
+    pow_4511();
+    of_pow(4544, false, true, false, false, true, true, false, false, false, false, false, true, false, true, false, false, false, true, false, false, true, false, false, true, false, false, true, true, false, false, true, false);
+  }
 
   lemma lut_entry_70()
   ensures bits_of_int(lut[70] as int, 64)
@@ -2918,28 +2932,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, true, true, true, true, true, false, false, true, false, true, true, true, true, false, false, false, false, false, true, false, false, true, true, true, true, false, false, false]+[false, true, false, false, true, true, false, false, true, false, false, true, false, false, true, false, false, false, true, false, true, false, false, false, false, false, true, true, false, false, true, false];
       {
-        calc {
-          [false, false, true, true, true, true, true, true, true, false, false, true, false, true, true, true, true, false, false, false, false, false, true, false, false, true, true, true, true, false, false, false];
-          {
-            pow_9055();
-            of_pow(9088, false, false, false, true, true, true, true, false, false, true, false, false, false, false, false, true, true, true, true, false, true, false, false, true, true, true, true, true, true, true, false, false);
-          }
-          pow_mod_crc(9088);
-        }
-        calc {
-          [false, true, false, false, true, true, false, false, true, false, false, true, false, false, true, false, false, false, true, false, true, false, false, false, false, false, true, true, false, false, true, false];
-          {
-            pow_4511();
-            of_pow(4544, false, true, false, false, true, true, false, false, false, false, false, true, false, true, false, false, false, true, false, false, true, false, false, true, false, false, true, true, false, false, true, false);
-          }
-          pow_mod_crc(4544);
-        }
+        lut_entry_70_0();
+        lut_entry_70_1();
       }
       pow_mod_crc(9088) + pow_mod_crc(4544);
     }
   }
 
 
+
+  lemma lut_entry_71_0()
+  ensures [false, true, false, false, true, false, true, true, false, false, true, false, false, true, true, true, false, false, false, true, true, false, true, true, false, true, true, false, false, false, false, true] == pow_mod_crc(9216);
+  {
+    pow_9183();
+    of_pow(9216, true, false, false, false, false, true, true, false, true, true, false, true, true, false, false, false, true, true, true, false, false, true, false, false, true, true, false, true, false, false, true, false);
+  }
+
+  lemma lut_entry_71_1()
+  ensures [false, false, true, false, false, false, true, false, false, false, false, true, true, false, false, true, true, false, true, true, true, false, false, false, true, true, true, false, false, true, false, false] == pow_mod_crc(4608);
+  {
+    pow_4575();
+    of_pow(4608, false, false, true, false, false, true, true, true, false, false, false, true, true, true, false, true, true, false, false, true, true, false, false, false, false, true, false, false, false, true, false, false);
+  }
 
   lemma lut_entry_71()
   ensures bits_of_int(lut[71] as int, 64)
@@ -2958,28 +2972,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, true, false, true, true, false, false, true, false, false, true, true, true, false, false, false, true, true, false, true, true, false, true, true, false, false, false, false, true]+[false, false, true, false, false, false, true, false, false, false, false, true, true, false, false, true, true, false, true, true, true, false, false, false, true, true, true, false, false, true, false, false];
       {
-        calc {
-          [false, true, false, false, true, false, true, true, false, false, true, false, false, true, true, true, false, false, false, true, true, false, true, true, false, true, true, false, false, false, false, true];
-          {
-            pow_9183();
-            of_pow(9216, true, false, false, false, false, true, true, false, true, true, false, true, true, false, false, false, true, true, true, false, false, true, false, false, true, true, false, true, false, false, true, false);
-          }
-          pow_mod_crc(9216);
-        }
-        calc {
-          [false, false, true, false, false, false, true, false, false, false, false, true, true, false, false, true, true, false, true, true, true, false, false, false, true, true, true, false, false, true, false, false];
-          {
-            pow_4575();
-            of_pow(4608, false, false, true, false, false, true, true, true, false, false, false, true, true, true, false, true, true, false, false, true, true, false, false, false, false, true, false, false, false, true, false, false);
-          }
-          pow_mod_crc(4608);
-        }
+        lut_entry_71_0();
+        lut_entry_71_1();
       }
       pow_mod_crc(9216) + pow_mod_crc(4608);
     }
   }
 
 
+
+  lemma lut_entry_72_0()
+  ensures [true, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, true, true, false, true, true, false, false, false, true, false, true, false, false, true, true, false] == pow_mod_crc(9344);
+  {
+    pow_9311();
+    of_pow(9344, false, true, true, false, false, true, false, true, false, false, false, true, true, false, true, true, true, true, false, true, true, false, false, true, true, false, false, false, true, false, true, true);
+  }
+
+  lemma lut_entry_72_1()
+  ensures [false, true, false, false, false, false, false, false, true, true, true, true, false, false, false, true, false, false, true, false, true, false, false, false, false, true, false, false, true, false, true, false] == pow_mod_crc(4672);
+  {
+    pow_4639();
+    of_pow(4672, false, true, false, true, false, false, true, false, false, false, false, true, false, true, false, false, true, false, false, false, true, true, true, true, false, false, false, false, false, false, true, false);
+  }
 
   lemma lut_entry_72()
   ensures bits_of_int(lut[72] as int, 64)
@@ -2998,28 +3012,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, true, true, false, true, true, false, false, false, true, false, true, false, false, true, true, false]+[false, true, false, false, false, false, false, false, true, true, true, true, false, false, false, true, false, false, true, false, true, false, false, false, false, true, false, false, true, false, true, false];
       {
-        calc {
-          [true, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, true, true, false, true, true, false, false, false, true, false, true, false, false, true, true, false];
-          {
-            pow_9311();
-            of_pow(9344, false, true, true, false, false, true, false, true, false, false, false, true, true, false, true, true, true, true, false, true, true, false, false, true, true, false, false, false, true, false, true, true);
-          }
-          pow_mod_crc(9344);
-        }
-        calc {
-          [false, true, false, false, false, false, false, false, true, true, true, true, false, false, false, true, false, false, true, false, true, false, false, false, false, true, false, false, true, false, true, false];
-          {
-            pow_4639();
-            of_pow(4672, false, true, false, true, false, false, true, false, false, false, false, true, false, true, false, false, true, false, false, false, true, true, true, true, false, false, false, false, false, false, true, false);
-          }
-          pow_mod_crc(4672);
-        }
+        lut_entry_72_0();
+        lut_entry_72_1();
       }
       pow_mod_crc(9344) + pow_mod_crc(4672);
     }
   }
 
 
+
+  lemma lut_entry_73_0()
+  ensures [false, false, true, true, true, true, false, true, true, false, false, false, true, true, true, true, false, false, false, true, true, true, false, true, true, true, false, true, true, false, true, false] == pow_mod_crc(9472);
+  {
+    pow_9439();
+    of_pow(9472, false, true, false, true, true, false, true, true, true, false, true, true, true, false, false, false, true, true, true, true, false, false, false, true, true, false, true, true, true, true, false, false);
+  }
+
+  lemma lut_entry_73_1()
+  ensures [false, false, true, true, false, false, false, false, false, true, false, true, false, true, true, false, false, true, true, false, true, true, true, false, false, true, true, true, false, false, false, true] == pow_mod_crc(4736);
+  {
+    pow_4703();
+    of_pow(4736, true, false, false, false, true, true, true, false, false, true, true, true, false, true, true, false, false, true, true, false, true, false, true, false, false, false, false, false, true, true, false, false);
+  }
 
   lemma lut_entry_73()
   ensures bits_of_int(lut[73] as int, 64)
@@ -3038,28 +3052,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, true, true, false, true, true, false, false, false, true, true, true, true, false, false, false, true, true, true, false, true, true, true, false, true, true, false, true, false]+[false, false, true, true, false, false, false, false, false, true, false, true, false, true, true, false, false, true, true, false, true, true, true, false, false, true, true, true, false, false, false, true];
       {
-        calc {
-          [false, false, true, true, true, true, false, true, true, false, false, false, true, true, true, true, false, false, false, true, true, true, false, true, true, true, false, true, true, false, true, false];
-          {
-            pow_9439();
-            of_pow(9472, false, true, false, true, true, false, true, true, true, false, true, true, true, false, false, false, true, true, true, true, false, false, false, true, true, false, true, true, true, true, false, false);
-          }
-          pow_mod_crc(9472);
-        }
-        calc {
-          [false, false, true, true, false, false, false, false, false, true, false, true, false, true, true, false, false, true, true, false, true, true, true, false, false, true, true, true, false, false, false, true];
-          {
-            pow_4703();
-            of_pow(4736, true, false, false, false, true, true, true, false, false, true, true, true, false, true, true, false, false, true, true, false, true, false, true, false, false, false, false, false, true, true, false, false);
-          }
-          pow_mod_crc(4736);
-        }
+        lut_entry_73_0();
+        lut_entry_73_1();
       }
       pow_mod_crc(9472) + pow_mod_crc(4736);
     }
   }
 
 
+
+  lemma lut_entry_74_0()
+  ensures [false, true, false, true, true, true, true, false, false, true, false, false, true, false, true, true, true, true, true, true, false, false, false, false, true, false, false, true, false, true, false, true] == pow_mod_crc(9600);
+  {
+    pow_9567();
+    of_pow(9600, true, false, true, false, true, false, false, true, false, false, false, false, true, true, true, true, true, true, false, true, false, false, true, false, false, true, true, true, true, false, true, false);
+  }
+
+  lemma lut_entry_74_1()
+  ensures [false, true, false, true, true, true, true, false, true, true, false, false, true, true, true, true, false, true, true, false, false, false, true, true, true, true, false, false, false, true, false, true] == pow_mod_crc(4800);
+  {
+    pow_4767();
+    of_pow(4800, true, false, true, false, false, false, true, true, true, true, false, false, false, true, true, false, true, true, true, true, false, false, true, true, false, true, true, true, true, false, true, false);
+  }
 
   lemma lut_entry_74()
   ensures bits_of_int(lut[74] as int, 64)
@@ -3078,28 +3092,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, true, true, true, false, false, true, false, false, true, false, true, true, true, true, true, true, false, false, false, false, true, false, false, true, false, true, false, true]+[false, true, false, true, true, true, true, false, true, true, false, false, true, true, true, true, false, true, true, false, false, false, true, true, true, true, false, false, false, true, false, true];
       {
-        calc {
-          [false, true, false, true, true, true, true, false, false, true, false, false, true, false, true, true, true, true, true, true, false, false, false, false, true, false, false, true, false, true, false, true];
-          {
-            pow_9567();
-            of_pow(9600, true, false, true, false, true, false, false, true, false, false, false, false, true, true, true, true, true, true, false, true, false, false, true, false, false, true, true, true, true, false, true, false);
-          }
-          pow_mod_crc(9600);
-        }
-        calc {
-          [false, true, false, true, true, true, true, false, true, true, false, false, true, true, true, true, false, true, true, false, false, false, true, true, true, true, false, false, false, true, false, true];
-          {
-            pow_4767();
-            of_pow(4800, true, false, true, false, false, false, true, true, true, true, false, false, false, true, true, false, true, true, true, true, false, false, true, true, false, true, true, true, true, false, true, false);
-          }
-          pow_mod_crc(4800);
-        }
+        lut_entry_74_0();
+        lut_entry_74_1();
       }
       pow_mod_crc(9600) + pow_mod_crc(4800);
     }
   }
 
 
+
+  lemma lut_entry_75_0()
+  ensures [false, true, false, true, true, true, true, false, true, true, true, false, false, false, false, false, true, true, true, true, false, true, false, true, true, true, false, false, true, true, false, true] == pow_mod_crc(9728);
+  {
+    pow_9695();
+    of_pow(9728, true, false, true, true, false, false, true, true, true, false, true, false, true, true, true, true, false, false, false, false, false, true, true, true, false, true, true, true, true, false, true, false);
+  }
+
+  lemma lut_entry_75_1()
+  ensures [false, false, false, false, true, true, false, false, true, true, true, false, true, true, true, true, true, false, true, false, false, true, false, true, true, true, false, false, true, false, false, true] == pow_mod_crc(4864);
+  {
+    pow_4831();
+    of_pow(4864, true, false, false, true, false, false, true, true, true, false, true, false, false, true, false, true, true, true, true, true, false, true, true, true, false, false, true, true, false, false, false, false);
+  }
 
   lemma lut_entry_75()
   ensures bits_of_int(lut[75] as int, 64)
@@ -3118,28 +3132,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, true, true, true, false, true, true, true, false, false, false, false, false, true, true, true, true, false, true, false, true, true, true, false, false, true, true, false, true]+[false, false, false, false, true, true, false, false, true, true, true, false, true, true, true, true, true, false, true, false, false, true, false, true, true, true, false, false, true, false, false, true];
       {
-        calc {
-          [false, true, false, true, true, true, true, false, true, true, true, false, false, false, false, false, true, true, true, true, false, true, false, true, true, true, false, false, true, true, false, true];
-          {
-            pow_9695();
-            of_pow(9728, true, false, true, true, false, false, true, true, true, false, true, false, true, true, true, true, false, false, false, false, false, true, true, true, false, true, true, true, true, false, true, false);
-          }
-          pow_mod_crc(9728);
-        }
-        calc {
-          [false, false, false, false, true, true, false, false, true, true, true, false, true, true, true, true, true, false, true, false, false, true, false, true, true, true, false, false, true, false, false, true];
-          {
-            pow_4831();
-            of_pow(4864, true, false, false, true, false, false, true, true, true, false, true, false, false, true, false, true, true, true, true, true, false, true, true, true, false, false, true, true, false, false, false, false);
-          }
-          pow_mod_crc(4864);
-        }
+        lut_entry_75_0();
+        lut_entry_75_1();
       }
       pow_mod_crc(9728) + pow_mod_crc(4864);
     }
   }
 
 
+
+  lemma lut_entry_76_0()
+  ensures [false, true, false, false, false, false, false, true, true, true, true, false, true, false, true, true, false, false, true, false, false, false, false, true, true, false, false, true, false, false, true, false] == pow_mod_crc(9856);
+  {
+    pow_9823();
+    of_pow(9856, false, true, false, false, true, false, false, true, true, false, false, false, false, true, false, false, true, true, false, true, false, true, true, true, true, false, false, false, false, false, true, false);
+  }
+
+  lemma lut_entry_76_1()
+  ensures [true, true, true, true, true, true, true, false, true, false, true, false, true, false, true, false, false, false, false, false, false, false, true, true, true, true, true, false, true, false, true, true] == pow_mod_crc(4928);
+  {
+    pow_4895();
+    of_pow(4928, true, true, false, true, false, true, true, true, true, true, false, false, false, false, false, false, false, true, false, true, false, true, false, true, false, true, true, true, true, true, true, true);
+  }
 
   lemma lut_entry_76()
   ensures bits_of_int(lut[76] as int, 64)
@@ -3158,28 +3172,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, false, false, false, true, true, true, true, false, true, false, true, true, false, false, true, false, false, false, false, true, true, false, false, true, false, false, true, false]+[true, true, true, true, true, true, true, false, true, false, true, false, true, false, true, false, false, false, false, false, false, false, true, true, true, true, true, false, true, false, true, true];
       {
-        calc {
-          [false, true, false, false, false, false, false, true, true, true, true, false, true, false, true, true, false, false, true, false, false, false, false, true, true, false, false, true, false, false, true, false];
-          {
-            pow_9823();
-            of_pow(9856, false, true, false, false, true, false, false, true, true, false, false, false, false, true, false, false, true, true, false, true, false, true, true, true, true, false, false, false, false, false, true, false);
-          }
-          pow_mod_crc(9856);
-        }
-        calc {
-          [true, true, true, true, true, true, true, false, true, false, true, false, true, false, true, false, false, false, false, false, false, false, true, true, true, true, true, false, true, false, true, true];
-          {
-            pow_4895();
-            of_pow(4928, true, true, false, true, false, true, true, true, true, true, false, false, false, false, false, false, false, true, false, true, false, true, false, true, false, true, true, true, true, true, true, true);
-          }
-          pow_mod_crc(4928);
-        }
+        lut_entry_76_0();
+        lut_entry_76_1();
       }
       pow_mod_crc(9856) + pow_mod_crc(4928);
     }
   }
 
 
+
+  lemma lut_entry_77_0()
+  ensures [false, false, true, true, false, true, false, true, true, true, false, false, true, true, true, true, false, true, true, true, false, true, true, false, false, true, false, true, false, false, true, true] == pow_mod_crc(9984);
+  {
+    pow_9951();
+    of_pow(9984, true, true, false, false, true, false, true, false, false, true, true, false, true, true, true, false, true, true, true, true, false, false, true, true, true, false, true, false, true, true, false, false);
+  }
+
+  lemma lut_entry_77_1()
+  ensures [false, false, true, true, true, false, true, false, false, true, true, true, false, false, false, true, false, false, false, false, true, true, false, true, false, false, true, true, false, true, true, false] == pow_mod_crc(4992);
+  {
+    pow_4959();
+    of_pow(4992, false, true, true, false, true, true, false, false, true, false, true, true, false, false, false, false, true, false, false, false, true, true, true, false, false, true, false, true, true, true, false, false);
+  }
 
   lemma lut_entry_77()
   ensures bits_of_int(lut[77] as int, 64)
@@ -3198,28 +3212,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, false, true, false, true, true, true, false, false, true, true, true, true, false, true, true, true, false, true, true, false, false, true, false, true, false, false, true, true]+[false, false, true, true, true, false, true, false, false, true, true, true, false, false, false, true, false, false, false, false, true, true, false, true, false, false, true, true, false, true, true, false];
       {
-        calc {
-          [false, false, true, true, false, true, false, true, true, true, false, false, true, true, true, true, false, true, true, true, false, true, true, false, false, true, false, true, false, false, true, true];
-          {
-            pow_9951();
-            of_pow(9984, true, true, false, false, true, false, true, false, false, true, true, false, true, true, true, false, true, true, true, true, false, false, true, true, true, false, true, false, true, true, false, false);
-          }
-          pow_mod_crc(9984);
-        }
-        calc {
-          [false, false, true, true, true, false, true, false, false, true, true, true, false, false, false, true, false, false, false, false, true, true, false, true, false, false, true, true, false, true, true, false];
-          {
-            pow_4959();
-            of_pow(4992, false, true, true, false, true, true, false, false, true, false, true, true, false, false, false, false, true, false, false, false, true, true, true, false, false, true, false, true, true, true, false, false);
-          }
-          pow_mod_crc(4992);
-        }
+        lut_entry_77_0();
+        lut_entry_77_1();
       }
       pow_mod_crc(9984) + pow_mod_crc(4992);
     }
   }
 
 
+
+  lemma lut_entry_78_0()
+  ensures [false, true, true, false, false, true, false, false, true, true, false, true, false, false, false, false, false, true, true, true, false, false, true, false, true, true, false, false, false, true, false, false] == pow_mod_crc(10112);
+  {
+    pow_10079();
+    of_pow(10112, false, false, true, false, false, false, true, true, false, true, false, false, true, true, true, false, false, false, false, false, true, false, true, true, false, false, true, false, false, true, true, false);
+  }
+
+  lemma lut_entry_78_1()
+  ensures [false, true, false, true, false, true, true, false, false, false, false, false, true, false, true, true, false, true, true, true, true, false, true, true, true, true, false, false, false, true, true, false] == pow_mod_crc(5056);
+  {
+    pow_5023();
+    of_pow(5056, false, true, true, false, false, false, true, true, true, true, false, true, true, true, true, false, true, true, false, true, false, false, false, false, false, true, true, false, true, false, true, false);
+  }
 
   lemma lut_entry_78()
   ensures bits_of_int(lut[78] as int, 64)
@@ -3238,28 +3252,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, false, false, true, false, false, true, true, false, true, false, false, false, false, false, true, true, true, false, false, true, false, true, true, false, false, false, true, false, false]+[false, true, false, true, false, true, true, false, false, false, false, false, true, false, true, true, false, true, true, true, true, false, true, true, true, true, false, false, false, true, true, false];
       {
-        calc {
-          [false, true, true, false, false, true, false, false, true, true, false, true, false, false, false, false, false, true, true, true, false, false, true, false, true, true, false, false, false, true, false, false];
-          {
-            pow_10079();
-            of_pow(10112, false, false, true, false, false, false, true, true, false, true, false, false, true, true, true, false, false, false, false, false, true, false, true, true, false, false, true, false, false, true, true, false);
-          }
-          pow_mod_crc(10112);
-        }
-        calc {
-          [false, true, false, true, false, true, true, false, false, false, false, false, true, false, true, true, false, true, true, true, true, false, true, true, true, true, false, false, false, true, true, false];
-          {
-            pow_5023();
-            of_pow(5056, false, true, true, false, false, false, true, true, true, true, false, true, true, true, true, false, true, true, false, true, false, false, false, false, false, true, true, false, true, false, true, false);
-          }
-          pow_mod_crc(5056);
-        }
+        lut_entry_78_0();
+        lut_entry_78_1();
       }
       pow_mod_crc(10112) + pow_mod_crc(5056);
     }
   }
 
 
+
+  lemma lut_entry_79_0()
+  ensures [true, true, false, true, true, true, false, true, true, true, false, true, false, false, true, true, false, true, true, false, false, true, true, false, true, false, true, true, true, false, true, true] == pow_mod_crc(10240);
+  {
+    pow_10207();
+    of_pow(10240, true, true, false, true, true, true, false, true, false, true, true, false, false, true, true, false, true, true, false, false, true, false, true, true, true, false, true, true, true, false, true, true);
+  }
+
+  lemma lut_entry_79_1()
+  ensures [false, true, false, false, true, true, false, true, true, true, true, true, true, false, false, true, false, false, true, false, true, true, true, false, true, true, false, true, false, true, true, false] == pow_mod_crc(5120);
+  {
+    pow_5087();
+    of_pow(5120, false, true, true, false, true, false, true, true, false, true, true, true, false, true, false, false, true, false, false, true, true, true, true, true, true, false, true, true, false, false, true, false);
+  }
 
   lemma lut_entry_79()
   ensures bits_of_int(lut[79] as int, 64)
@@ -3278,28 +3292,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, true, true, false, true, true, true, false, true, false, false, true, true, false, true, true, false, false, true, true, false, true, false, true, true, true, false, true, true]+[false, true, false, false, true, true, false, true, true, true, true, true, true, false, false, true, false, false, true, false, true, true, true, false, true, true, false, true, false, true, true, false];
       {
-        calc {
-          [true, true, false, true, true, true, false, true, true, true, false, true, false, false, true, true, false, true, true, false, false, true, true, false, true, false, true, true, true, false, true, true];
-          {
-            pow_10207();
-            of_pow(10240, true, true, false, true, true, true, false, true, false, true, true, false, false, true, true, false, true, true, false, false, true, false, true, true, true, false, true, true, true, false, true, true);
-          }
-          pow_mod_crc(10240);
-        }
-        calc {
-          [false, true, false, false, true, true, false, true, true, true, true, true, true, false, false, true, false, false, true, false, true, true, true, false, true, true, false, true, false, true, true, false];
-          {
-            pow_5087();
-            of_pow(5120, false, true, true, false, true, false, true, true, false, true, true, true, false, true, false, false, true, false, false, true, true, true, true, true, true, false, true, true, false, false, true, false);
-          }
-          pow_mod_crc(5120);
-        }
+        lut_entry_79_0();
+        lut_entry_79_1();
       }
       pow_mod_crc(10240) + pow_mod_crc(5120);
     }
   }
 
 
+
+  lemma lut_entry_80_0()
+  ensures [false, true, false, true, false, true, true, false, true, false, true, false, false, false, true, false, true, true, true, false, true, false, false, true, true, false, true, false, false, false, true, false] == pow_mod_crc(10368);
+  {
+    pow_10335();
+    of_pow(10368, false, true, false, false, false, true, false, true, true, false, false, true, false, true, true, true, false, true, false, false, false, true, false, true, false, true, true, false, true, false, true, false);
+  }
+
+  lemma lut_entry_80_1()
+  ensures [false, false, true, true, true, true, false, false, true, true, true, false, true, false, false, true, false, true, true, false, true, false, true, false, true, false, true, true, false, false, true, false] == pow_mod_crc(5184);
+  {
+    pow_5151();
+    of_pow(5184, false, true, false, false, true, true, false, true, false, true, false, true, false, true, true, false, true, false, false, true, false, true, true, true, false, false, true, true, true, true, false, false);
+  }
 
   lemma lut_entry_80()
   ensures bits_of_int(lut[80] as int, 64)
@@ -3318,28 +3332,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, false, true, true, false, true, false, true, false, false, false, true, false, true, true, true, false, true, false, false, true, true, false, true, false, false, false, true, false]+[false, false, true, true, true, true, false, false, true, true, true, false, true, false, false, true, false, true, true, false, true, false, true, false, true, false, true, true, false, false, true, false];
       {
-        calc {
-          [false, true, false, true, false, true, true, false, true, false, true, false, false, false, true, false, true, true, true, false, true, false, false, true, true, false, true, false, false, false, true, false];
-          {
-            pow_10335();
-            of_pow(10368, false, true, false, false, false, true, false, true, true, false, false, true, false, true, true, true, false, true, false, false, false, true, false, true, false, true, true, false, true, false, true, false);
-          }
-          pow_mod_crc(10368);
-        }
-        calc {
-          [false, false, true, true, true, true, false, false, true, true, true, false, true, false, false, true, false, true, true, false, true, false, true, false, true, false, true, true, false, false, true, false];
-          {
-            pow_5151();
-            of_pow(5184, false, true, false, false, true, true, false, true, false, true, false, true, false, true, true, false, true, false, false, true, false, true, true, true, false, false, true, true, true, true, false, false);
-          }
-          pow_mod_crc(5184);
-        }
+        lut_entry_80_0();
+        lut_entry_80_1();
       }
       pow_mod_crc(10368) + pow_mod_crc(5184);
     }
   }
 
 
+
+  lemma lut_entry_81_0()
+  ensures [false, false, true, false, true, true, false, true, false, true, true, true, false, false, false, true, false, true, false, false, false, true, true, true, true, false, false, true, false, true, true, true] == pow_mod_crc(10496);
+  {
+    pow_10463();
+    of_pow(10496, true, true, true, false, true, false, false, true, true, true, true, false, false, false, true, false, true, false, false, false, true, true, true, false, true, false, true, true, false, true, false, false);
+  }
+
+  lemma lut_entry_81_1()
+  ensures [true, true, false, false, false, false, false, false, false, true, false, false, false, true, true, true, true, true, false, false, true, false, false, true, true, true, false, false, true, false, false, false] == pow_mod_crc(5248);
+  {
+    pow_5215();
+    of_pow(5248, false, false, false, true, false, false, true, true, true, false, false, true, false, false, true, true, true, true, true, false, false, false, true, false, false, false, false, false, false, false, true, true);
+  }
 
   lemma lut_entry_81()
   ensures bits_of_int(lut[81] as int, 64)
@@ -3358,28 +3372,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, false, true, true, false, true, false, true, true, true, false, false, false, true, false, true, false, false, false, true, true, true, true, false, false, true, false, true, true, true]+[true, true, false, false, false, false, false, false, false, true, false, false, false, true, true, true, true, true, false, false, true, false, false, true, true, true, false, false, true, false, false, false];
       {
-        calc {
-          [false, false, true, false, true, true, false, true, false, true, true, true, false, false, false, true, false, true, false, false, false, true, true, true, true, false, false, true, false, true, true, true];
-          {
-            pow_10463();
-            of_pow(10496, true, true, true, false, true, false, false, true, true, true, true, false, false, false, true, false, true, false, false, false, true, true, true, false, true, false, true, true, false, true, false, false);
-          }
-          pow_mod_crc(10496);
-        }
-        calc {
-          [true, true, false, false, false, false, false, false, false, true, false, false, false, true, true, true, true, true, false, false, true, false, false, true, true, true, false, false, true, false, false, false];
-          {
-            pow_5215();
-            of_pow(5248, false, false, false, true, false, false, true, true, true, false, false, true, false, false, true, true, true, true, true, false, false, false, true, false, false, false, false, false, false, false, true, true);
-          }
-          pow_mod_crc(5248);
-        }
+        lut_entry_81_0();
+        lut_entry_81_1();
       }
       pow_mod_crc(10496) + pow_mod_crc(5248);
     }
   }
 
 
+
+  lemma lut_entry_82_0()
+  ensures [false, true, false, true, true, true, true, false, true, false, true, false, true, true, true, true, true, true, true, true, true, true, false, false, true, true, false, true, true, true, true, false] == pow_mod_crc(10624);
+  {
+    pow_10591();
+    of_pow(10624, false, true, true, true, true, false, true, true, false, false, true, true, true, true, true, true, true, true, true, true, false, true, false, true, false, true, true, true, true, false, true, false);
+  }
+
+  lemma lut_entry_82_1()
+  ensures [true, true, true, true, true, false, true, true, true, false, false, true, false, false, true, true, true, false, false, true, false, true, true, false, false, true, true, false, true, false, false, true] == pow_mod_crc(5312);
+  {
+    pow_5279();
+    of_pow(5312, true, false, false, true, false, true, true, false, false, true, true, false, true, false, false, true, true, true, false, false, true, false, false, true, true, true, false, true, true, true, true, true);
+  }
 
   lemma lut_entry_82()
   ensures bits_of_int(lut[82] as int, 64)
@@ -3398,28 +3412,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, true, true, true, false, true, false, true, false, true, true, true, true, true, true, true, true, true, true, false, false, true, true, false, true, true, true, true, false]+[true, true, true, true, true, false, true, true, true, false, false, true, false, false, true, true, true, false, false, true, false, true, true, false, false, true, true, false, true, false, false, true];
       {
-        calc {
-          [false, true, false, true, true, true, true, false, true, false, true, false, true, true, true, true, true, true, true, true, true, true, false, false, true, true, false, true, true, true, true, false];
-          {
-            pow_10591();
-            of_pow(10624, false, true, true, true, true, false, true, true, false, false, true, true, true, true, true, true, true, true, true, true, false, true, false, true, false, true, true, true, true, false, true, false);
-          }
-          pow_mod_crc(10624);
-        }
-        calc {
-          [true, true, true, true, true, false, true, true, true, false, false, true, false, false, true, true, true, false, false, true, false, true, true, false, false, true, true, false, true, false, false, true];
-          {
-            pow_5279();
-            of_pow(5312, true, false, false, true, false, true, true, false, false, true, true, false, true, false, false, true, true, true, false, false, true, false, false, true, true, true, false, true, true, true, true, true);
-          }
-          pow_mod_crc(5312);
-        }
+        lut_entry_82_0();
+        lut_entry_82_1();
       }
       pow_mod_crc(10624) + pow_mod_crc(5312);
     }
   }
 
 
+
+  lemma lut_entry_83_0()
+  ensures [false, true, false, false, false, false, false, true, true, true, true, false, true, true, false, true, false, false, false, true, false, false, true, true, true, false, false, true, false, false, true, true] == pow_mod_crc(10752);
+  {
+    pow_10719();
+    of_pow(10752, true, true, false, false, true, false, false, true, true, true, false, false, true, false, false, false, true, false, true, true, false, true, true, true, true, false, false, false, false, false, true, false);
+  }
+
+  lemma lut_entry_83_1()
+  ensures [false, true, true, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, false, false, false, false, true, true, false, true, true, true, false, false, true, true] == pow_mod_crc(5376);
+  {
+    pow_5343();
+    of_pow(5376, true, true, false, false, true, true, true, false, true, true, false, false, false, false, true, true, false, true, true, false, false, true, true, false, false, false, true, false, true, true, true, false);
+  }
 
   lemma lut_entry_83()
   ensures bits_of_int(lut[83] as int, 64)
@@ -3438,28 +3452,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, false, false, false, true, true, true, true, false, true, true, false, true, false, false, false, true, false, false, true, true, true, false, false, true, false, false, true, true]+[false, true, true, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, false, false, false, false, true, true, false, true, true, true, false, false, true, true];
       {
-        calc {
-          [false, true, false, false, false, false, false, true, true, true, true, false, true, true, false, true, false, false, false, true, false, false, true, true, true, false, false, true, false, false, true, true];
-          {
-            pow_10719();
-            of_pow(10752, true, true, false, false, true, false, false, true, true, true, false, false, true, false, false, false, true, false, true, true, false, true, true, true, true, false, false, false, false, false, true, false);
-          }
-          pow_mod_crc(10752);
-        }
-        calc {
-          [false, true, true, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, false, false, false, false, true, true, false, true, true, true, false, false, true, true];
-          {
-            pow_5343();
-            of_pow(5376, true, true, false, false, true, true, true, false, true, true, false, false, false, false, true, true, false, true, true, false, false, true, true, false, false, false, true, false, true, true, true, false);
-          }
-          pow_mod_crc(5376);
-        }
+        lut_entry_83_0();
+        lut_entry_83_1();
       }
       pow_mod_crc(10752) + pow_mod_crc(5376);
     }
   }
 
 
+
+  lemma lut_entry_84_0()
+  ensures [true, true, true, true, false, true, true, false, false, false, true, true, false, false, true, true, false, false, false, false, true, true, true, false, true, true, true, true, true, true, false, false] == pow_mod_crc(10880);
+  {
+    pow_10847();
+    of_pow(10880, false, false, true, true, true, true, true, true, false, true, true, true, false, false, false, false, true, true, false, false, true, true, false, false, false, true, true, false, true, true, true, true);
+  }
+
+  lemma lut_entry_84_1()
+  ensures [false, true, false, true, false, false, false, true, true, true, false, false, true, true, true, true, true, true, true, false, true, false, false, false, false, false, true, false, false, true, true, true] == pow_mod_crc(5440);
+  {
+    pow_5407();
+    of_pow(5440, true, true, true, false, false, true, false, false, false, false, false, true, false, true, true, true, true, true, true, true, false, false, true, true, true, false, false, false, true, false, true, false);
+  }
 
   lemma lut_entry_84()
   ensures bits_of_int(lut[84] as int, 64)
@@ -3478,28 +3492,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, true, false, true, true, false, false, false, true, true, false, false, true, true, false, false, false, false, true, true, true, false, true, true, true, true, true, true, false, false]+[false, true, false, true, false, false, false, true, true, true, false, false, true, true, true, true, true, true, true, false, true, false, false, false, false, false, true, false, false, true, true, true];
       {
-        calc {
-          [true, true, true, true, false, true, true, false, false, false, true, true, false, false, true, true, false, false, false, false, true, true, true, false, true, true, true, true, true, true, false, false];
-          {
-            pow_10847();
-            of_pow(10880, false, false, true, true, true, true, true, true, false, true, true, true, false, false, false, false, true, true, false, false, true, true, false, false, false, true, true, false, true, true, true, true);
-          }
-          pow_mod_crc(10880);
-        }
-        calc {
-          [false, true, false, true, false, false, false, true, true, true, false, false, true, true, true, true, true, true, true, false, true, false, false, false, false, false, true, false, false, true, true, true];
-          {
-            pow_5407();
-            of_pow(5440, true, true, true, false, false, true, false, false, false, false, false, true, false, true, true, true, true, true, true, true, false, false, true, true, true, false, false, false, true, false, true, false);
-          }
-          pow_mod_crc(5440);
-        }
+        lut_entry_84_0();
+        lut_entry_84_1();
       }
       pow_mod_crc(10880) + pow_mod_crc(5440);
     }
   }
 
 
+
+  lemma lut_entry_85_0()
+  ensures [false, false, true, false, false, true, false, true, false, true, true, false, false, false, false, false, true, false, false, false, false, true, true, true, true, true, false, false, true, false, false, true] == pow_mod_crc(11008);
+  {
+    pow_10975();
+    of_pow(11008, true, false, false, true, false, false, true, true, true, true, true, false, false, false, false, true, false, false, false, false, false, true, true, false, true, false, true, false, false, true, false, false);
+  }
+
+  lemma lut_entry_85_1()
+  ensures [true, true, false, true, true, true, false, true, true, false, true, false, true, false, false, false, true, false, true, false, false, false, true, true, false, true, true, false, true, false, false, true] == pow_mod_crc(5504);
+  {
+    pow_5471();
+    of_pow(5504, true, false, false, true, false, true, true, false, true, true, false, false, false, true, false, true, false, false, false, true, false, true, false, true, true, false, true, true, true, false, true, true);
+  }
 
   lemma lut_entry_85()
   ensures bits_of_int(lut[85] as int, 64)
@@ -3518,28 +3532,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, false, false, true, false, true, false, true, true, false, false, false, false, false, true, false, false, false, false, true, true, true, true, true, false, false, true, false, false, true]+[true, true, false, true, true, true, false, true, true, false, true, false, true, false, false, false, true, false, true, false, false, false, true, true, false, true, true, false, true, false, false, true];
       {
-        calc {
-          [false, false, true, false, false, true, false, true, false, true, true, false, false, false, false, false, true, false, false, false, false, true, true, true, true, true, false, false, true, false, false, true];
-          {
-            pow_10975();
-            of_pow(11008, true, false, false, true, false, false, true, true, true, true, true, false, false, false, false, true, false, false, false, false, false, true, true, false, true, false, true, false, false, true, false, false);
-          }
-          pow_mod_crc(11008);
-        }
-        calc {
-          [true, true, false, true, true, true, false, true, true, false, true, false, true, false, false, false, true, false, true, false, false, false, true, true, false, true, true, false, true, false, false, true];
-          {
-            pow_5471();
-            of_pow(5504, true, false, false, true, false, true, true, false, true, true, false, false, false, true, false, true, false, false, false, true, false, true, false, true, true, false, true, true, true, false, true, true);
-          }
-          pow_mod_crc(5504);
-        }
+        lut_entry_85_0();
+        lut_entry_85_1();
       }
       pow_mod_crc(11008) + pow_mod_crc(5504);
     }
   }
 
 
+
+  lemma lut_entry_86_0()
+  ensures [true, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, true, false, true, false, false, false, true, true, false] == pow_mod_crc(11136);
+  {
+    pow_11103();
+    of_pow(11136, false, true, true, false, false, false, true, false, true, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, true);
+  }
+
+  lemma lut_entry_86_1()
+  ensures [true, false, false, false, true, true, true, false, true, true, true, true, false, false, false, false, false, true, true, true, true, false, false, true, true, true, false, true, false, false, true, false] == pow_mod_crc(5568);
+  {
+    pow_5535();
+    of_pow(5568, false, true, false, false, true, false, true, true, true, false, false, true, true, true, true, false, false, false, false, false, true, true, true, true, false, true, true, true, false, false, false, true);
+  }
 
   lemma lut_entry_86()
   ensures bits_of_int(lut[86] as int, 64)
@@ -3558,28 +3572,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, true, false, true, false, false, false, true, true, false]+[true, false, false, false, true, true, true, false, true, true, true, true, false, false, false, false, false, true, true, true, true, false, false, true, true, true, false, true, false, false, true, false];
       {
-        calc {
-          [true, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, true, false, true, false, false, false, true, true, false];
-          {
-            pow_11103();
-            of_pow(11136, false, true, true, false, false, false, true, false, true, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, true);
-          }
-          pow_mod_crc(11136);
-        }
-        calc {
-          [true, false, false, false, true, true, true, false, true, true, true, true, false, false, false, false, false, true, true, true, true, false, false, true, true, true, false, true, false, false, true, false];
-          {
-            pow_5535();
-            of_pow(5568, false, true, false, false, true, false, true, true, true, false, false, true, true, true, true, false, false, false, false, false, true, true, true, true, false, true, true, true, false, false, false, true);
-          }
-          pow_mod_crc(5568);
-        }
+        lut_entry_86_0();
+        lut_entry_86_1();
       }
       pow_mod_crc(11136) + pow_mod_crc(5568);
     }
   }
 
 
+
+  lemma lut_entry_87_0()
+  ensures [true, false, true, false, false, true, false, false, true, true, false, false, true, true, false, true, true, true, false, false, true, false, false, false, false, false, false, true, true, false, true, true] == pow_mod_crc(11264);
+  {
+    pow_11231();
+    of_pow(11264, true, true, false, true, true, false, false, false, false, false, false, true, false, false, true, true, true, false, true, true, false, false, true, true, false, false, true, false, false, true, false, true);
+  }
+
+  lemma lut_entry_87_1()
+  ensures [false, true, false, true, false, true, true, false, false, true, true, true, false, false, true, false, false, false, true, true, true, true, true, true, false, true, true, false, false, true, true, true] == pow_mod_crc(5632);
+  {
+    pow_5599();
+    of_pow(5632, true, true, true, false, false, true, true, false, true, true, true, true, true, true, false, false, false, true, false, false, true, true, true, false, false, true, true, false, true, false, true, false);
+  }
 
   lemma lut_entry_87()
   ensures bits_of_int(lut[87] as int, 64)
@@ -3598,28 +3612,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, false, false, true, false, false, true, true, false, false, true, true, false, true, true, true, false, false, true, false, false, false, false, false, false, true, true, false, true, true]+[false, true, false, true, false, true, true, false, false, true, true, true, false, false, true, false, false, false, true, true, true, true, true, true, false, true, true, false, false, true, true, true];
       {
-        calc {
-          [true, false, true, false, false, true, false, false, true, true, false, false, true, true, false, true, true, true, false, false, true, false, false, false, false, false, false, true, true, false, true, true];
-          {
-            pow_11231();
-            of_pow(11264, true, true, false, true, true, false, false, false, false, false, false, true, false, false, true, true, true, false, true, true, false, false, true, true, false, false, true, false, false, true, false, true);
-          }
-          pow_mod_crc(11264);
-        }
-        calc {
-          [false, true, false, true, false, true, true, false, false, true, true, true, false, false, true, false, false, false, true, true, true, true, true, true, false, true, true, false, false, true, true, true];
-          {
-            pow_5599();
-            of_pow(5632, true, true, true, false, false, true, true, false, true, true, true, true, true, true, false, false, false, true, false, false, true, true, true, false, false, true, true, false, true, false, true, false);
-          }
-          pow_mod_crc(5632);
-        }
+        lut_entry_87_0();
+        lut_entry_87_1();
       }
       pow_mod_crc(11264) + pow_mod_crc(5632);
     }
   }
 
 
+
+  lemma lut_entry_88_0()
+  ensures [false, false, false, false, false, false, false, true, false, true, true, false, false, false, true, false, false, false, false, false, true, true, true, true, true, false, true, true, false, false, false, false] == pow_mod_crc(11392);
+  {
+    pow_11359();
+    of_pow(11392, false, false, false, false, true, true, false, true, true, true, true, true, false, false, false, false, false, true, false, false, false, true, true, false, true, false, false, false, false, false, false, false);
+  }
+
+  lemma lut_entry_88_1()
+  ensures [false, false, true, true, true, true, true, true, false, false, false, true, true, true, false, true, false, false, true, false, false, false, false, false, true, false, false, false, true, false, true, true] == pow_mod_crc(5696);
+  {
+    pow_5663();
+    of_pow(5696, true, true, false, true, false, false, false, true, false, false, false, false, false, true, false, false, true, false, true, true, true, false, false, false, true, true, true, true, true, true, false, false);
+  }
 
   lemma lut_entry_88()
   ensures bits_of_int(lut[88] as int, 64)
@@ -3638,28 +3652,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, false, false, false, false, true, false, true, true, false, false, false, true, false, false, false, false, false, true, true, true, true, true, false, true, true, false, false, false, false]+[false, false, true, true, true, true, true, true, false, false, false, true, true, true, false, true, false, false, true, false, false, false, false, false, true, false, false, false, true, false, true, true];
       {
-        calc {
-          [false, false, false, false, false, false, false, true, false, true, true, false, false, false, true, false, false, false, false, false, true, true, true, true, true, false, true, true, false, false, false, false];
-          {
-            pow_11359();
-            of_pow(11392, false, false, false, false, true, true, false, true, true, true, true, true, false, false, false, false, false, true, false, false, false, true, true, false, true, false, false, false, false, false, false, false);
-          }
-          pow_mod_crc(11392);
-        }
-        calc {
-          [false, false, true, true, true, true, true, true, false, false, false, true, true, true, false, true, false, false, true, false, false, false, false, false, true, false, false, false, true, false, true, true];
-          {
-            pow_5663();
-            of_pow(5696, true, true, false, true, false, false, false, true, false, false, false, false, false, true, false, false, true, false, true, true, true, false, false, false, true, true, true, true, true, true, false, false);
-          }
-          pow_mod_crc(5696);
-        }
+        lut_entry_88_0();
+        lut_entry_88_1();
       }
       pow_mod_crc(11392) + pow_mod_crc(5696);
     }
   }
 
 
+
+  lemma lut_entry_89_0()
+  ensures [false, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, true, false, true, true, false, false, false, true, false, false] == pow_mod_crc(11520);
+  {
+    pow_11487();
+    of_pow(11520, false, false, true, false, false, false, true, true, false, true, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, true, true, true, true, false);
+  }
+
+  lemma lut_entry_89_1()
+  ensures [false, true, false, true, false, false, false, true, true, true, false, true, true, true, false, true, true, true, true, false, false, true, false, false, false, true, false, false, false, false, false, true] == pow_mod_crc(5760);
+  {
+    pow_5727();
+    of_pow(5760, true, false, false, false, false, false, true, false, false, false, true, false, false, true, true, true, true, false, true, true, true, false, true, true, true, false, false, false, true, false, true, false);
+  }
 
   lemma lut_entry_89()
   ensures bits_of_int(lut[89] as int, 64)
@@ -3678,28 +3692,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, true, false, true, true, false, false, false, true, false, false]+[false, true, false, true, false, false, false, true, true, true, false, true, true, true, false, true, true, true, true, false, false, true, false, false, false, true, false, false, false, false, false, true];
       {
-        calc {
-          [false, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, true, false, true, true, false, false, false, true, false, false];
-          {
-            pow_11487();
-            of_pow(11520, false, false, true, false, false, false, true, true, false, true, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, true, true, true, true, false);
-          }
-          pow_mod_crc(11520);
-        }
-        calc {
-          [false, true, false, true, false, false, false, true, true, true, false, true, true, true, false, true, true, true, true, false, false, true, false, false, false, true, false, false, false, false, false, true];
-          {
-            pow_5727();
-            of_pow(5760, true, false, false, false, false, false, true, false, false, false, true, false, false, true, true, true, true, false, true, true, true, false, true, true, true, false, false, false, true, false, true, false);
-          }
-          pow_mod_crc(5760);
-        }
+        lut_entry_89_0();
+        lut_entry_89_1();
       }
       pow_mod_crc(11520) + pow_mod_crc(5760);
     }
   }
 
 
+
+  lemma lut_entry_90_0()
+  ensures [false, true, true, true, true, true, true, false, true, false, true, true, false, false, false, true, false, true, false, true, false, true, false, false, false, true, false, true, false, false, false, false] == pow_mod_crc(11648);
+  {
+    pow_11615();
+    of_pow(11648, false, false, false, false, true, false, true, false, false, false, true, false, true, false, true, false, true, false, false, false, true, true, false, true, false, true, true, true, true, true, true, false);
+  }
+
+  lemma lut_entry_90_1()
+  ensures [false, false, false, false, true, true, false, false, true, true, true, false, true, true, true, false, true, false, false, true, true, true, false, false, true, true, false, true, true, false, true, false] == pow_mod_crc(5824);
+  {
+    pow_5791();
+    of_pow(5824, false, true, false, true, true, false, true, true, false, false, true, true, true, false, false, true, false, true, true, true, false, true, true, true, false, false, true, true, false, false, false, false);
+  }
 
   lemma lut_entry_90()
   ensures bits_of_int(lut[90] as int, 64)
@@ -3718,28 +3732,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, true, true, true, true, false, true, false, true, true, false, false, false, true, false, true, false, true, false, true, false, false, false, true, false, true, false, false, false, false]+[false, false, false, false, true, true, false, false, true, true, true, false, true, true, true, false, true, false, false, true, true, true, false, false, true, true, false, true, true, false, true, false];
       {
-        calc {
-          [false, true, true, true, true, true, true, false, true, false, true, true, false, false, false, true, false, true, false, true, false, true, false, false, false, true, false, true, false, false, false, false];
-          {
-            pow_11615();
-            of_pow(11648, false, false, false, false, true, false, true, false, false, false, true, false, true, false, true, false, true, false, false, false, true, true, false, true, false, true, true, true, true, true, true, false);
-          }
-          pow_mod_crc(11648);
-        }
-        calc {
-          [false, false, false, false, true, true, false, false, true, true, true, false, true, true, true, false, true, false, false, true, true, true, false, false, true, true, false, true, true, false, true, false];
-          {
-            pow_5791();
-            of_pow(5824, false, true, false, true, true, false, true, true, false, false, true, true, true, false, false, true, false, true, true, true, false, true, true, true, false, false, true, true, false, false, false, false);
-          }
-          pow_mod_crc(5824);
-        }
+        lut_entry_90_0();
+        lut_entry_90_1();
       }
       pow_mod_crc(11648) + pow_mod_crc(5824);
     }
   }
 
 
+
+  lemma lut_entry_91_0()
+  ensures [true, true, true, false, true, false, true, false, true, false, false, true, false, false, true, false, false, true, false, true, true, false, false, true, true, false, true, true, false, true, true, false] == pow_mod_crc(11776);
+  {
+    pow_11743();
+    of_pow(11776, false, true, true, false, true, true, false, true, true, false, false, true, true, false, true, false, false, true, false, false, true, false, false, true, false, true, false, true, false, true, true, true);
+  }
+
+  lemma lut_entry_91_1()
+  ensures [false, false, false, true, false, true, true, false, true, true, true, false, false, false, true, false, true, false, true, true, false, false, true, true, false, false, false, false, true, true, false, true] == pow_mod_crc(5888);
+  {
+    pow_5855();
+    of_pow(5888, true, false, true, true, false, false, false, false, true, true, false, false, true, true, false, true, false, true, false, false, false, true, true, true, false, true, true, false, true, false, false, false);
+  }
 
   lemma lut_entry_91()
   ensures bits_of_int(lut[91] as int, 64)
@@ -3758,28 +3772,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, false, true, false, true, false, true, false, false, true, false, false, true, false, false, true, false, true, true, false, false, true, true, false, true, true, false, true, true, false]+[false, false, false, true, false, true, true, false, true, true, true, false, false, false, true, false, true, false, true, true, false, false, true, true, false, false, false, false, true, true, false, true];
       {
-        calc {
-          [true, true, true, false, true, false, true, false, true, false, false, true, false, false, true, false, false, true, false, true, true, false, false, true, true, false, true, true, false, true, true, false];
-          {
-            pow_11743();
-            of_pow(11776, false, true, true, false, true, true, false, true, true, false, false, true, true, false, true, false, false, true, false, false, true, false, false, true, false, true, false, true, false, true, true, true);
-          }
-          pow_mod_crc(11776);
-        }
-        calc {
-          [false, false, false, true, false, true, true, false, true, true, true, false, false, false, true, false, true, false, true, true, false, false, true, true, false, false, false, false, true, true, false, true];
-          {
-            pow_5855();
-            of_pow(5888, true, false, true, true, false, false, false, false, true, true, false, false, true, true, false, true, false, true, false, false, false, true, true, true, false, true, true, false, true, false, false, false);
-          }
-          pow_mod_crc(5888);
-        }
+        lut_entry_91_0();
+        lut_entry_91_1();
       }
       pow_mod_crc(11776) + pow_mod_crc(5888);
     }
   }
 
 
+
+  lemma lut_entry_92_0()
+  ensures [true, true, false, true, false, false, false, true, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, true, false, false, false, true, false, true, true, true] == pow_mod_crc(11904);
+  {
+    pow_11871();
+    of_pow(11904, true, true, true, false, true, false, false, false, true, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, true, false, false, false, true, false, true, true);
+  }
+
+  lemma lut_entry_92_1()
+  ensures [false, true, true, false, true, false, false, false, false, false, true, false, true, true, false, true, false, true, true, true, false, false, false, true, true, true, true, false, false, true, true, true] == pow_mod_crc(5952);
+  {
+    pow_5919();
+    of_pow(5952, true, true, true, false, false, true, true, true, true, false, false, false, true, true, true, false, true, false, true, true, false, true, false, false, false, false, false, true, false, true, true, false);
+  }
 
   lemma lut_entry_92()
   ensures bits_of_int(lut[92] as int, 64)
@@ -3798,28 +3812,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, false, false, false, true, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, true, false, false, false, true, false, true, true, true]+[false, true, true, false, true, false, false, false, false, false, true, false, true, true, false, true, false, true, true, true, false, false, false, true, true, true, true, false, false, true, true, true];
       {
-        calc {
-          [true, true, false, true, false, false, false, true, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, true, false, false, false, true, false, true, true, true];
-          {
-            pow_11871();
-            of_pow(11904, true, true, true, false, true, false, false, false, true, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, true, false, false, false, true, false, true, true);
-          }
-          pow_mod_crc(11904);
-        }
-        calc {
-          [false, true, true, false, true, false, false, false, false, false, true, false, true, true, false, true, false, true, true, true, false, false, false, true, true, true, true, false, false, true, true, true];
-          {
-            pow_5919();
-            of_pow(5952, true, true, true, false, false, true, true, true, true, false, false, false, true, true, true, false, true, false, true, true, false, true, false, false, false, false, false, true, false, true, true, false);
-          }
-          pow_mod_crc(5952);
-        }
+        lut_entry_92_0();
+        lut_entry_92_1();
       }
       pow_mod_crc(11904) + pow_mod_crc(5952);
     }
   }
 
 
+
+  lemma lut_entry_93_0()
+  ensures [false, true, false, true, true, false, false, false, true, false, true, true, false, true, true, true, true, true, false, false, false, false, true, true, false, true, false, false, true, false, true, true] == pow_mod_crc(12032);
+  {
+    pow_11999();
+    of_pow(12032, true, true, false, true, false, false, true, false, true, true, false, false, false, false, true, true, true, true, true, false, true, true, false, true, false, false, false, true, true, false, true, false);
+  }
+
+  lemma lut_entry_93_1()
+  ensures [true, false, true, false, true, true, false, false, true, true, true, true, true, true, true, true, true, true, true, false, false, false, true, true, true, false, false, true, true, true, false, false] == pow_mod_crc(6016);
+  {
+    pow_5983();
+    of_pow(6016, false, false, true, true, true, false, false, true, true, true, false, false, false, true, true, true, true, true, true, true, true, true, true, true, false, false, true, true, false, true, false, true);
+  }
 
   lemma lut_entry_93()
   ensures bits_of_int(lut[93] as int, 64)
@@ -3838,28 +3852,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, true, false, false, false, true, false, true, true, false, true, true, true, true, true, false, false, false, false, true, true, false, true, false, false, true, false, true, true]+[true, false, true, false, true, true, false, false, true, true, true, true, true, true, true, true, true, true, true, false, false, false, true, true, true, false, false, true, true, true, false, false];
       {
-        calc {
-          [false, true, false, true, true, false, false, false, true, false, true, true, false, true, true, true, true, true, false, false, false, false, true, true, false, true, false, false, true, false, true, true];
-          {
-            pow_11999();
-            of_pow(12032, true, true, false, true, false, false, true, false, true, true, false, false, false, false, true, true, true, true, true, false, true, true, false, true, false, false, false, true, true, false, true, false);
-          }
-          pow_mod_crc(12032);
-        }
-        calc {
-          [true, false, true, false, true, true, false, false, true, true, true, true, true, true, true, true, true, true, true, false, false, false, true, true, true, false, false, true, true, true, false, false];
-          {
-            pow_5983();
-            of_pow(6016, false, false, true, true, true, false, false, true, true, true, false, false, false, true, true, true, true, true, true, true, true, true, true, true, false, false, true, true, false, true, false, true);
-          }
-          pow_mod_crc(6016);
-        }
+        lut_entry_93_0();
+        lut_entry_93_1();
       }
       pow_mod_crc(12032) + pow_mod_crc(6016);
     }
   }
 
 
+
+  lemma lut_entry_94_0()
+  ensures [false, false, true, false, false, true, false, false, true, true, true, false, true, false, true, false, false, true, false, true, true, false, true, false, true, false, false, true, true, false, false, true] == pow_mod_crc(12160);
+  {
+    pow_12127();
+    of_pow(12160, true, false, false, true, true, false, false, true, false, true, false, true, true, false, true, false, false, true, false, true, false, true, true, true, false, false, true, false, false, true, false, false);
+  }
+
+  lemma lut_entry_94_1()
+  ensures [true, false, false, false, false, false, false, false, false, true, true, true, false, false, false, false, true, true, true, true, true, true, true, true, true, false, false, false, false, true, true, false] == pow_mod_crc(6080);
+  {
+    pow_6047();
+    of_pow(6080, false, true, true, false, false, false, false, true, true, true, true, true, true, true, true, true, false, false, false, false, true, true, true, false, false, false, false, false, false, false, false, true);
+  }
 
   lemma lut_entry_94()
   ensures bits_of_int(lut[94] as int, 64)
@@ -3878,28 +3892,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, false, false, true, false, false, true, true, true, false, true, false, true, false, false, true, false, true, true, false, true, false, true, false, false, true, true, false, false, true]+[true, false, false, false, false, false, false, false, false, true, true, true, false, false, false, false, true, true, true, true, true, true, true, true, true, false, false, false, false, true, true, false];
       {
-        calc {
-          [false, false, true, false, false, true, false, false, true, true, true, false, true, false, true, false, false, true, false, true, true, false, true, false, true, false, false, true, true, false, false, true];
-          {
-            pow_12127();
-            of_pow(12160, true, false, false, true, true, false, false, true, false, true, false, true, true, false, true, false, false, true, false, true, false, true, true, true, false, false, true, false, false, true, false, false);
-          }
-          pow_mod_crc(12160);
-        }
-        calc {
-          [true, false, false, false, false, false, false, false, false, true, true, true, false, false, false, false, true, true, true, true, true, true, true, true, true, false, false, false, false, true, true, false];
-          {
-            pow_6047();
-            of_pow(6080, false, true, true, false, false, false, false, true, true, true, true, true, true, true, true, true, false, false, false, false, true, true, true, false, false, false, false, false, false, false, false, true);
-          }
-          pow_mod_crc(6080);
-        }
+        lut_entry_94_0();
+        lut_entry_94_1();
       }
       pow_mod_crc(12160) + pow_mod_crc(6080);
     }
   }
 
 
+
+  lemma lut_entry_95_0()
+  ensures [true, false, true, false, true, true, false, false, true, false, true, true, false, false, false, true, false, true, true, false, true, true, true, true, false, true, true, true, true, false, false, true] == pow_mod_crc(12288);
+  {
+    pow_12255();
+    of_pow(12288, true, false, false, true, true, true, true, false, true, true, true, true, false, true, true, false, true, false, false, false, true, true, false, true, false, false, true, true, false, true, false, true);
+  }
+
+  lemma lut_entry_95_1()
+  ensures [false, false, true, true, true, false, true, false, false, true, false, false, false, false, false, true, false, false, true, false, false, true, false, true, true, true, true, false, true, false, true, true] == pow_mod_crc(6144);
+  {
+    pow_6111();
+    of_pow(6144, true, true, false, true, false, true, true, true, true, false, true, false, false, true, false, false, true, false, false, false, false, false, true, false, false, true, false, true, true, true, false, false);
+  }
 
   lemma lut_entry_95()
   ensures bits_of_int(lut[95] as int, 64)
@@ -3918,28 +3932,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, false, true, true, false, false, true, false, true, true, false, false, false, true, false, true, true, false, true, true, true, true, false, true, true, true, true, false, false, true]+[false, false, true, true, true, false, true, false, false, true, false, false, false, false, false, true, false, false, true, false, false, true, false, true, true, true, true, false, true, false, true, true];
       {
-        calc {
-          [true, false, true, false, true, true, false, false, true, false, true, true, false, false, false, true, false, true, true, false, true, true, true, true, false, true, true, true, true, false, false, true];
-          {
-            pow_12255();
-            of_pow(12288, true, false, false, true, true, true, true, false, true, true, true, true, false, true, true, false, true, false, false, false, true, true, false, true, false, false, true, true, false, true, false, true);
-          }
-          pow_mod_crc(12288);
-        }
-        calc {
-          [false, false, true, true, true, false, true, false, false, true, false, false, false, false, false, true, false, false, true, false, false, true, false, true, true, true, true, false, true, false, true, true];
-          {
-            pow_6111();
-            of_pow(6144, true, true, false, true, false, true, true, true, true, false, true, false, false, true, false, false, true, false, false, false, false, false, true, false, false, true, false, true, true, true, false, false);
-          }
-          pow_mod_crc(6144);
-        }
+        lut_entry_95_0();
+        lut_entry_95_1();
       }
       pow_mod_crc(12288) + pow_mod_crc(6144);
     }
   }
 
 
+
+  lemma lut_entry_96_0()
+  ensures [true, false, false, false, true, true, false, false, true, true, false, true, true, false, false, true, true, true, false, false, true, false, false, false, false, false, true, true, false, false, false, false] == pow_mod_crc(12416);
+  {
+    pow_12383();
+    of_pow(12416, false, false, false, false, true, true, false, false, false, false, false, true, false, false, true, true, true, false, false, true, true, false, true, true, false, false, true, true, false, false, false, true);
+  }
+
+  lemma lut_entry_96_1()
+  ensures [false, false, true, true, true, false, false, false, true, false, true, false, true, false, true, false, false, true, true, false, true, false, false, true, true, false, true, true, false, false, false, true] == pow_mod_crc(6208);
+  {
+    pow_6175();
+    of_pow(6208, true, false, false, false, true, true, false, true, true, false, false, true, false, true, true, false, false, true, false, true, false, true, false, true, false, false, false, true, true, true, false, false);
+  }
 
   lemma lut_entry_96()
   ensures bits_of_int(lut[96] as int, 64)
@@ -3958,28 +3972,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, false, true, true, false, false, true, true, false, true, true, false, false, true, true, true, false, false, true, false, false, false, false, false, true, true, false, false, false, false]+[false, false, true, true, true, false, false, false, true, false, true, false, true, false, true, false, false, true, true, false, true, false, false, true, true, false, true, true, false, false, false, true];
       {
-        calc {
-          [true, false, false, false, true, true, false, false, true, true, false, true, true, false, false, true, true, true, false, false, true, false, false, false, false, false, true, true, false, false, false, false];
-          {
-            pow_12383();
-            of_pow(12416, false, false, false, false, true, true, false, false, false, false, false, true, false, false, true, true, true, false, false, true, true, false, true, true, false, false, true, true, false, false, false, true);
-          }
-          pow_mod_crc(12416);
-        }
-        calc {
-          [false, false, true, true, true, false, false, false, true, false, true, false, true, false, true, false, false, true, true, false, true, false, false, true, true, false, true, true, false, false, false, true];
-          {
-            pow_6175();
-            of_pow(6208, true, false, false, false, true, true, false, true, true, false, false, true, false, true, true, false, false, true, false, true, false, true, false, true, false, false, false, true, true, true, false, false);
-          }
-          pow_mod_crc(6208);
-        }
+        lut_entry_96_0();
+        lut_entry_96_1();
       }
       pow_mod_crc(12416) + pow_mod_crc(6208);
     }
   }
 
 
+
+  lemma lut_entry_97_0()
+  ensures [false, false, false, false, false, true, true, false, false, true, true, true, true, false, false, false, true, true, true, false, false, true, false, false, false, true, false, false, true, true, true, true] == pow_mod_crc(12544);
+  {
+    pow_12511();
+    of_pow(12544, true, true, true, true, false, false, true, false, false, false, true, false, false, true, true, true, false, false, false, true, true, true, true, false, false, true, true, false, false, false, false, false);
+  }
+
+  lemma lut_entry_97_1()
+  ensures [true, true, false, true, false, false, true, false, false, false, true, false, false, false, false, true, true, true, false, false, true, true, false, true, false, true, false, true, false, false, false, false] == pow_mod_crc(6272);
+  {
+    pow_6239();
+    of_pow(6272, false, false, false, false, true, false, true, false, true, false, true, true, false, false, true, true, true, false, false, false, false, true, false, false, false, true, false, false, true, false, true, true);
+  }
 
   lemma lut_entry_97()
   ensures bits_of_int(lut[97] as int, 64)
@@ -3998,28 +4012,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, false, false, true, true, false, false, true, true, true, true, false, false, false, true, true, true, false, false, true, false, false, false, true, false, false, true, true, true, true]+[true, true, false, true, false, false, true, false, false, false, true, false, false, false, false, true, true, true, false, false, true, true, false, true, false, true, false, true, false, false, false, false];
       {
-        calc {
-          [false, false, false, false, false, true, true, false, false, true, true, true, true, false, false, false, true, true, true, false, false, true, false, false, false, true, false, false, true, true, true, true];
-          {
-            pow_12511();
-            of_pow(12544, true, true, true, true, false, false, true, false, false, false, true, false, false, true, true, true, false, false, false, true, true, true, true, false, false, true, true, false, false, false, false, false);
-          }
-          pow_mod_crc(12544);
-        }
-        calc {
-          [true, true, false, true, false, false, true, false, false, false, true, false, false, false, false, true, true, true, false, false, true, true, false, true, false, true, false, true, false, false, false, false];
-          {
-            pow_6239();
-            of_pow(6272, false, false, false, false, true, false, true, false, true, false, true, true, false, false, true, true, true, false, false, false, false, true, false, false, false, true, false, false, true, false, true, true);
-          }
-          pow_mod_crc(6272);
-        }
+        lut_entry_97_0();
+        lut_entry_97_1();
       }
       pow_mod_crc(12544) + pow_mod_crc(6272);
     }
   }
 
 
+
+  lemma lut_entry_98_0()
+  ensures [false, true, false, true, false, false, true, true, false, false, false, true, true, true, true, true, true, true, false, true, false, false, false, false, true, true, false, true, false, false, false, false] == pow_mod_crc(12672);
+  {
+    pow_12639();
+    of_pow(12672, false, false, false, false, true, false, true, true, false, false, false, false, true, false, true, true, true, true, true, true, true, false, false, false, true, true, false, false, true, false, true, false);
+  }
+
+  lemma lut_entry_98_1()
+  ensures [false, true, false, false, true, false, true, true, true, false, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, true, false, true, false, false, false, false] == pow_mod_crc(6336);
+  {
+    pow_6303();
+    of_pow(6336, false, false, false, false, true, false, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, false, true, true, true, false, true, false, false, true, false);
+  }
 
   lemma lut_entry_98()
   ensures bits_of_int(lut[98] as int, 64)
@@ -4038,28 +4052,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, false, false, true, true, false, false, false, true, true, true, true, true, true, true, false, true, false, false, false, false, true, true, false, true, false, false, false, false]+[false, true, false, false, true, false, true, true, true, false, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, true, false, true, false, false, false, false];
       {
-        calc {
-          [false, true, false, true, false, false, true, true, false, false, false, true, true, true, true, true, true, true, false, true, false, false, false, false, true, true, false, true, false, false, false, false];
-          {
-            pow_12639();
-            of_pow(12672, false, false, false, false, true, false, true, true, false, false, false, false, true, false, true, true, true, true, true, true, true, false, false, false, true, true, false, false, true, false, true, false);
-          }
-          pow_mod_crc(12672);
-        }
-        calc {
-          [false, true, false, false, true, false, true, true, true, false, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, true, false, true, false, false, false, false];
-          {
-            pow_6303();
-            of_pow(6336, false, false, false, false, true, false, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, false, true, true, true, false, true, false, false, true, false);
-          }
-          pow_mod_crc(6336);
-        }
+        lut_entry_98_0();
+        lut_entry_98_1();
       }
       pow_mod_crc(12672) + pow_mod_crc(6336);
     }
   }
 
 
+
+  lemma lut_entry_99_0()
+  ensures [true, true, false, true, false, false, false, true, true, false, true, true, true, true, true, true, false, false, true, false, false, true, true, false, false, true, true, false, false, true, false, false] == pow_mod_crc(12800);
+  {
+    pow_12767();
+    of_pow(12800, false, false, true, false, false, true, true, false, false, true, true, false, false, true, false, false, true, true, true, true, true, true, false, true, true, false, false, false, true, false, true, true);
+  }
+
+  lemma lut_entry_99_1()
+  ensures [false, true, false, false, true, false, false, false, true, true, false, false, true, false, true, true, true, true, true, false, false, true, true, false, true, false, false, false, false, false, false, false] == pow_mod_crc(6400);
+  {
+    pow_6367();
+    of_pow(6400, false, false, false, false, false, false, false, true, false, true, true, false, false, true, true, true, true, true, false, true, false, false, true, true, false, false, false, true, false, false, true, false);
+  }
 
   lemma lut_entry_99()
   ensures bits_of_int(lut[99] as int, 64)
@@ -4078,28 +4092,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, false, false, false, true, true, false, true, true, true, true, true, true, false, false, true, false, false, true, true, false, false, true, true, false, false, true, false, false]+[false, true, false, false, true, false, false, false, true, true, false, false, true, false, true, true, true, true, true, false, false, true, true, false, true, false, false, false, false, false, false, false];
       {
-        calc {
-          [true, true, false, true, false, false, false, true, true, false, true, true, true, true, true, true, false, false, true, false, false, true, true, false, false, true, true, false, false, true, false, false];
-          {
-            pow_12767();
-            of_pow(12800, false, false, true, false, false, true, true, false, false, true, true, false, false, true, false, false, true, true, true, true, true, true, false, true, true, false, false, false, true, false, true, true);
-          }
-          pow_mod_crc(12800);
-        }
-        calc {
-          [false, true, false, false, true, false, false, false, true, true, false, false, true, false, true, true, true, true, true, false, false, true, true, false, true, false, false, false, false, false, false, false];
-          {
-            pow_6367();
-            of_pow(6400, false, false, false, false, false, false, false, true, false, true, true, false, false, true, true, true, true, true, false, true, false, false, true, true, false, false, false, true, false, false, true, false);
-          }
-          pow_mod_crc(6400);
-        }
+        lut_entry_99_0();
+        lut_entry_99_1();
       }
       pow_mod_crc(12800) + pow_mod_crc(6400);
     }
   }
 
 
+
+  lemma lut_entry_100_0()
+  ensures [true, false, true, true, false, true, false, false, true, false, false, false, false, false, false, true, false, false, true, false, false, true, true, false, true, false, true, true, false, true, true, true] == pow_mod_crc(12928);
+  {
+    pow_12895();
+    of_pow(12928, true, true, true, false, true, true, false, true, false, true, true, false, false, true, false, false, true, false, false, false, false, false, false, true, false, false, true, false, true, true, false, true);
+  }
+
+  lemma lut_entry_100_1()
+  ensures [true, false, true, true, false, true, true, true, true, true, false, true, false, true, false, true, true, false, false, false, false, true, false, false, false, false, false, true, false, false, false, true] == pow_mod_crc(6464);
+  {
+    pow_6431();
+    of_pow(6464, true, false, false, false, true, false, false, false, false, false, true, false, false, false, false, true, true, false, true, false, true, false, true, true, true, true, true, false, true, true, false, true);
+  }
 
   lemma lut_entry_100()
   ensures bits_of_int(lut[100] as int, 64)
@@ -4118,28 +4132,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, true, false, true, false, false, true, false, false, false, false, false, false, true, false, false, true, false, false, true, true, false, true, false, true, true, false, true, true, true]+[true, false, true, true, false, true, true, true, true, true, false, true, false, true, false, true, true, false, false, false, false, true, false, false, false, false, false, true, false, false, false, true];
       {
-        calc {
-          [true, false, true, true, false, true, false, false, true, false, false, false, false, false, false, true, false, false, true, false, false, true, true, false, true, false, true, true, false, true, true, true];
-          {
-            pow_12895();
-            of_pow(12928, true, true, true, false, true, true, false, true, false, true, true, false, false, true, false, false, true, false, false, false, false, false, false, true, false, false, true, false, true, true, false, true);
-          }
-          pow_mod_crc(12928);
-        }
-        calc {
-          [true, false, true, true, false, true, true, true, true, true, false, true, false, true, false, true, true, false, false, false, false, true, false, false, false, false, false, true, false, false, false, true];
-          {
-            pow_6431();
-            of_pow(6464, true, false, false, false, true, false, false, false, false, false, true, false, false, false, false, true, true, false, true, false, true, false, true, true, true, true, true, false, true, true, false, true);
-          }
-          pow_mod_crc(6464);
-        }
+        lut_entry_100_0();
+        lut_entry_100_1();
       }
       pow_mod_crc(12928) + pow_mod_crc(6464);
     }
   }
 
 
+
+  lemma lut_entry_101_0()
+  ensures [false, true, false, false, true, true, false, true, true, true, false, false, false, false, false, false, false, true, true, true, false, true, true, true, false, true, false, false, false, false, false, false] == pow_mod_crc(13056);
+  {
+    pow_13023();
+    of_pow(13056, false, false, false, false, false, false, true, false, true, true, true, false, true, true, true, false, false, false, false, false, false, false, true, true, true, false, true, true, false, false, true, false);
+  }
+
+  lemma lut_entry_101_1()
+  ensures [false, false, true, false, false, false, true, false, true, false, true, false, false, true, true, false, true, true, true, false, false, false, false, false, false, true, true, false, true, true, true, true] == pow_mod_crc(6528);
+  {
+    pow_6495();
+    of_pow(6528, true, true, true, true, false, true, true, false, false, false, false, false, false, true, true, true, false, true, true, false, false, true, false, true, false, true, false, false, false, true, false, false);
+  }
 
   lemma lut_entry_101()
   ensures bits_of_int(lut[101] as int, 64)
@@ -4158,28 +4172,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, true, true, false, true, true, true, false, false, false, false, false, false, false, true, true, true, false, true, true, true, false, true, false, false, false, false, false, false]+[false, false, true, false, false, false, true, false, true, false, true, false, false, true, true, false, true, true, true, false, false, false, false, false, false, true, true, false, true, true, true, true];
       {
-        calc {
-          [false, true, false, false, true, true, false, true, true, true, false, false, false, false, false, false, false, true, true, true, false, true, true, true, false, true, false, false, false, false, false, false];
-          {
-            pow_13023();
-            of_pow(13056, false, false, false, false, false, false, true, false, true, true, true, false, true, true, true, false, false, false, false, false, false, false, true, true, true, false, true, true, false, false, true, false);
-          }
-          pow_mod_crc(13056);
-        }
-        calc {
-          [false, false, true, false, false, false, true, false, true, false, true, false, false, true, true, false, true, true, true, false, false, false, false, false, false, true, true, false, true, true, true, true];
-          {
-            pow_6495();
-            of_pow(6528, true, true, true, true, false, true, true, false, false, false, false, false, false, true, true, true, false, true, true, false, false, true, false, true, false, true, false, false, false, true, false, false);
-          }
-          pow_mod_crc(6528);
-        }
+        lut_entry_101_0();
+        lut_entry_101_1();
       }
       pow_mod_crc(13056) + pow_mod_crc(6528);
     }
   }
 
 
+
+  lemma lut_entry_102_0()
+  ensures [true, true, true, true, false, false, false, false, false, true, true, true, false, true, false, true, false, false, true, false, false, false, false, false, false, true, true, false, false, false, false, true] == pow_mod_crc(13184);
+  {
+    pow_13151();
+    of_pow(13184, true, false, false, false, false, true, true, false, false, false, false, false, false, true, false, false, true, false, true, false, true, true, true, false, false, false, false, false, true, true, true, true);
+  }
+
+  lemma lut_entry_102_1()
+  ensures [false, true, false, false, true, true, false, true, false, true, false, false, true, false, true, true, true, false, true, false, false, false, true, false, false, true, false, true, false, true, true, false] == pow_mod_crc(6592);
+  {
+    pow_6559();
+    of_pow(6592, false, true, true, false, true, false, true, false, false, true, false, false, false, true, false, true, true, true, false, true, false, false, true, false, true, false, true, true, false, false, true, false);
+  }
 
   lemma lut_entry_102()
   ensures bits_of_int(lut[102] as int, 64)
@@ -4198,28 +4212,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, true, false, false, false, false, false, true, true, true, false, true, false, true, false, false, true, false, false, false, false, false, false, true, true, false, false, false, false, true]+[false, true, false, false, true, true, false, true, false, true, false, false, true, false, true, true, true, false, true, false, false, false, true, false, false, true, false, true, false, true, true, false];
       {
-        calc {
-          [true, true, true, true, false, false, false, false, false, true, true, true, false, true, false, true, false, false, true, false, false, false, false, false, false, true, true, false, false, false, false, true];
-          {
-            pow_13151();
-            of_pow(13184, true, false, false, false, false, true, true, false, false, false, false, false, false, true, false, false, true, false, true, false, true, true, true, false, false, false, false, false, true, true, true, true);
-          }
-          pow_mod_crc(13184);
-        }
-        calc {
-          [false, true, false, false, true, true, false, true, false, true, false, false, true, false, true, true, true, false, true, false, false, false, true, false, false, true, false, true, false, true, true, false];
-          {
-            pow_6559();
-            of_pow(6592, false, true, true, false, true, false, true, false, false, true, false, false, false, true, false, true, true, true, false, true, false, false, true, false, true, false, true, true, false, false, true, false);
-          }
-          pow_mod_crc(6592);
-        }
+        lut_entry_102_0();
+        lut_entry_102_1();
       }
       pow_mod_crc(13184) + pow_mod_crc(6592);
     }
   }
 
 
+
+  lemma lut_entry_103_0()
+  ensures [true, true, false, false, true, true, false, true, false, true, true, false, true, false, true, true, true, true, false, true, true, true, false, false, false, true, true, false, true, true, false, false] == pow_mod_crc(13312);
+  {
+    pow_13279();
+    of_pow(13312, false, false, true, true, false, true, true, false, false, false, true, true, true, false, true, true, true, true, false, true, false, true, true, false, true, false, true, true, false, false, true, true);
+  }
+
+  lemma lut_entry_103_1()
+  ensures [false, true, false, true, false, false, false, false, false, true, true, false, false, true, false, true, false, true, true, false, true, true, true, true, false, true, true, false, false, true, false, false] == pow_mod_crc(6656);
+  {
+    pow_6623();
+    of_pow(6656, false, false, true, false, false, true, true, false, true, true, true, true, false, true, true, false, true, false, true, false, false, true, true, false, false, false, false, false, true, false, true, false);
+  }
 
   lemma lut_entry_103()
   ensures bits_of_int(lut[103] as int, 64)
@@ -4238,28 +4252,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, false, true, true, false, true, false, true, true, false, true, false, true, true, true, true, false, true, true, true, false, false, false, true, true, false, true, true, false, false]+[false, true, false, true, false, false, false, false, false, true, true, false, false, true, false, true, false, true, true, false, true, true, true, true, false, true, true, false, false, true, false, false];
       {
-        calc {
-          [true, true, false, false, true, true, false, true, false, true, true, false, true, false, true, true, true, true, false, true, true, true, false, false, false, true, true, false, true, true, false, false];
-          {
-            pow_13279();
-            of_pow(13312, false, false, true, true, false, true, true, false, false, false, true, true, true, false, true, true, true, true, false, true, false, true, true, false, true, false, true, true, false, false, true, true);
-          }
-          pow_mod_crc(13312);
-        }
-        calc {
-          [false, true, false, true, false, false, false, false, false, true, true, false, false, true, false, true, false, true, true, false, true, true, true, true, false, true, true, false, false, true, false, false];
-          {
-            pow_6623();
-            of_pow(6656, false, false, true, false, false, true, true, false, true, true, true, true, false, true, true, false, true, false, true, false, false, true, true, false, false, false, false, false, true, false, true, false);
-          }
-          pow_mod_crc(6656);
-        }
+        lut_entry_103_0();
+        lut_entry_103_1();
       }
       pow_mod_crc(13312) + pow_mod_crc(6656);
     }
   }
 
 
+
+  lemma lut_entry_104_0()
+  ensures [true, false, true, true, true, true, true, true, true, true, false, false, false, false, false, true, false, false, true, true, true, false, true, false, true, true, false, false, true, false, false, false] == pow_mod_crc(13440);
+  {
+    pow_13407();
+    of_pow(13440, false, false, false, true, false, false, true, true, false, true, false, true, true, true, false, false, true, false, false, false, false, false, true, true, true, true, true, true, true, true, false, true);
+  }
+
+  lemma lut_entry_104_1()
+  ensures [true, false, false, true, true, false, false, false, false, true, true, false, false, true, true, false, false, true, false, false, true, false, true, true, false, false, false, true, true, false, true, true] == pow_mod_crc(6720);
+  {
+    pow_6687();
+    of_pow(6720, true, true, false, true, true, false, false, false, true, true, false, true, false, false, true, false, false, true, true, false, false, true, true, false, false, false, false, true, true, false, false, true);
+  }
 
   lemma lut_entry_104()
   ensures bits_of_int(lut[104] as int, 64)
@@ -4278,28 +4292,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, true, true, true, true, true, true, true, false, false, false, false, false, true, false, false, true, true, true, false, true, false, true, true, false, false, true, false, false, false]+[true, false, false, true, true, false, false, false, false, true, true, false, false, true, true, false, false, true, false, false, true, false, true, true, false, false, false, true, true, false, true, true];
       {
-        calc {
-          [true, false, true, true, true, true, true, true, true, true, false, false, false, false, false, true, false, false, true, true, true, false, true, false, true, true, false, false, true, false, false, false];
-          {
-            pow_13407();
-            of_pow(13440, false, false, false, true, false, false, true, true, false, true, false, true, true, true, false, false, true, false, false, false, false, false, true, true, true, true, true, true, true, true, false, true);
-          }
-          pow_mod_crc(13440);
-        }
-        calc {
-          [true, false, false, true, true, false, false, false, false, true, true, false, false, true, true, false, false, true, false, false, true, false, true, true, false, false, false, true, true, false, true, true];
-          {
-            pow_6687();
-            of_pow(6720, true, true, false, true, true, false, false, false, true, true, false, true, false, false, true, false, false, true, true, false, false, true, true, false, false, false, false, true, true, false, false, true);
-          }
-          pow_mod_crc(6720);
-        }
+        lut_entry_104_0();
+        lut_entry_104_1();
       }
       pow_mod_crc(13440) + pow_mod_crc(6720);
     }
   }
 
 
+
+  lemma lut_entry_105_0()
+  ensures [false, false, false, false, true, true, true, false, false, true, true, false, false, true, true, true, true, true, false, true, false, true, false, true, true, true, true, true, true, false, true, false] == pow_mod_crc(13568);
+  {
+    pow_13535();
+    of_pow(13568, false, true, false, true, true, true, true, true, true, false, true, false, true, false, true, true, true, true, true, false, false, true, true, false, false, true, true, true, false, false, false, false);
+  }
+
+  lemma lut_entry_105_1()
+  ensures [true, true, true, true, true, true, false, true, true, false, false, false, false, false, true, true, true, false, false, false, false, false, true, false, true, true, true, false, false, true, false, true] == pow_mod_crc(6784);
+  {
+    pow_6751();
+    of_pow(6784, true, false, true, false, false, true, true, true, false, true, false, false, false, false, false, true, true, true, false, false, false, false, false, true, true, false, true, true, true, true, true, true);
+  }
 
   lemma lut_entry_105()
   ensures bits_of_int(lut[105] as int, 64)
@@ -4318,28 +4332,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, false, true, true, true, false, false, true, true, false, false, true, true, true, true, true, false, true, false, true, false, true, true, true, true, true, true, false, true, false]+[true, true, true, true, true, true, false, true, true, false, false, false, false, false, true, true, true, false, false, false, false, false, true, false, true, true, true, false, false, true, false, true];
       {
-        calc {
-          [false, false, false, false, true, true, true, false, false, true, true, false, false, true, true, true, true, true, false, true, false, true, false, true, true, true, true, true, true, false, true, false];
-          {
-            pow_13535();
-            of_pow(13568, false, true, false, true, true, true, true, true, true, false, true, false, true, false, true, true, true, true, true, false, false, true, true, false, false, true, true, true, false, false, false, false);
-          }
-          pow_mod_crc(13568);
-        }
-        calc {
-          [true, true, true, true, true, true, false, true, true, false, false, false, false, false, true, true, true, false, false, false, false, false, true, false, true, true, true, false, false, true, false, true];
-          {
-            pow_6751();
-            of_pow(6784, true, false, true, false, false, true, true, true, false, true, false, false, false, false, false, true, true, true, false, false, false, false, false, true, true, false, true, true, true, true, true, true);
-          }
-          pow_mod_crc(6784);
-        }
+        lut_entry_105_0();
+        lut_entry_105_1();
       }
       pow_mod_crc(13568) + pow_mod_crc(6784);
     }
   }
 
 
+
+  lemma lut_entry_106_0()
+  ensures [true, false, false, true, true, true, true, false, false, true, false, false, true, true, false, false, false, false, true, true, false, true, true, true, true, false, true, false, true, true, false, false] == pow_mod_crc(13696);
+  {
+    pow_13663();
+    of_pow(13696, false, false, true, true, false, true, false, true, true, true, true, false, true, true, false, false, false, false, true, true, false, false, true, false, false, true, true, true, true, false, false, true);
+  }
+
+  lemma lut_entry_106_1()
+  ensures [false, false, true, true, false, true, true, false, false, false, false, false, false, false, false, true, true, true, true, false, false, false, false, true, false, true, true, true, true, false, true, true] == pow_mod_crc(6848);
+  {
+    pow_6815();
+    of_pow(6848, true, true, false, true, true, true, true, false, true, false, false, false, false, true, true, true, true, false, false, false, false, false, false, false, false, true, true, false, true, true, false, false);
+  }
 
   lemma lut_entry_106()
   ensures bits_of_int(lut[106] as int, 64)
@@ -4358,28 +4372,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, true, true, true, true, false, false, true, false, false, true, true, false, false, false, false, true, true, false, true, true, true, true, false, true, false, true, true, false, false]+[false, false, true, true, false, true, true, false, false, false, false, false, false, false, false, true, true, true, true, false, false, false, false, true, false, true, true, true, true, false, true, true];
       {
-        calc {
-          [true, false, false, true, true, true, true, false, false, true, false, false, true, true, false, false, false, false, true, true, false, true, true, true, true, false, true, false, true, true, false, false];
-          {
-            pow_13663();
-            of_pow(13696, false, false, true, true, false, true, false, true, true, true, true, false, true, true, false, false, false, false, true, true, false, false, true, false, false, true, true, true, true, false, false, true);
-          }
-          pow_mod_crc(13696);
-        }
-        calc {
-          [false, false, true, true, false, true, true, false, false, false, false, false, false, false, false, true, true, true, true, false, false, false, false, true, false, true, true, true, true, false, true, true];
-          {
-            pow_6815();
-            of_pow(6848, true, true, false, true, true, true, true, false, true, false, false, false, false, true, true, true, true, false, false, false, false, false, false, false, false, true, true, false, true, true, false, false);
-          }
-          pow_mod_crc(6848);
-        }
+        lut_entry_106_0();
+        lut_entry_106_1();
       }
       pow_mod_crc(13696) + pow_mod_crc(6848);
     }
   }
 
 
+
+  lemma lut_entry_107_0()
+  ensures [false, true, true, false, true, true, true, true, true, false, true, false, true, true, true, true, false, false, true, true, true, true, false, true, false, false, false, false, false, false, false, false] == pow_mod_crc(13824);
+  {
+    pow_13791();
+    of_pow(13824, false, false, false, false, false, false, false, false, true, false, true, true, true, true, false, false, true, true, true, true, false, true, false, true, true, true, true, true, false, true, true, false);
+  }
+
+  lemma lut_entry_107_1()
+  ensures [true, true, false, true, false, false, true, true, true, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, false, true] == pow_mod_crc(6912);
+  {
+    pow_6879();
+    of_pow(6912, true, false, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, true, true, true, false, false, true, false, true, true);
+  }
 
   lemma lut_entry_107()
   ensures bits_of_int(lut[107] as int, 64)
@@ -4398,28 +4412,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, false, true, true, true, true, true, false, true, false, true, true, true, true, false, false, true, true, true, true, false, true, false, false, false, false, false, false, false, false]+[true, true, false, true, false, false, true, true, true, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, false, true];
       {
-        calc {
-          [false, true, true, false, true, true, true, true, true, false, true, false, true, true, true, true, false, false, true, true, true, true, false, true, false, false, false, false, false, false, false, false];
-          {
-            pow_13791();
-            of_pow(13824, false, false, false, false, false, false, false, false, true, false, true, true, true, true, false, false, true, true, true, true, false, true, false, true, true, true, true, true, false, true, true, false);
-          }
-          pow_mod_crc(13824);
-        }
-        calc {
-          [true, true, false, true, false, false, true, true, true, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, false, true];
-          {
-            pow_6879();
-            of_pow(6912, true, false, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, true, true, true, false, false, true, false, true, true);
-          }
-          pow_mod_crc(6912);
-        }
+        lut_entry_107_0();
+        lut_entry_107_1();
       }
       pow_mod_crc(13824) + pow_mod_crc(6912);
     }
   }
 
 
+
+  lemma lut_entry_108_0()
+  ensures [true, false, false, true, false, false, false, true, false, true, true, false, false, false, false, false, false, false, false, false, false, true, true, true, false, true, false, true, false, false, false, true] == pow_mod_crc(13952);
+  {
+    pow_13919();
+    of_pow(13952, true, false, false, false, true, false, true, false, true, true, true, false, false, false, false, false, false, false, false, false, false, true, true, false, true, false, false, false, true, false, false, true);
+  }
+
+  lemma lut_entry_108_1()
+  ensures [false, false, true, false, true, false, true, false, true, true, true, false, false, false, false, true, true, true, false, false, true, true, false, false, false, false, true, false, true, false, false, false] == pow_mod_crc(6976);
+  {
+    pow_6943();
+    of_pow(6976, false, false, false, true, false, true, false, false, false, false, true, true, false, false, true, true, true, false, false, false, false, true, true, true, false, true, false, true, false, true, false, false);
+  }
 
   lemma lut_entry_108()
   ensures bits_of_int(lut[108] as int, 64)
@@ -4438,28 +4452,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, true, false, false, false, true, false, true, true, false, false, false, false, false, false, false, false, false, false, true, true, true, false, true, false, true, false, false, false, true]+[false, false, true, false, true, false, true, false, true, true, true, false, false, false, false, true, true, true, false, false, true, true, false, false, false, false, true, false, true, false, false, false];
       {
-        calc {
-          [true, false, false, true, false, false, false, true, false, true, true, false, false, false, false, false, false, false, false, false, false, true, true, true, false, true, false, true, false, false, false, true];
-          {
-            pow_13919();
-            of_pow(13952, true, false, false, false, true, false, true, false, true, true, true, false, false, false, false, false, false, false, false, false, false, true, true, false, true, false, false, false, true, false, false, true);
-          }
-          pow_mod_crc(13952);
-        }
-        calc {
-          [false, false, true, false, true, false, true, false, true, true, true, false, false, false, false, true, true, true, false, false, true, true, false, false, false, false, true, false, true, false, false, false];
-          {
-            pow_6943();
-            of_pow(6976, false, false, false, true, false, true, false, false, false, false, true, true, false, false, true, true, true, false, false, false, false, true, true, true, false, true, false, true, false, true, false, false);
-          }
-          pow_mod_crc(6976);
-        }
+        lut_entry_108_0();
+        lut_entry_108_1();
       }
       pow_mod_crc(13952) + pow_mod_crc(6976);
     }
   }
 
 
+
+  lemma lut_entry_109_0()
+  ensures [false, false, false, true, true, false, false, true, false, true, true, false, true, true, true, false, false, true, false, false, true, true, true, true, true, true, true, false, true, false, false, false] == pow_mod_crc(14080);
+  {
+    pow_14047();
+    of_pow(14080, false, false, false, true, false, true, true, true, true, true, true, true, false, false, true, false, false, true, true, true, false, true, true, false, true, false, false, true, true, false, false, false);
+  }
+
+  lemma lut_entry_109_1()
+  ensures [false, false, true, true, true, false, false, true, false, false, true, true, false, false, true, true, true, true, false, false, false, false, true, true, true, false, false, true, false, false, true, false] == pow_mod_crc(7040);
+  {
+    pow_7007();
+    of_pow(7040, false, true, false, false, true, false, false, true, true, true, false, false, false, false, true, true, true, true, false, false, true, true, false, false, true, false, false, true, true, true, false, false);
+  }
 
   lemma lut_entry_109()
   ensures bits_of_int(lut[109] as int, 64)
@@ -4478,28 +4492,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, true, true, false, false, true, false, true, true, false, true, true, true, false, false, true, false, false, true, true, true, true, true, true, true, false, true, false, false, false]+[false, false, true, true, true, false, false, true, false, false, true, true, false, false, true, true, true, true, false, false, false, false, true, true, true, false, false, true, false, false, true, false];
       {
-        calc {
-          [false, false, false, true, true, false, false, true, false, true, true, false, true, true, true, false, false, true, false, false, true, true, true, true, true, true, true, false, true, false, false, false];
-          {
-            pow_14047();
-            of_pow(14080, false, false, false, true, false, true, true, true, true, true, true, true, false, false, true, false, false, true, true, true, false, true, true, false, true, false, false, true, true, false, false, false);
-          }
-          pow_mod_crc(14080);
-        }
-        calc {
-          [false, false, true, true, true, false, false, true, false, false, true, true, false, false, true, true, true, true, false, false, false, false, true, true, true, false, false, true, false, false, true, false];
-          {
-            pow_7007();
-            of_pow(7040, false, true, false, false, true, false, false, true, true, true, false, false, false, false, true, true, true, true, false, false, true, true, false, false, true, false, false, true, true, true, false, false);
-          }
-          pow_mod_crc(7040);
-        }
+        lut_entry_109_0();
+        lut_entry_109_1();
       }
       pow_mod_crc(14080) + pow_mod_crc(7040);
     }
   }
 
 
+
+  lemma lut_entry_110_0()
+  ensures [false, false, false, false, false, false, false, false, true, true, true, true, true, false, true, false, false, true, false, true, false, false, true, true, false, false, false, true, true, false, true, false] == pow_mod_crc(14208);
+  {
+    pow_14175();
+    of_pow(14208, false, true, false, true, true, false, false, false, true, true, false, false, true, false, true, false, false, true, false, true, true, true, true, true, false, false, false, false, false, false, false, false);
+  }
+
+  lemma lut_entry_110_1()
+  ensures [true, true, true, true, true, false, false, false, true, false, false, false, false, false, false, false, false, true, false, false, true, false, true, true, true, true, false, true, true, false, true, false] == pow_mod_crc(7104);
+  {
+    pow_7071();
+    of_pow(7104, false, true, false, true, true, false, true, true, true, true, false, true, false, false, true, false, false, false, false, false, false, false, false, true, false, false, false, true, true, true, true, true);
+  }
 
   lemma lut_entry_110()
   ensures bits_of_int(lut[110] as int, 64)
@@ -4518,28 +4532,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, false, false, false, false, false, true, true, true, true, true, false, true, false, false, true, false, true, false, false, true, true, false, false, false, true, true, false, true, false]+[true, true, true, true, true, false, false, false, true, false, false, false, false, false, false, false, false, true, false, false, true, false, true, true, true, true, false, true, true, false, true, false];
       {
-        calc {
-          [false, false, false, false, false, false, false, false, true, true, true, true, true, false, true, false, false, true, false, true, false, false, true, true, false, false, false, true, true, false, true, false];
-          {
-            pow_14175();
-            of_pow(14208, false, true, false, true, true, false, false, false, true, true, false, false, true, false, true, false, false, true, false, true, true, true, true, true, false, false, false, false, false, false, false, false);
-          }
-          pow_mod_crc(14208);
-        }
-        calc {
-          [true, true, true, true, true, false, false, false, true, false, false, false, false, false, false, false, false, true, false, false, true, false, true, true, true, true, false, true, true, false, true, false];
-          {
-            pow_7071();
-            of_pow(7104, false, true, false, true, true, false, true, true, true, true, false, true, false, false, true, false, false, false, false, false, false, false, false, true, false, false, false, true, true, true, true, true);
-          }
-          pow_mod_crc(7104);
-        }
+        lut_entry_110_0();
+        lut_entry_110_1();
       }
       pow_mod_crc(14208) + pow_mod_crc(7104);
     }
   }
 
 
+
+  lemma lut_entry_111_0()
+  ensures [true, false, true, false, true, false, true, true, false, true, false, true, true, true, true, false, false, false, true, true, true, true, true, false, false, true, false, true, false, true, false, true] == pow_mod_crc(14336);
+  {
+    pow_14303();
+    of_pow(14336, true, false, true, false, true, false, true, false, false, true, true, true, true, true, false, false, false, true, true, true, true, false, true, false, true, true, false, true, false, true, false, true);
+  }
+
+  lemma lut_entry_111_1()
+  ensures [false, true, false, true, true, true, true, false, false, false, false, true, false, true, true, true, false, false, true, true, true, true, false, true, false, false, false, true, false, true, true, false] == pow_mod_crc(7168);
+  {
+    pow_7135();
+    of_pow(7168, false, true, true, false, true, false, false, false, true, false, true, true, true, true, false, false, true, true, true, false, true, false, false, false, false, true, true, true, true, false, true, false);
+  }
 
   lemma lut_entry_111()
   ensures bits_of_int(lut[111] as int, 64)
@@ -4558,28 +4572,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, false, true, false, true, true, false, true, false, true, true, true, true, false, false, false, true, true, true, true, true, false, false, true, false, true, false, true, false, true]+[false, true, false, true, true, true, true, false, false, false, false, true, false, true, true, true, false, false, true, true, true, true, false, true, false, false, false, true, false, true, true, false];
       {
-        calc {
-          [true, false, true, false, true, false, true, true, false, true, false, true, true, true, true, false, false, false, true, true, true, true, true, false, false, true, false, true, false, true, false, true];
-          {
-            pow_14303();
-            of_pow(14336, true, false, true, false, true, false, true, false, false, true, true, true, true, true, false, false, false, true, true, true, true, false, true, false, true, true, false, true, false, true, false, true);
-          }
-          pow_mod_crc(14336);
-        }
-        calc {
-          [false, true, false, true, true, true, true, false, false, false, false, true, false, true, true, true, false, false, true, true, true, true, false, true, false, false, false, true, false, true, true, false];
-          {
-            pow_7135();
-            of_pow(7168, false, true, true, false, true, false, false, false, true, false, true, true, true, true, false, false, true, true, true, false, true, false, false, false, false, true, true, true, true, false, true, false);
-          }
-          pow_mod_crc(7168);
-        }
+        lut_entry_111_0();
+        lut_entry_111_1();
       }
       pow_mod_crc(14336) + pow_mod_crc(7168);
     }
   }
 
 
+
+  lemma lut_entry_112_0()
+  ensures [false, false, false, true, false, true, false, false, false, true, false, true, false, false, true, true, true, true, true, true, false, false, true, true, true, false, true, false, true, true, false, true] == pow_mod_crc(14464);
+  {
+    pow_14431();
+    of_pow(14464, true, false, true, true, false, true, false, true, true, true, false, false, true, true, true, true, true, true, false, false, true, false, true, false, false, false, true, false, true, false, false, false);
+  }
+
+  lemma lut_entry_112_1()
+  ensures [false, true, true, true, false, false, false, true, false, false, true, false, false, false, true, false, true, true, true, false, false, false, false, false, true, false, true, true, true, false, true, true] == pow_mod_crc(7232);
+  {
+    pow_7199();
+    of_pow(7232, true, true, false, true, true, true, false, true, false, false, false, false, false, true, true, true, false, true, false, false, false, true, false, false, true, false, false, false, true, true, true, false);
+  }
 
   lemma lut_entry_112()
   ensures bits_of_int(lut[112] as int, 64)
@@ -4598,28 +4612,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, true, false, true, false, false, false, true, false, true, false, false, true, true, true, true, true, true, false, false, true, true, true, false, true, false, true, true, false, true]+[false, true, true, true, false, false, false, true, false, false, true, false, false, false, true, false, true, true, true, false, false, false, false, false, true, false, true, true, true, false, true, true];
       {
-        calc {
-          [false, false, false, true, false, true, false, false, false, true, false, true, false, false, true, true, true, true, true, true, false, false, true, true, true, false, true, false, true, true, false, true];
-          {
-            pow_14431();
-            of_pow(14464, true, false, true, true, false, true, false, true, true, true, false, false, true, true, true, true, true, true, false, false, true, false, true, false, false, false, true, false, true, false, false, false);
-          }
-          pow_mod_crc(14464);
-        }
-        calc {
-          [false, true, true, true, false, false, false, true, false, false, true, false, false, false, true, false, true, true, true, false, false, false, false, false, true, false, true, true, true, false, true, true];
-          {
-            pow_7199();
-            of_pow(7232, true, true, false, true, true, true, false, true, false, false, false, false, false, true, true, true, false, true, false, false, false, true, false, false, true, false, false, false, true, true, true, false);
-          }
-          pow_mod_crc(7232);
-        }
+        lut_entry_112_0();
+        lut_entry_112_1();
       }
       pow_mod_crc(14464) + pow_mod_crc(7232);
     }
   }
 
 
+
+  lemma lut_entry_113_0()
+  ensures [false, false, false, true, true, true, true, true, false, false, false, true, false, false, false, true, false, true, false, false, true, false, true, true, false, true, true, true, true, false, true, true] == pow_mod_crc(14592);
+  {
+    pow_14559();
+    of_pow(14592, true, true, false, true, true, true, true, false, true, true, false, true, false, false, true, false, true, false, false, false, true, false, false, false, true, true, true, true, true, false, false, false);
+  }
+
+  lemma lut_entry_113_1()
+  ensures [true, true, true, false, true, true, false, false, false, false, false, false, true, false, true, true, true, true, false, false, false, true, false, true, true, true, true, false, true, false, true, false] == pow_mod_crc(7296);
+  {
+    pow_7263();
+    of_pow(7296, false, true, false, true, false, true, true, true, true, false, true, false, false, false, true, true, true, true, false, true, false, false, false, false, false, false, true, true, false, true, true, true);
+  }
 
   lemma lut_entry_113()
   ensures bits_of_int(lut[113] as int, 64)
@@ -4638,28 +4652,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, true, true, true, true, true, false, false, false, true, false, false, false, true, false, true, false, false, true, false, true, true, false, true, true, true, true, false, true, true]+[true, true, true, false, true, true, false, false, false, false, false, false, true, false, true, true, true, true, false, false, false, true, false, true, true, true, true, false, true, false, true, false];
       {
-        calc {
-          [false, false, false, true, true, true, true, true, false, false, false, true, false, false, false, true, false, true, false, false, true, false, true, true, false, true, true, true, true, false, true, true];
-          {
-            pow_14559();
-            of_pow(14592, true, true, false, true, true, true, true, false, true, true, false, true, false, false, true, false, true, false, false, false, true, false, false, false, true, true, true, true, true, false, false, false);
-          }
-          pow_mod_crc(14592);
-        }
-        calc {
-          [true, true, true, false, true, true, false, false, false, false, false, false, true, false, true, true, true, true, false, false, false, true, false, true, true, true, true, false, true, false, true, false];
-          {
-            pow_7263();
-            of_pow(7296, false, true, false, true, false, true, true, true, true, false, true, false, false, false, true, true, true, true, false, true, false, false, false, false, false, false, true, true, false, true, true, true);
-          }
-          pow_mod_crc(7296);
-        }
+        lut_entry_113_0();
+        lut_entry_113_1();
       }
       pow_mod_crc(14592) + pow_mod_crc(7296);
     }
   }
 
 
+
+  lemma lut_entry_114_0()
+  ensures [false, false, true, true, true, true, false, true, true, false, false, true, false, true, false, false, false, true, false, false, true, true, true, true, true, false, false, true, true, false, true, false] == pow_mod_crc(14720);
+  {
+    pow_14687();
+    of_pow(14720, false, true, false, true, true, false, false, true, true, true, true, true, false, false, true, false, false, false, true, false, true, false, false, true, true, false, true, true, true, true, false, false);
+  }
+
+  lemma lut_entry_114_1()
+  ensures [true, false, false, true, true, true, false, true, true, false, true, false, true, true, true, true, false, false, false, true, false, true, true, true, true, false, true, true, true, false, true, true] == pow_mod_crc(7360);
+  {
+    pow_7327();
+    of_pow(7360, true, true, false, true, true, true, false, true, true, true, true, false, true, false, false, false, true, true, true, true, false, true, false, true, true, false, true, true, true, false, false, true);
+  }
 
   lemma lut_entry_114()
   ensures bits_of_int(lut[114] as int, 64)
@@ -4678,28 +4692,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, true, true, false, true, true, false, false, true, false, true, false, false, false, true, false, false, true, true, true, true, true, false, false, true, true, false, true, false]+[true, false, false, true, true, true, false, true, true, false, true, false, true, true, true, true, false, false, false, true, false, true, true, true, true, false, true, true, true, false, true, true];
       {
-        calc {
-          [false, false, true, true, true, true, false, true, true, false, false, true, false, true, false, false, false, true, false, false, true, true, true, true, true, false, false, true, true, false, true, false];
-          {
-            pow_14687();
-            of_pow(14720, false, true, false, true, true, false, false, true, true, true, true, true, false, false, true, false, false, false, true, false, true, false, false, true, true, false, true, true, true, true, false, false);
-          }
-          pow_mod_crc(14720);
-        }
-        calc {
-          [true, false, false, true, true, true, false, true, true, false, true, false, true, true, true, true, false, false, false, true, false, true, true, true, true, false, true, true, true, false, true, true];
-          {
-            pow_7327();
-            of_pow(7360, true, true, false, true, true, true, false, true, true, true, true, false, true, false, false, false, true, true, true, true, false, true, false, true, true, false, true, true, true, false, false, true);
-          }
-          pow_mod_crc(7360);
-        }
+        lut_entry_114_0();
+        lut_entry_114_1();
       }
       pow_mod_crc(14720) + pow_mod_crc(7360);
     }
   }
 
 
+
+  lemma lut_entry_115_0()
+  ensures [false, false, true, true, false, true, true, true, true, false, true, true, false, false, false, false, true, false, false, true, true, true, false, false, true, false, true, true, false, true, true, false] == pow_mod_crc(14848);
+  {
+    pow_14815();
+    of_pow(14848, false, true, true, false, true, true, false, true, false, false, true, true, true, false, false, true, false, false, false, false, true, true, false, true, true, true, true, false, true, true, false, false);
+  }
+
+  lemma lut_entry_115_1()
+  ensures [true, true, false, true, true, true, false, false, false, false, true, true, true, true, true, true, false, true, true, false, true, false, true, false, true, false, false, true, false, true, true, false] == pow_mod_crc(7424);
+  {
+    pow_7391();
+    of_pow(7424, false, true, true, false, true, false, false, true, false, true, false, true, false, true, true, false, true, true, true, true, true, true, false, false, false, false, true, true, true, false, true, true);
+  }
 
   lemma lut_entry_115()
   ensures bits_of_int(lut[115] as int, 64)
@@ -4718,28 +4732,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, false, true, true, true, true, false, true, true, false, false, false, false, true, false, false, true, true, true, false, false, true, false, true, true, false, true, true, false]+[true, true, false, true, true, true, false, false, false, false, true, true, true, true, true, true, false, true, true, false, true, false, true, false, true, false, false, true, false, true, true, false];
       {
-        calc {
-          [false, false, true, true, false, true, true, true, true, false, true, true, false, false, false, false, true, false, false, true, true, true, false, false, true, false, true, true, false, true, true, false];
-          {
-            pow_14815();
-            of_pow(14848, false, true, true, false, true, true, false, true, false, false, true, true, true, false, false, true, false, false, false, false, true, true, false, true, true, true, true, false, true, true, false, false);
-          }
-          pow_mod_crc(14848);
-        }
-        calc {
-          [true, true, false, true, true, true, false, false, false, false, true, true, true, true, true, true, false, true, true, false, true, false, true, false, true, false, false, true, false, true, true, false];
-          {
-            pow_7391();
-            of_pow(7424, false, true, true, false, true, false, false, true, false, true, false, true, false, true, true, false, true, true, true, true, true, true, false, false, false, false, true, true, true, false, true, true);
-          }
-          pow_mod_crc(7424);
-        }
+        lut_entry_115_0();
+        lut_entry_115_1();
       }
       pow_mod_crc(14848) + pow_mod_crc(7424);
     }
   }
 
 
+
+  lemma lut_entry_116_0()
+  ensures [false, false, false, false, true, false, false, true, true, true, false, false, false, false, false, false, true, true, true, false, true, false, false, false, true, true, true, false, true, true, false, false] == pow_mod_crc(14976);
+  {
+    pow_14943();
+    of_pow(14976, false, false, true, true, false, true, true, true, false, false, false, true, false, true, true, true, false, false, false, false, false, false, true, true, true, false, false, true, false, false, false, false);
+  }
+
+  lemma lut_entry_116_1()
+  ensures [false, false, true, true, false, true, false, false, false, false, false, false, false, true, true, true, true, true, false, false, false, true, true, true, true, true, false, false, false, true, false, true] == pow_mod_crc(7488);
+  {
+    pow_7455();
+    of_pow(7488, true, false, true, false, false, false, true, true, true, true, true, false, false, false, true, true, true, true, true, false, false, false, false, false, false, false, true, false, true, true, false, false);
+  }
 
   lemma lut_entry_116()
   ensures bits_of_int(lut[116] as int, 64)
@@ -4758,28 +4772,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, false, true, false, false, true, true, true, false, false, false, false, false, false, true, true, true, false, true, false, false, false, true, true, true, false, true, true, false, false]+[false, false, true, true, false, true, false, false, false, false, false, false, false, true, true, true, true, true, false, false, false, true, true, true, true, true, false, false, false, true, false, true];
       {
-        calc {
-          [false, false, false, false, true, false, false, true, true, true, false, false, false, false, false, false, true, true, true, false, true, false, false, false, true, true, true, false, true, true, false, false];
-          {
-            pow_14943();
-            of_pow(14976, false, false, true, true, false, true, true, true, false, false, false, true, false, true, true, true, false, false, false, false, false, false, true, true, true, false, false, true, false, false, false, false);
-          }
-          pow_mod_crc(14976);
-        }
-        calc {
-          [false, false, true, true, false, true, false, false, false, false, false, false, false, true, true, true, true, true, false, false, false, true, true, true, true, true, false, false, false, true, false, true];
-          {
-            pow_7455();
-            of_pow(7488, true, false, true, false, false, false, true, true, true, true, true, false, false, false, true, true, true, true, true, false, false, false, false, false, false, false, true, false, true, true, false, false);
-          }
-          pow_mod_crc(7488);
-        }
+        lut_entry_116_0();
+        lut_entry_116_1();
       }
       pow_mod_crc(14976) + pow_mod_crc(7488);
     }
   }
 
 
+
+  lemma lut_entry_117_0()
+  ensures [false, false, true, true, false, false, true, true, true, false, false, false, false, false, true, true, true, true, false, false, true, false, true, false, true, true, false, false, false, true, true, false] == pow_mod_crc(15104);
+  {
+    pow_15071();
+    of_pow(15104, false, true, true, false, false, false, true, true, false, true, false, true, false, false, true, true, true, true, false, false, false, false, false, true, true, true, false, false, true, true, false, false);
+  }
+
+  lemma lut_entry_117_1()
+  ensures [false, false, false, true, false, false, false, true, false, false, false, true, false, false, false, true, true, false, false, true, true, false, true, true, false, true, false, false, false, false, true, false] == pow_mod_crc(7552);
+  {
+    pow_7519();
+    of_pow(7552, false, true, false, false, false, false, true, false, true, true, false, true, true, false, false, true, true, false, false, false, true, false, false, false, true, false, false, false, true, false, false, false);
+  }
 
   lemma lut_entry_117()
   ensures bits_of_int(lut[117] as int, 64)
@@ -4798,28 +4812,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, false, false, true, true, true, false, false, false, false, false, true, true, true, true, false, false, true, false, true, false, true, true, false, false, false, true, true, false]+[false, false, false, true, false, false, false, true, false, false, false, true, false, false, false, true, true, false, false, true, true, false, true, true, false, true, false, false, false, false, true, false];
       {
-        calc {
-          [false, false, true, true, false, false, true, true, true, false, false, false, false, false, true, true, true, true, false, false, true, false, true, false, true, true, false, false, false, true, true, false];
-          {
-            pow_15071();
-            of_pow(15104, false, true, true, false, false, false, true, true, false, true, false, true, false, false, true, true, true, true, false, false, false, false, false, true, true, true, false, false, true, true, false, false);
-          }
-          pow_mod_crc(15104);
-        }
-        calc {
-          [false, false, false, true, false, false, false, true, false, false, false, true, false, false, false, true, true, false, false, true, true, false, true, true, false, true, false, false, false, false, true, false];
-          {
-            pow_7519();
-            of_pow(7552, false, true, false, false, false, false, true, false, true, true, false, true, true, false, false, true, true, false, false, false, true, false, false, false, true, false, false, false, true, false, false, false);
-          }
-          pow_mod_crc(7552);
-        }
+        lut_entry_117_0();
+        lut_entry_117_1();
       }
       pow_mod_crc(15104) + pow_mod_crc(7552);
     }
   }
 
 
+
+  lemma lut_entry_118_0()
+  ensures [false, false, true, true, true, false, true, false, true, true, true, true, false, false, true, false, false, false, false, true, true, false, true, false, false, false, true, false, false, false, true, true] == pow_mod_crc(15232);
+  {
+    pow_15199();
+    of_pow(15232, true, true, false, false, false, true, false, false, false, true, false, true, true, false, false, false, false, true, false, false, true, true, true, true, false, true, false, true, true, true, false, false);
+  }
+
+  lemma lut_entry_118_1()
+  ensures [false, true, false, true, false, true, true, true, true, true, false, true, true, true, true, false, false, false, true, true, true, true, false, false, true, true, true, false, true, false, true, true] == pow_mod_crc(7616);
+  {
+    pow_7583();
+    of_pow(7616, true, true, false, true, false, true, true, true, false, false, true, true, true, true, false, false, false, true, true, true, true, false, true, true, true, true, true, false, true, false, true, false);
+  }
 
   lemma lut_entry_118()
   ensures bits_of_int(lut[118] as int, 64)
@@ -4838,28 +4852,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, true, false, true, false, true, true, true, true, false, false, true, false, false, false, false, true, true, false, true, false, false, false, true, false, false, false, true, true]+[false, true, false, true, false, true, true, true, true, true, false, true, true, true, true, false, false, false, true, true, true, true, false, false, true, true, true, false, true, false, true, true];
       {
-        calc {
-          [false, false, true, true, true, false, true, false, true, true, true, true, false, false, true, false, false, false, false, true, true, false, true, false, false, false, true, false, false, false, true, true];
-          {
-            pow_15199();
-            of_pow(15232, true, true, false, false, false, true, false, false, false, true, false, true, true, false, false, false, false, true, false, false, true, true, true, true, false, true, false, true, true, true, false, false);
-          }
-          pow_mod_crc(15232);
-        }
-        calc {
-          [false, true, false, true, false, true, true, true, true, true, false, true, true, true, true, false, false, false, true, true, true, true, false, false, true, true, true, false, true, false, true, true];
-          {
-            pow_7583();
-            of_pow(7616, true, true, false, true, false, true, true, true, false, false, true, true, true, true, false, false, false, true, true, true, true, false, true, true, true, true, true, false, true, false, true, false);
-          }
-          pow_mod_crc(7616);
-        }
+        lut_entry_118_0();
+        lut_entry_118_1();
       }
       pow_mod_crc(15232) + pow_mod_crc(7616);
     }
   }
 
 
+
+  lemma lut_entry_119_0()
+  ensures [true, false, false, true, false, true, true, true, false, true, false, false, false, false, true, false, false, true, true, false, false, false, false, true, false, false, true, false, true, true, true, true] == pow_mod_crc(15360);
+  {
+    pow_15327();
+    of_pow(15360, true, true, true, true, false, true, false, false, true, false, false, false, false, true, true, false, false, true, false, false, false, false, true, false, true, true, true, false, true, false, false, true);
+  }
+
+  lemma lut_entry_119_1()
+  ensures [true, true, true, true, false, false, false, true, true, false, false, true, false, true, true, true, true, false, false, false, true, true, true, false, true, true, true, false, true, true, false, false] == pow_mod_crc(7680);
+  {
+    pow_7647();
+    of_pow(7680, false, false, true, true, false, true, true, true, false, true, true, true, false, false, false, true, true, true, true, false, true, false, false, true, true, false, false, false, true, true, true, true);
+  }
 
   lemma lut_entry_119()
   ensures bits_of_int(lut[119] as int, 64)
@@ -4878,28 +4892,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, true, false, true, true, true, false, true, false, false, false, false, true, false, false, true, true, false, false, false, false, true, false, false, true, false, true, true, true, true]+[true, true, true, true, false, false, false, true, true, false, false, true, false, true, true, true, true, false, false, false, true, true, true, false, true, true, true, false, true, true, false, false];
       {
-        calc {
-          [true, false, false, true, false, true, true, true, false, true, false, false, false, false, true, false, false, true, true, false, false, false, false, true, false, false, true, false, true, true, true, true];
-          {
-            pow_15327();
-            of_pow(15360, true, true, true, true, false, true, false, false, true, false, false, false, false, true, true, false, false, true, false, false, false, false, true, false, true, true, true, false, true, false, false, true);
-          }
-          pow_mod_crc(15360);
-        }
-        calc {
-          [true, true, true, true, false, false, false, true, true, false, false, true, false, true, true, true, true, false, false, false, true, true, true, false, true, true, true, false, true, true, false, false];
-          {
-            pow_7647();
-            of_pow(7680, false, false, true, true, false, true, true, true, false, true, true, true, false, false, false, true, true, true, true, false, true, false, false, true, true, false, false, false, true, true, true, true);
-          }
-          pow_mod_crc(7680);
-        }
+        lut_entry_119_0();
+        lut_entry_119_1();
       }
       pow_mod_crc(15360) + pow_mod_crc(7680);
     }
   }
 
 
+
+  lemma lut_entry_120_0()
+  ensures [false, true, false, false, false, true, true, true, true, true, true, false, true, true, true, false, true, true, false, false, true, false, false, false, true, true, false, false, true, false, true, false] == pow_mod_crc(15488);
+  {
+    pow_15455();
+    of_pow(15488, false, true, false, true, false, false, true, true, false, false, false, true, false, false, true, true, false, true, true, true, false, true, true, true, true, true, true, false, false, false, true, false);
+  }
+
+  lemma lut_entry_120_1()
+  ensures [true, true, false, false, true, false, false, true, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true] == pow_mod_crc(7744);
+  {
+    pow_7711();
+    of_pow(7744, true, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, true, false, false, true, false, false, true, true);
+  }
 
   lemma lut_entry_120()
   ensures bits_of_int(lut[120] as int, 64)
@@ -4918,28 +4932,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, false, true, true, true, true, true, true, false, true, true, true, false, true, true, false, false, true, false, false, false, true, true, false, false, true, false, true, false]+[true, true, false, false, true, false, false, true, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true];
       {
-        calc {
-          [false, true, false, false, false, true, true, true, true, true, true, false, true, true, true, false, true, true, false, false, true, false, false, false, true, true, false, false, true, false, true, false];
-          {
-            pow_15455();
-            of_pow(15488, false, true, false, true, false, false, true, true, false, false, false, true, false, false, true, true, false, true, true, true, false, true, true, true, true, true, true, false, false, false, true, false);
-          }
-          pow_mod_crc(15488);
-        }
-        calc {
-          [true, true, false, false, true, false, false, true, false, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, true];
-          {
-            pow_7711();
-            of_pow(7744, true, false, false, false, false, false, false, false, true, true, true, true, true, true, true, true, false, false, false, false, false, false, false, false, true, false, false, true, false, false, true, true);
-          }
-          pow_mod_crc(7744);
-        }
+        lut_entry_120_0();
+        lut_entry_120_1();
       }
       pow_mod_crc(15488) + pow_mod_crc(7744);
     }
   }
 
 
+
+  lemma lut_entry_121_0()
+  ensures [true, false, true, true, false, false, false, true, false, false, true, true, true, true, false, true, true, false, true, false, true, true, false, false, true, false, true, true, true, false, true, true] == pow_mod_crc(15616);
+  {
+    pow_15583();
+    of_pow(15616, true, true, false, true, true, true, false, true, false, false, true, true, false, true, false, true, true, false, true, true, true, true, false, false, true, false, false, false, true, true, false, true);
+  }
+
+  lemma lut_entry_121_1()
+  ensures [true, false, false, true, true, false, true, true, true, true, false, false, false, true, true, true, false, true, false, true, false, true, false, false, false, false, true, false, true, true, false, true] == pow_mod_crc(7808);
+  {
+    pow_7775();
+    of_pow(7808, true, false, true, true, false, true, false, false, false, false, true, false, true, false, true, false, true, true, true, false, false, false, true, true, true, true, false, true, true, false, false, true);
+  }
 
   lemma lut_entry_121()
   ensures bits_of_int(lut[121] as int, 64)
@@ -4958,28 +4972,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, true, false, false, false, true, false, false, true, true, true, true, false, true, true, false, true, false, true, true, false, false, true, false, true, true, true, false, true, true]+[true, false, false, true, true, false, true, true, true, true, false, false, false, true, true, true, false, true, false, true, false, true, false, false, false, false, true, false, true, true, false, true];
       {
-        calc {
-          [true, false, true, true, false, false, false, true, false, false, true, true, true, true, false, true, true, false, true, false, true, true, false, false, true, false, true, true, true, false, true, true];
-          {
-            pow_15583();
-            of_pow(15616, true, true, false, true, true, true, false, true, false, false, true, true, false, true, false, true, true, false, true, true, true, true, false, false, true, false, false, false, true, true, false, true);
-          }
-          pow_mod_crc(15616);
-        }
-        calc {
-          [true, false, false, true, true, false, true, true, true, true, false, false, false, true, true, true, false, true, false, true, false, true, false, false, false, false, true, false, true, true, false, true];
-          {
-            pow_7775();
-            of_pow(7808, true, false, true, true, false, true, false, false, false, false, true, false, true, false, true, false, true, true, true, false, false, false, true, true, true, true, false, true, true, false, false, true);
-          }
-          pow_mod_crc(7808);
-        }
+        lut_entry_121_0();
+        lut_entry_121_1();
       }
       pow_mod_crc(15616) + pow_mod_crc(7808);
     }
   }
 
 
+
+  lemma lut_entry_122_0()
+  ensures [false, true, false, false, true, true, true, true, true, false, false, true, false, true, false, false, true, true, false, true, true, false, true, false, false, true, false, false, true, true, false, true] == pow_mod_crc(15744);
+  {
+    pow_15711();
+    of_pow(15744, true, false, true, true, false, false, true, false, false, true, false, true, true, false, true, true, false, false, true, false, true, false, false, true, true, true, true, true, false, false, true, false);
+  }
+
+  lemma lut_entry_122_1()
+  ensures [true, false, true, true, false, false, true, false, true, true, false, false, false, false, true, true, false, false, true, false, false, true, true, true, true, true, true, true, false, false, false, true] == pow_mod_crc(7872);
+  {
+    pow_7839();
+    of_pow(7872, true, false, false, false, true, true, true, true, true, true, true, false, false, true, false, false, true, true, false, false, false, false, true, true, false, true, false, false, true, true, false, true);
+  }
 
   lemma lut_entry_122()
   ensures bits_of_int(lut[122] as int, 64)
@@ -4998,28 +5012,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, true, true, true, true, true, false, false, true, false, true, false, false, true, true, false, true, true, false, true, false, false, true, false, false, true, true, false, true]+[true, false, true, true, false, false, true, false, true, true, false, false, false, false, true, true, false, false, true, false, false, true, true, true, true, true, true, true, false, false, false, true];
       {
-        calc {
-          [false, true, false, false, true, true, true, true, true, false, false, true, false, true, false, false, true, true, false, true, true, false, true, false, false, true, false, false, true, true, false, true];
-          {
-            pow_15711();
-            of_pow(15744, true, false, true, true, false, false, true, false, false, true, false, true, true, false, true, true, false, false, true, false, true, false, false, true, true, true, true, true, false, false, true, false);
-          }
-          pow_mod_crc(15744);
-        }
-        calc {
-          [true, false, true, true, false, false, true, false, true, true, false, false, false, false, true, true, false, false, true, false, false, true, true, true, true, true, true, true, false, false, false, true];
-          {
-            pow_7839();
-            of_pow(7872, true, false, false, false, true, true, true, true, true, true, true, false, false, true, false, false, true, true, false, false, false, false, true, true, false, true, false, false, true, true, false, true);
-          }
-          pow_mod_crc(7872);
-        }
+        lut_entry_122_0();
+        lut_entry_122_1();
       }
       pow_mod_crc(15744) + pow_mod_crc(7872);
     }
   }
 
 
+
+  lemma lut_entry_123_0()
+  ensures [true, false, false, false, false, false, true, false, false, true, true, true, true, false, true, true, false, true, true, true, true, false, true, false, false, true, false, true, true, false, false, true] == pow_mod_crc(15872);
+  {
+    pow_15839();
+    of_pow(15872, true, false, false, true, true, false, true, false, false, true, false, true, true, true, true, false, true, true, false, true, true, true, true, false, false, true, false, false, false, false, false, true);
+  }
+
+  lemma lut_entry_123_1()
+  ensures [false, true, false, true, true, true, false, false, true, false, false, false, true, false, true, false, false, false, false, true, true, true, true, false, true, false, false, false, false, true, false, false] == pow_mod_crc(7936);
+  {
+    pow_7903();
+    of_pow(7936, false, false, true, false, false, false, false, true, false, true, true, true, true, false, false, false, false, true, false, true, false, false, false, true, false, false, true, true, true, false, true, false);
+  }
 
   lemma lut_entry_123()
   ensures bits_of_int(lut[123] as int, 64)
@@ -5038,28 +5052,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, false, false, false, true, false, false, true, true, true, true, false, true, true, false, true, true, true, true, false, true, false, false, true, false, true, true, false, false, true]+[false, true, false, true, true, true, false, false, true, false, false, false, true, false, true, false, false, false, false, true, true, true, true, false, true, false, false, false, false, true, false, false];
       {
-        calc {
-          [true, false, false, false, false, false, true, false, false, true, true, true, true, false, true, true, false, true, true, true, true, false, true, false, false, true, false, true, true, false, false, true];
-          {
-            pow_15839();
-            of_pow(15872, true, false, false, true, true, false, true, false, false, true, false, true, true, true, true, false, true, true, false, true, true, true, true, false, false, true, false, false, false, false, false, true);
-          }
-          pow_mod_crc(15872);
-        }
-        calc {
-          [false, true, false, true, true, true, false, false, true, false, false, false, true, false, true, false, false, false, false, true, true, true, true, false, true, false, false, false, false, true, false, false];
-          {
-            pow_7903();
-            of_pow(7936, false, false, true, false, false, false, false, true, false, true, true, true, true, false, false, false, false, true, false, true, false, false, false, true, false, false, true, true, true, false, true, false);
-          }
-          pow_mod_crc(7936);
-        }
+        lut_entry_123_0();
+        lut_entry_123_1();
       }
       pow_mod_crc(15872) + pow_mod_crc(7936);
     }
   }
 
 
+
+  lemma lut_entry_124_0()
+  ensures [true, false, true, true, true, false, true, false, false, false, false, false, true, false, false, true, true, true, false, false, false, true, true, false, true, false, true, false, false, true, false, true] == pow_mod_crc(16000);
+  {
+    pow_15967();
+    of_pow(16000, true, false, true, false, false, true, false, true, false, true, true, false, false, false, true, true, true, false, false, true, false, false, false, false, false, true, false, true, true, true, false, true);
+  }
+
+  lemma lut_entry_124_1()
+  ensures [true, false, false, false, true, false, false, false, false, false, true, true, true, true, true, true, true, false, false, true, true, false, false, true, true, true, true, true, true, false, true, true] == pow_mod_crc(8000);
+  {
+    pow_7967();
+    of_pow(8000, true, true, false, true, true, true, true, true, true, false, false, true, true, false, false, true, true, true, true, true, true, true, false, false, false, false, false, true, false, false, false, true);
+  }
 
   lemma lut_entry_124()
   ensures bits_of_int(lut[124] as int, 64)
@@ -5078,28 +5092,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, true, true, false, true, false, false, false, false, false, true, false, false, true, true, true, false, false, false, true, true, false, true, false, true, false, false, true, false, true]+[true, false, false, false, true, false, false, false, false, false, true, true, true, true, true, true, true, false, false, true, true, false, false, true, true, true, true, true, true, false, true, true];
       {
-        calc {
-          [true, false, true, true, true, false, true, false, false, false, false, false, true, false, false, true, true, true, false, false, false, true, true, false, true, false, true, false, false, true, false, true];
-          {
-            pow_15967();
-            of_pow(16000, true, false, true, false, false, true, false, true, false, true, true, false, false, false, true, true, true, false, false, true, false, false, false, false, false, true, false, true, true, true, false, true);
-          }
-          pow_mod_crc(16000);
-        }
-        calc {
-          [true, false, false, false, true, false, false, false, false, false, true, true, true, true, true, true, true, false, false, true, true, false, false, true, true, true, true, true, true, false, true, true];
-          {
-            pow_7967();
-            of_pow(8000, true, true, false, true, true, true, true, true, true, false, false, true, true, false, false, true, true, true, true, true, true, true, false, false, false, false, false, true, false, false, false, true);
-          }
-          pow_mod_crc(8000);
-        }
+        lut_entry_124_0();
+        lut_entry_124_1();
       }
       pow_mod_crc(16000) + pow_mod_crc(8000);
     }
   }
 
 
+
+  lemma lut_entry_125_0()
+  ensures [false, true, true, true, false, false, true, false, true, true, true, true, true, false, true, true, true, false, true, true, false, false, true, true, true, false, true, false, false, false, true, false] == pow_mod_crc(16128);
+  {
+    pow_16095();
+    of_pow(16128, false, true, false, false, false, true, false, true, true, true, false, false, true, true, false, true, true, true, false, true, true, true, true, true, false, true, false, false, true, true, true, false);
+  }
+
+  lemma lut_entry_125_1()
+  ensures [false, true, true, true, true, false, false, true, true, true, false, false, true, false, false, false, false, false, true, true, false, true, false, true, false, false, false, false, false, true, true, true] == pow_mod_crc(8064);
+  {
+    pow_8031();
+    of_pow(8064, true, true, true, false, false, false, false, false, true, false, true, false, true, true, false, false, false, false, false, true, false, false, true, true, true, false, false, true, true, true, true, false);
+  }
 
   lemma lut_entry_125()
   ensures bits_of_int(lut[125] as int, 64)
@@ -5118,28 +5132,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, true, false, false, true, false, true, true, true, true, true, false, true, true, true, false, true, true, false, false, true, true, true, false, true, false, false, false, true, false]+[false, true, true, true, true, false, false, true, true, true, false, false, true, false, false, false, false, false, true, true, false, true, false, true, false, false, false, false, false, true, true, true];
       {
-        calc {
-          [false, true, true, true, false, false, true, false, true, true, true, true, true, false, true, true, true, false, true, true, false, false, true, true, true, false, true, false, false, false, true, false];
-          {
-            pow_16095();
-            of_pow(16128, false, true, false, false, false, true, false, true, true, true, false, false, true, true, false, true, true, true, false, true, true, true, true, true, false, true, false, false, true, true, true, false);
-          }
-          pow_mod_crc(16128);
-        }
-        calc {
-          [false, true, true, true, true, false, false, true, true, true, false, false, true, false, false, false, false, false, true, true, false, true, false, true, false, false, false, false, false, true, true, true];
-          {
-            pow_8031();
-            of_pow(8064, true, true, true, false, false, false, false, false, true, false, true, false, true, true, false, false, false, false, false, true, false, false, true, true, true, false, false, true, true, true, true, false);
-          }
-          pow_mod_crc(8064);
-        }
+        lut_entry_125_0();
+        lut_entry_125_1();
       }
       pow_mod_crc(16128) + pow_mod_crc(8064);
     }
   }
 
 
+
+  lemma lut_entry_126_0()
+  ensures [true, true, false, false, false, false, false, false, true, false, false, false, true, true, false, false, false, true, false, true, true, true, true, true, false, false, true, true, false, true, false, true] == pow_mod_crc(16256);
+  {
+    pow_16223();
+    of_pow(16256, true, false, true, false, true, true, false, false, true, true, true, true, true, false, true, false, false, false, true, true, false, false, false, true, false, false, false, false, false, false, true, true);
+  }
+
+  lemma lut_entry_126_1()
+  ensures [true, false, false, false, false, false, true, false, false, false, false, true, false, true, true, true, true, true, false, false, false, true, false, false, false, false, true, true, false, true, true, false] == pow_mod_crc(8128);
+  {
+    pow_8095();
+    of_pow(8128, false, true, true, false, true, true, false, false, false, false, true, false, false, false, true, true, true, true, true, false, true, false, false, false, false, true, false, false, false, false, false, true);
+  }
 
   lemma lut_entry_126()
   ensures bits_of_int(lut[126] as int, 64)
@@ -5158,28 +5172,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, false, false, false, false, false, true, false, false, false, true, true, false, false, false, true, false, true, true, true, true, true, false, false, true, true, false, true, false, true]+[true, false, false, false, false, false, true, false, false, false, false, true, false, true, true, true, true, true, false, false, false, true, false, false, false, false, true, true, false, true, true, false];
       {
-        calc {
-          [true, true, false, false, false, false, false, false, true, false, false, false, true, true, false, false, false, true, false, true, true, true, true, true, false, false, true, true, false, true, false, true];
-          {
-            pow_16223();
-            of_pow(16256, true, false, true, false, true, true, false, false, true, true, true, true, true, false, true, false, false, false, true, true, false, false, false, true, false, false, false, false, false, false, true, true);
-          }
-          pow_mod_crc(16256);
-        }
-        calc {
-          [true, false, false, false, false, false, true, false, false, false, false, true, false, true, true, true, true, true, false, false, false, true, false, false, false, false, true, true, false, true, true, false];
-          {
-            pow_8095();
-            of_pow(8128, false, true, true, false, true, true, false, false, false, false, true, false, false, false, true, true, true, true, true, false, true, false, false, false, false, true, false, false, false, false, false, true);
-          }
-          pow_mod_crc(8128);
-        }
+        lut_entry_126_0();
+        lut_entry_126_1();
       }
       pow_mod_crc(16256) + pow_mod_crc(8128);
     }
   }
 
 
+
+  lemma lut_entry_127_0()
+  ensures [true, false, true, false, true, true, false, false, true, false, false, false, false, true, true, false, true, true, false, true, true, false, false, false, true, false, true, false, false, true, false, true] == pow_mod_crc(16384);
+  {
+    pow_16351();
+    of_pow(16384, true, false, true, false, false, true, false, true, false, false, false, true, true, false, true, true, false, true, true, false, false, false, false, true, false, false, true, true, false, true, false, true);
+  }
+
+  lemma lut_entry_127_1()
+  ensures [false, true, false, true, true, true, true, true, false, true, true, false, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, false, true, false, false, false] == pow_mod_crc(8192);
+  {
+    pow_8159();
+    of_pow(8192, false, false, false, true, false, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, false, true, true, false, true, true, true, true, true, false, true, false);
+  }
 
   lemma lut_entry_127()
   ensures bits_of_int(lut[127] as int, 64)
@@ -5198,28 +5212,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, false, true, true, false, false, true, false, false, false, false, true, true, false, true, true, false, true, true, false, false, false, true, false, true, false, false, true, false, true]+[false, true, false, true, true, true, true, true, false, true, true, false, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, false, true, false, false, false];
       {
-        calc {
-          [true, false, true, false, true, true, false, false, true, false, false, false, false, true, true, false, true, true, false, true, true, false, false, false, true, false, true, false, false, true, false, true];
-          {
-            pow_16351();
-            of_pow(16384, true, false, true, false, false, true, false, true, false, false, false, true, true, false, true, true, false, true, true, false, false, false, false, true, false, false, true, true, false, true, false, true);
-          }
-          pow_mod_crc(16384);
-        }
-        calc {
-          [false, true, false, true, true, true, true, true, false, true, true, false, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, false, true, false, false, false];
-          {
-            pow_8159();
-            of_pow(8192, false, false, false, true, false, true, true, true, false, false, false, false, false, false, false, false, false, true, true, true, false, true, true, false, true, true, true, true, true, false, true, false);
-          }
-          pow_mod_crc(8192);
-        }
+        lut_entry_127_0();
+        lut_entry_127_1();
       }
       pow_mod_crc(16384) + pow_mod_crc(8192);
     }
   }
 
 
+
+  lemma lut_entry_128_0()
+  ensures [false, true, false, false, true, true, false, true, true, true, true, true, false, false, true, false, true, false, false, true, true, false, true, true, true, true, true, true, true, false, true, true] == pow_mod_crc(16512);
+  {
+    pow_16479();
+    of_pow(16512, true, true, false, true, true, true, true, true, true, true, false, true, true, false, false, true, false, true, false, false, true, true, true, true, true, false, true, true, false, false, true, false);
+  }
+
+  lemma lut_entry_128_1()
+  ensures [false, false, false, true, true, false, true, false, false, true, false, false, false, false, true, false, true, false, false, false, true, true, false, false, false, true, true, true, true, true, true, true] == pow_mod_crc(8256);
+  {
+    pow_8223();
+    of_pow(8256, true, true, true, true, true, true, true, false, false, false, true, true, false, false, false, true, false, true, false, false, false, false, true, false, false, true, false, true, true, false, false, false);
+  }
 
   lemma lut_entry_128()
   ensures bits_of_int(lut[128] as int, 64)
@@ -5238,28 +5252,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, true, true, false, true, true, true, true, true, false, false, true, false, true, false, false, true, true, false, true, true, true, true, true, true, true, false, true, true]+[false, false, false, true, true, false, true, false, false, true, false, false, false, false, true, false, true, false, false, false, true, true, false, false, false, true, true, true, true, true, true, true];
       {
-        calc {
-          [false, true, false, false, true, true, false, true, true, true, true, true, false, false, true, false, true, false, false, true, true, false, true, true, true, true, true, true, true, false, true, true];
-          {
-            pow_16479();
-            of_pow(16512, true, true, false, true, true, true, true, true, true, true, false, true, true, false, false, true, false, true, false, false, true, true, true, true, true, false, true, true, false, false, true, false);
-          }
-          pow_mod_crc(16512);
-        }
-        calc {
-          [false, false, false, true, true, false, true, false, false, true, false, false, false, false, true, false, true, false, false, false, true, true, false, false, false, true, true, true, true, true, true, true];
-          {
-            pow_8223();
-            of_pow(8256, true, true, true, true, true, true, true, false, false, false, true, true, false, false, false, true, false, true, false, false, false, false, true, false, false, true, false, true, true, false, false, false);
-          }
-          pow_mod_crc(8256);
-        }
+        lut_entry_128_0();
+        lut_entry_128_1();
       }
       pow_mod_crc(16512) + pow_mod_crc(8256);
     }
   }
 
 
+
+  lemma lut_entry_129_0()
+  ensures [true, true, false, true, false, true, true, false, false, false, false, true, false, false, false, true, false, true, false, false, true, true, true, true, false, false, false, false, false, false, false, true] == pow_mod_crc(16640);
+  {
+    pow_16607();
+    of_pow(16640, true, false, false, false, false, false, false, false, true, true, true, true, false, false, true, false, true, false, false, false, true, false, false, false, false, true, true, false, true, false, true, true);
+  }
+
+  lemma lut_entry_129_1()
+  ensures [true, true, false, false, true, false, false, false, false, false, true, false, true, false, true, true, true, false, true, true, false, false, true, false, false, false, true, false, false, false, true, false] == pow_mod_crc(8320);
+  {
+    pow_8287();
+    of_pow(8320, false, true, false, false, false, true, false, false, false, true, false, false, true, true, false, true, true, true, false, true, false, true, false, false, false, false, false, true, false, false, true, true);
+  }
 
   lemma lut_entry_129()
   ensures bits_of_int(lut[129] as int, 64)
@@ -5278,28 +5292,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, false, true, true, false, false, false, false, true, false, false, false, true, false, true, false, false, true, true, true, true, false, false, false, false, false, false, false, true]+[true, true, false, false, true, false, false, false, false, false, true, false, true, false, true, true, true, false, true, true, false, false, true, false, false, false, true, false, false, false, true, false];
       {
-        calc {
-          [true, true, false, true, false, true, true, false, false, false, false, true, false, false, false, true, false, true, false, false, true, true, true, true, false, false, false, false, false, false, false, true];
-          {
-            pow_16607();
-            of_pow(16640, true, false, false, false, false, false, false, false, true, true, true, true, false, false, true, false, true, false, false, false, true, false, false, false, false, true, true, false, true, false, true, true);
-          }
-          pow_mod_crc(16640);
-        }
-        calc {
-          [true, true, false, false, true, false, false, false, false, false, true, false, true, false, true, true, true, false, true, true, false, false, true, false, false, false, true, false, false, false, true, false];
-          {
-            pow_8287();
-            of_pow(8320, false, true, false, false, false, true, false, false, false, true, false, false, true, true, false, true, true, true, false, true, false, true, false, false, false, false, false, true, false, false, true, true);
-          }
-          pow_mod_crc(8320);
-        }
+        lut_entry_129_0();
+        lut_entry_129_1();
       }
       pow_mod_crc(16640) + pow_mod_crc(8320);
     }
   }
 
 
+
+  lemma lut_entry_130_0()
+  ensures [false, true, false, true, false, true, true, false, false, true, false, true, true, false, false, true, false, true, true, false, true, false, false, true, true, true, true, false, false, true, true, false] == pow_mod_crc(16768);
+  {
+    pow_16735();
+    of_pow(16768, false, true, true, false, false, true, true, true, true, false, false, true, false, true, true, false, true, false, false, true, true, false, true, false, false, true, true, false, true, false, true, false);
+  }
+
+  lemma lut_entry_130_1()
+  ensures [false, false, false, false, false, true, false, true, true, true, false, false, true, true, true, false, true, true, false, false, false, false, false, true, true, false, true, true, false, false, false, false] == pow_mod_crc(8384);
+  {
+    pow_8351();
+    of_pow(8384, false, false, false, false, true, true, false, true, true, false, false, false, false, false, true, true, false, true, true, true, false, false, true, true, true, false, true, false, false, false, false, false);
+  }
 
   lemma lut_entry_130()
   ensures bits_of_int(lut[130] as int, 64)
@@ -5318,28 +5332,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, false, true, true, false, false, true, false, true, true, false, false, true, false, true, true, false, true, false, false, true, true, true, true, false, false, true, true, false]+[false, false, false, false, false, true, false, true, true, true, false, false, true, true, true, false, true, true, false, false, false, false, false, true, true, false, true, true, false, false, false, false];
       {
-        calc {
-          [false, true, false, true, false, true, true, false, false, true, false, true, true, false, false, true, false, true, true, false, true, false, false, true, true, true, true, false, false, true, true, false];
-          {
-            pow_16735();
-            of_pow(16768, false, true, true, false, false, true, true, true, true, false, false, true, false, true, true, false, true, false, false, true, true, false, true, false, false, true, true, false, true, false, true, false);
-          }
-          pow_mod_crc(16768);
-        }
-        calc {
-          [false, false, false, false, false, true, false, true, true, true, false, false, true, true, true, false, true, true, false, false, false, false, false, true, true, false, true, true, false, false, false, false];
-          {
-            pow_8351();
-            of_pow(8384, false, false, false, false, true, true, false, true, true, false, false, false, false, false, true, true, false, true, true, true, false, false, true, true, true, false, true, false, false, false, false, false);
-          }
-          pow_mod_crc(8384);
-        }
+        lut_entry_130_0();
+        lut_entry_130_1();
       }
       pow_mod_crc(16768) + pow_mod_crc(8384);
     }
   }
 
 
+
+  lemma lut_entry_131_0()
+  ensures [true, true, true, true, false, true, true, true, true, false, true, false, false, false, true, true, false, true, false, true, true, false, false, false, false, true, false, false, false, false, false, false] == pow_mod_crc(16896);
+  {
+    pow_16863();
+    of_pow(16896, false, false, false, false, false, false, true, false, false, false, false, true, true, false, true, false, true, true, false, false, false, true, false, true, true, true, true, false, true, true, true, true);
+  }
+
+  lemma lut_entry_131_1()
+  ensures [true, false, true, false, false, false, true, false, false, true, true, true, true, false, true, false, false, false, true, false, true, true, false, false, true, true, true, true, false, true, true, false] == pow_mod_crc(8448);
+  {
+    pow_8415();
+    of_pow(8448, false, true, true, false, true, true, true, true, false, false, true, true, false, true, false, false, false, true, false, true, true, true, true, false, false, true, false, false, false, true, false, true);
+  }
 
   lemma lut_entry_131()
   ensures bits_of_int(lut[131] as int, 64)
@@ -5358,28 +5372,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, true, false, true, true, true, true, false, true, false, false, false, true, true, false, true, false, true, true, false, false, false, false, true, false, false, false, false, false, false]+[true, false, true, false, false, false, true, false, false, true, true, true, true, false, true, false, false, false, true, false, true, true, false, false, true, true, true, true, false, true, true, false];
       {
-        calc {
-          [true, true, true, true, false, true, true, true, true, false, true, false, false, false, true, true, false, true, false, true, true, false, false, false, false, true, false, false, false, false, false, false];
-          {
-            pow_16863();
-            of_pow(16896, false, false, false, false, false, false, true, false, false, false, false, true, true, false, true, false, true, true, false, false, false, true, false, true, true, true, true, false, true, true, true, true);
-          }
-          pow_mod_crc(16896);
-        }
-        calc {
-          [true, false, true, false, false, false, true, false, false, true, true, true, true, false, true, false, false, false, true, false, true, true, false, false, true, true, true, true, false, true, true, false];
-          {
-            pow_8415();
-            of_pow(8448, false, true, true, false, true, true, true, true, false, false, true, true, false, true, false, false, false, true, false, true, true, true, true, false, false, true, false, false, false, true, false, true);
-          }
-          pow_mod_crc(8448);
-        }
+        lut_entry_131_0();
+        lut_entry_131_1();
       }
       pow_mod_crc(16896) + pow_mod_crc(8448);
     }
   }
 
 
+
+  lemma lut_entry_132_0()
+  ensures [false, true, false, true, true, true, true, true, false, true, false, true, false, false, false, false, true, false, false, false, true, true, false, false, false, false, false, true, false, true, true, true] == pow_mod_crc(17024);
+  {
+    pow_16991();
+    of_pow(17024, true, true, true, false, true, false, false, false, false, false, true, true, false, false, false, true, false, false, false, false, true, false, true, false, true, true, true, true, true, false, true, false);
+  }
+
+  lemma lut_entry_132_1()
+  ensures [false, true, true, true, true, false, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, true, true, false, false, true, true, false, false, false] == pow_mod_crc(8512);
+  {
+    pow_8479();
+    of_pow(8512, false, false, false, true, true, false, false, true, true, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, true, false, true, true, true, true, false);
+  }
 
   lemma lut_entry_132()
   ensures bits_of_int(lut[132] as int, 64)
@@ -5398,28 +5412,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, true, true, true, true, false, true, false, true, false, false, false, false, true, false, false, false, true, true, false, false, false, false, false, true, false, true, true, true]+[false, true, true, true, true, false, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, true, true, false, false, true, true, false, false, false];
       {
-        calc {
-          [false, true, false, true, true, true, true, true, false, true, false, true, false, false, false, false, true, false, false, false, true, true, false, false, false, false, false, true, false, true, true, true];
-          {
-            pow_16991();
-            of_pow(17024, true, true, true, false, true, false, false, false, false, false, true, true, false, false, false, true, false, false, false, false, true, false, true, false, true, true, true, true, true, false, true, false);
-          }
-          pow_mod_crc(17024);
-        }
-        calc {
-          [false, true, true, true, true, false, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, true, true, false, false, true, true, false, false, false];
-          {
-            pow_8479();
-            of_pow(8512, false, false, false, true, true, false, false, true, true, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, true, false, true, true, true, true, false);
-          }
-          pow_mod_crc(8512);
-        }
+        lut_entry_132_0();
+        lut_entry_132_1();
       }
       pow_mod_crc(17024) + pow_mod_crc(8512);
     }
   }
 
 
+
+  lemma lut_entry_133_0()
+  ensures [false, false, true, false, false, false, false, false, true, true, false, true, true, false, false, false, true, false, true, false, false, false, true, false, true, false, true, false, true, true, true, false] == pow_mod_crc(17152);
+  {
+    pow_17119();
+    of_pow(17152, false, true, true, true, false, true, false, true, false, true, false, false, false, true, false, true, false, false, false, true, true, false, true, true, false, false, false, false, false, true, false, false);
+  }
+
+  lemma lut_entry_133_1()
+  ensures [false, false, true, false, false, true, true, false, true, true, false, true, true, true, true, false, true, false, false, false, true, false, true, true, true, false, false, false, false, false, true, false] == pow_mod_crc(8576);
+  {
+    pow_8543();
+    of_pow(8576, false, true, false, false, false, false, false, true, true, true, false, true, false, false, false, true, false, true, true, true, true, false, true, true, false, true, true, false, false, true, false, false);
+  }
 
   lemma lut_entry_133()
   ensures bits_of_int(lut[133] as int, 64)
@@ -5438,28 +5452,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, false, false, false, false, false, true, true, false, true, true, false, false, false, true, false, true, false, false, false, true, false, true, false, true, false, true, true, true, false]+[false, false, true, false, false, true, true, false, true, true, false, true, true, true, true, false, true, false, false, false, true, false, true, true, true, false, false, false, false, false, true, false];
       {
-        calc {
-          [false, false, true, false, false, false, false, false, true, true, false, true, true, false, false, false, true, false, true, false, false, false, true, false, true, false, true, false, true, true, true, false];
-          {
-            pow_17119();
-            of_pow(17152, false, true, true, true, false, true, false, true, false, true, false, false, false, true, false, true, false, false, false, true, true, false, true, true, false, false, false, false, false, true, false, false);
-          }
-          pow_mod_crc(17152);
-        }
-        calc {
-          [false, false, true, false, false, true, true, false, true, true, false, true, true, true, true, false, true, false, false, false, true, false, true, true, true, false, false, false, false, false, true, false];
-          {
-            pow_8543();
-            of_pow(8576, false, true, false, false, false, false, false, true, true, true, false, true, false, false, false, true, false, true, true, true, true, false, true, true, false, true, true, false, false, true, false, false);
-          }
-          pow_mod_crc(8576);
-        }
+        lut_entry_133_0();
+        lut_entry_133_1();
       }
       pow_mod_crc(17152) + pow_mod_crc(8576);
     }
   }
 
 
+
+  lemma lut_entry_134_0()
+  ensures [true, true, true, false, true, true, true, true, false, false, false, false, true, false, true, false, false, false, true, false, true, false, false, false, false, true, true, true, false, false, false, true] == pow_mod_crc(17280);
+  {
+    pow_17247();
+    of_pow(17280, true, false, false, false, true, true, true, false, false, false, false, true, false, true, false, false, false, true, false, true, false, false, false, false, true, true, true, true, false, true, true, true);
+  }
+
+  lemma lut_entry_134_1()
+  ensures [false, false, true, false, true, true, false, true, false, false, false, true, false, true, true, false, false, true, false, false, true, true, true, true, true, false, false, true, false, true, false, false] == pow_mod_crc(8640);
+  {
+    pow_8607();
+    of_pow(8640, false, false, true, false, true, false, false, true, true, true, true, true, false, false, true, false, false, true, true, false, true, false, false, false, true, false, true, true, false, true, false, false);
+  }
 
   lemma lut_entry_134()
   ensures bits_of_int(lut[134] as int, 64)
@@ -5478,28 +5492,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, false, true, true, true, true, false, false, false, false, true, false, true, false, false, false, true, false, true, false, false, false, false, true, true, true, false, false, false, true]+[false, false, true, false, true, true, false, true, false, false, false, true, false, true, true, false, false, true, false, false, true, true, true, true, true, false, false, true, false, true, false, false];
       {
-        calc {
-          [true, true, true, false, true, true, true, true, false, false, false, false, true, false, true, false, false, false, true, false, true, false, false, false, false, true, true, true, false, false, false, true];
-          {
-            pow_17247();
-            of_pow(17280, true, false, false, false, true, true, true, false, false, false, false, true, false, true, false, false, false, true, false, true, false, false, false, false, true, true, true, true, false, true, true, true);
-          }
-          pow_mod_crc(17280);
-        }
-        calc {
-          [false, false, true, false, true, true, false, true, false, false, false, true, false, true, true, false, false, true, false, false, true, true, true, true, true, false, false, true, false, true, false, false];
-          {
-            pow_8607();
-            of_pow(8640, false, false, true, false, true, false, false, true, true, true, true, true, false, false, true, false, false, true, true, false, true, false, false, false, true, false, true, true, false, true, false, false);
-          }
-          pow_mod_crc(8640);
-        }
+        lut_entry_134_0();
+        lut_entry_134_1();
       }
       pow_mod_crc(17280) + pow_mod_crc(8640);
     }
   }
 
 
+
+  lemma lut_entry_135_0()
+  ensures [true, false, false, false, false, true, true, true, false, true, true, true, false, false, true, false, false, true, true, true, true, true, false, true, true, true, false, true, false, false, true, true] == pow_mod_crc(17408);
+  {
+    pow_17375();
+    of_pow(17408, true, true, false, false, true, false, true, true, true, false, true, true, true, true, true, false, false, true, false, false, true, true, true, false, true, true, true, false, false, false, false, true);
+  }
+
+  lemma lut_entry_135_1()
+  ensures [true, true, true, false, true, false, false, true, false, true, false, true, true, true, false, true, true, false, true, true, false, false, false, false, true, true, true, true, true, true, true, true] == pow_mod_crc(8704);
+  {
+    pow_8671();
+    of_pow(8704, true, true, true, true, true, true, true, true, false, false, false, false, true, true, false, true, true, false, true, true, true, false, true, false, true, false, false, true, false, true, true, true);
+  }
 
   lemma lut_entry_135()
   ensures bits_of_int(lut[135] as int, 64)
@@ -5518,28 +5532,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, false, false, true, true, true, false, true, true, true, false, false, true, false, false, true, true, true, true, true, false, true, true, true, false, true, false, false, true, true]+[true, true, true, false, true, false, false, true, false, true, false, true, true, true, false, true, true, false, true, true, false, false, false, false, true, true, true, true, true, true, true, true];
       {
-        calc {
-          [true, false, false, false, false, true, true, true, false, true, true, true, false, false, true, false, false, true, true, true, true, true, false, true, true, true, false, true, false, false, true, true];
-          {
-            pow_17375();
-            of_pow(17408, true, true, false, false, true, false, true, true, true, false, true, true, true, true, true, false, false, true, false, false, true, true, true, false, true, true, true, false, false, false, false, true);
-          }
-          pow_mod_crc(17408);
-        }
-        calc {
-          [true, true, true, false, true, false, false, true, false, true, false, true, true, true, false, true, true, false, true, true, false, false, false, false, true, true, true, true, true, true, true, true];
-          {
-            pow_8671();
-            of_pow(8704, true, true, true, true, true, true, true, true, false, false, false, false, true, true, false, true, true, false, true, true, true, false, true, false, true, false, false, true, false, true, true, true);
-          }
-          pow_mod_crc(8704);
-        }
+        lut_entry_135_0();
+        lut_entry_135_1();
       }
       pow_mod_crc(17408) + pow_mod_crc(8704);
     }
   }
 
 
+
+  lemma lut_entry_136_0()
+  ensures [true, false, false, false, false, true, false, false, false, true, true, true, true, false, true, true, true, true, false, false, false, false, false, true, false, true, false, true, true, true, false, false] == pow_mod_crc(17536);
+  {
+    pow_17503();
+    of_pow(17536, false, false, true, true, true, false, true, false, true, false, false, false, false, false, true, true, true, true, false, true, true, true, true, false, false, false, true, false, false, false, false, true);
+  }
+
+  lemma lut_entry_136_1()
+  ensures [false, true, false, true, false, true, false, false, true, true, false, false, false, true, true, false, false, false, false, false, false, false, true, true, true, false, true, true, true, false, false, false] == pow_mod_crc(8768);
+  {
+    pow_8735();
+    of_pow(8768, false, false, false, true, true, true, false, true, true, true, false, false, false, false, false, false, false, true, true, false, false, false, true, true, false, false, true, false, true, false, true, false);
+  }
 
   lemma lut_entry_136()
   ensures bits_of_int(lut[136] as int, 64)
@@ -5558,28 +5572,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, false, false, true, false, false, false, true, true, true, true, false, true, true, true, true, false, false, false, false, false, true, false, true, false, true, true, true, false, false]+[false, true, false, true, false, true, false, false, true, true, false, false, false, true, true, false, false, false, false, false, false, false, true, true, true, false, true, true, true, false, false, false];
       {
-        calc {
-          [true, false, false, false, false, true, false, false, false, true, true, true, true, false, true, true, true, true, false, false, false, false, false, true, false, true, false, true, true, true, false, false];
-          {
-            pow_17503();
-            of_pow(17536, false, false, true, true, true, false, true, false, true, false, false, false, false, false, true, true, true, true, false, true, true, true, true, false, false, false, true, false, false, false, false, true);
-          }
-          pow_mod_crc(17536);
-        }
-        calc {
-          [false, true, false, true, false, true, false, false, true, true, false, false, false, true, true, false, false, false, false, false, false, false, true, true, true, false, true, true, true, false, false, false];
-          {
-            pow_8735();
-            of_pow(8768, false, false, false, true, true, true, false, true, true, true, false, false, false, false, false, false, false, true, true, false, false, false, true, true, false, false, true, false, true, false, true, false);
-          }
-          pow_mod_crc(8768);
-        }
+        lut_entry_136_0();
+        lut_entry_136_1();
       }
       pow_mod_crc(17536) + pow_mod_crc(8768);
     }
   }
 
 
+
+  lemma lut_entry_137_0()
+  ensures [false, true, true, false, false, false, false, true, true, true, true, true, false, false, true, true, true, false, true, true, false, false, true, true, false, false, false, false, false, true, true, true] == pow_mod_crc(17664);
+  {
+    pow_17631();
+    of_pow(17664, true, true, true, false, false, false, false, false, true, true, false, false, true, true, false, true, true, true, false, false, true, true, true, true, true, false, false, false, false, true, true, false);
+  }
+
+  lemma lut_entry_137_1()
+  ensures [true, false, false, false, true, true, true, true, true, false, true, true, true, true, false, false, true, true, true, false, true, true, false, true, false, true, false, false, false, true, false, true] == pow_mod_crc(8832);
+  {
+    pow_8799();
+    of_pow(8832, true, false, true, false, false, false, true, false, true, false, true, true, false, true, true, true, false, false, true, true, true, true, false, true, true, true, true, true, false, false, false, true);
+  }
 
   lemma lut_entry_137()
   ensures bits_of_int(lut[137] as int, 64)
@@ -5598,28 +5612,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, false, false, false, false, true, true, true, true, true, false, false, true, true, true, false, true, true, false, false, true, true, false, false, false, false, false, true, true, true]+[true, false, false, false, true, true, true, true, true, false, true, true, true, true, false, false, true, true, true, false, true, true, false, true, false, true, false, false, false, true, false, true];
       {
-        calc {
-          [false, true, true, false, false, false, false, true, true, true, true, true, false, false, true, true, true, false, true, true, false, false, true, true, false, false, false, false, false, true, true, true];
-          {
-            pow_17631();
-            of_pow(17664, true, true, true, false, false, false, false, false, true, true, false, false, true, true, false, true, true, true, false, false, true, true, true, true, true, false, false, false, false, true, true, false);
-          }
-          pow_mod_crc(17664);
-        }
-        calc {
-          [true, false, false, false, true, true, true, true, true, false, true, true, true, true, false, false, true, true, true, false, true, true, false, true, false, true, false, false, false, true, false, true];
-          {
-            pow_8799();
-            of_pow(8832, true, false, true, false, false, false, true, false, true, false, true, true, false, true, true, true, false, false, true, true, true, true, false, true, true, true, true, true, false, false, false, true);
-          }
-          pow_mod_crc(8832);
-        }
+        lut_entry_137_0();
+        lut_entry_137_1();
       }
       pow_mod_crc(17664) + pow_mod_crc(8832);
     }
   }
 
 
+
+  lemma lut_entry_138_0()
+  ensures [true, false, false, true, true, true, true, false, false, true, true, false, true, false, false, false, false, false, true, true, true, true, false, false, true, false, true, false, false, false, true, false] == pow_mod_crc(17792);
+  {
+    pow_17759();
+    of_pow(17792, false, true, false, false, false, true, false, true, false, false, true, true, true, true, false, false, false, false, false, true, false, true, true, false, false, true, true, true, true, false, false, true);
+  }
+
+  lemma lut_entry_138_1()
+  ensures [false, true, true, false, true, false, false, true, true, true, false, false, true, true, true, true, false, false, true, false, true, false, false, false, false, true, true, false, true, false, false, false] == pow_mod_crc(8896);
+  {
+    pow_8863();
+    of_pow(8896, false, false, false, true, false, true, true, false, false, false, false, true, false, true, false, false, true, true, true, true, false, false, true, true, true, false, false, true, false, true, true, false);
+  }
 
   lemma lut_entry_138()
   ensures bits_of_int(lut[138] as int, 64)
@@ -5638,28 +5652,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, true, true, true, true, false, false, true, true, false, true, false, false, false, false, false, true, true, true, true, false, false, true, false, true, false, false, false, true, false]+[false, true, true, false, true, false, false, true, true, true, false, false, true, true, true, true, false, false, true, false, true, false, false, false, false, true, true, false, true, false, false, false];
       {
-        calc {
-          [true, false, false, true, true, true, true, false, false, true, true, false, true, false, false, false, false, false, true, true, true, true, false, false, true, false, true, false, false, false, true, false];
-          {
-            pow_17759();
-            of_pow(17792, false, true, false, false, false, true, false, true, false, false, true, true, true, true, false, false, false, false, false, true, false, true, true, false, false, true, true, true, true, false, false, true);
-          }
-          pow_mod_crc(17792);
-        }
-        calc {
-          [false, true, true, false, true, false, false, true, true, true, false, false, true, true, true, true, false, false, true, false, true, false, false, false, false, true, true, false, true, false, false, false];
-          {
-            pow_8863();
-            of_pow(8896, false, false, false, true, false, true, true, false, false, false, false, true, false, true, false, false, true, true, true, true, false, false, true, true, true, false, false, true, false, true, true, false);
-          }
-          pow_mod_crc(8896);
-        }
+        lut_entry_138_0();
+        lut_entry_138_1();
       }
       pow_mod_crc(17792) + pow_mod_crc(8896);
     }
   }
 
 
+
+  lemma lut_entry_139_0()
+  ensures [false, false, true, true, true, false, false, false, false, false, true, false, false, true, false, true, true, true, false, true, true, true, true, true, false, true, true, true, true, false, true, true] == pow_mod_crc(17920);
+  {
+    pow_17887();
+    of_pow(17920, true, true, false, true, true, true, true, false, true, true, true, true, true, false, true, true, true, false, true, false, false, true, false, false, false, false, false, true, true, true, false, false);
+  }
+
+  lemma lut_entry_139_1()
+  ensures [false, false, true, true, false, false, true, false, true, false, true, false, false, true, true, true, false, true, false, false, true, true, true, false, false, false, false, true, true, true, true, true] == pow_mod_crc(8960);
+  {
+    pow_8927();
+    of_pow(8960, true, true, true, true, true, false, false, false, false, true, true, true, false, false, true, false, true, true, true, false, false, true, false, true, false, true, false, false, true, true, false, false);
+  }
 
   lemma lut_entry_139()
   ensures bits_of_int(lut[139] as int, 64)
@@ -5678,28 +5692,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, true, false, false, false, false, false, true, false, false, true, false, true, true, true, false, true, true, true, true, true, false, true, true, true, true, false, true, true]+[false, false, true, true, false, false, true, false, true, false, true, false, false, true, true, true, false, true, false, false, true, true, true, false, false, false, false, true, true, true, true, true];
       {
-        calc {
-          [false, false, true, true, true, false, false, false, false, false, true, false, false, true, false, true, true, true, false, true, true, true, true, true, false, true, true, true, true, false, true, true];
-          {
-            pow_17887();
-            of_pow(17920, true, true, false, true, true, true, true, false, true, true, true, true, true, false, true, true, true, false, true, false, false, true, false, false, false, false, false, true, true, true, false, false);
-          }
-          pow_mod_crc(17920);
-        }
-        calc {
-          [false, false, true, true, false, false, true, false, true, false, true, false, false, true, true, true, false, true, false, false, true, true, true, false, false, false, false, true, true, true, true, true];
-          {
-            pow_8927();
-            of_pow(8960, true, true, true, true, true, false, false, false, false, true, true, true, false, false, true, false, true, true, true, false, false, true, false, true, false, true, false, false, true, true, false, false);
-          }
-          pow_mod_crc(8960);
-        }
+        lut_entry_139_0();
+        lut_entry_139_1();
       }
       pow_mod_crc(17920) + pow_mod_crc(8960);
     }
   }
 
 
+
+  lemma lut_entry_140_0()
+  ensures [true, false, false, false, true, false, false, true, false, true, true, true, false, true, true, true, false, true, true, true, true, true, false, false, true, false, false, false, false, true, true, false] == pow_mod_crc(18048);
+  {
+    pow_18015();
+    of_pow(18048, false, true, true, false, false, false, false, true, false, false, true, true, true, true, true, false, true, true, true, false, true, true, true, false, true, false, false, true, false, false, false, true);
+  }
+
+  lemma lut_entry_140_1()
+  ensures [true, true, false, false, true, false, true, true, true, true, false, false, true, false, false, true, true, false, false, true, false, true, false, false, false, true, true, true, true, false, false, true] == pow_mod_crc(9024);
+  {
+    pow_8991();
+    of_pow(9024, true, false, false, true, true, true, true, false, false, false, true, false, true, false, false, true, true, false, false, true, false, false, true, true, true, true, false, true, false, false, true, true);
+  }
 
   lemma lut_entry_140()
   ensures bits_of_int(lut[140] as int, 64)
@@ -5718,28 +5732,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, false, true, false, false, true, false, true, true, true, false, true, true, true, false, true, true, true, true, true, false, false, true, false, false, false, false, true, true, false]+[true, true, false, false, true, false, true, true, true, true, false, false, true, false, false, true, true, false, false, true, false, true, false, false, false, true, true, true, true, false, false, true];
       {
-        calc {
-          [true, false, false, false, true, false, false, true, false, true, true, true, false, true, true, true, false, true, true, true, true, true, false, false, true, false, false, false, false, true, true, false];
-          {
-            pow_18015();
-            of_pow(18048, false, true, true, false, false, false, false, true, false, false, true, true, true, true, true, false, true, true, true, false, true, true, true, false, true, false, false, true, false, false, false, true);
-          }
-          pow_mod_crc(18048);
-        }
-        calc {
-          [true, true, false, false, true, false, true, true, true, true, false, false, true, false, false, true, true, false, false, true, false, true, false, false, false, true, true, true, true, false, false, true];
-          {
-            pow_8991();
-            of_pow(9024, true, false, false, true, true, true, true, false, false, false, true, false, true, false, false, true, true, false, false, true, false, false, true, true, true, true, false, true, false, false, true, true);
-          }
-          pow_mod_crc(9024);
-        }
+        lut_entry_140_0();
+        lut_entry_140_1();
       }
       pow_mod_crc(18048) + pow_mod_crc(9024);
     }
   }
 
 
+
+  lemma lut_entry_141_0()
+  ensures [false, false, true, false, true, false, false, false, true, false, false, false, true, false, true, false, true, true, true, true, false, true, false, true, true, false, true, true, true, false, true, true] == pow_mod_crc(18176);
+  {
+    pow_18143();
+    of_pow(18176, true, true, false, true, true, true, false, true, true, false, true, false, true, true, true, true, false, true, false, true, false, false, false, true, false, false, false, true, false, true, false, false);
+  }
+
+  lemma lut_entry_141_1()
+  ensures [false, false, true, true, true, true, true, true, true, false, false, true, false, true, true, true, true, false, false, false, false, false, true, false, false, true, true, true, true, false, false, false] == pow_mod_crc(9088);
+  {
+    pow_9055();
+    of_pow(9088, false, false, false, true, true, true, true, false, false, true, false, false, false, false, false, true, true, true, true, false, true, false, false, true, true, true, true, true, true, true, false, false);
+  }
 
   lemma lut_entry_141()
   ensures bits_of_int(lut[141] as int, 64)
@@ -5758,28 +5772,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, false, true, false, false, false, true, false, false, false, true, false, true, false, true, true, true, true, false, true, false, true, true, false, true, true, true, false, true, true]+[false, false, true, true, true, true, true, true, true, false, false, true, false, true, true, true, true, false, false, false, false, false, true, false, false, true, true, true, true, false, false, false];
       {
-        calc {
-          [false, false, true, false, true, false, false, false, true, false, false, false, true, false, true, false, true, true, true, true, false, true, false, true, true, false, true, true, true, false, true, true];
-          {
-            pow_18143();
-            of_pow(18176, true, true, false, true, true, true, false, true, true, false, true, false, true, true, true, true, false, true, false, true, false, false, false, true, false, false, false, true, false, true, false, false);
-          }
-          pow_mod_crc(18176);
-        }
-        calc {
-          [false, false, true, true, true, true, true, true, true, false, false, true, false, true, true, true, true, false, false, false, false, false, true, false, false, true, true, true, true, false, false, false];
-          {
-            pow_9055();
-            of_pow(9088, false, false, false, true, true, true, true, false, false, true, false, false, false, false, false, true, true, true, true, false, true, false, false, true, true, true, true, true, true, true, false, false);
-          }
-          pow_mod_crc(9088);
-        }
+        lut_entry_141_0();
+        lut_entry_141_1();
       }
       pow_mod_crc(18176) + pow_mod_crc(9088);
     }
   }
 
 
+
+  lemma lut_entry_142_0()
+  ensures [false, false, true, false, false, true, false, false, true, false, false, false, true, false, true, true, true, false, true, true, true, false, false, false, true, true, true, true, true, false, false, false] == pow_mod_crc(18304);
+  {
+    pow_18271();
+    of_pow(18304, false, false, false, true, true, true, true, true, false, false, false, true, true, true, false, true, true, true, false, true, false, false, false, true, false, false, true, false, false, true, false, false);
+  }
+
+  lemma lut_entry_142_1()
+  ensures [false, false, true, true, true, true, false, false, true, true, true, false, true, false, true, true, true, true, false, true, false, true, true, true, true, true, false, true, false, true, true, false] == pow_mod_crc(9152);
+  {
+    pow_9119();
+    of_pow(9152, false, true, true, false, true, false, true, true, true, true, true, false, true, false, true, true, true, true, false, true, false, true, true, true, false, false, true, true, true, true, false, false);
+  }
 
   lemma lut_entry_142()
   ensures bits_of_int(lut[142] as int, 64)
@@ -5798,28 +5812,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, false, false, true, false, false, true, false, false, false, true, false, true, true, true, false, true, true, true, false, false, false, true, true, true, true, true, false, false, false]+[false, false, true, true, true, true, false, false, true, true, true, false, true, false, true, true, true, true, false, true, false, true, true, true, true, true, false, true, false, true, true, false];
       {
-        calc {
-          [false, false, true, false, false, true, false, false, true, false, false, false, true, false, true, true, true, false, true, true, true, false, false, false, true, true, true, true, true, false, false, false];
-          {
-            pow_18271();
-            of_pow(18304, false, false, false, true, true, true, true, true, false, false, false, true, true, true, false, true, true, true, false, true, false, false, false, true, false, false, true, false, false, true, false, false);
-          }
-          pow_mod_crc(18304);
-        }
-        calc {
-          [false, false, true, true, true, true, false, false, true, true, true, false, true, false, true, true, true, true, false, true, false, true, true, true, true, true, false, true, false, true, true, false];
-          {
-            pow_9119();
-            of_pow(9152, false, true, true, false, true, false, true, true, true, true, true, false, true, false, true, true, true, true, false, true, false, true, true, true, false, false, true, true, true, true, false, false);
-          }
-          pow_mod_crc(9152);
-        }
+        lut_entry_142_0();
+        lut_entry_142_1();
       }
       pow_mod_crc(18304) + pow_mod_crc(9152);
     }
   }
 
 
+
+  lemma lut_entry_143_0()
+  ensures [true, false, false, false, false, true, false, true, true, true, false, true, false, true, true, false, false, false, true, true, true, false, true, true, false, true, true, true, true, true, false, true] == pow_mod_crc(18432);
+  {
+    pow_18399();
+    of_pow(18432, true, false, true, true, true, true, true, false, true, true, false, true, true, true, false, false, false, true, true, false, true, false, true, true, true, false, true, false, false, false, false, true);
+  }
+
+  lemma lut_entry_143_1()
+  ensures [false, true, false, false, true, false, true, true, false, false, true, false, false, true, true, true, false, false, false, true, true, false, true, true, false, true, true, false, false, false, false, true] == pow_mod_crc(9216);
+  {
+    pow_9183();
+    of_pow(9216, true, false, false, false, false, true, true, false, true, true, false, true, true, false, false, false, true, true, true, false, false, true, false, false, true, true, false, true, false, false, true, false);
+  }
 
   lemma lut_entry_143()
   ensures bits_of_int(lut[143] as int, 64)
@@ -5838,28 +5852,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, false, false, true, false, true, true, true, false, true, false, true, true, false, false, false, true, true, true, false, true, true, false, true, true, true, true, true, false, true]+[false, true, false, false, true, false, true, true, false, false, true, false, false, true, true, true, false, false, false, true, true, false, true, true, false, true, true, false, false, false, false, true];
       {
-        calc {
-          [true, false, false, false, false, true, false, true, true, true, false, true, false, true, true, false, false, false, true, true, true, false, true, true, false, true, true, true, true, true, false, true];
-          {
-            pow_18399();
-            of_pow(18432, true, false, true, true, true, true, true, false, true, true, false, true, true, true, false, false, false, true, true, false, true, false, true, true, true, false, true, false, false, false, false, true);
-          }
-          pow_mod_crc(18432);
-        }
-        calc {
-          [false, true, false, false, true, false, true, true, false, false, true, false, false, true, true, true, false, false, false, true, true, false, true, true, false, true, true, false, false, false, false, true];
-          {
-            pow_9183();
-            of_pow(9216, true, false, false, false, false, true, true, false, true, true, false, true, true, false, false, false, true, true, true, false, false, true, false, false, true, true, false, true, false, false, true, false);
-          }
-          pow_mod_crc(9216);
-        }
+        lut_entry_143_0();
+        lut_entry_143_1();
       }
       pow_mod_crc(18432) + pow_mod_crc(9216);
     }
   }
 
 
+
+  lemma lut_entry_144_0()
+  ensures [false, true, true, true, true, true, true, true, true, true, true, true, false, false, false, true, false, false, false, false, false, true, false, true, false, false, true, true, false, true, true, true] == pow_mod_crc(18560);
+  {
+    pow_18527();
+    of_pow(18560, true, true, true, false, true, true, false, false, true, false, true, false, false, false, false, false, true, false, false, false, true, true, true, true, true, true, true, true, true, true, true, false);
+  }
+
+  lemma lut_entry_144_1()
+  ensures [false, true, true, false, false, true, true, true, true, false, false, false, true, false, false, true, false, true, true, true, false, true, false, true, true, true, false, false, false, true, true, false] == pow_mod_crc(9280);
+  {
+    pow_9247();
+    of_pow(9280, false, true, true, false, false, false, true, true, true, false, true, false, true, true, true, false, true, false, false, true, false, false, false, true, true, true, true, false, false, true, true, false);
+  }
 
   lemma lut_entry_144()
   ensures bits_of_int(lut[144] as int, 64)
@@ -5878,28 +5892,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, true, true, true, true, true, true, true, true, true, false, false, false, true, false, false, false, false, false, true, false, true, false, false, true, true, false, true, true, true]+[false, true, true, false, false, true, true, true, true, false, false, false, true, false, false, true, false, true, true, true, false, true, false, true, true, true, false, false, false, true, true, false];
       {
-        calc {
-          [false, true, true, true, true, true, true, true, true, true, true, true, false, false, false, true, false, false, false, false, false, true, false, true, false, false, true, true, false, true, true, true];
-          {
-            pow_18527();
-            of_pow(18560, true, true, true, false, true, true, false, false, true, false, true, false, false, false, false, false, true, false, false, false, true, true, true, true, true, true, true, true, true, true, true, false);
-          }
-          pow_mod_crc(18560);
-        }
-        calc {
-          [false, true, true, false, false, true, true, true, true, false, false, false, true, false, false, true, false, true, true, true, false, true, false, true, true, true, false, false, false, true, true, false];
-          {
-            pow_9247();
-            of_pow(9280, false, true, true, false, false, false, true, true, true, false, true, false, true, true, true, false, true, false, false, true, false, false, false, true, true, true, true, false, false, true, true, false);
-          }
-          pow_mod_crc(9280);
-        }
+        lut_entry_144_0();
+        lut_entry_144_1();
       }
       pow_mod_crc(18560) + pow_mod_crc(9280);
     }
   }
 
 
+
+  lemma lut_entry_145_0()
+  ensures [true, false, true, false, true, true, true, false, false, false, false, true, false, false, false, false, true, true, false, false, false, true, true, true, false, true, false, true, true, true, false, false] == pow_mod_crc(18688);
+  {
+    pow_18655();
+    of_pow(18688, false, false, true, true, true, false, true, false, true, true, true, false, false, false, true, true, false, false, false, false, true, false, false, false, false, true, true, true, false, true, false, true);
+  }
+
+  lemma lut_entry_145_1()
+  ensures [true, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, true, true, false, true, true, false, false, false, true, false, true, false, false, true, true, false] == pow_mod_crc(9344);
+  {
+    pow_9311();
+    of_pow(9344, false, true, true, false, false, true, false, true, false, false, false, true, true, false, true, true, true, true, false, true, true, false, false, true, true, false, false, false, true, false, true, true);
+  }
 
   lemma lut_entry_145()
   ensures bits_of_int(lut[145] as int, 64)
@@ -5918,28 +5932,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, false, true, true, true, false, false, false, false, true, false, false, false, false, true, true, false, false, false, true, true, true, false, true, false, true, true, true, false, false]+[true, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, true, true, false, true, true, false, false, false, true, false, true, false, false, true, true, false];
       {
-        calc {
-          [true, false, true, false, true, true, true, false, false, false, false, true, false, false, false, false, true, true, false, false, false, true, true, true, false, true, false, true, true, true, false, false];
-          {
-            pow_18655();
-            of_pow(18688, false, false, true, true, true, false, true, false, true, true, true, false, false, false, true, true, false, false, false, false, true, false, false, false, false, true, true, true, false, true, false, true);
-          }
-          pow_mod_crc(18688);
-        }
-        calc {
-          [true, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, true, true, false, true, true, false, false, false, true, false, true, false, false, true, true, false];
-          {
-            pow_9311();
-            of_pow(9344, false, true, true, false, false, true, false, true, false, false, false, true, true, false, true, true, true, true, false, true, true, false, false, true, true, false, false, false, true, false, true, true);
-          }
-          pow_mod_crc(9344);
-        }
+        lut_entry_145_0();
+        lut_entry_145_1();
       }
       pow_mod_crc(18688) + pow_mod_crc(9344);
     }
   }
 
 
+
+  lemma lut_entry_146_0()
+  ensures [false, true, false, true, false, true, true, false, false, true, false, false, true, false, true, false, true, false, false, false, true, false, true, true, false, false, true, true, false, false, false, false] == pow_mod_crc(18816);
+  {
+    pow_18783();
+    of_pow(18816, false, false, false, false, true, true, false, false, true, true, false, true, false, false, false, true, false, true, false, true, false, false, true, false, false, true, true, false, true, false, true, false);
+  }
+
+  lemma lut_entry_146_1()
+  ensures [false, true, false, true, true, true, true, false, false, true, false, true, true, false, true, true, true, false, false, true, false, false, true, true, false, false, false, true, true, true, true, true] == pow_mod_crc(9408);
+  {
+    pow_9375();
+    of_pow(9408, true, true, true, true, true, false, false, false, true, true, false, false, true, false, false, true, true, true, false, true, true, false, true, false, false, true, true, true, true, false, true, false);
+  }
 
   lemma lut_entry_146()
   ensures bits_of_int(lut[146] as int, 64)
@@ -5958,28 +5972,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, false, true, true, false, false, true, false, false, true, false, true, false, true, false, false, false, true, false, true, true, false, false, true, true, false, false, false, false]+[false, true, false, true, true, true, true, false, false, true, false, true, true, false, true, true, true, false, false, true, false, false, true, true, false, false, false, true, true, true, true, true];
       {
-        calc {
-          [false, true, false, true, false, true, true, false, false, true, false, false, true, false, true, false, true, false, false, false, true, false, true, true, false, false, true, true, false, false, false, false];
-          {
-            pow_18783();
-            of_pow(18816, false, false, false, false, true, true, false, false, true, true, false, true, false, false, false, true, false, true, false, true, false, false, true, false, false, true, true, false, true, false, true, false);
-          }
-          pow_mod_crc(18816);
-        }
-        calc {
-          [false, true, false, true, true, true, true, false, false, true, false, true, true, false, true, true, true, false, false, true, false, false, true, true, false, false, false, true, true, true, true, true];
-          {
-            pow_9375();
-            of_pow(9408, true, true, true, true, true, false, false, false, true, true, false, false, true, false, false, true, true, true, false, true, true, false, true, false, false, true, true, true, true, false, true, false);
-          }
-          pow_mod_crc(9408);
-        }
+        lut_entry_146_0();
+        lut_entry_146_1();
       }
       pow_mod_crc(18816) + pow_mod_crc(9408);
     }
   }
 
 
+
+  lemma lut_entry_147_0()
+  ensures [false, false, true, false, false, false, false, false, true, true, true, true, false, false, false, false, true, true, false, false, false, true, true, false, true, false, false, false, true, true, false, true] == pow_mod_crc(18944);
+  {
+    pow_18911();
+    of_pow(18944, true, false, true, true, false, false, false, true, false, true, true, false, false, false, true, true, false, false, false, false, true, true, true, true, false, false, false, false, false, true, false, false);
+  }
+
+  lemma lut_entry_147_1()
+  ensures [false, false, true, true, true, true, false, true, true, false, false, false, true, true, true, true, false, false, false, true, true, true, false, true, true, true, false, true, true, false, true, false] == pow_mod_crc(9472);
+  {
+    pow_9439();
+    of_pow(9472, false, true, false, true, true, false, true, true, true, false, true, true, true, false, false, false, true, true, true, true, false, false, false, true, true, false, true, true, true, true, false, false);
+  }
 
   lemma lut_entry_147()
   ensures bits_of_int(lut[147] as int, 64)
@@ -5998,28 +6012,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, false, false, false, false, false, true, true, true, true, false, false, false, false, true, true, false, false, false, true, true, false, true, false, false, false, true, true, false, true]+[false, false, true, true, true, true, false, true, true, false, false, false, true, true, true, true, false, false, false, true, true, true, false, true, true, true, false, true, true, false, true, false];
       {
-        calc {
-          [false, false, true, false, false, false, false, false, true, true, true, true, false, false, false, false, true, true, false, false, false, true, true, false, true, false, false, false, true, true, false, true];
-          {
-            pow_18911();
-            of_pow(18944, true, false, true, true, false, false, false, true, false, true, true, false, false, false, true, true, false, false, false, false, true, true, true, true, false, false, false, false, false, true, false, false);
-          }
-          pow_mod_crc(18944);
-        }
-        calc {
-          [false, false, true, true, true, true, false, true, true, false, false, false, true, true, true, true, false, false, false, true, true, true, false, true, true, true, false, true, true, false, true, false];
-          {
-            pow_9439();
-            of_pow(9472, false, true, false, true, true, false, true, true, true, false, true, true, true, false, false, false, true, true, true, true, false, false, false, true, true, false, true, true, true, true, false, false);
-          }
-          pow_mod_crc(9472);
-        }
+        lut_entry_147_0();
+        lut_entry_147_1();
       }
       pow_mod_crc(18944) + pow_mod_crc(9472);
     }
   }
 
 
+
+  lemma lut_entry_148_0()
+  ensures [true, true, false, true, true, true, true, false, true, false, false, false, true, true, false, false, true, true, true, false, false, false, true, false, true, true, true, true, true, true, true, true] == pow_mod_crc(19072);
+  {
+    pow_19039();
+    of_pow(19072, true, true, true, true, true, true, true, true, false, true, false, false, false, true, true, true, false, false, true, true, false, false, false, true, false, true, true, true, true, false, true, true);
+  }
+
+  lemma lut_entry_148_1()
+  ensures [true, false, false, false, false, false, true, true, true, false, false, true, true, false, false, false, false, true, false, true, true, false, true, false, false, false, true, false, true, false, false, true] == pow_mod_crc(9536);
+  {
+    pow_9503();
+    of_pow(9536, true, false, false, true, false, true, false, false, false, true, false, true, true, false, true, false, false, false, false, true, true, false, false, true, true, true, false, false, false, false, false, true);
+  }
 
   lemma lut_entry_148()
   ensures bits_of_int(lut[148] as int, 64)
@@ -6038,28 +6052,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, true, true, true, false, true, false, false, false, true, true, false, false, true, true, true, false, false, false, true, false, true, true, true, true, true, true, true, true]+[true, false, false, false, false, false, true, true, true, false, false, true, true, false, false, false, false, true, false, true, true, false, true, false, false, false, true, false, true, false, false, true];
       {
-        calc {
-          [true, true, false, true, true, true, true, false, true, false, false, false, true, true, false, false, true, true, true, false, false, false, true, false, true, true, true, true, true, true, true, true];
-          {
-            pow_19039();
-            of_pow(19072, true, true, true, true, true, true, true, true, false, true, false, false, false, true, true, true, false, false, true, true, false, false, false, true, false, true, true, true, true, false, true, true);
-          }
-          pow_mod_crc(19072);
-        }
-        calc {
-          [true, false, false, false, false, false, true, true, true, false, false, true, true, false, false, false, false, true, false, true, true, false, true, false, false, false, true, false, true, false, false, true];
-          {
-            pow_9503();
-            of_pow(9536, true, false, false, true, false, true, false, false, false, true, false, true, true, false, true, false, false, false, false, true, true, false, false, true, true, true, false, false, false, false, false, true);
-          }
-          pow_mod_crc(9536);
-        }
+        lut_entry_148_0();
+        lut_entry_148_1();
       }
       pow_mod_crc(19072) + pow_mod_crc(9536);
     }
   }
 
 
+
+  lemma lut_entry_149_0()
+  ensures [true, true, true, false, false, false, false, false, false, false, false, true, false, true, false, true, true, true, false, false, false, false, true, true, false, true, true, false, true, false, true, true] == pow_mod_crc(19200);
+  {
+    pow_19167();
+    of_pow(19200, true, true, false, true, false, true, true, false, true, true, false, false, false, false, true, true, true, false, true, false, true, false, false, false, false, false, false, false, false, true, true, true);
+  }
+
+  lemma lut_entry_149_1()
+  ensures [false, true, false, true, true, true, true, false, false, true, false, false, true, false, true, true, true, true, true, true, false, false, false, false, true, false, false, true, false, true, false, true] == pow_mod_crc(9600);
+  {
+    pow_9567();
+    of_pow(9600, true, false, true, false, true, false, false, true, false, false, false, false, true, true, true, true, true, true, false, true, false, false, true, false, false, true, true, true, true, false, true, false);
+  }
 
   lemma lut_entry_149()
   ensures bits_of_int(lut[149] as int, 64)
@@ -6078,28 +6092,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, false, false, false, false, false, false, false, false, true, false, true, false, true, true, true, false, false, false, false, true, true, false, true, true, false, true, false, true, true]+[false, true, false, true, true, true, true, false, false, true, false, false, true, false, true, true, true, true, true, true, false, false, false, false, true, false, false, true, false, true, false, true];
       {
-        calc {
-          [true, true, true, false, false, false, false, false, false, false, false, true, false, true, false, true, true, true, false, false, false, false, true, true, false, true, true, false, true, false, true, true];
-          {
-            pow_19167();
-            of_pow(19200, true, true, false, true, false, true, true, false, true, true, false, false, false, false, true, true, true, false, true, false, true, false, false, false, false, false, false, false, false, true, true, true);
-          }
-          pow_mod_crc(19200);
-        }
-        calc {
-          [false, true, false, true, true, true, true, false, false, true, false, false, true, false, true, true, true, true, true, true, false, false, false, false, true, false, false, true, false, true, false, true];
-          {
-            pow_9567();
-            of_pow(9600, true, false, true, false, true, false, false, true, false, false, false, false, true, true, true, true, true, true, false, true, false, false, true, false, false, true, true, true, true, false, true, false);
-          }
-          pow_mod_crc(9600);
-        }
+        lut_entry_149_0();
+        lut_entry_149_1();
       }
       pow_mod_crc(19200) + pow_mod_crc(9600);
     }
   }
 
 
+
+  lemma lut_entry_150_0()
+  ensures [false, false, false, false, false, true, true, true, true, false, false, false, false, false, false, true, true, true, true, false, true, true, true, false, false, true, false, true, true, false, false, true] == pow_mod_crc(19328);
+  {
+    pow_19295();
+    of_pow(19328, true, false, false, true, true, false, true, false, false, true, true, true, false, true, true, true, true, false, false, false, false, false, false, true, true, true, true, false, false, false, false, false);
+  }
+
+  lemma lut_entry_150_1()
+  ensures [true, true, true, false, true, true, false, true, true, true, false, false, true, false, false, false, false, true, false, false, false, false, false, true, false, true, true, true, false, true, true, true] == pow_mod_crc(9664);
+  {
+    pow_9631();
+    of_pow(9664, true, true, true, false, true, true, true, false, true, false, false, false, false, false, true, false, false, false, false, true, false, false, true, true, true, false, true, true, false, true, true, true);
+  }
 
   lemma lut_entry_150()
   ensures bits_of_int(lut[150] as int, 64)
@@ -6118,28 +6132,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, false, false, true, true, true, true, false, false, false, false, false, false, true, true, true, true, false, true, true, true, false, false, true, false, true, true, false, false, true]+[true, true, true, false, true, true, false, true, true, true, false, false, true, false, false, false, false, true, false, false, false, false, false, true, false, true, true, true, false, true, true, true];
       {
-        calc {
-          [false, false, false, false, false, true, true, true, true, false, false, false, false, false, false, true, true, true, true, false, true, true, true, false, false, true, false, true, true, false, false, true];
-          {
-            pow_19295();
-            of_pow(19328, true, false, false, true, true, false, true, false, false, true, true, true, false, true, true, true, true, false, false, false, false, false, false, true, true, true, true, false, false, false, false, false);
-          }
-          pow_mod_crc(19328);
-        }
-        calc {
-          [true, true, true, false, true, true, false, true, true, true, false, false, true, false, false, false, false, true, false, false, false, false, false, true, false, true, true, true, false, true, true, true];
-          {
-            pow_9631();
-            of_pow(9664, true, true, true, false, true, true, true, false, true, false, false, false, false, false, true, false, false, false, false, true, false, false, true, true, true, false, true, true, false, true, true, true);
-          }
-          pow_mod_crc(9664);
-        }
+        lut_entry_150_0();
+        lut_entry_150_1();
       }
       pow_mod_crc(19328) + pow_mod_crc(9664);
     }
   }
 
 
+
+  lemma lut_entry_151_0()
+  ensures [true, false, false, true, false, true, true, true, true, true, true, false, true, false, false, true, false, false, false, false, true, false, true, true, true, true, false, false, false, true, true, false] == pow_mod_crc(19456);
+  {
+    pow_19423();
+    of_pow(19456, false, true, true, false, false, false, true, true, true, true, false, true, false, false, false, false, true, false, false, true, false, true, true, true, true, true, true, false, true, false, false, true);
+  }
+
+  lemma lut_entry_151_1()
+  ensures [false, true, false, true, true, true, true, false, true, true, true, false, false, false, false, false, true, true, true, true, false, true, false, true, true, true, false, false, true, true, false, true] == pow_mod_crc(9728);
+  {
+    pow_9695();
+    of_pow(9728, true, false, true, true, false, false, true, true, true, false, true, false, true, true, true, true, false, false, false, false, false, true, true, true, false, true, true, true, true, false, true, false);
+  }
 
   lemma lut_entry_151()
   ensures bits_of_int(lut[151] as int, 64)
@@ -6158,28 +6172,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, true, false, true, true, true, true, true, true, false, true, false, false, true, false, false, false, false, true, false, true, true, true, true, false, false, false, true, true, false]+[false, true, false, true, true, true, true, false, true, true, true, false, false, false, false, false, true, true, true, true, false, true, false, true, true, true, false, false, true, true, false, true];
       {
-        calc {
-          [true, false, false, true, false, true, true, true, true, true, true, false, true, false, false, true, false, false, false, false, true, false, true, true, true, true, false, false, false, true, true, false];
-          {
-            pow_19423();
-            of_pow(19456, false, true, true, false, false, false, true, true, true, true, false, true, false, false, false, false, true, false, false, true, false, true, true, true, true, true, true, false, true, false, false, true);
-          }
-          pow_mod_crc(19456);
-        }
-        calc {
-          [false, true, false, true, true, true, true, false, true, true, true, false, false, false, false, false, true, true, true, true, false, true, false, true, true, true, false, false, true, true, false, true];
-          {
-            pow_9695();
-            of_pow(9728, true, false, true, true, false, false, true, true, true, false, true, false, true, true, true, true, false, false, false, false, false, true, true, true, false, true, true, true, true, false, true, false);
-          }
-          pow_mod_crc(9728);
-        }
+        lut_entry_151_0();
+        lut_entry_151_1();
       }
       pow_mod_crc(19456) + pow_mod_crc(9728);
     }
   }
 
 
+
+  lemma lut_entry_152_0()
+  ensures [true, true, true, true, true, false, true, false, true, true, true, false, true, false, false, false, true, false, false, false, true, true, false, false, true, false, true, true, true, false, false, false] == pow_mod_crc(19584);
+  {
+    pow_19551();
+    of_pow(19584, false, false, false, true, true, true, false, true, false, false, true, true, false, false, false, true, false, false, false, true, false, true, true, true, false, true, false, true, true, true, true, true);
+  }
+
+  lemma lut_entry_152_1()
+  ensures [true, true, true, false, false, false, true, true, true, false, true, true, true, false, false, false, false, false, false, true, true, true, true, false, true, true, false, false, true, false, false, true] == pow_mod_crc(9792);
+  {
+    pow_9759();
+    of_pow(9792, true, false, false, true, false, false, true, true, false, true, true, true, true, false, false, false, false, false, false, true, true, true, false, true, true, true, false, false, false, true, true, true);
+  }
 
   lemma lut_entry_152()
   ensures bits_of_int(lut[152] as int, 64)
@@ -6198,28 +6212,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, true, true, false, true, false, true, true, true, false, true, false, false, false, true, false, false, false, true, true, false, false, true, false, true, true, true, false, false, false]+[true, true, true, false, false, false, true, true, true, false, true, true, true, false, false, false, false, false, false, true, true, true, true, false, true, true, false, false, true, false, false, true];
       {
-        calc {
-          [true, true, true, true, true, false, true, false, true, true, true, false, true, false, false, false, true, false, false, false, true, true, false, false, true, false, true, true, true, false, false, false];
-          {
-            pow_19551();
-            of_pow(19584, false, false, false, true, true, true, false, true, false, false, true, true, false, false, false, true, false, false, false, true, false, true, true, true, false, true, false, true, true, true, true, true);
-          }
-          pow_mod_crc(19584);
-        }
-        calc {
-          [true, true, true, false, false, false, true, true, true, false, true, true, true, false, false, false, false, false, false, true, true, true, true, false, true, true, false, false, true, false, false, true];
-          {
-            pow_9759();
-            of_pow(9792, true, false, false, true, false, false, true, true, false, true, true, true, true, false, false, false, false, false, false, true, true, true, false, true, true, true, false, false, false, true, true, true);
-          }
-          pow_mod_crc(9792);
-        }
+        lut_entry_152_0();
+        lut_entry_152_1();
       }
       pow_mod_crc(19584) + pow_mod_crc(9792);
     }
   }
 
 
+
+  lemma lut_entry_153_0()
+  ensures [false, true, true, true, false, true, true, false, true, false, true, false, false, true, false, false, true, true, false, true, false, true, true, true, false, false, true, false, true, false, false, true] == pow_mod_crc(19712);
+  {
+    pow_19679();
+    of_pow(19712, true, false, false, true, false, true, false, false, true, true, true, false, true, false, true, true, false, false, true, false, false, true, false, true, false, true, true, false, true, true, true, false);
+  }
+
+  lemma lut_entry_153_1()
+  ensures [false, true, false, false, false, false, false, true, true, true, true, false, true, false, true, true, false, false, true, false, false, false, false, true, true, false, false, true, false, false, true, false] == pow_mod_crc(9856);
+  {
+    pow_9823();
+    of_pow(9856, false, true, false, false, true, false, false, true, true, false, false, false, false, true, false, false, true, true, false, true, false, true, true, true, true, false, false, false, false, false, true, false);
+  }
 
   lemma lut_entry_153()
   ensures bits_of_int(lut[153] as int, 64)
@@ -6238,28 +6252,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, true, false, true, true, false, true, false, true, false, false, true, false, false, true, true, false, true, false, true, true, true, false, false, true, false, true, false, false, true]+[false, true, false, false, false, false, false, true, true, true, true, false, true, false, true, true, false, false, true, false, false, false, false, true, true, false, false, true, false, false, true, false];
       {
-        calc {
-          [false, true, true, true, false, true, true, false, true, false, true, false, false, true, false, false, true, true, false, true, false, true, true, true, false, false, true, false, true, false, false, true];
-          {
-            pow_19679();
-            of_pow(19712, true, false, false, true, false, true, false, false, true, true, true, false, true, false, true, true, false, false, true, false, false, true, false, true, false, true, true, false, true, true, true, false);
-          }
-          pow_mod_crc(19712);
-        }
-        calc {
-          [false, true, false, false, false, false, false, true, true, true, true, false, true, false, true, true, false, false, true, false, false, false, false, true, true, false, false, true, false, false, true, false];
-          {
-            pow_9823();
-            of_pow(9856, false, true, false, false, true, false, false, true, true, false, false, false, false, true, false, false, true, true, false, true, false, true, true, true, true, false, false, false, false, false, true, false);
-          }
-          pow_mod_crc(9856);
-        }
+        lut_entry_153_0();
+        lut_entry_153_1();
       }
       pow_mod_crc(19712) + pow_mod_crc(9856);
     }
   }
 
 
+
+  lemma lut_entry_154_0()
+  ensures [true, false, false, true, false, false, true, false, false, true, true, false, false, false, true, false, false, false, false, true, true, false, false, false, true, true, false, false, true, false, false, false] == pow_mod_crc(19840);
+  {
+    pow_19807();
+    of_pow(19840, false, false, false, true, false, false, true, true, false, false, false, true, true, false, false, false, false, true, false, false, false, true, true, false, false, true, false, false, true, false, false, true);
+  }
+
+  lemma lut_entry_154_1()
+  ensures [true, false, false, true, true, true, false, true, true, false, false, false, false, true, false, true, false, false, true, false, false, false, true, true, false, false, true, true, false, false, true, true] == pow_mod_crc(9920);
+  {
+    pow_9887();
+    of_pow(9920, true, true, false, false, true, true, false, false, true, true, false, false, false, true, false, false, true, false, true, false, false, false, false, true, true, false, true, true, true, false, false, true);
+  }
 
   lemma lut_entry_154()
   ensures bits_of_int(lut[154] as int, 64)
@@ -6278,28 +6292,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, true, false, false, true, false, false, true, true, false, false, false, true, false, false, false, false, true, true, false, false, false, true, true, false, false, true, false, false, false]+[true, false, false, true, true, true, false, true, true, false, false, false, false, true, false, true, false, false, true, false, false, false, true, true, false, false, true, true, false, false, true, true];
       {
-        calc {
-          [true, false, false, true, false, false, true, false, false, true, true, false, false, false, true, false, false, false, false, true, true, false, false, false, true, true, false, false, true, false, false, false];
-          {
-            pow_19807();
-            of_pow(19840, false, false, false, true, false, false, true, true, false, false, false, true, true, false, false, false, false, true, false, false, false, true, true, false, false, true, false, false, true, false, false, true);
-          }
-          pow_mod_crc(19840);
-        }
-        calc {
-          [true, false, false, true, true, true, false, true, true, false, false, false, false, true, false, true, false, false, true, false, false, false, true, true, false, false, true, true, false, false, true, true];
-          {
-            pow_9887();
-            of_pow(9920, true, true, false, false, true, true, false, false, true, true, false, false, false, true, false, false, true, false, true, false, false, false, false, true, true, false, true, true, true, false, false, true);
-          }
-          pow_mod_crc(9920);
-        }
+        lut_entry_154_0();
+        lut_entry_154_1();
       }
       pow_mod_crc(19840) + pow_mod_crc(9920);
     }
   }
 
 
+
+  lemma lut_entry_155_0()
+  ensures [false, false, false, false, true, false, false, true, true, false, true, true, true, true, true, true, true, true, true, false, false, true, true, true, true, true, false, true, false, false, true, false] == pow_mod_crc(19968);
+  {
+    pow_19935();
+    of_pow(19968, false, true, false, false, true, false, true, true, true, true, true, false, false, true, true, true, true, true, true, true, true, true, false, true, true, false, false, true, false, false, false, false);
+  }
+
+  lemma lut_entry_155_1()
+  ensures [false, false, true, true, false, true, false, true, true, true, false, false, true, true, true, true, false, true, true, true, false, true, true, false, false, true, false, true, false, false, true, true] == pow_mod_crc(9984);
+  {
+    pow_9951();
+    of_pow(9984, true, true, false, false, true, false, true, false, false, true, true, false, true, true, true, false, true, true, true, true, false, false, true, true, true, false, true, false, true, true, false, false);
+  }
 
   lemma lut_entry_155()
   ensures bits_of_int(lut[155] as int, 64)
@@ -6318,28 +6332,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, false, true, false, false, true, true, false, true, true, true, true, true, true, true, true, true, false, false, true, true, true, true, true, false, true, false, false, true, false]+[false, false, true, true, false, true, false, true, true, true, false, false, true, true, true, true, false, true, true, true, false, true, true, false, false, true, false, true, false, false, true, true];
       {
-        calc {
-          [false, false, false, false, true, false, false, true, true, false, true, true, true, true, true, true, true, true, true, false, false, true, true, true, true, true, false, true, false, false, true, false];
-          {
-            pow_19935();
-            of_pow(19968, false, true, false, false, true, false, true, true, true, true, true, false, false, true, true, true, true, true, true, true, true, true, false, true, true, false, false, true, false, false, false, false);
-          }
-          pow_mod_crc(19968);
-        }
-        calc {
-          [false, false, true, true, false, true, false, true, true, true, false, false, true, true, true, true, false, true, true, true, false, true, true, false, false, true, false, true, false, false, true, true];
-          {
-            pow_9951();
-            of_pow(9984, true, true, false, false, true, false, true, false, false, true, true, false, true, true, true, false, true, true, true, true, false, false, true, true, true, false, true, false, true, true, false, false);
-          }
-          pow_mod_crc(9984);
-        }
+        lut_entry_155_0();
+        lut_entry_155_1();
       }
       pow_mod_crc(19968) + pow_mod_crc(9984);
     }
   }
 
 
+
+  lemma lut_entry_156_0()
+  ensures [false, false, true, false, false, true, true, false, true, false, true, true, true, false, false, false, false, false, true, true, true, false, true, false, true, false, true, true, true, true, true, false] == pow_mod_crc(20096);
+  {
+    pow_20063();
+    of_pow(20096, false, true, true, true, true, true, false, true, false, true, false, true, true, true, false, false, false, false, false, true, true, true, false, true, false, true, true, false, false, true, false, false);
+  }
+
+  lemma lut_entry_156_1()
+  ensures [true, false, false, false, true, true, true, false, true, false, false, true, true, false, true, true, false, true, false, false, false, false, true, true, false, true, false, false, false, true, false, true] == pow_mod_crc(10048);
+  {
+    pow_10015();
+    of_pow(10048, true, false, true, false, false, false, true, false, true, true, false, false, false, false, true, false, true, true, false, true, true, false, false, true, false, true, true, true, false, false, false, true);
+  }
 
   lemma lut_entry_156()
   ensures bits_of_int(lut[156] as int, 64)
@@ -6358,28 +6372,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, false, false, true, true, false, true, false, true, true, true, false, false, false, false, false, true, true, true, false, true, false, true, false, true, true, true, true, true, false]+[true, false, false, false, true, true, true, false, true, false, false, true, true, false, true, true, false, true, false, false, false, false, true, true, false, true, false, false, false, true, false, true];
       {
-        calc {
-          [false, false, true, false, false, true, true, false, true, false, true, true, true, false, false, false, false, false, true, true, true, false, true, false, true, false, true, true, true, true, true, false];
-          {
-            pow_20063();
-            of_pow(20096, false, true, true, true, true, true, false, true, false, true, false, true, true, true, false, false, false, false, false, true, true, true, false, true, false, true, true, false, false, true, false, false);
-          }
-          pow_mod_crc(20096);
-        }
-        calc {
-          [true, false, false, false, true, true, true, false, true, false, false, true, true, false, true, true, false, true, false, false, false, false, true, true, false, true, false, false, false, true, false, true];
-          {
-            pow_10015();
-            of_pow(10048, true, false, true, false, false, false, true, false, true, true, false, false, false, false, true, false, true, true, false, true, true, false, false, true, false, true, true, true, false, false, false, true);
-          }
-          pow_mod_crc(10048);
-        }
+        lut_entry_156_0();
+        lut_entry_156_1();
       }
       pow_mod_crc(20096) + pow_mod_crc(10048);
     }
   }
 
 
+
+  lemma lut_entry_157_0()
+  ensures [false, true, false, true, true, false, false, true, true, false, true, false, false, false, false, true, false, true, false, true, true, true, false, true, false, false, false, false, false, false, false, true] == pow_mod_crc(20224);
+  {
+    pow_20191();
+    of_pow(20224, true, false, false, false, false, false, false, false, true, false, true, true, true, false, true, false, true, false, false, false, false, true, false, true, true, false, false, true, true, false, true, false);
+  }
+
+  lemma lut_entry_157_1()
+  ensures [false, true, true, false, false, true, false, false, true, true, false, true, false, false, false, false, false, true, true, true, false, false, true, false, true, true, false, false, false, true, false, false] == pow_mod_crc(10112);
+  {
+    pow_10079();
+    of_pow(10112, false, false, true, false, false, false, true, true, false, true, false, false, true, true, true, false, false, false, false, false, true, false, true, true, false, false, true, false, false, true, true, false);
+  }
 
   lemma lut_entry_157()
   ensures bits_of_int(lut[157] as int, 64)
@@ -6398,28 +6412,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, true, false, false, true, true, false, true, false, false, false, false, true, false, true, false, true, true, true, false, true, false, false, false, false, false, false, false, true]+[false, true, true, false, false, true, false, false, true, true, false, true, false, false, false, false, false, true, true, true, false, false, true, false, true, true, false, false, false, true, false, false];
       {
-        calc {
-          [false, true, false, true, true, false, false, true, true, false, true, false, false, false, false, true, false, true, false, true, true, true, false, true, false, false, false, false, false, false, false, true];
-          {
-            pow_20191();
-            of_pow(20224, true, false, false, false, false, false, false, false, true, false, true, true, true, false, true, false, true, false, false, false, false, true, false, true, true, false, false, true, true, false, true, false);
-          }
-          pow_mod_crc(20224);
-        }
-        calc {
-          [false, true, true, false, false, true, false, false, true, true, false, true, false, false, false, false, false, true, true, true, false, false, true, false, true, true, false, false, false, true, false, false];
-          {
-            pow_10079();
-            of_pow(10112, false, false, true, false, false, false, true, true, false, true, false, false, true, true, true, false, false, false, false, false, true, false, true, true, false, false, true, false, false, true, true, false);
-          }
-          pow_mod_crc(10112);
-        }
+        lut_entry_157_0();
+        lut_entry_157_1();
       }
       pow_mod_crc(20224) + pow_mod_crc(10112);
     }
   }
 
 
+
+  lemma lut_entry_158_0()
+  ensures [true, false, false, true, false, false, true, true, true, false, false, false, true, false, true, true, false, true, true, true, false, true, true, true, false, true, true, true, false, true, true, false] == pow_mod_crc(20352);
+  {
+    pow_20319();
+    of_pow(20352, false, true, true, false, true, true, true, false, true, true, true, false, true, true, true, false, true, true, false, true, false, false, false, true, true, true, false, false, true, false, false, true);
+  }
+
+  lemma lut_entry_158_1()
+  ensures [false, true, false, false, true, false, true, false, false, false, true, false, false, false, true, false, true, false, true, true, false, true, false, true, false, false, true, true, true, false, false, false] == pow_mod_crc(10176);
+  {
+    pow_10143();
+    of_pow(10176, false, false, false, true, true, true, false, false, true, false, true, false, true, true, false, true, false, true, false, false, false, true, false, false, false, true, false, true, false, false, true, false);
+  }
 
   lemma lut_entry_158()
   ensures bits_of_int(lut[158] as int, 64)
@@ -6438,28 +6452,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, true, false, false, true, true, true, false, false, false, true, false, true, true, false, true, true, true, false, true, true, true, false, true, true, true, false, true, true, false]+[false, true, false, false, true, false, true, false, false, false, true, false, false, false, true, false, true, false, true, true, false, true, false, true, false, false, true, true, true, false, false, false];
       {
-        calc {
-          [true, false, false, true, false, false, true, true, true, false, false, false, true, false, true, true, false, true, true, true, false, true, true, true, false, true, true, true, false, true, true, false];
-          {
-            pow_20319();
-            of_pow(20352, false, true, true, false, true, true, true, false, true, true, true, false, true, true, true, false, true, true, false, true, false, false, false, true, true, true, false, false, true, false, false, true);
-          }
-          pow_mod_crc(20352);
-        }
-        calc {
-          [false, true, false, false, true, false, true, false, false, false, true, false, false, false, true, false, true, false, true, true, false, true, false, true, false, false, true, true, true, false, false, false];
-          {
-            pow_10143();
-            of_pow(10176, false, false, false, true, true, true, false, false, true, false, true, false, true, true, false, true, false, true, false, false, false, true, false, false, false, true, false, true, false, false, true, false);
-          }
-          pow_mod_crc(10176);
-        }
+        lut_entry_158_0();
+        lut_entry_158_1();
       }
       pow_mod_crc(20352) + pow_mod_crc(10176);
     }
   }
 
 
+
+  lemma lut_entry_159_0()
+  ensures [true, true, true, true, true, false, false, true, true, false, false, true, true, true, true, false, true, true, false, false, false, false, true, true, false, true, false, false, false, true, false, false] == pow_mod_crc(20480);
+  {
+    pow_20447();
+    of_pow(20480, false, false, true, false, false, false, true, false, true, true, false, false, false, false, true, true, false, true, true, true, true, false, false, true, true, false, false, true, true, true, true, true);
+  }
+
+  lemma lut_entry_159_1()
+  ensures [true, true, false, true, true, true, false, true, true, true, false, true, false, false, true, true, false, true, true, false, false, true, true, false, true, false, true, true, true, false, true, true] == pow_mod_crc(10240);
+  {
+    pow_10207();
+    of_pow(10240, true, true, false, true, true, true, false, true, false, true, true, false, false, true, true, false, true, true, false, false, true, false, true, true, true, false, true, true, true, false, true, true);
+  }
 
   lemma lut_entry_159()
   ensures bits_of_int(lut[159] as int, 64)
@@ -6478,28 +6492,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, true, true, false, false, true, true, false, false, true, true, true, true, false, true, true, false, false, false, false, true, true, false, true, false, false, false, true, false, false]+[true, true, false, true, true, true, false, true, true, true, false, true, false, false, true, true, false, true, true, false, false, true, true, false, true, false, true, true, true, false, true, true];
       {
-        calc {
-          [true, true, true, true, true, false, false, true, true, false, false, true, true, true, true, false, true, true, false, false, false, false, true, true, false, true, false, false, false, true, false, false];
-          {
-            pow_20447();
-            of_pow(20480, false, false, true, false, false, false, true, false, true, true, false, false, false, false, true, true, false, true, true, true, true, false, false, true, true, false, false, true, true, true, true, true);
-          }
-          pow_mod_crc(20480);
-        }
-        calc {
-          [true, true, false, true, true, true, false, true, true, true, false, true, false, false, true, true, false, true, true, false, false, true, true, false, true, false, true, true, true, false, true, true];
-          {
-            pow_10207();
-            of_pow(10240, true, true, false, true, true, true, false, true, false, true, true, false, false, true, true, false, true, true, false, false, true, false, true, true, true, false, true, true, true, false, true, true);
-          }
-          pow_mod_crc(10240);
-        }
+        lut_entry_159_0();
+        lut_entry_159_1();
       }
       pow_mod_crc(20480) + pow_mod_crc(10240);
     }
   }
 
 
+
+  lemma lut_entry_160_0()
+  ensures [false, false, false, true, true, true, true, false, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, true, false, false, false, true, true, false, true, true] == pow_mod_crc(20608);
+  {
+    pow_20575();
+    of_pow(20608, true, true, false, true, true, false, false, false, true, true, true, false, true, true, false, false, true, true, false, false, false, true, false, true, false, true, true, true, true, false, false, false);
+  }
+
+  lemma lut_entry_160_1()
+  ensures [true, false, false, false, false, false, false, false, false, true, true, false, false, true, false, false, false, true, false, false, true, false, false, true, false, false, true, false, true, true, true, false] == pow_mod_crc(10304);
+  {
+    pow_10271();
+    of_pow(10304, false, true, true, true, false, true, false, false, true, false, false, true, false, false, true, false, false, false, true, false, false, true, true, false, false, false, false, false, false, false, false, true);
+  }
 
   lemma lut_entry_160()
   ensures bits_of_int(lut[160] as int, 64)
@@ -6518,28 +6532,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, true, true, true, true, false, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, true, false, false, false, true, true, false, true, true]+[true, false, false, false, false, false, false, false, false, true, true, false, false, true, false, false, false, true, false, false, true, false, false, true, false, false, true, false, true, true, true, false];
       {
-        calc {
-          [false, false, false, true, true, true, true, false, true, false, true, false, false, false, true, true, false, false, true, true, false, true, true, true, false, false, false, true, true, false, true, true];
-          {
-            pow_20575();
-            of_pow(20608, true, true, false, true, true, false, false, false, true, true, true, false, true, true, false, false, true, true, false, false, false, true, false, true, false, true, true, true, true, false, false, false);
-          }
-          pow_mod_crc(20608);
-        }
-        calc {
-          [true, false, false, false, false, false, false, false, false, true, true, false, false, true, false, false, false, true, false, false, true, false, false, true, false, false, true, false, true, true, true, false];
-          {
-            pow_10271();
-            of_pow(10304, false, true, true, true, false, true, false, false, true, false, false, true, false, false, true, false, false, false, true, false, false, true, true, false, false, false, false, false, false, false, false, true);
-          }
-          pow_mod_crc(10304);
-        }
+        lut_entry_160_0();
+        lut_entry_160_1();
       }
       pow_mod_crc(20608) + pow_mod_crc(10304);
     }
   }
 
 
+
+  lemma lut_entry_161_0()
+  ensures [false, false, true, false, true, false, false, true, false, true, false, true, true, false, true, true, false, true, true, false, false, true, false, true, true, true, false, false, true, true, false, true] == pow_mod_crc(20736);
+  {
+    pow_20703();
+    of_pow(20736, true, false, true, true, false, false, true, true, true, false, true, false, false, true, true, false, true, true, false, true, true, false, true, false, true, false, false, true, false, true, false, false);
+  }
+
+  lemma lut_entry_161_1()
+  ensures [false, true, false, true, false, true, true, false, true, false, true, false, false, false, true, false, true, true, true, false, true, false, false, true, true, false, true, false, false, false, true, false] == pow_mod_crc(10368);
+  {
+    pow_10335();
+    of_pow(10368, false, true, false, false, false, true, false, true, true, false, false, true, false, true, true, true, false, true, false, false, false, true, false, true, false, true, true, false, true, false, true, false);
+  }
 
   lemma lut_entry_161()
   ensures bits_of_int(lut[161] as int, 64)
@@ -6558,28 +6572,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, false, true, false, false, true, false, true, false, true, true, false, true, true, false, true, true, false, false, true, false, true, true, true, false, false, true, true, false, true]+[false, true, false, true, false, true, true, false, true, false, true, false, false, false, true, false, true, true, true, false, true, false, false, true, true, false, true, false, false, false, true, false];
       {
-        calc {
-          [false, false, true, false, true, false, false, true, false, true, false, true, true, false, true, true, false, true, true, false, false, true, false, true, true, true, false, false, true, true, false, true];
-          {
-            pow_20703();
-            of_pow(20736, true, false, true, true, false, false, true, true, true, false, true, false, false, true, true, false, true, true, false, true, true, false, true, false, true, false, false, true, false, true, false, false);
-          }
-          pow_mod_crc(20736);
-        }
-        calc {
-          [false, true, false, true, false, true, true, false, true, false, true, false, false, false, true, false, true, true, true, false, true, false, false, true, true, false, true, false, false, false, true, false];
-          {
-            pow_10335();
-            of_pow(10368, false, true, false, false, false, true, false, true, true, false, false, true, false, true, true, true, false, true, false, false, false, true, false, true, false, true, true, false, true, false, true, false);
-          }
-          pow_mod_crc(10368);
-        }
+        lut_entry_161_0();
+        lut_entry_161_1();
       }
       pow_mod_crc(20736) + pow_mod_crc(10368);
     }
   }
 
 
+
+  lemma lut_entry_162_0()
+  ensures [false, true, true, true, true, true, true, true, true, true, false, false, true, true, false, false, true, false, false, true, true, true, true, true, false, true, false, true, false, false, true, true] == pow_mod_crc(20864);
+  {
+    pow_20831();
+    of_pow(20864, true, true, false, false, true, false, true, false, true, true, true, true, true, false, false, true, false, false, true, true, false, false, true, true, true, true, true, true, true, true, true, false);
+  }
+
+  lemma lut_entry_162_1()
+  ensures [true, true, false, true, false, true, false, true, false, true, true, true, true, true, true, false, true, true, true, true, true, false, true, false, true, false, true, false, false, false, true, true] == pow_mod_crc(10432);
+  {
+    pow_10399();
+    of_pow(10432, true, true, false, false, false, true, false, true, false, true, false, true, true, true, true, true, false, true, true, true, true, true, true, false, true, false, true, false, true, false, true, true);
+  }
 
   lemma lut_entry_162()
   ensures bits_of_int(lut[162] as int, 64)
@@ -6598,28 +6612,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, true, true, true, true, true, true, true, false, false, true, true, false, false, true, false, false, true, true, true, true, true, false, true, false, true, false, false, true, true]+[true, true, false, true, false, true, false, true, false, true, true, true, true, true, true, false, true, true, true, true, true, false, true, false, true, false, true, false, false, false, true, true];
       {
-        calc {
-          [false, true, true, true, true, true, true, true, true, true, false, false, true, true, false, false, true, false, false, true, true, true, true, true, false, true, false, true, false, false, true, true];
-          {
-            pow_20831();
-            of_pow(20864, true, true, false, false, true, false, true, false, true, true, true, true, true, false, false, true, false, false, true, true, false, false, true, true, true, true, true, true, true, true, true, false);
-          }
-          pow_mod_crc(20864);
-        }
-        calc {
-          [true, true, false, true, false, true, false, true, false, true, true, true, true, true, true, false, true, true, true, true, true, false, true, false, true, false, true, false, false, false, true, true];
-          {
-            pow_10399();
-            of_pow(10432, true, true, false, false, false, true, false, true, false, true, false, true, true, true, true, true, false, true, true, true, true, true, true, false, true, false, true, false, true, false, true, true);
-          }
-          pow_mod_crc(10432);
-        }
+        lut_entry_162_0();
+        lut_entry_162_1();
       }
       pow_mod_crc(20864) + pow_mod_crc(10432);
     }
   }
 
 
+
+  lemma lut_entry_163_0()
+  ensures [false, true, true, true, true, false, true, true, false, true, false, true, false, true, false, true, true, true, true, true, true, true, false, true, false, false, false, false, true, false, true, false] == pow_mod_crc(20992);
+  {
+    pow_20959();
+    of_pow(20992, false, true, false, true, false, false, false, false, true, false, true, true, true, true, true, true, true, false, true, false, true, false, true, false, true, true, false, true, true, true, true, false);
+  }
+
+  lemma lut_entry_163_1()
+  ensures [false, false, true, false, true, true, false, true, false, true, true, true, false, false, false, true, false, true, false, false, false, true, true, true, true, false, false, true, false, true, true, true] == pow_mod_crc(10496);
+  {
+    pow_10463();
+    of_pow(10496, true, true, true, false, true, false, false, true, true, true, true, false, false, false, true, false, true, false, false, false, true, true, true, false, true, false, true, true, false, true, false, false);
+  }
 
   lemma lut_entry_163()
   ensures bits_of_int(lut[163] as int, 64)
@@ -6638,28 +6652,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, true, true, false, true, true, false, true, false, true, false, true, false, true, true, true, true, true, true, true, false, true, false, false, false, false, true, false, true, false]+[false, false, true, false, true, true, false, true, false, true, true, true, false, false, false, true, false, true, false, false, false, true, true, true, true, false, false, true, false, true, true, true];
       {
-        calc {
-          [false, true, true, true, true, false, true, true, false, true, false, true, false, true, false, true, true, true, true, true, true, true, false, true, false, false, false, false, true, false, true, false];
-          {
-            pow_20959();
-            of_pow(20992, false, true, false, true, false, false, false, false, true, false, true, true, true, true, true, true, true, false, true, false, true, false, true, false, true, true, false, true, true, true, true, false);
-          }
-          pow_mod_crc(20992);
-        }
-        calc {
-          [false, false, true, false, true, true, false, true, false, true, true, true, false, false, false, true, false, true, false, false, false, true, true, true, true, false, false, true, false, true, true, true];
-          {
-            pow_10463();
-            of_pow(10496, true, true, true, false, true, false, false, true, true, true, true, false, false, false, true, false, true, false, false, false, true, true, true, false, true, false, true, true, false, true, false, false);
-          }
-          pow_mod_crc(10496);
-        }
+        lut_entry_163_0();
+        lut_entry_163_1();
       }
       pow_mod_crc(20992) + pow_mod_crc(10496);
     }
   }
 
 
+
+  lemma lut_entry_164_0()
+  ensures [true, true, true, false, false, true, false, true, true, false, false, false, true, false, false, false, true, false, true, true, true, true, true, false, false, true, true, true, false, true, false, false] == pow_mod_crc(21120);
+  {
+    pow_21087();
+    of_pow(21120, false, false, true, false, true, true, true, false, false, true, true, true, true, true, false, true, false, false, false, true, false, false, false, true, true, false, true, false, false, true, true, true);
+  }
+
+  lemma lut_entry_164_1()
+  ensures [true, false, false, true, false, true, false, false, true, true, false, false, false, true, false, false, false, true, true, false, true, false, false, true, true, false, false, false, false, true, false, true] == pow_mod_crc(10560);
+  {
+    pow_10527();
+    of_pow(10560, true, false, true, false, false, false, false, true, true, false, false, true, false, true, true, false, false, false, true, false, false, false, true, true, false, false, true, false, true, false, false, true);
+  }
 
   lemma lut_entry_164()
   ensures bits_of_int(lut[164] as int, 64)
@@ -6678,28 +6692,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, false, false, true, false, true, true, false, false, false, true, false, false, false, true, false, true, true, true, true, true, false, false, true, true, true, false, true, false, false]+[true, false, false, true, false, true, false, false, true, true, false, false, false, true, false, false, false, true, true, false, true, false, false, true, true, false, false, false, false, true, false, true];
       {
-        calc {
-          [true, true, true, false, false, true, false, true, true, false, false, false, true, false, false, false, true, false, true, true, true, true, true, false, false, true, true, true, false, true, false, false];
-          {
-            pow_21087();
-            of_pow(21120, false, false, true, false, true, true, true, false, false, true, true, true, true, true, false, true, false, false, false, true, false, false, false, true, true, false, true, false, false, true, true, true);
-          }
-          pow_mod_crc(21120);
-        }
-        calc {
-          [true, false, false, true, false, true, false, false, true, true, false, false, false, true, false, false, false, true, true, false, true, false, false, true, true, false, false, false, false, true, false, true];
-          {
-            pow_10527();
-            of_pow(10560, true, false, true, false, false, false, false, true, true, false, false, true, false, true, true, false, false, false, true, false, false, false, true, true, false, false, true, false, true, false, false, true);
-          }
-          pow_mod_crc(10560);
-        }
+        lut_entry_164_0();
+        lut_entry_164_1();
       }
       pow_mod_crc(21120) + pow_mod_crc(10560);
     }
   }
 
 
+
+  lemma lut_entry_165_0()
+  ensures [true, true, true, true, false, false, false, true, false, false, true, false, true, true, true, false, false, false, true, false, true, false, false, false, true, false, true, true, true, true, true, false] == pow_mod_crc(21248);
+  {
+    pow_21215();
+    of_pow(21248, false, true, true, true, true, true, false, true, false, false, false, true, false, true, false, false, false, true, true, true, false, true, false, false, true, false, false, false, true, true, true, true);
+  }
+
+  lemma lut_entry_165_1()
+  ensures [false, true, false, true, true, true, true, false, true, false, true, false, true, true, true, true, true, true, true, true, true, true, false, false, true, true, false, true, true, true, true, false] == pow_mod_crc(10624);
+  {
+    pow_10591();
+    of_pow(10624, false, true, true, true, true, false, true, true, false, false, true, true, true, true, true, true, true, true, true, true, false, true, false, true, false, true, true, true, true, false, true, false);
+  }
 
   lemma lut_entry_165()
   ensures bits_of_int(lut[165] as int, 64)
@@ -6718,28 +6732,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, true, false, false, false, true, false, false, true, false, true, true, true, false, false, false, true, false, true, false, false, false, true, false, true, true, true, true, true, false]+[false, true, false, true, true, true, true, false, true, false, true, false, true, true, true, true, true, true, true, true, true, true, false, false, true, true, false, true, true, true, true, false];
       {
-        calc {
-          [true, true, true, true, false, false, false, true, false, false, true, false, true, true, true, false, false, false, true, false, true, false, false, false, true, false, true, true, true, true, true, false];
-          {
-            pow_21215();
-            of_pow(21248, false, true, true, true, true, true, false, true, false, false, false, true, false, true, false, false, false, true, true, true, false, true, false, false, true, false, false, false, true, true, true, true);
-          }
-          pow_mod_crc(21248);
-        }
-        calc {
-          [false, true, false, true, true, true, true, false, true, false, true, false, true, true, true, true, true, true, true, true, true, true, false, false, true, true, false, true, true, true, true, false];
-          {
-            pow_10591();
-            of_pow(10624, false, true, true, true, true, false, true, true, false, false, true, true, true, true, true, true, true, true, true, true, false, true, false, true, false, true, true, true, true, false, true, false);
-          }
-          pow_mod_crc(10624);
-        }
+        lut_entry_165_0();
+        lut_entry_165_1();
       }
       pow_mod_crc(21248) + pow_mod_crc(10624);
     }
   }
 
 
+
+  lemma lut_entry_166_0()
+  ensures [false, false, true, true, true, false, false, false, false, false, true, false, false, false, false, false, false, false, false, true, true, false, true, true, false, true, false, false, true, true, false, false] == pow_mod_crc(21376);
+  {
+    pow_21343();
+    of_pow(21376, false, false, true, true, false, false, true, false, true, true, false, true, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, true, true, false, false);
+  }
+
+  lemma lut_entry_166_1()
+  ensures [true, false, false, true, false, false, true, false, true, true, true, false, false, false, false, false, true, true, true, false, true, true, false, false, true, false, true, true, false, true, false, false] == pow_mod_crc(10688);
+  {
+    pow_10655();
+    of_pow(10688, false, false, true, false, true, true, false, true, false, false, true, true, false, true, true, true, false, false, false, false, false, true, true, true, false, true, false, false, true, false, false, true);
+  }
 
   lemma lut_entry_166()
   ensures bits_of_int(lut[166] as int, 64)
@@ -6758,28 +6772,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, true, false, false, false, false, false, true, false, false, false, false, false, false, false, false, true, true, false, true, true, false, true, false, false, true, true, false, false]+[true, false, false, true, false, false, true, false, true, true, true, false, false, false, false, false, true, true, true, false, true, true, false, false, true, false, true, true, false, true, false, false];
       {
-        calc {
-          [false, false, true, true, true, false, false, false, false, false, true, false, false, false, false, false, false, false, false, true, true, false, true, true, false, true, false, false, true, true, false, false];
-          {
-            pow_21343();
-            of_pow(21376, false, false, true, true, false, false, true, false, true, true, false, true, true, false, false, false, false, false, false, false, false, true, false, false, false, false, false, true, true, true, false, false);
-          }
-          pow_mod_crc(21376);
-        }
-        calc {
-          [true, false, false, true, false, false, true, false, true, true, true, false, false, false, false, false, true, true, true, false, true, true, false, false, true, false, true, true, false, true, false, false];
-          {
-            pow_10655();
-            of_pow(10688, false, false, true, false, true, true, false, true, false, false, true, true, false, true, true, true, false, false, false, false, false, true, true, true, false, true, false, false, true, false, false, true);
-          }
-          pow_mod_crc(10688);
-        }
+        lut_entry_166_0();
+        lut_entry_166_1();
       }
       pow_mod_crc(21376) + pow_mod_crc(10688);
     }
   }
 
 
+
+  lemma lut_entry_167_0()
+  ensures [true, false, false, false, false, true, true, true, false, false, true, false, true, true, true, false, true, true, true, false, true, false, false, true, false, false, false, true, false, false, false, true] == pow_mod_crc(21504);
+  {
+    pow_21471();
+    of_pow(21504, true, false, false, false, true, false, false, false, true, false, false, true, false, true, true, true, false, true, true, true, false, true, false, false, true, true, true, false, false, false, false, true);
+  }
+
+  lemma lut_entry_167_1()
+  ensures [false, true, false, false, false, false, false, true, true, true, true, false, true, true, false, true, false, false, false, true, false, false, true, true, true, false, false, true, false, false, true, true] == pow_mod_crc(10752);
+  {
+    pow_10719();
+    of_pow(10752, true, true, false, false, true, false, false, true, true, true, false, false, true, false, false, false, true, false, true, true, false, true, true, true, true, false, false, false, false, false, true, false);
+  }
 
   lemma lut_entry_167()
   ensures bits_of_int(lut[167] as int, 64)
@@ -6798,28 +6812,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, false, false, true, true, true, false, false, true, false, true, true, true, false, true, true, true, false, true, false, false, true, false, false, false, true, false, false, false, true]+[false, true, false, false, false, false, false, true, true, true, true, false, true, true, false, true, false, false, false, true, false, false, true, true, true, false, false, true, false, false, true, true];
       {
-        calc {
-          [true, false, false, false, false, true, true, true, false, false, true, false, true, true, true, false, true, true, true, false, true, false, false, true, false, false, false, true, false, false, false, true];
-          {
-            pow_21471();
-            of_pow(21504, true, false, false, false, true, false, false, false, true, false, false, true, false, true, true, true, false, true, true, true, false, true, false, false, true, true, true, false, false, false, false, true);
-          }
-          pow_mod_crc(21504);
-        }
-        calc {
-          [false, true, false, false, false, false, false, true, true, true, true, false, true, true, false, true, false, false, false, true, false, false, true, true, true, false, false, true, false, false, true, true];
-          {
-            pow_10719();
-            of_pow(10752, true, true, false, false, true, false, false, true, true, true, false, false, true, false, false, false, true, false, true, true, false, true, true, true, true, false, false, false, false, false, true, false);
-          }
-          pow_mod_crc(10752);
-        }
+        lut_entry_167_0();
+        lut_entry_167_1();
       }
       pow_mod_crc(21504) + pow_mod_crc(10752);
     }
   }
 
 
+
+  lemma lut_entry_168_0()
+  ensures [true, true, true, true, true, true, true, true, false, false, false, false, false, true, false, true, false, false, false, true, false, false, true, true, false, false, true, true, false, true, true, false] == pow_mod_crc(21632);
+  {
+    pow_21599();
+    of_pow(21632, false, true, true, false, true, true, false, false, true, true, false, false, true, false, false, false, true, false, true, false, false, false, false, false, true, true, true, true, true, true, true, true);
+  }
+
+  lemma lut_entry_168_1()
+  ensures [true, false, false, false, false, true, false, true, false, false, true, false, false, false, false, true, true, false, true, true, true, true, true, false, true, false, false, true, true, true, false, false] == pow_mod_crc(10816);
+  {
+    pow_10783();
+    of_pow(10816, false, false, true, true, true, false, false, true, false, true, true, true, true, true, false, true, true, false, false, false, false, true, false, false, true, false, true, false, false, false, false, true);
+  }
 
   lemma lut_entry_168()
   ensures bits_of_int(lut[168] as int, 64)
@@ -6838,28 +6852,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, true, true, true, true, true, false, false, false, false, false, true, false, true, false, false, false, true, false, false, true, true, false, false, true, true, false, true, true, false]+[true, false, false, false, false, true, false, true, false, false, true, false, false, false, false, true, true, false, true, true, true, true, true, false, true, false, false, true, true, true, false, false];
       {
-        calc {
-          [true, true, true, true, true, true, true, true, false, false, false, false, false, true, false, true, false, false, false, true, false, false, true, true, false, false, true, true, false, true, true, false];
-          {
-            pow_21599();
-            of_pow(21632, false, true, true, false, true, true, false, false, true, true, false, false, true, false, false, false, true, false, true, false, false, false, false, false, true, true, true, true, true, true, true, true);
-          }
-          pow_mod_crc(21632);
-        }
-        calc {
-          [true, false, false, false, false, true, false, true, false, false, true, false, false, false, false, true, true, false, true, true, true, true, true, false, true, false, false, true, true, true, false, false];
-          {
-            pow_10783();
-            of_pow(10816, false, false, true, true, true, false, false, true, false, true, true, true, true, true, false, true, true, false, false, false, false, true, false, false, true, false, true, false, false, false, false, true);
-          }
-          pow_mod_crc(10816);
-        }
+        lut_entry_168_0();
+        lut_entry_168_1();
       }
       pow_mod_crc(21632) + pow_mod_crc(10816);
     }
   }
 
 
+
+  lemma lut_entry_169_0()
+  ensures [true, true, true, true, false, false, true, true, true, true, false, false, true, true, true, true, true, false, false, false, false, true, false, true, false, true, false, true, true, false, true, false] == pow_mod_crc(21760);
+  {
+    pow_21727();
+    of_pow(21760, false, true, false, true, true, false, true, false, true, false, true, false, false, false, false, true, true, true, true, true, false, false, true, true, true, true, false, false, true, true, true, true);
+  }
+
+  lemma lut_entry_169_1()
+  ensures [true, true, true, true, false, true, true, false, false, false, true, true, false, false, true, true, false, false, false, false, true, true, true, false, true, true, true, true, true, true, false, false] == pow_mod_crc(10880);
+  {
+    pow_10847();
+    of_pow(10880, false, false, true, true, true, true, true, true, false, true, true, true, false, false, false, false, true, true, false, false, true, true, false, false, false, true, true, false, true, true, true, true);
+  }
 
   lemma lut_entry_169()
   ensures bits_of_int(lut[169] as int, 64)
@@ -6878,28 +6892,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, true, false, false, true, true, true, true, false, false, true, true, true, true, true, false, false, false, false, true, false, true, false, true, false, true, true, false, true, false]+[true, true, true, true, false, true, true, false, false, false, true, true, false, false, true, true, false, false, false, false, true, true, true, false, true, true, true, true, true, true, false, false];
       {
-        calc {
-          [true, true, true, true, false, false, true, true, true, true, false, false, true, true, true, true, true, false, false, false, false, true, false, true, false, true, false, true, true, false, true, false];
-          {
-            pow_21727();
-            of_pow(21760, false, true, false, true, true, false, true, false, true, false, true, false, false, false, false, true, true, true, true, true, false, false, true, true, true, true, false, false, true, true, true, true);
-          }
-          pow_mod_crc(21760);
-        }
-        calc {
-          [true, true, true, true, false, true, true, false, false, false, true, true, false, false, true, true, false, false, false, false, true, true, true, false, true, true, true, true, true, true, false, false];
-          {
-            pow_10847();
-            of_pow(10880, false, false, true, true, true, true, true, true, false, true, true, true, false, false, false, false, true, true, false, false, true, true, false, false, false, true, true, false, true, true, true, true);
-          }
-          pow_mod_crc(10880);
-        }
+        lut_entry_169_0();
+        lut_entry_169_1();
       }
       pow_mod_crc(21760) + pow_mod_crc(10880);
     }
   }
 
 
+
+  lemma lut_entry_170_0()
+  ensures [false, true, false, false, true, false, false, false, false, false, false, false, false, false, true, false, true, true, true, false, false, false, false, false, false, true, false, true, false, false, false, true] == pow_mod_crc(21888);
+  {
+    pow_21855();
+    of_pow(21888, true, false, false, false, true, false, true, false, false, false, false, false, false, true, true, true, false, true, false, false, false, false, false, false, false, false, false, true, false, false, true, false);
+  }
+
+  lemma lut_entry_170_1()
+  ensures [false, false, false, false, true, true, true, false, false, true, false, false, true, true, false, false, true, false, false, false, true, false, false, false, true, false, false, true, true, true, true, false] == pow_mod_crc(10944);
+  {
+    pow_10911();
+    of_pow(10944, false, true, true, true, true, false, false, true, false, false, false, true, false, false, false, true, false, false, true, true, false, false, true, false, false, true, true, true, false, false, false, false);
+  }
 
   lemma lut_entry_170()
   ensures bits_of_int(lut[170] as int, 64)
@@ -6918,28 +6932,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, true, false, false, false, false, false, false, false, false, false, true, false, true, true, true, false, false, false, false, false, false, true, false, true, false, false, false, true]+[false, false, false, false, true, true, true, false, false, true, false, false, true, true, false, false, true, false, false, false, true, false, false, false, true, false, false, true, true, true, true, false];
       {
-        calc {
-          [false, true, false, false, true, false, false, false, false, false, false, false, false, false, true, false, true, true, true, false, false, false, false, false, false, true, false, true, false, false, false, true];
-          {
-            pow_21855();
-            of_pow(21888, true, false, false, false, true, false, true, false, false, false, false, false, false, true, true, true, false, true, false, false, false, false, false, false, false, false, false, true, false, false, true, false);
-          }
-          pow_mod_crc(21888);
-        }
-        calc {
-          [false, false, false, false, true, true, true, false, false, true, false, false, true, true, false, false, true, false, false, false, true, false, false, false, true, false, false, true, true, true, true, false];
-          {
-            pow_10911();
-            of_pow(10944, false, true, true, true, true, false, false, true, false, false, false, true, false, false, false, true, false, false, true, true, false, false, true, false, false, true, true, true, false, false, false, false);
-          }
-          pow_mod_crc(10944);
-        }
+        lut_entry_170_0();
+        lut_entry_170_1();
       }
       pow_mod_crc(21888) + pow_mod_crc(10944);
     }
   }
 
 
+
+  lemma lut_entry_171_0()
+  ensures [true, true, false, false, true, true, false, true, false, false, false, true, true, false, true, false, false, false, true, true, true, true, false, true, true, true, false, false, true, true, false, false] == pow_mod_crc(22016);
+  {
+    pow_21983();
+    of_pow(22016, false, false, true, true, false, false, true, true, true, false, true, true, true, true, false, false, false, true, false, true, true, false, false, false, true, false, true, true, false, false, true, true);
+  }
+
+  lemma lut_entry_171_1()
+  ensures [false, false, true, false, false, true, false, true, false, true, true, false, false, false, false, false, true, false, false, false, false, true, true, true, true, true, false, false, true, false, false, true] == pow_mod_crc(11008);
+  {
+    pow_10975();
+    of_pow(11008, true, false, false, true, false, false, true, true, true, true, true, false, false, false, false, true, false, false, false, false, false, true, true, false, true, false, true, false, false, true, false, false);
+  }
 
   lemma lut_entry_171()
   ensures bits_of_int(lut[171] as int, 64)
@@ -6958,28 +6972,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, false, true, true, false, true, false, false, false, true, true, false, true, false, false, false, true, true, true, true, false, true, true, true, false, false, true, true, false, false]+[false, false, true, false, false, true, false, true, false, true, true, false, false, false, false, false, true, false, false, false, false, true, true, true, true, true, false, false, true, false, false, true];
       {
-        calc {
-          [true, true, false, false, true, true, false, true, false, false, false, true, true, false, true, false, false, false, true, true, true, true, false, true, true, true, false, false, true, true, false, false];
-          {
-            pow_21983();
-            of_pow(22016, false, false, true, true, false, false, true, true, true, false, true, true, true, true, false, false, false, true, false, true, true, false, false, false, true, false, true, true, false, false, true, true);
-          }
-          pow_mod_crc(22016);
-        }
-        calc {
-          [false, false, true, false, false, true, false, true, false, true, true, false, false, false, false, false, true, false, false, false, false, true, true, true, true, true, false, false, true, false, false, true];
-          {
-            pow_10975();
-            of_pow(11008, true, false, false, true, false, false, true, true, true, true, true, false, false, false, false, true, false, false, false, false, false, true, true, false, true, false, true, false, false, true, false, false);
-          }
-          pow_mod_crc(11008);
-        }
+        lut_entry_171_0();
+        lut_entry_171_1();
       }
       pow_mod_crc(22016) + pow_mod_crc(11008);
     }
   }
 
 
+
+  lemma lut_entry_172_0()
+  ensures [false, true, false, true, false, true, false, false, false, false, false, false, false, false, false, false, true, true, false, true, false, true, false, false, true, true, true, true, true, false, false, true] == pow_mod_crc(22144);
+  {
+    pow_22111();
+    of_pow(22144, true, false, false, true, true, true, true, true, false, false, true, false, true, false, true, true, false, false, false, false, false, false, false, false, false, false, true, false, true, false, true, false);
+  }
+
+  lemma lut_entry_172_1()
+  ensures [true, true, false, false, false, false, false, false, false, false, false, true, true, true, true, false, true, false, false, false, false, false, false, true, false, false, true, true, true, true, false, true] == pow_mod_crc(11072);
+  {
+    pow_11039();
+    of_pow(11072, true, false, true, true, true, true, false, false, true, false, false, false, false, false, false, true, false, true, true, true, true, false, false, false, false, false, false, false, false, false, true, true);
+  }
 
   lemma lut_entry_172()
   ensures bits_of_int(lut[172] as int, 64)
@@ -6998,28 +7012,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, false, true, false, false, false, false, false, false, false, false, false, false, true, true, false, true, false, true, false, false, true, true, true, true, true, false, false, true]+[true, true, false, false, false, false, false, false, false, false, false, true, true, true, true, false, true, false, false, false, false, false, false, true, false, false, true, true, true, true, false, true];
       {
-        calc {
-          [false, true, false, true, false, true, false, false, false, false, false, false, false, false, false, false, true, true, false, true, false, true, false, false, true, true, true, true, true, false, false, true];
-          {
-            pow_22111();
-            of_pow(22144, true, false, false, true, true, true, true, true, false, false, true, false, true, false, true, true, false, false, false, false, false, false, false, false, false, false, true, false, true, false, true, false);
-          }
-          pow_mod_crc(22144);
-        }
-        calc {
-          [true, true, false, false, false, false, false, false, false, false, false, true, true, true, true, false, true, false, false, false, false, false, false, true, false, false, true, true, true, true, false, true];
-          {
-            pow_11039();
-            of_pow(11072, true, false, true, true, true, true, false, false, true, false, false, false, false, false, false, true, false, true, true, true, true, false, false, false, false, false, false, false, false, false, true, true);
-          }
-          pow_mod_crc(11072);
-        }
+        lut_entry_172_0();
+        lut_entry_172_1();
       }
       pow_mod_crc(22144) + pow_mod_crc(11072);
     }
   }
 
 
+
+  lemma lut_entry_173_0()
+  ensures [true, true, true, true, true, false, true, false, false, true, false, false, true, true, false, true, true, true, false, true, false, false, false, false, true, false, true, true, true, true, false, true] == pow_mod_crc(22272);
+  {
+    pow_22239();
+    of_pow(22272, true, false, true, true, true, true, false, true, false, false, false, false, true, false, true, true, true, false, true, true, false, false, true, false, false, true, false, true, true, true, true, true);
+  }
+
+  lemma lut_entry_173_1()
+  ensures [true, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, true, false, true, false, false, false, true, true, false] == pow_mod_crc(11136);
+  {
+    pow_11103();
+    of_pow(11136, false, true, true, false, false, false, true, false, true, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, true);
+  }
 
   lemma lut_entry_173()
   ensures bits_of_int(lut[173] as int, 64)
@@ -7038,28 +7052,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, true, true, false, true, false, false, true, false, false, true, true, false, true, true, true, false, true, false, false, false, false, true, false, true, true, true, true, false, true]+[true, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, true, false, true, false, false, false, true, true, false];
       {
-        calc {
-          [true, true, true, true, true, false, true, false, false, true, false, false, true, true, false, true, true, true, false, true, false, false, false, false, true, false, true, true, true, true, false, true];
-          {
-            pow_22239();
-            of_pow(22272, true, false, true, true, true, true, false, true, false, false, false, false, true, false, true, true, true, false, true, true, false, false, true, false, false, true, false, true, true, true, true, true);
-          }
-          pow_mod_crc(22272);
-        }
-        calc {
-          [true, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, true, false, true, false, false, false, true, true, false];
-          {
-            pow_11103();
-            of_pow(11136, false, true, true, false, false, false, true, false, true, true, true, false, true, true, false, false, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, true);
-          }
-          pow_mod_crc(11136);
-        }
+        lut_entry_173_0();
+        lut_entry_173_1();
       }
       pow_mod_crc(22272) + pow_mod_crc(11136);
     }
   }
 
 
+
+  lemma lut_entry_174_0()
+  ensures [false, true, false, true, false, true, true, false, false, true, false, true, false, false, false, false, true, true, true, true, true, true, false, true, false, false, false, false, false, true, true, false] == pow_mod_crc(22400);
+  {
+    pow_22367();
+    of_pow(22400, false, true, true, false, false, false, false, false, true, false, true, true, true, true, true, true, false, false, false, false, true, false, true, false, false, true, true, false, true, false, true, false);
+  }
+
+  lemma lut_entry_174_1()
+  ensures [true, true, true, false, false, false, false, false, false, false, true, true, true, true, false, false, true, true, false, true, false, true, true, true, false, false, false, true, false, false, false, true] == pow_mod_crc(11200);
+  {
+    pow_11167();
+    of_pow(11200, true, false, false, false, true, false, false, false, true, true, true, false, true, false, true, true, false, false, true, true, true, true, false, false, false, false, false, false, false, true, true, true);
+  }
 
   lemma lut_entry_174()
   ensures bits_of_int(lut[174] as int, 64)
@@ -7078,28 +7092,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, false, true, true, false, false, true, false, true, false, false, false, false, true, true, true, true, true, true, false, true, false, false, false, false, false, true, true, false]+[true, true, true, false, false, false, false, false, false, false, true, true, true, true, false, false, true, true, false, true, false, true, true, true, false, false, false, true, false, false, false, true];
       {
-        calc {
-          [false, true, false, true, false, true, true, false, false, true, false, true, false, false, false, false, true, true, true, true, true, true, false, true, false, false, false, false, false, true, true, false];
-          {
-            pow_22367();
-            of_pow(22400, false, true, true, false, false, false, false, false, true, false, true, true, true, true, true, true, false, false, false, false, true, false, true, false, false, true, true, false, true, false, true, false);
-          }
-          pow_mod_crc(22400);
-        }
-        calc {
-          [true, true, true, false, false, false, false, false, false, false, true, true, true, true, false, false, true, true, false, true, false, true, true, true, false, false, false, true, false, false, false, true];
-          {
-            pow_11167();
-            of_pow(11200, true, false, false, false, true, false, false, false, true, true, true, false, true, false, true, true, false, false, true, true, true, true, false, false, false, false, false, false, false, true, true, true);
-          }
-          pow_mod_crc(11200);
-        }
+        lut_entry_174_0();
+        lut_entry_174_1();
       }
       pow_mod_crc(22400) + pow_mod_crc(11200);
     }
   }
 
 
+
+  lemma lut_entry_175_0()
+  ensures [true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, false, true, false, true, false, false, false, true, false, true, false, false, false, false, true] == pow_mod_crc(22528);
+  {
+    pow_22495();
+    of_pow(22528, true, false, false, false, false, true, false, true, false, false, false, true, false, true, false, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, true);
+  }
+
+  lemma lut_entry_175_1()
+  ensures [true, false, true, false, false, true, false, false, true, true, false, false, true, true, false, true, true, true, false, false, true, false, false, false, false, false, false, true, true, false, true, true] == pow_mod_crc(11264);
+  {
+    pow_11231();
+    of_pow(11264, true, true, false, true, true, false, false, false, false, false, false, true, false, false, true, true, true, false, true, true, false, false, true, true, false, false, true, false, false, true, false, true);
+  }
 
   lemma lut_entry_175()
   ensures bits_of_int(lut[175] as int, 64)
@@ -7118,28 +7132,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, false, true, false, true, false, false, false, true, false, true, false, false, false, false, true]+[true, false, true, false, false, true, false, false, true, true, false, false, true, true, false, true, true, true, false, false, true, false, false, false, false, false, false, true, true, false, true, true];
       {
-        calc {
-          [true, true, true, true, true, true, true, false, false, false, false, false, false, false, true, true, true, false, true, false, true, false, false, false, true, false, true, false, false, false, false, true];
-          {
-            pow_22495();
-            of_pow(22528, true, false, false, false, false, true, false, true, false, false, false, true, false, true, false, true, true, true, false, false, false, false, false, false, false, true, true, true, true, true, true, true);
-          }
-          pow_mod_crc(22528);
-        }
-        calc {
-          [true, false, true, false, false, true, false, false, true, true, false, false, true, true, false, true, true, true, false, false, true, false, false, false, false, false, false, true, true, false, true, true];
-          {
-            pow_11231();
-            of_pow(11264, true, true, false, true, true, false, false, false, false, false, false, true, false, false, true, true, true, false, true, true, false, false, true, true, false, false, true, false, false, true, false, true);
-          }
-          pow_mod_crc(11264);
-        }
+        lut_entry_175_0();
+        lut_entry_175_1();
       }
       pow_mod_crc(22528) + pow_mod_crc(11264);
     }
   }
 
 
+
+  lemma lut_entry_176_0()
+  ensures [true, true, false, true, true, false, false, true, false, false, false, false, false, false, true, true, true, true, false, false, false, true, true, true, true, true, false, true, true, true, false, false] == pow_mod_crc(22656);
+  {
+    pow_22623();
+    of_pow(22656, false, false, true, true, true, false, true, true, true, true, true, false, false, false, true, true, true, true, false, false, false, false, false, false, true, false, false, true, true, false, true, true);
+  }
+
+  lemma lut_entry_176_1()
+  ensures [false, false, false, false, true, true, false, false, false, true, true, false, true, true, false, true, false, false, true, true, false, false, true, false, false, true, true, true, false, true, true, false] == pow_mod_crc(11328);
+  {
+    pow_11295();
+    of_pow(11328, false, true, true, false, true, true, true, false, false, true, false, false, true, true, false, false, true, false, true, true, false, true, true, false, false, false, true, true, false, false, false, false);
+  }
 
   lemma lut_entry_176()
   ensures bits_of_int(lut[176] as int, 64)
@@ -7158,28 +7172,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, true, false, false, true, false, false, false, false, false, false, true, true, true, true, false, false, false, true, true, true, true, true, false, true, true, true, false, false]+[false, false, false, false, true, true, false, false, false, true, true, false, true, true, false, true, false, false, true, true, false, false, true, false, false, true, true, true, false, true, true, false];
       {
-        calc {
-          [true, true, false, true, true, false, false, true, false, false, false, false, false, false, true, true, true, true, false, false, false, true, true, true, true, true, false, true, true, true, false, false];
-          {
-            pow_22623();
-            of_pow(22656, false, false, true, true, true, false, true, true, true, true, true, false, false, false, true, true, true, true, false, false, false, false, false, false, true, false, false, true, true, false, true, true);
-          }
-          pow_mod_crc(22656);
-        }
-        calc {
-          [false, false, false, false, true, true, false, false, false, true, true, false, true, true, false, true, false, false, true, true, false, false, true, false, false, true, true, true, false, true, true, false];
-          {
-            pow_11295();
-            of_pow(11328, false, true, true, false, true, true, true, false, false, true, false, false, true, true, false, false, true, false, true, true, false, true, true, false, false, false, true, true, false, false, false, false);
-          }
-          pow_mod_crc(11328);
-        }
+        lut_entry_176_0();
+        lut_entry_176_1();
       }
       pow_mod_crc(22656) + pow_mod_crc(11328);
     }
   }
 
 
+
+  lemma lut_entry_177_0()
+  ensures [true, false, true, false, false, true, false, false, true, false, true, false, false, false, false, false, false, false, true, false, false, false, true, false, false, false, false, true, true, false, true, true] == pow_mod_crc(22784);
+  {
+    pow_22751();
+    of_pow(22784, true, true, false, true, true, false, false, false, false, true, false, false, false, true, false, false, false, false, false, false, false, true, false, true, false, false, true, false, false, true, false, true);
+  }
+
+  lemma lut_entry_177_1()
+  ensures [false, false, false, false, false, false, false, true, false, true, true, false, false, false, true, false, false, false, false, false, true, true, true, true, true, false, true, true, false, false, false, false] == pow_mod_crc(11392);
+  {
+    pow_11359();
+    of_pow(11392, false, false, false, false, true, true, false, true, true, true, true, true, false, false, false, false, false, true, false, false, false, true, true, false, true, false, false, false, false, false, false, false);
+  }
 
   lemma lut_entry_177()
   ensures bits_of_int(lut[177] as int, 64)
@@ -7198,28 +7212,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, false, false, true, false, false, true, false, true, false, false, false, false, false, false, false, true, false, false, false, true, false, false, false, false, true, true, false, true, true]+[false, false, false, false, false, false, false, true, false, true, true, false, false, false, true, false, false, false, false, false, true, true, true, true, true, false, true, true, false, false, false, false];
       {
-        calc {
-          [true, false, true, false, false, true, false, false, true, false, true, false, false, false, false, false, false, false, true, false, false, false, true, false, false, false, false, true, true, false, true, true];
-          {
-            pow_22751();
-            of_pow(22784, true, true, false, true, true, false, false, false, false, true, false, false, false, true, false, false, false, false, false, false, false, true, false, true, false, false, true, false, false, true, false, true);
-          }
-          pow_mod_crc(22784);
-        }
-        calc {
-          [false, false, false, false, false, false, false, true, false, true, true, false, false, false, true, false, false, false, false, false, true, true, true, true, true, false, true, true, false, false, false, false];
-          {
-            pow_11359();
-            of_pow(11392, false, false, false, false, true, true, false, true, true, true, true, true, false, false, false, false, false, true, false, false, false, true, true, false, true, false, false, false, false, false, false, false);
-          }
-          pow_mod_crc(11392);
-        }
+        lut_entry_177_0();
+        lut_entry_177_1();
       }
       pow_mod_crc(22784) + pow_mod_crc(11392);
     }
   }
 
 
+
+  lemma lut_entry_178_0()
+  ensures [true, false, true, true, true, false, true, false, false, false, false, true, false, false, false, false, true, false, true, true, false, true, false, false, false, false, false, true, false, true, true, false] == pow_mod_crc(22912);
+  {
+    pow_22879();
+    of_pow(22912, false, true, true, false, true, false, false, false, false, false, true, false, true, true, false, true, false, false, false, false, true, false, false, false, false, true, false, true, true, true, false, true);
+  }
+
+  lemma lut_entry_178_1()
+  ensures [false, false, true, true, true, false, true, false, true, false, true, true, true, false, false, false, true, true, true, false, true, false, false, true, true, false, false, false, true, true, true, false] == pow_mod_crc(11456);
+  {
+    pow_11423();
+    of_pow(11456, false, true, true, true, false, false, false, true, true, false, false, true, false, true, true, true, false, false, false, true, true, true, false, true, false, true, false, true, true, true, false, false);
+  }
 
   lemma lut_entry_178()
   ensures bits_of_int(lut[178] as int, 64)
@@ -7238,28 +7252,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, true, true, false, true, false, false, false, false, true, false, false, false, false, true, false, true, true, false, true, false, false, false, false, false, true, false, true, true, false]+[false, false, true, true, true, false, true, false, true, false, true, true, true, false, false, false, true, true, true, false, true, false, false, true, true, false, false, false, true, true, true, false];
       {
-        calc {
-          [true, false, true, true, true, false, true, false, false, false, false, true, false, false, false, false, true, false, true, true, false, true, false, false, false, false, false, true, false, true, true, false];
-          {
-            pow_22879();
-            of_pow(22912, false, true, true, false, true, false, false, false, false, false, true, false, true, true, false, true, false, false, false, false, true, false, false, false, false, true, false, true, true, true, false, true);
-          }
-          pow_mod_crc(22912);
-        }
-        calc {
-          [false, false, true, true, true, false, true, false, true, false, true, true, true, false, false, false, true, true, true, false, true, false, false, true, true, false, false, false, true, true, true, false];
-          {
-            pow_11423();
-            of_pow(11456, false, true, true, true, false, false, false, true, true, false, false, true, false, true, true, true, false, false, false, true, true, true, false, true, false, true, false, true, true, true, false, false);
-          }
-          pow_mod_crc(11456);
-        }
+        lut_entry_178_0();
+        lut_entry_178_1();
       }
       pow_mod_crc(22912) + pow_mod_crc(11456);
     }
   }
 
 
+
+  lemma lut_entry_179_0()
+  ensures [false, true, true, true, false, true, true, true, false, true, true, true, false, false, true, false, false, true, false, true, true, false, true, false, false, true, true, false, false, false, true, false] == pow_mod_crc(23040);
+  {
+    pow_23007();
+    of_pow(23040, false, true, false, false, false, true, true, false, false, true, false, true, true, false, true, false, false, true, false, false, true, true, true, false, true, true, true, false, true, true, true, false);
+  }
+
+  lemma lut_entry_179_1()
+  ensures [false, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, true, false, true, true, false, false, false, true, false, false] == pow_mod_crc(11520);
+  {
+    pow_11487();
+    of_pow(11520, false, false, true, false, false, false, true, true, false, true, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, true, true, true, true, false);
+  }
 
   lemma lut_entry_179()
   ensures bits_of_int(lut[179] as int, 64)
@@ -7278,28 +7292,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, true, false, true, true, true, false, true, true, true, false, false, true, false, false, true, false, true, true, false, true, false, false, true, true, false, false, false, true, false]+[false, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, true, false, true, true, false, false, false, true, false, false];
       {
-        calc {
-          [false, true, true, true, false, true, true, true, false, true, true, true, false, false, true, false, false, true, false, true, true, false, true, false, false, true, true, false, false, false, true, false];
-          {
-            pow_23007();
-            of_pow(23040, false, true, false, false, false, true, true, false, false, true, false, true, true, false, true, false, false, true, false, false, true, true, true, false, true, true, true, false, true, true, true, false);
-          }
-          pow_mod_crc(23040);
-        }
-        calc {
-          [false, true, true, true, true, false, false, false, false, false, false, false, false, false, false, false, false, true, false, false, false, false, true, false, true, true, false, false, false, true, false, false];
-          {
-            pow_11487();
-            of_pow(11520, false, false, true, false, false, false, true, true, false, true, false, false, false, false, true, false, false, false, false, false, false, false, false, false, false, false, false, true, true, true, true, false);
-          }
-          pow_mod_crc(11520);
-        }
+        lut_entry_179_0();
+        lut_entry_179_1();
       }
       pow_mod_crc(23040) + pow_mod_crc(11520);
     }
   }
 
 
+
+  lemma lut_entry_180_0()
+  ensures [false, true, false, false, false, false, false, true, false, true, true, true, true, false, true, true, true, false, true, false, true, true, false, true, false, false, false, true, false, true, false, false] == pow_mod_crc(23168);
+  {
+    pow_23135();
+    of_pow(23168, false, false, true, false, true, false, false, false, true, false, true, true, false, true, false, true, true, true, false, true, true, true, true, false, true, false, false, false, false, false, true, false);
+  }
+
+  lemma lut_entry_180_1()
+  ensures [false, true, true, false, false, false, true, true, true, true, false, true, false, false, false, true, true, true, false, true, true, true, false, false, true, true, false, false, true, true, true, true] == pow_mod_crc(11584);
+  {
+    pow_11551();
+    of_pow(11584, true, true, true, true, false, false, true, true, false, false, true, true, true, false, true, true, true, false, false, false, true, false, true, true, true, true, false, false, false, true, true, false);
+  }
 
   lemma lut_entry_180()
   ensures bits_of_int(lut[180] as int, 64)
@@ -7318,28 +7332,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, false, false, false, true, false, true, true, true, true, false, true, true, true, false, true, false, true, true, false, true, false, false, false, true, false, true, false, false]+[false, true, true, false, false, false, true, true, true, true, false, true, false, false, false, true, true, true, false, true, true, true, false, false, true, true, false, false, true, true, true, true];
       {
-        calc {
-          [false, true, false, false, false, false, false, true, false, true, true, true, true, false, true, true, true, false, true, false, true, true, false, true, false, false, false, true, false, true, false, false];
-          {
-            pow_23135();
-            of_pow(23168, false, false, true, false, true, false, false, false, true, false, true, true, false, true, false, true, true, true, false, true, true, true, true, false, true, false, false, false, false, false, true, false);
-          }
-          pow_mod_crc(23168);
-        }
-        calc {
-          [false, true, true, false, false, false, true, true, true, true, false, true, false, false, false, true, true, true, false, true, true, true, false, false, true, true, false, false, true, true, true, true];
-          {
-            pow_11551();
-            of_pow(11584, true, true, true, true, false, false, true, true, false, false, true, true, true, false, true, true, true, false, false, false, true, false, true, true, true, true, false, false, false, true, true, false);
-          }
-          pow_mod_crc(11584);
-        }
+        lut_entry_180_0();
+        lut_entry_180_1();
       }
       pow_mod_crc(23168) + pow_mod_crc(11584);
     }
   }
 
 
+
+  lemma lut_entry_181_0()
+  ensures [false, false, false, false, false, true, true, true, false, false, true, false, true, false, true, false, true, false, true, true, true, true, true, false, true, true, true, false, false, false, false, false] == pow_mod_crc(23296);
+  {
+    pow_23263();
+    of_pow(23296, false, false, false, false, false, true, true, true, false, true, true, true, true, true, false, true, false, true, false, true, false, true, false, false, true, true, true, false, false, false, false, false);
+  }
+
+  lemma lut_entry_181_1()
+  ensures [false, true, true, true, true, true, true, false, true, false, true, true, false, false, false, true, false, true, false, true, false, true, false, false, false, true, false, true, false, false, false, false] == pow_mod_crc(11648);
+  {
+    pow_11615();
+    of_pow(11648, false, false, false, false, true, false, true, false, false, false, true, false, true, false, true, false, true, false, false, false, true, true, false, true, false, true, true, true, true, true, true, false);
+  }
 
   lemma lut_entry_181()
   ensures bits_of_int(lut[181] as int, 64)
@@ -7358,28 +7372,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, false, false, true, true, true, false, false, true, false, true, false, true, false, true, false, true, true, true, true, true, false, true, true, true, false, false, false, false, false]+[false, true, true, true, true, true, true, false, true, false, true, true, false, false, false, true, false, true, false, true, false, true, false, false, false, true, false, true, false, false, false, false];
       {
-        calc {
-          [false, false, false, false, false, true, true, true, false, false, true, false, true, false, true, false, true, false, true, true, true, true, true, false, true, true, true, false, false, false, false, false];
-          {
-            pow_23263();
-            of_pow(23296, false, false, false, false, false, true, true, true, false, true, true, true, true, true, false, true, false, true, false, true, false, true, false, false, true, true, true, false, false, false, false, false);
-          }
-          pow_mod_crc(23296);
-        }
-        calc {
-          [false, true, true, true, true, true, true, false, true, false, true, true, false, false, false, true, false, true, false, true, false, true, false, false, false, true, false, true, false, false, false, false];
-          {
-            pow_11615();
-            of_pow(11648, false, false, false, false, true, false, true, false, false, false, true, false, true, false, true, false, true, false, false, false, true, true, false, true, false, true, true, true, true, true, true, false);
-          }
-          pow_mod_crc(11648);
-        }
+        lut_entry_181_0();
+        lut_entry_181_1();
       }
       pow_mod_crc(23296) + pow_mod_crc(11648);
     }
   }
 
 
+
+  lemma lut_entry_182_0()
+  ensures [false, false, true, true, false, false, false, true, false, false, true, true, true, true, false, false, true, true, true, true, true, false, true, false, false, true, true, true, false, true, false, false] == pow_mod_crc(23424);
+  {
+    pow_23391();
+    of_pow(23424, false, false, true, false, true, true, true, false, false, true, false, true, true, true, true, true, false, false, true, true, true, true, false, false, true, false, false, false, true, true, false, false);
+  }
+
+  lemma lut_entry_182_1()
+  ensures [false, false, false, false, false, false, true, true, true, true, false, true, true, true, false, true, true, true, false, false, true, true, false, true, true, true, true, true, true, false, false, true] == pow_mod_crc(11712);
+  {
+    pow_11679();
+    of_pow(11712, true, false, false, true, true, true, true, true, true, false, true, true, false, false, true, true, true, false, true, true, true, false, true, true, true, true, false, false, false, false, false, false);
+  }
 
   lemma lut_entry_182()
   ensures bits_of_int(lut[182] as int, 64)
@@ -7398,28 +7412,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, false, false, false, true, false, false, true, true, true, true, false, false, true, true, true, true, true, false, true, false, false, true, true, true, false, true, false, false]+[false, false, false, false, false, false, true, true, true, true, false, true, true, true, false, true, true, true, false, false, true, true, false, true, true, true, true, true, true, false, false, true];
       {
-        calc {
-          [false, false, true, true, false, false, false, true, false, false, true, true, true, true, false, false, true, true, true, true, true, false, true, false, false, true, true, true, false, true, false, false];
-          {
-            pow_23391();
-            of_pow(23424, false, false, true, false, true, true, true, false, false, true, false, true, true, true, true, true, false, false, true, true, true, true, false, false, true, false, false, false, true, true, false, false);
-          }
-          pow_mod_crc(23424);
-        }
-        calc {
-          [false, false, false, false, false, false, true, true, true, true, false, true, true, true, false, true, true, true, false, false, true, true, false, true, true, true, true, true, true, false, false, true];
-          {
-            pow_11679();
-            of_pow(11712, true, false, false, true, true, true, true, true, true, false, true, true, false, false, true, true, true, false, true, true, true, false, true, true, true, true, false, false, false, false, false, false);
-          }
-          pow_mod_crc(11712);
-        }
+        lut_entry_182_0();
+        lut_entry_182_1();
       }
       pow_mod_crc(23424) + pow_mod_crc(11712);
     }
   }
 
 
+
+  lemma lut_entry_183_0()
+  ensures [false, false, false, false, false, false, false, true, false, true, false, false, true, true, true, true, true, false, true, true, false, false, false, false, false, false, false, false, false, false, true, true] == pow_mod_crc(23552);
+  {
+    pow_23519();
+    of_pow(23552, true, true, false, false, false, false, false, false, false, false, false, false, true, true, false, true, true, true, true, true, false, false, true, false, true, false, false, false, false, false, false, false);
+  }
+
+  lemma lut_entry_183_1()
+  ensures [true, true, true, false, true, false, true, false, true, false, false, true, false, false, true, false, false, true, false, true, true, false, false, true, true, false, true, true, false, true, true, false] == pow_mod_crc(11776);
+  {
+    pow_11743();
+    of_pow(11776, false, true, true, false, true, true, false, true, true, false, false, true, true, false, true, false, false, true, false, false, true, false, false, true, false, true, false, true, false, true, true, true);
+  }
 
   lemma lut_entry_183()
   ensures bits_of_int(lut[183] as int, 64)
@@ -7438,28 +7452,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, false, false, false, false, true, false, true, false, false, true, true, true, true, true, false, true, true, false, false, false, false, false, false, false, false, false, false, true, true]+[true, true, true, false, true, false, true, false, true, false, false, true, false, false, true, false, false, true, false, true, true, false, false, true, true, false, true, true, false, true, true, false];
       {
-        calc {
-          [false, false, false, false, false, false, false, true, false, true, false, false, true, true, true, true, true, false, true, true, false, false, false, false, false, false, false, false, false, false, true, true];
-          {
-            pow_23519();
-            of_pow(23552, true, true, false, false, false, false, false, false, false, false, false, false, true, true, false, true, true, true, true, true, false, false, true, false, true, false, false, false, false, false, false, false);
-          }
-          pow_mod_crc(23552);
-        }
-        calc {
-          [true, true, true, false, true, false, true, false, true, false, false, true, false, false, true, false, false, true, false, true, true, false, false, true, true, false, true, true, false, true, true, false];
-          {
-            pow_11743();
-            of_pow(11776, false, true, true, false, true, true, false, true, true, false, false, true, true, false, true, false, false, true, false, false, true, false, false, true, false, true, false, true, false, true, true, true);
-          }
-          pow_mod_crc(11776);
-        }
+        lut_entry_183_0();
+        lut_entry_183_1();
       }
       pow_mod_crc(23552) + pow_mod_crc(11776);
     }
   }
 
 
+
+  lemma lut_entry_184_0()
+  ensures [true, true, false, false, false, false, true, false, true, true, true, true, true, true, true, false, true, true, false, false, false, true, false, true, false, false, false, false, true, false, true, true] == pow_mod_crc(23680);
+  {
+    pow_23647();
+    of_pow(23680, true, true, false, true, false, false, false, false, true, false, true, false, false, false, true, true, false, true, true, true, true, true, true, true, false, true, false, false, false, false, true, true);
+  }
+
+  lemma lut_entry_184_1()
+  ensures [true, true, false, false, false, true, false, false, true, true, false, true, false, true, false, false, false, true, false, false, true, true, true, true, false, true, true, true, false, true, true, false] == pow_mod_crc(11840);
+  {
+    pow_11807();
+    of_pow(11840, false, true, true, false, true, true, true, false, true, true, true, true, false, false, true, false, false, false, true, false, true, false, true, true, false, false, true, false, false, false, true, true);
+  }
 
   lemma lut_entry_184()
   ensures bits_of_int(lut[184] as int, 64)
@@ -7478,28 +7492,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, false, false, false, true, false, true, true, true, true, true, true, true, false, true, true, false, false, false, true, false, true, false, false, false, false, true, false, true, true]+[true, true, false, false, false, true, false, false, true, true, false, true, false, true, false, false, false, true, false, false, true, true, true, true, false, true, true, true, false, true, true, false];
       {
-        calc {
-          [true, true, false, false, false, false, true, false, true, true, true, true, true, true, true, false, true, true, false, false, false, true, false, true, false, false, false, false, true, false, true, true];
-          {
-            pow_23647();
-            of_pow(23680, true, true, false, true, false, false, false, false, true, false, true, false, false, false, true, true, false, true, true, true, true, true, true, true, false, true, false, false, false, false, true, true);
-          }
-          pow_mod_crc(23680);
-        }
-        calc {
-          [true, true, false, false, false, true, false, false, true, true, false, true, false, true, false, false, false, true, false, false, true, true, true, true, false, true, true, true, false, true, true, false];
-          {
-            pow_11807();
-            of_pow(11840, false, true, true, false, true, true, true, false, true, true, true, true, false, false, true, false, false, false, true, false, true, false, true, true, false, false, true, false, false, false, true, true);
-          }
-          pow_mod_crc(11840);
-        }
+        lut_entry_184_0();
+        lut_entry_184_1();
       }
       pow_mod_crc(23680) + pow_mod_crc(11840);
     }
   }
 
 
+
+  lemma lut_entry_185_0()
+  ensures [false, false, true, true, false, true, true, true, false, false, false, true, true, false, true, false, true, true, true, true, false, true, false, false, true, false, true, false, false, true, false, true] == pow_mod_crc(23808);
+  {
+    pow_23775();
+    of_pow(23808, true, false, true, false, false, true, false, true, false, false, true, false, true, true, true, true, false, true, false, true, true, false, false, false, true, true, true, false, true, true, false, false);
+  }
+
+  lemma lut_entry_185_1()
+  ensures [true, true, false, true, false, false, false, true, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, true, false, false, false, true, false, true, true, true] == pow_mod_crc(11904);
+  {
+    pow_11871();
+    of_pow(11904, true, true, true, false, true, false, false, false, true, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, true, false, false, false, true, false, true, true);
+  }
 
   lemma lut_entry_185()
   ensures bits_of_int(lut[185] as int, 64)
@@ -7518,28 +7532,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, false, true, true, true, false, false, false, true, true, false, true, false, true, true, true, true, false, true, false, false, true, false, true, false, false, true, false, true]+[true, true, false, true, false, false, false, true, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, true, false, false, false, true, false, true, true, true];
       {
-        calc {
-          [false, false, true, true, false, true, true, true, false, false, false, true, true, false, true, false, true, true, true, true, false, true, false, false, true, false, true, false, false, true, false, true];
-          {
-            pow_23775();
-            of_pow(23808, true, false, true, false, false, true, false, true, false, false, true, false, true, true, true, true, false, true, false, true, true, false, false, false, true, true, true, false, true, true, false, false);
-          }
-          pow_mod_crc(23808);
-        }
-        calc {
-          [true, true, false, true, false, false, false, true, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, true, false, false, false, true, false, true, true, true];
-          {
-            pow_11871();
-            of_pow(11904, true, true, true, false, true, false, false, false, true, false, true, true, false, true, true, false, false, false, true, true, false, true, true, false, true, false, false, false, true, false, true, true);
-          }
-          pow_mod_crc(11904);
-        }
+        lut_entry_185_0();
+        lut_entry_185_1();
       }
       pow_mod_crc(23808) + pow_mod_crc(11904);
     }
   }
 
 
+
+  lemma lut_entry_186_0()
+  ensures [false, true, true, false, false, false, false, true, false, true, true, true, false, true, false, false, true, false, false, false, true, true, true, false, false, false, false, false, false, false, false, false] == pow_mod_crc(23936);
+  {
+    pow_23903();
+    of_pow(23936, false, false, false, false, false, false, false, false, false, true, true, true, false, false, false, true, false, false, true, false, true, true, true, false, true, false, false, false, false, true, true, false);
+  }
+
+  lemma lut_entry_186_1()
+  ensures [false, false, false, true, false, true, true, false, true, true, true, false, true, true, true, true, true, false, true, true, false, true, false, false, false, true, true, true, false, false, true, true] == pow_mod_crc(11968);
+  {
+    pow_11935();
+    of_pow(11968, true, true, false, false, true, true, true, false, false, false, true, false, true, true, false, true, true, true, true, true, false, true, true, true, false, true, true, false, true, false, false, false);
+  }
 
   lemma lut_entry_186()
   ensures bits_of_int(lut[186] as int, 64)
@@ -7558,28 +7572,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, false, false, false, false, true, false, true, true, true, false, true, false, false, true, false, false, false, true, true, true, false, false, false, false, false, false, false, false, false]+[false, false, false, true, false, true, true, false, true, true, true, false, true, true, true, true, true, false, true, true, false, true, false, false, false, true, true, true, false, false, true, true];
       {
-        calc {
-          [false, true, true, false, false, false, false, true, false, true, true, true, false, true, false, false, true, false, false, false, true, true, true, false, false, false, false, false, false, false, false, false];
-          {
-            pow_23903();
-            of_pow(23936, false, false, false, false, false, false, false, false, false, true, true, true, false, false, false, true, false, false, true, false, true, true, true, false, true, false, false, false, false, true, true, false);
-          }
-          pow_mod_crc(23936);
-        }
-        calc {
-          [false, false, false, true, false, true, true, false, true, true, true, false, true, true, true, true, true, false, true, true, false, true, false, false, false, true, true, true, false, false, true, true];
-          {
-            pow_11935();
-            of_pow(11968, true, true, false, false, true, true, true, false, false, false, true, false, true, true, false, true, true, true, true, true, false, true, true, true, false, true, true, false, true, false, false, false);
-          }
-          pow_mod_crc(11968);
-        }
+        lut_entry_186_0();
+        lut_entry_186_1();
       }
       pow_mod_crc(23936) + pow_mod_crc(11968);
     }
   }
 
 
+
+  lemma lut_entry_187_0()
+  ensures [false, true, false, false, false, false, false, true, false, true, true, true, false, false, false, true, false, false, true, false, true, true, true, false, false, true, true, false, true, false, true, true] == pow_mod_crc(24064);
+  {
+    pow_24031();
+    of_pow(24064, true, true, false, true, false, true, true, false, false, true, true, true, false, true, false, false, true, false, false, false, true, true, true, false, true, false, false, false, false, false, true, false);
+  }
+
+  lemma lut_entry_187_1()
+  ensures [false, true, false, true, true, false, false, false, true, false, true, true, false, true, true, true, true, true, false, false, false, false, true, true, false, true, false, false, true, false, true, true] == pow_mod_crc(12032);
+  {
+    pow_11999();
+    of_pow(12032, true, true, false, true, false, false, true, false, true, true, false, false, false, false, true, true, true, true, true, false, true, true, false, true, false, false, false, true, true, false, true, false);
+  }
 
   lemma lut_entry_187()
   ensures bits_of_int(lut[187] as int, 64)
@@ -7598,28 +7612,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, false, false, false, true, false, true, true, true, false, false, false, true, false, false, true, false, true, true, true, false, false, true, true, false, true, false, true, true]+[false, true, false, true, true, false, false, false, true, false, true, true, false, true, true, true, true, true, false, false, false, false, true, true, false, true, false, false, true, false, true, true];
       {
-        calc {
-          [false, true, false, false, false, false, false, true, false, true, true, true, false, false, false, true, false, false, true, false, true, true, true, false, false, true, true, false, true, false, true, true];
-          {
-            pow_24031();
-            of_pow(24064, true, true, false, true, false, true, true, false, false, true, true, true, false, true, false, false, true, false, false, false, true, true, true, false, true, false, false, false, false, false, true, false);
-          }
-          pow_mod_crc(24064);
-        }
-        calc {
-          [false, true, false, true, true, false, false, false, true, false, true, true, false, true, true, true, true, true, false, false, false, false, true, true, false, true, false, false, true, false, true, true];
-          {
-            pow_11999();
-            of_pow(12032, true, true, false, true, false, false, true, false, true, true, false, false, false, false, true, true, true, true, true, false, true, true, false, true, false, false, false, true, true, false, true, false);
-          }
-          pow_mod_crc(12032);
-        }
+        lut_entry_187_0();
+        lut_entry_187_1();
       }
       pow_mod_crc(24064) + pow_mod_crc(12032);
     }
   }
 
 
+
+  lemma lut_entry_188_0()
+  ensures [false, false, false, false, false, false, false, false, true, false, false, false, false, true, false, false, true, true, true, false, true, false, false, true, true, true, true, false, false, false, true, false] == pow_mod_crc(24192);
+  {
+    pow_24159();
+    of_pow(24192, false, true, false, false, false, true, true, true, true, false, false, true, false, true, true, true, false, false, true, false, false, false, false, true, false, false, false, false, false, false, false, false);
+  }
+
+  lemma lut_entry_188_1()
+  ensures [true, true, true, false, false, false, true, true, true, true, true, true, false, false, true, false, false, true, false, true, true, true, false, false, true, false, true, false, false, true, true, true] == pow_mod_crc(12096);
+  {
+    pow_12063();
+    of_pow(12096, true, true, true, false, false, true, false, true, false, false, true, true, true, false, true, false, false, true, false, false, true, true, true, true, true, true, false, false, false, true, true, true);
+  }
 
   lemma lut_entry_188()
   ensures bits_of_int(lut[188] as int, 64)
@@ -7638,28 +7652,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, false, false, false, false, false, true, false, false, false, false, true, false, false, true, true, true, false, true, false, false, true, true, true, true, false, false, false, true, false]+[true, true, true, false, false, false, true, true, true, true, true, true, false, false, true, false, false, true, false, true, true, true, false, false, true, false, true, false, false, true, true, true];
       {
-        calc {
-          [false, false, false, false, false, false, false, false, true, false, false, false, false, true, false, false, true, true, true, false, true, false, false, true, true, true, true, false, false, false, true, false];
-          {
-            pow_24159();
-            of_pow(24192, false, true, false, false, false, true, true, true, true, false, false, true, false, true, true, true, false, false, true, false, false, false, false, true, false, false, false, false, false, false, false, false);
-          }
-          pow_mod_crc(24192);
-        }
-        calc {
-          [true, true, true, false, false, false, true, true, true, true, true, true, false, false, true, false, false, true, false, true, true, true, false, false, true, false, true, false, false, true, true, true];
-          {
-            pow_12063();
-            of_pow(12096, true, true, true, false, false, true, false, true, false, false, true, true, true, false, true, false, false, true, false, false, true, true, true, true, true, true, false, false, false, true, true, true);
-          }
-          pow_mod_crc(12096);
-        }
+        lut_entry_188_0();
+        lut_entry_188_1();
       }
       pow_mod_crc(24192) + pow_mod_crc(12096);
     }
   }
 
 
+
+  lemma lut_entry_189_0()
+  ensures [false, true, true, false, false, true, true, false, true, true, true, true, false, true, true, true, false, true, true, true, false, true, false, true, true, false, false, false, true, false, true, false] == pow_mod_crc(24320);
+  {
+    pow_24287();
+    of_pow(24320, false, true, false, true, false, false, false, true, true, false, true, false, true, true, true, false, true, true, true, false, true, true, true, true, false, true, true, false, false, true, true, false);
+  }
+
+  lemma lut_entry_189_1()
+  ensures [false, false, true, false, false, true, false, false, true, true, true, false, true, false, true, false, false, true, false, true, true, false, true, false, true, false, false, true, true, false, false, true] == pow_mod_crc(12160);
+  {
+    pow_12127();
+    of_pow(12160, true, false, false, true, true, false, false, true, false, true, false, true, true, false, true, false, false, true, false, true, false, true, true, true, false, false, true, false, false, true, false, false);
+  }
 
   lemma lut_entry_189()
   ensures bits_of_int(lut[189] as int, 64)
@@ -7678,28 +7692,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, false, false, true, true, false, true, true, true, true, false, true, true, true, false, true, true, true, false, true, false, true, true, false, false, false, true, false, true, false]+[false, false, true, false, false, true, false, false, true, true, true, false, true, false, true, false, false, true, false, true, true, false, true, false, true, false, false, true, true, false, false, true];
       {
-        calc {
-          [false, true, true, false, false, true, true, false, true, true, true, true, false, true, true, true, false, true, true, true, false, true, false, true, true, false, false, false, true, false, true, false];
-          {
-            pow_24287();
-            of_pow(24320, false, true, false, true, false, false, false, true, true, false, true, false, true, true, true, false, true, true, true, false, true, true, true, true, false, true, true, false, false, true, true, false);
-          }
-          pow_mod_crc(24320);
-        }
-        calc {
-          [false, false, true, false, false, true, false, false, true, true, true, false, true, false, true, false, false, true, false, true, true, false, true, false, true, false, false, true, true, false, false, true];
-          {
-            pow_12127();
-            of_pow(12160, true, false, false, true, true, false, false, true, false, true, false, true, true, false, true, false, false, true, false, true, false, true, true, true, false, false, true, false, false, true, false, false);
-          }
-          pow_mod_crc(12160);
-        }
+        lut_entry_189_0();
+        lut_entry_189_1();
       }
       pow_mod_crc(24320) + pow_mod_crc(12160);
     }
   }
 
 
+
+  lemma lut_entry_190_0()
+  ensures [false, true, false, false, true, false, false, false, true, true, true, false, false, false, false, false, false, false, false, false, true, false, false, true, true, false, false, false, true, true, true, false] == pow_mod_crc(24448);
+  {
+    pow_24415();
+    of_pow(24448, false, true, true, true, false, false, false, true, true, false, false, true, false, false, false, false, false, false, false, false, false, true, true, true, false, false, false, true, false, false, true, false);
+  }
+
+  lemma lut_entry_190_1()
+  ensures [false, true, false, true, true, false, false, false, true, false, false, true, false, true, false, true, false, false, false, false, false, true, true, false, false, true, true, true, true, true, false, true] == pow_mod_crc(12224);
+  {
+    pow_12191();
+    of_pow(12224, true, false, true, true, true, true, true, false, false, true, true, false, false, false, false, false, true, false, true, false, true, false, false, true, false, false, false, true, true, false, true, false);
+  }
 
   lemma lut_entry_190()
   ensures bits_of_int(lut[190] as int, 64)
@@ -7718,28 +7732,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, true, false, false, false, true, true, true, false, false, false, false, false, false, false, false, false, true, false, false, true, true, false, false, false, true, true, true, false]+[false, true, false, true, true, false, false, false, true, false, false, true, false, true, false, true, false, false, false, false, false, true, true, false, false, true, true, true, true, true, false, true];
       {
-        calc {
-          [false, true, false, false, true, false, false, false, true, true, true, false, false, false, false, false, false, false, false, false, true, false, false, true, true, false, false, false, true, true, true, false];
-          {
-            pow_24415();
-            of_pow(24448, false, true, true, true, false, false, false, true, true, false, false, true, false, false, false, false, false, false, false, false, false, true, true, true, false, false, false, true, false, false, true, false);
-          }
-          pow_mod_crc(24448);
-        }
-        calc {
-          [false, true, false, true, true, false, false, false, true, false, false, true, false, true, false, true, false, false, false, false, false, true, true, false, false, true, true, true, true, true, false, true];
-          {
-            pow_12191();
-            of_pow(12224, true, false, true, true, true, true, true, false, false, true, true, false, false, false, false, false, true, false, true, false, true, false, false, true, false, false, false, true, true, false, true, false);
-          }
-          pow_mod_crc(12224);
-        }
+        lut_entry_190_0();
+        lut_entry_190_1();
       }
       pow_mod_crc(24448) + pow_mod_crc(12224);
     }
   }
 
 
+
+  lemma lut_entry_191_0()
+  ensures [true, true, true, false, true, true, true, true, false, false, true, false, true, true, true, false, false, true, true, false, true, false, false, true, true, false, true, false, true, true, false, false] == pow_mod_crc(24576);
+  {
+    pow_24543();
+    of_pow(24576, false, false, true, true, false, true, false, true, true, false, false, true, false, true, true, false, false, true, true, true, false, true, false, false, true, true, true, true, false, true, true, true);
+  }
+
+  lemma lut_entry_191_1()
+  ensures [true, false, true, false, true, true, false, false, true, false, true, true, false, false, false, true, false, true, true, false, true, true, true, true, false, true, true, true, true, false, false, true] == pow_mod_crc(12288);
+  {
+    pow_12255();
+    of_pow(12288, true, false, false, true, true, true, true, false, true, true, true, true, false, true, true, false, true, false, false, false, true, true, false, true, false, false, true, true, false, true, false, true);
+  }
 
   lemma lut_entry_191()
   ensures bits_of_int(lut[191] as int, 64)
@@ -7758,28 +7772,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, false, true, true, true, true, false, false, true, false, true, true, true, false, false, true, true, false, true, false, false, true, true, false, true, false, true, true, false, false]+[true, false, true, false, true, true, false, false, true, false, true, true, false, false, false, true, false, true, true, false, true, true, true, true, false, true, true, true, true, false, false, true];
       {
-        calc {
-          [true, true, true, false, true, true, true, true, false, false, true, false, true, true, true, false, false, true, true, false, true, false, false, true, true, false, true, false, true, true, false, false];
-          {
-            pow_24543();
-            of_pow(24576, false, false, true, true, false, true, false, true, true, false, false, true, false, true, true, false, false, true, true, true, false, true, false, false, true, true, true, true, false, true, true, true);
-          }
-          pow_mod_crc(24576);
-        }
-        calc {
-          [true, false, true, false, true, true, false, false, true, false, true, true, false, false, false, true, false, true, true, false, true, true, true, true, false, true, true, true, true, false, false, true];
-          {
-            pow_12255();
-            of_pow(12288, true, false, false, true, true, true, true, false, true, true, true, true, false, true, true, false, true, false, false, false, true, true, false, true, false, false, true, true, false, true, false, true);
-          }
-          pow_mod_crc(12288);
-        }
+        lut_entry_191_0();
+        lut_entry_191_1();
       }
       pow_mod_crc(24576) + pow_mod_crc(12288);
     }
   }
 
 
+
+  lemma lut_entry_192_0()
+  ensures [true, false, true, false, true, false, false, false, true, false, true, true, true, true, false, true, true, true, true, true, true, true, true, false, false, false, true, false, false, true, true, false] == pow_mod_crc(24704);
+  {
+    pow_24671();
+    of_pow(24704, false, true, true, false, false, true, false, false, false, true, true, true, true, true, true, true, true, false, true, true, true, true, false, true, false, false, false, true, false, true, false, true);
+  }
+
+  lemma lut_entry_192_1()
+  ensures [true, false, true, false, true, false, false, false, false, true, false, true, false, false, false, false, false, true, false, true, true, true, true, true, true, false, true, true, true, false, false, false] == pow_mod_crc(12352);
+  {
+    pow_12319();
+    of_pow(12352, false, false, false, true, true, true, false, true, true, true, true, true, true, false, true, false, false, false, false, false, true, false, true, false, false, false, false, true, false, true, false, true);
+  }
 
   lemma lut_entry_192()
   ensures bits_of_int(lut[192] as int, 64)
@@ -7798,28 +7812,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, false, true, false, false, false, true, false, true, true, true, true, false, true, true, true, true, true, true, true, true, false, false, false, true, false, false, true, true, false]+[true, false, true, false, true, false, false, false, false, true, false, true, false, false, false, false, false, true, false, true, true, true, true, true, true, false, true, true, true, false, false, false];
       {
-        calc {
-          [true, false, true, false, true, false, false, false, true, false, true, true, true, true, false, true, true, true, true, true, true, true, true, false, false, false, true, false, false, true, true, false];
-          {
-            pow_24671();
-            of_pow(24704, false, true, true, false, false, true, false, false, false, true, true, true, true, true, true, true, true, false, true, true, true, true, false, true, false, false, false, true, false, true, false, true);
-          }
-          pow_mod_crc(24704);
-        }
-        calc {
-          [true, false, true, false, true, false, false, false, false, true, false, true, false, false, false, false, false, true, false, true, true, true, true, true, true, false, true, true, true, false, false, false];
-          {
-            pow_12319();
-            of_pow(12352, false, false, false, true, true, true, false, true, true, true, true, true, true, false, true, false, false, false, false, false, true, false, true, false, false, false, false, true, false, true, false, true);
-          }
-          pow_mod_crc(12352);
-        }
+        lut_entry_192_0();
+        lut_entry_192_1();
       }
       pow_mod_crc(24704) + pow_mod_crc(12352);
     }
   }
 
 
+
+  lemma lut_entry_193_0()
+  ensures [true, false, false, true, false, false, false, false, false, false, false, true, false, true, false, true, false, true, false, true, false, true, false, true, true, true, false, true, true, false, false, false] == pow_mod_crc(24832);
+  {
+    pow_24799();
+    of_pow(24832, false, false, false, true, true, false, true, true, true, false, true, false, true, false, true, false, true, false, true, false, true, false, false, false, false, false, false, false, true, false, false, true);
+  }
+
+  lemma lut_entry_193_1()
+  ensures [true, false, false, false, true, true, false, false, true, true, false, true, true, false, false, true, true, true, false, false, true, false, false, false, false, false, true, true, false, false, false, false] == pow_mod_crc(12416);
+  {
+    pow_12383();
+    of_pow(12416, false, false, false, false, true, true, false, false, false, false, false, true, false, false, true, true, true, false, false, true, true, false, true, true, false, false, true, true, false, false, false, true);
+  }
 
   lemma lut_entry_193()
   ensures bits_of_int(lut[193] as int, 64)
@@ -7838,28 +7852,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, true, false, false, false, false, false, false, false, true, false, true, false, true, false, true, false, true, false, true, false, true, true, true, false, true, true, false, false, false]+[true, false, false, false, true, true, false, false, true, true, false, true, true, false, false, true, true, true, false, false, true, false, false, false, false, false, true, true, false, false, false, false];
       {
-        calc {
-          [true, false, false, true, false, false, false, false, false, false, false, true, false, true, false, true, false, true, false, true, false, true, false, true, true, true, false, true, true, false, false, false];
-          {
-            pow_24799();
-            of_pow(24832, false, false, false, true, true, false, true, true, true, false, true, false, true, false, true, false, true, false, true, false, true, false, false, false, false, false, false, false, true, false, false, true);
-          }
-          pow_mod_crc(24832);
-        }
-        calc {
-          [true, false, false, false, true, true, false, false, true, true, false, true, true, false, false, true, true, true, false, false, true, false, false, false, false, false, true, true, false, false, false, false];
-          {
-            pow_12383();
-            of_pow(12416, false, false, false, false, true, true, false, false, false, false, false, true, false, false, true, true, true, false, false, true, true, false, true, true, false, false, true, true, false, false, false, true);
-          }
-          pow_mod_crc(12416);
-        }
+        lut_entry_193_0();
+        lut_entry_193_1();
       }
       pow_mod_crc(24832) + pow_mod_crc(12416);
     }
   }
 
 
+
+  lemma lut_entry_194_0()
+  ensures [false, true, true, false, false, false, false, true, true, true, true, true, false, true, true, true, false, true, false, true, true, false, false, true, false, true, true, false, false, false, true, false] == pow_mod_crc(24960);
+  {
+    pow_24927();
+    of_pow(24960, false, true, false, false, false, true, true, false, true, false, false, true, true, false, true, false, true, true, true, false, true, true, true, true, true, false, false, false, false, true, true, false);
+  }
+
+  lemma lut_entry_194_1()
+  ensures [false, true, true, false, true, false, false, true, true, true, false, false, false, true, false, false, true, false, true, false, false, false, true, true, false, true, true, true, false, false, false, true] == pow_mod_crc(12480);
+  {
+    pow_12447();
+    of_pow(12480, true, false, false, false, true, true, true, false, true, true, false, false, false, true, false, true, false, false, true, false, false, false, true, true, true, false, false, true, false, true, true, false);
+  }
 
   lemma lut_entry_194()
   ensures bits_of_int(lut[194] as int, 64)
@@ -7878,28 +7892,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, false, false, false, false, true, true, true, true, true, false, true, true, true, false, true, false, true, true, false, false, true, false, true, true, false, false, false, true, false]+[false, true, true, false, true, false, false, true, true, true, false, false, false, true, false, false, true, false, true, false, false, false, true, true, false, true, true, true, false, false, false, true];
       {
-        calc {
-          [false, true, true, false, false, false, false, true, true, true, true, true, false, true, true, true, false, true, false, true, true, false, false, true, false, true, true, false, false, false, true, false];
-          {
-            pow_24927();
-            of_pow(24960, false, true, false, false, false, true, true, false, true, false, false, true, true, false, true, false, true, true, true, false, true, true, true, true, true, false, false, false, false, true, true, false);
-          }
-          pow_mod_crc(24960);
-        }
-        calc {
-          [false, true, true, false, true, false, false, true, true, true, false, false, false, true, false, false, true, false, true, false, false, false, true, true, false, true, true, true, false, false, false, true];
-          {
-            pow_12447();
-            of_pow(12480, true, false, false, false, true, true, true, false, true, true, false, false, false, true, false, true, false, false, true, false, false, false, true, true, true, false, false, true, false, true, true, false);
-          }
-          pow_mod_crc(12480);
-        }
+        lut_entry_194_0();
+        lut_entry_194_1();
       }
       pow_mod_crc(24960) + pow_mod_crc(12480);
     }
   }
 
 
+
+  lemma lut_entry_195_0()
+  ensures [false, true, true, false, false, false, false, false, true, false, true, true, false, true, false, false, false, false, true, false, true, false, true, true, false, true, true, false, false, false, false, true] == pow_mod_crc(25088);
+  {
+    pow_25055();
+    of_pow(25088, true, false, false, false, false, true, true, false, true, true, false, true, false, true, false, false, false, false, true, false, true, true, false, true, false, false, false, false, false, true, true, false);
+  }
+
+  lemma lut_entry_195_1()
+  ensures [false, false, false, false, false, true, true, false, false, true, true, true, true, false, false, false, true, true, true, false, false, true, false, false, false, true, false, false, true, true, true, true] == pow_mod_crc(12544);
+  {
+    pow_12511();
+    of_pow(12544, true, true, true, true, false, false, true, false, false, false, true, false, false, true, true, true, false, false, false, true, true, true, true, false, false, true, true, false, false, false, false, false);
+  }
 
   lemma lut_entry_195()
   ensures bits_of_int(lut[195] as int, 64)
@@ -7918,28 +7932,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, false, false, false, false, false, true, false, true, true, false, true, false, false, false, false, true, false, true, false, true, true, false, true, true, false, false, false, false, true]+[false, false, false, false, false, true, true, false, false, true, true, true, true, false, false, false, true, true, true, false, false, true, false, false, false, true, false, false, true, true, true, true];
       {
-        calc {
-          [false, true, true, false, false, false, false, false, true, false, true, true, false, true, false, false, false, false, true, false, true, false, true, true, false, true, true, false, false, false, false, true];
-          {
-            pow_25055();
-            of_pow(25088, true, false, false, false, false, true, true, false, true, true, false, true, false, true, false, false, false, false, true, false, true, true, false, true, false, false, false, false, false, true, true, false);
-          }
-          pow_mod_crc(25088);
-        }
-        calc {
-          [false, false, false, false, false, true, true, false, false, true, true, true, true, false, false, false, true, true, true, false, false, true, false, false, false, true, false, false, true, true, true, true];
-          {
-            pow_12511();
-            of_pow(12544, true, true, true, true, false, false, true, false, false, false, true, false, false, true, true, true, false, false, false, true, true, true, true, false, false, true, true, false, false, false, false, false);
-          }
-          pow_mod_crc(12544);
-        }
+        lut_entry_195_0();
+        lut_entry_195_1();
       }
       pow_mod_crc(25088) + pow_mod_crc(12544);
     }
   }
 
 
+
+  lemma lut_entry_196_0()
+  ensures [false, false, false, false, true, true, true, false, false, false, true, false, true, false, false, false, false, true, false, true, true, true, false, true, false, true, false, true, false, false, true, false] == pow_mod_crc(25216);
+  {
+    pow_25183();
+    of_pow(25216, false, true, false, false, true, false, true, false, true, false, true, true, true, false, true, false, false, false, false, true, false, true, false, false, false, true, true, true, false, false, false, false);
+  }
+
+  lemma lut_entry_196_1()
+  ensures [true, false, false, false, true, false, false, false, true, true, false, true, false, true, true, false, false, true, true, false, true, true, true, false, false, true, true, true, false, false, false, false] == pow_mod_crc(12608);
+  {
+    pow_12575();
+    of_pow(12608, false, false, false, false, true, true, true, false, false, true, true, true, false, true, true, false, false, true, true, false, true, false, true, true, false, false, false, true, false, false, false, true);
+  }
 
   lemma lut_entry_196()
   ensures bits_of_int(lut[196] as int, 64)
@@ -7958,28 +7972,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, false, true, true, true, false, false, false, true, false, true, false, false, false, false, true, false, true, true, true, false, true, false, true, false, true, false, false, true, false]+[true, false, false, false, true, false, false, false, true, true, false, true, false, true, true, false, false, true, true, false, true, true, true, false, false, true, true, true, false, false, false, false];
       {
-        calc {
-          [false, false, false, false, true, true, true, false, false, false, true, false, true, false, false, false, false, true, false, true, true, true, false, true, false, true, false, true, false, false, true, false];
-          {
-            pow_25183();
-            of_pow(25216, false, true, false, false, true, false, true, false, true, false, true, true, true, false, true, false, false, false, false, true, false, true, false, false, false, true, true, true, false, false, false, false);
-          }
-          pow_mod_crc(25216);
-        }
-        calc {
-          [true, false, false, false, true, false, false, false, true, true, false, true, false, true, true, false, false, true, true, false, true, true, true, false, false, true, true, true, false, false, false, false];
-          {
-            pow_12575();
-            of_pow(12608, false, false, false, false, true, true, true, false, false, true, true, true, false, true, true, false, false, true, true, false, true, false, true, true, false, false, false, true, false, false, false, true);
-          }
-          pow_mod_crc(12608);
-        }
+        lut_entry_196_0();
+        lut_entry_196_1();
       }
       pow_mod_crc(25216) + pow_mod_crc(12608);
     }
   }
 
 
+
+  lemma lut_entry_197_0()
+  ensures [false, true, false, true, false, false, false, false, false, true, true, true, false, false, true, true, false, false, true, true, false, true, false, false, false, false, true, true, true, false, false, false] == pow_mod_crc(25344);
+  {
+    pow_25311();
+    of_pow(25344, false, false, false, true, true, true, false, false, false, false, true, false, true, true, false, false, true, true, false, false, true, true, true, false, false, false, false, false, true, false, true, false);
+  }
+
+  lemma lut_entry_197_1()
+  ensures [false, true, false, true, false, false, true, true, false, false, false, true, true, true, true, true, true, true, false, true, false, false, false, false, true, true, false, true, false, false, false, false] == pow_mod_crc(12672);
+  {
+    pow_12639();
+    of_pow(12672, false, false, false, false, true, false, true, true, false, false, false, false, true, false, true, true, true, true, true, true, true, false, false, false, true, true, false, false, true, false, true, false);
+  }
 
   lemma lut_entry_197()
   ensures bits_of_int(lut[197] as int, 64)
@@ -7998,28 +8012,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, false, false, false, false, false, true, true, true, false, false, true, true, false, false, true, true, false, true, false, false, false, false, true, true, true, false, false, false]+[false, true, false, true, false, false, true, true, false, false, false, true, true, true, true, true, true, true, false, true, false, false, false, false, true, true, false, true, false, false, false, false];
       {
-        calc {
-          [false, true, false, true, false, false, false, false, false, true, true, true, false, false, true, true, false, false, true, true, false, true, false, false, false, false, true, true, true, false, false, false];
-          {
-            pow_25311();
-            of_pow(25344, false, false, false, true, true, true, false, false, false, false, true, false, true, true, false, false, true, true, false, false, true, true, true, false, false, false, false, false, true, false, true, false);
-          }
-          pow_mod_crc(25344);
-        }
-        calc {
-          [false, true, false, true, false, false, true, true, false, false, false, true, true, true, true, true, true, true, false, true, false, false, false, false, true, true, false, true, false, false, false, false];
-          {
-            pow_12639();
-            of_pow(12672, false, false, false, false, true, false, true, true, false, false, false, false, true, false, true, true, true, true, true, true, true, false, false, false, true, true, false, false, true, false, true, false);
-          }
-          pow_mod_crc(12672);
-        }
+        lut_entry_197_0();
+        lut_entry_197_1();
       }
       pow_mod_crc(25344) + pow_mod_crc(12672);
     }
   }
 
 
+
+  lemma lut_entry_198_0()
+  ensures [true, true, false, false, true, false, true, true, false, true, false, false, true, false, true, true, false, false, true, true, false, false, false, false, false, true, false, true, false, true, false, true] == pow_mod_crc(25472);
+  {
+    pow_25439();
+    of_pow(25472, true, false, true, false, true, false, true, false, false, false, false, false, true, true, false, false, true, true, false, true, false, false, true, false, true, true, false, true, false, false, true, true);
+  }
+
+  lemma lut_entry_198_1()
+  ensures [false, false, true, false, false, true, false, true, false, true, true, false, false, false, true, false, false, false, false, true, true, false, true, false, true, true, true, false, false, false, true, false] == pow_mod_crc(12736);
+  {
+    pow_12703();
+    of_pow(12736, false, true, false, false, false, true, true, true, false, true, false, true, true, false, false, false, false, true, false, false, false, true, true, false, true, false, true, false, false, true, false, false);
+  }
 
   lemma lut_entry_198()
   ensures bits_of_int(lut[198] as int, 64)
@@ -8038,28 +8052,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, false, true, false, true, true, false, true, false, false, true, false, true, true, false, false, true, true, false, false, false, false, false, true, false, true, false, true, false, true]+[false, false, true, false, false, true, false, true, false, true, true, false, false, false, true, false, false, false, false, true, true, false, true, false, true, true, true, false, false, false, true, false];
       {
-        calc {
-          [true, true, false, false, true, false, true, true, false, true, false, false, true, false, true, true, false, false, true, true, false, false, false, false, false, true, false, true, false, true, false, true];
-          {
-            pow_25439();
-            of_pow(25472, true, false, true, false, true, false, true, false, false, false, false, false, true, true, false, false, true, true, false, true, false, false, true, false, true, true, false, true, false, false, true, true);
-          }
-          pow_mod_crc(25472);
-        }
-        calc {
-          [false, false, true, false, false, true, false, true, false, true, true, false, false, false, true, false, false, false, false, true, true, false, true, false, true, true, true, false, false, false, true, false];
-          {
-            pow_12703();
-            of_pow(12736, false, true, false, false, false, true, true, true, false, true, false, true, true, false, false, false, false, true, false, false, false, true, true, false, true, false, true, false, false, true, false, false);
-          }
-          pow_mod_crc(12736);
-        }
+        lut_entry_198_0();
+        lut_entry_198_1();
       }
       pow_mod_crc(25472) + pow_mod_crc(12736);
     }
   }
 
 
+
+  lemma lut_entry_199_0()
+  ensures [false, false, false, false, false, false, true, false, false, true, true, false, false, false, false, true, false, false, true, false, false, false, true, false, false, false, false, true, true, true, true, true] == pow_mod_crc(25600);
+  {
+    pow_25567();
+    of_pow(25600, true, true, true, true, true, false, false, false, false, true, false, false, false, true, false, false, true, false, false, false, false, true, true, false, false, true, false, false, false, false, false, false);
+  }
+
+  lemma lut_entry_199_1()
+  ensures [true, true, false, true, false, false, false, true, true, false, true, true, true, true, true, true, false, false, true, false, false, true, true, false, false, true, true, false, false, true, false, false] == pow_mod_crc(12800);
+  {
+    pow_12767();
+    of_pow(12800, false, false, true, false, false, true, true, false, false, true, true, false, false, true, false, false, true, true, true, true, true, true, false, true, true, false, false, false, true, false, true, true);
+  }
 
   lemma lut_entry_199()
   ensures bits_of_int(lut[199] as int, 64)
@@ -8078,28 +8092,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, false, false, false, true, false, false, true, true, false, false, false, false, true, false, false, true, false, false, false, true, false, false, false, false, true, true, true, true, true]+[true, true, false, true, false, false, false, true, true, false, true, true, true, true, true, true, false, false, true, false, false, true, true, false, false, true, true, false, false, true, false, false];
       {
-        calc {
-          [false, false, false, false, false, false, true, false, false, true, true, false, false, false, false, true, false, false, true, false, false, false, true, false, false, false, false, true, true, true, true, true];
-          {
-            pow_25567();
-            of_pow(25600, true, true, true, true, true, false, false, false, false, true, false, false, false, true, false, false, true, false, false, false, false, true, true, false, false, true, false, false, false, false, false, false);
-          }
-          pow_mod_crc(25600);
-        }
-        calc {
-          [true, true, false, true, false, false, false, true, true, false, true, true, true, true, true, true, false, false, true, false, false, true, true, false, false, true, true, false, false, true, false, false];
-          {
-            pow_12767();
-            of_pow(12800, false, false, true, false, false, true, true, false, false, true, true, false, false, true, false, false, true, true, true, true, true, true, false, true, true, false, false, false, true, false, true, true);
-          }
-          pow_mod_crc(12800);
-        }
+        lut_entry_199_0();
+        lut_entry_199_1();
       }
       pow_mod_crc(25600) + pow_mod_crc(12800);
     }
   }
 
 
+
+  lemma lut_entry_200_0()
+  ensures [false, false, true, true, false, true, true, true, true, false, true, true, false, false, true, true, true, true, true, true, false, false, true, false, false, false, true, true, false, true, false, true] == pow_mod_crc(25728);
+  {
+    pow_25695();
+    of_pow(25728, true, false, true, false, true, true, false, false, false, true, false, false, true, true, true, true, true, true, false, false, true, true, false, true, true, true, true, false, true, true, false, false);
+  }
+
+  lemma lut_entry_200_1()
+  ensures [false, true, true, false, false, true, false, true, true, true, true, true, true, false, true, true, true, true, false, false, false, true, false, true, false, true, false, false, true, true, false, true] == pow_mod_crc(12864);
+  {
+    pow_12831();
+    of_pow(12864, true, false, true, true, false, false, true, false, true, false, true, false, false, false, true, true, true, true, false, true, true, true, true, true, true, false, true, false, false, true, true, false);
+  }
 
   lemma lut_entry_200()
   ensures bits_of_int(lut[200] as int, 64)
@@ -8118,28 +8132,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, false, true, true, true, true, false, true, true, false, false, true, true, true, true, true, true, false, false, true, false, false, false, true, true, false, true, false, true]+[false, true, true, false, false, true, false, true, true, true, true, true, true, false, true, true, true, true, false, false, false, true, false, true, false, true, false, false, true, true, false, true];
       {
-        calc {
-          [false, false, true, true, false, true, true, true, true, false, true, true, false, false, true, true, true, true, true, true, false, false, true, false, false, false, true, true, false, true, false, true];
-          {
-            pow_25695();
-            of_pow(25728, true, false, true, false, true, true, false, false, false, true, false, false, true, true, true, true, true, true, false, false, true, true, false, true, true, true, true, false, true, true, false, false);
-          }
-          pow_mod_crc(25728);
-        }
-        calc {
-          [false, true, true, false, false, true, false, true, true, true, true, true, true, false, true, true, true, true, false, false, false, true, false, true, false, true, false, false, true, true, false, true];
-          {
-            pow_12831();
-            of_pow(12864, true, false, true, true, false, false, true, false, true, false, true, false, false, false, true, true, true, true, false, true, true, true, true, true, true, false, true, false, false, true, true, false);
-          }
-          pow_mod_crc(12864);
-        }
+        lut_entry_200_0();
+        lut_entry_200_1();
       }
       pow_mod_crc(25728) + pow_mod_crc(12864);
     }
   }
 
 
+
+  lemma lut_entry_201_0()
+  ensures [false, false, true, false, true, false, true, false, true, false, false, false, true, true, true, true, false, false, true, true, true, false, false, false, false, false, false, true, false, true, true, true] == pow_mod_crc(25856);
+  {
+    pow_25823();
+    of_pow(25856, true, true, true, false, true, false, false, false, false, false, false, true, true, true, false, false, true, true, true, true, false, false, false, true, false, true, false, true, false, true, false, false);
+  }
+
+  lemma lut_entry_201_1()
+  ensures [true, false, true, true, false, true, false, false, true, false, false, false, false, false, false, true, false, false, true, false, false, true, true, false, true, false, true, true, false, true, true, true] == pow_mod_crc(12928);
+  {
+    pow_12895();
+    of_pow(12928, true, true, true, false, true, true, false, true, false, true, true, false, false, true, false, false, true, false, false, false, false, false, false, true, false, false, true, false, true, true, false, true);
+  }
 
   lemma lut_entry_201()
   ensures bits_of_int(lut[201] as int, 64)
@@ -8158,28 +8172,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, false, true, false, true, false, true, false, false, false, true, true, true, true, false, false, true, true, true, false, false, false, false, false, false, true, false, true, true, true]+[true, false, true, true, false, true, false, false, true, false, false, false, false, false, false, true, false, false, true, false, false, true, true, false, true, false, true, true, false, true, true, true];
       {
-        calc {
-          [false, false, true, false, true, false, true, false, true, false, false, false, true, true, true, true, false, false, true, true, true, false, false, false, false, false, false, true, false, true, true, true];
-          {
-            pow_25823();
-            of_pow(25856, true, true, true, false, true, false, false, false, false, false, false, true, true, true, false, false, true, true, true, true, false, false, false, true, false, true, false, true, false, true, false, false);
-          }
-          pow_mod_crc(25856);
-        }
-        calc {
-          [true, false, true, true, false, true, false, false, true, false, false, false, false, false, false, true, false, false, true, false, false, true, true, false, true, false, true, true, false, true, true, true];
-          {
-            pow_12895();
-            of_pow(12928, true, true, true, false, true, true, false, true, false, true, true, false, false, true, false, false, true, false, false, false, false, false, false, true, false, false, true, false, true, true, false, true);
-          }
-          pow_mod_crc(12928);
-        }
+        lut_entry_201_0();
+        lut_entry_201_1();
       }
       pow_mod_crc(25856) + pow_mod_crc(12928);
     }
   }
 
 
+
+  lemma lut_entry_202_0()
+  ensures [false, false, true, true, true, false, true, false, false, false, false, true, true, true, false, false, true, true, true, false, false, false, true, true, false, true, false, false, false, false, true, true] == pow_mod_crc(25984);
+  {
+    pow_25951();
+    of_pow(25984, true, true, false, false, false, false, true, false, true, true, false, false, false, true, true, true, false, false, true, true, true, false, false, false, false, true, false, true, true, true, false, false);
+  }
+
+  lemma lut_entry_202_1()
+  ensures [false, false, true, true, false, false, false, false, false, true, true, false, true, false, false, false, false, true, false, true, true, false, false, false, false, false, true, true, true, false, true, true] == pow_mod_crc(12992);
+  {
+    pow_12959();
+    of_pow(12992, true, true, false, true, true, true, false, false, false, false, false, true, true, false, true, false, false, false, false, true, false, true, true, false, false, false, false, false, true, true, false, false);
+  }
 
   lemma lut_entry_202()
   ensures bits_of_int(lut[202] as int, 64)
@@ -8198,28 +8212,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, true, false, true, false, false, false, false, true, true, true, false, false, true, true, true, false, false, false, true, true, false, true, false, false, false, false, true, true]+[false, false, true, true, false, false, false, false, false, true, true, false, true, false, false, false, false, true, false, true, true, false, false, false, false, false, true, true, true, false, true, true];
       {
-        calc {
-          [false, false, true, true, true, false, true, false, false, false, false, true, true, true, false, false, true, true, true, false, false, false, true, true, false, true, false, false, false, false, true, true];
-          {
-            pow_25951();
-            of_pow(25984, true, true, false, false, false, false, true, false, true, true, false, false, false, true, true, true, false, false, true, true, true, false, false, false, false, true, false, true, true, true, false, false);
-          }
-          pow_mod_crc(25984);
-        }
-        calc {
-          [false, false, true, true, false, false, false, false, false, true, true, false, true, false, false, false, false, true, false, true, true, false, false, false, false, false, true, true, true, false, true, true];
-          {
-            pow_12959();
-            of_pow(12992, true, true, false, true, true, true, false, false, false, false, false, true, true, false, true, false, false, false, false, true, false, true, true, false, false, false, false, false, true, true, false, false);
-          }
-          pow_mod_crc(12992);
-        }
+        lut_entry_202_0();
+        lut_entry_202_1();
       }
       pow_mod_crc(25984) + pow_mod_crc(12992);
     }
   }
 
 
+
+  lemma lut_entry_203_0()
+  ensures [false, false, true, true, true, false, true, true, true, true, true, false, true, false, true, true, true, true, true, true, true, true, true, true, true, false, true, false, true, false, false, true] == pow_mod_crc(26112);
+  {
+    pow_26079();
+    of_pow(26112, true, false, false, true, false, true, false, true, true, true, true, true, true, true, true, true, true, true, false, true, false, true, true, true, true, true, false, true, true, true, false, false);
+  }
+
+  lemma lut_entry_203_1()
+  ensures [false, true, false, false, true, true, false, true, true, true, false, false, false, false, false, false, false, true, true, true, false, true, true, true, false, true, false, false, false, false, false, false] == pow_mod_crc(13056);
+  {
+    pow_13023();
+    of_pow(13056, false, false, false, false, false, false, true, false, true, true, true, false, true, true, true, false, false, false, false, false, false, false, true, true, true, false, true, true, false, false, true, false);
+  }
 
   lemma lut_entry_203()
   ensures bits_of_int(lut[203] as int, 64)
@@ -8238,28 +8252,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, true, false, true, true, true, true, true, false, true, false, true, true, true, true, true, true, true, true, true, true, true, false, true, false, true, false, false, true]+[false, true, false, false, true, true, false, true, true, true, false, false, false, false, false, false, false, true, true, true, false, true, true, true, false, true, false, false, false, false, false, false];
       {
-        calc {
-          [false, false, true, true, true, false, true, true, true, true, true, false, true, false, true, true, true, true, true, true, true, true, true, true, true, false, true, false, true, false, false, true];
-          {
-            pow_26079();
-            of_pow(26112, true, false, false, true, false, true, false, true, true, true, true, true, true, true, true, true, true, true, false, true, false, true, true, true, true, true, false, true, true, true, false, false);
-          }
-          pow_mod_crc(26112);
-        }
-        calc {
-          [false, true, false, false, true, true, false, true, true, true, false, false, false, false, false, false, false, true, true, true, false, true, true, true, false, true, false, false, false, false, false, false];
-          {
-            pow_13023();
-            of_pow(13056, false, false, false, false, false, false, true, false, true, true, true, false, true, true, true, false, false, false, false, false, false, false, true, true, true, false, true, true, false, false, true, false);
-          }
-          pow_mod_crc(13056);
-        }
+        lut_entry_203_0();
+        lut_entry_203_1();
       }
       pow_mod_crc(26112) + pow_mod_crc(13056);
     }
   }
 
 
+
+  lemma lut_entry_204_0()
+  ensures [false, true, true, false, true, true, true, false, true, false, false, false, false, true, true, false, false, true, true, true, true, false, true, true, true, false, false, false, true, false, false, true] == pow_mod_crc(26240);
+  {
+    pow_26207();
+    of_pow(26240, true, false, false, true, false, false, false, true, true, true, false, true, true, true, true, false, false, true, true, false, false, false, false, true, false, true, true, true, false, true, true, false);
+  }
+
+  lemma lut_entry_204_1()
+  ensures [false, false, true, true, true, false, false, false, true, true, true, true, true, false, true, true, true, true, true, true, false, true, false, true, true, false, false, true, true, true, true, false] == pow_mod_crc(13120);
+  {
+    pow_13087();
+    of_pow(13120, false, true, true, true, true, false, false, true, true, false, true, false, true, true, true, true, true, true, false, true, true, true, true, true, false, false, false, true, true, true, false, false);
+  }
 
   lemma lut_entry_204()
   ensures bits_of_int(lut[204] as int, 64)
@@ -8278,28 +8292,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, false, true, true, true, false, true, false, false, false, false, true, true, false, false, true, true, true, true, false, true, true, true, false, false, false, true, false, false, true]+[false, false, true, true, true, false, false, false, true, true, true, true, true, false, true, true, true, true, true, true, false, true, false, true, true, false, false, true, true, true, true, false];
       {
-        calc {
-          [false, true, true, false, true, true, true, false, true, false, false, false, false, true, true, false, false, true, true, true, true, false, true, true, true, false, false, false, true, false, false, true];
-          {
-            pow_26207();
-            of_pow(26240, true, false, false, true, false, false, false, true, true, true, false, true, true, true, true, false, false, true, true, false, false, false, false, true, false, true, true, true, false, true, true, false);
-          }
-          pow_mod_crc(26240);
-        }
-        calc {
-          [false, false, true, true, true, false, false, false, true, true, true, true, true, false, true, true, true, true, true, true, false, true, false, true, true, false, false, true, true, true, true, false];
-          {
-            pow_13087();
-            of_pow(13120, false, true, true, true, true, false, false, true, true, false, true, false, true, true, true, true, true, true, false, true, true, true, true, true, false, false, false, true, true, true, false, false);
-          }
-          pow_mod_crc(13120);
-        }
+        lut_entry_204_0();
+        lut_entry_204_1();
       }
       pow_mod_crc(26240) + pow_mod_crc(13120);
     }
   }
 
 
+
+  lemma lut_entry_205_0()
+  ensures [false, false, true, true, false, true, false, true, true, false, false, true, false, false, false, true, false, true, true, true, false, true, true, true, false, false, true, false, false, false, false, true] == pow_mod_crc(26368);
+  {
+    pow_26335();
+    of_pow(26368, true, false, false, false, false, true, false, false, true, true, true, false, true, true, true, false, true, false, false, false, true, false, false, true, true, false, true, false, true, true, false, false);
+  }
+
+  lemma lut_entry_205_1()
+  ensures [true, true, true, true, false, false, false, false, false, true, true, true, false, true, false, true, false, false, true, false, false, false, false, false, false, true, true, false, false, false, false, true] == pow_mod_crc(13184);
+  {
+    pow_13151();
+    of_pow(13184, true, false, false, false, false, true, true, false, false, false, false, false, false, true, false, false, true, false, true, false, true, true, true, false, false, false, false, false, true, true, true, true);
+  }
 
   lemma lut_entry_205()
   ensures bits_of_int(lut[205] as int, 64)
@@ -8318,28 +8332,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, false, true, false, true, true, false, false, true, false, false, false, true, false, true, true, true, false, true, true, true, false, false, true, false, false, false, false, true]+[true, true, true, true, false, false, false, false, false, true, true, true, false, true, false, true, false, false, true, false, false, false, false, false, false, true, true, false, false, false, false, true];
       {
-        calc {
-          [false, false, true, true, false, true, false, true, true, false, false, true, false, false, false, true, false, true, true, true, false, true, true, true, false, false, true, false, false, false, false, true];
-          {
-            pow_26335();
-            of_pow(26368, true, false, false, false, false, true, false, false, true, true, true, false, true, true, true, false, true, false, false, false, true, false, false, true, true, false, true, false, true, true, false, false);
-          }
-          pow_mod_crc(26368);
-        }
-        calc {
-          [true, true, true, true, false, false, false, false, false, true, true, true, false, true, false, true, false, false, true, false, false, false, false, false, false, true, true, false, false, false, false, true];
-          {
-            pow_13151();
-            of_pow(13184, true, false, false, false, false, true, true, false, false, false, false, false, false, true, false, false, true, false, true, false, true, true, true, false, false, false, false, false, true, true, true, true);
-          }
-          pow_mod_crc(13184);
-        }
+        lut_entry_205_0();
+        lut_entry_205_1();
       }
       pow_mod_crc(26368) + pow_mod_crc(13184);
     }
   }
 
 
+
+  lemma lut_entry_206_0()
+  ensures [true, false, true, true, false, false, false, true, false, false, false, false, true, true, false, false, false, true, true, true, true, true, false, false, true, true, false, false, true, false, true, false] == pow_mod_crc(26496);
+  {
+    pow_26463();
+    of_pow(26496, false, true, false, true, false, false, true, true, false, false, true, true, true, true, true, false, false, false, true, true, false, false, false, false, true, false, false, false, true, true, false, true);
+  }
+
+  lemma lut_entry_206_1()
+  ensures [false, true, true, false, false, false, true, false, false, true, true, true, false, true, true, false, false, false, true, true, false, true, false, true, true, true, true, false, false, false, false, false] == pow_mod_crc(13248);
+  {
+    pow_13215();
+    of_pow(13248, false, false, false, false, false, true, true, true, true, false, true, false, true, true, false, false, false, true, true, false, true, true, true, false, false, true, false, false, false, true, true, false);
+  }
 
   lemma lut_entry_206()
   ensures bits_of_int(lut[206] as int, 64)
@@ -8358,28 +8372,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, true, false, false, false, true, false, false, false, false, true, true, false, false, false, true, true, true, true, true, false, false, true, true, false, false, true, false, true, false]+[false, true, true, false, false, false, true, false, false, true, true, true, false, true, true, false, false, false, true, true, false, true, false, true, true, true, true, false, false, false, false, false];
       {
-        calc {
-          [true, false, true, true, false, false, false, true, false, false, false, false, true, true, false, false, false, true, true, true, true, true, false, false, true, true, false, false, true, false, true, false];
-          {
-            pow_26463();
-            of_pow(26496, false, true, false, true, false, false, true, true, false, false, true, true, true, true, true, false, false, false, true, true, false, false, false, false, true, false, false, false, true, true, false, true);
-          }
-          pow_mod_crc(26496);
-        }
-        calc {
-          [false, true, true, false, false, false, true, false, false, true, true, true, false, true, true, false, false, false, true, true, false, true, false, true, true, true, true, false, false, false, false, false];
-          {
-            pow_13215();
-            of_pow(13248, false, false, false, false, false, true, true, true, true, false, true, false, true, true, false, false, false, true, true, false, true, true, true, false, false, true, false, false, false, true, true, false);
-          }
-          pow_mod_crc(13248);
-        }
+        lut_entry_206_0();
+        lut_entry_206_1();
       }
       pow_mod_crc(26496) + pow_mod_crc(13248);
     }
   }
 
 
+
+  lemma lut_entry_207_0()
+  ensures [false, false, false, true, true, true, false, false, false, false, true, false, false, false, false, false, false, true, true, true, false, false, false, false, true, true, true, true, true, false, true, false] == pow_mod_crc(26624);
+  {
+    pow_26591();
+    of_pow(26624, false, true, false, true, true, true, true, true, false, false, false, false, true, true, true, false, false, false, false, false, false, true, false, false, false, false, true, true, true, false, false, false);
+  }
+
+  lemma lut_entry_207_1()
+  ensures [true, true, false, false, true, true, false, true, false, true, true, false, true, false, true, true, true, true, false, true, true, true, false, false, false, true, true, false, true, true, false, false] == pow_mod_crc(13312);
+  {
+    pow_13279();
+    of_pow(13312, false, false, true, true, false, true, true, false, false, false, true, true, true, false, true, true, true, true, false, true, false, true, true, false, true, false, true, true, false, false, true, true);
+  }
 
   lemma lut_entry_207()
   ensures bits_of_int(lut[207] as int, 64)
@@ -8398,28 +8412,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, true, true, true, false, false, false, false, true, false, false, false, false, false, false, true, true, true, false, false, false, false, true, true, true, true, true, false, true, false]+[true, true, false, false, true, true, false, true, false, true, true, false, true, false, true, true, true, true, false, true, true, true, false, false, false, true, true, false, true, true, false, false];
       {
-        calc {
-          [false, false, false, true, true, true, false, false, false, false, true, false, false, false, false, false, false, true, true, true, false, false, false, false, true, true, true, true, true, false, true, false];
-          {
-            pow_26591();
-            of_pow(26624, false, true, false, true, true, true, true, true, false, false, false, false, true, true, true, false, false, false, false, false, false, true, false, false, false, false, true, true, true, false, false, false);
-          }
-          pow_mod_crc(26624);
-        }
-        calc {
-          [true, true, false, false, true, true, false, true, false, true, true, false, true, false, true, true, true, true, false, true, true, true, false, false, false, true, true, false, true, true, false, false];
-          {
-            pow_13279();
-            of_pow(13312, false, false, true, true, false, true, true, false, false, false, true, true, true, false, true, true, true, true, false, true, false, true, true, false, true, false, true, true, false, false, true, true);
-          }
-          pow_mod_crc(13312);
-        }
+        lut_entry_207_0();
+        lut_entry_207_1();
       }
       pow_mod_crc(26624) + pow_mod_crc(13312);
     }
   }
 
 
+
+  lemma lut_entry_208_0()
+  ensures [true, false, false, true, false, false, false, false, false, true, true, true, false, true, true, false, true, false, true, true, false, false, true, false, false, false, false, false, false, true, true, false] == pow_mod_crc(26752);
+  {
+    pow_26719();
+    of_pow(26752, false, true, true, false, false, false, false, false, false, true, false, false, true, true, false, true, false, true, true, false, true, true, true, false, false, false, false, false, true, false, false, true);
+  }
+
+  lemma lut_entry_208_1()
+  ensures [true, true, false, false, true, false, true, false, false, true, false, false, true, false, true, false, false, false, false, true, true, true, true, true, true, false, true, false, true, false, false, false] == pow_mod_crc(13376);
+  {
+    pow_13343();
+    of_pow(13376, false, false, false, true, false, true, false, true, true, true, true, true, true, false, false, false, false, true, false, true, false, false, true, false, false, true, false, true, false, false, true, true);
+  }
 
   lemma lut_entry_208()
   ensures bits_of_int(lut[208] as int, 64)
@@ -8438,28 +8452,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, true, false, false, false, false, false, true, true, true, false, true, true, false, true, false, true, true, false, false, true, false, false, false, false, false, false, true, true, false]+[true, true, false, false, true, false, true, false, false, true, false, false, true, false, true, false, false, false, false, true, true, true, true, true, true, false, true, false, true, false, false, false];
       {
-        calc {
-          [true, false, false, true, false, false, false, false, false, true, true, true, false, true, true, false, true, false, true, true, false, false, true, false, false, false, false, false, false, true, true, false];
-          {
-            pow_26719();
-            of_pow(26752, false, true, true, false, false, false, false, false, false, true, false, false, true, true, false, true, false, true, true, false, true, true, true, false, false, false, false, false, true, false, false, true);
-          }
-          pow_mod_crc(26752);
-        }
-        calc {
-          [true, true, false, false, true, false, true, false, false, true, false, false, true, false, true, false, false, false, false, true, true, true, true, true, true, false, true, false, true, false, false, false];
-          {
-            pow_13343();
-            of_pow(13376, false, false, false, true, false, true, false, true, true, true, true, true, true, false, false, false, false, true, false, true, false, false, true, false, false, true, false, true, false, false, true, true);
-          }
-          pow_mod_crc(13376);
-        }
+        lut_entry_208_0();
+        lut_entry_208_1();
       }
       pow_mod_crc(26752) + pow_mod_crc(13376);
     }
   }
 
 
+
+  lemma lut_entry_209_0()
+  ensures [false, true, false, false, false, true, false, false, false, true, true, false, false, true, true, true, true, true, false, false, true, true, false, true, false, true, true, true, false, true, false, true] == pow_mod_crc(26880);
+  {
+    pow_26847();
+    of_pow(26880, true, false, true, false, true, true, true, false, true, false, true, true, false, false, true, true, true, true, true, false, false, true, true, false, false, false, true, false, false, false, true, false);
+  }
+
+  lemma lut_entry_209_1()
+  ensures [true, false, true, true, true, true, true, true, true, true, false, false, false, false, false, true, false, false, true, true, true, false, true, false, true, true, false, false, true, false, false, false] == pow_mod_crc(13440);
+  {
+    pow_13407();
+    of_pow(13440, false, false, false, true, false, false, true, true, false, true, false, true, true, true, false, false, true, false, false, false, false, false, true, true, true, true, true, true, true, true, false, true);
+  }
 
   lemma lut_entry_209()
   ensures bits_of_int(lut[209] as int, 64)
@@ -8478,28 +8492,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, false, true, false, false, false, true, true, false, false, true, true, true, true, true, false, false, true, true, false, true, false, true, true, true, false, true, false, true]+[true, false, true, true, true, true, true, true, true, true, false, false, false, false, false, true, false, false, true, true, true, false, true, false, true, true, false, false, true, false, false, false];
       {
-        calc {
-          [false, true, false, false, false, true, false, false, false, true, true, false, false, true, true, true, true, true, false, false, true, true, false, true, false, true, true, true, false, true, false, true];
-          {
-            pow_26847();
-            of_pow(26880, true, false, true, false, true, true, true, false, true, false, true, true, false, false, true, true, true, true, true, false, false, true, true, false, false, false, true, false, false, false, true, false);
-          }
-          pow_mod_crc(26880);
-        }
-        calc {
-          [true, false, true, true, true, true, true, true, true, true, false, false, false, false, false, true, false, false, true, true, true, false, true, false, true, true, false, false, true, false, false, false];
-          {
-            pow_13407();
-            of_pow(13440, false, false, false, true, false, false, true, true, false, true, false, true, true, true, false, false, true, false, false, false, false, false, true, true, true, true, true, true, true, true, false, true);
-          }
-          pow_mod_crc(13440);
-        }
+        lut_entry_209_0();
+        lut_entry_209_1();
       }
       pow_mod_crc(26880) + pow_mod_crc(13440);
     }
   }
 
 
+
+  lemma lut_entry_210_0()
+  ensures [false, false, true, false, false, false, false, false, true, true, false, true, false, true, true, true, true, true, false, false, false, true, true, false, false, true, false, false, false, false, true, false] == pow_mod_crc(27008);
+  {
+    pow_26975();
+    of_pow(27008, false, true, false, false, false, false, true, false, false, true, true, false, false, false, true, true, true, true, true, false, true, false, true, true, false, false, false, false, false, true, false, false);
+  }
+
+  lemma lut_entry_210_1()
+  ensures [true, false, true, true, true, false, true, true, false, false, true, false, false, true, false, false, false, false, true, true, false, true, true, true, true, true, false, true, true, false, false, false] == pow_mod_crc(13504);
+  {
+    pow_13471();
+    of_pow(13504, false, false, false, true, true, false, true, true, true, true, true, false, true, true, false, false, false, false, true, false, false, true, false, false, true, true, false, true, true, true, false, true);
+  }
 
   lemma lut_entry_210()
   ensures bits_of_int(lut[210] as int, 64)
@@ -8518,28 +8532,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, false, false, false, false, false, true, true, false, true, false, true, true, true, true, true, false, false, false, true, true, false, false, true, false, false, false, false, true, false]+[true, false, true, true, true, false, true, true, false, false, true, false, false, true, false, false, false, false, true, true, false, true, true, true, true, true, false, true, true, false, false, false];
       {
-        calc {
-          [false, false, true, false, false, false, false, false, true, true, false, true, false, true, true, true, true, true, false, false, false, true, true, false, false, true, false, false, false, false, true, false];
-          {
-            pow_26975();
-            of_pow(27008, false, true, false, false, false, false, true, false, false, true, true, false, false, false, true, true, true, true, true, false, true, false, true, true, false, false, false, false, false, true, false, false);
-          }
-          pow_mod_crc(27008);
-        }
-        calc {
-          [true, false, true, true, true, false, true, true, false, false, true, false, false, true, false, false, false, false, true, true, false, true, true, true, true, true, false, true, true, false, false, false];
-          {
-            pow_13471();
-            of_pow(13504, false, false, false, true, true, false, true, true, true, true, true, false, true, true, false, false, false, false, true, false, false, true, false, false, true, true, false, true, true, true, false, true);
-          }
-          pow_mod_crc(13504);
-        }
+        lut_entry_210_0();
+        lut_entry_210_1();
       }
       pow_mod_crc(27008) + pow_mod_crc(13504);
     }
   }
 
 
+
+  lemma lut_entry_211_0()
+  ensures [false, true, true, false, true, false, false, false, true, true, false, true, false, false, true, true, false, true, false, false, false, false, true, true, false, false, false, false, true, false, true, false] == pow_mod_crc(27136);
+  {
+    pow_27103();
+    of_pow(27136, false, true, false, true, false, false, false, false, true, true, false, false, false, false, true, false, true, true, false, false, true, false, true, true, false, false, false, true, false, true, true, false);
+  }
+
+  lemma lut_entry_211_1()
+  ensures [false, false, false, false, true, true, true, false, false, true, true, false, false, true, true, true, true, true, false, true, false, true, false, true, true, true, true, true, true, false, true, false] == pow_mod_crc(13568);
+  {
+    pow_13535();
+    of_pow(13568, false, true, false, true, true, true, true, true, true, false, true, false, true, false, true, true, true, true, true, false, false, true, true, false, false, true, true, true, false, false, false, false);
+  }
 
   lemma lut_entry_211()
   ensures bits_of_int(lut[211] as int, 64)
@@ -8558,28 +8572,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, false, true, false, false, false, true, true, false, true, false, false, true, true, false, true, false, false, false, false, true, true, false, false, false, false, true, false, true, false]+[false, false, false, false, true, true, true, false, false, true, true, false, false, true, true, true, true, true, false, true, false, true, false, true, true, true, true, true, true, false, true, false];
       {
-        calc {
-          [false, true, true, false, true, false, false, false, true, true, false, true, false, false, true, true, false, true, false, false, false, false, true, true, false, false, false, false, true, false, true, false];
-          {
-            pow_27103();
-            of_pow(27136, false, true, false, true, false, false, false, false, true, true, false, false, false, false, true, false, true, true, false, false, true, false, true, true, false, false, false, true, false, true, true, false);
-          }
-          pow_mod_crc(27136);
-        }
-        calc {
-          [false, false, false, false, true, true, true, false, false, true, true, false, false, true, true, true, true, true, false, true, false, true, false, true, true, true, true, true, true, false, true, false];
-          {
-            pow_13535();
-            of_pow(13568, false, true, false, true, true, true, true, true, true, false, true, false, true, false, true, true, true, true, true, false, false, true, true, false, false, true, true, true, false, false, false, false);
-          }
-          pow_mod_crc(13568);
-        }
+        lut_entry_211_0();
+        lut_entry_211_1();
       }
       pow_mod_crc(27136) + pow_mod_crc(13568);
     }
   }
 
 
+
+  lemma lut_entry_212_0()
+  ensures [true, true, true, false, false, true, true, true, true, true, true, true, false, true, false, true, true, true, true, false, false, true, true, false, false, true, true, false, false, true, true, false] == pow_mod_crc(27264);
+  {
+    pow_27231();
+    of_pow(27264, false, true, true, false, false, true, true, false, false, true, true, false, false, true, true, true, true, false, true, false, true, true, true, true, true, true, true, false, false, true, true, true);
+  }
+
+  lemma lut_entry_212_1()
+  ensures [true, true, false, true, true, false, true, false, true, false, true, true, false, false, true, true, false, true, true, false, true, true, false, false, false, false, true, true, false, false, true, false] == pow_mod_crc(13632);
+  {
+    pow_13599();
+    of_pow(13632, false, true, false, false, true, true, false, false, false, false, true, true, false, true, true, false, true, true, false, false, true, true, false, true, false, true, false, true, true, false, true, true);
+  }
 
   lemma lut_entry_212()
   ensures bits_of_int(lut[212] as int, 64)
@@ -8598,28 +8612,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, false, false, true, true, true, true, true, true, true, false, true, false, true, true, true, true, false, false, true, true, false, false, true, true, false, false, true, true, false]+[true, true, false, true, true, false, true, false, true, false, true, true, false, false, true, true, false, true, true, false, true, true, false, false, false, false, true, true, false, false, true, false];
       {
-        calc {
-          [true, true, true, false, false, true, true, true, true, true, true, true, false, true, false, true, true, true, true, false, false, true, true, false, false, true, true, false, false, true, true, false];
-          {
-            pow_27231();
-            of_pow(27264, false, true, true, false, false, true, true, false, false, true, true, false, false, true, true, true, true, false, true, false, true, true, true, true, true, true, true, false, false, true, true, true);
-          }
-          pow_mod_crc(27264);
-        }
-        calc {
-          [true, true, false, true, true, false, true, false, true, false, true, true, false, false, true, true, false, true, true, false, true, true, false, false, false, false, true, true, false, false, true, false];
-          {
-            pow_13599();
-            of_pow(13632, false, true, false, false, true, true, false, false, false, false, true, true, false, true, true, false, true, true, false, false, true, true, false, true, false, true, false, true, true, false, true, true);
-          }
-          pow_mod_crc(13632);
-        }
+        lut_entry_212_0();
+        lut_entry_212_1();
       }
       pow_mod_crc(27264) + pow_mod_crc(13632);
     }
   }
 
 
+
+  lemma lut_entry_213_0()
+  ensures [false, false, false, true, true, true, false, true, true, false, false, true, false, false, false, true, false, false, false, true, false, true, true, false, false, true, false, true, true, false, false, false] == pow_mod_crc(27392);
+  {
+    pow_27359();
+    of_pow(27392, false, false, false, true, true, false, true, false, false, true, true, false, true, false, false, false, true, false, false, false, true, false, false, true, true, false, true, true, true, false, false, false);
+  }
+
+  lemma lut_entry_213_1()
+  ensures [true, false, false, true, true, true, true, false, false, true, false, false, true, true, false, false, false, false, true, true, false, true, true, true, true, false, true, false, true, true, false, false] == pow_mod_crc(13696);
+  {
+    pow_13663();
+    of_pow(13696, false, false, true, true, false, true, false, true, true, true, true, false, true, true, false, false, false, false, true, true, false, false, true, false, false, true, true, true, true, false, false, true);
+  }
 
   lemma lut_entry_213()
   ensures bits_of_int(lut[213] as int, 64)
@@ -8638,28 +8652,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, true, true, true, false, true, true, false, false, true, false, false, false, true, false, false, false, true, false, true, true, false, false, true, false, true, true, false, false, false]+[true, false, false, true, true, true, true, false, false, true, false, false, true, true, false, false, false, false, true, true, false, true, true, true, true, false, true, false, true, true, false, false];
       {
-        calc {
-          [false, false, false, true, true, true, false, true, true, false, false, true, false, false, false, true, false, false, false, true, false, true, true, false, false, true, false, true, true, false, false, false];
-          {
-            pow_27359();
-            of_pow(27392, false, false, false, true, true, false, true, false, false, true, true, false, true, false, false, false, true, false, false, false, true, false, false, true, true, false, true, true, true, false, false, false);
-          }
-          pow_mod_crc(27392);
-        }
-        calc {
-          [true, false, false, true, true, true, true, false, false, true, false, false, true, true, false, false, false, false, true, true, false, true, true, true, true, false, true, false, true, true, false, false];
-          {
-            pow_13663();
-            of_pow(13696, false, false, true, true, false, true, false, true, true, true, true, false, true, true, false, false, false, false, true, true, false, false, true, false, false, true, true, true, true, false, false, true);
-          }
-          pow_mod_crc(13696);
-        }
+        lut_entry_213_0();
+        lut_entry_213_1();
       }
       pow_mod_crc(27392) + pow_mod_crc(13696);
     }
   }
 
 
+
+  lemma lut_entry_214_0()
+  ensures [false, true, false, true, false, true, false, false, true, false, false, true, false, false, true, true, false, true, false, false, false, false, true, false, false, true, true, true, true, false, true, true] == pow_mod_crc(27520);
+  {
+    pow_27487();
+    of_pow(27520, true, true, false, true, true, true, true, false, false, true, false, false, false, false, true, false, true, true, false, false, true, false, false, true, false, false, true, false, true, false, true, false);
+  }
+
+  lemma lut_entry_214_1()
+  ensures [true, false, false, true, false, true, false, false, false, true, true, true, false, true, false, false, false, true, false, false, false, true, false, true, false, false, false, false, false, true, true, true] == pow_mod_crc(13760);
+  {
+    pow_13727();
+    of_pow(13760, true, true, true, false, false, false, false, false, true, false, true, false, false, false, true, false, false, false, true, false, true, true, true, false, false, false, true, false, true, false, false, true);
+  }
 
   lemma lut_entry_214()
   ensures bits_of_int(lut[214] as int, 64)
@@ -8678,28 +8692,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, false, true, false, false, true, false, false, true, false, false, true, true, false, true, false, false, false, false, true, false, false, true, true, true, true, false, true, true]+[true, false, false, true, false, true, false, false, false, true, true, true, false, true, false, false, false, true, false, false, false, true, false, true, false, false, false, false, false, true, true, true];
       {
-        calc {
-          [false, true, false, true, false, true, false, false, true, false, false, true, false, false, true, true, false, true, false, false, false, false, true, false, false, true, true, true, true, false, true, true];
-          {
-            pow_27487();
-            of_pow(27520, true, true, false, true, true, true, true, false, false, true, false, false, false, false, true, false, true, true, false, false, true, false, false, true, false, false, true, false, true, false, true, false);
-          }
-          pow_mod_crc(27520);
-        }
-        calc {
-          [true, false, false, true, false, true, false, false, false, true, true, true, false, true, false, false, false, true, false, false, false, true, false, true, false, false, false, false, false, true, true, true];
-          {
-            pow_13727();
-            of_pow(13760, true, true, true, false, false, false, false, false, true, false, true, false, false, false, true, false, false, false, true, false, true, true, true, false, false, false, true, false, true, false, false, true);
-          }
-          pow_mod_crc(13760);
-        }
+        lut_entry_214_0();
+        lut_entry_214_1();
       }
       pow_mod_crc(27520) + pow_mod_crc(13760);
     }
   }
 
 
+
+  lemma lut_entry_215_0()
+  ensures [true, false, true, true, true, true, false, false, false, true, true, false, false, false, true, false, true, true, true, false, false, false, true, false, true, true, true, true, true, true, true, false] == pow_mod_crc(27648);
+  {
+    pow_27615();
+    of_pow(27648, false, true, true, true, true, true, true, true, false, true, false, false, false, true, true, true, false, true, false, false, false, true, true, false, false, false, true, true, true, true, false, true);
+  }
+
+  lemma lut_entry_215_1()
+  ensures [false, true, true, false, true, true, true, true, true, false, true, false, true, true, true, true, false, false, true, true, true, true, false, true, false, false, false, false, false, false, false, false] == pow_mod_crc(13824);
+  {
+    pow_13791();
+    of_pow(13824, false, false, false, false, false, false, false, false, true, false, true, true, true, true, false, false, true, true, true, true, false, true, false, true, true, true, true, true, false, true, true, false);
+  }
 
   lemma lut_entry_215()
   ensures bits_of_int(lut[215] as int, 64)
@@ -8718,28 +8732,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, true, true, true, false, false, false, true, true, false, false, false, true, false, true, true, true, false, false, false, true, false, true, true, true, true, true, true, true, false]+[false, true, true, false, true, true, true, true, true, false, true, false, true, true, true, true, false, false, true, true, true, true, false, true, false, false, false, false, false, false, false, false];
       {
-        calc {
-          [true, false, true, true, true, true, false, false, false, true, true, false, false, false, true, false, true, true, true, false, false, false, true, false, true, true, true, true, true, true, true, false];
-          {
-            pow_27615();
-            of_pow(27648, false, true, true, true, true, true, true, true, false, true, false, false, false, true, true, true, false, true, false, false, false, true, true, false, false, false, true, true, true, true, false, true);
-          }
-          pow_mod_crc(27648);
-        }
-        calc {
-          [false, true, true, false, true, true, true, true, true, false, true, false, true, true, true, true, false, false, true, true, true, true, false, true, false, false, false, false, false, false, false, false];
-          {
-            pow_13791();
-            of_pow(13824, false, false, false, false, false, false, false, false, true, false, true, true, true, true, false, false, true, true, true, true, false, true, false, true, true, true, true, true, false, true, true, false);
-          }
-          pow_mod_crc(13824);
-        }
+        lut_entry_215_0();
+        lut_entry_215_1();
       }
       pow_mod_crc(27648) + pow_mod_crc(13824);
     }
   }
 
 
+
+  lemma lut_entry_216_0()
+  ensures [false, false, false, false, false, false, false, true, false, false, false, false, false, true, true, false, true, true, false, true, false, true, false, false, false, false, false, true, true, true, false, true] == pow_mod_crc(27776);
+  {
+    pow_27743();
+    of_pow(27776, true, false, true, true, true, false, false, false, false, false, true, false, true, false, true, true, false, true, true, false, false, false, false, false, true, false, false, false, false, false, false, false);
+  }
+
+  lemma lut_entry_216_1()
+  ensures [true, false, false, true, true, false, true, true, false, true, true, true, false, true, true, false, true, true, false, true, false, true, false, false, false, false, true, true, true, true, true, false] == pow_mod_crc(13888);
+  {
+    pow_13855();
+    of_pow(13888, false, true, true, true, true, true, false, false, false, false, true, false, true, false, true, true, false, true, true, false, true, true, true, false, true, true, false, true, true, false, false, true);
+  }
 
   lemma lut_entry_216()
   ensures bits_of_int(lut[216] as int, 64)
@@ -8758,28 +8772,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, false, false, false, false, true, false, false, false, false, false, true, true, false, true, true, false, true, false, true, false, false, false, false, false, true, true, true, false, true]+[true, false, false, true, true, false, true, true, false, true, true, true, false, true, true, false, true, true, false, true, false, true, false, false, false, false, true, true, true, true, true, false];
       {
-        calc {
-          [false, false, false, false, false, false, false, true, false, false, false, false, false, true, true, false, true, true, false, true, false, true, false, false, false, false, false, true, true, true, false, true];
-          {
-            pow_27743();
-            of_pow(27776, true, false, true, true, true, false, false, false, false, false, true, false, true, false, true, true, false, true, true, false, false, false, false, false, true, false, false, false, false, false, false, false);
-          }
-          pow_mod_crc(27776);
-        }
-        calc {
-          [true, false, false, true, true, false, true, true, false, true, true, true, false, true, true, false, true, true, false, true, false, true, false, false, false, false, true, true, true, true, true, false];
-          {
-            pow_13855();
-            of_pow(13888, false, true, true, true, true, true, false, false, false, false, true, false, true, false, true, true, false, true, true, false, true, true, true, false, true, true, false, true, true, false, false, true);
-          }
-          pow_mod_crc(13888);
-        }
+        lut_entry_216_0();
+        lut_entry_216_1();
       }
       pow_mod_crc(27776) + pow_mod_crc(13888);
     }
   }
 
 
+
+  lemma lut_entry_217_0()
+  ensures [true, true, false, true, false, false, false, false, true, false, true, false, true, false, true, false, true, false, true, true, false, false, false, true, false, true, false, false, false, false, false, true] == pow_mod_crc(27904);
+  {
+    pow_27871();
+    of_pow(27904, true, false, false, false, false, false, true, false, true, false, false, false, true, true, false, true, false, true, false, true, false, true, false, true, false, false, false, false, true, false, true, true);
+  }
+
+  lemma lut_entry_217_1()
+  ensures [true, false, false, true, false, false, false, true, false, true, true, false, false, false, false, false, false, false, false, false, false, true, true, true, false, true, false, true, false, false, false, true] == pow_mod_crc(13952);
+  {
+    pow_13919();
+    of_pow(13952, true, false, false, false, true, false, true, false, true, true, true, false, false, false, false, false, false, false, false, false, false, true, true, false, true, false, false, false, true, false, false, true);
+  }
 
   lemma lut_entry_217()
   ensures bits_of_int(lut[217] as int, 64)
@@ -8798,28 +8812,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, false, false, false, false, true, false, true, false, true, false, true, false, true, false, true, true, false, false, false, true, false, true, false, false, false, false, false, true]+[true, false, false, true, false, false, false, true, false, true, true, false, false, false, false, false, false, false, false, false, false, true, true, true, false, true, false, true, false, false, false, true];
       {
-        calc {
-          [true, true, false, true, false, false, false, false, true, false, true, false, true, false, true, false, true, false, true, true, false, false, false, true, false, true, false, false, false, false, false, true];
-          {
-            pow_27871();
-            of_pow(27904, true, false, false, false, false, false, true, false, true, false, false, false, true, true, false, true, false, true, false, true, false, true, false, true, false, false, false, false, true, false, true, true);
-          }
-          pow_mod_crc(27904);
-        }
-        calc {
-          [true, false, false, true, false, false, false, true, false, true, true, false, false, false, false, false, false, false, false, false, false, true, true, true, false, true, false, true, false, false, false, true];
-          {
-            pow_13919();
-            of_pow(13952, true, false, false, false, true, false, true, false, true, true, true, false, false, false, false, false, false, false, false, false, false, true, true, false, true, false, false, false, true, false, false, true);
-          }
-          pow_mod_crc(13952);
-        }
+        lut_entry_217_0();
+        lut_entry_217_1();
       }
       pow_mod_crc(27904) + pow_mod_crc(13952);
     }
   }
 
 
+
+  lemma lut_entry_218_0()
+  ensures [false, true, false, true, true, false, true, true, false, false, true, false, true, true, false, true, false, true, false, false, false, true, false, true, false, false, true, true, true, false, true, true] == pow_mod_crc(28032);
+  {
+    pow_27999();
+    of_pow(28032, true, true, false, true, true, true, false, false, true, false, true, false, false, false, true, false, true, false, true, true, false, true, false, false, true, true, false, true, true, false, true, false);
+  }
+
+  lemma lut_entry_218_1()
+  ensures [true, false, true, true, true, true, true, true, false, false, false, true, false, false, false, true, true, true, true, true, true, true, true, true, false, true, true, false, false, false, false, false] == pow_mod_crc(14016);
+  {
+    pow_13983();
+    of_pow(14016, false, false, false, false, false, true, true, false, true, true, true, true, true, true, true, true, true, false, false, false, true, false, false, false, true, true, true, true, true, true, false, true);
+  }
 
   lemma lut_entry_218()
   ensures bits_of_int(lut[218] as int, 64)
@@ -8838,28 +8852,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, true, false, true, true, false, false, true, false, true, true, false, true, false, true, false, false, false, true, false, true, false, false, true, true, true, false, true, true]+[true, false, true, true, true, true, true, true, false, false, false, true, false, false, false, true, true, true, true, true, true, true, true, true, false, true, true, false, false, false, false, false];
       {
-        calc {
-          [false, true, false, true, true, false, true, true, false, false, true, false, true, true, false, true, false, true, false, false, false, true, false, true, false, false, true, true, true, false, true, true];
-          {
-            pow_27999();
-            of_pow(28032, true, true, false, true, true, true, false, false, true, false, true, false, false, false, true, false, true, false, true, true, false, true, false, false, true, true, false, true, true, false, true, false);
-          }
-          pow_mod_crc(28032);
-        }
-        calc {
-          [true, false, true, true, true, true, true, true, false, false, false, true, false, false, false, true, true, true, true, true, true, true, true, true, false, true, true, false, false, false, false, false];
-          {
-            pow_13983();
-            of_pow(14016, false, false, false, false, false, true, true, false, true, true, true, true, true, true, true, true, true, false, false, false, true, false, false, false, true, true, true, true, true, true, false, true);
-          }
-          pow_mod_crc(14016);
-        }
+        lut_entry_218_0();
+        lut_entry_218_1();
       }
       pow_mod_crc(28032) + pow_mod_crc(14016);
     }
   }
 
 
+
+  lemma lut_entry_219_0()
+  ensures [true, true, false, true, false, true, true, true, false, true, true, false, false, true, false, false, true, true, true, false, false, false, true, true, false, true, false, true, false, false, true, false] == pow_mod_crc(28160);
+  {
+    pow_28127();
+    of_pow(28160, false, true, false, false, true, false, true, false, true, true, false, false, false, true, true, true, false, false, true, false, false, true, true, false, true, true, true, false, true, false, true, true);
+  }
+
+  lemma lut_entry_219_1()
+  ensures [false, false, false, true, true, false, false, true, false, true, true, false, true, true, true, false, false, true, false, false, true, true, true, true, true, true, true, false, true, false, false, false] == pow_mod_crc(14080);
+  {
+    pow_14047();
+    of_pow(14080, false, false, false, true, false, true, true, true, true, true, true, true, false, false, true, false, false, true, true, true, false, true, true, false, true, false, false, true, true, false, false, false);
+  }
 
   lemma lut_entry_219()
   ensures bits_of_int(lut[219] as int, 64)
@@ -8878,28 +8892,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, false, true, true, true, false, true, true, false, false, true, false, false, true, true, true, false, false, false, true, true, false, true, false, true, false, false, true, false]+[false, false, false, true, true, false, false, true, false, true, true, false, true, true, true, false, false, true, false, false, true, true, true, true, true, true, true, false, true, false, false, false];
       {
-        calc {
-          [true, true, false, true, false, true, true, true, false, true, true, false, false, true, false, false, true, true, true, false, false, false, true, true, false, true, false, true, false, false, true, false];
-          {
-            pow_28127();
-            of_pow(28160, false, true, false, false, true, false, true, false, true, true, false, false, false, true, true, true, false, false, true, false, false, true, true, false, true, true, true, false, true, false, true, true);
-          }
-          pow_mod_crc(28160);
-        }
-        calc {
-          [false, false, false, true, true, false, false, true, false, true, true, false, true, true, true, false, false, true, false, false, true, true, true, true, true, true, true, false, true, false, false, false];
-          {
-            pow_14047();
-            of_pow(14080, false, false, false, true, false, true, true, true, true, true, true, true, false, false, true, false, false, true, true, true, false, true, true, false, true, false, false, true, true, false, false, false);
-          }
-          pow_mod_crc(14080);
-        }
+        lut_entry_219_0();
+        lut_entry_219_1();
       }
       pow_mod_crc(28160) + pow_mod_crc(14080);
     }
   }
 
 
+
+  lemma lut_entry_220_0()
+  ensures [false, true, true, false, false, true, true, true, true, false, true, false, true, false, false, true, false, true, false, false, true, false, false, true, false, true, false, false, true, false, true, false] == pow_mod_crc(28288);
+  {
+    pow_28255();
+    of_pow(28288, false, true, false, true, false, false, true, false, true, false, false, true, false, false, true, false, true, false, false, true, false, true, false, true, true, true, true, false, false, true, true, false);
+  }
+
+  lemma lut_entry_220_1()
+  ensures [false, false, false, false, true, true, true, true, false, false, true, true, true, true, true, false, true, false, false, false, true, true, false, false, true, true, true, false, true, true, true, true] == pow_mod_crc(14144);
+  {
+    pow_14111();
+    of_pow(14144, true, true, true, true, false, true, true, true, false, false, true, true, false, false, false, true, false, true, true, true, true, true, false, false, true, true, true, true, false, false, false, false);
+  }
 
   lemma lut_entry_220()
   ensures bits_of_int(lut[220] as int, 64)
@@ -8918,28 +8932,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, false, false, true, true, true, true, false, true, false, true, false, false, true, false, true, false, false, true, false, false, true, false, true, false, false, true, false, true, false]+[false, false, false, false, true, true, true, true, false, false, true, true, true, true, true, false, true, false, false, false, true, true, false, false, true, true, true, false, true, true, true, true];
       {
-        calc {
-          [false, true, true, false, false, true, true, true, true, false, true, false, true, false, false, true, false, true, false, false, true, false, false, true, false, true, false, false, true, false, true, false];
-          {
-            pow_28255();
-            of_pow(28288, false, true, false, true, false, false, true, false, true, false, false, true, false, false, true, false, true, false, false, true, false, true, false, true, true, true, true, false, false, true, true, false);
-          }
-          pow_mod_crc(28288);
-        }
-        calc {
-          [false, false, false, false, true, true, true, true, false, false, true, true, true, true, true, false, true, false, false, false, true, true, false, false, true, true, true, false, true, true, true, true];
-          {
-            pow_14111();
-            of_pow(14144, true, true, true, true, false, true, true, true, false, false, true, true, false, false, false, true, false, true, true, true, true, true, false, false, true, true, true, true, false, false, false, false);
-          }
-          pow_mod_crc(14144);
-        }
+        lut_entry_220_0();
+        lut_entry_220_1();
       }
       pow_mod_crc(28288) + pow_mod_crc(14144);
     }
   }
 
 
+
+  lemma lut_entry_221_0()
+  ensures [true, true, false, true, false, true, true, true, false, false, false, true, false, true, false, false, true, true, true, true, true, false, false, true, false, true, true, true, true, false, true, false] == pow_mod_crc(28416);
+  {
+    pow_28383();
+    of_pow(28416, false, true, false, true, true, true, true, false, true, false, false, true, true, true, true, true, false, false, true, false, true, false, false, false, true, true, true, false, true, false, true, true);
+  }
+
+  lemma lut_entry_221_1()
+  ensures [false, false, false, false, false, false, false, false, true, true, true, true, true, false, true, false, false, true, false, true, false, false, true, true, false, false, false, true, true, false, true, false] == pow_mod_crc(14208);
+  {
+    pow_14175();
+    of_pow(14208, false, true, false, true, true, false, false, false, true, true, false, false, true, false, true, false, false, true, false, true, true, true, true, true, false, false, false, false, false, false, false, false);
+  }
 
   lemma lut_entry_221()
   ensures bits_of_int(lut[221] as int, 64)
@@ -8958,28 +8972,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, false, true, true, true, false, false, false, true, false, true, false, false, true, true, true, true, true, false, false, true, false, true, true, true, true, false, true, false]+[false, false, false, false, false, false, false, false, true, true, true, true, true, false, true, false, false, true, false, true, false, false, true, true, false, false, false, true, true, false, true, false];
       {
-        calc {
-          [true, true, false, true, false, true, true, true, false, false, false, true, false, true, false, false, true, true, true, true, true, false, false, true, false, true, true, true, true, false, true, false];
-          {
-            pow_28383();
-            of_pow(28416, false, true, false, true, true, true, true, false, true, false, false, true, true, true, true, true, false, false, true, false, true, false, false, false, true, true, true, false, true, false, true, true);
-          }
-          pow_mod_crc(28416);
-        }
-        calc {
-          [false, false, false, false, false, false, false, false, true, true, true, true, true, false, true, false, false, true, false, true, false, false, true, true, false, false, false, true, true, false, true, false];
-          {
-            pow_14175();
-            of_pow(14208, false, true, false, true, true, false, false, false, true, true, false, false, true, false, true, false, false, true, false, true, true, true, true, true, false, false, false, false, false, false, false, false);
-          }
-          pow_mod_crc(14208);
-        }
+        lut_entry_221_0();
+        lut_entry_221_1();
       }
       pow_mod_crc(28416) + pow_mod_crc(14208);
     }
   }
 
 
+
+  lemma lut_entry_222_0()
+  ensures [true, true, true, true, true, true, true, true, true, true, true, true, false, false, true, false, true, false, false, false, false, false, true, true, false, false, false, false, false, false, true, false] == pow_mod_crc(28544);
+  {
+    pow_28511();
+    of_pow(28544, false, true, false, false, false, false, false, false, true, true, false, false, false, false, false, true, false, true, false, false, true, true, true, true, true, true, true, true, true, true, true, true);
+  }
+
+  lemma lut_entry_222_1()
+  ensures [true, true, false, true, false, false, false, false, false, false, true, false, false, true, true, true, false, true, true, false, true, true, false, true, true, false, false, false, false, true, true, false] == pow_mod_crc(14272);
+  {
+    pow_14239();
+    of_pow(14272, false, true, true, false, false, false, false, true, true, false, true, true, false, true, true, false, true, true, true, false, false, true, false, false, false, false, false, false, true, false, true, true);
+  }
 
   lemma lut_entry_222()
   ensures bits_of_int(lut[222] as int, 64)
@@ -8998,28 +9012,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, true, true, true, true, true, true, true, true, true, false, false, true, false, true, false, false, false, false, false, true, true, false, false, false, false, false, false, true, false]+[true, true, false, true, false, false, false, false, false, false, true, false, false, true, true, true, false, true, true, false, true, true, false, true, true, false, false, false, false, true, true, false];
       {
-        calc {
-          [true, true, true, true, true, true, true, true, true, true, true, true, false, false, true, false, true, false, false, false, false, false, true, true, false, false, false, false, false, false, true, false];
-          {
-            pow_28511();
-            of_pow(28544, false, true, false, false, false, false, false, false, true, true, false, false, false, false, false, true, false, true, false, false, true, true, true, true, true, true, true, true, true, true, true, true);
-          }
-          pow_mod_crc(28544);
-        }
-        calc {
-          [true, true, false, true, false, false, false, false, false, false, true, false, false, true, true, true, false, true, true, false, true, true, false, true, true, false, false, false, false, true, true, false];
-          {
-            pow_14239();
-            of_pow(14272, false, true, true, false, false, false, false, true, true, false, true, true, false, true, true, false, true, true, true, false, false, true, false, false, false, false, false, false, true, false, true, true);
-          }
-          pow_mod_crc(14272);
-        }
+        lut_entry_222_0();
+        lut_entry_222_1();
       }
       pow_mod_crc(28544) + pow_mod_crc(14272);
     }
   }
 
 
+
+  lemma lut_entry_223_0()
+  ensures [true, true, false, true, true, false, false, true, true, false, false, false, true, true, true, true, true, false, false, false, false, true, false, true, false, true, true, false, true, false, false, true] == pow_mod_crc(28672);
+  {
+    pow_28639();
+    of_pow(28672, true, false, false, true, false, true, true, false, true, false, true, false, false, false, false, true, true, true, true, true, false, false, false, true, true, false, false, true, true, false, true, true);
+  }
+
+  lemma lut_entry_223_1()
+  ensures [true, false, true, false, true, false, true, true, false, true, false, true, true, true, true, false, false, false, true, true, true, true, true, false, false, true, false, true, false, true, false, true] == pow_mod_crc(14336);
+  {
+    pow_14303();
+    of_pow(14336, true, false, true, false, true, false, true, false, false, true, true, true, true, true, false, false, false, true, true, true, true, false, true, false, true, true, false, true, false, true, false, true);
+  }
 
   lemma lut_entry_223()
   ensures bits_of_int(lut[223] as int, 64)
@@ -9038,28 +9052,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, true, false, false, true, true, false, false, false, true, true, true, true, true, false, false, false, false, true, false, true, false, true, true, false, true, false, false, true]+[true, false, true, false, true, false, true, true, false, true, false, true, true, true, true, false, false, false, true, true, true, true, true, false, false, true, false, true, false, true, false, true];
       {
-        calc {
-          [true, true, false, true, true, false, false, true, true, false, false, false, true, true, true, true, true, false, false, false, false, true, false, true, false, true, true, false, true, false, false, true];
-          {
-            pow_28639();
-            of_pow(28672, true, false, false, true, false, true, true, false, true, false, true, false, false, false, false, true, true, true, true, true, false, false, false, true, true, false, false, true, true, false, true, true);
-          }
-          pow_mod_crc(28672);
-        }
-        calc {
-          [true, false, true, false, true, false, true, true, false, true, false, true, true, true, true, false, false, false, true, true, true, true, true, false, false, true, false, true, false, true, false, true];
-          {
-            pow_14303();
-            of_pow(14336, true, false, true, false, true, false, true, false, false, true, true, true, true, true, false, false, false, true, true, true, true, false, true, false, true, true, false, true, false, true, false, true);
-          }
-          pow_mod_crc(14336);
-        }
+        lut_entry_223_0();
+        lut_entry_223_1();
       }
       pow_mod_crc(28672) + pow_mod_crc(14336);
     }
   }
 
 
+
+  lemma lut_entry_224_0()
+  ensures [true, false, false, false, false, true, true, true, true, true, true, false, true, false, true, false, true, false, false, false, true, true, true, false, true, false, false, true, true, false, false, true] == pow_mod_crc(28800);
+  {
+    pow_28767();
+    of_pow(28800, true, false, false, true, true, false, false, true, false, true, true, true, false, false, false, true, false, true, false, true, false, true, true, true, true, true, true, false, false, false, false, true);
+  }
+
+  lemma lut_entry_224_1()
+  ensures [false, false, false, true, true, true, true, true, true, true, true, false, true, false, false, true, false, true, false, true, false, false, false, true, false, true, true, true, true, false, true, true] == pow_mod_crc(14400);
+  {
+    pow_14367();
+    of_pow(14400, true, true, false, true, true, true, true, false, true, false, false, false, true, false, true, false, true, false, false, true, false, true, true, true, true, true, true, true, true, false, false, false);
+  }
 
   lemma lut_entry_224()
   ensures bits_of_int(lut[224] as int, 64)
@@ -9078,28 +9092,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, false, false, true, true, true, true, true, true, false, true, false, true, false, true, false, false, false, true, true, true, false, true, false, false, true, true, false, false, true]+[false, false, false, true, true, true, true, true, true, true, true, false, true, false, false, true, false, true, false, true, false, false, false, true, false, true, true, true, true, false, true, true];
       {
-        calc {
-          [true, false, false, false, false, true, true, true, true, true, true, false, true, false, true, false, true, false, false, false, true, true, true, false, true, false, false, true, true, false, false, true];
-          {
-            pow_28767();
-            of_pow(28800, true, false, false, true, true, false, false, true, false, true, true, true, false, false, false, true, false, true, false, true, false, true, true, true, true, true, true, false, false, false, false, true);
-          }
-          pow_mod_crc(28800);
-        }
-        calc {
-          [false, false, false, true, true, true, true, true, true, true, true, false, true, false, false, true, false, true, false, true, false, false, false, true, false, true, true, true, true, false, true, true];
-          {
-            pow_14367();
-            of_pow(14400, true, true, false, true, true, true, true, false, true, false, false, false, true, false, true, false, true, false, false, true, false, true, true, true, true, true, true, true, true, false, false, false);
-          }
-          pow_mod_crc(14400);
-        }
+        lut_entry_224_0();
+        lut_entry_224_1();
       }
       pow_mod_crc(28800) + pow_mod_crc(14400);
     }
   }
 
 
+
+  lemma lut_entry_225_0()
+  ensures [false, true, true, false, true, false, false, true, true, false, false, false, false, false, false, true, true, false, true, true, false, true, true, true, false, false, false, false, true, true, false, true] == pow_mod_crc(28928);
+  {
+    pow_28895();
+    of_pow(28928, true, false, true, true, false, false, false, false, true, true, true, false, true, true, false, true, true, false, false, false, false, false, false, true, true, false, false, true, false, true, true, false);
+  }
+
+  lemma lut_entry_225_1()
+  ensures [false, false, false, true, false, true, false, false, false, true, false, true, false, false, true, true, true, true, true, true, false, false, true, true, true, false, true, false, true, true, false, true] == pow_mod_crc(14464);
+  {
+    pow_14431();
+    of_pow(14464, true, false, true, true, false, true, false, true, true, true, false, false, true, true, true, true, true, true, false, false, true, false, true, false, false, false, true, false, true, false, false, false);
+  }
 
   lemma lut_entry_225()
   ensures bits_of_int(lut[225] as int, 64)
@@ -9118,28 +9132,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, false, true, false, false, true, true, false, false, false, false, false, false, true, true, false, true, true, false, true, true, true, false, false, false, false, true, true, false, true]+[false, false, false, true, false, true, false, false, false, true, false, true, false, false, true, true, true, true, true, true, false, false, true, true, true, false, true, false, true, true, false, true];
       {
-        calc {
-          [false, true, true, false, true, false, false, true, true, false, false, false, false, false, false, true, true, false, true, true, false, true, true, true, false, false, false, false, true, true, false, true];
-          {
-            pow_28895();
-            of_pow(28928, true, false, true, true, false, false, false, false, true, true, true, false, true, true, false, true, true, false, false, false, false, false, false, true, true, false, false, true, false, true, true, false);
-          }
-          pow_mod_crc(28928);
-        }
-        calc {
-          [false, false, false, true, false, true, false, false, false, true, false, true, false, false, true, true, true, true, true, true, false, false, true, true, true, false, true, false, true, true, false, true];
-          {
-            pow_14431();
-            of_pow(14464, true, false, true, true, false, true, false, true, true, true, false, false, true, true, true, true, true, true, false, false, true, false, true, false, false, false, true, false, true, false, false, false);
-          }
-          pow_mod_crc(14464);
-        }
+        lut_entry_225_0();
+        lut_entry_225_1();
       }
       pow_mod_crc(28928) + pow_mod_crc(14464);
     }
   }
 
 
+
+  lemma lut_entry_226_0()
+  ensures [false, true, true, false, false, true, true, true, true, false, false, false, false, false, true, false, false, true, true, true, true, true, true, false, true, false, false, true, false, false, false, false] == pow_mod_crc(29056);
+  {
+    pow_29023();
+    of_pow(29056, false, false, false, false, true, false, false, true, false, true, true, true, true, true, true, false, false, true, false, false, false, false, false, true, true, true, true, false, false, true, true, false);
+  }
+
+  lemma lut_entry_226_1()
+  ensures [true, false, true, false, false, false, true, false, false, false, true, false, true, false, false, false, false, true, true, false, true, true, true, true, false, false, false, true, false, false, false, true] == pow_mod_crc(14528);
+  {
+    pow_14495();
+    of_pow(14528, true, false, false, false, true, false, false, false, true, true, true, true, false, true, true, false, false, false, false, true, false, true, false, false, false, true, false, false, false, true, false, true);
+  }
 
   lemma lut_entry_226()
   ensures bits_of_int(lut[226] as int, 64)
@@ -9158,28 +9172,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, false, false, true, true, true, true, false, false, false, false, false, true, false, false, true, true, true, true, true, true, false, true, false, false, true, false, false, false, false]+[true, false, true, false, false, false, true, false, false, false, true, false, true, false, false, false, false, true, true, false, true, true, true, true, false, false, false, true, false, false, false, true];
       {
-        calc {
-          [false, true, true, false, false, true, true, true, true, false, false, false, false, false, true, false, false, true, true, true, true, true, true, false, true, false, false, true, false, false, false, false];
-          {
-            pow_29023();
-            of_pow(29056, false, false, false, false, true, false, false, true, false, true, true, true, true, true, true, false, false, true, false, false, false, false, false, true, true, true, true, false, false, true, true, false);
-          }
-          pow_mod_crc(29056);
-        }
-        calc {
-          [true, false, true, false, false, false, true, false, false, false, true, false, true, false, false, false, false, true, true, false, true, true, true, true, false, false, false, true, false, false, false, true];
-          {
-            pow_14495();
-            of_pow(14528, true, false, false, false, true, false, false, false, true, true, true, true, false, true, true, false, false, false, false, true, false, true, false, false, false, true, false, false, false, true, false, true);
-          }
-          pow_mod_crc(14528);
-        }
+        lut_entry_226_0();
+        lut_entry_226_1();
       }
       pow_mod_crc(29056) + pow_mod_crc(14528);
     }
   }
 
 
+
+  lemma lut_entry_227_0()
+  ensures [true, false, true, false, false, true, true, true, true, true, true, true, true, true, false, true, false, false, false, true, false, true, true, true, false, false, true, true, false, false, true, false] == pow_mod_crc(29184);
+  {
+    pow_29151();
+    of_pow(29184, false, true, false, false, true, true, false, false, true, true, true, false, true, false, false, false, true, false, true, true, true, true, true, true, true, true, true, false, false, true, false, true);
+  }
+
+  lemma lut_entry_227_1()
+  ensures [false, false, false, true, true, true, true, true, false, false, false, true, false, false, false, true, false, true, false, false, true, false, true, true, false, true, true, true, true, false, true, true] == pow_mod_crc(14592);
+  {
+    pow_14559();
+    of_pow(14592, true, true, false, true, true, true, true, false, true, true, false, true, false, false, true, false, true, false, false, false, true, false, false, false, true, true, true, true, true, false, false, false);
+  }
 
   lemma lut_entry_227()
   ensures bits_of_int(lut[227] as int, 64)
@@ -9198,28 +9212,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, false, false, true, true, true, true, true, true, true, true, true, false, true, false, false, false, true, false, true, true, true, false, false, true, true, false, false, true, false]+[false, false, false, true, true, true, true, true, false, false, false, true, false, false, false, true, false, true, false, false, true, false, true, true, false, true, true, true, true, false, true, true];
       {
-        calc {
-          [true, false, true, false, false, true, true, true, true, true, true, true, true, true, false, true, false, false, false, true, false, true, true, true, false, false, true, true, false, false, true, false];
-          {
-            pow_29151();
-            of_pow(29184, false, true, false, false, true, true, false, false, true, true, true, false, true, false, false, false, true, false, true, true, true, true, true, true, true, true, true, false, false, true, false, true);
-          }
-          pow_mod_crc(29184);
-        }
-        calc {
-          [false, false, false, true, true, true, true, true, false, false, false, true, false, false, false, true, false, true, false, false, true, false, true, true, false, true, true, true, true, false, true, true];
-          {
-            pow_14559();
-            of_pow(14592, true, true, false, true, true, true, true, false, true, true, false, true, false, false, true, false, true, false, false, false, true, false, false, false, true, true, true, true, true, false, false, false);
-          }
-          pow_mod_crc(14592);
-        }
+        lut_entry_227_0();
+        lut_entry_227_1();
       }
       pow_mod_crc(29184) + pow_mod_crc(14592);
     }
   }
 
 
+
+  lemma lut_entry_228_0()
+  ensures [true, false, true, true, false, true, false, true, true, false, false, false, false, false, true, false, false, false, false, true, false, true, true, false, true, true, false, false, false, true, true, true] == pow_mod_crc(29312);
+  {
+    pow_29279();
+    of_pow(29312, true, true, true, false, false, false, true, true, false, true, true, false, true, false, false, false, false, true, false, false, false, false, false, true, true, false, true, false, true, true, false, true);
+  }
+
+  lemma lut_entry_228_1()
+  ensures [false, true, true, true, true, false, false, true, false, true, true, true, false, false, false, false, false, true, false, false, true, false, true, false, false, false, true, false, true, false, true, true] == pow_mod_crc(14656);
+  {
+    pow_14623();
+    of_pow(14656, true, true, false, true, false, true, false, false, false, true, false, true, false, false, true, false, false, false, false, false, true, true, true, false, true, false, false, true, true, true, true, false);
+  }
 
   lemma lut_entry_228()
   ensures bits_of_int(lut[228] as int, 64)
@@ -9238,28 +9252,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, true, false, true, false, true, true, false, false, false, false, false, true, false, false, false, false, true, false, true, true, false, true, true, false, false, false, true, true, true]+[false, true, true, true, true, false, false, true, false, true, true, true, false, false, false, false, false, true, false, false, true, false, true, false, false, false, true, false, true, false, true, true];
       {
-        calc {
-          [true, false, true, true, false, true, false, true, true, false, false, false, false, false, true, false, false, false, false, true, false, true, true, false, true, true, false, false, false, true, true, true];
-          {
-            pow_29279();
-            of_pow(29312, true, true, true, false, false, false, true, true, false, true, true, false, true, false, false, false, false, true, false, false, false, false, false, true, true, false, true, false, true, true, false, true);
-          }
-          pow_mod_crc(29312);
-        }
-        calc {
-          [false, true, true, true, true, false, false, true, false, true, true, true, false, false, false, false, false, true, false, false, true, false, true, false, false, false, true, false, true, false, true, true];
-          {
-            pow_14623();
-            of_pow(14656, true, true, false, true, false, true, false, false, false, true, false, true, false, false, true, false, false, false, false, false, true, true, true, false, true, false, false, true, true, true, true, false);
-          }
-          pow_mod_crc(14656);
-        }
+        lut_entry_228_0();
+        lut_entry_228_1();
       }
       pow_mod_crc(29312) + pow_mod_crc(14656);
     }
   }
 
 
+
+  lemma lut_entry_229_0()
+  ensures [false, false, true, true, true, true, true, false, false, true, false, false, false, false, true, false, true, false, false, true, false, true, false, true, true, false, false, false, true, false, true, true] == pow_mod_crc(29440);
+  {
+    pow_29407();
+    of_pow(29440, true, true, false, true, false, false, false, true, true, false, true, false, true, false, false, true, false, true, false, false, false, false, true, false, false, true, true, true, true, true, false, false);
+  }
+
+  lemma lut_entry_229_1()
+  ensures [false, false, true, true, true, true, false, true, true, false, false, true, false, true, false, false, false, true, false, false, true, true, true, true, true, false, false, true, true, false, true, false] == pow_mod_crc(14720);
+  {
+    pow_14687();
+    of_pow(14720, false, true, false, true, true, false, false, true, true, true, true, true, false, false, true, false, false, false, true, false, true, false, false, true, true, false, true, true, true, true, false, false);
+  }
 
   lemma lut_entry_229()
   ensures bits_of_int(lut[229] as int, 64)
@@ -9278,28 +9292,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, true, true, true, false, false, true, false, false, false, false, true, false, true, false, false, true, false, true, false, true, true, false, false, false, true, false, true, true]+[false, false, true, true, true, true, false, true, true, false, false, true, false, true, false, false, false, true, false, false, true, true, true, true, true, false, false, true, true, false, true, false];
       {
-        calc {
-          [false, false, true, true, true, true, true, false, false, true, false, false, false, false, true, false, true, false, false, true, false, true, false, true, true, false, false, false, true, false, true, true];
-          {
-            pow_29407();
-            of_pow(29440, true, true, false, true, false, false, false, true, true, false, true, false, true, false, false, true, false, true, false, false, false, false, true, false, false, true, true, true, true, true, false, false);
-          }
-          pow_mod_crc(29440);
-        }
-        calc {
-          [false, false, true, true, true, true, false, true, true, false, false, true, false, true, false, false, false, true, false, false, true, true, true, true, true, false, false, true, true, false, true, false];
-          {
-            pow_14687();
-            of_pow(14720, false, true, false, true, true, false, false, true, true, true, true, true, false, false, true, false, false, false, true, false, true, false, false, true, true, false, true, true, true, true, false, false);
-          }
-          pow_mod_crc(14720);
-        }
+        lut_entry_229_0();
+        lut_entry_229_1();
       }
       pow_mod_crc(29440) + pow_mod_crc(14720);
     }
   }
 
 
+
+  lemma lut_entry_230_0()
+  ensures [false, false, true, true, true, false, false, true, true, false, false, false, true, true, false, false, true, true, false, false, true, true, true, true, true, true, false, false, true, false, false, true] == pow_mod_crc(29568);
+  {
+    pow_29535();
+    of_pow(29568, true, false, false, true, false, false, true, true, true, true, true, true, false, false, true, true, false, false, true, true, false, false, false, true, true, false, false, true, true, true, false, false);
+  }
+
+  lemma lut_entry_230_1()
+  ensures [true, false, true, false, true, false, true, true, true, true, false, true, false, true, false, false, true, false, false, true, true, false, true, false, false, false, true, true, false, false, false, false] == pow_mod_crc(14784);
+  {
+    pow_14751();
+    of_pow(14784, false, false, false, false, true, true, false, false, false, true, false, true, true, false, false, true, false, false, true, false, true, false, true, true, true, true, false, true, false, true, false, true);
+  }
 
   lemma lut_entry_230()
   ensures bits_of_int(lut[230] as int, 64)
@@ -9318,28 +9332,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, true, false, false, true, true, false, false, false, true, true, false, false, true, true, false, false, true, true, true, true, true, true, false, false, true, false, false, true]+[true, false, true, false, true, false, true, true, true, true, false, true, false, true, false, false, true, false, false, true, true, false, true, false, false, false, true, true, false, false, false, false];
       {
-        calc {
-          [false, false, true, true, true, false, false, true, true, false, false, false, true, true, false, false, true, true, false, false, true, true, true, true, true, true, false, false, true, false, false, true];
-          {
-            pow_29535();
-            of_pow(29568, true, false, false, true, false, false, true, true, true, true, true, true, false, false, true, true, false, false, true, true, false, false, false, true, true, false, false, true, true, true, false, false);
-          }
-          pow_mod_crc(29568);
-        }
-        calc {
-          [true, false, true, false, true, false, true, true, true, true, false, true, false, true, false, false, true, false, false, true, true, false, true, false, false, false, true, true, false, false, false, false];
-          {
-            pow_14751();
-            of_pow(14784, false, false, false, false, true, true, false, false, false, true, false, true, true, false, false, true, false, false, true, false, true, false, true, true, true, true, false, true, false, true, false, true);
-          }
-          pow_mod_crc(14784);
-        }
+        lut_entry_230_0();
+        lut_entry_230_1();
       }
       pow_mod_crc(29568) + pow_mod_crc(14784);
     }
   }
 
 
+
+  lemma lut_entry_231_0()
+  ensures [false, true, true, true, true, true, true, true, false, true, true, false, false, false, true, true, false, true, false, true, false, false, false, true, true, false, true, false, true, true, false, true] == pow_mod_crc(29696);
+  {
+    pow_29663();
+    of_pow(29696, true, false, true, true, false, true, false, true, true, false, false, false, true, false, true, false, true, true, false, false, false, true, true, false, true, true, true, true, true, true, true, false);
+  }
+
+  lemma lut_entry_231_1()
+  ensures [false, false, true, true, false, true, true, true, true, false, true, true, false, false, false, false, true, false, false, true, true, true, false, false, true, false, true, true, false, true, true, false] == pow_mod_crc(14848);
+  {
+    pow_14815();
+    of_pow(14848, false, true, true, false, true, true, false, true, false, false, true, true, true, false, false, true, false, false, false, false, true, true, false, true, true, true, true, false, true, true, false, false);
+  }
 
   lemma lut_entry_231()
   ensures bits_of_int(lut[231] as int, 64)
@@ -9358,28 +9372,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, true, true, true, true, true, false, true, true, false, false, false, true, true, false, true, false, true, false, false, false, true, true, false, true, false, true, true, false, true]+[false, false, true, true, false, true, true, true, true, false, true, true, false, false, false, false, true, false, false, true, true, true, false, false, true, false, true, true, false, true, true, false];
       {
-        calc {
-          [false, true, true, true, true, true, true, true, false, true, true, false, false, false, true, true, false, true, false, true, false, false, false, true, true, false, true, false, true, true, false, true];
-          {
-            pow_29663();
-            of_pow(29696, true, false, true, true, false, true, false, true, true, false, false, false, true, false, true, false, true, true, false, false, false, true, true, false, true, true, true, true, true, true, true, false);
-          }
-          pow_mod_crc(29696);
-        }
-        calc {
-          [false, false, true, true, false, true, true, true, true, false, true, true, false, false, false, false, true, false, false, true, true, true, false, false, true, false, true, true, false, true, true, false];
-          {
-            pow_14815();
-            of_pow(14848, false, true, true, false, true, true, false, true, false, false, true, true, true, false, false, true, false, false, false, false, true, true, false, true, true, true, true, false, true, true, false, false);
-          }
-          pow_mod_crc(14848);
-        }
+        lut_entry_231_0();
+        lut_entry_231_1();
       }
       pow_mod_crc(29696) + pow_mod_crc(14848);
     }
   }
 
 
+
+  lemma lut_entry_232_0()
+  ensures [true, false, false, false, false, false, true, false, false, true, false, false, true, false, false, true, false, false, false, false, false, false, false, true, true, true, false, false, false, true, true, true] == pow_mod_crc(29824);
+  {
+    pow_29791();
+    of_pow(29824, true, true, true, false, false, false, true, true, true, false, false, false, false, false, false, false, true, false, false, true, false, false, true, false, false, true, false, false, false, false, false, true);
+  }
+
+  lemma lut_entry_232_1()
+  ensures [true, true, false, false, true, true, true, true, false, true, false, true, true, true, true, true, true, false, true, true, false, true, true, true, false, false, false, true, true, true, false, false] == pow_mod_crc(14912);
+  {
+    pow_14879();
+    of_pow(14912, false, false, true, true, true, false, false, false, true, true, true, false, true, true, false, true, true, true, true, true, true, false, true, false, true, true, true, true, false, false, true, true);
+  }
 
   lemma lut_entry_232()
   ensures bits_of_int(lut[232] as int, 64)
@@ -9398,28 +9412,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, false, false, false, true, false, false, true, false, false, true, false, false, true, false, false, false, false, false, false, false, true, true, true, false, false, false, true, true, true]+[true, true, false, false, true, true, true, true, false, true, false, true, true, true, true, true, true, false, true, true, false, true, true, true, false, false, false, true, true, true, false, false];
       {
-        calc {
-          [true, false, false, false, false, false, true, false, false, true, false, false, true, false, false, true, false, false, false, false, false, false, false, true, true, true, false, false, false, true, true, true];
-          {
-            pow_29791();
-            of_pow(29824, true, true, true, false, false, false, true, true, true, false, false, false, false, false, false, false, true, false, false, true, false, false, true, false, false, true, false, false, false, false, false, true);
-          }
-          pow_mod_crc(29824);
-        }
-        calc {
-          [true, true, false, false, true, true, true, true, false, true, false, true, true, true, true, true, true, false, true, true, false, true, true, true, false, false, false, true, true, true, false, false];
-          {
-            pow_14879();
-            of_pow(14912, false, false, true, true, true, false, false, false, true, true, true, false, true, true, false, true, true, true, true, true, true, false, true, false, true, true, true, true, false, false, true, true);
-          }
-          pow_mod_crc(14912);
-        }
+        lut_entry_232_0();
+        lut_entry_232_1();
       }
       pow_mod_crc(29824) + pow_mod_crc(14912);
     }
   }
 
 
+
+  lemma lut_entry_233_0()
+  ensures [false, true, false, false, false, true, true, true, true, true, false, false, true, false, true, true, true, true, true, true, false, true, false, false, false, true, false, false, true, true, true, true] == pow_mod_crc(29952);
+  {
+    pow_29919();
+    of_pow(29952, true, true, true, true, false, false, true, false, false, false, true, false, true, true, true, true, true, true, false, true, false, false, true, true, true, true, true, false, false, false, true, false);
+  }
+
+  lemma lut_entry_233_1()
+  ensures [false, false, false, false, true, false, false, true, true, true, false, false, false, false, false, false, true, true, true, false, true, false, false, false, true, true, true, false, true, true, false, false] == pow_mod_crc(14976);
+  {
+    pow_14943();
+    of_pow(14976, false, false, true, true, false, true, true, true, false, false, false, true, false, true, true, true, false, false, false, false, false, false, true, true, true, false, false, true, false, false, false, false);
+  }
 
   lemma lut_entry_233()
   ensures bits_of_int(lut[233] as int, 64)
@@ -9438,28 +9452,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, false, true, true, true, true, true, false, false, true, false, true, true, true, true, true, true, false, true, false, false, false, true, false, false, true, true, true, true]+[false, false, false, false, true, false, false, true, true, true, false, false, false, false, false, false, true, true, true, false, true, false, false, false, true, true, true, false, true, true, false, false];
       {
-        calc {
-          [false, true, false, false, false, true, true, true, true, true, false, false, true, false, true, true, true, true, true, true, false, true, false, false, false, true, false, false, true, true, true, true];
-          {
-            pow_29919();
-            of_pow(29952, true, true, true, true, false, false, true, false, false, false, true, false, true, true, true, true, true, true, false, true, false, false, true, true, true, true, true, false, false, false, true, false);
-          }
-          pow_mod_crc(29952);
-        }
-        calc {
-          [false, false, false, false, true, false, false, true, true, true, false, false, false, false, false, false, true, true, true, false, true, false, false, false, true, true, true, false, true, true, false, false];
-          {
-            pow_14943();
-            of_pow(14976, false, false, true, true, false, true, true, true, false, false, false, true, false, true, true, true, false, false, false, false, false, false, true, true, true, false, false, true, false, false, false, false);
-          }
-          pow_mod_crc(14976);
-        }
+        lut_entry_233_0();
+        lut_entry_233_1();
       }
       pow_mod_crc(29952) + pow_mod_crc(14976);
     }
   }
 
 
+
+  lemma lut_entry_234_0()
+  ensures [false, false, false, true, false, false, false, true, true, true, true, true, true, false, true, true, false, true, false, false, false, false, true, true, true, true, false, false, false, false, false, true] == pow_mod_crc(30080);
+  {
+    pow_30047();
+    of_pow(30080, true, false, false, false, false, false, true, true, true, true, false, false, false, false, true, false, true, true, false, true, true, true, true, true, true, false, false, false, true, false, false, false);
+  }
+
+  lemma lut_entry_234_1()
+  ensures [true, true, false, true, true, false, true, true, false, false, true, true, true, true, true, true, true, true, false, true, false, false, true, true, false, true, false, false, true, true, true, false] == pow_mod_crc(15040);
+  {
+    pow_15007();
+    of_pow(15040, false, true, true, true, false, false, true, false, true, true, false, false, true, false, true, true, true, true, true, true, true, true, false, false, true, true, false, true, true, false, true, true);
+  }
 
   lemma lut_entry_234()
   ensures bits_of_int(lut[234] as int, 64)
@@ -9478,28 +9492,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, true, false, false, false, true, true, true, true, true, true, false, true, true, false, true, false, false, false, false, true, true, true, true, false, false, false, false, false, true]+[true, true, false, true, true, false, true, true, false, false, true, true, true, true, true, true, true, true, false, true, false, false, true, true, false, true, false, false, true, true, true, false];
       {
-        calc {
-          [false, false, false, true, false, false, false, true, true, true, true, true, true, false, true, true, false, true, false, false, false, false, true, true, true, true, false, false, false, false, false, true];
-          {
-            pow_30047();
-            of_pow(30080, true, false, false, false, false, false, true, true, true, true, false, false, false, false, true, false, true, true, false, true, true, true, true, true, true, false, false, false, true, false, false, false);
-          }
-          pow_mod_crc(30080);
-        }
-        calc {
-          [true, true, false, true, true, false, true, true, false, false, true, true, true, true, true, true, true, true, false, true, false, false, true, true, false, true, false, false, true, true, true, false];
-          {
-            pow_15007();
-            of_pow(15040, false, true, true, true, false, false, true, false, true, true, false, false, true, false, true, true, true, true, true, true, true, true, false, false, true, true, false, true, true, false, true, true);
-          }
-          pow_mod_crc(15040);
-        }
+        lut_entry_234_0();
+        lut_entry_234_1();
       }
       pow_mod_crc(30080) + pow_mod_crc(15040);
     }
   }
 
 
+
+  lemma lut_entry_235_0()
+  ensures [false, true, false, true, true, false, true, false, false, true, false, false, false, false, false, true, true, false, false, false, true, true, false, true, false, true, true, false, true, false, true, true] == pow_mod_crc(30208);
+  {
+    pow_30175();
+    of_pow(30208, true, true, false, true, false, true, true, false, true, false, true, true, false, false, false, true, true, false, false, false, false, false, true, false, false, true, false, true, true, false, true, false);
+  }
+
+  lemma lut_entry_235_1()
+  ensures [false, false, true, true, false, false, true, true, true, false, false, false, false, false, true, true, true, true, false, false, true, false, true, false, true, true, false, false, false, true, true, false] == pow_mod_crc(15104);
+  {
+    pow_15071();
+    of_pow(15104, false, true, true, false, false, false, true, true, false, true, false, true, false, false, true, true, true, true, false, false, false, false, false, true, true, true, false, false, true, true, false, false);
+  }
 
   lemma lut_entry_235()
   ensures bits_of_int(lut[235] as int, 64)
@@ -9518,28 +9532,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, true, false, true, false, false, true, false, false, false, false, false, true, true, false, false, false, true, true, false, true, false, true, true, false, true, false, true, true]+[false, false, true, true, false, false, true, true, true, false, false, false, false, false, true, true, true, true, false, false, true, false, true, false, true, true, false, false, false, true, true, false];
       {
-        calc {
-          [false, true, false, true, true, false, true, false, false, true, false, false, false, false, false, true, true, false, false, false, true, true, false, true, false, true, true, false, true, false, true, true];
-          {
-            pow_30175();
-            of_pow(30208, true, true, false, true, false, true, true, false, true, false, true, true, false, false, false, true, true, false, false, false, false, false, true, false, false, true, false, true, true, false, true, false);
-          }
-          pow_mod_crc(30208);
-        }
-        calc {
-          [false, false, true, true, false, false, true, true, true, false, false, false, false, false, true, true, true, true, false, false, true, false, true, false, true, true, false, false, false, true, true, false];
-          {
-            pow_15071();
-            of_pow(15104, false, true, true, false, false, false, true, true, false, true, false, true, false, false, true, true, true, true, false, false, false, false, false, true, true, true, false, false, true, true, false, false);
-          }
-          pow_mod_crc(15104);
-        }
+        lut_entry_235_0();
+        lut_entry_235_1();
       }
       pow_mod_crc(30208) + pow_mod_crc(15104);
     }
   }
 
 
+
+  lemma lut_entry_236_0()
+  ensures [false, true, false, false, true, true, false, false, false, true, false, false, true, true, true, true, true, true, true, true, false, false, true, false, false, true, true, true, false, false, true, false] == pow_mod_crc(30336);
+  {
+    pow_30303();
+    of_pow(30336, false, true, false, false, true, true, true, false, false, true, false, false, true, true, true, true, true, true, true, true, false, false, true, false, false, false, true, true, false, false, true, false);
+  }
+
+  lemma lut_entry_236_1()
+  ensures [true, false, true, false, false, true, false, true, true, false, false, false, true, true, false, false, true, true, false, false, false, false, false, true, false, false, true, false, true, true, false, false] == pow_mod_crc(15168);
+  {
+    pow_15135();
+    of_pow(15168, false, false, true, true, false, true, false, false, true, false, false, false, false, false, true, true, false, false, true, true, false, false, false, true, true, false, true, false, false, true, false, true);
+  }
 
   lemma lut_entry_236()
   ensures bits_of_int(lut[236] as int, 64)
@@ -9558,28 +9572,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, false, true, true, false, false, false, true, false, false, true, true, true, true, true, true, true, true, false, false, true, false, false, true, true, true, false, false, true, false]+[true, false, true, false, false, true, false, true, true, false, false, false, true, true, false, false, true, true, false, false, false, false, false, true, false, false, true, false, true, true, false, false];
       {
-        calc {
-          [false, true, false, false, true, true, false, false, false, true, false, false, true, true, true, true, true, true, true, true, false, false, true, false, false, true, true, true, false, false, true, false];
-          {
-            pow_30303();
-            of_pow(30336, false, true, false, false, true, true, true, false, false, true, false, false, true, true, true, true, true, true, true, true, false, false, true, false, false, false, true, true, false, false, true, false);
-          }
-          pow_mod_crc(30336);
-        }
-        calc {
-          [true, false, true, false, false, true, false, true, true, false, false, false, true, true, false, false, true, true, false, false, false, false, false, true, false, false, true, false, true, true, false, false];
-          {
-            pow_15135();
-            of_pow(15168, false, false, true, true, false, true, false, false, true, false, false, false, false, false, true, true, false, false, true, true, false, false, false, true, true, false, true, false, false, true, false, true);
-          }
-          pow_mod_crc(15168);
-        }
+        lut_entry_236_0();
+        lut_entry_236_1();
       }
       pow_mod_crc(30336) + pow_mod_crc(15168);
     }
   }
 
 
+
+  lemma lut_entry_237_0()
+  ensures [true, false, false, false, false, false, true, true, true, false, false, true, true, false, true, true, false, false, true, false, false, true, true, false, false, true, true, false, false, true, true, false] == pow_mod_crc(30464);
+  {
+    pow_30431();
+    of_pow(30464, false, true, true, false, false, true, true, false, false, true, true, false, false, true, false, false, true, true, false, true, true, false, false, true, true, true, false, false, false, false, false, true);
+  }
+
+  lemma lut_entry_237_1()
+  ensures [false, false, true, true, true, false, true, false, true, true, true, true, false, false, true, false, false, false, false, true, true, false, true, false, false, false, true, false, false, false, true, true] == pow_mod_crc(15232);
+  {
+    pow_15199();
+    of_pow(15232, true, true, false, false, false, true, false, false, false, true, false, true, true, false, false, false, false, true, false, false, true, true, true, true, false, true, false, true, true, true, false, false);
+  }
 
   lemma lut_entry_237()
   ensures bits_of_int(lut[237] as int, 64)
@@ -9598,28 +9612,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, false, false, false, true, true, true, false, false, true, true, false, true, true, false, false, true, false, false, true, true, false, false, true, true, false, false, true, true, false]+[false, false, true, true, true, false, true, false, true, true, true, true, false, false, true, false, false, false, false, true, true, false, true, false, false, false, true, false, false, false, true, true];
       {
-        calc {
-          [true, false, false, false, false, false, true, true, true, false, false, true, true, false, true, true, false, false, true, false, false, true, true, false, false, true, true, false, false, true, true, false];
-          {
-            pow_30431();
-            of_pow(30464, false, true, true, false, false, true, true, false, false, true, true, false, false, true, false, false, true, true, false, true, true, false, false, true, true, true, false, false, false, false, false, true);
-          }
-          pow_mod_crc(30464);
-        }
-        calc {
-          [false, false, true, true, true, false, true, false, true, true, true, true, false, false, true, false, false, false, false, true, true, false, true, false, false, false, true, false, false, false, true, true];
-          {
-            pow_15199();
-            of_pow(15232, true, true, false, false, false, true, false, false, false, true, false, true, true, false, false, false, false, true, false, false, true, true, true, true, false, true, false, true, true, true, false, false);
-          }
-          pow_mod_crc(15232);
-        }
+        lut_entry_237_0();
+        lut_entry_237_1();
       }
       pow_mod_crc(30464) + pow_mod_crc(15232);
     }
   }
 
 
+
+  lemma lut_entry_238_0()
+  ensures [false, true, true, true, false, true, true, false, false, true, false, true, true, false, true, false, true, true, false, true, false, true, true, false, true, true, false, false, false, false, false, true] == pow_mod_crc(30592);
+  {
+    pow_30559();
+    of_pow(30592, true, false, false, false, false, false, true, true, false, true, true, false, true, false, true, true, false, true, false, true, true, false, true, false, false, true, true, false, true, true, true, false);
+  }
+
+  lemma lut_entry_238_1()
+  ensures [true, false, false, true, true, false, false, false, false, false, true, true, true, true, true, false, true, true, true, false, true, false, false, true, true, true, false, false, false, false, true, true] == pow_mod_crc(15296);
+  {
+    pow_15263();
+    of_pow(15296, true, true, false, false, false, false, true, true, true, false, false, true, false, true, true, true, false, true, true, true, true, true, false, false, false, false, false, true, true, false, false, true);
+  }
 
   lemma lut_entry_238()
   ensures bits_of_int(lut[238] as int, 64)
@@ -9638,28 +9652,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, true, false, true, true, false, false, true, false, true, true, false, true, false, true, true, false, true, false, true, true, false, true, true, false, false, false, false, false, true]+[true, false, false, true, true, false, false, false, false, false, true, true, true, true, true, false, true, true, true, false, true, false, false, true, true, true, false, false, false, false, true, true];
       {
-        calc {
-          [false, true, true, true, false, true, true, false, false, true, false, true, true, false, true, false, true, true, false, true, false, true, true, false, true, true, false, false, false, false, false, true];
-          {
-            pow_30559();
-            of_pow(30592, true, false, false, false, false, false, true, true, false, true, true, false, true, false, true, true, false, true, false, true, true, false, true, false, false, true, true, false, true, true, true, false);
-          }
-          pow_mod_crc(30592);
-        }
-        calc {
-          [true, false, false, true, true, false, false, false, false, false, true, true, true, true, true, false, true, true, true, false, true, false, false, true, true, true, false, false, false, false, true, true];
-          {
-            pow_15263();
-            of_pow(15296, true, true, false, false, false, false, true, true, true, false, false, true, false, true, true, true, false, true, true, true, true, true, false, false, false, false, false, true, true, false, false, true);
-          }
-          pow_mod_crc(15296);
-        }
+        lut_entry_238_0();
+        lut_entry_238_1();
       }
       pow_mod_crc(30592) + pow_mod_crc(15296);
     }
   }
 
 
+
+  lemma lut_entry_239_0()
+  ensures [true, false, true, false, false, true, true, true, true, true, true, false, false, true, true, true, true, false, true, false, true, false, true, true, true, true, false, false, false, true, false, false] == pow_mod_crc(30720);
+  {
+    pow_30687();
+    of_pow(30720, false, false, true, false, false, false, true, true, true, true, false, true, false, true, false, true, true, true, true, false, false, true, true, true, true, true, true, false, false, true, false, true);
+  }
+
+  lemma lut_entry_239_1()
+  ensures [true, false, false, true, false, true, true, true, false, true, false, false, false, false, true, false, false, true, true, false, false, false, false, true, false, false, true, false, true, true, true, true] == pow_mod_crc(15360);
+  {
+    pow_15327();
+    of_pow(15360, true, true, true, true, false, true, false, false, true, false, false, false, false, true, true, false, false, true, false, false, false, false, true, false, true, true, true, false, true, false, false, true);
+  }
 
   lemma lut_entry_239()
   ensures bits_of_int(lut[239] as int, 64)
@@ -9678,28 +9692,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, false, false, true, true, true, true, true, true, false, false, true, true, true, true, false, true, false, true, false, true, true, true, true, false, false, false, true, false, false]+[true, false, false, true, false, true, true, true, false, true, false, false, false, false, true, false, false, true, true, false, false, false, false, true, false, false, true, false, true, true, true, true];
       {
-        calc {
-          [true, false, true, false, false, true, true, true, true, true, true, false, false, true, true, true, true, false, true, false, true, false, true, true, true, true, false, false, false, true, false, false];
-          {
-            pow_30687();
-            of_pow(30720, false, false, true, false, false, false, true, true, true, true, false, true, false, true, false, true, true, true, true, false, false, true, true, true, true, true, true, false, false, true, false, true);
-          }
-          pow_mod_crc(30720);
-        }
-        calc {
-          [true, false, false, true, false, true, true, true, false, true, false, false, false, false, true, false, false, true, true, false, false, false, false, true, false, false, true, false, true, true, true, true];
-          {
-            pow_15327();
-            of_pow(15360, true, true, true, true, false, true, false, false, true, false, false, false, false, true, true, false, false, true, false, false, false, false, true, false, true, true, true, false, true, false, false, true);
-          }
-          pow_mod_crc(15360);
-        }
+        lut_entry_239_0();
+        lut_entry_239_1();
       }
       pow_mod_crc(30720) + pow_mod_crc(15360);
     }
   }
 
 
+
+  lemma lut_entry_240_0()
+  ensures [true, true, false, false, false, false, true, false, true, true, false, false, true, false, true, false, false, true, true, false, false, false, false, false, true, false, true, false, false, true, true, false] == pow_mod_crc(30848);
+  {
+    pow_30815();
+    of_pow(30848, false, true, true, false, false, true, false, true, false, false, false, false, false, true, true, false, false, true, false, true, false, false, true, true, false, true, false, false, false, false, true, true);
+  }
+
+  lemma lut_entry_240_1()
+  ensures [false, false, true, true, true, true, true, false, false, true, false, true, false, true, true, true, false, true, false, true, true, true, true, true, false, true, false, true, true, false, true, true] == pow_mod_crc(15424);
+  {
+    pow_15391();
+    of_pow(15424, true, true, false, true, true, false, true, false, true, true, true, true, true, false, true, false, true, true, true, false, true, false, true, false, false, true, true, true, true, true, false, false);
+  }
 
   lemma lut_entry_240()
   ensures bits_of_int(lut[240] as int, 64)
@@ -9718,28 +9732,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, false, false, false, true, false, true, true, false, false, true, false, true, false, false, true, true, false, false, false, false, false, true, false, true, false, false, true, true, false]+[false, false, true, true, true, true, true, false, false, true, false, true, false, true, true, true, false, true, false, true, true, true, true, true, false, true, false, true, true, false, true, true];
       {
-        calc {
-          [true, true, false, false, false, false, true, false, true, true, false, false, true, false, true, false, false, true, true, false, false, false, false, false, true, false, true, false, false, true, true, false];
-          {
-            pow_30815();
-            of_pow(30848, false, true, true, false, false, true, false, true, false, false, false, false, false, true, true, false, false, true, false, true, false, false, true, true, false, true, false, false, false, false, true, true);
-          }
-          pow_mod_crc(30848);
-        }
-        calc {
-          [false, false, true, true, true, true, true, false, false, true, false, true, false, true, true, true, false, true, false, true, true, true, true, true, false, true, false, true, true, false, true, true];
-          {
-            pow_15391();
-            of_pow(15424, true, true, false, true, true, false, true, false, true, true, true, true, true, false, true, false, true, true, true, false, true, false, true, false, false, true, true, true, true, true, false, false);
-          }
-          pow_mod_crc(15424);
-        }
+        lut_entry_240_0();
+        lut_entry_240_1();
       }
       pow_mod_crc(30848) + pow_mod_crc(15424);
     }
   }
 
 
+
+  lemma lut_entry_241_0()
+  ensures [true, false, true, true, false, false, false, false, false, true, false, false, true, false, true, true, true, false, true, false, true, false, false, true, false, false, true, false, true, false, false, false] == pow_mod_crc(30976);
+  {
+    pow_30943();
+    of_pow(30976, false, false, false, true, false, true, false, false, true, false, false, true, false, true, false, true, true, true, false, true, false, false, true, false, false, false, false, false, true, true, false, true);
+  }
+
+  lemma lut_entry_241_1()
+  ensures [false, true, false, false, false, true, true, true, true, true, true, false, true, true, true, false, true, true, false, false, true, false, false, false, true, true, false, false, true, false, true, false] == pow_mod_crc(15488);
+  {
+    pow_15455();
+    of_pow(15488, false, true, false, true, false, false, true, true, false, false, false, true, false, false, true, true, false, true, true, true, false, true, true, true, true, true, true, false, false, false, true, false);
+  }
 
   lemma lut_entry_241()
   ensures bits_of_int(lut[241] as int, 64)
@@ -9758,28 +9772,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, true, false, false, false, false, false, true, false, false, true, false, true, true, true, false, true, false, true, false, false, true, false, false, true, false, true, false, false, false]+[false, true, false, false, false, true, true, true, true, true, true, false, true, true, true, false, true, true, false, false, true, false, false, false, true, true, false, false, true, false, true, false];
       {
-        calc {
-          [true, false, true, true, false, false, false, false, false, true, false, false, true, false, true, true, true, false, true, false, true, false, false, true, false, false, true, false, true, false, false, false];
-          {
-            pow_30943();
-            of_pow(30976, false, false, false, true, false, true, false, false, true, false, false, true, false, true, false, true, true, true, false, true, false, false, true, false, false, false, false, false, true, true, false, true);
-          }
-          pow_mod_crc(30976);
-        }
-        calc {
-          [false, true, false, false, false, true, true, true, true, true, true, false, true, true, true, false, true, true, false, false, true, false, false, false, true, true, false, false, true, false, true, false];
-          {
-            pow_15455();
-            of_pow(15488, false, true, false, true, false, false, true, true, false, false, false, true, false, false, true, true, false, true, true, true, false, true, true, true, true, true, true, false, false, false, true, false);
-          }
-          pow_mod_crc(15488);
-        }
+        lut_entry_241_0();
+        lut_entry_241_1();
       }
       pow_mod_crc(30976) + pow_mod_crc(15488);
     }
   }
 
 
+
+  lemma lut_entry_242_0()
+  ensures [true, true, false, true, false, true, true, true, false, true, false, false, false, false, false, true, false, false, true, true, true, false, false, true, false, true, false, false, false, true, false, true] == pow_mod_crc(31104);
+  {
+    pow_31071();
+    of_pow(31104, true, false, true, false, false, false, true, false, true, false, false, true, true, true, false, false, true, false, false, false, false, false, true, false, true, true, true, false, true, false, true, true);
+  }
+
+  lemma lut_entry_242_1()
+  ensures [false, false, true, false, false, false, false, false, false, false, true, true, false, false, true, false, true, true, false, true, true, false, true, true, true, true, false, false, true, true, true, false] == pow_mod_crc(15552);
+  {
+    pow_15519();
+    of_pow(15552, false, true, true, true, false, false, true, true, true, true, false, true, true, false, true, true, false, true, false, false, true, true, false, false, false, false, false, false, false, true, false, false);
+  }
 
   lemma lut_entry_242()
   ensures bits_of_int(lut[242] as int, 64)
@@ -9798,28 +9812,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, true, false, true, true, true, false, true, false, false, false, false, false, true, false, false, true, true, true, false, false, true, false, true, false, false, false, true, false, true]+[false, false, true, false, false, false, false, false, false, false, true, true, false, false, true, false, true, true, false, true, true, false, true, true, true, true, false, false, true, true, true, false];
       {
-        calc {
-          [true, true, false, true, false, true, true, true, false, true, false, false, false, false, false, true, false, false, true, true, true, false, false, true, false, true, false, false, false, true, false, true];
-          {
-            pow_31071();
-            of_pow(31104, true, false, true, false, false, false, true, false, true, false, false, true, true, true, false, false, true, false, false, false, false, false, true, false, true, true, true, false, true, false, true, true);
-          }
-          pow_mod_crc(31104);
-        }
-        calc {
-          [false, false, true, false, false, false, false, false, false, false, true, true, false, false, true, false, true, true, false, true, true, false, true, true, true, true, false, false, true, true, true, false];
-          {
-            pow_15519();
-            of_pow(15552, false, true, true, true, false, false, true, true, true, true, false, true, true, false, true, true, false, true, false, false, true, true, false, false, false, false, false, false, false, true, false, false);
-          }
-          pow_mod_crc(15552);
-        }
+        lut_entry_242_0();
+        lut_entry_242_1();
       }
       pow_mod_crc(31104) + pow_mod_crc(15552);
     }
   }
 
 
+
+  lemma lut_entry_243_0()
+  ensures [true, true, true, true, true, true, true, false, true, true, false, false, true, true, false, true, false, false, false, false, true, true, true, false, true, true, false, false, true, true, true, true] == pow_mod_crc(31232);
+  {
+    pow_31199();
+    of_pow(31232, true, true, true, true, false, false, true, true, false, true, true, true, false, false, false, false, true, false, true, true, false, false, true, true, false, true, true, true, true, true, true, true);
+  }
+
+  lemma lut_entry_243_1()
+  ensures [true, false, true, true, false, false, false, true, false, false, true, true, true, true, false, true, true, false, true, false, true, true, false, false, true, false, true, true, true, false, true, true] == pow_mod_crc(15616);
+  {
+    pow_15583();
+    of_pow(15616, true, true, false, true, true, true, false, true, false, false, true, true, false, true, false, true, true, false, true, true, true, true, false, false, true, false, false, false, true, true, false, true);
+  }
 
   lemma lut_entry_243()
   ensures bits_of_int(lut[243] as int, 64)
@@ -9838,28 +9852,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, true, true, true, true, false, true, true, false, false, true, true, false, true, false, false, false, false, true, true, true, false, true, true, false, false, true, true, true, true]+[true, false, true, true, false, false, false, true, false, false, true, true, true, true, false, true, true, false, true, false, true, true, false, false, true, false, true, true, true, false, true, true];
       {
-        calc {
-          [true, true, true, true, true, true, true, false, true, true, false, false, true, true, false, true, false, false, false, false, true, true, true, false, true, true, false, false, true, true, true, true];
-          {
-            pow_31199();
-            of_pow(31232, true, true, true, true, false, false, true, true, false, true, true, true, false, false, false, false, true, false, true, true, false, false, true, true, false, true, true, true, true, true, true, true);
-          }
-          pow_mod_crc(31232);
-        }
-        calc {
-          [true, false, true, true, false, false, false, true, false, false, true, true, true, true, false, true, true, false, true, false, true, true, false, false, true, false, true, true, true, false, true, true];
-          {
-            pow_15583();
-            of_pow(15616, true, true, false, true, true, true, false, true, false, false, true, true, false, true, false, true, true, false, true, true, true, true, false, false, true, false, false, false, true, true, false, true);
-          }
-          pow_mod_crc(15616);
-        }
+        lut_entry_243_0();
+        lut_entry_243_1();
       }
       pow_mod_crc(31232) + pow_mod_crc(15616);
     }
   }
 
 
+
+  lemma lut_entry_244_0()
+  ensures [false, false, true, true, true, false, true, true, true, true, true, false, true, false, true, true, true, false, true, true, false, true, true, false, false, true, false, true, false, true, true, true] == pow_mod_crc(31360);
+  {
+    pow_31327();
+    of_pow(31360, true, true, true, false, true, false, true, false, false, true, true, false, true, true, false, true, true, true, false, true, false, true, true, true, true, true, false, true, true, true, false, false);
+  }
+
+  lemma lut_entry_244_1()
+  ensures [false, false, false, true, false, true, true, true, false, false, true, true, true, false, true, false, true, true, true, false, false, true, true, false, false, true, false, false, true, true, true, false] == pow_mod_crc(15680);
+  {
+    pow_15647();
+    of_pow(15680, false, true, true, true, false, false, true, false, false, true, true, false, false, true, true, true, false, true, false, true, true, true, false, false, true, true, true, false, true, false, false, false);
+  }
 
   lemma lut_entry_244()
   ensures bits_of_int(lut[244] as int, 64)
@@ -9878,28 +9892,28 @@ module CRC32_C_Lut {
       }
       [false, false, true, true, true, false, true, true, true, true, true, false, true, false, true, true, true, false, true, true, false, true, true, false, false, true, false, true, false, true, true, true]+[false, false, false, true, false, true, true, true, false, false, true, true, true, false, true, false, true, true, true, false, false, true, true, false, false, true, false, false, true, true, true, false];
       {
-        calc {
-          [false, false, true, true, true, false, true, true, true, true, true, false, true, false, true, true, true, false, true, true, false, true, true, false, false, true, false, true, false, true, true, true];
-          {
-            pow_31327();
-            of_pow(31360, true, true, true, false, true, false, true, false, false, true, true, false, true, true, false, true, true, true, false, true, false, true, true, true, true, true, false, true, true, true, false, false);
-          }
-          pow_mod_crc(31360);
-        }
-        calc {
-          [false, false, false, true, false, true, true, true, false, false, true, true, true, false, true, false, true, true, true, false, false, true, true, false, false, true, false, false, true, true, true, false];
-          {
-            pow_15647();
-            of_pow(15680, false, true, true, true, false, false, true, false, false, true, true, false, false, true, true, true, false, true, false, true, true, true, false, false, true, true, true, false, true, false, false, false);
-          }
-          pow_mod_crc(15680);
-        }
+        lut_entry_244_0();
+        lut_entry_244_1();
       }
       pow_mod_crc(31360) + pow_mod_crc(15680);
     }
   }
 
 
+
+  lemma lut_entry_245_0()
+  ensures [false, true, true, true, false, false, true, true, true, true, false, true, true, false, true, false, true, false, false, false, false, false, true, false, true, false, false, true, false, true, true, true] == pow_mod_crc(31488);
+  {
+    pow_31455();
+    of_pow(31488, true, true, true, false, true, false, false, true, false, true, false, false, false, false, false, true, false, true, false, true, true, false, true, true, true, true, false, false, true, true, true, false);
+  }
+
+  lemma lut_entry_245_1()
+  ensures [false, true, false, false, true, true, true, true, true, false, false, true, false, true, false, false, true, true, false, true, true, false, true, false, false, true, false, false, true, true, false, true] == pow_mod_crc(15744);
+  {
+    pow_15711();
+    of_pow(15744, true, false, true, true, false, false, true, false, false, true, false, true, true, false, true, true, false, false, true, false, true, false, false, true, true, true, true, true, false, false, true, false);
+  }
 
   lemma lut_entry_245()
   ensures bits_of_int(lut[245] as int, 64)
@@ -9918,28 +9932,28 @@ module CRC32_C_Lut {
       }
       [false, true, true, true, false, false, true, true, true, true, false, true, true, false, true, false, true, false, false, false, false, false, true, false, true, false, false, true, false, true, true, true]+[false, true, false, false, true, true, true, true, true, false, false, true, false, true, false, false, true, true, false, true, true, false, true, false, false, true, false, false, true, true, false, true];
       {
-        calc {
-          [false, true, true, true, false, false, true, true, true, true, false, true, true, false, true, false, true, false, false, false, false, false, true, false, true, false, false, true, false, true, true, true];
-          {
-            pow_31455();
-            of_pow(31488, true, true, true, false, true, false, false, true, false, true, false, false, false, false, false, true, false, true, false, true, true, false, true, true, true, true, false, false, true, true, true, false);
-          }
-          pow_mod_crc(31488);
-        }
-        calc {
-          [false, true, false, false, true, true, true, true, true, false, false, true, false, true, false, false, true, true, false, true, true, false, true, false, false, true, false, false, true, true, false, true];
-          {
-            pow_15711();
-            of_pow(15744, true, false, true, true, false, false, true, false, false, true, false, true, true, false, true, true, false, false, true, false, true, false, false, true, true, true, true, true, false, false, true, false);
-          }
-          pow_mod_crc(15744);
-        }
+        lut_entry_245_0();
+        lut_entry_245_1();
       }
       pow_mod_crc(31488) + pow_mod_crc(15744);
     }
   }
 
 
+
+  lemma lut_entry_246_0()
+  ensures [true, true, true, true, false, false, false, false, true, true, false, true, true, false, false, true, false, false, false, false, true, true, false, false, false, true, true, false, true, false, false, true] == pow_mod_crc(31616);
+  {
+    pow_31583();
+    of_pow(31616, true, false, false, true, false, true, true, false, false, false, true, true, false, false, false, false, true, false, false, true, true, false, true, true, false, false, false, false, true, true, true, true);
+  }
+
+  lemma lut_entry_246_1()
+  ensures [true, true, false, false, false, false, false, true, true, true, true, true, true, true, true, true, false, true, false, false, false, false, true, true, false, true, true, true, true, true, false, false] == pow_mod_crc(15808);
+  {
+    pow_15775();
+    of_pow(15808, false, false, true, true, true, true, true, false, true, true, false, false, false, false, true, false, true, true, true, true, true, true, true, true, true, false, false, false, false, false, true, true);
+  }
 
   lemma lut_entry_246()
   ensures bits_of_int(lut[246] as int, 64)
@@ -9958,28 +9972,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, true, false, false, false, false, true, true, false, true, true, false, false, true, false, false, false, false, true, true, false, false, false, true, true, false, true, false, false, true]+[true, true, false, false, false, false, false, true, true, true, true, true, true, true, true, true, false, true, false, false, false, false, true, true, false, true, true, true, true, true, false, false];
       {
-        calc {
-          [true, true, true, true, false, false, false, false, true, true, false, true, true, false, false, true, false, false, false, false, true, true, false, false, false, true, true, false, true, false, false, true];
-          {
-            pow_31583();
-            of_pow(31616, true, false, false, true, false, true, true, false, false, false, true, true, false, false, false, false, true, false, false, true, true, false, true, true, false, false, false, false, true, true, true, true);
-          }
-          pow_mod_crc(31616);
-        }
-        calc {
-          [true, true, false, false, false, false, false, true, true, true, true, true, true, true, true, true, false, true, false, false, false, false, true, true, false, true, true, true, true, true, false, false];
-          {
-            pow_15775();
-            of_pow(15808, false, false, true, true, true, true, true, false, true, true, false, false, false, false, true, false, true, true, true, true, true, true, true, true, true, false, false, false, false, false, true, true);
-          }
-          pow_mod_crc(15808);
-        }
+        lut_entry_246_0();
+        lut_entry_246_1();
       }
       pow_mod_crc(31616) + pow_mod_crc(15808);
     }
   }
 
 
+
+  lemma lut_entry_247_0()
+  ensures [false, false, false, true, false, false, true, false, false, true, true, false, true, true, false, true, false, true, true, false, true, true, true, false, true, true, true, false, false, false, true, true] == pow_mod_crc(31744);
+  {
+    pow_31711();
+    of_pow(31744, true, true, false, false, false, true, true, true, false, true, true, true, false, true, true, false, true, false, true, true, false, true, true, false, false, true, false, false, true, false, false, false);
+  }
+
+  lemma lut_entry_247_1()
+  ensures [true, false, false, false, false, false, true, false, false, true, true, true, true, false, true, true, false, true, true, true, true, false, true, false, false, true, false, true, true, false, false, true] == pow_mod_crc(15872);
+  {
+    pow_15839();
+    of_pow(15872, true, false, false, true, true, false, true, false, false, true, false, true, true, true, true, false, true, true, false, true, true, true, true, false, false, true, false, false, false, false, false, true);
+  }
 
   lemma lut_entry_247()
   ensures bits_of_int(lut[247] as int, 64)
@@ -9998,28 +10012,28 @@ module CRC32_C_Lut {
       }
       [false, false, false, true, false, false, true, false, false, true, true, false, true, true, false, true, false, true, true, false, true, true, true, false, true, true, true, false, false, false, true, true]+[true, false, false, false, false, false, true, false, false, true, true, true, true, false, true, true, false, true, true, true, true, false, true, false, false, true, false, true, true, false, false, true];
       {
-        calc {
-          [false, false, false, true, false, false, true, false, false, true, true, false, true, true, false, true, false, true, true, false, true, true, true, false, true, true, true, false, false, false, true, true];
-          {
-            pow_31711();
-            of_pow(31744, true, true, false, false, false, true, true, true, false, true, true, true, false, true, true, false, true, false, true, true, false, true, true, false, false, true, false, false, true, false, false, false);
-          }
-          pow_mod_crc(31744);
-        }
-        calc {
-          [true, false, false, false, false, false, true, false, false, true, true, true, true, false, true, true, false, true, true, true, true, false, true, false, false, true, false, true, true, false, false, true];
-          {
-            pow_15839();
-            of_pow(15872, true, false, false, true, true, false, true, false, false, true, false, true, true, true, true, false, true, true, false, true, true, true, true, false, false, true, false, false, false, false, false, true);
-          }
-          pow_mod_crc(15872);
-        }
+        lut_entry_247_0();
+        lut_entry_247_1();
       }
       pow_mod_crc(31744) + pow_mod_crc(15872);
     }
   }
 
 
+
+  lemma lut_entry_248_0()
+  ensures [true, false, true, false, false, false, true, true, false, true, false, false, true, false, true, false, false, false, true, true, false, true, false, false, false, true, false, false, false, false, true, true] == pow_mod_crc(31872);
+  {
+    pow_31839();
+    of_pow(31872, true, true, false, false, false, false, true, false, false, false, true, false, true, true, false, false, false, true, false, true, false, false, true, false, true, true, false, false, false, true, false, true);
+  }
+
+  lemma lut_entry_248_1()
+  ensures [true, true, true, false, true, false, false, false, false, false, false, false, false, true, false, true, true, true, true, false, false, false, true, true, false, false, false, true, false, true, true, true] == pow_mod_crc(15936);
+  {
+    pow_15903();
+    of_pow(15936, true, true, true, false, true, false, false, false, true, true, false, false, false, true, true, true, true, false, true, false, false, false, false, false, false, false, false, true, false, true, true, true);
+  }
 
   lemma lut_entry_248()
   ensures bits_of_int(lut[248] as int, 64)
@@ -10038,28 +10052,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, false, false, false, true, true, false, true, false, false, true, false, true, false, false, false, true, true, false, true, false, false, false, true, false, false, false, false, true, true]+[true, true, true, false, true, false, false, false, false, false, false, false, false, true, false, true, true, true, true, false, false, false, true, true, false, false, false, true, false, true, true, true];
       {
-        calc {
-          [true, false, true, false, false, false, true, true, false, true, false, false, true, false, true, false, false, false, true, true, false, true, false, false, false, true, false, false, false, false, true, true];
-          {
-            pow_31839();
-            of_pow(31872, true, true, false, false, false, false, true, false, false, false, true, false, true, true, false, false, false, true, false, true, false, false, true, false, true, true, false, false, false, true, false, true);
-          }
-          pow_mod_crc(31872);
-        }
-        calc {
-          [true, true, true, false, true, false, false, false, false, false, false, false, false, true, false, true, true, true, true, false, false, false, true, true, false, false, false, true, false, true, true, true];
-          {
-            pow_15903();
-            of_pow(15936, true, true, true, false, true, false, false, false, true, true, false, false, false, true, true, true, true, false, true, false, false, false, false, false, false, false, false, true, false, true, true, true);
-          }
-          pow_mod_crc(15936);
-        }
+        lut_entry_248_0();
+        lut_entry_248_1();
       }
       pow_mod_crc(31872) + pow_mod_crc(15936);
     }
   }
 
 
+
+  lemma lut_entry_249_0()
+  ensures [true, true, false, false, false, false, true, false, true, false, true, true, false, false, true, true, true, true, true, true, false, false, true, true, false, true, true, true, false, false, true, true] == pow_mod_crc(32000);
+  {
+    pow_31967();
+    of_pow(32000, true, true, false, false, true, true, true, false, true, true, false, false, true, true, true, true, true, true, false, false, true, true, false, true, false, true, false, false, false, false, true, true);
+  }
+
+  lemma lut_entry_249_1()
+  ensures [true, false, true, true, true, false, true, false, false, false, false, false, true, false, false, true, true, true, false, false, false, true, true, false, true, false, true, false, false, true, false, true] == pow_mod_crc(16000);
+  {
+    pow_15967();
+    of_pow(16000, true, false, true, false, false, true, false, true, false, true, true, false, false, false, true, true, true, false, false, true, false, false, false, false, false, true, false, true, true, true, false, true);
+  }
 
   lemma lut_entry_249()
   ensures bits_of_int(lut[249] as int, 64)
@@ -10078,28 +10092,28 @@ module CRC32_C_Lut {
       }
       [true, true, false, false, false, false, true, false, true, false, true, true, false, false, true, true, true, true, true, true, false, false, true, true, false, true, true, true, false, false, true, true]+[true, false, true, true, true, false, true, false, false, false, false, false, true, false, false, true, true, true, false, false, false, true, true, false, true, false, true, false, false, true, false, true];
       {
-        calc {
-          [true, true, false, false, false, false, true, false, true, false, true, true, false, false, true, true, true, true, true, true, false, false, true, true, false, true, true, true, false, false, true, true];
-          {
-            pow_31967();
-            of_pow(32000, true, true, false, false, true, true, true, false, true, true, false, false, true, true, true, true, true, true, false, false, true, true, false, true, false, true, false, false, false, false, true, true);
-          }
-          pow_mod_crc(32000);
-        }
-        calc {
-          [true, false, true, true, true, false, true, false, false, false, false, false, true, false, false, true, true, true, false, false, false, true, true, false, true, false, true, false, false, true, false, true];
-          {
-            pow_15967();
-            of_pow(16000, true, false, true, false, false, true, false, true, false, true, true, false, false, false, true, true, true, false, false, true, false, false, false, false, false, true, false, true, true, true, false, true);
-          }
-          pow_mod_crc(16000);
-        }
+        lut_entry_249_0();
+        lut_entry_249_1();
       }
       pow_mod_crc(32000) + pow_mod_crc(16000);
     }
   }
 
 
+
+  lemma lut_entry_250_0()
+  ensures [true, true, true, false, false, true, true, true, false, true, true, true, true, false, false, false, true, false, false, false, true, true, false, false, false, false, false, true, true, false, true, true] == pow_mod_crc(32128);
+  {
+    pow_32095();
+    of_pow(32128, true, true, false, true, true, false, false, false, false, false, true, true, false, false, false, true, false, false, false, true, true, true, true, false, true, true, true, false, false, true, true, true);
+  }
+
+  lemma lut_entry_250_1()
+  ensures [true, true, true, true, false, true, true, true, false, true, false, true, true, true, true, true, true, true, false, true, false, false, true, false, true, true, true, true, false, false, true, true] == pow_mod_crc(16064);
+  {
+    pow_16031();
+    of_pow(16064, true, true, false, false, true, true, true, true, false, true, false, false, true, false, true, true, true, true, true, true, true, false, true, false, true, true, true, false, true, true, true, true);
+  }
 
   lemma lut_entry_250()
   ensures bits_of_int(lut[250] as int, 64)
@@ -10118,28 +10132,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, false, false, true, true, true, false, true, true, true, true, false, false, false, true, false, false, false, true, true, false, false, false, false, false, true, true, false, true, true]+[true, true, true, true, false, true, true, true, false, true, false, true, true, true, true, true, true, true, false, true, false, false, true, false, true, true, true, true, false, false, true, true];
       {
-        calc {
-          [true, true, true, false, false, true, true, true, false, true, true, true, true, false, false, false, true, false, false, false, true, true, false, false, false, false, false, true, true, false, true, true];
-          {
-            pow_32095();
-            of_pow(32128, true, true, false, true, true, false, false, false, false, false, true, true, false, false, false, true, false, false, false, true, true, true, true, false, true, true, true, false, false, true, true, true);
-          }
-          pow_mod_crc(32128);
-        }
-        calc {
-          [true, true, true, true, false, true, true, true, false, true, false, true, true, true, true, true, true, true, false, true, false, false, true, false, true, true, true, true, false, false, true, true];
-          {
-            pow_16031();
-            of_pow(16064, true, true, false, false, true, true, true, true, false, true, false, false, true, false, true, true, true, true, true, true, true, false, true, false, true, true, true, false, true, true, true, true);
-          }
-          pow_mod_crc(16064);
-        }
+        lut_entry_250_0();
+        lut_entry_250_1();
       }
       pow_mod_crc(32128) + pow_mod_crc(16064);
     }
   }
 
 
+
+  lemma lut_entry_251_0()
+  ensures [true, true, true, true, false, false, false, true, false, true, true, true, true, true, true, true, false, true, true, false, false, true, true, true, false, false, true, false, false, true, false, false] == pow_mod_crc(32256);
+  {
+    pow_32223();
+    of_pow(32256, false, false, true, false, false, true, false, false, true, true, true, false, false, true, true, false, true, true, true, true, true, true, true, false, true, false, false, false, true, true, true, true);
+  }
+
+  lemma lut_entry_251_1()
+  ensures [false, true, true, true, false, false, true, false, true, true, true, true, true, false, true, true, true, false, true, true, false, false, true, true, true, false, true, false, false, false, true, false] == pow_mod_crc(16128);
+  {
+    pow_16095();
+    of_pow(16128, false, true, false, false, false, true, false, true, true, true, false, false, true, true, false, true, true, true, false, true, true, true, true, true, false, true, false, false, true, true, true, false);
+  }
 
   lemma lut_entry_251()
   ensures bits_of_int(lut[251] as int, 64)
@@ -10158,28 +10172,28 @@ module CRC32_C_Lut {
       }
       [true, true, true, true, false, false, false, true, false, true, true, true, true, true, true, true, false, true, true, false, false, true, true, true, false, false, true, false, false, true, false, false]+[false, true, true, true, false, false, true, false, true, true, true, true, true, false, true, true, true, false, true, true, false, false, true, true, true, false, true, false, false, false, true, false];
       {
-        calc {
-          [true, true, true, true, false, false, false, true, false, true, true, true, true, true, true, true, false, true, true, false, false, true, true, true, false, false, true, false, false, true, false, false];
-          {
-            pow_32223();
-            of_pow(32256, false, false, true, false, false, true, false, false, true, true, true, false, false, true, true, false, true, true, true, true, true, true, true, false, true, false, false, false, true, true, true, true);
-          }
-          pow_mod_crc(32256);
-        }
-        calc {
-          [false, true, true, true, false, false, true, false, true, true, true, true, true, false, true, true, true, false, true, true, false, false, true, true, true, false, true, false, false, false, true, false];
-          {
-            pow_16095();
-            of_pow(16128, false, true, false, false, false, true, false, true, true, true, false, false, true, true, false, true, true, true, false, true, true, true, true, true, false, true, false, false, true, true, true, false);
-          }
-          pow_mod_crc(16128);
-        }
+        lut_entry_251_0();
+        lut_entry_251_1();
       }
       pow_mod_crc(32256) + pow_mod_crc(16128);
     }
   }
 
 
+
+  lemma lut_entry_252_0()
+  ensures [true, false, false, true, false, false, true, true, true, true, true, false, true, false, true, true, false, true, true, false, false, false, true, true, false, false, false, false, true, false, true, true] == pow_mod_crc(32384);
+  {
+    pow_32351();
+    of_pow(32384, true, true, false, true, false, false, false, false, true, true, false, false, false, true, true, false, true, true, false, true, false, true, true, true, true, true, false, false, true, false, false, true);
+  }
+
+  lemma lut_entry_252_1()
+  ensures [true, true, true, false, false, false, true, true, false, true, false, true, true, false, false, false, false, true, true, true, true, false, true, true, true, true, false, true, false, true, true, false] == pow_mod_crc(16192);
+  {
+    pow_16159();
+    of_pow(16192, false, true, true, false, true, false, true, true, true, true, false, true, true, true, true, false, false, false, false, true, true, false, true, false, true, true, false, false, false, true, true, true);
+  }
 
   lemma lut_entry_252()
   ensures bits_of_int(lut[252] as int, 64)
@@ -10198,28 +10212,28 @@ module CRC32_C_Lut {
       }
       [true, false, false, true, false, false, true, true, true, true, true, false, true, false, true, true, false, true, true, false, false, false, true, true, false, false, false, false, true, false, true, true]+[true, true, true, false, false, false, true, true, false, true, false, true, true, false, false, false, false, true, true, true, true, false, true, true, true, true, false, true, false, true, true, false];
       {
-        calc {
-          [true, false, false, true, false, false, true, true, true, true, true, false, true, false, true, true, false, true, true, false, false, false, true, true, false, false, false, false, true, false, true, true];
-          {
-            pow_32351();
-            of_pow(32384, true, true, false, true, false, false, false, false, true, true, false, false, false, true, true, false, true, true, false, true, false, true, true, true, true, true, false, false, true, false, false, true);
-          }
-          pow_mod_crc(32384);
-        }
-        calc {
-          [true, true, true, false, false, false, true, true, false, true, false, true, true, false, false, false, false, true, true, true, true, false, true, true, true, true, false, true, false, true, true, false];
-          {
-            pow_16159();
-            of_pow(16192, false, true, true, false, true, false, true, true, true, true, false, true, true, true, true, false, false, false, false, true, true, false, true, false, true, true, false, false, false, true, true, true);
-          }
-          pow_mod_crc(16192);
-        }
+        lut_entry_252_0();
+        lut_entry_252_1();
       }
       pow_mod_crc(32384) + pow_mod_crc(16192);
     }
   }
 
 
+
+  lemma lut_entry_253_0()
+  ensures [false, true, false, true, false, false, true, false, true, false, true, true, true, false, true, false, false, true, false, true, false, true, false, true, true, false, true, false, false, false, true, false] == pow_mod_crc(32512);
+  {
+    pow_32479();
+    of_pow(32512, false, true, false, false, false, true, false, true, true, false, true, false, true, false, true, false, false, true, false, true, true, true, false, true, false, true, false, false, true, false, true, false);
+  }
+
+  lemma lut_entry_253_1()
+  ensures [true, true, false, false, false, false, false, false, true, false, false, false, true, true, false, false, false, true, false, true, true, true, true, true, false, false, true, true, false, true, false, true] == pow_mod_crc(16256);
+  {
+    pow_16223();
+    of_pow(16256, true, false, true, false, true, true, false, false, true, true, true, true, true, false, true, false, false, false, true, true, false, false, false, true, false, false, false, false, false, false, true, true);
+  }
 
   lemma lut_entry_253()
   ensures bits_of_int(lut[253] as int, 64)
@@ -10238,28 +10252,28 @@ module CRC32_C_Lut {
       }
       [false, true, false, true, false, false, true, false, true, false, true, true, true, false, true, false, false, true, false, true, false, true, false, true, true, false, true, false, false, false, true, false]+[true, true, false, false, false, false, false, false, true, false, false, false, true, true, false, false, false, true, false, true, true, true, true, true, false, false, true, true, false, true, false, true];
       {
-        calc {
-          [false, true, false, true, false, false, true, false, true, false, true, true, true, false, true, false, false, true, false, true, false, true, false, true, true, false, true, false, false, false, true, false];
-          {
-            pow_32479();
-            of_pow(32512, false, true, false, false, false, true, false, true, true, false, true, false, true, false, true, false, false, true, false, true, true, true, false, true, false, true, false, false, true, false, true, false);
-          }
-          pow_mod_crc(32512);
-        }
-        calc {
-          [true, true, false, false, false, false, false, false, true, false, false, false, true, true, false, false, false, true, false, true, true, true, true, true, false, false, true, true, false, true, false, true];
-          {
-            pow_16223();
-            of_pow(16256, true, false, true, false, true, true, false, false, true, true, true, true, true, false, true, false, false, false, true, true, false, false, false, true, false, false, false, false, false, false, true, true);
-          }
-          pow_mod_crc(16256);
-        }
+        lut_entry_253_0();
+        lut_entry_253_1();
       }
       pow_mod_crc(32512) + pow_mod_crc(16256);
     }
   }
 
 
+
+  lemma lut_entry_254_0()
+  ensures [true, false, true, false, false, true, true, false, false, false, false, false, true, true, true, false, false, true, true, false, false, false, false, false, true, true, true, true, false, false, true, true] == pow_mod_crc(32640);
+  {
+    pow_32607();
+    of_pow(32640, true, true, false, false, true, true, true, true, false, false, false, false, false, true, true, false, false, true, true, true, false, false, false, false, false, true, true, false, false, true, false, true);
+  }
+
+  lemma lut_entry_254_1()
+  ensures [false, true, false, false, false, false, true, true, true, false, true, false, true, true, true, false, true, false, false, false, true, false, false, false, false, true, true, true, false, true, false, true] == pow_mod_crc(16320);
+  {
+    pow_16287();
+    of_pow(16320, true, false, true, false, true, true, true, false, false, false, false, true, false, false, false, true, false, true, true, true, false, true, false, true, true, true, false, false, false, false, true, false);
+  }
 
   lemma lut_entry_254()
   ensures bits_of_int(lut[254] as int, 64)
@@ -10278,28 +10292,28 @@ module CRC32_C_Lut {
       }
       [true, false, true, false, false, true, true, false, false, false, false, false, true, true, true, false, false, true, true, false, false, false, false, false, true, true, true, true, false, false, true, true]+[false, true, false, false, false, false, true, true, true, false, true, false, true, true, true, false, true, false, false, false, true, false, false, false, false, true, true, true, false, true, false, true];
       {
-        calc {
-          [true, false, true, false, false, true, true, false, false, false, false, false, true, true, true, false, false, true, true, false, false, false, false, false, true, true, true, true, false, false, true, true];
-          {
-            pow_32607();
-            of_pow(32640, true, true, false, false, true, true, true, true, false, false, false, false, false, true, true, false, false, true, true, true, false, false, false, false, false, true, true, false, false, true, false, true);
-          }
-          pow_mod_crc(32640);
-        }
-        calc {
-          [false, true, false, false, false, false, true, true, true, false, true, false, true, true, true, false, true, false, false, false, true, false, false, false, false, true, true, true, false, true, false, true];
-          {
-            pow_16287();
-            of_pow(16320, true, false, true, false, true, true, true, false, false, false, false, true, false, false, false, true, false, true, true, true, false, true, false, true, true, true, false, false, false, false, true, false);
-          }
-          pow_mod_crc(16320);
-        }
+        lut_entry_254_0();
+        lut_entry_254_1();
       }
       pow_mod_crc(32640) + pow_mod_crc(16320);
     }
   }
 
 
+
+  lemma lut_entry_255_0()
+  ensures [true, true, true, false, true, true, true, false, false, false, true, true, true, false, false, true, false, false, false, true, true, true, true, true, false, true, false, false, false, false, false, true] == pow_mod_crc(32768);
+  {
+    pow_32735();
+    of_pow(32768, true, false, false, false, false, false, true, false, true, true, true, true, true, false, false, false, true, false, false, true, true, true, false, false, false, true, true, true, false, true, true, true);
+  }
+
+  lemma lut_entry_255_1()
+  ensures [true, false, true, false, true, true, false, false, true, false, false, false, false, true, true, false, true, true, false, true, true, false, false, false, true, false, true, false, false, true, false, true] == pow_mod_crc(16384);
+  {
+    pow_16351();
+    of_pow(16384, true, false, true, false, false, true, false, true, false, false, false, true, true, false, true, true, false, true, true, false, false, false, false, true, false, false, true, true, false, true, false, true);
+  }
 
   lemma lut_entry_255()
   ensures bits_of_int(lut[255] as int, 64)
@@ -10318,22 +10332,8 @@ module CRC32_C_Lut {
       }
       [true, true, true, false, true, true, true, false, false, false, true, true, true, false, false, true, false, false, false, true, true, true, true, true, false, true, false, false, false, false, false, true]+[true, false, true, false, true, true, false, false, true, false, false, false, false, true, true, false, true, true, false, true, true, false, false, false, true, false, true, false, false, true, false, true];
       {
-        calc {
-          [true, true, true, false, true, true, true, false, false, false, true, true, true, false, false, true, false, false, false, true, true, true, true, true, false, true, false, false, false, false, false, true];
-          {
-            pow_32735();
-            of_pow(32768, true, false, false, false, false, false, true, false, true, true, true, true, true, false, false, false, true, false, false, true, true, true, false, false, false, true, true, true, false, true, true, true);
-          }
-          pow_mod_crc(32768);
-        }
-        calc {
-          [true, false, true, false, true, true, false, false, true, false, false, false, false, true, true, false, true, true, false, true, true, false, false, false, true, false, true, false, false, true, false, true];
-          {
-            pow_16351();
-            of_pow(16384, true, false, true, false, false, true, false, true, false, false, false, true, true, false, true, true, false, true, true, false, false, false, false, true, false, false, true, true, false, true, false, true);
-          }
-          pow_mod_crc(16384);
-        }
+        lut_entry_255_0();
+        lut_entry_255_1();
       }
       pow_mod_crc(32768) + pow_mod_crc(16384);
     }
