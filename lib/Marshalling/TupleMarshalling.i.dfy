@@ -200,8 +200,6 @@ abstract module Tuple3Marshalling refines Marshalling {
   type Boundary = BoundaryInt.Integer
   type BoundaryTable = mseq<Boundary>
 
-  // datatype Structure = Structure(boundaries: mseq<Boundary>, elements: mseq<byte>)
-
   function method SizeOfBoundaryEntry() : uint64
   {
     BoundaryInt.Size()
@@ -423,19 +421,57 @@ abstract module Tuple3Marshalling refines Marshalling {
     }
 
     assert newdata[start..end][..tableSize] == newdata[start..end0] == newdata0[start..end0];
-    assert TableMarshalling.parse(newdata[start..end0]) == table;
+    // assert TableMarshalling.parse(newdata[start..end0]) == table;
     
-    assert newdata[start..end][tableSize..bound0] == newdata[end0..end1] ==  newdata1[end0..end1] by {
+    assert newdata[start..end][tableSize..bound0] == newdata[end0..end1] == newdata1[end0..end1] by {
       Sequences.lemma_seq_slice_slice(newdata, start as int, end as int, tableSize as int, bound0 as int);
     }
-    assert ElemMarshalling0.parse(newdata[end0..end1]) == elem0;
+    // assert ElemMarshalling0.parse(newdata[end0..end1]) == elem0;
 
     assert newdata[start..end][bound0..bound1] == newdata[end1..end2] == newdata2[end1..end2] by {
       Sequences.lemma_seq_slice_slice(newdata, start as int, end as int, bound0 as int, bound1 as int);
     }
-    assert ElemMarshalling1.parse(newdata[end1..end2]) == elem1;
+    // assert ElemMarshalling1.parse(newdata[end1..end2]) == elem1;
 
     assert newdata[start..end][bound1..] == newdata[end2..end];
-    assert ElemMarshalling2.parse(newdata[end2..end]) == elem2;
+    // assert ElemMarshalling2.parse(newdata[end2..end]) == elem2;
+  }
+
+  method GetElem0(data: mseq<byte>) returns (edata: mseq<byte>)
+    requires parsable(data)
+    ensures ElemMarshalling0.parsable(edata)
+    ensures ElemMarshalling0.parse(edata) == parse(data).0
+  {
+    var tableSize := sizeOfTable() as uint64;
+    var iend0 := TableMarshalling.FastGet(data[..tableSize], 0);
+    var end0 := BoundaryInt.toUint64(iend0); 
+
+    edata := data[tableSize..end0];
+  }
+
+  method GetElem1(data: mseq<byte>) returns (edata: mseq<byte>)
+    requires parsable(data)
+    ensures ElemMarshalling1.parsable(edata)
+    ensures ElemMarshalling1.parse(edata) == parse(data).1
+  {
+    var tableSize := sizeOfTable() as uint64;
+    var iend0 := TableMarshalling.FastGet(data[..tableSize], 0);
+    var end0 := BoundaryInt.toUint64(iend0); 
+    var iend1 := TableMarshalling.FastGet(data[..tableSize], 1);
+    var end1 := BoundaryInt.toUint64(iend1); 
+
+    edata := data[end0..end1];
+  }
+
+  method GetElem2(data: mseq<byte>) returns (edata: mseq<byte>)
+    requires parsable(data)
+    ensures ElemMarshalling2.parsable(edata)
+    ensures ElemMarshalling2.parse(edata) == parse(data).2
+  {
+    var tableSize := sizeOfTable() as uint64;
+    var iend1 := TableMarshalling.FastGet(data[..tableSize], 1);
+    var end1 := BoundaryInt.toUint64(iend1); 
+
+    edata := data[end1..];
   }
 }
