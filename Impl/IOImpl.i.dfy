@@ -33,18 +33,45 @@ module IOImpl {
   import SSI = StateSectorImpl
   import SSM = StateSectorModel
 
+  import opened ViewOp
+  import opened DiskOpModel
+  import BucketWeights
+  import BlockJournalDisk
+  import IMM = MarshallingModel
+
+  predicate LocAvailable(s: ImplVariables, loc: Location, len: uint64)
+  requires s.WFBCVars()
+  {
+    && s.Ready?
+    && ValidNodeLocation(loc)
+    && BC.ValidAllocation(s.IBlockCache(), loc)
+    && loc.len == len
+  }
+
   // TODO does ImplVariables make sense? Should it be a Variables? Or just the fields of a class we live in?
   method getFreeLoc(shared s: ImplVariables, len: uint64)
   returns (loc : Option<Location>)
   requires s.Ready?
-  requires s.WF()
+  requires s.WFBCVars()
   requires len <= NodeBlockSizeUint64()
-  ensures loc == IOModel.getFreeLoc(s.I(), len)
+  ensures loc.Some? ==> LocAvailable(s, loc.value, len)
   {
-    IOModel.reveal_getFreeLoc();
+    reveal_ConsistentBitmap();
+    DiskLayout.reveal_ValidNodeAddr();
+
     var i := s.blockAllocator.Alloc();
     if i.Some? {
       loc := Some(Location((i.value * NodeBlockSizeUint64()), len));
+
+      ghost var blockAllocatorI := s.blockAllocator.I();
+      assert i.value as int == BlockAllocatorModel.Alloc(blockAllocatorI).value;
+
+      BlockAllocatorModel.LemmaAllocResult(blockAllocatorI);
+      assert !IT.IndirectionTable.IsLocAllocBitmap(blockAllocatorI.ephemeral, i.value as int);
+      assert blockAllocatorI.frozen.Some? ==>
+          !IT.IndirectionTable.IsLocAllocBitmap(blockAllocatorI.frozen.value, i.value as int);
+      assert !IT.IndirectionTable.IsLocAllocBitmap(blockAllocatorI.persistent, i.value as int);
+      assert !IT.IndirectionTable.IsLocAllocBitmap(blockAllocatorI.outstanding, i.value as int);
     } else {
       loc := None;
     }
@@ -68,35 +95,52 @@ module IOImpl {
   requires io.initialized()
   requires sector.SectorSuperblock?
   requires ValidSuperblockLocation(loc)
-  modifies io
-  ensures IOModel.RequestWrite(old(IIO(io)), loc, old(SSI.ISector(sector)), id, IIO(io))
-  ensures io.diskOp().ReqWriteOp? && io.diskOp().id == id
-  {
-    IOModel.reveal_RequestWrite();
+  
+  // [yizhou7]: additional precondition
+  requires ValidLocation(loc)
 
+  modifies io
+  ensures io.diskOp().ReqWriteOp? && io.diskOp().id == id
+  ensures ValidDiskOp(diskOp(IIO(io)))
+  ensures ValidSuperblock1Location(loc) ==>
+    IDiskOp(diskOp(IIO(io))) == BlockJournalDisk.DiskOp(BlockDisk.NoDiskOp, JournalDisk.ReqWriteSuperblockOp(id, 0, JournalDisk.ReqWriteSuperblock(sector.superblock)))
+  ensures ValidSuperblock2Location(loc) ==>
+    IDiskOp(diskOp(IIO(io))) == BlockJournalDisk.DiskOp(BlockDisk.NoDiskOp, JournalDisk.ReqWriteSuperblockOp(id, 1, JournalDisk.ReqWriteSuperblock(sector.superblock)))
+  {
     var bytes := MarshallingImpl.MarshallCheckedSector(sector);
     id := io.write(loc.addr, bytes[..]);
 
     sector.Free();
+
+    IMM.reveal_parseCheckedSector();
+    IMM.reveal_parseSector();
+    Marshalling.reveal_parseSector();
+    reveal_SectorOfBytes();
+    reveal_ValidCheckedBytes();
+    reveal_Parse();
+    D.reveal_ChecksumChecksOut();
+    Marshalling.reveal_parseSector();
   }
 
   method FindLocationAndRequestWrite(io: DiskIOHandler, shared s: ImplVariables, shared sector: SSI.Sector)
   returns (id: Option<D.ReqId>, loc: Option<Location>)
-  requires s.WF()
+  requires s.WFBCVars()
   requires s.Ready?
   requires SSI.WFSector(sector)
   requires SSM.WFSector(SSI.ISector(sector))
   requires io.initialized()
   requires sector.SectorNode?
+
   modifies io
-  ensures s.W()
-  ensures IOModel.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(SSI.ISector(sector)), id, loc, IIO(io))
-  ensures old(s.I()) == s.I();
+
   ensures id.Some? ==> loc.Some? && io.diskOp().ReqWriteOp? && io.diskOp().id == id.value
   ensures id.None? ==> IIO(io) == old(IIO(io))
+  ensures ValidDiskOp(diskOp(IIO(io)))
+  ensures id.Some? ==> DiskLayout.ValidLocation(loc.value)
+  ensures id.Some? ==> sector.SectorNode? ==> BC.ValidAllocation(s.IBlockCache(), loc.value)
+  ensures id.Some? ==> sector.SectorNode? ==> DiskLayout.ValidNodeLocation(loc.value)
+  ensures sector.SectorNode? ==> id.Some? ==> IDiskOp(diskOp(IIO(io))) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteNodeOp(id.value, BlockDisk.ReqWriteNode(loc.value, sector.node.I())), JournalDisk.NoDiskOp)
   {
-    IOModel.reveal_FindLocationAndRequestWrite();
-
     var bytes := MarshallingImpl.MarshallCheckedSector(sector);
     if (bytes == null) {
       id := None;
@@ -111,12 +155,20 @@ module IOImpl {
         id := None;
       }
     }
+
+    IMM.reveal_parseSector();
+    IMM.reveal_parseCheckedSector();
+    Marshalling.reveal_parseSector();
+    reveal_SectorOfBytes();
+    reveal_ValidCheckedBytes();
+    reveal_Parse();
+    D.reveal_ChecksumChecksOut();
+    Marshalling.reveal_parseSector();
   }
 
   method FindIndirectionTableLocationAndRequestWrite(
       io: DiskIOHandler, shared s: ImplVariables, ghost sector: SSI.Sector)
   returns (id: Option<D.ReqId>, loc: Option<Location>)
-  requires s.WF()
   requires s.Ready?
   requires io.initialized()
   requires SSI.WFSector(sector)
@@ -124,16 +176,21 @@ module IOImpl {
   requires sector.SectorIndirectionTable?
   requires s.frozenIndirectionTable.lSome? && sector.indirectionTable == s.frozenIndirectionTable.value
 
+  // [yizhou7]: additional precondition
+  requires s.BCInv()
+
   modifies io
 
+  ensures ValidDiskOp(diskOp(IIO(io)))
   ensures id.Some? ==> id.value == old(io.reservedId())
-  ensures s.W()
-  ensures IOModel.FindIndirectionTableLocationAndRequestWrite(old(IIO(io)), s.I(), SSI.ISector(sector), id, loc, IIO(io))
   ensures id.Some? ==> (loc.Some? && io.diskOp().ReqWriteOp? && io.diskOp().id == id.value)
   ensures id.None? ==> IIO(io) == old(IIO(io))
-  {
-    IOModel.reveal_FindIndirectionTableLocationAndRequestWrite();
 
+  ensures id.Some? ==> loc.Some?
+  ensures id.Some? ==> DiskLayout.ValidIndirectionTableLocation(loc.value)
+  ensures id.Some? ==> IDiskOp(diskOp(IIO(io))) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteIndirectionTableOp(id.value, BlockDisk.ReqWriteIndirectionTable(loc.value, sector.indirectionTable.I())), JournalDisk.NoDiskOp)
+  ensures loc.Some? ==> !overlap(loc.value, s.persistentIndirectionTableLoc)
+  {
     var bytes := MarshallingImpl.MarshallCheckedSectorIndirectionTable(s.frozenIndirectionTable.value, sector);
     if (bytes == null) {
       id := None;
@@ -145,6 +202,24 @@ module IOImpl {
         len));
       var i := io.write(loc.value.addr, bytes[..]);
       id := Some(i);
+    }
+
+    IMM.reveal_parseSector();
+    IMM.reveal_parseCheckedSector();
+    Marshalling.reveal_parseSector();
+    reveal_SectorOfBytes();
+    reveal_ValidCheckedBytes();
+    reveal_Parse();
+    D.reveal_ChecksumChecksOut();
+    Marshalling.reveal_parseSector();
+
+    ghost var dop := diskOp(IIO(io));
+    if dop.ReqWriteOp? {
+      if overlap(loc.value, s.persistentIndirectionTableLoc) {
+        overlappingIndirectionTablesSameAddr(
+            loc.value, s.persistentIndirectionTableLoc);
+        assert false;
+      }
     }
   }
 
@@ -158,49 +233,67 @@ module IOImpl {
   }
 
   method PageInIndirectionTableReq(linear inout s: ImplVariables, io: DiskIOHandler)
-  requires old_s.WF()
+  requires old_s.WFBCVars()
   requires io.initialized()
   requires old_s.Loading?
+  // [yizhou7]: additional precondition
   requires ValidIndirectionTableLocation(old_s.indirectionTableLoc)
-  modifies io
-  ensures s.WF()
-  ensures (s.I(), IIO(io)) == IOModel.PageInIndirectionTableReq(
-      old_s.I(), old(IIO(io)))
-  {
-    IOModel.reveal_PageInIndirectionTableReq();
 
+  modifies io
+  ensures var dop := diskOp(IIO(io));
+    && s.WFBCVars()
+    && ValidDiskOp(dop)
+    && IDiskOp(dop).jdop.NoDiskOp?
+    && BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(dop).bdop, StatesInternalOp)
+  {
     if (s.indirectionTableRead.None?) {
       var id := RequestRead(io, s.indirectionTableLoc);
       inout s.indirectionTableRead := Some(id);
+
+      IOModel.RequestReadCorrect(old(IIO(io)), old_s.indirectionTableLoc);
+      assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.PageInIndirectionTableReqStep);
     } else {
       print "PageInIndirectionTableReq: request already out\n";
+      assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
     }
   }
 
   method PageInNodeReq(linear inout s: ImplVariables, io: DiskIOHandler, ref: BC.Reference)
   requires io.initialized();
   requires old_s.Ready?
-  requires old_s.WF()
+  // requires old_s.WFBCVars()
   requires ref in old_s.ephemeralIndirectionTable.I().locs
 
-  // [yizhou7]: this addtional precondition is needed
+  // [yizhou7]: addtional preconditions
+  requires old_s.BCInv()
+  requires ref !in old_s.cache.I()
   requires old_s.TotalCacheSize() as int <= MaxCacheSize() - 1
 
   modifies io
-  ensures s.WF()
-  ensures s.Ready?
-  ensures (s.I(), IIO(io)) == IOModel.PageInNodeReq(old_s.I(), old(IIO(io)), ref)
+  ensures 
+    && s.Ready?
+    && s.WFBCVars()
+    && ValidDiskOp(diskOp(IIO(io)))
+    && BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       print "giving up; already an outstanding read for this ref\n";
+      assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
     } else {
       var locGraph := s.ephemeralIndirectionTable.GetEntry(ref);
       var loc := locGraph.value.loc;
+
+      assert ref in s.ephemeralIndirectionTable.I().locs;
+      assert DiskLayout.ValidNodeLocation(loc.value);
       var id := RequestRead(io, loc.value);
+
       inout s.outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)];
+
+      assert s.WFBCVars();
+      assert BC.PageInNodeReq(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, ref);
+      assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.PageInNodeReqStep(ref));
     }
   }
-
   // == readResponse ==
 
   function ISectorOpt(sector: Option<SSI.Sector>) : Option<SSM.Sector>
@@ -239,15 +332,29 @@ module IOImpl {
   }
 
   method PageInIndirectionTableResp(linear inout s: ImplVariables, io: DiskIOHandler)
-  requires old_s.W()
+  // requires old_s.W()
   requires io.diskOp().RespReadOp?
   requires old_s.Loading?
-  ensures s.W()
-  ensures s.I() == IOModel.PageInIndirectionTableResp(old_s.I(), old(IIO(io)))
+
+  // [yizhou7]: addtional preconditions
+  requires old_s.BCInv()
+  requires ValidDiskOp(diskOp(IIO(io)))
+  requires ValidIndirectionTableLocation(LocOfRespRead(diskOp(IIO(io)).respRead))
+
+  ensures 
+    && s.WFBCVars()
+    && ValidDiskOp(diskOp(IIO(io)))
+    && IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
+    && BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
   {
-    var id;
-    linear var sectorOpt;
+    linear var sectorOpt; var id;
     id, sectorOpt := ReadSector(io);
+
+    IOModel.ReadSectorCorrect(IIO(io));
+
+    Marshalling.reveal_parseSector();
+    reveal_SectorOfBytes();
+    reveal_Parse();
 
     if (Some(id) == s.indirectionTableRead && sectorOpt.lSome? && sectorOpt.value.SectorIndirectionTable?) {
       linear var lSome(sector: SSI.Sector) := sectorOpt;
@@ -278,18 +385,42 @@ module IOImpl {
           lru,
           blockAllocator);
 
-        assert s.I() == IOModel.PageInIndirectionTableResp(old_s.I(), old(IIO(io))); // TODO(andreal)
+        BucketWeights.WeightBucketEmpty();
+
+        assert ConsistentBitmap(s.ephemeralIndirectionTable.I(), lNone,
+          s.persistentIndirectionTable.I(), s.outstandingBlockWrites, s.blockAllocator.I()) by {
+          reveal_ConsistentBitmap();
+        }
+
+        assert s.WFBCVars();
+        assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.PageInIndirectionTableRespStep);
+        assert BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp);
       } else {
         bm.Free();
         ephemeralIndirectionTable.Free();
-
         print "InitLocBitmap failed\n";
+
+        assert old_s == s;
+        assert ValidDiskOp(diskOp(IIO(io)));
+        assert BC.NoOp(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp);
+        assert BBC.BlockCacheMove(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, BC.NoOpStep);
+        assert BBC.NextStep(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep));
+        assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.NoOpStep);
       }
     } else {
+
+      assert old_s == s;
+      assert ValidDiskOp(diskOp(IIO(io)));
+      assert BC.NoOp(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp);
+      assert BBC.BlockCacheMove(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, BC.NoOpStep);
+      assert BBC.NextStep(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep));
+      assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.NoOpStep);
+
       FreeSectorOpt(sectorOpt);
       print "giving up; did not get indirectionTable when reading\n";
     }
   }
+/*
 
   method PageInNodeResp(linear inout s: ImplVariables, io: DiskIOHandler)
   requires old_s.W()
@@ -429,4 +560,5 @@ module IOImpl {
 
     inout s.blockAllocator.MoveFrozenToPersistent();
   }
+  */
 }
