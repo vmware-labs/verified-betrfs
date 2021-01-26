@@ -10,6 +10,7 @@ module AtomicStatusImpl {
   import opened Ptrs
   import opened AtomicSpec
   import opened LinearOption
+  import opened DiskInterfaceSpec
   import RWLock
   import RWLockMethods
   import CacheResources
@@ -161,7 +162,7 @@ module AtomicStatusImpl {
   returns (success: bool,
       linear m: lOption<RWLock.R>,
       /* readonly */ linear handle_out: lOption<RWLock.Handle>,
-      linear disk_write_ticket: lOption<CacheResources.R>)
+      linear disk_write_ticket: lOption<DiskWriteTicket>)
   requires atomic_status_inv(a, key)
   ensures !success ==> m.lNone?
   ensures !success ==> handle_out.lNone?
@@ -172,7 +173,7 @@ module AtomicStatusImpl {
       && handle_out.lSome?
       && handle_out.value.is_handle(key)
       && disk_write_ticket
-        == lSome(CacheResources.DiskWriteTicket(
+        == lSome(DiskWriteTicket(
             handle_out.value.cache_entry.disk_idx as uint64,
             handle_out.value.cache_entry.data))
   {
@@ -280,13 +281,13 @@ module AtomicStatusImpl {
   method release_writeback(a: AtomicStatus, key: RWLock.Key,
       linear r: RWLock.R,
       /* readonly */ linear handle: RWLock.Handle,
-      linear stub: CacheResources.R)
+      linear stub: DiskWriteStub)
   requires atomic_status_inv(a, key)
   requires r == RWLock.Internal(RWLock.WriteBackObtained(key))
   requires handle.is_handle(key)
   requires 0 <= handle.cache_entry.disk_idx
              < 0x1_0000_0000_0000_0000
-  requires stub == CacheResources.DiskWriteStub(
+  requires stub == DiskWriteStub(
       handle.cache_entry.disk_idx as uint64)
   {
     // Unset WriteBack; set Clean

@@ -1,7 +1,7 @@
+include "../../lib/Lang/NativeTypes.s.dfy"
+
 module AtomicSpec {
   type {:extern} Atomic<V, G>
-
-  linear datatype NullGhostType = NullGhostType
 
   predicate {:extern} atomic_inv<V, G>(atomic: Atomic<V, G>, v: V, g: G)
 
