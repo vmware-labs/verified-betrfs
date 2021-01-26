@@ -1842,24 +1842,21 @@ module IndirectionTable {
     //   }
     // }
 
-    static method BitmapInitUpTo(bm: BitmapImpl.Bitmap, upTo: uint64)
-    requires bm.Inv()
-    requires upTo as int <= BitmapModel.Len(bm.I())
-    modifies bm.Repr
+    static method BitmapInitUpTo(linear inout bm: BitmapImpl.Bitmap, upTo: uint64)
+    requires old_bm.Inv()
+    requires upTo as int <= BitmapModel.Len(old_bm.I())
     ensures bm.Inv()
-    ensures old(BitmapModel.Len(bm.I())) == BitmapModel.Len(bm.I())
+    ensures BitmapModel.Len(old_bm.I()) == BitmapModel.Len(bm.I())
     // ensures bm.I() == IndirectionTableModel.BitmapInitUpTo(old(bm.I()), upTo)
-    ensures bm.Repr == old(bm.Repr)
     {
       var i := 0;
       while i < upTo
       invariant i <= upTo
       invariant bm.Inv()
-      invariant bm.Repr == old(bm.Repr)
       invariant upTo as int <= BitmapModel.Len(bm.I())
-      invariant old(BitmapModel.Len(bm.I())) == BitmapModel.Len(bm.I())
+      invariant BitmapModel.Len(old_bm.I()) == BitmapModel.Len(bm.I())
       {
-        bm.Set(i);
+        inout bm.Set(i);
         i := i + 1;
       }
     }
@@ -1876,20 +1873,18 @@ module IndirectionTable {
     /* TODO(andrea) ModelImpl */    && BC.AllLocationsForDifferentRefsDontOverlap(this.I())
     /* TODO(andrea) ModelImpl */  )
 
-
     shared method InitLocBitmap()
-    returns (success: bool, bm: BitmapImpl.Bitmap)
+    returns (success: bool, linear bm: BitmapImpl.Bitmap)
     requires this.Inv()
     requires BC.WFCompleteIndirectionTable(this.I())
     ensures bm.Inv()
     /* TODO(andrea) ModelImpl */ ensures (success, bm.I()) == this.initLocBitmap()
     ensures BitmapModel.Len(bm.I()) == NumBlocks()
-    ensures fresh(bm.Repr)
     {
-      bm := new BitmapImpl.Bitmap(NumBlocksUint64());
+      bm := BitmapImpl.Bitmap.Constructor(NumBlocksUint64());
       assert BitmapModel.Len(bm.I()) == NumBlocks();
 
-      BitmapInitUpTo(bm, MinNodeBlockIndexUint64());
+      BitmapInitUpTo(inout bm, MinNodeBlockIndexUint64());
       var it := LinearMutableMap.IterStart(this.t);
 
       assert BitmapModel.Len(bm.I()) == NumBlocks();
@@ -1903,7 +1898,6 @@ module IndirectionTable {
       invariant BitmapModel.Len(bm.I()) == NumBlocks()
       // invariant IndirectionTableModel.InitLocBitmapIterate(I(this), it, bm.I())
       //        == IndirectionTableModel.InitLocBitmap(I(this))
-      invariant fresh(bm.Repr)
       decreases it.decreaser
       {
         assert it.next.key in this.I().locs;
@@ -1914,16 +1908,16 @@ module IndirectionTable {
           var isSet := bm.GetIsSet(locIndex);
           if !isSet {
             it := LinearMutableMap.IterInc(this.t, it);
-            bm.Set(locIndex);
+            inout bm.Set(locIndex);
           } else {
             success := false;
             /* TODO(andrea) ModelImpl */ assume (success, bm.I()) == this.initLocBitmap();
-            return;
+            break;
           }
         } else {
           success := false;
           /* TODO(andrea) ModelImpl */ assume (success, bm.I()) == this.initLocBitmap();
-          return;
+          break;
         }
       }
 
@@ -2327,12 +2321,11 @@ module IndirectionTable {
       v, size := box.Borrow().IndirectionTableToVal();
     }
 
-    method InitLocBitmap() returns (success: bool, bm: BitmapImpl.Bitmap)
+    method InitLocBitmap() returns (success: bool, linear bm: BitmapImpl.Bitmap)
       requires Inv()
       requires BC.WFCompleteIndirectionTable(this.I())
       ensures bm.Inv()
       /* TODO(andrea) ModelImpl */ ensures (success, bm.I()) == this.ReadWithInv().initLocBitmap()
-      ensures fresh(bm.Repr)
     {
       success, bm := box.Borrow().InitLocBitmap();
     }

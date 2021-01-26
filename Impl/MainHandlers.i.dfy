@@ -38,24 +38,21 @@ module MainHandlers refines Main {
 
   import opened DiskOpImpl
   import opened InterpretationDiskOps
+  import CacheImpl
 
   import System_Ref = ByteSystem_Refines_ThreeStateVersionedMap
   import AllocationReport
 
-  type Variables = FullImpl.Full
+  type FullVariables = FullImpl.Full
 
-  function HeapSet(hs: HeapState) : set<object> { hs.Repr }
-
-  predicate Inv(hs: HeapState)
+  predicate Inv(fs: FullVariables)
   {
-    && hs.s in HeapSet(hs)
-    && hs.s.Repr <= HeapSet(hs)
-    && hs.s.Inv()
-    && hs !in hs.s.Repr
+    fs.Inv()
   }
 
-  function I(hs: HeapState) : ADM.M.Variables {
-    SM.IVars(hs.s.I())
+  function I(fs: FullVariables) : ADM.M.Variables
+  {
+    SM.IVars(fs.I())
   }
 
   method PrintMetadata()
@@ -69,66 +66,60 @@ module MainHandlers refines Main {
     print "metadata DiskNumJournalBlocks ", Bounds.DiskNumJournalBlocksUint64(), "\n";
   }
 
-  method InitState() returns (hs: HeapState)
+  method InitState() returns (linear fs: FullVariables)
     // conditions inherited:
     //ensures Inv(hs)
-    //ensures ADM.M.Init(I(hs))
+    //ensures ADM.M.Init(I(fs))
   {
     PrintMetadata();
-    var s := new Variables();
-    hs := new HeapState(s, {});
-    hs.Repr := s.Repr + {s};
-    assert Inv(hs);
-    BlockJournalCache.InitImpliesInv(I(hs));
+    fs := FullImpl.Full.Constructor();
+    assert Inv(fs);
+    BlockJournalCache.InitImpliesInv(I(fs));
   }
 
   ////////// Top-level handlers
-
-  method handlePushSync(hs: HeapState, io: DiskIOHandler)
+  method handlePushSync(linear inout fs: FullVariables, io: DiskIOHandler)
   returns (id: uint64)
   {
-    var s := hs.s;
-    var id1 := CoordinationImpl.pushSync(s);
+    var id1 := CoordinationImpl.pushSync(inout fs);
 
-    CoordinationModel.pushSyncCorrect(old(s.I()));
+    CoordinationModel.pushSyncCorrect(old_fs.I());
 
-    //assert ADM.M.Next(SM.IVars(old(s.I())), SM.IVars(s.I()),
+    //assert ADM.M.Next(SM.IVars(old_fs.I()), SM.IVars(s.I()),
     //   if id1 == 0 then UI.NoOp else UI.PushSyncOp(id1 as int),
     //   D.NoDiskOp);
 
     id := id1;
     ghost var uiop := if id == 0 then UI.NoOp else UI.PushSyncOp(id as int);
     if ValidDiskOp(io.diskOp()) {
-      BlockJournalCache.NextPreservesInv(SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+      BlockJournalCache.NextPreservesInv(SM.IVars(old_fs.I()), SM.IVars(fs.I()), uiop, IDiskOp(io.diskOp()));
     }
-    hs.Repr := s.Repr + {s};
     //assert SM.Inv(hs.s.I());
     //assert hs.s.Inv();
     //assert Inv(hs);
-    assert ADM.M.Next(old(I(hs)), I(hs), uiop, io.diskOp()); // observe
+    assert ADM.M.Next(I(old_fs), I(fs), uiop, io.diskOp()); // observe
   }
 
   // (jonh) unverified debug hook: Note "requires false" which prevents calling
   // this hook from any real handler code. It's only reachable from hooks
   // in the trusted benchmark driver; we used it to diagnose memory leaks.
-  method handleEvictEverything(hs: HeapState, io: DiskIOHandler)
+  method handleEvictEverything(linear inout s: FullVariables, io: DiskIOHandler)
   requires false
   {
-    var s := hs.s;
     print "\nBefore\n";
     // var acc := s.bc.DebugAccumulate();
     // DebugAccumulator.Display(acc, 0);
 
     // var count:uint64 := s.bc.cache.cache.Count;
-    var count:uint64 := s.bc.cache.Count(); // [yizhou7][REVIEW]: replace the above to this
+    var count:uint64 := CacheImpl.CacheCount(s.bc.cache); // [yizhou7][REVIEW]: replace the above to this
 
 //    var last_count:uint64 := count;
 //    var last_at_this_count:uint64 = 0;
     while (count > 0)
     { // somehow it gets to where we can't get rid of the last few...?
-      EvictOrDealloc(s.bc, io);
+      EvictOrDealloc(inout s.bc, io);
       // count := s.bc.cache.cache.Count;
-      count := s.bc.cache.Count(); // [yizhou7][REVIEW]: replace the above to this
+      count := CacheImpl.CacheCount(s.bc.cache); // [yizhou7][REVIEW]: replace the above to this
     }
     print "\nAfter\n";
     // acc := s.bc.DebugAccumulate();
@@ -138,7 +129,7 @@ module MainHandlers refines Main {
   // (jonh) unverified debug hook: Note "requires false" which prevents calling
   // this hook from any real handler code. It's only reachable from hooks
   // in the trusted benchmark driver; we used it to diagnose memory leaks.
-  method handleCountAmassAllocations(hs: HeapState, io: DiskIOHandler)
+  method handleCountAmassAllocations(linear inout fs: FullVariables, io: DiskIOHandler)
   requires false
   {
     /*
@@ -169,100 +160,88 @@ module MainHandlers refines Main {
     */
   }
 
-  method handlePopSync(hs: HeapState, io: DiskIOHandler, id: uint64, graphSync: bool)
+  method handlePopSync(linear inout fs: FullVariables, io: DiskIOHandler, id: uint64, graphSync: bool)
   returns (wait: bool, success: bool)
   {
-    var s := hs.s;
-    var succ, w := CoordinationImpl.popSync(s, io, id, graphSync);
-    CoordinationModel.popSyncCorrect(old(s.I()), old(IIO(io)), id, graphSync, s.I(), IIO(io), succ);
+    var succ, w := CoordinationImpl.popSync(inout fs, io, id, graphSync);
+    CoordinationModel.popSyncCorrect(old_fs.I(), old(IIO(io)), id, graphSync, fs.I(), IIO(io), succ);
     success := succ;
     wait := w;
     ghost var uiop := if succ then UI.PopSyncOp(id as int) else UI.NoOp;
     if ValidDiskOp(io.diskOp()) {
-      BlockJournalCache.NextPreservesInv(SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+      BlockJournalCache.NextPreservesInv(SM.IVars(old_fs.I()), SM.IVars(fs.I()), uiop, IDiskOp(io.diskOp()));
     }
-    hs.Repr := s.Repr + {s};
-    assert ADM.M.Next(old(I(hs)), I(hs), // observe
+    assert ADM.M.Next(I(old_fs), I(fs), // observe
         uiop,
         io.diskOp());
   }
 
-  method handleQuery(hs: HeapState, io: DiskIOHandler, key: Key)
+  method handleQuery(linear inout fs: FullVariables, io: DiskIOHandler, key: Key)
   returns (v: Option<Value>)
   {
-    var s := hs.s;
-    var value := CoordinationImpl.query(s, io, key);
-    CoordinationModel.queryCorrect(old(s.I()), old(IIO(io)), key, s.I(), value, IIO(io));
+    var value := CoordinationImpl.query(inout fs, io, key);
+    CoordinationModel.queryCorrect(old_fs.I(), old(IIO(io)), key, fs.I(), value, IIO(io));
     ghost var uiop := if value.Some? then UI.GetOp(key, value.value) else UI.NoOp;
     if ValidDiskOp(io.diskOp()) {
-      BlockJournalCache.NextPreservesInv(SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+      BlockJournalCache.NextPreservesInv(SM.IVars(old_fs.I()), SM.IVars(fs.I()), uiop, IDiskOp(io.diskOp()));
     }
-    hs.Repr := s.Repr + {s};
     v := value;
-    assert ADM.M.Next(old(I(hs)), I(hs), // observe
+    assert ADM.M.Next(I(old_fs), I(fs), // observe
         if v.Some? then UI.GetOp(key, v.value) else UI.NoOp,
         io.diskOp());
   }
 
-  method handleInsert(hs: HeapState, io: DiskIOHandler, key: Key, value: Value)
+  method handleInsert(linear inout fs: FullVariables, io: DiskIOHandler, key: Key, value: Value)
   returns (success: bool)
   {
-    var s := hs.s;
-    var succ := CoordinationImpl.insert(s, io, key, value);
-    CoordinationModel.insertCorrect(old(s.I()), old(IIO(io)), key, value, s.I(), succ, IIO(io));
+    var succ := CoordinationImpl.insert(inout fs, io, key, value);
+    CoordinationModel.insertCorrect(old_fs.I(), old(IIO(io)), key, value, fs.I(), succ, IIO(io));
     ghost var uiop := if succ then UI.PutOp(key, value) else UI.NoOp;
     if ValidDiskOp(io.diskOp()) {
-      BlockJournalCache.NextPreservesInv(SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+      BlockJournalCache.NextPreservesInv(SM.IVars(old_fs.I()), SM.IVars(fs.I()), uiop, IDiskOp(io.diskOp()));
     }
-    hs.Repr := s.Repr + {s};
     success := succ;
-    assert ADM.M.Next(old(I(hs)), I(hs), // observe
+    assert ADM.M.Next(I(old_fs), I(fs), // observe
         if success then UI.PutOp(key, value) else UI.NoOp,
         io.diskOp());
   }
 
-  method handleSucc(hs: HeapState, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
+  method handleSucc(linear inout fs: FullVariables, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
   returns (res: Option<UI.SuccResultList>)
   {
-    var s := hs.s;
-    var value := CoordinationImpl.succ(s, io, start, maxToFind);
-    CoordinationModel.succCorrect(old(s.I()), old(IIO(io)), start, maxToFind as int, s.I(), value, IIO(io));
+    var value := CoordinationImpl.succ(inout fs, io, start, maxToFind);
+    CoordinationModel.succCorrect(old_fs.I(), old(IIO(io)), start, maxToFind as int, fs.I(), value, IIO(io));
     ghost var uiop := 
       if value.Some? then UI.SuccOp(start, value.value.results, value.value.end) else UI.NoOp;
     if ValidDiskOp(io.diskOp()) {
-      BlockJournalCache.NextPreservesInv(SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+      BlockJournalCache.NextPreservesInv(SM.IVars(old_fs.I()), SM.IVars(fs.I()), uiop, IDiskOp(io.diskOp()));
     }
-    hs.Repr := s.Repr + {s};
     res := value;
-    assert ADM.M.Next(old(I(hs)), I(hs), // observe
+    assert ADM.M.Next(I(old_fs), I(fs), // observe
         uiop,
         io.diskOp());
   }
 
-  method handleReadResponse(hs: HeapState, io: DiskIOHandler)
+  method handleReadResponse(linear inout fs: FullVariables, io: DiskIOHandler)
   {
-    var s := hs.s;
-    HandleReadResponseImpl.readResponse(s, io);
-    HandleReadResponseModel.readResponseCorrect(old(s.I()), old(IIO(io)));
+    HandleReadResponseImpl.readResponse(inout fs, io);
+    HandleReadResponseModel.readResponseCorrect(old_fs.I(), old(IIO(io)));
     ghost var uiop := UI.NoOp;
     if ValidDiskOp(io.diskOp()) {
-      BlockJournalCache.NextPreservesInv(SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+      BlockJournalCache.NextPreservesInv(SM.IVars(old_fs.I()), SM.IVars(fs.I()), uiop, IDiskOp(io.diskOp()));
     }
-    hs.Repr := s.Repr + {s};
-    assert ADM.M.Next(old(I(hs)), I(hs), UI.NoOp, io.diskOp()); // observe
+    assert ADM.M.Next(I(old_fs), I(fs), UI.NoOp, io.diskOp()); // observe
   }
 
-  method handleWriteResponse(hs: HeapState, io: DiskIOHandler)
+  method handleWriteResponse(linear inout fs: FullVariables, io: DiskIOHandler)
   {
-    var s := hs.s;
-    HandleWriteResponseImpl.writeResponse(s, io);
-    HandleWriteResponseModel.writeResponseCorrect(old(s.I()), old(IIO(io)));
+    HandleWriteResponseImpl.writeResponse(inout fs, io);
+    HandleWriteResponseModel.writeResponseCorrect(old_fs.I(), old(IIO(io)));
     ghost var uiop := UI.NoOp;
     if ValidDiskOp(io.diskOp()) {
-      BlockJournalCache.NextPreservesInv(SM.IVars(old(s.I())), SM.IVars(s.I()), uiop, IDiskOp(io.diskOp()));
+      BlockJournalCache.NextPreservesInv(SM.IVars(old_fs.I()), SM.IVars(fs.I()), uiop, IDiskOp(io.diskOp()));
     }
-    hs.Repr := s.Repr + {s};
-    assert ADM.M.Next(old(I(hs)), I(hs), UI.NoOp, io.diskOp()); // observe
+    assert ADM.M.Next(I(old_fs), I(fs), UI.NoOp, io.diskOp()); // observe
   }
 
   predicate InitDiskContents(diskContents: map<uint64, seq<byte>>)
@@ -289,8 +268,7 @@ module MainHandlers refines Main {
     System_Ref.I(s)
   }
 
-  lemma SystemRefinesCrashSafeMapInit(
-    s: ADM.Variables)
+  lemma SystemRefinesCrashSafeMapInit(s: ADM.Variables)
   {
     System_Ref.RefinesInit(s);
   }

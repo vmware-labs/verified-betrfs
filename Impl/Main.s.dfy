@@ -31,117 +31,79 @@ abstract module Main {
 
   // impl defined stuff
 
-  type Variables // impl defined
+  type FullVariables // impl defined
 
-  class HeapState {
-    var s: Variables;
-    ghost var Repr: set<object>;
-    constructor(s_: Variables, ghost repr: set<object>)
-    ensures fresh(this)
-    ensures Repr == repr
-    ensures this.s == s_;
-    {
-      s := s_;
-      Repr := repr;
-    }
-  }
+  predicate Inv(fs: FullVariables)
 
-  function HeapSet(hs: HeapState) : set<object>
-    reads hs
+  function I(fs: FullVariables): ADM.M.Variables
+    requires Inv(fs)
 
-  predicate Inv(hs: HeapState)
-    reads hs, HeapSet(hs)
-  function I(hs: HeapState): ADM.M.Variables
-    requires Inv(hs)
-    reads hs, HeapSet(hs)
-
-  method InitState() returns (hs: HeapState)
-    ensures Inv(hs)
-    ensures ADM.M.Init(I(hs))
+  method InitState() returns (linear fs: FullVariables)
+    ensures Inv(fs)
+    ensures ADM.M.Init(I(fs))
 
   // Implementation of the state transitions
 
-  method handlePushSync(hs: HeapState, io: DiskIOHandler)
+  method handlePushSync(linear inout fs: FullVariables, io: DiskIOHandler)
   returns (id: uint64)
   requires io.initialized()
-  requires Inv(hs)
-  requires io !in HeapSet(hs)
-  modifies hs, HeapSet(hs)
+  requires Inv(old_fs)
   modifies io
-  ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
-  ensures Inv(hs)
-  ensures ADM.M.Next(old(I(hs)), I(hs),
+  ensures Inv(fs)
+  ensures ADM.M.Next(I(old_fs), I(fs),
       if id == 0 then UI.NoOp else UI.PushSyncOp(id as int),
       io.diskOp())
 
-  method handlePopSync(hs: HeapState, io: DiskIOHandler, id: uint64, graphSync: bool)
+  method handlePopSync(linear inout fs: FullVariables, io: DiskIOHandler, id: uint64, graphSync: bool)
   returns (wait: bool, success: bool)
   requires io.initialized()
-  requires Inv(hs)
-  requires io !in HeapSet(hs)
-  modifies hs, HeapSet(hs)
+  requires Inv(old_fs)
   modifies io
-  ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
-  ensures Inv(hs)
-  ensures ADM.M.Next(old(I(hs)), I(hs),
+  ensures Inv(fs)
+  ensures ADM.M.Next(I(old_fs), I(fs),
       if success then UI.PopSyncOp(id as int) else UI.NoOp,
       io.diskOp())
 
-  method handleReadResponse(hs: HeapState, io: DiskIOHandler)
+  method handleReadResponse(linear inout fs: FullVariables, io: DiskIOHandler)
   requires io.diskOp().RespReadOp?
-  requires Inv(hs)
-  requires io !in HeapSet(hs)
-  modifies hs, HeapSet(hs)
-  ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
-  ensures Inv(hs)
-  ensures ADM.M.Next(old(I(hs)), I(hs), UI.NoOp, io.diskOp())
+  requires Inv(old_fs)
+  ensures Inv(fs)
+  ensures ADM.M.Next(I(old_fs), I(fs), UI.NoOp, io.diskOp())
 
-  method handleWriteResponse(hs: HeapState, io: DiskIOHandler)
+  method handleWriteResponse(linear inout fs: FullVariables, io: DiskIOHandler)
   requires io.diskOp().RespWriteOp?
-  requires Inv(hs)
-  requires io !in HeapSet(hs)
-  modifies hs, HeapSet(hs)
-  ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
-  ensures Inv(hs)
-  ensures ADM.M.Next(old(I(hs)), I(hs), UI.NoOp, io.diskOp())
+  requires Inv(old_fs)
+  ensures Inv(fs)
+  ensures ADM.M.Next(I(old_fs), I(fs), UI.NoOp, io.diskOp())
 
-  method handleQuery(hs: HeapState, io: DiskIOHandler, key: Key)
+  method handleQuery(linear inout fs: FullVariables, io: DiskIOHandler, key: Key)
   returns (v: Option<Value>)
   requires io.initialized()
-  requires Inv(hs)
-  requires io !in HeapSet(hs)
-  modifies hs, HeapSet(hs)
+  requires Inv(old_fs)
   modifies io
-  ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
-  ensures Inv(hs)
-  ensures ADM.M.Next(old(I(hs)), I(hs),
+  ensures Inv(fs)
+  ensures ADM.M.Next(I(old_fs), I(fs),
     if v.Some? then UI.GetOp(key, v.value) else UI.NoOp,
     io.diskOp())
 
-  method handleInsert(hs: HeapState, io: DiskIOHandler, key: Key, value: Value)
+  method handleInsert(linear inout fs: FullVariables, io: DiskIOHandler, key: Key, value: Value)
   returns (success: bool)
   requires io.initialized()
-  requires Inv(hs)
-  requires io !in HeapSet(hs)
-  modifies hs, HeapSet(hs)
+  requires Inv(old_fs)
   modifies io
-  ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
-  ensures Inv(hs)
-  ensures ADM.M.Next(old(I(hs)), I(hs),
+  ensures Inv(fs)
+  ensures ADM.M.Next(I(old_fs), I(fs),
     if success then UI.PutOp(key, value) else UI.NoOp,
     io.diskOp())
 
-  method handleSucc(hs: HeapState, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
+  method handleSucc(linear inout fs: FullVariables, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
   returns (res: Option<UI.SuccResultList>)
   requires io.initialized()
-  requires Inv(hs)
+  requires Inv(old_fs)
   requires maxToFind >= 1
-  requires io !in HeapSet(hs)
-  modifies hs, HeapSet(hs)
   modifies io
-  ensures forall o | o in HeapSet(hs) :: o in old(HeapSet(hs)) || fresh(o)
-  ensures Inv(hs)
-  ensures ADM.M.Next(old(I(hs)), I(hs),
+  ensures Inv(fs)
+  ensures ADM.M.Next(I(old_fs), I(fs),
     if res.Some? then UI.SuccOp(start, res.value.results, res.value.end) else UI.NoOp,
     io.diskOp())
 
@@ -179,8 +141,7 @@ abstract module Main {
   function SystemI(s: ADM.Variables) : ThreeStateVersionedMap.Variables
   requires ADM.Inv(s)
 
-  lemma SystemRefinesCrashSafeMapInit(
-    s: ADM.Variables)
+  lemma SystemRefinesCrashSafeMapInit(s: ADM.Variables)
   requires ADM.Init(s)
   ensures ADM.Inv(s)
   ensures ThreeStateVersionedMap.Init(SystemI(s))

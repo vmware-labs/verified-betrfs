@@ -107,7 +107,7 @@ module StateBCModel {
   predicate WFVarsReady(s: BCVariables)
   requires s.Ready?
   {
-    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, persistentIndirectionTableLoc, frozenIndirectionTableLoc, outstandingIndirectionTableWrite, oustandingBlockWrites, outstandingBlockReads, cache, lru, locBitmap) := s;
+    var Ready(persistentIndirectionTable, frozenIndirectionTable, ephemeralIndirectionTable, persistentIndirectionTableLoc, frozenIndirectionTableLoc, outstandingIndirectionTableWrite, outstandingBlockWrites, _, cache, lru, locBitmap) := s;
     && WFCache(cache)
     && LruModel.WF(lru)
     && LruModel.I(lru) == cache.Keys

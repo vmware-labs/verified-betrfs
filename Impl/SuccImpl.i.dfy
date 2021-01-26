@@ -40,7 +40,7 @@ module SuccImpl {
   import opened BucketsLib
   import opened BoundedPivotsLib
 
-  method composeGenerator(cache: CacheImpl.MutCache, ref: BT.G.Reference, r: uint64, 
+  method composeGenerator(shared cache: CacheImpl.LMutCache, ref: BT.G.Reference, r: uint64, 
     linear g: lOption<BGI.Generator>, ghost acc: seq<Bucket>, ghost bucket: Bucket,
     start: UI.RangeStart)
   returns (linear g': BGI.Generator)
@@ -68,7 +68,7 @@ module SuccImpl {
   }
 
   method getPathInternal(
-      s: ImplVariables,
+      linear inout s: ImplVariables,
       io: DiskIOHandler,
       key: Key,
       ghost acc: seq<Bucket>,
@@ -81,29 +81,28 @@ module SuccImpl {
       pivots: PivotTable,
       children: Option<seq<BT.G.Reference>>)
   returns (res : Option<UI.SuccResultList>)
-  requires s.ready
-  requires Inv(s)
+  requires old_s.Ready?
+  requires old_s.Inv()
   requires io.initialized()
-  requires s.cache.ptr(ref).Some?
-  requires SSM.WFNode(s.cache.I()[ref])
-  requires pivots == s.cache.I()[ref].pivotTable
-  requires children == s.cache.I()[ref].children
+  requires old_s.cache.ptr(ref).Some?
+  requires SSM.WFNode(old_s.cache.I()[ref])
+  requires pivots == old_s.cache.I()[ref].pivotTable
+  requires children == old_s.cache.I()[ref].children
   requires BoundedKey(pivots, key)
-  requires ref in s.I().ephemeralIndirectionTable.graph
+  requires ref in old_s.I().ephemeralIndirectionTable.graph
   requires maxToFind >= 1
   requires |acc| + counter as int < 0x1_0000_0000_0000_0000 - 1
   requires forall i | 0 <= i < |acc| :: WFBucket(acc[i])
   requires g.lSome? <==> |acc| >= 1
   requires g.lSome? ==> g.value.Inv() && g.value.I()
     == BGM.GenFromBucketStackWithLowerBound(acc, start)
-  requires io !in s.Repr()
-  modifies s.Repr()
   modifies io
   decreases counter, 0
-  ensures WellUpdated(s)
-  ensures s.cache.I() == old(s.cache.I())
+  ensures s.W()
+  ensures s.Ready?
+  ensures s.cache.I() == old_s.cache.I()
   ensures (s.I(), IIO(io), res)
-       == SuccModel.getPathInternal(old(s.I()), old(IIO(io)), key, old(acc),
+       == SuccModel.getPathInternal(old_s.I(), old(IIO(io)), key, old(acc),
       start, upTo, maxToFind as int, ref, counter, s.cache.I()[ref])
   {
     SuccModel.reveal_getPathInternal();
@@ -138,16 +137,16 @@ module SuccImpl {
         }
 
         assert (s.I(), IIO(io), res)
-         == SuccModel.getPathInternal(old(s.I()), old(IIO(io)), key, old(acc),
+         == SuccModel.getPathInternal(old_s.I(), old(IIO(io)), key, old(acc),
           start, upTo, maxToFind as int, ref, counter, node);
       } else {
         BookkeepingModel.lemmaChildInGraph(s.I(), ref, children.value[r]);
         linear var g' := composeGenerator(s.cache, ref, r, g, acc, bucket, start);
-        res := getPath(s, io, key, acc', lSome(g'), start, upTo', maxToFind,
+        res := getPath(inout s, io, key, acc', lSome(g'), start, upTo', maxToFind,
           children.value[r], counter - 1);
         
         assert (s.I(), IIO(io), res)
-         == SuccModel.getPathInternal(old(s.I()), old(IIO(io)), key, old(acc),
+         == SuccModel.getPathInternal(old_s.I(), old(IIO(io)), key, old(acc),
           start, upTo, maxToFind as int, ref, counter, node);
       }
     } else {
@@ -157,13 +156,13 @@ module SuccImpl {
       res := Some(res0);
 
       assert (s.I(), IIO(io), res)
-       == SuccModel.getPathInternal(old(s.I()), old(IIO(io)), key,
+       == SuccModel.getPathInternal(old_s.I(), old(IIO(io)), key,
         old(acc), start, upTo, maxToFind as int, ref, counter, node);
     }
   }
 
   method getPath(
-      s: ImplVariables,
+      linear inout s: ImplVariables,
       io: DiskIOHandler,
       key: Key,
       ghost acc: seq<Bucket>,
@@ -174,23 +173,21 @@ module SuccImpl {
       ref: BT.G.Reference,
       counter: uint64)
   returns (res : Option<UI.SuccResultList>)
-  requires Inv(s)
-  requires s.ready
+  requires old_s.Inv()
+  requires old_s.Ready?
   requires io.initialized()
   requires maxToFind >= 1
-  requires ref in s.I().ephemeralIndirectionTable.graph
+  requires ref in old_s.I().ephemeralIndirectionTable.graph
   requires forall i | 0 <= i < |acc| :: WFBucket(acc[i])
-  requires io !in s.Repr()
   requires |acc| + counter as int < 0x1_0000_0000_0000_0000 - 1
   requires g.lSome? <==> |acc| >= 1
   requires g.lSome? ==> g.value.Inv() && g.value.I()
     == BGM.GenFromBucketStackWithLowerBound(acc, start)
-  modifies s.Repr()
   modifies io
   decreases counter, 1
-  ensures WellUpdated(s)
+  ensures s.W()
   ensures (s.I(), IIO(io), res)
-       == SuccModel.getPath(old(s.I()), old(IIO(io)), key, old(acc), start,
+       == SuccModel.getPath(old_s.I(), old(IIO(io)), key, old(acc), start,
         upTo, maxToFind as int, ref, counter)
   {
     SuccModel.reveal_getPath();
@@ -200,10 +197,10 @@ module SuccImpl {
       var pivots, children := s.cache.GetNodeInfo(ref);
       var boundedkey := ComputeBoundedKey(pivots, key);
       if boundedkey {
-        res := getPathInternal(s, io, key, acc, g, start, upTo,
+        res := getPathInternal(inout s, io, key, acc, g, start, upTo,
           maxToFind, ref, counter, pivots, children);
         LruModel.LruUse(s.I().lru, ref);
-        s.lru.Use(ref);
+        inout s.lru.Use(ref);
       } else {
         linear match g {
           case lSome(g1) =>
@@ -221,8 +218,8 @@ module SuccImpl {
       }
       // TODO factor this out into something that checks (and if it's full, actually
       // does something).
-      if s.cache.Count() + |s.outstandingBlockReads| as uint64 <= MaxCacheSizeUint64() - 1 {
-        PageInNodeReq(s, io, ref);
+      if CacheImpl.CacheCount(s.cache) + |s.outstandingBlockReads| as uint64 <= MaxCacheSizeUint64() - 1 {
+        PageInNodeReq(inout s, io, ref);
       } else {
         print "getPath: Can't page in anything because cache is full\n";
       }
@@ -230,21 +227,19 @@ module SuccImpl {
     }
   }
 
-  method doSucc(s: ImplVariables, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
+  method doSucc(linear inout s: ImplVariables, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
   returns (res : Option<UI.SuccResultList>)
-  requires Inv(s)
+  requires old_s.Inv()
   requires io.initialized()
-  requires io !in s.Repr()
   requires maxToFind >= 1
-  requires s.ready
+  requires old_s.Ready?
   modifies io
-  modifies s.Repr()
-  ensures WellUpdated(s)
-  ensures (s.I(), IIO(io), res) == SuccModel.doSucc(old(s.I()), old(IIO(io)),
+  ensures s.W()
+  ensures (s.I(), IIO(io), res) == SuccModel.doSucc(old_s.I(), old(IIO(io)),
     start, maxToFind as int)
   {
     SuccModel.reveal_doSucc();
     var startKey := if start.NegativeInf? then [] else start.key;
-    res := getPath(s, io, startKey, [], lNone, start, None, maxToFind, BT.G.Root(), 40);
+    res := getPath(inout s, io, startKey, [], lNone, start, None, maxToFind, BT.G.Root(), 40);
   }
 }

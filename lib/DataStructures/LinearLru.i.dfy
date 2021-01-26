@@ -46,11 +46,14 @@ module LinearLru
 
     static method Alloc() returns (linear lru:LinearLru)
       ensures lru.Inv()
+      ensures lru.Queue() == LruModel.Empty()
     {
       var size := 128;
       linear var dlist := DList.DList<uint64>.Alloc(size + 1);
       linear var ptr_map := LinearMutableMap.Constructor(size);
       lru := LinearLru(dlist, ptr_map);
+      assert lru.dlist.Seq() == [];
+      assert lru.Queue() == LruModel.Empty();
     }
 
     linear method Free()

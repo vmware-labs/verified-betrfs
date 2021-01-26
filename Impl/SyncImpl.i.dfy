@@ -23,6 +23,7 @@ module SyncImpl {
   import opened MainDiskIOHandler
 
   import opened Options
+  import opened LinearOption
   import opened Maps
   import opened Sequences
   import opened Sets
@@ -33,114 +34,138 @@ module SyncImpl {
   import opened StateSectorImpl
   import SBCM = StateBCModel
   import SSM = StateSectorModel
+  import opened DiskOpModel
+  import IOModel
 
-  method AssignRefToLocEphemeral(s: ImplVariables, ref: BT.G.Reference, loc: Location)
-  requires s.W()
-  requires s.ready
-  requires BlockAllocatorModel.Inv(s.blockAllocator.I())
+  method AssignRefToLocEphemeral(linear inout s: ImplVariables, ref: BT.G.Reference, loc: Location)
+  requires old_s.W()
+  requires old_s.Ready?
+  requires BlockAllocatorModel.Inv(old_s.blockAllocator.I())
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
-  modifies s.Repr()
+
   ensures s.W()
-  ensures WellUpdated(s)
-  ensures s.I() == SyncModel.AssignRefToLocEphemeral(old(s.I()), ref, loc)
-  ensures s.ready
+  ensures s.I() == SyncModel.AssignRefToLocEphemeral(old_s.I(), ref, loc)
+  ensures s.Ready?
   {
     SyncModel.reveal_AssignRefToLocEphemeral();
 
-    var table := s.ephemeralIndirectionTable;
-    var added := table.AddLocIfPresent(ref, loc);
+    var added := inout s.ephemeralIndirectionTable.AddLocIfPresent(ref, loc);
     if added {
-      s.blockAllocator.MarkUsedEphemeral(loc.addr / NodeBlockSizeUint64());
+      inout s.blockAllocator.MarkUsedEphemeral(loc.addr / NodeBlockSizeUint64());
     }
   }
 
-  method AssignRefToLocFrozen(s: ImplVariables, ref: BT.G.Reference, loc: Location)
-  requires s.W()
-  requires s.ready
-  requires s.I().frozenIndirectionTable.Some? ==> s.I().blockAllocator.frozen.Some?
-  requires BlockAllocatorModel.Inv(s.blockAllocator.I())
+  method AssignRefToLocFrozen(linear inout s: ImplVariables, ref: BT.G.Reference, loc: Location)
+  requires old_s.W()
+  requires old_s.Ready?
+  requires old_s.I().frozenIndirectionTable.Some? ==> old_s.I().blockAllocator.frozen.Some?
+  requires BlockAllocatorModel.Inv(old_s.blockAllocator.I())
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
-  modifies s.Repr()
+
   ensures s.W()
-  ensures WellUpdated(s)
-  ensures s.I() == SyncModel.AssignRefToLocFrozen(old(s.I()), ref, loc)
-  ensures s.ready
+  ensures s.I() == SyncModel.AssignRefToLocFrozen(old_s.I(), ref, loc)
+  ensures s.Ready?
   {
     SyncModel.reveal_AssignRefToLocFrozen();
 
-    if s.frozenIndirectionTable != null {
-      var table := s.frozenIndirectionTable;
-      var added := table.AddLocIfPresent(ref, loc);
+    if s.frozenIndirectionTable.lSome? {
+      var added := inout s.frozenIndirectionTable.value.AddLocIfPresent(ref, loc);
       if added {
-        s.blockAllocator.MarkUsedFrozen(loc.addr / NodeBlockSizeUint64());
+        inout s.blockAllocator.MarkUsedFrozen(loc.addr / NodeBlockSizeUint64());
       }
     }
   }
 
-  method AssignIdRefLocOutstanding(s: ImplVariables, id: D.ReqId, ref: BT.G.Reference, loc: Location)
-  requires s.W()
-  requires s.ready
-  requires BlockAllocatorModel.Inv(s.I().blockAllocator)
+  method AssignIdRefLocOutstanding(linear inout s: ImplVariables, id: D.ReqId, ref: BT.G.Reference, loc: Location)
+  requires old_s.W()
+  requires old_s.Ready?
+  requires BlockAllocatorModel.Inv(old_s.I().blockAllocator)
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
-  modifies s.Repr()
   ensures s.W()
-  ensures WellUpdated(s)
-  ensures s.I() == SyncModel.AssignIdRefLocOutstanding(old(s.I()), id, ref, loc)
-  ensures s.ready
+  ensures s.I() == SyncModel.AssignIdRefLocOutstanding(old_s.I(), id, ref, loc)
+  ensures s.Ready?
   {
     SyncModel.reveal_AssignIdRefLocOutstanding();
 
-    if id in s.outstandingBlockWrites && s.outstandingBlockWrites[id].loc.addr / NodeBlockSizeUint64() < NumBlocksUint64() {
-      s.blockAllocator.MarkFreeOutstanding(s.outstandingBlockWrites[id].loc.addr / NodeBlockSizeUint64());
+    if id in s.outstandingBlockWrites {
+      var numBlocks := s.outstandingBlockWrites[id].loc.addr / NodeBlockSizeUint64();
+      if numBlocks < NumBlocksUint64() {
+        inout s.blockAllocator.MarkFreeOutstanding(numBlocks);
+      }
     }
-    s.outstandingBlockWrites := s.outstandingBlockWrites[id := BC.OutstandingWrite(ref, loc)];
-    s.blockAllocator.MarkUsedOutstanding(loc.addr / NodeBlockSizeUint64());
+    inout s.outstandingBlockWrites := s.outstandingBlockWrites[id := BC.OutstandingWrite(ref, loc)];
+    inout s.blockAllocator.MarkUsedOutstanding(loc.addr / NodeBlockSizeUint64());
   }
 
   method {:fuel BC.GraphClosed,0} {:fuel BC.CacheConsistentWithSuccessors,0}
-  maybeFreeze(s: ImplVariables, io: DiskIOHandler)
+  maybeFreeze(linear inout s: ImplVariables, io: DiskIOHandler)
   returns (froze: bool)
   requires io.initialized()
+  requires old_s.Inv()
+  requires old_s.Ready?
+  requires old_s.outstandingIndirectionTableWrite.None?
+  requires old_s.frozenIndirectionTable.lNone?
+
   modifies io
-  requires Inv(s)
-  requires s.ready
-  requires s.outstandingIndirectionTableWrite.None?
-  requires s.frozenIndirectionTable == null
-  requires io !in s.Repr()
-  modifies s.Repr()
-  ensures WellUpdated(s)
+
+  ensures s.W()
   ensures (s.I(), IIO(io), froze) == SyncModel.maybeFreeze(
-      old(s.I()), old(IIO(io)))
+      old_s.I(), old(IIO(io)))
   {
     var foundDeallocable := FindDeallocable(s);
     DeallocModel.FindDeallocableCorrect(s.I());
     if foundDeallocable.Some? {
-      Dealloc(s, io, foundDeallocable.value);
-      return false;
+      Dealloc(inout s, io, foundDeallocable.value);
+      froze := false;
+    } else {
+      // [yizhou7]: is there a better way to perfrom this kind of assignment?
+      linear var Ready(
+        persistentIndirectionTable,
+        frozenIndirectionTable,
+        ephemeralIndirectionTable,
+        persistentIndirectionTableLoc,
+        frozenIndirectionTableLoc,
+        outstandingIndirectionTableWrite,
+        outstandingBlockWrites,
+        outstandingBlockReads,
+        cache,
+        lru,
+        blockAllocator) := s;
+
+      linear var clonedEphemeralIndirectionTable := ephemeralIndirectionTable.Clone();
+      dispose_lnone(frozenIndirectionTable);
+      frozenIndirectionTable := lSome(clonedEphemeralIndirectionTable);
+
+      s := Ready(
+        persistentIndirectionTable,
+        frozenIndirectionTable,
+        ephemeralIndirectionTable,
+        persistentIndirectionTableLoc,
+        frozenIndirectionTableLoc,
+        outstandingIndirectionTableWrite,
+        outstandingBlockWrites,
+        outstandingBlockReads,
+        cache,
+        lru,
+        blockAllocator);
+
+      inout s.blockAllocator.CopyEphemeralToFrozen();
+      froze := true;
     }
-
-    var clonedEphemeralIndirectionTable := s.ephemeralIndirectionTable.Clone();
-
-    s.frozenIndirectionTable := clonedEphemeralIndirectionTable;
-    s.blockAllocator.CopyEphemeralToFrozen();
-
-    return true;
   }
 
-  method TryToWriteBlock(s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
-  requires s.ready
-  requires Inv(s)
+  method TryToWriteBlock(linear inout s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
+  requires old_s.Ready?
+  requires old_s.Inv()
   requires io.initialized()
-  requires ref in s.cache.I()
-  requires io !in s.Repr()
-  modifies s.Repr()
+  requires ref in old_s.cache.I()
   modifies io
-  ensures WellUpdated(s)
-  ensures s.ready
-  ensures SyncModel.TryToWriteBlock(old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
+  ensures s.W()
+  ensures s.Ready?
+  ensures SyncModel.TryToWriteBlock(old_s.I(), old(IIO(io)), ref, s.I(), IIO(io))
   {
     linear var placeholder := Node.EmptyNode();
-    linear var node := s.cache.ReplaceAndGet(ref, placeholder);
+    linear var node := inout s.cache.ReplaceAndGet(ref, placeholder);
     linear var sector := SectorNode(node);
   
     assert |s.cache.I()| <= 0x10000;
@@ -150,67 +175,62 @@ module SyncImpl {
     ghost var s' := s.I();
 
     linear var SectorNode(n) := sector;
-    linear var replaced:= s.cache.ReplaceAndGet(ref, n);
+    linear var replaced:= inout s.cache.ReplaceAndGet(ref, n);
     var _ := FreeNode(replaced);
 
     assert IOModel.SimilarVariables(s', s.I());
-    IOModel.SimilarVariablesGuarantees(old(IIO(io)), s', old(s.I()),
-      old(SSM.SectorNode(s.cache.I()[ref])), id, loc, IIO(io));
-    assert s.cache.I() == old(s.cache.I());
+    IOModel.SimilarVariablesGuarantees(old(IIO(io)), s', old_s.I(),
+      SSM.SectorNode(old_s.cache.I()[ref]), id, loc, IIO(io));
+    assert s.cache.I() == old_s.cache.I();
 
     if (id.Some?) {
       SBCM.reveal_ConsistentBitmap();
 
-      AssignRefToLocEphemeral(s, ref, loc.value);
-      AssignRefToLocFrozen(s, ref, loc.value);
-      AssignIdRefLocOutstanding(s, id.value, ref, loc.value);
+      AssignRefToLocEphemeral(inout s, ref, loc.value);
+      AssignRefToLocFrozen(inout s, ref, loc.value);
+      AssignIdRefLocOutstanding(inout s, id.value, ref, loc.value);
     } else {
       print "sync: giving up; write req failed\n";
     }
   
-    assert IOModel.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()),
-      old(SSM.SectorNode(s.cache.I()[ref])), id, loc, IIO(io));
-    assert SyncModel.WriteBlockUpdateState(old(s.I()), ref, id, loc, s.I());
+    assert IOModel.FindLocationAndRequestWrite(old(IIO(io)), old_s.I(),
+      SSM.SectorNode(old_s.cache.I()[ref]), id, loc, IIO(io));
+    assert SyncModel.WriteBlockUpdateState(old_s.I(), ref, id, loc, s.I());
   }
 
   // TODO fix the name of this method
-  method {:fuel BC.GraphClosed,0} syncFoundInFrozen(s: ImplVariables, io: DiskIOHandler, ref: Reference)
+  method {:fuel BC.GraphClosed,0} syncFoundInFrozen(linear inout s: ImplVariables, io: DiskIOHandler, ref: Reference)
   requires io.initialized()
-  requires Inv(s)
-  requires s.ready
-  requires s.outstandingIndirectionTableWrite.None?
-  requires s.frozenIndirectionTable != null
-  requires ref in s.frozenIndirectionTable.I().graph
-  requires ref !in s.frozenIndirectionTable.I().locs
-  requires io !in s.Repr()
+  requires old_s.Inv()
+  requires old_s.Ready?
+  requires old_s.outstandingIndirectionTableWrite.None?
+  requires old_s.frozenIndirectionTable.lSome?
+  requires ref in old_s.frozenIndirectionTable.value.I().graph
+  requires ref !in old_s.frozenIndirectionTable.value.I().locs
   modifies io
-  modifies s.Repr()
-  ensures WellUpdated(s)
-  ensures SyncModel.syncFoundInFrozen(old(s.I()), old(IIO(io)), ref, s.I(), IIO(io))
+  ensures s.W()
+  ensures SyncModel.syncFoundInFrozen(old_s.I(), old(IIO(io)), ref, s.I(), IIO(io))
   {
-    assert ref in s.frozenIndirectionTable.I().graph;
-    assert ref !in s.frozenIndirectionTable.I().locs;
+    assert ref in s.frozenIndirectionTable.value.I().graph;
+    assert ref !in s.frozenIndirectionTable.value.I().locs;
 
     var ephemeralRef := s.ephemeralIndirectionTable.GetEntry(ref);
     if ephemeralRef.Some? && ephemeralRef.value.loc.Some? {
       // TODO we should be able to prove this is impossible as well
       print "sync: giving up; ref already in ephemeralIndirectionTable.locs but not frozen";
-      return;
+    } else {
+      TryToWriteBlock(inout s, io, ref);
     }
-
-    TryToWriteBlock(s, io, ref);
   }
 
-  method {:fuel BC.GraphClosed,0} sync(s: ImplVariables, io: DiskIOHandler)
+  method {:fuel BC.GraphClosed,0} sync(linear inout s: ImplVariables, io: DiskIOHandler)
   returns (froze: bool, wait: bool)
-  requires Inv(s)
+  requires old_s.Inv()
   requires io.initialized()
-  requires io !in s.Repr()
-  requires s.ready
+  requires old_s.Ready?
   modifies io
-  modifies s.Repr()
-  ensures WellUpdated(s)
-  ensures SyncModel.sync(old(s.I()), old(IIO(io)), s.I(), IIO(io), froze)
+  ensures s.W()
+  ensures SyncModel.sync(old_s.I(), old(IIO(io)), s.I(), IIO(io), froze)
   {
     SyncModel.reveal_sync();
     wait := false;
@@ -219,36 +239,31 @@ module SyncImpl {
     if s.frozenIndirectionTableLoc.Some? {
       //print "sync: waiting; frozen table is currently being written\n";
       wait := true;
-      return;
-    }
-
-    if (s.frozenIndirectionTable == null) {
-      froze := maybeFreeze(s, io);
-      return;
-    }
-    var foundInFrozen := s.frozenIndirectionTable.FindRefWithNoLoc();
-
-    assert Inv(s) by { SBCM.reveal_ConsistentBitmap(); }
-
-    if foundInFrozen.Some? {
-      syncFoundInFrozen(s, io, foundInFrozen.value);
-      return;
-    } else if (s.outstandingBlockWrites != map[]) {
-      //print "sync: waiting; blocks are still being written\n";
-      wait := true;
-      return;
+    } else if s.frozenIndirectionTable.lNone? {
+      froze := maybeFreeze(inout s, io);
     } else {
-      var id, loc := FindIndirectionTableLocationAndRequestWrite(
-          io, s, SectorIndirectionTable(s.frozenIndirectionTable));
-    
-      if (id.Some?) {
-        s.outstandingIndirectionTableWrite := id;
-        s.frozenIndirectionTableLoc := loc;
+      var foundInFrozen := inout s.frozenIndirectionTable.value.FindRefWithNoLoc();
+      ghost var s0 := s;
 
-        return;
+      assert s0.Inv() by { SBCM.reveal_ConsistentBitmap(); }
+
+      if foundInFrozen.Some? {
+        syncFoundInFrozen(inout s, io, foundInFrozen.value);
+      } else if (s.outstandingBlockWrites != map[]) {
+        //print "sync: waiting; blocks are still being written\n";
+        wait := true;
       } else {
-        print "sync: giving up; write back indirection table failed (no id)\n";
-        return;
+        var id, loc := FindIndirectionTableLocationAndRequestWrite(
+            io, s, SectorIndirectionTable(s.frozenIndirectionTable.value));
+
+        if id.Some? {
+          // assume IOModel.FindIndirectionTableLocationAndRequestWrite(
+          //   IIO(old(io)), s0.I(), SSM.SectorIndirectionTable(s0.I().frozenIndirectionTable.value), id, loc, IIO(io));
+          inout s.outstandingIndirectionTableWrite := id;
+          inout s.frozenIndirectionTableLoc := loc;
+        } else {
+          print "sync: giving up; write back indirection table failed (no id)\n";
+        }
       }
     }
   }

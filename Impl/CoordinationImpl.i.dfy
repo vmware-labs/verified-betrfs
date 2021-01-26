@@ -34,81 +34,65 @@ module CoordinationImpl {
   import opened MainDiskIOHandler
   import opened LinearMutableMap
 
-  method pushSync(s: Full)
+  method pushSync(linear inout s: Full)
   returns (id: uint64)
-  requires s.Inv()
-  modifies s.Repr
+  requires old_s.Inv()
   ensures s.W()
-  ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
-  ensures (s.I(), id) == CoordinationModel.pushSync(old(s.I()))
+  ensures (s.I(), id) == CoordinationModel.pushSync(old_s.I())
   {
-    s.reveal_ReprInv();
     CoordinationModel.reveal_pushSync();
 
-    linear var jc := s.jc.Take();
-    id := inout jc.pushSync();
-    s.jc.Give(jc);
-
-    s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
-    s.reveal_ReprInv();
+    id := inout s.jc.pushSync();
   }
 
-  method receiveLoc(s: Variables, loc: DiskLayout.Location)
-  requires s.WF()
-  modifies s.Repr()
-  ensures WellUpdated(s)
-  ensures s.I() == CoordinationModel.receiveLoc(old(s.I()), loc)
+  method receiveLoc(linear inout s: Variables, loc: DiskLayout.Location)
+  requires old_s.WF()
+  requires old_s.Unready?
+  ensures s.W()
+  ensures s.I() == CoordinationModel.receiveLoc(old_s.I(), loc)
   {
     CoordinationModel.reveal_receiveLoc();
-
-    s.loading := true;
-    s.ready := false;
-    s.indirectionTableLoc := loc;
-    s.indirectionTableRead := None;
+    linear var Unready() := s;
+    s := Variables.Loading(loc, None);
   }
 
   // [yizhou7][FIXME]: this takes long to verify
-  method initialization(s: Full, io: DiskIOHandler)
-  requires s.Inv()
+  method initialization(linear inout s: Full, io: DiskIOHandler)
+  requires old_s.Inv()
   requires io.initialized()
-  requires io !in s.Repr
-  modifies s.Repr
   modifies io
   ensures s.W()
-  ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
-  ensures CoordinationModel.initialization(old(s.I()), old(IIO(io)), s.I(), IIO(io))
+  ensures CoordinationModel.initialization(old_s.I(), old(IIO(io)), s.I(), IIO(io))
   {
     CoordinationModel.reveal_initialization();
-    s.reveal_ReprInv();
 
-    linear var jc := s.jc.Take();
-
-    if jc.status.StatusLoadingSuperblock? {
-      if jc.superblock1.SuperblockSuccess?
-          && jc.superblock2.SuperblockSuccess? {
-        inout jc.finishLoadingSuperblockPhase();
-        receiveLoc(s.bc, jc.superblock.indirectionTableLoc);
-      } else if jc.superblock1Read.None?
-          && jc.superblock1.SuperblockUnfinished? {
-        inout jc.pageInSuperblockReq(io, 0);
-      } else if jc.superblock2Read.None?
-          && jc.superblock2.SuperblockUnfinished? {
-        inout jc.pageInSuperblockReq(io, 1);
+    if s.jc.status.StatusLoadingSuperblock? {
+      if s.jc.superblock1.SuperblockSuccess?
+          && s.jc.superblock2.SuperblockSuccess? {
+        inout s.jc.finishLoadingSuperblockPhase();
+        var loc := s.jc.superblock.indirectionTableLoc;
+        receiveLoc(inout s.bc, loc);
+      } else if s.jc.superblock1Read.None?
+          && s.jc.superblock1.SuperblockUnfinished? {
+        inout s.jc.pageInSuperblockReq(io, 0);
+      } else if s.jc.superblock2Read.None?
+          && s.jc.superblock2.SuperblockUnfinished? {
+        inout s.jc.pageInSuperblockReq(io, 1);
       } else {
         print "initialization: doing nothing, superblock reads out\n";
       }
-    } else if jc.status.StatusLoadingOther? {
-      inout jc.tryFinishLoadingOtherPhase(io);
-    } else if s.bc.loading && !s.bc.ready
+    } else if s.jc.status.StatusLoadingOther? {
+      inout s.jc.tryFinishLoadingOtherPhase(io);
+    } else if s.bc.Loading?
         && s.bc.indirectionTableRead.None? {
-      IOImpl.PageInIndirectionTableReq(s.bc, io);
-    } else if s.bc.ready {
-      var isEmpty := jc.isReplayEmpty();
+      IOImpl.PageInIndirectionTableReq(inout s.bc, io);
+    } else if s.bc.Ready? {
+      var isEmpty := s.jc.isReplayEmpty();
       if !isEmpty {
-        var je := jc.journalist.replayJournalTop();
-        var success := InsertImpl.insert(s.bc, io, je.key, je.value);
+        var je := s.jc.journalist.replayJournalTop();
+        var success := InsertImpl.insert(inout s.bc, io, je.key, je.value);
         if success {
-          inout jc.journalReplayOne(je);
+          inout s.jc.journalReplayOne(je);
         }
       } else {
         print "initialization: doing nothing, no replay journal\n";
@@ -117,239 +101,193 @@ module CoordinationImpl {
       print "initialization: doing nothing\n";
     }
 
-    s.jc.Give(jc);
-    s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
-    s.reveal_ReprInv();
-    assert s.ProtectedReprInv();
   }
 
   method doSync(
-      s: Full, io: DiskIOHandler, graphSync: bool)
+      linear inout s: Full, io: DiskIOHandler, graphSync: bool)
   returns (wait: bool)
-  requires s.Inv()
+  requires old_s.Inv()
   requires io.initialized()
-  requires io !in s.Repr
-  requires s.bc.ready
-  requires s.jc.Inv() // [yizhou7][NOTE]: this is implied by s.Inv(), but opaqued
-  requires s.jc.Read().status.StatusReady?
+  requires old_s.bc.Ready?
+  requires old_s.jc.Inv() // [yizhou7][NOTE]: this is implied by s.Inv(), but opaqued
+  requires old_s.jc.status.StatusReady?
 
   // [yizhou7] this additional precondition is added
-  requires s.jc.Read().journalist.I().replayJournal == []
+  requires old_s.jc.journalist.I().replayJournal == []
 
-  modifies s.Repr
   modifies io
   ensures s.W()
-  ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
   ensures CoordinationModel.doSync(
-      old(s.I()), old(IIO(io)), graphSync, s.I(), IIO(io))
+      old_s.I(), old(IIO(io)), graphSync, s.I(), IIO(io))
   {
-    s.reveal_ReprInv();
 
-    linear var jc := s.jc.Take();
     wait := false;
 
-    if jc.isFrozen {
-      if jc.frozenLoc.Some? {
-        wait := inout jc.tryAdvanceLocation(io);
+    if s.jc.isFrozen {
+      if s.jc.frozenLoc.Some? {
+        wait := inout s.jc.tryAdvanceLocation(io);
       } else {
-        var froze, wait0 := SyncImpl.sync(s.bc, io);
+        var froze, wait0 := SyncImpl.sync(inout s.bc, io);
         wait := wait0;
       }
-    } else if jc.superblockWrite.Some? {
+    } else if s.jc.superblockWrite.Some? {
       wait := true;
     } else {
       if graphSync {
-        var froze, wait0 := SyncImpl.sync(s.bc, io);
+        var froze, wait0 := SyncImpl.sync(inout s.bc, io);
         wait := wait0;
         if froze {
-          inout jc.freeze();
+          inout s.jc.freeze();
         }
       } else {
-        wait := inout jc.tryAdvanceLog(io);
+        wait := inout s.jc.tryAdvanceLog(io);
       }
     }
 
-    s.jc.Give(jc);
-    s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
-    s.reveal_ReprInv();
   }
 
-  method getCommitterSyncState(s: Full, id: uint64) returns (res: Option<JC.SyncReqStatus>)
-  requires s.WF()
-  {
-    s.reveal_ReprInv();
-    res := LinearMutableMap.Get(s.jc.Borrow().syncReqs, id);
-  }
-
-  function method isCommitterStatusReady(s: Full) : bool
-  requires s.WF()
-  reads s.Repr
-  {
-    s.reveal_ReprInv();
-    s.jc.Borrow().status.StatusReady?
-  }
-
-  function method isInitialized(s: Full) : (b: bool)
+  method getCommitterSyncState(shared s: Full, id: uint64) returns (res: Option<JC.SyncReqStatus>)
   requires s.Inv()
-  reads s.Repr
+  ensures var contents := s.jc.syncReqs.contents;
+    && (if id in contents then res == Some(contents[id]) else res.None?)
+    && (res.Some? <==> id in s.jc.syncReqs.contents)
+  {
+    res := LinearMutableMap.Get(s.jc.syncReqs, id);
+  }
+
+  function method isCommitterStatusReady(shared s: Full) : bool
+  requires s.WF()
+  {
+    s.jc.status.StatusReady?
+  }
+
+  function method isInitialized(shared s: Full) : (b: bool)
+  requires s.Inv()
   ensures b == CoordinationModel.isInitialized(s.I())
   {
-    s.reveal_ReprInv();
     if (
-      && s.bc.ready
+      && s.bc.Ready?
       && isCommitterStatusReady(s)
     ) then
-      s.jc.Borrow().isReplayEmpty()
+      s.jc.isReplayEmpty()
     else
       false
   }
 
   method popSync(
-      s: Full, io: DiskIOHandler, id: uint64, graphSync: bool)
+      linear inout s: Full, io: DiskIOHandler, id: uint64, graphSync: bool)
   returns (success: bool, wait: bool)
-  requires s.Inv()
+  requires old_s.Inv()
   requires io.initialized()
-  requires s.Inv()
-  requires io.initialized()
-  requires io !in s.Repr
-  modifies s.Repr
+  // requires old_s.Inv()
+  // requires io.initialized()
   modifies io
   ensures s.W()
-  ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
   ensures CoordinationModel.popSync(
-      old(s.I()), old(IIO(io)), id, graphSync,
+      old_s.I(), old(IIO(io)), id, graphSync,
       s.I(), IIO(io), success)
   {
     CoordinationModel.reveal_popSync();
-    s.reveal_ReprInv();
 
     wait := false;
 
     var committerSyncState := getCommitterSyncState(s, id);
+    assert committerSyncState.Some? <==> id in s.jc.syncReqs.contents;
+
     if committerSyncState == Some(JC.State1) {
-      linear var jc := s.jc.Take();
-      inout jc.popSync(id);
+      inout s.jc.popSync(id);
       success := true;
-      s.jc.Give(jc);
-      s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
-      s.reveal_ReprInv();
-      assert s.ProtectedReprInv();
     } else {
       var isInit := isInitialized(s);
       if !isInit {
-        initialization(s, io);
+        initialization(inout s, io);
         success := false;
       } else {
-        wait := doSync(s, io, graphSync);
+        wait := doSync(inout s, io, graphSync);
         success := false;
       }
     }
   }
 
-  method query(s: Full, io: DiskIOHandler, key: Key)
+  method query(linear inout s: Full, io: DiskIOHandler, key: Key)
   returns (result: Option<Value>) 
-  requires s.Inv() 
+  requires old_s.Inv() 
   requires io.initialized()
-  requires io !in s.Repr
-  modifies s.Repr
   modifies io
   ensures s.W()
-  ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
   ensures CoordinationModel.query(
-      old(s.I()), old(IIO(io)), key,
+      old_s.I(), old(IIO(io)), key,
       s.I(), result, IIO(io))
   {
     CoordinationModel.reveal_query();
-    s.reveal_ReprInv();
 
     var is_init := isInitialized(s);
     if !is_init {
-      initialization(s, io);
+      initialization(inout s, io);
       result := None;
     } else {
-      result := QueryImpl.query(s.bc, io, key);
+      result := QueryImpl.query(inout s.bc, io, key);
 
-      s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
-      s.reveal_ReprInv();
-      assert s.ProtectedReprInv();
     }
   }
 
   method succ(
-      s: Full, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
+      linear inout s: Full, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
   returns (result: Option<UI.SuccResultList>)
   requires maxToFind >= 1
-  requires s.Inv() 
+  requires old_s.Inv() 
   requires io.initialized()
-  requires io !in s.Repr
-  modifies s.Repr
   modifies io
   ensures s.W()
-  ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
   ensures CoordinationModel.succ(
-      old(s.I()), old(IIO(io)), start, maxToFind as int,
+      old_s.I(), old(IIO(io)), start, maxToFind as int,
       s.I(), result, IIO(io))
   {
     CoordinationModel.reveal_succ();
-    s.reveal_ReprInv();
 
     var is_init := isInitialized(s);
     if !is_init {
-      initialization(s, io);
+      initialization(inout s, io);
       result := None;
     } else {
-      result := SuccImpl.doSucc(s.bc, io, start, maxToFind);
+      result := SuccImpl.doSucc(inout s.bc, io, start, maxToFind);
 
-      s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
-      s.reveal_ReprInv();
-      assert s.ProtectedReprInv();
     }
   }
 
-  function method canJournalistAppend(s: Full, key: Key, value: Value) : (b: bool)
+  function method canJournalistAppend(shared s: Full, key: Key, value: Value) : (b: bool)
   requires s.WF()
-  reads s.Repr
   {
-    s.reveal_ReprInv();
-    s.jc.Borrow().journalist.canAppend(Journal.JournalInsert(key, value))
+    s.jc.journalist.canAppend(Journal.JournalInsert(key, value))
   }
 
   // [yizhou7][FIXME]: this takes long to verify
   method insert(
-      s: Full, io: DiskIOHandler, key: Key, value: Value)
+      linear inout s: Full, io: DiskIOHandler, key: Key, value: Value)
   returns (success: bool)
-  requires s.Inv() 
+  requires old_s.Inv() 
   requires io.initialized()
-  requires io !in s.Repr
-  modifies s.Repr
   modifies io
   ensures s.W()
-  ensures forall o | o in s.Repr :: o in old(s.Repr) || fresh(o)
   ensures CoordinationModel.insert(
-      old(s.I()), old(IIO(io)), key, value,
+      old_s.I(), old(IIO(io)), key, value,
       s.I(), success, IIO(io))
   {
     CoordinationModel.reveal_insert();
-    s.reveal_ReprInv();
 
     var is_init := isInitialized(s);
     if !is_init {
-      initialization(s, io);
+      initialization(inout s, io);
       success := false;
     } else {
       var can_append := canJournalistAppend(s, key, value);
       if can_append {
-        success := InsertImpl.insert(s.bc, io, key, value);
+        success := InsertImpl.insert(inout s.bc, io, key, value);
         if success {
-          linear var jc := s.jc.Take();
-          inout jc.journalAppend(key, value);
-          s.jc.Give(jc);
+          inout s.jc.journalAppend(key, value);
         }
-        s.Repr := {s} + s.bc.Repr() + s.jc.Repr;
-        s.reveal_ReprInv();
-        assert s.ProtectedReprInv();
       } else {
-        var wait := doSync(s, io, true /* graphSync */);
+        var wait := doSync(inout s, io, true /* graphSync */);
         success := false;
       }
     }

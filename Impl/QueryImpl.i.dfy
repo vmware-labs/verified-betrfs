@@ -39,7 +39,7 @@ module QueryImpl {
   // == query ==
 
   method queryIterate(
-    s: ImplVariables,
+    linear inout s: ImplVariables,
     key: Key,
     msg: Message,
     ref: BT.G.Reference,
@@ -47,76 +47,67 @@ module QueryImpl {
     counter: uint64)
   returns (res: Option<Value>)
   requires io.initialized()
-  requires Inv(s)
-  requires io !in s.Repr()
-  requires s.ready
-  requires ref in s.ephemeralIndirectionTable.I().graph
+  requires old_s.Inv()
+  requires old_s.Ready?
+  requires ref in old_s.ephemeralIndirectionTable.I().graph
   modifies io
-  modifies s.Repr()
   decreases counter
-  ensures WellUpdated(s)
-  ensures QueryModel.queryIterate(old(s.I()), key, msg, ref, old(IIO(io)), counter, s.I(), res, IIO(io))
+  ensures s.W()
+  ensures QueryModel.queryIterate(old_s.I(), key, msg, ref, old(IIO(io)), counter, s.I(), res, IIO(io))
   {
     QueryModel.reveal_queryIterate();
 
     if counter == 0 {
       res := None;
-      return;
-    }
-
-    var incache := s.cache.InCache(ref);
-    if !incache {
-      PageInNodeReqOrMakeRoom(s, io, ref);
-      res := None;
-      return;
     } else {
-      assert s.cache.I() == old(s.cache.I());
-      var pivots, children := s.cache.GetNodeInfo(ref);
-
-      var boundedkey := ComputeBoundedKey(pivots, key);
-      if !boundedkey {
+      var incache := s.cache.InCache(ref);
+      if !incache {
+        PageInNodeReqOrMakeRoom(inout s, io, ref);
         res := None;
-        return;
-      }
-
-      ghost var oldIVars := s.I();
-      LruModel.LruUse(s.lru.Queue, ref);
-      s.lru.Use(ref);
-      assert SBCM.IBlockCache(oldIVars) == SBCM.IBlockCache(s.I());
-
-      var r := Pivots.ComputeRoute(pivots, key);
-      var kmtMsg := s.cache.GetMessage(ref, r, key);
-      var newmsg := if kmtMsg.Some? then ValueMessage.Merge(msg, kmtMsg.value) else msg;
-
-      if (newmsg.Define?) {
-        res := Some(newmsg.value);
-        return;
       } else {
-        if children.Some? {
-          BookkeepingModel.lemmaChildInGraph(s.I(), ref, children.value[r]);
-          res := queryIterate(s, key, newmsg, children.value[r], io, counter - 1);
+        assert s.cache.I() == old(s.cache.I());
+        var pivots, children := s.cache.GetNodeInfo(ref);
 
-          ghost var a := QueryModel.queryIterate(old(s.I()), key, msg, ref, 
-            old(IIO(io)), counter, s.I(), res, IIO(io));
-          assert a;
+        var boundedkey := ComputeBoundedKey(pivots, key);
+        if !boundedkey {
+          res := None;
         } else {
-          res := Some(ValueType.DefaultValue());
-          return;
+          ghost var oldIVars := s.I();
+          LruModel.LruUse(s.lru.Queue(), ref);
+          inout s.lru.Use(ref);
+          assert SBCM.IBlockCache(oldIVars) == SBCM.IBlockCache(s.I());
+
+          var r := Pivots.ComputeRoute(pivots, key);
+          var kmtMsg := s.cache.GetMessage(ref, r, key);
+          var newmsg := if kmtMsg.Some? then ValueMessage.Merge(msg, kmtMsg.value) else msg;
+
+          if (newmsg.Define?) {
+            res := Some(newmsg.value);
+          } else {
+            if children.Some? {
+              BookkeepingModel.lemmaChildInGraph(s.I(), ref, children.value[r]);
+              res := queryIterate(inout s, key, newmsg, children.value[r], io, counter - 1);
+
+              ghost var a := QueryModel.queryIterate(old_s.I(), key, msg, ref, 
+                old(IIO(io)), counter, s.I(), res, IIO(io));
+              assert a;
+            } else {
+              res := Some(ValueType.DefaultValue());
+            }
+          }
         }
       }
     }
   }
 
-  method query(s: ImplVariables, io: DiskIOHandler, key: Key)
+  method query(linear inout s: ImplVariables, io: DiskIOHandler, key: Key)
   returns (res: Option<Value>)
   requires io.initialized()
-  requires Inv(s)
-  requires io !in s.Repr()
-  requires s.ready
+  requires old_s.Inv()
+  requires old_s.Ready?
   modifies io
-  modifies s.Repr()
-  ensures WellUpdated(s)
-  ensures QueryModel.query(old(s.I()), old(IIO(io)), key, s.I(), res, IIO(io))
+  ensures s.W()
+  ensures QueryModel.query(old_s.I(), old(IIO(io)), key, s.I(), res, IIO(io))
   {
     QueryModel.reveal_query();
 
@@ -124,6 +115,6 @@ module QueryImpl {
     var msg := ValueMessage.IdentityMessage();
     var counter: uint64 := 40;
 
-    res := queryIterate(s, key, msg, ref, io, counter);
+    res := queryIterate(inout s, key, msg, ref, io, counter);
   }
 }

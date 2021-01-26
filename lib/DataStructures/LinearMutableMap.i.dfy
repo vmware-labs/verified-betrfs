@@ -38,7 +38,7 @@ module LinearMutableMap {
     count: uint64,
     ghost contents: map<uint64, Option<V>>)
 
-  predicate FixedSizeInv<V>(self: FixedSizeLinearHashMap<V>)
+  protected predicate FixedSizeInv<V>(self: FixedSizeLinearHashMap<V>)
   {
     && 128 <= |self.storage| < 0x1_0000_0000_0000_0000
     && (self.count as nat) < 0x1_0000_0000_0000_0000

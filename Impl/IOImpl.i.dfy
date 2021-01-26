@@ -34,9 +34,9 @@ module IOImpl {
   import SSM = StateSectorModel
 
   // TODO does ImplVariables make sense? Should it be a Variables? Or just the fields of a class we live in?
-  method getFreeLoc(s: ImplVariables, len: uint64)
+  method getFreeLoc(shared s: ImplVariables, len: uint64)
   returns (loc : Option<Location>)
-  requires s.ready
+  requires s.Ready?
   requires s.WF()
   requires len <= NodeBlockSizeUint64()
   ensures loc == IOModel.getFreeLoc(s.I(), len)
@@ -80,14 +80,13 @@ module IOImpl {
     sector.Free();
   }
 
-  method FindLocationAndRequestWrite(io: DiskIOHandler, s: ImplVariables, shared sector: SSI.Sector)
+  method FindLocationAndRequestWrite(io: DiskIOHandler, shared s: ImplVariables, shared sector: SSI.Sector)
   returns (id: Option<D.ReqId>, loc: Option<Location>)
   requires s.WF()
-  requires s.ready
+  requires s.Ready?
   requires SSI.WFSector(sector)
   requires SSM.WFSector(SSI.ISector(sector))
   requires io.initialized()
-  requires io !in s.Repr()
   requires sector.SectorNode?
   modifies io
   ensures s.W()
@@ -115,30 +114,27 @@ module IOImpl {
   }
 
   method FindIndirectionTableLocationAndRequestWrite(
-      io: DiskIOHandler, s: ImplVariables, linear sector: SSI.Sector)
+      io: DiskIOHandler, shared s: ImplVariables, ghost sector: SSI.Sector)
   returns (id: Option<D.ReqId>, loc: Option<Location>)
   requires s.WF()
-  requires s.ready
+  requires s.Ready?
+  requires io.initialized()
   requires SSI.WFSector(sector)
   requires SSM.WFSector(SSI.ISector(sector))
-  requires io.initialized()
-  requires io !in s.Repr()
   requires sector.SectorIndirectionTable?
+  requires s.frozenIndirectionTable.lSome? && sector.indirectionTable == s.frozenIndirectionTable.value
+
   modifies io
-  requires sector.SectorIndirectionTable? ==> sector.indirectionTable == s.frozenIndirectionTable
-  requires sector.SectorIndirectionTable? ==> io !in sector.indirectionTable.Repr
-  modifies if sector.SectorIndirectionTable? then sector.indirectionTable.Repr else {}
-  ensures sector.SectorIndirectionTable? ==> (sector.indirectionTable.Inv() && sector.indirectionTable.I() == old(sector.indirectionTable.I()) && sector.indirectionTable.Repr == old(sector.indirectionTable.Repr))
+
   ensures id.Some? ==> id.value == old(io.reservedId())
   ensures s.W()
-  ensures IOModel.FindIndirectionTableLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(SSI.ISector(sector)), id, loc, IIO(io))
-  ensures old(s.I()) == s.I();
-  ensures id.Some? ==> loc.Some? && io.diskOp().ReqWriteOp? && io.diskOp().id == id.value
+  ensures IOModel.FindIndirectionTableLocationAndRequestWrite(old(IIO(io)), s.I(), SSI.ISector(sector), id, loc, IIO(io))
+  ensures id.Some? ==> (loc.Some? && io.diskOp().ReqWriteOp? && io.diskOp().id == id.value)
   ensures id.None? ==> IIO(io) == old(IIO(io))
   {
     IOModel.reveal_FindIndirectionTableLocationAndRequestWrite();
 
-    var bytes := MarshallingImpl.MarshallCheckedSector(sector);
+    var bytes := MarshallingImpl.MarshallCheckedSectorIndirectionTable(s.frozenIndirectionTable.value, sector);
     if (bytes == null) {
       id := None;
       loc := None;
@@ -150,7 +146,6 @@ module IOImpl {
       var i := io.write(loc.value.addr, bytes[..]);
       id := Some(i);
     }
-    sector.Free();
   }
 
   method RequestRead(io: DiskIOHandler, loc: Location)
@@ -162,57 +157,53 @@ module IOImpl {
     id := io.read(loc.addr, loc.len);
   }
 
-  method PageInIndirectionTableReq(s: ImplVariables, io: DiskIOHandler)
-  requires s.WF()
-  requires io.initialized();
-  requires !s.ready
-  requires s.loading
-  requires io !in s.Repr()
-  requires ValidIndirectionTableLocation(s.indirectionTableLoc)
+  method PageInIndirectionTableReq(linear inout s: ImplVariables, io: DiskIOHandler)
+  requires old_s.WF()
+  requires io.initialized()
+  requires old_s.Loading?
+  requires ValidIndirectionTableLocation(old_s.indirectionTableLoc)
   modifies io
-  modifies s.Repr()
-  ensures WellUpdated(s)
+  ensures s.WF()
   ensures (s.I(), IIO(io)) == IOModel.PageInIndirectionTableReq(
-      old(s.I()), old(IIO(io)))
+      old_s.I(), old(IIO(io)))
   {
     IOModel.reveal_PageInIndirectionTableReq();
 
     if (s.indirectionTableRead.None?) {
       var id := RequestRead(io, s.indirectionTableLoc);
-      s.indirectionTableRead := Some(id);
+      inout s.indirectionTableRead := Some(id);
     } else {
       print "PageInIndirectionTableReq: request already out\n";
     }
   }
 
-  method PageInNodeReq(s: ImplVariables, io: DiskIOHandler, ref: BC.Reference)
+  method PageInNodeReq(linear inout s: ImplVariables, io: DiskIOHandler, ref: BC.Reference)
   requires io.initialized();
-  requires s.ready
-  requires s.WF()
-  requires ref in s.ephemeralIndirectionTable.I().locs
-  requires io !in s.Repr()
+  requires old_s.Ready?
+  requires old_s.WF()
+  requires ref in old_s.ephemeralIndirectionTable.I().locs
+
+  // [yizhou7]: this addtional precondition is needed
+  requires old_s.TotalCacheSize() as int <= MaxCacheSize() - 1
+
   modifies io
-  modifies s.Repr()
-  ensures WellUpdated(s)
-  ensures s.ready
-  ensures (s.I(), IIO(io)) == IOModel.PageInNodeReq(old(s.I()), old(IIO(io)), ref)
+  ensures s.WF()
+  ensures s.Ready?
+  ensures (s.I(), IIO(io)) == IOModel.PageInNodeReq(old_s.I(), old(IIO(io)), ref)
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       print "giving up; already an outstanding read for this ref\n";
     } else {
       var locGraph := s.ephemeralIndirectionTable.GetEntry(ref);
-      assert locGraph.Some?;
       var loc := locGraph.value.loc;
       var id := RequestRead(io, loc.value);
-      s.outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)];
+      inout s.outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)];
     }
   }
 
   // == readResponse ==
 
   function ISectorOpt(sector: Option<SSI.Sector>) : Option<SSM.Sector>
-  reads if sector.Some? then SSI.SectorObjectSet(sector.value) else {}
-  reads if sector.Some? then SSI.SectorRepr(sector.value) else {}
   requires sector.Some? ==> SSI.WFSector(sector.value)
   {
     match sector {
@@ -225,7 +216,6 @@ module IOImpl {
   returns (id: D.ReqId, linear sector: lOption<SSI.Sector>)
   requires io.diskOp().RespReadOp?
   ensures sector.lSome? ==> SSI.WFSector(sector.value)
-  ensures sector.lSome? ==> fresh(SSI.SectorRepr(sector.value))
   ensures (id, ISectorOpt(sector.Option())) == IOModel.ReadSector(old(IIO(io)))
   {
     var id1, addr, bytes := io.getReadResult();
@@ -248,15 +238,12 @@ module IOImpl {
     }
   }
 
-  method PageInIndirectionTableResp(s: ImplVariables, io: DiskIOHandler)
-  requires s.W()
+  method PageInIndirectionTableResp(linear inout s: ImplVariables, io: DiskIOHandler)
+  requires old_s.W()
   requires io.diskOp().RespReadOp?
-  requires !s.ready
-  requires s.loading
-  requires io !in s.Repr()
-  modifies s.Repr()
-  ensures WellUpdated(s)
-  ensures s.I() == IOModel.PageInIndirectionTableResp(old(s.I()), old(IIO(io)))
+  requires old_s.Loading?
+  ensures s.W()
+  ensures s.I() == IOModel.PageInIndirectionTableResp(old_s.I(), old(IIO(io)))
   {
     var id;
     linear var sectorOpt;
@@ -265,30 +252,37 @@ module IOImpl {
     if (Some(id) == s.indirectionTableRead && sectorOpt.lSome? && sectorOpt.value.SectorIndirectionTable?) {
       linear var lSome(sector: SSI.Sector) := sectorOpt;
       linear var SectorIndirectionTable(ephemeralIndirectionTable) := sector;
-      assert SSI.SectorRepr(sector) == 
-        {ephemeralIndirectionTable} + ephemeralIndirectionTable.Repr; // why is this needed??
 
-      var succ, bm := ephemeralIndirectionTable.InitLocBitmap();
-      assert (succ, bm.I()) == ephemeralIndirectionTable.ReadWithInv().initLocBitmap(); // TODO(andreal) unnecessary
+      linear var bm; var succ;
+      succ, bm := ephemeralIndirectionTable.InitLocBitmap();
+      assert (succ, bm.I()) == ephemeralIndirectionTable.initLocBitmap(); // TODO(andreal) unnecessary
+
       if succ {
-        var blockAllocator := new BlockAllocatorImpl.BlockAllocator(bm);
-        var persistentIndirectionTable := ephemeralIndirectionTable.Clone();
+        linear var Loading(indirectionTableLoc, indirectionTableRead) := s;
+  
+        linear var blockAllocator := BlockAllocatorImpl.BlockAllocator.Constructor(bm);
+        linear var persistentIndirectionTable := ephemeralIndirectionTable.Clone();
+        linear var lru := LinearLru.LinearLru.Alloc();
+        linear var cache := CacheImpl.LMutCache.NewCache();
 
-        s.ready := true;
-        s.persistentIndirectionTable := persistentIndirectionTable;
-        s.frozenIndirectionTable := null;
-        s.persistentIndirectionTableLoc := s.indirectionTableLoc;
-        s.frozenIndirectionTableLoc := None;
-        s.ephemeralIndirectionTable := ephemeralIndirectionTable;
-        s.outstandingIndirectionTableWrite := None;
-        s.outstandingBlockWrites := map[];
-        s.outstandingBlockReads := map[];
-        s.cache := new MutCache();
-        assert s.cache.I() == map[];
-        s.lru := new LruImpl.LruImplQueue();
-        s.blockAllocator := blockAllocator;
-        assert s.I() == IOModel.PageInIndirectionTableResp(old(s.I()), old(IIO(io))); // TODO(andreal)
+        s := Variables.Ready(
+          persistentIndirectionTable,
+          lNone,
+          ephemeralIndirectionTable,
+          indirectionTableLoc,
+          None,
+          None,
+          map[],
+          map[],
+          cache,
+          lru,
+          blockAllocator);
+
+        assert s.I() == IOModel.PageInIndirectionTableResp(old_s.I(), old(IIO(io))); // TODO(andreal)
       } else {
+        bm.Free();
+        ephemeralIndirectionTable.Free();
+
         print "InitLocBitmap failed\n";
       }
     } else {
@@ -297,21 +291,17 @@ module IOImpl {
     }
   }
 
-  method PageInNodeResp(s: ImplVariables, io: DiskIOHandler)
-  requires s.W()
-  requires s.WF()
+  method PageInNodeResp(linear inout s: ImplVariables, io: DiskIOHandler)
+  requires old_s.W()
+  requires old_s.WF()
   requires io.diskOp().RespReadOp?
-  requires s.ready
-  requires io !in s.Repr()
-  modifies s.Repr()
-  ensures WellUpdated(s)
-  ensures s.I() == IOModel.PageInNodeResp(old(s.I()), old(IIO(io)))
+  requires old_s.Ready?
+  ensures s.W()
+  ensures s.I() == IOModel.PageInNodeResp(old_s.I(), old(IIO(io)))
   {
-    var id;
-    linear var sector;
+    var id; linear var sector;
     id, sector := ReadSector(io);
     assert sector.lSome? ==> SSI.WFSector(sector.value);
-    assert sector.lSome? ==> SSI.SectorRepr(sector.value) !! s.Repr();
 
     // TODO we should probably remove the id from outstandingBlockReads
     // even in the case we don't do anything with it
@@ -325,7 +315,6 @@ module IOImpl {
           print "PageInNodeResp: ref in s.cache\n";
         } else {
           assert sector.lSome? ==> SSI.WFSector(sector.value);
-          assert sector.lSome? ==> SSI.SectorRepr(sector.value) !! s.Repr();
 
           var lba := lbaGraph.value.loc.value;
           var graph := lbaGraph.value.succs;
@@ -336,18 +325,16 @@ module IOImpl {
 
             var children := node.children;
             if (graph == (if children.Some? then children.value else [])) {
-              assert|LruModel.I(s.lru.Queue)| <= 0x10000;
+              assert|LruModel.I(s.lru.Queue())| <= 0x10000;
               assert sector.lSome? ==> SSI.WFSector(value);
-              assert sector.lSome? ==> SSI.SectorRepr(value) !! s.Repr();
-              s.lru.Use(ref);
+              inout s.lru.Use(ref);
 
               assert sector.lSome? ==> SSI.WFSector(value);
-              assert sector.lSome? ==> SSI.SectorRepr(value) !! s.Repr();
 
               assert |s.cache.I()| <= MaxCacheSize();
-              s.cache.Insert(ref, node);
+              inout s.cache.Insert(ref, node);
 
-              s.outstandingBlockReads := ComputeMapRemove1(s.outstandingBlockReads, id);
+              inout s.outstandingBlockReads := ComputeMapRemove1(s.outstandingBlockReads, id);
             } else {
               var _ := FreeNode(node);
               print "giving up; block does not match graph\n";
@@ -369,54 +356,77 @@ module IOImpl {
 
   // == writeResponse ==
 
-  method writeNodeResponse(s: ImplVariables, io: DiskIOHandler)
+  method writeNodeResponse(linear inout s: ImplVariables, io: DiskIOHandler)
   requires io.diskOp().RespWriteOp?
   requires ValidDiskOp(io.diskOp())
-  requires Inv(s)
-  requires s.ready && IIO(io).id in s.outstandingBlockWrites
-  requires io !in s.Repr()
-  modifies s.Repr()
-  ensures WellUpdated(s)
-  ensures s.I() == IOModel.writeNodeResponse(old(s.I()), IIO(io))
+  requires old_s.Inv()
+  requires old_s.Ready? && IIO(io).id in old_s.outstandingBlockWrites
+  ensures s.W()
+  ensures s.I() == IOModel.writeNodeResponse(old_s.I(), IIO(io))
   {
     var id, addr, len := io.getWriteResult();
     IOModel.lemmaOutstandingLocIndexValid(s.I(), id);
 
-    s.blockAllocator.MarkFreeOutstanding(s.outstandingBlockWrites[id].loc.addr / NodeBlockSizeUint64());
-    s.outstandingBlockWrites := ComputeMapRemove1(s.outstandingBlockWrites, id);
+    var i := s.outstandingBlockWrites[id].loc.addr / NodeBlockSizeUint64();
+    inout s.blockAllocator.MarkFreeOutstanding(i);
+    inout s.outstandingBlockWrites := ComputeMapRemove1(s.outstandingBlockWrites, id);
   }
 
-  method writeIndirectionTableResponse(s: ImplVariables, io: DiskIOHandler)
+  method writeIndirectionTableResponse(linear inout s: ImplVariables, io: DiskIOHandler)
   returns (loc: Location)
   requires io.diskOp().RespWriteOp?
   requires ValidDiskOp(io.diskOp())
-  requires Inv(s)
-  requires s.ready
-  requires s.frozenIndirectionTableLoc.Some?
-  requires io !in s.Repr()
-  modifies s.Repr()
-  ensures WellUpdated(s)
+  requires old_s.Inv()
+  requires old_s.Ready?
+  requires old_s.frozenIndirectionTableLoc.Some?
+  ensures s.W()
   ensures (s.I(), loc) == IOModel.writeIndirectionTableResponse(
-      old(s.I()), IIO(io))
+      old_s.I(), IIO(io))
   {
-    s.outstandingIndirectionTableWrite := None;
+    inout s.outstandingIndirectionTableWrite := None;
     loc := s.frozenIndirectionTableLoc.value;
   }
 
-  method cleanUp(s: ImplVariables)
-  requires Inv(s)
-  requires s.ready
-  requires s.frozenIndirectionTable != null
-  requires s.frozenIndirectionTableLoc.Some?
-  modifies s.Repr()
-  ensures WellUpdated(s)
-  ensures s.I() == IOModel.cleanUp(old(s.I()))
+  // [yizhou7]: this might not be the best way is to decompose and recompose
+  method cleanUp(linear inout s: ImplVariables)
+  requires old_s.Inv()
+  requires old_s.Ready?
+  requires old_s.frozenIndirectionTable.lSome?
+  requires old_s.frozenIndirectionTableLoc.Some?
+  ensures s.W()
+  ensures s.I() == IOModel.cleanUp(old_s.I())
   {
     IOModel.lemmaBlockAllocatorFrozenSome(s.I());
-    s.persistentIndirectionTableLoc := s.frozenIndirectionTableLoc.value;
-    s.persistentIndirectionTable := s.frozenIndirectionTable;
-    s.frozenIndirectionTable := null;
-    s.frozenIndirectionTableLoc := None;
-    s.blockAllocator.MoveFrozenToPersistent();
+
+    linear var Ready(
+      persistentIndirectionTable,
+      frozenIndirectionTable,
+      ephemeralIndirectionTable,
+      persistentIndirectionTableLoc,
+      frozenIndirectionTableLoc,
+      outstandingIndirectionTableWrite,
+      outstandingBlockWrites,
+      outstandingBlockReads,
+      cache,
+      lru,
+      blockAllocator) := s;
+
+    persistentIndirectionTable.Free();
+    linear var value := unwrap_value(frozenIndirectionTable);
+
+    s := Ready(
+      value,
+      lNone,
+      ephemeralIndirectionTable,
+      frozenIndirectionTableLoc.value,
+      None,
+      outstandingIndirectionTableWrite,
+      outstandingBlockWrites,
+      outstandingBlockReads,
+      cache,
+      lru,
+      blockAllocator);
+
+    inout s.blockAllocator.MoveFrozenToPersistent();
   }
 }
