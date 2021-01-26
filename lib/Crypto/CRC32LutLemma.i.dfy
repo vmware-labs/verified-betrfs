@@ -327,7 +327,6 @@ module CRC32_C_Lut_Lemma {
   requires b > 0
   ensures (x % (a * b)) % b == x % b
   {
-    assume false; // TODO
     var t := x % (a * b);
     var q := x / (a * b);
     assert x == q * (a * b) + t;
@@ -341,13 +340,18 @@ module CRC32_C_Lut_Lemma {
       x - (x / b) * b;
       calc {
         x / b;
-        calc {
-          x;
-          q * (a * b) + r * b + s;
-          { assert q * (a * b) == (q * a) * b; }
-          (q * a) * b + r * b + s;
-          { assert (q * a + r) * b == (q * a) * b + r * b; }
-          (q * a + r) * b + s;
+        {
+          assert x == (q * a + r) * b + s by {
+            calc {
+              x;
+              q * (a * b) + (r * b + s);
+              q * (a * b) + r * b + s;
+              { assert q * (a * b) == (q * a) * b; }
+              (q * a) * b + r * b + s;
+              { assert (q * a + r) * b == (q * a) * b + r * b; }
+              (q * a + r) * b + s;
+            }
+          }
         }
         ((q * a + r) * b + s) / b;
         (s + (q * a + r) * b) / b;
