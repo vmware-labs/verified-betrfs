@@ -6,7 +6,7 @@ include "StateSectorImpl.i.dfy"
 include "BlockAllocatorImpl.i.dfy"
 include "CacheImpl.i.dfy"
 include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
-include "StateBCModel.i.dfy"
+// include "StateBCModel.i.dfy"
 
 module StateBCImpl {
   import opened Options
@@ -26,10 +26,49 @@ module StateBCImpl {
   import BlockAllocatorImpl
   import D = AsyncDisk
   import SBCM = StateBCModel
+  import BlockAllocatorModel
+  import LruModel
 
+  import opened StateSectorModel
+  import BBC = BetreeCache
 
   type ImplVariables = Variables
   type Reference = BT.G.Reference
+
+  predicate WFCache(cache: map<Reference, Node>)
+  {
+    forall ref | ref in cache :: WFNode(cache[ref])
+  }
+
+  function ICache(cache: map<Reference, Node>): map<Reference, BT.G.Node>
+  requires WFCache(cache)
+  {
+    map ref | ref in cache :: INode(cache[ref])
+  }
+
+  predicate IsLocAllocOutstanding(outstanding: map<BC.ReqId, BC.OutstandingWrite>, i: int)
+  {
+    !(forall id | id in outstanding :: outstanding[id].loc.addr as int != i * NodeBlockSize() as int)
+  }
+
+  predicate {:opaque} ConsistentBitmap(
+      ephemeralIndirectionTable: SectorType.IndirectionTable,
+      frozenIndirectionTable: lOption<SectorType.IndirectionTable>,
+      persistentIndirectionTable: SectorType.IndirectionTable,
+      outstandingBlockWrites: map<BC.ReqId, BC.OutstandingWrite>,
+      blockAllocator: BlockAllocatorModel.BlockAllocatorModel)
+  {
+    && (forall i: int :: IT.IndirectionTable.IsLocAllocIndirectionTable(ephemeralIndirectionTable, i)
+      <==> IT.IndirectionTable.IsLocAllocBitmap(blockAllocator.ephemeral, i))
+    && (forall i: int :: IT.IndirectionTable.IsLocAllocIndirectionTable(persistentIndirectionTable, i)
+      <==> IT.IndirectionTable.IsLocAllocBitmap(blockAllocator.persistent, i))
+    && (frozenIndirectionTable.lSome? <==> blockAllocator.frozen.Some?)
+    && (frozenIndirectionTable.lSome? ==>
+      (forall i: int :: IT.IndirectionTable.IsLocAllocIndirectionTable(frozenIndirectionTable.value, i)
+        <==> IT.IndirectionTable.IsLocAllocBitmap(blockAllocator.frozen.value, i)))
+    && (forall i: int :: IsLocAllocOutstanding(outstandingBlockWrites, i)
+      <==> IT.IndirectionTable.IsLocAllocBitmap(blockAllocator.outstanding, i))
+  }
 
   // TODO rename to like... BlockCache variables or smthn
   linear datatype Variables = 
@@ -93,6 +132,22 @@ module StateBCImpl {
       // acc := DebugAccumulator.AccPut(acc, "blockAllocator", a);
     }
 
+    shared function method TotalCacheSize() : (res : uint64)
+    requires Ready?
+    requires cache.Inv()
+    requires |cache.I()| + |outstandingBlockReads| < 0x1_0000_0000_0000_0000
+    {
+      // cache.Count() + (|outstandingBlockReads| as uint64)
+      CacheImpl.CacheCount(cache) + (|outstandingBlockReads| as uint64)
+    }
+
+    function totalCacheSize() : int
+    requires Ready?
+    requires W()
+    {
+      |cache.I()| + |outstandingBlockReads|
+    }
+
     predicate W()
     {
       Ready? ==> (
@@ -105,57 +160,50 @@ module StateBCImpl {
       )
     }
 
-    function I() : SBCM.BCVariables
+    predicate WFVarsReady()
+    requires Ready?
     requires W()
     {
+      && WFCache(cache.I())
+      && LruModel.WF(lru.Queue())
+      && LruModel.I(lru.Queue()) == cache.I().Keys
+      && totalCacheSize() <= MaxCacheSize()
+      && ephemeralIndirectionTable.TrackingGarbage()
+      && BlockAllocatorModel.Inv(blockAllocator.I())
+      && ConsistentBitmap(ephemeralIndirectionTable.I(), frozenIndirectionTable. Map((x: IndirectionTable) => x.I()),
+          persistentIndirectionTable.I(), outstandingBlockWrites, blockAllocator.I())
+    }
+
+    predicate WFBCVars()
+    {
+      && W()
+      && (Ready? ==> WFVarsReady())
+    }
+
+    function IBlockCache() : BBC.Variables
+    requires WFBCVars()
+    {
       if Ready? then (
-        SBCM.Ready(
-          persistentIndirectionTable,
-          if frozenIndirectionTable.lSome? then Some(frozenIndirectionTable.value) else None,
-          ephemeralIndirectionTable,
-          persistentIndirectionTableLoc,
-          frozenIndirectionTableLoc,
-          outstandingIndirectionTableWrite,
-          outstandingBlockWrites,
-          outstandingBlockReads,
-          cache.I(),
-          lru.Queue(),
-          blockAllocator.I())
+          BC.Ready(persistentIndirectionTable.I(), 
+          if frozenIndirectionTable.lSome? then Some(frozenIndirectionTable.value.I()) else None, ephemeralIndirectionTable.I(),  persistentIndirectionTableLoc, frozenIndirectionTableLoc, outstandingIndirectionTableWrite, outstandingBlockWrites, outstandingBlockReads, ICache(cache.I()))
       ) else if Loading? then (
-        SBCM.LoadingIndirectionTable(
-          indirectionTableLoc,
-          indirectionTableRead)
+          BC.LoadingIndirectionTable(indirectionTableLoc, indirectionTableRead)
       ) else (
-        SBCM.Unready
+        BC.Unready
       )
     }
 
-    predicate WF()
+    predicate BCInv()
     {
-      && W()
-      && SBCM.WFBCVars(I())
+      && WFBCVars()
+      && BBC.Inv(IBlockCache())
     }
 
     static method Constructor() returns (linear v: Variables)
     ensures v.Unready?
-    ensures v.WF()
+    ensures v.WFBCVars()
     {
       v := Unready;
-    }
-
-    predicate Inv()
-    {
-      && W()
-      && SBCM.BCInv(I())
-    }
-
-    shared function method TotalCacheSize() : (res : uint64)
-    requires Ready?
-    requires cache.Inv()
-    requires |cache.I()| + |outstandingBlockReads| < 0x1_0000_0000_0000_0000
-    {
-      // cache.Count() + (|outstandingBlockReads| as uint64)
-      CacheImpl.CacheCount(cache) + (|outstandingBlockReads| as uint64)
     }
   }
 }
