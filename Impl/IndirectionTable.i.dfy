@@ -2055,322 +2055,322 @@ module IndirectionTable {
     }
   }
 
-  class BoxedIndirectionTable {
-    var box: BoxedLinear<IndirectionTable>;
-    ghost var Repr: set<object>;
+//   class BoxedIndirectionTable {
+//     var box: BoxedLinear<IndirectionTable>;
+//     ghost var Repr: set<object>;
 
-    function Read() : IndirectionTable
-      requires box.Inv()
-      reads this, box, box.Repr
-    {
-      box.Read()
-    }
-
-    function ReadWithInv() : (t: IndirectionTable)
-      requires Inv()
-      ensures t.Inv()
-      ensures t == this.Read()
-      reads this, Repr
-    {
-      box.Read()
-    }
-
-//     method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator)
-//       requires false
+//     function Read() : IndirectionTable
+//       requires box.Inv()
+//       reads this, box, box.Repr
 //     {
-// /*
-//       acc := DebugAccumulator.EmptyAccumulator();
-//       var a := new DebugAccumulator.AccRec(t.Count, "Entry");
-//       acc := DebugAccumulator.AccPut(acc, "t", a);
-//       var r := garbageQueue.DebugAccumulate();
-//       a := new DebugAccumulator.AccRec.Index(r);
-//       acc := DebugAccumulator.AccPut(acc, "garbageQueue", a);
-// */
+//       box.Read()
 //     }
 
-    protected predicate Inv()
-      reads this, Repr
-      ensures Inv() ==> this in Repr
-    {
-      && box in Repr
-      && Repr == {this} + box.Repr
-      && box.Inv()
-      && box.Has()
-      && Read().Inv()
-    }
+//     function ReadWithInv() : (t: IndirectionTable)
+//       requires Inv()
+//       ensures t.Inv()
+//       ensures t == this.Read()
+//       reads this, Repr
+//     {
+//       box.Read()
+//     }
 
-    protected function I() : SectorType.IndirectionTable
-      reads this, Repr
-      requires Inv()
-      ensures I() == this.Read().I() == this.ReadWithInv().I()
-    {
-      this.Read().I()
-    }
+// //     method DebugAccumulate() returns (acc:DebugAccumulator.DebugAccumulator)
+// //       requires false
+// //     {
+// // /*
+// //       acc := DebugAccumulator.EmptyAccumulator();
+// //       var a := new DebugAccumulator.AccRec(t.Count, "Entry");
+// //       acc := DebugAccumulator.AccPut(acc, "t", a);
+// //       var r := garbageQueue.DebugAccumulate();
+// //       a := new DebugAccumulator.AccRec.Index(r);
+// //       acc := DebugAccumulator.AccPut(acc, "garbageQueue", a);
+// // */
+// //     }
 
-    lemma RevealI()
-    requires Inv()
-    ensures I() == this.Read().I()
-    ensures this.Read().TrackingGarbage() ==> this.TrackingGarbage()
-    {
-    }
+//     protected predicate Inv()
+//       reads this, Repr
+//       ensures Inv() ==> this in Repr
+//     {
+//       && box in Repr
+//       && Repr == {this} + box.Repr
+//       && box.Inv()
+//       && box.Has()
+//       && Read().Inv()
+//     }
 
-    protected predicate TrackingGarbage()
-      reads this, Repr
-      requires Inv()
-    {
-      this.Read().TrackingGarbage()
-    }
+//     protected function I() : SectorType.IndirectionTable
+//       reads this, Repr
+//       requires Inv()
+//       ensures I() == this.Read().I() == this.ReadWithInv().I()
+//     {
+//       this.Read().I()
+//     }
 
-    predicate DeallocableRef(ref: BT.G.Reference)
-    reads this, Repr
-    requires this.Inv()
-    ensures DeallocableRef(ref) ==> this.Read().DeallocableRef(ref)
-    {
-      && ref in this.I().graph
-      && ref != BT.G.Root()
-      && (forall r | r in this.I().graph :: ref !in this.I().graph[r])
-    }
+//     lemma RevealI()
+//     requires Inv()
+//     ensures I() == this.Read().I()
+//     ensures this.Read().TrackingGarbage() ==> this.TrackingGarbage()
+//     {
+//     }
 
-    constructor Box(box: BoxedLinear<IndirectionTable>)
-      ensures this.box == box
-      ensures Repr == {this} + box.Repr
-    {
-      this.box := box;
-      new;
-      Repr := {this} + box.Repr;
-    }
+//     protected predicate TrackingGarbage()
+//       reads this, Repr
+//       requires Inv()
+//     {
+//       this.Read().TrackingGarbage()
+//     }
 
-    constructor Empty()
-      ensures Inv()
-      ensures fresh(Repr)
-    {
-      linear var allocd := IndirectionTable.AllocEmpty();
-      box := new BoxedLinear(allocd);
-      new;
-      Repr := {this} + box.Repr;
-    }
+//     predicate DeallocableRef(ref: BT.G.Reference)
+//     reads this, Repr
+//     requires this.Inv()
+//     ensures DeallocableRef(ref) ==> this.Read().DeallocableRef(ref)
+//     {
+//       && ref in this.I().graph
+//       && ref != BT.G.Root()
+//       && (forall r | r in this.I().graph :: ref !in this.I().graph[r])
+//     }
 
-    constructor (loc: Location)
-      ensures Inv()
-      ensures fresh(Repr)
-      ensures Read().Inv()
-      ensures Read().graph == map[BT.G.Root() := []]
-      ensures Read().locs == map[BT.G.Root() := loc]
-    {
-      linear var allocd := IndirectionTable.Alloc(loc);
-      box := new BoxedLinear(allocd);
-      new;
-      Repr := {this} + box.Repr;
-    }
+//     constructor Box(box: BoxedLinear<IndirectionTable>)
+//       ensures this.box == box
+//       ensures Repr == {this} + box.Repr
+//     {
+//       this.box := box;
+//       new;
+//       Repr := {this} + box.Repr;
+//     }
 
-    // TODO: need to remember to call this; otherwise, memory will leak
-    method Destructor()
-      requires Inv()
-      modifies Repr
-    {
-      linear var x := box.Take();
-      x.Free();
-    }
+//     constructor Empty()
+//       ensures Inv()
+//       ensures fresh(Repr)
+//     {
+//       linear var allocd := IndirectionTable.AllocEmpty();
+//       box := new BoxedLinear(allocd);
+//       new;
+//       Repr := {this} + box.Repr;
+//     }
 
-    method Clone() returns (table: BoxedIndirectionTable)
-      requires Inv()
-      ensures table.Inv()
-      ensures fresh(table.Repr)
-      ensures table.I() == this.I()
-      /* TODO(andrea) ModelImpl */ ensures table.ReadWithInv() == this.ReadWithInv().clone()
-    {
-      linear var clone := box.Borrow().Clone();
-      assert clone.I() == this.I();
-      var boxed := new BoxedLinear(clone);
-      table := new BoxedIndirectionTable.Box(boxed);
-    }
+//     constructor (loc: Location)
+//       ensures Inv()
+//       ensures fresh(Repr)
+//       ensures Read().Inv()
+//       ensures Read().graph == map[BT.G.Root() := []]
+//       ensures Read().locs == map[BT.G.Root() := loc]
+//     {
+//       linear var allocd := IndirectionTable.Alloc(loc);
+//       box := new BoxedLinear(allocd);
+//       new;
+//       Repr := {this} + box.Repr;
+//     }
 
-    method GetEntry(ref: BT.G.Reference) returns (e : Option<Entry>)
-      requires Inv()
-      ensures e.None? ==> ref !in this.Read().graph
-      ensures e.Some? ==> ref in this.Read().graph
-      ensures e.Some? ==> this.Read().graph[ref] == e.value.succs
-      ensures e.Some? && e.value.loc.Some? ==>
-          ref in this.Read().locs && this.Read().locs[ref] == e.value.loc.value
-      ensures ref in this.Read().locs ==> e.Some? && e.value.loc.Some?
-      /* TODO(andrea) ModelImpl */ ensures e == this.ReadWithInv().getEntry(ref)
-    {
-      e := box.Borrow().GetEntry(ref);
-    }
+//     // TODO: need to remember to call this; otherwise, memory will leak
+//     method Destructor()
+//       requires Inv()
+//       modifies Repr
+//     {
+//       linear var x := box.Take();
+//       x.Free();
+//     }
 
-    method HasEmptyLoc(ref: BT.G.Reference) returns (b: bool)
-      requires Inv()
-      ensures b == (ref in this.I().graph && ref !in this.I().locs)
-      /* TODO(andrea) ModelImpl */ ensures this.Read().hasEmptyLoc(ref) == b
-    {
-      b := box.Borrow().HasEmptyLoc(ref);
-    }
+//     method Clone() returns (table: BoxedIndirectionTable)
+//       requires Inv()
+//       ensures table.Inv()
+//       ensures fresh(table.Repr)
+//       ensures table.I() == this.I()
+//       /* TODO(andrea) ModelImpl */ ensures table.ReadWithInv() == this.ReadWithInv().clone()
+//     {
+//       linear var clone := box.Borrow().Clone();
+//       assert clone.I() == this.I();
+//       var boxed := new BoxedLinear(clone);
+//       table := new BoxedIndirectionTable.Box(boxed);
+//     }
 
-    method RemoveLoc(ref: BT.G.Reference) returns (oldLoc: Option<Location>)
-      requires Inv()
-      requires TrackingGarbage()
-      requires ref in I().graph
-      modifies Repr
-      ensures Inv()
-      ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
-      ensures TrackingGarbage()
-      ensures this.I().locs == MapRemove1(old(this.I()).locs, ref)
-      ensures this.I().graph == old(this.I()).graph
-      ensures oldLoc.None? ==> ref !in old(this.I()).locs
-      ensures oldLoc.Some? ==> ref in old(this.I()).locs && old(this.I()).locs[ref] == oldLoc.value
-      /* TODO(andrea) ModelImpl */ ensures (this.Read(), oldLoc) == old(this.Read()).removeLoc(ref)
-    {
-      linear var x := box.Take();
-      oldLoc := inout x.RemoveLoc(ref);
-      box.Give(x);
-    }
+//     method GetEntry(ref: BT.G.Reference) returns (e : Option<Entry>)
+//       requires Inv()
+//       ensures e.None? ==> ref !in this.Read().graph
+//       ensures e.Some? ==> ref in this.Read().graph
+//       ensures e.Some? ==> this.Read().graph[ref] == e.value.succs
+//       ensures e.Some? && e.value.loc.Some? ==>
+//           ref in this.Read().locs && this.Read().locs[ref] == e.value.loc.value
+//       ensures ref in this.Read().locs ==> e.Some? && e.value.loc.Some?
+//       /* TODO(andrea) ModelImpl */ ensures e == this.ReadWithInv().getEntry(ref)
+//     {
+//       e := box.Borrow().GetEntry(ref);
+//     }
 
-    method AddLocIfPresent(ref: BT.G.Reference, loc: Location) returns (added: bool)
-      requires Inv()
-      modifies Repr
-      ensures Inv()
-      ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
-      ensures added == (ref in old(this.I()).graph && ref !in old(this.I()).locs)
-      ensures this.I().graph == old(this.I()).graph
-      ensures added ==> this.I().locs == old(this.I()).locs[ref := loc]
-      ensures !added ==> this.I().locs == old(this.I()).locs
-      ensures old(this.TrackingGarbage()) ==> this.TrackingGarbage()
-      /* TODO(andrea) ModelImpl */ ensures old(this.Read()).addLocIfPresent(ref, loc) == (this.Read(), added)
-    {
-      linear var x := box.Take();
-      added := inout x.AddLocIfPresent(ref, loc);
-      box.Give(x);
-    }
+//     method HasEmptyLoc(ref: BT.G.Reference) returns (b: bool)
+//       requires Inv()
+//       ensures b == (ref in this.I().graph && ref !in this.I().locs)
+//       /* TODO(andrea) ModelImpl */ ensures this.Read().hasEmptyLoc(ref) == b
+//     {
+//       b := box.Borrow().HasEmptyLoc(ref);
+//     }
 
-    method RemoveRef(ref: BT.G.Reference) returns (oldLoc: Option<Location>)
-      requires Inv()
-      requires this.TrackingGarbage()
-      requires this.DeallocableRef(ref)
-      modifies Repr
-      ensures Inv()
-      ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
-      ensures this.TrackingGarbage()
-      ensures this.I().graph == MapRemove1(old(this.I()).graph, ref)
-      ensures this.I().locs == MapRemove1(old(this.I()).locs, ref)
-      ensures (ref in old(this.I()).locs ==> oldLoc == Some(old(this.I()).locs[ref]))
-      ensures (ref !in old(this.I()).locs ==> oldLoc == None)
-      /* TODO(andrea) ModelImpl */ ensures old(this.Read()).removeRef(ref) == (this.Read(), oldLoc)
-    {
-      linear var x := box.Take();
-      oldLoc := inout x.RemoveRef(ref);
-      box.Give(x);
-    }
+//     method RemoveLoc(ref: BT.G.Reference) returns (oldLoc: Option<Location>)
+//       requires Inv()
+//       requires TrackingGarbage()
+//       requires ref in I().graph
+//       modifies Repr
+//       ensures Inv()
+//       ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
+//       ensures TrackingGarbage()
+//       ensures this.I().locs == MapRemove1(old(this.I()).locs, ref)
+//       ensures this.I().graph == old(this.I()).graph
+//       ensures oldLoc.None? ==> ref !in old(this.I()).locs
+//       ensures oldLoc.Some? ==> ref in old(this.I()).locs && old(this.I()).locs[ref] == oldLoc.value
+//       /* TODO(andrea) ModelImpl */ ensures (this.Read(), oldLoc) == old(this.Read()).removeLoc(ref)
+//     {
+//       linear var x := box.Take();
+//       oldLoc := inout x.RemoveLoc(ref);
+//       box.Give(x);
+//     }
 
-    method UpdateAndRemoveLoc(ref: BT.G.Reference, succs: seq<BT.G.Reference>) returns (oldLoc: Option<Location>)
-      requires Inv()
-      requires this.TrackingGarbage()
-      requires |succs| <= MaxNumChildren()
-      requires |I().graph| < MaxSize()
-      requires IndirectionTable.SuccsValid(succs, I().graph)
-      modifies Repr
-      ensures Inv()
-      ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
-      ensures this.TrackingGarbage()
-      ensures this.I().locs == MapRemove1(old(this.I()).locs, ref)
-      ensures this.I().graph == old(this.I()).graph[ref := succs]
-      ensures (oldLoc.None? ==> ref !in old(this.I()).locs)
-      ensures (oldLoc.Some? ==> ref in old(this.I()).locs && old(this.I()).locs[ref] == oldLoc.value)
-      /* TODO(andrea) ModelImpl */ ensures old(this.Read()).updateAndRemoveLoc(ref, succs) == (this.Read(), oldLoc)
-    {
-      linear var x := box.Take();
-      oldLoc := inout x.UpdateAndRemoveLoc(ref, succs);
-      box.Give(x);
-    }
+//     method AddLocIfPresent(ref: BT.G.Reference, loc: Location) returns (added: bool)
+//       requires Inv()
+//       modifies Repr
+//       ensures Inv()
+//       ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
+//       ensures added == (ref in old(this.I()).graph && ref !in old(this.I()).locs)
+//       ensures this.I().graph == old(this.I()).graph
+//       ensures added ==> this.I().locs == old(this.I()).locs[ref := loc]
+//       ensures !added ==> this.I().locs == old(this.I()).locs
+//       ensures old(this.TrackingGarbage()) ==> this.TrackingGarbage()
+//       /* TODO(andrea) ModelImpl */ ensures old(this.Read()).addLocIfPresent(ref, loc) == (this.Read(), added)
+//     {
+//       linear var x := box.Take();
+//       added := inout x.AddLocIfPresent(ref, loc);
+//       box.Give(x);
+//     }
 
-    static method ValToIndirectionTable(v: V) returns (s: BoxedIndirectionTable?)
-      requires ValidVal(v)
-      requires ValInGrammar(v, IndirectionTable.IndirectionTableGrammar())
-      ensures s != null ==> s.Inv()
-      ensures s != null ==> fresh(s.Repr)
-      ensures s != null ==> Marshalling.valToIndirectionTable(v) == Some(s.I())
-      ensures s == null ==> Marshalling.valToIndirectionTable(v).None?
-      /* TODO(andrea) ModelImpl */ ensures s != null ==> IndirectionTable.valToIndirectionTable(v).Some?
-      /* TODO(andrea) ModelImpl */ ensures s != null ==> s.Read() == IndirectionTable.valToIndirectionTable(v).value
-      // TODO maybe these are needed at call sites?  ensures s.Some? ==> TrackingGarbage(s.value)
-      // TODO maybe these are needed at call sites?  ensures s.Some? ==> BC.WFCompleteIndirectionTable(I(s.value))
-    {
-      linear var opt := IndirectionTable.ValToIndirectionTable(v);
-      linear match opt {
-        case lNone => {s := null;}
-        case lSome(it) => {
-          var box := new BoxedLinear(it);
-          s := new BoxedIndirectionTable.Box(box);
-        }
-      }
-    }
+//     method RemoveRef(ref: BT.G.Reference) returns (oldLoc: Option<Location>)
+//       requires Inv()
+//       requires this.TrackingGarbage()
+//       requires this.DeallocableRef(ref)
+//       modifies Repr
+//       ensures Inv()
+//       ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
+//       ensures this.TrackingGarbage()
+//       ensures this.I().graph == MapRemove1(old(this.I()).graph, ref)
+//       ensures this.I().locs == MapRemove1(old(this.I()).locs, ref)
+//       ensures (ref in old(this.I()).locs ==> oldLoc == Some(old(this.I()).locs[ref]))
+//       ensures (ref !in old(this.I()).locs ==> oldLoc == None)
+//       /* TODO(andrea) ModelImpl */ ensures old(this.Read()).removeRef(ref) == (this.Read(), oldLoc)
+//     {
+//       linear var x := box.Take();
+//       oldLoc := inout x.RemoveRef(ref);
+//       box.Give(x);
+//     }
 
-    method IndirectionTableToVal() returns (v: V, size: uint64)
-      requires Inv()
-      requires BC.WFCompleteIndirectionTable(this.I())
-      ensures ValInGrammar(v, IndirectionTable.IndirectionTableGrammar())
-      ensures ValidVal(v)
-      ensures Marshalling.valToIndirectionTable(v).Some?
-      ensures Marshalling.valToIndirectionTable(v) == Some(this.I())
+//     method UpdateAndRemoveLoc(ref: BT.G.Reference, succs: seq<BT.G.Reference>) returns (oldLoc: Option<Location>)
+//       requires Inv()
+//       requires this.TrackingGarbage()
+//       requires |succs| <= MaxNumChildren()
+//       requires |I().graph| < MaxSize()
+//       requires IndirectionTable.SuccsValid(succs, I().graph)
+//       modifies Repr
+//       ensures Inv()
+//       ensures forall o | o in Repr :: fresh(o) || o in old(Repr)
+//       ensures this.TrackingGarbage()
+//       ensures this.I().locs == MapRemove1(old(this.I()).locs, ref)
+//       ensures this.I().graph == old(this.I()).graph[ref := succs]
+//       ensures (oldLoc.None? ==> ref !in old(this.I()).locs)
+//       ensures (oldLoc.Some? ==> ref in old(this.I()).locs && old(this.I()).locs[ref] == oldLoc.value)
+//       /* TODO(andrea) ModelImpl */ ensures old(this.Read()).updateAndRemoveLoc(ref, succs) == (this.Read(), oldLoc)
+//     {
+//       linear var x := box.Take();
+//       oldLoc := inout x.UpdateAndRemoveLoc(ref, succs);
+//       box.Give(x);
+//     }
 
-      /* TODO(andrea) ModelImpl */ ensures IndirectionTable.valToIndirectionTable(v).Some?
-      /* TODO(andrea) ModelImpl */ ensures IndirectionTable.valToIndirectionTable(v) == Some(this.Read())
+//     static method ValToIndirectionTable(v: V) returns (s: BoxedIndirectionTable?)
+//       requires ValidVal(v)
+//       requires ValInGrammar(v, IndirectionTable.IndirectionTableGrammar())
+//       ensures s != null ==> s.Inv()
+//       ensures s != null ==> fresh(s.Repr)
+//       ensures s != null ==> Marshalling.valToIndirectionTable(v) == Some(s.I())
+//       ensures s == null ==> Marshalling.valToIndirectionTable(v).None?
+//       /* TODO(andrea) ModelImpl */ ensures s != null ==> IndirectionTable.valToIndirectionTable(v).Some?
+//       /* TODO(andrea) ModelImpl */ ensures s != null ==> s.Read() == IndirectionTable.valToIndirectionTable(v).value
+//       // TODO maybe these are needed at call sites?  ensures s.Some? ==> TrackingGarbage(s.value)
+//       // TODO maybe these are needed at call sites?  ensures s.Some? ==> BC.WFCompleteIndirectionTable(I(s.value))
+//     {
+//       linear var opt := IndirectionTable.ValToIndirectionTable(v);
+//       linear match opt {
+//         case lNone => {s := null;}
+//         case lSome(it) => {
+//           var box := new BoxedLinear(it);
+//           s := new BoxedIndirectionTable.Box(box);
+//         }
+//       }
+//     }
 
-      ensures SizeOfV(v) <= IndirectionTable.MaxIndirectionTableByteSize()
-      ensures SizeOfV(v) == size as int
-    {
-      v, size := box.Borrow().IndirectionTableToVal();
-    }
+//     method IndirectionTableToVal() returns (v: V, size: uint64)
+//       requires Inv()
+//       requires BC.WFCompleteIndirectionTable(this.I())
+//       ensures ValInGrammar(v, IndirectionTable.IndirectionTableGrammar())
+//       ensures ValidVal(v)
+//       ensures Marshalling.valToIndirectionTable(v).Some?
+//       ensures Marshalling.valToIndirectionTable(v) == Some(this.I())
 
-    method InitLocBitmap() returns (success: bool, linear bm: BitmapImpl.Bitmap)
-      requires Inv()
-      requires BC.WFCompleteIndirectionTable(this.I())
-      ensures bm.Inv()
-      /* TODO(andrea) ModelImpl */ ensures (success, bm.I()) == this.ReadWithInv().initLocBitmap()
-    {
-      success, bm := box.Borrow().InitLocBitmap();
-    }
+//       /* TODO(andrea) ModelImpl */ ensures IndirectionTable.valToIndirectionTable(v).Some?
+//       /* TODO(andrea) ModelImpl */ ensures IndirectionTable.valToIndirectionTable(v) == Some(this.Read())
+
+//       ensures SizeOfV(v) <= IndirectionTable.MaxIndirectionTableByteSize()
+//       ensures SizeOfV(v) == size as int
+//     {
+//       v, size := box.Borrow().IndirectionTableToVal();
+//     }
+
+//     method InitLocBitmap() returns (success: bool, linear bm: BitmapImpl.Bitmap)
+//       requires Inv()
+//       requires BC.WFCompleteIndirectionTable(this.I())
+//       ensures bm.Inv()
+//       /* TODO(andrea) ModelImpl */ ensures (success, bm.I()) == this.ReadWithInv().initLocBitmap()
+//     {
+//       success, bm := box.Borrow().InitLocBitmap();
+//     }
     
-    method FindDeallocable() returns (ref: Option<BT.G.Reference>)
-      requires this.Inv()
-      requires this.Read().TrackingGarbage()
-      ensures ref.Some? ==> ref.value in this.Read().I().graph
-      ensures ref.Some? ==> this.Read().deallocable(ref.value)
-      ensures ref.None? ==> forall r | r in this.I().graph :: !this.Read().deallocable(r)
-      /* TODO(andrea) ModelImpl */ ensures this.ReadWithInv().findDeallocable() == ref
-    {
-      ref := box.Borrow().FindDeallocable();
-    }
+//     method FindDeallocable() returns (ref: Option<BT.G.Reference>)
+//       requires this.Inv()
+//       requires this.Read().TrackingGarbage()
+//       ensures ref.Some? ==> ref.value in this.Read().I().graph
+//       ensures ref.Some? ==> this.Read().deallocable(ref.value)
+//       ensures ref.None? ==> forall r | r in this.I().graph :: !this.Read().deallocable(r)
+//       /* TODO(andrea) ModelImpl */ ensures this.ReadWithInv().findDeallocable() == ref
+//     {
+//       ref := box.Borrow().FindDeallocable();
+//     }
 
-    function method GetSize() : (size: uint64)
-      requires Inv()
-      reads Repr
-      ensures size as int == |I().graph|
-    {
-      box.Borrow().GetSize()
-    }
+//     function method GetSize() : (size: uint64)
+//       requires Inv()
+//       reads Repr
+//       ensures size as int == |I().graph|
+//     {
+//       box.Borrow().GetSize()
+//     }
 
-    method FindRefWithNoLoc() returns (ref: Option<BT.G.Reference>)
-      requires Inv()
-      modifies Repr
-      ensures Inv()
-      ensures Repr == old(Repr)
-      ensures this.Read().locs == old(this.Read().locs)
-      ensures this.Read().graph == old(this.Read().graph)
-      ensures ref.Some? ==> ref.value in old(this.Read().graph)
-      ensures ref.Some? ==> ref.value !in old(this.Read().locs)
-      ensures ref.None? ==> forall r | r in old(this.Read().graph) :: r in old(this.Read().locs)
-      /* TODO(andrea) ModelImpl */ ensures (this.Read(), ref) == old(this.Read()).findRefWithNoLoc()
-    {
-      linear var x := box.Take();
-      ref := inout x.FindRefWithNoLoc();
-      box.Give(x);
-    }
+//     method FindRefWithNoLoc() returns (ref: Option<BT.G.Reference>)
+//       requires Inv()
+//       modifies Repr
+//       ensures Inv()
+//       ensures Repr == old(Repr)
+//       ensures this.Read().locs == old(this.Read().locs)
+//       ensures this.Read().graph == old(this.Read().graph)
+//       ensures ref.Some? ==> ref.value in old(this.Read().graph)
+//       ensures ref.Some? ==> ref.value !in old(this.Read().locs)
+//       ensures ref.None? ==> forall r | r in old(this.Read().graph) :: r in old(this.Read().locs)
+//       /* TODO(andrea) ModelImpl */ ensures (this.Read(), ref) == old(this.Read()).findRefWithNoLoc()
+//     {
+//       linear var x := box.Take();
+//       ref := inout x.FindRefWithNoLoc();
+//       box.Give(x);
+//     }
 
-    method GetRefUpperBound() returns (r: uint64)
-      requires Inv()
-      ensures r == this.Read().getRefUpperBound()
-    {
-      r := box.Borrow().GetRefUpperBound();
-    }
-  }
+//     method GetRefUpperBound() returns (r: uint64)
+//       requires Inv()
+//       ensures r == this.Read().getRefUpperBound()
+//     {
+//       r := box.Borrow().GetRefUpperBound();
+//     }
+//   }
 }
