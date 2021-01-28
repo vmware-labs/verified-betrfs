@@ -38,6 +38,7 @@ module IOImpl {
   import BucketWeights
   import BlockJournalDisk
   import IMM = MarshallingModel
+  import BitmapModel
 
   predicate LocAvailable(s: ImplVariables, loc: Location, len: uint64)
   requires s.WFBCVars()
@@ -504,51 +505,136 @@ module IOImpl {
       assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.NoOpStep);
     }
   }
-/*
+
+  lemma lemmaOutstandingLocIndexValid(s: ImplVariables, id: uint64)
+  requires s.BCInv()
+  requires s.Ready?
+  requires id in s.outstandingBlockWrites
+  ensures 0 <= s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize() < NumBlocks()
+  {
+    reveal_ConsistentBitmap();
+    var i := s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize();
+    DiskLayout.reveal_ValidNodeAddr();
+    assert i * NodeBlockSize() == s.outstandingBlockWrites[id].loc.addr as int;
+    assert IT.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.I().outstanding, i);
+  }
 
   // == writeResponse ==
-
   method writeNodeResponse(linear inout s: ImplVariables, io: DiskIOHandler)
   requires io.diskOp().RespWriteOp?
   requires ValidDiskOp(io.diskOp())
-  requires old_s.Inv()
+  requires old_s.BCInv()
   requires old_s.Ready? && IIO(io).id in old_s.outstandingBlockWrites
-  ensures s.W()
-  ensures s.I() == IOModel.writeNodeResponse(old_s.I(), IIO(io))
+
+  requires ValidNodeLocation(LocOfRespWrite(diskOp(IIO(io)).respWrite))
+
+  ensures && s.WFBCVars()
+      && BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop,
+        StatesInternalOp)
   {
     var id, addr, len := io.getWriteResult();
-    IOModel.lemmaOutstandingLocIndexValid(s.I(), id);
+    lemmaOutstandingLocIndexValid(s, id);
 
-    var i := s.outstandingBlockWrites[id].loc.addr / NodeBlockSizeUint64();
-    inout s.blockAllocator.MarkFreeOutstanding(i);
+    var locIdx: uint64 := s.outstandingBlockWrites[id].loc.addr / NodeBlockSizeUint64();
+    inout s.blockAllocator.MarkFreeOutstanding(locIdx);
     inout s.outstandingBlockWrites := ComputeMapRemove1(s.outstandingBlockWrites, id);
+
+    reveal_ConsistentBitmap();
+    // var locIdx := s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize();
+
+    DiskLayout.reveal_ValidNodeAddr();
+    assert locIdx as int * NodeBlockSize() == old_s.outstandingBlockWrites[id].loc.addr as int;
+
+    BitmapModel.reveal_BitUnset();
+    BitmapModel.reveal_IsSet();
+
+    forall i: int
+    | IsLocAllocOutstanding(s.outstandingBlockWrites, i)
+    ensures IT.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.I().outstanding, i)
+    {
+      if i != locIdx as int {
+        assert IsLocAllocOutstanding(old_s.outstandingBlockWrites, i);
+        assert IT.IndirectionTable.IsLocAllocBitmap(old_s.blockAllocator.I().outstanding, i);
+        assert IT.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.I().outstanding, i);
+      } else {
+        var id1 :| id1 in s.outstandingBlockWrites && s.outstandingBlockWrites[id1].loc.addr as int == i * NodeBlockSize() as int;
+        assert BC.OutstandingBlockWritesDontOverlap(old_s.outstandingBlockWrites, id, id1);
+        /*assert old_s.outstandingBlockWrites[id1].loc.addr as int
+            == s.outstandingBlockWrites[id1].loc.addr as int
+            == i * NodeBlockSize() as int;
+        assert id == id1;
+        assert id !in s.outstandingBlockWrites;
+        assert false;*/
+      }
+    }
+
+    forall i: int
+    | IT.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.I().outstanding, i)
+    ensures IsLocAllocOutstanding(s.outstandingBlockWrites, i)
+    {
+      if i != locIdx as int {
+        assert IT.IndirectionTable.IsLocAllocBitmap(old_s.blockAllocator.I().outstanding, i);
+        assert IsLocAllocOutstanding(s.outstandingBlockWrites, i);
+      } else {
+        assert IsLocAllocOutstanding(s.outstandingBlockWrites, i);
+      }
+    }
+
+    assert s.WFBCVars();
+    assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.WriteBackNodeRespStep);
   }
 
   method writeIndirectionTableResponse(linear inout s: ImplVariables, io: DiskIOHandler)
   returns (loc: Location)
   requires io.diskOp().RespWriteOp?
   requires ValidDiskOp(io.diskOp())
-  requires old_s.Inv()
+  requires old_s.BCInv()
   requires old_s.Ready?
   requires old_s.frozenIndirectionTableLoc.Some?
-  ensures s.W()
-  ensures (s.I(), loc) == IOModel.writeIndirectionTableResponse(
-      old_s.I(), IIO(io))
+
+  // [yizhou7]: addtional preconditions
+  requires old_s.outstandingIndirectionTableWrite == Some(IIO(io).id)
+  requires ValidIndirectionTableLocation(LocOfRespWrite(diskOp(IIO(io)).respWrite))
+  ensures && s.WFBCVars()
+    && BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop,
+        SendFrozenLocOp(loc))
   {
     inout s.outstandingIndirectionTableWrite := None;
     loc := s.frozenIndirectionTableLoc.value;
+
+    ghost var bdop := IDiskOp(diskOp(IIO(io))).bdop;
+    assert s.WFBCVars();
+    assert BC.WriteBackIndirectionTableResp(old_s.IBlockCache(), s.IBlockCache(), bdop,
+      SendFrozenLocOp(loc));
+    assert BC.NextStep(old_s.IBlockCache(), s.IBlockCache(), bdop,
+      SendFrozenLocOp(loc), BC.WriteBackIndirectionTableRespStep);
+    assert BBC.NextStep(old_s.IBlockCache(), s.IBlockCache(), bdop,
+      SendFrozenLocOp(loc), BBC.BlockCacheMoveStep(BC.WriteBackIndirectionTableRespStep));
+    assert BBC.Next(old_s.IBlockCache(), s.IBlockCache(), bdop, SendFrozenLocOp(loc));
+  }
+
+  lemma lemmaBlockAllocatorFrozenSome(s: ImplVariables)
+  requires s.BCInv()
+  requires s.Ready?
+  ensures s.frozenIndirectionTable.lSome?
+      ==> s.blockAllocator.frozen.lSome?
+  {
+    reveal_ConsistentBitmap();
   }
 
   // [yizhou7]: this might not be the best way is to decompose and recompose
   method cleanUp(linear inout s: ImplVariables)
-  requires old_s.Inv()
+  requires old_s.BCInv()
   requires old_s.Ready?
   requires old_s.frozenIndirectionTable.lSome?
   requires old_s.frozenIndirectionTableLoc.Some?
-  ensures s.W()
-  ensures s.I() == IOModel.cleanUp(old_s.I())
+
+  requires old_s.outstandingIndirectionTableWrite.None?
+
+  ensures && s.WFBCVars()
+    && BBC.Next(old_s.IBlockCache(), s.IBlockCache(), BlockDisk.NoDiskOp, CleanUpOp)
   {
-    IOModel.lemmaBlockAllocatorFrozenSome(s.I());
+    lemmaBlockAllocatorFrozenSome(s);
 
     linear var Ready(
       persistentIndirectionTable,
@@ -578,8 +664,18 @@ module IOImpl {
       cache,
       lru,
       blockAllocator);
-
+  
+    assert s.blockAllocator == old_s.blockAllocator;
+    assert old_s.blockAllocator.Inv();
     inout s.blockAllocator.MoveFrozenToPersistent();
+
+    reveal_ConsistentBitmap();
+    assert s.WFBCVars();
+    assert BC.CleanUp(old_s.IBlockCache(), s.IBlockCache(), BlockDisk.NoDiskOp, CleanUpOp);
+    assert BC.NextStep(old_s.IBlockCache(), s.IBlockCache(), BlockDisk.NoDiskOp,
+      CleanUpOp, BC.CleanUpStep);
+    assert BBC.NextStep(old_s.IBlockCache(), s.IBlockCache(), BlockDisk.NoDiskOp,
+      CleanUpOp, BBC.BlockCacheMoveStep(BC.CleanUpStep));
+    assert BBC.Next(old_s.IBlockCache(), s.IBlockCache(), BlockDisk.NoDiskOp, CleanUpOp);
   }
-  */
 }

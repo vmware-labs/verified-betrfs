@@ -204,7 +204,7 @@ module BlockAllocatorImpl {
     linear inout method MoveFrozenToPersistent()
     requires old_self.Inv()
     requires BlockAllocatorModel.Inv(old_self.I())
-    requires old_self.I().frozen.Some?
+    requires old_self.frozen.lSome?
     ensures self.Inv()
     ensures self.I() == BlockAllocatorModel.MoveFrozenToPersistent(old_self.I())
     {
