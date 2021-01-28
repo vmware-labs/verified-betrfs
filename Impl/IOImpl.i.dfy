@@ -420,19 +420,30 @@ module IOImpl {
       print "giving up; did not get indirectionTable when reading\n";
     }
   }
-/*
 
+  // [yizhou7][fixme]: this takes a long time to go through
   method PageInNodeResp(linear inout s: ImplVariables, io: DiskIOHandler)
-  requires old_s.W()
-  requires old_s.WF()
+  requires old_s.WFBCVars()
   requires io.diskOp().RespReadOp?
   requires old_s.Ready?
-  ensures s.W()
-  ensures s.I() == IOModel.PageInNodeResp(old_s.I(), old(IIO(io)))
+
+  // [yizhou7]: addtional preconditions
+  requires old_s.BCInv()
+  requires ValidDiskOp(diskOp(IIO(io)))
+
+  ensures && s.WFBCVars()
+    && ValidDiskOp(diskOp(IIO(io)))
+    && BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
   {
     var id; linear var sector;
     id, sector := ReadSector(io);
     assert sector.lSome? ==> SSI.WFSector(sector.value);
+
+    IOModel.ReadSectorCorrect(IIO(io));
+
+    Marshalling.reveal_parseSector();
+    reveal_SectorOfBytes();
+    reveal_Parse();
 
     // TODO we should probably remove the id from outstandingBlockReads
     // even in the case we don't do anything with it
@@ -444,6 +455,7 @@ module IOImpl {
         if cacheLookup {
           FreeSectorOpt(sector);
           print "PageInNodeResp: ref in s.cache\n";
+          assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.NoOpStep);
         } else {
           assert sector.lSome? ==> SSI.WFSector(sector.value);
 
@@ -456,34 +468,43 @@ module IOImpl {
 
             var children := node.children;
             if (graph == (if children.Some? then children.value else [])) {
-              assert|LruModel.I(s.lru.Queue())| <= 0x10000;
-              assert sector.lSome? ==> SSI.WFSector(value);
               inout s.lru.Use(ref);
-
-              assert sector.lSome? ==> SSI.WFSector(value);
-
-              assert |s.cache.I()| <= MaxCacheSize();
               inout s.cache.Insert(ref, node);
-
               inout s.outstandingBlockReads := ComputeMapRemove1(s.outstandingBlockReads, id);
+
+              BucketWeights.WeightBucketEmpty();
+
+              LruModel.LruUse(old_s.lru.Queue(), ref);
+
+              assert |s.cache.I()| == |old_s.cache.I()| + 1;
+              assert |s.outstandingBlockReads| == |old_s.outstandingBlockReads| - 1;
+
+              assert s.WFBCVars();
+              assert BC.PageInNodeResp(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp);
+              assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.PageInNodeRespStep);
             } else {
               var _ := FreeNode(node);
               print "giving up; block does not match graph\n";
+              assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.NoOpStep);
             }
           } else {
             FreeSectorOpt(sector);
             print "giving up; block read in was not block\n";
+            assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.NoOpStep);
           }
         }
       } else {
         FreeSectorOpt(sector);
         print "PageInNodeResp: ref !in lbas\n";
+        assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.NoOpStep);
       }
     } else {
       FreeSectorOpt(sector);
       print "PageInNodeResp: unrecognized id from Read\n";
+      assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.NoOpStep);
     }
   }
+/*
 
   // == writeResponse ==
 
