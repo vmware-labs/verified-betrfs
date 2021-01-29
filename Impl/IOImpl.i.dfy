@@ -1,10 +1,9 @@
 include "StateSectorImpl.i.dfy"
 include "StateBCImpl.i.dfy"
-include "IOModel.i.dfy"
 include "MarshallingImpl.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "DiskOpImpl.i.dfy"
-
+include "IOModel.i.dfy"
 include "../lib/Base/LinearOption.i.dfy"
 include "../lib/DataStructures/LruImpl.i.dfy"
 
@@ -40,23 +39,17 @@ module IOImpl {
   import IMM = MarshallingModel
   import BitmapModel
 
-  predicate LocAvailable(s: ImplVariables, loc: Location, len: uint64)
-  requires s.WFBCVars()
-  {
-    && s.Ready?
-    && ValidNodeLocation(loc)
-    && BC.ValidAllocation(s.IBlockCache(), loc)
-    && loc.len == len
-  }
-
   // TODO does ImplVariables make sense? Should it be a Variables? Or just the fields of a class we live in?
   method getFreeLoc(shared s: ImplVariables, len: uint64)
   returns (loc : Option<Location>)
   requires s.Ready?
   requires s.WFBCVars()
   requires len <= NodeBlockSizeUint64()
-  ensures loc.Some? ==> LocAvailable(s, loc.value, len)
+  ensures loc.Some? ==> IOModel.LocAvailable(s, loc.value, len)
+  ensures loc == IOModel.getFreeLoc(s, len)
   {
+    IOModel.reveal_getFreeLoc();
+
     reveal_ConsistentBitmap();
     DiskLayout.reveal_ValidNodeAddr();
 
@@ -133,9 +126,11 @@ module IOImpl {
   requires sector.SectorNode?
 
   modifies io
-
+  
+  ensures IOModel.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(SSI.ISector(sector)), id, loc, IIO(io))
   ensures id.Some? ==> loc.Some? && io.diskOp().ReqWriteOp? && io.diskOp().id == id.value
   ensures id.None? ==> IIO(io) == old(IIO(io))
+
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures id.Some? ==> DiskLayout.ValidLocation(loc.value)
   ensures id.Some? ==> sector.SectorNode? ==> BC.ValidAllocation(s.IBlockCache(), loc.value)
@@ -506,19 +501,6 @@ module IOImpl {
     }
   }
 
-  lemma lemmaOutstandingLocIndexValid(s: ImplVariables, id: uint64)
-  requires s.BCInv()
-  requires s.Ready?
-  requires id in s.outstandingBlockWrites
-  ensures 0 <= s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize() < NumBlocks()
-  {
-    reveal_ConsistentBitmap();
-    var i := s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize();
-    DiskLayout.reveal_ValidNodeAddr();
-    assert i * NodeBlockSize() == s.outstandingBlockWrites[id].loc.addr as int;
-    assert IT.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.I().outstanding, i);
-  }
-
   // == writeResponse ==
   method writeNodeResponse(linear inout s: ImplVariables, io: DiskIOHandler)
   requires io.diskOp().RespWriteOp?
@@ -533,7 +515,7 @@ module IOImpl {
         StatesInternalOp)
   {
     var id, addr, len := io.getWriteResult();
-    lemmaOutstandingLocIndexValid(s, id);
+    IOModel.lemmaOutstandingLocIndexValid(s, id);
 
     var locIdx: uint64 := s.outstandingBlockWrites[id].loc.addr / NodeBlockSizeUint64();
     inout s.blockAllocator.MarkFreeOutstanding(locIdx);
@@ -613,15 +595,6 @@ module IOImpl {
     assert BBC.Next(old_s.IBlockCache(), s.IBlockCache(), bdop, SendFrozenLocOp(loc));
   }
 
-  lemma lemmaBlockAllocatorFrozenSome(s: ImplVariables)
-  requires s.BCInv()
-  requires s.Ready?
-  ensures s.frozenIndirectionTable.lSome?
-      ==> s.blockAllocator.frozen.lSome?
-  {
-    reveal_ConsistentBitmap();
-  }
-
   // [yizhou7]: this might not be the best way is to decompose and recompose
   method cleanUp(linear inout s: ImplVariables)
   requires old_s.BCInv()
@@ -634,7 +607,7 @@ module IOImpl {
   ensures && s.WFBCVars()
     && BBC.Next(old_s.IBlockCache(), s.IBlockCache(), BlockDisk.NoDiskOp, CleanUpOp)
   {
-    lemmaBlockAllocatorFrozenSome(s);
+    IOModel.lemmaBlockAllocatorFrozenSome(s);
 
     linear var Ready(
       persistentIndirectionTable,
