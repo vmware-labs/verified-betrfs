@@ -21,6 +21,7 @@ module BookkeepingImpl {
   predicate RefAvailable(s: ImplVariables, ref: Reference)
   {
     && s.Ready?
+    && s.W()
     && ref !in s.ephemeralIndirectionTable.I().graph
     && ref !in s.cache.I()
     && ref != BT.G.Root()
@@ -29,7 +30,7 @@ module BookkeepingImpl {
   method getFreeRef(shared s: ImplVariables)
   returns (ref : Option<BT.G.Reference>)
   requires s.Ready?
-  requires s.WFBCVars()
+  requires s.W()
   ensures ref.Some? ==> RefAvailable(s, ref.value)
   {
     var i := s.ephemeralIndirectionTable.GetRefUpperBound();
@@ -61,7 +62,7 @@ module BookkeepingImpl {
   method getFreeRef2(shared s: ImplVariables, avoid: BT.G.Reference)
   returns (ref : Option<BT.G.Reference>)
   requires s.Ready?
-  requires s.WFBCVars()
+  requires s.W()
 
   ensures ref.Some? ==> ref.value != avoid;
   ensures ref.Some? ==> RefAvailable(s, ref.value)
@@ -296,6 +297,11 @@ module BookkeepingImpl {
   ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
   ensures s.cache.I() == old_s.cache.I()
   ensures WriteAllocConditions(s)
+  ensures |s.ephemeralIndirectionTable.graph| <= |old_s.ephemeralIndirectionTable.graph| + 1
+
+  ensures forall children1: Option<seq<BT.G.Reference>> :: ChildrenConditions(old_s, children1) ==> ChildrenConditions(s, children1)
+  ensures forall ref2 :: ref2 in old_s.ephemeralIndirectionTable.I().graph ==>  ref2 in s.ephemeralIndirectionTable.I().graph
+  ensures ref in  s.ephemeralIndirectionTable.I().graph
   {
     lemmaIndirectionTableLocIndexValid(s, ref);
     var oldLoc := inout s.ephemeralIndirectionTable.UpdateAndRemoveLoc(ref, (if children.Some? then children.value else []));
@@ -318,16 +324,17 @@ module BookkeepingImpl {
       else None);
     reveal_ConsistentBitmap();
   }
-/*
 
+/*
   method writeBookkeepingNoSuccsUpdate(linear inout s: ImplVariables, ref: BT.G.Reference)
   requires old_s.W()
   requires old_s.Ready?
+  requires WriteAllocConditions(s)
+
   requires |LruModel.I(old_s.lru.Queue())| <= 0x1_0000_0000
   requires BookkeepingModel.WriteAllocConditions(old_s.I())
   requires ref in old_s.ephemeralIndirectionTable.I().graph
   ensures s.W()
-  ensures s.I() == BookkeepingModel.writeBookkeepingNoSuccsUpdate(old_s.I(), ref)
   ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
   {
     BookkeepingModel.reveal_writeBookkeepingNoSuccsUpdate();
