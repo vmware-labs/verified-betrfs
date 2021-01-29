@@ -126,8 +126,8 @@ module IOImpl {
   requires sector.SectorNode?
 
   modifies io
-  
-  ensures IOModel.FindLocationAndRequestWrite(old(IIO(io)), old(s.I()), old(SSI.ISector(sector)), id, loc, IIO(io))
+
+  ensures IOModel.FindLocationAndRequestWrite(old(IIO(io)), s, old(SSI.ISector(sector)), id, loc, IIO(io))
   ensures id.Some? ==> loc.Some? && io.diskOp().ReqWriteOp? && io.diskOp().id == id.value
   ensures id.None? ==> IIO(io) == old(IIO(io))
 
@@ -137,6 +137,7 @@ module IOImpl {
   ensures id.Some? ==> sector.SectorNode? ==> DiskLayout.ValidNodeLocation(loc.value)
   ensures sector.SectorNode? ==> id.Some? ==> IDiskOp(diskOp(IIO(io))) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteNodeOp(id.value, BlockDisk.ReqWriteNode(loc.value, sector.node.I())), JournalDisk.NoDiskOp)
   {
+    IOModel.reveal_FindLocationAndRequestWrite();
     var bytes := MarshallingImpl.MarshallCheckedSector(sector);
     if (bytes == null) {
       id := None;
