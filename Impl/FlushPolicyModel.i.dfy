@@ -38,45 +38,6 @@ module FlushPolicyModel {
     | ActionEvict
     | ActionFail
 
-  function biggestSlotIterate(buckets: seq<Bucket>, j: uint64, bestIdx: uint64, bestWeight: uint64) : (res : (uint64, uint64))
-  requires 0 <= bestIdx as int < |buckets|
-  requires 0 <= bestWeight as int <= MaxTotalBucketWeight()
-  requires 1 <= j as int <= |buckets| <= MaxNumChildren()
-  requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
-  requires WeightBucketList(buckets) <= MaxTotalBucketWeight()
-  requires WeightBucket(buckets[bestIdx]) == bestWeight as int
-  ensures 0 <= res.0 as int < |buckets|
-  ensures 0 <= res.1 as int <= MaxTotalBucketWeight()
-  ensures WeightBucket(buckets[res.0]) == res.1 as int
-  decreases |buckets| - j as int
-  {
-    if j == |buckets| as uint64 then (
-      (bestIdx, bestWeight)
-    ) else (
-      WeightBucketLeBucketList(buckets, j as int);
-
-      var w := WeightBucket(buckets[j]) as uint64;
-      if w > bestWeight then (
-        biggestSlotIterate(buckets, j+1, j, w)
-      ) else (
-        biggestSlotIterate(buckets, j+1, bestIdx, bestWeight)
-      )
-    )
-  }
-
-  function biggestSlot(buckets: seq<Bucket>) : (res : (uint64, uint64))
-  requires |buckets| > 0
-  requires |buckets| <= MaxNumChildren()
-  requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
-  requires WeightBucketList(buckets) <= MaxTotalBucketWeight()
-  ensures 0 <= res.0 as int < |buckets|
-  ensures 0 <= res.1 as int <= MaxTotalBucketWeight()
-  ensures WeightBucket(buckets[res.0]) == res.1 as int
-  {
-    WeightBucketLeBucketList(buckets, 0);
-    biggestSlotIterate(buckets, 1, 0, WeightBucket(buckets[0]) as uint64)
-  }
-
   predicate ValidStackSlots(s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
   {
     && |stack| == |slots| + 1
