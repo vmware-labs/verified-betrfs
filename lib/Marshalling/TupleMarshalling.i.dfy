@@ -234,8 +234,8 @@ abstract module Tuple3Marshalling refines Marshalling {
     var tableSize := sizeOfTable();
     var table :mseq<Boundary> := TableMarshalling.parse(data[..tableSize]);
     var bound0 := BoundaryInt.toInt(table[0]);
-    var bound1 := BoundaryInt.toInt(table[1]);
     var elem0 := ElemMarshalling0.parse(data[tableSize..bound0]);
+    var bound1 := BoundaryInt.toInt(table[1]);
     var elem1 := ElemMarshalling1.parse(data[bound0..bound1]);
     var elem2 := ElemMarshalling2.parse(data[bound1..]);
     (elem0, elem1, elem2)
