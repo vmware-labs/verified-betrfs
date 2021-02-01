@@ -35,7 +35,7 @@ abstract module Tuple{{count}}Marshalling refines Marshalling {
   predicate parsable(data: mseq<byte>)
   {
     && var tableSize := sizeOfTable();
-    && tableSize < Uint64UpperBound()
+    && SizeOfBoundaryEntry() as int < Uint64UpperBound() / {{count-1}}
     && |data| >= tableSize
     && TableMarshalling.parsable(data[..tableSize])
     && var table :mseq<Boundary> := TableMarshalling.parse(data[..tableSize]);
@@ -236,6 +236,10 @@ abstract module Tuple{{count}}Marshalling refines Marshalling {
 
   predicate marshallable(value: UnmarshalledType)
   {
+    && var entrySize := SizeOfBoundaryEntry();
+{% if count > 2 %}
+    && entrySize < {{esize}}
+{% endif %}
     && var ({%- for n in range(0,count) -%}
     {%- if n != count - 1 -%}
       elem{{n}},
