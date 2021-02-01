@@ -226,6 +226,20 @@ def entry_lemma(i):
     return lines
 
   return """
+  lemma lut_entry_"""+str(i-1)+"""_0()
+  ensures ["""+bool_list(val,0,32)+"""] == pow_mod_crc("""+str(128*i)+""");
+  {
+    pow_"""+str(128*i-33)+"""();
+    of_pow("""+str(128*i)+""", """+bool_list_rev(val,0, 32)+""");
+  }
+
+  lemma lut_entry_"""+str(i-1)+"""_1()
+  ensures ["""+bool_list(val,32,64)+"""] == pow_mod_crc("""+str(64*i)+""");
+  {
+    pow_"""+str(64*i-33)+"""();
+    of_pow("""+str(64*i)+""", """+bool_list_rev(val,32, 64)+""");
+  }
+
   lemma lut_entry_"""+str(i-1)+"""()
   ensures bits_of_int(lut["""+str(i-1)+"""] as int, 64)
       == pow_mod_crc("""+str(128*i)+""") + pow_mod_crc("""+str(64*i)+""")
@@ -243,22 +257,8 @@ def entry_lemma(i):
       }
       ["""+bool_list(val,0,32)+"""]+["""+bool_list(val,32,64)+"""];
       {
-        calc {
-          ["""+bool_list(val,0,32)+"""];
-          {
-            pow_"""+str(128*i-33)+"""();
-            of_pow("""+str(128*i)+""", """+bool_list_rev(val,0, 32)+""");
-          }
-          pow_mod_crc("""+str(128*i)+""");
-        }
-        calc {
-          ["""+bool_list(val,32,64)+"""];
-          {
-            pow_"""+str(64*i-33)+"""();
-            of_pow("""+str(64*i)+""", """+bool_list_rev(val,32, 64)+""");
-          }
-          pow_mod_crc("""+str(64*i)+""");
-        }
+        lut_entry_"""+str(i-1)+"""_0();
+        lut_entry_"""+str(i-1)+"""_1();
       }
       pow_mod_crc("""+str(128*i)+""") + pow_mod_crc("""+str(64*i)+""");
     }

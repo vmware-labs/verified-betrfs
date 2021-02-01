@@ -26,3 +26,4 @@ fi
 # https://github.com/secure-foundations/dafny.git
 # cpp branch
 git checkout $commit
+git submodule update --init --recursive

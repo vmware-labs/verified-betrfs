@@ -110,7 +110,7 @@ build%/.:
 SHELL=/bin/bash
 define tee_capture
 	$(eval TMPNAME=$(patsubst %.verified,%.verified-tmp,$1))
-	$(2) 2&>1 | tee $(TMPNAME); test $${PIPESTATUS[0]} -eq 0
+	$(2) 2>&1 | tee $(TMPNAME); test $${PIPESTATUS[0]} -eq 0
 	mv $(TMPNAME) $1
 endef
 

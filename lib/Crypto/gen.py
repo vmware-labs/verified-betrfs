@@ -35,12 +35,10 @@ def pow_str(k):
   return "pow("+str(k)+"," + ",".join("true" if (p>>i)&1 else "false" for i in range(0,32)) + ")"
 
 def main():
-  print("""include "CRC32LutLemma.i.dfy"
+  print("""include "CRC32PowDef.i.dfy"
 
 module CRC32_C_Lut_Powers {
-  import opened Bits_s
-  import opened F2_X_s
-  import opened CRC32_C_Lut_Lemma
+  import opened CRC32PowDef
 
 """)
 
@@ -62,9 +60,11 @@ module CRC32_C_Lut_Powers {
     print("    " + ("}" * (k-1-prev)))
     """
 
+    print("    reveal_pow();")
     if i > 1:
-      print("    assert " + pow_str(k-21) + " by { ")
-      print("    assert " + pow_str(k-42) + " by { pow_" + str(k-64) + "(); } }")
+      #print("    assert " + pow_str(k-21) + " by { ")
+      #print("    assert " + pow_str(k-42) + " by { pow_" + str(k-64) + "(); } }")
+      print("    assert " + pow_str(k-32) + " by { pow_" + str(k-64) + "(); }")
 
     
     print("  }")
