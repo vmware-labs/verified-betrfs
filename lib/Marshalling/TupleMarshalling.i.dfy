@@ -438,9 +438,14 @@ abstract module Tuple3Marshalling refines Marshalling {
   }
 
   method GetElem0(data: mseq<byte>) returns (edata: mseq<byte>)
-    requires parsable(data)
-    ensures ElemMarshalling0.parsable(edata)
-    ensures ElemMarshalling0.parse(edata) == parse(data).0
+    requires var tableSize := sizeOfTable();
+    // && TableMarshalling.parsable(data[..tableSize])
+    // && var table :mseq<Boundary> := TableMarshalling.parse(data[..tableSize]);
+    // && BoundaryInt.fitsInUint64(table[0])
+    // && var bound0 := BoundaryInt.toInt(table[0]);
+    // && tableSize <= bound0 <= |data|
+    ensures parsable(data) ==> ElemMarshalling0.parsable(edata)
+    ensures parsable(data) ==> ElemMarshalling0.parse(edata) == parse(data).0
   {
     var tableSize := sizeOfTable() as uint64;
     var iend0 := TableMarshalling.FastGet(data[..tableSize], 0);

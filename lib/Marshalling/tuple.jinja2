@@ -385,43 +385,43 @@ abstract module Tuple{{count}}Marshalling refines Marshalling {
     assert newdata[start..end][bound{{count-2}}..] == newdata[end{{count-1}}..end];
     // assert ElemMarshalling{{count-1}}.parse(newdata[end{{count-1}}..end]) == elem{{count-1}};
   }
-{% for n in range(0,count) %}
-  {% if n == 0 -%}
-  method GetElem0(data: mseq<byte>) returns (edata: mseq<byte>)
-    requires parsable(data)
-    ensures ElemMarshalling0.parsable(edata)
-    ensures ElemMarshalling0.parse(edata) == parse(data).0
-  {
-    var tableSize := sizeOfTable() as uint64;
-    var iend0 := TableMarshalling.FastGet(data[..tableSize], 0);
-    var end0 := BoundaryInt.toUint64(iend0); 
 
-    edata := data[tableSize..end0];
+  predicate gettable(data: mseq<byte>, index: nat)
+  {
+    && index <= {{count-1}}
+    && SizeOfBoundaryEntry() < 0x8000_0000_0000_0000
+    && var tableSize := sizeOfTable();
+    && tableSize < Uint64UpperBound()
+    && |data| >= tableSize
+    && TableMarshalling.parsable(data[..tableSize])
+    && var table :mseq<Boundary> := TableMarshalling.parse(data[..tableSize]);
+    && var start := if index == 0 then tableSize else BoundaryInt.toInt(table[index - 1]);
+    && var end := if index == {{count-1}} then |data| else BoundaryInt.toInt(table[index]);
+    && 0 <= start <= end <= |data|
   }
-  {% elif n != count-1 -%}
+{% for n in range(0,count) %}
   method GetElem{{n}}(data: mseq<byte>) returns (edata: mseq<byte>)
     requires parsable(data)
-    ensures ElemMarshalling{{n}}.parsable(edata)
-    ensures ElemMarshalling{{n}}.parse(edata) == parse(data).{{n}}
+    ensures parsable(data) ==> ElemMarshalling{{n}}.parsable(edata)
+    ensures parsable(data) ==> ElemMarshalling{{n}}.parse(edata) == parse(data).{{n}}
   {
     var tableSize := sizeOfTable() as uint64;
+  {% if n == 0 %}
+    var iend0 := TableMarshalling.FastGet(data[..tableSize], 0);
+    var end0 := BoundaryInt.toUint64(iend0);
+    edata := data[tableSize..end0];
+  }
+  {% elif n != count-1 %}
     var iend{{n-1}} := TableMarshalling.FastGet(data[..tableSize], {{n-1}});
-    var end{{n-1}} := BoundaryInt.toUint64(iend{{n-1}}); 
+    var end{{n-1}} := BoundaryInt.toUint64(iend{{n-1}});
     var iend{{n}} := TableMarshalling.FastGet(data[..tableSize], {{n}});
     var end{{n}} := BoundaryInt.toUint64(iend{{n}});
 
     edata := data[end{{n-1}}..end{{n}}];
   }
-  {% else -%}
-  method GetElem{{n}}(data: mseq<byte>) returns (edata: mseq<byte>)
-    requires parsable(data)
-    ensures ElemMarshalling{{n}}.parsable(edata)
-    ensures ElemMarshalling{{n}}.parse(edata) == parse(data).{{n}}
-  {
-    var tableSize := sizeOfTable() as uint64;
+  {% else %}
     var iend{{n-1}} := TableMarshalling.FastGet(data[..tableSize], {{n-1}});
     var end{{n-1}} := BoundaryInt.toUint64(iend{{n-1}});
-
     edata := data[end{{n-1}}..];
   }
   {% endif -%}
