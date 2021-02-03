@@ -65,13 +65,7 @@ module GrowImpl {
             print "giving up; could not allocate ref\n";
           }
           case Some(newref) => {
-            WeightBucketEmpty();
-
-            linear var mutbucket := MutBucket.Alloc();
-            linear var buckets := lseq_alloc(1);
-            lseq_give_inout(inout buckets, 0, mutbucket);
-
-            linear var newroot := Node.Alloc(InitPivotTable(), Some([newref]), buckets);
+            linear var newroot := Node.EmptyNode();
             writeBookkeeping(inout s, root, Some([newref]));
             assert newref !in s.cache.I();
             inout s.cache.MoveAndReplace(root, newref, newroot);
