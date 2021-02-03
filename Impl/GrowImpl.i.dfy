@@ -34,6 +34,7 @@ module GrowImpl {
   requires old_s.Ready?
   requires BT.G.Root() in old_s.IBlockCache().cache
   requires |old_s.IBlockCache().ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
+  requires old_s.totalCacheSize() <= MaxCacheSize() - 1
 
   ensures s.Ready?
   ensures s.WFBCVars()
@@ -74,10 +75,9 @@ module GrowImpl {
             writeBookkeeping(inout s, root, Some([newref]));
             assert newref !in s.cache.I();
             inout s.cache.MoveAndReplace(root, newref, newroot);
-            assert s.totalCacheSize() == old_s.totalCacheSize() + 1;
+            assert s.TotalCacheSize() == old_s.TotalCacheSize() + 1;
 
             assume && WFCache(s.cache.I());
-                  // && totalCacheSize() <= MaxCacheSize()
           }
         }
       }
