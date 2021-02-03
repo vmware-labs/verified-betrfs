@@ -5,8 +5,8 @@ include "../MapSpec/UI.s.dfy"
 // state machines.
 
 abstract module UIStateMachine {
-  import _UI = UI
-  type UIOp = _UI.Op
+  import myUI = UI
+  type UIOp = myUI.Op
 
   type Variables(!new)
   predicate Init(s: Variables)
