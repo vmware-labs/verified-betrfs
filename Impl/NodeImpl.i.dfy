@@ -277,10 +277,11 @@ module NodeImpl {
     requires old_self.Inv();
     requires BT.WFNode(old_self.I())
     requires Pivots.BoundedKey(old_self.pivotTable, key)
-    requires WeightBucketList(MutBucket.ILseq(buckets)) + WeightKey(key) + WeightMessage(msg) 
-      < 0x1_0000_0000_0000_0000
+    requires WeightBucketList(MutBucket.ILseq(old_self.buckets)) + WeightKey(key) + WeightMessage(msg) 
+      < MaxTotalBucketWeight()
     ensures self.Inv()
     ensures self.I() == BT.NodeInsertKeyValue(old_self.I(), key, msg)
+    ensures BT.WFNode(self.I())
     {
       BT.reveal_NodeInsertKeyValue();
 
@@ -299,6 +300,9 @@ module NodeImpl {
 
       assert self.Inv();
       assert self.I().buckets == BT.NodeInsertKeyValue(old_self.I(), key, msg).buckets;
+      WeightBucketListInsert(old_self.I().buckets, old_self.pivotTable, key, msg);
+
+      assert BT.WFNode(self.I());
     }
   }
 
