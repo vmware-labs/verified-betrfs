@@ -136,14 +136,14 @@ module StateBCImpl {
     requires Ready?
     requires cache.Inv()
     requires |cache.I()| + |outstandingBlockReads| < 0x1_0000_0000_0000_0000
+    ensures res as int == totalCacheSize()
     {
-      // cache.Count() + (|outstandingBlockReads| as uint64)
       CacheImpl.CacheCount(cache) + (|outstandingBlockReads| as uint64)
     }
 
     function totalCacheSize() : int
     requires Ready?
-    requires W()
+    requires cache.Inv()
     {
       |cache.I()| + |outstandingBlockReads|
     }

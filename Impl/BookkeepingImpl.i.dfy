@@ -22,9 +22,8 @@ module BookkeepingImpl {
   import SSM = StateSectorModel
 
   predicate RefAvailable(s: ImplVariables, ref: Reference)
+    requires s.Ready? && s.W()
   {
-    && s.Ready?
-    && s.W()
     && ref !in s.ephemeralIndirectionTable.I().graph
     && ref !in s.cache.I()
     && ref != BT.G.Root()
@@ -34,6 +33,9 @@ module BookkeepingImpl {
   returns (ref : Option<BT.G.Reference>)
   requires s.Ready?
   requires s.W()
+
+  ensures s.Ready?
+  ensures s.W()
   ensures ref.Some? ==> RefAvailable(s, ref.value)
   ensures forall ref1 | ref1 in s.cache.I() :: Some(ref1) != ref
   {
@@ -68,6 +70,8 @@ module BookkeepingImpl {
   requires s.Ready?
   requires s.W()
 
+  ensures s.Ready?
+  ensures s.W()
   ensures ref.Some? ==> ref.value != avoid;
   ensures ref.Some? ==> RefAvailable(s, ref.value)
   ensures forall ref1 | ref1 in s.cache.I() :: Some(ref1) != ref
@@ -301,6 +305,7 @@ module BookkeepingImpl {
   ensures s.W()
   ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
   ensures s.cache.I() == old_s.cache.I()
+  ensures s.totalCacheSize() == old_s.totalCacheSize();
   ensures WriteAllocConditions(s)
   ensures |s.ephemeralIndirectionTable.graph| <= |old_s.ephemeralIndirectionTable.graph| + 1
 
@@ -310,6 +315,7 @@ module BookkeepingImpl {
   ensures forall ref2 :: ref2 in old_s.ephemeralIndirectionTable.I().graph ==>  ref2 in s.ephemeralIndirectionTable.I().graph
   ensures ref in s.ephemeralIndirectionTable.I().graph
   ensures ChildrenConditions(s, Some([ref]))
+  ensures LruModel.I(s.lru.Queue()) == LruModel.I(old_s.lru.Queue()) + {ref}
   {
     lemmaIndirectionTableLocIndexValid(s, ref);
     var oldLoc := inout s.ephemeralIndirectionTable.UpdateAndRemoveLoc(ref, (if children.Some? then children.value else []));
@@ -383,21 +389,45 @@ module BookkeepingImpl {
   ensures s.W()
   ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
   ensures s.cache.I() == old_s.cache.I()
+  ensures s.totalCacheSize() == old_s.totalCacheSize();
   ensures WriteAllocConditions(s)
   ensures |s.ephemeralIndirectionTable.graph| <= |old_s.ephemeralIndirectionTable.graph| + 1
   ensures ref.Some? ==> ChildrenConditions(s, Some([ref.value]))
-  ensures forall ref2 :: ref2 in old_s.cache.I() ==> ref != Some(ref2)
+  ensures ref.Some? ==> (forall ref2 :: ref2 in old_s.cache.I() ==> ref.value != ref2)
+  ensures ref.Some? ==> (ref.value !in old_s.cache.I())
   ensures ref.Some? ==> 
       (
         forall childrenValue:: ChildrenConditions(old_s, Some(childrenValue)) ==> (
         forall i :: 0 <= i < |childrenValue| ==> ChildrenConditions(s, Some(childrenValue[i := ref.value])))
       )
+  ensures ref.Some? ==> (LruModel.I(s.lru.Queue()) == LruModel.I(old_s.lru.Queue()) + {ref.value})
+  ensures ref.None? ==> (LruModel.I(s.lru.Queue()) == LruModel.I(old_s.lru.Queue()))
   {
     ref := getFreeRef(s);
     if ref.Some? {
       writeBookkeeping(inout s, ref.value, children);
     }
   }
+
+  lemma lemmaChildrenConditionsOfNode(
+      s: ImplVariables, ref: BT.G.Reference)
+  requires s.Ready?
+  requires s.BCInv()
+  requires ref in s.cache.I()
+  requires ref in s.ephemeralIndirectionTable.graph
+  ensures ChildrenConditions(s, s.cache.I()[ref].children)
+  // {
+  //   if s.cache[ref].children.Some? {
+  //     forall r | r in s.cache[ref].children.value
+  //     ensures r in s.ephemeralIndirectionTable.graph
+  //     {
+  //       // Trigger the forall in CacheConsistentWithSuccessors
+  //       assert r in BT.G.Successors(INode(s.cache[ref]));
+  //       assert r in s.ephemeralIndirectionTable.graph[ref];
+  //     }
+  //   }
+  // }
+
 
   method writeWithNode(linear inout s: ImplVariables, ref: BT.G.Reference, linear node: Node)
   requires old_s.WFBCVars()

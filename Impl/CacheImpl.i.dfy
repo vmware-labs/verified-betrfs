@@ -246,11 +246,17 @@ module CacheImpl {
     requires oldref in old_self.I()
     ensures self.Inv()
     ensures self.I() == old_self.I()[oldref := node.I()][newref := old_self.I()[oldref]]
+    ensures newref !in old_self.I() ==> |self.I()| == |old_self.I()| + 1;
+    ensures newref in old_self.I() ==> |self.I()| == |old_self.I()|;
+    ensures self.I().Keys == old_self.I().Keys + {newref};
     {
       self.LemmaSizeEqCount();
       linear var replaced := LCMM.Insert(inout self.cache, oldref, node);
       assert self.cache.contents[oldref] == node;
       assert replaced.lSome?;
+
+      self.LemmaSizeEqCount();
+      assert |self.I()| == |old_self.I()|;
 
       linear var lSome(oldnode) := replaced;
       linear var replaced2 := LCMM.Insert(inout self.cache, newref, oldnode);
@@ -260,6 +266,8 @@ module CacheImpl {
         }
         case lNone() => { }
       }
+
+      self.LemmaSizeEqCount();
     }
 
     // Like Insert, but with slightly different requires
