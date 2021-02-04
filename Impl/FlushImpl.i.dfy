@@ -74,13 +74,18 @@ module FlushImpl {
             s.I(), newchild.children, parentI.children.value, slot as int);
         BookkeepingModel.allocRefDoesntEqual(s.I(), newchild.children, parentref);
 
+
         var newchildref := allocBookkeeping(inout s, newchild.children);
         if newchildref.None? {
           var _ := FreeMutBucket(newparentBucket);
           var _ := FreeNode(newchild);
           print "giving up; could not get parentref\n";
         } else {
+          // assert WeightBucket(newparentBucket.I()) <= WeightBucket(s.cache.I()[parentref].buckets[slot as int]);
+
           inout s.cache.Insert(newchildref.value, newchild);
+
+          // assert WeightBucket(newparentBucket.I()) <= WeightBucket(s.cache.I()[parentref].buckets[slot as int]);
 
           var newparent_children := inout s.cache.NodeUpdateSlot(parentref,
             slot, newparentBucket, newchildref.value);
