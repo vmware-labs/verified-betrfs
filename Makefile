@@ -194,6 +194,7 @@ build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	( $(TIME) $(DAFNY_CMD) $(DAFNY_FLAGS) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
 
+build/lib/Buckets/BucketLib.i.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/DataStructures/MutableBtree.i.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/DataStructures/BtreeModel.i.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/Buckets/LKMBPKVOps.i.verchk: DAFNY_FLAGS=/noNLarith
