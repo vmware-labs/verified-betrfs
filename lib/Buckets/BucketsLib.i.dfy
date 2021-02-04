@@ -1325,6 +1325,8 @@ module BucketsLib {
       GetBucketListFlushEqMerge(bucket, emp, pivots, key);
     }
     assert a == b;
+    assert BucketListFlush(bucket, emp, pivots)[i].keys == B(b).keys;
+    assert BucketListFlush(bucket, emp, pivots)[i].msgs == B(b).msgs;
   }
 
   lemma LemmaSplitBucketOnPivotsEqAddMessagesToBuckets(bucket: Bucket, pivots: PivotTable, emp: seq<Bucket>)
