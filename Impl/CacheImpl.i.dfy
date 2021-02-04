@@ -291,6 +291,9 @@ module CacheImpl {
     requires old_self.I()[ref].children.Some?
     requires slot as int + 1 < 0x1_0000_0000_0000_0000
     requires slot as nat < |old_self.I()[ref].children.value|
+
+    requires WeightBucket(bucket.I()) <= WeightBucket(old_self.I()[ref].buckets[slot as int])
+
     ensures self.Inv()
     ensures self.I() == old_self.I()[ref := BT.G.Node(
         old_self.I()[ref].pivotTable,
@@ -302,7 +305,10 @@ module CacheImpl {
       linear var node := inout self.RemoveAndGet(ref);
       inout node.UpdateSlot(slot, bucket, childref);
       newchildren := node.children;
+      
+      WeightBucketListShrinkEntry(old_self.I()[ref].buckets, slot as int, bucket.I());
       assert BT.WFNode(node.I());
+
       inout self.Insert(ref, node);
     }
 
@@ -312,8 +318,10 @@ module CacheImpl {
     requires |old_self.I()| <= 0x10000
     requires BT.WFNode(old_self.I()[ref])
     requires Pivots.BoundedKey(old_self.I()[ref].pivotTable, key)
+
     requires WeightBucketList(old_self.I()[ref].buckets) + WeightKey(key) 
       + WeightMessage(msg) < MaxTotalBucketWeight()
+
     ensures self.Inv()
     ensures self.I() == old_self.I()
       [ref := BT.NodeInsertKeyValue(old_self.I()[ref], key, msg)]
@@ -323,124 +331,124 @@ module CacheImpl {
       inout self.Insert(ref, node);
     }
 
-  //   linear inout method SplitParent(ref: BT.G.Reference, slot: uint64, pivot: Key,
-  //     left_childref: BT.G.Reference, right_childref: BT.G.Reference)
-  //   requires old_self.Inv()
-  //   requires old_self.ptr(ref).Some?
-  //   requires BT.WFNode(old_self.I()[ref])
-  //   requires old_self.I()[ref].children.Some?
-  //   requires 0 <= slot as int < |old_self.I()[ref].children.value|
-  //   requires 0 <= slot as int < |old_self.I()[ref].buckets|
-  //   requires |old_self.I()| <= 0x10000
-  //   ensures self.Inv()
-  //   ensures self.I() == old_self.I()[ref := BT.SplitParent(old_self.I()[ref],
-  //     pivot, slot as int, left_childref, right_childref)]
-  //   {
-  //     linear var node := inout self.RemoveAndGet(ref);
-  //     inout node.SplitParent(slot, pivot, left_childref, right_childref);
-  //     inout self.Insert(ref, node);
-  //   }
+    linear inout method SplitParent(ref: BT.G.Reference, slot: uint64, pivot: Key,
+      left_childref: BT.G.Reference, right_childref: BT.G.Reference)
+    requires old_self.Inv()
+    requires old_self.ptr(ref).Some?
+    requires BT.WFNode(old_self.I()[ref])
+    requires old_self.I()[ref].children.Some?
+    requires 0 <= slot as int < |old_self.I()[ref].children.value|
+    requires 0 <= slot as int < |old_self.I()[ref].buckets|
+    requires |old_self.I()| <= 0x10000
+    ensures self.Inv()
+    ensures self.I() == old_self.I()[ref := BT.SplitParent(old_self.I()[ref],
+      pivot, slot as int, left_childref, right_childref)]
+    {
+      linear var node := inout self.RemoveAndGet(ref);
+      inout node.SplitParent(slot, pivot, left_childref, right_childref);
+      inout self.Insert(ref, node);
+    }
 
-  //   /// Temporary node borrow methods
+    /// Temporary node borrow methods
 
-  //   shared method GetNodeInfo(ref: BT.G.Reference)
-  //   returns (pivots: Pivots.PivotTable, children: Option<seq<BT.G.Reference>>)
-  //   requires Inv()
-  //   requires ptr(ref).Some?
-  //   ensures pivots == I()[ref].pivotTable
-  //   ensures children == I()[ref].children
-  //   {
-  //     shared var node := Get(ref);
-  //     children := node.children;
-  //     pivots := node.pivotTable;
-  //   }
+    shared method GetNodeInfo(ref: BT.G.Reference)
+    returns (pivots: Pivots.PivotTable, children: Option<seq<BT.G.Reference>>)
+    requires Inv()
+    requires ptr(ref).Some?
+    ensures pivots == I()[ref].pivotTable
+    ensures children == I()[ref].children
+    {
+      shared var node := Get(ref);
+      children := node.children;
+      pivots := node.pivotTable;
+    }
 
-  //   shared method GetNodeBucketsLen(ref: BT.G.Reference)
-  //   returns (len: uint64)
-  //   requires Inv()
-  //   requires ptr(ref).Some?
-  //   ensures len as nat == |I()[ref].buckets|
-  //   {
-  //     shared var node := Get(ref);
-  //     len := lseq_length_as_uint64(node.buckets);
-  //   }
+    shared method GetNodeBucketsLen(ref: BT.G.Reference)
+    returns (len: uint64)
+    requires Inv()
+    requires ptr(ref).Some?
+    ensures len as nat == |I()[ref].buckets|
+    {
+      shared var node := Get(ref);
+      len := lseq_length_as_uint64(node.buckets);
+    }
 
-  //   shared method GetMessage(ref: BT.G.Reference, i: uint64, key: KeyType.Key)
-  //   returns (msg: Option<Message>)
-  //   requires Inv()
-  //   requires ptr(ref).Some?
-  //   requires BT.WFNode(I()[ref])
-  //   requires Pivots.BoundedKey(I()[ref].pivotTable, key)
-  //   requires i as int == Pivots.Route(I()[ref].pivotTable, key)
-  //   ensures 
-  //     && var bucket := I()[ref].buckets[i];
-  //     && msg == BucketsLib.bucketBinarySearchLookup(bucket, key)
-  //   {
-  //     shared var node := Get(ref);
-  //     msg := lseq_peek(node.buckets, i).Query(key);
-  //   }
+    shared method GetMessage(ref: BT.G.Reference, i: uint64, key: KeyType.Key)
+    returns (msg: Option<Message>)
+    requires Inv()
+    requires ptr(ref).Some?
+    requires BT.WFNode(I()[ref])
+    requires Pivots.BoundedKey(I()[ref].pivotTable, key)
+    requires i as int == Pivots.Route(I()[ref].pivotTable, key)
+    ensures 
+      && var bucket := I()[ref].buckets[i];
+      && msg == BucketsLib.bucketBinarySearchLookup(bucket, key)
+    {
+      shared var node := Get(ref);
+      msg := lseq_peek(node.buckets, i).Query(key);
+    }
 
-  //   shared method NodeBucketsWeight(ref: BT.G.Reference)
-  //   returns (weight: uint64)
-  //   requires Inv()
-  //   requires ptr(ref).Some?
-  //   requires BT.WFNode(I()[ref])
-  //   ensures weight as int == WeightBucketList(I()[ref].buckets)
-  //   {
-  //     shared var node := Get(ref);
-  //     weight := MutBucket.computeWeightOfSeq(node.buckets);
-  //   }
+    shared method NodeBucketsWeight(ref: BT.G.Reference)
+    returns (weight: uint64)
+    requires Inv()
+    requires ptr(ref).Some?
+    requires BT.WFNode(I()[ref])
+    ensures weight as int == WeightBucketList(I()[ref].buckets)
+    {
+      shared var node := Get(ref);
+      weight := MutBucket.computeWeightOfSeq(node.buckets);
+    }
 
-  //   shared method NodeBoundedBucket(ref: BT.G.Reference, 
-  //     pivotsref: BT.G.Reference, slot: uint64)
-  //   returns (b: bool)
-  //   requires Inv()
-  //   requires ref in I()
-  //   requires pivotsref in I()
-  //   requires BT.WFNode(I()[ref])
-  //   requires BT.WFNode(I()[pivotsref])
-  //   requires slot as nat < |I()[ref].buckets|
-  //   ensures b == Pivots.BoundedKeySeq(I()[pivotsref].pivotTable,
-  //       I()[ref].buckets[slot as nat].keys)
-  //   {
-  //     shared var node := Get(ref);
-  //     if ref == pivotsref {
-  //       b := node.BoundedBucket(node.pivotTable, slot);
-  //     } else {
-  //       shared var pivotsnode := Get(pivotsref);
-  //       b := node.BoundedBucket(pivotsnode.pivotTable, slot);
-  //     }
-  //   }
+    shared method NodeBoundedBucket(ref: BT.G.Reference, 
+      pivotsref: BT.G.Reference, slot: uint64)
+    returns (b: bool)
+    requires Inv()
+    requires ref in I()
+    requires pivotsref in I()
+    requires BT.WFNode(I()[ref])
+    requires BT.WFNode(I()[pivotsref])
+    requires slot as nat < |I()[ref].buckets|
+    ensures b == Pivots.BoundedKeySeq(I()[pivotsref].pivotTable,
+        I()[ref].buckets[slot as nat].keys)
+    {
+      shared var node := Get(ref);
+      if ref == pivotsref {
+        b := node.BoundedBucket(node.pivotTable, slot);
+      } else {
+        shared var pivotsnode := Get(pivotsref);
+        b := node.BoundedBucket(pivotsnode.pivotTable, slot);
+      }
+    }
 
-  //   shared method NodePartialFlush(parentref: BT.G.Reference, 
-  //     childref: BT.G.Reference, slot: uint64)
-  //   returns (linear newparentBucket: MutBucket, linear newchild: Node)
-  //   requires Inv()
-  //   requires parentref in I()
-  //   requires childref in I()
-  //   requires BT.WFNode(I()[parentref])
-  //   requires BT.WFNode(I()[childref])
-  //   requires slot as nat < |I()[parentref].buckets|
-  //   ensures newparentBucket.Inv()
-  //   ensures newchild.Inv()
-  //   ensures newchild.I().pivotTable == I()[childref].pivotTable
-  //   ensures newchild.I().children == I()[childref].children
-  //   ensures BucketModel.partialFlushResult(newparentBucket.I(), newchild.I().buckets)
-  //       == BucketModel.partialFlush(I()[parentref].buckets[slot], 
-  //         I()[childref].pivotTable, I()[childref].buckets)
-  //   {
-  //     shared var parent := Get(parentref);
-  //     shared var child := Get(childref);
+    shared method NodePartialFlush(parentref: BT.G.Reference, 
+      childref: BT.G.Reference, slot: uint64)
+    returns (linear newparentBucket: MutBucket, linear newchild: Node)
+    requires Inv()
+    requires parentref in I()
+    requires childref in I()
+    requires BT.WFNode(I()[parentref])
+    requires BT.WFNode(I()[childref])
+    requires slot as nat < |I()[parentref].buckets|
+    ensures newparentBucket.Inv()
+    ensures newchild.Inv()
+    ensures newchild.I().pivotTable == I()[childref].pivotTable
+    ensures newchild.I().children == I()[childref].children
+    ensures BucketModel.partialFlushResult(newparentBucket.I(), newchild.I().buckets)
+        == BucketModel.partialFlush(I()[parentref].buckets[slot], 
+          I()[childref].pivotTable, I()[childref].buckets)
+    {
+      shared var parent := Get(parentref);
+      shared var child := Get(childref);
 
-  //     WeightBucketLeBucketList(parent.I().buckets, slot as int);
-  //     assert WeightBucketList(child.I().buckets) <= MaxTotalBucketWeight();
+      WeightBucketLeBucketList(parent.I().buckets, slot as int);
+      assert WeightBucketList(child.I().buckets) <= MaxTotalBucketWeight();
 
-  //     linear var newpbucket, newbuckets := BucketImpl.PartialFlush(
-  //       lseq_peek(parent.buckets, slot as uint64), child.buckets, child.pivotTable);
+      linear var newpbucket, newbuckets := BucketImpl.PartialFlush(
+        lseq_peek(parent.buckets, slot as uint64), child.buckets, child.pivotTable);
 
-  //     newchild := Node(child.pivotTable, child.children, newbuckets);
-  //     newparentBucket := newpbucket;
-  //   }
+      newchild := Node(child.pivotTable, child.children, newbuckets);
+      newparentBucket := newpbucket;
+    }
 
     shared method NodeSplitMiddle(ref: BT.G.Reference)
     returns (linear left: MutBucket, linear right: MutBucket, pivot: Key)
