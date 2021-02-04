@@ -436,7 +436,7 @@ module CacheImpl {
     ensures BucketModel.partialFlushResult(newparentBucket.I(), newchild.I().buckets)
         == BucketModel.partialFlush(I()[parentref].buckets[slot], 
           I()[childref].pivotTable, I()[childref].buckets)
-    ensures BT.WFNode(newchild);
+    ensures BT.WFNode(newchild.I());
     {
       shared var parent := Get(parentref);
       shared var child := Get(childref);
