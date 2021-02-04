@@ -41,8 +41,8 @@ module MkfsImpl {
     var nodeAddr := NodeBlockSizeUint64() * MinNodeBlockIndexUint64();
 
     linear var node := Node.EmptyNode();
-    ghost var is:SSM.Sector := SSI.ISector(SSI.SectorNode(node));
-    assert SSM.WFNode(is.node) by {
+    ghost var i:SSM.Sector := SSI.ISector(SSI.SectorNode(node));
+    assert SSM.WFNode(i.node) by {
       reveal_WeightBucketList();
     }
 
