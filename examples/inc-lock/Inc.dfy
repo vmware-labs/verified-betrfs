@@ -64,7 +64,6 @@ module Impl {
     linear var V(num, r) := entry;
 
     num := num + 1;
-https://www.kosbie.net/cmu/
     linear var r';
     stub, r' := transform_inc(ticket, r);
 

@@ -11,7 +11,7 @@ abstract module ResourceSpec {
   ghost method {:extern} resources_obey_inv(shared objects: lseq<R>)
   returns (t: multiset<R>)
   ensures (forall a in objects.as_set() :: a in t)
-  ensures (ensures Inv(t))
+  ensures Inv(t)
 
   ghost method {:extern} do_transform(
       shared readonly_objects: lseq<R>,

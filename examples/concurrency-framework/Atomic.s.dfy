@@ -18,6 +18,8 @@ module AtomicSpec {
     && ret == cur_value
   }
 
+  // Tej says look up Fine-grained concurrent separation logic
+
   method {:extern} atomic_fetch_add_1<G, H, H'>(
       atomic: Atomic<int, G>,
       linear ghost h: H,
