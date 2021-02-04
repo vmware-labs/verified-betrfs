@@ -71,6 +71,10 @@ module GrowImpl {
             assert newroot.I() == BT.G.Node(InitPivotTable(), Some([newref]), [B(map[])]);
             assert s.I().cache[root] == old_s.I().cache[root];
 
+            assert BT.WFNode(newroot.I()) by {
+                WeightBucketListOneEmpty();
+            }
+
             writeBookkeeping(inout s, root, Some([newref]));
             inout s.cache.MoveAndReplace(root, newref, newroot);
 
