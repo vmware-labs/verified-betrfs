@@ -44,6 +44,10 @@ module InsertImpl {
   requires BT.G.Root() in old_s.cache.I()
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 1
   requires BoundedKey(old_s.cache.I()[BT.G.Root()].pivotTable, key)
+
+  requires WeightBucketList(old_s.cache.I()[BT.G.Root()].buckets) + WeightKey(key) 
+      + WeightMessage(ValueMessage.Define(value)) <= MaxTotalBucketWeight()
+
   ensures s.W()
   ensures (s.I(), success) == InsertModel.InsertKeyValue(old_s.I(), key, value)
   {

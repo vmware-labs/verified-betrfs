@@ -172,6 +172,7 @@ module NodeImpl {
       var childrenReplaced := Replace1with2(self.children.value, left_childref, right_childref, slot);
       inout self.children := Some(childrenReplaced);
 
+      // assert BT.WFNode(self.I());
       ghost var a := self.I();
       assert a == b;
     }
@@ -278,7 +279,7 @@ module NodeImpl {
     requires BT.WFNode(old_self.I())
     requires Pivots.BoundedKey(old_self.pivotTable, key)
     requires WeightBucketList(MutBucket.ILseq(old_self.buckets)) + WeightKey(key) + WeightMessage(msg) 
-      < MaxTotalBucketWeight()
+      <= MaxTotalBucketWeight()
     ensures self.Inv()
     ensures self.I() == BT.NodeInsertKeyValue(old_self.I(), key, msg)
     ensures BT.WFNode(self.I())

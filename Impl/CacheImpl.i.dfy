@@ -320,7 +320,7 @@ module CacheImpl {
     requires Pivots.BoundedKey(old_self.I()[ref].pivotTable, key)
 
     requires WeightBucketList(old_self.I()[ref].buckets) + WeightKey(key) 
-      + WeightMessage(msg) < MaxTotalBucketWeight()
+      + WeightMessage(msg) <= MaxTotalBucketWeight()
 
     ensures self.Inv()
     ensures self.I() == old_self.I()
