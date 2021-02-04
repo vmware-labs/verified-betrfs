@@ -426,8 +426,6 @@ module CacheImpl {
     requires Inv()
     requires parentref in I()
     requires childref in I()
-    requires BT.WFNode(I()[parentref])
-    requires BT.WFNode(I()[childref])
     requires slot as nat < |I()[parentref].buckets|
     ensures newparentBucket.Inv()
     ensures newchild.Inv()
@@ -437,6 +435,7 @@ module CacheImpl {
         == BucketModel.partialFlush(I()[parentref].buckets[slot], 
           I()[childref].pivotTable, I()[childref].buckets)
     ensures BT.WFNode(newchild.I());
+    ensures WeightBucket(newparentBucket.I()) <= WeightBucket(I()[parentref].buckets[slot as int]);
     {
       shared var parent := Get(parentref);
       shared var child := Get(childref);
@@ -465,7 +464,8 @@ module CacheImpl {
       BucketModel.partialFlushWeightBound(top, child.pivotTable, child.I().buckets);
 
       assert BT.WFNode(newchild.I());
-      // WeightBucketListShrinkEntry(parent.buckets, slot, newparentBucket);
+
+      assert WeightBucket(newparentBucket.I()) <= WeightBucket(parent.I().buckets[slot as int]);
     }
 
     shared method NodeSplitMiddle(ref: BT.G.Reference)
