@@ -1,8 +1,13 @@
 #!/bin/bash
 
+commit=inout-merge
+if [ $1 ]; then
+   commit=$1
+fi
+
 set -x
 
-dotnet --list-sdks | grep '^3.1'
+dotnet --list-sdks | grep '^5.0'
 if [ $? -ne 0 ]; then
   echo "You must install .NET Core 3.1: https://dotnet.microsoft.com/download"
   exit 1
@@ -15,7 +20,7 @@ cd .dafny
 
 git clone https://github.com/secure-foundations/dafny.git --recurse-submodules
 cd dafny
-../../tools/checkout-dafny-commit.sh "$@"
+../../tools/checkout-dafny-commit.sh $commit
 
 cd ..
 dotnet build dafny/Source/Dafny.sln
