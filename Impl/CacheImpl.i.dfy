@@ -436,6 +436,7 @@ module CacheImpl {
     ensures BucketModel.partialFlushResult(newparentBucket.I(), newchild.I().buckets)
         == BucketModel.partialFlush(I()[parentref].buckets[slot], 
           I()[childref].pivotTable, I()[childref].buckets)
+    ensures BT.WFNode(newchild);
     {
       shared var parent := Get(parentref);
       shared var child := Get(childref);
@@ -448,6 +449,23 @@ module CacheImpl {
 
       newchild := Node(child.pivotTable, child.children, newbuckets);
       newparentBucket := newpbucket;
+
+      ghost var top := parent.I().buckets[slot as int];
+      assume BoundedPivotsLib.BoundedKeySeq(child.pivotTable, top.keys);
+
+      ghost var flushedKeys := {};
+      if BucketsLib.BucketWellMarshalled(top)
+          && BucketsLib.BucketListWellMarshalled(child.I().buckets)
+          && BucketsLib.WFBucketListProper(child.I().buckets, child.pivotTable)
+      {
+        flushedKeys := BucketModel.partialFlushCorrect(top, child.pivotTable, child.I().buckets);
+      }
+      assert (forall key | key in flushedKeys :: key in top.keys);
+
+      BucketModel.partialFlushWeightBound(top, child.pivotTable, child.I().buckets);
+
+      assert BT.WFNode(newchild.I());
+      // WeightBucketListShrinkEntry(parent.buckets, slot, newparentBucket);
     }
 
     shared method NodeSplitMiddle(ref: BT.G.Reference)
