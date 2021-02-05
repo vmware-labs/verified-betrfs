@@ -1,0 +1,54 @@
+include "MarshalledAccessors.i.dfy"
+
+abstract module Union{{n}}Marshalling refines Marshalling {
+{%- for n in range(0,count) %}
+  import CaseMarshalling{{n}} : Marshalling
+{%- endfor %}
+  import TagMarshalling : IntegerMarshalling
+
+  datatype UnionType =
+{%- for n in range(0,count) %}
+    | Case{{n}}(c{{n}}: CaseMarshalling{{n}}.UnmarshalledType)
+{%- endfor %}
+
+  type UnmarshalledType = UnionType
+
+  function method getTagEnd(): uint64
+  {
+    TagMarshalling.Int.Size() as uint64
+  }
+
+  predicate parsable(data: mseq<byte>)
+  {
+    var tagEnd := getTagEnd() as int;
+    && |data| >= tagEnd
+    && TagMarshalling.parsable(data[..tagEnd])
+    && TagMarshalling.Int.fitsInUint64(TagMarshalling.parse(data[..tagEnd]))
+    && var tag := TagMarshalling.Int.toInt(TagMarshalling.parse(data[..tagEnd]));
+{%- for n in range(0,count) %}
+    {%- if n == 0 %}
+    (if tag == 0 then CaseMarshalling0.parsable(data[tagEnd..])
+    {% elif n != count - 1 -%}
+      else if tag == {{n}} then CaseMarshalling{{n}}.parsable(data[tagEnd..])
+    {% else -%}
+        else CaseMarshalling{{n}}.parsable(data[tagEnd..]))
+    {% endif %}
+{%- endfor %}
+  }
+
+  function parse(data: mseq<byte>) : UnmarshalledType
+  {
+    var tagEnd := getTagEnd() as int;
+    var tag := TagMarshalling.Int.toInt(TagMarshalling.parse(data[..tagEnd]));
+
+{%- for n in range(0,count) %}
+    {%- if n == 0 %}
+    if tag == 0 then Case0(CaseMarshalling0.parse(data[tagEnd..]))
+    {% elif n != count - 1 -%}
+      else if tag == {{n}} then Case{{n}}(CaseMarshalling{{n}}.parse(data[tagEnd..]))
+    {% else -%}
+        else Case{{n}}(CaseMarshalling{{n}}.parse(data[tagEnd..]))
+    {% endif %}
+{%- endfor %}
+  }
+}
