@@ -389,19 +389,71 @@ abstract module Tuple{{count}}Marshalling refines Marshalling {
   predicate gettable(data: mseq<byte>, index: nat)
   {
     && index <= {{count-1}}
-    && SizeOfBoundaryEntry() < 0x8000_0000_0000_0000
+    && SizeOfBoundaryEntry() < {{esize}}
     && var tableSize := sizeOfTable();
-    && tableSize < Uint64UpperBound()
     && |data| >= tableSize
     && TableMarshalling.parsable(data[..tableSize])
     && var table :mseq<Boundary> := TableMarshalling.parse(data[..tableSize]);
     && var start := if index == 0 then tableSize else BoundaryInt.toInt(table[index - 1]);
     && var end := if index == {{count-1}} then |data| else BoundaryInt.toInt(table[index]);
+    && (index != 0 ==> BoundaryInt.fitsInUint64(table[index - 1]))
+    && (index != {{count-1}} ==> BoundaryInt.fitsInUint64(table[index]))
     && 0 <= start <= end <= |data|
+  }
+
+  method Gettable(data: mseq<byte>, index: uint64) returns (g: bool)
+    ensures g == gettable(data, index as nat)
+  {
+    if index > {{count-1}} {
+      return false;
+    }
+
+    if SizeOfBoundaryEntry() >= {{esize}} {
+      return false;
+    }
+
+    var tableSize := sizeOfTable() as uint64;
+
+    if |data| as uint64 < tableSize {
+      return false;
+    }
+
+    var tableParsable := TableMarshalling.Parsable(data[..tableSize]);
+
+    if !tableParsable {
+      return false;
+    }
+
+    var start := tableSize;
+    var end := |data| as uint64;
+
+    assert TableMarshalling.length(data[..tableSize]) == {{count-1}};
+
+    if index != 0 {
+      var temp := TableMarshalling.FastGet(data[..tableSize], index - 1);
+
+      if !BoundaryInt.fitsInUint64(temp) {
+        return false;
+      }
+
+      start := BoundaryInt.toUint64(temp);
+    }
+
+    if index != {{count-1}} {
+      var temp := TableMarshalling.FastGet(data[..tableSize], index);
+
+      if !BoundaryInt.fitsInUint64(temp) {
+        return false;
+      }
+
+      end := BoundaryInt.toUint64(temp);
+    }
+
+    return 0 <= start <= end <= |data| as uint64;
   }
 {% for n in range(0,count) %}
   method GetElem{{n}}(data: mseq<byte>) returns (edata: mseq<byte>)
-    requires parsable(data)
+    requires gettable(data, {{n}})
     ensures parsable(data) ==> ElemMarshalling{{n}}.parsable(edata)
     ensures parsable(data) ==> ElemMarshalling{{n}}.parse(edata) == parse(data).{{n}}
   {
