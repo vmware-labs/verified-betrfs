@@ -361,12 +361,10 @@ abstract module Union3Marshalling refines Marshalling {
       ghost var newdata1 :seq<byte>, end1 := newdata, end;
       newdata, end := CaseMarshalling0.Marshall(c0, newdata, end);
 
-      assert newdata1[start..end1] == newdata[start..end1];
+      assert newdata[start..end][..tagEnd] == newdata1[start..end1] == newdata[start..end1];
       ghost var tag := TagMarshalling.Int.toInt(TagMarshalling.parse(newdata[start..end1]));
       TagMarshalling.Int.fromtoInverses();
       assert tag == 0;
-
-      assert newdata[start..end][..tagEnd] == newdata[start..end1];
     }
     case Case1(c1) => {
       newdata, end := TagMarshalling.Marshall(TagMarshalling.Int.fromUint64(1), data, start);
