@@ -106,12 +106,31 @@ module CookieResource refines ApplicationResourceSpec {
   {
   }
 
+  lemma radical_of_unit(a: R)
+  requires radical(a, unit())
+  ensures a == unit()
+  {
+    reveal_radical();
+  }
+
   method {:extern} easy_transform(
       linear b: R,
       ghost expected_out: R)
   returns (linear c: R)
   requires Update(b, expected_out)
   ensures c == expected_out
+  {
+    shared var u := get_unit_shared();
+    ghost var a := u;
+    forall a' | radical(a', a) && Valid(add(a', b))
+    ensures Update(add(a', b), add(a', expected_out))
+    {
+      radical_of_unit(a');
+      assert add(a', b) == b;
+      assert add(a', expected_out) == expected_out;
+    }
+    c := do_transform(u, b, expected_out);
+  }
 
   method do_tr(linear t: R, linear s: R, ticket: Ticket, batches: nat)
   returns (linear stub: R, linear s': R)

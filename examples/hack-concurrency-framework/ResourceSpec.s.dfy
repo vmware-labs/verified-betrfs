@@ -38,7 +38,7 @@ abstract module ResourceSpec {
   requires Update(x, y)
   ensures Update(add(x, z), add(y, z))
 
-  predicate radical(a': R, a: R)
+  predicate {:opaque} radical(a': R, a: R)
   {
     && le(a', a)
     && (exists n :: le(a, pow(a', n)))
@@ -54,11 +54,14 @@ abstract module ResourceSpec {
       linear b: R,
       ghost expected_out: R)
   returns (linear c: R)
-  requires forall a' :: radical(a, a') && Valid(add(a', b)) ==> Update(add(a', b), add(a', expected_out))
+  requires forall a' :: radical(a', a) && Valid(add(a', b)) ==> Update(add(a', b), add(a', expected_out))
   ensures c == expected_out
 
   function method {:extern} get_unit() : (linear u: R)
+  ensures u == unit()
+
   function method {:extern} get_unit_shared() : (shared u: R)
+  ensures u == unit()
 
   function method {:extern} join(linear a: R, linear b: R) : (linear sum: R)
   ensures sum == add(a, b)
