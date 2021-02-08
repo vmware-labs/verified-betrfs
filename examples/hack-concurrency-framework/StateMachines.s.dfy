@@ -27,7 +27,7 @@ module AsyncIfc {
 module AsyncSpec(InnerIfc: InputOutputIfc, SM: StateMachine(InnerIfc))
     refines StateMachine(AsyncIfc(InnerIfc))
 {
-  type Variables = Variables(
+  datatype Variables = Variables(
       s: SM.Variables,
       reqs: map<RequestId, InnerIfc.Input>,
       resps: map<RequestId, InnerIfc.Output>)

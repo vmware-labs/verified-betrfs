@@ -106,14 +106,7 @@ module CookieResource refines ApplicationResourceSpec {
   {
   }
 
-  lemma radical_of_unit(a: R)
-  requires radical(a, unit())
-  ensures a == unit()
-  {
-    reveal_radical();
-  }
-
-  method {:extern} easy_transform(
+  method easy_transform(
       linear b: R,
       ghost expected_out: R)
   returns (linear c: R)
@@ -125,9 +118,9 @@ module CookieResource refines ApplicationResourceSpec {
     forall a' | radical(a', a) && Valid(add(a', b))
     ensures Update(add(a', b), add(a', expected_out))
     {
-      radical_of_unit(a');
-      assert add(a', b) == b;
-      assert add(a', expected_out) == expected_out;
+      update_monotonic(b, expected_out, a');
+      commutative(a', b);
+      commutative(a', expected_out);
     }
     c := do_transform(u, b, expected_out);
   }

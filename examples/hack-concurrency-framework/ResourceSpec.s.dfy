@@ -40,7 +40,6 @@ abstract module ResourceSpec {
 
   predicate {:opaque} radical(a': R, a: R)
   {
-    && le(a', a)
     && (exists n :: le(a, pow(a', n)))
   }
 
