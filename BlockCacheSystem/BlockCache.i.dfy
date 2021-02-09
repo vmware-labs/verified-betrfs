@@ -58,6 +58,15 @@ module BlockCache refines Transactable {
       )
 
     | Unready
+  {
+      predicate WriteAllocConditions()
+      {
+        && Ready?
+        && (forall loc | loc in ephemeralIndirectionTable.locs.Values :: 
+              DiskLayout.ValidNodeLocation(loc))
+        && AllLocationsForDifferentRefsDontOverlap(ephemeralIndirectionTable)
+      }
+  }
 
   predicate IsAllocated(s: Variables, ref: Reference)
   requires s.Ready?

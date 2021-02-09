@@ -17,6 +17,7 @@ module BookkeepingModel {
   import opened Bounds
   import LruModel
   import DiskLayout
+  import BBC = BetreeCache
 
   import opened NativeTypes
 
@@ -25,32 +26,63 @@ module BookkeepingModel {
   // because it turns out to be easier to do the cache updates separately. However, for the proofs
   // it is easier to use the below.
 
-  // function writeWithNode(s: BCVariables, ref: BT.G.Reference, node: Node)
-  // : (s': BCVariables)
-  // requires WriteAllocConditions(s)
-  // requires ChildrenConditions(s, node.children)
-  // requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
-  // ensures WriteAllocConditions(s')
-  // ensures |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
-  // {
-  //   lemmaIndirectionTableLocIndexValid(s, ref);
-  //   var (eph, oldLoc) := s.ephemeralIndirectionTable.updateAndRemoveLoc(ref,
-  //       (if node.children.Some? then node.children.value else []));
-  //   var blockAllocator' := if oldLoc.Some?
-  //     then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / NodeBlockSize())
-  //     else s.blockAllocator;
-  //   var s' := s.(ephemeralIndirectionTable := eph).(cache := s.cache[ref := node])
-  //       .(lru := LruModel.Use(s.lru, ref))
-  //       .(blockAllocator := blockAllocator');
+  function writeWithNodeTest(s: BBC.Variables, ref: BT.G.Reference, node: Node)
+  : (s': BBC.Variables)
+    requires s.WriteAllocConditions()
+    requires var succs := node.children;
+    succs.Some? ==> (
+      // && |succs.value| <= MaxNumChildren()
+      && IT.IndirectionTable.SuccsValid(succs.value, s.ephemeralIndirectionTable.graph)
+    )
 
-  //   freeIndirectionTableLocCorrect(s, s', ref,
-  //     if oldLoc.Some?
-  //     then Some(oldLoc.value.addr as int / NodeBlockSize())
-  //     else None);
-  //   reveal_ConsistentBitmap();
+    ensures s'.WriteAllocConditions()
+    ensures |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
+  {
+    var (eph, oldLoc) := s.ephemeralIndirectionTable.updateAndRemoveLoc(ref,
+        (if node.children.Some? then node.children.value else []));
+    var blockAllocator' := if oldLoc.Some?
+      then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / NodeBlockSize())
+      else s.blockAllocator;
+    var s' := s.(ephemeralIndirectionTable := eph).(cache := s.cache[ref := node])
+        .(lru := LruModel.Use(s.lru, ref))
+        .(blockAllocator := blockAllocator');
 
-  //   s'
-  // }
+    freeIndirectionTableLocCorrect(s, s', ref,
+      if oldLoc.Some?
+      then Some(oldLoc.value.addr as int / NodeBlockSize())
+      else None);
+    reveal_ConsistentBitmap();
+
+    s'
+  }
+/*
+
+  function writeWithNode(s: BCVariables, ref: BT.G.Reference, node: Node)
+  : (s': BCVariables)
+  requires WriteAllocConditions(s)
+  requires ChildrenConditions(s, node.children)
+  requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
+  ensures WriteAllocConditions(s')
+  ensures |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
+  {
+    lemmaIndirectionTableLocIndexValid(s, ref);
+    var (eph, oldLoc) := s.ephemeralIndirectionTable.updateAndRemoveLoc(ref,
+        (if node.children.Some? then node.children.value else []));
+    var blockAllocator' := if oldLoc.Some?
+      then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / NodeBlockSize())
+      else s.blockAllocator;
+    var s' := s.(ephemeralIndirectionTable := eph).(cache := s.cache[ref := node])
+        .(lru := LruModel.Use(s.lru, ref))
+        .(blockAllocator := blockAllocator');
+
+    freeIndirectionTableLocCorrect(s, s', ref,
+      if oldLoc.Some?
+      then Some(oldLoc.value.addr as int / NodeBlockSize())
+      else None);
+    reveal_ConsistentBitmap();
+
+    s'
+  }
 
   function allocWithNode(s: BCVariables, node: Node)
   : (p: (BCVariables, Option<Reference>))
@@ -94,33 +126,33 @@ module BookkeepingModel {
     }
   }
   
-  // lemma writeCorrect(s: BCVariables, ref: BT.G.Reference, node: Node)
-  // requires s.Ready?
-  // requires WFBCVars(s)
-  // requires WriteAllocConditions(s)
-  // requires ref in s.ephemeralIndirectionTable.I().graph
-  // requires ref in s.cache
-  // requires WFNode(node)
-  // requires BC.BlockPointsToValidReferences(INode(node), s.ephemeralIndirectionTable.I().graph)
-  // requires s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.locs
-  // requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
-  // ensures var s' := writeWithNode(s, ref, node);
-  //   && WFBCVars(s')
-  //   && BC.Dirty(IBlockCache(s), IBlockCache(s'), ref, INode(node))
-  //   && TotalCacheSize(s') == TotalCacheSize(s)
-  //   && WriteAllocConditions(s')
-  // {
-  //   lemmaIndirectionTableLocIndexValid(s, ref);
-  //   WeightBucketEmpty();
+  lemma writeCorrect(s: BCVariables, ref: BT.G.Reference, node: Node)
+  requires s.Ready?
+  requires WFBCVars(s)
+  requires WriteAllocConditions(s)
+  requires ref in s.ephemeralIndirectionTable.I().graph
+  requires ref in s.cache
+  requires WFNode(node)
+  requires BC.BlockPointsToValidReferences(INode(node), s.ephemeralIndirectionTable.I().graph)
+  requires s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.locs
+  requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
+  ensures var s' := writeWithNode(s, ref, node);
+    && WFBCVars(s')
+    && BC.Dirty(IBlockCache(s), IBlockCache(s'), ref, INode(node))
+    && TotalCacheSize(s') == TotalCacheSize(s)
+    && WriteAllocConditions(s')
+  {
+    lemmaIndirectionTableLocIndexValid(s, ref);
+    WeightBucketEmpty();
 
-  //   LruModel.LruUse(s.lru, ref);
+    LruModel.LruUse(s.lru, ref);
 
-  //   writeBookkeepingBitmapCorrect(s, ref, node.children);
-  //   reveal_writeBookkeeping();
+    writeBookkeepingBitmapCorrect(s, ref, node.children);
+    reveal_writeBookkeeping();
 
-  //   var s' := writeWithNode(s, ref, node);
-  //   assert WFBCVars(s');
-  // }
+    var s' := writeWithNode(s, ref, node);
+    assert WFBCVars(s');
+  }
  
   lemma writeNewRefIsAlloc(s: BCVariables, ref: BT.G.Reference, node: Node)
   requires s.Ready?
@@ -202,4 +234,5 @@ module BookkeepingModel {
   {
     reveal_replace1with2();
   }
+  */
 }

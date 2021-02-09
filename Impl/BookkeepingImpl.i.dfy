@@ -106,18 +106,21 @@ module BookkeepingImpl {
   // Conditions that will hold intermediately between writes and allocs
   predicate WriteAllocConditions(s: ImplVariables)
   {
+    && s.WFBCVars()
+
     && s.Ready?
     && s.blockAllocator.Inv()
     && s.ephemeralIndirectionTable.Inv()
     && s.ephemeralIndirectionTable.TrackingGarbage()
-    && (forall loc |
-        loc in s.ephemeralIndirectionTable.I().locs.Values :: 
-          DiskLayout.ValidNodeLocation(loc))
+    // && (forall loc |
+    //     loc in s.ephemeralIndirectionTable.I().locs.Values :: 
+    //       DiskLayout.ValidNodeLocation(loc))
     && ConsistentBitmap(s.ephemeralIndirectionTable.I(), s.frozenIndirectionTable.Map((x: IT.IndirectionTable) => x.I()),
         s.persistentIndirectionTable.I(), s.outstandingBlockWrites, s.blockAllocator.I())
     && BlockAllocatorModel.Inv(s.blockAllocator.I())
-    && BC.AllLocationsForDifferentRefsDontOverlap(
-        s.ephemeralIndirectionTable.I())
+    // && BC.AllLocationsForDifferentRefsDontOverlap(
+    //     s.ephemeralIndirectionTable.I())
+    && s.IBlockCache().WriteAllocConditions()
   }
 
   predicate ChildrenConditions(s: ImplVariables, succs: Option<seq<BT.G.Reference>>)
@@ -126,7 +129,7 @@ module BookkeepingImpl {
   {
     succs.Some? ==> (
       && |succs.value| <= MaxNumChildren()
-      && IT.IndirectionTable.SuccsValid(succs.value, s.ephemeralIndirectionTable.I().graph)
+      && IT.IndirectionTable.SuccsValid(succs.value, s.ephemeralIndirectionTable.graph)
     )
   }
 
@@ -428,57 +431,56 @@ module BookkeepingImpl {
   //   }
   // }
 
-
-  method writeWithNode(linear inout s: ImplVariables, ref: BT.G.Reference, linear node: Node)
-  requires old_s.WFBCVars()
-  requires old_s.Ready?
-  requires old_s.totalCacheSize() <= MaxCacheSize()
+  // method writeWithNode(linear inout s: ImplVariables, ref: BT.G.Reference, linear node: Node)
+  // requires old_s.WFBCVars()
+  // requires old_s.Ready?
+  // requires old_s.totalCacheSize() <= MaxCacheSize()
   
-  requires WriteAllocConditions(old_s)
-  requires ChildrenConditions(old_s, node.children)
-  requires |old_s.ephemeralIndirectionTable.graph| < IT.MaxSize()
-  requires |LruModel.I(old_s.lru.Queue())| <= 0x1_0000_0000
-  requires node.Inv()
-  requires SSM.WFNode(node.I())
+  // requires WriteAllocConditions(old_s)
+  // requires ChildrenConditions(old_s, node.children)
+  // requires |old_s.ephemeralIndirectionTable.graph| < IT.MaxSize()
+  // requires |LruModel.I(old_s.lru.Queue())| <= 0x1_0000_0000
+  // requires node.Inv()
+  // requires SSM.WFNode(node.I())
 
-  requires ref in old_s.ephemeralIndirectionTable.I().graph
-  requires ref in old_s.cache.I()
+  // requires ref in old_s.ephemeralIndirectionTable.I().graph
+  // requires ref in old_s.cache.I()
 
-  requires BC.BlockPointsToValidReferences(node.I(), old_s.ephemeralIndirectionTable.I().graph)
-  requires old_s.frozenIndirectionTable.lSome? && ref in old_s.frozenIndirectionTable.value.graph ==> ref in old_s.frozenIndirectionTable.value.locs
+  // requires BC.BlockPointsToValidReferences(node.I(), old_s.ephemeralIndirectionTable.I().graph)
+  // requires old_s.frozenIndirectionTable.lSome? && ref in old_s.frozenIndirectionTable.value.graph ==> ref in old_s.frozenIndirectionTable.value.locs
 
-  ensures s.WFBCVars()
-  ensures s.Ready?
+  // ensures s.WFBCVars()
+  // ensures s.Ready?
 
-  ensures BC.Dirty(old_s.IBlockCache(), s.IBlockCache(), ref, node.I())
-  ensures old_s.TotalCacheSize() == s.TotalCacheSize()
+  // ensures BC.Dirty(old_s.IBlockCache(), s.IBlockCache(), ref, node.I())
+  // ensures old_s.TotalCacheSize() == s.TotalCacheSize()
 
-  ensures WriteAllocConditions(s)
-  ensures |s.ephemeralIndirectionTable.graph| <= |old_s.ephemeralIndirectionTable.graph| + 1
-  {
-    lemmaIndirectionTableLocIndexValid(s, ref);
-    var oldLoc := inout s.ephemeralIndirectionTable.UpdateAndRemoveLoc(ref, (if node.children.Some? then node.children.value else []));
+  // ensures WriteAllocConditions(s)
+  // ensures |s.ephemeralIndirectionTable.graph| <= |old_s.ephemeralIndirectionTable.graph| + 1
+  // {
+  //   lemmaIndirectionTableLocIndexValid(s, ref);
+  //   var oldLoc := inout s.ephemeralIndirectionTable.UpdateAndRemoveLoc(ref, (if node.children.Some? then node.children.value else []));
 
-    inout s.lru.Use(ref);
+  //   inout s.lru.Use(ref);
 
-    if oldLoc.Some? {
-      inout s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / NodeBlockSizeUint64());
-    }
+  //   if oldLoc.Some? {
+  //     inout s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / NodeBlockSizeUint64());
+  //   }
 
-    inout s.cache.Insert(ref, node);
+  //   inout s.cache.Insert(ref, node);
 
-    LruModel.LruUse(old_s.lru.Queue(), ref);
-    assert LruModel.I(s.lru.Queue()) == LruModel.I(old_s.lru.Queue()) + {ref};
-    assert |LruModel.I(s.lru.Queue())| == |LruModel.I(old_s.lru.Queue()) + {ref}|
-        <= |LruModel.I(old_s.lru.Queue())| + |{ref}|
-        == |LruModel.I(old_s.lru.Queue())| + 1;
+  //   LruModel.LruUse(old_s.lru.Queue(), ref);
+  //   assert LruModel.I(s.lru.Queue()) == LruModel.I(old_s.lru.Queue()) + {ref};
+  //   assert |LruModel.I(s.lru.Queue())| == |LruModel.I(old_s.lru.Queue()) + {ref}|
+  //       <= |LruModel.I(old_s.lru.Queue())| + |{ref}|
+  //       == |LruModel.I(old_s.lru.Queue())| + 1;
     
-    freeIndirectionTableLocCorrect(old_s, s, ref,
-      if oldLoc.Some?
-      then Some(oldLoc.value.addr as int / NodeBlockSize())
-      else None);
-    reveal_ConsistentBitmap();
+  //   freeIndirectionTableLocCorrect(old_s, s, ref,
+  //     if oldLoc.Some?
+  //     then Some(oldLoc.value.addr as int / NodeBlockSize())
+  //     else None);
+  //   reveal_ConsistentBitmap();
 
-    assert s.WFBCVars();
-  }
+  //   assert s.WFBCVars();
+  // }
 }
