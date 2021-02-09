@@ -30,7 +30,7 @@ fi
 
 mkdir bin
 echo "#! /bin/bash" > bin/dafny
-echo "mono `pwd`/dafny/Binaries/Dafny.exe \"\$@\"" >> bin/dafny
+echo "`pwd`/dafny/Binaries/Dafny \"\$@\"" >> bin/dafny
 chmod +x bin/dafny
 
 ## This is needed in case you want to call the Boogie binary directly.
