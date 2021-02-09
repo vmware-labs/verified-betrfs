@@ -141,6 +141,7 @@ module StateBCImpl {
       CacheImpl.CacheCount(cache) + (|outstandingBlockReads| as uint64)
     }
 
+    // TODO reuse the definition in BlockCache?
     function totalCacheSize() : int
     requires Ready?
     requires cache.Inv()

@@ -66,6 +66,13 @@ module BlockCache refines Transactable {
               DiskLayout.ValidNodeLocation(loc))
         && AllLocationsForDifferentRefsDontOverlap(ephemeralIndirectionTable)
       }
+
+      function totalCacheSize() : int
+      requires Ready?
+      {
+        |cache| + |outstandingBlockReads|
+      }
+
   }
 
   predicate IsAllocated(s: Variables, ref: Reference)

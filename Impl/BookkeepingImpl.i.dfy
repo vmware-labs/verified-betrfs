@@ -21,6 +21,7 @@ module BookkeepingImpl {
 
   import SSM = StateSectorModel
 
+  // TODO(andreal) dedup with the definition in the model
   predicate RefAvailable(s: ImplVariables, ref: Reference)
     requires s.Ready? && s.W()
   {
@@ -133,6 +134,7 @@ module BookkeepingImpl {
     )
   }
 
+  // TODO rewrite in terms of the lemma in BookkeepingModel?
   lemma lemmaIndirectionTableLocIndexValid(s: ImplVariables, ref: BT.G.Reference)
   requires s.W()
   requires WriteAllocConditions(s)
