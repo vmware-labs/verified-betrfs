@@ -38,7 +38,7 @@ module GrowImpl {
 
   ensures s.Ready?
   ensures s.WFBCVars()
-  // ensures IOModel.betree_next(old_s.IBlockCache(), s.IBlockCache())
+  ensures IOModel.betree_next(old_s.IBlockCache(), s.IBlockCache())
   {
     var root := BT.G.Root();
     lemmaChildrenConditionsOfNode(s, root);
@@ -72,6 +72,16 @@ module GrowImpl {
             assert s.TotalCacheSize() == old_s.TotalCacheSize() + 1;
 
             assume && WFCache(s.cache.I());
+
+            ghost var s1: ImplVariables := *;
+
+            var growth := BT.RootGrowth(SSM.INode(root), newref);
+            assert SSM.INode(root) == BT.G.Node(InitPivotTable(), Some([growth.newchildref]), [B(map[])]);
+            var step := BT.BetreeGrow(growth);
+            assert BT.ValidGrow(growth);
+            BC.MakeTransaction2(old_s.IBlockCache(), s1.IBlockCache(), s.IBlockCache(), BT.BetreeStepOps(step));
+            assert BBC.BetreeMove(old_s.IBlockCache(), s.IBlockCache(), BlockDisk.NoDiskOp, AdvanceOp(UI.NoOp, true), step);
+            assert stepsBetree(old_s.IBlockCache(), s.IBlockCache(), AdvanceOp(UI.NoOp, true), step);
           }
         }
       }
