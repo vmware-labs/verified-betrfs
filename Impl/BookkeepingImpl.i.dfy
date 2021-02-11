@@ -107,21 +107,18 @@ module BookkeepingImpl {
   // Conditions that will hold intermediately between writes and allocs
   predicate WriteAllocConditions(s: ImplVariables)
   {
-    && s.WFBCVars()
-
     && s.Ready?
     && s.blockAllocator.Inv()
     && s.ephemeralIndirectionTable.Inv()
     && s.ephemeralIndirectionTable.TrackingGarbage()
-    // && (forall loc |
-    //     loc in s.ephemeralIndirectionTable.I().locs.Values :: 
-    //       DiskLayout.ValidNodeLocation(loc))
+    && (forall loc |
+        loc in s.ephemeralIndirectionTable.I().locs.Values :: 
+          DiskLayout.ValidNodeLocation(loc))
     && ConsistentBitmap(s.ephemeralIndirectionTable.I(), s.frozenIndirectionTable.Map((x: IT.IndirectionTable) => x.I()),
         s.persistentIndirectionTable.I(), s.outstandingBlockWrites, s.blockAllocator.I())
     && BlockAllocatorModel.Inv(s.blockAllocator.I())
-    // && BC.AllLocationsForDifferentRefsDontOverlap(
-    //     s.ephemeralIndirectionTable.I())
-    && s.IBlockCache().WriteAllocConditions()
+    && BC.AllLocationsForDifferentRefsDontOverlap(
+        s.ephemeralIndirectionTable.I())
   }
 
   predicate ChildrenConditions(s: ImplVariables, succs: Option<seq<BT.G.Reference>>)
@@ -406,7 +403,7 @@ module BookkeepingImpl {
         forall i :: 0 <= i < |childrenValue| ==> ChildrenConditions(s, Some(childrenValue[i := ref.value])))
       )
   ensures ref.Some? ==> (LruModel.I(s.lru.Queue()) == LruModel.I(old_s.lru.Queue()) + {ref.value})
-  ensures ref.None? ==> (LruModel.I(s.lru.Queue()) == LruModel.I(old_s.lru.Queue()))
+  ensures ref.None? ==> old_s == s;
   {
     ref := getFreeRef(s);
     if ref.Some? {

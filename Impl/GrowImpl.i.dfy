@@ -21,6 +21,8 @@ module GrowImpl {
   import opened BoundedPivotsLib
   import opened Bounds
 
+  import BlockDisk
+  import opened ViewOp
   import IOModel
 
   import IT = IndirectionTable
@@ -57,15 +59,25 @@ module GrowImpl {
       var containsall := ComputeContainsAllKeys(oldpivots);
       if !containsall {
         print "giving up; grow can't run because root node is incorrect";
+        assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
+        assert IOModel.betree_next(old_s.IBlockCache(), s.IBlockCache());
       } else {
         var newref := allocBookkeeping(inout s, oldchildren);
-
         match newref {
           case None => {
             print "giving up; could not allocate ref\n";
+            assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
+            assert IOModel.betree_next(old_s.IBlockCache(), s.IBlockCache());
           }
           case Some(newref) => {
-            linear var newroot := Node.EmptyNode();
+            WeightBucketEmpty();
+
+            linear var mutbucket := MutBucket.Alloc();
+            linear var buckets := lseq_alloc(1);
+            lseq_give_inout(inout buckets, 0, mutbucket);
+
+            linear var newroot := Node(InitPivotTable(), Some([newref]), buckets);
+
             writeBookkeeping(inout s, root, Some([newref]));
             assert newref !in s.cache.I();
             inout s.cache.MoveAndReplace(root, newref, newroot);
@@ -73,18 +85,22 @@ module GrowImpl {
 
             assume && WFCache(s.cache.I());
 
-            ghost var s1: ImplVariables := *;
+            ghost var s1: BC.Variables := *;
 
-            var growth := BT.RootGrowth(SSM.INode(root), newref);
-            assert SSM.INode(root) == BT.G.Node(InitPivotTable(), Some([growth.newchildref]), [B(map[])]);
-            var step := BT.BetreeGrow(growth);
+            ghost var growth := BT.RootGrowth(SSM.INode(old_s.cache.I()[root]), newref);
+            assert SSM.INode(newroot.I()) == BT.G.Node(InitPivotTable(), Some([growth.newchildref]), [B(map[])]);
+            ghost var step := BT.BetreeGrow(growth);
             assert BT.ValidGrow(growth);
-            BC.MakeTransaction2(old_s.IBlockCache(), s1.IBlockCache(), s.IBlockCache(), BT.BetreeStepOps(step));
+            BC.MakeTransaction2(old_s.IBlockCache(), s1, s.IBlockCache(), BT.BetreeStepOps(step));
             assert BBC.BetreeMove(old_s.IBlockCache(), s.IBlockCache(), BlockDisk.NoDiskOp, AdvanceOp(UI.NoOp, true), step);
-            assert stepsBetree(old_s.IBlockCache(), s.IBlockCache(), AdvanceOp(UI.NoOp, true), step);
+            assert IOModel.stepsBetree(old_s.IBlockCache(), s.IBlockCache(), AdvanceOp(UI.NoOp, true), step);
+            assert IOModel.betree_next(old_s.IBlockCache(), s.IBlockCache());
           }
         }
       }
+    } else {
+        assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
+        assert IOModel.betree_next(old_s.IBlockCache(), s.IBlockCache());
     }
   }
 }
