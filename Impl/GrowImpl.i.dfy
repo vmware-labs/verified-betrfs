@@ -78,19 +78,19 @@ module GrowImpl {
             lseq_give_inout(inout buckets, 0, mutbucket);
             linear var newroot := Node(InitPivotTable(), Some([newref]), buckets);
 
-            // writeBookkeeping(inout s, root, Some([newref]));
-            // inout s.cache.MoveAndReplace(root, newref, newroot);
+            writeBookkeeping(inout s, root, Some([newref]));
+            inout s.cache.MoveAndReplace(root, newref, newroot);
 
             // assume && WFCache(s.cache.I());
 
             ghost var old_root := old_s.cache.I()[root];
-            var gs0 := old_s.IBlockCache();
+            ghost var gs0 := old_s.IBlockCache();
 
             ghost var (gs1: BC.Variables, newref2) := BookkeepingModel.allocWithNode(gs0, old_root);
             // assume newref2.Some? && newref == newref2.value;
             ghost var gs2 := BookkeepingModel.writeWithNode(gs1, BT.G.Root(), newroot.I());
 
-            BookkeepingModel.writeCorrect(s1, BT.G.Root(), newroot);
+            BookkeepingModel.writeCorrect(gs1, BT.G.Root(), newroot.I());
 
             // ghost var growth := BT.RootGrowth(SSM.INode(old_s.cache.I()[root]), newref);
             // assert SSM.INode(newroot.I()) == BT.G.Node(InitPivotTable(), Some([growth.newchildref]), [B(map[])]);
