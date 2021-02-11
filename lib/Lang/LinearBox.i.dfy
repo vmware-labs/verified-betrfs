@@ -120,10 +120,12 @@ module LinearBox {
 
     function Read():A
       requires Inv()
+      requires Has()
       reads this, Repr
     {
-      var a:A :| true;
-      match data.Read() case lNone => a case lSome(a) => a
+      // match data.Read() case lNone => {} case lSome(a) => a
+      var lSome(a) := data.Read();
+      a
     }
 
     constructor Empty(f:DestructorFunction<A>)
@@ -141,8 +143,8 @@ module LinearBox {
     constructor(linear a:A, f:DestructorFunction<A>)
       requires OfDestructor(f).requires(a)
       ensures Inv()
-      ensures Read() == a
       ensures Has()
+      ensures Read() == a
       ensures fresh(Repr)
       ensures DataInv == OfDestructor(f).requires
     {
