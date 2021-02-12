@@ -1,6 +1,5 @@
 include "BookkeepingImpl.i.dfy"
-include "BookkeepingModel.i.dfy"
-// include "GrowModel.i.dfy"
+include "GrowModel.i.dfy"
 
 module GrowImpl { 
   import opened IOImpl
@@ -9,7 +8,7 @@ module GrowImpl {
   import opened NodeImpl
   import opened BucketImpl
   import opened DiskOpImpl
-  import BookkeepingModel
+  import GrowModel
 
   import opened Options
   import opened Maps
@@ -20,31 +19,25 @@ module GrowImpl {
   import opened LinearSequence_s
   import opened LinearSequence_i
   import opened BoundedPivotsLib
-  import opened Bounds
-
-  import BlockDisk
-  import opened ViewOp
-  import IOModel
 
   import IT = IndirectionTable
 
   import opened NativeTypes
-  import SSM = StateSectorModel
 
   /// The root was found to be too big: grow
   method grow(linear inout s: ImplVariables)
-  requires old_s.BCInv()
+  requires old_s.Inv()
   requires old_s.Ready?
-  requires BT.G.Root() in old_s.IBlockCache().cache
-  requires |old_s.IBlockCache().ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
-  requires old_s.totalCacheSize() <= MaxCacheSize() - 1
-
+  requires BT.G.Root() in old_s.I().cache
+  requires |old_s.I().ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
+  ensures s.W()
   ensures s.Ready?
-  ensures s.WFBCVars()
-  ensures IOModel.betree_next(old_s.IBlockCache(), s.IBlockCache())
+  ensures s.I() == GrowModel.grow(old_s.I())
   {
+    GrowModel.reveal_grow();
+
     var root := BT.G.Root();
-    lemmaChildrenConditionsOfNode(s, root);
+    BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), root);
     var nop := false;
 
     if s.frozenIndirectionTable.lSome? {
@@ -60,15 +53,12 @@ module GrowImpl {
       var containsall := ComputeContainsAllKeys(oldpivots);
       if !containsall {
         print "giving up; grow can't run because root node is incorrect";
-        assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
-        assert IOModel.betree_next(old_s.IBlockCache(), s.IBlockCache());
       } else {
+        BookkeepingModel.lemmaChildrenConditionsSingleOfAllocBookkeeping(s.I(), oldchildren);
         var newref := allocBookkeeping(inout s, oldchildren);
         match newref {
           case None => {
             print "giving up; could not allocate ref\n";
-            assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
-            assert IOModel.betree_next(old_s.IBlockCache(), s.IBlockCache());
           }
           case Some(newref) => {
             WeightBucketEmpty();
@@ -76,38 +66,22 @@ module GrowImpl {
             linear var mutbucket := MutBucket.Alloc();
             linear var buckets := lseq_alloc(1);
             lseq_give_inout(inout buckets, 0, mutbucket);
+
             linear var newroot := Node(InitPivotTable(), Some([newref]), buckets);
+            assert newroot.I() == BT.G.Node(InitPivotTable(), Some([newref]), [B(map[])]);
+            assert s.I().cache[root] == old_s.I().cache[root];
 
             writeBookkeeping(inout s, root, Some([newref]));
             inout s.cache.MoveAndReplace(root, newref, newroot);
 
-            // assume && WFCache(s.cache.I());
-
-            ghost var old_root := old_s.cache.I()[root];
-            ghost var gs0 := old_s.IBlockCache();
-
-            ghost var (gs1: BC.Variables, newref2) := BookkeepingModel.allocWithNode(gs0, old_root);
-            // assume newref2.Some? && newref == newref2.value;
-            ghost var gs2 := BookkeepingModel.writeWithNode(gs1, BT.G.Root(), newroot.I());
-
-            BookkeepingModel.writeCorrect(gs1, BT.G.Root(), newroot.I());
-
-            // ghost var growth := BT.RootGrowth(SSM.INode(old_s.cache.I()[root]), newref);
-            // assert SSM.INode(newroot.I()) == BT.G.Node(InitPivotTable(), Some([growth.newchildref]), [B(map[])]);
-            // ghost var step := BT.BetreeGrow(growth);
-            // assert BT.ValidGrow(growth);
-            // BC.MakeTransaction2(old_s.IBlockCache(), s1, s.IBlockCache(), BT.BetreeStepOps(step));
-            // assert BBC.BetreeMove(old_s.IBlockCache(), s.IBlockCache(), BlockDisk.NoDiskOp, AdvanceOp(UI.NoOp, true), step);
-            // assert IOModel.stepsBetree(old_s.IBlockCache(), s.IBlockCache(), AdvanceOp(UI.NoOp, true), step);
-            // assert IOModel.betree_next(old_s.IBlockCache(), s.IBlockCache());
-
-            assume false;
+            ghost var a := s.I();
+            ghost var b := GrowModel.grow(old_s.I());
+            assert a.cache == b.cache;
+            assert a.ephemeralIndirectionTable == b.ephemeralIndirectionTable;
+            assert a.lru == b.lru;
           }
         }
       }
-    } else {
-        assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
-        assert IOModel.betree_next(old_s.IBlockCache(), s.IBlockCache());
     }
   }
 }

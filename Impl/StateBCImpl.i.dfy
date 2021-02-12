@@ -158,6 +158,7 @@ module StateBCImpl {
         && lru.Inv()
         && cache.Inv()
         && blockAllocator.Inv()
+        && WFCache(cache.I())
       )
     }
 
@@ -165,7 +166,6 @@ module StateBCImpl {
     requires Ready?
     requires W()
     {
-      && WFCache(cache.I())
       && LruModel.WF(lru.Queue())
       && LruModel.I(lru.Queue()) == cache.I().Keys
       && totalCacheSize() <= MaxCacheSize()
@@ -185,10 +185,38 @@ module StateBCImpl {
     requires WFBCVars()
     {
       if Ready? then (
-          BC.Ready(persistentIndirectionTable.I(), 
-          if frozenIndirectionTable.lSome? then Some(frozenIndirectionTable.value.I()) else None, ephemeralIndirectionTable.I(),  persistentIndirectionTableLoc, frozenIndirectionTableLoc, outstandingIndirectionTableWrite, outstandingBlockWrites, outstandingBlockReads, ICache(cache.I()))
+        BC.Ready(persistentIndirectionTable.I(), 
+          if frozenIndirectionTable.lSome? then Some(frozenIndirectionTable.value.I()) else None,
+          ephemeralIndirectionTable.I(),
+          persistentIndirectionTableLoc,
+          frozenIndirectionTableLoc,
+          outstandingIndirectionTableWrite,
+          outstandingBlockWrites,
+          outstandingBlockReads,
+          ICache(cache.I()))
       ) else if Loading? then (
-          BC.LoadingIndirectionTable(indirectionTableLoc, indirectionTableRead)
+        BC.LoadingIndirectionTable(indirectionTableLoc, indirectionTableRead)
+      ) else (
+        BC.Unready
+      )
+    }
+
+    function IBlockCache2() : BBC.Variables
+    requires W()
+    // requires Ready? ==> WFCache(cache.I())
+    {
+      if Ready? then (
+        BC.Ready(persistentIndirectionTable.I(), 
+          if frozenIndirectionTable.lSome? then Some(frozenIndirectionTable.value.I()) else None,
+          ephemeralIndirectionTable.I(),
+          persistentIndirectionTableLoc,
+          frozenIndirectionTableLoc,
+          outstandingIndirectionTableWrite,
+          outstandingBlockWrites,
+          outstandingBlockReads,
+          ICache(cache.I()))
+      ) else if Loading? then (
+        BC.LoadingIndirectionTable(indirectionTableLoc, indirectionTableRead)
       ) else (
         BC.Unready
       )
@@ -198,6 +226,32 @@ module StateBCImpl {
     {
       && WFBCVars()
       && BBC.Inv(IBlockCache())
+    }
+
+    predicate WriteAllocConditions()
+    {
+      && Ready?
+      && ephemeralIndirectionTable.Inv()
+      && ephemeralIndirectionTable.TrackingGarbage()
+      && blockAllocator.Inv()
+      && (forall loc | loc in ephemeralIndirectionTable.I().locs.Values :: 
+            DiskLayout.ValidNodeLocation(loc))
+      && ConsistentBitmap(ephemeralIndirectionTable.I(),
+          frozenIndirectionTable. Map((x: IndirectionTable) => x.I()),
+          persistentIndirectionTable.I(),
+          outstandingBlockWrites,
+          blockAllocator.I())
+      && BlockAllocatorModel.Inv(blockAllocator.I())
+      && BC.AllLocationsForDifferentRefsDontOverlap(ephemeralIndirectionTable.I())
+    }
+
+    predicate ChildrenConditions(succs: Option<seq<BT.G.Reference>>)
+    requires Ready?
+    {
+      succs.Some? ==> (
+        && |succs.value| <= MaxNumChildren()
+        && IT.IndirectionTable.SuccsValid(succs.value, ephemeralIndirectionTable.graph)
+      )
     }
 
     static method Constructor() returns (linear v: Variables)
