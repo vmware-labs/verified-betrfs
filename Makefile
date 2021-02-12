@@ -109,7 +109,7 @@ build%/.:
 # Use bash so PIPESTATUS works
 SHELL=/bin/bash
 define tee_capture
-	$(eval TMPNAME=$(patsubst %.verified,%.verified-tmp,$1))
+	$(eval TMPNAME=$(patsubst %,%-tmp,$1))
 	$(2) 2>&1 | tee $(TMPNAME); test $${PIPESTATUS[0]} -eq 0
 	mv $(TMPNAME) $1
 endef
@@ -220,12 +220,12 @@ build/%.okay: %.dfy | $$(@D)/.
 .PRECIOUS: build/%.verchk
 AGGREGATE_TOOL=tools/aggregate-verchk.py
 build/%.verified: build/%.verchk $(AGGREGATE_TOOL) | $$(@D)/.
-	$(call tee_capture,$@,$(AGGREGATE_TOOL) $^)
+	$(call tee_capture,$@,$(AGGREGATE_TOOL) verchk $^)
 
 # Syntax is trivial from synchk file, just a marker.
 # (We need the .syntax target to get a recursive dependency computation.)
 build/%.syntax: build/%.synchk $(AGGREGATE_TOOL) | $$(@D)/.
-	touch $@
+	$(call tee_capture,$@,$(AGGREGATE_TOOL) synchk $^)
 
 ##############################################################################
 # .status.pdf: a dependency graph of .dfy files labeled with verification result status.
