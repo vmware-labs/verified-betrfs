@@ -204,6 +204,7 @@ build/Impl/QueryImpl.i.verchk: DAFNY_FLAGS=/noNLarith
 build/ByteBlockCacheSystem/InterpretationDisk.i.verchk: DAFNY_FLAGS=/noNLarith
 build/Betree/BetreeInv.i.verchk: DAFNY_FLAGS=/proverOpt:O:smt.random_seed=1
 build/lib/DataStructures/LinearDList.i.verchk: DAFNY_FLAGS=/noNLarith /proverOpt:O:smt.case_split=1
+build/lib/Crypto/CRC32Lut.i.verchk: DAFNY_FLAGS=/vcsCores=8
 
 ##############################################################################
 # .okay: Dafny file-level verification, no time limit,
