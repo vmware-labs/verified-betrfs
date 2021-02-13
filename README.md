@@ -13,7 +13,7 @@ sudo tools/prep-environment.sh
 
 ## Manual setup (Mac, Linux)
 
-1. Install [Mono](https://www.mono-project.com/download/stable/).
+1. Install [.NET 5.0](https://dotnet.microsoft.com/download).
 
 2. Run
 
