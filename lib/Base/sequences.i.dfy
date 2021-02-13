@@ -318,19 +318,19 @@ module Sequences {
     }
   }
 
-  predicate {:opaque} IsPrefix<A(==)>(a: seq<A>, b: seq<A>)
+  predicate {:opaque} IsPrefix<A>(a: seq<A>, b: seq<A>)
   ensures IsPrefix(a, b) ==> |a| <= |b|
   {
     && |a| <= |b|
     && a == b[..|a|]
   }
 
-  predicate {:opaque} IsSuffix<A(==)>(a: seq<A>, b: seq<A>) {
+  predicate {:opaque} IsSuffix<A>(a: seq<A>, b: seq<A>) {
     && |a| <= |b|
     && a == b[|b|-|a|..]
   }
 
-  function {:opaque} SeqIndexIterate<A(==)>(run: seq<A>, needle: A, i: int) : (res : Option<int>)
+  function {:opaque} SeqIndexIterate<A>(run: seq<A>, needle: A, i: int) : (res : Option<int>)
   requires 0 <= i <= |run|
   ensures res.Some? ==> 0 <= res.value < |run| && run[res.value] == needle
   ensures res.None? ==> forall j | i <= j < |run| :: run[j] != needle
@@ -341,14 +341,14 @@ module Sequences {
     else SeqIndexIterate(run, needle, i+1)
   }
 
-  function {:opaque} SeqIndex<A(==)>(run: seq<A>, needle: A) : (res : Option<int>)
+  function {:opaque} SeqIndex<A>(run: seq<A>, needle: A) : (res : Option<int>)
   ensures res.Some? ==> 0 <= res.value < |run| && run[res.value] == needle
   ensures res.None? ==> forall i | 0 <= i < |run| :: run[i] != needle
   {
     SeqIndexIterate(run, needle, 0)
   }
 
-  function {:opaque} SeqOfLength<V(==)>(length: nat, v: V) : (res: seq<V>)
+  function {:opaque} SeqOfLength<V>(length: nat, v: V) : (res: seq<V>)
   ensures |res| == length
   ensures forall i: nat | i < |res| :: res[i] == v
   {

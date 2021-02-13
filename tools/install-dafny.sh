@@ -1,13 +1,14 @@
 #! /bin/bash
 
-set -e
 set -x
 
 dotnet --list-sdks | grep '^5.0'
 if [ $? -ne 0 ]; then
-  echo "You must install .NET Core 3.1: https://dotnet.microsoft.com/download"
+  echo "You must install .NET Core 5.0: https://dotnet.microsoft.com/download"
   exit 1
 fi
+
+set -e
 
 mkdir .dafny
 cd .dafny
