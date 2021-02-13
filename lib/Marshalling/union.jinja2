@@ -1,6 +1,6 @@
 include "MarshalledAccessors.i.dfy"
 
-abstract module Union{{n}}Marshalling refines Marshalling {
+abstract module Union{{count}}Marshalling refines Marshalling {
 {%- for n in range(0,count) %}
   import CaseMarshalling{{n}} : Marshalling
 {%- endfor %}
