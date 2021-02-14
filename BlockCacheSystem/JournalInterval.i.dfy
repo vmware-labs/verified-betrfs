@@ -9,6 +9,13 @@ module JournalIntervals {
   import opened Sequences
   import opened NativeTypes
 
+// begin generated export
+  export Spec
+    provides *
+    reveals journalIntervalOverlap, journalCyclicIntervalOverlap, concatIntervals, InCyclicRange, ContiguousJournalInterval, subinterval, fullRange, concatFold, JournalFrontInterval, NextStartPoint, ValidJournalInterval, ValidJournal, CyclicSpliceValue, JournalInterval, JournalBackInterval
+  export extends Spec
+// end generated export
+
   datatype JournalInterval = JournalInterval(
       ghost start: int, ghost len: int)
 

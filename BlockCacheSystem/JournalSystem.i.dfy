@@ -22,6 +22,13 @@ module JournalSystem {
   import opened ViewOp
   import opened ThreeStateTypes
 
+// begin generated export
+  export Spec
+    provides *
+    reveals RecordedReadJournalRequests, DiskHasSuperblock2, CorrectInflightJournalWrite, RecordedWriteJournalRequest, RecordedReadJournalRequest, Variables, SyncReqState, CorrectInflightJournalWrites, CorrectInflightSuperblockWrites, Init, FrozenLen, HasLocationUpdateOccurredUnacked, GammaLen, RecordedReadSuperblockRequests, DiskHasSuperblock1, ProcessWriteIsGraphUpdate, Superblock1OfDisk, RecordedWriteSuperblockRequests, DiskHasSuperblock, Superblock2OfDisk, CorrectInflightSuperblockReads, FrozenInterval, FrozenStartPos, GammaStartPos, Crash, RecordedWriteSuperblockRequest, Step, HasUpdateOccurredUnacked, SuperblockOfDisk, Machine, RecordedReadSuperblockRequest, GammaInterval, WriteJournalRequestsDontOverlap, RecordedWriteJournalRequests, CorrectInflightJournalReads, DiskOp, NextStep, ReadWritesJournalDontOverlap, Next, DiskInternal, WFDisk
+  export extends Spec
+// end generated export
+
   type DiskOp = M.DiskOp
 
   type Variables = AsyncSectorDiskModelVariables<M.Variables, D.Variables>

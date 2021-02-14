@@ -17,6 +17,13 @@ module BlockAllocatorImpl {
   import BlockAllocatorModel
   import opened NativeTypes
 
+// begin generated export
+  export Spec
+    provides *
+    reveals BlockAllocator
+  export extends Spec
+// end generated export
+
   linear datatype BlockAllocator = BlockAllocator(
     linear ephemeral: BitmapImpl.Bitmap,
     linear frozen: lOption <BitmapImpl.Bitmap>,

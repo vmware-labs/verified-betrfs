@@ -35,6 +35,13 @@ module LinearContentMutableMap {
   import opened Inout
   import opened Base = LinearMutableMapBase
 
+// begin generated export
+  export Spec
+    provides *
+    reveals LinearHashMap, FixedSizeLinearHashMap, IsConstructor, UnderlyingInv, lItem, IsRealloc, Uint64SlotForKey, UnderlyingContentsMatchesContents, LinearHashMap.Inv, IsConstructorFromSize, Inv0
+  export extends Spec
+// end generated export
+
   linear datatype lItem<V> = Empty | Entry(key: uint64, linear value: V) | Tombstone(key: uint64)
   {
     linear method FreeNonEntry()
@@ -510,8 +517,6 @@ module LinearContentMutableMap {
     assert MapFromStorage(toItems(underlying.storage)) == contents;
   }
 
-  predicate Inv0<V>(self: LinearHashMap<V>) { Inv(self) }
-
   protected predicate Inv<V>(self: LinearHashMap<V>)
   ensures Inv(self) ==> |self.contents| == self.count as nat
   ensures Inv(self) ==> UnderlyingInv(self, self.underlying)
@@ -521,6 +526,8 @@ module LinearContentMutableMap {
     && |self.contents| == self.count as nat
     && (self.count as nat) <= 0x1_0000_0000_0000_0000 / 8
   }
+
+  predicate Inv0<V>(self: LinearHashMap<V>) { Inv(self) }
 
   lemma CountBound<V>(self: LinearHashMap<V>)
   requires Inv(self)

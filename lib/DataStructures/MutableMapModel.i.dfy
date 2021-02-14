@@ -26,6 +26,13 @@ module MutableMapModel {
   import opened SetBijectivity
   import opened NativeArithmetic
 
+// begin generated export
+  export Spec
+    provides *
+    reveals EachReturnedKeyExplainedByPassedIndex, Slot, MaxKeyIterate, ConstructorFromStorage, SlotIsEmpty, iterToNext, Count1, CantEquivocate, ValidSlot, ValidI, FilledWithOtherKeys, TombstoneInSlotMatchesContents, Uint64SlotSuccessor, FilledWithEntryKey, IndexSet, ProbeIterate, FixedSizeInv, ValidElements, SlotSuccessor, KeyInSlotIsInContents, FilledWithKey, LinearHashMap, ConstructorFromSize, CountFilled, SlotExplainsKey, RemoveAndGet, TombstonesMatchContentValue, Iterator, NextExplainedByI, EntryInSlotMatchesContents, setUpTo, UnderlyingContentsMatchesContents, IndexSetThrough, UnderlyingInv, RemoveInternal, IteratorOutput, Item, SlotForKey, TwoNonEmptyValidSlotsWithSameKey, KthSlotSuccessor, EntriesMatchContentValue, ProbeResult, Realloc, View, Get, SameSlot, FixedSizeLinearHashMap, FixedSizeUpdateBySlot, SeqMatchesContentKeys, SlotIsEntry, MapFromStorage, simpleIterToNext, Remove, indexOutput, SimpleIterator, ReallocIterate, CantEquivocateStorageKey, FilledWithOtherKey, SlotIsTombstone, Uint64SlotForKey
+  export extends Spec
+// end generated export
+
   function method {:opaque} lshift(a: uint64, b: uint32) : uint64
   requires 0 <= b < 64
   {

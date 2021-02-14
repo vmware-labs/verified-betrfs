@@ -33,6 +33,13 @@ module LinearMutableMap {
   import opened LinearSequence_s
   import opened LinearMutableMapBase
 
+// begin generated export
+  export Spec
+    provides *
+    reveals setUpTo, MapFromStorage, UnderlyingContentsMatchesContents, LinearHashMap, FixedSizeLinearHashMap, Iterator, NextExplainedByI, indexOutput, IteratorOutput, LinearHashMap.Inv, Inv0, EachReturnedKeyExplainedByPassedIndex, CantEquivocate, ValidIterIndex, ConstructorFromSize, ConstructorFromStorage, UnderlyingInv, KeyExplainedByPassedIndex, ValidI, Uint64SlotForKey, SimpleIterator
+  export extends Spec
+// end generated export
+
   linear datatype FixedSizeLinearHashMap<V> = FixedSizeLinearHashMap(
     linear storage: seq<Item<V>>,
     count: uint64,

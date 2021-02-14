@@ -18,6 +18,13 @@ module BlockSystem {
   import opened SectorType
   import opened ViewOp
 
+// begin generated export
+  export Spec
+    provides *
+    reveals CleanCacheEntriesAreCorrect, Crash, CorrectInflightBlockReads, WFDiskGraph, Reference, CorrectInflightIndirectionTableReads, DiskGraph, Graph, RecordedReadRequestNode, disjointWritesFromIndirectionTable, Machine, WriteRequestsAreDistinct, ReadWritesDontOverlap, CorrectInflightBlockRead, ReadWritesAreDistinct, WFDiskGraphOfLoc, NoDanglingPointers, DiskOp, RecordedReadRequestIndirectionTable, DiskChangesPreservesPersistentAndFrozen, RecordedWriteRequestNode, DiskGraphOfLoc, WriteRequestsDontOverlap, Next, RecordedWriteRequestsIndirectionTable, Step, RecordedReadRequestsIndirectionTable, RecordedWriteRequestsNode, CorrectInflightNodeWrites, Node, Variables, RefMapOfDisk, SuccessorsAgree, RecordedWriteRequestIndirectionTable, DiskCacheLookup, CorrectInflightIndirectionTableWrites, WFIndirectionTableWrtDisk, CorrectInflightNodeWrite, Op, WFIndirectionTableRefWrtDisk, HasDiskCacheLookup, Init, WFDiskCacheGraph, RecordedReadRequestsNode, NextStep, DiskCacheGraph
+  export extends Spec
+// end generated export
+
   type DiskOp = M.DiskOp
 
   type Variables = AsyncSectorDiskModelVariables<M.Variables, D.Variables>

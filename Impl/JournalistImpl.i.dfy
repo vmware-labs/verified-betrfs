@@ -17,6 +17,13 @@ module JournalistImpl {
   import opened JournalistMarshallingImpl
   import JournalistParsingImpl
 
+// begin generated export
+  export Spec
+    provides *
+    reveals basic_mod, Journalist.ReplayJournal, Journalist.Iprivate, Journalist.mid, Journalist.InMemoryJournalFrozen, Journalist.end, MaxPossibleEntries, Journalist.InMemoryJournal, CorrectJournalBlockSizes, Journalist.WF, Journalist, Journalist.Inv, JournalInfo
+  export extends Spec
+// end generated export
+
   datatype JournalInfo = JournalInfo(
     inMemoryJournalFrozen: seq<JournalEntry>,
     inMemoryJournal: seq<JournalEntry>,
