@@ -27,7 +27,7 @@ module BucketIteratorModel {
     set k | k in bucket && Keyspace.lte(key, k)
   }
 
-  protected predicate WFIter(bucket: Bucket, it: Iterator)
+  predicate {:opaque} WFIter(bucket: Bucket, it: Iterator)
   ensures WFIter(bucket, it) ==>
       && it.decreaser >= 0
       && (it.next.Next? && BucketWellMarshalled(bucket) ==> (
@@ -59,6 +59,8 @@ module BucketIteratorModel {
   requires 0 <= idx <= |bucket.keys|
   ensures WFIter(bucket, it)
   {
+    reveal WFIter();
+
     var it := Iterator(
       (if idx == |bucket.keys| then Done
           else Next(bucket.keys[idx], bucket.msgs[idx])),
@@ -70,7 +72,6 @@ module BucketIteratorModel {
       && it.next.key in bucket.b
       && bucket.b[it.next.key] == it.next.msg
     ));
-
     it
   }
 
@@ -78,6 +79,7 @@ module BucketIteratorModel {
   requires |bucket.keys| == |bucket.msgs|
   ensures WFIter(bucket, it)
   {
+    reveal WFIter();
     Iterator(Done, |bucket.keys|, 0)
   }
 
@@ -87,6 +89,7 @@ module BucketIteratorModel {
   requires WFBucket(bucket)
   ensures WFIter(bucket, it')
   {
+    reveal WFIter();
     iterForIndex(bucket, 0)
   }
 
@@ -104,6 +107,7 @@ module BucketIteratorModel {
   ensures WFIter(bucket, it')
   ensures it'.next.Next? ==> Keyspace.lt(key, it'.next.key)
   {
+    reveal WFIter();
     iterForIndex(bucket,
       Keyspace.binarySearchIndexOfFirstKeyGt(bucket.keys, key))
   }
@@ -115,6 +119,7 @@ module BucketIteratorModel {
   ensures WFIter(bucket, it')
   ensures it'.decreaser < it.decreaser
   {
+    reveal WFIter();
     iterForIndex(bucket, it.idx + 1)
   }
 
@@ -129,6 +134,7 @@ module BucketIteratorModel {
   ensures IterInc(bucket, it).next.Done? ==>
       Keyspace.lte(key, it.next.key)
   {
+    reveal WFIter();
     Keyspace.reveal_IsStrictlySorted();
     reveal_IterInc();
   }
@@ -141,6 +147,7 @@ module BucketIteratorModel {
   ensures IterInc(bucket, it).next.Next? ==>
       Keyspace.lt(it.next.key, IterInc(bucket, it).next.key)
   {
+    reveal WFIter();
     Keyspace.reveal_IsStrictlySorted();
     reveal_IterInc();
   }
@@ -193,5 +200,6 @@ module BucketIteratorModel {
   ensures it.idx == |bucket.keys| ==>
     && it.next.Done?
   {
+    reveal WFIter();
   }
 }
