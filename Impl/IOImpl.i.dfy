@@ -6,7 +6,6 @@ include "MainDiskIOHandler.s.dfy"
 include "DiskOpImpl.i.dfy"
 
 include "../lib/Base/LinearOption.i.dfy"
-include "../lib/DataStructures/LruImpl.i.dfy"
 
 module IOImpl { 
   import opened MainDiskIOHandler
@@ -23,7 +22,6 @@ module IOImpl {
   import IOModel
   import BucketsLib
   import LruModel
-  import LruImpl
   import opened Bounds
   import MutableMapModel
 
