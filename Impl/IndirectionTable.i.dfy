@@ -1613,7 +1613,9 @@ module IndirectionTable {
                     /* r.graph */ Graph(t1),
                     /* r.predCounts */ PredCounts(t1)));
 
-                  assert s.lSome? ==> s.value.Inv();
+                  assert s.lSome? ==> s.value.Inv() by {
+                    reveal s.value.Inv();
+                  }
                   /* TODO(andrea) ModelImpl */ assume s.Option() == valToIndirectionTable(v);
                 }
                 case lNone => {
@@ -2005,6 +2007,7 @@ module IndirectionTable {
     requires this.Inv()
     ensures size as int == |this.I().graph|
     {
+      reveal this.Inv();
       lemma_count_eq_graph_size(this.t);
       this.t.count
     }
