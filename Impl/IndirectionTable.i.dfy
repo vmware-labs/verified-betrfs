@@ -156,7 +156,7 @@ module IndirectionTable {
       SectorType.IndirectionTable(this.locs, this.graph)
     }
 
-    protected predicate Inv()
+    predicate {:opaque} Inv()
     ensures Inv() ==> this.locs.Keys <= this.graph.Keys
     {
       && LinearMutableMap.Inv(this.t)
@@ -200,7 +200,10 @@ module IndirectionTable {
         /* r.graph */ Graph(hashMap),
         /* r.predCounts */ PredCounts(hashMap));
 
-      assert r.Inv() by { reveal_PredCounts(); }
+      assert r.Inv() by { 
+        reveal r.Inv();
+        reveal_PredCounts();
+      }
     }
 
     // Dummy constructor only used when ImplVariables is in a state with no indirection
@@ -222,7 +225,10 @@ module IndirectionTable {
         /* r.graph */ Graph(hashMap),
         /* r.predCounts */ PredCounts(hashMap));
 
-      assert r.Inv() by { reveal_PredCounts(); }
+      assert r.Inv() by {
+        reveal r.Inv();
+        reveal_PredCounts();
+      }
     }
 
     // TODO useful? var res := IndirectionTableModel.FromHashMap(me.t, MapOption(me.garbageQueue.Option(), x => USeq.I(x)), me.refUpperBound, me.findLoclessIterator);
@@ -253,6 +259,7 @@ module IndirectionTable {
     ensures cloned.I() == this.I()
     /* TODO(andrea) ModelImpl */ ensures cloned == this.clone()
     {
+      reveal Inv();
       shared var IndirectionTable(
         t, garbageQueue, refUpperBound, findLoclessIterator, locs, graph, predCounts) := this;
       linear var t' := LinearMutableMap.Clone(t);
@@ -279,6 +286,7 @@ module IndirectionTable {
     ensures ref in this.locs ==> e.Some? && e.value.loc.Some?
     /* TODO(andrea) ModelImpl */ ensures e == getEntry(ref)
     {
+      reveal Inv();
       e := LinearMutableMap.Get(this.t, ref);
       /* TODO(andrea) ModelImpl */ assume e == getEntry(ref);
     }
@@ -292,6 +300,7 @@ module IndirectionTable {
     ensures b == (ref in this.graph && ref !in this.locs)
     /* TODO(andrea) ModelImpl */ ensures this.hasEmptyLoc(ref) == b
     {
+      reveal Inv();
       var entry := LinearMutableMap.Get(this.t, ref);
       b := entry.Some? && entry.value.loc.None?;
     }
@@ -333,6 +342,7 @@ module IndirectionTable {
     ensures (oldLoc.Some? ==> ref in old_self.locs && old_self.locs[ref] == oldLoc.value)
     /* TODO(andrea) ModelImpl */ ensures (self, oldLoc) == old_self.removeLoc(ref)
     {
+      reveal old_self.Inv();
       var it := LinearMutableMap.FindSimpleIter(self.t, ref);
       var oldEntry := LinearMutableMap.SimpleIterOutput(self.t, it);
        
@@ -372,6 +382,8 @@ module IndirectionTable {
     ensures (old_self.TrackingGarbage() ==> self.TrackingGarbage())
     /* TODO(andrea) ModelImpl */ ensures old_self.addLocIfPresent(ref, loc) == (self, added)
     {
+      reveal old_self.Inv();
+
       var it := LinearMutableMap.FindSimpleIter(self.t, ref);
       var oldEntry := LinearMutableMap.SimpleIterOutput(self.t, it);
 
@@ -382,7 +394,10 @@ module IndirectionTable {
       }
 
       assert Graph(self.t) == Graph(old_self.t);
-      assert self.Inv() by { reveal_PredCounts(); }
+      assert self.Inv() by {
+        reveal self.Inv();
+        reveal_PredCounts();
+      }
 
       /* TODO(andrea) ModelImpl */ assume old_self.addLocIfPresent(ref, loc) == (self, added);
     }
@@ -522,6 +537,7 @@ module IndirectionTable {
     ensures (ref !in old_self.locs ==> oldLoc == None)
     /* TODO(andrea) ModelImpl */ ensures old_self.removeRef(ref) == (self, oldLoc)
     {
+      reveal old_self.Inv();
       TCountEqGraphSize(self.t);
 
       // == mutation ==
@@ -596,6 +612,7 @@ module IndirectionTable {
       // ==============
 
       assert self.graph == MapRemove1(old_self.graph, ref); // observe
+      reveal self.Inv();
 
       /* TODO(andrea) ModelImpl */ assume old_self.removeRef(ref) == (self, oldLoc);
     }
@@ -957,6 +974,8 @@ module IndirectionTable {
     ensures this.garbageQueue.lSome? ==>
         |this.garbageQueue.value.I()| <= 0x1_0000_0000;
     {
+      reveal this.Inv();
+
       if this.garbageQueue.lSome? {
         NoDupesSetCardinality(this.garbageQueue.value.I());
         SetInclusionImpliesSmallerCardinality(Set(this.garbageQueue.value.I()), this.t.contents.Keys);
@@ -997,6 +1016,8 @@ module IndirectionTable {
     ensures (oldLoc.Some? ==> ref in old_self.locs && old_self.locs[ref] == oldLoc.value)
     /* TODO(andrea) ModelImpl */ ensures old_self.updateAndRemoveLoc(ref, succs) == (self, oldLoc)
     {
+      reveal old_self.Inv();
+
       self.QueueSizeBound();
       TCountEqGraphSize(self.t);
 
@@ -1070,6 +1091,7 @@ module IndirectionTable {
       inout self.findLoclessIterator := None;
       inout self.UpdateGhost();
       // ==============
+      reveal self.Inv();
 
       /* TODO(andrea) ModelImpl */ assume old_self.updateAndRemoveLoc(ref, succs) == (self, oldLoc);
     }
@@ -1679,6 +1701,7 @@ module IndirectionTable {
     /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v).Some?
     /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v) == Some(this)
     {
+      reveal Inv();
       assert this.t.count <= MaxSizeUint64();
       lemma_SeqSum_empty();
       var count := this.t.count as uint64;
@@ -1881,6 +1904,7 @@ module IndirectionTable {
     /* TODO(andrea) ModelImpl */ ensures (success, bm.I()) == this.initLocBitmap()
     ensures BitmapModel.Len(bm.I()) == NumBlocks()
     {
+      reveal this.Inv();
       bm := BitmapImpl.Bitmap.Constructor(NumBlocksUint64());
       assert BitmapModel.Len(bm.I()) == NumBlocks();
 
@@ -1949,6 +1973,8 @@ module IndirectionTable {
     ensures ref.None? ==> forall r | r in this.I().graph :: !this.deallocable(r)
     /* TODO(andrea) ModelImpl */ ensures this.findDeallocable() == ref
     {
+      reveal this.Inv();
+
       ref := this.garbageQueue.value.FirstOpt();
       if ref.None? {
         forall r | r in this.I().graph ensures !this.deallocable(r)
@@ -2004,6 +2030,7 @@ module IndirectionTable {
     ensures ref.None? ==> forall r | r in old_self.graph :: r in old_self.locs
     /* TODO(andrea) ModelImpl */ ensures (self, ref) == old_self.findRefWithNoLoc()
     {
+      reveal old_self.Inv();
 
       var findLoclessIterator := self.findLoclessIterator;
       var it;
@@ -2035,7 +2062,8 @@ module IndirectionTable {
           break;
         }
       }
-
+  
+      reveal self.Inv();
       /* TODO(andrea) ModelImpl */ assume (self, ref) == old_self.findRefWithNoLoc();
     }
 
@@ -2043,6 +2071,7 @@ module IndirectionTable {
     requires Inv()
     ensures forall ref | ref in this.graph :: ref <= r
     {
+      reveal Inv();
       this.refUpperBound
     }
 
