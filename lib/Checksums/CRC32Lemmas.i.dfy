@@ -238,6 +238,32 @@ module CRC32_C_Lemmas {
     reveal_advances_bytes();
   }
 
+  lemma bits_of_bytes_additive(s: seq<byte>, t: seq<byte>)
+  ensures bits_of_bytes(s + t) == bits_of_bytes(s) + bits_of_bytes(t)
+  {
+    if |t| == 0 {
+      calc {
+        bits_of_bytes(s + t);
+          { assert s + t == s; }
+        bits_of_bytes(s);
+        bits_of_bytes(s) + bits_of_bytes(t);
+      }
+    } else {
+      calc {
+        bits_of_bytes(s + t);
+        bits_of_bytes((s+t)[0..|s+t|-1]) + bits_of_int((s+t)[|s+t|-1] as int, 8);
+        {
+          assert (s+t)[0..|s+t|-1] == s + t[0..|t|-1];
+          assert (s+t)[|s+t|-1] == t[|t|-1];
+        }
+        bits_of_bytes(s + t[0..|t|-1]) + bits_of_int(t[|t|-1] as int, 8);
+        { bits_of_bytes_additive(s, t[0..|t|-1]); }
+        bits_of_bytes(s) + bits_of_bytes(t[0..|t|-1]) + bits_of_int(t[|t|-1] as int, 8);
+        bits_of_bytes(s) + bits_of_bytes(t);
+      }
+    }
+  }
+
   lemma advances_bytes_transitive(s: seq<byte>,
       i1: int, acc1: uint32,
       i2: int, acc2: uint32,
@@ -252,8 +278,12 @@ module CRC32_C_Lemmas {
     //var b3 := bits_of_int(acc3 as int, 32);
     reveal_advances_bytes();
     advance_assoc(b1, bits_of_bytes(s[i1..i2]), bits_of_bytes(s[i2..i3]));
-    assume bits_of_bytes(s[i1..i2]) + bits_of_bytes(s[i2..i3])
-        == bits_of_bytes(s[i1..i3]);
+
+    assert bits_of_bytes(s[i1..i2]) + bits_of_bytes(s[i2..i3])
+        == bits_of_bytes(s[i1..i3]) by {
+      bits_of_bytes_additive(s[i1..i2], s[i2..i3]);
+      assert s[i1..i2] + s[i2..i3] == s[i1..i3];
+    }
   }
 
   lemma advances_bytes_u8(s: seq<byte>, i: int, acc: uint32, acc': uint32)

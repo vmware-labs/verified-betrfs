@@ -239,11 +239,11 @@ module CRC32_C_Lut_Lemma {
       }
       bits_of_int(x % power2(a), a) + bits_of_int(x / power2(a), 1);
       {
-        assume x % power2(a) == x;
+        assert x % power2(a) == x;
       }
       bits_of_int(x, a) + bits_of_int(x / power2(a), 1);
       {
-        assume x / power2(a) == 0;
+        assert x / power2(a) == 0;
       }
       bits_of_int(x, a) + bits_of_int(0, 1);
       {
