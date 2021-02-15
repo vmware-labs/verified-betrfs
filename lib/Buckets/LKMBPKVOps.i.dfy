@@ -500,9 +500,7 @@ module LKMBPKVOps {
     node := LKMB.EmptyTree();
     weight := 0;
 
-    assert BucketsLib.B(map[]) == BucketsLib.EmptyBucket() by {
-      BucketsLib.reveal_B();
-    }
+    BucketsLib.B_empty_map();
     
     while i < DPKV.PKV.NumKVPairs(pkv)
       invariant i <= DPKV.PKV.NumKVPairs(pkv)
@@ -569,7 +567,7 @@ module LKMBPKVOps {
         BucketWeights.WeightBucketInduct(oldinterp, key, msg);
       }
 
-      //BucketsLib.reveal_BucketMapOfSeq();
+      MapSeqs.induct_map_of_seqs(keys[..i+1], msgs[..i+1]);
       assert keys[..i+1] == keys[..i] + [ keys[i] ];
       assert msgs[..i+1] == msgs[..i] + [ msgs[i] ];
 

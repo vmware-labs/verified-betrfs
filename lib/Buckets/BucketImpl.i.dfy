@@ -267,6 +267,7 @@ module BucketImpl {
     {
       if (format.BFTree?) {
         result := LKMB.Empty(format.tree);
+        MapSeqs.emptiness_map_of_seqs(I().keys, I().msgs);
       } else {
         SetCardinality0(PackedKV.IKeys(format.pkv.keys));
         result := 0 == |format.pkv.keys.offsets| as uint64;
@@ -378,6 +379,7 @@ module BucketImpl {
     ensures forall k | k in bucket.keys :: Ord.lte(result, k)
     {
       MapSeqs.key_sets_eq(bucket.keys, bucket.msgs);
+      MapSeqs.emptiness_map_of_seqs(bucket.keys, bucket.msgs);
 
       if format.BFTree? {
         result := LKMB.MinKey(format.tree);
@@ -422,6 +424,7 @@ module BucketImpl {
     ensures forall k | k in bucket.keys :: Ord.lte(k, result)
     {
       MapSeqs.key_sets_eq(bucket.keys, bucket.msgs);
+      MapSeqs.emptiness_map_of_seqs(bucket.keys, bucket.msgs);
 
       if format.BFTree? {
         result := LKMB.MaxKey(format.tree);

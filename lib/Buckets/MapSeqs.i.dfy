@@ -25,7 +25,7 @@ module MapSeqs {
   import opened Options
   import Multisets
 
-  protected function map_of_seqs(keys: seq<Key>, msgs: seq<Message>) : map<Key, Message>
+  function map_of_seqs(keys: seq<Key>, msgs: seq<Message>) : map<Key, Message>
   requires |keys| == |msgs|
   {
     if |keys| == 0 then
@@ -47,7 +47,7 @@ module MapSeqs {
 
   datatype SeqPair = SeqPair(keys: seq<Key>, msgs: seq<Message>)
 
-  protected function seqs_of_map(m: map<Key, Message>) : (res : SeqPair)
+  function seqs_of_map(m: map<Key, Message>) : (res : SeqPair)
   ensures |res.keys| == |res.msgs|
   {
     var keyOpt := maximumKey(m.Keys);
@@ -342,6 +342,25 @@ module MapSeqs {
 
   lemma empty_seqs_of_map()
   ensures |seqs_of_map(map[]).keys| == 0
+  {
+  }
+
+  lemma emptiness_map_of_seqs(keys: seq<Key>, msgs: seq<Message>)
+  requires |keys| == |msgs|
+  ensures |keys| == 0 <==> map_of_seqs(keys, msgs) == map[]
+  {
+    if |keys| == 0 {
+      assert map_of_seqs(keys, msgs) == map[];
+    } else {
+      assert Last(keys) in map_of_seqs(keys, msgs);
+      assert map_of_seqs(keys, msgs) != map[];
+    }
+  }
+
+  lemma induct_map_of_seqs(keys: seq<Key>, msgs: seq<Message>)
+  requires |keys| == |msgs| > 0
+  ensures map_of_seqs(keys, msgs) ==
+      map_of_seqs(DropLast(keys), DropLast(msgs))[Last(keys) := Last(msgs)]
   {
   }
 }
