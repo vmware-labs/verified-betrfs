@@ -301,7 +301,45 @@ module MapSeqs {
   ensures MapDisjointUnion(map_of_seqs(keys1, msgs1), map_of_seqs(keys2, msgs2))
       == map_of_seqs(keys1 + keys2, msgs1 + msgs2)
   {
-    assume false; // TODO
+    assert IsStrictlySorted(keys1) by { reveal_IsStrictlySorted(); assert keys1 == (keys1 + keys2)[..|keys1|]; }
+    assert IsStrictlySorted(keys2) by { reveal_IsStrictlySorted(); assert keys2 == (keys1 + keys2)[|keys1|..]; }
+    key_sets_eq(keys1, msgs1);
+    key_sets_eq(keys2, msgs2);
+
+    forall k | k in map_of_seqs(keys1, msgs1).Keys && k in map_of_seqs(keys2, msgs2).Keys
+    ensures false
+    {
+      var i := GetIndex(keys1, msgs1, k);
+      var j := GetIndex(keys2, msgs2, k);
+      reveal_IsStrictlySorted();
+      assert (keys1 + keys2)[i] == (keys1 + keys2)[|keys1| + j];
+    }
+
+    var a := MapDisjointUnion(map_of_seqs(keys1, msgs1), map_of_seqs(keys2, msgs2));
+    var b := map_of_seqs(keys1 + keys2, msgs1 + msgs2);
+    forall k | k in a
+    ensures k in b
+    ensures a[k] == b[k]
+    {
+      if k in map_of_seqs(keys1, msgs1) {
+        var i := GetIndex(keys1, msgs1, k);
+        MapMapsIndex(keys1 + keys2, msgs1 + msgs2, i);
+      } else {
+        var i := GetIndex(keys2, msgs2, k);
+        MapMapsIndex(keys1 + keys2, msgs1 + msgs2, |keys1| + i);
+      }
+    }
+    forall k | k in b
+    ensures k in a
+    {
+      var i := GetIndex(keys1 + keys2, msgs1 + msgs2, k);
+      if i < |keys1| {
+        MapMapsIndex(keys1, msgs1, i);
+      } else {
+        MapMapsIndex(keys2, msgs2, i - |keys1|);
+      }
+    }
+    assert a == b;
   }
 
   lemma eq_map_of_seqs(keys: seq<Key>, msgs: seq<Message>, bmap: map<Key, Message>)
@@ -311,14 +349,52 @@ module MapSeqs {
   requires forall i | 0 <= i < |keys| :: bmap[keys[i]] == msgs[i]
   ensures bmap == map_of_seqs(keys, msgs)
   {
-    assume false; // TODO
+    var m := map_of_seqs(keys, msgs);
+    forall k | k in bmap
+    ensures k in m
+    ensures bmap[k] == m[k]
+    {
+      var i :| 0 <= i < |keys| && keys[i] == k;
+      MapMapsIndex(keys, msgs, i);
+    }
+    forall k | k in m
+    ensures k in bmap
+    {
+      var i := GetIndex(keys, msgs, k);
+    }
+    assert m == bmap;
+  }
+
+  lemma MapHasKey(keys: seq<Key>, msgs: seq<Message>, i: int)
+  requires |keys| == |msgs|
+  requires 0 <= i < |keys|
+  ensures keys[i] in map_of_seqs(keys, msgs)
+  {
+    if i == |keys| - 1 {
+    } else {
+      MapHasKey(DropLast(keys), DropLast(msgs), i);
+    }
   }
 
   lemma key_sets_eq(keys: seq<Key>, msgs: seq<Message>)
   requires |keys| == |msgs|
   ensures Set(keys) == map_of_seqs(keys, msgs).Keys
   {
-    assume false; // TODO
+    var a := Set(keys);
+    var b := map_of_seqs(keys, msgs).Keys;
+
+    forall k | k in a
+    ensures k in b
+    {
+      var i :| 0 <= i < |keys| && keys[i] == k;
+      MapHasKey(keys, msgs, i);
+    }
+
+    forall k | k in b
+    ensures k in a
+    {
+      var i := GetIndex(keys, msgs, k);
+    }
   }
 
   lemma lemma_multisets_eq(keys: seq<Key>, msgs: seq<Message>)
