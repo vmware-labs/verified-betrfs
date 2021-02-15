@@ -194,6 +194,7 @@ build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	( $(TIME) $(DAFNY_CMD) $(DAFNY_FLAGS) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
 
+%.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/Buckets/BucketLib.i.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/DataStructures/MutableBtree.i.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/DataStructures/BtreeModel.i.verchk: DAFNY_FLAGS=/noNLarith
@@ -202,7 +203,7 @@ build/lib/Buckets/PackedKVMarshalling.i.verchk: DAFNY_FLAGS=/noNLarith
 build/Impl/NodeImpl.i.verchk: DAFNY_FLAGS=/noNLarith
 build/Impl/QueryImpl.i.verchk: DAFNY_FLAGS=/noNLarith
 build/ByteBlockCacheSystem/InterpretationDisk.i.verchk: DAFNY_FLAGS=/noNLarith
-build/Betree/BetreeInv.i.verchk: DAFNY_FLAGS=/proverOpt:O:smt.random_seed=1
+build/Betree/BetreeInv.i.verchk: DAFNY_FLAGS=/noNLarith /proverOpt:O:smt.random_seed=1
 build/lib/DataStructures/LinearDList.i.verchk: DAFNY_FLAGS=/noNLarith /proverOpt:O:smt.case_split=1
 
 ##############################################################################
