@@ -9,14 +9,15 @@ module PivotBetreeSpecWFNodes {
   import opened BucketsLib
   import opened BucketMaps
   import opened Bounds
-  import opened BoundedPivotsLib
   import opened ValueMessage
   import opened KeyType
+  import opened BoundedPivotsLib
+
   import BucketFlushModel
   import MapSeqs
 
   import MS = MapSpec
-  import Keyspace = Lexicographic_Byte_Order
+  import Lexicographic_Byte_Order
 
   // TODO lots of proof duplication between WF and Inv lemmas
   // We could instead have the Inv lemmas call the WF lemmas
@@ -140,7 +141,7 @@ module PivotBetreeSpecWFNodes {
     var node' := CutoffNodeAndKeepLeft(node, pivot);
     assert BucketListWellMarshalled(node'.buckets) by {
       reveal_SplitBucketLeft();
-      Keyspace.reveal_IsStrictlySorted();
+      Lexicographic_Byte_Order.reveal_IsStrictlySorted();
     }
   }
 
@@ -205,7 +206,7 @@ module PivotBetreeSpecWFNodes {
     reveal_CutoffNodeAndKeepLeft();
     var cLeft := CutoffForLeft(node.pivotTable, pivot);
     reveal_SplitBucketLeft();
-    Keyspace.reveal_IsStrictlySorted();
+    Lexicographic_Byte_Order.reveal_IsStrictlySorted();
   }
 
   lemma BucketListWellMarshalledCutoffNodeAndKeepRight(
@@ -221,7 +222,7 @@ module PivotBetreeSpecWFNodes {
     reveal_CutoffNodeAndKeepRight();
     var cRight := CutoffForRight(node.pivotTable, pivot);
     reveal_SplitBucketRight();
-    Keyspace.reveal_IsStrictlySorted();
+    Lexicographic_Byte_Order.reveal_IsStrictlySorted();
   }
 
   lemma BucketListWellMarshalledCutoffNode(
@@ -367,7 +368,7 @@ module PivotBetreeSpecWFNodes {
     var fused_child := f.fused_child;
 
     var lbound := getlbound(f.split_parent, f.slot_idx);
-    var ubound := getubound(f.split_parent, f.slot_idx);
+    var ubound := getubound(f.split_parent, f.slot_idx+1);
 
     var left_child := CutoffNode(f.left_child, lbound, Some(f.pivot));
     var right_child := CutoffNode(f.right_child, f.pivot, ubound);
@@ -375,14 +376,8 @@ module PivotBetreeSpecWFNodes {
     var pivot := f.pivot;
 
     WeightBucketListConcat(left_child.buckets, right_child.buckets);
-
-    WFPivotsRemoved(split_parent.pivotTable, slot_idx);
-    
-    reveal_MergeBucketsInList();
-
-    //WeightMergeBucketsInListLe(split_parent.buckets, slot_idx, split_parent.pivotTable);
-
-    //WFMergeBucketsInList(split_parent.buckets, slot_idx, split_parent.pivotTable);
+    WeightMergeBucketsInListLe(split_parent.buckets, slot_idx);
+    WFMergeBucketsInList(split_parent.buckets, slot_idx, split_parent.pivotTable);
 
     WFConcat3(left_child.pivotTable, pivot, right_child.pivotTable);
 
@@ -401,6 +396,8 @@ module PivotBetreeSpecWFNodes {
     assert InvNode(MergeReads(f)[1].node);
     assert InvNode(MergeReads(f)[2].node);
 
+    ValidMergeWritesWFNodes(f);
+
     var slot_idx := f.slot_idx;
     var pivot := f.pivot;
 
@@ -409,31 +406,28 @@ module PivotBetreeSpecWFNodes {
     var fused_child := f.fused_child;
 
     assert InvNode(fused_parent) by {
-      WFPivotsRemoved(split_parent.pivotTable, slot_idx);
-      
-      assert forall i | 0 <= i <= slot_idx - 1 :: fused_parent.buckets[i] == split_parent.buckets[i]
+      WFPivotsRemoved(split_parent.pivotTable, slot_idx+1);
+      assert forall i | 0 <= i <= slot_idx-1 :: fused_parent.buckets[i] == split_parent.buckets[i]
         by { reveal_MergeBucketsInList(); }
       assert forall i | slot_idx + 1 <= i <= |fused_parent.buckets| - 1 :: fused_parent.buckets[i] == split_parent.buckets[i+1]
         by { reveal_MergeBucketsInList(); }
 
-      BucketListHasWFBucketAtIdenticalSlice(split_parent.buckets, split_parent.pivotTable, fused_parent.buckets, fused_parent.pivotTable, 0, slot_idx - 1, 0);
+      BucketListHasWFBucketAtIdenticalSlice(split_parent.buckets, split_parent.pivotTable, fused_parent.buckets, fused_parent.pivotTable, 0, slot_idx-1, 0);
       BucketListHasWFBucketAtIdenticalSlice(split_parent.buckets, split_parent.pivotTable, fused_parent.buckets, fused_parent.pivotTable, slot_idx + 1, |fused_parent.buckets| - 1, -1);
 
-      //WFProperMergeBucketsInList(split_parent.buckets, slot_idx, split_parent.pivotTable);
-      //WeightMergeBucketsInListLe(split_parent.buckets, slot_idx, split_parent.pivotTable);
+      WFProperMergeBucketsInList(split_parent.buckets, slot_idx, split_parent.pivotTable);
+      WellMarshalledMergeBucketsInList(split_parent.buckets, slot_idx, split_parent.pivotTable);
     }
 
     assert InvNode(fused_child) by {
       var lbound := getlbound(f.split_parent, f.slot_idx);
-      var ubound := getubound(f.split_parent, f.slot_idx);
+      var ubound := getubound(f.split_parent, f.slot_idx+1);
       var left_child := CutoffNode(f.left_child, lbound, Some(f.pivot));
       var right_child := CutoffNode(f.right_child, f.pivot, ubound);
 
       WFBucketListProperCutoffNode(f.left_child, lbound, Some(f.pivot));
       WFBucketListProperCutoffNode(f.right_child, f.pivot, ubound);
       WeightBucketListConcat(left_child.buckets, right_child.buckets);
-
-      WFConcat3(left_child.pivotTable, pivot, right_child.pivotTable);
 
       assert WFPivots(fused_child.pivotTable); // This fixes a time-out somehow. -- robj
       BucketListHasWFBucketAtIdenticalSlice(left_child.buckets, left_child.pivotTable, fused_child.buckets, fused_child.pivotTable, 0, |left_child.buckets| - 1, 0);
@@ -493,7 +487,7 @@ module PivotBetreeSpecWFNodes {
 
   lemma bucket_msgs_equiv(b: Bucket)
   requires PreWFBucket(b)
-  requires Keyspace.IsStrictlySorted(b.keys)
+  requires Lexicographic_Byte_Order.IsStrictlySorted(b.keys)
   ensures forall k :: k in b.msgs <==> k in b.as_map().Values
   {
     forall i | 0 <= i < |b.msgs|
@@ -517,7 +511,7 @@ module PivotBetreeSpecWFNodes {
 
   lemma bucket_keys_equiv(b: Bucket)
   requires PreWFBucket(b)
-  requires Keyspace.IsStrictlySorted(b.keys)
+  requires Lexicographic_Byte_Order.IsStrictlySorted(b.keys)
   ensures forall k :: k in b.keys <==> k in b.as_map()
   {
     forall i | 0 <= i < |b.keys|
@@ -581,11 +575,11 @@ module PivotBetreeSpecWFNodes {
     SplitMaps(r.leaf.buckets[0], r.pivot);
 
     assert BucketWellMarshalled(leaf'_buckets[0]) by {
-      Keyspace.reveal_IsStrictlySorted();
+      Lexicographic_Byte_Order.reveal_IsStrictlySorted();
       reveal_SplitBucketLeft();
     }
     assert BucketWellMarshalled(leaf'_buckets[1]) by {
-      Keyspace.reveal_IsStrictlySorted();
+      Lexicographic_Byte_Order.reveal_IsStrictlySorted();
       reveal_SplitBucketRight();
     }
 

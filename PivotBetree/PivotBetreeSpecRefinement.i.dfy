@@ -899,113 +899,112 @@ module PivotBetreeSpecRefinement {
   requires P.InvNode(f.right_child)
   ensures B.ValidRedirect(IMerge(f))
   {
-    // var redirect := IMerge(f);
-    // PivotBetreeSpecWFNodes.ValidMergeWritesInvNodes(f);
+    var redirect := IMerge(f);
+    PivotBetreeSpecWFNodes.ValidMergeWritesInvNodes(f);
 
-    // assert P.WFNode(P.MergeOps(f)[0].node);
-    // assert P.WFNode(P.MergeOps(f)[1].node);
+    assert P.WFNode(P.MergeOps(f)[0].node);
+    assert P.WFNode(P.MergeOps(f)[1].node);
 
-    // assert P.MergeReads(f)[0].node == f.split_parent;
-    // assert BucketListWellMarshalled(f.split_parent.buckets);
-    // WellMarshalledMergeBucketsInList(f.split_parent.buckets, f.slot_idx);
+    assert P.MergeReads(f)[0].node == f.split_parent;
+    assert BucketListWellMarshalled(f.split_parent.buckets);
 
-    // forall ref | ref in IMapRestrict(redirect.old_parent.children, redirect.keys).Values
-    // ensures ref in redirect.old_childrefs
-    // {
-    //   var key: Key :| IMapsTo(IMapRestrict(redirect.old_parent.children, redirect.keys), key, ref);
-    //   assert key in redirect.keys;
-    //   if (P.G.Keyspace.lt(key, f.pivot)) {
-    //     RouteIs(f.split_parent.pivotTable, key, f.slot_idx);
-    //     assert ref == f.left_childref;
-    //   } else {
-    //     assert f.split_parent.pivotTable[f.slot_idx + 1] == f.fused_parent.pivotTable[f.slot_idx];
-    //     RouteIs(f.split_parent.pivotTable, key, f.slot_idx+1);
-    //     assert ref == f.right_childref;
-    //   }
-    // }
+    forall ref | ref in IMapRestrict(redirect.old_parent.children, redirect.keys).Values
+    ensures ref in redirect.old_childrefs
+    {
+      var key: Key :| IMapsTo(IMapRestrict(redirect.old_parent.children, redirect.keys), key, ref);
+      assert key in redirect.keys;
+      if (P.G.Keyspace.lt(key, f.pivot)) {
+        RouteIs(f.split_parent.pivotTable, key, f.slot_idx);
+        assert ref == f.left_childref;
+      } else {
+        assert f.split_parent.pivotTable[f.slot_idx + 2] == f.fused_parent.pivotTable[f.slot_idx + 1];
+        RouteIs(f.split_parent.pivotTable, key, f.slot_idx+1);
+        assert ref == f.right_childref;
+      }
+    }
 
-    // forall ref | ref in redirect.old_childrefs
-    // ensures ref in IMapRestrict(redirect.old_parent.children, redirect.keys).Values
-    // {
-    //   assert ref == f.left_childref || ref == f.right_childref;
-    //   if (ref == f.left_childref) {
-    //     var key := GetKeyInBucket(f.split_parent.pivotTable, f.slot_idx);
-    //     RouteIs(f.fused_parent.pivotTable, key, f.slot_idx);
-    //     assert key in redirect.keys;
-    //     assert key in IMapRestrict(redirect.old_parent.children, redirect.keys);
-    //     assert IMapRestrict(redirect.old_parent.children, redirect.keys)[key] == ref;
-    //     assert ref in IMapRestrict(redirect.old_parent.children, redirect.keys).Values;
-    //   } else {
-    //     var key := GetKeyInBucket(f.split_parent.pivotTable, f.slot_idx + 1);
-    //     RouteIs(f.fused_parent.pivotTable, key, f.slot_idx);
-    //     assert key in redirect.keys;
-    //     assert key in IMapRestrict(redirect.old_parent.children, redirect.keys);
-    //     assert IMapRestrict(redirect.old_parent.children, redirect.keys)[key] == ref;
-    //     assert ref in IMapRestrict(redirect.old_parent.children, redirect.keys).Values;
-    //   }
-    // }
+    forall ref | ref in redirect.old_childrefs
+    ensures ref in IMapRestrict(redirect.old_parent.children, redirect.keys).Values
+    {
+      assert ref == f.left_childref || ref == f.right_childref;
+      if (ref == f.left_childref) {
+        var key := GetKeyInBucket(f.split_parent.pivotTable, f.slot_idx);
+        RouteIs(f.fused_parent.pivotTable, key, f.slot_idx);
+        assert key in redirect.keys;
+        assert key in IMapRestrict(redirect.old_parent.children, redirect.keys);
+        assert IMapRestrict(redirect.old_parent.children, redirect.keys)[key] == ref;
+        assert ref in IMapRestrict(redirect.old_parent.children, redirect.keys).Values;
+      } else {
+        var key := GetKeyInBucket(f.split_parent.pivotTable, f.slot_idx + 1);
+        RouteIs(f.fused_parent.pivotTable, key, f.slot_idx);
+        assert key in redirect.keys;
+        assert key in IMapRestrict(redirect.old_parent.children, redirect.keys);
+        assert IMapRestrict(redirect.old_parent.children, redirect.keys)[key] == ref;
+        assert ref in IMapRestrict(redirect.old_parent.children, redirect.keys).Values;
+      }
+    }
 
-    // reveal_MergeBucketsInList();
-    // SplitOfMergeBucketsInList(f.split_parent.buckets, f.slot_idx, f.split_parent.pivotTable);
-    // SplitMergeBuffersChildrenEq(f.fused_parent, f.split_parent, f.slot_idx);
+    reveal_MergeBucketsInList();
+    SplitOfMergeBucketsInList(f.split_parent.buckets, f.slot_idx, f.split_parent.pivotTable);
+    SplitMergeBuffersChildrenEq(f.fused_parent, f.split_parent, f.slot_idx);
 
-    // var lb := Some(GetKey(f.split_parent.pivotTable, f.slot_idx));
-    // var ub := if f.split_parent.pivotTable[f.slot_idx+1].Element? then Some(GetKey(f.split_parent.pivotTable, f.slot_idx+1)) else None;
+    var lb := P.getlbound(f.split_parent, f.slot_idx);
+    var ub := P.getubound(f.split_parent, f.slot_idx+1);
 
-    // var l := P.CutoffNode(f.left_child, lb , Some(f.pivot));
-    // var r := P.CutoffNode(f.right_child, Some(f.pivot), ub);
+    var l := P.CutoffNode(f.left_child, lb , Some(f.pivot));
+    var r := P.CutoffNode(f.right_child, f.pivot, ub);
 
-    // assert redirect.old_children[f.left_childref] == INode(f.left_child);
-    // assert redirect.old_children[f.right_childref] == INode(f.right_child);
+    assert redirect.old_children[f.left_childref] == INode(f.left_child);
+    assert redirect.old_children[f.right_childref] == INode(f.right_child);
 
-    // forall key:Key | key in redirect.keys * redirect.old_parent.children.Keys
-    // ensures redirect.old_parent.children[key] in redirect.old_children
-    // ensures IMapsAgreeOnKey(redirect.new_children[redirect.new_parent.children[key]].buffer, redirect.old_children[redirect.old_parent.children[key]].buffer, key)
-    // ensures IMapsAgreeOnKey(redirect.new_children[redirect.new_parent.children[key]].children, redirect.old_children[redirect.old_parent.children[key]].children, key)
-    // {
-    //   assert key in redirect.keys;
-    //   if (P.G.Keyspace.lt(key, f.pivot)) {
-    //     RouteIs(f.split_parent.pivotTable, key, f.slot_idx);
-    //     assert redirect.old_parent.children[key] == f.left_childref;
-    //     assert redirect.old_children[redirect.old_parent.children[key]] == INode(f.left_child);
-    //     CutoffNodeAgree(f.left_child, l, lb, Some(f.pivot), key);
-    //     MergedNodeAndLeftAgree(l, r, f.fused_child, f.pivot, key);
-    //   } else {
-    //     if f.slot_idx + 1 < |f.split_parent.pivotTable| {
-    //       assert f.split_parent.pivotTable[f.slot_idx + 1] == f.fused_parent.pivotTable[f.slot_idx];
-    //     }
-    //     RouteIs(f.split_parent.pivotTable, key, f.slot_idx + 1);
-    //     assert redirect.old_parent.children[key] == f.right_childref;
-    //     assert redirect.old_children[redirect.old_parent.children[key]] == INode(f.right_child);
-    //     CutoffNodeAgree(f.right_child, r, Some(f.pivot), ub, key);
-    //     MergedNodeAndRightAgree(l, r, f.fused_child, f.pivot, key);
-    //   }
-    // }
+    assert forall k | k in redirect.keys :: Keyspace.lt(KeyToElement(k), f.fused_parent.pivotTable[f.slot_idx+1]);
 
-    // forall childref, ref | childref in redirect.new_children && ref in redirect.new_children[childref].children.Values
-    // ensures exists key ::
-    //       && IMapsTo(redirect.new_parent.children, key, childref)
-    //       && IMapsTo(redirect.new_children[childref].children, key, ref)
-    //       && key in redirect.keys
-    //       && key in redirect.old_parent.children
-    // {
-    //   assert childref == f.fused_childref;
-    //   var new_child := redirect.new_children[childref];
-    //   var key :| key in new_child.children && new_child.children[key] == ref;
-    //   var i := Route(f.fused_child.pivotTable, key);
-    //   ValidMergeChildHasGoodPivots(f);
-    //   var key1 := GetKeyInChildBucket(f.fused_parent.pivotTable, f.fused_child.pivotTable, f.slot_idx, i);
-    //   assert key1 in redirect.keys;
-    //   assert key1 in redirect.old_parent.children.Keys;
-    //   assert new_child.children[key1] == ref;
-    //   assert key1 in redirect.keys * redirect.old_parent.children.Keys;
-    //   assert key1 in IMapRestrict(new_child.children, redirect.keys * redirect.old_parent.children.Keys);
+    forall key:Key | key in redirect.keys * redirect.old_parent.children.Keys
+    ensures redirect.old_parent.children[key] in redirect.old_children
+    ensures IMapsAgreeOnKey(redirect.new_children[redirect.new_parent.children[key]].buffer, redirect.old_children[redirect.old_parent.children[key]].buffer, key)
+    ensures IMapsAgreeOnKey(redirect.new_children[redirect.new_parent.children[key]].children, redirect.old_children[redirect.old_parent.children[key]].children, key)
+    {
+      assert key in redirect.keys;
+      if (P.G.Keyspace.lt(key, f.pivot)) {
+        RouteIs(f.split_parent.pivotTable, key, f.slot_idx);
+        assert redirect.old_parent.children[key] == f.left_childref;
+        assert redirect.old_children[redirect.old_parent.children[key]] == INode(f.left_child);
+        CutoffNodeAgree(f.left_child, l, lb, Some(f.pivot), key);
+        MergedNodeAndLeftAgree(l, r, f.fused_child, f.pivot, key);
+      } else {
+        assert f.split_parent.pivotTable[f.slot_idx+2] == f.fused_parent.pivotTable[f.slot_idx+1];
+        RouteIs(f.split_parent.pivotTable, key, f.slot_idx + 1);
+        assert redirect.old_parent.children[key] == f.right_childref;
+        assert redirect.old_children[redirect.old_parent.children[key]] == INode(f.right_child);
+        CutoffNodeAgree(f.right_child, r, f.pivot, ub, key);
+        MergedNodeAndRightAgree(l, r, f.fused_child, f.pivot, key);
+      }
+    }
 
-    //   assert IMapsTo(redirect.new_parent.children, key1, childref)
-    //       && IMapsTo(redirect.new_children[childref].children, key1, ref)
-    //       && key1 in redirect.keys
-    //       && key1 in redirect.old_parent.children;
-    // }
+    forall childref, ref | childref in redirect.new_children && ref in redirect.new_children[childref].children.Values
+    ensures exists key ::
+          && IMapsTo(redirect.new_parent.children, key, childref)
+          && IMapsTo(redirect.new_children[childref].children, key, ref)
+          && key in redirect.keys
+          && key in redirect.old_parent.children
+    {
+      assert childref == f.fused_childref;
+      var new_child := redirect.new_children[childref];
+      var key :| key in new_child.children && new_child.children[key] == ref;
+      var i := Route(f.fused_child.pivotTable, key);
+      ValidMergeChildHasGoodPivots(f);
+      var key1 := GetKeyInChildBucket(f.fused_parent.pivotTable, f.fused_child.pivotTable, f.slot_idx, i);
+      assert key1 in redirect.keys;
+      assert key1 in redirect.old_parent.children.Keys;
+      assert new_child.children[key1] == ref;
+      assert key1 in redirect.keys * redirect.old_parent.children.Keys;
+      assert key1 in IMapRestrict(new_child.children, redirect.keys * redirect.old_parent.children.Keys);
+
+      assert IMapsTo(redirect.new_parent.children, key1, childref)
+          && IMapsTo(redirect.new_children[childref].children, key1, ref)
+          && key1 in redirect.keys
+          && key1 in redirect.old_parent.children;
+    }
   }
 
   lemma RefinesValidSplit(f: P.NodeFusion)

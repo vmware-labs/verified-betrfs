@@ -477,6 +477,7 @@ module PivotBetreeSpec {
   ensures node.children.Some? <==> node'.children.Some?
   ensures WFNode(node')
   ensures pivot == node'.pivotTable[0].e
+  ensures Last(node.pivotTable) == Last(node'.pivotTable)
   ensures G.Successors(node') <= G.Successors(node)
   ensures WeightBucketList(node'.buckets) <= WeightBucketList(node.buckets)
   ensures |node'.buckets| <= |node.buckets|
@@ -511,6 +512,7 @@ module PivotBetreeSpec {
   ensures WFNode(node')
   ensures lpivot == node'.pivotTable[0].e
   ensures rpivot.Some? ==> Last(node'.pivotTable) == KeyToElement(rpivot.value)
+  ensures rpivot.None? ==> Last(node'.pivotTable) == Last(node.pivotTable)
   ensures G.Successors(node') <= G.Successors(node)
   ensures WeightBucketList(node'.buckets) <= WeightBucketList(node.buckets)
   ensures |node'.buckets| <= |node.buckets|
@@ -653,9 +655,6 @@ module PivotBetreeSpec {
 
   //// Merge
 
-  // 0 index children is negative infinity to pivot[0]
-  // f.pivot == the end of the pivot
-
   predicate ValidMerge(f: NodeFusion)
   {
     && WFNode(f.split_parent)
@@ -684,7 +683,7 @@ module PivotBetreeSpec {
     && (f.left_child.children.None? ==> f.right_child.children.None?)
   
     && var lbound :=  getlbound(f.split_parent, f.slot_idx);
-    && var ubound :=  getubound(f.split_parent, f.slot_idx);
+    && var ubound :=  getubound(f.split_parent, f.slot_idx+1);
 
     && ValidSplitKey(f.left_child, lbound, Some(f.pivot))
     && ValidSplitKey(f.right_child, f.pivot, ubound)
