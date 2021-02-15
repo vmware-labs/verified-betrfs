@@ -153,7 +153,7 @@ module IndirectionTable {
 
     function I(): SectorType.IndirectionTable
     {
-      SectorType.IndirectionTable(this.locs, this.graph)
+      SectorType.IndirectionTable(this.locs, this.graph, this.refUpperBound)
     }
 
     protected predicate Inv()
@@ -1639,7 +1639,7 @@ module IndirectionTable {
 
     static function IMapAsIndirectionTable(m: map<uint64, Entry>) : SectorType.IndirectionTable
     {
-      SectorType.IndirectionTable(MapLocs(m), MapGraph(m))
+      SectorType.IndirectionTable(MapLocs(m), MapGraph(m), 0) // TODO: yizhou7
     }
 
     // TODO remove static function IHashMapAsIndirectionTable(m: HashMap) : SectorType.IndirectionTable
@@ -1652,11 +1652,6 @@ module IndirectionTable {
     {
       // (Reference, address, len, successor-list) triples
       GArray(GTuple([GUint64, GUint64, GUint64, GUint64Array]))
-    }
-
-    function IModel(self: IndirectionTable) : SectorType.IndirectionTable
-    {
-      SectorType.IndirectionTable(self.locs, self.graph)
     }
 
     // NOTE(travis): I found that the above method which marshalls
@@ -2042,6 +2037,7 @@ module IndirectionTable {
     function {:opaque} getRefUpperBound() : (r: uint64)
     requires Inv()
     ensures forall ref | ref in this.graph :: ref <= r
+    ensures r == this.I().refUpperBound
     {
       this.refUpperBound
     }
@@ -2049,6 +2045,7 @@ module IndirectionTable {
     shared method GetRefUpperBound() returns (r: uint64)
     requires this.Inv()
     ensures r == this.getRefUpperBound()
+    ensures r == this.I().refUpperBound
     {
       reveal_getRefUpperBound();
       r := this.refUpperBound;

@@ -28,41 +28,40 @@ module BookkeepingModel {
     && ref != BT.G.Root()
   }
 
-  // function getFreeRefIterate(s: BBC.Variables, i: uint64) 
-  // : (ref : Option<BT.G.Reference>)
-  // requires s.Ready?
-  // // requires s.ephemeralIndirectionTable.Inv()
-  // requires i >= 1
-  // requires forall r | r in s.ephemeralIndirectionTable.graph :: r < i
-  // ensures ref.Some? ==> RefAvailable(s, ref.value)
-  // decreases 0x1_0000_0000_0000_0000 - i as int
-  // {
-  //   // NOTE: we shouldn't even need to do this check with the current
-  //   // setup (because we start i at a value > than anything that has
-  //   // *ever* been in the ephemeralIndirectionTable, which would include
-  //   // anything in the cache. That requires some proof though.
-  //   if i !in s.cache then (
-  //     Some(i)
-  //   ) else if i == 0xffff_ffff_ffff_ffff then (
-  //     None
-  //   ) else (
-  //     getFreeRefIterate(s, i+1) 
-  //   )
-  // }
+  function getFreeRefIterate(s: BBC.Variables, i: uint64) 
+  : (ref : Option<BT.G.Reference>)
+  requires s.Ready?
+  requires i >= 1
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r < i
+  ensures ref.Some? ==> RefAvailable(s, ref.value)
+  decreases 0x1_0000_0000_0000_0000 - i as int
+  {
+    // NOTE: we shouldn't even need to do this check with the current
+    // setup (because we start i at a value > than anything that has
+    // *ever* been in the ephemeralIndirectionTable, which would include
+    // anything in the cache. That requires some proof though.
+    if i !in s.cache then (
+      Some(i)
+    ) else if i == 0xffff_ffff_ffff_ffff then (
+      None
+    ) else (
+      getFreeRefIterate(s, i+1) 
+    )
+  }
 
-  // function {:opaque} getFreeRef(s: BBC.Variables)
-  // : (ref : Option<BT.G.Reference>)
-  // requires s.Ready?
-  // // requires s.ephemeralIndirectionTable.Inv()
-  // ensures ref.Some? ==> RefAvailable(s, ref.value)
-  // {
-  //   var i := s.ephemeralIndirectionTable.getRefUpperBound();
-  //   if i == 0xffff_ffff_ffff_ffff then (
-  //     None
-  //   ) else (
-  //     getFreeRefIterate(s, i+1)
-  //   )
-  // }
+  function {:opaque} getFreeRef(s: BBC.Variables)
+  : (ref : Option<BT.G.Reference>)
+  requires s.Ready?
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r < s.ephemeralIndirectionTable.refUpperBound
+  ensures ref.Some? ==> RefAvailable(s, ref.value)
+  {
+    var i := s.ephemeralIndirectionTable.refUpperBound;
+    if i == 0xffff_ffff_ffff_ffff then (
+      None
+    ) else (
+      getFreeRefIterate(s, i+1)
+    )
+  }
 
   // function getFreeRef2Iterate(s: BBC.Variables, avoid: BT.G.Reference, i: uint64) 
   // : (ref : Option<BT.G.Reference>)
@@ -160,6 +159,26 @@ module BookkeepingModel {
     assert s'.WriteAllocConditions();
     s'    
   }
+
+  function {:opaque} allocBookkeeping(s: BBC.Variables, children: Option<seq<BT.G.Reference>>)
+  : (p: (BBC.Variables, Option<Reference>))
+  requires WriteAllocConditions(s)
+  requires ChildrenConditions(s, children)
+  requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
+
+  ensures var (s', id) := p;
+    && s'.Ready?
+    && WriteAllocConditions(s')
+    && |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
+  {
+    // var ref := getFreeRef(s);
+    var ref: Option<BT.G.Reference> :| ref.Some? ==> RefAvailable(s, ref.value);
+    if ref.Some? then (
+      (writeBookkeeping(s, ref.value, children), ref)
+    ) else (
+      (s, None)
+    )
+  }
 /*
 
   function {:opaque} writeBookkeepingNoSuccsUpdate(s: BCVariables, ref: BT.G.Reference)
@@ -190,24 +209,6 @@ module BookkeepingModel {
   }
 
 
-  function {:opaque} allocBookkeeping(s: BCVariables, children: Option<seq<BT.G.Reference>>)
-  : (p: (BCVariables, Option<Reference>))
-  requires WriteAllocConditions(s)
-  requires ChildrenConditions(s, children)
-  requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
-
-  ensures var (s', id) := p;
-    && s'.Ready?
-    && WriteAllocConditions(s')
-    && |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
-  {
-    var ref := getFreeRef(s);
-    if ref.Some? then (
-      (writeBookkeeping(s, ref.value, children), ref)
-    ) else (
-      (s, None)
-    )
-  }
 
   // fullWrite and fullAlloc are like writeBookkeeping/allocBookkeeping, except that fullWrite and fullAlloc update
   // the cache with the node. In the implementation of betree operations we use the above,

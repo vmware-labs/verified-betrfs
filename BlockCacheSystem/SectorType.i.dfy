@@ -18,7 +18,8 @@ module SectorType {
   // TODO make indirectionTable take up more than one block
   datatype IndirectionTable = IndirectionTable(
       locs: map<Reference, Location>,
-      graph: map<Reference, seq<Reference>>)
+      graph: map<Reference, seq<Reference>>,
+      refUpperBound: uint64)
 
   datatype Sector =
     | SectorSuperblock(superblock: Superblock)

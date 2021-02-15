@@ -141,7 +141,8 @@ module BlockCache refines Transactable {
   {
     IndirectionTable(
       if ref in indirectionTable.graph && ref !in indirectionTable.locs then indirectionTable.locs[ref := loc] else indirectionTable.locs,
-      indirectionTable.graph
+      indirectionTable.graph,
+      indirectionTable.refUpperBound // TODO: yizhou7 
     )
   }
 

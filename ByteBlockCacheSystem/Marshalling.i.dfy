@@ -286,7 +286,7 @@ module Marshalling {
   ensures s.Some? ==> forall ref | ref in s.value.graph :: |s.value.graph[ref]| <= MaxNumChildren()
   {
     if |a| == 0 then
-      Some(IndirectionTable(map[], map[]))
+      Some(IndirectionTable(map[], map[], 0))
     else (
       var res := valToIndirectionTableMaps(DropLast(a));
       match res {
@@ -300,7 +300,7 @@ module Marshalling {
           if ref in table.graph || !DiskLayout.ValidNodeLocation(loc) || |succs| as int > MaxNumChildren() then (
             None
           ) else (
-            Some(IndirectionTable(table.locs[ref := loc], table.graph[ref := succs]))
+            Some(IndirectionTable(table.locs[ref := loc], table.graph[ref := succs], 0)) // yizhou7: TODO
           )
         )
         case None => None
