@@ -867,6 +867,42 @@ module F2_X_Lemmas {
     assert 0 % 2 == 0;
   }
 
+  lemma parity_rev(x: seq<bool>, y: seq<bool>, i: nat)
+  requires i >= 1
+  requires 1 + i <= |x| + |y|
+  ensures parity(set_digit(x, y, |x| + |y| - 1 - i))
+      == parity(set_digit(reverse(x), reverse(y), i - 1))
+  {
+    var setA := set_digit(x, y, |x| + |y| - 1 - i);
+    var setB := set_digit(reverse(x), reverse(y), i - 1);
+    assert |setA| == |setB| by {
+      var relation := iset a:((nat,nat),(nat,nat))
+          | a.0.0 + a.1.0 == |x| - 1
+          && a.0.1 + a.1.1 == |y| - 1;
+
+      forall a | a in setA ensures exists b :: b in setB && (a, b) in relation
+      {
+        var b := (|x| - 1 - a.0, |y| - 1 - a.1);
+        assert bits_get(reverse(x), b.0) == bits_get(x, a.0);
+        assert bits_get(reverse(y), b.1) == bits_get(y, a.1);
+        assert b in setB;
+        assert (a, b) in relation;
+      }
+      forall b | b in setB ensures exists a :: a in setA && (a, b) in relation
+      {
+        var a := (|x| - 1 - b.0, |y| - 1 - b.1);
+        assert bits_get(reverse(x), b.0) == bits_get(x, a.0);
+        assert bits_get(reverse(y), b.1) == bits_get(y, a.1);
+        assert a in setA;
+        assert (a, b) in relation;
+      }
+      assume false;
+
+      SetBijectivity.BijectivityImpliesEqualCardinality(setA, setB, relation);
+    }
+    reveal_parity();
+  }
+
   lemma reverse_mul(x: Bits, y: Bits)
   ensures reverse(mul_F2_X(x, y)) + [false]
     == [false] + mul_F2_X(reverse(x), reverse(y))
@@ -903,35 +939,7 @@ module F2_X_Lemmas {
             }
             parity(set_digit(x, y, |x| + |y| - 1 - i));
             {
-              var setA := set_digit(x, y, |x| + |y| - 1 - i);
-              var setB := set_digit(reverse(x), reverse(y), i - 1);
-              assert |setA| == |setB| by {
-                var relation := iset a:((nat,nat),(nat,nat))
-                    | a.0.0 + a.1.0 == |x| - 1
-                    && a.0.1 + a.1.1 == |y| - 1;
-
-                forall a | a in setA ensures exists b :: b in setB && (a, b) in relation
-                {
-                  var b := (|x| - 1 - a.0, |y| - 1 - a.1);
-                  assert bits_get(reverse(x), b.0) == bits_get(x, a.0);
-                  assert bits_get(reverse(y), b.1) == bits_get(y, a.1);
-                  assert b in setB;
-                  assert (a, b) in relation;
-                }
-                forall b | b in setB ensures exists a :: a in setA && (a, b) in relation
-                {
-                  var a := (|x| - 1 - b.0, |y| - 1 - b.1);
-                  assert bits_get(reverse(x), b.0) == bits_get(x, a.0);
-                  assert bits_get(reverse(y), b.1) == bits_get(y, a.1);
-                  assert a in setA;
-                  assert (a, b) in relation;
-                }
-                assume false;
-
-                SetBijectivity.BijectivityImpliesEqualCardinality(setA, setB, relation);
-              }
-
-              reveal_parity();
+              parity_rev(x, y, i);
             }
             parity(set_digit(reverse(x), reverse(y), i - 1));
             {
