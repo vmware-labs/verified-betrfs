@@ -27,6 +27,9 @@ module PivotBetreeSpecRefinement {
   import opened BucketsLib
   import opened KeyType
   import PivotBetreeSpecWFNodes
+  import opened BucketMaps
+  import BucketFlushModel
+  import Upperbounded_Lexicographic_Byte_Order
 
   type Node = B.G.Node
   type PNode = P.G.Node
@@ -46,16 +49,17 @@ module PivotBetreeSpecRefinement {
     )
   }
 
-  function BucketOptGet(bucket: Bucket, key: Key) : Message
+
+  function BucketOptGet(bucket: BucketMap, key: Key) : Message
   {
-    if key in bucket.b then bucket.b[key] else IdentityMessage()
+    if key in bucket then bucket[key] else IdentityMessage()
   }
 
   function BucketOptListGet(blist: BucketList, pivots: PivotTable, key: Key) : Message
   requires WFBucketList(blist, pivots)
   requires BoundedKey(pivots, key)
   {
-    BucketOptGet(blist[Route(pivots, key)], key)
+    BucketOptGet(blist[Route(pivots, key)].as_map(), key)
   }
 
   function IBufferInternal(node: PNode) : Buffer
@@ -140,16 +144,18 @@ module PivotBetreeSpecRefinement {
     iset key | BoundedKey(node.pivotTable, key) && Route(node.pivotTable, key) == slotIndex
   }
 
-  function FlushedKeys(node: PNode, slotIndex: int, keys: set<Key>) : iset<Key>
-  requires WFPivots(node.pivotTable)
+  function FlushedKeys(flush: P.NodeFlush) : iset<Key>
+  requires P.ValidFlush(flush)
   {
-    iset key | BoundedKey(node.pivotTable, key) && Route(node.pivotTable, key) == slotIndex && key in keys
+    //iset key | BoundedKey(node.pivotTable, key) && Route(node.pivotTable, key) == slotIndex && key in keys
+    iset key | key in flush.parent.buckets[flush.slotIndex].as_map().Keys
+            && key !in flush.newParentBucket.as_map().Keys
   }
 
   function IFlush(flush: P.NodeFlush) : B.NodeFlush
   requires P.ValidFlush(flush)
   {
-    B.NodeFlush(flush.parentref, INode(flush.parent), flush.childref, INode(flush.child), flush.newchildref, MovedKeys(flush.parent, flush.slotIndex), FlushedKeys(flush.parent, flush.slotIndex, flush.keys))
+    B.NodeFlush(flush.parentref, INode(flush.parent), flush.childref, INode(flush.child), flush.newchildref, MovedKeys(flush.parent, flush.slotIndex), FlushedKeys(flush))
   }
 
   function IGrow(growth: P.RootGrowth) : B.RootGrowth
@@ -461,6 +467,40 @@ module PivotBetreeSpecRefinement {
     }
     InRangeImpliesSameRoute(start, key, end, lookup, |lookup|-1);
   }
+ 
+  function InterpretBucketStack(buckets: seq<Bucket>, key: Key) : Message
+  requires forall i | 0 <= i < |buckets| :: PreWFBucket(buckets[i])
+  {
+    if |buckets| == 0 then
+      Update(NopDelta())
+    else
+      Merge(InterpretBucketStack(DropLast(buckets), key), BucketGet(Last(buckets).as_map(), key))
+  }
+
+  lemma BucketGetComposeSeq(buckets: seq<Bucket>, key: Key)
+  requires forall i | 0 <= i < |buckets| :: PreWFBucket(buckets[i])
+  ensures BucketGet(ComposeSeq(MapsOfBucketList(buckets)), key) == InterpretBucketStack(buckets, key);
+  {
+    reveal_ComposeSeq();
+    reveal_Compose();
+    if |buckets| == 0 {
+    } else {
+      calc {
+        BucketGet(ComposeSeq(MapsOfBucketList(buckets)), key);
+        Merge(BucketGet(ComposeSeq(DropLast(MapsOfBucketList(buckets))), key), BucketGet(Last(MapsOfBucketList(buckets)), key));
+        {
+          assert DropLast(MapsOfBucketList(buckets)) == MapsOfBucketList(DropLast(buckets));
+          assert Last(MapsOfBucketList(buckets)) == Last(buckets).as_map();
+        }
+        Merge(BucketGet(ComposeSeq(MapsOfBucketList(DropLast(buckets))), key), BucketGet(Last(buckets).as_map(), key));
+        {
+          BucketGetComposeSeq(DropLast(buckets), key);
+        }
+        Merge(InterpretBucketStack(DropLast(buckets), key), BucketGet(Last(buckets).as_map(), key));
+        InterpretBucketStack(buckets, key);
+      }
+    }
+  }
 
   lemma InterpretBucketStackEqInterpretLookupIter(
       start: MS.UI.RangeStart, end: MS.UI.RangeEnd, startKey: Key,
@@ -523,10 +563,11 @@ module PivotBetreeSpecRefinement {
   lemma SuccQueryProperties(results: seq<UI.SuccResult>, buckets: seq<Bucket>,
       start: UI.RangeStart, end: UI.RangeEnd)
   requires BucketListWellMarshalled(buckets)
+  requires forall i | 0 <= i < |buckets| :: PreWFBucket(buckets[i])
   requires results ==
         SortedSeqOfKeyValueMap(
           KeyValueMapOfBucket(
-            ClampRange(ComposeSeq(buckets), start, end)))
+            ClampRange(ComposeSeq(MapsOfBucketList(buckets)), start, end)))
   ensures (forall i | 0 <= i < |results| ::
       P.BufferDefinesValue(InterpretBucketStack(buckets, results[i].key), results[i].value))
   ensures (forall i | 0 <= i < |results| :: results[i].value != MS.EmptyValue())
@@ -542,7 +583,7 @@ module PivotBetreeSpecRefinement {
     ensures results[i].value != MS.EmptyValue()
     ensures MS.InRange(start, results[i].key, end)
     {
-      SortedSeqOfKeyValueMaps(KeyValueMapOfBucket(ClampRange(ComposeSeq(buckets), start, end)), i);
+      SortedSeqOfKeyValueMaps(KeyValueMapOfBucket(ClampRange(ComposeSeq(MapsOfBucketList(buckets)), start, end)), i);
       reveal_KeyValueMapOfBucket();
       reveal_ClampRange();
 
@@ -553,7 +594,7 @@ module PivotBetreeSpecRefinement {
     }
 
     SortedSeqOfKeyValueMapHasSortedKeys(KeyValueMapOfBucket(
-            ClampRange(ComposeSeq(buckets), start, end)));
+            ClampRange(ComposeSeq(MapsOfBucketList(buckets)), start, end)));
 
     forall key | MS.InRange(start, key, end) &&
         (forall i | 0 <= i < |results| :: results[i].key != key)
@@ -567,7 +608,7 @@ module PivotBetreeSpecRefinement {
         BucketGetComposeSeq(buckets, key);
         //assert BucketGet(ComposeSeq(buckets), key) == InterpretBucketStack(buckets, key);
         //assert key in KeyValueMapOfBucket(ClampRange(ComposeSeq(buckets), start, end));
-        SortedSeqOfKeyValueHasKey(KeyValueMapOfBucket(ClampRange(ComposeSeq(buckets), start, end)), key);
+        SortedSeqOfKeyValueHasKey(KeyValueMapOfBucket(ClampRange(ComposeSeq(MapsOfBucketList(buckets)), start, end)), key);
       }
     }
   }
@@ -623,9 +664,23 @@ module PivotBetreeSpecRefinement {
 
   lemma RefinesValidFlush(flush: P.NodeFlush)
   requires P.ValidFlush(flush)
+  requires forall i | 0 <= i < |P.FlushReads(flush)| :: P.InvNode(P.FlushReads(flush)[i].node)
   requires ReadOpsBucketsWellMarshalled(P.FlushReads(flush))
   ensures B.ValidFlush(IFlush(flush))
   {
+    assert P.InvNode(P.FlushReads(flush)[0].node);
+    assert P.InvNode(P.FlushReads(flush)[1].node);
+    forall key | key in flush.parent.buckets[flush.slotIndex].as_map().Keys
+    ensures BoundedKey(flush.parent.pivotTable, key)
+    ensures Route(flush.parent.pivotTable, key) == flush.slotIndex
+    {
+      assert WFBucketAt(
+        flush.parent.buckets[flush.slotIndex],
+        flush.parent.pivotTable,
+        flush.slotIndex);
+      PivotBetreeSpecWFNodes.bucket_keys_in_seq(
+          flush.parent.buckets[flush.slotIndex]);
+    }
   }
 
   lemma RefinesValidGrow(growth: P.RootGrowth)
@@ -654,6 +709,8 @@ module PivotBetreeSpecRefinement {
     assert Keyspace.lt(KeyToElement(key), node'.pivotTable[i+1]);
     assert Keyspace.lt(KeyToElement(key), node.pivotTable[i+1]);
     RouteIs(node.pivotTable, key, i);
+    PivotBetreeSpecWFNodes.SplitMaps(node.buckets[cLeft], pivot);
+    //assert MapsAgreeOnKey(node.buckets[i].as_map(), node'.buckets[i].as_map(), key);
   }
 
   lemma CutoffNodeAndKeepRightAgree(node: PNode, node': PNode, pivot: Key, key: Key)
@@ -670,6 +727,8 @@ module PivotBetreeSpecRefinement {
     P.reveal_CutoffNodeAndKeepRight();
     var i := Route(node'.pivotTable, key);
     RouteIs(node.pivotTable, key, i + |node.pivotTable| - |node'.pivotTable|);
+    var cRight := CutoffForRight(node.pivotTable, pivot);
+    PivotBetreeSpecWFNodes.SplitMaps(node.buckets[cRight], pivot);
   }
 
   lemma CutoffNodeAgree(node: PNode, node': PNode, l: Key, r: Option<Key>, key: Key)
@@ -787,8 +846,8 @@ module PivotBetreeSpecRefinement {
   requires |node'.buckets| == |node.buckets| + 1
   requires 0 <= idx < |node.buckets|
   requires forall i | 0 <= i < idx :: node.buckets[i] == node'.buckets[i]
-  requires node'.buckets[idx].b == SplitBucketLeft(node.buckets[idx], GetKey(node'.pivotTable, idx+1)).b
-  requires node'.buckets[idx+1].b == SplitBucketRight(node.buckets[idx], GetKey(node'.pivotTable, idx+1)).b
+  requires node'.buckets[idx] == SplitBucketLeft(node.buckets[idx], GetKey(node'.pivotTable, idx+1))
+  requires node'.buckets[idx+1] == SplitBucketRight(node.buckets[idx], GetKey(node'.pivotTable, idx+1))
   requires forall i | idx + 2 <= i < |node'.buckets| :: node'.buckets[i] == node.buckets[i-1]
   requires forall i | 0 <= i <= idx :: node.pivotTable[i] == node'.pivotTable[i]
   requires forall i | idx+1 < i < |node'.pivotTable| :: node'.pivotTable[i] == node.pivotTable[i-1]
@@ -817,7 +876,9 @@ module PivotBetreeSpecRefinement {
       } else if (i == idx || i == idx+1) {
         assert node'.pivotTable[idx+2] == node.pivotTable[idx+1];
         RouteIs(node.pivotTable, key, idx);
-        assert IBuffer(node)[key] == IBuffer(node')[key];
+        assert IBuffer(node)[key] == IBuffer(node')[key] by {
+          PivotBetreeSpecWFNodes.SplitMaps(node.buckets[idx], GetKey(node'.pivotTable, idx+1));
+        }
         assert key in PivotTableBucketKeySet(node.pivotTable, idx);
       } else {
         assert node.pivotTable[i-1] == node'.pivotTable[i];
@@ -1112,6 +1173,7 @@ module PivotBetreeSpecRefinement {
   {
     assert P.InvNode(P.InsertionReads(ins)[0].node);
     PivotBetreeSpecWFNodes.ValidInsertWritesInvNodes(ins);
+    assert P.InvNode(P.InsertionOps(ins)[0].node);
 
     var newroot := P.AddMessageToNode(ins.oldroot, ins.key, ins.msg);
     var newroot' := B.AddMessageToNode(INode(ins.oldroot), ins.key, ins.msg);
@@ -1129,7 +1191,7 @@ module PivotBetreeSpecRefinement {
         } else {
           MergeIsAssociative(
             ins.msg,
-            BucketGet(oldroot.buckets[Route(oldroot.pivotTable, ins.key)], ins.key),
+            BucketGet(oldroot.buckets[Route(oldroot.pivotTable, ins.key)].as_map(), ins.key),
             DefineDefault()
           );
           assert INode(newroot).buffer[key] == newroot'.buffer[key];
@@ -1145,19 +1207,25 @@ module PivotBetreeSpecRefinement {
     assert INode(newroot) == newroot';
   }
 
-  lemma AddMessagesToNodeResult(node: PNode, bucket: Bucket, node': PNode, key: Key)
+  lemma AddMessagesToNodeResult(node: PNode, bucket: BucketMap, node': PNode, key: Key)
   requires P.InvNode(node)
   requires P.WFNode(node')
-  requires BucketWellMarshalled(bucket)
+  requires WFBucketListProper(node'.buckets, node'.pivotTable);
   requires BucketListWellMarshalled(node.buckets)
   requires BoundedKey(node.pivotTable, key)
   requires BoundedKey(node'.pivotTable, key)
-  requires node' == P.AddMessagesToNode(node, bucket);
+  requires node'.pivotTable == node.pivotTable
+  requires node'.children == node.children
+  requires MapsOfBucketList(node'.buckets)
+      == BucketListFlush(bucket, MapsOfBucketList(node.buckets), node.pivotTable)
   ensures WFBucketListProper(node'.buckets, node'.pivotTable);
-  ensures key !in bucket.b ==> P.NodeLookup(node', key) == P.NodeLookup(node, key)
-  ensures key in bucket.b ==> P.NodeLookup(node', key) == Merge(bucket.b[key], P.NodeLookup(node, key))
+  ensures key !in bucket ==> P.NodeLookup(node', key) == P.NodeLookup(node, key)
+  ensures key in bucket ==> P.NodeLookup(node', key) == Merge(bucket[key], P.NodeLookup(node, key))
   {
-    GetBucketListFlushEqMerge(bucket, node.buckets, node.pivotTable, key);
+    //GetBucketListFlushEqMerge(bucket, node.buckets, node.pivotTable, key);
+    var i := Route(node.pivotTable, key);
+    assert node'.buckets[i].as_map() == 
+        BucketListItemFlush(bucket, node.buckets[i].as_map(), node.pivotTable, i);
   }
 
   lemma {:fuel IOps,2} FlushRefinesOps(flush: P.NodeFlush)
@@ -1172,17 +1240,33 @@ module PivotBetreeSpecRefinement {
     assert P.InvNode(P.FlushReads(flush)[1].node);
     PivotBetreeSpecWFNodes.ValidFlushWritesInvNodes(flush);
 
-    var comp := BucketComplement(flush.parent.buckets[flush.slotIndex], flush.keys);
-    var isec := BucketIntersect(flush.parent.buckets[flush.slotIndex], flush.keys);
-
     var newparent := P.G.Node(
         flush.parent.pivotTable,
         Some(flush.parent.children.value[flush.slotIndex := flush.newchildref]),
-        flush.parent.buckets[flush.slotIndex := comp]
+        flush.parent.buckets[flush.slotIndex := flush.newParentBucket]
       );
-    var newchild := P.AddMessagesToNode(flush.child, isec);
+    var pfr := BucketFlushModel.partialFlush(
+          flush.parent.buckets[flush.slotIndex], flush.child.pivotTable, flush.child.buckets);
+    var newchild := flush.child.(buckets := pfr.bots);
     var allocop := P.G.AllocOp(flush.newchildref, newchild);
     var writeop := P.G.WriteOp(flush.parentref, newparent);
+
+    var flushedKeys := BucketFlushModel.partialFlushCorrect(
+        flush.parent.buckets[flush.slotIndex], flush.child.pivotTable, flush.child.buckets);
+
+    // equality of set and iset:
+    forall k | k in flushedKeys ensures k in FlushedKeys(flush) {
+      reveal_BucketComplement();
+      //assert k in flush.parent.buckets[flush.slotIndex].as_map().Keys by {
+      PivotBetreeSpecWFNodes.bucket_keys_equiv(flush.parent.buckets[flush.slotIndex]); //}
+      //assert k !in flush.newParentBucket.as_map().Keys;
+    }
+    forall k | k in FlushedKeys(flush) ensures k in flushedKeys {
+      reveal_BucketComplement();
+    }
+
+    var comp := BucketComplement(flush.parent.buckets[flush.slotIndex].as_map(), flushedKeys);
+    var isec := BucketIntersect(flush.parent.buckets[flush.slotIndex].as_map(), flushedKeys);
 
     assert P.WFNode(newchild);
     assert P.WFNode(newparent);
@@ -1282,7 +1366,7 @@ module PivotBetreeSpecRefinement {
     assert P.InvNode(P.GrowReads(growth)[0].node);
     PivotBetreeSpecWFNodes.ValidGrowWritesInvNodes(growth);
 
-    var newroot := P.G.Node(InitPivotTable(), Some([growth.newchildref]), [BucketsLib.B(map[])]);
+    var newroot := P.G.Node(InitPivotTable(), Some([growth.newchildref]), [BucketsLib.EmptyBucket()]);
     P.PivotsHasAllKeys(newroot.pivotTable);
 
     // observe: (I don't know really know why this is necessary)
@@ -1395,7 +1479,7 @@ module PivotBetreeSpecRefinement {
     }
   }
 
-  lemma IBufferLeafEqJoin(node: PNode)
+  /*lemma IBufferLeafEqJoin(node: PNode)
   requires P.InvNode(node)
   requires BucketListWellMarshalled(node.buckets)
   ensures IBufferLeaf(node) == imap key :: if BoundedKey(node.pivotTable, key) then Merge(BucketGet(JoinBucketList(node.buckets), key), DefineDefault()) else DefineDefault() 
@@ -1408,7 +1492,7 @@ module PivotBetreeSpecRefinement {
       }
       GetJoinBucketListEq(node.buckets, node.pivotTable, key);
     }
-  }
+  }*/
 
   lemma RepivotPreservesNode(r: P.Repivot)
   requires P.ValidRepivot(r)
@@ -1419,7 +1503,21 @@ module PivotBetreeSpecRefinement {
     assert P.InvNode(P.RepivotReads(r)[0].node);
     PivotBetreeSpecWFNodes.InvApplyRepivot(r);
 
-    var buckets1 := r.leaf.buckets;
+    P.PivotsHasAllKeys(r.pivots);
+    assert r.pivots[1] == KeyToElement(r.pivot);
+
+    PivotBetreeSpecWFNodes.SplitMaps(r.leaf.buckets[0], r.pivot);
+
+    /*var leaf'_buckets := [
+          SplitBucketLeft(r.leaf.buckets[0], r.idx),
+          SplitBucketRight(r.leaf.buckets[0], r.idx)
+        ];*/
+
+    //PivotBetreeSpecWFNodes.bucket_keys_equiv(r.leaf.buckets[0]);
+    //PivotBetreeSpecWFNodes.bucket_keys_equiv(leaf'_buckets[0]);
+    //PivotBetreeSpecWFNodes.bucket_keys_equiv(leaf'_buckets[1]);
+
+    /*var buckets1 := r.leaf.buckets;
     P.PivotsHasAllKeys(r.pivots);
     BoundedBucketListJoin(buckets1, r.pivots);
     var joined := JoinBucketList(buckets1);
@@ -1428,7 +1526,7 @@ module PivotBetreeSpecRefinement {
     WFSplitBucketOnPivots(joined, r.pivots);
 
     forall i | 0 <= i < |buckets1|
-    ensures forall key:Key | key in buckets1[i].b :: buckets1[i].b[key] != IdentityMessage()
+    ensures forall key:Key | key in buckets1[i].as_map() :: buckets1[i].as_map()[key] != IdentityMessage()
     {
       //assert P.NodeHasWFBucketAt(r.leaf, i);
     }
@@ -1440,6 +1538,6 @@ module PivotBetreeSpecRefinement {
     IBufferLeafEqJoin(P.ApplyRepivot(r));
 
     BoundedBucketListJoin(buckets1, r.leaf.pivotTable);
-    assert BoundedBucket(joined, r.leaf.pivotTable);
+    assert BoundedBucket(joined, r.leaf.pivotTable);*/
   }
 }

@@ -7,7 +7,10 @@ include "../../MapSpec/UI.s.dfy"
 include "../../MapSpec/MapSpec.s.dfy"
 include "../../PivotBetree/Bounds.i.dfy"
 
-module BucketModel {
+// TODO rename this file to be BucketFlushing or something
+
+module BucketFlushModel {
+  import opened BucketMaps
   import opened BucketsLib
   import opened BucketWeights
   import opened BoundedPivotsLib
@@ -21,6 +24,7 @@ module BucketModel {
   import MS = MapSpec
   import opened Bounds
   import opened NativeTypes
+  import opened MapSeqs
   
   datatype singleMergeResult =
     | MergeCompleted(
@@ -36,7 +40,7 @@ module BucketModel {
     function bucketMap() : BucketMap
     requires |this.keys| == |this.msgs|
     {
-      BucketMapOfSeq(this.keys, this.msgs)
+      map_of_seqs(this.keys, this.msgs)
     }
 
     function flushedKeys(
@@ -61,7 +65,7 @@ module BucketModel {
     requires 0 <= from <= to <= |top_keys| == |top_msgs|
     requires this.SlackExhausted? ==> from <= this.end <= |top_keys|
     {
-      var top := BucketMapOfSeq(
+      var top := map_of_seqs(
             top_keys[from..to], top_msgs[from..to]);
       map key | key in top
         && key in this.flushedKeys(top_keys, top_msgs, from, to)
@@ -173,54 +177,6 @@ module BucketModel {
       :: topBotAccMergeForKey(top, bot, acc, key)
   }
 
-  lemma BucketMapOfSeqPushBack(
-      keys: seq<Key>, msgs: seq<Message>, key: Key, msg: Message)
-  requires |keys| == |msgs|
-  requires IsStrictlySorted(keys)
-  requires forall k | k in keys :: Lexi.lt(k, key)
-  ensures BucketMapOfSeq(keys + [key], msgs + [msg])
-       == BucketMapOfSeq(keys, msgs)[key := msg]
-  ensures key !in BucketMapOfSeq(keys, msgs)
-  {
-    reveal_BucketMapOfSeq();
-    if key in BucketMapOfSeq(keys, msgs) {
-      var i := BucketMapOfSeqGetIndex(keys, msgs, key);
-      assert Lexi.lt(keys[i], key);
-    }
-  }
-
-  lemma BucketMapOfSeqPopFront(
-      keys: seq<Key>, msgs: seq<Message>, i: int)
-  requires |keys| == |msgs|
-  requires 0 <= i < |keys|
-  requires IsStrictlySorted(keys)
-  ensures BucketMapOfSeq(keys[i+1..], msgs[i+1..])[keys[i] := msgs[i]]
-       == BucketMapOfSeq(keys[i..], msgs[i..])
-  ensures keys[i] !in BucketMapOfSeq(keys[i+1..], msgs[i+1..])
-  {
-    var a := BucketMapOfSeq(keys[i+1..], msgs[i+1..])[keys[i] := msgs[i]];
-    var b := BucketMapOfSeq(keys[i..], msgs[i..]);
-    forall k | k in a
-    ensures k in b
-    ensures a[k] == b[k]
-    {
-      reveal_IsStrictlySorted();
-      if k == keys[i] {
-        BucketMapOfSeqMapsIndex(keys[i..], msgs[i..], 0);
-        assert a[k] == b[k];
-      } else {
-        var j := BucketMapOfSeqGetIndex(keys[i+1..], msgs[i+1..], k);
-        BucketMapOfSeqMapsIndex(keys[i..], msgs[i..], j+1);
-        assert a[k] == b[k];
-      }
-    }
-    forall k | k in b
-    ensures k in a
-    {
-    }
-    reveal_IsStrictlySorted();
-  }
-
   lemma flushedMapPopFront(res: singleMergeResult,
     top_keys: seq<Key>, top_msgs: seq<Message>, from: int, to: int)
   requires |top_keys| == |top_msgs|
@@ -232,28 +188,34 @@ module BucketModel {
               [top_keys[from] := top_msgs[from]]
   ensures top_keys[from] !in res.flushedMap(top_keys, top_msgs, from+1, to)
   {
-    var a := BucketMapOfSeq(top_keys[from+1..to], top_msgs[from+1..to])[top_keys[from] := top_msgs[from]];
-    var b := BucketMapOfSeq(top_keys[from..to], top_msgs[from..to]);
+    var a := map_of_seqs(top_keys[from+1..to], top_msgs[from+1..to])[top_keys[from] := top_msgs[from]];
+    var b := map_of_seqs(top_keys[from..to], top_msgs[from..to]);
     forall k | k in a
     ensures k in b
     ensures a[k] == b[k]
     {
       reveal_IsStrictlySorted();
       if k == top_keys[from] {
-        BucketMapOfSeqMapsIndex(top_keys[from..to], top_msgs[from..to], 0);
+        MapMapsIndex(top_keys[from..to], top_msgs[from..to], 0);
         assert a[k] == b[k];
       } else {
-        var j := BucketMapOfSeqGetIndex(top_keys[from+1..to], top_msgs[from+1..to], k);
-        BucketMapOfSeqMapsIndex(top_keys[from..to], top_msgs[from..to], j+1);
+        var j := GetIndex(top_keys[from+1..to], top_msgs[from+1..to], k);
+        MapMapsIndex(top_keys[from..to], top_msgs[from..to], j+1);
         assert a[k] == b[k];
       }
     }
     forall k | k in b
     ensures k in a
     {
+      reveal_IsStrictlySorted();
+      var j := GetIndex(top_keys[from..to], top_msgs[from..to], k);
+      if (j == 0) {
+      } else {
+        MapMapsIndex(top_keys[from+1..to], top_msgs[from+1..to], j-1);
+      }
     }
-    assert BucketMapOfSeq(top_keys[from+1..to], top_msgs[from+1..to])[top_keys[from] := top_msgs[from]]
-        ==  BucketMapOfSeq(top_keys[from..to], top_msgs[from..to]);
+    assert map_of_seqs(top_keys[from+1..to], top_msgs[from+1..to])[top_keys[from] := top_msgs[from]]
+        ==  map_of_seqs(top_keys[from..to], top_msgs[from..to]);
     reveal_IsStrictlySorted();
   }
 
@@ -278,32 +240,47 @@ module BucketModel {
   requires seq_lt(acc_keys, bot_keys, from)
   ensures
     topBotAccMerge(map[],
-      BucketMapOfSeq(bot_keys[from..], bot_msgs[from..]),
-      BucketMapOfSeq(acc_keys, acc_msgs))
-    == BucketMapOfSeq(acc_keys + bot_keys[from..], acc_msgs + bot_msgs[from..])
+      map_of_seqs(bot_keys[from..], bot_msgs[from..]),
+      map_of_seqs(acc_keys, acc_msgs))
+    == map_of_seqs(acc_keys + bot_keys[from..], acc_msgs + bot_msgs[from..])
   {
     var x := 
       topBotAccMerge(map[],
-        BucketMapOfSeq(bot_keys[from..], bot_msgs[from..]),
-        BucketMapOfSeq(acc_keys, acc_msgs));
-    var y := BucketMapOfSeq(acc_keys + bot_keys[from..], acc_msgs + bot_msgs[from..]);
+        map_of_seqs(bot_keys[from..], bot_msgs[from..]),
+        map_of_seqs(acc_keys, acc_msgs));
+    var y := map_of_seqs(acc_keys + bot_keys[from..], acc_msgs + bot_msgs[from..]);
     forall k: Key | k in y
     ensures k in x
     ensures x[k] == y[k]
     {
       reveal_IsStrictlySorted();
-      var i := BucketMapOfSeqGetIndex(acc_keys + bot_keys[from..], acc_msgs + bot_msgs[from..], k);
+      var i := GetIndex(acc_keys + bot_keys[from..], acc_msgs + bot_msgs[from..], k);
       if i < |acc_keys| {
-        BucketMapOfSeqMapsIndex(acc_keys, acc_msgs, i);
-        assert k !in BucketMapOfSeq(bot_keys[from..], bot_msgs[from..]);
+        MapMapsIndex(acc_keys, acc_msgs, i);
+        if k in map_of_seqs(bot_keys[from..], bot_msgs[from..]) {
+          var j := GetIndex(bot_keys[from..], bot_msgs[from..], k);
+          assert false;
+        }
       } else {
-        BucketMapOfSeqMapsIndex(bot_keys[from..], bot_msgs[from..], i - |acc_keys|);
-        assert k !in BucketMapOfSeq(acc_keys, acc_msgs);
+        MapMapsIndex(bot_keys[from..], bot_msgs[from..], i - |acc_keys|);
+        if k in map_of_seqs(acc_keys, acc_msgs) {
+          var j := GetIndex(acc_keys, acc_msgs, k);
+          assert false;
+        }
       }
     }
     forall k | k in x
     ensures k in y
     {
+      reveal_IsStrictlySorted();
+      if k in map_of_seqs(bot_keys[from..], bot_msgs[from..]) {
+        var j := GetIndex(bot_keys[from..], bot_msgs[from..], k);
+        MapMapsIndex(acc_keys + bot_keys[from..], acc_msgs + bot_msgs[from..], j + |acc_keys|);
+      } else {
+        assert k in map_of_seqs(acc_keys, acc_msgs);
+        var j := GetIndex(acc_keys, acc_msgs, k);
+        MapMapsIndex(acc_keys + bot_keys[from..], acc_msgs + bot_msgs[from..], j);
+      }
     }
   }
 
@@ -337,11 +314,11 @@ module BucketModel {
             top_keys, top_msgs, from, to,
             bot_keys, bot_msgs, bot_from,
             acc_keys, acc_msgs, slack);
-      var top := BucketMapOfSeq(
+      var top := map_of_seqs(
             top_keys[from..to], top_msgs[from..to]);
-      var bot := BucketMapOfSeq(
+      var bot := map_of_seqs(
             bot_keys[bot_from..], bot_msgs[bot_from..]);
-      var acc := BucketMapOfSeq(acc_keys, acc_msgs);
+      var acc := map_of_seqs(acc_keys, acc_msgs);
       && IsStrictlySorted(res.keys)
       && res.bucketMap() == topBotAccMerge(
         res.flushedMap(top_keys, top_msgs, from, to),
@@ -352,11 +329,11 @@ module BucketModel {
           top_keys, top_msgs, from, to,
           bot_keys, bot_msgs, bot_from,
           acc_keys, acc_msgs, slack);
-    var top := BucketMapOfSeq(
+    var top := map_of_seqs(
           top_keys[from..to], top_msgs[from..to]);
-    var bot := BucketMapOfSeq(
+    var bot := map_of_seqs(
           bot_keys[bot_from..], bot_msgs[bot_from..]);
-    var acc := BucketMapOfSeq(acc_keys, acc_msgs);
+    var acc := map_of_seqs(acc_keys, acc_msgs);
 
     assert IsStrictlySorted(bot_keys[bot_from..]) by { reveal_IsStrictlySorted(); }
     assert IsStrictlySorted(top_keys[from..to]) by { reveal_IsStrictlySorted(); }
@@ -366,21 +343,40 @@ module BucketModel {
       var b := topBotAccMerge(
         res.flushedMap(top_keys, top_msgs, from, to),
         bot, acc);
+      assert res.flushedMap(top_keys, top_msgs, from, to) == map[];
       forall k | k in a
       ensures k in b
       ensures a[k] == b[k]
       {
-        var i := BucketMapOfSeqGetIndex(res.keys, res.msgs, k);
+        var i := GetIndex(res.keys, res.msgs, k);
         if i < |acc_keys| {
-          BucketMapOfSeqMapsIndex(acc_keys, acc_msgs, i);
+          MapMapsIndex(acc_keys, acc_msgs, i);
+          if k in map_of_seqs(bot_keys[bot_from..], bot_msgs[bot_from..]) {
+            var j := GetIndex(bot_keys[bot_from..], bot_msgs[bot_from..], k);
+          }
         } else {
-          BucketMapOfSeqMapsIndex(bot_keys[bot_from..],
+          MapMapsIndex(bot_keys[bot_from..],
               bot_msgs[bot_from..], i-|acc_keys|);
+          if k in map_of_seqs(acc_keys, acc_msgs) {
+            var j := GetIndex(acc_keys, acc_msgs, k);
+          }
         }
       }
       forall k | k in b
       ensures k in a
       {
+        assert IsStrictlySorted(res.keys) by { reveal_IsStrictlySorted(); }
+        if k in res.flushedMap(top_keys, top_msgs, from, to) {
+          assert false; // because from == to
+        } else if k in acc {
+          var j := GetIndex(acc_keys, acc_msgs, k);
+          MapMapsIndex(res.keys, res.msgs, j);
+          assert k == res.keys[j];
+        } else {
+          assert k in bot;
+          var j := GetIndex(bot_keys[bot_from..], bot_msgs[bot_from..], k);
+          MapMapsIndex(res.keys, res.msgs, j + |acc_keys|);
+        }
       }
       assert a == b;
       assert IsStrictlySorted(res.keys) by {
@@ -395,9 +391,9 @@ module BucketModel {
       ensures k in b
       ensures a[k] == b[k]
       {
-        var i := BucketMapOfSeqGetIndex(res.keys, res.msgs, k);
+        var i := GetIndex(res.keys, res.msgs, k);
         if i < |acc_keys| {
-          BucketMapOfSeqMapsIndex(acc_keys, acc_msgs, i);
+          MapMapsIndex(acc_keys, acc_msgs, i);
           /*assert acc_msgs[i] != IdentityMessage();
           assert k !in bot;
           assert k !in top;
@@ -413,7 +409,7 @@ module BucketModel {
             bot, acc, k) != IdentityMessage();*/
           assert k in b;
         } else {
-          BucketMapOfSeqMapsIndex(top_keys[from..to], top_msgs[from..to], i - |acc_keys|);
+          MapMapsIndex(top_keys[from..to], top_msgs[from..to], i - |acc_keys|);
           assert k in res.flushedMap(top_keys, top_msgs, from, to);
           assert k in b;
         }
@@ -441,17 +437,17 @@ module BucketModel {
           }
           topBotAccMerge(
             res.flushedMap(top_keys, top_msgs, from+1, to),
-            BucketMapOfSeq(bot_keys[bot_from+1..], bot_msgs[bot_from+1..]),
-            BucketMapOfSeq(acc_keys, acc_msgs));
+            map_of_seqs(bot_keys[bot_from+1..], bot_msgs[bot_from+1..]),
+            map_of_seqs(acc_keys, acc_msgs));
           {
             flushedMapPopFront(res, top_keys, top_msgs, from, to);
             assert res.flushedMap(top_keys, top_msgs, from, to)
                 == res.flushedMap(top_keys, top_msgs, from+1, to)[key := topmsg];
-            BucketMapOfSeqPopFront(bot_keys, bot_msgs, bot_from);
-            assert BucketMapOfSeq(bot_keys[bot_from..], bot_msgs[bot_from..])
-                == BucketMapOfSeq(bot_keys[bot_from+1..], bot_msgs[bot_from+1..])[key := botmsg];
+            map_of_seqs_pop_front(bot_keys, bot_msgs, bot_from);
+            assert map_of_seqs(bot_keys[bot_from..], bot_msgs[bot_from..])
+                == map_of_seqs(bot_keys[bot_from+1..], bot_msgs[bot_from+1..])[key := botmsg];
             assert key !in acc;
-            assert key !in BucketMapOfSeq(bot_keys[bot_from+1..], bot_msgs[bot_from+1..]);
+            assert key !in map_of_seqs(bot_keys[bot_from+1..], bot_msgs[bot_from+1..]);
             assert key !in res.flushedMap(top_keys, top_msgs, from+1, to);
           }
           topBotAccMerge(
@@ -488,14 +484,14 @@ module BucketModel {
             }
             topBotAccMerge(
               res.flushedMap(top_keys, top_msgs, from+1, to),
-              BucketMapOfSeq(
+              map_of_seqs(
                   bot_keys[bot_from+1..], bot_msgs[bot_from+1..]),
-              BucketMapOfSeq(acc_keys + [key], acc_msgs + [msg])
+              map_of_seqs(acc_keys + [key], acc_msgs + [msg])
             );
             {
-              BucketMapOfSeqPushBack(acc_keys, acc_msgs, key, msg);
+              map_of_seqs_push_back(acc_keys, acc_msgs, key, msg);
               flushedMapPopFront(res, top_keys, top_msgs, from, to);
-              BucketMapOfSeqPopFront(bot_keys, bot_msgs, bot_from);
+              map_of_seqs_pop_front(bot_keys, bot_msgs, bot_from);
             }
             topBotAccMerge(
               res.flushedMap(top_keys, top_msgs, from, to),
@@ -544,9 +540,9 @@ module BucketModel {
           }
           topBotAccMerge(
             res.flushedMap(top_keys, top_msgs, from+1, to),
-            bot, BucketMapOfSeq(acc_keys + [key], acc_msgs + [msg]));
+            bot, map_of_seqs(acc_keys + [key], acc_msgs + [msg]));
           {
-            BucketMapOfSeqPushBack(acc_keys, acc_msgs, key, msg);
+            map_of_seqs_push_back(acc_keys, acc_msgs, key, msg);
             flushedMapPopFront(res, top_keys, top_msgs, from, to);
           }
           topBotAccMerge(
@@ -578,12 +574,12 @@ module BucketModel {
         }
         topBotAccMerge(
           res.flushedMap(top_keys, top_msgs, from, to),
-          BucketMapOfSeq(
+          map_of_seqs(
               bot_keys[bot_from+1..], bot_msgs[bot_from+1..]),
-          BucketMapOfSeq(acc_keys + [key], acc_msgs + [msg]));
+          map_of_seqs(acc_keys + [key], acc_msgs + [msg]));
         {
-          BucketMapOfSeqPopFront(bot_keys, bot_msgs, bot_from);
-          BucketMapOfSeqPushBack(acc_keys, acc_msgs, key, msg);
+          map_of_seqs_pop_front(bot_keys, bot_msgs, bot_from);
+          map_of_seqs_push_back(acc_keys, acc_msgs, key, msg);
         }
         topBotAccMerge(
           res.flushedMap(top_keys, top_msgs, from, to),
@@ -642,27 +638,28 @@ module BucketModel {
             top_keys, top_msgs, from, to,
             bot_keys, bot_msgs, 0,
             [], [], slack);
-      var top := BucketMapOfSeq(top_keys, top_msgs);
-      var bot := BucketMapOfSeq(bot_keys, bot_msgs);
+      var top := map_of_seqs(top_keys, top_msgs);
+      var bot := map_of_seqs(bot_keys, bot_msgs);
       && IsStrictlySorted(res.keys)
       && BucketListItemFlush(
-          BucketIntersect(B(top), res.flushedKeys(top_keys, top_msgs, from, to)),
-          B(bot), pivots, r).b
+          BucketIntersect(top, res.flushedKeys(top_keys, top_msgs, from, to)),
+          bot, pivots, r)
         == res.bucketMap()
   {
     var res := mergeToOneChild(
           top_keys, top_msgs, from, to,
           bot_keys, bot_msgs, 0,
           [], [], slack);
-    var top := BucketMapOfSeq(top_keys, top_msgs);
-    var bot := BucketMapOfSeq(bot_keys, bot_msgs);
-    var itop := BucketIntersect(B(top), res.flushedKeys(top_keys, top_msgs, from, to));
+    var top := map_of_seqs(top_keys, top_msgs);
+    var bot := map_of_seqs(bot_keys, bot_msgs);
+
+    var itop := BucketIntersect(top, res.flushedKeys(top_keys, top_msgs, from, to));
 
     calc {
-      BucketListItemFlush(itop, B(bot), pivots, r).b;
+      BucketListItemFlush(itop, bot, pivots, r);
       {
-        var a := BucketListItemFlush(itop, B(bot), pivots, r).b;
-        var b := topBotAccMerge(itop.b, bot, map[]);
+        var a := BucketListItemFlush(itop, bot, pivots, r);
+        var b := topBotAccMerge(itop, bot, map[]);
         forall k | k in a
         ensures k in b
         ensures a[k] == b[k]
@@ -671,42 +668,49 @@ module BucketModel {
         forall k | k in b
         ensures k in a
         {
-          reveal_BucketIntersect();
-          reveal_IsStrictlySorted();
-          RouteIs(pivots, k, r);
+          if k in itop {
+            reveal_BucketIntersect();
+            reveal_IsStrictlySorted();
+            RouteIs(pivots, k, r);
+          } else {
+            var j := GetIndex(bot_keys, bot_msgs, k);
+            assert Route(pivots, bot_keys[j]) == r;
+          }
         }
       }
-      topBotAccMerge(itop.b, bot, map[]);
+      topBotAccMerge(itop, bot, map[]);
       topBotAccMerge(
-        itop.b,
-        BucketMapOfSeq(bot_keys, bot_msgs),
+        itop,
+        map_of_seqs(bot_keys, bot_msgs),
         map[]);
       {
         reveal_BucketIntersect();
-        var x := itop.b;
+        var x := itop;
         var y := res.flushedMap(top_keys, top_msgs, from, to);
         forall k | k in x
         ensures k in y
         ensures x[k] == y[k]
         {
-          var i := BucketMapOfSeqGetIndex(
-              top_keys[from..to], top_msgs[from..to], k);
-          BucketMapOfSeqMapsIndex(top_keys, top_msgs, from+i);
+          var i := GetIndex(top_keys, top_msgs, k);
+          reveal_IsStrictlySorted();
+          MapMapsIndex(top_keys[from..to], top_msgs[from..to], i - from);
         }
         forall k | k in y
         ensures k in x
         {
+          var i := GetIndex(top_keys[from..to], top_msgs[from..to], k);
+          MapMapsIndex(top_keys, top_msgs, from+i);
         }
-        assert itop.b == res.flushedMap(top_keys, top_msgs, from, to);
+        assert itop == res.flushedMap(top_keys, top_msgs, from, to);
       }
       topBotAccMerge(
         res.flushedMap(top_keys, top_msgs, from, to),
-        BucketMapOfSeq(bot_keys, bot_msgs),
+        map_of_seqs(bot_keys, bot_msgs),
         map[]);
       topBotAccMerge(
         res.flushedMap(top_keys, top_msgs, from, to),
-        BucketMapOfSeq(bot_keys, bot_msgs),
-        BucketMapOfSeq([], []));
+        map_of_seqs(bot_keys, bot_msgs),
+        map_of_seqs([], []));
       {
         mergeToOneOneChild_eq_topBotAccMerge(
           top_keys, top_msgs, from, to, bot_keys, bot_msgs, 0,
@@ -953,10 +957,10 @@ module BucketModel {
   {
     if i == |bots| then (
       if tmp.SlackExhausted? then (
-        var leftover_top := BucketOfSeq(top.keys[tmp.end..], top.msgs[tmp.end..]);
+        var leftover_top := Bucket(top.keys[tmp.end..], top.msgs[tmp.end..]);
         mergeResult(leftover_top, results, tmp.slack)
       ) else (
-        mergeResult(B(map[]), results, tmp.slack)
+        mergeResult(EmptyBucket(), results, tmp.slack)
       )
     ) else (
       if tmp.MergeCompleted? then (
@@ -967,7 +971,7 @@ module BucketModel {
             top.keys, top.msgs, from, to,
             bots[i].keys, bots[i].msgs, 0,
             [], [], tmp.slack);
-        var results' := results + [BucketOfSeq(tmp'.keys, tmp'.msgs)];
+        var results' := results + [Bucket(tmp'.keys, tmp'.msgs)];
         mergeToChildrenIter(top, bots, idxs, tmp', i+1, results')
       ) else (
         var results' := results + [bots[i]];
@@ -1008,34 +1012,35 @@ module BucketModel {
   requires |top.keys| == |top.msgs|
   requires 0 <= tmp.end <= |top.keys|
   requires IsStrictlySorted(top.keys)
-  requires BucketMapOfSeq(top.keys, top.msgs) == top.b
-  ensures BucketComplement(top, getFlushedKeys(tmp, top))
-      == BucketOfSeq(top.keys[tmp.end..], top.msgs[tmp.end..])
+  ensures BucketComplement(top.as_map(), getFlushedKeys(tmp, top))
+      == map_of_seqs(top.keys[tmp.end..], top.msgs[tmp.end..])
   {
     reveal_BucketComplement();
     reveal_IsStrictlySorted();
 
-    var a := BucketComplement(top, getFlushedKeys(tmp, top));
-    var b := BucketMapOfSeq(top.keys[tmp.end..], top.msgs[tmp.end..]);
-    forall k | k in a.b
+    var a := BucketComplement(top.as_map(), getFlushedKeys(tmp, top));
+    var b := map_of_seqs(top.keys[tmp.end..], top.msgs[tmp.end..]);
+    forall k | k in a
     ensures k in b
-    ensures a.b[k] == b[k]
+    ensures a[k] == b[k]
     {
-      assert k in top.b;
-      var i := BucketMapOfSeqGetIndex(top.keys, top.msgs, k);
+      assert k in top.as_map();
+      var i := GetIndex(top.keys, top.msgs, k);
       assert i >= tmp.end;
-      BucketMapOfSeqMapsIndex(top.keys[tmp.end..],
+      MapMapsIndex(top.keys[tmp.end..],
           top.msgs[tmp.end..], i - tmp.end);
     }
     forall k | k in b
-    ensures k in a.b
+    ensures k in a
     {
+      var j := GetIndex(top.keys[tmp.end..], top.msgs[tmp.end..], k);
+      MapMapsIndex(top.keys, top.msgs, j + tmp.end);
     }
-    assert a.b == b;
+    assert a == b;
 
-    WFBucketComplement(top, getFlushedKeys(tmp, top));
-    WellMarshalledBucketsEq(BucketComplement(top, getFlushedKeys(tmp, top)),
-      BucketOfSeq(top.keys[tmp.end..], top.msgs[tmp.end..]));
+    //WFBucketComplement(top, getFlushedKeys(tmp, top));
+    //WellMarshalledBucketsEq(BucketComplement(top, getFlushedKeys(tmp, top)),
+    //  Bucket(top.keys[tmp.end..], top.msgs[tmp.end..]));
   }
 
   lemma all_msgs_not_eq_identity(bucket: Bucket)
@@ -1047,7 +1052,7 @@ module BucketModel {
     forall i | 0 <= i < |bucket.msgs|
     ensures bucket.msgs[i] != IdentityMessage()
     {
-      BucketMapOfSeqMapsIndex(bucket.keys, bucket.msgs, i);
+      MapMapsIndex(bucket.keys, bucket.msgs, i);
     }
   }
 
@@ -1058,8 +1063,8 @@ module BucketModel {
   requires WFPivots(pivots)
   requires forall k | BoundedKey(pivots, k) && Route(pivots, k) == i && k in keys1 :: k in keys2
   requires forall k | BoundedKey(pivots, k) && Route(pivots, k) == i && k in keys2 :: k in keys1
-  ensures BucketListItemFlush(BucketIntersect(top, keys1), bot, pivots, i)
-       == BucketListItemFlush(BucketIntersect(top, keys2), bot, pivots, i)
+  ensures BucketListItemFlush(BucketIntersect(top.as_map(), keys1), bot.as_map(), pivots, i)
+       == BucketListItemFlush(BucketIntersect(top.as_map(), keys2), bot.as_map(), pivots, i)
   {
     reveal_BucketIntersect();
   }
@@ -1088,38 +1093,45 @@ module BucketModel {
   requires forall i | 0 <= i < |bots| :: IsStrictlySorted(bots[i].keys)
   requires WFBucketListProper(bots, pivots)
   requires i < NumBuckets(pivots) ==> tmp.SlackExhausted? ==> tmp.end <= bucketStartIdx(top.keys, pivots, i)
-  requires forall r | 0 <= r < i :: results[r] ==
-      BucketListItemFlush(BucketIntersect(top, getFlushedKeys(tmp, top)), bots[r], pivots, r)
+  requires forall r | 0 <= r < i :: |results[r].keys| == |results[r].msgs|
+  requires forall r | 0 <= r < i :: results[r].as_map() ==
+      BucketListItemFlush(BucketIntersect(top.as_map(), getFlushedKeys(tmp, top)), bots[r].as_map(), pivots, r)
 
   decreases |bots| - i
 
   ensures var res :=
     mergeToChildrenIter(top, bots, idxs, tmp, i, results);
-    && res.top == BucketComplement(top, flushedKeys)
-    && forall r | 0 <= r < |res.bots| :: res.bots[r] ==
-      BucketListItemFlush(BucketIntersect(top, flushedKeys), bots[r], pivots, r)
+    && |res.top.keys| == |res.top.msgs|
+    && res.top.as_map() == BucketComplement(top.as_map(), flushedKeys)
+    && (forall r | 0 <= r < |res.bots| :: |res.bots[r].keys| == |res.bots[r].msgs|)
+    && (forall r | 0 <= r < |res.bots| :: res.bots[r].as_map() ==
+      BucketListItemFlush(BucketIntersect(top.as_map(), flushedKeys), bots[r].as_map(), pivots, r))
   ensures forall k | k in flushedKeys :: k in top.keys
   {
     if i == |bots| {
       flushedKeys := getFlushedKeys(tmp, top);
       if tmp.SlackExhausted? {
-        var leftover_top := BucketOfSeq(top.keys[tmp.end..], top.msgs[tmp.end..]);
+        var leftover_top := Bucket(top.keys[tmp.end..], top.msgs[tmp.end..]);
         var res := mergeResult(leftover_top, results, tmp.slack);
-        assert res.top == BucketComplement(top, flushedKeys) by {
+        assert res.top.as_map() == BucketComplement(top.as_map(), flushedKeys) by {
           BucketMapOfSeqKeysComplement(top, tmp);
         }
       } else {
-        var res := mergeResult(B(map[]), results, tmp.slack);
+        var res := mergeResult(EmptyBucket(), results, tmp.slack);
         calc {
-          res.top;
-          B(map[]);
+          res.top.as_map();
+          map[];
           {
             reveal_BucketComplement();
-            assert forall key | key in top.b :: key in flushedKeys;
-            assert BucketComplement(top, flushedKeys).b
+            forall key | key in top.as_map()
+            ensures key in flushedKeys;
+            {
+              var i := GetIndex(top.keys, top.msgs, key);
+            }
+            assert BucketComplement(top.as_map(), flushedKeys)
                 == map[];
           }
-          BucketComplement(top, flushedKeys);
+          BucketComplement(top.as_map(), flushedKeys);
         }
       }
     } else {
@@ -1151,10 +1163,10 @@ module BucketModel {
           }
         }
         // show previous results hold up
-        var results' := results + [BucketOfSeq(tmp'.keys, tmp'.msgs)];
+        var results' := results + [Bucket(tmp'.keys, tmp'.msgs)];
         forall r | 0 <= r < i
-        ensures results'[r] ==
-          BucketListItemFlush(BucketIntersect(top, getFlushedKeys(tmp', top)), bots[r], pivots, r) {
+        ensures results'[r].as_map() ==
+          BucketListItemFlush(BucketIntersect(top.as_map(), getFlushedKeys(tmp', top)), bots[r].as_map(), pivots, r) {
           BucketListItemFlush_eq(top, 
             getFlushedKeys(tmp', top),
             getFlushedKeys(tmp, top), 
@@ -1162,39 +1174,25 @@ module BucketModel {
         }
         // show current result
         calc {
-          results'[i];
+          results'[i].as_map();
           {
             reveal_BucketIntersect();
-            WellMarshalledBucketsEq(results'[i],
+            /*WellMarshalledBucketsEq(results'[i],
               BucketListItemFlush(
                 BucketIntersect(
-                  BucketOfSeq(top.keys, top.msgs),
+                  top.as_map(),
                   tmp'.flushedKeys(top.keys, top.msgs, from, to)
                 ),
-                BucketOfSeq(bots[i].keys, bots[i].msgs),
+                bots[i].as_map(),
                 pivots, i
-              ));
+              ));*/
           }
           BucketListItemFlush(
             BucketIntersect(
-              BucketOfSeq(top.keys, top.msgs),
+              top.as_map(),
               tmp'.flushedKeys(top.keys, top.msgs, from, to)
             ),
-            BucketOfSeq(bots[i].keys, bots[i].msgs),
-            pivots, i
-          );
-          {
-            WellMarshalledBucketsEq(top,
-              BucketOfSeq(top.keys, top.msgs));
-            WellMarshalledBucketsEq(bots[i],
-              BucketOfSeq(bots[i].keys, bots[i].msgs));
-          }
-          BucketListItemFlush(
-            BucketIntersect(
-              top,
-              tmp'.flushedKeys(top.keys, top.msgs, from, to)
-            ),
-            bots[i],
+            bots[i].as_map(),
             pivots, i
           );
           {
@@ -1220,10 +1218,10 @@ module BucketModel {
           }
           BucketListItemFlush(
             BucketIntersect(
-              top,
+              top.as_map(),
               getFlushedKeys(tmp', top)
             ),
-            bots[i],
+            bots[i].as_map(),
             pivots, i
           );
         }
@@ -1232,25 +1230,24 @@ module BucketModel {
         var results' := results + [bots[i]];
         var res := mergeToChildrenIter(top, bots, idxs, tmp, i+1, results');
         calc {
-          results'[i];
-          bots[i];
+          results'[i].as_map();
+          bots[i].as_map();
           {
             assert WFBucketAt(bots[i], pivots, i);
-            forall k | k in bots[i].b
+            forall k | k in bots[i].as_map()
+            ensures BoundedKey(pivots, k)
             ensures Route(pivots, k) == i
-            ensures bots[i].b[k] != IdentityMessage()
+            ensures bots[i].as_map()[k] != IdentityMessage()
             {
-              RouteIs(pivots, k, i);
+              var j := GetIndex(bots[i].keys, bots[i].msgs, k);
             }
-            WellMarshalledBucketsEq(bots[i],
-                BucketListItemFlush(B(map[]), bots[i], pivots, i));
           }
-          BucketListItemFlush(B(map[]), bots[i], pivots, i);
+          BucketListItemFlush(map[], bots[i].as_map(), pivots, i);
           {
             reveal_BucketIntersect();
-            assert BucketIntersect(top, {}).b == map[];
+            assert BucketIntersect(top.as_map(), {}) == map[];
           }
-          BucketListItemFlush(BucketIntersect(top, {}), bots[i], pivots, i);
+          BucketListItemFlush(BucketIntersect(top.as_map(), {}), bots[i].as_map(), pivots, i);
           {
             reveal_IsStrictlySorted();
             BucketListItemFlush_eq(top,
@@ -1258,7 +1255,7 @@ module BucketModel {
               {},
               bots[i], pivots, i);
           }
-          BucketListItemFlush(BucketIntersect(top, getFlushedKeys(tmp, top)), bots[i], pivots, i);
+          BucketListItemFlush(BucketIntersect(top.as_map(), getFlushedKeys(tmp, top)), bots[i].as_map(), pivots, i);
         }
 
         if i+1 < NumBuckets(pivots) {
@@ -1304,7 +1301,7 @@ module BucketModel {
     if i == |bots| {
       assert {:split_here} true;
       if tmp.SlackExhausted? {
-        var leftover_top := BucketOfSeq(top.keys[tmp.end..], top.msgs[tmp.end..]);
+        var leftover_top := Bucket(top.keys[tmp.end..], top.msgs[tmp.end..]);
 
         assert WeightBucket(res.top) <= WeightBucket(top) by {
           WeightKeyListAdditive(top.keys[..tmp.end], top.keys[tmp.end..]);
@@ -1316,7 +1313,7 @@ module BucketModel {
       }
       assert bots[i..] == [];
       assert WeightBucketList([]) == 0 by { reveal_WeightBucketList(); }
-      WFBucketMapOfWFMessageSeq(res.top.keys, res.top.msgs);
+      //WFBucketMapOfWFMessageSeq(res.top.keys, res.top.msgs);
     } else {
       assert {:split_here} true;
       calc {
@@ -1348,8 +1345,7 @@ module BucketModel {
             top.keys, top.msgs, from, to,
             bots[i].keys, bots[i].msgs, 0,
             [], [], tmp.slack);
-        var results' := results + [BucketOfSeq(tmp'.keys, tmp'.msgs)];
-        WFBucketMapOfWFMessageSeq(tmp'.keys, tmp'.msgs);
+        var results' := results + [Bucket(tmp'.keys, tmp'.msgs)];
         mergeToChildrenIterSlack(top, bots, idxs, tmp', i+1, results');
 
         calc {
@@ -1357,7 +1353,7 @@ module BucketModel {
           {
             reveal_WeightBucketList();
             assert DropLast(results') == results;
-            assert Last(results') == BucketOfSeq(tmp'.keys, tmp'.msgs);
+            assert Last(results') == Bucket(tmp'.keys, tmp'.msgs);
             //WeightBucket_eq_WeightSeqs(results'[i]);
           }
           WeightBucketList(results');
@@ -1414,11 +1410,10 @@ module BucketModel {
     var res := mergeToChildrenIter(top, bots, idxs, tmp, i, results);
     if i == |bots| {
       if tmp.SlackExhausted? {
-        var leftover_top := BucketOfSeq(top.keys[tmp.end..], top.msgs[tmp.end..]);
+        var leftover_top := Bucket(top.keys[tmp.end..], top.msgs[tmp.end..]);
       } else {
       }
       assert bots[i..] == [];
-      WFBucketMapOfWFMessageSeq(res.top.keys, res.top.msgs);
     } else {
       if tmp.MergeCompleted? {
         var from := idxs[i];
@@ -1433,7 +1428,7 @@ module BucketModel {
             top.keys, top.msgs, from, to,
             bots[i].keys, bots[i].msgs, 0,
             [], [], tmp.slack);
-        var results' := results + [BucketOfSeq(tmp'.keys, tmp'.msgs)];
+        var results' := results + [Bucket(tmp'.keys, tmp'.msgs)];
         mergeToChildrenIterPreservesSorted(top, bots, idxs, tmp', i+1, results');
 
         var res := mergeToChildrenIter(top, bots, idxs, tmp, i, results);
@@ -1461,10 +1456,18 @@ module BucketModel {
   requires WFBucketListProper(bots, pivots)
   requires forall k | k in top.keys :: BoundedKey(pivots, k)
 
+  // NOTE: might be cleaner to just say
+  // flushedKeys == top keys - res.top keys
+
   ensures var res := mergeToChildren(top, pivots, bots, slack);
-    && res.top == BucketComplement(top, flushedKeys)
-    && res.bots ==
-      BucketListFlush(BucketIntersect(top, flushedKeys), bots, pivots)
+    && |res.top.keys| == |res.top.msgs|
+    && res.top.as_map() == BucketComplement(top.as_map(), flushedKeys)
+    && |res.bots| == |bots|
+    && (forall i | 0 <= i < |res.bots| :: |res.bots[i].keys| == |res.bots[i].msgs|)
+    && (forall i | 0 <= i < |res.bots| ::
+          res.bots[i].as_map() ==
+      BucketListItemFlush(BucketIntersect(top.as_map(), flushedKeys), bots[i].as_map(), pivots, i)
+    )
   ensures forall k | k in flushedKeys :: k in top.keys
   {
     reveal_mergeToChildren();
@@ -1568,9 +1571,14 @@ module BucketModel {
   requires WeightBucketList(bots) <= MaxTotalBucketWeight()
   requires forall k | k in top.keys :: BoundedKey(pivots, k)
   ensures var res := partialFlush(top, pivots, bots);
-    && res.top == BucketComplement(top, flushedKeys)
-    && res.bots ==
-      BucketListFlush(BucketIntersect(top, flushedKeys), bots, pivots)
+    && |res.top.keys| == |res.top.msgs|
+    && res.top.as_map() == BucketComplement(top.as_map(), flushedKeys)
+    && |res.bots| == |bots|
+    && (forall i | 0 <= i < |res.bots| :: |res.bots[i].keys| == |res.bots[i].msgs|)
+    && (forall i | 0 <= i < |res.bots| ::
+          res.bots[i].as_map() ==
+      BucketListItemFlush(BucketIntersect(top.as_map(), flushedKeys), bots[i].as_map(), pivots, i)
+    )
   ensures forall k | k in flushedKeys :: k in top.keys
   {
     reveal_partialFlush();
@@ -1599,7 +1607,7 @@ module BucketModel {
         top, pivots, bots, MaxTotalBucketWeight() - WeightBucketList(bots));
   }
 
-  lemma partialFlushWeightPreservesSorted(
+  lemma partialFlushPreservesSorted(
       top: Bucket,
       pivots: PivotTable,
       bots: seq<Bucket>)

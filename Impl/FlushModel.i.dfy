@@ -1,7 +1,7 @@
 include "BookkeepingModel.i.dfy"
 include "IOModel.i.dfy"
 include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
-include "../lib/Buckets/BucketModel.i.dfy"
+include "../lib/Buckets/BucketFlushModel.i.dfy"
 
 module FlushModel { 
   import opened StateBCModel
@@ -19,7 +19,7 @@ module FlushModel {
 
   import opened BucketsLib
   import opened BucketWeights
-  import BucketModel
+  import BucketFlushModel
   import opened Bounds
   import opened BoundedPivotsLib
 
@@ -58,7 +58,7 @@ module FlushModel {
         lemmaChildrenConditionsOfNode(s, parentref);
 
         var partialFlushResult(newparentBucket, newbuckets) :=
-            BucketModel.partialFlush(
+            BucketFlushModel.partialFlush(
               parent.buckets[slot], child.pivotTable, child.buckets);
         var newchild := child.(buckets := newbuckets);
         var (s2, newchildref) := allocBookkeeping(s, newchild.children);
@@ -106,7 +106,7 @@ module FlushModel {
         lemmaChildrenConditionsOfNode(s, parentref);
 
         var partialFlushResult(newparentBucket, newbuckets) :=
-          BucketModel.partialFlush(
+          BucketFlushModel.partialFlush(
             parent.buckets[slot], child.pivotTable, child.buckets);
 
         var flushedKeys := {};
@@ -114,11 +114,11 @@ module FlushModel {
             && BucketListWellMarshalled(child.buckets)
             && WFBucketListProper(child.buckets, child.pivotTable)
         {
-          flushedKeys := BucketModel.partialFlushCorrect(parent.buckets[slot], child.pivotTable, child.buckets);
+          flushedKeys := BucketFlushModel.partialFlushCorrect(parent.buckets[slot], child.pivotTable, child.buckets);
         }
         assert (forall key | key in flushedKeys :: key in parent.buckets[slot].keys);
 
-        BucketModel.partialFlushWeightBound(parent.buckets[slot], child.pivotTable, child.buckets);
+        BucketFlushModel.partialFlushWeightBound(parent.buckets[slot], child.pivotTable, child.buckets);
         
         /*WFBucketIntersect(parent.buckets[slot], flushedKeys);
         WFBucketComplement(parent.buckets[slot], flushedKeys);
@@ -149,7 +149,6 @@ module FlushModel {
             Some(parent.children.value[slot := newchildref.value]),
             parent.buckets[slot := newparentBucket]
           );
-          reveal_BucketComplement();
 
           var s3 := writeWithNode(s2, parentref, newparent);
           reveal_writeBookkeeping();
@@ -169,8 +168,6 @@ module FlushModel {
             lemmaChildInGraph(s, childref, ref);
           }
 
-          WeightBucketListClearEntry(parent.buckets, slot);
-
           allocCorrect(s, newchild);
           writeCorrect(s2, parentref, newparent);
 
@@ -182,7 +179,6 @@ module FlushModel {
             newchildref.value,
             INode(newchild),
             slot,
-            flushedKeys,
             INode(newparent).buckets[slot],
             INode(newchild).buckets);
           assert BT.ValidFlush(flushStep);

@@ -427,8 +427,8 @@ module CacheImpl {
     ensures newchild.Inv()
     ensures newchild.I().pivotTable == I()[childref].pivotTable
     ensures newchild.I().children == I()[childref].children
-    ensures BucketModel.partialFlushResult(newparentBucket.I(), newchild.I().buckets)
-        == BucketModel.partialFlush(I()[parentref].buckets[slot], 
+    ensures BucketFlushModel.partialFlushResult(newparentBucket.I(), newchild.I().buckets)
+        == BucketFlushModel.partialFlush(I()[parentref].buckets[slot], 
           I()[childref].pivotTable, I()[childref].buckets)
     {
       shared var parent := Get(parentref);

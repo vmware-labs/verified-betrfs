@@ -615,6 +615,7 @@ module PackedStringArray {
   // TODO these could be written in terms of the above
   // less-restrictive binary search methods:
   
+  /*
   method IndexOfFirstKeyGte(psa: Psa, key: Key) returns (idx: uint64)
     requires WF(psa)
     requires LexOrder.IsSorted(I(psa))
@@ -696,6 +697,7 @@ module PackedStringArray {
     idx := lo;
     LexOrder.IndexOfFirstGtIsUnique(I(psa), key, idx as nat);
   }
+  */
 
   //~ method PivotIndexes(keys: Psa, pivots: seq<Key>) returns (pivotIdxs: seq<uint64>)
   //~   requires WF(keys)
