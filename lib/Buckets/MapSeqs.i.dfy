@@ -339,4 +339,9 @@ module MapSeqs {
   {
     assume false; // TODO
   }
+
+  lemma empty_seqs_of_map()
+  ensures |seqs_of_map(map[]).keys| == 0
+  {
+  }
 }

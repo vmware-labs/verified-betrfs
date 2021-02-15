@@ -625,6 +625,7 @@ module BucketsLib {
   lemma B_empty_map()
   ensures B(map[]) == EmptyBucket();
   {
+    MapSeqs.empty_seqs_of_map();
     reveal_B();
   }
 
