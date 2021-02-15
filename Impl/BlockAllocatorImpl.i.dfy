@@ -58,7 +58,7 @@ module BlockAllocatorImpl {
       acc := DebugAccumulator.AccPut(acc, "full", a);
     }
 
-    protected predicate Inv()
+    predicate Inv()
     {
       && ephemeral.Inv()
       && (frozen.lSome? ==> frozen.value.Inv())
@@ -72,7 +72,7 @@ module BlockAllocatorImpl {
       && BitmapModel.Len(full.I()) == NumBlocks()
     }
 
-    protected function I() : BlockAllocatorModel.BlockAllocatorModel
+    function I() : BlockAllocatorModel.BlockAllocatorModel
     requires Inv()
     {
       BlockAllocatorModel.BlockAllocatorModel(ephemeral.I(),

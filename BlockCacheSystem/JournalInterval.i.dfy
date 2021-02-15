@@ -208,7 +208,8 @@ module JournalIntervals {
   }
 
 
-  protected predicate Disk_HasJournalRange(journal: seq<Option<JournalBlock>>, interval: JournalInterval)
+  /* protected */
+  predicate Disk_HasJournalRange(journal: seq<Option<JournalBlock>>, interval: JournalInterval)
   requires ValidJournalInterval(interval)
   {
     && |journal| == NumJournalBlocks() as int
@@ -216,7 +217,8 @@ module JournalIntervals {
     && fullRange(slice)
   }
 
-  protected function Disk_JournalRange(journal: seq<Option<JournalBlock>>, interval: JournalInterval) : JournalRange
+  /* protected */
+  function Disk_JournalRange(journal: seq<Option<JournalBlock>>, interval: JournalInterval) : JournalRange
   requires ValidJournalInterval(interval)
   requires Disk_HasJournalRange(journal, interval)
   {
@@ -224,7 +226,8 @@ module JournalIntervals {
     concatFold(slice)
   }
 
-  protected predicate Disk_HasJournal(
+  /* protected */
+  predicate Disk_HasJournal(
       journal: seq<Option<JournalBlock>>, interval: JournalInterval)
   requires ValidJournalInterval(interval)
   {
@@ -232,7 +235,8 @@ module JournalIntervals {
     && parseJournalRange(Disk_JournalRange(journal, interval)).Some?
   }
 
-  protected function Disk_Journal(
+  /* protected */
+  function Disk_Journal(
       journal: seq<Option<JournalBlock>>, interval: JournalInterval) : seq<JournalEntry>
   requires ValidJournalInterval(interval)
   requires Disk_HasJournal(journal, interval)
@@ -452,7 +456,8 @@ module JournalIntervals {
     assert c1 == c2;
   }
 
-  protected function JournalIntervalOfLocation(loc: Location) : (interval : JournalInterval)
+  /* protected */
+  function JournalIntervalOfLocation(loc: Location) : (interval : JournalInterval)
   requires ValidJournalLocation(loc)
   ensures ContiguousJournalInterval(interval)
   ensures JournalRangeLocation(interval.start as uint64, interval.len as uint64) == loc

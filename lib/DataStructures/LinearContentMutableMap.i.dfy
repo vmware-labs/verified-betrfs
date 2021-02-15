@@ -53,7 +53,8 @@ module LinearContentMutableMap {
       }
     }
 
-    protected function toItem(): Item<V>
+    /* protected */
+    function toItem(): Item<V>
     {
       match this {
         case Empty() => Base.Empty()
@@ -63,7 +64,8 @@ module LinearContentMutableMap {
     }
   }
 
-  protected function toItems<V>(litems: lseq<lItem<V>>): (items: seq<Item<V>>)
+  /* protected */
+  function toItems<V>(litems: lseq<lItem<V>>): (items: seq<Item<V>>)
   ensures |items| == |litems|
   {
     var elements := lseqs(litems);
@@ -85,7 +87,8 @@ module LinearContentMutableMap {
     h % (storageLength as uint64)
   }
 
-  protected predicate FixedSizeInv<V>(self: FixedSizeLinearHashMap<V>)
+  /* protected */
+  predicate FixedSizeInv<V>(self: FixedSizeLinearHashMap<V>)
   {
     && 128 <= |self.storage| < 0x1_0000_0000_0000_0000
     && (self.count as nat) < 0x1_0000_0000_0000_0000
@@ -517,7 +520,8 @@ module LinearContentMutableMap {
     assert MapFromStorage(toItems(underlying.storage)) == contents;
   }
 
-  protected predicate Inv<V>(self: LinearHashMap<V>)
+  /* protected */
+  predicate Inv<V>(self: LinearHashMap<V>)
   ensures Inv(self) ==> |self.contents| == self.count as nat
   ensures Inv(self) ==> UnderlyingInv(self, self.underlying)
   {

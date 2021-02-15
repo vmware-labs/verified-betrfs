@@ -178,7 +178,8 @@ module JournalistImpl {
       )
     }
 
-    protected function I() : JournalInfo
+    /* protected */
+    function I() : JournalInfo
     requires WF()
     {
       Iprivate()
@@ -338,7 +339,8 @@ module JournalistImpl {
       WeightJournalEntriesSum(old_self.I().inMemoryJournalFrozen, old_self.I().inMemoryJournal);
     }
 
-    protected shared function method canAppend(je: JournalEntry) : (b : bool)
+    /* protected */
+    shared function method canAppend(je: JournalEntry) : (b : bool)
     requires Inv()
     {
       4064 * (writtenJournalBlocks + frozenJournalBlocks)

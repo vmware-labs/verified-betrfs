@@ -37,7 +37,6 @@ module MarshallingImpl {
   import CRC32_C_Impl
   import CRC32_C_Array_Impl
   import NativeArrays
-  import MutableMapModel
   import IndirectionTable
   import KeyType
   import SeqComparison

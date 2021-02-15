@@ -62,7 +62,7 @@ module BucketGeneratorImpl {
       bg.reveal_Inv();
     }
 
-    protected function I() : BucketGeneratorModel.Generator
+    function I() : BucketGeneratorModel.Generator
     requires Inv()
     decreases height
     ensures BucketGeneratorModel.WF(I())

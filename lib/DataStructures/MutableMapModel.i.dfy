@@ -939,9 +939,9 @@ module MutableMapModel {
   }
 
   lemma UnderlyingInvImpliesMapFromStorageMatchesContents<V>(underlying: FixedSizeLinearHashMap<V>, contents: map<uint64, V>)
-    requires UnderlyingContentsMatchesContents(underlying, contents)
-    requires FixedSizeInv(underlying)
-    ensures MapFromStorage(underlying.storage) == contents
+  requires UnderlyingContentsMatchesContents(underlying, contents)
+  requires FixedSizeInv(underlying)
+  ensures MapFromStorage(underlying.storage) == contents
   {
     var mapFromStorage := MapFromStorage(underlying.storage);
     CantEquivocateMapFromStorageKey(underlying);
@@ -949,8 +949,9 @@ module MutableMapModel {
     assert MapFromStorage(underlying.storage) == contents;
   }
 
-  protected predicate Inv<V>(self: LinearHashMap<V>)
-    ensures Inv(self) ==> |self.contents| == self.count as nat
+  /* protected */
+  predicate Inv<V>(self: LinearHashMap<V>)
+  ensures Inv(self) ==> |self.contents| == self.count as nat
   {
     && UnderlyingInv(self, self.underlying)
     && MapFromStorage(self.underlying.storage) == self.contents
@@ -1431,7 +1432,8 @@ module MutableMapModel {
         && key == self.underlying.storage[j].key
   }
 
-  protected predicate WFIter<V>(self: LinearHashMap<V>, it: Iterator<V>)
+  /* protected */
+  predicate WFIter<V>(self: LinearHashMap<V>, it: Iterator<V>)
   ensures WFIter(self, it) ==> (it.next.Done? ==> it.s == self.contents.Keys)
   ensures WFIter(self, it) ==> (it.next.Next? ==>
       MapsTo(self.contents, it.next.key, it.next.value));
@@ -1452,7 +1454,8 @@ module MutableMapModel {
     && it.s <= self.contents.Keys
   }
 
-  protected predicate WFSimpleIter<V>(self: LinearHashMap<V>, it: SimpleIterator)
+  /* protected */
+  predicate WFSimpleIter<V>(self: LinearHashMap<V>, it: SimpleIterator)
   ensures WFSimpleIter(self, it) ==> it.s <= self.contents.Keys
   {
     && 0 <= it.i as int <= |self.underlying.storage|
@@ -1483,7 +1486,8 @@ module MutableMapModel {
     )
   }
 
-  protected function SimpleIterOutput<V>(self: LinearHashMap<V>, it: SimpleIterator) : (next: IteratorOutput<V>)
+  /* protected */
+  function SimpleIterOutput<V>(self: LinearHashMap<V>, it: SimpleIterator) : (next: IteratorOutput<V>)
   requires WFSimpleIter(self, it)
   ensures (next.Done? ==> it.s == self.contents.Keys)
   ensures (next.Next? ==>

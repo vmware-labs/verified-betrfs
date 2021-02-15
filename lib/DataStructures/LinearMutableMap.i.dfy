@@ -45,7 +45,8 @@ module LinearMutableMap {
     count: uint64,
     ghost contents: map<uint64, Option<V>>)
 
-  protected predicate FixedSizeInv<V>(self: FixedSizeLinearHashMap<V>)
+  /* protected */
+  predicate FixedSizeInv<V>(self: FixedSizeLinearHashMap<V>)
   {
     && 128 <= |self.storage| < 0x1_0000_0000_0000_0000
     && (self.count as nat) < 0x1_0000_0000_0000_0000
@@ -561,7 +562,8 @@ module LinearMutableMap {
 
   predicate Inv0<V>(self: LinearHashMap<V>) { Inv(self) }
 
-  protected predicate Inv<V>(self: LinearHashMap<V>)
+  /* protected */
+  predicate Inv<V>(self: LinearHashMap<V>)
     ensures Inv(self) ==> |self.contents| == self.count as nat
   {
     && UnderlyingInv(self, self.underlying)
@@ -876,7 +878,8 @@ module LinearMutableMap {
     forall key | key in s :: KeyExplainedByPassedIndex(self, i, key) 
   }
 
-  protected predicate WFIter<V>(self: LinearHashMap<V>, it: Iterator<V>)
+  /* protected */
+  predicate WFIter<V>(self: LinearHashMap<V>, it: Iterator<V>)
   ensures WFIter(self, it) ==> (it.next.Done? ==> it.s == self.contents.Keys)
   ensures WFIter(self, it) ==> (it.next.Next? ==>
       MapsTo(self.contents, it.next.key, it.next.value));
@@ -898,7 +901,8 @@ module LinearMutableMap {
     && it.s <= self.contents.Keys
   }
 
-  protected predicate WFSimpleIter<V>(self: LinearHashMap<V>, it: SimpleIterator)
+  /* protected */
+  predicate WFSimpleIter<V>(self: LinearHashMap<V>, it: SimpleIterator)
   ensures WFSimpleIter(self, it) ==> it.s <= self.contents.Keys
   {
     && 0 <= it.i as int <= |self.underlying.storage| < Uint64UpperBound()
@@ -930,7 +934,8 @@ module LinearMutableMap {
     )
   }
 
-  protected function method SimpleIterOutput<V>(shared self: LinearHashMap<V>, it: SimpleIterator) : (next: IteratorOutput<V>)
+  /* protected */
+  function method SimpleIterOutput<V>(shared self: LinearHashMap<V>, it: SimpleIterator) : (next: IteratorOutput<V>)
   requires WFSimpleIter(self, it)
   ensures (next.Done? ==> it.s == self.contents.Keys)
   ensures (next.Next? ==>

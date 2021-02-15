@@ -27,7 +27,6 @@ module NodeImpl {
   import opened BucketsLib
   import opened BucketWeights
 
-  import MM = MutableMap
   import ReferenceType`Internal
 
   linear datatype Node = Node(

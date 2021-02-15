@@ -23,7 +23,6 @@ module IOImpl {
   import BucketsLib
   import LruModel
   import opened Bounds
-  import MutableMapModel
 
   import StateBCModel
   import opened StateBCImpl

@@ -80,7 +80,8 @@ module JournalSystem {
     && DiskHasSuperblock(disk)
   }
 
-  protected predicate WFPersistentJournal(s: Variables)
+  /* protected */
+  predicate WFPersistentJournal(s: Variables)
   {
     && DiskHasSuperblock(s.disk)
     && ValidJournalInterval(JournalInterval(
@@ -91,7 +92,8 @@ module JournalSystem {
         SuperblockOfDisk(s.disk).journalLen as int))
   }
 
-  protected function PersistentJournal(s: Variables) : seq<JournalEntry>
+  /* protected */
+  function PersistentJournal(s: Variables) : seq<JournalEntry>
   requires WFPersistentJournal(s)
   {
     Disk_Journal(s.disk.journal, JournalInterval(
@@ -134,25 +136,29 @@ module JournalSystem {
     JournalInterval(FrozenStartPos(s), FrozenLen(s))
   }
 
-  protected predicate WFFrozenJournal(s: Variables)
+  /* protected */
+  predicate WFFrozenJournal(s: Variables)
   {
     && DiskHasSuperblock(s.disk)
     && ValidJournalInterval(FrozenInterval(s))
     && Disk_HasJournal(s.disk.journal, FrozenInterval(s))
   }
 
-  protected function FrozenJournal(s: Variables) : seq<JournalEntry>
+  /* protected */
+  function FrozenJournal(s: Variables) : seq<JournalEntry>
   requires WFFrozenJournal(s)
   {
     Disk_Journal(s.disk.journal, FrozenInterval(s))
   }
 
-  protected predicate WFEphemeralJournal(s: Variables)
+  /* protected */
+  predicate WFEphemeralJournal(s: Variables)
   {
     && WFPersistentJournal(s)
   }
 
-  protected function EphemeralJournal(s: Variables) : seq<JournalEntry>
+  /* protected */
+  function EphemeralJournal(s: Variables) : seq<JournalEntry>
   requires WFEphemeralJournal(s)
   {
     if s.machine.Ready? then (
@@ -204,14 +210,16 @@ module JournalSystem {
     JournalInterval(GammaStartPos(s), GammaLen(s))
   }
 
-  protected predicate WFGammaJournal(s: Variables)
+  /* protected */
+  predicate WFGammaJournal(s: Variables)
   {
     && DiskHasSuperblock(s.disk)
     && ValidJournalInterval(GammaInterval(s))
     && Disk_HasJournal(s.disk.journal, GammaInterval(s))
   }
 
-  protected function GammaJournal(s: Variables) : seq<JournalEntry>
+  /* protected */
+  function GammaJournal(s: Variables) : seq<JournalEntry>
   requires WFGammaJournal(s)
   {
     if s.machine.Ready? then (
@@ -222,7 +230,8 @@ module JournalSystem {
     )
   }
 
-  protected function DeltaJournal(s: Variables) : seq<JournalEntry>
+  /* protected */
+  function DeltaJournal(s: Variables) : seq<JournalEntry>
   {
     if s.machine.Ready? then (
       s.machine.inMemoryJournal
@@ -231,18 +240,21 @@ module JournalSystem {
     )
   }
 
-  protected predicate WFPersistentLoc(s: Variables)
+  /* protected */
+  predicate WFPersistentLoc(s: Variables)
   {
     && DiskHasSuperblock(s.disk)
   }
 
-  protected function PersistentLoc(s: Variables) : Location
+  /* protected */
+  function PersistentLoc(s: Variables) : Location
   requires WFPersistentLoc(s)
   {
     SuperblockOfDisk(s.disk).indirectionTableLoc
   }
 
-  protected function FrozenLoc(s: Variables) : Option<Location>
+  /* protected */
+  function FrozenLoc(s: Variables) : Option<Location>
   {
     if s.machine.Ready? then
       s.machine.frozenLoc
@@ -266,7 +278,8 @@ module JournalSystem {
     }
   }
 
-  protected function SyncReqs(s: Variables) : map<int, SyncReqStatus>
+  /* protected */
+  function SyncReqs(s: Variables) : map<int, SyncReqStatus>
   {
     map id | 0 <= id < 0x1_0000_0000_0000_0000 && id as uint64 in s.machine.syncReqs :: SyncReqState(s, s.machine.syncReqs[id as uint64])
   }
@@ -503,7 +516,8 @@ module JournalSystem {
         !journalIntervalOverlap(reqReads[id1], reqWrites[id2]))
   }
 
-  protected predicate Inv(s: Variables)
+  /* protected */
+  predicate Inv(s: Variables)
   ensures Inv(s) ==>
     && WFPersistentJournal(s)
     && WFFrozenJournal(s)
