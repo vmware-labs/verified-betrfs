@@ -347,8 +347,6 @@ module BucketWeights {
     reveal_SplitBucketLeft();
   }
 
-  // used internally
-
   lemma WeightSplitBucketRight(bucket: Bucket, pivot: Key)
     requires WFBucket(bucket)
     //requires BucketWellMarshalled(bucket)
@@ -566,6 +564,83 @@ module BucketWeights {
     // And then relate the replaced terms.
     WeightBucketList2(SplitBucketLeft(blist[i], pivot), SplitBucketRight(blist[i], pivot));
     WeightSplitBucketAdditive(blist[i], pivot);
+  }
+
+  // used
+  lemma WeightMergeBuckets(left: Bucket, right: Bucket)
+    requires PreWFBucket(left)
+    requires PreWFBucket(right)
+    ensures WeightBucket(MergeBuckets(left, right)) <= WeightBucket(left) + WeightBucket(right)
+  {
+    reveal_MergeBuckets();
+    var merged := MergeBuckets(left, right);
+    calc <= {
+      WeightKeyMultiset(multiset(merged.keys));
+      {
+        assert multiset(left.keys) + multiset(right.keys) ==
+          multiset(merged.keys) + ((multiset(left.keys) + multiset(right.keys)) - multiset(merged.keys));
+        WeightKeyMultisetAdditive(multiset(merged.keys),
+                                  (multiset(left.keys) + multiset(right.keys)) - multiset(merged.keys));
+      }
+      WeightKeyMultiset(multiset(left.keys) + multiset(right.keys));
+      { WeightKeyMultisetAdditive(multiset(left.keys), multiset(right.keys)); }
+      WeightKeyMultiset(multiset(left.keys)) + WeightKeyMultiset(multiset(right.keys));
+    }
+
+    calc <= {
+      WeightMessageMultiset(multiset(merged.msgs));
+      {
+        assert multiset(left.msgs) + multiset(right.msgs) ==
+          multiset(merged.msgs) + ((multiset(left.msgs) + multiset(right.msgs)) - multiset(merged.msgs));
+        WeightMessageMultisetAdditive(multiset(merged.msgs),
+                                     (multiset(left.msgs) + multiset(right.msgs)) - multiset(merged.msgs));
+      }
+      WeightMessageMultiset(multiset(left.msgs) + multiset(right.msgs));
+      { WeightMessageMultisetAdditive(multiset(left.msgs), multiset(right.msgs)); }
+      WeightMessageMultiset(multiset(left.msgs)) + WeightMessageMultiset(multiset(right.msgs));
+    }
+  }
+
+  // used
+  lemma WeightMergeBucketsInListLe(blist: BucketList, i: int)
+    requires 0 <= i < |blist|-1
+    requires PreWFBucket(blist[i])
+    requires PreWFBucket(blist[i+1])
+    ensures WeightBucketList(MergeBucketsInList(blist, i)) <= WeightBucketList(blist)
+  {
+    var newblist := MergeBucketsInList(blist, i);
+    calc <= {
+      WeightBucketList(newblist);
+      {
+        assert newblist == newblist[..i] + newblist[i..];
+        assert newblist[i..] == newblist[i..i+1] + newblist[i+1..];
+        WeightBucketListConcat(newblist[..i], newblist[i..]);
+        WeightBucketListConcat(newblist[i..i+1], newblist[i+1..]);
+      }
+      WeightBucketList(newblist[..i]) + WeightBucketList(newblist[i..i+1]) + WeightBucketList(newblist[i+1..]);
+      { reveal_WeightBucketList(); }
+      WeightBucketList(newblist[..i]) + WeightBucket(newblist[i]) + WeightBucketList(newblist[i+1..]);
+      {
+        reveal_MergeBucketsInList();
+        WeightMergeBuckets(blist[i], blist[i+1]);
+      }
+      WeightBucketList(newblist[..i]) + WeightBucket(blist[i]) + WeightBucket(blist[i+1]) + WeightBucketList(newblist[i+1..]);
+      { reveal_WeightBucketList(); }
+      WeightBucketList(newblist[..i]) + WeightBucketList(blist[i..i+2]) + WeightBucketList(newblist[i+1..]);
+      {
+        reveal_MergeBucketsInList();
+        assert blist[..i] == newblist[..i];
+        assert blist[i+2..] == newblist[i+1..];
+      }
+      WeightBucketList(blist[..i]) + WeightBucketList(blist[i..i+2]) + WeightBucketList(blist[i+2..]);
+      {
+        assert blist == blist[..i] + blist[i..];
+        assert blist[i..] == blist[i..i+2] + blist[i+2..];
+        WeightBucketListConcat(blist[..i], blist[i..]);
+        WeightBucketListConcat(blist[i..i+2], blist[i+2..]);
+      }
+      WeightBucketList(blist);
+    }
   }
 
   // used

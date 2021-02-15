@@ -128,10 +128,10 @@ module BoundedPivotsLib {
     else 0
   }
  
-  function Route(pt: PivotTable, key: Key) : int
+  function Route(pt: PivotTable, key: Key) : (i: int)
   requires WFPivots(pt)
   requires BoundedKey(pt, key)
-  ensures 0 <= Route(pt, key) < NumBuckets(pt)
+  ensures 0 <= i < NumBuckets(pt)
   {
     Keyspace.LargestLte(pt, KeyToElement(key))
   }
@@ -312,38 +312,32 @@ module BoundedPivotsLib {
   lemma WFConcat3(left: PivotTable, key: Key, right: PivotTable)
   requires WFPivots(left)
   requires WFPivots(right)
-  requires Keyspace.lt(left[|left|-1], KeyToElement(key))
-  requires Keyspace.lt(KeyToElement(key), right[0])
-  ensures WFPivots(concat3(left, KeyToElement(key), right))
+  requires Last(left) == KeyToElement(key)
+  requires right[0] == KeyToElement(key)
+  ensures WFPivots(concat3(left[..|left|-1], KeyToElement(key), right[1..]))
   {
     Keyspace.reveal_IsStrictlySorted();
     reveal_concat3();
-    var run := concat3(left, KeyToElement(key), right);
+    var run := concat3(left[..|left|-1], KeyToElement(key), right[1..]);
 
     forall i, j | 0 <= i < j < |run|
     ensures Keyspace.lt(run[i], run[j])
     {
-      if (i < |left|) {
-        if (j < |left|) {
+      if (i < |left|-1) {
+        if (j < |left|-1) {
           assert Keyspace.lt(run[i], run[j]);
-        } else if (j == |left|) {
+        } else if (j == |left|-1) {
+          assert run[j] == KeyToElement(key);
           assert Keyspace.lt(run[i], run[j]);
         } else {
           assert run[i] == left[i];
-          assert run[j] == right[j - |left| - 1];
-          assert Keyspace.lte(left[i], Last(left));
-          assert Keyspace.lte(right[0], right[j - |left| - 1]);
+          assert run[j] == right[j - |left| + 1];
           assert Keyspace.lt(run[i], run[j]);
         }
-      } else if (i == |left|) {
-        assert j > |left|;
-        assert run[j] == right[j - |left| - 1];
-        assert Keyspace.lte(right[0], right[j - |left| - 1]);
+      } else if (i == |left|-1) {
         assert Keyspace.lt(run[i], run[j]);
       } else {
-        assert j > |left|;
-        assert run[i] == right[i - |left| - 1];
-        assert run[j] == right[j - |left| - 1];
+        assert j >= |left|;
         assert Keyspace.lt(run[i], run[j]);
       }
     }
