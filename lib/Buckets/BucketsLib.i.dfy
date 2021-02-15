@@ -26,6 +26,7 @@ include "BucketMap.i.dfy"
 
 module BucketsLib {
   import opened BoundedPivotsLib
+  import opened Lexicographic_Byte_Order
   import opened ValueMessage
   import opened Maps
   import opened Sequences
@@ -36,7 +37,7 @@ module BucketsLib {
   import Multisets
   import opened MapSeqs
   import opened BucketMaps
-  import opened BoundedKeyspace = Lexicographic_Byte_Order
+  import BoundedKeyspace = Lexicographic_Byte_Order
   import Upperbounded_Lexicographic_Byte_Order
 
   datatype Bucket = Bucket(keys: seq<Key>, msgs: seq<Message>)
@@ -227,7 +228,6 @@ module BucketsLib {
       else
         m[key := mergedMsg];
     var bucket' := BucketInsert(bucket, key, msg);
-    assert bucket' == B(m');
     assert m' == bucket'.as_map();
     assert m' == map_of_seqs(bucket'.keys, bucket'.msgs);
 
