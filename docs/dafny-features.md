@@ -32,6 +32,8 @@
 - (Partial) higher-order functions
 - Bitvectors (do we use these?)
 - Type synonyms
+- Multisets
+- Infinite maps
 
 ## Statements
 - Break?
@@ -43,6 +45,7 @@
 - Print
 - Reveal
 - Forall
+- Labeled statements
 
 ## Expressions
 - Most of them
@@ -67,9 +70,7 @@
 ## Types
 - Ordinal types
 - Type parameter variance
-- Multisets?
 - Multi-dimensional arrays
-- Infinite maps
 - Traits
 - Co-inductive datatypes 
 
@@ -78,7 +79,6 @@
 - Co-induction
 
 ## Statements
-- Labeled statements
 - Yield statements
 - "Monad" statements
 - Guards
