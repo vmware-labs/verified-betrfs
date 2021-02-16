@@ -43,7 +43,7 @@ module NonlinearLemmas {
 
   lemma div_eq_0(a: int, b: int)
   requires b > 0
-  requires -b < a < b
+  requires 0 <= a < b
   ensures a / b == 0
   {
   }
