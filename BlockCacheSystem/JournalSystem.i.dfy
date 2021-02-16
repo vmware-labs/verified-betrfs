@@ -1,5 +1,6 @@
 include "../BlockCacheSystem/JournalCache.i.dfy"
 include "../MapSpec/ThreeStateVersioned.s.dfy"
+include "AsyncSectorDiskModelTypes.i.dfy"
 
 //
 // Attach a BlockCache to a Disk

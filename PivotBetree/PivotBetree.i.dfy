@@ -11,6 +11,7 @@ include "../Betree/BetreeInv.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../MapSpec/UIStateMachine.s.dfy"
 include "PivotBetreeSpecRefinement.i.dfy"
+include "PivotBetreeBlockInterface.i.dfy"
 
 //
 // Like Betree, PivetBetree lowers the "lifted" op-sequences of PivotBetreeSpec
@@ -18,10 +19,6 @@ include "PivotBetreeSpecRefinement.i.dfy"
 // as required by BetreeSpec. The only difference is that the interface has a more
 // concrete (pivot-y) type.
 //
-
-module PivotBetreeBlockInterface refines BlockInterface {
-  import G = PivotBetreeGraph
-}
 
 module PivotBetree refines UIStateMachine {
   import opened PivotBetreeSpec`Internal

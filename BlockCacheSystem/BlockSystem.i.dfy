@@ -1,5 +1,6 @@
 include "../BlockCacheSystem/BlockCache.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
+include "../BlockCacheSystem/AsyncSectorDiskModelTypes.i.dfy"
 
 //
 // Attach a BlockCache to a Disk
