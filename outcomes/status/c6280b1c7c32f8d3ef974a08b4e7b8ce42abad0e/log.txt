@@ -1,0 +1,196 @@
+mkdir -p build/.
+echo Impl/Bundle.i.dfy build-tests/test-suite.i.dfy > build/roots
+tools/veridepend.py Impl/Bundle.i.dfy build-tests/test-suite.i.dfy
+mkdir -p build/lib/Lang/.
+mkdir -p build/lib/Base/.
+mkdir -p build/lib/Lang/System/.
+mkdir -p build/MapSpec/.
+mkdir -p build/lib/Checksums/.
+mkdir -p build/ByteBlockCacheSystem/.
+mkdir -p build/Impl/.
+touch build/lib/Base/Sets.i.dummydep
+touch build/lib/Base/mathematics.i.dummydep
+mkdir -p build/Betree/.
+touch build/lib/Lang/LinearMaybe.s.dummydep
+mkdir -p build/lib/Buckets/.
+mkdir -p build/PivotBetree/.
+touch build/lib/Lang/LinearBox.s.dummydep
+touch build/lib/Lang/Inout.i.dummydep
+touch build/lib/Base/SetBijectivity.i.dummydep
+mkdir -p build/lib/DataStructures/.
+mkdir -p build/lib/Math/.
+mkdir -p build/lib/Marshalling/.
+touch build/lib/Base/MathAxioms.s.dummydep
+mkdir -p build/BlockCacheSystem/.
+mkdir -p build/Versions/.
+touch build/lib/Checksums/Nonlinear.i.dummydep
+touch build/lib/Base/NativeBenchmarking.s.dummydep
+( /usr/bin/time .dafny/dafny//Binaries/Dafny   /compile:0 /timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4 lib/Lang/NativeTypes.s.dfy ) 2>&1 | tee build/lib/Lang/NativeTypes.s.verchk-tmp
+( /usr/bin/time .dafny/dafny//Binaries/Dafny   /compile:0 /timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4 lib/Base/Option.s.dfy ) 2>&1 | tee build/lib/Base/Option.s.verchk-tmp
+( /usr/bin/time .dafny/dafny//Binaries/Dafny   /compile:0 /timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4 lib/Base/MapRemove.s.dfy ) 2>&1 | tee build/lib/Base/MapRemove.s.verchk-tmp
+( /usr/bin/time .dafny/dafny//Binaries/Dafny   /compile:0 /timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4 lib/Base/Sets.i.dfy ) 2>&1 | tee build/lib/Base/Sets.i.verchk-tmp
+( /usr/bin/time .dafny/dafny//Binaries/Dafny   /compile:0 /timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4 lib/Base/mathematics.i.dfy ) 2>&1 | tee build/lib/Base/mathematics.i.verchk-tmp
+*** Error: 'DAFNY_GLOBAL_FLAGS=/vcsCores:4': Filename extension '' is not supported. Input files must be Dafny programs (.dfy) or C# files (.cs) or managed DLLS (.dll)
+*** Error: 'DAFNY_GLOBAL_FLAGS=/vcsCores:4': Filename extension '' is not supported. Input files must be Dafny programs (.dfy) or C# files (.cs) or managed DLLS (.dll)
+*** Error: 'DAFNY_GLOBAL_FLAGS=/vcsCores:4': Filename extension '' is not supported. Input files must be Dafny programs (.dfy) or C# files (.cs) or managed DLLS (.dll)
+Command exited with non-zero status 1
+0.15user 0.01system 0:00.19elapsed 91%CPU (0avgtext+0avgdata 52116maxresident)k
+0inputs+0outputs (0major+5266minor)pagefaults 0swaps
+Command exited with non-zero status 1
+0.15user 0.02system 0:00.19elapsed 93%CPU (0avgtext+0avgdata 51920maxresident)k
+0inputs+0outputs (0major+5257minor)pagefaults 0swaps
+mv build/lib/Base/mathematics.i.verchk-tmp build/lib/Base/mathematics.i.verchk
+Command exited with non-zero status 1
+0.14user 0.03system 0:00.19elapsed 90%CPU (0avgtext+0avgdata 52144maxresident)k
+0inputs+0outputs (0major+5263minor)pagefaults 0swaps
+mv build/lib/Base/Sets.i.verchk-tmp build/lib/Base/Sets.i.verchk
+mv build/lib/Lang/NativeTypes.s.verchk-tmp build/lib/Lang/NativeTypes.s.verchk
+( /usr/bin/time .dafny/dafny//Binaries/Dafny   /compile:0 /timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4 lib/Lang/LinearMaybe.s.dfy ) 2>&1 | tee build/lib/Lang/LinearMaybe.s.verchk-tmp
+( /usr/bin/time .dafny/dafny//Binaries/Dafny   /compile:0 /timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4 lib/Lang/LinearBox.s.dfy ) 2>&1 | tee build/lib/Lang/LinearBox.s.verchk-tmp
+( /usr/bin/time .dafny/dafny//Binaries/Dafny   /compile:0 /timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4 lib/Lang/Inout.i.dfy ) 2>&1 | tee build/lib/Lang/Inout.i.verchk-tmp
+*** Error: 'DAFNY_GLOBAL_FLAGS=/vcsCores:4': Filename extension '' is not supported. Input files must be Dafny programs (.dfy) or C# files (.cs) or managed DLLS (.dll)
+Command exited with non-zero status 1
+0.15user 0.03system 0:00.21elapsed 89%CPU (0avgtext+0avgdata 52164maxresident)k
+0inputs+0outputs (0major+5260minor)pagefaults 0swaps
+mv build/lib/Base/MapRemove.s.verchk-tmp build/lib/Base/MapRemove.s.verchk
+( /usr/bin/time .dafny/dafny//Binaries/Dafny   /compile:0 /timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4 lib/Base/SetBijectivity.i.dfy ) 2>&1 | tee build/lib/Base/SetBijectivity.i.verchk-tmp
+*** Error: 'DAFNY_GLOBAL_FLAGS=/vcsCores:4': Filename extension '' is not supported. Input files must be Dafny programs (.dfy) or C# files (.cs) or managed DLLS (.dll)
+Command exited with non-zero status 1
+0.17user 0.01system 0:00.22elapsed 83%CPU (0avgtext+0avgdata 52112maxresident)k
+0inputs+0outputs (0major+5268minor)pagefaults 0swaps
+mv build/lib/Base/Option.s.verchk-tmp build/lib/Base/Option.s.verchk
+( /usr/bin/time .dafny/dafny//Binaries/Dafny   /compile:0 /timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4 lib/Math/bases.i.dfy ) 2>&1 | tee build/lib/Math/bases.i.verchk-tmp
+*** Error: 'DAFNY_GLOBAL_FLAGS=/vcsCores:4': Filename extension '' is not supported. Input files must be Dafny programs (.dfy) or C# files (.cs) or managed DLLS (.dll)
+Command exited with non-zero status 1
+0.16user 0.01system 0:00.19elapsed 90%CPU (0avgtext+0avgdata 52188maxresident)k
+0inputs+0outputs (0major+5261minor)pagefaults 0swaps
+mv build/lib/Lang/LinearMaybe.s.verchk-tmp build/lib/Lang/LinearMaybe.s.verchk
+( /usr/bin/time .dafny/dafny//Binaries/Dafny   /compile:0 /timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4 lib/Marshalling/Maps.i.dfy ) 2>&1 | tee build/lib/Marshalling/Maps.i.verchk-tmp
+*** Error: 'DAFNY_GLOBAL_FLAGS=/vcsCores:4': Filename extension '' is not supported. Input files must be Dafny programs (.dfy) or C# files (.cs) or managed DLLS (.dll)
+Command exited with non-zero status 1
+0.15user 0.02system 0:00.19elapsed 91%CPU (0avgtext+0avgdata 52152maxresident)k
+0inputs+0outputs (0major+5260minor)pagefaults 0swaps
+mv build/lib/Base/SetBijectivity.i.verchk-tmp build/lib/Base/SetBijectivity.i.verchk
+( /usr/bin/time .dafny/dafny//Binaries/Dafny   /compile:0 /timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4 lib/Marshalling/Math.i.dfy ) 2>&1 | tee build/lib/Marshalling/Math.i.verchk-tmp
+*** Error: 'DAFNY_GLOBAL_FLAGS=/vcsCores:4': Filename extension '' is not supported. Input files must be Dafny programs (.dfy) or C# files (.cs) or managed DLLS (.dll)
+*** Error: 'DAFNY_GLOBAL_FLAGS=/vcsCores:4': Filename extension '' is not supported. Input files must be Dafny programs (.dfy) or C# files (.cs) or managed DLLS (.dll)
+Command exited with non-zero status 1
+0.13user 0.03system 0:00.20elapsed 86%CPU (0avgtext+0avgdata 52060maxresident)k
+0inputs+0outputs (0major+5261minor)pagefaults 0swaps
+mv build/lib/Math/bases.i.verchk-tmp build/lib/Math/bases.i.verchk
+Command exited with non-zero status 1
+0.18user 0.02system 0:00.22elapsed 88%CPU (0avgtext+0avgdata 52152maxresident)k
+0inputs+0outputs (0major+5317minor)pagefaults 0swaps
+mv build/lib/Lang/LinearBox.s.verchk-tmp build/lib/Lang/LinearBox.s.verchk
+*** Error: 'DAFNY_GLOBAL_FLAGS=/vcsCores:4': Filename extension '' is not supported. Input files must be Dafny programs (.dfy) or C# files (.cs) or managed DLLS (.dll)
+( /usr/bin/time .dafny/dafny//Binaries/Dafny   /compile:0 /timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4 lib/Base/MathAxioms.s.dfy ) 2>&1 | tee build/lib/Base/MathAxioms.s.verchk-tmp
+( /usr/bin/time .dafny/dafny//Binaries/Dafny   /compile:0 /timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4 BlockCacheSystem/AsyncSectorDiskModelTypes.i.dfy ) 2>&1 | tee build/BlockCacheSystem/AsyncSectorDiskModelTypes.i.verchk-tmp
+Command exited with non-zero status 1
+0.17user 0.02system 0:00.22elapsed 87%CPU (0avgtext+0avgdata 51992maxresident)k
+8inputs+0outputs (0major+5310minor)pagefaults 0swaps
+mv build/lib/Lang/Inout.i.verchk-tmp build/lib/Lang/Inout.i.verchk
+( /usr/bin/time .dafny/dafny//Binaries/Dafny   /compile:0 /timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4 lib/Checksums/Nonlinear.i.dfy ) 2>&1 | tee build/lib/Checksums/Nonlinear.i.verchk-tmp
+*** Error: 'DAFNY_GLOBAL_FLAGS=/vcsCores:4': Filename extension '' is not supported. Input files must be Dafny programs (.dfy) or C# files (.cs) or managed DLLS (.dll)
+Command exited with non-zero status 1
+0.16user 0.01system 0:00.19elapsed 93%CPU (0avgtext+0avgdata 52200maxresident)k
+0inputs+0outputs (0major+5260minor)pagefaults 0swaps
+mv build/lib/Marshalling/Maps.i.verchk-tmp build/lib/Marshalling/Maps.i.verchk
+( /usr/bin/time .dafny/dafny//Binaries/Dafny   /compile:0 /timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4 lib/Base/NativeBenchmarking.s.dfy ) 2>&1 | tee build/lib/Base/NativeBenchmarking.s.verchk-tmp
+*** Error: 'DAFNY_GLOBAL_FLAGS=/vcsCores:4': Filename extension '' is not supported. Input files must be Dafny programs (.dfy) or C# files (.cs) or managed DLLS (.dll)
+Command exited with non-zero status 1
+0.16user 0.01system 0:00.19elapsed 91%CPU (0avgtext+0avgdata 52156maxresident)k
+0inputs+0outputs (0major+5259minor)pagefaults 0swaps
+mv build/lib/Marshalling/Math.i.verchk-tmp build/lib/Marshalling/Math.i.verchk
+touch build/lib/Lang/NativeTypes.s.dummydep
+touch build/lib/Base/Option.s.dummydep
+touch build/lib/Lang/System/SeqComparison.s.dummydep
+touch build/lib/Base/KeyType.s.dummydep
+touch build/lib/Base/MapRemove.s.dummydep
+touch build/lib/Lang/System/Bits.s.dummydep
+touch build/lib/Base/Maps.i.dummydep
+touch build/lib/Base/sequences.i.dummydep
+*** Error: 'DAFNY_GLOBAL_FLAGS=/vcsCores:4': Filename extension '' is not supported. Input files must be Dafny programs (.dfy) or C# files (.cs) or managed DLLS (.dll)
+touch build/lib/Lang/LinearSequence.s.dummydep
+touch build/lib/Lang/System/NativeArrays.s.dummydep
+touch build/lib/Base/Multisets.i.dummydep
+Command exited with non-zero status 1
+0.15user 0.02system 0:00.19elapsed 91%CPU (0avgtext+0avgdata 51936maxresident)k
+0inputs+0outputs (0major+5255minor)pagefaults 0swaps
+mv build/lib/Base/MathAxioms.s.verchk-tmp build/lib/Base/MathAxioms.s.verchk
+touch build/PivotBetree/Bounds.i.dummydep
+touch build/lib/Base/LinearOption.i.dummydep
+touch build/lib/Lang/LinearSequence.i.dummydep
+touch build/lib/Lang/System/Arithmetic.s.dummydep
+touch build/lib/Math/bases.i.dummydep
+touch build/lib/Marshalling/Maps.i.dummydep
+touch build/lib/Marshalling/Seqs.i.dummydep
+touch build/lib/Marshalling/Math.i.dummydep
+touch build/lib/Lang/System/PackedInts.s.dummydep
+touch build/lib/Base/BitsetLemmas.i.dummydep
+touch build/lib/DataStructures/LinearDList.i.dummydep
+*** Error: 'DAFNY_GLOBAL_FLAGS=/vcsCores:4': Filename extension '' is not supported. Input files must be Dafny programs (.dfy) or C# files (.cs) or managed DLLS (.dll)
+touch build/BlockCacheSystem/DiskLayout.i.dummydep
+touch build/BlockCacheSystem/AsyncSectorDiskModelTypes.i.dummydep
+touch build/lib/DataStructures/LruModel.i.dummydep
+Command exited with non-zero status 1
+0.14user 0.02systouch build/lib/Base/PackedIntsLib.i.dummydep
+tem 0:00.19elapsed 87%CPU (0avgtext+0avgdata 52276maxresident)k
+0inputs+0outputs (0major+5266minor)pagefaults 0swaps
+mv build/lib/Checksums/Nonlinear.i.verchk-tmp build/lib/Checksums/Nonlinear.i.verchk
+touch build/lib/Checksums/MathLemmas.i.dummydep
+touch build/lib/Base/Arrays.i.dummydep
+*** Error: 'DAFNY_GLOBAL_FLAGS=/vcsCores:4': Filename extension '' is not supported. Input files must be Dafny programs (.dfy) or C# files (.cs) or managed DLLS (.dll)
+( /usr/bin/time .dafny/dafny//Binaries/Dafny   /compile:0 /timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4 lib/Base/DebugAccumulator.i.dfy ) 2>&1 | tee build/lib/Base/DebugAccumulator.i.verchk-tmp
+tools/aggregate-verchk.py verchk build/lib/Lang/NativeTypes.s.verchk tools/aggregate-verchk.py 2>&1 | tee build/lib/Lang/NativeTypes.s.verified-tmp; test ${PIPESTATUS[0]} -eq 0
+tools/aggregate-verchk.py verchk build/lib/Base/Option.s.verchk tools/aggregate-verchk.py 2>&1 | tee build/lib/Base/Option.s.verified-tmp; test ${PIPESTATUS[0]} -eq 0
+Command exited with non-zero status 1
+0.16user 0.02system 0:00.20elapsed 87%CPU (0avgtext+0avgdata 52220maxresident)k
+0inputs+0outputs (0major+5265minor)pagefaults 0swaps
+mv build/BlockCacheSystem/AsyncSectorDiskModelTypes.i.verchk-tmp build/BlockCacheSystem/AsyncSectorDiskModelTypes.i.verchk
+( /usr/bin/time .dafny/dafny//Binaries/Dafny   /compile:0 /timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4 lib/Lang/System/SeqComparison.s.dfy ) 2>&1 | tee build/lib/Lang/System/SeqComparison.s.verchk-tmp
+['build/lib/Base/Option.s.verchk']
+Traceback (most recent call last):
+  File "tools/aggregate-verchk.py", line 17, in <module>
+    main(reportType, inputs)
+  File "tools/aggregate-verchk.py", line 8, in main
+    summaries = [summarize(reportType, verchk) for verchk in verchks]
+  File "tools/aggregate-verchk.py", line 8, in <listcomp>
+    summaries = [summarize(reportType, verchk) for verchk in verchks]
+  File "/root/verichecks-worker/worker-dir/clones/c6280b1c7c32f8d3ef974a08b4e7b8ce42abad0e/tools/lib_aggregate.py", line 116, in summarize
+    condition = extractCondition(reportType, verchk, content)
+  File "/root/verichecks-worker/worker-dir/clones/c6280b1c7c32f8d3ef974a08b4e7b8ce42abad0e/tools/lib_aggregate.py", line 95, in extractCondition
+    raise Exception("build system error: couldn't summarize %s\n" % report)
+Exception: build system error: couldn't summarize build/lib/Base/Option.s.verchk
+
+['build/lib/Lang/NativeTypes.s.verchk']
+Traceback (most recent call last):
+  File "tools/aggregate-verchk.py", line 17, in <module>
+    main(reportType, inputs)
+  File "tools/aggregate-verchk.py", line 8, in main
+    summaries = [summarize(reportType, verchk) for verchk in verchks]
+  File "tools/aggregate-verchk.py", line 8, in <listcomp>
+    summaries = [summarize(reportType, verchk) for verchk in verchks]
+  File "/root/verichecks-worker/worker-dir/clones/c6280b1c7c32f8d3ef974a08b4e7b8ce42abad0e/tools/lib_aggregate.py", line 116, in summarize
+    condition = extractCondition(reportType, verchk, content)
+  File "/root/verichecks-worker/worker-dir/clones/c6280b1c7c32f8d3ef974a08b4e7b8ce42abad0e/tools/lib_aggregate.py", line 95, in extractCondition
+    raise Exception("build system error: couldn't summarize %s\n" % report)
+Exception: build system error: couldn't summarize build/lib/Lang/NativeTypes.s.verchk
+
+make: *** [Makefile:232: build/lib/Base/Option.s.verified] Error 1
+make: *** Waiting for unfinished jobs....
+make: *** [Makefile:232: build/lib/Lang/NativeTypes.s.verified] Error 1
+*** Error: 'DAFNY_GLOBAL_FLAGS=/vcsCores:4': Filename extension '' is not supported. Input files must be Dafny programs (.dfy) or C# files (.cs) or managed DLLS (.dll)
+Command exited with non-zero status 1
+0.15user 0.02system 0:00.19elapsed 92%CPU (0avgtext+0avgdata 52276maxresident)k
+0inputs+0outputs (0major+5265minor)pagefaults 0swaps
+mv build/lib/Base/NativeBenchmarking.s.verchk-tmp build/lib/Base/NativeBenchmarking.s.verchk
+*** Error: 'DAFNY_GLOBAL_FLAGS=/vcsCores:4': Filename extension '' is not supported. Input files must be Dafny programs (.dfy) or C# files (.cs) or managed DLLS (.dll)
+Command exited with non-zero status 1
+0.15user 0.02system 0:00.19elapsed 88%CPU (0avgtext+0avgdata 52164maxresident)k
+0inputs+0outputs (0major+5270minor)pagefaults 0swaps
+mv build/lib/Base/DebugAccumulator.i.verchk-tmp build/lib/Base/DebugAccumulator.i.verchk
+*** Error: 'DAFNY_GLOBAL_FLAGS=/vcsCores:4': Filename extension '' is not supported. Input files must be Dafny programs (.dfy) or C# files (.cs) or managed DLLS (.dll)
+Command exited with non-zero status 1
+0.16user 0.01system 0:00.20elapsed 84%CPU (0avgtext+0avgdata 52192maxresident)k
+0inputs+0outputs (0major+5272minor)pagefaults 0swaps
+mv build/lib/Lang/System/SeqComparison.s.verchk-tmp build/lib/Lang/System/SeqComparison.s.verchk
