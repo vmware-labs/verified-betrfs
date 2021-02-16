@@ -1,2 +1,2 @@
 #!/bin/bash
-dafny /z3opt:smt.qi.profile=true /z3opt:smt.qi.profile_freq=100 /timeLimit:20 "$@"
+dafny /proverOpt:O:smt.qi.profile=true /proverOpt:O:smt.qi.profile_freq=100 /timeLimit:20 "$@"
