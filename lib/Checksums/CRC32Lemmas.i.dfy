@@ -264,6 +264,24 @@ module CRC32_C_Lemmas {
     }
   }
 
+  lemma bits_of_bytes_additive4(r: seq<byte>, s: seq<byte>, t: seq<byte>, u: seq<byte>)
+  ensures bits_of_bytes(r + s + t + u)
+      == bits_of_bytes(r) + bits_of_bytes(s) + bits_of_bytes(t) + bits_of_bytes(u)
+  {
+    calc {
+      bits_of_bytes(r + s + t + u);
+      { assert r + s + t + u == (r + s) + (t + u); }
+      bits_of_bytes((r + s) + (t + u));
+      { bits_of_bytes_additive(r + s, t + u); }
+      bits_of_bytes(r + s) + bits_of_bytes(t + u);
+      {
+        bits_of_bytes_additive(r, s);
+        bits_of_bytes_additive(t, u);
+      }
+      bits_of_bytes(r) + bits_of_bytes(s) + bits_of_bytes(t) + bits_of_bytes(u);
+    }
+  }
+
   lemma advances_bytes_transitive(s: seq<byte>,
       i1: int, acc1: uint32,
       i2: int, acc2: uint32,
@@ -1180,7 +1198,16 @@ module CRC32_C_Lemmas {
         )
       ));
       {
-        assume r+s+t+u == bits_of_bytes(data[start..i]);
+        bits_of_bytes_additive4(
+            data[start .. i - 16 * n],
+            data[i - 16 * n .. i - 8 * n],
+            data[i - 8 * n .. i - 8],
+            data[i - 8 .. i]);
+        assert data[start .. i - 16 * n]
+            + data[i - 16 * n .. i - 8 * n]
+            + data[i - 8 * n .. i - 8]
+            + data[i - 8 .. i] == data[start..i];
+        assert r+s+t+u == bits_of_bytes(data[start..i]);
         reveal_advance();
       }
       advance(prev, bits_of_bytes(data[start..i]));
