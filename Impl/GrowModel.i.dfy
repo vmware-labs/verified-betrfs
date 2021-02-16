@@ -22,9 +22,9 @@ module GrowModel {
   import opened NativeTypes
 
   /// The root was found to be too big: grow
-  function {:opaque} grow(s: BCVariables)
-  : (BCVariables)
-  requires BCInv(s)
+  function {:opaque} grow(s: BBC.Variables)
+  : (BBC.Variables)
+  requires BBC.Inv(s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
   requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
@@ -33,7 +33,10 @@ module GrowModel {
 
     if (
       && s.frozenIndirectionTable.Some?
-      && s.frozenIndirectionTable.value.hasEmptyLoc(BT.G.Root())
+      && var table := s.frozenIndirectionTable.value;
+      && BT.G.Root() in table.graph
+      && BT.G.Root() !in table.locs
+      // s.frozenIndirectionTable.value.hasEmptyLoc(BT.G.Root())
     ) then (
       s
     ) else (
@@ -59,12 +62,12 @@ module GrowModel {
     )
   }
 
-  lemma growCorrect(s: BCVariables)
+  lemma growCorrect(s: BBC.Variables)
   requires grow.requires(s)
-  requires TotalCacheSize(s) <= MaxCacheSize() - 1
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r < s.ephemeralIndirectionTable.refUpperBound
+  requires s.totalCacheSize() <= MaxCacheSize() - 1
   ensures var s' := grow(s);
-    && WFBCVars(s')
-    && betree_next(IBlockCache(s), IBlockCache(s'))
+    && betree_next(s, s')
   {
     reveal_grow();
 
@@ -74,15 +77,17 @@ module GrowModel {
 
     if (
       && s.frozenIndirectionTable.Some?
-      && s.frozenIndirectionTable.value.hasEmptyLoc(BT.G.Root())
+      && var table := s.frozenIndirectionTable.value;
+      && BT.G.Root() in table.graph
+      && BT.G.Root() !in table.locs
     ) {
-      assert noop(IBlockCache(s), IBlockCache(s));
+      assert noop(s, s);
       return;
     }
 
     var oldroot := s.cache[BT.G.Root()];
     if !ContainsAllKeys(oldroot.pivotTable) {
-      assert noop(IBlockCache(s), IBlockCache(s));
+      assert noop(s, s);
       return;
     }
 
@@ -92,7 +97,7 @@ module GrowModel {
 
     match newref {
       case None => {
-        assert noop(IBlockCache(s), IBlockCache(s1));
+        assert noop(s, s);
       }
       case Some(newref) => {
         var newroot := BT.G.Node(InitPivotTable(), Some([newref]), [B(map[])]);
@@ -113,9 +118,9 @@ module GrowModel {
         assert INode(newroot) == BT.G.Node(InitPivotTable(), Some([growth.newchildref]), [B(map[])]);
         var step := BT.BetreeGrow(growth);
         assert BT.ValidGrow(growth);
-        BC.MakeTransaction2(IBlockCache(s), IBlockCache(s1), IBlockCache(s'), BT.BetreeStepOps(step));
-        assert BBC.BetreeMove(IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, AdvanceOp(UI.NoOp, true), step);
-        assert stepsBetree(IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), step);
+        BC.MakeTransaction2(s, s1, s', BT.BetreeStepOps(step));
+        assert BBC.BetreeMove(s, s', BlockDisk.NoDiskOp, AdvanceOp(UI.NoOp, true), step);
+        assert stepsBetree(s, s', AdvanceOp(UI.NoOp, true), step);
       }
     }
   }
