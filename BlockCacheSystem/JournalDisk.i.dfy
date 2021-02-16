@@ -1,12 +1,8 @@
-include "../MapSpec/MapSpec.s.dfy"
 include "../lib/Base/Maps.i.dfy"
-include "../PivotBetree/Bounds.i.dfy"
 include "DiskLayout.i.dfy"
 include "SectorType.i.dfy"
 include "JournalInterval.i.dfy"
-include "AsyncSectorDiskModelTypes.i.dfy"
 
-// A disk, processing stuff in its queue, doing its thing.
 module JournalDisk {
   import opened NativeTypes
   import opened Maps

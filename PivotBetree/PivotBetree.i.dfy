@@ -19,6 +19,10 @@ include "PivotBetreeSpecRefinement.i.dfy"
 // concrete (pivot-y) type.
 //
 
+module PivotBetreeBlockInterface refines BlockInterface {
+  import G = PivotBetreeGraph
+}
+
 module PivotBetree refines UIStateMachine {
   import opened PivotBetreeSpec`Internal
 

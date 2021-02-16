@@ -1,27 +1,22 @@
-include "../MapSpec/MapSpec.s.dfy"
 include "../lib/Base/Maps.i.dfy"
-include "../PivotBetree/Bounds.i.dfy"
 include "../Versions/VOp.i.dfy"
 include "DiskLayout.i.dfy"
 include "SectorType.i.dfy"
-include "AsyncSectorDiskModelTypes.i.dfy"
 
 //
 // An AsyncSectorDiskModel allows concurrent outstanding I/Os to a disk where each "sector"
 // is some higher-level Node datatype. A later refinement step shows how to marshall and align
 // these Nodes to the byte-ranges of the (trusted) AsyncDiskModel.
 //
-// TODO disallow concurrent spatially-overlapping writes/reads
 
-// A disk, processing stuff in its queue, doing its thing.
 module BlockDisk {
   import opened NativeTypes
   import opened Maps
   import opened Options
   import opened DiskLayout
-  import opened SectorType
   import opened PivotBetreeGraph
   import opened Sequences
+  import opened SectorType
 
   type ReqId = uint64
 

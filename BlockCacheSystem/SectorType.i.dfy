@@ -1,11 +1,8 @@
-include "JournalRange.i.dfy"
 include "DiskLayout.i.dfy"
-include "../PivotBetree/PivotBetreeSpec.i.dfy"
+include "../PivotBetree/PivotBetreeGraph.i.dfy"
 
 module SectorType {
   import opened NativeTypes
-  import opened Journal
-  import opened JournalRanges
   import opened DiskLayout
   import opened PivotBetreeGraph
 

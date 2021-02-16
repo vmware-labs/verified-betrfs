@@ -1,55 +1,21 @@
-include "../Betree/BlockInterface.i.dfy"  
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Maps.i.dfy"
 include "../MapSpec/MapSpec.s.dfy"
-include "../Betree/Graph.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Message.i.dfy"
-include "../Betree/BetreeSpec.i.dfy"
-include "../Betree/Betree.i.dfy"
 include "../lib/Buckets/BoundedPivotsLib.i.dfy"
 include "../lib/Buckets/BucketsLib.i.dfy"
 include "../lib/Buckets/BucketMap.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 include "../lib/Buckets/BucketWeights.i.dfy"
 include "../lib/Buckets/BucketFlushModel.i.dfy"
+include "PivotBetreeGraph.i.dfy"
+
 //
 // A PivotBetree refines a Betree, carrying forward the tree structure
 // but refining the abstract infinite key maps with key ranges separated
 // by pivot keys.
 //
-
-module PivotBetreeGraph refines Graph {
-  import BG = BetreeGraph
-
-  import MS = MapSpec
-  import opened Options
-  import opened ValueMessage
-  import opened KeyType
-  import opened BucketsLib
-  import opened BoundedPivotsLib
-
-  import Keyspace = Lexicographic_Byte_Order
-  import KeyspaceImpl = Lexicographic_Byte_Order_Impl
-
-  datatype Node = Node(
-      pivotTable: PivotTable,
-      children: Option<seq<Reference>>,
-      buckets: seq<Bucket>)
-
-  function Successors(node: Node) : iset<Reference>
-  {
-    if node.children.Some? then (
-      iset i | 0 <= i < |node.children.value| :: node.children.value[i]
-    ) else (
-      iset{}
-    )
-  }
-}
-
-module PivotBetreeBlockInterface refines BlockInterface {
-  import G = PivotBetreeGraph
-}
 
 module PivotBetreeSpec {
   import MS = MapSpec
@@ -68,7 +34,7 @@ module PivotBetreeSpec {
   import opened BucketMaps
   import Upperbounded_Lexicographic_Byte_Order
 
-  export Spec provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, BetreeStepUI, G, WFNode, InvNode
+  export Spec provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, BetreeStepUI, G, WFNode, InvNode, MS
   export Internal reveals *
 
   export extends Spec // Default export-style is Spec
