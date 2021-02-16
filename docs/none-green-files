@@ -1,40 +1,40 @@
-BlockCacheSystem
+BlockCacheSystem 
     BlockJournalCache.i.dfy timeout (ok with 120 TL)
     BlockSystem.i.dfy timeout (ok with 120 TL)
 
-PivotBetree
+PivotBetree [Jialin]
     StatesViewPivotBetree_Refines_StatesViewMap.i.dfy timeout (ok with 120 TL)
     PivotBetreeSpecRefinement.i.dfy timeout
 
-Versions
+Versions [Travis]
     CompositeView.i.dfy timeout
 
-Betree
-    Betree_Refines_Map.i.dfy timeout
+Betree [Jialin]
+    Betree_Refines_Map.i.dfy timeout 
     BetreeInv.i.dfy timeout
 
-lib/Base
+lib/Base [Bryan]
     BitsetLemmas.i.dfy timeout
 
 lib/DataStructures
-    LinearDList.i.dfy failure
-    BtreeModel.i.dfy assume
-    KMBtree.i.dfy timeout
+    LinearDList.i.dfy failure [Chris fixed]
+    BtreeModel.i.dfy assume [Jack]
+    KMBtree.i.dfy timeout [Jack]
     LinearContentMutableMap.i.dfy timeout (ok with 120 TL)
     LinearMutableMapBase.i.dfy timeout (ok with 120 TL)
 
 lib/Buckets
-    LKMBPKVOps.i.dfy assume
+    LKMBPKVOps.i.dfy assume [Travis]
     PackedKV.i.dfy timeout (ok with 120 TL)
     BucketModel.i.dfy timeout (ok with 120 TL)
-    PackedStringArray.i.dfy failure
-    BucketWeights.i.dfy failure
+    PackedStringArray.i.dfy failure [Andrea]
+    BucketWeights.i.dfy failure [Travis]
 
 ByteBlockCacheSystem
     ByteSystem.i.dfy timeout
     InterpretationDisk.i.dfy timeout
 
-lib/Crypto
+lib/Crypto [Travis]
     CRC32Lemmas.i.dfy assume
     CRC32LutLemma.i.dfy assume
     F2_X_Lemmas.i.dfy assume
@@ -46,7 +46,7 @@ Impl
     FlushImpl.i.dfy timeout (ok with 120 TL)
     DeallocImpl.i.dfy timeout (ok with 120 TL)
     BucketGeneratorModel.i.dfy timeout
-    SyncModel.i.dfy timeout
+    SyncModel.i.dfy timeout [Yi]
     FlushModel.i.dfy timeout (ok with 120 TL)
     SplitModel.i.dfy timeout (ok with 120 TL)
     DeallocModel.i.dfy timeout (ok with 120 TL)
