@@ -127,7 +127,8 @@ status: build/deps build/Impl/Bundle.i.status.pdf
 
 # Longer time-limit for CI
 .PHONY: verichecks-status
-verichecks-status: TIMELIMIT=/timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4
+verichecks-status: TIMELIMIT=/timeLimit:60
+verichecks-status: DAFNY_GLOBAL_FLAGS=/vcsCores:4
 verichecks-status: build/deps build/Impl/Bundle.i.status.pdf
 
 .PHONY: syntax-status
