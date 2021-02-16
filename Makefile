@@ -8,6 +8,7 @@ DAFNY_ROOT?=.dafny/dafny/
 DAFNY_CMD=$(DAFNY_ROOT)/Binaries/Dafny
 DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
 DAFNY_FLAGS=
+DAFNY_GLOBAL_FLAGS=
 
 ifndef TL
 	TL=20
@@ -126,7 +127,7 @@ status: build/deps build/Impl/Bundle.i.status.pdf
 
 # Longer time-limit for CI
 .PHONY: verichecks-status
-verichecks-status: TIMELIMIT=/timeLimit:120
+verichecks-status: TIMELIMIT=/timeLimit:60 DAFNY_GLOBAL_FLAGS=/vcsCores:4
 verichecks-status: build/deps build/Impl/Bundle.i.status.pdf
 
 .PHONY: syntax-status
@@ -196,7 +197,7 @@ build/%.synchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 # .verchk: Dafny file-local verification
 build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.verchk,%.verchk-tmp,$@))
-	( $(TIME) $(DAFNY_CMD) $(DAFNY_FLAGS) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
+	( $(TIME) $(DAFNY_CMD) $(DAFNY_GLOBAL_FLAGS) $(DAFNY_FLAGS) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
 
 build/lib/Buckets/BucketLib.i.verchk: DAFNY_FLAGS=/noNLarith
