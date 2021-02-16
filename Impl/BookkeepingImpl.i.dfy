@@ -37,14 +37,17 @@ module BookkeepingImpl {
   ensures forall ref1 | ref1 in s.cache.I() :: Some(ref1) != ref
 
   ensures var gs := s.IBlockCache2();
-    && (forall r | r in gs.ephemeralIndirectionTable.graph :: r < gs.ephemeralIndirectionTable.refUpperBound)
+    && (forall r | r in gs.ephemeralIndirectionTable.graph :: r <= gs.ephemeralIndirectionTable.refUpperBound)
     && ref == BookkeepingModel.getFreeRef(gs);
   {
     BookkeepingModel.reveal_getFreeRef();
 
     ghost var getable := s.IBlockCache2().ephemeralIndirectionTable;
 
-    assume forall r | r in getable.graph :: r < getable.refUpperBound;
+    assert forall r | r in getable.graph :: r <= getable.refUpperBound by {
+      s.ephemeralIndirectionTable.UpperBounded();
+      assert forall r | r in s.ephemeralIndirectionTable.graph :: r <= s.ephemeralIndirectionTable.refUpperBound;
+    }
 
     var i := s.ephemeralIndirectionTable.GetRefUpperBound();
     if i == 0xffff_ffff_ffff_ffff {

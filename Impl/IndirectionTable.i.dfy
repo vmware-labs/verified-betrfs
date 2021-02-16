@@ -183,6 +183,12 @@ module IndirectionTable {
         )
     }
 
+    lemma UpperBounded()
+    requires Inv()
+    ensures (forall ref | ref in this.graph :: ref <= this.refUpperBound)
+    {
+    }
+
     static method Alloc(loc: Location) returns (linear r: IndirectionTable)
     ensures r.Inv()
     ensures r.graph == map[BT.G.Root() := []]

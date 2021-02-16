@@ -52,7 +52,7 @@ module BookkeepingModel {
   function {:opaque} getFreeRef(s: BBC.Variables)
   : (ref : Option<BT.G.Reference>)
   requires s.Ready?
-  requires forall r | r in s.ephemeralIndirectionTable.graph :: r < s.ephemeralIndirectionTable.refUpperBound
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= s.ephemeralIndirectionTable.refUpperBound
   ensures ref.Some? ==> RefAvailable(s, ref.value)
   {
     var i := s.ephemeralIndirectionTable.refUpperBound;
@@ -168,7 +168,8 @@ module BookkeepingModel {
   : (p: (BBC.Variables, Option<Reference>))
   requires WriteAllocConditions(s)
   requires ChildrenConditions(s, children)
-  requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
+  // requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= s.ephemeralIndirectionTable.refUpperBound
 
   ensures var (s', id) := p;
     && s'.Ready?
@@ -617,6 +618,7 @@ module BookkeepingModel {
       s: BBC.Variables, children: Option<seq<BT.G.Reference>>)
   requires WriteAllocConditions(s)
   requires ChildrenConditions(s, children)
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= s.ephemeralIndirectionTable.refUpperBound
   // requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
   ensures var (s1, newref) := allocBookkeeping(s, children);
     newref.Some? ==> ChildrenConditions(s1, Some([newref.value]))

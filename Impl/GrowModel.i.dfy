@@ -44,6 +44,8 @@ module GrowModel {
       if !ContainsAllKeys(oldroot.pivotTable) then (
         s
       ) else (
+        assume forall r | r in s.ephemeralIndirectionTable.graph :: r < s.ephemeralIndirectionTable.refUpperBound;
+
         var (s1, newref) := allocBookkeeping(s, oldroot.children);
         lemmaChildrenConditionsSingleOfAllocBookkeeping(s, oldroot.children);
 

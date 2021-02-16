@@ -28,6 +28,8 @@ module GrowImpl {
   method grow(linear inout s: ImplVariables)
   requires old_s.BCInv()
   requires old_s.Ready?
+  // requires (forall r | r in old_s.ephemeralIndirectionTable.graph :: r <= old_s.ephemeralIndirectionTable.refUpperBound)
+
   requires BT.G.Root() in old_s.IBlockCache().cache
   requires |old_s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
   ensures s.WFBCVars()
@@ -53,17 +55,14 @@ module GrowImpl {
       var containsall := ComputeContainsAllKeys(oldpivots);
       if !containsall {
         print "giving up; grow can't run because root node is incorrect";
-        
-        assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
-        assert IOModel.betree_next(old_s.IBlockCache(), s.IBlockCache());
+        assert old_s.IBlockCache() == s.IBlockCache();
       } else {
-        BookkeepingModel.lemmaChildrenConditionsSingleOfAllocBookkeeping(s.IBlockCache(), oldchildren);
+        // BookkeepingModel.lemmaChildrenConditionsSingleOfAllocBookkeeping(s.IBlockCache(), oldchildren);
         var newref := allocBookkeeping(inout s, oldchildren);
         match newref {
           case None => {
             print "giving up; could not allocate ref\n";
-
-            assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
+            assert old_s.IBlockCache() == s.IBlockCache();
           }
           case Some(newref) => {
             // assert BookkeepingModel.ChildrenConditions(s.IBlockCache2(), Some([newref]));
@@ -92,7 +91,6 @@ module GrowImpl {
       }
     } else {
       assert old_s.IBlockCache() == s.IBlockCache();
-      assert IOModel.betree_next(old_s.IBlockCache(), s.IBlockCache());
     }
   }
 }
