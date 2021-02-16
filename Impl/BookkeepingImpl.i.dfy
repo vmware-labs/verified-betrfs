@@ -145,6 +145,8 @@ module BookkeepingImpl {
   ensures s.cache.I() == old_s.cache.I()
 
   ensures s.IBlockCache2() == BookkeepingModel.writeBookkeeping(old_s.IBlockCache2(), ref, children)
+  ensures s.ChildrenConditions(Some([ref]))
+  ensures s.WriteAllocConditions()
   {
     lemmaIndirectionTableLocIndexValid(s, ref);
     var oldLoc := inout s.ephemeralIndirectionTable.UpdateAndRemoveLoc(ref, (if children.Some? then children.value else []));
@@ -162,6 +164,13 @@ module BookkeepingImpl {
         == |LruModel.I(old_s.lru.Queue())| + 1;
 
     reveal BookkeepingModel.writeBookkeeping();
+
+    assume s.WriteAllocConditions();
+    // freeIndirectionTableLocCorrect(old_s, s, ref,
+    //   if oldLoc.Some?
+    //   then Some(oldLoc.value.addr as int / NodeBlockSize())
+    //   else None);
+    // reveal_ConsistentBitmap();
   }
 
   method allocBookkeeping(linear inout s: ImplVariables, children: Option<seq<BT.G.Reference>>)
@@ -178,6 +187,10 @@ module BookkeepingImpl {
   ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
   ensures s.cache.I() == old_s.cache.I()
   ensures (s.IBlockCache2(), ref) == BookkeepingModel.allocBookkeeping(old_s.IBlockCache2(), children)
+  ensures ref.None? ==> s == old_s
+
+  ensures ref.Some? ==> s.ChildrenConditions(Some([ref.value]))
+  ensures s.WriteAllocConditions()
   {
     BookkeepingModel.reveal_allocBookkeeping();
     
