@@ -404,7 +404,41 @@ module MapSeqs {
       && multiset(m.Keys) == multiset(keys)
       && Multisets.ValueMultiset(m) == multiset(msgs)
   {
-    assume false; // TODO
+    if |keys| == 0 {
+    } else {
+      var keys' := DropLast(keys);
+      var msgs' := DropLast(msgs);
+      var key := Last(keys);
+      var msg := Last(msgs);
+      var m := map_of_seqs(keys, msgs);
+      var m' := map_of_seqs(DropLast(keys), DropLast(msgs));
+      assert key !in m' by {
+        lemma_maxkey_not_in_map_of_seqs_drop_last(keys, msgs);
+      }
+      calc {
+        multiset(m.Keys);
+        multiset(m'.Keys) + multiset{key};
+        {
+          reveal_IsStrictlySorted();
+          lemma_multisets_eq(keys', msgs');
+        }
+        multiset(keys') + multiset{key};
+        { assert keys == keys' + [key]; }
+        multiset(keys);
+      }
+      calc {
+        Multisets.ValueMultiset(m);
+        { Multisets.ValueMultisetInduct(m', key, msg); }
+        Multisets.ValueMultiset(m') + multiset{msg};
+        {
+          reveal_IsStrictlySorted();
+          lemma_multisets_eq(keys', msgs');
+        }
+        multiset(msgs') + multiset{msg};
+        { assert msgs == msgs' + [msg]; }
+        multiset(msgs);
+      }
+    }
   }
 
   lemma lemma_multisets_le(keys: seq<Key>, msgs: seq<Message>)
@@ -413,7 +447,54 @@ module MapSeqs {
       && multiset(m.Keys) <= multiset(keys)
       && Multisets.ValueMultiset(m) <= multiset(msgs)
   {
-    assume false; // TODO
+    if |keys| == 0 {
+    } else {
+      var keys' := DropLast(keys);
+      var msgs' := DropLast(msgs);
+      var key := Last(keys);
+      var msg := Last(msgs);
+      var m := map_of_seqs(keys, msgs);
+      var m' := map_of_seqs(DropLast(keys), DropLast(msgs));
+      var m1 := MapRemove1(m, key);
+      calc {
+        multiset(m.Keys);
+        multiset(m1.Keys) + multiset{key}; <=
+        multiset(m'.Keys) + multiset{key}; <=
+        {
+          reveal_IsStrictlySorted();
+          lemma_multisets_le(keys', msgs');
+        }
+        multiset(keys') + multiset{key};
+        { assert keys == keys' + [key]; }
+        multiset(keys);
+      }
+      calc {
+        Multisets.ValueMultiset(m);
+        {
+          assert m == m1[key := msg];
+          Multisets.ValueMultisetInduct(m1, key, msg);
+        }
+        Multisets.ValueMultiset(m1) + multiset{msg}; <=
+        {
+          if key in m' {
+            Multisets.ValueMultisetInduct(m1, key, m'[key]);
+            assert m' == m1[key := m'[key]];
+            assert Multisets.ValueMultiset(m1) <= Multisets.ValueMultiset(m');
+          } else {
+            assert m1 == m';
+            assert Multisets.ValueMultiset(m1) == Multisets.ValueMultiset(m');
+          }
+        }
+        Multisets.ValueMultiset(m') + multiset{msg}; <=
+        {
+          reveal_IsStrictlySorted();
+          lemma_multisets_le(keys', msgs');
+        }
+        multiset(msgs') + multiset{msg};
+        { assert msgs == msgs' + [msg]; }
+        multiset(msgs);
+      }
+    }
   }
 
   lemma empty_seqs_of_map()
