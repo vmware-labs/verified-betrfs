@@ -993,6 +993,7 @@ module IndirectionTable {
     ensures self.TrackingGarbage()
     ensures self.locs == MapRemove1(old_self.locs, ref)
     ensures self.graph == old_self.graph[ref := succs]
+    ensures self.refUpperBound == if ref > old_self.refUpperBound then ref else old_self.refUpperBound
     ensures (oldLoc.None? ==> ref !in old_self.locs)
     ensures (oldLoc.Some? ==> ref in old_self.locs && old_self.locs[ref] == oldLoc.value)
     /* TODO(andrea) ModelImpl */ ensures old_self.updateAndRemoveLoc(ref, succs) == (self, oldLoc)
