@@ -6,9 +6,6 @@ PivotBetree [Jialin]
     StatesViewPivotBetree_Refines_StatesViewMap.i.dfy timeout (ok with 120 TL)
     PivotBetreeSpecRefinement.i.dfy timeout
 
-Versions [Travis]
-    CompositeView.i.dfy timeout
-
 Betree [Jialin]
     Betree_Refines_Map.i.dfy timeout 
     BetreeInv.i.dfy timeout
@@ -33,11 +30,6 @@ lib/Buckets
 ByteBlockCacheSystem [Travis]
     ByteSystem.i.dfy timeout
     InterpretationDisk.i.dfy timeout
-
-lib/Crypto [Travis]
-    CRC32Lemmas.i.dfy assume
-    CRC32LutLemma.i.dfy assume
-    F2_X_Lemmas.i.dfy assume
 
 Impl
     FlushPolicyImpl.i.dfy timeout (ok with 120 TL)
