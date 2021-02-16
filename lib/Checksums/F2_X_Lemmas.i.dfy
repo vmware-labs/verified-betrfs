@@ -27,6 +27,8 @@ module F2_X_Lemmas {
   requires |a| == |b|
   requires 0 <= i <= |a|
   ensures xor(a[..i], b[..i]) == xor(a, b)[..i];
+  {
+  }
 
   lemma mod_xor(x: Bits, y: Bits)
   requires |x| == |y|
