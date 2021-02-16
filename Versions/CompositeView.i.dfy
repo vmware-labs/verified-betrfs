@@ -170,7 +170,7 @@ module CompositeView {
     }
   }
 
-  lemma FreezePreservesInv(s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
+  lemma {:fuel SM.Inv,0} FreezePreservesInv(s: Variables, s': Variables, vop: VOp, uiop: UI.Op)
   requires NextStep(s, s', vop, uiop)
   requires vop.FreezeOp?
   requires VOpAgreesUIOp(vop, uiop)
