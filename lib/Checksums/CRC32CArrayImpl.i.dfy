@@ -1,11 +1,10 @@
 include "CRC32C.s.dfy"
-include "CRC32Lemmas.i.dfy"
-include "CRC32Lut.i.dfy"
-include "CRC32LutLemma.i.dfy"
-include "CRC32C.s.dfy"
 include "../Lang/System/PackedInts.s.dfy"
 include "../Lang/System/NativeArrays.s.dfy"
 include "BitLemmas.i.dfy"
+include "CRC32C_Lemmas.i.dfy"
+include "CRC32C_Lut.i.dfy"
+include "CRC32C_PowDef.i.dfy"
 
 // Yeah this is basically a copy of CRC32_C_Impl but with seq replaced by array.
 // TODO if we use (linear) sequences everywhere instead of arrays we can remove this.
@@ -18,9 +17,9 @@ module CRC32_C_Array_Impl {
   import opened NativePackedInts
   import opened Bits_s
   import opened F2_X_s
-  import opened CRC32_C_Lemmas
-  import opened CRC32_C_Lut
-  import opened CRC32_C_Lut_Lemma
+  import opened CRC32C_Lemmas
+  import opened CRC32C_Lut
+  import opened CRC32C_PowDef
   import A = CRC32_C
   import opened CRC32_C`Internal
   import opened BitLemmas

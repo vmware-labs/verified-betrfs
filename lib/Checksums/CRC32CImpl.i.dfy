@@ -1,11 +1,10 @@
 include "CRC32C.s.dfy"
-include "CRC32Lemmas.i.dfy"
-include "CRC32Lut.i.dfy"
-include "CRC32LutLemma.i.dfy"
-include "CRC32C.s.dfy"
 include "../Lang/System/PackedInts.s.dfy"
 include "../Lang/System/NativeArrays.s.dfy"
 include "BitLemmas.i.dfy"
+include "CRC32C_Lemmas.i.dfy"
+include "CRC32C_Lut.i.dfy"
+include "CRC32C_PowDef.i.dfy"
 
 // Implementation of CRC32-C, using the 
 // using the _mm_crc32_u64 intrinsic, pipelined and proven
@@ -21,9 +20,9 @@ module CRC32_C_Impl {
   import opened NativePackedInts
   import opened Bits_s
   import opened F2_X_s
-  import opened CRC32_C_Lemmas
-  import opened CRC32_C_Lut
-  import opened CRC32_C_Lut_Lemma
+  import opened CRC32C_Lemmas
+  import opened CRC32C_Lut
+  import opened CRC32C_PowDef
   import A = CRC32_C
   import opened CRC32_C`Internal
   import opened BitLemmas

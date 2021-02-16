@@ -1,21 +1,22 @@
 include "../Lang/NativeTypes.s.dfy"
 include "../Lang/System/F2_X.s.dfy"
-//include "CRC32LutPowers.i.dfy"
-include "CRC32LutLemma.i.dfy"
-//include "CRC32LutBitUnrolling.i.dfy"
-include "CRC32Lemmas.i.dfy"
+include "CRC32C_PowDef.i.dfy"
+include "CRC32C_Lemmas.i.dfy"
 include "../Lang/LinearSequence.s.dfy"
+include "BitLemmas.i.dfy"
+include "F2_X_Lemmas.i.dfy"
 
-module CRC32_C_Lut {
-  export Spec provides lut, lut_entries, NativeTypes, Bits_s, F2_X_s, CRC32_C_Lut_Lemma
+module CRC32C_Lut {
+  export Spec provides lut, lut_entries, NativeTypes, Bits_s, F2_X_s, CRC32C_PowDef
   export extends Spec
 
   import opened NativeTypes
   import opened F2_X_s
   import opened Bits_s
-  import opened CRC32_C_Lut_Lemma
+  import opened CRC32C_PowDef
   import opened F2_X_Lemmas
-  import opened CRC32_C_Lemmas
+  import opened CRC32C_Lemmas
+  import opened BitLemmas
   import opened LinearSequence_s
   import Math
 
@@ -207,7 +208,7 @@ module CRC32_C_Lut {
   {
   }
 
-  function method compute_pow_mod_crc(
+  function method {:opaque} compute_pow_mod_crc(
       n: uint64, p: uint32,
       n': uint64) : (p': uint32)
   requires n >= 33
@@ -224,7 +225,7 @@ module CRC32_C_Lut {
     )
   }
 
-  function method compute_all_pow_mod_crc_iter(
+  function method {:opaque} compute_all_pow_mod_crc_iter(
       linear results: seq<uint32>,
       i: uint64) : (linear results': seq<uint32>)
   requires |results| == 512
@@ -245,7 +246,7 @@ module CRC32_C_Lut {
     )
   }
 
-  function method compute_all_pow_mod_crc() : (linear results': seq<uint32>)
+  function method {:opaque} compute_all_pow_mod_crc() : (linear results': seq<uint32>)
   ensures |results'| == 512
   ensures forall j:nat | 0 <= j < 512 ::
       bits_of_int(results'[j] as nat, 32) == pow_mod_crc(64*(j+1))
@@ -263,7 +264,7 @@ module CRC32_C_Lut {
     (b as uint64) * 0x1_0000_0000 + (a as uint64)
   }
 
-  function method compute_lut_iter(
+  function method {:opaque} compute_lut_iter(
       linear pmc: seq<uint32>,
       linear lut: seq<uint64>,
       i: uint64) : (linear lut': seq<uint64>)

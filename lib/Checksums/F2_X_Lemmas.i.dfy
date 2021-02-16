@@ -23,6 +23,11 @@ module F2_X_Lemmas {
     zeroes(n) + [true]
   }
 
+  lemma slice_xor(a: Bits, b: Bits, i: int)
+  requires |a| == |b|
+  requires 0 <= i <= |a|
+  ensures xor(a[..i], b[..i]) == xor(a, b)[..i];
+
   lemma mod_xor(x: Bits, y: Bits)
   requires |x| == |y|
   ensures mod(xor(x, y)) == xor(mod(x), mod(y))
@@ -44,7 +49,9 @@ module F2_X_Lemmas {
         mod(z);
         mod(z1');
         {
-          assert z1' == xor(x1', y1');
+          assert z1' == xor(x1', y1') by {
+            slice_xor(x1, y1, |x| - 1);
+          }
         }
         mod(xor(x1', y1'));
         {

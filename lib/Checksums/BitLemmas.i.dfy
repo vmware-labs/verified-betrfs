@@ -3,6 +3,8 @@ include "../Lang/System/F2_X.s.dfy"
 include "CRC32C.s.dfy"
 include "../Marshalling/Math.i.dfy"
 include "../Lang/System/PackedInts.s.dfy"
+include "Nonlinear.i.dfy"
+include "MathLemmas.i.dfy"
 
 module BitLemmas {
   import opened Bits_s
@@ -11,6 +13,28 @@ module BitLemmas {
   import opened NativeTypes
   import opened NativePackedInts
   import opened Math
+  import NonlinearLemmas
+  import MathLemmas
+
+  lemma bits_of_int_0(x: nat)
+  ensures bits_of_int(0, x) == zeroes(x)
+  {
+    if x > 0 {
+      calc {
+        bits_of_int(0, x);
+        [0 % 2 == 1] + bits_of_int(0 / 2, x-1);
+        [false] + bits_of_int(0, x-1);
+        { bits_of_int_0(x-1); }
+        zeroes(x);
+      }
+    } else {
+      calc {
+        bits_of_int(0, 0);
+        [];
+        zeroes(0);
+      }
+    }
+  }
 
   lemma bits_X_eq_bits_Y_plus_zeros(n: nat, x: nat, y: nat)
   requires 0 <= n < Math.power2(x)
@@ -21,6 +45,14 @@ module BitLemmas {
     if y == x {
     } else {
       if x == 0 {
+        calc {
+          bits_of_int(n, y);
+          {
+            assert n == 0; bits_of_int_0(y);
+          }
+          zeroes(y-x);
+          bits_of_int(n, x) + zeroes(y-x);
+        }
       } else {
         bits_X_eq_bits_Y_plus_zeros(n/2, x-1, y-1);
       }
@@ -134,6 +166,8 @@ module BitLemmas {
         }
         (if a[0] then 1 else 0) + 2 * (int_of_bits(a[1..]) + (power2(|a|-1) * int_of_bits(b)));
         int_of_bits(a) + 2 * (power2(|a|-1) * int_of_bits(b));
+        { NonlinearLemmas.mul_assoc(2, power2(|a|-1), int_of_bits(b)); }
+        int_of_bits(a) + (2 * power2(|a|-1)) * int_of_bits(b);
         { assert power2(|a|) == 2 * power2(|a|-1) by { reveal_power2(); } }
         int_of_bits(a) + power2(|a|) * int_of_bits(b);
       }
@@ -261,6 +295,7 @@ module BitLemmas {
   lemma int_of_bits_bits_of_int(s: int, n: nat)
   requires 0 <= s < power2(n)
   ensures int_of_bits(bits_of_int(s as int, n)) == s
+  decreases n
   {
     if n == 0 {
       assert power2(0) == 1 by { reveal_power2(); }
@@ -268,6 +303,7 @@ module BitLemmas {
     } else {
       calc {
         int_of_bits(bits_of_int(s, n));
+        { assert s / 2 >= 0; }
         int_of_bits([s % 2 == 1] + bits_of_int(s / 2, n-1));
         (if s % 2 == 1 then 1 else 0) + 2 * int_of_bits(bits_of_int(s / 2, n-1));
         {
@@ -341,5 +377,264 @@ module BitLemmas {
         byte_of_bits(m[16..24]),
         byte_of_bits(m[24..32])
       ], t);
+  }
+
+  /*lemma bits_of_int_unpack32(s: seq<byte>)
+  requires |s| == 8
+  ensures bits_of_int(unpack_LittleEndian_Uint32(s) as int, 64)
+       == bits_of_bytes(s);*/
+
+  lemma lemma_bits_of_int_split(x: int, a: int, b: int)
+  requires a >= 0
+  requires b >= 0
+  requires 0 <= x < power2(a + b)
+  ensures x % power2(a) >= 0
+  ensures x / power2(a) >= 0
+  ensures bits_of_int(x, a + b)
+      == bits_of_int(x % power2(a), a)
+       + bits_of_int(x / power2(a), b)
+  {
+    NonlinearLemmas.div_ge_0(x, power2(a));
+    NonlinearLemmas.mod_ge_0(x, power2(a));
+    if a == 0 {
+      calc {
+        bits_of_int(x, a + b);
+        bits_of_int(x, b);
+        {
+          assert power2(0) == 1 by { reveal_power2(); }
+          assert x / power2(a) == x;
+        }
+        bits_of_int(x / power2(a), b);
+        [] + bits_of_int(x / power2(a), b);
+        {
+          calc {
+            bits_of_int(x % power2(a), a);
+            [];
+          }
+        }
+        bits_of_int(x % power2(a), a) + bits_of_int(x / power2(a), b);
+      }
+    } else {
+      assert x / power2(a) >= 0;
+      calc {
+        bits_of_int(x, a + b);
+        [x % 2 == 1] + bits_of_int(x/2, a + b - 1);
+        {
+          assert x / 2 < power2(a - 1 + b) by { reveal_power2(); }
+          lemma_bits_of_int_split(x/2, a - 1, b);
+        }
+        [x % 2 == 1] + (bits_of_int((x/2) % power2(a-1), a-1) + bits_of_int((x/2) / power2(a-1), b));
+        {
+          calc {
+            bits_of_int((x/2) / power2(a-1), b);
+            {
+              calc {
+                (x/2) / power2(a-1);
+                { lemma_div_denominator(x, 2, power2(a-1)); }
+                x / (2 * power2(a-1));
+                {
+                  assert power2(a) == 2 * power2(a-1) by { reveal_power2(); }
+                }
+                x / power2(a);
+              }
+            }
+            bits_of_int(x / power2(a), b);
+          }
+        }
+        [x % 2 == 1] + (bits_of_int((x/2) % power2(a-1), a-1) + bits_of_int(x / power2(a), b));
+        ([x % 2 == 1] + bits_of_int((x/2) % power2(a-1), a-1)) + bits_of_int(x / power2(a), b);
+        {
+          calc {
+            [x % 2 == 1] + bits_of_int((x/2) % power2(a-1), a-1);
+            {
+              calc {
+                (x % power2(a)) % 2;
+                {
+                  assert power2(a) == power2(a-1) * 2 by { reveal_power2(); }
+                }
+                (x % (power2(a-1) * 2)) % 2;
+                {
+                  MathLemmas.mod_mod(x, power2(a-1), 2);
+                }
+                x % 2;
+              }
+            }
+            [(x % power2(a)) % 2 == 1] + bits_of_int((x/2) % power2(a-1), a-1);
+            {
+              calc {
+                (x/2) % power2(a-1);
+                {
+                  MathLemmas.div_mod(x, power2(a-1), 2);
+                }
+                (x % (power2(a-1) * 2)) / 2;
+                {
+                  assert (power2(a-1) * 2) == power2(a) by {reveal_power2();}
+                }
+                (x % power2(a)) / 2;
+              }
+            }
+            [(x % power2(a)) % 2 == 1] + bits_of_int((x % power2(a)) / 2, a-1);
+            bits_of_int(x % power2(a), a);
+          }
+        }
+        bits_of_int(x % power2(a), a) + bits_of_int(x / power2(a), b);
+      } 
+    }
+  }
+
+  lemma lemma_bits_of_int_64_split(x: int)
+  requires 0 <= x < 0x1_0000_0000_0000_0000
+  ensures bits_of_int(x, 64)
+      == bits_of_int(x % 0x1_0000_0000, 32)
+       + bits_of_int(x / 0x1_0000_0000, 32)
+  {
+    lemma_2toX();
+    lemma_bits_of_int_split(x, 32, 32);
+  }
+
+  lemma bits_of_int_0_1()
+  ensures bits_of_int(0,1) == [false]
+  {
+  }
+
+  lemma {:fuel bits_of_int,0} extend_bits_of_int(x: nat, a: nat)
+  requires 0 <= x < power2(a)
+  ensures bits_of_int(x, a + 1) == bits_of_int(x, a) + [false]
+  {
+    calc {
+      bits_of_int(x, a + 1);
+      {
+        assert x < power2(a + 1) by { reveal_power2(); }
+        lemma_bits_of_int_split(x, a, 1);
+      }
+      bits_of_int(x % power2(a), a) + bits_of_int(x / power2(a), 1);
+      {
+        NonlinearLemmas.a_mod_b_eq_a(x, power2(a));
+        assert x % power2(a) == x;
+      }
+      bits_of_int(x, a) + bits_of_int(x / power2(a), 1);
+      {
+        NonlinearLemmas.div_eq_0(x, power2(a));
+        assert x / power2(a) == 0;
+      }
+      bits_of_int(x, a) + bits_of_int(0, 1);
+      {
+        bits_of_int_0_1();
+      }
+      bits_of_int(x, a) + [false];
+    }
+  }
+
+
+  lemma bits_of_int_combine(x: nat, a: nat, y: nat, b: nat)
+  requires 0 <= x < power2(a)
+  requires 0 <= y < power2(b)
+  requires power2(a) * y >= 0
+  ensures bits_of_int(x, a) + bits_of_int(y, b)
+      == bits_of_int(x + power2(a) * y, a + b)
+  {
+    calc {
+      (x + power2(a) * y) / power2(a);
+      (power2(a) * y + x) / power2(a);
+      { lemma_div_multiples_vanish_fancy(y, x, power2(a)); }
+      y;
+    }
+
+    calc {
+      (x + power2(a) * y) % power2(a);
+      { NonlinearLemmas.div_mul_plus_mod(x + power2(a) * y, power2(a)); }
+      (x + power2(a) * y) - ( ((x + power2(a) * y) / power2(a)) ) * power2(a);
+      (x + power2(a) * y) - y * power2(a);
+      { NonlinearLemmas.mul_comm(y, power2(a)); }
+      x;
+    }
+
+    calc {
+      bits_of_int(x, a) + bits_of_int(y, b);
+      {
+      }
+      bits_of_int((x + power2(a) * y) % power2(a), a)
+        + bits_of_int(y, b);
+      {
+      }
+      bits_of_int((x + power2(a) * y) % power2(a), a)
+        + bits_of_int((x + power2(a) * y) / power2(a), b);
+      {
+        calc {
+          x + power2(a) * y; <
+          { NonlinearLemmas.mul_le_right(power2(a), y, power2(b) - 1); }
+          power2(a) + power2(a) * (power2(b) - 1);
+          { NonlinearLemmas.distributive_left_sub(power2(a), power2(b), 1); }
+          power2(a) + power2(a) * power2(b) - power2(a) * 1;
+          power2(a) * power2(b);
+          { lemma_power2_adds(a, b); }
+          power2(a + b);
+        }
+        lemma_bits_of_int_split(x + power2(a) * y, a, b);
+      }
+      bits_of_int(x + power2(a) * y, a + b);
+    }
+  }
+
+  lemma {:fuel bits_of_int,0} bits_of_int_unpack64(s: seq<byte>)
+  requires |s| == 8
+  ensures bits_of_int(unpack_LittleEndian_Uint64(s) as int, 64)
+       == bits_of_bytes(s);
+  {
+    lemma_2toX();
+    assert power2(40) == 0x100_0000_0000 by { reveal_power2(); }
+    assert power2(48) == 0x10000_0000_0000 by { reveal_power2(); }
+    assert power2(56) == 0x100_0000_0000_0000 by { reveal_power2(); }
+    calc {
+      bits_of_bytes(s);
+      bits_of_bytes(s[0..7]) + bits_of_int(s[7] as int, 8);
+      { assert s[0..7][0..6] == s[0..6]; }
+      bits_of_bytes(s[0..6]) + bits_of_int(s[6] as int, 8) + bits_of_int(s[7] as int, 8);
+      { assert s[0..6][0..5] == s[0..5]; }
+      bits_of_bytes(s[0..5]) + bits_of_int(s[5] as int, 8) + bits_of_int(s[6] as int, 8) + bits_of_int(s[7] as int, 8);
+      { assert s[0..5][0..4] == s[0..4]; }
+      bits_of_bytes(s[0..4]) + bits_of_int(s[4] as int, 8) + bits_of_int(s[5] as int, 8) + bits_of_int(s[6] as int, 8) + bits_of_int(s[7] as int, 8);
+      { assert s[0..4][0..3] == s[0..3]; }
+      bits_of_bytes(s[0..3]) + bits_of_int(s[3] as int, 8) + bits_of_int(s[4] as int, 8) + bits_of_int(s[5] as int, 8) + bits_of_int(s[6] as int, 8) + bits_of_int(s[7] as int, 8);
+      { assert s[0..3][0..2] == s[0..2]; }
+      bits_of_bytes(s[0..2]) + bits_of_int(s[2] as int, 8) + bits_of_int(s[3] as int, 8) + bits_of_int(s[4] as int, 8) + bits_of_int(s[5] as int, 8) + bits_of_int(s[6] as int, 8) + bits_of_int(s[7] as int, 8);
+      { assert s[0..2][0..1] == s[0..1]; }
+      bits_of_bytes(s[0..1]) + bits_of_int(s[1] as int, 8) + bits_of_int(s[2] as int, 8) + bits_of_int(s[3] as int, 8) + bits_of_int(s[4] as int, 8) + bits_of_int(s[5] as int, 8) + bits_of_int(s[6] as int, 8) + bits_of_int(s[7] as int, 8);
+      { assert s[0..1][0..0] == []; }
+      bits_of_bytes([]) + bits_of_int(s[0] as int, 8) + bits_of_int(s[1] as int, 8) + bits_of_int(s[2] as int, 8) + bits_of_int(s[3] as int, 8) + bits_of_int(s[4] as int, 8) + bits_of_int(s[5] as int, 8) + bits_of_int(s[6] as int, 8) + bits_of_int(s[7] as int, 8);
+      { assert bits_of_bytes([]) == []; }
+
+      bits_of_int(s[0] as int, 8) + bits_of_int(s[1] as int, 8) + bits_of_int(s[2] as int, 8) + bits_of_int(s[3] as int, 8) + bits_of_int(s[4] as int, 8) + bits_of_int(s[5] as int, 8) + bits_of_int(s[6] as int, 8) + bits_of_int(s[7] as int, 8);
+      {
+        bits_of_int_combine(s[0] as int, 8, s[1] as int, 8);
+      }
+      bits_of_int(s[0] as int + 0x100 * s[1] as int, 16) + bits_of_int(s[2] as int, 8) + bits_of_int(s[3] as int, 8) + bits_of_int(s[4] as int, 8) + bits_of_int(s[5] as int, 8) + bits_of_int(s[6] as int, 8) + bits_of_int(s[7] as int, 8);
+      {
+        bits_of_int_combine(s[0] as int + 0x100 * s[1] as int, 16, s[2] as int, 8);
+      }
+      bits_of_int(s[0] as int + 0x100 * s[1] as int + 0x100_00 * s[2] as int, 24) + bits_of_int(s[3] as int, 8) + bits_of_int(s[4] as int, 8) + bits_of_int(s[5] as int, 8) + bits_of_int(s[6] as int, 8) + bits_of_int(s[7] as int, 8);
+      {
+        bits_of_int_combine(s[0] as int + 0x100 * s[1] as int + 0x100_00 * s[2] as int, 24, s[3] as int, 8);
+      }
+      bits_of_int(s[0] as int + 0x100 * s[1] as int + 0x100_00 * s[2] as int + 0x100_00_00 * s[3] as int, 32) + bits_of_int(s[4] as int, 8) + bits_of_int(s[5] as int, 8) + bits_of_int(s[6] as int, 8) + bits_of_int(s[7] as int, 8);
+      {
+        bits_of_int_combine(s[0] as int + 0x100 * s[1] as int + 0x100_00 * s[2] as int + 0x100_00_00 * s[3] as int, 32, s[4] as int, 8);
+      }
+      bits_of_int(s[0] as int + 0x100 * s[1] as int + 0x100_00 * s[2] as int + 0x100_00_00 * s[3] as int + 0x100_00_00_00 * s[4] as int, 40) + bits_of_int(s[5] as int, 8) + bits_of_int(s[6] as int, 8) + bits_of_int(s[7] as int, 8);
+      {
+        bits_of_int_combine(s[0] as int + 0x100 * s[1] as int + 0x100_00 * s[2] as int + 0x100_00_00 * s[3] as int + 0x100_00_00_00 * s[4] as int, 40, s[5] as int, 8);
+      }
+      bits_of_int(s[0] as int + 0x100 * s[1] as int + 0x100_00 * s[2] as int + 0x100_00_00 * s[3] as int + 0x100_00_00_00 * s[4] as int + 0x100_00_00_00_00 * s[5] as int, 48) + bits_of_int(s[6] as int, 8) + bits_of_int(s[7] as int, 8);
+      {
+        bits_of_int_combine(s[0] as int + 0x100 * s[1] as int + 0x100_00 * s[2] as int + 0x100_00_00 * s[3] as int + 0x100_00_00_00 * s[4] as int + 0x100_00_00_00_00 * s[5] as int, 48, s[6] as int, 8);
+      }
+      bits_of_int(s[0] as int + 0x100 * s[1] as int + 0x100_00 * s[2] as int + 0x100_00_00 * s[3] as int + 0x100_00_00_00 * s[4] as int + 0x100_00_00_00_00 * s[5] as int + 0x100_00_00_00_00_00 * s[6] as int, 56) + bits_of_int(s[7] as int, 8);
+      {
+        bits_of_int_combine(s[0] as int + 0x100 * s[1] as int + 0x100_00 * s[2] as int + 0x100_00_00 * s[3] as int + 0x100_00_00_00 * s[4] as int + 0x100_00_00_00_00 * s[5] as int + 0x100_00_00_00_00_00 * s[6] as int, 56, s[7] as int, 8);
+      }
+      bits_of_int(s[0] as int + 0x100 * s[1] as int + 0x100_00 * s[2] as int + 0x100_00_00 * s[3] as int + 0x100_00_00_00 * s[4] as int + 0x100_00_00_00_00 * s[5] as int + 0x100_00_00_00_00_00 * s[6] as int + 0x100_00_00_00_00_00_00 * s[7] as int, 64);
+      { reveal_unpack_LittleEndian_Uint64(); }
+      bits_of_int(unpack_LittleEndian_Uint64(s) as int, 64);
+    }
   }
 }

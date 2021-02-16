@@ -1,16 +1,16 @@
 include "CRC32C.s.dfy"
 include "../Lang/System/PackedInts.s.dfy"
-include "CRC32LutLemma.i.dfy"
+include "CRC32C_PowDef.i.dfy"
 include "F2_X_Lemmas.i.dfy"
 include "BitLemmas.i.dfy"
 
-module CRC32_C_Lemmas {
+module CRC32C_Lemmas {
   import opened Bits_s
   import opened F2_X_s
   import opened NativeTypes
   import opened NativePackedInts
   import opened CRC32_C`Internal
-  import opened CRC32_C_Lut_Lemma
+  import opened CRC32C_PowDef
   import opened F2_X_Lemmas
   import BitLemmas
 
@@ -282,6 +282,16 @@ module CRC32_C_Lemmas {
     }
   }
 
+  lemma bits_of_bytes_additive4_slice(r: seq<byte>, a: int, b: int, c: int, d: int, e: int)
+  requires 0 <= a <= b <= c <= d <= e <= |r|
+  ensures bits_of_bytes(r[a..e])
+      == bits_of_bytes(r[a..b]) + bits_of_bytes(r[b..c]) + bits_of_bytes(r[c..d]) + bits_of_bytes(r[d..e])
+  {
+    assert r[a..b] + r[b..c] + r[c..d] + r[d..e] == r[a..e];
+    bits_of_bytes_additive4(r[a..b], r[b..c], r[c..d], r[d..e]);
+  }
+
+
   lemma advances_bytes_transitive(s: seq<byte>,
       i1: int, acc1: uint32,
       i2: int, acc2: uint32,
@@ -338,8 +348,7 @@ module CRC32_C_Lemmas {
     i, acc,
     i+8, acc')
   {
-    assume bits_of_int(unpack_LittleEndian_Uint64(s[i..i+8]) as int, 64)
-        == bits_of_bytes(s[i..i+8]);
+    BitLemmas.bits_of_int_unpack64(s[i..i+8]);
 
     calc {
       advance(bits_of_int(acc as int, 32), bits_of_bytes(s[i..i+8]));
@@ -1083,7 +1092,7 @@ module CRC32_C_Lemmas {
         )
       );
       {
-        assume u == bits_of_int(unpack_LittleEndian_Uint64(data[i-8 .. i]) as int, 64);
+        BitLemmas.bits_of_int_unpack64(data[i-8 .. i]);
       }
       mm_crc32_u64(
         bits_of_int(c as int, 32),
@@ -1097,7 +1106,7 @@ module CRC32_C_Lemmas {
       );
       {
         reveal_advance();
-        assume bits_of_int(0, 32) == zeroes(32);
+        BitLemmas.bits_of_int_0(32);
         assert bits_of_int(c as int, 32)
          == reverse(mod(
               xor(
@@ -1198,15 +1207,7 @@ module CRC32_C_Lemmas {
         )
       ));
       {
-        bits_of_bytes_additive4(
-            data[start .. i - 16 * n],
-            data[i - 16 * n .. i - 8 * n],
-            data[i - 8 * n .. i - 8],
-            data[i - 8 .. i]);
-        assert data[start .. i - 16 * n]
-            + data[i - 16 * n .. i - 8 * n]
-            + data[i - 8 * n .. i - 8]
-            + data[i - 8 .. i] == data[start..i];
+        bits_of_bytes_additive4_slice(data, start, i - 16 * n, i - 8 * n, i - 8, i);
         assert r+s+t+u == bits_of_bytes(data[start..i]);
         reveal_advance();
       }
