@@ -30,7 +30,7 @@ lib/Buckets
     PackedStringArray.i.dfy failure [Andrea]
     BucketWeights.i.dfy failure [Travis]
 
-ByteBlockCacheSystem
+ByteBlockCacheSystem [Travis]
     ByteSystem.i.dfy timeout
     InterpretationDisk.i.dfy timeout
 
