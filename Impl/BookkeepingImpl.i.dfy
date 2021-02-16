@@ -161,7 +161,7 @@ module BookkeepingImpl {
         <= |LruModel.I(old_s.lru.Queue())| + |{ref}|
         == |LruModel.I(old_s.lru.Queue())| + 1;
 
-    reveal BookkeepingModel.writeBookkeeping(); 
+    reveal BookkeepingModel.writeBookkeeping();
   }
 
   method allocBookkeeping(linear inout s: ImplVariables, children: Option<seq<BT.G.Reference>>)
@@ -175,7 +175,6 @@ module BookkeepingImpl {
   ensures s.Ready?
 
   ensures s.W()
-  // ensures (s.I(), ref) == BookkeepingModel.allocBookkeeping(old_s.I(), children)
   ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
   ensures s.cache.I() == old_s.cache.I()
   ensures (s.IBlockCache2(), ref) == BookkeepingModel.allocBookkeeping(old_s.IBlockCache2(), children)
@@ -218,7 +217,5 @@ module BookkeepingImpl {
         <= |LruModel.I(old_s.lru.Queue())| + |{ref}|
         == |LruModel.I(old_s.lru.Queue())| + 1;
   }
-
-
   */
 }
