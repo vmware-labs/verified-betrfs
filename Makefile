@@ -124,7 +124,12 @@ endef
 .PHONY: status
 status: build/deps build/Impl/Bundle.i.status.pdf
 
-.PHONY: faststatus
+# Longer time-limit for CI
+.PHONY: verichecks-status
+verichecks-status: TIMELIMIT=/timeLimit:120
+verichecks-status: build/deps build/Impl/Bundle.i.status.pdf
+
+.PHONY: syntax-status
 syntax-status: build/deps build/Impl/Bundle.i.syntax-status.pdf
 
 .PHONY: verify-ordered
