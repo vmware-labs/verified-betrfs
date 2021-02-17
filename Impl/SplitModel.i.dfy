@@ -38,9 +38,8 @@ module SplitModel {
     reveal_CutoffNodeAndKeepRight();
   }
 
-/*
   lemma lemmaChildrenConditionsSplitChild(
-      s: BCVariables, child: Node, num_children_left: int)
+      s: BBC.Variables, child: Node, num_children_left: int)
   requires SplitChildLeft.requires(child, num_children_left)
   requires SplitChildRight.requires(child, num_children_left)
   requires s.Ready?
@@ -63,6 +62,7 @@ module SplitModel {
   ensures BC.BlockPointsToValidReferences(BT.SplitChildRight(child, num_children_left), graph);
   {
   }
+/*
 
   lemma lemmaSplitParentValidReferences(fused_parent: BT.G.Node, pivot: Key, slot: int, left_childref: BT.G.Reference, right_childref: BT.G.Reference, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
   requires BT.WFNode(fused_parent)

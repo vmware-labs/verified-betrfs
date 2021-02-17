@@ -616,7 +616,6 @@ module BookkeepingModel {
       s: BBC.Variables, children: Option<seq<BT.G.Reference>>)
   requires WriteAllocConditions(s)
   requires ChildrenConditions(s, children)
-  // requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
   ensures var (s1, newref) := allocBookkeeping(s, children);
     newref.Some? ==> ChildrenConditions(s1, Some([newref.value]))
   {
@@ -625,14 +624,12 @@ module BookkeepingModel {
     //assert newref.value in s1.ephemeralIndirectionTable.graph;
   }
 
-/*
   lemma lemmaChildrenConditionsUpdateOfAllocBookkeeping(
-      s: BCVariables, children: Option<seq<BT.G.Reference>>,
+      s: BBC.Variables, children: Option<seq<BT.G.Reference>>,
           children1: seq<BT.G.Reference>, i: int)
   requires WriteAllocConditions(s)
   requires ChildrenConditions(s, children)
   requires ChildrenConditions(s, Some(children1))
-  requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
   requires 0 <= i < |children1|
   ensures var (s1, newref) := allocBookkeeping(s, children);
     newref.Some? ==> ChildrenConditions(s1, Some(children1[i := newref.value]))
@@ -642,12 +639,11 @@ module BookkeepingModel {
   }
 
   lemma lemmaChildrenConditionsPreservedWriteBookkeeping(
-      s: BCVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>,
+      s: BBC.Variables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>,
       children1: Option<seq<BT.G.Reference>>)
   requires WriteAllocConditions(s)
   requires ChildrenConditions(s, children)
   requires ChildrenConditions(s, children1)
-  requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
   ensures var s1 := writeBookkeeping(s, ref, children);
     ChildrenConditions(s1, children1)
   {
@@ -655,7 +651,7 @@ module BookkeepingModel {
   }
 
   lemma lemmaChildrenConditionsOfReplace1With2(
-      s: BCVariables,
+      s: BBC.Variables,
       children: seq<BT.G.Reference>,
       i: int, a: BT.G.Reference, b: BT.G.Reference)
   requires s.Ready?
@@ -669,25 +665,22 @@ module BookkeepingModel {
     reveal_replace1with2();
   }
 
-  lemma lemmaRefInGraphOfWriteBookkeeping(s: BCVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
+  lemma lemmaRefInGraphOfWriteBookkeeping(s: BBC.Variables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
   requires WriteAllocConditions(s)
   requires ChildrenConditions(s, children)
-  requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
   ensures var s1 := writeBookkeeping(s, ref, children);
     ref in s1.ephemeralIndirectionTable.graph
   {
     reveal_writeBookkeeping();
   }
 
-  lemma lemmaRefInGraphPreservedWriteBookkeeping(s: BCVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>, ref2: BT.G.Reference)
+  lemma lemmaRefInGraphPreservedWriteBookkeeping(s: BBC.Variables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>, ref2: BT.G.Reference)
   requires WriteAllocConditions(s)
   requires ChildrenConditions(s, children)
-  requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
   requires ref2 in s.ephemeralIndirectionTable.graph
   ensures var s1 := writeBookkeeping(s, ref, children);
     ref2 in s1.ephemeralIndirectionTable.graph
   {
     reveal_writeBookkeeping();
   }
-  */
 }
