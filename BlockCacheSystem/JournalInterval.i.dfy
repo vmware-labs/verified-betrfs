@@ -75,6 +75,22 @@ module JournalIntervals {
         journal'[i] == CyclicSpliceValue(journal, indices, newEntries, i))
   }
 
+  lemma ProveJournalUpdate(
+      journal: seq<Option<JournalBlock>>,
+      journal': seq<Option<JournalBlock>>,
+      indices: JournalInterval,
+      newEntries: seq<JournalBlock>)
+  requires ValidJournal(journal)
+  requires ValidJournal(journal')
+  requires ValidJournalInterval(indices)
+  requires indices.len == |newEntries|
+  requires (forall i | 0 <= i < |journal| ::
+      journal'[i] == CyclicSpliceValue(journal, indices, newEntries, i))
+  ensures JournalUpdate(journal, journal', indices, newEntries)
+  {
+    reveal_JournalUpdate();
+  }
+
   predicate InCyclicRange(i: int, indices: JournalInterval)
   {
     || (indices.start <= i < indices.start + indices.len)
