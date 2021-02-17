@@ -17,6 +17,7 @@ module IOModel {
   import opened DiskOpModel
   import opened NativeTypes
   import opened Options
+  import opened LinearOption
   import opened Maps
   import opened Bounds
   import opened BucketWeights
@@ -697,6 +698,8 @@ module IOModel {
       ==> s.blockAllocator.frozen.lSome?
   {
     reveal_ConsistentBitmap();
+    reveal s.blockAllocator.Inv();
+    reveal s.blockAllocator.I();
   }
 
   // function writeNodeResponse(s: BCVariables, io: IO)
