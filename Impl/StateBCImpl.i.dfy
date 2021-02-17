@@ -171,7 +171,7 @@ module StateBCImpl {
       && totalCacheSize() <= MaxCacheSize()
       && ephemeralIndirectionTable.TrackingGarbage()
       && BlockAllocatorModel.Inv(blockAllocator.I())
-      && ConsistentBitmap(ephemeralIndirectionTable.I(), frozenIndirectionTable. Map((x: IndirectionTable) => x.I()),
+      && ConsistentBitmap(ephemeralIndirectionTable.I(), if frozenIndirectionTable.lSome? then lSome(frozenIndirectionTable.value.I()) else lNone,
           persistentIndirectionTable.I(), outstandingBlockWrites, blockAllocator.I())
     }
 
@@ -182,28 +182,7 @@ module StateBCImpl {
     }
 
     function IBlockCache() : BBC.Variables
-    requires WFBCVars()
-    {
-      if Ready? then (
-        BC.Ready(persistentIndirectionTable.I(), 
-          if frozenIndirectionTable.lSome? then Some(frozenIndirectionTable.value.I()) else None,
-          ephemeralIndirectionTable.I(),
-          persistentIndirectionTableLoc,
-          frozenIndirectionTableLoc,
-          outstandingIndirectionTableWrite,
-          outstandingBlockWrites,
-          outstandingBlockReads,
-          ICache(cache.I()))
-      ) else if Loading? then (
-        BC.LoadingIndirectionTable(indirectionTableLoc, indirectionTableRead)
-      ) else (
-        BC.Unready
-      )
-    }
-
-    function IBlockCache2() : BBC.Variables
     requires W()
-    // requires Ready? ==> WFCache(cache.I())
     {
       if Ready? then (
         BC.Ready(persistentIndirectionTable.I(), 

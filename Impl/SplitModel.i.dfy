@@ -25,7 +25,7 @@ module SplitModel {
 
   import opened NativeTypes
 
-  lemma lemmaChildrenConditionsCutoffNode(s: BCVariables, 
+  lemma lemmaChildrenConditionsCutoffNode(s: BBC.Variables, 
       node: Node, lbound: Key, ubound: Option<Key>)
   requires BT.WFNode(node)
   requires s.Ready?
@@ -38,6 +38,7 @@ module SplitModel {
     reveal_CutoffNodeAndKeepRight();
   }
 
+/*
   lemma lemmaChildrenConditionsSplitChild(
       s: BCVariables, child: Node, num_children_left: int)
   requires SplitChildLeft.requires(child, num_children_left)
@@ -408,4 +409,5 @@ module SplitModel {
     BC.MakeTransaction3(IBlockCache(s), IBlockCache(s1), IBlockCache(s2), IBlockCache(s'), ops);
     assert stepsBetree(IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), step);
   }
+  */
 }

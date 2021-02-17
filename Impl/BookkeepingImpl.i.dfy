@@ -36,13 +36,13 @@ module BookkeepingImpl {
   ensures ref.Some? ==> RefAvailable(s, ref.value)
   ensures forall ref1 | ref1 in s.cache.I() :: Some(ref1) != ref
 
-  ensures var gs := s.IBlockCache2();
+  ensures var gs := s.IBlockCache();
     && (forall r | r in gs.ephemeralIndirectionTable.graph :: r <= gs.ephemeralIndirectionTable.refUpperBound)
     && ref == BookkeepingModel.getFreeRef(gs);
   {
     BookkeepingModel.reveal_getFreeRef();
 
-    ghost var getable := s.IBlockCache2().ephemeralIndirectionTable;
+    ghost var getable := s.IBlockCache().ephemeralIndirectionTable;
 
     assert forall r | r in getable.graph :: r <= getable.refUpperBound by {
       s.ephemeralIndirectionTable.UpperBounded();
@@ -59,8 +59,8 @@ module BookkeepingImpl {
     while true
     invariant i >= 1
     invariant forall r | r in s.ephemeralIndirectionTable.graph :: r < i
-    invariant BookkeepingModel.getFreeRefIterate(s.IBlockCache2(), i)
-           == BookkeepingModel.getFreeRef(s.IBlockCache2())
+    invariant BookkeepingModel.getFreeRefIterate(s.IBlockCache(), i)
+           == BookkeepingModel.getFreeRef(s.IBlockCache())
     decreases 0x1_0000_0000_0000_0000 - i as int
     {
       var cacheLookup := s.cache.InCache(i);
@@ -147,7 +147,7 @@ module BookkeepingImpl {
   ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
   ensures s.cache.I() == old_s.cache.I()
 
-  ensures s.IBlockCache2() == BookkeepingModel.writeBookkeeping(old_s.IBlockCache2(), ref, children)
+  ensures s.IBlockCache() == BookkeepingModel.writeBookkeeping(old_s.IBlockCache(), ref, children)
   ensures s.ChildrenConditions(Some([ref]))
   ensures s.WriteAllocConditions()
   {
@@ -189,7 +189,7 @@ module BookkeepingImpl {
   ensures s.W()
   ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
   ensures s.cache.I() == old_s.cache.I()
-  ensures (s.IBlockCache2(), ref) == BookkeepingModel.allocBookkeeping(old_s.IBlockCache2(), children)
+  ensures (s.IBlockCache(), ref) == BookkeepingModel.allocBookkeeping(old_s.IBlockCache(), children)
   ensures ref.None? ==> s == old_s
 
   ensures ref.Some? ==> s.ChildrenConditions(Some([ref.value]))

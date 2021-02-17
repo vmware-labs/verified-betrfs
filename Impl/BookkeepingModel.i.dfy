@@ -160,7 +160,6 @@ module BookkeepingModel {
       (refUpperBound := if ref > s.ephemeralIndirectionTable.refUpperBound then ref else s.ephemeralIndirectionTable.refUpperBound);
 
     var s' := s.(ephemeralIndirectionTable := eph);
-    assert s'.WriteAllocConditions();
     s'
   }
 

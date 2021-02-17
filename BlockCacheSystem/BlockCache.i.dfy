@@ -59,13 +59,24 @@ module BlockCache refines Transactable {
 
     | Unready
   {
-      predicate WriteAllocConditions()
-      {
-        && Ready?
-        && (forall loc | loc in ephemeralIndirectionTable.locs.Values :: 
-              DiskLayout.ValidNodeLocation(loc))
-        && AllLocationsForDifferentRefsDontOverlap(ephemeralIndirectionTable)
-      }
+      // Conditions that will hold intermediately between writes and allocs
+
+      // predicate WriteAllocConditions()
+      // {
+      //   && Ready?
+      //   && (forall loc | loc in ephemeralIndirectionTable.locs.Values :: 
+      //         DiskLayout.ValidNodeLocation(loc))
+      //   && AllLocationsForDifferentRefsDontOverlap(ephemeralIndirectionTable)
+      // }
+
+      // predicate ChildrenConditions(succs: Option<seq<Reference>>)
+      // requires Ready?
+      // {
+      //   succs.Some? ==> (
+      //     && |succs.value| <= MaxNumChildren()
+      //     && IT.IndirectionTable.SuccsValid(succs.value, s.ephemeralIndirectionTable.graph)
+      //   )
+      // }
 
       function totalCacheSize() : int
       requires Ready?

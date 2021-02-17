@@ -65,7 +65,7 @@ module GrowImpl {
             assert old_s.IBlockCache() == s.IBlockCache();
           }
           case Some(newref) => {
-            // assert BookkeepingModel.ChildrenConditions(s.IBlockCache2(), Some([newref]));
+            // assert BookkeepingModel.ChildrenConditions(s.IBlockCache(), Some([newref]));
             WeightBucketEmpty();
 
             linear var mutbucket := MutBucket.Alloc();
@@ -74,7 +74,7 @@ module GrowImpl {
 
             linear var newroot := Node(InitPivotTable(), Some([newref]), buckets);
             assert newroot.I() == BT.G.Node(InitPivotTable(), Some([newref]), [B(map[])]);
-            assert s.IBlockCache2().cache[root] == old_s.IBlockCache().cache[root];
+            assert s.IBlockCache().cache[root] == old_s.IBlockCache().cache[root];
 
             writeBookkeeping(inout s, root, Some([newref]));
             inout s.cache.MoveAndReplace(root, newref, newroot);
