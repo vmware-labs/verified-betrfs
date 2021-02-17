@@ -1391,9 +1391,15 @@ module InterpretationDisk {
       var b := atLoc(l, disk'.contents);
       forall i | 0 <= i < |a| ensures a[i] == b[i]
       {
-        D.reveal_splice();
-        reveal_atLoc();
-        assert a[i] == b[i]; // Fixes verification failure somehow. -- robj
+        calc {
+          a[i];
+          { reveal_atLoc(); }
+          disk.contents[l.addr as int + i];
+          { D.reveal_splice(); }
+          disk'.contents[l.addr as int + i];
+          { reveal_atLoc(); }
+          b[i];
+        }
       }
     }
 
