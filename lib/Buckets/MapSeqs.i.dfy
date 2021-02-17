@@ -100,12 +100,83 @@ module MapSeqs {
     }
   }
 
-  lemma map_of_seqs_of_seqs_of_map(m: map<Key, Message>)
+  lemma GetIndex_seqs_of_map(m: map<Key, Message>, k: Key)
+  returns (i: int)
+  requires k in m
+  ensures 0 <= i < |seqs_of_map(m).keys|
+  ensures seqs_of_map(m).keys[i] == k
+  ensures seqs_of_map(m).msgs[i] == m[k]
+  {
+    var keyOpt := maximumKey(m.Keys);
+    match keyOpt {
+      case None => {
+        assert false;
+      }
+      case Some(key) => {
+        if keyOpt.value == k {
+          i := |seqs_of_map(m).keys| - 1;
+        } else {
+          var m' := MapRemove1(m, key);
+          //var SeqPair(keys', msgs') := seqs_of_map(m');
+          //assert seqs_of_map(m).keys == keys' + [key];
+
+          i := GetIndex_seqs_of_map(m', k);
+
+          /*calc {
+            seqs_of_map(m).keys[i];
+            (keys' + [keyOpt.value])[i];
+            keys'[i];
+            k;
+          }*/
+        }
+      }
+    }
+  }
+
+  lemma MapMapsIndex_seqs_of_map(m: map<Key, Message>, i: int)
+  requires 0 <= i < |seqs_of_map(m).keys|
+  ensures seqs_of_map(m).keys[i] in m
+  ensures m[seqs_of_map(m).keys[i]] == seqs_of_map(m).msgs[i]
+  {
+    var keyOpt := maximumKey(m.Keys);
+    match keyOpt {
+      case None => {
+        assert false;
+      }
+      case Some(key) => {
+        if i == |seqs_of_map(m).keys| - 1 {
+        } else {
+          var m' := MapRemove1(m, key);
+          MapMapsIndex_seqs_of_map(m', i);
+          assert key != seqs_of_map(m).keys[i];
+        }
+      }
+    }
+  }
+
+
+  lemma {:fuel seqs_of_map,0} {:fuel map_of_seqs,0}
+    map_of_seqs_of_seqs_of_map(m: map<Key, Message>)
   ensures
     var a := seqs_of_map(m);
     map_of_seqs(a.keys, a.msgs) == m
   {
-    assume false;
+    IsStrictlySorted_seqs_of_map(m);
+    var a := seqs_of_map(m);
+    var t := map_of_seqs(a.keys, a.msgs);
+    forall k | k in m
+    ensures k in t
+    ensures t[k] == m[k]
+    {
+      var i := GetIndex_seqs_of_map(m, k);
+      MapMapsIndex(a.keys, a.msgs, i);
+    }
+    forall k | k in t
+    ensures k in m
+    {
+      var i := GetIndex(a.keys, a.msgs, k);
+      MapMapsIndex_seqs_of_map(m, i);
+    }
   }
 
   lemma GetIndex(keys: seq<Key>, msgs: seq<Message>, key: Key)
