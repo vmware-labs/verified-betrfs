@@ -105,6 +105,7 @@ module BookkeepingModel {
     && s.Ready?
     && (forall loc | loc in s.ephemeralIndirectionTable.locs.Values :: 
           DiskLayout.ValidNodeLocation(loc))
+    && (forall r | r in s.ephemeralIndirectionTable.graph :: r <= s.ephemeralIndirectionTable.refUpperBound)
     && BC.AllLocationsForDifferentRefsDontOverlap(s.ephemeralIndirectionTable)
   }
 
@@ -244,7 +245,6 @@ module BookkeepingModel {
   : (p: (BBC.Variables, Option<Reference>))
   requires WriteAllocConditions(s)
   requires ChildrenConditions(s, node.children)
-  requires forall r | r in s.ephemeralIndirectionTable.graph :: r < s.ephemeralIndirectionTable.refUpperBound
   ensures var (s', id) := p;
       && WriteAllocConditions(s')
       && |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
@@ -425,7 +425,6 @@ module BookkeepingModel {
   requires BBC.Inv(s)
   requires WriteAllocConditions(s)
   requires BC.BlockPointsToValidReferences(INode(node), s.ephemeralIndirectionTable.graph)
-  requires forall r | r in s.ephemeralIndirectionTable.graph :: r < s.ephemeralIndirectionTable.refUpperBound
   // requires TotalCacheSize(s) <= MaxCacheSize() - 1
   requires WFNode(node)
   requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
@@ -617,7 +616,6 @@ module BookkeepingModel {
       s: BBC.Variables, children: Option<seq<BT.G.Reference>>)
   requires WriteAllocConditions(s)
   requires ChildrenConditions(s, children)
-  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= s.ephemeralIndirectionTable.refUpperBound
   // requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
   ensures var (s1, newref) := allocBookkeeping(s, children);
     newref.Some? ==> ChildrenConditions(s1, Some([newref.value]))

@@ -213,8 +213,8 @@ module StateBCImpl {
       && ephemeralIndirectionTable.Inv()
       && ephemeralIndirectionTable.TrackingGarbage()
       && blockAllocator.Inv()
-      && (forall loc | loc in ephemeralIndirectionTable.I().locs.Values :: 
-            DiskLayout.ValidNodeLocation(loc))
+      && (forall loc | loc in ephemeralIndirectionTable.I().locs.Values :: DiskLayout.ValidNodeLocation(loc))
+      && (forall r | r in ephemeralIndirectionTable.graph :: r <= ephemeralIndirectionTable.refUpperBound)
       && ConsistentBitmap(ephemeralIndirectionTable.I(),
           frozenIndirectionTable. Map((x: IndirectionTable) => x.I()),
           persistentIndirectionTable.I(),

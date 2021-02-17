@@ -147,9 +147,9 @@ module BookkeepingImpl {
   ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
   ensures s.cache.I() == old_s.cache.I()
 
-  ensures s.IBlockCache() == BookkeepingModel.writeBookkeeping(old_s.IBlockCache(), ref, children)
-  ensures s.ChildrenConditions(Some([ref]))
   ensures s.WriteAllocConditions()
+  ensures s.ChildrenConditions(Some([ref]))
+  ensures s.IBlockCache() == BookkeepingModel.writeBookkeeping(old_s.IBlockCache(), ref, children)
   {
     lemmaIndirectionTableLocIndexValid(s, ref);
     var oldLoc := inout s.ephemeralIndirectionTable.UpdateAndRemoveLoc(ref, (if children.Some? then children.value else []));
@@ -189,11 +189,11 @@ module BookkeepingImpl {
   ensures s.W()
   ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
   ensures s.cache.I() == old_s.cache.I()
-  ensures (s.IBlockCache(), ref) == BookkeepingModel.allocBookkeeping(old_s.IBlockCache(), children)
-  ensures ref.None? ==> s == old_s
-
   ensures ref.Some? ==> s.ChildrenConditions(Some([ref.value]))
   ensures s.WriteAllocConditions()
+
+  ensures (s.IBlockCache(), ref) == BookkeepingModel.allocBookkeeping(old_s.IBlockCache(), children)
+  ensures ref.None? ==> s == old_s
   {
     BookkeepingModel.reveal_allocBookkeeping();
     
