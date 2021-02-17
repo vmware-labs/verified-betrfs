@@ -88,7 +88,6 @@ module JournalIntervals {
       journal'[i] == CyclicSpliceValue(journal, indices, newEntries, i))
   ensures JournalUpdate(journal, journal', indices, newEntries)
   {
-    // TODO(travis) why won't this prove omg
     reveal_JournalUpdate();
   }
 
