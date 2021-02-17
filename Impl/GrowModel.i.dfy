@@ -67,7 +67,7 @@ module GrowModel {
   lemma growCorrect(s: BBC.Variables)
   requires grow.requires(s)
   requires forall r | r in s.ephemeralIndirectionTable.graph :: r < s.ephemeralIndirectionTable.refUpperBound
-  requires s.totalCacheSize() <= MaxCacheSize() - 1
+  // requires s.totalCacheSize() <= MaxCacheSize() - 1
   ensures var s' := grow(s);
     && betree_next(s, s')
   {

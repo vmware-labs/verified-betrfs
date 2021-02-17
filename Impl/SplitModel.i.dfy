@@ -98,7 +98,7 @@ module SplitModel {
   function {:opaque} splitBookkeeping(s: BBC.Variables, left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference, fused_parent_children: seq<BT.G.Reference>, left_child: Node, right_child: Node, slot: int) : (s': BBC.Variables)
   requires 0 <= slot < |fused_parent_children|
   requires s.Ready?
-  requires WriteAllocConditions(s)
+  requires s.WriteAllocConditions()
   requires ChildrenConditions(s, left_child.children)
   requires ChildrenConditions(s, right_child.children)
   requires ChildrenConditions(s, Some(fused_parent_children))
@@ -154,7 +154,7 @@ module SplitModel {
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires 0 <= slot < |fused_parent_children|
   requires |child.buckets| >= 2
-  requires WriteAllocConditions(s)
+  requires s.WriteAllocConditions()
   requires ChildrenConditions(s, Some(fused_parent_children))
   requires ChildrenConditions(s, child.children)
   requires |fused_parent_children| < MaxNumChildren()
@@ -192,9 +192,6 @@ module SplitModel {
   requires ChildrenConditions(s, s.cache[parentref].children)
   requires |s.cache[parentref].children.value| < MaxNumChildren()
   {
-
-    assume forall r | r in s.ephemeralIndirectionTable.graph :: r <= s.ephemeralIndirectionTable.refUpperBound;
-
     var fused_parent := s.cache[parentref];
     var fused_child := s.cache[childref];
 
@@ -316,8 +313,6 @@ module SplitModel {
       assert noop(s, s);
       return;
     }
-
-    assume forall r | r in s.ephemeralIndirectionTable.graph :: r <= s.ephemeralIndirectionTable.refUpperBound;
 
     var left_childref := getFreeRef(s);
     if left_childref.None? {

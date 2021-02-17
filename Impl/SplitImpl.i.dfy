@@ -69,38 +69,38 @@ module SplitImpl {
     right_childref: BT.G.Reference, parentref: BT.G.Reference, 
     fparent_children: seq<BT.G.Reference>, shared left_child: Node, 
     shared right_child: Node, slot: uint64)
-  requires old_s.Inv()
+  requires old_s.BCInv()
   requires 0 <= slot as int < |fparent_children|
   requires slot as int < MaxNumChildren()
   requires left_child.Inv()
   requires right_child.Inv()
   requires old_s.Ready?
-  requires BookkeepingModel.ChildrenConditions(old_s.I(), left_child.children)
-  requires BookkeepingModel.ChildrenConditions(old_s.I(), right_child.children)
-  requires BookkeepingModel.ChildrenConditions(old_s.I(), Some(fparent_children))
+  requires BookkeepingModel.ChildrenConditions(old_s.IBlockCache(), left_child.children)
+  requires BookkeepingModel.ChildrenConditions(old_s.IBlockCache(), right_child.children)
+  requires BookkeepingModel.ChildrenConditions(old_s.IBlockCache(), Some(fparent_children))
   requires |fparent_children| < MaxNumChildren()
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
 
   ensures s.Ready?
   ensures s.W()
-  ensures s.I() == SplitModel.splitBookkeeping(old_s.I(), left_childref, right_childref, 
+  ensures s.IBlockCache() == SplitModel.splitBookkeeping(old_s.IBlockCache(), left_childref, right_childref, 
     parentref, fparent_children, left_child.I(), right_child.I(), slot as int)
   {
     SplitModel.reveal_splitBookkeeping();
 
-    BookkeepingModel.lemmaChildrenConditionsPreservedWriteBookkeeping(s.I(), left_childref, left_child.children, right_child.children);
-    BookkeepingModel.lemmaChildrenConditionsPreservedWriteBookkeeping(s.I(), left_childref, left_child.children, Some(fparent_children));
-    BookkeepingModel.lemmaRefInGraphOfWriteBookkeeping(s.I(), left_childref, left_child.children);
+    BookkeepingModel.lemmaChildrenConditionsPreservedWriteBookkeeping(s.IBlockCache(), left_childref, left_child.children, right_child.children);
+    BookkeepingModel.lemmaChildrenConditionsPreservedWriteBookkeeping(s.IBlockCache(), left_childref, left_child.children, Some(fparent_children));
+    BookkeepingModel.lemmaRefInGraphOfWriteBookkeeping(s.IBlockCache(), left_childref, left_child.children);
 
     writeBookkeeping(inout s, left_childref, left_child.children);
 
-    BookkeepingModel.lemmaChildrenConditionsPreservedWriteBookkeeping(s.I(), right_childref, right_child.children, Some(fparent_children));
-    BookkeepingModel.lemmaRefInGraphOfWriteBookkeeping(s.I(), right_childref, right_child.children);
-    BookkeepingModel.lemmaRefInGraphPreservedWriteBookkeeping(s.I(), right_childref, right_child.children, left_childref);
+    BookkeepingModel.lemmaChildrenConditionsPreservedWriteBookkeeping(s.IBlockCache(), right_childref, right_child.children, Some(fparent_children));
+    BookkeepingModel.lemmaRefInGraphOfWriteBookkeeping(s.IBlockCache(), right_childref, right_child.children);
+    BookkeepingModel.lemmaRefInGraphPreservedWriteBookkeeping(s.IBlockCache(), right_childref, right_child.children, left_childref);
 
     writeBookkeeping(inout s, right_childref, right_child.children);
 
-    BookkeepingModel.lemmaChildrenConditionsOfReplace1With2(s.I(), fparent_children, slot as int, left_childref, right_childref);
+    BookkeepingModel.lemmaChildrenConditionsOfReplace1With2(s.IBlockCache(), fparent_children, slot as int, left_childref, right_childref);
 
     var rep := Replace1with2(fparent_children, left_childref, right_childref, slot);
     writeBookkeeping(inout s, parentref, Some(rep));
@@ -123,7 +123,7 @@ module SplitImpl {
   requires PivotInsertable(old_s.cache.I()[parentref].pivotTable, (slot+1) as int, pivot)
 
   ensures s.W()
-  ensures s.I() == SplitModel.splitCacheChanges(old_s.I(), left_childref, right_childref,
+  ensures s.IBlockCache() == SplitModel.splitCacheChanges(old_s.IBlockCache(), left_childref, right_childref,
     parentref, slot as int, num_children_left as int, pivot, left_child.I(), right_child.I())
   ensures s.Ready?
   {
@@ -132,6 +132,7 @@ module SplitImpl {
     inout s.cache.Insert(right_childref, right_child);
     inout s.cache.SplitParent(parentref, slot as uint64, pivot, left_childref, right_childref);
   }
+/*
 
   method splitDoChanges(linear inout s: ImplVariables, linear child: Node, left_childref: BT.G.Reference,
       right_childref: BT.G.Reference, parentref: BT.G.Reference, fparent_pivots: PivotTable,
@@ -149,11 +150,11 @@ module SplitImpl {
   requires |child.buckets| >= 2
   requires left_childref != parentref
   requires right_childref != parentref
-  requires BookkeepingModel.ChildrenConditions(old_s.I(), Some(fparent_children))
-  requires BookkeepingModel.ChildrenConditions(old_s.I(), child.children)
+  requires BookkeepingModel.ChildrenConditions(old_s.IBlockCache(), Some(fparent_children))
+  requires BookkeepingModel.ChildrenConditions(old_s.IBlockCache(), child.children)
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
   ensures s.W()
-  ensures s.I() == SplitModel.splitDoChanges(old_s.I(), old(child.I()), left_childref,
+  ensures s.IBlockCache() == SplitModel.splitDoChanges(old_s.IBlockCache(), old(child.I()), left_childref,
     right_childref, parentref, fparent_children, slot as int)
   ensures s.Ready?
   {
@@ -165,7 +166,7 @@ module SplitImpl {
 
     var insertable := ComputePivotInsertable(fparent_pivots, slot+1, pivot);
     if insertable {
-      SplitModel.lemmaChildrenConditionsSplitChild(s.I(), child.I(), num_children_left as int);
+      SplitModel.lemmaChildrenConditionsSplitChild(s.IBlockCache(), child.I(), num_children_left as int);
 
       linear var left_child := child.SplitChildLeft(num_children_left);
       linear var right_child := child.SplitChildRight(num_children_left);
@@ -194,18 +195,18 @@ module SplitImpl {
   requires fparent_children.value[slot] == childref
   requires |fparent_children.value| < MaxNumChildren()
   requires BT.ValidSplitKey(old_s.cache.I()[childref], lbound, ubound)
-  requires BookkeepingModel.ChildrenConditions(old_s.I(), fparent_children)
-  requires BookkeepingModel.ChildrenConditions(old_s.I(), old_s.cache.I()[childref].children)
+  requires BookkeepingModel.ChildrenConditions(old_s.IBlockCache(), fparent_children)
+  requires BookkeepingModel.ChildrenConditions(old_s.IBlockCache(), old_s.cache.I()[childref].children)
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
   ensures s.Ready?
   ensures s.W()
-  ensures s.I() == SplitModel.splitChild(old_s.I(), parentref, childref, slot as int, lbound, ubound)
+  ensures s.IBlockCache() == SplitModel.splitChild(old_s.IBlockCache(), parentref, childref, slot as int, lbound, ubound)
   {
     SplitModel.reveal_splitChild();
 
     linear var child := s.cache.NodeCutOff(childref, lbound, ubound);
     assert child.I() == BT.CutoffNode(s.cache.I()[childref], lbound, ubound);
-    SplitModel.lemmaChildrenConditionsCutoffNode(s.I(), s.cache.I()[childref], lbound, ubound);
+    SplitModel.lemmaChildrenConditionsCutoffNode(s.IBlockCache(), s.cache.I()[childref], lbound, ubound);
     assert BT.WFNode(child.I());
 
     if (|child.pivotTable| as uint64 == 2) {
@@ -218,14 +219,14 @@ module SplitImpl {
       var num_children_left := len / 2;
       var pivot := ComputeGetKey(child.pivotTable, num_children_left);
 
-      BookkeepingModel.getFreeRefDoesntEqual(s.I(), parentref);
+      BookkeepingModel.getFreeRefDoesntEqual(s.IBlockCache(), parentref);
 
       var left_childref := getFreeRef(s);
       if left_childref.None? {
         print "giving up; doSplit can't allocate left_childref\n";
         var _ := FreeNode(child);
       } else {
-        BookkeepingModel.getFreeRef2DoesntEqual(s.I(), left_childref.value, parentref);
+        BookkeepingModel.getFreeRef2DoesntEqual(s.IBlockCache(), left_childref.value, parentref);
         var right_childref := getFreeRef2(s, left_childref.value);
         if right_childref.None? {
           print "giving up; doSplit can't allocate right_childref\n";
@@ -252,7 +253,7 @@ module SplitImpl {
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
   ensures s.W()
   ensures s.Ready?
-  ensures s.I() == SplitModel.doSplit(old_s.I(), parentref, childref, slot as int);
+  ensures s.IBlockCache() == SplitModel.doSplit(old_s.IBlockCache(), parentref, childref, slot as int);
   {
     SplitModel.reveal_doSplit();
     var b := false;
@@ -276,8 +277,8 @@ module SplitImpl {
       if childlbound > 0 || childubound > 0 {
         print "giving up; split can't run because splitted keys are not in bound";
       } else {
-        BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), parentref);
-        BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), childref);
+        BookkeepingModel.lemmaChildrenConditionsOfNode(s.IBlockCache(), parentref);
+        BookkeepingModel.lemmaChildrenConditionsOfNode(s.IBlockCache(), childref);
 
         var lbound := ComputeGetKey(fparent_pivots, slot);
         var ubound := None;
@@ -302,4 +303,5 @@ module SplitImpl {
       }
     }
   }
+  */
 }

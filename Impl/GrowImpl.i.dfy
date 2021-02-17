@@ -28,7 +28,7 @@ module GrowImpl {
   method grow(linear inout s: ImplVariables)
   requires old_s.BCInv()
   requires old_s.Ready?
-  requires (forall r | r in old_s.ephemeralIndirectionTable.graph :: r <= old_s.ephemeralIndirectionTable.refUpperBound)
+  // requires (forall r | r in old_s.ephemeralIndirectionTable.graph :: r <= old_s.ephemeralIndirectionTable.refUpperBound)
 
   requires BT.G.Root() in old_s.IBlockCache().cache
   requires |old_s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
