@@ -832,6 +832,60 @@ module InterpretationDisk {
       :: !writeRespReadOverlap(reqWrite, disk.respReads[id]))
   }
 
+
+  lemma JournalUpdate_of_RefinesReqWriteOp(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  requires Inv(disk)
+  requires dop.ReqWriteOp?
+  requires ValidDiskOp(dop)
+  requires D.RecvWrite(disk, disk', dop)
+  requires ValidJournalLocation(LocOfReqWrite(dop.reqWrite))
+  requires reqWriteDisjointFromCurrent(disk, dop.reqWrite)
+  ensures JournalUpdate(DiskJournal(disk), DiskJournal(disk'),
+      JournalInterval(IDiskOp(dop).jdop.reqWriteJournal.start, |IDiskOp(dop).jdop.reqWriteJournal.journal|),
+      IDiskOp(dop).jdop.reqWriteJournal.journal)
+  {
+    var loc := LocOfReqWrite(dop.reqWrite);
+
+    getReqWriteSelf(disk.contents, disk'.reqWrites, dop.id);
+
+    forall l | !overlap(l, loc)
+    ensures atLocWithWrites(l, disk.contents, disk.reqWrites)
+         == atLocWithWrites(l, disk'.contents, disk'.reqWrites)
+    {
+      newReqWritePreserve(disk.contents, disk.reqWrites,
+          dop.id, dop.reqWrite, l.addr as int, l.len as int);
+    }
+
+    var newEntries := IDiskOp(dop).jdop.reqWriteJournal.journal;
+    var interval := JournalInterval(
+        IDiskOp(dop).jdop.reqWriteJournal.start,
+        |IDiskOp(dop).jdop.reqWriteJournal.journal|);
+    var journal := DiskJournal(disk);
+    var journal' := DiskJournal(disk');
+    forall i | 0 <= i < |journal|
+    ensures journal'[i] == CyclicSpliceValue(
+          journal, interval, newEntries, i)
+    {
+      if interval.start <= i < interval.start + interval.len {
+        JournalBytes.JournalBlockOfJournalRange(dop.reqWrite.bytes, i - interval.start);
+        getReqWriteSelfSub(disk.contents, disk'.reqWrites, dop.id, (i - interval.start) * 4096, 4096);
+        calc {
+          journal'[i];
+          JournalBlockAt(disk'.contents, disk'.reqWrites, i);
+          Some(JournalBlockOfBytes(atLocWithWrites(JournalRangeLocation(i as uint64, 1), disk'.contents, disk'.reqWrites)));
+          JournalBytes.JournalBlockOfByteSeq(dop.reqWrite.bytes[(i - interval.start) * 4096 .. (i - interval.start + 1) * 4096]);
+          Some(JournalBytes.JournalRangeOfByteSeq(dop.reqWrite.bytes).value[i - interval.start]);
+          Some(newEntries[i - interval.start]);
+        }
+      } else if interval.start <= i + NumJournalBlocks() as int < interval.start + interval.len {
+        assert journal'[i] == Some(newEntries[i + NumJournalBlocks() as int - interval.start]);
+      } else {
+        assert journal'[i] == journal[i];
+      }
+    }
+    ProveJournalUpdate(journal, journal', interval, newEntries);
+  }
+
   lemma RefinesReqWriteOp(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
   requires Inv(disk)
   requires dop.ReqWriteOp?
@@ -972,28 +1026,7 @@ module InterpretationDisk {
       var journal := DiskJournal(disk);
       var journal' := DiskJournal(disk');
       assert JournalUpdate(journal, journal', interval, newEntries) by {
-        forall i | 0 <= i < |journal|
-        ensures journal'[i] == CyclicSpliceValue(
-              journal, interval, newEntries, i)
-        {
-          if interval.start <= i < interval.start + interval.len {
-            JournalBytes.JournalBlockOfJournalRange(dop.reqWrite.bytes, i - interval.start);
-            getReqWriteSelfSub(disk.contents, disk'.reqWrites, dop.id, (i - interval.start) * 4096, 4096);
-            calc {
-              journal'[i];
-              JournalBlockAt(disk'.contents, disk'.reqWrites, i);
-              Some(JournalBlockOfBytes(atLocWithWrites(JournalRangeLocation(i as uint64, 1), disk'.contents, disk'.reqWrites)));
-              JournalBytes.JournalBlockOfByteSeq(dop.reqWrite.bytes[(i - interval.start) * 4096 .. (i - interval.start + 1) * 4096]);
-              Some(JournalBytes.JournalRangeOfByteSeq(dop.reqWrite.bytes).value[i - interval.start]);
-              Some(newEntries[i - interval.start]);
-            }
-          } else if interval.start <= i + NumJournalBlocks() as int < interval.start + interval.len {
-            assert journal'[i] == Some(newEntries[i + NumJournalBlocks() as int - interval.start]);
-          } else {
-            assert journal'[i] == journal[i];
-          }
-        }
-        reveal_JournalUpdate();
+        JournalUpdate_of_RefinesReqWriteOp(disk, disk', dop);
       }
 
       assert BlockDisk.Next(
@@ -1140,7 +1173,7 @@ module InterpretationDisk {
           assert journal'[i] == journal[i];
         }
       }
-      reveal_JournalUpdate();
+      ProveJournalUpdate(journal, journal', interval, newEntries);
     }
 
     assert BlockDisk.Next(
