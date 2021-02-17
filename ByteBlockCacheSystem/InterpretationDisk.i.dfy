@@ -1351,14 +1351,174 @@ module InterpretationDisk {
   {
   }
 
-  lemma RefinesProcessRead(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  lemma RefinesProcessRead_Inv(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  requires Inv(disk)
+  requires D.ProcessReadFailure(disk, disk', id, fakeContents)
+  ensures Inv(disk')
+  //ensures IBlockDisk(disk) == IBlockDisk(disk')
+  //ensures IJournalDisk(disk) == IJournalDisk(disk')
+  {
+    reveal_atLoc();
+  }
+
+  lemma RefinesProcessRead_Node_1(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  requires Inv(disk)
+  requires D.ProcessReadFailure(disk, disk', id, fakeContents)
+  requires Inv(disk')
+  requires ValidNodeLocation(LocOfReqRead(disk.reqReads[id]))
+  ensures IBlockDisk(disk) == IBlockDisk(disk')
+  {
+    assert ReqReadIndirectionTables(disk) == ReqReadIndirectionTables(disk');
+    assert ReqReadNodes(disk) == ReqReadNodes(disk');
+    assert ReqWriteIndirectionTables(disk) == ReqWriteIndirectionTables(disk');
+    assert ReqWriteNodes(disk) == ReqWriteNodes(disk');
+    assert DiskIndirectionTables(disk) == DiskIndirectionTables(disk');
+    assert DiskNodes(disk) == DiskNodes(disk');
+  }
+
+  lemma RefinesProcessRead_Node_2(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  requires Inv(disk)
+  requires D.ProcessReadFailure(disk, disk', id, fakeContents)
+  requires Inv(disk')
+  requires ValidNodeLocation(LocOfReqRead(disk.reqReads[id]))
+  ensures IJournalDisk(disk) == IJournalDisk(disk')
+  {
+    assert ReqReadSuperblock1(disk) == ReqReadSuperblock1(disk');
+    assert ReqReadSuperblock2(disk) == ReqReadSuperblock2(disk');
+    assert ReqReadJournals(disk) == ReqReadJournals(disk');
+    assert ReqWriteSuperblock1(disk) ==  ReqWriteSuperblock1(disk');
+    assert ReqWriteSuperblock2(disk) ==  ReqWriteSuperblock2(disk');
+    assert ReqWriteJournals(disk) ==  ReqWriteJournals(disk');
+    assert DiskSuperblock1(disk) == DiskSuperblock1(disk');
+    assert DiskSuperblock2(disk) == DiskSuperblock2(disk');
+    assert DiskJournal(disk) == DiskJournal(disk');
+  }
+
+  lemma RefinesProcessRead_IndirectionTable_1(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  requires Inv(disk)
+  requires D.ProcessReadFailure(disk, disk', id, fakeContents)
+  requires Inv(disk')
+  requires ValidIndirectionTableLocation(LocOfReqRead(disk.reqReads[id]))
+  ensures IBlockDisk(disk) == IBlockDisk(disk')
+  {
+    assert ReqReadIndirectionTables(disk) == ReqReadIndirectionTables(disk');
+    assert ReqReadNodes(disk) == ReqReadNodes(disk');
+    assert ReqWriteIndirectionTables(disk) == ReqWriteIndirectionTables(disk');
+    assert ReqWriteNodes(disk) == ReqWriteNodes(disk');
+    assert DiskIndirectionTables(disk) == DiskIndirectionTables(disk');
+    assert DiskNodes(disk) == DiskNodes(disk');
+  }
+
+  lemma RefinesProcessRead_IndirectionTable_2(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  requires Inv(disk)
+  requires D.ProcessReadFailure(disk, disk', id, fakeContents)
+  requires Inv(disk')
+  requires ValidIndirectionTableLocation(LocOfReqRead(disk.reqReads[id]))
+  ensures IJournalDisk(disk) == IJournalDisk(disk')
+  {
+    assert ReqReadSuperblock1(disk) == ReqReadSuperblock1(disk');
+    assert ReqReadSuperblock2(disk) == ReqReadSuperblock2(disk');
+    assert ReqReadJournals(disk) == ReqReadJournals(disk');
+    assert ReqWriteSuperblock1(disk) ==  ReqWriteSuperblock1(disk');
+    assert ReqWriteSuperblock2(disk) ==  ReqWriteSuperblock2(disk');
+    assert ReqWriteJournals(disk) ==  ReqWriteJournals(disk');
+    assert DiskSuperblock1(disk) == DiskSuperblock1(disk');
+    assert DiskSuperblock2(disk) == DiskSuperblock2(disk');
+    assert DiskJournal(disk) == DiskJournal(disk');
+  }
+
+  lemma RefinesProcessRead_Journal_1(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  requires Inv(disk)
+  requires D.ProcessReadFailure(disk, disk', id, fakeContents)
+  requires Inv(disk')
+  requires ValidJournalLocation(LocOfReqRead(disk.reqReads[id]))
+  ensures IBlockDisk(disk) == IBlockDisk(disk')
+  {
+    assert ReqReadIndirectionTables(disk) == ReqReadIndirectionTables(disk');
+    assert ReqReadNodes(disk) == ReqReadNodes(disk');
+    assert ReqWriteIndirectionTables(disk) == ReqWriteIndirectionTables(disk');
+    assert ReqWriteNodes(disk) == ReqWriteNodes(disk');
+    assert DiskIndirectionTables(disk) == DiskIndirectionTables(disk');
+    assert DiskNodes(disk) == DiskNodes(disk');
+  }
+
+  lemma RefinesProcessRead_Journal_2(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  requires Inv(disk)
+  requires D.ProcessReadFailure(disk, disk', id, fakeContents)
+  requires Inv(disk')
+  requires ValidJournalLocation(LocOfReqRead(disk.reqReads[id]))
+  ensures IJournalDisk(disk) == IJournalDisk(disk')
+  {
+    assert ReqReadSuperblock1(disk) == ReqReadSuperblock1(disk');
+    assert ReqReadSuperblock2(disk) == ReqReadSuperblock2(disk');
+    assert ReqReadJournals(disk) == ReqReadJournals(disk');
+    assert ReqWriteSuperblock1(disk) ==  ReqWriteSuperblock1(disk');
+    assert ReqWriteSuperblock2(disk) ==  ReqWriteSuperblock2(disk');
+    assert ReqWriteJournals(disk) ==  ReqWriteJournals(disk');
+    assert DiskSuperblock1(disk) == DiskSuperblock1(disk');
+    assert DiskSuperblock2(disk) == DiskSuperblock2(disk');
+    assert DiskJournal(disk) == DiskJournal(disk');
+  }
+
+  lemma RefinesProcessRead_Superblock_1(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  requires Inv(disk)
+  requires D.ProcessReadFailure(disk, disk', id, fakeContents)
+  requires Inv(disk')
+  requires ValidSuperblockLocation(LocOfReqRead(disk.reqReads[id]))
+  ensures IBlockDisk(disk) == IBlockDisk(disk')
+  {
+    assert ReqReadIndirectionTables(disk) == ReqReadIndirectionTables(disk');
+    assert ReqReadNodes(disk) == ReqReadNodes(disk');
+    assert ReqWriteIndirectionTables(disk) == ReqWriteIndirectionTables(disk');
+    assert ReqWriteNodes(disk) == ReqWriteNodes(disk');
+    assert DiskIndirectionTables(disk) == DiskIndirectionTables(disk');
+    assert DiskNodes(disk) == DiskNodes(disk');
+  }
+
+  lemma RefinesProcessRead_Superblock_2(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  requires Inv(disk)
+  requires D.ProcessReadFailure(disk, disk', id, fakeContents)
+  requires Inv(disk')
+  requires ValidSuperblockLocation(LocOfReqRead(disk.reqReads[id]))
+  ensures IJournalDisk(disk) == IJournalDisk(disk')
+  {
+    assert ReqReadSuperblock1(disk) == ReqReadSuperblock1(disk');
+    assert ReqReadSuperblock2(disk) == ReqReadSuperblock2(disk');
+    assert ReqReadJournals(disk) == ReqReadJournals(disk');
+    assert ReqWriteSuperblock1(disk) ==  ReqWriteSuperblock1(disk');
+    assert ReqWriteSuperblock2(disk) ==  ReqWriteSuperblock2(disk');
+    assert ReqWriteJournals(disk) ==  ReqWriteJournals(disk');
+    assert DiskSuperblock1(disk) == DiskSuperblock1(disk');
+    assert DiskSuperblock2(disk) == DiskSuperblock2(disk');
+    assert DiskJournal(disk) == DiskJournal(disk');
+  }
+
+  lemma /*{:fuel Inv,0} {:fuel IBlockDisk,0} {:fuel IJournalDisk,0}*/
+    RefinesProcessRead(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
   requires Inv(disk)
   requires D.ProcessReadFailure(disk, disk', id, fakeContents)
   ensures Inv(disk')
   ensures IBlockDisk(disk) == IBlockDisk(disk')
   ensures IJournalDisk(disk) == IJournalDisk(disk')
   {
-    reveal_atLoc();
+    RefinesProcessRead_Inv(disk, disk', id, fakeContents);
+    if ValidNodeLocation(LocOfReqRead(disk.reqReads[id])) {
+      RefinesProcessRead_Node_1(disk, disk', id, fakeContents);
+      RefinesProcessRead_Node_2(disk, disk', id, fakeContents);
+    }
+    else if ValidIndirectionTableLocation(LocOfReqRead(disk.reqReads[id])) {
+      RefinesProcessRead_IndirectionTable_1(disk, disk', id, fakeContents);
+      RefinesProcessRead_IndirectionTable_2(disk, disk', id, fakeContents);
+    }
+    else if ValidJournalLocation(LocOfReqRead(disk.reqReads[id])) {
+      RefinesProcessRead_Journal_1(disk, disk', id, fakeContents);
+      RefinesProcessRead_Journal_2(disk, disk', id, fakeContents);
+    }
+    else if ValidSuperblockLocation(LocOfReqRead(disk.reqReads[id])) {
+      RefinesProcessRead_Superblock_1(disk, disk', id, fakeContents);
+      RefinesProcessRead_Superblock_2(disk, disk', id, fakeContents);
+    }
+    else { assert false; }
   }
 
   lemma RefinesProcessWrite(disk: D.Variables, disk': D.Variables, id: D.ReqId)
