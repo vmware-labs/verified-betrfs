@@ -11,30 +11,38 @@ module HTResource refines ApplicationResourceSpec {
   datatype InsertTicket = InsertTicket(rid: int, key: uint64, val: V)
   datatype InsertStub = InsertStub(rid: int)
 
+  datatype QueryResult = Found(val: V) | NotFound
+
+  datatype QueryTicket = QueryTicket(rid: int, key: uint64)
+  datatype QueryStub = QueryStub(rid: int, res: QueryResult)
+
   function method hash(key: uint64) : uint32
 
   function FixedSize() : nat
 
-  datatype HKV = HKV(hash: uint32, key: uint64, val: V)
+  datatype KV = KV(key: uint64, val: V)
 
   datatype Entry =
-    | Full(hkv: HKV)
+    | Full(kv: KV)
     | Empty
   datatype State =
     | Free
-    | Inserting(rid: int, hkv: HKV)
+    | Inserting(rid: int, kv: KV)
+    | Querying(rid: int, key: uint64)
 
   datatype Info = Info(entry: Entry, state: State)
 
   datatype PreR =
       | R(table: seq<Option<Info>>,
           insert_tickets: multiset<InsertTicket>,
-          insert_stubs: multiset<InsertStub>)
+          insert_stubs: multiset<InsertStub>,
+          query_tickets: multiset<QueryTicket>,
+          query_stubs: multiset<QueryStub>)
       | Fail
   type R = r: PreR | (r.R? ==> |r.table| == FixedSize()) witness Fail
 
   function unit() : R {
-    R(seq(FixedSize(), i => None), multiset{}, multiset{})
+    R(seq(FixedSize(), i => None), multiset{}, multiset{}, multiset{}, multiset{})
   }
 
   predicate nonoverlapping<A>(a: seq<Option<A>>, b: seq<Option<A>>)
@@ -61,7 +69,9 @@ module HTResource refines ApplicationResourceSpec {
     if x.R? && y.R? && nonoverlapping(x.table, y.table) then (
       R(fuse_seq(x.table, y.table),
           x.insert_tickets + y.insert_tickets,
-          x.insert_stubs + y.insert_stubs)
+          x.insert_stubs + y.insert_stubs,
+          x.query_tickets + y.query_tickets,
+          x.query_stubs + y.query_stubs)
     ) else (
       Fail
     )
@@ -85,6 +95,9 @@ module HTResource refines ApplicationResourceSpec {
       assert fuse_seq(x.table, y.table) == fuse_seq(y.table, x.table);
       assert add(x, y).insert_tickets == add(y, x).insert_tickets;
       assert add(x, y).insert_stubs == add(y, x).insert_stubs;
+
+      assert add(x, y).query_tickets == add(y, x).query_tickets;
+      assert add(x, y).query_stubs == add(y, x).query_stubs;
     }
   }
 
@@ -112,9 +125,14 @@ module HTResource refines ApplicationResourceSpec {
 
   datatype Step =
     | ProcessInsertTicketStep(insert_ticket: InsertTicket)
-    | AdvanceInsertSkipStep(pos: nat)
-    | AdvanceInsertSwapStep(pos: nat)
-    | AdvanceInsertDoneStep(pos: nat)
+    | InsertSkipStep(pos: nat)
+    | InsertSwapStep(pos: nat)
+    | InsertDoneStep(pos: nat)
+
+    | ProcessQueryTicketStep(query_ticket: QueryTicket)
+    | QuerySkipStep(pos: nat)
+    | QueryDoneStep(pos: nat)
+    | QueryNotFoundStep(pos: nat)
 
   predicate ProcessInsertTicket(s: R, s': R, insert_ticket: InsertTicket)
   {
@@ -129,13 +147,13 @@ module HTResource refines ApplicationResourceSpec {
       .(insert_tickets := s.insert_tickets - multiset{insert_ticket})
       .(table := s.table[h := Some(
           s.table[h].value.(state :=
-            Inserting(insert_ticket.rid, HKV(h, insert_ticket.key, insert_ticket.val))))])
+            Inserting(insert_ticket.rid, KV(insert_ticket.key, insert_ticket.val))))])
   }
 
   // We're trying to insert new_item at pos j
   // where hash(new_item) >= hash(pos j)
   // we skip item i and move to i+1.
-  predicate AdvanceInsertSkip(s: R, s': R, pos: nat)
+  predicate InsertSkip(s: R, s': R, pos: nat)
   {
     && s.R?
     && s'.R?
@@ -144,7 +162,7 @@ module HTResource refines ApplicationResourceSpec {
     && s.table[pos + 1].Some?
     && s.table[pos].value.state.Inserting?
     && s.table[pos].value.entry.Full?
-    && s.table[pos].value.state.hkv.hash >= s.table[pos].value.entry.hkv.hash
+    && hash(s.table[pos].value.state.kv.key) >= hash(s.table[pos].value.entry.kv.key)
     && s.table[pos + 1].value.state.Free?
 
     && s' == s.(table := s.table
@@ -156,7 +174,7 @@ module HTResource refines ApplicationResourceSpec {
   // where hash(new_item) < hash(pos j)
   // in this case we do the swap and keep moving forward
   // with the swapped-out item.
-  predicate AdvanceInsertSwap(s: R, s': R, pos: nat)
+  predicate InsertSwap(s: R, s': R, pos: nat)
   {
     && s.R?
     && s'.R?
@@ -165,21 +183,21 @@ module HTResource refines ApplicationResourceSpec {
     && s.table[pos + 1].Some?
     && s.table[pos].value.state.Inserting?
     && s.table[pos].value.entry.Full?
-    && s.table[pos].value.state.hkv.hash < s.table[pos].value.entry.hkv.hash
+    && hash(s.table[pos].value.state.kv.key) < hash(s.table[pos].value.entry.kv.key)
     && s.table[pos + 1].value.state.Free?
 
     && s' == s.(table := s.table
         [pos := Some(Info(
-          Full(s.table[pos].value.state.hkv),
+          Full(s.table[pos].value.state.kv),
           Free))]
         [pos + 1 := Some(s.table[pos].value.(state :=
           Inserting(
             s.table[pos].value.state.rid,
-            s.table[pos].value.entry.hkv)))])
+            s.table[pos].value.entry.kv)))])
   }
 
   // Slot is empty. Insert our element and finish.
-  predicate AdvanceInsertDone(s: R, s': R, pos: nat)
+  predicate InsertDone(s: R, s': R, pos: nat)
   {
     && s.R?
     && s'.R?
@@ -190,18 +208,92 @@ module HTResource refines ApplicationResourceSpec {
     && s' == s
       .(table := s.table
         [pos := Some(Info(
-            Full(s.table[pos].value.state.hkv),
+            Full(s.table[pos].value.state.kv),
             Free))])
       .(insert_stubs := s.insert_stubs + multiset{InsertStub(s.table[pos].value.state.rid)})
+  }
+
+  predicate ProcessQueryTicket(s: R, s': R, query_ticket: QueryTicket)
+  {
+    && s.R?
+    && s'.R?
+    && query_ticket in s.query_tickets
+    && var h: uint32 := hash(query_ticket.key);
+    && 0 <= h as int < FixedSize()
+    && s.table[h].Some?
+    && s' == s
+      .(query_tickets := s.query_tickets - multiset{query_ticket})
+      .(table := s.table[h := Some(
+          s.table[h].value.(state :=
+            Querying(query_ticket.rid, query_ticket.key)))])
+  }
+
+  predicate QuerySkip(s: R, s': R, pos: nat)
+  {
+    && s.R?
+    && s'.R?
+    && 0 <= pos < FixedSize() - 1
+    && s.table[pos].Some?
+    && s.table[pos + 1].Some?
+    && s.table[pos].value.state.Querying?
+    && s.table[pos].value.entry.Full?
+    && s.table[pos].value.state.key != s.table[pos].value.entry.kv.key
+    && s.table[pos + 1].value.state.Free?
+
+    && s' == s.(table := s.table
+        [pos := Some(s.table[pos].value.(state := Free))]
+        [pos + 1 := Some(s.table[pos].value.(state := s.table[pos].value.state))])
+  }
+
+  predicate QueryDone(s: R, s': R, pos: nat)
+  {
+    && s.R?
+    && s'.R?
+    && 0 <= pos < FixedSize()
+    && s.table[pos].Some?
+    && s.table[pos].value.state.Querying?
+    && s.table[pos].value.entry.Full?
+    && s.table[pos].value.state.key == s.table[pos].value.entry.kv.key
+    && s' == s
+      .(table := s.table
+        [pos := Some(s.table[pos].value.(state := Free))])
+      .(query_stubs := s.query_stubs + multiset{
+        QueryStub(s.table[pos].value.state.rid,
+                  Found(s.table[pos].value.entry.kv.val))
+       })
+  }
+
+  predicate QueryNotFound(s: R, s': R, pos: nat)
+  {
+    && s.R?
+    && s'.R?
+    && 0 <= pos < FixedSize()
+    && s.table[pos].Some?
+    && s.table[pos].value.state.Querying?
+    // We're allowed to do this step if it's empty, or if the hash value we
+    // find is bigger than the one we're looking for
+    && (s.table[pos].value.entry.Full? ==>
+      hash(s.table[pos].value.state.key) < hash(s.table[pos].value.entry.kv.key))
+    && s' == s
+      .(table := s.table
+        [pos := Some(s.table[pos].value.(state := Free))])
+      .(query_stubs := s.query_stubs + multiset{
+        QueryStub(s.table[pos].value.state.rid, NotFound)
+       })
   }
 
   predicate UpdateStep(s: R, s': R, step: Step)
   {
     match step {
       case ProcessInsertTicketStep(insert_ticket) => ProcessInsertTicket(s, s', insert_ticket)
-      case AdvanceInsertSkipStep(pos) => AdvanceInsertSkip(s, s', pos)
-      case AdvanceInsertSwapStep(pos) => AdvanceInsertSwap(s, s', pos)
-      case AdvanceInsertDoneStep(pos) => AdvanceInsertDone(s, s', pos)
+      case InsertSkipStep(pos) => InsertSkip(s, s', pos)
+      case InsertSwapStep(pos) => InsertSwap(s, s', pos)
+      case InsertDoneStep(pos) => InsertDone(s, s', pos)
+
+      case ProcessQueryTicketStep(query_ticket) => ProcessQueryTicket(s, s', query_ticket)
+      case QuerySkipStep(pos) => QuerySkip(s, s', pos)
+      case QueryDoneStep(pos) => QueryDone(s, s', pos)
+      case QueryNotFoundStep(pos) => QueryNotFound(s, s', pos)
     }
   }
 
@@ -229,13 +321,25 @@ module HTResource refines ApplicationResourceSpec {
       case ProcessInsertTicketStep(insert_ticket) => {
         assert UpdateStep(add(x, z), add(y, z), step);
       }
-      case AdvanceInsertSkipStep(pos) => {
+      case InsertSkipStep(pos) => {
         assert UpdateStep(add(x, z), add(y, z), step);
       }
-      case AdvanceInsertSwapStep(pos) => {
+      case InsertSwapStep(pos) => {
         assert UpdateStep(add(x, z), add(y, z), step);
       }
-      case AdvanceInsertDoneStep(pos) => {
+      case InsertDoneStep(pos) => {
+        assert UpdateStep(add(x, z), add(y, z), step);
+      }
+      case ProcessQueryTicketStep(query_ticket) => {
+        assert UpdateStep(add(x, z), add(y, z), step);
+      }
+      case QuerySkipStep(pos) => {
+        assert UpdateStep(add(x, z), add(y, z), step);
+      }
+      case QueryDoneStep(pos) => {
+        assert UpdateStep(add(x, z), add(y, z), step);
+      }
+      case QueryNotFoundStep(pos) => {
         assert UpdateStep(add(x, z), add(y, z), step);
       }
     }
