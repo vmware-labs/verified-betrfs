@@ -36,6 +36,7 @@ abstract module ResourceSpec {
 
   lemma update_monotonic(x: R, y: R, z: R)
   requires Update(x, y)
+  requires Valid(add(x, z))
   ensures Update(add(x, z), add(y, z))
 
   predicate {:opaque} radical(a': R, a: R)
