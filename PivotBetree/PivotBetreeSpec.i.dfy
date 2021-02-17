@@ -63,7 +63,9 @@ module PivotBetreeSpec {
   import opened ValueMessage
   import opened bpl = BoundedPivotsLib
 
-  export Spec provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, BetreeStepUI, G, WFNode, InvNode
+  export Spec
+    provides BetreeStep, ValidBetreeStep, BetreeStepReads, BetreeStepOps, BetreeStepUI, G, WFNode, InvNode
+    // reveals Reference
   export Internal reveals *
 
   export extends Spec // Default export-style is Spec
