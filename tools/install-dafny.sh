@@ -31,7 +31,7 @@ fi
 
 mkdir bin
 echo "#! /bin/bash" > bin/dafny
-echo "`pwd`/dafny/Binaries/Dafny \"\$@\"" >> bin/dafny
+echo "`pwd`/dafny/Scripts/dafny \"\$@\"" >> bin/dafny
 chmod +x bin/dafny
 
 ## This is needed in case you want to call the Boogie binary directly.
