@@ -8,13 +8,15 @@ module HTResource refines ApplicationResourceSpec {
 
   type V(==)
 
-  datatype InsertTicket = InsertTicket(rid: int, key: uint64, val: V)
-  datatype InsertStub = InsertStub(rid: int)
+  datatype Ticket =
+    | InsertTicket(rid: int, key: uint64, val: V)
+    | QueryTicket(rid: int, key: uint64)
 
   datatype QueryResult = Found(val: V) | NotFound
 
-  datatype QueryTicket = QueryTicket(rid: int, key: uint64)
-  datatype QueryStub = QueryStub(rid: int, res: QueryResult)
+  datatype Stub =
+    | InsertStub(rid: int)
+    | QueryStub(rid: int, res: QueryResult)
 
   function method hash(key: uint64) : uint32
 
@@ -34,15 +36,13 @@ module HTResource refines ApplicationResourceSpec {
 
   datatype PreR =
       | R(table: seq<Option<Info>>,
-          insert_tickets: multiset<InsertTicket>,
-          insert_stubs: multiset<InsertStub>,
-          query_tickets: multiset<QueryTicket>,
-          query_stubs: multiset<QueryStub>)
+          tickets: multiset<Ticket>,
+          stubs: multiset<Stub>)
       | Fail
   type R = r: PreR | (r.R? ==> |r.table| == FixedSize()) witness Fail
 
   function unit() : R {
-    R(seq(FixedSize(), i => None), multiset{}, multiset{}, multiset{}, multiset{})
+    R(seq(FixedSize(), i => None), multiset{}, multiset{})
   }
 
   predicate nonoverlapping<A>(a: seq<Option<A>>, b: seq<Option<A>>)
@@ -68,10 +68,8 @@ module HTResource refines ApplicationResourceSpec {
   function add(x: R, y: R) : R {
     if x.R? && y.R? && nonoverlapping(x.table, y.table) then (
       R(fuse_seq(x.table, y.table),
-          x.insert_tickets + y.insert_tickets,
-          x.insert_stubs + y.insert_stubs,
-          x.query_tickets + y.query_tickets,
-          x.query_stubs + y.query_stubs)
+          x.tickets + y.tickets,
+          x.stubs + y.stubs)
     ) else (
       Fail
     )
@@ -93,11 +91,8 @@ module HTResource refines ApplicationResourceSpec {
         assert fuse(x.table[i], y.table[i]) == fuse(y.table[i], x.table[i]);
       }*/
       assert fuse_seq(x.table, y.table) == fuse_seq(y.table, x.table);
-      assert add(x, y).insert_tickets == add(y, x).insert_tickets;
-      assert add(x, y).insert_stubs == add(y, x).insert_stubs;
-
-      assert add(x, y).query_tickets == add(y, x).query_tickets;
-      assert add(x, y).query_stubs == add(y, x).query_stubs;
+      assert add(x, y).tickets == add(y, x).tickets;
+      assert add(x, y).stubs == add(y, x).stubs;
     }
   }
 
@@ -124,27 +119,28 @@ module HTResource refines ApplicationResourceSpec {
   }
 
   datatype Step =
-    | ProcessInsertTicketStep(insert_ticket: InsertTicket)
+    | ProcessInsertTicketStep(insert_ticket: Ticket)
     | InsertSkipStep(pos: nat)
     | InsertSwapStep(pos: nat)
     | InsertDoneStep(pos: nat)
 
-    | ProcessQueryTicketStep(query_ticket: QueryTicket)
+    | ProcessQueryTicketStep(query_ticket: Ticket)
     | QuerySkipStep(pos: nat)
     | QueryDoneStep(pos: nat)
     | QueryNotFoundStep(pos: nat)
 
-  predicate ProcessInsertTicket(s: R, s': R, insert_ticket: InsertTicket)
+  predicate ProcessInsertTicket(s: R, s': R, insert_ticket: Ticket)
   {
     && s.R?
     && s'.R?
-    && insert_ticket in s.insert_tickets
+    && insert_ticket.InsertTicket?
+    && insert_ticket in s.tickets
     && var h: uint32 := hash(insert_ticket.key);
     && 0 <= h as int < |s.table|
     && s.table[h].Some?
     && s.table[h].value.state.Free?
     && s' == s
-      .(insert_tickets := s.insert_tickets - multiset{insert_ticket})
+      .(tickets := s.tickets - multiset{insert_ticket})
       .(table := s.table[h := Some(
           s.table[h].value.(state :=
             Inserting(insert_ticket.rid, KV(insert_ticket.key, insert_ticket.val))))])
@@ -210,19 +206,20 @@ module HTResource refines ApplicationResourceSpec {
         [pos := Some(Info(
             Full(s.table[pos].value.state.kv),
             Free))])
-      .(insert_stubs := s.insert_stubs + multiset{InsertStub(s.table[pos].value.state.rid)})
+      .(stubs := s.stubs + multiset{InsertStub(s.table[pos].value.state.rid)})
   }
 
-  predicate ProcessQueryTicket(s: R, s': R, query_ticket: QueryTicket)
+  predicate ProcessQueryTicket(s: R, s': R, query_ticket: Ticket)
   {
     && s.R?
     && s'.R?
-    && query_ticket in s.query_tickets
+    && query_ticket.QueryTicket?
+    && query_ticket in s.tickets
     && var h: uint32 := hash(query_ticket.key);
     && 0 <= h as int < FixedSize()
     && s.table[h].Some?
     && s' == s
-      .(query_tickets := s.query_tickets - multiset{query_ticket})
+      .(tickets := s.tickets - multiset{query_ticket})
       .(table := s.table[h := Some(
           s.table[h].value.(state :=
             Querying(query_ticket.rid, query_ticket.key)))])
@@ -257,7 +254,7 @@ module HTResource refines ApplicationResourceSpec {
     && s' == s
       .(table := s.table
         [pos := Some(s.table[pos].value.(state := Free))])
-      .(query_stubs := s.query_stubs + multiset{
+      .(stubs := s.stubs + multiset{
         QueryStub(s.table[pos].value.state.rid,
                   Found(s.table[pos].value.entry.kv.val))
        })
@@ -277,7 +274,7 @@ module HTResource refines ApplicationResourceSpec {
     && s' == s
       .(table := s.table
         [pos := Some(s.table[pos].value.(state := Free))])
-      .(query_stubs := s.query_stubs + multiset{
+      .(stubs := s.stubs + multiset{
         QueryStub(s.table[pos].value.state.rid, NotFound)
        })
   }
@@ -343,8 +340,6 @@ module HTResource refines ApplicationResourceSpec {
         assert UpdateStep(add(x, z), add(y, z), step);
       }
     }
-    /*var ticket, batches :| do_request(x, y, ticket, batches);
-    assert do_request(add(x, z), add(y, z), ticket, batches);*/
   }
 
   /*function input_ticket(id: int, input: Ifc.Input) : R {
