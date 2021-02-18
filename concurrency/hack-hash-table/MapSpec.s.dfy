@@ -1,6 +1,12 @@
+include "../../lib/Lang/NativeTypes.s.dfy"
+
 module KeyValueType {
+  import opened NativeTypes
+
   type Key = uint64
   type Value(==)
+
+  datatype QueryResult = Found(val: Value) | NotFound
 }
 
 module InputOutputIfc {
@@ -18,7 +24,7 @@ module MapIfc refines InputOutputIfc {
     | InsertInput(key: Key, value: Value)
 
   datatype Output =
-    | QueryOutput(value: Value)
+    | QueryOutput(res: QueryResult)
     | InsertOutput
 }
 
@@ -34,44 +40,42 @@ module AsyncIfc {
 
 // disallowed:
 
-// thread 1 : 4 butter, 2 sugar
-// thread 2 : 2 butter, 4 sugar
-
-// thread 1 : 3 batches returned
-// thread 2 : 3 batches returned
-
 module MapSpec {
+  import opened KeyValueType
+
   import Ifc = MapIfc
-  datatype Variables = Variables(butter: nat, sugar: nat)
+  datatype Variables = Variables(m: map<Key, Value>)
 
   predicate Init(s: Variables) {
-    && s.butter == 0
-    && s.sugar == 0
+    s.m == map[]
   }
 
   predicate Next(s: Variables, s': Variables, op: Ifc.Op) {
     match op {
       case Op(input, output) => (
-        exists num_batches: nat ::
-          && num_batches <= s.butter + input.butter
-          && num_batches <= s.sugar + input.sugar
-          && s'.butter == s.butter + input.butter - num_batches
-          && s'.sugar == s.sugar + input.sugar - num_batches
-          && output == Ifc.Output(6 * num_batches)
+        match input {
+          case QueryInput(key) => 
+            && s' == s
+            && (key in s.m ==> output == Ifc.QueryOutput(Found(s.m[key])))
+            && (key !in s.m ==> output == Ifc.QueryOutput(NotFound))
+          case InsertInput(key, value) =>
+            && s'.m == s.m[key := value]
+            && output == Ifc.InsertOutput
+        }
       )
     }
   }
 }
 
 module AsyncSpec {
-  import InnerIfc = CookieIfc
-  import SM = CookieSpec
+  import InnerIfc = MapIfc
+  import SM = MapSpec
   import Ifc = AsyncIfc
 
   type RequestId = Ifc.RequestId
 
   datatype Req = Req(rid: RequestId, input: InnerIfc.Input)
-  datatype Resp = Req(rid: RequestId, input: InnerIfc.Input)
+  datatype Resp = Resp(rid: RequestId, output: InnerIfc.Output)
 
   datatype Variables = Variables(
       s: SM.Variables,

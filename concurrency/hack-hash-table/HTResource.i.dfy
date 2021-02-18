@@ -1,28 +1,26 @@
-include "../hack-concurrency-framework/ApplicationResourceSpec.s.dfy"
+include "ApplicationResourceSpec.s.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "../../lib/Base/Option.s.dfy"
+include "MapSpec.s.dfy"
 
 module HTResource refines ApplicationResourceSpec {
   import opened NativeTypes
   import opened Options
 
-  type V(==)
+  import opened KeyValueType
+  import MapIfc
 
   datatype Ticket =
-    | InsertTicket(rid: int, key: uint64, val: V)
-    | QueryTicket(rid: int, key: uint64)
-
-  datatype QueryResult = Found(val: V) | NotFound
+    | Ticket(rid: int, input: MapIfc.Input)
 
   datatype Stub =
-    | InsertStub(rid: int)
-    | QueryStub(rid: int, res: QueryResult)
+    | Stub(rid: int, output: MapIfc.Output)
 
   function method hash(key: uint64) : uint32
 
   function FixedSize() : nat
 
-  datatype KV = KV(key: uint64, val: V)
+  datatype KV = KV(key: uint64, val: Value)
 
   datatype Entry =
     | Full(kv: KV)
@@ -133,9 +131,9 @@ module HTResource refines ApplicationResourceSpec {
   {
     && s.R?
     && s'.R?
-    && insert_ticket.InsertTicket?
+    && insert_ticket.input.InsertInput?
     && insert_ticket in s.tickets
-    && var h: uint32 := hash(insert_ticket.key);
+    && var h: uint32 := hash(insert_ticket.input.key);
     && 0 <= h as int < |s.table|
     && s.table[h].Some?
     && s.table[h].value.state.Free?
@@ -143,7 +141,8 @@ module HTResource refines ApplicationResourceSpec {
       .(tickets := s.tickets - multiset{insert_ticket})
       .(table := s.table[h := Some(
           s.table[h].value.(state :=
-            Inserting(insert_ticket.rid, KV(insert_ticket.key, insert_ticket.val))))])
+            Inserting(insert_ticket.rid,
+              KV(insert_ticket.input.key, insert_ticket.input.value))))])
   }
 
   // We're trying to insert new_item at pos j
@@ -206,23 +205,23 @@ module HTResource refines ApplicationResourceSpec {
         [pos := Some(Info(
             Full(s.table[pos].value.state.kv),
             Free))])
-      .(stubs := s.stubs + multiset{InsertStub(s.table[pos].value.state.rid)})
+      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput)})
   }
 
   predicate ProcessQueryTicket(s: R, s': R, query_ticket: Ticket)
   {
     && s.R?
     && s'.R?
-    && query_ticket.QueryTicket?
+    && query_ticket.input.QueryInput?
     && query_ticket in s.tickets
-    && var h: uint32 := hash(query_ticket.key);
+    && var h: uint32 := hash(query_ticket.input.key);
     && 0 <= h as int < FixedSize()
     && s.table[h].Some?
     && s' == s
       .(tickets := s.tickets - multiset{query_ticket})
       .(table := s.table[h := Some(
           s.table[h].value.(state :=
-            Querying(query_ticket.rid, query_ticket.key)))])
+            Querying(query_ticket.rid, query_ticket.input.key)))])
   }
 
   predicate QuerySkip(s: R, s': R, pos: nat)
@@ -255,8 +254,8 @@ module HTResource refines ApplicationResourceSpec {
       .(table := s.table
         [pos := Some(s.table[pos].value.(state := Free))])
       .(stubs := s.stubs + multiset{
-        QueryStub(s.table[pos].value.state.rid,
-                  Found(s.table[pos].value.entry.kv.val))
+        Stub(s.table[pos].value.state.rid,
+                  MapIfc.QueryOutput(Found(s.table[pos].value.entry.kv.val)))
        })
   }
 
@@ -275,7 +274,7 @@ module HTResource refines ApplicationResourceSpec {
       .(table := s.table
         [pos := Some(s.table[pos].value.(state := Free))])
       .(stubs := s.stubs + multiset{
-        QueryStub(s.table[pos].value.state.rid, NotFound)
+        Stub(s.table[pos].value.state.rid, MapIfc.QueryOutput(NotFound))
        })
   }
 
@@ -342,80 +341,19 @@ module HTResource refines ApplicationResourceSpec {
     }
   }
 
-  /*function input_ticket(id: int, input: Ifc.Input) : R {
-    R(multiset{Ticket(id, input)}, multiset{}, 0, 0)
+  function input_ticket(id: int, input: Ifc.Input) : R
+  {
+    unit().(tickets := multiset{Ticket(id, input)})
   }
 
-  function output_stub(id: int, output: Ifc.Output) : R {
-    R(multiset{}, multiset{Stub(id, output)}, 0, 0)
-  }*/
-
-  predicate Inv(s: R) {
-    true
+  function output_stub(id: int, output: Ifc.Output) : R
+  {
+    unit().(stubs := multiset{Stub(id, output)})
   }
 
-  lemma UpdatePreservesInv(s: R, s': R)
-  //requires Inv(s)
-  //requires Update(s, s')
-  ensures Inv(s')
+  lemma NewTicketPreservesValid(r: R, id: int, input: Ifc.Input)
+  //requires Valid(r)
+  ensures Valid(add(r, input_ticket(id, input)))
   {
   }
-
-  lemma NewTicketPreservesInv(s: R, s': R)
-  //requires Inv(s)
-  //requires NewTicket(s, s')
-  ensures Inv(s')
-  {
-  }
-
-  lemma ConsumeStubPreservesInv(s: R, s': R)
-  //requires Inv(s)
-  //requires ConsumeStub(s, s')
-  ensures Inv(s')
-  {
-  }
-
-  method easy_transform(
-      linear b: R,
-      ghost expected_out: R)
-  returns (linear c: R)
-  requires Update(b, expected_out)
-  ensures c == expected_out
-  {
-    shared var u := get_unit_shared();
-    ghost var a := u;
-    forall a' | radical(a', a) && Valid(add(a', b))
-    ensures Update(add(a', b), add(a', expected_out))
-    {
-      update_monotonic(b, expected_out, a');
-      commutative(a', b);
-      commutative(a', expected_out);
-    }
-    c := do_transform(u, b, expected_out);
-  }
-
-  /*method do_tr(linear t: R, linear s: R, ticket: Ticket, batches: nat)
-  returns (linear stub: R, linear s': R)
-  requires t == input_ticket(ticket.rid, ticket.input)
-  requires batches <= ticket.input.sugar + s.sugar
-  requires batches <= ticket.input.butter + s.butter
-  ensures stub == output_stub(ticket.rid, Ifc.Output(6 * batches))
-  ensures s' == s
-    .(sugar := ticket.input.sugar + s.sugar - batches)
-    .(butter := ticket.input.butter + s.butter - batches)
-  {
-    linear var total := join(t, s);
-    ghost var total_exp := total
-      .(tickets := total.tickets - multiset{ticket})
-      .(stubs := total.stubs + multiset{Stub(ticket.rid, Ifc.Output(6 * batches))})
-      .(sugar := ticket.input.sugar + s.sugar - batches)
-      .(butter := ticket.input.butter + s.butter - batches);
-    assert do_request(total, total_exp, ticket, batches);
-    linear var total' := easy_transform(total, total_exp);
-    stub, s' := split(total', 
-        output_stub(ticket.rid, Ifc.Output(6 * batches)),
-        s.(sugar := ticket.input.sugar + s.sugar - batches)
-         .(butter := ticket.input.butter + s.butter - batches)
-    );
-  }*/
 }
