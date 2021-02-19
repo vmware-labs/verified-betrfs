@@ -528,7 +528,7 @@ module MarshallingImpl {
   returns (v : V, size: uint64)
   requires node.Inv()
   requires SSM.WFNode(node.I())
-  requires BT.WFNode(SSM.INode(node.I()))
+  requires BT.WFNode(node.I())
   requires BucketsLib.BucketListWellMarshalled(BucketImpl.MutBucket.ILseq(node.buckets))
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.PivotNodeGrammar())
@@ -589,7 +589,7 @@ module MarshallingImpl {
   requires SSM.WFSector(SSI.ISector(sector))
   requires sector.SectorNode?
   requires sector.SectorNode? ==> SSM.WFNode(sector.node.I())
-  requires sector.SectorNode? ==> BT.WFNode(SSM.INode(sector.node.I()))
+  requires sector.SectorNode? ==> BT.WFNode(sector.node.I())
   requires sector.SectorNode? ==> 
     BucketsLib.BucketListWellMarshalled(BucketImpl.MutBucket.ILseq(sector.node.buckets))
   ensures ValidVal(v)
@@ -633,7 +633,7 @@ module MarshallingImpl {
   ensures s.lSome? ==> SSM.WFSector(SSI.ISector(s.value))
   ensures ISectorOpt(s.Option()) == IMM.parseSector(data[start..])
   ensures s.lSome? && s.value.SectorNode? ==> SSM.WFNode(s.value.node.I())
-  ensures s.lSome? && s.value.SectorNode? ==> BT.WFNode(SSM.INode(s.value.node.I()))
+  ensures s.lSome? && s.value.SectorNode? ==> BT.WFNode(s.value.node.I())
   {
     IMM.reveal_parseSector();
     var success, v, rest_index := ParseVal(data, start, Marshalling.SectorGrammar());
@@ -672,7 +672,7 @@ module MarshallingImpl {
   ensures s.lSome? ==> SSM.WFSector(SSI.ISector(s.value))
   ensures ISectorOpt(s.Option()) == IMM.parseCheckedSector(data)
   ensures s.lSome? && s.value.SectorNode? ==> SSM.WFNode(s.value.node.I())
-  ensures s.lSome? && s.value.SectorNode? ==> BT.WFNode(SSM.INode(s.value.node.I()))
+  ensures s.lSome? && s.value.SectorNode? ==> BT.WFNode(s.value.node.I())
   {
     if |data| as uint64 >= 32 {
       // TODO unnecessary copy here
@@ -757,7 +757,7 @@ module MarshallingImpl {
   requires SSI.WFSector(sector)
   requires SSM.WFSector(SSI.ISector(sector))
   requires sector.SectorNode? ==> SSM.WFNode(sector.node.I())
-  requires sector.SectorNode? ==> BT.WFNode(SSM.INode(sector.node.I()))
+  requires sector.SectorNode? ==> BT.WFNode(sector.node.I())
   requires sector.SectorSuperblock? ==> JC.WFSuperblock(sector.superblock)
   ensures sector.SectorIndirectionTable? ==> 
     sector.indirectionTable.Inv()
