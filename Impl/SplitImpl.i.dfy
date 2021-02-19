@@ -83,8 +83,8 @@ module SplitImpl {
 
   ensures s.Ready?
   ensures s.W()
-  ensures s.IBlockCache() == SplitModel.splitBookkeeping(old_s.IBlockCache(), left_childref, right_childref, 
-    parentref, fparent_children, left_child.I(), right_child.I(), slot as int)
+  ensures s.IBlockCache() == SplitModel.splitBookkeeping(old_s.IBlockCache(), left_childref, right_childref, parentref, fparent_children, left_child.I(), right_child.I(), slot as int)
+  ensures s.cache == old_s.cache
   {
     SplitModel.reveal_splitBookkeeping();
 
@@ -122,23 +122,27 @@ module SplitImpl {
   requires right_childref != parentref
   requires PivotInsertable(old_s.cache.I()[parentref].pivotTable, (slot+1) as int, pivot)
 
+  ensures s.Ready?
   ensures s.W()
   ensures s.IBlockCache() == SplitModel.splitCacheChanges(old_s.IBlockCache(), left_childref, right_childref,
     parentref, slot as int, num_children_left as int, pivot, left_child.I(), right_child.I())
-  ensures s.Ready?
   {
     SplitModel.reveal_splitCacheChanges();
     inout s.cache.Insert(left_childref, left_child);
     inout s.cache.Insert(right_childref, right_child);
     inout s.cache.SplitParent(parentref, slot as uint64, pivot, left_childref, right_childref);
+
+    ghost var s' := SplitModel.splitCacheChanges(old_s.IBlockCache(), left_childref, right_childref,
+    parentref, slot as int, num_children_left as int, pivot, left_child.I(), right_child.I());
+    assert s.W();
+    assert s' == s.IBlockCache();
   }
-/*
 
   method splitDoChanges(linear inout s: ImplVariables, linear child: Node, left_childref: BT.G.Reference,
       right_childref: BT.G.Reference, parentref: BT.G.Reference, fparent_pivots: PivotTable,
       fparent_children: seq<BT.G.Reference>, slot: uint64)
   requires old_s.Ready?
-  requires old_s.Inv()
+  requires old_s.BCInv()
   requires child.Inv()
   requires BT.WFNode(child.I())
   requires old_s.cache.ptr(parentref).Some?
@@ -153,10 +157,10 @@ module SplitImpl {
   requires BookkeepingModel.ChildrenConditions(old_s.IBlockCache(), Some(fparent_children))
   requires BookkeepingModel.ChildrenConditions(old_s.IBlockCache(), child.children)
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
-  ensures s.W()
-  ensures s.IBlockCache() == SplitModel.splitDoChanges(old_s.IBlockCache(), old(child.I()), left_childref,
-    right_childref, parentref, fparent_children, slot as int)
+
   ensures s.Ready?
+  ensures s.W()
+  ensures s.IBlockCache() == SplitModel.splitDoChanges(old_s.IBlockCache(), old(child.I()), left_childref, right_childref, parentref, fparent_children, slot as int)
   {
     var len := lseq_length_as_uint64(child.buckets);
     var num_children_left := len / 2;
@@ -173,6 +177,7 @@ module SplitImpl {
 
       splitBookkeeping(inout s, left_childref, right_childref, parentref,
         fparent_children, left_child, right_child, slot as uint64);
+
       splitCacheChanges(inout s, left_childref, right_childref, parentref,
         slot as uint64, num_children_left as uint64, pivot, left_child, right_child);
     } else {
@@ -185,7 +190,7 @@ module SplitImpl {
     childref: BT.G.Reference, slot: uint64, lbound: Key, ubound: Option<Key>,
     fparent_pivots: PivotTable, fparent_children: Option<seq<BT.G.Reference>>)
   requires old_s.Ready?
-  requires old_s.Inv()
+  requires old_s.BCInv()
   requires old_s.cache.ptr(childref).Some?
   requires old_s.cache.ptr(parentref).Some?
   requires old_s.cache.I()[parentref].children.Some?
@@ -241,7 +246,7 @@ module SplitImpl {
 
   method doSplit(linear inout s: ImplVariables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: uint64)
   requires old_s.Ready?
-  requires old_s.Inv()
+  requires old_s.BCInv()
   requires old_s.cache.ptr(childref).Some?
   requires old_s.cache.ptr(parentref).Some?
   requires childref in old_s.ephemeralIndirectionTable.I().graph
@@ -303,5 +308,4 @@ module SplitImpl {
       }
     }
   }
-  */
 }

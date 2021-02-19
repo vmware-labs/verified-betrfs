@@ -1,7 +1,6 @@
 include "BookkeepingModel.i.dfy"
 
 module SplitModel {
-  import opened StateBCModel
   import opened StateSectorModel
 
   import opened IOModel
@@ -165,6 +164,7 @@ module SplitModel {
 
     if PivotInsertable(s.cache[parentref].pivotTable, slot+1, pivot) then (
       lemmaChildrenConditionsSplitChild(s, child, num_children_left);
+
 
       var left_child := SplitChildLeft(child, num_children_left);
       var right_child := SplitChildRight(child, num_children_left);

@@ -1,12 +1,10 @@
 include "../lib/Base/DebugAccumulator.i.dfy"
 include "../lib/DataStructures/LinearLru.i.dfy"
 include "IndirectionTable.i.dfy"
-include "StateBCModel.i.dfy"
 include "StateSectorImpl.i.dfy"
 include "BlockAllocatorImpl.i.dfy"
 include "CacheImpl.i.dfy"
 include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
-// include "StateBCModel.i.dfy"
 
 module StateBCImpl {
   import opened Options
@@ -25,7 +23,6 @@ module StateBCImpl {
   import LinearLru
   import BlockAllocatorImpl
   import D = AsyncDisk
-  import SBCM = StateBCModel
   import BlockAllocatorModel
   import LruModel
 
@@ -38,12 +35,6 @@ module StateBCImpl {
   predicate WFCache(cache: map<Reference, Node>)
   {
     forall ref | ref in cache :: WFNode(cache[ref])
-  }
-
-  function ICache(cache: map<Reference, Node>): map<Reference, BT.G.Node>
-  requires WFCache(cache)
-  {
-    map ref | ref in cache :: INode(cache[ref])
   }
 
   predicate IsLocAllocOutstanding(outstanding: map<BC.ReqId, BC.OutstandingWrite>, i: int)
@@ -158,7 +149,6 @@ module StateBCImpl {
         && lru.Inv()
         && cache.Inv()
         && blockAllocator.Inv()
-        && WFCache(cache.I())
       )
     }
 
@@ -173,6 +163,7 @@ module StateBCImpl {
       && BlockAllocatorModel.Inv(blockAllocator.I())
       && ConsistentBitmap(ephemeralIndirectionTable.I(), if frozenIndirectionTable.lSome? then lSome(frozenIndirectionTable.value.I()) else lNone,
           persistentIndirectionTable.I(), outstandingBlockWrites, blockAllocator.I())
+      && WFCache(cache.I())
     }
 
     predicate WFBCVars()
@@ -193,7 +184,7 @@ module StateBCImpl {
           outstandingIndirectionTableWrite,
           outstandingBlockWrites,
           outstandingBlockReads,
-          ICache(cache.I()))
+          cache.I())
       ) else if Loading? then (
         BC.LoadingIndirectionTable(indirectionTableLoc, indirectionTableRead)
       ) else (

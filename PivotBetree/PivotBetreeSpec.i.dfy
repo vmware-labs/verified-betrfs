@@ -544,7 +544,7 @@ module PivotBetreeSpec {
   }
 
   //// Split
-  function SplitChildLeft(child: Node, num_children_left: int) : Node
+  function SplitChildLeft(child: Node, num_children_left: int) : (l: Node)
   requires 0 <= num_children_left - 1 <= |child.pivotTable| - 2
   requires child.children.Some? ==> 0 <= num_children_left <= |child.children.value|
   requires 0 <= num_children_left <= |child.buckets|
