@@ -16,8 +16,6 @@ module HTResource refines ApplicationResourceSpec {
   datatype Stub =
     | Stub(rid: int, output: MapIfc.Output)
 
-  function method hash(key: uint64) : uint32
-
   function FixedSize() : nat
 
   datatype KV = KV(key: uint64, val: Value)
