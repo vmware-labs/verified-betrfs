@@ -3,7 +3,6 @@ include "../lib/Base/Sets.i.dfy"
 
 module BookkeepingModel { 
   import IT = IndirectionTable
-  import opened StateBCModel
   import opened StateSectorModel
   import opened IOModel
   import opened DiskOpModel
@@ -20,7 +19,7 @@ module BookkeepingModel {
 
   import opened NativeTypes
 
-  predicate RefAvailable(s: BBC.Variables, ref: Reference)
+  predicate RefAvailable(s: BBC.Variables, ref: BT.G.Reference)
   {
     && s.Ready?
     && ref !in s.ephemeralIndirectionTable.graph
@@ -155,7 +154,7 @@ module BookkeepingModel {
   }
 
   function {:opaque} allocBookkeeping(s: BBC.Variables, children: Option<seq<BT.G.Reference>>)
-  : (p: (BBC.Variables, Option<Reference>))
+  : (p: (BBC.Variables, Option<BT.G.Reference>))
   requires s.WriteAllocConditions()
   requires ChildrenConditions(s, children)
 
@@ -172,10 +171,9 @@ module BookkeepingModel {
       (s, None)
     )
   }
-/*
 
-  function {:opaque} writeBookkeepingNoSuccsUpdate(s: BCVariables, ref: BT.G.Reference)
-  : (s': BCVariables)
+  function {:opaque} writeBookkeepingNoSuccsUpdate(s: BBC.Variables, ref: BT.G.Reference)
+  : (s': BBC.Variables)
   requires s.WriteAllocConditions()
   requires ref in s.ephemeralIndirectionTable.graph
   ensures s'.Ready?
@@ -183,24 +181,13 @@ module BookkeepingModel {
   ensures s'.WriteAllocConditions()
   ensures |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
   {
-    lemmaIndirectionTableLocIndexValid(s, ref);
-    var (eph, oldLoc) := s.ephemeralIndirectionTable.removeLoc(ref);
-    var blockAllocator' := if oldLoc.Some?
-      then BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, oldLoc.value.addr as int / NodeBlockSize())
-      else s.blockAllocator;
-    var s' := s.(ephemeralIndirectionTable := eph)
-     .(lru := LruModel.Use(s.lru, ref))
-     .(blockAllocator := blockAllocator');
+    var eph := s.ephemeralIndirectionTable.
+      (locs := MapRemove1(s.ephemeralIndirectionTable.locs, ref));
 
-    freeIndirectionTableLocCorrect(s, s', ref,
-      if oldLoc.Some?
-      then Some(oldLoc.value.addr as int / NodeBlockSize())
-      else None);
-    reveal_ConsistentBitmap();
-
+    var s' := s.(ephemeralIndirectionTable := eph);
+    assert s'.WriteAllocConditions();
     s'
   }
-*/
 
   // fullWrite and fullAlloc are like writeBookkeeping/allocBookkeeping, except that fullWrite and fullAlloc update
   // the cache with the node. In the implementation of betree operations we use the above,
@@ -234,7 +221,7 @@ module BookkeepingModel {
   }
 
   function allocWithNode(s: BBC.Variables, node: Node)
-  : (p: (BBC.Variables, Option<Reference>))
+  : (p: (BBC.Variables, Option<BT.G.Reference>))
   requires s.WriteAllocConditions()
   requires ChildrenConditions(s, node.children)
   ensures var (s', id) := p;
@@ -248,147 +235,6 @@ module BookkeepingModel {
       (s, None)
     )
   }
-/*
-
-  lemma freeIndirectionTableLocCorrect(
-      s: BCVariables, s': BCVariables, ref: BT.G.Reference, j: Option<int>)
-  requires s.WriteAllocConditions()
-  requires s'.Ready?
-  requires forall r | r != ref ::
-      MapsAgreeOnKey(
-          s.ephemeralIndirectionTable.I().locs,
-          s'.ephemeralIndirectionTable.I().locs,
-          r)
-  requires ref !in s'.ephemeralIndirectionTable.I().locs
-  requires j.Some? ==> 0 <= j.value < NumBlocks()
-  requires j.Some? ==> ref in s.ephemeralIndirectionTable.I().locs
-  requires j.Some? ==> s.ephemeralIndirectionTable.I().locs[ref].addr as int == j.value * NodeBlockSize()
-  requires j.Some? ==> s'.blockAllocator == BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator, j.value)
-  requires j.None? ==> s'.blockAllocator == s.blockAllocator
-  requires j.None? ==> ref !in s.ephemeralIndirectionTable.I().locs
-  ensures (forall i: int :: IT.IndirectionTable.IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable.I(), i)
-      <==> IT.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.ephemeral, i))
-  ensures BlockAllocatorModel.Inv(s'.blockAllocator)
-  ensures BC.AllLocationsForDifferentRefsDontOverlap(
-        s'.ephemeralIndirectionTable.I())
-  ensures (forall loc |
-        loc in s'.ephemeralIndirectionTable.I().locs.Values :: 
-          DiskLayout.ValidNodeLocation(loc))
-  {
-    reveal_ConsistentBitmap();
-    BitmapModel.reveal_IsSet();
-    BitmapModel.reveal_BitUnset();
-    lemmaIndirectionTableLocIndexValid(s, ref);
-
-    forall r1, r2 | r1 in s'.ephemeralIndirectionTable.I().locs && r2 in s'.ephemeralIndirectionTable.I().locs
-    ensures BC.LocationsForDifferentRefsDontOverlap(s'.ephemeralIndirectionTable.I(), r1, r2)
-    {
-      assert MapsAgreeOnKey( s.ephemeralIndirectionTable.I().locs, s'.ephemeralIndirectionTable.I().locs, r1);
-      assert MapsAgreeOnKey( s.ephemeralIndirectionTable.I().locs, s'.ephemeralIndirectionTable.I().locs, r2);
-    }
-
-    forall loc | loc in s'.ephemeralIndirectionTable.I().locs.Values
-    ensures DiskLayout.ValidNodeLocation(loc)
-    {
-      var r :| r in s'.ephemeralIndirectionTable.I().locs && s'.ephemeralIndirectionTable.I().locs[r] == loc;
-      assert MapsAgreeOnKey(s.ephemeralIndirectionTable.I().locs, s'.ephemeralIndirectionTable.I().locs, r);
-    }
-
-    if j.Some? {
-      assert DiskLayout.ValidNodeLocation(s.ephemeralIndirectionTable.I().locs[ref]);
-      assert j.value >= MinNodeBlockIndex() by {
-        DiskLayout.reveal_ValidNodeAddr();
-      }
-    }
-
-    forall i: int
-    | IT.IndirectionTable.IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable.I(), i)
-    ensures IT.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.ephemeral, i)
-    {
-      if j.Some? && i == j.value {
-        if 0 <= i < MinNodeBlockIndex() {
-          assert false;
-        } else {
-          var r :| r in s'.ephemeralIndirectionTable.locs &&
-              s'.ephemeralIndirectionTable.locs[r].addr as int == i * NodeBlockSize() as int;
-          assert MapsAgreeOnKey(
-            s.ephemeralIndirectionTable.I().locs,
-            s'.ephemeralIndirectionTable.I().locs, r);
-
-          assert BC.LocationsForDifferentRefsDontOverlap(s.ephemeralIndirectionTable.I(), ref, r);
-
-          assert ref !in s'.ephemeralIndirectionTable.I().locs;
-          assert r in s'.ephemeralIndirectionTable.I().locs;
-          assert s.ephemeralIndirectionTable.I().locs[r]
-              == s.ephemeralIndirectionTable.I().locs[ref];
-          assert r == ref;
-
-          assert false;
-        }
-      } else {
-        if 0 <= i < MinNodeBlockIndex() {
-          assert IT.IndirectionTable.IsLocAllocIndirectionTable(s.ephemeralIndirectionTable.I(), i);
-          assert IT.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.ephemeral, i);
-          assert IT.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.ephemeral, i);
-        } else {
-          var r :| r in s'.ephemeralIndirectionTable.locs &&
-              s'.ephemeralIndirectionTable.locs[r].addr as int == i * NodeBlockSize() as int;
-          assert MapsAgreeOnKey(
-            s.ephemeralIndirectionTable.I().locs,
-            s'.ephemeralIndirectionTable.I().locs, r);
-          assert IT.IndirectionTable.IsLocAllocIndirectionTable(s.ephemeralIndirectionTable.I(), i);
-          assert IT.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.ephemeral, i);
-          assert IT.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.ephemeral, i);
-        }
-      }
-    }
-
-    forall i: int
-    | IT.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.ephemeral, i)
-    ensures IT.IndirectionTable.IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable.I(), i)
-    {
-      if j.Some? && i == j.value {
-        assert IT.IndirectionTable.IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable.I(), i);
-      } else {
-        assert IT.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.ephemeral, i);
-        assert IT.IndirectionTable.IsLocAllocIndirectionTable(s.ephemeralIndirectionTable.I(), i);
-        if 0 <= i < MinNodeBlockIndex() {
-          assert IT.IndirectionTable.IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable.I(), i);
-        } else {
-          var r :| r in s.ephemeralIndirectionTable.locs &&
-            s.ephemeralIndirectionTable.locs[r].addr as int == i * NodeBlockSize() as int;
-          assert MapsAgreeOnKey(
-            s.ephemeralIndirectionTable.I().locs,
-            s'.ephemeralIndirectionTable.I().locs, r);
-          assert r in s'.ephemeralIndirectionTable.locs &&
-            s'.ephemeralIndirectionTable.locs[r].addr as int == i * NodeBlockSize() as int;
-          assert IT.IndirectionTable.IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable.I(), i);
-        }
-      }
-    }
-
-    if j.Some? {
-      forall i | 0 <= i < NumBlocks()
-      ensures BitmapModel.IsSet(s'.blockAllocator.full, i) == (
-        || BitmapModel.IsSet(s'.blockAllocator.ephemeral, i)
-        || (s'.blockAllocator.frozen.Some? && BitmapModel.IsSet(s'.blockAllocator.frozen.value, i))
-        || BitmapModel.IsSet(s'.blockAllocator.persistent, i)
-        || BitmapModel.IsSet(s'.blockAllocator.full, i)
-      )
-      {
-        if i == j.value {
-        } else {
-          assert BitmapModel.IsSet(s'.blockAllocator.full, i) == BitmapModel.IsSet(s.blockAllocator.full, i);
-          assert BitmapModel.IsSet(s'.blockAllocator.ephemeral, i) == BitmapModel.IsSet(s.blockAllocator.ephemeral, i);
-          assert s'.blockAllocator.frozen.Some? ==> BitmapModel.IsSet(s'.blockAllocator.frozen.value, i) == BitmapModel.IsSet(s.blockAllocator.frozen.value, i);
-          assert BitmapModel.IsSet(s'.blockAllocator.persistent, i) == BitmapModel.IsSet(s.blockAllocator.persistent, i);
-          assert BitmapModel.IsSet(s'.blockAllocator.outstanding, i) == BitmapModel.IsSet(s.blockAllocator.outstanding, i);
-        }
-      }
-    } else {
-    }
-  }
-*/
 
   lemma writeBookkeepingBitmapCorrect(s: BBC.Variables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>)
   requires s.WriteAllocConditions()
@@ -401,14 +247,14 @@ module BookkeepingModel {
   lemma allocCorrect(s: BBC.Variables, node: Node)
   requires BBC.Inv(s)
   requires s.WriteAllocConditions()
-  requires BC.BlockPointsToValidReferences(INode(node), s.ephemeralIndirectionTable.graph)
+  requires BC.BlockPointsToValidReferences(node, s.ephemeralIndirectionTable.graph)
   // requires TotalCacheSize(s) <= MaxCacheSize() - 1
   requires WFNode(node)
   requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
   ensures var (s', ref) := allocWithNode(s, node);
     && BBC.Inv(s')
     // && WFBCVars(s')
-    && (ref.Some? ==> BC.Alloc(s, s', ref.value, INode(node)))
+    && (ref.Some? ==> BC.Alloc(s, s', ref.value, node))
     && (ref.None? ==> s' == s)
     && (ref.Some? ==> s'.totalCacheSize() == s.totalCacheSize() + 1)
     && s'.WriteAllocConditions()
@@ -431,25 +277,18 @@ module BookkeepingModel {
   requires ref in s.ephemeralIndirectionTable.graph
   requires ref in s.cache
   requires WFNode(node)
-  requires BC.BlockPointsToValidReferences(INode(node), s.ephemeralIndirectionTable.graph)
+  requires BC.BlockPointsToValidReferences(node, s.ephemeralIndirectionTable.graph)
   requires s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.locs
   // requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
   ensures var s' := writeWithNode(s, ref, node);
     && BBC.Inv(s')
-    && BC.Dirty(s, s', ref, INode(node))
+    && BC.Dirty(s, s', ref, node)
     && s'.totalCacheSize() == s.totalCacheSize()
     && s'.WriteAllocConditions()
   {
     // lemmaIndirectionTableLocIndexValid(s, ref);
     WeightBucketEmpty();
-
-    // LruModel.LruUse(s.lru, ref);
-
-    // writeBookkeepingBitmapCorrect(s, ref, node.children);
     reveal_writeBookkeeping();
-
-    // var s' := writeWithNode(s, ref, node);
-    // assert WFBCVars(s');
   }
  
   lemma writeNewRefIsAlloc(s: BBC.Variables, ref: BT.G.Reference, node: Node)
@@ -457,15 +296,13 @@ module BookkeepingModel {
   requires s.WriteAllocConditions()
   requires RefAvailable(s, ref)
   requires WFNode(node)
-  // requires s.totalCacheSize() <= MaxCacheSize() - 1
-  requires BC.BlockPointsToValidReferences(INode(node), s.ephemeralIndirectionTable.graph)
-  // requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
+  requires BC.WFIndirectionTable(s.ephemeralIndirectionTable)
+  requires BC.BlockPointsToValidReferences(node, s.ephemeralIndirectionTable.graph)
   ensures var s' := writeWithNode(s, ref, node);
-    && BC.Alloc(s, s', ref, INode(node))
+    && BC.Alloc(s, s', ref, node)
     && s'.totalCacheSize() == s.totalCacheSize() + 1
     && s'.WriteAllocConditions()
   {
-    assume s.ephemeralIndirectionTable.locs.Keys <= s.ephemeralIndirectionTable.graph.Keys;
     writeBookkeepingBitmapCorrect(s, ref, node.children);
   }
 
@@ -474,7 +311,7 @@ module BookkeepingModel {
   requires BBC.Inv(s)
   requires ref in s.cache
   requires ref in s.ephemeralIndirectionTable.graph
-  requires childref in BT.G.Successors(INode(s.cache[ref]))
+  requires childref in BT.G.Successors(s.cache[ref])
   ensures childref in s.ephemeralIndirectionTable.graph
   {
     assert childref in s.ephemeralIndirectionTable.graph[ref];
@@ -485,22 +322,21 @@ module BookkeepingModel {
   requires s.Ready?
   requires ref in s.cache
   requires ref in s.ephemeralIndirectionTable.graph
-  ensures BC.BlockPointsToValidReferences(INode(s.cache[ref]), s.ephemeralIndirectionTable.graph);
+  ensures BC.BlockPointsToValidReferences(s.cache[ref], s.ephemeralIndirectionTable.graph);
   {
-    var node := INode(s.cache[ref]);
+    var node := s.cache[ref];
     var graph := s.ephemeralIndirectionTable.graph;
     forall r | r in BT.G.Successors(node) ensures r in graph
     {
       lemmaChildInGraph(s, ref, r);
     }
   }
-/*
 
-  lemma getFreeRefIterateDoesntEqual(s: BCVariables, i: uint64, ref: BT.G.Reference)
+  lemma getFreeRefIterateDoesntEqual(s: BBC.Variables, i: uint64, ref: BT.G.Reference)
   requires s.Ready?
   requires ref in s.cache
   requires i >= 1
-  requires s.ephemeralIndirectionTable.Inv()
+  // requires s.ephemeralIndirectionTable.Inv()
   requires forall r | r in s.ephemeralIndirectionTable.graph :: r < i
   decreases 0x1_0000_0000_0000_0000 - i as int
   ensures getFreeRefIterate(s, i) != Some(ref)
@@ -512,25 +348,25 @@ module BookkeepingModel {
     }
   }
 
-  lemma getFreeRefDoesntEqual(s: BCVariables, ref: BT.G.Reference)
+  lemma getFreeRefDoesntEqual(s: BBC.Variables, ref: BT.G.Reference)
   requires s.Ready?
   requires ref in s.cache
-  requires s.ephemeralIndirectionTable.Inv()
+  // requires s.ephemeralIndirectionTable.Inv()
+  requires BC.WFIndirectionTable(s.ephemeralIndirectionTable)
   ensures getFreeRef(s) != Some(ref)
   {
     reveal_getFreeRef();
-    var i := s.ephemeralIndirectionTable.getRefUpperBound();
+    var i := s.ephemeralIndirectionTable.refUpperBound;
     if i == 0xffff_ffff_ffff_ffff {
     } else {
       getFreeRefIterateDoesntEqual(s, i+1, ref);
     }
   }
 
-  lemma getFreeRef2IterateDoesntEqual(s: BCVariables, avoid: BT.G.Reference, i: uint64, ref: BT.G.Reference)
+  lemma getFreeRef2IterateDoesntEqual(s: BBC.Variables, avoid: BT.G.Reference, i: uint64, ref: BT.G.Reference)
   requires s.Ready?
   requires ref in s.cache
   requires i >= 1
-  requires s.ephemeralIndirectionTable.Inv()
   requires forall r | r in s.ephemeralIndirectionTable.graph :: r < i
   ensures getFreeRef2Iterate(s, avoid, i) != Some(ref)
   decreases 0x1_0000_0000_0000_0000 - i as int
@@ -542,29 +378,29 @@ module BookkeepingModel {
     }
   }
 
-  lemma getFreeRef2DoesntEqual(s: BCVariables, avoid: BT.G.Reference, ref: BT.G.Reference)
+  lemma getFreeRef2DoesntEqual(s: BBC.Variables, avoid: BT.G.Reference, ref: BT.G.Reference)
   requires s.Ready?
   requires ref in s.cache
-  requires s.ephemeralIndirectionTable.Inv()
+  requires BC.WFIndirectionTable(s.ephemeralIndirectionTable)
   ensures getFreeRef2(s, avoid) != Some(ref)
   {
     reveal_getFreeRef2();
-    var i := s.ephemeralIndirectionTable.getRefUpperBound();
+    var i := s.ephemeralIndirectionTable.refUpperBound;
     if i == 0xffff_ffff_ffff_ffff {
     } else {
       getFreeRef2IterateDoesntEqual(s, avoid, i+1, ref);
     }
   }
 
-  lemma allocRefDoesntEqual(s: BCVariables, children: Option<seq<BT.G.Reference>>, ref: BT.G.Reference)
+  lemma allocRefDoesntEqual(s: BBC.Variables, children: Option<seq<BT.G.Reference>>, ref: BT.G.Reference)
   requires allocBookkeeping.requires(s, children);
   requires ref in s.cache
+  requires BC.WFIndirectionTable(s.ephemeralIndirectionTable)
   ensures allocBookkeeping(s, children).1 != Some(ref)
   {
     reveal_allocBookkeeping();
     getFreeRefDoesntEqual(s, ref);
   }
-*/
 
   lemma lemmaChildrenConditionsOfNode(
       s: BBC.Variables, ref: BT.G.Reference)
@@ -579,7 +415,7 @@ module BookkeepingModel {
       ensures r in s.ephemeralIndirectionTable.graph
       {
         // Trigger the forall in CacheConsistentWithSuccessors
-        assert r in BT.G.Successors(INode(s.cache[ref]));
+        assert r in BT.G.Successors(s.cache[ref]);
         assert r in s.ephemeralIndirectionTable.graph[ref];
       }
     }
