@@ -359,21 +359,19 @@ module BookkeepingImpl {
     }
   }
 
-/*
-
   method writeBookkeepingNoSuccsUpdate(linear inout s: ImplVariables, ref: BT.G.Reference)
   requires old_s.W()
   requires old_s.Ready?
   requires |LruModel.I(old_s.lru.Queue())| <= 0x1_0000_0000
-  requires BookkeepingModel.WriteAllocConditions(old_s.I())
+  requires old_s.WriteAllocConditions()
   requires ref in old_s.ephemeralIndirectionTable.I().graph
   ensures s.W()
-  ensures s.I() == BookkeepingModel.writeBookkeepingNoSuccsUpdate(old_s.I(), ref)
+  ensures s.IBlockCache() == BookkeepingModel.writeBookkeepingNoSuccsUpdate(old_s.IBlockCache(), ref)
   ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
   {
     BookkeepingModel.reveal_writeBookkeepingNoSuccsUpdate();
 
-    BookkeepingModel.lemmaIndirectionTableLocIndexValid(s.I(), ref);
+    lemmaIndirectionTableLocIndexValid(s, ref);
 
     var oldLoc := inout s.ephemeralIndirectionTable.RemoveLoc(ref);
 
@@ -389,5 +387,4 @@ module BookkeepingImpl {
         <= |LruModel.I(old_s.lru.Queue())| + |{ref}|
         == |LruModel.I(old_s.lru.Queue())| + 1;
   }
-  */
 }
