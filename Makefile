@@ -5,7 +5,7 @@
 DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy
 
 DAFNY_ROOT?=.dafny/dafny/
-DAFNY_CMD=$(DAFNY_ROOT)/Binaries/Dafny
+DAFNY_CMD=$(DAFNY_ROOT)/Scripts/dafny
 DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
 DAFNY_FLAGS=
 DAFNY_GLOBAL_FLAGS=
