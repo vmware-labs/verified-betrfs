@@ -1,7 +1,6 @@
 include "BookkeepingModel.i.dfy"
 
 module GrowModel { 
-  import opened StateBCModel
   import opened StateSectorModel
 
   import opened IOModel
@@ -106,8 +105,6 @@ module GrowModel {
         WeightBucketListOneEmpty();
 
         assert BT.G.Root() in s.cache;
-        assert BT.G.Root() in ICache(s.cache);
-        assert BT.G.Root() in ICache(s1.cache);
         assert BT.G.Root() in s1.cache;
 
         var s2 := writeWithNode(s1, BT.G.Root(), newroot);
@@ -116,8 +113,8 @@ module GrowModel {
         allocCorrect(s, oldroot);
         writeCorrect(s1, BT.G.Root(), newroot);
 
-        var growth := BT.RootGrowth(INode(oldroot), newref);
-        assert INode(newroot) == BT.G.Node(InitPivotTable(), Some([growth.newchildref]), [B(map[])]);
+        var growth := BT.RootGrowth(oldroot, newref);
+        assert newroot == BT.G.Node(InitPivotTable(), Some([growth.newchildref]), [B(map[])]);
         var step := BT.BetreeGrow(growth);
         assert BT.ValidGrow(growth);
         BC.MakeTransaction2(s, s1, s', BT.BetreeStepOps(step));

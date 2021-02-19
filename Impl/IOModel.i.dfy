@@ -491,7 +491,7 @@ module IOModel {
     && (sector.Some? ==> (
       && SSM.WFSector(sector.value)
       && ValidDiskOp(diskOp(io))
-      && (sector.value.SectorNode? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadNodeOp(id, Some(SSM.INode(sector.value.node))), JournalDisk.NoDiskOp))
+      && (sector.value.SectorNode? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadNodeOp(id, Some(sector.value.node )), JournalDisk.NoDiskOp))
       && (sector.value.SectorIndirectionTable? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadIndirectionTableOp(id, Some(sector.value.indirectionTable.I())), JournalDisk.NoDiskOp))
       && (sector.value.SectorSuperblock? ==>
         && IDiskOp(diskOp(io)).bdop == BlockDisk.NoDiskOp
