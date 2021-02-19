@@ -38,16 +38,11 @@ module StateSectorModel {
     }
   }
 
-  function INode(node: Node) : (result: BT.G.Node)
-  {
-    BT.G.Node(node.pivotTable, node.children, node.buckets)
-  }
-
   function ISector(sector: Sector) : SectorType.Sector
   requires WFSector(sector)
   {
     match sector {
-      case SectorNode(node) => SectorType.SectorNode(INode(node))
+      case SectorNode(node) => SectorType.SectorNode(node)
       case SectorIndirectionTable(indirectionTable) => SectorType.SectorIndirectionTable(indirectionTable.I())
       case SectorSuperblock(superblock) => SectorType.SectorSuperblock(superblock)
     }
