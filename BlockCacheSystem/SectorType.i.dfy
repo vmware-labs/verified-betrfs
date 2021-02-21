@@ -8,6 +8,7 @@ module SectorType {
   import opened JournalRanges
   import opened DiskLayout
   import opened PivotBetreeGraph
+  import opened Bounds
 
   import opened ReferenceType`Internal
 
@@ -27,6 +28,16 @@ module SectorType {
     {
       && ref in graph
       && ref !in locs
+    }
+
+    predicate IsLocAllocIndirectionTable(i: int)
+    {
+      // Can't use the lower values, so they're always marked "allocated"
+      || 0 <= i < MinNodeBlockIndex()
+      || (!(
+        forall ref | ref in locs ::
+          locs[ref].addr as int != i * NodeBlockSize() as int
+      ))
     }
   }
 
