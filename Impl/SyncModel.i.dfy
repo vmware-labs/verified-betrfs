@@ -26,31 +26,6 @@ module SyncModel {
 
   import opened StateSectorModel
 
-  function {:opaque} AssignRefToLocFrozen(s: BCVariables, ref: BT.G.Reference, loc: Location) : (s' : BCVariables)
-  requires s.Ready?
-  requires s.frozenIndirectionTable.Some? ==> s.frozenIndirectionTable.value.Inv()
-  requires s.frozenIndirectionTable.Some? ==> s.blockAllocator.frozen.Some?
-  requires BlockAllocatorModel.Inv(s.blockAllocator)
-  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
-  ensures s'.Ready?
-  ensures s'.outstandingBlockWrites == s.outstandingBlockWrites
-  ensures BlockAllocatorModel.Inv(s'.blockAllocator)
-  {
-    if s.frozenIndirectionTable.Some? then (
-      var table := s.frozenIndirectionTable.value;
-      var (table', added) := table.addLocIfPresent(ref, loc);
-      if added then (
-        var blockAllocator' := BlockAllocatorModel.MarkUsedFrozen(s.blockAllocator, loc.addr as int / NodeBlockSize());
-        s.(frozenIndirectionTable := Some(table'))
-         .(blockAllocator := blockAllocator')
-      ) else (
-        s.(frozenIndirectionTable := Some(table'))
-      )
-    ) else (
-      s
-    )
-  }
-
   function {:opaque} AssignIdRefLocOutstanding(s: BCVariables, id: D.ReqId, ref: BT.G.Reference, loc: Location) : (s' : BCVariables)
   requires s.Ready?
   requires BlockAllocatorModel.Inv(s.blockAllocator)
@@ -144,74 +119,6 @@ module SyncModel {
         assert s'.outstandingBlockWrites[id].loc.addr as int == i * NodeBlockSize() as int;
         assert IsLocAllocOutstanding(s'.outstandingBlockWrites, i);
       }
-    }
-  }
-
-  lemma LemmaAssignRefToLocFrozenCorrect(s: BCVariables, ref: BT.G.Reference, loc: Location)
-  requires s.Ready?
-  requires s.frozenIndirectionTable.Some? ==> s.frozenIndirectionTable.value.Inv()
-  requires s.frozenIndirectionTable.Some? ==> s.blockAllocator.frozen.Some?
-  requires s.frozenIndirectionTable.Some? ==>
-        (forall i: int :: StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(s.frozenIndirectionTable.value.I(), i)
-          <==> StateSectorModel.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.frozen.value, i))
-  requires BlockAllocatorModel.Inv(s.blockAllocator)
-  requires ValidNodeLocation(loc);
-  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
-  ensures var s' := AssignRefToLocFrozen(s, ref, loc);
-      && s'.Ready?
-      && (s'.frozenIndirectionTable.Some? ==> s'.blockAllocator.frozen.Some?)
-      && (s'.frozenIndirectionTable.Some? ==>
-          (forall i: int :: StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(s'.frozenIndirectionTable.value.I(), i)
-          <==> StateSectorModel.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.frozen.value, i)))
-      && BlockAllocatorModel.Inv(s'.blockAllocator)
-  {
-    reveal_AssignRefToLocFrozen();
-
-    if s.frozenIndirectionTable.None? {
-      return;
-    }
-
-    reveal_ConsistentBitmap();
-    BitmapModel.reveal_BitSet();
-    BitmapModel.reveal_IsSet();
-
-    var j := loc.addr as int / NodeBlockSize();
-
-    var table := s.frozenIndirectionTable.value;
-    var (table', added) := table.addLocIfPresent(ref, loc);
-    if added {
-      var blockAllocator' := BlockAllocatorModel.MarkUsedFrozen(s.blockAllocator, loc.addr as int / NodeBlockSize());
-      var s' := s
-        .(frozenIndirectionTable := Some(table'))
-        .(blockAllocator := blockAllocator');
-
-      assert s' == AssignRefToLocFrozen(s, ref, loc);
-
-      forall i | 0 <= i < NumBlocks()
-      ensures BitmapModel.IsSet(s'.blockAllocator.full, i) == (
-        || BitmapModel.IsSet(s'.blockAllocator.frozen.value, i)
-        || (s'.blockAllocator.frozen.Some? && BitmapModel.IsSet(s'.blockAllocator.frozen.value, i))
-        || BitmapModel.IsSet(s'.blockAllocator.persistent, i)
-        || BitmapModel.IsSet(s'.blockAllocator.full, i)
-      )
-      {
-        if i != j {
-          assert BitmapModel.IsSet(s'.blockAllocator.full, i) == BitmapModel.IsSet(s.blockAllocator.full, i);
-          assert BitmapModel.IsSet(s'.blockAllocator.ephemeral, i) == BitmapModel.IsSet(s.blockAllocator.ephemeral, i);
-          assert s'.blockAllocator.frozen.Some? ==> BitmapModel.IsSet(s'.blockAllocator.frozen.value, i) == BitmapModel.IsSet(s.blockAllocator.frozen.value, i);
-          assert BitmapModel.IsSet(s'.blockAllocator.persistent, i) == BitmapModel.IsSet(s.blockAllocator.persistent, i);
-          assert BitmapModel.IsSet(s'.blockAllocator.outstanding, i) == BitmapModel.IsSet(s.blockAllocator.outstanding, i);
-        }
-      }
-
-      LemmaAssignRefToLocBitmapConsistent(
-          s.frozenIndirectionTable.value,
-          s.blockAllocator.frozen.value,
-          s'.frozenIndirectionTable.value,
-          s'.blockAllocator.frozen.value,
-          ref,
-          loc);
-    } else {
     }
   }
 
