@@ -30,7 +30,7 @@ module LeafImpl {
   }
 
   method repivotLeaf(linear inout s: ImplVariables, ref: BT.G.Reference)
-  requires old_s.Inv()
+  requires old_s.BCInv()
   requires old_s.Ready?
   requires ref in old_s.ephemeralIndirectionTable.I().graph
   requires old_s.cache.ptr(ref).Some?
@@ -39,7 +39,7 @@ module LeafImpl {
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 1
   ensures s.Ready?
   ensures s.W()
-  ensures s.I() == LeafModel.repivotLeaf(old_s.I(), ref, old_s.cache.I()[ref]);
+  ensures s.IBlockCache() == LeafModel.repivotLeaf(old_s.IBlockCache(), ref, old_s.cache.I()[ref]);
   {
     LeafModel.reveal_repivotLeaf();
     var b := false;
@@ -74,9 +74,9 @@ module LeafImpl {
         inout s.cache.Insert(ref, newnode);
         assert s.W();
 
-        ghost var a := s.I();
+        ghost var a := s.IBlockCache();
         ghost var oldnode := old_s.cache.I()[ref];
-        ghost var b := LeafModel.repivotLeaf(old_s.I(), ref, oldnode);
+        ghost var b := LeafModel.repivotLeaf(old_s.IBlockCache(), ref, oldnode);
         assert newnode.I() == BT.G.Node(pivots, None, [
               SplitBucketLeft(oldnode.buckets[0], pivot),
               SplitBucketRight(oldnode.buckets[0], pivot)
