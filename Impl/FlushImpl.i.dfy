@@ -30,7 +30,7 @@ module FlushImpl {
   import IT = IndirectionTable
 
   method flush(linear inout s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference)
-  requires old_s.Inv()
+  requires old_s.BCInv()
   requires old_s.Ready?
   requires old_s.cache.ptr(childref).Some?
 
@@ -47,8 +47,8 @@ module FlushImpl {
 
   ensures s.W()
   ensures s.Ready?
-  ensures FlushModel.flush(old_s.I(), parentref, slot as int, childref, 
-    old_s.cache.I()[childref]) == s.I()
+  ensures s.IBlockCache() == FlushModel.flush(old_s.IBlockCache(), parentref, slot as int, childref, 
+    old_s.cache.I()[childref]);
   {
     var b := false;
     if s.frozenIndirectionTable.lSome? {
@@ -68,11 +68,11 @@ module FlushImpl {
         linear var newparentBucket, newchild := 
           s.cache.NodePartialFlush(parentref, childref, slot);
 
-        BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), childref);
-        BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), parentref);
+        BookkeepingModel.lemmaChildrenConditionsOfNode(s.IBlockCache(), childref);
+        BookkeepingModel.lemmaChildrenConditionsOfNode(s.IBlockCache(), parentref);
         BookkeepingModel.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
-            s.I(), newchild.children, parentI.children.value, slot as int);
-        BookkeepingModel.allocRefDoesntEqual(s.I(), newchild.children, parentref);
+            s.IBlockCache(), newchild.children, parentI.children.value, slot as int);
+        BookkeepingModel.allocRefDoesntEqual(s.IBlockCache(), newchild.children, parentref);
 
         var newchildref := allocBookkeeping(inout s, newchild.children);
         if newchildref.None? {
@@ -94,54 +94,3 @@ module FlushImpl {
     }
   }
 }
-
-/*
-Impl/FlushImpl.i.dfy(32,9): Verification out of resource (Impl$$FlushImpl.__default.flush)
-Impl/FlushImpl.i.dfy(83,30): Out of resource on BP5002: A precondition for this call might not hold.
-Impl/CacheImpl.i.dfy(115,28): Related location: This is the precondition that might not hold.
-Execution trace:
-    (0,0): anon0
-    (0,0): anon11_Else
-    (0,0): anon3
-    (0,0): anon12_Else
-    (0,0): anon13_Then
-    (0,0): anon14_Else
-Impl/FlushImpl.i.dfy(85,64): Out of resource on BP5002: A precondition for this call might not hold.
-Impl/CacheImpl.i.dfy(233,31): Related location: This is the precondition that might not hold.
-Execution trace:
-    (0,0): anon0
-    (0,0): anon11_Else
-    (0,0): anon3
-    (0,0): anon12_Else
-    (0,0): anon13_Then
-    (0,0): anon14_Else
-Impl/FlushImpl.i.dfy(85,64): Out of resource on BP5002: A precondition for this call might not hold.
-Impl/CacheImpl.i.dfy(234,16): Related location: This is the precondition that might not hold.
-Impl/../PivotBetree/PivotBetreeSpec.i.dfy(82,35): Related location
-Execution trace:
-    (0,0): anon0
-    (0,0): anon11_Else
-    (0,0): anon3
-    (0,0): anon12_Else
-    (0,0): anon13_Then
-    (0,0): anon14_Else
-Impl/FlushImpl.i.dfy(85,64): Out of resource on BP5002: A precondition for this call might not hold.
-Impl/CacheImpl.i.dfy(234,16): Related location: This is the precondition that might not hold.
-Impl/../PivotBetree/PivotBetreeSpec.i.dfy(83,47): Related location
-Execution trace:
-    (0,0): anon0
-    (0,0): anon11_Else
-    (0,0): anon3
-    (0,0): anon12_Else
-    (0,0): anon13_Then
-    (0,0): anon14_Else
-Impl/FlushImpl.i.dfy(85,64): Out of resource on BP5002: A precondition for this call might not hold.
-Impl/CacheImpl.i.dfy(235,28): Related location: This is the precondition that might not hold.
-Execution trace:
-    (0,0): anon0
-    (0,0): anon11_Else
-    (0,0): anon3
-    (0,0): anon12_Else
-    (0,0): anon13_Then
-    (0,0): anon14_Else
-*/

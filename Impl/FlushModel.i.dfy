@@ -4,7 +4,6 @@ include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
 include "../lib/Buckets/BucketModel.i.dfy"
 
 module FlushModel { 
-  import opened StateBCModel
   import opened StateSectorModel
 
   import opened IOModel
@@ -27,9 +26,9 @@ module FlushModel {
   import opened NativeTypes
   import D = AsyncDisk
 
-  function flush(s: BCVariables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
-  : BCVariables
-  requires BCInv(s)
+  function flush(s: BBC.Variables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
+  : BBC.Variables
+  requires BBC.Inv(s)
   requires s.Ready?
 
   requires parentref in s.ephemeralIndirectionTable.graph
@@ -42,7 +41,6 @@ module FlushModel {
   requires childref in s.ephemeralIndirectionTable.graph
   requires childref in s.cache
   requires s.cache[childref] == child
-  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
   {
     if (
       && s.frozenIndirectionTable.Some?
@@ -72,9 +70,10 @@ module FlushModel {
             Some(parent.children.value[slot := newchildref.value]),
             parent.buckets[slot := newparentBucket]
           );
+          assert s2.WriteAllocConditions();
           var s2 := s2.(cache := s2.cache[newchildref.value := newchild][parentref := newparent]);
-          var s' := writeBookkeeping(s2, parentref, newparent.children);
-          s'
+          var s2 := writeBookkeeping(s2, parentref, newparent.children);
+          s2
         )
       ) else (
         s
@@ -82,13 +81,11 @@ module FlushModel {
     )
   }
 
-  lemma flushCorrect(s: BCVariables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
+  lemma flushCorrect(s: BBC.Variables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
   requires flush.requires(s, parentref, slot, childref, child)
-  requires TotalCacheSize(s) <= MaxCacheSize() - 1
   ensures
       var s' := flush(s, parentref, slot, childref, child);
-      && WFBCVars(s')
-      && betree_next(IBlockCache(s), IBlockCache(s'))
+      && betree_next(s, s')
   {
     var s' := flush(s, parentref, slot, childref, child);
 
@@ -96,7 +93,7 @@ module FlushModel {
       && s.frozenIndirectionTable.Some?
       && s.frozenIndirectionTable.value.hasEmptyLoc(parentref)
     ) {
-      assert noop(IBlockCache(s), IBlockCache(s));
+      assert noop(s, s);
     } else {
       var parent := s.cache[parentref];
 
@@ -142,7 +139,7 @@ module FlushModel {
         var (s2, newchildref) := allocWithNode(s, newchild);
         reveal_allocBookkeeping();
         if newchildref.None? {
-          assert noop(IBlockCache(s), IBlockCache(s2));
+          assert noop(s, s2);
         } else {
           var newparent := BT.G.Node(
             parent.pivotTable,
@@ -155,17 +152,17 @@ module FlushModel {
           reveal_writeBookkeeping();
           assert s3 == s';
 
-          forall ref | ref in BT.G.Successors(INode(newparent)) ensures ref in s2.ephemeralIndirectionTable.I().graph {
+          forall ref | ref in BT.G.Successors(newparent) ensures ref in s2.ephemeralIndirectionTable.graph {
             if (ref == newchildref.value) {
             } else {
-              assert ref in BT.G.Successors(INode(parent));
+              assert ref in BT.G.Successors(parent);
               lemmaChildInGraph(s, parentref, ref);
-              assert ref in s2.ephemeralIndirectionTable.I().graph;
+              assert ref in s2.ephemeralIndirectionTable.graph;
             }
           }
-          assert BC.BlockPointsToValidReferences(INode(newparent), s2.ephemeralIndirectionTable.I().graph);
+          assert BC.BlockPointsToValidReferences(newparent, s2.ephemeralIndirectionTable.graph);
 
-          forall ref | ref in BT.G.Successors(INode(newchild)) ensures ref in s.ephemeralIndirectionTable.I().graph {
+          forall ref | ref in BT.G.Successors(newchild) ensures ref in s.ephemeralIndirectionTable.graph {
             lemmaChildInGraph(s, childref, ref);
           }
 
@@ -176,27 +173,27 @@ module FlushModel {
 
           var flushStep := BT.NodeFlush(
             parentref,
-            INode(parent),
+            parent,
             childref,
-            INode(child),
+            child,
             newchildref.value,
-            INode(newchild),
+            newchild,
             slot,
             flushedKeys,
-            INode(newparent).buckets[slot],
-            INode(newchild).buckets);
+            newparent.buckets[slot],
+            newchild.buckets);
           assert BT.ValidFlush(flushStep);
           var step := BT.BetreeFlush(flushStep);
-          assert INode(newparent) == BT.FlushOps(flushStep)[1].node;
-          assert BC.Alloc(IBlockCache(s), IBlockCache(s2), newchildref.value, INode(newchild));
-          assert BC.Dirty(IBlockCache(s2), IBlockCache(s'), parentref, INode(newparent));
-          BC.MakeTransaction2(IBlockCache(s), IBlockCache(s2), IBlockCache(s'), BT.BetreeStepOps(step));
-          assert BBC.BetreeMove(IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, AdvanceOp(UI.NoOp, true), step);
-          assert stepsBetree(IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), step);
-          assert stepsBetree(IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), step);
+          assert newparent == BT.FlushOps(flushStep)[1].node;
+          assert BC.Alloc(s, s2, newchildref.value, newchild);
+          assert BC.Dirty(s2, s', parentref, newparent);
+          BC.MakeTransaction2(s, s2, s', BT.BetreeStepOps(step));
+          assert BBC.BetreeMove(s, s', BlockDisk.NoDiskOp, AdvanceOp(UI.NoOp, true), step);
+          assert stepsBetree(s, s', AdvanceOp(UI.NoOp, true), step);
+          assert stepsBetree(s, s', AdvanceOp(UI.NoOp, true), step);
         } 
       } else {
-        assert noop(IBlockCache(s), IBlockCache(s)); 
+        assert noop(s, s); 
       }
     }
   }

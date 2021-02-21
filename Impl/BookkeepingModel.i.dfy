@@ -250,7 +250,6 @@ module BookkeepingModel {
   requires BC.BlockPointsToValidReferences(node, s.ephemeralIndirectionTable.graph)
   // requires TotalCacheSize(s) <= MaxCacheSize() - 1
   requires WFNode(node)
-  requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
   ensures var (s', ref) := allocWithNode(s, node);
     && BBC.Inv(s')
     // && WFBCVars(s')
