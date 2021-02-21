@@ -1,4 +1,4 @@
-include "StateBCModel.i.dfy"
+include "BookkeepingModel.i.dfy"
 include "IOModel.i.dfy"
 include "DeallocModel.i.dfy"
 include "../lib/Base/Option.s.dfy"
@@ -9,7 +9,6 @@ include "../lib/Base/Sets.i.dfy"
 module SyncModel { 
   import opened IOModel
   import opened BookkeepingModel
-  import opened DeallocModel
   import opened DiskOpModel
   import opened Bounds
   import opened ViewOp
@@ -25,30 +24,7 @@ module SyncModel {
 
   import opened NativeTypes
 
-  import opened StateBCModel
   import opened StateSectorModel
-
-  function {:opaque} AssignRefToLocEphemeral(s: BCVariables, ref: BT.G.Reference, loc: Location) : (s' : BCVariables)
-  requires s.Ready?
-  requires s.ephemeralIndirectionTable.Inv()
-  requires BlockAllocatorModel.Inv(s.blockAllocator)
-  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
-  ensures s'.Ready?
-  ensures s'.frozenIndirectionTable == s.frozenIndirectionTable
-  ensures s'.blockAllocator.frozen == s.blockAllocator.frozen
-  ensures s'.outstandingBlockWrites == s.outstandingBlockWrites
-  ensures BlockAllocatorModel.Inv(s'.blockAllocator)
-  {
-    var table := s.ephemeralIndirectionTable;
-    var (table', added) := table.addLocIfPresent(ref, loc);
-    if added then (
-      var blockAllocator' := BlockAllocatorModel.MarkUsedEphemeral(s.blockAllocator, loc.addr as int / NodeBlockSize());
-      s.(ephemeralIndirectionTable := table')
-       .(blockAllocator := blockAllocator')
-    ) else (
-      s.(ephemeralIndirectionTable := table')
-    )
-  }
 
   function {:opaque} AssignRefToLocFrozen(s: BCVariables, ref: BT.G.Reference, loc: Location) : (s' : BCVariables)
   requires s.Ready?
@@ -168,134 +144,6 @@ module SyncModel {
         assert s'.outstandingBlockWrites[id].loc.addr as int == i * NodeBlockSize() as int;
         assert IsLocAllocOutstanding(s'.outstandingBlockWrites, i);
       }
-    }
-  }
-
-  lemma LemmaAssignRefToLocBitmapConsistent(
-      indirectionTable: StateSectorModel.IndirectionTable,
-      bm: BitmapModel.BitmapModelT,
-      indirectionTable': StateSectorModel.IndirectionTable,
-      bm': BitmapModel.BitmapModelT,
-      ref: BT.G.Reference,
-      loc: Location)
-  requires indirectionTable.Inv()
-  requires (forall i: int :: StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(indirectionTable.I(), i)
-          <==> StateSectorModel.IndirectionTable.IsLocAllocBitmap(bm, i))
-  requires ValidNodeLocation(loc);
-  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
-  requires ref in indirectionTable.graph
-  requires ref !in indirectionTable.locs
-  requires (indirectionTable', true) == indirectionTable.addLocIfPresent(ref, loc)
-  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
-  requires BitmapModel.Len(bm) == NumBlocks()
-  requires bm' == BitmapModel.BitSet(bm, loc.addr as int / NodeBlockSize())
-  ensures 
-      && (forall i: int :: StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(indirectionTable'.I(), i)
-          <==> StateSectorModel.IndirectionTable.IsLocAllocBitmap(bm', i))
-  {
-    BitmapModel.reveal_BitSet();
-    BitmapModel.reveal_IsSet();
-
-    //assert indirectionTable'.contents == indirectionTable.contents[ref := (Some(loc), indirectionTable.contents[ref].1)];
-
-    var j := loc.addr as int / NodeBlockSize();
-    reveal_ValidNodeAddr();
-    assert j != 0;
-    assert j * NodeBlockSize() == loc.addr as int;
-
-    forall i: int | StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(indirectionTable'.I(), i)
-    ensures StateSectorModel.IndirectionTable.IsLocAllocBitmap(bm', i)
-    {
-      if i == j {
-        assert StateSectorModel.IndirectionTable.IsLocAllocBitmap(bm', i);
-      } else {
-        assert StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(indirectionTable.I(), i);
-        assert StateSectorModel.IndirectionTable.IsLocAllocBitmap(bm', i);
-      }
-    }
-    forall i: int | StateSectorModel.IndirectionTable.IsLocAllocBitmap(bm', i)
-    ensures StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(indirectionTable'.I(), i)
-    {
-      if i == j {
-        assert ref in indirectionTable'.graph;
-        assert ref in indirectionTable'.locs;
-        assert indirectionTable'.locs[ref].addr as int == i * NodeBlockSize() as int;
-        assert StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(indirectionTable'.I(), i);
-      } else {
-        if 0 <= i < MinNodeBlockIndex() {
-          assert StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(indirectionTable'.I(), i);
-        } else {
-          assert StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(indirectionTable.I(), i);
-          var r :| r in indirectionTable.locs &&
-            indirectionTable.locs[r].addr as int == i * NodeBlockSize() as int;
-          assert MapsAgreeOnKey(
-            indirectionTable.I().locs,
-            indirectionTable'.I().locs, r);
-          assert r in indirectionTable'.locs &&
-            indirectionTable'.locs[r].addr as int == i * NodeBlockSize() as int;
-          assert StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(indirectionTable'.I(), i);
-        }
-      }
-    }
-  }
-
-  lemma LemmaAssignRefToLocEphemeralCorrect(s: BCVariables, ref: BT.G.Reference, loc: Location)
-  requires s.Ready?
-  requires s.ephemeralIndirectionTable.Inv()
-  requires (forall i: int :: StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(s.ephemeralIndirectionTable.I(), i)
-          <==> StateSectorModel.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.ephemeral, i))
-  requires BlockAllocatorModel.Inv(s.blockAllocator)
-  requires ValidNodeLocation(loc);
-  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
-  ensures var s' := AssignRefToLocEphemeral(s, ref, loc);
-      && s'.Ready?
-      && (forall i: int :: StateSectorModel.IndirectionTable.IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable.I(), i)
-          <==> StateSectorModel.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.ephemeral, i))
-      && BlockAllocatorModel.Inv(s'.blockAllocator)
-  {
-    reveal_AssignRefToLocEphemeral();
-    reveal_ConsistentBitmap();
-    BitmapModel.reveal_BitSet();
-    BitmapModel.reveal_IsSet();
-
-    var j := loc.addr as int / NodeBlockSize();
-
-    var table := s.ephemeralIndirectionTable;
-    if (ref in table.graph && ref !in table.locs) {
-      var (table', added) := table.addLocIfPresent(ref, loc);
-      assert added;
-      var blockAllocator' := BlockAllocatorModel.MarkUsedEphemeral(s.blockAllocator, loc.addr as int / NodeBlockSize());
-      var s' := s
-      .(ephemeralIndirectionTable := table')
-      .(blockAllocator := blockAllocator');
-
-      forall i | 0 <= i < NumBlocks()
-      ensures BitmapModel.IsSet(s'.blockAllocator.full, i) == (
-        || BitmapModel.IsSet(s'.blockAllocator.ephemeral, i)
-        || (s'.blockAllocator.frozen.Some? && BitmapModel.IsSet(s'.blockAllocator.frozen.value, i))
-        || BitmapModel.IsSet(s'.blockAllocator.persistent, i)
-        || BitmapModel.IsSet(s'.blockAllocator.full, i)
-      )
-      {
-        if i != j {
-          assert BitmapModel.IsSet(s'.blockAllocator.full, i) == BitmapModel.IsSet(s.blockAllocator.full, i);
-          assert BitmapModel.IsSet(s'.blockAllocator.ephemeral, i) == BitmapModel.IsSet(s.blockAllocator.ephemeral, i);
-          assert s'.blockAllocator.frozen.Some? ==> BitmapModel.IsSet(s'.blockAllocator.frozen.value, i) == BitmapModel.IsSet(s.blockAllocator.frozen.value, i);
-          assert BitmapModel.IsSet(s'.blockAllocator.persistent, i) == BitmapModel.IsSet(s.blockAllocator.persistent, i);
-          assert BitmapModel.IsSet(s'.blockAllocator.outstanding, i) == BitmapModel.IsSet(s.blockAllocator.outstanding, i);
-        }
-      }
-
-      LemmaAssignRefToLocBitmapConsistent(
-          s.ephemeralIndirectionTable,
-          s.blockAllocator.ephemeral,
-          s'.ephemeralIndirectionTable, 
-          s'.blockAllocator.ephemeral,
-          ref,
-          loc);
-    } else {
-      var (table', added) := table.addLocIfPresent(ref, loc);
-      assert !added; // observe
     }
   }
 

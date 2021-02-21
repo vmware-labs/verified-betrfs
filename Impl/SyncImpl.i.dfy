@@ -1,6 +1,5 @@
 include "IOImpl.i.dfy"
 include "DeallocImpl.i.dfy"
-include "SyncModel.i.dfy"
 include "BookkeepingModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "../lib/Base/Option.s.dfy"
@@ -15,9 +14,7 @@ module SyncImpl {
   import opened DeallocImpl
   import opened Bounds
   import opened DiskLayout
-  import SyncModel
   import BookkeepingModel
-  import DeallocModel
   import BlockAllocatorModel
   import opened DiskOpImpl
   import opened MainDiskIOHandler
@@ -32,29 +29,149 @@ module SyncImpl {
 
   import opened StateBCImpl
   import opened StateSectorImpl
-  import SBCM = StateBCModel
   import SSM = StateSectorModel
   import opened DiskOpModel
   import IOModel
+  import IT = IndirectionTable
+
+
+  lemma LemmaAssignRefToLocBitmapConsistent(
+      indirectionTable: IT.IndirectionTable,
+      bm: BitmapModel.BitmapModelT,
+      indirectionTable': IT.IndirectionTable,
+      bm': BitmapModel.BitmapModelT,
+      ref: BT.G.Reference,
+      loc: Location)
+  requires indirectionTable.Inv()
+  requires (forall i: int :: indirectionTable.I().IsLocAllocIndirectionTable(i)
+          <==> IT.IndirectionTable.IsLocAllocBitmap(bm, i))
+  requires ValidNodeLocation(loc);
+  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
+  requires ref in indirectionTable.graph
+  requires ref !in indirectionTable.locs
+  requires (indirectionTable', true) == indirectionTable.addLocIfPresent(ref, loc)
+  requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
+  requires BitmapModel.Len(bm) == NumBlocks()
+  requires bm' == BitmapModel.BitSet(bm, loc.addr as int / NodeBlockSize())
+  ensures 
+      && (forall i: int :: indirectionTable'.I().IsLocAllocIndirectionTable(i)
+          <==> IT.IndirectionTable.IsLocAllocBitmap(bm', i))
+  {
+    BitmapModel.reveal_BitSet();
+    BitmapModel.reveal_IsSet();
+
+    //assert indirectionTable'.contents == indirectionTable.contents[ref := (Some(loc), indirectionTable.contents[ref].1)];
+
+    var j := loc.addr as int / NodeBlockSize();
+    reveal_ValidNodeAddr();
+    assert j != 0;
+    assert j * NodeBlockSize() == loc.addr as int;
+
+    forall i: int | indirectionTable'.I().IsLocAllocIndirectionTable(i)
+    ensures IT.IndirectionTable.IsLocAllocBitmap(bm', i)
+    {
+      if i == j {
+        assert IT.IndirectionTable.IsLocAllocBitmap(bm', i);
+      } else {
+        assert indirectionTable.I().IsLocAllocIndirectionTable(i);
+        assert IT.IndirectionTable.IsLocAllocBitmap(bm', i);
+      }
+    }
+    forall i: int | IT.IndirectionTable.IsLocAllocBitmap(bm', i)
+    ensures indirectionTable'.I().IsLocAllocIndirectionTable(i)
+    {
+      if i == j {
+        assert ref in indirectionTable'.graph;
+        assert ref in indirectionTable'.locs;
+        assert indirectionTable'.locs[ref].addr as int == i * NodeBlockSize() as int;
+        assert indirectionTable'.I().IsLocAllocIndirectionTable(i);
+      } else {
+        if 0 <= i < MinNodeBlockIndex() {
+          assert indirectionTable'.I().IsLocAllocIndirectionTable(i);
+        } else {
+          assert indirectionTable.I().IsLocAllocIndirectionTable(i);
+          var r :| r in indirectionTable.locs &&
+            indirectionTable.locs[r].addr as int == i * NodeBlockSize() as int;
+          assert MapsAgreeOnKey(
+            indirectionTable.I().locs,
+            indirectionTable'.I().locs, r);
+          assert r in indirectionTable'.locs &&
+            indirectionTable'.locs[r].addr as int == i * NodeBlockSize() as int;
+          assert indirectionTable'.I().IsLocAllocIndirectionTable(i);
+        }
+      }
+    }
+  }
 
   method AssignRefToLocEphemeral(linear inout s: ImplVariables, ref: BT.G.Reference, loc: Location)
   requires old_s.W()
   requires old_s.Ready?
+
+  requires (forall i: int :: old_s.ephemeralIndirectionTable.I().IsLocAllocIndirectionTable(i)
+          <==> StateSectorModel.IndirectionTable.IsLocAllocBitmap(old_s.blockAllocator.I().ephemeral, i))
+
+  requires ValidNodeLocation(loc);
   requires BlockAllocatorModel.Inv(old_s.blockAllocator.I())
+
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
 
   ensures s.W()
-  ensures s.I() == SyncModel.AssignRefToLocEphemeral(old_s.I(), ref, loc)
+  // ensures s.I() == SyncModel.AssignRefToLocEphemeral(old_s.I(), ref, loc)
   ensures s.Ready?
+  
+  ensures (forall i: int :: s.ephemeralIndirectionTable.I().IsLocAllocIndirectionTable(i)
+        <==> StateSectorModel.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.I().ephemeral, i))
+
+  ensures BlockAllocatorModel.Inv(s.blockAllocator.I())
   {
-    SyncModel.reveal_AssignRefToLocEphemeral();
+    // SyncModel.reveal_AssignRefToLocEphemeral();
 
     var added := inout s.ephemeralIndirectionTable.AddLocIfPresent(ref, loc);
     if added {
       inout s.blockAllocator.MarkUsedEphemeral(loc.addr / NodeBlockSizeUint64());
     }
+
+    reveal_ConsistentBitmap();
+    BitmapModel.reveal_BitSet();
+    BitmapModel.reveal_IsSet();
+
+    ghost var j := loc.addr as int / NodeBlockSize();
+
+    ghost var table := old_s.ephemeralIndirectionTable;
+    if (ref in table.graph && ref !in table.locs) {
+      assert added;
+
+      forall i | 0 <= i < NumBlocks()
+      ensures BitmapModel.IsSet(s.blockAllocator.I().full, i) == (
+        || BitmapModel.IsSet(s.blockAllocator.I().ephemeral, i)
+        || (s.blockAllocator.I().frozen.Some? && BitmapModel.IsSet(s.blockAllocator.I().frozen.value, i))
+        || BitmapModel.IsSet(s.blockAllocator.I().persistent, i)
+        || BitmapModel.IsSet(s.blockAllocator.I().full, i)
+      )
+      {
+        if i != j {
+          assert BitmapModel.IsSet(s.blockAllocator.I().full, i) == BitmapModel.IsSet(old_s.blockAllocator.I().full, i);
+          assert BitmapModel.IsSet(s.blockAllocator.I().ephemeral, i) == BitmapModel.IsSet(old_s.blockAllocator.I().ephemeral, i);
+          assert s.blockAllocator.I().frozen.Some? ==> BitmapModel.IsSet(s.blockAllocator.I().frozen.value, i) == BitmapModel.IsSet(old_s.blockAllocator.I().frozen.value, i);
+          assert BitmapModel.IsSet(s.blockAllocator.I().persistent, i) == BitmapModel.IsSet(old_s.blockAllocator.I().persistent, i);
+          assert BitmapModel.IsSet(s.blockAllocator.I().outstanding, i) == BitmapModel.IsSet(old_s.blockAllocator.I().outstanding, i);
+        }
+      }
+
+      LemmaAssignRefToLocBitmapConsistent(
+          old_s.ephemeralIndirectionTable,
+          old_s.blockAllocator.I().ephemeral,
+          s.ephemeralIndirectionTable, 
+          s.blockAllocator.I().ephemeral,
+          ref,
+          loc);
+    } else {
+      assert !added; // observe
+    }
+
   }
 
+/*
   method AssignRefToLocFrozen(linear inout s: ImplVariables, ref: BT.G.Reference, loc: Location)
   requires old_s.W()
   requires old_s.Ready?
@@ -267,4 +384,5 @@ module SyncImpl {
       }
     }
   }
+  */
 }
