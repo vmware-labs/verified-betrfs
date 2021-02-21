@@ -527,6 +527,7 @@ module IndirectionTable {
     ensures self.locs == MapRemove1(old_self.locs, ref)
     ensures (ref in old_self.locs ==> oldLoc == Some(old_self.locs[ref]))
     ensures (ref !in old_self.locs ==> oldLoc == None)
+    ensures self.refUpperBound == old_self.refUpperBound
     /* TODO(andrea) ModelImpl */ ensures old_self.removeRef(ref) == (self, oldLoc)
     {
       TCountEqGraphSize(self.t);
@@ -1817,16 +1818,6 @@ module IndirectionTable {
 
     // // To bitmap
 
-    static predicate IsLocAllocIndirectionTable(indirectionTable: SectorType.IndirectionTable, i: int)
-    {
-      // Can't use the lower values, so they're always marked "allocated"
-      || 0 <= i < MinNodeBlockIndex()
-      || (!(
-        forall ref | ref in indirectionTable.locs ::
-          indirectionTable.locs[ref].addr as int != i * NodeBlockSize() as int
-      ))
-    }
-
     static predicate IsLocAllocBitmap(bm: BitmapModel.BitmapModelT, i: int)
     {
       && 0 <= i < BitmapModel.Len(bm)
@@ -1874,7 +1865,7 @@ module IndirectionTable {
     /* TODO(andrea) ModelImpl */ ensures BitmapModel.Len(res.1) == NumBlocks()
     /* TODO(andrea) ModelImpl */ ensures var (succ, bm) := this.initLocBitmap();
     /* TODO(andrea) ModelImpl */  (succ ==>
-    /* TODO(andrea) ModelImpl */    && (forall i: int :: IsLocAllocIndirectionTable(this.I(), i)
+    /* TODO(andrea) ModelImpl */    && (forall i: int :: this.I().IsLocAllocIndirectionTable(i)
     /* TODO(andrea) ModelImpl */      <==> IsLocAllocBitmap(bm, i)
     /* TODO(andrea) ModelImpl */    )
     /* TODO(andrea) ModelImpl */    && BC.AllLocationsForDifferentRefsDontOverlap(this.I())

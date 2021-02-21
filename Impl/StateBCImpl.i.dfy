@@ -50,13 +50,13 @@ module StateBCImpl {
       outstandingBlockWrites: map<BC.ReqId, BC.OutstandingWrite>,
       blockAllocator: BlockAllocatorModel.BlockAllocatorModel)
   {
-    && (forall i: int :: IT.IndirectionTable.IsLocAllocIndirectionTable(ephemeralIndirectionTable, i)
+    && (forall i: int :: ephemeralIndirectionTable.IsLocAllocIndirectionTable(i)
       <==> IT.IndirectionTable.IsLocAllocBitmap(blockAllocator.ephemeral, i))
-    && (forall i: int :: IT.IndirectionTable.IsLocAllocIndirectionTable(persistentIndirectionTable, i)
+    && (forall i: int :: persistentIndirectionTable.IsLocAllocIndirectionTable(i)
       <==> IT.IndirectionTable.IsLocAllocBitmap(blockAllocator.persistent, i))
     && (frozenIndirectionTable.lSome? <==> blockAllocator.frozen.Some?)
     && (frozenIndirectionTable.lSome? ==>
-      (forall i: int :: IT.IndirectionTable.IsLocAllocIndirectionTable(frozenIndirectionTable.value, i)
+      (forall i: int :: frozenIndirectionTable.value.IsLocAllocIndirectionTable(i)
         <==> IT.IndirectionTable.IsLocAllocBitmap(blockAllocator.frozen.value, i)))
     && (forall i: int :: IsLocAllocOutstanding(outstandingBlockWrites, i)
       <==> IT.IndirectionTable.IsLocAllocBitmap(blockAllocator.outstanding, i))

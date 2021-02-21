@@ -167,7 +167,7 @@ module BookkeepingImpl {
   requires j.Some? ==> s'.blockAllocator.I() == BlockAllocatorModel.MarkFreeEphemeral(s.blockAllocator.I(), j.value)
   requires j.None? ==> s'.blockAllocator == s.blockAllocator
   requires j.None? ==> ref !in s.ephemeralIndirectionTable.I().locs
-  ensures (forall i: int :: IT.IndirectionTable.IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable.I(), i)
+  ensures (forall i: int :: s'.ephemeralIndirectionTable.I().IsLocAllocIndirectionTable(i)
       <==> IT.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.I().ephemeral, i))
   ensures BlockAllocatorModel.Inv(s'.blockAllocator.I())
   ensures BC.AllLocationsForDifferentRefsDontOverlap(
@@ -203,7 +203,7 @@ module BookkeepingImpl {
     }
 
     forall i: int
-    | IT.IndirectionTable.IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable.I(), i)
+    | s'.ephemeralIndirectionTable.I().IsLocAllocIndirectionTable(i)
     ensures IT.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.I().ephemeral, i)
     {
       if j.Some? && i == j.value {
@@ -228,7 +228,7 @@ module BookkeepingImpl {
         }
       } else {
         if 0 <= i < MinNodeBlockIndex() {
-          assert IT.IndirectionTable.IsLocAllocIndirectionTable(s.ephemeralIndirectionTable.I(), i);
+          assert s.ephemeralIndirectionTable.I().IsLocAllocIndirectionTable(i);
           assert IT.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.I().ephemeral, i);
           assert IT.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.I().ephemeral, i);
         } else {
@@ -237,7 +237,7 @@ module BookkeepingImpl {
           assert MapsAgreeOnKey(
             s.ephemeralIndirectionTable.I().locs,
             s'.ephemeralIndirectionTable.I().locs, r);
-          assert IT.IndirectionTable.IsLocAllocIndirectionTable(s.ephemeralIndirectionTable.I(), i);
+          assert s.ephemeralIndirectionTable.I().IsLocAllocIndirectionTable(i);
           assert IT.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.I().ephemeral, i);
           assert IT.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.I().ephemeral, i);
         }
@@ -246,15 +246,15 @@ module BookkeepingImpl {
 
     forall i: int
     | IT.IndirectionTable.IsLocAllocBitmap(s'.blockAllocator.I().ephemeral, i)
-    ensures IT.IndirectionTable.IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable.I(), i)
+    ensures s'.ephemeralIndirectionTable.I().IsLocAllocIndirectionTable(i)
     {
       if j.Some? && i == j.value {
-        assert IT.IndirectionTable.IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable.I(), i);
+        assert s'.ephemeralIndirectionTable.I().IsLocAllocIndirectionTable(i);
       } else {
         assert IT.IndirectionTable.IsLocAllocBitmap(s.blockAllocator.I().ephemeral, i);
-        assert IT.IndirectionTable.IsLocAllocIndirectionTable(s.ephemeralIndirectionTable.I(), i);
+        assert s.ephemeralIndirectionTable.I().IsLocAllocIndirectionTable(i);
         if 0 <= i < MinNodeBlockIndex() {
-          assert IT.IndirectionTable.IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable.I(), i);
+          assert s'.ephemeralIndirectionTable.I().IsLocAllocIndirectionTable(i);
         } else {
           var r :| r in s.ephemeralIndirectionTable.locs &&
             s.ephemeralIndirectionTable.locs[r].addr as int == i * NodeBlockSize() as int;
@@ -263,7 +263,7 @@ module BookkeepingImpl {
             s'.ephemeralIndirectionTable.I().locs, r);
           assert r in s'.ephemeralIndirectionTable.locs &&
             s'.ephemeralIndirectionTable.locs[r].addr as int == i * NodeBlockSize() as int;
-          assert IT.IndirectionTable.IsLocAllocIndirectionTable(s'.ephemeralIndirectionTable.I(), i);
+          assert s'.ephemeralIndirectionTable.I().IsLocAllocIndirectionTable(i);
         }
       }
     }
