@@ -32,7 +32,7 @@ module GrowImpl {
 
   requires BT.G.Root() in old_s.IBlockCache().cache
   requires |old_s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
-  ensures s.WFBCVars()
+  ensures s.W()
   ensures s.Ready?
   ensures s.IBlockCache() == GrowModel.grow(old_s.IBlockCache())
   {
@@ -78,8 +78,6 @@ module GrowImpl {
 
             writeBookkeeping(inout s, root, Some([newref]));
             inout s.cache.MoveAndReplace(root, newref, newroot);
-
-            assume s.WFBCVars();
 
             ghost var a := s.IBlockCache();
             ghost var b := GrowModel.grow(old_s.IBlockCache());

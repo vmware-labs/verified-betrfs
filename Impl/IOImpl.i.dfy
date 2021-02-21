@@ -26,7 +26,6 @@ module IOImpl {
   import opened Bounds
   import MutableMapModel
 
-  import StateBCModel
   import opened StateBCImpl
 
   import SSI = StateSectorImpl

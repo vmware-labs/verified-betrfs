@@ -32,10 +32,7 @@ module GrowModel {
 
     if (
       && s.frozenIndirectionTable.Some?
-      && var table := s.frozenIndirectionTable.value;
-      && BT.G.Root() in table.graph
-      && BT.G.Root() !in table.locs
-      // s.frozenIndirectionTable.value.hasEmptyLoc(BT.G.Root())
+      && s.frozenIndirectionTable.value.hasEmptyLoc(BT.G.Root())
     ) then (
       s
     ) else (
@@ -43,8 +40,6 @@ module GrowModel {
       if !ContainsAllKeys(oldroot.pivotTable) then (
         s
       ) else (
-        assume forall r | r in s.ephemeralIndirectionTable.graph :: r < s.ephemeralIndirectionTable.refUpperBound;
-
         var (s1, newref) := allocBookkeeping(s, oldroot.children);
         lemmaChildrenConditionsSingleOfAllocBookkeeping(s, oldroot.children);
 

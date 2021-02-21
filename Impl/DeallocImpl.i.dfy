@@ -1,11 +1,11 @@
 include "BookkeepingImpl.i.dfy"
-include "DeallocModel.i.dfy"
+// include "DeallocModel.i.dfy"
 
 module DeallocImpl { 
   import opened IOImpl
   import opened BookkeepingImpl
   import opened DiskOpImpl
-  import DeallocModel
+  // import DeallocModel
   import opened StateBCImpl
   import opened Bounds
   import opened MainDiskIOHandler
@@ -17,18 +17,32 @@ module DeallocImpl {
 
   import LruModel
 
-  import opened NativeTypes
+  // import opened StateSectorModel
+  import opened IOModel
+  import opened DiskOpModel
+  // import opened BookkeepingModel
+  import opened ViewOp
+  import opened InterpretationDiskOps
 
+  import opened NativeTypes
   method Dealloc(linear inout s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
-  requires old_s.Inv()
+  requires old_s.BCInv()
   requires io.initialized()
-  requires DeallocModel.deallocable(old_s.I(), ref)
+  requires old_s.Ready?
+  requires old_s.ephemeralIndirectionTable.deallocable(ref)
+
   modifies io
   ensures s.W()
   ensures s.Ready?
-  ensures (s.I(), IIO(io)) == DeallocModel.Dealloc(old_s.I(), old(IIO(io)), ref);
+  ensures 
+    var dop := diskOp(IIO(io));
+    && ValidDiskOp(dop)
+    && IDiskOp(dop).jdop.NoDiskOp?
+    && (
+      || BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(dop).bdop, AdvanceOp(UI.NoOp, true))
+      || BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(dop).bdop, StatesInternalOp)
+    )
   {
-    DeallocModel.reveal_Dealloc();
     var nop := false;
 
     if s.frozenIndirectionTable.lSome? {
@@ -41,8 +55,10 @@ module DeallocImpl {
 
     if nop || BC.OutstandingRead(ref) in s.outstandingBlockReads.Values {
       print "giving up; dealloc can't dealloc because of outstanding read\n";
-    } else {
-      BookkeepingModel.lemmaIndirectionTableLocIndexValid(s.I(), ref);
+      assert IOModel.noop(s.IBlockCache(), s.IBlockCache());
+  } else {
+      lemmaIndirectionTableLocIndexValid(s, ref);
+      assert BC.OutstandingBlockReadsDoesNotHaveRef(s.outstandingBlockReads, ref);
 
       var oldLoc := inout s.ephemeralIndirectionTable.RemoveRef(ref);
 
@@ -53,19 +69,22 @@ module DeallocImpl {
         inout s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / NodeBlockSizeUint64());
       }
 
-      ghost var s1 := s.I();
-      ghost var s2 := DeallocModel.Dealloc(old_s.I(), old(IIO(io)), ref).0;
-
-      assert s1.cache == s2.cache;
+      ghost var iDiskOp := IDiskOp(diskOp(IIO(io))).bdop;
+      assert BC.Unalloc(old_s.IBlockCache(), s.IBlockCache(), iDiskOp, AdvanceOp(UI.NoOp, true), ref);
+      assert BBC.BlockCacheMove(old_s.IBlockCache(), s.IBlockCache(), iDiskOp, AdvanceOp(UI.NoOp, true), BC.UnallocStep(ref));
+      assert BBC.NextStep(old_s.IBlockCache(), s.IBlockCache(), iDiskOp, AdvanceOp(UI.NoOp, true), BBC.BlockCacheMoveStep(BC.UnallocStep(ref)));
     }
   }
 
   method FindDeallocable(shared s: ImplVariables) returns (ref: Option<Reference>)
-  requires s.WF()
+  requires s.BCInv()
   requires s.Ready?
-  ensures ref == DeallocModel.FindDeallocable(s.I())
+  ensures 
+      && (ref.Some? ==> ref.value in s.ephemeralIndirectionTable.graph)
+      && (ref.Some? ==> s.ephemeralIndirectionTable.deallocable(ref.value))
+      && (ref.None? ==> forall r | r in s.ephemeralIndirectionTable.graph :: !s.ephemeralIndirectionTable.deallocable(r))
   {
-    DeallocModel.reveal_FindDeallocable();
+    // DeallocModel.reveal_FindDeallocable();
     ref := s.ephemeralIndirectionTable.FindDeallocable();
   }
 }

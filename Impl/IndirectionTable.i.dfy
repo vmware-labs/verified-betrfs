@@ -335,6 +335,7 @@ module IndirectionTable {
     ensures self.locs == MapRemove1(old_self.locs, ref)
     ensures self.TrackingGarbage()
     ensures self.graph == old_self.graph
+    ensures self.refUpperBound == old_self.refUpperBound
     ensures (oldLoc.None? ==> ref !in old_self.locs)
     ensures (oldLoc.Some? ==> ref in old_self.locs && old_self.locs[ref] == oldLoc.value)
     /* TODO(andrea) ModelImpl */ ensures (self, oldLoc) == old_self.removeLoc(ref)
@@ -1675,7 +1676,8 @@ module IndirectionTable {
     ensures ValInGrammar(v, IndirectionTableGrammar())
     ensures ValidVal(v)
     ensures Marshalling.valToIndirectionTable(v).Some?
-    ensures Marshalling.valToIndirectionTable(v) == Some(this.I())
+    ensures Marshalling.valToIndirectionTable(v).value.locs == this.I().locs
+    ensures Marshalling.valToIndirectionTable(v).value.graph == this.I().graph
     ensures SizeOfV(v) <= MaxIndirectionTableByteSize()
     ensures SizeOfV(v) == size as int
     /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v).Some?
@@ -1802,10 +1804,13 @@ module IndirectionTable {
 
       size := size + 8;
 
-      assert this.I() == IMapAsIndirectionTable(partial); // observe
+      // assert this.I() == IMapAsIndirectionTable(partial); // observe
 
       assert Marshalling.valToIndirectionTable(v).Some?;
-      assert Marshalling.valToIndirectionTable(v) == Some(this.I());
+      // assert Marshalling.valToIndirectionTable(v) == Some(this.I());
+
+      // assert Marshalling.valToIndirectionTable(v).value.locs == this.I().locs;
+      // assert Marshalling.valToIndirectionTable(v).value.graph == this.I().graph;
 
       /* TODO(andrea) ModelImpl */ assume valToIndirectionTable(v) == Some(this);
     }

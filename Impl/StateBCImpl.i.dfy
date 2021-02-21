@@ -5,6 +5,7 @@ include "StateSectorImpl.i.dfy"
 include "BlockAllocatorImpl.i.dfy"
 include "CacheImpl.i.dfy"
 include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
+include "../BlockCacheSystem/BetreeCache.i.dfy"
 
 module StateBCImpl {
   import opened Options

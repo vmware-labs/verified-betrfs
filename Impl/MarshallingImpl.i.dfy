@@ -604,26 +604,26 @@ module MarshallingImpl {
     size := s + 8;
   }
 
-  method indirectionTableSectorToVal(shared sector: SSI.Sector)
-  returns (v : V, size: uint64)
-  requires SSI.WFSector(sector)
-  requires SSM.WFSector(SSI.ISector(sector))
-  requires sector.SectorIndirectionTable?
-  requires sector.indirectionTable.Inv()
-  requires BC.WFCompleteIndirectionTable(sector.indirectionTable.I())
-  // TODO(andreal) I believe this is unnecessary: modifies sector.indirectionTable.Repr
-  ensures sector.indirectionTable.Inv() 
-  && sector.indirectionTable.I() == old(sector.indirectionTable.I())
-  ensures ValidVal(v)
-  ensures ValInGrammar(v, Marshalling.SectorGrammar());
-  ensures Marshalling.valToSector(v) == Some(SSM.ISector(SSI.ISector(sector)))
-  ensures SizeOfV(v) < 0x1_0000_0000_0000_0000 - 32
-  ensures SizeOfV(v) == size as int
-  {
-    var w, s := sector.indirectionTable.IndirectionTableToVal();
-    v := VCase(1, w);
-    size := s + 8;
-  }
+  // method indirectionTableSectorToVal(shared sector: SSI.Sector)
+  // returns (v : V, size: uint64)
+  // requires SSI.WFSector(sector)
+  // requires SSM.WFSector(SSI.ISector(sector))
+  // requires sector.SectorIndirectionTable?
+  // requires sector.indirectionTable.Inv()
+  // requires BC.WFCompleteIndirectionTable(sector.indirectionTable.I())
+  // // TODO(andreal) I believe this is unnecessary: modifies sector.indirectionTable.Repr
+  // ensures sector.indirectionTable.Inv() 
+  // && sector.indirectionTable.I() == old(sector.indirectionTable.I())
+  // ensures ValidVal(v)
+  // ensures ValInGrammar(v, Marshalling.SectorGrammar());
+  // ensures Marshalling.valToSector(v) == Some(SSM.ISector(SSI.ISector(sector)))
+  // ensures SizeOfV(v) < 0x1_0000_0000_0000_0000 - 32
+  // ensures SizeOfV(v) == size as int
+  // {
+  //   var w, s := sector.indirectionTable.IndirectionTableToVal();
+  //   v := VCase(1, w);
+  //   size := s + 8;
+  // }
 
   /////// Marshalling and de-marshalling
 
