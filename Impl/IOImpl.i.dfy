@@ -49,7 +49,7 @@ module IOImpl {
   {
     IOModel.reveal_getFreeLoc();
 
-    reveal_ConsistentBitmap();
+    reveal_ConsistentBitmapInteral();
     DiskLayout.reveal_ValidNodeAddr();
 
     var i := s.blockAllocator.Alloc();
@@ -383,9 +383,8 @@ module IOImpl {
 
         BucketWeights.WeightBucketEmpty();
 
-        assert ConsistentBitmap(s.ephemeralIndirectionTable.I(), lNone,
-          s.persistentIndirectionTable.I(), s.outstandingBlockWrites, s.blockAllocator.I()) by {
-          reveal_ConsistentBitmap();
+        assert s.ConsistentBitmap() by {
+          reveal_ConsistentBitmapInteral();
         }
 
         assert s.WFBCVars();
@@ -521,7 +520,7 @@ module IOImpl {
     inout s.blockAllocator.MarkFreeOutstanding(locIdx);
     inout s.outstandingBlockWrites := ComputeMapRemove1(s.outstandingBlockWrites, id);
 
-    reveal_ConsistentBitmap();
+    reveal_ConsistentBitmapInteral();
     // var locIdx := s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize();
 
     DiskLayout.reveal_ValidNodeAddr();
@@ -642,7 +641,7 @@ module IOImpl {
     assert old_s.blockAllocator.Inv();
     inout s.blockAllocator.MoveFrozenToPersistent();
 
-    reveal_ConsistentBitmap();
+    reveal_ConsistentBitmapInteral();
     assert s.WFBCVars();
     assert BC.CleanUp(old_s.IBlockCache(), s.IBlockCache(), BlockDisk.NoDiskOp, CleanUpOp);
     assert BC.NextStep(old_s.IBlockCache(), s.IBlockCache(), BlockDisk.NoDiskOp,

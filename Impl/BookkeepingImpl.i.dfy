@@ -137,7 +137,7 @@ module BookkeepingImpl {
     )
   {
     if ref in s.ephemeralIndirectionTable.locs {
-      reveal_ConsistentBitmap();
+      reveal_ConsistentBitmapInteral();
       var loc := s.ephemeralIndirectionTable.locs[ref];
       var i := loc.addr as int / NodeBlockSize();
       assert s.ephemeralIndirectionTable.I().locs[ref] == loc;
@@ -176,7 +176,7 @@ module BookkeepingImpl {
         loc in s'.ephemeralIndirectionTable.I().locs.Values :: 
           DiskLayout.ValidNodeLocation(loc))
   {
-    reveal_ConsistentBitmap();
+    reveal_ConsistentBitmapInteral();
     BitmapModel.reveal_IsSet();
     BitmapModel.reveal_BitUnset();
     lemmaIndirectionTableLocIndexValid(s, ref);
@@ -328,7 +328,7 @@ module BookkeepingImpl {
       if oldLoc.Some?
       then Some(oldLoc.value.addr as int / NodeBlockSize())
       else None);
-    reveal_ConsistentBitmap();
+    reveal_ConsistentBitmapInteral();
     assert s.WriteAllocConditions();
   }
 

@@ -102,7 +102,7 @@ module IOModel {
   //   && (loc.Some? ==> LocAvailable(s, loc.value, len))
   // {
   //   reveal_getFreeLoc();
-  //   reveal_ConsistentBitmap();
+  //   reveal_ConsistentBitmapInteral();
   //   DiskLayout.reveal_ValidNodeAddr();
 
   //   var loc := getFreeLoc(s, len);
@@ -561,7 +561,7 @@ module IOModel {
   //     if succ {
   //       WeightBucketEmpty();
 
-  //       reveal_ConsistentBitmap();
+  //       reveal_ConsistentBitmapInteral();
   //       assert ConsistentBitmap(s'.ephemeralIndirectionTable.I(), MapOption(s'.frozenIndirectionTable, (x: IndirectionTable.IndirectionTable) => x.I()),
   //         s'.persistentIndirectionTable.I(), s'.outstandingBlockWrites, s'.blockAllocator);
 
@@ -684,7 +684,7 @@ module IOModel {
   requires id in s.outstandingBlockWrites
   ensures 0 <= s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize() < NumBlocks()
   {
-    reveal_ConsistentBitmap();
+    reveal_ConsistentBitmapInteral();
     var i := s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize();
     DiskLayout.reveal_ValidNodeAddr();
     assert i * NodeBlockSize() == s.outstandingBlockWrites[id].loc.addr as int;
@@ -697,7 +697,7 @@ module IOModel {
   ensures s.frozenIndirectionTable.lSome?
       ==> s.blockAllocator.frozen.lSome?
   {
-    reveal_ConsistentBitmap();
+    reveal_ConsistentBitmapInteral();
     reveal s.blockAllocator.Inv();
     reveal s.blockAllocator.I();
   }
@@ -728,7 +728,7 @@ module IOModel {
   //   && BBC.Next(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
   //       StatesInternalOp)
   // {
-  //   reveal_ConsistentBitmap();
+  //   reveal_ConsistentBitmapInteral();
   //   var id := io.id;
   //   var s' := writeNodeResponse(s, io);
 
@@ -824,7 +824,7 @@ module IOModel {
   //   && BBC.Next(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io)).bdop,
   //       SendFrozenLocOp(loc))
   // {
-  //   reveal_ConsistentBitmap();
+  //   reveal_ConsistentBitmapInteral();
   //   var id := io.id;
   //   var (s', loc) := writeIndirectionTableResponse(s, io);
   //   assert WFBCVars(s');
@@ -864,7 +864,7 @@ module IOModel {
   //   && WFBCVars(s')
   //   && BBC.Next(IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, CleanUpOp)
   // {
-  //   reveal_ConsistentBitmap();
+  //   reveal_ConsistentBitmapInteral();
   //   var s' := cleanUp(s);
   //   lemmaBlockAllocatorFrozenSome(s);
   //   assert WFBCVars(s');

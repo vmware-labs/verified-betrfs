@@ -43,7 +43,7 @@ module StateBCImpl {
     !(forall id | id in outstanding :: outstanding[id].loc.addr as int != i * NodeBlockSize() as int)
   }
 
-  predicate {:opaque} ConsistentBitmap(
+  predicate {:opaque} ConsistentBitmapInteral(
       ephemeralIndirectionTable: SectorType.IndirectionTable,
       frozenIndirectionTable: lOption<SectorType.IndirectionTable>,
       persistentIndirectionTable: SectorType.IndirectionTable,
@@ -124,6 +124,13 @@ module StateBCImpl {
       // acc := DebugAccumulator.AccPut(acc, "blockAllocator", a);
     }
 
+    predicate ConsistentBitmap()
+      requires Ready? && blockAllocator.Inv()
+    {
+      ConsistentBitmapInteral(ephemeralIndirectionTable.I(), if frozenIndirectionTable.lSome? then lSome(frozenIndirectionTable.value.I()) else lNone,
+          persistentIndirectionTable.I(), outstandingBlockWrites, blockAllocator.I())
+    }
+
     shared function method TotalCacheSize() : (res : uint64)
     requires Ready?
     requires cache.Inv()
@@ -162,8 +169,7 @@ module StateBCImpl {
       && totalCacheSize() <= MaxCacheSize()
       && ephemeralIndirectionTable.TrackingGarbage()
       && BlockAllocatorModel.Inv(blockAllocator.I())
-      && ConsistentBitmap(ephemeralIndirectionTable.I(), if frozenIndirectionTable.lSome? then lSome(frozenIndirectionTable.value.I()) else lNone,
-          persistentIndirectionTable.I(), outstandingBlockWrites, blockAllocator.I())
+      && ConsistentBitmap()
       && WFCache(cache.I())
     }
 
@@ -207,11 +213,7 @@ module StateBCImpl {
       && blockAllocator.Inv()
       && (forall loc | loc in ephemeralIndirectionTable.I().locs.Values :: DiskLayout.ValidNodeLocation(loc))
       && (forall r | r in ephemeralIndirectionTable.graph :: r <= ephemeralIndirectionTable.refUpperBound)
-      && ConsistentBitmap(ephemeralIndirectionTable.I(),
-          frozenIndirectionTable. Map((x: IndirectionTable) => x.I()),
-          persistentIndirectionTable.I(),
-          outstandingBlockWrites,
-          blockAllocator.I())
+      && ConsistentBitmap()
       && BlockAllocatorModel.Inv(blockAllocator.I())
       && BC.AllLocationsForDifferentRefsDontOverlap(ephemeralIndirectionTable.I())
     }

@@ -107,11 +107,7 @@ module SyncImpl {
   method AssignRefToLocEphemeral(linear inout s: ImplVariables, ref: BT.G.Reference, loc: Location)
   requires old_s.W()
   requires old_s.Ready?
-  requires ConsistentBitmap(old_s.ephemeralIndirectionTable.I(),
-      if old_s.frozenIndirectionTable.lSome? then lSome(old_s.frozenIndirectionTable.value.I()) else lNone,
-      old_s.persistentIndirectionTable.I(),
-      old_s.outstandingBlockWrites,
-      old_s.blockAllocator.I())
+  requires old_s.ConsistentBitmap()
 
   requires ValidNodeLocation(loc);
   requires BlockAllocatorModel.Inv(old_s.blockAllocator.I())
@@ -120,11 +116,8 @@ module SyncImpl {
 
   ensures s.W()
   ensures s.Ready?
-  ensures ConsistentBitmap(s.ephemeralIndirectionTable.I(),
-      if s.frozenIndirectionTable.lSome? then lSome(s.frozenIndirectionTable.value.I()) else lNone,
-      s.persistentIndirectionTable.I(),
-      s.outstandingBlockWrites,
-      s.blockAllocator.I())
+  ensures s.ConsistentBitmap()
+
   ensures BlockAllocatorModel.Inv(s.blockAllocator.I())
   {
     // SyncModel.reveal_AssignRefToLocEphemeral();
@@ -134,7 +127,7 @@ module SyncImpl {
       inout s.blockAllocator.MarkUsedEphemeral(loc.addr / NodeBlockSizeUint64());
     }
 
-    reveal_ConsistentBitmap();
+    reveal_ConsistentBitmapInteral();
     BitmapModel.reveal_BitSet();
     BitmapModel.reveal_IsSet();
 
@@ -184,11 +177,7 @@ module SyncImpl {
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   requires ValidNodeLocation(loc);
 
-  requires ConsistentBitmap(old_s.ephemeralIndirectionTable.I(),
-      if old_s.frozenIndirectionTable.lSome? then lSome(old_s.frozenIndirectionTable.value.I()) else lNone,
-      old_s.persistentIndirectionTable.I(),
-      old_s.outstandingBlockWrites,
-      old_s.blockAllocator.I())
+  requires old_s.ConsistentBitmap()
 
   ensures s.W()
   ensures s.Ready?
@@ -197,14 +186,10 @@ module SyncImpl {
     && s.blockAllocator.frozen.lSome?
     && s.blockAllocator.I().frozen.Some?
   )
-  ensures ConsistentBitmap(s.ephemeralIndirectionTable.I(),
-      if s.frozenIndirectionTable.lSome? then lSome(s.frozenIndirectionTable.value.I()) else lNone,
-      s.persistentIndirectionTable.I(),
-      s.outstandingBlockWrites,
-      s.blockAllocator.I())
+  ensures s.ConsistentBitmap()
   ensures BlockAllocatorModel.Inv(s.blockAllocator.I())
   {
-    reveal_ConsistentBitmap();
+    reveal_ConsistentBitmapInteral();
     BitmapModel.reveal_BitSet();
     BitmapModel.reveal_IsSet();
 
@@ -253,25 +238,19 @@ module SyncImpl {
   requires BlockAllocatorModel.Inv(old_s.blockAllocator.I())
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
 
-  requires ConsistentBitmap(old_s.ephemeralIndirectionTable.I(),
-      if old_s.frozenIndirectionTable.lSome? then lSome(old_s.frozenIndirectionTable.value.I()) else lNone,
-      old_s.persistentIndirectionTable.I(),
-      old_s.outstandingBlockWrites,
-      old_s.blockAllocator.I())
+  requires old_s.ConsistentBitmap()
+
   requires ValidNodeLocation(loc);
   requires BC.AllOutstandingBlockWritesDontOverlap(old_s.outstandingBlockWrites)
   requires BC.OutstandingWriteValidNodeLocation(old_s.outstandingBlockWrites)
 
   ensures s.W()
   ensures s.Ready?
-  ensures ConsistentBitmap(s.ephemeralIndirectionTable.I(),
-      if s.frozenIndirectionTable.lSome? then lSome(s.frozenIndirectionTable.value.I()) else lNone,
-      s.persistentIndirectionTable.I(),
-      s.outstandingBlockWrites,
-      s.blockAllocator.I())
+  ensures s.ConsistentBitmap()
+
   ensures BlockAllocatorModel.Inv(s.blockAllocator.I())
   {
-    reveal_ConsistentBitmap();
+    reveal_ConsistentBitmapInteral();
 
     BitmapModel.reveal_BitUnset();
     BitmapModel.reveal_BitSet();
@@ -437,7 +416,7 @@ module SyncImpl {
     assert s.cache.I() == old_s.cache.I();
 
     if (id.Some?) {
-      reveal_ConsistentBitmap();
+      reveal_ConsistentBitmapInteral();
 
       AssignRefToLocEphemeral(inout s, ref, loc.value);
 
@@ -517,7 +496,7 @@ module SyncImpl {
       var foundInFrozen := inout s.frozenIndirectionTable.value.FindRefWithNoLoc();
       ghost var s0 := s;
 
-      assert s0.Inv() by { SBCM.reveal_ConsistentBitmap(); }
+      assert s0.Inv() by { SBCM.reveal_ConsistentBitmapInteral(); }
 
       if foundInFrozen.Some? {
         syncFoundInFrozen(inout s, io, foundInFrozen.value);
