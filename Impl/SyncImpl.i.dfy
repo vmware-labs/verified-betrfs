@@ -54,8 +54,7 @@ module SyncImpl {
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   requires BitmapModel.Len(bm) == NumBlocks()
   requires bm' == BitmapModel.BitSet(bm, loc.addr as int / NodeBlockSize())
-  ensures 
-      && (forall i: int :: indirectionTable'.I().IsLocAllocIndirectionTable(i)
+  ensures (forall i: int :: indirectionTable'.I().IsLocAllocIndirectionTable(i)
           <==> IT.IndirectionTable.IsLocAllocBitmap(bm', i))
   {
     BitmapModel.reveal_BitSet();
@@ -116,6 +115,8 @@ module SyncImpl {
   ensures s.W() && s.Ready?
   ensures s.ConsistentBitmap()
   ensures BlockAllocatorModel.Inv(s.blockAllocator.I())
+  ensures var old_gs := old_s.IBlockCache();
+    s.IBlockCache() == old_gs.(ephemeralIndirectionTable := BC.assignRefToLocation(old_gs.ephemeralIndirectionTable, ref, loc))
   {
     var added := inout s.ephemeralIndirectionTable.AddLocIfPresent(ref, loc);
     if added {
@@ -171,9 +172,10 @@ module SyncImpl {
 
   ensures s.W() && s.Ready?
   ensures s.frozenIndirectionTable.lSome?
-  ensures s.frozenIndirectionTable.value.I() == BC.assignRefToLocation(old_s.frozenIndirectionTable.value.I(), ref, loc)
   ensures s.ConsistentBitmap()
   ensures BlockAllocatorModel.Inv(s.blockAllocator.I())
+  ensures var old_gs := old_s.IBlockCache();
+    s.IBlockCache() == old_gs.(frozenIndirectionTable := Some(BC.assignRefToLocation(old_gs.frozenIndirectionTable.value, ref, loc)))
   {
     reveal_ConsistentBitmapInteral();
     BitmapModel.reveal_BitSet();
@@ -231,6 +233,8 @@ module SyncImpl {
   ensures s.ConsistentBitmap()
 
   ensures BlockAllocatorModel.Inv(s.blockAllocator.I())
+  ensures var old_gs := old_s.IBlockCache();
+    s.IBlockCache() == old_gs.(outstandingBlockWrites := old_gs.outstandingBlockWrites[id := BC.OutstandingWrite(ref, loc)])
   {
     reveal_ConsistentBitmapInteral();
 
@@ -374,7 +378,7 @@ module SyncImpl {
   ensures s.W() && s.Ready?
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
-  // ensures BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
+  ensures BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
   {
     linear var placeholder := Node.EmptyNode();
     linear var node := inout s.cache.ReplaceAndGet(ref, placeholder);
@@ -384,51 +388,28 @@ module SyncImpl {
     assert s.cache.ptr(ref).Some?;
     
     var id, loc := FindLocationAndRequestWrite(io, s, sector);
-    // ghost var s' := s.I();
 
     linear var SectorNode(n) := sector;
     linear var replaced:= inout s.cache.ReplaceAndGet(ref, n);
     var _ := FreeNode(replaced);
-
-    // assert IOModel.SimilarVariables(s', s.I());
-    // IOModel.SimilarVariablesGuarantees(old(IIO(io)), s', old_s.I(),
-    //   SSM.SectorNode(old_s.cache.I()[ref]), id, loc, IIO(io));
     assert s.cache.I() == old_s.cache.I();
 
     if (id.Some?) {
       reveal_ConsistentBitmapInteral();
 
-      AssignIdRefLocOutstanding(inout s, id.value, ref, loc.value);
       AssignRefToLocEphemeral(inout s, ref, loc.value);
-
+      AssignIdRefLocOutstanding(inout s, id.value, ref, loc.value);
       if s.frozenIndirectionTable.lSome? {
         AssignRefToLocFrozen(inout s, ref, loc.value);
       }
 
-      // assume s.persistentIndirectionTable == old_s.persistentIndirectionTable;
-      // assume s.cache == old_s.cache;
-      // assume s.outstandingBlockReads == old_s.outstandingBlockReads;
-      // assume s.frozenIndirectionTableLoc == old_s.frozenIndirectionTableLoc;
-      // assume s.persistentIndirectionTableLoc == old_s.persistentIndirectionTableLoc;
-
-      // ghost var g := true;
-
-      // if g && old_s.frozenIndirectionTable.lSome? {
-      //   assert s.frozenIndirectionTable.value.I()
-      //     == BC.assignRefToLocation(old_s.frozenIndirectionTable.value.I(), ref, loc.value);
-      // }
-
-      // assert ValidNodeLocation(IDiskOp(diskOp(IIO(io))).bdop.reqWriteNode.loc);
-      // assert BC.WriteBackNodeReq(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, ref);
-      // assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.WriteBackNodeReqStep(ref));
+      assert ValidNodeLocation(IDiskOp(diskOp(IIO(io))).bdop.reqWriteNode.loc);
+      assert BC.WriteBackNodeReq(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, ref);
+      assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.WriteBackNodeReqStep(ref));
     } else {
       print "sync: giving up; write req failed\n";
       assert IOModel.noop(s.IBlockCache(), s.IBlockCache());
     }
-  
-    // assert IOModel.FindLocationAndRequestWrite(old(IIO(io)), old_s.I(),
-    //   SSM.SectorNode(old_s.cache.I()[ref]), id, loc, IIO(io));
-    // assert SyncModel.WriteBlockUpdateState(old_s.I(), ref, id, loc, s.I());
   }
 /*
 
