@@ -727,4 +727,31 @@ module RobinHood {
 
     assert ExistsEmptyEntry(table'); // TODO
   }
+
+  lemma GetValue_Insert_self(
+      table: seq<Entry>, table': seq<Entry>,
+      key: Key, value: Value, shift: RightShift)
+  requires Inv(table)
+  requires Insert(table, table', key, value, shift)
+  ensures GetValue(table', key) == Some(value)
+  {
+    Insert_Inv(table, table', key, value, shift);
+  }
+
+  lemma GetValue_Insert_other(
+      table: seq<Entry>, table': seq<Entry>,
+      key: Key, value: Value, shift: RightShift,
+      other: Key)
+  requires Inv(table)
+  requires Insert(table, table', key, value, shift)
+  requires other != key
+  ensures GetValue(table', other) == GetValue(table, other)
+  {
+    if GetIndex(table, other).Some? {
+      var j := GetIndex(table, other).value;
+      var k := (if j < |table| - 1 then j + 1 else 0);
+      assert (table'[j].Full? && table'[j].key == other)
+          || (table'[k].Full? && table'[k].key == other);
+    }
+  }
 }
