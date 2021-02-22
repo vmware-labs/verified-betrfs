@@ -34,7 +34,7 @@ module SyncModel {
   requires loc.Some? ==> 0 <= loc.value.addr as int / NodeBlockSize() < NumBlocks()
   requires ref in s.cache
   {
-    reveal_ConsistentBitmapInteral();
+    reveal_ConsistentBitmap();
 
     if id.Some? then (
       && loc.Some?
@@ -76,7 +76,7 @@ module SyncModel {
     FindLocationAndRequestWriteCorrect(io, s, SectorNode(s.cache[ref]), id, loc, io');
 
     if id.Some? {
-      reveal_ConsistentBitmapInteral();
+      reveal_ConsistentBitmap();
       reveal_AssignRefToLocEphemeral();
       reveal_AssignRefToLocFrozen();
       reveal_AssignIdRefLocOutstanding();
@@ -175,7 +175,7 @@ module SyncModel {
       ) else (
         var (frozen0, ref) := s.frozenIndirectionTable.value.findRefWithNoLoc();
         var s0 := s.(frozenIndirectionTable := Some(frozen0));
-        assert BCInv(s0) by { reveal_ConsistentBitmapInteral(); }
+        assert BCInv(s0) by { reveal_ConsistentBitmap(); }
         if ref.Some? then (
           syncFoundInFrozen(s0, io, ref.value, s', io')
           && froze == false
@@ -234,7 +234,7 @@ module SyncModel {
       } else {
         var (frozen0, ref) := s.frozenIndirectionTable.value.findRefWithNoLoc();
         var s0 := s.(frozenIndirectionTable := Some(frozen0));
-        assert BCInv(s0) by { reveal_ConsistentBitmapInteral(); }
+        assert BCInv(s0) by { reveal_ConsistentBitmap(); }
         if ref.Some? {
           syncFoundInFrozenCorrect(s0, io, ref.value, s', io');
         } else if (s0.outstandingBlockWrites != map[]) {

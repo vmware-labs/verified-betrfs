@@ -374,6 +374,7 @@ module IndirectionTable {
     ensures self.Inv()
     ensures added == (ref in old_self.graph && ref !in old_self.locs)
     ensures self.graph == old_self.graph
+    ensures self.refUpperBound == old_self.refUpperBound
     ensures (added ==> self.locs == old_self.locs[ref := loc])
     ensures (!added ==> self.locs == old_self.locs)
     ensures (old_self.TrackingGarbage() ==> self.TrackingGarbage())
