@@ -6,7 +6,6 @@ module RobinHood {
   import opened NativeTypes
   import opened Options
 
-
   function method hash(key: uint64) : (h : uint32)
 
   datatype Entry =
@@ -556,4 +555,176 @@ module RobinHood {
     }
   }
 
+  lemma GetValue_Remove_self(
+      table: seq<Entry>, table': seq<Entry>,
+      key: Key, shift: LeftShift)
+  requires Inv(table)
+  requires Remove(table, table', key, shift)
+  ensures GetValue(table', key) == None
+  {
+  }
+
+  lemma GetValue_Remove_other(
+      table: seq<Entry>, table': seq<Entry>,
+      key: Key, shift: LeftShift, other: Key)
+  requires Inv(table)
+  requires Remove(table, table', key, shift)
+  requires other != key
+  ensures GetValue(table', other) == GetValue(table, other)
+  {
+    if GetIndex(table, other).Some? {
+      var j := GetIndex(table, other).value;
+      //var k := (if j < |table| - 1 then j + 1 else 0);
+      var k := (if j > 0 then j - 1 else |table| - 1);
+      assert (table'[j].Full? && table'[j].key == other)
+          || (table'[k].Full? && table'[k].key == other);
+    } else if GetIndex(table', other).Some? {
+    } else {
+    }
+  }
+
+  // Insert key / value at a, shift a,...,b-1 to the right
+  datatype RightShift = RightShift(start: int, end: int)
+
+  predicate ApplyRightShift(table: seq<Entry>, table': seq<Entry>, key: Key, value: Value, shift: RightShift)
+  {
+    && 0 <= shift.start < |table|
+    && 0 <= shift.end < |table|
+    && |table'| == |table|
+
+    && (shift.start <= shift.end ==>
+      && (forall i | 0 <= i < shift.start :: table'[i] == table[i])
+      && table'[shift.start] == Full(key, value)
+      && (forall i | shift.start < i <= shift.end :: table'[i] == table[i-1])
+      && (forall i | shift.end < i < |table'| :: table'[i] == table[i])
+    )
+
+    && (shift.start > shift.end ==>
+      && table'[0] == table[|table| - 1]
+      && (forall i | 0 < i <= shift.end :: table'[i] == table[i-1])
+      && (forall i | shift.end < i < shift.start :: table'[i] == table[i])
+      && table'[shift.start] == Full(key, value)
+      && (forall i | shift.start < i < |table'| :: table'[i] == table[i-1])
+    )
+  }
+
+  predicate ValidInBetweenInsertionPoint(table: seq<Entry>, i: int, h: uint32)
+  {
+    var j := if i > 0 then i - 1 else |table| - 1;
+    && 0 <= i < |table|
+    && table[i].Full?
+    && table[j].Full?
+    && (hash(table[j].key) <= h < hash(table[i].key)
+     || h < hash(table[i].key) < hash(table[j].key)
+     || hash(table[i].key) < hash(table[j].key) <= h)
+  }
+
+  predicate Insert(table: seq<Entry>, table': seq<Entry>, key: Key, value: Value, shift: RightShift)
+  {
+    && 0 <= shift.start < |table|
+    && 0 <= shift.end < |table|
+
+    // The next element must be empty
+    && table[shift.end].Empty?
+
+    && var h := hash(key) as int;
+
+    && 0 <= h < |table|
+
+    && (h <= shift.start <= shift.end
+        || shift.start <= shift.end < h
+        || shift.end < h <= shift.start)
+
+    && (forall j | (h <= j < shift.end
+        || 0 <= j <= shift.end < h
+        || shift.end < h <= j < |table|) :: table[j].Full?)
+
+    // key is not found in the range
+    // (only have to check up to start of the shift)
+    && (forall j | (h <= j <= shift.start
+        || 0 <= j <= shift.start < h
+        || shift.start < h <= j < |table|) :: table[j].Full? && table[j].key != key)
+
+    // we put the new entry in the right spot:
+    //
+    // |-------|-------|-------|-------|-------|-------| Empty
+    //   h               start                           end
+    //
+    //            h1       h2        
+    //
+    // If we're going to insert (k,v) at start with hashes h1 and h2 as shown,
+    // we need h1 <= h < h2 (cyclically)
+    // in which case we get h < start < end.
+    //
+    // If none of those work, then use start == end
+
+    && (table[shift.start].Full? ==> (
+      && shift.start != h
+      && ValidInBetweenInsertionPoint(table, shift.start, hash(key))
+    ))
+
+    && (table[shift.start].Empty? ==> (
+      && shift.start == shift.end
+      && (forall j |
+          (h < j < shift.end || j < shift.end < h || shift.end < h < j)
+            :: !ValidInBetweenInsertionPoint(table, shift.start, hash(key)))
+    ))
+
+    && ApplyRightShift(table, table', key, value, shift)
+  }
+
+  lemma Insert_Inv(table: seq<Entry>, table': seq<Entry>, key: Key, value: Value, shift: RightShift)
+  requires Inv(table)
+  requires Insert(table, table', key, value, shift)
+  ensures Inv(table')
+  {
+    assert KeysUnique(table') by {
+      forall i | 0 <= i < |table| && table[i].Full? && table[i].key == key
+      ensures false
+      {
+        assert ContiguousToEntry(table, shift.start);
+
+        var j := if shift.start > 0 then shift.start - 1 else |table| - 1;
+        assert ValidHashNeighbors(table, shift.end, j);
+
+        assert ContiguousToEntry(table, i);
+        hash_neighbor_transitive(table, shift.end, shift.start, i);
+      }
+    }
+
+    forall e, j | 0 <= e < |table'| && 0 <= j < |table'|
+    ensures ValidHashNeighbors(table', e, j)
+    {
+      var j' := if j > 0 then j - 1 else |table| - 1;
+      var j1 := if j + 1 < |table| then j + 1 else 0;
+      assert ValidHashNeighbors(table, e, j');
+      assert ValidHashNeighbors(table, e, j);
+
+      if table'[j].Full? && table'[j1].Full? {
+        if j == shift.start {
+          assert ValidHashNeighbors(table', e, j);
+        } else if j1 == shift.start {
+          assert ValidHashNeighbors(table', e, j);
+        } else if j == shift.end {
+          // Two previously-separate contiguous regions are now joining.
+          assert ContiguousToEntry(table, j');
+          assert ContiguousToEntry(table, j1);
+          //assert hash(table[j1].key) as int == j1;
+          assert ValidHashNeighbors(table', e, j);
+        } else {
+          assert ValidHashNeighbors(table', e, j);
+        }
+      }
+    }
+
+    forall j | 0 <= j < |table'|
+    ensures ContiguousToEntry(table', j)
+    {
+      var j' := if j > 0 then j - 1 else |table| - 1;
+      assert ContiguousToEntry(table, j);
+      assert ContiguousToEntry(table, j');
+    }
+
+    assert ExistsEmptyEntry(table'); // TODO
+  }
 }
