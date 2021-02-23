@@ -266,11 +266,10 @@ module IOImpl {
   requires old_s.TotalCacheSize() as int <= MaxCacheSize() - 1
 
   modifies io
-  ensures 
-    && s.Ready?
-    && s.WFBCVars()
-    && ValidDiskOp(diskOp(IIO(io)))
-    && BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
+  ensures s.Ready? && s.WFBCVars()
+  ensures ValidDiskOp(diskOp(IIO(io)))
+  ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
+  ensures BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       print "giving up; already an outstanding read for this ref\n";

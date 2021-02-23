@@ -468,8 +468,7 @@ module SyncImpl {
       var foundInFrozen := inout s.frozenIndirectionTable.value.FindRefWithNoLoc();
       // ghost var s0 := s;
 
-      // assert s0.BCInv() by { reveal_ConsistentBitmapInteral(); }
-      assume s.BCInv();
+      assert s.BCInv();
 
       if foundInFrozen.Some? {
         syncFoundInFrozen(inout s, io, foundInFrozen.value);
