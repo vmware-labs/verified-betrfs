@@ -411,20 +411,20 @@ module SyncImpl {
       assert IOModel.noop(s.IBlockCache(), s.IBlockCache());
     }
   }
-/*
 
   // TODO fix the name of this method
   method {:fuel BC.GraphClosed,0} syncFoundInFrozen(linear inout s: ImplVariables, io: DiskIOHandler, ref: Reference)
   requires io.initialized()
-  requires old_s.Inv()
-  requires old_s.Ready?
+  requires old_s.Ready? && old_s.BCInv()
   requires old_s.outstandingIndirectionTableWrite.None?
   requires old_s.frozenIndirectionTable.lSome?
   requires ref in old_s.frozenIndirectionTable.value.I().graph
   requires ref !in old_s.frozenIndirectionTable.value.I().locs
   modifies io
-  ensures s.W()
-  ensures SyncModel.syncFoundInFrozen(old_s.I(), old(IIO(io)), ref, s.I(), IIO(io))
+  ensures s.Ready? && s.W()
+  ensures ValidDiskOp(diskOp(IIO(io)))
+  ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
+  ensures BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
   {
     assert ref in s.frozenIndirectionTable.value.I().graph;
     assert ref !in s.frozenIndirectionTable.value.I().locs;
@@ -433,6 +433,7 @@ module SyncImpl {
     if ephemeralRef.Some? && ephemeralRef.value.loc.Some? {
       // TODO we should be able to prove this is impossible as well
       print "sync: giving up; ref already in ephemeralIndirectionTable.locs but not frozen";
+      assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
     } else {
       TryToWriteBlock(inout s, io, ref);
     }
@@ -440,47 +441,57 @@ module SyncImpl {
 
   method {:fuel BC.GraphClosed,0} sync(linear inout s: ImplVariables, io: DiskIOHandler)
   returns (froze: bool, wait: bool)
-  requires old_s.Inv()
+  requires old_s.Ready? && old_s.BCInv()
   requires io.initialized()
-  requires old_s.Ready?
+
   modifies io
-  ensures s.W()
-  ensures SyncModel.sync(old_s.I(), old(IIO(io)), s.I(), IIO(io), froze)
+
+  ensures s.Ready? && s.W()
+  ensures ValidDiskOp(diskOp(IIO(io)))
+  ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
+  ensures (froze ==> 
+    BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, FreezeOp))
+  ensures (!froze ==>
+    || BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp))
+    || BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.NoOp, true))
   {
-    SyncModel.reveal_sync();
     wait := false;
     froze := false;
 
     if s.frozenIndirectionTableLoc.Some? {
       //print "sync: waiting; frozen table is currently being written\n";
       wait := true;
+      assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
     } else if s.frozenIndirectionTable.lNone? {
       froze := maybeFreeze(inout s, io);
     } else {
       var foundInFrozen := inout s.frozenIndirectionTable.value.FindRefWithNoLoc();
-      ghost var s0 := s;
+      // ghost var s0 := s;
 
-      assert s0.Inv() by { SBCM.reveal_ConsistentBitmapInteral(); }
+      // assert s0.BCInv() by { reveal_ConsistentBitmapInteral(); }
+      assume s.BCInv();
 
       if foundInFrozen.Some? {
         syncFoundInFrozen(inout s, io, foundInFrozen.value);
       } else if (s.outstandingBlockWrites != map[]) {
         //print "sync: waiting; blocks are still being written\n";
         wait := true;
+        assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
       } else {
         var id, loc := FindIndirectionTableLocationAndRequestWrite(
             io, s, SectorIndirectionTable(s.frozenIndirectionTable.value));
 
         if id.Some? {
-          // assume IOModel.FindIndirectionTableLocationAndRequestWrite(
-          //   IIO(old(io)), s0.I(), SSM.SectorIndirectionTable(s0.I().frozenIndirectionTable.value), id, loc, IIO(io));
           inout s.outstandingIndirectionTableWrite := id;
           inout s.frozenIndirectionTableLoc := loc;
+
+          assert BC.WriteBackIndirectionTableReq(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp);
+          assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.WriteBackIndirectionTableReqStep);
         } else {
           print "sync: giving up; write back indirection table failed (no id)\n";
+          assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
         }
       }
     }
   }
-  */
 }
