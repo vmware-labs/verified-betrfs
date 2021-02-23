@@ -21,9 +21,7 @@ lib/DataStructures
     LinearMutableMapBase.i.dfy timeout (ok with 120 TL)
 
 lib/Buckets
-    PackedKV.i.dfy timeout (ok with 120 TL)
-    BucketModel.i.dfy timeout (ok with 120 TL)
-    PackedStringArray.i.dfy failure [Andrea]
+    PackedStringArray.i.dfy failure [Rob]
 
 ByteBlockCacheSystem [Travis]
     ByteSystem.i.dfy timeout
