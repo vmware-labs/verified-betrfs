@@ -4,7 +4,7 @@ BlockCacheSystem
 
 PivotBetree [Jialin]
     StatesViewPivotBetree_Refines_StatesViewMap.i.dfy timeout (ok with 120 TL)
-    PivotBetreeSpecRefinement.i.dfy timeout
+    PivotBetreeSpecRefinement.i.dfy timeout (ok with 120 TL)
 
 Betree [Jialin]
     Betree_Refines_Map.i.dfy timeout 
