@@ -34,7 +34,7 @@ module PivotBetreeSpecWFNodes {
     assert WFNode(FlushOps(f)[0].node);
     BucketFlushModel.partialFlushWeightBound(
         f.parent.buckets[f.slotIndex], f.child.pivotTable, f.child.buckets);
-    WeightBucketListShrinkEntry(f.parent.buckets, f.slotIndex, f.newParentBucket);
+    WeightBucketListShrinkEntry(f.parent.buckets, f.slotIndex, f.newparent.buckets[f.slotIndex]);
     assert WFNode(FlushOps(f)[1].node);
   }
 
@@ -49,13 +49,6 @@ module PivotBetreeSpecWFNodes {
     assert InvNode(FlushReads(f)[1].node);
 
     ValidFlushWritesWFNodes(f);
-
-    var newparent := G.Node(
-        f.parent.pivotTable,
-        Some(f.parent.children.value[f.slotIndex := f.newchildref]),
-        f.parent.buckets[f.slotIndex := f.newParentBucket]
-      );
-    var newchild := f.child.(buckets := f.newChildBuckets);
 
     //WFBucketComplement(f.parent.buckets[f.slotIndex], f.keys);
     //WFBucketIntersect(f.parent.buckets[f.slotIndex], f.keys);
@@ -77,48 +70,48 @@ module PivotBetreeSpecWFNodes {
     reveal_BucketIntersect();
     //WFBucketListFlush(BucketIntersect(f.parent.buckets[f.slotIndex], f.keys), f.child.buckets, f.child.pivotTable);
 
-    forall i | 0 <= i < |newparent.buckets|
-    ensures WFBucketAt(newparent.buckets[i], newparent.pivotTable, i)
+    forall i | 0 <= i < |f.newparent.buckets|
+    ensures WFBucketAt(f.newparent.buckets[i], f.newparent.pivotTable, i)
     {
       assert WFBucketAt(f.parent.buckets[i], f.parent.pivotTable, i);
       if i == f.slotIndex {
-        forall j | 0 <= j < |newparent.buckets[i].keys|
-        ensures BoundedKey(newparent.pivotTable, newparent.buckets[i].keys[j])
-        ensures Route(newparent.pivotTable, newparent.buckets[i].keys[j]) == i
+        forall j | 0 <= j < |f.newparent.buckets[i].keys|
+        ensures BoundedKey(f.newparent.pivotTable, f.newparent.buckets[i].keys[j])
+        ensures Route(f.newparent.pivotTable, f.newparent.buckets[i].keys[j]) == i
         {
-          MapSeqs.MapMapsIndex(newparent.buckets[i].keys, newparent.buckets[i].msgs, j);
+          MapSeqs.MapMapsIndex(f.newparent.buckets[i].keys, f.newparent.buckets[i].msgs, j);
           reveal_BucketComplement();
           var t := MapSeqs.GetIndex(f.parent.buckets[i].keys, f.parent.buckets[i].msgs, 
-              newparent.buckets[i].keys[j]);
-          //RouteIs(newparent.pivotTable, newparent.buckets[i].keys[i], i);
+              f.newparent.buckets[i].keys[j]);
+          //RouteIs(f.newparent.pivotTable, f.newparent.buckets[i].keys[i], i);
         }
-        assert WFBucketAt(newparent.buckets[i], newparent.pivotTable, i);
+        assert WFBucketAt(f.newparent.buckets[i], f.newparent.pivotTable, i);
       } else {
-        assert f.parent.buckets[i] == newparent.buckets[i];
-        assert f.parent.pivotTable == newparent.pivotTable;
-        assert WFBucketAt(newparent.buckets[i], newparent.pivotTable, i);
+        assert f.parent.buckets[i] == f.newparent.buckets[i];
+        assert f.parent.pivotTable == f.newparent.pivotTable;
+        assert WFBucketAt(f.newparent.buckets[i], f.newparent.pivotTable, i);
       }
       //assert (set k | k in f.parent.buckets[i].keys) == f.parent.buckets[i].as_map().Keys;
-      //assert (set k | k in newparent.buckets[i].keys) == newparent.buckets[i].as_map().Keys;
+      //assert (set k | k in f.newparent.buckets[i].keys) == f.newparent.buckets[i].as_map().Keys;
     }
 
-    forall i | 0 <= i < |newchild.buckets|
-    ensures WFBucketAt(newchild.buckets[i], newchild.pivotTable, i)
+    forall i | 0 <= i < |f.newchild.buckets|
+    ensures WFBucketAt(f.newchild.buckets[i], f.newchild.pivotTable, i)
     {
       assert WFBucketAt(f.child.buckets[i], f.child.pivotTable, i);
-      forall j | 0 <= j < |newchild.buckets[i].keys|
-      ensures BoundedKey(newchild.pivotTable, newchild.buckets[i].keys[j])
-      ensures Route(newchild.pivotTable, newchild.buckets[i].keys[j]) == i
+      forall j | 0 <= j < |f.newchild.buckets[i].keys|
+      ensures BoundedKey(f.newchild.pivotTable, f.newchild.buckets[i].keys[j])
+      ensures Route(f.newchild.pivotTable, f.newchild.buckets[i].keys[j]) == i
       {
-        MapSeqs.MapMapsIndex(newchild.buckets[i].keys, newchild.buckets[i].msgs, j);
+        MapSeqs.MapMapsIndex(f.newchild.buckets[i].keys, f.newchild.buckets[i].msgs, j);
         reveal_BucketIntersect();
         //var t := MapSeqs.GetIndex(f.child.buckets[i].keys, f.child.buckets[i].msgs, 
         //    newchild.buckets[i].keys[j]);
       }
     }
 
-    assert InvNode(newparent);
-    assert InvNode(newchild);
+    assert InvNode(f.newparent);
+    assert InvNode(f.newchild);
   }
 
   // TODO I think there's some redundancy in the below. Would probably be better.
