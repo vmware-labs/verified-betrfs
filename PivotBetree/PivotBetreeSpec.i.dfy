@@ -303,14 +303,12 @@ module PivotBetreeSpec {
   datatype NodeFlush = NodeFlush(
     parentref: Reference,
     parent: Node,
+    newparent: Node,
     childref: Reference,
     child: Node,
     newchildref: Reference,
     newchild: Node,
-    ghost slotIndex: int,
-    //keys: set<Key>,
-    newParentBucket: Bucket,
-    newChildBuckets: seq<Bucket>
+    ghost slotIndex: int
   )
 
   predicate ValidFlush(f: NodeFlush)
@@ -320,12 +318,6 @@ module PivotBetreeSpec {
     && 0 <= f.slotIndex < |f.parent.buckets|
     && f.parent.children.Some?
     && f.parent.children.value[f.slotIndex] == f.childref
-    && WFBucketList(f.newChildBuckets, f.child.pivotTable)
-    && WFBucket(f.newParentBucket)
-    //&& (forall key | key in f.keys :: BoundedKey(f.child.pivotTable, key))
-    && WeightBucketList(f.newChildBuckets) <= MaxTotalBucketWeight()
-    && WeightBucket(f.newParentBucket) <= WeightBucket(f.parent.buckets[f.slotIndex])
-
     && BoundedKeySeq(f.child.pivotTable, f.parent.buckets[f.slotIndex].keys)
 
     /*&& (BucketListWellMarshalled(f.child.buckets)
@@ -339,8 +331,16 @@ module PivotBetreeSpec {
     )*/
     && var pfr := BucketFlushModel.partialFlush(
           f.parent.buckets[f.slotIndex], f.child.pivotTable, f.child.buckets);
-    && f.newParentBucket == pfr.top
-    && f.newChildBuckets == pfr.bots
+
+    && f.newparent == Node(
+        f.parent.pivotTable,
+        Some(f.parent.children.value[f.slotIndex := f.newchildref]),
+        f.parent.buckets[f.slotIndex := pfr.top])
+    && f.newchild == f.child.(buckets := pfr.bots)
+    && WFBucketList(f.newchild.buckets, f.child.pivotTable)
+    && WFBucket(f.newparent.buckets[f.slotIndex])
+    && WeightBucketList(f.newchild.buckets) <= MaxTotalBucketWeight()
+    && WeightBucket(f.newparent.buckets[f.slotIndex]) <= WeightBucket(f.parent.buckets[f.slotIndex])
   }
 
   function FlushReads(f: NodeFlush) : seq<ReadOp>
@@ -355,14 +355,8 @@ module PivotBetreeSpec {
   function FlushOps(f: NodeFlush) : seq<Op>
   requires ValidFlush(f)
   {
-    var newparent := Node(
-        f.parent.pivotTable,
-        Some(f.parent.children.value[f.slotIndex := f.newchildref]),
-        f.parent.buckets[f.slotIndex := f.newParentBucket]
-      );
-    var newchild := f.child.(buckets := f.newChildBuckets);
-    var allocop := G.AllocOp(f.newchildref, newchild);
-    var writeop := G.WriteOp(f.parentref, newparent);
+    var allocop := G.AllocOp(f.newchildref, f.newchild);
+    var writeop := G.WriteOp(f.parentref, f.newparent);
     [allocop, writeop]
   }
 

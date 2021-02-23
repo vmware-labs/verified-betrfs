@@ -174,13 +174,12 @@ module FlushModel {
           var flushStep := BT.NodeFlush(
             parentref,
             INode(parent),
+            INode(newparent),
             childref,
             INode(child),
             newchildref.value,
             INode(newchild),
-            slot,
-            INode(newparent).buckets[slot],
-            INode(newchild).buckets);
+            slot);
           assert BT.ValidFlush(flushStep);
           var step := BT.BetreeFlush(flushStep);
           assert INode(newparent) == BT.FlushOps(flushStep)[1].node;

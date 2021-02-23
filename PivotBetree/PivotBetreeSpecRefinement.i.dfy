@@ -150,13 +150,13 @@ module PivotBetreeSpecRefinement {
   {
     //iset key | BoundedKey(node.pivotTable, key) && Route(node.pivotTable, key) == slotIndex && key in keys
     iset key | key in flush.parent.buckets[flush.slotIndex].as_map().Keys
-            && key !in flush.newParentBucket.as_map().Keys
+            && key !in flush.newparent.buckets[flush.slotIndex].as_map().Keys
   }
 
   function IFlush(flush: P.NodeFlush) : B.NodeFlush
   requires P.ValidFlush(flush)
   {
-    B.NodeFlush(flush.parentref, INode(flush.parent), flush.childref, INode(flush.child), flush.newchildref, MovedKeys(flush.parent, flush.slotIndex), FlushedKeys(flush))
+    B.NodeFlush(flush.parentref, INode(flush.parent), INode(flush.newparent), flush.childref, INode(flush.child), flush.newchildref, INode(flush.newchild), MovedKeys(flush.parent, flush.slotIndex), FlushedKeys(flush))
   }
 
   function IGrow(growth: P.RootGrowth) : B.RootGrowth
@@ -669,8 +669,12 @@ module PivotBetreeSpecRefinement {
   requires ReadOpsBucketsWellMarshalled(P.FlushReads(flush))
   ensures B.ValidFlush(IFlush(flush))
   {
+    PivotBetreeSpecWFNodes.ValidFlushWritesInvNodes(flush);
+    var f := IFlush(flush);
+
     assert P.InvNode(P.FlushReads(flush)[0].node);
     assert P.InvNode(P.FlushReads(flush)[1].node);
+
     forall key | key in flush.parent.buckets[flush.slotIndex].as_map().Keys
     ensures BoundedKey(flush.parent.pivotTable, key)
     ensures Route(flush.parent.pivotTable, key) == flush.slotIndex
@@ -681,6 +685,31 @@ module PivotBetreeSpecRefinement {
         flush.slotIndex);
       PivotBetreeSpecWFNodes.bucket_keys_in_seq(
           flush.parent.buckets[flush.slotIndex]);
+    }
+
+    assert (forall key | key in f.movedKeys :: IMapsTo(f.parent.children, key, f.childref));
+    assert f.newparent.children == (imap k | k in f.parent.children :: (if k in f.movedKeys then f.newchildref else f.parent.children[k]));
+    assert f.newchild.children == f.child.children;
+
+    var flushedKeys := BucketFlushModel.partialFlushCorrect(
+      flush.parent.buckets[flush.slotIndex], flush.child.pivotTable, flush.child.buckets);
+
+    reveal_BucketIntersect();
+    reveal_BucketComplement();
+
+    assert f.newparent.buffer == 
+      (imap k : Key :: (if k in f.flushedKeys then IdentityMessage() else f.parent.buffer[k])); // observe
+
+    var isec := BucketIntersect(flush.parent.buckets[flush.slotIndex].as_map(), flushedKeys);
+    forall k: Key | BoundedKey(flush.child.pivotTable, k)
+    ensures f.newchild.buffer[k] == (if k in f.flushedKeys then Merge(f.parent.buffer[k], f.child.buffer[k]) else f.child.buffer[k])
+    {
+      AddMessagesToNodeResult(flush.child, isec, flush.newchild, k);
+      if (k in f.flushedKeys) {
+        if (flush.newchild.children.None?) {
+           MergeIsAssociative(BucketGet(isec, k), P.NodeLookup(flush.child, k), DefineDefault());
+        }
+      }
     }
   }
 
@@ -1293,122 +1322,7 @@ module PivotBetreeSpecRefinement {
       P.InvNode(P.FlushOps(flush)[i].node)
   ensures IOps(P.FlushOps(flush)) == B.FlushOps(IFlush(flush))
   {
-    assert P.InvNode(P.FlushReads(flush)[0].node);
-    assert P.InvNode(P.FlushReads(flush)[1].node);
     PivotBetreeSpecWFNodes.ValidFlushWritesInvNodes(flush);
-
-    var newparent := P.G.Node(
-        flush.parent.pivotTable,
-        Some(flush.parent.children.value[flush.slotIndex := flush.newchildref]),
-        flush.parent.buckets[flush.slotIndex := flush.newParentBucket]
-      );
-    var pfr := BucketFlushModel.partialFlush(
-          flush.parent.buckets[flush.slotIndex], flush.child.pivotTable, flush.child.buckets);
-    var newchild := flush.child.(buckets := pfr.bots);
-    var allocop := P.G.AllocOp(flush.newchildref, newchild);
-    var writeop := P.G.WriteOp(flush.parentref, newparent);
-
-    var flushedKeys := BucketFlushModel.partialFlushCorrect(
-        flush.parent.buckets[flush.slotIndex], flush.child.pivotTable, flush.child.buckets);
-
-    // equality of set and iset:
-    forall k | k in flushedKeys ensures k in FlushedKeys(flush) {
-      reveal_BucketComplement();
-      //assert k in flush.parent.buckets[flush.slotIndex].as_map().Keys by {
-      PivotBetreeSpecWFNodes.bucket_keys_equiv(flush.parent.buckets[flush.slotIndex]); //}
-      //assert k !in flush.newParentBucket.as_map().Keys;
-    }
-    forall k | k in FlushedKeys(flush) ensures k in flushedKeys {
-      reveal_BucketComplement();
-    }
-
-    var isec := BucketIntersect(flush.parent.buckets[flush.slotIndex].as_map(), flushedKeys);
-
-    assert P.WFNode(newchild);
-    assert P.WFNode(newparent);
-
-    var flush' := IFlush(flush);
-    var parentref := flush'.parentref;
-    var parent := flush'.parent;
-    var childref := flush'.childref;
-    var child := flush'.child;
-    var newchildref := flush'.newchildref;
-
-    var newbuffer := imap k:Key :: (if k in flush'.flushedKeys then Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
-    var newchild' := B.G.Node(child.children, newbuffer);
-    var newparentbuffer := imap k:Key :: (if k in flush'.flushedKeys then Update(NopDelta()) else parent.buffer[k]);
-    var newparentchildren := imap k:Key | k in parent.children :: (if k in flush'.movedKeys then newchildref else parent.children[k]);
-    var newparent' := B.G.Node(newparentchildren, newparentbuffer);
-    var allocop' := B.G.AllocOp(newchildref, newchild');
-    var writeop' := B.G.WriteOp(parentref, newparent');
-
-    reveal_BucketIntersect();
-    reveal_BucketComplement();
-
-    forall k: Key | BoundedKey(flush.child.pivotTable, k)
-    ensures IBuffer(newchild)[k] == newbuffer[k]
-    {
-      AddMessagesToNodeResult(flush.child, isec, newchild, k);
-      if (k in flush'.flushedKeys) {
-        if (newchild.children.Some?) {
-          assert IBuffer(newchild)[k] == newbuffer[k];
-        } else {
-          MergeIsAssociative(BucketGet(isec, k), P.NodeLookup(flush.child, k), DefineDefault());
-          /*
-          assert IBuffer(newchild)[k]
-              == M.Merge(P.NodeLookup(newchild, k), M.DefineDefault())
-              == M.Merge(M.Merge(BucketGet(isec, k), P.NodeLookup(flush.child, k)), M.DefineDefault())
-              == Merge(BucketGet(isec, k), Merge(P.NodeLookup(flush.child, k), DefineDefault()))
-              == newbuffer[k];*/
-        }
-      } else {
-        //assert P.NodeHasWFBucketAt(flush.parent, flush.slotIndex);
-        //assert k !in isec;
-        /*
-        if (newchild.children.Some?) {
-          assert flush.child.children.Some?;
-          assert IBuffer(newchild)[k] == IBuffer(flush.child)[k];
-        } else {
-          assert flush.child.children.None?;
-          assert IBuffer(newchild)[k] == IBuffer(flush.child)[k];
-        }
-        */
-        assert IBuffer(newchild)[k] == newbuffer[k];
-      }
-    }
-
-    /*forall i | 0 <= i < |newparent.buckets|
-    ensures P.NodeHasWFBucketAt(newparent, i)
-    {
-      assert P.NodeHasWFBucketAt(flush.parent, i);
-    }*/
-    //assert P.WFNode(newparent);
-
-    //assert IChildren(newchild) == newchild'.children;
-    //assert IBuffer(newchild) == newbuffer;
-
-    forall k: Key | BoundedKey(flush.parent.pivotTable, k)
-    ensures IChildren(newparent)[k] == newparent'.children[k]
-    {
-      if (k in flush'.flushedKeys) {
-        RouteIs(flush.parent.pivotTable, k, flush.slotIndex);
-        assert IChildren(newparent)[k] == newparent'.children[k];
-      } else if k in flush'.movedKeys {
-        assert IChildren(newparent)[k] == newparent'.children[k];
-      } else {
-        // not in bound
-        assert IChildren(newparent)[k] == newparent'.children[k];
-      }
-    }
-
-    assert IChildren(newparent) == newparent'.children;
-    assert IBuffer(newparent) == newparentbuffer;
-
-    assert INode(newchild) == newchild';
-    assert INode(newparent) == newparent';
-
-    assert IOp(allocop) == allocop';
-    assert IOp(writeop) == writeop';
   }
 
   lemma {:fuel IOps,3} GrowRefinesOps(growth: P.RootGrowth)
