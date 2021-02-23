@@ -1995,15 +1995,12 @@ module IndirectionTable {
     linear inout method FindRefWithNoLoc() returns (ref: Option<BT.G.Reference>)
     requires old_self.Inv()
     ensures self.Inv()
-    ensures self.Inv()
-    ensures self.locs == old_self.locs
-    ensures self.graph == old_self.graph
+    ensures self.I() == old_self.I()
     ensures ref.Some? ==> ref.value in old_self.graph
     ensures ref.Some? ==> ref.value !in old_self.locs
     ensures ref.None? ==> forall r | r in old_self.graph :: r in old_self.locs
     /* TODO(andrea) ModelImpl */ ensures (self, ref) == old_self.findRefWithNoLoc()
     {
-
       var findLoclessIterator := self.findLoclessIterator;
       var it;
       if findLoclessIterator.Some? {
