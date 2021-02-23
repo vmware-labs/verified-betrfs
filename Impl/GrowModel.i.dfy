@@ -26,7 +26,6 @@ module GrowModel {
   requires BBC.Inv(s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
-  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
   {
     lemmaChildrenConditionsOfNode(s, BT.G.Root());
 
@@ -60,8 +59,6 @@ module GrowModel {
 
   lemma growCorrect(s: BBC.Variables)
   requires grow.requires(s)
-  requires forall r | r in s.ephemeralIndirectionTable.graph :: r < s.ephemeralIndirectionTable.refUpperBound
-  // requires s.totalCacheSize() <= MaxCacheSize() - 1
   ensures var s' := grow(s);
     && betree_next(s, s')
   {

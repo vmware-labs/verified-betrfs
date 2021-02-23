@@ -2,11 +2,9 @@ include "FlushModel.i.dfy"
 include "GrowModel.i.dfy"
 include "SplitModel.i.dfy"
 include "LeafModel.i.dfy"
-include "EvictModel.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 
 module FlushPolicyModel {
-  import opened StateBCModel
   import opened StateSectorModel
 
   import opened IOModel
@@ -15,7 +13,6 @@ module FlushPolicyModel {
   import opened GrowModel
   import opened SplitModel
   import opened LeafModel
-  import opened EvictModel
   import opened InterpretationDiskOps
   import opened DiskOpModel
 
@@ -38,7 +35,7 @@ module FlushPolicyModel {
     | ActionEvict
     | ActionFail
 
-  predicate ValidStackSlots(s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
+  predicate ValidStackSlots(s: BBC.Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
   {
     && |stack| == |slots| + 1
     && s.Ready?
@@ -48,14 +45,14 @@ module FlushPolicyModel {
     && (forall j | 0 <= j < |stack| - 1 :: slots[j] as int < |s.cache[stack[j]].children.value| <= MaxNumChildren())
   }
 
-  predicate ValidAction(s: BCVariables, action: Action)
+  predicate ValidAction(s: BBC.Variables, action: Action)
   {
     && s.Ready?
     && (action.ActionPageIn? ==> (
       && action.ref in s.ephemeralIndirectionTable.graph
       && action.ref !in s.cache
       && action.ref in s.ephemeralIndirectionTable.locs
-      && TotalCacheSize(s) <= MaxCacheSize() - 1
+      && s.totalCacheSize() <= MaxCacheSize() - 1
     ))
     && ((action.ActionSplit? || action.ActionFlush?) ==> (
       && action.parentref in s.ephemeralIndirectionTable.graph
@@ -68,13 +65,13 @@ module FlushPolicyModel {
     && (action.ActionSplit? ==> (
       && |s.cache[s.cache[action.parentref].children.value[action.slot]].buckets| >= 2
       && |s.cache[action.parentref].buckets| <= MaxNumChildren() - 1
-      && TotalCacheSize(s) <= MaxCacheSize() - 2
+      && s.totalCacheSize() <= MaxCacheSize() - 2
     ))
     && (action.ActionFlush? ==> (
-      && TotalCacheSize(s) <= MaxCacheSize() - 1
+      && s.totalCacheSize() <= MaxCacheSize() - 1
     ))
     && (action.ActionGrow? ==> (
-      && TotalCacheSize(s) <= MaxCacheSize() - 1
+      && s.totalCacheSize() <= MaxCacheSize() - 1
     ))
     && (action.ActionRepivot? ==> (
       && action.ref in s.ephemeralIndirectionTable.graph
@@ -84,24 +81,23 @@ module FlushPolicyModel {
     ))
   }
 
-  function {:opaque} getActionToSplit(s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64) : (action : Action)
+  function {:opaque} getActionToSplit(s: BBC.Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64) : (action : Action)
   requires 0 <= i as int < |stack|
-  requires WFBCVars(s)
   requires ValidStackSlots(s, stack, slots)
   {
     if i == 0 then
       // Can't split root until we grow it.
-      if TotalCacheSize(s) <= MaxCacheSize() - 1 then (
+      if s.totalCacheSize() <= MaxCacheSize() - 1 then (
         ActionGrow
       ) else (
         ActionEvict
       )
     else (
       if |s.cache[stack[i-1]].children.value| as uint64 < MaxNumChildren() as uint64 then (
-        if |s.cache[stack[i]].buckets| as uint64 == 1 then (
+        if |s.cache[stack[i]].buckets| == 1 then (
           ActionRepivot(stack[i])
         ) else (
-          if TotalCacheSize(s) <= MaxCacheSize() - 2 then (
+          if s.totalCacheSize() <= MaxCacheSize() - 2 then (
             ActionSplit(stack[i-1], slots[i-1])
           ) else (
             ActionEvict
@@ -113,10 +109,10 @@ module FlushPolicyModel {
     )
   }
 
-  function {:opaque} getActionToFlush(s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>) : (BCVariables, Action)
+  function {:opaque} getActionToFlush(s: BBC.Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>) : (BBC.Variables, Action)
   requires |stack| <= 40
   requires ValidStackSlots(s, stack, slots)
-  requires WFBCVars(s)
+  requires BBC.Inv(s)
   decreases 0x1_0000_0000_0000_0000 - |stack|
   {
     if |stack| as uint64 == 40 then (
@@ -134,16 +130,17 @@ module FlushPolicyModel {
           var childref := node.children.value[slot];
           if childref in s.cache then (
             var child := s.cache[childref];
-            var s1 := s.(lru := LruModel.Use(s.lru, childref));
-            LruModel.LruUse(s.lru, childref);
-            assert IBlockCache(s) == IBlockCache(s1);
+            var s1 := s;
+            // var s1 := s.(lru := LruModel.Use(s.lru, childref));
+            // LruModel.LruUse(s.lru, childref);
+            // assert IBlockCache(s) == IBlockCache(s1);
 
             var childTotalWeight: uint64 := WeightBucketList(child.buckets) as uint64;
             if childTotalWeight + FlushTriggerWeight() as uint64 <= MaxTotalBucketWeight() as uint64 then (
               // If there's room for FlushTriggerWeight() worth of stuff, then
               // we flush. We flush as much as we can (which will end up being at least
               // FlushTriggerWeight - max key weight - max message weight).
-              if TotalCacheSize(s1) <= MaxCacheSize() - 1 then (
+              if s1.totalCacheSize() <= MaxCacheSize() - 1 then (
                 (s1, ActionFlush(ref, slot))
               ) else (
                 (s1, ActionEvict)
@@ -152,7 +149,7 @@ module FlushPolicyModel {
               getActionToFlush(s1, stack + [childref], slots + [slot])
             )
           ) else (
-            if TotalCacheSize(s) <= MaxCacheSize() - 1 then (
+            if s.totalCacheSize() <= MaxCacheSize() - 1 then (
               (s, ActionPageIn(childref))
             ) else (
               (s, ActionEvict)
@@ -165,9 +162,9 @@ module FlushPolicyModel {
     )
   }
 
-  lemma getActionToSplitValidAction(s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64)
+  lemma getActionToSplitValidAction(s: BBC.Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>, i: uint64)
   requires 0 <= i as int < |stack|
-  requires BCInv(s)
+  requires BBC.Inv(s)
   requires ValidStackSlots(s, stack, slots)
   requires forall j | 0 <= j < |stack| :: stack[j] in s.ephemeralIndirectionTable.graph
   requires forall j | 0 <= j < |stack| - 1 :: s.cache[stack[j]].children.value[slots[j]] == stack[j+1]
@@ -195,17 +192,16 @@ module FlushPolicyModel {
     }
   }
 
-  lemma getActionToFlushValidAction(s: BCVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
+  lemma getActionToFlushValidAction(s: BBC.Variables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
   requires |stack| <= 40
   requires ValidStackSlots(s, stack, slots)
-  requires BCInv(s)
+  requires BBC.Inv(s)
   requires forall j | 0 <= j < |stack| :: stack[j] in s.ephemeralIndirectionTable.graph
   requires forall j | 0 <= j < |stack| - 1 :: s.cache[stack[j]].children.value[slots[j]] == stack[j+1]
   decreases 0x1_0000_0000_0000_0000 - |stack|
   ensures var (s', action) := getActionToFlush(s, stack, slots);
-    && WFBCVars(s')
-    && IBlockCache(s) == IBlockCache(s')
     && ValidAction(s', action)
+    && s == s'
   {
     reveal_getActionToFlush();
     var action := getActionToFlush(s, stack, slots).1;
@@ -224,8 +220,7 @@ module FlushPolicyModel {
           lemmaChildInGraph(s, ref, childref);
           if childref in s.cache {
             var child := s.cache[childref];
-            var s1 := s.(lru := LruModel.Use(s.lru, childref));
-            LruModel.LruUse(s.lru, childref);
+            var s1 := s;
             var childTotalWeight: uint64 := WeightBucketList(child.buckets) as uint64;
             if childTotalWeight + FlushTriggerWeight() as uint64 <= MaxTotalBucketWeight() as uint64 {
               assert ValidAction(s1, action);
@@ -233,9 +228,9 @@ module FlushPolicyModel {
               getActionToFlushValidAction(s1, stack + [childref], slots + [slot]);
             }
           } else {
-            assert childref !in IBlockCache(s).cache;
-            assert childref in s.ephemeralIndirectionTable.I().graph;
-            assert childref in s.ephemeralIndirectionTable.I().locs;
+            assert childref !in s.cache;
+            assert childref in s.ephemeralIndirectionTable.graph;
+            assert childref in s.ephemeralIndirectionTable.locs;
             assert ValidAction(s, action);
           }
         } else {
@@ -245,104 +240,100 @@ module FlushPolicyModel {
     }
   }
 
-  predicate {:opaque} runFlushPolicy(s: BCVariables, io: IO,
-      s': BCVariables, io': IO)
-  requires BCInv(s)
-  requires io.IOInit?
-  requires s.Ready?
-  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
-  requires BT.G.Root() in s.cache
-  {
-    var s0 := s.(lru := LruModel.Use(s.lru, BT.G.Root()));
-    LruModel.LruUse(s.lru, BT.G.Root());
-    assert IBlockCache(s0) == IBlockCache(s);
+  // predicate {:opaque} runFlushPolicy(s: BBC.Variables, io: IO,
+  //     s': BBC.Variables, io': IO)
+  // requires BBC.Inv(s)
+  // requires io.IOInit?
+  // requires s.Ready?
+  // requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
+  // requires BT.G.Root() in s.cache
+  // {
+  //   var (s1, action) := getActionToFlush(s, [BT.G.Root()], []);
+  //   getActionToFlushValidAction(s, [BT.G.Root()], []);
 
-    var (s1, action) := getActionToFlush(s0, [BT.G.Root()], []);
-    getActionToFlushValidAction(s0, [BT.G.Root()], []);
+  //   match action {
+  //     case ActionPageIn(ref) => (
+  //       (s', io') == PageInNodeReq(s1, io, ref)
+  //     )
+  //     case ActionSplit(parentref, slot) => (
+  //       && var childref := s1.cache[parentref].children.value[slot];
+  //       && doSplit.requires(s1, parentref, childref, slot as int)
+  //       && s' == doSplit(s1, parentref, childref, slot as int)
+  //       && io' == io
+  //     )
+  //     case ActionRepivot(ref) => (
+  //       && s' == repivotLeaf(s1, ref, s1.cache[ref])
+  //       && io' == io
+  //     )
+  //     case ActionFlush(parentref, slot) => (
+  //       && flush.requires(s1, parentref, slot as int, 
+  //           s1.cache[parentref].children.value[slot],
+  //           s1.cache[s1.cache[parentref].children.value[slot]])
+  //       && s' == flush(s1, parentref, slot as int, 
+  //           s1.cache[parentref].children.value[slot],
+  //           s1.cache[s1.cache[parentref].children.value[slot]])
+  //       && io' == io
+  //     )
+  //     case ActionGrow => (
+  //       && grow.requires(s1)
+  //       && s' == grow(s1)
+  //       && io' == io
+  //     )
+  //     case ActionEvict => (
+  //       EvictOrDealloc(s1, io, s', io')
+  //     )
+  //     case ActionFail => (
+  //       && s' == s1
+  //       && io' == io
+  //     )
+  //   }
+  // }
 
-    match action {
-      case ActionPageIn(ref) => (
-        (s', io') == PageInNodeReq(s1, io, ref)
-      )
-      case ActionSplit(parentref, slot) => (
-        && var childref := s1.cache[parentref].children.value[slot];
-        && doSplit.requires(s1, parentref, childref, slot as int)
-        && s' == doSplit(s1, parentref, childref, slot as int)
-        && io' == io
-      )
-      case ActionRepivot(ref) => (
-        && s' == repivotLeaf(s1, ref, s1.cache[ref])
-        && io' == io
-      )
-      case ActionFlush(parentref, slot) => (
-        && flush.requires(s1, parentref, slot as int, 
-            s1.cache[parentref].children.value[slot],
-            s1.cache[s1.cache[parentref].children.value[slot]])
-        && s' == flush(s1, parentref, slot as int, 
-            s1.cache[parentref].children.value[slot],
-            s1.cache[s1.cache[parentref].children.value[slot]])
-        && io' == io
-      )
-      case ActionGrow => (
-        && grow.requires(s1)
-        && s' == grow(s1)
-        && io' == io
-      )
-      case ActionEvict => (
-        EvictOrDealloc(s1, io, s', io')
-      )
-      case ActionFail => (
-        && s' == s1
-        && io' == io
-      )
-    }
-  }
+  // lemma runFlushPolicyCorrect(s: BBC.Variables, io: IO, s': BBC.Variables, io': IO)
+  // requires BBC.Inv(s)
+  // requires io.IOInit?
+  // requires s.Ready?
+  // requires BT.G.Root() in s.cache
+  // requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
+  // requires runFlushPolicy(s, io, s', io')
+  // ensures WFBCVars(s')
+  // ensures ValidDiskOp(diskOp(io'))
+  // ensures IDiskOp(diskOp(io')).jdop.NoDiskOp?
+  // ensures betree_next_dop(IBlockCache(s), IBlockCache(s'),
+  //     IDiskOp(diskOp(io')).bdop)
+  // {
+  //   var s0 := s.(lru := LruModel.Use(s.lru, BT.G.Root()));
+  //   LruModel.LruUse(s.lru, BT.G.Root());
+  //   assert IBlockCache(s0) == IBlockCache(s);
+  //   var (s1, action) := getActionToFlush(s0, [BT.G.Root()], []);
+  //   getActionToFlushValidAction(s0, [BT.G.Root()], []);
 
-  lemma runFlushPolicyCorrect(s: BCVariables, io: IO, s': BCVariables, io': IO)
-  requires BCInv(s)
-  requires io.IOInit?
-  requires s.Ready?
-  requires BT.G.Root() in s.cache
-  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
-  requires runFlushPolicy(s, io, s', io')
-  ensures WFBCVars(s')
-  ensures ValidDiskOp(diskOp(io'))
-  ensures IDiskOp(diskOp(io')).jdop.NoDiskOp?
-  ensures betree_next_dop(IBlockCache(s), IBlockCache(s'),
-      IDiskOp(diskOp(io')).bdop)
-  {
-    var s0 := s.(lru := LruModel.Use(s.lru, BT.G.Root()));
-    LruModel.LruUse(s.lru, BT.G.Root());
-    assert IBlockCache(s0) == IBlockCache(s);
-    var (s1, action) := getActionToFlush(s0, [BT.G.Root()], []);
-    getActionToFlushValidAction(s0, [BT.G.Root()], []);
+  //   reveal_runFlushPolicy();
 
-    reveal_runFlushPolicy();
-
-    match action {
-      case ActionPageIn(ref) => {
-        PageInNodeReqCorrect(s1, io, ref);
-      }
-      case ActionSplit(parentref, slot) => {
-        doSplitCorrect(s1, parentref, s1.cache[parentref].children.value[slot], slot as int);
-      }
-      case ActionRepivot(ref) => {
-        repivotLeafCorrect(s1, ref, s1.cache[ref]);
-      }
-      case ActionFlush(parentref, slot) => {
-        flushCorrect(s1, parentref, slot as int, 
-            s1.cache[parentref].children.value[slot],
-            s1.cache[s1.cache[parentref].children.value[slot]]);
-      }
-      case ActionGrow => {
-        growCorrect(s1);
-      }
-      case ActionEvict => {
-        EvictOrDeallocCorrect(s1, io, s', io');
-      }
-      case ActionFail => {
-        assert noop(IBlockCache(s), IBlockCache(s1));
-      }
-    }
-  }
+  //   match action {
+  //     case ActionPageIn(ref) => {
+  //       PageInNodeReqCorrect(s1, io, ref);
+  //     }
+  //     case ActionSplit(parentref, slot) => {
+  //       doSplitCorrect(s1, parentref, s1.cache[parentref].children.value[slot], slot as int);
+  //     }
+  //     case ActionRepivot(ref) => {
+  //       repivotLeafCorrect(s1, ref, s1.cache[ref]);
+  //     }
+  //     case ActionFlush(parentref, slot) => {
+  //       flushCorrect(s1, parentref, slot as int, 
+  //           s1.cache[parentref].children.value[slot],
+  //           s1.cache[s1.cache[parentref].children.value[slot]]);
+  //     }
+  //     case ActionGrow => {
+  //       growCorrect(s1);
+  //     }
+  //     case ActionEvict => {
+  //       EvictOrDeallocCorrect(s1, io, s', io');
+  //     }
+  //     case ActionFail => {
+  //       assert noop(IBlockCache(s), IBlockCache(s1));
+  //     }
+  //   }
+  // }
 }
