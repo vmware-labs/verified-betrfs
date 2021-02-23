@@ -1,0 +1,2 @@
+build/Impl/LeafImpl.i.verchk:/root/verichecks-worker/worker-dir/clones/5a93861adbbde5b4edb1daa4a558ed3b11382368/Impl/LeafImpl.i.dfy(56,21): Error: assertion violation
+build/Impl/InsertModel.i.verchk:/root/verichecks-worker/worker-dir/clones/5a93861adbbde5b4edb1daa4a558ed3b11382368/Impl/InsertModel.i.dfy(101,11): Error: assertion violation
