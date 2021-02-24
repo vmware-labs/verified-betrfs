@@ -788,12 +788,7 @@ module CommitterImpl {
       inout self.superblockWrite := Some(id);
       inout self.commitStatus := JC.CommitAdvanceLog;
 
-      reveal IOModel.RequestWrite();
-
-      IOModel.RequestWriteCorrect(old(IIO(io)), loc, SSM.SectorSuperblock(newSuperblock), id, IIO(io));
-
       assert ValidDiskOp(diskOp(IIO(io)));
-
       assert JC.WriteBackSuperblockReq_AdvanceLog(old_self.I(), self.I(), IDiskOp(diskOp(IIO(io))).jdop, JournalInternalOp);
       assert JC.NextStep(old_self.I(), self.I(), IDiskOp(diskOp(IIO(io))).jdop, JournalInternalOp, JC.WriteBackSuperblockReq_AdvanceLog_Step);
     }
@@ -833,12 +828,7 @@ module CommitterImpl {
       inout self.superblockWrite := Some(id);
       inout self.commitStatus := JC.CommitAdvanceLocation;
 
-      reveal IOModel.RequestWrite();
-
-      IOModel.RequestWriteCorrect(old(IIO(io)), loc, SSM.SectorSuperblock(newSuperblock), id, IIO(io));
-
       assert ValidDiskOp(diskOp(IIO(io)));
-
       assert JC.WriteBackSuperblockReq_AdvanceLocation(old_self.I(), self.I(), IDiskOp(diskOp(IIO(io))).jdop, JournalInternalOp);
       assert JC.NextStep(old_self.I(), self.I(), IDiskOp(diskOp(IIO(io))).jdop, JournalInternalOp, JC.WriteBackSuperblockReq_AdvanceLocation_Step);
     }
