@@ -22,10 +22,12 @@ module MapIfc refines InputOutputIfc {
   datatype Input =
     | QueryInput(key: Key)
     | InsertInput(key: Key, value: Value)
+    | RemoveInput(key: Key)
 
   datatype Output =
     | QueryOutput(res: QueryResult)
     | InsertOutput
+    | RemoveOutput
 }
 
 module AsyncIfc {

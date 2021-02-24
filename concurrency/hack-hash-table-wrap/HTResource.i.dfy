@@ -2,10 +2,13 @@ include "ApplicationResourceSpec.s.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "../../lib/Base/Option.s.dfy"
 include "MapSpec.s.dfy"
+include "RobinHood.i.dfy"
 
 module HTResource refines ApplicationResourceSpec {
   import opened NativeTypes
   import opened Options
+
+  import RobinHood
 
   import opened KeyValueType
   import MapIfc
@@ -18,20 +21,12 @@ module HTResource refines ApplicationResourceSpec {
 
   function FixedSize() : nat
 
-  datatype KV = KV(key: uint64, val: Value)
-
   datatype Entry =
-    | Full(kv: KV)
+    | Full(key: uint64, value: Value)
     | Empty
-  datatype State =
-    | Free
-    | Inserting(rid: int, kv: KV)
-    | Querying(rid: int, key: uint64)
-
-  datatype Info = Info(entry: Entry, state: State)
 
   datatype PreR =
-      | R(table: seq<Option<Info>>,
+      | R(table: seq<Option<Entry>>,
           tickets: multiset<Ticket>,
           stubs: multiset<Stub>)
       | Fail
@@ -112,185 +107,143 @@ module HTResource refines ApplicationResourceSpec {
 
   predicate Init(s: R) {
     && s.R?
-    && (forall i | 0 < i < |s.table| :: s.table[i] == Some(Info(Empty, Free)))
+    && (forall i | 0 < i < |s.table| :: s.table[i] == Some(Empty))
     && s.tickets == multiset{}
     && s.stubs == multiset{}
   }
 
   datatype Step =
-    | ProcessInsertTicketStep(insert_ticket: Ticket)
-    | InsertSkipStep(pos: nat)
-    | InsertSwapStep(pos: nat)
-    | InsertDoneStep(pos: nat)
+    | QueryFoundStep(ticket: Ticket, i: int)
+    | QueryNotFoundStep(ticket: Ticket, end: int)
 
-    | ProcessQueryTicketStep(query_ticket: Ticket)
-    | QuerySkipStep(pos: nat)
-    | QueryDoneStep(pos: nat)
-    | QueryNotFoundStep(pos: nat)
+    | RemoveStep(ticket: Ticket, i: int, end: int)
+    | RemoveNotFoundStep(ticket: Ticket, end: int)
 
-  predicate ProcessInsertTicket(s: R, s': R, insert_ticket: Ticket)
+    | OverwriteStep(ticket: Ticket, i: int)
+    | InsertStep(ticket: Ticket, i: int)
+
+  // Query
+
+  predicate QueryFound(s: R, s': R, ticket: Ticket, i: int)
   {
     && s.R?
     && s'.R?
-    && insert_ticket.input.InsertInput?
-    && insert_ticket in s.tickets
-    && var h: uint32 := hash(insert_ticket.input.key);
-    && 0 <= h as int < |s.table|
-    && s.table[h].Some?
-    && s.table[h].value.state.Free?
+    && ticket in s.tickets
+    && ticket.input.QueryInput?
+    && 0 <= i < |s.table|
+    && s.table[i].Some?
+    && s.table[i].value.Full?
+    && s.table[i].value.key == ticket.input.key
     && s' == s
-      .(tickets := s.tickets - multiset{insert_ticket})
-      .(table := s.table[h := Some(
-          s.table[h].value.(state :=
-            Inserting(insert_ticket.rid,
-              KV(insert_ticket.input.key, insert_ticket.input.value))))])
+      .(tickets := s.tickets - multiset{ticket})
+      .(stubs := s.stubs + multiset{Stub(ticket.rid,
+          MapIfc.QueryOutput(Found(s.table[i].value.value)))})
   }
 
-  // We're trying to insert new_item at pos j
-  // where hash(new_item) >= hash(pos j)
-  // we skip item i and move to i+1.
-  predicate InsertSkip(s: R, s': R, pos: nat)
+  predicate KeyNotFound(table: seq<Option<Entry>>, key: Key, end: int)
+  {
+    && 0 <= end < |table|
+    && table[end].Some?
+    && table[end].value.Empty?
+    && var h := RobinHood.hash(key) as int;
+    && (h <= end ==> forall j | h <= j < end     :: table[j].Some? && table[j].value.Full? && table[j].value.key != key)
+    && (h > end  ==> forall j | h <= j < |table| :: table[j].Some? && table[j].value.Full? && table[j].value.key != key)
+    && (h > end  ==> forall j | 0 <= j < end     :: table[j].Some? && table[j].value.Full? && table[j].value.key != key)
+  }
+
+  predicate QueryNotFound(s: R, s': R, ticket: Ticket, end: int)
   {
     && s.R?
     && s'.R?
-    && 0 <= pos < FixedSize() - 1
-    && s.table[pos].Some?
-    && s.table[pos + 1].Some?
-    && s.table[pos].value.state.Inserting?
-    && s.table[pos].value.entry.Full?
-    && hash(s.table[pos].value.state.kv.key) >= hash(s.table[pos].value.entry.kv.key)
-    && s.table[pos + 1].value.state.Free?
-
-    && s' == s.(table := s.table
-        [pos := Some(s.table[pos].value.(state := Free))]
-        [pos + 1 := Some(s.table[pos].value.(state := s.table[pos].value.state))])
-  }
-
-  // We're trying to insert new_item at pos j
-  // where hash(new_item) < hash(pos j)
-  // in this case we do the swap and keep moving forward
-  // with the swapped-out item.
-  predicate InsertSwap(s: R, s': R, pos: nat)
-  {
-    && s.R?
-    && s'.R?
-    && 0 <= pos < FixedSize() - 1
-    && s.table[pos].Some?
-    && s.table[pos + 1].Some?
-    && s.table[pos].value.state.Inserting?
-    && s.table[pos].value.entry.Full?
-    && hash(s.table[pos].value.state.kv.key) < hash(s.table[pos].value.entry.kv.key)
-    && s.table[pos + 1].value.state.Free?
-
-    && s' == s.(table := s.table
-        [pos := Some(Info(
-          Full(s.table[pos].value.state.kv),
-          Free))]
-        [pos + 1 := Some(s.table[pos].value.(state :=
-          Inserting(
-            s.table[pos].value.state.rid,
-            s.table[pos].value.entry.kv)))])
-  }
-
-  // Slot is empty. Insert our element and finish.
-  predicate InsertDone(s: R, s': R, pos: nat)
-  {
-    && s.R?
-    && s'.R?
-    && 0 <= pos < FixedSize()
-    && s.table[pos].Some?
-    && s.table[pos].value.state.Inserting?
-    && s.table[pos].value.entry.Empty?
+    && ticket in s.tickets
+    && ticket.input.QueryInput?
+    && KeyNotFound(s.table, ticket.input.key, end)
     && s' == s
-      .(table := s.table
-        [pos := Some(Info(
-            Full(s.table[pos].value.state.kv),
-            Free))])
-      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput)})
+      .(tickets := s.tickets - multiset{ticket})
+      .(stubs := s.stubs + multiset{Stub(ticket.rid,
+          MapIfc.QueryOutput(NotFound))})
   }
 
-  predicate ProcessQueryTicket(s: R, s': R, query_ticket: Ticket)
+  // Insert
+
+  predicate Overwrite(s: R, s': R, ticket: Ticket, i: int)
   {
     && s.R?
     && s'.R?
-    && query_ticket.input.QueryInput?
-    && query_ticket in s.tickets
-    && var h: uint32 := hash(query_ticket.input.key);
-    && 0 <= h as int < FixedSize()
-    && s.table[h].Some?
+    && ticket in s.tickets
+    && ticket.input.InsertInput?
+    && 0 <= i < |s.table|
+    && s.table[i].Some?
+    && s.table[i].value.Full?
+    && s.table[i].value.key == ticket.input.key
     && s' == s
-      .(tickets := s.tickets - multiset{query_ticket})
-      .(table := s.table[h := Some(
-          s.table[h].value.(state :=
-            Querying(query_ticket.rid, query_ticket.input.key)))])
+      .(tickets := s.tickets - multiset{ticket})
+      .(stubs := s.stubs + multiset{Stub(ticket.rid, MapIfc.InsertOutput)})
+      .(table := s.table[i := Some(Full(ticket.input.key, ticket.input.value))])
   }
 
-  predicate QuerySkip(s: R, s': R, pos: nat)
+  // Remove
+
+  predicate RemoveNotFound(s: R, s': R, ticket: Ticket, end: int)
   {
     && s.R?
     && s'.R?
-    && 0 <= pos < FixedSize() - 1
-    && s.table[pos].Some?
-    && s.table[pos + 1].Some?
-    && s.table[pos].value.state.Querying?
-    && s.table[pos].value.entry.Full?
-    && s.table[pos].value.state.key != s.table[pos].value.entry.kv.key
-    && s.table[pos + 1].value.state.Free?
-
-    && s' == s.(table := s.table
-        [pos := Some(s.table[pos].value.(state := Free))]
-        [pos + 1 := Some(s.table[pos].value.(state := s.table[pos].value.state))])
-  }
-
-  predicate QueryDone(s: R, s': R, pos: nat)
-  {
-    && s.R?
-    && s'.R?
-    && 0 <= pos < FixedSize()
-    && s.table[pos].Some?
-    && s.table[pos].value.state.Querying?
-    && s.table[pos].value.entry.Full?
-    && s.table[pos].value.state.key == s.table[pos].value.entry.kv.key
+    && ticket in s.tickets
+    && ticket.input.RemoveInput?
+    && KeyNotFound(s.table, ticket.input.key, end)
     && s' == s
-      .(table := s.table
-        [pos := Some(s.table[pos].value.(state := Free))])
-      .(stubs := s.stubs + multiset{
-        Stub(s.table[pos].value.state.rid,
-                  MapIfc.QueryOutput(Found(s.table[pos].value.entry.kv.val)))
-       })
+      .(tickets := s.tickets - multiset{ticket})
+      .(stubs := s.stubs + multiset{Stub(ticket.rid, MapIfc.RemoveOutput)})
   }
 
-  predicate QueryNotFound(s: R, s': R, pos: nat)
+  predicate LeftShift_PartialState(table: seq<Option<Entry>>, table': seq<Option<Entry>>, shift: RobinHood.LeftShift)
+  {
+    && 0 <= shift.start < |table|
+    && 0 <= shift.end < |table|
+    && |table'| == |table|
+
+    && (shift.start <= shift.end ==>
+      && (forall i | 0 <= i < shift.start :: table'[i] == table[i])
+      && (forall i | shift.start <= i < shift.end :: table'[i] == table[i+1] && table'[i].Some?)
+      && table'[shift.end] == Some(Empty)
+      && (forall i | shift.end < i < |table'| :: table'[i] == table[i])
+    )
+
+    && (shift.start > shift.end ==>
+      && (forall i | 0 <= i < shift.end :: table'[i] == table[i+1])
+      && table'[shift.end] == Some(Empty)
+      && (forall i | shift.end < i < shift.start :: table'[i] == table[i])
+      && (forall i | shift.start <= i < |table'| - 1 :: table'[i] == table[i+1] && table'[i].Some?)
+      && table'[|table'| - 1] == table[0]
+    )
+  }
+
+  predicate Remove(s: R, s': R, ticket: Ticket, i: int, end: int)
   {
     && s.R?
     && s'.R?
-    && 0 <= pos < FixedSize()
-    && s.table[pos].Some?
-    && s.table[pos].value.state.Querying?
-    // We're allowed to do this step if it's empty, or if the hash value we
-    // find is bigger than the one we're looking for
-    && (s.table[pos].value.entry.Full? ==>
-      hash(s.table[pos].value.state.key) < hash(s.table[pos].value.entry.kv.key))
-    && s' == s
-      .(table := s.table
-        [pos := Some(s.table[pos].value.(state := Free))])
-      .(stubs := s.stubs + multiset{
-        Stub(s.table[pos].value.state.rid, MapIfc.QueryOutput(NotFound))
-       })
+    && ticket in s.tickets
+    && ticket.input.RemoveInput?
+    && 0 <= i < |s.table|
+    && s.table[i].Some?
+    && s.table[i].value.Full?
+    && s.table[i].value.key == ticket.input.key
+    && LeftShift_PartialState(s.table, s'.table, RobinHood.LeftShift(i, end))
+    && s' == s.(table := s'.table)
+        .(tickets := s.tickets - multiset{ticket})
+        .(stubs := s.stubs + multiset{Stub(ticket.rid, MapIfc.RemoveOutput)})
   }
+
+  // All together
 
   predicate UpdateStep(s: R, s': R, step: Step)
   {
     match step {
-      case ProcessInsertTicketStep(insert_ticket) => ProcessInsertTicket(s, s', insert_ticket)
-      case InsertSkipStep(pos) => InsertSkip(s, s', pos)
-      case InsertSwapStep(pos) => InsertSwap(s, s', pos)
-      case InsertDoneStep(pos) => InsertDone(s, s', pos)
-
-      case ProcessQueryTicketStep(query_ticket) => ProcessQueryTicket(s, s', query_ticket)
-      case QuerySkipStep(pos) => QuerySkip(s, s', pos)
-      case QueryDoneStep(pos) => QueryDone(s, s', pos)
-      case QueryNotFoundStep(pos) => QueryNotFound(s, s', pos)
+      case QueryFoundStep(ticket, i) => QueryFound(s, s', ticket, i)
+      case QueryNotFoundStep(ticket, end) => QueryNotFound(s, s', ticket, end)
+      case OverwriteStep(ticket, i) => Overwrite(s, s', ticket, i)
+      case RemoveStep(ticket, i, end) => Remove(s, s', ticket, i, end)
+      case RemoveNotFoundStep(ticket, end) => RemoveNotFound(s, s', ticket, end)
     }
   }
 
@@ -315,7 +268,26 @@ module HTResource refines ApplicationResourceSpec {
   {
     var step :| UpdateStep(x, y, step);
     match step {
-      case ProcessInsertTicketStep(insert_ticket) => {
+      case QueryFoundStep(ticket, i) => {
+        assert UpdateStep(add(x, z), add(y, z), step);
+      }
+      case QueryNotFoundStep(ticket, end) => {
+        assert UpdateStep(add(x, z), add(y, z), step);
+      }
+      case OverwriteStep(ticket, i) => {
+        assert UpdateStep(add(x, z), add(y, z), step);
+      }
+      case RemoveStep(ticket, i, end) => {
+        assume LeftShift_PartialState(
+          fuse_seq(x.table, z.table),
+          fuse_seq(y.table, z.table),
+          RobinHood.LeftShift(i, end));
+        assert UpdateStep(add(x, z), add(y, z), step);
+      }
+      case RemoveNotFoundStep(ticket, end) => {
+        assert UpdateStep(add(x, z), add(y, z), step);
+      }
+      /*case ProcessInsertTicketStep(insert_ticket) => {
         assert UpdateStep(add(x, z), add(y, z), step);
       }
       case InsertSkipStep(pos) => {
@@ -338,7 +310,7 @@ module HTResource refines ApplicationResourceSpec {
       }
       case QueryNotFoundStep(pos) => {
         assert UpdateStep(add(x, z), add(y, z), step);
-      }
+      }*/
     }
   }
 
