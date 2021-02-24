@@ -404,35 +404,32 @@ module IOModel {
   //   }
   // }
 
-  // function PageInNodeReq(s: BCVariables, io: IO, ref: BC.Reference)
-  // : (res : (BCVariables, IO))
-  // requires s.Ready?
-  // requires io.IOInit?
-  // requires ref in s.ephemeralIndirectionTable.I().locs;
-  // {
-  //   if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) then (
-  //     (s, io)
-  //   ) else (
-  //     var loc := s.ephemeralIndirectionTable.locs[ref];
-  //     var (id, io') := RequestRead(io, loc);
-  //     var s' := s
-  //       .(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
-  //     (s', io')
-  //   )
-  // }
+  function PageInNodeReq(s: BBC.Variables, io: IO, ref: BC.Reference)
+  : (res : (BBC.Variables, IO))
+  requires s.Ready?
+  requires io.IOInit?
+  requires ref in s.ephemeralIndirectionTable.locs;
+  {
+    if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) then (
+      (s, io)
+    ) else (
+      var loc := s.ephemeralIndirectionTable.locs[ref];
+      var (id, io') := RequestRead(io, loc);
+      var s' := s
+        .(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
+      (s', io')
+    )
+  }
 
-  // lemma PageInNodeReqCorrect(s: BCVariables, io: IO, ref: BC.Reference)
-  // requires io.IOInit?
-  // requires s.Ready?
-  // requires WFBCVars(s)
-  // requires BBC.Inv(IBlockCache(s))
-  // requires ref in s.ephemeralIndirectionTable.locs;
-  // requires ref !in s.cache
-  // requires TotalCacheSize(s) <= MaxCacheSize() - 1
-  // ensures var (s', io') := PageInNodeReq(s, io, ref);
-  //   && WFBCVars(s')
-  //   && ValidDiskOp(diskOp(io'))
-  //   && BBC.Next(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp)
+  lemma PageInNodeReqCorrect(s: BBC.Variables, io: IO, ref: BC.Reference)
+  requires io.IOInit?
+  requires s.Ready?
+  requires BBC.Inv(s)
+  requires ref in s.ephemeralIndirectionTable.locs;
+  requires ref !in s.cache
+  ensures var (s', io') := PageInNodeReq(s, io, ref);
+    && ValidDiskOp(diskOp(io'))
+    && BBC.Next(s, s', IDiskOp(diskOp(io')).bdop, StatesInternalOp)
   // {
   //   if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
   //     assert noop(IBlockCache(s), IBlockCache(s));

@@ -270,6 +270,8 @@ module IOImpl {
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
   ensures BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
+
+  ensures (s.IBlockCache(), IIO(io)) == IOModel.PageInNodeReq(old_s.IBlockCache(), old(IIO(io)), ref)
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       print "giving up; already an outstanding read for this ref\n";
