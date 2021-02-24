@@ -2,7 +2,6 @@ include "BookkeepingModel.i.dfy"
 include "FlushPolicyModel.i.dfy"
 
 module InsertModel { 
-  import opened StateBCModel
   import opened StateSectorModel
 
   import opened IOModel
@@ -28,16 +27,19 @@ module InsertModel {
   import IT = IndirectionTable
 
   import BT = PivotBetreeSpec`Internal
-
+  
+  import Messages = ValueMessage`Internal
+  import Pivots = BoundedPivotsLib
   // == insert ==
 
-  function {:opaque} InsertKeyValue(s: BCVariables, key: Key, value: Value)
-  : (BCVariables, bool)
-  requires BCInv(s)
+  function {:opaque} InsertKeyValue(s: BBC.Variables, key: Key, value: Value)
+  : (BBC.Variables, bool)
+  requires BBC.Inv(s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
-  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 1
-  requires BoundedKey(s.cache[BT.G.Root()].pivotTable, key)
+  requires var root := s.cache[BT.G.Root()];
+    && WFNode(root)
+    && BoundedKey(root.pivotTable, key)
   {
     lemmaChildrenConditionsOfNode(s, BT.G.Root());
 
@@ -57,20 +59,19 @@ module InsertModel {
     )
   }
 
-  lemma InsertKeyValueCorrect(s: BCVariables, key: Key, value: Value, replay: bool)
+  lemma InsertKeyValueCorrect(s: BBC.Variables, key: Key, value: Value, replay: bool)
   requires InsertKeyValue.requires(s, key, value)
   requires WeightKey(key) + WeightMessage(Messages.Define(value)) +
       WeightBucketList(s.cache[BT.G.Root()].buckets) 
       <= MaxTotalBucketWeight()
   ensures var (s', success) := InsertKeyValue(s, key, value);
-      && WFBCVars(s')
       && (success ==>
-        BBC.Next(IBlockCache(s), IBlockCache(s'),
+        BBC.Next(s, s',
           BlockDisk.NoDiskOp,
           AdvanceOp(UI.PutOp(key, value), replay))
       )
       && (!success ==>
-        betree_next(IBlockCache(s), IBlockCache(s'))
+        betree_next(s, s')
       )
   {
     reveal_InsertKeyValue();
@@ -79,10 +80,10 @@ module InsertModel {
       && s.frozenIndirectionTable.Some?
       && s.frozenIndirectionTable.value.hasEmptyLoc(BT.G.Root())
     ) {
-      assert (s.frozenIndirectionTable.Some? && BT.G.Root() in s.frozenIndirectionTable.value.I().graph) &&
-          !(BT.G.Root() in s.frozenIndirectionTable.value.I().locs);
+      assert (s.frozenIndirectionTable.Some? && BT.G.Root() in s.frozenIndirectionTable.value.graph) &&
+          !(BT.G.Root() in s.frozenIndirectionTable.value.locs);
       // TODO write out the root here instead of giving up
-      assert noop(IBlockCache(s), IBlockCache(s));
+      assert noop(s, s);
       return;
     }
 
@@ -96,7 +97,7 @@ module InsertModel {
 
     WeightBucketListInsert(root.buckets, root.pivotTable, key, msg);
 
-    assert BC.BlockPointsToValidReferences(INode(root), s.ephemeralIndirectionTable.I().graph);
+    assert BC.BlockPointsToValidReferences(root, s.ephemeralIndirectionTable.graph);
 
     assert WFBucket(newBucket);
     assert WFNode(newRoot);
@@ -107,8 +108,8 @@ module InsertModel {
     reveal_writeBookkeepingNoSuccsUpdate();
     writeCorrect(s0, BT.G.Root(), newRoot);
 
-    var oldroot := INode(root);
-    var newroot := INode(newRoot);
+    var oldroot := root;
+    var newroot := newRoot;
 
     assert newroot == BT.AddMessageToNode(oldroot, key, msg);
 
@@ -118,19 +119,20 @@ module InsertModel {
     assert BT.ValidInsertion(BT.MessageInsertion(key, msg, oldroot));
 
     assert WFNode(newRoot);
-    assert WFBCVars(s');
+    // assert WFBCVars(s');
 
-    assert BC.Dirty(IBlockCache(s), IBlockCache(s'), BT.G.Root(), newroot);
-    assert BC.OpStep(IBlockCache(s), IBlockCache(s'), BT.G.WriteOp(BT.G.Root(), newroot));
+    assert BC.Dirty(s, s', BT.G.Root(), newroot);
+    assert BC.OpStep(s, s', BT.G.WriteOp(BT.G.Root(), newroot));
     assert BT.ValidBetreeStep(btStep);
-    assert BC.OpStep(IBlockCache(s), IBlockCache(s'), BT.BetreeStepOps(btStep)[0]);
-    assert BC.OpTransaction(IBlockCache(s), IBlockCache(s'), BT.BetreeStepOps(btStep));
-    assert BBC.BetreeMove(IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, AdvanceOp(UI.PutOp(key, value), replay), btStep);
-    assert stepsBetree(IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.PutOp(key, value), replay), btStep);
+    assert BC.OpStep(s, s', BT.BetreeStepOps(btStep)[0]);
+    assert BC.OpTransaction(s, s', BT.BetreeStepOps(btStep));
+    assert BBC.BetreeMove(s, s', BlockDisk.NoDiskOp, AdvanceOp(UI.PutOp(key, value), replay), btStep);
+    assert stepsBetree(s, s', AdvanceOp(UI.PutOp(key, value), replay), btStep);
   }
+/*
 
-  predicate {:opaque} insert(s: BCVariables, io: IO, key: Key, value: Value,
-      s': BCVariables, success: bool, io': IO)
+  predicate {:opaque} insert(s: BBC.Variables, io: IO, key: Key, value: Value,
+      s': BBC.Variables, success: bool, io': IO)
   requires io.IOInit?
   requires s.Ready?
   requires BCInv(s)
@@ -164,8 +166,8 @@ module InsertModel {
     )
   }
 
-  lemma insertCorrect(s: BCVariables, io: IO, key: Key, value: Value,
-      s': BCVariables, success: bool, io': IO, replay: bool)
+  lemma insertCorrect(s: BBC.Variables, io: IO, key: Key, value: Value,
+      s': BBC.Variables, success: bool, io': IO, replay: bool)
   requires insert.requires(s, io, key, value, s', success, io')
   requires insert(s, io, key, value, s', success, io');
   ensures WFBCVars(s')
@@ -173,24 +175,24 @@ module InsertModel {
   ensures IDiskOp(diskOp(io')).jdop.NoDiskOp?
 
   ensures success ==>
-        BBC.Next(IBlockCache(s), IBlockCache(s'),
+        BBC.Next(s, s',
           IDiskOp(diskOp(io')).bdop,
           AdvanceOp(UI.PutOp(key, value), replay))
   ensures !success ==>
-        betree_next_dop(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop)
+        betree_next_dop(s, s', IDiskOp(diskOp(io')).bdop)
   {
     reveal_insert();
 
     if !(|s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3) {
-      assert noop(IBlockCache(s), IBlockCache(s));
+      assert noop(s, s);
     } else if (BT.G.Root() !in s.cache) {
       if TotalCacheSize(s) <= MaxCacheSize() - 1 {
         PageInNodeReqCorrect(s, io, BT.G.Root());
       } else {
-        assert noop(IBlockCache(s), IBlockCache(s));
+        assert noop(s, s);
       }
     } else if !BoundedKey(s.cache[BT.G.Root()].pivotTable, key) {
-      assert noop(IBlockCache(s), IBlockCache(s));
+      assert noop(s, s);
       return;
     } else if WeightKey(key) + WeightMessage(Messages.Define(value)) +
         WeightBucketList(s.cache[BT.G.Root()].buckets) 
@@ -200,4 +202,5 @@ module InsertModel {
       runFlushPolicyCorrect(s, io, s', io');
     }
   }
+  */
 }
