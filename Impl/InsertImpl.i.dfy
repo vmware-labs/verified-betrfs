@@ -43,15 +43,15 @@ module InsertImpl {
 
   method InsertKeyValue(linear inout s: ImplVariables, key: Key, value: Value)
   returns (success: bool)
-  requires old_s.BCInv() && old_s.Ready?
+  requires old_s.Inv() && old_s.Ready?
   requires BT.G.Root() in old_s.cache.I()
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 1
   requires BoundedKey(old_s.cache.I()[BT.G.Root()].pivotTable, key)
   ensures s.W() && s.Ready?
-  ensures (s.IBlockCache(), success) == InsertModel.InsertKeyValue(old_s.IBlockCache(), key, value)
+  ensures (s.I(), success) == InsertModel.InsertKeyValue(old_s.I(), key, value)
   {
     reveal InsertModel.InsertKeyValue();
-    BookkeepingModel.lemmaChildrenConditionsOfNode(s.IBlockCache(), BT.G.Root());
+    BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), BT.G.Root());
     success := true;
 
     if s.frozenIndirectionTable.lSome? {
@@ -75,16 +75,16 @@ module InsertImpl {
   method insert(linear inout s: ImplVariables, io: DiskIOHandler, key: Key, value: Value)
   returns (success: bool)
   requires io.initialized()
-  requires old_s.BCInv() && old_s.Ready?
+  requires old_s.Inv() && old_s.Ready?
   modifies io
   ensures s.W()
 
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
   ensures success ==>
-    BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.PutOp(key, value), success))
+    BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.PutOp(key, value), success))
   ensures !success ==>
-    IOModel.betree_next_dop(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop)
+    IOModel.betree_next_dop(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop)
   {
     success := true;
 
@@ -120,7 +120,7 @@ module InsertImpl {
       if WeightKeyUint64(key) + WeightMessageUint64(ValueMessage.Define(value)) + weightSeq
         <= MaxTotalBucketWeightUint64() {
           success := InsertKeyValue(inout s, key, value);
-          InsertModel.InsertKeyValueCorrect(old_s.IBlockCache(), key, value, success);
+          InsertModel.InsertKeyValueCorrect(old_s.I(), key, value, success);
       } else {
         runFlushPolicy(inout s, io);
         success := false;
@@ -128,7 +128,7 @@ module InsertImpl {
     }
 
     if !success {
-      assert IOModel.noop(s.IBlockCache(), s.IBlockCache());
+      assert IOModel.noop(s.I(), s.I());
     }
   }
 }

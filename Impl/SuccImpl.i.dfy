@@ -86,7 +86,7 @@ module SuccImpl {
       pivots: PivotTable,
       children: Option<seq<BT.G.Reference>>)
   returns (res : Option<UI.SuccResultList>)
-  requires old_s.Ready? && old_s.BCInv()
+  requires old_s.Ready? && old_s.Inv()
   requires io.initialized()
   requires old_s.cache.ptr(ref).Some?
   requires BT.WFNode(old_s.cache.I()[ref])
@@ -105,8 +105,8 @@ module SuccImpl {
   ensures s.WFBCVars()
   ensures s.Ready?
   ensures s.cache.I() == old_s.cache.I()
-  ensures (s.IBlockCache(), IIO(io), res)
-       == SuccModel.getPathInternal(old_s.IBlockCache(), old(IIO(io)), key, old(acc),
+  ensures (s.I(), IIO(io), res)
+       == SuccModel.getPathInternal(old_s.I(), old(IIO(io)), key, old(acc),
       start, upTo, maxToFind as int, ref, counter, s.cache.I()[ref])
   {
     SuccModel.reveal_getPathInternal();
@@ -140,17 +140,17 @@ module SuccImpl {
           case lNone() =>
         }
 
-        assert (s.IBlockCache(), IIO(io), res)
-         == SuccModel.getPathInternal(old_s.IBlockCache(), old(IIO(io)), key, old(acc),
+        assert (s.I(), IIO(io), res)
+         == SuccModel.getPathInternal(old_s.I(), old(IIO(io)), key, old(acc),
           start, upTo, maxToFind as int, ref, counter, node);
       } else {
-        BookkeepingModel.lemmaChildInGraph(s.IBlockCache(), ref, children.value[r]);
+        BookkeepingModel.lemmaChildInGraph(s.I(), ref, children.value[r]);
         linear var g' := composeGenerator(s.cache, ref, r, g, acc, bucket, start);
         res := getPath(inout s, io, key, acc', lSome(g'), start, upTo', maxToFind,
           children.value[r], counter - 1);
         
-        assert (s.IBlockCache(), IIO(io), res)
-         == SuccModel.getPathInternal(old_s.IBlockCache(), old(IIO(io)), key, old(acc),
+        assert (s.I(), IIO(io), res)
+         == SuccModel.getPathInternal(old_s.I(), old(IIO(io)), key, old(acc),
           start, upTo, maxToFind as int, ref, counter, node);
       }
     } else {
@@ -159,8 +159,8 @@ module SuccImpl {
         maxToFind, start, upTo');
       res := Some(res0);
 
-      assert (s.IBlockCache(), IIO(io), res)
-       == SuccModel.getPathInternal(old_s.IBlockCache(), old(IIO(io)), key,
+      assert (s.I(), IIO(io), res)
+       == SuccModel.getPathInternal(old_s.I(), old(IIO(io)), key,
         old(acc), start, upTo, maxToFind as int, ref, counter, node);
     }
   }
@@ -177,7 +177,7 @@ module SuccImpl {
       ref: BT.G.Reference,
       counter: uint64)
   returns (res : Option<UI.SuccResultList>)
-  requires old_s.BCInv() && old_s.Ready?
+  requires old_s.Inv() && old_s.Ready?
   requires io.initialized()
   requires maxToFind >= 1
   requires ref in old_s.ephemeralIndirectionTable.graph
@@ -189,8 +189,8 @@ module SuccImpl {
   modifies io
   decreases counter, 1
   ensures s.WFBCVars()
-  ensures (s.IBlockCache(), IIO(io), res)
-       == SuccModel.getPath(old_s.IBlockCache(), old(IIO(io)), key, old(acc), start,
+  ensures (s.I(), IIO(io), res)
+       == SuccModel.getPath(old_s.I(), old(IIO(io)), key, old(acc), start,
         upTo, maxToFind as int, ref, counter)
   {
     SuccModel.reveal_getPath();
@@ -232,7 +232,7 @@ module SuccImpl {
 
   method doSucc(linear inout s: ImplVariables, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
   returns (res : Option<UI.SuccResultList>)
-  requires old_s.BCInv() && old_s.Ready?
+  requires old_s.Inv() && old_s.Ready?
   requires io.initialized()
   requires maxToFind >= 1
   modifies io
@@ -240,14 +240,14 @@ module SuccImpl {
   ensures ValidDiskOp(diskOp(IIO(io)))
     && IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
     && (res.Some? ==>
-            BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop,
+            BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop,
             AdvanceOp(UI.SuccOp(start, res.value.results, res.value.end), false)))
     && (res.None? ==>
-            IOModel.betree_next_dop(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop))
+            IOModel.betree_next_dop(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop))
   {
     PBS.reveal_LookupUpperBound();
     var startKey := if start.NegativeInf? then [] else start.key;
-    SuccModel.lemmaGetPathResult(old_s.IBlockCache(), IIO(io), startKey, [], [], start, None, maxToFind as int, BT.G.Root(), 40);
+    SuccModel.lemmaGetPathResult(old_s.I(), IIO(io), startKey, [], [], start, None, maxToFind as int, BT.G.Root(), 40);
     res := getPath(inout s, io, startKey, [], lNone, start, None, maxToFind, BT.G.Root(), 40);
   }
 }

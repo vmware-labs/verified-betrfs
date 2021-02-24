@@ -77,7 +77,7 @@ module IOModel {
   {
     && s.Ready?
     && ValidNodeLocation(loc)
-    && BC.ValidAllocation(s.IBlockCache(), loc)
+    && BC.ValidAllocation(s.I(), loc)
     && loc.len == len
   }
 
@@ -676,7 +676,7 @@ module IOModel {
   // == writeResponse ==
 
   lemma lemmaOutstandingLocIndexValid(s: ImplVariables, id: uint64)
-  requires s.BCInv()
+  requires s.Inv()
   requires s.Ready?
   requires id in s.outstandingBlockWrites
   ensures 0 <= s.outstandingBlockWrites[id].loc.addr as int / NodeBlockSize() < NumBlocks()
@@ -689,7 +689,7 @@ module IOModel {
   }
 
   lemma lemmaBlockAllocatorFrozenSome(s: ImplVariables)
-  requires s.BCInv()
+  requires s.Inv()
   requires s.Ready?
   ensures s.frozenIndirectionTable.lSome?
       ==> s.blockAllocator.frozen.lSome?

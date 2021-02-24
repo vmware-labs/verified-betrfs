@@ -179,7 +179,7 @@ module StateBCImpl {
       && (Ready? ==> WFVarsReady())
     }
 
-    function IBlockCache() : BBC.Variables
+    function I() : BBC.Variables
     requires W()
     {
       if Ready? then (
@@ -199,10 +199,10 @@ module StateBCImpl {
       )
     }
 
-    predicate BCInv()
+    predicate Inv()
     {
       && WFBCVars()
-      && BBC.Inv(IBlockCache())
+      && BBC.Inv(I())
     }
 
     predicate WriteAllocConditions()

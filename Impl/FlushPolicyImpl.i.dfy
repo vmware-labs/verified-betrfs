@@ -65,9 +65,9 @@ module FlushPolicyImpl {
     slots: seq<uint64>, i: uint64)
   returns (action : FlushPolicyModel.Action)
   requires 0 <= i as int < |stack|
-  requires s.BCInv()
-  requires FlushPolicyModel.ValidStackSlots(s.IBlockCache(), stack, slots)
-  ensures action == FlushPolicyModel.getActionToSplit(s.IBlockCache(), stack, slots, i)
+  requires s.Inv()
+  requires FlushPolicyModel.ValidStackSlots(s.I(), stack, slots)
+  ensures action == FlushPolicyModel.getActionToSplit(s.I(), stack, slots, i)
   {
     FlushPolicyModel.reveal_getActionToSplit();
 
@@ -100,12 +100,12 @@ module FlushPolicyImpl {
   method getActionToFlush(linear inout s: ImplVariables, stack: seq<BT.G.Reference>, slots: seq<uint64>)
   returns (action : FlushPolicyModel.Action)
   requires |stack| <= 40
-  requires old_s.BCInv()
-  requires FlushPolicyModel.ValidStackSlots(old_s.IBlockCache(), stack, slots)
+  requires old_s.Inv()
+  requires FlushPolicyModel.ValidStackSlots(old_s.I(), stack, slots)
   decreases 0x1_0000_0000_0000_0000 - |stack|
-  ensures s.BCInv()
+  ensures s.Inv()
   ensures s.Ready?
-  ensures (s.IBlockCache(), action) == FlushPolicyModel.getActionToFlush(old_s.IBlockCache(), stack, slots)
+  ensures (s.I(), action) == FlushPolicyModel.getActionToFlush(old_s.I(), stack, slots)
   {
     FlushPolicyModel.reveal_getActionToFlush();
 
@@ -153,7 +153,7 @@ module FlushPolicyImpl {
   }
 
   method runFlushPolicy(linear inout s: ImplVariables, io: DiskIOHandler)
-  requires old_s.BCInv() && old_s.Ready?
+  requires old_s.Inv() && old_s.Ready?
   requires io.initialized()
   requires BT.G.Root() in old_s.cache.I()
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
@@ -162,13 +162,13 @@ module FlushPolicyImpl {
 
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
-  ensures IOModel.betree_next_dop(old_s.IBlockCache(), s.IBlockCache(),
+  ensures IOModel.betree_next_dop(old_s.I(), s.I(),
       IDiskOp(diskOp(IIO(io))).bdop)
   {
     LruModel.LruUse(s.lru.Queue(), BT.G.Root());
     inout s.lru.Use(BT.G.Root());
 
-    FlushPolicyModel.getActionToFlushValidAction(s.IBlockCache(), [BT.G.Root()], []);
+    FlushPolicyModel.getActionToFlushValidAction(s.I(), [BT.G.Root()], []);
     var action := getActionToFlush(inout s, [BT.G.Root()], []);
 
     match action {
@@ -177,28 +177,28 @@ module FlushPolicyImpl {
       }
       case ActionSplit(parentref, slot) => {
         var _, parent_children := s.cache.GetNodeInfo(parentref);
-        SplitModel.doSplitCorrect(s.IBlockCache(), parentref, parent_children.value[slot], slot as int);
+        SplitModel.doSplitCorrect(s.I(), parentref, parent_children.value[slot], slot as int);
         doSplit(inout s, parentref, parent_children.value[slot], slot);
       }
       case ActionRepivot(ref) => {
-        LeafModel.repivotLeafCorrect(s.IBlockCache(), ref, s.cache.I()[ref]);
+        LeafModel.repivotLeafCorrect(s.I(), ref, s.cache.I()[ref]);
         repivotLeaf(inout s, ref);
       }
       case ActionFlush(parentref, slot) => {
         var _, parent_children := s.cache.GetNodeInfo(parentref);
         var childref := parent_children.value[slot];
-        FlushModel.flushCorrect(s.IBlockCache(), parentref, slot as int, childref,s.cache.I()[childref]);
+        FlushModel.flushCorrect(s.I(), parentref, slot as int, childref,s.cache.I()[childref]);
         flush(inout s, parentref, slot, childref);
       }
       case ActionGrow => {
-        GrowModel.growCorrect(s.IBlockCache());
+        GrowModel.growCorrect(s.I());
         grow(inout s);
       }
       case ActionEvict => {
         EvictOrDealloc(inout s, io);
       }
       case ActionFail => {
-        assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
+        assert IOModel.noop(old_s.I(), s.I());
         print "ActionFail\n";
       }
     }

@@ -132,7 +132,7 @@ module IOImpl {
 
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures id.Some? ==> DiskLayout.ValidLocation(loc.value)
-  ensures id.Some? ==> sector.SectorNode? ==> BC.ValidAllocation(s.IBlockCache(), loc.value)
+  ensures id.Some? ==> sector.SectorNode? ==> BC.ValidAllocation(s.I(), loc.value)
   ensures id.Some? ==> sector.SectorNode? ==> DiskLayout.ValidNodeLocation(loc.value)
   ensures sector.SectorNode? ==> id.Some? ==> IDiskOp(diskOp(IIO(io))) == BlockJournalDisk.DiskOp(BlockDisk.ReqWriteNodeOp(id.value, BlockDisk.ReqWriteNode(loc.value, sector.node.I())), JournalDisk.NoDiskOp)
   {
@@ -173,7 +173,7 @@ module IOImpl {
   requires s.frozenIndirectionTable.lSome? && sector.indirectionTable == s.frozenIndirectionTable.value
 
   // [yizhou7]: additional precondition
-  requires s.BCInv()
+  requires s.Inv()
 
   modifies io
 
@@ -240,17 +240,17 @@ module IOImpl {
     && s.WFBCVars()
     && ValidDiskOp(dop)
     && IDiskOp(dop).jdop.NoDiskOp?
-    && BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(dop).bdop, StatesInternalOp)
+    && BBC.Next(old_s.I(), s.I(), IDiskOp(dop).bdop, StatesInternalOp)
   {
     if (s.indirectionTableRead.None?) {
       var id := RequestRead(io, s.indirectionTableLoc);
       inout s.indirectionTableRead := Some(id);
 
       IOModel.RequestReadCorrect(old(IIO(io)), old_s.indirectionTableLoc);
-      assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.PageInIndirectionTableReqStep);
+      assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.PageInIndirectionTableReqStep);
     } else {
       print "PageInIndirectionTableReq: request already out\n";
-      assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
+      assert IOModel.noop(old_s.I(), s.I());
     }
   }
 
@@ -261,7 +261,7 @@ module IOImpl {
   requires ref in old_s.ephemeralIndirectionTable.I().locs
 
   // [yizhou7]: addtional preconditions
-  requires old_s.BCInv()
+  requires old_s.Inv()
   requires ref !in old_s.cache.I()
   requires old_s.TotalCacheSize() as int <= MaxCacheSize() - 1
 
@@ -269,13 +269,13 @@ module IOImpl {
   ensures s.Ready? && s.WFBCVars()
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
-  ensures BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
+  ensures BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
 
-  ensures (s.IBlockCache(), IIO(io)) == IOModel.PageInNodeReq(old_s.IBlockCache(), old(IIO(io)), ref)
+  ensures (s.I(), IIO(io)) == IOModel.PageInNodeReq(old_s.I(), old(IIO(io)), ref)
   {
     if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
       print "giving up; already an outstanding read for this ref\n";
-      assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
+      assert IOModel.noop(old_s.I(), s.I());
     } else {
       var locGraph := s.ephemeralIndirectionTable.GetEntry(ref);
       var loc := locGraph.value.loc;
@@ -287,8 +287,8 @@ module IOImpl {
       inout s.outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)];
 
       assert s.WFBCVars();
-      assert BC.PageInNodeReq(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, ref);
-      assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.PageInNodeReqStep(ref));
+      assert BC.PageInNodeReq(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, ref);
+      assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.PageInNodeReqStep(ref));
     }
   }
   // == readResponse ==
@@ -334,7 +334,7 @@ module IOImpl {
   requires old_s.Loading?
 
   // [yizhou7]: addtional preconditions
-  requires old_s.BCInv()
+  requires old_s.Inv()
   requires ValidDiskOp(diskOp(IIO(io)))
   requires ValidIndirectionTableLocation(LocOfRespRead(diskOp(IIO(io)).respRead))
 
@@ -342,7 +342,7 @@ module IOImpl {
     && s.WFBCVars()
     && ValidDiskOp(diskOp(IIO(io)))
     && IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
-    && BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
+    && BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
   {
     linear var sectorOpt; var id;
     id, sectorOpt := ReadSector(io);
@@ -389,8 +389,8 @@ module IOImpl {
         }
 
         assert s.WFBCVars();
-        assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.PageInIndirectionTableRespStep);
-        assert BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp);
+        assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.PageInIndirectionTableRespStep);
+        assert BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp);
       } else {
         bm.Free();
         ephemeralIndirectionTable.Free();
@@ -398,19 +398,19 @@ module IOImpl {
 
         assert old_s == s;
         assert ValidDiskOp(diskOp(IIO(io)));
-        assert BC.NoOp(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp);
-        assert BBC.BlockCacheMove(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, BC.NoOpStep);
-        assert BBC.NextStep(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep));
-        assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.NoOpStep);
+        assert BC.NoOp(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp);
+        assert BBC.BlockCacheMove(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, BC.NoOpStep);
+        assert BBC.NextStep(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep));
+        assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.NoOpStep);
       }
     } else {
 
       assert old_s == s;
       assert ValidDiskOp(diskOp(IIO(io)));
-      assert BC.NoOp(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp);
-      assert BBC.BlockCacheMove(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, BC.NoOpStep);
-      assert BBC.NextStep(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep));
-      assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.NoOpStep);
+      assert BC.NoOp(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp);
+      assert BBC.BlockCacheMove(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, BC.NoOpStep);
+      assert BBC.NextStep(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, BBC.BlockCacheMoveStep(BC.NoOpStep));
+      assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.NoOpStep);
 
       FreeSectorOpt(sectorOpt);
       print "giving up; did not get indirectionTable when reading\n";
@@ -424,12 +424,12 @@ module IOImpl {
   requires old_s.Ready?
 
   // [yizhou7]: addtional preconditions
-  requires old_s.BCInv()
+  requires old_s.Inv()
   requires ValidDiskOp(diskOp(IIO(io)))
 
   ensures && s.WFBCVars()
     && ValidDiskOp(diskOp(IIO(io)))
-    && BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
+    && BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
   {
     var id; linear var sector;
     id, sector := ReadSector(io);
@@ -451,7 +451,7 @@ module IOImpl {
         if cacheLookup {
           FreeSectorOpt(sector);
           print "PageInNodeResp: ref in s.cache\n";
-          assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.NoOpStep);
+          assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.NoOpStep);
         } else {
           assert sector.lSome? ==> SSI.WFSector(sector.value);
 
@@ -476,28 +476,28 @@ module IOImpl {
               assert |s.outstandingBlockReads| == |old_s.outstandingBlockReads| - 1;
 
               assert s.WFBCVars();
-              assert BC.PageInNodeResp(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp);
-              assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.PageInNodeRespStep);
+              assert BC.PageInNodeResp(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp);
+              assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.PageInNodeRespStep);
             } else {
               var _ := FreeNode(node);
               print "giving up; block does not match graph\n";
-              assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.NoOpStep);
+              assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.NoOpStep);
             }
           } else {
             FreeSectorOpt(sector);
             print "giving up; block read in was not block\n";
-            assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.NoOpStep);
+            assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.NoOpStep);
           }
         }
       } else {
         FreeSectorOpt(sector);
         print "PageInNodeResp: ref !in lbas\n";
-        assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.NoOpStep);
+        assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.NoOpStep);
       }
     } else {
       FreeSectorOpt(sector);
       print "PageInNodeResp: unrecognized id from Read\n";
-      assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.NoOpStep);
+      assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.NoOpStep);
     }
   }
 
@@ -505,13 +505,13 @@ module IOImpl {
   method writeNodeResponse(linear inout s: ImplVariables, io: DiskIOHandler)
   requires io.diskOp().RespWriteOp?
   requires ValidDiskOp(io.diskOp())
-  requires old_s.BCInv()
+  requires old_s.Inv()
   requires old_s.Ready? && IIO(io).id in old_s.outstandingBlockWrites
 
   requires ValidNodeLocation(LocOfRespWrite(diskOp(IIO(io)).respWrite))
 
   ensures && s.WFBCVars()
-      && BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop,
+      && BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop,
         StatesInternalOp)
   {
     var id, addr, len := io.getWriteResult();
@@ -563,14 +563,14 @@ module IOImpl {
     }
 
     assert s.WFBCVars();
-    assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.WriteBackNodeRespStep);
+    assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.WriteBackNodeRespStep);
   }
 
   method writeIndirectionTableResponse(linear inout s: ImplVariables, io: DiskIOHandler)
   returns (loc: Location)
   requires io.diskOp().RespWriteOp?
   requires ValidDiskOp(io.diskOp())
-  requires old_s.BCInv()
+  requires old_s.Inv()
   requires old_s.Ready?
   requires old_s.frozenIndirectionTableLoc.Some?
 
@@ -578,7 +578,7 @@ module IOImpl {
   requires old_s.outstandingIndirectionTableWrite == Some(IIO(io).id)
   requires ValidIndirectionTableLocation(LocOfRespWrite(diskOp(IIO(io)).respWrite))
   ensures && s.WFBCVars()
-    && BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop,
+    && BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop,
         SendFrozenLocOp(loc))
   {
     inout s.outstandingIndirectionTableWrite := None;
@@ -586,18 +586,18 @@ module IOImpl {
 
     ghost var bdop := IDiskOp(diskOp(IIO(io))).bdop;
     assert s.WFBCVars();
-    assert BC.WriteBackIndirectionTableResp(old_s.IBlockCache(), s.IBlockCache(), bdop,
+    assert BC.WriteBackIndirectionTableResp(old_s.I(), s.I(), bdop,
       SendFrozenLocOp(loc));
-    assert BC.NextStep(old_s.IBlockCache(), s.IBlockCache(), bdop,
+    assert BC.NextStep(old_s.I(), s.I(), bdop,
       SendFrozenLocOp(loc), BC.WriteBackIndirectionTableRespStep);
-    assert BBC.NextStep(old_s.IBlockCache(), s.IBlockCache(), bdop,
+    assert BBC.NextStep(old_s.I(), s.I(), bdop,
       SendFrozenLocOp(loc), BBC.BlockCacheMoveStep(BC.WriteBackIndirectionTableRespStep));
-    assert BBC.Next(old_s.IBlockCache(), s.IBlockCache(), bdop, SendFrozenLocOp(loc));
+    assert BBC.Next(old_s.I(), s.I(), bdop, SendFrozenLocOp(loc));
   }
 
   // [yizhou7]: this might not be the best way is to decompose and recompose
   method cleanUp(linear inout s: ImplVariables)
-  requires old_s.BCInv()
+  requires old_s.Inv()
   requires old_s.Ready?
   requires old_s.frozenIndirectionTable.lSome?
   requires old_s.frozenIndirectionTableLoc.Some?
@@ -605,7 +605,7 @@ module IOImpl {
   requires old_s.outstandingIndirectionTableWrite.None?
 
   ensures && s.WFBCVars()
-    && BBC.Next(old_s.IBlockCache(), s.IBlockCache(), BlockDisk.NoDiskOp, CleanUpOp)
+    && BBC.Next(old_s.I(), s.I(), BlockDisk.NoDiskOp, CleanUpOp)
   {
     IOModel.lemmaBlockAllocatorFrozenSome(s);
 
@@ -644,11 +644,11 @@ module IOImpl {
 
     reveal_ConsistentBitmapInteral();
     assert s.WFBCVars();
-    assert BC.CleanUp(old_s.IBlockCache(), s.IBlockCache(), BlockDisk.NoDiskOp, CleanUpOp);
-    assert BC.NextStep(old_s.IBlockCache(), s.IBlockCache(), BlockDisk.NoDiskOp,
+    assert BC.CleanUp(old_s.I(), s.I(), BlockDisk.NoDiskOp, CleanUpOp);
+    assert BC.NextStep(old_s.I(), s.I(), BlockDisk.NoDiskOp,
       CleanUpOp, BC.CleanUpStep);
-    assert BBC.NextStep(old_s.IBlockCache(), s.IBlockCache(), BlockDisk.NoDiskOp,
+    assert BBC.NextStep(old_s.I(), s.I(), BlockDisk.NoDiskOp,
       CleanUpOp, BBC.BlockCacheMoveStep(BC.CleanUpStep));
-    assert BBC.Next(old_s.IBlockCache(), s.IBlockCache(), BlockDisk.NoDiskOp, CleanUpOp);
+    assert BBC.Next(old_s.I(), s.I(), BlockDisk.NoDiskOp, CleanUpOp);
   }
 }

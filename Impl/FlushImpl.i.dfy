@@ -30,7 +30,7 @@ module FlushImpl {
   import IT = IndirectionTable
 
   method flush(linear inout s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference)
-  requires old_s.BCInv()
+  requires old_s.Inv()
   requires old_s.Ready?
   requires old_s.cache.ptr(childref).Some?
 
@@ -47,7 +47,7 @@ module FlushImpl {
 
   ensures s.W()
   ensures s.Ready?
-  ensures s.IBlockCache() == FlushModel.flush(old_s.IBlockCache(), parentref, slot as int, childref, 
+  ensures s.I() == FlushModel.flush(old_s.I(), parentref, slot as int, childref, 
     old_s.cache.I()[childref]);
   {
     var b := false;
@@ -68,11 +68,11 @@ module FlushImpl {
         linear var newparentBucket, newchild := 
           s.cache.NodePartialFlush(parentref, childref, slot);
 
-        BookkeepingModel.lemmaChildrenConditionsOfNode(s.IBlockCache(), childref);
-        BookkeepingModel.lemmaChildrenConditionsOfNode(s.IBlockCache(), parentref);
+        BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), childref);
+        BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), parentref);
         BookkeepingModel.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
-            s.IBlockCache(), newchild.children, parentI.children.value, slot as int);
-        BookkeepingModel.allocRefDoesntEqual(s.IBlockCache(), newchild.children, parentref);
+            s.I(), newchild.children, parentI.children.value, slot as int);
+        BookkeepingModel.allocRefDoesntEqual(s.I(), newchild.children, parentref);
 
         var newchildref := allocBookkeeping(inout s, newchild.children);
         if newchildref.None? {

@@ -84,7 +84,7 @@ module EvictImpl {
   }
 
   method EvictOrDealloc(linear inout s: ImplVariables, io: DiskIOHandler)
-  requires old_s.BCInv() && old_s.Ready?
+  requires old_s.Inv() && old_s.Ready?
   requires io.initialized()
   requires |old_s.cache.I()| > 0
   modifies io
@@ -92,8 +92,8 @@ module EvictImpl {
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
   ensures
-    || BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
-    || BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.NoOp, true))
+    || BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
+    || BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.NoOp, true))
   {
     var ref := FindDeallocable(s);
 
@@ -108,26 +108,26 @@ module EvictImpl {
           if s.outstandingIndirectionTableWrite.None? {
             TryToWriteBlock(inout s, io, ref);
           } else {
-            assert IOModel.noop(s.IBlockCache(), s.IBlockCache());
+            assert IOModel.noop(s.I(), s.I());
           }
         } else {
           var canEvict := CanEvict(s, ref);
           if canEvict {
             inout s.lru.Remove(ref);
             inout s.cache.Remove(ref);
-            assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.EvictStep(ref));
+            assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.EvictStep(ref));
           } else {
-            assert IOModel.noop(s.IBlockCache(), s.IBlockCache());
+            assert IOModel.noop(s.I(), s.I());
           }
         }
       } else {
-        assert IOModel.noop(s.IBlockCache(), s.IBlockCache());
+        assert IOModel.noop(s.I(), s.I());
       }
     }
   }
 
   method PageInNodeReqOrMakeRoom(linear inout s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
-  requires old_s.BCInv() && old_s.Ready?
+  requires old_s.Inv() && old_s.Ready?
   requires io.initialized()
   requires ref in old_s.ephemeralIndirectionTable.I().graph
   requires ref !in old_s.cache.I()
@@ -136,8 +136,8 @@ module EvictImpl {
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
   ensures
-    || BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
-    || BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.NoOp, true))
+    || BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
+    || BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.NoOp, true))
   {
     if s.TotalCacheSize() <= MaxCacheSizeUint64() - 1 {
       PageInNodeReq(inout s, io, ref);
@@ -147,7 +147,7 @@ module EvictImpl {
       if c > 0 {
         EvictOrDealloc(inout s, io);
       } else {
-        assert IOModel.noop(s.IBlockCache(), s.IBlockCache());
+        assert IOModel.noop(s.I(), s.I());
       }
     }
   }

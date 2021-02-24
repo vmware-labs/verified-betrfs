@@ -115,8 +115,8 @@ module SyncImpl {
   ensures s.W() && s.Ready?
   ensures s.ConsistentBitmap()
   ensures BlockAllocatorModel.Inv(s.blockAllocator.I())
-  ensures var old_gs := old_s.IBlockCache();
-    s.IBlockCache() == old_gs.(ephemeralIndirectionTable := BC.assignRefToLocation(old_gs.ephemeralIndirectionTable, ref, loc))
+  ensures var old_gs := old_s.I();
+    s.I() == old_gs.(ephemeralIndirectionTable := BC.assignRefToLocation(old_gs.ephemeralIndirectionTable, ref, loc))
   {
     var added := inout s.ephemeralIndirectionTable.AddLocIfPresent(ref, loc);
     if added {
@@ -174,8 +174,8 @@ module SyncImpl {
   ensures s.frozenIndirectionTable.lSome?
   ensures s.ConsistentBitmap()
   ensures BlockAllocatorModel.Inv(s.blockAllocator.I())
-  ensures var old_gs := old_s.IBlockCache();
-    s.IBlockCache() == old_gs.(frozenIndirectionTable := Some(BC.assignRefToLocation(old_gs.frozenIndirectionTable.value, ref, loc)))
+  ensures var old_gs := old_s.I();
+    s.I() == old_gs.(frozenIndirectionTable := Some(BC.assignRefToLocation(old_gs.frozenIndirectionTable.value, ref, loc)))
   {
     reveal_ConsistentBitmapInteral();
     BitmapModel.reveal_BitSet();
@@ -233,8 +233,8 @@ module SyncImpl {
   ensures s.ConsistentBitmap()
 
   ensures BlockAllocatorModel.Inv(s.blockAllocator.I())
-  ensures var old_gs := old_s.IBlockCache();
-    s.IBlockCache() == old_gs.(outstandingBlockWrites := old_gs.outstandingBlockWrites[id := BC.OutstandingWrite(ref, loc)])
+  ensures var old_gs := old_s.I();
+    s.I() == old_gs.(outstandingBlockWrites := old_gs.outstandingBlockWrites[id := BC.OutstandingWrite(ref, loc)])
   {
     reveal_ConsistentBitmapInteral();
 
@@ -307,7 +307,7 @@ module SyncImpl {
   maybeFreeze(linear inout s: ImplVariables, io: DiskIOHandler)
   returns (froze: bool)
   requires io.initialized()
-  requires old_s.BCInv()
+  requires old_s.Inv()
   requires old_s.Ready?
   requires old_s.outstandingIndirectionTableWrite.None?
   requires old_s.frozenIndirectionTable.lNone?
@@ -317,10 +317,10 @@ module SyncImpl {
   ensures s.W()
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
-  ensures froze ==> BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, FreezeOp)
+  ensures froze ==> BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, FreezeOp)
   ensures !froze ==>
-      || BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
-      || BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.NoOp, true))
+      || BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
+      || BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.NoOp, true))
   {
     var foundDeallocable := FindDeallocable(s);
     if foundDeallocable.Some? {
@@ -361,14 +361,14 @@ module SyncImpl {
       inout s.blockAllocator.CopyEphemeralToFrozen();
       froze := true;
 
-      assert BC.Freeze(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, FreezeOp);
-      assert BBC.BlockCacheMove(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, FreezeOp, BC.FreezeStep);
-      assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), FreezeOp, IIO(io), BC.FreezeStep);
+      assert BC.Freeze(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, FreezeOp);
+      assert BBC.BlockCacheMove(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, FreezeOp, BC.FreezeStep);
+      assert IOModel.stepsBC(old_s.I(), s.I(), FreezeOp, IIO(io), BC.FreezeStep);
     }
   }
 
   method TryToWriteBlock(linear inout s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
-  requires old_s.Ready? && old_s.BCInv()
+  requires old_s.Ready? && old_s.Inv()
   requires io.initialized()
   requires ref in old_s.cache.I()
   requires old_s.outstandingIndirectionTableWrite.None?
@@ -378,7 +378,7 @@ module SyncImpl {
   ensures s.W() && s.Ready?
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
-  ensures BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
+  ensures BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
   {
     linear var placeholder := Node.EmptyNode();
     linear var node := inout s.cache.ReplaceAndGet(ref, placeholder);
@@ -404,18 +404,18 @@ module SyncImpl {
       }
 
       assert ValidNodeLocation(IDiskOp(diskOp(IIO(io))).bdop.reqWriteNode.loc);
-      assert BC.WriteBackNodeReq(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, ref);
-      assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.WriteBackNodeReqStep(ref));
+      assert BC.WriteBackNodeReq(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, ref);
+      assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.WriteBackNodeReqStep(ref));
     } else {
       print "sync: giving up; write req failed\n";
-      assert IOModel.noop(s.IBlockCache(), s.IBlockCache());
+      assert IOModel.noop(s.I(), s.I());
     }
   }
 
   // TODO fix the name of this method
   method {:fuel BC.GraphClosed,0} syncFoundInFrozen(linear inout s: ImplVariables, io: DiskIOHandler, ref: Reference)
   requires io.initialized()
-  requires old_s.Ready? && old_s.BCInv()
+  requires old_s.Ready? && old_s.Inv()
   requires old_s.outstandingIndirectionTableWrite.None?
   requires old_s.frozenIndirectionTable.lSome?
   requires ref in old_s.frozenIndirectionTable.value.I().graph
@@ -424,7 +424,7 @@ module SyncImpl {
   ensures s.Ready? && s.W()
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
-  ensures BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
+  ensures BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
   {
     assert ref in s.frozenIndirectionTable.value.I().graph;
     assert ref !in s.frozenIndirectionTable.value.I().locs;
@@ -433,7 +433,7 @@ module SyncImpl {
     if ephemeralRef.Some? && ephemeralRef.value.loc.Some? {
       // TODO we should be able to prove this is impossible as well
       print "sync: giving up; ref already in ephemeralIndirectionTable.locs but not frozen";
-      assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
+      assert IOModel.noop(old_s.I(), s.I());
     } else {
       TryToWriteBlock(inout s, io, ref);
     }
@@ -441,7 +441,7 @@ module SyncImpl {
 
   method {:fuel BC.GraphClosed,0} sync(linear inout s: ImplVariables, io: DiskIOHandler)
   returns (froze: bool, wait: bool)
-  requires old_s.Ready? && old_s.BCInv()
+  requires old_s.Ready? && old_s.Inv()
   requires io.initialized()
 
   modifies io
@@ -450,10 +450,10 @@ module SyncImpl {
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
   ensures (froze ==> 
-    BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, FreezeOp))
+    BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, FreezeOp))
   ensures (!froze ==>
-    || BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp))
-    || BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.NoOp, true))
+    || BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp))
+    || BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.NoOp, true))
   {
     wait := false;
     froze := false;
@@ -461,21 +461,21 @@ module SyncImpl {
     if s.frozenIndirectionTableLoc.Some? {
       //print "sync: waiting; frozen table is currently being written\n";
       wait := true;
-      assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
+      assert IOModel.noop(old_s.I(), s.I());
     } else if s.frozenIndirectionTable.lNone? {
       froze := maybeFreeze(inout s, io);
     } else {
       var foundInFrozen := inout s.frozenIndirectionTable.value.FindRefWithNoLoc();
       // ghost var s0 := s;
 
-      assert s.BCInv();
+      assert s.Inv();
 
       if foundInFrozen.Some? {
         syncFoundInFrozen(inout s, io, foundInFrozen.value);
       } else if (s.outstandingBlockWrites != map[]) {
         //print "sync: waiting; blocks are still being written\n";
         wait := true;
-        assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
+        assert IOModel.noop(old_s.I(), s.I());
       } else {
         var id, loc := FindIndirectionTableLocationAndRequestWrite(
             io, s, SectorIndirectionTable(s.frozenIndirectionTable.value));
@@ -484,11 +484,11 @@ module SyncImpl {
           inout s.outstandingIndirectionTableWrite := id;
           inout s.frozenIndirectionTableLoc := loc;
 
-          assert BC.WriteBackIndirectionTableReq(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp);
-          assert IOModel.stepsBC(old_s.IBlockCache(), s.IBlockCache(), StatesInternalOp, IIO(io), BC.WriteBackIndirectionTableReqStep);
+          assert BC.WriteBackIndirectionTableReq(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp);
+          assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.WriteBackIndirectionTableReqStep);
         } else {
           print "sync: giving up; write back indirection table failed (no id)\n";
-          assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
+          assert IOModel.noop(old_s.I(), s.I());
         }
       }
     }

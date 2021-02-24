@@ -44,8 +44,8 @@ module QueryImpl {
   method queryIterate(linear inout s: ImplVariables, key: Key, msg: Message, ref: BT.G.Reference, io: DiskIOHandler, counter: uint64, ghost lookup: seq<BT.G.ReadOp>)
   returns (res: Option<Value>)
 
-  requires old_s.W() && old_s.BCInv()
-  requires queryInv(old_s.IBlockCache(), key, msg, ref, IIO(io), counter, lookup)
+  requires old_s.W() && old_s.Inv()
+  requires queryInv(old_s.I(), key, msg, ref, IIO(io), counter, lookup)
   requires !msg.Define?
   requires io.initialized()
 
@@ -56,16 +56,16 @@ module QueryImpl {
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
   ensures res.Some? ==>
-      BBC.Next(old_s.IBlockCache(), s.IBlockCache(),
+      BBC.Next(old_s.I(), s.I(),
           IDiskOp(diskOp(IIO(io))).bdop,
           AdvanceOp(UI.GetOp(key, res.value), false));
   ensures res.None? ==>
-      IOModel.betree_next_dop(old_s.IBlockCache(), s.IBlockCache(),
+      IOModel.betree_next_dop(old_s.I(), s.I(),
           IDiskOp(diskOp(IIO(io))).bdop)
   {
     if counter == 0 {
       res := None;
-      assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
+      assert IOModel.noop(old_s.I(), s.I());
     } else {
       var incache := s.cache.InCache(ref);
       if !incache {
@@ -80,12 +80,12 @@ module QueryImpl {
         var boundedkey := ComputeBoundedKey(pivots, key);
         if !boundedkey {
           res := None;
-          assert IOModel.noop(old_s.IBlockCache(), s.IBlockCache());
+          assert IOModel.noop(old_s.I(), s.I());
         } else {
-          ghost var oldIVars := s.IBlockCache();
+          ghost var oldIVars := s.I();
           LruModel.LruUse(s.lru.Queue(), ref);
           inout s.lru.Use(ref);
-          assert oldIVars == s.IBlockCache();
+          assert oldIVars == s.I();
 
           var r := Pivots.ComputeRoute(pivots, key);
           ghost var bucket := node.buckets[r];
@@ -106,28 +106,28 @@ module QueryImpl {
             res := Some(newmsg.value);
 
             assert BT.ValidQuery(BT.LookupQuery(key, res.value, newlookup));
-            assert BBC.BetreeMove(old_s.IBlockCache(), s.IBlockCache(),
+            assert BBC.BetreeMove(old_s.I(), s.I(),
               IDiskOp(diskOp(IIO(io))).bdop,
               AdvanceOp(UI.GetOp(key, res.value), false),
               BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
-            assert IOModel.stepsBetree(old_s.IBlockCache(), s.IBlockCache(),
+            assert IOModel.stepsBetree(old_s.I(), s.I(),
               AdvanceOp(UI.GetOp(key, res.value), false),
               BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
           } else {
             if children.Some? {
-              BookkeepingModel.lemmaChildInGraph(s.IBlockCache(), ref, children.value[r]);
+              BookkeepingModel.lemmaChildInGraph(s.I(), ref, children.value[r]);
               res := queryIterate(inout s, key, newmsg, children.value[r], io, counter - 1, newlookup);
             } else {
               res := Some(ValueType.DefaultValue());
-              assert BC.OpTransaction(old_s.IBlockCache(), s.IBlockCache(),
+              assert BC.OpTransaction(old_s.I(), s.I(),
                 PBS.BetreeStepOps(BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup))));
 
-              assert BBC.BetreeMove(old_s.IBlockCache(), s.IBlockCache(),
+              assert BBC.BetreeMove(old_s.I(), s.I(),
                 IDiskOp(diskOp( IIO(io) )).bdop,
                 AdvanceOp(UI.GetOp(key, res.value), false),
                 BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
 
-              assert IOModel.stepsBetree(old_s.IBlockCache(), s.IBlockCache(),
+              assert IOModel.stepsBetree(old_s.I(), s.I(),
                 AdvanceOp(UI.GetOp(key, res.value), false),
                 BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
             }
@@ -139,7 +139,7 @@ module QueryImpl {
 
   method query(linear inout s: ImplVariables, io: DiskIOHandler, key: Key)
   returns (res: Option<Value>)
-  requires old_s.BCInv() && old_s.Ready?
+  requires old_s.Inv() && old_s.Ready?
   requires io.initialized()
 
   modifies io
@@ -148,11 +148,11 @@ module QueryImpl {
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
   ensures res.Some? ==>
-      BBC.Next(old_s.IBlockCache(), s.IBlockCache(),
+      BBC.Next(old_s.I(), s.I(),
           IDiskOp(diskOp(IIO(io))).bdop,
           AdvanceOp(UI.GetOp(key, res.value), false));
   ensures res.None? ==>
-      IOModel.betree_next_dop(old_s.IBlockCache(), s.IBlockCache(),
+      IOModel.betree_next_dop(old_s.I(), s.I(),
           IDiskOp(diskOp(IIO(io))).bdop)
   {
     var ref := BT.G.Root();

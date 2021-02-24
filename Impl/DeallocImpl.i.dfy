@@ -26,7 +26,7 @@ module DeallocImpl {
 
   import opened NativeTypes
   method Dealloc(linear inout s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
-  requires old_s.BCInv()
+  requires old_s.Inv()
   requires io.initialized()
   requires old_s.Ready?
   requires old_s.ephemeralIndirectionTable.deallocable(ref)
@@ -39,8 +39,8 @@ module DeallocImpl {
     && ValidDiskOp(dop)
     && IDiskOp(dop).jdop.NoDiskOp?
     && (
-      || BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(dop).bdop, AdvanceOp(UI.NoOp, true))
-      || BBC.Next(old_s.IBlockCache(), s.IBlockCache(), IDiskOp(dop).bdop, StatesInternalOp)
+      || BBC.Next(old_s.I(), s.I(), IDiskOp(dop).bdop, AdvanceOp(UI.NoOp, true))
+      || BBC.Next(old_s.I(), s.I(), IDiskOp(dop).bdop, StatesInternalOp)
     )
   {
     var nop := false;
@@ -55,7 +55,7 @@ module DeallocImpl {
 
     if nop || BC.OutstandingRead(ref) in s.outstandingBlockReads.Values {
       print "giving up; dealloc can't dealloc because of outstanding read\n";
-      assert IOModel.noop(s.IBlockCache(), s.IBlockCache());
+      assert IOModel.noop(s.I(), s.I());
   } else {
       lemmaIndirectionTableLocIndexValid(s, ref);
       assert BC.OutstandingBlockReadsDoesNotHaveRef(s.outstandingBlockReads, ref);
@@ -70,14 +70,14 @@ module DeallocImpl {
       }
 
       ghost var iDiskOp := IDiskOp(diskOp(IIO(io))).bdop;
-      assert BC.Unalloc(old_s.IBlockCache(), s.IBlockCache(), iDiskOp, AdvanceOp(UI.NoOp, true), ref);
-      assert BBC.BlockCacheMove(old_s.IBlockCache(), s.IBlockCache(), iDiskOp, AdvanceOp(UI.NoOp, true), BC.UnallocStep(ref));
-      assert BBC.NextStep(old_s.IBlockCache(), s.IBlockCache(), iDiskOp, AdvanceOp(UI.NoOp, true), BBC.BlockCacheMoveStep(BC.UnallocStep(ref)));
+      assert BC.Unalloc(old_s.I(), s.I(), iDiskOp, AdvanceOp(UI.NoOp, true), ref);
+      assert BBC.BlockCacheMove(old_s.I(), s.I(), iDiskOp, AdvanceOp(UI.NoOp, true), BC.UnallocStep(ref));
+      assert BBC.NextStep(old_s.I(), s.I(), iDiskOp, AdvanceOp(UI.NoOp, true), BBC.BlockCacheMoveStep(BC.UnallocStep(ref)));
     }
   }
 
   method FindDeallocable(shared s: ImplVariables) returns (ref: Option<Reference>)
-  requires s.BCInv()
+  requires s.Inv()
   requires s.Ready?
   ensures 
       && (ref.Some? ==> ref.value in s.ephemeralIndirectionTable.graph)

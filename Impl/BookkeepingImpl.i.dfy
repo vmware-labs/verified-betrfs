@@ -36,13 +36,13 @@ module BookkeepingImpl {
   ensures ref.Some? ==> RefAvailable(s, ref.value)
   ensures forall ref1 | ref1 in s.cache.I() :: Some(ref1) != ref
 
-  ensures var gs := s.IBlockCache();
+  ensures var gs := s.I();
     && (forall r | r in gs.ephemeralIndirectionTable.graph :: r <= gs.ephemeralIndirectionTable.refUpperBound)
     && ref == BookkeepingModel.getFreeRef(gs);
   {
     BookkeepingModel.reveal_getFreeRef();
 
-    ghost var getable := s.IBlockCache().ephemeralIndirectionTable;
+    ghost var getable := s.I().ephemeralIndirectionTable;
 
     assert forall r | r in getable.graph :: r <= getable.refUpperBound by {
       s.ephemeralIndirectionTable.UpperBounded();
@@ -59,8 +59,8 @@ module BookkeepingImpl {
     while true
     invariant i >= 1
     invariant forall r | r in s.ephemeralIndirectionTable.graph :: r < i
-    invariant BookkeepingModel.getFreeRefIterate(s.IBlockCache(), i)
-           == BookkeepingModel.getFreeRef(s.IBlockCache())
+    invariant BookkeepingModel.getFreeRefIterate(s.I(), i)
+           == BookkeepingModel.getFreeRef(s.I())
     decreases 0x1_0000_0000_0000_0000 - i as int
     {
       var cacheLookup := s.cache.InCache(i);
@@ -85,13 +85,13 @@ module BookkeepingImpl {
   ensures ref.Some? ==> RefAvailable(s, ref.value)
   ensures forall ref1 | ref1 in s.cache.I() :: Some(ref1) != ref
 
-  ensures var gs := s.IBlockCache();
+  ensures var gs := s.I();
     && (forall r | r in gs.ephemeralIndirectionTable.graph :: r <= gs.ephemeralIndirectionTable.refUpperBound)
     && ref == BookkeepingModel.getFreeRef2(gs, avoid);
   {
     BookkeepingModel.reveal_getFreeRef2();
 
-    ghost var getable := s.IBlockCache().ephemeralIndirectionTable;
+    ghost var getable := s.I().ephemeralIndirectionTable;
 
     assert forall r | r in getable.graph :: r <= getable.refUpperBound by {
       s.ephemeralIndirectionTable.UpperBounded();
@@ -108,8 +108,8 @@ module BookkeepingImpl {
     while true
     invariant i >= 1
     invariant forall r | r in s.ephemeralIndirectionTable.I().graph :: r < i
-    invariant BookkeepingModel.getFreeRef2Iterate(s.IBlockCache(), avoid, i)
-           == BookkeepingModel.getFreeRef2(s.IBlockCache(), avoid)
+    invariant BookkeepingModel.getFreeRef2Iterate(s.I(), avoid, i)
+           == BookkeepingModel.getFreeRef2(s.I(), avoid)
     decreases 0x1_0000_0000_0000_0000 - i as int
     {
       if i != avoid {
@@ -304,7 +304,7 @@ module BookkeepingImpl {
 
   ensures s.WriteAllocConditions()
   ensures s.ChildrenConditions(Some([ref]))
-  ensures s.IBlockCache() == BookkeepingModel.writeBookkeeping(old_s.IBlockCache(), ref, children)
+  ensures s.I() == BookkeepingModel.writeBookkeeping(old_s.I(), ref, children)
   ensures s.cache == old_s.cache
   {
     lemmaIndirectionTableLocIndexValid(s, ref);
@@ -348,7 +348,7 @@ module BookkeepingImpl {
   ensures ref.Some? ==> s.ChildrenConditions(Some([ref.value]))
   ensures s.WriteAllocConditions()
 
-  ensures (s.IBlockCache(), ref) == BookkeepingModel.allocBookkeeping(old_s.IBlockCache(), children)
+  ensures (s.I(), ref) == BookkeepingModel.allocBookkeeping(old_s.I(), children)
   ensures ref.None? ==> s == old_s
   {
     BookkeepingModel.reveal_allocBookkeeping();
@@ -366,7 +366,7 @@ module BookkeepingImpl {
   requires old_s.WriteAllocConditions()
   requires ref in old_s.ephemeralIndirectionTable.I().graph
   ensures s.W()
-  ensures s.IBlockCache() == BookkeepingModel.writeBookkeepingNoSuccsUpdate(old_s.IBlockCache(), ref)
+  ensures s.I() == BookkeepingModel.writeBookkeepingNoSuccsUpdate(old_s.I(), ref)
   ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
   {
     BookkeepingModel.reveal_writeBookkeepingNoSuccsUpdate();

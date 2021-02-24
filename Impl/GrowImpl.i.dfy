@@ -26,20 +26,20 @@ module GrowImpl {
 
   /// The root was found to be too big: grow
   method grow(linear inout s: ImplVariables)
-  requires old_s.BCInv()
+  requires old_s.Inv()
   requires old_s.Ready?
   // requires (forall r | r in old_s.ephemeralIndirectionTable.graph :: r <= old_s.ephemeralIndirectionTable.refUpperBound)
 
-  requires BT.G.Root() in old_s.IBlockCache().cache
+  requires BT.G.Root() in old_s.I().cache
   requires |old_s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
   ensures s.W()
   ensures s.Ready?
-  ensures s.IBlockCache() == GrowModel.grow(old_s.IBlockCache())
+  ensures s.I() == GrowModel.grow(old_s.I())
   {
     GrowModel.reveal_grow();
 
     var root := BT.G.Root();
-    BookkeepingModel.lemmaChildrenConditionsOfNode(s.IBlockCache(), root);
+    BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), root);
     var nop := false;
 
     if s.frozenIndirectionTable.lSome? {
@@ -55,17 +55,17 @@ module GrowImpl {
       var containsall := ComputeContainsAllKeys(oldpivots);
       if !containsall {
         print "giving up; grow can't run because root node is incorrect";
-        assert old_s.IBlockCache() == s.IBlockCache();
+        assert old_s.I() == s.I();
       } else {
-        // BookkeepingModel.lemmaChildrenConditionsSingleOfAllocBookkeeping(s.IBlockCache(), oldchildren);
+        // BookkeepingModel.lemmaChildrenConditionsSingleOfAllocBookkeeping(s.I(), oldchildren);
         var newref := allocBookkeeping(inout s, oldchildren);
         match newref {
           case None => {
             print "giving up; could not allocate ref\n";
-            assert old_s.IBlockCache() == s.IBlockCache();
+            assert old_s.I() == s.I();
           }
           case Some(newref) => {
-            // assert BookkeepingModel.ChildrenConditions(s.IBlockCache(), Some([newref]));
+            // assert BookkeepingModel.ChildrenConditions(s.I(), Some([newref]));
             WeightBucketEmpty();
 
             linear var mutbucket := MutBucket.Alloc();
@@ -74,13 +74,13 @@ module GrowImpl {
 
             linear var newroot := Node(InitPivotTable(), Some([newref]), buckets);
             assert newroot.I() == BT.G.Node(InitPivotTable(), Some([newref]), [B(map[])]);
-            assert s.IBlockCache().cache[root] == old_s.IBlockCache().cache[root];
+            assert s.I().cache[root] == old_s.I().cache[root];
 
             writeBookkeeping(inout s, root, Some([newref]));
             inout s.cache.MoveAndReplace(root, newref, newroot);
 
-            ghost var a := s.IBlockCache();
-            ghost var b := GrowModel.grow(old_s.IBlockCache());
+            ghost var a := s.I();
+            ghost var b := GrowModel.grow(old_s.I());
             assert a.cache == b.cache;
             assert a.ephemeralIndirectionTable == b.ephemeralIndirectionTable;
             assert a == b;
@@ -88,7 +88,7 @@ module GrowImpl {
         }
       }
     } else {
-      assert old_s.IBlockCache() == s.IBlockCache();
+      assert old_s.I() == s.I();
     }
   }
 }
