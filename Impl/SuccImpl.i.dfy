@@ -102,7 +102,7 @@ module SuccImpl {
     == BGM.GenFromBucketStackWithLowerBound(acc, start)
   modifies io
   decreases counter, 0
-  ensures s.W()
+  ensures s.WFBCVars()
   ensures s.Ready?
   ensures s.cache.I() == old_s.cache.I()
   ensures (s.IBlockCache(), IIO(io), res)
@@ -188,7 +188,7 @@ module SuccImpl {
     == BGM.GenFromBucketStackWithLowerBound(acc, start)
   modifies io
   decreases counter, 1
-  ensures s.W()
+  ensures s.WFBCVars()
   ensures (s.IBlockCache(), IIO(io), res)
        == SuccModel.getPath(old_s.IBlockCache(), old(IIO(io)), key, old(acc), start,
         upTo, maxToFind as int, ref, counter)
@@ -202,8 +202,7 @@ module SuccImpl {
       if boundedkey {
         res := getPathInternal(inout s, io, key, acc, g, start, upTo,
           maxToFind, ref, counter, pivots, children);
-        // LruModel.LruUse(s.lru.Queue(), ref);
-        assume |LruModel.I(s.lru.Queue())| < 0x1_0000_0000_0000_0000 / 8;
+        LruModel.LruUse(s.lru.Queue(), ref);
         inout s.lru.Use(ref);
       } else {
         linear match g {

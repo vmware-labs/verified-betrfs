@@ -1,19 +1,4 @@
-// include "../PivotBetree/PivotBetreeSpec.i.dfy"
-// include "../lib/Base/Message.i.dfy"
-// include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
-// include "../lib/Base/Option.s.dfy"
-// include "../BlockCacheSystem/BetreeCache.i.dfy"
-// include "../lib/Lang/NativeTypes.s.dfy"
-// include "../lib/DataStructures/LruModel.i.dfy"
-// include "../lib/DataStructures/MutableMapModel.i.dfy"
-// include "../lib/DataStructures/BitmapModel.i.dfy"
-// include "BlockAllocatorModel.i.dfy"
-// include "IndirectionTableModel.i.dfy"
-// include "CommitterModel.i.dfy"
-// include "../BlockCacheSystem/BlockJournalDisk.i.dfy"
 include "../BlockCacheSystem/BlockJournalCache.i.dfy"
-// include "../ByteBlockCacheSystem/ByteCache.i.dfy"
-// include "DiskOpModel.i.dfy"
 include "CommitterImpl.i.dfy"
 include "StateBCModel.i.dfy"
 //
@@ -30,9 +15,6 @@ module StateModel {
   import BJC = BlockJournalCache
   import opened CommitterImpl
   import opened StateBCModel
-
-  // type Node = BT.G.Node  
-  // type IndirectionTable = IndirectionTableModel.IndirectionTable
 
   datatype Variables = Variables(
     bc: BCVariables,
