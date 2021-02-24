@@ -20,9 +20,6 @@ lib/DataStructures
     LinearContentMutableMap.i.dfy timeout (ok with 120 TL)
     LinearMutableMapBase.i.dfy timeout (ok with 120 TL)
 
-lib/Buckets
-    PackedStringArray.i.dfy failure [Rob]
-
 ByteBlockCacheSystem [Travis]
     ByteSystem.i.dfy timeout
     InterpretationDisk.i.dfy timeout
