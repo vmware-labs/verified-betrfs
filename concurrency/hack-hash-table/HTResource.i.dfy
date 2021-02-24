@@ -16,18 +16,42 @@ module HTResource refines ApplicationResourceSpec {
   datatype Stub =
     | Stub(rid: int, output: MapIfc.Output)
 
-  function method hash(key: uint64) : uint32
-
   function FixedSize() : nat
+
+  predicate ValidHashIndex(h:int) {
+    0 <= h as int < FixedSize()
+  }
+
+  function method hash(key: uint64) : (h:uint32)
+    ensures ValidHashIndex(h as int)
 
   datatype KV = KV(key: uint64, val: Value)
 
+  // This is the thing that's stored in the hash table at this row.
   datatype Entry =
     | Full(kv: KV)
     | Empty
+
+  // This is what some thread's stack thinks we're doing at this row.
+  // TODO rename ActiveOp or Underway or something
+  // The information embedded in these state objects form a richer invariant
+  // that paves over the temporary gaps in the "idle invariant" that should
+  // apply when no threads are operating)
   datatype State =
     | Free
     | Inserting(rid: int, kv: KV)
+    | Removing(rid: int, key: uint64)
+    | RemoveTidying(rid: int)
+
+      // Why do we need to store query state to support an invariant over the
+      // hash table interpretation, since query is a read-only operation?
+      // Because the query's result is defined at the moment it begins (its
+      // serialization point), which is to say the proof ghostily knows the
+      // answer when the query begins. We need to show inductively that that
+      // answer stays the same with each step of any thread, until the impl
+      // gets far enough to discover the answer in the real data structure.
+      // We're showing that we inductively preserve the value of the
+      // interpretation of the *answer* to query #rid.
     | Querying(rid: int, key: uint64)
 
   datatype Info = Info(entry: Entry, state: State)
@@ -37,6 +61,14 @@ module HTResource refines ApplicationResourceSpec {
           tickets: multiset<Ticket>,
           stubs: multiset<Stub>)
       | Fail
+        // The UpdateStep disjunct is complex, but we'll show that as long
+        // as the impl obeys them, it'll never land in Fail.
+        // The state is here to "leave slack" in the defenition of add(),
+        // so that we can push off the proof that we never end up failing
+        // until UpdatePreservesValid. If we didn't do it this way, we'd
+        // have to show that add is complete, which would entail sucking
+        // the definition of update and proof of UpdatePreservesValid all
+        // into the definition of add().
   type R = r: PreR | (r.R? ==> |r.table| == FixedSize()) witness Fail
 
   function unit() : R {
@@ -125,6 +157,11 @@ module HTResource refines ApplicationResourceSpec {
     | InsertSwapStep(pos: nat)
     | InsertDoneStep(pos: nat)
 
+    | ProcessRemoveTicketStep(insert_ticket: Ticket)
+    | RemoveSkipStep(pos: nat)
+    | RemoveTidyStep(pos: nat)
+    | RemoveDoneStep(pos: nat)
+
     | ProcessQueryTicketStep(query_ticket: Ticket)
     | QuerySkipStep(pos: nat)
     | QueryDoneStep(pos: nat)
@@ -165,7 +202,7 @@ module HTResource refines ApplicationResourceSpec {
 
     && s' == s.(table := s.table
         [pos := Some(s.table[pos].value.(state := Free))]
-        [pos + 1 := Some(s.table[pos].value.(state := s.table[pos].value.state))])
+        [pos + 1 := Some(s.table[pos + 1].value.(state := s.table[pos].value.state))])
   }
 
   // We're trying to insert new_item at pos j
@@ -210,6 +247,85 @@ module HTResource refines ApplicationResourceSpec {
             Free))])
       .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput)})
   }
+
+  // Remove
+
+  // A well-formed condition
+  predicate HappyStates(s: R, s': R) {
+    && !s.Fail?
+    && !s'.Fail?
+  }
+
+  // We know about row h (our thread is working on it),
+  // and we know that it's free (we're not already claiming to do something else with it).
+  predicate KnowRowIsFree(s: R, h: uint32)
+    requires s.R?
+    requires ValidHashIndex(h as int)
+  {
+    && s.table[h].Some?
+    && s.table[h].value.state.Free?
+  }
+
+  predicate ProcessRemoveTicket(s: R, s': R, remove_ticket: Ticket)
+  {
+    && HappyStates(s, s')
+    && remove_ticket.input.RemoveInput?
+    && remove_ticket in s.tickets
+    && var h: uint32 := hash(remove_ticket.input.key);
+    && KnowRowIsFree(s, h)
+    && s' == s
+      .(tickets := s.tickets - multiset{remove_ticket})
+      .(table := s.table[h := Some(
+          s.table[h].value.(state :=
+            Removing(remove_ticket.rid,
+              remove_ticket.input.key)))])
+  }
+
+  predicate RemoveSkip(s: R, s': R, pos: nat)
+  {
+    && HappyStates(s, s')
+    && 0 <= pos < FixedSize() - 1
+    && knowRowIsFree(s, pos+1)
+    // Know row pos, and it's the thing we're removing, and it's full...
+    && s.table[pos].Some?
+    && s.table[pos].value.state.Removing?
+    && s.table[pos].value.entry.Full?
+    // ...and the key it's full of sorts before the thing we're looking to remove.
+    && hash(s.table[pos].value.entry.kv.key) <= hash(s.table[pos].value.state.key)
+    // (and if the hash is equal it's not the one we're looking for!)
+    && s.table[pos].value.entry.kv.key != s.table[pos].value.state.key
+
+    && s' == s.(table := s.table
+        [pos := Some(s.table[pos].value.(state := Free))]
+        [pos + 1 := Some(s.table[pos + 1].value.(state := s.table[pos].value.state))])
+  }
+
+  predicate RemoveFoundIt(s: R, s': R, pos: nat)
+  {
+    && HappyStates(s, s')
+    && 0 <= pos < FixedSize() - 1
+    && knowRowIsFree(s, pos+1)
+    // Know row pos, and it's the thing we're removing, and it's full...
+    && s.table[pos].Some?
+    && s.table[pos].value.state.Removing?
+    && s.table[pos].value.entry.Full?
+    // ...and the key it's full of is the one we wanted to delete
+    && s.table[pos].value.entry.kv.key == s.table[pos].value.state.key
+
+    // Enter RemoveTidying mode
+    && var rid := s.table[pos].value.state.rid
+    && s' == s.(table := s.table[pos := Some(Empty, RemoveTidying(rid))])
+  }
+
+  predicate RemoveTidy(s: R, s': R, pos: nat)
+  {
+    && HappyStates(s, s')
+    && 0 <= pos < FixedSize() - 1
+    && knowRowIsFree(s, pos+1)
+  }
+
+
+  // Query
 
   predicate ProcessQueryTicket(s: R, s': R, query_ticket: Ticket)
   {
