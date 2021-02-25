@@ -54,6 +54,7 @@ module HTResource refines ApplicationResourceSpec {
       // interpretation of the *answer* to query #rid.
     | Querying(rid: int, key: uint64)
 
+  // TODO rename
   datatype Info = Info(entry: Entry, state: State)
 
   datatype PreR =
@@ -159,6 +160,7 @@ module HTResource refines ApplicationResourceSpec {
 
     | ProcessRemoveTicketStep(insert_ticket: Ticket)
     | RemoveSkipStep(pos: nat)
+    | RemoveFoundItStep(pos: nat)
     | RemoveTidyStep(pos: nat)
     | RemoveDoneStep(pos: nat)
 
@@ -169,8 +171,7 @@ module HTResource refines ApplicationResourceSpec {
 
   predicate ProcessInsertTicket(s: R, s': R, insert_ticket: Ticket)
   {
-    && s.R?
-    && s'.R?
+    && !s.Fail?
     && insert_ticket.input.InsertInput?
     && insert_ticket in s.tickets
     && var h: uint32 := hash(insert_ticket.input.key);
@@ -190,7 +191,7 @@ module HTResource refines ApplicationResourceSpec {
   // we skip item i and move to i+1.
   predicate InsertSkip(s: R, s': R, pos: nat)
   {
-    && s.R?
+    && !s.Fail?
     && s'.R?
     && 0 <= pos < FixedSize() - 1
     && s.table[pos].Some?
@@ -211,8 +212,7 @@ module HTResource refines ApplicationResourceSpec {
   // with the swapped-out item.
   predicate InsertSwap(s: R, s': R, pos: nat)
   {
-    && s.R?
-    && s'.R?
+    && !s.Fail?
     && 0 <= pos < FixedSize() - 1
     && s.table[pos].Some?
     && s.table[pos + 1].Some?
@@ -234,8 +234,7 @@ module HTResource refines ApplicationResourceSpec {
   // Slot is empty. Insert our element and finish.
   predicate InsertDone(s: R, s': R, pos: nat)
   {
-    && s.R?
-    && s'.R?
+    && !s.Fail?
     && 0 <= pos < FixedSize()
     && s.table[pos].Some?
     && s.table[pos].value.state.Inserting?
@@ -250,17 +249,11 @@ module HTResource refines ApplicationResourceSpec {
 
   // Remove
 
-  // A well-formed condition
-  predicate HappyStates(s: R, s': R) {
-    && !s.Fail?
-    && !s'.Fail?
-  }
-
   // We know about row h (our thread is working on it),
   // and we know that it's free (we're not already claiming to do something else with it).
-  predicate KnowRowIsFree(s: R, h: uint32)
-    requires s.R?
-    requires ValidHashIndex(h as int)
+  predicate KnowRowIsFree(s: R, h: int)
+    requires !s.Fail?
+    requires ValidHashIndex(h)
   {
     && s.table[h].Some?
     && s.table[h].value.state.Free?
@@ -268,11 +261,11 @@ module HTResource refines ApplicationResourceSpec {
 
   predicate ProcessRemoveTicket(s: R, s': R, remove_ticket: Ticket)
   {
-    && HappyStates(s, s')
+    && !s.Fail?
     && remove_ticket.input.RemoveInput?
     && remove_ticket in s.tickets
     && var h: uint32 := hash(remove_ticket.input.key);
-    && KnowRowIsFree(s, h)
+    && KnowRowIsFree(s, h as int)
     && s' == s
       .(tickets := s.tickets - multiset{remove_ticket})
       .(table := s.table[h := Some(
@@ -281,20 +274,26 @@ module HTResource refines ApplicationResourceSpec {
               remove_ticket.input.key)))])
   }
 
-  predicate RemoveSkip(s: R, s': R, pos: nat)
+  predicate RemoveSkipEnabled(s: R, pos: nat)
   {
-    && HappyStates(s, s')
+    && !s.Fail?
     && 0 <= pos < FixedSize() - 1
-    && knowRowIsFree(s, pos+1)
+    && KnowRowIsFree(s, pos+1)
     // Know row pos, and it's the thing we're removing, and it's full...
     && s.table[pos].Some?
     && s.table[pos].value.state.Removing?
     && s.table[pos].value.entry.Full?
     // ...and the key it's full of sorts before the thing we're looking to remove.
     && hash(s.table[pos].value.entry.kv.key) <= hash(s.table[pos].value.state.key)
-    // (and if the hash is equal it's not the one we're looking for!)
+  }
+
+  predicate RemoveSkip(s: R, s': R, pos: nat)
+  {
+    && RemoveSkipEnabled(s, pos)
+    // The hash is equal, but this isn't the key we're trying to remove.
     && s.table[pos].value.entry.kv.key != s.table[pos].value.state.key
 
+    // Advance the pointer to the next row.
     && s' == s.(table := s.table
         [pos := Some(s.table[pos].value.(state := Free))]
         [pos + 1 := Some(s.table[pos + 1].value.(state := s.table[pos].value.state))])
@@ -302,28 +301,61 @@ module HTResource refines ApplicationResourceSpec {
 
   predicate RemoveFoundIt(s: R, s': R, pos: nat)
   {
-    && HappyStates(s, s')
-    && 0 <= pos < FixedSize() - 1
-    && knowRowIsFree(s, pos+1)
-    // Know row pos, and it's the thing we're removing, and it's full...
-    && s.table[pos].Some?
-    && s.table[pos].value.state.Removing?
-    && s.table[pos].value.entry.Full?
-    // ...and the key it's full of is the one we wanted to delete
+    && RemoveSkipEnabled(s, pos)
+    // This IS the key we want to remove!
     && s.table[pos].value.entry.kv.key == s.table[pos].value.state.key
 
-    // Enter RemoveTidying mode
-    && var rid := s.table[pos].value.state.rid
-    && s' == s.(table := s.table[pos := Some(Empty, RemoveTidying(rid))])
+    // Change the program counter into RemoveTidying mode
+    && var rid := s.table[pos].value.state.rid;
+    && s' == s.(table := s.table[pos := Some(Info(Empty, RemoveTidying(rid)))])
+  }
+
+  predicate TidyEnabled(s: R, pos: nat)
+  {
+    && !s.Fail?
+    && ValidHashIndex(pos)
+    // The row that needs backfilling is known and we're pointing at it
+    && s.table[pos].Some?
+    && s.table[pos].value.state.RemoveTidying?
+    && s.table[pos].value.entry.Empty?  // Should be an invariant, actually
+    && (pos < FixedSize() - 1 ==> s.table[pos+1].Some?) // if a next row, we know it
+  }
+
+  predicate DoneTidying(s: R, pos: nat)
+    requires TidyEnabled(s, pos)
+  {
+    || (pos == FixedSize() - 1)
+    || (
+      && KnowRowIsFree(s, pos+1)                               // Next row is off end of the array
+      && (
+        || s.table[pos].value.entry.Empty?                     // Next row is empty
+        || pos < hash(s.table[pos].value.entry.kv.key) as nat  // Next row's key can't move back
+      )
+    )
   }
 
   predicate RemoveTidy(s: R, s': R, pos: nat)
   {
-    && HappyStates(s, s')
-    && 0 <= pos < FixedSize() - 1
-    && knowRowIsFree(s, pos+1)
+    && TidyEnabled(s, pos)
+    && !DoneTidying(s, pos)
+
+    // Pull the entry back one slot, and push the state pointer forward one slot.
+    && s' == s.(table := s.table
+      [pos := Some(Info(s.table[pos+1].value.entry, Free))]
+      [pos+1 := Some(Info(Empty, s.table[pos].value.state))]
+      )
   }
 
+  predicate RemoveDone(s: R, s': R, pos: nat)
+  {
+    && TidyEnabled(s, pos)
+    && DoneTidying(s, pos)
+    && !s'.Fail?
+    // Clear the pointer, return the stub.
+    && s' == s
+      .(table := s.table[pos := Some(Info(s.table[pos].value.entry, Free))])
+      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput)})
+  }
 
   // Query
 
@@ -405,6 +437,12 @@ module HTResource refines ApplicationResourceSpec {
       case InsertSwapStep(pos) => InsertSwap(s, s', pos)
       case InsertDoneStep(pos) => InsertDone(s, s', pos)
 
+      case ProcessRemoveTicketStep(remove_ticket) => ProcessRemoveTicket(s, s', remove_ticket)
+      case RemoveSkipStep(pos) => RemoveSkip(s, s', pos)
+      case RemoveFoundItStep(pos) => RemoveFoundIt(s, s', pos)
+      case RemoveTidyStep(pos) => RemoveTidy(s, s', pos)
+      case RemoveDoneStep(pos) => RemoveDone(s, s', pos)
+
       case ProcessQueryTicketStep(query_ticket) => ProcessQueryTicket(s, s', query_ticket)
       case QuerySkipStep(pos) => QuerySkip(s, s', pos)
       case QueryDoneStep(pos) => QueryDone(s, s', pos)
@@ -432,32 +470,52 @@ module HTResource refines ApplicationResourceSpec {
   ensures Update(add(x, z), add(y, z))
   {
     var step :| UpdateStep(x, y, step);
-    match step {
-      case ProcessInsertTicketStep(insert_ticket) => {
-        assert UpdateStep(add(x, z), add(y, z), step);
-      }
-      case InsertSkipStep(pos) => {
-        assert UpdateStep(add(x, z), add(y, z), step);
-      }
-      case InsertSwapStep(pos) => {
-        assert UpdateStep(add(x, z), add(y, z), step);
-      }
-      case InsertDoneStep(pos) => {
-        assert UpdateStep(add(x, z), add(y, z), step);
-      }
-      case ProcessQueryTicketStep(query_ticket) => {
-        assert UpdateStep(add(x, z), add(y, z), step);
-      }
-      case QuerySkipStep(pos) => {
-        assert UpdateStep(add(x, z), add(y, z), step);
-      }
-      case QueryDoneStep(pos) => {
-        assert UpdateStep(add(x, z), add(y, z), step);
-      }
-      case QueryNotFoundStep(pos) => {
-        assert UpdateStep(add(x, z), add(y, z), step);
-      }
-    }
+    // TODO Bodies of every case are identical. Can't we just assert that and skip the
+    // case analysis?
+    assert UpdateStep(add(x, z), add(y, z), step);
+//    match step {
+//      case ProcessInsertTicketStep(insert_ticket) => {
+//        assert UpdateStep(add(x, z), add(y, z), step);
+//      }
+//      case InsertSkipStep(pos) => {
+//        assert UpdateStep(add(x, z), add(y, z), step);
+//      }
+//      case InsertSwapStep(pos) => {
+//        assert UpdateStep(add(x, z), add(y, z), step);
+//      }
+//      case InsertDoneStep(pos) => {
+//        assert UpdateStep(add(x, z), add(y, z), step);
+//      }
+//
+//      case ProcessRemoveTicketStep(remove_ticket) => {
+//        assert UpdateStep(add(x, z), add(y, z), step);
+//      }
+//      case RemoveSkipStep(pos) => {
+//        assert UpdateStep(add(x, z), add(y, z), step);
+//      }
+//      case RemoveFoundItStep(pos) => {
+//        assert UpdateStep(add(x, z), add(y, z), step);
+//      }
+//      case RemoveTidyStep(pos) => {
+//        assert UpdateStep(add(x, z), add(y, z), step);
+//      }
+//      case RemoveDoneStep(pos) => {
+//        assert UpdateStep(add(x, z), add(y, z), step);
+//      }
+//
+//      case ProcessQueryTicketStep(query_ticket) => {
+//        assert UpdateStep(add(x, z), add(y, z), step);
+//      }
+//      case QuerySkipStep(pos) => {
+//        assert UpdateStep(add(x, z), add(y, z), step);
+//      }
+//      case QueryDoneStep(pos) => {
+//        assert UpdateStep(add(x, z), add(y, z), step);
+//      }
+//      case QueryNotFoundStep(pos) => {
+//        assert UpdateStep(add(x, z), add(y, z), step);
+//      }
+//    }
   }
 
   function input_ticket(id: int, input: Ifc.Input) : R
