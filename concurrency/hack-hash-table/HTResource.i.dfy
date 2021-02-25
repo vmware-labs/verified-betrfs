@@ -225,7 +225,7 @@ module HTResource refines ApplicationResourceSpec {
         [pos := Some(Info(
           Full(s.table[pos].value.state.kv),
           Free))]
-        [pos + 1 := Some(s.table[pos].value.(state :=
+        [pos + 1 := Some(s.table[pos + 1].value.(state :=
           Inserting(
             s.table[pos].value.state.rid,
             s.table[pos].value.entry.kv)))])
