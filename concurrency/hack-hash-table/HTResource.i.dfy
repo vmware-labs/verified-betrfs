@@ -361,8 +361,7 @@ module HTResource refines ApplicationResourceSpec {
 
   predicate ProcessQueryTicket(s: R, s': R, query_ticket: Ticket)
   {
-    && s.R?
-    && s'.R?
+    && !s.Fail?
     && query_ticket.input.QueryInput?
     && query_ticket in s.tickets
     && var h: uint32 := hash(query_ticket.input.key);
@@ -377,8 +376,7 @@ module HTResource refines ApplicationResourceSpec {
 
   predicate QuerySkip(s: R, s': R, pos: nat)
   {
-    && s.R?
-    && s'.R?
+    && !s.Fail?
     && 0 <= pos < FixedSize() - 1
     && s.table[pos].Some?
     && s.table[pos + 1].Some?
@@ -394,8 +392,7 @@ module HTResource refines ApplicationResourceSpec {
 
   predicate QueryDone(s: R, s': R, pos: nat)
   {
-    && s.R?
-    && s'.R?
+    && !s.Fail?
     && 0 <= pos < FixedSize()
     && s.table[pos].Some?
     && s.table[pos].value.state.Querying?
@@ -412,8 +409,7 @@ module HTResource refines ApplicationResourceSpec {
 
   predicate QueryNotFound(s: R, s': R, pos: nat)
   {
-    && s.R?
-    && s'.R?
+    && !s.Fail?
     && 0 <= pos < FixedSize()
     && s.table[pos].Some?
     && s.table[pos].value.state.Querying?
