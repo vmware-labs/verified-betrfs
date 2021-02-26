@@ -82,7 +82,14 @@ module ResourceStateMachine {
     (table[e].value.entry.Empty? && table[j].value.entry.Full? && table[k].value.entry.Full? ==> (
       var hj := HT.hash(table[j].value.entry.kv.key) as int;
       var hk := HT.hash(table[k].value.entry.kv.key) as int;
-      adjust(hj, e) <= adjust(hk, e)
+      && adjust(hj, e) <= adjust(hk, e)
+
+      // If entry 'k' has an 'Inserting' action on it, then that action must have
+      // gotten past entry 'j'.
+      && (table[k].value.state.Inserting? ==>
+        var ha := HT.hash(table[k].value.state.kv.key) as int;
+        && adjust(hj, e) <= adjust(ha, e)
+      )
     ))
   }
 
@@ -117,6 +124,7 @@ module ResourceStateMachine {
     ensures ValidHashNeighbors(s'.table, e, j)
     {
       assert ValidHashNeighbors(s.table, e, j);
+      assert ContiguousToEntry(s.table, j);
     }
   }
 
@@ -135,6 +143,7 @@ module ResourceStateMachine {
     ensures ValidHashNeighbors(s'.table, e, j)
     {
       assert ValidHashNeighbors(s.table, e, j);
+      assert ContiguousToEntry(s.table, j);
     }
   }
 

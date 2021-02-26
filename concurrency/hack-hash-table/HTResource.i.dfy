@@ -16,7 +16,8 @@ module HTResource refines ApplicationResourceSpec {
   datatype Stub =
     | Stub(rid: int, output: MapIfc.Output)
 
-  function FixedSize() : nat
+  function FixedSize() : (n: nat)
+  ensures n > 1
 
   predicate ValidHashIndex(h:int) {
     0 <= h as int < FixedSize()
@@ -186,6 +187,13 @@ module HTResource refines ApplicationResourceSpec {
               KV(insert_ticket.input.key, insert_ticket.input.value))))])
   }
 
+  predicate ShouldHashGoBefore(search_h: int, slot_h: int, slot_idx: int)
+  {
+    || search_h < slot_h <= slot_idx
+    || slot_h <= slot_idx < search_h
+    || slot_idx < search_h < slot_h
+  }
+
   // We're trying to insert new_item at pos j
   // where hash(new_item) >= hash(pos j)
   // we skip item i and move to i+1.
@@ -193,17 +201,20 @@ module HTResource refines ApplicationResourceSpec {
   {
     && !s.Fail?
     && s'.R?
-    && 0 <= pos < FixedSize() - 1
+    && 0 <= pos < FixedSize()
+    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
     && s.table[pos].Some?
-    && s.table[pos + 1].Some?
+    && s.table[pos'].Some?
     && s.table[pos].value.state.Inserting?
     && s.table[pos].value.entry.Full?
-    && hash(s.table[pos].value.state.kv.key) >= hash(s.table[pos].value.entry.kv.key)
-    && s.table[pos + 1].value.state.Free?
+    && !ShouldHashGoBefore(
+        hash(s.table[pos].value.state.kv.key) as int,
+        hash(s.table[pos].value.entry.kv.key) as int, pos)
+    && s.table[pos'].value.state.Free?
 
     && s' == s.(table := s.table
         [pos := Some(s.table[pos].value.(state := Free))]
-        [pos + 1 := Some(s.table[pos + 1].value.(state := s.table[pos].value.state))])
+        [pos' := Some(s.table[pos'].value.(state := s.table[pos].value.state))])
   }
 
   // We're trying to insert new_item at pos j
@@ -213,19 +224,22 @@ module HTResource refines ApplicationResourceSpec {
   predicate InsertSwap(s: R, s': R, pos: nat)
   {
     && !s.Fail?
-    && 0 <= pos < FixedSize() - 1
+    && 0 <= pos < FixedSize()
+    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
     && s.table[pos].Some?
-    && s.table[pos + 1].Some?
+    && s.table[pos'].Some?
     && s.table[pos].value.state.Inserting?
     && s.table[pos].value.entry.Full?
-    && hash(s.table[pos].value.state.kv.key) < hash(s.table[pos].value.entry.kv.key)
-    && s.table[pos + 1].value.state.Free?
+    && ShouldHashGoBefore(
+        hash(s.table[pos].value.state.kv.key) as int,
+        hash(s.table[pos].value.entry.kv.key) as int, pos)
+    && s.table[pos'].value.state.Free?
 
     && s' == s.(table := s.table
         [pos := Some(Info(
           Full(s.table[pos].value.state.kv),
           Free))]
-        [pos + 1 := Some(s.table[pos + 1].value.(state :=
+        [pos' := Some(s.table[pos'].value.(state :=
           Inserting(
             s.table[pos].value.state.rid,
             s.table[pos].value.entry.kv)))])
