@@ -1,10 +1,29 @@
-#!/bin/bash
+#!/bin/bash -x
+
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: MIT
+
+DRY_RUN=
+if [ "$1" == "-d" ]; then
+    DRY_RUN=echo
+fi
 
 COPYRIGHT_NOTICE="Copyright 2018-2021 VMware, Inc."
 COPYING_PERMISSION_STATEMENT="SPDX-License-Identifier: MIT"
 
+function starts_with_bang_line() {
+    FILENAME="$1"
+    head -n 1 "$FILENAME" | grep "^#!" > /dev/null 2>&1
+    if [ ${PIPESTATUS[0]} != 0 ]; then
+        return 2
+    fi
+    return ${PIPESTATUS[1]}
+}
+
 while [ $1 ]; do
     FILENAME="$1"
+    shift
+
     TMPSUFFIX="${FILENAME##*.}"
     SUFFIX="${TMPSUFFIX,,}"
     COMMENT_PREFIX=""
@@ -20,11 +39,35 @@ while [ $1 ]; do
     elif [ "$SUFFIX" == "hpp" ]; then
         COMMENT_PREFIX="//"
     elif [ "$SUFFIX" == "sh" ]; then
-        BANGLINES=1
+        starts_with_bang_line "$FILENAME"
+        RESULT=$?
+        if [ $RESULT == 0 ]; then
+            BANGLINES=1
+        elif [ $RESULT != 1 ]; then
+            continue
+        fi
         COMMENT_PREFIX="#"
     elif [ "$SUFFIX" == "py" ]; then
-        BANGLINES=1
+        starts_with_bang_line "$FILENAME"
+        RESULT=$?
+        if [ $RESULT == 0 ]; then
+            BANGLINES=1
+        elif [ $RESULT != 1 ]; then
+            continue
+        fi
         COMMENT_PREFIX="#"
+    fi
+
+    grep -F -m 1 "$COPYRIGHT_NOTICE" "$FILENAME" > /dev/null 2>&1
+    CONTAINS_COPYRIGHT_NOTICE=$?
+    grep -F -m 1 "$COPYING_PERMISSION_STATEMENT" "$FILENAME" > /dev/null 2>&1
+    CONTAINS_COPYING_PERMISSION_STATEMENT=$?
+
+    if [ $CONTAINS_COPYRIGHT_NOTICE != 1 ]; then
+      continue
+    fi
+    if [ $CONTAINS_COPYING_PERMISSION_STATEMENT != 1 ]; then
+      continue
     fi
 
     if [ "$COMMENT_PREFIX" ]; then
@@ -35,8 +78,7 @@ while [ $1 ]; do
         echo "$COMMENT_PREFIX" "$COPYING_PERMISSION_STATEMENT" >> "$TMPFILE" &&
         echo >> "$TMPFILE" &&
         tail -n +"$[ $BANGLINES + 1 ]" "$FILENAME" >> "$TMPFILE" &&
-        echo cp "$TMPFILE" "$FILENAME"
+        $DRY_RUN cp "$TMPFILE" "$FILENAME"
     fi
 
-    shift
 done
