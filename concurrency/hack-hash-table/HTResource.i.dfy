@@ -511,4 +511,12 @@ module HTResource refines ApplicationResourceSpec {
   ensures Valid(t)
   {
   }
+
+  method easy_transform(
+      linear b: R,
+      ghost expected_out: R)
+  returns (linear c: R)
+  requires Update(b, expected_out)
+  ensures c == expected_out
+  // travis promises to supply this
 }
