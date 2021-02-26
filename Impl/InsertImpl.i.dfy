@@ -72,7 +72,7 @@ module InsertImpl {
 
   //TODO Check to see if casing on success is OK
   //     Before it returned but cant do that with linear
-  method insert(linear inout s: ImplVariables, io: DiskIOHandler, key: Key, value: Value)
+  method insert(linear inout s: ImplVariables, io: DiskIOHandler, key: Key, value: Value, ghost replay: bool)
   returns (success: bool)
   requires io.initialized()
   requires old_s.Inv() && old_s.Ready?
@@ -82,7 +82,7 @@ module InsertImpl {
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
   ensures success ==>
-    BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.PutOp(key, value), success))
+    BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.PutOp(key, value), replay))
   ensures !success ==>
     IOModel.betree_next_dop(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop)
   {
@@ -120,7 +120,7 @@ module InsertImpl {
       if WeightKeyUint64(key) + WeightMessageUint64(ValueMessage.Define(value)) + weightSeq
         <= MaxTotalBucketWeightUint64() {
           success := InsertKeyValue(inout s, key, value);
-          InsertModel.InsertKeyValueCorrect(old_s.I(), key, value, success);
+          InsertModel.InsertKeyValueCorrect(old_s.I(), key, value, replay);
       } else {
         runFlushPolicy(inout s, io);
         success := false;
