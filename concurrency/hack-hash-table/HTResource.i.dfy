@@ -210,6 +210,8 @@ module HTResource refines ApplicationResourceSpec {
     && !ShouldHashGoBefore(
         hash(s.table[pos].value.state.kv.key) as int,
         hash(s.table[pos].value.entry.kv.key) as int, pos)
+    && s.table[pos].value.state.kv.key
+        != s.table[pos].value.entry.kv.key
     && s.table[pos'].value.state.Free?
 
     && s' == s.(table := s.table

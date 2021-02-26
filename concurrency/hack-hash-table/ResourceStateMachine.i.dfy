@@ -125,6 +125,21 @@ module ResourceStateMachine {
     ))
   }
 
+  predicate InsertionNotPastKey(table: seq<Option<HT.Info>>, e: int, j: int, k: int)
+  requires Complete(table)
+  requires 0 <= e < |table|
+  requires 0 <= j < |table|
+  requires 0 <= k < |table|
+  {
+    (table[e].value.entry.Empty? && table[j].value.entry.Full? && adjust(j, e) < adjust(k, e) ==> (
+      // If entry 'k' has an 'Inserting' action on it, then that action must have
+      // gotten past entry 'j'.
+      && (table[k].value.state.Inserting? ==> (
+        table[k].value.state.kv.key != table[j].value.entry.kv.key
+      ))
+    ))
+  }
+
   predicate ExistsEmptyEntry(table: seq<Option<HT.Info>>)
   {
     exists i :: 0 <= i < |table| && table[i].Some? && table[i].value.entry.Empty?
@@ -140,6 +155,8 @@ module ResourceStateMachine {
         :: ValidHashInSlot(s.table, e, i))
     && (forall e, j, k | 0 <= e < |s.table| && 0 <= j < |s.table| && 0 <= k < |s.table|
         :: ValidHashOrdering(s.table, e, j, k))
+    && (forall e, j, k | 0 <= e < |s.table| && 0 <= j < |s.table| && 0 <= k < |s.table|
+        :: InsertionNotPastKey(s.table, e, j, k))
   }
 
   lemma ProcessInsertTicket_PreservesInv(s: Variables, s': Variables, insert_ticket: HT.Ticket)
@@ -159,6 +176,12 @@ module ResourceStateMachine {
       assert ValidHashOrdering(s.table, e, j, k);
       assert ValidHashInSlot(s.table, e, j);
       assert ValidHashInSlot(s.table, e, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures InsertionNotPastKey(s'.table, e, j, k)
+    {
+      assert InsertionNotPastKey(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
     }
   }
 
@@ -216,6 +239,14 @@ module ResourceStateMachine {
         assert ValidHashOrdering(s'.table, e, j, k);
       }*/
     }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures InsertionNotPastKey(s'.table, e, j, k)
+    {
+      assert InsertionNotPastKey(s.table, e, j, pos);
+
+      assert InsertionNotPastKey(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+    }
   }
 
   lemma InsertSwap_PreservesInv(s: Variables, s': Variables, pos: nat)
@@ -244,6 +275,29 @@ module ResourceStateMachine {
       assert ValidHashInSlot(s.table, e, pos);
       assert ValidHashOrdering(s.table, e, j, pos);
       assert ValidHashOrdering(s.table, e, pos, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures InsertionNotPastKey(s'.table, e, j, k)
+    {
+      assert InsertionNotPastKey(s.table, e, j, pos);
+
+      assert InsertionNotPastKey(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+
+      assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, pos);
+      assert ValidHashOrdering(s.table, e, j, pos);
+    }
+
+    forall i | 0 <= i < |s.table| && s.table[i].value.entry.Full?
+    ensures s.table[i].value.entry.kv.key != s.table[pos].value.state.kv.key
+    {
+      var e :| 0 <= e < |s.table| && s.table[e].value.entry.Empty?;
+      assert InsertionNotPastKey(s.table, e, i, pos);
+      //assert ValidHashInSlot(s.table, e, i);
+      assert ValidHashInSlot(s.table, e, pos);
+      assert ValidHashOrdering(s.table, e, pos, i);
+      //assert ValidHashOrdering(s.table, e, i, pos);
     }
   }
 
