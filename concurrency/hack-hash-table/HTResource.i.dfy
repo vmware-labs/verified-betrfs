@@ -158,6 +158,7 @@ module HTResource refines ApplicationResourceSpec {
     | InsertSkipStep(pos: nat)
     | InsertSwapStep(pos: nat)
     | InsertDoneStep(pos: nat)
+    | InsertUpdateStep(pos: nat)
 
     | ProcessRemoveTicketStep(insert_ticket: Ticket)
     | RemoveSkipStep(pos: nat)
@@ -255,6 +256,22 @@ module HTResource refines ApplicationResourceSpec {
     && s.table[pos].Some?
     && s.table[pos].value.state.Inserting?
     && s.table[pos].value.entry.Empty?
+    && s' == s
+      .(table := s.table
+        [pos := Some(Info(
+            Full(s.table[pos].value.state.kv),
+            Free))])
+      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput)})
+  }
+
+  predicate InsertUpdate(s: R, s': R, pos: nat)
+  {
+    && !s.Fail?
+    && 0 <= pos < FixedSize()
+    && s.table[pos].Some?
+    && s.table[pos].value.state.Inserting?
+    && s.table[pos].value.entry.Full?
+    && s.table[pos].value.entry.kv.key == s.table[pos].value.state.kv.key
     && s' == s
       .(table := s.table
         [pos := Some(Info(
@@ -448,6 +465,7 @@ module HTResource refines ApplicationResourceSpec {
       case InsertSkipStep(pos) => InsertSkip(s, s', pos)
       case InsertSwapStep(pos) => InsertSwap(s, s', pos)
       case InsertDoneStep(pos) => InsertDone(s, s', pos)
+      case InsertUpdateStep(pos) => InsertUpdate(s, s', pos)
 
       case ProcessRemoveTicketStep(remove_ticket) => ProcessRemoveTicket(s, s', remove_ticket)
       case RemoveSkipStep(pos) => RemoveSkip(s, s', pos)

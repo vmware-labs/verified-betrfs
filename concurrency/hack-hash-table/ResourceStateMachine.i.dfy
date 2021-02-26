@@ -301,4 +301,73 @@ module ResourceStateMachine {
     }
   }
 
+  lemma InsertDone_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.InsertDone(s, s', pos)
+  ensures Inv(s')
+  {
+    forall e, i | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+      assert ValidHashInSlot(s.table, e, k);
+      //assert ValidHashInSlot(s.table, e, pos);
+      //assert ValidHashOrdering(s.table, e, j, pos);
+      //assert ValidHashOrdering(s.table, e, pos, k);
+
+      //assert InsertionNotPastKey(s.table, e, j, pos);
+
+      //assert InsertionNotPastKey(s.table, pos, j, k);
+      //assert InsertionNotPastKey(s.table, pos, k, j);
+
+      //assert ValidHashOrdering(s.table, pos, j, k);
+      //assert ValidHashOrdering(s.table, pos, k, j);
+
+      //assert ValidHashInSlot(s.table, pos, j);
+      assert ValidHashInSlot(s.table, pos, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures InsertionNotPastKey(s'.table, e, j, k)
+    {
+      assert InsertionNotPastKey(s.table, e, j, k);
+    }
+
+    forall i | 0 <= i < |s.table| && s.table[i].value.entry.Full?
+    ensures s.table[i].value.entry.kv.key != s.table[pos].value.state.kv.key
+    {
+    }
+  }
+
+  lemma InsertUpdate_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.InsertUpdate(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s.table[i].value.entry.Empty? ==> s'.table[i].value.entry.Empty?;
+
+    forall e, i | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures InsertionNotPastKey(s'.table, e, j, k)
+    {
+      assert InsertionNotPastKey(s.table, e, j, k);
+    }
+  }
+
+
+
 }
