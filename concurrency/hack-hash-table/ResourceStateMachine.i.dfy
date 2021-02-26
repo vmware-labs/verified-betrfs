@@ -54,7 +54,7 @@ module ResourceStateMachine {
   // If there's an entry in slot `i` with hash `h`, then
   // you must be able to get from `h` to `i` (possibly wrapping around)
   // with passing a free space.
-  predicate ContiguousToEntry(table: seq<Option<HT.Info>>, i: int)
+  /*predicate ValidHashInSlot(table: seq<Option<HT.Info>>, i: int)
   requires Complete(table)
   requires 0 <= i < |table|
   {
@@ -67,18 +67,41 @@ module ResourceStateMachine {
         && (forall j | h <= j < |table| :: table[j].value.entry.Full?)
       )
     )
+  }*/
+
+  predicate ValidHashInSlot(table: seq<Option<HT.Info>>, e: int, i: int)
+  requires Complete(table)
+  requires 0 <= e < |table|
+  requires 0 <= i < |table|
+  {
+    table[e].value.entry.Empty? && table[i].value.entry.Full? ==> (
+      var h := HT.hash(table[i].value.entry.kv.key) as int;
+      && (
+        || e < h <= i
+        || h <= i < e
+        || i < e < h
+      )
+      && (table[i].value.state.Inserting? ==> (
+        var ha := HT.hash(table[i].value.state.kv.key) as int;
+        && (
+          || e < ha <= i
+          || ha <= i < e
+          || i < e < ha
+        )
+      ))
+    )
   }
 
   // 'Robin Hood' order
   // It's not enough to say that hash(entry[i]) <= hash(entry[i+1])
   // because of wraparound. We do a cyclic comparison 'rooted' at an
   // arbitrary empty element, given by e.
-  predicate ValidHashNeighbors(table: seq<Option<HT.Info>>, e: int, j: int)
+  predicate ValidHashOrdering(table: seq<Option<HT.Info>>, e: int, j: int, k: int)
   requires Complete(table)
   requires 0 <= e < |table|
   requires 0 <= j < |table|
+  requires 0 <= k < |table|
   {
-    var k := (if j+1 < |table| then j+1 else 0);
     (table[e].value.entry.Empty? && table[j].value.entry.Full? && table[k].value.entry.Full? ==> (
       var hj := HT.hash(table[j].value.entry.kv.key) as int;
       var hk := HT.hash(table[k].value.entry.kv.key) as int;
@@ -104,9 +127,10 @@ module ResourceStateMachine {
     && Complete(s.table)
     && ExistsEmptyEntry(s.table)
     && KeysUnique(s.table)
-    && (forall i | 0 <= i < |s.table| :: ContiguousToEntry(s.table, i))
-    && (forall e, j | 0 <= e < |s.table| && 0 <= j < |s.table|
-        :: ValidHashNeighbors(s.table, e, j))
+    && (forall e, i | 0 <= e < |s.table| && 0 <= i < |s.table|
+        :: ValidHashInSlot(s.table, e, i))
+    && (forall e, j, k | 0 <= e < |s.table| && 0 <= j < |s.table| && 0 <= k < |s.table|
+        :: ValidHashOrdering(s.table, e, j, k))
   }
 
   lemma ProcessInsertTicket_PreservesInv(s: Variables, s': Variables, insert_ticket: HT.Ticket)
@@ -115,16 +139,17 @@ module ResourceStateMachine {
   ensures Inv(s')
   {
     assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
-    forall i | 0 <= i < |s'.table|
-    ensures ContiguousToEntry(s'.table, i)
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
     {
-      assert ContiguousToEntry(s.table, i);
+      assert ValidHashInSlot(s.table, e, i);
     }
-    forall e, j | 0 <= e < |s'.table| && 0 <= j < |s'.table|
-    ensures ValidHashNeighbors(s'.table, e, j)
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
     {
-      assert ValidHashNeighbors(s.table, e, j);
-      assert ContiguousToEntry(s.table, j);
+      assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+      assert ValidHashInSlot(s.table, e, k);
     }
   }
 
@@ -134,16 +159,25 @@ module ResourceStateMachine {
   ensures Inv(s')
   {
     assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
-    forall i | 0 <= i < |s'.table|
-    ensures ContiguousToEntry(s'.table, i)
+    forall e, i | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
     {
-      assert ContiguousToEntry(s.table, i);
+      assert ValidHashInSlot(s.table, e, i);
+
+      var i' := if i > 0 then i - 1 else |s.table| - 1;
+      assert ValidHashInSlot(s.table, e, i');
     }
-    forall e, j | 0 <= e < |s'.table| && 0 <= j < |s'.table|
-    ensures ValidHashNeighbors(s'.table, e, j)
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
     {
-      assert ValidHashNeighbors(s.table, e, j);
-      assert ContiguousToEntry(s.table, j);
+      assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+      assert ValidHashInSlot(s.table, e, k);
+
+      var k' := if k > 0 then k - 1 else |s.table| - 1;
+
+      assert ValidHashInSlot(s.table, e, k');
+      assert ValidHashOrdering(s.table, e, k, k');
     }
   }
 
@@ -153,15 +187,25 @@ module ResourceStateMachine {
   ensures Inv(s')
   {
     assert forall i | 0 <= i < |s'.table| :: s.table[i].value.entry.Empty? ==> s'.table[i].value.entry.Empty?;
-    forall i | 0 <= i < |s'.table|
-    ensures ContiguousToEntry(s'.table, i)
+    forall e, i | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
     {
-      assert ContiguousToEntry(s.table, i);
+      assert ValidHashInSlot(s.table, e, i);
+
+      var i' := if i > 0 then i - 1 else |s.table| - 1;
+      assert ValidHashInSlot(s.table, e, i');
     }
-    forall e, j | 0 <= e < |s'.table| && 0 <= j < |s'.table|
-    ensures ValidHashNeighbors(s'.table, e, j)
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
     {
-      assert ValidHashNeighbors(s.table, e, j);
+      assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+      assert ValidHashInSlot(s.table, e, k);
+
+      var k' := if k > 0 then k - 1 else |s.table| - 1;
+
+      assert ValidHashInSlot(s.table, e, k');
+      assert ValidHashOrdering(s.table, e, k, k');
     }
   }
 
