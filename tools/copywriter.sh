@@ -15,7 +15,6 @@ function starts_with_bang_line() {
     FILENAME="$1"
     head -n 1 "$FILENAME" | grep "^#!" > /dev/null 2>&1
     status=("${PIPESTATUS[@]}")
-    echo ${status[0]} ${status[1]}
     if [ ${status[0]} != 0 ]; then
         return 2
     fi
