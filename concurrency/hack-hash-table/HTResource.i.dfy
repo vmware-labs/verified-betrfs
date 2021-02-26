@@ -480,52 +480,7 @@ module HTResource refines ApplicationResourceSpec {
   ensures Update(add(x, z), add(y, z))
   {
     var step :| UpdateStep(x, y, step);
-    // TODO Bodies of every case are identical. Can't we just assert that and skip the
-    // case analysis?
     assert UpdateStep(add(x, z), add(y, z), step);
-//    match step {
-//      case ProcessInsertTicketStep(insert_ticket) => {
-//        assert UpdateStep(add(x, z), add(y, z), step);
-//      }
-//      case InsertSkipStep(pos) => {
-//        assert UpdateStep(add(x, z), add(y, z), step);
-//      }
-//      case InsertSwapStep(pos) => {
-//        assert UpdateStep(add(x, z), add(y, z), step);
-//      }
-//      case InsertDoneStep(pos) => {
-//        assert UpdateStep(add(x, z), add(y, z), step);
-//      }
-//
-//      case ProcessRemoveTicketStep(remove_ticket) => {
-//        assert UpdateStep(add(x, z), add(y, z), step);
-//      }
-//      case RemoveSkipStep(pos) => {
-//        assert UpdateStep(add(x, z), add(y, z), step);
-//      }
-//      case RemoveFoundItStep(pos) => {
-//        assert UpdateStep(add(x, z), add(y, z), step);
-//      }
-//      case RemoveTidyStep(pos) => {
-//        assert UpdateStep(add(x, z), add(y, z), step);
-//      }
-//      case RemoveDoneStep(pos) => {
-//        assert UpdateStep(add(x, z), add(y, z), step);
-//      }
-//
-//      case ProcessQueryTicketStep(query_ticket) => {
-//        assert UpdateStep(add(x, z), add(y, z), step);
-//      }
-//      case QuerySkipStep(pos) => {
-//        assert UpdateStep(add(x, z), add(y, z), step);
-//      }
-//      case QueryDoneStep(pos) => {
-//        assert UpdateStep(add(x, z), add(y, z), step);
-//      }
-//      case QueryNotFoundStep(pos) => {
-//        assert UpdateStep(add(x, z), add(y, z), step);
-//      }
-//    }
   }
 
   function input_ticket(id: int, input: Ifc.Input) : R
