@@ -74,19 +74,21 @@ module ResourceStateMachine {
   requires 0 <= e < |table|
   requires 0 <= i < |table|
   {
-    table[e].value.entry.Empty? && table[i].value.entry.Full? ==> (
-      var h := HT.hash(table[i].value.entry.kv.key) as int;
-      && (
-        || e < h <= i
-        || h <= i < e
-        || i < e < h
-      )
+    table[e].value.entry.Empty? ==> (
+      && (table[i].value.entry.Full? ==> (
+        var h := HT.hash(table[i].value.entry.kv.key) as int;
+        && (
+          || e < h <= i
+          || h <= i < e
+          || i < e < h
+        )
+      ))
       && (table[i].value.state.Inserting? ==> (
         var ha := HT.hash(table[i].value.state.kv.key) as int;
         && (
           || e < ha <= i
-          || ha <= i < e
-          || i < e < ha
+          || ha <= i <= e
+          || i <= e < ha
         )
       ))
     )
@@ -102,17 +104,24 @@ module ResourceStateMachine {
   requires 0 <= j < |table|
   requires 0 <= k < |table|
   {
-    (table[e].value.entry.Empty? && table[j].value.entry.Full? && table[k].value.entry.Full? ==> (
+    (table[e].value.entry.Empty? && table[j].value.entry.Full? && adjust(j, e) < adjust(k, e) ==> (
       var hj := HT.hash(table[j].value.entry.kv.key) as int;
-      var hk := HT.hash(table[k].value.entry.kv.key) as int;
-      && adjust(hj, e) <= adjust(hk, e)
+
+      && (table[k].value.entry.Full? ==> (
+        var hk := HT.hash(table[k].value.entry.kv.key) as int;
+        && adjust(hj, e) <= adjust(hk, e)
+      ))
 
       // If entry 'k' has an 'Inserting' action on it, then that action must have
       // gotten past entry 'j'.
-      && (table[k].value.state.Inserting? ==>
+      && (table[k].value.state.Inserting? ==> (
         var ha := HT.hash(table[k].value.state.kv.key) as int;
-        && adjust(hj, e) <= adjust(ha, e)
-      )
+        && (
+          || e < hj <= ha
+          || hj <= ha <= e
+          || ha <= e < hj
+        )
+      ))
     ))
   }
 
@@ -174,10 +183,38 @@ module ResourceStateMachine {
       assert ValidHashInSlot(s.table, e, j);
       assert ValidHashInSlot(s.table, e, k);
 
-      var k' := if k > 0 then k - 1 else |s.table| - 1;
+      //var k' := if k > 0 then k - 1 else |s.table| - 1;
 
-      assert ValidHashInSlot(s.table, e, k');
-      assert ValidHashOrdering(s.table, e, k, k');
+      assert ValidHashInSlot(s.table, e, pos);
+      assert ValidHashOrdering(s.table, e, j, pos);
+      assert ValidHashOrdering(s.table, e, pos, k);
+
+      /*if j == pos && (pos == HT.FixedSize() - 1 ==> k == 0) && (pos < HT.FixedSize() - 1 ==> k == j + 1) {
+        assert ValidHashOrdering(s'.table, e, j, k);
+      } else if j == pos {
+        assert ValidHashOrdering(s'.table, e, j, k);
+      } else if (pos == HT.FixedSize() - 1 ==> k == 0) && (pos < HT.FixedSize() - 1 ==> k == pos + 1) {
+        if s'.table[e].value.entry.Empty? && s'.table[j].value.entry.Full? && adjust(j, e) <= adjust(k, e) && s'.table[k].value.state.Inserting? {
+          if j == k {
+            assert ValidHashOrdering(s'.table, e, j, k);
+          } else {
+            assert HT.hash(s.table[j].value.entry.kv.key)
+                == HT.hash(s'.table[j].value.entry.kv.key);
+            assert HT.hash(s.table[pos].value.state.kv.key)
+                == HT.hash(s'.table[k].value.state.kv.key);
+
+            assert s.table[e].value.entry.Empty?;
+            assert s.table[j].value.entry.Full?;
+            assert adjust(j, e) <= adjust(pos, e);
+            assert s.table[pos].value.state.Inserting?;
+
+            assert ValidHashOrdering(s.table, e, j, pos);
+            assert ValidHashOrdering(s'.table, e, j, k);
+          }
+        }
+      } else {
+        assert ValidHashOrdering(s'.table, e, j, k);
+      }*/
     }
   }
 
@@ -204,8 +241,9 @@ module ResourceStateMachine {
 
       var k' := if k > 0 then k - 1 else |s.table| - 1;
 
-      assert ValidHashInSlot(s.table, e, k');
-      assert ValidHashOrdering(s.table, e, k, k');
+      assert ValidHashInSlot(s.table, e, pos);
+      assert ValidHashOrdering(s.table, e, j, pos);
+      assert ValidHashOrdering(s.table, e, pos, k);
     }
   }
 
