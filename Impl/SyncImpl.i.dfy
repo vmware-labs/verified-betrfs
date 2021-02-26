@@ -449,11 +449,13 @@ module SyncImpl {
   ensures s.Ready? && s.W()
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
+
+  ensures old_s.frozenIndirectionTable.lSome? ==> !froze
   ensures (froze ==> 
     BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, FreezeOp))
-  ensures (!froze ==>
-    || BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp))
-    || BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.NoOp, true))
+  ensures !froze ==> (
+    || BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
+    || BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.NoOp, true)))
   {
     wait := false;
     froze := false;
