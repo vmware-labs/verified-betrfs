@@ -193,6 +193,7 @@ module IndirectionTable {
     ensures r.Inv()
     ensures r.graph == map[BT.G.Root() := []]
     ensures r.locs == map[BT.G.Root() := loc]
+    ensures r.refUpperBound ==  BT.G.Root()
     {
       linear var hashMap := LinearMutableMap.Constructor<Entry>(128);
       LinearMutableMap.Insert(inout hashMap, BT.G.Root(), Entry(Some(loc), [], 1));

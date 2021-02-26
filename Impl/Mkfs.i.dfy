@@ -61,7 +61,8 @@ module MkfsImpl {
 
     assert sectorIndirectionTable.I() == IndirectionTable(
       map[0 := nodeLoc],
-      map[0 := []]
+      map[0 := []],
+      BT.G.Root()
     );
 
     assert BC.WFCompleteIndirectionTable(sectorIndirectionTable.I());
