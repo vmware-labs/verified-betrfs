@@ -14,10 +14,12 @@ COPYING_PERMISSION_STATEMENT="SPDX-License-Identifier: MIT"
 function starts_with_bang_line() {
     FILENAME="$1"
     head -n 1 "$FILENAME" | grep "^#!" > /dev/null 2>&1
-    if [ ${PIPESTATUS[0]} != 0 ]; then
+    status=("${PIPESTATUS[@]}")
+    echo ${status[0]} ${status[1]}
+    if [ ${status[0]} != 0 ]; then
         return 2
     fi
-    return ${PIPESTATUS[1]}
+    return ${status[1]}
 }
 
 while [ $1 ]; do
