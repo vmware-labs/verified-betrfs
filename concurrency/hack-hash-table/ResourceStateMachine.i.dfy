@@ -332,15 +332,65 @@ module ResourceStateMachine {
       //assert ValidHashInSlot(s.table, pos, j);
       assert ValidHashInSlot(s.table, pos, k);
     }
-    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
-    ensures InsertionNotPastKey(s'.table, e, j, k)
-    {
-      assert InsertionNotPastKey(s.table, e, j, k);
-    }
+
+    assert ExistsEmptyEntry(s'.table);
 
     forall i | 0 <= i < |s.table| && s.table[i].value.entry.Full?
     ensures s.table[i].value.entry.kv.key != s.table[pos].value.state.kv.key
     {
+      var e :| 0 <= e < |s.table| && s'.table[e].value.entry.Empty?;
+      assert InsertionNotPastKey(s.table, e, i, pos);
+      //assert InsertionNotPastKey(s.table, e, pos, i);
+      assert ValidHashInSlot(s.table, e, pos);
+      //assert ValidHashInSlot(s.table, e, i);
+      //assert ValidHashOrdering(s.table, e, pos, i);
+      //assert ValidHashOrdering(s.table, e, i, pos);
+
+      //assert InsertionNotPastKey(s.table, pos, i, pos);
+      //assert InsertionNotPastKey(s.table, pos, pos, i);
+      //assert ValidHashInSlot(s.table, pos, pos);
+      assert ValidHashInSlot(s.table, pos, i);
+      //assert ValidHashOrdering(s.table, pos, pos, i);
+      //assert ValidHashOrdering(s.table, pos, i, pos);
+    }
+
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures InsertionNotPastKey(s'.table, e, j, k)
+    {
+      assert InsertionNotPastKey(s.table, e, j, k);
+
+      //assert InsertionNotPastKey(s.table, e, j, pos);
+      //assert InsertionNotPastKey(s.table, e, k, pos);
+      //assert InsertionNotPastKey(s.table, e, pos, j);
+      //assert InsertionNotPastKey(s.table, e, pos, k);
+      //assert InsertionNotPastKey(s.table, e, j, k);
+      //assert InsertionNotPastKey(s.table, e, k, j);
+      //assert ValidHashInSlot(s.table, e, pos);
+      assert ValidHashInSlot(s.table, e, j);
+      //assert ValidHashInSlot(s.table, e, k);
+      //assert ValidHashOrdering(s.table, e, pos, j);
+      //assert ValidHashOrdering(s.table, e, j, pos);
+      //assert ValidHashOrdering(s.table, e, pos, k);
+      //assert ValidHashOrdering(s.table, e, k, pos);
+      //assert ValidHashOrdering(s.table, e, j, k);
+      //assert ValidHashOrdering(s.table, e, k, j);
+
+      //assert InsertionNotPastKey(s.table, pos, j, pos);
+      //assert InsertionNotPastKey(s.table, pos, pos, j);
+      //assert InsertionNotPastKey(s.table, pos, k, pos);
+      //assert InsertionNotPastKey(s.table, pos, pos, k);
+      //assert InsertionNotPastKey(s.table, pos, k, j);
+      //assert InsertionNotPastKey(s.table, pos, j, k);
+      //assert ValidHashInSlot(s.table, pos, pos);
+      //assert ValidHashInSlot(s.table, pos, j);
+      assert ValidHashInSlot(s.table, pos, k);
+      //assert ValidHashOrdering(s.table, pos, pos, j);
+      //assert ValidHashOrdering(s.table, pos, j, pos);
+      //assert ValidHashOrdering(s.table, pos, pos, k);
+      //assert ValidHashOrdering(s.table, pos, k, pos);
+      //assert ValidHashOrdering(s.table, pos, j, k);
+      //assert ValidHashOrdering(s.table, pos, k, j);
+
     }
   }
 
