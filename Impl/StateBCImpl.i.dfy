@@ -198,6 +198,7 @@ module StateBCImpl {
 
     predicate Inv()
     {
+      && WFBCVars()
       && BBC.Inv(I())
     }
 
