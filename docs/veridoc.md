@@ -23,7 +23,7 @@ state machines.
 **ByteBlockCacheSystem/AsyncDiskModel.s.dfy** An async disk allows concurrent outstanding I/Os. The disk is a sequence of bytes.
 
 (Real disks constrain I/Os to fall on logical-block-address boundaries, but we're
-ignoring constraint for now.)
+ignoring that constraint for now.)
 
 
 # Implementation spec
