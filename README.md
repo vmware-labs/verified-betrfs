@@ -19,7 +19,7 @@ On-going work is focused on extending the key-value store to support cloning and
 ## Automatic setup (Linux)
 
 On Linux, use this script to install necessary tools, including an appropriately-recent
-version of `mono`. The script will also build a copy of Dafny in the local
+version of .NET. The script will also build a copy of Dafny in the local
 .dafny/ dir (using the veribetrfs variant of Dafny with support for linear
 types).
 
