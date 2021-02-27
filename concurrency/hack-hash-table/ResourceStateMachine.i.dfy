@@ -74,7 +74,7 @@ module ResourceStateMachine {
   requires 0 <= e < |table|
   requires 0 <= i < |table|
   {
-    table[e].value.entry.Empty? ==> (
+    table[e].value.entry.Empty? && !table[e].value.state.RemoveTidying? ==> (
       && (table[i].value.entry.Full? ==> (
         var h := HT.hash(table[i].value.entry.kv.key) as int;
         && (
@@ -104,7 +104,7 @@ module ResourceStateMachine {
   requires 0 <= j < |table|
   requires 0 <= k < |table|
   {
-    (table[e].value.entry.Empty? && table[j].value.entry.Full? && adjust(j, e) < adjust(k, e) ==> (
+    (table[e].value.entry.Empty? && !table[e].value.state.RemoveTidying? && table[j].value.entry.Full? && adjust(j, e) < adjust(k, e) ==> (
       var hj := HT.hash(table[j].value.entry.kv.key) as int;
 
       && (table[k].value.entry.Full? ==> (
@@ -131,7 +131,7 @@ module ResourceStateMachine {
   requires 0 <= j < |table|
   requires 0 <= k < |table|
   {
-    (table[e].value.entry.Empty? && table[j].value.entry.Full? && adjust(j, e) < adjust(k, e) ==> (
+    (table[e].value.entry.Empty? && !table[e].value.state.RemoveTidying? && table[j].value.entry.Full? && adjust(j, e) < adjust(k, e) ==> (
       // If entry 'k' has an 'Inserting' action on it, then that action must have
       // gotten past entry 'j'.
       && (table[k].value.state.Inserting? ==> (
@@ -142,7 +142,8 @@ module ResourceStateMachine {
 
   predicate ExistsEmptyEntry(table: seq<Option<HT.Info>>)
   {
-    exists i :: 0 <= i < |table| && table[i].Some? && table[i].value.entry.Empty?
+    exists e :: 0 <= e < |table| && table[e].Some? && table[e].value.entry.Empty?
+        && !table[e].value.state.RemoveTidying?
   }
 
   predicate Inv(s: Variables)
@@ -292,7 +293,8 @@ module ResourceStateMachine {
     forall i | 0 <= i < |s.table| && s.table[i].value.entry.Full?
     ensures s.table[i].value.entry.kv.key != s.table[pos].value.state.kv.key
     {
-      var e :| 0 <= e < |s.table| && s.table[e].value.entry.Empty?;
+      var e :| 0 <= e < |s.table| && s.table[e].value.entry.Empty?
+        && !s.table[e].value.state.RemoveTidying?;
       assert InsertionNotPastKey(s.table, e, i, pos);
       //assert ValidHashInSlot(s.table, e, i);
       assert ValidHashInSlot(s.table, e, pos);
@@ -338,7 +340,8 @@ module ResourceStateMachine {
     forall i | 0 <= i < |s.table| && s.table[i].value.entry.Full?
     ensures s.table[i].value.entry.kv.key != s.table[pos].value.state.kv.key
     {
-      var e :| 0 <= e < |s.table| && s'.table[e].value.entry.Empty?;
+      var e :| 0 <= e < |s.table| && s'.table[e].value.entry.Empty?
+        && !s.table[e].value.state.RemoveTidying?;
       assert InsertionNotPastKey(s.table, e, i, pos);
       //assert InsertionNotPastKey(s.table, e, pos, i);
       assert ValidHashInSlot(s.table, e, pos);
@@ -493,6 +496,153 @@ module ResourceStateMachine {
   lemma QueryNotFound_PreservesInv(s: Variables, s': Variables, pos: nat)
   requires Inv(s)
   requires HT.QueryNotFound(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures InsertionNotPastKey(s'.table, e, j, k)
+    {
+      assert InsertionNotPastKey(s.table, e, j, k);
+    }
+  }
+
+  lemma ProcessRemoveTicket_PreservesInv(s: Variables, s': Variables, remove_ticket: HT.Ticket)
+  requires Inv(s)
+  requires HT.ProcessRemoveTicket(s, s', remove_ticket)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures InsertionNotPastKey(s'.table, e, j, k)
+    {
+      assert InsertionNotPastKey(s.table, e, j, k);
+    }
+  }
+
+  lemma RemoveSkip_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.RemoveSkip(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures InsertionNotPastKey(s'.table, e, j, k)
+    {
+      assert InsertionNotPastKey(s.table, e, j, k);
+    }
+  }
+
+  lemma RemoveFoundIt_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.RemoveFoundIt(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: i != pos ==> s'.table[i].value.entry == s.table[i].value.entry;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures InsertionNotPastKey(s'.table, e, j, k)
+    {
+      assert InsertionNotPastKey(s.table, e, j, k);
+    }
+  }
+
+  lemma RemoveTidy_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.RemoveTidy(s, s', pos)
+  ensures Inv(s')
+  {
+    //assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
+
+    var pos' := if pos < |s.table| - 1 then pos + 1 else 0;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+      assert ValidHashInSlot(s.table, e, pos');
+      //assert ValidHashOrdering(s.table, e, pos, pos');
+      /*if i == pos {
+        if s'.table[e].value.entry.Empty? && !s'.table[e].value.state.RemoveTidying?
+            && s'.table[i].value.entry.Full? && s.table[pos'].value.entry.Full? {
+          var h := HT.hash(s'.table[i].value.entry.kv.key) as int;
+          assert h == HT.hash(s.table[pos'].value.entry.kv.key) as int;
+
+          assert e < h <= pos'
+           || h <= pos' < e
+           || pos' < e < h;
+
+          assert h != pos';
+
+          assert e < h <= pos
+           || h <= pos < e
+           || pos < e < h;
+
+          assert ValidHashInSlot(s'.table, e, i);
+        }
+
+        assert ValidHashInSlot(s'.table, e, i);
+      } else {
+        assert ValidHashInSlot(s'.table, e, i);
+      }*/
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures InsertionNotPastKey(s'.table, e, j, k)
+    {
+      assert InsertionNotPastKey(s.table, e, j, k);
+    }
+  }
+
+  lemma RemoveDone_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.RemoveDone(s, s', pos)
   ensures Inv(s')
   {
     assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;

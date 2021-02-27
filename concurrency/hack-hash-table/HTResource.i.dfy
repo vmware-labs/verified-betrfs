@@ -340,6 +340,9 @@ module HTResource refines ApplicationResourceSpec {
 
     // Change the program counter into RemoveTidying mode
     && var rid := s.table[pos].value.state.rid;
+    // Note: it doesn't matter what we set the entry to here, since we're going
+    // to overwrite it in the next step either way.
+    // (Might be easier to leave the entry as it is rather than set it to Empty?)
     && s' == s.(table := s.table[pos := Some(Info(Empty, RemoveTidying(rid)))])
   }
 
@@ -361,8 +364,8 @@ module HTResource refines ApplicationResourceSpec {
     || (
       && KnowRowIsFree(s, pos+1)                               // Next row is off end of the array
       && (
-        || s.table[pos].value.entry.Empty?                     // Next row is empty
-        || pos < hash(s.table[pos].value.entry.kv.key) as nat  // Next row's key can't move back
+        || s.table[pos + 1].value.entry.Empty?                     // Next row is empty
+        || pos + 1 == hash(s.table[pos + 1].value.entry.kv.key) as nat  // Next row's key can't move back
       )
     )
   }
@@ -371,6 +374,8 @@ module HTResource refines ApplicationResourceSpec {
   {
     && TidyEnabled(s, pos)
     && !DoneTidying(s, pos)
+
+    && KnowRowIsFree(s, pos+1)
 
     // Pull the entry back one slot, and push the state pointer forward one slot.
     && s' == s.(table := s.table
