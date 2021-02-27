@@ -4,8 +4,6 @@ include "DiskOpImpl.i.dfy"
 include "IOImpl.i.dfy"
 include "../Versions/VOp.i.dfy"
 
-// for when you have commitment issues
-
 module CommitterImpl {
   import JC = JournalCache
   import opened SectorType
