@@ -160,6 +160,15 @@ module ResourceStateMachine {
         :: InsertionNotPastKey(s.table, e, j, k))
   }
 
+  lemma get_empty_cell_other_than_insertion_cell(s: Variables)
+  returns (e: int)
+  requires Inv(s)
+  ensures 0 <= e < |s.table| && s.table[e].Some? && s.table[e].value.entry.Empty?
+        && !s.table[e].value.state.RemoveTidying?
+        && !s.table[e].value.state.Inserting?
+  {
+  }
+
   lemma ProcessInsertTicket_PreservesInv(s: Variables, s': Variables, insert_ticket: HT.Ticket)
   requires Inv(s)
   requires HT.ProcessInsertTicket(s, s', insert_ticket)
@@ -335,7 +344,11 @@ module ResourceStateMachine {
       assert ValidHashInSlot(s.table, pos, k);
     }
 
-    assert ExistsEmptyEntry(s'.table);
+    assert ExistsEmptyEntry(s'.table) by {
+      var e' := get_empty_cell_other_than_insertion_cell(s);
+      assert 0 <= e' < |s'.table| && s'.table[e'].Some? && s'.table[e'].value.entry.Empty?
+            && !s'.table[e'].value.state.RemoveTidying?;
+    }
 
     forall i | 0 <= i < |s.table| && s.table[i].value.entry.Full?
     ensures s.table[i].value.entry.kv.key != s.table[pos].value.state.kv.key
@@ -594,7 +607,12 @@ module ResourceStateMachine {
   requires HT.RemoveTidy(s, s', pos)
   ensures Inv(s')
   {
-    //assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
+    assert ExistsEmptyEntry(s'.table) by {
+      var e :| 0 <= e < |s.table| && s.table[e].Some? && s.table[e].value.entry.Empty?
+        && !s.table[e].value.state.RemoveTidying?;
+      assert 0 <= e < |s'.table| && s'.table[e].Some? && s'.table[e].value.entry.Empty?
+        && !s'.table[e].value.state.RemoveTidying?;
+    }
 
     var pos' := if pos < |s.table| - 1 then pos + 1 else 0;
 
@@ -632,11 +650,15 @@ module ResourceStateMachine {
     ensures ValidHashOrdering(s'.table, e, j, k)
     {
       assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashOrdering(s.table, e, pos', k);
+      assert ValidHashOrdering(s.table, e, j, pos');
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
     ensures InsertionNotPastKey(s'.table, e, j, k)
     {
       assert InsertionNotPastKey(s.table, e, j, k);
+      assert InsertionNotPastKey(s.table, e, pos', k);
+      assert InsertionNotPastKey(s.table, e, j, pos');
     }
   }
 
@@ -647,10 +669,51 @@ module ResourceStateMachine {
   {
     assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
 
+    var pos' := if pos < |s.table| - 1 then pos + 1 else 0;
+
+    assert s'.table[pos].value.entry.Empty?;
+
     forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
     ensures ValidHashInSlot(s'.table, e, i)
     {
+      var e' := get_empty_cell_other_than_insertion_cell(s);
+      
       assert ValidHashInSlot(s.table, e, i);
+      //assert ValidHashInSlot(s.table, i, e);
+
+      assert ValidHashInSlot(s.table, pos', i);
+      assert ValidHashOrdering(s.table, e', pos', i);
+      //assert ValidHashOrdering(s.table, e', i, pos');
+
+      //assert ValidHashInSlot(s.table, pos, i);
+      //assert ValidHashOrdering(s.table, e', pos, i);
+      //assert ValidHashOrdering(s.table, e', i, pos);
+
+      assert ValidHashInSlot(s.table, e', i);
+      //assert ValidHashInSlot(s.table, i, e');
+
+      //assert ValidHashInSlot(s.table, e', pos');
+      //assert ValidHashInSlot(s.table, pos', e');
+
+      /*if e == pos {
+        if i == pos' {
+          assert ValidHashInSlot(s'.table, e, i);
+        } else {
+          if s.table[pos'].value.entry.Full? {
+            if adjust(i, pos) < adjust(e', pos) {
+              assert ValidHashInSlot(s'.table, e, i);
+            } else if i == e' {
+              assert ValidHashInSlot(s'.table, e, i);
+            } else {
+              assert ValidHashInSlot(s'.table, e, i);
+            }
+          } else {
+            assert ValidHashInSlot(s'.table, e, i);
+          }
+        }
+      } else {
+        assert ValidHashInSlot(s'.table, e, i);
+      }*/
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
     ensures ValidHashOrdering(s'.table, e, j, k)

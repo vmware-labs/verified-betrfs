@@ -360,13 +360,11 @@ module HTResource refines ApplicationResourceSpec {
   predicate DoneTidying(s: R, pos: nat)
     requires TidyEnabled(s, pos)
   {
-    || (pos == FixedSize() - 1)
-    || (
-      && KnowRowIsFree(s, pos+1)                               // Next row is off end of the array
-      && (
-        || s.table[pos + 1].value.entry.Empty?                     // Next row is empty
-        || pos + 1 == hash(s.table[pos + 1].value.entry.kv.key) as nat  // Next row's key can't move back
-      )
+    var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
+    && KnowRowIsFree(s, pos')
+    && (
+      || s.table[pos'].value.entry.Empty?                     // Next row is empty
+      || pos' == hash(s.table[pos'].value.entry.kv.key) as nat  // Next row's key can't move back
     )
   }
 
@@ -375,12 +373,13 @@ module HTResource refines ApplicationResourceSpec {
     && TidyEnabled(s, pos)
     && !DoneTidying(s, pos)
 
-    && KnowRowIsFree(s, pos+1)
+    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
+    && KnowRowIsFree(s, pos')
 
     // Pull the entry back one slot, and push the state pointer forward one slot.
     && s' == s.(table := s.table
-      [pos := Some(Info(s.table[pos+1].value.entry, Free))]
-      [pos+1 := Some(Info(Empty, s.table[pos].value.state))]
+      [pos := Some(Info(s.table[pos'].value.entry, Free))]
+      [pos' := Some(Info(Empty, s.table[pos].value.state))]
       )
   }
 
