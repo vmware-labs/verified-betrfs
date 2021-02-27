@@ -1,3 +1,19 @@
+# Verified BetrFS
+
+Verified BetrFS (VeriBetrFS) is a verified file system based on the design of [BetrFS](http://betrfs.org).
+
+VeriBetrFS is implemented in [dafny](https://github.com/dafny-lang/dafny), which supports specifying and proving functional correctness.
+
+VeriBetrFS uses the [IronFleet](https://www.microsoft.com/en-us/research/publication/ironfleet-proving-practical-distributed-systems-correct/) methodology to prove strong crash-safety guarantees.
+
+# Current status
+
+Like BetrFS, VeriBetrFS implements a file system on top of a B^e-tree-based key-value store.
+
+VeriBetrFS currently includes a verified key-value store.
+
+On-going work is focused on extending the key-value store to support cloning and to build the file-system layer.
+
 # Setting things up
 
 ## Automatic setup (Linux)

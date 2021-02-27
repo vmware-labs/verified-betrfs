@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "../Lang/NativeTypes.s.dfy"
 include "../Lang/System/NativeArrays.s.dfy"
 include "../Base/Option.s.dfy"

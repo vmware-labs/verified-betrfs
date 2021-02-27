@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "total_order.i.dfy"
  
 abstract module Lexical_Order refines Total_Order {

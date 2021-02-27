@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: MIT
+
+
 while getopts ":t:p:f:h:d:" opt; do
   case $opt in
     t) timelimit="$OPTARG" ;;

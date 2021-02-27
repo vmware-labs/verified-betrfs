@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "../lib/Base/KeyType.s.dfy"
 
 // Defines the "UI Op", used as labels on transitions of many of our

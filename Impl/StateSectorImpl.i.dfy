@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "NodeImpl.i.dfy"
 include "IndirectionTable.i.dfy"
 include "StateSectorModel.i.dfy"

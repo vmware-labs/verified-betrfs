@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
   // method SplitChildOfIndex(linear node: Node, childidx: uint64)
   //   returns (linear splitNode: Node)
   //   requires WF(node)

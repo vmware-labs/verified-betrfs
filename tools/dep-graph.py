@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: MIT
+
 # Args: dep-graph <synchk|verchk> root.dfy output.dot
 # Gather the syntax or verification check output for all dfy files reachable
 # from root.dfy. Construct a GraphViz dot file as output.

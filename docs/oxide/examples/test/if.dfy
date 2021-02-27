@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 linear datatype ASDF = ASDF(a: int)
 linear datatype QWER = QWER(linear asdf: ASDF)
 

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 #pragma once
 #include "BundleWrapper.h"
 #include "DafnyRuntime.h"

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "../BlockCacheSystem/BlockSystem.i.dfy"
 include "../Versions/StatesView.i.dfy"
 include "../lib/Base/Maps.i.dfy"

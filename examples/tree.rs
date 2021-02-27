@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 #[allow(dead_code)]
 
 extern crate prusti_contracts;

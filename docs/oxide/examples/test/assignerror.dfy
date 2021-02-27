@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 datatype A = A(v: nat)
 linear datatype B = B(a: A)
 

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 module Mathematics {
 
 	function min(a: int, b: int) : int

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 module NativeTypes {
   newtype{:nativeType "sbyte"} sbyte = i:int | -0x80 <= i < 0x80
   newtype{:nativeType "byte"} byte = i:int | 0 <= i < 0x100

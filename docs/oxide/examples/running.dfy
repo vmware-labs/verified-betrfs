@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 
 method {:extern} Assign<V>(inout v: V, newV: V)
 ensures v == newV

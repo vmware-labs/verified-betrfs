@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "../lib/NativeTypes.s.dfy"
 include "../lib/MutableMap.i.dfy"
 include "../lib/Option.s.dfy"

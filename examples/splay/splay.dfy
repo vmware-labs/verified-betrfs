@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 method
 {:fuel is_structurally_valid,0,0} {:fuel value_set,0,0}
 splay(node: Node,

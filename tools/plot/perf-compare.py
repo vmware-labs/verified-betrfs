@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: MIT
+
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 using System;
 using System.Diagnostics;
 using System.Collections.Generic;

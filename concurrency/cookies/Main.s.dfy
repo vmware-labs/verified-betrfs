@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 abstract module Main(ARS: ApplicationResourceSpec) {
   type Object(==,!new)
   predicate Inv(o: Object)

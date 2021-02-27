@@ -22,9 +22,10 @@ function starts_with_bang_line() {
 }
 
 while [ $1 ]; do
-    FILENAME="$1"
+    FULLPATH="$1"
     shift
 
+    FILENAME=`basename "$FULLPATH"`
     TMPSUFFIX="${FILENAME##*.}"
     SUFFIX="${TMPSUFFIX,,}"
     COMMENT_PREFIX=""
@@ -39,8 +40,16 @@ while [ $1 ]; do
         COMMENT_PREFIX="//"
     elif [ "$SUFFIX" == "hpp" ]; then
         COMMENT_PREFIX="//"
+    elif [ "$SUFFIX" == "cs" ]; then
+        COMMENT_PREFIX="//"
+    elif [ "$SUFFIX" == "rs" ]; then
+        COMMENT_PREFIX="//"
+    elif [ "$SUFFIX" == "vpr" ]; then
+        COMMENT_PREFIX="//"
+    elif [ "$SUFFIX" == "makefile" ]; then
+        COMMENT_PREFIX="#"
     elif [ "$SUFFIX" == "sh" ]; then
-        starts_with_bang_line "$FILENAME"
+        starts_with_bang_line "$FULLPATH"
         RESULT=$?
         if [ $RESULT == 0 ]; then
             BANGLINES=1
@@ -49,7 +58,7 @@ while [ $1 ]; do
         fi
         COMMENT_PREFIX="#"
     elif [ "$SUFFIX" == "py" ]; then
-        starts_with_bang_line "$FILENAME"
+        starts_with_bang_line "$FULLPATH"
         RESULT=$?
         if [ $RESULT == 0 ]; then
             BANGLINES=1
@@ -59,9 +68,9 @@ while [ $1 ]; do
         COMMENT_PREFIX="#"
     fi
 
-    grep -F -m 1 "$COPYRIGHT_NOTICE" "$FILENAME" > /dev/null 2>&1
+    grep -F -m 1 "$COPYRIGHT_NOTICE" "$FULLPATH" > /dev/null 2>&1
     CONTAINS_COPYRIGHT_NOTICE=$?
-    grep -F -m 1 "$COPYING_PERMISSION_STATEMENT" "$FILENAME" > /dev/null 2>&1
+    grep -F -m 1 "$COPYING_PERMISSION_STATEMENT" "$FULLPATH" > /dev/null 2>&1
     CONTAINS_COPYING_PERMISSION_STATEMENT=$?
 
     if [ $CONTAINS_COPYRIGHT_NOTICE != 1 ]; then
@@ -73,13 +82,13 @@ while [ $1 ]; do
 
     if [ "$COMMENT_PREFIX" ]; then
         TMPFILE=`mktemp` &&
-        head -n $BANGLINES "$FILENAME" > "$TMPFILE" &&
+        head -n $BANGLINES "$FULLPATH" > "$TMPFILE" &&
         if [ $BANGLINES -gt 0 ]; then echo >> "$TMPFILE"; fi &&
         echo "$COMMENT_PREFIX" "$COPYRIGHT_NOTICE" >> "$TMPFILE" &&
         echo "$COMMENT_PREFIX" "$COPYING_PERMISSION_STATEMENT" >> "$TMPFILE" &&
         echo >> "$TMPFILE" &&
-        tail -n +"$[ $BANGLINES + 1 ]" "$FILENAME" >> "$TMPFILE" &&
-        $DRY_RUN cp "$TMPFILE" "$FILENAME"
+        tail -n +"$[ $BANGLINES + 1 ]" "$FULLPATH" >> "$TMPFILE" &&
+        $DRY_RUN cp "$TMPFILE" "$FULLPATH"
     fi
 
 done

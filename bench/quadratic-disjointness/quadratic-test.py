@@ -1,4 +1,8 @@
 #!/usr/bin/python3
+
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: MIT
+
 import time
 import os
 import subprocess

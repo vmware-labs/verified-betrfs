@@ -1,3 +1,6 @@
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: MIT
+
 import argparse
 import os
 import re

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "InterpretationDiskOps.i.dfy"
 include "InterpretationDiskContents.i.dfy"
 include "AsyncDiskModel.s.dfy"

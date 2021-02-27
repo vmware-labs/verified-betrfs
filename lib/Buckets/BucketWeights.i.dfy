@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "../Base/Sets.i.dfy"
 include "../Base/Multisets.i.dfy"
 include "BucketsLib.i.dfy"

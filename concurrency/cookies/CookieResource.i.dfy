@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 module CookieResource refines ApplicationResourceSpec(CookieIfc) {
   datatype R =
     | ButterAndSugar(rid: RequestId, butter: nat, sugar: nat)

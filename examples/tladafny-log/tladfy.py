@@ -1,3 +1,6 @@
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: MIT
+
 import sys, re
 from parsy import seq, string, regex, generate
 

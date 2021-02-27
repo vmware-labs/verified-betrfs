@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "ResourceSpec.s.dfy"
 include "../../lib/Base/Multisets.i.dfy"
 include "../../lib/Base/Option.s.dfy"

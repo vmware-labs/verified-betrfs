@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "tttree.i.dfy"
 
 module Integer_TTTree refines TwoThreeTree {

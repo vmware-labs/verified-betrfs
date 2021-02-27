@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: MIT
+
 """
 line_counter.py: attribute lines of veribetrfs source as {spec,code,proof}.
 Emulates counting policy from IronFleet to facilitate comparison.

@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: MIT
+
 # example: rename.sh MapSpec.s.dfy
 newname=$1
 basename=`echo $newname | sed s/\.[is].dfy$/.dfy/`

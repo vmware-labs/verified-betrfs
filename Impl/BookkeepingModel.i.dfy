@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "IOModel.i.dfy"
 include "../lib/Base/Sets.i.dfy"
 

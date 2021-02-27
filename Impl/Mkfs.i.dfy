@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "../ByteBlockCacheSystem/Marshalling.i.dfy"
 include "StateSectorImpl.i.dfy"
 include "MarshallingImpl.i.dfy"

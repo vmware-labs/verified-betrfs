@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "StateBCImpl.i.dfy"
 include "StateModel.i.dfy"
 include "CommitterImpl.i.dfy"

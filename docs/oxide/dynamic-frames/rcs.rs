@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 use std::cell::RefCell;
 use std::rc::Rc;
 

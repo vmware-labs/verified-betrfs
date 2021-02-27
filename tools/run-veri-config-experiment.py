@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: MIT
+
+
 from __future__ import print_function
 from __future__ import division
 

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 module Disk {
   datatype DiskOp<LBA(==), Sector> =
     | WriteOp(lba: LBA, sector: Sector)

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 // Needs to be compiled with -msse4.2
 
 // From https://github.com/komrad36/CRC

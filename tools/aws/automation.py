@@ -1,3 +1,6 @@
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: MIT
+
 SSH_ID_PEM="~/.ssh/veribetrfsbastion.pem"
 
 import json

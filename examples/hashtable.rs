@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 // compile with `rustc --edition=2018 --test hashtable.rs`
 
 use std::hash::{Hash, Hasher};

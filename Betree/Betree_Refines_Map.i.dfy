@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "../Betree/Betree.i.dfy"
 include "../MapSpec/MapSpec.s.dfy"
 include "../Betree/BetreeInv.i.dfy"

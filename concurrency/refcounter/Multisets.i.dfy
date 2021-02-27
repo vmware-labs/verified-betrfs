@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 module Multisets {
   function Count<A>(fn: A ~> bool, s: multiset<A>) : nat
 

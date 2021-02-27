@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 linear datatype A = A(v: int)
 linear datatype B = B(linear a: A)
 

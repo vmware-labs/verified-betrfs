@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: MIT
+
 #
 # Run this script as root (sudo tools/prep-environment) to install a recent
 # version of mono and a few other necessary tools.

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "../lib/Lang/NativeTypes.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../PivotBetree/Bounds.i.dfy"

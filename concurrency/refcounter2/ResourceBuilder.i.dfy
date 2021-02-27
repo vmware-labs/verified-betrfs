@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "Frac.s.dfy"
 include "ResourceSpec.s.dfy"
 include "LinearMap.s.dfy"

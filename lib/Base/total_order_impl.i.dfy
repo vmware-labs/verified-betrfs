@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "../Lang/NativeTypes.s.dfy"
 include "total_order.i.dfy"
 include "../Lang/LinearSequence.s.dfy"

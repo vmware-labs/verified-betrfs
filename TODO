@@ -1,17 +1,10 @@
 lifting
 basement nodes
 - sub-blocks
-make sure marshalling code verifies
-finish split and merge based on redirect
 generalize splay tree
 fragmentation
 routing filters
 sstables
-all kinds of implementation stuff
-- cache w/ lru
-- implementation version of pivot-y betree
-add i/o errors to model
-add asynchronous i/o to model
 concurrency
 
 When can we benchmark performance
@@ -25,34 +18,19 @@ When can we benchmark performance
 
 3. Unrealistic superblock
 
-3.5 hashmap (mutable)
-
-4. checksummed blocks
-
 13. partial reads/writes
 
 5. sub-block query reads
    - bloom filters
 
-6. more serious benchmark
-   - ycsb
-   - range queries
-
 7. avoid needless log n descent
-
-8. async disk model
-8.5 async implementation
 
 9. mutable buffers at root
 
 10. efficient mechanism to merge buffers
     - mutable vectors
 
-11. log for low-latency sync
-
 12. GC pause benchmark
-
-14. C++ backend
 
 Publication
 -----------
@@ -63,12 +41,7 @@ Publication
 
 - key lifting and file system layer
 
-- extend crash semantics to include torn write
-
-
 Maintainability
 ---------------
 
-- .s vs .i separation
-- .i /noCheating
 - clean up probably duplicate code in lib

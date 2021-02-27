@@ -1,3 +1,6 @@
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: MIT
+
 .DEFAULT_GOAL := build/libycsbc-default.a
 
 # libycsbc-default is compatible with the default standard library

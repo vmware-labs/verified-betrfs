@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "LinearBox.s.dfy"
 include "LinearMaybe.s.dfy"
 include "../Base/LinearOption.i.dfy"

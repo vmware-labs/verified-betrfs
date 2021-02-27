@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "ArrayPtr.s.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "Constants.i.dfy"

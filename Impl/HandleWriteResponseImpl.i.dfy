@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "CommitterImpl.i.dfy"
 include "HandleWriteResponseModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"

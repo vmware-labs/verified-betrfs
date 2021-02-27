@@ -1,3 +1,6 @@
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: MIT
+
 # Definitions from IronFleet to ensure that results are comparable.
 # Based on:
 # https://github.com/microsoft/Ironclad/blob/master/ironfleet/tools/scripts/dafny-line-count.py

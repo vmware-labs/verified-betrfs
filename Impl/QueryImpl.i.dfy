@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "SyncImpl.i.dfy"
 include "QueryModel.i.dfy"
 include "EvictImpl.i.dfy"

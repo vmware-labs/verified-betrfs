@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 abstract module StateMachineRefinement(
   _v1: Ifc, // L.Ifc == H.Ifc
   L: StateMachine(_v1),

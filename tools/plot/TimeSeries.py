@@ -1,3 +1,6 @@
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: MIT
+
 from PlotHelper import *    # scale prefixes such as Kilo
 
 Time = "time"

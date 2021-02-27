@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "../MapSpec/UI.s.dfy"
 
 // Abstract module for state machines with transitions labeled by UIOps.

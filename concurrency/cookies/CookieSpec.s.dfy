@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 module CookieIfc refines InputOutputIfc {
   datatype Input = Input(butter: nat, sugar: nat)
   datatype Output = Output(cookies: nat)

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "StateSectorImpl.i.dfy"
 include "../lib/Buckets/BucketImpl.i.dfy"

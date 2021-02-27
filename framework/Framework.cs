@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 using MainHandlers_Compile;
 using MainDiskIOHandler_Compile;
 using UI_Compile;

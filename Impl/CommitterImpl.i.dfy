@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "../lib/DataStructures/LinearMutableMap.i.dfy"
 include "JournalistImpl.i.dfy"
 include "DiskOpImpl.i.dfy"

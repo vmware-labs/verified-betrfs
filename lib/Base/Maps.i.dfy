@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 // TODO(rob): Split into Maps and IMaps
 
 include "Option.s.dfy"

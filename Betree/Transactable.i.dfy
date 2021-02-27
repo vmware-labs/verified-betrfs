@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "../lib/Base/sequences.i.dfy"
 include "../Betree/Graph.i.dfy"
 //

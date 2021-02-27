@@ -1,3 +1,6 @@
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: MIT
+
 dfys := $(patsubst src/%.dfy,dfy/%.dfy,$(wildcard src/*.dfy))
 targets := $(patsubst src/%.dfy,build/%.success,$(wildcard src/*.dfy))
 

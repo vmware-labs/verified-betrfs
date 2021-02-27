@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 
 datatype Thing = Thing(things: array<Thing>, other: set<int>, ghost repr: set<object>)
 

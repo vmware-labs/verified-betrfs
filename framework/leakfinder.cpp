@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 #include <unordered_map>
 #include <execinfo.h>
 #include <string.h>

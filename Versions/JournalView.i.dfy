@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "../MapSpec/UIStateMachine.s.dfy"
 include "../MapSpec/Journal.i.dfy"
 include "../lib/Base/Option.s.dfy"

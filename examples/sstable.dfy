@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 include "../lib/sequences.s.dfy"
 include "../lib/total_order.s.dfy"
 include "../lib/lexical.i.dfy"

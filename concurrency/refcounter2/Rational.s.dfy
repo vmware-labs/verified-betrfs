@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 module Rationals {
   export Spec provides PositiveNat, add, lt, minus, one
       reveals PositiveRational

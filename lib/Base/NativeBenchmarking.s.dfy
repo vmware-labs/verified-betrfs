@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: MIT
+
 // Some utilities for benchmarking via explicit instrumentation.
 
 module {:extern} NativeBenchmarking {
