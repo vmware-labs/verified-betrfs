@@ -19,9 +19,8 @@ function apt_based_install() {
     rm packages-microsoft-prod.deb
     apt-get update
     apt-get install -y dotnet-sdk-5.0
+    exit 0
 }
-
-# We welcome patches to add support for rpm-based distros...
 
 if [ -f /etc/os-release ]; then
     . /etc/os-release
@@ -30,7 +29,6 @@ if [ -f /etc/os-release ]; then
     elif [ "$ID" == "ubuntu" ]; then
         apt_based_install
     fi
-else
-    # We welcome patches to identify distributions that don't have /etc/os-release...
-    echo "Could not identify Linux distribution."
 fi
+
+echo "Could not identify Linux distribution."
