@@ -400,6 +400,7 @@ module HTResource refines ApplicationResourceSpec {
     && var h: uint32 := hash(query_ticket.input.key);
     && 0 <= h as int < FixedSize()
     && s.table[h].Some?
+    && s.table[h].value.state.Free?
     && s' == s
       .(tickets := s.tickets - multiset{query_ticket})
       .(table := s.table[h := Some(
@@ -420,7 +421,7 @@ module HTResource refines ApplicationResourceSpec {
 
     && s' == s.(table := s.table
         [pos := Some(s.table[pos].value.(state := Free))]
-        [pos + 1 := Some(s.table[pos].value.(state := s.table[pos].value.state))])
+        [pos + 1 := Some(s.table[pos + 1].value.(state := s.table[pos].value.state))])
   }
 
   predicate QueryDone(s: R, s': R, pos: nat)

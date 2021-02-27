@@ -418,6 +418,100 @@ module ResourceStateMachine {
     }
   }
 
+  lemma ProcessQueryTicket_PreservesInv(s: Variables, s': Variables, query_ticket: HT.Ticket)
+  requires Inv(s)
+  requires HT.ProcessQueryTicket(s, s', query_ticket)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
 
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures InsertionNotPastKey(s'.table, e, j, k)
+    {
+      assert InsertionNotPastKey(s.table, e, j, k);
+    }
+  }
+
+  lemma QuerySkip_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.QuerySkip(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures InsertionNotPastKey(s'.table, e, j, k)
+    {
+      assert InsertionNotPastKey(s.table, e, j, k);
+    }
+  }
+
+  lemma QueryDone_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.QueryDone(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures InsertionNotPastKey(s'.table, e, j, k)
+    {
+      assert InsertionNotPastKey(s.table, e, j, k);
+    }
+  }
+
+  lemma QueryNotFound_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.QueryNotFound(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures InsertionNotPastKey(s'.table, e, j, k)
+    {
+      assert InsertionNotPastKey(s.table, e, j, k);
+    }
+  }
 
 }
