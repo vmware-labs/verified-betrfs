@@ -11,7 +11,7 @@ set -e
 
 function apt_based_install() {
     apt-get update
-    apt-get install wget time make unzip graphviz apt-transport-https python3-pip
+    apt-get install -y wget time make unzip graphviz apt-transport-https python3-pip clang libc++-dev
     pip3 install toposort
     # Derived from https://docs.microsoft.com/en-us/dotnet/core/install/linux-debian
     wget https://packages.microsoft.com/config/${ID}/${VERSION_ID}/packages-microsoft-prod.deb -O packages-microsoft-prod.deb

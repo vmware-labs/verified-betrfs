@@ -24,7 +24,8 @@ version of .NET. The script will also build a copy of Dafny in the local
 types).
 
 ```
-sudo tools/prep-environment.sh
+sudo ./tools/prep-environment.sh
+./tools/install-dafny.sh
 ```
 
 ## Manual setup (Mac, Linux)
