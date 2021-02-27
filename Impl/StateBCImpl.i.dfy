@@ -160,23 +160,20 @@ module StateBCImpl {
       )
     }
 
-    predicate WFVarsReady()
-    requires Ready?
-    requires W()
-    {
-      && LruModel.WF(lru.Queue())
-      && LruModel.I(lru.Queue()) == cache.I().Keys
-      && totalCacheSize() <= MaxCacheSize()
-      && ephemeralIndirectionTable.TrackingGarbage()
-      && BlockAllocatorModel.Inv(blockAllocator.I())
-      && ConsistentBitmap()
-      && WFCache(cache.I())
-    }
-
     predicate WFBCVars()
     {
       && W()
-      && (Ready? ==> WFVarsReady())
+      && (Ready? ==> 
+        (
+          && LruModel.WF(lru.Queue())
+          && LruModel.I(lru.Queue()) == cache.I().Keys
+          && totalCacheSize() <= MaxCacheSize()
+          && ephemeralIndirectionTable.TrackingGarbage()
+          && BlockAllocatorModel.Inv(blockAllocator.I())
+          && ConsistentBitmap()
+          && WFCache(cache.I())
+        )
+      )
     }
 
     function I() : BBC.Variables
@@ -201,7 +198,6 @@ module StateBCImpl {
 
     predicate Inv()
     {
-      && WFBCVars()
       && BBC.Inv(I())
     }
 
