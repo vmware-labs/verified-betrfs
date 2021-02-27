@@ -1,5 +1,5 @@
 // Copyright 2018-2021 VMware, Inc.
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSD-2-Clause
 
 module ResourceSM(ARS : ApplicationResourceSpec) refines StateMachine(AsyncIfc(ARS.Ifc)) {
   datatype Variables = multiset<ARS.R>

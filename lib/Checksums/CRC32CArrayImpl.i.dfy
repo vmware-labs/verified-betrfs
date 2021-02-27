@@ -1,5 +1,5 @@
 // Copyright 2018-2021 VMware, Inc.
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSD-2-Clause
 
 include "CRC32C.s.dfy"
 include "../Lang/System/PackedInts.s.dfy"

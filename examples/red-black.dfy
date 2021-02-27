@@ -1,5 +1,5 @@
 // Copyright 2018-2021 VMware, Inc.
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSD-2-Clause
 
 predicate method Less<Value>(a:Value, b:Value)
     // How do we insist that Value is a functional (non heap) type?

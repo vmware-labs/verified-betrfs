@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Copyright 2018-2021 VMware, Inc.
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: BSD-2-Clause
 
 #
 # Run this script as root (sudo tools/prep-environment.sh) to install a recent

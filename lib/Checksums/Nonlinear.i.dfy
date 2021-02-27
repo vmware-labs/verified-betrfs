@@ -1,5 +1,5 @@
 // Copyright 2018-2021 VMware, Inc.
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSD-2-Clause
 
 // This file is meant to be run with nonlinear-arithmetic enabled in z3.
 // It only exports really basic lemmas (commutativity, associativity, etc.)

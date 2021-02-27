@@ -1,7 +1,7 @@
 #! /bin/bash
 
 # Copyright 2018-2021 VMware, Inc.
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: BSD-2-Clause
 
 
 # NOTE: pass the sampling rate (Hz) as first argument, followed by parameters to the benchmarker (i.e. ./tools/run-perf-docker.sh 1000 --benchmark=random-inserts)

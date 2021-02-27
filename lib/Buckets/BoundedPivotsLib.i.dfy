@@ -1,5 +1,5 @@
 // Copyright 2018-2021 VMware, Inc.
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSD-2-Clause
 
 include "../Base/total_order_impl.i.dfy"
 include "../Base/KeyType.s.dfy"

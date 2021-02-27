@@ -1,5 +1,5 @@
 // Copyright 2018-2021 VMware, Inc.
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSD-2-Clause
 
 // Copyright (c) Damien Guard.  All rights reserved.
 // This code is adapted from https://github.com/force-net/Crc32.NET and distributed under the MIT license:

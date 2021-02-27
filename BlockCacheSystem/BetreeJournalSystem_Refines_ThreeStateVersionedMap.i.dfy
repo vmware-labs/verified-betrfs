@@ -1,5 +1,5 @@
 // Copyright 2018-2021 VMware, Inc.
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSD-2-Clause
 
 include "BetreeJournalSystem_Refines_CompositeView.i.dfy"
 include "../Versions/CompositeView_Refines_ThreeStateVersionedMap.i.dfy"
