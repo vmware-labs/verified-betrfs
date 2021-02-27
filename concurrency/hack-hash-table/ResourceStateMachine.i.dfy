@@ -718,12 +718,37 @@ module ResourceStateMachine {
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
     ensures ValidHashOrdering(s'.table, e, j, k)
     {
+      var e' := get_empty_cell_other_than_insertion_cell(s);
+
       assert ValidHashOrdering(s.table, e, j, k);
+
+      assert ValidHashOrdering(s.table, e', j, k);
+      //assert ValidHashOrdering(s.table, e', k, j);
+
+      assert ValidHashInSlot(s.table, pos', j);
+      assert ValidHashOrdering(s.table, e', pos', j);
+      //assert ValidHashInSlot(s.table, e', j);
+
+      //assert ValidHashInSlot(s.table, pos', k);
+      //assert ValidHashOrdering(s.table, e', pos', k);
+      assert ValidHashInSlot(s.table, e', k);
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
     ensures InsertionNotPastKey(s'.table, e, j, k)
     {
+      var e' := get_empty_cell_other_than_insertion_cell(s);
+
       assert InsertionNotPastKey(s.table, e, j, k);
+
+      //assert ValidHashOrdering(s.table, e, j, k);
+      //assert ValidHashOrdering(s.table, e', j, k);
+      assert ValidHashInSlot(s.table, pos', j);
+      assert ValidHashOrdering(s.table, e', pos', j);
+      assert ValidHashInSlot(s.table, e', k);
+
+      //assert InsertionNotPastKey(s.table, e, j, k);
+      assert InsertionNotPastKey(s.table, e', j, k);
+      //assert InsertionNotPastKey(s.table, e', pos', j);
     }
   }
 
