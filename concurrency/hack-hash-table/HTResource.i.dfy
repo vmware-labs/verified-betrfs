@@ -411,17 +411,18 @@ module HTResource refines ApplicationResourceSpec {
   predicate QuerySkip(s: R, s': R, pos: nat)
   {
     && !s.Fail?
-    && 0 <= pos < FixedSize() - 1
+    && 0 <= pos < FixedSize()
+    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
     && s.table[pos].Some?
-    && s.table[pos + 1].Some?
+    && s.table[pos'].Some?
     && s.table[pos].value.state.Querying?
     && s.table[pos].value.entry.Full?
     && s.table[pos].value.state.key != s.table[pos].value.entry.kv.key
-    && s.table[pos + 1].value.state.Free?
+    && s.table[pos'].value.state.Free?
 
     && s' == s.(table := s.table
         [pos := Some(s.table[pos].value.(state := Free))]
-        [pos + 1 := Some(s.table[pos + 1].value.(state := s.table[pos].value.state))])
+        [pos' := Some(s.table[pos'].value.(state := s.table[pos].value.state))])
   }
 
   predicate QueryDone(s: R, s': R, pos: nat)
