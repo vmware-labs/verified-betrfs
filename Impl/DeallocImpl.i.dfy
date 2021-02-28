@@ -17,14 +17,13 @@ module DeallocImpl {
 
   import LruModel
 
-  // import opened StateSectorModel
   import opened IOModel
   import opened DiskOpModel
-  // import opened BookkeepingModel
   import opened ViewOp
   import opened InterpretationDiskOps
 
   import opened NativeTypes
+
   method Dealloc(linear inout s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
   requires old_s.Inv()
   requires io.initialized()
@@ -32,7 +31,7 @@ module DeallocImpl {
   requires old_s.ephemeralIndirectionTable.deallocable(ref)
 
   modifies io
-  ensures s.W()
+  ensures s.WFBCVars()
   ensures s.Ready?
   ensures 
     var dop := diskOp(IIO(io));
@@ -62,12 +61,21 @@ module DeallocImpl {
 
       var oldLoc := inout s.ephemeralIndirectionTable.RemoveRef(ref);
 
+      LruModel.LruRemove(s.lru.Queue(), ref);
       inout s.lru.Remove(ref);
       inout s.cache.Remove(ref);
 
       if oldLoc.Some? {
         inout s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / NodeBlockSizeUint64());
       }
+
+      freeIndirectionTableLocCorrect(old_s, s, ref,
+        if oldLoc.Some?
+        then Some(oldLoc.value.addr as int / NodeBlockSize())
+        else None);
+      reveal ConsistentBitmapInteral();
+
+      assert s.WFBCVars();
 
       ghost var iDiskOp := IDiskOp(diskOp(IIO(io))).bdop;
       assert BC.Unalloc(old_s.I(), s.I(), iDiskOp, AdvanceOp(UI.NoOp, true), ref);
