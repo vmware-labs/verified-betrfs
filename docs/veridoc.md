@@ -383,7 +383,7 @@ from map<Reference, Node>.
 
 **Impl/BookkeepingImpl.i.dfy** 
 
-**Impl/CommitterImpl.i.dfy** for when you have commitment issues
+**Impl/CommitterImpl.i.dfy** 
 
 **Impl/DeallocImpl.i.dfy** 
 
