@@ -6,6 +6,10 @@ VeriBetrFS is implemented in [dafny](https://github.com/dafny-lang/dafny), which
 
 VeriBetrFS uses the [IronFleet](https://www.microsoft.com/en-us/research/publication/ironfleet-proving-practical-distributed-systems-correct/) methodology to prove strong crash-safety guarantees.
 
+# Publications
+
+[Storage Systems are Distributed Systems (So Verify Them That Way!)](https://www.usenix.org/conference/osdi20/presentation/hance).  Travis Hance, Andrea Lattuada, Chris Hawblitzel, Jon Howell, Rob Johnson, and Bryan Parno. OSDI 2020.
+
 # Current status
 
 Like BetrFS, VeriBetrFS implements a file system on top of a B^e-tree-based key-value store.
