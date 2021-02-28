@@ -104,7 +104,7 @@ module SyncImpl {
   }
 
   method AssignRefToLocEphemeral(linear inout s: ImplVariables, ref: BT.G.Reference, loc: Location)
-  requires old_s.W() && old_s.Ready?
+  requires old_s.WFBCVars() && old_s.Ready?
   requires old_s.ConsistentBitmap()
 
   requires ValidNodeLocation(loc);
@@ -112,7 +112,7 @@ module SyncImpl {
 
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
 
-  ensures s.W() && s.Ready?
+  ensures s.WFBCVars() && s.Ready?
   ensures s.ConsistentBitmap()
   ensures BlockAllocatorModel.Inv(s.blockAllocator.I())
   ensures var old_gs := old_s.I();
@@ -163,14 +163,14 @@ module SyncImpl {
   }
 
   method AssignRefToLocFrozen(linear inout s: ImplVariables, ref: BT.G.Reference, loc: Location)
-  requires old_s.W() && old_s.Ready?
+  requires old_s.WFBCVars() && old_s.Ready?
   requires old_s.frozenIndirectionTable.lSome?
   requires BlockAllocatorModel.Inv(old_s.blockAllocator.I())
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   requires ValidNodeLocation(loc);
   requires old_s.ConsistentBitmap()
 
-  ensures s.W() && s.Ready?
+  ensures s.WFBCVars() && s.Ready?
   ensures s.frozenIndirectionTable.lSome?
   ensures s.ConsistentBitmap()
   ensures BlockAllocatorModel.Inv(s.blockAllocator.I())
@@ -219,7 +219,7 @@ module SyncImpl {
   }
 
   method AssignIdRefLocOutstanding(linear inout s: ImplVariables, id: D.ReqId, ref: BT.G.Reference, loc: Location)
-  requires old_s.W() && old_s.Ready?
+  requires old_s.WFBCVars() && old_s.Ready?
   requires BlockAllocatorModel.Inv(old_s.blockAllocator.I())
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
 
@@ -229,7 +229,7 @@ module SyncImpl {
   requires BC.AllOutstandingBlockWritesDontOverlap(old_s.outstandingBlockWrites)
   requires BC.OutstandingWriteValidNodeLocation(old_s.outstandingBlockWrites)
 
-  ensures s.W() && s.Ready?
+  ensures s.WFBCVars() && s.Ready?
   ensures s.ConsistentBitmap()
 
   ensures BlockAllocatorModel.Inv(s.blockAllocator.I())
@@ -307,14 +307,13 @@ module SyncImpl {
   maybeFreeze(linear inout s: ImplVariables, io: DiskIOHandler)
   returns (froze: bool)
   requires io.initialized()
-  requires old_s.Inv()
-  requires old_s.Ready?
+  requires old_s.Inv() && old_s.Ready?
   requires old_s.outstandingIndirectionTableWrite.None?
   requires old_s.frozenIndirectionTable.lNone?
 
   modifies io
 
-  ensures s.W()
+  ensures s.WFBCVars()
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
   ensures froze ==> BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, FreezeOp)
@@ -324,6 +323,7 @@ module SyncImpl {
   {
     var foundDeallocable := FindDeallocable(s);
     if foundDeallocable.Some? {
+      assume false;
       Dealloc(inout s, io, foundDeallocable.value);
       froze := false;
     } else {
@@ -360,6 +360,9 @@ module SyncImpl {
 
       inout s.blockAllocator.CopyEphemeralToFrozen();
       froze := true;
+
+      reveal ConsistentBitmapInteral();
+      assert s.WFBCVars();
 
       assert BC.Freeze(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, FreezeOp);
       assert BBC.BlockCacheMove(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, FreezeOp, BC.FreezeStep);
@@ -446,7 +449,7 @@ module SyncImpl {
 
   modifies io
 
-  ensures s.Ready? && s.W()
+  ensures s.Ready? && s.WFBCVars()
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
 
