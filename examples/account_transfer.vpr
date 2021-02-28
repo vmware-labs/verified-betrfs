@@ -1,5 +1,5 @@
 // Copyright 2018-2021 VMware, Inc.
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSD-2-Clause
 
 define arr_access(a, p) (forall j: Int :: 0 <= j && j < len(a) ==> acc(loc(a, j).val, p))
 define init(s) forall j: Int :: 0 <= j && j < len(s.accounts) ==> loc(s.accounts, j).val == 0

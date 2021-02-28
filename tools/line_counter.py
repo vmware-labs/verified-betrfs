@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # Copyright 2018-2021 VMware, Inc.
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: BSD-2-Clause
 
 """
 line_counter.py: attribute lines of veribetrfs source as {spec,code,proof}.

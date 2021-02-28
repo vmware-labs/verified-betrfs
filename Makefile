@@ -1,5 +1,5 @@
 # Copyright 2018-2021 VMware, Inc.
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: BSD-2-Clause
 
 ##############################################################################
 # System configuration
@@ -139,29 +139,6 @@ syntax-status: build/deps build/Impl/Bundle.i.syntax-status.pdf
 
 .PHONY: verify-ordered
 verify-ordered: build/deps build/Impl/Bundle.i.okay
-
-##############################################################################
-# C# executables
-
-FRAMEWORK_SOURCES=framework/Framework.cs framework/Benchmarks.cs framework/Crc32.cs
-
-.PHONY: exe
-exe: build/Veribetrfs.exe
-
-build/Impl/Bundle.i.exe: build/Impl/Bundle.i.cs $(FRAMEWORK_SOURCES)
-	csc $^ /optimize /r:System.Numerics.dll /nowarn:0164 /nowarn:0219 /nowarn:1717 /nowarn:0162 /nowarn:0168 /unsafe /out:$@
-
-.PHONY: exe-roslyn
-exe-roslyn: build/Impl/Bundle.i.roslyn.exe
-
-build/Impl/Bundle.i.roslyn.exe:build/Impl/Bundle.i.cs $(FRAMEWORK_SOURCES)
-	tools/roslyn-csc.sh $^ /optimize /nowarn:CS0162 /nowarn:CS0164 /unsafe /t:exe /out:$@
-#eval trick to assign make var inside rule
-	$(eval CONFIG=$(patsubst %.roslyn.exe,%.roslyn.runtimeconfig.json,$@))
-	tools/roslyn-write-runtimeconfig.sh > $(CONFIG)
-
-build/Veribetrfs.exe: build/Impl/Bundle.i.exe
-	cp $< $@
 
 ##############################################################################
 # C++ executables

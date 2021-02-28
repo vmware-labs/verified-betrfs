@@ -1,7 +1,7 @@
 #! /bin/bash
 
 # Copyright 2018-2021 VMware, Inc.
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: BSD-2-Clause
 
 
 # if a recent dotnet core is installed, run csc with the first sdk version found

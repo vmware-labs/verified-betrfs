@@ -1,5 +1,5 @@
 // Copyright 2018-2021 VMware, Inc.
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSD-2-Clause
 
 include "../Lang/LinearSequence.s.dfy"
 include "../Lang/LinearSequence.i.dfy"

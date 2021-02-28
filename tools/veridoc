@@ -2,7 +2,7 @@
 """Builds the docs/veridoc.md documentation file."""
 
 # Copyright 2018-2021 VMware, Inc.
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: BSD-2-Clause
 
 from lib_deps import *
 

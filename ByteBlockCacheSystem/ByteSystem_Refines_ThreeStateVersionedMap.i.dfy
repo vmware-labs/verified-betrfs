@@ -1,5 +1,5 @@
 // Copyright 2018-2021 VMware, Inc.
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSD-2-Clause
 
 include "ByteSystem_Refines_BetreeJournalSystem.i.dfy"
 include "../BlockCacheSystem/BetreeJournalSystem_Refines_ThreeStateVersionedMap.i.dfy"

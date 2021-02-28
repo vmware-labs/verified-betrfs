@@ -1,5 +1,5 @@
 // Copyright 2018-2021 VMware, Inc.
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BSD-2-Clause
 
 module Inout {
     method Replace<V>(linear inout v: V, linear newv: V)

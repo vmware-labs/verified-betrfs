@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Copyright 2018-2021 VMware, Inc.
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: BSD-2-Clause
 
 
 # Build a file which includes all the files in the directory.

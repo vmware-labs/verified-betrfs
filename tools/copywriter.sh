@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Copyright 2018-2021 VMware, Inc.
-# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: BSD-2-Clause
 
 DRY_RUN=
 if [ "$1" == "-d" ]; then
@@ -9,7 +9,7 @@ if [ "$1" == "-d" ]; then
 fi
 
 COPYRIGHT_NOTICE="Copyright 2018-2021 VMware, Inc."
-COPYING_PERMISSION_STATEMENT="SPDX-License-Identifier: MIT"
+COPYING_PERMISSION_STATEMENT="SPDX-License-Identifier: BSD-2-Clause"
 
 function starts_with_bang_line() {
     FILENAME="$1"
