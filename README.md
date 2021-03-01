@@ -121,4 +121,4 @@ where `<data_dir>` should be an empty (or non-existing) directory that will cont
 
 # Contributing
 
-You can check out `docs/veridoc.md` for an overview of our source code.
+See CONTRIBUTING.md for our contributing guidelines.
