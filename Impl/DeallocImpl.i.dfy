@@ -5,7 +5,6 @@ module DeallocImpl {
   import opened IOImpl
   import opened BookkeepingImpl
   import opened DiskOpImpl
-  // import DeallocModel
   import opened StateBCImpl
   import opened Bounds
   import opened MainDiskIOHandler

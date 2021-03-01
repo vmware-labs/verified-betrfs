@@ -26,10 +26,11 @@ module FlushImpl {
   import opened NativeTypes
   import BookkeepingModel
   import FlushModel
+  import IOModel
 
   import IT = IndirectionTable
 
-  method flush(linear inout s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference)
+  method flushInteral(linear inout s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference)
   requires old_s.Inv()
   requires old_s.Ready?
   requires old_s.cache.ptr(childref).Some?
@@ -47,8 +48,10 @@ module FlushImpl {
 
   ensures s.W()
   ensures s.Ready?
+  ensures s.WriteAllocConditions()
   ensures s.I() == FlushModel.flush(old_s.I(), parentref, slot as int, childref, 
     old_s.cache.I()[childref]);
+  ensures LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
   {
     var b := false;
     if s.frozenIndirectionTable.lSome? {
@@ -86,11 +89,38 @@ module FlushImpl {
             slot, newparentBucket, newchildref.value);
           writeBookkeeping(inout s, parentref, newparent_children);
 
-          //Native.BenchmarkingUtil.end();
+          assert LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
         }
       } else {
         print "giving up; flush can't run because flushed keys are out of bound for its children";
       }
     }
   }
+  
+  method flush(linear inout s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference)
+  requires old_s.Inv()
+  requires old_s.Ready?
+  requires old_s.cache.ptr(childref).Some?
+
+  requires parentref in old_s.ephemeralIndirectionTable.I().graph
+  requires parentref in old_s.cache.I()
+
+  requires old_s.cache.I()[parentref].children.Some?
+  requires 0 <= slot as int < |old_s.cache.I()[parentref].children.value|
+  requires old_s.cache.I()[parentref].children.value[slot] == childref
+
+  requires childref in old_s.ephemeralIndirectionTable.I().graph
+
+  requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 2
+
+  requires old_s.totalCacheSize() <= MaxCacheSize() - 1
+
+  ensures s.WFBCVars()
+  ensures IOModel.betree_next(old_s.I(), s.I())
+  {
+    FlushModel.flushCorrect(s.I(), parentref, slot as int, childref, s.cache.I()[childref]);
+    flushInteral(inout s, parentref, slot, childref);
+    assert s.WFBCVars();
+  }
+
 }

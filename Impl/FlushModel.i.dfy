@@ -83,8 +83,11 @@ module FlushModel {
 
   lemma flushCorrect(s: BBC.Variables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
   requires flush.requires(s, parentref, slot, childref, child)
-  ensures
-      var s' := flush(s, parentref, slot, childref, child);
+  requires s.totalCacheSize() <= MaxCacheSize() - 1
+  ensures var s' := flush(s, parentref, slot, childref, child);
+      && s'.Ready?
+      && s'.totalCacheSize() <= MaxCacheSize()
+      && StateBCImpl.WFCache(s'.cache)
       && betree_next(s, s')
   {
     var s' := flush(s, parentref, slot, childref, child);
