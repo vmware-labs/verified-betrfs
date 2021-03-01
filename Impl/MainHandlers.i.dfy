@@ -49,15 +49,13 @@ module MainHandlers refines Main {
 
   predicate Inv(fs: FullVariables)
   {
-    && W(fs)
-    && BJC.Inv(fs.I())
+    fs.Inv()
   }
 
   function I(fs: FullVariables) : ADM.M.Variables
   {
     fs.I()
   }
-
 
   method PrintMetadata()
   {
@@ -96,13 +94,13 @@ module MainHandlers refines Main {
     if ValidDiskOp(io.diskOp()) {
       BlockJournalCache.NextPreservesInv(old_fs.I(), fs.I(), uiop, IDiskOp(io.diskOp()));
     }
+/*
 
     //assert SM.Inv(hs.s.I());
     //assert hs.s.Inv();
     //assert Inv(hs);
     assert ADM.M.Next(I(old_fs), I(fs), uiop, io.diskOp()); // observe
   }
-/*
 
   // (jonh) unverified debug hook: Note "requires false" which prevents calling
   // this hook from any real handler code. It's only reachable from hooks

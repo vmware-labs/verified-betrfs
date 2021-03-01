@@ -28,6 +28,8 @@ module GrowImpl {
   method grow(linear inout s: ImplVariables)
   requires old_s.Inv()
   requires old_s.Ready?
+  requires TotalCacheSize(s) <= MaxCacheSize() - 1
+
   // requires (forall r | r in old_s.ephemeralIndirectionTable.graph :: r <= old_s.ephemeralIndirectionTable.refUpperBound)
 
   requires BT.G.Root() in old_s.I().cache
@@ -79,11 +81,7 @@ module GrowImpl {
             writeBookkeeping(inout s, root, Some([newref]));
             inout s.cache.MoveAndReplace(root, newref, newroot);
 
-            ghost var a := s.I();
-            ghost var b := GrowModel.grow(old_s.I());
-            assert a.cache == b.cache;
-            assert a.ephemeralIndirectionTable == b.ephemeralIndirectionTable;
-            assert a == b;
+            assert s.WFBCVars();
           }
         }
       }

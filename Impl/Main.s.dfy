@@ -41,6 +41,7 @@ abstract module Main {
     requires W(fs)
 
   method InitState() returns (linear fs: FullVariables)
+    ensures W(fs)
     ensures Inv(fs)
     ensures ADM.M.Init(I(fs))
 
@@ -49,8 +50,10 @@ abstract module Main {
   method handlePushSync(linear inout fs: FullVariables, io: DiskIOHandler)
   returns (id: uint64)
   requires io.initialized()
+  requires W(old_fs)
   requires Inv(old_fs)
   modifies io
+  ensures W(fs)
   ensures Inv(fs)
   ensures ADM.M.Next(I(old_fs), I(fs),
       if id == 0 then UI.NoOp else UI.PushSyncOp(id as int),
@@ -59,8 +62,10 @@ abstract module Main {
   method handlePopSync(linear inout fs: FullVariables, io: DiskIOHandler, id: uint64, graphSync: bool)
   returns (wait: bool, success: bool)
   requires io.initialized()
+  requires W(old_fs)
   requires Inv(old_fs)
   modifies io
+  ensures W(fs)
   ensures Inv(fs)
   ensures ADM.M.Next(I(old_fs), I(fs),
       if success then UI.PopSyncOp(id as int) else UI.NoOp,
@@ -68,21 +73,27 @@ abstract module Main {
 
   method handleReadResponse(linear inout fs: FullVariables, io: DiskIOHandler)
   requires io.diskOp().RespReadOp?
+  requires W(old_fs)
   requires Inv(old_fs)
+  ensures W(fs)
   ensures Inv(fs)
   ensures ADM.M.Next(I(old_fs), I(fs), UI.NoOp, io.diskOp())
 
   method handleWriteResponse(linear inout fs: FullVariables, io: DiskIOHandler)
   requires io.diskOp().RespWriteOp?
+  requires W(old_fs)
   requires Inv(old_fs)
+  ensures W(fs)
   ensures Inv(fs)
   ensures ADM.M.Next(I(old_fs), I(fs), UI.NoOp, io.diskOp())
 
   method handleQuery(linear inout fs: FullVariables, io: DiskIOHandler, key: Key)
   returns (v: Option<Value>)
   requires io.initialized()
+  requires W(old_fs)
   requires Inv(old_fs)
   modifies io
+  ensures W(fs)
   ensures Inv(fs)
   ensures ADM.M.Next(I(old_fs), I(fs),
     if v.Some? then UI.GetOp(key, v.value) else UI.NoOp,
@@ -91,8 +102,10 @@ abstract module Main {
   method handleInsert(linear inout fs: FullVariables, io: DiskIOHandler, key: Key, value: Value)
   returns (success: bool)
   requires io.initialized()
+  requires W(old_fs)
   requires Inv(old_fs)
   modifies io
+  ensures W(fs)
   ensures Inv(fs)
   ensures ADM.M.Next(I(old_fs), I(fs),
     if success then UI.PutOp(key, value) else UI.NoOp,
@@ -101,9 +114,11 @@ abstract module Main {
   method handleSucc(linear inout fs: FullVariables, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
   returns (res: Option<UI.SuccResultList>)
   requires io.initialized()
+  requires W(old_fs)
   requires Inv(old_fs)
   requires maxToFind >= 1
   modifies io
+  ensures W(fs)
   ensures Inv(fs)
   ensures ADM.M.Next(I(old_fs), I(fs),
     if res.Some? then UI.SuccOp(start, res.value.results, res.value.end) else UI.NoOp,

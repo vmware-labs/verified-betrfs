@@ -86,7 +86,7 @@ module CoordinationImpl {
   method pushSync(linear inout s: Full)
   returns (id: uint64)
   requires old_s.Inv()
-  ensures s.W()
+  ensures s.WF()
   ensures M.Next(old_s.I(), s.I(),
        if id == 0 then UI.NoOp else UI.PushSyncOp(id as int),
        D.NoDiskOp)
@@ -222,7 +222,7 @@ module CoordinationImpl {
   requires old_s.jc.journalist.I().replayJournal == []
 
   modifies io
-  ensures s.W()
+  ensures s.WF()
   ensures M.Next(old_s.I(), s.I(), UI.NoOp, diskOp(IIO(io)))
   {
     wait := false;

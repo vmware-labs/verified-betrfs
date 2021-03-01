@@ -202,6 +202,14 @@ module StateBCImpl {
       && BBC.Inv(I())
     }
 
+    predicate RefAvailable(ref: BT.G.Reference)
+    requires Ready? && W()
+    {
+      && ref !in ephemeralIndirectionTable.graph
+      && ref !in cache.I()
+      && ref != BT.G.Root()
+    }
+
     predicate WriteAllocConditions()
     {
       && Ready?
