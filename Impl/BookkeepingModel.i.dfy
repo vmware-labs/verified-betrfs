@@ -253,11 +253,11 @@ module BookkeepingModel {
     }
   }
 
-  predicate writeBookkeeping(s: ImplVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>, s': ImplVariables)
+  predicate writeBookkeepingInternal(s: ImplVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>, s': ImplVariables)
     requires s.W()
     requires s.WriteAllocConditions()
     requires s.ChildrenConditions(children)
-    requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
+    // requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
     requires s'.Ready?
     requires s'.blockAllocator.Inv()
   {
@@ -283,6 +283,37 @@ module BookkeepingModel {
     && s'.outstandingBlockReads == s.outstandingBlockReads
     && s'.cache == s.cache
   }
+
+  function writeBookkeeping(s: ImplVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>) : (s': ImplVariables)
+    requires s.W()
+    requires s.WriteAllocConditions()
+    requires s.ChildrenConditions(children)
+  {
+    var s' :| writeBookkeepingInternal(s, ref, children, s');
+    s'
+  }
+
+
+  // function {:opaque} allocBookkeeping(s: ImplVariables, children: Option<seq<BT.G.Reference>>)
+  // : (p: (ImplVariables, Option<Reference>))
+  //   requires s.W()
+  //   requires s.WriteAllocConditions()
+  //   requires s.ChildrenConditions(children)
+  //   // requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
+
+  // // ensures var (s', id) := p;
+  // //   && s'.Ready?
+  // //   && WriteAllocConditions(s')
+  // //   && |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
+  // {
+  //   var ref := getFreeRef(s);
+  //   if ref.Some? then (
+  //     var s' :| writeBookkeeping(s, ref.value, children, s');
+  //     (s', ref)
+  //   ) else (
+  //     (s, None)
+  //   )
+  // }
 
 /*
   // Conditions that will hold intermediately between writes and allocs
@@ -340,24 +371,6 @@ module BookkeepingModel {
     s'
   }
 
-  function {:opaque} allocBookkeeping(s: ImplVariables, children: Option<seq<BT.G.Reference>>)
-  : (p: (ImplVariables, Option<Reference>))
-  requires WriteAllocConditions(s)
-  requires ChildrenConditions(s, children)
-  requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
-
-  ensures var (s', id) := p;
-    && s'.Ready?
-    && WriteAllocConditions(s')
-    && |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
-  {
-    var ref := getFreeRef(s);
-    if ref.Some? then (
-      (writeBookkeeping(s, ref.value, children), ref)
-    ) else (
-      (s, None)
-    )
-  }
 
   // fullWrite and fullAlloc are like writeBookkeeping/allocBookkeeping, except that fullWrite and fullAlloc update
   // the cache with the node. In the implementation of betree operations we use the above,
