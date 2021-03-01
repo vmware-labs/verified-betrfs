@@ -39,8 +39,10 @@ what the software assumes about the environment and what it promises
 about its behavior.  In other words, they correspond to the statement
 of a theorem about the software.  All other files should be able to be
 verified by dafny and should end in ".i.dfy".  (The "s" stands for
-"specification" and the "i" stands for "implementation".)  Spec files
-(i.e. ".s.dfy" files) can include only other spec files.
+"specification" and the "i" stands for "implementation".)
+The ".s" files are also often called "trusted" files, while the ".i"
+files are "untrusted".
+Spec files (i.e. ".s.dfy" files) can include only other spec files.
 Implementation files can include both spec and implementation files.
 
 Avoid introducing trusted code.
@@ -98,3 +100,7 @@ Don't bother with excess comments.  Rather, structure your function
 and method names and their requires and ensures clauses to be self
 documenting.  (Of course high-level comments in a file, or about
 anything tricky, are welcome.)
+
+## Code documentation.
+
+You can check out `docs/veridoc.md` for an overview of our source files.
