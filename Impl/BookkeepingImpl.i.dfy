@@ -18,55 +18,46 @@ module BookkeepingImpl {
 
   import opened Bounds
 
-  // method getFreeRef(shared s: ImplVariables)
-  // returns (ref : Option<BT.G.Reference>)
-  // requires s.Ready?
-  // requires s.W()
+  method getFreeRef(shared s: ImplVariables)
+  returns (ref : Option<BT.G.Reference>)
+  requires s.Ready?
+  requires s.W()
 
-  // ensures s.Ready?
-  // ensures s.W()
-  // ensures ref.Some? ==> s.RefAvailable(ref.value)
-  // ensures forall ref1 | ref1 in s.cache.I() :: Some(ref1) != ref
+  ensures s.Ready?
+  ensures s.W()
+  ensures ref.Some? ==> s.RefAvailable(ref.value)
+  ensures forall ref1 | ref1 in s.cache.I() :: Some(ref1) != ref
 
-  // ensures var gs := s.I();
-  //   && (forall r | r in gs.ephemeralIndirectionTable.graph :: r <= gs.ephemeralIndirectionTable.refUpperBound)
-  //   && ref == BookkeepingModel.getFreeRef(gs);
-  // {
-  //   BookkeepingModel.reveal_getFreeRef();
+  ensures ref == BookkeepingModel.getFreeRef(s);
+  {
+    BookkeepingModel.reveal_getFreeRef();
 
-  //   ghost var getable := s.I().ephemeralIndirectionTable;
+    var i := s.ephemeralIndirectionTable.GetRefUpperBound();
+    if i == 0xffff_ffff_ffff_ffff {
+      return None;
+    }
 
-  //   assert forall r | r in getable.graph :: r <= getable.refUpperBound by {
-  //     s.ephemeralIndirectionTable.UpperBounded();
-  //     assert forall r | r in s.ephemeralIndirectionTable.graph :: r <= s.ephemeralIndirectionTable.refUpperBound;
-  //   }
+    i := i + 1;
 
-  //   var i := s.ephemeralIndirectionTable.GetRefUpperBound();
-  //   if i == 0xffff_ffff_ffff_ffff {
-  //     return None;
-  //   }
-
-  //   i := i + 1;
-
-  //   while true
-  //   invariant i >= 1
-  //   invariant forall r | r in s.ephemeralIndirectionTable.graph :: r < i
-  //   invariant BookkeepingModel.getFreeRefIterate(s.I(), i)
-  //          == BookkeepingModel.getFreeRef(s.I())
-  //   decreases 0x1_0000_0000_0000_0000 - i as int
-  //   {
-  //     var cacheLookup := s.cache.InCache(i);
-  //     if !cacheLookup {
-  //       return Some(i);
-  //     }
+    while true
+    invariant i >= 1
+    invariant forall r | r in s.ephemeralIndirectionTable.graph :: r < i
+    invariant BookkeepingModel.getFreeRefIterate(s, i)
+           == BookkeepingModel.getFreeRef(s)
+    decreases 0x1_0000_0000_0000_0000 - i as int
+    {
+      var cacheLookup := s.cache.InCache(i);
+      if !cacheLookup {
+        return Some(i);
+      }
       
-  //     if i == 0xffff_ffff_ffff_ffff {
-  //       return None;
-  //     } else {
-  //       i := i + 1;
-  //     }
-  //   }
-  // }
+      if i == 0xffff_ffff_ffff_ffff {
+        return None;
+      } else {
+        i := i + 1;
+      }
+    }
+  }
 
   // method getFreeRef2(shared s: ImplVariables, avoid: BT.G.Reference)
   // returns (ref : Option<BT.G.Reference>)
@@ -161,32 +152,29 @@ module BookkeepingImpl {
     reveal_ConsistentBitmapInteral();
   }
 
-  // method allocBookkeeping(linear inout s: ImplVariables, children: Option<seq<BT.G.Reference>>)
-  // returns (ref: Option<BT.G.Reference>)
-  // requires old_s.W()
-  // requires old_s.Ready?
-  // requires |LruModel.I(old_s.lru.Queue())| <= 0x1_0000_0000
-  // requires old_s.WriteAllocConditions()
-  // requires old_s.ChildrenConditions(children)
-  // requires |old_s.ephemeralIndirectionTable.I().graph| < IndirectionTable.MaxSize()
-  // ensures s.Ready?
+  method allocBookkeeping(linear inout s: ImplVariables, children: Option<seq<BT.G.Reference>>)
+  returns (ref: Option<BT.G.Reference>)
+  requires old_s.W()
+  requires old_s.Ready?
+  requires |LruModel.I(old_s.lru.Queue())| <= 0x1_0000_0000
+  requires old_s.WriteAllocConditions()
+  requires old_s.ChildrenConditions(children)
+  requires |old_s.ephemeralIndirectionTable.I().graph| < IndirectionTable.MaxSize()
+  ensures s.Ready?
 
-  // ensures s.W()
-  // ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
-  // ensures s.cache.I() == old_s.cache.I()
-  // ensures ref.Some? ==> s.ChildrenConditions(Some([ref.value]))
-  // ensures s.WriteAllocConditions()
+  ensures s.W()
+  ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
+  ensures s.cache.I() == old_s.cache.I()
+  ensures ref.Some? ==> s.ChildrenConditions(Some([ref.value]))
+  ensures s.WriteAllocConditions()
 
-  // ensures (s.I(), ref) == BookkeepingModel.allocBookkeeping(old_s.I(), children)
-  // ensures ref.None? ==> s == old_s
-  // {
-  //   BookkeepingModel.reveal_allocBookkeeping();
-    
-  //   ref := getFreeRef(s);
-  //   if (ref.Some?) {
-  //     writeBookkeeping(inout s, ref.value, children);
-  //   }
-  // }
+  ensures BookkeepingModel.allocBookkeeping(old_s, children, s, ref)
+  {
+    ref := getFreeRef(s);
+    if (ref.Some?) {
+      writeBookkeeping(inout s, ref.value, children);
+    }
+  }
 
   // method writeBookkeepingNoSuccsUpdate(linear inout s: ImplVariables, ref: BT.G.Reference)
   // requires old_s.W()

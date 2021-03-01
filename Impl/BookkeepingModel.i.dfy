@@ -253,7 +253,7 @@ module BookkeepingModel {
     }
   }
 
-  predicate writeBookkeepingInternal(s: ImplVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>, s': ImplVariables)
+  predicate writeBookkeeping(s: ImplVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>, s': ImplVariables)
     requires s.W()
     requires s.WriteAllocConditions()
     requires s.ChildrenConditions(children)
@@ -284,36 +284,27 @@ module BookkeepingModel {
     && s'.cache == s.cache
   }
 
-  function writeBookkeeping(s: ImplVariables, ref: BT.G.Reference, children: Option<seq<BT.G.Reference>>) : (s': ImplVariables)
+  predicate allocBookkeeping(s: ImplVariables, children: Option<seq<BT.G.Reference>>, s': ImplVariables, r: Option<Reference>)
     requires s.W()
     requires s.WriteAllocConditions()
     requires s.ChildrenConditions(children)
+
+    requires s'.Ready?
+    requires s'.blockAllocator.Inv()
   {
-    var s' :| writeBookkeepingInternal(s, ref, children, s');
-    s'
+    var ref := getFreeRef(s);
+    if ref.Some? then
+    (
+      && writeBookkeeping(s, ref.value, children, s')
+      && r == ref
+    )
+    else
+    (
+      && s == s'
+      && r == None
+    )
   }
 
-
-  // function {:opaque} allocBookkeeping(s: ImplVariables, children: Option<seq<BT.G.Reference>>)
-  // : (p: (ImplVariables, Option<Reference>))
-  //   requires s.W()
-  //   requires s.WriteAllocConditions()
-  //   requires s.ChildrenConditions(children)
-  //   // requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
-
-  // // ensures var (s', id) := p;
-  // //   && s'.Ready?
-  // //   && WriteAllocConditions(s')
-  // //   && |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
-  // {
-  //   var ref := getFreeRef(s);
-  //   if ref.Some? then (
-  //     var s' :| writeBookkeeping(s, ref.value, children, s');
-  //     (s', ref)
-  //   ) else (
-  //     (s, None)
-  //   )
-  // }
 
 /*
   // Conditions that will hold intermediately between writes and allocs
