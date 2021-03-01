@@ -23,7 +23,7 @@ VeriBetrFS currently provides a verified key-value store component.
 
 ### Trusted Code
 
-In order to document which files contain trusted assumptions, we use the file name extension. Files ending in `.s.dfy` compose all of our ‘trusted’ Dafny code. Files ending in `.i.dfy` compose our ‘untrusted’. The Dafny verifier checks that the implementation code and proof work in the `.i.dfy` files meets the obligations demanded by the `.s.dfy` files. These `.s.dfy` files document, _mathematically_, the guarantees and assumptions stated in English above.
+In order to document which files contain trusted assumptions, we use the file name extension. Files ending in `.s.dfy` compose all of our ‘trusted’ Dafny code. Files ending in `.i.dfy` compose our ‘untrusted’ Dafny code. The Dafny verifier checks that the implementation code and proof work in the `.i.dfy` files meets the obligations demanded by the `.s.dfy` files. These `.s.dfy` files document, _mathematically_, the guarantees and assumptions stated in English above.
 
 Our entire Trusted Code Base (TCB) comprises:
 
