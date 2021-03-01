@@ -65,6 +65,9 @@ module LeafModel {
   requires node.children.None?
   requires |node.buckets| == 1
   ensures var s' := repivotLeaf(s, ref, node);
+    && s'.Ready?
+    && s'.totalCacheSize() == s.totalCacheSize()
+    && StateBCImpl.WFCache(s'.cache)
     && betree_next(s, s')
   {
     reveal_SplitBucketLeft();
