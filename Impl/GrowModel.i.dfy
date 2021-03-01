@@ -19,6 +19,7 @@ module GrowModel {
 
   import IT = IndirectionTable
   import opened NativeTypes
+  import StateBCImpl
 
   /// The root was found to be too big: grow
   function {:opaque} grow(s: BBC.Variables)
@@ -59,7 +60,11 @@ module GrowModel {
 
   lemma growCorrect(s: BBC.Variables)
   requires grow.requires(s)
+  requires s.totalCacheSize() <= MaxCacheSize() - 1
   ensures var s' := grow(s);
+    && s'.Ready?
+    && s'.totalCacheSize() <= MaxCacheSize()
+    && StateBCImpl.WFCache(s'.cache)
     && betree_next(s, s')
   {
     reveal_grow();

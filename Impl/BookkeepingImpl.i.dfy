@@ -300,12 +300,12 @@ module BookkeepingImpl {
   ensures s.W()
   ensures s.Ready?
   ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
-  ensures s.cache.I() == old_s.cache.I()
 
   ensures s.WriteAllocConditions()
   ensures s.ChildrenConditions(Some([ref]))
   ensures s.I() == BookkeepingModel.writeBookkeeping(old_s.I(), ref, children)
   ensures s.cache == old_s.cache
+  ensures LruModel.I(s.lru.Queue()) == LruModel.I(old_s.lru.Queue()) + {ref}
   {
     lemmaIndirectionTableLocIndexValid(s, ref);
     var oldLoc := inout s.ephemeralIndirectionTable.UpdateAndRemoveLoc(ref, (if children.Some? then children.value else []));
@@ -350,6 +350,7 @@ module BookkeepingImpl {
 
   ensures (s.I(), ref) == BookkeepingModel.allocBookkeeping(old_s.I(), children)
   ensures ref.None? ==> s == old_s
+  ensures ref.Some? ==> LruModel.I(s.lru.Queue()) == LruModel.I(old_s.lru.Queue()) + {ref.value}
   {
     BookkeepingModel.reveal_allocBookkeeping();
     

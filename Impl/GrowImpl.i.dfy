@@ -19,22 +19,22 @@ module GrowImpl {
   import opened LinearSequence_s
   import opened LinearSequence_i
   import opened BoundedPivotsLib
+  import opened Bounds
 
   import IT = IndirectionTable
 
   import opened NativeTypes
 
   /// The root was found to be too big: grow
-  method grow(linear inout s: ImplVariables)
+  method growInteral(linear inout s: ImplVariables)
   requires old_s.Inv()
   requires old_s.Ready?
-  // requires (forall r | r in old_s.ephemeralIndirectionTable.graph :: r <= old_s.ephemeralIndirectionTable.refUpperBound)
-
   requires BT.G.Root() in old_s.I().cache
   requires |old_s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
   ensures s.W()
   ensures s.Ready?
   ensures s.I() == GrowModel.grow(old_s.I())
+  ensures s.WriteAllocConditions()
   {
     GrowModel.reveal_grow();
 
@@ -90,5 +90,17 @@ module GrowImpl {
     } else {
       assert old_s.I() == s.I();
     }
+  }
+
+  method grow(linear inout s: ImplVariables)
+  requires old_s.Inv()
+  requires old_s.Ready?
+  requires BT.G.Root() in old_s.I().cache
+  requires |old_s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
+  requires old_s.totalCacheSize() <= MaxCacheSize() - 1
+  {
+    GrowModel.growCorrect(s.I());
+    growInteral(inout s);
+    assert s.WFBCVars();
   }
 }
