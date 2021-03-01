@@ -32,7 +32,7 @@ Our entire Trusted Code Base (TCB) comprises:
  * The C++ compiler (currently clang).
  * The hardware, kernel, execution environment, etc.
  * Our [extensions to the Dafny language.](https://github.com/secure-foundations/dafny/tree/inout/Docs/Linear)
- * The `.cpp` files in `framework/` (especially `Framework.cpp`) which provides a layer between our Dafny-facing disk API and the operating system's aio API.
+ * The `.cpp` files in `framework/` (especially `Framework.cpp`) which provide a layer between our Dafny-facing disk API and the operating system's aio API.
  * Extern functions that provide access to other useful system utilities (`lib/Lang/System/`).
 
 Some of these items are in scope for VeriBetrFS, while others are not.
