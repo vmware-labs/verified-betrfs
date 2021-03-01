@@ -35,6 +35,7 @@ module GrowImpl {
   ensures s.Ready?
   ensures s.I() == GrowModel.grow(old_s.I())
   ensures s.WriteAllocConditions()
+  ensures LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
   {
     GrowModel.reveal_grow();
 
@@ -79,11 +80,7 @@ module GrowImpl {
             writeBookkeeping(inout s, root, Some([newref]));
             inout s.cache.MoveAndReplace(root, newref, newroot);
 
-            ghost var a := s.I();
-            ghost var b := GrowModel.grow(old_s.I());
-            assert a.cache == b.cache;
-            assert a.ephemeralIndirectionTable == b.ephemeralIndirectionTable;
-            assert a == b;
+            assert LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
           }
         }
       }
@@ -98,6 +95,9 @@ module GrowImpl {
   requires BT.G.Root() in old_s.I().cache
   requires |old_s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
   requires old_s.totalCacheSize() <= MaxCacheSize() - 1
+  
+  ensures s.WFBCVars();
+  ensures IOModel.betree_next(old_s.I(), s.I())
   {
     GrowModel.growCorrect(s.I());
     growInteral(inout s);
