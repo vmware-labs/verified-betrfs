@@ -265,8 +265,11 @@ module SplitModel {
 
   lemma doSplitCorrect(s: BBC.Variables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
   requires doSplit.requires(s, parentref, childref, slot)
-  // requires TotalCacheSize(s) <= MaxCacheSize() - 2
+  requires s.totalCacheSize() <= MaxCacheSize() - 2
   ensures var s' := doSplit(s, parentref, childref, slot);
+    && s'.Ready?
+    && s'.totalCacheSize() <= MaxCacheSize()
+    && StateBCImpl.WFCache(s'.cache)
     && betree_next(s, s')
   {
     var s' := doSplit(s, parentref, childref, slot);
