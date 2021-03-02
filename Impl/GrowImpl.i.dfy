@@ -26,7 +26,7 @@ module GrowImpl {
   import opened NativeTypes
 
   /// The root was found to be too big: grow
-  method growInteral(linear inout s: ImplVariables)
+  method doGrow(linear inout s: ImplVariables)
   requires old_s.Inv()
   requires old_s.Ready?
   requires BT.G.Root() in old_s.I().cache
@@ -96,11 +96,11 @@ module GrowImpl {
   requires |old_s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
   requires old_s.totalCacheSize() <= MaxCacheSize() - 1
   
-  ensures s.WFBCVars();
+  ensures s.WFBCVars() && s.Ready?;
   ensures IOModel.betree_next(old_s.I(), s.I())
   {
     GrowModel.growCorrect(s.I());
-    growInteral(inout s);
+    doGrow(inout s);
     assert s.WFBCVars();
   }
 }

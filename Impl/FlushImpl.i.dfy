@@ -115,12 +115,10 @@ module FlushImpl {
 
   requires old_s.totalCacheSize() <= MaxCacheSize() - 1
 
-  ensures s.WFBCVars()
+  ensures s.WFBCVars() && s.Ready?
   ensures IOModel.betree_next(old_s.I(), s.I())
   {
     FlushModel.flushCorrect(s.I(), parentref, slot as int, childref, s.cache.I()[childref]);
     flushInteral(inout s, parentref, slot, childref);
-    assert s.WFBCVars();
   }
-
 }
