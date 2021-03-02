@@ -44,14 +44,14 @@ module QueryImpl {
   method queryIterate(linear inout s: ImplVariables, key: Key, msg: Message, ref: BT.G.Reference, io: DiskIOHandler, counter: uint64, ghost lookup: seq<BT.G.ReadOp>)
   returns (res: Option<Value>)
 
-  requires old_s.W() && old_s.Inv()
+  requires old_s.Inv()
   requires queryInv(old_s.I(), key, msg, ref, IIO(io), counter, lookup)
   requires !msg.Define?
   requires io.initialized()
 
   modifies io
   decreases counter
-  ensures s.W()
+  ensures s.WFBCVars()
 
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
@@ -144,7 +144,7 @@ module QueryImpl {
 
   modifies io
 
-  ensures s.W()
+  ensures s.WFBCVars()
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
   ensures res.Some? ==>
