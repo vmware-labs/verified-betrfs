@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 abstract module Main(ARS: ApplicationResourceSpec) {
   type Object(==,!new)
   predicate Inv(o: Object)

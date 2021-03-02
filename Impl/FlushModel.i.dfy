@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "BookkeepingModel.i.dfy"
 include "IOModel.i.dfy"
 include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
@@ -174,13 +177,12 @@ module FlushModel {
           var flushStep := BT.NodeFlush(
             parentref,
             INode(parent),
+            INode(newparent),
             childref,
             INode(child),
             newchildref.value,
             INode(newchild),
-            slot,
-            INode(newparent).buckets[slot],
-            INode(newchild).buckets);
+            slot);
           assert BT.ValidFlush(flushStep);
           var step := BT.BetreeFlush(flushStep);
           assert INode(newparent) == BT.FlushOps(flushStep)[1].node;

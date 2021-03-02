@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "QueryState.i.dfy"
 include "Betree.i.dfy"
 include "BetreeInv.i.dfy"

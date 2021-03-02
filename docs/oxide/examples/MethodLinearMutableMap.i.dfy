@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
   method FixedSizeInsert<V>(linear inout self: FixedSizeLinearHashMap, key: uint64, value: V)
   returns (replaced: Option<V>)
 

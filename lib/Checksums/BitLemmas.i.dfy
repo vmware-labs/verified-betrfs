@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../Lang/System/Bits.s.dfy"
 include "../Lang/System/F2_X.s.dfy"
 include "CRC32C.s.dfy"

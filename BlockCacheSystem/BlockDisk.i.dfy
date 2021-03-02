@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../lib/Base/Maps.i.dfy"
 include "../Versions/VOp.i.dfy"
 include "DiskLayout.i.dfy"

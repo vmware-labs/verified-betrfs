@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../lib/Base/DebugAccumulator.i.dfy"
 include "BlockAllocatorModel.i.dfy"
 include "../lib/DataStructures/BitmapImpl.i.dfy"

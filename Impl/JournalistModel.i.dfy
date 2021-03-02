@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 // include "../ByteBlockCacheSystem/JournalBytes.i.dfy"
 // include "../BlockCacheSystem/DiskLayout.i.dfy"
 // include "JournalistMarshallingModel.i.dfy"

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 module Constants {
   const NUM_THREADS := 24;
   const CACHE_SIZE := 1048576;

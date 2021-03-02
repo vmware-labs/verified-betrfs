@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../Lang/NativeTypes.s.dfy"
 include "../Base/KeyType.s.dfy"
 include "../DataStructures/KMBtree.i.dfy"
@@ -288,7 +291,8 @@ module LKMBPKVOps {
       ghost var premsgs := dpkv.toPkv().messages;
 
       assert PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, LKMB.Model.ToSeq(children[i]).0);
-      assume false;
+      LKMTreeEncodableToSeq(children[i]);
+      assert PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(LKMB.Model.ToSeq(children[i]).1));
       FillDpkv(lseq_peek(node.children, i), dpkv);
       
       calc {

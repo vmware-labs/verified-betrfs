@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "StatesViewMap.i.dfy"
 include "JournalView.i.dfy"
 include "../MapSpec/TSJMap.i.dfy"

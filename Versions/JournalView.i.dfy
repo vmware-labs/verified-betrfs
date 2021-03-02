@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../MapSpec/UIStateMachine.s.dfy"
 include "../MapSpec/Journal.i.dfy"
 include "../lib/Base/Option.s.dfy"

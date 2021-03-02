@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../DataStructures/KMBtree.i.dfy"
 include "PackedKV.i.dfy"
 include "../../PivotBetree/Bounds.i.dfy"

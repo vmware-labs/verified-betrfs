@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../MapSpec/MapSpec.s.dfy"
 include "../MapSpec/ThreeStateVersionedMap.s.dfy"
 include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"

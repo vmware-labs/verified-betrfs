@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../lib/Lang/System/NativeArrays.s.dfy"
 include "JournalistMarshallingImpl.i.dfy"
 include "JournalistParsingImpl.i.dfy"

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../lib/Buckets/BucketIteratorModel.i.dfy"
 //
 // A mathematical description of bucket generators.

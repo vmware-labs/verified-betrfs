@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: BSD-2-Clause
+
+
+import json
 from lib_aggregate import *
 
 def main(reportType, inputs):
     verchks = [prereq for prereq in inputs if prereq.endswith("."+reportType)]
-    print(verchks)
-    summaries = [summarize(reportType, verchk) for verchk in verchks]
+    summaries = sorted([summarize(reportType, verchk) for verchk in verchks])
     worstSummary = min(summaries)
-    status = 1 if isinstance(worstSummary, DafnyVerified) else 0
-    print(status, worstSummary, worstSummary.verchk)
+    result = {
+        'is_success': worstSummary.is_success,
+        'worst': worstSummary.json(),
+        'summaries': [summary.json() for summary in summaries]
+    }
+    print(json.dumps(result, sort_keys=True, indent=4))
 
 reportType = sys.argv[1]
 inputs = sys.argv[2:]

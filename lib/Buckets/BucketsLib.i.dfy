@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "BoundedPivotsLib.i.dfy"
 include "../Base/Message.i.dfy"
 include "../Base/Maps.i.dfy"

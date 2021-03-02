@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 // Defines a MapRemove1 operation for removing a key from a
 // the built-in map<K,V> type, and declares a trusted, compilable
 // version.

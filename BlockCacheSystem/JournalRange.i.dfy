@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../MapSpec/Journal.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Lang/System/PackedInts.s.dfy"

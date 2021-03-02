@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 abstract module ResourceSpec {
   type R(==, !new) // TODO user can't construct/destruct the R?
 

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "EvictModel.i.dfy"
 include "DeallocImpl.i.dfy"
 include "SyncImpl.i.dfy"

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../hack-concurrency-framework/ApplicationResourceSpec.s.dfy"
 
 module CookieResource refines ApplicationResourceSpec {

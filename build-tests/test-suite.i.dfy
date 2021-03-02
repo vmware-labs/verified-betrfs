@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "empty.i.dfy"
 include "parse-error.i.dfy"
 include "type-error.i.dfy"

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 linear datatype A = A(v: nat, ghost v2: nat)
 linear datatype B = B(linear a: A)
 

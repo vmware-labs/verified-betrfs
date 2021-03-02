@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../BlockCacheSystem/JournalCache.i.dfy"
 include "../MapSpec/ThreeStateVersioned.s.dfy"
 include "AsyncSectorDiskModelTypes.i.dfy"

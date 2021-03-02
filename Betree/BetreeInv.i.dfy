@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../lib/Base/Maps.i.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../MapSpec/MapSpec.s.dfy"
@@ -562,18 +565,13 @@ module BetreeInv {
   ensures PreservesLookups(s, s', start)
   {
     var f := flush;
-    var newbuffer := imap k :: (if k in f.flushedKeys then G.M.Merge(f.parent.buffer[k], f.child.buffer[k]) else f.child.buffer[k]);
-    var newchild := Node(f.child.children, newbuffer);
-    var newparentbuffer := imap k :: (if k in f.flushedKeys then G.M.Update(G.M.NopDelta()) else f.parent.buffer[k]);
-    var newparentchildren := imap k | k in f.parent.children :: (if k in f.movedKeys then f.newchildref else f.parent.children[k]);
-    var newparent := Node(newparentchildren, newparentbuffer);
 
     forall lookup:Lookup, key, value | IsSatisfyingLookupFrom(s.bcv.view, key, value, lookup, start)
       ensures exists lookup':Lookup :: IsSatisfyingLookupFrom(s'.bcv.view, key, value, lookup', start)
     {
       if parentLayer :| 0 <= parentLayer < |lookup| && lookup[parentLayer].ref == f.parentref {
         if key !in f.movedKeys {
-          var lookup' := lookup[parentLayer := ReadOp(f.parentref, newparent)];
+          var lookup' := lookup[parentLayer := ReadOp(f.parentref, f.newparent)];
           forall j | 0 <= j < |lookup'|
           ensures IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node) {
             if (j == parentLayer) {
@@ -594,7 +592,7 @@ module BetreeInv {
           assert IsSatisfyingLookupFrom(s'.bcv.view, key, value, lookup', start); // observe
         } else {
           if |lookup| - 1 == parentLayer { // we stopped at f.parent
-            var lookup' := lookup[..parentLayer] + [ ReadOp(f.parentref, newparent) ] + [ ReadOp(f.newchildref, newchild) ];
+            var lookup' := lookup[..parentLayer] + [ ReadOp(f.parentref, f.newparent) ] + [ ReadOp(f.newchildref, f.newchild) ];
             forall j | 0 <= j < |lookup'|
             ensures IMapsTo(s'.bcv.view, lookup'[j].ref, lookup'[j].node) {
             }
@@ -608,7 +606,7 @@ module BetreeInv {
             assert IsSatisfyingLookupFrom(s'.bcv.view, key, value, lookup', start); // observe
           } else {
             var middle := [ lookup[parentLayer] ] + [ lookup[parentLayer+1] ];
-            var middle' := ([ ReadOp(f.parentref, newparent) ] + [ ReadOp(f.newchildref, newchild) ]);
+            var middle' := ([ ReadOp(f.parentref, f.newparent) ] + [ ReadOp(f.newchildref, f.newchild) ]);
 
             assert lookup == lookup[..parentLayer] + middle + lookup[parentLayer+2..];
             var lookup' := lookup[..parentLayer] + middle' + lookup[parentLayer+2..];
@@ -623,8 +621,6 @@ module BetreeInv {
             }
 
             assert lookup[..parentLayer] == lookup'[..parentLayer];
-            assert lookup[parentLayer+2..] == lookup'[parentLayer+2..];
-
             assert LookupFollowsChildRefAtLayer(key, lookup, parentLayer);    // Handles the j==parentLayer+1 case; connects middle[1] to f.child.
             forall j | 0 <= j < |lookup'|-1
               ensures LookupFollowsChildRefAtLayer(key, lookup', j)

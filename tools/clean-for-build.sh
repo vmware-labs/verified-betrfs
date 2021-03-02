@@ -1,4 +1,8 @@
 #!/bin/sh
+
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: BSD-2-Clause
+
 # Args: git-branch to check out
 git fetch
 git checkout $*

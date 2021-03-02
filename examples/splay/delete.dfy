@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 method find_node(root: Node, value: uint64) returns (out: Node?)
 requires is_valid_node(root)
 ensures value in value_set(root) ==> out != null

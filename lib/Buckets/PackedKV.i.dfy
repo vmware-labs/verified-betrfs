@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "PackedStringArray.i.dfy"
 include "BucketsLib.i.dfy"
 include "BucketFlushModel.i.dfy"

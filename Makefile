@@ -1,3 +1,6 @@
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: BSD-2-Clause
+
 ##############################################################################
 # System configuration
 
@@ -5,7 +8,7 @@
 DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy
 
 DAFNY_ROOT?=.dafny/dafny/
-DAFNY_CMD=$(DAFNY_ROOT)/Binaries/Dafny
+DAFNY_CMD=$(DAFNY_ROOT)/Scripts/dafny
 DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
 DAFNY_FLAGS=
 DAFNY_GLOBAL_FLAGS=
@@ -138,29 +141,6 @@ syntax-status: build/deps build/Impl/Bundle.i.syntax-status.pdf
 verify-ordered: build/deps build/Impl/Bundle.i.okay
 
 ##############################################################################
-# C# executables
-
-FRAMEWORK_SOURCES=framework/Framework.cs framework/Benchmarks.cs framework/Crc32.cs
-
-.PHONY: exe
-exe: build/Veribetrfs.exe
-
-build/Impl/Bundle.i.exe: build/Impl/Bundle.i.cs $(FRAMEWORK_SOURCES)
-	csc $^ /optimize /r:System.Numerics.dll /nowarn:0164 /nowarn:0219 /nowarn:1717 /nowarn:0162 /nowarn:0168 /unsafe /out:$@
-
-.PHONY: exe-roslyn
-exe-roslyn: build/Impl/Bundle.i.roslyn.exe
-
-build/Impl/Bundle.i.roslyn.exe:build/Impl/Bundle.i.cs $(FRAMEWORK_SOURCES)
-	tools/roslyn-csc.sh $^ /optimize /nowarn:CS0162 /nowarn:CS0164 /unsafe /t:exe /out:$@
-#eval trick to assign make var inside rule
-	$(eval CONFIG=$(patsubst %.roslyn.exe,%.roslyn.runtimeconfig.json,$@))
-	tools/roslyn-write-runtimeconfig.sh > $(CONFIG)
-
-build/Veribetrfs.exe: build/Impl/Bundle.i.exe
-	cp $< $@
-
-##############################################################################
 # C++ executables
 
 .PHONY: allcpp
@@ -230,12 +210,12 @@ build/%.okay: %.dfy | $$(@D)/.
 .PRECIOUS: build/%.verchk
 AGGREGATE_TOOL=tools/aggregate-verchk.py
 build/%.verified: build/%.verchk $(AGGREGATE_TOOL) | $$(@D)/.
-	$(call tee_capture,$@,$(AGGREGATE_TOOL) verchk $^)
+	$(AGGREGATE_TOOL) verchk $^ > $@
 
 # Syntax is trivial from synchk file, just a marker.
 # (We need the .syntax target to get a recursive dependency computation.)
 build/%.syntax: build/%.synchk $(AGGREGATE_TOOL) | $$(@D)/.
-	$(call tee_capture,$@,$(AGGREGATE_TOOL) synchk $^)
+	$(AGGREGATE_TOOL) synchk $^ > $@
 
 ##############################################################################
 # .status.pdf: a dependency graph of .dfy files labeled with verification result status.

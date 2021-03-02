@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "BlockDisk.i.dfy"
 include "../PivotBetree/PivotBetree_Refines_Betree.i.dfy"
 include "../lib/Base/Maps.i.dfy"

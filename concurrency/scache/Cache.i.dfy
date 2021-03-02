@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "AtomicRefcount.i.dfy"
 include "AtomicStatus.i.dfy"
 include "AtomicIndexLookup.i.dfy"

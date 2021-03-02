@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 #include "Application.h"
 
 #define ROW_CACHE_SIZE (1 << 18)

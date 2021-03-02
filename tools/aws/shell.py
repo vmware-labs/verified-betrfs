@@ -1,5 +1,9 @@
 #!/usr/bin/python3
 
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: BSD-2-Clause
+
+
 import sys
 from automation import *
 
