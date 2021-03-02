@@ -41,6 +41,6 @@ In particular, it's healthy for us to try to slim down on the files in `framewor
 
 ### Other limitations
 
-Our main limitation is that we don't prove liveness. Thus, while we do show that VeriBetrFS does not return incorrect answers, and while we show that we do not lose data (subject to no crashes occurring), we do not actually ensure that any operation is guaranteed to complete.
+Our main limitation is that we don't prove liveness. Thus, while we do show that VeriBetrFS does not return incorrect answers, and while we show that we do not lose data (subject to no corruptions occurring), we do not actually ensure that any operation is guaranteed to complete.
 
 However, we do note that IronFleet (an ‘intellectual predecessor’ to VeriBetrFS) has proved liveness. Proving liveness for VeriBetrFS would, however, be a significant undertaking (depending on assumptions and guarantees), and we currently consider it less valuable than its integrity guarantees.
