@@ -31,8 +31,6 @@ module CommitterImpl {
   import opened JournalBytes
   import IOModel
 
-  import SSM = StateSectorModel
-
   method SyncReqs2to1(linear inout m: LinearMutableMap.LinearHashMap<JC.SyncReqStatus>)
   requires old_m.Inv()
   ensures m.Inv()
