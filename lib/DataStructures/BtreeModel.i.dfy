@@ -427,6 +427,9 @@ abstract module BtreeModel {
     SubIndexPreservesWF(oldindex, |leftindex.children|, |oldindex.children|);
   }
   
+  //Timeout
+  /* either ensures seem to cause a timeout 
+     too many things to ensure? */
   lemma SplitIndexInterpretation1(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
     requires WF(oldindex)
     requires WF(leftindex)
@@ -459,6 +462,8 @@ abstract module BtreeModel {
     }
   }
   
+  //Timeout
+  /* Same with previous, either ensures causes timeout */
   lemma SplitIndexInterpretation2(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
     requires WF(oldindex)
     requires WF(leftindex)
@@ -731,7 +736,8 @@ abstract module BtreeModel {
       }
     }
   }
-  
+
+  //Timeout  
   lemma SplitChildOfIndexPreservesInterpretationA(oldindex: Node, newindex: Node, childidx: int)
     requires WF(oldindex);
     requires WF(newindex);
@@ -784,6 +790,7 @@ abstract module BtreeModel {
     }
   }
 
+  //Timeout
   lemma SplitChildOfIndexPreservesInterpretationB(oldindex: Node, newindex: Node, childidx: int)
     requires WF(oldindex);
     requires WF(newindex);
@@ -894,13 +901,13 @@ abstract module BtreeModel {
     }
   }
 
+  //Timeout
   lemma RecursiveInsertIsCorrect(node: Node, key: Key, value: Value, pos: int, newnode: Node, newchild: Node)
     requires WF(node)
     requires node.Index?
     requires WF(newchild)
     requires pos == Keys.LargestLte(node.pivots, key)+1
     requires Interpretation(newchild) == Interpretation(node.children[pos])[key := value]
-
 //    requires newnode == node.(children := node.children[pos := newchild])
 // Can't do update on linear datatype, so instead we'll break out the parts:
     requires newnode.Index?
@@ -1076,6 +1083,7 @@ abstract module BtreeModel {
     assert Interpretation(left).Keys !! Interpretation(rightchild).Keys;
   }
 
+  //ASSUME FALSE;
   lemma InterpretationsDisjointUnion(node: Node)
     requires WF(node)
     requires node.Index?
@@ -1102,7 +1110,7 @@ abstract module BtreeModel {
 
     assert AllKeysBelowBound(node, |node.pivots|-1);
     assert AllKeysAboveBound(node, |node.pivots|);
-    assume false;
+    //assume false;
     assert lseqs(right.children) == lseqs(SubIndex(node, |left.children|, |node.children|).children);
     assert SplitIndex(node, left, right, pivot);
     SplitNodeInterpretation(node, left, right, pivot);
@@ -1350,6 +1358,7 @@ abstract module BtreeModel {
     }
   }
 
+  //Timeout
   lemma ToSeqInInterpretation(node: Node)
     requires WF(node)
     ensures forall i :: 0 <= i < |ToSeq(node).0| ==> MapsTo(Interpretation(node), ToSeq(node).0[i], ToSeq(node).1[i])
