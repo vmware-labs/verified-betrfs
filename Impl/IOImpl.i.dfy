@@ -359,7 +359,6 @@ module IOImpl {
 
       linear var bm; var succ;
       succ, bm := ephemeralIndirectionTable.InitLocBitmap();
-      assert (succ, bm.I()) == ephemeralIndirectionTable.initLocBitmap(); // TODO(andreal) unnecessary
 
       if succ {
         linear var Loading(indirectionTableLoc, indirectionTableRead) := s;
@@ -385,7 +384,7 @@ module IOImpl {
         BucketWeights.WeightBucketEmpty();
 
         assert s.ConsistentBitmap() by {
-          reveal_ConsistentBitmapInteral();
+          reveal ConsistentBitmapInteral();
         }
 
         assert s.WFBCVars();

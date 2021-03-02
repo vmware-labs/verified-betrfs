@@ -52,7 +52,6 @@ module SyncImpl {
 
   requires indirectionTable'.Inv()
   requires indirectionTable'.graph == indirectionTable.graph
-  requires indirectionTable'.refUpperBound == indirectionTable.refUpperBound
   requires indirectionTable'.locs == indirectionTable.locs[ref := loc]
   
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
