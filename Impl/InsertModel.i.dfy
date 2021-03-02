@@ -73,6 +73,8 @@ module InsertModel {
       && (!success ==>
         betree_next(s, s')
       )
+      && (StateBCImpl.WFCache(s'.cache))
+      && s.totalCacheSize() == s'.totalCacheSize()
   {
     reveal_InsertKeyValue();
     BT.reveal_NodeInsertKeyValue();

@@ -47,9 +47,10 @@ module InsertImpl {
   requires BT.G.Root() in old_s.cache.I()
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 1
   requires BoundedKey(old_s.cache.I()[BT.G.Root()].pivotTable, key)
-  ensures s.W() && s.Ready?
+  ensures s.W() 
+  ensures s.WriteAllocConditions() 
   ensures (s.I(), success) == InsertModel.InsertKeyValue(old_s.I(), key, value)
-  // ensures LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
+  ensures LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
   {
     reveal InsertModel.InsertKeyValue();
     BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), BT.G.Root());
@@ -66,7 +67,6 @@ module InsertImpl {
     if success {
       var msg := ValueMessage.Define(value);
       inout s.cache.InsertKeyValue(BT.G.Root(), key, msg);
-
       writeBookkeepingNoSuccsUpdate(inout s, BT.G.Root());
     }
   }
@@ -122,7 +122,6 @@ module InsertImpl {
         <= MaxTotalBucketWeightUint64() {
           InsertModel.InsertKeyValueCorrect(s.I(), key, value, replay);
           success := insertKeyValue(inout s, key, value);
-          assume s.WFBCVars();
       } else {
         runFlushPolicy(inout s, io);
         success := false;

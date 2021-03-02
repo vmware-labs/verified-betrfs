@@ -367,8 +367,10 @@ module BookkeepingImpl {
   requires old_s.WriteAllocConditions()
   requires ref in old_s.ephemeralIndirectionTable.I().graph
   ensures s.W()
+  ensures s.WriteAllocConditions()
   ensures s.I() == BookkeepingModel.writeBookkeepingNoSuccsUpdate(old_s.I(), ref)
   ensures |LruModel.I(s.lru.Queue())| <= |LruModel.I(old_s.lru.Queue())| + 1
+  ensures LruModel.I(s.lru.Queue()) == LruModel.I(old_s.lru.Queue()) + {ref}
   {
     BookkeepingModel.reveal_writeBookkeepingNoSuccsUpdate();
 
@@ -381,6 +383,12 @@ module BookkeepingImpl {
     if oldLoc.Some? {
       inout s.blockAllocator.MarkFreeEphemeral(oldLoc.value.addr / NodeBlockSizeUint64());
     }
+
+    freeIndirectionTableLocCorrect(old_s, s, ref,
+      if oldLoc.Some?
+      then Some(oldLoc.value.addr as int / NodeBlockSize())
+      else None);
+    reveal ConsistentBitmapInteral();
 
     LruModel.LruUse(old_s.lru.Queue(), ref);
     assert LruModel.I(s.lru.Queue()) == LruModel.I(old_s.lru.Queue()) + {ref};

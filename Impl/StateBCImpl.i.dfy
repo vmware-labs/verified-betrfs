@@ -176,6 +176,19 @@ module StateBCImpl {
       )
     }
 
+    predicate WriteAllocConditions()
+    {
+      && Ready?
+      && ephemeralIndirectionTable.Inv()
+      && ephemeralIndirectionTable.TrackingGarbage()
+      && blockAllocator.Inv()
+      && (forall loc | loc in ephemeralIndirectionTable.I().locs.Values :: DiskLayout.ValidNodeLocation(loc))
+      && (forall r | r in ephemeralIndirectionTable.graph :: r <= ephemeralIndirectionTable.refUpperBound)
+      && ConsistentBitmap()
+      && BlockAllocatorModel.Inv(blockAllocator.I())
+      && BC.AllLocationsForDifferentRefsDontOverlap(ephemeralIndirectionTable.I())
+    }
+
     function I() : BBC.Variables
     requires W()
     {
@@ -200,19 +213,6 @@ module StateBCImpl {
     {
       && WFBCVars()
       && BBC.Inv(I())
-    }
-
-    predicate WriteAllocConditions()
-    {
-      && Ready?
-      && ephemeralIndirectionTable.Inv()
-      && ephemeralIndirectionTable.TrackingGarbage()
-      && blockAllocator.Inv()
-      && (forall loc | loc in ephemeralIndirectionTable.I().locs.Values :: DiskLayout.ValidNodeLocation(loc))
-      && (forall r | r in ephemeralIndirectionTable.graph :: r <= ephemeralIndirectionTable.refUpperBound)
-      && ConsistentBitmap()
-      && BlockAllocatorModel.Inv(blockAllocator.I())
-      && BC.AllLocationsForDifferentRefsDontOverlap(ephemeralIndirectionTable.I())
     }
 
     predicate ChildrenConditions(succs: Option<seq<BT.G.Reference>>)
