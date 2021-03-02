@@ -48,9 +48,13 @@ module SyncImpl {
           <==> IT.IndirectionTable.IsLocAllocBitmap(bm, i))
   requires ValidNodeLocation(loc);
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
-  requires ref in indirectionTable.graph
-  requires ref !in indirectionTable.locs
-  requires (indirectionTable', true) == indirectionTable.addLocIfPresent(ref, loc)
+  requires ref in indirectionTable.graph && ref !in indirectionTable.locs
+
+  requires indirectionTable'.Inv()
+  requires indirectionTable'.graph == indirectionTable.graph
+  requires indirectionTable'.refUpperBound == indirectionTable.refUpperBound
+  requires indirectionTable'.locs == indirectionTable.locs[ref := loc]
+  
   requires 0 <= loc.addr as int / NodeBlockSize() < NumBlocks()
   requires BitmapModel.Len(bm) == NumBlocks()
   requires bm' == BitmapModel.BitSet(bm, loc.addr as int / NodeBlockSize())
