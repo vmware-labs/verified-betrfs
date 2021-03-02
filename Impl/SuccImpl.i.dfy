@@ -1,4 +1,4 @@
-include "SyncImpl.i.dfy"
+include "BookkeepingImpl.i.dfy"
 include "SuccModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "../lib/Base/Option.s.dfy"
@@ -9,7 +9,6 @@ include "BucketSuccessorLoopImpl.i.dfy"
 // See dependency graph in MainHandlers.dfy
 
 module SuccImpl { 
-  import opened SyncImpl
   import opened IOImpl
   import SuccModel
   import BookkeepingModel
@@ -236,7 +235,7 @@ module SuccImpl {
   requires io.initialized()
   requires maxToFind >= 1
   modifies io
-  ensures s.W()
+  ensures s.WFBCVars()
   ensures ValidDiskOp(diskOp(IIO(io)))
     && IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
     && (res.Some? ==>
