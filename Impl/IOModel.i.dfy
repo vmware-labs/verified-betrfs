@@ -172,22 +172,20 @@ module IOModel {
   ensures var (s', io') := PageInNodeReq(s, io, ref);
     && ValidDiskOp(diskOp(io'))
     && BBC.Next(s, s', IDiskOp(diskOp(io')).bdop, StatesInternalOp)
-  // {
-  //   if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
-  //     assert noop(IBlockCache(s), IBlockCache(s));
-  //   } else {
-  //     var loc := s.ephemeralIndirectionTable.locs[ref];
-  //     assert ref in s.ephemeralIndirectionTable.I().locs;
-  //     assert ValidNodeLocation(loc);
-  //     var (id, io') := RequestRead(io, loc);
-  //     var s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
+  {
+    if (BC.OutstandingRead(ref) in s.outstandingBlockReads.Values) {
+      assert noop(s, s);
+    } else {
+      // assert ref in s.ephemeralIndirectionTable.locs;
+      var loc := s.ephemeralIndirectionTable.locs[ref];
+      assert ValidNodeLocation(loc);
+      var (id, io') := RequestRead(io, loc);
+      var s' := s.(outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)]);
 
-  //     assert WFBCVars(s');
-
-  //     assert BC.PageInNodeReq(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop, StatesInternalOp, ref);
-  //     assert stepsBC(IBlockCache(s), IBlockCache(s'), StatesInternalOp, io', BC.PageInNodeReqStep(ref));
-  //   }
-  // }
+      assert BC.PageInNodeReq(s, s', IDiskOp(diskOp(io')).bdop, StatesInternalOp, ref);
+      assert stepsBC(s, s', StatesInternalOp, io', BC.PageInNodeReqStep(ref));
+    }
+  }
 
   // == readResponse ==
 
