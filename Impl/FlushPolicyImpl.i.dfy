@@ -157,9 +157,10 @@ module FlushPolicyImpl {
   requires io.initialized()
   requires BT.G.Root() in old_s.cache.I()
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
-  modifies io
-  ensures s.W() && s.Ready?
 
+  modifies io
+
+  ensures s.WFBCVars() && s.Ready?
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
   ensures IOModel.betree_next_dop(old_s.I(), s.I(),
@@ -177,21 +178,17 @@ module FlushPolicyImpl {
       }
       case ActionSplit(parentref, slot) => {
         var _, parent_children := s.cache.GetNodeInfo(parentref);
-        SplitModel.doSplitCorrect(s.I(), parentref, parent_children.value[slot], slot as int);
-        doSplit(inout s, parentref, parent_children.value[slot], slot);
+        split(inout s, parentref, parent_children.value[slot], slot);
       }
       case ActionRepivot(ref) => {
-        LeafModel.repivotLeafCorrect(s.I(), ref, s.cache.I()[ref]);
         repivotLeaf(inout s, ref);
       }
       case ActionFlush(parentref, slot) => {
         var _, parent_children := s.cache.GetNodeInfo(parentref);
         var childref := parent_children.value[slot];
-        FlushModel.flushCorrect(s.I(), parentref, slot as int, childref,s.cache.I()[childref]);
         flush(inout s, parentref, slot, childref);
       }
       case ActionGrow => {
-        GrowModel.growCorrect(s.I());
         grow(inout s);
       }
       case ActionEvict => {
