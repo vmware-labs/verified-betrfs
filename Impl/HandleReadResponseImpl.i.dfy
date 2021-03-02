@@ -21,7 +21,7 @@ module HandleReadResponseImpl {
   method readResponse(linear inout s: Full, io: DiskIOHandler)
   requires old_s.Inv()
   requires io.diskOp().RespReadOp?
-  ensures s.W()
+  ensures s.WF()
   ensures |old(io.diskOp()).respRead.bytes| < 0x1_0000_0000_0000_0000
   ensures M.Next(old_s.I(), s.I(), UI.NoOp, diskOp(IIO(io)))
   {

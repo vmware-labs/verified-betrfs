@@ -24,7 +24,7 @@ module HandleWriteResponseImpl {
   method writeResponse(linear inout s: Full, io: DiskIOHandler)
   requires old_s.Inv()
   requires io.diskOp().RespWriteOp?
-  ensures s.W()
+  ensures s.WF()
   ensures M.Next(old_s.I(), s.I(), UI.NoOp, diskOp(IIO(io)))
   {
     var id, addr, len := io.getWriteResult();

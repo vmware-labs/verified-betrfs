@@ -33,12 +33,10 @@ abstract module Main {
 
   type FullVariables // impl defined
 
-  predicate W(fs: FullVariables)
-
   predicate Inv(fs: FullVariables)
 
   function I(fs: FullVariables): ADM.M.Variables
-    requires W(fs)
+    requires Inv(fs)
 
   method InitState() returns (linear fs: FullVariables)
     ensures Inv(fs)

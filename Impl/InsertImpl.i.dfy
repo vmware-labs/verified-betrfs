@@ -41,7 +41,7 @@ module InsertImpl {
   import opened ViewOp
   import opened DiskOpModel
 
-  method InsertKeyValue(linear inout s: ImplVariables, key: Key, value: Value)
+  method insertKeyValue(linear inout s: ImplVariables, key: Key, value: Value)
   returns (success: bool)
   requires old_s.Inv() && old_s.Ready?
   requires BT.G.Root() in old_s.cache.I()
@@ -49,6 +49,7 @@ module InsertImpl {
   requires BoundedKey(old_s.cache.I()[BT.G.Root()].pivotTable, key)
   ensures s.W() && s.Ready?
   ensures (s.I(), success) == InsertModel.InsertKeyValue(old_s.I(), key, value)
+  // ensures LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
   {
     reveal InsertModel.InsertKeyValue();
     BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), BT.G.Root());
@@ -62,7 +63,7 @@ module InsertImpl {
       }
     }
 
-    if (success) {
+    if success {
       var msg := ValueMessage.Define(value);
       inout s.cache.InsertKeyValue(BT.G.Root(), key, msg);
 
@@ -77,8 +78,8 @@ module InsertImpl {
   requires io.initialized()
   requires old_s.Inv() && old_s.Ready?
   modifies io
-  ensures s.W()
 
+  ensures s.WFBCVars()
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
   ensures success ==>
@@ -93,7 +94,7 @@ module InsertImpl {
       success := false;
     }
 
-    if (success){
+    if success{
       var rootLookup := s.cache.InCache(BT.G.Root());
       if !rootLookup {
         if s.TotalCacheSize() <= MaxCacheSizeUint64() - 1 {
@@ -106,7 +107,7 @@ module InsertImpl {
       }
     }
 
-    if (success) {
+    if success {
       var pivots, _ := s.cache.GetNodeInfo(BT.G.Root());
       var bounded := ComputeBoundedKey(pivots, key);
       if !bounded {
@@ -119,8 +120,9 @@ module InsertImpl {
       var weightSeq := s.cache.NodeBucketsWeight(BT.G.Root());
       if WeightKeyUint64(key) + WeightMessageUint64(ValueMessage.Define(value)) + weightSeq
         <= MaxTotalBucketWeightUint64() {
-          success := InsertKeyValue(inout s, key, value);
-          InsertModel.InsertKeyValueCorrect(old_s.I(), key, value, replay);
+          InsertModel.InsertKeyValueCorrect(s.I(), key, value, replay);
+          success := insertKeyValue(inout s, key, value);
+          assume s.WFBCVars();
       } else {
         runFlushPolicy(inout s, io);
         success := false;

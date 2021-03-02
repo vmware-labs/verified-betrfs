@@ -42,22 +42,20 @@ module MainHandlers refines Main {
 
   type FullVariables = FullImpl.Full
 
-  predicate W(fs: FullVariables)
-  {
-    fs.W()
-  }
+  // predicate W(fs: FullVariables)
+  // {
+  //   fs.W()
+  // }
 
   predicate Inv(fs: FullVariables)
   {
-    && W(fs)
-    && BJC.Inv(fs.I())
+    fs.Inv()
   }
 
   function I(fs: FullVariables) : ADM.M.Variables
   {
     fs.I()
   }
-
 
   method PrintMetadata()
   {
@@ -102,7 +100,6 @@ module MainHandlers refines Main {
     //assert Inv(hs);
     assert ADM.M.Next(I(old_fs), I(fs), uiop, io.diskOp()); // observe
   }
-/*
 
   // (jonh) unverified debug hook: Note "requires false" which prevents calling
   // this hook from any real handler code. It's only reachable from hooks
@@ -276,5 +273,4 @@ module MainHandlers refines Main {
   {
     System_Ref.RefinesNext(s, s', uiop);
   }
-  */
 }

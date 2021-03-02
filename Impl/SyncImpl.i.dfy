@@ -323,7 +323,6 @@ module SyncImpl {
   {
     var foundDeallocable := FindDeallocable(s);
     if foundDeallocable.Some? {
-      assume false;
       Dealloc(inout s, io, foundDeallocable.value);
       froze := false;
     } else {

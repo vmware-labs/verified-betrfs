@@ -86,7 +86,7 @@ module CoordinationImpl {
   method pushSync(linear inout s: Full)
   returns (id: uint64)
   requires old_s.Inv()
-  ensures s.W()
+  ensures s.WF()
   ensures M.Next(old_s.I(), s.I(),
        if id == 0 then UI.NoOp else UI.PushSyncOp(id as int),
        D.NoDiskOp)
@@ -111,7 +111,7 @@ module CoordinationImpl {
   requires old_s.WFBCVars()
   requires DiskLayout.ValidIndirectionTableLocation(loc)
   requires old_s.Unready?
-  ensures s.W()
+  ensures s.WFBCVars()
   ensures BBC.Next(old_s.I(), s.I(), BlockDisk.NoDiskOp, SendPersistentLocOp(loc))
   {
     linear var Unready() := s;
@@ -126,7 +126,7 @@ module CoordinationImpl {
   requires old_s.Inv()
   requires io.initialized()
   modifies io
-  ensures s.W()
+  ensures s.WF()
   ensures M.Next(old_s.I(), s.I(), UI.NoOp, diskOp(IIO(io)))
   {
     if s.jc.status.StatusLoadingSuperblock? {
@@ -222,7 +222,7 @@ module CoordinationImpl {
   requires old_s.jc.journalist.I().replayJournal == []
 
   modifies io
-  ensures s.W()
+  ensures s.WF()
   ensures M.Next(old_s.I(), s.I(), UI.NoOp, diskOp(IIO(io)))
   {
     wait := false;
@@ -338,7 +338,7 @@ module CoordinationImpl {
   requires old_s.Inv()
   requires io.initialized()
   modifies io
-  ensures s.W()
+  ensures s.WF()
   ensures M.Next(old_s.I(), s.I(),
         if success then UI.PopSyncOp(id as int) else UI.NoOp,
         diskOp(IIO(io)))
@@ -376,7 +376,7 @@ module CoordinationImpl {
   requires old_s.Inv() 
   requires io.initialized()
   modifies io
-  ensures s.W()
+  ensures s.WF()
   ensures M.Next(old_s.I(), s.I(),
           if result.Some? then UI.GetOp(key, result.value) else UI.NoOp,
           diskOp(IIO(io)))
@@ -427,7 +427,7 @@ module CoordinationImpl {
   requires old_s.Inv() 
   requires io.initialized()
   modifies io
-  ensures s.W()
+  ensures s.WF()
   ensures M.Next(old_s.I(), s.I(),
           if result.Some? then UI.SuccOp(start, result.value.results, result.value.end) else UI.NoOp,
           diskOp(IIO(io)))
@@ -483,7 +483,7 @@ module CoordinationImpl {
   requires old_s.Inv() 
   requires io.initialized()
   modifies io
-  ensures s.W()
+  ensures s.WF()
   ensures M.Next(old_s.I(), s.I(),
           if success then UI.PutOp(key, value) else UI.NoOp,
           diskOp(IIO(io)))
