@@ -378,7 +378,7 @@ module SyncImpl {
 
   modifies io
 
-  ensures s.W() && s.Ready?
+  ensures s.WFBCVars() && s.Ready?
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
   ensures BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
@@ -424,7 +424,7 @@ module SyncImpl {
   requires ref in old_s.frozenIndirectionTable.value.I().graph
   requires ref !in old_s.frozenIndirectionTable.value.I().locs
   modifies io
-  ensures s.Ready? && s.W()
+  ensures s.Ready? && s.WFBCVars()
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
   ensures BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
