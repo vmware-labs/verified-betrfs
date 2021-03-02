@@ -88,7 +88,7 @@ module EvictImpl {
   requires io.initialized()
   requires |old_s.cache.I()| > 0
   modifies io
-  ensures s.W() && s.Ready?
+  ensures s.WFBCVars() && s.Ready?
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
   ensures
@@ -113,6 +113,7 @@ module EvictImpl {
         } else {
           var canEvict := CanEvict(s, ref);
           if canEvict {
+            LruModel.LruRemove(s.lru.Queue(), ref);
             inout s.lru.Remove(ref);
             inout s.cache.Remove(ref);
             assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.EvictStep(ref));
@@ -132,7 +133,7 @@ module EvictImpl {
   requires ref in old_s.ephemeralIndirectionTable.I().graph
   requires ref !in old_s.cache.I()
   modifies io
-  ensures s.W() && s.Ready?
+  ensures s.WFBCVars() && s.Ready?
   ensures ValidDiskOp(diskOp(IIO(io)))
   ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
   ensures
