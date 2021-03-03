@@ -1,8 +1,11 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../ByteBlockCacheSystem/JournalBytes.i.dfy"
 include "../BlockCacheSystem/DiskLayout.i.dfy"
 include "JournalistMarshallingModel.i.dfy"
 include "../lib/Lang/System/NativeArrays.s.dfy"
-include "../lib/Crypto/CRC32CArrayImpl.i.dfy"
+include "../lib/Checksums/CRC32CArrayImpl.i.dfy"
 
 module JournalistMarshallingImpl {
   import opened JournalRanges`Internal

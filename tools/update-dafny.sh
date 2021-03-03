@@ -1,5 +1,9 @@
 #! /bin/bash
 
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: BSD-2-Clause
+
+
 set -e
 set -x
 
@@ -13,5 +17,4 @@ else
     ../../tools/checkout-dafny-commit.sh
 fi
 git pull || true # don't try to pull if dafny pointer is to a specific commit, not a branch name
-mono ../boogie/nuget.exe restore Source/Dafny.sln
-msbuild /p:Configuration=Release Source/Dafny.sln
+make exe

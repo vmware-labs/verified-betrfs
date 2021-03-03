@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "Mutex.dfy"
 
 module StateObjects {
@@ -64,7 +67,6 @@ module Impl {
     linear var V(num, r) := entry;
 
     num := num + 1;
-https://www.kosbie.net/cmu/
     linear var r';
     stub, r' := transform_inc(ticket, r);
 

@@ -1,10 +1,11 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../lib/DataStructures/LinearMutableMap.i.dfy"
 include "JournalistImpl.i.dfy"
 include "DiskOpImpl.i.dfy"
 include "IOImpl.i.dfy"
 include "../Versions/VOp.i.dfy"
-
-// for when you have commitment issues
 
 module CommitterImpl {
   import JC = JournalCache

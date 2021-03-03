@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 // A Map that you can query, but you can't insert/remove elements
 // Iterators will be read-only maps from int -> kvpair
 // This abstract module doesn't define a constructor, since the

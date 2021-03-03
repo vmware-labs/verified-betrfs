@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: BSD-2-Clause
+
 # Create the build/ directory, generate the initial build/makefile
 
 import os

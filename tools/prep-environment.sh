@@ -1,18 +1,34 @@
 #!/bin/bash
+
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: BSD-2-Clause
+
 #
-# Run this script as root (sudo tools/prep-environment) to install a recent
-# version of mono and a few other necessary tools.
+# Run this script as root (sudo tools/prep-environment.sh) to install a recent
+# version of .NET and a few other necessary tools.
 
-apt-get update
-apt-get install -y ca-certificates gnupg2
-apt-key adv --keyserver keyserver.ubuntu.com --recv-keys A6A19B38D3D831EF
-apt-get install make wget
-dafny_server/mono-official-stable.list 
-cat > /etc/apt/sources.list.d/mono-official-stable.list <<__EOF__
-deb https://download.mono-project.com/repo/ubuntu stable-bionic main
-__EOF__
-apt-get update
-apt-get install -y mono-runtime mono-mcs mono-devel make wget unzip
-pip3 install toposort
+set -e
 
-tools/install-dafny.sh
+function apt_based_install() {
+    apt-get update
+    apt-get install -y wget time make unzip graphviz apt-transport-https python3-pip clang libc++-dev
+    pip3 install toposort
+    # Derived from https://docs.microsoft.com/en-us/dotnet/core/install/linux-debian
+    wget https://packages.microsoft.com/config/${ID}/${VERSION_ID}/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
+    dpkg -i packages-microsoft-prod.deb
+    rm packages-microsoft-prod.deb
+    apt-get update
+    apt-get install -y dotnet-sdk-5.0
+    exit 0
+}
+
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    if [ "$ID" == "debian" ]; then
+        apt_based_install
+    elif [ "$ID" == "ubuntu" ]; then
+        apt_based_install
+    fi
+fi
+
+echo "Could not identify Linux distribution."

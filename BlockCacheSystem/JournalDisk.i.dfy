@@ -1,12 +1,11 @@
-include "../MapSpec/MapSpec.s.dfy"
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../lib/Base/Maps.i.dfy"
-include "../PivotBetree/Bounds.i.dfy"
 include "DiskLayout.i.dfy"
 include "SectorType.i.dfy"
 include "JournalInterval.i.dfy"
-include "AsyncSectorDiskModelTypes.i.dfy"
 
-// A disk, processing stuff in its queue, doing its thing.
 module JournalDisk {
   import opened NativeTypes
   import opened Maps
@@ -278,71 +277,4 @@ module JournalDisk {
     && s'.superblock2 == s.superblock2
     && havocJournal(s.journal, s'.journal, s.reqWriteJournals)
   }
-}
-
-abstract module JournalMachine {
-  import D = JournalDisk
-  import UI
-
-  type Variables
-  type Location(==)
-  type Sector
-  type UIOp = UI.Op
-
-  predicate Init(s: Variables)
-  predicate Next(s: Variables, s': Variables, uiop: UIOp, dop: D.DiskOp)
-}
-
-// A disk attached to a program ("Machine"), modeling the nondeterministic crashes that reset the
-// program. Designed to look like the AsyncDiskModel, which we want to show refines to this.
-// TODO(jonh): Rename this to a "System"?
-abstract module JournalSystemModel {
-  import D = JournalDisk
-  import M : JournalMachine
-  import AsyncSectorDiskModelTypes
-  import opened SectorType
-
-  type Variables = AsyncSectorDiskModelTypes.AsyncSectorDiskModelVariables<M.Variables, D.Variables>
-  type UIOp = M.UIOp
-
-  datatype Step =
-    | MachineStep(dop: D.DiskOp)
-    | CrashStep
-  
-  predicate Machine(s: Variables, s': Variables, uiop: UIOp, dop: D.DiskOp)
-  {
-    && M.Next(s.machine, s'.machine, uiop, dop)
-    && D.Next(s.disk, s'.disk, dop)
-  }
-
-  predicate Crash(s: Variables, s': Variables, uiop: UIOp)
-  {
-    && uiop.CrashOp?
-    && M.Init(s'.machine)
-    && D.Crash(s.disk, s'.disk)
-  }
-
-  predicate NextStep(s: Variables, s': Variables, uiop: UIOp, step: Step)
-  {
-    match step {
-      case MachineStep(dop) => Machine(s, s', uiop, dop)
-      case CrashStep => Crash(s, s', uiop)
-    }
-  }
-
-  predicate Next(s: Variables, s': Variables, uiop: UIOp) {
-    exists step :: NextStep(s, s', uiop, step)
-  }
-
-  predicate Init(s: Variables)
-  predicate Inv(s: Variables)
-
-  lemma InitImpliesInv(s: Variables)
-    requires Init(s)
-    ensures Inv(s)
-
-  lemma NextPreservesInv(s: Variables, s': Variables, uiop: UIOp)
-    requires Inv(s)
-    requires Next(s, s', uiop)
-    ensures Inv(s')
 }

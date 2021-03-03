@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "BookkeepingModel.i.dfy"
 
 module GrowModel { 
@@ -48,7 +51,7 @@ module GrowModel {
             s1
           )
           case Some(newref) => (
-            var newroot := BT.G.Node(InitPivotTable(), Some([newref]), [B(map[])]);
+            var newroot := BT.G.Node(InitPivotTable(), Some([newref]), [EmptyBucket()]);
             var s2 := writeBookkeeping(s1, BT.G.Root(), newroot.children);
             var s' := s2.(cache := s2.cache[BT.G.Root() := newroot][newref := oldroot]);
             s'
@@ -98,7 +101,7 @@ module GrowModel {
         assert noop(s, s);
       }
       case Some(newref) => {
-        var newroot := BT.G.Node(InitPivotTable(), Some([newref]), [B(map[])]);
+        var newroot := BT.G.Node(InitPivotTable(), Some([newref]), [EmptyBucket()]);
         WeightBucketListOneEmpty();
 
         assert BT.G.Root() in s.cache;
@@ -111,7 +114,7 @@ module GrowModel {
         writeCorrect(s1, BT.G.Root(), newroot);
 
         var growth := BT.RootGrowth(oldroot, newref);
-        assert newroot == BT.G.Node(InitPivotTable(), Some([growth.newchildref]), [B(map[])]);
+        assert newroot == BT.G.Node(InitPivotTable(), Some([growth.newchildref]), [EmptyBucket()]);
         var step := BT.BetreeGrow(growth);
         assert BT.ValidGrow(growth);
         BC.MakeTransaction2(s, s1, s', BT.BetreeStepOps(step));

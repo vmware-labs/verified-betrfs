@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../Lang/NativeTypes.s.dfy"
 include "../Base/Option.s.dfy"
 include "../Base/sequences.i.dfy"
@@ -25,6 +28,13 @@ module MutableMapModel {
   import opened Maps
   import opened SetBijectivity
   import opened NativeArithmetic
+
+// begin generated export
+  export Spec
+    provides *
+    reveals EachReturnedKeyExplainedByPassedIndex, Slot, MaxKeyIterate, ConstructorFromStorage, SlotIsEmpty, iterToNext, Count1, CantEquivocate, ValidSlot, ValidI, FilledWithOtherKeys, TombstoneInSlotMatchesContents, Uint64SlotSuccessor, FilledWithEntryKey, IndexSet, ProbeIterate, FixedSizeInv, ValidElements, SlotSuccessor, KeyInSlotIsInContents, FilledWithKey, LinearHashMap, ConstructorFromSize, CountFilled, SlotExplainsKey, RemoveAndGet, TombstonesMatchContentValue, Iterator, NextExplainedByI, EntryInSlotMatchesContents, setUpTo, UnderlyingContentsMatchesContents, IndexSetThrough, UnderlyingInv, RemoveInternal, IteratorOutput, Item, SlotForKey, TwoNonEmptyValidSlotsWithSameKey, KthSlotSuccessor, EntriesMatchContentValue, ProbeResult, Realloc, View, Get, SameSlot, FixedSizeLinearHashMap, FixedSizeUpdateBySlot, SeqMatchesContentKeys, SlotIsEntry, MapFromStorage, simpleIterToNext, Remove, indexOutput, SimpleIterator, ReallocIterate, CantEquivocateStorageKey, FilledWithOtherKey, SlotIsTombstone, Uint64SlotForKey
+  export extends Spec
+// end generated export
 
   function method {:opaque} lshift(a: uint64, b: uint32) : uint64
   requires 0 <= b < 64
@@ -932,9 +942,9 @@ module MutableMapModel {
   }
 
   lemma UnderlyingInvImpliesMapFromStorageMatchesContents<V>(underlying: FixedSizeLinearHashMap<V>, contents: map<uint64, V>)
-    requires UnderlyingContentsMatchesContents(underlying, contents)
-    requires FixedSizeInv(underlying)
-    ensures MapFromStorage(underlying.storage) == contents
+  requires UnderlyingContentsMatchesContents(underlying, contents)
+  requires FixedSizeInv(underlying)
+  ensures MapFromStorage(underlying.storage) == contents
   {
     var mapFromStorage := MapFromStorage(underlying.storage);
     CantEquivocateMapFromStorageKey(underlying);
@@ -942,8 +952,9 @@ module MutableMapModel {
     assert MapFromStorage(underlying.storage) == contents;
   }
 
-  protected predicate Inv<V>(self: LinearHashMap<V>)
-    ensures Inv(self) ==> |self.contents| == self.count as nat
+  /* protected */
+  predicate Inv<V>(self: LinearHashMap<V>)
+  ensures Inv(self) ==> |self.contents| == self.count as nat
   {
     && UnderlyingInv(self, self.underlying)
     && MapFromStorage(self.underlying.storage) == self.contents
@@ -1424,7 +1435,8 @@ module MutableMapModel {
         && key == self.underlying.storage[j].key
   }
 
-  protected predicate WFIter<V>(self: LinearHashMap<V>, it: Iterator<V>)
+  /* protected */
+  predicate WFIter<V>(self: LinearHashMap<V>, it: Iterator<V>)
   ensures WFIter(self, it) ==> (it.next.Done? ==> it.s == self.contents.Keys)
   ensures WFIter(self, it) ==> (it.next.Next? ==>
       MapsTo(self.contents, it.next.key, it.next.value));
@@ -1445,7 +1457,8 @@ module MutableMapModel {
     && it.s <= self.contents.Keys
   }
 
-  protected predicate WFSimpleIter<V>(self: LinearHashMap<V>, it: SimpleIterator)
+  /* protected */
+  predicate WFSimpleIter<V>(self: LinearHashMap<V>, it: SimpleIterator)
   ensures WFSimpleIter(self, it) ==> it.s <= self.contents.Keys
   {
     && 0 <= it.i as int <= |self.underlying.storage|
@@ -1476,7 +1489,8 @@ module MutableMapModel {
     )
   }
 
-  protected function SimpleIterOutput<V>(self: LinearHashMap<V>, it: SimpleIterator) : (next: IteratorOutput<V>)
+  /* protected */
+  function SimpleIterOutput<V>(self: LinearHashMap<V>, it: SimpleIterator) : (next: IteratorOutput<V>)
   requires WFSimpleIter(self, it)
   ensures (next.Done? ==> it.s == self.contents.Keys)
   ensures (next.Next? ==>

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 lemma node_set_contained(v: Node, w: Node)
 requires is_structurally_valid(v)
 requires w in node_set(v)

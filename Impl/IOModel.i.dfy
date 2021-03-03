@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../ByteBlockCacheSystem/ByteCache.i.dfy"
 include "MarshallingModel.i.dfy"
 include "DiskOpModel.i.dfy"

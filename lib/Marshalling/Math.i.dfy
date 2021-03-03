@@ -14,13 +14,13 @@ module Math {
   }
 
   lemma lemma_2toX()
-      ensures power2(64) == 18446744073709551616;
-      ensures power2(60) == 1152921504606846976;
-      ensures power2(32) == 4294967296;
-      ensures power2(24) == 16777216;
-      ensures power2(19) == 524288;
-      ensures power2(16) == 65536;
       ensures power2(8) ==  256;
+      ensures power2(16) == 65536;
+      ensures power2(19) == 524288;
+      ensures power2(24) == 16777216;
+      ensures power2(32) == 4294967296;
+      ensures power2(60) == 1152921504606846976;
+      ensures power2(64) == 18446744073709551616;
   {
     reveal_power2();
   }

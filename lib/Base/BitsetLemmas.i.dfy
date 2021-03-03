@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../Lang/NativeTypes.s.dfy"
 include "MathAxioms.s.dfy"
 //
@@ -17,7 +20,7 @@ module BitsetLemmas {
   {
   }
 
-  lemma bit_comp_ne_expanded(i: uint64, j: uint64)
+  lemma {:timeLimitMultiplier 6} bit_comp_ne_expanded(i: uint64, j: uint64)
   requires i < 64
   requires j < 64
   requires i != j
@@ -365,6 +368,10 @@ module BitsetLemmas {
 
   // uint64
 
+  // TODO: We should rewrite the functions below to use the b2u and u2b
+  //       wrappers, instead of Dafny-level casts.  That will reduce 
+  //       bit-vector induced flakiness in higher-level proofs
+
   function method {:opaque} bit_or_uint64(a: uint64, b: uint64) : uint64
   {
     bit_or(a as bv64, b as bv64) as uint64
@@ -404,16 +411,52 @@ module BitsetLemmas {
     reveal_set_bit_to_1_uint64();
   }
 
+
+  function {:opaque} b2u(b:bv64) : uint64
+  {
+    b as uint64
+  }
+
+  function {:opaque} u2b(u:uint64) : bv64
+  {
+    u as bv64
+  }
+
+  lemma u2b_inverse_b2u(a:bv64) 
+    ensures u2b(b2u(a)) == a;
+  {
+    reveal b2u();
+    reveal u2b();
+    bv64cast(a);
+  }
+
   lemma set_bit_to_1_other_uint64(a: uint64, i: uint64, j: uint64)
   requires i < 64
   requires j < 64
   requires i != j
   ensures in_set_uint64(j, a) <==> in_set_uint64(j, set_bit_to_1_uint64(a, i))
   {
-    set_bit_to_1_other(a as bv64, i, j);
-    bv64cast(set_bit_to_1(a as bv64, i));
-    reveal_in_set_uint64();
-    reveal_set_bit_to_1_uint64();
+    calc {
+      in_set_uint64(j, a);
+        { reveal in_set_uint64(); }
+      in_set(j, a as bv64);
+        { reveal u2b(); }
+      in_set(j, u2b(a));
+        { set_bit_to_1_other(u2b(a), i, j); }
+      in_set(j, set_bit_to_1(u2b(a), i));
+        { u2b_inverse_b2u(set_bit_to_1(u2b(a), i)); }
+      in_set(j, u2b(b2u(set_bit_to_1(u2b(a), i))));
+        { reveal u2b(); }
+      in_set(j, b2u(set_bit_to_1(u2b(a), i)) as bv64);
+        { reveal in_set_uint64(); }
+      in_set_uint64(j, b2u(set_bit_to_1(u2b(a), i)));
+          { reveal u2b(); }
+      in_set_uint64(j, b2u(set_bit_to_1(a as bv64, i)));
+          { reveal b2u(); }
+      in_set_uint64(j, set_bit_to_1(a as bv64, i) as uint64);
+        { reveal_set_bit_to_1_uint64(); }
+      in_set_uint64(j, set_bit_to_1_uint64(a, i));
+    }
   }
 
   lemma set_bit_to_0_self_uint64(a: uint64, i: uint64)
@@ -432,10 +475,27 @@ module BitsetLemmas {
   requires i != j
   ensures in_set_uint64(j, a) <==> in_set_uint64(j, set_bit_to_0_uint64(a, i))
   {
-    set_bit_to_0_other(a as bv64, i, j);
-    bv64cast(set_bit_to_0(a as bv64, i));
-    reveal_in_set_uint64();
-    reveal_set_bit_to_0_uint64();
+    calc {
+      in_set_uint64(j, a);
+        { reveal in_set_uint64(); }
+      in_set(j, a as bv64);
+        { reveal u2b(); }
+      in_set(j, u2b(a));
+        { set_bit_to_0_other(u2b(a), i, j); }
+      in_set(j, set_bit_to_0(u2b(a), i));
+        { u2b_inverse_b2u(set_bit_to_0(u2b(a), i)); }
+      in_set(j, u2b(b2u(set_bit_to_0(u2b(a), i))));
+        { reveal u2b(); }
+      in_set(j, b2u(set_bit_to_0(u2b(a), i)) as bv64);
+        { reveal in_set_uint64(); }
+      in_set_uint64(j, b2u(set_bit_to_0(u2b(a), i)));
+          { reveal u2b(); }
+      in_set_uint64(j, b2u(set_bit_to_0(a as bv64, i)));
+          { reveal b2u(); }
+      in_set_uint64(j, set_bit_to_0(a as bv64, i) as uint64);
+        { reveal_set_bit_to_0_uint64(); }
+      in_set_uint64(j, set_bit_to_0_uint64(a, i));
+    }
   }
 
   lemma bit_or_is_union_uint64(a: uint64, b: uint64, i: uint64)
@@ -443,10 +503,27 @@ module BitsetLemmas {
   ensures in_set_uint64(i, bit_or_uint64(a, b))
       == (in_set_uint64(i, a) || in_set_uint64(i, b))
   {
-    bit_or_is_union(a as bv64, b as bv64, i);
-    bv64cast(bit_or(a as bv64, b as bv64));
-    reveal_bit_or_uint64();
-    reveal_in_set_uint64();
+    calc {
+      in_set_uint64(i, bit_or_uint64(a, b));
+        { reveal_in_set_uint64(); } 
+      in_set(i, bit_or_uint64(a, b) as bv64);
+        { reveal u2b(); }
+      in_set(i, u2b(bit_or_uint64(a, b)));
+        { reveal bit_or_uint64(); }
+      in_set(i, u2b(bit_or(a as bv64, b as bv64) as uint64));
+        { reveal u2b(); }
+      in_set(i, u2b(bit_or(u2b(a), u2b(b)) as uint64));
+        { reveal b2u(); }
+      in_set(i, u2b(b2u(bit_or(u2b(a), u2b(b)))));
+        { u2b_inverse_b2u(bit_or(u2b(a), u2b(b))); }
+      in_set(i, bit_or(u2b(a), u2b(b)));
+        { bit_or_is_union(u2b(a), u2b(b), i); }
+      in_set(i, u2b(a)) || in_set(i, u2b(b));
+        { reveal u2b(); }
+      in_set(i, a as bv64) || in_set(i, b as bv64);
+        { reveal_in_set_uint64(); } 
+      in_set_uint64(i, a) || in_set_uint64(i, b);
+    }
   }
 
   lemma all1s_is_set_uint64(i: uint64)

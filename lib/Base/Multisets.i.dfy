@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "Maps.i.dfy"
 include "sequences.i.dfy"
 
@@ -380,5 +383,24 @@ module Multisets {
   function ValueMultiset<A,B>(m: map<A,B>) : (result: multiset<B>)
   {
     Apply(ValueMultisetFn(m), multiset(m.Keys))
+  }
+
+  lemma ValueMultisetInduct<A,B>(m: map<A,B>, a: A, b: B)
+  requires a !in m
+  ensures ValueMultiset(m[a := b]) == ValueMultiset(m) + multiset{b}
+  {
+    calc {
+      ValueMultiset(m[a := b]);
+      Apply(ValueMultisetFn(m[a := b]), multiset(m[a := b].Keys));
+      { assert multiset(m[a := b].Keys) == multiset(m.Keys) + multiset{a}; }
+      Apply(ValueMultisetFn(m[a := b]), multiset(m.Keys) + multiset{a});
+      { ApplyAdditive(ValueMultisetFn(m[a := b]), multiset(m.Keys), multiset{a}); }
+      Apply(ValueMultisetFn(m[a := b]), multiset(m.Keys)) + Apply(ValueMultisetFn(m[a := b]), multiset{a});
+      { ApplySingleton(ValueMultisetFn(m[a := b]), a); }
+      Apply(ValueMultisetFn(m[a := b]), multiset(m.Keys)) + multiset{b};
+      { ApplyEquivalentFns(ValueMultisetFn(m[a := b]), ValueMultisetFn(m), multiset(m.Keys)); }
+      Apply(ValueMultisetFn(m), multiset(m.Keys)) + multiset{b};
+      ValueMultiset(m) + multiset{b};
+    }
   }
 }

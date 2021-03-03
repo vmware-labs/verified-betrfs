@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "FlushModel.i.dfy"
 include "GrowModel.i.dfy"
 include "SplitModel.i.dfy"

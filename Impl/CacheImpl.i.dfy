@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../lib/Base/DebugAccumulator.i.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Lang/LinearBox.i.dfy"
@@ -32,7 +35,7 @@ module CacheImpl {
   import Pivots = BoundedPivotsLib
   import BucketsLib
 
-  import BGI = BucketGeneratorImpl
+  import opened BGI = BucketGeneratorImpl
 
   import opened LinearBox
   import opened LinearBox_s
@@ -40,6 +43,14 @@ module CacheImpl {
   import opened LCMM = LinearContentMutableMap
 
   import opened LinearSequence_s
+
+
+// begin generated export
+  export Spec
+    provides *
+    reveals LMutCache, LMutCache.Inv, LMutCache.ptr, LMutCache.I, CacheCount
+  export extends Spec
+// end generated export
 
   linear datatype LMutCache = LMutCache(linear cache: LinearHashMap<Node>) {
     static method DebugAccumulate(shared c: LMutCache)
@@ -426,8 +437,8 @@ module CacheImpl {
     ensures newchild.Inv()
     ensures newchild.I().pivotTable == I()[childref].pivotTable
     ensures newchild.I().children == I()[childref].children
-    ensures BucketModel.partialFlushResult(newparentBucket.I(), newchild.I().buckets)
-        == BucketModel.partialFlush(I()[parentref].buckets[slot], 
+    ensures BucketFlushModel.partialFlushResult(newparentBucket.I(), newchild.I().buckets)
+        == BucketFlushModel.partialFlush(I()[parentref].buckets[slot], 
           I()[childref].pivotTable, I()[childref].buckets)
     {
       shared var parent := Get(parentref);

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../Base/sequences.i.dfy"
 include "../Base/total_order.i.dfy"
   

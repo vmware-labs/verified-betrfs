@@ -1,6 +1,9 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "PackedStringArray.i.dfy"
 include "BucketsLib.i.dfy"
-include "BucketModel.i.dfy"
+include "BucketFlushModel.i.dfy"
 
 module PackedKV {
   import PSA = PackedStringArray
@@ -80,13 +83,13 @@ module PackedKV {
     && IdentityMessage() !in IMessages(pkv.messages)
   }
 
-  function IMap(pkv: Pkv) : (bucket : BucketMap)
+  /*function IMap(pkv: Pkv) : (bucket : BucketMap)
   requires WF(pkv)
   ensures WFBucketMap(bucket)
   {
     assert IdentityMessage() !in Set(IMessages(pkv.messages));
     BucketMapOfSeq(IKeys(pkv.keys), IMessages(pkv.messages))
-  }
+  }*/
 
   predicate SortedKeys(pkv: Pkv)
   requires WF(pkv)
@@ -99,12 +102,13 @@ module PackedKV {
   ensures WFBucket(bucket)
   {
     // Note that this might not be WellMarshalled
-    BucketMapWithSeq(IMap(pkv), IKeys(pkv.keys), IMessages(pkv.messages))
+    Bucket(IKeys(pkv.keys), IMessages(pkv.messages))
   }
 
   function method EmptyPkv() : (result: Pkv)
     ensures WF(result)
-    ensures IMap(result) == map[]
+    //ensures IMap(result) == map[]
+    ensures I(result) == EmptyBucket()
   {
     Pkv(PSA.EmptyPsa(), PSA.EmptyPsa())
   }
@@ -295,12 +299,12 @@ module PackedKV {
     requires WF(pkv)
     requires 0 <= from <= to <= PSA.psaNumStrings(pkv.keys)
     ensures WF(result)
-    ensures BucketWellMarshalled(I(pkv)) ==> BucketWellMarshalled(I(result))
+    //ensures BucketWellMarshalled(I(pkv)) ==> BucketWellMarshalled(I(result))
   {
-    if BucketWellMarshalled(I(pkv)) then
+    /*if BucketWellMarshalled(I(pkv)) then
       Keyspace.StrictlySortedSubsequence(PSA.I(pkv.keys), from as int, to as int);
       Pkv(PSA.psaSubSeq(pkv.keys, from, to), PSA.psaSubSeq(pkv.messages, from, to))
-    else 
+    else */
       Pkv(PSA.psaSubSeq(pkv.keys, from, to), PSA.psaSubSeq(pkv.messages, from, to))
   }
 
@@ -322,7 +326,7 @@ module PackedKV {
     subPkv(pkv, 0, NumKVPairs(pkv) - 1)
   }
 
-  lemma Imaps(pkv: Pkv, i: int)
+  /*lemma Imaps(pkv: Pkv, i: int)
     requires WF(pkv)
     requires Keyspace.IsStrictlySorted(PSA.I(pkv.keys))
     requires 0 <= i < |PSA.I(pkv.keys)|
@@ -348,19 +352,54 @@ module PackedKV {
       }
       assert Sequences.DropLast(IMessages(pkv.messages)) == IMessages(PSA.psaDropLast(pkv.messages));
     }
+  }*/
+
+  lemma IMessagesSlice(pkv: Pkv, a: uint64, b: uint64)
+  requires WF(pkv)
+  requires 0 <= a <= b <= NumKVPairs(pkv)
+  ensures IMessages(pkv.messages)[a..b]
+      == IMessages(subPkv(pkv, a, b).messages)
+  {
+    var x := IMessages(pkv.messages)[a..b];
+    var y := IMessages(subPkv(pkv, a, b).messages);
+    assert |x| == |y|;
+    forall i | 0 <= i < |x|
+    ensures x[i] == y[i];
+    {
+      calc {
+        x[i];
+        IMessages(pkv.messages)[a as int + i];
+        bytestring_to_Message(PSA.I(pkv.messages)[a as int + i]);
+        y[i];
+      }
+    }
   }
 
   method SplitLeft(pkv: Pkv, pivot: Key) returns (result: Pkv)
     requires WF(pkv)
-    requires Keyspace.IsStrictlySorted(PSA.I(pkv.keys))
     ensures WF(result)
-    ensures Keyspace.IsStrictlySorted(PSA.I(result.keys))
     ensures I(result) == SplitBucketLeft(I(pkv), pivot)
   {
-    var idx := PSA.IndexOfFirstKeyGte(pkv.keys, pivot);
+    var idx := PSA.BinarySearchIndexOfFirstKeyGte(pkv.keys, pivot);
     result := SubPkv(pkv, 0, idx);
 
-    ghost var ikeys := PSA.I(pkv.keys);
+    //calc {
+    //  I(result);
+    //  Bucket(IKeys(result.keys), IMessages(result.messages));
+    //  {
+        IMessagesSlice(pkv, 0, idx);
+    //    assert IKeys(result.keys) == IKeys(pkv.keys)[..idx];
+    //    assert IMessages(result.messages) == IMessages(pkv.messages)[..idx];
+    //  }
+    //  Bucket(IKeys(pkv.keys)[..idx], IMessages(pkv.messages)[..idx]);
+    //  Bucket(I(pkv).keys[..idx], I(pkv).msgs[..idx]);
+    //  {
+        reveal_SplitBucketLeft();
+    //  }
+    //  SplitBucketLeft(I(pkv), pivot);
+    //}
+
+    /*ghost var ikeys := PSA.I(pkv.keys);
     ghost var subkeys := PSA.I(result.keys);
     
     Keyspace.StrictlySortedSubsequence(ikeys, 0, idx as int);
@@ -385,20 +424,21 @@ module PackedKV {
 
     ghost var iresult := I(result);
     ghost var isplit := SplitBucketLeft(I(pkv), pivot);
-    WellMarshalledBucketsEq(iresult, isplit);
+    WellMarshalledBucketsEq(iresult, isplit);*/
   }
     
   method SplitRight(pkv: Pkv, pivot: Key) returns (result: Pkv)
     requires WF(pkv)
-    requires Keyspace.IsStrictlySorted(PSA.I(pkv.keys))
     ensures WF(result)
-    ensures Keyspace.IsStrictlySorted(PSA.I(result.keys))
     ensures I(result) == SplitBucketRight(I(pkv), pivot)
   {
-    var idx := PSA.IndexOfFirstKeyGte(pkv.keys, pivot);
+    var idx := PSA.BinarySearchIndexOfFirstKeyGte(pkv.keys, pivot);
     result := SubPkv(pkv, idx, NumKVPairs(pkv));
 
-    ghost var ikeys := PSA.I(pkv.keys);
+    IMessagesSlice(pkv, idx, NumKVPairs(pkv));
+    reveal_SplitBucketRight();
+
+    /*ghost var ikeys := PSA.I(pkv.keys);
     ghost var subkeys := PSA.I(result.keys);
     
     Keyspace.StrictlySortedSubsequence(ikeys, idx as int, |ikeys|);
@@ -423,7 +463,7 @@ module PackedKV {
 
     ghost var iresult := I(result);
     ghost var isplit := SplitBucketRight(I(pkv), pivot);
-    WellMarshalledBucketsEq(iresult, isplit);
+    WellMarshalledBucketsEq(iresult, isplit);*/
   }
 
   lemma psaTotalLengthBound(psa: PSA.Psa, maxlen: nat)
@@ -453,7 +493,7 @@ module DynamicPkv {
   import Uint64_Order
   import opened BucketsLib
   import P = BoundedPivotsLib
-  import BucketModel
+  import BucketFlushModel
   import opened BucketWeights
   import opened Bounds
   import KeyspaceImpl = Lexicographic_Byte_Order_Impl
@@ -577,7 +617,7 @@ module DynamicPkv {
         WeightBucketPkv(pkv') + WeightKey(key) + WeightMessage(msg);
         WeightKeyList(keys') + WeightMessageList(msgs') + WeightKey(key) + WeightMessage(msg);
         {
-          IMessagesSlice(pkv, 0, PKV.NumKVPairs(pkv) -  1);
+          PKV.IMessagesSlice(pkv, 0, PKV.NumKVPairs(pkv) -  1);
           assert keys' + [key] == keys;
           assert msgs' + [msg] == msgs;
           WeightKeyListPushBack(keys', key);
@@ -783,17 +823,17 @@ module DynamicPkv {
       && PKV.WF(this.bot)
     }
 
-    function I() : BucketModel.singleMergeResult
+    function I() : BucketFlushModel.singleMergeResult
     requires WF()
     {
       match this {
         case MergeCompleted(bot, slack) =>
-          BucketModel.MergeCompleted(
+          BucketFlushModel.MergeCompleted(
             PSA.I(bot.keys),
             PKV.IMessages(bot.messages),
             slack as nat)
         case SlackExhausted(bot, end, slack) =>
-          BucketModel.SlackExhausted(
+          BucketFlushModel.SlackExhausted(
             PSA.I(bot.keys),
             PKV.IMessages(bot.messages),
             end as nat,
@@ -812,7 +852,7 @@ module DynamicPkv {
     requires WeightBucketPkv(bot) as int + slack0 as int
         <= MaxTotalBucketWeight()
     ensures result.WF()
-    ensures result.I() == BucketModel.mergeToOneChild(
+    ensures result.I() == BucketFlushModel.mergeToOneChild(
         PSA.I(top.keys), PKV.IMessages(top.messages),
         from0 as nat, to as nat,
         PSA.I(bot.keys), PKV.IMessages(bot.messages),
@@ -825,7 +865,7 @@ module DynamicPkv {
           WeightMessageList(PKV.IMessages(bot.messages)) +
           slack0 as int
   {
-    BucketModel.reveal_mergeToOneChild();
+    BucketFlushModel.reveal_mergeToOneChild();
 
     var from: uint64 := from0;
     var slack: uint64 := slack0;
@@ -855,13 +895,13 @@ module DynamicPkv {
     invariant bot_from <= PKV.NumKVPairs(bot)
     invariant dresult.WF()
     invariant fresh(dresult.Repr)
-    invariant BucketModel.mergeToOneChild(
+    invariant BucketFlushModel.mergeToOneChild(
           PSA.I(top.keys), PKV.IMessages(top.messages),
           from0 as nat, to as nat,
           PSA.I(bot.keys), PKV.IMessages(bot.messages),
           0, [], [],
           slack0 as nat)
-     == BucketModel.mergeToOneChild(
+     == BucketFlushModel.mergeToOneChild(
           PSA.I(top.keys), PKV.IMessages(top.messages),
           from as nat, to as nat,
           PSA.I(bot.keys), PKV.IMessages(bot.messages),
@@ -992,10 +1032,10 @@ module DynamicPkv {
       && forall i | 0 <= i < |this.bots| :: PKV.WF(this.bots[i])
     }
 
-    function I() : BucketModel.mergeResult
+    function I() : BucketFlushModel.mergeResult
     requires WF()
     {
-      BucketModel.mergeResult(
+      BucketFlushModel.mergeResult(
         PKV.I(this.top),
         PKVISeq(this.bots),
         this.slack as nat
@@ -1010,27 +1050,6 @@ module DynamicPkv {
       <= WeightBucketList(PKVISeq(bots[i..]))
   {
     WeightBucketLeBucketList(PKVISeq(bots[i..]), 0);
-  }
-
-  lemma IMessagesSlice(pkv: PKV.Pkv, a: uint64, b: uint64)
-  requires PKV.WF(pkv)
-  requires 0 <= a <= b <= PKV.NumKVPairs(pkv)
-  ensures PKV.IMessages(pkv.messages)[a..b]
-      == PKV.IMessages(PKV.subPkv(pkv, a, b).messages)
-  {
-    var x := PKV.IMessages(pkv.messages)[a..b];
-    var y := PKV.IMessages(PKV.subPkv(pkv, a, b).messages);
-    assert |x| == |y|;
-    forall i | 0 <= i < |x|
-    ensures x[i] == y[i];
-    {
-      calc {
-        x[i];
-        PKV.IMessages(pkv.messages)[a as int + i];
-        bytestring_to_Message(PSA.I(pkv.messages)[a as int + i]);
-        y[i];
-      }
-    }
   }
 
   lemma WeightPKVListPopFront(pkvs: seq<PKV.Pkv>, i: int)
@@ -1096,7 +1115,7 @@ module DynamicPkv {
   decreases |bots| - i as int
   modifies results
   ensures res.WF()
-  ensures res.I() == BucketModel.mergeToChildrenIter(
+  ensures res.I() == BucketFlushModel.mergeToChildrenIter(
       PKV.I(top), PKVISeq(bots), seqInt(idxs), tmp.I(), i as int, 
           PKVISeq(old(results[..i])))
   {
@@ -1107,14 +1126,14 @@ module DynamicPkv {
         ghost var topb := PKV.I(top);
         calc
         {
-          BucketOfSeq(topb.keys[tmp.end..], topb.msgs[tmp.end..]);
+          Bucket(topb.keys[tmp.end..], topb.msgs[tmp.end..]);
           {
             assert PKV.IKeys(top.keys)[tmp.end..]
                 == PKV.IKeys(top.keys)[tmp.end..PKV.NumKVPairs(top)];
             assert PKV.IMessages(top.messages)[tmp.end..]
                 == PKV.IMessages(top.messages)[tmp.end..PKV.NumKVPairs(top)];
             assert PKV.I(leftover_top).keys == topb.keys[tmp.end..];
-            IMessagesSlice(top, tmp.end, PKV.NumKVPairs(top));
+            PKV.IMessagesSlice(top, tmp.end, PKV.NumKVPairs(top));
             assert PKV.I(leftover_top).msgs == topb.msgs[tmp.end..];
           }
           PKV.I(leftover_top);
@@ -1152,7 +1171,7 @@ module DynamicPkv {
 
         calc {
           PKVISeq(results[..i+1]);
-          PKVISeq(old(results[..i])) + [BucketOfSeq(PKV.IKeys(tmp'.bot.keys), PKV.IMessages(tmp'.bot.messages))];
+          PKVISeq(old(results[..i])) + [Bucket(PKV.IKeys(tmp'.bot.keys), PKV.IMessages(tmp'.bot.messages))];
         }
 
         res := MergeToChildrenIter(top, bots, idxs, tmp', i+1, results);
@@ -1220,17 +1239,17 @@ module DynamicPkv {
   requires WeightBucketList(PKVISeq(bots)) + slack as int == MaxTotalBucketWeight()
 
   ensures result.WF()
-  ensures result.I() == BucketModel.mergeToChildren(
+  ensures result.I() == BucketFlushModel.mergeToChildren(
       PKV.I(top), pivots, PKVISeq(bots), slack as int)
   {
-    BucketModel.reveal_mergeToChildren();
+    BucketFlushModel.reveal_mergeToChildren();
     var idxs := computePivotIndexes(top.keys, pivots);
     var tmp := MergeCompleted(PKV.EmptyPkv(), slack);
     var ar := new PKV.Pkv[|bots| as uint64];
 
     assert WeightBucketList(PKVISeq(ar[..0])) == 0 by { reveal_WeightBucketList(); }
     assert bots[0..] == bots;
-    assert BucketModel.pivotIndexes(PKV.I(top).keys, pivots) == seqInt(idxs);
+    assert BucketFlushModel.pivotIndexes(PKV.I(top).keys, pivots) == seqInt(idxs);
 
     result := MergeToChildrenIter(top, bots, idxs, tmp, 0, ar);
   }
@@ -1243,10 +1262,10 @@ module DynamicPkv {
       && forall i | 0 <= i < |bots| :: PKV.WF(bots[i])
     }
 
-    function I() : BucketModel.partialFlushResult
+    function I() : BucketFlushModel.partialFlushResult
     requires WF()
     {
-      BucketModel.partialFlushResult(PKV.I(top), PKVISeq(bots))
+      BucketFlushModel.partialFlushResult(PKV.I(top), PKVISeq(bots))
     }
   }
 
@@ -1263,7 +1282,7 @@ module DynamicPkv {
   requires 0 < |bots| == P.NumBuckets(pivots)
   requires WeightBucketList(PKVISeq(bots)) <= MaxTotalBucketWeight()
   ensures result.WF()
-  ensures result.I() == BucketModel.partialFlush(
+  ensures result.I() == BucketFlushModel.partialFlush(
       PKV.I(top), pivots, PKVISeq(bots))
   {
     var slack := MaxTotalBucketWeightUint64();
@@ -1299,7 +1318,7 @@ module DynamicPkv {
     }
     assert PKVISeq(bots)[..i] == PKVISeq(bots);
 
-    BucketModel.reveal_partialFlush();
+    BucketFlushModel.reveal_partialFlush();
     var res := MergeToChildren(top, pivots, bots, slack);
     return PartialFlushResult(res.top, res.bots);
   }

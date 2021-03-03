@@ -1,7 +1,11 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../BlockCacheSystem/BlockSystem.i.dfy"
 include "../Versions/StatesView.i.dfy"
 include "../lib/Base/Maps.i.dfy"
 include "../lib/Base/sequences.i.dfy"
+include "../PivotBetree/PivotBetreeBlockInterface.i.dfy"
 
 module BlockSystem_Refines_StatesView {
   import opened G = PivotBetreeGraph

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "BucketsLib.i.dfy"
 include "../Base/Sets.i.dfy"
 //
@@ -13,6 +16,8 @@ module BucketIteratorModel {
   import opened ValueMessage
   import opened Sequences
   import opened KeyType
+  import opened BucketMaps
+  import MapSeqs
 
   datatype IteratorOutput = Next(key: Key, msg: Message) | Done
 
@@ -27,14 +32,16 @@ module BucketIteratorModel {
     set k | k in bucket && Keyspace.lte(key, k)
   }
 
-  protected predicate WFIter(bucket: Bucket, it: Iterator)
+  predicate {:opaque} WFIter(bucket: Bucket, it: Iterator)
   ensures WFIter(bucket, it) ==>
+      && PreWFBucket(bucket)
       && it.decreaser >= 0
       && (it.next.Next? && BucketWellMarshalled(bucket) ==> (
-        && it.next.key in bucket.b
-        && bucket.b[it.next.key] == it.next.msg
+        && it.next.key in bucket.as_map()
+        && bucket.as_map()[it.next.key] == it.next.msg
       ))
   {
+    && PreWFBucket(bucket)
     && it.decreaser >= 0
     && it.idx >= 0
     && it.idx + it.decreaser == |bucket.keys|
@@ -48,8 +55,8 @@ module BucketIteratorModel {
       && it.decreaser == 0
     ))
     && (it.next.Next? && BucketWellMarshalled(bucket) ==> (
-      && it.next.key in bucket.b
-      && bucket.b[it.next.key] == it.next.msg
+      && it.next.key in bucket.as_map()
+      && bucket.as_map()[it.next.key] == it.next.msg
     ))
   }
 
@@ -59,6 +66,8 @@ module BucketIteratorModel {
   requires 0 <= idx <= |bucket.keys|
   ensures WFIter(bucket, it)
   {
+    reveal WFIter();
+
     var it := Iterator(
       (if idx == |bucket.keys| then Done
           else Next(bucket.keys[idx], bucket.msgs[idx])),
@@ -66,11 +75,10 @@ module BucketIteratorModel {
       |bucket.keys| - idx);
 
     assert (it.next.Next? && BucketWellMarshalled(bucket) ==> (
-      WFWellMarshalledBucketMapI(bucket, idx);
-      && it.next.key in bucket.b
-      && bucket.b[it.next.key] == it.next.msg
+      MapSeqs.MapMapsIndex(bucket.keys, bucket.msgs, idx);
+      && it.next.key in bucket.as_map()
+      && bucket.as_map()[it.next.key] == it.next.msg
     ));
-
     it
   }
 
@@ -78,6 +86,7 @@ module BucketIteratorModel {
   requires |bucket.keys| == |bucket.msgs|
   ensures WFIter(bucket, it)
   {
+    reveal WFIter();
     Iterator(Done, |bucket.keys|, 0)
   }
 
@@ -87,6 +96,7 @@ module BucketIteratorModel {
   requires WFBucket(bucket)
   ensures WFIter(bucket, it')
   {
+    reveal WFIter();
     iterForIndex(bucket, 0)
   }
 
@@ -104,6 +114,7 @@ module BucketIteratorModel {
   ensures WFIter(bucket, it')
   ensures it'.next.Next? ==> Keyspace.lt(key, it'.next.key)
   {
+    reveal WFIter();
     iterForIndex(bucket,
       Keyspace.binarySearchIndexOfFirstKeyGt(bucket.keys, key))
   }
@@ -115,6 +126,7 @@ module BucketIteratorModel {
   ensures WFIter(bucket, it')
   ensures it'.decreaser < it.decreaser
   {
+    reveal WFIter();
     iterForIndex(bucket, it.idx + 1)
   }
 
@@ -122,15 +134,17 @@ module BucketIteratorModel {
   requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
   requires WFIter(bucket, it)
-  requires key in bucket.b
+  requires key in bucket.as_map()
   requires it.next.Next?
   ensures IterInc(bucket, it).next.Next? ==>
       (Keyspace.lte(key, it.next.key) || Keyspace.lte(IterInc(bucket, it).next.key, key))
   ensures IterInc(bucket, it).next.Done? ==>
       Keyspace.lte(key, it.next.key)
   {
+    reveal WFIter();
     Keyspace.reveal_IsStrictlySorted();
     reveal_IterInc();
+    var i := MapSeqs.GetIndex(bucket.keys, bucket.msgs, key);
   }
 
   lemma IterIncKeyGreater(bucket: Bucket, it: Iterator)
@@ -141,6 +155,7 @@ module BucketIteratorModel {
   ensures IterInc(bucket, it).next.Next? ==>
       Keyspace.lt(it.next.key, IterInc(bucket, it).next.key)
   {
+    reveal WFIter();
     Keyspace.reveal_IsStrictlySorted();
     reveal_IterInc();
   }
@@ -148,7 +163,7 @@ module BucketIteratorModel {
   lemma noKeyBetweenIterFindFirstGte(bucket: Bucket, key: Key, key0: Key)
   requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
-  requires key0 in bucket.b
+  requires key0 in bucket.as_map()
   ensures IterFindFirstGte(bucket, key).next.Next? ==>
       (Keyspace.lt(key0, key) || Keyspace.lte(IterFindFirstGte(bucket, key).next.key, key0))
   ensures IterFindFirstGte(bucket, key).next.Done? ==>
@@ -156,12 +171,13 @@ module BucketIteratorModel {
   {
     Keyspace.reveal_IsStrictlySorted();
     reveal_IterFindFirstGte();
+    var i := MapSeqs.GetIndex(bucket.keys, bucket.msgs, key0);
   }
 
   lemma noKeyBetweenIterFindFirstGt(bucket: Bucket, key: Key, key0: Key)
   requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
-  requires key0 in bucket.b
+  requires key0 in bucket.as_map()
   ensures IterFindFirstGt(bucket, key).next.Next? ==>
       (Keyspace.lte(key0, key) || Keyspace.lte(IterFindFirstGt(bucket, key).next.key, key0))
   ensures IterFindFirstGt(bucket, key).next.Done? ==>
@@ -169,17 +185,19 @@ module BucketIteratorModel {
   {
     Keyspace.reveal_IsStrictlySorted();
     reveal_IterFindFirstGt();
+    var i := MapSeqs.GetIndex(bucket.keys, bucket.msgs, key0);
   }
 
   lemma noKeyBeforeIterStart(bucket: Bucket, key0: Key)
   requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
-  requires key0 in bucket.b
+  requires key0 in bucket.as_map()
   ensures IterStart(bucket).next.Next?
   ensures Keyspace.lte(IterStart(bucket).next.key, key0)
   {
     Keyspace.reveal_IsStrictlySorted();
     reveal_IterStart();
+    var i := MapSeqs.GetIndex(bucket.keys, bucket.msgs, key0);
   }
 
   lemma lemma_NextFromIndex(bucket: Bucket, it: Iterator)
@@ -193,5 +211,6 @@ module BucketIteratorModel {
   ensures it.idx == |bucket.keys| ==>
     && it.next.Done?
   {
+    reveal WFIter();
   }
 }

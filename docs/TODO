@@ -1,0 +1,47 @@
+lifting
+basement nodes
+- sub-blocks
+generalize splay tree
+fragmentation
+routing filters
+sstables
+concurrency
+
+When can we benchmark performance
+---------------------------------
+1. un-marshall is slow (quadratically building maps?)
+   - sstables
+
+2. Background event triggering
+   - Flush/split/grow/merge
+   - evict/writeback
+
+3. Unrealistic superblock
+
+13. partial reads/writes
+
+5. sub-block query reads
+   - bloom filters
+
+7. avoid needless log n descent
+
+9. mutable buffers at root
+
+10. efficient mechanism to merge buffers
+    - mutable vectors
+
+12. GC pause benchmark
+
+Publication
+-----------
+
+- good perf. benchmark
+
+- handle i/o errors / corruption
+
+- key lifting and file system layer
+
+Maintainability
+---------------
+
+- clean up probably duplicate code in lib

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../MapSpec/UI.s.dfy"
 
 // Abstract module for state machines with transitions labeled by UIOps.
@@ -5,8 +8,8 @@ include "../MapSpec/UI.s.dfy"
 // state machines.
 
 abstract module UIStateMachine {
-  import _UI = UI
-  type UIOp = _UI.Op
+  import myUI = UI
+  type UIOp = myUI.Op
 
   type Variables(!new)
   predicate Init(s: Variables)

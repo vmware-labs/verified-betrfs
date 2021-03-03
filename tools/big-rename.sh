@@ -1,3 +1,6 @@
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: BSD-2-Clause
+
 cd disk-betree
 ../tools/rename.sh MapSpec.s.dfy
 ../tools/rename.sh ThreeStateVersionedMap.s.dfy

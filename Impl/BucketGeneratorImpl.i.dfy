@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "BucketGeneratorModel.i.dfy"
 include "../lib/Buckets/BucketImpl.i.dfy"
 
@@ -11,6 +14,13 @@ module BucketGeneratorImpl {
   import opened LinearSequence_s
   import opened LinearSequence_i
   import UI
+
+// begin generated export
+  export Spec
+    provides *
+    reveals Generator.Inv1, Generator
+  export extends Spec
+// end generated export
 
   linear datatype Generator = Basic(linear biter: BucketIter, ghost height: nat)
     | Compose(linear top: Generator, linear bot: Generator, 
@@ -55,7 +65,7 @@ module BucketGeneratorImpl {
       bg.reveal_Inv();
     }
 
-    protected function I() : BucketGeneratorModel.Generator
+    function I() : BucketGeneratorModel.Generator
     requires Inv()
     decreases height
     ensures BucketGeneratorModel.WF(I())

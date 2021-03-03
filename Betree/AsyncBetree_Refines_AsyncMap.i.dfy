@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "AsyncBetree.i.dfy"
 include "../MapSpec/AsyncMap.i.dfy"
 include "BetreeInv.i.dfy"

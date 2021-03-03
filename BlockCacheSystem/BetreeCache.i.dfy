@@ -1,9 +1,14 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "BlockCache.i.dfy"
 include "../lib/Base/Maps.i.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../PivotBetree/PivotBetree.i.dfy"
 include "../PivotBetree/PivotBetreeSpecWFNodes.i.dfy"
+include "../MapSpec/Journal.i.dfy"
+
 //
 // Bind a Betree to a BlockCache to get the behavior of both: the map implementation of a Betree,
 // and the crash-safety implementation of a BlockCache.

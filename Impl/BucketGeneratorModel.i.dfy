@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../lib/Buckets/BucketIteratorModel.i.dfy"
 //
 // A mathematical description of bucket generators.
@@ -13,6 +16,8 @@ module BucketGeneratorModel {
   import opened ValueMessage
   import opened Sequences
   import opened BucketIteratorModel
+  import opened BucketMaps
+  import opened KeyType
   import UI
 
   datatype Generator =
@@ -200,42 +205,55 @@ module BucketGeneratorModel {
     )
   }
 
-  function {:opaque} BucketOf(g: Generator) : Bucket
-  ensures BucketWellMarshalled(BucketOf(g))
+  function {:opaque} BucketOf(g: Generator) : BucketMap
+  requires WF(g)
   {
     match g {
       case BasicGenerator(bucket, it) =>
-        if it.next.Done? then B(map[])
-        else B(map k | k in bucket.b && lte(it.next.key, k) :: bucket.b[k])
+        if it.next.Done? then map[]
+        else map k | k in bucket.as_map() && lte(it.next.key, k) :: bucket.as_map()[k]
       case ComposeGenerator(top, bot, next) =>
-        if next.Done? then B(map[])
-        else B(Compose(BucketOf(top), BucketOf(bot)).b[next.key := next.msg])
+        if next.Done? then map[]
+        else Compose(BucketOf(top), BucketOf(bot))[next.key := next.msg]
     }
   }
 
+  // like reveal_BucketOf but only takes a single argument
   lemma reveal_BucketOf_for_Merge(g: Generator)
-  ensures g.ComposeGenerator? && g.next.Done? ==> BucketOf(g).b == map[]
-  ensures g.ComposeGenerator? && g.next.Next? ==> BucketOf(g).b ==
-        Compose(BucketOf(g.top), BucketOf(g.bot)).b[g.next.key := g.next.msg]
+  requires WF(g)
+  ensures g.ComposeGenerator? && g.next.Done? ==> BucketOf(g) == map[]
+  ensures g.ComposeGenerator? && g.next.Next? ==> BucketOf(g) ==
+        Compose(BucketOf(g.top), BucketOf(g.bot))[g.next.key := g.next.msg]
   {
     reveal_BucketOf();
   }
 
-  predicate YieldsSortedBucket(g: Generator, b: Bucket)
+  predicate YieldsSortedBucket(g: Generator, b: BucketMap)
   {
     && WF(g)
     && WM(g)
     && Monotonic(g)
-    && BucketOf(g).b == b.b
+    && BucketOf(g) == b
+  }
+
+  function minimumKey(b: set<Key>) : Option<Key>
+  {
+    var m := Lexicographic_Byte_Order.minimumOpt(b);
+    if m.Some? then
+      assert |m.value| <= KeyType.MaxLen() as nat;
+      var k: Key := m.value;
+      Some(k)
+    else
+      None
   }
 
   lemma GenLeftIsMinimum(g: Generator)
   requires WM(g)
   requires WF(g)
   requires Monotonic(g)
-  ensures GenLeft(g).Done? ==> BucketOf(g).b == map[]
-  ensures GenLeft(g).Next? ==> BucketsLib.minimumKey(BucketOf(g).b.Keys) == Some(GenLeft(g).key)
-  ensures GenLeft(g).Next? ==> BucketOf(g).b[GenLeft(g).key] == GenLeft(g).msg
+  ensures GenLeft(g).Done? ==> BucketOf(g) == map[]
+  ensures GenLeft(g).Next? ==> minimumKey(BucketOf(g).Keys) == Some(GenLeft(g).key)
+  ensures GenLeft(g).Next? ==> BucketOf(g)[GenLeft(g).key] == GenLeft(g).msg
   {
     reveal_BucketOf();
     if GenLeft(g).Next? {
@@ -245,15 +263,15 @@ module BucketGeneratorModel {
         assert Monotonic(g.bot) by { reveal_Monotonic(); }
         GenLeftIsMinimum(g.top);
         GenLeftIsMinimum(g.bot);
-        assert GenLeft(g).key in BucketOf(g).b;
-        assert forall k | k in BucketOf(g).b :: lte(GenLeft(g).key, k) by {
+        assert GenLeft(g).key in BucketOf(g);
+        assert forall k | k in BucketOf(g) :: lte(GenLeft(g).key, k) by {
           reveal_Monotonic();
         }
-        assert minimumKey(BucketOf(g).b.Keys) == Some(GenLeft(g).key);
+        assert minimumKey(BucketOf(g).Keys) == Some(GenLeft(g).key);
       } else {
-        assert GenLeft(g).key in BucketOf(g).b;
-        assert forall k | k in BucketOf(g).b :: lte(GenLeft(g).key, k);
-        assert minimumKey(BucketOf(g).b.Keys) == Some(GenLeft(g).key);
+        assert GenLeft(g).key in BucketOf(g);
+        assert forall k | k in BucketOf(g) :: lte(GenLeft(g).key, k);
+        assert minimumKey(BucketOf(g).Keys) == Some(GenLeft(g).key);
       }
     }
   }
@@ -263,9 +281,9 @@ module BucketGeneratorModel {
   requires WF(g)
   requires Monotonic(g)
   requires GenLeft(g).Next?
-  ensures |BucketOf(g).b.Keys| >= 1
+  ensures |BucketOf(g).Keys| >= 1
   ensures YieldsSortedBucket(GenPop(g),
-      B(MapRemove1(BucketOf(g).b, Keyspace.minimum(BucketOf(g).b.Keys))))
+      MapRemove1(BucketOf(g), Keyspace.minimum(BucketOf(g).Keys)))
   {
     reveal_BucketOf();
     var g' := GenPop(g);
@@ -277,8 +295,8 @@ module BucketGeneratorModel {
       reveal_BasicGenPop();
       IterIncKeyGreater(g.bucket, g.it);
 
-      var b1 := BucketOf(g').b;
-      var b2 := MapRemove1(BucketOf(g).b, minimum(BucketOf(g).b.Keys));
+      var b1 := BucketOf(g');
+      var b2 := MapRemove1(BucketOf(g), minimum(BucketOf(g).Keys));
       forall k | k in b1 ensures k in b2 && b1[k] == b2[k]
       {
       }
@@ -301,11 +319,11 @@ module BucketGeneratorModel {
 
       if (GenLeft(g.top).Next?) {
         GenPopIsRemove(g.top);
-        assert GenLeft(g.top).key in BucketOf(g.top).b.Keys;
+        assert GenLeft(g.top).key in BucketOf(g.top).Keys;
       }
       if (GenLeft(g.bot).Next?) {
         GenPopIsRemove(g.bot);
-        assert GenLeft(g.bot).key in BucketOf(g.bot).b.Keys;
+        assert GenLeft(g.bot).key in BucketOf(g.bot).Keys;
       }
 
       assert Monotonic(GenPop(g)) by {
@@ -314,7 +332,7 @@ module BucketGeneratorModel {
 
       assert GenPop(g).ComposeGenerator?;
       calc {
-        BucketOf(GenPop(g)).b;
+        BucketOf(GenPop(g));
         {
           assert
             && (g.next.Next? && GenLeft(g.top).Next? ==> lt(g.next.key, GenLeft(g.top).key))
@@ -322,10 +340,10 @@ module BucketGeneratorModel {
             reveal_Monotonic();
           }
         }
-        MapRemove1(BucketOf(g).b, minimum(BucketOf(g).b.Keys));
+        MapRemove1(BucketOf(g), minimum(BucketOf(g).Keys));
       }
       assert YieldsSortedBucket(GenPop(g),
-        B(MapRemove1(BucketOf(g).b, minimum(BucketOf(g).b.Keys))));
+        MapRemove1(BucketOf(g), minimum(BucketOf(g).Keys)));
     }
   }
 
@@ -345,11 +363,11 @@ module BucketGeneratorModel {
     reveal_GenCompose();
     if (GenLeft(top).Next?) {
       GenPopIsRemove(top);
-      assert GenLeft(top).key in BucketOf(top).b.Keys;
+      assert GenLeft(top).key in BucketOf(top).Keys;
     }
     if (GenLeft(bot).Next?) {
       GenPopIsRemove(bot);
-      assert GenLeft(bot).key in BucketOf(bot).b.Keys;
+      assert GenLeft(bot).key in BucketOf(bot).Keys;
     }
     assert Monotonic(GenCompose(top, bot)) by {
       reveal_Monotonic();
@@ -412,15 +430,15 @@ module BucketGeneratorModel {
   requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
   ensures var g := GenFromBucketWithLowerBound(bucket, start);
-      YieldsSortedBucket(g, ClampStart(bucket, start))
+      YieldsSortedBucket(g, ClampStart(bucket.as_map(), start))
   {
     reveal_GenFromBucketWithLowerBound();
     reveal_ClampStart();
     reveal_BucketOf();
 
     var g := GenFromBucketWithLowerBound(bucket, start);
-    var b1 := BucketOf(g).b;
-    var b2 := ClampStart(bucket, start).b;
+    var b1 := BucketOf(g);
+    var b2 := ClampStart(bucket.as_map(), start);
 
     forall k | k in b2 ensures k in b1
     {
@@ -437,7 +455,7 @@ module BucketGeneratorModel {
       }
     }
 
-    assert YieldsSortedBucket(g, ClampStart(bucket, start)) by {
+    assert YieldsSortedBucket(g, ClampStart(bucket.as_map(), start)) by {
       reveal_Monotonic();
     }
   }
@@ -447,7 +465,7 @@ module BucketGeneratorModel {
   requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
   requires BucketListWellMarshalled(buckets)
   ensures var g := GenFromBucketStackWithLowerBound(buckets, start);
-      && YieldsSortedBucket(g, ClampStart(ComposeSeq(buckets), start))
+      && YieldsSortedBucket(g, ClampStart(ComposeSeq(MapsOfBucketList(buckets)), start))
   decreases |buckets|
   {
     reveal_GenFromBucketStackWithLowerBound();
@@ -457,45 +475,54 @@ module BucketGeneratorModel {
       reveal_GenFromBucketWithLowerBound();
       assert WM(g);
 
-      ComposeSeq1(buckets[0]);
+      ComposeSeq1(buckets[0].as_map());
       assert [buckets[0]] == buckets;
       assert WFBucket(buckets[0]);
-      assert WFBucket(ComposeSeq([buckets[0]])) by {
+      /*assert WFBucket(ComposeSeq([buckets[0].as_map()])) by {
         reveal_ComposeSeq();
         reveal_Compose();
-      }
+      }*/
       GenFromBucketWithLowerBoundYieldsClampStart(buckets[0], start);
-      WellMarshalledBucketsEq(ComposeSeq([buckets[0]]), buckets[0]);
+      //WellMarshalledBucketsEq(ComposeSeq([buckets[0]]), buckets[0]);
+      assert MapsOfBucketList(buckets) == [buckets[0].as_map()];
     } else {
       var g1 := GenFromBucketStackWithLowerBound(DropLast(buckets), start);
       var g2 := GenFromBucketStackWithLowerBound([Last(buckets)], start);
       assert WM(g1);
       assert WM(g2) by { GenFromBucketStackWithLowerBoundYieldsComposeSeq([Last(buckets)], start); }
       GenComposeIsCompose(g1, g2);
+      var bucketMaps := MapsOfBucketList(buckets);
       calc {
-        BucketOf(g).b;
+        BucketOf(g);
           { GenComposeIsCompose(g1, g2); }
-        Compose(BucketOf(g1), BucketOf(g2)).b;
+        Compose(BucketOf(g1), BucketOf(g2));
           {
             GenFromBucketStackWithLowerBoundYieldsComposeSeq(DropLast(buckets), start);
             GenFromBucketStackWithLowerBoundYieldsComposeSeq([Last(buckets)], start);
             reveal_Compose();
           }
         Compose(
-          ClampStart(ComposeSeq(DropLast(buckets)), start), 
-          ClampStart(ComposeSeq([Last(buckets)]), start)).b;
+          ClampStart(ComposeSeq(MapsOfBucketList(DropLast(buckets))), start), 
+          ClampStart(ComposeSeq(MapsOfBucketList([Last(buckets)])), start));
+        {
+            assert MapsOfBucketList([Last(buckets)]) == [Last(bucketMaps)];
+            assert MapsOfBucketList(DropLast(buckets)) == DropLast(bucketMaps);
+        }
+        Compose(
+          ClampStart(ComposeSeq(DropLast(bucketMaps)), start), 
+          ClampStart(ComposeSeq([Last(bucketMaps)]), start));
           {
             reveal_Compose();
             reveal_ClampStart();
           }
-        ClampStart(Compose(ComposeSeq(DropLast(buckets)), ComposeSeq([Last(buckets)])), start).b;
+        ClampStart(Compose(ComposeSeq(DropLast(bucketMaps)), ComposeSeq([Last(bucketMaps)])), start);
           {
-            ComposeSeqAdditive(DropLast(buckets), [Last(buckets)]);
+            ComposeSeqAdditive(DropLast(bucketMaps), [Last(bucketMaps)]);
             reveal_ClampStart();
           }
-        ClampStart(ComposeSeq(DropLast(buckets) + [Last(buckets)]), start).b;
-          { assert DropLast(buckets) + [Last(buckets)] == buckets; }
-        ClampStart(ComposeSeq(buckets), start).b;
+        ClampStart(ComposeSeq(DropLast(bucketMaps) + [Last(bucketMaps)]), start);
+          { assert DropLast(bucketMaps) + [Last(bucketMaps)] == bucketMaps; }
+        ClampStart(ComposeSeq(bucketMaps), start);
       }
     }
   }

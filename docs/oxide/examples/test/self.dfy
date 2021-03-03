@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 
 linear datatype Car = Car(passengers: nat) {
   linear inout method LoadPassengers(count: nat)

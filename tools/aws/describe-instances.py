@@ -1,4 +1,8 @@
 #!/usr/bin/python3
+
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: BSD-2-Clause
+
 """
 This script runs on bastion; you don't run it remotely from your
 laptop.

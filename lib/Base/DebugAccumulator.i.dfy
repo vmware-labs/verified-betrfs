@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../Lang/NativeTypes.s.dfy"
 
 // Used for counting up instances of objects, while debugging some

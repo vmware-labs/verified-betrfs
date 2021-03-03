@@ -1,3 +1,6 @@
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: BSD-2-Clause
+
 ##############################################################################
 # System configuration
 
@@ -5,9 +8,10 @@
 DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy
 
 DAFNY_ROOT?=.dafny/dafny/
-DAFNY_CMD=$(DAFNY_ROOT)/Binaries/dafny
+DAFNY_CMD=$(DAFNY_ROOT)/Scripts/dafny
 DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
 DAFNY_FLAGS=
+DAFNY_GLOBAL_FLAGS=
 
 ifndef TL
 	TL=20
@@ -109,7 +113,7 @@ build%/.:
 # Use bash so PIPESTATUS works
 SHELL=/bin/bash
 define tee_capture
-	$(eval TMPNAME=$(patsubst %.verified,%.verified-tmp,$1))
+	$(eval TMPNAME=$(patsubst %,%-tmp,$1))
 	$(2) 2>&1 | tee $(TMPNAME); test $${PIPESTATUS[0]} -eq 0
 	mv $(TMPNAME) $1
 endef
@@ -124,34 +128,17 @@ endef
 .PHONY: status
 status: build/deps build/Impl/Bundle.i.status.pdf
 
-.PHONY: faststatus
+# Longer time-limit for CI
+.PHONY: verichecks-status
+verichecks-status: TIMELIMIT=/timeLimit:60
+verichecks-status: DAFNY_GLOBAL_FLAGS=/vcsCores:4
+verichecks-status: build/deps build/Impl/Bundle.i.status.pdf
+
+.PHONY: syntax-status
 syntax-status: build/deps build/Impl/Bundle.i.syntax-status.pdf
 
 .PHONY: verify-ordered
 verify-ordered: build/deps build/Impl/Bundle.i.okay
-
-##############################################################################
-# C# executables
-
-FRAMEWORK_SOURCES=framework/Framework.cs framework/Benchmarks.cs framework/Crc32.cs
-
-.PHONY: exe
-exe: build/Veribetrfs.exe
-
-build/Impl/Bundle.i.exe: build/Impl/Bundle.i.cs $(FRAMEWORK_SOURCES)
-	csc $^ /optimize /r:System.Numerics.dll /nowarn:0164 /nowarn:0219 /nowarn:1717 /nowarn:0162 /nowarn:0168 /unsafe /out:$@
-
-.PHONY: exe-roslyn
-exe-roslyn: build/Impl/Bundle.i.roslyn.exe
-
-build/Impl/Bundle.i.roslyn.exe:build/Impl/Bundle.i.cs $(FRAMEWORK_SOURCES)
-	tools/roslyn-csc.sh $^ /optimize /nowarn:CS0162 /nowarn:CS0164 /unsafe /t:exe /out:$@
-#eval trick to assign make var inside rule
-	$(eval CONFIG=$(patsubst %.roslyn.exe,%.roslyn.runtimeconfig.json,$@))
-	tools/roslyn-write-runtimeconfig.sh > $(CONFIG)
-
-build/Veribetrfs.exe: build/Impl/Bundle.i.exe
-	cp $< $@
 
 ##############################################################################
 # C++ executables
@@ -191,9 +178,10 @@ build/%.synchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 # .verchk: Dafny file-local verification
 build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.verchk,%.verchk-tmp,$@))
-	( $(TIME) $(DAFNY_CMD) $(DAFNY_FLAGS) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
+	( $(TIME) $(DAFNY_CMD) $(DAFNY_GLOBAL_FLAGS) $(DAFNY_FLAGS) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
 
+build/lib/Buckets/BucketLib.i.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/DataStructures/MutableBtree.i.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/DataStructures/BtreeModel.i.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/Buckets/LKMBPKVOps.i.verchk: DAFNY_FLAGS=/noNLarith
@@ -201,8 +189,11 @@ build/lib/Buckets/PackedKVMarshalling.i.verchk: DAFNY_FLAGS=/noNLarith
 build/Impl/NodeImpl.i.verchk: DAFNY_FLAGS=/noNLarith
 build/Impl/QueryImpl.i.verchk: DAFNY_FLAGS=/noNLarith
 build/ByteBlockCacheSystem/InterpretationDisk.i.verchk: DAFNY_FLAGS=/noNLarith
-build/Betree/BetreeInv.i.verchk: DAFNY_FLAGS=/z3opt:smt.random_seed=1
-build/lib/DataStructures/LinearDList.i.verchk: DAFNY_FLAGS=/noNLarith /proverOpt:OPTIMIZE_FOR_BV=true /z3opt:smt.PHASE_SELECTION=0 /z3opt:smt.RESTART_STRATEGY=0 /z3opt:smt.RESTART_FACTOR=1.5 /z3opt:smt.ARITH.RANDOM_INITIAL_VALUE=true /z3opt:smt.CASE_SPLIT=1
+build/Betree/BetreeInv.i.verchk: DAFNY_FLAGS=/proverOpt:O:smt.random_seed=1
+build/lib/DataStructures/LinearDList.i.verchk: DAFNY_FLAGS=/noNLarith /proverOpt:O:smt.random_seed=1
+
+build/lib/Checksums/%.i.verchk: DAFNY_FLAGS=/noNLarith
+build/lib/Checksums/Nonlinear.i.verchk: DAFNY_FLAGS=
 
 ##############################################################################
 # .okay: Dafny file-level verification, no time limit,
@@ -219,12 +210,12 @@ build/%.okay: %.dfy | $$(@D)/.
 .PRECIOUS: build/%.verchk
 AGGREGATE_TOOL=tools/aggregate-verchk.py
 build/%.verified: build/%.verchk $(AGGREGATE_TOOL) | $$(@D)/.
-	$(call tee_capture,$@,$(AGGREGATE_TOOL) $^)
+	$(AGGREGATE_TOOL) verchk $^ > $@
 
 # Syntax is trivial from synchk file, just a marker.
 # (We need the .syntax target to get a recursive dependency computation.)
 build/%.syntax: build/%.synchk $(AGGREGATE_TOOL) | $$(@D)/.
-	touch $@
+	$(AGGREGATE_TOOL) synchk $^ > $@
 
 ##############################################################################
 # .status.pdf: a dependency graph of .dfy files labeled with verification result status.

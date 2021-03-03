@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../Base/DebugAccumulator.i.dfy"
 include "BitmapModel.i.dfy"
 //
@@ -59,7 +62,7 @@ module BitmapImpl {
       && i * 64 < 0x1_0000_0000_0000_0000
     }
 
-    protected predicate Inv()
+    predicate {:opaque} Inv()
     {
       && |bits| < 0x1_0000_0000_0000_0000 / 128
     }
@@ -72,9 +75,10 @@ module BitmapImpl {
       if i == 0 then [] else IPrefix(bits, i-1) + [BitsSetAtC(bits, i-1)]
     }
 
-    protected function I() : BitmapModelT
+    function {:opaque} I() : BitmapModelT
     requires Inv()
     {
+      reveal Inv();
       IPrefix(bits, 64 * |bits|)
     }
 
@@ -86,6 +90,8 @@ module BitmapImpl {
     {
       var bits := NativeArrays.newArrayFill(len / 64, 0);
       bm := Bitmap(bits[..]);
+      reveal bm.Inv();
+      reveal bm.I();
 
       ghost var ghosty := true;
       if ghosty {
@@ -114,6 +120,9 @@ module BitmapImpl {
     ensures self.Inv()
     ensures self.I() == BitSet(old_self.I(), c as int)
     {
+      reveal Inv();
+      reveal I();
+
       var i: uint64 := c / 64;
       var b: uint64 := c % 64;
 
@@ -157,6 +166,9 @@ module BitmapImpl {
     ensures self.Inv()
     ensures self.I() == BitUnset(old_self.I(), c as int)
     {
+      reveal Inv();
+      reveal I();
+  
       var i: uint64 := c / 64;
       var b: uint64 := c % 64;
 
@@ -193,6 +205,9 @@ module BitmapImpl {
     requires c as nat < Len(I())
     ensures result == IsSet(I(), c as int)
     {
+      reveal Inv();
+      reveal I();
+
       var i: uint64 := c / 64;
       var b: uint64 := c % 64;
 
@@ -207,6 +222,9 @@ module BitmapImpl {
         this.bits[k] == 0xffff_ffff_ffff_ffff
     ensures BitAlloc(I()).None?
     {
+      reveal Inv();
+      reveal I();
+
       BitmapModel.reveal_IsSet();
       var bm := I();
       if BitAlloc(bm).Some? {
@@ -231,6 +249,9 @@ module BitmapImpl {
     requires !BitsetLemmas.in_set_uint64(b, this.bits[i])
     ensures BitAlloc(I()) == Some(64 * i as int + b as int)
     {
+      reveal Inv();
+      reveal I();
+
       BitmapModel.reveal_IsSet();
       var bm := I();
 
@@ -267,6 +288,9 @@ module BitmapImpl {
     ensures res.Some? <==> BitAlloc(I()).Some?
     ensures res.Some? ==> res.value as int == BitAlloc(I()).value
     {
+      reveal Inv();
+      reveal I();
+
       var i: uint64 := 0;
       while i < |this.bits| as uint64
       invariant 0 <= i as int <= |this.bits|
@@ -307,6 +331,9 @@ module BitmapImpl {
     ensures bm.Inv()
     ensures bm.I() == BitUnion(a.I(), b.I())
     {
+      reveal a.I();
+      reveal b.I();
+
       var len := |a.bits| as uint64;
       var bits := new uint64[len];
 
@@ -325,6 +352,8 @@ module BitmapImpl {
       }
 
       bm := Bitmap(bits[..]);
+      reveal bm.Inv();
+      reveal bm.I();
 
       ghost var x := bm.I();
       ghost var y := BitUnion(a.I(), b.I());
@@ -351,6 +380,8 @@ module BitmapImpl {
     ensures bm.I() == a.I()
     {
       bm := Bitmap(a.bits);
+      reveal bm.I();
+      reveal bm.Inv();
     }
 
     linear method Free()

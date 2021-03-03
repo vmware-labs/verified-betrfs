@@ -1,8 +1,10 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../lib/Buckets/BucketImpl.i.dfy"
 include "../lib/Lang/LinearBox.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../PivotBetree/PivotBetree.i.dfy"
-include "../lib/DataStructures/MutableMapImpl.i.dfy"
 
 //
 // Implements PivotBetree/PivotBetreeSpec.Node. (There's no Model file
@@ -28,7 +30,6 @@ module NodeImpl {
   import opened BucketsLib
   import opened BucketWeights
 
-  import MM = MutableMap
   import ReferenceType`Internal
 
   linear datatype Node = Node(
@@ -71,7 +72,7 @@ module NodeImpl {
       lseq_give_inout(inout buckets, 0, mutbucket);
       
       node := Node(Pivots.InitPivotTable(), None, buckets);
-      assert node.I().buckets == [B(map[])];
+      assert node.I().buckets == [EmptyBucket()];
       WeightBucketListOneEmpty();
     }
 

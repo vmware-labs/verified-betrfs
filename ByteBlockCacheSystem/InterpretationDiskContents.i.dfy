@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "InterpretationDiskOps.i.dfy"
 
 module InterpretationDiskContents {
@@ -75,7 +78,7 @@ module InterpretationDiskContents {
       withWritesI(s, reqs, a, len-1) + [byteWithWrites(s, reqs, a+len-1)]
   }
 
-  protected function withWrites(s: seq<byte>, reqs: map<ReqId, ReqWrite>, a: int, len: int)
+  function {:opaque} withWrites(s: seq<byte>, reqs: map<ReqId, ReqWrite>, a: int, len: int)
     : (res: seq<byte>)
   requires len >= 0
   ensures |res| == len
@@ -96,6 +99,7 @@ module InterpretationDiskContents {
   ensures withWrites(s, reqs, reqs[id].addr as int, |reqs[id].bytes|)
       == reqs[id].bytes
   {
+    reveal withWrites();
   }
 
   lemma getReqWriteSelfSub(s: seq<byte>, reqs: map<ReqId, ReqWrite>, id: ReqId, offset: int, len: int)
@@ -106,6 +110,7 @@ module InterpretationDiskContents {
   ensures withWrites(s, reqs, reqs[id].addr as int + offset, len)
       == reqs[id].bytes[offset .. offset + len]
   {
+    reveal withWrites();
   }
 
 
@@ -122,6 +127,7 @@ module InterpretationDiskContents {
   ensures withWrites(s, reqs, a, len)
       == withWrites(s, reqs[id := req], a, len)
   {
+    reveal withWrites();
     var x := withWrites(s, reqs, a, len);
     var y := withWrites(s, reqs[id := req], a, len);
     assert |x| == |y|;
@@ -160,6 +166,7 @@ module InterpretationDiskContents {
   ensures atLoc(loc, contents)
       == atLocWithWrites(loc, contents, reqWrites);
   {
+    reveal withWrites();
     reveal_atLoc();
   }
 
@@ -178,6 +185,8 @@ module InterpretationDiskContents {
           MapRemove1(reqWrites, id),
           start, len)
   {
+    reveal withWrites();
+
     var contents' := splice(contents,
             reqWrites[id].addr as int,
             reqWrites[id].bytes);
@@ -222,7 +231,7 @@ module InterpretationDiskContents {
   ensures withWrites(contents, reqs, start, len)
       == withWrites(contents, map[], start, len)
   {
-    
+    reveal withWrites();
   }
 
   lemma withEmptyWrites(contents: seq<byte>, loc: DiskLayout.Location)
@@ -230,6 +239,7 @@ module InterpretationDiskContents {
   ensures atLocWithWrites(loc, contents, map[])
       == atLoc(loc, contents)
   {
+    reveal withWrites();
     reveal_atLoc();
   }
 }

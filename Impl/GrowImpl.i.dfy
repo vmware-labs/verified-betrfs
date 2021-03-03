@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "BookkeepingImpl.i.dfy"
 include "GrowModel.i.dfy"
 
@@ -74,7 +77,7 @@ module GrowImpl {
             lseq_give_inout(inout buckets, 0, mutbucket);
 
             linear var newroot := Node(InitPivotTable(), Some([newref]), buckets);
-            assert newroot.I() == BT.G.Node(InitPivotTable(), Some([newref]), [B(map[])]);
+            assert newroot.I() == BT.G.Node(InitPivotTable(), Some([newref]), [EmptyBucket()]);
             assert s.I().cache[root] == old_s.I().cache[root];
 
             writeBookkeeping(inout s, root, Some([newref]));

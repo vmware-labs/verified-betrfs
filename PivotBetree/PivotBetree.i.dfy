@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../Betree/BlockInterface.i.dfy"  
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Maps.i.dfy"
@@ -11,6 +14,8 @@ include "../Betree/BetreeInv.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../MapSpec/UIStateMachine.s.dfy"
 include "PivotBetreeSpecRefinement.i.dfy"
+include "PivotBetreeBlockInterface.i.dfy"
+
 //
 // Like Betree, PivetBetree lowers the "lifted" op-sequences of PivotBetreeSpec
 // down to concrete state machine steps that advance the PivotBetreeBlockInterface
@@ -34,7 +39,7 @@ module PivotBetree refines UIStateMachine {
 
   function EmptyNode() : Node
   {
-    Node(InitPivotTable(), None, [BucketsLib.B(map[])])
+    Node(InitPivotTable(), None, [BucketsLib.EmptyBucket()])
   }
 
   predicate Init(s: Variables) {

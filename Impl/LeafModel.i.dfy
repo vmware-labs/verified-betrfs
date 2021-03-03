@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "BookkeepingModel.i.dfy"
 
 module LeafModel { 
@@ -17,6 +20,7 @@ module LeafModel {
   import opened BucketWeights
   import opened Bounds
   import opened BoundedPivotsLib
+  import PivotBetreeSpecWFNodes
 
   import IT = IndirectionTable
   import opened NativeTypes
@@ -109,33 +113,25 @@ module LeafModel {
 
     assert s1 == s';
 
-    WeightBucketLeBucketList(node.buckets, 0);
+    /*WeightBucketLeBucketList(node.buckets, 0);
     WeightSplitBucketAdditiveLe(node.buckets[0], pivot);
     WeightBucketList2(
         SplitBucketLeft(node.buckets[0], pivot),
-        SplitBucketRight(node.buckets[0], pivot));
+        SplitBucketRight(node.buckets[0], pivot));*/
+    PivotBetreeSpecWFNodes.WFApplyRepivot(
+        BT.Repivot(ref, node, pivots, pivot));
 
     assert WFNode(newnode);
     writeCorrect(s, ref, newnode);
 
     //assert IBlockCache(s1).cache == s.cache[ref := INode(newnode)];
 
-    assert JoinBucketList(node.buckets).b
-        == MapUnion(JoinBucketList([]).b, node.buckets[0].b)
-        == MapUnion(map[], node.buckets[0].b)
-        == node.buckets[0].b;
-
     BT.PivotsHasAllKeys(pivots);
-    BoundedBucketListJoin(node.buckets, pivots);
 
-    assert SplitBucketOnPivots(JoinBucketList(node.buckets), pivots)
-        == SplitBucketOnPivots(node.buckets[0], pivots)
-        == buckets';
+    assert BT.ApplyRepivot(BT.Repivot(ref, node, pivots, pivot)) == newnode;
 
-    assert BT.ApplyRepivot(BT.Repivot(ref, node, pivots)) == newnode;
-
-    assert BT.ValidRepivot(BT.Repivot(ref, node, pivots));
-    var step := BT.BetreeRepivot(BT.Repivot(ref, node, pivots));
+    assert BT.ValidRepivot(BT.Repivot(ref, node, pivots, pivot));
+    var step := BT.BetreeRepivot(BT.Repivot(ref, node, pivots, pivot));
     assert BT.ValidBetreeStep(step);
     assert |BT.BetreeStepOps(step)| == 1; // TODO
     assert BC.Dirty(s, s', ref, newnode);

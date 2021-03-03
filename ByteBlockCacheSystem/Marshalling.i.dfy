@@ -1,7 +1,10 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../lib/Base/Message.i.dfy"
-include "../lib/Crypto/CRC32C.s.dfy"
+include "../lib/Checksums/CRC32C.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../BlockCacheSystem/BlockCache.i.dfy"
 include "../BlockCacheSystem/JournalCache.i.dfy"

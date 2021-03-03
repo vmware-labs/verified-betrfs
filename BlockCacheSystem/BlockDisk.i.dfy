@@ -1,27 +1,25 @@
-include "../MapSpec/MapSpec.s.dfy"
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../lib/Base/Maps.i.dfy"
-include "../PivotBetree/Bounds.i.dfy"
 include "../Versions/VOp.i.dfy"
 include "DiskLayout.i.dfy"
 include "SectorType.i.dfy"
-include "AsyncSectorDiskModelTypes.i.dfy"
 
 //
 // An AsyncSectorDiskModel allows concurrent outstanding I/Os to a disk where each "sector"
 // is some higher-level Node datatype. A later refinement step shows how to marshall and align
 // these Nodes to the byte-ranges of the (trusted) AsyncDiskModel.
 //
-// TODO disallow concurrent spatially-overlapping writes/reads
 
-// A disk, processing stuff in its queue, doing its thing.
 module BlockDisk {
   import opened NativeTypes
   import opened Maps
   import opened Options
   import opened DiskLayout
-  import opened SectorType
   import opened PivotBetreeGraph
   import opened Sequences
+  import opened SectorType
 
   type ReqId = uint64
 
@@ -206,59 +204,4 @@ abstract module BlockMachine {
 
   predicate Init(s: Variables)
   predicate Next(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp)
-}
-
-// A disk attached to a program ("Machine"), modeling the nondeterministic crashes that reset the
-// program. Designed to look like the AsyncDiskModel, which we want to show refines to this.
-// TODO(jonh): Rename this to a "System"?
-abstract module BlockSystemModel {
-  import D = BlockDisk
-  import M : BlockMachine
-  import AsyncSectorDiskModelTypes
-  import opened SectorType
-  import opened ViewOp
-  import opened DiskLayout
-
-  type Variables = AsyncSectorDiskModelTypes.AsyncSectorDiskModelVariables<M.Variables, D.Variables>
-
-  datatype Step =
-    | MachineStep(dop: D.DiskOp)
-    | CrashStep
-  
-  predicate Machine(s: Variables, s': Variables, dop: D.DiskOp, vop: VOp)
-  {
-    && M.Next(s.machine, s'.machine, dop, vop)
-    && D.Next(s.disk, s'.disk, dop)
-  }
-
-  predicate Crash(s: Variables, s': Variables, vop: VOp)
-  {
-    && vop.CrashOp?
-    && M.Init(s'.machine)
-    && D.Crash(s.disk, s'.disk)
-  }
-
-  predicate NextStep(s: Variables, s': Variables, vop: VOp, step: Step)
-  {
-    match step {
-      case MachineStep(dop) => Machine(s, s', dop, vop)
-      case CrashStep => Crash(s, s', vop)
-    }
-  }
-
-  predicate Next(s: Variables, s': Variables, vop: VOp) {
-    exists step :: NextStep(s, s', vop, step)
-  }
-
-  predicate Init(s: Variables, loc: Location)
-  predicate Inv(s: Variables)
-
-  lemma InitImpliesInv(s: Variables, loc: Location)
-    requires Init(s, loc)
-    ensures Inv(s)
-
-  lemma NextPreservesInv(s: Variables, s': Variables, vop: VOp)
-    requires Inv(s)
-    requires Next(s, s', vop)
-    ensures Inv(s')
 }

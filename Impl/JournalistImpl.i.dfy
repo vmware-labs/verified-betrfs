@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../lib/Lang/System/NativeArrays.s.dfy"
 include "JournalistMarshallingImpl.i.dfy"
 include "JournalistParsingImpl.i.dfy"
@@ -16,6 +19,13 @@ module JournalistImpl {
   import opened JournalistMarshallingModel
   import opened JournalistMarshallingImpl
   import JournalistParsingImpl
+
+// begin generated export
+  export Spec
+    provides *
+    reveals basic_mod, Journalist.ReplayJournal, Journalist.Iprivate, Journalist.mid, Journalist.InMemoryJournalFrozen, Journalist.end, MaxPossibleEntries, Journalist.InMemoryJournal, CorrectJournalBlockSizes, Journalist.WF, Journalist, Journalist.Inv, JournalInfo
+  export extends Spec
+// end generated export
 
   datatype JournalInfo = JournalInfo(
     inMemoryJournalFrozen: seq<JournalEntry>,
@@ -171,7 +181,8 @@ module JournalistImpl {
       )
     }
 
-    protected function I() : JournalInfo
+    /* protected */
+    function I() : JournalInfo
     requires WF()
     {
       Iprivate()
@@ -331,7 +342,8 @@ module JournalistImpl {
       WeightJournalEntriesSum(old_self.I().inMemoryJournalFrozen, old_self.I().inMemoryJournal);
     }
 
-    protected shared function method canAppend(je: JournalEntry) : (b : bool)
+    /* protected */
+    shared function method canAppend(je: JournalEntry) : (b : bool)
     requires Inv()
     {
       4064 * (writtenJournalBlocks + frozenJournalBlocks)

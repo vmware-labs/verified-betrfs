@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../Lang/NativeTypes.s.dfy"
 include "../Base/KeyType.s.dfy"
 include "../DataStructures/KMBtree.i.dfy"
@@ -19,6 +22,7 @@ module LKMBPKVOps {
   import opened Maps
   import BucketsLib
   import BucketWeights
+  import MapSeqs
 
   predicate IsKeyMessageTree(node: LKMB.Model.Node)
   {
@@ -287,7 +291,8 @@ module LKMBPKVOps {
       ghost var premsgs := dpkv.toPkv().messages;
 
       assert PKV.PSA.psaCanAppendSeq(dpkv.toPkv().keys, LKMB.Model.ToSeq(children[i]).0);
-      assume false;
+      LKMTreeEncodableToSeq(children[i]);
+      assert PKV.PSA.psaCanAppendSeq(dpkv.toPkv().messages, ValueMessage.messageSeq_to_bytestringSeq(LKMB.Model.ToSeq(children[i]).1));
       FillDpkv(lseq_peek(node.children, i), dpkv);
       
       calc {
@@ -374,7 +379,7 @@ module LKMBPKVOps {
     requires LKMB.WF(node)
     requires IsKeyMessageTree(node)
     ensures forall k | k in LKMB.Model.ToSeq(node).0 :: |k| <= KeyType.MaxLen() as nat
-    ensures BucketsLib.BucketMapOfSeq(byteSeqSeqToKeySeq(LKMB.Model.ToSeq(node).0), LKMB.Model.ToSeq(node).1) == LKMB.Interpretation(node)
+    ensures BucketsLib.Bucket(byteSeqSeqToKeySeq(LKMB.Model.ToSeq(node).0), LKMB.Model.ToSeq(node).1).as_map() == LKMB.Interpretation(node)
   {
     LKMB.Model.ToSeqCoversInterpretation(node);
     LKMB.Model.ToSeqInInterpretation(node);
@@ -386,7 +391,14 @@ module LKMBPKVOps {
     assert LKMB.Model.Keys.IsStrictlySorted(keys) by {
       LKMB.Model.Keys.reveal_IsStrictlySorted();
     }
-    BucketsLib.StrictlySortedIsBucketMapOfSeq(keys, msgs, interp);
+    calc {
+      BucketsLib.Bucket(byteSeqSeqToKeySeq(LKMB.Model.ToSeq(node).0), LKMB.Model.ToSeq(node).1).as_map();
+      MapSeqs.map_of_seqs(byteSeqSeqToKeySeq(LKMB.Model.ToSeq(node).0), LKMB.Model.ToSeq(node).1);
+      {
+        MapSeqs.eq_map_of_seqs(keys, msgs, interp);
+      }
+      LKMB.Interpretation(node);
+    }
   }
 
   lemma IMessagesInverse(pkv: PKV.Pkv, msgs: seq<LKMB.Model.Messages.Message>)
@@ -412,15 +424,15 @@ module LKMBPKVOps {
     var keys := byteSeqSeqToKeySeq(LKMB.Model.ToSeq(node).0);
     var msgs := LKMB.Model.ToSeq(node).1;
     calc {
-      DPKV.PKV.I(pkv).b;
-      BucketsLib.BucketMapOfSeq(PKV.IKeys(pkv.keys), PKV.IMessages(pkv.messages));
+      DPKV.PKV.I(pkv).as_map();
+      BucketsLib.Bucket(PKV.IKeys(pkv.keys), PKV.IMessages(pkv.messages)).as_map();
       { assert PKV.IKeys(pkv.keys) == keys; }
-      BucketsLib.BucketMapOfSeq(keys, PKV.IMessages(pkv.messages));
+      BucketsLib.Bucket(keys, PKV.IMessages(pkv.messages)).as_map();
       { IMessagesInverse(pkv, msgs); }
-      BucketsLib.BucketMapOfSeq(keys, msgs);
+      BucketsLib.Bucket(keys, msgs).as_map();
       { ToSeqInterpretation(node); }
       LKMB.Interpretation(node);
-      BucketsLib.B(LKMB.Interpretation(node)).b;
+      BucketsLib.B(LKMB.Interpretation(node)).as_map();
     }
     LKMB.Model.ToSeqIsStrictlySorted(node);
     BucketsLib.WellMarshalledBucketsEq(DPKV.PKV.I(pkv), BucketsLib.B(LKMB.Interpretation(node)));
@@ -437,7 +449,7 @@ module LKMBPKVOps {
     var keys := byteSeqSeqToKeySeq(LKMB.Model.ToSeq(node).0);
     var msgs := LKMB.Model.ToSeq(node).1;
     var interp := LKMB.Interpretation(node);
-    var bucket := BucketsLib.BucketMapWithSeq(interp, keys, msgs);
+    var bucket := BucketsLib.Bucket(keys, msgs);
     ToSeqInterpretation(node);
     LKMB.Model.ToSeqIsStrictlySorted(node);
     
@@ -480,7 +492,7 @@ module LKMBPKVOps {
     requires DPKV.PKV.WF(pkv)
     ensures LKMB.WF(node)
     ensures IsKeyMessageTree(node)
-    ensures PKV.I(pkv).b == BucketsLib.B(LKMB.Interpretation(node)).b
+    ensures PKV.I(pkv).as_map() == LKMB.Interpretation(node)
     ensures weight as nat == BucketWeights.WeightBucket(BucketsLib.B(LKMB.Interpretation(node)))
   {
     ghost var keys := PKV.IKeys(pkv.keys);
@@ -491,33 +503,31 @@ module LKMBPKVOps {
     
     node := LKMB.EmptyTree();
     weight := 0;
+
+    BucketsLib.B_empty_map();
     
     while i < DPKV.PKV.NumKVPairs(pkv)
       invariant i <= DPKV.PKV.NumKVPairs(pkv)
       invariant LKMB.WF(node)
       invariant IsKeyMessageTree(node)
-      invariant LKMB.Interpretation(node) == BucketsLib.BucketMapOfSeq(keys[..i], msgs[..i])
+      invariant LKMB.Interpretation(node) == BucketsLib.Bucket(keys[..i], msgs[..i]).as_map()
       invariant weight as nat == BucketWeights.WeightBucket(BucketsLib.B(LKMB.Interpretation(node)))
     {
       calc <= {
         weight as nat;
         BucketWeights.WeightBucket(BucketsLib.B(LKMB.Interpretation(node)));
-        BucketWeights.WeightBucket(BucketsLib.B(BucketsLib.BucketMapOfSeq(keys[..i], msgs[..i])));
-        {
-          BucketWeights.WeightWellMarshalledLe(
-            BucketsLib.BucketMapWithSeq(BucketsLib.BucketMapOfSeq(keys[..i], msgs[..i]), keys[..i], msgs[..i]),
-            BucketsLib.B(BucketsLib.BucketMapOfSeq(keys[..i], msgs[..i])));
-        }
-        BucketWeights.WeightBucket(BucketsLib.BucketMapWithSeq(BucketsLib.BucketMapOfSeq(keys[..i],
-          msgs[..i]), keys[..i], msgs[..i]));
+        BucketWeights.WeightBucket(BucketsLib.B(BucketsLib.Bucket(keys[..i], msgs[..i]).as_map()));
+        { BucketWeights.Weight_Bucket_eq_BucketMap(BucketsLib.Bucket(keys[..i], msgs[..i]).as_map()); }
+        BucketWeights.WeightBucketMap(BucketsLib.Bucket(keys[..i], msgs[..i]).as_map());
+        { BucketWeights.Weight_BucketMap_le_Bucket(BucketsLib.Bucket(keys[..i], msgs[..i])); }
+        BucketWeights.WeightBucket(BucketsLib.Bucket(keys[..i], msgs[..i]));
         {
           assert keys == keys[..i] + keys[i..];
           assert msgs == msgs[..i] + msgs[i..];
           BucketWeights.WeightKeyListAdditive(keys[..i], keys[i..]);
           BucketWeights.WeightMessageListAdditive(msgs[..i], msgs[i..]);
         }
-        BucketWeights.WeightBucket(BucketsLib.BucketMapWithSeq(BucketsLib.BucketMapOfSeq(keys, msgs),
-          keys, msgs));
+        BucketWeights.WeightBucket(BucketsLib.Bucket(keys, msgs));
         BucketWeights.WeightBucket(PKV.I(pkv));
         {
           DPKV.WeightBucketPkv_eq_WeightPkv(pkv);
@@ -536,11 +546,14 @@ module LKMBPKVOps {
       if oldvalue.Some? {
         calc <= {
           BucketWeights.WeightMessageUint64(oldvalue.value) as nat;
-          { BucketWeights.WeightBucketSingleton(key, oldvalue.value); }
-          BucketWeights.WeightBucket(BucketsLib.SingletonBucket(key, oldvalue.value));
+          { BucketWeights.WeightBucketMapSingleton(key, oldvalue.value); }
+          BucketWeights.WeightBucketMap(map[key := oldvalue.value]);
           {
-            BucketWeights.WeightWellMarshalledSubsetLe(BucketsLib.SingletonBucket(key, oldvalue.value),
-              BucketsLib.B(oldinterp));
+            BucketWeights.WeightBucketMapSubsetLe(map[key := oldvalue.value], oldinterp);
+          }
+          BucketWeights.WeightBucketMap(oldinterp);
+          {
+            BucketWeights.Weight_Bucket_eq_BucketMap(oldinterp);
           }
           BucketWeights.WeightBucket(BucketsLib.B(oldinterp));
           oldweight;
@@ -549,20 +562,23 @@ module LKMBPKVOps {
         weight := weight - BucketWeights.WeightMessageUint64(oldvalue.value);
 
         ghost var map0 := Maps.MapRemove1(oldinterp, key);
-        BucketWeights.WeightBucketInduct(BucketsLib.B(map0), key, oldvalue.value);
-        BucketWeights.WeightBucketInduct(BucketsLib.B(map0), key, msg);
+        BucketWeights.WeightBucketInduct(map0, key, oldvalue.value);
+        BucketWeights.WeightBucketInduct(map0, key, msg);
         assert oldinterp == map0[key := oldvalue.value];
         assert LKMB.Interpretation(node) == map0[key := msg];
       } else {
         weight := weight + BucketWeights.WeightKeyUint64(key);
-        BucketWeights.WeightBucketInduct(BucketsLib.B(oldinterp), key, msg);
+        BucketWeights.WeightBucketInduct(oldinterp, key, msg);
       }
 
-      BucketsLib.reveal_BucketMapOfSeq();
+      MapSeqs.induct_map_of_seqs(keys[..i+1], msgs[..i+1]);
       assert keys[..i+1] == keys[..i] + [ keys[i] ];
       assert msgs[..i+1] == msgs[..i] + [ msgs[i] ];
 
       i := i + 1;
+
+      BucketWeights.Weight_Bucket_eq_BucketMap(oldinterp);
+      BucketWeights.Weight_Bucket_eq_BucketMap(LKMB.Interpretation(node));
     }
 
     assert keys[..i] == keys;

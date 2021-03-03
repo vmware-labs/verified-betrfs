@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../lib/Base/DebugAccumulator.i.dfy"
 include "../lib/Base/Maps.i.dfy"
 include "../lib/Base/sequences.i.dfy"
@@ -156,7 +159,7 @@ module IndirectionTable {
       SectorType.IndirectionTable(this.locs, this.graph, this.refUpperBound)
     }
 
-    protected predicate Inv()
+    predicate {:opaque} Inv()
     ensures Inv() ==> this.locs.Keys <= this.graph.Keys
     {
       && LinearMutableMap.Inv(this.t)
@@ -187,6 +190,7 @@ module IndirectionTable {
     requires Inv()
     ensures (forall ref | ref in this.graph :: ref <= this.refUpperBound)
     {
+      reveal Inv();
     }
 
     static method Alloc(loc: Location) returns (linear r: IndirectionTable)
@@ -207,7 +211,10 @@ module IndirectionTable {
         /* r.graph */ Graph(hashMap),
         /* r.predCounts */ PredCounts(hashMap));
 
-      assert r.Inv() by { reveal_PredCounts(); }
+      assert r.Inv() by { 
+        reveal r.Inv();
+        reveal_PredCounts();
+      }
     }
 
     // Dummy constructor only used when ImplVariables is in a state with no indirection
@@ -229,7 +236,10 @@ module IndirectionTable {
         /* r.graph */ Graph(hashMap),
         /* r.predCounts */ PredCounts(hashMap));
 
-      assert r.Inv() by { reveal_PredCounts(); }
+      assert r.Inv() by {
+        reveal r.Inv();
+        reveal_PredCounts();
+      }
     }
 
     // TODO useful? var res := IndirectionTableModel.FromHashMap(me.t, MapOption(me.garbageQueue.Option(), x => USeq.I(x)), me.refUpperBound, me.findLoclessIterator);
@@ -253,6 +263,7 @@ module IndirectionTable {
     ensures cloned.locs == this.locs
     ensures cloned.I() == this.I()
     {
+      reveal Inv();
       shared var IndirectionTable(
         t, garbageQueue, refUpperBound, findLoclessIterator, locs, graph, predCounts) := this;
       linear var t' := LinearMutableMap.Clone(t);
@@ -268,6 +279,7 @@ module IndirectionTable {
         ref in this.locs && this.locs[ref] == e.value.loc.value
     ensures ref in this.locs ==> e.Some? && e.value.loc.Some?
     {
+      reveal Inv();
       e := LinearMutableMap.Get(this.t, ref);
     }
 
@@ -275,6 +287,7 @@ module IndirectionTable {
     requires this.Inv()
     ensures b == (ref in this.graph && ref !in this.locs)
     {
+      reveal Inv();
       var entry := LinearMutableMap.Get(this.t, ref);
       b := entry.Some? && entry.value.loc.None?;
     }
@@ -304,6 +317,7 @@ module IndirectionTable {
     ensures (oldLoc.None? ==> ref !in old_self.locs)
     ensures (oldLoc.Some? ==> ref in old_self.locs && old_self.locs[ref] == oldLoc.value)
     {
+      reveal old_self.Inv();
       var it := LinearMutableMap.FindSimpleIter(self.t, ref);
       var oldEntry := LinearMutableMap.SimpleIterOutput(self.t, it);
        
@@ -331,6 +345,8 @@ module IndirectionTable {
     ensures (!added ==> self.locs == old_self.locs)
     ensures (old_self.TrackingGarbage() ==> self.TrackingGarbage())
     {
+      reveal old_self.Inv();
+
       var it := LinearMutableMap.FindSimpleIter(self.t, ref);
       var oldEntry := LinearMutableMap.SimpleIterOutput(self.t, it);
 
@@ -341,7 +357,11 @@ module IndirectionTable {
       }
 
       assert Graph(self.t) == Graph(old_self.t);
-      assert self.Inv() by { reveal_PredCounts(); }
+
+      assert self.Inv() by {
+        reveal self.Inv();
+        reveal_PredCounts();
+      }
     }
 
     predicate DeallocableRef(ref: BT.G.Reference)
@@ -467,6 +487,7 @@ module IndirectionTable {
     ensures (ref !in old_self.locs ==> oldLoc == None)
     ensures self.refUpperBound == old_self.refUpperBound
     {
+      reveal old_self.Inv();
       TCountEqGraphSize(self.t);
 
       // == mutation ==
@@ -541,6 +562,7 @@ module IndirectionTable {
       // ==============
 
       assert self.graph == MapRemove1(old_self.graph, ref); // observe
+      reveal self.Inv();
     }
 
     static predicate UnchangedExceptTAndGarbageQueue(old_self: IndirectionTable, self: IndirectionTable) {
@@ -900,6 +922,8 @@ module IndirectionTable {
     ensures this.garbageQueue.lSome? ==>
         |this.garbageQueue.value.I()| <= 0x1_0000_0000;
     {
+      reveal this.Inv();
+
       if this.garbageQueue.lSome? {
         NoDupesSetCardinality(this.garbageQueue.value.I());
         SetInclusionImpliesSmallerCardinality(Set(this.garbageQueue.value.I()), this.t.contents.Keys);
@@ -925,6 +949,8 @@ module IndirectionTable {
     ensures (oldLoc.None? ==> ref !in old_self.locs)
     ensures (oldLoc.Some? ==> ref in old_self.locs && old_self.locs[ref] == oldLoc.value)
     {
+      reveal old_self.Inv();
+
       self.QueueSizeBound();
       TCountEqGraphSize(self.t);
 
@@ -998,6 +1024,7 @@ module IndirectionTable {
       inout self.findLoclessIterator := None;
       inout self.UpdateGhost();
       // ==============
+      reveal self.Inv();
     }
 
     static predicate ValIsHashMap(a: seq<V>, s: Option<HashMap>)
@@ -1517,7 +1544,9 @@ module IndirectionTable {
                     /* r.graph */ Graph(t1),
                     /* r.predCounts */ PredCounts(t1)));
 
-                  assert s.lSome? ==> s.value.Inv();
+                  assert s.lSome? ==> s.value.Inv() by {
+                    reveal s.value.Inv();
+                  }
                   /* TODO(andrea) ModelImpl */ assume s.Option() == valToIndirectionTable(v);
                 }
                 case lNone => {
@@ -1601,6 +1630,7 @@ module IndirectionTable {
     /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v).Some?
     /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v) == Some(this)
     {
+      reveal Inv();
       assert this.t.count <= MaxSizeUint64();
       lemma_SeqSum_empty();
       var count := this.t.count as uint64;
@@ -1787,6 +1817,7 @@ module IndirectionTable {
       && BC.AllLocationsForDifferentRefsDontOverlap(I())
     )
     {
+      reveal this.Inv();
       bm := BitmapImpl.Bitmap.Constructor(NumBlocksUint64());
       assert BitmapModel.Len(bm.I()) == NumBlocks();
 
@@ -1846,6 +1877,8 @@ module IndirectionTable {
     ensures ref.Some? ==> this.deallocable(ref.value)
     ensures ref.None? ==> forall r | r in this.I().graph :: !this.deallocable(r)
     {
+      reveal this.Inv();
+
       ref := this.garbageQueue.value.FirstOpt();
       if ref.None? {
         forall r | r in this.I().graph ensures !this.deallocable(r)
@@ -1875,6 +1908,7 @@ module IndirectionTable {
     requires this.Inv()
     ensures size as int == |this.I().graph|
     {
+      reveal this.Inv();
       lemma_count_eq_graph_size(this.t);
       this.t.count
     }
@@ -1887,6 +1921,7 @@ module IndirectionTable {
     ensures ref.Some? ==> ref.value !in old_self.locs
     ensures ref.None? ==> forall r | r in old_self.graph :: r in old_self.locs
     {
+      reveal old_self.Inv();
       var findLoclessIterator := self.findLoclessIterator;
       var it;
       if findLoclessIterator.Some? {
@@ -1917,6 +1952,7 @@ module IndirectionTable {
           break;
         }
       }
+      reveal self.Inv();
     }
 
     function {:opaque} getRefUpperBound() : (r: uint64)
@@ -1924,6 +1960,7 @@ module IndirectionTable {
     ensures forall ref | ref in this.graph :: ref <= r
     ensures r == this.I().refUpperBound
     {
+      reveal Inv();
       this.refUpperBound
     }
 

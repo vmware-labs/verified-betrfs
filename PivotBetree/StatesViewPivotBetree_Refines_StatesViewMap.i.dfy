@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "PivotBetree_Refines_Map.i.dfy"
 include "StatesViewPivotBetree.i.dfy"
 include "../Versions/StatesViewMap.i.dfy"

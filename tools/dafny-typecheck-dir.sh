@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: BSD-2-Clause
+
+
 # Build a file which includes all the files in the directory.
 # (This is a lot faster than running dafny on each one individually.)
 

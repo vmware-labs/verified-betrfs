@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: BSD-2-Clause
+
+
 import sys
 import re
 from termcolor import colored
@@ -42,7 +47,7 @@ def main(args):
     source = {"max":p.by_max, "sum":p.by_sum, "count":p.by_count}
     p.display(source[args.metric], args.metric)
 
-parser = argparse.ArgumentParser(description = "Display a report from Z3 quantifier-instantiation profiling output.\nUse Dafny flags /z3opt:smt.qi.profile=true /z3opt:smt.qi.profile_freq=1000")
+parser = argparse.ArgumentParser(description = "Display a report from Z3 quantifier-instantiation profiling output.\nUse Dafny flags /proverOpt:O:smt.qi.profile=true /proverOpt:O:smt.qi.profile_freq=1000")
 parser.add_argument("--input", default="dafny-qi.profile", help="Input filename")
 parser.add_argument("--metric", default="max", help="Sort by max count in profile output.",
         choices=["max", "sum", "count"])

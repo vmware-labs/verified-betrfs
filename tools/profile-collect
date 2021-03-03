@@ -6,5 +6,4 @@ if [[ X`echo $* | grep /timeLimit`X == XX ]]
 then echo "Warning: /timeLimit flag recommended."
 fi
 # "qi" stands for "quantifier instatiation" count.
-./.dafny/dafny/Binaries/dafny /z3opt:smt.qi.profile=true /z3opt:smt.qi.profile_freq=1000 $* | tee dafny-qi.profile | grep -v "Prover error:"
-
+./.dafny/dafny/Binaries/dafny /proverOpt:O:smt.qi.profile=true /proverOpt:O:smt.qi.profile_freq=1000 $* | tee dafny-qi.profile | grep -v "Prover error:"

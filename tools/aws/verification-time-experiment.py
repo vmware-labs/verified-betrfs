@@ -1,4 +1,8 @@
 #!/usr/bin/python3
+
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: BSD-2-Clause
+
 import sys
 import os
 sys.path.append(os.path.dirname(__file__)+"/..")

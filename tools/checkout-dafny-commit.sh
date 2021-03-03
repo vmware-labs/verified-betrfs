@@ -1,5 +1,9 @@
 #! /bin/bash
 
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: BSD-2-Clause
+
+
 ### Update this commit hash in order to update the version of dafny
 ### to build Veribetrfs with.
 
@@ -7,7 +11,7 @@
 ### and updater scripts, and it serves as the single point to save
 ### the dafny commit hash compatible with the veribetrfs repository.
 
-### Typically, we'll expect to keep this set to the head of the cpp
+### Typically, we'll expect to keep this set to the head of the betr
 ### branch of our dafny fork.
 
 ### When the dafny runtime API on that branch changes, we can update
@@ -18,12 +22,10 @@
 set -e
 set -x
 
-commit=inout
+commit=betr
 if [ $1 ]; then
    commit=$1
 fi
 
 # https://github.com/secure-foundations/dafny.git
-# cpp branch
 git checkout $commit
-git submodule update --init --recursive

@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "BucketGeneratorModel.i.dfy"
 
 module BucketSuccessorLoopModel {
@@ -10,6 +13,8 @@ module BucketSuccessorLoopModel {
   import opened BucketGeneratorModel
   import UI
   import opened KeyType
+  import opened BucketMaps
+  import Lexicographic_Byte_Order
 
   // A straightforward loop using the generator machinery
 
@@ -61,9 +66,9 @@ module BucketSuccessorLoopModel {
   // Lemmas and stuff
 
   predicate ProcessInv(
-      bucket: Bucket,
-      left: Bucket,
-      right: Bucket,
+      bucket: BucketMap,
+      left: BucketMap,
+      right: BucketMap,
       g: Generator,
       maxToFind: int,
       upTo: Option<Key>,
@@ -71,24 +76,32 @@ module BucketSuccessorLoopModel {
   {
     && results == SortedSeqOfKeyValueMap(KeyValueMapOfBucket(left))
     && YieldsSortedBucket(g, right)
-    && (forall l, r | l in left.b && r in right.b :: Keyspace.lt(l, r))
-    && (upTo.Some? ==> forall l | l in left.b :: Keyspace.lt(l, upTo.value))
-    && MapUnionPreferA(left.b, right.b) == bucket.b
+    && (forall l, r | l in left && r in right :: Keyspace.lt(l, r))
+    && (upTo.Some? ==> forall l | l in left :: Keyspace.lt(l, upTo.value))
+    && MapUnionPreferA(left, right) == bucket
     && |results| < maxToFind
   }
 
+  function maximumKey(b: set<Key>) : Option<Key>
+  {
+    var m := Lexicographic_Byte_Order.maximumOpt(b);
+    if m.Some? then
+      assert |m.value| <= KeyType.MaxLen() as nat;
+      var k: Key := m.value;
+      Some(k)
+    else
+      None
+  }
+
   lemma ProcessGeneratorResult(
-      bucket: Bucket,
-      left: Bucket,
-      right: Bucket,
+      bucket: BucketMap,
+      left: BucketMap,
+      right: BucketMap,
       g: Generator,
       maxToFind: int,
       upTo: Option<Key>,
       results: seq<UI.SuccResult>)
   requires ProcessInv(bucket, left, right, g, maxToFind, upTo, results)
-  requires BucketWellMarshalled(bucket)
-  requires BucketWellMarshalled(left)
-  requires BucketWellMarshalled(right)
   ensures var r := ProcessGenerator(g, maxToFind, upTo, results);
       && r.results == SortedSeqOfKeyValueMap(
           KeyValueMapOfBucket(
@@ -113,8 +126,8 @@ module BucketSuccessorLoopModel {
 
       GenPopIsRemove(g);
 
-      var left' := B(left.b[next.key := next.msg]);
-      var right' := B(MapRemove1(right.b, next.key));
+      var left' := left[next.key := next.msg];
+      var right' := MapRemove1(right, next.key);
 
       if v != DefaultValue() {
         var results' := results + [UI.SuccResult(next.key, v)];
@@ -123,13 +136,35 @@ module BucketSuccessorLoopModel {
         assert next.key in KeyValueMapOfBucket(left').Keys;
         assert next.key == maximumKey(KeyValueMapOfBucket(left').Keys).value;
         assert MapRemove1(KeyValueMapOfBucket(left'), next.key) == KeyValueMapOfBucket(left);
-        assert results' == SortedSeqOfKeyValueMap(KeyValueMapOfBucket(left'));
+        var m := KeyValueMapOfBucket(left');
+        calc {
+          results';
+          //SortedSeqOfKeyValueMap(MapRemove1(m, next.key))
+          //    + [UI.SuccResult(next.key, m[next.key])];
+          //{
+          //  assert Lexicographic_Byte_Order.maximumOpt(m.Keys).value == next.key;
+          //}
+          //SortedSeqOfKeyValueMap(MapRemove1(m, next.key))
+          //    + [UI.SuccResult(Lexicographic_Byte_Order.maximumOpt(m.Keys).value, m[Lexicographic_Byte_Order.maximumOpt(m.Keys).value])];
+          {
+          //  assert next.key == Lexicographic_Byte_Order.maximumOpt(m.Keys).value;
+            // seems like Dafny needs the help here:
+            assert MapRemove1(m, next.key)
+                == MapRemove1(m, Lexicographic_Byte_Order.maximumOpt(m.Keys).value);
+          //  assert SortedSeqOfKeyValueMap(MapRemove1(m, next.key))
+          //      == SortedSeqOfKeyValueMap(MapRemove1(m, Lexicographic_Byte_Order.maximumOpt(m.Keys).value));
+          }
+          //SortedSeqOfKeyValueMap(MapRemove1(m, Lexicographic_Byte_Order.maximumOpt(m.Keys).value))
+          //    + [UI.SuccResult(Lexicographic_Byte_Order.maximumOpt(m.Keys).value, m[Lexicographic_Byte_Order.maximumOpt(m.Keys).value])];
+          //SortedSeqOfKeyValueMap(m);
+          SortedSeqOfKeyValueMap(KeyValueMapOfBucket(left'));
+        }
 
         if |results'| < maxToFind {
           var g' := GenPop(g);
           ProcessGeneratorResult(bucket, left', right', g', maxToFind, upTo, results');
         } else {
-          WellMarshalledBucketsEq(left', ClampEnd(bucket, UI.EInclusive(next.key)));
+          //WellMarshalledBucketsEq(left', ClampEnd(bucket, UI.EInclusive(next.key)));
           assert left' == ClampEnd(bucket, UI.EInclusive(next.key));
           //var r := UI.SuccResultList(results', UI.EInclusive(next.key));
         }
@@ -143,7 +178,7 @@ module BucketSuccessorLoopModel {
     } else {
       var ce := ClampEnd(bucket, 
           if upTo.Some? then UI.EExclusive(upTo.value) else UI.PositiveInf);
-      assert left.b == ce.b;
+      assert left == ce;
       //var r := UI.SuccResultList(results,
       //    if upTo.Some? then UI.EExclusive(upTo.value) else UI.PositiveInf);
     }
@@ -174,7 +209,7 @@ module BucketSuccessorLoopModel {
     && r.results ==
         SortedSeqOfKeyValueMap(
           KeyValueMapOfBucket(
-            ClampRange(ComposeSeq(buckets), start, r.end)))
+            ClampRange(ComposeSeq(MapsOfBucketList(buckets)), start, r.end)))
     && (upTo.Some? ==> !MS.UpperBound(upTo.value, r.end))
     && MS.NonEmptyRange(start, r.end)
   {
@@ -184,15 +219,15 @@ module BucketSuccessorLoopModel {
     var bucket := BucketOf(g);
     reveal_KeyValueMapOfBucket();
     reveal_SortedSeqOfKeyValueMap();
-    ProcessGeneratorResult(bucket, B(map[]), bucket, g, maxToFind, upTo, []);
+    ProcessGeneratorResult(bucket, map[], bucket, g, maxToFind, upTo, []);
     var r := ProcessGenerator(g, maxToFind, upTo, []);
     assert r == GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);
 
     reveal_ClampRange();
     reveal_ClampStart();
     reveal_ClampEnd();
-    assert ClampRange(ComposeSeq(buckets), start, r.end)
-        == ClampEnd(ClampStart(ComposeSeq(buckets), start), r.end);
+    assert ClampRange(ComposeSeq(MapsOfBucketList(buckets)), start, r.end)
+        == ClampEnd(ClampStart(ComposeSeq(MapsOfBucketList(buckets)), start), r.end);
 
     /*assert bucket == ClampStart(ComposeSeq(buckets), start);
 
@@ -210,8 +245,8 @@ module BucketSuccessorLoopModel {
     } else {
       // There's at least 1 result, so the range has to be non-empty
       SortedSeqOfKeyValueMaps(KeyValueMapOfBucket(
-               ClampRange(ComposeSeq(buckets), start, r.end)), 0);
-      assert r.results[0].key in ClampRange(ComposeSeq(buckets), start, r.end).b;
+               ClampRange(ComposeSeq(MapsOfBucketList(buckets)), start, r.end)), 0);
+      assert r.results[0].key in ClampRange(ComposeSeq(MapsOfBucketList(buckets)), start, r.end);
       assert MS.InRange(start, r.results[0].key, r.end);
       InRangeImpliesNonEmpty(start, r.results[0].key, r.end);
     }

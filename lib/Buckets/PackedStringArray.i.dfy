@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../Lang/NativeTypes.s.dfy"
 include "../Lang/LinearSequence.s.dfy"
 include "../Lang/System/PackedInts.s.dfy"
@@ -238,7 +241,6 @@ module PackedStringArray {
     assert WF(subpsa) by { Uint32_Order.reveal_IsSorted(); }
     var isubpsa := I(subpsa);
     var ipsasub := I(psa)[from..to];
-    assert |isubpsa| == |ipsasub|;
     forall i: uint64 | 0 <= i < |isubpsa| as uint64
       ensures isubpsa[i] == ipsasub[i]
     {
@@ -246,17 +248,7 @@ module PackedStringArray {
       var dataEnd := psaEnd(psa, to-1);
       var subStart := psaStart(subpsa, i);
       var subEnd := psaEnd(subpsa, i);
-      // WTF.  Why isn't this a simple calc of sequence?  This proof seem very brittle.
-      forall j  | 0 <= j < subEnd - subStart
-        ensures 
-        psa.data[dataStart..dataEnd][subStart..subEnd][j] ==
-        psa.data[dataStart + subStart..dataStart + subEnd][j]
-      {
-        // For example of the brittleness of this proof, converting these asserts to a single calc causes the proof to fail.
-        assert psa.data[dataStart..dataEnd][subStart..subEnd][j] == psa.data[dataStart..dataEnd][subStart + j];
-        assert psa.data[dataStart..dataEnd][subStart..subEnd][j] == psa.data[dataStart + subStart + j];
-        assert psa.data[dataStart + subStart..dataStart + subEnd][j] == psa.data[dataStart + subStart + j];
-      }
+      lemma_seq_slice_slice(psa.data, dataStart as nat, dataEnd as nat, subStart as nat, subEnd as nat);
     }
   }
 
@@ -615,6 +607,7 @@ module PackedStringArray {
   // TODO these could be written in terms of the above
   // less-restrictive binary search methods:
   
+  /*
   method IndexOfFirstKeyGte(psa: Psa, key: Key) returns (idx: uint64)
     requires WF(psa)
     requires LexOrder.IsSorted(I(psa))
@@ -696,6 +689,7 @@ module PackedStringArray {
     idx := lo;
     LexOrder.IndexOfFirstGtIsUnique(I(psa), key, idx as nat);
   }
+  */
 
   //~ method PivotIndexes(keys: Psa, pivots: seq<Key>) returns (pivotIdxs: seq<uint64>)
   //~   requires WF(keys)

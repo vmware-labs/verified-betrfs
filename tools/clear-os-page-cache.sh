@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: BSD-2-Clause
+
+
 # To free pagecache:
 # echo 1 > /proc/sys/vm/drop_caches
 #

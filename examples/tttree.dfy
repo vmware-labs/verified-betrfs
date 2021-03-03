@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../lib/total_order.s.dfy"
 include "../lib/lexical.i.dfy"
 include "../lib/Maps.i.dfy"

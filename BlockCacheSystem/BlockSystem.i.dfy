@@ -1,5 +1,9 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../BlockCacheSystem/BlockCache.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
+include "../BlockCacheSystem/AsyncSectorDiskModelTypes.i.dfy"
 
 //
 // Attach a BlockCache to a Disk
@@ -17,6 +21,13 @@ module BlockSystem {
   import opened DiskLayout
   import opened SectorType
   import opened ViewOp
+
+// begin generated export
+  export Spec
+    provides *
+    reveals CleanCacheEntriesAreCorrect, Crash, CorrectInflightBlockReads, WFDiskGraph, Reference, CorrectInflightIndirectionTableReads, DiskGraph, Graph, RecordedReadRequestNode, disjointWritesFromIndirectionTable, Machine, WriteRequestsAreDistinct, ReadWritesDontOverlap, CorrectInflightBlockRead, ReadWritesAreDistinct, WFDiskGraphOfLoc, NoDanglingPointers, DiskOp, RecordedReadRequestIndirectionTable, DiskChangesPreservesPersistentAndFrozen, RecordedWriteRequestNode, DiskGraphOfLoc, WriteRequestsDontOverlap, Next, RecordedWriteRequestsIndirectionTable, Step, RecordedReadRequestsIndirectionTable, RecordedWriteRequestsNode, CorrectInflightNodeWrites, Node, Variables, RefMapOfDisk, SuccessorsAgree, RecordedWriteRequestIndirectionTable, DiskCacheLookup, CorrectInflightIndirectionTableWrites, WFIndirectionTableWrtDisk, CorrectInflightNodeWrite, Op, WFIndirectionTableRefWrtDisk, HasDiskCacheLookup, Init, WFDiskCacheGraph, RecordedReadRequestsNode, NextStep, DiskCacheGraph
+  export extends Spec
+// end generated export
 
   type DiskOp = M.DiskOp
 
@@ -135,7 +146,8 @@ module BlockSystem {
     && forall ref | ref in succGraph :: (iset r | r in succGraph[ref]) == M.G.Successors(graph[ref])
   }
 
-  protected predicate WFSuccs(s: Variables, loc: Location)
+  /* protected */
+  predicate WFSuccs(s: Variables, loc: Location)
   {
     && WFDiskGraphOfLoc(s, loc)
     && SuccessorsAgree(
@@ -152,14 +164,16 @@ module BlockSystem {
     DiskGraph(s.disk.indirectionTables[loc], s.disk.nodes)
   }
 
-  protected function DiskGraphMap(
+  /* protected */
+  function DiskGraphMap(
       s: Variables) : imap<Location, imap<Reference, Node>>
   {
     imap loc | WFSuccs(s, loc)
         :: DiskGraphOfLoc(s, loc)
   }
 
-  protected function PersistentLoc(s: Variables) : Option<Location>
+  /* protected */
+  function PersistentLoc(s: Variables) : Option<Location>
   {
     if s.machine.Ready? then 
       Some(s.machine.persistentIndirectionTableLoc)
@@ -169,7 +183,8 @@ module BlockSystem {
       None
   }
 
-  protected function FrozenLoc(s: Variables) : Option<Location>
+  /* protected */
+  function FrozenLoc(s: Variables) : Option<Location>
   {
     if s.machine.Ready? && s.machine.frozenIndirectionTableLoc.Some?
         && s.machine.outstandingIndirectionTableWrite.None? then (
@@ -200,25 +215,29 @@ module BlockSystem {
     )
   }
 
-  protected predicate WFFrozenGraph(s: Variables)
+  /* protected */
+  predicate WFFrozenGraph(s: Variables)
   {
     && s.machine.Ready?
     && s.machine.frozenIndirectionTable.Some?
     && WFDiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
   }
 
-  protected function FrozenGraph(s: Variables) : imap<Reference, Node>
+  /* protected */
+  function FrozenGraph(s: Variables) : imap<Reference, Node>
   requires WFFrozenGraph(s)
   {
     DiskCacheGraph(s.machine.frozenIndirectionTable.value, s.disk, s.machine.cache)
   }
 
-  protected predicate UseFrozenGraph(s: Variables)
+  /* protected */
+  predicate UseFrozenGraph(s: Variables)
   {
     s.machine.Ready? && s.machine.frozenIndirectionTable.Some?
   }
 
-  protected function FrozenGraphOpt(s: Variables) : Option<imap<Reference, Node>>
+  /* protected */
+  function FrozenGraphOpt(s: Variables) : Option<imap<Reference, Node>>
   {
     if WFFrozenGraph(s) then
       Some(FrozenGraph(s))
@@ -226,31 +245,36 @@ module BlockSystem {
       None
   }
 
-  protected predicate WFLoadingGraph(s: Variables)
+  /* protected */
+  predicate WFLoadingGraph(s: Variables)
   {
     && s.machine.LoadingIndirectionTable?
     && WFDiskGraphOfLoc(s, s.machine.indirectionTableLoc)
   }
 
-  protected function LoadingGraph(s: Variables) : imap<Reference, Node>
+  /* protected */
+  function LoadingGraph(s: Variables) : imap<Reference, Node>
   requires WFLoadingGraph(s)
   {
     DiskGraphOfLoc(s, s.machine.indirectionTableLoc)
   }
 
-  protected predicate WFEphemeralGraph(s: Variables)
+  /* protected */
+  predicate WFEphemeralGraph(s: Variables)
   {
     && s.machine.Ready?
     && WFDiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
   }
 
-  protected function EphemeralGraph(s: Variables) : imap<Reference, Node>
+  /* protected */
+  function EphemeralGraph(s: Variables) : imap<Reference, Node>
   requires WFEphemeralGraph(s)
   {
     DiskCacheGraph(s.machine.ephemeralIndirectionTable, s.disk, s.machine.cache)
   }
 
-  protected function EphemeralGraphOpt(s: Variables) : Option<imap<Reference, Node>>
+  /* protected */
+  function EphemeralGraphOpt(s: Variables) : Option<imap<Reference, Node>>
   {
     if WFEphemeralGraph(s) then
       Some(EphemeralGraph(s))
@@ -474,7 +498,8 @@ module BlockSystem {
         reqReads[id1] != reqWrites[id2]
   }
 
-  protected predicate Inv(s: Variables)
+  /* protected */
+  predicate Inv(s: Variables)
   ensures Inv(s) ==>
     && (s.machine.Ready? ==> EphemeralGraphOpt(s).Some?)
     && M.Inv(s.machine)

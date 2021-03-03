@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../lib/Base/DebugAccumulator.i.dfy"
 include "BlockAllocatorModel.i.dfy"
 include "../lib/DataStructures/BitmapImpl.i.dfy"
@@ -16,6 +19,13 @@ module BlockAllocatorImpl {
   import opened Options
   import BlockAllocatorModel
   import opened NativeTypes
+
+// // begin generated export
+//   export Spec
+//     provides *
+//     reveals BlockAllocator
+//   export extends Spec
+// // end generated export
 
   linear datatype BlockAllocator = BlockAllocator(
     linear ephemeral: BitmapImpl.Bitmap,

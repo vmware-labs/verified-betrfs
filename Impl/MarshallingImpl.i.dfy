@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "StateSectorImpl.i.dfy"
 include "../lib/Buckets/BucketImpl.i.dfy"
@@ -5,8 +8,8 @@ include "../lib/Base/Option.s.dfy"
 include "../lib/Lang/System/NativeArrays.s.dfy"
 include "../lib/Base/NativeBenchmarking.s.dfy"
 include "../lib/Base/LinearOption.i.dfy"
-include "../lib/Crypto/CRC32CArrayImpl.i.dfy"
-include "../lib/Crypto/CRC32CImpl.i.dfy"
+include "../lib/Checksums/CRC32CArrayImpl.i.dfy"
+include "../lib/Checksums/CRC32CImpl.i.dfy"
 
 include "../ByteBlockCacheSystem/Marshalling.i.dfy"
 include "MarshallingModel.i.dfy"
@@ -37,7 +40,6 @@ module MarshallingImpl {
   import CRC32_C_Impl
   import CRC32_C_Array_Impl
   import NativeArrays
-  import MutableMapModel
   import IndirectionTable
   import KeyType
   import SeqComparison

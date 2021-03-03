@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "IOImpl.i.dfy"
 include "BookkeepingImpl.i.dfy"
 include "InsertModel.i.dfy"

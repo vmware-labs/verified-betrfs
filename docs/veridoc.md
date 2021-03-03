@@ -23,7 +23,7 @@ state machines.
 **ByteBlockCacheSystem/AsyncDiskModel.s.dfy** An async disk allows concurrent outstanding I/Os. The disk is a sequence of bytes.
 
 (Real disks constrain I/Os to fall on logical-block-address boundaries, but we're
-ignoring constraint for now.)
+ignoring that constraint for now.)
 
 
 # Implementation spec
@@ -99,6 +99,10 @@ TODO(jonh) and apparently a bunch of dead code! See TODO inline.
 of children of a node.
 
 
+**PivotBetree/PivotBetreeGraph.i.dfy** 
+
+**PivotBetree/PivotBetreeBlockInterface.i.dfy** 
+
 **PivotBetree/PivotBetreeSpec.i.dfy** A PivotBetree refines a Betree, carrying forward the tree structure
 but refining the abstract infinite key maps with key ranges separated
 by pivot keys.
@@ -163,10 +167,8 @@ via the StatesView functor
 is some higher-level Node datatype. A later refinement step shows how to marshall and align
 these Nodes to the byte-ranges of the (trusted) AsyncDiskModel.
 
-TODO disallow concurrent spatially-overlapping writes/reads
-A disk, processing stuff in its queue, doing its thing.
 
-**BlockCacheSystem/JournalDisk.i.dfy** A disk, processing stuff in its queue, doing its thing.
+**BlockCacheSystem/JournalDisk.i.dfy** 
 
 **BlockCacheSystem/BlockCache.i.dfy** A BlockCache implements the BlockInterface by caching over an
 BlockDisk. At this layer, the disk provides high-level sectors
@@ -287,17 +289,7 @@ The bucket may be implicit.
 
 **Impl/DiskOpModel.i.dfy** 
 
-**Impl/IndirectionTableModel.i.dfy** An IndirectionTable maps references to locations and tracks
-dependencies (accounts for locations containing references).
-This module includes a reference-counting map and free list
-that make discovering free blocks (and maintaining the list of
-them) cheap.
-
-TODO(thance): separate API from refcount-y implementation using
-a layer of Dafny refinement.
-
-TODO(jonh): Here "Model" means "lowest functional model of the mutable
-impl". Maybe move Model to the beginning of all such usages?
+**Impl/IndirectionTable.i.dfy** The heap-y implementation of IndirectionTableModel.
 
 
 **Impl/JournalistMarshallingModel.i.dfy** 
@@ -305,6 +297,12 @@ impl". Maybe move Model to the beginning of all such usages?
 **Impl/JournalistParsingImpl.i.dfy** 
 
 **Impl/MkfsModel.i.dfy** 
+
+**Impl/NodeImpl.i.dfy** Implements PivotBetree/PivotBetreeSpec.Node. (There's no Model file
+because Node is already a precise functional model of this code.)
+
+
+**Impl/AllocationReport.i.dfy** 
 
 **Impl/BlockAllocatorImpl.i.dfy** A BlockAllocator tracks which blocks are allocated, to safely allocate
 blocks unused by any view.
@@ -317,33 +315,13 @@ blocks unused by any view.
 **Impl/DiskOpImpl.i.dfy** TODO a better name might be IOImpl, but that's already
 taken. TODO rename that other thing, then rename this.
 
-**Impl/IndirectionTableImpl.i.dfy** The heap-y implementation of IndirectionTableModel.
-
-
 **Impl/JournalistMarshallingImpl.i.dfy** 
 
-**Impl/JournalistModel.i.dfy** 
+**Impl/StateSectorModel.i.dfy** 
 
 **Impl/BucketSuccessorLoopImpl.i.dfy** 
 
-**Impl/CommitterModel.i.dfy** for when you have commitment issues
-
 **Impl/JournalistImpl.i.dfy** 
-
-**Impl/CommitterImpl.i.dfy** for when you have commitment issues
-
-**Impl/CommitterReplayModel.i.dfy** 
-
-**Impl/StateModel.i.dfy** This file represents immutability's last stand.
-It is the highest-fidelity representation of the implementation
-that can be represented with immutable datatypes.
-
-For example, it has a model of the root bucket which does not exist in
-BlockCache.  It also represents indirection table as a map to pairs, rather
-than two maps, because real, mutable implementation uses a map to pairs.
-
-
-**Impl/CommitterReplayImpl.i.dfy** 
 
 **Impl/MarshallingModel.i.dfy** Parses bytes and returns the data structure (a Pivot-Node Sector) used by
 the Model.
@@ -355,7 +333,9 @@ that produces an output that parses to X.
 TODO(jonh): rename to ModelParsing.
 
 
-**Impl/NodeModel.i.dfy** 
+**Impl/StateBCModel.i.dfy** 
+
+**Impl/StateSectorImpl.i.dfy** 
 
 **Impl/IOModel.i.dfy** IO functions used by various StateModel verbs.
 Updates data structures as defined in StateModel.
@@ -365,27 +345,7 @@ MainDiskIOHandlers.s.dfy.
 Also, the code that reads in indirection tables and nodes.
 
 
-**Impl/NodeImpl.i.dfy** Implements PivotBetree/PivotBetreeSpec.Node. (There's no Model file
-because Node is already a precise functional model of this code.)
-
-
-**Impl/AllocationReport.i.dfy** 
-
 **Impl/BookkeepingModel.i.dfy** 
-
-**Impl/CacheImpl.i.dfy** Implements map<Reference, Node>
-
-TODO(thance): We need a CacheModel, because this is taking too big a leap
-from map<Reference, Node>.
-
-
-**Impl/CommitterAppendModel.i.dfy** 
-
-**Impl/CommitterCommitModel.i.dfy** 
-
-**Impl/CommitterInitModel.i.dfy** 
-
-**Impl/CommitterAppendImpl.i.dfy** 
 
 **Impl/DeallocModel.i.dfy** 
 
@@ -393,25 +353,29 @@ from map<Reference, Node>.
 
 **Impl/GrowModel.i.dfy** 
 
-**Impl/HandleReadResponseModel.i.dfy** 
-
-**Impl/HandleWriteResponseModel.i.dfy** 
-
 **Impl/LeafModel.i.dfy** 
 
 **Impl/SplitModel.i.dfy** 
 
-**Impl/StateImpl.i.dfy** 
-
 **Impl/SuccModel.i.dfy** See dependency graph in MainHandlers.dfy
-
-**Impl/FullImpl.i.dfy** 
-
-**Impl/MarshallingImpl.i.dfy** 
 
 **Impl/SyncModel.i.dfy** See dependency graph in MainHandlers.dfy
 
 **Impl/EvictModel.i.dfy** 
+
+**Impl/FlushPolicyModel.i.dfy** 
+
+**Impl/CacheImpl.i.dfy** Implements map<Reference, Node>
+
+TODO(thance): We need a CacheModel, because this is taking too big a leap
+from map<Reference, Node>.
+
+
+**Impl/InsertModel.i.dfy** 
+
+**Impl/MarshallingImpl.i.dfy** 
+
+**Impl/StateBCImpl.i.dfy** 
 
 **Impl/IOImpl.i.dfy** 
 
@@ -419,13 +383,7 @@ from map<Reference, Node>.
 
 **Impl/BookkeepingImpl.i.dfy** 
 
-**Impl/CommitterCommitImpl.i.dfy** 
-
-**Impl/CommitterInitImpl.i.dfy** 
-
-**Impl/FlushPolicyModel.i.dfy** 
-
-**Impl/QueryModel.i.dfy** See dependency graph in MainHandlers.dfy
+**Impl/CommitterImpl.i.dfy** 
 
 **Impl/DeallocImpl.i.dfy** 
 
@@ -433,21 +391,36 @@ from map<Reference, Node>.
 
 **Impl/GrowImpl.i.dfy** 
 
-**Impl/HandleReadResponseImpl.i.dfy** 
-
-**Impl/HandleWriteResponseImpl.i.dfy** 
-
-**Impl/InsertModel.i.dfy** 
-
 **Impl/LeafImpl.i.dfy** 
 
 **Impl/SplitImpl.i.dfy** 
 
-**Impl/CoordinationModel.i.dfy** 
+**Impl/StateModel.i.dfy** This file represents immutability's last stand.
+It is the highest-fidelity representation of the implementation
+that can be represented with immutable datatypes.
+
+For example, it has a model of the root bucket which does not exist in
+BlockCache.  It also represents indirection table as a map to pairs, rather
+than two maps, because real, mutable implementation uses a map to pairs.
+
+
+**Impl/FullImpl.i.dfy** 
+
+**Impl/HandleReadResponseModel.i.dfy** 
+
+**Impl/HandleWriteResponseModel.i.dfy** 
+
+**Impl/QueryModel.i.dfy** See dependency graph in MainHandlers.dfy
 
 **Impl/SyncImpl.i.dfy** See dependency graph in MainHandlers.dfy
 
+**Impl/CoordinationModel.i.dfy** 
+
 **Impl/EvictImpl.i.dfy** 
+
+**Impl/HandleReadResponseImpl.i.dfy** 
+
+**Impl/HandleWriteResponseImpl.i.dfy** 
 
 **Impl/SuccImpl.i.dfy** See dependency graph in MainHandlers.dfy
 
@@ -567,37 +540,40 @@ backends to support compiling ints.
 
 # Bucket implementation
 
-**lib/Buckets/PackedStringArray.i.dfy** 
-
-**lib/Buckets/PivotsLib.i.dfy** Provides definitions and libraries for pivot tables. A pivot
+**lib/Buckets/BoundedPivotsLib.i.dfy** Provides definitions and libraries for pivot tables. A pivot
 table is a sorted list of *pivot* keys that divides the keyspace into
 contiguous ranges.
 
 
-**lib/Buckets/BucketsLib.i.dfy** A Bucket maps keys to Messages. A BucketList imparts a Message meaning
-to every key obeying the Message composition rules. This module shows
-how pushing messages down a tree towards a child still produces equivalent
-values as viewed through the Message chain.
+**lib/Buckets/MapSeqs.i.dfy** Utilities for converting from a (seq of keys, seq of values) representation
+and a map<key, value> representation.
 
-Unfortunately this currently has a lot of tech debt. Here is the situation:
-Originally, a "bucket" was defined to be a map<Key, Value>, and the PivotBetree
-was defined in terms of the Buckets.
-Many operations (split, flush) were defined on these Buckets.
-The implementation used data structures whose
-interpretations were these map<Key, Value> objects.
+Currently specialized to keys and messages, could be made more general.
 
-However, key/value pairs are stored on disk as sequences. In order to avoid demarshalling
-costs, it slowly became clear that it would be more useful that the PivotBetree should
-use sequences, and that it should maintain an invariant that the sequences are sorted,
-and that the implementation should primarily operate on sequences.
+seqs -> map representation is lossy, unless the input keys are sorted.
+map -> seqs representation is invertible.
 
-Unfortunately (blame tjhance) the move to this second option is a little undercooked,
-and this file
-remains in a messy mid-refactor state where a Bucket is *both* a BucketMap and
-a key/value sequence. TODO fix all of this
 
+**lib/Buckets/PackedStringArray.i.dfy** 
+
+**lib/Buckets/BucketMap.i.dfy** 
 
 **lib/Buckets/PackedStringArrayMarshalling.i.dfy** 
+
+**lib/Buckets/BucketsLib.i.dfy** A Bucket is two sequences: a sequence of keys and
+a sequence of messages. The interpretation of a bucket
+is a map, given by to_map().
+
+Buckets generally should have keys in sorted order.
+However, most operations are defined so as it make sense
+without that requirement, thus the implementation can
+avoid costly sortedness checks.
+
+The on-disk representation and the most common in-memory
+representation of a bucket is as 2 sequences (PackedKV)
+so this is the most straightforward representation of such
+a thing.
+
 
 **lib/Buckets/BucketIteratorModel.i.dfy** A mathematical description of bucket iterators.
 The implementation is defined in BucketImpl together with MutBucket.
@@ -615,7 +591,7 @@ going to do.  If we use a predicate definition instead, then we can
 describe the non-deterministic universe of valid flushes and
 concretize at a lower layer.
 
-**lib/Buckets/BucketModel.i.dfy** 
+**lib/Buckets/BucketFlushModel.i.dfy** TODO rename this file to be BucketFlushing or something
 
 **lib/Buckets/PackedKV.i.dfy** 
 
@@ -642,37 +618,26 @@ representation.
 
 **lib/DataStructures/LinearDList.i.dfy** 
 
-**lib/DataStructures/LinearMutableMap.i.dfy** 
+**lib/DataStructures/LinearMutableMapBase.i.dfy** 
 
-**lib/DataStructures/MutableMapModel.i.dfy** Immutable (functional) model to support MutableMapImpl.  API provides an
-iterator interface with a deterministic order for parsing/marshaling.
-(That's why the API is/ more than just a Dafny map.)
-
-TODO(jonh): Here and elsewhere, Model files seem to be both
-API (because callers use some of the definitions as 'public' ways
-to reason about the behavior of the modeled Impl) and internal
-proof (the logic half of the behavior of the Impl). It would be
-nice to cleanly separate these concerns.
+**lib/DataStructures/LruModel.i.dfy** An LRU-queue.
 
 
 **lib/DataStructures/BitmapImpl.i.dfy** Maintains a compact set of integers using a packed-uint64 bitmap
 representation.
 
 
-**lib/DataStructures/LinearUSeq.i.dfy** 
+**lib/DataStructures/LinearContentMutableMap.i.dfy** 
+
+**lib/DataStructures/LinearMutableMap.i.dfy** 
 
 **lib/DataStructures/MutableBtree.i.dfy** 
 
-**lib/DataStructures/MutableMapImpl.i.dfy** A map implemented as a fast, mutable hash table.
-
-
 **lib/DataStructures/KMBtree.i.dfy** 
 
-**lib/DataStructures/LruModel.i.dfy** An LRU-queue.
+**lib/DataStructures/LinearLru.i.dfy** 
 
-
-**lib/DataStructures/LruImpl.i.dfy** An LRU-queue.
-
+**lib/DataStructures/LinearUSeq.i.dfy** 
 
 # Language utilities
 
@@ -728,7 +693,7 @@ From IronFleet, but mostly unused in VeriBetrKV
 
 # CRC32-C Specification
 
-**lib/Crypto/CRC32C.s.dfy** Our disk model relies on assumptions relating to our checksum
+**lib/Checksums/CRC32C.s.dfy** Our disk model relies on assumptions relating to our checksum
 algorithm, CRC-32 (namely that a block with a valid checksum cannot
 become corrupted to another block with a valid checksum).
 Thus, we need the CRC-32 algorithm in our TCB. The validity of our
@@ -740,26 +705,28 @@ over F_2.
 
 # CRC32-C Implementation
 
-**lib/Crypto/CRC32PowDef.i.dfy** 
+**lib/Checksums/Nonlinear.i.dfy** This file is meant to be run with nonlinear-arithmetic enabled in z3.
+It only exports really basic lemmas (commutativity, associativity, etc.)
+so that these facts can be used by files that use /noNLarith
 
-**lib/Crypto/BitLemmas.i.dfy** 
+**lib/Checksums/CRC32C_PowDef.i.dfy** 
 
-**lib/Crypto/CRC32LutBitUnrolling.i.dfy** 
+**lib/Checksums/F2_X_Lemmas.i.dfy** 
 
-**lib/Crypto/CRC32LutPowers.i.dfy** 
+**lib/Checksums/MathLemmas.i.dfy** More complicated math lemmas. This file is meant to be run with `/noNLarith`.
+Call into NonlinearLemmas for basic nonlinear facts rather than relying on Z3.
+TODO combine with other math lib?
 
-**lib/Crypto/F2_X_Lemmas.i.dfy** 
+**lib/Checksums/BitLemmas.i.dfy** 
 
-**lib/Crypto/CRC32LutLemma.i.dfy** 
+**lib/Checksums/CRC32C_Lemmas.i.dfy** 
 
-**lib/Crypto/CRC32Lemmas.i.dfy** 
+**lib/Checksums/CRC32C_Lut.i.dfy** 
 
-**lib/Crypto/CRC32Lut.i.dfy** 
-
-**lib/Crypto/CRC32CArrayImpl.i.dfy** Yeah this is basically a copy of CRC32_C_Impl but with seq replaced by array.
+**lib/Checksums/CRC32CArrayImpl.i.dfy** Yeah this is basically a copy of CRC32_C_Impl but with seq replaced by array.
 TODO if we use (linear) sequences everywhere instead of arrays we can remove this.
 
-**lib/Crypto/CRC32CImpl.i.dfy** Implementation of CRC32-C, using the
+**lib/Checksums/CRC32CImpl.i.dfy** Implementation of CRC32-C, using the
 using the _mm_crc32_u64 intrinsic, pipelined and proven
 correct using fancy polynomial math.
 

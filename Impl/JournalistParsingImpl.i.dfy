@@ -1,6 +1,9 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "../ByteBlockCacheSystem/JournalBytes.i.dfy"
 include "../lib/Lang/System/NativeArrays.s.dfy"
-include "../lib/Crypto/CRC32CImpl.i.dfy"
+include "../lib/Checksums/CRC32CImpl.i.dfy"
 
 module JournalistParsingImpl {
   import opened NativeTypes

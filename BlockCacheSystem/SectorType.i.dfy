@@ -1,11 +1,11 @@
-include "JournalRange.i.dfy"
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "DiskLayout.i.dfy"
-include "../PivotBetree/PivotBetreeSpec.i.dfy"
+include "../PivotBetree/PivotBetreeGraph.i.dfy"
 
 module SectorType {
   import opened NativeTypes
-  import opened Journal
-  import opened JournalRanges
   import opened DiskLayout
   import opened PivotBetreeGraph
   import opened Bounds

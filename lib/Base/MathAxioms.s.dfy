@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 // This files contains math axioms which seem to be missing
 // from Dafny's (Boogie's?) math reasoning, resulting in
 // an incomplete theory.

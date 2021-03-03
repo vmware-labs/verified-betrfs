@@ -1,3 +1,6 @@
+// Copyright 2018-2021 VMware, Inc.
+// SPDX-License-Identifier: BSD-2-Clause
+
 include "StateSectorImpl.i.dfy"
 include "StateBCImpl.i.dfy"
 include "MarshallingImpl.i.dfy"
@@ -5,7 +8,6 @@ include "MainDiskIOHandler.s.dfy"
 include "DiskOpImpl.i.dfy"
 include "IOModel.i.dfy"
 include "../lib/Base/LinearOption.i.dfy"
-include "../lib/DataStructures/LruImpl.i.dfy"
 
 module IOImpl { 
   import opened MainDiskIOHandler
@@ -22,9 +24,7 @@ module IOImpl {
   import IOModel
   import BucketsLib
   import LruModel
-  import LruImpl
   import opened Bounds
-  import MutableMapModel
 
   import opened StateBCImpl
 

@@ -1,13 +1,24 @@
 #!/usr/bin/env python3
 """Builds the docs/veridoc.md documentation file."""
 
+# Copyright 2018-2021 VMware, Inc.
+# SPDX-License-Identifier: BSD-2-Clause
+
 from lib_deps import *
+
+def is_include(line):
+  l = line.split()
+  if len(l) > 0 and (l[0] == 'include' or l[0] == '//include'):
+    return True
+  if len(l) > 1 and l[0] == '//' and l[1] == 'include':
+    return True
+  return False
 
 def readVeriDoc(path):
     lines = open(path).readlines()
     offset = 0
     veridoc = []
-    while lines[offset].startswith("include"):
+    while is_include(lines[offset]):
         offset += 1
     while True:
       line = lines[offset].strip()
@@ -66,8 +77,8 @@ dirs = [
   FileBucket("lib/Marshalling/", ".i.dfy", "Marshalling library"),
   FileBucket("lib/Math/", "", "Math library", comment="From IronFleet, but mostly unused in VeriBetrKV"),
 
-  FileBucket("lib/Crypto/", ".s.dfy", "CRC32-C Specification"),
-  FileBucket("lib/Crypto/", ".i.dfy", "CRC32-C Implementation"),
+  FileBucket("lib/Checksums/", ".s.dfy", "CRC32-C Specification"),
+  FileBucket("lib/Checksums/", ".i.dfy", "CRC32-C Implementation"),
 ]
 
 class Documentater:
