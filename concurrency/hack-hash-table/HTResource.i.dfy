@@ -310,14 +310,17 @@ module HTResource refines ApplicationResourceSpec {
   predicate RemoveSkipEnabled(s: R, pos: nat)
   {
     && !s.Fail?
-    && 0 <= pos < FixedSize() - 1
-    && KnowRowIsFree(s, pos+1)
+    && 0 <= pos < FixedSize()
+    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
+    && KnowRowIsFree(s, pos')
     // Know row pos, and it's the thing we're removing, and it's full...
     && s.table[pos].Some?
     && s.table[pos].value.state.Removing?
     && s.table[pos].value.entry.Full?
     // ...and the key it's full of sorts before the thing we're looking to remove.
-    && hash(s.table[pos].value.entry.kv.key) <= hash(s.table[pos].value.state.key)
+    && !ShouldHashGoBefore(
+        hash(s.table[pos].value.state.key) as int,
+        hash(s.table[pos].value.entry.kv.key) as int, pos)
   }
 
   predicate RemoveSkip(s: R, s': R, pos: nat)
@@ -325,11 +328,12 @@ module HTResource refines ApplicationResourceSpec {
     && RemoveSkipEnabled(s, pos)
     // The hash is equal, but this isn't the key we're trying to remove.
     && s.table[pos].value.entry.kv.key != s.table[pos].value.state.key
+    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
 
     // Advance the pointer to the next row.
     && s' == s.(table := s.table
         [pos := Some(s.table[pos].value.(state := Free))]
-        [pos + 1 := Some(s.table[pos + 1].value.(state := s.table[pos].value.state))])
+        [pos' := Some(s.table[pos'].value.(state := s.table[pos].value.state))])
   }
 
   predicate RemoveFoundIt(s: R, s': R, pos: nat)
