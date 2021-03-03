@@ -1,0 +1,343 @@
+include "ResourceStateMachine.i.dfy"
+include "Monoid.i.dfy"
+include "MultisetLemmas.i.dfy"
+include "../../lib/Base/Maps.i.dfy"
+include "../../lib/Base/Multisets.i.dfy"
+
+module SummaryMonoid refines MonoidMap {
+  import opened KeyValueType
+  import opened Options
+  import opened Maps
+  import MapIfc
+  import HT = HTResource
+  import Multisets
+  import MultisetLemmas
+
+  datatype QueryRes =
+    | QueryFound(rid: int, key: Key, value: Option<Value>)
+    | QueryUnknown(rid: int, key: Key)
+
+  datatype Summary = Summary(
+    ops: map<Key, Option<Value>>,
+    stubs: multiset<HT.Stub>,
+    queries: multiset<QueryRes>
+  )
+
+  type M = Summary
+
+  function unit() : M {
+    Summary(map[], multiset{}, multiset{})
+  }
+
+  function app_query(query: QueryRes, ops: map<Key, Option<Value>>) : QueryRes
+  {
+    match query {
+      case QueryFound(_, _, _) => query
+      case QueryUnknown(rid, key) => (
+        if key in ops then (
+          QueryFound(rid, key, ops[key])
+        ) else (
+          query
+        )
+      )
+    }
+  }
+
+  function {:opaque} app_queries(
+    queries: multiset<QueryRes>, ops: map<Key, Option<Value>>) : multiset<QueryRes>
+  {
+    Multisets.Apply((q) => app_query(q, ops), queries)
+  }
+
+  function add(x: M, y: M) : M {
+    Summary(
+        MapUnionPreferA(x.ops, y.ops),
+        x.stubs + y.stubs,
+        app_queries(x.queries, y.ops) + y.queries)
+  }
+
+  lemma associative(x: M, y: M, z: M)
+  ensures add(add(x, y), z) == add(x, add(y, z))
+  {
+    reveal_app_queries();
+    calc {
+      add(add(x, y), z).queries;
+      app_queries(add(x, y).queries, z.ops) + z.queries;
+      {
+        calc {
+          app_queries(add(x, y).queries, z.ops);
+          app_queries(app_queries(x.queries, y.ops) + y.queries, z.ops);
+          {
+            Multisets.ApplyAdditive((q) => app_query(q, z.ops),
+              app_queries(x.queries, y.ops),
+              y.queries);
+          }
+          app_queries(app_queries(x.queries, y.ops), z.ops) + app_queries(y.queries, z.ops);
+          {
+            MultisetLemmas.ApplyCompose(
+                (q) => app_query(q, y.ops),
+                (q) => app_query(q, z.ops),
+                (q) => app_query(q, MapUnionPreferA(y.ops, z.ops)), x.queries);
+            //assert app_queries(app_queries(x.queries, y.ops), z.ops)
+            //    == app_queries(x.queries, MapUnionPreferA(y.ops, z.ops));
+          }
+          app_queries(x.queries, MapUnionPreferA(y.ops, z.ops)) + app_queries(y.queries, z.ops);
+        }
+      }
+      app_queries(x.queries, MapUnionPreferA(y.ops, z.ops)) + app_queries(y.queries, z.ops) + z.queries;
+      {
+        //assert add(y, z).ops == MapUnionPreferA(y.ops, z.ops);
+        //assert add(y, z).queries == app_queries(y.queries, z.ops) + z.queries;
+      }
+      app_queries(x.queries, add(y, z).ops) + add(y, z).queries;
+      add(x, add(y, z)).queries;
+    }
+  }
+
+  lemma add_unit(x: M)
+  ensures add(x, unit()) == x
+  ensures add(unit(), x) == x
+  {
+    reveal_app_queries();
+    MultisetLemmas.ApplyId((q) => app_query(q, map[]), x.queries);
+  }
+
+  type Q = Option<HT.Info>
+
+  function get_summary(info: HT.Info) : Summary {
+    match info {
+      case Info(Empty(), Free()) => unit()
+      case Info(Full(kv), Free()) => Summary(
+        map[kv.key := Some(kv.val)],
+        multiset{},
+        multiset{}
+      )
+
+      case Info(Empty(), Inserting(rid, ins_kv)) =>
+        Summary(
+          map[ins_kv.key := Some(ins_kv.val)],
+          multiset{HT.Stub(rid, MapIfc.InsertOutput)},
+          multiset{}
+        )
+
+      case Info(Full(kv), Inserting(rid, ins_kv)) =>
+        Summary(
+          map[kv.key := Some(kv.val)][ins_kv.key := Some(ins_kv.val)],
+          multiset{HT.Stub(rid, MapIfc.InsertOutput)},
+          multiset{}
+        )
+
+      case Info(Empty(), Removing(rid, remove_key)) =>
+        Summary(
+          map[remove_key := None],
+          multiset{HT.Stub(rid, MapIfc.RemoveOutput)},
+          multiset{}
+        )
+
+      case Info(Full(kv), Removing(rid, remove_key)) =>
+        Summary(
+          map[kv.key := Some(kv.val)][remove_key := None],
+          multiset{HT.Stub(rid, MapIfc.RemoveOutput)},
+          multiset{}
+        )
+
+      case Info(_, RemoveTidying(rid)) =>
+        Summary(
+          map[],
+          multiset{HT.Stub(rid, MapIfc.RemoveOutput)},
+          multiset{}
+        )
+
+      case Info(Empty(), Querying(rid, query_key)) =>
+        Summary(
+          map[],
+          multiset{},
+          multiset{QueryUnknown(rid, query_key)}
+        )
+
+      case Info(Full(kv), Querying(rid, query_key)) =>
+        Summary(
+          map[kv.key := Some(kv.val)],
+          multiset{},
+          (if kv.key == query_key
+            then multiset{QueryFound(rid, query_key, Some(kv.val))}
+            else multiset{QueryUnknown(rid, query_key)}
+          )
+        )
+    }
+  }
+
+  function f(q: Q) : M {
+    match q {
+      case Some(info) => get_summary(info)
+      case None => unit()
+    }
+  }
+}
+
+module Interpretation {
+  import opened ResourceStateMachine
+  import opened Options
+  import S = SummaryMonoid
+
+  function {:opaque} interp_wrt(table: seq<Option<HT.Info>>, e: int) : S.Summary
+  requires Complete(table)
+  requires 0 <= e < |table|
+  {
+    S.concat_map(table[e+1..] + table[..e+1])
+  }
+
+  predicate is_good_root(table: seq<Option<HT.Info>>, e: int)
+  {
+    && 0 <= e < |table|
+    && table[e].Some?
+    && table[e].value.entry.Empty?
+    && !table[e].value.state.RemoveTidying?
+  }
+
+  /*lemma split_at_empty(table: seq<Option<HT.Info>>, e: int, a: int, b: int)
+  requires 0 <= a <= e < b < |table|
+  requires is_good_root(table, e)
+  ensures S.concat_map(table[a..b])
+      == S.add(
+        S.concat_map(table[a..e]),
+        S.concat_map(table[e+1..b]))
+  {
+    calc {
+      S.concat_map(table[a..b]);
+      {
+        assert table[a..b] == table[a..e] + table[e..b];
+        S.concat_map_additive(table[a..e], table[e..b]);
+      }
+      S.add(
+        S.concat_map(table[a..e]),
+        S.concat_map(table[e..b]));
+      {
+        assert [table[e]] + table[e+1..b] == table[e..b];
+        S.concat_map_additive([table[e]], table[e+1..b]);
+      }
+      S.add(
+        S.concat_map(table[a..e]),
+        S.add(
+          S.concat_map([table[e]]),
+          S.concat_map(table[e+1..b])));
+      {
+        assert S.f(table[e]) == S.unit();
+      }
+      S.add(
+        S.concat_map(table[a..e]),
+        S.add(
+          S.unit(),
+          S.concat_map(table[e+1..b])));
+      S.add(
+        S.concat_map(table[a..e]),
+        S.concat_map(table[e+1..b]));
+    }
+  }*/
+
+  lemma separated_segments_commute(table: seq<Option<HT.Info>>, e: int, f: int,
+      a: int, b: int, c: int, d: int)
+  requires Complete(table)
+  requires is_good_root(table, e)
+  requires is_good_root(table, f)
+  requires 0 <= a <= b < |table|
+  requires 0 <= c <= d < |table|
+  requires adjust(a, e+1)
+        <= adjust(b, e+1)
+        <= adjust(f+1, e+1)
+        <  adjust(c, e+1)
+        <= adjust(d, e+1)
+  ensures S.add(S.concat_map(table[a..b]), S.concat_map(table[c..d]))
+      == S.add(S.concat_map(table[c..d]), S.concat_map(table[a..b]))
+
+  lemma interp_wrt_independent_of_root_wlog(table: seq<Option<HT.Info>>, e: int, f: int)
+  requires Complete(table)
+  requires is_good_root(table, e)
+  requires is_good_root(table, f)
+  requires e < f
+  ensures interp_wrt(table, e) == interp_wrt(table, f)
+  {
+    calc {
+      interp_wrt(table, e);
+      { reveal_interp_wrt(); }
+      S.concat_map(table[e+1..] + table[..e+1]);
+      {
+        S.concat_map_additive(table[e+1..], table[..e+1]);
+      }
+      S.add(
+        S.concat_map(table[e+1..]),
+        S.concat_map(table[..e+1]));
+      {
+        S.concat_map_additive(table[e+1..f+1], table[f+1..]);
+        assert table[e+1..f+1] + table[f+1..] == table[e+1..];
+      }
+      S.add(
+        S.add(
+          S.concat_map(table[e+1..f+1]),
+          S.concat_map(table[f+1..])
+        ),
+        S.concat_map(table[..e+1])
+      );
+      {
+        separated_segments_commute(table, e, f, e+1, f+1, f+1, |table|);
+        assert table[f+1..] == table[f+1..|table|];
+      }
+      S.add(
+        S.add(
+          S.concat_map(table[f+1..]),
+          S.concat_map(table[e+1..f+1])
+        ),
+        S.concat_map(table[..e+1])
+      );
+      {
+        S.associative(S.concat_map(table[f+1..]),
+          S.concat_map(table[e+1..f+1]), S.concat_map(table[..e+1]));
+      }
+      S.add(
+        S.concat_map(table[f+1..]),
+        S.add(
+          S.concat_map(table[e+1..f+1]),
+          S.concat_map(table[..e+1])
+        )
+      );
+      {
+        separated_segments_commute(table, e, f, 0, e+1, e+1, f+1);
+      }
+      S.add(
+        S.concat_map(table[f+1..]),
+        S.add(
+          S.concat_map(table[..e+1]),
+          S.concat_map(table[e+1..f+1])
+        )
+      );
+      {
+        S.concat_map_additive(table[..e+1], table[e+1..f+1]);
+        assert table[..e+1] + table[e+1..f+1] == table[..f+1];
+      }
+      S.add(
+        S.concat_map(table[f+1..]),
+        S.concat_map(table[..f+1])
+      );
+      {
+        S.concat_map_additive(table[f+1..], table[..f+1]);
+      }
+      S.concat_map(table[f+1..] + table[..f+1]);
+      { reveal_interp_wrt(); }
+      interp_wrt(table, f);
+    }
+  }
+
+  lemma interp_wrt_independent_of_root(table: seq<Option<HT.Info>>, e: int, f: int)
+  requires Complete(table)
+  requires is_good_root(table, e)
+  requires is_good_root(table, f)
+  ensures interp_wrt(table, e) == interp_wrt(table, f)
+  {
+    if e < f {
+      interp_wrt_independent_of_root_wlog(table, e, f);
+    } else if e == f {
+    } else {
+      interp_wrt_independent_of_root_wlog(table, f, e);
+    }
+  }
+}
