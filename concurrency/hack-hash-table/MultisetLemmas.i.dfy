@@ -14,4 +14,12 @@ module MultisetLemmas {
   ensures Apply(gn, Apply(fn, s)) == Apply(hn, s)
   {
   }
+
+  lemma ApplyGetBackwards<A,B>(fn : A ~> B, s: multiset<A>, b: B)
+  returns (a: A)
+  requires b in Apply(fn, s)
+  ensures fn(a) == b
+  ensures a in s
+  {
+  }
 }

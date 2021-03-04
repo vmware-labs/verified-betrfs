@@ -178,7 +178,9 @@ module SummaryMonoid refines MonoidMap {
 module Interpretation {
   import opened ResourceStateMachine
   import opened Options
+  import opened KeyValueType
   import S = SummaryMonoid
+  import MultisetLemmas
 
   function {:opaque} interp_wrt(table: seq<Option<HT.Info>>, e: int) : S.Summary
   requires Complete(table)
@@ -235,23 +237,134 @@ module Interpretation {
     }
   }*/
 
+  lemma get_singleton_for_key(t: seq<Option<HT.Info>>, key: Key)
+  returns (i: int)
+  requires key in S.concat_map(t).ops
+  ensures 0 <= i < |t|
+  ensures key in S.f(t[i]).ops
+  {
+    if |t| <= 1 {
+      i := 0;
+    } else {
+      if key in S.f(t[|t|-1]).ops {
+        i := |t| - 1;
+      } else {
+        assert t[..|t|-1] + [t[|t|-1]] == t;
+        S.concat_map_additive(t[..|t|-1], [t[|t|-1]]);
+        i := get_singleton_for_key(t[..|t|-1], key);
+      }
+    }
+  }
+
+  lemma get_singleton_for_query(t: seq<Option<HT.Info>>, q: S.QueryRes)
+  returns (i: int, q': S.QueryRes)
+  requires q in S.concat_map(t).queries
+  ensures 0 <= i < |t|
+  ensures q' in S.f(t[i]).queries
+  ensures q.key == q'.key
+  {
+    if |t| <= 1 {
+      i := 0;
+      var q1 :| q1 in S.f(t[0]).queries;
+      q' := q1;
+    } else {
+      if q in S.f(t[|t|-1]).queries {
+        i := |t| - 1;
+        q' := q;
+      } else {
+        assert t[..|t|-1] + [t[|t|-1]] == t;
+        S.concat_map_additive(t[..|t|-1], [t[|t|-1]]);
+        var x := S.concat_map(t[..|t|-1]);
+        var y := S.f(t[|t|-1]);
+        //assert q in S.app_queries(x.queries, y.ops);
+        S.reveal_app_queries();
+        var qr := MultisetLemmas.ApplyGetBackwards(
+            (q) => S.app_query(q, y.ops), x.queries, q);
+        i, q' := get_singleton_for_query(t[..|t|-1], qr);
+      }
+    }
+  }
+
   lemma separated_segments_commute(table: seq<Option<HT.Info>>, e: int, f: int,
       a: int, b: int, c: int, d: int)
   requires Complete(table)
+  requires InvTable(table)
   requires is_good_root(table, e)
   requires is_good_root(table, f)
   requires 0 <= a <= b < |table|
   requires 0 <= c <= d < |table|
   requires adjust(a, e+1)
         <= adjust(b, e+1)
-        <= adjust(f+1, e+1)
-        <  adjust(c, e+1)
+        <= adjust((if f < |table| - 1 then f + 1 else 0), e + 1)
+        <= adjust(c, e+1)
         <= adjust(d, e+1)
   ensures S.add(S.concat_map(table[a..b]), S.concat_map(table[c..d]))
       == S.add(S.concat_map(table[c..d]), S.concat_map(table[a..b]))
+  {
+    assert e != f;
+
+    var x := S.concat_map(table[a..b]);
+    var y := S.concat_map(table[c..d]);
+    var a1 := S.add(x, y);
+    var a2 := S.add(y, x);
+
+    assert a1.stubs == a2.stubs;
+
+    assert a1.ops == a2.ops by {
+      forall k | k in x.ops && k in y.ops
+      ensures false
+      {
+        var i := get_singleton_for_key(table[a..b], k);
+        var j := get_singleton_for_key(table[c..d], k);
+
+        var i1 := a + i;
+        assert table[a..b][i] == table[i1];
+
+        var j1 := c + j;
+        assert table[c..d][j] == table[j1];
+
+        assert ValidHashInSlot(table, e, i1);
+        assert ValidHashInSlot(table, e, j1);
+        assert ValidHashInSlot(table, f, i1);
+        assert ValidHashInSlot(table, f, j1);
+
+        assert ValidHashOrdering(table, e, i1, j1);
+        assert ValidHashOrdering(table, e, j1, i1);
+        assert ValidHashOrdering(table, f, i1, j1);
+        assert ValidHashOrdering(table, f, j1, i1);
+
+        assert InsertionNotPastKey(table, e, i1, j1);
+        assert InsertionNotPastKey(table, e, j1, i1);
+        assert InsertionNotPastKey(table, f, i1, j1);
+        assert InsertionNotPastKey(table, f, j1, i1);
+
+        if table[i1].value.entry.Full? && table[i1].value.entry.kv.key == k {
+          if table[j1].value.entry.Full? && table[j1].value.entry.kv.key == k {
+            if e + 1 == |table| {
+              assert false;
+            } else if e + 1 == 1 {
+              assert false;
+            } else {
+              assert false;
+            }
+          } else {
+            assert false;
+          }
+        } else {
+          assert false;
+        }
+      }
+    }
+
+    assume false;
+
+    assert a1.queries == a2.queries by {
+    }
+  }
 
   lemma interp_wrt_independent_of_root_wlog(table: seq<Option<HT.Info>>, e: int, f: int)
   requires Complete(table)
+  requires InvTable(table)
   requires is_good_root(table, e)
   requires is_good_root(table, f)
   requires e < f

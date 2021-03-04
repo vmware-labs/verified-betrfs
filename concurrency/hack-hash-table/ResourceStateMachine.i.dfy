@@ -117,7 +117,7 @@ module ResourceStateMachine {
 
       && (table[k].value.entry.Full? ==> (
         var hk := HT.hash(table[k].value.entry.kv.key) as int;
-        && adjust(hj, e) <= adjust(hk, e)
+        && adjust(hj, e + 1) <= adjust(hk, e + 1)
       ))
 
       // If entry 'k' has an 'Inserting' action on it, then that action must have
@@ -163,19 +163,24 @@ module ResourceStateMachine {
         && !table[e].value.state.RemoveTidying?
   }
 
+  predicate InvTable(table: seq<Option<HT.Info>>)
+  {
+    && Complete(table)
+    && ExistsEmptyEntry(table)
+    && KeysUnique(table)
+    && (forall e, i | 0 <= e < |table| && 0 <= i < |table|
+        :: ValidHashInSlot(table, e, i))
+    && (forall e, j, k | 0 <= e < |table| && 0 <= j < |table| && 0 <= k < |table|
+        :: ValidHashOrdering(table, e, j, k))
+    && (forall e, j, k | 0 <= e < |table| && 0 <= j < |table| && 0 <= k < |table|
+        :: InsertionNotPastKey(table, e, j, k))
+  }
+
   predicate Inv(s: Variables)
   {
     && s.R?
-    && Complete(s.table)
-    && ExistsEmptyEntry(s.table)
-    && KeysUnique(s.table)
-    && (forall e, i | 0 <= e < |s.table| && 0 <= i < |s.table|
-        :: ValidHashInSlot(s.table, e, i))
-    && (forall e, j, k | 0 <= e < |s.table| && 0 <= j < |s.table| && 0 <= k < |s.table|
-        :: ValidHashOrdering(s.table, e, j, k))
-    && (forall e, j, k | 0 <= e < |s.table| && 0 <= j < |s.table| && 0 <= k < |s.table|
-        :: InsertionNotPastKey(s.table, e, j, k))
-  }
+    && InvTable(s.table)
+}
 
   lemma get_empty_cell(s: Variables)
   returns (e: int)
