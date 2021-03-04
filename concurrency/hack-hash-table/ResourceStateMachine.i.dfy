@@ -77,27 +77,15 @@ module ResourceStateMachine {
     table[e].value.entry.Empty? && !table[e].value.state.RemoveTidying? ==> (
       && (table[i].value.entry.Full? ==> (
         var h := HT.hash(table[i].value.entry.kv.key) as int;
-        && (
-          || e < h <= i
-          || h <= i < e
-          || i < e < h
-        )
+        && adjust(h, e+1) <= adjust(i, e+1)
       ))
       && (table[i].value.state.Inserting? ==> (
         var ha := HT.hash(table[i].value.state.kv.key) as int;
-        && (
-          || e < ha <= i
-          || ha <= i <= e
-          || i <= e < ha
-        )
+        && adjust(ha, e+1) <= adjust(i, e+1)
       ))
       && (table[i].value.state.Removing? ==> (
         var ha := HT.hash(table[i].value.state.key) as int;
-        && (
-          || e < ha <= i
-          || ha <= i <= e
-          || i <= e < ha
-        )
+        && adjust(ha, e+1) <= adjust(i, e+1)
       ))
     )
   }
@@ -124,20 +112,12 @@ module ResourceStateMachine {
       // gotten past entry 'j'.
       && (table[k].value.state.Inserting? ==> (
         var ha := HT.hash(table[k].value.state.kv.key) as int;
-        && (
-          || e < hj <= ha
-          || hj <= ha <= e
-          || ha <= e < hj
-        )
+        && adjust(hj, e+1) <= adjust(ha, e+1)
       ))
 
       && (table[k].value.state.Removing? ==> (
         var ha := HT.hash(table[k].value.state.key) as int;
-        && (
-          || e < hj <= ha
-          || hj <= ha <= e
-          || ha <= e < hj
-        )
+        && adjust(hj, e+1) <= adjust(ha, e+1)
       ))
     ))
   }

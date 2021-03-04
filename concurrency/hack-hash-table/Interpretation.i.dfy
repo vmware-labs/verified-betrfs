@@ -291,6 +291,113 @@ module Interpretation {
   requires InvTable(table)
   requires is_good_root(table, e)
   requires is_good_root(table, f)
+  requires 0 <= a < b <= |table|
+  requires 0 <= c < d <= |table|
+  requires |table| == HT.FixedSize()
+  requires e != f
+  requires adjust(a, e+1)
+        <= adjust(b-1, e+1)
+        <= adjust(f, e+1)
+  requires adjust(c, f+1)
+        <= adjust(d-1, f+1)
+        <= adjust(e, f+1)
+  ensures S.add(S.concat_map(table[a..b]), S.concat_map(table[c..d]))
+      == S.add(S.concat_map(table[c..d]), S.concat_map(table[a..b]))
+  {
+
+    var x := S.concat_map(table[a..b]);
+    var y := S.concat_map(table[c..d]);
+    var a1 := S.add(x, y);
+    var a2 := S.add(y, x);
+
+    assert a1.stubs == a2.stubs;
+
+    assert a1.ops == a2.ops by {
+      forall k | k in x.ops && k in y.ops
+      ensures false
+      {
+        var i := get_singleton_for_key(table[a..b], k);
+        var j := get_singleton_for_key(table[c..d], k);
+
+        var i1 := a + i;
+        assert table[a..b][i] == table[i1];
+
+        var j1 := c + j;
+        assert table[c..d][j] == table[j1];
+
+        assert ValidHashInSlot(table, e, i1);
+        //assert ValidHashInSlot(table, e, j1);
+        //assert ValidHashInSlot(table, f, i1);
+        assert ValidHashInSlot(table, f, j1);
+
+        //assert ValidHashOrdering(table, e, i1, j1);
+        //assert ValidHashOrdering(table, e, j1, i1);
+        //assert ValidHashOrdering(table, f, i1, j1);
+        //assert ValidHashOrdering(table, f, j1, i1);
+
+        //assert InsertionNotPastKey(table, e, i1, j1);
+        //assert InsertionNotPastKey(table, e, j1, i1);
+        //assert InsertionNotPastKey(table, f, i1, j1);
+        //assert InsertionNotPastKey(table, f, j1, i1);
+
+        /*if table[i1].value.entry.Full? && table[i1].value.entry.kv.key == k {
+          if table[j1].value.entry.Full? && table[j1].value.entry.kv.key == k {
+            if e + 1 == |table| {
+              if f+1 > c {
+                assert adjust(c, f+1) <= adjust(e, f+1);
+                assert adjust(c, f+1) == c + |table|;
+                assert c + |table| <= adjust(e, f+1);
+                assert c <= e;
+                assert e < f+1;
+                assert e == |table| - 1;
+                assert f == |table| - 1;
+                assert false;
+              }
+              assert a < b <= f+1 <= c < d <= |table|;
+              assert false;
+            } else if e + 1 == 1 {
+              /*var e' := (if e < |table| - 1 then e + 1 else 0);
+              var f' := (if f < |table| - 1 then f + 1 else 0);
+              var h := HT.hash(table[i1].value.entry.kv.key) as int;
+              assert adjust(h, f') <= adjust(j1, f');
+
+              assert adjust(j1, f') < adjust(d, f');
+              assert d != f';
+              assert adjust(d, f') <= adjust(e', f');
+              assert adjust(j1, f') < adjust(e', f');
+
+              assert adjust(f', e') <= adjust(h, e');
+              assert adjust(f', e+1) <= adjust(h, e+1);
+              assert adjust(h, e+1) <= adjust(j1, e+1);*/
+
+              assert false;
+            } else {
+              assert false;
+            }
+          } else {
+            assert false;
+          }
+        } else {
+          assert false;
+        }*/
+      }
+    }
+
+    assert a1.queries == a2.queries by {
+      forall q, k | k in x.ops && q in y.queries && q.key == k
+      ensures false
+      {
+      }
+      assume false;
+    }
+  }
+
+  /*lemma separated_segments_commute(table: seq<Option<HT.Info>>, e: int, f: int,
+      a: int, b: int, c: int, d: int)
+  requires Complete(table)
+  requires InvTable(table)
+  requires is_good_root(table, e)
+  requires is_good_root(table, f)
   requires 0 <= a <= b < |table|
   requires 0 <= c <= d < |table|
   requires adjust(a, e+1)
@@ -301,7 +408,7 @@ module Interpretation {
   ensures S.add(S.concat_map(table[a..b]), S.concat_map(table[c..d]))
       == S.add(S.concat_map(table[c..d]), S.concat_map(table[a..b]))
   {
-    assert e != f;
+    assume e != f;
 
     var x := S.concat_map(table[a..b]);
     var y := S.concat_map(table[c..d]);
@@ -343,6 +450,20 @@ module Interpretation {
             if e + 1 == |table| {
               assert false;
             } else if e + 1 == 1 {
+              var e' := (if e < |table| - 1 then e + 1 else 0);
+              var f' := (if f < |table| - 1 then f + 1 else 0);
+              var h := HT.hash(table[i1].value.entry.kv.key) as int;
+              assert adjust(h, f') <= adjust(j1, f');
+
+              assert adjust(j1, f') < adjust(d, f');
+              assert d != f';
+              assert adjust(d, f') <= adjust(e', f');
+              assert adjust(j1, f') < adjust(e', f');
+
+              assert adjust(f', e') <= adjust(h, e');
+              assert adjust(f', e+1) <= adjust(h, e+1);
+              assert adjust(h, e+1) <= adjust(j1, e+1);
+
               assert false;
             } else {
               assert false;
@@ -360,7 +481,7 @@ module Interpretation {
 
     assert a1.queries == a2.queries by {
     }
-  }
+  }*/
 
   lemma interp_wrt_independent_of_root_wlog(table: seq<Option<HT.Info>>, e: int, f: int)
   requires Complete(table)
