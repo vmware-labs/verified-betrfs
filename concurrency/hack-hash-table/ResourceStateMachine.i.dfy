@@ -83,7 +83,7 @@ module ResourceStateMachine {
         var ha := HT.hash(table[i].value.state.kv.key) as int;
         && adjust(ha, e+1) <= adjust(i, e+1)
       ))
-      && (table[i].value.state.Removing? ==> (
+      && ((table[i].value.state.Removing? || table[i].value.state.Querying?) ==> (
         var ha := HT.hash(table[i].value.state.key) as int;
         && adjust(ha, e+1) <= adjust(i, e+1)
       ))
@@ -115,7 +115,7 @@ module ResourceStateMachine {
         && adjust(hj, e+1) <= adjust(ha, e+1)
       ))
 
-      && (table[k].value.state.Removing? ==> (
+      && ((table[k].value.state.Removing? || table[k].value.state.Querying?) ==> (
         var ha := HT.hash(table[k].value.state.key) as int;
         && adjust(hj, e+1) <= adjust(ha, e+1)
       ))

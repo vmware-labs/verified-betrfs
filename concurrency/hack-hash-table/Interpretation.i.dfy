@@ -387,8 +387,36 @@ module Interpretation {
       forall q, k | k in x.ops && q in y.queries && q.key == k
       ensures false
       {
+        var i := get_singleton_for_key(table[a..b], k);
+        var j, q' := get_singleton_for_query(table[c..d], q);
+
+        var i1 := a + i;
+        assert table[a..b][i] == table[i1];
+
+        var j1 := c + j;
+        assert table[c..d][j] == table[j1];
+
+        assert ValidHashInSlot(table, e, i1);
+        assert ValidHashInSlot(table, f, j1);
       }
-      assume false;
+      forall q, k | k in y.ops && q in x.queries && q.key == k
+      ensures false
+      {
+        var i, q' := get_singleton_for_query(table[a..b], q);
+        var j := get_singleton_for_key(table[c..d], k);
+
+        var i1 := a + i;
+        assert table[a..b][i] == table[i1];
+
+        var j1 := c + j;
+        assert table[c..d][j] == table[j1];
+
+        assert ValidHashInSlot(table, e, i1);
+        assert ValidHashInSlot(table, f, j1);
+      }
+      S.reveal_app_queries();
+      MultisetLemmas.ApplyId((q) => S.app_query(q, x.ops), y.queries);
+      MultisetLemmas.ApplyId((q) => S.app_query(q, y.ops), x.queries);
     }
   }
 
