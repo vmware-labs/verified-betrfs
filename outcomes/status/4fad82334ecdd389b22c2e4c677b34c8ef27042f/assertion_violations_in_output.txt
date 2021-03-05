@@ -1,0 +1,2 @@
+build/Impl/LeafImpl.i.verchk:/root/verichecks-worker/worker-dir/clones/4fad82334ecdd389b22c2e4c677b34c8ef27042f/Impl/LeafImpl.i.dfy(61,21): Error: assertion violation
+build/Impl/IndirectionTable.i.verchk:/root/verichecks-worker/worker-dir/clones/4fad82334ecdd389b22c2e4c677b34c8ef27042f/Impl/IndirectionTable.i.dfy(1731,15): Error: assertion violation
