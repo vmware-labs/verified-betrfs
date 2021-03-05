@@ -181,6 +181,7 @@ module Interpretation {
   import opened KeyValueType
   import S = SummaryMonoid
   import MultisetLemmas
+  import Multisets
 
   function {:opaque} interp_wrt(table: seq<Option<HT.Info>>, e: int) : S.Summary
   requires Complete(table)
@@ -285,25 +286,63 @@ module Interpretation {
     }
   }
 
+  lemma get_singleton_for_key_slice(t: seq<Option<HT.Info>>, key: Key, a: int, b: int)
+  returns (i: int)
+  requires 0 <= a <= b <= |t|
+  requires key in S.concat_map(t[a..b]).ops
+  ensures a <= i < b
+  ensures key in S.f(t[i]).ops
+  {
+    var i1 := get_singleton_for_key(t[a..b], key);
+    i := a + i1;
+    assert t[a..b][i1] == t[i];
+  }
+
+  lemma get_singleton_for_query_slice(t: seq<Option<HT.Info>>, q: S.QueryRes, a: int, b: int)
+  returns (i: int, q': S.QueryRes)
+  requires 0 <= a <= b <= |t|
+  requires q in S.concat_map(t[a..b]).queries
+  ensures a <= i < b
+  ensures q' in S.f(t[i]).queries
+  ensures q.key == q'.key
+  {
+    var i1;
+    i1, q' := get_singleton_for_query(t[a..b], q);
+    i := a + i1;
+    assert t[a..b][i1] == t[i];
+  }
+
   lemma separated_segments_commute(table: seq<Option<HT.Info>>, e: int, f: int,
       a: int, b: int, c: int, d: int)
   requires Complete(table)
   requires InvTable(table)
   requires is_good_root(table, e)
   requires is_good_root(table, f)
-  requires 0 <= a < b <= |table|
-  requires 0 <= c < d <= |table|
+  requires 0 <= a <= b <= |table|
+  requires 0 <= c <= d <= |table|
   requires |table| == HT.FixedSize()
   requires e != f
-  requires adjust(a, e+1)
+  requires a != b ==>
+           adjust(a, e+1)
         <= adjust(b-1, e+1)
         <= adjust(f, e+1)
-  requires adjust(c, f+1)
+  requires c != d ==>
+           adjust(c, f+1)
         <= adjust(d-1, f+1)
         <= adjust(e, f+1)
   ensures S.add(S.concat_map(table[a..b]), S.concat_map(table[c..d]))
       == S.add(S.concat_map(table[c..d]), S.concat_map(table[a..b]))
   {
+    if a == b {
+      assert table[a..b] == [];
+      S.add_unit(S.concat_map(table[c..d]));
+      return;
+    }
+    if c == d {
+      assert table[c..d] == [];
+      S.add_unit(S.concat_map(table[a..b]));
+      return;
+    }
 
     var x := S.concat_map(table[a..b]);
     var y := S.concat_map(table[c..d]);
@@ -316,19 +355,13 @@ module Interpretation {
       forall k | k in x.ops && k in y.ops
       ensures false
       {
-        var i := get_singleton_for_key(table[a..b], k);
-        var j := get_singleton_for_key(table[c..d], k);
+        var i := get_singleton_for_key_slice(table, k, a, b);
+        var j := get_singleton_for_key_slice(table, k, c, d);
 
-        var i1 := a + i;
-        assert table[a..b][i] == table[i1];
-
-        var j1 := c + j;
-        assert table[c..d][j] == table[j1];
-
-        assert ValidHashInSlot(table, e, i1);
+        assert ValidHashInSlot(table, e, i);
         //assert ValidHashInSlot(table, e, j1);
         //assert ValidHashInSlot(table, f, i1);
-        assert ValidHashInSlot(table, f, j1);
+        assert ValidHashInSlot(table, f, j);
 
         //assert ValidHashOrdering(table, e, i1, j1);
         //assert ValidHashOrdering(table, e, j1, i1);
@@ -387,32 +420,20 @@ module Interpretation {
       forall q, k | k in x.ops && q in y.queries && q.key == k
       ensures false
       {
-        var i := get_singleton_for_key(table[a..b], k);
-        var j, q' := get_singleton_for_query(table[c..d], q);
+        var i := get_singleton_for_key_slice(table, k, a, b);
+        var j, q' := get_singleton_for_query_slice(table, q, c, d);
 
-        var i1 := a + i;
-        assert table[a..b][i] == table[i1];
-
-        var j1 := c + j;
-        assert table[c..d][j] == table[j1];
-
-        assert ValidHashInSlot(table, e, i1);
-        assert ValidHashInSlot(table, f, j1);
+        assert ValidHashInSlot(table, e, i);
+        assert ValidHashInSlot(table, f, j);
       }
       forall q, k | k in y.ops && q in x.queries && q.key == k
       ensures false
       {
-        var i, q' := get_singleton_for_query(table[a..b], q);
-        var j := get_singleton_for_key(table[c..d], k);
+        var i, q' := get_singleton_for_query_slice(table, q, a, b);
+        var j := get_singleton_for_key_slice(table, k, c, d);
 
-        var i1 := a + i;
-        assert table[a..b][i] == table[i1];
-
-        var j1 := c + j;
-        assert table[c..d][j] == table[j1];
-
-        assert ValidHashInSlot(table, e, i1);
-        assert ValidHashInSlot(table, f, j1);
+        assert ValidHashInSlot(table, e, i);
+        assert ValidHashInSlot(table, f, j);
       }
       S.reveal_app_queries();
       MultisetLemmas.ApplyId((q) => S.app_query(q, x.ops), y.queries);
@@ -420,96 +441,12 @@ module Interpretation {
     }
   }
 
-  /*lemma separated_segments_commute(table: seq<Option<HT.Info>>, e: int, f: int,
-      a: int, b: int, c: int, d: int)
-  requires Complete(table)
-  requires InvTable(table)
-  requires is_good_root(table, e)
-  requires is_good_root(table, f)
-  requires 0 <= a <= b < |table|
-  requires 0 <= c <= d < |table|
-  requires adjust(a, e+1)
-        <= adjust(b, e+1)
-        <= adjust((if f < |table| - 1 then f + 1 else 0), e + 1)
-        <= adjust(c, e+1)
-        <= adjust(d, e+1)
-  ensures S.add(S.concat_map(table[a..b]), S.concat_map(table[c..d]))
-      == S.add(S.concat_map(table[c..d]), S.concat_map(table[a..b]))
+  lemma seq_ext<A>(a: seq<A>, b: seq<A>)
+  requires |a| == |b|
+  requires forall i | 0 <= i < |a| :: a[i] == b[i]
+  ensures a == b
   {
-    assume e != f;
-
-    var x := S.concat_map(table[a..b]);
-    var y := S.concat_map(table[c..d]);
-    var a1 := S.add(x, y);
-    var a2 := S.add(y, x);
-
-    assert a1.stubs == a2.stubs;
-
-    assert a1.ops == a2.ops by {
-      forall k | k in x.ops && k in y.ops
-      ensures false
-      {
-        var i := get_singleton_for_key(table[a..b], k);
-        var j := get_singleton_for_key(table[c..d], k);
-
-        var i1 := a + i;
-        assert table[a..b][i] == table[i1];
-
-        var j1 := c + j;
-        assert table[c..d][j] == table[j1];
-
-        assert ValidHashInSlot(table, e, i1);
-        assert ValidHashInSlot(table, e, j1);
-        assert ValidHashInSlot(table, f, i1);
-        assert ValidHashInSlot(table, f, j1);
-
-        assert ValidHashOrdering(table, e, i1, j1);
-        assert ValidHashOrdering(table, e, j1, i1);
-        assert ValidHashOrdering(table, f, i1, j1);
-        assert ValidHashOrdering(table, f, j1, i1);
-
-        assert InsertionNotPastKey(table, e, i1, j1);
-        assert InsertionNotPastKey(table, e, j1, i1);
-        assert InsertionNotPastKey(table, f, i1, j1);
-        assert InsertionNotPastKey(table, f, j1, i1);
-
-        if table[i1].value.entry.Full? && table[i1].value.entry.kv.key == k {
-          if table[j1].value.entry.Full? && table[j1].value.entry.kv.key == k {
-            if e + 1 == |table| {
-              assert false;
-            } else if e + 1 == 1 {
-              var e' := (if e < |table| - 1 then e + 1 else 0);
-              var f' := (if f < |table| - 1 then f + 1 else 0);
-              var h := HT.hash(table[i1].value.entry.kv.key) as int;
-              assert adjust(h, f') <= adjust(j1, f');
-
-              assert adjust(j1, f') < adjust(d, f');
-              assert d != f';
-              assert adjust(d, f') <= adjust(e', f');
-              assert adjust(j1, f') < adjust(e', f');
-
-              assert adjust(f', e') <= adjust(h, e');
-              assert adjust(f', e+1) <= adjust(h, e+1);
-              assert adjust(h, e+1) <= adjust(j1, e+1);
-
-              assert false;
-            } else {
-              assert false;
-            }
-          } else {
-            assert false;
-          }
-        } else {
-          assert false;
-        }
-      }
-    }
-
-    assume false;
-
-    assert a1.queries == a2.queries by {
-    }
-  }*/
+  }
 
   lemma interp_wrt_independent_of_root_wlog(table: seq<Option<HT.Info>>, e: int, f: int)
   requires Complete(table)
@@ -531,7 +468,7 @@ module Interpretation {
         S.concat_map(table[..e+1]));
       {
         S.concat_map_additive(table[e+1..f+1], table[f+1..]);
-        assert table[e+1..f+1] + table[f+1..] == table[e+1..];
+        seq_ext(table[e+1..f+1] + table[f+1..], table[e+1..]);
       }
       S.add(
         S.add(
@@ -563,7 +500,7 @@ module Interpretation {
         )
       );
       {
-        separated_segments_commute(table, e, f, 0, e+1, e+1, f+1);
+        separated_segments_commute(table, f, e, 0, e+1, e+1, f+1);
       }
       S.add(
         S.concat_map(table[f+1..]),
@@ -591,6 +528,7 @@ module Interpretation {
 
   lemma interp_wrt_independent_of_root(table: seq<Option<HT.Info>>, e: int, f: int)
   requires Complete(table)
+  requires InvTable(table)
   requires is_good_root(table, e)
   requires is_good_root(table, f)
   ensures interp_wrt(table, e) == interp_wrt(table, f)
@@ -601,5 +539,369 @@ module Interpretation {
     } else {
       interp_wrt_independent_of_root_wlog(table, f, e);
     }
+  }
+
+  function {:opaque} interp(table: seq<Option<HT.Info>>) : S.Summary
+  requires Complete(table)
+  requires InvTable(table)
+  ensures forall e | is_good_root(table, e) :: interp(table) == interp_wrt(table, e)
+  {
+    var f := get_empty_cell(table);
+    var res := interp_wrt(table, f);
+
+    assert forall e | is_good_root(table, e) :: res == interp_wrt(table, e) by {
+      forall e | is_good_root(table, e) ensures res == interp_wrt(table, e)
+      {
+        interp_wrt_independent_of_root(table, e, f);
+      }
+    }
+
+    res
+  }
+
+  lemma preserves_1_helper(table: seq<Option<HT.Info>>,
+      table': seq<Option<HT.Info>>,
+      i: int)
+  requires Complete(table)
+  requires Complete(table')
+  requires |table| == |table'|
+  requires forall j | 0 <= j < |table| && i != j :: table'[j] == table[j]
+  requires 0 <= i < |table|
+  requires S.f(table[i]) == S.f(table'[i])
+  ensures S.concat_map(table)
+       == S.concat_map(table')
+  {
+    calc {
+      S.concat_map(table);
+      {
+        S.concat_map_additive(table[..i], table[i..]);
+        assert table[..i] + table[i..] == table;
+      }
+      S.add(
+        S.concat_map(table[..i]),
+        S.concat_map(table[i..]));
+      {
+        S.concat_map_additive([table[i]], table[i+1..]);
+        assert [table[i]] + table[i+1..] == table[i..];
+      }
+      S.add(
+        S.concat_map(table[..i]),
+        S.add(
+          S.concat_map([table[i]]),
+          S.concat_map(table[i+1..])));
+      {
+        assert table[..i] == table'[..i];
+        calc {
+          S.concat_map([table[i]]);
+          //S.f(table[i]);
+          //S.f(table'[i]);
+          S.concat_map([table'[i]]);
+        }
+        assert table[i+1..] == table'[i+1..];
+      }
+      S.add(
+        S.concat_map(table'[..i]),
+        S.add(
+          S.concat_map([table'[i]]),
+          S.concat_map(table'[i+1..])));
+      {
+        S.concat_map_additive([table'[i]], table'[i+1..]);
+        assert [table'[i]] + table'[i+1..] == table'[i..];
+      }
+      S.add(
+        S.concat_map(table'[..i]),
+        S.concat_map(table'[i..]));
+      {
+        S.concat_map_additive(table'[..i], table'[i..]);
+        assert table'[..i] + table'[i..] == table';
+      }
+      S.concat_map(table');
+    }
+  }
+
+  lemma preserves_1(table: seq<Option<HT.Info>>,
+      table': seq<Option<HT.Info>>,
+      i: int,
+      f: int)
+  requires Complete(table)
+  requires Complete(table')
+  requires InvTable(table)
+  requires InvTable(table')
+  requires forall j | 0 <= j < |table| && i != j :: table'[j] == table[j]
+  requires 0 <= i < |table|
+  requires S.f(table[i]) == S.f(table'[i])
+  requires is_good_root(table, f);
+  requires is_good_root(table', f);
+  ensures interp(table) == interp(table')
+  {
+    calc {
+      interp(table);
+      interp_wrt(table, f);
+      { reveal_interp_wrt(); }
+      S.concat_map(table[f+1..] + table[..f+1]);
+      {
+        preserves_1_helper(table[f+1..] + table[..f+1],
+            table'[f+1..] + table'[..f+1],
+            if i >= f+1 then i - (f+1) else i + |table| - (f+1));
+      }
+      S.concat_map(table'[f+1..] + table'[..f+1]);
+      { reveal_interp_wrt(); }
+      interp_wrt(table', f);
+      interp(table');
+    }
+  }
+
+  lemma preserves_2_helper(table: seq<Option<HT.Info>>,
+      table': seq<Option<HT.Info>>,
+      i: int)
+  requires Complete(table)
+  requires Complete(table')
+  requires |table| == |table'|
+  requires forall j | 0 <= j < |table| && j != i && j != i+1 :: table'[j] == table[j]
+  requires 0 <= i < |table| - 1
+  requires S.add(S.f(table[i]), S.f(table[i+1]))
+        == S.add(S.f(table'[i]), S.f(table'[i+1]));
+  ensures S.concat_map(table)
+       == S.concat_map(table')
+  {
+    calc {
+      S.concat_map(table);
+      {
+        S.concat_map_additive(table[..i], table[i..]);
+        assert table[..i] + table[i..] == table;
+      }
+      S.add(
+        S.concat_map(table[..i]),
+        S.concat_map(table[i..]));
+      {
+        S.concat_map_additive([table[i], table[i+1]], table[i+2..]);
+        assert [table[i], table[i+1]] + table[i+2..] == table[i..];
+      }
+      S.add(
+        S.concat_map(table[..i]),
+        S.add(
+          S.concat_map([table[i], table[i+1]]),
+          S.concat_map(table[i+2..])));
+      {
+        assert table[..i] == table'[..i];
+        calc {
+          S.concat_map([table[i], table[i+1]]);
+          S.add(S.f(table[i]), S.f(table[i+1]));
+          S.add(S.f(table'[i]), S.f(table'[i+1]));
+          S.concat_map([table'[i], table'[i+1]]);
+        }
+        assert table[i+2..] == table'[i+2..];
+      }
+      S.add(
+        S.concat_map(table'[..i]),
+        S.add(
+          S.concat_map([table'[i], table'[i+1]]),
+          S.concat_map(table'[i+2..])));
+      {
+        S.concat_map_additive([table'[i], table'[i+1]], table'[i+2..]);
+        assert [table'[i], table'[i+1]] + table'[i+2..] == table'[i..];
+      }
+      S.add(
+        S.concat_map(table'[..i]),
+        S.concat_map(table'[i..]));
+      {
+        S.concat_map_additive(table'[..i], table'[i..]);
+        assert table'[..i] + table'[i..] == table';
+      }
+      S.concat_map(table');
+    }
+  }
+
+  lemma preserves_2(table: seq<Option<HT.Info>>,
+      table': seq<Option<HT.Info>>,
+      i: int,
+      f: int)
+  requires Complete(table)
+  requires Complete(table')
+  requires InvTable(table)
+  requires InvTable(table')
+  requires 0 <= i < |table|
+  requires var i' := (if i < |table| - 1 then i + 1 else 0);
+           && S.add(S.f(table[i]), S.f(table[i'])) == S.add(S.f(table'[i]), S.f(table'[i']))
+           && (forall j | 0 <= j < |table| && i != j && i' != j :: table'[j] == table[j])
+  requires i != f
+  requires is_good_root(table, f);
+  requires is_good_root(table', f);
+  ensures interp(table) == interp(table')
+  {
+    calc {
+      interp(table);
+      interp_wrt(table, f);
+      { reveal_interp_wrt(); }
+      S.concat_map(table[f+1..] + table[..f+1]);
+      {
+        preserves_2_helper(table[f+1..] + table[..f+1],
+            table'[f+1..] + table'[..f+1],
+            if i >= f+1 then i - (f+1) else i + |table| - (f+1));
+      }
+      S.concat_map(table'[f+1..] + table'[..f+1]);
+      { reveal_interp_wrt(); }
+      interp_wrt(table', f);
+      interp(table');
+    }
+  }
+
+  /*lemma UsefulTriggers()
+  ensures forall fn: S.QueryRes ~> S.QueryRes :: Multisets.Apply(fn, multiset{}) == multiset{};
+  ensures forall fn: S.QueryRes ~> S.QueryRes, a :: Multisets.Apply(fn, multiset{a}) == multiset{fn(a)}
+  {
+  }*/
+
+  lemma InsertSkip_PreservesInterp(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.InsertSkip(s, s', pos)
+  ensures Inv(s')
+  ensures interp(s.table) == interp(s'.table)
+  {
+    InsertSkip_PreservesInv(s, s', pos);
+    var e := get_empty_cell(s.table);
+
+    /*var table := s.table;
+    var table' := s'.table;
+    var pos' := if pos < |s.table| - 1 then pos + 1 else 0;
+
+    var a := S.add(S.f(table[pos]), S.f(table[pos']));
+    var b := S.add(S.f(table'[pos]), S.f(table'[pos']));*/
+
+    //UsefulTriggers();
+    S.reveal_app_queries();
+
+    /*assert a.ops == b.ops;
+    assert a.stubs == b.stubs;
+    assert a.queries == b.queries;*/
+
+    preserves_2(s.table, s'.table, pos, e);
+  }
+
+  lemma InsertSwap_PreservesInterp(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.InsertSwap(s, s', pos)
+  ensures Inv(s')
+  ensures interp(s.table) == interp(s'.table)
+  {
+    InsertSwap_PreservesInv(s, s', pos);
+    var e := get_empty_cell(s.table);
+    S.reveal_app_queries();
+    preserves_2(s.table, s'.table, pos, e);
+  }
+
+  lemma InsertDone_PreservesInterp(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.InsertDone(s, s', pos)
+  ensures Inv(s')
+  ensures interp(s.table) == interp(s'.table)
+  {
+    InsertDone_PreservesInv(s, s', pos);
+    var e := get_empty_cell(s.table);
+    S.reveal_app_queries();
+
+    assert S.f(s.table[pos]).ops == S.f(s'.table[pos]).ops;
+    assert S.f(s.table[pos]).stubs == S.f(s'.table[pos]).stubs;
+    assert S.f(s.table[pos]).queries == S.f(s'.table[pos]).queries;
+
+    preserves_1(s.table, s'.table, pos, e);
+  }
+
+  lemma InsertUpdate_PreservesInterp(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.InsertUpdate(s, s', pos)
+  ensures Inv(s')
+  ensures interp(s.table) == interp(s'.table)
+  {
+    InsertUpdate_PreservesInv(s, s', pos);
+    var e := get_empty_cell(s.table);
+    S.reveal_app_queries();
+
+
+    preserves_1(s.table, s'.table, pos, e);
+  }
+
+  lemma QuerySkip_PreservesInterp(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.QuerySkip(s, s', pos)
+  ensures Inv(s')
+  ensures interp(s.table) == interp(s'.table)
+  {
+    QuerySkip_PreservesInv(s, s', pos);
+    var e := get_empty_cell(s.table);
+    S.reveal_app_queries();
+    preserves_2(s.table, s'.table, pos, e);
+  }
+
+  lemma QueryDone_PreservesInterp(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.QueryDone(s, s', pos)
+  ensures Inv(s')
+  ensures interp(s.table) == interp(s'.table)
+  {
+    QueryDone_PreservesInv(s, s', pos);
+    var e := get_empty_cell(s.table);
+    S.reveal_app_queries();
+    preserves_1(s.table, s'.table, pos, e);
+  }
+
+  lemma QueryNotFound_PreservesInterp(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.QueryNotFound(s, s', pos)
+  ensures Inv(s')
+  ensures interp(s.table) == interp(s'.table)
+  {
+    QueryNotFound_PreservesInv(s, s', pos);
+    var e := get_empty_cell(s.table);
+    S.reveal_app_queries();
+    preserves_2(s.table, s'.table, pos, e);
+  }
+
+  lemma RemoveSkip_PreservesInterp(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.RemoveSkip(s, s', pos)
+  ensures Inv(s')
+  ensures interp(s.table) == interp(s'.table)
+  {
+    RemoveSkip_PreservesInv(s, s', pos);
+    var e := get_empty_cell(s.table);
+    S.reveal_app_queries();
+    preserves_2(s.table, s'.table, pos, e);
+  }
+
+  lemma RemoveFoundIt_PreservesInterp(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.RemoveFoundIt(s, s', pos)
+  ensures Inv(s')
+  ensures interp(s.table) == interp(s'.table)
+  {
+    RemoveFoundIt_PreservesInv(s, s', pos);
+    var e := get_empty_cell(s.table);
+    S.reveal_app_queries();
+    preserves_2(s.table, s'.table, pos, e);
+  }
+
+  lemma RemoveTidy_PreservesInterp(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.RemoveTidy(s, s', pos)
+  ensures Inv(s')
+  ensures interp(s.table) == interp(s'.table)
+  {
+    RemoveTidy_PreservesInv(s, s', pos);
+    var e := get_empty_cell(s.table);
+    S.reveal_app_queries();
+    preserves_2(s.table, s'.table, pos, e);
+  }
+
+  lemma RemoveDone_PreservesInterp(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.RemoveDone(s, s', pos)
+  ensures Inv(s')
+  ensures interp(s.table) == interp(s'.table)
+  {
+    RemoveDone_PreservesInv(s, s', pos);
+    var e := get_empty_cell(s.table);
+    S.reveal_app_queries();
+    preserves_1(s.table, s'.table, pos, e);
   }
 }

@@ -37,6 +37,8 @@ module ResourceStateMachine {
   }
 
   function adjust(i: int, root: int) : int
+  requires 0 <= i < HT.FixedSize()
+  requires 0 <= root <= HT.FixedSize()
   {
     if i < root then HT.FixedSize() + i else i
   }
@@ -70,6 +72,7 @@ module ResourceStateMachine {
   }*/
 
   predicate ValidHashInSlot(table: seq<Option<HT.Info>>, e: int, i: int)
+  requires |table| == HT.FixedSize()
   requires Complete(table)
   requires 0 <= e < |table|
   requires 0 <= i < |table|
@@ -95,6 +98,7 @@ module ResourceStateMachine {
   // because of wraparound. We do a cyclic comparison 'rooted' at an
   // arbitrary empty element, given by e.
   predicate ValidHashOrdering(table: seq<Option<HT.Info>>, e: int, j: int, k: int)
+  requires |table| == HT.FixedSize()
   requires Complete(table)
   requires 0 <= e < |table|
   requires 0 <= j < |table|
@@ -123,6 +127,7 @@ module ResourceStateMachine {
   }
 
   predicate InsertionNotPastKey(table: seq<Option<HT.Info>>, e: int, j: int, k: int)
+  requires |table| == HT.FixedSize()
   requires Complete(table)
   requires 0 <= e < |table|
   requires 0 <= j < |table|
@@ -145,6 +150,7 @@ module ResourceStateMachine {
 
   predicate InvTable(table: seq<Option<HT.Info>>)
   {
+    && |table| == HT.FixedSize()
     && Complete(table)
     && ExistsEmptyEntry(table)
     && KeysUnique(table)
@@ -162,15 +168,14 @@ module ResourceStateMachine {
     && InvTable(s.table)
 }
 
-  lemma get_empty_cell(s: Variables)
-  returns (e: int)
-  requires Inv(s)
-  ensures 0 <= e < |s.table| && s.table[e].Some? && s.table[e].value.entry.Empty?
-        && !s.table[e].value.state.RemoveTidying?
+  function {:opaque} get_empty_cell(table: seq<Option<HT.Info>>) : (e: int)
+  requires InvTable(table)
+  ensures 0 <= e < |table| && table[e].Some? && table[e].value.entry.Empty?
+        && !table[e].value.state.RemoveTidying?
   {
-    var e' :| 0 <= e' < |s.table| && s.table[e'].Some? && s.table[e'].value.entry.Empty?
-        && !s.table[e'].value.state.RemoveTidying?;
-    e := e';
+    var e' :| 0 <= e' < |table| && table[e'].Some? && table[e'].value.entry.Empty?
+        && !table[e'].value.state.RemoveTidying?;
+    e'
   }
 
   lemma get_empty_cell_other_than_insertion_cell(s: Variables)
@@ -699,7 +704,7 @@ module ResourceStateMachine {
     forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
     ensures ValidHashInSlot(s'.table, e, i)
     {
-      var e' := get_empty_cell(s);
+      var e' := get_empty_cell(s.table);
       
       assert ValidHashInSlot(s.table, e, i);
 
@@ -792,7 +797,7 @@ module ResourceStateMachine {
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
     ensures ValidHashOrdering(s'.table, e, j, k)
     {
-      var e' := get_empty_cell(s);
+      var e' := get_empty_cell(s.table);
 
       assert ValidHashOrdering(s.table, e, j, k);
 
@@ -810,7 +815,7 @@ module ResourceStateMachine {
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
     ensures InsertionNotPastKey(s'.table, e, j, k)
     {
-      var e' := get_empty_cell(s);
+      var e' := get_empty_cell(s.table);
 
       assert InsertionNotPastKey(s.table, e, j, k);
 
