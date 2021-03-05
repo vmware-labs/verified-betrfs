@@ -64,6 +64,30 @@ module MapSeqs {
     }
   }
 
+  lemma {:induction |res.msgs|} seqs_of_map_preserves_values(m: map<Key, Message>, res : SeqPair)
+  requires seqs_of_map(m) == res
+  ensures m.Values == Set(res.msgs)
+  {
+    var keyOpt := maximumKey(m.Keys);
+    match keyOpt {
+      case None => {
+        assert m.Values == Set(res.msgs);
+      }
+      case Some(key) => {
+        var m' := MapRemove1(m, key);
+        var SeqPair(keys', msgs') := seqs_of_map(m');
+        assert m'.Values == Set(msgs') by {
+          seqs_of_map_preserves_values(m', SeqPair(keys', msgs'));
+        }
+        assert res == SeqPair(keys' + [key], msgs' + [m[key]]);
+
+        assert Set(res.msgs) == Set(msgs') + {m[key]};
+        assert m.Values == m'.Values + {m[key]};
+        assert Set(res.msgs)  == m.Values;
+      }
+    }
+  }
+
   lemma IsStrictlySorted_seqs_of_map(m: map<Key, Message>)
   ensures IsStrictlySorted(seqs_of_map(m).keys)
   {
@@ -467,6 +491,23 @@ module MapSeqs {
     forall k | k in b
     ensures k in a
     {
+      var i := GetIndex(keys, msgs, k);
+    }
+  }
+
+  lemma value_sets_le(keys: seq<Key>, msgs: seq<Message>)
+  requires |keys| == |msgs|
+  ensures map_of_seqs(keys, msgs).Values <= Set(msgs)
+  {
+    var mp := map_of_seqs(keys, msgs);
+    var a := mp.Values;
+    var b := Set(msgs);
+
+    forall m | m in a
+    ensures m in b
+    {
+      assert exists k :: k in mp && mp[k] == m;
+      var k : Key :| k in mp && mp[k] == m;
       var i := GetIndex(keys, msgs, k);
     }
   }

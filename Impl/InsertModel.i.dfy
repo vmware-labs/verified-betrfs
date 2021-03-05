@@ -33,6 +33,7 @@ module InsertModel {
   
   import Messages = ValueMessage`Internal
   import Pivots = BoundedPivotsLib
+
   // == insert ==
 
   function {:opaque} InsertKeyValue(s: BBC.Variables, key: Key, value: Value)
@@ -96,7 +97,33 @@ module InsertModel {
     var root := s.cache[BT.G.Root()];
     var r := Pivots.Route(root.pivotTable, key);
     var bucket := root.buckets[r];
-    var newBucket := B(bucket.as_map()[key := msg]);
+
+    assert WFBucket(bucket);
+
+    var old_map := bucket.as_map();
+    var new_map := old_map[key := msg];
+    var newBucket := B(new_map);
+
+
+    assert WFBucket(newBucket) by {
+      assert WFBucketMap(old_map);
+
+      assert old_map.Keys + {key} == new_map.Keys;
+      if key !in old_map {
+        assert old_map.Values + {msg} == new_map.Values;
+        assert WFBucketMap(new_map);
+      } else {
+        if exists key' :: key' in old_map && key' != key && old_map[key] == old_map[key'] {
+          assert old_map[key] in new_map.Values;
+          assert old_map.Values + {msg} == new_map.Values;
+          assert WFBucketMap(new_map);
+        } else {
+          assert old_map.Values - {old_map[key]} + {msg} == new_map.Values;
+          assert WFBucketMap(new_map);
+        }
+      }
+    }
+
     var newRoot := root.(buckets := root.buckets[r := newBucket]);
     var newCache := s.cache[BT.G.Root() := newRoot];
 
@@ -104,7 +131,6 @@ module InsertModel {
 
     assert BC.BlockPointsToValidReferences(root, s.ephemeralIndirectionTable.graph);
 
-    assert WFBucket(newBucket);
     assert WFNode(newRoot);
 
     var s0 := s.(cache := newCache);
