@@ -287,6 +287,7 @@ module Marshalling {
   ensures s.Some? ==> s.value.graph.Keys == s.value.locs.Keys
   ensures s.Some? ==> forall v | v in s.value.locs.Values :: DiskLayout.ValidNodeLocation(v)
   ensures s.Some? ==> forall ref | ref in s.value.graph :: |s.value.graph[ref]| <= MaxNumChildren()
+  ensures s.Some? ==> forall ref | ref in s.value.graph :: ref <= s.value.refUpperBound
   {
     if |a| == 0 then
       Some(IndirectionTable(map[], map[], 0))
@@ -303,7 +304,8 @@ module Marshalling {
           if ref in table.graph || !DiskLayout.ValidNodeLocation(loc) || |succs| as int > MaxNumChildren() then (
             None
           ) else (
-            Some(IndirectionTable(table.locs[ref := loc], table.graph[ref := succs], 0)) // yizhou7: TODO
+            var upperBound := if ref > table.refUpperBound then ref else table.refUpperBound;
+            Some(IndirectionTable(table.locs[ref := loc], table.graph[ref := succs], upperBound)) // yizhou7: TODO
           )
         )
         case None => None
