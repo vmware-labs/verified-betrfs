@@ -1046,7 +1046,14 @@ module IndirectionTable {
       && (s.Some? ==> forall v | v in s.value.Values :: v.loc.Some? && ValidNodeLocation(v.loc.value))
       && (s.Some? ==> forall ref | ref in s.value :: s.value[ref].predCount == 0)
       && (s.Some? ==> forall ref | ref in s.value :: |s.value[ref].succs| <= MaxNumChildren())
-      && (s.Some? ==> Marshalling.valToIndirectionTableMaps(a) == Some(IMapAsIndirectionTable(s.value)))
+      && (s.Some? ==> Marshalling.valToIndirectionTableMaps(a).Some?)
+      && (s.Some? ==> 
+        (
+          var left := Marshalling.valToIndirectionTableMaps(a).value;
+          var right := IMapAsIndirectionTable(s.value);
+          && left.graph == right.graph
+          && left.locs == right.locs
+        ))
       && (s.None? ==> Marshalling.valToIndirectionTableMaps(a).None?)
     }
 
