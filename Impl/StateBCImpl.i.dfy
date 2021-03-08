@@ -38,7 +38,7 @@ module StateBCImpl {
 
   predicate WFCache(cache: map<Reference, Node>)
   {
-    forall ref | ref in cache :: WFNode(cache[ref])
+    forall ref | ref in cache :: BT.WFNode(cache[ref])
   }
 
   predicate IsLocAllocOutstanding(outstanding: map<BC.ReqId, BC.OutstandingWrite>, i: int)

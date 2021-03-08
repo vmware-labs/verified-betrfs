@@ -252,7 +252,7 @@ module BookkeepingModel {
   requires s.WriteAllocConditions()
   requires BC.BlockPointsToValidReferences(node, s.ephemeralIndirectionTable.graph)
   // requires TotalCacheSize(s) <= MaxCacheSize() - 1
-  requires WFNode(node)
+  requires BT.WFNode(node)
   ensures var (s', ref) := allocWithNode(s, node);
     && BBC.Inv(s')
     // && WFBCVars(s')
@@ -278,7 +278,7 @@ module BookkeepingModel {
   requires s.WriteAllocConditions()
   requires ref in s.ephemeralIndirectionTable.graph
   requires ref in s.cache
-  requires WFNode(node)
+  requires BT.WFNode(node)
   requires BC.BlockPointsToValidReferences(node, s.ephemeralIndirectionTable.graph)
   requires s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.locs
   // requires |s.ephemeralIndirectionTable.graph| < IT.MaxSize()
@@ -297,7 +297,7 @@ module BookkeepingModel {
   requires s.Ready?
   requires s.WriteAllocConditions()
   requires RefAvailable(s, ref)
-  requires WFNode(node)
+  requires BT.WFNode(node)
   requires BC.WFIndirectionTable(s.ephemeralIndirectionTable)
   requires BC.BlockPointsToValidReferences(node, s.ephemeralIndirectionTable.graph)
   ensures var s' := writeWithNode(s, ref, node);

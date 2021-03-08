@@ -51,7 +51,7 @@ module SuccModel {
   requires BBC.Inv(s)
   requires s.Ready?
   requires io.IOInit?
-  requires WFNode(node)
+  requires BT.WFNode(node)
   requires ref in s.cache
   requires ref in s.ephemeralIndirectionTable.graph
   requires node == s.cache[ref]

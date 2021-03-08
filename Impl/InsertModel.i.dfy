@@ -42,7 +42,7 @@ module InsertModel {
   requires s.Ready?
   requires BT.G.Root() in s.cache
   requires var root := s.cache[BT.G.Root()];
-    && WFNode(root)
+    && BT.WFNode(root)
     && BoundedKey(root.pivotTable, key)
   {
     lemmaChildrenConditionsOfNode(s, BT.G.Root());
@@ -131,7 +131,7 @@ module InsertModel {
 
     assert BC.BlockPointsToValidReferences(root, s.ephemeralIndirectionTable.graph);
 
-    assert WFNode(newRoot);
+    assert BT.WFNode(newRoot);
 
     var s0 := s.(cache := newCache);
     var s' := writeBookkeepingNoSuccsUpdate(s0, BT.G.Root());
@@ -148,8 +148,6 @@ module InsertModel {
 
     var btStep := BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot));
     assert BT.ValidInsertion(BT.MessageInsertion(key, msg, oldroot));
-
-    assert WFNode(newRoot);
     // assert WFBCVars(s');
 
     assert BC.Dirty(s, s', BT.G.Root(), newroot);

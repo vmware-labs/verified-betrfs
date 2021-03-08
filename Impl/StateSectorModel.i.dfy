@@ -23,15 +23,10 @@ module StateSectorModel {
     | SectorIndirectionTable(indirectionTable: IndirectionTable)
     | SectorSuperblock(superblock: SectorType.Superblock)
 
-  predicate WFNode(node: Node)
-  {
-    BT.WFNode(node)
-  }
-  
   predicate WFSector(sector: Sector)
   {
     match sector {
-      case SectorNode(node) => WFNode(node)
+      case SectorNode(node) => BT.WFNode(node)
       case SectorIndirectionTable(indirectionTable) => (
         && indirectionTable.Inv()
         && BC.WFCompleteIndirectionTable(indirectionTable.I())

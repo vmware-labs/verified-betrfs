@@ -121,7 +121,7 @@ module LeafModel {
     PivotBetreeSpecWFNodes.WFApplyRepivot(
         BT.Repivot(ref, node, pivots, pivot));
 
-    assert WFNode(newnode);
+    assert BT.WFNode(newnode);
     writeCorrect(s, ref, newnode);
 
     //assert IBlockCache(s1).cache == s.cache[ref := INode(newnode)];
