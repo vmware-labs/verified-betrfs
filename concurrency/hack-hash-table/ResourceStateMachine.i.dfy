@@ -468,6 +468,8 @@ module ResourceStateMachine {
     ensures ValidHashOrdering(s'.table, e, j, k)
     {
       assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+      assert ValidHashInSlot(s.table, e, k);
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
     ensures InsertionNotPastKey(s'.table, e, j, k)
@@ -487,11 +489,19 @@ module ResourceStateMachine {
     ensures ValidHashInSlot(s'.table, e, i)
     {
       assert ValidHashInSlot(s.table, e, i);
+
+      var i' := if i > 0 then i - 1 else |s.table| - 1;
+      assert ValidHashInSlot(s.table, e, i');
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
     ensures ValidHashOrdering(s'.table, e, j, k)
     {
       assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+      assert ValidHashInSlot(s.table, e, k);
+      assert ValidHashInSlot(s.table, e, pos);
+      assert ValidHashOrdering(s.table, e, j, pos);
+      assert ValidHashOrdering(s.table, e, pos, k);
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
     ensures InsertionNotPastKey(s'.table, e, j, k)

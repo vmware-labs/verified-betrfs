@@ -425,6 +425,9 @@ module HTResource refines ApplicationResourceSpec {
     && s.table[pos'].Some?
     && s.table[pos].value.state.Querying?
     && s.table[pos].value.entry.Full?
+    && !ShouldHashGoBefore(
+        hash(s.table[pos].value.state.key) as int,
+        hash(s.table[pos].value.entry.kv.key) as int, pos)
     && s.table[pos].value.state.key != s.table[pos].value.entry.kv.key
     && s.table[pos'].value.state.Free?
 
