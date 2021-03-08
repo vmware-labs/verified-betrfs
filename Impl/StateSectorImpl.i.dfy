@@ -3,18 +3,16 @@
 
 include "NodeImpl.i.dfy"
 include "IndirectionTable.i.dfy"
-include "StateSectorModel.i.dfy"
+include "../BlockCacheSystem/SectorType.i.dfy"
 
 module StateSectorImpl {
   import opened Options
   import opened NodeImpl
   import IT = IndirectionTable
   import JC = JournalCache
+  import BC = BlockCache
 
   import SectorType
-  import SSM = StateSectorModel
-
-  // type MutIndirectionTableNullable = IndirectionTable.BoxedIndirectionTable?
 
   linear datatype Sector =
     | SectorNode(linear node: Node)
@@ -38,18 +36,26 @@ module StateSectorImpl {
 
   predicate WFSector(sector: Sector)
   {
-    && (sector.SectorIndirectionTable? ==> sector.indirectionTable.Inv())
     && (sector.SectorNode? ==> sector.node.Inv())
+    && (sector.SectorIndirectionTable? ==> sector.indirectionTable.Inv())
     && (sector.SectorSuperblock? ==> JC.WFSuperblock(sector.superblock))
   }
 
-  function ISector(sector: Sector) : SSM.Sector
+  predicate Inv(sector: Sector)
+  {
+    && WFSector(sector)
+    && (sector.SectorNode? ==> BT.WFNode(sector.node.I()))
+    && (sector.SectorIndirectionTable? ==> BC.WFCompleteIndirectionTable(sector.indirectionTable.I()))
+    && (sector.SectorSuperblock? ==> JC.WFSuperblock(sector.superblock))
+  }
+
+  function ISector(sector: Sector) : SectorType.Sector
   requires WFSector(sector)
   {
     match sector {
-      case SectorSuperblock(superblock) => SSM.SectorSuperblock(superblock)
-      case SectorNode(node) => SSM.SectorNode(node.I())
-      case SectorIndirectionTable(indirectionTable) => SSM.SectorIndirectionTable(indirectionTable)
+      case SectorNode(node) => SectorType.SectorNode(node.I())
+      case SectorSuperblock(superblock) => SectorType.SectorSuperblock(superblock)
+      case SectorIndirectionTable(indirectionTable) => SectorType.SectorIndirectionTable(indirectionTable.I())
     }
   }
 }

@@ -1,48 +1,48 @@
-// Copyright 2018-2021 VMware, Inc.
-// SPDX-License-Identifier: BSD-2-Clause
+// // Copyright 2018-2021 VMware, Inc.
+// // SPDX-License-Identifier: BSD-2-Clause
 
-include "../PivotBetree/PivotBetreeSpec.i.dfy"
-include "IndirectionTable.i.dfy"
-include "../BlockCacheSystem/SectorType.i.dfy"
-include "../lib/Base/Option.s.dfy"
+// include "../PivotBetree/PivotBetreeSpec.i.dfy"
+// include "IndirectionTable.i.dfy"
+// include "../BlockCacheSystem/SectorType.i.dfy"
+// include "../lib/Base/Option.s.dfy"
 
-module StateSectorModel {
-  import opened Options
+// module StateSectorModel {
+//   import opened Options
 
-  import BT = PivotBetreeSpec`Internal
-  import SectorType
-  import BC = BlockCache
-  import JC = JournalCache
-  import IT = IndirectionTable
+//   import BT = PivotBetreeSpec`Internal
+//   import SectorType
+//   import BC = BlockCache
+//   import JC = JournalCache
+//   import IT = IndirectionTable
 
-  type Node = BT.G.Node  
-  type IndirectionTable = IT.IndirectionTable
+//   type Node = BT.G.Node  
+//   type IndirectionTable = IT.IndirectionTable
 
-  datatype Sector =
-    | SectorNode(node: Node)
-    | SectorIndirectionTable(indirectionTable: IndirectionTable)
-    | SectorSuperblock(superblock: SectorType.Superblock)
+//   datatype Sector =
+//     | SectorNode(node: Node)
+//     | SectorIndirectionTable(indirectionTable: IndirectionTable)
+//     | SectorSuperblock(superblock: SectorType.Superblock)
 
-  predicate WFSector(sector: Sector)
-  {
-    match sector {
-      case SectorNode(node) => BT.WFNode(node)
-      case SectorIndirectionTable(indirectionTable) => (
-        && indirectionTable.Inv()
-        && BC.WFCompleteIndirectionTable(indirectionTable.I())
-      )
-      case SectorSuperblock(superblock) =>
-        JC.WFSuperblock(superblock)
-    }
-  }
+//   predicate WFSector(sector: Sector)
+//   {
+//     match sector {
+//       case SectorNode(node) => BT.WFNode(node)
+//       case SectorIndirectionTable(indirectionTable) => (
+//         && indirectionTable.Inv()
+//         && BC.WFCompleteIndirectionTable(indirectionTable.I())
+//       )
+//       case SectorSuperblock(superblock) =>
+//         JC.WFSuperblock(superblock)
+//     }
+//   }
 
-  function ISector(sector: Sector) : SectorType.Sector
-  requires WFSector(sector)
-  {
-    match sector {
-      case SectorNode(node) => SectorType.SectorNode(node)
-      case SectorIndirectionTable(indirectionTable) => SectorType.SectorIndirectionTable(indirectionTable.I())
-      case SectorSuperblock(superblock) => SectorType.SectorSuperblock(superblock)
-    }
-  }
-}
+//   function ISector(sector: Sector) : SectorType.Sector
+//   requires WFSector(sector)
+//   {
+//     match sector {
+//       case SectorNode(node) => SectorType.SectorNode(node)
+//       case SectorIndirectionTable(indirectionTable) => SectorType.SectorIndirectionTable(indirectionTable.I())
+//       case SectorSuperblock(superblock) => SectorType.SectorSuperblock(superblock)
+//     }
+//   }
+// }
