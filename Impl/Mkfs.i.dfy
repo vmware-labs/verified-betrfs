@@ -12,7 +12,6 @@ module MkfsImpl {
   import opened Options
   import opened NativeTypes
   import opened BucketWeights
-  import SSM = StateSectorModel
   import opened BucketImpl
   import opened NodeImpl
   import opened BoundedPivotsLib
@@ -44,8 +43,8 @@ module MkfsImpl {
     var nodeAddr := NodeBlockSizeUint64() * MinNodeBlockIndexUint64();
 
     linear var node := Node.EmptyNode();
-    ghost var i:SSM.Sector := SSI.ISector(SSI.SectorNode(node));
-    assert BT.WFNode(i.node) by {
+    // ghost var i:SSM.Sector := SSI.ISector(SSI.SectorNode(node));
+    assert BT.WFNode(node.I()) by {
       reveal_WeightBucketList();
     }
 
@@ -69,7 +68,7 @@ module MkfsImpl {
     );
 
     assert BC.WFCompleteIndirectionTable(sectorIndirectionTable.I());
-    assert SSM.WFSector(SSI.ISector(SSI.SectorIndirectionTable(sectorIndirectionTable)));
+    assert SSI.Inv(SSI.SectorIndirectionTable(sectorIndirectionTable));
 
     linear var sectorIndirect := SSI.SectorIndirectionTable(sectorIndirectionTable);
     var bIndirectionTable_array := MarshallingImpl.MarshallCheckedSector(sectorIndirect);
