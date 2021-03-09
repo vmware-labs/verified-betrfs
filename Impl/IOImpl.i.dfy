@@ -29,13 +29,13 @@ module IOImpl {
   import opened StateBCImpl
 
   import SSI = StateSectorImpl
-  import SSM = StateSectorModel
 
   import opened ViewOp
   import opened DiskOpModel
   import BucketWeights
   import BlockJournalDisk
   import IMM = MarshallingModel
+  import Marshalling
   import BitmapModel
 
   // TODO does ImplVariables make sense? Should it be a Variables? Or just the fields of a class we live in?
@@ -84,12 +84,10 @@ module IOImpl {
   method RequestWrite(io: DiskIOHandler, loc: Location, linear sector: SSI.Sector)
   returns (id: D.ReqId)
   requires SSI.WFSector(sector)
-  requires SSM.WFSector(SSI.ISector(sector))
+  requires SSI.Inv(sector)
   requires io.initialized()
   requires sector.SectorSuperblock?
   requires ValidSuperblockLocation(loc)
-  
-  // [yizhou7]: additional precondition
   requires ValidLocation(loc)
 
   modifies io
@@ -105,14 +103,12 @@ module IOImpl {
 
     sector.Free();
 
-    IMM.reveal_parseCheckedSector();
-    IMM.reveal_parseSector();
+    Marshalling.reveal_parseCheckedSector();
     Marshalling.reveal_parseSector();
     reveal_SectorOfBytes();
     reveal_ValidCheckedBytes();
     reveal_Parse();
     D.reveal_ChecksumChecksOut();
-    Marshalling.reveal_parseSector();
   }
 
   method FindLocationAndRequestWrite(io: DiskIOHandler, shared s: ImplVariables, shared sector: SSI.Sector)
@@ -120,13 +116,13 @@ module IOImpl {
   requires s.WFBCVars()
   requires s.Ready?
   requires SSI.WFSector(sector)
-  requires SSM.WFSector(SSI.ISector(sector))
+  requires SSI.Inv(sector)
   requires io.initialized()
   requires sector.SectorNode?
 
   modifies io
 
-  ensures IOModel.FindLocationAndRequestWrite(old(IIO(io)), s, old(SSI.ISector(sector)), id, loc, IIO(io))
+  ensures IOModel.FindLocationAndRequestWrite(old(IIO(io)), s, sector, id, loc, IIO(io))
   ensures id.Some? ==> loc.Some? && io.diskOp().ReqWriteOp? && io.diskOp().id == id.value
   ensures id.None? ==> IIO(io) == old(IIO(io))
 
@@ -152,14 +148,12 @@ module IOImpl {
       }
     }
 
-    IMM.reveal_parseSector();
-    IMM.reveal_parseCheckedSector();
+    Marshalling.reveal_parseCheckedSector();
     Marshalling.reveal_parseSector();
     reveal_SectorOfBytes();
     reveal_ValidCheckedBytes();
     reveal_Parse();
     D.reveal_ChecksumChecksOut();
-    Marshalling.reveal_parseSector();
   }
 
   method FindIndirectionTableLocationAndRequestWrite(
@@ -168,11 +162,9 @@ module IOImpl {
   requires s.Ready?
   requires io.initialized()
   requires SSI.WFSector(sector)
-  requires SSM.WFSector(SSI.ISector(sector))
+  requires SSI.Inv(sector)
   requires sector.SectorIndirectionTable?
   requires s.frozenIndirectionTable.lSome? && sector.indirectionTable == s.frozenIndirectionTable.value
-
-  // [yizhou7]: additional precondition
   requires s.Inv()
 
   modifies io
@@ -200,8 +192,8 @@ module IOImpl {
       id := Some(i);
     }
 
-    IMM.reveal_parseSector();
-    IMM.reveal_parseCheckedSector();
+    Marshalling.reveal_parseSector();
+    Marshalling.reveal_parseCheckedSector();
     reveal_SectorOfBytes();
     reveal_ValidCheckedBytes();
     reveal_Parse();
@@ -291,20 +283,41 @@ module IOImpl {
   }
   // == readResponse ==
 
-  function ISectorOpt(sector: Option<SSI.Sector>) : Option<SSM.Sector>
-  requires sector.Some? ==> SSI.WFSector(sector.value)
-  {
-    match sector {
-      case None => None
-      case Some(sector) => Some(SSI.ISector(sector))
-    }
-  }
+  // function ISectorOpt(sector: Option<SSI.Sector>) : Option<SSM.Sector>
+  // requires sector.Some? ==> SSI.WFSector(sector.value)
+  // {
+  //   match sector {
+  //     case None => None
+  //     case Some(sector) => Some(SSI.ISector(sector))
+  //   }
+  // }
 
   method ReadSector(io: DiskIOHandler)
   returns (id: D.ReqId, linear sector: lOption<SSI.Sector>)
   requires io.diskOp().RespReadOp?
+  requires ValidDiskOp(diskOp(IIO(io)))
   ensures sector.lSome? ==> SSI.WFSector(sector.value)
-  ensures (id, ISectorOpt(sector.Option())) == IOModel.ReadSector(old(IIO(io)))
+
+  ensures var sector := sector.Option();
+    var io := IIO(io);
+    && (sector.Some? ==> (
+      && SSI.Inv(sector.value)
+      && ValidDiskOp(diskOp(io))
+      && (sector.value.SectorNode? ==> 
+        IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadNodeOp(id, Some(sector.value.node.I())), JournalDisk.NoDiskOp))
+      && (sector.value.SectorIndirectionTable? ==> 
+        IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadIndirectionTableOp(id, Some(sector.value.indirectionTable.I())), JournalDisk.NoDiskOp))
+      && (sector.value.SectorSuperblock? ==>
+        && IDiskOp(diskOp(io)).bdop == BlockDisk.NoDiskOp
+        && IDiskOp(diskOp(io)).jdop.RespReadSuperblockOp?
+        && IDiskOp(diskOp(io)).jdop.id == id
+        && IDiskOp(diskOp(io)).jdop.superblock == Some(sector.value.superblock)
+      )
+    ))
+    && ((IDiskOp(diskOp(io)).jdop.RespReadSuperblockOp? && IDiskOp(diskOp(io)).jdop.superblock.Some?) ==> (
+      && sector.Some?
+      && sector.value.SectorSuperblock?
+    ))
   {
     var id1, addr, bytes := io.getReadResult();
     id := id1;
@@ -324,6 +337,13 @@ module IOImpl {
     } else {
       sector := lNone;
     }
+
+    Marshalling.reveal_parseCheckedSector();
+    Marshalling.reveal_parseSector();
+    reveal_SectorOfBytes();
+    reveal_ValidCheckedBytes();
+    reveal_Parse();
+    D.reveal_ChecksumChecksOut();
   }
 
   method PageInIndirectionTableResp(linear inout s: ImplVariables, io: DiskIOHandler)
@@ -345,7 +365,7 @@ module IOImpl {
     linear var sectorOpt; var id;
     id, sectorOpt := ReadSector(io);
 
-    IOModel.ReadSectorCorrect(IIO(io));
+    // IOModel.ReadSectorCorrect(IIO(io));
 
     Marshalling.reveal_parseSector();
     reveal_SectorOfBytes();
@@ -354,6 +374,8 @@ module IOImpl {
     if (Some(id) == s.indirectionTableRead && sectorOpt.lSome? && sectorOpt.value.SectorIndirectionTable?) {
       linear var lSome(sector: SSI.Sector) := sectorOpt;
       linear var SectorIndirectionTable(ephemeralIndirectionTable) := sector;
+
+      assume ephemeralIndirectionTable.TrackingGarbage();
 
       linear var bm; var succ;
       succ, bm := ephemeralIndirectionTable.InitLocBitmap();
@@ -432,7 +454,7 @@ module IOImpl {
     id, sector := ReadSector(io);
     assert sector.lSome? ==> SSI.WFSector(sector.value);
 
-    IOModel.ReadSectorCorrect(IIO(io));
+    // IOModel.ReadSectorCorrect(IIO(io));
 
     Marshalling.reveal_parseSector();
     reveal_SectorOfBytes();

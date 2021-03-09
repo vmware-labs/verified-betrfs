@@ -38,12 +38,12 @@ module IOModel {
   import UI
   // Misc utilities
   import BBC = BetreeCache
-  import SSM = StateSectorModel
+  import SSI = StateSectorImpl
   import IndirectionTable
 
   import opened StateBCImpl
 
-  type Sector = SSM.Sector
+  type Sector = SSI.Sector
   
   predicate stepsBetree(s: BBC.Variables, s': BBC.Variables, vop: VOp, step: BT.BetreeStep)
   {
@@ -116,9 +116,9 @@ module IOModel {
       var bytes: seq<byte> := dop.reqWrite.bytes;
       && |bytes| <= NodeBlockSize() as int
       && 32 <= |bytes|
-      && IMM.parseCheckedSector(bytes).Some?
-      && SSM.WFSector(sector)
-      && SSM.ISector(IMM.parseCheckedSector(bytes).value) == SSM.ISector(sector)
+      && Marshalling.parseCheckedSector(bytes).Some?
+      && SSI.Inv(sector)
+      && Marshalling.parseCheckedSector(bytes).value == SSI.ISector(sector)
 
       && var len := |bytes| as uint64;
       && loc == getFreeLoc(s, len)
@@ -188,70 +188,6 @@ module IOModel {
       assert BC.PageInNodeReq(s, s', IDiskOp(diskOp(io')).bdop, StatesInternalOp, ref);
       assert stepsBC(s, s', StatesInternalOp, io', BC.PageInNodeReqStep(ref));
     }
-  }
-
-  // == readResponse ==
-
-  function ISectorOpt(sector: Option<Sector>) : Option<SectorType.Sector>
-  requires sector.Some? ==> SSM.WFSector(sector.value)
-  {
-    match sector {
-      case None => None
-      case Some(sector) => Some(SSM.ISector(sector))
-    }
-  }
-
-  function ReadSector(io: IO)
-  : (res : (D.ReqId, Option<Sector>))
-  requires diskOp(io).RespReadOp?
-  {
-    var id := io.id;
-    var bytes := io.respRead.bytes;
-    if |bytes| <= IndirectionTableBlockSize() then (
-      var loc := DiskLayout.Location(io.respRead.addr, |io.respRead.bytes| as uint64);
-      var sector := IMM.parseCheckedSector(bytes);
-      if sector.Some? && (
-        || (ValidNodeLocation(loc) && sector.value.SectorNode?)
-        || (ValidSuperblockLocation(loc) && sector.value.SectorSuperblock?)
-        || (ValidIndirectionTableLocation(loc) && sector.value.SectorIndirectionTable?)
-      )
-      then
-        (id, sector)
-      else
-        (id, None)
-    ) else (
-      (id, None)
-    )
-  }
-
-  lemma ReadSectorCorrect(io: IO)
-  requires diskOp(io).RespReadOp?
-  requires ValidDiskOp(diskOp(io))
-  ensures var (id, sector) := ReadSector(io);
-    && (sector.Some? ==> (
-      && SSM.WFSector(sector.value)
-      && ValidDiskOp(diskOp(io))
-      && (sector.value.SectorNode? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadNodeOp(id, Some(sector.value.node )), JournalDisk.NoDiskOp))
-      && (sector.value.SectorIndirectionTable? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadIndirectionTableOp(id, Some(sector.value.indirectionTable.I())), JournalDisk.NoDiskOp))
-      && (sector.value.SectorSuperblock? ==>
-        && IDiskOp(diskOp(io)).bdop == BlockDisk.NoDiskOp
-        && IDiskOp(diskOp(io)).jdop.RespReadSuperblockOp?
-        && IDiskOp(diskOp(io)).jdop.id == id
-        && IDiskOp(diskOp(io)).jdop.superblock == Some(sector.value.superblock)
-      )
-    ))
-    && ((IDiskOp(diskOp(io)).jdop.RespReadSuperblockOp? && IDiskOp(diskOp(io)).jdop.superblock.Some?) ==> (
-      && sector.Some?
-      && sector.value.SectorSuperblock?
-    ))
-  {
-    IMM.reveal_parseCheckedSector();
-    Marshalling.reveal_parseSector();
-    IMM.reveal_parseSector();
-    reveal_SectorOfBytes();
-    reveal_ValidCheckedBytes();
-    reveal_Parse();
-    D.reveal_ChecksumChecksOut();
   }
 
   // == writeResponse ==
