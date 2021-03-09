@@ -1,6 +1,7 @@
 include "../lib/Lang/NativeTypes.s.dfy"
 include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Option.s.dfy"
+include "../lib/Base/Maps.i.dfy"
 
 module MessageMod {
   type Key(!new,==)
@@ -105,6 +106,7 @@ module MsgMapMod {
 module JournalMod {
   import opened Options
   import opened Sequences
+  import opened Maps
   import opened MsgMapMod
   import opened AllocationMod
 
@@ -122,32 +124,32 @@ module JournalMod {
   function parse(b: UninterpretedDiskPage) : Option<JournalRecord>
     // TODO marshalling
 
-  predicate WFChainBasic(journalChain: JournalChain)
+  predicate WFChainBasic(chain: JournalChain)
   {
-    && 0 < |journalChain|
-    && Last(journalChain).nextCU.None?
-    && (forall i | 0<=i<|journalChain|-1 :: journalChain[i].nextCU.Some?)
+    && 0 < |chain|
+    && Last(chain).nextCU.None?
+    && (forall i | 0<=i<|chain|-1 :: chain[i].nextCU.Some?)
   }
 
-  predicate {:opaque} WFChainInner(journalChain: JournalChain)
-    requires WFChainBasic(journalChain)
+  predicate {:opaque} WFChainInner(chain: JournalChain)
+    requires WFChainBasic(chain)
   {
-    && (forall i | 0<=i<|journalChain|-1 ::
-      journalChain[i].seqStart == journalChain[i+1].seqEnd)
+    && (forall i | 0<=i<|chain|-1 ::
+      chain[i].seqStart == chain[i+1].seqEnd)
   }
 
-  predicate WFChain(journalChain: JournalChain)
+  predicate WFChain(chain: JournalChain)
   {
-    && WFChainBasic(journalChain)
-    && WFChainInner(journalChain)
+    && WFChainBasic(chain)
+    && WFChainInner(chain)
   }
 
-  function CUsForChain(firstCU: CU, journalChain: JournalChain) : (cus: seq<CU>)
-    requires WFChain(journalChain)
-    ensures |cus| == |journalChain|
+  function CUsForChain(firstCU: CU, chain: JournalChain) : (cus: seq<CU>)
+    requires WFChain(chain)
+    ensures |cus| == |chain|
   {
-    [firstCU] + seq(|journalChain|-1,
-      i requires 0<=i<|journalChain|-1 => journalChain[i].nextCU.value)
+    [firstCU] + seq(|chain|-1,
+      i requires 0<=i<|chain|-1 => chain[i].nextCU.value)
   }
 
   predicate RecordOnDisk(dv: DiskView, cu: CU, journalRecord: JournalRecord)
@@ -156,12 +158,85 @@ module JournalMod {
     && parse(dv[cu]) == Some(journalRecord)
   }
 
-  predicate {:opaque} ValidJournalChain(dv: DiskView, firstCU: CU, journalChain: JournalChain) {
-    // Chain is internally consistent
-    && WFChain(journalChain)
-    // ...and it corresponds to stuff in the DiskView starting at firstCU.
-    && var cus := CUsForChain(firstCU, journalChain);
-    && (forall i | 0<=i<|journalChain| :: RecordOnDisk(dv, cus[i], journalChain[i]))
+  predicate {:opaque} ChainMatchesDiskView(dv: DiskView, firstCU: CU, chain: JournalChain)
+    requires WFChain(chain)
+  {
+    // chain corresponds to stuff in the DiskView starting at firstCU.
+    && var cus := CUsForChain(firstCU, chain);
+    && (forall i | 0<=i<|chain| :: RecordOnDisk(dv, cus[i], chain[i]))
+  }
+
+  // Describe a valid chain with quantification.
+  predicate ValidJournalChain(dv: DiskView, firstCU: CU, chain: JournalChain)
+  {
+    && WFChain(chain)
+    && ChainMatchesDiskView(dv, firstCU, chain)
+  }
+
+  // Define reading a chain recursively. Returns None if any of the
+  // CUs point to missing blocks from the dv, or if the block can't
+  // be parsed.
+  // Note that the firstCU.None? case is only here to clean up the recursive
+  // definition; that's why firstCU.Some? is a prereq for the ensures.
+  function ChainFromInner(dv: DiskView, firstCU: Option<CU>) : (chain:Option<JournalChain>)
+    ensures firstCU.Some? && chain.Some?
+      ==> ValidJournalChain(dv, firstCU.value, chain.value)
+    decreases |dv.Keys|
+  {
+    if firstCU.None? then
+      Some([])
+    else if firstCU.value !in dv then
+      None  // !RecordOnDisk
+    else
+      var firstRec := parse(dv[firstCU.value]);
+      if firstRec.None? then
+        None  // !RecordOnDisk
+      else
+        var rest := ChainFromInner(MapRemove1(dv, firstCU.value), firstRec.value.nextCU);
+        if rest.None? // tail didn't decode or
+          // tail decoded but head doesn't stitch to it (a cross-crash invariant)
+          || (0<|rest.value| && firstRec.value.seqStart != rest.value[0].seqEnd)
+        then
+          None  // failure in recursive call
+        else
+          var chain := [firstRec.value] + rest.value;
+          assert ValidJournalChain(dv, firstCU.value, chain) by {
+            reveal_WFChainInner();
+            reveal_ChainMatchesDiskView();
+            forall i | 0<=i<|chain|-1
+              ensures chain[i].seqStart == chain[i+1].seqEnd
+            {
+              if i==0 {
+                calc {
+                  chain[i].seqStart;
+                  rest.value[0].seqEnd;
+                  chain[i+1].seqEnd;
+                }
+                assert chain[i].seqStart == chain[i+1].seqEnd;
+              } else {
+                calc {
+                  chain[i].seqStart;
+                  rest.value[i-1].seqStart;
+                  rest.value[i].seqEnd;
+                  chain[i+1].seqEnd;
+                }
+              }
+            }
+            assert WFChain(chain);
+            var cus := CUsForChain(firstCU.value, chain);
+            forall i | 0<=i<|chain|
+              ensures RecordOnDisk(dv, cus[i], chain[i])
+            {
+            }
+          }
+          Some(chain)
+  }
+
+  // Returns None if any of the CUs point to missing blocks from the dv, or if
+  // the block can't be parsed.
+  function ChainFrom(dv: DiskView, firstCU: CU) : (chain:Option<JournalChain>)
+  {
+    ChainFromInner(dv, Some(firstCU))
   }
 
   function MessageMaps(journalChain: JournalChain) : seq<MsgMap> {
@@ -170,49 +245,25 @@ module JournalMod {
         => var mm := journalChain[i].messageMap; mm)
   }
 
-  function TheIMChain(dv: DiskView, sb: Superblock) : JournalChain
-    requires exists journalChain :: ValidJournalChain(dv, sb.firstCU, journalChain)
-  {
-    var journalChain :| ValidJournalChain(dv, sb.firstCU, journalChain);
-    journalChain
-  }
-
   function IM(dv: DiskView, sb: Superblock) : MsgMap
   {
-    if (exists journalChain :: ValidJournalChain(dv, sb.firstCU, journalChain))
+    var chain := ChainFrom(dv, sb.firstCU);
+    if chain.Some?
     then
-      MsgMapMod.ConcatSeq(MessageMaps(TheIMChain(dv, sb)))
+      MsgMapMod.ConcatSeq(MessageMaps(chain.value))
     else
       MsgMapMod.Empty()
   }
 
-  function {:opaque} IReads(dv: DiskView, firstCU: CU) : set<AU>
+  function IReads(dv: DiskView, firstCU: CU) : set<AU>
   {
-    if (exists journalChain :: ValidJournalChain(dv, firstCU, journalChain))
-    then
-      var journalChain :| ValidJournalChain(dv, firstCU, journalChain);
-      var cus := CUsForChain(firstCU, journalChain);
-      set i | 0<=i<|cus| :: cus[i].au
+    var chain := ChainFrom(dv, firstCU);
+    if chain.None?
+    then {}
     else
-      // Does this actually work? If there exists no such chain,
-      // did we have to read all the blocks to convince ourselves
-      // of that? Ugh.
-      {}
+      var cus := CUsForChain(firstCU, chain.value);
+      set i | 0<=i<|chain.value| :: cus[i].au
   }
-
-// Recursive definition, rejected
-//  function IM(dv: DiskView, sb: Superblock) : Message.MsgMap
-//  {
-//    IMAU(dv, sb.firstCU)
-//  }
-//
-//  function IMAU(dv: DiskView, cu:CU) : Message.MsgMap {
-//    var journalRecord = JournalRecord.I(dv, cu);
-//    suffix := if (firstValidSeq >= journalRecord.lowestSeq)
-//      then MsgMap.Empty()
-//      else IMAU(dv, journalRecord.nextCu);
-//    MsgMap.Concat(journalRecord.msgmap, suffix)
-//  }
 
   predicate EqualAt(dv0: DiskView, dv1: DiskView, cu: CU)
     requires cu in dv0
@@ -239,114 +290,99 @@ module JournalMod {
     ensures c[0].nextCU.Some? // boilerplate for next line
     ensures ValidJournalChain(dv, c[0].nextCU.value, c[1..])
   {
-    reveal_ValidJournalChain();
+    reveal_ChainMatchesDiskView();
     reveal_WFChainInner();
   }
 
-  lemma UniqueChain(dv: DiskView, firstCU: CU, c0: JournalChain, c1: JournalChain)
-    requires ValidJournalChain(dv, firstCU, c0)
-    requires ValidJournalChain(dv, firstCU, c1)
-    ensures c0 == c1
-    decreases |c0|
-  {
-    reveal_ValidJournalChain();
-    if |c1|<|c0| {
-      UniqueChain(dv, firstCU, c1, c0);
-    } else {
-      assert c0[0]==c1[0];
-      if 1==|c0| {
-        assert 1==|c1|;
-      } else {
-        ValidTruncatedChain(dv, firstCU, c0);
-        ValidTruncatedChain(dv, firstCU, c1);
-        UniqueChain(dv, c0[0].nextCU.value, c0[1..], c1[1..]);
-      }
-    }
-  }
-
-  lemma CUInIReads(dv: DiskView, firstCU: CU, chain: JournalChain)
-    requires ValidJournalChain(dv, firstCU, chain)
-    ensures firstCU.au in IReads(dv, firstCU)
-  {
-    reveal_IReads();
-    assert ValidJournalChain(dv, firstCU, chain);
-    assert exists journalChain :: ValidJournalChain(dv, firstCU, journalChain);
-    var journalChain :| ValidJournalChain(dv, firstCU, journalChain);
-    UniqueChain(dv, firstCU, chain, journalChain);
-    assert chain == journalChain;
-    assert firstCU.au in IReads(dv, firstCU);
-  }
-
-  lemma FrameOneChain(dv0: DiskView, dv1: DiskView, firstCU: CU, journalChain: JournalChain)
-    requires ValidJournalChain(dv0, firstCU, journalChain)
-    requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, firstCU))
-    ensures ValidJournalChain(dv1, firstCU, journalChain)
-    decreases |journalChain|
-  {
-    reveal_ValidJournalChain();
-    if |journalChain|==1 {
-      assert WFChain(journalChain);
-      // ...and it corresponds to stuff in the DiskView starting at firstCU.
-      var cus := CUsForChain(firstCU, journalChain);
-      forall i | 0<=i<|journalChain|
-        ensures RecordOnDisk(dv1, cus[i], journalChain[i])
-      {
-        assert i == 0;
-        assert cus[i] == firstCU;
-        assert RecordOnDisk(dv0, firstCU, journalChain[i]);
-        CUInIReads(dv0, firstCU, journalChain);
-        assert EqualAt(dv0, dv1, firstCU);
-        assert RecordOnDisk(dv1, firstCU, journalChain[i]);
-        assert RecordOnDisk(dv1, cus[i], journalChain[i]);
-      }
-      assert ValidJournalChain(dv1, firstCU, journalChain);
-    } else {
-      var secondCU := journalChain[0].nextCU.value;
-      ValidTruncatedChain(dv0, firstCU, journalChain);
-      assert IReads(dv0, secondCU) <= IReads(dv0, firstCU);
-      assert DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, secondCU));
-      FrameOneChain(dv0, dv1, secondCU, journalChain[1..]);
-
-      // Sequence math to enjoy results of recursion
-      var cus := CUsForChain(firstCU, journalChain);
-      var cus1 := CUsForChain(secondCU, journalChain[1..]);
-      forall i | 0<=i<|journalChain|
-        ensures RecordOnDisk(dv1, cus[i], journalChain[i])
-      {
-        //assert cus[i] in IReads(dv0, firstCU);
-        if i==0 {
-          assert RecordOnDisk(dv1, cus[i], journalChain[i]);
-        } else {
-          assert RecordOnDisk(dv1, cus1[i-1], journalChain[1..][i-1]);
-          assert RecordOnDisk(dv1, cus[i], journalChain[i]);
-        }
-      }
-
-      assert ValidJournalChain(dv1, firstCU, journalChain);
-    }
-  }
-
+//  lemma UniqueChain(dv: DiskView, firstCU: CU, c0: JournalChain, c1: JournalChain)
+//    requires ValidJournalChain(dv, firstCU, c0)
+//    requires ValidJournalChain(dv, firstCU, c1)
+//    ensures c0 == c1
+//    decreases |c0|
+//  {
+//    reveal_ValidJournalChain();
+//    if |c1|<|c0| {
+//      UniqueChain(dv, firstCU, c1, c0);
+//    } else {
+//      assert c0[0]==c1[0];
+//      if 1==|c0| {
+//        assert 1==|c1|;
+//      } else {
+//        ValidTruncatedChain(dv, firstCU, c0);
+//        ValidTruncatedChain(dv, firstCU, c1);
+//        UniqueChain(dv, c0[0].nextCU.value, c0[1..], c1[1..]);
+//      }
+//    }
+//  }
+//
+//  lemma FrameOneChain(dv0: DiskView, dv1: DiskView, firstCU: CU, journalChain: JournalChain)
+//    requires ValidJournalChain(dv0, firstCU, journalChain)
+//    requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, firstCU))
+//    ensures ValidJournalChain(dv1, firstCU, journalChain)
+//    decreases |journalChain|
+//  {
+//    reveal_ValidJournalChain();
+//    if |journalChain|==1 {
+//      assert WFChain(journalChain);
+//      // ...and it corresponds to stuff in the DiskView starting at firstCU.
+//      var cus := CUsForChain(firstCU, journalChain);
+////      forall i | 0<=i<|journalChain|
+////        ensures RecordOnDisk(dv1, cus[i], journalChain[i])
+////      {
+////        assert i == 0;
+////        assert cus[i] == firstCU;
+////        assert RecordOnDisk(dv0, firstCU, journalChain[i]);
+////        CUInIReads(dv0, firstCU, journalChain);
+////        assert EqualAt(dv0, dv1, firstCU);
+////        assert RecordOnDisk(dv1, firstCU, journalChain[i]);
+////        assert RecordOnDisk(dv1, cus[i], journalChain[i]);
+////      }
+//      assert ValidJournalChain(dv1, firstCU, journalChain);
+//    } else {
+//      var secondCU := journalChain[0].nextCU.value;
+//      ValidTruncatedChain(dv0, firstCU, journalChain);
+//      assert IReads(dv0, secondCU) <= IReads(dv0, firstCU);
+//      assert DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, secondCU));
+//      FrameOneChain(dv0, dv1, secondCU, journalChain[1..]);
+//
+//      // Sequence math to enjoy results of recursion
+//      var cus := CUsForChain(firstCU, journalChain);
+//      var cus1 := CUsForChain(secondCU, journalChain[1..]);
+////      forall i | 0<=i<|journalChain|
+////        ensures RecordOnDisk(dv1, cus[i], journalChain[i])
+////      {
+////        //assert cus[i] in IReads(dv0, firstCU);
+////        if i==0 {
+////          assert RecordOnDisk(dv1, cus[i], journalChain[i]);
+////        } else {
+////          assert RecordOnDisk(dv1, cus1[i-1], journalChain[1..][i-1]);
+////          assert RecordOnDisk(dv1, cus[i], journalChain[i]);
+////        }
+////      }
+//
+//      assert ValidJournalChain(dv1, firstCU, journalChain);
+//    }
+//  }
 
   lemma Framing(sb:Superblock, dv0: DiskView, dv1: DiskView)
     requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, sb.firstCU))
     ensures IM(dv0, sb) == IM(dv1, sb)
   {
-    var le0 := exists journalChain :: ValidJournalChain(dv0, sb.firstCU, journalChain);
-    var le1 := exists journalChain :: ValidJournalChain(dv1, sb.firstCU, journalChain);
-    if le0 && le1 {
-      var journalChain0 := TheIMChain(dv0, sb);
-      var journalChain1 := TheIMChain(dv1, sb);
-      FrameOneChain(dv0, dv1, sb.firstCU, journalChain0);
-      UniqueChain(dv1, sb.firstCU, journalChain0, journalChain1);
-      assert journalChain0 == journalChain1;
+    var chain0 := ChainFrom(dv0, sb.firstCU);
+    var chain1 := ChainFrom(dv1, sb.firstCU);
+    if chain0.Some? && chain1.Some? {
+//      FrameOneChain(dv0, dv1, sb.firstCU, journalChain0);
+//      UniqueChain(dv1, sb.firstCU, journalChain0, journalChain1);
+      assert chain0 == chain1;
       calc {
         IM(dv0, sb);
-        MsgMapMod.ConcatSeq(MessageMaps(journalChain0));
-        MsgMapMod.ConcatSeq(MessageMaps(journalChain1));
+        MsgMapMod.ConcatSeq(MessageMaps(chain0.value));
+        MsgMapMod.ConcatSeq(MessageMaps(chain1.value));
         IM(dv1, sb);
       }
     } else {
-      assume false;
+      assert chain0.None?;
+      assert chain1.None?;
       assert IM(dv0, sb) == IM(dv1, sb);
     }
   }
