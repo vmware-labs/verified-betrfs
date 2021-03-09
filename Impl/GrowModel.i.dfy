@@ -4,7 +4,6 @@
 include "BookkeepingModel.i.dfy"
 
 module GrowModel { 
-  import opened StateBCModel
   import opened StateSectorModel
 
   import opened IOModel
@@ -23,14 +22,14 @@ module GrowModel {
 
   import IT = IndirectionTable
   import opened NativeTypes
+  import StateBCImpl
 
   /// The root was found to be too big: grow
-  function {:opaque} grow(s: BCVariables)
-  : (BCVariables)
-  requires BCInv(s)
+  function {:opaque} grow(s: BBC.Variables)
+  : (BBC.Variables)
+  requires BBC.Inv(s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
-  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
   {
     lemmaChildrenConditionsOfNode(s, BT.G.Root());
 
@@ -62,12 +61,14 @@ module GrowModel {
     )
   }
 
-  lemma growCorrect(s: BCVariables)
+  lemma growCorrect(s: BBC.Variables)
   requires grow.requires(s)
-  requires TotalCacheSize(s) <= MaxCacheSize() - 1
+  requires s.totalCacheSize() <= MaxCacheSize() - 1
   ensures var s' := grow(s);
-    && WFBCVars(s')
-    && betree_next(IBlockCache(s), IBlockCache(s'))
+    && s'.Ready?
+    && s'.totalCacheSize() <= MaxCacheSize()
+    && StateBCImpl.WFCache(s'.cache)
+    && betree_next(s, s')
   {
     reveal_grow();
 
@@ -77,15 +78,17 @@ module GrowModel {
 
     if (
       && s.frozenIndirectionTable.Some?
-      && s.frozenIndirectionTable.value.hasEmptyLoc(BT.G.Root())
+      && var table := s.frozenIndirectionTable.value;
+      && BT.G.Root() in table.graph
+      && BT.G.Root() !in table.locs
     ) {
-      assert noop(IBlockCache(s), IBlockCache(s));
+      assert noop(s, s);
       return;
     }
 
     var oldroot := s.cache[BT.G.Root()];
     if !ContainsAllKeys(oldroot.pivotTable) {
-      assert noop(IBlockCache(s), IBlockCache(s));
+      assert noop(s, s);
       return;
     }
 
@@ -95,15 +98,13 @@ module GrowModel {
 
     match newref {
       case None => {
-        assert noop(IBlockCache(s), IBlockCache(s1));
+        assert noop(s, s);
       }
       case Some(newref) => {
         var newroot := BT.G.Node(InitPivotTable(), Some([newref]), [EmptyBucket()]);
         WeightBucketListOneEmpty();
 
         assert BT.G.Root() in s.cache;
-        assert BT.G.Root() in ICache(s.cache);
-        assert BT.G.Root() in ICache(s1.cache);
         assert BT.G.Root() in s1.cache;
 
         var s2 := writeWithNode(s1, BT.G.Root(), newroot);
@@ -112,13 +113,13 @@ module GrowModel {
         allocCorrect(s, oldroot);
         writeCorrect(s1, BT.G.Root(), newroot);
 
-        var growth := BT.RootGrowth(INode(oldroot), newref);
-        assert INode(newroot) == BT.G.Node(InitPivotTable(), Some([growth.newchildref]), [EmptyBucket()]);
+        var growth := BT.RootGrowth(oldroot, newref);
+        assert newroot == BT.G.Node(InitPivotTable(), Some([growth.newchildref]), [EmptyBucket()]);
         var step := BT.BetreeGrow(growth);
         assert BT.ValidGrow(growth);
-        BC.MakeTransaction2(IBlockCache(s), IBlockCache(s1), IBlockCache(s'), BT.BetreeStepOps(step));
-        assert BBC.BetreeMove(IBlockCache(s), IBlockCache(s'), BlockDisk.NoDiskOp, AdvanceOp(UI.NoOp, true), step);
-        assert stepsBetree(IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), step);
+        BC.MakeTransaction2(s, s1, s', BT.BetreeStepOps(step));
+        assert BBC.BetreeMove(s, s', BlockDisk.NoDiskOp, AdvanceOp(UI.NoOp, true), step);
+        assert stepsBetree(s, s', AdvanceOp(UI.NoOp, true), step);
       }
     }
   }

@@ -1,7 +1,7 @@
 // Copyright 2018-2021 VMware, Inc.
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "SyncImpl.i.dfy"
+include "BookkeepingImpl.i.dfy"
 include "SuccModel.i.dfy"
 include "MainDiskIOHandler.s.dfy"
 include "../lib/Base/Option.s.dfy"
@@ -12,7 +12,6 @@ include "BucketSuccessorLoopImpl.i.dfy"
 // See dependency graph in MainHandlers.dfy
 
 module SuccImpl { 
-  import opened SyncImpl
   import opened IOImpl
   import SuccModel
   import BookkeepingModel
@@ -43,13 +42,18 @@ module SuccImpl {
   import opened BucketsLib
   import opened BoundedPivotsLib
 
+  import opened InterpretationDiskOps
+  import opened ViewOp
+  import opened DiskOpModel
+  import PBS = PivotBetreeSpec`Internal
+
   method composeGenerator(shared cache: CacheImpl.LMutCache, ref: BT.G.Reference, r: uint64, 
     linear g: lOption<BGI.Generator>, ghost acc: seq<Bucket>, ghost bucket: Bucket,
     start: UI.RangeStart)
   returns (linear g': BGI.Generator)
   requires cache.Inv()
   requires cache.ptr(ref).Some?
-  requires SSM.WFNode(cache.I()[ref])
+  requires BT.WFNode(cache.I()[ref])
   requires r as nat < |cache.I()[ref].buckets|
   requires bucket == cache.I()[ref].buckets[r as nat]
   requires WFBucket(bucket)
@@ -84,15 +88,14 @@ module SuccImpl {
       pivots: PivotTable,
       children: Option<seq<BT.G.Reference>>)
   returns (res : Option<UI.SuccResultList>)
-  requires old_s.Ready?
-  requires old_s.Inv()
+  requires old_s.Ready? && old_s.Inv()
   requires io.initialized()
   requires old_s.cache.ptr(ref).Some?
-  requires SSM.WFNode(old_s.cache.I()[ref])
+  requires BT.WFNode(old_s.cache.I()[ref])
   requires pivots == old_s.cache.I()[ref].pivotTable
   requires children == old_s.cache.I()[ref].children
   requires BoundedKey(pivots, key)
-  requires ref in old_s.I().ephemeralIndirectionTable.graph
+  requires ref in old_s.ephemeralIndirectionTable.graph
   requires maxToFind >= 1
   requires |acc| + counter as int < 0x1_0000_0000_0000_0000 - 1
   requires forall i | 0 <= i < |acc| :: WFBucket(acc[i])
@@ -101,7 +104,7 @@ module SuccImpl {
     == BGM.GenFromBucketStackWithLowerBound(acc, start)
   modifies io
   decreases counter, 0
-  ensures s.W()
+  ensures s.WFBCVars()
   ensures s.Ready?
   ensures s.cache.I() == old_s.cache.I()
   ensures (s.I(), IIO(io), res)
@@ -176,11 +179,10 @@ module SuccImpl {
       ref: BT.G.Reference,
       counter: uint64)
   returns (res : Option<UI.SuccResultList>)
-  requires old_s.Inv()
-  requires old_s.Ready?
+  requires old_s.Inv() && old_s.Ready?
   requires io.initialized()
   requires maxToFind >= 1
-  requires ref in old_s.I().ephemeralIndirectionTable.graph
+  requires ref in old_s.ephemeralIndirectionTable.graph
   requires forall i | 0 <= i < |acc| :: WFBucket(acc[i])
   requires |acc| + counter as int < 0x1_0000_0000_0000_0000 - 1
   requires g.lSome? <==> |acc| >= 1
@@ -188,7 +190,7 @@ module SuccImpl {
     == BGM.GenFromBucketStackWithLowerBound(acc, start)
   modifies io
   decreases counter, 1
-  ensures s.W()
+  ensures s.WFBCVars()
   ensures (s.I(), IIO(io), res)
        == SuccModel.getPath(old_s.I(), old(IIO(io)), key, old(acc), start,
         upTo, maxToFind as int, ref, counter)
@@ -202,7 +204,7 @@ module SuccImpl {
       if boundedkey {
         res := getPathInternal(inout s, io, key, acc, g, start, upTo,
           maxToFind, ref, counter, pivots, children);
-        LruModel.LruUse(s.I().lru, ref);
+        LruModel.LruUse(s.lru.Queue(), ref);
         inout s.lru.Use(ref);
       } else {
         linear match g {
@@ -232,17 +234,22 @@ module SuccImpl {
 
   method doSucc(linear inout s: ImplVariables, io: DiskIOHandler, start: UI.RangeStart, maxToFind: uint64)
   returns (res : Option<UI.SuccResultList>)
-  requires old_s.Inv()
+  requires old_s.Inv() && old_s.Ready?
   requires io.initialized()
   requires maxToFind >= 1
-  requires old_s.Ready?
   modifies io
-  ensures s.W()
-  ensures (s.I(), IIO(io), res) == SuccModel.doSucc(old_s.I(), old(IIO(io)),
-    start, maxToFind as int)
+  ensures s.WFBCVars()
+  ensures ValidDiskOp(diskOp(IIO(io)))
+    && IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
+    && (res.Some? ==>
+            BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop,
+            AdvanceOp(UI.SuccOp(start, res.value.results, res.value.end), false)))
+    && (res.None? ==>
+            IOModel.betree_next_dop(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop))
   {
-    SuccModel.reveal_doSucc();
+    PBS.reveal_LookupUpperBound();
     var startKey := if start.NegativeInf? then [] else start.key;
+    SuccModel.lemmaGetPathResult(old_s.I(), IIO(io), startKey, [], [], start, None, maxToFind as int, BT.G.Root(), 40);
     res := getPath(inout s, io, startKey, [], lNone, start, None, maxToFind, BT.G.Root(), 40);
   }
 }

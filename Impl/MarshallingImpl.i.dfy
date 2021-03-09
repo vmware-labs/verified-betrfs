@@ -529,8 +529,7 @@ module MarshallingImpl {
   method {:fuel SizeOfV,4} nodeToVal(shared node: Node)
   returns (v : V, size: uint64)
   requires node.Inv()
-  requires SSM.WFNode(node.I())
-  requires BT.WFNode(SSM.INode(node.I()))
+  requires BT.WFNode(node.I())
   requires BucketsLib.BucketListWellMarshalled(BucketImpl.MutBucket.ILseq(node.buckets))
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.PivotNodeGrammar())
@@ -590,8 +589,7 @@ module MarshallingImpl {
   requires SSI.WFSector(sector)
   requires SSM.WFSector(SSI.ISector(sector))
   requires sector.SectorNode?
-  requires sector.SectorNode? ==> SSM.WFNode(sector.node.I())
-  requires sector.SectorNode? ==> BT.WFNode(SSM.INode(sector.node.I()))
+  requires sector.SectorNode? ==> BT.WFNode(sector.node.I())
   requires sector.SectorNode? ==> 
     BucketsLib.BucketListWellMarshalled(BucketImpl.MutBucket.ILseq(sector.node.buckets))
   ensures ValidVal(v)
@@ -606,26 +604,26 @@ module MarshallingImpl {
     size := s + 8;
   }
 
-  method indirectionTableSectorToVal(shared sector: SSI.Sector)
-  returns (v : V, size: uint64)
-  requires SSI.WFSector(sector)
-  requires SSM.WFSector(SSI.ISector(sector))
-  requires sector.SectorIndirectionTable?
-  requires sector.indirectionTable.Inv()
-  requires BC.WFCompleteIndirectionTable(sector.indirectionTable.I())
-  // TODO(andreal) I believe this is unnecessary: modifies sector.indirectionTable.Repr
-  ensures sector.indirectionTable.Inv() 
-  && sector.indirectionTable.I() == old(sector.indirectionTable.I())
-  ensures ValidVal(v)
-  ensures ValInGrammar(v, Marshalling.SectorGrammar());
-  ensures Marshalling.valToSector(v) == Some(SSM.ISector(SSI.ISector(sector)))
-  ensures SizeOfV(v) < 0x1_0000_0000_0000_0000 - 32
-  ensures SizeOfV(v) == size as int
-  {
-    var w, s := sector.indirectionTable.IndirectionTableToVal();
-    v := VCase(1, w);
-    size := s + 8;
-  }
+  // method indirectionTableSectorToVal(shared sector: SSI.Sector)
+  // returns (v : V, size: uint64)
+  // requires SSI.WFSector(sector)
+  // requires SSM.WFSector(SSI.ISector(sector))
+  // requires sector.SectorIndirectionTable?
+  // requires sector.indirectionTable.Inv()
+  // requires BC.WFCompleteIndirectionTable(sector.indirectionTable.I())
+  // // TODO(andreal) I believe this is unnecessary: modifies sector.indirectionTable.Repr
+  // ensures sector.indirectionTable.Inv() 
+  // && sector.indirectionTable.I() == old(sector.indirectionTable.I())
+  // ensures ValidVal(v)
+  // ensures ValInGrammar(v, Marshalling.SectorGrammar());
+  // ensures Marshalling.valToSector(v) == Some(SSM.ISector(SSI.ISector(sector)))
+  // ensures SizeOfV(v) < 0x1_0000_0000_0000_0000 - 32
+  // ensures SizeOfV(v) == size as int
+  // {
+  //   var w, s := sector.indirectionTable.IndirectionTableToVal();
+  //   v := VCase(1, w);
+  //   size := s + 8;
+  // }
 
   /////// Marshalling and de-marshalling
 
@@ -634,8 +632,7 @@ module MarshallingImpl {
   ensures s.lSome? ==> SSI.WFSector(s.value)
   ensures s.lSome? ==> SSM.WFSector(SSI.ISector(s.value))
   ensures ISectorOpt(s.Option()) == IMM.parseSector(data[start..])
-  ensures s.lSome? && s.value.SectorNode? ==> SSM.WFNode(s.value.node.I())
-  ensures s.lSome? && s.value.SectorNode? ==> BT.WFNode(SSM.INode(s.value.node.I()))
+  ensures s.lSome? && s.value.SectorNode? ==> BT.WFNode(s.value.node.I())
   {
     IMM.reveal_parseSector();
     var success, v, rest_index := ParseVal(data, start, Marshalling.SectorGrammar());
@@ -673,8 +670,7 @@ module MarshallingImpl {
   ensures s.lSome? ==> SSI.WFSector(s.value)
   ensures s.lSome? ==> SSM.WFSector(SSI.ISector(s.value))
   ensures ISectorOpt(s.Option()) == IMM.parseCheckedSector(data)
-  ensures s.lSome? && s.value.SectorNode? ==> SSM.WFNode(s.value.node.I())
-  ensures s.lSome? && s.value.SectorNode? ==> BT.WFNode(SSM.INode(s.value.node.I()))
+  ensures s.lSome? && s.value.SectorNode? ==> BT.WFNode(s.value.node.I())
   {
     if |data| as uint64 >= 32 {
       // TODO unnecessary copy here
@@ -758,8 +754,6 @@ module MarshallingImpl {
   method MarshallCheckedSector(shared sector: Sector) returns (data : array?<byte>)
   requires SSI.WFSector(sector)
   requires SSM.WFSector(SSI.ISector(sector))
-  requires sector.SectorNode? ==> SSM.WFNode(sector.node.I())
-  requires sector.SectorNode? ==> BT.WFNode(SSM.INode(sector.node.I()))
   requires sector.SectorSuperblock? ==> JC.WFSuperblock(sector.superblock)
   ensures sector.SectorIndirectionTable? ==> 
     sector.indirectionTable.Inv()

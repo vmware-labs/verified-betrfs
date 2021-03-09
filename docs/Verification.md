@@ -16,6 +16,7 @@ VeriBetrFS currently provides a verified key-value store component.
  * Our main system assumptions about the disk model.
    * We assume an asynchronous disk model, where reads and writes may be re-ordered.
    * We do not attempt to model overlapping reads and writes; we consider this ‘undefined behavior’.
+     * As such, VeriBetrFS ensures that it never issues overlapping reads or writes.
    * The disk may randomly corrupt its data, but when it does so, it does not produce a checksum-valid block (using a [CRC32-C](https://en.wikipedia.org/wiki/Cyclic_redundancy_check) checksum).
      * VeriBetrFS is robust to disk corruption only in the sense that it will detect it and, as a result, fail to provide corrupted data to its client, but VeriBetrFS is not an error-correcting system, so it will not recover the true data.
  * **Relevant files**

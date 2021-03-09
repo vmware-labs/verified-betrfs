@@ -4,7 +4,6 @@
 include "BookkeepingModel.i.dfy"
 
 module SplitModel {
-  import opened StateBCModel
   import opened StateSectorModel
 
   import opened IOModel
@@ -28,7 +27,7 @@ module SplitModel {
 
   import opened NativeTypes
 
-  lemma lemmaChildrenConditionsCutoffNode(s: BCVariables, 
+  lemma lemmaChildrenConditionsCutoffNode(s: BBC.Variables, 
       node: Node, lbound: Key, ubound: Option<Key>)
   requires BT.WFNode(node)
   requires s.Ready?
@@ -42,7 +41,7 @@ module SplitModel {
   }
 
   lemma lemmaChildrenConditionsSplitChild(
-      s: BCVariables, child: Node, num_children_left: int)
+      s: BBC.Variables, child: Node, num_children_left: int)
   requires SplitChildLeft.requires(child, num_children_left)
   requires SplitChildRight.requires(child, num_children_left)
   requires s.Ready?
@@ -98,15 +97,15 @@ module SplitModel {
     }
   }
 
-  function {:opaque} splitBookkeeping(s: BCVariables, left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference, fused_parent_children: seq<BT.G.Reference>, left_child: Node, right_child: Node, slot: int) : (s': BCVariables)
+  function {:opaque} splitBookkeeping(s: BBC.Variables, left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference, fused_parent_children: seq<BT.G.Reference>, left_child: Node, right_child: Node, slot: int) : (s': BBC.Variables)
   requires 0 <= slot < |fused_parent_children|
   requires s.Ready?
-  requires WriteAllocConditions(s)
+  requires s.WriteAllocConditions()
   requires ChildrenConditions(s, left_child.children)
   requires ChildrenConditions(s, right_child.children)
   requires ChildrenConditions(s, Some(fused_parent_children))
   requires |fused_parent_children| < MaxNumChildren()
-  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
+  // requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
   ensures s'.Ready?
   ensures s'.cache == s.cache
   {
@@ -129,8 +128,8 @@ module SplitModel {
     s3
   }
 
-  function {:opaque} splitCacheChanges(s: BCVariables, left_childref: BT.G.Reference,
-      right_childref: BT.G.Reference, parentref: BT.G.Reference, slot: int, num_children_left: int, pivot: Key, left_child: Node, right_child: Node) : (s': BCVariables)
+  function {:opaque} splitCacheChanges(s: BBC.Variables, left_childref: BT.G.Reference,
+      right_childref: BT.G.Reference, parentref: BT.G.Reference, slot: int, num_children_left: int, pivot: Key, left_child: Node, right_child: Node) : (s': BBC.Variables)
   requires s.Ready?
   requires parentref in s.cache
   requires BT.WFNode(s.cache[parentref]);
@@ -146,9 +145,9 @@ module SplitModel {
         [parentref := split_parent])
   }
 
-  function {:opaque} splitDoChanges(s: BCVariables, child: Node,
+  function {:opaque} splitDoChanges(s: BBC.Variables, child: Node,
       left_childref: BT.G.Reference, right_childref: BT.G.Reference, parentref: BT.G.Reference,
-      fused_parent_children: seq<BT.G.Reference>, slot: int) : (s': BCVariables)
+      fused_parent_children: seq<BT.G.Reference>, slot: int) : (s': BBC.Variables)
   requires s.Ready?
   requires parentref in s.cache
   requires BT.WFNode(s.cache[parentref]);
@@ -157,17 +156,18 @@ module SplitModel {
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires 0 <= slot < |fused_parent_children|
   requires |child.buckets| >= 2
-  requires WriteAllocConditions(s)
+  requires s.WriteAllocConditions()
   requires ChildrenConditions(s, Some(fused_parent_children))
   requires ChildrenConditions(s, child.children)
   requires |fused_parent_children| < MaxNumChildren()
-  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
+  // requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
   {
     var num_children_left := |child.buckets| / 2;
     var pivot := GetKey(child.pivotTable, num_children_left);
 
     if PivotInsertable(s.cache[parentref].pivotTable, slot+1, pivot) then (
       lemmaChildrenConditionsSplitChild(s, child, num_children_left);
+
 
       var left_child := SplitChildLeft(child, num_children_left);
       var right_child := SplitChildRight(child, num_children_left);
@@ -179,10 +179,10 @@ module SplitModel {
     )
   }
 
-  function {:opaque} splitChild(s: BCVariables, parentref: BT.G.Reference, 
-    childref: BT.G.Reference, slot: int, lbound: Key, ubound: Option<Key>): (s': BCVariables)
+  function {:opaque} splitChild(s: BBC.Variables, parentref: BT.G.Reference, 
+    childref: BT.G.Reference, slot: int, lbound: Key, ubound: Option<Key>): (s': BBC.Variables)
   requires s.Ready?
-  requires BCInv(s)
+  requires BBC.Inv(s)
   requires parentref in s.cache
   requires childref in s.cache
   requires BT.WFNode(s.cache[parentref]);
@@ -194,7 +194,6 @@ module SplitModel {
   requires ChildrenConditions(s, s.cache[childref].children)
   requires ChildrenConditions(s, s.cache[parentref].children)
   requires |s.cache[parentref].children.value| < MaxNumChildren()
-  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
   {
     var fused_parent := s.cache[parentref];
     var fused_child := s.cache[childref];
@@ -221,10 +220,10 @@ module SplitModel {
     )
   }
 
-  function {:opaque} doSplit(s: BCVariables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
-  : (s': BCVariables)
+  function {:opaque} doSplit(s: BBC.Variables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
+  : (s': BBC.Variables)
   requires s.Ready?
-  requires BCInv(s)
+  requires BBC.Inv(s)
   requires childref in s.ephemeralIndirectionTable.graph
   requires parentref in s.ephemeralIndirectionTable.graph
   requires childref in s.cache
@@ -233,7 +232,6 @@ module SplitModel {
   requires |s.cache[parentref].buckets| <= MaxNumChildren() - 1
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires s.cache[parentref].children.value[slot] == childref
-  requires |s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 3
   {
     if (
       && s.frozenIndirectionTable.Some?
@@ -268,12 +266,14 @@ module SplitModel {
     )
   }
 
-  lemma doSplitCorrect(s: BCVariables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
+  lemma doSplitCorrect(s: BBC.Variables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
   requires doSplit.requires(s, parentref, childref, slot)
-  requires TotalCacheSize(s) <= MaxCacheSize() - 2
+  requires s.totalCacheSize() <= MaxCacheSize() - 2
   ensures var s' := doSplit(s, parentref, childref, slot);
-    && WFBCVars(s')
-    && betree_next(IBlockCache(s), IBlockCache(s'))
+    && s'.Ready?
+    && s'.totalCacheSize() <= MaxCacheSize()
+    && StateBCImpl.WFCache(s'.cache)
+    && betree_next(s, s')
   {
     var s' := doSplit(s, parentref, childref, slot);
     reveal_doSplit();
@@ -282,17 +282,16 @@ module SplitModel {
       && s.frozenIndirectionTable.Some?
       && s.frozenIndirectionTable.value.hasEmptyLoc(parentref)
     ) {
-      assert noop(IBlockCache(s), IBlockCache(s));
+      assert noop(s, s);
       return;
     } 
-
     var fused_parent := s.cache[parentref];
     var fused_child := s.cache[childref];
     if !( 
         && Keyspace.lte(fused_child.pivotTable[0], fused_parent.pivotTable[slot])
         && Keyspace.lte(fused_parent.pivotTable[slot+1], Last(fused_child.pivotTable))
     ) {
-      assert noop(IBlockCache(s), IBlockCache(s));
+      assert noop(s, s);
       return;
     }
 
@@ -306,7 +305,7 @@ module SplitModel {
       && ValidSplitKey(fused_child, lbound, ubound) 
       && ValidSplitKey(fused_parent, lbound, ubound)
     ) {
-      assert noop(IBlockCache(s), IBlockCache(s));
+      assert noop(s, s);
       return;
     }
 
@@ -317,28 +316,28 @@ module SplitModel {
     if (|child.pivotTable| == 2) {
       // TODO there should be an operation which just
       // cuts off the node and doesn't split it.          
-      assert noop(IBlockCache(s), IBlockCache(s));
+      assert noop(s, s);
       return;
     }
-      
+
     var left_childref := getFreeRef(s);
     if left_childref.None? {
-      assert noop(IBlockCache(s), IBlockCache(s));
+      assert noop(s, s);
       return;
     }
-      
+
     var right_childref := getFreeRef2(s, left_childref.value);
     if right_childref.None? {
-      assert noop(IBlockCache(s), IBlockCache(s));
+      assert noop(s, s);
       return;
     }
-      
+
     reveal_splitDoChanges();
     var num_children_left := |child.buckets| / 2;
     var pivot := GetKey(child.pivotTable, num_children_left);
 
     if !PivotInsertable(fused_parent.pivotTable, slot+1, pivot) {
-      assert noop(IBlockCache(s), IBlockCache(s));
+      assert noop(s, s);
       return;
     }
       
@@ -380,25 +379,21 @@ module SplitModel {
 
     PBSWF.ValidSplitWritesWFNodes(splitStep);
     lemmaBlockPointsToValidReferences(s, childref);
-    assert BC.BlockPointsToValidReferences(fused_child, s.ephemeralIndirectionTable.I().graph);
-    lemmaSplitChildValidReferences(fused_child, child, num_children_left, s.ephemeralIndirectionTable.I().graph, lbound, ubound);
+    assert BC.BlockPointsToValidReferences(fused_child, s.ephemeralIndirectionTable.graph);
+    lemmaSplitChildValidReferences(fused_child, child, num_children_left, s.ephemeralIndirectionTable.graph, lbound, ubound);
 
     writeNewRefIsAlloc(s, left_childref.value, left_child);
     writeNewRefIsAlloc(s1, right_childref.value, right_child);
 
     lemmaBlockPointsToValidReferences(s, parentref);
-    assert BC.BlockPointsToValidReferences(fused_parent, s2.ephemeralIndirectionTable.I().graph);
-    lemmaSplitParentValidReferences(fused_parent, pivot, slot, left_childref.value, right_childref.value, s2.ephemeralIndirectionTable.I().graph);
+    assert BC.BlockPointsToValidReferences(fused_parent, s2.ephemeralIndirectionTable.graph);
+    lemmaSplitParentValidReferences(fused_parent, pivot, slot, left_childref.value, right_childref.value, s2.ephemeralIndirectionTable.graph);
 
     assert child == CutoffNode(fused_child, lbound, ubound);
     assert 1 <= num_children_left < |child.buckets|;
 
-    LruModel.LruUse(s2.lru, parentref);
-    assert LruModel.WF(s'.lru);
-
     assert splitStep.num_children_left == num_children_left;
     assert splitStep.fused_child == fused_child;
-
     assert left_childref.value != right_childref.value;
     assert ValidSplit(splitStep);
     var step := BetreeSplit(splitStep);
@@ -408,7 +403,7 @@ module SplitModel {
       BT.G.WriteOp(parentref, split_parent)
     ];
     assert ops == BetreeStepOps(step);
-    BC.MakeTransaction3(IBlockCache(s), IBlockCache(s1), IBlockCache(s2), IBlockCache(s'), ops);
-    assert stepsBetree(IBlockCache(s), IBlockCache(s'), AdvanceOp(UI.NoOp, true), step);
+    BC.MakeTransaction3(s, s1, s2, s', ops);
+    assert stepsBetree(s, s', AdvanceOp(UI.NoOp, true), step);
   }
 }

@@ -8,7 +8,6 @@ include "CoordinationImpl.i.dfy"
 include "HandleReadResponseImpl.i.dfy"
 include "HandleWriteResponseImpl.i.dfy"
 include "Mkfs.i.dfy"
-include "CoordinationModel.i.dfy"
 include "AllocationReport.i.dfy"
 include "../ByteBlockCacheSystem/ByteSystem_Refines_ThreeStateVersionedMap.i.dfy"
 
@@ -19,15 +18,12 @@ include "../ByteBlockCacheSystem/ByteSystem_Refines_ThreeStateVersionedMap.i.dfy
 module MainHandlers refines Main { 
   import DebugAccumulator
   import DOM = DiskOpModel
-  import SM = StateModel
   import SI = StateBCImpl
   import opened EvictImpl // (jonh) only used for unverified debug hooks
   import CoordinationImpl
   import HandleReadResponseImpl
   import HandleReadResponseModel
   import HandleWriteResponseImpl
-  import HandleWriteResponseModel
-  import CoordinationModel
   import FullImpl
   import MkfsImpl
   import MkfsModel
@@ -45,8 +41,14 @@ module MainHandlers refines Main {
 
   import System_Ref = ByteSystem_Refines_ThreeStateVersionedMap
   import AllocationReport
+  import BJC = BlockJournalCache
 
   type FullVariables = FullImpl.Full
+
+  // predicate W(fs: FullVariables)
+  // {
+  //   fs.W()
+  // }
 
   predicate Inv(fs: FullVariables)
   {
@@ -55,7 +57,7 @@ module MainHandlers refines Main {
 
   function I(fs: FullVariables) : ADM.M.Variables
   {
-    SM.IVars(fs.I())
+    fs.I()
   }
 
   method PrintMetadata()
@@ -86,17 +88,16 @@ module MainHandlers refines Main {
   {
     var id1 := CoordinationImpl.pushSync(inout fs);
 
-    CoordinationModel.pushSyncCorrect(old_fs.I());
-
-    //assert ADM.M.Next(SM.IVars(old_fs.I()), SM.IVars(s.I()),
+    //assert ADM.M.Next(old_fs.I(), SM.IVars(s.I()),
     //   if id1 == 0 then UI.NoOp else UI.PushSyncOp(id1 as int),
     //   D.NoDiskOp);
 
     id := id1;
     ghost var uiop := if id == 0 then UI.NoOp else UI.PushSyncOp(id as int);
     if ValidDiskOp(io.diskOp()) {
-      BlockJournalCache.NextPreservesInv(SM.IVars(old_fs.I()), SM.IVars(fs.I()), uiop, IDiskOp(io.diskOp()));
+      BlockJournalCache.NextPreservesInv(old_fs.I(), fs.I(), uiop, IDiskOp(io.diskOp()));
     }
+
     //assert SM.Inv(hs.s.I());
     //assert hs.s.Inv();
     //assert Inv(hs);
@@ -167,12 +168,11 @@ module MainHandlers refines Main {
   returns (wait: bool, success: bool)
   {
     var succ, w := CoordinationImpl.popSync(inout fs, io, id, graphSync);
-    CoordinationModel.popSyncCorrect(old_fs.I(), old(IIO(io)), id, graphSync, fs.I(), IIO(io), succ);
     success := succ;
     wait := w;
     ghost var uiop := if succ then UI.PopSyncOp(id as int) else UI.NoOp;
     if ValidDiskOp(io.diskOp()) {
-      BlockJournalCache.NextPreservesInv(SM.IVars(old_fs.I()), SM.IVars(fs.I()), uiop, IDiskOp(io.diskOp()));
+      BlockJournalCache.NextPreservesInv(old_fs.I(), fs.I(), uiop, IDiskOp(io.diskOp()));
     }
     assert ADM.M.Next(I(old_fs), I(fs), // observe
         uiop,
@@ -183,10 +183,9 @@ module MainHandlers refines Main {
   returns (v: Option<Value>)
   {
     var value := CoordinationImpl.query(inout fs, io, key);
-    CoordinationModel.queryCorrect(old_fs.I(), old(IIO(io)), key, fs.I(), value, IIO(io));
     ghost var uiop := if value.Some? then UI.GetOp(key, value.value) else UI.NoOp;
     if ValidDiskOp(io.diskOp()) {
-      BlockJournalCache.NextPreservesInv(SM.IVars(old_fs.I()), SM.IVars(fs.I()), uiop, IDiskOp(io.diskOp()));
+      BlockJournalCache.NextPreservesInv(old_fs.I(), fs.I(), uiop, IDiskOp(io.diskOp()));
     }
     v := value;
     assert ADM.M.Next(I(old_fs), I(fs), // observe
@@ -198,10 +197,9 @@ module MainHandlers refines Main {
   returns (success: bool)
   {
     var succ := CoordinationImpl.insert(inout fs, io, key, value);
-    CoordinationModel.insertCorrect(old_fs.I(), old(IIO(io)), key, value, fs.I(), succ, IIO(io));
     ghost var uiop := if succ then UI.PutOp(key, value) else UI.NoOp;
     if ValidDiskOp(io.diskOp()) {
-      BlockJournalCache.NextPreservesInv(SM.IVars(old_fs.I()), SM.IVars(fs.I()), uiop, IDiskOp(io.diskOp()));
+      BlockJournalCache.NextPreservesInv(old_fs.I(), fs.I(), uiop, IDiskOp(io.diskOp()));
     }
     success := succ;
     assert ADM.M.Next(I(old_fs), I(fs), // observe
@@ -213,11 +211,10 @@ module MainHandlers refines Main {
   returns (res: Option<UI.SuccResultList>)
   {
     var value := CoordinationImpl.succ(inout fs, io, start, maxToFind);
-    CoordinationModel.succCorrect(old_fs.I(), old(IIO(io)), start, maxToFind as int, fs.I(), value, IIO(io));
     ghost var uiop := 
       if value.Some? then UI.SuccOp(start, value.value.results, value.value.end) else UI.NoOp;
     if ValidDiskOp(io.diskOp()) {
-      BlockJournalCache.NextPreservesInv(SM.IVars(old_fs.I()), SM.IVars(fs.I()), uiop, IDiskOp(io.diskOp()));
+      BlockJournalCache.NextPreservesInv(old_fs.I(), fs.I(), uiop, IDiskOp(io.diskOp()));
     }
     res := value;
     assert ADM.M.Next(I(old_fs), I(fs), // observe
@@ -228,10 +225,9 @@ module MainHandlers refines Main {
   method handleReadResponse(linear inout fs: FullVariables, io: DiskIOHandler)
   {
     HandleReadResponseImpl.readResponse(inout fs, io);
-    HandleReadResponseModel.readResponseCorrect(old_fs.I(), old(IIO(io)));
     ghost var uiop := UI.NoOp;
     if ValidDiskOp(io.diskOp()) {
-      BlockJournalCache.NextPreservesInv(SM.IVars(old_fs.I()), SM.IVars(fs.I()), uiop, IDiskOp(io.diskOp()));
+      BlockJournalCache.NextPreservesInv(old_fs.I(), fs.I(), uiop, IDiskOp(io.diskOp()));
     }
     assert ADM.M.Next(I(old_fs), I(fs), UI.NoOp, io.diskOp()); // observe
   }
@@ -239,10 +235,9 @@ module MainHandlers refines Main {
   method handleWriteResponse(linear inout fs: FullVariables, io: DiskIOHandler)
   {
     HandleWriteResponseImpl.writeResponse(inout fs, io);
-    HandleWriteResponseModel.writeResponseCorrect(old_fs.I(), old(IIO(io)));
     ghost var uiop := UI.NoOp;
     if ValidDiskOp(io.diskOp()) {
-      BlockJournalCache.NextPreservesInv(SM.IVars(old_fs.I()), SM.IVars(fs.I()), uiop, IDiskOp(io.diskOp()));
+      BlockJournalCache.NextPreservesInv(old_fs.I(), fs.I(), uiop, IDiskOp(io.diskOp()));
     }
     assert ADM.M.Next(I(old_fs), I(fs), UI.NoOp, io.diskOp()); // observe
   }

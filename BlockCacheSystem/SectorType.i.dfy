@@ -8,6 +8,9 @@ module SectorType {
   import opened NativeTypes
   import opened DiskLayout
   import opened PivotBetreeGraph
+  import opened Bounds
+
+  import opened ReferenceType`Internal
 
   datatype Superblock = Superblock(
       counter: uint64,
@@ -17,8 +20,31 @@ module SectorType {
 
   // TODO make indirectionTable take up more than one block
   datatype IndirectionTable = IndirectionTable(
-      locs: map<Reference, Location>,
-      graph: map<Reference, seq<Reference>>)
+    locs: map<ReferenceType.Reference, Location>,
+    graph: map<ReferenceType.Reference, seq<ReferenceType.Reference>>,
+    refUpperBound: uint64)
+  {
+    predicate hasEmptyLoc(ref: ReferenceType.Reference)
+    {
+      && ref in graph
+      && ref !in locs
+    }
+
+    predicate IsLocAllocIndirectionTable(i: int)
+    {
+      // Can't use the lower values, so they're always marked "allocated"
+      || 0 <= i < MinNodeBlockIndex()
+      || (!(
+        forall ref | ref in locs ::
+          locs[ref].addr as int != i * NodeBlockSize() as int
+      ))
+    }
+  }
+
+  // predicate test(indirectionTable: IndirectionTable)
+  // {
+  //   && (forall ref | ref in indirectionTable.graph :: ref <= indirectionTable.refUpperBound)
+  // }
 
   datatype Sector =
     | SectorSuperblock(superblock: Superblock)

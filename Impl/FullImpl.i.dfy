@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "StateBCImpl.i.dfy"
-include "StateModel.i.dfy"
 include "CommitterImpl.i.dfy"
 
 module FullImpl {
@@ -10,8 +9,8 @@ module FullImpl {
   import opened StateBCImpl
   import opened CommitterImpl
   import opened DiskOpImpl
-  import StateModel
   import JC = JournalCache
+  import BJC = BlockJournalCache
 
   linear datatype Full = Full(
     linear bc: Variables,
@@ -24,23 +23,24 @@ module FullImpl {
       && this.jc.WF()
     }
 
-    function I() : StateModel.Variables
+    function I() : BJC.Variables
     requires W()
     {
-      StateModel.Variables(bc.I(), jc)
+      BJC.Variables(bc.I(), jc.I())
     }
 
     predicate WF()
     {
       && W()
-      && this.bc.WF()
-      && this.jc.WF()
+      && bc.WFBCVars()
     }
 
     predicate Inv()
     {
-      && W()
-      && StateModel.Inv(I())
+      && WF()
+      && bc.Inv()
+      && jc.Inv()
+      && BJC.Inv(I())
     }
 
     static method Constructor() returns (linear f: Full)

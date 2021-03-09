@@ -32,7 +32,7 @@ module LeafImpl {
     k2 := [] + k;
   }
 
-  method repivotLeaf(linear inout s: ImplVariables, ref: BT.G.Reference)
+  method repivotLeafInternal(linear inout s: ImplVariables, ref: BT.G.Reference)
   requires old_s.Inv()
   requires old_s.Ready?
   requires ref in old_s.ephemeralIndirectionTable.I().graph
@@ -42,7 +42,9 @@ module LeafImpl {
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 1
   ensures s.Ready?
   ensures s.W()
+  ensures s.WriteAllocConditions()
   ensures s.I() == LeafModel.repivotLeaf(old_s.I(), ref, old_s.cache.I()[ref]);
+  ensures LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
   {
     LeafModel.reveal_repivotLeaf();
     var b := false;
@@ -87,5 +89,21 @@ module LeafImpl {
         assert a.cache == b.cache;
       }
     }
+  }
+
+  method repivotLeaf(linear inout s: ImplVariables, ref: BT.G.Reference)
+  requires old_s.Inv()
+  requires old_s.Ready?
+  requires ref in old_s.ephemeralIndirectionTable.I().graph
+  requires old_s.cache.ptr(ref).Some?
+  requires old_s.cache.I()[ref].children.None?
+  requires |old_s.cache.I()[ref].buckets| == 1
+  requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 1
+
+  ensures s.WFBCVars() && s.Ready?;
+  ensures IOModel.betree_next(old_s.I(), s.I())
+  {
+    repivotLeafCorrect(s.I(), ref, s.cache.I()[ref]);
+    repivotLeafInternal(inout s, ref);
   }
 }

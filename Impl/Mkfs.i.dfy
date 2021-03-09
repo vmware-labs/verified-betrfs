@@ -45,7 +45,7 @@ module MkfsImpl {
 
     linear var node := Node.EmptyNode();
     ghost var i:SSM.Sector := SSI.ISector(SSI.SectorNode(node));
-    assert SSM.WFNode(i.node) by {
+    assert BT.WFNode(i.node) by {
       reveal_WeightBucketList();
     }
 
@@ -64,7 +64,8 @@ module MkfsImpl {
 
     assert sectorIndirectionTable.I() == IndirectionTable(
       map[0 := nodeLoc],
-      map[0 := []]
+      map[0 := []],
+      BT.G.Root()
     );
 
     assert BC.WFCompleteIndirectionTable(sectorIndirectionTable.I());

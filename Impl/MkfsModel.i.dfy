@@ -57,7 +57,8 @@ module MkfsModel {
     && Marshalling.parseCheckedSector(bIndirectionTable)
       == Some(SectorIndirectionTable(IndirectionTable(
         map[BT.G.Root() := nodeLoc],
-        map[BT.G.Root() := []]
+        map[BT.G.Root() := []],
+        0
       )))
     && Marshalling.parseCheckedSector(bNode)
       == Some(SectorNode(BT.EmptyNode()))
@@ -117,7 +118,8 @@ module MkfsModel {
         && IndirectionTableOfBytes(bIndirectionTable)
           == IndirectionTable(
               map[BT.G.Root() := nodeLoc],
-              map[BT.G.Root() := []]
+              map[BT.G.Root() := []],
+              0
             )
       by {
         reveal_SectorOfBytes();

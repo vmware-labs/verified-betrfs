@@ -22,20 +22,23 @@ module GrowImpl {
   import opened LinearSequence_s
   import opened LinearSequence_i
   import opened BoundedPivotsLib
+  import opened Bounds
 
   import IT = IndirectionTable
 
   import opened NativeTypes
 
   /// The root was found to be too big: grow
-  method grow(linear inout s: ImplVariables)
+  method doGrow(linear inout s: ImplVariables)
   requires old_s.Inv()
   requires old_s.Ready?
   requires BT.G.Root() in old_s.I().cache
-  requires |old_s.I().ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
+  requires |old_s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
   ensures s.W()
   ensures s.Ready?
   ensures s.I() == GrowModel.grow(old_s.I())
+  ensures s.WriteAllocConditions()
+  ensures LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
   {
     GrowModel.reveal_grow();
 
@@ -56,14 +59,17 @@ module GrowImpl {
       var containsall := ComputeContainsAllKeys(oldpivots);
       if !containsall {
         print "giving up; grow can't run because root node is incorrect";
+        assert old_s.I() == s.I();
       } else {
-        BookkeepingModel.lemmaChildrenConditionsSingleOfAllocBookkeeping(s.I(), oldchildren);
+        // BookkeepingModel.lemmaChildrenConditionsSingleOfAllocBookkeeping(s.I(), oldchildren);
         var newref := allocBookkeeping(inout s, oldchildren);
         match newref {
           case None => {
             print "giving up; could not allocate ref\n";
+            assert old_s.I() == s.I();
           }
           case Some(newref) => {
+            // assert BookkeepingModel.ChildrenConditions(s.I(), Some([newref]));
             WeightBucketEmpty();
 
             linear var mutbucket := MutBucket.Alloc();
@@ -77,14 +83,27 @@ module GrowImpl {
             writeBookkeeping(inout s, root, Some([newref]));
             inout s.cache.MoveAndReplace(root, newref, newroot);
 
-            ghost var a := s.I();
-            ghost var b := GrowModel.grow(old_s.I());
-            assert a.cache == b.cache;
-            assert a.ephemeralIndirectionTable == b.ephemeralIndirectionTable;
-            assert a.lru == b.lru;
+            assert LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
           }
         }
       }
+    } else {
+      assert old_s.I() == s.I();
     }
+  }
+
+  method grow(linear inout s: ImplVariables)
+  requires old_s.Inv()
+  requires old_s.Ready?
+  requires BT.G.Root() in old_s.I().cache
+  requires |old_s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
+  requires old_s.totalCacheSize() <= MaxCacheSize() - 1
+  
+  ensures s.WFBCVars() && s.Ready?;
+  ensures IOModel.betree_next(old_s.I(), s.I())
+  {
+    GrowModel.growCorrect(s.I());
+    doGrow(inout s);
+    assert s.WFBCVars();
   }
 }

@@ -10,7 +10,6 @@ include "../lib/DataStructures/LinearContentMutableMap.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 include "NodeImpl.i.dfy"
 include "BucketGeneratorImpl.i.dfy"
-include "FlushPolicyModel.i.dfy"
 
 //
 // Implements map<Reference, Node>
@@ -36,8 +35,7 @@ module CacheImpl {
   import Pivots = BoundedPivotsLib
   import BucketsLib
 
-  import BGI = BucketGeneratorImpl
-  import FPM = FlushPolicyModel
+  import opened BGI = BucketGeneratorImpl
 
   import opened LinearBox
   import opened LinearBox_s
@@ -45,6 +43,7 @@ module CacheImpl {
   import opened LCMM = LinearContentMutableMap
 
   import opened LinearSequence_s
+
 
 // begin generated export
   export Spec
@@ -258,11 +257,17 @@ module CacheImpl {
     requires oldref in old_self.I()
     ensures self.Inv()
     ensures self.I() == old_self.I()[oldref := node.I()][newref := old_self.I()[oldref]]
+    ensures newref !in old_self.I() ==> |self.I()| == |old_self.I()| + 1;
+    ensures newref in old_self.I() ==> |self.I()| == |old_self.I()|;
+    ensures self.I().Keys == old_self.I().Keys + {newref};
     {
       self.LemmaSizeEqCount();
       linear var replaced := LCMM.Insert(inout self.cache, oldref, node);
       assert self.cache.contents[oldref] == node;
       assert replaced.lSome?;
+
+      self.LemmaSizeEqCount();
+      assert |self.I()| == |old_self.I()|;
 
       linear var lSome(oldnode) := replaced;
       linear var replaced2 := LCMM.Insert(inout self.cache, newref, oldnode);
@@ -272,6 +277,8 @@ module CacheImpl {
         }
         case lNone() => { }
       }
+
+      self.LemmaSizeEqCount();
     }
 
     // Like Insert, but with slightly different requires
@@ -502,8 +509,8 @@ module CacheImpl {
     returns (res : (uint64, uint64))
     requires Inv()
     requires ptr(ref).Some?
-    requires FPM.biggestSlot.requires(I()[ref].buckets)
-    ensures res == FPM.biggestSlot(I()[ref].buckets)
+    requires biggestSlot.requires(I()[ref].buckets)
+    ensures res == biggestSlot(I()[ref].buckets)
     {
       shared var node := Get(ref);
       shared var buckets := node.buckets;
@@ -514,9 +521,9 @@ module CacheImpl {
       var bestWeight := lseq_peek(buckets, 0).weight;
 
       while j < lseq_length_as_uint64(buckets)
-      invariant FPM.biggestSlotIterate.requires(MutBucket.ILseq(buckets), j, bestIdx, bestWeight)
-      invariant FPM.biggestSlotIterate(MutBucket.ILseq(buckets), j, bestIdx, bestWeight) 
-        == FPM.biggestSlot(MutBucket.ILseq(buckets))
+      invariant biggestSlotIterate.requires(MutBucket.ILseq(buckets), j, bestIdx, bestWeight)
+      invariant biggestSlotIterate(MutBucket.ILseq(buckets), j, bestIdx, bestWeight) 
+        == biggestSlot(MutBucket.ILseq(buckets))
       {
         WeightBucketLeBucketList(MutBucket.ILseq(buckets), j as int);
         var w := lseq_peek(buckets, j).weight;

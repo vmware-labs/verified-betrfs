@@ -29,10 +29,11 @@ module FlushImpl {
   import opened NativeTypes
   import BookkeepingModel
   import FlushModel
+  import IOModel
 
   import IT = IndirectionTable
 
-  method flush(linear inout s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference)
+  method flushInteral(linear inout s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference)
   requires old_s.Inv()
   requires old_s.Ready?
   requires old_s.cache.ptr(childref).Some?
@@ -50,8 +51,10 @@ module FlushImpl {
 
   ensures s.W()
   ensures s.Ready?
-  ensures FlushModel.flush(old_s.I(), parentref, slot as int, childref, 
-    old_s.cache.I()[childref]) == s.I()
+  ensures s.WriteAllocConditions()
+  ensures s.I() == FlushModel.flush(old_s.I(), parentref, slot as int, childref, 
+    old_s.cache.I()[childref]);
+  ensures LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
   {
     var b := false;
     if s.frozenIndirectionTable.lSome? {
@@ -89,62 +92,36 @@ module FlushImpl {
             slot, newparentBucket, newchildref.value);
           writeBookkeeping(inout s, parentref, newparent_children);
 
-          //Native.BenchmarkingUtil.end();
+          assert LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
         }
       } else {
         print "giving up; flush can't run because flushed keys are out of bound for its children";
       }
     }
   }
-}
+  
+  method flush(linear inout s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference)
+  requires old_s.Inv()
+  requires old_s.Ready?
+  requires old_s.cache.ptr(childref).Some?
 
-/*
-Impl/FlushImpl.i.dfy(32,9): Verification out of resource (Impl$$FlushImpl.__default.flush)
-Impl/FlushImpl.i.dfy(83,30): Out of resource on BP5002: A precondition for this call might not hold.
-Impl/CacheImpl.i.dfy(115,28): Related location: This is the precondition that might not hold.
-Execution trace:
-    (0,0): anon0
-    (0,0): anon11_Else
-    (0,0): anon3
-    (0,0): anon12_Else
-    (0,0): anon13_Then
-    (0,0): anon14_Else
-Impl/FlushImpl.i.dfy(85,64): Out of resource on BP5002: A precondition for this call might not hold.
-Impl/CacheImpl.i.dfy(233,31): Related location: This is the precondition that might not hold.
-Execution trace:
-    (0,0): anon0
-    (0,0): anon11_Else
-    (0,0): anon3
-    (0,0): anon12_Else
-    (0,0): anon13_Then
-    (0,0): anon14_Else
-Impl/FlushImpl.i.dfy(85,64): Out of resource on BP5002: A precondition for this call might not hold.
-Impl/CacheImpl.i.dfy(234,16): Related location: This is the precondition that might not hold.
-Impl/../PivotBetree/PivotBetreeSpec.i.dfy(82,35): Related location
-Execution trace:
-    (0,0): anon0
-    (0,0): anon11_Else
-    (0,0): anon3
-    (0,0): anon12_Else
-    (0,0): anon13_Then
-    (0,0): anon14_Else
-Impl/FlushImpl.i.dfy(85,64): Out of resource on BP5002: A precondition for this call might not hold.
-Impl/CacheImpl.i.dfy(234,16): Related location: This is the precondition that might not hold.
-Impl/../PivotBetree/PivotBetreeSpec.i.dfy(83,47): Related location
-Execution trace:
-    (0,0): anon0
-    (0,0): anon11_Else
-    (0,0): anon3
-    (0,0): anon12_Else
-    (0,0): anon13_Then
-    (0,0): anon14_Else
-Impl/FlushImpl.i.dfy(85,64): Out of resource on BP5002: A precondition for this call might not hold.
-Impl/CacheImpl.i.dfy(235,28): Related location: This is the precondition that might not hold.
-Execution trace:
-    (0,0): anon0
-    (0,0): anon11_Else
-    (0,0): anon3
-    (0,0): anon12_Else
-    (0,0): anon13_Then
-    (0,0): anon14_Else
-*/
+  requires parentref in old_s.ephemeralIndirectionTable.I().graph
+  requires parentref in old_s.cache.I()
+
+  requires old_s.cache.I()[parentref].children.Some?
+  requires 0 <= slot as int < |old_s.cache.I()[parentref].children.value|
+  requires old_s.cache.I()[parentref].children.value[slot] == childref
+
+  requires childref in old_s.ephemeralIndirectionTable.I().graph
+
+  requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 2
+
+  requires old_s.totalCacheSize() <= MaxCacheSize() - 1
+
+  ensures s.WFBCVars() && s.Ready?
+  ensures IOModel.betree_next(old_s.I(), s.I())
+  {
+    FlushModel.flushCorrect(s.I(), parentref, slot as int, childref, s.cache.I()[childref]);
+    flushInteral(inout s, parentref, slot, childref);
+  }
+}

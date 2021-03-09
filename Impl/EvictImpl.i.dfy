@@ -1,16 +1,14 @@
 // Copyright 2018-2021 VMware, Inc.
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "EvictModel.i.dfy"
-include "DeallocImpl.i.dfy"
 include "SyncImpl.i.dfy"
+include "DeallocImpl.i.dfy"
 
 module EvictImpl {
   import opened IOImpl
   import opened BookkeepingImpl
   import opened DeallocImpl
   import opened SyncImpl
-  import EvictModel
   import opened DiskOpImpl
   import opened StateBCImpl
   import opened Bounds
@@ -25,24 +23,28 @@ module EvictImpl {
 
   import LruModel
 
-  method Evict(linear inout s: ImplVariables, ref: BT.G.Reference)
-  requires old_s.WF()
-  requires old_s.Ready?
-  requires ref in old_s.cache.I()
-  ensures s.W()
-  ensures s.Ready?
-  ensures s.I() == EvictModel.Evict(old_s.I(), ref)
+  import opened InterpretationDiskOps
+  import opened ViewOp
+  import opened DiskOpModel
+
+  predicate needToWrite(s: ImplVariables, ref: BT.G.Reference)
+  requires s.Ready?
   {
-    inout s.lru.Remove(ref);
-    inout s.cache.Remove(ref);
-    assert s.I().cache == EvictModel.Evict(old_s.I(), ref).cache;
+    || (
+      && ref in s.ephemeralIndirectionTable.graph
+      && ref !in s.ephemeralIndirectionTable.locs
+    )
+    || (
+      && s.frozenIndirectionTable.lSome?
+      && ref in s.frozenIndirectionTable.value.graph
+      && ref !in s.frozenIndirectionTable.value.locs
+    )
   }
 
   method NeedToWrite(shared s: ImplVariables, ref: BT.G.Reference)
   returns (b: bool)
-  requires s.WF()
-  requires s.Ready?
-  ensures b == EvictModel.NeedToWrite(s.I(), ref)
+  requires s.W() && s.Ready?
+  ensures b == needToWrite(s, ref)
   {
     var eph := s.ephemeralIndirectionTable.GetEntry(ref);
     if eph.Some? && eph.value.loc.None? {
@@ -59,13 +61,22 @@ module EvictImpl {
     return false;
   }
 
+  predicate canEvict(s: ImplVariables, ref: BT.G.Reference)
+  requires s.Ready?
+  requires ref in s.ephemeralIndirectionTable.graph ==>
+      ref in s.ephemeralIndirectionTable.locs
+  {
+    && (ref in s.ephemeralIndirectionTable.graph ==>
+      && BC.OutstandingWrite(ref, s.ephemeralIndirectionTable.locs[ref]) !in s.outstandingBlockWrites.Values
+    )
+  }
+
   method CanEvict(shared s: ImplVariables, ref: BT.G.Reference)
   returns (b: bool)
-  requires s.WF()
-  requires s.Ready?
+  requires s.W() && s.Ready?
   requires ref in s.ephemeralIndirectionTable.I().graph ==>
       ref in s.ephemeralIndirectionTable.I().locs
-  ensures b == EvictModel.CanEvict(s.I(), ref)
+  ensures b == canEvict(s, ref)
   {
     var eph := s.ephemeralIndirectionTable.GetEntry(ref);
     if (eph.Some?) {
@@ -76,59 +87,71 @@ module EvictImpl {
   }
 
   method EvictOrDealloc(linear inout s: ImplVariables, io: DiskIOHandler)
-  requires old_s.Inv()
-  requires old_s.Ready?
+  requires old_s.Inv() && old_s.Ready?
   requires io.initialized()
   requires |old_s.cache.I()| > 0
   modifies io
-  ensures s.W()
-  ensures s.Ready?
-  ensures EvictModel.EvictOrDealloc(old_s.I(), old(IIO(io)), s.I(), IIO(io))
+  ensures s.WFBCVars() && s.Ready?
+  ensures ValidDiskOp(diskOp(IIO(io)))
+  ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
+  ensures
+    || BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
+    || BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.NoOp, true))
   {
     var ref := FindDeallocable(s);
-    DeallocModel.FindDeallocableCorrect(s.I());
 
     if ref.Some? {
       Dealloc(inout s, io, ref.value);
     } else {
       var refOpt := s.lru.NextOpt();
-      if refOpt.None? {
-      } else {
+      if refOpt.Some? {
         var ref := refOpt.value;
         var needToWrite := NeedToWrite(s, ref);
         if needToWrite {
           if s.outstandingIndirectionTableWrite.None? {
             TryToWriteBlock(inout s, io, ref);
+          } else {
+            assert IOModel.noop(s.I(), s.I());
           }
         } else {
           var canEvict := CanEvict(s, ref);
           if canEvict {
-            Evict(inout s, ref);
+            LruModel.LruRemove(s.lru.Queue(), ref);
+            inout s.lru.Remove(ref);
+            inout s.cache.Remove(ref);
+            assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.EvictStep(ref));
+          } else {
+            assert IOModel.noop(s.I(), s.I());
           }
         }
+      } else {
+        assert IOModel.noop(s.I(), s.I());
       }
     }
   }
 
   method PageInNodeReqOrMakeRoom(linear inout s: ImplVariables, io: DiskIOHandler, ref: BT.G.Reference)
-  requires old_s.Inv()
-  requires old_s.Ready?
+  requires old_s.Inv() && old_s.Ready?
   requires io.initialized()
   requires ref in old_s.ephemeralIndirectionTable.I().graph
   requires ref !in old_s.cache.I()
   modifies io
-  ensures s.W()
-  ensures s.Ready?
-  ensures EvictModel.PageInNodeReqOrMakeRoom(old_s.I(), old(IIO(io)), ref, s.I(), IIO(io))
+  ensures s.WFBCVars() && s.Ready?
+  ensures ValidDiskOp(diskOp(IIO(io)))
+  ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
+  ensures
+    || BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp)
+    || BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.NoOp, true))
   {
-    EvictModel.reveal_PageInNodeReqOrMakeRoom();
-
     if s.TotalCacheSize() <= MaxCacheSizeUint64() - 1 {
       PageInNodeReq(inout s, io, ref);
+      assert ValidDiskOp(diskOp(IIO(io)));
     } else {
       var c := CacheImpl.CacheCount(s.cache); 
       if c > 0 {
         EvictOrDealloc(inout s, io);
+      } else {
+        assert IOModel.noop(s.I(), s.I());
       }
     }
   }

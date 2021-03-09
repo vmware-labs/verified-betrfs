@@ -34,6 +34,10 @@ module FlushPolicyImpl {
   import opened BucketsLib
   import opened BucketWeights
 
+  import opened InterpretationDiskOps
+  import opened ViewOp
+  import opened DiskOpModel
+
   // temporarily moving method to cache
   // method biggestSlot(shared buckets: lseq<MutBucket>) returns (res : (uint64, uint64))
   // requires MutBucket.InvLseq(buckets)
@@ -102,7 +106,7 @@ module FlushPolicyImpl {
   requires old_s.Inv()
   requires FlushPolicyModel.ValidStackSlots(old_s.I(), stack, slots)
   decreases 0x1_0000_0000_0000_0000 - |stack|
-  ensures s.W()
+  ensures s.Inv()
   ensures s.Ready?
   ensures (s.I(), action) == FlushPolicyModel.getActionToFlush(old_s.I(), stack, slots)
   {
@@ -152,21 +156,21 @@ module FlushPolicyImpl {
   }
 
   method runFlushPolicy(linear inout s: ImplVariables, io: DiskIOHandler)
-  requires old_s.Inv()
+  requires old_s.Inv() && old_s.Ready?
   requires io.initialized()
-  requires old_s.Ready?
   requires BT.G.Root() in old_s.cache.I()
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
-  modifies io
-  ensures s.W()
-  ensures s.Ready?
-  ensures FlushPolicyModel.runFlushPolicy(old_s.I(), old(IIO(io)), s.I(), IIO(io))
-  {
-    FlushPolicyModel.reveal_runFlushPolicy();
 
+  modifies io
+
+  ensures s.WFBCVars() && s.Ready?
+  ensures ValidDiskOp(diskOp(IIO(io)))
+  ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
+  ensures IOModel.betree_next_dop(old_s.I(), s.I(),
+      IDiskOp(diskOp(IIO(io))).bdop)
+  {
     LruModel.LruUse(s.lru.Queue(), BT.G.Root());
     inout s.lru.Use(BT.G.Root());
-    assert SBCM.IBlockCache(s.I()) == SBCM.IBlockCache(old_s.I());
 
     FlushPolicyModel.getActionToFlushValidAction(s.I(), [BT.G.Root()], []);
     var action := getActionToFlush(inout s, [BT.G.Root()], []);
@@ -177,7 +181,7 @@ module FlushPolicyImpl {
       }
       case ActionSplit(parentref, slot) => {
         var _, parent_children := s.cache.GetNodeInfo(parentref);
-        doSplit(inout s, parentref, parent_children.value[slot], slot);
+        split(inout s, parentref, parent_children.value[slot], slot);
       }
       case ActionRepivot(ref) => {
         repivotLeaf(inout s, ref);
@@ -194,6 +198,7 @@ module FlushPolicyImpl {
         EvictOrDealloc(inout s, io);
       }
       case ActionFail => {
+        assert IOModel.noop(old_s.I(), s.I());
         print "ActionFail\n";
       }
     }

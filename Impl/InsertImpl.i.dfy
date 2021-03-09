@@ -15,7 +15,7 @@ include "../PivotBetree/PivotBetreeSpec.i.dfy"
 module InsertImpl { 
   import opened IOImpl
   import opened BookkeepingImpl
-  import opened InsertModel
+  import InsertModel
   import opened StateBCImpl
   import opened StateSectorImpl
   import opened FlushPolicyImpl
@@ -40,18 +40,22 @@ module InsertImpl {
   import opened NodeImpl
   import opened BoundedPivotsLib
 
-  method InsertKeyValue(linear inout s: ImplVariables, key: Key, value: Value)
+  import opened InterpretationDiskOps
+  import opened ViewOp
+  import opened DiskOpModel
+
+  method insertKeyValue(linear inout s: ImplVariables, key: Key, value: Value)
   returns (success: bool)
-  requires old_s.Inv()
-  requires old_s.Ready?
+  requires old_s.Inv() && old_s.Ready?
   requires BT.G.Root() in old_s.cache.I()
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 1
   requires BoundedKey(old_s.cache.I()[BT.G.Root()].pivotTable, key)
-  ensures s.W()
+  ensures s.W() 
+  ensures s.WriteAllocConditions() 
   ensures (s.I(), success) == InsertModel.InsertKeyValue(old_s.I(), key, value)
+  ensures LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
   {
-    InsertModel.reveal_InsertKeyValue();
-
+    reveal InsertModel.InsertKeyValue();
     BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), BT.G.Root());
     success := true;
 
@@ -63,26 +67,29 @@ module InsertImpl {
       }
     }
 
-    if (success) {
+    if success {
       var msg := ValueMessage.Define(value);
       inout s.cache.InsertKeyValue(BT.G.Root(), key, msg);
-
       writeBookkeepingNoSuccsUpdate(inout s, BT.G.Root());
     }
   }
 
   //TODO Check to see if casing on success is OK
   //     Before it returned but cant do that with linear
-  method insert(linear inout s: ImplVariables, io: DiskIOHandler, key: Key, value: Value)
+  method insert(linear inout s: ImplVariables, io: DiskIOHandler, key: Key, value: Value, ghost replay: bool)
   returns (success: bool)
   requires io.initialized()
-  requires old_s.Inv()
-  requires old_s.Ready?
+  requires old_s.Inv() && old_s.Ready?
   modifies io
-  ensures s.W()
-  ensures InsertModel.insert(old_s.I(), old(IIO(io)), key, value, s.I(), success, IIO(io))
+
+  ensures s.WFBCVars()
+  ensures ValidDiskOp(diskOp(IIO(io)))
+  ensures IDiskOp(diskOp(IIO(io))).jdop.NoDiskOp?
+  ensures success ==>
+    BBC.Next(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, AdvanceOp(UI.PutOp(key, value), replay))
+  ensures !success ==>
+    IOModel.betree_next_dop(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop)
   {
-    InsertModel.reveal_insert();
     success := true;
 
     var indirectionTableSize := s.ephemeralIndirectionTable.GetSize();
@@ -90,7 +97,7 @@ module InsertImpl {
       success := false;
     }
 
-    if (success){
+    if success{
       var rootLookup := s.cache.InCache(BT.G.Root());
       if !rootLookup {
         if s.TotalCacheSize() <= MaxCacheSizeUint64() - 1 {
@@ -103,7 +110,7 @@ module InsertImpl {
       }
     }
 
-    if (success) {
+    if success {
       var pivots, _ := s.cache.GetNodeInfo(BT.G.Root());
       var bounded := ComputeBoundedKey(pivots, key);
       if !bounded {
@@ -112,15 +119,20 @@ module InsertImpl {
       }
     }
 
-    if (success) {
+    if success {
       var weightSeq := s.cache.NodeBucketsWeight(BT.G.Root());
       if WeightKeyUint64(key) + WeightMessageUint64(ValueMessage.Define(value)) + weightSeq
         <= MaxTotalBucketWeightUint64() {
-          success := InsertKeyValue(inout s, key, value);
+          InsertModel.InsertKeyValueCorrect(s.I(), key, value, replay);
+          success := insertKeyValue(inout s, key, value);
       } else {
         runFlushPolicy(inout s, io);
         success := false;
       }
+    }
+
+    if !success {
+      assert IOModel.noop(s.I(), s.I());
     }
   }
 }

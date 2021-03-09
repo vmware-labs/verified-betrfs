@@ -1,7 +1,6 @@
 // Copyright 2018-2021 VMware, Inc.
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "StateBCModel.i.dfy"
 include "BookkeepingModel.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/Sets.i.dfy"
@@ -11,7 +10,6 @@ include "BucketSuccessorLoopModel.i.dfy"
 // See dependency graph in MainHandlers.dfy
 
 module SuccModel { 
-  import opened StateBCModel
   import opened StateSectorModel
   import opened IOModel
   import opened BookkeepingModel
@@ -39,8 +37,7 @@ module SuccModel {
   // Awkwardly split up for verification time reasons
 
   function {:opaque} getPathInternal(
-      
-      s: BCVariables,
+      s: BBC.Variables,
       io: IO,
       key: Key,
       acc: seq<Bucket>,
@@ -50,11 +47,11 @@ module SuccModel {
       ref: BT.G.Reference,
       counter: uint64,
       node: Node)
-  : (res : (BCVariables, IO, Option<UI.SuccResultList>))
-  requires BCInv(s)
+  : (res : (BBC.Variables, IO, Option<UI.SuccResultList>))
+  requires BBC.Inv(s)
   requires s.Ready?
   requires io.IOInit?
-  requires WFNode(node)
+  requires BT.WFNode(node)
   requires ref in s.cache
   requires ref in s.ephemeralIndirectionTable.graph
   requires node == s.cache[ref]
@@ -63,7 +60,6 @@ module SuccModel {
   requires forall i | 0 <= i < |acc| :: WFBucket(acc[i])
   ensures var (s', io, sr) := res;
     && s'.Ready?
-    && WFBCVars(s')
     && s'.cache == s.cache
   decreases counter, 0
   {
@@ -102,8 +98,7 @@ module SuccModel {
   }
 
   function {:opaque} getPath(
-      
-      s: BCVariables,
+      s: BBC.Variables,
       io: IO,
       key: Key,
       acc: seq<Bucket>,
@@ -112,8 +107,8 @@ module SuccModel {
       maxToFind: int,
       ref: BT.G.Reference,
       counter: uint64)
-  : (res : (BCVariables, IO, Option<UI.SuccResultList>))
-  requires BCInv(s)
+  : (res : (BBC.Variables, IO, Option<UI.SuccResultList>))
+  requires BBC.Inv(s)
   requires s.Ready?
   requires io.IOInit?
   requires maxToFind >= 1
@@ -121,7 +116,6 @@ module SuccModel {
   requires forall i | 0 <= i < |acc| :: WFBucket(acc[i])
   ensures var (s', io, sr) := res;
     && s'.Ready?
-    && WFBCVars(s')
     && s'.cache == s.cache
   decreases counter, 1
   {
@@ -129,17 +123,17 @@ module SuccModel {
       var node := s.cache[ref];
       if BoundedKey(node.pivotTable, key) then ( 
         var (s0, io', pr) := getPathInternal(s, io, key, acc, start, upTo, maxToFind, ref, counter, node);
-        LruModel.LruUse(s0.lru, ref);
-        var s' := s0.(lru := LruModel.Use(s0.lru, ref));
-        assert WFBCVars(s');
+        var s' := s0;
+        // LruModel.LruUse(s0.lru, ref);
+        // var s' := s0.(lru := LruModel.Use(s0.lru, ref));
+        // assert WFBCVars(s');
         (s', io', pr)
       ) else (
         (s, io, None)
       )
     ) else (
-      if TotalCacheSize(s) <= MaxCacheSize() - 1 then (
+      if s.totalCacheSize() <= MaxCacheSize() - 1 then (
         var (s', io') := PageInNodeReq(s, io, ref);
-        assert WFBCVars(s');
         (s', io', None)
       ) else (
         (s, io, None)
@@ -147,9 +141,9 @@ module SuccModel {
     )
   }
 
-  function {:opaque} doSucc(s: BCVariables, io: IO, start: UI.RangeStart, maxToFind: int)
-  : (res : (BCVariables, IO, Option<UI.SuccResultList>))
-  requires BCInv(s)
+  function {:opaque} doSucc(s: BBC.Variables, io: IO, start: UI.RangeStart, maxToFind: int)
+  : (res : (BBC.Variables, IO, Option<UI.SuccResultList>))
+  requires BBC.Inv(s)
   requires io.IOInit?
   requires s.Ready?
   requires maxToFind >= 1
@@ -157,12 +151,6 @@ module SuccModel {
     var startKey := if start.NegativeInf? then [] else start.key;
     getPath(s, io, startKey, [], start, None, maxToFind, BT.G.Root(), 40)
   }
-
-  /////////////////////////////////
-  /////////////////////////////////
-  ///////////////////////////////// Proof stuff
-  /////////////////////////////////
-  /////////////////////////////////
 
   predicate LookupBucketsProps(lookup: PBS.Lookup, buckets: seq<Bucket>, upTo: Option<Key>, startKey: Key)
   {
@@ -174,22 +162,21 @@ module SuccModel {
     && (forall i | 0 <= i < |lookup| :: buckets[i] == lookup[i].node.buckets[Route(lookup[i].node.pivotTable, startKey)])
   }
 
-  lemma SatisfiesSuccBetreeStep(s: BCVariables, io: IO, start: UI.RangeStart,
+  lemma SatisfiesSuccBetreeStep(s: BBC.Variables, io: IO, start: UI.RangeStart,
       res: UI.SuccResultList, buckets: seq<Bucket>, lookup: PBS.Lookup, maxToFind: int, startKey: Key, upTo: Option<Key>)
-  requires BCInv(s)
-  requires s.Ready?
+  requires BBC.Inv(s) && s.Ready?
   requires io.IOInit?
   requires maxToFind >= 1
   requires LookupBucketsProps(lookup, buckets, upTo, startKey);
-  requires forall i | 0 <= i < |lookup| :: lookup[i].ref in s.ephemeralIndirectionTable.I().graph
-  requires forall i | 0 <= i < |lookup| :: MapsTo(ICache(s.cache), lookup[i].ref, lookup[i].node)
+  requires forall i | 0 <= i < |lookup| :: lookup[i].ref in s.ephemeralIndirectionTable.graph
+  requires forall i | 0 <= i < |lookup| :: MapsTo(s.cache, lookup[i].ref, lookup[i].node)
   requires (upTo.Some? ==> lt(startKey, upTo.value))
   requires startKey == (if start.NegativeInf? then [] else start.key)
   requires res == 
      BucketSuccessorLoopModel.GetSuccessorInBucketStack(buckets, maxToFind, start, upTo);
 
   ensures ValidDiskOp(diskOp(io))
-  ensures BBC.Next(IBlockCache(s), IBlockCache(s),
+  ensures BBC.Next(s, s,
       IDiskOp(diskOp(io)).bdop,
       AdvanceOp(UI.SuccOp(start, res.results, res.end), false));
   {
@@ -201,18 +188,17 @@ module SuccModel {
     assert BT.ValidSuccQuery(succStep);
     var step := BT.BetreeSuccQuery(succStep);
 
-    assert BBC.BetreeMove(IBlockCache(s), IBlockCache(s),
+    assert BBC.BetreeMove(s, s,
       IDiskOp(diskOp(io)).bdop,
       AdvanceOp(UI.SuccOp(start, res.results, res.end), false),
       step);
-    assert stepsBetree(IBlockCache(s), IBlockCache(s),
+    assert stepsBetree(s, s,
       AdvanceOp(UI.SuccOp(start, res.results, res.end), false),
       step);
   }
 
-  lemma lemmaGetPathResult(s: BCVariables, io: IO, startKey: Key, acc: seq<Bucket>, lookup: PBS.Lookup, start: UI.RangeStart, upTo: Option<Key>, maxToFind: int, ref: BT.G.Reference, counter: uint64)
-  requires BCInv(s)
-  requires s.Ready?
+  lemma lemmaGetPathResult(s: BBC.Variables, io: IO, startKey: Key, acc: seq<Bucket>, lookup: PBS.Lookup, start: UI.RangeStart, upTo: Option<Key>, maxToFind: int, ref: BT.G.Reference, counter: uint64)
+  requires BBC.Inv(s) && s.Ready?
   requires io.IOInit?
   requires maxToFind >= 1
   requires forall i | 0 <= i < |acc| :: WFBucket(acc[i])
@@ -224,21 +210,20 @@ module SuccModel {
   requires upTo == PBS.LookupUpperBound(lookup, startKey)
   requires |lookup| == |acc|
   requires forall i | 0 <= i < |lookup| :: acc[i] == lookup[i].node.buckets[Route(lookup[i].node.pivotTable, startKey)]
-  requires (forall i | 0 <= i < |lookup| :: lookup[i].ref in s.ephemeralIndirectionTable.I().graph)
-  requires forall i | 0 <= i < |lookup| :: lookup[i].ref in s.cache && lookup[i].node == INode(s.cache[lookup[i].ref])
+  requires (forall i | 0 <= i < |lookup| :: lookup[i].ref in s.ephemeralIndirectionTable.graph)
+  requires forall i | 0 <= i < |lookup| :: lookup[i].ref in s.cache && lookup[i].node == s.cache[lookup[i].ref]
   requires upTo.Some? ==> lt(startKey, upTo.value)
   requires startKey == (if start.NegativeInf? then [] else start.key)
   decreases counter
   ensures var (s', io', res) := getPath(s, io, startKey, acc, start, upTo, maxToFind, ref, counter);
-      && WFBCVars(s')
       && ValidDiskOp(diskOp(io'))
       && IDiskOp(diskOp(io')).jdop.NoDiskOp?
-      && (res.Some? ==> BBC.Next(IBlockCache(s), IBlockCache(s'),
+      && (res.Some? ==> BBC.Next(s, s',
             IDiskOp(diskOp(io')).bdop,
             AdvanceOp(UI.SuccOp(start, res.value.results, res.value.end), false)))
       && (res.None? ==>
-            betree_next_dop(IBlockCache(s), IBlockCache(s'), IDiskOp(diskOp(io')).bdop))
-    /*  && IBlockCache(s1) == IBlockCache(s)
+            betree_next_dop(s, s', IDiskOp(diskOp(io')).bdop))
+    /*  && IBlockCache(s1) == s
       && s1.ephemeralIndirectionTable == s.ephemeralIndirectionTable
       && (pr.Fetch? ==> pr.ref in s.ephemeralIndirectionTable.locs)
       && (pr.Fetch? ==> pr.ref !in s.cache)
@@ -258,7 +243,7 @@ module SuccModel {
         var r := Route(node.pivotTable, startKey);
         var bucket := node.buckets[r];
         var acc1 := acc + [bucket];
-        var lookup1 := lookup + [BT.G.ReadOp(ref, INode(node))];
+        var lookup1 := lookup + [BT.G.ReadOp(ref, node)];
 
         forall idx | PBS.ValidLayerIndex(lookup1, idx) && idx < |lookup1| - 1
         ensures PBS.LookupFollowsChildRefAtLayer(startKey, lookup1, idx)
@@ -292,7 +277,7 @@ module SuccModel {
 
         if node.children.Some? {
           if counter == 0 {
-            assert noop(IBlockCache(s), IBlockCache(s));
+            assert noop(s, s);
           } else {
             lemmaChildInGraph(s, ref, node.children.value[r]);
             lemmaGetPathResult(s, io, startKey, acc1, lookup1, start, upTo', maxToFind, node.children.value[r], counter - 1);
@@ -303,20 +288,21 @@ module SuccModel {
           SatisfiesSuccBetreeStep(s, io, start, res, acc1, lookup1, maxToFind, startKey, upTo');
         }
       } else {
-        assert noop(IBlockCache(s), IBlockCache(s));
+        assert noop(s, s);
       }
     } else {
-      if TotalCacheSize(s) <= MaxCacheSize() - 1 {
+      if s.totalCacheSize() <= MaxCacheSize() - 1 {
         assert ref in s.ephemeralIndirectionTable.graph;
         assert ref in s.ephemeralIndirectionTable.locs;
         PageInNodeReqCorrect(s, io, ref);
       } else {
-        assert noop(IBlockCache(s), IBlockCache(s));
+        assert noop(s, s);
       }
     }
   }
 
-  lemma doSuccCorrect(s: BCVariables, io: IO, start: UI.RangeStart, maxToFind: int)
+/*
+  lemma doSuccCorrect(s: BBC.Variables, io: IO, start: UI.RangeStart, maxToFind: int)
   requires BCInv(s)
   requires io.IOInit?
   requires maxToFind >= 1
@@ -336,4 +322,5 @@ module SuccModel {
     var startKey := if start.NegativeInf? then [] else start.key;
     lemmaGetPathResult(s, io, startKey, [], [], start, None, maxToFind, BT.G.Root(), 40);
   }
+  */
 }
