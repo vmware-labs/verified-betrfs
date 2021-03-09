@@ -6,7 +6,6 @@ include "../lib/Base/Sets.i.dfy"
 
 module BookkeepingModel { 
   import IT = IndirectionTable
-  import opened StateSectorModel
   import opened IOModel
   import opened DiskOpModel
 
@@ -19,8 +18,10 @@ module BookkeepingModel {
   import opened Bounds
   import LruModel
   import DiskLayout
+  import BT = PivotBetreeSpec`Internal
 
   import opened NativeTypes
+  type Node = BT.G.Node  
 
   predicate RefAvailable(s: BBC.Variables, ref: BT.G.Reference)
   {
