@@ -16,7 +16,6 @@ include "MarshallingModel.i.dfy"
 include "CacheImpl.i.dfy"
 
 module MarshallingImpl {
-  import SSM = StateSectorModel
   import SSI = StateSectorImpl
   import opened NodeImpl
   import opened CacheImpl
@@ -235,10 +234,16 @@ module MarshallingImpl {
   }
 
   method ValToNode(v: V) returns (linear s : lOption<Node>)
-  requires IMM.valToNode.requires(v)
+  requires ValidVal(v)
+  requires ValInGrammar(v, Marshalling.PivotNodeGrammar())
   requires SizeOfV(v) < 0x1_0000_0000_0000_0000
-  ensures s.lSome? ==> s.value.Inv()
-  ensures INodeOpt(s.Option()) == IMM.valToNode(v)
+  ensures s.lSome? == Marshalling.valToNode(v).Some?
+  ensures s.lSome? ==> 
+    (
+      && s.value.Inv()
+      && BT.WFNode(s.value.I())
+      && s.value.I() == Marshalling.valToNode(v).value
+    )
   {
     assert ValidVal(v.t[0]);
     assert ValidVal(v.t[1]);
@@ -302,22 +307,14 @@ module MarshallingImpl {
     }
   }
 
-  function ISectorOpt(s : Option<Sector>): Option<IMM.Sector>
-  requires s.Some? ==> SSI.WFSector(s.value)
-  requires s.Some? ==> SSM.WFSector(SSI.ISector(s.value))
-  {
-    if s.Some? then
-      Some(SSI.ISector(s.value))
-    else
-      None
-  }
-
-  method ValToSector(v: V) returns (linear s : lOption<SSI.Sector>)
-  requires IMM.valToSector.requires(v)
+  method ValToSector(v: V) returns (linear s : lOption<Sector>)
+  requires ValidVal(v)
+  requires ValInGrammar(v, Marshalling.SectorGrammar())
   requires SizeOfV(v) < 0x1_0000_0000_0000_0000
   ensures s.lSome? ==> SSI.WFSector(s.value)
-  ensures s.lSome? ==> SSM.WFSector(SSI.ISector(s.value))
-  ensures MapOption(s.Option(), SSI.ISector) == IMM.valToSector(v)
+  ensures s.lSome? ==> SSI.Inv(s.value)
+  ensures ISectorOpt(s.Option()) == Marshalling.valToSector(v)
+  // ensures s.Some? && s.value.SectorIndirectionTable? ==> s.value.indirectionTable.TrackingGarbage()
   {
     if v.c == 0 {
       var sb := Marshalling.valToSuperblock(v.val);
@@ -517,14 +514,14 @@ module MarshallingImpl {
     }
   }
 
-  function INodeOpt(s : Option<Node>): Option<IMM.Node>
-  requires s.Some? ==> s.value.Inv()
-  {
-    if s.Some? then
-      Some(s.value.I())
-    else
-      None
-  }
+  // function INodeOpt(s : Option<Node>): Option<IMM.Node>
+  // requires s.Some? ==> s.value.Inv()
+  // {
+  //   if s.Some? then
+  //     Some(s.value.I())
+  //   else
+  //     None
+  // }
 
   method {:fuel SizeOfV,4} nodeToVal(shared node: Node)
   returns (v : V, size: uint64)
@@ -533,7 +530,7 @@ module MarshallingImpl {
   requires BucketsLib.BucketListWellMarshalled(BucketImpl.MutBucket.ILseq(node.buckets))
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.PivotNodeGrammar())
-  ensures IMM.valToNode(v) == INodeOpt(Some(node))
+  ensures Marshalling.valToNode(v) == Some(node.I())
   ensures SizeOfV(v) <= NodeBlockSize() - 32 - 8
   ensures SizeOfV(v) == size as int
   {
@@ -587,14 +584,14 @@ module MarshallingImpl {
   method sectorToVal(shared sector: SSI.Sector)
   returns (v : V, size: uint64)
   requires SSI.WFSector(sector)
-  requires SSM.WFSector(SSI.ISector(sector))
+  requires SSI.Inv(sector)
   requires sector.SectorNode?
   requires sector.SectorNode? ==> BT.WFNode(sector.node.I())
   requires sector.SectorNode? ==> 
     BucketsLib.BucketListWellMarshalled(BucketImpl.MutBucket.ILseq(sector.node.buckets))
   ensures ValidVal(v)
   ensures ValInGrammar(v, Marshalling.SectorGrammar());
-  ensures Marshalling.valToSector(v) == Some(SSM.ISector(SSI.ISector(sector)))
+  ensures Marshalling.valToSector(v) == Some(SSI.ISector(sector))
   ensures sector.SectorNode? ==> SizeOfV(v) <= NodeBlockSize() as int - 32
   ensures SizeOfV(v) < 0x1_0000_0000_0000_0000 - 32
   ensures SizeOfV(v) == size as int
@@ -627,15 +624,26 @@ module MarshallingImpl {
 
   /////// Marshalling and de-marshalling
 
+  function ISectorOpt(s : Option<Sector>): Option<SectorType.Sector>
+  requires s.Some? ==> SSI.WFSector(s.value)
+  requires s.Some? ==> SSI.Inv(s.value)
+  {
+    if s.Some? then
+      Some(SSI.ISector(s.value))
+    else
+      None
+  }
+
   method ParseSector(data: seq<byte>, start: uint64) returns (linear s : lOption<Sector>)
   requires start as int <= |data| < 0x1_0000_0000_0000_0000;
   ensures s.lSome? ==> SSI.WFSector(s.value)
-  ensures s.lSome? ==> SSM.WFSector(SSI.ISector(s.value))
-  ensures ISectorOpt(s.Option()) == IMM.parseSector(data[start..])
+  ensures s.lSome? ==> SSI.Inv(s.value)
+  ensures ISectorOpt(s.Option()) == Marshalling.parseSector(data[start..])
   ensures s.lSome? && s.value.SectorNode? ==> BT.WFNode(s.value.node.I())
+  // ensures s.Some? && s.value.SectorIndirectionTable? ==> s.value.indirectionTable.TrackingGarbage()
   {
-    IMM.reveal_parseSector();
     var success, v, rest_index := ParseVal(data, start, Marshalling.SectorGrammar());
+    Marshalling.reveal_parseSector();
 
     if success {
       lemma_SizeOfV_parse_Val(data[start..], Marshalling.SectorGrammar());
@@ -668,10 +676,12 @@ module MarshallingImpl {
   method ParseCheckedSector(data: seq<byte>) returns (linear s : lOption<Sector>)
   requires |data| < 0x1_0000_0000
   ensures s.lSome? ==> SSI.WFSector(s.value)
-  ensures s.lSome? ==> SSM.WFSector(SSI.ISector(s.value))
-  ensures ISectorOpt(s.Option()) == IMM.parseCheckedSector(data)
+  ensures s.lSome? ==> SSI.Inv(s.value)
+  ensures ISectorOpt(s.Option()) == Marshalling.parseCheckedSector(data)
   ensures s.lSome? && s.value.SectorNode? ==> BT.WFNode(s.value.node.I())
   {
+    Marshalling.reveal_parseCheckedSector();
+
     if |data| as uint64 >= 32 {
       // TODO unnecessary copy here
       var hash := CRC32_C_Impl.compute_crc32c_padded(data[32 as uint64..]);
@@ -683,26 +693,23 @@ module MarshallingImpl {
     } else {
       s := lNone;
     }
-
-    IMM.reveal_parseCheckedSector();
   }
 
   method MarshallCheckedSectorIndirectionTable(shared table: IndirectionTable.IndirectionTable, ghost sector: Sector) returns (data : array?<byte>)
   requires sector == SSI.SectorIndirectionTable(table);
   requires SSI.WFSector(sector)
-  requires SSM.WFSector(SSI.ISector(sector))
-  // ensures sector.indirectionTable.Inv()
-  //   && sector.indirectionTable.I() == old(sector.indirectionTable.I())
-  ensures data != null ==> IMM.parseCheckedSector(data[..]).Some?
+  requires SSI.Inv(sector)
+  ensures data != null ==> Marshalling.parseCheckedSector(data[..]).Some?
   ensures data != null ==>
-      && SSM.ISector(IMM.parseCheckedSector(data[..]).value)
-      == SSM.ISector(SSI.ISector(sector))
+    Marshalling.parseCheckedSector(data[..]).value == SSI.ISector(sector)
   ensures data != null ==> 32 <= data.Length
   ensures data != null && sector.SectorIndirectionTable? ==> data.Length <= IndirectionTableBlockSize() as int
   ensures sector.SectorIndirectionTable? && Marshalling.IsInitIndirectionTable(sector.indirectionTable.I()) ==> data != null;
   {
     var w, s := table.IndirectionTableToVal();
     var v := VCase(1, w);
+    assert Marshalling.valToSector(v) == Some(SectorType.SectorIndirectionTable(table.I()));
+
     var computedSize := s + 8;
 
     // var v, computedSize := indirectionTableSectorToVal(sector);
@@ -721,8 +728,8 @@ module MarshallingImpl {
     } else {
       data := MarshallIntoFixedSize(v, Marshalling.SectorGrammar(), 32, size);
 
-      IMM.reveal_parseSector();
-      IMM.reveal_parseCheckedSector();
+      Marshalling.reveal_parseSector();
+      Marshalling.reveal_parseCheckedSector();
 
       var hash := CRC32_C_Array_Impl.compute_crc32c_padded(data, 32, data.Length as uint32 - 32);
 
@@ -753,15 +760,11 @@ module MarshallingImpl {
 
   method MarshallCheckedSector(shared sector: Sector) returns (data : array?<byte>)
   requires SSI.WFSector(sector)
-  requires SSM.WFSector(SSI.ISector(sector))
+  requires SSI.Inv(sector)
   requires sector.SectorSuperblock? ==> JC.WFSuperblock(sector.superblock)
-  ensures sector.SectorIndirectionTable? ==> 
-    sector.indirectionTable.Inv()
-    && sector.indirectionTable.I() == old(sector.indirectionTable.I())
-  ensures data != null ==> IMM.parseCheckedSector(data[..]).Some?
+  ensures data != null ==> Marshalling.parseCheckedSector(data[..]).Some?
   ensures data != null ==>
-      && SSM.ISector(IMM.parseCheckedSector(data[..]).value)
-      == SSM.ISector(SSI.ISector(sector))
+        Marshalling.parseCheckedSector(data[..]).value == SSI.ISector(sector)
   ensures data != null ==> 32 <= data.Length
   ensures data != null && sector.SectorNode? ==> data.Length <= NodeBlockSize() as int
   ensures data != null && sector.SectorIndirectionTable? ==> data.Length <= IndirectionTableBlockSize() as int
@@ -769,14 +772,14 @@ module MarshallingImpl {
   ensures sector.SectorIndirectionTable? && Marshalling.IsInitIndirectionTable(sector.indirectionTable.I()) ==> data != null;
   ensures sector.SectorNode? && BucketListWellMarshalled(BucketImpl.MutBucket.ILseq(sector.node.buckets)) ==> data != null
   {
+    Marshalling.reveal_parseSector();
+    Marshalling.reveal_parseCheckedSector();
+
     if sector.SectorSuperblock? {
       var v0 := superblockToVal(sector.superblock);
       var v := VCase(0, v0);
       data := MarshallIntoFixedSize(
           v, Marshalling.SectorGrammar(), 32, 4096);
-
-      IMM.reveal_parseSector();
-      IMM.reveal_parseCheckedSector();
 
       var hash := CRC32_C_Array_Impl.compute_crc32c_padded(data, 32, data.Length as uint32 - 32);
 
@@ -795,9 +798,6 @@ module MarshallingImpl {
         var size := computedSize + 32;
 
         data := MarshallIntoFixedSize(v, Marshalling.SectorGrammar(), 32, size);
-
-        IMM.reveal_parseSector();
-        IMM.reveal_parseCheckedSector();
 
         var hash := CRC32_C_Array_Impl.compute_crc32c_padded(data, 32, data.Length as uint32 - 32);
 

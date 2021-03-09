@@ -1510,15 +1510,15 @@ module IndirectionTable {
       r := refUpperBound;
     }
 
-    // TODO temporary; useful to maintain the Marshalling Model/Impl split
-    /* TODO(andrea) ModelImpl */ static function valToIndirectionTable(v: V) : (s : Option<IndirectionTable>)
-    /* TODO(andrea) ModelImpl */ requires ValidVal(v)
-    /* TODO(andrea) ModelImpl */ requires ValInGrammar(v, IndirectionTableGrammar())
-    /* TODO(andrea) ModelImpl */ ensures s.Some? ==> s.value.Inv()
-    /* TODO(andrea) ModelImpl */ ensures s.Some? ==> s.value.TrackingGarbage()
-    /* TODO(andrea) ModelImpl */ ensures s.Some? ==> BC.WFCompleteIndirectionTable(s.value.I())
-    /* TODO(andrea) ModelImpl */ ensures s.Some? ==> Marshalling.valToIndirectionTable(v) == Some(s.value.I())
-    /* TODO(andrea) ModelImpl */ ensures s.None? ==> Marshalling.valToIndirectionTable(v).None?
+    // // TODO temporary; useful to maintain the Marshalling Model/Impl split
+    // /* TODO(andrea) ModelImpl */ static function valToIndirectionTable(v: V) : (s : Option<IndirectionTable>)
+    // /* TODO(andrea) ModelImpl */ requires ValidVal(v)
+    // /* TODO(andrea) ModelImpl */ requires ValInGrammar(v, IndirectionTableGrammar())
+    // /* TODO(andrea) ModelImpl */ ensures s.Some? ==> s.value.Inv()
+    // /* TODO(andrea) ModelImpl */ ensures s.Some? ==> s.value.TrackingGarbage()
+    // /* TODO(andrea) ModelImpl */ ensures s.Some? ==> BC.WFCompleteIndirectionTable(s.value.I())
+    // /* TODO(andrea) ModelImpl */ ensures s.Some? ==> Marshalling.valToIndirectionTable(v) == Some(s.value.I())
+    // /* TODO(andrea) ModelImpl */ ensures s.None? ==> Marshalling.valToIndirectionTable(v).None?
 
     static method ValToIndirectionTable(v: V)
     returns (linear s : lOption<IndirectionTable>)
@@ -1528,7 +1528,7 @@ module IndirectionTable {
     ensures s.lSome? ==> Marshalling.valToIndirectionTable(v) == Some(s.value.I())
     ensures s.lSome? ==> s.value.TrackingGarbage()
     ensures s.lNone? ==> Marshalling.valToIndirectionTable(v).None?
-    /* TODO(andrea) ModelImpl */ ensures s.Option() == valToIndirectionTable(v)
+    // /* TODO(andrea) ModelImpl */ ensures s.Option() == Marshalling.valToIndirectionTable(v)
     {
       if |v.a| as uint64 <= MaxSizeUint64() {
         linear var res := ValToHashMap(v.a);
@@ -1554,7 +1554,7 @@ module IndirectionTable {
                   assert s.lSome? ==> s.value.Inv() by {
                     reveal s.value.Inv();
                   }
-                  /* TODO(andrea) ModelImpl */ assume s.Option() == valToIndirectionTable(v);
+                  // /* TODO(andrea) ModelImpl */ assume s.Option() == Marshalling.valToIndirectionTable(v);
                 }
                 case lNone => {
                   s := lNone;
@@ -1632,10 +1632,11 @@ module IndirectionTable {
     ensures Marshalling.valToIndirectionTable(v).Some?
     ensures Marshalling.valToIndirectionTable(v).value.locs == this.I().locs
     ensures Marshalling.valToIndirectionTable(v).value.graph == this.I().graph
+    ensures Marshalling.valToIndirectionTable(v).value == this.I()
     ensures SizeOfV(v) <= MaxIndirectionTableByteSize()
     ensures SizeOfV(v) == size as int
-    /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v).Some?
-    /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v) == Some(this)
+    // /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v).Some?
+    // /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v) == Some(this)
     {
       reveal Inv();
       assert this.t.count <= MaxSizeUint64();
@@ -1766,8 +1767,6 @@ module IndirectionTable {
 
       // assert Marshalling.valToIndirectionTable(v).value.locs == this.I().locs;
       // assert Marshalling.valToIndirectionTable(v).value.graph == this.I().graph;
-
-      /* TODO(andrea) ModelImpl */ assume valToIndirectionTable(v) == Some(this);
     }
 
     // // To bitmap

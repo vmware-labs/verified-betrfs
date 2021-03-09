@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../ByteBlockCacheSystem/Marshalling.i.dfy"
-include "StateSectorModel.i.dfy"
+include "StateSectorImpl.i.dfy"
 include "IndirectionTable.i.dfy"
 
 //
@@ -33,6 +33,8 @@ module MarshallingModel {
   import Marshalling
   import PackedKVMarshalling
   import PackedKV
+  import SSI = StateSectorImpl
+  import SectorType
   
   import BT = PivotBetreeSpec`Internal
 
@@ -45,11 +47,9 @@ module MarshallingModel {
   import ReferenceType`Internal
   import ValueType`Internal
 
-  import SSM = StateSectorModel
-
   type Reference = BC.Reference
-  type Sector = SSM.Sector
-  type Node = SSM.Node
+  type Sector = SectorType.Sector
+  type Node = BT.G.Node
 
   /////// Some lemmas that are useful in Impl
 
@@ -138,46 +138,47 @@ module MarshallingModel {
     VUint64(ref)
   }
 
-  function {:fuel ValInGrammar,2} valToNode(v: V) : (s : Option<Node>)
-  requires ValidVal(v)
-  requires ValInGrammar(v, Marshalling.PivotNodeGrammar())
-  ensures s.Some? ==> BT.WFNode(s.value)
-  {
-    var node := Marshalling.valToNode(v);
-    if node.Some? then (
-      Some(BT.G.Node(node.value.pivotTable, node.value.children, node.value.buckets))
-    ) else (
-      None
-    )
-  }
+  // function {:fuel ValInGrammar,2} valToNode(v: V) : (s : Option<Node>)
+  // requires ValidVal(v)
+  // requires ValInGrammar(v, Marshalling.PivotNodeGrammar())
+  // ensures s.Some? ==> BT.WFNode(s.value)
+  // {
+  //   var node := Marshalling.valToNode(v);
+  //   if node.Some? then (
+  //     Some(BT.G.Node(node.value.pivotTable, node.value.children, node.value.buckets))
+  //   ) else (
+  //     None
+  //   )
+  // }
 
-  /////// Marshalling and de-marshalling
+  // /////// Marshalling and de-marshalling
 
-  function valToSector(v: V) : (s : Option<Sector>)
-  requires ValidVal(v)
-  requires ValInGrammar(v, Marshalling.SectorGrammar())
-  ensures s.Some? ==> SSM.WFSector(s.value)
-  ensures s.Some? ==> Some(SSM.ISector(s.value)) == Marshalling.valToSector(v)
-  ensures s.None? ==> Marshalling.valToSector(v).None?
-  ensures s.Some? && s.value.SectorIndirectionTable? ==> s.value.indirectionTable.TrackingGarbage()
-  {
-    if v.c == 0 then (
-      match Marshalling.valToSuperblock(v.val) {
-        case Some(s) => Some(SSM.SectorSuperblock(s))
-        case None => None
-      }
-    ) else if v.c == 1 then (
-      match IndirectionTable.IndirectionTable.valToIndirectionTable(v.val) {
-        case Some(s) => Some(SSM.SectorIndirectionTable(s))
-        case None => None
-      }
-    ) else (
-      match valToNode(v.val) {
-        case Some(s) => Some(SSM.SectorNode(s))
-        case None => None
-      }
-    )
-  }
+  // function valToSector(v: V) : (s : Option<Sector>)
+  // requires ValidVal(v)
+  // requires ValInGrammar(v, Marshalling.SectorGrammar())
+  // // ensures s.Some? ==> SSI.Inv(s.value)
+  // ensures s.Some? ==> Some(SSM.ISector(s.value)) == Marshalling.valToSector(v)
+  // ensures s.None? ==> Marshalling.valToSector(v).None?
+  // ensures s.Some? && s.value.SectorIndirectionTable? ==> s.value.indirectionTable.TrackingGarbage()
+  // {
+  //   if v.c == 0 then (
+  //     match Marshalling.valToSuperblock(v.val) {
+  //       case Some(s) => Some(SectorType.SectorSuperblock(s))
+  //       case None => None
+  //     }
+  //   ) else if v.c == 1 then (
+  //     match Marshalling.valToIndirectionTable(v.val) {
+  //       case Some(s) => Some(SectorType.SectorIndirectionTable(s))
+  //       case None => None
+  //     }
+  //   ) else (
+  //     match valToNode(v.val) {
+  //       case Some(s) => Some(SectorType.SectorNode(s))
+  //       case None => None
+  //     }
+  //   )
+  // }
+/*
 
   function {:opaque} parseSector(data: seq<byte>) : (s : Option<Sector>)
   ensures s.Some? ==> SSM.WFSector(s.value)
@@ -212,5 +213,5 @@ module MarshallingModel {
     else
       None
   }
-
+*/
 }

@@ -30,11 +30,11 @@ module StateBCImpl {
   import BlockAllocatorModel
   import LruModel
 
-  import opened StateSectorModel
   import BBC = BetreeCache
 
   type ImplVariables = Variables
   type Reference = BT.G.Reference
+  type Node = BT.G.Node
 
   predicate WFCache(cache: map<Reference, Node>)
   {

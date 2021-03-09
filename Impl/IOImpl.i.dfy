@@ -202,12 +202,10 @@ module IOImpl {
 
     IMM.reveal_parseSector();
     IMM.reveal_parseCheckedSector();
-    Marshalling.reveal_parseSector();
     reveal_SectorOfBytes();
     reveal_ValidCheckedBytes();
     reveal_Parse();
     D.reveal_ChecksumChecksOut();
-    Marshalling.reveal_parseSector();
 
     ghost var dop := diskOp(IIO(io));
     if dop.ReqWriteOp? {
