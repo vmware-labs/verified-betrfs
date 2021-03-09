@@ -4,8 +4,6 @@
 include "BookkeepingModel.i.dfy"
 
 module GrowModel { 
-  import opened StateSectorModel
-
   import opened IOModel
   import opened BookkeepingModel
   import opened ViewOp

@@ -283,41 +283,25 @@ module IOImpl {
   }
   // == readResponse ==
 
-  // function ISectorOpt(sector: Option<SSI.Sector>) : Option<SSM.Sector>
-  // requires sector.Some? ==> SSI.WFSector(sector.value)
-  // {
-  //   match sector {
-  //     case None => None
-  //     case Some(sector) => Some(SSI.ISector(sector))
-  //   }
-  // }
+  function ISectorOpt(sector: Option<SSI.Sector>) : Option<SectorType.Sector>
+  requires sector.Some? ==> SSI.WFSector(sector.value)
+  {
+    match sector {
+      case None => None
+      case Some(sector) => Some(SSI.ISector(sector))
+    }
+  }
 
   method ReadSector(io: DiskIOHandler)
   returns (id: D.ReqId, linear sector: lOption<SSI.Sector>)
   requires io.diskOp().RespReadOp?
   requires ValidDiskOp(diskOp(IIO(io)))
-  ensures sector.lSome? ==> SSI.WFSector(sector.value)
 
   ensures var sector := sector.Option();
-    var io := IIO(io);
-    && (sector.Some? ==> (
-      && SSI.Inv(sector.value)
-      && ValidDiskOp(diskOp(io))
-      && (sector.value.SectorNode? ==> 
-        IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadNodeOp(id, Some(sector.value.node.I())), JournalDisk.NoDiskOp))
-      && (sector.value.SectorIndirectionTable? ==> 
-        IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadIndirectionTableOp(id, Some(sector.value.indirectionTable.I())), JournalDisk.NoDiskOp))
-      && (sector.value.SectorSuperblock? ==>
-        && IDiskOp(diskOp(io)).bdop == BlockDisk.NoDiskOp
-        && IDiskOp(diskOp(io)).jdop.RespReadSuperblockOp?
-        && IDiskOp(diskOp(io)).jdop.id == id
-        && IDiskOp(diskOp(io)).jdop.superblock == Some(sector.value.superblock)
-      )
-    ))
-    && ((IDiskOp(diskOp(io)).jdop.RespReadSuperblockOp? && IDiskOp(diskOp(io)).jdop.superblock.Some?) ==> (
-      && sector.Some?
-      && sector.value.SectorSuperblock?
-    ))
+    sector.Some? ==> (
+      && SSI.WFSector(sector.value)
+      && SSI.Inv(sector.value))
+  ensures (id, ISectorOpt(sector.Option())) == IOModel.ReadSector(IIO(io))
   {
     var id1, addr, bytes := io.getReadResult();
     id := id1;
@@ -365,7 +349,7 @@ module IOImpl {
     linear var sectorOpt; var id;
     id, sectorOpt := ReadSector(io);
 
-    // IOModel.ReadSectorCorrect(IIO(io));
+    IOModel.ReadSectorCorrect(IIO(io));
 
     Marshalling.reveal_parseSector();
     reveal_SectorOfBytes();
@@ -454,7 +438,7 @@ module IOImpl {
     id, sector := ReadSector(io);
     assert sector.lSome? ==> SSI.WFSector(sector.value);
 
-    // IOModel.ReadSectorCorrect(IIO(io));
+    IOModel.ReadSectorCorrect(IIO(io));
 
     Marshalling.reveal_parseSector();
     reveal_SectorOfBytes();

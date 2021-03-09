@@ -9,8 +9,6 @@ include "../PivotBetree/PivotBetreeSpec.i.dfy"
 // See dependency graph in MainHandlers.dfy
 
 module QueryModel { 
-  import opened StateSectorModel
-
   import opened IOModel
   import opened BookkeepingModel
   import opened KeyType

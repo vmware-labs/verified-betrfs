@@ -190,7 +190,58 @@ module IOModel {
     }
   }
 
-  // == writeResponse ==
+  function ReadSector(io: IO)
+  : (res : (D.ReqId, Option<SectorType.Sector>))
+  requires diskOp(io).RespReadOp?
+  {
+    var id := io.id;
+    var bytes := io.respRead.bytes;
+    if |bytes| <= IndirectionTableBlockSize() then (
+      var loc := DiskLayout.Location(io.respRead.addr, |io.respRead.bytes| as uint64);
+      var sector := Marshalling.parseCheckedSector(bytes);
+      if sector.Some? && (
+        || (ValidNodeLocation(loc) && sector.value.SectorNode?)
+        || (ValidSuperblockLocation(loc) && sector.value.SectorSuperblock?)
+        || (ValidIndirectionTableLocation(loc) && sector.value.SectorIndirectionTable?)
+      )
+      then
+        (id, sector)
+      else
+        (id, None)
+    ) else (
+      (id, None)
+    )
+  }
+
+  lemma ReadSectorCorrect(io: IO)
+  requires diskOp(io).RespReadOp?
+  requires ValidDiskOp(diskOp(io))
+  ensures var (id, sector) := ReadSector(io);
+    && (sector.Some? ==> (
+      // && SSM.WFSector(sector.value)
+      && ValidDiskOp(diskOp(io))
+      && (sector.value.SectorNode? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadNodeOp(id, Some(sector.value.node )), JournalDisk.NoDiskOp))
+      && (sector.value.SectorIndirectionTable? ==> IDiskOp(diskOp(io)) == BlockJournalDisk.DiskOp(BlockDisk.RespReadIndirectionTableOp(id, Some(sector.value.indirectionTable)), JournalDisk.NoDiskOp))
+      && (sector.value.SectorSuperblock? ==>
+        && IDiskOp(diskOp(io)).bdop == BlockDisk.NoDiskOp
+        && IDiskOp(diskOp(io)).jdop.RespReadSuperblockOp?
+        && IDiskOp(diskOp(io)).jdop.id == id
+        && IDiskOp(diskOp(io)).jdop.superblock == Some(sector.value.superblock)
+      )
+    ))
+    && ((IDiskOp(diskOp(io)).jdop.RespReadSuperblockOp? && IDiskOp(diskOp(io)).jdop.superblock.Some?) ==> (
+      && sector.Some?
+      && sector.value.SectorSuperblock?
+    ))
+  {
+    Marshalling.reveal_parseCheckedSector();
+    Marshalling.reveal_parseSector();
+    reveal_SectorOfBytes();
+    reveal_ValidCheckedBytes();
+    reveal_Parse();
+    D.reveal_ChecksumChecksOut();
+  }
+
 
   lemma lemmaOutstandingLocIndexValid(s: ImplVariables, id: uint64)
   requires s.Inv()

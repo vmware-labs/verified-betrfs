@@ -34,9 +34,8 @@ module StateBCImpl {
 
   type ImplVariables = Variables
   type Reference = BT.G.Reference
-  type Node = BT.G.Node
 
-  predicate WFCache(cache: map<Reference, Node>)
+  predicate WFCache(cache: map<Reference, BT.G.Node>)
   {
     forall ref | ref in cache :: BT.WFNode(cache[ref])
   }

@@ -8,8 +8,6 @@ include "LeafModel.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 
 module FlushPolicyModel {
-  import opened StateSectorModel
-
   import opened IOModel
   import opened BookkeepingModel
   import opened FlushModel

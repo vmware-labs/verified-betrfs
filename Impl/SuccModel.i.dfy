@@ -10,7 +10,6 @@ include "BucketSuccessorLoopModel.i.dfy"
 // See dependency graph in MainHandlers.dfy
 
 module SuccModel { 
-  import opened StateSectorModel
   import opened IOModel
   import opened BookkeepingModel
   import opened KeyType

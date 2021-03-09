@@ -7,8 +7,6 @@ include "../ByteBlockCacheSystem/AsyncDiskModel.s.dfy"
 include "../lib/Buckets/BucketFlushModel.i.dfy"
 
 module FlushModel { 
-  import opened StateSectorModel
-
   import opened IOModel
   import opened BookkeepingModel
   import opened ViewOp
