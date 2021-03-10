@@ -178,7 +178,7 @@ module SplitModel {
   }
 
   function {:opaque} splitChild(s: BBC.Variables, parentref: BT.G.Reference, 
-    childref: BT.G.Reference, slot: int, lbound: Key, ubound: Option<Key>): (s': BBC.Variables)
+    childref: BT.G.Reference, slot: int, lbound: Key, ubound: Option<Key>, refUpperBound: uint64): (s': BBC.Variables)
   requires s.Ready?
   requires BBC.Inv(s)
   requires parentref in s.cache
@@ -192,6 +192,7 @@ module SplitModel {
   requires ChildrenConditions(s, s.cache[childref].children)
   requires ChildrenConditions(s, s.cache[parentref].children)
   requires |s.cache[parentref].children.value| < MaxNumChildren()
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= refUpperBound
   {
     var fused_parent := s.cache[parentref];
     var fused_child := s.cache[childref];
@@ -203,11 +204,11 @@ module SplitModel {
       // cuts off the node and doesn't split it.
       s
     ) else (
-      var left_childref := getFreeRef(s);
+      var left_childref := getFreeRef(s, refUpperBound);
       if left_childref.None? then (
         s
       ) else (
-        var right_childref := getFreeRef2(s, left_childref.value);
+        var right_childref := getFreeRef2(s, left_childref.value, refUpperBound);
         if right_childref.None? then (
           s
         ) else (
@@ -218,7 +219,7 @@ module SplitModel {
     )
   }
 
-  function {:opaque} doSplit(s: BBC.Variables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
+  function {:opaque} doSplit(s: BBC.Variables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int, refUpperBound: uint64)
   : (s': BBC.Variables)
   requires s.Ready?
   requires BBC.Inv(s)
@@ -230,6 +231,7 @@ module SplitModel {
   requires |s.cache[parentref].buckets| <= MaxNumChildren() - 1
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires s.cache[parentref].children.value[slot] == childref
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= refUpperBound
   {
     if (
       && s.frozenIndirectionTable.Some?
@@ -256,7 +258,7 @@ module SplitModel {
           && ValidSplitKey(fused_child, lbound, ubound) 
           && ValidSplitKey(fused_parent, lbound, ubound)
         ) then (
-          splitChild(s, parentref, childref, slot, lbound, ubound)
+          splitChild(s, parentref, childref, slot, lbound, ubound, refUpperBound)
         ) else (
           s
         )
@@ -264,16 +266,16 @@ module SplitModel {
     )
   }
 
-  lemma doSplitCorrect(s: BBC.Variables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int)
-  requires doSplit.requires(s, parentref, childref, slot)
+  lemma doSplitCorrect(s: BBC.Variables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: int, refUpperBound: uint64)
+  requires doSplit.requires(s, parentref, childref, slot, refUpperBound)
   requires s.totalCacheSize() <= MaxCacheSize() - 2
-  ensures var s' := doSplit(s, parentref, childref, slot);
+  ensures var s' := doSplit(s, parentref, childref, slot, refUpperBound);
     && s'.Ready?
     && s'.totalCacheSize() <= MaxCacheSize()
     && StateBCImpl.WFCache(s'.cache)
     && betree_next(s, s')
   {
-    var s' := doSplit(s, parentref, childref, slot);
+    var s' := doSplit(s, parentref, childref, slot, refUpperBound);
     reveal_doSplit();
 
     if (
@@ -318,13 +320,13 @@ module SplitModel {
       return;
     }
 
-    var left_childref := getFreeRef(s);
+    var left_childref := getFreeRef(s, refUpperBound);
     if left_childref.None? {
       assert noop(s, s);
       return;
     }
 
-    var right_childref := getFreeRef2(s, left_childref.value);
+    var right_childref := getFreeRef2(s, left_childref.value, refUpperBound);
     if right_childref.None? {
       assert noop(s, s);
       return;

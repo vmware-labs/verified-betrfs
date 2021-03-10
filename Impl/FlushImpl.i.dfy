@@ -33,7 +33,7 @@ module FlushImpl {
 
   import IT = IndirectionTable
 
-  method flushInteral(linear inout s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference)
+  method doFlush(linear inout s: ImplVariables, parentref: BT.G.Reference, slot: uint64, childref: BT.G.Reference)
   requires old_s.Inv()
   requires old_s.Ready?
   requires old_s.cache.ptr(childref).Some?
@@ -48,14 +48,16 @@ module FlushImpl {
   requires childref in old_s.ephemeralIndirectionTable.I().graph
 
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 2
+  requires forall r | r in old_s.ephemeralIndirectionTable.graph :: r <= old_s.ephemeralIndirectionTable.refUpperBound
 
   ensures s.W()
   ensures s.Ready?
   ensures s.WriteAllocConditions()
   ensures s.I() == FlushModel.flush(old_s.I(), parentref, slot as int, childref, 
-    old_s.cache.I()[childref]);
+    old_s.cache.I()[childref], old_s.ephemeralIndirectionTable.refUpperBound);
   ensures LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
   {
+    ghost var refUpperBound := s.ephemeralIndirectionTable.refUpperBound;
     var b := false;
     if s.frozenIndirectionTable.lSome? {
       b := s.frozenIndirectionTable.value.HasEmptyLoc(parentref);
@@ -77,8 +79,8 @@ module FlushImpl {
         BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), childref);
         BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), parentref);
         BookkeepingModel.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
-            s.I(), newchild.children, parentI.children.value, slot as int);
-        BookkeepingModel.allocRefDoesntEqual(s.I(), newchild.children, parentref);
+            s.I(), newchild.children, parentI.children.value, slot as int, refUpperBound);
+        BookkeepingModel.allocRefDoesntEqual(s.I(), newchild.children, parentref, refUpperBound);
 
         var newchildref := allocBookkeeping(inout s, newchild.children);
         if newchildref.None? {
@@ -121,7 +123,8 @@ module FlushImpl {
   ensures s.WFBCVars() && s.Ready?
   ensures IOModel.betree_next(old_s.I(), s.I())
   {
-    FlushModel.flushCorrect(s.I(), parentref, slot as int, childref, s.cache.I()[childref]);
-    flushInteral(inout s, parentref, slot, childref);
+    s.ephemeralIndirectionTable.UpperBounded();
+    FlushModel.flushCorrect(s.I(), parentref, slot as int, childref, s.cache.I()[childref], s.ephemeralIndirectionTable.refUpperBound);
+    doFlush(inout s, parentref, slot, childref);
   }
 }

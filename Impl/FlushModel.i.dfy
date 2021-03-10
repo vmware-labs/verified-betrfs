@@ -27,7 +27,7 @@ module FlushModel {
   import opened NativeTypes
   import D = AsyncDisk
 
-  function flush(s: BBC.Variables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
+  function flush(s: BBC.Variables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node, refUpperBound: uint64)
   : BBC.Variables
   requires BBC.Inv(s)
   requires s.Ready?
@@ -38,6 +38,7 @@ module FlushModel {
   requires s.cache[parentref].children.Some?
   requires 0 <= slot < |s.cache[parentref].children.value|
   requires s.cache[parentref].children.value[slot] == childref
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= refUpperBound
 
   requires childref in s.ephemeralIndirectionTable.graph
   requires childref in s.cache
@@ -60,9 +61,9 @@ module FlushModel {
             BucketFlushModel.partialFlush(
               parent.buckets[slot], child.pivotTable, child.buckets);
         var newchild := child.(buckets := newbuckets);
-        var (s2, newchildref) := allocBookkeeping(s, newchild.children);
+        var (s2, newchildref) := allocBookkeeping(s, newchild.children, refUpperBound);
         lemmaChildrenConditionsUpdateOfAllocBookkeeping(
-          s, newchild.children, parent.children.value, slot);
+          s, newchild.children, parent.children.value, slot, refUpperBound);
         if newchildref.None? then (
           s2
         ) else (
@@ -82,16 +83,16 @@ module FlushModel {
     )
   }
 
-  lemma flushCorrect(s: BBC.Variables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node)
-  requires flush.requires(s, parentref, slot, childref, child)
+  lemma flushCorrect(s: BBC.Variables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node, refUpperBound: uint64)
+  requires flush.requires(s, parentref, slot, childref, child, refUpperBound)
   requires s.totalCacheSize() <= MaxCacheSize() - 1
-  ensures var s' := flush(s, parentref, slot, childref, child);
+  ensures var s' := flush(s, parentref, slot, childref, child, refUpperBound);
       && s'.Ready?
       && s'.totalCacheSize() <= MaxCacheSize()
       && StateBCImpl.WFCache(s'.cache)
       && betree_next(s, s')
   {
-    var s' := flush(s, parentref, slot, childref, child);
+    var s' := flush(s, parentref, slot, childref, child, refUpperBound);
 
     if (
       && s.frozenIndirectionTable.Some?
@@ -140,7 +141,7 @@ module FlushModel {
         assert parent == s.cache[parentref];
 
         var newchild := child.(buckets := newbuckets);
-        var (s2, newchildref) := allocWithNode(s, newchild);
+        var (s2, newchildref) := allocWithNode(s, newchild, refUpperBound);
         reveal_allocBookkeeping();
         if newchildref.None? {
           assert noop(s, s2);
@@ -169,7 +170,7 @@ module FlushModel {
             lemmaChildInGraph(s, childref, ref);
           }
 
-          allocCorrect(s, newchild);
+          allocCorrect(s, newchild, refUpperBound);
           writeCorrect(s2, parentref, newparent);
 
           var flushStep := BT.NodeFlush(

@@ -206,7 +206,7 @@ module SplitImpl {
 
   method splitChild(linear inout s: ImplVariables, parentref: BT.G.Reference, 
     childref: BT.G.Reference, slot: uint64, lbound: Key, ubound: Option<Key>,
-    fparent_pivots: PivotTable, fparent_children: Option<seq<BT.G.Reference>>)
+    fparent_pivots: PivotTable, fparent_children: Option<seq<BT.G.Reference>>, refUpperBound: uint64)
   requires old_s.Ready?
   requires old_s.Inv()
   requires old_s.cache.ptr(childref).Some?
@@ -221,11 +221,13 @@ module SplitImpl {
   requires BookkeepingModel.ChildrenConditions(old_s.I(), fparent_children)
   requires BookkeepingModel.ChildrenConditions(old_s.I(), old_s.cache.I()[childref].children)
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
+  requires forall r | r in old_s.ephemeralIndirectionTable.graph :: r <= refUpperBound
+  requires old_s.ephemeralIndirectionTable.refUpperBound == refUpperBound
   ensures s.Ready?
   ensures s.W()
   ensures s.WriteAllocConditions()
   ensures LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
-  ensures s.I() == SplitModel.splitChild(old_s.I(), parentref, childref, slot as int, lbound, ubound)
+  ensures s.I() == SplitModel.splitChild(old_s.I(), parentref, childref, slot as int, lbound, ubound, refUpperBound)
   {
     SplitModel.reveal_splitChild();
 
@@ -244,14 +246,17 @@ module SplitImpl {
       var num_children_left := len / 2;
       var pivot := ComputeGetKey(child.pivotTable, num_children_left);
 
-      BookkeepingModel.getFreeRefDoesntEqual(s.I(), parentref);
+      BookkeepingModel.getFreeRefDoesntEqual(s.I(), parentref, refUpperBound);
+
+      ghost var gleft_childref := BookkeepingModel.getFreeRef(s.I(), refUpperBound);
 
       var left_childref := getFreeRef(s);
+
       if left_childref.None? {
         print "giving up; doSplit can't allocate left_childref\n";
         var _ := FreeNode(child);
       } else {
-        BookkeepingModel.getFreeRef2DoesntEqual(s.I(), left_childref.value, parentref);
+        BookkeepingModel.getFreeRef2DoesntEqual(s.I(), left_childref.value, parentref, refUpperBound);
         var right_childref := getFreeRef2(s, left_childref.value);
         if right_childref.None? {
           print "giving up; doSplit can't allocate right_childref\n";
@@ -264,7 +269,7 @@ module SplitImpl {
     }
   }
 
-  method doSplit(linear inout s: ImplVariables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: uint64)
+  method doSplit(linear inout s: ImplVariables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: uint64, refUpperBound: uint64)
   requires old_s.Ready?
   requires old_s.Inv()
   requires old_s.cache.ptr(childref).Some?
@@ -276,9 +281,11 @@ module SplitImpl {
   requires old_s.cache.I()[parentref].children.value[slot] == childref
   requires |old_s.cache.I()[parentref].buckets| <= MaxNumChildren() - 1
   requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
+  requires forall r | r in old_s.ephemeralIndirectionTable.graph :: r <= refUpperBound
+  requires old_s.ephemeralIndirectionTable.refUpperBound == refUpperBound
   ensures s.W()
   ensures s.Ready?
-  ensures s.I() == SplitModel.doSplit(old_s.I(), parentref, childref, slot as int);
+  ensures s.I() == SplitModel.doSplit(old_s.I(), parentref, childref, slot as int, refUpperBound);
   ensures s.WriteAllocConditions()
   ensures LruModel.I(s.lru.Queue()) == s.cache.I().Keys
   {
@@ -323,7 +330,7 @@ module SplitImpl {
           assert BT.ValidSplitKey(fused_parent, lbound, ubound);
           assert BT.ValidSplitKey(fused_child, lbound, ubound);
         
-          splitChild(inout s, parentref, childref, slot, lbound, ubound, fparent_pivots, fparent_children);
+          splitChild(inout s, parentref, childref, slot, lbound, ubound, fparent_pivots, fparent_children, refUpperBound);
         } else {
           print "giving up; split can't run because bounds checking failed";
         }
@@ -348,7 +355,9 @@ module SplitImpl {
   ensures s.WFBCVars() && s.Ready?
   ensures IOModel.betree_next(old_s.I(), s.I())
   {
-    SplitModel.doSplitCorrect(s.I(), parentref, childref, slot as int);
-    doSplit(inout s, parentref, childref, slot);
+    var refUpperBound := s.ephemeralIndirectionTable.refUpperBound;
+    old_s.ephemeralIndirectionTable.UpperBounded();
+    SplitModel.doSplitCorrect(s.I(), parentref, childref, slot as int, refUpperBound);
+    doSplit(inout s, parentref, childref, slot, refUpperBound);
   }
 }

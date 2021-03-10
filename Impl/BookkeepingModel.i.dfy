@@ -53,13 +53,13 @@ module BookkeepingModel {
     )
   }
 
-  function {:opaque} getFreeRef(s: BBC.Variables)
+  function {:opaque} getFreeRef(s: BBC.Variables, refUpperBound: uint64)
   : (ref : Option<BT.G.Reference>)
   requires s.Ready?
-  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= s.ephemeralIndirectionTable.refUpperBound
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= refUpperBound
   ensures ref.Some? ==> RefAvailable(s, ref.value)
   {
-    var i := s.ephemeralIndirectionTable.refUpperBound;
+    var i := refUpperBound;
     if i == 0xffff_ffff_ffff_ffff then (
       None
     ) else (
@@ -86,15 +86,15 @@ module BookkeepingModel {
     )
   }
 
-  function {:opaque} getFreeRef2(s: BBC.Variables, avoid: BT.G.Reference)
+  function {:opaque} getFreeRef2(s: BBC.Variables, avoid: BT.G.Reference, refUpperBound: uint64)
   : (ref : Option<BT.G.Reference>)
   requires s.Ready?
   // requires s.ephemeralIndirectionTable.Inv()
-  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= s.ephemeralIndirectionTable.refUpperBound
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= refUpperBound
   ensures ref.Some? ==> RefAvailable(s, ref.value)
   ensures ref.Some? ==> ref.value != avoid
   {
-    var i := s.ephemeralIndirectionTable.refUpperBound;
+    var i := refUpperBound;
     if i == 0xffff_ffff_ffff_ffff then (
       None
     ) else (
@@ -150,24 +150,24 @@ module BookkeepingModel {
     // TODO(andreal)     (if children.Some? then children.value else []));
     var eph := s.ephemeralIndirectionTable.(
       graph := s.ephemeralIndirectionTable.graph[ref := succs]).
-      (locs := MapRemove1(s.ephemeralIndirectionTable.locs, ref)).
-      (refUpperBound := if ref > s.ephemeralIndirectionTable.refUpperBound then ref else s.ephemeralIndirectionTable.refUpperBound);
+      (locs := MapRemove1(s.ephemeralIndirectionTable.locs, ref));
 
     var s' := s.(ephemeralIndirectionTable := eph);
     s'
   }
 
-  function {:opaque} allocBookkeeping(s: BBC.Variables, children: Option<seq<BT.G.Reference>>)
+  function {:opaque} allocBookkeeping(s: BBC.Variables, children: Option<seq<BT.G.Reference>>, refUpperBound: uint64)
   : (p: (BBC.Variables, Option<BT.G.Reference>))
   requires s.WriteAllocConditions()
   requires ChildrenConditions(s, children)
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= refUpperBound
 
   ensures var (s', id) := p;
     && s'.Ready?
     && s'.WriteAllocConditions()
     && |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
   {
-    var ref := getFreeRef(s);
+    var ref := getFreeRef(s, refUpperBound);
     // var ref: Option<BT.G.Reference> :| ref.Some? ==> RefAvailable(s, ref.value);
     if ref.Some? then (
       (writeBookkeeping(s, ref.value, children), ref)
@@ -215,8 +215,7 @@ module BookkeepingModel {
 
     var eph := table.
       (graph := table.graph[ref := succs]).
-      (locs := MapRemove1(table.locs, ref)).
-      (refUpperBound := if ref > table.refUpperBound then ref else table.refUpperBound);
+      (locs := MapRemove1(table.locs, ref));
 
     var s' := s.(ephemeralIndirectionTable := eph).(cache := s.cache[ref := node]);
 
@@ -224,15 +223,16 @@ module BookkeepingModel {
     s'
   }
 
-  function allocWithNode(s: BBC.Variables, node: Node)
+  function allocWithNode(s: BBC.Variables, node: Node, refUpperBound: uint64)
   : (p: (BBC.Variables, Option<BT.G.Reference>))
   requires s.WriteAllocConditions()
   requires ChildrenConditions(s, node.children)
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= refUpperBound
   ensures var (s', id) := p;
       && s'.WriteAllocConditions()
       && |s'.ephemeralIndirectionTable.graph| <= |s.ephemeralIndirectionTable.graph| + 1
   {
-    var ref := getFreeRef(s);
+    var ref := getFreeRef(s, refUpperBound);
     if ref.Some? then (
       (writeWithNode(s, ref.value, node), ref)
     ) else (
@@ -248,13 +248,13 @@ module BookkeepingModel {
   {
   }
 
-  lemma allocCorrect(s: BBC.Variables, node: Node)
+  lemma allocCorrect(s: BBC.Variables, node: Node, refUpperBound: uint64)
   requires BBC.Inv(s)
   requires s.WriteAllocConditions()
   requires BC.BlockPointsToValidReferences(node, s.ephemeralIndirectionTable.graph)
-  // requires TotalCacheSize(s) <= MaxCacheSize() - 1
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= refUpperBound
   requires BT.WFNode(node)
-  ensures var (s', ref) := allocWithNode(s, node);
+  ensures var (s', ref) := allocWithNode(s, node, refUpperBound);
     && BBC.Inv(s')
     // && WFBCVars(s')
     && (ref.Some? ==> BC.Alloc(s, s', ref.value, node))
@@ -262,7 +262,7 @@ module BookkeepingModel {
     && (ref.Some? ==> s'.totalCacheSize() == s.totalCacheSize() + 1)
     && s'.WriteAllocConditions()
   {
-    var ref := getFreeRef(s);
+    var ref := getFreeRef(s, refUpperBound);
     if ref.Some? {
       lemmaIndirectionTableLocIndexValid(s, ref.value);
       // LruModel.LruUse(s.lru, ref.value);
@@ -351,15 +351,14 @@ module BookkeepingModel {
     }
   }
 
-  lemma getFreeRefDoesntEqual(s: BBC.Variables, ref: BT.G.Reference)
+  lemma getFreeRefDoesntEqual(s: BBC.Variables, ref: BT.G.Reference, refUpperBound: uint64)
   requires s.Ready?
   requires ref in s.cache
-  // requires s.ephemeralIndirectionTable.Inv()
-  requires BC.WFIndirectionTable(s.ephemeralIndirectionTable)
-  ensures getFreeRef(s) != Some(ref)
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= refUpperBound
+  ensures getFreeRef(s, refUpperBound) != Some(ref)
   {
     reveal_getFreeRef();
-    var i := s.ephemeralIndirectionTable.refUpperBound;
+    var i := refUpperBound;
     if i == 0xffff_ffff_ffff_ffff {
     } else {
       getFreeRefIterateDoesntEqual(s, i+1, ref);
@@ -381,28 +380,27 @@ module BookkeepingModel {
     }
   }
 
-  lemma getFreeRef2DoesntEqual(s: BBC.Variables, avoid: BT.G.Reference, ref: BT.G.Reference)
+  lemma getFreeRef2DoesntEqual(s: BBC.Variables, avoid: BT.G.Reference, ref: BT.G.Reference, refUpperBound: uint64)
   requires s.Ready?
   requires ref in s.cache
-  requires BC.WFIndirectionTable(s.ephemeralIndirectionTable)
-  ensures getFreeRef2(s, avoid) != Some(ref)
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= refUpperBound
+  ensures getFreeRef2(s, avoid, refUpperBound) != Some(ref)
   {
     reveal_getFreeRef2();
-    var i := s.ephemeralIndirectionTable.refUpperBound;
+    var i := refUpperBound;
     if i == 0xffff_ffff_ffff_ffff {
     } else {
       getFreeRef2IterateDoesntEqual(s, avoid, i+1, ref);
     }
   }
 
-  lemma allocRefDoesntEqual(s: BBC.Variables, children: Option<seq<BT.G.Reference>>, ref: BT.G.Reference)
-  requires allocBookkeeping.requires(s, children);
+  lemma allocRefDoesntEqual(s: BBC.Variables, children: Option<seq<BT.G.Reference>>, ref: BT.G.Reference, refUpperBound: uint64)
+  requires allocBookkeeping.requires(s, children, refUpperBound);
   requires ref in s.cache
-  requires BC.WFIndirectionTable(s.ephemeralIndirectionTable)
-  ensures allocBookkeeping(s, children).1 != Some(ref)
+  ensures allocBookkeeping(s, children, refUpperBound).1 != Some(ref)
   {
     reveal_allocBookkeeping();
-    getFreeRefDoesntEqual(s, ref);
+    getFreeRefDoesntEqual(s, ref, refUpperBound);
   }
 
   lemma lemmaChildrenConditionsOfNode(
@@ -425,10 +423,11 @@ module BookkeepingModel {
   }
 
   lemma lemmaChildrenConditionsSingleOfAllocBookkeeping(
-      s: BBC.Variables, children: Option<seq<BT.G.Reference>>)
+      s: BBC.Variables, children: Option<seq<BT.G.Reference>>, refUpperBound: uint64)
   requires s.WriteAllocConditions()
   requires ChildrenConditions(s, children)
-  ensures var (s1, newref) := allocBookkeeping(s, children);
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= refUpperBound
+  ensures var (s1, newref) := allocBookkeeping(s, children, refUpperBound);
     newref.Some? ==> ChildrenConditions(s1, Some([newref.value]))
   {
     reveal_allocBookkeeping();
@@ -438,12 +437,13 @@ module BookkeepingModel {
 
   lemma lemmaChildrenConditionsUpdateOfAllocBookkeeping(
       s: BBC.Variables, children: Option<seq<BT.G.Reference>>,
-          children1: seq<BT.G.Reference>, i: int)
+          children1: seq<BT.G.Reference>, i: int, refUpperBound: uint64)
   requires s.WriteAllocConditions()
   requires ChildrenConditions(s, children)
   requires ChildrenConditions(s, Some(children1))
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= refUpperBound
   requires 0 <= i < |children1|
-  ensures var (s1, newref) := allocBookkeeping(s, children);
+  ensures var (s1, newref) := allocBookkeeping(s, children, refUpperBound);
     newref.Some? ==> ChildrenConditions(s1, Some(children1[i := newref.value]))
   {
     reveal_allocBookkeeping();

@@ -39,20 +39,19 @@ module BookkeepingImpl {
   ensures ref.Some? ==> RefAvailable(s, ref.value)
   ensures forall ref1 | ref1 in s.cache.I() :: Some(ref1) != ref
 
-  ensures var gs := s.I();
-    && (forall r | r in gs.ephemeralIndirectionTable.graph :: r <= gs.ephemeralIndirectionTable.refUpperBound)
-    && ref == BookkeepingModel.getFreeRef(gs);
+  ensures 
+    && (forall r | r in s.ephemeralIndirectionTable.graph :: r <= s.ephemeralIndirectionTable.refUpperBound)
+    && ref == BookkeepingModel.getFreeRef(s.I(), s.ephemeralIndirectionTable.refUpperBound);
   {
     BookkeepingModel.reveal_getFreeRef();
 
     ghost var getable := s.I().ephemeralIndirectionTable;
 
-    assert forall r | r in getable.graph :: r <= getable.refUpperBound by {
-      s.ephemeralIndirectionTable.UpperBounded();
-      assert forall r | r in s.ephemeralIndirectionTable.graph :: r <= s.ephemeralIndirectionTable.refUpperBound;
-    }
+    s.ephemeralIndirectionTable.UpperBounded();
 
-    var i := s.ephemeralIndirectionTable.GetRefUpperBound();
+    var upperBound := s.ephemeralIndirectionTable.refUpperBound;
+
+    var i := upperBound;
     if i == 0xffff_ffff_ffff_ffff {
       return None;
     }
@@ -63,7 +62,7 @@ module BookkeepingImpl {
     invariant i >= 1
     invariant forall r | r in s.ephemeralIndirectionTable.graph :: r < i
     invariant BookkeepingModel.getFreeRefIterate(s.I(), i)
-           == BookkeepingModel.getFreeRef(s.I())
+           == BookkeepingModel.getFreeRef(s.I(), upperBound)
     decreases 0x1_0000_0000_0000_0000 - i as int
     {
       var cacheLookup := s.cache.InCache(i);
@@ -88,20 +87,16 @@ module BookkeepingImpl {
   ensures ref.Some? ==> RefAvailable(s, ref.value)
   ensures forall ref1 | ref1 in s.cache.I() :: Some(ref1) != ref
 
-  ensures var gs := s.I();
-    && (forall r | r in gs.ephemeralIndirectionTable.graph :: r <= gs.ephemeralIndirectionTable.refUpperBound)
-    && ref == BookkeepingModel.getFreeRef2(gs, avoid);
+  ensures
+    && (forall r | r in s.ephemeralIndirectionTable.graph :: r <= s.ephemeralIndirectionTable.refUpperBound)
+    && ref == BookkeepingModel.getFreeRef2(s.I(), avoid, s.ephemeralIndirectionTable.refUpperBound);
   {
     BookkeepingModel.reveal_getFreeRef2();
 
-    ghost var getable := s.I().ephemeralIndirectionTable;
+    s.ephemeralIndirectionTable.UpperBounded();
 
-    assert forall r | r in getable.graph :: r <= getable.refUpperBound by {
-      s.ephemeralIndirectionTable.UpperBounded();
-      assert forall r | r in s.ephemeralIndirectionTable.graph :: r <= s.ephemeralIndirectionTable.refUpperBound;
-    }
-
-    var i := s.ephemeralIndirectionTable.GetRefUpperBound();
+    var upperBound := s.ephemeralIndirectionTable.refUpperBound;
+    var i := upperBound;
     if i == 0xffff_ffff_ffff_ffff {
       return None;
     }
@@ -112,7 +107,7 @@ module BookkeepingImpl {
     invariant i >= 1
     invariant forall r | r in s.ephemeralIndirectionTable.I().graph :: r < i
     invariant BookkeepingModel.getFreeRef2Iterate(s.I(), avoid, i)
-           == BookkeepingModel.getFreeRef2(s.I(), avoid)
+           == BookkeepingModel.getFreeRef2(s.I(), avoid, upperBound)
     decreases 0x1_0000_0000_0000_0000 - i as int
     {
       if i != avoid {
@@ -351,7 +346,8 @@ module BookkeepingImpl {
   ensures ref.Some? ==> s.ChildrenConditions(Some([ref.value]))
   ensures s.WriteAllocConditions()
 
-  ensures (s.I(), ref) == BookkeepingModel.allocBookkeeping(old_s.I(), children)
+  ensures (forall r | r in old_s.ephemeralIndirectionTable.graph :: r <= old_s.ephemeralIndirectionTable.refUpperBound)
+  ensures (s.I(), ref) == BookkeepingModel.allocBookkeeping(old_s.I(), children, old_s.ephemeralIndirectionTable.refUpperBound)
   ensures ref.None? ==> s == old_s
   ensures ref.Some? ==> LruModel.I(s.lru.Queue()) == LruModel.I(old_s.lru.Queue()) + {ref.value}
   {

@@ -21,8 +21,7 @@ module SectorType {
   // TODO make indirectionTable take up more than one block
   datatype IndirectionTable = IndirectionTable(
     locs: map<ReferenceType.Reference, Location>,
-    graph: map<ReferenceType.Reference, seq<ReferenceType.Reference>>,
-    refUpperBound: uint64)
+    graph: map<ReferenceType.Reference, seq<ReferenceType.Reference>>)
   {
     predicate hasEmptyLoc(ref: ReferenceType.Reference)
     {

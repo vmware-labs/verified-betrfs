@@ -67,7 +67,6 @@ module BlockCache refines Transactable {
     {
       && Ready?
       && (forall loc | loc in ephemeralIndirectionTable.locs.Values :: ValidNodeLocation(loc))
-      && (forall r | r in ephemeralIndirectionTable.graph :: r <= ephemeralIndirectionTable.refUpperBound)
       && AllLocationsForDifferentRefsDontOverlap(ephemeralIndirectionTable)
     }
 
@@ -104,7 +103,6 @@ module BlockCache refines Transactable {
   predicate WFCompleteIndirectionTable(indirectionTable: IndirectionTable)
   {
     && (forall loc | loc in indirectionTable.locs.Values :: ValidNodeLocation(loc))
-    && (forall r | r in indirectionTable.graph :: r <= indirectionTable.refUpperBound)
     && indirectionTable.graph.Keys == indirectionTable.locs.Keys
     && G.Root() in indirectionTable.graph
     && GraphClosed(indirectionTable.graph)
@@ -114,7 +112,6 @@ module BlockCache refines Transactable {
   predicate WFIndirectionTable(indirectionTable: IndirectionTable)
   {
     && (forall loc | loc in indirectionTable.locs.Values :: ValidNodeLocation(loc))
-    && (forall r | r in indirectionTable.graph :: r <= indirectionTable.refUpperBound)
     && indirectionTable.locs.Keys <= indirectionTable.graph.Keys
     && G.Root() in indirectionTable.graph
     && GraphClosed(indirectionTable.graph)
@@ -155,8 +152,7 @@ module BlockCache refines Transactable {
   {
     IndirectionTable(
       if ref in indirectionTable.graph && ref !in indirectionTable.locs then indirectionTable.locs[ref := loc] else indirectionTable.locs,
-      indirectionTable.graph,
-      indirectionTable.refUpperBound // TODO: yizhou7 
+      indirectionTable.graph
     )
   }
 
@@ -270,7 +266,6 @@ module BlockCache refines Transactable {
     && s'.ephemeralIndirectionTable.locs == MapRemove(s.ephemeralIndirectionTable.locs, {ref})
     && s'.cache == MapRemove(s.cache, {ref})
     && s'.ephemeralIndirectionTable.graph == MapRemove(s.ephemeralIndirectionTable.graph, {ref})
-    && s'.ephemeralIndirectionTable.refUpperBound == s.ephemeralIndirectionTable.refUpperBound
 
     && s'.outstandingIndirectionTableWrite == s.outstandingIndirectionTableWrite
     && s'.outstandingBlockWrites == s.outstandingBlockWrites
@@ -454,7 +449,6 @@ module BlockCache refines Transactable {
     && (s.frozenIndirectionTable.Some? && ref in s.frozenIndirectionTable.value.graph ==> ref in s.frozenIndirectionTable.value.locs)
     && ref in s'.ephemeralIndirectionTable.graph
     && s'.ephemeralIndirectionTable.graph == s.ephemeralIndirectionTable.graph[ref := s'.ephemeralIndirectionTable.graph[ref]]
-    && (s'.ephemeralIndirectionTable.refUpperBound == if ref > s.ephemeralIndirectionTable.refUpperBound then ref else s.ephemeralIndirectionTable.refUpperBound)
 
     && (iset r | r in s'.ephemeralIndirectionTable.graph[ref]) == G.Successors(block)
 
@@ -483,7 +477,6 @@ module BlockCache refines Transactable {
 
     && ref in s'.ephemeralIndirectionTable.graph
     && s'.ephemeralIndirectionTable.graph == s.ephemeralIndirectionTable.graph[ref := s'.ephemeralIndirectionTable.graph[ref]]
-    && (s'.ephemeralIndirectionTable.refUpperBound == if ref > s.ephemeralIndirectionTable.refUpperBound then ref else s.ephemeralIndirectionTable.refUpperBound)
 
     && (iset r | r in s'.ephemeralIndirectionTable.graph[ref]) == G.Successors(block)
 

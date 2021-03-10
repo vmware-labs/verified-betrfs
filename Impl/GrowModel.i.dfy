@@ -23,11 +23,12 @@ module GrowModel {
   import StateBCImpl
 
   /// The root was found to be too big: grow
-  function {:opaque} grow(s: BBC.Variables)
+  function {:opaque} grow(s: BBC.Variables, refUpperBound: uint64)
   : (BBC.Variables)
   requires BBC.Inv(s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
+  requires forall r | r in s.ephemeralIndirectionTable.graph :: r <= refUpperBound
   {
     lemmaChildrenConditionsOfNode(s, BT.G.Root());
 
@@ -41,8 +42,8 @@ module GrowModel {
       if !ContainsAllKeys(oldroot.pivotTable) then (
         s
       ) else (
-        var (s1, newref) := allocBookkeeping(s, oldroot.children);
-        lemmaChildrenConditionsSingleOfAllocBookkeeping(s, oldroot.children);
+        var (s1, newref) := allocBookkeeping(s, oldroot.children, refUpperBound);
+        lemmaChildrenConditionsSingleOfAllocBookkeeping(s, oldroot.children, refUpperBound);
 
         match newref {
           case None => (
@@ -59,10 +60,10 @@ module GrowModel {
     )
   }
 
-  lemma growCorrect(s: BBC.Variables)
-  requires grow.requires(s)
+  lemma growCorrect(s: BBC.Variables, refUpperBound: uint64)
+  requires grow.requires(s, refUpperBound)
   requires s.totalCacheSize() <= MaxCacheSize() - 1
-  ensures var s' := grow(s);
+  ensures var s' := grow(s, refUpperBound);
     && s'.Ready?
     && s'.totalCacheSize() <= MaxCacheSize()
     && StateBCImpl.WFCache(s'.cache)
@@ -70,7 +71,7 @@ module GrowModel {
   {
     reveal_grow();
 
-    var s' := grow(s);
+    var s' := grow(s, refUpperBound);
 
     lemmaChildrenConditionsOfNode(s, BT.G.Root());
 
@@ -90,7 +91,7 @@ module GrowModel {
       return;
     }
 
-    var (s1, newref) := allocWithNode(s, oldroot);
+    var (s1, newref) := allocWithNode(s, oldroot, refUpperBound);
     reveal_allocBookkeeping();
     reveal_writeBookkeeping();
 
@@ -108,7 +109,7 @@ module GrowModel {
         var s2 := writeWithNode(s1, BT.G.Root(), newroot);
         assert s2 == s';
 
-        allocCorrect(s, oldroot);
+        allocCorrect(s, oldroot, refUpperBound);
         writeCorrect(s1, BT.G.Root(), newroot);
 
         var growth := BT.RootGrowth(oldroot, newref);

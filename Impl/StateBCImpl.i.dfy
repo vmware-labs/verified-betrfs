@@ -185,7 +185,7 @@ module StateBCImpl {
       && ephemeralIndirectionTable.TrackingGarbage()
       && blockAllocator.Inv()
       && (forall loc | loc in ephemeralIndirectionTable.I().locs.Values :: DiskLayout.ValidNodeLocation(loc))
-      && (forall r | r in ephemeralIndirectionTable.graph :: r <= ephemeralIndirectionTable.refUpperBound)
+      // && (forall r | r in ephemeralIndirectionTable.graph :: r <= ephemeralIndirectionTable.refUpperBound)
       && ConsistentBitmap()
       && BlockAllocatorModel.Inv(blockAllocator.I())
       && BC.AllLocationsForDifferentRefsDontOverlap(ephemeralIndirectionTable.I())

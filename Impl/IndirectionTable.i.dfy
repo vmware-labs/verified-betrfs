@@ -156,7 +156,7 @@ module IndirectionTable {
 
     function I(): SectorType.IndirectionTable
     {
-      SectorType.IndirectionTable(this.locs, this.graph, this.refUpperBound)
+      SectorType.IndirectionTable(this.locs, this.graph)
     }
 
     predicate {:opaque} Inv()
@@ -1601,7 +1601,7 @@ module IndirectionTable {
 
     static function IMapAsIndirectionTable(m: map<uint64, Entry>) : SectorType.IndirectionTable
     {
-      SectorType.IndirectionTable(MapLocs(m), MapGraph(m), 0) // TODO: yizhou7
+      SectorType.IndirectionTable(MapLocs(m), MapGraph(m)) // TODO: yizhou7
     }
 
     // TODO remove static function IHashMapAsIndirectionTable(m: HashMap) : SectorType.IndirectionTable
@@ -1630,8 +1630,8 @@ module IndirectionTable {
     ensures ValInGrammar(v, IndirectionTableGrammar())
     ensures ValidVal(v)
     ensures Marshalling.valToIndirectionTable(v).Some?
-    ensures Marshalling.valToIndirectionTable(v).value.locs == this.I().locs
-    ensures Marshalling.valToIndirectionTable(v).value.graph == this.I().graph
+    // ensures Marshalling.valToIndirectionTable(v).value.locs == this.I().locs
+    // ensures Marshalling.valToIndirectionTable(v).value.graph == this.I().graph
     ensures Marshalling.valToIndirectionTable(v).value == this.I()
     ensures SizeOfV(v) <= MaxIndirectionTableByteSize()
     ensures SizeOfV(v) == size as int
@@ -1964,7 +1964,6 @@ module IndirectionTable {
     function {:opaque} getRefUpperBound() : (r: uint64)
     requires Inv()
     ensures forall ref | ref in this.graph :: ref <= r
-    ensures r == this.I().refUpperBound
     {
       reveal Inv();
       this.refUpperBound
@@ -1973,7 +1972,6 @@ module IndirectionTable {
     shared method GetRefUpperBound() returns (r: uint64)
     requires this.Inv()
     ensures r == this.getRefUpperBound()
-    ensures r == this.I().refUpperBound
     {
       reveal_getRefUpperBound();
       r := this.refUpperBound;

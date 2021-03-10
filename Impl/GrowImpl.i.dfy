@@ -34,9 +34,11 @@ module GrowImpl {
   requires old_s.Ready?
   requires BT.G.Root() in old_s.I().cache
   requires |old_s.ephemeralIndirectionTable.graph| <= IT.MaxSize() - 2
+  requires forall r | r in old_s.ephemeralIndirectionTable.graph :: r <= old_s.ephemeralIndirectionTable.refUpperBound
+
   ensures s.W()
   ensures s.Ready?
-  ensures s.I() == GrowModel.grow(old_s.I())
+  ensures s.I() == GrowModel.grow(old_s.I(), old_s.ephemeralIndirectionTable.refUpperBound)
   ensures s.WriteAllocConditions()
   ensures LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
   {
@@ -102,7 +104,8 @@ module GrowImpl {
   ensures s.WFBCVars() && s.Ready?;
   ensures IOModel.betree_next(old_s.I(), s.I())
   {
-    GrowModel.growCorrect(s.I());
+    old_s.ephemeralIndirectionTable.UpperBounded();
+    GrowModel.growCorrect(s.I(), old_s.ephemeralIndirectionTable.refUpperBound);
     doGrow(inout s);
     assert s.WFBCVars();
   }
