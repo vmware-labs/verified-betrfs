@@ -301,6 +301,7 @@ module IOImpl {
     sector.Some? ==> (
       && SSI.WFSector(sector.value)
       && SSI.Inv(sector.value))
+  ensures sector.lSome? && sector.value.SectorIndirectionTable? ==> sector.value.indirectionTable.TrackingGarbage()
   ensures (id, ISectorOpt(sector.Option())) == IOModel.ReadSector(IIO(io))
   {
     var id1, addr, bytes := io.getReadResult();
@@ -358,8 +359,6 @@ module IOImpl {
     if (Some(id) == s.indirectionTableRead && sectorOpt.lSome? && sectorOpt.value.SectorIndirectionTable?) {
       linear var lSome(sector: SSI.Sector) := sectorOpt;
       linear var SectorIndirectionTable(ephemeralIndirectionTable) := sector;
-
-      assume ephemeralIndirectionTable.TrackingGarbage();
 
       linear var bm; var succ;
       succ, bm := ephemeralIndirectionTable.InitLocBitmap();

@@ -314,7 +314,7 @@ module MarshallingImpl {
   ensures s.lSome? ==> SSI.WFSector(s.value)
   ensures s.lSome? ==> SSI.Inv(s.value)
   ensures ISectorOpt(s.Option()) == Marshalling.valToSector(v)
-  // ensures s.Some? && s.value.SectorIndirectionTable? ==> s.value.indirectionTable.TrackingGarbage()
+  ensures s.lSome? && s.value.SectorIndirectionTable? ==> s.value.indirectionTable.TrackingGarbage()
   {
     if v.c == 0 {
       var sb := Marshalling.valToSuperblock(v.val);
@@ -640,7 +640,7 @@ module MarshallingImpl {
   ensures s.lSome? ==> SSI.Inv(s.value)
   ensures ISectorOpt(s.Option()) == Marshalling.parseSector(data[start..])
   ensures s.lSome? && s.value.SectorNode? ==> BT.WFNode(s.value.node.I())
-  // ensures s.Some? && s.value.SectorIndirectionTable? ==> s.value.indirectionTable.TrackingGarbage()
+  ensures s.lSome? && s.value.SectorIndirectionTable? ==> s.value.indirectionTable.TrackingGarbage()
   {
     var success, v, rest_index := ParseVal(data, start, Marshalling.SectorGrammar());
     Marshalling.reveal_parseSector();
@@ -679,6 +679,7 @@ module MarshallingImpl {
   ensures s.lSome? ==> SSI.Inv(s.value)
   ensures ISectorOpt(s.Option()) == Marshalling.parseCheckedSector(data)
   ensures s.lSome? && s.value.SectorNode? ==> BT.WFNode(s.value.node.I())
+  ensures s.lSome? && s.value.SectorIndirectionTable? ==> s.value.indirectionTable.TrackingGarbage()
   {
     Marshalling.reveal_parseCheckedSector();
 
