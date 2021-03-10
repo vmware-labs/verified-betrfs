@@ -294,75 +294,92 @@ module JournalMod {
     reveal_WFChainInner();
   }
 
-//  lemma UniqueChain(dv: DiskView, firstCU: CU, c0: JournalChain, c1: JournalChain)
-//    requires ValidJournalChain(dv, firstCU, c0)
-//    requires ValidJournalChain(dv, firstCU, c1)
-//    ensures c0 == c1
-//    decreases |c0|
-//  {
-//    reveal_ValidJournalChain();
-//    if |c1|<|c0| {
-//      UniqueChain(dv, firstCU, c1, c0);
-//    } else {
-//      assert c0[0]==c1[0];
-//      if 1==|c0| {
-//        assert 1==|c1|;
-//      } else {
-//        ValidTruncatedChain(dv, firstCU, c0);
-//        ValidTruncatedChain(dv, firstCU, c1);
-//        UniqueChain(dv, c0[0].nextCU.value, c0[1..], c1[1..]);
-//      }
-//    }
-//  }
-//
-//  lemma FrameOneChain(dv0: DiskView, dv1: DiskView, firstCU: CU, journalChain: JournalChain)
-//    requires ValidJournalChain(dv0, firstCU, journalChain)
-//    requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, firstCU))
-//    ensures ValidJournalChain(dv1, firstCU, journalChain)
-//    decreases |journalChain|
-//  {
-//    reveal_ValidJournalChain();
-//    if |journalChain|==1 {
-//      assert WFChain(journalChain);
-//      // ...and it corresponds to stuff in the DiskView starting at firstCU.
-//      var cus := CUsForChain(firstCU, journalChain);
-////      forall i | 0<=i<|journalChain|
-////        ensures RecordOnDisk(dv1, cus[i], journalChain[i])
-////      {
-////        assert i == 0;
-////        assert cus[i] == firstCU;
-////        assert RecordOnDisk(dv0, firstCU, journalChain[i]);
-////        CUInIReads(dv0, firstCU, journalChain);
-////        assert EqualAt(dv0, dv1, firstCU);
-////        assert RecordOnDisk(dv1, firstCU, journalChain[i]);
-////        assert RecordOnDisk(dv1, cus[i], journalChain[i]);
-////      }
-//      assert ValidJournalChain(dv1, firstCU, journalChain);
-//    } else {
-//      var secondCU := journalChain[0].nextCU.value;
-//      ValidTruncatedChain(dv0, firstCU, journalChain);
-//      assert IReads(dv0, secondCU) <= IReads(dv0, firstCU);
-//      assert DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, secondCU));
-//      FrameOneChain(dv0, dv1, secondCU, journalChain[1..]);
-//
-//      // Sequence math to enjoy results of recursion
-//      var cus := CUsForChain(firstCU, journalChain);
-//      var cus1 := CUsForChain(secondCU, journalChain[1..]);
-////      forall i | 0<=i<|journalChain|
-////        ensures RecordOnDisk(dv1, cus[i], journalChain[i])
-////      {
-////        //assert cus[i] in IReads(dv0, firstCU);
-////        if i==0 {
-////          assert RecordOnDisk(dv1, cus[i], journalChain[i]);
-////        } else {
-////          assert RecordOnDisk(dv1, cus1[i-1], journalChain[1..][i-1]);
-////          assert RecordOnDisk(dv1, cus[i], journalChain[i]);
-////        }
-////      }
-//
-//      assert ValidJournalChain(dv1, firstCU, journalChain);
-//    }
-//  }
+  lemma UniqueChain(dv: DiskView, firstCU: CU, c0: JournalChain, c1: JournalChain)
+    requires ValidJournalChain(dv, firstCU, c0)
+    requires ValidJournalChain(dv, firstCU, c1)
+    ensures c0 == c1
+    decreases |c0|
+  {
+    reveal_ChainMatchesDiskView();
+    if |c1|<|c0| {
+      UniqueChain(dv, firstCU, c1, c0);
+    } else {
+      assert c0[0]==c1[0];
+      if 1==|c0| {
+        assert 1==|c1|;
+      } else {
+        ValidTruncatedChain(dv, firstCU, c0);
+        ValidTruncatedChain(dv, firstCU, c1);
+        UniqueChain(dv, c0[0].nextCU.value, c0[1..], c1[1..]);
+      }
+    }
+  }
+
+  lemma FrameOneChain(dv0: DiskView, dv1: DiskView, firstCU: Option<CU>, chain: Option<JournalChain>)
+    requires chain == ChainFromInner(dv0, firstCU)
+    requires firstCU.Some? ==> DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, firstCU.value))
+    ensures chain == ChainFromInner(dv1, firstCU)
+  {
+    
+    if firstCU.None? {
+      assert chain == ChainFromInner(dv1, firstCU);
+    } else if firstCU.value !in dv0 {
+      assert IReads(dv0, firstCU.value) == {};
+      assert firstCU.value !in dv1;
+      assert chain == ChainFromInner(dv1, firstCU);
+    } else {
+      assert chain == ChainFromInner(dv1, firstCU);
+//      var firstRec := parse(dv[firstCU.value]);
+//      if firstRec.None? then
+//        None  // !RecordOnDisk
+//      else
+//        var rest := ChainFromInner(MapRemove1(dv, firstCU.value), firstRec.value.nextCU);
+//        if rest.None? // tail didn't decode or
+//          // tail decoded but head doesn't stitch to it (a cross-crash invariant)
+//          || (0<|rest.value| && firstRec.value.seqStart != rest.value[0].seqEnd)
+//        then
+//          None  // failure in recursive call
+//        else
+//          var chain := [firstRec.value] + rest.value;
+//          assert ValidJournalChain(dv, firstCU.value, chain) by {
+//            reveal_WFChainInner();
+//            reveal_ChainMatchesDiskView();
+//            forall i | 0<=i<|chain|-1
+//              ensures chain[i].seqStart == chain[i+1].seqEnd
+//            {
+//              if i==0 {
+//                calc {
+//                  chain[i].seqStart;
+//                  rest.value[0].seqEnd;
+//                  chain[i+1].seqEnd;
+//                }
+//                assert chain[i].seqStart == chain[i+1].seqEnd;
+//              } else {
+//                calc {
+//                  chain[i].seqStart;
+//                  rest.value[i-1].seqStart;
+//                  rest.value[i].seqEnd;
+//                  chain[i+1].seqEnd;
+//                }
+//              }
+//            }
+//            assert WFChain(chain);
+//            var cus := CUsForChain(firstCU.value, chain);
+//            forall i | 0<=i<|chain|
+//              ensures RecordOnDisk(dv, cus[i], chain[i])
+//            {
+//            }
+//          }
+//          Some(chain)
+    }
+  }
+
+  lemma UniqueChainFrom(dv: DiskView, firstCU: CU, chain0: Option<JournalChain>, chain1: Option<JournalChain>)
+    requires chain0 == ChainFrom(dv, firstCU);
+    requires chain1 == ChainFrom(dv, firstCU);
+    ensures chain0 == chain1
+  {
+  }
 
   lemma Framing(sb:Superblock, dv0: DiskView, dv1: DiskView)
     requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, sb.firstCU))
@@ -370,10 +387,14 @@ module JournalMod {
   {
     var chain0 := ChainFrom(dv0, sb.firstCU);
     var chain1 := ChainFrom(dv1, sb.firstCU);
-    if chain0.Some? && chain1.Some? {
-//      FrameOneChain(dv0, dv1, sb.firstCU, journalChain0);
-//      UniqueChain(dv1, sb.firstCU, journalChain0, journalChain1);
-      assert chain0 == chain1;
+    FrameOneChain(dv0, dv1, Some(sb.firstCU), chain0);
+    assert chain0 == ChainFrom(dv1, sb.firstCU);
+    UniqueChainFrom(dv0, sb.firstCU, chain0, chain1);
+    if chain0.Some? {
+      assert chain1.Some?;
+//      FrameOneChain(dv0, dv1, sb.firstCU, chain0.value);
+//      UniqueChain(dv1, sb.firstCU, chain0.value, chain1.value);
+//      assert chain0 == chain1;
       calc {
         IM(dv0, sb);
         MsgMapMod.ConcatSeq(MessageMaps(chain0.value));
