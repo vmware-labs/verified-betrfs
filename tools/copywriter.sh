@@ -9,7 +9,7 @@ if [ "$1" == "-d" ]; then
     shift
 fi
 
-OLD_COPYRIGHT_NOTICE="Copyright 2018-2021 VMware, Inc."
+OLD_COPYRIGHT_NOTICE=""
 COPYRIGHT_NOTICE="Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington"
 COPYING_PERMISSION_STATEMENT="SPDX-License-Identifier: BSD-2-Clause"
 
