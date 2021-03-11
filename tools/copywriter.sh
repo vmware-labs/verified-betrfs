@@ -6,9 +6,11 @@
 DRY_RUN=
 if [ "$1" == "-d" ]; then
     DRY_RUN=echo
+    shift
 fi
 
-COPYRIGHT_NOTICE="Copyright 2018-2021 VMware, Inc."
+OLD_COPYRIGHT_NOTICE="Copyright 2018-2021 VMware, Inc."
+COPYRIGHT_NOTICE="Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington"
 COPYING_PERMISSION_STATEMENT="SPDX-License-Identifier: BSD-2-Clause"
 
 function starts_with_bang_line() {
@@ -19,6 +21,21 @@ function starts_with_bang_line() {
         return 2
     fi
     return ${status[1]}
+}
+
+#
+# Quote strings for use as literals in sed s///
+#
+
+# SYNOPSIS
+#   quoteRe <text>
+quoteRe() { sed -e 's/[^^]/[&]/g; s/\^/\\^/g; $!a\'$'\n''\\n' <<<"$1" | tr -d '\n'; }
+
+# SYNOPSIS
+#  quoteSubst <text>
+quoteSubst() {
+  IFS= read -d '' -r < <(sed -e ':a' -e '$!{N;ba' -e '}' -e 's/[&/\]/\\&/g; s/\n/\\&/g' <<<"$1")
+  printf %s "${REPLY%$'\n'}"
 }
 
 while [ $1 ]; do
@@ -68,27 +85,41 @@ while [ $1 ]; do
         COMMENT_PREFIX="#"
     fi
 
-    grep -F -m 1 "$COPYRIGHT_NOTICE" "$FULLPATH" > /dev/null 2>&1
+    if [ "$COMMENT_PREFIX" == "" ]; then
+        continue
+    fi
+
+    grep -Fx -m 1 "$COMMENT_PREFIX $COPYRIGHT_NOTICE" "$FULLPATH" > /dev/null 2>&1
     CONTAINS_COPYRIGHT_NOTICE=$?
-    grep -F -m 1 "$COPYING_PERMISSION_STATEMENT" "$FULLPATH" > /dev/null 2>&1
+
+    CONTAINS_OLD_COPYRIGHT_NOTICE=1
+    if [ "$OLD_COPYRIGHT_NOTICE" ]; then
+        grep -Fx -m 1 "$COMMENT_PREFIX $OLD_COPYRIGHT_NOTICE" "$FULLPATH" > /dev/null 2>&1
+        CONTAINS_OLD_COPYRIGHT_NOTICE=$?
+    fi
+
+    grep -Fx -m 1 "$COMMENT_PREFIX $COPYING_PERMISSION_STATEMENT" "$FULLPATH" > /dev/null 2>&1
     CONTAINS_COPYING_PERMISSION_STATEMENT=$?
 
-    if [ $CONTAINS_COPYRIGHT_NOTICE != 1 ]; then
-      continue
-    fi
-    if [ $CONTAINS_COPYING_PERMISSION_STATEMENT != 1 ]; then
-      continue
+    if [[ $CONTAINS_COPYING_PERMISSION_STATEMENT -gt 1 || $CONTAINS_OLD_COPYRIGHT_NOTICE -gt 1 || $CONTAINS_COPYRIGHT_NOTICE -gt 1 ]]; then
+        echo "error checking for existing notices in $FULLPATH. Skipping."
     fi
 
-    if [ "$COMMENT_PREFIX" ]; then
+    if [[ $CONTAINS_COPYRIGHT_NOTICE == 0 && $CONTAINS_OLD_COPYRIGHT_NOTICE == 1 && $CONTAINS_COPYING_PERMISSION_STATEMENT == 0 ]]; then
+      continue
+    elif [[ $CONTAINS_COPYRIGHT_NOTICE == 1 && $CONTAINS_OLD_COPYRIGHT_NOTICE == 1 && $CONTAINS_COPYING_PERMISSION_STATEMENT == 1 ]]; then
         TMPFILE=`mktemp` &&
         head -n $BANGLINES "$FULLPATH" > "$TMPFILE" &&
         if [ $BANGLINES -gt 0 ]; then echo >> "$TMPFILE"; fi &&
-        echo "$COMMENT_PREFIX" "$COPYRIGHT_NOTICE" >> "$TMPFILE" &&
-        echo "$COMMENT_PREFIX" "$COPYING_PERMISSION_STATEMENT" >> "$TMPFILE" &&
+        echo "$COMMENT_PREFIX $COPYRIGHT_NOTICE" >> "$TMPFILE" &&
+        echo "$COMMENT_PREFIX $COPYING_PERMISSION_STATEMENT" >> "$TMPFILE" &&
         echo >> "$TMPFILE" &&
         tail -n +"$[ $BANGLINES + 1 ]" "$FULLPATH" >> "$TMPFILE" &&
         $DRY_RUN cp "$TMPFILE" "$FULLPATH"
+    elif [[ $CONTAINS_COPYRIGHT_NOTICE == 1 && $CONTAINS_OLD_COPYRIGHT_NOTICE == 0 && $CONTAINS_COPYING_PERMISSION_STATEMENT == 0 ]]; then
+        $DRY_RUN sed -i "s/$(quoteRe "$COMMENT_PREFIX $OLD_COPYRIGHT_NOTICE")/$(quoteSubst "$COMMENT_PREFIX $COPYRIGHT_NOTICE")/" "$FULLPATH"
+    else
+        echo "$FULLPATH contains some weird combination of copyright notice, old copyright notice, and permission statement.  Skipping."
     fi
 
 done
