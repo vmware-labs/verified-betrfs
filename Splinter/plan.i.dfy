@@ -337,38 +337,11 @@ module JournalMod {
     }
   }
 
-  lemma UniqueChainFrom(dv: DiskView, firstCU: CU, chain0: Option<JournalChain>, chain1: Option<JournalChain>)
-    requires chain0 == ChainFrom(dv, firstCU);
-    requires chain1 == ChainFrom(dv, firstCU);
-    ensures chain0 == chain1
-  {
-  }
-
   lemma Framing(sb:Superblock, dv0: DiskView, dv1: DiskView)
     requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, sb.firstCU))
     ensures IM(dv0, sb) == IM(dv1, sb)
   {
-    var chain0 := ChainFrom(dv0, sb.firstCU);
-    var chain1 := ChainFrom(dv1, sb.firstCU);
-    FrameOneChain(dv0, dv1, Some(sb.firstCU), chain0);
-    assert chain0 == ChainFrom(dv1, sb.firstCU);
-    UniqueChainFrom(dv0, sb.firstCU, chain0, chain1);
-    if chain0.Some? {
-      assert chain1.Some?;
-//      FrameOneChain(dv0, dv1, sb.firstCU, chain0.value);
-//      UniqueChain(dv1, sb.firstCU, chain0.value, chain1.value);
-//      assert chain0 == chain1;
-      calc {
-        IM(dv0, sb);
-        MsgMapMod.ConcatSeq(MessageMaps(chain0.value));
-        MsgMapMod.ConcatSeq(MessageMaps(chain1.value));
-        IM(dv1, sb);
-      }
-    } else {
-      assert chain0.None?;
-      assert chain1.None?;
-      assert IM(dv0, sb) == IM(dv1, sb);
-    }
+    FrameOneChain(dv0, dv1, Some(sb.firstCU), ChainFrom(dv0, sb.firstCU));
   }
 }
 
