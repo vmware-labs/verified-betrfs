@@ -414,6 +414,8 @@ module CacheImpl {
     requires slot as nat < |I()[ref].buckets|
     ensures b == Pivots.BoundedKeySeq(I()[pivotsref].pivotTable,
         I()[ref].buckets[slot as nat].keys)
+    ensures b == BucketsLib.BoundedBucket(I()[ref].buckets[slot as nat].as_map(), 
+        I()[pivotsref].pivotTable)
     {
       shared var node := Get(ref);
       if ref == pivotsref {

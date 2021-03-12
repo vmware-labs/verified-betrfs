@@ -83,10 +83,12 @@ module NodeImpl {
     requires Pivots.WFPivots(pivots)
     requires slot as nat < |buckets|
     ensures result == Pivots.BoundedKeySeq(pivots, buckets[slot as nat].I().keys)
+    ensures result == BucketsLib.BoundedBucket(buckets[slot as nat].I().as_map(), pivots)
     {
       var pkv := lseq_peek(buckets, slot).GetPkv();
       ghost var keys := PKV.IKeys(pkv.keys);
-      assert buckets[slot as nat].I().keys == keys;
+      ghost var bucket := buckets[slot as nat].I();
+      assert bucket.keys == keys;
 
       var bounded := true;
       var i := 0 as uint64;
@@ -101,6 +103,8 @@ module NodeImpl {
         bounded := Pivots.ComputeBoundedKey(pivots, key);
         i := i + 1;
       }
+
+      MapSeqs.key_sets_eq(bucket.keys, bucket.msgs);
       return bounded;
     }
 
