@@ -172,10 +172,10 @@ module BucketsLib {
     && (forall i | 0 <= i < |blist| :: WFBucketAt(blist[i], pivots, i))
   }
 
-  predicate BoundedBucket(bucket: map<Key, Message>, pivots: PivotTable)
+  predicate BoundedBucket(bucket: Bucket, pivots: PivotTable)
   {
     && WFPivots(pivots)
-    && (forall key | key in bucket :: BoundedKey(pivots, key))
+    && (forall key | key in bucket.keys :: BoundedKey(pivots, key))
   }
 
   predicate BoundedBucketList(blist: BucketList, pivots: PivotTable)
@@ -183,7 +183,7 @@ module BucketsLib {
     && WFPivots(pivots)
     && (forall i | 0 <= i < |blist| ::
         && PreWFBucket(blist[i])
-        && BoundedBucket(blist[i].as_map(), pivots))
+        && BoundedBucket(blist[i], pivots))
   }
 
   function {:opaque} B(m: map<Key, Message>) : (b : Bucket)

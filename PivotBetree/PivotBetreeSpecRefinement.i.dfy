@@ -1479,6 +1479,8 @@ module PivotBetreeSpecRefinement {
     P.PivotsHasAllKeys(r.pivots);
     assert r.pivots[1] == KeyToElement(r.pivot);
 
+    MapSeqs.key_sets_eq(r.leaf.buckets[0].keys, r.leaf.buckets[0].msgs);
+
     PivotBetreeSpecWFNodes.SplitMaps(r.leaf.buckets[0], r.pivot);
 
     /*var leaf'_buckets := [
