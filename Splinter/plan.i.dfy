@@ -178,65 +178,52 @@ module JournalMod {
   // be parsed.
   // Note that the firstCU.None? case is only here to clean up the recursive
   // definition; that's why firstCU.Some? is a prereq for the ensures.
-  function ChainFromInner(dv: DiskView, firstCU: Option<CU>) : (chain:Option<JournalChain>)
-    ensures firstCU.Some? && chain.Some?
-      ==> ValidJournalChain(dv, firstCU.value, chain.value)
+  datatype ChainResult = ChainResult(chain: Option<JournalChain>, readCUs:seq<CU>)
+
+  function ChainFromInner(dv: DiskView, firstCU: Option<CU>) : (r:ChainResult)
+    ensures firstCU.Some? && r.chain.Some?
+      ==> ValidJournalChain(dv, firstCU.value, r.chain.value)
     decreases |dv.Keys|
   {
     if firstCU.None? then
-      Some([])
+      // Recursion stop condition. Didn't try to read anything
+      ChainResult(Some([]), [])
     else if firstCU.value !in dv then
-      None  // !RecordOnDisk
+      // !RecordOnDisk: tried to read firstCU and failed
+      ChainResult(None, [firstCU.value])
     else
       var firstRec := parse(dv[firstCU.value]);
       if firstRec.None? then
-        None  // !RecordOnDisk
+        // !RecordOnDisk: read firstCU, but it was borked
+        ChainResult(None, [firstCU.value])
       else
-        var rest := ChainFromInner(MapRemove1(dv, firstCU.value), firstRec.value.nextCU);
-        if rest.None? // tail didn't decode or
+        var inner := ChainFromInner(MapRemove1(dv, firstCU.value), firstRec.value.nextCU);
+        if inner.chain.None? // tail didn't decode or
           // tail decoded but head doesn't stitch to it (a cross-crash invariant)
-          || (0<|rest.value| && firstRec.value.seqStart != rest.value[0].seqEnd)
+          || (0<|inner.chain.value|
+              && firstRec.value.seqStart != inner.chain.value[0].seqEnd)
         then
-          None  // failure in recursive call
+          // failure in recursive call.
+          // We read our cu plus however far the recursive call reached.
+          ChainResult(None, [firstCU.value] + inner.readCUs)
         else
-          var chain := [firstRec.value] + rest.value;
+          var chain := [firstRec.value] + inner.chain.value;
+
+          // TODO tighten this proof:
           assert ValidJournalChain(dv, firstCU.value, chain) by {
             reveal_WFChainInner();
             reveal_ChainMatchesDiskView();
-            forall i | 0<=i<|chain|-1
-              ensures chain[i].seqStart == chain[i+1].seqEnd
-            {
-              if i==0 {
-                calc {
-                  chain[i].seqStart;
-                  rest.value[0].seqEnd;
-                  chain[i+1].seqEnd;
-                }
-                assert chain[i].seqStart == chain[i+1].seqEnd;
-              } else {
-                calc {
-                  chain[i].seqStart;
-                  rest.value[i-1].seqStart;
-                  rest.value[i].seqEnd;
-                  chain[i+1].seqEnd;
-                }
-              }
-            }
-            assert WFChain(chain);
             var cus := CUsForChain(firstCU.value, chain);
-            forall i | 0<=i<|chain|
-              ensures RecordOnDisk(dv, cus[i], chain[i])
-            {
-            }
+            assert forall i | 0<=i<|chain| :: RecordOnDisk(dv, cus[i], chain[i]); // trigger
           }
-          Some(chain)
+          ChainResult(Some(chain), [firstCU.value] + inner.readCUs)
   }
 
   // Returns None if any of the CUs point to missing blocks from the dv, or if
   // the block can't be parsed.
   function ChainFrom(dv: DiskView, firstCU: CU) : (chain:Option<JournalChain>)
   {
-    ChainFromInner(dv, Some(firstCU))
+    ChainFromInner(dv, Some(firstCU)).chain
   }
 
   function MessageMaps(journalChain: JournalChain) : seq<MsgMap> {
@@ -255,33 +242,30 @@ module JournalMod {
       MsgMapMod.Empty()
   }
 
-  function IReads(dv: DiskView, firstCU: CU) : set<AU>
+  function ReadAt(cus: seq<CU>, i: nat) : AU
+    requires i<|cus|
   {
-    var chain := ChainFrom(dv, firstCU);
-    if chain.None?
-    then {}
-    else
-      var cus := CUsForChain(firstCU, chain.value);
-      set i | 0<=i<|chain.value| :: cus[i].au
+    cus[i].au
+  }
+
+  function IReads(dv: DiskView, firstCU: CU) : seq<AU>
+  {
+    var cus := ChainFromInner(dv, Some(firstCU)).readCUs;
+    // wanted to write:
+    // seq(|cus|, i requires 0<=i<|cus| => cus[i].au)
+    // but Dafny bug, so:
+    seq(|cus|, i requires 0<=i<|cus| => ReadAt(cus, i))
   }
 
   predicate EqualAt(dv0: DiskView, dv1: DiskView, cu: CU)
-    requires cu in dv0
-    requires cu in dv1
   {
-    dv0[cu]==dv1[cu]
+    || (cu !in dv0 && cu !in dv1)
+    || (cu in dv0 && cu in dv1 && dv0[cu]==dv1[cu])
   }
 
-  predicate Member(dv: DiskView, cu: CU)
+  predicate DiskViewsEquivalentForSet(dv0: DiskView, dv1: DiskView, aus: seq<AU>)
   {
-    cu in dv
-  }
-
-  predicate DiskViewsEquivalentForSet(dv0: DiskView, dv1: DiskView, aus: set<AU>)
-  {
-    && (forall cu:CU :: cu.au in aus ==> Member(dv0, cu))
-    && (forall cu:CU :: cu.au in aus ==> Member(dv1, cu))
-    && (forall cu:CU :: cu.au in aus ==> EqualAt(dv0, dv1, cu))
+    forall cu:CU :: cu.au in aus ==> EqualAt(dv0, dv1, cu)
   }
 
   lemma ValidTruncatedChain(dv: DiskView, firstCU: CU, c: JournalChain)
@@ -315,62 +299,41 @@ module JournalMod {
     }
   }
 
-  lemma FrameOneChain(dv0: DiskView, dv1: DiskView, firstCU: Option<CU>, chain: Option<JournalChain>)
-    requires chain == ChainFromInner(dv0, firstCU)
-    requires firstCU.Some? ==> DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, firstCU.value))
-    ensures chain == ChainFromInner(dv1, firstCU)
+  predicate SequenceSubset<T>(a:seq<T>, b:seq<T>)
   {
-    
-    if firstCU.None? {
-      assert chain == ChainFromInner(dv1, firstCU);
-    } else if firstCU.value !in dv0 {
-      assert IReads(dv0, firstCU.value) == {};
-      assert firstCU.value !in dv1;
-      assert chain == ChainFromInner(dv1, firstCU);
-    } else {
-      assert chain == ChainFromInner(dv1, firstCU);
-//      var firstRec := parse(dv[firstCU.value]);
-//      if firstRec.None? then
-//        None  // !RecordOnDisk
-//      else
-//        var rest := ChainFromInner(MapRemove1(dv, firstCU.value), firstRec.value.nextCU);
-//        if rest.None? // tail didn't decode or
-//          // tail decoded but head doesn't stitch to it (a cross-crash invariant)
-//          || (0<|rest.value| && firstRec.value.seqStart != rest.value[0].seqEnd)
-//        then
-//          None  // failure in recursive call
-//        else
-//          var chain := [firstRec.value] + rest.value;
-//          assert ValidJournalChain(dv, firstCU.value, chain) by {
-//            reveal_WFChainInner();
-//            reveal_ChainMatchesDiskView();
-//            forall i | 0<=i<|chain|-1
-//              ensures chain[i].seqStart == chain[i+1].seqEnd
-//            {
-//              if i==0 {
-//                calc {
-//                  chain[i].seqStart;
-//                  rest.value[0].seqEnd;
-//                  chain[i+1].seqEnd;
-//                }
-//                assert chain[i].seqStart == chain[i+1].seqEnd;
-//              } else {
-//                calc {
-//                  chain[i].seqStart;
-//                  rest.value[i-1].seqStart;
-//                  rest.value[i].seqEnd;
-//                  chain[i+1].seqEnd;
-//                }
-//              }
-//            }
-//            assert WFChain(chain);
-//            var cus := CUsForChain(firstCU.value, chain);
-//            forall i | 0<=i<|chain|
-//              ensures RecordOnDisk(dv, cus[i], chain[i])
-//            {
-//            }
-//          }
-//          Some(chain)
+    forall i | 0<=i<|a| :: a[i] in b
+  }
+
+  lemma DiskViewsEquivalentAfterRemove(dv0: DiskView, dv1: DiskView, aus: seq<AU>, removedCU: CU, ausr: seq<AU>)
+    requires DiskViewsEquivalentForSet(dv0, dv1, aus)
+    requires SequenceSubset(ausr, aus)
+    ensures DiskViewsEquivalentForSet(MapRemove1(dv0, removedCU), MapRemove1(dv1, removedCU), ausr)
+  {
+  }
+
+  lemma FrameOneChain(dv0: DiskView, dv1: DiskView, firstCU: Option<CU>, chain: Option<JournalChain>)
+    requires chain == ChainFromInner(dv0, firstCU).chain
+    requires firstCU.Some? ==> DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, firstCU.value))
+    ensures chain == ChainFromInner(dv1, firstCU).chain
+  {
+    if firstCU.Some? {
+      assert IReads(dv0, firstCU.value)[0] == firstCU.value.au; // trigger
+      if firstCU.value in dv0 {
+        var firstRec := parse(dv0[firstCU.value]);
+        if firstRec.Some? { // Recurse to follow chain
+          var dv0r := MapRemove1(dv0, firstCU.value);
+          var nextCU := firstRec.value.nextCU;
+          var aus := IReads(dv0, firstCU.value);
+          var ausr := if nextCU.Some? then IReads(dv0r, nextCU.value) else [];
+
+          forall i | 0<=i<|ausr| ensures ausr[i] in aus {
+            assert aus[i+1] == ausr[i]; // witness to SequenceSubset(ausr, aus)
+          }
+          DiskViewsEquivalentAfterRemove(dv0, dv1, aus, firstCU.value, ausr);
+          FrameOneChain(dv0r, MapRemove1(dv1, firstCU.value),
+            nextCU, ChainFromInner(dv0r, nextCU).chain);
+        }
+      }
     }
   }
 
