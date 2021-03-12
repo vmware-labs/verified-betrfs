@@ -208,8 +208,6 @@ module JournalMod {
           ChainResult(None, [firstCU.value] + inner.readCUs)
         else
           var chain := [firstRec.value] + inner.chain.value;
-
-          // TODO tighten this proof:
           assert ValidJournalChain(dv, firstCU.value, chain) by {
             reveal_WFChainInner();
             reveal_ChainMatchesDiskView();
