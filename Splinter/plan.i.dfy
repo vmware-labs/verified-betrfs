@@ -42,73 +42,95 @@ module AllocationMod {
 module MsgSeqMod {
   import opened MessageMod
 
-  type MsgSeq = seq<Message>
+  datatype MapInterp = MapInterp(mi: imap<Key, Value>, seqEnd: nat)
 
-  function I(key:Key, msgseq: MsgSeq) : Value
-
-  predicate Collapsed(m0: MsgSeq, m1:MsgSeq)
+  function EmptyInterp() : MapInterp
   {
-    false
-    // m0, m1 related by collapsing irrelevant messages
+    MapInterp(imap[], 0)
   }
 
-  lemma ICollapse(m0: MsgSeq, m1:MsgSeq)
-    requires Collapsed(m0, m1)
-    ensures forall key :: I(key, m0) == I(key, m1)
+  datatype MsgSeq = MsgSeq(msgs: map<nat, Message>, seqStart: nat, seqEnd: nat)
+    // seqEnd is exclusive
+
+  predicate WF(ms: MsgSeq)
   {
+    forall k :: k in ms.msgs <==> ms.seqStart <= k < ms.seqEnd
+  }
+
+  predicate Complete(ms: MsgSeq)
+  {
+    && WF(ms)
+    && ms.seqStart == 0
+  }
+
+  function IKey(key:Key, ms: MsgSeq) : Value
+    requires Complete(ms)
+
+  function I(ms: MsgSeq) : MapInterp
+    requires Complete(ms)
+  {
+    MapInterp(imap key :: IKey(key, ms), ms.seqEnd)
   }
 
   function Concat(m0: MsgSeq, m1:MsgSeq) : MsgSeq
+    requires WF(m0)
+    requires WF(m1)
+    requires m0.seqEnd == m1.seqStart
   {
-    m0 + m1
+    MsgSeq(m0.msgs + m1.msgs, m0.seqStart, m1.seqEnd)
+  }
+
+  function Empty() : MsgSeq
+  {
+    MsgSeq(map[], 0, 0)
   }
 }
 
-module MsgMapMod {
-  import opened MessageMod
-  import opened MsgSeqMod
-  import opened Sequences
-
-  predicate FullImap<K(!new),V>(m: imap<K, V>) {  // TODO move to MapSpec
-    forall k :: k in m
-  }
-
-  function method FullImapWitness<K(!new),V>(v: V) : (m: imap<K, V>)
-    ensures FullImap(m)
-    // Gaa "method" because Dafny considers 'witness' not a ghost context.
-    // Can't actually give this a body.
-
-  type MsgMap = m: imap<Key, MsgSeq> | FullImap(m) witness FullImapWitness([])
-
-  function I(msgmap: MsgMap) : imap<Key, Value>
-  {
-    imap key | key in AllKeys() :: MsgSeqMod.I(key, msgmap[key])
-  }
-
-  function Concat(m0: MsgMap, m1: MsgMap) : MsgMap
-  {
-    imap key | key in AllKeys() :: MsgSeqMod.Concat(m0[key], m1[key])
-  }
-
-  function ConcatSeq(sm:seq<MsgMap>) : MsgMap
-  {
-    if |sm|==0
-      then Empty()
-      else Concat(ConcatSeq(DropLast(sm)), Last(sm))
-  }
-
-  function Empty() : MsgMap
-  {
-    imap key | key in AllKeys() :: []
-  }
-}
+//module MsgMapMod {
+//  import opened MessageMod
+//  import opened MsgSeqMod
+//  import opened Sequences
+//
+//  predicate FullImap<K(!new),V>(m: imap<K, V>) {  // TODO move to MapSpec
+//    forall k :: k in m
+//  }
+//
+//  function method FullImapWitness<K(!new),V>(v: V) : (m: imap<K, V>)
+//    ensures FullImap(m)
+//    // Gaa "method" because Dafny considers 'witness' not a ghost context.
+//    // Can't actually give this a body.
+//
+//  type MsgMap = m: imap<Key, MsgSeq> | FullImap(m)
+//    witness FullImapWitness(MsgSeqMod.Empty())
+//
+//  function I(msgmap: MsgMap) : imap<Key, Value>
+//  {
+//    imap key | key in AllKeys() :: MsgSeqMod.I(key, msgmap[key])
+//  }
+//
+//  function Concat(m0: MsgMap, m1: MsgMap) : MsgMap
+//  {
+//    imap key | key in AllKeys() :: MsgSeqMod.Concat(m0[key], m1[key])
+//  }
+//
+//  function ConcatSeq(sm:seq<MsgMap>) : MsgMap
+//  {
+//    if |sm|==0
+//      then Empty()
+//      else Concat(ConcatSeq(DropLast(sm)), Last(sm))
+//  }
+//
+//  function Empty() : MsgMap
+//  {
+//    imap key | key in AllKeys() :: []
+//  }
+//}
 
 module JournalMod {
   import opened Options
   import opened Sequences
   import opened Maps
   import opened MsgSeqMod
-  import opened MsgMapMod
   import opened AllocationMod
 
   datatype Superblock = Superblock(firstCU: Option<CU>, firstValidSeq : nat)
@@ -119,8 +141,6 @@ module JournalMod {
     seqStart: nat,  // inclusive
     nextCU: Option<CU>   // linked list pointer
   ) {
-
-    function seqEnd() : nat { seqStart + |messageSeq| }
 
     // Synthesize a superblock that reflects the tail of the chain (cutting
     // off the first rec), propagating along firstValidSeq.
@@ -163,7 +183,7 @@ module JournalMod {
     requires WFChainBasic(chain)
   {
     && (forall i | 0<=i<|chain.recs|-1 ::
-      chain.recs[i].seqStart == chain.recs[i+1].seqEnd())
+      chain.recs[i].seqStart == chain.recs[i+1].messageSeq.seqEnd)
   }
 
   predicate WFChain(chain: JournalChain)
@@ -216,7 +236,7 @@ module JournalMod {
     requires sb.firstCU.Some?
     requires rec.nextCU.Some? ==> sb.firstValidSeq < rec.seqStart; // proves !IsLastLink(0, chain)
     requires innerchain.sb == rec.nextSB(sb);
-    requires 0<|innerchain.recs| ==> rec.seqStart == innerchain.recs[0].seqEnd();
+    requires 0<|innerchain.recs| ==> rec.seqStart == innerchain.recs[0].messageSeq.seqEnd;
     requires WFChain(innerchain)
     ensures WFChain(chain)
   {
@@ -259,7 +279,7 @@ module JournalMod {
       if firstRec.None? then
         // !RecordOnDisk: read firstCU, but it was borked
         ChainResult(None, [sb.firstCU.value])
-      else if firstRec.value.seqEnd() <= sb.firstValidSeq then
+      else if firstRec.value.messageSeq.seqEnd <= sb.firstValidSeq then
         // This isn't an invariant disk state: if we're in the initial call,
         // the superblock shouldn't point to a useless JournalRecord; if we're
         // in a recursive call with correctly-chained records, we should have
@@ -278,7 +298,7 @@ module JournalMod {
         if inner.chain.None? // tail didn't decode or
           // tail decoded but head doesn't stitch to it (a cross-crash invariant)
           || (0<|inner.chain.value.recs|
-              && firstRec.value.seqStart != inner.chain.value.recs[0].seqEnd())
+              && firstRec.value.seqStart != inner.chain.value.recs[0].messageSeq.seqEnd)
         then
           // failure in recursive call.
           // We read our cu plus however far the recursive call reached.
@@ -360,7 +380,7 @@ module JournalMod {
       if sb.firstCU.value in dv0 {
         var firstRec := parse(dv0[sb.firstCU.value]);
         if firstRec.Some? { // Recurse to follow chain
-          if firstRec.value.seqEnd() <= sb.firstValidSeq {
+          if firstRec.value.messageSeq.seqEnd <= sb.firstValidSeq {
           } else if firstRec.value.seqStart == sb.firstValidSeq {
           } else {
             var dv0r := MapRemove1(dv0, sb.firstCU.value);
@@ -450,23 +470,26 @@ module BetreeMod {
   import opened MessageMod
   import opened AllocationMod
   import opened MsgSeqMod
-  import opened MsgMapMod
   import opened IndirectionTableMod
 
-  datatype Superblock = Superblock(itbl: IndirectionTableMod.Superblock, rootIdx: IndirectionTableMod.IndirectionTable)
+  datatype Superblock = Superblock(
+    itbl: IndirectionTableMod.Superblock,
+    rootIdx: IndirectionTableMod.IndirectionTable,
+    seqEnd: nat)
 
   datatype LookupRecord = LookupRecord(
     cu: CU
   )
   type Lookup = seq<LookupRecord>
 
-  function LookupToMsgSeq(lookup: Lookup) : MsgSeq
+  // Select the messages that lookup finds.
+  function LookupToValue(lookup: Lookup) : Value
     // TODO body
 
   predicate ValidLookup(dv: DiskView, itbl: IndirectionTable, key: Key, lookup: Lookup)
     // TODO
 
-  function IMKey(dv: DiskView, sb: Superblock, key: Key) : MsgSeq
+  function IMKey(dv: DiskView, sb: Superblock, key: Key) : Value
   {
     var itbl := IndirectionTableMod.I(dv, sb.itbl);
     if
@@ -474,14 +497,14 @@ module BetreeMod {
       && exists lookup :: ValidLookup(dv, itbl.value, key, lookup)
     then
       var lookup :| ValidLookup(dv, itbl.value, key, lookup);
-      LookupToMsgSeq(lookup)
+      LookupToValue(lookup)
     else
-      []
+      DefaultValue()
   }
 
-  function IM(dv: DiskView, sb: Superblock) : MsgMap
+  function IM(dv: DiskView, sb: Superblock) : MapInterp
   {
-    imap key | key in AllKeys() :: IMKey(dv, sb, key)
+    MapInterp(imap key | key in AllKeys() :: IMKey(dv, sb, key), sb.seqEnd)
   }
 
   function IReadsKey(dv: DiskView, itbl: Option<IndirectionTable>, key: Key) : set<AU> {
@@ -543,7 +566,6 @@ module System {
   import opened MessageMod
   import opened AllocationMod
   import opened MsgSeqMod
-  import opened MsgMapMod
   import AllocationTableMod
   import JournalMod
   import BetreeMod
@@ -578,19 +600,19 @@ module System {
     {0}
   }
  
-  // IM == Interpret as MsgSeq
+  // IM == Interpret as MapInterp
   // Oh man we're gonna have a family of IReads predicates that capture the
   // heapiness of DiskView, aren't we?
-  function IM(dv: DiskView) : MsgMap
+  function IM(dv: DiskView) : MapInterp
   {
     var sb := ISuperblock(dv);
     if sb.Some?
     then
       //JournalMod.IM(dv, sb.value.journal) + BetreeMod.IM(dv, sb.value.betree)
-      // TODO stubbed out because IM API is changing to MsgSeqs
+      // TODO stubbed out because IM API is changing to MapInterp
       BetreeMod.IM(dv, sb.value.betree)
     else
-      MsgMapMod.Empty()
+      EmptyInterp()
   }
 
   function IMReads(dv: DiskView) : set<AU> {
@@ -605,10 +627,6 @@ module System {
       */
   }
 
-  function I(dv: DiskView) : imap<Key, Value> {
-    MsgMapMod.I(IM(dv))
-  }
-
   function IReads(dv: DiskView) : set<AU> {
     IMReads(dv)
   }
@@ -620,10 +638,10 @@ module System {
       && cu in dv1
       && dv0[cu]==dv1[cu]
       */
-    ensures I(dv0) == I(dv1)
+    ensures IM(dv0) == IM(dv1)
   {
     //assert forall k :: k !in I(dv0);
-    assert forall k :: I(dv0)[k] == I(dv1)[k];
+    assert forall k :: IM(dv0).mi[k] == IM(dv1).mi[k];
   }
 }
 
