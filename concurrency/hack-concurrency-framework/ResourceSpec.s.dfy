@@ -39,22 +39,14 @@ abstract module ResourceSpec {
   requires Valid(add(x, z))
   ensures Update(add(x, z), add(y, z))
 
-  predicate {:opaque} radical(a': R, a: R)
-  {
-    && (exists n :: le(a, pow(a', n)))
-  }
-
-  method {:extern} resources_obey_inv(shared a: R, linear b: R)
-  returns (ghost a': R)
-  ensures radical(a', a)
-  ensures Valid(add(a', b))
+  method {:extern} resources_obey_inv(linear b: R)
+  ensures Valid(b)
 
   method {:extern} do_transform(
-      shared a: R,
       linear b: R,
       ghost expected_out: R)
   returns (linear c: R)
-  requires forall a' :: radical(a', a) && Valid(add(a', b)) ==> Update(add(a', b), add(a', expected_out))
+  requires Update(b, expected_out)
   ensures c == expected_out
 
   function method {:extern} get_unit() : (linear u: R)
