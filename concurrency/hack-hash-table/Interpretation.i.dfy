@@ -559,65 +559,14 @@ module Interpretation {
     res
   }
 
-  lemma preserves_1_helper(table: seq<Option<HT.Info>>,
-      table': seq<Option<HT.Info>>,
-      i: int)
-  requires Complete(table)
-  requires Complete(table')
-  requires |table| == |table'|
-  requires forall j | 0 <= j < |table| && i != j :: table'[j] == table[j]
-  requires 0 <= i < |table|
-  requires S.f(table[i]) == S.f(table'[i])
-  ensures S.concat_map(table)
-       == S.concat_map(table')
+  function interp_with_stubs(s: Variables) : S.Summary
+  requires Inv(s)
+  requires Complete(s.table)
   {
-    calc {
-      S.concat_map(table);
-      {
-        S.concat_map_additive(table[..i], table[i..]);
-        assert table[..i] + table[i..] == table;
-      }
-      S.add(
-        S.concat_map(table[..i]),
-        S.concat_map(table[i..]));
-      {
-        S.concat_map_additive([table[i]], table[i+1..]);
-        assert [table[i]] + table[i+1..] == table[i..];
-      }
-      S.add(
-        S.concat_map(table[..i]),
-        S.add(
-          S.concat_map([table[i]]),
-          S.concat_map(table[i+1..])));
-      {
-        assert table[..i] == table'[..i];
-        calc {
-          S.concat_map([table[i]]);
-          //S.f(table[i]);
-          //S.f(table'[i]);
-          S.concat_map([table'[i]]);
-        }
-        assert table[i+1..] == table'[i+1..];
-      }
-      S.add(
-        S.concat_map(table'[..i]),
-        S.add(
-          S.concat_map([table'[i]]),
-          S.concat_map(table'[i+1..])));
-      {
-        S.concat_map_additive([table'[i]], table'[i+1..]);
-        assert [table'[i]] + table'[i+1..] == table'[i..];
-      }
-      S.add(
-        S.concat_map(table'[..i]),
-        S.concat_map(table'[i..]));
-      {
-        S.concat_map_additive(table'[..i], table'[i..]);
-        assert table'[..i] + table'[i..] == table';
-      }
-      S.concat_map(table');
-    }
+    var d := interp(s.table);
+    d.(stubs := s.stubs)
   }
+
 
   lemma preserves_1(table: seq<Option<HT.Info>>,
       table': seq<Option<HT.Info>>,
@@ -640,7 +589,7 @@ module Interpretation {
       { reveal_interp_wrt(); }
       S.concat_map(table[f+1..] + table[..f+1]);
       {
-        preserves_1_helper(table[f+1..] + table[..f+1],
+        S.preserves_1_helper(table[f+1..] + table[..f+1],
             table'[f+1..] + table'[..f+1],
             if i >= f+1 then i - (f+1) else i + |table| - (f+1));
       }
@@ -648,67 +597,6 @@ module Interpretation {
       { reveal_interp_wrt(); }
       interp_wrt(table', f);
       interp(table');
-    }
-  }
-
-  lemma preserves_2_helper(table: seq<Option<HT.Info>>,
-      table': seq<Option<HT.Info>>,
-      i: int)
-  requires Complete(table)
-  requires Complete(table')
-  requires |table| == |table'|
-  requires forall j | 0 <= j < |table| && j != i && j != i+1 :: table'[j] == table[j]
-  requires 0 <= i < |table| - 1
-  requires S.add(S.f(table[i]), S.f(table[i+1]))
-        == S.add(S.f(table'[i]), S.f(table'[i+1]));
-  ensures S.concat_map(table)
-       == S.concat_map(table')
-  {
-    calc {
-      S.concat_map(table);
-      {
-        S.concat_map_additive(table[..i], table[i..]);
-        assert table[..i] + table[i..] == table;
-      }
-      S.add(
-        S.concat_map(table[..i]),
-        S.concat_map(table[i..]));
-      {
-        S.concat_map_additive([table[i], table[i+1]], table[i+2..]);
-        assert [table[i], table[i+1]] + table[i+2..] == table[i..];
-      }
-      S.add(
-        S.concat_map(table[..i]),
-        S.add(
-          S.concat_map([table[i], table[i+1]]),
-          S.concat_map(table[i+2..])));
-      {
-        assert table[..i] == table'[..i];
-        calc {
-          S.concat_map([table[i], table[i+1]]);
-          S.add(S.f(table[i]), S.f(table[i+1]));
-          S.add(S.f(table'[i]), S.f(table'[i+1]));
-          S.concat_map([table'[i], table'[i+1]]);
-        }
-        assert table[i+2..] == table'[i+2..];
-      }
-      S.add(
-        S.concat_map(table'[..i]),
-        S.add(
-          S.concat_map([table'[i], table'[i+1]]),
-          S.concat_map(table'[i+2..])));
-      {
-        S.concat_map_additive([table'[i], table'[i+1]], table'[i+2..]);
-        assert [table'[i], table'[i+1]] + table'[i+2..] == table'[i..];
-      }
-      S.add(
-        S.concat_map(table'[..i]),
-        S.concat_map(table'[i..]));
-      {
-        S.concat_map_additive(table'[..i], table'[i..]);
-        assert table'[..i] + table'[i..] == table';
-      }
-      S.concat_map(table');
     }
   }
 
@@ -735,7 +623,7 @@ module Interpretation {
       { reveal_interp_wrt(); }
       S.concat_map(table[f+1..] + table[..f+1]);
       {
-        preserves_2_helper(table[f+1..] + table[..f+1],
+        S.preserves_2_helper(table[f+1..] + table[..f+1],
             table'[f+1..] + table'[..f+1],
             if i >= f+1 then i - (f+1) else i + |table| - (f+1));
       }
@@ -778,6 +666,7 @@ module Interpretation {
     preserves_2(s.table, s'.table, pos, e);
   }
 
+
   lemma InsertSwap_PreservesInterp(s: Variables, s': Variables, pos: nat)
   requires Inv(s)
   requires HT.InsertSwap(s, s', pos)
@@ -789,6 +678,7 @@ module Interpretation {
     S.reveal_app_queries();
     preserves_2(s.table, s'.table, pos, e);
   }
+
 
   lemma InsertDone_PreservesInterp(s: Variables, s': Variables, pos: nat)
   requires Inv(s)
@@ -806,6 +696,8 @@ module Interpretation {
 
     preserves_1(s.table, s'.table, pos, e);
   }
+
+  /*
 
   lemma InsertUpdate_PreservesInterp(s: Variables, s': Variables, pos: nat)
   requires Inv(s)
@@ -903,5 +795,5 @@ module Interpretation {
     var e := get_empty_cell(s.table);
     S.reveal_app_queries();
     preserves_1(s.table, s'.table, pos, e);
-  }
+  }*/
 }
