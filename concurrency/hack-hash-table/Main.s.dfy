@@ -4,15 +4,15 @@ abstract module Main {
   import ARS = HTResource
   import Ifc = MapIfc
 
-  type Object(==,!new)
-  predicate Inv(o: Object)
+  type MutexTable(==,!new) // using this name so the impl is more readable
+  predicate Inv(o: MutexTable)
 
   method init(linear in_r: ARS.R)
-  returns (o: Object)
+  returns (o: MutexTable, linear out_r: ARS.R)
   requires ARS.Init(in_r)
   ensures Inv(o)
 
-  method call(o: Object, input: Ifc.Input,
+  method call(o: MutexTable, input: Ifc.Input,
       rid: int, linear in_r: ARS.R)
   returns (output: Ifc.Output, linear out_r: ARS.R)
   requires Inv(o)
