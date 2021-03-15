@@ -549,7 +549,7 @@ module IndirectionTable {
       // == mutation ==
       inout self.garbageQueue.value.Remove(ref);
       assert self.t.count as int <= MaxSize();
-      UpdatePredCounts(inout self, ref, [], oldEntry.value.succs);
+      inout self.UpdatePredCounts(ref, [], oldEntry.value.succs);
       // ==============
 
       TCountEqGraphSize(self.t);
