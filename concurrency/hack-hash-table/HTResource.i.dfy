@@ -432,6 +432,9 @@ module HTResource refines ApplicationResourceSpec {
         hash(s.table[pos].value.state.key) as int,
         hash(s.table[pos].value.entry.kv.key) as int, pos)
     && s.table[pos].value.state.key != s.table[pos].value.entry.kv.key
+      // Uh, what happens if we scan past the key we're looking for? We should be able
+      // to stop with QueryNotFound; instead, we have to keep scanning until we hit
+      // an empty row!
     && s.table[pos'].value.state.Free?
 
     && s' == s.(table := s.table
