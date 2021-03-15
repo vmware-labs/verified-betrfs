@@ -10,7 +10,7 @@ abstract module AbstractMutex {
 
   predicate Inv(k: ConstType, v: ValueType)
 
-  method {:axiom} new_mutex(k: ConstType, linear v: ValueType)
+  method {:axiom} new_mutex(ghost k: ConstType, linear v: ValueType)
   returns (m: Mutex)
   requires Inv(k, v)
   ensures m.constant() == k

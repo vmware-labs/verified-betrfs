@@ -40,8 +40,6 @@ module AsyncIfc {
     | InternalOp
 }
 
-// disallowed:
-
 module MapSpec {
   import opened KeyValueType
 

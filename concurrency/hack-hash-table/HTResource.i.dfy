@@ -19,6 +19,9 @@ module HTResource refines ApplicationResourceSpec {
   function FixedSize() : (n: nat)
   ensures n > 1
 
+  function method FixedSizeImpl() : (n: uint32)
+  ensures n as int == FixedSize()
+
   predicate ValidHashIndex(h:int) {
     0 <= h as int < FixedSize()
   }

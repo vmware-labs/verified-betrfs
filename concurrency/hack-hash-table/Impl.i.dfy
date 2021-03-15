@@ -9,7 +9,7 @@ module HTMutex refines AbstractMutex {
 
   linear datatype ValueType = Value(
       entry: HTResource.Entry,
-      linear resource: HTResource.R)
+      /* ghost */ linear resource: HTResource.R)
 
   predicate Inv(k: ConstType, v: ValueType) {
     && v.resource.R?
@@ -20,15 +20,17 @@ module HTMutex refines AbstractMutex {
 }
 
 module Impl refines Main {
-  import HTMutex
-  import HTResource
+  import opened Options
+  import opened NativeTypes
+  import opened HTMutex
+  import opened HTResource
 
   type Object = seq<HTMutex.Mutex>
   predicate Inv(o: Object) {
     |o| == HTResource.FixedSize()
   }
 
-  predicate Init(s: R) {
+  predicate Init(s: ARS.R) {
     && s.R?
     && (forall i | 0 < i < |s.table| :: s.table[i] == Some(Info(Empty, Free)))
     && s.tickets == multiset{}
@@ -53,18 +55,26 @@ module Impl refines Main {
   ensures Inv(o)
   {
     var remaining_r := in_r;
-    o := []
+    o := [];
     var i:uint32 := 0;
-    while i < FixedSize()
-      invariant forall j | 0<=j<i :: && o[j].constant() == j
+    while i < FixedSizeImpl()
+      invariant forall j:nat | j<i as int :: && o[j].constant() as int == j
     {
-      ghost var splitted := Split(remaining_r, i);
+      ghost var splitted := Split(remaining_r, i as int);
       var remaining_r', ri := ARS.split(remaining_r, splitted.r', splitted.ri);
       remaining_r := remaining_r';
-      var m := new_mutex(i, Value(Free, ri));
+      var m := new_mutex(i as int, Value(Empty, ri));
       o := o + [m];
       i := i + 1;
     }
+  }
+
+  method call_Insert(o: Object, input: Ifc.Input, rid: int, /*ghost*/ linear insert_ticket: ARS.R)
+  returns (output: Ifc.Output, linear out_r: ARS.R)
+    requires forall i:nat | i < |insert_ticket.table| :: insert_ticket.table[i].None?
+    requires insert_ticket.tickets == multiset { Ticket(rid, input) }
+    requires insert_ticket.stubs == multiset { }
+  {
   }
 
   method call(o: Object, input: Ifc.Input,
@@ -78,40 +88,46 @@ module Impl refines Main {
     assert |in_r.tickets| == 1;
     var the_ticket :| the_ticket in in_r.tickets;
 
+    if the_ticket.input.QueryInput? {
+      //call_Query(o, input, rid, in_r);
+    } else if the_ticket.input.InsertInput? {
+      output, out_r := call_Insert(o, input, rid, in_r);
+    } else if the_ticket.input.RemoveInput? {
+      // call_Remove(o, input, rid, in_r);
+    } else {
+      assert false;
+    }
+
     match the_ticket.input {
       case QueryInput(key) => {
-        var h := hash(something);
+        var h := hash(key);
         linear var row: HTMutex.ValueType := HTMutex.acquire(o[h]);
-        linear var ValueType(entry_r, row_r) := row;
+        linear var Value(entry_r, row_r) := row;
         linear var r := ARS.join(in_r, row_r);
 
       }
-      case InsertInput(key) => { assume false; }
+      case InsertInput(key, value) => { assume false; }
       case RemoveInput(key) => assume false; { }
     }
 
-    HTResource.(
-
-
-    linear var Value(sugar, butter, pantry_object) := p;
-
-    sugar := sugar + input.sugar;
-    butter := butter + input.butter;
-
-    var num_batches := if sugar < butter then sugar else butter;
-
-    sugar := sugar - num_batches;
-    butter := butter - num_batches;
-
-    output := Ifc.Output(num_batches * 6);
-
-    linear var cookies, new_pantry := CookieResource.do_tr( // ghost
-        ticket, pantry_object, CookieResource.Ticket(rid, input), num_batches);
-
-    stub := cookies;
-
-    CookieMutex.release(o, CookieMutex.Value(sugar, butter, new_pantry));
+//    linear var Value(sugar, butter, pantry_object) := p;
+//
+//    sugar := sugar + input.sugar;
+//    butter := butter + input.butter;
+//
+//    var num_batches := if sugar < butter then sugar else butter;
+//
+//    sugar := sugar - num_batches;
+//    butter := butter - num_batches;
+//
+//    output := Ifc.Output(num_batches * 6);
+//
+//    linear var cookies, new_pantry := CookieResource.do_tr( // ghost
+//        ticket, pantry_object, CookieResource.Ticket(rid, input), num_batches);
+//
+//    stub := cookies;
+//
+//    CookieMutex.release(o, CookieMutex.Value(sugar, butter, new_pantry));
   }
-  
 }
 
