@@ -102,23 +102,60 @@ module Impl refines Main {
     assert UpdateStep(r, r1, ProcessQueryTicketStep(query_ticket)); // observe
     r := easy_transform(r, r1);
 
-    if entry.Empty? {
-      output := MapIfc.QueryOutput(NotFound);
-      ghost var stub := Stub(rid, output);
-      ghost var r2 := R(singletonTable(h as nat, Info(entry, Free)), multiset{}, multiset{stub}); 
-      assert UpdateStep(r, r2, QueryNotFoundStep(h as nat)); // observe
-      r := easy_transform(r, r2);
+    match entry {
+      case Empty => {
+        output := MapIfc.QueryOutput(NotFound);
+        ghost var stub := Stub(rid, output);
+        ghost var r2 := R(singletonTable(h as nat, Info(entry, Free)), multiset{}, multiset{stub}); 
+        assert UpdateStep(r, r2, QueryNotFoundStep(h as nat)); // observe
+        r := easy_transform(r, r2);
 
-      linear var rmutex;
+        linear var rmutex;
 
-      ghost var left := ARS.output_stub(rid, output);
-      ghost var right := singletonEntry(h as nat, Info(entry, Free));
+        ghost var left := ARS.output_stub(rid, output);
+        ghost var right := singletonEntry(h as nat, Info(entry, Free));
 
-      r, rmutex := ARS.split(r, left, right);
-      release(mt[h], Value(entry, rmutex));
+        r, rmutex := ARS.split(r, left, right);
+        release(mt[h], Value(entry, rmutex));
+      }
+      case Full(KV(entry_key, value)) => {
+        if entry_key == key {
+          output := MapIfc.QueryOutput(Found(value));
+          ghost var stub := Stub(rid, output);
+          ghost var r2 := R(singletonTable(h as nat, Info(entry, Free)), multiset{}, multiset{stub}); 
+          assert UpdateStep(r, r2, QueryDoneStep(h as nat)); // observe
+          r := easy_transform(r, r2);
 
-      assert r == ARS.output_stub(rid, output);
+          linear var rmutex;
+
+          ghost var left := ARS.output_stub(rid, output);
+          ghost var right := singletonEntry(h as nat, Info(entry, Free));
+
+          r, rmutex := ARS.split(r, left, right);
+          release(mt[h], Value(entry, rmutex));
+        }
+      }
     }
+
+    // if entry.? {
+    //   output := MapIfc.QueryOutput(NotFound);
+    //   ghost var stub := Stub(rid, output);
+    //   ghost var r2 := R(singletonTable(h as nat, Info(entry, Free)), multiset{}, multiset{stub}); 
+    //   assert UpdateStep(r, r2, QueryNotFoundStep(h as nat)); // observe
+    //   r := easy_transform(r, r2);
+
+    //   linear var rmutex;
+
+    //   ghost var left := ARS.output_stub(rid, output);
+    //   ghost var right := singletonEntry(h as nat, Info(entry, Free));
+
+    //   r, rmutex := ARS.split(r, left, right);
+    //   release(mt[h], Value(entry, rmutex));
+
+    //   assert r == ARS.output_stub(rid, output);
+    // } else if entry. == {
+      
+    // }
 
     out_r := r;
   }
