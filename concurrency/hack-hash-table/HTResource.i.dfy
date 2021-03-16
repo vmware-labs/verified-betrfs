@@ -80,16 +80,16 @@ module HTResource refines ApplicationResourceSpec {
     R(seq(FixedSize(), i => None), multiset{}, multiset{})
   }
 
-  function singletonTable(k: nat, info: Info) : seq<Option<Info>>
+  function singleEntryTable(k: nat, info: Info) : seq<Option<Info>>
     requires 0 <= k < FixedSize()
   {
     seq(FixedSize(), i => if i == k then Some(info) else None)
   }
 
-  function singletonEntry(k: nat, info: Info) : R 
+  function singleEntryResource(k: nat, info: Info) : R 
     requires 0 <= k < FixedSize()
   {
-    R(singletonTable(k, info), multiset{}, multiset{})
+    R(singleEntryTable(k, info), multiset{}, multiset{})
   }
 
   predicate nonoverlapping<A>(a: seq<Option<A>>, b: seq<Option<A>>)

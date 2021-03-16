@@ -13,7 +13,7 @@ module HTMutex refines AbstractMutex {
 
   predicate Inv(k: ConstType, v: ValueType) {
     && 0 <= k < FixedSize()
-    && v.resource == singletonEntry(k as nat, Info(v.entry, Free))
+    && v.resource == singleEntryResource(k as nat, Info(v.entry, Free))
   }
 }
 
@@ -81,14 +81,59 @@ module Impl refines Main {
     assert out_r == unit();
   }
 
-  method callQuery(mt: MutexTable, input: Ifc.Input, rid: int, /*ghost*/ linear query_ticket_r: ARS.R)
+  method queryNotFound(mt: MutexTable, rid: int, pos: uint32, key: uint64, /*ghost*/ linear r: ARS.R)
+  returns (output: Ifc.Output, linear out_r: ARS.R)
+    requires Inv(mt)
+    requires pos as nat < FixedSize()
+    requires r == singleEntryResource(pos as nat, Info(Empty, Querying(rid, key)))
+  {
+    output := MapIfc.QueryOutput(NotFound);
+    ghost var stub := Stub(rid, output);
+    ghost var r2 := R(singleEntryTable(pos as nat, Info(Empty, Free)), multiset{}, multiset{stub});
+
+    assert QueryNotFound(r, r2, pos as nat);
+    assert UpdateStep(r, r2, QueryNotFoundStep(pos as nat)); // observe
+
+    linear var r := easy_transform(r, r2);
+    linear var rmutex;
+
+    ghost var left := ARS.output_stub(rid, output);
+    ghost var right := singleEntryResource(pos as nat, Info(Empty, Free));
+
+    out_r, rmutex := ARS.split(r, left, right);
+    release(mt[pos], Value(Empty, rmutex));
+  }
+
+  method QueryDone(mt: MutexTable, rid: int, pos: uint32, key: uint64, value: Value , /*ghost*/ linear r: ARS.R)
+  returns (output: Ifc.Output, linear out_r: ARS.R)
+    requires Inv(mt)
+    requires pos as nat < FixedSize()
+    requires r == singleEntryResource(pos as nat, Info(Full(KV(key, value)), Querying(rid, key)))
+  {
+    output := MapIfc.QueryOutput(Found(value));
+    var entry := Full(KV(key, value));
+    ghost var stub := Stub(rid, output);
+    ghost var r2 := R(singleEntryTable(pos as nat, Info(entry, Free)), multiset{}, multiset{stub}); 
+    assert UpdateStep(r, r2, QueryDoneStep(pos as nat)); // observe
+
+    linear var r := easy_transform(r, r2);
+    linear var rmutex;
+
+    ghost var left := ARS.output_stub(rid, output);
+    ghost var right := singleEntryResource(pos as nat, Info(entry, Free));
+
+    out_r, rmutex := ARS.split(r, left, right);
+    release(mt[pos], Value(entry, rmutex));
+  }
+
+  method callQuery(mt: MutexTable, input: Ifc.Input, rid: int,  /*ghost*/ linear in_r: ARS.R)
   returns (output: Ifc.Output, linear out_r: ARS.R)
     requires Inv(mt)
     requires input.QueryInput?
-    requires query_ticket_r.R?
-    requires forall i:nat | i < |query_ticket_r.table| :: query_ticket_r.table[i].None?
-    requires query_ticket_r.tickets == multiset { Ticket(rid, input) }
-    requires query_ticket_r.stubs == multiset { }
+    requires in_r.R?
+    requires forall i:nat | i < |in_r.table| :: in_r.table[i].None?
+    requires in_r.tickets == multiset { Ticket(rid, input) }
+    requires in_r.stubs == multiset { }
     // ensures out_r == ARS.output_stub(rid, output)
   {
     var query_ticket := Ticket(rid, input);
@@ -97,42 +142,20 @@ module Impl refines Main {
     linear var row: HTMutex.ValueType := HTMutex.acquire(mt[h]);
 
     linear var Value(entry, row_r) := row;
-    linear var r := ARS.join(query_ticket_r, row_r);
-    ghost var r1 := singletonEntry(h as nat, Info(entry, Querying(query_ticket.rid, query_ticket.input.key)));
+    linear var r := ARS.join(in_r, row_r);
+    ghost var r1 := singleEntryResource(h as nat, Info(entry, Querying(rid, key)));
     assert UpdateStep(r, r1, ProcessQueryTicketStep(query_ticket)); // observe
     r := easy_transform(r, r1);
 
     match entry {
       case Empty => {
-        output := MapIfc.QueryOutput(NotFound);
-        ghost var stub := Stub(rid, output);
-        ghost var r2 := R(singletonTable(h as nat, Info(entry, Free)), multiset{}, multiset{stub}); 
-        assert UpdateStep(r, r2, QueryNotFoundStep(h as nat)); // observe
-        r := easy_transform(r, r2);
-
-        linear var rmutex;
-
-        ghost var left := ARS.output_stub(rid, output);
-        ghost var right := singletonEntry(h as nat, Info(entry, Free));
-
-        r, rmutex := ARS.split(r, left, right);
-        release(mt[h], Value(entry, rmutex));
+        output, out_r := queryNotFound(mt, rid, h, key, r);
       }
       case Full(KV(entry_key, value)) => {
         if entry_key == key {
-          output := MapIfc.QueryOutput(Found(value));
-          ghost var stub := Stub(rid, output);
-          ghost var r2 := R(singletonTable(h as nat, Info(entry, Free)), multiset{}, multiset{stub}); 
-          assert UpdateStep(r, r2, QueryDoneStep(h as nat)); // observe
-          r := easy_transform(r, r2);
-
-          linear var rmutex;
-
-          ghost var left := ARS.output_stub(rid, output);
-          ghost var right := singletonEntry(h as nat, Info(entry, Free));
-
-          r, rmutex := ARS.split(r, left, right);
-          release(mt[h], Value(entry, rmutex));
+          output, out_r := QueryDone(mt, rid, h, key, value , r);
+        } else {
+          out_r := r;
         }
       }
     }
@@ -140,14 +163,14 @@ module Impl refines Main {
     // if entry.? {
     //   output := MapIfc.QueryOutput(NotFound);
     //   ghost var stub := Stub(rid, output);
-    //   ghost var r2 := R(singletonTable(h as nat, Info(entry, Free)), multiset{}, multiset{stub}); 
+    //   ghost var r2 := R(singleEntryTable(h as nat, Info(entry, Free)), multiset{}, multiset{stub}); 
     //   assert UpdateStep(r, r2, QueryNotFoundStep(h as nat)); // observe
     //   r := easy_transform(r, r2);
 
     //   linear var rmutex;
 
     //   ghost var left := ARS.output_stub(rid, output);
-    //   ghost var right := singletonEntry(h as nat, Info(entry, Free));
+    //   ghost var right := singleEntryResource(h as nat, Info(entry, Free));
 
     //   r, rmutex := ARS.split(r, left, right);
     //   release(mt[h], Value(entry, rmutex));
@@ -157,7 +180,6 @@ module Impl refines Main {
       
     // }
 
-    out_r := r;
   }
 
   method call_Insert(o: MutexTable, input: Ifc.Input, rid: int, /*ghost*/ linear insert_ticket: ARS.R)
