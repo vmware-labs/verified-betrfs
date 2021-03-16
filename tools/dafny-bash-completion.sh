@@ -1,4 +1,4 @@
-# Copyright 2018-2021 VMware, Inc.
+# Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 # SPDX-License-Identifier: BSD-2-Clause
 
 # To install: Run this command in your shell, or add it to .bashrc, or

@@ -1,4 +1,4 @@
-// Copyright 2018-2021 VMware, Inc.
+// Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../ByteBlockCacheSystem/ByteSystem.i.dfy"
@@ -57,8 +57,7 @@ module MkfsModel {
     && Marshalling.parseCheckedSector(bIndirectionTable)
       == Some(SectorIndirectionTable(IndirectionTable(
         map[BT.G.Root() := nodeLoc],
-        map[BT.G.Root() := []],
-        0
+        map[BT.G.Root() := []]
       )))
     && Marshalling.parseCheckedSector(bNode)
       == Some(SectorNode(BT.EmptyNode()))
@@ -118,8 +117,7 @@ module MkfsModel {
         && IndirectionTableOfBytes(bIndirectionTable)
           == IndirectionTable(
               map[BT.G.Root() := nodeLoc],
-              map[BT.G.Root() := []],
-              0
+              map[BT.G.Root() := []]
             )
       by {
         reveal_SectorOfBytes();

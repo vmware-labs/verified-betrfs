@@ -1,12 +1,10 @@
-// Copyright 2018-2021 VMware, Inc.
+// Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "BookkeepingModel.i.dfy"
 include "FlushPolicyModel.i.dfy"
 
 module InsertModel { 
-  import opened StateSectorModel
-
   import opened IOModel
   import opened BookkeepingModel
   import opened FlushPolicyModel

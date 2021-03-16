@@ -1,4 +1,4 @@
-// Copyright 2018-2021 VMware, Inc.
+// Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "BookkeepingModel.i.dfy"
@@ -10,7 +10,6 @@ include "BucketSuccessorLoopModel.i.dfy"
 // See dependency graph in MainHandlers.dfy
 
 module SuccModel { 
-  import opened StateSectorModel
   import opened IOModel
   import opened BookkeepingModel
   import opened KeyType
