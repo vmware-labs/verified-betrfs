@@ -37,6 +37,17 @@ module AllocationMod {
   predicate FullView(dv: DiskView) {
     forall cu :: cu in dv.Keys <==> ValidCU(cu)
   }
+
+  predicate EqualAt(dv0: DiskView, dv1: DiskView, cu: CU)
+  {
+    || (cu !in dv0 && cu !in dv1)
+    || (cu in dv0 && cu in dv1 && dv0[cu]==dv1[cu])
+  }
+
+  predicate DiskViewsEquivalentForSet(dv0: DiskView, dv1: DiskView, aus: seq<AU>)
+  {
+    forall cu:CU :: cu.au in aus ==> EqualAt(dv0, dv1, cu)
+  }
 }
 
 module MapInterp {
@@ -322,17 +333,6 @@ module JournalMod {
     seq(|cus|, i requires 0<=i<|cus| => ReadAt(cus, i))
   }
 
-  predicate EqualAt(dv0: DiskView, dv1: DiskView, cu: CU)
-  {
-    || (cu !in dv0 && cu !in dv1)
-    || (cu in dv0 && cu in dv1 && dv0[cu]==dv1[cu])
-  }
-
-  predicate DiskViewsEquivalentForSet(dv0: DiskView, dv1: DiskView, aus: seq<AU>)
-  {
-    forall cu:CU :: cu.au in aus ==> EqualAt(dv0, dv1, cu)
-  }
-
   predicate SequenceSubset<T>(a:seq<T>, b:seq<T>)
   {
     forall i | 0<=i<|a| :: a[i] in b
@@ -615,8 +615,8 @@ module System {
       MapInterp.Empty()
   }
 
-  function IMReads(dv: DiskView) : set<AU> {
-      {}
+  function IMReads(dv: DiskView) : seq<AU> {
+      []
       /*
     var sb := ISuperblock(dv);
     if sb.Some?
@@ -627,22 +627,16 @@ module System {
       */
   }
 
-  function IReads(dv: DiskView) : set<AU> {
+  function IReads(dv: DiskView) : seq<AU> {
     IMReads(dv)
   }
 
   lemma Framing(dv0: DiskView, dv1: DiskView)
-  /*
-    requires forall cu:CU :: cu.au in IReads(dv0) ==>
-      && cu in dv0
-      && cu in dv1
-      && dv0[cu]==dv1[cu]
-      */
+    requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0))
     ensures IM(dv0) == IM(dv1)
   {
     //assert forall k :: k !in I(dv0);
     //assert forall k :: IM(dv0).mi[k] == IM(dv1).mi[k];
-    assume false;
   }
 }
 
