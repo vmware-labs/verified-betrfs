@@ -85,26 +85,43 @@ module HTResource refines ApplicationResourceSpec {
     R(unitTable(), multiset{}, multiset{})
   }
 
-  function singleEntryTable(k: nat, info: Info) : seq<Option<Info>>
+  function oneRowTable(k: nat, info: Info) : seq<Option<Info>>
     requires 0 <= k < FixedSize()
   {
     seq(FixedSize(), i => if i == k then Some(info) else None)
   }
 
-  function singleEntryResource(k: nat, info: Info) : R 
+  function oneRowResource(k: nat, info: Info) : R 
     requires 0 <= k < FixedSize()
   {
-    R(singleEntryTable(k, info), multiset{}, multiset{})
+    R(oneRowTable(k, info), multiset{}, multiset{})
   }
 
-  predicate resourceHasSingleEntry(r: R, k: nat, state: State)
+  predicate resourceHasSingleRow(r: R, k: nat, entry: Entry, state: State)
     requires 0 <= k < FixedSize()
   {
     && r.R?
     && (forall i:nat | i < FixedSize() :: if i == k then r.table[i].Some? else r.table[i].None?)
     && r.table[k].value.state == state
+    && r.table[k].value.entry == entry
     && r.tickets == multiset{}
     && r.stubs == multiset{}
+  }
+
+  function twoRowsTable(k1: nat, info1: Info, k2: nat, info2: Info) : seq<Option<Info>>
+    requires 0 <= k1 < FixedSize()
+    requires 0 <= k2 < FixedSize()
+    requires k1 != k2
+  {
+    seq(FixedSize(), i => if i == k1 then Some(info1) else if i == k2 then Some(info2) else None)
+  }
+
+  function twoRowsResource(k1: nat, info1: Info, k2: nat, info2: Info) : R 
+    requires 0 <= k1 < FixedSize()
+    requires 0 <= k2 < FixedSize()
+    requires k1 != k2
+  {
+    R(twoRowsTable(k1, info1, k2, info2), multiset{}, multiset{})
   }
 
   predicate nonoverlapping<A>(a: seq<Option<A>>, b: seq<Option<A>>)

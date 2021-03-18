@@ -13,7 +13,7 @@ module HTMutex refines AbstractMutex {
 
   predicate Inv(k: ConstType, v: ValueType) {
     && 0 <= k < FixedSize()
-    && v.resource == singleEntryResource(k as nat, Info(v.entry, Free))
+    && v.resource == oneRowResource(k as nat, Info(v.entry, Free))
   }
 }
 
@@ -85,13 +85,13 @@ module Impl refines Main {
   returns (output: Ifc.Output, linear out_r: ARS.R)
     requires Inv(mt)
     requires pos as nat < FixedSize()
-    requires r == singleEntryResource(pos as nat, Info(Empty, Querying(rid, key)))
+    requires r == oneRowResource(pos as nat, Info(Empty, Querying(rid, key)))
     ensures out_r == R(unitTable(), multiset{}, multiset{ Stub(rid, output) })
     ensures Inv(mt)
 {
     output := MapIfc.QueryOutput(NotFound);
     ghost var stub := Stub(rid, output);
-    ghost var r2 := R(singleEntryTable(pos as nat, Info(Empty, Free)), multiset{}, multiset{stub});
+    ghost var r2 := R(oneRowTable(pos as nat, Info(Empty, Free)), multiset{}, multiset{stub});
 
     assert QueryNotFound(r, r2, pos as nat);
     assert UpdateStep(r, r2, QueryNotFoundStep(pos as nat)); // observe
@@ -100,7 +100,7 @@ module Impl refines Main {
     linear var rmutex;
 
     ghost var left := ARS.output_stub(rid, output);
-    ghost var right := singleEntryResource(pos as nat, Info(Empty, Free));
+    ghost var right := oneRowResource(pos as nat, Info(Empty, Free));
 
     out_r, rmutex := ARS.split(r, left, right);
     release(mt[pos], Value(Empty, rmutex));
@@ -110,35 +110,40 @@ module Impl refines Main {
   returns (output: Ifc.Output, linear out_r: ARS.R)
     requires Inv(mt)
     requires pos as nat < FixedSize()
-    requires r == singleEntryResource(pos as nat, Info(Full(KV(key, value)), Querying(rid, key)))
+    requires r == oneRowResource(pos as nat, Info(Full(KV(key, value)), Querying(rid, key)))
     ensures out_r == R(unitTable(), multiset{}, multiset{ Stub(rid, output) })
     ensures Inv(mt)
 {
     output := MapIfc.QueryOutput(Found(value));
     var entry := Full(KV(key, value));
     ghost var stub := Stub(rid, output);
-    ghost var r2 := R(singleEntryTable(pos as nat, Info(entry, Free)), multiset{}, multiset{stub}); 
+    ghost var r2 := R(oneRowTable(pos as nat, Info(entry, Free)), multiset{}, multiset{stub}); 
     assert UpdateStep(r, r2, QueryDoneStep(pos as nat)); // observe
 
     linear var r := easy_transform(r, r2);
     linear var rmutex;
 
     ghost var left := ARS.output_stub(rid, output);
-    ghost var right := singleEntryResource(pos as nat, Info(entry, Free));
+    ghost var right := oneRowResource(pos as nat, Info(entry, Free));
 
     out_r, rmutex := ARS.split(r, left, right);
     release(mt[pos], Value(entry, rmutex));
   }
 
   predicate method shouldHashGoBefore(search_h: uint32, slot_h: uint32, slot_idx: uint32) 
-    // ensures ShouldHashGoBefore(search_h as int, slot_h as int, slot_idx as int)
+    ensures shouldHashGoBefore(search_h, slot_h, slot_idx) == ShouldHashGoBefore(search_h as int, slot_h as int, slot_idx as int)
   {
     || search_h < slot_h <= slot_idx // normal case
     || slot_h <= slot_idx < search_h // search_h wraps around the end of array
     || slot_idx < search_h < slot_h// search_h, slot_h wrap around the end of array
   }
 
-  method callQuery(mt: MutexTable, input: Ifc.Input, rid: int,  /*ghost*/ linear in_r: ARS.R)
+  function method getNextIndex(hash_idx: uint32, slot_idx: uint32) : uint32
+  {
+    if slot_idx == FixedSizeImpl() - 1 then 0 else slot_idx + 1
+  }
+
+  method doQuery(mt: MutexTable, input: Ifc.Input, rid: int,  /*ghost*/ linear in_r: ARS.R)
   returns (output: Ifc.Output, linear out_r: ARS.R)
     requires Inv(mt)
     requires input.QueryInput?
@@ -154,32 +159,23 @@ module Impl refines Main {
     var slot_idx := hash_idx;
     linear var r := in_r;
 
+    linear var row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx]);
+    linear var Value(entry, row_r) := row;
+    r := ARS.join(r, row_r);
+
+    ghost var r1 := oneRowResource(hash_idx as nat, Info(entry, Querying(rid, key)));
+    assert UpdateStep(r, r1, ProcessQueryTicketStep(query_ticket)); // observe
+    r := easy_transform(r, r1);
+
     while true 
       invariant Inv(mt);
       invariant 0 <= slot_idx < FixedSizeImpl();
-      invariant slot_idx == hash_idx ==> r == in_r;
-      // invariant (slot_idx != hash_idx) ==> 
-      //   resourceHasSingleEntry(r, slot_idx as nat, Querying(rid, key));
+      invariant resourceHasSingleRow(r, slot_idx as nat, entry, Querying(rid, key));
       decreases 
       if slot_idx >= hash_idx
         then (hash_idx as int - slot_idx as int + FixedSize() as int)
         else (hash_idx as int - slot_idx as int)
     {
-      linear var row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx]);
-      linear var Value(entry, row_r) := row;
-      r := ARS.join(r, row_r);
-
-      if slot_idx == hash_idx {
-        ghost var r1 := singleEntryResource(hash_idx as nat, Info(entry, Querying(rid, key)));
-        assert UpdateStep(r, r1, ProcessQueryTicketStep(query_ticket)); // observe
-        r := easy_transform(r, r1);
-      } else {
-        // assert (slot_idx != hash_idx) ==> 
-        // resourceHasSingleEntry(r, slot_idx as nat, Querying(rid, key));
-        // assert resourceHasSingleEntry(r, slot_idx as nat, Querying(rid, key));
-        assume resourceHasSingleEntry(r, slot_idx as nat, Querying(rid, key));
-      }
-
       match entry {
         case Empty => {
           output, r := queryNotFound(mt, rid, slot_idx, key, r);
@@ -187,21 +183,38 @@ module Impl refines Main {
         }
         case Full(KV(entry_key, value)) => {
           if entry_key == key {
+            // TODO: might be able to output Done when ShouldHashGoBefore fails?
             output, r := QueryDone(mt, rid, slot_idx, key, value , r);
             break;
           } else {
-            
+            var should_replace := shouldHashGoBefore(hash_idx, hash(entry_key), slot_idx);
+            var slot_idx' := getNextIndex(hash_idx, slot_idx);
+
+            assume !should_replace;
+
+            linear var next_row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx']);
+            linear var Value(next_entry, next_row_r) := next_row;
+            r := ARS.join(r, next_row_r);
+
+            ghost var r2 := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Querying(rid, key)));
+            assert UpdateStep(r, r2, QuerySkipStep(slot_idx as nat)); // observe
+
+            r := easy_transform(r, r2);
+
+            linear var rmutex;
+
+            ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Querying(rid, key)));
+            ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
+
+            r, rmutex := ARS.split(r, left, right);
+            release(mt[slot_idx], Value(entry, rmutex));
+            slot_idx := slot_idx';
+            entry := next_entry;
+
+            assert resourceHasSingleRow(r, slot_idx as nat, entry, Querying(rid, key));
           }
         }
       }
-
-      if slot_idx == FixedSizeImpl() - 1 {
-        slot_idx := 0;
-      } else {
-        slot_idx := slot_idx + 1;
-      }
-
-      // assume resourceHasSingleEntry(r, slot_idx as nat, Querying(rid, key));
 
       if slot_idx == hash_idx {
         break;
@@ -232,7 +245,7 @@ module Impl refines Main {
     var the_ticket :| the_ticket in in_r.tickets;
 
     if the_ticket.input.QueryInput? {
-      output, out_r := callQuery(o, input, rid, in_r);
+      output, out_r := doQuery(o, input, rid, in_r);
     } else if the_ticket.input.InsertInput? {
       assume false;
       output, out_r := call_Insert(o, input, rid, in_r);
