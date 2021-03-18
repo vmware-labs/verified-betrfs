@@ -76,8 +76,13 @@ module HTResource refines ApplicationResourceSpec {
         // into the definition of add().
   type R = r: PreR | (r.R? ==> |r.table| == FixedSize()) witness Fail
 
+  function unitTable(): seq<Option<Info>>
+  {
+    seq(FixedSize(), i => None)
+  }
+
   function unit() : R {
-    R(seq(FixedSize(), i => None), multiset{}, multiset{})
+    R(unitTable(), multiset{}, multiset{})
   }
 
   function singleEntryTable(k: nat, info: Info) : seq<Option<Info>>
@@ -90,6 +95,16 @@ module HTResource refines ApplicationResourceSpec {
     requires 0 <= k < FixedSize()
   {
     R(singleEntryTable(k, info), multiset{}, multiset{})
+  }
+
+  predicate resourceHasSingleEntry(r: R, k: nat, state: State)
+    requires 0 <= k < FixedSize()
+  {
+    && r.R?
+    && (forall i:nat | i < FixedSize() :: if i == k then r.table[i].Some? else r.table[i].None?)
+    && r.table[k].value.state == state
+    && r.tickets == multiset{}
+    && r.stubs == multiset{}
   }
 
   predicate nonoverlapping<A>(a: seq<Option<A>>, b: seq<Option<A>>)
@@ -203,11 +218,14 @@ module HTResource refines ApplicationResourceSpec {
               KV(insert_ticket.input.key, insert_ticket.input.value))))])
   }
 
+  // search_h: hash of the key we are trying to insert
+  // slot_h: hash of the key at slot_idx
+  // returns search_h should go before slot_h
   predicate ShouldHashGoBefore(search_h: int, slot_h: int, slot_idx: int)
   {
-    || search_h < slot_h <= slot_idx
-    || slot_h <= slot_idx < search_h
-    || slot_idx < search_h < slot_h
+    || search_h < slot_h <= slot_idx // normal case
+    || slot_h <= slot_idx < search_h // search_h wraps around the end of array
+    || slot_idx < search_h < slot_h// search_h, slot_h wrap around the end of array
   }
 
   // We're trying to insert new_item at pos j
