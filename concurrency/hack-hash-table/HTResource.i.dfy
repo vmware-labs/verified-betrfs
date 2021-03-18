@@ -515,7 +515,11 @@ module HTResource refines ApplicationResourceSpec {
     // We're allowed to do this step if it's empty, or if the hash value we
     // find is bigger than the one we're looking for
     && (s.table[pos].value.entry.Full? ==>
-      hash(s.table[pos].value.state.key) < hash(s.table[pos].value.entry.kv.key))
+      ShouldHashGoBefore(
+        hash(s.table[pos].value.state.key) as int,
+        hash(s.table[pos].value.entry.kv.key) as int, pos))
+      // TODO: we have replaced the following predicate, so wrap around is considered
+      // hash(s.table[pos].value.state.key) < hash(s.table[pos].value.entry.kv.key))
     && s' == s
       .(table := s.table
         [pos := Some(s.table[pos].value.(state := Free))])
