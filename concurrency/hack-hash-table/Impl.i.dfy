@@ -89,12 +89,15 @@ module Impl refines Main {
     || slot_idx < search_h < slot_h// search_h, slot_h wrap around the end of array
   }
 
-  function method getNextIndex(hash_idx: uint32, slot_idx: uint32) : uint32
+  function method getNextIndex(slot_idx: uint32) : uint32
+    requires slot_idx < FixedSizeImpl()
   {
     if slot_idx == FixedSizeImpl() - 1 then 0 else slot_idx + 1
   }
 
   function DistanceToSlot(src: uint32, dst: uint32) : nat
+    requires src < FixedSizeImpl()
+    requires dst < FixedSizeImpl()
   {
     if src >= dst
       then (dst as int - src as int + FixedSize() as int)
@@ -105,10 +108,7 @@ module Impl refines Main {
   returns (output: Ifc.Output, linear out_r: ARS.R)
     requires Inv(mt)
     requires input.QueryInput?
-    requires in_r.R?
-    requires forall i:nat | i < |in_r.table| :: in_r.table[i].None?
-    requires in_r.tickets == multiset { Ticket(rid, input) }
-    requires in_r.stubs == multiset { }
+    requires isInputResource(in_r, rid, input)
     ensures out_r == ARS.output_stub(rid, output)
   {
     var query_ticket := Ticket(rid, input);
@@ -153,7 +153,7 @@ module Impl refines Main {
             break;
           } else {
             var should_go_before := shouldHashGoBefore(hash_idx, hash(entry_key), slot_idx);
-            var slot_idx' := getNextIndex(hash_idx, slot_idx);
+            var slot_idx' := getNextIndex(slot_idx);
 
             if !should_go_before {
               linear var next_row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx']);
@@ -206,14 +206,15 @@ module Impl refines Main {
     out_r := r;
   }
 
-  method call_Insert(o: MutexTable, input: Ifc.Input, rid: int, /*ghost*/ linear insert_ticket: ARS.R)
+  method doInsert(mt: MutexTable, input: Ifc.Input, rid: int, /*ghost*/ linear in_r: ARS.R)
   returns (output: Ifc.Output, linear out_r: ARS.R)
-    requires forall i:nat | i < |insert_ticket.table| :: insert_ticket.table[i].None?
-    requires insert_ticket.tickets == multiset { Ticket(rid, input) }
-    requires insert_ticket.stubs == multiset { }
-  {
-    out_r := insert_ticket;
-  }
+    requires Inv(mt)
+    requires input.InsertInput?
+    requires isInputResource(in_r, rid, input)
+  // {
+
+  //   // out_r := insert_ticket;
+  // }
 
   method call(o: MutexTable, input: Ifc.Input,
       rid: int, linear in_r: ARS.R)
@@ -230,7 +231,7 @@ module Impl refines Main {
       output, out_r := doQuery(o, input, rid, in_r);
     } else if the_ticket.input.InsertInput? {
       assume false;
-      output, out_r := call_Insert(o, input, rid, in_r);
+      output, out_r := doInsert(o, input, rid, in_r);
     } else if the_ticket.input.RemoveInput? {
       assume false;
       out_r := in_r;

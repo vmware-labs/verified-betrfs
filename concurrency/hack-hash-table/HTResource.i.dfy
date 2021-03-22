@@ -124,6 +124,14 @@ module HTResource refines ApplicationResourceSpec {
     R(twoRowsTable(k1, info1, k2, info2), multiset{}, multiset{})
   }
 
+  predicate isInputResource(in_r: R, rid: int, input: Ifc.Input)
+  {
+    && in_r.R?
+    && in_r.table == unitTable()
+    && in_r.tickets == multiset { Ticket(rid, input) }
+    && in_r.stubs == multiset { }
+  }
+
   predicate nonoverlapping<A>(a: seq<Option<A>>, b: seq<Option<A>>)
   requires |a| == FixedSize()
   requires |b| == FixedSize()
