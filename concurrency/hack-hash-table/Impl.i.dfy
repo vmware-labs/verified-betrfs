@@ -217,21 +217,102 @@ module Impl refines Main {
   {
     var query_ticket := Ticket(rid, input);
     var key := input.key;
-    var value := input.value;
+    var kv := KV(key, input.value);
 
     var hash_idx := hash(key);
     var slot_idx := hash_idx;
-    linear var r := in_r;
 
+    linear var r := in_r;
     linear var row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx]);
     linear var Value(entry, row_r) := row;
     r := ARS.join(r, row_r);
 
-    ghost var r1 := oneRowResource(hash_idx as nat, Info(entry, Inserting(rid, KV(key, value))));
+    ghost var r1 := oneRowResource(hash_idx as nat, Info(entry, Inserting(rid, kv)));
     assert UpdateStep(r, r1, ProcessInsertTicketStep(query_ticket)); // observe
     r := easy_transform(r, r1);
 
-    // while 
+    // while true 
+    //   invariant Inv(mt);
+    //   invariant 0 <= slot_idx < FixedSizeImpl();
+    //   invariant resourceHasSingleRow(r, slot_idx as nat, entry, Querying(rid, key));
+    //   decreases DistanceToSlot(slot_idx, hash_idx)
+    // {
+    //   var step;
+
+    //   match entry {
+    //     case Empty => {
+    //       step := QueryNotFoundStep(slot_idx as nat);
+    //     }
+    //     case Full(KV(entry_key, value)) => {
+    //       if entry_key == key {
+    //         step := QueryDoneStep(slot_idx as nat);
+    //         output := MapIfc.QueryOutput(Found(value));
+    //       } else {
+    //         var should_go_before := shouldHashGoBefore(hash_idx, hash(entry_key), slot_idx);
+
+    //         if !should_go_before {
+    //           step := QuerySkipStep(slot_idx as nat);
+    //         } else {
+    //           step := QueryNotFoundStep(slot_idx as nat);
+    //         }
+    //       }
+    //     }
+    //   }
+
+    //   assume false;
+
+    //   // if step.QueryDoneStep? {
+    //   //   ghost var r2 := R(oneRowTable(slot_idx as nat, Info(entry, Free)), multiset{}, multiset{Stub(rid, output)}); 
+    //   //   assert UpdateStep(r, r2, QueryDoneStep(slot_idx as nat)); // observe
+    //   //   r := easy_transform(r, r2);
+
+    //   //   linear var rmutex;
+    //   //   r, rmutex := ARS.split(r, 
+    //   //     ARS.output_stub(rid, output), 
+    //   //     oneRowResource(slot_idx as nat, Info(entry, Free)));
+    //   //   release(mt[slot_idx], Value(entry, rmutex));
+    //   //   break;
+    //   // } else if step.QueryNotFoundStep? {
+    //   //   output := MapIfc.QueryOutput(NotFound);
+    //   //   ghost var r2 := R(oneRowTable(slot_idx as nat, Info(entry, Free)), multiset{}, multiset{Stub(rid, output)});
+    //   //   assert UpdateStep(r, r2, step); // observe
+    //   //   r := easy_transform(r, r2);
+
+    //   //   linear var rmutex;
+    //   //   r, rmutex := ARS.split(r,
+    //   //     ARS.output_stub(rid, output),
+    //   //     oneRowResource(slot_idx as nat, Info(entry, Free)));
+    //   //   release(mt[slot_idx], Value(entry, rmutex));
+    //   //   break;
+    //   // } else if step.QuerySkipStep? {
+    //   //   var slot_idx' := getNextIndex(slot_idx);
+
+    //   //   linear var next_row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx']);
+    //   //   linear var Value(next_entry, next_row_r) := next_row;
+    //   //   r := ARS.join(r, next_row_r);
+
+    //   //   ghost var r2 := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Querying(rid, key)));
+    //   //   assert UpdateStep(r, r2, step); // observe
+
+    //   //   r := easy_transform(r, r2);
+
+    //   //   linear var rmutex;
+
+    //   //   ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Querying(rid, key)));
+    //   //   ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
+
+    //   //   r, rmutex := ARS.split(r, left, right);
+    //   //   release(mt[slot_idx], Value(entry, rmutex));
+    //   //   slot_idx := slot_idx';
+    //   //   entry := next_entry;
+    //   //   assert resourceHasSingleRow(r, slot_idx as nat, entry, Querying(rid, key));
+    //   // }
+
+    //   if slot_idx == hash_idx {
+    //     assume false; // TODO: add unreachable step in the sharded state machine
+    //     break;
+    //   }
+    // }
 
     out_r := r;
   }
