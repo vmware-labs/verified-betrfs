@@ -1,4 +1,4 @@
-// Copyright 2018-2021 VMware, Inc.
+// Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../lib/Base/DebugAccumulator.i.dfy"
@@ -156,7 +156,7 @@ module IndirectionTable {
 
     function I(): SectorType.IndirectionTable
     {
-      SectorType.IndirectionTable(this.locs, this.graph, this.refUpperBound)
+      SectorType.IndirectionTable(this.locs, this.graph)
     }
 
     predicate {:opaque} Inv()
@@ -1046,7 +1046,14 @@ module IndirectionTable {
       && (s.Some? ==> forall v | v in s.value.Values :: v.loc.Some? && ValidNodeLocation(v.loc.value))
       && (s.Some? ==> forall ref | ref in s.value :: s.value[ref].predCount == 0)
       && (s.Some? ==> forall ref | ref in s.value :: |s.value[ref].succs| <= MaxNumChildren())
-      && (s.Some? ==> Marshalling.valToIndirectionTableMaps(a) == Some(IMapAsIndirectionTable(s.value)))
+      && (s.Some? ==> Marshalling.valToIndirectionTableMaps(a).Some?)
+      && (s.Some? ==> 
+        (
+          var left := Marshalling.valToIndirectionTableMaps(a).value;
+          var right := IMapAsIndirectionTable(s.value);
+          && left.graph == right.graph
+          && left.locs == right.locs
+        ))
       && (s.None? ==> Marshalling.valToIndirectionTableMaps(a).None?)
     }
 
@@ -1503,16 +1510,6 @@ module IndirectionTable {
       r := refUpperBound;
     }
 
-    // TODO temporary; useful to maintain the Marshalling Model/Impl split
-    /* TODO(andrea) ModelImpl */ static function valToIndirectionTable(v: V) : (s : Option<IndirectionTable>)
-    /* TODO(andrea) ModelImpl */ requires ValidVal(v)
-    /* TODO(andrea) ModelImpl */ requires ValInGrammar(v, IndirectionTableGrammar())
-    /* TODO(andrea) ModelImpl */ ensures s.Some? ==> s.value.Inv()
-    /* TODO(andrea) ModelImpl */ ensures s.Some? ==> s.value.TrackingGarbage()
-    /* TODO(andrea) ModelImpl */ ensures s.Some? ==> BC.WFCompleteIndirectionTable(s.value.I())
-    /* TODO(andrea) ModelImpl */ ensures s.Some? ==> Marshalling.valToIndirectionTable(v) == Some(s.value.I())
-    /* TODO(andrea) ModelImpl */ ensures s.None? ==> Marshalling.valToIndirectionTable(v).None?
-
     static method ValToIndirectionTable(v: V)
     returns (linear s : lOption<IndirectionTable>)
     requires ValidVal(v)
@@ -1521,7 +1518,6 @@ module IndirectionTable {
     ensures s.lSome? ==> Marshalling.valToIndirectionTable(v) == Some(s.value.I())
     ensures s.lSome? ==> s.value.TrackingGarbage()
     ensures s.lNone? ==> Marshalling.valToIndirectionTable(v).None?
-    /* TODO(andrea) ModelImpl */ ensures s.Option() == valToIndirectionTable(v)
     {
       if |v.a| as uint64 <= MaxSizeUint64() {
         linear var res := ValToHashMap(v.a);
@@ -1547,7 +1543,6 @@ module IndirectionTable {
                   assert s.lSome? ==> s.value.Inv() by {
                     reveal s.value.Inv();
                   }
-                  /* TODO(andrea) ModelImpl */ assume s.Option() == valToIndirectionTable(v);
                 }
                 case lNone => {
                   s := lNone;
@@ -1594,7 +1589,7 @@ module IndirectionTable {
 
     static function IMapAsIndirectionTable(m: map<uint64, Entry>) : SectorType.IndirectionTable
     {
-      SectorType.IndirectionTable(MapLocs(m), MapGraph(m), 0) // TODO: yizhou7
+      SectorType.IndirectionTable(MapLocs(m), MapGraph(m)) // TODO: yizhou7
     }
 
     // TODO remove static function IHashMapAsIndirectionTable(m: HashMap) : SectorType.IndirectionTable
@@ -1623,12 +1618,13 @@ module IndirectionTable {
     ensures ValInGrammar(v, IndirectionTableGrammar())
     ensures ValidVal(v)
     ensures Marshalling.valToIndirectionTable(v).Some?
-    ensures Marshalling.valToIndirectionTable(v).value.locs == this.I().locs
-    ensures Marshalling.valToIndirectionTable(v).value.graph == this.I().graph
+    // ensures Marshalling.valToIndirectionTable(v).value.locs == this.I().locs
+    // ensures Marshalling.valToIndirectionTable(v).value.graph == this.I().graph
+    ensures Marshalling.valToIndirectionTable(v).value == this.I()
     ensures SizeOfV(v) <= MaxIndirectionTableByteSize()
     ensures SizeOfV(v) == size as int
-    /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v).Some?
-    /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v) == Some(this)
+    // /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v).Some?
+    // /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v) == Some(this)
     {
       reveal Inv();
       assert this.t.count <= MaxSizeUint64();
@@ -1759,8 +1755,6 @@ module IndirectionTable {
 
       // assert Marshalling.valToIndirectionTable(v).value.locs == this.I().locs;
       // assert Marshalling.valToIndirectionTable(v).value.graph == this.I().graph;
-
-      /* TODO(andrea) ModelImpl */ assume valToIndirectionTable(v) == Some(this);
     }
 
     // // To bitmap
@@ -1958,7 +1952,6 @@ module IndirectionTable {
     function {:opaque} getRefUpperBound() : (r: uint64)
     requires Inv()
     ensures forall ref | ref in this.graph :: ref <= r
-    ensures r == this.I().refUpperBound
     {
       reveal Inv();
       this.refUpperBound
@@ -1967,7 +1960,6 @@ module IndirectionTable {
     shared method GetRefUpperBound() returns (r: uint64)
     requires this.Inv()
     ensures r == this.getRefUpperBound()
-    ensures r == this.I().refUpperBound
     {
       reveal_getRefUpperBound();
       r := this.refUpperBound;

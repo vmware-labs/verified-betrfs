@@ -1,4 +1,4 @@
-// Copyright 2018-2021 VMware, Inc.
+// Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
@@ -289,7 +289,7 @@ module Marshalling {
   ensures s.Some? ==> forall ref | ref in s.value.graph :: |s.value.graph[ref]| <= MaxNumChildren()
   {
     if |a| == 0 then
-      Some(IndirectionTable(map[], map[], 0))
+      Some(IndirectionTable(map[], map[]))
     else (
       var res := valToIndirectionTableMaps(DropLast(a));
       match res {
@@ -303,7 +303,7 @@ module Marshalling {
           if ref in table.graph || !DiskLayout.ValidNodeLocation(loc) || |succs| as int > MaxNumChildren() then (
             None
           ) else (
-            Some(IndirectionTable(table.locs[ref := loc], table.graph[ref := succs], 0)) // yizhou7: TODO
+            Some(IndirectionTable(table.locs[ref := loc], table.graph[ref := succs]))
           )
         )
         case None => None

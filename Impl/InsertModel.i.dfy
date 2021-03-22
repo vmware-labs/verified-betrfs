@@ -1,12 +1,10 @@
-// Copyright 2018-2021 VMware, Inc.
+// Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "BookkeepingModel.i.dfy"
 include "FlushPolicyModel.i.dfy"
 
 module InsertModel { 
-  import opened StateSectorModel
-
   import opened IOModel
   import opened BookkeepingModel
   import opened FlushPolicyModel
@@ -33,6 +31,7 @@ module InsertModel {
   
   import Messages = ValueMessage`Internal
   import Pivots = BoundedPivotsLib
+
   // == insert ==
 
   function {:opaque} InsertKeyValue(s: BBC.Variables, key: Key, value: Value)
@@ -41,7 +40,7 @@ module InsertModel {
   requires s.Ready?
   requires BT.G.Root() in s.cache
   requires var root := s.cache[BT.G.Root()];
-    && WFNode(root)
+    && BT.WFNode(root)
     && BoundedKey(root.pivotTable, key)
   {
     lemmaChildrenConditionsOfNode(s, BT.G.Root());
@@ -96,7 +95,33 @@ module InsertModel {
     var root := s.cache[BT.G.Root()];
     var r := Pivots.Route(root.pivotTable, key);
     var bucket := root.buckets[r];
-    var newBucket := B(bucket.as_map()[key := msg]);
+
+    assert WFBucket(bucket);
+
+    var old_map := bucket.as_map();
+    var new_map := old_map[key := msg];
+    var newBucket := B(new_map);
+
+
+    assert WFBucket(newBucket) by {
+      assert WFBucketMap(old_map);
+
+      assert old_map.Keys + {key} == new_map.Keys;
+      if key !in old_map {
+        assert old_map.Values + {msg} == new_map.Values;
+        assert WFBucketMap(new_map);
+      } else {
+        if exists key' :: key' in old_map && key' != key && old_map[key] == old_map[key'] {
+          assert old_map[key] in new_map.Values;
+          assert old_map.Values + {msg} == new_map.Values;
+          assert WFBucketMap(new_map);
+        } else {
+          assert old_map.Values - {old_map[key]} + {msg} == new_map.Values;
+          assert WFBucketMap(new_map);
+        }
+      }
+    }
+
     var newRoot := root.(buckets := root.buckets[r := newBucket]);
     var newCache := s.cache[BT.G.Root() := newRoot];
 
@@ -104,8 +129,7 @@ module InsertModel {
 
     assert BC.BlockPointsToValidReferences(root, s.ephemeralIndirectionTable.graph);
 
-    assert WFBucket(newBucket);
-    assert WFNode(newRoot);
+    assert BT.WFNode(newRoot);
 
     var s0 := s.(cache := newCache);
     var s' := writeBookkeepingNoSuccsUpdate(s0, BT.G.Root());
@@ -122,8 +146,6 @@ module InsertModel {
 
     var btStep := BT.BetreeInsert(BT.MessageInsertion(key, msg, oldroot));
     assert BT.ValidInsertion(BT.MessageInsertion(key, msg, oldroot));
-
-    assert WFNode(newRoot);
     // assert WFBCVars(s');
 
     assert BC.Dirty(s, s', BT.G.Root(), newroot);

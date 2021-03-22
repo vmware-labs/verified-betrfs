@@ -1,4 +1,4 @@
-// Copyright 2018-2021 VMware, Inc.
+// Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../ByteBlockCacheSystem/Marshalling.i.dfy"
@@ -12,7 +12,6 @@ module MkfsImpl {
   import opened Options
   import opened NativeTypes
   import opened BucketWeights
-  import SSM = StateSectorModel
   import opened BucketImpl
   import opened NodeImpl
   import opened BoundedPivotsLib
@@ -44,8 +43,8 @@ module MkfsImpl {
     var nodeAddr := NodeBlockSizeUint64() * MinNodeBlockIndexUint64();
 
     linear var node := Node.EmptyNode();
-    ghost var i:SSM.Sector := SSI.ISector(SSI.SectorNode(node));
-    assert SSM.WFNode(i.node) by {
+    // ghost var i:SSM.Sector := SSI.ISector(SSI.SectorNode(node));
+    assert BT.WFNode(node.I()) by {
       reveal_WeightBucketList();
     }
 
@@ -64,12 +63,11 @@ module MkfsImpl {
 
     assert sectorIndirectionTable.I() == IndirectionTable(
       map[0 := nodeLoc],
-      map[0 := []],
-      BT.G.Root()
+      map[0 := []]
     );
 
     assert BC.WFCompleteIndirectionTable(sectorIndirectionTable.I());
-    assert SSM.WFSector(SSI.ISector(SSI.SectorIndirectionTable(sectorIndirectionTable)));
+    assert SSI.Inv(SSI.SectorIndirectionTable(sectorIndirectionTable));
 
     linear var sectorIndirect := SSI.SectorIndirectionTable(sectorIndirectionTable);
     var bIndirectionTable_array := MarshallingImpl.MarshallCheckedSector(sectorIndirect);

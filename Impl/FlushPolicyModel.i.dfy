@@ -1,4 +1,4 @@
-// Copyright 2018-2021 VMware, Inc.
+// Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "FlushModel.i.dfy"
@@ -8,8 +8,6 @@ include "LeafModel.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 
 module FlushPolicyModel {
-  import opened StateSectorModel
-
   import opened IOModel
   import opened BookkeepingModel
   import opened FlushModel

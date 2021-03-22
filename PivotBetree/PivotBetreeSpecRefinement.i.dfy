@@ -1,4 +1,4 @@
-// Copyright 2018-2021 VMware, Inc.
+// Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../Betree/BlockInterface.i.dfy"  
@@ -1478,6 +1478,8 @@ module PivotBetreeSpecRefinement {
 
     P.PivotsHasAllKeys(r.pivots);
     assert r.pivots[1] == KeyToElement(r.pivot);
+
+    MapSeqs.key_sets_eq(r.leaf.buckets[0].keys, r.leaf.buckets[0].msgs);
 
     PivotBetreeSpecWFNodes.SplitMaps(r.leaf.buckets[0], r.pivot);
 

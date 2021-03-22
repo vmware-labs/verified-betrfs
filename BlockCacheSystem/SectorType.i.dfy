@@ -1,4 +1,4 @@
-// Copyright 2018-2021 VMware, Inc.
+// Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "DiskLayout.i.dfy"
@@ -21,8 +21,7 @@ module SectorType {
   // TODO make indirectionTable take up more than one block
   datatype IndirectionTable = IndirectionTable(
     locs: map<ReferenceType.Reference, Location>,
-    graph: map<ReferenceType.Reference, seq<ReferenceType.Reference>>,
-    refUpperBound: uint64)
+    graph: map<ReferenceType.Reference, seq<ReferenceType.Reference>>)
   {
     predicate hasEmptyLoc(ref: ReferenceType.Reference)
     {

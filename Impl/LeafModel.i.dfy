@@ -1,11 +1,9 @@
-// Copyright 2018-2021 VMware, Inc.
+// Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "BookkeepingModel.i.dfy"
 
 module LeafModel { 
-  import opened StateSectorModel
-
   import opened IOModel
   import opened BookkeepingModel
   import opened ViewOp
@@ -121,7 +119,7 @@ module LeafModel {
     PivotBetreeSpecWFNodes.WFApplyRepivot(
         BT.Repivot(ref, node, pivots, pivot));
 
-    assert WFNode(newnode);
+    assert BT.WFNode(newnode);
     writeCorrect(s, ref, newnode);
 
     //assert IBlockCache(s1).cache == s.cache[ref := INode(newnode)];

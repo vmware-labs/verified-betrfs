@@ -1,4 +1,4 @@
-// Copyright 2018-2021 VMware, Inc.
+// Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../lib/Base/DebugAccumulator.i.dfy"
@@ -30,15 +30,14 @@ module StateBCImpl {
   import BlockAllocatorModel
   import LruModel
 
-  import opened StateSectorModel
   import BBC = BetreeCache
 
   type ImplVariables = Variables
   type Reference = BT.G.Reference
 
-  predicate WFCache(cache: map<Reference, Node>)
+  predicate WFCache(cache: map<Reference, BT.G.Node>)
   {
-    forall ref | ref in cache :: WFNode(cache[ref])
+    forall ref | ref in cache :: BT.WFNode(cache[ref])
   }
 
   predicate IsLocAllocOutstanding(outstanding: map<BC.ReqId, BC.OutstandingWrite>, i: int)
@@ -186,7 +185,7 @@ module StateBCImpl {
       && ephemeralIndirectionTable.TrackingGarbage()
       && blockAllocator.Inv()
       && (forall loc | loc in ephemeralIndirectionTable.I().locs.Values :: DiskLayout.ValidNodeLocation(loc))
-      && (forall r | r in ephemeralIndirectionTable.graph :: r <= ephemeralIndirectionTable.refUpperBound)
+      // && (forall r | r in ephemeralIndirectionTable.graph :: r <= ephemeralIndirectionTable.refUpperBound)
       && ConsistentBitmap()
       && BlockAllocatorModel.Inv(blockAllocator.I())
       && BC.AllLocationsForDifferentRefsDontOverlap(ephemeralIndirectionTable.I())

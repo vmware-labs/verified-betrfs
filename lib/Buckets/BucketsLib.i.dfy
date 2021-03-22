@@ -1,4 +1,4 @@
-// Copyright 2018-2021 VMware, Inc.
+// Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "BoundedPivotsLib.i.dfy"
@@ -47,9 +47,16 @@ module BucketsLib {
   {
     function as_map() : BucketMap
     requires |this.keys| == |this.msgs|
+    ensures WFBucket(this) ==> WFBucketMap(as_map())
     {
+      value_sets_le(keys, msgs);
       map_of_seqs(keys, msgs)
     }
+  }
+
+  predicate WFBucketMap(bucket: BucketMap)
+  {
+    forall message: Message :: message in bucket.Values ==> message != IdentityMessage()
   }
 
   type BucketList = seq<Bucket>
@@ -165,10 +172,10 @@ module BucketsLib {
     && (forall i | 0 <= i < |blist| :: WFBucketAt(blist[i], pivots, i))
   }
 
-  predicate BoundedBucket(bucket: map<Key, Message>, pivots: PivotTable)
+  predicate BoundedBucket(bucket: Bucket, pivots: PivotTable)
   {
     && WFPivots(pivots)
-    && (forall key | key in bucket :: BoundedKey(pivots, key))
+    && (forall key | key in bucket.keys :: BoundedKey(pivots, key))
   }
 
   predicate BoundedBucketList(blist: BucketList, pivots: PivotTable)
@@ -176,20 +183,42 @@ module BucketsLib {
     && WFPivots(pivots)
     && (forall i | 0 <= i < |blist| ::
         && PreWFBucket(blist[i])
-        && BoundedBucket(blist[i].as_map(), pivots))
+        && BoundedBucket(blist[i], pivots))
   }
 
   function {:opaque} B(m: map<Key, Message>) : (b : Bucket)
   ensures PreWFBucket(b)
   ensures IsStrictlySorted(b.keys)
   ensures b.as_map() == m
-  {
+  ensures WFBucketMap(m) ==> WFBucket(b)
+  {  
     IsStrictlySorted_seqs_of_map(m);
     map_of_seqs_of_seqs_of_map(m);
     var sp := seqs_of_map(m);
     var b := Bucket(sp.keys, sp.msgs);
     assert b.as_map() == map_of_seqs(b.keys, b.msgs);
+    test(m, sp, b);
     b
+  }
+
+  lemma test(m: map<Key, Message>, sp: SeqPair, b: Bucket)
+  requires sp == seqs_of_map(m);
+  requires b == Bucket(sp.keys, sp.msgs);
+  ensures WFBucketMap(m) ==> WFBucket(b)
+  {
+    if WFBucketMap(m) {
+      assert Set(b.msgs) == m.Values by {
+        seqs_of_map_preserves_values(m, sp);
+      }
+      assert forall i : int :: 0 <= i < |b.msgs| ==> b.msgs[i] != IdentityMessage()
+      by {
+        forall i | 0 <= i < |b.msgs|
+          ensures b.msgs[i] != IdentityMessage()
+        {
+          assert b.msgs[i] in m.Values;
+        }
+      }
+    }
   }
 
   function BucketInsert(bucket: Bucket, key: Key, msg: Message) : Bucket

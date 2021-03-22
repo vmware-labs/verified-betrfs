@@ -1,4 +1,4 @@
-// Copyright 2018-2021 VMware, Inc.
+// Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "IOModel.i.dfy"
@@ -6,7 +6,6 @@ include "FullImpl.i.dfy"
 
 module HandleReadResponseModel {
   import opened NativeTypes
-  import opened StateSectorModel
 
   import opened DiskLayout
   import opened InterpretationDiskOps
@@ -44,9 +43,8 @@ module HandleReadResponseModel {
     IDiskOp(diskOp(io)).bdop, vop);
   {
     reveal_Parse();
-    MarshallingModel.reveal_parseCheckedSector();
+    Marshalling.reveal_parseCheckedSector();
     Marshalling.reveal_parseSector();
-    MarshallingModel.reveal_parseSector();
     reveal_SectorOfBytes();
     reveal_ValidCheckedBytes();
     reveal_Parse();
