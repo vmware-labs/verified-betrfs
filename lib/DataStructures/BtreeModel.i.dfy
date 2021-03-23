@@ -1,14 +1,33 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
+// Model for a Btree https://en.wikipedia.org/wiki/B-tree
+//
+// Includes the actual implementation (allKeys) which includes the structure
+// of a Btree and an interpretation which abstracts the tree to a key value
+// map. For every operation we perform to the btree we must show that the 
+// abstraction to the key value map holds.
+
+/**
+ * Timeouts
+ *  | - RecursiveInsertIsCorrect
+ *  | - \ - Not on any specific forall, timesout if each forall has assumes false
+ * Cleanup
+ *  | - SplitIndexInterpretation (still has 1 and 2)
+ *  \ - SpliitChildOfIndexPreservesInterpretation (still has A B)
+ */
+
+
 include "../Lang/LinearSequence.s.dfy"
 include "../Lang/LinearSequence.i.dfy"
 include "../Base/sequences.i.dfy"
 include "../Base/Maps.i.dfy"
 include "../Base/total_order_impl.i.dfy"
 include "../Base/mathematics.i.dfy"
+include "../Base/Sets.i.dfy"
 
 abstract module BtreeModel {
+  import opened Sets
   import opened LinearSequence_s
   import opened LinearSequence_i
   import opened Seq = Sequences
@@ -20,12 +39,17 @@ abstract module BtreeModel {
   
   type Key = Keys.Element
   type Value
-    
+  
+  // Node in the btree
+  // A node can either contain a key-value mapping (LEAF) or a sequence of 
+  // pivots to provide an ordering of the children
   linear datatype Node =
     | Leaf(linear keys: seq<Key>, linear values: seq<Value>)
     | Index(linear pivots: seq<Key>, linear children: lseq<Node>)
 
-
+  // Returns a set of all the keys within and below a specific node.
+  // Includes key-value keys and pivot keys
+  // Confused by why the 0 < size check is necessary and what it does?
   function {:opaque} AllKeys(node: Node) : set<Key>
     ensures node.Leaf? && 0 < |node.keys| ==> AllKeys(node) != {}
     ensures node.Index? && 0 < |node.pivots| ==> AllKeys(node) != {}
@@ -50,6 +74,9 @@ abstract module BtreeModel {
     }    
   }
 
+  // Validates that there are no keys which are higher than pivot i which are 
+  // children 
+  // Confused by the requires (why are both necessary)
   predicate AllKeysBelowBound(node: Node, i: int)
     requires node.Index?
     requires 0 <= i < |node.children|-1
@@ -58,6 +85,7 @@ abstract module BtreeModel {
     forall key :: key in AllKeys(node.children[i]) ==> Keys.lt(key, node.pivots[i])
   }
 
+  // Mirror of previous
   predicate AllKeysAboveBound(node: Node, i: int)
     requires node.Index?
     requires 0 <= i < |node.children|
@@ -81,6 +109,7 @@ abstract module BtreeModel {
       && (forall i :: 0 < i < |node.children|   ==> AllKeysAboveBound(node, i))
   }
 
+  // Takes in a btree node and returns the key value map abstraction,
   function {:opaque} Interpretation(node: Node) : map<Key, Value>
     requires WF(node)
     decreases node
@@ -374,10 +403,11 @@ abstract module BtreeModel {
     }
   }
 
-  function SubIndex(node: Node, from: int, to: int) : Node
+  function SubIndex(node: Node, from: int, to: int) : (result : Node)
     requires node.Index?
     requires |node.children| == |node.pivots| + 1
     requires 0 <= from < to <= |node.children|
+    // ensures forall key :: key in AllKeys(result) ==> key in AllKeys(node)
   {
     Index(node.pivots[from..to-1],
       imagine_lseq(lseqs(node.children)[from..to]))
@@ -429,10 +459,7 @@ abstract module BtreeModel {
     SubIndexPreservesWF(oldindex, 0, |leftindex.children|);
     SubIndexPreservesWF(oldindex, |leftindex.children|, |oldindex.children|);
   }
-  
-  //Timeout
-  /* either ensures seem to cause a timeout 
-     too many things to ensure? */
+
   lemma SplitIndexInterpretation1(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
     requires WF(oldindex)
     requires WF(leftindex)
@@ -441,7 +468,6 @@ abstract module BtreeModel {
     ensures forall key :: key in Interpretation(oldindex) ==>
     MapsTo(Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex)), key, Interpretation(oldindex)[key])
   {
-    reveal_Interpretation();
     var oldint := Interpretation(oldindex);
     var leftint := Interpretation(leftindex);
     var rightint := Interpretation(rightindex);
@@ -452,21 +478,21 @@ abstract module BtreeModel {
     {
       AllKeysIsConsistentWithInterpretation(oldindex, key);
       var llte := Keys.LargestLte(oldindex.pivots, key);
+
       if Keys.lt(key, pivot) { 
         Keys.LargestLteSubsequence(oldindex.pivots, key, 0, |leftindex.pivots|);
         assert leftindex.children[llte+1] == oldindex.children[llte+1];
+        InterpretationInheritance(oldindex, key);
+        InterpretationDelegation(leftindex, key);
       } else {
         Keys.LargestLteSubsequence(oldindex.pivots, key, |leftindex.pivots|+1, |oldindex.pivots|);
         assert rightindex.children[llte - |leftindex.children| + 1] == oldindex.children[llte + 1];
         InterpretationInheritance(oldindex, key);
         InterpretationDelegation(rightindex, key);
       }
-      reveal_AllKeys();
     }
   }
   
-  //Timeout
-  /* Same with previous, either ensures causes timeout */
   lemma SplitIndexInterpretation2(oldindex: Node, leftindex: Node, rightindex: Node, pivot: Key)
     requires WF(oldindex)
     requires WF(leftindex)
@@ -475,7 +501,6 @@ abstract module BtreeModel {
     ensures Interpretation(oldindex).Keys >=
             Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex)).Keys
   {
-    reveal_Interpretation();
     var oldint := Interpretation(oldindex);
     var leftint := Interpretation(leftindex);
     var rightint := Interpretation(rightindex);
@@ -485,18 +510,13 @@ abstract module BtreeModel {
       ensures key in oldint
     {
       if Keys.lt(key, pivot) {
-        AllKeysIsConsistentWithInterpretation(leftindex, key);
-        var llte := Keys.LargestLte(leftindex.pivots, key);
         Keys.LargestLteSubsequence(oldindex.pivots, key, 0, |leftindex.pivots|);
-        assert oldindex.children[llte+1] == leftindex.children[llte+1];
         InterpretationInheritance(leftindex, key);
       } else {
-        AllKeysIsConsistentWithInterpretation(rightindex, key);
-        var llte := Keys.LargestLte(rightindex.pivots, key);
         Keys.LargestLteSubsequence(oldindex.pivots, key, |leftindex.pivots|+1, |oldindex.pivots|);
-        assert oldindex.children[|leftindex.children| + llte + 1] == rightindex.children[llte+1];
+        InterpretationInheritance(rightindex, key);
       }
-      reveal_AllKeys();
+      InterpretationDelegation(oldindex, key);
     }
   }
 
@@ -506,7 +526,7 @@ abstract module BtreeModel {
     requires WF(rightindex)
     requires SplitIndex(oldindex, leftindex, rightindex, pivot)
     ensures Interpretation(oldindex) ==
-    Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex))
+            Keys.MapPivotedUnion(Interpretation(leftindex), pivot, Interpretation(rightindex))
   {
     reveal_Interpretation();
     SplitIndexInterpretation1(oldindex, leftindex, rightindex, pivot);
@@ -554,8 +574,8 @@ abstract module BtreeModel {
     ensures AllKeys(oldnode) == AllKeys(leftnode) + AllKeys(rightnode)
     ensures AllKeys(leftnode) != {}
     ensures AllKeys(rightnode) != {}
-    ensures forall key :: key in AllKeys(leftnode) ==> Keys.lt(key, pivot)
-    ensures forall key :: key in AllKeys(rightnode) ==> Keys.lte(pivot, key)
+    ensures forall key :: key in AllKeys(leftnode) <==> (Keys.lt(key, pivot) && key in AllKeys(oldnode))
+    ensures forall key :: key in AllKeys(rightnode) <==> (Keys.lte(pivot, key) && key in AllKeys(oldnode))
   {
     reveal_AllKeys();
     assert leftnode.keys[0] in AllKeys(leftnode);
@@ -582,8 +602,8 @@ abstract module BtreeModel {
     ensures AllKeys(oldnode) == AllKeys(leftnode) + AllKeys(rightnode) + {pivot}
     ensures AllKeys(leftnode) != {}
     ensures AllKeys(rightnode) != {}
-    ensures forall key :: key in AllKeys(leftnode) ==> Keys.lt(key, pivot)
-    ensures forall key :: key in AllKeys(rightnode) ==> Keys.lte(pivot, key)
+    ensures forall key :: key in AllKeys(leftnode) <==> (Keys.lt(key, pivot) && key in AllKeys(oldnode))
+    ensures forall key :: key in (AllKeys(rightnode) + {pivot}) <==> (Keys.lte(pivot, key) && key in AllKeys(oldnode))
   {
     reveal_AllKeys();
     var x :| x in AllKeys(leftnode.children[0]);
@@ -624,8 +644,9 @@ abstract module BtreeModel {
     ensures AllKeys(leftnode) + AllKeys(rightnode) <= AllKeys(oldnode)
     ensures AllKeys(leftnode) != {}
     ensures AllKeys(rightnode) != {}
-    ensures forall key :: key in AllKeys(leftnode) ==> Keys.lt(key, pivot)
-    ensures forall key :: key in AllKeys(rightnode) ==> Keys.lte(pivot, key)
+    ensures forall key :: key in AllKeys(leftnode) <==> (Keys.lt(key, pivot) && key in AllKeys(oldnode))
+    ensures forall key :: key in (AllKeys(rightnode)) ==> (Keys.lte(pivot, key) && key in AllKeys(oldnode))
+    ensures forall key :: key in (AllKeys(rightnode) + {pivot}) <== (Keys.lte(pivot, key) && key in AllKeys(oldnode))
   {
     if SplitLeaf(oldnode, leftnode, rightnode, pivot) {
       SplitLeafAllKeys(oldnode, leftnode, rightnode, pivot);
@@ -740,20 +761,14 @@ abstract module BtreeModel {
     }
   }
 
-  //Timeout  
   lemma SplitChildOfIndexPreservesInterpretationA(oldindex: Node, newindex: Node, childidx: int)
     requires WF(oldindex);
     requires WF(newindex);
     requires SplitChildOfIndex(oldindex, newindex, childidx)
     ensures forall key :: key in Interpretation(oldindex) ==> MapsTo(Interpretation(newindex), key, Interpretation(oldindex)[key])
   {
-    reveal_Interpretation();
     var newint := Interpretation(newindex);
     var oldint := Interpretation(oldindex);
-
-    // These speed up verification a bit, but we don't understand why.
-    assert newint == Interpretation(newindex);
-    assert oldint == Interpretation(oldindex);
     
     var oldchild := oldindex.children[childidx];
     var leftchild := newindex.children[childidx];
@@ -765,21 +780,17 @@ abstract module BtreeModel {
     forall key | key in oldint
       ensures MapsTo(newint, key, oldint[key])
     {
+      InterpretationInheritance(oldindex, key);
       var llte := Keys.LargestLte(oldindex.pivots, key);
       if llte + 1 < childidx {
-        Keys.LargestLteIsUnique2(newindex.pivots, key, llte);
-        assert newindex.children[llte+1] == oldindex.children[llte+1];
+        Keys.LargestLteIsUnique2(newindex.pivots, key, llte);        
       } else if llte + 1 == childidx {
         SplitNodeInterpretation(oldchild, leftchild, rightchild, pivot);
         if Keys.lt(key, pivot) {
           Keys.LargestLteIsUnique2(newindex.pivots, key, llte);
-          InterpretationDelegation(newindex, key);
-          InterpretationDelegation(oldindex, key);
         } else {
           assert llte+2 < |newindex.pivots| ==> newindex.pivots[llte+2] == oldindex.pivots[llte+1];
           Keys.LargestLteIsUnique2(newindex.pivots, key, llte+1);
-          InterpretationDelegation(newindex, key);
-          InterpretationDelegation(oldindex, key);
         }
       } else {
         var newllte := llte + 1;
@@ -790,10 +801,10 @@ abstract module BtreeModel {
         Keys.LargestLteIsUnique2(newindex.pivots, key, newllte);
         assert newindex.children[newllte+1] == oldindex.children[llte+1];
       }
+      InterpretationDelegation(newindex, key);
     }
   }
 
-  //Timeout
   lemma SplitChildOfIndexPreservesInterpretationB(oldindex: Node, newindex: Node, childidx: int)
     requires WF(oldindex);
     requires WF(newindex);
@@ -801,15 +812,8 @@ abstract module BtreeModel {
     ensures forall key :: key in Interpretation(newindex) ==> key in Interpretation(oldindex)
       //ensures Interpretation(newindex) == Interpretation(oldindex)
   {
-    reveal_Interpretation();
     var newint := Interpretation(newindex);
     var oldint := Interpretation(oldindex);
-
-    // Why can't Dafny see these (from emacs flycheck mode)!?
-    assert WF(oldindex);
-    assert WF(newindex);
-    assert oldint == Interpretation(oldindex);
-    assert newint == Interpretation(newindex);
     
     var oldchild := oldindex.children[childidx];
     var leftchild := newindex.children[childidx];
@@ -822,25 +826,17 @@ abstract module BtreeModel {
     forall key | key in newint
       ensures key in oldint
     {
-      reveal_AllKeys();
+      InterpretationInheritance(newindex, key);
       var llte := Keys.LargestLte(newindex.pivots, key);
-      if llte + 1 < childidx {
+      if llte + 1 <= childidx {
         Keys.LargestLteIsUnique2(oldindex.pivots, key, llte);
-        assert key in oldint;
-      } else if llte + 1 == childidx {
-        Keys.LargestLteIsUnique2(oldindex.pivots, key, llte);
-        assert key in oldint;
-      } else if llte + 1 == childidx + 1 {
+      } else if llte == childidx {
         var oldllte := llte - 1;
         Keys.LargestLteIsUnique2(oldindex.pivots, key, oldllte);
-        assert oldllte == Keys.LargestLte(oldindex.pivots, key);
-        assert key in Interpretation(oldindex.children[Keys.LargestLte(oldindex.pivots, key) + 1]);
-        InterpretationDelegation(oldindex, key);
-        assert key in oldint;
       } else {
         Keys.LargestLteIsUnique2(oldindex.pivots, key, llte-1);
-        assert key in oldint;
       }
+      InterpretationDelegation(oldindex, key);
     }
   }
 
@@ -904,26 +900,20 @@ abstract module BtreeModel {
     }
   }
 
-  //Timeout
   lemma RecursiveInsertIsCorrect(node: Node, key: Key, value: Value, pos: int, newnode: Node, newchild: Node)
     requires WF(node)
     requires node.Index?
     requires WF(newchild)
     requires pos == Keys.LargestLte(node.pivots, key)+1
     requires Interpretation(newchild) == Interpretation(node.children[pos])[key := value]
-//    requires newnode == node.(children := node.children[pos := newchild])
-// Can't do update on linear datatype, so instead we'll break out the parts:
     requires newnode.Index?
     requires newnode.pivots == node.pivots
     requires lseqs(newnode.children) == lseqs(node.children)[pos := newchild]
-
     requires AllKeys(newchild) <= AllKeys(node.children[pos]) + {key}
     ensures WF(newnode)
     ensures Interpretation(newnode) == Interpretation(node)[key := value]
     ensures AllKeys(newnode) <= AllKeys(node) + {key}
   {
-    reveal_AllKeys();
-    reveal_Interpretation();
     var oldint := Interpretation(node);
     AllKeysIsConsistentWithInterpretation(newchild, key);
     forall i | 0 <= i < |newnode.children| - 1
@@ -963,35 +953,24 @@ abstract module BtreeModel {
     forall key' | key' in oldint && key' != key
       ensures MapsTo(newint, key', oldint[key'])
     {
-      var llte := Keys.LargestLte(node.pivots, key');
-      assert key' in Interpretation(node.children[llte+1]);
-      if llte + 1 < pos {
-        assert key' in AllKeys(newnode.children[llte+1]);
-      } else if llte + 1 == pos {
-        assert Interpretation(newnode.children[llte+1])[key'] == Interpretation(node.children[llte+1])[key'];
-        assert key' in AllKeys(newchild);
-      } else {
-        assert key' in AllKeys(newnode.children[llte+1]);
-      }
+      InterpretationInheritance(node, key');
+      InterpretationDelegation(newnode, key');
     }
     forall key' | key' in newint && key' != key
       ensures key' in oldint
     {
-      var llte := Keys.LargestLte(node.pivots, key');
-      assert key' in Interpretation(node.children[llte+1]);
-      if llte + 1 < pos {
-        assert key' in AllKeys(node.children[llte+1]);
-      } else if llte + 1 == pos {
-        assert Interpretation(newnode.children[llte+1])[key'] == Interpretation(node.children[llte+1])[key'];
-        assert key' in AllKeys(node.children[llte+1]);
-      } else {
-        assert key' in AllKeys(node.children[llte+1]);
-      }
+      InterpretationInheritance(newnode, key');
+      InterpretationDelegation(node, key');
     }
 
-    assert key in Interpretation(newchild);
-    assert key in AllKeys(newchild);
-    assert newnode.children[Keys.LargestLte(newnode.pivots, key)+1] == newchild;
+    InterpretationDelegation(newnode, key);
+
+    forall key' | key' in AllKeys(newnode)
+      ensures key' in AllKeys(node) + {key}
+    {
+      assume false;
+    }
+    SubSetExtensionality(AllKeys(newnode), AllKeys(node) + {key});
   }
 
   function Grow(node: Node) : Node
@@ -1086,7 +1065,6 @@ abstract module BtreeModel {
     assert Interpretation(left).Keys !! Interpretation(rightchild).Keys;
   }
 
-  //ASSUME FALSE;
   lemma InterpretationsDisjointUnion(node: Node)
     requires WF(node)
     requires node.Index?
@@ -1113,7 +1091,6 @@ abstract module BtreeModel {
 
     assert AllKeysBelowBound(node, |node.pivots|-1);
     assert AllKeysAboveBound(node, |node.pivots|);
-    //assume false;
     assert lseqs(right.children) == lseqs(SubIndex(node, |left.children|, |node.children|).children);
     assert SplitIndex(node, left, right, pivot);
     SplitNodeInterpretation(node, left, right, pivot);
@@ -1361,22 +1338,22 @@ abstract module BtreeModel {
     }
   }
 
-  //Timeout
   lemma ToSeqInInterpretation(node: Node)
     requires WF(node)
     ensures forall i :: 0 <= i < |ToSeq(node).0| ==> MapsTo(Interpretation(node), ToSeq(node).0[i], ToSeq(node).1[i])
   {
-    reveal_Interpretation();
     var (keys, values) := ToSeq(node);
     var interp := Interpretation(node);
-    
-    reveal_ToSeq();
-    
+        
     if node.Leaf? {
       forall i | 0 <= i < |keys|
         ensures MapsTo(interp, keys[i], values[i])
         {
+          reveal_Interpretation();
+          reveal_ToSeq();
           Keys.PosEqLargestLte(keys, keys[i], i);
+          assert(keys[i] in interp);
+          assert(interp[keys[i]] == values[i]);
         }
     } else {
       var (keylists, valuelists) := ToSeqChildren(lseqs(node.children));
@@ -1385,10 +1362,12 @@ abstract module BtreeModel {
       forall i | 0 <= i < |keys|
         ensures MapsTo(Interpretation(node), keys[i], values[i])
       {
+        assert i < FlattenLength(shape) by {reveal_ToSeq();}
         var (child, offset) := UnflattenIndex(shape, i);
         UnflattenIndexIsCorrect(keylists, i);
         UnflattenIndexIsCorrect(valuelists, i);
         ToSeqInInterpretation(node.children[child]);
+        reveal_ToSeq();
         AllKeysIsConsistentWithInterpretation(node.children[child], keys[i]);
         if 0 < child {
           assert AllKeysAboveBound(node, child);
