@@ -225,6 +225,10 @@ module HTResource refines ApplicationResourceSpec {
     | QuerySkipStep(pos: nat)
     | QueryDoneStep(pos: nat)
     | QueryNotFoundStep(pos: nat)
+    // never happens, but give impl an escape route so we can defer the proof
+    // that it doesn't happen to a higher lever where we have a necessary
+    // invariant
+    | QueryFullHashTableStep(pos: nat)
 
   predicate ProcessInsertTicket(s: R, s': R, insert_ticket: Ticket)
   {
@@ -476,13 +480,16 @@ module HTResource refines ApplicationResourceSpec {
             Querying(query_ticket.rid, query_ticket.input.key)))])
   }
 
-  predicate QuerySkip(s: R, s': R, pos: nat)
+  function NextPos(pos: nat) : nat {
+    if pos < FixedSize() - 1 then pos + 1 else 0
+  }
+
+  predicate QuerySkipEnabled(s: R, pos: nat)
   {
     && !s.Fail?
     && 0 <= pos < FixedSize()
-    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
     && s.table[pos].Some?
-    && s.table[pos'].Some?
+    && s.table[NextPos(pos)].Some?
     && s.table[pos].value.state.Querying?
     && s.table[pos].value.entry.Full?
     // Not the key we're looking for
@@ -491,14 +498,16 @@ module HTResource refines ApplicationResourceSpec {
     && !ShouldHashGoBefore(
         hash(s.table[pos].value.state.key) as int,
         hash(s.table[pos].value.entry.kv.key) as int, pos)
-      // Uh, what happens if we scan past the key we're looking for? We should be able
-      // to stop with QueryNotFound; instead, we have to keep scanning until we hit
-      // an empty row!
-    && s.table[pos'].value.state.Free?
+    && s.table[NextPos(pos)].value.state.Free?
+  }
+
+  predicate QuerySkip(s: R, s': R, pos: nat)
+  {
+    && QuerySkipEnabled(s, pos)
 
     && s' == s.(table := s.table
         [pos := Some(s.table[pos].value.(state := Free))]
-        [pos' := Some(s.table[pos'].value.(state := s.table[pos].value.state))])
+        [NextPos(pos) := Some(s.table[NextPos(pos)].value.(state := s.table[pos].value.state))])
   }
 
   predicate QueryDone(s: R, s': R, pos: nat)
@@ -540,6 +549,22 @@ module HTResource refines ApplicationResourceSpec {
        })
   }
 
+  predicate QueryFullHashTable(s: R, s': R, pos: nat)
+  {
+    && QuerySkipEnabled(s, pos)
+
+    // And we've gone in an entire circle; another step would put us
+    // back where we entered the hash table.
+    && NextPos(pos) == hash(s.table[pos].value.state.key) as int
+
+    && s' == s
+      .(table := s.table
+        [pos := Some(s.table[pos].value.(state := Free))])
+      .(stubs := s.stubs + multiset{
+        Stub(s.table[pos].value.state.rid, MapIfc.QueryOutput(NotFound))
+       })
+  }
+
   predicate UpdateStep(s: R, s': R, step: Step)
   {
     match step {
@@ -559,6 +584,7 @@ module HTResource refines ApplicationResourceSpec {
       case QuerySkipStep(pos) => QuerySkip(s, s', pos)
       case QueryDoneStep(pos) => QueryDone(s, s', pos)
       case QueryNotFoundStep(pos) => QueryNotFound(s, s', pos)
+      case QueryFullHashTableStep(pos) => QueryFullHashTable(s, s', pos)
     }
   }
 

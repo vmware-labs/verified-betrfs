@@ -155,7 +155,7 @@ module Impl refines Main {
         }
       }
 
-      if step.QueryDoneStep? || step.QueryNotFoundStep?{
+      if !step.QuerySkipStep? {
         ghost var r2 := R(oneRowTable(slot_idx as nat, Info(entry, Free)), multiset{}, multiset{Stub(rid, output)}); 
         assert UpdateStep(r, r2, step); // observe
         r := easy_transform(r, r2);
@@ -168,33 +168,52 @@ module Impl refines Main {
         break;
       }
 
-      assert step.QuerySkipStep?;
       var slot_idx' := getNextIndex(slot_idx);
+      assert step.QuerySkipStep?;
 
       linear var next_row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx']);
       linear var Value(next_entry, next_row_r) := next_row;
       r := ARS.join(r, next_row_r);
 
+      if slot_idx' == hash_idx {
+        // Take everything apart exactly as in QueryDone/QueryNotFound above
+        output := MapIfc.QueryOutput(NotFound);
+        ghost var r2 := R(oneRowTable(slot_idx as nat, Info(entry, Free)), multiset{}, multiset{Stub(rid, output)}); 
+        assert r.table[slot_idx as nat].value.entry == entry;
+        assert r.table[slot_idx as nat].value.state == Free;
+        assert r2.table == r.table[slot_idx := Some(r.table[slot_idx as nat].value.(state := Free))];
+        assert r2.stubs == r.stubs + multiset{
+          Stub(r.table[slot_idx as nat].value.state.rid, MapIfc.QueryOutput(NotFound))
+        };
+        step := QueryFullHashTableStep(slot_idx as nat);
+        assert QuerySkipEnabled(r, slot_idx as nat);
+        assert QueryFullHashTable(r, r2, step.pos);
+        assert UpdateStep(r, r2, step); // observe
+        r := easy_transform(r, r2);
+
+        linear var rmutex;
+        r, rmutex := ARS.split(r, 
+          ARS.output_stub(rid, output), 
+          oneRowResource(slot_idx as nat, Info(entry, Free)));
+        release(mt[slot_idx], Value(entry, rmutex));
+
+        break;
+      }
+
       ghost var r2 := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Querying(rid, key)));
       assert UpdateStep(r, r2, step); // observe
-
       r := easy_transform(r, r2);
 
       linear var rmutex;
-
       ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Querying(rid, key)));
       ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
-
       r, rmutex := ARS.split(r, left, right);
       release(mt[slot_idx], Value(entry, rmutex));
+
+
       slot_idx := slot_idx';
       entry := next_entry;
       assert resourceHasSingleRow(r, slot_idx as nat, entry, Querying(rid, key));
-
-      if slot_idx == hash_idx {
-        assume false; // TODO: add unreachable step in the sharded state machine
-        break;
-      }
     }
 
     out_r := r;
