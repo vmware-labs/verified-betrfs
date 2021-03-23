@@ -169,39 +169,47 @@ module Impl refines Main {
       }
 
       var slot_idx' := getNextIndex(slot_idx);
-      assert step.QuerySkipStep?;
 
       linear var next_row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx']);
       linear var Value(next_entry, next_row_r) := next_row;
       r := ARS.join(r, next_row_r);
 
-      if slot_idx' == hash_idx {
-        // Take everything apart exactly as in QueryDone/QueryNotFound above
-        output := MapIfc.QueryOutput(NotFound);
-        ghost var r2 := R(oneRowTable(slot_idx as nat, Info(entry, Free)), multiset{}, multiset{Stub(rid, output)}); 
-        assert r.table[slot_idx as nat].value.entry == entry;
-        assert r.table[slot_idx as nat].value.state == Free;
-        assert r2.table == r.table[slot_idx := Some(r.table[slot_idx as nat].value.(state := Free))];
-        assert r2.stubs == r.stubs + multiset{
-          Stub(r.table[slot_idx as nat].value.state.rid, MapIfc.QueryOutput(NotFound))
-        };
-        step := QueryFullHashTableStep(slot_idx as nat);
-        assert QuerySkipEnabled(r, slot_idx as nat);
-        assert QueryFullHashTable(r, r2, step.pos);
-        assert UpdateStep(r, r2, step); // observe
-        r := easy_transform(r, r2);
-
-        linear var rmutex;
-        r, rmutex := ARS.split(r, 
-          ARS.output_stub(rid, output), 
-          oneRowResource(slot_idx as nat, Info(entry, Free)));
-        release(mt[slot_idx], Value(entry, rmutex));
-
-        break;
-      }
+      // assert QuerySkipEnabled(r, slot_idx as nat);
 
       ghost var r2 := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Querying(rid, key)));
       assert UpdateStep(r, r2, step); // observe
+
+      if slot_idx' == hash_idx {
+        output := MapIfc.QueryOutput(NotFound);
+
+        ghost var r2 := R(
+          twoRowsTable(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Free)),
+          multiset{},
+          multiset{ Stub(rid, output) });
+
+        // Take everything apart exactly as in QueryDone/QueryNotFound above
+        step := QueryFullHashTableStep(slot_idx as nat);
+        assert UpdateStep(r, r2, step); // observe
+        r := easy_transform(r, r2);
+        assert r == r2;
+
+        linear var rmutex;
+        ghost var left := R(
+          oneRowTable(slot_idx' as nat, Info(next_entry, Free)),
+          multiset{},
+          multiset{ Stub(rid, output) });
+        ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
+
+        r, rmutex := ARS.split(r, left, right);
+        release(mt[slot_idx], Value(entry, rmutex));
+
+        r, rmutex := ARS.split(r, 
+          ARS.output_stub(rid, output), 
+          oneRowResource(slot_idx' as nat, Info(next_entry, Free)));
+        release(mt[slot_idx'], Value(next_entry, rmutex));
+        break;
+      }
+
       r := easy_transform(r, r2);
 
       linear var rmutex;
@@ -209,7 +217,6 @@ module Impl refines Main {
       ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
       r, rmutex := ARS.split(r, left, right);
       release(mt[slot_idx], Value(entry, rmutex));
-
 
       slot_idx := slot_idx';
       entry := next_entry;
