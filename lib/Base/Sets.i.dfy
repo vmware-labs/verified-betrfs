@@ -48,4 +48,11 @@ module Sets {
           == SetRange(n-1) + {n-1};
     }
   }
+
+  lemma SubSetExtensionality<T>(a: set<T>, b: set<T>)
+    requires forall x | x in a :: x in b
+    ensures a <= b
+  {
+
+  }
 }
