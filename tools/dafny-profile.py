@@ -19,7 +19,7 @@ parser.add_argument("proc", help="Boogie procedure to be verified, i.e., argumen
 parser.add_argument("filename", help="Dafny file name")
 parser.add_argument("--metric", default="max", help="Sort by max count in profile output.",
                     choices=["max", "sum", "count"])
-parser.add_argument("--dafny", help="Path for binary binary", default="./.dafny/dafny/Binaries/dafny")
+parser.add_argument("--dafny", help="Path for binary binary", default="./.dafny/bin/dafny")
 parser.add_argument("--arg", help="Argument to be passed to Dafny", action='append')
 parser.add_argument("--freq", help="Frequency to sample", default=1000)
 parser.add_argument("--show", help="# number of profiler result shown", type=int, default=30)

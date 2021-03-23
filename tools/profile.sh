@@ -26,4 +26,4 @@ if [ ! -z "$display" ]; then
     addon=$(echo --show "$display")
 fi
 
-python3 tools/dafny-profile.py $timelimit Impl\*$proc\* $file $addon --dafny=./.dafny/dafny/Binaries/dafny
+python3 tools/dafny-profile.py $timelimit Impl\*$proc\* $file $addon --dafny=./.dafny/bin/dafny

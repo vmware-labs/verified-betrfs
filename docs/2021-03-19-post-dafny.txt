@@ -1,0 +1,27 @@
+
+Specifications
+  - Prusti limitations
+    - Lack of ints and other math objects
+    - Comment-based specs
+    - Datatype equality
+    - Existentials
+  - Mathematically pure constructs
+  - Tidy syntax for:
+    - state machines
+    - Sharded state machines for concurrency? 
+  - Dafny constructs
+    - Ints, nats
+    - Seqs, Maps, Sets, Multisets
+
+Discussion of algebraic datatypes
+  - Perhaps an impl datatype with Box simply has box ignored in spec
+    - Actually VC can ignore Box
+    - Possible challenges with matching on something with Box
+   
+TODO: Find a Rust parser written in Rust via a generator that we can extend
+
+
+Logistical items:
+  - Oded proposes a full paper on linear Dafny
+  - Will the December file system be in linear Dafny or Rusty?
+    - Affects which one Jack should be working on 
