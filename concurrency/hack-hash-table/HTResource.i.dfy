@@ -76,20 +76,60 @@ module HTResource refines ApplicationResourceSpec {
         // into the definition of add().
   type R = r: PreR | (r.R? ==> |r.table| == FixedSize()) witness Fail
 
-  function unit() : R {
-    R(seq(FixedSize(), i => None), multiset{}, multiset{})
+  function unitTable(): seq<Option<Info>>
+  {
+    seq(FixedSize(), i => None)
   }
 
-  function singleEntryTable(k: nat, info: Info) : seq<Option<Info>>
+  function unit() : R {
+    R(unitTable(), multiset{}, multiset{})
+  }
+
+  function oneRowTable(k: nat, info: Info) : seq<Option<Info>>
     requires 0 <= k < FixedSize()
   {
     seq(FixedSize(), i => if i == k then Some(info) else None)
   }
 
-  function singleEntryResource(k: nat, info: Info) : R 
+  function oneRowResource(k: nat, info: Info) : R 
     requires 0 <= k < FixedSize()
   {
-    R(singleEntryTable(k, info), multiset{}, multiset{})
+    R(oneRowTable(k, info), multiset{}, multiset{})
+  }
+
+  predicate resourceHasSingleRow(r: R, k: nat, entry: Entry, state: State)
+    requires 0 <= k < FixedSize()
+  {
+    && r.R?
+    && (forall i:nat | i < FixedSize() :: if i == k then r.table[i].Some? else r.table[i].None?)
+    && r.table[k].value.state == state
+    && r.table[k].value.entry == entry
+    && r.tickets == multiset{}
+    && r.stubs == multiset{}
+  }
+
+  function twoRowsTable(k1: nat, info1: Info, k2: nat, info2: Info) : seq<Option<Info>>
+    requires 0 <= k1 < FixedSize()
+    requires 0 <= k2 < FixedSize()
+    requires k1 != k2
+  {
+    seq(FixedSize(), i => if i == k1 then Some(info1) else if i == k2 then Some(info2) else None)
+  }
+
+  function twoRowsResource(k1: nat, info1: Info, k2: nat, info2: Info) : R 
+    requires 0 <= k1 < FixedSize()
+    requires 0 <= k2 < FixedSize()
+    requires k1 != k2
+  {
+    R(twoRowsTable(k1, info1, k2, info2), multiset{}, multiset{})
+  }
+
+  predicate isInputResource(in_r: R, rid: int, input: Ifc.Input)
+  {
+    && in_r.R?
+    && in_r.table == unitTable()
+    && in_r.tickets == multiset { Ticket(rid, input) }
+    && in_r.stubs == multiset { }
   }
 
   predicate nonoverlapping<A>(a: seq<Option<A>>, b: seq<Option<A>>)
@@ -203,11 +243,14 @@ module HTResource refines ApplicationResourceSpec {
               KV(insert_ticket.input.key, insert_ticket.input.value))))])
   }
 
+  // search_h: hash of the key we are trying to insert
+  // slot_h: hash of the key at slot_idx
+  // returns search_h should go before slot_h
   predicate ShouldHashGoBefore(search_h: int, slot_h: int, slot_idx: int)
   {
-    || search_h < slot_h <= slot_idx
-    || slot_h <= slot_idx < search_h
-    || slot_idx < search_h < slot_h
+    || search_h < slot_h <= slot_idx // normal case
+    || slot_h <= slot_idx < search_h // search_h wraps around the end of array
+    || slot_idx < search_h < slot_h// search_h, slot_h wrap around the end of array
   }
 
   // We're trying to insert new_item at pos j
@@ -484,7 +527,11 @@ module HTResource refines ApplicationResourceSpec {
     // We're allowed to do this step if it's empty, or if the hash value we
     // find is bigger than the one we're looking for
     && (s.table[pos].value.entry.Full? ==>
-      hash(s.table[pos].value.state.key) < hash(s.table[pos].value.entry.kv.key))
+      ShouldHashGoBefore(
+        hash(s.table[pos].value.state.key) as int,
+        hash(s.table[pos].value.entry.kv.key) as int, pos))
+      // TODO: we have replaced the following predicate, so wrap around is considered
+      // hash(s.table[pos].value.state.key) < hash(s.table[pos].value.entry.kv.key))
     && s' == s
       .(table := s.table
         [pos := Some(s.table[pos].value.(state := Free))])
