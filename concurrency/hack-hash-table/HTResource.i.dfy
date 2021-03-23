@@ -223,11 +223,13 @@ module HTResource refines ApplicationResourceSpec {
     && s.table[pos'].Some?
     && s.table[pos].value.state.Inserting?
     && s.table[pos].value.entry.Full?
+    // This isn't a matching key...
+    && s.table[pos].value.state.kv.key
+        != s.table[pos].value.entry.kv.key
+    // ...and we need to keep searching because of the Robin Hood rule.
     && !ShouldHashGoBefore(
         hash(s.table[pos].value.state.kv.key) as int,
         hash(s.table[pos].value.entry.kv.key) as int, pos)
-    && s.table[pos].value.state.kv.key
-        != s.table[pos].value.entry.kv.key
     && s.table[pos'].value.state.Free?
 
     && s' == s.(table := s.table
@@ -440,10 +442,12 @@ module HTResource refines ApplicationResourceSpec {
     && s.table[pos'].Some?
     && s.table[pos].value.state.Querying?
     && s.table[pos].value.entry.Full?
+    // Not the key we're looking for
+    && s.table[pos].value.state.key != s.table[pos].value.entry.kv.key
+    // But we haven't passed by the key we want yet (Robin Hood rule)
     && !ShouldHashGoBefore(
         hash(s.table[pos].value.state.key) as int,
         hash(s.table[pos].value.entry.kv.key) as int, pos)
-    && s.table[pos].value.state.key != s.table[pos].value.entry.kv.key
       // Uh, what happens if we scan past the key we're looking for? We should be able
       // to stop with QueryNotFound; instead, we have to keep scanning until we hit
       // an empty row!
