@@ -211,6 +211,7 @@ module Impl refines Main {
     var kv := KV(key, input.value);
 
     var hash_idx := hash(key);
+    var orignal_hash_idx := hash_idx;
     var slot_idx := hash_idx;
 
     linear var r := in_r;
@@ -225,10 +226,12 @@ module Impl refines Main {
     while true 
       invariant Inv(mt);
       invariant 0 <= slot_idx < FixedSizeImpl();
-      invariant resourceHasSingleRow(r, slot_idx as nat, entry, Inserting(rid, kv));
-      decreases DistanceToSlot(slot_idx, hash_idx)
+      invariant resourceHasSingleRow(r, slot_idx as nat, entry, Inserting(rid, kv))
+      invariant kv.key == key
+      invariant hash_idx == hash(key)
+      decreases DistanceToSlot(slot_idx, orignal_hash_idx)
     {
-      var step;
+      var step, new_kv;
 
       match entry {
         case Empty => {
@@ -243,71 +246,78 @@ module Impl refines Main {
             if !should_go_before {
               step := InsertSkipStep(slot_idx as nat);
             } else {
+              new_kv := KV(entry_key, value);
               step := InsertSwapStep(slot_idx as nat);
             }
           }
         }
       }
 
-      if step.InsertDoneStep? {
+      if step.InsertDoneStep? || step.InsertUpdateStep? {
         output := MapIfc.InsertOutput;
-        entry := Full(kv);
-        ghost var r2 := R(oneRowTable(slot_idx as nat, Info(entry, Free)), multiset{}, multiset{Stub(rid, output)});
+        ghost var r2 := R(oneRowTable(slot_idx as nat, Info(Full(kv), Free)), multiset{}, multiset{Stub(rid, output)});
+
         assert UpdateStep(r, r2, step); // observe
         r := easy_transform(r, r2);
 
         linear var rmutex;
         r, rmutex := ARS.split(r, 
           ARS.output_stub(rid, output), 
-          oneRowResource(slot_idx as nat, Info(entry, Free)));
-        release(mt[slot_idx], Value(entry, rmutex));
+          oneRowResource(slot_idx as nat, Info(Full(kv), Free)));
+        release(mt[slot_idx], Value(Full(kv), rmutex));
         break;
-      } else if step.InsertUpdateStep? {
-
-
-
       }
-      // else if step.QueryNotFoundStep? {
-      //   output := MapIfc.QueryOutput(NotFound);
-      //   ghost var r2 := R(oneRowTable(slot_idx as nat, Info(entry, Free)), multiset{}, multiset{Stub(rid, output)});
-      //   assert UpdateStep(r, r2, step); // observe
-      //   r := easy_transform(r, r2);
 
-      //   linear var rmutex;
-      //   r, rmutex := ARS.split(r,
-      //     ARS.output_stub(rid, output),
-      //     oneRowResource(slot_idx as nat, Info(entry, Free)));
-      //   release(mt[slot_idx], Value(entry, rmutex));
-      //   break;
-      // }
+      var slot_idx' := getNextIndex(slot_idx);
 
-      assume false;
+      linear var next_row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx']);
+      linear var Value(next_entry, next_row_r) := next_row;
+      r := ARS.join(r, next_row_r);
 
-    //   // } else if step.QuerySkipStep? {
-    //   //   var slot_idx' := getNextIndex(slot_idx);
+      if step.InsertSkipStep? {
+        ghost var r2 := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Inserting(rid, kv)));
+        assert InsertSkip(r, r2, slot_idx as nat);
 
-    //   //   linear var next_row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx']);
-    //   //   linear var Value(next_entry, next_row_r) := next_row;
-    //   //   r := ARS.join(r, next_row_r);
+        assert UpdateStep(r, r2, step); // observe
+        r := easy_transform(r, r2);
 
-    //   //   ghost var r2 := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Querying(rid, key)));
-    //   //   assert UpdateStep(r, r2, step); // observe
+        linear var rmutex;
 
-    //   //   r := easy_transform(r, r2);
+        ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Inserting(rid, kv)));
+        ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
 
-    //   //   linear var rmutex;
+        r, rmutex := ARS.split(r, left, right);
+        release(mt[slot_idx], Value(entry, rmutex));
+        slot_idx := slot_idx';
+        entry := next_entry;
+        assert resourceHasSingleRow(r, slot_idx as nat, entry, Inserting(rid, kv));
+      } else {
+        entry := Full(kv);
+        assert step.InsertSwapStep?;
 
-    //   //   ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Querying(rid, key)));
-    //   //   ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
+        ghost var r2 := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Inserting(rid, new_kv)));
+        assert UpdateStep(r, r2, step); // observe
+        r := easy_transform(r, r2);
+        kv := new_kv;
 
-    //   //   r, rmutex := ARS.split(r, left, right);
-    //   //   release(mt[slot_idx], Value(entry, rmutex));
-    //   //   slot_idx := slot_idx';
-    //   //   entry := next_entry;
-    //   //   assert resourceHasSingleRow(r, slot_idx as nat, entry, Querying(rid, key));
-    //   // }
+        linear var rmutex;
 
-      if slot_idx == hash_idx {
+        ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Inserting(rid, kv)));
+        ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
+
+        r, rmutex := ARS.split(r, left, right);
+        release(mt[slot_idx], Value(entry, rmutex));
+        slot_idx := slot_idx';
+        entry := next_entry;
+        key := new_kv.key;
+        assert resourceHasSingleRow(r, slot_idx as nat, entry, Inserting(rid, kv));
+
+        // assume false;
+      }
+
+      hash_idx := hash(key);
+
+      if slot_idx == orignal_hash_idx {
         assume false; // TODO: add unreachable step in the sharded state machine
         break;
       }
