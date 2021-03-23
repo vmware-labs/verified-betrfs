@@ -29,12 +29,46 @@ module MarshalledSnapshot {
 // blocks, but it's actually okay: we reserve them in the in-memory
 // representation, then emit them once we've frozen a given view.
 
+module AllocationTableMachineMod refines MarshalledSnapshot {
+  type AllocationTable = multiset<AU>
+
+  datatype Variables = Variables(
+    table: AllocationTable 
+  )
+
+  datatype Step =
+    | AddRefStep(au: AU)
+    | DropRefStep(au: AU)
+
+  predicate IsFree(s:Variables, au: AU) {
+    au !in s.table
+  }
+
+  predicate AddRef(s: Variables, s': Variables, au: AU) {
+    s'.table = s.table + {au}
+  }
+
+  predicate DropRef(s: Variables, s': Variables, au: AU) {
+    && !IsFree(s, au)
+    && s'.table = s.table - {au}
+  }
+
+  predicate NextStep(s: Variables, s': Variables, step: Step) {
+    match s {
+      case AddRefStep(au) => AddRef(s, s', au)
+      case DropRefStep(au) => DropRef(s, s', au)
+    }
+  }
+
+  predicate Next() {
+    exists step :: && NextStep(s, s', step)
+  }
+}
+
 module AllocationTableMod refines MarshalledSnapshot {
   import opened Options
 
   datatype Superblock = Superblock(snapshot: SnapshotSuperblock)
-
-  type AllocationTable = set<AU>
 
   function parse(b: seq<byte>) : Option<AllocationTable>
     // TODO

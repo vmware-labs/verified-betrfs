@@ -1,4 +1,82 @@
-include "MsgSeq.i.dfy"
+include "Tables.i.dfy"
+
+// NB the journal needs a smaller-sized-write primitive. If we get asked to sync
+// frequently, we don't want to burn an AU on every journal write. Maybe not even
+// a CU. Hrmm.
+module JournalMachineMod {
+  import AllocationTableMachineMod
+
+  datatype Superblock = Superblock(
+    allocation: AllocationTableMod.Superblock,
+    freshestCU: Option<CU>,
+    firstValidSeq : nat)
+
+  datatype MemJournalRecord =
+    | Message(m: Message)
+    | SyncReq(syncReqId: SyncReqId)
+
+  datatype WriteState =
+    | Idle
+    | WritingJournal(count: nat)  // Writing seqStart .. seqStart + count
+    | 
+
+  datatype Variables = Variables(
+    durableTail: CU, // pointer to the freshest CU that's durable (okay to commit in SB)
+    inFlightTail: Option<CU> // pointer to the CU where record.seqEnd == seqStart
+    seqStart: nat,  // in-memory records start here
+    journal: seq<MemJournalRecord>, // in memory records
+    seqToAU: map<nat, AU>,  // Which AU each seq number is stored in.
+  )
+
+  function AllocationForSeqs(s:Variables, seqStart: nat, seqEndExclusive: nat) : multiset<AU>
+  {
+    multiset seqNum | seqStart <= seqNum < seqEndExclusive :: s:seqToAU[seqNum]
+  }
+
+  predicate Record(s: Variables, s': Variables, message: Message)
+  {
+    && s' == s.(journal := s.journal + [Message(message)])
+  }
+
+  predicate InitiateJournalWriteNoop(s: Variables, s': Variables)
+  {
+  }
+
+  predicate CompleteJournalWriteNoop(s: Variables, s': Variables)
+  {
+  }
+
+  predicate InitiateSuperblockWriteNoop(s: Variables, s': Variables)
+  {
+  }
+
+  predicate AsyncFlush(s: Variables, s': Variables)
+  {
+    // Complete superblock write
+    // a superblock write hits the disk and commits seqStart .. seqStart + inFlightWriteCount
+  }
+
+  predicate CommitStart(s: Variables, s': Variables, sb: Superblock, startBoundary: nat)
+  {
+    && sb.allocation == holy crap
+    && sb.freshestCU == s.durableTail
+    && sb.firstValidSeq == startBoundary
+  }
+
+  predicate CommitComplete(s: Variables, s': Variables, sb: Superblock)
+  {
+    && 
+  }
+
+  predicate ReqSync(s: Variables, s': Variables, syncReqId: SyncReqId)
+  {
+    && s' == s.(journal := s.journal + [SyncReq(syncReqId)])
+  }
+
+  predicate CompleteSync(s: Variables, s': Variables, syncReqId: SyncReqId)
+  {
+  }
+}
 
 module JournalMod {
   import opened Options
@@ -7,30 +85,27 @@ module JournalMod {
   import opened MsgSeqMod
   import opened AllocationMod
 
-  datatype Superblock = Superblock(firstCU: Option<CU>, firstValidSeq : nat)
-
   // Monoid-friendly (quantified-list) definition
   datatype JournalRecord = JournalRecord(
     messageSeq: MsgSeq,
-    seqStart: nat,  // inclusive
-    nextCU: Option<CU>   // linked list pointer
+    priorCU: Option<CU>   // linked list pointer
   ) {
 
     // Synthesize a superblock that reflects the tail of the chain (cutting
     // off the first rec), propagating along firstValidSeq.
-    function nextSB(sb: Superblock) : Superblock
+    function priorSB(sb: Superblock) : Superblock
     {
-      Superblock(nextCU, sb.firstValidSeq)
+      Superblock(priorCU, sb.firstValidSeq)
     }
   }
   datatype JournalChain = JournalChain(sb: Superblock, recs:seq<JournalRecord>)
   {
     // Synthesize a superblock that reflects the tail of the chain (cutting
     // off the first rec), propagating along firstValidSeq.
-    function nextSB() : Superblock
+    function priorSB() : Superblock
       requires 0<|recs|
     {
-      recs[0].nextSB(sb)
+      recs[0].priorSB(sb)
     }
   }
 
@@ -41,16 +116,16 @@ module JournalMod {
     requires 0<=i<|chain.recs|
   {
     // stop if nothing more available
-    || chain.recs[i].nextCU.None?
+    || chain.recs[i].priorCU.None?
     // stop if nothing more needed
     || chain.sb.firstValidSeq >= chain.recs[i].seqStart
   }
 
   predicate WFChainBasic(chain: JournalChain)
   {
-    && (chain.sb.firstCU.None? <==> 0 == |chain.recs|)
+    && (chain.sb.freshestCU.None? <==> 0 == |chain.recs|)
     && (forall i | 0<=i<|chain.recs| :: i==|chain.recs|-1 <==> IsLastLink(i, chain))
-    && (forall i | 0<=i<|chain.recs|-1 :: chain.recs[i].nextCU.Some?)
+    && (forall i | 0<=i<|chain.recs|-1 :: chain.recs[i].priorCU.Some?)
   }
 
   predicate {:opaque} WFChainInner(chain: JournalChain)
@@ -70,10 +145,10 @@ module JournalMod {
     requires WFChain(chain)
     ensures |cus| == |chain.recs|
   {
-    if chain.sb.firstCU.None?
+    if chain.sb.freshestCU.None?
     then []
-    else [chain.sb.firstCU.value] + seq(|chain.recs|-1,
-        i requires 0<=i<|chain.recs|-1 => chain.recs[i].nextCU.value)
+    else [chain.sb.freshestCU.value] + seq(|chain.recs|-1,
+        i requires 0<=i<|chain.recs|-1 => chain.recs[i].priorCU.value)
   }
 
   predicate RecordOnDisk(dv: DiskView, cu: CU, journalRecord: JournalRecord)
@@ -85,12 +160,12 @@ module JournalMod {
   predicate {:opaque} ChainMatchesDiskView(dv: DiskView, chain: JournalChain)
     requires WFChain(chain)
   {
-    // chain corresponds to stuff in the DiskView starting at firstCU.
+    // chain corresponds to stuff in the DiskView starting at freshestCU.
     && var cus := CUsForChain(chain);
     && (forall i | 0<=i<|chain.recs| :: RecordOnDisk(dv, cus[i], chain.recs[i]))
   }
 
-  // Describe a valid chain with quantification.
+  // Describe a valid chain.
   predicate ValidJournalChain(dv: DiskView, chain: JournalChain)
   {
     && WFChain(chain)
@@ -98,7 +173,7 @@ module JournalMod {
   }
 
   lemma ValidEmptyChain(dv: DiskView, sb: Superblock)
-    requires sb.firstCU.None?
+    requires sb.freshestCU.None?
     ensures ValidJournalChain(dv, JournalChain(sb, []))
   {
     reveal_WFChainInner();
@@ -107,9 +182,9 @@ module JournalMod {
 
   function ExtendChain(sb: Superblock, rec: JournalRecord, innerchain: JournalChain)
     : (chain: JournalChain)
-    requires sb.firstCU.Some?
-    requires rec.nextCU.Some? ==> sb.firstValidSeq < rec.seqStart; // proves !IsLastLink(0, chain)
-    requires innerchain.sb == rec.nextSB(sb);
+    requires sb.freshestCU.Some?
+    requires rec.priorCU.Some? ==> sb.firstValidSeq < rec.seqStart; // proves !IsLastLink(0, chain)
+    requires innerchain.sb == rec.priorSB(sb);
     requires 0<|innerchain.recs| ==> rec.seqStart == innerchain.recs[0].messageSeq.seqEnd;
     requires WFChain(innerchain)
     ensures WFChain(chain)
@@ -141,34 +216,34 @@ module JournalMod {
       && r.chain.value.sb == sb
     decreases |dv.Keys|
   {
-    if sb.firstCU.None? then
+    if sb.freshestCU.None? then
       // Superblock told the whole story; nothing to read.
       ValidEmptyChain(dv, sb);
       ChainResult(Some(JournalChain(sb, [])), [])
-    else if sb.firstCU.value !in dv then
-      // !RecordOnDisk: tried to read firstCU and failed
-      ChainResult(None, [sb.firstCU.value])
+    else if sb.freshestCU.value !in dv then
+      // !RecordOnDisk: tried to read freshestCU and failed
+      ChainResult(None, [sb.freshestCU.value])
     else
-      var firstRec := parse(dv[sb.firstCU.value]);
+      var firstRec := parse(dv[sb.freshestCU.value]);
       if firstRec.None? then
-        // !RecordOnDisk: read firstCU, but it was borked
-        ChainResult(None, [sb.firstCU.value])
+        // !RecordOnDisk: read freshestCU, but it was borked
+        ChainResult(None, [sb.freshestCU.value])
       else if firstRec.value.messageSeq.seqEnd <= sb.firstValidSeq then
         // This isn't an invariant disk state: if we're in the initial call,
         // the superblock shouldn't point to a useless JournalRecord; if we're
         // in a recursive call with correctly-chained records, we should have
         // already ignored this case.
-        ChainResult(None, [sb.firstCU.value])
+        ChainResult(None, [sb.freshestCU.value])
       else if firstRec.value.seqStart == sb.firstValidSeq then
         // Glad we read this record, but we don't need to read anything beyond.
-        var r := ChainResult(Some(JournalChain(sb, [firstRec.value])), [sb.firstCU.value]);
+        var r := ChainResult(Some(JournalChain(sb, [firstRec.value])), [sb.freshestCU.value]);
         assert ValidJournalChain(dv, r.chain.value) by {
           reveal_WFChainInner();
           reveal_ChainMatchesDiskView();
         }
         r
       else
-        var inner := ChainFrom(MapRemove1(dv, sb.firstCU.value), firstRec.value.nextSB(sb));
+        var inner := ChainFrom(MapRemove1(dv, sb.freshestCU.value), firstRec.value.priorSB(sb));
         if inner.chain.None? // tail didn't decode or
           // tail decoded but head doesn't stitch to it (a cross-crash invariant)
           || (0<|inner.chain.value.recs|
@@ -176,9 +251,9 @@ module JournalMod {
         then
           // failure in recursive call.
           // We read our cu plus however far the recursive call reached.
-          ChainResult(None, [sb.firstCU.value] + inner.readCUs)
+          ChainResult(None, [sb.freshestCU.value] + inner.readCUs)
         else
-          assert firstRec.value.nextCU.Some? ==> sb.firstValidSeq < firstRec.value.seqStart;
+          assert firstRec.value.priorCU.Some? ==> sb.firstValidSeq < firstRec.value.seqStart;
           var chain := ExtendChain(sb, firstRec.value, inner.chain.value);
           //var chain := JournalChain(sb, [firstRec.value] + inner.chain.value.recs);
           assert ValidJournalChain(dv, chain) by {
@@ -186,7 +261,7 @@ module JournalMod {
             var cus := CUsForChain(chain);
             assert forall i | 0<=i<|chain.recs| :: RecordOnDisk(dv, cus[i], chain.recs[i]); // trigger
           }
-          ChainResult(Some(chain), [sb.firstCU.value] + inner.readCUs)
+          ChainResult(Some(chain), [sb.freshestCU.value] + inner.readCUs)
   }
 
   // TODO redo: return a seq of Message, with a prefix of None.
@@ -196,6 +271,7 @@ module JournalMod {
         => var mm := journalChain.recs[i].messageSeq; mm)
   }
 
+  // TODO(jonh): collapse to return MsgSeq
   function IM(dv: DiskView, sb: Superblock) : seq<MsgSeq>
   {
     var chain := ChainFrom(dv, sb).chain;
@@ -233,33 +309,35 @@ module JournalMod {
   {
   }
 
+  // TODO(jonh): delete chain parameter.
   lemma FrameOneChain(dv0: DiskView, dv1: DiskView, sb: Superblock, chain: Option<JournalChain>)
     requires chain == ChainFrom(dv0, sb).chain
     requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, sb))
     ensures chain == ChainFrom(dv1, sb).chain
+    // ensures ChainFrom(dv0, sb).chain == ChainFrom(dv1, sb).chain
   {
-    if sb.firstCU.Some? {
-      assert IReads(dv0, sb)[0] == sb.firstCU.value.au; // trigger
-      if sb.firstCU.value in dv0 {
-        var firstRec := parse(dv0[sb.firstCU.value]);
+    if sb.freshestCU.Some? {
+      assert IReads(dv0, sb)[0] == sb.freshestCU.value.au; // trigger
+      if sb.freshestCU.value in dv0 {
+        var firstRec := parse(dv0[sb.freshestCU.value]);
         if firstRec.Some? { // Recurse to follow chain
           if firstRec.value.messageSeq.seqEnd <= sb.firstValidSeq {
           } else if firstRec.value.seqStart == sb.firstValidSeq {
           } else {
-            var dv0r := MapRemove1(dv0, sb.firstCU.value);
-            var nextCU := firstRec.value.nextCU;
-            var nextSB := firstRec.value.nextSB(sb);
+            var dv0r := MapRemove1(dv0, sb.freshestCU.value);
+            var priorCU := firstRec.value.priorCU;
+            var priorSB := firstRec.value.priorSB(sb);
             var aus := IReads(dv0, sb);
-            var ausr := if nextCU.Some?
-              then IReads(dv0r, nextSB)
+            var ausr := if priorCU.Some?
+              then IReads(dv0r, priorSB)
               else [];
 
             forall i | 0<=i<|ausr| ensures ausr[i] in aus {
               assert aus[i+1] == ausr[i]; // witness to SequenceSubset(ausr, aus)
             }
-            DiskViewsEquivalentAfterRemove(dv0, dv1, aus, sb.firstCU.value, ausr);
-            FrameOneChain(dv0r, MapRemove1(dv1, sb.firstCU.value),
-              nextSB, ChainFrom(dv0r, nextSB).chain);
+            DiskViewsEquivalentAfterRemove(dv0, dv1, aus, sb.freshestCU.value, ausr);
+            FrameOneChain(dv0r, MapRemove1(dv1, sb.freshestCU.value),
+              priorSB, ChainFrom(dv0r, priorSB).chain);
           }
         }
       }
