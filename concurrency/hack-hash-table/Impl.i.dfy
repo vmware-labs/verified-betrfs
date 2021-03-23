@@ -205,6 +205,7 @@ module Impl refines Main {
     requires Inv(mt)
     requires input.InsertInput?
     requires isInputResource(in_r, rid, input)
+    ensures out_r == ARS.output_stub(rid, output)
   {
     var query_ticket := Ticket(rid, input);
     var key := input.key;
@@ -311,8 +312,6 @@ module Impl refines Main {
         entry := next_entry;
         key := new_kv.key;
         assert resourceHasSingleRow(r, slot_idx as nat, entry, Inserting(rid, kv));
-
-        // assume false;
       }
 
       hash_idx := hash(key);
@@ -325,6 +324,32 @@ module Impl refines Main {
 
     out_r := r;
   }
+
+  method doRemove(mt: MutexTable, input: Ifc.Input, rid: int, /*ghost*/ linear in_r: ARS.R)
+    returns (output: Ifc.Output, linear out_r: ARS.R)
+    requires Inv(mt)
+    requires input.RemoveInput?
+    requires isInputResource(in_r, rid, input)
+  {
+    var query_ticket := Ticket(rid, input);
+    var key := input.key;
+
+    var hash_idx := hash(key);
+    var orignal_hash_idx := hash_idx;
+    var slot_idx := hash_idx;
+
+    linear var r := in_r;
+    linear var row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx]);
+    linear var Value(entry, row_r) := row;
+    r := ARS.join(r, row_r);
+
+    ghost var r1 := oneRowResource(hash_idx as nat, Info(entry, Removing(rid, key)));
+    assert UpdateStep(r, r1, ProcessRemoveTicketStep(query_ticket)); // observe
+    r := easy_transform(r, r1);
+
+    out_r := r;
+  }
+
 
   method call(o: MutexTable, input: Ifc.Input,
       rid: int, linear in_r: ARS.R)
@@ -340,7 +365,6 @@ module Impl refines Main {
     if the_ticket.input.QueryInput? {
       output, out_r := doQuery(o, input, rid, in_r);
     } else if the_ticket.input.InsertInput? {
-      assume false;
       output, out_r := doInsert(o, input, rid, in_r);
     } else if the_ticket.input.RemoveInput? {
       assume false;
