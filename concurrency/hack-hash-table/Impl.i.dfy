@@ -270,7 +270,6 @@ module Impl refines Main {
       }
 
       var slot_idx' := getNextIndex(slot_idx);
-
       linear var next_row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx']);
       linear var Value(next_entry, next_row_r) := next_row;
       r := ARS.join(r, next_row_r);
@@ -335,7 +334,6 @@ module Impl refines Main {
     var key := input.key;
 
     var hash_idx := hash(key);
-    var orignal_hash_idx := hash_idx;
     var slot_idx := hash_idx;
 
     linear var r := in_r;
@@ -346,6 +344,44 @@ module Impl refines Main {
     ghost var r1 := oneRowResource(hash_idx as nat, Info(entry, Removing(rid, key)));
     assert UpdateStep(r, r1, ProcessRemoveTicketStep(query_ticket)); // observe
     r := easy_transform(r, r1);
+
+
+    while true 
+      invariant Inv(mt);
+      invariant 0 <= slot_idx < FixedSizeImpl();
+      invariant resourceHasSingleRow(r, slot_idx as nat, entry, Removing(rid, key))
+      decreases DistanceToSlot(slot_idx, hash_idx)
+    {
+      // var step;
+
+      match entry {
+        case Empty => {
+          // step := RemoveTidy(slot_idx as nat);
+          assert TidyEnabled(r, slot_idx as nat);
+        }
+        case Full(KV(entry_key, value)) => {
+          // if entry_key == key {
+          //   step := RemoveFoundIt(slot_idx as nat);
+          // } else {
+          //   var should_go_before := shouldHashGoBefore(hash_idx, hash(entry_key), slot_idx);
+
+          //   if !should_go_before {
+          //     step := InsertSkipStep(slot_idx as nat);
+          //   } else {
+          //     step := InsertSwapStep(slot_idx as nat);
+          //   }
+          // }
+        }
+      }
+
+
+      // var slot_idx' := getNextIndex(slot_idx);
+      // linear var next_row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx']);
+      // linear var Value(next_entry, next_row_r) := next_row;
+      // r := ARS.join(r, next_row_r);
+
+      assume false;
+    }
 
     out_r := r;
   }
