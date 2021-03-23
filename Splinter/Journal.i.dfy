@@ -6,31 +6,44 @@ include "Tables.i.dfy"
 module JournalMachineMod {
   import AllocationTableMachineMod
 
+  type LSN = nat // Log sequence number
+    
   datatype Superblock = Superblock(
     allocation: AllocationTableMod.Superblock,
     freshestCU: Option<CU>,
-    firstValidSeq : nat)
+    firstValidLSN : LSN)
 
-  datatype MemJournalRecord =
-    | Message(m: Message)
-    | SyncReq(syncReqId: SyncReqId)
+  datatype MemJournalRecord = Message(m: Message)
 
   datatype WriteState =
     | Idle
     | WritingJournal(count: nat)  // Writing seqStart .. seqStart + count
-    | 
 
   datatype Variables = Variables(
-    durableTail: CU, // pointer to the freshest CU that's durable (okay to commit in SB)
-    inFlightTail: Option<CU> // pointer to the CU where record.seqEnd == seqStart
-    seqStart: nat,  // in-memory records start here
+    firstValidLSN: LSN,
+    syncedLSNBoundary: LSN, // Smaller LSNs are reachable from the superblock, i.e. they are safe in the event of a crash
+    inFlightSyncedLSNBoundary: Option<LSN>, // Also indicates whether a superblock is currently being written to disk
+    durableTailCU: CU, // pointer to the freshest CU that's durable (okay to commit in SB)
+    durableTailLSN: LSN, // last durable log sequence number
+    inFlightTailCU: Option<CU> // pointer to the CU where record.seqEnd == seqStart
+    seqStart: LSN,  // in-memory records start here
     journal: seq<MemJournalRecord>, // in memory records
-    seqToAU: map<nat, AU>,  // Which AU each seq number is stored in.
+    seqToAU: map<LSN, AU>,  // Which AU each seq number is stored in.
+    syncReqs: map<SyncReqId, LSN>
   )
-
-  function AllocationForSeqs(s:Variables, seqStart: nat, seqEndExclusive: nat) : multiset<AU>
   {
-    multiset seqNum | seqStart <= seqNum < seqEndExclusive :: s:seqToAU[seqNum]
+    predicate seqToAuValid() {
+      && forall seqno :: firstValidSeq <= seqno < seqStart <==> seqno in seqToAu.Keys
+    }
+
+    predicate WF() {
+      && seqToAuValid()
+    }
+  }
+
+  function AllocationForSeqs(s:Variables, seqStart: LSN, seqEndExclusive: LSN) : multiset<AU>
+  {
+    multiset seqNum | seqStart <= seqNum < seqEndExclusive :: s.seqToAU[seqNum]
   }
 
   predicate Record(s: Variables, s': Variables, message: Message)
@@ -58,23 +71,38 @@ module JournalMachineMod {
 
   predicate CommitStart(s: Variables, s': Variables, sb: Superblock, startBoundary: nat)
   {
-    && sb.allocation == holy crap
-    && sb.freshestCU == s.durableTail
+    && s.inFlightSyncedLSNBoundary == None
+    && sb.allocation == AllocationForSeqs(s, startBoundary, durableTailLSN)
+    && sb.freshestCU == s.durableTailCU
     && sb.firstValidSeq == startBoundary
+    && s' == s.(inFlightSyncedLSNBoundary := Some(s.durableTailLSN))
   }
 
   predicate CommitComplete(s: Variables, s': Variables, sb: Superblock)
   {
-    && 
+    && s.inFlightSyncedLSNBoundary.Some?
+    && s'.firstValidSeq             == sb.firstValidSeq
+    && s'.syncedLSNBoundary         == s.inFlightSyncedLSNBoundary.value
+    && s'.inFlightSyncedLSNBoundary == None
+    && s'.durableTailCU             == s.durableTailCU
+    && s'.durableTailSeq            == s.durableTailSeq
+    && s'.inFlightTailCU            == s.inFlightTailCU
+    && s'.seqStart                  == s.seqStart
+    && s'.journal                   == s.journal
+    && s'.seqToAU                   == map seqno | s'.firstValidSeq <= seqno < s'.seqStart :: s.seqToAU[seqno]
   }
 
   predicate ReqSync(s: Variables, s': Variables, syncReqId: SyncReqId)
   {
-    && s' == s.(journal := s.journal + [SyncReq(syncReqId)])
+    && syncReqId !in s.syncReqs.Keys
+    && s' == s.(syncReqs := syncReqs[syncReqs := s.seqStart + |s.journal|])
   }
 
   predicate CompleteSync(s: Variables, s': Variables, syncReqId: SyncReqId)
   {
+    && syncReqId in s.syncReqs.Keys
+    && s.syncReqs[syncReqId] < s.syncedLSNBoundary
+    && s' == s.(syncReqs := MapRemove(s.syncReqs, syncReqId))
   }
 }
 
