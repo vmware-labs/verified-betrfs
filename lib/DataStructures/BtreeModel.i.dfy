@@ -1,21 +1,10 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-// Model for a Btree https://en.wikipedia.org/wiki/B-tree
-//
 // Includes the actual implementation (allKeys) which includes the structure
 // of a Btree and an interpretation which abstracts the tree to a key value
 // map. For every operation we perform to the btree we must show that the 
 // abstraction to the key value map holds.
-
-/**
- * Timeouts
- *  | - RecursiveInsertIsCorrect
- *  | - \ - Not on any specific forall, timesout if each forall has assumes false
- * Cleanup
- *  | - SplitIndexInterpretation (still has 1 and 2)
- *  \ - SpliitChildOfIndexPreservesInterpretation (still has A B)
- */
 
 
 include "../Lang/LinearSequence.s.dfy"
@@ -49,7 +38,6 @@ abstract module BtreeModel {
 
   // Returns a set of all the keys within and below a specific node.
   // Includes key-value keys and pivot keys
-  // Confused by why the 0 < size check is necessary and what it does?
   function {:opaque} AllKeys(node: Node) : set<Key>
     ensures node.Leaf? && 0 < |node.keys| ==> AllKeys(node) != {}
     ensures node.Index? && 0 < |node.pivots| ==> AllKeys(node) != {}
@@ -74,9 +62,6 @@ abstract module BtreeModel {
     }    
   }
 
-  // Validates that there are no keys which are higher than pivot i which are 
-  // children 
-  // Confused by the requires (why are both necessary)
   predicate AllKeysBelowBound(node: Node, i: int)
     requires node.Index?
     requires 0 <= i < |node.children|-1
@@ -85,7 +70,6 @@ abstract module BtreeModel {
     forall key :: key in AllKeys(node.children[i]) ==> Keys.lt(key, node.pivots[i])
   }
 
-  // Mirror of previous
   predicate AllKeysAboveBound(node: Node, i: int)
     requires node.Index?
     requires 0 <= i < |node.children|
@@ -968,7 +952,7 @@ abstract module BtreeModel {
     forall key' | key' in AllKeys(newnode)
       ensures key' in AllKeys(node) + {key}
     {
-      assume false;
+      reveal_AllKeys();
     }
     SubSetExtensionality(AllKeys(newnode), AllKeys(node) + {key});
   }
