@@ -218,6 +218,7 @@ module HTResource refines ApplicationResourceSpec {
     | ProcessRemoveTicketStep(insert_ticket: Ticket)
     | RemoveSkipStep(pos: nat)
     | RemoveFoundItStep(pos: nat)
+    | RemoveNotFoundStep(pos: nat)
     | RemoveTidyStep(pos: nat)
     | RemoveDoneStep(pos: nat)
 
@@ -371,16 +372,21 @@ module HTResource refines ApplicationResourceSpec {
               remove_ticket.input.key)))])
   }
 
-  predicate RemoveSkipEnabled(s: R, pos: nat)
+  predicate RemoveInspectEnabled(s: R, pos: nat)
   {
     && !s.Fail?
     && 0 <= pos < FixedSize()
-    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
-    && KnowRowIsFree(s, pos')
     // Know row pos, and it's the thing we're removing, and it's full...
     && s.table[pos].Some?
     && s.table[pos].value.state.Removing?
+  }
+
+  predicate RemoveSkipEnabled(s: R, pos: nat)
+  {
+    && RemoveInspectEnabled(s, pos)
     && s.table[pos].value.entry.Full?
+    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
+    && KnowRowIsFree(s, pos')
     // ...and the key it's full of sorts before the thing we're looking to remove.
     && !ShouldHashGoBefore(
         hash(s.table[pos].value.state.key) as int,
@@ -398,6 +404,21 @@ module HTResource refines ApplicationResourceSpec {
     && s' == s.(table := s.table
         [pos := Some(s.table[pos].value.(state := Free))]
         [pos' := Some(s.table[pos'].value.(state := s.table[pos].value.state))])
+  }
+
+  predicate RemoveNotFound(s: R, s': R, pos: nat)
+  {
+    && RemoveInspectEnabled(s, pos)
+    && (if s.table[pos].value.entry.Full? then // the key we are looking for goes before the one in the slot, so it must be absent
+      && ShouldHashGoBefore(
+        hash(s.table[pos].value.state.key) as int,
+        hash(s.table[pos].value.entry.kv.key) as int, pos)
+      && s.table[pos].value.entry.kv.key != s.table[pos].value.state.key
+      else true // the key would have been in this empty spot
+    )
+    && s' == s
+      .(table := s.table[pos := Some(Info(s.table[pos].value.entry, Free))])
+      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput(false))})
   }
 
   predicate RemoveFoundIt(s: R, s': R, pos: nat)
@@ -459,7 +480,7 @@ module HTResource refines ApplicationResourceSpec {
     // Clear the pointer, return the stub.
     && s' == s
       .(table := s.table[pos := Some(Info(s.table[pos].value.entry, Free))])
-      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput)})
+      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput(true))})
   }
 
   // Query
@@ -577,6 +598,7 @@ module HTResource refines ApplicationResourceSpec {
       case ProcessRemoveTicketStep(remove_ticket) => ProcessRemoveTicket(s, s', remove_ticket)
       case RemoveSkipStep(pos) => RemoveSkip(s, s', pos)
       case RemoveFoundItStep(pos) => RemoveFoundIt(s, s', pos)
+      case RemoveNotFoundStep(pos) => RemoveNotFound(s, s', pos)
       case RemoveTidyStep(pos) => RemoveTidy(s, s', pos)
       case RemoveDoneStep(pos) => RemoveDone(s, s', pos)
 
@@ -647,4 +669,16 @@ module HTResource refines ApplicationResourceSpec {
   requires Update(b, expected_out)
   ensures c == expected_out
   // travis promises to supply this
+
+  // Reduce boilerplate by letting caller provide explicit step, which triggers a quantifier for generic Update()
+  method easy_transform_step(
+      linear b: R,
+      ghost expected_out: R,
+      step: Step)
+  returns (linear c: R)
+  requires UpdateStep(b, expected_out, step) 
+  ensures c == expected_out
+  {
+    c := easy_transform(b, expected_out);
+  }
 }
