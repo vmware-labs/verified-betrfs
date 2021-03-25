@@ -6,14 +6,17 @@ include "Betree.i.dfy"
 // It has an interface to a disk, but can't actually see inside the disk (that's for the IOSystem).
 
 module ProgramMachineMod {
+  import JournalMachineMod
+  import BetreeMod
+
   datatype Superblock = Superblock(
     serial: nat,
-    journal: JournalMod.Superblock,
+    journal: JournalMachineMod.Superblock,
     betree: BetreeMod.Superblock)
 
   datatype Variables = Variables(
     stableSuperblock: Superblock,
-    journal: JournalMachine.Variables,
+    journal: JournalMachineMod.Variables,
     betree: CachedBetreeMachine.Variables,
     inFlightSuperblock: Option<Superblock>
     )
@@ -25,10 +28,12 @@ module ProgramMachineMod {
 
   predicate Init(s: Variables)
   {
+    false
   }
 
   predicate Recover(s: Variables, s': Variables)
   {
+    false
   }
 
   predicate Query(s: Variables, s': Variables, k: Key, v: Value)

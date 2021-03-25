@@ -1,4 +1,5 @@
 include "Tables.i.dfy"
+include "MsgSeq.i.dfy"
 
 module BetreeMod {
   import opened Options
@@ -59,7 +60,7 @@ module BetreeMod {
   function IReads(dv: DiskView, sb: Superblock) : set<AU> {
     var itbl := IndirectionTableMod.I(dv, sb.itbl);
     set au:AU |
-      && au < AUSizeInBlocks()
+      && au < AUSizeInCUs()
       && exists key :: au in IReadsKey(dv, itbl, key)
   }
 
