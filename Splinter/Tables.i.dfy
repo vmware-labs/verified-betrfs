@@ -1,4 +1,5 @@
 include "Allocation.i.dfy"
+include "../lib/Base/Option.s.dfy"
 
 module MarshalledSnapshot {
   // A snapshot of a data structure, spread across a linked list of CUs on the disk.
@@ -45,35 +46,36 @@ module AllocationTableMachineMod refines MarshalledSnapshot {
   }
 
   predicate AddRef(s: Variables, s': Variables, au: AU) {
-    s'.table = s.table + {au}
+    s'.table == s.table + multiset{au}
   }
 
   predicate DropRef(s: Variables, s': Variables, au: AU) {
     && !IsFree(s, au)
-    && s'.table = s.table - {au}
+    && s'.table == s.table - multiset{au}
   }
 
   predicate NextStep(s: Variables, s': Variables, step: Step) {
-    match s {
+    match step {
       case AddRefStep(au) => AddRef(s, s', au)
       case DropRefStep(au) => DropRef(s, s', au)
     }
   }
 
-  predicate Next() {
+  predicate Next(s: Variables, s': Variables) {
     exists step :: && NextStep(s, s', step)
   }
 }
 
 module AllocationTableMod refines MarshalledSnapshot {
   import opened Options
+  import AllocationTableMachineMod
 
   datatype Superblock = Superblock(snapshot: SnapshotSuperblock)
 
-  function parse(b: seq<byte>) : Option<AllocationTable>
+  function parse(b: seq<byte>) : Option<AllocationTableMachineMod.AllocationTable>
     // TODO
 
-  function I(dv: DiskView, sb: Superblock) : Option<AllocationTable> {
+  function I(dv: DiskView, sb: Superblock) : Option<AllocationTableMachineMod.AllocationTable> {
     parse(IBytes(dv, sb.snapshot))
   }
 }

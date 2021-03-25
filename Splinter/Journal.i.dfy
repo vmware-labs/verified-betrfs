@@ -1,15 +1,32 @@
+include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/Maps.i.dfy"
+include "Spec.s.dfy"
+include "MsgSeq.i.dfy"
 include "Tables.i.dfy"
 
 // NB the journal needs a smaller-sized-write primitive. If we get asked to sync
 // frequently, we don't want to burn an AU on every journal write. Maybe not even
 // a CU. Hrmm.
 module JournalMachineMod {
-  import AllocationTableMachineMod
+  import opened Options
+  import opened Sequences
+  import opened Maps
+  import opened MessageMod
+  import opened InterpMod
+  import opened DeferredWriteMapSpecMod
+  import opened MsgSeqMod
+  import opened AllocationMod
+  import AllocationTableMod
 
-  datatype Superblock = Superblock(
-    allocation: AllocationTableMod.Superblock,
+  // The core journal superblock
+  datatype CoreSuperblock = CoreSuperblock(
     freshestCU: Option<CU>,
     firstValidLSN : LSN)
+
+  // The entire superblock we need to store: Core data plus allocation data
+  datatype Superblock = Superblock(
+    allocation: AllocationTableMod.Superblock,
+    core: CoreSuperblock)
 
   datatype MemJournalRecord = Message(m: Message)
 
@@ -23,7 +40,7 @@ module JournalMachineMod {
       // been garbage-collected. (There may be leftover records with smaller
       // JSNs in a journal entry, but they should be ignored).
 
-    durableTailCU: CU,
+    durableTailCU: Option<CU>,
       // pointer to the freshest CU that's durable (okay to commit in SB)
 
     seqStart: LSN,  // in-memory records start here
@@ -33,7 +50,7 @@ module JournalMachineMod {
   )
   {
     predicate seqToAuValid() {
-      && forall seqno :: firstValidLSN <= seqno < seqStart <==> seqno in seqToAu.Keys
+      && forall seqno :: firstValidLSN <= seqno < seqStart <==> seqno in seqToAU.Keys
     }
 
     predicate WF() {
@@ -41,9 +58,9 @@ module JournalMachineMod {
     }
   }
 
-  function AllocationForSeqs(s:Variables, seqStart: LSN, seqEndExclusive: LSN) : multiset<AU>
+  predicate SeqsCoveredByAllocation(s:Variables, seqStart: LSN, seqEndExclusive: LSN, allocation: AllocationTableMod.Superblock)
   {
-    multiset { seqNum | seqStart <= seqNum < seqEndExclusive :: s.seqToAU[seqNum] }
+    false
   }
 
   predicate Record(s: Variables, s': Variables, message: Message)
@@ -53,20 +70,29 @@ module JournalMachineMod {
 
   predicate InitiateJournalWriteNoop(s: Variables, s': Variables)
   {
+    false
   }
 
   predicate CompleteJournalWriteNoop(s: Variables, s': Variables)
   {
+    false
   }
 
   predicate InitiateSuperblockWriteNoop(s: Variables, s': Variables)
   {
+    false
   }
 
   predicate AsyncFlush(s: Variables, s': Variables)
   {
+    false
     // Complete superblock write
     // a superblock write hits the disk and commits seqStart .. seqStart + inFlightWriteCount
+  }
+
+  function endLSNExclusive(firstValidLSN: LSN, cu: Option<CU>) : LSN
+  {
+    0 //TODO
   }
 
   // Program keeps track of the "in-flight" superblock. CommitStart(sb) means that sb
@@ -77,35 +103,38 @@ module JournalMachineMod {
   predicate CommitStart(s: Variables, s': Variables, sb: Superblock, startBoundary: LSN)
   {
     && startBoundary <= s.firstValidLSN
-    && var durableTailLSN := endLSNExclusive(sb.freshestCU);
-    && sb.allocation == AllocationForSeqs(s, startBoundary, durableTailLSN)
-    && sb.freshestCU == s.durableTailCU
-    && sb.firstValidLSN == startBoundary
+    && SeqsCoveredByAllocation(s, startBoundary, endLSNExclusive(sb.core.firstValidLSN, sb.core.freshestCU), sb.allocation)
+    && sb.core.freshestCU == s.durableTailCU
+    && sb.core.firstValidLSN == startBoundary
     && s' == s
   }
 
   predicate CommitComplete(s: Variables, s': Variables, sb: Superblock)
   {
-    && s'.firstValidLSN == sb.firstValidLSN
+    && s.WF()
+    && s.firstValidLSN <= sb.core.firstValidLSN
+      // guaranteed inductively -- we don't update s.firstValidLSN except here,
+      // CommitStart establishes this relation
+      // and Program carries sb from there to here.
+    && s'.firstValidLSN == sb.core.firstValidLSN
     && s'.durableTailCU == s.durableTailCU
     && s'.seqStart == s.seqStart
     && s'.journal == s.journal
-    && s'.seqToAU == map seqno | s'.firstValidLSN <= seqno < s'.seqStart :: s.seqToAU[seqno]
+    && s'.seqToAU == (map seqno | s'.firstValidLSN <= seqno < s'.seqStart :: s.seqToAU[seqno])
     && s'.syncReqs == s.syncReqs
   }
 
   predicate ReqSync(s: Variables, s': Variables, syncReqId: SyncReqId)
   {
     && syncReqId !in s.syncReqs.Keys
-    && s' == s.(syncReqs := syncReqs[syncReqs := s.seqStart + |s.journal|])
+    && s' == s.(syncReqs := s.syncReqs[syncReqId := s.seqStart + |s.journal|])
   }
 
   predicate CompleteSync(s: Variables, s': Variables, syncReqId: SyncReqId)
   {
     && syncReqId in s.syncReqs.Keys
-    && var syncedLSNBoundary := endLSNExclusive(sb.freshestCU);
-    && s.syncReqs[syncReqId] < s.syncedLSNBoundary
-    && s' == s.(syncReqs := MapRemove(s.syncReqs, syncReqId))
+    && s.syncReqs[syncReqId] < endLSNExclusive(s.firstValidLSN, s.durableTailCU)
+    && s' == s.(syncReqs := MapRemove1(s.syncReqs, syncReqId))
   }
 }
 
@@ -115,6 +144,7 @@ module JournalMod {
   import opened Maps
   import opened MsgSeqMod
   import opened AllocationMod
+  import opened JournalMachineMod
 
   // Monoid-friendly (quantified-list) definition
   datatype JournalRecord = JournalRecord(
@@ -124,16 +154,16 @@ module JournalMod {
 
     // Synthesize a superblock that reflects the tail of the chain (cutting
     // off the first rec), propagating along firstValidLSN.
-    function priorSB(sb: Superblock) : Superblock
+    function priorSB(sb: CoreSuperblock) : CoreSuperblock
     {
-      Superblock(priorCU, sb.firstValidLSN)
+      CoreSuperblock(priorCU, sb.firstValidLSN)
     }
   }
-  datatype JournalChain = JournalChain(sb: Superblock, recs:seq<JournalRecord>)
+  datatype JournalChain = JournalChain(sb: CoreSuperblock, recs:seq<JournalRecord>)
   {
     // Synthesize a superblock that reflects the tail of the chain (cutting
     // off the first rec), propagating along firstValidLSN.
-    function priorSB() : Superblock
+    function priorSB() : CoreSuperblock
       requires 0<|recs|
     {
       recs[0].priorSB(sb)
@@ -149,7 +179,7 @@ module JournalMod {
     // stop if nothing more available
     || chain.recs[i].priorCU.None?
     // stop if nothing more needed
-    || chain.sb.firstValidLSN >= chain.recs[i].seqStart
+    || chain.sb.firstValidLSN >= chain.recs[i].messageSeq.seqStart
   }
 
   predicate WFChainBasic(chain: JournalChain)
@@ -163,7 +193,7 @@ module JournalMod {
     requires WFChainBasic(chain)
   {
     && (forall i | 0<=i<|chain.recs|-1 ::
-      chain.recs[i].seqStart == chain.recs[i+1].messageSeq.seqEnd)
+      chain.recs[i].messageSeq.seqStart == chain.recs[i+1].messageSeq.seqEnd)
   }
 
   predicate WFChain(chain: JournalChain)
@@ -203,7 +233,7 @@ module JournalMod {
     && ChainMatchesDiskView(dv, chain)
   }
 
-  lemma ValidEmptyChain(dv: DiskView, sb: Superblock)
+  lemma ValidEmptyChain(dv: DiskView, sb: CoreSuperblock)
     requires sb.freshestCU.None?
     ensures ValidJournalChain(dv, JournalChain(sb, []))
   {
@@ -211,12 +241,12 @@ module JournalMod {
     reveal_ChainMatchesDiskView();
   }
 
-  function ExtendChain(sb: Superblock, rec: JournalRecord, innerchain: JournalChain)
+  function ExtendChain(sb: CoreSuperblock, rec: JournalRecord, innerchain: JournalChain)
     : (chain: JournalChain)
     requires sb.freshestCU.Some?
-    requires rec.priorCU.Some? ==> sb.firstValidLSN < rec.seqStart; // proves !IsLastLink(0, chain)
+    requires rec.priorCU.Some? ==> sb.firstValidLSN < rec.messageSeq.seqStart; // proves !IsLastLink(0, chain)
     requires innerchain.sb == rec.priorSB(sb);
-    requires 0<|innerchain.recs| ==> rec.seqStart == innerchain.recs[0].messageSeq.seqEnd;
+    requires 0<|innerchain.recs| ==> rec.messageSeq.seqStart == innerchain.recs[0].messageSeq.seqEnd;
     requires WFChain(innerchain)
     ensures WFChain(chain)
   {
@@ -241,7 +271,7 @@ module JournalMod {
   // results (even when they're broken).
   datatype ChainResult = ChainResult(chain: Option<JournalChain>, readCUs:seq<CU>)
 
-  function ChainFrom(dv: DiskView, sb: Superblock) : (r:ChainResult)
+  function ChainFrom(dv: DiskView, sb: CoreSuperblock) : (r:ChainResult)
     ensures r.chain.Some? ==>
       && ValidJournalChain(dv, r.chain.value)
       && r.chain.value.sb == sb
@@ -265,7 +295,7 @@ module JournalMod {
         // in a recursive call with correctly-chained records, we should have
         // already ignored this case.
         ChainResult(None, [sb.freshestCU.value])
-      else if firstRec.value.seqStart == sb.firstValidLSN then
+      else if firstRec.value.messageSeq.seqStart == sb.firstValidLSN then
         // Glad we read this record, but we don't need to read anything beyond.
         var r := ChainResult(Some(JournalChain(sb, [firstRec.value])), [sb.freshestCU.value]);
         assert ValidJournalChain(dv, r.chain.value) by {
@@ -278,13 +308,13 @@ module JournalMod {
         if inner.chain.None? // tail didn't decode or
           // tail decoded but head doesn't stitch to it (a cross-crash invariant)
           || (0<|inner.chain.value.recs|
-              && firstRec.value.seqStart != inner.chain.value.recs[0].messageSeq.seqEnd)
+              && firstRec.value.messageSeq.seqStart != inner.chain.value.recs[0].messageSeq.seqEnd)
         then
           // failure in recursive call.
           // We read our cu plus however far the recursive call reached.
           ChainResult(None, [sb.freshestCU.value] + inner.readCUs)
         else
-          assert firstRec.value.priorCU.Some? ==> sb.firstValidLSN < firstRec.value.seqStart;
+          assert firstRec.value.priorCU.Some? ==> sb.firstValidLSN < firstRec.value.messageSeq.seqStart;
           var chain := ExtendChain(sb, firstRec.value, inner.chain.value);
           //var chain := JournalChain(sb, [firstRec.value] + inner.chain.value.recs);
           assert ValidJournalChain(dv, chain) by {
@@ -303,7 +333,7 @@ module JournalMod {
   }
 
   // TODO(jonh): collapse to return MsgSeq
-  function IM(dv: DiskView, sb: Superblock) : seq<MsgSeq>
+  function IM(dv: DiskView, sb: CoreSuperblock) : seq<MsgSeq>
   {
     var chain := ChainFrom(dv, sb).chain;
     if chain.Some?
@@ -321,7 +351,7 @@ module JournalMod {
 
   // TODO(jonh): Try porting this from recursive style to Travis' suggested
   // repr-state style (see ReprsAsSets.i.dfy).
-  function IReads(dv: DiskView, sb: Superblock) : seq<AU>
+  function IReads(dv: DiskView, sb: CoreSuperblock) : seq<AU>
   {
     var cus := ChainFrom(dv, sb).readCUs;
     // wanted to write:
@@ -343,7 +373,7 @@ module JournalMod {
   }
 
   // TODO(jonh): delete chain parameter.
-  lemma FrameOneChain(dv0: DiskView, dv1: DiskView, sb: Superblock, chain: Option<JournalChain>)
+  lemma FrameOneChain(dv0: DiskView, dv1: DiskView, sb: CoreSuperblock, chain: Option<JournalChain>)
     requires chain == ChainFrom(dv0, sb).chain
     requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, sb))
     ensures chain == ChainFrom(dv1, sb).chain
@@ -355,7 +385,7 @@ module JournalMod {
         var firstRec := parse(dv0[sb.freshestCU.value]);
         if firstRec.Some? { // Recurse to follow chain
           if firstRec.value.messageSeq.seqEnd <= sb.firstValidLSN {
-          } else if firstRec.value.seqStart == sb.firstValidLSN {
+          } else if firstRec.value.messageSeq.seqStart == sb.firstValidLSN {
           } else {
             var dv0r := MapRemove1(dv0, sb.freshestCU.value);
             var priorCU := firstRec.value.priorCU;
@@ -377,7 +407,7 @@ module JournalMod {
     }
   }
 
-  lemma Framing(sb:Superblock, dv0: DiskView, dv1: DiskView)
+  lemma Framing(sb:CoreSuperblock, dv0: DiskView, dv1: DiskView)
     requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, sb))
     ensures IM(dv0, sb) == IM(dv1, sb)
   {

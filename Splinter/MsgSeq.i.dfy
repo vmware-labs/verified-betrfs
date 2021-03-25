@@ -4,7 +4,7 @@ module MsgSeqMod {
   import opened MessageMod
   import opened InterpMod
 
-  datatype MsgSeq = MsgSeq(msgs: map<nat, Message>, seqStart: nat, seqEnd: nat)
+  datatype MsgSeq = MsgSeq(msgs: map<LSN, Message>, seqStart: LSN, seqEnd: LSN)
     // seqEnd is exclusive
   {
     predicate WF()
