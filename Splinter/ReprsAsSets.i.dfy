@@ -1,5 +1,16 @@
 include "../lib/Base/Option.s.dfy"
 
+// When Jon first drafted Journal.i.dfy, he computed IReads as a function,
+// at the same time as recursively walking the DiskView. Travis points out
+// that we had an analogous challenge in mem-heap reasoning, and we often
+// found it was better to inductively maintain a ghosty repr state.
+// This file shows what that might look like. Jon has a TODO to try porting
+// the journal over to this style once there's an inductive proof to try
+// it on.
+// Why Jon is contractually obligated to prefer this style: it is more
+// Lookup-y: the IReads-function style keeps the repr set as a recursive
+// definition; this style exposes the read set as a quantified representation.
+
 module Example {
   import opened Options
 

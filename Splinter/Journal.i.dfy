@@ -316,6 +316,8 @@ module JournalMod {
     cus[i].au
   }
 
+  // TODO(jonh): Try porting this from recursive style to Travis' suggested
+  // repr-state style (see ReprsAsSets.i.dfy).
   function IReads(dv: DiskView, sb: Superblock) : seq<AU>
   {
     var cus := ChainFrom(dv, sb).readCUs;
