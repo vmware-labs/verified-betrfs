@@ -342,6 +342,62 @@ module Impl refines Main {
     out_r := r;
   }
 
+  method doRemoveTidy(mt: MutexTable, rid: int, 
+    slot_idx: uint32,
+    hash_idx: uint32, 
+    entry: Entry,
+    next_entry: Entry,
+    /*ghost*/ linear r: ARS.R)
+    returns (output: Ifc.Output, linear out_r: ARS.R)
+    requires Inv(mt)
+    requires TidyEnabled(r, slot_idx as nat)
+    requires !DoneTidying(r, slot_idx as nat)
+    requires r == twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid)), NextPos(slot_idx as nat), Info(next_entry, Free));
+    requires 0 <= slot_idx < FixedSizeImpl()
+    requires 0 <= hash_idx < FixedSizeImpl()
+  {
+    var slot_idx := slot_idx;
+    linear var r := r;
+    while true
+      invariant Inv(mt);
+      invariant TidyEnabled(r, slot_idx as nat)
+      invariant !DoneTidying(r, slot_idx as nat)
+      invariant 0 <= slot_idx < FixedSizeImpl()
+      invariant r == twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid)), NextPos(slot_idx as nat), Info(next_entry, Free))
+      decreases DistanceToSlot(slot_idx, hash_idx)
+    {
+      var slot_idx' := getNextIndex(slot_idx);
+
+      ghost var r2 := twoRowsResource(slot_idx as nat, Info(next_entry, Free), slot_idx' as nat, Info(Empty, RemoveTidying(rid)));
+      r := easy_transform_step(r, r2, RemoveTidyStep(slot_idx as nat));
+
+      linear var rmutex;
+      ghost var left := oneRowResource(slot_idx' as nat, Info(Empty, RemoveTidying(rid)));
+      ghost var right := oneRowResource(slot_idx as nat, Info(next_entry, Free));
+
+      r, rmutex := ARS.split(r, left, right);
+      release(mt[slot_idx], Value(next_entry, rmutex));
+
+      slot_idx := slot_idx';
+      slot_idx' := getNextIndex(slot_idx);
+
+      linear var next_row := HTMutex.acquire(mt[slot_idx']);
+      linear var Value(next_entry, next_row_r) := next_row;
+      r := ARS.join(r, next_row_r);
+
+      if next_entry.Empty? || hash(next_entry.kv.key) == slot_idx' {
+        break;
+      }
+
+      if slot_idx == hash_idx {
+        assume false; // TODO: add unreachable step in the sharded state machine
+        break;
+      }
+    }
+
+    out_r := r;
+  }
+
   method doRemove(mt: MutexTable, input: Ifc.Input, rid: int, /*ghost*/ linear in_r: ARS.R)
     returns (output: Ifc.Output, linear out_r: ARS.R)
     requires Inv(mt)
@@ -443,37 +499,6 @@ module Impl refines Main {
           release(mt[slot_idx'], Value(next_entry, rmutex));
 
           break;
-        }
-
-        while true
-          invariant Inv(mt);
-          invariant !DoneTidying(r, slot_idx as nat)
-          invariant TidyEnabled(r, slot_idx as nat)
-          invariant 0 <= slot_idx < FixedSizeImpl()
-          invariant r == twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid)), slot_idx' as nat, Info(next_entry, Free));
-          decreases DistanceToSlot(slot_idx, hash_idx)
-        {
-          if next_entry.Empty? || hash(next_entry.kv.key) == slot_idx' {
-            break;
-          }
-
-          // linear var rmutex;
-          // ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Free));
-          // ghost var right := oneRowResource(slot_idx as nat, Info(Empty, Free));
-
-          // r, rmutex := ARS.split(r, left, right);
-          // release(mt[slot_idx], Value(Empty, rmutex));
-
-
-          assume false;
-
-          slot_idx' := getNextIndex(slot_idx);
-          slot_idx := slot_idx';
-
-          if slot_idx == hash_idx {
-            assume false; // TODO: add unreachable step in the sharded state machine
-            break;
-          }
         }
 
         assert DoneTidying(r, slot_idx as nat);
