@@ -1,7 +1,4 @@
 include "../lib/Lang/NativeTypes.s.dfy"
-include "../lib/Base/sequences.i.dfy"
-include "../lib/Base/Option.s.dfy"
-include "../lib/Base/Maps.i.dfy"
 
 // TODO replace this stuff with the real key, value, message definitions
 

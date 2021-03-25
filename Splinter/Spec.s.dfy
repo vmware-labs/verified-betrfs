@@ -1,4 +1,5 @@
-include "Base.i.dfy"
+include "Base.s.dfy"
+include "../lib/Base/sequences.i.dfy" // TODO .i from .s, for Last, DropLast
 
 module MapSpecMod {
   import opened MessageMod
@@ -35,7 +36,7 @@ module MapSpecMod {
 // Sync requests are associated with the ephemeral version, and travel with
 // that version until they arrive in the persistent state slot (index 0).
 module DeferredWriteMapSpecMod {
-  import opened Sequences
+  import opened Sequences // Last, DropLast
   import opened MessageMod
   import InterpMod
   import MapSpecMod
