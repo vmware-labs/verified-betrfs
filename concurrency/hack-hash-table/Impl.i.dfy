@@ -351,22 +351,29 @@ module Impl refines Main {
     returns (output: Ifc.Output, linear out_r: ARS.R)
     requires Inv(mt)
     requires TidyEnabled(r, slot_idx as nat)
-    requires !DoneTidying(r, slot_idx as nat)
     requires r == twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid)), NextPos(slot_idx as nat), Info(next_entry, Free));
     requires 0 <= slot_idx < FixedSizeImpl()
     requires 0 <= hash_idx < FixedSizeImpl()
+    ensures out_r == ARS.output_stub(rid, output)
   {
     var slot_idx := slot_idx;
+    var next_entry := next_entry;
     linear var r := r;
     while true
       invariant Inv(mt);
-      invariant TidyEnabled(r, slot_idx as nat)
-      invariant !DoneTidying(r, slot_idx as nat)
+      // invariant TidyEnabled(r, slot_idx as nat)
+      // invariant !DoneTidying(r, slot_idx as nat)
       invariant 0 <= slot_idx < FixedSizeImpl()
       invariant r == twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid)), NextPos(slot_idx as nat), Info(next_entry, Free))
       decreases DistanceToSlot(slot_idx, hash_idx)
     {
       var slot_idx' := getNextIndex(slot_idx);
+
+      if next_entry.Empty? || hash(next_entry.kv.key) == slot_idx' {
+        assert DoneTidying(r, slot_idx as nat);
+        break;
+      }
+
 
       ghost var r2 := twoRowsResource(slot_idx as nat, Info(next_entry, Free), slot_idx' as nat, Info(Empty, RemoveTidying(rid)));
       r := easy_transform_step(r, r2, RemoveTidyStep(slot_idx as nat));
@@ -382,18 +389,46 @@ module Impl refines Main {
       slot_idx' := getNextIndex(slot_idx);
 
       linear var next_row := HTMutex.acquire(mt[slot_idx']);
-      linear var Value(next_entry, next_row_r) := next_row;
+      linear var Value(next_entry', next_row_r) := next_row;
+      next_entry := next_entry';
       r := ARS.join(r, next_row_r);
 
-      if next_entry.Empty? || hash(next_entry.kv.key) == slot_idx' {
-        break;
-      }
 
       if slot_idx == hash_idx {
         assume false; // TODO: add unreachable step in the sharded state machine
         break;
       }
+
+      assert r == twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid)), NextPos(slot_idx as nat), Info(next_entry, Free));
     }
+
+    assert DoneTidying(r, slot_idx as nat);
+
+    var slot_idx' := getNextIndex(slot_idx);
+    output := MapIfc.RemoveOutput(true);
+    ghost var r2 := R (
+      twoRowsTable(slot_idx as nat, Info(Empty, Free), slot_idx' as nat, Info(next_entry, Free)),
+      multiset{},
+      multiset{ Stub(rid, output) }
+    );
+    // assert RemoveDone(r, r2, slot_idx as nat);
+    var step := RemoveDoneStep(slot_idx as nat);
+    r := easy_transform_step(r, r2, step);
+
+    linear var rmutex;
+    ghost var left := R(
+      oneRowTable(slot_idx' as nat, Info(next_entry, Free)),
+      multiset{},
+      multiset{ Stub(rid, output) });
+    ghost var right := oneRowResource(slot_idx as nat, Info(Empty, Free));
+
+    r, rmutex := ARS.split(r, left, right);
+    release(mt[slot_idx], Value(Empty, rmutex));
+
+    r, rmutex := ARS.split(r, 
+      ARS.output_stub(rid, output), 
+      oneRowResource(slot_idx' as nat, Info(next_entry, Free)));
+    release(mt[slot_idx'], Value(next_entry, rmutex));
 
     out_r := r;
   }
@@ -403,7 +438,7 @@ module Impl refines Main {
     requires Inv(mt)
     requires input.RemoveInput?
     requires isInputResource(in_r, rid, input)
-    // ensures out_r == ARS.output_stub(rid, output)
+    ensures out_r == ARS.output_stub(rid, output)
   {
     var query_ticket := Ticket(rid, input);
     var key := input.key;
@@ -465,43 +500,7 @@ module Impl refines Main {
 
         ghost var r2 := twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid)), slot_idx' as nat, Info(next_entry, Free));
         r := easy_transform_step(r, r2, step);
-
-        var doneTidying := false;
-        if next_entry.Empty? || hash(next_entry.kv.key) == slot_idx' {
-          doneTidying := true;
-        }
-        // assert doneTidying == DoneTidying(r, slot_idx as nat);
-
-        if doneTidying {
-          var output := MapIfc.RemoveOutput(true);
-          ghost var r2 := R (
-            twoRowsTable(slot_idx as nat, Info(Empty, Free), slot_idx' as nat, Info(next_entry, Free)),
-            multiset{},
-            multiset{ Stub(rid, output) }
-          );
-          // assert RemoveDone(r, r2, slot_idx as nat);
-          step := RemoveDoneStep(slot_idx as nat);
-          r := easy_transform_step(r, r2, step);
-
-          linear var rmutex;
-          ghost var left := R(
-            oneRowTable(slot_idx' as nat, Info(next_entry, Free)),
-            multiset{},
-            multiset{ Stub(rid, output) });
-          ghost var right := oneRowResource(slot_idx as nat, Info(Empty, Free));
-
-          r, rmutex := ARS.split(r, left, right);
-          release(mt[slot_idx], Value(Empty, rmutex));
-
-          r, rmutex := ARS.split(r, 
-            ARS.output_stub(rid, output), 
-            oneRowResource(slot_idx' as nat, Info(next_entry, Free)));
-          release(mt[slot_idx'], Value(next_entry, rmutex));
-
-          break;
-        }
-
-        assert DoneTidying(r, slot_idx as nat);
+        output, r := doRemoveTidy(mt, rid, slot_idx, hash_idx, entry, next_entry, r);
         break;
       } else {
         ghost var r2 := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Removing(rid, key)));
@@ -543,7 +542,7 @@ module Impl refines Main {
       rid: int, linear in_r: ARS.R)
   returns (output: Ifc.Output, linear out_r: ARS.R)
   //requires Inv(o)
-  //requires ticket == ARS.input_ticket(rid, key)
+  // requires ticket == ARS.input_ticket(rid, key)
   ensures out_r == ARS.output_stub(rid, output)
   {
     // Find the ticket.
@@ -555,9 +554,7 @@ module Impl refines Main {
     } else if the_ticket.input.InsertInput? {
       output, out_r := doInsert(o, input, rid, in_r);
     } else if the_ticket.input.RemoveInput? {
-      assume false;
-      out_r := in_r;
-      // call_Remove(o, input, rid, in_r);
+      output, out_r := doRemove(o, input, rid, in_r);
     } else {
       out_r := in_r;
       assert false;
