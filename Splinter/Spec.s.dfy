@@ -42,6 +42,9 @@ module DeferredWriteMapSpecMod {
 
   type SyncReqId = nat
   datatype Version = Version(mapp: MapSpecMod.Variables, syncReqIds: set<SyncReqId>)
+  // TODO(jonh): per discussion with oded: let this version history grow forever, and then
+  // just have a nat pointing to the persistent version!
+  // TODO(jonh): hey this should be a .s file
   datatype Variables = Variables(versions: seq<Version>)
   {
     predicate WF() {

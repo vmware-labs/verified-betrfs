@@ -21,7 +21,9 @@ module MessageMod {
 module InterpMod {
   import opened MessageMod
 
-  datatype Interp = Interp(mi:imap<Key, Value>, seqEnd: nat)
+  type LSN = nat // Log sequence number
+
+  datatype Interp = Interp(mi:imap<Key, Value>, seqEnd: LSN)
   {
     predicate WF() {
       // TODO How is ImapComplete not in Maps.i?

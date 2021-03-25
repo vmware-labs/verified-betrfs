@@ -82,7 +82,7 @@ module ProgramMachineMod {
   //     until sb1 commits, lest sb0 get lost before sb1 is successfully written and the "synced"
   //     data gets lost
   // At this layer, we abbreviate that to "write sb" and "write sb complete".
-  predicate CommitStart(s: Variables, s': Variables, seqBoundary: nat)
+  predicate CommitStart(s: Variables, s': Variables, seqBoundary: LSN)
   {
     && s.inFlightSuperblock.None?
     && var sb := s'.inFlightSuperblock;
