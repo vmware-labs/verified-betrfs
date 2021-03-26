@@ -156,7 +156,6 @@ module Impl refines Main {
 
       if !step.QuerySkipStep? {
         ghost var r2 := R(oneRowTable(slot_idx as nat, Info(entry, Free)), multiset{}, multiset{Stub(rid, output)}); 
-        // assert UpdateStep(r, r2, step); // observe
         r := easy_transform_step(r, r2, step);
 
         linear var rmutex;
@@ -172,10 +171,6 @@ module Impl refines Main {
       linear var next_row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx']);
       linear var Value(next_entry, next_row_r) := next_row;
       r := ARS.join(r, next_row_r);
-
-      // assert QuerySkipEnabled(r, slot_idx as nat);
-
-      ghost var r2 := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Querying(rid, key)));
 
       if slot_idx' == hash_idx {
         output := MapIfc.QueryOutput(NotFound);
@@ -207,6 +202,7 @@ module Impl refines Main {
         break;
       }
 
+      ghost var r2 := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Querying(rid, key)));
       r := easy_transform_step(r, r2, step);
 
       linear var rmutex;
@@ -296,8 +292,6 @@ module Impl refines Main {
 
       if step.InsertSkipStep? {
         ghost var r2 := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Inserting(rid, kv)));
-        assert InsertSkip(r, r2, slot_idx as nat);
-
         r := easy_transform_step(r, r2, step);
 
         linear var rmutex;
@@ -348,7 +342,7 @@ module Impl refines Main {
     entry: Entry,
     next_entry: Entry,
     /*ghost*/ linear r: ARS.R)
-    returns (output: Ifc.Output, linear out_r: ARS.R)
+  returns (output: Ifc.Output, linear out_r: ARS.R)
     requires Inv(mt)
     requires TidyEnabled(r, slot_idx as nat)
     requires r == twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid)), NextPos(slot_idx as nat), Info(next_entry, Free));
@@ -361,8 +355,6 @@ module Impl refines Main {
     linear var r := r;
     while true
       invariant Inv(mt);
-      // invariant TidyEnabled(r, slot_idx as nat)
-      // invariant !DoneTidying(r, slot_idx as nat)
       invariant 0 <= slot_idx < FixedSizeImpl()
       invariant r == twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid)), NextPos(slot_idx as nat), Info(next_entry, Free))
       decreases DistanceToSlot(slot_idx, hash_idx)
@@ -398,8 +390,6 @@ module Impl refines Main {
         assume false; // TODO: add unreachable step in the sharded state machine
         break;
       }
-
-      assert r == twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid)), NextPos(slot_idx as nat), Info(next_entry, Free));
     }
 
     assert DoneTidying(r, slot_idx as nat);
