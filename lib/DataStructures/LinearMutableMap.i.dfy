@@ -218,15 +218,15 @@ module LinearMutableMap {
 
   method FixedSizeInsert<V>(linear inout self: FixedSizeLinearHashMap, key: uint64, value: V)
   returns (replaced: Option<V>)
-    requires FixedSizeInv(old_self)
-    requires old_self.count as nat < |old_self.storage| - 1
-    ensures (
-      && FixedSizeInv(self)
-      && self.contents == old_self.contents[key := Some(value)]
-      && (key in old_self.contents ==> replaced == old_self.contents[key])
-      && (replaced.Some? ==> key in old_self.contents)
-      && (key !in old_self.contents ==> replaced.None?)
-      && |self.storage| == |old_self.storage|)
+  requires FixedSizeInv(old_self)
+  requires old_self.count as nat < |old_self.storage| - 1
+  ensures (
+    && FixedSizeInv(self)
+    && self.contents == old_self.contents[key := Some(value)]
+    && (key in old_self.contents ==> replaced == old_self.contents[key])
+    && (replaced.Some? ==> key in old_self.contents)
+    && (key !in old_self.contents ==> replaced.None?)
+    && |self.storage| == |old_self.storage|)
   {
     var slotIdx;
     ghost var probeStartSlotIdx, probeSkips;

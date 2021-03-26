@@ -29,8 +29,8 @@ include "BucketMap.i.dfy"
 
 module BucketsLib {
   import opened BoundedPivotsLib
-  import opened Lexicographic_Byte_Order
-  import opened ValueMessage
+  import opened Lexi = Lexicographic_Byte_Order
+  import opened M = ValueMessage
   import opened Maps
   import opened Sequences
   import opened KeyType
@@ -615,6 +615,16 @@ module BucketsLib {
   {
   }
 
+  predicate BucketNoKeyWithPrefix(bucket: Bucket, prefix: Key)
+  {
+    && (forall k | k in bucket.keys :: !IsPrefix(prefix, k))
+  }
+
+  predicate BucketListNoKeyWithPrefix(blist: BucketList, pt: PivotTable, prefix: Key)
+  requires WFBucketList(blist, pt)
+  {
+    && (forall i | 0 <= i < |blist| :: BucketNoKeyWithPrefix(blist[i], prefix))
+  }
 
   // This is useful for proving NodeHasWFBuckets(node')
   // for indices over the given interval [a, b],

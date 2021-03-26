@@ -911,6 +911,12 @@ module Lexicographic_Byte_Order refines Total_Order {
     SeqComparison.reveal_lte();
   }
 
+  lemma EqualLte(e: Element)
+  ensures lte(e, e)
+  {
+    SeqComparison.reveal_lte();
+  }
+
   // TODO(robj): Ideally we'd just overload SmallerElement to return
   // [], but dafny won't let us.  :\
   lemma SmallestElement() returns (b: Element)
@@ -950,6 +956,14 @@ module Upperbounded_Lexicographic_Byte_Order refines Upperbounded_Total_Order {
         assert lte(a, wit);
         assert false;
       }
+    }
+  }
+
+  lemma transitivity(a: Element, b: Element, c: Element)
+  ensures lte(a, b) && lte(b, c) ==> lte(a, c);
+  {
+    if a.Element? && b.Element? && c.Element? {
+      Base_Order.transitivity(a.e, b.e, c.e);
     }
   }
 }

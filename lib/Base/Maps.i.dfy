@@ -18,6 +18,10 @@ module Maps {
     k in m && m[k] == v
   }
 
+  predicate IMapInjective<K,V>(m: imap<K, V>) {
+    && (forall k1, k2 | k1 != k2 && k1 in m && k2 in m :: m[k1] != m[k2])
+  }
+
   predicate MapsAgreeOnKey<K,V>(m: map<K,V>, m': map<K,V>, k: K) {
     (k !in m && k !in m') || (k in m && k in m' && m[k] == m'[k])
   }
@@ -78,7 +82,18 @@ module Maps {
     MapRemove_s.reveal_MapRemove1();
     MapRemove1(m, k)
   }
-  
+
+  function {:opaque} IMapInvert<K,V>(m:imap<K,V>) : (m':imap<V,K>)
+  {
+    imap b | b in m.Values :: var a :| a in m && m[a] == b; a
+  }
+
+  lemma InvertIsInjective<K,V>(m:imap<K,V>)
+    ensures IMapInjective(IMapInvert(m))
+  {
+    reveal_IMapInvert();
+  }
+
   function {:opaque} IMapRemove<K,V>(m:imap<K,V>, ks:iset<K>) : (m':imap<K,V>)
     ensures m'.Keys == m.Keys - ks
     ensures forall j :: j in m' ==> m'[j] == m[j]
