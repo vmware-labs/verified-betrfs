@@ -76,7 +76,15 @@ module BoundedPivotsLib {
     return (b1 == 0) && (b2 == 0);
   }
 
-  // contains range, we want to say 
+  lemma ContainsAllKeysImpliesBoundedKey(pt: PivotTable, key: Key)
+  requires ContainsAllKeys(pt)
+  ensures BoundedKey(pt, key)
+  {
+    Keyspace.reveal_IsStrictlySorted();
+    Keyspace.Base_Order.EmptyLte(key);
+    assert BoundedKey(pt, key);
+  }
+
   predicate ContainsRange(pt: PivotTable, left: Element, right: Element)
   requires WFPivots(pt)
   requires ElementIsKey(left)

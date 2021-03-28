@@ -421,7 +421,7 @@ module PivotBetreeSpec {
     && (BucketListWellMarshalled(sq.buckets) ==>
       && MS.NonEmptyRange(sq.start, sq.end)
       && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, sq.end))
-      && var translatedbuckets := TranslateSuccBuckets(sq.lookup, sq.buckets, sq.translations, 0); // this might be a bigger jump
+      && var translatedbuckets := TranslateSuccBuckets(sq.lookup, sq.buckets, sq.translations, 0);
       && sq.results == SortedSeqOfKeyValueMap(
         KeyValueMapOfBucket(ClampRange(ComposeSeq(MapsOfBucketList(translatedbuckets)), sq.start, sq.end))))
   }
@@ -973,23 +973,56 @@ module PivotBetreeSpec {
   requires WFNode(node)
   requires ContainsAllKeys(node.pivotTable)
   requires node.children.Some?
+  requires G.Keyspace.lt([], to)
   ensures WFPivots(node'.pivotTable)
   ensures WFEdges(node'.edgeTable, node'.pivotTable)
   ensures NumBuckets(node'.pivotTable) == |node'.buckets|
   ensures WFBucketList(node'.buckets, node'.pivotTable)
   ensures (node'.children.Some? ==> |node'.buckets| == |node'.children.value|)
-  ensures WeightBucketList(node'.buckets) <= MaxTotalBucketWeight()
+  // ensures WeightBucketList(node'.buckets) <= MaxTotalBucketWeight()
   {
-    // 1. find SUP of from, cut off node based on from and sup.
-    // 2. translate the node into tos 
-    //    - 0 to NumBucket-1 remove prefix + newprefix
-    //    - last one is SUP of tos
-    // 3. cutandkeepright oldroot based on to
-    // 4. cutandkeepleft oldroot base on tosup 
-    // stitch 3 2 4 together which is our new node
+    var fromend := ShortestUncommonPrefix(from, |from|);
+    var fromendkey := if fromend.Element? then (var k : Key := fromend.e; Some(k)) else None;
 
-    // can probably simplify this to not use cutoffnodes 
-    node
+    ContainsAllKeysImpliesBoundedKey(node.pivotTable, from);
+    var fromnode := CutoffNode(node, from, fromendkey);
+
+    var (left, toend) := TranslatePivotPairInternal(KeyToElement(from), fromend, from, to);
+    var toendkey := if toend.Element? then (var k : Key := toend.e; Some(k)) else None;
+    assert left == KeyToElement(to);
+
+    PrefixOfLcpIsPrefixOfKeys(KeyToElement(from), fromend, from);
+    Pivots.Keyspace.reveal_IsStrictlySorted();
+    TranslatePivotPairRangeProperty(KeyToElement(from), fromend, from, to);
+
+    var topivots := TranslatePivots(fromnode.pivotTable, from, to, toend, 0);
+    var toedges := TranslateEdges(fromnode.edgeTable, fromnode.pivotTable, 0);
+    var tonode := Node(topivots, toedges, fromnode.children, fromnode.buckets);
+
+    ContainsAllKeysImpliesBoundedKey(node.pivotTable, to);
+    var lnode := CutoffNodeAndKeepLeft(node, to);
+    assert Last(lnode.pivotTable) == KeyToElement(to);
+    assert topivots[0] == KeyToElement(to);
+
+    if toendkey.None? then (
+      var children := if lnode.children.None? then None else Some(lnode.children.value + tonode.children.value);
+      Node(
+        lnode.pivotTable[..|lnode.pivotTable|-1] + tonode.pivotTable,
+        lnode.edgeTable + tonode.edgeTable,
+        children,
+        lnode.buckets + tonode.buckets
+      )
+    ) else (  
+      var rnode := CutoffNodeAndKeepRight(node, toendkey.value);
+      assert rnode.pivotTable[0] == Last(tonode.pivotTable);
+      var children := if lnode.children.None? then None else Some(lnode.children.value + tonode.children.value + rnode.children.value);
+      Node(
+        lnode.pivotTable[..|lnode.pivotTable|-1] + tonode.pivotTable + rnode.pivotTable[1..],
+        lnode.edgeTable + tonode.edgeTable + rnode.edgeTable,
+        children,
+        lnode.buckets + tonode.buckets + rnode.buckets
+      )
+    )
   }
 
   predicate ValidClone(clone: NodeClone)
@@ -999,16 +1032,12 @@ module PivotBetreeSpec {
     && ContainsAllKeys(clone.newroot.pivotTable)
 
     && clone.oldroot.children.Some?
+    && G.Keyspace.lt([], clone.to)
     && BucketListNoKeyWithPrefix(clone.oldroot.buckets, clone.oldroot.pivotTable, clone.from)
 
     && clone.newroot == CloneNewRoot(clone.oldroot, clone.from, clone.to)
     && NumBuckets(clone.newroot.pivotTable) <= MaxNumChildren()
   }
-  //   // newroot's buffer and children requirments 
-  //   && (forall k | k in clone.new_to_old :: IMapsTo(clone.newroot.buffer, k, G.M.Update(G.M.NopDelta())))
-  //   && (forall k | k !in clone.new_to_old :: IMapsAgreeOnKey(clone.newroot.buffer, clone.oldroot.buffer, k))
-  //   && (forall k | k in clone.new_to_old :: IMapsTo(clone.newroot.children, k, clone.oldroot.children[clone.new_to_old[k]]))
-  //   && (forall k | k !in clone.new_to_old :: IMapsAgreeOnKey(clone.newroot.children, clone.oldroot.children, k))
 
   function CloneReads(clone: NodeClone) : seq<ReadOp>
   requires ValidClone(clone)
