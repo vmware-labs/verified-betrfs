@@ -236,6 +236,12 @@ module PivotBetreeSpecRefinement {
     )
   }
 
+  function IClone(clone: P.NodeClone) : B.Clone
+  requires P.ValidClone(clone)
+  {
+    B.Clone(INode(clone.oldroot), INode(clone.newroot), P.CloneMap(clone.from, clone.to))
+  }
+
   function IStep(betreeStep: P.BetreeStep) : B.BetreeStep
   requires !betreeStep.BetreeRepivot?
   requires P.ValidBetreeStep(betreeStep)
@@ -257,6 +263,9 @@ module PivotBetreeSpecRefinement {
         assert P.InvNode(P.BetreeStepReads(betreeStep)[1].node);
         assert P.InvNode(P.BetreeStepReads(betreeStep)[2].node);
         B.BetreeRedirect(IMerge(fusion))
+      )
+      case BetreeClone(clone) => (
+        B.BetreeClone(IClone(clone))
       )
     }
   }
@@ -1707,6 +1716,14 @@ module PivotBetreeSpecRefinement {
     }
   }
 
+  lemma RefinesValidClone(clone: P.NodeClone)
+  requires P.ValidClone(clone)
+  requires ReadOpsBucketsWellMarshalled(P.CloneReads(clone))
+  ensures B.ValidClone(IClone(clone))
+  {
+    assume false;
+  }
+
   lemma RefinesValidBetreeStep(betreeStep: P.BetreeStep)
   requires P.ValidBetreeStep(betreeStep)
   requires forall i | 0 <= i < |P.BetreeStepReads(betreeStep)| :: P.InvNode(P.BetreeStepReads(betreeStep)[i].node)
@@ -1731,6 +1748,7 @@ module PivotBetreeSpecRefinement {
         assert P.InvNode(P.BetreeStepReads(betreeStep)[2].node);
         RefinesValidMerge(fusion);
       }
+      case BetreeClone(clone) => RefinesValidClone(clone); // what's wrong?
     }
   }
 
@@ -1884,6 +1902,17 @@ module PivotBetreeSpecRefinement {
     PivotBetreeSpecWFNodes.ValidMergeWritesInvNodes(f);
   }
 
+  lemma {:fuel IOps,3} CloneRefinesOps(c: P.NodeClone)
+  requires P.ValidClone(c)
+  requires P.InvNode(c.oldroot)
+  requires B.ValidClone(IClone(c))
+  ensures forall i | 0 <= i < |P.CloneOps(c)| ::
+      P.InvNode(P.CloneOps(c)[i].node)
+  ensures IOps(P.CloneOps(c)) == B.CloneOps(IClone(c))
+  {
+    PivotBetreeSpecWFNodes.ValidCloneWritesInvNodes(c);
+  }
+
   // The meaty lemma: If we mutate the nodes of a pivot-y cache according to a
   // (generic-DSL) BetreeStep, under the INode interpretation, the same
   // mutation happens to the imap-y cache.
@@ -1929,6 +1958,10 @@ module PivotBetreeSpecRefinement {
         assert P.InvNode(P.BetreeStepReads(betreeStep)[1].node);
         assert P.InvNode(P.BetreeStepReads(betreeStep)[2].node);
         MergeRefinesOps(fusion);
+      }
+      case BetreeClone(clone) => {
+        assert P.InvNode(P.BetreeStepReads(betreeStep)[0].node);
+        CloneRefinesOps(clone);
       }
     }
   }

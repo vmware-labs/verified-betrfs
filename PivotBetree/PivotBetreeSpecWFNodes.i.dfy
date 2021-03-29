@@ -676,12 +676,28 @@ module PivotBetreeSpecWFNodes {
   requires ValidClone(c)
   requires forall i | 0 <= i < |CloneReads(c)| :: InvNode(CloneReads(c)[i].node)
   ensures forall i | 0 <= i < |CloneReads(c)|:: InvNode(CloneOps(c)[i].node)
-  {
-    assume false;
-    // assert InvNode(GrowReads(g)[0].node);
-    // var newroot := G.Node(InitPivotTable(), [None], Some([g.newchildref]), [EmptyBucket()]);
-    // WeightBucketListOneEmpty();
-    // assert InvNode(newroot);
+  { 
+    assert InvNode(CloneReads(c)[0].node);
+
+    var tonode := RestrictAndTranslateNode(c.oldroot, c.from, c.to);
+    assert WFBucketListProper(tonode.buckets, tonode.pivotTable);
+    assert BucketListWellMarshalled(tonode.buckets);
+
+    ContainsAllKeysImpliesBoundedKey(c.oldroot.pivotTable, c.to);
+    var lnode := CutoffNodeAndKeepLeft(c.oldroot, c.to);
+    KeepLeftWFProperWellMarshalled(c.oldroot, c.to);
+
+    assert Last(lnode.pivotTable) == c.newroot.pivotTable[|lnode.pivotTable|-1];
+    BucketListHasWFBucketAtIdenticalSlice(lnode.buckets, lnode.pivotTable, c.newroot.buckets, c.newroot.pivotTable, 0, |lnode.buckets|-1, 0);
+
+    if Last(tonode.pivotTable).Element? {
+      var toend := GetKey(tonode.pivotTable, |tonode.pivotTable|-1);
+      var rnode := CutoffNodeAndKeepRight(c.oldroot, toend);
+
+      KeepRightWFProperWellMarshalled(c.oldroot, toend);
+      BucketListHasWFBucketAtIdenticalSlice(rnode.buckets, rnode.pivotTable, c.newroot.buckets, c.newroot.pivotTable,
+        |lnode.buckets|+|tonode.buckets|, |c.newroot.buckets|-1, |lnode.buckets|+|tonode.buckets|);
+    }
   }
 
   lemma ValidStepWritesWFNodes(betreeStep: BetreeStep)

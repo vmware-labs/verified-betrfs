@@ -1015,6 +1015,7 @@ module PivotBetreeSpec {
   ensures WFBucketList(node'.buckets, node'.pivotTable)
   ensures (node'.children.Some? ==> |node'.buckets| == |node'.children.value|)
   ensures WeightBucketList(node'.buckets) <= MaxTotalBucketWeight()
+  ensures ContainsAllKeys(node'.pivotTable)
   {
     var tonode := RestrictAndTranslateNode(node, from, to);
     assert tonode.pivotTable[0] == KeyToElement(to);
