@@ -37,20 +37,17 @@ abstract module MinimalResourceSpec {
 
   predicate transition(a: M, b: M)
 
-  lemma transition_preserves_valid(a: M, b: M)
-  requires transition(a, b)
-  requires Valid(a)
-  ensures Valid(b)
-
   lemma transition_is_monotonic(a: M, b: M, c: M)
   requires transition(a, b)
-  requires Valid(add(a, c))
+  requires add_defined(a, c)
+  ensures add_defined(b, c)
   ensures transition(add(a, c), add(b, c))
 
   predicate W(a: M, b: M)
 
   lemma W_monotonic(a: M, b: M, s: M)
   requires W(a, s)
+  requires add_defined(a, b)
   ensures W(add(a, b), s)
 
   /*
@@ -66,22 +63,19 @@ abstract module MinimalResourceSpec {
   lemma W_unit(a: M)
   ensures W(a, unit())
 
-  lemma valid_unit()
-  ensures Valid(unit())
-
   /*
    * Actions
    */
 
   function method {:extern} is_valid(shared a: M, linear b: M) : ()
-  ensures Valid(add(a, b))
+  ensures add_defined(a, b)
 
   function method {:extern} transition_update(
       shared s: M,
       linear b: M,
       ghost expected_out: M)
     : (linear c: M)
-  requires forall a :: W(a, s) ==> transition(add(a, b), add(a, expected_out))
+  requires forall a :: W(a, s) && add_defined(a, b) ==> add_defined(a, expected_out) && transition(add(a, b), add(a, expected_out))
   ensures c == expected_out
 
   function method {:extern} get_unit() : (linear u: M)
@@ -90,11 +84,14 @@ abstract module MinimalResourceSpec {
   function method {:extern} get_unit_shared() : (shared u: M)
   ensures u == unit()
 
-  function method {:extern} join(linear a: M, linear b: M) : (linear sum: M)
+  method {:extern} join(linear a: M, linear b: M)
+  returns (linear sum: M)
+  ensures add_defined(a, b) // yes, this is an 'ensures'
   ensures sum == add(a, b)
 
   method {:extern} split(linear sum: M, ghost a: M, ghost b: M)
   returns (linear a': M, linear b': M)
+  requires add_defined(a, b)
   requires sum == add(a, b)
   ensures a' == a && b' == b
 
