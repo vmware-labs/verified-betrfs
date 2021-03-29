@@ -97,16 +97,15 @@ module HTResource refines ApplicationResourceSpec {
     R(oneRowTable(k, info), multiset{}, multiset{})
   }
 
-  predicate resourceHasSingleRow(r: R, k: nat, entry: Entry, state: State)
-    requires 0 <= k < FixedSize()
-  {
-    && r.R?
-    && (forall i:nat | i < FixedSize() :: if i == k then r.table[i].Some? else r.table[i].None?)
-    && r.table[k].value.state == state
-    && r.table[k].value.entry == entry
-    && r.tickets == multiset{}
-    && r.stubs == multiset{}
-  }
+  // predicate resourceHasSingleRow(r: R, k: nat, info: Info)
+  //   requires 0 <= k < FixedSize()
+  // {
+  //   && r.R?
+  //   && (forall i:nat | i < FixedSize() :: if i == k then r.table[i].Some? else r.table[i].None?)
+  //   && r.table[k].value == info
+  //   && r.tickets == multiset{}
+  //   && r.stubs == multiset{}
+  // }
 
   function twoRowsTable(k1: nat, info1: Info, k2: nat, info2: Info) : seq<Option<Info>>
     requires 0 <= k1 < FixedSize()
@@ -214,6 +213,7 @@ module HTResource refines ApplicationResourceSpec {
     | InsertSwapStep(pos: nat)
     | InsertDoneStep(pos: nat)
     | InsertUpdateStep(pos: nat)
+    | InsertFullHashTableStep(pos: nat)
 
     | ProcessRemoveTicketStep(insert_ticket: Ticket)
     | RemoveSkipStep(pos: nat)
@@ -343,6 +343,17 @@ module HTResource refines ApplicationResourceSpec {
             Full(s.table[pos].value.state.kv),
             Free))])
       .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput)})
+  }
+
+  predicate InsertFullHashTable(s: R, s': R, pos: nat, orignal_hash_idx: nat)
+  {
+    && NextPos(pos) == orignal_hash_idx
+    && s.table[pos].Some?
+    && s.table[pos].value.state.Inserting?
+    && s.table[pos].value.entry.kv.key != s.table[pos].value.state.kv.key
+    // && s' == s
+    //   .(table := s.table[pos := Some(s.table[pos].value.(state := Free))])
+    //   .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput)})
   }
 
   // Remove

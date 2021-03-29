@@ -127,7 +127,7 @@ module Impl refines Main {
     while true 
       invariant Inv(mt);
       invariant 0 <= slot_idx < FixedSizeImpl();
-      invariant resourceHasSingleRow(r, slot_idx as nat, entry, Querying(rid, key));
+      invariant r == oneRowResource(slot_idx as nat, Info(entry, Querying(rid, key)));
       decreases DistanceToSlot(slot_idx, hash_idx)
     {
       var step;
@@ -213,7 +213,6 @@ module Impl refines Main {
 
       slot_idx := slot_idx';
       entry := next_entry;
-      assert resourceHasSingleRow(r, slot_idx as nat, entry, Querying(rid, key));
     }
 
     out_r := r;
@@ -244,8 +243,8 @@ module Impl refines Main {
 
     while true 
       invariant Inv(mt);
-      invariant 0 <= slot_idx < FixedSizeImpl();
-      invariant resourceHasSingleRow(r, slot_idx as nat, entry, Inserting(rid, kv))
+      invariant 0 <= slot_idx < FixedSizeImpl()
+      invariant r == oneRowResource(slot_idx as nat, Info(entry, Inserting(rid, kv)))
       invariant kv.key == key
       invariant hash_idx == hash(key)
       decreases DistanceToSlot(slot_idx, orignal_hash_idx)
@@ -303,7 +302,6 @@ module Impl refines Main {
         release(mt[slot_idx], Value(entry, rmutex));
         slot_idx := slot_idx';
         entry := next_entry;
-        assert resourceHasSingleRow(r, slot_idx as nat, entry, Inserting(rid, kv));
       } else {
         entry := Full(kv);
         assert step.InsertSwapStep?;
@@ -322,12 +320,12 @@ module Impl refines Main {
         slot_idx := slot_idx';
         entry := next_entry;
         key := new_kv.key;
-        assert resourceHasSingleRow(r, slot_idx as nat, entry, Inserting(rid, kv));
       }
 
       hash_idx := hash(key);
 
       if slot_idx == orignal_hash_idx {
+        // assert InsertFullHashTable(r, r, slot_idx as nat, orignal_hash_idx as nat);
         assume false; // TODO: add unreachable step in the sharded state machine
         break;
       }
@@ -450,7 +448,7 @@ module Impl refines Main {
     while true 
       invariant Inv(mt);
       invariant 0 <= slot_idx < FixedSizeImpl();
-      invariant resourceHasSingleRow(r, slot_idx as nat, entry, Removing(rid, key))
+      invariant r == oneRowResource(slot_idx as nat, Info(entry, Removing(rid, key)))
       invariant step.RemoveNotFoundStep? ==> 
         (entry.Full? && shouldHashGoBefore(hash_idx, hash(entry.kv.key), slot_idx))
       invariant step.RemoveTidyStep? ==> (
@@ -527,13 +525,12 @@ module Impl refines Main {
     out_r := r;
   }
 
-
   method call(o: MutexTable, input: Ifc.Input,
       rid: int, linear in_r: ARS.R)
-  returns (output: Ifc.Output, linear out_r: ARS.R)
-  //requires Inv(o)
+    returns (output: Ifc.Output, linear out_r: ARS.R)
+  // requires Inv(o)
   // requires ticket == ARS.input_ticket(rid, key)
-  ensures out_r == ARS.output_stub(rid, output)
+    ensures out_r == ARS.output_stub(rid, output)
   {
     // Find the ticket.
     assert |in_r.tickets| == 1;
