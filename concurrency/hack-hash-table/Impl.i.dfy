@@ -285,6 +285,13 @@ module Impl refines Main {
       }
 
       var slot_idx' := getNextIndex(slot_idx);
+
+     if slot_idx' == orignal_hash_idx {
+        // assert InsertFullHashTable(r, r, slot_idx as nat, orignal_hash_idx as nat);
+        assume false; // TODO: add unreachable step in the sharded state machine
+        break;
+      }
+
       linear var next_row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx']);
       linear var Value(next_entry, next_row_r) := next_row;
       r := ARS.join(r, next_row_r);
@@ -292,16 +299,6 @@ module Impl refines Main {
       if step.InsertSkipStep? {
         ghost var r2 := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Inserting(rid, kv)));
         r := easy_transform_step(r, r2, step);
-
-        linear var rmutex;
-
-        ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Inserting(rid, kv)));
-        ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
-
-        r, rmutex := ARS.split(r, left, right);
-        release(mt[slot_idx], Value(entry, rmutex));
-        slot_idx := slot_idx';
-        entry := next_entry;
       } else {
         entry := Full(kv);
         assert step.InsertSwapStep?;
@@ -310,25 +307,19 @@ module Impl refines Main {
         r := easy_transform_step(r, r2, step);
         kv := new_kv;
 
-        linear var rmutex;
-
-        ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Inserting(rid, kv)));
-        ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
-
-        r, rmutex := ARS.split(r, left, right);
-        release(mt[slot_idx], Value(entry, rmutex));
-        slot_idx := slot_idx';
-        entry := next_entry;
         key := new_kv.key;
       }
 
-      hash_idx := hash(key);
+      linear var rmutex;
+      ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Inserting(rid, kv)));
+      ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
 
-      if slot_idx == orignal_hash_idx {
-        // assert InsertFullHashTable(r, r, slot_idx as nat, orignal_hash_idx as nat);
-        assume false; // TODO: add unreachable step in the sharded state machine
-        break;
-      }
+      r, rmutex := ARS.split(r, left, right);
+      release(mt[slot_idx], Value(entry, rmutex));
+ 
+      slot_idx := slot_idx';
+      entry := next_entry;
+      hash_idx := hash(key);
     }
 
     out_r := r;
