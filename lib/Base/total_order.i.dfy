@@ -374,6 +374,7 @@ abstract module Total_Order refines Total_Preorder {
   ensures 0 <= i <= |s|
   ensures i > 0 ==> lt(s[i-1], key)
   ensures i < |s| ==> lte(key, s[i])
+  ensures lo <= i < hi
   decreases hi - lo
   {
     if lo + 1 < hi then (
@@ -385,6 +386,33 @@ abstract module Total_Order refines Total_Preorder {
     ) else (
       lo
     )
+  }
+
+  lemma binarySearchIndexOfFirstKeyGteIterPreservesLte(s: seq<Element>, key1: Element, key2: Element, lo: int, hi: int)
+  requires 0 <= lo < hi <= |s| + 1
+  requires lo > 0 ==> lt(s[lo-1], key1)
+  requires hi <= |s| ==> lte(key1, s[hi-1])
+  requires hi <= |s| ==> lte(key2, s[hi-1])
+  requires lte(key1, key2)
+  ensures binarySearchIndexOfFirstKeyGteIter(s, key1, lo, hi) <= binarySearchIndexOfFirstKeyGteIter(s, key2, lo, hi)
+  decreases hi - lo
+  {
+    if lo + 1 < hi {
+      var mid := (lo + hi) / 2;
+      if lt(s[mid-1], key1) {
+        binarySearchIndexOfFirstKeyGteIterPreservesLte(s, key1, key2, mid, hi);
+      } else {
+        if lte(key2, s[mid-1]) {
+          binarySearchIndexOfFirstKeyGteIterPreservesLte(s, key1, key2, lo, mid);
+        } else {
+          var i1 := binarySearchIndexOfFirstKeyGteIter(s, key1, lo, mid);
+          var i2 := binarySearchIndexOfFirstKeyGteIter(s, key2, mid, hi);
+
+          assert i1 == binarySearchIndexOfFirstKeyGteIter(s, key1, lo, hi);
+          assert i2 == binarySearchIndexOfFirstKeyGteIter(s, key2, lo, hi);
+        }
+      }
+    }
   }
 
   function {:opaque} binarySearchIndexOfFirstKeyGte(s: seq<Element>, key: Element) : (i: int)

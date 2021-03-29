@@ -96,6 +96,15 @@ module BucketsLib {
     MapOfEmptySeq();
     Bucket([], [])
   }
+
+  function EmptyBucketList(pivots: PivotTable) : (blist: BucketList)
+    requires |pivots| > 0
+    ensures |pivots| == |blist| + 1
+    ensures BucketListWellMarshalled(blist)
+    ensures forall i | 0 <= i < |blist| :: blist[i] == EmptyBucket()
+  {
+    if |pivots| == 1 then [] else [ EmptyBucket() ] + EmptyBucketList(DropLast(pivots))
+  }
   
   function SingletonBucket(key: Key, msg: Message) : (result: Bucket)
     ensures PreWFBucket(result)

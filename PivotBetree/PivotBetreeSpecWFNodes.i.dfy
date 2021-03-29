@@ -664,6 +664,25 @@ module PivotBetreeSpecWFNodes {
     assert InvNode(newroot);
   }
 
+  lemma ValidCloneWritesWFNodes(c: NodeClone)
+  requires ValidClone(c)
+  requires forall i | 0 <= i < |CloneReads(c)| :: WFNode(CloneReads(c)[i].node)
+  ensures forall i | 0 <= i < |CloneOps(c)| :: WFNode(CloneOps(c)[i].node)
+  {
+    assert WFNode(c.newroot);
+  }
+
+  lemma ValidCloneWritesInvNodes(c: NodeClone)
+  requires ValidClone(c)
+  requires forall i | 0 <= i < |CloneReads(c)| :: InvNode(CloneReads(c)[i].node)
+  ensures forall i | 0 <= i < |CloneReads(c)|:: InvNode(CloneOps(c)[i].node)
+  {
+    assume false;
+    // assert InvNode(GrowReads(g)[0].node);
+    // var newroot := G.Node(InitPivotTable(), [None], Some([g.newchildref]), [EmptyBucket()]);
+    // WeightBucketListOneEmpty();
+    // assert InvNode(newroot);
+  }
 
   lemma ValidStepWritesWFNodes(betreeStep: BetreeStep)
   requires ValidBetreeStep(betreeStep)
@@ -696,6 +715,10 @@ module PivotBetreeSpecWFNodes {
       case BetreeRepivot(r) => {
         assert forall i | 0 <= i < |BetreeStepReads(betreeStep)| :: BetreeStepReads(betreeStep)[i].node == RepivotReads(betreeStep.repivot)[i].node;
         ValidRepivotWFNodes(r);
+      }
+      case BetreeClone(r) => {
+        assert forall i | 0 <= i < |BetreeStepReads(betreeStep)| :: BetreeStepReads(betreeStep)[i].node == CloneReads(betreeStep.clone)[i].node;
+        ValidCloneWritesWFNodes(r);
       }
     }
   }

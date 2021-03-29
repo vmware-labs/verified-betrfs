@@ -969,23 +969,20 @@ module PivotBetreeSpec {
     imap k | IsPrefix(to, k) && (|from + k[|to|..]| <= 1024) :: fromkey(k, to, from)
   }
 
-  function CloneNewRoot(node: Node, from: Key, to: Key) : (node': Node)
+  function RestrictAndTranslateNode(node: Node, from: Key, to: Key) : (node': Node)
   requires WFNode(node)
   requires ContainsAllKeys(node.pivotTable)
   requires node.children.Some?
   requires G.Keyspace.lt([], to)
-  ensures WFPivots(node'.pivotTable)
-  ensures WFEdges(node'.edgeTable, node'.pivotTable)
-  ensures NumBuckets(node'.pivotTable) == |node'.buckets|
-  ensures WFBucketList(node'.buckets, node'.pivotTable)
-  ensures (node'.children.Some? ==> |node'.buckets| == |node'.children.value|)
-  // ensures WeightBucketList(node'.buckets) <= MaxTotalBucketWeight()
+  ensures WFNode(node')
+  ensures WeightBucketList(node'.buckets) == 0
   {
     var fromend := ShortestUncommonPrefix(from, |from|);
     var fromendkey := if fromend.Element? then (var k : Key := fromend.e; Some(k)) else None;
 
     ContainsAllKeysImpliesBoundedKey(node.pivotTable, from);
     var fromnode := CutoffNode(node, from, fromendkey);
+    assert WFNode(fromnode);
 
     var (left, toend) := TranslatePivotPairInternal(KeyToElement(from), fromend, from, to);
     var toendkey := if toend.Element? then (var k : Key := toend.e; Some(k)) else None;
@@ -996,15 +993,41 @@ module PivotBetreeSpec {
     TranslatePivotPairRangeProperty(KeyToElement(from), fromend, from, to);
 
     var topivots := TranslatePivots(fromnode.pivotTable, from, to, toend, 0);
-    var toedges := TranslateEdges(fromnode.edgeTable, fromnode.pivotTable, 0);
-    var tonode := Node(topivots, toedges, fromnode.children, fromnode.buckets);
+    assert AllKeysInBetweenHasPrefix(topivots[0], Last(topivots), to);
 
+    var toedges := TranslateEdges(fromnode.edgeTable, fromnode.pivotTable, 0);
+    var tobuckets := EmptyBucketList(topivots);
+    WeightBucketListEmpty(topivots);
+    assert |tobuckets| == |fromnode.buckets|;
+
+    Node(topivots, toedges, fromnode.children, tobuckets)
+  }
+
+  function CloneNewRoot(node: Node, from: Key, to: Key) : (node': Node)
+  requires WFNode(node)
+  requires ContainsAllKeys(node.pivotTable)
+  requires node.children.Some?
+  requires G.Keyspace.lt([], to)
+  requires BucketListNoKeyWithPrefix(node.buckets, node.pivotTable, from)
+  ensures WFPivots(node'.pivotTable)
+  ensures WFEdges(node'.edgeTable, node'.pivotTable)
+  ensures NumBuckets(node'.pivotTable) == |node'.buckets|
+  ensures WFBucketList(node'.buckets, node'.pivotTable)
+  ensures (node'.children.Some? ==> |node'.buckets| == |node'.children.value|)
+  ensures WeightBucketList(node'.buckets) <= MaxTotalBucketWeight()
+  {
+    var tonode := RestrictAndTranslateNode(node, from, to);
+    assert tonode.pivotTable[0] == KeyToElement(to);
+    assert node.children.None? <==> tonode.children.None?;
+    
     ContainsAllKeysImpliesBoundedKey(node.pivotTable, to);
     var lnode := CutoffNodeAndKeepLeft(node, to);
     assert Last(lnode.pivotTable) == KeyToElement(to);
-    assert topivots[0] == KeyToElement(to);
 
-    if toendkey.None? then (
+    WeightBucketListConcat(lnode.buckets, tonode.buckets);
+    assert WeightBucketList(lnode.buckets + tonode.buckets) == WeightBucketList(lnode.buckets);
+
+    if Last(tonode.pivotTable).Max_Element? then (
       var children := if lnode.children.None? then None else Some(lnode.children.value + tonode.children.value);
       Node(
         lnode.pivotTable[..|lnode.pivotTable|-1] + tonode.pivotTable,
@@ -1012,9 +1035,23 @@ module PivotBetreeSpec {
         children,
         lnode.buckets + tonode.buckets
       )
-    ) else (  
-      var rnode := CutoffNodeAndKeepRight(node, toendkey.value);
-      assert rnode.pivotTable[0] == Last(tonode.pivotTable);
+    ) else (
+      var toend := GetKey(tonode.pivotTable, |tonode.pivotTable|-1);
+      var rnode := CutoffNodeAndKeepRight(node, toend);
+
+      var cLeft := CutoffForLeft(node.pivotTable, to);
+      var cRight := CutoffForRight(node.pivotTable, toend);
+
+      WeightBucketListConcat(lnode.buckets, rnode.buckets);
+      WeightBucketListConcat(lnode.buckets + tonode.buckets, rnode.buckets);
+      WeightBucketListSubSets(node.buckets, node.pivotTable, cLeft, cRight, to, toend);
+
+      assert WeightBucketList(lnode.buckets + rnode.buckets) <= WeightBucketList(node.buckets)
+      by {
+        reveal_CutoffNodeAndKeepLeft();
+        reveal_CutoffNodeAndKeepRight();
+      }
+
       var children := if lnode.children.None? then None else Some(lnode.children.value + tonode.children.value + rnode.children.value);
       Node(
         lnode.pivotTable[..|lnode.pivotTable|-1] + tonode.pivotTable + rnode.pivotTable[1..],
