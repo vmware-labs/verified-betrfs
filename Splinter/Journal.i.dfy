@@ -4,6 +4,7 @@ include "Spec.s.dfy"
 include "MsgSeq.i.dfy"
 include "Tables.i.dfy"
 
+
 // NB the journal needs a smaller-sized-write primitive. If we get asked to sync
 // frequently, we don't want to burn an AU on every journal write. Maybe not even
 // a CU. Hrmm.
@@ -28,17 +29,24 @@ module JournalMachineMod {
     allocation: AllocationTableMod.Superblock,
     core: CoreSuperblock)
 
-  datatype MemJournalRecord = Message(m: Message)
+  // On-disk JournalRecords
+  datatype JournalRecord = JournalRecord(
+    messageSeq: MsgSeq,
+    priorCU: Option<CU>   // linked list pointer
+  )
 
+  // This little record tells us if we're in the middle of a
+  // CommitStart...CommitComplete sequence.
   datatype WriteState =
     | Idle
     | WritingJournal(count: nat)  // Writing seqStart .. seqStart + count
 
   datatype Variables = Variables(
     firstValidLSN: LSN,
-      // Smaller LSNs are unreachable from the superblock; they have already
-      // been garbage-collected. (There may be leftover records with smaller
-      // JSNs in a journal entry, but they should be ignored).
+      // Smaller LSNs are unreachable from the last-known-committed superblock;
+      // they have already been garbage-collected. (There may be leftover
+      // records with smaller LSNs in a journal record, but they should be
+      // ignored).
 
     durableTailCU: Option<CU>,
       // pointer to the freshest CU that's durable (okay to commit in SB)
@@ -57,6 +65,102 @@ module JournalMachineMod {
       && seqToAuValid()
     }
   }
+
+//////////////////////////////////////////////////////////////////////////////
+/*
+Journal operations include:
+- Append(Message): find the open CU and concat the message (cache write)
+- Advance(): the open CU is full. Open a new one with a back-pointer. (cache write)
+  Depends on being able to identify an unutilized CU, which requires knowing which CUs
+  in the disk journal are allocated.
+- Reallocate(): allocate or free AUs
+- CommitStart(sb): sb becomes eligible to be the next superblock
+  - PagesAreClean(lastCUexcl): the pages for CUs from sb.freshestCU to lastCUexcl are clean
+    (what to do when sb.freshestCU is None?
+- CommitComplete(sb): sb is definitely the next superblock
+- Replay(): needed at recovery time
+
+A completely empty journal has firstCU.None?, firstValidLSN==0
+A fully-garbage-collected journal has firstCU.None?, firstValidLSN positive
+
+Invariants:
+- I think we need a ghost relation between journal cus and LSNs
+- Only pages "between" durableCU and tailCU are dirty in cache
+
+*/
+
+  // advances tailLSN forward by adding a message
+  predicate Append(s: Variables, s': Variables, message: Message)
+  {
+    && s' == s.(openRecord := s.openRecord.Extend(message))
+  }
+
+  // advances marshalledLSN forward by marshalling a batch of messages into a dirty cache page
+  predicate AdvanceMarshalled(s: Variables, s': Variables, cop: CacheIfc.Ops)
+  {
+    && var cu := AllocateEmptyCU(s);
+    // Marshal and write the current record out into the cache. (This doesn't issue
+    // a disk write, it just dirties a page.)
+    && var jr := JournalRecord(s.openRecord, s.tailCU)
+    && cop == [CacheIfc.Write(cu, marshal(jr))]
+    && s' == s.(
+      // Open a new, empty record to absorb future journal Appends
+      openRecord := MsgSeq([], s.openRecord.seqEnd, s.openRecord.seqEnd)
+      seqToAU := MergeAu(s.seqToAU, cu.au, s.openRecord))
+  }
+
+  // advances durableLSN forward by learning that the cache has written back a contiguous
+  // sequence of pages starting at last durableCU
+  predicate AdvanceDurable(s: Variables, s': Variables, int k, cache: CacheIfc.Variables)
+  {
+    && var jc := JournalChain(marshalledCU, durableCU, cache);
+    && (forall i | 0<i<k :: cache.IsClean(jc[i]))
+    && s' == s.(durableCU := jc[k])
+  }
+
+  predicate Reallocate(s: Variables, s': Variables)
+  {
+    false // does something with allocation table?
+  }
+
+  function ParseCachedRecord(cache: CacheIfc.Variables, cu: CU) : Option<JournalRecord>
+  {
+    var raw := CacheIfc.ReadValue(s, cu);
+    if raw.Some? then parse(raw.value) else None
+  }
+
+  // Agrees to advance persistentLSN (to durableLSN) and firstLSN (to newBoundary, coordinated
+  // with BeTree) as part of superblock writeback.
+  predicate CommitStart(s: Variables, s': Variables, cache: CacheIfc.Variables, sb: Superblock, newBoundary: LSN)
+  {
+    // Boundary advances from oldBoundary to newBoundary (maybe zero)
+    && var oldBoundary := s.firstValidLSN;
+    && oldBoundary <= newBoundary // presumably provable from Inv
+
+    // Persistent advances from oldPersistent to durableLSN
+    && var oldPersistent := /*s.persistentTailLSN computable from cur sb*/;
+    && var newPersistent := s.durableLSN; // TODO compute from durableCU and LSN<->cu relation?
+    && oldPersistent <= newPersistent;
+
+    //
+    && sb == Superblock(CoreSuperblock(s.durableTailCU, newBoundary), allocationInfo)
+    && s' == s
+  }
+
+  // Learns that coordinated superblock writeback is complete; updates persistentLSN & firstLSN.
+  predicate CommitComplete(s: Variables, s': Variables, sb: Superblock)
+  {
+    && s.WF()
+    && s'.firstValidLSN == sb.core.firstValidLSN  // bump the boundary forward now.
+    && s'.durableTailCU == s.durableTailCU
+    && s'.seqStart == s.seqStart
+    && s'.journal == s.journal
+    && s'.seqToAU == (map seqno | s'.firstValidLSN <= seqno < s'.seqStart :: s.seqToAU[seqno])
+    && s'.syncReqs == s.syncReqs
+  }
+
+
+//////////////////////////////////////////////////////////////////////////////
 
   predicate SeqsCoveredByAllocation(s:Variables, seqStart: LSN, seqEndExclusive: LSN, allocation: AllocationTableMod.Superblock)
   {
@@ -146,19 +250,14 @@ module JournalMod {
   import opened AllocationMod
   import opened JournalMachineMod
 
-  // Monoid-friendly (quantified-list) definition
-  datatype JournalRecord = JournalRecord(
-    messageSeq: MsgSeq,
-    priorCU: Option<CU>   // linked list pointer
-  ) {
-
-    // Synthesize a superblock that reflects the tail of the chain (cutting
-    // off the first rec), propagating along firstValidLSN.
-    function priorSB(sb: CoreSuperblock) : CoreSuperblock
-    {
-      CoreSuperblock(priorCU, sb.firstValidLSN)
-    }
+  // Synthesize a superblock that reflects the tail of the chain (cutting
+  // off the first rec), propagating along firstValidLSN.
+  function priorSB(jr:JournalRecord, sb: CoreSuperblock) : CoreSuperblock
+  {
+    CoreSuperblock(jr.priorCU, sb.firstValidLSN)
   }
+
+  // Monoid-friendly (quantified-list) definition
   datatype JournalChain = JournalChain(sb: CoreSuperblock, recs:seq<JournalRecord>)
   {
     // Synthesize a superblock that reflects the tail of the chain (cutting

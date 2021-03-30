@@ -1,6 +1,8 @@
 include "Journal.i.dfy"
 include "Betree.i.dfy"
 
+// TODO first prove that a Program with a simple-policy cache works?
+
 // The "Program" is the complete model of the program state, with all of the components
 // (Journal, Betree, Cache).
 // It has an interface to a disk, but can't actually see inside the disk (that's for the IOSystem).

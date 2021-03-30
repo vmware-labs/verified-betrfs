@@ -11,6 +11,16 @@ module MsgSeqMod {
     {
       forall k :: k in msgs <==> seqStart <= k < seqEnd
     }
+
+    // Add a single message to the end of the sequence. It gets LSN 'seqEnd', since
+    // that's exclusive (points at the next empty slot).
+    function Extend(m: Message) : MsgSeq
+    {
+      MsgSeq(
+        map k | k in Keys + { seqEnd } :: if k == seqEnd then m else msgs[k],
+        seqStart,
+        seqEnd+1)
+    }
   }
 
   function Empty() : MsgSeq
