@@ -86,6 +86,22 @@ module TranslationLib {
     )
   }
 
+  method ComputeSplitLeftEdges(et: EdgeTable, pt: PivotTable, pt': PivotTable, pivot: Key, cLeft: uint64) returns (et': EdgeTable)
+  requires WFPivots(pt)
+  requires WFEdges(et, pt)
+  requires ValidLeftCutOffKey(pt, pivot)
+  requires cLeft as int == CutoffForLeft(pt, pivot)
+  requires pt' == SplitLeft(pt, pivot)
+  ensures et' == SplitLeftEdges(et, pt, pivot)
+  {
+    // maybe we should get cLeft passed in
+
+
+
+    assume false;
+    et' := et;
+  }
+
   function SplitRightEdges(et: EdgeTable, pt: PivotTable, pivot: Key) : (et': EdgeTable)
   requires WFPivots(pt)
   requires WFEdges(et, pt)
@@ -107,6 +123,18 @@ module TranslationLib {
       var translation : Key := et[cRight].value + newlcp[|oldlcp|..];
       [Some(translation)] + et[cRight+1..]
     )
+  }
+
+  method ComputeSplitRightEdges(et: EdgeTable, pt: PivotTable, pt': PivotTable, pivot: Key, cRight: uint64) returns (et': EdgeTable)
+  requires WFPivots(pt)
+  requires WFEdges(et, pt)
+  requires BoundedKey(pt, pivot)
+  requires cRight as int == CutoffForRight(pt, pivot)
+  requires pt' == SplitRight(pt, pivot)
+  ensures et' == SplitRightEdges(et, pt, pivot)
+  {
+    assume false;
+    et' := et;
   }
 
   lemma WFConcatEdges(leftpt: PivotTable, leftet: EdgeTable, rightpt: PivotTable, rightet: EdgeTable, pt: PivotTable)

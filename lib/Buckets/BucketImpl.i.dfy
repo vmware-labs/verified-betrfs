@@ -41,7 +41,7 @@ module BucketImpl {
   import opened LinearSequence_s
   import opened LinearSequence_i
   import opened Inout
-  import Lexicographic_Byte_Order
+  // import Lexicographic_Byte_Order
 
   type TreeMap = LKMB.Model.Node
 
@@ -290,7 +290,7 @@ module BucketImpl {
         return true;
       }
 
-      Lexicographic_Byte_Order.reveal_IsStrictlySorted();
+      BoundedKeyspace.reveal_IsStrictlySorted();
 
       var firstkey := GetFirstKey();
       var c := Pivots.KeyspaceImpl.cmp(pivots[i], Pivots.Keyspace.Element(firstkey));
@@ -390,7 +390,7 @@ module BucketImpl {
         assert format.BFPkv?;
         result := PackedKV.FirstKey(format.pkv);
         assert result == PackedKV.I(format.pkv).keys[0];
-        reveal BucketsLib.Lexicographic_Byte_Order.IsSorted();
+        reveal BoundedKeyspace.IsSorted();
       }
     }
 
@@ -435,7 +435,7 @@ module BucketImpl {
         assert format.BFPkv?;
         result := PackedKV.LastKey(format.pkv);
         assert result == Last(PackedKV.I(format.pkv).keys);
-        reveal BucketsLib.Lexicographic_Byte_Order.IsSorted();
+        reveal BoundedKeyspace.IsSorted();
       }
     }
 
@@ -566,7 +566,7 @@ module BucketImpl {
       WeightBucketPkv_eq_WeightPkv(pkvleft);
       assert sorted ==> BucketWellMarshalled(PackedKV.I(pkvleft)) by {
         reveal_SplitBucketLeft();
-        Lexicographic_Byte_Order.reveal_IsStrictlySorted();
+        BoundedKeyspace.reveal_IsStrictlySorted();
       }
       left := AllocPkv(pkvleft, sorted);
     }
@@ -584,7 +584,7 @@ module BucketImpl {
       WeightBucketPkv_eq_WeightPkv(pkvright);
       assert sorted ==> BucketWellMarshalled(PackedKV.I(pkvright)) by {
         reveal_SplitBucketRight();
-        Lexicographic_Byte_Order.reveal_IsStrictlySorted();
+        BoundedKeyspace.reveal_IsStrictlySorted();
       }
       right := AllocPkv(pkvright, sorted);
     }

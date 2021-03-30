@@ -114,6 +114,41 @@ module BoundedPivotsLib {
     && Keyspace.lt(KeyToElement(key), pt[|pt|-1])
   }
 
+  predicate BoundedKeySeq(pt: PivotTable, keys: seq<Key>)
+  requires WFPivots(pt)
+  {
+    && forall i | 0 <= i < |keys| :: BoundedKey(pt, keys[i])
+  }
+
+  predicate BoundedSortedKeySeq(pt: PivotTable, keys: seq<Key>)
+  requires WFPivots(pt)
+  requires Keyspace.Base_Order.IsStrictlySorted(keys)
+  {
+    && (|keys| > 0 ==> 
+        && BoundedKey(pt, keys[0])
+        && BoundedKey(pt, keys[|keys|-1]))
+  }
+
+  lemma BoundedSortedKeySeqIsBoundedKeySeq(pt: PivotTable, keys: seq<Key>)
+  requires WFPivots(pt)
+  requires Keyspace.Base_Order.IsStrictlySorted(keys)
+  ensures BoundedSortedKeySeq(pt, keys) == BoundedKeySeq(pt, keys)
+  {
+    Keyspace.reveal_IsStrictlySorted();
+
+    var b := BoundedSortedKeySeq(pt, keys);
+    if b {
+      forall i | 0 <= i < |keys|
+      ensures BoundedKey(pt, keys[i])
+      {
+        if i > 0 && i < |keys|-1 {
+          Keyspace.Base_Order.IsStrictlySortedImpliesLt(keys, 0, i);
+          Keyspace.Base_Order.IsStrictlySortedImpliesLt(keys, i, |keys|-1);
+        }
+      }
+    }
+  }
+
   // allows for exclusive upperbound
   predicate ValidLeftCutOffKey(pt: PivotTable, key: Key)
   requires WFPivots(pt)

@@ -24,30 +24,35 @@ module NodeImpl {
   import BT = PivotBetreeSpec`Internal
   import PivotBetree
   import Pivots = BoundedPivotsLib
+
   import PKV = PackedKV
   import opened Bounds
   import opened BucketImpl
   import opened BucketsLib
   import opened BucketWeights
+  import opened TranslationLib
 
   import ReferenceType`Internal
 
   linear datatype Node = Node(
-      pivotTable: Pivots.PivotTable, 
+      pivotTable: Pivots.PivotTable,
+      edgeTable: EdgeTable,
       children: Option<seq<BT.G.Reference>>,
       linear buckets: lseq<BucketImpl.MutBucket>)
   {
-    static method Alloc(pivotTable: Pivots.PivotTable, 
+    static method Alloc(pivotTable: Pivots.PivotTable,
+      edgeTable: EdgeTable, 
       children: Option<seq<BT.G.Reference>>, 
       linear buckets: lseq<BucketImpl.MutBucket>)
     returns (linear node: Node)
     requires MutBucket.InvLseq(buckets)
-    ensures node.pivotTable == pivotTable;
-    ensures node.children == children;
-    ensures node.buckets == buckets;
-    ensures node.Inv();
+    ensures node.pivotTable == pivotTable
+    ensures node.edgeTable == edgeTable
+    ensures node.children == children
+    ensures node.buckets == buckets
+    ensures node.Inv()
     {
-      node := Node(pivotTable, children, buckets);
+      node := Node(pivotTable, edgeTable, children, buckets);
     }
 
     predicate Inv()
@@ -58,7 +63,7 @@ module NodeImpl {
     function I() : BT.G.Node
     requires Inv()
     {
-      BT.G.Node(pivotTable, children,
+      BT.G.Node(pivotTable, edgeTable, children,
         BucketImpl.MutBucket.ILseq(buckets))
     }
 
@@ -70,8 +75,8 @@ module NodeImpl {
       linear var mutbucket := MutBucket.Alloc();
       linear var buckets := lseq_alloc(1);
       lseq_give_inout(inout buckets, 0, mutbucket);
-      
-      node := Node(Pivots.InitPivotTable(), None, buckets);
+
+      node := Node(Pivots.InitPivotTable(), [None], None, buckets);
       assert node.I().buckets == [EmptyBucket()];
       WeightBucketListOneEmpty();
     }
@@ -84,22 +89,39 @@ module NodeImpl {
     requires slot as nat < |buckets|
     ensures result == Pivots.BoundedKeySeq(pivots, buckets[slot as nat].I().keys)
     {
-      var pkv := lseq_peek(buckets, slot).GetPkv();
+      shared var bucket := lseq_peek(buckets, slot);
+      var pkv := bucket.GetPkv();
+      
       ghost var keys := PKV.IKeys(pkv.keys);
       assert buckets[slot as nat].I().keys == keys;
 
       var bounded := true;
-      var i := 0 as uint64;
       var len := PKV.NumKVPairs(pkv);
 
-      while i < len && bounded
-      invariant 0 <= i <= len
-      invariant bounded == Pivots.BoundedKeySeq(pivots, keys[..i])
-      {
-        var key := PKV.GetKey(pkv, i);
-        assert key == keys[i];
-        bounded := Pivots.ComputeBoundedKey(pivots, key);
-        i := i + 1;
+      if bucket.sorted {
+        if len > 0 {
+          var key := PKV.GetKey(pkv, 0);
+          assert key == keys[0];
+          bounded := Pivots.ComputeBoundedKey(pivots, key);
+          if bounded {
+            key := PKV.GetKey(pkv, len-1);
+            assert key == keys[|keys|-1];
+            bounded := Pivots.ComputeBoundedKey(pivots, key);
+          }
+          assert bounded == Pivots.BoundedSortedKeySeq(pivots, keys);
+          Pivots.BoundedSortedKeySeqIsBoundedKeySeq(pivots, keys);
+        }
+      } else {
+        var i := 0 as uint64;
+        while i < len && bounded
+        invariant 0 <= i <= len
+        invariant bounded == Pivots.BoundedKeySeq(pivots, keys[..i])
+        {
+          var key := PKV.GetKey(pkv, i);
+          assert key == keys[i];
+          bounded := Pivots.ComputeBoundedKey(pivots, key);
+          i := i + 1;
+        }
       }
       return bounded;
     }
@@ -145,6 +167,7 @@ module NodeImpl {
     ensures self.Inv() // mark all with self.
     ensures self.I() == BT.G.Node(
         old_self.I().pivotTable,
+        old_self.I().edgeTable,
         Some(old_self.I().children.value[slot as int := childref]),
         old_self.I().buckets[slot as int := bucket.bucket]
       )
@@ -167,6 +190,8 @@ module NodeImpl {
       ghost var b := BT.SplitParent(self.I(), pivot, slot as int, left_childref, right_childref);
 
       inout self.pivotTable := Sequences.Insert(self.pivotTable, Pivots.Keyspace.Element(pivot), slot+1);
+      inout self.edgeTable := Replace1with2(self.edgeTable, None, None, slot);
+
       MutBucket.SplitOneInList(inout self.buckets, slot, pivot);
       assert MutBucket.ILseq(self.buckets) == SplitBucketInList(old_self.I().buckets, slot as int, pivot);
       
@@ -187,13 +212,14 @@ module NodeImpl {
       BT.reveal_CutoffNodeAndKeepLeft();
       var cLeft := Pivots.ComputeCutoffForLeft(this.pivotTable, pivot);
       var leftPivots := Pivots.ComputeSplitLeft(this.pivotTable, pivot, cLeft);
+      var leftEdges := ComputeSplitLeftEdges(this.edgeTable, this.pivotTable, leftPivots, pivot, cLeft);
       var leftChildren := if this.children.Some? then Some(this.children.value[.. cLeft + 1]) else None;
 
       WeightBucketLeBucketList(MutBucket.ILseq(this.buckets), cLeft as int);  
       linear var splitBucket := lseq_peek(buckets, cLeft).SplitLeft(pivot);
       linear var slice := MutBucket.CloneSeq(this.buckets, 0, cLeft); // TODO clone not necessary?
       linear var leftBuckets := InsertLSeq(slice, splitBucket, cLeft);
-      node := Node(leftPivots, leftChildren, leftBuckets);
+      node := Node(leftPivots, leftEdges, leftChildren, leftBuckets);
     }
 
     shared method CutoffNodeAndKeepRight(pivot: Key) returns (linear node: Node)
@@ -206,16 +232,14 @@ module NodeImpl {
       BT.reveal_CutoffNodeAndKeepRight();
       var cRight := Pivots.ComputeCutoffForRight(this.pivotTable, pivot);
       var rightPivots := Pivots.ComputeSplitRight(this.pivotTable, pivot, cRight);
+      var rightEdges := ComputeSplitRightEdges(this.edgeTable, this.pivotTable, rightPivots, pivot, cRight);
       var rightChildren := if this.children.Some? then Some(this.children.value[cRight ..]) else None;
 
       WeightBucketLeBucketList(MutBucket.ILseq(this.buckets), cRight as int);
       linear var splitBucket := lseq_peek(buckets, cRight).SplitRight(pivot);
       linear var slice := MutBucket.CloneSeq(buckets, cRight + 1, lseq_length_raw(buckets));
       linear var rightBuckets := InsertLSeq(slice, splitBucket, 0);
-      node := Node(rightPivots, rightChildren, rightBuckets);
-      assert node.I().buckets == BT.CutoffNodeAndKeepRight(I(), pivot).buckets;
-      assert node.I().children == BT.CutoffNodeAndKeepRight(I(), pivot).children;
-      assert node.I().pivotTable == BT.CutoffNodeAndKeepRight(I(), pivot).pivotTable;
+      node := Node(rightPivots, rightEdges, rightChildren, rightBuckets);
     }
 
     shared method CutoffNode(lbound: Key, rbound: Option<Key>)
@@ -244,6 +268,7 @@ module NodeImpl {
     requires Inv()
     requires |pivotTable| < Uint64UpperBound()
     requires 0 <= num_children_left as int - 1 <= |pivotTable| - 2
+    requires 0 <= num_children_left as int <= |edgeTable|
     requires children.Some? ==> 0 <= num_children_left as int <= |children.value|
     requires 0 <= num_children_left as int <= |buckets|
     ensures node.Inv()
@@ -252,6 +277,7 @@ module NodeImpl {
       linear var slice := MutBucket.CloneSeq(buckets, 0, num_children_left);
       node := Node(
         pivotTable[ .. num_children_left + 1 ],
+        edgeTable[ .. num_children_left ],
         if children.Some? then Some(children.value[ .. num_children_left ]) else None,
         slice
       );
@@ -261,6 +287,7 @@ module NodeImpl {
     returns (linear node: Node)
     requires Inv()
     requires 0 <= num_children_left as int <= |pivotTable| - 1
+    requires 0 <= num_children_left as int <= |edgeTable|
     requires children.Some? ==> 0 <= num_children_left as int <= |children.value|
     requires 0 <= num_children_left as int <= |buckets|
     ensures node.Inv()
@@ -269,6 +296,7 @@ module NodeImpl {
       linear var slice := MutBucket.CloneSeq(buckets, num_children_left, lseq_length_raw(buckets));
       node := Node(
         pivotTable[ num_children_left .. ],
+        edgeTable[ num_children_left .. ],
         if children.Some? then Some(children.value[ num_children_left .. ]) else None,
         slice
       );
@@ -306,7 +334,7 @@ module NodeImpl {
   function method FreeNode(linear node: Node) : ()
   requires node.Inv()
   {
-    linear var Node(_, _, buckets) := node;
+    linear var Node(_, _, _, buckets) := node;
     FreeMutBucketSeq(buckets)
   }
 }
