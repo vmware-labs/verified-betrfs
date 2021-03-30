@@ -155,6 +155,7 @@ module Impl refines Main {
       }
 
       if !step.QuerySkipStep? {
+        // should be QueryNotFoundStep/QueryDoneStep
         r' := R(oneRowTable(slot_idx as nat, Info(entry, Free)), multiset{}, multiset{Stub(rid, output)}); 
         r := easy_transform_step(r, r', step);
 
