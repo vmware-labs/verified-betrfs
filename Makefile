@@ -215,7 +215,7 @@ build/%.verified: build/%.verchk $(AGGREGATE_TOOL) | $$(@D)/.
 # Syntax is trivial from synchk file, just a marker.
 # (We need the .syntax target to get a recursive dependency computation.)
 build/%.syntax: build/%.synchk $(AGGREGATE_TOOL) | $$(@D)/.
-	$(AGGREGATE_TOOL) synchk $^ > $@
+	$(AGGREGATE_TOOL) synchk $< > $@
 
 ##############################################################################
 # .status.pdf: a dependency graph of .dfy files labeled with verification result status.

@@ -69,6 +69,9 @@ class DafnySyntaxOK(DafnyCondition):
 def dafnyFromVerchk(verchk):
     return verchk.replace("build/", "./").replace(".verchk", ".dfy").replace(".synchk", ".dfy")
 
+def verchkFromDafny(dafny, reportType):
+    return "build/" + dafny.replace(".dfy", "."+reportType)
+
 def hasDisallowedAssumptions(verchk):
     dfy = dafnyFromVerchk(verchk)
     if dfy.endswith(".s.dfy"):
