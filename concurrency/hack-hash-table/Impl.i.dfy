@@ -226,11 +226,12 @@ module Impl refines Main {
     ensures out_r == ARS.output_stub(rid, output)
   {
     var query_ticket := Ticket(rid, input);
-    var key := input.key;
+    var key, inital_key := input.key, input.key;
     var kv := KV(key, input.value);
+    output := MapIfc.InsertOutput;
 
     var hash_idx := hash(key);
-    var orignal_hash_idx := hash_idx;
+    var initial_hash_idx := hash_idx;
     var slot_idx := hash_idx;
 
     linear var r := in_r;
@@ -238,16 +239,16 @@ module Impl refines Main {
     linear var Value(entry, row_r) := row;
     r := ARS.join(r, row_r);
 
-    ghost var r1 := oneRowResource(hash_idx as nat, Info(entry, Inserting(rid, kv)));
-    r := easy_transform_step(r, r1, ProcessInsertTicketStep(query_ticket));
+    ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Inserting(rid, kv, inital_key)));
+    r := easy_transform_step(r, r', ProcessInsertTicketStep(query_ticket));
 
     while true 
       invariant Inv(mt);
       invariant 0 <= slot_idx < FixedSizeImpl()
-      invariant r == oneRowResource(slot_idx as nat, Info(entry, Inserting(rid, kv)))
+      invariant r == oneRowResource(slot_idx as nat, Info(entry, Inserting(rid, kv, inital_key)))
       invariant kv.key == key
       invariant hash_idx == hash(key)
-      decreases DistanceToSlot(slot_idx, orignal_hash_idx)
+      decreases DistanceToSlot(slot_idx, initial_hash_idx)
     {
       var step, new_kv;
 
@@ -272,9 +273,8 @@ module Impl refines Main {
       }
 
       if step.InsertDoneStep? || step.InsertUpdateStep? {
-        output := MapIfc.InsertOutput;
-        ghost var r2 := R(oneRowTable(slot_idx as nat, Info(Full(kv), Free)), multiset{}, multiset{Stub(rid, output)});
-        r := easy_transform_step(r, r2, step);
+        r' := R(oneRowTable(slot_idx as nat, Info(Full(kv), Free)), multiset{}, multiset{Stub(rid, output)});
+        r := easy_transform_step(r, r', step);
 
         linear var rmutex;
         r, rmutex := ARS.split(r, 
@@ -286,8 +286,9 @@ module Impl refines Main {
 
       var slot_idx' := getNextIndex(slot_idx);
 
-     if slot_idx' == orignal_hash_idx {
-        // assert InsertFullHashTable(r, r, slot_idx as nat, orignal_hash_idx as nat);
+      if slot_idx' == initial_hash_idx {
+        ghost var r2 := R(oneRowTable(slot_idx as nat, Info(Full(kv), Free)), multiset{}, multiset{Stub(rid, output)});
+        // assert InsertFullHashTable(r, r2, slot_idx as nat);
         assume false; // TODO: add unreachable step in the sharded state machine
         break;
       }
@@ -297,13 +298,11 @@ module Impl refines Main {
       r := ARS.join(r, next_row_r);
 
       if step.InsertSkipStep? {
-        ghost var r2 := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Inserting(rid, kv)));
+        ghost var r2 := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Inserting(rid, kv, inital_key)));
         r := easy_transform_step(r, r2, step);
       } else {
         entry := Full(kv);
-        assert step.InsertSwapStep?;
-
-        ghost var r2 := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Inserting(rid, new_kv)));
+        ghost var r2 := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Inserting(rid, new_kv, inital_key)));
         r := easy_transform_step(r, r2, step);
         kv := new_kv;
 
@@ -311,7 +310,7 @@ module Impl refines Main {
       }
 
       linear var rmutex;
-      ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Inserting(rid, kv)));
+      ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Inserting(rid, kv, inital_key)));
       ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
 
       r, rmutex := ARS.split(r, left, right);
@@ -327,14 +326,15 @@ module Impl refines Main {
 
   method doRemoveTidy(mt: MutexTable, rid: int, 
     slot_idx: uint32,
-    hash_idx: uint32, 
+    hash_idx: uint32,
+    inital_key: Key,
     entry: Entry,
     next_entry: Entry,
     /*ghost*/ linear r: ARS.R)
   returns (output: Ifc.Output, linear out_r: ARS.R)
     requires Inv(mt)
     requires TidyEnabled(r, slot_idx as nat)
-    requires r == twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid)), NextPos(slot_idx as nat), Info(next_entry, Free));
+    requires r == twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key)), NextPos(slot_idx as nat), Info(next_entry, Free));
     requires 0 <= slot_idx < FixedSizeImpl()
     requires 0 <= hash_idx < FixedSizeImpl()
     ensures out_r == ARS.output_stub(rid, output)
@@ -345,7 +345,7 @@ module Impl refines Main {
     while true
       invariant Inv(mt);
       invariant 0 <= slot_idx < FixedSizeImpl()
-      invariant r == twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid)), NextPos(slot_idx as nat), Info(next_entry, Free))
+      invariant r == twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key)), NextPos(slot_idx as nat), Info(next_entry, Free))
       decreases DistanceToSlot(slot_idx, hash_idx)
     {
       var slot_idx' := getNextIndex(slot_idx);
@@ -355,12 +355,11 @@ module Impl refines Main {
         break;
       }
 
-
-      ghost var r2 := twoRowsResource(slot_idx as nat, Info(next_entry, Free), slot_idx' as nat, Info(Empty, RemoveTidying(rid)));
+      ghost var r2 := twoRowsResource(slot_idx as nat, Info(next_entry, Free), slot_idx' as nat, Info(Empty, RemoveTidying(rid, inital_key)));
       r := easy_transform_step(r, r2, RemoveTidyStep(slot_idx as nat));
 
       linear var rmutex;
-      ghost var left := oneRowResource(slot_idx' as nat, Info(Empty, RemoveTidying(rid)));
+      ghost var left := oneRowResource(slot_idx' as nat, Info(Empty, RemoveTidying(rid, inital_key)));
       ghost var right := oneRowResource(slot_idx as nat, Info(next_entry, Free));
 
       r, rmutex := ARS.split(r, left, right);
@@ -476,10 +475,9 @@ module Impl refines Main {
       r := ARS.join(r, next_row_r);
 
       if step.RemoveFoundItStep? {
-
-        ghost var r2 := twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid)), slot_idx' as nat, Info(next_entry, Free));
+        ghost var r2 := twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid, key)), slot_idx' as nat, Info(next_entry, Free));
         r := easy_transform_step(r, r2, step);
-        output, r := doRemoveTidy(mt, rid, slot_idx, hash_idx, entry, next_entry, r);
+        output, r := doRemoveTidy(mt, rid, slot_idx, hash_idx, key, entry, next_entry, r);
         break;
       } else {
         ghost var r2 := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Removing(rid, key)));

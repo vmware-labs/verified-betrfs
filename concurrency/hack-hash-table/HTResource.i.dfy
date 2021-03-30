@@ -26,10 +26,10 @@ module HTResource refines ApplicationResourceSpec {
     0 <= h as int < FixedSize()
   }
 
-  function method hash(key: uint64) : (h:uint32)
+  function method hash(key: Key) : (h:uint32)
     ensures ValidHashIndex(h as int)
 
-  datatype KV = KV(key: uint64, val: Value)
+  datatype KV = KV(key: Key, val: Value)
 
   // This is the thing that's stored in the hash table at this row.
   datatype Entry =
@@ -43,9 +43,9 @@ module HTResource refines ApplicationResourceSpec {
   // apply when no threads are operating)
   datatype State =
     | Free
-    | Inserting(rid: int, kv: KV)
-    | Removing(rid: int, key: uint64)
-    | RemoveTidying(rid: int)
+    | Inserting(rid: int, kv: KV, inital_key: Key)
+    | Removing(rid: int, key: Key)
+    | RemoveTidying(rid: int, inital_key: Key)
 
       // Why do we need to store query state to support an invariant over the
       // hash table interpretation, since query is a read-only operation?
@@ -56,7 +56,7 @@ module HTResource refines ApplicationResourceSpec {
       // gets far enough to discover the answer in the real data structure.
       // We're showing that we inductively preserve the value of the
       // interpretation of the *answer* to query #rid.
-    | Querying(rid: int, key: uint64)
+    | Querying(rid: int, key: Key)
 
   // TODO rename
   datatype Info = Info(entry: Entry, state: State)
@@ -236,7 +236,8 @@ module HTResource refines ApplicationResourceSpec {
     && !s.Fail?
     && insert_ticket.input.InsertInput?
     && insert_ticket in s.tickets
-    && var h: uint32 := hash(insert_ticket.input.key);
+    && var key := insert_ticket.input.key;
+    && var h: uint32 := hash(key);
     && 0 <= h as int < |s.table|
     && s.table[h].Some?
     && s.table[h].value.state.Free?
@@ -245,7 +246,7 @@ module HTResource refines ApplicationResourceSpec {
       .(table := s.table[h := Some(
           s.table[h].value.(state :=
             Inserting(insert_ticket.rid,
-              KV(insert_ticket.input.key, insert_ticket.input.value))))])
+              KV(key, insert_ticket.input.value), key)))])
   }
 
   // search_h: hash of the key we are trying to insert
@@ -296,21 +297,22 @@ module HTResource refines ApplicationResourceSpec {
     && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
     && s.table[pos].Some?
     && s.table[pos'].Some?
-    && s.table[pos].value.state.Inserting?
+    && var state := s.table[pos].value.state;
+    && state.Inserting?
     && s.table[pos].value.entry.Full?
     && ShouldHashGoBefore(
-        hash(s.table[pos].value.state.kv.key) as int,
+        hash(state.kv.key) as int,
         hash(s.table[pos].value.entry.kv.key) as int, pos)
     && s.table[pos'].value.state.Free?
 
     && s' == s.(table := s.table
         [pos := Some(Info(
-          Full(s.table[pos].value.state.kv),
+          Full(state.kv),
           Free))]
         [pos' := Some(s.table[pos'].value.(state :=
           Inserting(
-            s.table[pos].value.state.rid,
-            s.table[pos].value.entry.kv)))])
+            state.rid,
+            s.table[pos].value.entry.kv, state.inital_key)))])
   }
 
   // Slot is empty. Insert our element and finish.
@@ -345,15 +347,19 @@ module HTResource refines ApplicationResourceSpec {
       .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput)})
   }
 
-  predicate InsertFullHashTable(s: R, s': R, pos: nat, orignal_hash_idx: nat)
+  predicate InsertFullHashTable(s: R, s': R, pos: nat)
   {
-    && NextPos(pos) == orignal_hash_idx
+    && !s.Fail?
+    && 0 <= pos < FixedSize()
     && s.table[pos].Some?
-    && s.table[pos].value.state.Inserting?
-    && s.table[pos].value.entry.kv.key != s.table[pos].value.state.kv.key
-    // && s' == s
-    //   .(table := s.table[pos := Some(s.table[pos].value.(state := Free))])
-    //   .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput)})
+    && var state := s.table[pos].value.state;
+    && s.table[pos].value.state.Inserting? // we are still trying to insert
+    && s.table[pos].value.entry.Full?
+    && s.table[pos].value.entry.kv.key != state.kv.key // we can't insert here
+    && NextPos(pos) == hash(state.inital_key) as nat // we are about to loop back to the initial index
+    && s' == s
+      .(table := s.table[pos := Some(s.table[pos].value.(state := Free))])
+      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput)})
   }
 
   // Remove
@@ -436,14 +442,15 @@ module HTResource refines ApplicationResourceSpec {
   {
     && RemoveSkipEnabled(s, pos)
     // This IS the key we want to remove!
-    && s.table[pos].value.entry.kv.key == s.table[pos].value.state.key
+    && var inital_key := s.table[pos].value.state.key;
+    && s.table[pos].value.entry.kv.key == inital_key
 
     // Change the program counter into RemoveTidying mode
     && var rid := s.table[pos].value.state.rid;
     // Note: it doesn't matter what we set the entry to here, since we're going
     // to overwrite it in the next step either way.
     // (Might be easier to leave the entry as it is rather than set it to Empty?)
-    && s' == s.(table := s.table[pos := Some(Info(Empty, RemoveTidying(rid)))])
+    && s' == s.(table := s.table[pos := Some(Info(Empty, RemoveTidying(rid, inital_key)))])
   }
 
   predicate TidyEnabled(s: R, pos: nat)
@@ -550,13 +557,10 @@ module HTResource refines ApplicationResourceSpec {
     && s.table[pos].value.state.Querying?
     && s.table[pos].value.entry.Full?
     && s.table[pos].value.state.key == s.table[pos].value.entry.kv.key
+    && var stub := Stub(s.table[pos].value.state.rid, MapIfc.QueryOutput(Found(s.table[pos].value.entry.kv.val)));
     && s' == s
-      .(table := s.table
-        [pos := Some(s.table[pos].value.(state := Free))])
-      .(stubs := s.stubs + multiset{
-        Stub(s.table[pos].value.state.rid,
-                  MapIfc.QueryOutput(Found(s.table[pos].value.entry.kv.val)))
-       })
+      .(table := s.table[pos := Some(s.table[pos].value.(state := Free))])
+      .(stubs := s.stubs + multiset{stub})
   }
 
   predicate QueryNotFound(s: R, s': R, pos: nat)
@@ -605,6 +609,7 @@ module HTResource refines ApplicationResourceSpec {
       case InsertSwapStep(pos) => InsertSwap(s, s', pos)
       case InsertDoneStep(pos) => InsertDone(s, s', pos)
       case InsertUpdateStep(pos) => InsertUpdate(s, s', pos)
+      case InsertFullHashTableStep(pos) => InsertFullHashTable(s, s', pos)
 
       case ProcessRemoveTicketStep(remove_ticket) => ProcessRemoveTicket(s, s', remove_ticket)
       case RemoveSkipStep(pos) => RemoveSkip(s, s', pos)
