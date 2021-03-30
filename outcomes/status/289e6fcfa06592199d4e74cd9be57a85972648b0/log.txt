@@ -1,0 +1,159 @@
+mkdir -p build/.
+echo Impl/Bundle.i.dfy build-tests/test-suite.i.dfy > build/roots
+tools/veridepend.py Impl/Bundle.i.dfy build-tests/test-suite.i.dfy
+mkdir -p build/lib/Lang/.
+mkdir -p build/lib/Base/.
+mkdir -p build/lib/Lang/System/.
+mkdir -p build/MapSpec/.
+mkdir -p build/lib/Checksums/.
+mkdir -p build/ByteBlockCacheSystem/.
+mkdir -p build/Impl/.
+mkdir -p build/lib/DataStructures/.
+touch build/lib/Lang/Inout.i.dummydep
+touch build/lib/Lang/LinearMaybe.s.dummydep
+touch build/lib/Base/SetBijectivity.i.dummydep
+touch build/lib/Lang/LinearBox.s.dummydep
+mkdir -p build/lib/Buckets/.
+mkdir -p build/PivotBetree/.
+mkdir -p build/Betree/.
+mkdir -p build/lib/Math/.
+mkdir -p build/lib/Marshalling/.
+touch build/lib/Base/MathAxioms.s.dummydep
+mkdir -p build/BlockCacheSystem/.
+mkdir -p build/Versions/.
+touch build/lib/Checksums/Nonlinear.i.dummydep
+touch build/lib/Base/NativeBenchmarking.s.dummydep
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4  /compile:0 /timeLimit:60 lib/Lang/NativeTypes.s.dfy ) 2>&1 | tee build/lib/Lang/NativeTypes.s.verchk-tmp
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4  /compile:0 /timeLimit:60 lib/Base/Option.s.dfy ) 2>&1 | tee build/lib/Base/Option.s.verchk-tmp
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4  /compile:0 /timeLimit:60 lib/Base/MapRemove.s.dfy ) 2>&1 | tee build/lib/Base/MapRemove.s.verchk-tmp
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4  /compile:0 /timeLimit:60 lib/Base/Sets.i.dfy ) 2>&1 | tee build/lib/Base/Sets.i.verchk-tmp
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4  /compile:0 /timeLimit:60 lib/Base/mathematics.i.dfy ) 2>&1 | tee build/lib/Base/mathematics.i.verchk-tmp
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4  /compile:0 /timeLimit:60 lib/Lang/Inout.i.dfy ) 2>&1 | tee build/lib/Lang/Inout.i.verchk-tmp
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4  /compile:0 /timeLimit:60 lib/Lang/LinearMaybe.s.dfy ) 2>&1 | tee build/lib/Lang/LinearMaybe.s.verchk-tmp
+/root/verichecks-worker/worker-dir/clones/289e6fcfa06592199d4e74cd9be57a85972648b0/lib/Base/Sets.i.dfy(37,4): Warning: /!\ No terms found to trigger on.
+
+Dafny program verifier finished with 1 verified, 0 errors
+1.43user 0.05system 0:01.44elapsed 103%CPU (0avgtext+0avgdata 89048maxresident)k
+520inputs+0outputs (2major+16605minor)pagefaults 0swaps
+mv build/lib/Lang/Inout.i.verchk-tmp build/lib/Lang/Inout.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4  /compile:0 /timeLimit:60 lib/Base/SetBijectivity.i.dfy ) 2>&1 | tee build/lib/Base/SetBijectivity.i.verchk-tmp
+
+Dafny program verifier finished with 2 verified, 0 errors
+1.78user 0.07system 0:01.54elapsed 119%CPU (0avgtext+0avgdata 94640maxresident)k
+16inputs+0outputs (1major+20559minor)pagefaults 0swaps
+mv build/lib/Base/Option.s.verchk-tmp build/lib/Base/Option.s.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4  /compile:0 /timeLimit:60 lib/Lang/LinearBox.s.dfy ) 2>&1 | tee build/lib/Lang/LinearBox.s.verchk-tmp
+
+Dafny program verifier finished with 1 verified, 0 errors
+1.61user 0.05system 0:01.60elapsed 103%CPU (0avgtext+0avgdata 89956maxresident)k
+304inputs+0outputs (2major+17468minor)pagefaults 0swaps
+mv build/lib/Base/MapRemove.s.verchk-tmp build/lib/Base/MapRemove.s.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4  /compile:0 /timeLimit:60 lib/Math/bases.i.dfy ) 2>&1 | tee build/lib/Math/bases.i.verchk-tmp
+
+Dafny program verifier finished with 4 verified, 0 errors
+2.38user 0.14system 0:01.72elapsed 145%CPU (0avgtext+0avgdata 102840maxresident)k
+0inputs+0outputs (0major+26317minor)pagefaults 0swaps
+mv build/lib/Base/mathematics.i.verchk-tmp build/lib/Base/mathematics.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4  /compile:0 /timeLimit:60 lib/Marshalling/Maps.i.dfy ) 2>&1 | tee build/lib/Marshalling/Maps.i.verchk-tmp
+
+Dafny program verifier finished with 6 verified, 0 errors
+2.61user 0.14system 0:01.76elapsed 156%CPU (0avgtext+0avgdata 106560maxresident)k
+0inputs+0outputs (0major+28756minor)pagefaults 0swaps
+mv build/lib/Lang/LinearMaybe.s.verchk-tmp build/lib/Lang/LinearMaybe.s.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4  /compile:0 /timeLimit:60 lib/Marshalling/Math.i.dfy ) 2>&1 | tee build/lib/Marshalling/Math.i.verchk-tmp
+
+Dafny program verifier finished with 6 verified, 0 errors
+2.61user 0.11system 0:01.84elapsed 147%CPU (0avgtext+0avgdata 104840maxresident)k
+16inputs+0outputs (1major+27667minor)pagefaults 0swaps
+mv build/lib/Base/Sets.i.verchk-tmp build/lib/Base/Sets.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4  /compile:0 /timeLimit:60 lib/Base/MathAxioms.s.dfy ) 2>&1 | tee build/lib/Base/MathAxioms.s.verchk-tmp
+
+Dafny program verifier finished with 16 verified, 0 errors
+3.65user 0.13system 0:01.97elapsed 191%CPU (0avgtext+0avgdata 121456maxresident)k
+80inputs+0outputs (1major+31849minor)pagefaults 0swaps
+mv build/lib/Lang/NativeTypes.s.verchk-tmp build/lib/Lang/NativeTypes.s.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4  /compile:0 /timeLimit:60 lib/Checksums/Nonlinear.i.dfy ) 2>&1 | tee build/lib/Checksums/Nonlinear.i.verchk-tmp
+
+Dafny program verifier finished with 0 verified, 0 errors
+0.80user 0.07system 0:00.89elapsed 98%CPU (0avgtext+0avgdata 76532maxresident)k
+0inputs+0outputs (0major+12080minor)pagefaults 0swaps
+mv build/lib/Math/bases.i.verchk-tmp build/lib/Math/bases.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4  /compile:0 /timeLimit:60 lib/Base/NativeBenchmarking.s.dfy ) 2>&1 | tee build/lib/Base/NativeBenchmarking.s.verchk-tmp
+
+Dafny program verifier finished with 1 verified, 0 errors
+1.37user 0.06system 0:01.37elapsed 104%CPU (0avgtext+0avgdata 89092maxresident)k
+0inputs+0outputs (0major+16970minor)pagefaults 0swaps
+mv build/lib/Base/MathAxioms.s.verchk-tmp build/lib/Base/MathAxioms.s.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4  /compile:0 /timeLimit:60 BlockCacheSystem/AsyncSectorDiskModelTypes.i.dfy ) 2>&1 | tee build/BlockCacheSystem/AsyncSectorDiskModelTypes.i.verchk-tmp
+
+Dafny program verifier finished with 0 verified, 0 errors
+0.83user 0.04system 0:00.86elapsed 101%CPU (0avgtext+0avgdata 76556maxresident)k
+0inputs+0outputs (0major+12051minor)pagefaults 0swaps
+mv build/lib/Base/NativeBenchmarking.s.verchk-tmp build/lib/Base/NativeBenchmarking.s.verchk
+touch build/lib/Lang/NativeTypes.s.dummydep
+touch build/lib/Base/Option.s.dummydep
+touch build/lib/Lang/System/SeqComparison.s.dummydep
+touch build/lib/Base/KeyType.s.dummydep
+touch build/lib/Base/MapRemove.s.dummydep
+touch build/lib/Lang/System/Bits.s.dummydep
+touch build/lib/Base/Sets.i.dummydep
+touch build/lib/Base/mathematics.i.dummydep
+touch build/lib/Lang/LinearSequence.s.dummydep
+touch build/lib/Base/Maps.i.dummydep
+touch build/lib/Lang/System/Arithmetic.s.dummydep
+touch build/lib/Base/LinearOption.i.dummydep
+touch build/lib/Lang/System/NativeArrays.s.dummydep
+touch build/PivotBetree/Bounds.i.dummydep
+touch build/lib/Math/bases.i.dummydep
+touch build/lib/Marshalling/Maps.i.dummydep
+touch build/lib/Marshalling/Seqs.i.dummydep
+touch build/lib/Marshalling/Math.i.dummydep
+touch build/lib/Lang/System/PackedInts.s.dummydep
+touch build/lib/Base/BitsetLemmas.i.dummydep
+touch build/BlockCacheSystem/DiskLayout.i.dummydep
+touch build/lib/Base/PackedIntsLib.i.dummydep
+touch build/lib/Checksums/MathLemmas.i.dummydep
+touch build/BlockCacheSystem/AsyncSectorDiskModelTypes.i.dummydep
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4  /compile:0 /timeLimit:60 lib/Base/DebugAccumulator.i.dfy ) 2>&1 | tee build/lib/Base/DebugAccumulator.i.verchk-tmp
+
+Dafny program verifier finished with 10 verified, 0 errors
+3.58user 0.13system 0:02.82elapsed 131%CPU (0avgtext+0avgdata 116356maxresident)k
+0inputs+0outputs (0major+32213minor)pagefaults 0swaps
+mv build/lib/Marshalling/Maps.i.verchk-tmp build/lib/Marshalling/Maps.i.verchk
+tools/aggregate-verchk.py verchk build/lib/Lang/NativeTypes.s.verchk tools/aggregate-verchk.py > build/lib/Lang/NativeTypes.s.verified
+Traceback (most recent call last):
+  File "tools/aggregate-verchk.py", line 23, in <module>
+    assert(len(sys.argv)==3)
+AssertionError
+make: *** [Makefile:213: build/lib/Lang/NativeTypes.s.verified] Error 1
+make: *** Waiting for unfinished jobs....
+
+Dafny program verifier finished with 17 verified, 0 errors
+3.66user 0.19system 0:02.64elapsed 146%CPU (0avgtext+0avgdata 117872maxresident)k
+0inputs+0outputs (0major+30748minor)pagefaults 0swaps
+mv build/lib/Checksums/Nonlinear.i.verchk-tmp build/lib/Checksums/Nonlinear.i.verchk
+
+Dafny program verifier finished with 11 verified, 0 errors
+4.02user 0.19system 0:03.23elapsed 130%CPU (0avgtext+0avgdata 127820maxresident)k
+0inputs+0outputs (0major+37247minor)pagefaults 0swaps
+mv build/lib/Lang/LinearBox.s.verchk-tmp build/lib/Lang/LinearBox.s.verchk
+
+Dafny program verifier finished with 24 verified, 0 errors
+
+Dafny program verifier finished with 0 verified, 0 errors
+4.93user 0.24system 0:03.05elapsed 169%CPU (0avgtext+0avgdata 126184maxresident)k
+0inputs+0outputs (0major+37481minor)pagefaults 0swaps
+mv build/lib/Marshalling/Math.i.verchk-tmp build/lib/Marshalling/Math.i.verchk
+0.89user 0.04system 0:01.58elapsed 59%CPU (0avgtext+0avgdata 75776maxresident)k
+0inputs+0outputs (0major+11913minor)pagefaults 0swaps
+mv build/BlockCacheSystem/AsyncSectorDiskModelTypes.i.verchk-tmp build/BlockCacheSystem/AsyncSectorDiskModelTypes.i.verchk
+
+Dafny program verifier finished with 2 verified, 0 errors
+3.37user 0.15system 0:03.79elapsed 93%CPU (0avgtext+0avgdata 96472maxresident)k
+0inputs+0outputs (0major+32200minor)pagefaults 0swaps
+mv build/lib/Base/SetBijectivity.i.verchk-tmp build/lib/Base/SetBijectivity.i.verchk
+
+Dafny program verifier finished with 5 verified, 0 errors
+2.18user 0.11system 0:01.78elapsed 128%CPU (0avgtext+0avgdata 108804maxresident)k
+0inputs+0outputs (0major+28416minor)pagefaults 0swaps
+mv build/lib/Base/DebugAccumulator.i.verchk-tmp build/lib/Base/DebugAccumulator.i.verchk
