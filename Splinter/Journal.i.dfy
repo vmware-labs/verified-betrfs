@@ -35,18 +35,27 @@ module JournalMachineMod {
     priorCU: Option<CU>   // linked list pointer
   )
 
-  // This little record tells us if we're in the middle of a
-  // CommitStart...CommitComplete sequence.
-  datatype WriteState =
-    | Idle
-    | WritingJournal(count: nat)  // Writing seqStart .. seqStart + count
-
   datatype Variables = Variables(
     firstValidLSN: LSN,
-      // Smaller LSNs are unreachable from the last-known-committed superblock;
-      // they have already been garbage-collected. (There may be leftover
-      // records with smaller LSNs in a journal record, but they should be
-      // ignored).
+      // The (exclusive) upper bound of LSNs reachable from the
+      // last-known-committed superblock; earlier LSNs have already been
+      // garbage-collected. (There may be leftover records with smaller LSNs in
+      // a journal record, but the superblock says to ignore them.)
+      // We need to track this value to disallow the Betree from moving backwards,
+      // which would prevent us from recovering after a crash.
+
+    persistentLSN: LSN,
+      // The (exclusive) upper bound of LSNs known to be persistent on the on-disk journal.
+      // We may need to track this value to ensure commit doesn't go backwards.
+      // (maybe invariant-able)
+
+    durableLSN: LSN,
+      // The (exclusive) upper bound of LSNs that could be made persistent with a
+      // superblock write. (They're covered by marshalled pages that have been written
+      // back to the disk, but aren't yet linked to the superblock.)
+
+    marshalledLSN: LSN,
+      // The (exclusive) upper bound
 
     durableTailCU: Option<CU>,
       // pointer to the freshest CU that's durable (okay to commit in SB)
