@@ -71,7 +71,7 @@ module TranslationLib {
   ensures TranslationPreserved(pt, et, SplitLeft(pt, pivot), et')
   {
     var cLeft := CutoffForLeft(pt, pivot);
-    if pt[ cLeft+1 ] == KeyToElement(pivot) || et[cLeft].None? then (
+    if (pt[cLeft + 1].Element? && pt[ cLeft+1 ].e == pivot) || et[cLeft].None? then (
       et[..cLeft + 1]
     ) else (
       var pt' := SplitLeft(pt, pivot);
@@ -90,16 +90,22 @@ module TranslationLib {
   requires WFPivots(pt)
   requires WFEdges(et, pt)
   requires ValidLeftCutOffKey(pt, pivot)
+  requires |pt| < 0x4000_0000_0000_0000
   requires cLeft as int == CutoffForLeft(pt, pivot)
   requires pt' == SplitLeft(pt, pivot)
   ensures et' == SplitLeftEdges(et, pt, pivot)
   {
-    // maybe we should get cLeft passed in
-
-
-
-    assume false;
-    et' := et;
+    if (pt[cLeft + 1].Element? && pt[ cLeft+1 ].e == pivot) || et[cLeft].None? {
+      return et[..cLeft + 1];
+    } else {
+      var oldlcp : Key := ComputePivotLcp(pt[cLeft], pt[cLeft+1]);
+      var newlcp : Key := ComputePivotLcp(pt'[cLeft], pt'[cLeft+1]);
+      PivotLcpSubRangeLeft(pt[cLeft], pt[cLeft+1], pt'[cLeft+1]);
+      
+      assume |et[cLeft].value + newlcp[|oldlcp|..]| <= 1024;
+      var translation : Key := et[cLeft].value + newlcp[|oldlcp|..];
+      return et[..cLeft] +  [Some(translation)];
+    }
   }
 
   function SplitRightEdges(et: EdgeTable, pt: PivotTable, pivot: Key) : (et': EdgeTable)
@@ -110,7 +116,7 @@ module TranslationLib {
   ensures TranslationPreserved(pt, et, SplitRight(pt, pivot), et')
   {
     var cRight := CutoffForRight(pt, pivot);
-    if pt[cRight] == KeyToElement(pivot) || et[cRight].None? then (
+    if pt[cRight].e == pivot || et[cRight].None? then (
       et[cRight..]
     ) else (
       var pt' := SplitRight(pt, pivot);
@@ -129,12 +135,22 @@ module TranslationLib {
   requires WFPivots(pt)
   requires WFEdges(et, pt)
   requires BoundedKey(pt, pivot)
+  requires |pt| < 0x4000_0000_0000_0000
   requires cRight as int == CutoffForRight(pt, pivot)
   requires pt' == SplitRight(pt, pivot)
   ensures et' == SplitRightEdges(et, pt, pivot)
   {
-    assume false;
-    et' := et;
+    if pt[cRight].e == pivot || et[cRight].None? {
+      return et[cRight..];
+    } else {
+      var oldlcp : Key := ComputePivotLcp(pt[cRight], pt[cRight+1]);
+      var newlcp : Key := ComputePivotLcp(pt'[0], pt'[1]);
+      PivotLcpSubRangeRight(pt[cRight], pt'[0], pt'[1]);
+
+      assume |et[cRight].value + newlcp[|oldlcp|..]| <= 1024;
+      var translation : Key := et[cRight].value + newlcp[|oldlcp|..];
+      return [Some(translation)] + et[cRight+1..];
+    }
   }
 
   lemma WFConcatEdges(leftpt: PivotTable, leftet: EdgeTable, rightpt: PivotTable, rightet: EdgeTable, pt: PivotTable)
@@ -168,7 +184,7 @@ module TranslationLib {
     Keyspace.reveal_IsStrictlySorted();
   }
 
-  // lcp functions
+  // lcp functions and methods
 
   function lcpright(left: Key): (prefix: Key)
   ensures IsPrefix(prefix, left)
@@ -181,6 +197,31 @@ module TranslationLib {
       [left[0]] + lcpright(left[1..])
     else
       []
+  }
+
+  method Computelcpright(left: Key) returns (prefix: Key)
+  ensures prefix == lcpright(left)
+  {
+    var i: uint64 := 0;
+    var len := |left| as uint64;
+
+    while i < len
+      invariant 0 <= i <= len
+      invariant forall j | 0 <= j < i :: left[j] as int == Uint8UpperBound() - 1 
+    {
+      if left[i] as int == Uint8UpperBound() - 1 {
+        i := i + 1;
+      } else {
+        prefixIslcpright(left[..i]);
+        assert left[..i] == lcpright(left[..i]);
+        assert lcpright(left[i..]) == [];
+        assert left[..i] + left[i..] == left;
+        lcprightConcat(left[..i], left[i..]);
+        return left[..i];
+      }
+    }
+    prefixIslcpright(left);
+    return left;
   }
 
   function lcp(left: Key, right: Key): (prefix: Key)
@@ -199,6 +240,13 @@ module TranslationLib {
     )
   }
 
+  method Computelcp(left: Key, right: Key) returns (prefix: Key)
+  ensures prefix == lcp(left, right)
+  {
+    assume false;
+    prefix := [];
+  }
+
   function PivotLcp(left: Element, right: Element) : (prefix: Key)
   requires ElementIsKey(left)
   requires right.Element? ==> ElementIsKey(right)
@@ -208,6 +256,18 @@ module TranslationLib {
     ) else (
       lcp(left.e, right.e)
     )
+  }
+
+  method ComputePivotLcp(left: Element, right: Element) returns (prefix: Key)
+  requires ElementIsKey(left)
+  requires right.Element? ==> ElementIsKey(right)
+  ensures prefix == PivotLcp(left, right)
+  {
+    if right.Max_Element? {
+      prefix := Computelcpright(left.e);
+    } else {
+      prefix := Computelcp(left.e, right.e);
+    }
   }
 
   lemma lcprightCorrect(left: Key, prefix: Key, key: Key)
@@ -221,6 +281,15 @@ module TranslationLib {
     if |left| > 0 && left[0] as int == Uint8UpperBound() - 1 {
       lcprightCorrect(left[1..], prefix[1..], key[1..]);
     }
+  }
+
+  lemma lcprightConcat(key1: Key, key2: Key)
+  requires |key1 + key2| <= 1024
+  ensures lcpright(key1 + key2) == lcpright(key1) + lcpright(key2)
+  {
+    reveal_IsPrefix();
+    SeqComparison.reveal_lte();
+    assume false;
   }
 
   lemma lcprightSubRangeRight(left: Key, left': Key, prefix: Key, prefix': Key)

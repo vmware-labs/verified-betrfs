@@ -284,8 +284,10 @@ module MarshallingImpl {
                   var _ := BucketImpl.FreeMutBucketSeq(buckets);
                   s := lNone;
                 } else {
+                  // TODO(Jialin): 
                   linear var node := Node(
                     pivots,
+                    [],
                     if |children| as uint64 == 0 then None else childrenOpt,
                     buckets);
                   s := lSome(node);

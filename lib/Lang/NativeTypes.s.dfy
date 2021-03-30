@@ -22,7 +22,7 @@ module NativeTypes {
 
   function Uint64UpperBound() : int { 0x1_0000_0000_0000_0000 }
   function Uint32UpperBound() : int { 0x1_0000_0000 }
-  function Uint8UpperBound() : int { 0x100 }
+  function method Uint8UpperBound() : int { 0x100 }
 
   type uint8 = byte
 

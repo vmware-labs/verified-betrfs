@@ -247,6 +247,7 @@ module Marshalling {
     var children_len := |v.t[1].ua| as uint64;
     var buckets_len := |v.t[2].a| as uint64;
 
+    // TODO(Jialin): update marshalling 
     if (
        && 2 <= pivots_len <= MaxNumChildrenUint64() + 1
        && (children_len == 0 || children_len == pivots_len - 1)
@@ -264,6 +265,7 @@ module Marshalling {
               if buckets.Some? && WeightBucketList(buckets.value) <= MaxTotalBucketWeight() then (
                 var node := BT.G.Node(
                   pivots,
+                  [],
                   if |children| == 0 then None else Some(children),
                   buckets.value);
                 Some(node)

@@ -307,6 +307,7 @@ module CacheImpl {
     ensures self.Inv()
     ensures self.I() == old_self.I()[ref := BT.G.Node(
         old_self.I()[ref].pivotTable,
+        old_self.I()[ref].edgeTable,
         Some(old_self.I()[ref].children.value[slot as int := childref]),
         old_self.I()[ref].buckets[slot as int := bucket.bucket]
       )]
@@ -450,7 +451,7 @@ module CacheImpl {
       linear var newpbucket, newbuckets := BucketImpl.PartialFlush(
         lseq_peek(parent.buckets, slot as uint64), child.buckets, child.pivotTable);
 
-      newchild := Node(child.pivotTable, child.children, newbuckets);
+      newchild := Node(child.pivotTable, child.edgeTable, child.children, newbuckets);
       newparentBucket := newpbucket;
     }
 
