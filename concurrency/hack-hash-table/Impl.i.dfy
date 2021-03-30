@@ -256,15 +256,14 @@ module Impl refines Main {
           step := InsertDoneStep(slot_idx as nat);
         }
         case Full(KV(entry_key, value)) => {
+          new_kv := KV(entry_key, value);
           if entry_key == key {
             step := InsertUpdateStep(slot_idx as nat);
           } else {
             var should_go_before := shouldHashGoBefore(hash_idx, hash(entry_key), slot_idx);
-
             if !should_go_before {
               step := InsertSkipStep(slot_idx as nat);
             } else {
-              new_kv := KV(entry_key, value);
               step := InsertSwapStep(slot_idx as nat);
             }
           }
@@ -276,8 +275,7 @@ module Impl refines Main {
         r := easy_transform_step(r, r', step);
 
         linear var rmutex;
-        r, rmutex := ARS.split(r, 
-          ARS.output_stub(rid, output), 
+        r, rmutex := ARS.split(r, ARS.output_stub(rid, output), 
           oneRowResource(slot_idx as nat, Info(Full(kv), Free)));
         release(mt[slot_idx], Value(Full(kv), rmutex));
         break;
@@ -286,9 +284,15 @@ module Impl refines Main {
       var slot_idx' := getNextIndex(slot_idx);
 
       if slot_idx' == initial_hash_idx {
-        r' := R(oneRowTable(slot_idx as nat, Info(Full(kv), Free)), multiset{}, multiset{Stub(rid, output)});
-        // assert InsertFullHashTable(r, r2, slot_idx as nat);
-        assume false; // TODO: add unreachable step in the sharded state machine
+        // why do we have code here if this is supposed to be unreachable?
+        // shouldn't we just throw an exception?
+        r' := R(oneRowTable(slot_idx as nat, Info(Full(new_kv), Free)), multiset{}, multiset{Stub(rid, output)});
+        r := easy_transform_step(r, r', InsertFullHashTableStep(slot_idx as nat));
+
+        linear var rmutex;
+        r, rmutex := ARS.split(r, ARS.output_stub(rid, output), 
+          oneRowResource(slot_idx as nat, Info(Full(new_kv), Free)));
+        release(mt[slot_idx], Value(Full(new_kv), rmutex));
         break;
       }
 
@@ -369,7 +373,6 @@ module Impl refines Main {
       next_entry := next_entry';
       r := ARS.join(r, next_row_r);
 
-
       if slot_idx == hash_idx {
         assume false; // TODO: add unreachable step in the sharded state machine
         break;
@@ -380,14 +383,14 @@ module Impl refines Main {
 
     var slot_idx' := getNextIndex(slot_idx);
     output := MapIfc.RemoveOutput(true);
-    ghost var r2 := R (
+    ghost var r' := R(
       twoRowsTable(slot_idx as nat, Info(Empty, Free), slot_idx' as nat, Info(next_entry, Free)),
       multiset{},
       multiset{ Stub(rid, output) }
     );
 
     var step := RemoveDoneStep(slot_idx as nat);
-    r := easy_transform_step(r, r2, step);
+    r := easy_transform_step(r, r', step);
 
     linear var rmutex;
     ghost var left := R(

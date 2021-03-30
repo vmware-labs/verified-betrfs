@@ -347,6 +347,7 @@ module HTResource refines ApplicationResourceSpec {
       .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput)})
   }
 
+  // this transition should be impossible
   predicate InsertFullHashTable(s: R, s': R, pos: nat)
   {
     && !s.Fail?
