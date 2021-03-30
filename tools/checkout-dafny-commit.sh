@@ -22,7 +22,8 @@
 set -e
 set -x
 
-commit=betr
+# currently set to 'betr' branch
+commit=2002a5a4e898b099a08693ad08ad9cb1dab0488f
 if [ $1 ]; then
    commit=$1
 fi
