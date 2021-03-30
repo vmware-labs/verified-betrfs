@@ -329,6 +329,35 @@ module NodeImpl {
       assert self.Inv();
       assert self.I().buckets == BT.NodeInsertKeyValue(old_self.I(), key, msg).buckets;
     }
+
+    static method RestrictAndTranslateChild(shared parent: Node, shared child: Node, slot: uint64)
+    returns (linear newchild: Node)
+    requires parent.Inv()
+    requires child.Inv()
+    requires BT.WFNode(parent.I())
+    requires BT.WFNode(child.I())
+    requires 0 <= slot as int < Pivots.NumBuckets(parent.pivotTable)
+    requires BT.ParentKeysInChildRange(parent.I(), child.I(), slot as int)
+    ensures newchild.Inv()
+    ensures newchild.I() == BT.RestrictAndTranslateChild(parent.I(), child.I(), slot as int)
+    {
+      assume false;
+      newchild := EmptyNode();
+    }
+
+    static method RestrictAndTranslateNode(shared node: Node, from: Key, to: Key)
+    returns (linear node': Node)
+    requires node.Inv()
+    requires BT.WFNode(node.I())
+    requires Pivots.ContainsAllKeys(node.pivotTable)
+    requires node.children.Some?
+    requires BT.G.Keyspace.lt([], to)
+    ensures node'.Inv()
+    ensures node'.I() == BT.RestrictAndTranslateNode(node.I(), from, to)
+    {
+      assume false;
+      node' := EmptyNode();
+    }
   }
 
   function method FreeNode(linear node: Node) : ()
