@@ -958,15 +958,15 @@ module PivotBetreeSpec {
 
   function fromkey(k: Key, to: Key, from: Key) : Key 
   requires IsPrefix(to, k)
-  requires |from + k[|to|..]| <= 1024
   {
+    assume |from + k[|to|..]| <= 1024;
     from + k[|to|..]
   }
 
   // from = old, to = new
   function CloneMap(from: Key, to: Key) : imap<Key, Key>
   {
-    imap k | IsPrefix(to, k) && (|from + k[|to|..]| <= 1024) :: fromkey(k, to, from)
+    imap k | IsPrefix(to, k) :: fromkey(k, to, from)
   }
 
   function RestrictAndTranslateNode(node: Node, from: Key, to: Key) : (node': Node)
@@ -984,16 +984,22 @@ module PivotBetreeSpec {
     var fromnode := CutoffNode(node, from, fromendkey);
     assert WFNode(fromnode);
 
-    var (left, toend) := TranslatePivotPairInternal(KeyToElement(from), fromend, from, to);
-    var toendkey := if toend.Element? then (var k : Key := toend.e; Some(k)) else None;
-    assert left == KeyToElement(to);
-
     PrefixOfLcpIsPrefixOfKeys(KeyToElement(from), fromend, from);
     Pivots.Keyspace.reveal_IsStrictlySorted();
-    TranslatePivotPairRangeProperty(KeyToElement(from), fromend, from, to);
+
+    var toend := ShortestUncommonPrefix(to, |to|);
+    var toendkey := if toend.Element? then (var k : Key := toend.e; Some(k)) else None;
+
+    var e := TranslateElement(fromnode.pivotTable[|fromnode.pivotTable|-2], from, to);
+    assert Pivots.Keyspace.lt(e, toend) by {
+      if toend.Element? {
+        KeyWithPrefixLt(to, toend.e, e.e);
+      }
+    }
 
     var topivots := TranslatePivots(fromnode.pivotTable, from, to, toend, 0);
-    assert AllKeysInBetweenHasPrefix(topivots[0], Last(topivots), to);
+    assert topivots[0] == KeyToElement(to);
+    PrefixOfLcpIsPrefixOfKeys(topivots[0], Last(topivots), to);
 
     var toedges := TranslateEdges(fromnode.edgeTable, fromnode.pivotTable, 0);
     var tobuckets := EmptyBucketList(topivots);
@@ -1029,11 +1035,10 @@ module PivotBetreeSpec {
     assert WeightBucketList(lnode.buckets + tonode.buckets) == WeightBucketList(lnode.buckets);
 
     if Last(tonode.pivotTable).Max_Element? then (
-      var children := if lnode.children.None? then None else Some(lnode.children.value + tonode.children.value);
       Node(
         lnode.pivotTable[..|lnode.pivotTable|-1] + tonode.pivotTable,
         lnode.edgeTable + tonode.edgeTable,
-        children,
+        Some(lnode.children.value + tonode.children.value),
         lnode.buckets + tonode.buckets
       )
     ) else (
@@ -1053,11 +1058,10 @@ module PivotBetreeSpec {
         reveal_CutoffNodeAndKeepRight();
       }
 
-      var children := if lnode.children.None? then None else Some(lnode.children.value + tonode.children.value + rnode.children.value);
       Node(
         lnode.pivotTable[..|lnode.pivotTable|-1] + tonode.pivotTable + rnode.pivotTable[1..],
         lnode.edgeTable + tonode.edgeTable + rnode.edgeTable,
-        children,
+        Some(lnode.children.value + tonode.children.value + rnode.children.value),
         lnode.buckets + tonode.buckets + rnode.buckets
       )
     )

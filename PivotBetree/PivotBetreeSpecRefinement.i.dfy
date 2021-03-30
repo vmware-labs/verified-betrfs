@@ -1716,12 +1716,174 @@ module PivotBetreeSpecRefinement {
     }
   }
 
+  lemma RestrictAndTranslateNodeKeyRange(node: PNode, node': PNode, from: Key, to: Key)
+  requires P.WFNode(node)
+  requires ContainsAllKeys(node.pivotTable)
+  requires node.children.Some?
+  requires P.G.Keyspace.lt([], to)
+  requires node' == P.RestrictAndTranslateNode(node, from, to)
+  ensures forall k : Key | IsPrefix(to, k) :: BoundedKey(node'.pivotTable, k)
+  ensures AllKeysInBetweenHasPrefix(node'.pivotTable[0], Last(node'.pivotTable), to)
+  {
+    assert node'.pivotTable[0] == KeyToElement(to);
+    assert Last(node'.pivotTable) == ShortestUncommonPrefix(to, |to|);
+    PrefixOfLcpIsPrefixOfKeys(node'.pivotTable[0], Last(node'.pivotTable), to);
+
+    forall k : Key | IsPrefix(to, k)
+    ensures BoundedKey(node'.pivotTable, k)
+    {
+      reveal_IsPrefix();
+      P.G.Keyspace.EmptyLte(k[|to|..]);
+      PrefixLteProperties(to, to, k);
+      assert Keyspace.lte(node'.pivotTable[0], KeyToElement(k));
+
+      if Last(node'.pivotTable).Element? {
+        Keyspace.reveal_IsStrictlySorted();
+        assert !IsPrefix(to, Last(node'.pivotTable).e);
+        KeyWithPrefixLt(to, Last(node'.pivotTable).e, k);
+      }
+    }
+  }
+
+  lemma RestrictAndTranslateNodePreservesChildren(node: PNode, node': PNode, from: Key, to: Key, key: Key, key': Key)
+  requires P.InvNode(node)
+  requires ContainsAllKeys(node.pivotTable)
+  requires node.children.Some?
+  requires P.G.Keyspace.lt([], to)
+  requires node' == P.RestrictAndTranslateNode(node, from, to)
+  requires IsPrefix(to, key')
+  requires BoundedKey(node.pivotTable, key)
+  requires BoundedKey(node'.pivotTable, key')
+  requires key == from + key'[|to|..]
+  ensures IChildren(node)[key] == IChildren(node')[key']
+  {
+    var fromend := ShortestUncommonPrefix(from, |from|);
+    var fromendkey := if fromend.Element? then (var k : Key := fromend.e; Some(k)) else None;
+
+    ContainsAllKeysImpliesBoundedKey(node.pivotTable, from);
+    var fromnode := P.CutoffNode(node, from, fromendkey);
+
+    P.G.Keyspace.EmptyLte(key[|from|..]);
+    PrefixLteProperties(from, from, key);
+    if fromendkey.Some? {
+      KeyWithPrefixLt(from, fromendkey.value, key);
+    }
+
+    CutoffNodeAgree(node, fromnode, from, fromendkey, key);
+    assert IChildren(node)[key] == IChildren(fromnode)[key];
+
+    var toend := ShortestUncommonPrefix(to, |to|);
+    assert node'.pivotTable[0] == KeyToElement(to);
+    assert Last(node'.pivotTable) == toend;
+    assert PivotLcp(node'.pivotTable[0], Last(node'.pivotTable)) == to;
+
+    TranslatePivotsSameRoute(fromnode.pivotTable, node'.pivotTable, from, to, key, key');
+    TranslatePivotsEdgesPreserveTranslateKey(fromnode.pivotTable, fromnode.edgeTable,
+      node'.pivotTable, node'.edgeTable, from, to, Last(node'.pivotTable), key, key');
+  }
+
+  predicate IsNodeSlice(node: PNode, subnode: PNode, a: int, b: int)
+  {
+    && P.WFNode(node)
+    && P.WFNode(subnode)
+    && 0 <= a < b < |node.pivotTable|
+    && |subnode.buckets| <= |node.buckets|
+    && node.pivotTable[a..b+1] == subnode.pivotTable
+    && node.edgeTable[a..b] == subnode.edgeTable
+    && node.buckets[a..b] == subnode.buckets
+    && (node.children.Some? <==> subnode.children.Some?)
+    && (node.children.Some? ==> node.children.value[a..b] == subnode.children.value)
+  }
+
+  lemma NodeSliceProperty(node: PNode, subnode: PNode, key: Key, a: int, b: int)
+  requires IsNodeSlice(node, subnode, a, b)
+  requires BoundedKey(node.pivotTable, key)
+  requires BoundedKey(subnode.pivotTable, key)
+  ensures IBuffer(node)[key] == IBuffer(subnode)[key]
+  ensures node.children.Some? ==> IChildren(node)[key] == IChildren(subnode)[key]
+  {
+    var r := Route(node.pivotTable, key);
+    var r' := Route(subnode.pivotTable, key);
+    assert r' == r - a;
+    if node.children.Some? {
+      assert node.children.value[r] == subnode.children.value[r'];
+    }
+  }
+
   lemma RefinesValidClone(clone: P.NodeClone)
   requires P.ValidClone(clone)
+  requires forall i | 0 <= i < |P.CloneReads(clone)| :: P.InvNode(P.CloneReads(clone)[i].node)
   requires ReadOpsBucketsWellMarshalled(P.CloneReads(clone))
   ensures B.ValidClone(IClone(clone))
   {
-    assume false;
+    var c := IClone(clone);
+    PivotBetreeSpecWFNodes.ValidCloneWritesInvNodes(clone);
+    assert P.InvNode(P.CloneReads(clone)[0].node);
+
+    // oldroot buffer condition
+    forall k | k in c.new_to_old
+    ensures IMapsTo(c.oldroot.buffer, c.new_to_old[k], Update(NopDelta()))
+    ensures c.new_to_old[k] in c.oldroot.children
+    {
+      ContainsAllKeysImpliesBoundedKey(clone.oldroot.pivotTable, c.new_to_old[k]);
+      var r := Route(clone.oldroot.pivotTable, c.new_to_old[k]);
+      assert BucketNoKeyWithPrefix(clone.oldroot.buckets[r], clone.from);
+      assert IsPrefix(clone.from, c.new_to_old[k]) by { reveal_IsPrefix(); }
+      MapSeqs.key_sets_eq(clone.oldroot.buckets[r].keys, clone.oldroot.buckets[r].msgs);
+    }
+
+    // new root condition - keys affected by clone
+    ContainsAllKeysImpliesBoundedKey(clone.oldroot.pivotTable, clone.to);
+    var lnode := P.CutoffNodeAndKeepLeft(clone.oldroot, clone.to);
+    assert Last(lnode.pivotTable) == KeyToElement(clone.to);
+    assert |lnode.pivotTable| < |clone.newroot.pivotTable|;
+
+    var tonode := P.RestrictAndTranslateNode(clone.oldroot, clone.from, clone.to);
+    RestrictAndTranslateNodeKeyRange(clone.oldroot, tonode, clone.from, clone.to);
+
+    var tostart := |lnode.buckets|;
+    var toend := |lnode.buckets|+|tonode.buckets|;
+    assert IsNodeSlice(clone.newroot, tonode, tostart, toend);
+
+    forall k | k in c.new_to_old
+    ensures IMapsTo(c.newroot.buffer, k, Update(NopDelta()))
+    ensures IMapsTo(c.newroot.children, k, c.oldroot.children[c.new_to_old[k]])
+    {
+      RestrictAndTranslateNodePreservesChildren(clone.oldroot, tonode, clone.from, clone.to, c.new_to_old[k], k);
+      ContainsAllKeysImpliesBoundedKey(clone.newroot.pivotTable, k);
+      NodeSliceProperty(clone.newroot, tonode, k, tostart, toend);
+    }
+
+    // new root condition - keys not affected by clone
+    assert clone.newroot.pivotTable[..tostart] == lnode.pivotTable[..tostart];
+    assert clone.newroot.pivotTable[tostart] == KeyToElement(clone.to);
+    assert IsNodeSlice(clone.newroot, lnode, 0, tostart);
+
+    var rnode : PNode;
+    var toendkey : Key;
+    if Last(tonode.pivotTable).Element? {
+      toendkey := GetKey(tonode.pivotTable, |tonode.pivotTable|-1);
+      rnode := P.CutoffNodeAndKeepRight(clone.oldroot, toendkey);
+      assert IsNodeSlice(clone.newroot, rnode, toend, |clone.newroot.buckets|);
+    }
+
+    forall k : Key | k !in c.new_to_old
+    ensures IMapsAgreeOnKey(c.newroot.buffer, c.oldroot.buffer, k)
+    ensures IMapsAgreeOnKey(c.newroot.children, c.oldroot.children, k)
+    {
+      ContainsAllKeysImpliesBoundedKey(clone.oldroot.pivotTable, k);
+      ContainsAllKeysImpliesBoundedKey(clone.newroot.pivotTable, k);
+      var r := Route(clone.newroot.pivotTable, k);
+      assert r < tostart || r >= toend;
+
+      if r < tostart {
+        CutoffNodeAndKeepLeftAgree(clone.oldroot, lnode, clone.to, k);
+        NodeSliceProperty(clone.newroot, lnode, k, 0, tostart);
+      } else {
+        CutoffNodeAndKeepRightAgree(clone.oldroot, rnode, toendkey, k);
+        NodeSliceProperty(clone.newroot, rnode, k, toend, |clone.newroot.buckets|);
+      }
+    }
   }
 
   lemma RefinesValidBetreeStep(betreeStep: P.BetreeStep)
@@ -1748,7 +1910,7 @@ module PivotBetreeSpecRefinement {
         assert P.InvNode(P.BetreeStepReads(betreeStep)[2].node);
         RefinesValidMerge(fusion);
       }
-      case BetreeClone(clone) => RefinesValidClone(clone); // what's wrong?
+      case BetreeClone(clone) => RefinesValidClone(clone);
     }
   }
 
