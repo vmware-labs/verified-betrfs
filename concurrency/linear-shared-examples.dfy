@@ -1,7 +1,7 @@
-// 'ghost linear' and 'shared token' follow essentially the same rules as 'linear' and 'shared'
+// 'ghost linear' and 'ghost shared' follow essentially the same rules as 'linear' and 'shared'
 
 // token => 'ghost linear'
-// shared token => 'shared token'
+// shared token => 'ghost shared'
 
 method m(token x: int)
 returns (token x': int)
