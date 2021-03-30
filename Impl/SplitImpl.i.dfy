@@ -301,8 +301,8 @@ module SplitImpl {
     } else {
       ghost var fused_parent := s.cache.I()[parentref];
       ghost var fused_child := s.cache.I()[childref]; 
-      var fparent_pivots, fparent_children := s.cache.GetNodeInfo(parentref);
-      var fchild_pivots, _ := s.cache.GetNodeInfo(childref);
+      var fparent_pivots, _, fparent_children := s.cache.GetNodeInfo(parentref);
+      var fchild_pivots, _, _ := s.cache.GetNodeInfo(childref);
 
       var childlbound := KeyspaceImpl.cmp(fchild_pivots[0], fparent_pivots[slot]);
       var childubound := KeyspaceImpl.cmp(fparent_pivots[slot+1], 

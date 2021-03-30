@@ -82,7 +82,7 @@ module FlushPolicyImpl {
         action := FlushPolicyModel.ActionEvict;
       }
     } else {
-      var _, nodePrevChildren := s.cache.GetNodeInfo(stack[i-1]);
+      var _, _, nodePrevChildren := s.cache.GetNodeInfo(stack[i-1]);
       if |nodePrevChildren.value| as uint64 < MaxNumChildrenUint64() {
         var bucketslen := s.cache.GetNodeBucketsLen(stack[i]);
         if bucketslen == 1 {
@@ -116,7 +116,7 @@ module FlushPolicyImpl {
       action := FlushPolicyModel.ActionFail;
     } else {
       var ref := stack[|stack| as uint64 - 1];
-      var _, children := s.cache.GetNodeInfo(ref);
+      var _, _, children := s.cache.GetNodeInfo(ref);
       var bucketslen := s.cache.GetNodeBucketsLen(ref);
 
       if children.None? || bucketslen == MaxNumChildrenUint64() {
@@ -180,14 +180,14 @@ module FlushPolicyImpl {
         PageInNodeReq(inout s, io, ref);
       }
       case ActionSplit(parentref, slot) => {
-        var _, parent_children := s.cache.GetNodeInfo(parentref);
+        var _, _, parent_children := s.cache.GetNodeInfo(parentref);
         split(inout s, parentref, parent_children.value[slot], slot);
       }
       case ActionRepivot(ref) => {
         repivotLeaf(inout s, ref);
       }
       case ActionFlush(parentref, slot) => {
-        var _, parent_children := s.cache.GetNodeInfo(parentref);
+        var _, _, parent_children := s.cache.GetNodeInfo(parentref);
         var childref := parent_children.value[slot];
         flush(inout s, parentref, slot, childref);
       }

@@ -43,17 +43,20 @@ module LeafModel {
       if !BoundedBucketList(node.buckets, node.pivotTable) then (
         s
       ) else (
-        var pivot := getMiddleKey(node.buckets[0]);
-        var pivots := insert(InitPivotTable(), KeyToElement(pivot), 1);
-
-        var buckets' := [
-            SplitBucketLeft(node.buckets[0], pivot),
-            SplitBucketRight(node.buckets[0], pivot)
-        ];
-        var newnode := BT.G.Node(pivots, None, buckets');
-        var s1 := writeBookkeeping(s, ref, None);
-        var s' := s1.(cache := s1.cache[ref := newnode]);
-        s'
+        if node.edgeTable[0].Some? then (
+          s
+        ) else (
+          var pivot := getMiddleKey(node.buckets[0]);
+          var pivots := insert(InitPivotTable(), KeyToElement(pivot), 1);
+          var buckets' := [
+              SplitBucketLeft(node.buckets[0], pivot),
+              SplitBucketRight(node.buckets[0], pivot)
+          ];
+          var newnode := BT.G.Node(pivots, [None, None], None, buckets');
+          var s1 := writeBookkeeping(s, ref, None);
+          var s' := s1.(cache := s1.cache[ref := newnode]);
+          s'
+        )
       )
     )
   }
@@ -92,6 +95,11 @@ module LeafModel {
       return;
     }
 
+    if node.edgeTable[0].Some? {
+      assert noop(s, s);
+      return;
+    }
+
     var pivot := getMiddleKey(node.buckets[0]);
     var pivots := insert(InitPivotTable(), KeyToElement(pivot), 1);
     assert Last(InitPivotTable()) == Keyspace.Max_Element;
@@ -105,7 +113,7 @@ module LeafModel {
 
     //reveal_WFBucket();
 
-    var newnode := BT.G.Node(pivots, None, buckets');
+    var newnode := BT.G.Node(pivots, [None, None], None, buckets');
     var s1 := writeWithNode(s, ref, newnode);
     reveal_writeBookkeeping();
 
@@ -116,6 +124,7 @@ module LeafModel {
     WeightBucketList2(
         SplitBucketLeft(node.buckets[0], pivot),
         SplitBucketRight(node.buckets[0], pivot));*/
+
     PivotBetreeSpecWFNodes.WFApplyRepivot(
         BT.Repivot(ref, node, pivots, pivot));
 

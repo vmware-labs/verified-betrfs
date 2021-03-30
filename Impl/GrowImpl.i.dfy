@@ -57,7 +57,7 @@ module GrowImpl {
     }
 
     if !nop {
-      var oldpivots, oldchildren := s.cache.GetNodeInfo(root);
+      var oldpivots, _, oldchildren := s.cache.GetNodeInfo(root);
       var containsall := ComputeContainsAllKeys(oldpivots);
       if !containsall {
         print "giving up; grow can't run because root node is incorrect";

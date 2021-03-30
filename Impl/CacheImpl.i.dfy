@@ -33,6 +33,7 @@ module CacheImpl {
 
   import BT = PivotBetreeSpec`Internal
   import Pivots = BoundedPivotsLib
+  import opened TranslationLib
   import BucketsLib
 
   import opened BGI = BucketGeneratorImpl
@@ -357,14 +358,16 @@ module CacheImpl {
     /// Temporary node borrow methods
 
     shared method GetNodeInfo(ref: BT.G.Reference)
-    returns (pivots: Pivots.PivotTable, children: Option<seq<BT.G.Reference>>)
+    returns (pivots: Pivots.PivotTable, edges: EdgeTable, children: Option<seq<BT.G.Reference>>)
     requires Inv()
     requires ptr(ref).Some?
     ensures pivots == I()[ref].pivotTable
+    ensures edges == I()[ref].edgeTable
     ensures children == I()[ref].children
     {
       shared var node := Get(ref);
       children := node.children;
+      edges := node.edgeTable;
       pivots := node.pivotTable;
     }
 

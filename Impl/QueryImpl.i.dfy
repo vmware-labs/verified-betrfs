@@ -78,7 +78,7 @@ module QueryImpl {
         ghost var node := s.cache.I()[ref];
 
         assert s.cache.I() == old(s.cache.I());
-        var pivots, children := s.cache.GetNodeInfo(ref);
+        var pivots, _, children := s.cache.GetNodeInfo(ref);
 
         var boundedkey := ComputeBoundedKey(pivots, key);
         if !boundedkey {

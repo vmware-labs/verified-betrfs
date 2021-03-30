@@ -38,20 +38,6 @@ module TranslationLib {
     && (forall i | 0 <= i < |et| && et[i].Some? :: NonEmptyLcp(pt, i))
   }
 
-  function EmptyEdgesFromPivots(pt: PivotTable) : (et: EdgeTable)
-  requires WFPivots(pt)
-  ensures forall i | 0 <= i < |et| :: et[i].None?
-  ensures WFEdges(et, pt)
-  decreases |pt|
-  {
-    if |pt| == 2 then (
-      [None]
-    ) else (
-      WFPivotsRemoved(pt, 0);
-      [ None ] + EmptyEdgesFromPivots(remove(pt, 0))
-    )
-  }
-
   predicate TranslationPreserved(pt: PivotTable, et: EdgeTable, pt': PivotTable, et': EdgeTable)
   requires WFPivots(pt)
   requires WFPivots(pt')

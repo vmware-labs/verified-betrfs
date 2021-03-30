@@ -199,7 +199,7 @@ module SuccImpl {
 
     var incache := s.cache.InCache(ref);
     if incache {
-      var pivots, children := s.cache.GetNodeInfo(ref);
+      var pivots, _, children := s.cache.GetNodeInfo(ref);
       var boundedkey := ComputeBoundedKey(pivots, key);
       if boundedkey {
         res := getPathInternal(inout s, io, key, acc, g, start, upTo,

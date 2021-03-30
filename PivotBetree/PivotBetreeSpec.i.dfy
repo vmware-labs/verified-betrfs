@@ -906,7 +906,7 @@ module PivotBetreeSpec {
     && BoundedBucketList(r.leaf.buckets, r.leaf.pivotTable)
     && |r.leaf.buckets| == 1
     && ContainsAllKeys(r.pivots)
-    && (forall i | 0 <= i < |r.leaf.edgeTable| :: r.leaf.edgeTable[i].None?)
+    && r.leaf.edgeTable[0].None?
     && r.leaf.children.None?
     && r.pivots == insert(InitPivotTable(), KeyToElement(r.pivot), 1)
   }
@@ -934,9 +934,10 @@ module PivotBetreeSpec {
   requires ValidRepivot(r)
   {
     PivotsHasAllKeys(r.pivots);
+    assert WFEdges([None, None], r.pivots);
     Node(
       r.pivots,
-      EmptyEdgesFromPivots(r.pivots),
+      [ None, None ],
       None,
       [
         SplitBucketLeft(r.leaf.buckets[0], r.pivot),
