@@ -163,7 +163,7 @@ module Multisets {
       add(a, Fold(zero, add, inv, s - multiset{a}))
   }
 
-  function FoldSimple<A>(zero: A, add: (A, A) -> A, s: multiset<A>) : (result: A)
+  function FoldSimple<A(!new)>(zero: A, add: (A, A) -> A, s: multiset<A>) : (result: A)
     ensures |s| == 0 ==> result == zero
   {
     Fold(zero, add, x => true, s)
@@ -177,7 +177,7 @@ module Multisets {
     reveal_Fold();
   }
   
-  lemma FoldSimpleSingleton<A>(zero: A, add: (A, A) -> A, x: A)
+  lemma FoldSimpleSingleton<A(!new)>(zero: A, add: (A, A) -> A, x: A)
     ensures FoldSimple(zero, add, multiset{x}) == add(x, zero)
   {
     reveal_Fold();
@@ -219,7 +219,7 @@ module Multisets {
     IsAssociative(add, x => true)
   }
 
-  lemma FoldAdditive<A>(zero: A, add: (A, A) ~> A, inv: A -> bool, s1: multiset<A>, s2: multiset<A>)
+  lemma FoldAdditive<A(!new)>(zero: A, add: (A, A) ~> A, inv: A -> bool, s1: multiset<A>, s2: multiset<A>)
     requires Foldable(zero, add, inv)
     requires forall x | x in s1 :: inv(x)
     requires forall x | x in s2 :: inv(x)
@@ -291,7 +291,7 @@ module Multisets {
     }
   }
 
-  lemma FoldSimpleAdditive<A>(zero: A, add: (A, A) -> A, s1: multiset<A>, s2: multiset<A>)
+  lemma FoldSimpleAdditive<A(!new)>(zero: A, add: (A, A) -> A, s1: multiset<A>, s2: multiset<A>)
     requires IsCommutativeSimple(add)
     requires IsAssociativeSimple(add)
     requires IsIdentitySimple(add, zero)
@@ -329,7 +329,7 @@ module Multisets {
     }
   }
 
-  lemma FoldSeq<A>(zero: A, add: (A, A) -> A, s: seq<A>)
+  lemma FoldSeq<A(!new)>(zero: A, add: (A, A) -> A, s: seq<A>)
     requires IsIdentitySimple(add, zero);
     requires IsCommutativeSimple(add);
     requires IsAssociativeSimple(add);
