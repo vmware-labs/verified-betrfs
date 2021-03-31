@@ -169,38 +169,14 @@ module Impl refines Main {
 
       var slot_idx' := getNextIndex(slot_idx);
 
+      if slot_idx' == hash_idx {
+        QueryUnreachableState(r, slot_idx as nat);
+        break;
+      }
+
       linear var next_row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx']);
       linear var Value(next_entry, next_row_r) := next_row;
       r := ARS.join(r, next_row_r);
-
-      if slot_idx' == hash_idx {
-        output := MapIfc.QueryOutput(NotFound);
-
-        r' := R(
-          twoRowsTable(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Free)),
-          multiset{},
-          multiset{ Stub(rid, output) });
-
-        // Take everything apart exactly as in QueryDone/QueryNotFound above
-        step := QueryFullHashTableStep(slot_idx as nat);
-        r := easy_transform_step(r, r', step);
-
-        linear var rmutex;
-        ghost var left := R(
-          oneRowTable(slot_idx' as nat, Info(next_entry, Free)),
-          multiset{},
-          multiset{ Stub(rid, output) });
-        ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
-
-        r, rmutex := ARS.split(r, left, right);
-        release(mt[slot_idx], Value(entry, rmutex));
-
-        r, rmutex := ARS.split(r, 
-          ARS.output_stub(rid, output), 
-          oneRowResource(slot_idx' as nat, Info(next_entry, Free)));
-        release(mt[slot_idx'], Value(next_entry, rmutex));
-        break;
-      }
 
       r' := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Querying(rid, key)));
       r := easy_transform_step(r, r', step);
@@ -285,15 +261,7 @@ module Impl refines Main {
       var slot_idx' := getNextIndex(slot_idx);
 
       if slot_idx' == initial_hash_idx {
-        // why do we have code here if this is supposed to be unreachable?
-        // shouldn't we just throw an exception?
-        r' := R(oneRowTable(slot_idx as nat, Info(Full(new_kv), Free)), multiset{}, multiset{Stub(rid, output)});
-        r := easy_transform_step(r, r', InsertFullHashTableStep(slot_idx as nat));
-
-        linear var rmutex;
-        r, rmutex := ARS.split(r, ARS.output_stub(rid, output), 
-          oneRowResource(slot_idx as nat, Info(Full(new_kv), Free)));
-        release(mt[slot_idx], Value(Full(new_kv), rmutex));
+        InsertUnreachableState(r, slot_idx as nat);
         break;
       }
 
@@ -338,6 +306,7 @@ module Impl refines Main {
     requires r == twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key)), NextPos(slot_idx as nat), Info(next_entry, Free));
     requires 0 <= slot_idx < FixedSizeImpl()
     requires 0 <= hash_idx < FixedSizeImpl()
+    requires hash(inital_key) == hash_idx
     ensures out_r == ARS.output_stub(rid, output)
   {
     var slot_idx := slot_idx;
@@ -353,6 +322,11 @@ module Impl refines Main {
 
       if next_entry.Empty? || hash(next_entry.kv.key) == slot_idx' {
         assert DoneTidying(r, slot_idx as nat);
+        break;
+      }
+  
+      if slot_idx' == hash_idx {
+        RemoveTidyUnreachableState(r, slot_idx as nat);
         break;
       }
 
@@ -373,11 +347,6 @@ module Impl refines Main {
       linear var Value(next_entry', next_row_r) := next_row;
       next_entry := next_entry';
       r := ARS.join(r, next_row_r);
-
-      if slot_idx == hash_idx {
-        assume false; // TODO: add unreachable step in the sharded state machine
-        break;
-      }
     }
 
     assert DoneTidying(r, slot_idx as nat);
@@ -446,6 +415,8 @@ module Impl refines Main {
         && KnowRowIsFree(r, NextPos(slot_idx as nat)))
       decreases DistanceToSlot(slot_idx, hash_idx)
     {
+      var slot_idx' := getNextIndex(slot_idx);
+
       match entry {
         case Empty => {
           step := RemoveNotFoundStep(slot_idx as nat);
@@ -465,11 +436,15 @@ module Impl refines Main {
         }
       }
 
+      if slot_idx' == hash_idx {
+        RemoveUnreachableState(r, slot_idx as nat);
+        break;
+      }
+
       if step.RemoveNotFoundStep? {
         break;
       }
 
-      var slot_idx' := getNextIndex(slot_idx);
       linear var next_row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx']);
       linear var Value(next_entry, next_row_r) := next_row;
       r := ARS.join(r, next_row_r);
@@ -491,11 +466,6 @@ module Impl refines Main {
 
         slot_idx := slot_idx';
         entry := next_entry;
-      }
-
-      if slot_idx == hash_idx {
-        assume false; // TODO: add unreachable step in the sharded state machine
-        break;
       }
     }
 

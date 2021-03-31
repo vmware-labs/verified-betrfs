@@ -213,7 +213,6 @@ module HTResource refines ApplicationResourceSpec {
     | InsertSwapStep(pos: nat)
     | InsertDoneStep(pos: nat)
     | InsertUpdateStep(pos: nat)
-    | InsertFullHashTableStep(pos: nat)
 
     | ProcessRemoveTicketStep(insert_ticket: Ticket)
     | RemoveSkipStep(pos: nat)
@@ -226,10 +225,6 @@ module HTResource refines ApplicationResourceSpec {
     | QuerySkipStep(pos: nat)
     | QueryDoneStep(pos: nat)
     | QueryNotFoundStep(pos: nat)
-    // never happens, but give impl an escape route so we can defer the proof
-    // that it doesn't happen to a higher lever where we have a necessary
-    // invariant
-    | QueryFullHashTableStep(pos: nat)
 
   predicate ProcessInsertTicket(s: R, s': R, insert_ticket: Ticket)
   {
@@ -610,7 +605,6 @@ module HTResource refines ApplicationResourceSpec {
       case InsertSwapStep(pos) => InsertSwap(s, s', pos)
       case InsertDoneStep(pos) => InsertDone(s, s', pos)
       case InsertUpdateStep(pos) => InsertUpdate(s, s', pos)
-      case InsertFullHashTableStep(pos) => InsertFullHashTable(s, s', pos)
 
       case ProcessRemoveTicketStep(remove_ticket) => ProcessRemoveTicket(s, s', remove_ticket)
       case RemoveSkipStep(pos) => RemoveSkip(s, s', pos)
@@ -623,7 +617,6 @@ module HTResource refines ApplicationResourceSpec {
       case QuerySkipStep(pos) => QuerySkip(s, s', pos)
       case QueryDoneStep(pos) => QueryDone(s, s', pos)
       case QueryNotFoundStep(pos) => QueryNotFound(s, s', pos)
-      case QueryFullHashTableStep(pos) => QueryFullHashTable(s, s', pos)
     }
   }
 
@@ -678,6 +671,43 @@ module HTResource refines ApplicationResourceSpec {
   ensures Valid(t)
   {
   }
+
+  // TODO: the preconditions of the following lemmas might not be sufficient to prove false
+  lemma QueryUnreachableState(s: R, pos: nat)
+  requires Valid(s)
+  requires 0 <= pos < FixedSize()
+  requires s.table[pos].Some?
+  requires var state := s.table[pos].value.state;
+    && state.Querying?
+    && NextPos(pos) == hash(state.key) as nat
+  ensures false
+
+  lemma InsertUnreachableState(s: R, pos: nat)
+  requires Valid(s)
+  requires 0 <= pos < FixedSize()
+  requires s.table[pos].Some?
+  requires var state := s.table[pos].value.state;
+    && state.Inserting?
+    && NextPos(pos) == hash(state.inital_key) as nat
+  ensures false
+
+  lemma RemoveTidyUnreachableState(s: R, pos: nat)
+  requires Valid(s)
+  requires 0 <= pos < FixedSize()
+  requires s.table[pos].Some?
+  requires var state := s.table[pos].value.state;
+    && state.RemoveTidying?
+    && NextPos(pos) == hash(state.inital_key) as nat
+  ensures false
+
+  lemma RemoveUnreachableState(s: R, pos: nat)
+  requires Valid(s)
+  requires 0 <= pos < FixedSize()
+  requires s.table[pos].Some?
+  requires var state := s.table[pos].value.state;
+    && state.Removing?
+    && NextPos(pos) == hash(state.key) as nat
+  ensures false
 
   method easy_transform(
       linear b: R,
