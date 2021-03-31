@@ -5,4 +5,5 @@
 
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-$DIR/../.dafny/bin/dafny "$@"
+set -x
+$DIR/../.dafny/bin/dafny "$@" /trace /induction:1 /noNLarith
