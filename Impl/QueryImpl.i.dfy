@@ -36,15 +36,17 @@ module QueryImpl {
   import opened Bounds
   import opened BucketsLib
   import opened BoundedPivotsLib
+  import opened TranslationLib
   import opened DiskOpModel
 
-  import PBS = PivotBetreeSpec`Internal
+  // import PBS = PivotBetreeSpec`Internal
   import opened InterpretationDiskOps
   import opened ViewOp
 
   // == query ==
 
-  method queryIterate(linear inout s: ImplVariables, key: Key, msg: Message, ref: BT.G.Reference, io: DiskIOHandler, counter: uint64, ghost lookup: seq<BT.G.ReadOp>)
+  method queryIterate(linear inout s: ImplVariables, key: Key, msg: Message,
+    ref: BT.G.Reference, io: DiskIOHandler, counter: uint64, ghost lookup: seq<BT.Layer>)
   returns (res: Option<Value>)
 
   requires old_s.Inv()
@@ -76,10 +78,9 @@ module QueryImpl {
         res := None;
       } else {
         ghost var node := s.cache.I()[ref];
-
         assert s.cache.I() == old(s.cache.I());
-        var pivots, _, children := s.cache.GetNodeInfo(ref);
 
+        var pivots, edges, children := s.cache.GetNodeInfo(ref);
         var boundedkey := ComputeBoundedKey(pivots, key);
         if !boundedkey {
           res := None;
@@ -92,48 +93,62 @@ module QueryImpl {
 
           var r := Pivots.ComputeRoute(pivots, key);
           ghost var bucket := node.buckets[r];
-
           var kmtMsg := s.cache.GetMessage(ref, r, key);
           var newmsg := if kmtMsg.Some? then ValueMessage.Merge(msg, kmtMsg.value) else msg;
 
-          ghost var newlookup := new_lookup(lookup, ref, node);
+          ghost var newlookup := new_lookup(lookup, ref, node, key);
           AugmentLookup(newlookup, lookup, ref, node, key, s.cache.I(), s.ephemeralIndirectionTable.graph);
 
-          assert PBS.LookupVisitsWellMarshalledBuckets(newlookup, key) ==> BucketWellMarshalled(bucket);
-          assert PBS.LookupVisitsWellMarshalledBuckets(newlookup, key) ==> PBS.LookupVisitsWellMarshalledBuckets(lookup, key)
-          by {
-            reveal_new_lookup();
-          }
+          assume BT.LookupVisitsWellMarshalledBuckets(newlookup) ==> BucketWellMarshalled(bucket);
+          assume BT.LookupVisitsWellMarshalledBuckets(newlookup) ==> BT.LookupVisitsWellMarshalledBuckets(lookup);
+          // by {
+          //   reveal_new_lookup();
+          // }
 
-          if (newmsg.Define?) {
+          // assert BT.LookupVisitsWellMarshalledBuckets(newlookup) ==> BucketWellMarshalled(bucket);
+          // assert BT.LookupVisitsWellMarshalledBuckets(newlookup) ==> BT.LookupVisitsWellMarshalledBuckets(lookup)
+          // by {
+          //   reveal_new_lookup();
+          // }
+
+          assert |newlookup| > 0;
+          var querykey := newlookup[0].currentKey;
+
+          // might be better to divide into smaller cases 
+          // taking a long time to verify
+
+          if (newmsg.Define?) {  
             res := Some(newmsg.value);
 
-            assert BT.ValidQuery(BT.LookupQuery(key, res.value, newlookup));
+            assert BT.ValidQuery(BT.LookupQuery(querykey, res.value, newlookup));
             assert BBC.BetreeMove(old_s.I(), s.I(),
               IDiskOp(diskOp(IIO(io))).bdop,
-              AdvanceOp(UI.GetOp(key, res.value), false),
-              BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
+              AdvanceOp(UI.GetOp(querykey, res.value), false),
+              BT.BetreeQuery(BT.LookupQuery(querykey, res.value, newlookup)));
             assert IOModel.stepsBetree(old_s.I(), s.I(),
-              AdvanceOp(UI.GetOp(key, res.value), false),
-              BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
+              AdvanceOp(UI.GetOp(querykey, res.value), false),
+              BT.BetreeQuery(BT.LookupQuery(querykey, res.value, newlookup)));
           } else {
-            if children.Some? {
-              BookkeepingModel.lemmaChildInGraph(s.I(), ref, children.value[r]);
-              res := queryIterate(inout s, key, newmsg, children.value[r], io, counter - 1, newlookup);
-            } else {
-              res := Some(ValueType.DefaultValue());
-              assert BC.OpTransaction(old_s.I(), s.I(),
-                PBS.BetreeStepOps(BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup))));
+            assume false;
 
-              assert BBC.BetreeMove(old_s.I(), s.I(),
-                IDiskOp(diskOp( IIO(io) )).bdop,
-                AdvanceOp(UI.GetOp(key, res.value), false),
-                BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
+            // if children.Some? {
+            //   BookkeepingModel.lemmaChildInGraph(s.I(), ref, children.value[r]);
+            //   var newkey := ComputeTranslateKey(pivots, edges, key, r);
+            //   res := queryIterate(inout s, newkey, newmsg, children.value[r], io, counter - 1, newlookup);
+            // } else {
+            //   res := Some(ValueType.DefaultValue());
+            //   assert BC.OpTransaction(old_s.I(), s.I(),
+            //     BT.BetreeStepOps(BT.BetreeQuery(BT.LookupQuery(querykey, res.value, newlookup))));
 
-              assert IOModel.stepsBetree(old_s.I(), s.I(),
-                AdvanceOp(UI.GetOp(key, res.value), false),
-                BT.BetreeQuery(BT.LookupQuery(key, res.value, newlookup)));
-            }
+            //   assert BBC.BetreeMove(old_s.I(), s.I(),
+            //     IDiskOp(diskOp( IIO(io) )).bdop,
+            //     AdvanceOp(UI.GetOp(querykey, res.value), false),
+            //     BT.BetreeQuery(BT.LookupQuery(querykey, res.value, newlookup)));
+
+            //   assert IOModel.stepsBetree(old_s.I(), s.I(),
+            //     AdvanceOp(UI.GetOp(querykey, res.value), false),
+            //     BT.BetreeQuery(BT.LookupQuery(querykey, res.value, newlookup)));
+            // }
           }
         }
       }

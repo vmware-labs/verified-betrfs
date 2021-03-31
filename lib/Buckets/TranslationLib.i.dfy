@@ -485,6 +485,24 @@ module TranslationLib {
     ApplyPrefixSet(pset, key)
   }
 
+  method ComputeTranslateKey(pt: PivotTable, et: EdgeTable, key: Key, r: uint64) returns (k: Key)
+  requires WFPivots(pt)
+  requires BoundedKey(pt, key)
+  requires WFEdges(et, pt)
+  requires r as int == Route(pt, key)
+  ensures k == TranslateKey(pt, et, key)
+  {
+    assume false;
+    k := [];
+    // var r := Route(pt, key);
+    // if et[r].None? then
+    //   None
+    // else
+    //   var prefix := PivotLcp(pt[r], pt[r+1]);
+    //   PrefixOfLcpIsPrefixOfKey(pt[r], pt[r+1], prefix, key);
+    //   Some(PrefixSet(prefix, et[r].value))
+  }
+
   function ApplyPrefixSet(pset: Option<PrefixSet>, key: Key) : Key
   requires pset.Some? ==> IsPrefix(pset.value.prefix, key)
   {

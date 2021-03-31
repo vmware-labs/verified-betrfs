@@ -83,6 +83,7 @@ module QueryModel {
   ensures |lookup'| > 0 && BT.WFLookupForKey(lookup', lookup'[0].currentKey)
   ensures Last(lookup').readOp.node == node
   ensures BT.InterpretLookup(lookup') == Messages.Merge(BT.InterpretLookup(lookup), BT.NodeLookup(node, key))
+  ensures forall i | 0 <= i < |lookup'| :: BT.WFNode(lookup'[i].readOp.node)
   ensures forall i | 0 <= i < |lookup'| :: lookup'[i].readOp.ref in graph
   ensures forall i | 0 <= i < |lookup'| :: MapsTo(cache, lookup'[i].readOp.ref, lookup'[i].readOp.node)
   ensures forall i | 0 <= i < |lookup'| :: BoundedKey(lookup'[i].readOp.node.pivotTable, lookup'[i].currentKey)
