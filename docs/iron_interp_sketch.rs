@@ -46,7 +46,7 @@ fn do_stuff_with_seqs<T>() -> {
   assert iter == iter.collect();
 }
 
-fn mutate_vec<T>(v: Vec<T>)
+fn mutate_vec(v: Vec<u8>)
 requires v.len() == 2
 {
   // Make a 'ghost' copy
@@ -103,7 +103,7 @@ impl List<T> {
     self.list = ListImpl::Cons(new_head, self.list);
   }
 
-  // List implements .len() which is a feature of .seq
+  // List implements .len() which is a feature of seq
   // so we require that it have the same behavior.
 
   // We add an additional 'requires' clause, though, which must
