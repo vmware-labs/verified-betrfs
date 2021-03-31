@@ -460,7 +460,7 @@ module BucketGeneratorModel {
     }
   }
 
-  lemma GenFromBucketStackWithLowerBoundYieldsComposeSeq(buckets: seq<Bucket>, start: UI.RangeStart)
+  lemma {:induction true} GenFromBucketStackWithLowerBoundYieldsComposeSeq(buckets: seq<Bucket>, start: UI.RangeStart)
   requires |buckets| >= 1
   requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
   requires BucketListWellMarshalled(buckets)

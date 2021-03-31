@@ -205,7 +205,7 @@ module BucketMaps {
     }
   }
 
-  lemma SortedSeqOfKeyValueMapHasSortedKeys(m: map<Key, Value>)
+  lemma {:induction true} SortedSeqOfKeyValueMapHasSortedKeys(m: map<Key, Value>)
   ensures var s := SortedSeqOfKeyValueMap(m);
       forall i, j | 0 <= i < j < |s| :: UnboundedKeyspace.lt(s[i].key, s[j].key)
   {
