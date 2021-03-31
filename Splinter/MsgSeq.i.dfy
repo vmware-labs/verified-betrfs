@@ -17,7 +17,7 @@ module MsgSeqMod {
     function Extend(m: Message) : MsgSeq
     {
       MsgSeq(
-        map k | k in Keys + { seqEnd } :: if k == seqEnd then m else msgs[k],
+        map k | k in msgs.Keys + { seqEnd } :: if k == seqEnd then m else msgs[k],
         seqStart,
         seqEnd+1)
     }
