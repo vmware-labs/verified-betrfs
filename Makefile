@@ -195,6 +195,8 @@ build/lib/DataStructures/LinearDList.i.verchk: DAFNY_FLAGS=/noNLarith /proverOpt
 build/lib/Checksums/%.i.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/Checksums/Nonlinear.i.verchk: DAFNY_FLAGS=
 
+DAFNY_FLAGS += /induction:1
+
 ##############################################################################
 # .okay: Dafny file-level verification, no time limit,
 # verifies in dependency order.
