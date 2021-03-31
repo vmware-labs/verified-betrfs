@@ -1,5 +1,6 @@
 include "Allocation.i.dfy"
 include "../lib/Base/Option.s.dfy"
+include "CacheIfc.i.dfy"
 
 module MarshalledSnapshot {
   // A snapshot of a data structure, spread across a linked list of CUs on the disk.
@@ -31,51 +32,73 @@ module MarshalledSnapshot {
 // representation, then emit them once we've frozen a given view.
 
 module AllocationTableMachineMod refines MarshalledSnapshot {
-  type AllocationTable = multiset<AU>
+  import opened Options
+  import CacheIfc
+
+  // At this layer we're just going to allocate at CU granularity.
+  //
+  // Down lower, the real data structure will track only AUs, with an "open AU"
+  // in the in-memory data structure that can give out CUs sequentially.
+  // TODO this may be a challenge because we're going to want to show
+  // allocations are "tight" (so we don't leak), but CUs are going to look
+  // "looser" once we're tracking AUs.
+  type AllocationTable = multiset<CU>
 
   datatype Variables = Variables(
     table: AllocationTable 
   )
+  {
+    // Standard interface for coordinating disjointness among allocations of
+    // different subsystems.
+    function Allocated() : multiset<CU> { table }
+  }
 
   datatype Step =
-    | AddRefStep(au: AU)
-    | DropRefStep(au: AU)
+    | AddRefStep(cu: CU)
+    | DropRefStep(cu: CU)
 
-  predicate IsFree(s:Variables, au: AU) {
-    au !in s.table
+  predicate IsFree(s:Variables, cu: CU) {
+    cu !in s.table
   }
 
-  predicate AddRef(s: Variables, s': Variables, au: AU) {
-    s'.table == s.table + multiset{au}
+  predicate AddRef(s: Variables, s': Variables, cu: CU) {
+    s'.table == s.table + multiset{cu}
   }
 
-  predicate DropRef(s: Variables, s': Variables, au: AU) {
-    && !IsFree(s, au)
-    && s'.table == s.table - multiset{au}
+  predicate DropRef(s: Variables, s': Variables, cu: CU) {
+    && !IsFree(s, cu)
+    && s'.table == s.table - multiset{cu}
   }
 
   predicate NextStep(s: Variables, s': Variables, step: Step) {
     match step {
-      case AddRefStep(au) => AddRef(s, s', au)
-      case DropRefStep(au) => DropRef(s, s', au)
+      case AddRefStep(cu) => AddRef(s, s', cu)
+      case DropRefStep(cu) => DropRef(s, s', cu)
     }
   }
 
   predicate Next(s: Variables, s': Variables) {
     exists step :: && NextStep(s, s', step)
   }
-}
-
-module AllocationTableMod refines MarshalledSnapshot {
-  import opened Options
-  import AllocationTableMachineMod
 
   datatype Superblock = Superblock(snapshot: SnapshotSuperblock)
 
-  function parse(b: seq<byte>) : Option<AllocationTableMachineMod.AllocationTable>
-    // TODO
+  predicate DurableAt(s: Variables, cache: CacheIfc.Variables, sb: Superblock)
+  {
+    // TODO kind of dirty peeking into the entire cache here
+    // ValidSnapshot(cache.dv, sb.snapshot)
+    true
+  }
 
-  function I(dv: DiskView, sb: Superblock) : Option<AllocationTableMachineMod.AllocationTable> {
+  function parse(b: seq<byte>) : Option<AllocationTable>
+    // TODO
+}
+
+module AllocationTableMod {
+  import opened Options
+  import opened AllocationTableMachineMod
+
+  function I(dv: AllocationMod.DiskView, sb: Superblock) : Option<AllocationTable> {
     parse(IBytes(dv, sb.snapshot))
   }
 }

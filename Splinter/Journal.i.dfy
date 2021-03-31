@@ -3,7 +3,6 @@ include "../lib/Base/Maps.i.dfy"
 include "Spec.s.dfy"
 include "MsgSeq.i.dfy"
 include "Tables.i.dfy"
-include "CacheIfc.i.dfy"
 
 
 // NB the journal needs a smaller-sized-write primitive. If we get asked to sync
@@ -18,9 +17,8 @@ module JournalMachineMod {
   import opened DeferredWriteMapSpecMod
   import opened MsgSeqMod
   import opened AllocationMod
-  import AllocationTableMod
+  import AllocationTableMachineMod
   import CacheIfc
-  import MarshalledSnapshot // TODO stub delete
 
   // The core journal superblock
   datatype CoreSuperblock = CoreSuperblock(
@@ -29,7 +27,7 @@ module JournalMachineMod {
 
   // The entire superblock we need to store: Core data plus allocation data
   datatype Superblock = Superblock(
-    allocation: AllocationTableMod.Superblock,
+    allocation: AllocationTableMachineMod.Superblock,
     core: CoreSuperblock)
 
   // On-disk JournalRecords
@@ -85,7 +83,7 @@ module JournalMachineMod {
 
     predicate WF() {
       && boundaryLSN <= persistentLSN <= cleanLSN <= marshalledLSN
-      && (forall lsn :: 0 <= lsn < unmarshalledLSN() <==> lsn in lsnToCU)
+      && (forall lsn :: 0 <= lsn < marshalledLSN <==> lsn in lsnToCU)
     }
   }
 
@@ -95,35 +93,50 @@ module JournalMachineMod {
     && s' == s.(unmarshalledTail := s.unmarshalledTail + [message])
   }
 
-  function AllocateEmptyCU(s: Variables) : CU
-  {
-    CU(0, 0) //TODO
-  }
-
-    // TODO marshalling
+  // TODO marshalling
   function parse(b: UninterpretedDiskPage) : Option<JournalRecord>
   function marshal(jr: JournalRecord) : UninterpretedDiskPage
 
   function TailToMsgSeq(s: Variables) : MsgSeq
   {
     var start := s.marshalledLSN;
-    var end := start + |s.unmarshalledTail|;
+    var end := s.unmarshalledLSN();
     MsgSeq(map i:LSN | start <= i < end :: s.unmarshalledTail[i - start], start, end)
   }
 
+  function CurrentAllocation(s: Variables) : AllocationTableMachineMod.Variables
+  {
+    AllocationTableMachineMod.Variables(multiset(s.lsnToCU.Values))
+  }
+
   // advances marshalledLSN forward by marshalling a batch of messages into a dirty cache page
-  predicate AdvanceMarshalled(s: Variables, s': Variables, cacheOps: CacheIfc.Ops)
+  predicate AdvanceMarshalled(s: Variables, s': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, newCU: CU)
   {
     && s.WF()
-    && var cu := AllocateEmptyCU(s);
+
+    // newCU is an unused CU.
+    // That could be because the impl has freshly reserved a chunk of CUs from the outer
+    // program, or because it's using up a CU from a prior reserved chunk. The impl will
+    // batch allocations so it can avoid needing to rewrite the marshaled allocation before
+    // commiting a fresh superblock (on sync). Thus "unused" may be computed as "reserved
+    // but known not to be in use in the current JournalChain".
+
     // Marshal and write the current record out into the cache. (This doesn't issue
     // a disk write, it just dirties a page.)
     && var priorLSN := if s.marshalledLSN==0 then None else Some(s.lsnToCU[s.marshalledLSN-1]);
     && var jr := JournalRecord(TailToMsgSeq(s), priorLSN);
-    && cacheOps == [CacheIfc.Write(cu, marshal(jr))]
+    && cacheOps == [CacheIfc.Write(newCU, marshal(jr))]
+
+    // Record the changes to the marshalled, unmarshalled regions, and update the allocation.
     && s' == s.(
       // Open a new, empty record to absorb future journal Appends
-      unmarshalledTail := [])
+      marshalledLSN := s.unmarshalledLSN(),
+      unmarshalledTail := [],
+      lsnToCU := s'.lsnToCU  // Tautology to defer this constraint to next predicate
+      )
+    // constructive: (map lsn:LSN | 0 <= lsn < s.unmarshalledLSN() :: if lsn < s.marshalledLSN then s.lsnToCU[lsn] else newCU),
+    // predicate:
+    && CorrectMapping(cache, Some(newCU), s'.lsnToCU)
   }
 
   // advances cleanLSN forward by learning that the cache has written back a contiguous
@@ -138,18 +151,15 @@ module JournalMachineMod {
 
   predicate Reallocate(s: Variables, s': Variables)
   {
-    false // does something with allocation table?
-  }
-
-  function ParseCachedRecord(cache: CacheIfc.Variables, cu: CU) : Option<JournalRecord>
-  {
-    var raw := CacheIfc.ReadValue(cache, cu);
-    if raw.Some? then parse(raw.value) else None
+    // TODO Allocation isn't what we want, yet. It's tight, so we have to write
+    // a new allocation table every time we change the superblock. That's no
+    // good!
+    && false // does something with allocation table?
   }
 
   // Agrees to advance persistentLSN (to cleanLSN) and firstLSN (to newBoundary, coordinated
   // with BeTree) as part of superblock writeback.
-  predicate CommitStart(s: Variables, s': Variables, cache: CacheIfc.Variables, sb: Superblock, newBoundaryLSN: LSN)
+  predicate CommitStart(s: Variables, s': Variables, cache: CacheIfc.Variables, sb: Superblock, newBoundaryLSN: LSN, alloc: AllocationTableMachineMod.Variables)
   {
     && s.WF()
     // This is the stuff we'll get to garbage collect when the sb commit completes.
@@ -158,16 +168,31 @@ module JournalMachineMod {
     // These are the LSNs whose syncs will complete when the sb commit completes.
     && s.persistentLSN <= s.cleanLSN  // presumably provable from Inv
 
+    // The allocation we actually commit to is a superset of the allocation we're using.
+    && (forall cu | cu in s.lsnToCU.Values :: cu in alloc.table)
+
     // This is the superblock that's going to become persistent.
-    && var allocationInfo := AllocationTableMod.Superblock(AllocationTableMod.SnapshotSuperblock(CU(0, 0))); // TODO
+    && AllocationTableMachineMod.DurableAt(alloc, cache, sb.allocation)
     && var freshestCU := if s.cleanLSN == 0 then None else Some(s.lsnToCU[s.cleanLSN-1]);
-    && sb == Superblock(allocationInfo, CoreSuperblock(freshestCU, newBoundaryLSN))
-      // TODO what f s.cleanLSN is zero or ... no priorCU?
+    && sb.core == CoreSuperblock(freshestCU, newBoundaryLSN)
+      // TODO there should be a case where cleanLSN==boundaryLSN, so that the on-disk journal
+      // is empty, in which case we should have freshestCU.None?. But that's not
+      // showing up here yet.
     && s' == s
   }
 
+  // lsnToCU reflects a correct reading of the sb chain, I guess?
+  // TODO It's broken to be demanding that we actually can read this stuff out
+  // of the cache; we really want this to be a ghosty property in the next
+  // layer down. Not sure yet how to make that work.
+  predicate CorrectMapping(cache: CacheIfc.Variables, freshestCU: Option<CU>, lsnToCU: map<LSN, CU>)
+  {
+    // TODO We should build up a JournalChain here and confirm it justifies the mapping.
+    true
+  }
+
   // Learns that coordinated superblock writeback is complete; updates persistentLSN & firstLSN.
-  predicate CommitComplete(s: Variables, s': Variables, sb: Superblock)
+  predicate CommitComplete(s: Variables, s': Variables, cache: CacheIfc.Variables, sb: Superblock)
   {
     && s.WF()
 
@@ -187,6 +212,7 @@ module JournalMachineMod {
     && s'.marshalledLSN == s.marshalledLSN
     && s'.unmarshalledTail == s.unmarshalledTail
     && s'.syncReqs == s.syncReqs
+    && CorrectMapping(cache, sb.core.freshestCU, s'.lsnToCU)
   }
 
   predicate ReqSync(s: Variables, s': Variables, syncReqId: SyncReqId)
@@ -205,22 +231,20 @@ module JournalMachineMod {
 
   datatype Step =
     | AppendStep(message: Message)
-    | AdvanceMarshalledStep(cacheOps: CacheIfc.Ops)
+    | AdvanceMarshalledStep(cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, newCU: CU)
     | AdvanceCleanStep(cache: CacheIfc.Variables, newClean: nat)
-    | ReallocateStep()
-    | CommitStartStep(cache: CacheIfc.Variables, sb: Superblock, newBoundaryLSN: LSN)
-    | CommitCompleteStep(sb: Superblock)
+    | CommitStartStep(cache: CacheIfc.Variables, sb: Superblock, newBoundaryLSN: LSN, alloc: AllocationTableMachineMod.Variables)
+    | CommitCompleteStep(cache: CacheIfc.Variables, sb: Superblock)
     | ReqSyncStep(syncReqId: SyncReqId)
     | CompleteSyncStep(syncReqId: SyncReqId)
 
   predicate NextStep(s: Variables, s': Variables, step: Step) {
     match step {
       case AppendStep(message) => Append(s, s', message)
-      case AdvanceMarshalledStep(cacheOps) => AdvanceMarshalled(s, s', cacheOps)
+      case AdvanceMarshalledStep(cache, cacheOps, newCU) => AdvanceMarshalled(s, s', cache, cacheOps, newCU)
       case AdvanceCleanStep(cache, newClean) => AdvanceClean(s, s', cache, newClean)
-      case ReallocateStep => Reallocate(s, s')
-      case CommitStartStep(cache, sb, newBoundaryLSN) => CommitStart(s, s', cache, sb, newBoundaryLSN)
-      case CommitCompleteStep(sb) => CommitComplete(s, s', sb)
+      case CommitStartStep(cache, sb, newBoundaryLSN, alloc) => CommitStart(s, s', cache, sb, newBoundaryLSN, alloc)
+      case CommitCompleteStep(cache, sb) => CommitComplete(s, s', cache, sb)
       case ReqSyncStep(syncReqId) => ReqSync(s, s', syncReqId)
       case CompleteSyncStep(syncReqId) => CompleteSync(s, s', syncReqId)
     }
