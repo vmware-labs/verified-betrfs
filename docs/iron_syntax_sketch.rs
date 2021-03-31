@@ -9,9 +9,9 @@ ghost fn divides(v: nat, u: nat) -> bool { // 'ghost' == no implementation
 #[pure]
 fn gcd(a: u64, b: u64) -> u64
     // --> spec syntax
-    ensures exists(|k: nat| k * return == a)),
-            exists(|k: nat| k * return == b)),
-            forall(|d: nat| (divides(a, d) && divides(b, d)) ==> d <= return))
+    ensures exists(|k: nat| k * return == a),
+            exists(|k: nat| k * return == b),
+            forall(|d: nat| (divides(a, d) && divides(b, d)) ==> d <= return)
     // (this is consistent with the 'where' clause in vanilla rust)
 {
     // --> ghost variables and blocks
