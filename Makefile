@@ -201,8 +201,20 @@ OTHER_PROVER_FLAGS =
 build/Betree/BetreeInv.i.verchk: OTHER_PROVER_FLAGS=/proverOpt:O:smt.random_seed=1
 build/lib/DataStructures/LinearDList.i.verchk: OTHER_PROVER_FLAGS=/noNLarith /proverOpt:O:smt.random_seed=1
 
+# enable nonlinear arithmetic for some files
+# Note: Nonlinear.i.dfy and Math.i.dfy are designed to use nonlinear arith.
+# The other files are legacy'ed in, but it's no big deal as long
+# as they verify.
 build/lib/Checksums/Nonlinear.i.verchk: NONLINEAR_FLAGS=
 build/lib/Marshalling/Math.i.verchk: NONLINEAR_FLAGS=
+build/Impl/BookkeepingModel.i.verchk: NONLINEAR_FLAGS=
+build/Impl/IOImpl.i.verchk: NONLINEAR_FLAGS=
+build/Impl/IOModel.i.verchk: NONLINEAR_FLAGS=
+build/Impl/SyncImpl.i.verchk: NONLINEAR_FLAGS=
+build/Impl/BookkeepingImpl.i.verchk: NONLINEAR_FLAGS=
+build/Betree/BetreeInv.i.verchk: NONLINEAR_FLAGS=
+build/lib/Base/SetBijectivity.i.verchk: NONLINEAR_FLAGS=
+build/lib/Marshalling/GenericMarshalling.i.verchk: NONLINEAR_FLAGS=
 
 ### Put all the flags together
 
