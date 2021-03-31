@@ -29,6 +29,11 @@ module ResourceStateMachine {
     s == HT.add(s', HT.output_stub(id, output))
   }
 
+  /*predicate Next(s: Variables, s': Variables) {
+    Internal(s, s') || (exists id,input :: NewTicket(s, s', id, input))
+        || (exists id,input :: ConsumeStub(s, s', id, input))
+  }*/
+
   ////// Invariant
 
   predicate Complete(table: seq<Option<HT.Info>>)
@@ -36,6 +41,7 @@ module ResourceStateMachine {
     && (forall i | 0 <= i < |table| :: table[i].Some?)
   }
 
+  // unwrapped_index
   function adjust(i: int, root: int) : int
   requires 0 <= i < HT.FixedSize()
   requires 0 <= root <= HT.FixedSize()
@@ -77,18 +83,22 @@ module ResourceStateMachine {
   requires 0 <= e < |table|
   requires 0 <= i < |table|
   {
+    // No matter which empty pivot cell 'e' we choose, every entry is 'downstream'
+    // of the place that it hashes to.
+    // Likewise for insert pointers and others
+
     table[e].value.entry.Empty? && !table[e].value.state.RemoveTidying? ==> (
       && (table[i].value.entry.Full? ==> (
         var h := HT.hash(table[i].value.entry.kv.key) as int;
         && adjust(h, e+1) <= adjust(i, e+1)
       ))
       && (table[i].value.state.Inserting? ==> (
-        var ha := HT.hash(table[i].value.state.kv.key) as int;
-        && adjust(ha, e+1) <= adjust(i, e+1)
+        var h := HT.hash(table[i].value.state.kv.key) as int;
+        && adjust(h, e+1) <= adjust(i, e+1)
       ))
       && ((table[i].value.state.Removing? || table[i].value.state.Querying?) ==> (
-        var ha := HT.hash(table[i].value.state.key) as int;
-        && adjust(ha, e+1) <= adjust(i, e+1)
+        var h := HT.hash(table[i].value.state.key) as int;
+        && adjust(h, e+1) <= adjust(i, e+1)
       ))
     )
   }
@@ -166,7 +176,7 @@ module ResourceStateMachine {
   {
     && s.R?
     && InvTable(s.table)
-}
+  }
 
   function {:opaque} get_empty_cell(table: seq<Option<HT.Info>>) : (e: int)
   requires InvTable(table)
