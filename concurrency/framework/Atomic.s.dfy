@@ -443,4 +443,19 @@ module {:extern "Atomics"} Atomics {
   ensures ret_value == orig_value
   ensures new_value == wrapped_sub_uint64(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
+
+  /*
+   * No-op. Access the internal state without modifying the physical state.
+   * No observable non-ghost effects.
+   */
+
+  method {:extern} execute_atomic_noop<V, G>(
+      a: Atomic<V, G>)
+  returns (
+      ret_value: (),
+      ghost orig_value: V,
+      ghost new_value: V,
+      ghost linear g: G)
+  ensures orig_value == new_value
+  ensures atomic_inv(a, orig_value, g)
 }

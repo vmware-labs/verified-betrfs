@@ -119,6 +119,13 @@ ARITH_SPECIALIZE(uint32_t, uint32)
 ARITH_SPECIALIZE(uint64_t, uint64)
 
 template <typename V, typename G>
+void execute__atomic__noop(
+    InternalAtomic<V> a)
+{
+  // do nothing
+}
+
+template <typename V, typename G>
 using Atomic = InternalAtomic<V>;
 
 }
