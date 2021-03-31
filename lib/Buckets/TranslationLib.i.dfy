@@ -23,6 +23,17 @@ module TranslationLib {
 
   type EdgeTable = seq<Option<Key>>
 
+  // ==========================
+  //  b to have a's content 
+  // a = a 
+  // b = a
+  //  
+  // query any key with prefix b
+  // query(bz)  
+  // b -> a's node (assuming only contain messages for keys starting with a)
+  //        az = 9
+  //        ax = 6
+
   predicate NonEmptyLcp(pt: PivotTable, i: int)
   requires WFPivots(pt)
   requires 0 <= i < NumBuckets(pt)

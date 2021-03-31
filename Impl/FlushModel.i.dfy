@@ -27,6 +27,21 @@ module FlushModel {
   import opened NativeTypes
   import D = AsyncDisk
 
+  lemma lemmaChildrenConditionsRestrictAndTranslateChild(s: BBC.Variables, 
+      parent: Node, child: Node, slot: int)
+  requires s.Ready?
+  requires BT.WFNode(parent)
+  requires BT.WFNode(child)
+  requires 0 <= slot < NumBuckets(parent.pivotTable)
+  requires BT.ParentKeysInChildRange(parent, child, slot)
+  requires ChildrenConditions(s, child.children)
+  ensures ChildrenConditions(s, BT.RestrictAndTranslateChild(parent, child, slot).children)
+  {
+    BT.reveal_CutoffNode();
+    BT.reveal_CutoffNodeAndKeepLeft();
+    BT.reveal_CutoffNodeAndKeepRight();
+  }
+
   function flush(s: BBC.Variables, parentref: BT.G.Reference, slot: int, childref: BT.G.Reference, child: Node, refUpperBound: uint64)
   : BBC.Variables
   requires BBC.Inv(s)
@@ -52,30 +67,37 @@ module FlushModel {
     ) else (
       var parent := s.cache[parentref];
 
-      if BoundedKeySeq(child.pivotTable, parent.buckets[slot].keys) then (
-        WeightBucketLeBucketList(parent.buckets, slot);
-        lemmaChildrenConditionsOfNode(s, childref);
-        lemmaChildrenConditionsOfNode(s, parentref);
+      if BT.ParentKeysInChildRange(parent, child, slot) then (
+        var child' := BT.RestrictAndTranslateChild(parent, child, slot);
+        if WeightBucketList(child'.buckets) <= MaxTotalBucketWeight() then (
+          WeightBucketLeBucketList(parent.buckets, slot);
+          lemmaChildrenConditionsOfNode(s, childref);
+          lemmaChildrenConditionsOfNode(s, parentref);
+          lemmaChildrenConditionsRestrictAndTranslateChild(s, s.cache[parentref], s.cache[childref], slot);
 
-        var partialFlushResult(newparentBucket, newbuckets) :=
-            BucketFlushModel.partialFlush(
-              parent.buckets[slot], child.pivotTable, child.buckets);
-        var newchild := child.(buckets := newbuckets);
-        var (s2, newchildref) := allocBookkeeping(s, newchild.children, refUpperBound);
-        lemmaChildrenConditionsUpdateOfAllocBookkeeping(
-          s, newchild.children, parent.children.value, slot, refUpperBound);
-        if newchildref.None? then (
-          s2
+          var partialFlushResult(newparentBucket, newbuckets) :=
+              BucketFlushModel.partialFlush(
+                parent.buckets[slot], child'.pivotTable, child'.buckets);
+          var newchild := child'.(buckets := newbuckets);
+          var (s2, newchildref) := allocBookkeeping(s, newchild.children, refUpperBound);
+          lemmaChildrenConditionsUpdateOfAllocBookkeeping(
+            s, newchild.children, parent.children.value, slot, refUpperBound);
+          if newchildref.None? then (
+            s2
+          ) else (
+            var newparent := BT.G.Node(
+              parent.pivotTable,
+              parent.edgeTable[slot := None],
+              Some(parent.children.value[slot := newchildref.value]),
+              parent.buckets[slot := newparentBucket]
+            );
+            assert s2.WriteAllocConditions();
+            var s2 := s2.(cache := s2.cache[newchildref.value := newchild][parentref := newparent]);
+            var s2 := writeBookkeeping(s2, parentref, newparent.children);
+            s2
+          )
         ) else (
-          var newparent := BT.G.Node(
-            parent.pivotTable,
-            Some(parent.children.value[slot := newchildref.value]),
-            parent.buckets[slot := newparentBucket]
-          );
-          assert s2.WriteAllocConditions();
-          var s2 := s2.(cache := s2.cache[newchildref.value := newchild][parentref := newparent]);
-          var s2 := writeBookkeeping(s2, parentref, newparent.children);
-          s2
+          s
         )
       ) else (
         s
@@ -101,98 +123,98 @@ module FlushModel {
       assert noop(s, s);
     } else {
       var parent := s.cache[parentref];
+      
+      if BT.ParentKeysInChildRange(parent, child, slot) {
+        var child' := BT.RestrictAndTranslateChild(parent, child, slot);
+        if WeightBucketList(child'.buckets) <= MaxTotalBucketWeight() {
+          WeightBucketLeBucketList(parent.buckets, slot);
+          lemmaChildrenConditionsOfNode(s, childref);
+          lemmaChildrenConditionsOfNode(s, parentref);
+          lemmaChildrenConditionsRestrictAndTranslateChild(s, parent, child, slot);
 
-      if BoundedKeySeq(child.pivotTable, parent.buckets[slot].keys) {
-        WeightBucketLeBucketList(parent.buckets, slot);
-        lemmaChildrenConditionsOfNode(s, childref);
-        lemmaChildrenConditionsOfNode(s, parentref);
+          var partialFlushResult(newparentBucket, newbuckets) :=
+            BucketFlushModel.partialFlush(
+              parent.buckets[slot], child'.pivotTable, child'.buckets);
 
-        var partialFlushResult(newparentBucket, newbuckets) :=
-          BucketFlushModel.partialFlush(
-            parent.buckets[slot], child.pivotTable, child.buckets);
+          BucketFlushModel.partialFlushWeightBound(parent.buckets[slot], child'.pivotTable, child'.buckets);
+          /*WFBucketIntersect(parent.buckets[slot], flushedKeys);
+          WFBucketComplement(parent.buckets[slot], flushedKeys);
+          WeightBucketComplement(parent.buckets[slot], flushedKeys);
+          WFBucketListFlush(
+            BucketIntersect(parent.buckets[slot], flushedKeys),
+            child.buckets,
+            child.pivotTable);*/
+          WeightBucketListShrinkEntry(parent.buckets, slot, newparentBucket);
 
-        var flushedKeys := {};
-        if BucketWellMarshalled(parent.buckets[slot])
-            && BucketListWellMarshalled(child.buckets)
-            && WFBucketListProper(child.buckets, child.pivotTable)
-        {
-          flushedKeys := BucketFlushModel.partialFlushCorrect(parent.buckets[slot], child.pivotTable, child.buckets);
-        }
-        assert (forall key | key in flushedKeys :: key in parent.buckets[slot].keys);
+          // TODO these are actually kind of annoying right now
+          assert childref in s.cache;
+          assert childref in s.ephemeralIndirectionTable.graph;
+          assert child == s.cache[childref];
 
-        BucketFlushModel.partialFlushWeightBound(parent.buckets[slot], child.pivotTable, child.buckets);
-        
-        /*WFBucketIntersect(parent.buckets[slot], flushedKeys);
-        WFBucketComplement(parent.buckets[slot], flushedKeys);
-        WeightBucketComplement(parent.buckets[slot], flushedKeys);
-        WFBucketListFlush(
-          BucketIntersect(parent.buckets[slot], flushedKeys),
-          child.buckets,
-          child.pivotTable);*/
-        WeightBucketListShrinkEntry(parent.buckets, slot, newparentBucket);
+          assert parentref in s.cache;
+          assert parentref in s.ephemeralIndirectionTable.graph;
+          assert parent == s.cache[parentref];
 
-        // TODO these are actually kind of annoying right now
-        assert childref in s.cache;
-        assert childref in s.ephemeralIndirectionTable.graph;
-        assert child == s.cache[childref];
+          var newchild := child'.(buckets := newbuckets);
+          var (s2, newchildref) := allocWithNode(s, newchild, refUpperBound);
+          reveal_allocBookkeeping();
 
-        assert parentref in s.cache;
-        assert parentref in s.ephemeralIndirectionTable.graph;
-        assert parent == s.cache[parentref];
+          if newchildref.None? {
+            assert noop(s, s2);
+          } else {
+            var newparent := BT.G.Node(
+              parent.pivotTable,
+              parent.edgeTable[slot := None],
+              Some(parent.children.value[slot := newchildref.value]),
+              parent.buckets[slot := newparentBucket]
+            );
 
-        var newchild := child.(buckets := newbuckets);
-        var (s2, newchildref) := allocWithNode(s, newchild, refUpperBound);
-        reveal_allocBookkeeping();
-        if newchildref.None? {
-          assert noop(s, s2);
-        } else {
-          var newparent := BT.G.Node(
-            parent.pivotTable,
-            Some(parent.children.value[slot := newchildref.value]),
-            parent.buckets[slot := newparentBucket]
-          );
+            var s3 := writeWithNode(s2, parentref, newparent);
+            reveal_writeBookkeeping();
+            assert s3 == s';
 
-          var s3 := writeWithNode(s2, parentref, newparent);
-          reveal_writeBookkeeping();
-          assert s3 == s';
-
-          forall ref | ref in BT.G.Successors(newparent) ensures ref in s2.ephemeralIndirectionTable.graph {
-            if (ref == newchildref.value) {
-            } else {
-              assert ref in BT.G.Successors(parent);
-              lemmaChildInGraph(s, parentref, ref);
-              assert ref in s2.ephemeralIndirectionTable.graph;
+            forall ref | ref in BT.G.Successors(newparent) ensures ref in s2.ephemeralIndirectionTable.graph {
+              if (ref == newchildref.value) {
+              } else {
+                assert ref in BT.G.Successors(parent);
+                lemmaChildInGraph(s, parentref, ref);
+                assert ref in s2.ephemeralIndirectionTable.graph;
+              }
             }
-          }
-          assert BC.BlockPointsToValidReferences(newparent, s2.ephemeralIndirectionTable.graph);
+            assert BC.BlockPointsToValidReferences(newparent, s2.ephemeralIndirectionTable.graph);
 
-          forall ref | ref in BT.G.Successors(newchild) ensures ref in s.ephemeralIndirectionTable.graph {
-            lemmaChildInGraph(s, childref, ref);
-          }
+            forall ref | ref in BT.G.Successors(newchild) ensures ref in s.ephemeralIndirectionTable.graph {
+              lemmaChildInGraph(s, childref, ref);
+            }
 
-          allocCorrect(s, newchild, refUpperBound);
-          writeCorrect(s2, parentref, newparent);
+            allocCorrect(s, newchild, refUpperBound);
+            writeCorrect(s2, parentref, newparent);
 
-          var flushStep := BT.NodeFlush(
-            parentref,
-            parent,
-            newparent,
-            childref,
-            child,
-            newchildref.value,
-            newchild,
-            slot);
+            var flushStep := BT.NodeFlush(
+              parentref,
+              parent,
+              newparent,
+              childref,
+              child,
+              newchildref.value,
+              newchild,
+              slot);
 
-          assert BT.ValidFlush(flushStep);
-          var step := BT.BetreeFlush(flushStep);
-          assert newparent == BT.FlushOps(flushStep)[1].node;
-          assert BC.Alloc(s, s2, newchildref.value, newchild);
-          assert BC.Dirty(s2, s', parentref, newparent);
-          BC.MakeTransaction2(s, s2, s', BT.BetreeStepOps(step));
-          assert BBC.BetreeMove(s, s', BlockDisk.NoDiskOp, AdvanceOp(UI.NoOp, true), step);
-          assert stepsBetree(s, s', AdvanceOp(UI.NoOp, true), step);
-          assert stepsBetree(s, s', AdvanceOp(UI.NoOp, true), step);
-        } 
+            assert BT.ValidFlush(flushStep);
+            var step := BT.BetreeFlush(flushStep);
+            assert newparent == BT.FlushOps(flushStep)[1].node;
+
+            assert BC.Alloc(s, s2, newchildref.value, newchild);
+            assert BC.Dirty(s2, s', parentref, newparent);
+
+            BC.MakeTransaction2(s, s2, s', BT.BetreeStepOps(step));
+            assert BBC.BetreeMove(s, s', BlockDisk.NoDiskOp, AdvanceOp(UI.NoOp, true), step);
+            assert stepsBetree(s, s', AdvanceOp(UI.NoOp, true), step);
+            assert stepsBetree(s, s', AdvanceOp(UI.NoOp, true), step);
+          } 
+        } else {
+          assert noop(s, s);
+        }
       } else {
         assert noop(s, s); 
       }

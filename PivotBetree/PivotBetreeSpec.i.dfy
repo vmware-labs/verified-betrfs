@@ -492,7 +492,7 @@ module PivotBetreeSpec {
     && f.parent.children.value[f.slot_idx] == f.childref
     && ParentKeysInChildRange(f.parent, f.child, f.slot_idx)
     && var child' := RestrictAndTranslateChild(f.parent, f.child, f.slot_idx);
-    && WeightBucketList(child'.buckets) <= MaxTotalBucketWeight() // TODO(Jialin): revisit
+    && WeightBucketList(child'.buckets) <= MaxTotalBucketWeight()
     // TODO(Jialin): for now implementation can check this and no op if this is the case
     // but what we want is different version of flush, where if this isn't met then we don't
     // flush the translation down, just the message itself.
@@ -504,8 +504,7 @@ module PivotBetreeSpec {
         child'.children,
         pfr.bots
       )
-    && WeightBucketList(f.newchild.buckets) <= MaxTotalBucketWeight()
-    && WFBucketList(f.newchild.buckets, f.newchild.pivotTable)
+    // && WFBucketList(f.newchild.buckets, f.newchild.pivotTable)
     && f.newparent == Node(
         f.parent.pivotTable,
         f.parent.edgeTable[f.slot_idx := None],
@@ -784,6 +783,13 @@ module PivotBetreeSpec {
     else None
   }
 
+  predicate SplitChildrenWeight(child: Node, num_children_left: int)
+  requires 1 <= num_children_left < |child.buckets|
+  {
+    && WeightBucketList(child.buckets[..num_children_left]) <= MaxTotalBucketWeight()
+    && WeightBucketList(child.buckets[num_children_left..]) <= MaxTotalBucketWeight()
+  }
+
   predicate ValidSplit(f: NodeFusion)
   {
     && WFNode(f.fused_parent)
@@ -792,20 +798,19 @@ module PivotBetreeSpec {
     && f.fused_parent.children.Some?
     && 0 <= f.slot_idx < |f.fused_parent.buckets|
     && |f.fused_parent.buckets| <= MaxNumChildren() - 1
-    && PivotInsertable(f.fused_parent.pivotTable,  f.slot_idx+1, f.pivot)
+    && PivotInsertable(f.fused_parent.pivotTable, f.slot_idx+1, f.pivot)
     && f.fused_parent.children.value[f.slot_idx] == f.fused_childref
 
     && ParentKeysInChildRange(f.fused_parent, f.fused_child, f.slot_idx)
     && var child := RestrictAndTranslateChild(f.fused_parent, f.fused_child, f.slot_idx);
     && 1 <= f.num_children_left < |child.buckets|
+    && SplitChildrenWeight(child, f.num_children_left)
     && child.pivotTable[f.num_children_left].e == f.pivot
-  
+
     && (f.left_childref == f.right_childref ==> f.left_child == f.right_child)
     && f.split_parent == SplitParent(f.fused_parent, f.pivot, f.slot_idx, f.left_childref, f.right_childref)
     && f.left_child == SplitChildLeft(child, f.num_children_left)
     && f.right_child == SplitChildRight(child, f.num_children_left)
-    && WeightBucketList(f.left_child.buckets) <= MaxTotalBucketWeight()
-    && WeightBucketList(f.right_child.buckets) <= MaxTotalBucketWeight()
   }
 
   function SplitReads(f: NodeFusion) : seq<ReadOp>
@@ -970,6 +975,8 @@ module PivotBetreeSpec {
     imap k | IsPrefix(to, k) :: fromkey(k, to, from)
   }
 
+  // TODO: separate step
+
   function RestrictAndTranslateNode(node: Node, from: Key, to: Key) : (node': Node)
   requires WFNode(node)
   requires ContainsAllKeys(node.pivotTable)
@@ -1077,7 +1084,7 @@ module PivotBetreeSpec {
     && clone.oldroot.children.Some?
     && G.Keyspace.lt([], clone.to)
     && BucketListNoKeyWithPrefix(clone.oldroot.buckets, clone.oldroot.pivotTable, clone.from)
-
+    // from = old, to = new
     && clone.newroot == CloneNewRoot(clone.oldroot, clone.from, clone.to)
     && NumBuckets(clone.newroot.pivotTable) <= MaxNumChildren()
   }

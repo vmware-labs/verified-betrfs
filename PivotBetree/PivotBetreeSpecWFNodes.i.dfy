@@ -32,12 +32,12 @@ module PivotBetreeSpecWFNodes {
   {
     assert WFNode(FlushReads(f)[0].node);
     assert WFNode(FlushReads(f)[1].node);
-    assert WFNode(FlushOps(f)[0].node);
 
     var child' := RestrictAndTranslateChild(f.parent, f.child, f.slot_idx);
     BucketFlushModel.partialFlushWeightBound(
         f.parent.buckets[f.slot_idx], child'.pivotTable, child'.buckets);
     WeightBucketListShrinkEntry(f.parent.buckets, f.slot_idx, f.newparent.buckets[f.slot_idx]);
+    assert WFNode(FlushOps(f)[0].node);
     assert WFNode(FlushOps(f)[1].node);
   }
 
