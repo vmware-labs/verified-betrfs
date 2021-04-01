@@ -1300,7 +1300,7 @@ module PivotBetreeSpecRefinement {
   requires P.InvNode(parent)
   requires P.InvNode(child)
   requires 0 <= slot < NumBuckets(parent.pivotTable)
-  requires P.ParentKeysInChildRange(parent, child, slot)
+  requires ParentKeysInChildRange(parent.pivotTable, parent.edgeTable, child.pivotTable, slot)
   requires BoundedKey(parent.pivotTable, key) && Route(parent.pivotTable, key) == slot
   requires child' == P.RestrictAndTranslateChild(parent, child, slot)
   ensures BoundedKey(child'.pivotTable, key)

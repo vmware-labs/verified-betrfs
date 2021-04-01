@@ -21,6 +21,7 @@ module SplitModel {
   import opened KeyType
   import opened PivotBetreeSpec`Internal
   import opened BoundedPivotsLib
+  import opened TranslationLib
   import PBSWF = PivotBetreeSpecWFNodes
 
   import opened NativeTypes
@@ -31,7 +32,7 @@ module SplitModel {
   requires WFNode(parent)
   requires WFNode(child)
   requires 0 <= slot < NumBuckets(parent.pivotTable)
-  requires ParentKeysInChildRange(parent, child, slot)
+  requires ParentKeysInChildRange(parent.pivotTable, parent.edgeTable, child.pivotTable, slot)
   requires ChildrenConditions(s, child.children)
   ensures ChildrenConditions(s, RestrictAndTranslateChild(parent, child, slot).children)
   {
@@ -57,7 +58,7 @@ module SplitModel {
   requires BT.WFNode(parent)
   requires BT.WFNode(child1)
   requires 0 <= slot < NumBuckets(parent.pivotTable)
-  requires ParentKeysInChildRange(parent, child1, slot)
+  requires ParentKeysInChildRange(parent.pivotTable, parent.edgeTable, child1.pivotTable, slot)
   requires child == RestrictAndTranslateChild(parent, child1, slot)
   requires 1 <= num_children_left < |child.buckets|
   requires BC.BlockPointsToValidReferences(child1, graph);
@@ -201,7 +202,7 @@ module SplitModel {
       var fused_parent := s.cache[parentref];
       var fused_child := s.cache[childref];
 
-      if !( BT.ParentKeysInChildRange(fused_parent, fused_child, slot)
+      if !( ParentKeysInChildRange(fused_parent.pivotTable, fused_parent.edgeTable, fused_child.pivotTable, slot)
       ) then (
         s
       ) else (
@@ -255,7 +256,7 @@ module SplitModel {
     var fused_parent := s.cache[parentref];
     var fused_child := s.cache[childref];
 
-    if !( BT.ParentKeysInChildRange(fused_parent, fused_child, slot)) {
+    if !( ParentKeysInChildRange(fused_parent.pivotTable, fused_parent.edgeTable, fused_child.pivotTable, slot)) {
       assert noop(s, s);
       return;
     }

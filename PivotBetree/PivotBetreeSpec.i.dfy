@@ -490,7 +490,7 @@ module PivotBetreeSpec {
     && f.parent.children.Some?
 
     && f.parent.children.value[f.slot_idx] == f.childref
-    && ParentKeysInChildRange(f.parent, f.child, f.slot_idx)
+    && ParentKeysInChildRange(f.parent.pivotTable, f.parent.edgeTable, f.child.pivotTable, f.slot_idx)
     && var child' := RestrictAndTranslateChild(f.parent, f.child, f.slot_idx);
     && WeightBucketList(child'.buckets) <= MaxTotalBucketWeight()
     // TODO(Jialin): for now implementation can check this and no op if this is the case
@@ -513,19 +513,6 @@ module PivotBetreeSpec {
       )
     && WFBucket(f.newparent.buckets[f.slot_idx])
     && WeightBucket(f.newparent.buckets[f.slot_idx]) <= WeightBucket(f.parent.buckets[f.slot_idx])
-  }
-
-  predicate ParentKeysInChildRange(parent: Node, child: Node, slot: int)
-  requires WFNode(parent)
-  requires WFNode(child)
-  requires 0 <= slot < NumBuckets(parent.pivotTable)
-  {
-    Pivots.Keyspace.reveal_IsStrictlySorted();
-    && (parent.edgeTable[slot].None? ==> 
-        ContainsRange(child.pivotTable, parent.pivotTable[slot], parent.pivotTable[slot+1]))
-    && (parent.edgeTable[slot].Some? ==> 
-        && var (left, right) := TranslatePivotPair(parent.pivotTable, parent.edgeTable, slot);
-        && ContainsRange(child.pivotTable, left, right))
   }
 
   function FlushReads(f: NodeFlush) : seq<ReadOp>
@@ -680,7 +667,7 @@ module PivotBetreeSpec {
   requires WFNode(parent)
   requires WFNode(child)
   requires 0 <= slot < NumBuckets(parent.pivotTable)
-  requires ParentKeysInChildRange(parent, child, slot)
+  requires ParentKeysInChildRange(parent.pivotTable, parent.edgeTable, child.pivotTable, slot)
   ensures NumBuckets(newchild.pivotTable) == |newchild.buckets|
   ensures newchild.children.Some? ==> |newchild.buckets| == |newchild.children.value|
   ensures WFPivots(newchild.pivotTable)
@@ -801,7 +788,7 @@ module PivotBetreeSpec {
     && PivotInsertable(f.fused_parent.pivotTable, f.slot_idx+1, f.pivot)
     && f.fused_parent.children.value[f.slot_idx] == f.fused_childref
 
-    && ParentKeysInChildRange(f.fused_parent, f.fused_child, f.slot_idx)
+    && ParentKeysInChildRange(f.fused_parent.pivotTable, f.fused_parent.edgeTable, f.fused_child.pivotTable, f.slot_idx)
     && var child := RestrictAndTranslateChild(f.fused_parent, f.fused_child, f.slot_idx);
     && 1 <= f.num_children_left < |child.buckets|
     && SplitChildrenWeight(child, f.num_children_left)
@@ -854,8 +841,8 @@ module PivotBetreeSpec {
     && (f.left_child.children.Some? ==> f.right_child.children.Some?)
     && (f.left_child.children.None? ==> f.right_child.children.None?)
 
-    && ParentKeysInChildRange(f.split_parent, f.left_child, f.slot_idx)
-    && ParentKeysInChildRange(f.split_parent, f.right_child, f.slot_idx+1)
+    && ParentKeysInChildRange(f.split_parent.pivotTable, f.split_parent.edgeTable, f.left_child.pivotTable, f.slot_idx)
+    && ParentKeysInChildRange(f.split_parent.pivotTable, f.split_parent.edgeTable, f.right_child.pivotTable, f.slot_idx+1)
     && var left := RestrictAndTranslateChild(f.split_parent, f.left_child, f.slot_idx);
     && var right := RestrictAndTranslateChild(f.split_parent, f.right_child, f.slot_idx+1);
     && WeightBucketList(left.buckets) + WeightBucketList(right.buckets) <= MaxTotalBucketWeight()

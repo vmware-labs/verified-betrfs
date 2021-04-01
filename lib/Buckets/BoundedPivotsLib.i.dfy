@@ -94,6 +94,19 @@ module BoundedPivotsLib {
     && Keyspace.lte(right, pt[|pt|-1])
   }
 
+  method ComputeContainsRange(pt: PivotTable, left: Element, right: Element) returns (b: bool)
+  requires WFPivots(pt)
+  requires |pt| < 0x4000_0000_0000_0000
+  requires ElementIsKey(left)
+  requires Keyspace.lt(left, right)
+  ensures b == ContainsRange(pt, left, right)
+  {
+    var len := |pt| as uint64;
+    var b1 := KeyspaceImpl.cmp(pt[0], left);
+    var b2 := KeyspaceImpl.cmp(right, pt[len - 1]);
+    return (b1 <= 0) && (b2 <= 0);
+  }
+
   lemma ContainsRangeImpliesBoundedKey(pt: PivotTable, left: Element, right: Element)
   requires WFPivots(pt)
   requires ElementIsKey(left)

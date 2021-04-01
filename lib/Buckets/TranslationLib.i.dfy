@@ -23,17 +23,6 @@ module TranslationLib {
 
   type EdgeTable = seq<Option<Key>>
 
-  // ==========================
-  //  b to have a's content 
-  // a = a 
-  // b = a
-  //  
-  // query any key with prefix b
-  // query(bz)  
-  // b -> a's node (assuming only contain messages for keys starting with a)
-  //        az = 9
-  //        ax = 6
-
   predicate NonEmptyLcp(pt: PivotTable, i: int)
   requires WFPivots(pt)
   requires 0 <= i < NumBuckets(pt)
@@ -1160,4 +1149,38 @@ module TranslationLib {
     }
   }
 
+  predicate ParentKeysInChildRange(parentpivots: PivotTable, parentedges: EdgeTable, childpivots: PivotTable, slot: int)
+  requires WFPivots(parentpivots)
+  requires WFPivots(childpivots)
+  requires WFEdges(parentedges, parentpivots)
+  requires 0 <= slot < |parentedges|
+  {
+    Keyspace.reveal_IsStrictlySorted();
+    && (parentedges[slot].None? ==> 
+        ContainsRange(childpivots, parentpivots[slot], parentpivots[slot+1]))
+    && (parentedges[slot].Some? ==> 
+        && var (left, right) := TranslatePivotPair(parentpivots, parentedges, slot);
+        && ContainsRange(childpivots, left, right))
+  }
+
+  method ComputeParentKeysInChildRange(parentpivots: PivotTable, parentedges: EdgeTable, childpivots: PivotTable, slot: uint64)
+  returns (b: bool)
+  requires WFPivots(parentpivots)
+  requires WFPivots(childpivots)
+  requires WFEdges(parentedges, parentpivots)
+  requires 0 <= slot as int < |parentedges|
+  ensures b == ParentKeysInChildRange(parentpivots, parentedges, childpivots, slot as int)
+  {
+    assume false;
+    b := true;
+    // if parentedges[slot].None? {
+    //   ComputeContainsRange();
+    // }
+    // Keyspace.reveal_IsStrictlySorted();
+    // && (parentedges[slot].None? ==> 
+    //     ContainsRange(childpivots, parentpivots[slot], parentpivots[slot+1]))
+    // && (parentedges[slot].Some? ==> 
+    //     && var (left, right) := TranslatePivotPair(parentpivots, parentedges, slot);
+    //     && ContainsRange(childpivots, left, right))
+  }
 }

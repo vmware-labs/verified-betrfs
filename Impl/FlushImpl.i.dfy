@@ -25,11 +25,13 @@ module FlushImpl {
   import opened LinearSequence_s
   import opened LinearSequence_i
   import opened BoundedPivotsLib
+  import opened TranslationLib
 
   import opened NativeTypes
   import BookkeepingModel
   import FlushModel
   import IOModel
+  // import Inout
 
   import IT = IndirectionTable
 
@@ -66,35 +68,49 @@ module FlushImpl {
     if b {
       print "giving up; flush can't run because frozen isn't written";
     } else {
-      var bounded := s.cache.NodeBoundedBucket(parentref, childref, slot);
-      if bounded {
-        //Native.BenchmarkingUtil.start();
+      var parentpivots, parentedges, _ := s.cache.GetNodeInfo(parentref);
+      var childpivots, _, _ := s.cache.GetNodeInfo(childref);
 
-        ghost var parentI := s.cache.I()[parentref];
-        ghost var childI := s.cache.I()[childref];
+      var inrange := ComputeParentKeysInChildRange(parentpivots, parentedges, childpivots, slot);
+      if inrange {
+        linear var newchild := s.cache.NodeRestrictAndTranslateChild(parentref, childref, slot);
 
-        linear var newparentBucket, newchild := 
-          s.cache.NodePartialFlush(parentref, childref, slot);
+        var succ, weight := MutBucket.tryComputeWeightOfSeq(newchild.buckets);
+        if succ && weight <= MaxTotalBucketWeightUint64() {
+          //Native.BenchmarkingUtil.start();
 
-        BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), childref);
-        BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), parentref);
-        BookkeepingModel.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
-            s.I(), newchild.children, parentI.children.value, slot as int, refUpperBound);
-        BookkeepingModel.allocRefDoesntEqual(s.I(), newchild.children, parentref, refUpperBound);
+          ghost var parentI := s.cache.I()[parentref];
+          ghost var childI := s.cache.I()[childref];
 
-        var newchildref := allocBookkeeping(inout s, newchild.children);
-        if newchildref.None? {
-          var _ := FreeMutBucket(newparentBucket);
-          var _ := FreeNode(newchild);
-          print "giving up; could not get parentref\n";
+          BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), childref);
+          BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), parentref);
+          FlushModel.lemmaChildrenConditionsRestrictAndTranslateChild(s.I(), parentI, childI, slot as int);
+          assert BookkeepingModel.ChildrenConditions(s.I(), newchild.I().children);
+
+          linear var Node(newchildpivots, newchildedges, newchildchildren, newchildbuckets) := newchild;
+          BucketFlushModel.partialFlushWeightBound(parentI.buckets[slot as nat], newchildpivots, MutBucket.ILseq(newchildbuckets));
+          linear var newparentBucket := s.cache.NodePartialFlush(inout newchildbuckets, parentref, newchildpivots, slot);
+          newchild := Node(newchildpivots, newchildedges, newchildchildren, newchildbuckets);
+
+          BookkeepingModel.lemmaChildrenConditionsUpdateOfAllocBookkeeping(
+              s.I(), newchild.children, parentI.children.value, slot as int, refUpperBound);
+          BookkeepingModel.allocRefDoesntEqual(s.I(), newchild.children, parentref, refUpperBound);
+
+          var newchildref := allocBookkeeping(inout s, newchild.children);
+          if newchildref.None? {
+            var _ := FreeMutBucket(newparentBucket);
+            var _ := FreeNode(newchild);
+            print "giving up; could not get parentref\n";
+          } else {
+            inout s.cache.Insert(newchildref.value, newchild);
+            var newparent_children := inout s.cache.NodeUpdateSlot(parentref,
+              slot, newparentBucket, newchildref.value);
+            writeBookkeeping(inout s, parentref, newparent_children);
+            assert LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
+          }
         } else {
-          inout s.cache.Insert(newchildref.value, newchild);
-
-          var newparent_children := inout s.cache.NodeUpdateSlot(parentref,
-            slot, newparentBucket, newchildref.value);
-          writeBookkeeping(inout s, parentref, newparent_children);
-
-          assert LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
+          var _ := FreeNode(newchild);
+          print "giving up; flush can't run because flushed child will be overweight";
         }
       } else {
         print "giving up; flush can't run because flushed keys are out of bound for its children";

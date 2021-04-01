@@ -111,7 +111,7 @@ module PivotBetreeSpecWFNodes {
   requires 0 <= slot < NumBuckets(parent.pivotTable)
   requires InvNode(parent)
   requires InvNode(child)
-  requires ParentKeysInChildRange(parent, child, slot)
+  requires ParentKeysInChildRange(parent.pivotTable, parent.edgeTable, child.pivotTable, slot)
   ensures var child' := RestrictAndTranslateChild(parent, child, slot);
     && WFBucketListProper(child'.buckets, child'.pivotTable)
     && BucketListWellMarshalled(child'.buckets)

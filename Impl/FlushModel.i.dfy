@@ -22,6 +22,7 @@ module FlushModel {
   import BucketFlushModel
   import opened Bounds
   import opened BoundedPivotsLib
+  import opened TranslationLib
 
   import IT = IndirectionTable
   import opened NativeTypes
@@ -33,7 +34,7 @@ module FlushModel {
   requires BT.WFNode(parent)
   requires BT.WFNode(child)
   requires 0 <= slot < NumBuckets(parent.pivotTable)
-  requires BT.ParentKeysInChildRange(parent, child, slot)
+  requires ParentKeysInChildRange(parent.pivotTable, parent.edgeTable, child.pivotTable, slot)
   requires ChildrenConditions(s, child.children)
   ensures ChildrenConditions(s, BT.RestrictAndTranslateChild(parent, child, slot).children)
   {
@@ -67,8 +68,9 @@ module FlushModel {
     ) else (
       var parent := s.cache[parentref];
 
-      if BT.ParentKeysInChildRange(parent, child, slot) then (
+      if ParentKeysInChildRange(parent.pivotTable, parent.edgeTable, child.pivotTable, slot) then (
         var child' := BT.RestrictAndTranslateChild(parent, child, slot);
+
         if WeightBucketList(child'.buckets) <= MaxTotalBucketWeight() then (
           WeightBucketLeBucketList(parent.buckets, slot);
           lemmaChildrenConditionsOfNode(s, childref);
@@ -124,7 +126,7 @@ module FlushModel {
     } else {
       var parent := s.cache[parentref];
       
-      if BT.ParentKeysInChildRange(parent, child, slot) {
+      if ParentKeysInChildRange(parent.pivotTable, parent.edgeTable, child.pivotTable, slot) {
         var child' := BT.RestrictAndTranslateChild(parent, child, slot);
         if WeightBucketList(child'.buckets) <= MaxTotalBucketWeight() {
           WeightBucketLeBucketList(parent.buckets, slot);

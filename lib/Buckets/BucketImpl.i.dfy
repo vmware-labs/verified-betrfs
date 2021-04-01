@@ -621,8 +621,7 @@ module BucketImpl {
       }
     }
 
-    static method computeWeightOfSeq(shared buckets: lseq<MutBucket>)
-    returns (weight: uint64)
+    static method computeWeightOfSeq(shared buckets: lseq<MutBucket>) returns (weight: uint64)
     requires InvLseq(buckets)
     requires WeightBucketList(ILseq(buckets)) < 0x1_0000_0000_0000_0000
     requires |buckets| < 0x1_0000_0000_0000_0000
@@ -633,6 +632,7 @@ module BucketImpl {
 
       var w := 0;
       var j: uint64 := 0;
+
       while j < lseq_length_raw(buckets)
       invariant 0 <= j as int <= |buckets|
       invariant w as int == WeightBucketList(bs[0..j]);
@@ -644,8 +644,50 @@ module BucketImpl {
         w := w + lseq_peek(buckets, j).weight;
         j := j + 1;
       }
+
       assert bs[0..|buckets|] == bs;
       return w;
+    }
+
+    static method tryComputeWeightOfSeq(shared buckets: lseq<MutBucket>)
+    returns (succ: bool, weight: uint64)
+    requires InvLseq(buckets)
+    requires |buckets| < 0x1_0000_0000_0000_0000
+    ensures succ ==> weight as int == WeightBucketList(ILseq(buckets))
+    ensures !succ ==> MaxTotalBucketWeight() < WeightBucketList(ILseq(buckets)) 
+    {
+      reveal_WeightBucketList();
+      ghost var bs := ILseq(buckets);
+
+      var w := 0;
+      var j: uint64 := 0;
+      var max : uint64 := 0xffff_ffff_ffff_ffff;
+
+      while j < lseq_length_raw(buckets)
+      invariant 0 <= j as int <= |buckets|
+      invariant WeightBucketList(bs[0..j]) < 0x1_0000_0000_0000_0000
+      invariant w as int == WeightBucketList(bs[0..j]);
+      {
+        assert DropLast(bs[0..j+1]) == bs[0..j];
+        assert Last(bs[0..j+1]) == lseq_peek(buckets, j).I();
+        WeightBucketListSlice(bs, 0, j as int + 1);
+
+        var bucketweight := lseq_peek(buckets, j).weight;
+        var diff := max - bucketweight;
+
+        if diff < w {
+          succ := false;
+          weight := w;
+          return;
+        }
+
+        w := w + bucketweight;
+        j := j + 1;
+      }
+
+      assert bs[0..|buckets|] == bs;
+      succ := true;
+      weight := w;
     }
 
     static lemma Islice(buckets: lseq<MutBucket>, a: int, b: int)
@@ -845,46 +887,47 @@ module BucketImpl {
     }
   }
 
-  method pkvList2BucketList(pkvs: seq<PKV.Pkv>, sorted: bool)
-  returns (linear buckets: lseq<MutBucket>)
+  method pkvList2BucketList(linear inout bots: lseq<MutBucket>, pkvs: seq<PKV.Pkv>, sorted: bool)
   requires |pkvs| < Uint64UpperBound()
   requires forall i | 0 <= i < |pkvs| :: PKV.WF(pkvs[i])
   requires forall i | 0 <= i < |pkvs| :: PackedKV.WeightPkv(pkvs[i]) as nat < Uint32UpperBound()
   requires sorted ==>
            forall i | 0 <= i < |pkvs| :: BucketWellMarshalled(PKV.I(pkvs[i]))
-  ensures |buckets| == |pkvs|
-  ensures MutBucket.InvLseq(buckets)
-  ensures MutBucket.ILseq(buckets) == DPKV.PKVISeq(pkvs)
+  requires |old_bots| == |pkvs|
+  requires MutBucket.InvLseq(old_bots)
+  ensures |bots| == |pkvs|
+  ensures MutBucket.InvLseq(bots)
+  ensures MutBucket.ILseq(bots) == DPKV.PKVISeq(pkvs)
   {
-    buckets := lseq_alloc(|pkvs| as uint64);
     var i: uint64 := 0;
     while i < |pkvs| as uint64
       invariant i as nat <= |pkvs|
-      invariant |pkvs| == |buckets|
-      invariant forall j | i as int <= j < |buckets| :: !lseq_has(buckets)[j]
-      invariant forall j | 0 <= j < i as int :: lseq_has(buckets)[j]
-      invariant forall j | 0 <= j < i :: lseqs(buckets)[j].Inv()
-      invariant forall j | 0 <= j < i :: lseqs(buckets)[j].bucket == PKV.I(pkvs[j])
+      invariant |pkvs| == |bots|
+      invariant forall j | 0 <= j < |pkvs| as int :: lseq_has(bots)[j]
+      invariant forall j | 0 <= j < |pkvs| as int :: bots[j].Inv()
+      invariant forall j | 0 <= j < i :: lseqs(bots)[j].bucket == PKV.I(pkvs[j])
     {
       linear var newbucket := MutBucket.AllocPkv(pkvs[i], sorted);
-      buckets := lseq_give(buckets, i, newbucket);
+      linear var oldbucket := lseq_swap_inout(inout bots, i, newbucket);
+      var _ := FreeMutBucket(oldbucket);
       i := i + 1;
     }
   }
 
-  method PartialFlush(shared top: MutBucket, shared bots: lseq<MutBucket>, pivots: Pivots.PivotTable)
-    returns (linear newtop: MutBucket, linear newbots: lseq<MutBucket>)
+   method PartialFlush(linear inout bots: lseq<MutBucket>, shared top: MutBucket,  pivots: Pivots.PivotTable)
+    returns (linear newtop: MutBucket)
     requires top.Inv()
-    requires MutBucket.InvLseq(bots)
+    requires MutBucket.InvLseq(old_bots)
     requires Pivots.WFPivots(pivots)
     requires |pivots| < Uint64UpperBound()
-    requires Pivots.NumBuckets(pivots) == |bots|
+    requires Pivots.NumBuckets(pivots) == |old_bots|
     requires WeightBucket(top.I()) <= MaxTotalBucketWeight()
-    requires WeightBucketList(MutBucket.ILseq(bots)) <= MaxTotalBucketWeight()
-    ensures MutBucket.InvLseq(newbots)
+    requires WeightBucketList(MutBucket.ILseq(old_bots)) <= MaxTotalBucketWeight()
+    ensures MutBucket.InvLseq(bots)
+    ensures |bots| == |old_bots|
     ensures newtop.Inv()
-    ensures partialFlushResult(newtop.I(), MutBucket.ILseq(newbots))
-        == BucketFlushModel.partialFlush(top.I(), pivots, MutBucket.ILseq(bots))
+    ensures partialFlushResult(newtop.I(), MutBucket.ILseq(bots))
+        == BucketFlushModel.partialFlush(top.I(), pivots, MutBucket.ILseq(old_bots))
   {
     var i: uint64 := 0;
     var bots_len := lseq_length_raw(bots);
@@ -943,7 +986,83 @@ module BucketImpl {
       WeightBucketLeBucketList(DPKV.PKVISeq(result.bots), i);
       DPKV.WeightBucketPkv_eq_WeightPkv(result.bots[i]);
     }
+
     newtop := MutBucket.AllocPkv(result.top, sorted);
-    newbots := pkvList2BucketList(result.bots, sorted);
+    pkvList2BucketList(inout bots, result.bots, sorted);
   }
+
+  // method PartialFlush(shared top: MutBucket, shared bots: lseq<MutBucket>, pivots: Pivots.PivotTable)
+  //   returns (linear newtop: MutBucket, linear newbots: lseq<MutBucket>)
+  //   requires top.Inv()
+  //   requires MutBucket.InvLseq(bots)
+  //   requires Pivots.WFPivots(pivots)
+  //   requires |pivots| < Uint64UpperBound()
+  //   requires Pivots.NumBuckets(pivots) == |bots|
+  //   requires WeightBucket(top.I()) <= MaxTotalBucketWeight()
+  //   requires WeightBucketList(MutBucket.ILseq(bots)) <= MaxTotalBucketWeight()
+  //   ensures MutBucket.InvLseq(newbots)
+  //   ensures newtop.Inv()
+  //   ensures partialFlushResult(newtop.I(), MutBucket.ILseq(newbots))
+  //       == BucketFlushModel.partialFlush(top.I(), pivots, MutBucket.ILseq(bots))
+  // {
+  //   var i: uint64 := 0;
+  //   var bots_len := lseq_length_raw(bots);
+
+  //   var botPkvs: array<PKV.Pkv> := new PKV.Pkv[bots_len];
+  //   var sorted := true;
+  //   while i < bots_len
+  //     invariant i as nat <= |bots|
+  //     invariant forall j | 0 <= j < i :: PKV.WF(botPkvs[j])
+  //     invariant forall j | 0 <= j < i :: PKV.I(botPkvs[j]) == lseqs(bots)[j].bucket
+  //     invariant forall j | 0 <= j < i :: |PKV.IKeys(botPkvs[j].keys)| < 0x1000_0000
+  //     invariant sorted ==> forall j | 0 <= j < i ::
+  //         BucketWellMarshalled(PKV.I(botPkvs[j]))
+  //   {
+  //     botPkvs[i] := lseq_peek(bots, i).GetPkv();
+  //     NumElementsLteWeight(PKV.I(botPkvs[i]));
+  //     WeightBucketLeBucketList(MutBucket.ILseq(bots), i as int);
+
+  //     if !lseq_peek(bots, i).sorted {
+  //       sorted := false;
+  //     }
+  //     // assert |PKV.IKeys(botPkvs[i].keys)|
+  //     //    <= WeightBucket(PKV.I(botPkvs[i]))
+  //     //    <= WeightBucketList(MutBucket.ILseq(bots))
+  //     //    < 0x1000_0000;
+  //     i := i + 1;
+  //   }
+
+  //   var botPkvsSeq := botPkvs[..];
+
+  //   NumElementsLteWeight(top.bucket);
+  //   assert DPKV.PKVISeq(botPkvsSeq) == MutBucket.ILseq(bots);
+
+  //   var topPkv := top.GetPkv();
+  //   if !top.sorted {
+  //     sorted := false;
+  //   }
+
+  //   var result := DPKV.PartialFlush(topPkv, pivots, botPkvsSeq);
+
+  //   assert sorted ==>
+  //     && BucketWellMarshalled(PKV.I(result.top)) 
+  //     && (forall j | 0 <= j < |result.bots| ::
+  //         BucketWellMarshalled(PKV.I(result.bots[j])))
+  //   by {
+  //     if sorted {
+  //       partialFlushPreservesSorted(top.bucket, pivots, MutBucket.ILseq(bots));
+  //     }
+  //   }
+
+  //   partialFlushWeightBound(top.I(), pivots, MutBucket.ILseq(bots));
+  //   DPKV.WeightBucketPkv_eq_WeightPkv(result.top);
+  //   forall i | 0 <= i < |result.bots|
+  //     ensures PackedKV.WeightPkv(result.bots[i]) as nat < Uint32UpperBound()
+  //   {
+  //     WeightBucketLeBucketList(DPKV.PKVISeq(result.bots), i);
+  //     DPKV.WeightBucketPkv_eq_WeightPkv(result.bots[i]);
+  //   }
+  //   newtop := MutBucket.AllocPkv(result.top, sorted);
+  //   newbots := pkvList2BucketList(result.bots, sorted);
+  // }
 }

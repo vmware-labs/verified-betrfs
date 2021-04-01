@@ -81,50 +81,50 @@ module NodeImpl {
       WeightBucketListOneEmpty();
     }
 
-    shared method BoundedBucket(pivots: Pivots.PivotTable, slot: uint64)
-    returns (result: bool)
-    requires Inv()
-    requires |pivots| < 0x4000_0000_0000_0000
-    requires Pivots.WFPivots(pivots)
-    requires slot as nat < |buckets|
-    ensures result == Pivots.BoundedKeySeq(pivots, buckets[slot as nat].I().keys)
-    {
-      shared var bucket := lseq_peek(buckets, slot);
-      var pkv := bucket.GetPkv();
+    // shared method BoundedBucket(pivots: Pivots.PivotTable, slot: uint64)
+    // returns (result: bool)
+    // requires Inv()
+    // requires |pivots| < 0x4000_0000_0000_0000
+    // requires Pivots.WFPivots(pivots)
+    // requires slot as nat < |buckets|
+    // ensures result == Pivots.BoundedKeySeq(pivots, buckets[slot as nat].I().keys)
+    // {
+    //   shared var bucket := lseq_peek(buckets, slot);
+    //   var pkv := bucket.GetPkv();
       
-      ghost var keys := PKV.IKeys(pkv.keys);
-      assert buckets[slot as nat].I().keys == keys;
+    //   ghost var keys := PKV.IKeys(pkv.keys);
+    //   assert buckets[slot as nat].I().keys == keys;
 
-      var bounded := true;
-      var len := PKV.NumKVPairs(pkv);
+    //   var bounded := true;
+    //   var len := PKV.NumKVPairs(pkv);
 
-      if bucket.sorted {
-        if len > 0 {
-          var key := PKV.GetKey(pkv, 0);
-          assert key == keys[0];
-          bounded := Pivots.ComputeBoundedKey(pivots, key);
-          if bounded {
-            key := PKV.GetKey(pkv, len-1);
-            assert key == keys[|keys|-1];
-            bounded := Pivots.ComputeBoundedKey(pivots, key);
-          }
-          assert bounded == Pivots.BoundedSortedKeySeq(pivots, keys);
-          Pivots.BoundedSortedKeySeqIsBoundedKeySeq(pivots, keys);
-        }
-      } else {
-        var i := 0 as uint64;
-        while i < len && bounded
-        invariant 0 <= i <= len
-        invariant bounded == Pivots.BoundedKeySeq(pivots, keys[..i])
-        {
-          var key := PKV.GetKey(pkv, i);
-          assert key == keys[i];
-          bounded := Pivots.ComputeBoundedKey(pivots, key);
-          i := i + 1;
-        }
-      }
-      return bounded;
-    }
+    //   if bucket.sorted {
+    //     if len > 0 {
+    //       var key := PKV.GetKey(pkv, 0);
+    //       assert key == keys[0];
+    //       bounded := Pivots.ComputeBoundedKey(pivots, key);
+    //       if bounded {
+    //         key := PKV.GetKey(pkv, len-1);
+    //         assert key == keys[|keys|-1];
+    //         bounded := Pivots.ComputeBoundedKey(pivots, key);
+    //       }
+    //       assert bounded == Pivots.BoundedSortedKeySeq(pivots, keys);
+    //       Pivots.BoundedSortedKeySeqIsBoundedKeySeq(pivots, keys);
+    //     }
+    //   } else {
+    //     var i := 0 as uint64;
+    //     while i < len && bounded
+    //     invariant 0 <= i <= len
+    //     invariant bounded == Pivots.BoundedKeySeq(pivots, keys[..i])
+    //     {
+    //       var key := PKV.GetKey(pkv, i);
+    //       assert key == keys[i];
+    //       bounded := Pivots.ComputeBoundedKey(pivots, key);
+    //       i := i + 1;
+    //     }
+    //   }
+    //   return bounded;
+    // }
 
     shared method BucketWellMarshalled(slot: uint64) returns (result: bool)
     requires Inv()
@@ -337,7 +337,7 @@ module NodeImpl {
     requires BT.WFNode(parent.I())
     requires BT.WFNode(child.I())
     requires 0 <= slot as int < Pivots.NumBuckets(parent.pivotTable)
-    requires BT.ParentKeysInChildRange(parent.I(), child.I(), slot as int)
+    requires ParentKeysInChildRange(parent.pivotTable, parent.edgeTable, child.pivotTable, slot as int)
     ensures newchild.Inv()
     ensures newchild.I() == BT.RestrictAndTranslateChild(parent.I(), child.I(), slot as int)
     {
