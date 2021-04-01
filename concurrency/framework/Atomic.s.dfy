@@ -12,7 +12,7 @@ module {:extern "Atomics"} Atomics {
 
   method {:extern} new_atomic<V, G>(
       v: V,
-      ghost linear g: G,
+      glinear g: G,
       ghost inv: (V, G) -> bool)
   returns (a: Atomic<V, G>)
   requires inv(v, g)
@@ -21,7 +21,7 @@ module {:extern "Atomics"} Atomics {
   ghost method {:extern} finish_atomic<V, G>(
       a: Atomic<V, G>,
       new_value: V,
-      ghost linear g: G)
+      glinear g: G)
   requires atomic_inv(a, new_value, g)
 
   /*
@@ -43,7 +43,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: bool,
       ghost orig_value: V,
       ghost new_value: V,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value ==> orig_value == v1 && new_value == v2
   ensures !ret_value ==> orig_value != v1 && new_value == orig_value
   ensures atomic_inv(a, orig_value, g)
@@ -56,7 +56,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: bool,
       ghost orig_value: V,
       ghost new_value: V,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value ==> orig_value == v1 && new_value == v2
   ensures !ret_value ==> new_value == orig_value
   ensures atomic_inv(a, orig_value, g)
@@ -70,7 +70,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: V,
       ghost orig_value: V,
       ghost new_value: V,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == orig_value
   ensures atomic_inv(a, orig_value, g)
@@ -80,7 +80,7 @@ module {:extern "Atomics"} Atomics {
       ghost ret_value: (),
       ghost orig_value: V,
       ghost new_value: V,
-      ghost linear g: G)
+      glinear g: G)
   ensures new_value == v
   ensures atomic_inv(a, orig_value, g)
 
@@ -121,7 +121,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint8,
       ghost orig_value: uint8,
       ghost new_value: uint8,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == bit_or_uint8(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -133,7 +133,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint8,
       ghost orig_value: uint8,
       ghost new_value: uint8,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == bit_and_uint8(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -145,7 +145,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint8,
       ghost orig_value: uint8,
       ghost new_value: uint8,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == bit_xor_uint8(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -157,7 +157,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint8,
       ghost orig_value: uint8,
       ghost new_value: uint8,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == wrapped_add_uint8(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -169,7 +169,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint8,
       ghost orig_value: uint8,
       ghost new_value: uint8,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == wrapped_sub_uint8(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -211,7 +211,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint16,
       ghost orig_value: uint16,
       ghost new_value: uint16,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == bit_or_uint16(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -223,7 +223,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint16,
       ghost orig_value: uint16,
       ghost new_value: uint16,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == bit_and_uint16(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -235,7 +235,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint16,
       ghost orig_value: uint16,
       ghost new_value: uint16,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == bit_xor_uint16(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -247,7 +247,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint16,
       ghost orig_value: uint16,
       ghost new_value: uint16,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == wrapped_add_uint16(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -259,7 +259,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint16,
       ghost orig_value: uint16,
       ghost new_value: uint16,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == wrapped_sub_uint16(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -301,7 +301,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint32,
       ghost orig_value: uint32,
       ghost new_value: uint32,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == bit_or_uint32(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -313,7 +313,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint32,
       ghost orig_value: uint32,
       ghost new_value: uint32,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == bit_and_uint32(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -325,7 +325,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint32,
       ghost orig_value: uint32,
       ghost new_value: uint32,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == bit_xor_uint32(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -337,7 +337,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint32,
       ghost orig_value: uint32,
       ghost new_value: uint32,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == wrapped_add_uint32(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -349,7 +349,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint32,
       ghost orig_value: uint32,
       ghost new_value: uint32,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == wrapped_sub_uint32(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -391,7 +391,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint64,
       ghost orig_value: uint64,
       ghost new_value: uint64,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == bit_or_uint64(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -403,7 +403,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint64,
       ghost orig_value: uint64,
       ghost new_value: uint64,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == bit_and_uint64(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -415,7 +415,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint64,
       ghost orig_value: uint64,
       ghost new_value: uint64,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == bit_xor_uint64(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -427,7 +427,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint64,
       ghost orig_value: uint64,
       ghost new_value: uint64,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == wrapped_add_uint64(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -439,7 +439,7 @@ module {:extern "Atomics"} Atomics {
       ret_value: uint64,
       ghost orig_value: uint64,
       ghost new_value: uint64,
-      ghost linear g: G)
+      glinear g: G)
   ensures ret_value == orig_value
   ensures new_value == wrapped_sub_uint64(orig_value, operand)
   ensures atomic_inv(a, orig_value, g)
@@ -455,7 +455,7 @@ module {:extern "Atomics"} Atomics {
       ghost ret_value: (),
       ghost orig_value: V,
       ghost new_value: V,
-      ghost linear g: G)
+      glinear g: G)
   ensures orig_value == new_value
   ensures atomic_inv(a, orig_value, g)
 }
