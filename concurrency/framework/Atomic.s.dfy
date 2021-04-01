@@ -446,6 +446,7 @@ module {:extern "Atomics"} Atomics {
 
   /*
    * No-op. Access the internal state without modifying the physical state.
+   * May modify ghost state.
    * No observable non-ghost effects.
    */
 
