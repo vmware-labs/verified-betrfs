@@ -1,19 +1,52 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-#include <semaphore>
+//#include <semaphore> // c++20 feature
+#include <mutex>
+#include <condition_variable>
 
 namespace Mutexes {
+        
+class BinarySemaphore {
+public:
+  BinarySemaphore (int count) : count(count) { }
+  
+  void release() {
+    std::unique_lock<std::mutex> lock(mtx);
+    count++;
+    cv.notify_one();
+  }
+
+  void acquire() {
+    std::unique_lock<std::mutex> lock(mtx);
+    while (count == 0) {
+      cv.wait(lock);
+    }
+    count--;
+  }
+
+private:
+  std::mutex mtx;
+  std::condition_variable cv;
+  int count;
+};
 
 template <typename V>
 struct InternalMutex {
-  std::binary_semaphore semaphore;
+  // We use a semaphore because it allows us to do the 'release'
+  // on a different thread fro the 'acquire'.
+  // This behavior is allowed by the Dafny spec of Mutex.
+  // Howeer, that action would result in undefined behavior for std::mutex.
+
+  //std::binary_semaphore semaphore;
+  BinarySemaphore semaphore;
   V v;
 
   InternalMutex(V const& v) : semaphore(1), v(v) { }
 };
 
-using Mutex<V> = InternalMutex<V>*;
+template <typename V>
+using Mutex = InternalMutex<V>*;
 
 template <typename V>
 Mutex<V> new__mutex(V v)
@@ -22,14 +55,14 @@ Mutex<V> new__mutex(V v)
 }
 
 template <typename V>
-Mutex<V> acquire(Mutex m)
+V acquire(Mutex<V> m)
 {
   m->semaphore.acquire();
   return m->v;
 }
 
 template <typename V>
-Mutex<V> release(Mutex m, V v)
+void release(Mutex<V> m, V v)
 {
   m->v = v;
   m->semaphore.release();
