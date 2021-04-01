@@ -77,7 +77,7 @@ module {:extern "Atomics"} Atomics {
 
   method {:extern} execute_atomic_store<V, G>(a: Atomic<V, G>, v: V)
   returns (
-      ret_value: (),
+      ghost ret_value: (),
       ghost orig_value: V,
       ghost new_value: V,
       ghost linear g: G)
@@ -452,7 +452,7 @@ module {:extern "Atomics"} Atomics {
   method {:extern} execute_atomic_noop<V, G>(
       a: Atomic<V, G>)
   returns (
-      ret_value: (),
+      ghost ret_value: (),
       ghost orig_value: V,
       ghost new_value: V,
       ghost linear g: G)

@@ -2,6 +2,7 @@
 
 namespace Atomics {
 
+
 template <typename V>
 struct InternalAtomic {
   std::atomic<V>* slot;
@@ -120,10 +121,15 @@ ARITH_SPECIALIZE(uint64_t, uint64)
 
 template <typename V, typename G>
 void execute__atomic__noop(
-    InternalAtomic<V> a)
+    InternalAtomic<V> _a)
 {
   // do nothing
 }
+
+static_assert(std::atomic<uint8_t>::is_always_lock_free);
+static_assert(std::atomic<uint16_t>::is_always_lock_free);
+static_assert(std::atomic<uint32_t>::is_always_lock_free);
+static_assert(std::atomic<uint64_t>::is_always_lock_free);
 
 template <typename V, typename G>
 using Atomic = InternalAtomic<V>;
