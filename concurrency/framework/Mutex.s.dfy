@@ -4,24 +4,24 @@
 module {:extern "Mutexes"} Mutexes {
   type {:extern} Atomic<V, G>
 
+  datatype MutexHandle<V> = MutexHandle(m: Mutex<V>)
+
   type {:extern} Mutex<V>
   {
     predicate {:extern} inv(v: V)
-  }
 
-  datatype MutexHandle<V> = MutexHandle(m: Mutex<V>)
+    method {:extern} acquire()
+    returns (linear v: V, glinear handle: MutexHandle<V>)
+    ensures this.inv(v)
+    ensures handle.m == this
+
+    method {:extern} release(linear v: V, glinear handle: MutexHandle<V>)
+    requires this.inv(v)
+    requires handle.m == this
+  }
 
   method {:extern} new_mutex<V>(linear v: V, ghost inv: (V) -> bool)
   returns (m: Mutex)
   requires inv(v)
   ensures m.inv == inv
-
-  method {:extern} acquire<V>(m: Mutex<V>)
-  returns (linear v: V, glinear handle: MutexHandle<V>)
-  ensures m.inv(v)
-  ensures handle.m == m
-
-  method {:extern} release<V>(m: Mutex<V>, linear v: V, glinear handle: MutexHandle<V>)
-  requires m.inv(v)
-  requires handle.m == m
 }
