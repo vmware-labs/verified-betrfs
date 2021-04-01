@@ -908,7 +908,6 @@ module PivotBetreeSpec {
   {
     && WFNode(r.leaf)
     && |r.pivots| <= MaxNumChildren() + 1
-    && BoundedBucketList(r.leaf.buckets, r.leaf.pivotTable)
     && |r.leaf.buckets| == 1
     && ContainsAllKeys(r.pivots)
     && r.leaf.edgeTable[0].None?

@@ -56,43 +56,36 @@ module LeafImpl {
     if b {
       print "giving up; repivotLeaf can't run because frozen isn't written";
     } else {
-      var bounded := s.cache.NodeBoundedBucket(ref, ref, 0);
-      ghost var buckets := s.cache.I()[ref].buckets;
-      assert bounded == BoundedBucketList(buckets, s.cache.I()[ref].pivotTable);
-      if !bounded {
-        print "giving up; repivotLeaf can't run because current leaf is not bounded";
+      var _, edges, _ := s.cache.GetNodeInfo(ref);
+      if edges[0].Some? {
+        print "giving up; repivotLeaf can't run because current leaf is incorrect";
       } else {
-        var _, edges, _ := s.cache.GetNodeInfo(ref);
-        if edges[0].Some? {
-          print "giving up; repivotLeaf can't run because current leaf is incorrect";
-        } else {
-          var pivot: KeyType.Key;
-          linear var left, right;
-          var pivots := InitPivotTable();
+        var pivot: KeyType.Key;
+        linear var left, right;
+        var pivots := InitPivotTable();
+  
+        left, right, pivot := s.cache.NodeSplitMiddle(ref);
+        linear var buckets' := lseq_alloc(2);
+        lseq_give_inout(inout buckets', 0, left);
+        lseq_give_inout(inout buckets', 1, right);
 
-          left, right, pivot := s.cache.NodeSplitMiddle(ref);
-          linear var buckets' := lseq_alloc(2);
-          lseq_give_inout(inout buckets', 0, left);
-          lseq_give_inout(inout buckets', 1, right);
+        pivot := CopyKey(pivot);
+        pivots := Insert(pivots, Keyspace.Element(pivot), 1);
 
-          pivot := CopyKey(pivot);
-          pivots := Insert(pivots, Keyspace.Element(pivot), 1);
+        linear var newnode := Node(pivots, [None, None], None, buckets');
+        writeBookkeeping(inout s, ref, None);
+        inout s.cache.Insert(ref, newnode);
+        assert s.W();
 
-          linear var newnode := Node(pivots, [None, None], None, buckets');
-          writeBookkeeping(inout s, ref, None);
-          inout s.cache.Insert(ref, newnode);
-          assert s.W();
-
-          ghost var a := s.I();
-          ghost var oldnode := old_s.cache.I()[ref];
-          ghost var b := LeafModel.repivotLeaf(old_s.I(), ref, oldnode);
-          assert newnode.I() == BT.G.Node(pivots, [None, None], None, 
-              [
-                SplitBucketLeft(oldnode.buckets[0], pivot),
-                SplitBucketRight(oldnode.buckets[0], pivot)
-              ]);
-          assert a.cache == b.cache;
-        }
+        ghost var a := s.I();
+        ghost var oldnode := old_s.cache.I()[ref];
+        ghost var b := LeafModel.repivotLeaf(old_s.I(), ref, oldnode);
+        assert newnode.I() == BT.G.Node(pivots, [None, None], None, 
+            [
+              SplitBucketLeft(oldnode.buckets[0], pivot),
+              SplitBucketRight(oldnode.buckets[0], pivot)
+            ]);
+        assert a.cache == b.cache;
       }
     }
   }
