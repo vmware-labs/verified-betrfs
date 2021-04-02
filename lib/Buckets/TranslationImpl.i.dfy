@@ -37,7 +37,7 @@ module TranslationImpl {
       var oldlcp : Key := ComputePivotLcp(pt[cLeft], pt[cLeft+1]);
       var newlcp : Key := ComputePivotLcp(pt'[cLeft], pt'[cLeft+1]);
       PivotLcpSubRangeLeft(pt[cLeft], pt[cLeft+1], pt'[cLeft+1]);
-      
+
       assume |et[cLeft].value + newlcp[|oldlcp|..]| <= 1024;
       var translation : Key := et[cLeft].value + newlcp[|oldlcp|..];
       return et[..cLeft] +  [Some(translation)];
@@ -78,20 +78,27 @@ module TranslationImpl {
     }
   }
 
-  method Computelcpright(left: Key) returns (prefix: Key)
-  ensures prefix == lcpright(left)
+  method ComputelcprightLen(left: Key) returns (len: uint64)
+  ensures len as nat == |lcpright(left)|
   {
     var i: uint64 := 0;
-    var len := |left| as uint64;
+    var llen := |left| as uint64;
 
-    while i < len && left[i] == 255
-      invariant 0 <= i <= len
-      invariant forall j | 0 <= j < i :: left[j] as int == Uint8UpperBound() - 1 
+    while i < llen && left[i] == 255
+      invariant 0 <= i <= llen
+      invariant forall j | 0 <= j < i :: left[j] as int == Uint8UpperBound() - 1
     {
       i := i + 1;
     }
     lcprightCondition(left, i as nat);
-    return left[..i];
+    return i;
+  }
+
+  method Computelcpright(left: Key) returns (prefix: Key)
+  ensures prefix == lcpright(left)
+  {
+    var len := ComputelcprightLen(left);
+    return left[..len];
   }
 
   lemma lcpCondition(left: Key, right: Key, common_len: nat)
@@ -109,9 +116,9 @@ module TranslationImpl {
       lcpCondition(left[1..], right[1..], common_len-1);
     }
   }
-  
-  method Computelcp(left: Key, right: Key) returns (prefix: Key)
-  ensures prefix == lcp(left, right)
+
+  method ComputelcpLen(left: Key, right: Key) returns (len: uint64)
+  ensures len as nat == |lcp(left, right)|
   {
     var i: uint64 := 0;
     while
@@ -125,7 +132,7 @@ module TranslationImpl {
       i := i + 1;
     }
     lcpCondition(left, right, i as nat);
-    
+
     if
       && i < |left| as uint64
       && i + 1 == |right| as uint64
@@ -143,7 +150,26 @@ module TranslationImpl {
         }
         lcprightCondition(left[s..], i as nat - s as nat);
     }
-    prefix := left[..i];
+    len := i;
+  }
+
+  method Computelcp(left: Key, right: Key) returns (prefix: Key)
+  ensures prefix == lcp(left, right)
+  {
+    var len := ComputelcpLen(left, right);
+    prefix := left[..len];
+  }
+
+  method ComputePivotLcpLen(left: Element, right: Element) returns (len: uint64)
+  requires ElementIsKey(left)
+  requires right.Element? ==> ElementIsKey(right)
+  ensures len as nat == |PivotLcp(left, right)|
+  {
+    if right.Max_Element? {
+      len := ComputelcprightLen(left.e);
+    } else {
+      len := ComputelcpLen(left.e, right.e);
+    }
   }
 
   method ComputePivotLcp(left: Element, right: Element) returns (prefix: Key)
@@ -151,30 +177,27 @@ module TranslationImpl {
   requires right.Element? ==> ElementIsKey(right)
   ensures prefix == PivotLcp(left, right)
   {
-    if right.Max_Element? {
-      prefix := Computelcpright(left.e);
-    } else {
-      prefix := Computelcp(left.e, right.e);
-    }
+    var len := ComputePivotLcpLen(left, right);
+    prefix := left.e[..len];
   }
 
-  // TODO: Implement
   method ComputeTranslateKey(pt: PivotTable, et: EdgeTable, key: Key, r: uint64) returns (k: Key)
+  requires |pt| < 0x4000_0000_0000_0000
   requires WFPivots(pt)
   requires BoundedKey(pt, key)
   requires WFEdges(et, pt)
   requires r as int == Route(pt, key)
   ensures k == TranslateKey(pt, et, key)
   {
-    assume false;
-    k := [];
-    // var r := Route(pt, key);
-    // if et[r].None? then
-    //   None
-    // else
-    //   var prefix := PivotLcp(pt[r], pt[r+1]);
-    //   PrefixOfLcpIsPrefixOfKey(pt[r], pt[r+1], prefix, key);
-    //   Some(PrefixSet(prefix, et[r].value))
+    var r := ComputeRoute(pt, key);
+    if et[r].Some? {
+      var prefixlen := ComputePivotLcpLen(pt[r], pt[r+1]);
+      PrefixOfLcpIsPrefixOfKey(pt[r], pt[r+1], pt[r].e[..prefixlen], key);
+      assume |et[r].value| + |key| - prefixlen as nat <= 1024;
+      k := et[r].value + key[prefixlen..];
+    } else {
+      k := key;
+    }
   }
 
   // TODO: implement
