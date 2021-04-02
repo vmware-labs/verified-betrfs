@@ -7,7 +7,7 @@ include "../Lang/System/SeqComparison.s.dfy"
 
 //
 // Provides definitions and libraries for edge table and 
-// other translation related methods and lemma
+// other translation related functions and lemma
 //
 
 module TranslationLib {
@@ -49,6 +49,7 @@ module TranslationLib {
         && TranslateKey(pt', et', key) == TranslateKey(pt, et, key))
   }
 
+  // double check this looks weird when running as a whole
   function SplitLeftEdges(et: EdgeTable, pt: PivotTable, pivot: Key) : (et': EdgeTable)
   requires WFPivots(pt)
   requires WFEdges(et, pt)
@@ -72,28 +73,6 @@ module TranslationLib {
     )
   }
 
-  method ComputeSplitLeftEdges(et: EdgeTable, pt: PivotTable, pt': PivotTable, pivot: Key, cLeft: uint64) returns (et': EdgeTable)
-  requires WFPivots(pt)
-  requires WFEdges(et, pt)
-  requires ValidLeftCutOffKey(pt, pivot)
-  requires |pt| < 0x4000_0000_0000_0000
-  requires cLeft as int == CutoffForLeft(pt, pivot)
-  requires pt' == SplitLeft(pt, pivot)
-  ensures et' == SplitLeftEdges(et, pt, pivot)
-  {
-    if (pt[cLeft + 1].Element? && pt[ cLeft+1 ].e == pivot) || et[cLeft].None? {
-      return et[..cLeft + 1];
-    } else {
-      var oldlcp : Key := ComputePivotLcp(pt[cLeft], pt[cLeft+1]);
-      var newlcp : Key := ComputePivotLcp(pt'[cLeft], pt'[cLeft+1]);
-      PivotLcpSubRangeLeft(pt[cLeft], pt[cLeft+1], pt'[cLeft+1]);
-      
-      assume |et[cLeft].value + newlcp[|oldlcp|..]| <= 1024;
-      var translation : Key := et[cLeft].value + newlcp[|oldlcp|..];
-      return et[..cLeft] +  [Some(translation)];
-    }
-  }
-
   function SplitRightEdges(et: EdgeTable, pt: PivotTable, pivot: Key) : (et': EdgeTable)
   requires WFPivots(pt)
   requires WFEdges(et, pt)
@@ -115,28 +94,6 @@ module TranslationLib {
       var translation : Key := et[cRight].value + newlcp[|oldlcp|..];
       [Some(translation)] + et[cRight+1..]
     )
-  }
-
-  method ComputeSplitRightEdges(et: EdgeTable, pt: PivotTable, pt': PivotTable, pivot: Key, cRight: uint64) returns (et': EdgeTable)
-  requires WFPivots(pt)
-  requires WFEdges(et, pt)
-  requires BoundedKey(pt, pivot)
-  requires |pt| < 0x4000_0000_0000_0000
-  requires cRight as int == CutoffForRight(pt, pivot)
-  requires pt' == SplitRight(pt, pivot)
-  ensures et' == SplitRightEdges(et, pt, pivot)
-  {
-    if pt[cRight].e == pivot || et[cRight].None? {
-      return et[cRight..];
-    } else {
-      var oldlcp : Key := ComputePivotLcp(pt[cRight], pt[cRight+1]);
-      var newlcp : Key := ComputePivotLcp(pt'[0], pt'[1]);
-      PivotLcpSubRangeRight(pt[cRight], pt'[0], pt'[1]);
-
-      assume |et[cRight].value + newlcp[|oldlcp|..]| <= 1024;
-      var translation : Key := et[cRight].value + newlcp[|oldlcp|..];
-      return [Some(translation)] + et[cRight+1..];
-    }
   }
 
   lemma WFConcatEdges(leftpt: PivotTable, leftet: EdgeTable, rightpt: PivotTable, rightet: EdgeTable, pt: PivotTable)
@@ -170,7 +127,7 @@ module TranslationLib {
     Keyspace.reveal_IsStrictlySorted();
   }
 
-  // lcp functions and methods
+  // lcp functions and lemma
 
   function lcpright(left: Key): (prefix: Key)
   ensures IsPrefix(prefix, left)
@@ -183,31 +140,6 @@ module TranslationLib {
       [left[0]] + lcpright(left[1..])
     else
       []
-  }
-
-  method Computelcpright(left: Key) returns (prefix: Key)
-  ensures prefix == lcpright(left)
-  {
-    var i: uint64 := 0;
-    var len := |left| as uint64;
-
-    while i < len
-      invariant 0 <= i <= len
-      invariant forall j | 0 <= j < i :: left[j] as int == Uint8UpperBound() - 1 
-    {
-      if left[i] as int == Uint8UpperBound() - 1 {
-        i := i + 1;
-      } else {
-        prefixIslcpright(left[..i]);
-        assert left[..i] == lcpright(left[..i]);
-        assert lcpright(left[i..]) == [];
-        assert left[..i] + left[i..] == left;
-        lcprightConcat(left[..i], left[i..]);
-        return left[..i];
-      }
-    }
-    prefixIslcpright(left);
-    return left;
   }
 
   function lcp(left: Key, right: Key): (prefix: Key)
@@ -226,13 +158,6 @@ module TranslationLib {
     )
   }
 
-  method Computelcp(left: Key, right: Key) returns (prefix: Key)
-  ensures prefix == lcp(left, right)
-  {
-    assume false;
-    prefix := [];
-  }
-
   function PivotLcp(left: Element, right: Element) : (prefix: Key)
   requires ElementIsKey(left)
   requires right.Element? ==> ElementIsKey(right)
@@ -242,18 +167,6 @@ module TranslationLib {
     ) else (
       lcp(left.e, right.e)
     )
-  }
-
-  method ComputePivotLcp(left: Element, right: Element) returns (prefix: Key)
-  requires ElementIsKey(left)
-  requires right.Element? ==> ElementIsKey(right)
-  ensures prefix == PivotLcp(left, right)
-  {
-    if right.Max_Element? {
-      prefix := Computelcpright(left.e);
-    } else {
-      prefix := Computelcp(left.e, right.e);
-    }
   }
 
   lemma lcprightCorrect(left: Key, prefix: Key, key: Key)
@@ -269,6 +182,7 @@ module TranslationLib {
     }
   }
 
+  // TODO: prove
   lemma lcprightConcat(key1: Key, key2: Key)
   requires |key1 + key2| <= 1024
   ensures lcpright(key1 + key2) == lcpright(key1) + lcpright(key2)
@@ -472,24 +386,6 @@ module TranslationLib {
   {
     var pset := Translate(pt, et, key);
     ApplyPrefixSet(pset, key)
-  }
-
-  method ComputeTranslateKey(pt: PivotTable, et: EdgeTable, key: Key, r: uint64) returns (k: Key)
-  requires WFPivots(pt)
-  requires BoundedKey(pt, key)
-  requires WFEdges(et, pt)
-  requires r as int == Route(pt, key)
-  ensures k == TranslateKey(pt, et, key)
-  {
-    assume false;
-    k := [];
-    // var r := Route(pt, key);
-    // if et[r].None? then
-    //   None
-    // else
-    //   var prefix := PivotLcp(pt[r], pt[r+1]);
-    //   PrefixOfLcpIsPrefixOfKey(pt[r], pt[r+1], prefix, key);
-    //   Some(PrefixSet(prefix, et[r].value))
   }
 
   function ApplyPrefixSet(pset: Option<PrefixSet>, key: Key) : Key
@@ -1161,26 +1057,5 @@ module TranslationLib {
     && (parentedges[slot].Some? ==> 
         && var (left, right) := TranslatePivotPair(parentpivots, parentedges, slot);
         && ContainsRange(childpivots, left, right))
-  }
-
-  method ComputeParentKeysInChildRange(parentpivots: PivotTable, parentedges: EdgeTable, childpivots: PivotTable, slot: uint64)
-  returns (b: bool)
-  requires WFPivots(parentpivots)
-  requires WFPivots(childpivots)
-  requires WFEdges(parentedges, parentpivots)
-  requires 0 <= slot as int < |parentedges|
-  ensures b == ParentKeysInChildRange(parentpivots, parentedges, childpivots, slot as int)
-  {
-    assume false;
-    b := true;
-    // if parentedges[slot].None? {
-    //   ComputeContainsRange();
-    // }
-    // Keyspace.reveal_IsStrictlySorted();
-    // && (parentedges[slot].None? ==> 
-    //     ContainsRange(childpivots, parentpivots[slot], parentpivots[slot+1]))
-    // && (parentedges[slot].Some? ==> 
-    //     && var (left, right) := TranslatePivotPair(parentpivots, parentedges, slot);
-    //     && ContainsRange(childpivots, left, right))
   }
 }

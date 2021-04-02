@@ -36,7 +36,7 @@ module QueryImpl {
   import opened Bounds
   import opened BucketsLib
   import opened BoundedPivotsLib
-  import opened TranslationLib
+  import opened TranslationImpl
   import opened DiskOpModel
   import opened InterpretationDiskOps
   import opened ViewOp
@@ -48,7 +48,7 @@ module QueryImpl {
   returns (res: Option<Value>)
 
   requires old_s.Inv()
-  requires queryInv(old_s.I(), querykey, key, msg, ref, IIO(io), counter, lookup)
+  requires queryInv(old_s.I(), querykey, key, msg, ref, IIO(io), counter as int, lookup)
   requires !msg.Define?
   requires io.initialized()
 

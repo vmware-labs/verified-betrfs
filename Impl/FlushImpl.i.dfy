@@ -25,13 +25,12 @@ module FlushImpl {
   import opened LinearSequence_s
   import opened LinearSequence_i
   import opened BoundedPivotsLib
-  import opened TranslationLib
+  import opened TranslationImpl
 
   import opened NativeTypes
   import BookkeepingModel
   import FlushModel
   import IOModel
-  // import Inout
 
   import IT = IndirectionTable
 

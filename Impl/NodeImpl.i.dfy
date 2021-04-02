@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../lib/Buckets/BucketImpl.i.dfy"
-include "../lib/Lang/LinearBox.i.dfy"
+include "../lib/Buckets/TranslationImpl.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../PivotBetree/PivotBetree.i.dfy"
 
@@ -30,18 +30,18 @@ module NodeImpl {
   import opened BucketImpl
   import opened BucketsLib
   import opened BucketWeights
-  import opened TranslationLib
+  import opened TranslationImpl
 
   import ReferenceType`Internal
 
   linear datatype Node = Node(
       pivotTable: Pivots.PivotTable,
-      edgeTable: EdgeTable,
+      edgeTable: Translations.EdgeTable,
       children: Option<seq<BT.G.Reference>>,
       linear buckets: lseq<BucketImpl.MutBucket>)
   {
     static method Alloc(pivotTable: Pivots.PivotTable,
-      edgeTable: EdgeTable, 
+      edgeTable: Translations.EdgeTable, 
       children: Option<seq<BT.G.Reference>>, 
       linear buckets: lseq<BucketImpl.MutBucket>)
     returns (linear node: Node)
@@ -337,7 +337,7 @@ module NodeImpl {
     requires BT.WFNode(parent.I())
     requires BT.WFNode(child.I())
     requires 0 <= slot as int < Pivots.NumBuckets(parent.pivotTable)
-    requires ParentKeysInChildRange(parent.pivotTable, parent.edgeTable, child.pivotTable, slot as int)
+    requires Translations.ParentKeysInChildRange(parent.pivotTable, parent.edgeTable, child.pivotTable, slot as int)
     ensures newchild.Inv()
     ensures newchild.I() == BT.RestrictAndTranslateChild(parent.I(), child.I(), slot as int)
     {
