@@ -182,16 +182,6 @@ module TranslationLib {
     }
   }
 
-  // TODO: prove
-  lemma lcprightConcat(key1: Key, key2: Key)
-  requires |key1 + key2| <= 1024
-  ensures lcpright(key1 + key2) == lcpright(key1) + lcpright(key2)
-  {
-    reveal_IsPrefix();
-    SeqComparison.reveal_lte();
-    assume false;
-  }
-
   lemma lcprightSubRangeRight(left: Key, left': Key, prefix: Key, prefix': Key)
   requires lcpright(left) == prefix
   requires lcpright(left') == prefix'

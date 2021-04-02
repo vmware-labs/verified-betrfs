@@ -66,37 +66,84 @@ module TranslationImpl {
     }
   }
 
+  lemma lcprightCondition(s: Key, len: nat)
+    requires len <= |s|
+    requires forall j | 0 <= j < len :: s[j] == 255
+    requires len == |s| || s[len] < 255
+    ensures s[..len] == lcpright(s)
+  {
+    if |s| == 0 || s[0] < 255 {
+    } else {
+      lcprightCondition(s[1..], len-1);
+    }
+  }
+
   method Computelcpright(left: Key) returns (prefix: Key)
   ensures prefix == lcpright(left)
   {
     var i: uint64 := 0;
     var len := |left| as uint64;
 
-    while i < len
+    while i < len && left[i] == 255
       invariant 0 <= i <= len
       invariant forall j | 0 <= j < i :: left[j] as int == Uint8UpperBound() - 1 
     {
-      if left[i] as int == Uint8UpperBound() - 1 {
-        i := i + 1;
-      } else {
-        prefixIslcpright(left[..i]);
-        assert left[..i] == lcpright(left[..i]);
-        assert lcpright(left[i..]) == [];
-        assert left[..i] + left[i..] == left;
-        lcprightConcat(left[..i], left[i..]);
-        return left[..i];
-      }
+      i := i + 1;
     }
-    prefixIslcpright(left);
-    return left;
+    lcprightCondition(left, i as nat);
+    return left[..i];
   }
 
-  // TODO: Implement
+  lemma lcpCondition(left: Key, right: Key, common_len: nat)
+    requires common_len <= |left|
+    requires common_len <= |right|
+    requires forall j | 0 <= j < common_len :: left[j] == right[j]
+    requires common_len == |left| || common_len == |right| || left[common_len] != right[common_len]
+    ensures lcp(left, right) ==
+      if common_len < |left| && common_len + 1 == |right| && left[common_len] as nat + 1 == right[common_len] as nat then
+        left[..common_len + 1] + lcpright(left[common_len + 1..])
+      else
+        left[..common_len]
+  {
+    if 0 < common_len {
+      lcpCondition(left[1..], right[1..], common_len-1);
+    }
+  }
+  
   method Computelcp(left: Key, right: Key) returns (prefix: Key)
   ensures prefix == lcp(left, right)
   {
-    assume false;
-    prefix := [];
+    var i: uint64 := 0;
+    while
+      && i < |left| as uint64
+      && i < |right| as uint64
+      && left[i] == right[i]
+      invariant i as nat <= |left|
+      invariant i as nat <= |right|
+      invariant forall j | j < i :: left[j] == right[j]
+    {
+      i := i + 1;
+    }
+    lcpCondition(left, right, i as nat);
+    
+    if
+      && i < |left| as uint64
+      && i + 1 == |right| as uint64
+      && left[i] < right[i]
+      && left[i] + 1 == right[i] {
+        i := i + 1;
+        ghost var s := i;
+        while
+          && i < |left| as uint64
+          && left[i] == 255
+          invariant s as nat <= i as nat <= |left|
+          invariant forall j | s <= j < i :: left[j] == 255
+        {
+          i := i + 1;
+        }
+        lcprightCondition(left[s..], i as nat - s as nat);
+    }
+    prefix := left[..i];
   }
 
   method ComputePivotLcp(left: Element, right: Element) returns (prefix: Key)
