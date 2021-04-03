@@ -251,17 +251,14 @@ module TranslationImpl {
     }
   }
 
-  // TODO: implement
   method ComputeTranslateElement(e: Element, prefix: Key, newPrefix: Key) returns (e': Element)
   requires ElementIsKey(e)
   requires IsPrefix(prefix, e.e)
   ensures e' == TranslateElement(e, prefix, newPrefix)
   {
-    assume false;
-    e' := Keyspace.Element([]);
+    e' := Keyspace.Element(newPrefix + e.e[|prefix| as uint64..]);
   }
 
-  // TODO: impelement
   method ComputeTranslatePivotPair(left: Element, right: Element, prefix: Key, newPrefix: Key)
   returns (left': Element, right': Element)
   requires ElementIsKey(left)
@@ -272,9 +269,15 @@ module TranslationImpl {
     && l == left'
     && r == right'
   {
-    assume false;
-    left' := Keyspace.Element([]);
-    right' := Keyspace.Max_Element;
+    left' := ComputeTranslateElement(left, prefix, newPrefix);
+
+    var isprefix := right.Element? && |prefix| as uint64 <= |right.e| as uint64 && prefix == right.e[..|prefix|];
+    reveal_IsPrefix();
+    if right.Max_Element? || !isprefix {
+      right' := ComputeShortestUncommonPrefix(newPrefix);
+    } else {
+      right' := ComputeTranslateElement(right, prefix, newPrefix);
+    }
   }
 
   // TODO: implement
