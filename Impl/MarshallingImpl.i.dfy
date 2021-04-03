@@ -30,6 +30,8 @@ module MarshallingImpl {
   import opened BucketsLib
   import opened BucketWeights
   import opened Bounds
+  import opened TranslationLib
+  import opened TranslationImpl
   import SectorType
   import BucketImpl
   import BC = BlockCache
@@ -116,7 +118,7 @@ module MarshallingImpl {
     assert vs[..i] == vs;
     return Some(aresult[..i]);
   }
-  
+
   method valToStrictlySortedPivots(v: V) returns (s : Option<Pivots.PivotTable>)
   requires Marshalling.valToStrictlySortedPivots.requires(v)
   ensures s == Marshalling.valToStrictlySortedPivots(v)
@@ -142,13 +144,84 @@ module MarshallingImpl {
     }
   }
 
+  method ValToEdge(v: V) returns (s : Option<Option<Key>>)
+    requires Marshalling.valToEdge.requires(v)
+    ensures s == Marshalling.valToEdge(v)
+  {
+    assert v.c == 1 ==> ValInGrammar(v.val, GByteArray);
+    if v.c == 0 {
+      return Some(None);
+    } else if v.c == 1 && |v.val.b| <= 1024 {
+      return Some(Some(v.val.b));
+    } else {
+      return None;
+    }
+  }
+
+  method ValToEdgeTable(v: V) returns (s : Option<EdgeTable>)
+    requires Marshalling.valToEdgeTable.requires(v)
+    ensures s == Marshalling.valToEdgeTable(v)
+  {
+    var len := |v.a| as uint64;
+    linear var r := seq_alloc_init(len, None);
+
+    ghost var parse_error := false;
+    var i := 0;
+    while i < len
+      invariant 0 <= i <= len
+      invariant Marshalling.valSeqToEdgeTable(v.a[..i]).Some?
+      invariant |r| == len as nat
+      invariant r[..i] == Marshalling.valSeqToEdgeTable(v.a[..i]).value
+      invariant parse_error ==> Marshalling.valToEdge(v.a[i]) == None
+    {
+      var tmp := ValToEdge(v.a[i]);
+      if tmp == None {
+        parse_error := true;
+        break;
+      }
+      mut_seq_set(inout r, i, tmp.value);
+      i := i + 1;
+      assert v.a[..i] == v.a[..i-1] + [v.a[i-1]];
+    }
+
+    var r' := seq_unleash(r);
+    if i == len {
+      assert v.a[..i] == v.a;
+      assert r'[..i] == r';
+      s := Some(r');
+    } else {
+      s := None;
+    }
+  }
+
+  method PivotsAndEdgeTableConsistent(pivots: Pivots.PivotTable, edges: EdgeTable) returns (b: bool)
+    requires Pivots.WFPivots(pivots)
+    requires |edges| + 1 == |pivots| < Uint64UpperBound()
+    ensures b == (forall i | 0 <= i < |edges| && edges[i].Some? :: NonEmptyLcp(pivots, i))
+  {
+    var i := 0;
+    while i < |edges| as uint64
+      invariant 0 <= i <= |edges| as uint64
+      invariant forall j | 0 <= j < i && edges[j].Some? :: NonEmptyLcp(pivots, j as nat)
+    {
+      if edges[i].Some? {
+        var l := ComputePivotLcpLen(pivots[i], pivots[i+1]);
+        if l == 0 {
+          return false;
+        }
+      }
+      i := i + 1;
+    }
+    return true;
+  }
+  
   method ValToBucket(v: V) returns (linear s : lOption<BucketImpl.MutBucket>)
     requires Marshalling.valToBucket.requires(v)
     ensures s.lSome? <==> Marshalling.valToBucket(v).Some?
     ensures s.lSome? ==> s.value.Inv()
     ensures s.lSome? ==> WFBucket(s.value.I())
     ensures s.lSome? ==> Some(s.value.I()) == Marshalling.valToBucket(v)
-  { 
+  {
     var pkv := PackedKVMarshalling.FromVal(v);
     if pkv.Some? && PackedKV.WeightPkv(pkv.value) < 0x1_0000_0000 {
       linear var b := BucketImpl.MutBucket.AllocPkv(pkv.value, false);
@@ -178,7 +251,7 @@ module MarshallingImpl {
     invariant !error ==> forall k: nat | i as nat <= k < |a| :: !lseq_has(buckets)[k]
     invariant !error ==> forall k: nat | k < i as nat :: buckets[k].Inv()
     invariant !error ==> forall k: nat | k < i as nat :: WFBucket(buckets[k].bucket)
-    invariant !error ==> Some(BucketImpl.MutBucket.ISeq(lseqs(buckets)[..i])) 
+    invariant !error ==> Some(BucketImpl.MutBucket.ISeq(lseqs(buckets)[..i]))
       == Marshalling.valToBuckets(a[..i])
     invariant error ==> forall k: nat | k < |a| :: !lseq_has(buckets)[k]
     invariant error ==>  Marshalling.valToBuckets(a) == None
@@ -190,12 +263,12 @@ module MarshallingImpl {
         case lSome(bucket) =>
           lseq_give_inout(inout buckets, i, bucket);
           assert buckets[i as int].Inv();
-          assert forall k: nat | k < i as nat + 1 :: buckets[k].Inv();          
+          assert forall k: nat | k < i as nat + 1 :: buckets[k].Inv();
           assert DropLast(a[..i+1]) == a[..i];
           assert lseqs(buckets)[..i+1] == lseqs(buckets)[..i] + [bucket];
 
           i := i + 1;
-          assert BucketImpl.MutBucket.ISeq(lseqs(buckets)[..i]) 
+          assert BucketImpl.MutBucket.ISeq(lseqs(buckets)[..i])
             == Marshalling.valToBuckets(a[..i]).value;
         case lNone =>
           assert Marshalling.valToBuckets(a) == None;
@@ -238,7 +311,7 @@ module MarshallingImpl {
   requires ValInGrammar(v, Marshalling.PivotNodeGrammar())
   requires SizeOfV(v) < 0x1_0000_0000_0000_0000
   ensures s.lSome? == Marshalling.valToNode(v).Some?
-  ensures s.lSome? ==> 
+  ensures s.lSome? ==>
     (
       && s.value.Inv()
       && BT.WFNode(s.value.I())
@@ -248,63 +321,55 @@ module MarshallingImpl {
     assert ValidVal(v.t[0]);
     assert ValidVal(v.t[1]);
     assert ValidVal(v.t[2]);
+    assert ValidVal(v.t[3]);
+    IMM.SizeOfVTupleElem_le_SizeOfV(v, 3);
+    IMM.SizeOfVArrayElem_le_SizeOfV_forall(v.t[3]);
 
     var pivots_len := |v.t[0 as uint64].a| as uint64;
-    var children_len := |v.t[1 as uint64].ua| as uint64;
-    var buckets_len := |v.t[2 as uint64].a| as uint64;
+    var edges_len := |v.t[1 as uint64].a| as uint64;
+    var children_len := |v.t[2 as uint64].ua| as uint64;
+    var buckets_len := |v.t[3 as uint64].a| as uint64;
 
-    if (
-       && 2 <= pivots_len <= MaxNumChildrenUint64() + 1
-       && (children_len == 0 || children_len == pivots_len - 1)
-       && buckets_len == pivots_len - 1
-    ) {
-      var pivotsOpt := ValToPivots(v.t[0 as uint64]);
-      if (pivotsOpt.Some?) {
-        var pivots := pivotsOpt.value;
-        var childrenOpt := Marshalling.valToChildren(v.t[1 as uint64]);
-        if (childrenOpt.Some?) {
-          var children := childrenOpt.value;
-          assert ValidVal(v.t[2]);
+    var pivotsOpt := ValToPivots(v.t[0 as uint64]);
+    var edgesOpt := ValToEdgeTable(v.t[1]);
+    var childrenOpt := Marshalling.valToChildren(v.t[2 as uint64]);
+    linear var obuckets := ValToBuckets(v.t[3 as uint64].a);
 
-          IMM.SizeOfVTupleElem_le_SizeOfV(v, 2);
-          IMM.SizeOfVArrayElem_le_SizeOfV_forall(v.t[2]);
+    var buckets_valid_and_lightweight := false;
+    var pe_valid_and_consistent := false;
+    if
+      && obuckets.lSome?
+      && pivotsOpt.Some?
+      && edgesOpt.Some?
+      && 2 <= pivots_len <= MaxNumChildrenUint64() + 1
+      && edges_len == buckets_len == pivots_len - 1
+    {
+      IMM.WeightBucketListLteSize(v.t[3 as uint64], BucketImpl.MutBucket.ILseq(obuckets.value));
+      assert WeightBucketList(BucketImpl.MutBucket.ILseq(obuckets.value)) < 0x1_0000_0000_0000_0000;
+      var w: uint64 := BucketImpl.MutBucket.computeWeightOfSeq(obuckets.value);
+      buckets_valid_and_lightweight := w <= MaxTotalBucketWeightUint64();
+      pe_valid_and_consistent := PivotsAndEdgeTableConsistent(pivotsOpt.value, edgesOpt.value);
+    }
 
-          if |v.t[2 as uint64].a| as uint64 <= MaxNumChildrenUint64() {
-            linear var obuckets := ValToBuckets(v.t[2 as uint64].a);
-            linear match obuckets {
-              case lSome(buckets) =>
-                assert |buckets| as uint64 <= MaxNumChildrenUint64();
-                IMM.WeightBucketListLteSize(v.t[2 as uint64], 
-                  BucketImpl.MutBucket.ILseq(buckets));
-                assert WeightBucketList(BucketImpl.MutBucket.ILseq(buckets)) 
-                  < 0x1_0000_0000_0000_0000;
-
-                var w: uint64 := BucketImpl.MutBucket.computeWeightOfSeq(buckets);
-                if (w > MaxTotalBucketWeightUint64()) {
-                  var _ := BucketImpl.FreeMutBucketSeq(buckets);
-                  s := lNone;
-                } else {
-                  // TODO(Jialin): 
-                  linear var node := Node(
-                    pivots,
-                    [],
-                    if |children| as uint64 == 0 then None else childrenOpt,
-                    buckets);
-                  s := lSome(node);
-                }
-              case lNone => 
-                s := lNone;
-            }      
-          } else {
-            s := lNone;
-          }
-        } else {
-          s := lNone;
-        }
-      } else {
-        s := lNone;
-      }
+    if
+      && pe_valid_and_consistent
+      && buckets_valid_and_lightweight
+      && childrenOpt.Some?
+      && (children_len == 0 || children_len == pivots_len - 1)
+    {
+      linear var node := Node(
+        pivotsOpt.value,
+        edgesOpt.value,
+        if children_len == 0 then None else childrenOpt,
+        unwrap_value(obuckets));
+      s := lSome(node);
     } else {
+      if obuckets.lSome? {
+        linear var buckets := unwrap_value(obuckets);
+        var _ := BucketImpl.FreeMutBucketSeq(buckets);
+      } else {
+        dispose_lnone(obuckets);
+      }
       s := lNone;
     }
   }
@@ -448,6 +513,48 @@ module MarshallingImpl {
     v, size := strictlySortedPivotsToVal(pivots);
   }
 
+  method edgeTableToVal(edges: EdgeTable)
+  returns (v: V, size: uint64)
+  requires |edges| <= MaxNumChildren()
+  ensures ValidVal(v)
+  ensures ValInGrammar(v, Marshalling.EdgeTableGrammar())
+  ensures |v.a| == |edges|
+  ensures Marshalling.valToEdgeTable(v) == Some(edges)
+  ensures SizeOfV(v) <= 8 + |edges| * (8 + 8 + KeyType.MaxLen() as int)
+  ensures size as nat == SizeOfV(v)
+  {
+    reveal_SeqSum();
+    var vNone := VCase(0, VConstant);
+    linear var vals := seq_alloc_init(|edges| as uint64, vNone);
+    size := 8;
+
+    var i := 0;
+    while i < |edges| as uint64
+      invariant 0 <= i <= |edges| as uint64
+      invariant |vals| == |edges|
+      invariant forall j | 0 <= j < i as nat :: ValidVal(vals[j])
+      invariant forall j | 0 <= j < i as nat :: ValInGrammar(vals[j], Marshalling.EdgeGrammar())
+      invariant Marshalling.valSeqToEdgeTable(vals[..i]) == Some(edges[..i])
+      invariant forall j | i as nat <= j < |vals| :: vals[j] == vNone
+      invariant size as nat <= 8 + i as nat * (8 + 8 + KeyType.MaxLen() as nat)
+      invariant size as nat == 8 + SeqSum(vals[..i])
+    {
+      if edges[i].Some? {
+        mut_seq_set(inout vals, i, VCase(1, VByteArray(edges[i].value)));
+        size := size + 8 + 8 + |edges[i].value| as uint64;
+      } else {
+        size := size + 8;
+      }
+      i := i + 1;
+      assert vals[..i] == vals[..i-1] + [vals[i-1]];
+      assert edges[..i] == edges[..i-1] + [edges[i-1]];
+      lemma_SeqSum_prefix(vals[..i-1], vals[i-1]);
+    }
+    assert vals[..i] == vals;
+    assert edges[..i] == edges;
+    v := VArray(seq_unleash(vals));
+  }
+
   method {:fuel SizeOfV,3}
   bucketToVal(shared bucket: BucketImpl.MutBucket)
   returns (v: V, size: uint64)
@@ -525,7 +632,7 @@ module MarshallingImpl {
   //     None
   // }
 
-  method {:fuel SizeOfV,4} nodeToVal(shared node: Node)
+  method {:fuel SizeOfV,5} nodeToVal(shared node: Node)
   returns (v : V, size: uint64)
   requires node.Inv()
   requires BT.WFNode(node.I())
@@ -542,6 +649,8 @@ module MarshallingImpl {
 
     var pivots, size_pivots := pivotsToVal(node.pivotTable);
 
+    var edges, size_edges := edgeTableToVal(node.edgeTable);
+    
     var children, size_children;
     if node.children.Some? {
       children := childrenToVal(node.children.value);
@@ -552,17 +661,17 @@ module MarshallingImpl {
     }
     assert SizeOfV(children) == size_children as int;
 
-    v := VTuple([pivots, children, buckets]);
+    v := VTuple([pivots, edges, children, buckets]);
 
     assert SizeOfV(pivots) <= (8 + (MaxNumChildren()+1)*(8 + KeyType.MaxLen() as int));
     assert SizeOfV(children) <= (8 + MaxNumChildren() * 8);
     assert SizeOfV(buckets) <= 8 + MaxNumChildren() * (32) + MaxTotalBucketWeight();
 
-    assert SizeOfV(v) == SizeOfV(pivots) + SizeOfV(children) + SizeOfV(buckets);
+    assert SizeOfV(v) == SizeOfV(pivots) + SizeOfV(edges) + SizeOfV(children) + SizeOfV(buckets);
 
     lemma_node_fits_in_block();
 
-    size := size_buckets + size_pivots + size_children;
+    size := size_buckets + size_pivots + size_edges + size_children;
   }
 
   method {:fuel SizeOfV,7}

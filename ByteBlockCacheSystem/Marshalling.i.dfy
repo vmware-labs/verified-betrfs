@@ -229,6 +229,8 @@ module Marshalling {
   function valSeqToEdgeTable(v: seq<V>) : (s : Option<EdgeTable>)
     requires forall i | 0 <= i < |v| :: ValidVal(v[i])
     requires forall i | 0 <= i < |v| :: ValInGrammar(v[i], EdgeGrammar())
+    ensures s.Some? <==> forall i | 0 <= i < |v| :: valToEdge(v[i]).Some?
+    ensures s.Some? ==> |s.value| == |v|
   {
     if |v| == 0 then
       Some([])
