@@ -649,33 +649,35 @@ module BucketImpl {
       return w;
     }
 
-    static method tryComputeWeightOfSeq(shared buckets: lseq<MutBucket>)
+    static method tryComputeWeightOfSeq(shared buckets: lseq<MutBucket>, start: uint64, end: uint64)
     returns (succ: bool, weight: uint64)
     requires InvLseq(buckets)
+    requires 0 <= start as nat <= end as nat <= |buckets|
     requires |buckets| < 0x1_0000_0000_0000_0000
-    ensures succ ==> weight as int == WeightBucketList(ILseq(buckets))
-    ensures !succ ==> MaxTotalBucketWeight() < WeightBucketList(ILseq(buckets)) 
+    ensures succ ==> weight as int == WeightBucketList(ILseq(buckets)[start..end])
+    ensures !succ ==> MaxTotalBucketWeight() < WeightBucketList(ILseq(buckets)[start..end])
     {
       reveal_WeightBucketList();
       ghost var bs := ILseq(buckets);
 
       var w := 0;
-      var j: uint64 := 0;
+      var j: uint64 := start;
       var max : uint64 := 0xffff_ffff_ffff_ffff;
 
-      while j < lseq_length_raw(buckets)
-      invariant 0 <= j as int <= |buckets|
-      invariant WeightBucketList(bs[0..j]) < 0x1_0000_0000_0000_0000
-      invariant w as int == WeightBucketList(bs[0..j]);
+      while j < end
+      invariant start <= j <= end
+      invariant WeightBucketList(bs[start..j]) < 0x1_0000_0000_0000_0000
+      invariant w as int == WeightBucketList(bs[start..j]);
       {
-        assert DropLast(bs[0..j+1]) == bs[0..j];
-        assert Last(bs[0..j+1]) == lseq_peek(buckets, j).I();
-        WeightBucketListSlice(bs, 0, j as int + 1);
+        assert DropLast(bs[start..j+1]) == bs[start..j];
+        assert Last(bs[start..j+1]) == lseq_peek(buckets, j).I();
 
         var bucketweight := lseq_peek(buckets, j).weight;
         var diff := max - bucketweight;
 
         if diff < w {
+          WeightBucketListSlice(bs[start..end], 0, (j - start) as int);
+          assert bs[start..end][0..j-start] == bs[start..j];
           succ := false;
           weight := w;
           return;
@@ -685,7 +687,6 @@ module BucketImpl {
         j := j + 1;
       }
 
-      assert bs[0..|buckets|] == bs;
       succ := true;
       weight := w;
     }

@@ -168,7 +168,7 @@ module SplitModel {
 
     if !PivotInsertable(s.cache[parentref].pivotTable, slot+1, pivot) then (
       s
-    ) else if !SplitChildrenWeight(child, num_children_left) then (
+    ) else if !SplitChildrenWeight(child.buckets, num_children_left) then (
       s
     ) else (
       var left_child := SplitChildLeft(child, num_children_left);
@@ -294,7 +294,7 @@ module SplitModel {
       return;
     }
 
-    if !SplitChildrenWeight(child, num_children_left) {
+    if !SplitChildrenWeight(child.buckets, num_children_left) {
       assert noop(s, s);
       return;
     }

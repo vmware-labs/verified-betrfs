@@ -770,11 +770,11 @@ module PivotBetreeSpec {
     else None
   }
 
-  predicate SplitChildrenWeight(child: Node, num_children_left: int)
-  requires 1 <= num_children_left < |child.buckets|
+  predicate SplitChildrenWeight(buckets: BucketList, num_children_left: int)
+  requires 1 <= num_children_left < |buckets|
   {
-    && WeightBucketList(child.buckets[..num_children_left]) <= MaxTotalBucketWeight()
-    && WeightBucketList(child.buckets[num_children_left..]) <= MaxTotalBucketWeight()
+    && WeightBucketList(buckets[..num_children_left]) <= MaxTotalBucketWeight()
+    && WeightBucketList(buckets[num_children_left..]) <= MaxTotalBucketWeight()
   }
 
   predicate ValidSplit(f: NodeFusion)
@@ -791,7 +791,7 @@ module PivotBetreeSpec {
     && ParentKeysInChildRange(f.fused_parent.pivotTable, f.fused_parent.edgeTable, f.fused_child.pivotTable, f.slot_idx)
     && var child := RestrictAndTranslateChild(f.fused_parent, f.fused_child, f.slot_idx);
     && 1 <= f.num_children_left < |child.buckets|
-    && SplitChildrenWeight(child, f.num_children_left)
+    && SplitChildrenWeight(child.buckets, f.num_children_left)
     && child.pivotTable[f.num_children_left].e == f.pivot
 
     && (f.left_childref == f.right_childref ==> f.left_child == f.right_child)
