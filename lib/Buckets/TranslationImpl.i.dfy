@@ -200,32 +200,55 @@ module TranslationImpl {
     }
   }
 
-  // TODO: implement
   method ComputeApplyPrefixSet(pset: Option<PrefixSet>, key: Key) returns (k: Key)
   requires pset.Some? ==> IsPrefix(pset.value.prefix, key)
   ensures k == ApplyPrefixSet(pset, key)
   {
-    assume false;
-    k := key;
+    if pset.None? {
+      k := key;
+    } else {
+      assume |pset.value.newPrefix| + |key| - |pset.value.prefix| <= 1024;
+      k := pset.value.newPrefix + key[|pset.value.prefix| as uint64..];
+    }
   }
 
-  // TODO: implement
   method ComputeComposePrefixSet(a: Option<PrefixSet>, b: Option<PrefixSet>) returns (c: Option<PrefixSet>)
-  requires a.Some? && b.Some? ==> 
+  requires a.Some? && b.Some? ==>
     ( IsPrefix(a.value.newPrefix, b.value.prefix)
     || IsPrefix(b.value.prefix, a.value.newPrefix))
   ensures c == ComposePrefixSet(a, b)
   {
-    assume false;
-    c := None;
+    if a.None? {
+      c := b;
+    } else if b.None? {
+      c := a;
+    } else if |a.value.newPrefix| as uint64 <= |b.value.prefix| as uint64 {
+      reveal_IsPrefix();
+      var prefix := ComputeApplyPrefixSet(Some(PrefixSet(a.value.newPrefix, a.value.prefix)), b.value.prefix);
+      c := Some(PrefixSet(prefix, b.value.newPrefix));
+    } else {
+      var newPrefix := ComputeApplyPrefixSet(b, a.value.newPrefix);
+      c := Some(PrefixSet(a.value.prefix, newPrefix));
+    }
   }
 
-  // TODO: implement
   method ComputeShortestUncommonPrefix(prefix: Key) returns (upper: Element)
   ensures upper == ShortestUncommonPrefix(prefix, |prefix|)
   {
-    assume false;
-    upper := Keyspace.Max_Element;
+    reveal_ShortestUncommonPrefix();
+    var i: int64 := |prefix| as int64 - 1;
+    while 0 <= i && prefix[i] == 255
+      invariant -1 <= i as int < |prefix|
+      invariant forall j | i as int < j < |prefix| :: prefix[j] == 255
+      invariant ShortestUncommonPrefix(prefix, |prefix|) == ShortestUncommonPrefix(prefix, i as int + 1)
+    {
+      i := i - 1;
+    }
+    if i == -1 {
+      upper := Keyspace.Max_Element;
+    } else {
+      upper := Keyspace.Element(prefix[..i] + [prefix[i] + 1]);
+    }
   }
 
   // TODO: implement
