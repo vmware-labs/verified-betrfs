@@ -22,50 +22,30 @@ module SplitImpl {
   import opened LinearSequence_s
   import opened LinearSequence_i
 
-  import opened BucketsLib
   import opened BucketWeights
+  import opened BucketImpl
   import opened Bounds
   import opened KeyType
   import opened BoundedPivotsLib
+  import opened TranslationImpl
 
   import opened NativeTypes
 
-  method computeValidSplitKey(shared cache: CacheImpl.LMutCache, ref: BT.G.Reference,
-    pivots: PivotTable, lpivot: Key, rpivot: Option<Key>)
-  returns (b: bool)
-  requires cache.Inv()
-  requires cache.ptr(ref).Some?
-  requires cache.I()[ref].pivotTable == pivots
-  requires BT.WFNode(cache.I()[ref])
-  ensures BT.ValidSplitKey(cache.I()[ref], lpivot, rpivot) == b
+  method computeSplitChildrenWeight(shared buckets: lseq<MutBucket>, num_children_left: uint64, len: uint64) returns (b: bool)
+  requires MutBucket.InvLseq(buckets)
+  requires 1 <= num_children_left as int < len as int == |buckets|
+  ensures b == BT.SplitChildrenWeight(MutBucket.ILseq(buckets), num_children_left as int)
   {
-    var len := |pivots| as uint64;
-    var valid := ComputeBoundedKey(pivots, lpivot);
-    if !valid {
+    ghost var bs := MutBucket.ILseq(buckets);
+    assert bs[num_children_left..] == bs[num_children_left..len];
+
+    var succ, weight := MutBucket.tryComputeWeightOfSeq(buckets, 0, num_children_left);
+    if !succ || weight > MaxTotalBucketWeightUint64() {
       return false;
     }
 
-    if rpivot.Some? {
-      valid := ComputeValidLeftCutOffKey(pivots, rpivot.value);
-      if !valid {
-        return false;
-      }
-      var k := ComputeGetKey(pivots, 0);
-      var c := BT.G.KeyspaceImpl.cmp(k, rpivot.value);
-      if c >= 0 {
-        return false;
-      }
-      c := BT.G.KeyspaceImpl.cmp(lpivot, rpivot.value);
-      if c >= 0 {
-        return false;
-      }
-    } else {
-      if pivots[len - 1] != Keyspace.Max_Element {
-        return false;
-      }
-    }
-
-    return true;
+    succ, weight := MutBucket.tryComputeWeightOfSeq(buckets, num_children_left, len);
+    return succ && weight <= MaxTotalBucketWeightUint64();
   }
 
   method splitBookkeeping(linear inout s: ImplVariables, left_childref: BT.G.Reference,
@@ -153,7 +133,11 @@ module SplitImpl {
   requires old_s.Ready?
   requires old_s.Inv()
   requires child.Inv()
-  requires BT.WFNode(child.I())
+  requires |child.pivotTable| < 0x4000_0000_0000_0000
+  requires WFPivots(child.pivotTable)
+  requires NumBuckets(child.pivotTable) == |child.buckets|
+  requires |child.edgeTable| == |child.buckets| 
+  requires child.children.Some? ==> |child.children.value| == |child.buckets|
   requires old_s.cache.ptr(parentref).Some?
   requires BT.WFNode(old_s.cache.I()[parentref])
   requires fparent_pivots == old_s.cache.I()[parentref].pivotTable
@@ -181,92 +165,30 @@ module SplitImpl {
 
     var insertable := ComputePivotInsertable(fparent_pivots, slot+1, pivot);
     if insertable {
-      SplitModel.lemmaChildrenConditionsSplitChild(s.I(), child.I(), num_children_left as int);
+      var boundedweight := computeSplitChildrenWeight(child.buckets, num_children_left, len);
+      if boundedweight {
+        SplitModel.lemmaChildrenConditionsSplitChild(s.I(), child.I(), num_children_left as int);
+        linear var left_child := child.SplitChildLeft(num_children_left);
+        linear var right_child := child.SplitChildRight(num_children_left);
 
-      linear var left_child := child.SplitChildLeft(num_children_left);
-      linear var right_child := child.SplitChildRight(num_children_left);
+        splitBookkeeping(inout s, left_childref, right_childref, parentref,
+          fparent_children, left_child, right_child, slot as uint64);
+        splitCacheChanges(inout s, left_childref, right_childref, parentref,
+          slot as uint64, num_children_left as uint64, pivot, left_child, right_child);
 
-      splitBookkeeping(inout s, left_childref, right_childref, parentref,
-        fparent_children, left_child, right_child, slot as uint64);
-
-      splitCacheChanges(inout s, left_childref, right_childref, parentref,
-        slot as uint64, num_children_left as uint64, pivot, left_child, right_child);
-      
-      calc == {
-        LruModel.I(s.lru.Queue());
-        LruModel.I(old_s.lru.Queue()) + {left_childref, right_childref, parentref};
-        old_s.cache.I().Keys + {left_childref, right_childref, parentref};
-        s.cache.I().Keys;
+        calc == {
+          LruModel.I(s.lru.Queue());
+          LruModel.I(old_s.lru.Queue()) + {left_childref, right_childref, parentref};
+          old_s.cache.I().Keys + {left_childref, right_childref, parentref};
+          s.cache.I().Keys;
+        }
+      } else {
+        print "giving up; split can't run because new children will be overweight";
       }
     } else {
       print "giving up; split can't run because new pivots will not be strictly sorted";
     }
     var _ := FreeNode(child);
-  }
-
-  method splitChild(linear inout s: ImplVariables, parentref: BT.G.Reference, 
-    childref: BT.G.Reference, slot: uint64, lbound: Key, ubound: Option<Key>,
-    fparent_pivots: PivotTable, fparent_children: Option<seq<BT.G.Reference>>, refUpperBound: uint64)
-  requires old_s.Ready?
-  requires old_s.Inv()
-  requires old_s.cache.ptr(childref).Some?
-  requires old_s.cache.ptr(parentref).Some?
-  requires old_s.cache.I()[parentref].children.Some?
-  requires fparent_pivots == old_s.cache.I()[parentref].pivotTable
-  requires fparent_children == old_s.cache.I()[parentref].children
-  requires 0 <= slot as int < |fparent_children.value|
-  requires fparent_children.value[slot] == childref
-  requires |fparent_children.value| < MaxNumChildren()
-  requires BT.ValidSplitKey(old_s.cache.I()[childref], lbound, ubound)
-  requires BookkeepingModel.ChildrenConditions(old_s.I(), fparent_children)
-  requires BookkeepingModel.ChildrenConditions(old_s.I(), old_s.cache.I()[childref].children)
-  requires |old_s.ephemeralIndirectionTable.I().graph| <= IT.MaxSize() - 3
-  requires forall r | r in old_s.ephemeralIndirectionTable.graph :: r <= refUpperBound
-  requires old_s.ephemeralIndirectionTable.refUpperBound == refUpperBound
-  ensures s.Ready?
-  ensures s.W()
-  ensures s.WriteAllocConditions()
-  ensures LruModel.I(s.lru.Queue()) == s.cache.I().Keys;
-  ensures s.I() == SplitModel.splitChild(old_s.I(), parentref, childref, slot as int, lbound, ubound, refUpperBound)
-  {
-    SplitModel.reveal_splitChild();
-
-    linear var child := s.cache.NodeCutOff(childref, lbound, ubound);
-    assert child.I() == BT.CutoffNode(s.cache.I()[childref], lbound, ubound);
-    SplitModel.lemmaChildrenConditionsCutoffNode(s.I(), s.cache.I()[childref], lbound, ubound);
-    assert BT.WFNode(child.I());
-
-    if (|child.pivotTable| as uint64 == 2) {
-      // TODO there should be an operation which just
-      // cuts off the node and doesn't split it.
-      print "giving up; doSplit can't run because child pivots can't be splitted\n";
-      var _ := FreeNode(child);
-    } else {
-      var len := lseq_length_as_uint64(child.buckets);
-      var num_children_left := len / 2;
-      var pivot := ComputeGetKey(child.pivotTable, num_children_left);
-
-      BookkeepingModel.getFreeRefDoesntEqual(s.I(), parentref, refUpperBound);
-
-      ghost var gleft_childref := BookkeepingModel.getFreeRef(s.I(), refUpperBound);
-
-      var left_childref := getFreeRef(s);
-
-      if left_childref.None? {
-        print "giving up; doSplit can't allocate left_childref\n";
-        var _ := FreeNode(child);
-      } else {
-        BookkeepingModel.getFreeRef2DoesntEqual(s.I(), left_childref.value, parentref, refUpperBound);
-        var right_childref := getFreeRef2(s, left_childref.value);
-        if right_childref.None? {
-          print "giving up; doSplit can't allocate right_childref\n";
-          var _ := FreeNode(child);
-        } else {
-          splitDoChanges(inout s, child, left_childref.value, right_childref.value,
-            parentref, fparent_pivots, fparent_children.value, slot as uint64);
-        }
-      }
-    }
   }
 
   method doSplit(linear inout s: ImplVariables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: uint64, refUpperBound: uint64)
@@ -301,38 +223,41 @@ module SplitImpl {
     } else {
       ghost var fused_parent := s.cache.I()[parentref];
       ghost var fused_child := s.cache.I()[childref]; 
-      var fparent_pivots, _, fparent_children := s.cache.GetNodeInfo(parentref);
+      var fparent_pivots, fparent_edges, fparent_children := s.cache.GetNodeInfo(parentref);
       var fchild_pivots, _, _ := s.cache.GetNodeInfo(childref);
 
-      var childlbound := KeyspaceImpl.cmp(fchild_pivots[0], fparent_pivots[slot]);
-      var childubound := KeyspaceImpl.cmp(fparent_pivots[slot+1], 
-        fchild_pivots[|fchild_pivots| as uint64 -1]);
-
-      if childlbound > 0 || childubound > 0 {
+      var inrange := ComputeParentKeysInChildRange(fparent_pivots, fparent_edges, fchild_pivots, slot);
+      if !inrange {
         print "giving up; split can't run because splitted keys are not in bound";
       } else {
         BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), parentref);
         BookkeepingModel.lemmaChildrenConditionsOfNode(s.I(), childref);
 
-        var lbound := ComputeGetKey(fparent_pivots, slot);
-        var ubound := None;
-        if fparent_pivots[slot+1].Element? {
-          var ukey := ComputeGetKey(fparent_pivots, slot+1);
-          ubound := Some(ukey);
-        }
-        assert lbound == BT.getlbound(fused_parent, slot as int);
-        assert ubound == BT.getubound(fused_parent, slot as int);
-
-        var childvalid := computeValidSplitKey(s.cache, childref, fchild_pivots, lbound, ubound);
-        var parentvalid := computeValidSplitKey(s.cache, parentref, fparent_pivots, lbound, ubound);
-
-        if childvalid && parentvalid {
-          assert BT.ValidSplitKey(fused_parent, lbound, ubound);
-          assert BT.ValidSplitKey(fused_child, lbound, ubound);
-        
-          splitChild(inout s, parentref, childref, slot, lbound, ubound, fparent_pivots, fparent_children, refUpperBound);
+        linear var child := s.cache.NodeRestrictAndTranslateChild(parentref, childref, slot);
+        if (|child.pivotTable| as uint64 == 2) {
+          // TODO there should be an operation which just
+          // cuts off the node and doesn't split it.
+          print "giving up; doSplit can't run because child pivots can't be splitted\n";
+          var _ := FreeNode(child);
         } else {
-          print "giving up; split can't run because bounds checking failed";
+          SplitModel.lemmaChildrenConditionsRestrictAndTranslateChild(s.I(), fused_parent, fused_child, slot as int);
+          BookkeepingModel.getFreeRefDoesntEqual(s.I(), parentref, refUpperBound);
+
+          var left_childref := getFreeRef(s);
+          if left_childref.None? {
+            print "giving up; doSplit can't allocate left_childref\n";
+            var _ := FreeNode(child);
+          } else {
+            BookkeepingModel.getFreeRef2DoesntEqual(s.I(), left_childref.value, parentref, refUpperBound);
+            var right_childref := getFreeRef2(s, left_childref.value);
+            if right_childref.None? {
+              print "giving up; doSplit can't allocate right_childref\n";
+              var _ := FreeNode(child);
+            } else {
+              splitDoChanges(inout s, child, left_childref.value, right_childref.value,
+                parentref, fparent_pivots, fparent_children.value, slot as uint64);
+            }
+          }
         }
       }
     }

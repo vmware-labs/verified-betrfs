@@ -73,8 +73,10 @@ module FlushImpl {
       var inrange := ComputeParentKeysInChildRange(parentpivots, parentedges, childpivots, slot);
       if inrange {
         linear var newchild := s.cache.NodeRestrictAndTranslateChild(parentref, childref, slot);
+        var bucketslen := lseq_length_as_uint64(newchild.buckets);
+        var succ, weight := MutBucket.tryComputeWeightOfSeq(newchild.buckets, 0, bucketslen);
+        assert MutBucket.ILseq(newchild.buckets)[0..bucketslen] == MutBucket.ILseq(newchild.buckets);
 
-        var succ, weight := MutBucket.tryComputeWeightOfSeq(newchild.buckets);
         if succ && weight <= MaxTotalBucketWeightUint64() {
           //Native.BenchmarkingUtil.start();
 
