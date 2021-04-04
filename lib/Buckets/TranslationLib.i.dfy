@@ -782,39 +782,71 @@ module TranslationLib {
     RouteIs(pt', key', i);
   }
 
-  function TranslateBucketInternal(keys: seq<Key>, msgs: seq<M.Message>, prefix: Key, newPrefix: Key) : (r: (seq<Key>, seq<M.Message>))
-  requires |keys| == |msgs|
-  ensures var (keys', msgs') := r;
-    && |keys'| <= |keys|
-    && |keys'| == |msgs'|
-    && (forall i | 0 <= i < |keys'| :: IsPrefix(newPrefix, keys'[i]))
-    && (forall i | 0 <= i < |msgs'| :: msgs'[i] in msgs)
-  {
-    reveal_IsPrefix();
+  // translated bucket and idxs of corresponding keys
+  datatype TBucket = TBucket(b: Bucket, idxs: seq<int>)
 
-    if |keys| > 0 then (
-      var key : Key := Last(keys);
-      var (keys', msgs') := TranslateBucketInternal(DropLast(keys), DropLast(msgs), prefix, newPrefix);
-      if IsPrefix(prefix, key) then (
-        var key' := newPrefix + key[|prefix|..]; 
-        assume |key'| <= 1024;
-        (keys' + [key'], msgs' + [Last(msgs)])
-      ) else (
-        (keys', msgs')
-      )
+  predicate WFTBucket(bucket: Bucket, tbucket: TBucket, prefix: Key, tPrefix: Key, idx: int)
+  requires 0 <= idx <= |bucket.keys|
+  {
+    && PreWFBucket(bucket)
+    && PreWFBucket(tbucket.b)
+    && |tbucket.b.keys| <= |bucket.keys[idx..]|
+    && |tbucket.b.keys| == |tbucket.idxs|
+    && (forall i | 0 <= i < |tbucket.b.keys| ::
+        && idx <= tbucket.idxs[i] < |bucket.keys|
+        && var tkey : Key := tbucket.b.keys[i];
+        && var bkey : Key := bucket.keys[tbucket.idxs[i]];
+        && IsPrefix(tPrefix, tkey)
+        && IsPrefix(prefix, bkey)
+        && tkey[|tPrefix|..] == bkey[|prefix|..]
+        && bucket.msgs[tbucket.idxs[i]] == tbucket.b.msgs[i])
+    && (forall i | idx <= i < |bucket.keys| && i !in tbucket.idxs :: !IsPrefix(prefix, bucket.keys[i]))
+  }
+
+  function TranslateBucketInternal(bucket: Bucket, prefix: Key, newPrefix: Key, idx: int) : (tbucket: TBucket)
+  requires PreWFBucket(bucket)
+  requires 0 <= idx <= |bucket.keys|
+  ensures WFTBucket(bucket, tbucket, prefix, newPrefix, idx)
+  ensures BucketWellMarshalled(bucket) ==> BucketWellMarshalled(tbucket.b)
+  decreases |bucket.keys| - idx
+  {
+    if idx == |bucket.keys| then (
+      TBucket(Bucket([], []), [])
     ) else (
-      ([], [])
+      reveal_IsPrefix();
+      if IsPrefix(prefix, bucket.keys[idx]) then (
+        var key : Key := bucket.keys[idx];
+        assume |newPrefix + key[|prefix|..]| <= 1024;
+        var key' : Key := newPrefix + key[|prefix|..];
+
+        var tbucket := TranslateBucketInternal(bucket, prefix, newPrefix, idx + 1);
+        var tbucket' := TBucket(Bucket([key'] + tbucket.b.keys, [bucket.msgs[idx]] + tbucket.b.msgs), [idx] + tbucket.idxs);
+
+        assert BucketWellMarshalled(bucket) ==> BucketWellMarshalled(tbucket'.b) by {
+          if BucketWellMarshalled(bucket) && |tbucket'.b.keys| > 1 {
+            Lexi.IsStrictlySortedImpliesLt(bucket.keys, idx, tbucket.idxs[0]);
+            PrefixLteProperties(prefix, key,  bucket.keys[tbucket.idxs[0]]);
+            PrefixLteProperties(newPrefix, key',  tbucket.b.keys[0]);
+            Lexi.reveal_IsStrictlySorted();
+          }
+        }
+
+        tbucket'
+      ) else (
+        TranslateBucketInternal(bucket, prefix, newPrefix, idx + 1)
+      )
     )
   }
 
+  // implementation doens't need to implement TBucket
   function TranslateBucket(bucket: Bucket, prefix: Key, newPrefix: Key) : (res : Bucket)
   requires PreWFBucket(bucket)
   ensures WFBucket(bucket) ==> WFBucket(res)
   ensures PreWFBucket(res)
-  decreases |bucket.keys|
+  ensures BucketWellMarshalled(bucket) ==> BucketWellMarshalled(res)
   {
-    var (keys', msgs') := TranslateBucketInternal(bucket.keys, bucket.msgs, prefix, newPrefix);
-    Bucket(keys', msgs')
+    var tbucket := TranslateBucketInternal(bucket, prefix, newPrefix, 0);
+    tbucket.b
   }
 
   function TranslateBuckets(blist: BucketList, prefix: Key, newPrefix: Key) : (res : BucketList)
@@ -823,6 +855,7 @@ module TranslationLib {
   ensures forall i | 0 <= i < |res| :: 
       && WFBucket(res[i])
       && res[i] == TranslateBucket(blist[i], prefix, newPrefix)
+  ensures BucketListWellMarshalled(blist) ==> BucketListWellMarshalled(res)
   {
     if |blist| > 0 then (
       var newbucket := TranslateBucket(Last(blist), prefix, newPrefix);
@@ -832,104 +865,43 @@ module TranslationLib {
     )
   }
 
-  predicate SameSubfixKeys(keys: seq<Key>, keys': seq<Key>, prefix: Key, newPrefix: Key)
-  {
-    && |keys| == |keys'|
-    && (forall i | 0 <= i < |keys| :: IsPrefix(prefix, keys[i]))
-    && (forall i | 0 <= i < |keys'| :: IsPrefix(newPrefix, keys'[i]))
-    && (forall i | 0 <= i < |keys| :: 
-      && var key : Key := keys[i];
-      && var key' : Key := keys'[i];
-      && IsPrefix(newPrefix, key') 
-      && key[|prefix|..] == key'[|newPrefix|..]
-    )
-  }
-
-  lemma SortedBucketStaysSorted(keys: seq<Key>, msgs: seq<M.Message>, prefix: Key, newPrefix: Key)
-  requires |keys| == |msgs|
-  requires forall i | 0 <= i < |keys| :: IsPrefix(prefix, keys[i])
-  ensures var (keys', msgs') := TranslateBucketInternal(keys, msgs, prefix, newPrefix);
-    && (Lexi.IsStrictlySorted(keys) ==> Lexi.IsStrictlySorted(keys'))
-    && SameSubfixKeys(keys, keys', prefix, newPrefix)
-    && (msgs' == msgs)
-  {
-    reveal_IsPrefix();
-
-    if |keys| > 0 {
-      var (keys', msgs') := TranslateBucketInternal(DropLast(keys), DropLast(msgs), prefix, newPrefix);
-      if |keys| > 1 && Lexi.IsStrictlySorted(keys) {
-        var key : Key := Last(keys);
-        assume |newPrefix + key[|prefix|..]| <= 1024;
-        var key' := newPrefix + key[|prefix|..];
-        
-        Lexi.reveal_IsStrictlySorted();
-        PrefixLteProperties(prefix, keys[|keys|-2], key);
-        PrefixLteProperties(newPrefix, Last(keys'), key');
-      }
-      SortedBucketStaysSorted(DropLast(keys), DropLast(msgs), prefix, newPrefix);
-    }
-  }
-
-  lemma SortedBucketListStaysSorted(blist: BucketList, prefix: Key, newPrefix: Key)
-  requires forall i | 0 <= i < |blist| ::
-      && WFBucket(blist[i])
-      && (forall j | 0 <= j < |blist[i].keys| :: IsPrefix(prefix, blist[i].keys[j]))
-  ensures var blist' := TranslateBuckets(blist, prefix, newPrefix);
-      && (BucketListWellMarshalled(blist) ==> BucketListWellMarshalled(blist'))
-      && (forall i | 0 <= i < |blist| :: SameSubfixKeys(blist[i].keys, blist'[i].keys, prefix, newPrefix))
-  {
-    if |blist| > 0 {
-      SortedBucketStaysSorted(Last(blist).keys, Last(blist).msgs, prefix, newPrefix);
-      SortedBucketListStaysSorted(DropLast(blist), prefix, newPrefix);
-    }
-  }
-
   lemma TranslateBucketSameMessage(bucket: Bucket, bucket': Bucket, 
     prefix: Key, newPrefix: Key, key: Key, key': Key)
   requires WFBucket(bucket)
   requires WFBucket(bucket')
-  requires Lexi.IsStrictlySorted(bucket.keys)
+  requires BucketWellMarshalled(bucket)
   requires bucket' == TranslateBucket(bucket, prefix, newPrefix)
-  requires forall i | 0 <= i < |bucket.keys| :: IsPrefix(prefix, bucket.keys[i])
   requires IsPrefix(prefix, key)
   requires key' == newPrefix + key[|prefix|..]
   ensures key in bucket.as_map() <==> key' in bucket'.as_map()
   ensures key in bucket.as_map() ==> (bucket.as_map()[key] == bucket'.as_map()[key'])
   {
-    SortedBucketStaysSorted(bucket.keys, bucket.msgs, prefix, newPrefix);
+
+    var tbucket := TranslateBucketInternal(bucket, prefix, newPrefix, 0);
+    assert tbucket.b == bucket';
+
     key_sets_eq(bucket.keys, bucket.msgs);
     key_sets_eq(bucket'.keys, bucket'.msgs);
 
-    if key in bucket.keys {
-      var i := GetIndex(bucket.keys, bucket.msgs, key);
+    reveal_IsPrefix();
+    if key' in bucket'.keys {
+      var i' := GetIndex(bucket'.keys, bucket'.msgs, key');
+      var i := tbucket.idxs[i'];
+
       assert bucket.keys[i] == key;
-      assert bucket'.keys[i] == key';
+      assert bucket'.keys[i'] == key';
 
       MapMapsIndex(bucket.keys, bucket.msgs, i);
-      MapMapsIndex(bucket'.keys, bucket'.msgs, i);
+      MapMapsIndex(bucket'.keys, bucket'.msgs, i');
     } else {
-      if key' in bucket'.keys {
-        var i := GetIndex(bucket'.keys, bucket'.msgs, key');
-        assert key == prefix + key'[|newPrefix|..];
-        assert bucket.keys[i] == key;
+      if key in bucket.keys {
+        var i := GetIndex(bucket.keys, bucket.msgs, key);
+        if i in tbucket.idxs {
+          var i' :| 0 <= i' < |tbucket.idxs| && tbucket.idxs[i'] == i;
+          assert bucket'.keys[i'] == key';
+        }
         assert false;
       }
-    }
-  }
-
-  lemma BucketKeysHasPrefix(bucket: Bucket, pt: PivotTable, i: int, prefix: Key)
-  requires 0 <= i < NumBuckets(pt)
-  requires WFPivots(pt)
-  requires WFBucketAt(bucket, pt, i)
-  requires Keyspace.lt(pt[0], Last(pt))
-  requires AllKeysInBetweenHasPrefix(pt[0], Last(pt), prefix);
-  ensures forall k | k in bucket.keys :: IsPrefix(prefix, k)
-  {
-    forall k | k in bucket.keys
-    ensures IsPrefix(prefix, k)
-    {
-      assert BoundedKey(pt, k);
-      assert InBetween(pt[0], pt[|pt|-1], k);
     }
   }
 

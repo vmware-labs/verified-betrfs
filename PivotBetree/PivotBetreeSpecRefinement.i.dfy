@@ -732,40 +732,7 @@ module PivotBetreeSpecRefinement {
       var pivots := layer.readOp.node.pivotTable;
       var (left, right) := TranslatePivotPairInternal(
           KeyToElement(layer.currentKey), pivots[r+1], pset.value.newPrefix, pset.value.newPrefix);
-
-      TranslatePivotPairRangeProperty(KeyToElement(layer.currentKey), 
-        pivots[r+1], pset.value.newPrefix, pset.value.newPrefix);
-
-      var cutleft := if right.Max_Element? then bucket else SplitBucketLeft(bucket, right.e);
-      var cutright := SplitBucketRight(cutleft, layer.currentKey);
-
-      reveal_SplitBucketLeft();
-      reveal_SplitBucketRight();
-      P.G.Keyspace.reveal_IsStrictlySorted();
-
-      assert left == KeyToElement(layer.currentKey); // observe
-      assert InBetween(KeyToElement(layer.currentKey), pivots[r+1], layer'.currentKey); // observe
-      assert InBetween(left, right, layer'.currentKey); // observe
-
-      assert layer'.readOp.node.buckets[r] == bucket;
-      assert layer'.currentKey in cutright.keys <==> layer'.currentKey in bucket.keys;
-      MapSeqs.key_sets_eq(bucket.keys, bucket.msgs);
-      MapSeqs.key_sets_eq(cutright.keys, cutright.msgs);
-      assert layer'.currentKey in cutright.as_map() <==> layer'.currentKey in bucket.as_map();
-
-      if layer'.currentKey in cutright.as_map() {
-        var i1 := MapSeqs.GetIndex(bucket.keys, bucket.msgs, layer'.currentKey);
-        var i2 := MapSeqs.GetIndex(cutright.keys, cutright.msgs, layer'.currentKey);
-        MapSeqs.MapMapsIndex(bucket.keys, bucket.msgs, i1);
-        MapSeqs.MapMapsIndex(cutright.keys, cutright.msgs, i2);
-        assert BucketGet(cutright.as_map(), layer'.currentKey) == BucketGet(bucket.as_map(), layer'.currentKey);
-      }
-
-      TranslateBucketSameMessage(cutright, bucket', pset.value.newPrefix, pset.value.prefix, 
-        layer'.currentKey, key);
-
-      assert BucketGet(cutright.as_map(), layer'.currentKey) == BucketGet(bucket.as_map(), layer'.currentKey);
-      assert BucketGet(cutright.as_map(), layer'.currentKey) == BucketGet(bucket'.as_map(), key);
+      TranslateBucketSameMessage(bucket, bucket', pset.value.newPrefix, pset.value.prefix, layer'.currentKey, key);
     }
   }
 
@@ -1336,10 +1303,6 @@ module PivotBetreeSpecRefinement {
         child'.edgeTable, childprefix, parentprefix, parent.pivotTable[slot+1], edgekey, key);
       
       var i := Route(tmpchild.pivotTable, edgekey);
-      assert WFBucketAt(tmpchild.buckets[i], tmpchild.pivotTable, i);
-      assert tmpchild.pivotTable[0] == lbound;
-      assert Last(tmpchild.pivotTable) == ubound;
-      BucketKeysHasPrefix(tmpchild.buckets[i], tmpchild.pivotTable, i,  childprefix);
       TranslateBucketSameMessage(tmpchild.buckets[i], child'.buckets[i], childprefix, parentprefix, edgekey, key);
     }
   }

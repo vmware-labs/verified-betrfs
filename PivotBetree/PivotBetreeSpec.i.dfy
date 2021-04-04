@@ -351,25 +351,14 @@ module PivotBetreeSpec {
   requires IsPrefix(pset.newPrefix, layer.currentKey)
   requires BoundedKey(layer.readOp.node.pivotTable, layer.currentKey)
   requires PreWFBucket(bucket)
-  requires BucketWellMarshalled(bucket)
   requires bucket == layer.readOp.node.buckets[Route(layer.readOp.node.pivotTable, layer.currentKey)]
   ensures PreWFBucket(bucket')
-  ensures BucketWellMarshalled(bucket')
+  ensures BucketWellMarshalled(bucket) ==> BucketWellMarshalled(bucket')
   {
     var pivots := layer.readOp.node.pivotTable;
     var r := Route(pivots, layer.currentKey);
     var (left, right) := TranslatePivotPairInternal(KeyToElement(layer.currentKey), pivots[r+1], pset.newPrefix, pset.newPrefix);
-
-    var cutleft := if right.Max_Element? then bucket else SplitBucketLeft(bucket, right.e);
-    var cutright := SplitBucketRight(cutleft, layer.currentKey);
-
-    reveal_SplitBucketLeft();
-    reveal_SplitBucketRight();
-    G.Keyspace.reveal_IsStrictlySorted();
-
-    assert left == KeyToElement(layer.currentKey); // observe  
-    SortedBucketStaysSorted(cutright.keys, cutright.msgs, pset.newPrefix, pset.prefix);
-    TranslateBucket(cutright, pset.newPrefix, pset.prefix)
+    TranslateBucket(bucket, pset.newPrefix, pset.prefix)
   }
 
   function {:opaque} TranslateSuccBuckets(lookup: Lookup, buckets: seq<Bucket>, tt: TranslationTable, idx: int) : (buckets': seq<Bucket>)
@@ -379,7 +368,6 @@ module PivotBetreeSpec {
   requires LookupVisitsWFNodes(lookup)
   requires LookupBoundedKey(lookup)
   requires ValidTranslationTable(lookup, tt, 0)
-  requires BucketListWellMarshalled(buckets)
   requires forall i | 0 <= i < |lookup| :: buckets[i] == 
     lookup[i].readOp.node.buckets[Route(lookup[i].readOp.node.pivotTable, lookup[i].currentKey)]
   decreases |lookup| - idx
@@ -387,6 +375,7 @@ module PivotBetreeSpec {
   ensures forall i | 0 <= i < |buckets'| :: buckets'[i] == 
     if i+idx == 0 || tt[i+idx-1].None? then buckets[i+idx]
     else ClampAndTranslateBucket(lookup[i+idx], buckets[i+idx], tt[i+idx-1].value)
+  ensures BucketListWellMarshalled(buckets) ==> BucketListWellMarshalled(buckets')
   {
     if idx == |lookup| then (
       []
