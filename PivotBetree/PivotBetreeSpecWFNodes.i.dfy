@@ -131,9 +131,6 @@ module PivotBetreeSpecWFNodes {
       var child1 := CutoffNode(child, lboundkey, uboundkey);
       CutoffNodeWFProperWellMarshalled(child, lboundkey, uboundkey);
 
-      // assert forall i | 0 <= i < |child1.buckets| ::s
-      //   (forall k | k in child1.buckets[i].keys :: InBetween(lbound, ubound, k) && IsPrefix());
-
       var parentprefix := PivotLcp(parent.pivotTable[slot], parent.pivotTable[slot+1]);
       var childprefix := parent.edgeTable[slot].value;
 
@@ -143,44 +140,40 @@ module PivotBetreeSpecWFNodes {
       forall i | 0 <= i < |child'.buckets|
       ensures WFBucketAt(child'.buckets[i], child'.pivotTable, i)
       {
+        var tbucket := TranslateBucketInternal(child1.buckets[i], childprefix, parentprefix, 0);
+        assert child'.buckets[i] == tbucket.b;
+
         forall j | 0 <= j < |child'.buckets[i].keys|
         ensures BoundedKey(child'.pivotTable, child'.buckets[i].keys[j])
         ensures Route(child'.pivotTable, child'.buckets[i].keys[j]) == i
         {
-          // TODO: fix
-          assume false;
-          // var key : Key := child'.buckets[i].keys[j];
-          // var oldkey : Key := child1.buckets[i].keys[j];
-          // assert Route(child1.pivotTable, oldkey) == i;
+          var key : Key := child'.buckets[i].keys[j];
+          var oldkey : Key := child1.buckets[i].keys[tbucket.idxs[j]];
+          assert Route(child1.pivotTable, oldkey) == i;
+          assert key[|parentprefix|..] == oldkey[|childprefix|..];
+          assert key == parentprefix + oldkey[|childprefix|..];
 
-          // var lpivot := child'.pivotTable[i].e;
-          // var oldlpivot := child1.pivotTable[i].e;
+          var lpivot := child'.pivotTable[i].e;
+          var oldlpivot := child1.pivotTable[i].e;
 
-          // PrefixLteProperties(childprefix, oldlpivot, oldkey);
-          // PrefixLteProperties(parentprefix, lpivot, key);
+          PrefixLteProperties(childprefix, oldlpivot, oldkey);
+          PrefixLteProperties(parentprefix, lpivot, key);
 
-          // assert Keyspace.lte(child'.pivotTable[i], KeyToElement(key)); // assertion failure
-          // Keyspace.transitivity(child'.pivotTable[0], child'.pivotTable[i], KeyToElement(key));
-          // assert Keyspace.lte(child'.pivotTable[0], KeyToElement(key));
+          assert Keyspace.lte(child'.pivotTable[i], KeyToElement(key));
+          if i+1 == NumBuckets(child'.pivotTable) {
+            if child'.pivotTable[i+1].Element? {
+              TranslatePivotPairRangeProperty(parent.pivotTable[slot], parent.pivotTable[slot+1], parentprefix, childprefix);
+              assert Keyspace.lt(Keyspace.Element(key), Last(child'.pivotTable));
+            }
+          } else {
+            var rpivot := child'.pivotTable[i+1].e;
+            var oldrpivot := child1.pivotTable[i+1].e;
 
-          // if i+1 == NumBuckets(child'.pivotTable) {
-          //   assert InBetween(child1.pivotTable[0], Last(child1.pivotTable), oldkey);
-          //   if child'.pivotTable[i+1].Element? {
-          //     assert key == parentprefix + oldkey[|childprefix|..];
-          //     assert Keyspace.lt(Keyspace.Element(key), Last(child'.pivotTable)) by {
-          //       TranslatePivotPairRangeProperty(parent.pivotTable[slot], 
-          //           parent.pivotTable[slot+1], parentprefix, childprefix);
-          //     }
-          //   }
-          // } else {
-          //   var rpivot := child'.pivotTable[i+1].e;
-          //   var oldrpivot := child1.pivotTable[i+1].e;
-
-          //   PrefixLteProperties(childprefix, oldrpivot, oldkey);
-          //   PrefixLteProperties(parentprefix, rpivot, key);
-          //   assert Keyspace.lt(KeyToElement(key), child'.pivotTable[i+1]); // assertion failure
-          // }
-          // assert BoundedKey(child'.pivotTable, key);
+            PrefixLteProperties(childprefix, oldrpivot, oldkey);
+            PrefixLteProperties(parentprefix, rpivot, key);
+            assert Keyspace.lt(KeyToElement(key), child'.pivotTable[i+1]);
+          }
+          RouteIs(child'.pivotTable, key, i);
         }
       }
     }

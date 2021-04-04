@@ -797,8 +797,7 @@ module TranslationLib {
         && var tkey : Key := tbucket.b.keys[i];
         && var bkey : Key := bucket.keys[tbucket.idxs[i]];
         && IsPrefix(tPrefix, tkey)
-        && IsPrefix(prefix, bkey)
-        && tkey[|tPrefix|..] == bkey[|prefix|..]
+        && bkey == prefix + tkey[|tPrefix|..]
         && bucket.msgs[tbucket.idxs[i]] == tbucket.b.msgs[i])
     && (forall i | idx <= i < |bucket.keys| && i !in tbucket.idxs :: !IsPrefix(prefix, bucket.keys[i]))
   }
