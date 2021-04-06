@@ -280,26 +280,78 @@ module TranslationImpl {
     }
   }
 
-  // TODO: implement
+  lemma TranslatePivotsCondition(pt: PivotTable, prefix: Key, newPrefix: Key, end: Element, idx: nat, pt': PivotTable)
+    requires TranslatePivots.requires(pt, prefix, newPrefix, end, idx)
+    requires |pt'| == |pt| - idx
+    requires forall i | 0 <= i < |pt'| - 1 :: pt'[i] == TranslateElement(pt[idx + i], prefix, newPrefix)
+    requires Last(pt') == end
+    ensures pt' == TranslatePivots(pt, prefix, newPrefix, end, idx)
+    decreases |pt'|
+  {
+    if idx + 1 == NumBuckets(pt) {
+    } else {
+      TranslatePivotsCondition(pt, prefix, newPrefix, end, idx+1, pt'[1..]);
+    }
+  }
+
   method ComputeTranslatePivots(pt: PivotTable, prefix: Key, newPrefix: Key, end: Element) returns (pt': PivotTable)
+  requires |pt| < Uint64UpperBound()
   requires WFPivots(pt)
   requires forall i | 0 <= i < NumBuckets(pt) :: IsPrefix(prefix, pt[i].e)
   requires end.Element? ==> ElementIsKey(end)
   requires Keyspace.lt(TranslateElement(pt[|pt|-2], prefix, newPrefix), end)
   ensures pt' == TranslatePivots(pt, prefix, newPrefix, end, 0)
   {
-    assume false;
-    pt' := [];
+    linear var result := seq_alloc_init(|pt| as uint64, end);
+
+    var i := 0;
+    while i < |pt| as uint64 - 1
+      invariant 0 <= i <= |pt| as uint64 - 1
+      invariant |result| == |pt|
+      invariant forall j | 0 <= j < i :: result[j] == TranslateElement(pt[j], prefix, newPrefix)
+      invariant Last(result) == end
+    {
+      var tmp := ComputeTranslateElement(pt[i], prefix, newPrefix);
+      mut_seq_set(inout result, i, tmp);
+      i := i + 1;
+    }
+    pt' := seq_unleash(result);
+    TranslatePivotsCondition(pt, prefix, newPrefix, end, 0, pt');
   }
 
-  // TODO: implement
+  lemma TranslateEdgesCondition(et: EdgeTable, pt: PivotTable, idx: int, et': EdgeTable)
+    requires TranslateEdges.requires(et, pt, idx)
+    requires |et'| == |et| - idx
+    requires forall i | 0 <= i < |et'| :: et'[i] == if et[idx + i].Some? then et[idx + i] else Some(PivotLcp(pt[idx + i], pt[idx + i +1]))
+    ensures et' == TranslateEdges(et, pt, idx)
+    decreases |et'|
+  {
+  }
+
   method ComputeTranslateEdges(et: EdgeTable, pt: PivotTable) returns (et': EdgeTable)
+  requires |et| < Uint64UpperBound()
   requires WFPivots(pt)
   requires WFEdges(et, pt)
   ensures et' == TranslateEdges(et, pt, 0)
   {
-    assume false;
-    et' := [];
+    linear var result := seq_alloc(|et| as uint64, None);
+
+    var i := 0;
+    while i < |et| as uint64
+      invariant 0 <= i <= |et| as uint64
+      invariant |result| == |et|
+      invariant forall j | 0 <= j < i :: result[j] == if et[j].Some? then et[j] else Some(PivotLcp(pt[j], pt[j+1]));
+    {
+      if et[i].Some? {
+        mut_seq_set(inout result, i, et[i]);
+      } else {
+        var newPrefix := ComputePivotLcp(pt[i], pt[i+1]);
+        mut_seq_set(inout result, i, Some(newPrefix));
+      }
+      i := i + 1;
+    }
+    et' := seq_unleash(result);
+    TranslateEdgesCondition(et, pt, 0, et');
   }
 
   // TODO: implement
