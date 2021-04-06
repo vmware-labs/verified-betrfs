@@ -137,9 +137,8 @@ module Impl refines Main {
     r := ARS.join(r, row_r);
 
     ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Querying(rid, key)));
-    assert ProcessQueryTicket(r, r', query_ticket);
-    r := easy_transform_step(r, r', ProcessQueryTicketStep(query_ticket));
-    var step;
+    var step := ProcessQueryTicketStep(query_ticket);
+    r := easy_transform_step(r, r', step);
 
     while true 
       invariant Inv(mt);
@@ -148,6 +147,8 @@ module Impl refines Main {
       invariant handle.m == mt[slot_idx];
       decreases DistanceToSlot(slot_idx, hash_idx);
     {
+      var slot_idx' := getNextIndex(slot_idx);
+
       match entry {
         case Empty => {
           output := MapIfc.QueryOutput(NotFound);
@@ -174,8 +175,6 @@ module Impl refines Main {
         break;
       }
 
-      var slot_idx' := getNextIndex(slot_idx);
-
       if slot_idx' == hash_idx {
         QueryUnreachableState(r, slot_idx as nat);
         break;
@@ -201,7 +200,6 @@ module Impl refines Main {
     }
     
     // assert step.QueryNotFoundStep? || step.QueryDoneStep?;
-    
     r' := R(oneRowTable(slot_idx as nat, Info(entry, Free)), multiset{}, multiset{Stub(rid, output)}); 
     r := easy_transform_step(r, r', step);
 
@@ -231,7 +229,6 @@ module Impl refines Main {
     var slot_idx := hash_idx;
 
     linear var r := in_r;
-    
     linear var row; glinear var handle;
     row, handle := mt[slot_idx].acquire();
     linear var Row(entry, row_r) := row;
@@ -240,6 +237,7 @@ module Impl refines Main {
     var step := ProcessInsertTicketStep(query_ticket);
     ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Inserting(rid, kv, inital_key)));
     r := easy_transform_step(r, r', step);
+    linear var rmutex;
 
     while true 
       invariant Inv(mt);
@@ -250,6 +248,7 @@ module Impl refines Main {
       invariant handle.m == mt[slot_idx];
       decreases DistanceToSlot(slot_idx, initial_hash_idx)
     {
+      var slot_idx' := getNextIndex(slot_idx);
       var new_kv;
 
       match entry {
@@ -275,8 +274,6 @@ module Impl refines Main {
         break;
       }
 
-      var slot_idx' := getNextIndex(slot_idx);
-
       if slot_idx' == initial_hash_idx {
         InsertUnreachableState(r, slot_idx as nat);
         break;
@@ -296,7 +293,6 @@ module Impl refines Main {
       r' := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Inserting(rid, kv, inital_key)));
       r := easy_transform_step(r, r', step);
 
-      linear var rmutex;
       ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Inserting(rid, kv, inital_key)));
       ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
 
@@ -310,11 +306,9 @@ module Impl refines Main {
     }
 
     // assert step.InsertDoneStep? || step.InsertUpdateStep?;
-
     r' := R(oneRowTable(slot_idx as nat, Info(Full(kv), Free)), multiset{}, multiset{Stub(rid, output)});
     r := easy_transform_step(r, r', step);
 
-    linear var rmutex;
     r, rmutex := ARS.split(r, ARS.output_stub(rid, output), 
       oneRowResource(slot_idx as nat, Info(Full(kv), Free)));
     mt[slot_idx].release(Row(Full(kv), rmutex), handle);
@@ -344,6 +338,7 @@ module Impl refines Main {
 
     linear var r := r;
     glinear var handle := handle;
+    linear var rmutex;
 
     linear var next_row; glinear var next_handle;
     next_row, next_handle := mt[slot_idx'].acquire();
@@ -379,7 +374,6 @@ module Impl refines Main {
         slot_idx' as nat, Info(Empty, RemoveTidying(rid, inital_key)));
       r := easy_transform_step(r, r', RemoveTidyStep(slot_idx as nat));
 
-      linear var rmutex;
       ghost var left := oneRowResource(slot_idx' as nat, Info(Empty, RemoveTidying(rid, inital_key)));
       ghost var right := oneRowResource(slot_idx as nat, Info(next_entry, Free));
 
@@ -390,9 +384,7 @@ module Impl refines Main {
       slot_idx' := getNextIndex(slot_idx);
       handle := next_handle;
 
-      linear var next_row;
       next_row, next_handle := mt[slot_idx'].acquire();
-      
       linear var Row(next_entry', next_row_r) := next_row;
       next_entry := next_entry';
       r := ARS.join(r, next_row_r);
@@ -411,7 +403,6 @@ module Impl refines Main {
     step := RemoveDoneStep(slot_idx as nat);
     r := easy_transform_step(r, r', step);
 
-    linear var rmutex;
     ghost var left := R(
       oneRowTable(slot_idx' as nat, Info(next_entry, Free)),
       multiset{},
@@ -439,8 +430,7 @@ module Impl refines Main {
     var query_ticket := Ticket(rid, input);
     var key := input.key;
 
-    var hash_idx := hash(key);
-    var slot_idx := hash_idx;
+    var hash_idx := hash(key); var slot_idx := hash_idx;
 
     linear var r := in_r;
     linear var row; glinear var handle;
@@ -449,7 +439,8 @@ module Impl refines Main {
     linear var Row(entry, row_r) := row;
     r := ARS.join(r, row_r);
 
-    var slot_idx': uint32 ;
+    var slot_idx' ;
+    linear var rmutex;
 
     ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Removing(rid, key)));
     var step : Step := ProcessRemoveTicketStep(query_ticket);
@@ -505,7 +496,6 @@ module Impl refines Main {
       r' := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Removing(rid, key)));
       r := easy_transform_step(r, r', step);
 
-      linear var rmutex;
       ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Removing(rid, key)));
       ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
       r, rmutex := ARS.split(r, left, right);
@@ -520,8 +510,6 @@ module Impl refines Main {
       output := MapIfc.RemoveOutput(false);
       r' := R(oneRowTable(slot_idx as nat, Info(entry, Free)), multiset{}, multiset{Stub(rid, output)}); 
       r := easy_transform_step(r, r', step);
-
-      linear var rmutex;
       ghost var left := ARS.output_stub(rid, output);
       ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
       r, rmutex := ARS.split(r, left, right);
