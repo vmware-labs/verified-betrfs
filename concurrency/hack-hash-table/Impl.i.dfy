@@ -1,33 +1,47 @@
-include "../hack-cookies/Mutex.s.dfy"
+include "../framework/Mutex.s.dfy"
 include "HTResource.i.dfy"
 include "Main.s.dfy"
 
-module HTMutex refines AbstractMutex {
-  import opened HTResource
+// module HTMutex refines Mutexes {
+//   import opened HTResource
 
-  type ConstType = int  // the row in the hash table protected by this mutex
+//   type ConstType = int  // the row in the hash table protected by this mutex
 
-  linear datatype ValueType = Value(
-      entry: HTResource.Entry,
-      /* ghost */ linear resource: HTResource.R)
+//   linear datatype ValueType = Row(
+//       entry: HTResource.Entry,
+//       /* ghost */ linear resource: HTResource.R)
 
-  predicate Inv(k: ConstType, v: ValueType) {
-    && 0 <= k < FixedSize()
-    && v.resource == oneRowResource(k as nat, Info(v.entry, Free))
-  }
-}
+//   predicate Inv(k: ConstType, v: ValueType) {
+//     && 0 <= k < FixedSize()
+//     && v.resource == oneRowResource(k as nat, Info(v.entry, Free))
+//   }
+// }
 
 module Impl refines Main {
   import opened Options
   import opened NativeTypes
-  import opened HTMutex
   import opened HTResource
   import opened KeyValueType
+  import opened Mutexes
 
-  type MutexTable = seq<HTMutex.Mutex>
+  linear datatype Row = Row(
+    entry: HTResource.Entry,
+    linear resource: HTResource.R)
+
+  type HTMutex = Mutex<Row>
+  type MutexTable = seq<HTMutex>
+
+  function RowInv(index: nat, row: Row): bool
+  {
+    && Valid(row.resource)
+    && 0 <= index as nat < FixedSize()
+    && row.resource == oneRowResource(index as nat, Info(row.entry, Free))
+  }
+
   predicate Inv(o: MutexTable) {
     && |o| == HTResource.FixedSize()
-    && (forall i: nat | i < |o| :: o[i].constant() == i)
+    && (forall i | 0 <= i < FixedSize()
+      :: o[i].inv == ((row) => RowInv(i, row)))
   }
 
   predicate Init(s: ARS.R) {
@@ -60,7 +74,7 @@ module Impl refines Main {
     var i:uint32 := 0;
     while i < FixedSizeImpl()
       invariant i as int == |o| <= FixedSize()
-      invariant forall j:nat | j<i as int :: && o[j].constant() as int == j
+      invariant forall j:nat | j<i as int :: && o[j].inv == (row) => RowInv(j, row)
       invariant remaining_r.R?
       invariant remaining_r.tickets == multiset{}
       invariant remaining_r.stubs == multiset{} 
@@ -70,7 +84,7 @@ module Impl refines Main {
       ghost var splitted := Split(remaining_r, i as int);
       linear var ri;
       remaining_r, ri := ARS.split(remaining_r, splitted.r', splitted.ri);
-      var m := new_mutex(i as int, Value(Empty, ri));
+      var m := new_mutex<Row>(Row(Empty, ri), (row) => RowInv(i as nat, row));
       o := o + [m];
       i := i + 1;
     }
@@ -117,21 +131,23 @@ module Impl refines Main {
     var slot_idx := hash_idx;
     linear var r := in_r;
 
-    linear var row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx]);
-    linear var Value(entry, row_r) := row;
+    linear var row; glinear var handle;
+    row, handle := mt[slot_idx].acquire();
+    linear var Row(entry, row_r) := row;
     r := ARS.join(r, row_r);
 
     ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Querying(rid, key)));
+    assert ProcessQueryTicket(r, r', query_ticket);
     r := easy_transform_step(r, r', ProcessQueryTicketStep(query_ticket));
+    var step;
 
     while true 
       invariant Inv(mt);
       invariant 0 <= slot_idx < FixedSizeImpl();
       invariant r == oneRowResource(slot_idx as nat, Info(entry, Querying(rid, key)));
-      decreases DistanceToSlot(slot_idx, hash_idx)
+      invariant handle.m == mt[slot_idx];
+      decreases DistanceToSlot(slot_idx, hash_idx);
     {
-      var step;
-
       match entry {
         case Empty => {
           output := MapIfc.QueryOutput(NotFound);
@@ -155,15 +171,6 @@ module Impl refines Main {
       }
 
       if !step.QuerySkipStep? {
-        // should be QueryNotFoundStep/QueryDoneStep
-        r' := R(oneRowTable(slot_idx as nat, Info(entry, Free)), multiset{}, multiset{Stub(rid, output)}); 
-        r := easy_transform_step(r, r', step);
-
-        linear var rmutex;
-        r, rmutex := ARS.split(r, 
-          ARS.output_stub(rid, output), 
-          oneRowResource(slot_idx as nat, Info(entry, Free)));
-        release(mt[slot_idx], Value(entry, rmutex));
         break;
       }
 
@@ -174,8 +181,9 @@ module Impl refines Main {
         break;
       }
 
-      linear var next_row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx']);
-      linear var Value(next_entry, next_row_r) := next_row;
+      linear var next_row; glinear var next_handle;
+      next_row, next_handle := mt[slot_idx'].acquire();
+      linear var Row(next_entry, next_row_r) := next_row;
       r := ARS.join(r, next_row_r);
 
       r' := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Querying(rid, key)));
@@ -185,11 +193,23 @@ module Impl refines Main {
       ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Querying(rid, key)));
       ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
       r, rmutex := ARS.split(r, left, right);
-      release(mt[slot_idx], Value(entry, rmutex));
+      mt[slot_idx].release(Row(entry, rmutex), handle);
 
       slot_idx := slot_idx';
       entry := next_entry;
+      handle := next_handle;
     }
+    
+    // assert step.QueryNotFoundStep? || step.QueryDoneStep?;
+    
+    r' := R(oneRowTable(slot_idx as nat, Info(entry, Free)), multiset{}, multiset{Stub(rid, output)}); 
+    r := easy_transform_step(r, r', step);
+
+    linear var rmutex;
+    r, rmutex := ARS.split(r, 
+      ARS.output_stub(rid, output), 
+      oneRowResource(slot_idx as nat, Info(entry, Free)));
+    mt[slot_idx].release(Row(entry, rmutex), handle);
 
     out_r := r;
   }
@@ -211,12 +231,15 @@ module Impl refines Main {
     var slot_idx := hash_idx;
 
     linear var r := in_r;
-    linear var row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx]);
-    linear var Value(entry, row_r) := row;
+    
+    linear var row; glinear var handle;
+    row, handle := mt[slot_idx].acquire();
+    linear var Row(entry, row_r) := row;
     r := ARS.join(r, row_r);
 
+    var step := ProcessInsertTicketStep(query_ticket);
     ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Inserting(rid, kv, inital_key)));
-    r := easy_transform_step(r, r', ProcessInsertTicketStep(query_ticket));
+    r := easy_transform_step(r, r', step);
 
     while true 
       invariant Inv(mt);
@@ -224,9 +247,10 @@ module Impl refines Main {
       invariant r == oneRowResource(slot_idx as nat, Info(entry, Inserting(rid, kv, inital_key)))
       invariant kv.key == key
       invariant hash_idx == hash(key)
+      invariant handle.m == mt[slot_idx];
       decreases DistanceToSlot(slot_idx, initial_hash_idx)
     {
-      var step, new_kv;
+      var new_kv;
 
       match entry {
         case Empty => {
@@ -248,13 +272,6 @@ module Impl refines Main {
       }
 
       if step.InsertDoneStep? || step.InsertUpdateStep? {
-        r' := R(oneRowTable(slot_idx as nat, Info(Full(kv), Free)), multiset{}, multiset{Stub(rid, output)});
-        r := easy_transform_step(r, r', step);
-
-        linear var rmutex;
-        r, rmutex := ARS.split(r, ARS.output_stub(rid, output), 
-          oneRowResource(slot_idx as nat, Info(Full(kv), Free)));
-        release(mt[slot_idx], Value(Full(kv), rmutex));
         break;
       }
 
@@ -265,8 +282,9 @@ module Impl refines Main {
         break;
       }
 
-      linear var next_row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx']);
-      linear var Value(next_entry, next_row_r) := next_row;
+      linear var next_row; glinear var next_handle;
+      next_row, next_handle := mt[slot_idx'].acquire();
+      linear var Row(next_entry, next_row_r) := next_row;
       r := ARS.join(r, next_row_r);
 
       if step.InsertSwapStep? {
@@ -283,44 +301,70 @@ module Impl refines Main {
       ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
 
       r, rmutex := ARS.split(r, left, right);
-      release(mt[slot_idx], Value(entry, rmutex));
- 
+      mt[slot_idx].release(Row(entry, rmutex), handle);
+
       slot_idx := slot_idx';
       entry := next_entry;
       hash_idx := hash(key);
+      handle := next_handle;
     }
+
+    // assert step.InsertDoneStep? || step.InsertUpdateStep?;
+
+    r' := R(oneRowTable(slot_idx as nat, Info(Full(kv), Free)), multiset{}, multiset{Stub(rid, output)});
+    r := easy_transform_step(r, r', step);
+
+    linear var rmutex;
+    r, rmutex := ARS.split(r, ARS.output_stub(rid, output), 
+      oneRowResource(slot_idx as nat, Info(Full(kv), Free)));
+    mt[slot_idx].release(Row(Full(kv), rmutex), handle);
 
     out_r := r;
   }
 
-  method doRemoveTidy(mt: MutexTable, rid: int, 
+  method doRemoveFound(mt: MutexTable, rid: int, 
     slot_idx: uint32,
     hash_idx: uint32,
     inital_key: Key,
     entry: Entry,
-    next_entry: Entry,
+    glinear handle: MutexHandle<Row>,
     /*ghost*/ linear r: ARS.R)
   returns (output: Ifc.Output, linear out_r: ARS.R)
     requires Inv(mt)
-    requires TidyEnabled(r, slot_idx as nat)
-    requires r == twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key)), NextPos(slot_idx as nat), Info(next_entry, Free));
     requires 0 <= slot_idx < FixedSizeImpl()
     requires 0 <= hash_idx < FixedSizeImpl()
+    requires r == oneRowResource(slot_idx as nat, Info(entry, Removing(rid, inital_key)));
+    requires entry.Full? && entry.kv.key == inital_key
     requires hash(inital_key) == hash_idx
+    requires handle.m == mt[slot_idx]
     ensures out_r == ARS.output_stub(rid, output)
   {
     var slot_idx := slot_idx;
-    var next_entry := next_entry;
+    var slot_idx' := getNextIndex(slot_idx);
+
     linear var r := r;
+    glinear var handle := handle;
+
+    linear var next_row; glinear var next_handle;
+    next_row, next_handle := mt[slot_idx'].acquire();
+    linear var Row(next_entry, next_row_r) := next_row;
+    r := ARS.join(r, next_row_r);
+
+    var step := RemoveFoundItStep(slot_idx as nat);
+    var r' := twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key)), slot_idx' as nat, Info(next_entry, Free));
+    r := easy_transform_step(r, r', step);
+
     while true
       invariant Inv(mt);
       invariant 0 <= slot_idx < FixedSizeImpl()
       invariant r == twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key)), NextPos(slot_idx as nat), Info(next_entry, Free))
+      invariant handle.m == mt[slot_idx]
+      invariant next_handle.m == mt[NextPos(slot_idx as nat)]
       decreases DistanceToSlot(slot_idx, hash_idx)
     {
-      var slot_idx' := getNextIndex(slot_idx);
+      slot_idx' := getNextIndex(slot_idx);
 
-      if next_entry.Empty? || hash(next_entry.kv.key) == slot_idx' {
+      if next_entry.Empty? || (next_entry.Full? && hash(next_entry.kv.key) == slot_idx') {
         assert DoneTidying(r, slot_idx as nat);
         break;
       }
@@ -330,7 +374,9 @@ module Impl refines Main {
         break;
       }
 
-      ghost var r' := twoRowsResource(slot_idx as nat, Info(next_entry, Free), slot_idx' as nat, Info(Empty, RemoveTidying(rid, inital_key)));
+      ghost var r' := twoRowsResource(
+        slot_idx as nat, Info(next_entry, Free),
+        slot_idx' as nat, Info(Empty, RemoveTidying(rid, inital_key)));
       r := easy_transform_step(r, r', RemoveTidyStep(slot_idx as nat));
 
       linear var rmutex;
@@ -338,28 +384,31 @@ module Impl refines Main {
       ghost var right := oneRowResource(slot_idx as nat, Info(next_entry, Free));
 
       r, rmutex := ARS.split(r, left, right);
-      release(mt[slot_idx], Value(next_entry, rmutex));
+      mt[slot_idx].release(Row(next_entry, rmutex), handle);
 
       slot_idx := slot_idx';
       slot_idx' := getNextIndex(slot_idx);
+      handle := next_handle;
 
-      linear var next_row := HTMutex.acquire(mt[slot_idx']);
-      linear var Value(next_entry', next_row_r) := next_row;
+      linear var next_row;
+      next_row, next_handle := mt[slot_idx'].acquire();
+      
+      linear var Row(next_entry', next_row_r) := next_row;
       next_entry := next_entry';
       r := ARS.join(r, next_row_r);
     }
 
     assert DoneTidying(r, slot_idx as nat);
 
-    var slot_idx' := getNextIndex(slot_idx);
+    slot_idx' := getNextIndex(slot_idx);
     output := MapIfc.RemoveOutput(true);
-    ghost var r' := R(
+    r' := R(
       twoRowsTable(slot_idx as nat, Info(Empty, Free), slot_idx' as nat, Info(next_entry, Free)),
       multiset{},
       multiset{ Stub(rid, output) }
     );
 
-    var step := RemoveDoneStep(slot_idx as nat);
+    step := RemoveDoneStep(slot_idx as nat);
     r := easy_transform_step(r, r', step);
 
     linear var rmutex;
@@ -370,12 +419,12 @@ module Impl refines Main {
     ghost var right := oneRowResource(slot_idx as nat, Info(Empty, Free));
 
     r, rmutex := ARS.split(r, left, right);
-    release(mt[slot_idx], Value(Empty, rmutex));
+    mt[slot_idx].release(Row(Empty, rmutex), handle);
 
     r, rmutex := ARS.split(r, 
       ARS.output_stub(rid, output), 
       oneRowResource(slot_idx' as nat, Info(next_entry, Free)));
-    release(mt[slot_idx'], Value(next_entry, rmutex));
+    mt[slot_idx'].release(Row(next_entry, rmutex), next_handle);
 
     out_r := r;
   }
@@ -394,8 +443,10 @@ module Impl refines Main {
     var slot_idx := hash_idx;
 
     linear var r := in_r;
-    linear var row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx]);
-    linear var Value(entry, row_r) := row;
+    linear var row; glinear var handle;
+    row, handle := mt[slot_idx].acquire();
+
+    linear var Row(entry, row_r) := row;
     r := ARS.join(r, row_r);
 
     var slot_idx': uint32 ;
@@ -413,6 +464,7 @@ module Impl refines Main {
       invariant step.RemoveTidyStep? ==> (
         && TidyEnabled(r, slot_idx as nat)
         && KnowRowIsFree(r, NextPos(slot_idx as nat)))
+      invariant handle.m == mt[slot_idx]
       decreases DistanceToSlot(slot_idx, hash_idx)
     {
       var slot_idx' := getNextIndex(slot_idx);
@@ -441,32 +493,27 @@ module Impl refines Main {
         break;
       }
 
-      if step.RemoveNotFoundStep? {
+      if step.RemoveNotFoundStep? || step.RemoveFoundItStep? {
         break;
       }
 
-      linear var next_row: HTMutex.ValueType := HTMutex.acquire(mt[slot_idx']);
-      linear var Value(next_entry, next_row_r) := next_row;
+      linear var next_row; glinear var next_handle;
+      next_row, next_handle := mt[slot_idx'].acquire();
+      linear var Row(next_entry, next_row_r) := next_row;
       r := ARS.join(r, next_row_r);
 
-      if step.RemoveFoundItStep? {
-        r' := twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid, key)), slot_idx' as nat, Info(next_entry, Free));
-        r := easy_transform_step(r, r', step);
-        output, r := doRemoveTidy(mt, rid, slot_idx, hash_idx, key, entry, next_entry, r);
-        break;
-      } else {
-        r' := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Removing(rid, key)));
-        r := easy_transform_step(r, r', step);
+      r' := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Removing(rid, key)));
+      r := easy_transform_step(r, r', step);
 
-        linear var rmutex;
-        ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Removing(rid, key)));
-        ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
-        r, rmutex := ARS.split(r, left, right);
-        release(mt[slot_idx], Value(entry, rmutex));
+      linear var rmutex;
+      ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Removing(rid, key)));
+      ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
+      r, rmutex := ARS.split(r, left, right);
+      mt[slot_idx].release(Row(entry, rmutex), handle);
 
-        slot_idx := slot_idx';
-        entry := next_entry;
-      }
+      slot_idx := slot_idx';
+      entry := next_entry;
+      handle := next_handle;
     }
 
     if step.RemoveNotFoundStep? {
@@ -478,7 +525,9 @@ module Impl refines Main {
       ghost var left := ARS.output_stub(rid, output);
       ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
       r, rmutex := ARS.split(r, left, right);
-      release(mt[slot_idx], Value(entry, rmutex));
+      mt[slot_idx].release(Row(entry, rmutex), handle);
+    } else {
+      output, r := doRemoveFound(mt, rid, slot_idx, hash_idx, key, entry, handle, r);
     }
 
     out_r := r;
