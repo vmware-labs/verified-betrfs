@@ -803,9 +803,11 @@ module TranslationLib {
     && (forall i | 0 <= i < |tbucket.b.keys| ::
         && idx <= tbucket.idxs[i] < |bucket.keys|
         && var tkey : Key := tbucket.b.keys[i];
-        && var bkey : Key := bucket.keys[tbucket.idxs[i]];
-        && IsPrefix(tPrefix, tkey)
-        && bkey == prefix + tkey[|tPrefix|..]
+        && var key : Key := bucket.keys[tbucket.idxs[i]];
+        && IsPrefix(prefix, key)
+        && tkey == ApplyPrefixSet(Some(PrefixSet(prefix, tPrefix)), key)
+        // && IsPrefix(tPrefix, tkey)
+        // && bkey == prefix + tkey[|tPrefix|..]
         && bucket.msgs[tbucket.idxs[i]] == tbucket.b.msgs[i])
     && (forall i | idx <= i < |bucket.keys| && i !in tbucket.idxs :: !IsPrefix(prefix, bucket.keys[i]))
   }
@@ -883,7 +885,6 @@ module TranslationLib {
   ensures key in bucket.as_map() <==> key' in bucket'.as_map()
   ensures key in bucket.as_map() ==> (bucket.as_map()[key] == bucket'.as_map()[key'])
   {
-
     var tbucket := TranslateBucketInternal(bucket, prefix, newPrefix, 0);
     assert tbucket.b == bucket';
 
