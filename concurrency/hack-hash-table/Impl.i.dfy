@@ -129,12 +129,11 @@ module Impl refines Main {
     var key := input.key;
     var hash_idx := hash(key);
     var slot_idx := hash_idx;
-    linear var r := in_r;
 
     linear var row; glinear var handle;
     row, handle := mt[slot_idx].acquire();
     linear var Row(entry, row_r) := row;
-    r := ARS.join(r, row_r);
+    linear var r := ARS.join(in_r, row_r);
 
     ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Querying(rid, key)));
     var step := ProcessQueryTicketStep(query_ticket);
@@ -228,11 +227,10 @@ module Impl refines Main {
     var initial_hash_idx := hash_idx;
     var slot_idx := hash_idx;
 
-    linear var r := in_r;
     linear var row; glinear var handle;
     row, handle := mt[slot_idx].acquire();
     linear var Row(entry, row_r) := row;
-    r := ARS.join(r, row_r);
+    linear var r := ARS.join(in_r, row_r);
 
     var step := ProcessInsertTicketStep(query_ticket);
     ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Inserting(rid, kv, inital_key)));
@@ -336,14 +334,13 @@ module Impl refines Main {
     var slot_idx := slot_idx;
     var slot_idx' := getNextIndex(slot_idx);
 
-    linear var r := r;
     glinear var handle := handle;
     linear var rmutex;
 
     linear var next_row; glinear var next_handle;
     next_row, next_handle := mt[slot_idx'].acquire();
     linear var Row(next_entry, next_row_r) := next_row;
-    r := ARS.join(r, next_row_r);
+    linear var r := ARS.join(r, next_row_r);
 
     var step := RemoveFoundItStep(slot_idx as nat);
     var r' := twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key)), slot_idx' as nat, Info(next_entry, Free));
@@ -432,14 +429,13 @@ module Impl refines Main {
 
     var hash_idx := hash(key); var slot_idx := hash_idx;
 
-    linear var r := in_r;
     linear var row; glinear var handle;
     row, handle := mt[slot_idx].acquire();
 
     linear var Row(entry, row_r) := row;
-    r := ARS.join(r, row_r);
+    linear var r := ARS.join(in_r, row_r);
 
-    var slot_idx' ;
+    var slot_idx' :uint32;
     linear var rmutex;
 
     ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Removing(rid, key)));
