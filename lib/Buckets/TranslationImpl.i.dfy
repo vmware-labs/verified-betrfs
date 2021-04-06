@@ -213,22 +213,20 @@ module TranslationImpl {
   }
 
   method ComputeComposePrefixSet(a: Option<PrefixSet>, b: Option<PrefixSet>) returns (c: Option<PrefixSet>)
-  requires a.Some? && b.Some? ==>
-    ( IsPrefix(a.value.newPrefix, b.value.prefix)
-    || IsPrefix(b.value.prefix, a.value.newPrefix))
+  requires ComposePrefixSet.requires(a, b)
   ensures c == ComposePrefixSet(a, b)
   {
-    if a.None? {
-      c := b;
-    } else if b.None? {
+    if b.None? {
       c := a;
-    } else if |a.value.newPrefix| as uint64 <= |b.value.prefix| as uint64 {
+    } else if a.None? {
+      c := Some(PrefixSet(b.value.newPrefix, b.value.prefix));
+    } else if |a.value.prefix| as uint64 <= |b.value.prefix| as uint64 {
       reveal_IsPrefix();
-      var prefix := ComputeApplyPrefixSet(Some(PrefixSet(a.value.newPrefix, a.value.prefix)), b.value.prefix);
-      c := Some(PrefixSet(prefix, b.value.newPrefix));
+      var newPrefix := ComputeApplyPrefixSet(a, b.value.prefix);
+      c := Some(PrefixSet(b.value.newPrefix, newPrefix));
     } else {
-      var newPrefix := ComputeApplyPrefixSet(b, a.value.newPrefix);
-      c := Some(PrefixSet(a.value.prefix, newPrefix));
+      var prefix := ComputeApplyPrefixSet(b, a.value.prefix);
+      c := Some(PrefixSet(prefix, a.value.newPrefix));
     }
   }
 

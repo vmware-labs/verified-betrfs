@@ -378,11 +378,18 @@ module TranslationLib {
     ApplyPrefixSet(pset, key)
   }
 
-  function ApplyPrefixSet(pset: Option<PrefixSet>, key: Key) : Key
+  function RevPrefixSet(pset: Option<PrefixSet>) : Option<PrefixSet>
+  {
+    if pset.None? then None else Some(PrefixSet(pset.value.newPrefix, pset.value.prefix))
+  }
+
+  function ApplyPrefixSet(pset: Option<PrefixSet>, key: Key) : (key': Key)
   requires pset.Some? ==> IsPrefix(pset.value.prefix, key)
+  ensures pset.Some? ==> IsPrefix(pset.value.newPrefix, key')
   {
     if pset.None? then key 
     else (
+      reveal_IsPrefix();
       assume |pset.value.newPrefix + key[|pset.value.prefix|..]| <= 1024;
       pset.value.newPrefix + key[|pset.value.prefix|..]
     )
@@ -390,39 +397,40 @@ module TranslationLib {
 
   function ComposePrefixSet(a: Option<PrefixSet>, b: Option<PrefixSet>): (c: Option<PrefixSet>)
   requires a.Some? && b.Some? ==> 
-    ( IsPrefix(a.value.newPrefix, b.value.prefix)
-    || IsPrefix(b.value.prefix, a.value.newPrefix))
+    ( IsPrefix(a.value.prefix, b.value.prefix)
+    || IsPrefix(b.value.prefix, a.value.prefix))
   {
     if a == None then (
-      b
+      RevPrefixSet(b)
     ) else if b == None then (
       a
     ) else (
       reveal_IsPrefix();
-      if |a.value.newPrefix| <= |b.value.prefix| then (
-        var prefix := ApplyPrefixSet(Some(PrefixSet(a.value.newPrefix, a.value.prefix)), b.value.prefix);  
-        Some(PrefixSet(prefix, b.value.newPrefix))
+      if |a.value.prefix| <= |b.value.prefix| then (
+        var newPrefix := ApplyPrefixSet(a, b.value.prefix);  
+        Some(PrefixSet(b.value.newPrefix, newPrefix))
       ) else (
-        var newPrefix := ApplyPrefixSet(b, a.value.newPrefix);
-        Some(PrefixSet(a.value.prefix, newPrefix))
+        var prefix := ApplyPrefixSet(b, a.value.prefix);
+        Some(PrefixSet(prefix, a.value.newPrefix))
       )
     )
   }
 
   lemma ComposePrefixSetCorrect(a: Option<PrefixSet>, b: Option<PrefixSet>, c: Option<PrefixSet>, 
     key: Key, akey: Key, ckey: Key)
-  requires a.Some? ==> IsPrefix(a.value.prefix, key)
-  requires c.Some? ==> IsPrefix(c.value.prefix, key)
-  requires akey == ApplyPrefixSet(a, key)
-  requires ckey == ApplyPrefixSet(c, key)
-  requires c.None? ==> ckey == key
-  requires b.Some? ==> IsPrefix(b.value.prefix, akey)
   requires a.Some? && b.Some? ==> 
-    ( IsPrefix(a.value.newPrefix, b.value.prefix)
-    || IsPrefix(b.value.prefix, a.value.newPrefix))
+    ( IsPrefix(a.value.prefix, b.value.prefix)
+    || IsPrefix(b.value.prefix, a.value.prefix))
   requires c == ComposePrefixSet(a, b)
+  requires a.Some? ==> IsPrefix(a.value.prefix, akey)
+  requires b.Some? ==> IsPrefix(b.value.prefix, akey)
+  requires c.Some? ==> IsPrefix(c.value.prefix, ckey)
+  requires a == c ==> akey == ckey
+  requires key == ApplyPrefixSet(a, akey)
+  requires key == ApplyPrefixSet(c, ckey)
   ensures ApplyPrefixSet(b, akey) == ckey
   {
+    reveal_IsPrefix();
   }
 
   // given a prefix find its upperbound s.t. lcp(prefix, upper) == prefix

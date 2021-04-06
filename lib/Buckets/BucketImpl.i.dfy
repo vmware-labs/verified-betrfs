@@ -883,6 +883,7 @@ module BucketImpl {
       if it.i == |pkv.keys.offsets| as uint64 {
         next := BucketIteratorModel.Done;
       } else {
+        // here all we want to do is translate the key
         next := BucketIteratorModel.Next(PackedKV.GetKey(pkv, it.i), PackedKV.GetMessage(pkv, it.i));
       }
     }
@@ -915,20 +916,20 @@ module BucketImpl {
     }
   }
 
-   method PartialFlush(linear inout bots: lseq<MutBucket>, shared top: MutBucket,  pivots: Pivots.PivotTable)
-    returns (linear newtop: MutBucket)
-    requires top.Inv()
-    requires MutBucket.InvLseq(old_bots)
-    requires Pivots.WFPivots(pivots)
-    requires |pivots| < Uint64UpperBound()
-    requires Pivots.NumBuckets(pivots) == |old_bots|
-    requires WeightBucket(top.I()) <= MaxTotalBucketWeight()
-    requires WeightBucketList(MutBucket.ILseq(old_bots)) <= MaxTotalBucketWeight()
-    ensures MutBucket.InvLseq(bots)
-    ensures |bots| == |old_bots|
-    ensures newtop.Inv()
-    ensures partialFlushResult(newtop.I(), MutBucket.ILseq(bots))
-        == BucketFlushModel.partialFlush(top.I(), pivots, MutBucket.ILseq(old_bots))
+  method PartialFlush(linear inout bots: lseq<MutBucket>, shared top: MutBucket,  pivots: Pivots.PivotTable)
+  returns (linear newtop: MutBucket)
+  requires top.Inv()
+  requires MutBucket.InvLseq(old_bots)
+  requires Pivots.WFPivots(pivots)
+  requires |pivots| < Uint64UpperBound()
+  requires Pivots.NumBuckets(pivots) == |old_bots|
+  requires WeightBucket(top.I()) <= MaxTotalBucketWeight()
+  requires WeightBucketList(MutBucket.ILseq(old_bots)) <= MaxTotalBucketWeight()
+  ensures MutBucket.InvLseq(bots)
+  ensures |bots| == |old_bots|
+  ensures newtop.Inv()
+  ensures partialFlushResult(newtop.I(), MutBucket.ILseq(bots))
+      == BucketFlushModel.partialFlush(top.I(), pivots, MutBucket.ILseq(old_bots))
   {
     var i: uint64 := 0;
     var bots_len := lseq_length_raw(bots);
@@ -991,79 +992,4 @@ module BucketImpl {
     newtop := MutBucket.AllocPkv(result.top, sorted);
     pkvList2BucketList(inout bots, result.bots, sorted);
   }
-
-  // method PartialFlush(shared top: MutBucket, shared bots: lseq<MutBucket>, pivots: Pivots.PivotTable)
-  //   returns (linear newtop: MutBucket, linear newbots: lseq<MutBucket>)
-  //   requires top.Inv()
-  //   requires MutBucket.InvLseq(bots)
-  //   requires Pivots.WFPivots(pivots)
-  //   requires |pivots| < Uint64UpperBound()
-  //   requires Pivots.NumBuckets(pivots) == |bots|
-  //   requires WeightBucket(top.I()) <= MaxTotalBucketWeight()
-  //   requires WeightBucketList(MutBucket.ILseq(bots)) <= MaxTotalBucketWeight()
-  //   ensures MutBucket.InvLseq(newbots)
-  //   ensures newtop.Inv()
-  //   ensures partialFlushResult(newtop.I(), MutBucket.ILseq(newbots))
-  //       == BucketFlushModel.partialFlush(top.I(), pivots, MutBucket.ILseq(bots))
-  // {
-  //   var i: uint64 := 0;
-  //   var bots_len := lseq_length_raw(bots);
-
-  //   var botPkvs: array<PKV.Pkv> := new PKV.Pkv[bots_len];
-  //   var sorted := true;
-  //   while i < bots_len
-  //     invariant i as nat <= |bots|
-  //     invariant forall j | 0 <= j < i :: PKV.WF(botPkvs[j])
-  //     invariant forall j | 0 <= j < i :: PKV.I(botPkvs[j]) == lseqs(bots)[j].bucket
-  //     invariant forall j | 0 <= j < i :: |PKV.IKeys(botPkvs[j].keys)| < 0x1000_0000
-  //     invariant sorted ==> forall j | 0 <= j < i ::
-  //         BucketWellMarshalled(PKV.I(botPkvs[j]))
-  //   {
-  //     botPkvs[i] := lseq_peek(bots, i).GetPkv();
-  //     NumElementsLteWeight(PKV.I(botPkvs[i]));
-  //     WeightBucketLeBucketList(MutBucket.ILseq(bots), i as int);
-
-  //     if !lseq_peek(bots, i).sorted {
-  //       sorted := false;
-  //     }
-  //     // assert |PKV.IKeys(botPkvs[i].keys)|
-  //     //    <= WeightBucket(PKV.I(botPkvs[i]))
-  //     //    <= WeightBucketList(MutBucket.ILseq(bots))
-  //     //    < 0x1000_0000;
-  //     i := i + 1;
-  //   }
-
-  //   var botPkvsSeq := botPkvs[..];
-
-  //   NumElementsLteWeight(top.bucket);
-  //   assert DPKV.PKVISeq(botPkvsSeq) == MutBucket.ILseq(bots);
-
-  //   var topPkv := top.GetPkv();
-  //   if !top.sorted {
-  //     sorted := false;
-  //   }
-
-  //   var result := DPKV.PartialFlush(topPkv, pivots, botPkvsSeq);
-
-  //   assert sorted ==>
-  //     && BucketWellMarshalled(PKV.I(result.top)) 
-  //     && (forall j | 0 <= j < |result.bots| ::
-  //         BucketWellMarshalled(PKV.I(result.bots[j])))
-  //   by {
-  //     if sorted {
-  //       partialFlushPreservesSorted(top.bucket, pivots, MutBucket.ILseq(bots));
-  //     }
-  //   }
-
-  //   partialFlushWeightBound(top.I(), pivots, MutBucket.ILseq(bots));
-  //   DPKV.WeightBucketPkv_eq_WeightPkv(result.top);
-  //   forall i | 0 <= i < |result.bots|
-  //     ensures PackedKV.WeightPkv(result.bots[i]) as nat < Uint32UpperBound()
-  //   {
-  //     WeightBucketLeBucketList(DPKV.PKVISeq(result.bots), i);
-  //     DPKV.WeightBucketPkv_eq_WeightPkv(result.bots[i]);
-  //   }
-  //   newtop := MutBucket.AllocPkv(result.top, sorted);
-  //   newbots := pkvList2BucketList(result.bots, sorted);
-  // }
 }
