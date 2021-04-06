@@ -5,6 +5,20 @@ include "MsgSeq.i.dfy"
 include "Tables.i.dfy"
 
 
+/*
+Okay I think we need to just talk about DiskViews at this layer. Well, no, a cache that
+always has CanRead true. We still need to negotiate disjoint write Ops.
+At this layer, in the IOSystem machine, we'll need a model for how crashes replace the
+cache contents.
+This is all good; it's just an infinitely-big cache that never needs to evict.
+
+At the next layer down, we'll talk about interactions betwixt the Cache and the Disk.
+So the trick there will be showing that transitions obey constraints that require testing
+pages that aren't in the cache. That is, we know some sufficient predicate on those
+pages that lets us ghostily know that the transition is valid despite not being
+able to evaluate it directly at runtime. Let's enumerate the affected transitions.
+*/
+
 // NB the journal needs a smaller-sized-write primitive. If we get asked to sync
 // frequently, we don't want to burn an AU on every journal write. Maybe not even
 // a CU. Hrmm.
@@ -35,6 +49,12 @@ module JournalMachineMod {
     messageSeq: MsgSeq,
     priorCU: Option<CU>   // linked list pointer
   )
+  {
+    function priorSB(sb: CoreSuperblock) : CoreSuperblock
+    {
+      CoreSuperblock(priorCU, sb.boundaryLSN)
+    }
+  }
 
   datatype Variables = Variables(
     boundaryLSN: LSN,
@@ -83,7 +103,7 @@ module JournalMachineMod {
 
     predicate WF() {
       && boundaryLSN <= persistentLSN <= cleanLSN <= marshalledLSN
-      && (forall lsn :: 0 <= lsn < marshalledLSN <==> lsn in lsnToCU)
+      && (forall lsn :: boundaryLSN <= lsn < marshalledLSN <==> lsn in lsnToCU)
     }
   }
 
@@ -104,11 +124,6 @@ module JournalMachineMod {
     MsgSeq(map i:LSN | start <= i < end :: s.unmarshalledTail[i - start], start, end)
   }
 
-  function CurrentAllocation(s: Variables) : AllocationTableMachineMod.Variables
-  {
-    AllocationTableMachineMod.Variables(multiset(s.lsnToCU.Values))
-  }
-
   // advances marshalledLSN forward by marshalling a batch of messages into a dirty cache page
   predicate AdvanceMarshalled(s: Variables, s': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, newCU: CU)
   {
@@ -123,8 +138,8 @@ module JournalMachineMod {
 
     // Marshal and write the current record out into the cache. (This doesn't issue
     // a disk write, it just dirties a page.)
-    && var priorLSN := if s.marshalledLSN==0 then None else Some(s.lsnToCU[s.marshalledLSN-1]);
-    && var jr := JournalRecord(TailToMsgSeq(s), priorLSN);
+    && var priorCU := if s.marshalledLSN==0 then None else Some(s.lsnToCU[s.marshalledLSN-1]);
+    && var jr := JournalRecord(TailToMsgSeq(s), priorCU);
     && cacheOps == [CacheIfc.Write(newCU, marshal(jr))]
 
     // Record the changes to the marshalled, unmarshalled regions, and update the allocation.
@@ -181,15 +196,188 @@ module JournalMachineMod {
     && s' == s
   }
 
+  //////////////////////////////////////////////////////////////////////////////
+  // JournalChain
+
+  // Monoid-friendly (quantified-list) definition
+  datatype JournalChain = JournalChain(sb: CoreSuperblock, recs:seq<JournalRecord>)
+  {
+    // Synthesize a superblock that reflects the tail of the chain (cutting
+    // off the first rec), propagating along boundaryLSN.
+    function priorSB() : CoreSuperblock
+      requires 0<|recs|
+    {
+      recs[0].priorSB(sb)
+    }
+  }
+
+  predicate IsLastLink(i: nat, chain: JournalChain)
+    requires 0<=i<|chain.recs|
+  {
+    // stop if nothing more available
+    || chain.recs[i].priorCU.None?
+    // stop if nothing more needed
+    || chain.sb.boundaryLSN >= chain.recs[i].messageSeq.seqStart
+  }
+
+  predicate WFChainBasic(chain: JournalChain)
+  {
+    && (chain.sb.freshestCU.None? <==> 0 == |chain.recs|)
+    && (forall i | 0<=i<|chain.recs| :: i==|chain.recs|-1 <==> IsLastLink(i, chain))
+    && (forall i | 0<=i<|chain.recs|-1 :: chain.recs[i].priorCU.Some?)
+  }
+
+  predicate {:opaque} WFChainInner(chain: JournalChain)
+    requires WFChainBasic(chain)
+  {
+    && (forall i | 0<=i<|chain.recs|-1 ::
+      chain.recs[i].messageSeq.seqStart == chain.recs[i+1].messageSeq.seqEnd)
+  }
+
+  predicate WFChain(chain: JournalChain)
+  {
+    && WFChainBasic(chain)
+    && WFChainInner(chain)
+  }
+
+  function CUsForChain(chain: JournalChain) : (cus: seq<CU>)
+    requires WFChain(chain)
+    ensures |cus| == |chain.recs|
+  {
+    if chain.sb.freshestCU.None?
+    then []
+    else [chain.sb.freshestCU.value] + seq(|chain.recs|-1,
+        i requires 0<=i<|chain.recs|-1 => chain.recs[i].priorCU.value)
+  }
+
+  predicate RecordOnDisk(dv: DiskView, cu: CU, journalRecord: JournalRecord)
+  {
+    && cu in dv
+    && parse(dv[cu]) == Some(journalRecord)
+  }
+
+  predicate {:opaque} ChainMatchesDiskView(dv: DiskView, chain: JournalChain)
+    requires WFChain(chain)
+  {
+    // chain corresponds to stuff in the DiskView starting at freshestCU.
+    && var cus := CUsForChain(chain);
+    && (forall i | 0<=i<|chain.recs| :: RecordOnDisk(dv, cus[i], chain.recs[i]))
+  }
+
+  // Describe a valid chain.
+  predicate ValidJournalChain(dv: DiskView, chain: JournalChain)
+  {
+    && WFChain(chain)
+    && ChainMatchesDiskView(dv, chain)
+  }
+
+  lemma ValidEmptyChain(dv: DiskView, sb: CoreSuperblock)
+    requires sb.freshestCU.None?
+    ensures ValidJournalChain(dv, JournalChain(sb, []))
+  {
+    reveal_WFChainInner();
+    reveal_ChainMatchesDiskView();
+  }
+
+  function ExtendChain(sb: CoreSuperblock, rec: JournalRecord, innerchain: JournalChain)
+    : (chain: JournalChain)
+    requires sb.freshestCU.Some?
+    requires rec.priorCU.Some? ==> sb.boundaryLSN < rec.messageSeq.seqStart; // proves !IsLastLink(0, chain)
+    requires innerchain.sb == rec.priorSB(sb);
+    requires 0<|innerchain.recs| ==> rec.messageSeq.seqStart == innerchain.recs[0].messageSeq.seqEnd;
+    requires WFChain(innerchain)
+    ensures WFChain(chain)
+  {
+    var chain := JournalChain(sb, [rec] + innerchain.recs);
+    assert WFChainBasic(chain) by {
+      forall i | 0<=i<|chain.recs| ensures i==|chain.recs|-1 <==> IsLastLink(i, chain)
+      {
+        if 0<i {
+          assert IsLastLink(i-1, innerchain) == IsLastLink(i, chain);
+        }
+      }
+    }
+    assert WFChainInner(chain) by { reveal_WFChainInner(); }
+    chain
+  }
+
+  // Define reading a chain recursively. Returns None if any of the
+  // CUs point to missing blocks from the dv, or if the block can't
+  // be parsed.
+  // Return the set of readCUs visited. We may read six CUs before returning
+  // a None chain. We have to know that to show how related dvs produce identical
+  // results (even when they're broken).
+  datatype ChainResult = ChainResult(chain: Option<JournalChain>, readCUs:seq<CU>)
+
+  function ChainFrom(dv: DiskView, sb: CoreSuperblock) : (r:ChainResult)
+    ensures r.chain.Some? ==>
+      && ValidJournalChain(dv, r.chain.value)
+      && r.chain.value.sb == sb
+    decreases |dv.Keys|
+  {
+    if sb.freshestCU.None? then
+      // Superblock told the whole story; nothing to read.
+      ValidEmptyChain(dv, sb);
+      ChainResult(Some(JournalChain(sb, [])), [])
+    else if sb.freshestCU.value !in dv then
+      // !RecordOnDisk: tried to read freshestCU and failed
+      ChainResult(None, [sb.freshestCU.value])
+    else
+      var firstRec := parse(dv[sb.freshestCU.value]);
+      if firstRec.None? then
+        // !RecordOnDisk: read freshestCU, but it was borked
+        ChainResult(None, [sb.freshestCU.value])
+      else if firstRec.value.messageSeq.seqEnd <= sb.boundaryLSN then
+        // This isn't an invariant disk state: if we're in the initial call,
+        // the superblock shouldn't point to a useless JournalRecord; if we're
+        // in a recursive call with correctly-chained records, we should have
+        // already ignored this case.
+        ChainResult(None, [sb.freshestCU.value])
+      else if firstRec.value.messageSeq.seqStart == sb.boundaryLSN then
+        // Glad we read this record, but we don't need to read anything beyond.
+        var r := ChainResult(Some(JournalChain(sb, [firstRec.value])), [sb.freshestCU.value]);
+        assert ValidJournalChain(dv, r.chain.value) by {
+          reveal_WFChainInner();
+          reveal_ChainMatchesDiskView();
+        }
+        r
+      else
+        var inner := ChainFrom(MapRemove1(dv, sb.freshestCU.value), firstRec.value.priorSB(sb));
+        if inner.chain.None? // tail didn't decode or
+          // tail decoded but head doesn't stitch to it (a cross-crash invariant)
+          || (0<|inner.chain.value.recs|
+              && firstRec.value.messageSeq.seqStart != inner.chain.value.recs[0].messageSeq.seqEnd)
+        then
+          // failure in recursive call.
+          // We read our cu plus however far the recursive call reached.
+          ChainResult(None, [sb.freshestCU.value] + inner.readCUs)
+        else
+          assert firstRec.value.priorCU.Some? ==> sb.boundaryLSN < firstRec.value.messageSeq.seqStart;
+          var chain := ExtendChain(sb, firstRec.value, inner.chain.value);
+          //var chain := JournalChain(sb, [firstRec.value] + inner.chain.value.recs);
+          assert ValidJournalChain(dv, chain) by {
+            reveal_ChainMatchesDiskView();
+            var cus := CUsForChain(chain);
+            assert forall i | 0<=i<|chain.recs| :: RecordOnDisk(dv, cus[i], chain.recs[i]); // trigger
+          }
+          ChainResult(Some(chain), [sb.freshestCU.value] + inner.readCUs)
+  }
+
+  // JournalChain
+  //////////////////////////////////////////////////////////////////////////////
+
   // lsnToCU reflects a correct reading of the sb chain, I guess?
   // TODO It's broken to be demanding that we actually can read this stuff out
   // of the cache; we really want this to be a ghosty property in the next
   // layer down. Not sure yet how to make that work.
   predicate CorrectMapping(cache: CacheIfc.Variables, freshestCU: Option<CU>, lsnToCU: map<LSN, CU>)
   {
+    //var ChainFrom(dv: DiskView, sb: CoreSuperblock) : (r:ChainResult)
     // TODO We should build up a JournalChain here and confirm it justifies the mapping.
     true
   }
+
+  // TODO recovery time action!
 
   // Learns that coordinated superblock writeback is complete; updates persistentLSN & firstLSN.
   predicate CommitComplete(s: Variables, s': Variables, cache: CacheIfc.Variables, sb: Superblock)
@@ -205,7 +393,7 @@ module JournalMachineMod {
     && (if sb.core.freshestCU.None?
         then s'.persistentLSN == sb.core.boundaryLSN
         else 
-          && s'.persistentLSN -1 in s.lsnToCU
+          && s'.persistentLSN - 1 in s.lsnToCU
           && s.lsnToCU[s'.persistentLSN - 1] == sb.core.freshestCU.value
         )
     && s'.cleanLSN == s.cleanLSN

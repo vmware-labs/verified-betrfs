@@ -18,6 +18,7 @@ module ProgramMachineMod {
 
   datatype Variables = Variables(
     stableSuperblock: Superblock,
+    cache: 
     journal: JournalMachineMod.Variables,
     betree: CachedBetreeMachine.Variables,
     inFlightSuperblock: Option<Superblock>
