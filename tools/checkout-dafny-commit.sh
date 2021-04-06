@@ -18,7 +18,8 @@
 set -e
 set -x
 
-commit=betr
+# set to betr-concurrent branch
+commit=1e3c9e96600c97816e441f9fb9d14f53c12aa6b3
 if [ $1 ]; then
    commit=$1
 fi

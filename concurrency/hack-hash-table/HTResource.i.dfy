@@ -26,10 +26,10 @@ module HTResource refines ApplicationResourceSpec {
     0 <= h as int < FixedSize()
   }
 
-  function method hash(key: uint64) : (h:uint32)
+  function method hash(key: Key) : (h:uint32)
     ensures ValidHashIndex(h as int)
 
-  datatype KV = KV(key: uint64, val: Value)
+  datatype KV = KV(key: Key, val: Value)
 
   // This is the thing that's stored in the hash table at this row.
   datatype Entry =
@@ -43,9 +43,9 @@ module HTResource refines ApplicationResourceSpec {
   // apply when no threads are operating)
   datatype State =
     | Free
-    | Inserting(rid: int, kv: KV)
-    | Removing(rid: int, key: uint64)
-    | RemoveTidying(rid: int)
+    | Inserting(rid: int, kv: KV, inital_key: Key)
+    | Removing(rid: int, key: Key)
+    | RemoveTidying(rid: int, inital_key: Key)
 
       // Why do we need to store query state to support an invariant over the
       // hash table interpretation, since query is a read-only operation?
@@ -56,7 +56,7 @@ module HTResource refines ApplicationResourceSpec {
       // gets far enough to discover the answer in the real data structure.
       // We're showing that we inductively preserve the value of the
       // interpretation of the *answer* to query #rid.
-    | Querying(rid: int, key: uint64)
+    | Querying(rid: int, key: Key)
 
   // TODO rename
   datatype Info = Info(entry: Entry, state: State)
@@ -97,16 +97,15 @@ module HTResource refines ApplicationResourceSpec {
     R(oneRowTable(k, info), multiset{}, multiset{})
   }
 
-  predicate resourceHasSingleRow(r: R, k: nat, entry: Entry, state: State)
-    requires 0 <= k < FixedSize()
-  {
-    && r.R?
-    && (forall i:nat | i < FixedSize() :: if i == k then r.table[i].Some? else r.table[i].None?)
-    && r.table[k].value.state == state
-    && r.table[k].value.entry == entry
-    && r.tickets == multiset{}
-    && r.stubs == multiset{}
-  }
+  // predicate resourceHasSingleRow(r: R, k: nat, info: Info)
+  //   requires 0 <= k < FixedSize()
+  // {
+  //   && r.R?
+  //   && (forall i:nat | i < FixedSize() :: if i == k then r.table[i].Some? else r.table[i].None?)
+  //   && r.table[k].value == info
+  //   && r.tickets == multiset{}
+  //   && r.stubs == multiset{}
+  // }
 
   function twoRowsTable(k1: nat, info1: Info, k2: nat, info2: Info) : seq<Option<Info>>
     requires 0 <= k1 < FixedSize()
@@ -218,6 +217,7 @@ module HTResource refines ApplicationResourceSpec {
     | ProcessRemoveTicketStep(insert_ticket: Ticket)
     | RemoveSkipStep(pos: nat)
     | RemoveFoundItStep(pos: nat)
+    | RemoveNotFoundStep(pos: nat)
     | RemoveTidyStep(pos: nat)
     | RemoveDoneStep(pos: nat)
 
@@ -225,17 +225,14 @@ module HTResource refines ApplicationResourceSpec {
     | QuerySkipStep(pos: nat)
     | QueryDoneStep(pos: nat)
     | QueryNotFoundStep(pos: nat)
-    // never happens, but give impl an escape route so we can defer the proof
-    // that it doesn't happen to a higher lever where we have a necessary
-    // invariant
-    | QueryFullHashTableStep(pos: nat)
 
   predicate ProcessInsertTicket(s: R, s': R, insert_ticket: Ticket)
   {
     && !s.Fail?
     && insert_ticket.input.InsertInput?
     && insert_ticket in s.tickets
-    && var h: uint32 := hash(insert_ticket.input.key);
+    && var key := insert_ticket.input.key;
+    && var h: uint32 := hash(key);
     && 0 <= h as int < |s.table|
     && s.table[h].Some?
     && s.table[h].value.state.Free?
@@ -244,7 +241,7 @@ module HTResource refines ApplicationResourceSpec {
       .(table := s.table[h := Some(
           s.table[h].value.(state :=
             Inserting(insert_ticket.rid,
-              KV(insert_ticket.input.key, insert_ticket.input.value))))])
+              KV(key, insert_ticket.input.value), key)))])
   }
 
   // search_h: hash of the key we are trying to insert
@@ -295,21 +292,22 @@ module HTResource refines ApplicationResourceSpec {
     && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
     && s.table[pos].Some?
     && s.table[pos'].Some?
-    && s.table[pos].value.state.Inserting?
+    && var state := s.table[pos].value.state;
+    && state.Inserting?
     && s.table[pos].value.entry.Full?
     && ShouldHashGoBefore(
-        hash(s.table[pos].value.state.kv.key) as int,
+        hash(state.kv.key) as int,
         hash(s.table[pos].value.entry.kv.key) as int, pos)
     && s.table[pos'].value.state.Free?
 
     && s' == s.(table := s.table
         [pos := Some(Info(
-          Full(s.table[pos].value.state.kv),
+          Full(state.kv),
           Free))]
         [pos' := Some(s.table[pos'].value.(state :=
           Inserting(
-            s.table[pos].value.state.rid,
-            s.table[pos].value.entry.kv)))])
+            state.rid,
+            s.table[pos].value.entry.kv, state.inital_key)))])
   }
 
   // Slot is empty. Insert our element and finish.
@@ -344,6 +342,22 @@ module HTResource refines ApplicationResourceSpec {
       .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput)})
   }
 
+  // this transition should be impossible
+  predicate InsertFullHashTable(s: R, s': R, pos: nat)
+  {
+    && !s.Fail?
+    && 0 <= pos < FixedSize()
+    && s.table[pos].Some?
+    && var state := s.table[pos].value.state;
+    && s.table[pos].value.state.Inserting? // we are still trying to insert
+    && s.table[pos].value.entry.Full?
+    && s.table[pos].value.entry.kv.key != state.kv.key // we can't insert here
+    && NextPos(pos) == hash(state.inital_key) as nat // we are about to loop back to the initial index
+    && s' == s
+      .(table := s.table[pos := Some(s.table[pos].value.(state := Free))])
+      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput)})
+  }
+
   // Remove
 
   // We know about row h (our thread is working on it),
@@ -371,16 +385,21 @@ module HTResource refines ApplicationResourceSpec {
               remove_ticket.input.key)))])
   }
 
-  predicate RemoveSkipEnabled(s: R, pos: nat)
+  predicate RemoveInspectEnabled(s: R, pos: nat)
   {
     && !s.Fail?
     && 0 <= pos < FixedSize()
-    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
-    && KnowRowIsFree(s, pos')
     // Know row pos, and it's the thing we're removing, and it's full...
     && s.table[pos].Some?
     && s.table[pos].value.state.Removing?
+  }
+
+  predicate RemoveSkipEnabled(s: R, pos: nat)
+  {
+    && RemoveInspectEnabled(s, pos)
     && s.table[pos].value.entry.Full?
+    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
+    && KnowRowIsFree(s, pos')
     // ...and the key it's full of sorts before the thing we're looking to remove.
     && !ShouldHashGoBefore(
         hash(s.table[pos].value.state.key) as int,
@@ -400,18 +419,34 @@ module HTResource refines ApplicationResourceSpec {
         [pos' := Some(s.table[pos'].value.(state := s.table[pos].value.state))])
   }
 
+  predicate RemoveNotFound(s: R, s': R, pos: nat)
+  {
+    && RemoveInspectEnabled(s, pos)
+    && (if s.table[pos].value.entry.Full? then // the key we are looking for goes before the one in the slot, so it must be absent
+      && ShouldHashGoBefore(
+        hash(s.table[pos].value.state.key) as int,
+        hash(s.table[pos].value.entry.kv.key) as int, pos)
+      && s.table[pos].value.entry.kv.key != s.table[pos].value.state.key
+      else true // the key would have been in this empty spot
+    )
+    && s' == s
+      .(table := s.table[pos := Some(Info(s.table[pos].value.entry, Free))])
+      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput(false))})
+  }
+
   predicate RemoveFoundIt(s: R, s': R, pos: nat)
   {
     && RemoveSkipEnabled(s, pos)
     // This IS the key we want to remove!
-    && s.table[pos].value.entry.kv.key == s.table[pos].value.state.key
+    && var inital_key := s.table[pos].value.state.key;
+    && s.table[pos].value.entry.kv.key == inital_key
 
     // Change the program counter into RemoveTidying mode
     && var rid := s.table[pos].value.state.rid;
     // Note: it doesn't matter what we set the entry to here, since we're going
     // to overwrite it in the next step either way.
     // (Might be easier to leave the entry as it is rather than set it to Empty?)
-    && s' == s.(table := s.table[pos := Some(Info(Empty, RemoveTidying(rid)))])
+    && s' == s.(table := s.table[pos := Some(Info(Empty, RemoveTidying(rid, inital_key)))])
   }
 
   predicate TidyEnabled(s: R, pos: nat)
@@ -459,7 +494,7 @@ module HTResource refines ApplicationResourceSpec {
     // Clear the pointer, return the stub.
     && s' == s
       .(table := s.table[pos := Some(Info(s.table[pos].value.entry, Free))])
-      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput)})
+      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput(true))})
   }
 
   // Query
@@ -518,13 +553,10 @@ module HTResource refines ApplicationResourceSpec {
     && s.table[pos].value.state.Querying?
     && s.table[pos].value.entry.Full?
     && s.table[pos].value.state.key == s.table[pos].value.entry.kv.key
+    && var stub := Stub(s.table[pos].value.state.rid, MapIfc.QueryOutput(Found(s.table[pos].value.entry.kv.val)));
     && s' == s
-      .(table := s.table
-        [pos := Some(s.table[pos].value.(state := Free))])
-      .(stubs := s.stubs + multiset{
-        Stub(s.table[pos].value.state.rid,
-                  MapIfc.QueryOutput(Found(s.table[pos].value.entry.kv.val)))
-       })
+      .(table := s.table[pos := Some(s.table[pos].value.(state := Free))])
+      .(stubs := s.stubs + multiset{stub})
   }
 
   predicate QueryNotFound(s: R, s': R, pos: nat)
@@ -577,6 +609,7 @@ module HTResource refines ApplicationResourceSpec {
       case ProcessRemoveTicketStep(remove_ticket) => ProcessRemoveTicket(s, s', remove_ticket)
       case RemoveSkipStep(pos) => RemoveSkip(s, s', pos)
       case RemoveFoundItStep(pos) => RemoveFoundIt(s, s', pos)
+      case RemoveNotFoundStep(pos) => RemoveNotFound(s, s', pos)
       case RemoveTidyStep(pos) => RemoveTidy(s, s', pos)
       case RemoveDoneStep(pos) => RemoveDone(s, s', pos)
 
@@ -584,7 +617,6 @@ module HTResource refines ApplicationResourceSpec {
       case QuerySkipStep(pos) => QuerySkip(s, s', pos)
       case QueryDoneStep(pos) => QueryDone(s, s', pos)
       case QueryNotFoundStep(pos) => QueryNotFound(s, s', pos)
-      case QueryFullHashTableStep(pos) => QueryFullHashTable(s, s', pos)
     }
   }
 
@@ -640,6 +672,43 @@ module HTResource refines ApplicationResourceSpec {
   {
   }
 
+  // TODO: the preconditions of the following lemmas might not be sufficient to prove false
+  lemma QueryUnreachableState(s: R, pos: nat)
+  requires Valid(s)
+  requires 0 <= pos < FixedSize()
+  requires s.table[pos].Some?
+  requires var state := s.table[pos].value.state;
+    && state.Querying?
+    && NextPos(pos) == hash(state.key) as nat
+  ensures false
+
+  lemma InsertUnreachableState(s: R, pos: nat)
+  requires Valid(s)
+  requires 0 <= pos < FixedSize()
+  requires s.table[pos].Some?
+  requires var state := s.table[pos].value.state;
+    && state.Inserting?
+    && NextPos(pos) == hash(state.inital_key) as nat
+  ensures false
+
+  lemma RemoveTidyUnreachableState(s: R, pos: nat)
+  requires Valid(s)
+  requires 0 <= pos < FixedSize()
+  requires s.table[pos].Some?
+  requires var state := s.table[pos].value.state;
+    && state.RemoveTidying?
+    && NextPos(pos) == hash(state.inital_key) as nat
+  ensures false
+
+  lemma RemoveUnreachableState(s: R, pos: nat)
+  requires Valid(s)
+  requires 0 <= pos < FixedSize()
+  requires s.table[pos].Some?
+  requires var state := s.table[pos].value.state;
+    && state.Removing?
+    && NextPos(pos) == hash(state.key) as nat
+  ensures false
+
   method easy_transform(
       linear b: R,
       ghost expected_out: R)
@@ -647,4 +716,16 @@ module HTResource refines ApplicationResourceSpec {
   requires Update(b, expected_out)
   ensures c == expected_out
   // travis promises to supply this
+
+  // Reduce boilerplate by letting caller provide explicit step, which triggers a quantifier for generic Update()
+  method easy_transform_step(
+      linear b: R,
+      ghost expected_out: R,
+      step: Step)
+  returns (linear c: R)
+  requires UpdateStep(b, expected_out, step) 
+  ensures c == expected_out
+  {
+    c := easy_transform(b, expected_out);
+  }
 }

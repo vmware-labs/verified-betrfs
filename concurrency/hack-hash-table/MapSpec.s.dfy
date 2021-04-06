@@ -27,7 +27,7 @@ module MapIfc refines InputOutputIfc {
   datatype Output =
     | QueryOutput(res: QueryResult)
     | InsertOutput
-    | RemoveOutput
+    | RemoveOutput(existed: bool) // to Travis: added the possibility that there is nothing to remove
 }
 
 module AsyncIfc {
@@ -63,7 +63,7 @@ module MapSpec {
             && output == Ifc.InsertOutput
           case RemoveInput(key) =>
             && s'.m == s.m - {key}
-            && output == Ifc.RemoveOutput
+            && output == Ifc.RemoveOutput(key in s.m)
         }
       )
     }
