@@ -207,6 +207,7 @@ build/lib/DataStructures/LinearDList.i.verchk: OTHER_PROVER_FLAGS=/noNLarith /pr
 # as they verify.
 build/lib/Checksums/Nonlinear.i.verchk: NONLINEAR_FLAGS=
 build/lib/Marshalling/Math.i.verchk: NONLINEAR_FLAGS=
+build/lib/Base/mathematics.i.verchk: NONLINEAR_FLAGS=
 build/Impl/BookkeepingModel.i.verchk: NONLINEAR_FLAGS=
 build/Impl/IOImpl.i.verchk: NONLINEAR_FLAGS=
 build/Impl/IOModel.i.verchk: NONLINEAR_FLAGS=
@@ -215,6 +216,19 @@ build/Impl/BookkeepingImpl.i.verchk: NONLINEAR_FLAGS=
 build/Betree/BetreeInv.i.verchk: NONLINEAR_FLAGS=
 build/lib/Base/SetBijectivity.i.verchk: NONLINEAR_FLAGS=
 build/lib/Marshalling/GenericMarshalling.i.verchk: NONLINEAR_FLAGS=
+build/lib/Buckets/BucketFlushModel.i.verchk: NONLINEAR_FLAGS=
+build/lib/Buckets/PackedKV.i.verchk: NONLINEAR_FLAGS=
+build/lib/Buckets/PackedStringArray.i.verchk: NONLINEAR_FLAGS=
+build/lib/Base/sequences.i.verchk: NONLINEAR_FLAGS=
+build/Impl/IndirectionTable.i.verchk: NONLINEAR_FLAGS=
+build/BlockCacheSystem/DiskLayout.i.verchk: NONLINEAR_FLAGS=
+build/ByteBlockCacheSystem/Marshalling.i.verchk: NONLINEAR_FLAGS=
+build/ByteBlockCacheSystem/JournalBytes.i.verchk: NONLINEAR_FLAGS=
+build/PivotBetree/Bounds.i.verchk: NONLINEAR_FLAGS=
+build/Impl/Mkfs.i.verchk: NONLINEAR_FLAGS=
+build/Impl/MkfsModel.i.verchk: NONLINEAR_FLAGS=
+build/Impl/MarshallingImpl.i.verchk: NONLINEAR_FLAGS=
+
 
 ### Put all the flags together
 
