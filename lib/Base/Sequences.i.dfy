@@ -1,11 +1,13 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
+include "SequencesLite.s.dfy"
 include "Option.s.dfy"
 include "../Lang/NativeTypes.s.dfy"
 include "mathematics.i.dfy"
 
 module Sequences {
+  import opened SequencesLite
   import opened Options
   import opened NativeTypes
   import Math = Mathematics

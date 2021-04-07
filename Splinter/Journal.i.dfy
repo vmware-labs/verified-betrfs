@@ -1,4 +1,4 @@
-include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/Sequences.i.dfy"
 include "../lib/Base/Maps.i.dfy"
 include "Spec.s.dfy"
 include "MsgSeq.i.dfy"

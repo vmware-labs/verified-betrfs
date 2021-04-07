@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../Betree/Betree.i.dfy"
-include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/Sequences.i.dfy"
 include "../lib/Base/Maps.i.dfy"
 include "../Betree/Graph.i.dfy"
 include "../BlockCacheSystem/BlockDisk.i.dfy"

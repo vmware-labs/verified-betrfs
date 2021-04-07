@@ -1,7 +1,7 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "sequences.i.dfy"
+include "Sequences.i.dfy"
 include "Maps.i.dfy"
 include "../Lang/NativeTypes.s.dfy"
 include "../Lang/System/NativeArrays.s.dfy"

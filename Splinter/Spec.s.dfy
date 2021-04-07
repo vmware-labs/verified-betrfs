@@ -1,5 +1,5 @@
 include "Base.s.dfy"
-include "../lib/Base/sequences.i.dfy" // TODO .i from .s, for Last, DropLast
+include "../lib/Base/SequencesLite.s.dfy"
 
 module MapSpecMod {
   import opened MessageMod

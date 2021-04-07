@@ -3,7 +3,7 @@
 
 include "BlockCache.i.dfy"
 include "../lib/Base/Maps.i.dfy"
-include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/Sequences.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../PivotBetree/PivotBetree.i.dfy"
 include "../PivotBetree/PivotBetreeSpecWFNodes.i.dfy"

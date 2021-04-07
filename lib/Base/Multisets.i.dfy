@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "Maps.i.dfy"
-include "sequences.i.dfy"
+include "Sequences.i.dfy"
 
 module Multisets {
   import Sequences

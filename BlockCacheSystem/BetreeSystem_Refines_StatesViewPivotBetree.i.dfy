@@ -4,7 +4,7 @@
 include "../PivotBetree/PivotBetree_Refines_Betree.i.dfy"
 include "../BlockCacheSystem/BlockCache.i.dfy"
 include "../lib/Base/Maps.i.dfy"
-include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/Sequences.i.dfy"
 include "BetreeSystem.i.dfy"
 include "../PivotBetree/StatesViewPivotBetree.i.dfy"
 //

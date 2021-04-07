@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../lib/Base/Maps.i.dfy"
-include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/Sequences.i.dfy"
 include "../Betree/Graph.i.dfy"
 include "../Betree/Transactable.i.dfy"
 //
