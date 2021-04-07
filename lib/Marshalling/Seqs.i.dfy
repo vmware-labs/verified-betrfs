@@ -68,7 +68,7 @@ function SeqCatRev<T>(seqs:seq<seq<T>>) : seq<T>
     else SeqCatRev(all_but_last(seqs)) + last(seqs)
 }
 
-lemma lemma_SeqCat_adds<T>(A:seq<seq<T>>, B:seq<seq<T>>)
+lemma {:induction true} lemma_SeqCat_adds<T>(A:seq<seq<T>>, B:seq<seq<T>>)
     ensures SeqCat(A + B) == SeqCat(A) + SeqCat(B);
 {
     if |A| == 0 {
@@ -84,7 +84,7 @@ lemma lemma_SeqCat_adds<T>(A:seq<seq<T>>, B:seq<seq<T>>)
     }
 }
 
-lemma lemma_SeqCatRev_adds<T>(A:seq<seq<T>>, B:seq<seq<T>>)
+lemma {:induction true} lemma_SeqCatRev_adds<T>(A:seq<seq<T>>, B:seq<seq<T>>)
     ensures SeqCatRev(A + B) == SeqCatRev(A) + SeqCatRev(B);
 {
     if |B| == 0 {

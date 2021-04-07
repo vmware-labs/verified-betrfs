@@ -189,7 +189,7 @@ module BucketWeights {
     }
   }
   
-  lemma WeightMessageListFlatten(msgs: seq<Message>)
+  lemma {:induction true} WeightMessageListFlatten(msgs: seq<Message>)
     requires EncodableMessageSeq(msgs)
     ensures WeightMessageList(msgs) == FlattenLength(FlattenShape(messageSeq_to_bytestringSeq(msgs))) + 4 * |msgs|
   {

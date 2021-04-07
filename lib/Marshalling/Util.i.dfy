@@ -121,7 +121,7 @@ function BEByteSeqToInt(bytes:seq<byte>) : int
     else BEByteSeqToInt(bytes[..|bytes|-1]) * 256 + (bytes[|bytes|-1]) as int
 }
 
-lemma lemma_BEByteSeqToInt_bound(bytes:seq<byte>)
+lemma {:induction true} lemma_BEByteSeqToInt_bound(bytes:seq<byte>)
     ensures 0 <= BEByteSeqToInt(bytes);
     ensures BEByteSeqToInt(bytes) < power2(8*|bytes|);
 {

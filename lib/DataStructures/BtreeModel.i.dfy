@@ -1365,7 +1365,7 @@ abstract module BtreeModel {
     }
   }
 
-  lemma ToSeqCoversInterpretation(node: Node)
+  lemma {:induction true} ToSeqCoversInterpretation(node: Node)
     requires WF(node)
     ensures forall key :: key in Interpretation(node) ==> key in ToSeq(node).0
   {

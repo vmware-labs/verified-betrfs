@@ -485,7 +485,7 @@ module LinearMutableMap {
     }
   }
 
-  lemma MapFromStorageProperties<V>(elements: seq<Item<V>>, result: map<uint64, V>)
+  lemma {:induction true} MapFromStorageProperties<V>(elements: seq<Item<V>>, result: map<uint64, V>)
     requires CantEquivocate(elements)
     requires MapFromStorage(elements) == result
     ensures forall slot :: ValidSlot(|elements|, slot) && elements[slot.slot].Entry? ==>

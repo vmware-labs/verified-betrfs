@@ -405,7 +405,7 @@ module PackedStringArray {
   }
 
   
-  lemma psaAppendSeqAdditive(psa: Psa, strs1: seq<Key>, strs2: seq<Key>)
+  lemma {:induction true} psaAppendSeqAdditive(psa: Psa, strs1: seq<Key>, strs2: seq<Key>)
     requires WF(psa)
     requires psaCanAppendSeq(psa, strs1 + strs2) ||
     (psaCanAppendSeq(psa, strs1) && psaCanAppendSeq(psaAppendSeq(psa, strs1), strs2))

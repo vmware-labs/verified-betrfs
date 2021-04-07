@@ -70,7 +70,7 @@ module BitLemmas {
     bits_X_eq_bits_Y_plus_zeros(n as int, 32, 64);
   }
 
-  lemma mul_F2_X_digit_partial_ignores_zeroes(a: Bits, b: Bits, a': Bits, b': Bits, i: nat, j: nat)
+  lemma {:induction true} mul_F2_X_digit_partial_ignores_zeroes(a: Bits, b: Bits, a': Bits, b': Bits, i: nat, j: nat)
   requires forall k | 0 <= k :: bits_get(a, k) == bits_get(a', k)
   requires forall k | 0 <= k :: bits_get(b, k) == bits_get(b', k)
   requires j <= i+1

@@ -423,7 +423,7 @@ module Sequences {
   }
 
 
-  lemma FlattenLengthAdditive(shape1: seq<nat>, shape2: seq<nat>)
+  lemma {:induction true} FlattenLengthAdditive(shape1: seq<nat>, shape2: seq<nat>)
     ensures FlattenLength(shape1 + shape2) == FlattenLength(shape1) + FlattenLength(shape2)
   {
     if |shape2| == 0 {
@@ -512,7 +512,7 @@ module Sequences {
     }
   }
   
-  lemma UnflattenIndexInBounds(shape: seq<nat>, i: nat)
+  lemma {:induction true} UnflattenIndexInBounds(shape: seq<nat>, i: nat)
     requires i < FlattenLength(shape)
     ensures UnflattenIndex(shape, i).0 < |shape|
     ensures UnflattenIndex(shape, i).1 < shape[UnflattenIndex(shape, i).0]
@@ -520,7 +520,7 @@ module Sequences {
     var shapeidx := UnflattenIndex(shape, i).0;
   }
 
-  lemma FlattenUnflattenIdentity(shape: seq<nat>, i: nat)
+  lemma {:induction true} FlattenUnflattenIdentity(shape: seq<nat>, i: nat)
     requires i < FlattenLength(shape)
     ensures UnflattenIndex(shape, i).0 < |shape|
     ensures UnflattenIndex(shape, i).1 < shape[UnflattenIndex(shape, i).0]
@@ -549,7 +549,7 @@ module Sequences {
     }
   }
   
-  lemma UnflattenIndexOrdering(shape: seq<nat>, i: nat, j: nat)
+  lemma {:induction true} UnflattenIndexOrdering(shape: seq<nat>, i: nat, j: nat)
     requires i < j < FlattenLength(shape)
     ensures UnflattenIndex(shape, i).0 <= UnflattenIndex(shape, j).0
     ensures UnflattenIndex(shape, i).0 == UnflattenIndex(shape, j).0 ==> UnflattenIndex(shape, i).1 < UnflattenIndex(shape, j).1
@@ -572,7 +572,7 @@ module Sequences {
     }
   }
 
-  lemma UnflattenIndexIsCorrect<A>(seqs: seq<seq<A>>, i: nat)
+  lemma {:induction true} UnflattenIndexIsCorrect<A>(seqs: seq<seq<A>>, i: nat)
     requires i < FlattenLength(FlattenShape(seqs))
     ensures UnflattenIndex(FlattenShape(seqs), i).0 < |seqs|
     ensures UnflattenIndex(FlattenShape(seqs), i).1 < |seqs[UnflattenIndex(FlattenShape(seqs), i).0]|

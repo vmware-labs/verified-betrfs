@@ -115,7 +115,7 @@ module BetreeInv {
     }
   }
 
-  lemma InterpretLookupAdditive(a: Lookup, b: Lookup, key: Key)
+  lemma {:induction true} InterpretLookupAdditive(a: Lookup, b: Lookup, key: Key)
   requires LookupVisitsWFNodes(a);
   requires LookupVisitsWFNodes(b);
   ensures InterpretLookup(a + b, key) == G.M.Merge(InterpretLookup(a, key), InterpretLookup(b, key))

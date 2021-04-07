@@ -102,7 +102,7 @@ module LinearMutableMapBase {
   //                 | > > > >   k = 8
   //   > > > *                   (slot + k) mod length is slot 3 == 8 - (12 - 7) == 8 - 5 == 3
   //
-  lemma KthSlotSuccessorWrapsAround(elementsLength: nat, slot: Slot, k: nat)
+  lemma {:induction true} KthSlotSuccessorWrapsAround(elementsLength: nat, slot: Slot, k: nat)
     requires 0 <= k < elementsLength
     requires ValidSlot(elementsLength, slot)
     ensures if k < (elementsLength-slot.slot) then
@@ -321,7 +321,7 @@ module LinearMutableMapBase {
     BijectivityImpliesEqualCardinality(IndexSet(elements), contents.Keys, relation);
   }
 
-  lemma CountFilledAdditive<V>(a: seq<Item<V>>, b: seq<Item<V>>)
+  lemma {:induction true} CountFilledAdditive<V>(a: seq<Item<V>>, b: seq<Item<V>>)
   ensures CountFilled(a + b) == CountFilled(a) + CountFilled(b)
   {
     if |a| == 0 {
@@ -394,7 +394,7 @@ module LinearMutableMapBase {
         elements[slot1.slot].key == elements[slot2.slot].key ==> slot1 == slot2
   }
 
-  lemma MapFromStorageProperties<V>(elements: seq<Item<V>>, result: map<uint64, V>)
+  lemma {:induction true} MapFromStorageProperties<V>(elements: seq<Item<V>>, result: map<uint64, V>)
   requires CantEquivocate(elements)
   requires MapFromStorage(elements) == result
   ensures forall slot :: ValidSlot(|elements|, slot) && elements[slot.slot].Entry? ==>
@@ -454,7 +454,7 @@ module LinearMutableMapBase {
         && FilledWithEntryKey(elements, slot, key)))
   }
 
-  lemma ElementsEntryInMap<V>(elements: seq<Item<V>>, item: Item<V>)
+  lemma {:induction true} ElementsEntryInMap<V>(elements: seq<Item<V>>, item: Item<V>)
   requires item.Entry?
   requires item in elements
   ensures item.key in MapFromStorage(elements)

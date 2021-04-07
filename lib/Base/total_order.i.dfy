@@ -357,7 +357,7 @@ abstract module Total_Order refines Total_Preorder {
       IndexOfFirstGte(Seq.DropLast(run), needle)
   }
 
-  lemma IndexOfFirstGteIsUnique(run: seq<Element>, needle: Element, idx: nat)
+  lemma {:induction true} IndexOfFirstGteIsUnique(run: seq<Element>, needle: Element, idx: nat)
     requires IsSorted(run)
     requires idx <= |run|
     requires forall i | 0 <= i < idx :: lt(run[i], needle)
@@ -411,7 +411,7 @@ abstract module Total_Order refines Total_Preorder {
       IndexOfFirstGt(Seq.DropLast(run), needle)
   }
 
-  lemma IndexOfFirstGtIsUnique(run: seq<Element>, needle: Element, idx: nat)
+  lemma {:induction true} IndexOfFirstGtIsUnique(run: seq<Element>, needle: Element, idx: nat)
     requires IsSorted(run)
     requires idx <= |run|
     requires forall i | 0 <= i < idx :: lte(run[i], needle)
@@ -867,7 +867,7 @@ module Lexicographic_Byte_Order refines Total_Order {
     SeqComparison.lte(a, b)
   }
     
-  lemma totality(a: Element, b: Element)
+  lemma {:induction true} totality(a: Element, b: Element)
   ensures SeqComparison.lte(a, b) || SeqComparison.lte(b, a);
   {
     SeqComparison.reveal_lte();
