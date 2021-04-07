@@ -37,7 +37,7 @@ module MapSpecMod {
 // We don't do anything with old snapshots (indeed, no implementation could); I just wrote it
 // this way for greatest simplicity.
 module DeferredWriteMapSpecMod {
-  import opened Sequences // Last, DropLast
+  import opened SequencesLite // Last, DropLast
   import opened MessageMod
   import InterpMod
   import MapSpecMod
