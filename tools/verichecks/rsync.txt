@@ -1,0 +1,1 @@
+rsync --exclude venv3 --exclude __pycache__ -av -e "ssh -i ~/.ssh/veribetrfsbastion.pem" ubuntu@3.21.176.58:~/verichecks/ bastion/
