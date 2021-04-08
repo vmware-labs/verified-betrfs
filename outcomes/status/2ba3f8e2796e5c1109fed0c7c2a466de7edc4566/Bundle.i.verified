@@ -1,0 +1,22 @@
+Overall: Fail
+
+Files failing with verification error
+	./lib/Buckets/LKMBPKVOps.i.dfy
+
+Files failing with untrusted file contains assumptions
+	./Impl/IndirectionTable.i.dfy
+
+Files failing with verification timeout
+	./ByteBlockCacheSystem/InterpretationDisk.i.dfy
+	./lib/DataStructures/LinearContentMutableMap.i.dfy
+	./BlockCacheSystem/BlockJournalCache.i.dfy
+	./Impl/FlushPolicyModel.i.dfy
+	./Betree/BetreeInv.i.dfy
+	./ByteBlockCacheSystem/ByteSystem.i.dfy
+	./Impl/DeallocImpl.i.dfy
+	./BlockCacheSystem/BlockSystem.i.dfy
+	./Betree/Betree_Refines_Map.i.dfy
+	./Betree/Graph.i.dfy
+	./PivotBetree/StatesViewPivotBetree_Refines_StatesViewMap.i.dfy
+	./lib/Base/BitsetLemmas.i.dfy
+	./Impl/EvictImpl.i.dfy
