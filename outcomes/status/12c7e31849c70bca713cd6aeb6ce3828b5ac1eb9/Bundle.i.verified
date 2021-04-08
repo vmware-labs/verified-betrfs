@@ -1,0 +1,64 @@
+Overall: Fail
+
+Files failing with type error
+	./Impl/BookkeepingModel.i.dfy
+	./Impl/MarshallingModel.i.dfy
+	./Impl/FlushModel.i.dfy
+	./Impl/GrowModel.i.dfy
+	./Impl/IndirectionTable.i.dfy
+	./lib/Math/power.i.dfy
+	./Impl/GrowImpl.i.dfy
+	./Impl/QueryModel.i.dfy
+	./Impl/Mkfs.i.dfy
+	./Impl/SuccImpl.i.dfy
+	./Impl/HandleReadResponseImpl.i.dfy
+	./Impl/MarshallingImpl.i.dfy
+	./Impl/EvictImpl.i.dfy
+	./Impl/FlushPolicyImpl.i.dfy
+	./Impl/DeallocImpl.i.dfy
+	./Impl/InsertModel.i.dfy
+	./Impl/SyncImpl.i.dfy
+	./Impl/StateBCImpl.i.dfy
+	./Impl/HandleReadResponseModel.i.dfy
+	./Impl/StateSectorImpl.i.dfy
+	./Impl/MainHandlers.i.dfy
+	./Impl/SuccModel.i.dfy
+	./Impl/IOImpl.i.dfy
+	./Impl/SplitImpl.i.dfy
+	./Impl/LeafImpl.i.dfy
+	./Impl/QueryImpl.i.dfy
+	./Impl/FlushImpl.i.dfy
+	./Impl/Bundle.i.dfy
+	./Impl/HandleWriteResponseImpl.i.dfy
+	./Impl/InsertImpl.i.dfy
+	./Impl/SplitModel.i.dfy
+	./Impl/FullImpl.i.dfy
+	./lib/Math/div.i.dfy
+	./Impl/FlushPolicyModel.i.dfy
+	./Impl/BookkeepingImpl.i.dfy
+	./Impl/CommitterImpl.i.dfy
+	./lib/Math/div_auto_proofs.i.dfy
+	./Impl/LeafModel.i.dfy
+	./lib/Math/div_auto.i.dfy
+	./Impl/CoordinationImpl.i.dfy
+	./Impl/IOModel.i.dfy
+
+Files failing with verification error
+	./lib/Buckets/LKMBPKVOps.i.dfy
+	./lib/Math/div_nonlinear.i.dfy
+	./lib/Math/mul_nonlinear.i.dfy
+
+Files failing with verification timeout
+	./BlockCacheSystem/BlockSystem.i.dfy
+	./BlockCacheSystem/BlockJournalCache.i.dfy
+	./Betree/BetreeInv.i.dfy
+	./lib/Base/BitsetLemmas.i.dfy
+	./PivotBetree/StatesViewPivotBetree_Refines_StatesViewMap.i.dfy
+	./ByteBlockCacheSystem/ByteSystem.i.dfy
+	./lib/Math/mod_auto.i.dfy
+	./lib/Math/mul.i.dfy
+	./Betree/Graph.i.dfy
+	./Betree/BlockInterface.i.dfy
+	./ByteBlockCacheSystem/InterpretationDisk.i.dfy
+	./lib/DataStructures/LinearContentMutableMap.i.dfy
+	./Betree/Betree_Refines_Map.i.dfy
