@@ -63,6 +63,7 @@ module HTResource refines ApplicationResourceSpec {
 
   datatype PreR =
       | R(table: seq<Option<Info>>,
+          insert_capacity: nat,
           tickets: multiset<Ticket>,
           stubs: multiset<Stub>)
       | Fail
@@ -82,7 +83,7 @@ module HTResource refines ApplicationResourceSpec {
   }
 
   function unit() : R {
-    R(unitTable(), multiset{}, multiset{})
+    R(unitTable(), 0, multiset{}, multiset{})
   }
 
   function oneRowTable(k: nat, info: Info) : seq<Option<Info>>
@@ -94,7 +95,7 @@ module HTResource refines ApplicationResourceSpec {
   function oneRowResource(k: nat, info: Info) : R 
     requires 0 <= k < FixedSize()
   {
-    R(oneRowTable(k, info), multiset{}, multiset{})
+    R(oneRowTable(k, info), 0, multiset{}, multiset{})
   }
 
   // predicate resourceHasSingleRow(r: R, k: nat, info: Info)
@@ -120,7 +121,7 @@ module HTResource refines ApplicationResourceSpec {
     requires 0 <= k2 < FixedSize()
     requires k1 != k2
   {
-    R(twoRowsTable(k1, info1, k2, info2), multiset{}, multiset{})
+    R(twoRowsTable(k1, info1, k2, info2), 0, multiset{}, multiset{})
   }
 
   predicate isInputResource(in_r: R, rid: int, input: Ifc.Input)
@@ -154,6 +155,7 @@ module HTResource refines ApplicationResourceSpec {
   function add(x: R, y: R) : R {
     if x.R? && y.R? && nonoverlapping(x.table, y.table) then (
       R(fuse_seq(x.table, y.table),
+          x.insert_capacity + y.insert_capacity,
           x.tickets + y.tickets,
           x.stubs + y.stubs)
     ) else (
@@ -203,6 +205,7 @@ module HTResource refines ApplicationResourceSpec {
   predicate Init(s: R) {
     && s.R?
     && (forall i | 0 <= i < |s.table| :: s.table[i] == Some(Info(Empty, Free)))
+    && s.insert_capacity == FixedSize() - 1
     && s.tickets == multiset{}
     && s.stubs == multiset{}
   }
@@ -236,12 +239,25 @@ module HTResource refines ApplicationResourceSpec {
     && 0 <= h as int < |s.table|
     && s.table[h].Some?
     && s.table[h].value.state.Free?
-    && s' == s
+    && s.insert_capacity >= 1
+    && (s' == s
       .(tickets := s.tickets - multiset{insert_ticket})
+      .(insert_capacity := s.insert_capacity - 1)
       .(table := s.table[h := Some(
-          s.table[h].value.(state :=
-            Inserting(insert_ticket.rid,
-              KV(key, insert_ticket.input.value), key)))])
+          s.table[h].value.(
+              state := Inserting(insert_ticket.rid,
+              KV(key, insert_ticket.input.value),key)))]))
+  }
+
+  predicate ProcessInsertTicketFail(s: R, s': R, insert_ticket: Ticket)
+  {
+    && !s.Fail?
+    && insert_ticket.input.InsertInput?
+    && insert_ticket in s.tickets
+    // && s.insert_capacity == 1
+    && (s' == s
+      .(tickets := s.tickets - multiset{insert_ticket})
+      .(stubs := s.stubs + multiset{Stub(insert_ticket.rid, MapIfc.InsertOutput(false))}))
   }
 
   // search_h: hash of the key we are trying to insert
@@ -323,7 +339,7 @@ module HTResource refines ApplicationResourceSpec {
         [pos := Some(Info(
             Full(s.table[pos].value.state.kv),
             Free))])
-      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput)})
+      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput(true))})
   }
 
   predicate InsertUpdate(s: R, s': R, pos: nat)
@@ -339,23 +355,8 @@ module HTResource refines ApplicationResourceSpec {
         [pos := Some(Info(
             Full(s.table[pos].value.state.kv),
             Free))])
-      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput)})
-  }
-
-  // this transition should be impossible
-  predicate InsertFullHashTable(s: R, s': R, pos: nat)
-  {
-    && !s.Fail?
-    && 0 <= pos < FixedSize()
-    && s.table[pos].Some?
-    && var state := s.table[pos].value.state;
-    && s.table[pos].value.state.Inserting? // we are still trying to insert
-    && s.table[pos].value.entry.Full?
-    && s.table[pos].value.entry.kv.key != state.kv.key // we can't insert here
-    && NextPos(pos) == hash(state.inital_key) as nat // we are about to loop back to the initial index
-    && s' == s
-      .(table := s.table[pos := Some(s.table[pos].value.(state := Free))])
-      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput)})
+      .(insert_capacity := s.insert_capacity + 1) // we reserved the capacity at the begining, but later discover we don't need it
+      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput(true))})
   }
 
   // Remove
@@ -494,6 +495,7 @@ module HTResource refines ApplicationResourceSpec {
     // Clear the pointer, return the stub.
     && s' == s
       .(table := s.table[pos := Some(Info(s.table[pos].value.entry, Free))])
+      .(insert_capacity := s.insert_capacity + 1)
       .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput(true))})
   }
 
