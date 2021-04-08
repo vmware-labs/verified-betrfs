@@ -11,16 +11,10 @@ DAFNY_ROOT?=.dafny/dafny/
 DAFNY_CMD=$(DAFNY_ROOT)/Scripts/dafny
 DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
 DAFNY_FLAGS=
-DAFNY_GLOBAL_FLAGS=
-
-ifndef TL
-	TL=20
-endif
-ifeq "$(TL)" "0"
-  TIMELIMIT=
-else
-  TIMELIMIT=/timeLimit:$(TL)
-endif
+# Approximation based on (somewhat dated) F* measurements
+RLIMIT_PER_SECOND=545
+DEFAULT_RLIMIT=$$(( 60 * $(RLIMIT_PER_SECOND) ))
+DAFNY_GLOBAL_FLAGS=/rlimit:$(DEFAULT_RLIMIT)
 
 POUND_DEFINES=
 ifdef LOG_QUERY_STATS
@@ -130,7 +124,7 @@ status: build/deps build/Impl/Bundle.i.status.pdf
 
 # Longer time-limit for CI
 .PHONY: verichecks-status
-verichecks-status: TIMELIMIT=/timeLimit:60
+
 verichecks-status: DAFNY_GLOBAL_FLAGS=/vcsCores:4
 verichecks-status: build/deps build/Impl/Bundle.i.status.pdf
 
@@ -178,7 +172,7 @@ build/%.synchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 # .verchk: Dafny file-local verification
 build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.verchk,%.verchk-tmp,$@))
-	( $(TIME) $(DAFNY_CMD) $(DAFNY_GLOBAL_FLAGS) $(DAFNY_FLAGS) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
+	( $(TIME) $(DAFNY_CMD) $(DAFNY_GLOBAL_FLAGS) $(DAFNY_FLAGS) /compile:0 $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
 
 ### Establish Dafny flag defaults
@@ -200,6 +194,12 @@ OTHER_PROVER_FLAGS =
 
 build/Betree/BetreeInv.i.verchk: OTHER_PROVER_FLAGS=/proverOpt:O:smt.random_seed=1
 build/lib/DataStructures/LinearDList.i.verchk: OTHER_PROVER_FLAGS=/noNLarith /proverOpt:O:smt.random_seed=1
+
+## Each file that has a timeLimitMultiplier in it gets a whole file rlimit bump
+## Until PR https://github.com/dafny-lang/dafny/pull/1171 is merged
+build/lib/Base/BitsetLemmas.i.verchk: OTHER_PROVER_FLAGS=/rlimit:$$(( 6 * $(DEFAULT_RLIMIT) ))
+build/Marshalling/GenericMarshalling.i.verchk: OTHER_PROVER_FLAGS=/rlimit:$$(( 4 * $(DEFAULT_RLIMIT) ))
+build/Math/div.i.verchk: OTHER_PROVER_FLAGS=/rlimit:$$(( 2 * $(DEFAULT_RLIMIT) ))
 
 # enable nonlinear arithmetic for some files
 # Note: Nonlinear.i.dfy and Math.i.dfy are designed to use nonlinear arith.
