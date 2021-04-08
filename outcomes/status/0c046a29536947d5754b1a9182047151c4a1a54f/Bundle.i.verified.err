@@ -1,0 +1,2542 @@
+./Impl/EvictImpl.i.dfy
+	+ /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/tools/../.dafny/bin/dafny /vcsCores:4 /compile:0 /timeLimit:60 Impl/EvictImpl.i.dfy /trace /induction:1 /noNLarith
+	Parsing Impl/EvictImpl.i.dfy
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Impl/../PivotBetree/../lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	Coalescing blocks...
+	Inlining...
+	
+	Running abstract interpretation...
+	  [0.1126023 s]
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	Linearising   [0.8960358 s]
+	Linearising   [0.8637714 s]
+	Linearising   [0.6564517 s]
+	
+	Verifying CheckWellformed$$EvictImpl.__default.needToWrite ...
+	  [9.626 s, 7 proof obligations]  verified
+	
+	Verifying CheckWellformed$$EvictImpl.__default.NeedToWrite ...
+	  [9.103 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$EvictImpl.__default.NeedToWrite ...
+	  [9.992 s, 11 proof obligations]  verified
+	
+	Verifying CheckWellformed$$EvictImpl.__default.canEvict ...
+	  [10.952 s, 6 proof obligations]  verified
+	
+	Verifying CheckWellformed$$EvictImpl.__default.CanEvict ...
+	  [3.700 s, 4 proof obligations]  verified
+	
+	Verifying Impl$$EvictImpl.__default.CanEvict ...
+	  [3.306 s, 7 proof obligations]  verified
+	
+	Verifying CheckWellformed$$EvictImpl.__default.EvictOrDealloc ...
+	  [2.949 s, 209 proof obligations]  verified
+	
+	Verifying Impl$$EvictImpl.__default.EvictOrDealloc ...
+	  [63.014 s, 303 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Impl/EvictImpl.i.dfy(89,9): Verification of 'Impl$$EvictImpl.__default.EvictOrDealloc' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$EvictImpl.__default.PageInNodeReqOrMakeRoom ...
+	  [3.033 s, 210 proof obligations]  verified
+	
+	Verifying Impl$$EvictImpl.__default.PageInNodeReqOrMakeRoom ...
+	  [3.438 s, 226 proof obligations]  verified
+	
+	Dafny program verifier finished with 9 verified, 0 errors, 1 time out
+	Command exited with non-zero status 4
+	125.46user 1.99system 1:33.32elapsed 136%CPU (0avgtext+0avgdata 1580144maxresident)k
+	0inputs+0outputs (0major+691383minor)pagefaults 0swaps
+
+./lib/Buckets/LKMBPKVOps.i.dfy
+	+ /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/tools/../.dafny/bin/dafny /vcsCores:4 /compile:0 /timeLimit:60 lib/Buckets/LKMBPKVOps.i.dfy /trace /induction:1 /noNLarith
+	Parsing lib/Buckets/LKMBPKVOps.i.dfy
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	Coalescing blocks...
+	Inlining...
+	
+	Running abstract interpretation...
+	  [0.1316467 s]
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	
+	Verifying CheckWellformed$$LKMBPKVOps.__default.IsKeyMessageTree ...
+	  [3.808 s, 35 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LKMBPKVOps.__default.LKMTreeEncodableToSeq ...
+	  [3.572 s, 8 proof obligations]  verified
+	
+	Verifying Impl$$LKMBPKVOps.__default.LKMTreeEncodableToSeq ...
+	  [4.089 s, 11 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LKMBPKVOps.__default.IsKeyMessageTreeInheritance ...
+	  [3.572 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$LKMBPKVOps.__default.IsKeyMessageTreeInheritance ...
+	  [6.933 s, 133 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LKMBPKVOps.__default.LeafFillDpkv ...
+	  [1.236 s, 144 proof obligations]  verified
+	
+	Verifying Impl$$LKMBPKVOps.__default.LeafFillDpkv ...
+	  [5.126 s, 87 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LKMBPKVOps.__default.canAppendKeysIterate ...
+	  [0.899 s, 25 proof obligations]  verified
+	
+	Verifying Impl$$LKMBPKVOps.__default.canAppendKeysIterate ...
+	  [1.170 s, 100 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LKMBPKVOps.__default.canAppendMessagesIterate ...
+	  [0.919 s, 35 proof obligations]  verified
+	
+	Verifying Impl$$LKMBPKVOps.__default.canAppendMessagesIterate ...
+	  [0.920 s, 55 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LKMBPKVOps.__default.IndexFillDpkv ...
+	  [1.058 s, 144 proof obligations]  verified
+	
+	Verifying Impl$$LKMBPKVOps.__default.IndexFillDpkv ...
+	  [97.551 s, 927 proof obligations]  errors
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(275,24): Error: This loop invariant might not be maintained by the loop.
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/PackedStringArray.i.dfy(365,54): Related location
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(275,24): Related message: loop invariant violation
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/PackedStringArray.i.dfy(365,54): Related location
+	Execution trace:
+	    (0,0): anon0
+	    (0,0): anon65_Then
+	    (0,0): anon66_Then
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(225,12): anon67_Else
+	    (0,0): anon5
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(225,5): anon68_Else
+	    (0,0): anon69_Then
+	    (0,0): anon70_Then
+	    (0,0): anon71_Then
+	    (0,0): anon12
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(228,5): anon72_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(232,5): anon73_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(235,5): anon74_Else
+	    (0,0): anon75_Else
+	    (0,0): anon79_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon81_LoopHead
+	    (0,0): anon81_LoopBody
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon82_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon83_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(298,7): anon91_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(314,7): anon100_Else
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(278,24): Error: This loop invariant might not be maintained by the loop.
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/PackedStringArray.i.dfy(365,54): Related location
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(278,24): Related message: loop invariant violation
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/PackedStringArray.i.dfy(365,54): Related location
+	Execution trace:
+	    (0,0): anon0
+	    (0,0): anon65_Then
+	    (0,0): anon66_Then
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(225,12): anon67_Else
+	    (0,0): anon5
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(225,5): anon68_Else
+	    (0,0): anon69_Then
+	    (0,0): anon70_Then
+	    (0,0): anon71_Then
+	    (0,0): anon12
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(228,5): anon72_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(232,5): anon73_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(235,5): anon74_Else
+	    (0,0): anon75_Else
+	    (0,0): anon79_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon81_LoopHead
+	    (0,0): anon81_LoopBody
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon82_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon83_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(298,7): anon91_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(314,7): anon100_Else
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(278,24): Error: This loop invariant might not be maintained by the loop.
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/PackedStringArray.i.dfy(364,30): Related location
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(278,24): Related message: loop invariant violation
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/PackedStringArray.i.dfy(364,30): Related location
+	Execution trace:
+	    (0,0): anon0
+	    (0,0): anon65_Then
+	    (0,0): anon66_Then
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(225,12): anon67_Else
+	    (0,0): anon5
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(225,5): anon68_Else
+	    (0,0): anon69_Then
+	    (0,0): anon70_Then
+	    (0,0): anon71_Then
+	    (0,0): anon12
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(228,5): anon72_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(232,5): anon73_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(235,5): anon74_Else
+	    (0,0): anon75_Else
+	    (0,0): anon79_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon81_LoopHead
+	    (0,0): anon81_LoopBody
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon82_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon83_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(298,7): anon91_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(314,7): anon100_Else
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(309,34): Error: assertion violation
+	Execution trace:
+	    (0,0): anon0
+	    (0,0): anon65_Then
+	    (0,0): anon66_Then
+	    (0,0): anon67_Then
+	    (0,0): anon5
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(225,5): anon68_Else
+	    (0,0): anon69_Then
+	    (0,0): anon70_Then
+	    (0,0): anon71_Then
+	    (0,0): anon12
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(228,5): anon72_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(232,5): anon73_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(235,5): anon74_Else
+	    (0,0): anon75_Else
+	    (0,0): anon79_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon81_LoopHead
+	    (0,0): anon81_LoopBody
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon82_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon83_Else
+	    (0,0): anon91_Then
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(330,34): Error: assertion violation
+	Execution trace:
+	    (0,0): anon0
+	    (0,0): anon65_Then
+	    (0,0): anon66_Then
+	    (0,0): anon67_Then
+	    (0,0): anon5
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(225,5): anon68_Else
+	    (0,0): anon69_Then
+	    (0,0): anon70_Then
+	    (0,0): anon71_Then
+	    (0,0): anon12
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(228,5): anon72_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(232,5): anon73_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(235,5): anon74_Else
+	    (0,0): anon75_Else
+	    (0,0): anon79_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon81_LoopHead
+	    (0,0): anon81_LoopBody
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon82_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon83_Else
+	    /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Buckets/LKMBPKVOps.i.dfy(298,7): anon91_Else
+	    (0,0): anon100_Then
+	
+	Verifying CheckWellformed$$LKMBPKVOps.__default.FillDpkv ...
+	  [1.445 s, 144 proof obligations]  verified
+	
+	Verifying Impl$$LKMBPKVOps.__default.FillDpkv ...
+	  [1.395 s, 86 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LKMBPKVOps.__default.byteSeqSeqToKeySeq ...
+	  [1.331 s, 8 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LKMBPKVOps.__default.ToSeqInterpretation ...
+	  [1.396 s, 42 proof obligations]  verified
+	
+	Verifying Impl$$LKMBPKVOps.__default.ToSeqInterpretation ...
+	  [1.638 s, 147 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LKMBPKVOps.__default.IMessagesInverse ...
+	  [1.504 s, 12 proof obligations]  verified
+	
+	Verifying Impl$$LKMBPKVOps.__default.IMessagesInverse ...
+	  [1.582 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$LKMBPKVOps.__default.ToPkvPreservesInterpretation ...
+	  [1.506 s, 91 proof obligations]  verified
+	
+	Verifying Impl$$LKMBPKVOps.__default.ToPkvPreservesInterpretation ...
+	  [1.811 s, 184 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LKMBPKVOps.__default.WeightImpliesCanAppend ...
+	  [1.722 s, 48 proof obligations]  verified
+	
+	Verifying Impl$$LKMBPKVOps.__default.WeightImpliesCanAppend ...
+	  [1.864 s, 112 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LKMBPKVOps.__default.ToPkv ...
+	  [1.573 s, 91 proof obligations]  verified
+	
+	Verifying Impl$$LKMBPKVOps.__default.ToPkv ...
+	  [2.168 s, 140 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LKMBPKVOps.__default.FromPkv ...
+	  [2.140 s, 47 proof obligations]  verified
+	
+	Verifying Impl$$LKMBPKVOps.__default.FromPkv ...
+	  [3.207 s, 416 proof obligations]  verified
+	
+	Dafny program verifier finished with 27 verified, 5 errors
+	Command exited with non-zero status 4
+	149.72user 1.62system 1:56.10elapsed 130%CPU (0avgtext+0avgdata 796576maxresident)k
+	0inputs+0outputs (0major+418693minor)pagefaults 0swaps
+
+./Impl/DeallocImpl.i.dfy
+	+ /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/tools/../.dafny/bin/dafny /vcsCores:4 /compile:0 /timeLimit:60 Impl/DeallocImpl.i.dfy /trace /induction:1 /noNLarith
+	Parsing Impl/DeallocImpl.i.dfy
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Impl/../PivotBetree/../lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	Coalescing blocks...
+	Inlining...
+	
+	Running abstract interpretation...
+	  [0.0627565 s]
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	Linearising   [0.8403651 s]
+	
+	Verifying CheckWellformed$$DeallocImpl.__default.Dealloc ...
+	  [10.399 s, 207 proof obligations]  verified
+	
+	Verifying Impl$$DeallocImpl.__default.Dealloc ...
+	  [70.978 s, 416 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Impl/DeallocImpl.i.dfy(29,9): Verification of 'Impl$$DeallocImpl.__default.Dealloc' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$DeallocImpl.__default.FindDeallocable ...
+	  [10.170 s, 6 proof obligations]  verified
+	
+	Verifying Impl$$DeallocImpl.__default.FindDeallocable ...
+	  [9.886 s, 9 proof obligations]  verified
+	
+	Dafny program verifier finished with 3 verified, 0 errors, 1 time out
+	Command exited with non-zero status 4
+	109.42user 1.70system 1:32.84elapsed 119%CPU (0avgtext+0avgdata 1245192maxresident)k
+	0inputs+0outputs (0major+543188minor)pagefaults 0swaps
+
+./lib/DataStructures/LinearContentMutableMap.i.dfy
+	+ /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/tools/../.dafny/bin/dafny /vcsCores:4 /compile:0 /timeLimit:60 lib/DataStructures/LinearContentMutableMap.i.dfy /trace /induction:1 /noNLarith
+	Parsing lib/DataStructures/LinearContentMutableMap.i.dfy
+	Coalescing blocks...
+	Inlining...
+	
+	Running abstract interpretation...
+	  [0.091834 s]
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	
+	Verifying Impl$$LinearContentMutableMap.lItem.FreeNonEntry ...
+	  [1.667 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.LinearHashMap.Inv ...
+	  [1.804 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.toItems ...
+	  [1.670 s, 7 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.Uint64SlotForKey ...
+	  [1.640 s, 13 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.FixedSizeInv ...
+	  [0.746 s, 22 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.IsConstructorFromSize ...
+	  [0.779 s, 8 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.ConstructorFromSize ...
+	  [0.596 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.ConstructorFromSize ...
+	  [0.813 s, 43 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.allNonEmptyImpliesCountEqStorageSize ...
+	  [0.680 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.allNonEmptyImpliesCountEqStorageSize ...
+	  [0.628 s, 14 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.getEmptyWitness ...
+	  [0.609 s, 41 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.Probe ...
+	  [0.594 s, 34 proof obligations]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.Probe ...
+	  [18.170 s, 142 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.FixedSizeInsert ...
+	  [0.474 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.FixedSizeInsert ...
+	  [0.552 s, 29 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.FixedSizeInsertEntry ...
+	  [0.486 s, 8 proof obligations]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.FixedSizeInsertEntry ...
+	  [8.715 s, 132 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.FixedSizeUpdateBySlot ...
+	  [0.589 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.FixedSizeUpdateBySlot ...
+	  [2.900 s, 93 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.IsEntry ...
+	  [0.446 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.IsEntry ...
+	  [0.516 s, 16 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.FixedSizeGet ...
+	  [0.447 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.FixedSizeGet ...
+	  [0.454 s, 16 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.FixedSizeRemove ...
+	  [0.483 s, 4 proof obligations]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.FixedSizeRemove ...
+	  [3.624 s, 100 proof obligations]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.CantEquivocateMapFromStorageKey ...
+	  [0.857 s, 33 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.UnderlyingContentsMatchesContents ...
+	  [0.338 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.UnderlyingInv ...
+	  [0.391 s, 5 proof obligations]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.UnderlyingInvImpliesMapFromStorageMatchesContents ...
+	  [1.821 s, 15 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.Inv ...
+	  [0.509 s, 23 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.Inv0 ...
+	  [0.484 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.CountBound ...
+	  [0.349 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.CountBound ...
+	  [0.457 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.RevealProtectedInv ...
+	  [0.387 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.RevealProtectedInv ...
+	  [0.439 s, 15 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.IsConstructor ...
+	  [0.304 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.Constructor ...
+	  [0.367 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.Constructor ...
+	  [0.498 s, 42 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.LemmaEntryKeyInContents ...
+	  [0.351 s, 5 proof obligations]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.LemmaEntryKeyInContents ...
+	  [0.585 s, 7 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.IsRealloc ...
+	  [0.506 s, 6 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.Realloc ...
+	  [0.456 s, 19 proof obligations]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.Realloc ...
+	  [60.582 s, 224 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/DataStructures/LinearContentMutableMap.i.dfy(591,9): Verification of 'Impl$$LinearContentMutableMap.__default.Realloc' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.Insert ...
+	  [0.497 s, 5 proof obligations]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.Insert ...
+	  [1.528 s, 82 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.Remove ...
+	  [0.461 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.Remove ...
+	  [2.310 s, 85 proof obligations]  verified
+	
+	Verifying CheckWellformed$$LinearContentMutableMap.__default.Get ...
+	  [0.476 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$LinearContentMutableMap.__default.Get ...
+	  [0.505 s, 15 proof obligations]  verified
+	
+	Dafny program verifier finished with 48 verified, 0 errors, 1 time out
+	Command exited with non-zero status 4
+	125.15user 1.09system 1:17.15elapsed 163%CPU (0avgtext+0avgdata 477900maxresident)k
+	0inputs+0outputs (0major+289602minor)pagefaults 0swaps
+
+./PivotBetree/StatesViewPivotBetree_Refines_StatesViewMap.i.dfy
+	+ /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/tools/../.dafny/bin/dafny /vcsCores:4 /compile:0 /timeLimit:60 PivotBetree/StatesViewPivotBetree_Refines_StatesViewMap.i.dfy /trace /induction:1 /noNLarith
+	Parsing PivotBetree/StatesViewPivotBetree_Refines_StatesViewMap.i.dfy
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/PivotBetree/../PivotBetree/../lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	Coalescing blocks...
+	Inlining...
+	
+	Running abstract interpretation...
+	  [0.0895616 s]
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	
+	Verifying CheckWellformed$$StatesViewPivotBetree__Refines__StatesViewMap.__default.IDisk ...
+	  [8.166 s, 10 proof obligations]  verified
+	
+	Verifying CheckWellformed$$StatesViewPivotBetree__Refines__StatesViewMap.__default.IOptState ...
+	  [7.240 s, 10 proof obligations]  verified
+	
+	Verifying CheckWellformed$$StatesViewPivotBetree__Refines__StatesViewMap.__default.I ...
+	  [8.126 s, 16 proof obligations]  verified
+	
+	Verifying CheckWellformed$$StatesViewPivotBetree__Refines__StatesViewMap.__default.RefinesInit ...
+	  [8.088 s, 6 proof obligations]  verified
+	
+	Verifying Impl$$StatesViewPivotBetree__Refines__StatesViewMap.__default.RefinesInit ...
+	  [2.004 s, 19 proof obligations]  verified
+	
+	Verifying CheckWellformed$$StatesViewPivotBetree__Refines__StatesViewMap.__default.RefinesNextStep ...
+	  [1.800 s, 12 proof obligations]  verified
+	
+	Verifying Impl$$StatesViewPivotBetree__Refines__StatesViewMap.__default.RefinesNextStep ...
+	  [61.891 s, 130 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/PivotBetree/StatesViewPivotBetree_Refines_StatesViewMap.i.dfy(60,8): Verification of 'Impl$$StatesViewPivotBetree__Refines__StatesViewMap.__default.RefinesNextStep' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$StatesViewPivotBetree__Refines__StatesViewMap.__default.RefinesNext ...
+	  [2.069 s, 12 proof obligations]  verified
+	
+	Verifying Impl$$StatesViewPivotBetree__Refines__StatesViewMap.__default.RefinesNext ...
+	  [1.869 s, 16 proof obligations]  verified
+	
+	Dafny program verifier finished with 8 verified, 0 errors, 1 time out
+	Command exited with non-zero status 4
+	86.36user 1.65system 1:24.44elapsed 104%CPU (0avgtext+0avgdata 797148maxresident)k
+	0inputs+0outputs (0major+548880minor)pagefaults 0swaps
+
+./Betree/Graph.i.dfy
+	+ /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/tools/../.dafny/bin/dafny /vcsCores:4 /compile:0 /timeLimit:60 Betree/Graph.i.dfy /trace /induction:1 /noNLarith
+	Parsing Betree/Graph.i.dfy
+	Coalescing blocks...
+	Inlining...
+	
+	Running abstract interpretation...
+	  [0.0596891 s]
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	
+	Verifying CheckWellformed$$ReferenceType.__default.Root ...
+	  [0.674 s, 1 proof obligation]  verified
+	Coalescing blocks...
+	Inlining...
+	
+	Running abstract interpretation...
+	  [0.0064787 s]
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	
+	Verifying CheckWellformed$$Graph.__default.Root ...
+	  [0.890 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$Graph.__default.IsClosed ...
+	  [1.060 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Graph.__default.IsPath ...
+	  [1.110 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Graph.__default.IsCycle ...
+	  [1.061 s, 8 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Graph.__default.IsSimple ...
+	  [0.393 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Graph.__default.IsAcyclic ...
+	  [0.308 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$Graph.__default.AcyclicGraphImpliesSimplePath ...
+	  [1.018 s, 13 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Graph.__default.IsPathFromTo ...
+	  [0.339 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Graph.__default.ReachableReferences ...
+	  [0.324 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Graph.__default.NewPath ...
+	  [0.405 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Graph.__default.NewlyReachableReferences ...
+	  [0.472 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Graph.__default.EditIsLocal ...
+	  [0.412 s, 6 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Graph.__default.NewNodesAreCycleFree ...
+	  [0.327 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Graph.__default.FirstInGraph ...
+	  [0.412 s, 12 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Graph.__default.UndoLocalEdit ...
+	  [4.080 s, 50 proof obligations]  verified
+	
+	Verifying Impl$$Graph.__default.LocalEditPreservesAcyclic ...
+	  [60.383 s, 27 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Betree/Graph.i.dfy(161,8): Verification of 'Impl$$Graph.__default.LocalEditPreservesAcyclic' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$Graph.__default.UnallocPreservesAcyclic ...
+	  [0.353 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$Graph.__default.UnallocPreservesAcyclic ...
+	  [0.356 s, 5 proof obligations]  verified
+	
+	Dafny program verifier finished with 18 verified, 0 errors, 1 time out
+	Command exited with non-zero status 4
+	72.72user 0.92system 1:06.37elapsed 110%CPU (0avgtext+0avgdata 274244maxresident)k
+	0inputs+0outputs (0major+303726minor)pagefaults 0swaps
+
+./lib/Base/BitsetLemmas.i.dfy
+	+ /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/tools/../.dafny/bin/dafny /vcsCores:4 /compile:0 /timeLimit:60 lib/Base/BitsetLemmas.i.dfy /trace /induction:1 /noNLarith
+	Parsing lib/Base/BitsetLemmas.i.dfy
+	Coalescing blocks...
+	Inlining...
+	
+	Running abstract interpretation...
+	  [0.125261 s]
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.bit__ne__expanded ...
+	  [0.801 s, 8 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.bit__ne__expanded ...
+	  [60.772 s, 1 proof obligation]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/lib/Base/BitsetLemmas.i.dfy(15,8): Verification of 'Impl$$BitsetLemmas.__default.bit__ne__expanded' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.bit__comp__ne__expanded ...
+	  [0.801 s, 11 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.bit__comp__ne__expanded ...
+	  [121.002 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.bit ...
+	  [0.154 s, 4 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.and__or__dist ...
+	  [0.241 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.or__and__dist ...
+	  [0.217 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.bit__and__self ...
+	  [0.150 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.bit__or__self ...
+	  [0.143 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.bit__or__0 ...
+	  [0.134 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.bit__and__0 ...
+	  [0.131 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.bit__or__and__self ...
+	  [0.105 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.bit__or__result__0__implies__args__0 ...
+	  [0.122 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.zero__or__zero__eq__zero ...
+	  [0.137 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.bit__ne ...
+	  [0.139 s, 4 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.bit__ne ...
+	  [0.156 s, 7 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.bit__comp__ne ...
+	  [0.149 s, 5 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.bit__comp__ne ...
+	  [0.187 s, 8 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.and__comp ...
+	  [0.186 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.bit__ne__0 ...
+	  [0.162 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.bit__ne__0 ...
+	  [0.409 s, 67 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.in__set ...
+	  [0.115 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.set__bit__to__1 ...
+	  [0.098 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.set__bit__to__0 ...
+	  [0.134 s, 5 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.bit__and__and__comp ...
+	  [0.136 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.bit__and__assoc ...
+	  [0.114 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.set__bit__to__1__self ...
+	  [0.088 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.set__bit__to__1__self ...
+	  [0.125 s, 14 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.set__bit__to__1__other ...
+	  [0.087 s, 5 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.set__bit__to__1__other ...
+	  [0.134 s, 25 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.set__bit__to__0__self ...
+	  [0.085 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.set__bit__to__0__self ...
+	  [0.151 s, 20 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.set__bit__to__0__other ...
+	  [0.084 s, 5 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.set__bit__to__0__other ...
+	  [0.177 s, 20 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.bit__or__is__union ...
+	  [0.085 s, 4 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.bit__or__is__union ...
+	  [0.127 s, 14 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.all1s__and__bit__eq ...
+	  [0.137 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.all1s__and__bit__eq ...
+	  [0.145 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.all1s__is__set ...
+	  [0.135 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.all1s__is__set ...
+	  [0.139 s, 6 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.all__in__set__implies__all1s ...
+	  [0.137 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.all__in__set__implies__all1s ...
+	  [0.736 s, 260 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.bit__or__uint64 ...
+	  [0.154 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.in__set__uint64 ...
+	  [0.148 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.set__bit__to__1__uint64 ...
+	  [0.141 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.set__bit__to__0__uint64 ...
+	  [0.147 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.bv64cast ...
+	  [0.122 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.bv64cast ...
+	  [0.124 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.set__bit__to__1__self__uint64 ...
+	  [0.141 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.set__bit__to__1__self__uint64 ...
+	  [0.160 s, 9 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.b2u ...
+	  [0.137 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.u2b ...
+	  [0.139 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.u2b__inverse__b2u ...
+	  [0.161 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.set__bit__to__1__other__uint64 ...
+	  [0.137 s, 5 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.set__bit__to__1__other__uint64 ...
+	  [0.264 s, 45 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.set__bit__to__0__self__uint64 ...
+	  [0.119 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.set__bit__to__0__self__uint64 ...
+	  [0.138 s, 9 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.set__bit__to__0__other__uint64 ...
+	  [0.093 s, 5 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.set__bit__to__0__other__uint64 ...
+	  [0.291 s, 45 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.bit__or__is__union__uint64 ...
+	  [0.136 s, 4 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.bit__or__is__union__uint64 ...
+	  [0.362 s, 40 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.all1s__is__set__uint64 ...
+	  [0.171 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.all1s__is__set__uint64 ...
+	  [0.139 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BitsetLemmas.__default.all__in__set__implies__all1s__uint64 ...
+	  [0.140 s, 4 proof obligations]  verified
+	
+	Verifying Impl$$BitsetLemmas.__default.all__in__set__implies__all1s__uint64 ...
+	  [0.139 s, 11 proof obligations]  verified
+	
+	Dafny program verifier finished with 64 verified, 0 errors, 1 time out
+	Command exited with non-zero status 4
+	188.97user 0.38system 2:03.25elapsed 153%CPU (0avgtext+0avgdata 166376maxresident)k
+	0inputs+0outputs (0major+69252minor)pagefaults 0swaps
+
+./BlockCacheSystem/BlockSystem.i.dfy
+	+ /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/tools/../.dafny/bin/dafny /vcsCores:4 /compile:0 /timeLimit:60 BlockCacheSystem/BlockSystem.i.dfy /trace /induction:1 /noNLarith
+	Parsing BlockCacheSystem/BlockSystem.i.dfy
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/BlockCacheSystem/../PivotBetree/../lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	Coalescing blocks...
+	Inlining...
+	
+	Running abstract interpretation...
+	  [0.8912634 s]
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	
+	Verifying CheckWellformed$$BlockSystem.__default.WFIndirectionTableRefWrtDisk ...
+	  [5.165 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.WFIndirectionTableWrtDisk ...
+	  [4.369 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.disjointWritesFromIndirectionTable ...
+	  [4.377 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.RefMapOfDisk ...
+	  [4.376 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.Graph ...
+	  [1.411 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.WFDiskGraph ...
+	  [1.408 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.DiskGraph ...
+	  [1.344 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.HasDiskCacheLookup ...
+	  [1.455 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.DiskCacheLookup ...
+	  [1.329 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.WFDiskCacheGraph ...
+	  [1.320 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.DiskCacheGraph ...
+	  [1.396 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.WFDiskGraphOfLoc ...
+	  [1.438 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.NoDanglingPointers ...
+	  [1.447 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.SuccessorsAgree ...
+	  [1.329 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.WFSuccs ...
+	  [1.421 s, 26 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.DiskGraphOfLoc ...
+	  [1.755 s, 8 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.DiskGraphMap ...
+	  [1.614 s, 12 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.PersistentLoc ...
+	  [1.453 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.FrozenLoc ...
+	  [1.344 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.DiskChangesPreservesPersistentAndFrozen ...
+	  [1.759 s, 37 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.WFFrozenGraph ...
+	  [1.480 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.FrozenGraph ...
+	  [2.104 s, 7 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.UseFrozenGraph ...
+	  [1.520 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.FrozenGraphOpt ...
+	  [2.396 s, 6 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.WFLoadingGraph ...
+	  [2.504 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.LoadingGraph ...
+	  [2.308 s, 13 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.WFEphemeralGraph ...
+	  [1.884 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.EphemeralGraph ...
+	  [1.774 s, 6 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.EphemeralGraphOpt ...
+	  [1.584 s, 18 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.Init ...
+	  [1.622 s, 54 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.Machine ...
+	  [1.592 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.Crash ...
+	  [1.572 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.NextStep ...
+	  [1.920 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.Next ...
+	  [1.559 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.CleanCacheEntriesAreCorrect ...
+	  [1.621 s, 11 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.CorrectInflightBlockRead ...
+	  [1.295 s, 6 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.CorrectInflightBlockReads ...
+	  [1.843 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.CorrectInflightIndirectionTableReads ...
+	  [1.384 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.CorrectInflightNodeWrite ...
+	  [1.652 s, 20 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.CorrectInflightNodeWrites ...
+	  [1.579 s, 7 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.CorrectInflightIndirectionTableWrites ...
+	  [1.708 s, 8 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.RecordedWriteRequestIndirectionTable ...
+	  [1.432 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.RecordedWriteRequestNode ...
+	  [1.552 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.RecordedReadRequestIndirectionTable ...
+	  [1.416 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.RecordedReadRequestNode ...
+	  [1.360 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.RecordedWriteRequestsIndirectionTable ...
+	  [1.768 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.RecordedWriteRequestsNode ...
+	  [1.453 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.RecordedReadRequestsNode ...
+	  [1.513 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.RecordedReadRequestsIndirectionTable ...
+	  [1.456 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.WriteRequestsDontOverlap ...
+	  [1.394 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.WriteRequestsAreDistinct ...
+	  [1.556 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.ReadWritesDontOverlap ...
+	  [1.469 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.ReadWritesAreDistinct ...
+	  [1.630 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.Inv ...
+	  [2.911 s, 122 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.InitGraphs ...
+	  [1.777 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.InitGraphsValue ...
+	  [1.592 s, 7 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.InitGraphsValue ...
+	  [3.558 s, 9 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.InitImpliesInv ...
+	  [1.819 s, 148 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.WriteBackNodeReqStepUniqueLBAs ...
+	  [3.165 s, 32 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.WriteBackNodeReqStepPreservesDiskGraph ...
+	  [1.680 s, 13 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.WriteBackNodeReqStepPreservesDiskGraph ...
+	  [2.568 s, 20 proof obligations]  verified
+	Linearising   [0.5890353 s]
+	
+	Verifying CheckWellformed$$BlockSystem.__default.WriteBackNodeReqStepPreservesDiskCacheGraph ...
+	  [2.548 s, 11 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.WriteBackNodeReqStepPreservesDiskCacheGraph ...
+	  [6.516 s, 276 proof obligations]  verified
+	Linearising   [0.5006306 s]
+	
+	Verifying Impl$$BlockSystem.__default.WriteBackNodeReqStepPreservesGraphs ...
+	  [35.406 s, 520 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.WriteBackNodeReqStepPreservesInv ...
+	  [62.381 s, 469 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/BlockCacheSystem/BlockSystem.i.dfy(768,8): Verification of 'Impl$$BlockSystem.__default.WriteBackNodeReqStepPreservesInv' timed out after 60 seconds
+	
+	Verifying Impl$$BlockSystem.__default.WriteBackNodeRespStepPreservesGraphs ...
+	  [21.937 s, 25 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.WriteBackNodeRespStepPreservesInv ...
+	  [14.612 s, 261 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.WriteBackIndirectionTableReqStepPreservesGraphs ...
+	  [17.232 s, 51 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.WriteBackIndirectionTableReqStep__WriteRequestsDontOverlap ...
+	  [3.169 s, 28 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.WriteBackIndirectionTableReqStepPreservesInv ...
+	  [23.899 s, 442 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.WriteBackIndirectionTableRespStepPreservesGraphs ...
+	  [3.228 s, 5 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.WriteBackIndirectionTableRespStepPreservesGraphs ...
+	  [24.824 s, 83 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.WriteBackIndirectionTableRespStepPreservesInv ...
+	  [10.237 s, 316 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.DirtyStepUpdatesGraph ...
+	  [1.589 s, 4 proof obligations]  verified
+	Linearising   [0.5616692 s]
+	Linearising   [0.770447 s]
+	
+	Verifying Impl$$BlockSystem.__default.DirtyStepUpdatesGraph ...
+	  [35.113 s, 20 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.DirtyStepPreservesInv ...
+	  [42.387 s, 126 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.AllocStepUpdatesGraph ...
+	  [1.896 s, 4 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.AllocStepUpdatesGraph ...
+	  [19.271 s, 19 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.AllocStepPreservesInv ...
+	  [17.964 s, 126 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.OpPreservesInv ...
+	  [3.212 s, 417 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.OpTransactionPreservesInv ...
+	  [3.498 s, 521 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.TransactionStepPreservesInv ...
+	  [2.159 s, 255 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.UnallocStepUpdatesGraph ...
+	  [1.384 s, 6 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.UnallocStepUpdatesGraph ...
+	  [51.330 s, 20 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.UnallocStepPreservesInv ...
+	  [22.521 s, 126 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.PageInNodeReqStepPreservesGraphs ...
+	  [13.324 s, 25 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.PageInNodeReqStepPreservesInv ...
+	  [9.380 s, 291 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.PageInNodeRespStepPreservesGraphs ...
+	  [18.971 s, 25 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.PageInNodeRespStepPreservesInv ...
+	  [18.635 s, 266 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.PageInIndirectionTableReqStepPreservesGraphs ...
+	  [10.554 s, 16 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.PageInIndirectionTableReqStepPreservesInv ...
+	  [2.255 s, 262 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.PageInIndirectionTableRespStepPreservesGraphs ...
+	  [5.573 s, 20 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.PageInIndirectionTableRespStepPreservesInv ...
+	  [2.656 s, 277 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.ReceiveLocStepPreservesGraphs ...
+	  [1.166 s, 6 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.ReceiveLocStepPreservesGraphs ...
+	  [6.060 s, 54 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.ReceiveLocStepPreservesInv ...
+	  [1.276 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$BlockSystem.__default.ReceiveLocStepPreservesInv ...
+	  [1.786 s, 266 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.EvictStepPreservesGraphs ...
+	  [13.901 s, 25 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.EvictStepPreservesInv ...
+	  [6.931 s, 263 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.FreezeStepPreservesGraphs ...
+	  [12.431 s, 105 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.FreezeStepPreservesInv ...
+	  [1.823 s, 260 proof obligations]  verified
+	Linearising   [1.8020744 s]
+	
+	Verifying Impl$$BlockSystem.__default.CleanUpStepPreservesGraphs ...
+	  [12.267 s, 52 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.CleanUpStepPreservesInv ...
+	  [5.706 s, 317 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.NoOpStepPreservesGraphs ...
+	  [12.335 s, 25 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.NoOpStepPreservesInv ...
+	  [9.209 s, 290 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.MachineStepPreservesInv ...
+	  [5.119 s, 2272 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.CrashPreservesGraphs ...
+	  [40.940 s, 74 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.CrashStepPreservesInv ...
+	  [1.581 s, 126 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.NextStepPreservesInv ...
+	  [2.781 s, 424 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.NextPreservesInv ...
+	  [2.499 s, 255 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.EphemeralGraphRead ...
+	  [1.803 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.EphemeralGraphRead ...
+	  [0.896 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.NewRequestReadNodeDoesntOverlap ...
+	  [1.095 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.NewRequestReadNodeDoesntOverlap ...
+	  [1.952 s, 12 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.NewRequestReadIndirectionTableDoesntOverlap ...
+	  [1.083 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.NewRequestReadIndirectionTableDoesntOverlap ...
+	  [1.926 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.NewRequestWriteNodeDoesntOverlap ...
+	  [1.242 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.NewRequestWriteNodeDoesntOverlap ...
+	  [1.968 s, 12 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.NewRequestWriteIndirectionTableDoesntOverlap ...
+	  [1.231 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.NewRequestWriteIndirectionTableDoesntOverlap ...
+	  [2.032 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.NewRequestWriteNodeDoesntOverlapRead ...
+	  [1.237 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.NewRequestWriteNodeDoesntOverlapRead ...
+	  [2.033 s, 12 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.NewRequestWriteIndirectionTableDoesntOverlapRead ...
+	  [1.248 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$BlockSystem.__default.NewRequestWriteIndirectionTableDoesntOverlapRead ...
+	  [1.509 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.NewRequestReadNodeIsValid ...
+	  [1.130 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$BlockSystem.__default.NewRequestReadNodeIsValid ...
+	  [1.349 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BlockSystem.__default.NewRequestReadIndirectionTableIsValid ...
+	  [1.233 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$BlockSystem.__default.NewRequestReadIndirectionTableIsValid ...
+	  [1.433 s, 1 proof obligation]  verified
+	
+	Dafny program verifier finished with 127 verified, 0 errors, 1 time out
+	Command exited with non-zero status 4
+	722.49user 7.10system 4:07.75elapsed 294%CPU (0avgtext+0avgdata 1643328maxresident)k
+	0inputs+0outputs (0major+2120624minor)pagefaults 0swaps
+
+./ByteBlockCacheSystem/InterpretationDisk.i.dfy
+	+ /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/tools/../.dafny/bin/dafny /vcsCores:4 /compile:0 /timeLimit:60 ByteBlockCacheSystem/InterpretationDisk.i.dfy /trace /induction:1 /noNLarith
+	Parsing ByteBlockCacheSystem/InterpretationDisk.i.dfy
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/ByteBlockCacheSystem/../PivotBetree/../lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	Coalescing blocks...
+	Inlining...
+	
+	Running abstract interpretation...
+	  [0.2721359 s]
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqWriteNodeLocation ...
+	  [12.598 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqWriteIndirectionTableLocation ...
+	  [11.418 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqWriteJournalLocation ...
+	  [13.141 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqWriteSuperblockLocation ...
+	  [13.082 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.reqWritesHaveValidNodes ...
+	  [3.750 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.reqWritesHaveValidIndirectionTables ...
+	  [3.972 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.reqWritesHaveValidJournals ...
+	  [3.576 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.reqWritesHaveValidSuperblocks ...
+	  [4.225 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.reqWritesHaveValidData ...
+	  [3.437 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqReadWithLoc ...
+	  [2.731 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqWriteWithLoc ...
+	  [3.772 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RespReadWithLoc ...
+	  [3.045 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RespWriteWithLoc ...
+	  [3.272 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.HasSuperblockAtLoc ...
+	  [3.856 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.SuperblockAtLoc ...
+	  [2.995 s, 9 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.SuperblockAtLocOpt ...
+	  [3.046 s, 8 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqReadSuperblockAtLoc__of__reqs ...
+	  [2.736 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqReadSuperblockAtLoc__of__resps ...
+	  [2.880 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqReadSuperblockAtLoc ...
+	  [3.016 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqWriteSuperblockAtLoc ...
+	  [2.726 s, 21 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.Superblock1 ...
+	  [3.128 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.Superblock2 ...
+	  [2.991 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqReadSuperblock1 ...
+	  [2.972 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqReadSuperblock2 ...
+	  [3.284 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqWriteSuperblock1 ...
+	  [3.300 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqWriteSuperblock2 ...
+	  [2.776 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqReadJournals__of__reqs ...
+	  [3.569 s, 7 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqReadJournals__of__resps ...
+	  [2.873 s, 10 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqReadJournals ...
+	  [3.063 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqWriteJournals__of__reqs ...
+	  [3.048 s, 10 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqWriteJournals__of__resps ...
+	  [2.815 s, 7 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqWriteJournals ...
+	  [2.827 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqReadIndirectionTables__of__reqs ...
+	  [2.589 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqReadIndirectionTables__of__resps ...
+	  [2.552 s, 8 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqReadIndirectionTables ...
+	  [2.442 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqWriteIndirectionTables__of__reqs ...
+	  [2.513 s, 8 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqWriteIndirectionTables__of__resps ...
+	  [2.410 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqWriteIndirectionTables ...
+	  [2.441 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqReadNodes__of__reqs ...
+	  [3.076 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqReadNodes__of__resps ...
+	  [2.448 s, 8 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqReadNodes ...
+	  [2.990 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqWriteNodes__of__reqs ...
+	  [2.868 s, 8 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqWriteNodes__of__resps ...
+	  [2.779 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ReqWriteNodes ...
+	  [2.604 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.DiskNodes ...
+	  [2.421 s, 9 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.DiskIndirectionTables ...
+	  [2.543 s, 9 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.ValidJournalBlockBytes ...
+	  [2.242 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.JournalBlockOfBytes ...
+	  [2.373 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.JournalBlockAt ...
+	  [2.304 s, 12 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.DiskJournalOfContentsI ...
+	  [2.348 s, 14 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.DiskJournal ...
+	  [2.226 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.DiskSuperblockAtLoc ...
+	  [2.292 s, 14 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.DiskSuperblock1 ...
+	  [2.288 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.DiskSuperblock2 ...
+	  [2.324 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.IBlockDisk ...
+	  [2.288 s, 6 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.IJournalDisk ...
+	  [2.354 s, 12 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.reqWritesHaveValidLocations ...
+	  [2.372 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.reqReadsHaveValidLocations ...
+	  [2.417 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.respWritesHaveValidLocations ...
+	  [2.726 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.respReadsHaveValidLocations ...
+	  [2.658 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.respReadHasCorrectData ...
+	  [2.689 s, 10 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.respReadsHaveCorrectData ...
+	  [2.574 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.writesOverlap ...
+	  [2.463 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.allWritesDontOverlap ...
+	  [2.318 s, 6 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.writesReqRespOverlap ...
+	  [2.271 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.allWritesReqsRespsDontOverlap ...
+	  [2.322 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.writesRespRespOverlap ...
+	  [2.392 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.allWriteRespsDontOverlap ...
+	  [2.323 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.writeReqReadOverlap ...
+	  [2.361 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.allWritesReqReadsDontOverlap ...
+	  [2.344 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.writeRespReadOverlap ...
+	  [2.557 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.allWritesRespReadsDontOverlap ...
+	  [2.264 s, 7 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.respWritesHaveValidNodes ...
+	  [2.572 s, 12 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.respWritesHaveValidIndirectionTables ...
+	  [2.527 s, 12 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.respWritesHaveValidJournals ...
+	  [2.635 s, 12 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.respWritesHaveValidSuperblocks ...
+	  [2.343 s, 12 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.respWritesHaveValidData ...
+	  [2.554 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.respReadsHaveValidNodes ...
+	  [2.544 s, 16 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.respReadsHaveValidIndirectionTables ...
+	  [2.760 s, 16 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.respReadsHaveValidJournals ...
+	  [3.064 s, 16 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.respReadsHaveValidSuperblocks ...
+	  [2.839 s, 16 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.respReadsHaveValidData ...
+	  [2.996 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.reqReadsHaveValidNodes ...
+	  [3.081 s, 12 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.reqReadsHaveValidIndirectionTables ...
+	  [3.236 s, 12 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.reqReadsHaveValidJournals ...
+	  [3.048 s, 12 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.reqReadsHaveValidSuperblocks ...
+	  [3.484 s, 12 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.reqReadsHaveValidData ...
+	  [2.732 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.Inv ...
+	  [3.869 s, 21 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RefinesReqReadOp ...
+	  [3.351 s, 87 proof obligations]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesReqReadOp ...
+	  [63.322 s, 208 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/ByteBlockCacheSystem/InterpretationDisk.i.dfy(752,8): Verification of 'Impl$$InterpretationDisk.__default.RefinesReqReadOp' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.reqWriteDisjointFromCurrent ...
+	  [3.190 s, 15 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.JournalUpdate__of__RefinesReqWriteOp ...
+	  [3.564 s, 211 proof obligations]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.JournalUpdate__of__RefinesReqWriteOp ...
+	  [4.540 s, 245 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RefinesReqWriteOp ...
+	  [3.432 s, 65 proof obligations]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesReqWriteOp ...
+	  [63.489 s, 1041 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/ByteBlockCacheSystem/InterpretationDisk.i.dfy(892,8): Verification of 'Impl$$InterpretationDisk.__default.RefinesReqWriteOp' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RefinesReqWrite2Op ...
+	  [3.558 s, 101 proof obligations]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesReqWrite2Op ...
+	  [63.136 s, 604 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1059,8): Verification of 'Impl$$InterpretationDisk.__default.RefinesReqWrite2Op' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RefinesRespReadOp ...
+	  [2.313 s, 12 proof obligations]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesRespReadOp ...
+	  [62.687 s, 507 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1190,8): Verification of 'Impl$$InterpretationDisk.__default.RefinesRespReadOp' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RefinesRespWriteOp ...
+	  [2.465 s, 10 proof obligations]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesRespWriteOp ...
+	  [62.561 s, 267 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1316,8): Verification of 'Impl$$InterpretationDisk.__default.RefinesRespWriteOp' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RefinesStutterOp ...
+	  [3.242 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesStutterOp ...
+	  [2.703 s, 126 proof obligations]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesProcessRead__Inv ...
+	  [2.510 s, 29 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RefinesProcessRead__Node__1 ...
+	  [2.149 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesProcessRead__Node__1 ...
+	  [61.157 s, 7 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RefinesProcessRead__Node__2 ...
+	  [2.215 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesProcessRead__Node__2 ...
+	  [20.634 s, 14 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RefinesProcessRead__IndirectionTable__1 ...
+	  [2.205 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesProcessRead__IndirectionTable__1 ...
+	  [62.199 s, 7 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1400,8): Verification of 'Impl$$InterpretationDisk.__default.RefinesProcessRead__IndirectionTable__1' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RefinesProcessRead__IndirectionTable__2 ...
+	  [2.207 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesProcessRead__IndirectionTable__2 ...
+	  [40.240 s, 14 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RefinesProcessRead__Journal__1 ...
+	  [2.580 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesProcessRead__Journal__1 ...
+	  [48.207 s, 7 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RefinesProcessRead__Journal__2 ...
+	  [2.700 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesProcessRead__Journal__2 ...
+	  [48.368 s, 14 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RefinesProcessRead__Superblock__1 ...
+	  [2.693 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesProcessRead__Superblock__1 ...
+	  [62.886 s, 7 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1466,8): Verification of 'Impl$$InterpretationDisk.__default.RefinesProcessRead__Superblock__1' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RefinesProcessRead__Superblock__2 ...
+	  [2.431 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesProcessRead__Superblock__2 ...
+	  [37.368 s, 14 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RefinesProcessRead ...
+	  [2.344 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesProcessRead ...
+	  [2.649 s, 608 proof obligations]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RefinesProcessWrite ...
+	  [2.304 s, 6 proof obligations]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesProcessWrite ...
+	  [61.808 s, 204 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1527,8): Verification of 'Impl$$InterpretationDisk.__default.RefinesProcessWrite' timed out after 60 seconds
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesHavocConflictingWrites ...
+	  [2.215 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesHavocConflictingWriteRead ...
+	  [2.230 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$InterpretationDisk.__default.RefinesCrash ...
+	  [2.266 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$InterpretationDisk.__default.RefinesCrash ...
+	  [7.006 s, 97 proof obligations]  verified
+	
+	Dafny program verifier finished with 120 verified, 0 errors, 8 time outs
+	Command exited with non-zero status 4
+	1033.23user 12.59system 5:43.34elapsed 304%CPU (0avgtext+0avgdata 1534136maxresident)k
+	0inputs+0outputs (0major+3888728minor)pagefaults 0swaps
+
+./Betree/Betree_Refines_Map.i.dfy
+	+ /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/tools/../.dafny/bin/dafny /vcsCores:4 /compile:0 /timeLimit:60 Betree/Betree_Refines_Map.i.dfy /trace /induction:1 /noNLarith
+	Parsing Betree/Betree_Refines_Map.i.dfy
+	Coalescing blocks...
+	Inlining...
+	
+	Running abstract interpretation...
+	  [0.1352257 s]
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	
+	Verifying CheckWellformed$$Betree__Refines__Map.__default.GetLookup ...
+	  [4.470 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Betree__Refines__Map.__default.GetValue ...
+	  [4.162 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Betree__Refines__Map.__default.IView ...
+	  [3.974 s, 6 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Betree__Refines__Map.__default.I ...
+	  [3.947 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Betree__Refines__Map.__default.RefinesInit ...
+	  [1.176 s, 5 proof obligations]  verified
+	
+	Verifying Impl$$Betree__Refines__Map.__default.RefinesInit ...
+	  [1.724 s, 15 proof obligations]  verified
+	
+	Verifying Impl$$Betree__Refines__Map.__default.PreservesLookupsRev ...
+	  [1.316 s, 23 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Betree__Refines__Map.__default.PreservesLookupsImplInterpsEqual ...
+	  [0.895 s, 10 proof obligations]  verified
+	
+	Verifying Impl$$Betree__Refines__Map.__default.PreservesLookupsImplInterpsEqual ...
+	  [61.199 s, 39 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Betree/Betree_Refines_Map.i.dfy(100,8): Verification of 'Impl$$Betree__Refines__Map.__default.PreservesLookupsImplInterpsEqual' timed out after 60 seconds
+	
+	Verifying Impl$$Betree__Refines__Map.__default.PreservesLookupsRevExcept ...
+	  [1.066 s, 23 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Betree__Refines__Map.__default.PreservesLookupsPutImplInterpsPut ...
+	  [1.052 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$Betree__Refines__Map.__default.PreservesLookupsPutImplInterpsPut ...
+	  [61.085 s, 59 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Betree/Betree_Refines_Map.i.dfy(148,8): Verification of 'Impl$$Betree__Refines__Map.__default.PreservesLookupsPutImplInterpsPut' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$Betree__Refines__Map.__default.LookupImpliesMap ...
+	  [0.935 s, 6 proof obligations]  verified
+	
+	Verifying Impl$$Betree__Refines__Map.__default.LookupImpliesMap ...
+	  [0.940 s, 18 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Betree__Refines__Map.__default.QueryStepRefinesMap ...
+	  [1.164 s, 10 proof obligations]  verified
+	
+	Verifying Impl$$Betree__Refines__Map.__default.QueryStepRefinesMap ...
+	  [4.332 s, 16 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Betree__Refines__Map.__default.SuccQueryStepRefinesMap ...
+	  [1.100 s, 10 proof obligations]  verified
+	
+	Verifying Impl$$Betree__Refines__Map.__default.SuccQueryStepRefinesMap ...
+	  [1.863 s, 62 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Betree__Refines__Map.__default.InsertMessageStepRefinesMap ...
+	  [0.958 s, 10 proof obligations]  verified
+	
+	Verifying Impl$$Betree__Refines__Map.__default.InsertMessageStepRefinesMap ...
+	  [12.264 s, 36 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Betree__Refines__Map.__default.FlushStepRefinesMap ...
+	  [0.817 s, 10 proof obligations]  verified
+	
+	Verifying Impl$$Betree__Refines__Map.__default.FlushStepRefinesMap ...
+	  [1.129 s, 33 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Betree__Refines__Map.__default.GrowStepRefinesMap ...
+	  [0.604 s, 10 proof obligations]  verified
+	
+	Verifying Impl$$Betree__Refines__Map.__default.GrowStepRefinesMap ...
+	  [0.733 s, 33 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Betree__Refines__Map.__default.RedirectRefinesMap ...
+	  [0.850 s, 10 proof obligations]  verified
+	
+	Verifying Impl$$Betree__Refines__Map.__default.RedirectRefinesMap ...
+	  [1.152 s, 33 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Betree__Refines__Map.__default.BetreeStepRefinesMap ...
+	  [0.916 s, 10 proof obligations]  verified
+	
+	Verifying Impl$$Betree__Refines__Map.__default.BetreeStepRefinesMap ...
+	  [0.950 s, 115 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Betree__Refines__Map.__default.GCStepRefinesMap ...
+	  [0.829 s, 10 proof obligations]  verified
+	
+	Verifying Impl$$Betree__Refines__Map.__default.GCStepRefinesMap ...
+	  [0.945 s, 35 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Betree__Refines__Map.__default.RefinesNextStep ...
+	  [0.893 s, 10 proof obligations]  verified
+	
+	Verifying Impl$$Betree__Refines__Map.__default.RefinesNextStep ...
+	  [1.024 s, 44 proof obligations]  verified
+	
+	Verifying CheckWellformed$$Betree__Refines__Map.__default.RefinesNext ...
+	  [1.135 s, 10 proof obligations]  verified
+	
+	Verifying Impl$$Betree__Refines__Map.__default.RefinesNext ...
+	  [1.084 s, 21 proof obligations]  verified
+	
+	Dafny program verifier finished with 32 verified, 0 errors, 2 time outs
+	Command exited with non-zero status 4
+	158.07user 5.57system 1:15.51elapsed 216%CPU (0avgtext+0avgdata 2032084maxresident)k
+	0inputs+0outputs (0major+2082786minor)pagefaults 0swaps
+
+./Impl/IndirectionTable.i.dfy
+	using nonlinear arithmetic
+	+ /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/tools/../.dafny/bin/dafny /vcsCores:4 /compile:0 /timeLimit:60 Impl/IndirectionTable.i.dfy /trace /induction:1
+	Parsing Impl/IndirectionTable.i.dfy
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Impl/../lib/DataStructures/../Base/Sets.i.dfy(37,4): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Impl/../lib/Base/sequences.i.dfy(589,18): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Impl/../lib/DataStructures/BitmapModel.i.dfy(57,13): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Impl/../lib/DataStructures/BitmapModel.i.dfy(55,13): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Impl/../ByteBlockCacheSystem/../lib/Buckets/PackedKV.i.dfy(1061,10): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Impl/../ByteBlockCacheSystem/../lib/Buckets/PackedKV.i.dfy(1079,10): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Impl/../PivotBetree/../lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	Coalescing blocks...
+	Inlining...
+	
+	Running abstract interpretation...
+	  [0.2082862 s]
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.Inv ...
+	  [7.714 s, 25 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.UpperBounded ...
+	  [8.697 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.Alloc ...
+	  [8.333 s, 13 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.AllocEmpty ...
+	  [7.778 s, 11 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.Free ...
+	  [2.837 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.Clone ...
+	  [3.257 s, 6 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.GetEntry ...
+	  [3.083 s, 7 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.GetEntry ...
+	  [2.742 s, 10 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.HasEmptyLoc ...
+	  [2.904 s, 5 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.UpdateGhost ...
+	  [3.304 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.RemoveLoc ...
+	  [3.800 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.RemoveLoc ...
+	  [6.472 s, 23 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.AddLocIfPresent ...
+	  [5.552 s, 23 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.DeallocableRef ...
+	  [3.688 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.TCountEqGraphSize ...
+	  [3.250 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.SeqCountSet ...
+	  [2.912 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.SeqCount ...
+	  [2.704 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.PredecessorSetExcept ...
+	  [2.740 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.SeqCountPlusPredecessorSetExcept ...
+	  [2.869 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.SeqCountPlusPredecessorSetExcept ...
+	  [3.194 s, 22 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.ValidPredCountsIntermediate ...
+	  [3.088 s, 9 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.RefcountUpdateInv ...
+	  [3.199 s, 29 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.RemoveRef ...
+	  [2.880 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.RemoveRef ...
+	  [6.810 s, 87 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.PredInc ...
+	  [2.786 s, 15 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.PredInc ...
+	  [3.428 s, 21 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.PredDec ...
+	  [2.697 s, 17 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.PredDec ...
+	  [3.635 s, 22 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.SeqCountLePredecessorSet ...
+	  [2.688 s, 4 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.SeqCountLePredecessorSet ...
+	  [3.432 s, 28 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.SeqCountInc ...
+	  [2.681 s, 5 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.SeqCountInc ...
+	  [2.760 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.SeqCountIncOther ...
+	  [2.696 s, 5 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.SeqCountIncOther ...
+	  [2.907 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.PredecessorSetRestrictedSizeBound ...
+	  [2.693 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.PredecessorSetRestrictedSizeBound ...
+	  [4.536 s, 27 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.PredecessorSetSizeBound ...
+	  [2.790 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.PredecessorSetSizeBound ...
+	  [3.008 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.SeqCountBound ...
+	  [3.005 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.SeqCountBound ...
+	  [3.132 s, 8 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.UpdatePredCounts ...
+	  [2.904 s, 4 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.UpdatePredCounts ...
+	  [21.829 s, 278 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.QueueSizeBound ...
+	  [3.144 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.QueueSizeBound ...
+	  [2.737 s, 9 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.UpdateAndRemoveLoc ...
+	  [2.952 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.UpdateAndRemoveLoc ...
+	  [33.934 s, 106 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.ValIsHashMap ...
+	  [2.732 s, 11 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.ValIsMap ...
+	  [3.298 s, 32 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.lemma__valToHashMapNonePrefix ...
+	  [2.670 s, 9 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.lemma__valToHashMapNonePrefix ...
+	  [3.260 s, 27 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.ValToHashMap ...
+	  [2.989 s, 9 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.ValToHashMap ...
+	  [12.980 s, 85 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.lemma__count__eq__graph__size ...
+	  [4.272 s, 5 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.RevealComputeRefCountsSharedDomainInv ...
+	  [3.500 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.ComputeRefCountsSharedInv ...
+	  [3.288 s, 9 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.ComputeRefCountsOuterLoopInv0 ...
+	  [3.391 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.ComputeRefCountsOuterLoopInv ...
+	  [3.156 s, 11 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.ComputeRefCountsInnerLoopInv0 ...
+	  [2.724 s, 10 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.ComputeRefCountsInnerLoopInv ...
+	  [3.892 s, 19 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.ComputeRefCountsOuterLoopInvImpliesInnerLoopInv ...
+	  [2.788 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.ComputeRefCountsOuterLoopInvImpliesInnerLoopInv ...
+	  [4.054 s, 19 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.ComputeRefCountsInnerLoopInvImpliesOuterLoopInv ...
+	  [2.894 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.ComputeRefCountsInnerLoopInvImpliesOuterLoopInv ...
+	  [5.546 s, 28 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.LemmaPredecessorSetRestrictedPartialAdd1Self ...
+	  [2.881 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.LemmaPredecessorSetRestrictedPartialAdd1Self ...
+	  [3.954 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.LemmaPredecessorSetRestrictedPartialAdd1Other ...
+	  [2.776 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.LemmaPredecessorSetRestrictedPartialAdd1Other ...
+	  [3.409 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.ComputeRefCountsInnerLoop ...
+	  [20.060 s, 151 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.ComputeRefCounts ...
+	  [2.936 s, 10 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.ComputeRefCounts ...
+	  [8.753 s, 88 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.MakeGarbageQueue ...
+	  [2.572 s, 4 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.MakeGarbageQueue ...
+	  [3.284 s, 50 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.ComputeRefUpperBound ...
+	  [2.808 s, 17 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.ValToIndirectionTable ...
+	  [2.997 s, 7 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.ValToIndirectionTable ...
+	  [7.434 s, 32 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.MaxIndirectionTableByteSize ...
+	  [2.392 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.lemma__SeqSum__prefix__array ...
+	  [2.447 s, 7 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.lemma__SeqSum__prefix__array ...
+	  [2.775 s, 13 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.lemma__tuple__size ...
+	  [2.856 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.lemma__SeqSum__empty ...
+	  [2.573 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.IMapAsIndirectionTable ...
+	  [2.460 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.IndirectionTableGrammar ...
+	  [2.626 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.IndirectionTableToVal ...
+	  [2.997 s, 5 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.IndirectionTableToVal ...
+	  [45.536 s, 194 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.IsLocAllocBitmap ...
+	  [2.747 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.BitmapInitUpTo ...
+	  [2.484 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.BitmapInitUpTo ...
+	  [2.509 s, 21 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.InitLocBitmap ...
+	  [2.565 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.InitLocBitmap ...
+	  [2.835 s, 52 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.deallocable ...
+	  [2.434 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.FindDeallocable ...
+	  [2.528 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.FindDeallocable ...
+	  [2.927 s, 31 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.GetSize ...
+	  [2.772 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.FindRefWithNoLoc ...
+	  [2.682 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.FindRefWithNoLoc ...
+	  [3.484 s, 26 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.getRefUpperBound ...
+	  [3.218 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.IndirectionTable.GetRefUpperBound ...
+	  [2.760 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$IndirectionTable.IndirectionTable.GetRefUpperBound ...
+	  [2.748 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.__default.MapLocs ...
+	  [3.261 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.__default.Locs ...
+	  [3.334 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.__default.MapGraph ...
+	  [3.900 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.__default.Graph ...
+	  [2.536 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.__default.PredCounts ...
+	  [3.614 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.__default.PredecessorSet ...
+	  [2.888 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.__default.PredecessorSetRestricted ...
+	  [3.712 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.__default.PredecessorSetRestrictedPartial ...
+	  [3.168 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.__default.GraphClosedRestricted ...
+	  [3.249 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.__default.GraphClosedRestrictedPartial ...
+	  [3.096 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.__default.IsRoot ...
+	  [2.936 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.__default.ValidPredCounts ...
+	  [3.196 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.__default.MaxSize ...
+	  [2.612 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$IndirectionTable.__default.MaxSizeUint64 ...
+	  [2.688 s, 1 proof obligation]  verified
+	
+	Dafny program verifier finished with 112 verified, 0 errors
+	429.12user 4.83system 2:34.13elapsed 281%CPU (0avgtext+0avgdata 1458140maxresident)k
+	0inputs+0outputs (0major+841007minor)pagefaults 0swaps
+
+./ByteBlockCacheSystem/ByteSystem.i.dfy
+	+ /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/tools/../.dafny/bin/dafny /vcsCores:4 /compile:0 /timeLimit:60 ByteBlockCacheSystem/ByteSystem.i.dfy /trace /induction:1 /noNLarith
+	Parsing ByteBlockCacheSystem/ByteSystem.i.dfy
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/ByteBlockCacheSystem/../BlockCacheSystem/../PivotBetree/../lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	Coalescing blocks...
+	Inlining...
+	
+	Running abstract interpretation...
+	  [0.1604378 s]
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	
+	Verifying CheckWellformed$$ByteSystem.__default.I ...
+	  [7.010 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$ByteSystem.__default.Init ...
+	  [8.432 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$ByteSystem.__default.Inv ...
+	  [8.337 s, 4 proof obligations]  verified
+	
+	Verifying Impl$$ByteSystem.__default.InitImpliesInv ...
+	  [67.588 s, 5 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/ByteBlockCacheSystem/AsyncDiskModel.s.dfy[ByteSystem](333,8): Verification of 'Impl$$ByteSystem.__default.InitImpliesInv' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$ByteSystem.__default.ReqReadStepPreservesInv ...
+	  [7.464 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$ByteSystem.__default.ReqReadStepPreservesInv ...
+	  [62.691 s, 463 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/ByteBlockCacheSystem/ByteSystem.i.dfy(64,8): Verification of 'Impl$$ByteSystem.__default.ReqReadStepPreservesInv' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$ByteSystem.__default.ReqWriteStepPreservesInv ...
+	  [8.224 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$ByteSystem.__default.ReqWriteStepPreservesInv ...
+	  [63.409 s, 719 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/ByteBlockCacheSystem/ByteSystem.i.dfy(158,8): Verification of 'Impl$$ByteSystem.__default.ReqWriteStepPreservesInv' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$ByteSystem.__default.ReqWrite2StepPreservesInv ...
+	  [12.834 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$ByteSystem.__default.ReqWrite2StepPreservesInv ...
+	  [63.433 s, 409 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/ByteBlockCacheSystem/ByteSystem.i.dfy(343,8): Verification of 'Impl$$ByteSystem.__default.ReqWrite2StepPreservesInv' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$ByteSystem.__default.RespReadStepPreservesInv ...
+	  [8.433 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$ByteSystem.__default.RespReadStepPreservesInv ...
+	  [63.294 s, 260 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/ByteBlockCacheSystem/ByteSystem.i.dfy(452,8): Verification of 'Impl$$ByteSystem.__default.RespReadStepPreservesInv' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$ByteSystem.__default.RespWriteStepPreservesInv ...
+	  [8.009 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$ByteSystem.__default.RespWriteStepPreservesInv ...
+	  [62.968 s, 260 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/ByteBlockCacheSystem/ByteSystem.i.dfy(484,8): Verification of 'Impl$$ByteSystem.__default.RespWriteStepPreservesInv' timed out after 60 seconds
+	
+	Verifying CheckWellformed$$ByteSystem.__default.NoDiskOpStepPreservesInv ...
+	  [6.410 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$ByteSystem.__default.NoDiskOpStepPreservesInv ...
+	  [8.211 s, 263 proof obligations]  verified
+	
+	Verifying CheckWellformed$$ByteSystem.__default.MachineStepPreservesInv ...
+	  [16.113 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$ByteSystem.__default.MachineStepPreservesInv ...
+	  [3.736 s, 39 proof obligations]  verified
+	
+	Verifying CheckWellformed$$ByteSystem.__default.ProcessReadFailurePreservesInv ...
+	  [3.035 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$ByteSystem.__default.ProcessReadFailurePreservesInv ...
+	  [9.211 s, 141 proof obligations]  verified
+	
+	Verifying CheckWellformed$$ByteSystem.__default.ProcessWritePreservesInv ...
+	  [3.057 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$ByteSystem.__default.ProcessWritePreservesInv ...
+	  [17.193 s, 154 proof obligations]  verified
+	
+	Verifying CheckWellformed$$ByteSystem.__default.DiskInternalStepPreservesInv ...
+	  [2.541 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$ByteSystem.__default.DiskInternalStepPreservesInv ...
+	  [3.173 s, 91 proof obligations]  verified
+	
+	Verifying CheckWellformed$$ByteSystem.__default.CrashStepPreservesInv ...
+	  [2.970 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$ByteSystem.__default.CrashStepPreservesInv ...
+	  [4.439 s, 74 proof obligations]  verified
+	
+	Verifying CheckWellformed$$ByteSystem.__default.NextStepPreservesInv ...
+	  [33.620 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$ByteSystem.__default.NextStepPreservesInv ...
+	  [4.081 s, 20 proof obligations]  verified
+	
+	Verifying Impl$$ByteSystem.__default.NextPreservesInv ...
+	  [2.666 s, 7 proof obligations]  verified
+	
+	Dafny program verifier finished with 23 verified, 0 errors, 6 time outs
+	Command exited with non-zero status 4
+	569.98user 4.61system 2:59.34elapsed 320%CPU (0avgtext+0avgdata 1874308maxresident)k
+	0inputs+0outputs (0major+1442970minor)pagefaults 0swaps
+
+./BlockCacheSystem/BlockJournalCache.i.dfy
+	+ /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/tools/../.dafny/bin/dafny /vcsCores:4 /compile:0 /timeLimit:60 BlockCacheSystem/BlockJournalCache.i.dfy /trace /induction:1 /noNLarith
+	Parsing BlockCacheSystem/BlockJournalCache.i.dfy
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/BlockCacheSystem/../PivotBetree/../lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	Coalescing blocks...
+	Inlining...
+	
+	Running abstract interpretation...
+	  [0.1186279 s]
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	
+	Verifying CheckWellformed$$BlockJournalCache.__default.Init ...
+	  [9.049 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockJournalCache.__default.NextStep ...
+	  [10.103 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BlockJournalCache.__default.Next ...
+	  [9.354 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BlockJournalCache.__default.Inv ...
+	  [9.136 s, 8 proof obligations]  verified
+	
+	Verifying Impl$$BlockJournalCache.__default.InitImpliesInv ...
+	  [2.468 s, 11 proof obligations]  verified
+	
+	Verifying Impl$$BlockJournalCache.__default.NextPreservesInv ...
+	  [62.409 s, 88 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/BlockCacheSystem/BlockJournalCache.i.dfy(60,8): Verification of 'Impl$$BlockJournalCache.__default.NextPreservesInv' timed out after 60 seconds
+	
+	Dafny program verifier finished with 5 verified, 0 errors, 1 time out
+	Command exited with non-zero status 4
+	88.63user 1.09system 1:24.25elapsed 106%CPU (0avgtext+0avgdata 706948maxresident)k
+	0inputs+0outputs (0major+291600minor)pagefaults 0swaps
+
+./Betree/BetreeInv.i.dfy
+	using nonlinear arithmetic
+	+ /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/tools/../.dafny/bin/dafny /vcsCores:4 /proverOpt:O:smt.random_seed=1 /compile:0 /timeLimit:60 Betree/BetreeInv.i.dfy /trace /induction:1
+	Parsing Betree/BetreeInv.i.dfy
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Betree/../lib/Base/sequences.i.dfy(589,18): Warning: /!\ No terms found to trigger on.
+	Coalescing blocks...
+	Inlining...
+	
+	Running abstract interpretation...
+	  [0.1045012 s]
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	
+	Verifying CheckWellformed$$BetreeInv.__default.LookupRespectsView ...
+	  [3.763 s, 3 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.IsPathLookup ...
+	  [3.825 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.IsSatisfyingLookup ...
+	  [4.189 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.IsSatisfyingLookupFrom ...
+	  [3.722 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.KeyHasSatisfyingLookup ...
+	  [1.109 s, 1 proof obligation]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.PathOfLookup ...
+	  [1.578 s, 10 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.LookupIsAcyclic ...
+	  [1.322 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.Acyclic ...
+	  [1.017 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.Inv ...
+	  [1.033 s, 7 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.PreservesLookups ...
+	  [1.040 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.PreservesLookupsExcept ...
+	  [0.957 s, 2 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.PreservesLookupsPut ...
+	  [1.016 s, 4 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.InterpsEqualOfAllBuffersEqual ...
+	  [0.861 s, 6 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.InterpsEqualOfAllBuffersEqual ...
+	  [0.881 s, 9 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.InterpretLookupAdditive ...
+	  [0.877 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.InterpretLookupAdditive ...
+	  [2.034 s, 15 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.InterpretLookupAdditive3 ...
+	  [0.878 s, 4 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.InterpretLookupAdditive3 ...
+	  [0.873 s, 7 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.SatisfyingLookupsForKeyAgree ...
+	  [0.858 s, 4 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.SatisfyingLookupsForKeyAgree ...
+	  [1.151 s, 27 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.CantEquivocateWlog ...
+	  [1.086 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.CantEquivocateWlog ...
+	  [1.161 s, 23 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.CantEquivocate ...
+	  [0.887 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.CantEquivocate ...
+	  [0.932 s, 27 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.InsertMessage ...
+	  [0.888 s, 11 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.Flush ...
+	  [0.912 s, 25 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.Grow ...
+	  [0.881 s, 7 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.Redirect ...
+	  [1.190 s, 39 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.Query ...
+	  [1.016 s, 5 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.QueryDescent ...
+	  [1.137 s, 39 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.SuccQuery ...
+	  [1.029 s, 5 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.AcyclicGraphImpliesAcyclic ...
+	  [1.082 s, 12 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.FlushPreservesAcyclic ...
+	  [2.947 s, 20 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.GrowPreservesAcyclic ...
+	  [2.264 s, 17 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.RedirectResultingGraphAfterAllocs ...
+	  [1.051 s, 3 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.RedirectResultingGraphAfterAllocs ...
+	  [4.505 s, 33 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.RedirectResultingGraph ...
+	  [0.945 s, 2 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.RedirectResultingGraph ...
+	  [1.884 s, 33 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.RedirectOnlyPredOfChildIsParent ...
+	  [1.317 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$BetreeInv.__default.RedirectOnlyPredOfChildIsParent ...
+	  [61.235 s, 43 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Betree/BetreeInv.i.dfy(348,8): Verification of 'Impl$$BetreeInv.__default.RedirectOnlyPredOfChildIsParent' timed out after 60 seconds
+	
+	Verifying Impl$$BetreeInv.__default.RedirectPreservesAcyclic ...
+	  [60.965 s, 74 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Betree/BetreeInv.i.dfy(378,8): Verification of 'Impl$$BetreeInv.__default.RedirectPreservesAcyclic' timed out after 60 seconds
+	
+	Verifying Impl$$BetreeInv.__default.RedirectPreservesRootHasNoPred ...
+	  [8.416 s, 48 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.LookupAfterFirstHasNoRoot ...
+	  [1.180 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$BetreeInv.__default.LookupAfterFirstHasNoRoot ...
+	  [0.983 s, 6 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.GrowPreservesLookups ...
+	  [10.623 s, 43 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.PropagateInterperetation ...
+	  [0.919 s, 12 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.PropagateInterperetation ...
+	  [2.684 s, 14 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.FlushPreservesLookups ...
+	  [32.664 s, 126 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.RedirectPreservesLookups ...
+	  [60.975 s, 164 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Betree/BetreeInv.i.dfy(656,8): Verification of 'Impl$$BetreeInv.__default.RedirectPreservesLookups' timed out after 60 seconds
+	
+	Verifying Impl$$BetreeInv.__default.InitImpliesInv ...
+	  [1.205 s, 19 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.QueryStepPreservesInvariant ...
+	  [1.578 s, 5 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.InsertMessagePreservesAcyclicAndReachablePointersValid ...
+	  [3.731 s, 10 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.InsertMessagePreservesLookupsPut ...
+	  [1.728 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$BetreeInv.__default.InsertMessagePreservesLookupsPut ...
+	  [14.574 s, 72 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.InsertMessagePreservesNonrootLookups ...
+	  [2.214 s, 17 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.InsertMessageStepPreservesInvariant ...
+	  [2.788 s, 24 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.FlushStepPreservesInvariant ...
+	  [1.280 s, 23 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.GrowStepPreservesInvariant ...
+	  [28.713 s, 23 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.RedirectStepPreservesInvariant ...
+	  [0.894 s, 54 proof obligations]  verified
+	
+	Verifying CheckWellformed$$BetreeInv.__default.GCStepPreservesIsPathLookup ...
+	  [0.814 s, 1 proof obligation]  verified
+	
+	Verifying Impl$$BetreeInv.__default.GCStepPreservesIsPathLookup ...
+	  [1.040 s, 29 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.GCStepPreservesAcyclicity ...
+	  [0.825 s, 8 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.GCStepPreservesLookups ...
+	  [0.843 s, 22 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.GCStepPreservesInvariant ...
+	  [0.630 s, 34 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.BetreeStepPreservesInvariant ...
+	  [0.947 s, 56 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.NextStepPreservesInvariant ...
+	  [0.572 s, 25 proof obligations]  verified
+	
+	Verifying Impl$$BetreeInv.__default.NextPreservesInv ...
+	  [0.641 s, 13 proof obligations]  verified
+	
+	Dafny program verifier finished with 64 verified, 0 errors, 3 time outs
+	Command exited with non-zero status 4
+	328.96user 2.40system 1:53.94elapsed 290%CPU (0avgtext+0avgdata 559056maxresident)k
+	0inputs+0outputs (0major+590675minor)pagefaults 0swaps
+
+./Impl/FlushPolicyModel.i.dfy
+	+ /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/tools/../.dafny/bin/dafny /vcsCores:4 /compile:0 /timeLimit:60 Impl/FlushPolicyModel.i.dfy /trace /induction:1 /noNLarith
+	Parsing Impl/FlushPolicyModel.i.dfy
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Impl/../lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	Coalescing blocks...
+	Inlining...
+	
+	Running abstract interpretation...
+	  [0.1034258 s]
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	[TRACE] Using prover: /root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/.dafny/dafny/Binaries/z3/bin/z3
+	
+	Verifying CheckWellformed$$FlushPolicyModel.__default.ValidStackSlots ...
+	  [17.345 s, 25 proof obligations]  verified
+	
+	Verifying CheckWellformed$$FlushPolicyModel.__default.ValidAction ...
+	  [15.296 s, 67 proof obligations]  verified
+	
+	Verifying CheckWellformed$$FlushPolicyModel.__default.getActionToSplit ...
+	  [15.843 s, 40 proof obligations]  verified
+	
+	Verifying CheckWellformed$$FlushPolicyModel.__default.getActionToFlush ...
+	  [19.075 s, 70 proof obligations]  verified
+	
+	Verifying CheckWellformed$$FlushPolicyModel.__default.getActionToSplitValidAction ...
+	  [4.125 s, 34 proof obligations]  verified
+	
+	Verifying Impl$$FlushPolicyModel.__default.getActionToSplitValidAction ...
+	  [32.476 s, 61 proof obligations]  verified
+	
+	Verifying CheckWellformed$$FlushPolicyModel.__default.getActionToFlushValidAction ...
+	  [3.705 s, 18 proof obligations]  verified
+	
+	Verifying Impl$$FlushPolicyModel.__default.getActionToFlushValidAction ...
+	  [63.583 s, 164 proof obligations]  timed out
+	/root/verichecks-worker/worker-dir/clones/0c046a29536947d5754b1a9182047151c4a1a54f/Impl/FlushPolicyModel.i.dfy(196,8): Verification of 'Impl$$FlushPolicyModel.__default.getActionToFlushValidAction' timed out after 60 seconds
+	
+	Dafny program verifier finished with 7 verified, 0 errors, 1 time out
+	Command exited with non-zero status 4
+	154.52user 2.14system 1:41.62elapsed 154%CPU (0avgtext+0avgdata 1470228maxresident)k
+	0inputs+0outputs (0major+646712minor)pagefaults 0swaps
+
