@@ -1,6 +1,8 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
+///// veribetrkv-dafny-directive:nonlinear
+
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
 include "StateSectorImpl.i.dfy"
 include "../lib/Buckets/BucketImpl.i.dfy"

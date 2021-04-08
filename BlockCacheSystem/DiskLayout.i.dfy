@@ -1,6 +1,8 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
+///// veribetrkv-dafny-directive:nonlinear
+
 include "../lib/Lang/NativeTypes.s.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../PivotBetree/Bounds.i.dfy"

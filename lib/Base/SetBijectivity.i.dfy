@@ -1,6 +1,8 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
+///// veribetrkv-dafny-directive:nonlinear
+
 module SetBijectivity {
   lemma BijectivityImpliesEqualCardinality<A, B>(setA: set<A>, setB: set<B>, relation: iset<(A, B)>)
     requires forall a :: a in setA ==> exists b :: b in setB && (a, b) in relation

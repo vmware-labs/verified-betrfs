@@ -1,3 +1,5 @@
+///// veribetrkv-dafny-directive:nonlinear
+
 include "../Lang/NativeTypes.s.dfy"
 include "../Base/total_order.i.dfy"
 include "../Math/bases.i.dfy"

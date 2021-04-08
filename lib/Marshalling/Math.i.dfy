@@ -1,5 +1,8 @@
+///// veribetrkv-dafny-directive:nonlinear
+
 // Based on IronFleet's math library.
 // I pulled out only the functions we need for the marshalling code,
+
 // and in a few cases rewrote the proof from scratch to avoid pulling in
 // a lot of dependencies.
 

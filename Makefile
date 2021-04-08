@@ -8,7 +8,7 @@
 DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy
 
 DAFNY_ROOT?=.dafny/dafny/
-DAFNY_CMD=$(DAFNY_ROOT)/Scripts/dafny
+DAFNY_CMD=./tools/local-dafny.sh
 DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
 DAFNY_FLAGS=
 DAFNY_GLOBAL_FLAGS=
@@ -183,15 +183,7 @@ build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 
 ### Establish Dafny flag defaults
 
-# this flag means _NO_ non-linear arithmetic
-# unfortunately it can only be set on a per-file basis?
-
-NONLINEAR_FLAGS = /noNLarith
-
-# Only use auto-induction when specified, across all files.
-# To enable auto-induction, add {:induction true} to your source file.
-
-INDUCTION_FLAGS = /induction:1
+# For induction flag and nonlinear-arithmetic flag, see local-dafny.sh
 
 OTHER_PROVER_FLAGS = 
 
@@ -201,38 +193,9 @@ OTHER_PROVER_FLAGS =
 build/Betree/BetreeInv.i.verchk: OTHER_PROVER_FLAGS=/proverOpt:O:smt.random_seed=1
 build/lib/DataStructures/LinearDList.i.verchk: OTHER_PROVER_FLAGS=/noNLarith /proverOpt:O:smt.random_seed=1
 
-# enable nonlinear arithmetic for some files
-# Note: Nonlinear.i.dfy and Math.i.dfy are designed to use nonlinear arith.
-# The other files are legacy'ed in, but it's no big deal as long
-# as they verify.
-build/lib/Checksums/Nonlinear.i.verchk: NONLINEAR_FLAGS=
-build/lib/Marshalling/Math.i.verchk: NONLINEAR_FLAGS=
-build/lib/Base/mathematics.i.verchk: NONLINEAR_FLAGS=
-build/Impl/BookkeepingModel.i.verchk: NONLINEAR_FLAGS=
-build/Impl/IOImpl.i.verchk: NONLINEAR_FLAGS=
-build/Impl/IOModel.i.verchk: NONLINEAR_FLAGS=
-build/Impl/SyncImpl.i.verchk: NONLINEAR_FLAGS=
-build/Impl/BookkeepingImpl.i.verchk: NONLINEAR_FLAGS=
-build/Betree/BetreeInv.i.verchk: NONLINEAR_FLAGS=
-build/lib/Base/SetBijectivity.i.verchk: NONLINEAR_FLAGS=
-build/lib/Marshalling/GenericMarshalling.i.verchk: NONLINEAR_FLAGS=
-build/lib/Buckets/BucketFlushModel.i.verchk: NONLINEAR_FLAGS=
-build/lib/Buckets/PackedKV.i.verchk: NONLINEAR_FLAGS=
-build/lib/Buckets/PackedStringArray.i.verchk: NONLINEAR_FLAGS=
-build/lib/Base/sequences.i.verchk: NONLINEAR_FLAGS=
-build/Impl/IndirectionTable.i.verchk: NONLINEAR_FLAGS=
-build/BlockCacheSystem/DiskLayout.i.verchk: NONLINEAR_FLAGS=
-build/ByteBlockCacheSystem/Marshalling.i.verchk: NONLINEAR_FLAGS=
-build/ByteBlockCacheSystem/JournalBytes.i.verchk: NONLINEAR_FLAGS=
-build/PivotBetree/Bounds.i.verchk: NONLINEAR_FLAGS=
-build/Impl/Mkfs.i.verchk: NONLINEAR_FLAGS=
-build/Impl/MkfsModel.i.verchk: NONLINEAR_FLAGS=
-build/Impl/MarshallingImpl.i.verchk: NONLINEAR_FLAGS=
-
-
 ### Put all the flags together
 
-DAFNY_FLAGS = $(NONLINEAR_FLAGS) $(INDUCTION_FLAGS) $(OTHER_PROVER_FLAGS)
+DAFNY_FLAGS = $(OTHER_PROVER_FLAGS)
 
 ##############################################################################
 # .okay: Dafny file-level verification, no time limit,
