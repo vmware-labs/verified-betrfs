@@ -198,9 +198,9 @@ module ProgramInterpMod {
       None  // silly expression: DV has holes in it
   }
 
-  function ISuperblockReads(dv: DiskView) : set<AU>
+  function ISuperblockReads(dv: DiskView) : seq<AU>
   {
-    {0}
+    [ SUPERBLOCK_ADDRESS().au ]
   }
  
   // IM == Interpret as InterpMod
@@ -224,15 +224,13 @@ module ProgramInterpMod {
   }
 
   function IMReads(dv: DiskView) : seq<AU> {
-      []
-      /*
+    var sbreads := ISuperblockReads(dv);
     var sb := ISuperblock(dv);
     if sb.Some?
     then
-      JournalMod.IReads(dv, sb.value.journal) + BetreeMod.IReads(dv, sb.value.betree)
+      sbreads + JournalInterpMod.IReads(dv, sb.value.journal.core) + BetreeInterpMod.IReads(dv, sb.value.betree)
     else
-      set{}
-      */
+      sbreads
   }
 
   function IReads(dv: DiskView) : seq<AU> {

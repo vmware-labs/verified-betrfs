@@ -1,3 +1,4 @@
+include "../lib/Base/total_order.i.dfy"
 include "Tables.i.dfy"
 include "MsgSeq.i.dfy"
 
@@ -53,6 +54,7 @@ module BetreeInterpMod {
   import opened MsgSeqMod
   import IndirectionTableMod
   import opened BetreeMachineMod
+  import Nat_Order
 
   datatype LookupRecord = LookupRecord(
     cu: CU
@@ -97,11 +99,17 @@ module BetreeInterpMod {
       {}
   }
 
-  function IReads(dv: DiskView, sb: Superblock) : set<AU> {
+  function IReadsSet(dv: DiskView, sb: Superblock) : set<AU> {
     var itbl := IndirectionTableMod.I(dv, sb.itbl);
     set au:AU |
       && au < AUSizeInCUs()
       && exists key :: au in IReadsKey(dv, itbl, key)
+  }
+
+  function IReads(dv: DiskView, sb: Superblock) : seq<AU>
+    ensures forall au :: au in IReads(dv, sb) <==> au in IReadsSet(dv, sb)
+  {
+    Nat_Order.SortSet(IReadsSet(dv, sb))
   }
 
   lemma Framing(sb:Superblock, dv0: DiskView, dv1: DiskView)
