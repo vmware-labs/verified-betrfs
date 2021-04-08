@@ -249,7 +249,7 @@ build/%.okay: %.dfy | $$(@D)/.
 .PRECIOUS: build/%.verchk
 AGGREGATE_TOOL=tools/aggregate-verchk.py
 build/%.verified: build/%.verchk $(AGGREGATE_TOOL) | $$(@D)/.
-	$(AGGREGATE_TOOL) verchk $< > $@
+	$(AGGREGATE_TOOL) --verchk --root $< --summary $@ --error $@.err
 
 # Syntax is trivial from synchk file, just a marker.
 # (We need the .syntax target to get a recursive dependency computation.)
