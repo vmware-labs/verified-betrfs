@@ -241,8 +241,12 @@ module ProgramInterpMod {
     requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0))
     ensures IM(dv0) == IM(dv1)
   {
-    //assert forall k :: k !in I(dv0);
-    //assert forall k :: IM(dv0).mi[k] == IM(dv1).mi[k];
+    assert ISuperblock(dv0) == ISuperblock(dv1);
+    var sb := ISuperblock(dv0);
+    if sb.Some? {
+      BetreeInterpMod.Framing(sb.value.betree, dv0, dv1);
+      JournalInterpMod.Framing(sb.value.journal.core, dv0, dv1);
+    }
   }
 }
 

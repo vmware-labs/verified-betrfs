@@ -113,10 +113,7 @@ module BetreeInterpMod {
   }
 
   lemma Framing(sb:Superblock, dv0: DiskView, dv1: DiskView)
-    requires forall cu:CU :: cu.au in IReads(dv0, sb) ==>
-      && cu in dv0
-      && cu in dv1
-      && dv0[cu]==dv1[cu]
+    requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, sb))
     ensures IM(dv0, sb) == IM(dv1, sb)
   {
     // TODO I'm surprised this proof passes easily.
