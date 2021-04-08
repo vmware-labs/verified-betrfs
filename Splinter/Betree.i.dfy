@@ -1,18 +1,58 @@
 include "Tables.i.dfy"
 include "MsgSeq.i.dfy"
 
-module BetreeMod {
+module BetreeMachineMod {
   import opened Options
   import opened MessageMod
   import opened InterpMod
   import opened AllocationMod
   import opened MsgSeqMod
   import opened IndirectionTableMod
+  import CacheIfc
 
   datatype Superblock = Superblock(
     itbl: IndirectionTableMod.Superblock,
     rootIdx: IndirectionTableMod.IndirectionTable,
     seqEnd: nat)
+
+  datatype Variables = Variables()
+
+  predicate Query(v: Variables, v': Variables, key: Key, value: Value)
+  {
+    && true //TODO
+    && v' == v
+  }
+
+  predicate Put(v: Variables, v': Variables, key: Key, value: Value)
+  {
+    && true //TODO
+    && v' == v
+  }
+
+  predicate Internal(v: Variables, v': Variables)
+  {
+    false
+  }
+
+  predicate CommitStart(v: Variables, v': Variables, cache: CacheIfc.Variables, sb: Superblock, newBoundaryLSN: LSN)
+  {
+    && true //TODO
+  }
+
+  predicate CommitComplete(s: Variables, s': Variables, cache: CacheIfc.Variables, sb: Superblock)
+  {
+    && true //TODO
+  }
+}
+
+module BetreeInterpMod {
+  import opened Options
+  import opened MessageMod
+  import opened InterpMod
+  import opened AllocationMod
+  import opened MsgSeqMod
+  import IndirectionTableMod
+  import opened BetreeMachineMod
 
   datatype LookupRecord = LookupRecord(
     cu: CU
@@ -23,7 +63,7 @@ module BetreeMod {
   function LookupToValue(lookup: Lookup) : Value
     // TODO body
 
-  predicate ValidLookup(dv: DiskView, itbl: IndirectionTable, key: Key, lookup: Lookup)
+  predicate ValidLookup(dv: DiskView, itbl: IndirectionTableMod.IndirectionTable, key: Key, lookup: Lookup)
     // TODO
 
   function IMKey(dv: DiskView, sb: Superblock, key: Key) : Value
@@ -45,7 +85,7 @@ module BetreeMod {
     Interp(imap key | key in AllKeys() :: IMKey(dv, sb, key), sb.seqEnd)
   }
 
-  function IReadsKey(dv: DiskView, itbl: Option<IndirectionTable>, key: Key) : set<AU> {
+  function IReadsKey(dv: DiskView, itbl: Option<IndirectionTableMod.IndirectionTable>, key: Key) : set<AU> {
     
     if
       && itbl.Some?

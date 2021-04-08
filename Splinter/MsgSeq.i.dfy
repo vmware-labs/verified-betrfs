@@ -1,6 +1,12 @@
+include "../lib/Base/Sequences.i.dfy"
+include "../lib/Base/Maps.i.dfy"
+include "../lib/Base/Option.s.dfy"
 include "Allocation.i.dfy"
 
 module MsgSeqMod {
+  import opened Sequences
+  import opened Maps
+  import opened Options
   import opened MessageMod
   import opened InterpMod
 
@@ -9,7 +15,9 @@ module MsgSeqMod {
   {
     predicate WF()
     {
-      forall k :: k in msgs <==> seqStart <= k < seqEnd
+      && seqStart <= seqEnd
+      && (seqStart==seqEnd ==> seqStart==0) // normalize Empty.
+      && (forall k :: k in msgs <==> seqStart <= k < seqEnd)
     }
 
     // Add a single message to the end of the sequence. It gets LSN 'seqEnd', since
@@ -20,6 +28,10 @@ module MsgSeqMod {
         map k | k in msgs.Keys + { seqEnd } :: if k == seqEnd then m else msgs[k],
         seqStart,
         seqEnd+1)
+    }
+
+    predicate IsEmpty() {
+      seqStart == seqEnd
     }
   }
 
@@ -33,6 +45,34 @@ module MsgSeqMod {
     // Gaah look up existing message delta definitions. For
     // replacement/deletion messages, returns the value in the most-recent
     // message matching key else baseValue.
+
+  function Condense(m0: MsgSeq, m1: MsgSeq) : (mo: Option<MsgSeq>)
+    ensures mo.Some? ==> mo.value.WF()
+  {
+    if !m0.WF() || !m1.WF()
+      then None   // Bonkers inputs
+    else if m0.IsEmpty()
+      then Some(m1)
+    else if m1.IsEmpty()
+      then Some(m0)
+    else if m0.seqEnd == m1.seqStart
+      then Some(MsgSeq(MapDisjointUnion(m0.msgs, m1.msgs), m0.seqStart, m1.seqEnd))
+    else
+      None  // Inputs don't stitch
+  }
+
+  function CondenseAll(mss: seq<MsgSeq>) : Option<MsgSeq>
+  {
+    if |mss|==0
+    then Some(Empty())
+    else
+      var prefix := CondenseAll(DropLast(mss));
+      if prefix.Some?
+      then
+        Condense(prefix.value, Last(mss))
+      else
+        None
+  }
 
   function Concat(interp: Interp, ms:MsgSeq) : Interp
     requires interp.WF()

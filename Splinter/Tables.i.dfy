@@ -1,5 +1,5 @@
-include "Allocation.i.dfy"
 include "../lib/Base/Option.s.dfy"
+include "Allocation.i.dfy"
 include "CacheIfc.i.dfy"
 
 module MarshalledSnapshot {
@@ -92,6 +92,11 @@ module AllocationTableMachineMod refines MarshalledSnapshot {
 
   function parse(b: seq<byte>) : Option<AllocationTable>
     // TODO
+
+  predicate Disjoint(s1: Variables, s2: Variables)
+  {
+    s1.table !! s2.table
+  }
 }
 
 module AllocationTableMod {

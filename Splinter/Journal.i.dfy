@@ -138,7 +138,7 @@ module JournalMachineMod {
 
     // Marshal and write the current record out into the cache. (This doesn't issue
     // a disk write, it just dirties a page.)
-    && var priorCU := if s.marshalledLSN==0 then None else Some(s.lsnToCU[s.marshalledLSN-1]);
+    && var priorCU := if s.marshalledLSN == s.boundaryLSN then None else Some(s.lsnToCU[s.marshalledLSN-1]);
     && var jr := JournalRecord(TailToMsgSeq(s), priorCU);
     && cacheOps == [CacheIfc.Write(newCU, marshal(jr))]
 
@@ -188,11 +188,8 @@ module JournalMachineMod {
 
     // This is the superblock that's going to become persistent.
     && AllocationTableMachineMod.DurableAt(alloc, cache, sb.allocation)
-    && var freshestCU := if s.cleanLSN == 0 then None else Some(s.lsnToCU[s.cleanLSN-1]);
+    && var freshestCU := if s.cleanLSN == s.boundaryLSN then None else Some(s.lsnToCU[s.cleanLSN-1]);
     && sb.core == CoreSuperblock(freshestCU, newBoundaryLSN)
-      // TODO there should be a case where cleanLSN==boundaryLSN, so that the on-disk journal
-      // is empty, in which case we should have freshestCU.None?. But that's not
-      // showing up here yet.
     && s' == s
   }
 
@@ -436,6 +433,15 @@ module JournalMachineMod {
       case ReqSyncStep(syncReqId) => ReqSync(s, s', syncReqId)
       case CompleteSyncStep(syncReqId) => CompleteSync(s, s', syncReqId)
     }
+  }
+
+  predicate Internal(s: Variables, s': Variables) {
+    exists step ::
+      && NextStep(s, s', step)
+      && (
+        || step.AdvanceMarshalledStep?
+        || step.AdvanceCleanStep?
+        )
   }
 
   predicate Next(s: Variables, s': Variables) {

@@ -1,5 +1,7 @@
 include "Journal.i.dfy"
+include "JournalInterp.i.dfy"
 include "Betree.i.dfy"
+include "CacheIfc.i.dfy"
 
 // TODO first prove that a Program with a simple-policy cache works?
 
@@ -8,19 +10,38 @@ include "Betree.i.dfy"
 // It has an interface to a disk, but can't actually see inside the disk (that's for the IOSystem).
 
 module ProgramMachineMod {
+  import AllocationTableMod
+  import AllocationTableMachineMod
+  import BetreeMachineMod
   import JournalMachineMod
-  import BetreeMod
+  import opened AllocationMod
+  import opened DeferredWriteMapSpecMod
+  import opened InterpMod
+  import opened MessageMod
+  import opened MsgSeqMod
+  import opened Options
+  import CacheIfc
 
   datatype Superblock = Superblock(
     serial: nat,
     journal: JournalMachineMod.Superblock,
-    betree: BetreeMod.Superblock)
+    betree: BetreeMachineMod.Superblock)
+
+  function parseSuperblock(b: UninterpretedDiskPage) : Option<Superblock>
+
+  function marshalSuperblock(sb: Superblock) : (b: UninterpretedDiskPage)
+    ensures parseSuperblock(b) == Some(sb)
+
+  function SUPERBLOCK_ADDRESS(): CU
+  {
+    CU(0, 0)
+  }
 
   datatype Variables = Variables(
     stableSuperblock: Superblock,
-    cache: 
+    cache: CacheIfc.Variables,
     journal: JournalMachineMod.Variables,
-    betree: CachedBetreeMachine.Variables,
+    betree: BetreeMachineMod.Variables,
     inFlightSuperblock: Option<Superblock>
     )
   {
@@ -43,42 +64,42 @@ module ProgramMachineMod {
   {
     && s.WF()
     && s'.journal == s.journal
-    && CachedBetreeMachine.Query(s, s', k, v)
+    && BetreeMachineMod.Query(s.betree, s'.betree, k, v)
   }
 
   predicate Put(s: Variables, s': Variables, k: Key, v: Value)
   {
     && s.WF()
-    && JournalMachine.Record(s, s', JournalMachine.Put(k, v))
-    && CachedBetreeMachine.Put(s, s', k, v)
+    && JournalMachineMod.Append(s.journal, s'.journal, MessagePut(k, v))
+    && BetreeMachineMod.Put(s.betree, s'.betree, k, v)
   }
 
-  predicate BetreeNoop(s: Variables, s': Variables)
+  predicate JournalInternal(s: Variables, s': Variables)
+  {
+    && s.WF()
+    && JournalMachineMod.Internal(s.journal, s'.journal)
+    && s'.betree == s.betree
+  }
+
+  predicate BetreeInternal(s: Variables, s': Variables)
   {
     && s.WF()
     && s'.journal == s.journal
-    && CachedBetreeMachine.Noop(s, s')
-  }
-
-  predicate AsyncFlush(s: Variables, s': Variables)
-  {
-    && s.WF()
-    && JournalMachine.AsyncFlush(s, s')
-    && CachedBetreeMachine.Noop(s, s')
+    && BetreeMachineMod.Internal(s.betree, s'.betree)
   }
 
   predicate ReqSync(s: Variables, s': Variables, syncReqId: SyncReqId)
   {
     && s.WF()
-    && JournalMachine.ReqSync(s, s', syncReqId)
-    && CachedBetreeMachine.Noop(s, s')
+    && JournalMachineMod.ReqSync(s.journal, s'.journal, syncReqId)
+    && s'.betree == s.betree
   }
  
   predicate CompleteSync(s: Variables, s': Variables, syncReqId: SyncReqId)
   {
     && s.WF()
-    && JournalMachine.CompleteSync(s, s', syncReqId)
-    && CachedBetreeMachine.Noop(s, s')
+    && JournalMachineMod.CompleteSync(s.journal, s'.journal, syncReqId)
+    && s'.betree == s.betree
   }
 
   // At some lower layer, where we duplicate the superblock to protect against disk sector
@@ -93,28 +114,56 @@ module ProgramMachineMod {
   predicate CommitStart(s: Variables, s': Variables, seqBoundary: LSN)
   {
     && s.inFlightSuperblock.None?
-    && var sb := s'.inFlightSuperblock;
-    && Journal.CommitStart(s.journal, s'.journal, sb.journal, seqBoundary)
-    && Betree.CommitStart(s.betree, s'.betree, sb.betree, seqBoundary)
-    && sb.serial == s.stableSuperblock.serial + 1
-    && Disk.IssueWrite(s, s', SUPERBLOCK_ADDRESS(), sb) // TODO this stuff comes in as a binding param
+    && s'.inFlightSuperblock.Some?
+    && var sb := s'.inFlightSuperblock.value;
+    && (exists alloc :: JournalMachineMod.CommitStart(s.journal, s'.journal, s.cache, sb.journal, seqBoundary, alloc))
+    && BetreeMachineMod.CommitStart(s.betree, s'.betree, s.cache, sb.betree, seqBoundary)
+//    && sb.serial == s.stableSuperblock.serial + 1 // I think this isn't needed until duplicate-superblock code
+    && CacheIfc.ApplyWrites(s.cache, s'.cache, [CacheIfc.Write(SUPERBLOCK_ADDRESS(), marshalSuperblock(sb))])
   }
 
   predicate CommitComplete(s: Variables, s': Variables)
   {
-    && Disk.CompleteWrite(s, s', ?)   // how to match the write req?
     && s.inFlightSuperblock.Some?
+    && CacheIfc.IsClean(s.cache, SUPERBLOCK_ADDRESS())
+
     && var sb := s.inFlightSuperblock.value;
     && s'.stableSuperblock == sb
-    && Journal.CommitComplete(s.journal, s'.journal, sb.journal)
-    && Betree.CommitComplete(s.betree, s'.betree, sb.betree)
-    && s'.inFlightSuperblock.None?
+    && JournalMachineMod.CommitComplete(s.journal, s'.journal, s.cache, sb.journal)
+    && BetreeMachineMod.CommitComplete(s.betree, s'.betree, s.cache, sb.betree)
+    && s'.cache == s.cache
+    && s'.inFlightSuperblock.None?  // Yay! Done writing.
+  }
+
+  datatype Step =
+    | RecoverStep()
+    | QueryStep(k: Key, v: Value)
+    | PutStep(k: Key, v: Value)
+    | JournalInternalStep()
+    | BetreeInternalStep()
+    | ReqSyncStep(syncReqId: SyncReqId)
+    | CompleteSyncStep(syncReqId: SyncReqId)
+    | CommitStartStep(seqBoundary: LSN)
+    | CommitCompleteStep()
+    
+  predicate NextStep(s: Variables, s': Variables, step: Step) {
+    match step {
+      case RecoverStep() => Recover(s, s')
+      case QueryStep(k: Key, v: Value) => Query(s, s', k, v)
+      case PutStep(k: Key, v: Value) => Put(s, s', k, v)
+      case JournalInternalStep() => JournalInternal(s, s')
+      case BetreeInternalStep() => BetreeInternal(s, s')
+      case ReqSyncStep(syncReqId: SyncReqId) => ReqSync(s, s', syncReqId)
+      case CompleteSyncStep(syncReqId: SyncReqId) => CompleteSync(s, s', syncReqId)
+      case CommitStartStep(seqBoundary: LSN) => CommitStart(s, s', seqBoundary)
+      case CommitCompleteStep() => CommitComplete(s, s')
+    }
   }
 
   predicate Next(s: Variables, s': Variables) {
     exists step ::
       && NextStep(s, s', step)
-      && AllocationTablesDisjoint(s'.journal.allocation, s'.betree.allocation)
+      //&& AllocationTableMachineMod.Disjoint(s'.journal.allocation, s'.betree.allocation)
   }
 }
 
@@ -125,10 +174,10 @@ module ProgramInterpMod {
   import opened AllocationMod
   import opened MsgSeqMod
   import AllocationTableMod
-  import JournalMod
-  import BetreeMod
-
-  function parseSuperblock(b: UninterpretedDiskPage) : Option<Superblock>
+  //import JournalMod
+  import BetreeInterpMod
+  import JournalInterpMod
+  import opened ProgramMachineMod
 
   function ISuperblock(dv: DiskView) : Option<Superblock>
   {
@@ -163,7 +212,13 @@ module ProgramInterpMod {
     var sb := ISuperblock(dv);
     if sb.Some?
     then
-      Concat(BetreeMod.IM(dv, sb.value.betree), JournalMod.IM(dv, sb.value.journal))
+      var betreeInterp := BetreeInterpMod.IM(dv, sb.value.betree);
+      var journalMsgSeq := JournalInterpMod.IM(dv, sb.value.journal);
+      if journalMsgSeq.Some? && betreeInterp.seqEnd == journalMsgSeq.value.seqStart
+      then
+        Concat(betreeInterp, journalMsgSeq.value)
+      else
+        InterpMod.Empty()
     else
       InterpMod.Empty()
   }

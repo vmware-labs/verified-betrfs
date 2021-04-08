@@ -1,6 +1,6 @@
 include "Journal.i.dfy"
 
-module JournalMod {
+module JournalInterpMod {
   import opened Options
   import opened Sequences
   import opened Maps
@@ -16,7 +16,7 @@ module JournalMod {
   }
 
   // TODO(jonh): collapse to return MsgSeq
-  function IM(dv: DiskView, sb: CoreSuperblock) : seq<MsgSeq>
+  function IMinner(dv: DiskView, sb: CoreSuperblock) : seq<MsgSeq>
   {
     var chain := ChainFrom(dv, sb).chain;
     if chain.Some?
@@ -24,6 +24,11 @@ module JournalMod {
       MessageMaps(chain.value)
     else
       []
+  }
+
+  function IM(dv: DiskView, sb: Superblock) : Option<MsgSeq>
+  {
+    CondenseAll(IMinner(dv, sb.core))
   }
 
   function ReadAt(cus: seq<CU>, i: nat) : AU
@@ -92,7 +97,7 @@ module JournalMod {
 
   lemma Framing(sb:CoreSuperblock, dv0: DiskView, dv1: DiskView)
     requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, sb))
-    ensures IM(dv0, sb) == IM(dv1, sb)
+    ensures IMinner(dv0, sb) == IMinner(dv1, sb)
   {
     FrameOneChain(dv0, dv1, sb, ChainFrom(dv0, sb).chain);
   }
