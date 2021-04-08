@@ -357,7 +357,7 @@ abstract module Total_Order refines Total_Preorder {
       IndexOfFirstGte(Seq.DropLast(run), needle)
   }
 
-  lemma {:induction true} IndexOfFirstGteIsUnique(run: seq<Element>, needle: Element, idx: nat)
+  lemma IndexOfFirstGteIsUnique(run: seq<Element>, needle: Element, idx: nat)
     requires IsSorted(run)
     requires idx <= |run|
     requires forall i | 0 <= i < idx :: lt(run[i], needle)
@@ -365,6 +365,11 @@ abstract module Total_Order refines Total_Preorder {
     ensures idx == IndexOfFirstGte(run, needle)
   {
     reveal_IsSorted();
+    if |run| == 0 {
+    } else if lt(Seq.Last(run), needle) {
+    } else {
+      IndexOfFirstGteIsUnique(Seq.DropLast(run), needle, idx);
+    }
   }
 
   function binarySearchIndexOfFirstKeyGteIter(s: seq<Element>, key: Element, lo: int, hi: int) : (i: int)
@@ -411,7 +416,7 @@ abstract module Total_Order refines Total_Preorder {
       IndexOfFirstGt(Seq.DropLast(run), needle)
   }
 
-  lemma {:induction true} IndexOfFirstGtIsUnique(run: seq<Element>, needle: Element, idx: nat)
+  lemma IndexOfFirstGtIsUnique(run: seq<Element>, needle: Element, idx: nat)
     requires IsSorted(run)
     requires idx <= |run|
     requires forall i | 0 <= i < idx :: lte(run[i], needle)
@@ -419,6 +424,11 @@ abstract module Total_Order refines Total_Preorder {
     ensures idx == IndexOfFirstGt(run, needle)
   {
     reveal_IsSorted();
+    if |run| == 0 {
+    } else if lte(Seq.Last(run), needle) {
+    } else {
+      IndexOfFirstGtIsUnique(Seq.DropLast(run), needle, idx);
+    }
   }
 
   function binarySearchIndexOfFirstKeyGtIter(s: seq<Element>, key: Element, lo: int, hi: int) : (i: int)
