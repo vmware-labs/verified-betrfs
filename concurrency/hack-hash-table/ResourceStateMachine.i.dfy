@@ -747,6 +747,32 @@ module ResourceStateMachine {
     TableQuantity_replace2(s.table, s'.table, pos);
   }
 
+  lemma RemoveNotFound_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.RemoveNotFound(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: i != pos ==> s'.table[i].value.entry == s.table[i].value.entry;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures InsertionNotPastKey(s'.table, e, j, k)
+    {
+      assert InsertionNotPastKey(s.table, e, j, k);
+    }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
+  }
+
   lemma RemoveTidy_PreservesInv(s: Variables, s': Variables, pos: nat)
   requires Inv(s)
   requires HT.RemoveTidy(s, s', pos)
@@ -952,4 +978,39 @@ module ResourceStateMachine {
     TableQuantity_replace2(s.table, s'.table, pos);
   }
 
+  lemma UpdateStep_PreservesInv(s: Variables, s': Variables, step: HT.Step)
+  requires Inv(s)
+  requires HT.UpdateStep(s, s', step)
+  ensures Inv(s')
+  {
+    match step {
+      case ProcessInsertTicketStep(insert_ticket) => ProcessInsertTicket_PreservesInv(s, s', insert_ticket);
+      case InsertSkipStep(pos) => InsertSkip_PreservesInv(s, s', pos);
+      case InsertSwapStep(pos) => InsertSwap_PreservesInv(s, s', pos);
+      case InsertDoneStep(pos) => InsertDone_PreservesInv(s, s', pos);
+      case InsertUpdateStep(pos) => InsertUpdate_PreservesInv(s, s', pos);
+
+      case ProcessRemoveTicketStep(remove_ticket) => ProcessRemoveTicket_PreservesInv(s, s', remove_ticket);
+      case RemoveSkipStep(pos) => RemoveSkip_PreservesInv(s, s', pos);
+      case RemoveFoundItStep(pos) => RemoveFoundIt_PreservesInv(s, s', pos);
+      case RemoveNotFoundStep(pos) => RemoveNotFound_PreservesInv(s, s', pos);
+      case RemoveTidyStep(pos) => RemoveTidy_PreservesInv(s, s', pos);
+      case RemoveDoneStep(pos) => RemoveDone_PreservesInv(s, s', pos);
+
+      case ProcessQueryTicketStep(query_ticket) => ProcessQueryTicket_PreservesInv(s, s', query_ticket);
+      case QuerySkipStep(pos) => QuerySkip_PreservesInv(s, s', pos);
+      case QueryDoneStep(pos) => QueryDone_PreservesInv(s, s', pos);
+      case QueryNotFoundStep(pos) => QueryNotFound_PreservesInv(s, s', pos);
+    }
+  }
+
+
+  lemma Update_PreservesInv(s: Variables, s': Variables)
+  requires Inv(s)
+  requires HT.Update(s, s')
+  ensures Inv(s')
+  {
+    var step :| HT.UpdateStep(s, s', step);
+    UpdateStep_PreservesInv(s, s', step);
+  }
 }
