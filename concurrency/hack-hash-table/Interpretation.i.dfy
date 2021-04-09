@@ -113,17 +113,17 @@ module SummaryMonoid refines MonoidMap {
         multiset{}
       )
 
-      case Info(Empty(), Inserting(rid, ins_kv)) =>
+      case Info(Empty(), Inserting(rid, ins_kv, init_key)) =>
         Summary(
           map[ins_kv.key := Some(ins_kv.val)],
-          multiset{HT.Stub(rid, MapIfc.InsertOutput)},
+          multiset{HT.Stub(rid, MapIfc.InsertOutput(true))},
           multiset{}
         )
 
-      case Info(Full(kv), Inserting(rid, ins_kv)) =>
+      case Info(Full(kv), Inserting(rid, ins_kv, init_key)) =>
         Summary(
           map[kv.key := Some(kv.val)][ins_kv.key := Some(ins_kv.val)],
-          multiset{HT.Stub(rid, MapIfc.InsertOutput)},
+          multiset{HT.Stub(rid, MapIfc.InsertOutput(true))},
           multiset{}
         )
 
@@ -141,7 +141,7 @@ module SummaryMonoid refines MonoidMap {
           multiset{}
         )
 
-      case Info(_, RemoveTidying(rid)) =>
+      case Info(_, RemoveTidying(rid, init_key)) =>
         Summary(
           map[],
           multiset{HT.Stub(rid, MapIfc.RemoveOutput)},

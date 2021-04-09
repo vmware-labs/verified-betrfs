@@ -160,7 +160,7 @@ module Multisets {
       add(a, Fold(zero, add, inv, s - multiset{a}))
   }
 
-  function FoldSimple<A>(zero: A, add: (A, A) -> A, s: multiset<A>) : (result: A)
+  function FoldSimple<A(!new)>(zero: A, add: (A, A) -> A, s: multiset<A>) : (result: A)
     ensures |s| == 0 ==> result == zero
   {
     Fold(zero, add, x => true, s)
