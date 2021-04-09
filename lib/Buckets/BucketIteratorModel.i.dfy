@@ -139,6 +139,7 @@ module BucketIteratorModel {
   function {:opaque} IterStart(bucket: Bucket, pset: Option<PrefixSet>) : (it' : Iterator)
   requires WFBucket(bucket)
   ensures WFIter(bucket, it')
+  ensures it'.pset == pset
   {
     reveal WFIter();
 
@@ -148,26 +149,26 @@ module BucketIteratorModel {
 
   function {:opaque} IterFindFirstGte(bucket: Bucket, pset: Option<PrefixSet>, key: Key) : (it' : Iterator)
   requires WFBucket(bucket)
-  // requires pset.Some? ==> IsPrefix(pset.value.prefix, key)
+  requires pset.Some? ==> IsPrefix(pset.value.newPrefix, key)
   ensures WFIter(bucket, it')
-  // ensures it'.next.Next? ==> Keyspace.lte(ApplyPrefixSet(pset, key), it'.next.key)
-  // ^ can't make this promise without bucketmarshalled.
+  ensures it'.pset == pset
   {
-    var start := Keyspace.binarySearchIndexOfFirstKeyGte(bucket.keys, key);
+    var key' := ApplyPrefixSet(RevPrefixSet(pset), key);
+    var start := Keyspace.binarySearchIndexOfFirstKeyGte(bucket.keys, key');
     var i := if pset.None? then start else iterNextWithPrefix(bucket, pset.value.prefix, start);
     iterForIndex(bucket, pset, i)
   }
 
   function {:opaque} IterFindFirstGt(bucket: Bucket, pset: Option<PrefixSet>, key: Key) : (it' : Iterator)
   requires WFBucket(bucket)
-  // requires pset.Some? ==> IsPrefix(pset.value.prefix, key)
+  requires pset.Some? ==> IsPrefix(pset.value.newPrefix, key)
   ensures WFIter(bucket, it')
-  // ensures it'.next.Next? ==> Keyspace.lt(key, it'.next.key)
-  // ^ ditto
+  ensures it'.pset == pset
   {
     reveal WFIter();
 
-    var start := Keyspace.binarySearchIndexOfFirstKeyGt(bucket.keys, key);
+    var key' := ApplyPrefixSet(RevPrefixSet(pset), key);
+    var start := Keyspace.binarySearchIndexOfFirstKeyGt(bucket.keys, key');
     var i := if pset.None? then start else iterNextWithPrefix(bucket, pset.value.prefix, start);
     iterForIndex(bucket, pset, i)
   }
@@ -177,6 +178,7 @@ module BucketIteratorModel {
   requires WFIter(bucket, it)
   requires it.next.Next?
   ensures WFIter(bucket, it')
+  ensures it'.pset == it.pset
   ensures it'.decreaser < it.decreaser
   {
     reveal WFIter();
@@ -185,40 +187,51 @@ module BucketIteratorModel {
     iterForIndex(bucket, it.pset, i)
   }
 
+  lemma KeyIdx(bucket: Bucket, pset:Option<PrefixSet>, key: Key) returns (i: int)
+  requires PreWFBucket(bucket)
+  requires key in SuccBucket(bucket, pset).as_map()
+  ensures 0 <= i < |bucket.keys|
+  ensures pset.Some? ==> IsPrefix(pset.value.prefix, bucket.keys[i])
+  ensures ApplyPrefixSet(pset, bucket.keys[i]) == key
+  {
+    if pset.None? {
+      i := MapSeqs.GetIndex(bucket.keys, bucket.msgs, key);
+    } else {
+      var tbucket := TranslateBucketInternal(bucket, pset.value.prefix, pset.value.newPrefix, 0);
+      var succidx := MapSeqs.GetIndex(tbucket.b.keys, tbucket.b.msgs, key);
+      i := tbucket.idxs[succidx];
+    }
+  }
+
   lemma noKeyBetweenIterAndIterInc(bucket: Bucket, it: Iterator, key: Key)
   requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
   requires WFIter(bucket, it)
-  requires key in bucket.as_map()
-  requires it.pset.Some? ==> IsPrefix(it.pset.value.prefix, key)
-  // requires key in SuccBucket(bucket, it.pset).as_map()
+  requires key in SuccBucket(bucket, it.pset).as_map()
   requires it.next.Next?
   ensures IterInc(bucket, it).next.Next? ==>
-      ( Keyspace.lte(ApplyPrefixSet(it.pset, key), it.next.key) 
-     || Keyspace.lte(IterInc(bucket, it).next.key, ApplyPrefixSet(it.pset, key)))
+      ( Keyspace.lte(key, it.next.key) || Keyspace.lte(IterInc(bucket, it).next.key, key))
   ensures IterInc(bucket, it).next.Done? ==>
-      Keyspace.lte(ApplyPrefixSet(it.pset, key), it.next.key)
+        Keyspace.lte(key, it.next.key)
   {
     reveal WFIter();
     Keyspace.reveal_IsStrictlySorted();
     reveal_IterInc();
 
-    var idx := MapSeqs.GetIndex(bucket.keys, bucket.msgs, key);
-    var key' := ApplyPrefixSet(it.pset, key);
-
+    var idx := KeyIdx(bucket, it.pset, key);
     if it.pset.Some? {
       var itinc := IterInc(bucket, it);
       assert idx <= it.idx || itinc.idx <= idx;
       if idx <= it.idx {
-        PrefixLteProperties(it.pset.value.prefix, key, bucket.keys[it.idx]);
-        PrefixLteProperties(it.pset.value.newPrefix, key', it.next.key);
-        assert Keyspace.lte(key', it.next.key);
+        PrefixLteProperties(it.pset.value.prefix, bucket.keys[idx], bucket.keys[it.idx]);
+        PrefixLteProperties(it.pset.value.newPrefix, key, it.next.key);
+        assert Keyspace.lte(key, it.next.key);
       } else {
-        PrefixLteProperties(it.pset.value.prefix, bucket.keys[itinc.idx], key);
-        PrefixLteProperties(it.pset.value.newPrefix, itinc.next.key, key');
-        assert Keyspace.lte(itinc.next.key, key');
+        PrefixLteProperties(it.pset.value.prefix, bucket.keys[itinc.idx], bucket.keys[idx]);
+        PrefixLteProperties(it.pset.value.newPrefix, itinc.next.key, key);
+        assert Keyspace.lte(itinc.next.key, key);
       }
-    }
+    }   
   }
 
   lemma IterIncKeyGreater(bucket: Bucket, it: Iterator)
@@ -240,70 +253,120 @@ module BucketIteratorModel {
     }
   }
 
-  // TODO: is keyspace.lt(key0, key) still good ensures?
   lemma noKeyBetweenIterFindFirstGte(bucket: Bucket, pset: Option<PrefixSet>, key: Key, key0: Key)
   requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
-  requires key0 in bucket.as_map()
-  requires pset.Some? ==> IsPrefix(pset.value.prefix, key0)
+  requires key0 in SuccBucket(bucket, pset).as_map()
+  requires pset.Some? ==> IsPrefix(pset.value.newPrefix, key)
   ensures IterFindFirstGte(bucket, pset, key).next.Next? ==>
-      (Keyspace.lt(key0, key) || Keyspace.lte(IterFindFirstGte(bucket, pset, key).next.key, ApplyPrefixSet(pset, key0)))
+      (Keyspace.lt(key0, key) || Keyspace.lte(IterFindFirstGte(bucket, pset, key).next.key, key0))
   ensures IterFindFirstGte(bucket, pset, key).next.Done? ==>
       (Keyspace.lt(key0, key))
   {
     Keyspace.reveal_IsStrictlySorted();
     reveal_IterFindFirstGte();
-    var i := MapSeqs.GetIndex(bucket.keys, bucket.msgs, key0);
-    var itgte := IterFindFirstGte(bucket, pset, key);
 
-    if itgte.next.Next? && itgte.idx <= i && pset.Some? {
-      var key0' := ApplyPrefixSet(pset, key0);
-      PrefixLteProperties(pset.value.prefix, bucket.keys[itgte.idx], key0);
-      PrefixLteProperties(pset.value.newPrefix, itgte.next.key, key0');
-      assert Keyspace.lte(itgte.next.key, key0');
+    var idx := KeyIdx(bucket, pset, key0);
+    if pset.Some? {
+      var itgte := IterFindFirstGte(bucket, pset, key);
+      if itgte.next.Done? || idx < itgte.idx {
+        var k := ApplyPrefixSet(RevPrefixSet(pset), key);
+        assert Keyspace.lt(bucket.keys[idx], k); // observe
+        PrefixLteProperties(pset.value.prefix, bucket.keys[idx], k);
+        PrefixLteProperties(pset.value.newPrefix, key0, key);
+        assert Keyspace.lt(key0, key);
+      } else {
+        PrefixLteProperties(pset.value.prefix, bucket.keys[itgte.idx], bucket.keys[idx]);
+        PrefixLteProperties(pset.value.newPrefix, itgte.next.key, key0);
+        assert Keyspace.lte(itgte.next.key, key0);
+      }
+    } 
+  }
+
+  lemma IterFindFirstGteKeyGreater(bucket: Bucket, pset: Option<PrefixSet>, key: Key)
+  requires WFBucket(bucket)
+  requires BucketWellMarshalled(bucket)
+  requires pset.Some? ==> IsPrefix(pset.value.newPrefix, key)
+  ensures IterFindFirstGte(bucket, pset, key).next.Next? ==> 
+      Keyspace.lte(key, IterFindFirstGte(bucket, pset, key).next.key)
+  {
+    reveal WFIter();
+    Keyspace.reveal_IsStrictlySorted();
+    reveal_IterFindFirstGte();
+
+    var itgte := IterFindFirstGte(bucket, pset, key);
+    if itgte.next.Next? && pset.Some? {
+      var key' := ApplyPrefixSet(RevPrefixSet(pset), key);
+      PrefixLteProperties(pset.value.prefix, key',  bucket.keys[itgte.idx]);
+      PrefixLteProperties(pset.value.newPrefix, key, itgte.next.key);
     }
   }
 
   lemma noKeyBetweenIterFindFirstGt(bucket: Bucket, pset: Option<PrefixSet>, key: Key, key0: Key)
   requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
-  requires key0 in bucket.as_map()
-  requires pset.Some? ==> IsPrefix(pset.value.prefix, key0)
+  requires key0 in SuccBucket(bucket, pset).as_map()
+  requires pset.Some? ==> IsPrefix(pset.value.newPrefix, key)
   ensures IterFindFirstGt(bucket, pset, key).next.Next? ==>
-      (Keyspace.lte(key0, key) || Keyspace.lte(IterFindFirstGt(bucket, pset, key).next.key, ApplyPrefixSet(pset, key0)))
+      (Keyspace.lte(key0, key) || Keyspace.lte(IterFindFirstGt(bucket, pset, key).next.key, key0))
   ensures IterFindFirstGt(bucket, pset, key).next.Done? ==>
       (Keyspace.lte(key0, key))
   {
     Keyspace.reveal_IsStrictlySorted();
     reveal_IterFindFirstGt();
-    var i := MapSeqs.GetIndex(bucket.keys, bucket.msgs, key0);
-    var itgt := IterFindFirstGt(bucket, pset, key);
 
-    if itgt.next.Next? && itgt.idx <= i && pset.Some? {
-      var key0' := ApplyPrefixSet(pset, key0);
-      PrefixLteProperties(pset.value.prefix, bucket.keys[itgt.idx], key0);
-      PrefixLteProperties(pset.value.newPrefix, itgt.next.key, key0');
-      assert Keyspace.lte(itgt.next.key, key0');
+    var idx := KeyIdx(bucket, pset, key0);
+    var itgt := IterFindFirstGt(bucket, pset, key);
+    if pset.Some? {
+      if itgt.next.Done? || idx < itgt.idx {
+        var k := ApplyPrefixSet(RevPrefixSet(pset), key);
+        assert Keyspace.lte(bucket.keys[idx], k); // observe
+        PrefixLteProperties(pset.value.prefix, bucket.keys[idx], k);
+        PrefixLteProperties(pset.value.newPrefix, key0, key);
+        assert Keyspace.lte(key0, key);
+      } else {
+        PrefixLteProperties(pset.value.prefix, bucket.keys[itgt.idx], bucket.keys[idx]);
+        PrefixLteProperties(pset.value.newPrefix, itgt.next.key, key0);
+        assert Keyspace.lte(itgt.next.key, key0);
+      }
+    }
+  }
+
+  lemma IterFindFirstGtKeyGreater(bucket: Bucket, pset: Option<PrefixSet>, key: Key)
+  requires WFBucket(bucket)
+  requires BucketWellMarshalled(bucket)
+  requires pset.Some? ==> IsPrefix(pset.value.newPrefix, key)
+  ensures IterFindFirstGt(bucket, pset, key).next.Next? ==> 
+      Keyspace.lt(key, IterFindFirstGt(bucket, pset, key).next.key)
+  {
+    reveal WFIter();
+    Keyspace.reveal_IsStrictlySorted();
+    reveal_IterFindFirstGt();
+
+    var itgt := IterFindFirstGt(bucket, pset, key);
+    if itgt.next.Next? && pset.Some? {
+      var key' := ApplyPrefixSet(RevPrefixSet(pset), key);
+      assert Keyspace.lt(key', bucket.keys[itgt.idx]); // observe
+      PrefixLteProperties(pset.value.prefix, key', bucket.keys[itgt.idx]);
+      PrefixLteProperties(pset.value.newPrefix, key, itgt.next.key);
     }
   }
 
   lemma noKeyBeforeIterStart(bucket: Bucket, pset: Option<PrefixSet>, key0: Key)
   requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
-  requires key0 in bucket.as_map()
-  requires pset.Some? ==> IsPrefix(pset.value.prefix, key0)
+  requires key0 in SuccBucket(bucket, pset).as_map()
   ensures IterStart(bucket, pset).next.Next?
-  ensures Keyspace.lte(IterStart(bucket, pset).next.key, ApplyPrefixSet(pset, key0))
+  ensures Keyspace.lte(IterStart(bucket, pset).next.key, key0)
   {
     Keyspace.reveal_IsStrictlySorted();
     reveal_IterStart();
-    var i := MapSeqs.GetIndex(bucket.keys, bucket.msgs, key0);
-    var itstart := IterStart(bucket, pset);
 
-    if pset.Some? && itstart.idx < i {
-      var key0' := ApplyPrefixSet(pset, key0);
-      PrefixLteProperties(pset.value.prefix, bucket.keys[itstart.idx], key0);
-      PrefixLteProperties(pset.value.newPrefix, itstart.next.key, key0');
+    var idx := KeyIdx(bucket, pset, key0);
+    var itstart := IterStart(bucket, pset);
+    if pset.Some? && itstart.idx < idx {
+      PrefixLteProperties(pset.value.prefix, bucket.keys[itstart.idx], bucket.keys[idx]);
+      PrefixLteProperties(pset.value.newPrefix, itstart.next.key, key0);
     }
   }
 

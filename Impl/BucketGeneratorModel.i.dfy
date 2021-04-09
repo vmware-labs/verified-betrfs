@@ -18,6 +18,7 @@ module BucketGeneratorModel {
   import opened BucketIteratorModel
   import opened BucketMaps
   import opened KeyType
+  import opened TranslationLib
   import UI
 
   datatype Generator =
@@ -163,35 +164,69 @@ module BucketGeneratorModel {
     )
   }
 
-  function {:opaque} GenFromBucketWithLowerBound(bucket: Bucket, start: UI.RangeStart) : (g : Generator)
+  function {:opaque} GenFromBucketWithLowerBound(bucket: Bucket, start: UI.RangeStart, pset: Option<PrefixSet>) : (g : Generator)
   requires WFBucket(bucket)
+  requires var startkey := if start.NegativeInf? then [] else start.key;
+    && (pset.Some? ==> IsPrefix(pset.value.newPrefix, startkey))
   ensures WF(g)
   {
     var it := match start {
-      case SExclusive(key) => IterFindFirstGt(bucket, key)
-      case SInclusive(key) => IterFindFirstGte(bucket, key)
-      case NegativeInf => IterStart(bucket)
+      case SExclusive(key) => IterFindFirstGt(bucket, pset, key)
+      case SInclusive(key) => IterFindFirstGte(bucket, pset, key)
+      case NegativeInf => IterStart(bucket, pset)
     };
     BasicGenerator(bucket, it)
   }
 
-  function {:opaque} GenFromBucketStackWithLowerBound(buckets: seq<Bucket>, start: UI.RangeStart) : (g : Generator)
+  function {:opaque} GenFromBucketStackWithLowerBound(buckets: seq<Bucket>, start: UI.RangeStart, tt: TranslationTable)
+  : (g : Generator)
   requires |buckets| >= 1
   requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
+  requires |tt| + 1 == |buckets|
+  requires var startkey := if start.NegativeInf? then [] else start.key;
+    && forall i | 0 <= i < |tt| :: 
+      (tt[i].Some? ==> IsPrefix(tt[i].value.newPrefix, startkey))
   decreases |buckets|
   ensures WF(g)
   {
     if |buckets| == 1 then (
-      GenFromBucketWithLowerBound(buckets[0], start)
+      GenFromBucketWithLowerBound(buckets[0], start, None)
     ) else (
       GenCompose(
-        GenFromBucketStackWithLowerBound(DropLast(buckets), start),
-        GenFromBucketStackWithLowerBound([Last(buckets)], start)
+        GenFromBucketStackWithLowerBound(DropLast(buckets), start, DropLast(tt)),
+        GenFromBucketWithLowerBound(Last(buckets), start, Last(tt))
       )
     )
   }
 
-  // Characterizing what the generators return
+  // TODO(Jialin): to have a balanced generator tree we would need to create basic generator
+  // for each bucket as we go, store in a lseq, then compose them
+  // function {:opaque} GenFromBucketStackWithLowerBound(buckets: seq<Bucket>, start: UI.RangeStart,
+  //   tt: TranslationTable, startidx: int, endidx: int) : (g : Generator)
+  // requires 0 <= startidx < endidx <= |buckets|
+  // requires |buckets| >= 1
+  // requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
+  // requires |tt| + 1 == |buckets|
+  // requires var startkey := if start.NegativeInf? then [] else start.key;
+  //   && forall i | 0 <= i < |tt| :: 
+  //     (tt[i].Some? ==> IsPrefix(tt[i].value.newPrefix, startkey))
+  // decreases endidx - startidx
+  // ensures WF(g)
+  // {
+  //   if startidx + 1 == endidx then (
+  //     var pset := if startidx == 0 then None else tt[startidx-1];
+  //     GenFromBucketWithLowerBound(buckets[startidx], start, pset)
+  //   ) else (
+  //     var mid := startidx + (endidx-startidx) / 2;
+  //     GenCompose(
+  //       GenFromBucketStackWithLowerBound(buckets, start, tt, startidx, mid),
+  //       GenFromBucketStackWithLowerBound(buckets, start, tt, mid, endidx)
+  //     )
+  //   )
+  // }
+
+  
+  // Characterizing what the genersators return
 
   predicate {:opaque} Monotonic(g: Generator)
   {
@@ -211,7 +246,7 @@ module BucketGeneratorModel {
     match g {
       case BasicGenerator(bucket, it) =>
         if it.next.Done? then map[]
-        else map k | k in bucket.as_map() && lte(it.next.key, k) :: bucket.as_map()[k]
+        else map k | k in SuccBucket(bucket, it.pset).as_map() && lte(it.next.key, k) :: SuccBucket(bucket, it.pset).as_map()[k]
       case ComposeGenerator(top, bot, next) =>
         if next.Done? then map[]
         else Compose(BucketOf(top), BucketOf(bot))[next.key := next.msg]
@@ -300,12 +335,12 @@ module BucketGeneratorModel {
       forall k | k in b1 ensures k in b2 && b1[k] == b2[k]
       {
       }
+  
       forall k | k in b2 ensures k in b1
       {
         noKeyBetweenIterAndIterInc(g.bucket, g.it, k);
       }
       assert b1 == b2;
-
       assert Monotonic(GenPop(g)) by { reveal_Monotonic(); }
     } else {
       assert g.ComposeGenerator?;
@@ -426,94 +461,141 @@ module BucketGeneratorModel {
     }*/
   }
 
-  lemma GenFromBucketWithLowerBoundYieldsClampStart(bucket: Bucket, start: UI.RangeStart)
+  lemma GenFromBucketWithLowerBoundYieldsClampStart(bucket: Bucket, start: UI.RangeStart, pset: Option<PrefixSet>)
   requires WFBucket(bucket)
   requires BucketWellMarshalled(bucket)
-  ensures var g := GenFromBucketWithLowerBound(bucket, start);
-      YieldsSortedBucket(g, ClampStart(bucket.as_map(), start))
+  requires var startkey := if start.NegativeInf? then [] else start.key;
+    && (pset.Some? ==> IsPrefix(pset.value.newPrefix, startkey))
+  ensures var g := GenFromBucketWithLowerBound(bucket, start, pset);
+      YieldsSortedBucket(g, ClampStart(SuccBucket(bucket, pset).as_map(), start))
   {
     reveal_GenFromBucketWithLowerBound();
     reveal_ClampStart();
     reveal_BucketOf();
 
-    var g := GenFromBucketWithLowerBound(bucket, start);
+    var g := GenFromBucketWithLowerBound(bucket, start, pset);
     var b1 := BucketOf(g);
-    var b2 := ClampStart(bucket.as_map(), start);
+    var b2 := ClampStart(SuccBucket(bucket, pset).as_map(), start);
+
+    var startkey := if start.NegativeInf? then [] else start.key;
+    IterFindFirstGteKeyGreater(bucket, pset, startkey);
+    IterFindFirstGtKeyGreater(bucket, pset, startkey);
 
     forall k | k in b2 ensures k in b1
     {
       match start {
         case SExclusive(key) => {
-          noKeyBetweenIterFindFirstGt(bucket, key, k);
+          noKeyBetweenIterFindFirstGt(bucket, pset, key, k);
         }
         case SInclusive(key) => {
-          noKeyBetweenIterFindFirstGte(bucket, key, k);
+          noKeyBetweenIterFindFirstGte(bucket, pset, key, k);
         }
         case NegativeInf => {
-          noKeyBeforeIterStart(bucket, k);
+          noKeyBeforeIterStart(bucket, pset, k);
         }
       }
     }
 
-    assert YieldsSortedBucket(g, ClampStart(bucket.as_map(), start)) by {
+    assert YieldsSortedBucket(g, ClampStart(SuccBucket(bucket, pset).as_map(), start)) by {
       reveal_Monotonic();
     }
   }
+  
+  // function {:opaque} GenFromBucketStackWithLowerBound(buckets: seq<Bucket>, start: UI.RangeStart, tt: TranslationTable)
+  // : (g : Generator)
+  // requires |buckets| >= 1
+  // requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
+  // requires |tt| + 1 == |buckets|
+  // requires var startkey := if start.NegativeInf? then [] else start.key;
+  //   && forall i | 0 <= i < |tt| :: 
+  //     (tt[i].Some? ==> IsPrefix(tt[i].value.newPrefix, startkey))
+  // decreases |buckets|
+  // ensures WF(g)
+  // {
+  //   if |buckets| == 1 then (
+  //     GenFromBucketWithLowerBound(buckets[0], start, None)
+  //   ) else (
+  //     GenCompose(
+  //       GenFromBucketStackWithLowerBound(DropLast(buckets), start, DropLast(tt)),
+  //       GenFromBucketWithLowerBound(Last(buckets), start, Last(tt))
+  //     )
+  //   )
+  // }
 
-  lemma GenFromBucketStackWithLowerBoundYieldsComposeSeq(buckets: seq<Bucket>, start: UI.RangeStart)
-  requires |buckets| >= 1
-  requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
+  function SuccBucketList(buckets: seq<Bucket>, tt: TranslationTable): (buckets': seq<Bucket>)
+  requires forall i | 0 <= i < |buckets| :: PreWFBucket(buckets[i])
+  requires |buckets| == |tt| + 1
+  ensures |buckets'| == |buckets|
+  ensures forall i | 0 <= i < |buckets'| :: 
+      var pset := if i == 0 then None else tt[i-1];
+      && buckets'[i] == SuccBucket(buckets[i], pset)
+      
+  {
+    if |buckets| == 1 then (
+      [ SuccBucket(buckets[0], None) ]
+    ) else (
+      SuccBucketList(DropLast(buckets), DropLast(tt)) + [ SuccBucket(Last(buckets), Last(tt)) ]
+    )
+  }
+
+  lemma GenFromBucketStackWithLowerBoundYieldsComposeSeq(buckets: seq<Bucket>, start: UI.RangeStart, tt: TranslationTable)
+  requires GenFromBucketStackWithLowerBound.requires(buckets, start, tt)
   requires BucketListWellMarshalled(buckets)
-  ensures var g := GenFromBucketStackWithLowerBound(buckets, start);
-      && YieldsSortedBucket(g, ClampStart(ComposeSeq(MapsOfBucketList(buckets)), start))
+  ensures var g := GenFromBucketStackWithLowerBound(buckets, start, tt);
+      && var buckets' := SuccBucketList(buckets, tt);
+      && YieldsSortedBucket(g, ClampStart(ComposeSeq(MapsOfBucketList(buckets')), start))
   decreases |buckets|
   {
     reveal_GenFromBucketStackWithLowerBound();
-    var g := GenFromBucketStackWithLowerBound(buckets, start);
+    var g := GenFromBucketStackWithLowerBound(buckets, start, tt);
+    var buckets' := SuccBucketList(buckets, tt);
+  
     if |buckets| == 1 {
       assert BucketWellMarshalled(buckets[0]);
       reveal_GenFromBucketWithLowerBound();
       assert WM(g);
-
-      ComposeSeq1(buckets[0].as_map());
-      assert [buckets[0]] == buckets;
-      assert WFBucket(buckets[0]);
+      ComposeSeq1(buckets'[0].as_map());
       /*assert WFBucket(ComposeSeq([buckets[0].as_map()])) by {
         reveal_ComposeSeq();
         reveal_Compose();
       }*/
-      GenFromBucketWithLowerBoundYieldsClampStart(buckets[0], start);
-      //WellMarshalledBucketsEq(ComposeSeq([buckets[0]]), buckets[0]);
-      assert MapsOfBucketList(buckets) == [buckets[0].as_map()];
+      GenFromBucketWithLowerBoundYieldsClampStart(buckets[0], start, None);
+      assert MapsOfBucketList(buckets') == [buckets'[0].as_map()];
+      //WellMarshalledBucketsEq(ComposeSeq([buckets[0]]), buckets[0]);      
     } else {
-      var g1 := GenFromBucketStackWithLowerBound(DropLast(buckets), start);
-      var g2 := GenFromBucketStackWithLowerBound([Last(buckets)], start);
+      var g1 := GenFromBucketStackWithLowerBound(DropLast(buckets), start, DropLast(tt));
+      var g2 := GenFromBucketWithLowerBound(Last(buckets), start, Last(tt));
+      GenFromBucketWithLowerBoundYieldsClampStart(Last(buckets), start, Last(tt));
       assert WM(g1);
-      assert WM(g2) by { GenFromBucketStackWithLowerBoundYieldsComposeSeq([Last(buckets)], start); }
+      assert WM(g2);
       GenComposeIsCompose(g1, g2);
-      var bucketMaps := MapsOfBucketList(buckets);
+      var bucketMaps := MapsOfBucketList(buckets');
+
       calc {
         BucketOf(g);
           { GenComposeIsCompose(g1, g2); }
         Compose(BucketOf(g1), BucketOf(g2));
           {
-            GenFromBucketStackWithLowerBoundYieldsComposeSeq(DropLast(buckets), start);
-            GenFromBucketStackWithLowerBoundYieldsComposeSeq([Last(buckets)], start);
+            GenFromBucketStackWithLowerBoundYieldsComposeSeq(DropLast(buckets), start, DropLast(tt));
             reveal_Compose();
           }
         Compose(
-          ClampStart(ComposeSeq(MapsOfBucketList(DropLast(buckets))), start), 
-          ClampStart(ComposeSeq(MapsOfBucketList([Last(buckets)])), start));
-        {
-            assert MapsOfBucketList([Last(buckets)]) == [Last(bucketMaps)];
-            assert MapsOfBucketList(DropLast(buckets)) == DropLast(bucketMaps);
-        }
+          ClampStart(ComposeSeq(MapsOfBucketList(DropLast(buckets'))), start), 
+          ClampStart(Last(buckets').as_map(), start));
+            {
+              assert Last(buckets').as_map() == Last(bucketMaps);
+              assert MapsOfBucketList(DropLast(buckets')) == DropLast(bucketMaps);
+            }
         Compose(
           ClampStart(ComposeSeq(DropLast(bucketMaps)), start), 
-          ClampStart(ComposeSeq([Last(bucketMaps)]), start));
+          ClampStart(Last(bucketMaps), start));      
+            {
+              reveal_Compose();
+              reveal_ClampStart();
+            }
+        ClampStart(Compose(ComposeSeq(DropLast(bucketMaps)), Last(bucketMaps)), start);
           {
-            reveal_Compose();
-            reveal_ClampStart();
+            ComposeSeq1(Last(bucketMaps));
           }
         ClampStart(Compose(ComposeSeq(DropLast(bucketMaps)), ComposeSeq([Last(bucketMaps)])), start);
           {
