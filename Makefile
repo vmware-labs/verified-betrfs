@@ -13,7 +13,7 @@ DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
 DAFNY_FLAGS=
 # Approximation based on (somewhat dated) F* measurements
 RLIMIT_PER_SECOND=545
-DEFAULT_RLIMIT=$$(( 60 * $(RLIMIT_PER_SECOND) ))
+DEFAULT_RLIMIT=$$(( 50 * $(RLIMIT_PER_SECOND) ))
 DAFNY_GLOBAL_FLAGS=/rlimit:$(DEFAULT_RLIMIT)
 
 POUND_DEFINES=
