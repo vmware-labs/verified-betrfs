@@ -7,6 +7,7 @@ include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/LinearOption.i.dfy"
 include "../lib/Lang/NativeTypes.s.dfy"
+include "../lib/Math/div.i.dfy"
 include "../lib/Lang/LinearMaybe.s.dfy"
 include "../lib/Lang/LinearBox.i.dfy"
 include "../lib/DataStructures/LinearMutableMap.i.dfy"
@@ -28,6 +29,7 @@ module IndirectionTable {
   import opened Options
   import opened LinearOption
   import opened LinearBox
+  import Math__div_i
   import opened Sequences
   import opened NativeTypes
   import ReferenceType`Internal
@@ -1815,6 +1817,7 @@ module IndirectionTable {
       bm := BitmapImpl.Bitmap.Constructor(NumBlocksUint64());
       assert BitmapModel.Len(bm.I()) == NumBlocks();
 
+      MinNodeBlockIndex_le_NumBlocks();
       BitmapInitUpTo(inout bm, MinNodeBlockIndexUint64());
       var it := LinearMutableMap.IterStart(this.t);
 
@@ -1827,13 +1830,17 @@ module IndirectionTable {
       invariant bm.Inv()
       invariant LinearMutableMap.WFIter(this.t, it)
       invariant BitmapModel.Len(bm.I()) == NumBlocks()
-      // invariant IndirectionTableModel.InitLocBitmapIterate(I(this), it, bm.I())
-      //        == IndirectionTableModel.InitLocBitmap(I(this))
+      // TODO? invariant IndirectionTableModel.InitLocBitmapIterate(I(this), it, bm.I())
+      // TODO?        == IndirectionTableModel.InitLocBitmap(I(this))
       decreases it.decreaser
       {
         assert it.next.key in this.I().locs;
 
         var loc: uint64 := it.next.value.loc.value.addr;
+        // Math__div_i.lemma_div_pos_is_pos(loc as nat, NodeBlockSize() as nat);
+        assert 0 <= loc as nat / NodeBlockSize() < Uint64UpperBound() by {
+          Math__div_i.lemma_div_basics_forall();
+        }
         var locIndex: uint64 := loc / NodeBlockSizeUint64();
         if locIndex < NumBlocksUint64() {
           var isSet := bm.GetIsSet(locIndex);
@@ -1851,8 +1858,8 @@ module IndirectionTable {
       }
 
       success := true;
-      assume && (forall i: int :: I().IsLocAllocIndirectionTable(i) <==> IsLocAllocBitmap(bm.I(), i))
-        && BC.AllLocationsForDifferentRefsDontOverlap(I());
+      assert forall i: int :: I().IsLocAllocIndirectionTable(i) <==> IsLocAllocBitmap(bm.I(), i);
+      assert BC.AllLocationsForDifferentRefsDontOverlap(I());
     }
     // 
     // ///// Dealloc stuff

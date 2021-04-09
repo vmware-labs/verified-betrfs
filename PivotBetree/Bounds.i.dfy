@@ -95,4 +95,9 @@ module Bounds {
     <= NodeBlockSize()
   {
   }
+
+  lemma MinNodeBlockIndex_le_NumBlocks()
+  ensures MinNodeBlockIndex() <= NumBlocks()
+  {
+  }
 }
