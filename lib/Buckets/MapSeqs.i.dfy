@@ -64,7 +64,7 @@ module MapSeqs {
     }
   }
 
-  lemma {:induction |res.msgs|} seqs_of_map_preserves_values(m: map<Key, Message>, res : SeqPair)
+  lemma {:induction res} seqs_of_map_preserves_values(m: map<Key, Message>, res : SeqPair)
   requires seqs_of_map(m) == res
   ensures m.Values == Set(res.msgs)
   {

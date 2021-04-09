@@ -14,7 +14,7 @@ DAFNY_FLAGS=
 # Approximation based on (somewhat dated) F* measurements
 RLIMIT_PER_SECOND=545
 DEFAULT_RLIMIT=$$(( 50 * $(RLIMIT_PER_SECOND) ))
-DAFNY_GLOBAL_FLAGS=/rlimit:$(DEFAULT_RLIMIT)
+DAFNY_GLOBAL_FLAGS=
 
 POUND_DEFINES=
 ifdef LOG_QUERY_STATS
@@ -125,7 +125,7 @@ status: build/deps build/Impl/Bundle.i.status.pdf
 # Longer time-limit for CI
 .PHONY: verichecks-status
 
-verichecks-status: DAFNY_GLOBAL_FLAGS=/vcsCores:4
+verichecks-status: DAFNY_GLOBAL_FLAGS= #/vcsCores:4
 verichecks-status: build/deps build/Impl/Bundle.i.status.pdf
 
 .PHONY: syntax-status
@@ -187,7 +187,7 @@ NONLINEAR_FLAGS = /noNLarith
 
 INDUCTION_FLAGS = /induction:1
 
-OTHER_PROVER_FLAGS = 
+OTHER_PROVER_FLAGS = /rlimit:$(DEFAULT_RLIMIT)
 
 ### Adjust defaults for a couple of files
 # (It would be nice if we could do this in the source instead.)
