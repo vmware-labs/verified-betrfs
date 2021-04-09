@@ -152,17 +152,17 @@ module ResourceStateMachine {
     ))
   }
 
-  predicate ExistsEmptyEntry(table: seq<Option<HT.Info>>)
+  /*predicate ExistsEmptyEntry(table: seq<Option<HT.Info>>)
   {
     exists e :: 0 <= e < |table| && table[e].Some? && table[e].value.entry.Empty?
         && !table[e].value.state.RemoveTidying?
-  }
+  }*/
 
   predicate InvTable(table: seq<Option<HT.Info>>)
   {
     && |table| == HT.FixedSize()
     && Complete(table)
-    && ExistsEmptyEntry(table)
+    //&& ExistsEmptyEntry(table)
     && KeysUnique(table)
     && (forall e, i | 0 <= e < |table| && 0 <= i < |table|
         :: ValidHashInSlot(table, e, i))
@@ -223,9 +223,14 @@ module ResourceStateMachine {
 
   function {:opaque} get_empty_cell(table: seq<Option<HT.Info>>) : (e: int)
   requires InvTable(table)
+  requires TableQuantity(table) < |table|
   ensures 0 <= e < |table| && table[e].Some? && table[e].value.entry.Empty?
         && !table[e].value.state.RemoveTidying?
   {
+    assert exists e' :: 0 <= e' < |table| && table[e'].Some? && table[e'].value.entry.Empty?
+        && !table[e'].value.state.RemoveTidying? by {
+      var t := get_empty_cell_other_than_insertion_cell_table(table);
+    }
     var e' :| 0 <= e' < |table| && table[e'].Some? && table[e'].value.entry.Empty?
         && !table[e'].value.state.RemoveTidying?;
     e'
@@ -398,8 +403,9 @@ module ResourceStateMachine {
     forall i | 0 <= i < |s.table| && s.table[i].value.entry.Full?
     ensures s.table[i].value.entry.kv.key != s.table[pos].value.state.kv.key
     {
-      var e :| 0 <= e < |s.table| && s.table[e].value.entry.Empty?
-        && !s.table[e].value.state.RemoveTidying?;
+      //var e :| 0 <= e < |s.table| && s.table[e].value.entry.Empty?
+      //  && !s.table[e].value.state.RemoveTidying?;
+      var e := get_empty_cell_other_than_insertion_cell(s);
       assert InsertionNotPastKey(s.table, e, i, pos);
       //assert ValidHashInSlot(s.table, e, i);
       assert ValidHashInSlot(s.table, e, pos);
@@ -442,17 +448,18 @@ module ResourceStateMachine {
       assert ValidHashInSlot(s.table, pos, k);
     }
 
-    assert ExistsEmptyEntry(s'.table) by {
+    /*assert ExistsEmptyEntry(s'.table) by {
       var e' := get_empty_cell_other_than_insertion_cell(s);
       assert 0 <= e' < |s'.table| && s'.table[e'].Some? && s'.table[e'].value.entry.Empty?
             && !s'.table[e'].value.state.RemoveTidying?;
-    }
+    }*/
 
     forall i | 0 <= i < |s.table| && s.table[i].value.entry.Full?
     ensures s.table[i].value.entry.kv.key != s.table[pos].value.state.kv.key
     {
-      var e :| 0 <= e < |s.table| && s'.table[e].value.entry.Empty?
-        && !s.table[e].value.state.RemoveTidying?;
+      //var e :| 0 <= e < |s.table| && s'.table[e].value.entry.Empty?
+        //&& !s.table[e].value.state.RemoveTidying?;
+      var e := get_empty_cell_other_than_insertion_cell(s);
       assert InsertionNotPastKey(s.table, e, i, pos);
       //assert InsertionNotPastKey(s.table, e, pos, i);
       assert ValidHashInSlot(s.table, e, pos);
@@ -745,12 +752,12 @@ module ResourceStateMachine {
   requires HT.RemoveTidy(s, s', pos)
   ensures Inv(s')
   {
-    assert ExistsEmptyEntry(s'.table) by {
+    /*assert ExistsEmptyEntry(s'.table) by {
       var e :| 0 <= e < |s.table| && s.table[e].Some? && s.table[e].value.entry.Empty?
         && !s.table[e].value.state.RemoveTidying?;
       assert 0 <= e < |s'.table| && s'.table[e].Some? && s'.table[e].value.entry.Empty?
         && !s'.table[e].value.state.RemoveTidying?;
-    }
+    }*/
 
     var pos' := if pos < |s.table| - 1 then pos + 1 else 0;
 
