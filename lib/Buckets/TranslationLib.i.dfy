@@ -427,8 +427,8 @@ module TranslationLib {
   requires c.Some? ==> IsPrefix(c.value.prefix, ckey)
   requires a == c ==> akey == ckey
   requires key == ApplyPrefixSet(a, akey)
-  requires key == ApplyPrefixSet(c, ckey)
-  ensures ApplyPrefixSet(b, akey) == ckey
+  ensures ApplyPrefixSet(b, akey) == ckey ==> key == ApplyPrefixSet(c, ckey)
+  ensures key == ApplyPrefixSet(c, ckey) ==> ApplyPrefixSet(b, akey) == ckey
   {
     reveal_IsPrefix();
   }

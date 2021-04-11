@@ -244,7 +244,9 @@ module PivotBetreeSpec {
   {
     && |lookup| == |tt| + 1 + offset
     && (forall i | 0 <= i < |tt| :: 
-        && (tt[i].Some? ==> IsPrefix(tt[i].value.prefix, lookup[i+1+offset].currentKey))
+        && (tt[i].Some? ==> 
+            && IsPrefix(tt[i].value.prefix, lookup[i+1+offset].currentKey)
+            && IsPrefix(tt[i].value.newPrefix, lookup[0].currentKey)) // needed by succmodel
         && lookup[0].currentKey == ApplyPrefixSet(tt[i], lookup[i+1+offset].currentKey))
   }
 
@@ -317,59 +319,50 @@ module PivotBetreeSpec {
     }
   }
 
-  function {:opaque} LookupUpperBound(lookup: Lookup, idx: int, tt: TranslationTable) : Option<Key>
-  requires |lookup| > 0
-  requires 0 <= idx <= |lookup|
+  function {:opaque} LookupUpperBound(lookup: Lookup, tt: TranslationTable) : Option<Key>
   requires LookupVisitsWFNodes(lookup)
   requires LookupBoundedKey(lookup)
-  requires ValidTranslationTable(lookup, tt, 0)
-  decreases |lookup| - idx
+  requires |lookup| > 0 ==> ValidTranslationTable(lookup, tt, 0)
+  decreases |lookup|
   {
-    if idx == |lookup| then (
+    if |lookup| == 0 then (
       None
     ) else (
-      var pset := if idx == 0 then None else tt[idx-1];
+      var pset := if |tt| == 0 then None else Last(tt);
+      var tt' := if |tt| == 0 then tt else DropLast(tt);
+
       OptionKeyMin(
-        LookupUpperBound(lookup, idx + 1, tt),
-        LookupUpperBoundAtLayer(lookup[idx], pset, lookup[0].currentKey)
+        LookupUpperBound(DropLast(lookup), tt'),
+        LookupUpperBoundAtLayer(Last(lookup), pset, lookup[0].currentKey)
       )
     )
   }
 
-  function SuccBucketAtLayer(lookup: Lookup, buckets: seq<Bucket>, tt: TranslationTable, idx: int) : Bucket
-  requires |lookup| > 0
-  requires 0 <= idx < |lookup|
-  requires |lookup| == |buckets|
-  requires WFNode(lookup[idx].readOp.node)
+  function SuccBucketAtLayer(buckets: seq<Bucket>, tt: TranslationTable, idx: int) : Bucket
+  requires 0 <= idx < |buckets|
+  requires |tt| + 1 == |buckets|
   requires PreWFBucket(buckets[idx])
-  requires BoundedKey(lookup[idx].readOp.node.pivotTable, lookup[idx].currentKey)
-  requires ValidTranslationTable(lookup, tt, 0)
   {
     var pset := if idx == 0 then None else tt[idx - 1];
     if pset.None? then buckets[idx]
     else TranslateBucket(buckets[idx], pset.value.prefix, pset.value.newPrefix)
   }
 
-  function TranslateSuccBuckets(lookup: Lookup, buckets: seq<Bucket>, tt: TranslationTable, idx: int) 
+  function TranslateSuccBuckets(buckets: seq<Bucket>, tt: TranslationTable, idx: int) 
     : (buckets': seq<Bucket>)
-  requires |lookup| > 0
-  requires 0 <= idx <= |lookup|
-  requires |lookup| == |buckets|
-  requires LookupVisitsWFNodes(lookup)
-  requires LookupBoundedKey(lookup)
-  requires ValidTranslationTable(lookup, tt, 0)
-  requires forall i | 0 <= i < |lookup| :: buckets[i] == 
-    lookup[i].readOp.node.buckets[Route(lookup[i].readOp.node.pivotTable, lookup[i].currentKey)]
-  decreases |lookup| - idx
+  requires 0 <= idx <= |buckets|
+  requires |tt| + 1 == |buckets|
+  requires forall i | 0 <= i < |buckets| :: PreWFBucket(buckets[i])
+  decreases |buckets| - idx
   ensures |buckets| == |buckets'| + idx
-  ensures forall i | 0 <= i < |buckets'| :: buckets'[i] == SuccBucketAtLayer(lookup, buckets, tt, idx+i)
+  ensures forall i | 0 <= i < |buckets'| :: buckets'[i] == SuccBucketAtLayer(buckets, tt, idx+i)
   ensures BucketListWellMarshalled(buckets) ==> BucketListWellMarshalled(buckets')
   {
-    if idx == |lookup| then (
+    if idx == |buckets| then (
       []
     ) else (
-      var bucket := SuccBucketAtLayer(lookup, buckets, tt, idx);
-      [bucket] + TranslateSuccBuckets(lookup, buckets, tt, idx + 1)
+      var bucket := SuccBucketAtLayer(buckets, tt, idx);
+      [bucket] + TranslateSuccBuckets(buckets, tt, idx + 1)
     )
   }
 
@@ -384,8 +377,7 @@ module PivotBetreeSpec {
     && WFLookupForKey(sq.lookup, startKey)
 
     && sq.translations == LookupTranslationTable(sq.lookup, 0, None)
-
-    && var lookupUpperBound := LookupUpperBound(sq.lookup, 0, sq.translations);
+    && var lookupUpperBound := LookupUpperBound(sq.lookup, sq.translations);
     && Last(sq.lookup).readOp.node.children.None?
 
     && |sq.lookup| == |sq.buckets|
@@ -396,7 +388,7 @@ module PivotBetreeSpec {
     && (BucketListWellMarshalled(sq.buckets) ==>
       && MS.NonEmptyRange(sq.start, sq.end)
       && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, sq.end))
-      && var translatedbuckets := TranslateSuccBuckets(sq.lookup, sq.buckets, sq.translations, 0);
+      && var translatedbuckets := TranslateSuccBuckets(sq.buckets, sq.translations, 0);
       && sq.results == SortedSeqOfKeyValueMap(
         KeyValueMapOfBucket(ClampRange(ComposeSeq(MapsOfBucketList(translatedbuckets)), sq.start, sq.end))))
   }
