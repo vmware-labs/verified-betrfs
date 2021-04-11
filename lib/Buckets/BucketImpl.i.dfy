@@ -67,15 +67,15 @@ module BucketImpl {
     pkv := LKMBPKVOps.ToPkv(tree);
   }
 
-  datatype Iterator = Iterator(
-    ghost next: BucketIteratorModel.IteratorOutput,
-    i: uint64,
-    ghost decreaser: int)
+  // datatype Iterator = Iterator(
+  //   ghost next: BucketIteratorModel.IteratorOutput,
+  //   i: uint64,
+  //   ghost decreaser: int)
 
-  function IIterator(it: Iterator) : BucketIteratorModel.Iterator
-  {
-    BucketIteratorModel.Iterator(it.next, it.i as int, it.decreaser)
-  }
+  // function IIterator(it: Iterator) : BucketIteratorModel.Iterator
+  // {
+  //   BucketIteratorModel.Iterator(it.next, it.i as int, it.decreaser)
+  // }
 
   linear datatype BucketFormat =
       | BFTree(linear tree: TreeMap)
@@ -790,7 +790,7 @@ module BucketImpl {
       linear var buckets' := FreeMutBucketSeqRecur(buckets, 0);
       lseq_free_fun(buckets')
   }
-
+/*
   linear datatype BucketIter = BucketIter(it: Iterator, pkv: PackedKV.Pkv, ghost bucket: Bucket)
   {
     predicate WFIter()
@@ -887,7 +887,7 @@ module BucketImpl {
         next := BucketIteratorModel.Next(PackedKV.GetKey(pkv, it.i), PackedKV.GetMessage(pkv, it.i));
       }
     }
-  }
+  }*/
 
   method pkvList2BucketList(linear inout bots: lseq<MutBucket>, pkvs: seq<PKV.Pkv>, sorted: bool)
   requires |pkvs| < Uint64UpperBound()

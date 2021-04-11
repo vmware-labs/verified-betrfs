@@ -9,7 +9,7 @@ include "../lib/Lang/LinearSequence.i.dfy"
 include "../lib/DataStructures/LinearContentMutableMap.i.dfy"
 include "../PivotBetree/Bounds.i.dfy"
 include "NodeImpl.i.dfy"
-include "BucketGeneratorImpl.i.dfy"
+// include "BucketGeneratorImpl.i.dfy"
 
 //
 // Implements map<Reference, Node>
@@ -36,7 +36,7 @@ module CacheImpl {
   import opened TranslationLib
   import BucketsLib
 
-  import opened BGI = BucketGeneratorImpl
+  // import opened BGI = BucketGeneratorImpl
 
   import opened LinearBox
   import opened LinearBox_s
@@ -503,22 +503,22 @@ module CacheImpl {
       node' := node.CutoffNode(lbound, ubound);
     }
 
-    shared method NodeBucketGen(ref: BT.G.Reference, r: uint64, start: BT.UI.RangeStart)
-    returns (linear g: BGI.Generator)
-    requires Inv()
-    requires ptr(ref).Some?
-    requires BT.WFNode(I()[ref])
-    requires r as nat < |I()[ref].buckets|
-    ensures g.Basic?
-    ensures g.biter.bucket == I()[ref].buckets[r as nat]
-    ensures g.Inv()
-    ensures g.I() == BGI.BucketGeneratorModel.GenFromBucketWithLowerBound(
-        I()[ref].buckets[r as nat], start)
-    {
-      shared var node := Get(ref);
-      g := BGI.Generator.GenFromBucketWithLowerBound(
-          lseq_peek(node.buckets, r), start);
-    }
+    // shared method NodeBucketGen(ref: BT.G.Reference, r: uint64, start: BT.UI.RangeStart)
+    // returns (linear g: BGI.Generator)
+    // requires Inv()
+    // requires ptr(ref).Some?
+    // requires BT.WFNode(I()[ref])
+    // requires r as nat < |I()[ref].buckets|
+    // ensures g.Basic?
+    // ensures g.biter.bucket == I()[ref].buckets[r as nat]
+    // ensures g.Inv()
+    // ensures g.I() == BGI.BucketGeneratorModel.GenFromBucketWithLowerBound(
+    //     I()[ref].buckets[r as nat], start)
+    // {
+    //   shared var node := Get(ref);
+    //   g := BGI.Generator.GenFromBucketWithLowerBound(
+    //       lseq_peek(node.buckets, r), start);
+    // }
 
     shared method NodeBiggestSlot(ref: BT.G.Reference)
     returns (res : (uint64, uint64))
