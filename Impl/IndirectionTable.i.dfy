@@ -735,6 +735,8 @@ module IndirectionTable {
       assert |graph.Keys| <= MaxSize();
       CardinalitySetRange(MaxNumChildren());
       assert |SetRange(MaxNumChildren())| == MaxNumChildren();
+
+      assert |PredecessorSetRestricted(graph, dest, domain)| == |s1| <= |s3| == |graph.Keys| * MaxNumChildren(); // observe
     }
 
     static lemma PredecessorSetSizeBound(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference)
