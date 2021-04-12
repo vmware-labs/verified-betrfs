@@ -1,0 +1,272 @@
+./BlockCacheSystem/BlockSystem.i.dfy
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/BlockCacheSystem/../PivotBetree/../lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/BlockCacheSystem/BlockSystem.i.dfy(768,8): Verification of 'Impl$$BlockSystem.__default.WriteBackNodeReqStepPreservesInv' timed out after 60 seconds
+	
+	Dafny program verifier finished with 127 verified, 0 errors, 1 time out
+	Command exited with non-zero status 4
+	713.91user 7.56system 4:06.70elapsed 292%CPU (0avgtext+0avgdata 1656940maxresident)k
+	0inputs+0outputs (0major+2221460minor)pagefaults 0swaps
+
+./Betree/Betree_Refines_Map.i.dfy
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Betree/Betree_Refines_Map.i.dfy(100,8): Verification of 'Impl$$Betree__Refines__Map.__default.PreservesLookupsImplInterpsEqual' timed out after 60 seconds
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Betree/Betree_Refines_Map.i.dfy(148,8): Verification of 'Impl$$Betree__Refines__Map.__default.PreservesLookupsPutImplInterpsPut' timed out after 60 seconds
+	
+	Dafny program verifier finished with 32 verified, 0 errors, 2 time outs
+	Command exited with non-zero status 4
+	157.22user 5.99system 1:15.79elapsed 215%CPU (0avgtext+0avgdata 2987268maxresident)k
+	0inputs+0outputs (0major+2450279minor)pagefaults 0swaps
+
+./ByteBlockCacheSystem/ByteSystem.i.dfy
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/ByteBlockCacheSystem/../BlockCacheSystem/../PivotBetree/../lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/ByteBlockCacheSystem/AsyncDiskModel.s.dfy[ByteSystem](333,8): Verification of 'Impl$$ByteSystem.__default.InitImpliesInv' timed out after 60 seconds
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/ByteBlockCacheSystem/ByteSystem.i.dfy(64,8): Verification of 'Impl$$ByteSystem.__default.ReqReadStepPreservesInv' timed out after 60 seconds
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/ByteBlockCacheSystem/ByteSystem.i.dfy(158,8): Verification of 'Impl$$ByteSystem.__default.ReqWriteStepPreservesInv' timed out after 60 seconds
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/ByteBlockCacheSystem/ByteSystem.i.dfy(343,8): Verification of 'Impl$$ByteSystem.__default.ReqWrite2StepPreservesInv' timed out after 60 seconds
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/ByteBlockCacheSystem/ByteSystem.i.dfy(452,8): Verification of 'Impl$$ByteSystem.__default.RespReadStepPreservesInv' timed out after 60 seconds
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/ByteBlockCacheSystem/ByteSystem.i.dfy(484,8): Verification of 'Impl$$ByteSystem.__default.RespWriteStepPreservesInv' timed out after 60 seconds
+	
+	Dafny program verifier finished with 23 verified, 0 errors, 6 time outs
+	Command exited with non-zero status 4
+	571.90user 4.55system 2:55.27elapsed 328%CPU (0avgtext+0avgdata 2093812maxresident)k
+	0inputs+0outputs (0major+1456535minor)pagefaults 0swaps
+
+./BlockCacheSystem/BlockJournalCache.i.dfy
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/BlockCacheSystem/../PivotBetree/../lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/BlockCacheSystem/BlockJournalCache.i.dfy(60,8): Verification of 'Impl$$BlockJournalCache.__default.NextPreservesInv' timed out after 60 seconds
+	
+	Dafny program verifier finished with 5 verified, 0 errors, 1 time out
+	Command exited with non-zero status 4
+	88.20user 1.01system 1:25.31elapsed 104%CPU (0avgtext+0avgdata 725508maxresident)k
+	0inputs+0outputs (0major+293485minor)pagefaults 0swaps
+
+./Betree/Graph.i.dfy
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Betree/Graph.i.dfy(161,8): Verification of 'Impl$$Graph.__default.LocalEditPreservesAcyclic' timed out after 60 seconds
+	
+	Dafny program verifier finished with 18 verified, 0 errors, 1 time out
+	Command exited with non-zero status 4
+	71.30user 1.01system 1:06.59elapsed 108%CPU (0avgtext+0avgdata 274492maxresident)k
+	0inputs+0outputs (0major+298895minor)pagefaults 0swaps
+
+./PivotBetree/StatesViewPivotBetree_Refines_StatesViewMap.i.dfy
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/PivotBetree/../PivotBetree/../lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/PivotBetree/StatesViewPivotBetree_Refines_StatesViewMap.i.dfy(60,8): Verification of 'Impl$$StatesViewPivotBetree__Refines__StatesViewMap.__default.RefinesNextStep' timed out after 60 seconds
+	
+	Dafny program verifier finished with 8 verified, 0 errors, 1 time out
+	Command exited with non-zero status 4
+	85.57user 1.62system 1:24.96elapsed 102%CPU (0avgtext+0avgdata 798136maxresident)k
+	0inputs+0outputs (0major+546196minor)pagefaults 0swaps
+
+./Impl/EvictImpl.i.dfy
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Impl/../PivotBetree/../lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Impl/EvictImpl.i.dfy(89,9): Verification of 'Impl$$EvictImpl.__default.EvictOrDealloc' timed out after 60 seconds
+	
+	Dafny program verifier finished with 9 verified, 0 errors, 1 time out
+	Command exited with non-zero status 4
+	125.56user 2.00system 1:33.69elapsed 136%CPU (0avgtext+0avgdata 1553644maxresident)k
+	0inputs+0outputs (0major+685495minor)pagefaults 0swaps
+
+./ByteBlockCacheSystem/InterpretationDisk.i.dfy
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/ByteBlockCacheSystem/../PivotBetree/../lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/ByteBlockCacheSystem/InterpretationDisk.i.dfy(752,8): Verification of 'Impl$$InterpretationDisk.__default.RefinesReqReadOp' timed out after 60 seconds
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/ByteBlockCacheSystem/InterpretationDisk.i.dfy(892,8): Verification of 'Impl$$InterpretationDisk.__default.RefinesReqWriteOp' timed out after 60 seconds
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1059,8): Verification of 'Impl$$InterpretationDisk.__default.RefinesReqWrite2Op' timed out after 60 seconds
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1190,8): Verification of 'Impl$$InterpretationDisk.__default.RefinesRespReadOp' timed out after 60 seconds
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1316,8): Verification of 'Impl$$InterpretationDisk.__default.RefinesRespWriteOp' timed out after 60 seconds
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1367,8): Verification of 'Impl$$InterpretationDisk.__default.RefinesProcessRead__Node__1' timed out after 60 seconds
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1466,8): Verification of 'Impl$$InterpretationDisk.__default.RefinesProcessRead__Superblock__1' timed out after 60 seconds
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1527,8): Verification of 'Impl$$InterpretationDisk.__default.RefinesProcessWrite' timed out after 60 seconds
+	
+	Dafny program verifier finished with 120 verified, 0 errors, 8 time outs
+	Command exited with non-zero status 4
+	1028.51user 12.67system 5:41.54elapsed 304%CPU (0avgtext+0avgdata 1559264maxresident)k
+	0inputs+0outputs (0major+3900015minor)pagefaults 0swaps
+
+./Betree/BetreeInv.i.dfy
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Betree/../lib/Base/sequences.i.dfy(587,18): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Betree/BetreeInv.i.dfy(346,8): Verification of 'Impl$$BetreeInv.__default.RedirectOnlyPredOfChildIsParent' timed out after 60 seconds
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Betree/BetreeInv.i.dfy(376,8): Verification of 'Impl$$BetreeInv.__default.RedirectPreservesAcyclic' timed out after 60 seconds
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Betree/BetreeInv.i.dfy(654,8): Verification of 'Impl$$BetreeInv.__default.RedirectPreservesLookups' timed out after 60 seconds
+	
+	Dafny program verifier finished with 64 verified, 0 errors, 3 time outs
+	Command exited with non-zero status 4
+	328.63user 2.38system 1:53.99elapsed 290%CPU (0avgtext+0avgdata 558460maxresident)k
+	0inputs+0outputs (0major+601578minor)pagefaults 0swaps
+
+./Impl/DeallocImpl.i.dfy
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Impl/../PivotBetree/../lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Impl/DeallocImpl.i.dfy(29,9): Verification of 'Impl$$DeallocImpl.__default.Dealloc' timed out after 60 seconds
+	
+	Dafny program verifier finished with 3 verified, 0 errors, 1 time out
+	Command exited with non-zero status 4
+	109.61user 1.84system 1:31.81elapsed 121%CPU (0avgtext+0avgdata 1241584maxresident)k
+	0inputs+0outputs (0major+541985minor)pagefaults 0swaps
+
+./lib/Buckets/LKMBPKVOps.i.dfy
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(275,24): Error: This loop invariant might not be maintained by the loop.
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/PackedStringArray.i.dfy(363,54): Related location
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(275,24): Related message: loop invariant violation
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/PackedStringArray.i.dfy(363,54): Related location
+	Execution trace:
+	    (0,0): anon0
+	    (0,0): anon65_Then
+	    (0,0): anon66_Then
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(225,12): anon67_Else
+	    (0,0): anon5
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(225,5): anon68_Else
+	    (0,0): anon69_Then
+	    (0,0): anon70_Then
+	    (0,0): anon71_Then
+	    (0,0): anon12
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(228,5): anon72_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(232,5): anon73_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(235,5): anon74_Else
+	    (0,0): anon75_Else
+	    (0,0): anon79_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon81_LoopHead
+	    (0,0): anon81_LoopBody
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon82_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon83_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(298,7): anon91_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(314,7): anon100_Else
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(278,24): Error: This loop invariant might not be maintained by the loop.
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/PackedStringArray.i.dfy(363,54): Related location
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(278,24): Related message: loop invariant violation
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/PackedStringArray.i.dfy(363,54): Related location
+	Execution trace:
+	    (0,0): anon0
+	    (0,0): anon65_Then
+	    (0,0): anon66_Then
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(225,12): anon67_Else
+	    (0,0): anon5
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(225,5): anon68_Else
+	    (0,0): anon69_Then
+	    (0,0): anon70_Then
+	    (0,0): anon71_Then
+	    (0,0): anon12
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(228,5): anon72_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(232,5): anon73_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(235,5): anon74_Else
+	    (0,0): anon75_Else
+	    (0,0): anon79_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon81_LoopHead
+	    (0,0): anon81_LoopBody
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon82_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon83_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(298,7): anon91_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(314,7): anon100_Else
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(278,24): Error: This loop invariant might not be maintained by the loop.
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/PackedStringArray.i.dfy(362,30): Related location
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(278,24): Related message: loop invariant violation
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/PackedStringArray.i.dfy(362,30): Related location
+	Execution trace:
+	    (0,0): anon0
+	    (0,0): anon65_Then
+	    (0,0): anon66_Then
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(225,12): anon67_Else
+	    (0,0): anon5
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(225,5): anon68_Else
+	    (0,0): anon69_Then
+	    (0,0): anon70_Then
+	    (0,0): anon71_Then
+	    (0,0): anon12
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(228,5): anon72_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(232,5): anon73_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(235,5): anon74_Else
+	    (0,0): anon75_Else
+	    (0,0): anon79_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon81_LoopHead
+	    (0,0): anon81_LoopBody
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon82_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon83_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(298,7): anon91_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(314,7): anon100_Else
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(309,34): Error: assertion violation
+	Execution trace:
+	    (0,0): anon0
+	    (0,0): anon65_Then
+	    (0,0): anon66_Then
+	    (0,0): anon67_Then
+	    (0,0): anon5
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(225,5): anon68_Else
+	    (0,0): anon69_Then
+	    (0,0): anon70_Then
+	    (0,0): anon71_Then
+	    (0,0): anon12
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(228,5): anon72_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(232,5): anon73_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(235,5): anon74_Else
+	    (0,0): anon75_Else
+	    (0,0): anon79_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon81_LoopHead
+	    (0,0): anon81_LoopBody
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon82_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon83_Else
+	    (0,0): anon91_Then
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(330,34): Error: assertion violation
+	Execution trace:
+	    (0,0): anon0
+	    (0,0): anon65_Then
+	    (0,0): anon66_Then
+	    (0,0): anon67_Then
+	    (0,0): anon5
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(225,5): anon68_Else
+	    (0,0): anon69_Then
+	    (0,0): anon70_Then
+	    (0,0): anon71_Then
+	    (0,0): anon12
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(228,5): anon72_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(232,5): anon73_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(235,5): anon74_Else
+	    (0,0): anon75_Else
+	    (0,0): anon79_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon81_LoopHead
+	    (0,0): anon81_LoopBody
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon82_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(269,5): anon83_Else
+	    /root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Buckets/LKMBPKVOps.i.dfy(298,7): anon91_Else
+	    (0,0): anon100_Then
+	
+	Dafny program verifier finished with 27 verified, 5 errors
+	Command exited with non-zero status 4
+	149.02user 1.36system 1:55.82elapsed 129%CPU (0avgtext+0avgdata 802852maxresident)k
+	0inputs+0outputs (0major+392979minor)pagefaults 0swaps
+
+./Impl/IndirectionTable.i.dfy
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Impl/../lib/DataStructures/../Base/Sets.i.dfy(37,4): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Impl/../lib/Base/sequences.i.dfy(587,18): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Impl/../lib/DataStructures/BitmapModel.i.dfy(57,13): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Impl/../lib/DataStructures/BitmapModel.i.dfy(55,13): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Impl/../ByteBlockCacheSystem/../lib/Buckets/PackedKV.i.dfy(1059,10): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Impl/../ByteBlockCacheSystem/../lib/Buckets/PackedKV.i.dfy(1077,10): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Impl/../PivotBetree/../lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	
+	Dafny program verifier finished with 112 verified, 0 errors
+	427.16user 4.93system 2:34.79elapsed 279%CPU (0avgtext+0avgdata 1448888maxresident)k
+	0inputs+0outputs (0major+790329minor)pagefaults 0swaps
+
+./lib/DataStructures/LinearContentMutableMap.i.dfy
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/DataStructures/LinearContentMutableMap.i.dfy(591,9): Verification of 'Impl$$LinearContentMutableMap.__default.Realloc' timed out after 60 seconds
+	
+	Dafny program verifier finished with 48 verified, 0 errors, 1 time out
+	Command exited with non-zero status 4
+	126.46user 1.17system 1:17.53elapsed 164%CPU (0avgtext+0avgdata 477308maxresident)k
+	0inputs+0outputs (0major+300875minor)pagefaults 0swaps
+
+./lib/Base/BitsetLemmas.i.dfy
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/lib/Base/BitsetLemmas.i.dfy(15,8): Verification of 'Impl$$BitsetLemmas.__default.bit__ne__expanded' timed out after 60 seconds
+	
+	Dafny program verifier finished with 64 verified, 0 errors, 1 time out
+	Command exited with non-zero status 4
+	186.27user 0.51system 2:01.16elapsed 154%CPU (0avgtext+0avgdata 161148maxresident)k
+	0inputs+0outputs (0major+68362minor)pagefaults 0swaps
+
+./Impl/FlushPolicyModel.i.dfy
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Impl/../lib/Buckets/MapSeqs.i.dfy(67,20): Warning: invalid :induction attribute argument; expected 'false' or 'true' or lemma parameter; ignoring attribute
+	/root/verichecks-worker/worker-dir/clones/c9085d8090fb2dae2e5d7e162d570655290fc320/Impl/FlushPolicyModel.i.dfy(196,8): Verification of 'Impl$$FlushPolicyModel.__default.getActionToFlushValidAction' timed out after 60 seconds
+	
+	Dafny program verifier finished with 7 verified, 0 errors, 1 time out
+	Command exited with non-zero status 4
+	154.11user 2.27system 1:40.66elapsed 155%CPU (0avgtext+0avgdata 1468656maxresident)k
+	0inputs+0outputs (0major+644887minor)pagefaults 0swaps
+
