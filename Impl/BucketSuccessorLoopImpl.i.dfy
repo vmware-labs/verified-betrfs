@@ -6,21 +6,23 @@ include "BucketGeneratorImpl.i.dfy"
 
 module BucketSuccessorLoopImpl {
   import opened BucketsLib
-  import opened BucketImpl
   import opened BucketGeneratorImpl
   import opened NativeTypes
   import opened LinearSequence_s
   import opened LinearSequence_i
   import opened Options
+  import opened Sequences
   import BucketSuccessorLoopModel
   import BucketGeneratorModel
   import opened Lexicographic_Byte_Order_Impl
+  import opened TranslationLib
   import opened ValueMessage
   import opened KeyType
 
   method GetSuccessorInBucketStack(
       linear g': Generator,
       ghost buckets: seq<Bucket>,
+      ghost tt: TranslationTable,
       maxToFind: uint64,
       start: UI.RangeStart,
       upTo: Option<Key>)
@@ -28,10 +30,13 @@ module BucketSuccessorLoopImpl {
   requires forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
   requires |buckets| >= 1
   requires |buckets| < 0x1_0000_0000_0000_0000
-  requires g'.Inv() && g'.I() == BucketGeneratorModel.GenFromBucketStackWithLowerBound(buckets, start)
+  requires |tt| + 1 == |buckets|
+  requires var startkey := if start.NegativeInf? then [] else start.key;
+    && (forall i | 0 <= i < |tt| :: (tt[i].Some? ==> IsPrefix(tt[i].value.newPrefix, startkey)))
+  requires g'.Inv() && g'.I() == BucketGeneratorModel.GenFromBucketStackWithLowerBound(buckets, start, tt)
   requires maxToFind >= 1
   ensures res == BucketSuccessorLoopModel.GetSuccessorInBucketStack(
-      buckets, maxToFind as int, start, upTo)
+      buckets, tt, maxToFind as int, start, upTo)
   {
     BucketSuccessorLoopModel.reveal_GetSuccessorInBucketStack();
     BucketSuccessorLoopModel.reveal_ProcessGenerator();
@@ -46,10 +51,10 @@ module BucketSuccessorLoopImpl {
     invariant forall i | 0 <= i < |buckets| :: WFBucket(buckets[i])
     invariant 0 <= results_len <= maxToFind
     invariant !done ==> results_len < maxToFind
-    invariant !done ==> BucketSuccessorLoopModel.GetSuccessorInBucketStack(buckets, maxToFind as int, start, upTo) 
+    invariant !done ==> BucketSuccessorLoopModel.GetSuccessorInBucketStack(buckets, tt, maxToFind as int, start, upTo) 
         == BucketSuccessorLoopModel.ProcessGenerator(g.I(), maxToFind as int, upTo, results[..results_len])
     invariant done ==> res == BucketSuccessorLoopModel.GetSuccessorInBucketStack(
-                buckets, maxToFind as int, start, upTo)
+                buckets, tt, maxToFind as int, start, upTo)
     decreases !done, BucketGeneratorModel.decreaser(g.I())
     {
       BucketGeneratorModel.lemmaDecreaserDecreases(g.I());

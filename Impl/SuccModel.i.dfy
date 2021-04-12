@@ -36,7 +36,7 @@ module SuccModel {
   function {:opaque} getPathInternal(
       s: BBC.Variables,
       io: IO,
-      key: Key, // this is our currentkey, might need relation between currentkey and startkey
+      key: Key,
       acc: seq<Bucket>,
       tt: TranslationTable,
       start: UI.RangeStart,
@@ -62,7 +62,7 @@ module SuccModel {
   requires var startKey := if start.NegativeInf? then [] else start.key;
     && (forall i | 0 <= i < |tt| :: 
         (tt[i].Some? ==> IsPrefix(tt[i].value.newPrefix, startKey)))
-    && (pset.Some? ==> IsPrefix(pset.value.prefix, key) && IsPrefix(pset.value.newPrefix, startKey))
+    && (pset.Some? ==> IsPrefix(pset.value.prefix, key))
     && startKey == ApplyPrefixSet(pset, key)
   ensures var (s', io, sr) := res;
     && s'.Ready?
@@ -142,7 +142,7 @@ module SuccModel {
   requires var startKey := if start.NegativeInf? then [] else start.key;
     && (forall i | 0 <= i < |tt| :: 
         (tt[i].Some? ==> IsPrefix(tt[i].value.newPrefix, startKey)))
-    && ((pset.Some? ==> IsPrefix(pset.value.prefix, key) && IsPrefix(pset.value.newPrefix, startKey)))
+    && (pset.Some? ==> IsPrefix(pset.value.prefix, key))
     && startKey == ApplyPrefixSet(pset, key)
   ensures var (s', io, sr) := res;
     && s'.Ready?
@@ -171,16 +171,16 @@ module SuccModel {
     )
   }
 
-  function {:opaque} doSucc(s: BBC.Variables, io: IO, start: UI.RangeStart, maxToFind: int)
-  : (res : (BBC.Variables, IO, Option<UI.SuccResultList>))
-  requires BBC.Inv(s)
-  requires io.IOInit?
-  requires s.Ready?
-  requires maxToFind >= 1
-  {
-    var startKey := if start.NegativeInf? then [] else start.key;
-    getPath(s, io, startKey, [], [], start, None, None, maxToFind, BT.G.Root(), 40)
-  }
+  // function {:opaque} doSucc(s: BBC.Variables, io: IO, start: UI.RangeStart, maxToFind: int)
+  // : (res : (BBC.Variables, IO, Option<UI.SuccResultList>))
+  // requires BBC.Inv(s)
+  // requires io.IOInit?
+  // requires s.Ready?
+  // requires maxToFind >= 1
+  // {
+  //   var startKey := if start.NegativeInf? then [] else start.key;
+  //   getPath(s, io, startKey, [], [], start, None, None, maxToFind, BT.G.Root(), 40)
+  // }
 
   predicate LookupBucketsProps(lookup: BT.Lookup, buckets: seq<Bucket>, tt: TranslationTable, upTo: Option<Key>, startKey: Key)
   {
