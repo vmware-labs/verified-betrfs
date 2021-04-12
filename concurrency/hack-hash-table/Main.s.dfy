@@ -13,7 +13,7 @@ abstract module Main {
   ensures Inv(o)
 
   method call(o: MutexTable, input: Ifc.Input,
-      rid: int, linear in_r: ARS.R)
+      rid: int, linear in_r: ARS.R, thread_id: nat)
   returns (output: Ifc.Output, linear out_r: ARS.R)
   requires Inv(o)
   requires in_r == ARS.input_ticket(rid, input)

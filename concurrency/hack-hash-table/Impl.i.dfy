@@ -2,21 +2,6 @@ include "../framework/Mutex.s.dfy"
 include "HTResource.i.dfy"
 include "Main.s.dfy"
 
-// module HTMutex refines Mutexes {
-//   import opened HTResource
-
-//   type ConstType = int  // the row in the hash table protected by this mutex
-
-//   linear datatype ValueType = Row(
-//       entry: HTResource.Entry,
-//       /* ghost */ linear resource: HTResource.R)
-
-//   predicate Inv(k: ConstType, v: ValueType) {
-//     && 0 <= k < FixedSize()
-//     && v.resource == oneRowResource(k as nat, Info(v.entry, Free))
-//   }
-// }
-
 module Impl refines Main {
   import opened Options
   import opened NativeTypes
@@ -44,12 +29,12 @@ module Impl refines Main {
       :: o[i].inv == ((row) => RowInv(i, row)))
   }
 
-  predicate Init(s: ARS.R) {
-    && s.R?
-    && (forall i | 0 < i < |s.table| :: s.table[i] == Some(Info(Empty, Free)))
-    && s.tickets == multiset{}
-    && s.stubs == multiset{}
-  }
+  // predicate Init(s: ARS.R) {
+  //   && s.R?
+  //   && (forall i | 0 < i < |s.table| :: s.table[i] == Some(Info(Empty, Free)))
+  //   && s.tickets == multiset{}
+  //   && s.stubs == multiset{}
+  // }
 
   datatype Splitted = Splitted(r':ARS.R, ri:ARS.R)
 
@@ -58,8 +43,8 @@ module Impl refines Main {
     requires r.tickets == multiset{}
     requires r.stubs == multiset{}
   {
-    var r' := R(seq(|r.table|, (j) requires 0<=j<|r.table| => if j!=i then r.table[j] else None), multiset{}, multiset{});
-    var ri := R(seq(|r.table|, (j) requires 0<=j<|r.table| => if j==i then r.table[j] else None), multiset{}, multiset{});
+    var r' := R(seq(|r.table|, (j) requires 0<=j<|r.table| => if j!=i then r.table[j] else None), r.insert_capacity, multiset{}, multiset{});
+    var ri := R(seq(|r.table|, (j) requires 0<=j<|r.table| => if j==i then r.table[j] else None), 0, multiset{}, multiset{});
     Splitted(r', ri)
   }
 
@@ -199,7 +184,7 @@ module Impl refines Main {
     }
     
     // assert step.QueryNotFoundStep? || step.QueryDoneStep?;
-    r' := R(oneRowTable(slot_idx as nat, Info(entry, Free)), multiset{}, multiset{Stub(rid, output)}); 
+    r' := R(oneRowTable(slot_idx as nat, Info(entry, Free)), 0, multiset{}, multiset{Stub(rid, output)}); 
     r := easy_transform_step(r, r', step);
 
     linear var rmutex;
@@ -221,7 +206,7 @@ module Impl refines Main {
     var query_ticket := Ticket(rid, input);
     var key, inital_key := input.key, input.key;
     var kv := KV(key, input.value);
-    output := MapIfc.InsertOutput;
+    output := MapIfc.InsertOutput(true);
 
     var hash_idx := hash(key);
     var initial_hash_idx := hash_idx;
@@ -304,7 +289,7 @@ module Impl refines Main {
     }
 
     // assert step.InsertDoneStep? || step.InsertUpdateStep?;
-    r' := R(oneRowTable(slot_idx as nat, Info(Full(kv), Free)), multiset{}, multiset{Stub(rid, output)});
+    r' := R(oneRowTable(slot_idx as nat, Info(Full(kv), Free)), 0, multiset{}, multiset{Stub(rid, output)});
     r := easy_transform_step(r, r', step);
 
     r, rmutex := ARS.split(r, ARS.output_stub(rid, output), 
@@ -393,6 +378,7 @@ module Impl refines Main {
     output := MapIfc.RemoveOutput(true);
     r' := R(
       twoRowsTable(slot_idx as nat, Info(Empty, Free), slot_idx' as nat, Info(next_entry, Free)),
+      0,
       multiset{},
       multiset{ Stub(rid, output) }
     );
@@ -402,6 +388,7 @@ module Impl refines Main {
 
     ghost var left := R(
       oneRowTable(slot_idx' as nat, Info(next_entry, Free)),
+      0,
       multiset{},
       multiset{ Stub(rid, output) });
     ghost var right := oneRowResource(slot_idx as nat, Info(Empty, Free));
@@ -504,7 +491,7 @@ module Impl refines Main {
 
     if step.RemoveNotFoundStep? {
       output := MapIfc.RemoveOutput(false);
-      r' := R(oneRowTable(slot_idx as nat, Info(entry, Free)), multiset{}, multiset{Stub(rid, output)}); 
+      r' := R(oneRowTable(slot_idx as nat, Info(entry, Free)), 0, multiset{}, multiset{Stub(rid, output)}); 
       r := easy_transform_step(r, r', step);
       ghost var left := ARS.output_stub(rid, output);
       ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
@@ -518,7 +505,7 @@ module Impl refines Main {
   }
 
   method call(o: MutexTable, input: Ifc.Input,
-      rid: int, linear in_r: ARS.R)
+      rid: int, linear in_r: ARS.R, thread_id: nat)
     returns (output: Ifc.Output, linear out_r: ARS.R)
   // requires Inv(o)
   // requires ticket == ARS.input_ticket(rid, key)
