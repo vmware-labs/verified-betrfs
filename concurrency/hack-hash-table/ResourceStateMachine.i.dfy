@@ -152,17 +152,17 @@ module ResourceStateMachine {
     ))
   }
 
-  predicate ExistsEmptyEntry(table: seq<Option<HT.Info>>)
+  /*predicate ExistsEmptyEntry(table: seq<Option<HT.Info>>)
   {
     exists e :: 0 <= e < |table| && table[e].Some? && table[e].value.entry.Empty?
         && !table[e].value.state.RemoveTidying?
-  }
+  }*/
 
   predicate InvTable(table: seq<Option<HT.Info>>)
   {
     && |table| == HT.FixedSize()
     && Complete(table)
-    && ExistsEmptyEntry(table)
+    //&& ExistsEmptyEntry(table)
     && KeysUnique(table)
     && (forall e, i | 0 <= e < |table| && 0 <= i < |table|
         :: ValidHashInSlot(table, e, i))
@@ -172,20 +172,87 @@ module ResourceStateMachine {
         :: InsertionNotPastKey(table, e, j, k))
   }
 
+  function InfoQuantity(s: Option<HT.Info>) : nat {
+    if s.None? then 0 else (
+      (if s.value.state.Inserting? then 1 else 0) +
+      (if s.value.state.RemoveTidying? || s.value.entry.Full? then 1 else 0)
+    )
+  }
+
+  function {:opaque} TableQuantity(s: seq<Option<HT.Info>>) : nat {
+    if s == [] then 0 else TableQuantity(s[..|s|-1]) + InfoQuantity(s[|s| - 1])
+  }
+
   predicate Inv(s: Variables)
   {
     && s.R?
     && InvTable(s.table)
+    && TableQuantity(s.table) + s.insert_capacity == HT.Capacity()
+  }
+
+  lemma TableQuantity_replace1(s: seq<Option<HT.Info>>, s': seq<Option<HT.Info>>, i: int)
+  requires 0 <= i < |s| == |s'|
+  requires forall j | 0 <= j < |s| :: i != j ==> s[j] == s'[j]
+  ensures TableQuantity(s') == TableQuantity(s) + InfoQuantity(s'[i]) - InfoQuantity(s[i])
+  {
+    reveal_TableQuantity();
+    if i == |s| - 1 {
+      assert s[..|s|-1] == s'[..|s|-1];
+    } else {
+      TableQuantity_replace1(s[..|s|-1], s'[..|s'|-1], i);
+    }
+  }
+
+  lemma TableQuantity_replace2(s: seq<Option<HT.Info>>, s': seq<Option<HT.Info>>, i: int)
+  requires 0 <= i < |s| == |s'|
+  requires |s| > 1
+  requires
+      var i' := (if i == |s| - 1 then 0 else i + 1);
+      forall j | 0 <= j < |s| :: i != j && i' != j ==> s[j] == s'[j]
+  ensures
+      var i' := (if i == |s| - 1 then 0 else i + 1);
+    TableQuantity(s') == TableQuantity(s)
+        + InfoQuantity(s'[i]) - InfoQuantity(s[i])
+        + InfoQuantity(s'[i']) - InfoQuantity(s[i'])
+  {
+    var s0 := s[i := s'[i]];
+    TableQuantity_replace1(s, s0, i);
+    var i' := (if i == |s| - 1 then 0 else i + 1);
+    TableQuantity_replace1(s0, s', i');
   }
 
   function {:opaque} get_empty_cell(table: seq<Option<HT.Info>>) : (e: int)
   requires InvTable(table)
+  requires TableQuantity(table) < |table|
   ensures 0 <= e < |table| && table[e].Some? && table[e].value.entry.Empty?
         && !table[e].value.state.RemoveTidying?
   {
+    assert exists e' :: 0 <= e' < |table| && table[e'].Some? && table[e'].value.entry.Empty?
+        && !table[e'].value.state.RemoveTidying? by {
+      var t := get_empty_cell_other_than_insertion_cell_table(table);
+    }
     var e' :| 0 <= e' < |table| && table[e'].Some? && table[e'].value.entry.Empty?
         && !table[e'].value.state.RemoveTidying?;
     e'
+  }
+
+  lemma get_empty_cell_other_than_insertion_cell_table(table: seq<Option<HT.Info>>)
+  returns (e: int)
+  requires Complete(table)
+  requires TableQuantity(table) < |table|
+  ensures 0 <= e < |table| && table[e].Some? && table[e].value.entry.Empty?
+        && !table[e].value.state.RemoveTidying?
+        && !table[e].value.state.Inserting?
+  {
+    reveal_TableQuantity();
+    e := |table| - 1;
+    if table[e].value.entry.Empty?
+        && !table[e].value.state.RemoveTidying?
+        && !table[e].value.state.Inserting? {
+      return;
+    } else {
+      e := get_empty_cell_other_than_insertion_cell_table(table[..|table| - 1]);
+    }
   }
 
   lemma get_empty_cell_other_than_insertion_cell(s: Variables)
@@ -195,6 +262,7 @@ module ResourceStateMachine {
         && !s.table[e].value.state.RemoveTidying?
         && !s.table[e].value.state.Inserting?
   {
+    e := get_empty_cell_other_than_insertion_cell_table(s.table);
   }
 
   lemma ProcessInsertTicket_PreservesInv(s: Variables, s': Variables, insert_ticket: HT.Ticket)
@@ -221,6 +289,9 @@ module ResourceStateMachine {
       assert InsertionNotPastKey(s.table, e, j, k);
       assert ValidHashInSlot(s.table, e, j);
     }
+
+    var h := HT.hash(insert_ticket.input.key) as int;
+    TableQuantity_replace1(s.table, s'.table, h);
   }
 
   lemma InsertSkip_PreservesInv(s: Variables, s': Variables, pos: nat)
@@ -285,6 +356,8 @@ module ResourceStateMachine {
       assert InsertionNotPastKey(s.table, e, j, k);
       assert ValidHashInSlot(s.table, e, j);
     }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
   }
 
   lemma InsertSwap_PreservesInv(s: Variables, s': Variables, pos: nat)
@@ -330,14 +403,17 @@ module ResourceStateMachine {
     forall i | 0 <= i < |s.table| && s.table[i].value.entry.Full?
     ensures s.table[i].value.entry.kv.key != s.table[pos].value.state.kv.key
     {
-      var e :| 0 <= e < |s.table| && s.table[e].value.entry.Empty?
-        && !s.table[e].value.state.RemoveTidying?;
+      //var e :| 0 <= e < |s.table| && s.table[e].value.entry.Empty?
+      //  && !s.table[e].value.state.RemoveTidying?;
+      var e := get_empty_cell_other_than_insertion_cell(s);
       assert InsertionNotPastKey(s.table, e, i, pos);
       //assert ValidHashInSlot(s.table, e, i);
       assert ValidHashInSlot(s.table, e, pos);
       assert ValidHashOrdering(s.table, e, pos, i);
       //assert ValidHashOrdering(s.table, e, i, pos);
     }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
   }
 
   lemma InsertDone_PreservesInv(s: Variables, s': Variables, pos: nat)
@@ -372,17 +448,18 @@ module ResourceStateMachine {
       assert ValidHashInSlot(s.table, pos, k);
     }
 
-    assert ExistsEmptyEntry(s'.table) by {
+    /*assert ExistsEmptyEntry(s'.table) by {
       var e' := get_empty_cell_other_than_insertion_cell(s);
       assert 0 <= e' < |s'.table| && s'.table[e'].Some? && s'.table[e'].value.entry.Empty?
             && !s'.table[e'].value.state.RemoveTidying?;
-    }
+    }*/
 
     forall i | 0 <= i < |s.table| && s.table[i].value.entry.Full?
     ensures s.table[i].value.entry.kv.key != s.table[pos].value.state.kv.key
     {
-      var e :| 0 <= e < |s.table| && s'.table[e].value.entry.Empty?
-        && !s.table[e].value.state.RemoveTidying?;
+      //var e :| 0 <= e < |s.table| && s'.table[e].value.entry.Empty?
+        //&& !s.table[e].value.state.RemoveTidying?;
+      var e := get_empty_cell_other_than_insertion_cell(s);
       assert InsertionNotPastKey(s.table, e, i, pos);
       //assert InsertionNotPastKey(s.table, e, pos, i);
       assert ValidHashInSlot(s.table, e, pos);
@@ -436,6 +513,8 @@ module ResourceStateMachine {
       //assert ValidHashOrdering(s.table, pos, k, j);
 
     }
+
+    TableQuantity_replace1(s.table, s'.table, pos);
   }
 
   lemma InsertUpdate_PreservesInv(s: Variables, s': Variables, pos: nat)
@@ -460,6 +539,8 @@ module ResourceStateMachine {
     {
       assert InsertionNotPastKey(s.table, e, j, k);
     }
+
+    TableQuantity_replace1(s.table, s'.table, pos);
   }
 
   lemma ProcessQueryTicket_PreservesInv(s: Variables, s': Variables, query_ticket: HT.Ticket)
@@ -486,6 +567,9 @@ module ResourceStateMachine {
     {
       assert InsertionNotPastKey(s.table, e, j, k);
     }
+
+    var h := HT.hash(query_ticket.input.key) as int;
+    TableQuantity_replace1(s.table, s'.table, h);
   }
 
   lemma QuerySkip_PreservesInv(s: Variables, s': Variables, pos: nat)
@@ -518,6 +602,8 @@ module ResourceStateMachine {
     {
       assert InsertionNotPastKey(s.table, e, j, k);
     }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
   }
 
   lemma QueryDone_PreservesInv(s: Variables, s': Variables, pos: nat)
@@ -542,6 +628,8 @@ module ResourceStateMachine {
     {
       assert InsertionNotPastKey(s.table, e, j, k);
     }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
   }
 
   lemma QueryNotFound_PreservesInv(s: Variables, s': Variables, pos: nat)
@@ -566,6 +654,8 @@ module ResourceStateMachine {
     {
       assert InsertionNotPastKey(s.table, e, j, k);
     }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
   }
 
   lemma ProcessRemoveTicket_PreservesInv(s: Variables, s': Variables, remove_ticket: HT.Ticket)
@@ -592,6 +682,9 @@ module ResourceStateMachine {
     {
       assert InsertionNotPastKey(s.table, e, j, k);
     }
+
+    var h := HT.hash(remove_ticket.input.key) as int;
+    TableQuantity_replace1(s.table, s'.table, h);
   }
 
   lemma RemoveSkip_PreservesInv(s: Variables, s': Variables, pos: nat)
@@ -624,6 +717,8 @@ module ResourceStateMachine {
     {
       assert InsertionNotPastKey(s.table, e, j, k);
     }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
   }
 
   lemma RemoveFoundIt_PreservesInv(s: Variables, s': Variables, pos: nat)
@@ -648,6 +743,34 @@ module ResourceStateMachine {
     {
       assert InsertionNotPastKey(s.table, e, j, k);
     }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
+  }
+
+  lemma RemoveNotFound_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.RemoveNotFound(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: i != pos ==> s'.table[i].value.entry == s.table[i].value.entry;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures InsertionNotPastKey(s'.table, e, j, k)
+    {
+      assert InsertionNotPastKey(s.table, e, j, k);
+    }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
   }
 
   lemma RemoveTidy_PreservesInv(s: Variables, s': Variables, pos: nat)
@@ -655,12 +778,12 @@ module ResourceStateMachine {
   requires HT.RemoveTidy(s, s', pos)
   ensures Inv(s')
   {
-    assert ExistsEmptyEntry(s'.table) by {
+    /*assert ExistsEmptyEntry(s'.table) by {
       var e :| 0 <= e < |s.table| && s.table[e].Some? && s.table[e].value.entry.Empty?
         && !s.table[e].value.state.RemoveTidying?;
       assert 0 <= e < |s'.table| && s'.table[e].Some? && s'.table[e].value.entry.Empty?
         && !s'.table[e].value.state.RemoveTidying?;
-    }
+    }*/
 
     var pos' := if pos < |s.table| - 1 then pos + 1 else 0;
 
@@ -708,6 +831,8 @@ module ResourceStateMachine {
       assert InsertionNotPastKey(s.table, e, pos', k);
       assert InsertionNotPastKey(s.table, e, j, pos');
     }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
   }
 
   lemma RemoveDone_PreservesInv(s: Variables, s': Variables, pos: nat)
@@ -849,6 +974,43 @@ module ResourceStateMachine {
       assert InsertionNotPastKey(s.table, e', j, k);
       //assert InsertionNotPastKey(s.table, e', pos', j);
     }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
   }
 
+  lemma UpdateStep_PreservesInv(s: Variables, s': Variables, step: HT.Step)
+  requires Inv(s)
+  requires HT.UpdateStep(s, s', step)
+  ensures Inv(s')
+  {
+    match step {
+      case ProcessInsertTicketStep(insert_ticket) => ProcessInsertTicket_PreservesInv(s, s', insert_ticket);
+      case InsertSkipStep(pos) => InsertSkip_PreservesInv(s, s', pos);
+      case InsertSwapStep(pos) => InsertSwap_PreservesInv(s, s', pos);
+      case InsertDoneStep(pos) => InsertDone_PreservesInv(s, s', pos);
+      case InsertUpdateStep(pos) => InsertUpdate_PreservesInv(s, s', pos);
+
+      case ProcessRemoveTicketStep(remove_ticket) => ProcessRemoveTicket_PreservesInv(s, s', remove_ticket);
+      case RemoveSkipStep(pos) => RemoveSkip_PreservesInv(s, s', pos);
+      case RemoveFoundItStep(pos) => RemoveFoundIt_PreservesInv(s, s', pos);
+      case RemoveNotFoundStep(pos) => RemoveNotFound_PreservesInv(s, s', pos);
+      case RemoveTidyStep(pos) => RemoveTidy_PreservesInv(s, s', pos);
+      case RemoveDoneStep(pos) => RemoveDone_PreservesInv(s, s', pos);
+
+      case ProcessQueryTicketStep(query_ticket) => ProcessQueryTicket_PreservesInv(s, s', query_ticket);
+      case QuerySkipStep(pos) => QuerySkip_PreservesInv(s, s', pos);
+      case QueryDoneStep(pos) => QueryDone_PreservesInv(s, s', pos);
+      case QueryNotFoundStep(pos) => QueryNotFound_PreservesInv(s, s', pos);
+    }
+  }
+
+
+  lemma Update_PreservesInv(s: Variables, s': Variables)
+  requires Inv(s)
+  requires HT.Update(s, s')
+  ensures Inv(s')
+  {
+    var step :| HT.UpdateStep(s, s', step);
+    UpdateStep_PreservesInv(s, s', step);
+  }
 }

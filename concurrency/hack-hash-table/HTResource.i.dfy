@@ -19,6 +19,11 @@ module HTResource refines ApplicationResourceSpec {
   function FixedSize() : (n: nat)
   ensures n > 1
 
+  function Capacity() : (n: nat)
+  {
+    FixedSize() - 1
+  }
+
   function method FixedSizeImpl() : (n: uint32)
   ensures n as int == FixedSize()
 
@@ -205,7 +210,7 @@ module HTResource refines ApplicationResourceSpec {
   predicate Init(s: R) {
     && s.R?
     && (forall i | 0 <= i < |s.table| :: s.table[i] == Some(Info(Empty, Free)))
-    && s.insert_capacity == FixedSize() - 1
+    && s.insert_capacity == Capacity()
     && s.tickets == multiset{}
     && s.stubs == multiset{}
   }

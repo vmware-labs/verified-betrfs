@@ -84,12 +84,16 @@ abstract module MinimalResourceSpec {
   function method {:extern} get_unit_shared() : (gshared u: M)
   ensures u == unit()
 
-  ghost method {:extern} join(glinear a: M, glinear b: M)
+  // This MUST be 'method', as it wouldn't be safe to call this and
+  // obtain the postconditions from only ghost 'a' and 'b'.
+  glinear method {:extern} join(glinear a: M, glinear b: M)
   returns (glinear sum: M)
   ensures add_defined(a, b) // yes, this is an 'ensures'
   ensures sum == add(a, b)
 
-  ghost method {:extern} split(glinear sum: M, a: M, b: M)
+  // The only reason this is a 'method' and not a 'function method'
+  // is so it can easily have two return args.
+  glinear method {:extern} split(glinear sum: M, ghost a: M, ghost b: M)
   returns (glinear a': M, glinear b': M)
   requires add_defined(a, b)
   requires sum == add(a, b)

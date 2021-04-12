@@ -6,7 +6,7 @@
 #include <condition_variable>
 
 namespace Mutexes {
-        
+
 class BinarySemaphore {
 public:
   BinarySemaphore (int count) : count(count) { }
@@ -28,19 +28,19 @@ public:
 private:
   std::mutex mtx;
   std::condition_variable cv;
-  int count;
+  volatile int count;
 };
 
 template <typename V>
 struct InternalMutex {
   // We use a semaphore because it allows us to do the 'release'
-  // on a different thread fro the 'acquire'.
+  // on a different thread from the 'acquire'.
   // This behavior is allowed by the Dafny spec of Mutex.
   // Howeer, that action would result in undefined behavior for std::mutex.
 
   //std::binary_semaphore semaphore;
   BinarySemaphore semaphore;
-  V v;
+  volatile V v;
 
   InternalMutex(V const& v) : semaphore(1), v(v) { }
 };
