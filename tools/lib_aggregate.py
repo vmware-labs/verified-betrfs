@@ -142,6 +142,7 @@ def summarize_verbose(reportType, verchk):
 
     condition = extractCondition(reportType, verchk, content)
     condition.userTimeSec = userTimeSec
+    condition.filename = dafnyFromVerchk(verchk)
     condition.verchk = verchk
 
     return content, condition

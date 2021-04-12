@@ -15,9 +15,15 @@ def write_summary(reportType, verchks, summary_filename, error_filename):
     # Phase 1: Collect all the failures and write out error details
     fails = {}
     failTypes = {}
+    total_time = 0
+    timed_conditions = []
     with open(error_filename, 'w') as err:
         for verchk in verchks:
             content, condition = summarize_verbose(reportType, verchk)
+            if not condition.userTimeSec is None:
+                total_time += condition.userTimeSec
+                timed_conditions.append(condition)
+
             if not condition.is_success:
                 # Write the details to the error log
                 err.write(dafnyFromVerchk(verchk))
@@ -42,6 +48,12 @@ def write_summary(reportType, verchks, summary_filename, error_filename):
             summary.write("\nFiles failing with %s\n" % failTypes[level])
             for fail in fails[level]:
                 summary.write("\t%s\n" % fail)
+
+        summary.write("\nTotal build time: %d seconds\n" % int(total_time))
+        summary.write("\nSlowest files:\n") 
+        for condition in sorted(timed_conditions, reverse=True, key=lambda c : c.userTimeSec)[:10]:
+            summary.write("\t%s\t%s\n" % (condition.userTimeSec, condition.filename))
+
 
 def create_report(reportType, verchks):
     summaries = sorted([summarize(reportType, verchk) for verchk in verchks])
