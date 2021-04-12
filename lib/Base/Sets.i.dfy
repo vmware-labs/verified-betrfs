@@ -3,28 +3,28 @@
 
 module Sets {
 
-  lemma {:opaque} ProperSubsetImpliesSmallerCardinality<T>(a: set<T>, b: set<T>)
+  lemma ProperSubsetImpliesSmallerCardinality<T>(a: set<T>, b: set<T>)
     requires a < b
     ensures |a| < |b|
   {
     assert |b| == |a| + |b-a|;
   }
 
-  lemma {:opaque} SetInclusionImpliesSmallerCardinality<T>(a: set<T>, b: set<T>)
+  lemma SetInclusionImpliesSmallerCardinality<T>(a: set<T>, b: set<T>)
     requires a <= b
     ensures |a| <= |b|
   {
     assert b == a + (b - a);
   }
 
-  lemma {:opaque} SetInclusionImpliesStrictlySmallerCardinality<T>(a: set<T>, b: set<T>)
+  lemma SetInclusionImpliesStrictlySmallerCardinality<T>(a: set<T>, b: set<T>)
     requires a < b
     ensures |a| < |b|
   {
     assert b == a + (b - a);
   }
 
-  lemma {:opaque} SetInclusionAndEqualCardinalityImpliesSetEquality<T>(a: set<T>, b: set<T>)
+  lemma SetInclusionAndEqualCardinalityImpliesSetEquality<T>(a: set<T>, b: set<T>)
     requires a <= b
     requires |a| == |b|
     ensures a == b
