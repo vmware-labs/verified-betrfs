@@ -13,7 +13,7 @@ DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
 DAFNY_FLAGS=
 # Approximation based on (somewhat dated) F* measurements
 RLIMIT_PER_SECOND=545
-DEFAULT_RLIMIT=$$(( 50 * $(RLIMIT_PER_SECOND) ))
+DEFAULT_RLIMIT=$$(( 60 * $(RLIMIT_PER_SECOND) ))
 DAFNY_RLIMIT_FLAG=/rlimit:$(DEFAULT_RLIMIT)
 
 # This is mainly for CI use
@@ -129,6 +129,7 @@ status: build/deps build/Impl/Bundle.i.status.pdf
 .PHONY: verichecks-status
 
 verichecks-status: DAFNY_GLOBAL_FLAGS=/vcsCores:4
+verichecks-status: DEFAULT_RLIMIT=$$(( 30 * $(RLIMIT_PER_SECOND) ))
 verichecks-status: build/deps build/Impl/Bundle.i.status.pdf
 
 .PHONY: syntax-status
