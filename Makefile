@@ -14,7 +14,10 @@ DAFNY_FLAGS=
 # Approximation based on (somewhat dated) F* measurements
 RLIMIT_PER_SECOND=545
 DEFAULT_RLIMIT=$$(( 50 * $(RLIMIT_PER_SECOND) ))
-DAFNY_GLOBAL_FLAGS=/rlimit:$(DEFAULT_RLIMIT)
+DAFNY_RLIMIT_FLAG=/rlimit:$(DEFAULT_RLIMIT)
+
+# This is mainly for CI use
+DAFNY_GLOBAL_FLAGS=
 
 POUND_DEFINES=
 ifdef LOG_QUERY_STATS
@@ -172,7 +175,7 @@ build/%.synchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 # .verchk: Dafny file-local verification
 build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.verchk,%.verchk-tmp,$@))
-	( $(TIME) $(DAFNY_CMD) $(DAFNY_GLOBAL_FLAGS) $(DAFNY_FLAGS) /compile:0 $< ) 2>&1 | tee $(TMPNAME)
+	( $(TIME) $(DAFNY_CMD) $(DAFNY_GLOBAL_FLAGS) $(DAFNY_RLIMIT_FLAG) $(DAFNY_FLAGS) /compile:0 $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
 
 ### Establish Dafny flag defaults
@@ -220,7 +223,6 @@ build/lib/Buckets/BucketFlushModel.i.verchk: NONLINEAR_FLAGS=
 build/lib/Buckets/PackedKV.i.verchk: NONLINEAR_FLAGS=
 build/lib/Buckets/PackedStringArray.i.verchk: NONLINEAR_FLAGS=
 build/lib/Base/sequences.i.verchk: NONLINEAR_FLAGS=
-build/Impl/IndirectionTable.i.verchk: NONLINEAR_FLAGS=
 build/BlockCacheSystem/DiskLayout.i.verchk: NONLINEAR_FLAGS=
 build/ByteBlockCacheSystem/Marshalling.i.verchk: NONLINEAR_FLAGS=
 build/ByteBlockCacheSystem/JournalBytes.i.verchk: NONLINEAR_FLAGS=
