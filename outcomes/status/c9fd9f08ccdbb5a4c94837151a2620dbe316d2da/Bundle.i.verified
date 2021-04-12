@@ -1,0 +1,21 @@
+Overall: Fail
+
+Files failing with verification error
+	./Impl/IOImpl.i.dfy
+	./lib/DataStructures/LinearMutableMap.i.dfy
+
+Files failing with untrusted file contains assumptions
+	./Impl/IndirectionTable.i.dfy
+
+Files failing with exceeded rlimit
+	./lib/DataStructures/BtreeModel.i.dfy
+	./Impl/SplitImpl.i.dfy
+	./Betree/BetreeInv.i.dfy
+	./ByteBlockCacheSystem/ByteSystem.i.dfy
+	./Impl/BookkeepingModel.i.dfy
+	./BlockCacheSystem/BlockSystem.i.dfy
+	./PivotBetree/PivotBetreeSpecRefinement.i.dfy
+	./Impl/MarshallingImpl.i.dfy
+	./lib/DataStructures/LinearContentMutableMap.i.dfy
+	./ByteBlockCacheSystem/InterpretationDisk.i.dfy
+	./lib/Buckets/PackedKV.i.dfy
