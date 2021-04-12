@@ -13,7 +13,10 @@ DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
 DAFNY_FLAGS=
 # Approximation based on (somewhat dated) F* measurements
 RLIMIT_PER_SECOND=545
-DEFAULT_RLIMIT=$$(( 50 * $(RLIMIT_PER_SECOND) ))
+DEFAULT_RLIMIT=$$(( 30 * $(RLIMIT_PER_SECOND) ))
+DAFNY_RLIMIT_FLAG=/rlimit:$(DEFAULT_RLIMIT)
+
+# This is mainly for CI use
 DAFNY_GLOBAL_FLAGS=
 
 POUND_DEFINES=
@@ -125,7 +128,8 @@ status: build/deps build/Impl/Bundle.i.status.pdf
 # Longer time-limit for CI
 .PHONY: verichecks-status
 
-verichecks-status: DAFNY_GLOBAL_FLAGS= #/vcsCores:4
+verichecks-status: DAFNY_GLOBAL_FLAGS=/vcsCores:4
+verichecks-status: DEFAULT_RLIMIT=$$(( 30 * $(RLIMIT_PER_SECOND) ))
 verichecks-status: build/deps build/Impl/Bundle.i.status.pdf
 
 .PHONY: syntax-status
@@ -172,7 +176,7 @@ build/%.synchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 # .verchk: Dafny file-local verification
 build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.verchk,%.verchk-tmp,$@))
-	( $(TIME) $(DAFNY_CMD) $(DAFNY_GLOBAL_FLAGS) $(DAFNY_FLAGS) /compile:0 $< ) 2>&1 | tee $(TMPNAME)
+	( $(TIME) $(DAFNY_CMD) $(DAFNY_GLOBAL_FLAGS) $(DAFNY_RLIMIT_FLAG) $(DAFNY_FLAGS) /compile:0 $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
 
 ### Establish Dafny flag defaults
