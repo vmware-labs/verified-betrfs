@@ -383,7 +383,7 @@ module TranslationLib {
     if pset.None? then None else Some(PrefixSet(pset.value.newPrefix, pset.value.prefix))
   }
 
-  function ApplyPrefixSet(pset: Option<PrefixSet>, key: Key) : (key': Key)
+  function method ApplyPrefixSet(pset: Option<PrefixSet>, key: Key) : (key': Key)
   requires pset.Some? ==> IsPrefix(pset.value.prefix, key)
   ensures pset.Some? ==> IsPrefix(pset.value.newPrefix, key')
   {
@@ -585,6 +585,40 @@ module TranslationLib {
 
     if |right| > 0 && right[0] == prefix[0] {
       KeyWithPrefixLt(prefix[1..], right[1..], key[1..]);
+    }
+  }
+
+  lemma AllKeysWithPrefixLt(prefix: Key, right: Key)
+  requires SeqComparison.lt(prefix, right)
+  requires !IsPrefix(prefix, right)
+  ensures forall k : Key | IsPrefix(prefix, k) :: SeqComparison.lt(k, right)
+  {
+    forall k : Key | IsPrefix(prefix, k)
+    ensures SeqComparison.lt(k, right) 
+    {
+      KeyWithPrefixLt(prefix, right, k);
+    }
+  }
+
+  lemma KeyLtPrefix(prefix: Key, key: Key)
+  requires SeqComparison.lt(key, prefix)
+  ensures !IsPrefix(prefix, key)
+  {
+    reveal_IsPrefix();
+    SeqComparison.reveal_lte();
+
+    if |key| > 0 && key[0] == prefix[0] {
+      KeyLtPrefix(prefix[1..], key[1..]);
+    }
+  }
+
+  lemma AllKeysLtPrefix(prefix: Key)
+  ensures forall k : Key | SeqComparison.lt(k, prefix) :: !IsPrefix(prefix, k)
+  {
+    forall k : Key | SeqComparison.lt(k, prefix)
+    ensures !IsPrefix(prefix, k) 
+    {
+      KeyLtPrefix(prefix, k);
     }
   }
 

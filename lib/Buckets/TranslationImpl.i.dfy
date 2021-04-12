@@ -200,18 +200,6 @@ module TranslationImpl {
     }
   }
 
-  method ComputeApplyPrefixSet(pset: Option<PrefixSet>, key: Key) returns (k: Key)
-  requires pset.Some? ==> IsPrefix(pset.value.prefix, key)
-  ensures k == ApplyPrefixSet(pset, key)
-  {
-    if pset.None? {
-      k := key;
-    } else {
-      assume |pset.value.newPrefix| + |key| - |pset.value.prefix| <= 1024;
-      k := pset.value.newPrefix + key[|pset.value.prefix| as uint64..];
-    }
-  }
-
   method ComputeComposePrefixSet(a: Option<PrefixSet>, b: Option<PrefixSet>) returns (c: Option<PrefixSet>)
   requires ComposePrefixSet.requires(a, b)
   ensures c == ComposePrefixSet(a, b)
@@ -222,10 +210,10 @@ module TranslationImpl {
       c := Some(PrefixSet(b.value.newPrefix, b.value.prefix));
     } else if |a.value.prefix| as uint64 <= |b.value.prefix| as uint64 {
       reveal_IsPrefix();
-      var newPrefix := ComputeApplyPrefixSet(a, b.value.prefix);
+      var newPrefix := ApplyPrefixSet(a, b.value.prefix);
       c := Some(PrefixSet(b.value.newPrefix, newPrefix));
     } else {
-      var prefix := ComputeApplyPrefixSet(b, a.value.prefix);
+      var prefix := ApplyPrefixSet(b, a.value.prefix);
       c := Some(PrefixSet(prefix, a.value.newPrefix));
     }
   }

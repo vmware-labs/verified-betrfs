@@ -1,7 +1,7 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "../lib/Buckets/BucketIteratorModel.i.dfy"
+include "BucketIteratorModel.i.dfy"
 //
 // A mathematical description of bucket generators.
 // It's like an iterator, but it doesn't directly refer to an actual bucket.

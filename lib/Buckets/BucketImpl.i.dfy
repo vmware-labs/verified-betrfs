@@ -4,7 +4,6 @@
 include "../DataStructures/KMBtree.i.dfy"
 include "PackedKV.i.dfy"
 include "../../PivotBetree/Bounds.i.dfy"
-include "BucketIteratorModel.i.dfy"
 include "BucketFlushModel.i.dfy"
 include "LKMBPKVOps.i.dfy"
 include "../Lang/Inout.i.dfy"
@@ -15,9 +14,7 @@ include "../Lang/Inout.i.dfy"
 // it is flushed into the root in a batch.
 // This module implements PivotBetreeSpec.Bucket (the model for class
 // MutBucket).
-// The MutBucket class also supplies Iterators using the functional
-// Iterator datatype from BucketIteratorModel, which is why there is no
-// BucketIteratorImpl module/class.
+//
 
 module BucketImpl {
   import LKMB = LKMBtree`All
@@ -33,7 +30,6 @@ module BucketImpl {
   import opened BucketWeights
   import opened NativeTypes
   import opened KeyType
-  import BucketIteratorModel
   import Pivots = BoundedPivotsLib
   import opened BucketFlushModel
   import opened DPKV = DynamicPkv
@@ -41,7 +37,6 @@ module BucketImpl {
   import opened LinearSequence_s
   import opened LinearSequence_i
   import opened Inout
-  // import Lexicographic_Byte_Order
 
   type TreeMap = LKMB.Model.Node
 
@@ -66,16 +61,6 @@ module BucketImpl {
     LKMBPKVOps.WeightImpliesCanAppend(tree);
     pkv := LKMBPKVOps.ToPkv(tree);
   }
-
-  // datatype Iterator = Iterator(
-  //   ghost next: BucketIteratorModel.IteratorOutput,
-  //   i: uint64,
-  //   ghost decreaser: int)
-
-  // function IIterator(it: Iterator) : BucketIteratorModel.Iterator
-  // {
-  //   BucketIteratorModel.Iterator(it.next, it.i as int, it.decreaser)
-  // }
 
   linear datatype BucketFormat =
       | BFTree(linear tree: TreeMap)
@@ -790,104 +775,6 @@ module BucketImpl {
       linear var buckets' := FreeMutBucketSeqRecur(buckets, 0);
       lseq_free_fun(buckets')
   }
-/*
-  linear datatype BucketIter = BucketIter(it: Iterator, pkv: PackedKV.Pkv, ghost bucket: Bucket)
-  {
-    predicate WFIter()
-    {
-      && PackedKV.WF(pkv)
-      && bucket == PackedKV.I(pkv)
-      && BucketIteratorModel.WFIter(bucket, IIterator(it))
-    } 
-
-    linear method Free()
-    {
-      linear var BucketIter(_,_,_) := this;
-    }
-
-    static function method makeIter(ghost bucket: Bucket, idx: uint64): (it': Iterator)
-    requires WFBucket(bucket)
-    requires |bucket.keys| == |bucket.msgs|
-    requires 0 <= idx as int <= |bucket.keys|
-    ensures IIterator(it')
-      == BucketIteratorModel.iterForIndex(bucket, idx as int)
-    {
-      Iterator(
-          (if idx as int == |bucket.keys| then BucketIteratorModel.Done
-              else BucketIteratorModel.Next(bucket.keys[idx], bucket.msgs[idx])),
-          idx,
-          |bucket.keys| - idx as int)
-    }
-
-    static method IterStart(shared bucket: MutBucket) returns (linear biter: BucketIter)
-    requires bucket.Inv()
-    ensures biter.WFIter()
-    ensures biter.bucket == bucket.I()
-    ensures IIterator(biter.it) == BucketIteratorModel.IterStart(biter.bucket)
-    {
-      BucketIteratorModel.reveal_IterStart();
-      ghost var b := bucket.I();
-      var pkv := bucket.GetPkv();
-      var it := makeIter(b, 0);
-      biter := BucketIter(it, pkv, b);
-    }
-
-    static method IterFindFirstGte(shared bucket: MutBucket, key: Key) returns (linear biter: BucketIter)
-    requires bucket.Inv()
-    ensures biter.WFIter()
-    ensures biter.bucket == bucket.I()
-    ensures IIterator(biter.it) == BucketIteratorModel.IterFindFirstGte(biter.bucket, key)
-    {
-      BucketIteratorModel.reveal_IterFindFirstGte();
-      ghost var b := bucket.I();
-      var pkv := bucket.GetPkv();
-      var i: uint64 := PSA.BinarySearchIndexOfFirstKeyGte(pkv.keys, key);
-      var it := makeIter(b, i);
-      biter := BucketIter(it, pkv, b);
-    }
-
-    static method IterFindFirstGt(shared bucket: MutBucket, key: Key) returns (linear biter: BucketIter)
-    requires bucket.Inv()
-    ensures biter.WFIter()
-    ensures biter.bucket == bucket.I()
-    ensures IIterator(biter.it) == BucketIteratorModel.IterFindFirstGt(biter.bucket, key)
-    {
-      BucketIteratorModel.reveal_IterFindFirstGt();
-      ghost var b := bucket.I();
-      var pkv := bucket.GetPkv();
-      var i: uint64 := PSA.BinarySearchIndexOfFirstKeyGt(pkv.keys, key);
-      var it := makeIter(b, i);
-      biter := BucketIter(it, pkv, b);
-    }
-
-    linear inout method IterInc()
-    requires old_self.WFIter()
-    requires IIterator(old_self.it).next.Next?
-    ensures self.WFIter()
-    ensures old_self.bucket == self.bucket
-    ensures IIterator(self.it) == BucketIteratorModel.IterInc(old_self.bucket, IIterator(old_self.it))
-    {
-      BucketIteratorModel.lemma_NextFromIndex(self.bucket, IIterator(self.it));
-
-      BucketIteratorModel.reveal_IterInc();
-      NumElementsLteWeight(self.bucket);
-      inout self.it := makeIter(self.bucket, self.it.i + 1);
-    }
-
-    shared method GetNext() returns (next : BucketIteratorModel.IteratorOutput)
-    requires this.WFIter()
-    ensures next == IIterator(this.it).next
-    {
-      BucketIteratorModel.lemma_NextFromIndex(bucket, IIterator(it));
-        
-      if it.i == |pkv.keys.offsets| as uint64 {
-        next := BucketIteratorModel.Done;
-      } else {
-        // here all we want to do is translate the key
-        next := BucketIteratorModel.Next(PackedKV.GetKey(pkv, it.i), PackedKV.GetMessage(pkv, it.i));
-      }
-    }
-  }*/
 
   method pkvList2BucketList(linear inout bots: lseq<MutBucket>, pkvs: seq<PKV.Pkv>, sorted: bool)
   requires |pkvs| < Uint64UpperBound()

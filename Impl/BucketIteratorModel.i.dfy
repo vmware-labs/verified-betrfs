@@ -1,12 +1,12 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "BucketsLib.i.dfy"
-include "TranslationLib.i.dfy"
-include "../Base/Sets.i.dfy"
+include "../lib/Buckets/BucketsLib.i.dfy"
+include "../lib/Buckets/TranslationLib.i.dfy"
+include "../lib/Base/Sets.i.dfy"
+
 //
 // A mathematical description of bucket iterators for successor query.
-// The implementation is defined in BucketImpl together with MutBucket.
 //
 
 module BucketIteratorModel {
@@ -121,18 +121,52 @@ module BucketIteratorModel {
   ///// Functions for initializing and manipulating iterators
 
   // linear search
+  // function iterNextWithPrefix(bucket: Bucket, prefix: Key, idx: int) : (i: int)
+  // requires PreWFBucket(bucket)
+  // requires 0 <= idx <= |bucket.keys|
+  // ensures idx <= i <= |bucket.keys|
+  // ensures i < |bucket.keys| ==> IsPrefix(prefix, bucket.keys[i])
+  // ensures forall j | idx <= j < i :: !IsPrefix(prefix, bucket.keys[j])
+  // decreases |bucket.keys| - idx
+  // {
+  //   if idx < |bucket.keys| && !IsPrefix(prefix, bucket.keys[idx]) then (
+  //     iterNextWithPrefix(bucket, prefix, idx+1)
+  //   ) else (
+  //     idx
+  //   )
+  // }
+
   function iterNextWithPrefix(bucket: Bucket, prefix: Key, idx: int) : (i: int)
   requires PreWFBucket(bucket)
   requires 0 <= idx <= |bucket.keys|
   ensures idx <= i <= |bucket.keys|
   ensures i < |bucket.keys| ==> IsPrefix(prefix, bucket.keys[i])
-  ensures forall j | idx <= j < i :: !IsPrefix(prefix, bucket.keys[j])
-  decreases |bucket.keys| - idx
+  ensures BucketWellMarshalled(bucket) ==> forall j | idx <= j < i :: !IsPrefix(prefix, bucket.keys[j])
   {
-    if idx < |bucket.keys| && !IsPrefix(prefix, bucket.keys[idx]) then (
-      iterNextWithPrefix(bucket, prefix, idx+1)
-    ) else (
+    Keyspace.reveal_IsStrictlySorted();
+    reveal_IsPrefix();
+
+    if idx == |bucket.keys| then (
       idx
+    ) else if IsPrefix(prefix, bucket.keys[idx]) then (
+      idx
+    ) else if Keyspace.lt(bucket.keys[idx], prefix) then (
+      var i := Keyspace.binarySearchIndexOfFirstKeyGteWithLowerBound(bucket.keys, prefix, idx+1);
+      AllKeysLtPrefix(prefix);
+
+      if i < |bucket.keys| then (
+        if IsPrefix(prefix, bucket.keys[i]) then (
+          i
+        ) else (
+          AllKeysWithPrefixLt(prefix, bucket.keys[i]);
+          |bucket.keys|
+        )
+      ) else (
+        |bucket.keys|
+      )
+    ) else (
+      AllKeysWithPrefixLt(prefix, bucket.keys[idx]);
+      |bucket.keys|
     )
   }
 
