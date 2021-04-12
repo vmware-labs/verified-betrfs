@@ -7,7 +7,7 @@ include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/LinearOption.i.dfy"
 include "../lib/Lang/NativeTypes.s.dfy"
-include "../lib/Math/div.i.dfy"
+// TODO this seems to prevent z3 from timing out somehow: include "../lib/Math/div.i.dfy"
 include "../lib/Lang/LinearMaybe.s.dfy"
 include "../lib/Lang/LinearBox.i.dfy"
 include "../lib/DataStructures/LinearMutableMap.i.dfy"
@@ -29,7 +29,7 @@ module IndirectionTable {
   import opened Options
   import opened LinearOption
   import opened LinearBox
-  import Math__div_i
+  // TODO see include ^: import Math__div_i
   import opened Sequences
   import opened NativeTypes
   import ReferenceType`Internal
@@ -1861,7 +1861,7 @@ module IndirectionTable {
 
         var loc: uint64 := it.next.value.loc.value.addr;
         assert 0 <= loc as nat / NodeBlockSize() < Uint64UpperBound() by {
-          Math__div_i.lemma_div_basics_forall();
+          // TODO see include ^: Math__div_i.lemma_div_basics_forall();
         }
         var locIndex: uint64 := loc / NodeBlockSizeUint64();
         if locIndex < NumBlocksUint64() {
