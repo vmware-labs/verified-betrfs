@@ -129,7 +129,7 @@ status: build/deps build/Impl/Bundle.i.status.pdf
 .PHONY: verichecks-status
 
 verichecks-status: DAFNY_GLOBAL_FLAGS=/vcsCores:4
-verichecks-status: DEFAULT_RLIMIT=$$(( 30 * $(RLIMIT_PER_SECOND) ))
+verichecks-status: DEFAULT_RLIMIT=$$(( 10 * $(RLIMIT_PER_SECOND) ))
 verichecks-status: build/deps build/Impl/Bundle.i.status.pdf
 
 .PHONY: syntax-status
