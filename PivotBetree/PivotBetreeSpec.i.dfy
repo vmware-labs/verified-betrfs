@@ -934,7 +934,7 @@ module PivotBetreeSpec {
   requires WFNode(node)
   requires ContainsAllKeys(node.pivotTable)
   requires node.children.Some?
-  requires G.Keyspace.lt([], to)
+  requires to != []
   ensures WFNode(node')
   ensures WeightBucketList(node'.buckets) == 0
   {
@@ -974,7 +974,7 @@ module PivotBetreeSpec {
   requires WFNode(node)
   requires ContainsAllKeys(node.pivotTable)
   requires node.children.Some?
-  requires G.Keyspace.lt([], to)
+  requires to != []
   requires BucketListNoKeyWithPrefix(node.buckets, node.pivotTable, from)
   ensures WFPivots(node'.pivotTable)
   ensures WFEdges(node'.edgeTable, node'.pivotTable)
@@ -1035,7 +1035,7 @@ module PivotBetreeSpec {
     && ContainsAllKeys(clone.newroot.pivotTable)
 
     && clone.oldroot.children.Some?
-    && G.Keyspace.lt([], clone.to)
+    && clone.to != []
     && BucketListNoKeyWithPrefix(clone.oldroot.buckets, clone.oldroot.pivotTable, clone.from)
     // from = old, to = new
     && clone.newroot == CloneNewRoot(clone.oldroot, clone.from, clone.to)
