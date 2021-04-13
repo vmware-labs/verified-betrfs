@@ -645,6 +645,165 @@ module TranslationLib {
     }
   }
 
+  lemma DropCommonPrefixPreservesLte(prefix: seq<byte>, left: seq<byte>, right: seq<byte>)
+    requires IsPrefix(prefix, left)
+    requires IsPrefix(prefix, right)
+    requires Lexicographic_Byte_Order.lte(left, right)
+    ensures Lexicographic_Byte_Order.lte(left[|prefix|..], right[|prefix|..])
+  {
+    if |prefix| == 0 {
+    } else {
+      reveal_IsPrefix();
+      SeqComparison.reveal_lte();
+      DropCommonPrefixPreservesLte(prefix[1..], left[1..], right[1..]);
+    }
+  }
+
+  lemma DropCommonPrefixPreservesLt(prefix: seq<byte>, left: seq<byte>, right: seq<byte>)
+    requires IsPrefix(prefix, left)
+    requires IsPrefix(prefix, right)
+    requires Lexicographic_Byte_Order.lt(left, right)
+    ensures Lexicographic_Byte_Order.lt(left[|prefix|..], right[|prefix|..])
+  {
+    if |prefix| == 0 {
+    } else {
+      reveal_IsPrefix();
+      SeqComparison.reveal_lte();
+      DropCommonPrefixPreservesLte(prefix[1..], left[1..], right[1..]);
+    }
+  }
+
+  lemma PrependCommonPrefixPreservesLte(prefix: seq<byte>, left: seq<byte>, right: seq<byte>)
+    requires Lexicographic_Byte_Order.lte(left, right)
+    ensures Lexicographic_Byte_Order.lte(prefix + left, prefix + right)
+  {
+    if |prefix| == 0 {
+      assert prefix + left == left;
+      assert prefix + right == right;
+    } else {
+      PrependCommonPrefixPreservesLte(prefix[1..], left, right);
+      SeqComparison.reveal_lte();
+      assert (prefix + left)[1..] == prefix[1..] + left;
+      assert (prefix + right)[1..] == prefix[1..] + right;
+    }
+  }
+
+  lemma PrependCommonPrefixPreservesLt(prefix: seq<byte>, left: seq<byte>, right: seq<byte>)
+    requires Lexicographic_Byte_Order.lt(left, right)
+    ensures Lexicographic_Byte_Order.lt(prefix + left, prefix + right)
+  {
+    if |prefix| == 0 {
+      assert prefix + left == left;
+      assert prefix + right == right;
+    } else {
+      PrependCommonPrefixPreservesLt(prefix[1..], left, right);
+      SeqComparison.reveal_lte();
+      assert (prefix + left)[1..] == prefix[1..] + left;
+      assert (prefix + right)[1..] == prefix[1..] + right;
+    }
+  }
+
+  lemma TranslateElementPreservesLte(prefix: Key, newPrefix: Key)
+    ensures forall left, right |
+    && ElementIsKey(left)
+    && IsPrefix(prefix, left.e)
+    && ElementIsKey(right)
+    && IsPrefix(prefix, right.e)
+    && Keyspace.lte(left, right)
+    :: Keyspace.lte(TranslateElement(left, prefix, newPrefix), TranslateElement(right, prefix, newPrefix))
+  {
+    forall left, right |
+      && ElementIsKey(left)
+      && IsPrefix(prefix, left.e)
+      && ElementIsKey(right)
+      && IsPrefix(prefix, right.e)
+      && Keyspace.lte(left, right)
+      ensures Keyspace.lte(TranslateElement(left, prefix, newPrefix), TranslateElement(right, prefix, newPrefix))
+    {
+      DropCommonPrefixPreservesLte(prefix, left.e, right.e);
+      PrependCommonPrefixPreservesLte(newPrefix, left.e[|prefix|..], right.e[|prefix|..]);
+    }
+  }
+
+  predicate TranslateElementRequirements(pivot: Element, prefix: Key, newPrefix: Key)
+  {
+    && ElementIsKey(pivot)
+    && IsPrefix(prefix, pivot.e)
+  }
+  
+  lemma TranslateElementPreservesLt(prefix: Key, newPrefix: Key)
+    ensures forall left, right |
+    && TranslateElementRequirements(left, prefix, newPrefix)
+    && TranslateElementRequirements(right, prefix, newPrefix)
+    && Keyspace.lt(left, right)
+    :: Keyspace.lt(TranslateElement(left, prefix, newPrefix), TranslateElement(right, prefix, newPrefix))
+  {
+    forall left, right |
+      && ElementIsKey(left)
+      && IsPrefix(prefix, left.e)
+      && ElementIsKey(right)
+      && IsPrefix(prefix, right.e)
+      && Keyspace.lt(left, right)
+      ensures Keyspace.lt(TranslateElement(left, prefix, newPrefix), TranslateElement(right, prefix, newPrefix))
+    {
+      DropCommonPrefixPreservesLt(prefix, left.e, right.e);
+      PrependCommonPrefixPreservesLt(newPrefix, left.e[|prefix|..], right.e[|prefix|..]);
+    }
+  }
+
+  function TranslateElementLambda(prefix: Key, newPrefix: Key) : Keyspace.Element ~> Keyspace.Element
+  {
+    pivot
+      requires TranslateElementRequirements(pivot, prefix, newPrefix)
+      =>
+      TranslateElement(pivot, prefix, newPrefix)
+  }
+
+  lemma TranslateElementLambdaPreservesLt(prefix: Key, newPrefix: Key)
+    ensures forall left, right |
+    && TranslateElementLambda(prefix, newPrefix).requires(left)
+    && TranslateElementLambda(prefix, newPrefix).requires(right)
+    && Keyspace.lt(left, right)
+    :: Keyspace.lt(TranslateElementLambda(prefix, newPrefix)(left), TranslateElementLambda(prefix, newPrefix)(right))
+  {
+    var te := TranslateElementLambda(prefix, newPrefix);
+    forall left, right |
+      && te.requires(left)
+      && te.requires(right)
+      && Keyspace.lt(left, right)
+      ensures Keyspace.lt(te(left), te(right))
+    {
+      assert te.requires(left);
+      assert TranslateElementLambda(prefix, newPrefix).requires(left);
+      assert (pivot
+      requires ElementIsKey(pivot)
+      requires IsPrefix(prefix, pivot.e)
+      =>
+      TranslateElement(pivot, prefix, newPrefix)
+      ).requires(left);
+      assert TranslateElementRequirements(left, prefix, newPrefix);
+      TranslateElementPreservesLt(prefix, newPrefix);
+    }
+  }
+  
+  function TranslatePivots2(pt: PivotTable, prefix: Key, newPrefix: Key, end: Element) : (pt' : PivotTable)
+  requires WFPivots(pt)
+  requires forall i | 0 <= i < NumBuckets(pt) :: IsPrefix(prefix, pt[i].e)
+  requires end.Element? ==> ElementIsKey(end)
+  requires Keyspace.lt(TranslateElement(pt[|pt|-2], prefix, newPrefix), end)
+  ensures WFPivots(pt')
+  ensures |pt'| == |pt|
+  ensures forall i | 0 <= i <  NumBuckets(pt') :: IsPrefix(newPrefix, pt'[i].e)
+  ensures forall i | 0 <= i <  NumBuckets(pt') :: pt[i] == TranslateElement(pt'[i], newPrefix, prefix)
+  ensures Last(pt') == end
+  {
+    var front := Apply(TranslateElementLambda(prefix, newPrefix), DropLast(pt));
+    Keyspace.StrictlySortedSubsequence(pt, 0, |pt| - 1);
+    TranslateElementPreservesLt(prefix, newPrefix);
+    Keyspace.ApplyStrictlySorted(TranslateElementLambda(prefix, newPrefix), DropLast(pt));
+    front + [ end ]
+  }
+
   function TranslatePivots(pt: PivotTable, prefix: Key, newPrefix: Key, end: Element, idx: int): (pt' : PivotTable)
   requires WFPivots(pt)
   requires 0 <= idx < NumBuckets(pt)
@@ -802,7 +961,7 @@ module TranslationLib {
     && (forall i | idx <= i < |bucket.keys| && i !in tbucket.idxs :: !IsPrefix(prefix, bucket.keys[i]))
   }
 
-  function TranslateBucketInternal(bucket: Bucket, prefix: Key, newPrefix: Key, idx: int) : (tbucket: TBucket)
+  function {:opaque} TranslateBucketInternal(bucket: Bucket, prefix: Key, newPrefix: Key, idx: int) : (tbucket: TBucket)
   requires PreWFBucket(bucket)
   requires 0 <= idx <= |bucket.keys|
   ensures WFTBucket(bucket, tbucket, prefix, newPrefix, idx)
