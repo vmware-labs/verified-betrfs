@@ -26,7 +26,7 @@ module CloneModel {
     BT.reveal_CutoffNodeAndKeepRight();
   }
 
-  function {:opaque} clone(s: BBC.Variables, from: Key, to: Key): (BBC.Variables, bool)
+  function {:opaque} doClone(s: BBC.Variables, from: Key, to: Key): (BBC.Variables, bool)
   requires BBC.Inv(s)
   requires s.Ready?
   requires BT.G.Root() in s.cache
@@ -63,10 +63,10 @@ module CloneModel {
     )
   }
 
-  lemma cloneCorrect(s: BBC.Variables, from: Key, to: Key)
-  requires clone.requires(s, from, to)
+  lemma doCloneCorrect(s: BBC.Variables, from: Key, to: Key)
+  requires doClone.requires(s, from, to)
   requires s.totalCacheSize() <= MaxCacheSize()
-  ensures var (s', success) := clone(s, from, to);
+  ensures var (s', success) := doClone(s, from, to);
       && (success ==>
         BBC.Next(s, s',
           BlockDisk.NoDiskOp,
@@ -78,9 +78,9 @@ module CloneModel {
       && (StateBCImpl.WFCache(s'.cache))
       && s.totalCacheSize() == s'.totalCacheSize()
   {
-    reveal_clone();
+    reveal_doClone();
 
-    var (s', success) := clone(s, from, to);
+    var (s', success) := doClone(s, from, to);
     lemmaChildrenConditionsOfNode(s, BT.G.Root());
 
     if (

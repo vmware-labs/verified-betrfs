@@ -358,6 +358,28 @@ module NodeImpl {
       assume false;
       node' := EmptyNode();
     }
+
+    static method CloneNewRoot(shared node: Node, from: Key, to: Key)
+    returns (linear rootopt: lOption<Node>)
+    requires to != []
+    requires node.Inv()
+    requires BT.WFNode(node.I())
+    requires node.children.Some?
+    requires Pivots.ContainsAllKeys(node.pivotTable)
+    ensures rootopt.lNone? ==> (
+        !BucketListNoKeyWithPrefix(node.I().buckets, node.pivotTable, from)
+       || |BT.CloneNewRoot(node.I(), from, to).children.value| > MaxNumChildren())
+    ensures rootopt.lSome? ==> (
+      && BucketListNoKeyWithPrefix(node.I().buckets, node.pivotTable, from)
+      && rootopt.value.Inv()
+      && rootopt.value.I() == BT.CloneNewRoot(node.I(), from, to)
+      && |rootopt.value.I().children.value| <= MaxNumChildren()
+      )
+    {
+      assume false;
+      rootopt := lNone;
+      // node' := EmptyNode();
+    }
   }
 
   function method FreeNode(linear node: Node) : ()
