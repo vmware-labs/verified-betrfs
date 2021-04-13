@@ -209,8 +209,7 @@ build/Math/div.i.verchk: OTHER_PROVER_FLAGS=/rlimit:$$(( 2 * $(DEFAULT_RLIMIT) )
 # Note: Nonlinear.i.dfy and Math.i.dfy are designed to use nonlinear arith.
 # The other files are legacy'ed in, but it's no big deal as long
 # as they verify.
-build/lib/Checksums/Nonlinear.i.verchk: NONLINEAR_FLAGS=
-build/lib/Marshalling/Math.i.verchk: NONLINEAR_FLAGS=
+build/lib/Math/Nonlinear.i.verchk: NONLINEAR_FLAGS=
 build/lib/Base/mathematics.i.verchk: NONLINEAR_FLAGS=
 build/Impl/BookkeepingModel.i.verchk: NONLINEAR_FLAGS=
 build/Impl/IOImpl.i.verchk: NONLINEAR_FLAGS=
