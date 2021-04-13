@@ -4,10 +4,10 @@
 include "../Lang/System/Bits.s.dfy"
 include "../Lang/System/F2_X.s.dfy"
 include "CRC32C.s.dfy"
-include "../Marshalling/Math.i.dfy"
 include "../Lang/System/PackedInts.s.dfy"
-include "Nonlinear.i.dfy"
-include "MathLemmas.i.dfy"
+include "../Math/Nonlinear.i.dfy"
+include "../Math/ModLemmas.i.dfy"
+include "../Math/Math.i.dfy"
 
 module BitLemmas {
   import opened Bits_s
@@ -17,7 +17,7 @@ module BitLemmas {
   import opened NativePackedInts
   import opened Math
   import NonlinearLemmas
-  import MathLemmas
+  import ModLemmas
 
   lemma bits_of_int_0(x: nat)
   ensures bits_of_int(0, x) == zeroes(x)
@@ -457,7 +457,7 @@ module BitLemmas {
                 }
                 (x % (power2(a-1) * 2)) % 2;
                 {
-                  MathLemmas.mod_mod(x, power2(a-1), 2);
+                  ModLemmas.mod_mod(x, power2(a-1), 2);
                 }
                 x % 2;
               }
@@ -467,7 +467,7 @@ module BitLemmas {
               calc {
                 (x/2) % power2(a-1);
                 {
-                  MathLemmas.div_mod(x, power2(a-1), 2);
+                  ModLemmas.div_mod(x, power2(a-1), 2);
                 }
                 (x % (power2(a-1) * 2)) / 2;
                 {

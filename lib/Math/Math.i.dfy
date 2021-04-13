@@ -3,7 +3,11 @@
 // and in a few cases rewrote the proof from scratch to avoid pulling in
 // a lot of dependencies.
 
+include "Nonlinear.i.dfy"
+
 module Math {
+  import opened NonlinearLemmas
+
   function {:opaque} power2(exp: nat) : nat
       ensures power2(exp) > 0;
   {
@@ -31,8 +35,12 @@ module Math {
   {
     reveal_power2();
     if (e2 == 0) {
+      assert power2(e2) == 1;
     } else {
       lemma_power2_adds(e1, e2-1);
+      NonlinearLemmas.mul_assoc(power2(e1), 2, power2(e2 - 1));
+      NonlinearLemmas.mul_comm(power2(e1), 2);
+      NonlinearLemmas.mul_assoc(2, power2(e1), power2(e2 - 1));
     }
   }
 
@@ -78,6 +86,8 @@ module Math {
   requires -m < m*x < m
   ensures x == 0
   {
+    if (x >= 1) { mul_le_right(m, 1, x); }
+    if (x <= -1) { mul_le_right(m, x, -1); }
   }
 
   // This is often used as part of the axiomatic definition of division
@@ -87,21 +97,26 @@ module Math {
   requires d > 0
   ensures x / d + 1 == (x + d) / d
   {
-    assert d * (x / d + 1)
-        == (x/d)*d + d
-        == x - (x % d) + d;
+    mul_comm(d, (x / d + 1));
+    distributive_right(x/d, 1, d);
+    div_mul_plus_mod(x, d);
+    //assert d * (x / d + 1)
+    //    == (x/d)*d + d
+    //    == x - (x % d) + d;
 
-    assert d * ((x + d) / d)
-        == (x + d) - ((x + d) % d);
+    div_mul_plus_mod(x + d, d);
+    //assert d * ((x + d) / d)
+    //    == (x + d) - ((x + d) % d);
 
-    assert 0 <= x % d < d;
-    assert 0 <= (x + d) % d < d;
+    //assert 0 <= x % d < d;
+    //assert 0 <= (x + d) % d < d;
 
-    assert d * (x / d + 1) - d * ((x + d) / d)
-        == ((x + d) % d) - (x % d);
+    //assert d * (x / d + 1) - d * ((x + d) / d)
+    //    == ((x + d) % d) - (x % d);
 
-    assert -d < d * (x / d + 1) - d * ((x + d) / d) < d;
-    assert -d < d * ((x / d + 1) - ((x + d) / d)) < d;
+    //assert -d < d * (x / d + 1) - d * ((x + d) / d) < d;
+    distributive_left_sub(d, x/d + 1, (x+d)/d);
+    //assert -d < d * ((x / d + 1) - ((x + d) / d)) < d;
     bounded_mul_eq_0((x / d + 1) - ((x + d) / d), d);
   }
 
@@ -114,9 +129,11 @@ module Math {
     } else if (b > 0) {
       lemma_add_mul_div(a, b-1, d);
       lemma_div_ind(a + (b-1)*d, d);
+      distributive_right_sub(b, 1, d);
     } else {
       lemma_add_mul_div(a, b+1, d);
       lemma_div_ind(a + b*d, d);
+      distributive_right(b, 1, d);
     }
   }
 
@@ -127,12 +144,15 @@ module Math {
       decreases if x > 0 then x else -x
   {
     if (x == 0) {
+      div_eq_0(b, d);
     } else if (x > 0) {
       lemma_div_multiples_vanish_fancy(x-1, b, d);
       lemma_div_ind(d*(x-1) + b, d);
+      distributive_left_sub(d, x, 1);
     } else {
       lemma_div_multiples_vanish_fancy(x+1, b, d);
       lemma_div_ind(d*x + b, d);
+      distributive_left(d, x, 1);
     }
   }
 
@@ -147,23 +167,34 @@ module Math {
       requires m > 0;
       ensures  (x * m) % m == 0;
   {
-    assert (x*m)%m == x*m - ((x*m)/m)*m;
+    div_mul_plus_mod(x*m, m);
+    //assert (x*m)%m == x*m - ((x*m)/m)*m;
     lemma_div_by_multiple(x, m);
-    assert (x*m)/m == x;
-    assert x*m - ((x*m)/m)*m == x*m - x*m
-        == 0;
+    //assert (x*m)/m == x;
+    //assert x*m - ((x*m)/m)*m == x*m - x*m
+    //    == 0;
   }
 
   lemma lemma_div_by_multiple_is_strongly_ordered(x:int, y:int, m:int, z:int)
       requires x < y;
       requires y == m * z;
       requires z > 0;
-      ensures     x / z < y / z;
+      ensures x / z < y / z;
+      decreases y - x
   {
-    lemma_mod_multiples_basic(m, z);
-    if (x / z <= m-1) {
-    } else {
-      lemma_div_by_multiple_is_strongly_ordered(x, y-z, m-1, z);
+    if (x / z >= y / z) {
+      mul_le_right(z, y/z, x/z);
+      mul_comm(x/z, z);
+      mul_comm(y/z, z);
+      assert (x/z) * z >= (y/z) * z;
+      div_mul_plus_mod(x, z);
+      div_mul_plus_mod(y, z);
+      assert x - (x%z) >= y - (y%z);
+      lemma_mod_multiples_basic(m, z);
+      assert x - (x%z) >= y;
+      mod_ge_0(x, z);
+      assert x >= y;
+      assert false;
     }
   }
 
@@ -188,31 +219,39 @@ module Math {
       ensures c * d != 0;
       ensures (x/c)/d == x / (c*d);
   {
+    mul_gt_0(c, d);
     if (x < c*d) {
-      assert x/(c*d) == 0;
-      assert x/c < d;
-      assert (x/c)/d == 0;
+      div_eq_0(x, c*d);
+      //assert x/(c*d) == 0;
+      lemma_div_by_multiple_is_strongly_ordered(x, c*d, d, c);
+      lemma_div_by_multiple(d, c);
+      //assert (c*d) / c == d;
+      //assert x/c < d;
+      div_ge_0(x, c);
+      div_eq_0(x/c, d);
+      //assert (x/c)/d == 0;
     } else {
-      calc {
-        (x / c) / d;
-        ((x - c*d + c*d) / c) / d;
-        {
+      //calc {
+      //  (x / c) / d;
+      //  ((x - c*d + c*d) / c) / d;
+      //  {
           lemma_add_mul_div(x-c*d, d, c);
-        }
-        ((x - c*d) / c + d) / d;
-        {
+          mul_comm(c, d);
+      //  }
+      //  ((x - c*d) / c + d) / d;
+      //  {
           lemma_div_ind((x - c*d) / c, d);
-        }
-        ((x - c*d) / c) / d + 1;
-        {
+      //  }
+      //  ((x - c*d) / c) / d + 1;
+      //  {
           lemma_div_denominator(x - c*d, c, d);
-        }
-        ((x - c*d) / (c*d)) + 1;
-        {
+      //  }
+      //  ((x - c*d) / (c*d)) + 1;
+      //  {
           lemma_div_ind(x - c*d, c*d);
-        }
-        x / (c*d);
-      }
+      //  }
+      //  x / (c*d);
+      //}
     }
   }
 }

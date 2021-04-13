@@ -1,5 +1,5 @@
 include "../Lang/NativeTypes.s.dfy"
-include "Math.i.dfy"
+include "../Math/Math.i.dfy"
 
 module Common__Util_i {
 import opened NativeTypes
