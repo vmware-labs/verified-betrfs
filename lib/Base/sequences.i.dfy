@@ -126,11 +126,10 @@ module Sequences {
     if n == 0 then [] else Range(n-1) + [n-1]
   }
   
-  function Apply<E,R>(f: (E ~> R), run: seq<E>) : (result: seq<R>)
+  function Apply<E,R>(f: (E --> R), run: seq<E>) : (result: seq<R>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     ensures |result| == |run|
     ensures forall i :: 0 <= i < |run| ==> result[i] == f(run[i]);
-    reads set i, o | 0 <= i < |run| && o in f.reads(run[i]) :: o
   {
     seq(|run|,
       i
@@ -141,7 +140,7 @@ module Sequences {
       f(run[i]))
   }
 
-  lemma ApplyAdditive<E, R>(f: (E ~> R), run1: seq<E>, run2: seq<E>)
+  lemma ApplyAdditive<E, R>(f: (E --> R), run1: seq<E>, run2: seq<E>)
     requires forall i :: 0 <= i < |run1| ==> f.requires(run1[i])
     requires forall i :: 0 <= i < |run2| ==> f.requires(run2[i])
     ensures Apply(f, run1 + run2) == Apply(f, run1) + Apply(f, run2)
@@ -149,16 +148,15 @@ module Sequences {
   }
   
   // TODO: can we replace Apply with this?
-  function {:opaque} ApplyOpaque<E,R>(f: (E ~> R), run: seq<E>) : (result: seq<R>)
+  function {:opaque} ApplyOpaque<E,R>(f: (E --> R), run: seq<E>) : (result: seq<R>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     ensures |result| == |run|
     ensures forall i :: 0 <= i < |run| ==> result[i] == f(run[i]);
-    reads set i, o | 0 <= i < |run| && o in f.reads(run[i]) :: o
   {
     Apply(f, run)
   }
 
-  method DoApply<E,R>(f: E ~> R, run: seq<E>) returns (linear result: seq<R>)
+  method DoApply<E,R>(f: E --> R, run: seq<E>) returns (linear result: seq<R>)
     requires |run| < Uint64UpperBound()
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     ensures result == Apply(f, run)
@@ -182,13 +180,12 @@ module Sequences {
     }
   }
 
-  function Filter<E>(f : (E ~> bool), run: seq<E>) : (result: seq<E>)
+  function Filter<E>(f : (E --> bool), run: seq<E>) : (result: seq<E>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     ensures |result| <= |run|
     ensures forall i: nat | i < |result| :: result[i] in run
     ensures forall i: nat | i < |result| :: f(result[i])
     ensures forall i: nat | i < |run| && f(run[i]) :: run[i] in result
-    reads f.reads
   {
     if |run| == 0 then
       []
@@ -198,13 +195,13 @@ module Sequences {
       Filter(f, DropLast(run))
   }
 
-  method DoFilter<E>(f : (E ~> bool), run: seq<E>) returns (sresult: seq<E>)
+  method DoFilter<E>(f : (E --> bool), run: seq<E>) returns (linear result: seq<E>)
     requires |run| < Uint64UpperBound()
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
-    ensures sresult == Filter(f, run)
+    ensures result == Filter(f, run)
   {
     if |run| as uint64 == 0 {
-      sresult := [];
+      result := seq_empty();
     } else {
       linear var tresult := seq_alloc(|run| as uint64, run[0]);
       var result_len := 0;
@@ -223,12 +220,12 @@ module Sequences {
         i := i + 1;
         assert run[..i] == run[..i-1] + [ run[i-1] ];
       }
-      sresult := seq_unleash(tresult)[..result_len];
+      result := TrustedRuntimeSeqTruncate(tresult, result_len);
       assert run[..i] == run;
     }
   }
 
-  lemma FilterThenApplyStep<E, R>(f: E ~> bool, m: E ~> R, run: seq<E>)
+  lemma FilterThenApplyStep<E, R>(f: E --> bool, m: E --> R, run: seq<E>)
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     requires forall i | 0 <= i < |run| :: f(run[i]) ==> m.requires(run[i])
     requires 0 < |run|
@@ -237,13 +234,13 @@ module Sequences {
   {
   }
   
-  method FilterThenApply<E, R>(f: E ~> bool, m: E ~> R, run: seq<E>) returns (sresult: seq<R>)
+  method FilterThenApply<E, R>(f: E --> bool, m: E --> R, run: seq<E>) returns (linear result: seq<R>)
     requires |run| < Uint64UpperBound()
     requires forall i :: 0 <= i < |run| ==> f.requires(run[i])
     requires forall i | 0 <= i < |run| :: f(run[i]) ==> m.requires(run[i])
-    ensures sresult == Apply(m, Filter(f, run))
+    ensures result == Apply(m, Filter(f, run))
   {
-    linear var result := seq_empty();
+    result := seq_empty();
     var result_len := 0;
 
     var i := 0;
@@ -267,11 +264,11 @@ module Sequences {
       assert run[..i+1] == run[..i] + [ run[i] ];
       i := i + 1;
     }
-    sresult := seq_unleash(result)[..result_len];
+    result := TrustedRuntimeSeqTruncate(result, result_len);
     assert run == run[..i];
   }
 
-  lemma ApplyThenFilterStep<E, R>(m: E ~> R, f: R ~> bool, run: seq<E>)
+  lemma ApplyThenFilterStep<E, R>(m: E --> R, f: R --> bool, run: seq<E>)
     requires forall i :: 0 <= i < |run| ==> m.requires(run[i])
     requires forall i | 0 <= i < |run| :: f.requires(m(run[i]))
     requires 0 < |run|
@@ -282,17 +279,17 @@ module Sequences {
     ApplyAdditive(m, DropLast(run), [Last(run)]);
   }
   
-  method ApplyThenFilter<E, R>(m: E ~> R, f: R ~> bool, run: seq<E>) returns (sresult: seq<R>)
+  method ApplyThenFilter<E, R>(m: E --> R, f: R --> bool, run: seq<E>) returns (linear result: seq<R>)
     requires |run| < Uint64UpperBound()
     requires forall i | 0 <= i < |run| :: m.requires(run[i])
     requires forall i | 0 <= i < |run| :: f.requires(m(run[i]))
-    ensures sresult == Filter(f, Apply(m, run))
+    ensures result == Filter(f, Apply(m, run))
   {
     if |run| as uint64 == 0 {
-      sresult := [];
+      result := seq_empty();
     } else {
       var first := m(run[0]);
-      linear var result := seq_alloc(|run| as uint64, first);
+      result := seq_alloc(|run| as uint64, first);
       var result_len := if f(first) then 1 else 0;
 
       var i := result_len;
@@ -313,7 +310,7 @@ module Sequences {
         i := i + 1;
         assert run[..i] == run[..i-1] + [ run[i-1] ];
       }
-      sresult := seq_unleash(result)[..result_len];
+      result := TrustedRuntimeSeqTruncate(result, result_len);
       assert run == run[..i];
     }
   }
