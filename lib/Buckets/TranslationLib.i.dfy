@@ -378,11 +378,18 @@ module TranslationLib {
     ApplyPrefixSet(pset, key)
   }
 
-  function ApplyPrefixSet(pset: Option<PrefixSet>, key: Key) : Key
+  function RevPrefixSet(pset: Option<PrefixSet>) : Option<PrefixSet>
+  {
+    if pset.None? then None else Some(PrefixSet(pset.value.newPrefix, pset.value.prefix))
+  }
+
+  function method ApplyPrefixSet(pset: Option<PrefixSet>, key: Key) : (key': Key)
   requires pset.Some? ==> IsPrefix(pset.value.prefix, key)
+  ensures pset.Some? ==> IsPrefix(pset.value.newPrefix, key')
   {
     if pset.None? then key 
     else (
+      reveal_IsPrefix();
       assume |pset.value.newPrefix + key[|pset.value.prefix|..]| <= 1024;
       pset.value.newPrefix + key[|pset.value.prefix|..]
     )
@@ -390,39 +397,40 @@ module TranslationLib {
 
   function ComposePrefixSet(a: Option<PrefixSet>, b: Option<PrefixSet>): (c: Option<PrefixSet>)
   requires a.Some? && b.Some? ==> 
-    ( IsPrefix(a.value.newPrefix, b.value.prefix)
-    || IsPrefix(b.value.prefix, a.value.newPrefix))
+    ( IsPrefix(a.value.prefix, b.value.prefix)
+    || IsPrefix(b.value.prefix, a.value.prefix))
   {
     if a == None then (
-      b
+      RevPrefixSet(b)
     ) else if b == None then (
       a
     ) else (
       reveal_IsPrefix();
-      if |a.value.newPrefix| <= |b.value.prefix| then (
-        var prefix := ApplyPrefixSet(Some(PrefixSet(a.value.newPrefix, a.value.prefix)), b.value.prefix);  
-        Some(PrefixSet(prefix, b.value.newPrefix))
+      if |a.value.prefix| <= |b.value.prefix| then (
+        var newPrefix := ApplyPrefixSet(a, b.value.prefix);  
+        Some(PrefixSet(b.value.newPrefix, newPrefix))
       ) else (
-        var newPrefix := ApplyPrefixSet(b, a.value.newPrefix);
-        Some(PrefixSet(a.value.prefix, newPrefix))
+        var prefix := ApplyPrefixSet(b, a.value.prefix);
+        Some(PrefixSet(prefix, a.value.newPrefix))
       )
     )
   }
 
   lemma ComposePrefixSetCorrect(a: Option<PrefixSet>, b: Option<PrefixSet>, c: Option<PrefixSet>, 
     key: Key, akey: Key, ckey: Key)
-  requires a.Some? ==> IsPrefix(a.value.prefix, key)
-  requires c.Some? ==> IsPrefix(c.value.prefix, key)
-  requires akey == ApplyPrefixSet(a, key)
-  requires ckey == ApplyPrefixSet(c, key)
-  requires c.None? ==> ckey == key
-  requires b.Some? ==> IsPrefix(b.value.prefix, akey)
   requires a.Some? && b.Some? ==> 
-    ( IsPrefix(a.value.newPrefix, b.value.prefix)
-    || IsPrefix(b.value.prefix, a.value.newPrefix))
+    ( IsPrefix(a.value.prefix, b.value.prefix)
+    || IsPrefix(b.value.prefix, a.value.prefix))
   requires c == ComposePrefixSet(a, b)
-  ensures ApplyPrefixSet(b, akey) == ckey
+  requires a.Some? ==> IsPrefix(a.value.prefix, akey)
+  requires b.Some? ==> IsPrefix(b.value.prefix, akey)
+  requires c.Some? ==> IsPrefix(c.value.prefix, ckey)
+  requires a == c ==> akey == ckey
+  requires key == ApplyPrefixSet(a, akey)
+  ensures ApplyPrefixSet(b, akey) == ckey ==> key == ApplyPrefixSet(c, ckey)
+  ensures key == ApplyPrefixSet(c, ckey) ==> ApplyPrefixSet(b, akey) == ckey
   {
+    reveal_IsPrefix();
   }
 
   // given a prefix find its upperbound s.t. lcp(prefix, upper) == prefix
@@ -577,6 +585,40 @@ module TranslationLib {
 
     if |right| > 0 && right[0] == prefix[0] {
       KeyWithPrefixLt(prefix[1..], right[1..], key[1..]);
+    }
+  }
+
+  lemma AllKeysWithPrefixLt(prefix: Key, right: Key)
+  requires SeqComparison.lt(prefix, right)
+  requires !IsPrefix(prefix, right)
+  ensures forall k : Key | IsPrefix(prefix, k) :: SeqComparison.lt(k, right)
+  {
+    forall k : Key | IsPrefix(prefix, k)
+    ensures SeqComparison.lt(k, right) 
+    {
+      KeyWithPrefixLt(prefix, right, k);
+    }
+  }
+
+  lemma KeyLtPrefix(prefix: Key, key: Key)
+  requires SeqComparison.lt(key, prefix)
+  ensures !IsPrefix(prefix, key)
+  {
+    reveal_IsPrefix();
+    SeqComparison.reveal_lte();
+
+    if |key| > 0 && key[0] == prefix[0] {
+      KeyLtPrefix(prefix[1..], key[1..]);
+    }
+  }
+
+  lemma AllKeysLtPrefix(prefix: Key)
+  ensures forall k : Key | SeqComparison.lt(k, prefix) :: !IsPrefix(prefix, k)
+  {
+    forall k : Key | SeqComparison.lt(k, prefix)
+    ensures !IsPrefix(prefix, k) 
+    {
+      KeyLtPrefix(prefix, k);
     }
   }
 
@@ -795,9 +837,11 @@ module TranslationLib {
     && (forall i | 0 <= i < |tbucket.b.keys| ::
         && idx <= tbucket.idxs[i] < |bucket.keys|
         && var tkey : Key := tbucket.b.keys[i];
-        && var bkey : Key := bucket.keys[tbucket.idxs[i]];
-        && IsPrefix(tPrefix, tkey)
-        && bkey == prefix + tkey[|tPrefix|..]
+        && var key : Key := bucket.keys[tbucket.idxs[i]];
+        && IsPrefix(prefix, key)
+        && tkey == ApplyPrefixSet(Some(PrefixSet(prefix, tPrefix)), key)
+        // && IsPrefix(tPrefix, tkey)
+        // && bkey == prefix + tkey[|tPrefix|..]
         && bucket.msgs[tbucket.idxs[i]] == tbucket.b.msgs[i])
     && (forall i | idx <= i < |bucket.keys| && i !in tbucket.idxs :: !IsPrefix(prefix, bucket.keys[i]))
   }
@@ -875,7 +919,6 @@ module TranslationLib {
   ensures key in bucket.as_map() <==> key' in bucket'.as_map()
   ensures key in bucket.as_map() ==> (bucket.as_map()[key] == bucket'.as_map()[key'])
   {
-
     var tbucket := TranslateBucketInternal(bucket, prefix, newPrefix, 0);
     assert tbucket.b == bucket';
 

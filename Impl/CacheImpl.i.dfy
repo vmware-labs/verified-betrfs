@@ -503,21 +503,24 @@ module CacheImpl {
       node' := node.CutoffNode(lbound, ubound);
     }
 
-    shared method NodeBucketGen(ref: BT.G.Reference, r: uint64, start: BT.UI.RangeStart)
+    shared method NodeBucketGen(ref: BT.G.Reference, r: uint64, start: BT.UI.RangeStart,
+      key': Key, pset: Option<PrefixSet>)
     returns (linear g: BGI.Generator)
     requires Inv()
     requires ptr(ref).Some?
     requires BT.WFNode(I()[ref])
     requires r as nat < |I()[ref].buckets|
+    requires var startKey := if start.NegativeInf? then [] else start.key;
+        && (pset.Some? ==> IsPrefix(pset.value.prefix, key'))
+        && (ApplyPrefixSet(pset, key') == startKey)
     ensures g.Basic?
     ensures g.biter.bucket == I()[ref].buckets[r as nat]
     ensures g.Inv()
     ensures g.I() == BGI.BucketGeneratorModel.GenFromBucketWithLowerBound(
-        I()[ref].buckets[r as nat], start)
+        I()[ref].buckets[r as nat], start, pset)
     {
       shared var node := Get(ref);
-      g := BGI.Generator.GenFromBucketWithLowerBound(
-          lseq_peek(node.buckets, r), start);
+      g := BGI.Generator.GenFromBucketWithLowerBound(lseq_peek(node.buckets, r), start, key', pset);
     }
 
     shared method NodeBiggestSlot(ref: BT.G.Reference)

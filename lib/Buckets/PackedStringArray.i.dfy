@@ -555,14 +555,27 @@ module PackedStringArray {
     == LexOrder.binarySearchIndexOfFirstKeyGte(I(psa), key)
   {
     LexOrder.reveal_binarySearchIndexOfFirstKeyGte();
-    var lo: uint64 := 0;
+    LexOrder.reveal_binarySearchIndexOfFirstKeyGteWithLowerBound();
+    idx := BinarySearchIndexOfFirstKeyGteWithLowerBound(psa, key, 0);
+  }
+
+  method BinarySearchIndexOfFirstKeyGteWithLowerBound(psa: Psa, key: Key, l: uint64)
+  returns (idx: uint64)
+  requires WF(psa)
+  requires 0 <= l as int <= |I(psa)|
+  requires l > 0 ==> LexOrder.lt(I(psa)[l-1], key)
+  ensures idx as int
+    == LexOrder.binarySearchIndexOfFirstKeyGteWithLowerBound(I(psa), key, l as int)
+  {
+    LexOrder.reveal_binarySearchIndexOfFirstKeyGteWithLowerBound();
+    var lo := l;
     var hi: uint64 := psaNumStrings(psa) + 1;
 
     while lo + 1 < hi
     invariant 0 <= lo as int < hi as int <= |I(psa)| + 1
     invariant lo > 0 ==> LexOrder.lt(I(psa)[lo-1], key)
     invariant hi as int <= |I(psa)| ==> LexOrder.lte(key, I(psa)[hi-1])
-    invariant LexOrder.binarySearchIndexOfFirstKeyGte(I(psa), key)
+    invariant LexOrder.binarySearchIndexOfFirstKeyGteWithLowerBound(I(psa), key, l as int)
         == LexOrder.binarySearchIndexOfFirstKeyGteIter(I(psa), key, lo as int, hi as int)
     {
       var mid := (lo + hi) / 2;

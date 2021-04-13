@@ -473,6 +473,16 @@ abstract module Total_Order refines Total_Preorder {
     binarySearchIndexOfFirstKeyGteIter(s, key, 0, |s| + 1)
   }
 
+  function {:opaque} binarySearchIndexOfFirstKeyGteWithLowerBound(s: seq<Element>, key: Element, lo: int) : (i: int)
+  requires 0 <= lo <= |s|
+  requires lo > 0 ==> lt(s[lo-1], key)
+  ensures lo <= i <= |s|
+  ensures i > 0 ==> lt(s[i-1], key)
+  ensures i < |s| ==> lte(key, s[i])
+  {
+    binarySearchIndexOfFirstKeyGteIter(s, key, lo, |s| + 1)
+  }
+
   function IndexOfFirstGt(run: seq<Element>, needle: Element) : (result: nat)
     requires IsSorted(run)
     ensures result <= |run|

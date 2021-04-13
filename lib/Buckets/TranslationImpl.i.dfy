@@ -183,6 +183,23 @@ module TranslationImpl {
     prefix := left.e[..len];
   }
 
+  method ComputeTranslatePrefixSet(pt: PivotTable, et: EdgeTable, key: Key, r: uint64) returns (pset: Option<PrefixSet>)
+  requires |pt| < 0x4000_0000_0000_0000
+  requires WFPivots(pt)
+  requires BoundedKey(pt, key)
+  requires WFEdges(et, pt)
+  requires r as int == Route(pt, key)
+  ensures pset == Translate(pt, et, key)
+  {
+    if et[r].Some? {
+      var prefixlen := ComputePivotLcpLen(pt[r], pt[r+1]);
+      PrefixOfLcpIsPrefixOfKey(pt[r], pt[r+1], pt[r].e[..prefixlen], key);
+      pset := Some(PrefixSet(pt[r].e[..prefixlen], et[r].value));
+    } else {
+      pset := None;
+    }
+  }
+
   method ComputeTranslateKey(pt: PivotTable, et: EdgeTable, key: Key, r: uint64) returns (k: Key)
   requires |pt| < 0x4000_0000_0000_0000
   requires WFPivots(pt)
@@ -191,7 +208,6 @@ module TranslationImpl {
   requires r as int == Route(pt, key)
   ensures k == TranslateKey(pt, et, key)
   {
-    var r := ComputeRoute(pt, key);
     if et[r].Some? {
       var prefixlen := ComputePivotLcpLen(pt[r], pt[r+1]);
       PrefixOfLcpIsPrefixOfKey(pt[r], pt[r+1], pt[r].e[..prefixlen], key);
@@ -202,35 +218,21 @@ module TranslationImpl {
     }
   }
 
-  method ComputeApplyPrefixSet(pset: Option<PrefixSet>, key: Key) returns (k: Key)
-  requires pset.Some? ==> IsPrefix(pset.value.prefix, key)
-  ensures k == ApplyPrefixSet(pset, key)
-  {
-    if pset.None? {
-      k := key;
-    } else {
-      assume |pset.value.newPrefix| + |key| - |pset.value.prefix| <= 1024;
-      k := pset.value.newPrefix + key[|pset.value.prefix| as uint64..];
-    }
-  }
-
   method ComputeComposePrefixSet(a: Option<PrefixSet>, b: Option<PrefixSet>) returns (c: Option<PrefixSet>)
-  requires a.Some? && b.Some? ==>
-    ( IsPrefix(a.value.newPrefix, b.value.prefix)
-    || IsPrefix(b.value.prefix, a.value.newPrefix))
+  requires ComposePrefixSet.requires(a, b)
   ensures c == ComposePrefixSet(a, b)
   {
-    if a.None? {
-      c := b;
-    } else if b.None? {
+    if b.None? {
       c := a;
-    } else if |a.value.newPrefix| as uint64 <= |b.value.prefix| as uint64 {
+    } else if a.None? {
+      c := Some(PrefixSet(b.value.newPrefix, b.value.prefix));
+    } else if |a.value.prefix| as uint64 <= |b.value.prefix| as uint64 {
       reveal_IsPrefix();
-      var prefix := ComputeApplyPrefixSet(Some(PrefixSet(a.value.newPrefix, a.value.prefix)), b.value.prefix);
-      c := Some(PrefixSet(prefix, b.value.newPrefix));
+      var newPrefix := ApplyPrefixSet(a, b.value.prefix);
+      c := Some(PrefixSet(b.value.newPrefix, newPrefix));
     } else {
-      var newPrefix := ComputeApplyPrefixSet(b, a.value.newPrefix);
-      c := Some(PrefixSet(a.value.prefix, newPrefix));
+      var prefix := ApplyPrefixSet(b, a.value.prefix);
+      c := Some(PrefixSet(prefix, a.value.newPrefix));
     }
   }
 
@@ -261,17 +263,18 @@ module TranslationImpl {
     e' := Keyspace.Element(newPrefix + e.e[|prefix| as uint64..]);
   }
 
-  method ComputeTranslatePivotPair(left: Element, right: Element, prefix: Key, newPrefix: Key)
-  returns (left': Element, right': Element)
-  requires ElementIsKey(left)
+  method ComputeTranslatePivotPair(left: Key, right: Element, prefix: Key, newPrefix: Key)
+  returns (left': Key, right': Element)
   requires right.Element? ==> ElementIsKey(right)
-  requires IsPrefix(prefix, left.e)
-  requires Keyspace.lt(left, right)
-  ensures var (l, r) := TranslatePivotPairInternal(left, right, prefix, newPrefix);
-    && l == left'
+  requires IsPrefix(prefix, left)
+  requires Keyspace.lt(KeyToElement(left), right)
+  ensures var (l, r) := TranslatePivotPairInternal(KeyToElement(left), right, prefix, newPrefix);
+    && l == KeyToElement(left')
     && r == right'
   {
-    left' := ComputeTranslateElement(left, prefix, newPrefix);
+    assume |newPrefix + left[|prefix|..]| <= 1024;
+    left' := newPrefix + left[|prefix| as uint64..];
+    // left' := ComputeTranslateElement(left, prefix, newPrefix);
 
     var isprefix := right.Element? && |prefix| as uint64 <= |right.e| as uint64 && prefix == right.e[..|prefix|];
     reveal_IsPrefix();
