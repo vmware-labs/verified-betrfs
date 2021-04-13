@@ -55,6 +55,39 @@ module NonlinearLemmas {
   {
   }
 
+  lemma div_leq_numerator(a: int, b: int)
+    requires a >= 0
+    requires b > 0
+    ensures a >= (a / b) >= 0
+  {
+    assert b >= 1;
+  }
+
+  lemma div_plus_mod_bound(a: int, b: int)
+    requires b > 0
+    requires a >= 0
+    ensures a % b + a / b <= a;
+  {
+    var q := a / b;
+    var r := a % b;
+
+    assert a == q * b + r; 
+
+    if r + q > a {
+      calc >= {
+        a;
+        q * b + r; 
+        {
+          assert b >= 1;
+          assert q * b >= q;
+        }
+        q + r; 
+      }
+      assert a >= q + r;
+      assert false;
+    }
+  }
+
   lemma mod_ge_0(a: int, b: int)
   requires b > 0
   ensures a % b >= 0
@@ -73,5 +106,6 @@ module NonlinearLemmas {
   ensures a*b <= a*c
   {
   }
+
 
 }
