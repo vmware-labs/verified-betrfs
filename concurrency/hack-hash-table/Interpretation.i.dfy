@@ -20,13 +20,14 @@ module SummaryMonoid refines MonoidMap {
   datatype Summary = Summary(
     ops: map<Key, Option<Value>>,
     stubs: multiset<HT.Stub>,
-    queries: multiset<QueryRes>
+    queries: multiset<QueryRes>,
+    removes: multiset<QueryRes>
   )
 
   type M = Summary
 
   function unit() : M {
-    Summary(map[], multiset{}, multiset{})
+    Summary(map[], multiset{}, multiset{}, multiset{})
   }
 
   function app_query(query: QueryRes, ops: map<Key, Option<Value>>) : QueryRes
@@ -53,7 +54,8 @@ module SummaryMonoid refines MonoidMap {
     Summary(
         MapUnionPreferA(x.ops, y.ops),
         x.stubs + y.stubs,
-        app_queries(x.queries, y.ops) + y.queries)
+        app_queries(x.queries, y.ops) + y.queries,
+        app_queries(x.removes, y.ops) + y.removes)
   }
 
   lemma associative(x: M, y: M, z: M)
@@ -92,6 +94,38 @@ module SummaryMonoid refines MonoidMap {
       app_queries(x.queries, add(y, z).ops) + add(y, z).queries;
       add(x, add(y, z)).queries;
     }
+    calc {
+      add(add(x, y), z).removes;
+      app_queries(add(x, y).removes, z.ops) + z.removes;
+      {
+        calc {
+          app_queries(add(x, y).removes, z.ops);
+          app_queries(app_queries(x.removes, y.ops) + y.removes, z.ops);
+          {
+            Multisets.ApplyAdditive((q) => app_query(q, z.ops),
+              app_queries(x.removes, y.ops),
+              y.removes);
+          }
+          app_queries(app_queries(x.removes, y.ops), z.ops) + app_queries(y.removes, z.ops);
+          {
+            MultisetLemmas.ApplyCompose(
+                (q) => app_query(q, y.ops),
+                (q) => app_query(q, z.ops),
+                (q) => app_query(q, MapUnionPreferA(y.ops, z.ops)), x.removes);
+            //assert app_queries(app_queries(x.removes, y.ops), z.ops)
+            //    == app_queries(x.removes, MapUnionPreferA(y.ops, z.ops));
+          }
+          app_queries(x.removes, MapUnionPreferA(y.ops, z.ops)) + app_queries(y.removes, z.ops);
+        }
+      }
+      app_queries(x.removes, MapUnionPreferA(y.ops, z.ops)) + app_queries(y.removes, z.ops) + z.removes;
+      {
+        //assert add(y, z).ops == MapUnionPreferA(y.ops, z.ops);
+        //assert add(y, z).removes == app_queries(y.removes, z.ops) + z.removes;
+      }
+      app_queries(x.removes, add(y, z).ops) + add(y, z).removes;
+      add(x, add(y, z)).removes;
+    }
   }
 
   lemma add_unit(x: M)
@@ -100,6 +134,7 @@ module SummaryMonoid refines MonoidMap {
   {
     reveal_app_queries();
     MultisetLemmas.ApplyId((q) => app_query(q, map[]), x.queries);
+    MultisetLemmas.ApplyId((q) => app_query(q, map[]), x.removes);
   }
 
   type Q = Option<HT.Info>
@@ -110,6 +145,7 @@ module SummaryMonoid refines MonoidMap {
       case Info(Full(kv), Free()) => Summary(
         map[kv.key := Some(kv.val)],
         multiset{},
+        multiset{},
         multiset{}
       )
 
@@ -117,6 +153,7 @@ module SummaryMonoid refines MonoidMap {
         Summary(
           map[ins_kv.key := Some(ins_kv.val)],
           multiset{HT.Stub(rid, MapIfc.InsertOutput(true))},
+          multiset{},
           multiset{}
         )
 
@@ -124,27 +161,34 @@ module SummaryMonoid refines MonoidMap {
         Summary(
           map[kv.key := Some(kv.val)][ins_kv.key := Some(ins_kv.val)],
           multiset{HT.Stub(rid, MapIfc.InsertOutput(true))},
+          multiset{},
           multiset{}
         )
 
       case Info(Empty(), Removing(rid, remove_key)) =>
         Summary(
           map[remove_key := None],
-          multiset{HT.Stub(rid, MapIfc.RemoveOutput)},
-          multiset{}
+          multiset{},
+          multiset{},
+          multiset{QueryUnknown(rid, remove_key)}
         )
 
       case Info(Full(kv), Removing(rid, remove_key)) =>
         Summary(
           map[kv.key := Some(kv.val)][remove_key := None],
-          multiset{HT.Stub(rid, MapIfc.RemoveOutput)},
-          multiset{}
+          multiset{},
+          multiset{},
+          (if kv.key == remove_key
+            then multiset{QueryFound(rid, remove_key, Some(kv.val))}
+            else multiset{QueryUnknown(rid, remove_key)}
+          )
         )
 
       case Info(_, RemoveTidying(rid, init_key)) =>
         Summary(
           map[],
           multiset{HT.Stub(rid, MapIfc.RemoveOutput)},
+          multiset{},
           multiset{}
         )
 
@@ -152,7 +196,8 @@ module SummaryMonoid refines MonoidMap {
         Summary(
           map[],
           multiset{},
-          multiset{QueryUnknown(rid, query_key)}
+          multiset{QueryUnknown(rid, query_key)},
+          multiset{}
         )
 
       case Info(Full(kv), Querying(rid, query_key)) =>
@@ -162,7 +207,8 @@ module SummaryMonoid refines MonoidMap {
           (if kv.key == query_key
             then multiset{QueryFound(rid, query_key, Some(kv.val))}
             else multiset{QueryUnknown(rid, query_key)}
-          )
+          ),
+          multiset{}
         )
     }
   }
