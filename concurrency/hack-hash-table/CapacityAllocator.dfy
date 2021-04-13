@@ -1,6 +1,7 @@
 include "../framework/Mutex.s.dfy"
 include "HTResource.i.dfy"
 include "Main.s.dfy"
+include "../../lib/Checksums/Nonlinear.i.dfy"
 
 module CapacityAllocator {
   import opened Options
@@ -8,6 +9,7 @@ module CapacityAllocator {
   import opened HTResource
   import opened KeyValueType
   import opened Mutexes
+  import opened NonlinearLemmas
   import ARS = HTResource
 
   linear datatype AllocatorBin = AllocatorBin(
@@ -63,22 +65,11 @@ module CapacityAllocator {
     && s.stubs == multiset{}
   }
 
-  lemma test(a: nat, b: nat, q: nat, r: nat)
-    requires b >= 1
-    requires q == a / b
-    requires r == a % b
-
-    ensures r + q <= a;
-  {
-    assert a == q * b + r; 
-    assert r + q <= a;
-  }
-
   method init(linear in_r: ARS.R)
   returns (mt: AllocatorMutexTable, linear out_r: ARS.R)
   requires CapPreInit(in_r)
-  // ensures Inv(mt)
-  // ensures out_r == unit()
+  ensures Inv(mt)
+  ensures out_r == unit()
   {
     linear var remaining_r := in_r;
 
@@ -86,9 +77,11 @@ module CapacityAllocator {
     var bin_count := BinCountImpl();
     mt := [];
 
+
+    div_leq_numerator(total_amount as int, bin_count as int);
     var quotient :uint32 := total_amount / bin_count;
     var reaminder :uint32 := total_amount % bin_count;
-    test(total_amount as nat, bin_count as nat, quotient as nat, reaminder as nat);
+    div_plus_mod_bound(total_amount as nat, bin_count as nat);
 
     var allocated_sum: nat := 0;
     var i: uint32 := 0;
@@ -96,40 +89,75 @@ module CapacityAllocator {
     while i < bin_count
       invariant i == 0 ==> allocated_sum == 0;
       invariant i > 0 ==> (allocated_sum == quotient as nat * i as nat + reaminder as nat);
-      invariant allocated_sum <= total_amount as nat;
 
-      // invariant i as int == |mt| <= BinCount()
-      // invariant forall j:nat | j < i as int :: mt[j].inv == BinInv
-      // invariant remaining_r.R?
-      // invariant remaining_r.insert_capacity == total_amount as nat - allocated_sum
-      // invariant remaining_r.table == unitTable()
-      // invariant remaining_r.tickets == multiset{}
-      // invariant remaining_r.stubs == multiset{}
+      invariant i as int == |mt| <= BinCount()
+      invariant forall j:nat | j < i as int :: mt[j].inv == BinInv
+      invariant remaining_r.R?
+      invariant remaining_r.insert_capacity == total_amount as nat - allocated_sum
+      invariant remaining_r.table == unitTable()
+      invariant remaining_r.tickets == multiset{}
+      invariant remaining_r.stubs == multiset{}
     {
+      if i > 0 {
+        calc >= {
+          remaining_r.insert_capacity - quotient as int;
+          total_amount as int - allocated_sum - quotient as int;
+          total_amount as int - quotient as int * i as int - reaminder as int - quotient as int;
+          {
+            assert i <= bin_count - 1;
+            mul_le_right(quotient as int, i as int, bin_count as int - 1);
+          }
+          total_amount as nat - quotient as nat * (bin_count - 1) as nat - reaminder as nat - quotient as int;
+          {
+            distributive_left(quotient as int, bin_count as int - 1, 1);
+          }
+          total_amount as nat - quotient as nat * bin_count as nat - reaminder as nat;
+          {
+            div_mul_plus_mod(total_amount as int, bin_count as int);
+          }
+          0;
+        }
+
+        assert remaining_r.insert_capacity >= quotient as nat;
+      }
+
+      ghost var prev_sum := allocated_sum;
       var amount := if i == 0 then quotient + reaminder else quotient;
       allocated_sum := allocated_sum + amount as nat;
 
-      // ghost var splitted := Split(remaining_r, amount as nat);
-      // linear var ri;
-      // remaining_r, ri := ARS.split(remaining_r, splitted.r', splitted.ri);
-      // var m := new_mutex(AllocatorBin(amount, ri), BinInv);
-      // mt := mt + [m];
+      ghost var splitted := Split(remaining_r, amount as nat);
+      linear var ri;
+      remaining_r, ri := ARS.split(remaining_r, splitted.r', splitted.ri);
+      var m := new_mutex(AllocatorBin(amount, ri), BinInv);
+      mt := mt + [m];
 
       i := i + 1;
 
-      assert allocated_sum <= total_amount as nat by {
-        calc <=
-        {
+      assert i > 0;
+
+      if i > 1 {
+        calc == {
           allocated_sum;
-          quotient as nat * i as nat + reaminder as nat;
+          prev_sum + quotient as nat;
+          quotient as nat * (i - 1) as nat + reaminder as nat + quotient as nat;
           {
-            assert i <= bin_count;
+            assert quotient as nat * (i - 1) as nat + quotient as nat == i as nat * quotient as nat by {
+              distributive_right(i as int - 1, 1, quotient as int);
+            }
           }
-          quotient as nat * bin_count as nat + reaminder as nat;
-          total_amount as nat;
+          quotient as nat * i as nat + reaminder as nat;
         }
       }
     } 
+
+    calc == {
+      allocated_sum;
+      quotient as nat * bin_count as nat + reaminder as nat;
+      {
+        div_mul_plus_mod(total_amount as int, bin_count as int);
+      }
+      total_amount as nat;
+    }
 
     out_r := remaining_r;
   }
