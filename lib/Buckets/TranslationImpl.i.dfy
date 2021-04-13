@@ -18,7 +18,9 @@ module TranslationImpl {
   import opened Sequences
   import opened Options
   import opened KeyType
+  import opened ValueMessage
   import opened BucketImpl
+  import opened BucketsLib
   import opened LinearSequence_i
   import opened LinearSequence_s
 
@@ -354,14 +356,78 @@ module TranslationImpl {
     TranslateEdgesCondition(et, pt, 0, et');
   }
 
-  // TODO: implement
-  method ComputeTranslateBucket(shared bucket: MutBucket, prefix: Key, newPrefix: Key) returns (linear bucket': MutBucket)
-  requires bucket.Inv()
-  ensures bucket'.Inv()
-  ensures bucket'.I() == TranslateBucket(bucket.I(), prefix ,newPrefix)
+  function TranslateBucketSimple(bucket: Bucket, prefix: Key, newPrefix: Key, i: nat) : (result: Bucket)
+    requires PreWFBucket(bucket)
+    requires 0 <= i <= |bucket.keys|
+    ensures |result.keys| <= i
+    ensures PreWFBucket(result)
+    ensures EncodableMessageSeq(bucket.msgs) ==> EncodableMessageSeq(result.msgs)
+    decreases i
   {
-    assume false;
-    bucket' := MutBucket.Alloc();
+    if i == 0 then
+      EmptyBucket()
+    else if IsPrefix(prefix, bucket.keys[i - 1]) then
+      var prefixBucket := TranslateBucketSimple(bucket, prefix, newPrefix, i - 1);
+      var oldkey: seq<byte> := bucket.keys[i - 1];
+      assume |newPrefix + oldkey[|prefix|..]| <= 1024;
+      var newKey := newPrefix + oldkey[|prefix|..];
+      Bucket(prefixBucket.keys + [ newKey ], prefixBucket.msgs + [ bucket.msgs[i - 1] ])
+    else
+      TranslateBucketSimple(bucket, prefix, newPrefix, i - 1)
+  }
+
+  lemma TranslateBucketSimpleEquivalence(bucket: Bucket, prefix: Key, newPrefix: Key)
+    requires PreWFBucket(bucket)
+    ensures TranslateBucketSimple(bucket, prefix, newPrefix, |bucket.keys|) == TranslateBucket(bucket, prefix, newPrefix)
+
+  method ComputeTranslateBucket(shared mbucket: MutBucket, prefix: Key, newPrefix: Key) returns (linear mbucket': MutBucket)
+  requires mbucket.Inv()
+  requires PackedKV.PSA.psaCanAppendSeq(PackedKV.PSA.EmptyPsa(), TranslateBucket(mbucket.I(), prefix, newPrefix).keys)
+  requires PackedKV.PSA.psaCanAppendSeq(PackedKV.PSA.EmptyPsa(), messageSeq_to_bytestringSeq(TranslateBucket(mbucket.I(), prefix, newPrefix).msgs))
+  ensures mbucket'.Inv()
+  ensures mbucket'.I() == TranslateBucket(mbucket.I(), prefix, newPrefix)
+  {
+    ghost var bucket := mbucket.I();
+    assert EncodableMessageSeq(bucket.msgs);
+    TranslateBucketSimpleEquivalence(bucket, prefix, newPrefix);
+    reveal_IsPrefix();
+
+    var pkv := mbucket.GetPkv();
+    var len := PackedKV.NumKVPairs(pkv);
+    linear var result_keys := seq_alloc_init(len, []);
+    linear var result_msgs := seq_alloc_init(len, []);
+    var result_len := 0;
+
+    var i := 0;
+    while i < len
+      invariant 0 <= i <= len
+      invariant 0 <= result_len <= i
+      invariant |result_keys| == len as nat
+      invariant |result_msgs| == len as nat
+      invariant result_keys[..result_len] == TranslateBucketSimple(bucket, prefix, newPrefix, i as nat).keys
+      invariant forall j | 0 <= j < result_len :: |result_msgs[j]| < 0x1_0000_0000
+      invariant result_msgs[..result_len] == messageSeq_to_bytestringSeq(TranslateBucketSimple(bucket, prefix, newPrefix, i as nat).msgs)
+    {
+      var key: seq<byte> := PackedKV.GetKey(pkv, i);
+      var msg := PackedKV.PSA.psaElement(pkv.messages, i);
+      if |prefix| as uint64 <= |key| as uint64 && prefix == key[..|prefix| as uint64] {
+        assume |newPrefix + key[|prefix| as uint64..]| <= 1024;
+        mut_seq_set(inout result_keys, result_len, newPrefix + key[|prefix| as uint64..]);
+        mut_seq_set(inout result_msgs, result_len, msg);
+        result_len := result_len + 1;
+      }
+      i := i + 1;
+
+    }
+
+    var result_keys' := seq_unleash(result_keys);
+    var result_msgs' := seq_unleash(result_msgs);
+
+    assert result_keys'[..result_len] == TranslateBucket(mbucket.I(), prefix, newPrefix).keys;
+    //assert result_msgs'[..result_len] == messageSeq_to_bytestringSeq(TranslateBucket(mbucket.I(), prefix, newPrefix).msgs);
+    var result_keys_psa := PackedKV.PSA.FromSeq(result_keys'[..result_len]);
+    var result_msgs_psa := PackedKV.PSA.FromSeq(result_msgs'[..result_len]);
+    mbucket' := MutBucket.AllocPkv(PackedKV.Pkv(result_keys_psa, result_msgs_psa), mbucket.sorted);
   }
 
   // TODO: implement
