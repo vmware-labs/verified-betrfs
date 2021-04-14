@@ -41,6 +41,7 @@ module CacheImpl {
   import opened LinearBox
   import opened LinearBox_s
   import opened LinearSequence_i
+  import opened LinearOption
   import opened LCMM = LinearContentMutableMap
 
   import opened LinearSequence_s
@@ -444,6 +445,27 @@ module CacheImpl {
       shared var parent := Get(parentref);
       shared var child := Get(childref);
       newchild := Node.RestrictAndTranslateChild(parent, child, slot);
+    }
+
+    shared method NodeCloneNewRoot(ref: BT.G.Reference, from: Key, to: Key)
+    returns (linear rootopt: lOption<Node>)
+    requires Inv()
+    requires to != []
+    requires ref in I()
+    requires BT.WFNode(I()[ref])
+    requires I()[ref].children.Some?
+    requires Pivots.ContainsAllKeys(I()[ref].pivotTable)
+    ensures rootopt.lNone? ==> (
+      !BucketsLib.BucketListNoKeyWithPrefix(I()[ref].buckets, I()[ref].pivotTable, from)
+      || |BT.CloneNewRoot(I()[ref], from, to).children.value| > MaxNumChildren())
+    ensures rootopt.lSome? ==> (
+      && BucketsLib.BucketListNoKeyWithPrefix(I()[ref].buckets, I()[ref].pivotTable, from)
+      && rootopt.value.Inv()
+      && rootopt.value.I() == BT.CloneNewRoot(I()[ref], from, to)
+      && |rootopt.value.I().children.value| <= MaxNumChildren()) 
+    {
+      shared var node := Get(ref);
+      rootopt := Node.CloneNewRoot(node, from, to);
     }
 
     shared method NodePartialFlush(linear inout buckets: lseq<MutBucket>, ref: BT.G.Reference, pivots: Pivots.PivotTable, slot: uint64)
