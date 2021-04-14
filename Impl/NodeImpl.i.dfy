@@ -407,6 +407,7 @@ module NodeImpl {
       }
     }
 
+    // can probably return separate parts
     static method RestrictAndTranslateNode(shared node: Node, from: Key, to: Key)
     returns (linear node': Node)
     requires node.Inv()
@@ -459,13 +460,70 @@ module NodeImpl {
       && BT.ValidCloneBucketList(node.I(), from)
       && rootopt.value.Inv()
       && rootopt.value.I() == BT.CloneNewRoot(node.I(), from, to)
-      && |rootopt.value.I().children.value| <= MaxNumChildren()
-      )
+      && |rootopt.value.I().children.value| <= MaxNumChildren())
     {
-      // figure out clonenewroot 
-      assume false;
-      rootopt := lNone;
-      // node' := EmptyNode();
+      var fromend := ComputeShortestUncommonPrefix(from);
+      Pivots.ContainsAllKeysImpliesBoundedKey(node.pivotTable, from);
+      var start := Pivots.ComputeRoute(node.pivotTable, from);
+      var end;
+      if fromend.Max_Element? {
+        end := lseq_length_as_uint64(node.buckets);
+      } else {
+        end := Pivots.ComputeRoute(node.pivotTable, fromend.e);
+        end := end + 1;
+      }
+
+      var validbucketlist := MutBucket.BucketsNoKeyWithPrefix(node.buckets, from, start, end);
+      if !validbucketlist {
+        rootopt := lNone;
+      } else {
+        linear var tonode := RestrictAndTranslateNode(node, from, to);
+        Pivots.ContainsAllKeysImpliesBoundedKey(node.pivotTable, to);
+        linear var lnode := node.CutoffNodeAndKeepLeft(to);
+
+        if tonode.pivotTable[|tonode.pivotTable|-1].Max_Element? {
+          var len := |lnode.children.value + tonode.children.value| as uint64;
+          if len <= MaxNumChildrenUint64() {
+            var newpivots := lnode.pivotTable[..|lnode.pivotTable|-1] + tonode.pivotTable;
+            var newedges := lnode.edgeTable + tonode.edgeTable;
+            var newchildren := Some(lnode.children.value + tonode.children.value);
+
+            linear var Node(_, _, _, tobuckets) := tonode;
+            linear var Node(_, _, _, lbuckets) := lnode;
+
+            linear var newbuckets := MutBucket.BucketListConcat(lbuckets, tobuckets);
+            linear var node := Alloc(newpivots, newedges, newchildren, newbuckets);
+            rootopt := lSome(node);
+          } else {
+            var _ := FreeNode(lnode);
+            var _ := FreeNode(tonode);
+            rootopt := lNone;
+          }
+        } else {
+          var toend : Key := tonode.pivotTable[|tonode.pivotTable|-1].e;
+          linear var rnode := node.CutoffNodeAndKeepRight(toend);
+          var len := |lnode.children.value + tonode.children.value + rnode.children.value| as uint64;
+
+          if len <= MaxNumChildrenUint64() {
+            var newpivots := lnode.pivotTable[..|lnode.pivotTable|-1] + tonode.pivotTable + rnode.pivotTable[1..];
+            var newedges := lnode.edgeTable + tonode.edgeTable + rnode.edgeTable;
+            var newchildren := Some(lnode.children.value + tonode.children.value + rnode.children.value);
+
+            linear var Node(_, _, _, tobuckets) := tonode;
+            linear var Node(_, _, _, lbuckets) := lnode;
+            linear var Node(_, _, _, rbuckets) := rnode;
+
+            linear var newbuckets := MutBucket.BucketListConcat3(lbuckets, tobuckets, rbuckets);
+            linear var node := Alloc(newpivots, newedges, newchildren, newbuckets);
+            rootopt := lSome(node);
+          } else {
+            var _ := FreeNode(lnode);
+            var _ := FreeNode(tonode);
+            var _ := FreeNode(rnode);
+            rootopt := lNone;
+          }
+        }
+      }
     }
   }
 
