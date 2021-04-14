@@ -735,6 +735,28 @@ module BucketImpl {
         j := j + 1;
       }
     }
+
+    static method EmptySeq(size: uint64) returns (linear buckets: lseq<MutBucket>)
+    ensures InvLseq(buckets)
+    ensures |buckets| == size as int
+    ensures ILseq(buckets) == EmptyBucketList(size as int)
+    {
+      buckets := lseq_alloc(size);
+      
+      var j := 0 as uint64;
+      while j < size
+      invariant 0 <= j <= size
+      invariant |buckets| == size as int
+      invariant forall i | j as int <= i < |buckets| :: !lseq_has(buckets)[i]
+      invariant forall i | 0 <= i < j as int :: lseq_has(buckets)[i]
+      invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].Inv()
+      invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].I() == EmptyBucket()
+      {
+        linear var newbucket := MutBucket.Alloc();
+        buckets := lseq_give(buckets, j, newbucket);
+        j := j + 1;
+      }
+    }
   }
 
   function method FreeMutBucket(linear bucket: MutBucket) : ()

@@ -1789,15 +1789,32 @@ module PivotBetreeSpecRefinement {
     PivotBetreeSpecWFNodes.ValidCloneWritesInvNodes(clone);
     assert P.InvNode(P.CloneReads(clone)[0].node);
 
-    // oldroot buffer condition
+    ContainsAllKeysImpliesBoundedKey(clone.oldroot.pivotTable, clone.from);
+    var rstart := Route(clone.oldroot.pivotTable, clone.from);
+    var fromend := ShortestUncommonPrefix(clone.from, |clone.from|);
+    var rend := if fromend.Max_Element? then |clone.oldroot.buckets| 
+        else Route(clone.oldroot.pivotTable, fromend.e) + 1;
+    assert BucketListNoKeyWithPrefix(clone.oldroot.buckets[rstart..rend], clone.from);
+
     forall k | k in c.new_to_old
     ensures IMapsTo(c.oldroot.buffer, c.new_to_old[k], Update(NopDelta()))
     ensures c.new_to_old[k] in c.oldroot.children
     {
       ContainsAllKeysImpliesBoundedKey(clone.oldroot.pivotTable, c.new_to_old[k]);
-      var r := Route(clone.oldroot.pivotTable, c.new_to_old[k]);
+      var key : Key := c.new_to_old[k];
+      var r := Route(clone.oldroot.pivotTable, key);
+
+      Keyspace.Base_Order.EmptyLte(key[|clone.from|..]);
+      PrefixLteProperties(clone.from, clone.from, key);
+      assert Keyspace.lte(KeyToElement(clone.from), KeyToElement(key));
+
+      if fromend.Element? {
+        KeyWithPrefixLt(clone.from, fromend.e, key);
+        assert r <= rend;
+      }
+
+      assert clone.oldroot.buckets[rstart..rend][r-rstart] == clone.oldroot.buckets[r];
       assert BucketNoKeyWithPrefix(clone.oldroot.buckets[r], clone.from);
-      assert IsPrefix(clone.from, c.new_to_old[k]) by { reveal_IsPrefix(); }
       MapSeqs.key_sets_eq(clone.oldroot.buckets[r].keys, clone.oldroot.buckets[r].msgs);
     }
 

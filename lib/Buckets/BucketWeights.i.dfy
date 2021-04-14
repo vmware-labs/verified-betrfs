@@ -209,15 +209,15 @@ module BucketWeights {
   {
   }
 
-  lemma WeightBucketListEmpty(pivots: PivotTable)
-  requires |pivots| > 0
-  ensures WeightBucketList(EmptyBucketList(pivots)) == 0
+  lemma WeightBucketListEmpty(size: int)
+  requires 0 <= size
+  ensures WeightBucketList(EmptyBucketList(size)) == 0
   {
     reveal_WeightBucketList();
-    var buckets := EmptyBucketList(pivots);
-    if |pivots| > 1 {
-      assert DropLast(buckets) == EmptyBucketList(DropLast(pivots));
-      WeightBucketListEmpty(DropLast(pivots));
+    var buckets := EmptyBucketList(size);
+    if size > 0 {
+      assert DropLast(buckets) == EmptyBucketList(size-1);
+      WeightBucketListEmpty(size-1);
     }
   }
 

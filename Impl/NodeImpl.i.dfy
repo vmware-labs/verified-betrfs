@@ -362,15 +362,15 @@ module NodeImpl {
           newchild := child.CutoffNodeAndKeepRight(lbound);
           
           // TODO: update to avoid additional copy
-          BT.reveal_CutoffNodeAndKeepRight();
-          var cRight := Pivots.ComputeCutoffForRight(child.pivotTable, lbound);
-          var rightPivots := Pivots.ComputeSplitRight(child.pivotTable, lbound, cRight);
-          var rightEdges := ComputeSplitRightEdges(child.edgeTable, child.pivotTable, rightPivots, lbound, cRight);
-          var rightChildren := if child.children.Some? then Some(child.children.value[cRight ..]) else None;
+          // BT.reveal_CutoffNodeAndKeepRight();
+          // var cRight := Pivots.ComputeCutoffForRight(child.pivotTable, lbound);
+          // var rightPivots := Pivots.ComputeSplitRight(child.pivotTable, lbound, cRight);
+          // var rightEdges := ComputeSplitRightEdges(child.edgeTable, child.pivotTable, rightPivots, lbound, cRight);
+          // var rightChildren := if child.children.Some? then Some(child.children.value[cRight ..]) else None;
 
-          assert newchild.pivotTable == rightPivots;
-          assert newchild.edgeTable == rightEdges;
-          assert newchild.children == rightChildren;
+          // assert newchild.pivotTable == rightPivots;
+          // assert newchild.edgeTable == rightEdges;
+          // assert newchild.children == rightChildren;
           // need specialized buckets calls to deal with the additional split split
           // this is important bc clone is on the response path not a background op.
 
@@ -413,12 +413,36 @@ module NodeImpl {
     requires BT.WFNode(node.I())
     requires Pivots.ContainsAllKeys(node.pivotTable)
     requires node.children.Some?
-    requires BT.G.Keyspace.lt([], to)
+    requires to != []
     ensures node'.Inv()
     ensures node'.I() == BT.RestrictAndTranslateNode(node.I(), from, to)
     {
-      assume false;
-      node' := EmptyNode();
+      var fromend := ComputeShortestUncommonPrefix(from);
+      var fromendkey := if fromend.Element? then (var k : Key := fromend.e; Some(k)) else None;
+
+      Pivots.ContainsAllKeysImpliesBoundedKey(node.pivotTable, from);
+      node' := node.CutoffNode(from, fromendkey);
+
+      Translations.PrefixOfLcpIsPrefixOfKeys(Pivots.KeyToElement(from), fromend, from);
+      Pivots.Keyspace.reveal_IsStrictlySorted();
+
+      var toend := ComputeShortestUncommonPrefix(to);
+      var toendkey := if toend.Element? then (var k : Key := toend.e; Some(k)) else None;
+
+      ghost var e := Translations.TranslateElement(node'.pivotTable[|node'.pivotTable|-2], from, to);
+      assert Pivots.Keyspace.lt(e, toend) by {
+        if toend.Element? {
+          Translations.KeyWithPrefixLt(to, toend.e, e.e);
+        }
+      }
+
+      var topivots := ComputeTranslatePivots(node'.pivotTable, from, to, toend);
+      var toedges := ComputeTranslateEdges(node'.edgeTable, node'.pivotTable);
+      linear var tobuckets := MutBucket.EmptySeq((|topivots|-1) as uint64);
+      var tochildren := node'.children;
+
+      var _ := FreeNode(node');
+      node' := Node.Alloc(topivots, toedges, tochildren, tobuckets);
     }
 
     static method CloneNewRoot(shared node: Node, from: Key, to: Key)
@@ -429,15 +453,16 @@ module NodeImpl {
     requires node.children.Some?
     requires Pivots.ContainsAllKeys(node.pivotTable)
     ensures rootopt.lNone? ==> (
-        !BucketListNoKeyWithPrefix(node.I().buckets, node.pivotTable, from)
+        !BT.ValidCloneBucketList(node.I(), from)
        || |BT.CloneNewRoot(node.I(), from, to).children.value| > MaxNumChildren())
     ensures rootopt.lSome? ==> (
-      && BucketListNoKeyWithPrefix(node.I().buckets, node.pivotTable, from)
+      && BT.ValidCloneBucketList(node.I(), from)
       && rootopt.value.Inv()
       && rootopt.value.I() == BT.CloneNewRoot(node.I(), from, to)
       && |rootopt.value.I().children.value| <= MaxNumChildren()
       )
     {
+      // figure out clonenewroot 
       assume false;
       rootopt := lNone;
       // node' := EmptyNode();
