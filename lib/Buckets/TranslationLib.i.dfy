@@ -753,28 +753,33 @@ module TranslationLib {
 
   function TranslateElementLambda(prefix: Key, newPrefix: Key) : Keyspace.Element ~> Keyspace.Element
   {
-    pivot
-      requires TranslateElementRequirements(pivot, prefix, newPrefix)
-      =>
-      TranslateElement(pivot, prefix, newPrefix)
+    pivot 
+      requires TranslateElementRequirements(pivot, prefix, newPrefix) 
+      => TranslateElement(pivot, prefix, newPrefix)
   }
 
   lemma TranslateElementLambdaPreservesLt(prefix: Key, newPrefix: Key)
     ensures forall left, right |
-    && TranslateElementLambda(prefix, newPrefix).requires(left)
-    && TranslateElementLambda(prefix, newPrefix).requires(right)
+    && TranslateElementRequirements(left, prefix, newPrefix)
+    && TranslateElementRequirements(right, prefix, newPrefix)
+    // && TranslateElementLambda(prefix, newPrefix).requires(left)
+    // && TranslateElementLambda(prefix, newPrefix).requires(right)
     && Keyspace.lt(left, right)
     :: Keyspace.lt(TranslateElementLambda(prefix, newPrefix)(left), TranslateElementLambda(prefix, newPrefix)(right))
   {
     var te := TranslateElementLambda(prefix, newPrefix);
+
     forall left, right |
-      && te.requires(left)
-      && te.requires(right)
+      && TranslateElementRequirements(left, prefix, newPrefix)
+      && TranslateElementRequirements(right, prefix, newPrefix)
+      // && te.requires(left)
+      // && te.requires(right)
       && Keyspace.lt(left, right)
       ensures Keyspace.lt(te(left), te(right))
     {
       assert te.requires(left);
       assert TranslateElementLambda(prefix, newPrefix).requires(left);
+
       assert (pivot
       requires ElementIsKey(pivot)
       requires IsPrefix(prefix, pivot.e)
