@@ -961,6 +961,7 @@ module Interpretation {
         multiset{});
 
     preserves_1_right(s.table, s'.table, pos, e, x);
+    add_thing_with_no_ops(interp(s'.table), x);
   }
 
   lemma QueryNotFound_PreservesInterp(s: Variables, s': Variables, pos: nat)
