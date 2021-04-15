@@ -4,7 +4,6 @@
 include "../DataStructures/KMBtree.i.dfy"
 include "PackedKV.i.dfy"
 include "../../PivotBetree/Bounds.i.dfy"
-include "BucketIteratorModel.i.dfy"
 include "BucketFlushModel.i.dfy"
 include "LKMBPKVOps.i.dfy"
 include "../Lang/Inout.i.dfy"
@@ -15,9 +14,7 @@ include "../Lang/Inout.i.dfy"
 // it is flushed into the root in a batch.
 // This module implements PivotBetreeSpec.Bucket (the model for class
 // MutBucket).
-// The MutBucket class also supplies Iterators using the functional
-// Iterator datatype from BucketIteratorModel, which is why there is no
-// BucketIteratorImpl module/class.
+//
 
 module BucketImpl {
   import LKMB = LKMBtree`All
@@ -33,7 +30,6 @@ module BucketImpl {
   import opened BucketWeights
   import opened NativeTypes
   import opened KeyType
-  import BucketIteratorModel
   import Pivots = BoundedPivotsLib
   import opened BucketFlushModel
   import opened DPKV = DynamicPkv
@@ -41,7 +37,6 @@ module BucketImpl {
   import opened LinearSequence_s
   import opened LinearSequence_i
   import opened Inout
-  // import Lexicographic_Byte_Order
 
   type TreeMap = LKMB.Model.Node
 
@@ -65,16 +60,6 @@ module BucketImpl {
   {
     LKMBPKVOps.WeightImpliesCanAppend(tree);
     pkv := LKMBPKVOps.ToPkv(tree);
-  }
-
-  datatype Iterator = Iterator(
-    ghost next: BucketIteratorModel.IteratorOutput,
-    i: uint64,
-    ghost decreaser: int)
-
-  function IIterator(it: Iterator) : BucketIteratorModel.Iterator
-  {
-    BucketIteratorModel.Iterator(it.next, it.i as int, it.decreaser)
   }
 
   linear datatype BucketFormat =
@@ -726,7 +711,8 @@ module BucketImpl {
       }
     }
 
-    static method CloneSeq(shared buckets: lseq<MutBucket>, start: uint64, end: uint64) returns (linear buckets': lseq<MutBucket>)
+    static method CloneSeq(shared buckets: lseq<MutBucket>, start: uint64, end: uint64)
+    returns (linear buckets': lseq<MutBucket>)
     requires InvLseq(buckets)
     requires 0 <= start as int <= end as int <= |buckets|
     requires |buckets| < 0x1_0000_0000_0000_0000;
@@ -749,6 +735,104 @@ module BucketImpl {
         buckets' := lseq_give(buckets', j-start, newbucket);
         j := j + 1;
       }
+    }
+
+    static method EmptySeq(size: uint64) returns (linear buckets: lseq<MutBucket>)
+    ensures InvLseq(buckets)
+    ensures |buckets| == size as int
+    ensures ILseq(buckets) == EmptyBucketList(size as int)
+    {
+      buckets := lseq_alloc(size);
+      
+      var j := 0 as uint64;
+      while j < size
+      invariant 0 <= j <= size
+      invariant |buckets| == size as int
+      invariant forall i | j as int <= i < |buckets| :: !lseq_has(buckets)[i]
+      invariant forall i | 0 <= i < j as int :: lseq_has(buckets)[i]
+      invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].Inv()
+      invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].I() == EmptyBucket()
+      {
+        linear var newbucket := MutBucket.Alloc();
+        buckets := lseq_give(buckets, j, newbucket);
+        j := j + 1;
+      }
+    }
+
+    static method BucketsNoKeyWithPrefix(shared buckets: lseq<MutBucket>, prefix: Key, start: uint64, end: uint64)
+    returns (b: bool)
+    requires InvLseq(buckets)
+    requires 0 <= start as int < end as int <= |buckets|
+    requires |buckets| < 0x1_0000_0000_0000_0000
+    ensures b == BucketListNoKeyWithPrefix(ILseq(buckets)[start..end], prefix)
+    {
+      assume false;
+      b := true;
+      // buckets := lseq_alloc(size);
+      
+      // var j := 0 as uint64;
+      // while j < size
+      // invariant 0 <= j <= size
+      // invariant |buckets| == size as int
+      // invariant forall i | j as int <= i < |buckets| :: !lseq_has(buckets)[i]
+      // invariant forall i | 0 <= i < j as int :: lseq_has(buckets)[i]
+      // invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].Inv()
+      // invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].I() == EmptyBucket()
+      // {
+      //   linear var newbucket := MutBucket.Alloc();
+      //   buckets := lseq_give(buckets, j, newbucket);
+      //   j := j + 1;
+      // }
+    }
+
+    static method BucketListConcat(linear left: lseq<MutBucket>, linear right: lseq<MutBucket>)
+    returns (linear buckets: lseq<MutBucket>)
+    requires InvLseq(left)
+    requires InvLseq(right)
+    requires |left| + |right| < 0x1_0000_0000_0000_0000
+    ensures InvLseq(buckets)
+    ensures ILseq(buckets) == ILseq(left) + ILseq(right)
+    {
+      // var leftsize := lseq_length_as_uint64(left);
+      // var rightsize := lseq_length_as_uint64(right);
+
+      // var buckets := lseq_alloc(leftsize + rightsize);
+      // var j := 0 as uint64;
+
+      // while j < leftsize
+      // invariant 0 <= j <= leftsize
+      // invariant |buckets| == size as int
+      // invariant forall i | j as int <= i < |buckets| :: !lseq_has(buckets)[i]
+      // invariant forall i | 0 <= i < j as int :: lseq_has(buckets)[i]
+      // invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].Inv()
+      // invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].I() == EmptyBucket()
+      // {
+      //   linear var newbucket := MutBucket.Alloc();
+      //   buckets := lseq_give(buckets, j, newbucket);
+      //   j := j + 1;
+      // }
+      var _ := FreeMutBucketSeq(left);
+      var _ := FreeMutBucketSeq(right);
+
+      buckets := lseq_alloc(0);
+      assume false;
+    }
+
+    static method BucketListConcat3(linear left: lseq<MutBucket>, linear mid: lseq<MutBucket>, linear right: lseq<MutBucket>)
+    returns (linear buckets: lseq<MutBucket>)
+    requires InvLseq(left)
+    requires InvLseq(mid)
+    requires InvLseq(right)
+    requires |left| + |right| + |mid| < 0x1_0000_0000_0000_0000
+    ensures InvLseq(buckets)
+    ensures ILseq(buckets) == ILseq(left) + ILseq(mid) + ILseq(right)
+    {
+      var _ := FreeMutBucketSeq(left);
+      var _ := FreeMutBucketSeq(mid);
+      var _ := FreeMutBucketSeq(right);
+
+      buckets := lseq_alloc(0);
+      assume false;
     }
   }
 
@@ -791,103 +875,6 @@ module BucketImpl {
       lseq_free_fun(buckets')
   }
 
-  linear datatype BucketIter = BucketIter(it: Iterator, pkv: PackedKV.Pkv, ghost bucket: Bucket)
-  {
-    predicate WFIter()
-    {
-      && PackedKV.WF(pkv)
-      && bucket == PackedKV.I(pkv)
-      && BucketIteratorModel.WFIter(bucket, IIterator(it))
-    } 
-
-    linear method Free()
-    {
-      linear var BucketIter(_,_,_) := this;
-    }
-
-    static function method makeIter(ghost bucket: Bucket, idx: uint64): (it': Iterator)
-    requires WFBucket(bucket)
-    requires |bucket.keys| == |bucket.msgs|
-    requires 0 <= idx as int <= |bucket.keys|
-    ensures IIterator(it')
-      == BucketIteratorModel.iterForIndex(bucket, idx as int)
-    {
-      Iterator(
-          (if idx as int == |bucket.keys| then BucketIteratorModel.Done
-              else BucketIteratorModel.Next(bucket.keys[idx], bucket.msgs[idx])),
-          idx,
-          |bucket.keys| - idx as int)
-    }
-
-    static method IterStart(shared bucket: MutBucket) returns (linear biter: BucketIter)
-    requires bucket.Inv()
-    ensures biter.WFIter()
-    ensures biter.bucket == bucket.I()
-    ensures IIterator(biter.it) == BucketIteratorModel.IterStart(biter.bucket)
-    {
-      BucketIteratorModel.reveal_IterStart();
-      ghost var b := bucket.I();
-      var pkv := bucket.GetPkv();
-      var it := makeIter(b, 0);
-      biter := BucketIter(it, pkv, b);
-    }
-
-    static method IterFindFirstGte(shared bucket: MutBucket, key: Key) returns (linear biter: BucketIter)
-    requires bucket.Inv()
-    ensures biter.WFIter()
-    ensures biter.bucket == bucket.I()
-    ensures IIterator(biter.it) == BucketIteratorModel.IterFindFirstGte(biter.bucket, key)
-    {
-      BucketIteratorModel.reveal_IterFindFirstGte();
-      ghost var b := bucket.I();
-      var pkv := bucket.GetPkv();
-      var i: uint64 := PSA.BinarySearchIndexOfFirstKeyGte(pkv.keys, key);
-      var it := makeIter(b, i);
-      biter := BucketIter(it, pkv, b);
-    }
-
-    static method IterFindFirstGt(shared bucket: MutBucket, key: Key) returns (linear biter: BucketIter)
-    requires bucket.Inv()
-    ensures biter.WFIter()
-    ensures biter.bucket == bucket.I()
-    ensures IIterator(biter.it) == BucketIteratorModel.IterFindFirstGt(biter.bucket, key)
-    {
-      BucketIteratorModel.reveal_IterFindFirstGt();
-      ghost var b := bucket.I();
-      var pkv := bucket.GetPkv();
-      var i: uint64 := PSA.BinarySearchIndexOfFirstKeyGt(pkv.keys, key);
-      var it := makeIter(b, i);
-      biter := BucketIter(it, pkv, b);
-    }
-
-    linear inout method IterInc()
-    requires old_self.WFIter()
-    requires IIterator(old_self.it).next.Next?
-    ensures self.WFIter()
-    ensures old_self.bucket == self.bucket
-    ensures IIterator(self.it) == BucketIteratorModel.IterInc(old_self.bucket, IIterator(old_self.it))
-    {
-      BucketIteratorModel.lemma_NextFromIndex(self.bucket, IIterator(self.it));
-
-      BucketIteratorModel.reveal_IterInc();
-      NumElementsLteWeight(self.bucket);
-      inout self.it := makeIter(self.bucket, self.it.i + 1);
-    }
-
-    shared method GetNext() returns (next : BucketIteratorModel.IteratorOutput)
-    requires this.WFIter()
-    ensures next == IIterator(this.it).next
-    {
-      BucketIteratorModel.lemma_NextFromIndex(bucket, IIterator(it));
-        
-      if it.i == |pkv.keys.offsets| as uint64 {
-        next := BucketIteratorModel.Done;
-      } else {
-        next := BucketIteratorModel.Next(PackedKV.GetKey(pkv, it.i), PackedKV.GetMessage(pkv, it.i));
-      }
-    }
-  }
-
   method pkvList2BucketList(linear inout bots: lseq<MutBucket>, pkvs: seq<PKV.Pkv>, sorted: bool)
   requires |pkvs| < Uint64UpperBound()
   requires forall i | 0 <= i < |pkvs| :: PKV.WF(pkvs[i])
@@ -915,20 +902,20 @@ module BucketImpl {
     }
   }
 
-   method PartialFlush(linear inout bots: lseq<MutBucket>, shared top: MutBucket,  pivots: Pivots.PivotTable)
-    returns (linear newtop: MutBucket)
-    requires top.Inv()
-    requires MutBucket.InvLseq(old_bots)
-    requires Pivots.WFPivots(pivots)
-    requires |pivots| < Uint64UpperBound()
-    requires Pivots.NumBuckets(pivots) == |old_bots|
-    requires WeightBucket(top.I()) <= MaxTotalBucketWeight()
-    requires WeightBucketList(MutBucket.ILseq(old_bots)) <= MaxTotalBucketWeight()
-    ensures MutBucket.InvLseq(bots)
-    ensures |bots| == |old_bots|
-    ensures newtop.Inv()
-    ensures partialFlushResult(newtop.I(), MutBucket.ILseq(bots))
-        == BucketFlushModel.partialFlush(top.I(), pivots, MutBucket.ILseq(old_bots))
+  method PartialFlush(linear inout bots: lseq<MutBucket>, shared top: MutBucket,  pivots: Pivots.PivotTable)
+  returns (linear newtop: MutBucket)
+  requires top.Inv()
+  requires MutBucket.InvLseq(old_bots)
+  requires Pivots.WFPivots(pivots)
+  requires |pivots| < Uint64UpperBound()
+  requires Pivots.NumBuckets(pivots) == |old_bots|
+  requires WeightBucket(top.I()) <= MaxTotalBucketWeight()
+  requires WeightBucketList(MutBucket.ILseq(old_bots)) <= MaxTotalBucketWeight()
+  ensures MutBucket.InvLseq(bots)
+  ensures |bots| == |old_bots|
+  ensures newtop.Inv()
+  ensures partialFlushResult(newtop.I(), MutBucket.ILseq(bots))
+      == BucketFlushModel.partialFlush(top.I(), pivots, MutBucket.ILseq(old_bots))
   {
     var i: uint64 := 0;
     var bots_len := lseq_length_raw(bots);
@@ -991,79 +978,4 @@ module BucketImpl {
     newtop := MutBucket.AllocPkv(result.top, sorted);
     pkvList2BucketList(inout bots, result.bots, sorted);
   }
-
-  // method PartialFlush(shared top: MutBucket, shared bots: lseq<MutBucket>, pivots: Pivots.PivotTable)
-  //   returns (linear newtop: MutBucket, linear newbots: lseq<MutBucket>)
-  //   requires top.Inv()
-  //   requires MutBucket.InvLseq(bots)
-  //   requires Pivots.WFPivots(pivots)
-  //   requires |pivots| < Uint64UpperBound()
-  //   requires Pivots.NumBuckets(pivots) == |bots|
-  //   requires WeightBucket(top.I()) <= MaxTotalBucketWeight()
-  //   requires WeightBucketList(MutBucket.ILseq(bots)) <= MaxTotalBucketWeight()
-  //   ensures MutBucket.InvLseq(newbots)
-  //   ensures newtop.Inv()
-  //   ensures partialFlushResult(newtop.I(), MutBucket.ILseq(newbots))
-  //       == BucketFlushModel.partialFlush(top.I(), pivots, MutBucket.ILseq(bots))
-  // {
-  //   var i: uint64 := 0;
-  //   var bots_len := lseq_length_raw(bots);
-
-  //   var botPkvs: array<PKV.Pkv> := new PKV.Pkv[bots_len];
-  //   var sorted := true;
-  //   while i < bots_len
-  //     invariant i as nat <= |bots|
-  //     invariant forall j | 0 <= j < i :: PKV.WF(botPkvs[j])
-  //     invariant forall j | 0 <= j < i :: PKV.I(botPkvs[j]) == lseqs(bots)[j].bucket
-  //     invariant forall j | 0 <= j < i :: |PKV.IKeys(botPkvs[j].keys)| < 0x1000_0000
-  //     invariant sorted ==> forall j | 0 <= j < i ::
-  //         BucketWellMarshalled(PKV.I(botPkvs[j]))
-  //   {
-  //     botPkvs[i] := lseq_peek(bots, i).GetPkv();
-  //     NumElementsLteWeight(PKV.I(botPkvs[i]));
-  //     WeightBucketLeBucketList(MutBucket.ILseq(bots), i as int);
-
-  //     if !lseq_peek(bots, i).sorted {
-  //       sorted := false;
-  //     }
-  //     // assert |PKV.IKeys(botPkvs[i].keys)|
-  //     //    <= WeightBucket(PKV.I(botPkvs[i]))
-  //     //    <= WeightBucketList(MutBucket.ILseq(bots))
-  //     //    < 0x1000_0000;
-  //     i := i + 1;
-  //   }
-
-  //   var botPkvsSeq := botPkvs[..];
-
-  //   NumElementsLteWeight(top.bucket);
-  //   assert DPKV.PKVISeq(botPkvsSeq) == MutBucket.ILseq(bots);
-
-  //   var topPkv := top.GetPkv();
-  //   if !top.sorted {
-  //     sorted := false;
-  //   }
-
-  //   var result := DPKV.PartialFlush(topPkv, pivots, botPkvsSeq);
-
-  //   assert sorted ==>
-  //     && BucketWellMarshalled(PKV.I(result.top)) 
-  //     && (forall j | 0 <= j < |result.bots| ::
-  //         BucketWellMarshalled(PKV.I(result.bots[j])))
-  //   by {
-  //     if sorted {
-  //       partialFlushPreservesSorted(top.bucket, pivots, MutBucket.ILseq(bots));
-  //     }
-  //   }
-
-  //   partialFlushWeightBound(top.I(), pivots, MutBucket.ILseq(bots));
-  //   DPKV.WeightBucketPkv_eq_WeightPkv(result.top);
-  //   forall i | 0 <= i < |result.bots|
-  //     ensures PackedKV.WeightPkv(result.bots[i]) as nat < Uint32UpperBound()
-  //   {
-  //     WeightBucketLeBucketList(DPKV.PKVISeq(result.bots), i);
-  //     DPKV.WeightBucketPkv_eq_WeightPkv(result.bots[i]);
-  //   }
-  //   newtop := MutBucket.AllocPkv(result.top, sorted);
-  //   newbots := pkvList2BucketList(result.bots, sorted);
-  // }
 }

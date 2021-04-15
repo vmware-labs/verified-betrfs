@@ -41,6 +41,7 @@ module CacheImpl {
   import opened LinearBox
   import opened LinearBox_s
   import opened LinearSequence_i
+  import opened LinearOption
   import opened LCMM = LinearContentMutableMap
 
   import opened LinearSequence_s
@@ -446,6 +447,27 @@ module CacheImpl {
       newchild := Node.RestrictAndTranslateChild(parent, child, slot);
     }
 
+    shared method NodeCloneNewRoot(ref: BT.G.Reference, from: Key, to: Key)
+    returns (linear rootopt: lOption<Node>)
+    requires Inv()
+    requires to != []
+    requires ref in I()
+    requires BT.WFNode(I()[ref])
+    requires I()[ref].children.Some?
+    requires Pivots.ContainsAllKeys(I()[ref].pivotTable)
+    ensures rootopt.lNone? ==> (
+      !BT.ValidCloneBucketList(I()[ref], from)
+      || |BT.CloneNewRoot(I()[ref], from, to).children.value| > MaxNumChildren())
+    ensures rootopt.lSome? ==> (
+      && BT.ValidCloneBucketList(I()[ref], from)
+      && rootopt.value.Inv()
+      && rootopt.value.I() == BT.CloneNewRoot(I()[ref], from, to)
+      && |rootopt.value.I().children.value| <= MaxNumChildren()) 
+    {
+      shared var node := Get(ref);
+      rootopt := Node.CloneNewRoot(node, from, to);
+    }
+
     shared method NodePartialFlush(linear inout buckets: lseq<MutBucket>, ref: BT.G.Reference, pivots: Pivots.PivotTable, slot: uint64)
     returns (linear newparentBucket: MutBucket)
     requires Inv()
@@ -503,21 +525,24 @@ module CacheImpl {
       node' := node.CutoffNode(lbound, ubound);
     }
 
-    shared method NodeBucketGen(ref: BT.G.Reference, r: uint64, start: BT.UI.RangeStart)
+    shared method NodeBucketGen(ref: BT.G.Reference, r: uint64, start: BT.UI.RangeStart,
+      key': Key, pset: Option<PrefixSet>)
     returns (linear g: BGI.Generator)
     requires Inv()
     requires ptr(ref).Some?
     requires BT.WFNode(I()[ref])
     requires r as nat < |I()[ref].buckets|
+    requires var startKey := if start.NegativeInf? then [] else start.key;
+        && (pset.Some? ==> IsPrefix(pset.value.prefix, key'))
+        && (ApplyPrefixSet(pset, key') == startKey)
     ensures g.Basic?
     ensures g.biter.bucket == I()[ref].buckets[r as nat]
     ensures g.Inv()
     ensures g.I() == BGI.BucketGeneratorModel.GenFromBucketWithLowerBound(
-        I()[ref].buckets[r as nat], start)
+        I()[ref].buckets[r as nat], start, pset)
     {
       shared var node := Get(ref);
-      g := BGI.Generator.GenFromBucketWithLowerBound(
-          lseq_peek(node.buckets, r), start);
+      g := BGI.Generator.GenFromBucketWithLowerBound(lseq_peek(node.buckets, r), start, key', pset);
     }
 
     shared method NodeBiggestSlot(ref: BT.G.Reference)

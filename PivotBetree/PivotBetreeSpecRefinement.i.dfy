@@ -412,7 +412,7 @@ module PivotBetreeSpecRefinement {
   {
   }
 
-  lemma InUpperBoundAndNot(a: Key, end: MS.UI.RangeEnd, b: Key)
+  lemma InUpperBoundAndNot(a: Key, end: MS.UI.RangeEnd, b: Key) 
   requires MS.UpperBound(a, end)
   requires !MS.UpperBound(b, end)
   ensures P.G.Keyspace.lt(a, b)
@@ -430,25 +430,24 @@ module PivotBetreeSpecRefinement {
     }
   }
 
-  lemma LookupUpperBoundLte(lookup: P.Lookup, tt: TranslationTable, targetidx: int, idx: int)
-  requires idx <= targetidx
-  requires 0 <= idx < |lookup|
-  requires 1 <= targetidx < |lookup|
+  lemma LookupUpperBoundLte(lookup: P.Lookup, tt: TranslationTable, targetidx: int)
+  requires 0 <= targetidx < |lookup|
   requires P.LookupVisitsWFNodes(lookup)
   requires P.LookupBoundedKey(lookup)
-  requires P.ValidTranslationTable(lookup, tt, 0)
+  requires |lookup| > 0 ==> P.ValidTranslationTable(lookup, tt, 0)
   ensures 
-    var upperbound := P.LookupUpperBound(lookup, idx, tt);
-    var upper := P.LookupUpperBoundAtLayer(lookup[targetidx], tt[targetidx-1], lookup[0].currentKey);
+    var upperbound := P.LookupUpperBound(lookup, tt);
+    var pset := if targetidx-1 < 0 then None else tt[targetidx-1];
+    var upper := P.LookupUpperBoundAtLayer(lookup[targetidx], pset, lookup[0].currentKey);
     && (upperbound.None? ==> upper.None?)
     && (upper.Some? ==> upperbound.Some?)
     && (upper.Some? ==> P.G.Keyspace.lte(upperbound.value, upper.value))
-  decreases |lookup| - idx
+  decreases |lookup|
   {
     P.reveal_LookupUpperBound();
-    if idx == targetidx {
+    if |lookup| == targetidx+1 {
     } else {
-      LookupUpperBoundLte(lookup, tt, targetidx, idx + 1);
+      LookupUpperBoundLte(DropLast(lookup), DropLast(tt), targetidx);
     }
   }
 
@@ -458,9 +457,9 @@ module PivotBetreeSpecRefinement {
   requires P.LookupBoundedKey(lookup)
   requires P.ValidTranslationTable(lookup, tt, 0)
   requires P.G.Keyspace.lte(lookup[0].currentKey, key)
-  requires upperbound == P.LookupUpperBound(lookup, 0, tt)
+  requires upperbound == P.LookupUpperBound(lookup, tt)
   requires upperbound.Some? ==> P.G.Keyspace.lt(key, upperbound.value)
-  ensures idx > 0 && tt[idx-1].Some? ==> IsPrefix(tt[idx-1].value.prefix, key)
+  ensures idx > 0 && tt[idx-1].Some? ==> IsPrefix(tt[idx-1].value.newPrefix, key)
   ensures var r := Route(lookup[idx].readOp.node.pivotTable, lookup[idx].currentKey);
     var currentkey := GenerateKeyAtLayer(key, tt, idx);
     && Keyspace.lt(KeyToElement(currentkey), lookup[idx].readOp.node.pivotTable[r+1])
@@ -470,24 +469,19 @@ module PivotBetreeSpecRefinement {
     var pivots := lookup[idx].readOp.node.pivotTable;
     var r := Route(pivots, lookup[idx].currentKey);
     var currentkey := GenerateKeyAtLayer(key, tt, idx);
-    
-    if idx == 0 {
-      assert key == currentkey;
-      assert Keyspace.lt(KeyToElement(currentkey), pivots[r+1]);
-    } else {
-      LookupUpperBoundLte(lookup, tt, idx, 0);
-      if tt[idx-1].Some? {
-        TranslatePivotPairRangeProperty(KeyToElement(lookup[idx].currentKey),
-          pivots[r+1], tt[idx-1].value.newPrefix, tt[idx-1].value.prefix);
-      }
+
+    LookupUpperBoundLte(lookup, tt, idx);
+    if idx > 0 && tt[idx-1].Some? {
+      TranslatePivotPairRangeProperty(KeyToElement(lookup[idx].currentKey),
+          pivots[r+1], tt[idx-1].value.prefix, tt[idx-1].value.newPrefix);
     }
   }
 
   function GenerateKeyAtLayer(key: Key, tt: TranslationTable, idx: int) : (k: Key)
   requires 0 <= idx <= |tt|
   {
-    if idx > 0 && tt[idx-1].Some? && IsPrefix(tt[idx-1].value.prefix, key)
-    then ApplyPrefixSet(tt[idx-1], key)
+    if idx > 0 && tt[idx-1].Some? && IsPrefix(tt[idx-1].value.newPrefix, key)
+    then ApplyPrefixSet(RevPrefixSet(tt[idx-1]), key)
     else ApplyPrefixSet(None, key)
   }
 
@@ -520,9 +514,9 @@ module PivotBetreeSpecRefinement {
   requires P.ValidTranslationTable(lookup, tt, 0)
   requires lookup' == GenerateLookup(lookup, key, tt, 0)
   requires
-    var lookupUpperBound := P.LookupUpperBound(lookup, 0, tt);
+    var lookupUpperBound := P.LookupUpperBound(lookup, tt);
     && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
-  ensures idx > 0 && tt[idx-1].Some? ==> IsPrefix(tt[idx-1].value.prefix, key)
+  ensures idx > 0 && tt[idx-1].Some? ==> IsPrefix(tt[idx-1].value.newPrefix, key)
   ensures BoundedKey(lookup'[idx].readOp.node.pivotTable, lookup'[idx].currentKey)
   ensures Route(lookup[idx].readOp.node.pivotTable, lookup[idx].currentKey)
     == Route(lookup'[idx].readOp.node.pivotTable, lookup'[idx].currentKey)
@@ -536,24 +530,24 @@ module PivotBetreeSpecRefinement {
     var edges := lookup'[idx].readOp.node.edgeTable;
     var r := Route(pivots, lookup[idx].currentKey);
 
-    var upperbound := P.LookupUpperBound(lookup, 0, tt);
+    var upperbound := P.LookupUpperBound(lookup, tt);
     if upperbound.Some? {
       InUpperBoundAndNot(key, end, upperbound.value);
     }
 
     P.G.Keyspace.EmptyLte(key);
     KeyWithinUpperBoundIsWithinLookup(key, upperbound, lookup, tt, idx);
-    assert idx > 0 && tt[idx-1].Some? ==> IsPrefix(tt[idx-1].value.prefix, key);
+    assert idx > 0 && tt[idx-1].Some? ==> IsPrefix(tt[idx-1].value.newPrefix, key);
 
     if  idx > 0 && tt[idx-1].Some? {
-      assert IsPrefix(tt[idx-1].value.prefix, key);
-      assert IsPrefix(tt[idx-1].value.prefix, startKey) by { reveal_IsPrefix(); }
+      assert IsPrefix(tt[idx-1].value.newPrefix, key);
+      assert IsPrefix(tt[idx-1].value.newPrefix, startKey) by { reveal_IsPrefix(); }
 
-      assert IsPrefix(tt[idx-1].value.newPrefix, lookup'[idx].currentKey) by { reveal_IsPrefix(); }
-      assert IsPrefix(tt[idx-1].value.newPrefix, lookup[idx].currentKey);
+      assert IsPrefix(tt[idx-1].value.prefix, lookup'[idx].currentKey) by { reveal_IsPrefix(); }
+      assert IsPrefix(tt[idx-1].value.prefix, lookup[idx].currentKey);
 
-      PrefixLteProperties( tt[idx-1].value.prefix, startKey, key);
-      PrefixLteProperties( tt[idx-1].value.newPrefix, lookup[idx].currentKey, lookup'[idx].currentKey);
+      PrefixLteProperties( tt[idx-1].value.newPrefix, startKey, key);
+      PrefixLteProperties( tt[idx-1].value.prefix, lookup[idx].currentKey, lookup'[idx].currentKey);
     } else {
       assert lookup[idx].currentKey == startKey;
       assert lookup'[idx].currentKey == key;
@@ -580,7 +574,7 @@ module PivotBetreeSpecRefinement {
   requires tt == P.LookupTranslationTable(lookup, 0, None)
   requires lookup' == GenerateLookup(lookup, key, tt, 0)
   requires
-    var lookupUpperBound := P.LookupUpperBound(lookup, 0, tt);
+    var lookupUpperBound := P.LookupUpperBound(lookup, tt);
     && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
   requires var pset := if idx == 0 then None else tt[idx-1];
     && tt[idx..] == P.LookupTranslationTable(lookup, idx, pset)
@@ -614,7 +608,9 @@ module PivotBetreeSpecRefinement {
           assert tt[idx] == ComposePrefixSet(prefix1, prefix2) by {
             P.reveal_LookupTranslationTable();
           }
-
+          assert key == ApplyPrefixSet(prefix1, lookup'[idx].currentKey) by {
+            reveal_IsPrefix();
+          }
           ComposePrefixSetCorrect(prefix1, prefix2, tt[idx], key, 
               lookup'[idx].currentKey, lookup'[idx+1].currentKey);
           assert P.LookupFollowsChildEdgeAtLayer(lookup', idx);
@@ -639,7 +635,7 @@ module PivotBetreeSpecRefinement {
   requires P.ValidTranslationTable(lookup, tt, 0)
   requires lookup' == GenerateLookup(lookup, key, tt, 0)
   requires
-    var lookupUpperBound := P.LookupUpperBound(lookup, 0, tt);
+    var lookupUpperBound := P.LookupUpperBound(lookup, tt);
     && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
   requires P.LookupBoundedKey(lookup')
   ensures P.LookupVisitsWellMarshalledBuckets(lookup) ==> 
@@ -661,7 +657,7 @@ module PivotBetreeSpecRefinement {
   requires tt == P.LookupTranslationTable(lookup, 0, None)
   requires lookup' == GenerateLookup(lookup, key, tt, 0)
   requires
-    var lookupUpperBound := P.LookupUpperBound(lookup, 0, tt);
+    var lookupUpperBound := P.LookupUpperBound(lookup, tt);
     && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
   ensures P.WFLookupForKey(lookup', key)
   ensures P.LookupVisitsWellMarshalledBuckets(lookup) ==> 
@@ -705,34 +701,35 @@ module PivotBetreeSpecRefinement {
     }
   }
 
-  lemma TranslatedBucketPreservesLookup(layer: P.Layer, bucket: Bucket, layer': P.Layer, bucket': Bucket, key: Key, pset: Option<PrefixSet>)
-  requires P.WFNode(layer.readOp.node)
-  requires layer.readOp == layer'.readOp
-  requires P.G.Keyspace.lte(layer.currentKey, layer'.currentKey)
-  requires BoundedKey(layer.readOp.node.pivotTable, layer.currentKey)
-  requires BoundedKey(layer'.readOp.node.pivotTable, layer'.currentKey)
-  requires PreWFBucket(bucket)
-  requires BucketWellMarshalled(bucket)
-  requires Route(layer.readOp.node.pivotTable, layer.currentKey)
-    == Route(layer'.readOp.node.pivotTable, layer'.currentKey)
-  requires bucket == layer.readOp.node.buckets[Route(layer.readOp.node.pivotTable, layer.currentKey)]
-  requires pset.None? ==> bucket == bucket'
-  requires pset.Some? ==>
-    && IsPrefix(pset.value.prefix, key)
-    && IsPrefix(pset.value.newPrefix, layer.currentKey)
-    && bucket' == P.ClampAndTranslateBucket(layer, bucket, pset.value)
-  requires layer'.currentKey == ApplyPrefixSet(pset, key)
-  ensures P.NodeLookup(layer'.readOp.node, layer'.currentKey)
-          == BucketGet(bucket'.as_map(), key)
+  lemma SuccBucketAtLayerPreservesLookup(lookup: P.Lookup, lookup': P.Lookup,
+    buckets: seq<Bucket>, buckets': seq<Bucket>, tt: TranslationTable, key: Key, idx: int)
+  requires 1 <= idx
+  requires |lookup| == |buckets|
+  requires |lookup| == |lookup'|
+  requires |buckets| == |buckets'|
+  requires P.SuccBucketAtLayer.requires(buckets, tt, idx)
+  requires buckets'[idx] == P.SuccBucketAtLayer(buckets, tt, idx)
+  requires BucketWellMarshalled(buckets[idx])
+  requires lookup[idx].readOp == lookup'[idx].readOp
+  requires P.G.Keyspace.lte(lookup[idx].currentKey, lookup'[idx].currentKey)
+  requires P.WFNode(lookup[idx].readOp.node)
+  requires BoundedKey(lookup[idx].readOp.node.pivotTable, lookup[idx].currentKey)
+  requires BoundedKey(lookup'[idx].readOp.node.pivotTable, lookup'[idx].currentKey)
+  requires Route(lookup[idx].readOp.node.pivotTable, lookup[idx].currentKey)
+        == Route(lookup'[idx].readOp.node.pivotTable, lookup'[idx].currentKey)
+  requires buckets[idx] == lookup[idx].readOp.node.buckets[
+      Route(lookup[idx].readOp.node.pivotTable, lookup[idx].currentKey)]
+  requires tt[idx-1].Some? ==> IsPrefix(tt[idx-1].value.prefix, lookup'[idx].currentKey)
+  requires key == ApplyPrefixSet(tt[idx-1], lookup'[idx].currentKey)
+  ensures P.NodeLookup(lookup'[idx].readOp.node, lookup'[idx].currentKey)
+          == BucketGet(buckets'[idx].as_map(), key)
   {
-    var r := Route(layer'.readOp.node.pivotTable, layer'.currentKey);
-    if pset.None? {
-      assert layer'.readOp.node.buckets[r] == bucket';
+    var r := Route(lookup'[idx].readOp.node.pivotTable, lookup'[idx].currentKey);
+    if tt[idx-1].None? {
+      assert lookup'[idx].readOp.node.buckets[r] == buckets'[idx];
     } else {
-      var pivots := layer.readOp.node.pivotTable;
-      var (left, right) := TranslatePivotPairInternal(
-          KeyToElement(layer.currentKey), pivots[r+1], pset.value.newPrefix, pset.value.newPrefix);
-      TranslateBucketSameMessage(bucket, bucket', pset.value.newPrefix, pset.value.prefix, layer'.currentKey, key);
+      TranslateBucketSameMessage(buckets[idx], buckets'[idx], tt[idx-1].value.prefix,
+        tt[idx-1].value.newPrefix, lookup'[idx].currentKey, key);
     }
   }
 
@@ -749,12 +746,12 @@ module PivotBetreeSpecRefinement {
   requires P.LookupVisitsWFNodes(lookup')
   requires P.LookupBoundedKey(lookup')
   requires
-    var lookupUpperBound := P.LookupUpperBound(lookup, 0, tt);
+    var lookupUpperBound := P.LookupUpperBound(lookup, tt);
     && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
-  requires BucketListWellMarshalled(buckets)
   requires forall i | 0 <= i < |lookup| :: buckets[i] 
     == lookup[i].readOp.node.buckets[Route(lookup[i].readOp.node.pivotTable, lookup[i].currentKey)]
-  requires buckets' == P.TranslateSuccBuckets(lookup, buckets, tt, 0)
+  requires BucketListWellMarshalled(buckets)
+  requires buckets' == P.TranslateSuccBuckets(buckets, tt, 0)
   ensures InterpretBucketStack(buckets'[..idx], key)
        == P.InterpretLookup(lookup'[..idx])
   {
@@ -767,13 +764,17 @@ module PivotBetreeSpecRefinement {
       assert key == lookup'[0].currentKey;
       assert InterpretBucketStack(buckets'[..idx], key) == P.InterpretLookup(lookup'[..idx]);
     } else {
-      TranslatedBucketPreservesLookup(lookup[idx-1], buckets[idx-1], lookup'[idx-1], buckets'[idx-1], key, tt[idx-2]);
+      assert key == ApplyPrefixSet(tt[idx-2], lookup'[idx-1].currentKey) by {
+        reveal_IsPrefix();
+      }
+      SuccBucketAtLayerPreservesLookup(lookup, lookup', buckets, buckets', tt, key, idx-1);
       assert P.NodeLookup(lookup'[idx-1].readOp.node, lookup'[idx-1].currentKey) == BucketGet(buckets'[idx-1].as_map(), key);
-      InterpretBucketStackEqInterpretLookupIter(start, key, end, lookup, buckets, lookup', buckets', tt, idx-1);
-      assert InterpretBucketStack(buckets'[..idx-1], key) == P.InterpretLookup(lookup'[..idx-1]);
 
       assert DropLast(buckets'[..idx]) == buckets'[..idx-1];
       assert DropLast(lookup'[..idx]) == lookup'[..idx-1];
+
+      InterpretBucketStackEqInterpretLookupIter(start, key, end, lookup, buckets, lookup', buckets', tt, idx-1);
+      // assert InterpretBucketStack(buckets'[..idx-1], key) == P.InterpretLookup(lookup'[..idx-1]);
       assert InterpretBucketStack(buckets'[..idx], key) == P.InterpretLookup(lookup'[..idx]);
     }
   }
@@ -791,12 +792,12 @@ module PivotBetreeSpecRefinement {
   requires P.LookupVisitsWFNodes(lookup')
   requires P.LookupBoundedKey(lookup')
   requires
-    var lookupUpperBound := P.LookupUpperBound(lookup, 0, tt);
+    var lookupUpperBound := P.LookupUpperBound(lookup, tt);
     && (lookupUpperBound.Some? ==> !MS.UpperBound(lookupUpperBound.value, end))
   requires BucketListWellMarshalled(buckets)
   requires forall i | 0 <= i < |lookup| :: buckets[i] 
     == lookup[i].readOp.node.buckets[Route(lookup[i].readOp.node.pivotTable, lookup[i].currentKey)]
-  requires buckets' == P.TranslateSuccBuckets(lookup, buckets, tt, 0)
+  requires buckets' == P.TranslateSuccBuckets(buckets, tt, 0)
   ensures InterpretBucketStack(buckets', key)
        == P.InterpretLookup(lookup')
   {
@@ -865,7 +866,7 @@ module PivotBetreeSpecRefinement {
   {
     var q := ISuccQuery(sq);
     var startKey := if sq.start.NegativeInf? then [] else sq.start.key;
-    var translatedbuckets := P.TranslateSuccBuckets(sq.lookup, sq.buckets, sq.translations, 0);
+    var translatedbuckets := P.TranslateSuccBuckets(sq.buckets, sq.translations, 0);
     SuccQueryProperties(sq.results, translatedbuckets, sq.start, sq.end);
 
     forall i | 0 <= i < |q.results|
@@ -899,10 +900,15 @@ module PivotBetreeSpecRefinement {
       /*assert B.InterpretLookup(IReadOps(sq.lookup), key).value
           == P.InterpretLookupAccountingForLeaf(sq.lookup, key).value
           == MS.EmptyValue();*/
-      
+
+      assert P.LookupVisitsWellMarshalledBuckets(lookup');
+      assert B.InterpretLookup(ILayers(lookup')) == P.InterpretLookupAccountingForLeaf(lookup');
+
       InterpretBucketStackEqInterpretLookup(sq.start, key, sq.end, sq.lookup, sq.buckets, lookup', translatedbuckets, sq.translations);
+
       assert InterpretBucketStack(translatedbuckets, key) == P.InterpretLookup(lookup');
       assert P.BufferDefinesEmptyValue(P.InterpretLookup(lookup'));
+
       assert B.LookupKeyValue(ILayers(lookup'), key, MS.EmptyValue());
       assert B.SamePathWithKeyValue(q.lookup, ILayers(lookup'), key, MS.EmptyValue());
     }
@@ -1783,15 +1789,32 @@ module PivotBetreeSpecRefinement {
     PivotBetreeSpecWFNodes.ValidCloneWritesInvNodes(clone);
     assert P.InvNode(P.CloneReads(clone)[0].node);
 
-    // oldroot buffer condition
+    ContainsAllKeysImpliesBoundedKey(clone.oldroot.pivotTable, clone.from);
+    var rstart := Route(clone.oldroot.pivotTable, clone.from);
+    var fromend := ShortestUncommonPrefix(clone.from, |clone.from|);
+    var rend := if fromend.Max_Element? then |clone.oldroot.buckets| 
+        else Route(clone.oldroot.pivotTable, fromend.e) + 1;
+    assert BucketListNoKeyWithPrefix(clone.oldroot.buckets[rstart..rend], clone.from);
+
     forall k | k in c.new_to_old
     ensures IMapsTo(c.oldroot.buffer, c.new_to_old[k], Update(NopDelta()))
     ensures c.new_to_old[k] in c.oldroot.children
     {
       ContainsAllKeysImpliesBoundedKey(clone.oldroot.pivotTable, c.new_to_old[k]);
-      var r := Route(clone.oldroot.pivotTable, c.new_to_old[k]);
+      var key : Key := c.new_to_old[k];
+      var r := Route(clone.oldroot.pivotTable, key);
+
+      Keyspace.Base_Order.EmptyLte(key[|clone.from|..]);
+      PrefixLteProperties(clone.from, clone.from, key);
+      assert Keyspace.lte(KeyToElement(clone.from), KeyToElement(key));
+
+      if fromend.Element? {
+        KeyWithPrefixLt(clone.from, fromend.e, key);
+        assert r <= rend;
+      }
+
+      assert clone.oldroot.buckets[rstart..rend][r-rstart] == clone.oldroot.buckets[r];
       assert BucketNoKeyWithPrefix(clone.oldroot.buckets[r], clone.from);
-      assert IsPrefix(clone.from, c.new_to_old[k]) by { reveal_IsPrefix(); }
       MapSeqs.key_sets_eq(clone.oldroot.buckets[r].keys, clone.oldroot.buckets[r].msgs);
     }
 
