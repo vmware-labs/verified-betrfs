@@ -968,13 +968,35 @@ module Interpretation {
   requires Inv(s)
   requires HT.QueryNotFound(s, s', pos)
   ensures Inv(s')
-  ensures interp(s.table) == interp(s'.table)
+  ensures interp(s.table).ops == interp(s'.table).ops
+  ensures interp(s.table).stubs == interp(s'.table).stubs
+  ensures interp(s.table).queries == interp(s'.table).queries + multiset{S.QueryUnknown(
+      s.table[pos].value.state.rid, s.table[pos].value.state.key)}
+  ensures interp(s.table).removes == interp(s'.table).removes
+
   {
     QueryNotFound_PreservesInv(s, s', pos);
     var e := get_empty_cell(s.table);
     S.reveal_app_queries();
     UsefulTriggers();
-    preserves_2(s.table, s'.table, pos, e);
+
+    var x := S.Summary(map[],
+        multiset{},
+        multiset{S.QueryUnknown(
+          s.table[pos].value.state.rid, s.table[pos].value.state.key)},
+        multiset{});
+    forall k | 0 <= k < HT.FixedSize() && adjust(pos, e+1) < adjust(k, e+1)
+    ensures S.commutes(x, S.f(s.table[k]))
+    {
+      assert ValidHashInSlot(s.table, e, pos);
+      assert ValidHashOrdering(s.table, e, pos, k);
+      assert ValidHashInSlot(s.table, pos, k);
+      //assert !(s.table[k].value.entry.Full? && s.table[k].value.entry.kv.key == 
+      //    s.table[pos].value.state.key);
+    }
+
+    preserves_1_right(s.table, s'.table, pos, e, x);
+    add_thing_with_no_ops(interp(s'.table), x);
   }
 
   lemma RemoveSkip_PreservesInterp(s: Variables, s': Variables, pos: nat)
@@ -1020,12 +1042,48 @@ module Interpretation {
   requires Inv(s)
   requires HT.RemoveDone(s, s', pos)
   ensures Inv(s')
-  ensures interp(s.table) == interp(s'.table)
+  ensures interp(s.table).ops == interp(s'.table).ops
+  ensures interp(s.table).stubs == interp(s'.table).stubs
+  ensures interp(s.table).queries == interp(s'.table).queries
+  ensures interp(s.table).removes == interp(s'.table).removes + multiset{S.QueryFound(
+      s.table[pos].value.state.rid, s.table[pos].value.state.initial_key,
+      Some(s.table[pos].value.state.found_value))}
   {
     RemoveDone_PreservesInv(s, s', pos);
     var e := get_empty_cell(s.table);
     S.reveal_app_queries();
     UsefulTriggers();
-    preserves_1(s.table, s'.table, pos, e);
+
+    var x := S.Summary(map[],
+        multiset{},
+        multiset{},
+        multiset{S.QueryFound(
+          s.table[pos].value.state.rid, s.table[pos].value.state.initial_key,
+          Some(s.table[pos].value.state.found_value))});
+
+    /*forall k | 0 <= k < HT.FixedSize() && adjust(pos, e+1) < adjust(k, e+1)
+    ensures S.commutes(x, S.f(s.table[k]))
+    {
+      assert ValidHashInSlot(s.table, e, pos);
+      assert ValidHashOrdering(s.table, e, pos, k);
+      assert ValidHashInSlot(s.table, pos, k);
+    }*/
+
+    preserves_1_right(s.table, s'.table, pos, e, x);
+    add_thing_with_no_ops(interp(s'.table), x);
   }
+
+  lemma RemoveNotFound_PreservesInterp(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires HT.RemoveNotFound(s, s', pos)
+  ensures Inv(s')
+  ensures interp(s.table) == interp(s'.table)
+  {
+    RemoveNotFound_PreservesInv(s, s', pos);
+    var e := get_empty_cell(s.table);
+    S.reveal_app_queries();
+    UsefulTriggers();
+    preserves_2(s.table, s'.table, pos, e);
+  }
+
 }

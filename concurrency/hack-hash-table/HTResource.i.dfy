@@ -48,9 +48,9 @@ module HTResource refines ApplicationResourceSpec {
   // apply when no threads are operating)
   datatype State =
     | Free
-    | Inserting(rid: int, kv: KV, inital_key: Key)
+    | Inserting(rid: int, kv: KV, initial_key: Key)
     | Removing(rid: int, key: Key)
-    | RemoveTidying(rid: int, inital_key: Key, found_value: Value)
+    | RemoveTidying(rid: int, initial_key: Key, found_value: Value)
 
       // Why do we need to store query state to support an invariant over the
       // hash table interpretation, since query is a read-only operation?
@@ -328,7 +328,7 @@ module HTResource refines ApplicationResourceSpec {
         [pos' := Some(s.table[pos'].value.(state :=
           Inserting(
             state.rid,
-            s.table[pos].value.entry.kv, state.inital_key)))])
+            s.table[pos].value.entry.kv, state.initial_key)))])
   }
 
   // Slot is empty. Insert our element and finish.
@@ -444,8 +444,8 @@ module HTResource refines ApplicationResourceSpec {
   {
     && RemoveSkipEnabled(s, pos)
     // This IS the key we want to remove!
-    && var inital_key := s.table[pos].value.state.key;
-    && s.table[pos].value.entry.kv.key == inital_key
+    && var initial_key := s.table[pos].value.state.key;
+    && s.table[pos].value.entry.kv.key == initial_key
 
     // Change the program counter into RemoveTidying mode
     && var rid := s.table[pos].value.state.rid;
@@ -453,7 +453,7 @@ module HTResource refines ApplicationResourceSpec {
     // to overwrite it in the next step either way.
     // (Might be easier to leave the entry as it is rather than set it to Empty?)
     && s' == s.(table := s.table[pos := Some(Info(Empty,
-        RemoveTidying(rid, inital_key, s.table[pos].value.entry.kv.val)))])
+        RemoveTidying(rid, initial_key, s.table[pos].value.entry.kv.val)))])
   }
 
   predicate TidyEnabled(s: R, pos: nat)
@@ -696,7 +696,7 @@ module HTResource refines ApplicationResourceSpec {
   requires s.table[pos].Some?
   requires var state := s.table[pos].value.state;
     && state.Inserting?
-    && NextPos(pos) == hash(state.inital_key) as nat
+    && NextPos(pos) == hash(state.initial_key) as nat
   ensures false
 
   lemma RemoveTidyUnreachableState(s: R, pos: nat)
@@ -705,7 +705,7 @@ module HTResource refines ApplicationResourceSpec {
   requires s.table[pos].Some?
   requires var state := s.table[pos].value.state;
     && state.RemoveTidying?
-    && NextPos(pos) == hash(state.inital_key) as nat
+    && NextPos(pos) == hash(state.initial_key) as nat
   ensures false
 
   lemma RemoveUnreachableState(s: R, pos: nat)
