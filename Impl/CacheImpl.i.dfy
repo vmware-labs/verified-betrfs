@@ -456,10 +456,10 @@ module CacheImpl {
     requires I()[ref].children.Some?
     requires Pivots.ContainsAllKeys(I()[ref].pivotTable)
     ensures rootopt.lNone? ==> (
-      !BucketsLib.BucketListNoKeyWithPrefix(I()[ref].buckets, I()[ref].pivotTable, from)
+      !BT.ValidCloneBucketList(I()[ref], from)
       || |BT.CloneNewRoot(I()[ref], from, to).children.value| > MaxNumChildren())
     ensures rootopt.lSome? ==> (
-      && BucketsLib.BucketListNoKeyWithPrefix(I()[ref].buckets, I()[ref].pivotTable, from)
+      && BT.ValidCloneBucketList(I()[ref], from)
       && rootopt.value.Inv()
       && rootopt.value.I() == BT.CloneNewRoot(I()[ref], from, to)
       && |rootopt.value.I().children.value| <= MaxNumChildren()) 

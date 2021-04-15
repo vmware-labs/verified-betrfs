@@ -711,7 +711,8 @@ module BucketImpl {
       }
     }
 
-    static method CloneSeq(shared buckets: lseq<MutBucket>, start: uint64, end: uint64) returns (linear buckets': lseq<MutBucket>)
+    static method CloneSeq(shared buckets: lseq<MutBucket>, start: uint64, end: uint64)
+    returns (linear buckets': lseq<MutBucket>)
     requires InvLseq(buckets)
     requires 0 <= start as int <= end as int <= |buckets|
     requires |buckets| < 0x1_0000_0000_0000_0000;
@@ -734,6 +735,104 @@ module BucketImpl {
         buckets' := lseq_give(buckets', j-start, newbucket);
         j := j + 1;
       }
+    }
+
+    static method EmptySeq(size: uint64) returns (linear buckets: lseq<MutBucket>)
+    ensures InvLseq(buckets)
+    ensures |buckets| == size as int
+    ensures ILseq(buckets) == EmptyBucketList(size as int)
+    {
+      buckets := lseq_alloc(size);
+      
+      var j := 0 as uint64;
+      while j < size
+      invariant 0 <= j <= size
+      invariant |buckets| == size as int
+      invariant forall i | j as int <= i < |buckets| :: !lseq_has(buckets)[i]
+      invariant forall i | 0 <= i < j as int :: lseq_has(buckets)[i]
+      invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].Inv()
+      invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].I() == EmptyBucket()
+      {
+        linear var newbucket := MutBucket.Alloc();
+        buckets := lseq_give(buckets, j, newbucket);
+        j := j + 1;
+      }
+    }
+
+    static method BucketsNoKeyWithPrefix(shared buckets: lseq<MutBucket>, prefix: Key, start: uint64, end: uint64)
+    returns (b: bool)
+    requires InvLseq(buckets)
+    requires 0 <= start as int < end as int <= |buckets|
+    requires |buckets| < 0x1_0000_0000_0000_0000
+    ensures b == BucketListNoKeyWithPrefix(ILseq(buckets)[start..end], prefix)
+    {
+      assume false;
+      b := true;
+      // buckets := lseq_alloc(size);
+      
+      // var j := 0 as uint64;
+      // while j < size
+      // invariant 0 <= j <= size
+      // invariant |buckets| == size as int
+      // invariant forall i | j as int <= i < |buckets| :: !lseq_has(buckets)[i]
+      // invariant forall i | 0 <= i < j as int :: lseq_has(buckets)[i]
+      // invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].Inv()
+      // invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].I() == EmptyBucket()
+      // {
+      //   linear var newbucket := MutBucket.Alloc();
+      //   buckets := lseq_give(buckets, j, newbucket);
+      //   j := j + 1;
+      // }
+    }
+
+    static method BucketListConcat(linear left: lseq<MutBucket>, linear right: lseq<MutBucket>)
+    returns (linear buckets: lseq<MutBucket>)
+    requires InvLseq(left)
+    requires InvLseq(right)
+    requires |left| + |right| < 0x1_0000_0000_0000_0000
+    ensures InvLseq(buckets)
+    ensures ILseq(buckets) == ILseq(left) + ILseq(right)
+    {
+      // var leftsize := lseq_length_as_uint64(left);
+      // var rightsize := lseq_length_as_uint64(right);
+
+      // var buckets := lseq_alloc(leftsize + rightsize);
+      // var j := 0 as uint64;
+
+      // while j < leftsize
+      // invariant 0 <= j <= leftsize
+      // invariant |buckets| == size as int
+      // invariant forall i | j as int <= i < |buckets| :: !lseq_has(buckets)[i]
+      // invariant forall i | 0 <= i < j as int :: lseq_has(buckets)[i]
+      // invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].Inv()
+      // invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].I() == EmptyBucket()
+      // {
+      //   linear var newbucket := MutBucket.Alloc();
+      //   buckets := lseq_give(buckets, j, newbucket);
+      //   j := j + 1;
+      // }
+      var _ := FreeMutBucketSeq(left);
+      var _ := FreeMutBucketSeq(right);
+
+      buckets := lseq_alloc(0);
+      assume false;
+    }
+
+    static method BucketListConcat3(linear left: lseq<MutBucket>, linear mid: lseq<MutBucket>, linear right: lseq<MutBucket>)
+    returns (linear buckets: lseq<MutBucket>)
+    requires InvLseq(left)
+    requires InvLseq(mid)
+    requires InvLseq(right)
+    requires |left| + |right| + |mid| < 0x1_0000_0000_0000_0000
+    ensures InvLseq(buckets)
+    ensures ILseq(buckets) == ILseq(left) + ILseq(mid) + ILseq(right)
+    {
+      var _ := FreeMutBucketSeq(left);
+      var _ := FreeMutBucketSeq(mid);
+      var _ := FreeMutBucketSeq(right);
+
+      buckets := lseq_alloc(0);
+      assume false;
     }
   }
 

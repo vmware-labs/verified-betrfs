@@ -44,7 +44,7 @@ module CloneModel {
         && oldroot.children.Some? 
         && ContainsAllKeys(oldroot.pivotTable) 
       ) then (
-        if BucketListNoKeyWithPrefix(oldroot.buckets, oldroot.pivotTable, from) then (
+        if BT.ValidCloneBucketList(oldroot, from) then (
           var newroot := BT.CloneNewRoot(oldroot, from, to);
           if NumBuckets(newroot.pivotTable) <= MaxNumChildren() then (
             lemmaChildrenConditionsCloneNewRoot(s, oldroot, from, to);
@@ -102,7 +102,7 @@ module CloneModel {
       return;
     }
 
-    if !BucketListNoKeyWithPrefix(oldroot.buckets, oldroot.pivotTable, from) {
+    if !BT.ValidCloneBucketList(oldroot, from) {
       assert noop(s, s);
       return;
     }

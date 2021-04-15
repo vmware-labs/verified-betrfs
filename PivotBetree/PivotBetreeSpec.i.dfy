@@ -929,7 +929,6 @@ module PivotBetreeSpec {
   }
 
   // TODO: separate step
-
   function RestrictAndTranslateNode(node: Node, from: Key, to: Key) : (node': Node)
   requires WFNode(node)
   requires ContainsAllKeys(node.pivotTable)
@@ -963,8 +962,8 @@ module PivotBetreeSpec {
     PrefixOfLcpIsPrefixOfKeys(topivots[0], Last(topivots), to);
 
     var toedges := TranslateEdges(fromnode.edgeTable, fromnode.pivotTable, 0);
-    var tobuckets := EmptyBucketList(topivots);
-    WeightBucketListEmpty(topivots);
+    var tobuckets := EmptyBucketList(NumBuckets(topivots));
+    WeightBucketListEmpty(NumBuckets(topivots));
     assert |tobuckets| == |fromnode.buckets|;
 
     Node(topivots, toedges, fromnode.children, tobuckets)
@@ -975,7 +974,6 @@ module PivotBetreeSpec {
   requires ContainsAllKeys(node.pivotTable)
   requires node.children.Some?
   requires to != []
-  requires BucketListNoKeyWithPrefix(node.buckets, node.pivotTable, from)
   ensures WFPivots(node'.pivotTable)
   ensures WFEdges(node'.edgeTable, node'.pivotTable)
   ensures NumBuckets(node'.pivotTable) == |node'.buckets|
@@ -1028,6 +1026,19 @@ module PivotBetreeSpec {
     )
   }
 
+  predicate ValidCloneBucketList(node: Node, prefix: Key)
+  requires WFNode(node)
+  requires ContainsAllKeys(node.pivotTable)
+  {
+    var prefixend := ShortestUncommonPrefix(prefix, |prefix|);
+    ContainsAllKeysImpliesBoundedKey(node.pivotTable, prefix);
+
+    var start := Route(node.pivotTable, prefix);
+    var end := if prefixend.Max_Element? then |node.buckets| else Route(node.pivotTable, prefixend.e)+1;
+
+    && BucketListNoKeyWithPrefix(node.buckets[start..end], prefix)
+  }
+
   predicate ValidClone(clone: NodeClone)
   {
     && WFNode(clone.oldroot)
@@ -1036,7 +1047,8 @@ module PivotBetreeSpec {
 
     && clone.oldroot.children.Some?
     && clone.to != []
-    && BucketListNoKeyWithPrefix(clone.oldroot.buckets, clone.oldroot.pivotTable, clone.from)
+    && ValidCloneBucketList(clone.oldroot, clone.from)
+
     // from = old, to = new
     && clone.newroot == CloneNewRoot(clone.oldroot, clone.from, clone.to)
     && NumBuckets(clone.newroot.pivotTable) <= MaxNumChildren()

@@ -97,13 +97,13 @@ module BucketsLib {
     Bucket([], [])
   }
 
-  function EmptyBucketList(pivots: PivotTable) : (blist: BucketList)
-    requires |pivots| > 0
-    ensures |pivots| == |blist| + 1
+  function EmptyBucketList(size: int) : (blist: BucketList)
+    requires 0 <= size
+    ensures |blist| == size
     ensures BucketListWellMarshalled(blist)
     ensures forall i | 0 <= i < |blist| :: blist[i] == EmptyBucket()
   {
-    if |pivots| == 1 then [] else [ EmptyBucket() ] + EmptyBucketList(DropLast(pivots))
+    if size == 0 then [] else [ EmptyBucket() ] + EmptyBucketList(size-1)
   }
   
   function SingletonBucket(key: Key, msg: Message) : (result: Bucket)
@@ -113,7 +113,7 @@ module BucketsLib {
   {
     Bucket([key], [msg])
   }
-  
+
   function BucketDropLast(bucket: Bucket) : Bucket
     requires PreWFBucket(bucket)
     requires 0 < |bucket.keys|
@@ -629,8 +629,8 @@ module BucketsLib {
     && (forall k | k in bucket.keys :: !IsPrefix(prefix, k))
   }
 
-  predicate BucketListNoKeyWithPrefix(blist: BucketList, pt: PivotTable, prefix: Key)
-  requires WFBucketList(blist, pt)
+  predicate BucketListNoKeyWithPrefix(blist: BucketList, prefix: Key)
+  requires forall i | 0 <= i < |blist| :: WFBucket(blist[i])
   {
     && (forall i | 0 <= i < |blist| :: BucketNoKeyWithPrefix(blist[i], prefix))
   }
