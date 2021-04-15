@@ -1,0 +1,34 @@
+Overall: Fail
+
+Files failing with verification error
+	./lib/DataStructures/LinearMutableMap.i.dfy
+	./Impl/IOImpl.i.dfy
+	./Impl/IndirectionTable.i.dfy
+	./lib/Marshalling/GenericMarshalling.i.dfy
+
+Files failing with exceeded rlimit
+	./Impl/MarshallingImpl.i.dfy
+	./lib/DataStructures/BtreeModel.i.dfy
+	./Impl/BookkeepingModel.i.dfy
+	./ByteBlockCacheSystem/InterpretationDisk.i.dfy
+	./ByteBlockCacheSystem/ByteSystem.i.dfy
+	./BlockCacheSystem/BlockSystem.i.dfy
+	./lib/DataStructures/LinearContentMutableMap.i.dfy
+	./Impl/SplitImpl.i.dfy
+	./lib/Buckets/PackedKV.i.dfy
+	./Betree/BetreeInv.i.dfy
+	./PivotBetree/PivotBetreeSpecRefinement.i.dfy
+
+Total build time: 10785 seconds
+
+Slowest files:
+	1030.28	./ByteBlockCacheSystem/ByteSystem.i.dfy
+	537.21	./BlockCacheSystem/BlockSystem.i.dfy
+	465.27	./ByteBlockCacheSystem/InterpretationDisk.i.dfy
+	348.19	./Impl/IndirectionTable.i.dfy
+	260.34	./PivotBetree/PivotBetreeSpecRefinement.i.dfy
+	234.98	./BlockCacheSystem/JournalSystem.i.dfy
+	231.7	./Impl/CommitterImpl.i.dfy
+	207.87	./Impl/BookkeepingModel.i.dfy
+	193.72	./Impl/MarshallingImpl.i.dfy
+	181.83	./Betree/BetreeInv.i.dfy
