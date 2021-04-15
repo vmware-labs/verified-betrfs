@@ -184,12 +184,12 @@ module SummaryMonoid refines MonoidMap {
           )
         )
 
-      case Info(_, RemoveTidying(rid, init_key)) =>
+      case Info(_, RemoveTidying(rid, remove_key, found_value)) =>
         Summary(
           map[],
-          multiset{HT.Stub(rid, MapIfc.RemoveOutput)},
           multiset{},
-          multiset{}
+          multiset{},
+          multiset{QueryFound(rid, remove_key, Some(found_value))}
         )
 
       case Info(Empty(), Querying(rid, query_key)) =>
@@ -332,6 +332,36 @@ module Interpretation {
     }
   }
 
+  lemma get_singleton_for_remove(t: seq<Option<HT.Info>>, q: S.QueryRes)
+  returns (i: int, q': S.QueryRes)
+  requires q in S.concat_map(t).removes
+  ensures 0 <= i < |t|
+  ensures q' in S.f(t[i]).removes
+  ensures q.key == q'.key
+  ensures q'.QueryFound? ==> q.QueryFound?
+  {
+    if |t| <= 1 {
+      i := 0;
+      var q1 :| q1 in S.f(t[0]).removes;
+      q' := q1;
+    } else {
+      if q in S.f(t[|t|-1]).removes {
+        i := |t| - 1;
+        q' := q;
+      } else {
+        assert t[..|t|-1] + [t[|t|-1]] == t;
+        S.concat_map_additive(t[..|t|-1], [t[|t|-1]]);
+        var x := S.concat_map(t[..|t|-1]);
+        var y := S.f(t[|t|-1]);
+        //assert q in S.app_queries(x.queries, y.ops);
+        S.reveal_app_queries();
+        var qr := MultisetLemmas.ApplyGetBackwards(
+            (q) => S.app_query(q, y.ops), x.removes, q);
+        i, q' := get_singleton_for_remove(t[..|t|-1], qr);
+      }
+    }
+  }
+
   lemma get_singleton_for_key_slice(t: seq<Option<HT.Info>>, key: Key, a: int, b: int)
   returns (i: int)
   requires 0 <= a <= b <= |t|
@@ -357,6 +387,22 @@ module Interpretation {
     i := a + i1;
     assert t[a..b][i1] == t[i];
   }
+
+  lemma get_singleton_for_remove_slice(t: seq<Option<HT.Info>>, q: S.QueryRes, a: int, b: int)
+  returns (i: int, q': S.QueryRes)
+  requires 0 <= a <= b <= |t|
+  requires q in S.concat_map(t[a..b]).removes
+  ensures a <= i < b
+  ensures q' in S.f(t[i]).removes
+  ensures q.key == q'.key
+  ensures q'.QueryFound? ==> q.QueryFound?
+  {
+    var i1;
+    i1, q' := get_singleton_for_remove(t[a..b], q);
+    i := a + i1;
+    assert t[a..b][i1] == t[i];
+  }
+
 
   lemma separated_segments_commute(table: seq<Option<HT.Info>>, e: int, f: int,
       a: int, b: int, c: int, d: int)
@@ -484,6 +530,32 @@ module Interpretation {
       S.reveal_app_queries();
       MultisetLemmas.ApplyId((q) => S.app_query(q, x.ops), y.queries);
       MultisetLemmas.ApplyId((q) => S.app_query(q, y.ops), x.queries);
+    }
+
+    assert a1.removes == a2.removes by {
+      forall q, k | k in x.ops && q in y.removes && q.key == k && q.QueryUnknown?
+      ensures false
+      {
+        var i := get_singleton_for_key_slice(table, k, a, b);
+        var j, q' := get_singleton_for_remove_slice(table, q, c, d);
+
+        assert table[j].value.state.Removing?;
+
+        assert ValidHashInSlot(table, e, i);
+        assert ValidHashInSlot(table, f, j);
+      }
+      forall q, k | k in y.ops && q in x.removes && q.key == k && q.QueryUnknown?
+      ensures false
+      {
+        var i, q' := get_singleton_for_remove_slice(table, q, a, b);
+        var j := get_singleton_for_key_slice(table, k, c, d);
+
+        assert ValidHashInSlot(table, e, i);
+        assert ValidHashInSlot(table, f, j);
+      }
+      S.reveal_app_queries();
+      MultisetLemmas.ApplyId((q) => S.app_query(q, x.ops), y.removes);
+      MultisetLemmas.ApplyId((q) => S.app_query(q, y.ops), x.removes);
     }
   }
 

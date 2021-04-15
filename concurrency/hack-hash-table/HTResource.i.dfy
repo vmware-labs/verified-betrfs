@@ -50,7 +50,7 @@ module HTResource refines ApplicationResourceSpec {
     | Free
     | Inserting(rid: int, kv: KV, inital_key: Key)
     | Removing(rid: int, key: Key)
-    | RemoveTidying(rid: int, inital_key: Key)
+    | RemoveTidying(rid: int, inital_key: Key, found_value: Value)
 
       // Why do we need to store query state to support an invariant over the
       // hash table interpretation, since query is a read-only operation?
@@ -452,7 +452,8 @@ module HTResource refines ApplicationResourceSpec {
     // Note: it doesn't matter what we set the entry to here, since we're going
     // to overwrite it in the next step either way.
     // (Might be easier to leave the entry as it is rather than set it to Empty?)
-    && s' == s.(table := s.table[pos := Some(Info(Empty, RemoveTidying(rid, inital_key)))])
+    && s' == s.(table := s.table[pos := Some(Info(Empty,
+        RemoveTidying(rid, inital_key, s.table[pos].value.entry.kv.val)))])
   }
 
   predicate TidyEnabled(s: R, pos: nat)
