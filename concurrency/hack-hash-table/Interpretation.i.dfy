@@ -662,6 +662,7 @@ module Interpretation {
   function {:opaque} interp(table: seq<Option<HT.Info>>) : S.Summary
   requires Complete(table)
   requires InvTable(table)
+  requires TableQuantity(table) < |table|
   ensures forall e | is_good_root(table, e) :: interp(table) == interp_wrt(table, e)
   {
     var f := get_empty_cell(table);
@@ -694,6 +695,8 @@ module Interpretation {
   requires Complete(table')
   requires InvTable(table)
   requires InvTable(table')
+  requires TableQuantity(table) < |table|
+  requires TableQuantity(table') < |table'|
   requires forall j | 0 <= j < |table| && i != j :: table'[j] == table[j]
   requires 0 <= i < |table|
   requires S.f(table[i]) == S.f(table'[i])
@@ -718,6 +721,44 @@ module Interpretation {
     }
   }
 
+  lemma preserves_1_right(table: seq<Option<HT.Info>>,
+      table': seq<Option<HT.Info>>,
+      i: int,
+      f: int,
+      x: S.Summary)
+  requires Complete(table)
+  requires Complete(table')
+  requires InvTable(table)
+  requires InvTable(table')
+  requires TableQuantity(table) < |table|
+  requires TableQuantity(table') < |table'|
+  requires forall j | 0 <= j < |table| && i != j :: table'[j] == table[j]
+  requires 0 <= i < |table|
+  requires S.f(table[i]) == S.add(S.f(table'[i]), x)
+  requires is_good_root(table, f);
+  requires is_good_root(table', f);
+  requires forall k | 0 <= k < HT.FixedSize() && adjust(i, f+1) < adjust(k, f+1)
+      :: S.commutes(x, S.f(table[k]))
+  ensures interp(table) == S.add(interp(table'), x)
+  {
+    /*calc {
+      interp(table);
+      interp_wrt(table, f);
+      { reveal_interp_wrt(); }
+      S.concat_map(table[f+1..] + table[..f+1]);
+      {
+        S.preserves_1_helper(table[f+1..] + table[..f+1],
+            table'[f+1..] + table'[..f+1],
+            if i >= f+1 then i - (f+1) else i + |table| - (f+1));
+      }
+      S.concat_map(table'[f+1..] + table'[..f+1]);
+      { reveal_interp_wrt(); }
+      interp_wrt(table', f);
+      interp(table');
+    }*/
+    assume false;
+  }
+
   lemma preserves_2(table: seq<Option<HT.Info>>,
       table': seq<Option<HT.Info>>,
       i: int,
@@ -726,6 +767,8 @@ module Interpretation {
   requires Complete(table')
   requires InvTable(table)
   requires InvTable(table')
+  requires TableQuantity(table) < |table|
+  requires TableQuantity(table') < |table'|
   requires 0 <= i < |table|
   requires var i' := (if i < |table| - 1 then i + 1 else 0);
            && S.add(S.f(table[i]), S.f(table[i'])) == S.add(S.f(table'[i]), S.f(table'[i']))
@@ -752,11 +795,12 @@ module Interpretation {
     }
   }
 
-  /*lemma UsefulTriggers()
-  ensures forall fn: S.QueryRes ~> S.QueryRes :: Multisets.Apply(fn, multiset{}) == multiset{};
-  ensures forall fn: S.QueryRes ~> S.QueryRes, a :: Multisets.Apply(fn, multiset{a}) == multiset{fn(a)}
+  lemma UsefulTriggers()
+  ensures forall fn: S.QueryRes -> S.QueryRes :: Multisets.Apply(fn, multiset{}) == multiset{};
+  ensures forall fn: S.QueryRes -> S.QueryRes, a :: Multisets.Apply(fn, multiset{a}) == multiset{fn(a)}
   {
-  }*/
+    Multisets.reveal_Apply();
+  }
 
   lemma InsertSkip_PreservesInterp(s: Variables, s': Variables, pos: nat)
   requires Inv(s)
@@ -797,38 +841,73 @@ module Interpretation {
     preserves_2(s.table, s'.table, pos, e);
   }
 
+  lemma add_thing_with_no_ops(s: S.Summary, t: S.Summary)
+  requires t.ops == map[]
+  ensures S.add(s, t).ops == s.ops
+  ensures S.add(s, t).stubs == s.stubs + t.stubs
+  ensures S.add(s, t).queries == s.queries + t.queries
+  ensures S.add(s, t).removes == s.removes + t.removes
+  {
+    S.reveal_app_queries();
+    MultisetLemmas.ApplyId((q) => S.app_query(q, map[]), s.queries);
+    MultisetLemmas.ApplyId((q) => S.app_query(q, map[]), s.removes);
+  }
 
   lemma InsertDone_PreservesInterp(s: Variables, s': Variables, pos: nat)
   requires Inv(s)
   requires HT.InsertDone(s, s', pos)
   ensures Inv(s')
-  ensures interp(s.table) == interp(s'.table)
+  ensures interp(s.table).ops == interp(s'.table).ops
+  ensures interp(s.table).stubs == interp(s'.table).stubs + multiset{HT.Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput(true))}
+  ensures interp(s.table).queries == interp(s'.table).queries
+  ensures interp(s.table).removes == interp(s'.table).removes
   {
     InsertDone_PreservesInv(s, s', pos);
-    var e := get_empty_cell(s.table);
+    var e := get_empty_cell(s'.table);
     S.reveal_app_queries();
 
-    assert S.f(s.table[pos]).ops == S.f(s'.table[pos]).ops;
-    assert S.f(s.table[pos]).stubs == S.f(s'.table[pos]).stubs;
-    assert S.f(s.table[pos]).queries == S.f(s'.table[pos]).queries;
+    var x := S.Summary(map[],
+        multiset{HT.Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput(true))},
+        multiset{}, multiset{});
 
-    preserves_1(s.table, s'.table, pos, e);
+    forall y ensures S.commutes(x, y) {
+      MultisetLemmas.ApplyId((q) => S.app_query(q, map[]), x.queries);
+      MultisetLemmas.ApplyId((q) => S.app_query(q, map[]), x.removes);
+      MultisetLemmas.ApplyId((q) => S.app_query(q, map[]), y.queries);
+      MultisetLemmas.ApplyId((q) => S.app_query(q, map[]), y.removes);
+    }
+
+    preserves_1_right(s.table, s'.table, pos, e, x);
+    add_thing_with_no_ops(interp(s'.table), x);
   }
-
-  /*
 
   lemma InsertUpdate_PreservesInterp(s: Variables, s': Variables, pos: nat)
   requires Inv(s)
   requires HT.InsertUpdate(s, s', pos)
   ensures Inv(s')
-  ensures interp(s.table) == interp(s'.table)
+  ensures interp(s.table).ops == interp(s'.table).ops
+  ensures interp(s.table).stubs == interp(s'.table).stubs + multiset{HT.Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput(true))}
+  ensures interp(s.table).queries == interp(s'.table).queries
+  ensures interp(s.table).removes == interp(s'.table).removes
   {
     InsertUpdate_PreservesInv(s, s', pos);
-    var e := get_empty_cell(s.table);
+    var e := get_empty_cell(s'.table);
     S.reveal_app_queries();
 
+    var x := S.Summary(map[],
+        multiset{HT.Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput(true))},
+        multiset{}, multiset{});
 
-    preserves_1(s.table, s'.table, pos, e);
+    forall y ensures S.commutes(x, y) {
+      MultisetLemmas.ApplyId((q) => S.app_query(q, map[]), x.queries);
+      MultisetLemmas.ApplyId((q) => S.app_query(q, map[]), x.removes);
+      MultisetLemmas.ApplyId((q) => S.app_query(q, map[]), y.queries);
+      MultisetLemmas.ApplyId((q) => S.app_query(q, map[]), y.removes);
+    }
+
+    preserves_1_right(s.table, s'.table, pos, e, x);
+    add_thing_with_no_ops(interp(s'.table), x);
+
   }
 
   lemma QuerySkip_PreservesInterp(s: Variables, s': Variables, pos: nat)
@@ -840,6 +919,21 @@ module Interpretation {
     QuerySkip_PreservesInv(s, s', pos);
     var e := get_empty_cell(s.table);
     S.reveal_app_queries();
+
+    var table := s.table;
+    var table' := s'.table;
+    var pos' := if pos < |s.table| - 1 then pos + 1 else 0;
+
+    var a := S.add(S.f(table[pos]), S.f(table[pos']));
+    var b := S.add(S.f(table'[pos]), S.f(table'[pos']));
+
+    UsefulTriggers();
+    S.reveal_app_queries();
+
+    assert a.ops == b.ops;
+    assert a.stubs == b.stubs;
+    assert a.queries == b.queries;
+
     preserves_2(s.table, s'.table, pos, e);
   }
 
@@ -847,12 +941,26 @@ module Interpretation {
   requires Inv(s)
   requires HT.QueryDone(s, s', pos)
   ensures Inv(s')
-  ensures interp(s.table) == interp(s'.table)
+  ensures interp(s.table).ops == interp(s'.table).ops
+  ensures interp(s.table).stubs == interp(s'.table).stubs
+  ensures interp(s.table).queries == interp(s'.table).queries + multiset{S.QueryFound(
+      s.table[pos].value.state.rid, s.table[pos].value.state.key,
+      Some(s.table[pos].value.entry.kv.val))}
+  ensures interp(s.table).removes == interp(s'.table).removes
   {
     QueryDone_PreservesInv(s, s', pos);
-    var e := get_empty_cell(s.table);
+    var e := get_empty_cell(s'.table);
     S.reveal_app_queries();
-    preserves_1(s.table, s'.table, pos, e);
+    UsefulTriggers();
+
+    var x := S.Summary(map[],
+        multiset{},
+        multiset{S.QueryFound(
+          s.table[pos].value.state.rid, s.table[pos].value.state.key,
+          Some(s.table[pos].value.entry.kv.val))},
+        multiset{});
+
+    preserves_1_right(s.table, s'.table, pos, e, x);
   }
 
   lemma QueryNotFound_PreservesInterp(s: Variables, s': Variables, pos: nat)
@@ -864,6 +972,7 @@ module Interpretation {
     QueryNotFound_PreservesInv(s, s', pos);
     var e := get_empty_cell(s.table);
     S.reveal_app_queries();
+    UsefulTriggers();
     preserves_2(s.table, s'.table, pos, e);
   }
 
@@ -876,6 +985,7 @@ module Interpretation {
     RemoveSkip_PreservesInv(s, s', pos);
     var e := get_empty_cell(s.table);
     S.reveal_app_queries();
+    UsefulTriggers();
     preserves_2(s.table, s'.table, pos, e);
   }
 
@@ -888,6 +998,7 @@ module Interpretation {
     RemoveFoundIt_PreservesInv(s, s', pos);
     var e := get_empty_cell(s.table);
     S.reveal_app_queries();
+    UsefulTriggers();
     preserves_2(s.table, s'.table, pos, e);
   }
 
@@ -900,6 +1011,7 @@ module Interpretation {
     RemoveTidy_PreservesInv(s, s', pos);
     var e := get_empty_cell(s.table);
     S.reveal_app_queries();
+    UsefulTriggers();
     preserves_2(s.table, s'.table, pos, e);
   }
 
@@ -912,6 +1024,7 @@ module Interpretation {
     RemoveDone_PreservesInv(s, s', pos);
     var e := get_empty_cell(s.table);
     S.reveal_app_queries();
+    UsefulTriggers();
     preserves_1(s.table, s'.table, pos, e);
-  }*/
+  }
 }
