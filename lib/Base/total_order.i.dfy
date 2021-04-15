@@ -6,9 +6,11 @@ include "Maps.i.dfy"
 include "../Lang/NativeTypes.s.dfy"
 include "../Lang/System/NativeArrays.s.dfy"
 include "Option.s.dfy"
+include "Functional.i.dfy"
 
 abstract module Total_Preorder {
   import Seq = Sequences
+  import opened Functional
   
   type Element(!new,==)
 
@@ -133,53 +135,65 @@ abstract module Total_Preorder {
     reveal_IsSorted();
   }
 
-  lemma ApplySorted(f: Element ~> Element, run: seq<Element>)
+  predicate OrderPreserving(p: Element -> bool, f: Element --> Element) {
+    && ImpliesRequires(p, f)
+    && ( forall x, y | p(x) && p(y) && lte(x, y) :: lte(f(x), f(y)))
+  }
+
+  predicate StrictlyOrderPreserving(p: Element -> bool, f: Element --> Element) {
+    && ImpliesRequires(p, f)
+    && ( forall x, y | p(x) && p(y) && lt(x, y) :: lt(f(x), f(y)))
+  }
+  
+  lemma ApplySorted(p: Element -> bool, f: Element --> Element, run: seq<Element>)
     requires IsSorted(run)
-    requires forall x, y | f.requires(x) && f.requires(y) && lte(x, y) :: lte(f(x), f(y))
-    requires forall i | 0 <= i < |run| :: f.requires(run[i])
+    requires OrderPreserving(p, f)
+    requires forall i | 0 <= i < |run| :: p(run[i])
     ensures IsSorted(Seq.Apply(f, run))
   {
     reveal_IsSorted();
   }
 
-  lemma ApplyStrictlySorted(f: Element ~> Element, run: seq<Element>)
+  lemma ApplyStrictlySorted(p: Element -> bool, f: Element --> Element, run: seq<Element>)
     requires IsStrictlySorted(run)
-    requires forall x, y | f.requires(x) && f.requires(y) && lt(x, y) :: lt(f(x), f(y))
-    requires forall i | 0 <= i < |run| :: f.requires(run[i])
+    requires StrictlyOrderPreserving(p, f)
+    requires forall i | 0 <= i < |run| :: p(run[i])
     ensures IsStrictlySorted(Seq.Apply(f, run))
   {
     reveal_IsStrictlySorted();
   }
 
-  lemma FilterSorted(f: Element ~> bool, run: seq<Element>)
+  lemma FilterSorted(p: Element -> bool, f: Element --> bool, run: seq<Element>)
     requires IsSorted(run)
-    requires forall i | 0 <= i < |run| :: f.requires(run[i])
+    requires ImpliesRequires(p, f)
+    requires forall i | 0 <= i < |run| :: p(run[i])
     ensures IsSorted(Seq.Filter(f, run))
   {
     if |run| == 0 {
     } else if f(Seq.Last(run)) {
       SortedSubsequence(run, 0, |run| - 1);
-      FilterSorted(f, Seq.DropLast(run));
+      FilterSorted(p, f, Seq.DropLast(run));
       reveal_IsSorted();
     } else {
       SortedSubsequence(run, 0, |run| - 1);
-      FilterSorted(f, Seq.DropLast(run));
+      FilterSorted(p, f, Seq.DropLast(run));
     }
   }
 
-  lemma FilterStrictlySorted(f: Element ~> bool, run: seq<Element>)
+  lemma FilterStrictlySorted(p: Element -> bool, f: Element --> bool, run: seq<Element>)
     requires IsStrictlySorted(run)
-    requires forall i | 0 <= i < |run| :: f.requires(run[i])
+    requires ImpliesRequires(p, f)
+    requires forall i | 0 <= i < |run| :: p(run[i])
     ensures IsStrictlySorted(Seq.Filter(f, run))
   {
     if |run| == 0 {
     } else if f(Seq.Last(run)) {
       StrictlySortedSubsequence(run, 0, |run| - 1);
-      FilterStrictlySorted(f, Seq.DropLast(run));
+      FilterStrictlySorted(p, f, Seq.DropLast(run));
       reveal_IsStrictlySorted();
     } else {
       StrictlySortedSubsequence(run, 0, |run| - 1);
-      FilterStrictlySorted(f, Seq.DropLast(run));
+      FilterStrictlySorted(p, f, Seq.DropLast(run));
     }
   }
 }

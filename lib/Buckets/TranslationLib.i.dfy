@@ -758,39 +758,6 @@ module TranslationLib {
       => TranslateElement(pivot, prefix, newPrefix)
   }
 
-  lemma TranslateElementLambdaPreservesLt(prefix: Key, newPrefix: Key)
-    ensures forall left, right |
-    && TranslateElementRequirements(left, prefix, newPrefix)
-    && TranslateElementRequirements(right, prefix, newPrefix)
-    // && TranslateElementLambda(prefix, newPrefix).requires(left)
-    // && TranslateElementLambda(prefix, newPrefix).requires(right)
-    && Keyspace.lt(left, right)
-    :: Keyspace.lt(TranslateElementLambda(prefix, newPrefix)(left), TranslateElementLambda(prefix, newPrefix)(right))
-  {
-    var te := TranslateElementLambda(prefix, newPrefix);
-
-    forall left, right |
-      && TranslateElementRequirements(left, prefix, newPrefix)
-      && TranslateElementRequirements(right, prefix, newPrefix)
-      // && te.requires(left)
-      // && te.requires(right)
-      && Keyspace.lt(left, right)
-      ensures Keyspace.lt(te(left), te(right))
-    {
-      assert te.requires(left);
-      assert TranslateElementLambda(prefix, newPrefix).requires(left);
-
-      assert (pivot
-      requires ElementIsKey(pivot)
-      requires IsPrefix(prefix, pivot.e)
-      =>
-      TranslateElement(pivot, prefix, newPrefix)
-      ).requires(left);
-      assert TranslateElementRequirements(left, prefix, newPrefix);
-      TranslateElementPreservesLt(prefix, newPrefix);
-    }
-  }
-  
   function TranslatePivots2(pt: PivotTable, prefix: Key, newPrefix: Key, end: Element) : (pt' : PivotTable)
   requires WFPivots(pt)
   requires forall i | 0 <= i < NumBuckets(pt) :: IsPrefix(prefix, pt[i].e)
@@ -802,10 +769,12 @@ module TranslationLib {
   ensures forall i | 0 <= i <  NumBuckets(pt') :: pt[i] == TranslateElement(pt'[i], newPrefix, prefix)
   ensures Last(pt') == end
   {
-    var front := Apply(TranslateElementLambda(prefix, newPrefix), DropLast(pt));
+    var tel := TranslateElementLambda(prefix, newPrefix);
+    var front := Apply(tel, DropLast(pt));
     Keyspace.StrictlySortedSubsequence(pt, 0, |pt| - 1);
     TranslateElementPreservesLt(prefix, newPrefix);
-    Keyspace.ApplyStrictlySorted(TranslateElementLambda(prefix, newPrefix), DropLast(pt));
+    Keyspace.ApplyStrictlySorted(x => TranslateElementRequirements(x, prefix, newPrefix), tel, DropLast(pt));
+    Keyspace.StrictlySortedAugment(front, end);
     front + [ end ]
   }
 
