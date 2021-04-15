@@ -474,15 +474,18 @@ module TranslationImpl {
   requires WFPivots(childpivots)
   requires WFEdges(parentedges, parentpivots)
   requires 0 <= slot as int < |parentedges|
+  requires |parentpivots| < Uint64UpperBound()
+  requires |childpivots| < 0x4000_0000_0000_0000
   ensures b == ParentKeysInChildRange(parentpivots, parentedges, childpivots, slot as int)
   {
+    Keyspace.reveal_IsStrictlySorted();
     if parentedges[slot].None? {
       b := ComputeContainsRange(childpivots, parentpivots[slot], parentpivots[slot+1]);
     } else {
       var prefix := ComputePivotLcp(parentpivots[slot], parentpivots[slot + 1]);
       var newPrefix := parentedges[slot].value;
       var left, right := ComputeTranslatePivotPair(parentpivots[slot].e, parentpivots[slot + 1], prefix, newPrefix);
-      b := ComputeContainsRange(childpivots, left, right);
+      b := ComputeContainsRange(childpivots, Keyspace.Element(left), right);
     }
   }
 }
