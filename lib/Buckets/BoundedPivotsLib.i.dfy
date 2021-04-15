@@ -39,7 +39,7 @@ module BoundedPivotsLib {
     && (forall i | 0 <= i < |pt| && pt[i].Element? :: ElementIsKey(pt[i]))
   }
 
-  function KeyToElement(key: Key): Element
+  function method KeyToElement(key: Key): Element
   {
     Keyspace.Element(key)
   }
