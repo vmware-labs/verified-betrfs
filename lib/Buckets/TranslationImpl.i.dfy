@@ -383,13 +383,20 @@ module TranslationImpl {
     requires PreWFBucket(bucket)
     ensures TranslateBucketSimple(bucket, prefix, newPrefix, |bucket.keys|) == TranslateBucket(bucket, prefix, newPrefix)
 
+  predicate {:opaque} WillFitInPkv(mbucket: MutBucket, prefix: Key, newPrefix: Key)
+    requires mbucket.Inv()
+  {
+    && PackedKV.PSA.psaCanAppendSeq(PackedKV.PSA.EmptyPsa(), TranslateBucket(mbucket.I(), prefix, newPrefix).keys)
+    && PackedKV.PSA.psaCanAppendSeq(PackedKV.PSA.EmptyPsa(), messageSeq_to_bytestringSeq(TranslateBucket(mbucket.I(), prefix, newPrefix).msgs))
+  }
+
   method ComputeTranslateBucket(shared mbucket: MutBucket, prefix: Key, newPrefix: Key) returns (linear mbucket': MutBucket)
   requires mbucket.Inv()
-  requires PackedKV.PSA.psaCanAppendSeq(PackedKV.PSA.EmptyPsa(), TranslateBucket(mbucket.I(), prefix, newPrefix).keys)
-  requires PackedKV.PSA.psaCanAppendSeq(PackedKV.PSA.EmptyPsa(), messageSeq_to_bytestringSeq(TranslateBucket(mbucket.I(), prefix, newPrefix).msgs))
+  requires WillFitInPkv(mbucket, prefix, newPrefix);
   ensures mbucket'.Inv()
   ensures mbucket'.I() == TranslateBucket(mbucket.I(), prefix, newPrefix)
   {
+    reveal_WillFitInPkv();
     ghost var bucket := mbucket.I();
     assert EncodableMessageSeq(bucket.msgs);
     TranslateBucketSimpleEquivalence(bucket, prefix, newPrefix);
@@ -420,7 +427,7 @@ module TranslationImpl {
         result_len := result_len + 1;
       }
       i := i + 1;
-
+      assume false;
     }
 
     var result_keys' := seq_unleash(result_keys);
@@ -433,17 +440,34 @@ module TranslationImpl {
     mbucket' := MutBucket.AllocPkv(PackedKV.Pkv(result_keys_psa, result_msgs_psa), mbucket.sorted);
   }
 
-  // TODO: implement
   method ComputeTranslateBuckets(shared blist: lseq<MutBucket>, prefix: Key, newPrefix: Key) returns (linear blist': lseq<MutBucket>)
   requires MutBucket.InvLseq(blist)
+  requires forall i | 0 <= i < |blist| :: WillFitInPkv(blist[i], prefix, newPrefix)
   ensures MutBucket.InvLseq(blist')
   ensures MutBucket.ILseq(blist') == TranslateBuckets(MutBucket.ILseq(blist), prefix, newPrefix)
   {
-    blist' := lseq_alloc(0);
-    assume false;
+    ghost var iblist := MutBucket.ILseq(blist);
+
+    blist' := lseq_alloc(lseq_length_as_uint64(blist));
+
+    var i := 0;
+    while i < lseq_length_as_uint64(blist)
+      invariant 0 <= i <= |blist| as uint64
+      invariant |blist'| == |blist|
+      invariant forall j | 0 <= j < |blist| as uint64 :: lseq_has(blist')[j] <==> (j < i)
+      invariant MutBucket.InvSeq(lseqs(blist')[..i])
+      invariant MutBucket.ISeq(lseqs(blist')[..i]) == TranslateBuckets(iblist[..i], prefix, newPrefix)
+    {
+      linear var tmp := ComputeTranslateBucket(lseq_peek(blist, i), prefix, newPrefix);
+      lseq_give_inout(inout blist', i, tmp);
+      i := i + 1;
+
+      assert lseqs(blist')[..i] == lseqs(blist')[..i-1] + [lseqs(blist')[i-1]];
+    }
+    assert lseqs(blist') == lseqs(blist')[..i];
+    assert iblist == iblist[..i];
   }
 
-  // TODO: Implement
   method ComputeParentKeysInChildRange(parentpivots: PivotTable, parentedges: EdgeTable, childpivots: PivotTable, slot: uint64)
   returns (b: bool)
   requires WFPivots(parentpivots)
@@ -452,16 +476,13 @@ module TranslationImpl {
   requires 0 <= slot as int < |parentedges|
   ensures b == ParentKeysInChildRange(parentpivots, parentedges, childpivots, slot as int)
   {
-    assume false;
-    b := true;
-    // if parentedges[slot].None? {
-    //   ComputeContainsRange();
-    // }
-    // Keyspace.reveal_IsStrictlySorted();
-    // && (parentedges[slot].None? ==> 
-    //     ContainsRange(childpivots, parentpivots[slot], parentpivots[slot+1]))
-    // && (parentedges[slot].Some? ==> 
-    //     && var (left, right) := TranslatePivotPair(parentpivots, parentedges, slot);
-    //     && ContainsRange(childpivots, left, right))
+    if parentedges[slot].None? {
+      b := ComputeContainsRange(childpivots, parentpivots[slot], parentpivots[slot+1]);
+    } else {
+      var prefix := ComputePivotLcp(parentpivots[slot], parentpivots[slot + 1]);
+      var newPrefix := parentedges[slot].value;
+      var left, right := ComputeTranslatePivotPair(parentpivots[slot].e, parentpivots[slot + 1], prefix, newPrefix);
+      b := ComputeContainsRange(childpivots, left, right);
+    }
   }
 }
