@@ -1185,13 +1185,101 @@ module Interpretation {
   requires Inv(s)
   requires HT.RemoveNotFound(s, s', pos)
   ensures Inv(s')
-  ensures interp(s.table) == interp(s'.table)
+  ensures map_remove_nones(interp(s.table).ops)
+       == map_remove_nones(interp(s'.table).ops)
+  ensures interp(s.table).stubs == interp(s'.table).stubs
+  ensures apply_to_query_stub(interp(s.table).queries)
+       == apply_to_query_stub(interp(s'.table).queries)
+  ensures apply_to_remove_stub(interp(s.table).removes)
+       == apply_to_remove_stub(interp(s'.table).removes)
+        + multiset{HT.Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput(false))};
+
   {
     RemoveNotFound_PreservesInv(s, s', pos);
     var e := get_empty_cell(s.table);
     S.reveal_app_queries();
     UsefulTriggers();
-    preserves_2(s.table, s'.table, pos, e);
+
+    /*var x := S.Summary(map[],
+        multiset{},
+        multiset{},
+        multiset{S.QueryFound(
+          s.table[pos].value.state.rid, s.table[pos].value.state.key,
+          None)});*/
+
+    var x := S.Summary(map[s.table[pos].value.state.key := None],
+        multiset{}, multiset{},
+        multiset{S.QueryUnknown(
+          s.table[pos].value.state.rid, s.table[pos].value.state.key)});
+
+    /*assert s.table[pos].value.entry.Full? ==>
+        s.table[pos].value.entry.kv.key != s.table[pos].value.state.key;
+
+    var m1 := S.f(s.table[pos]);
+    var m2 := S.add(S.f(s'.table[pos]), x);
+    assert m1.ops == m2.ops;
+    assert m1.stubs == m2.stubs;
+    assert m1.queries == m2.queries;
+    assert m1.removes == m2.removes;*/
+
+    forall k | 0 <= k < HT.FixedSize() && adjust(pos, e+1) < adjust(k, e+1)
+    ensures S.commutes(x, S.f(s.table[k]))
+    {
+      assert ValidHashInSlot(s.table, e, pos);
+      assert ValidHashOrdering(s.table, e, pos, k);
+      assert ValidHashInSlot(s.table, pos, k);
+      assert ActionNotPastKey(s.table, e, pos, k);
+    }
+
+    preserves_1_right(s.table, s'.table, pos, e, x);
+
+    calc {
+      apply_to_query_stub(interp(s.table).queries);
+      {
+        assert interp(s.table).queries
+            == Multisets.Apply((q) => S.app_query(q, x.ops), interp(s'.table).queries);
+        MultisetLemmas.apply_eq_1_2(
+            interp(s'.table).queries,
+            to_query_stub,
+            (q) => S.app_query(q, x.ops),
+            to_query_stub);
+      }
+      apply_to_query_stub(interp(s'.table).queries);
+    }
+
+    calc {
+      apply_to_remove_stub(interp(s.table).removes);
+      Multisets.Apply(to_remove_stub, interp(s.table).removes);
+      {
+        assert interp(s.table).removes
+            == Multisets.Apply((q) => S.app_query(q, x.ops), interp(s'.table).removes)
+        + multiset{S.QueryUnknown(
+          s.table[pos].value.state.rid, s.table[pos].value.state.key)};
+      }
+      Multisets.Apply(to_remove_stub, Multisets.Apply((q) => S.app_query(q, x.ops), interp(s'.table).removes)
+        + multiset{S.QueryUnknown(
+          s.table[pos].value.state.rid, s.table[pos].value.state.key)});
+      {
+        Multisets.ApplyAdditive(to_remove_stub, 
+            Multisets.Apply((q) => S.app_query(q, x.ops), interp(s'.table).removes),
+            multiset{S.QueryUnknown(s.table[pos].value.state.rid, s.table[pos].value.state.key)});
+        assert to_remove_stub(S.QueryUnknown(s.table[pos].value.state.rid, s.table[pos].value.state.key)) == HT.Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput(false));
+        Multisets.ApplySingleton(to_remove_stub, S.QueryUnknown(s.table[pos].value.state.rid, s.table[pos].value.state.key));
+      }
+      Multisets.Apply(to_remove_stub, Multisets.Apply((q) => S.app_query(q, x.ops), interp(s'.table).removes))
+        + multiset{HT.Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput(false))};
+      {
+        MultisetLemmas.apply_eq_1_2(
+            interp(s'.table).removes,
+            to_remove_stub,
+            (q) => S.app_query(q, x.ops),
+            to_remove_stub);
+      }
+      Multisets.Apply(to_remove_stub, interp(s'.table).removes)
+        + multiset{HT.Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput(false))};
+      apply_to_remove_stub(interp(s'.table).removes)
+        + multiset{HT.Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput(false))};
+    }
   }
 
 }
