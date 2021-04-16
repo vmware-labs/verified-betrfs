@@ -795,6 +795,36 @@ module Interpretation {
     }
   }
 
+  function to_query_stub(q: S.QueryRes) : HT.Stub {
+    match q {
+      case QueryFound(rid, key, Some(value)) =>
+          HT.Stub(rid, MapIfc.QueryOutput(Found(value)))
+      case QueryFound(rid, key, None()) =>
+          HT.Stub(rid, MapIfc.QueryOutput(NotFound))
+      case QueryUnknown(rid, key) =>
+          HT.Stub(rid, MapIfc.QueryOutput(NotFound))
+    }
+  }
+
+  function apply_to_query_stub(m: multiset<S.QueryRes>) : multiset<HT.Stub> {
+    Multisets.Apply(to_query_stub, m)
+  }
+
+  function to_remove_stub(q: S.QueryRes) : HT.Stub {
+    match q {
+      case QueryFound(rid, key, Some(value)) =>
+          HT.Stub(rid, MapIfc.RemoveOutput(true))
+      case QueryFound(rid, key, None()) =>
+          HT.Stub(rid, MapIfc.RemoveOutput(false))
+      case QueryUnknown(rid, key) =>
+          HT.Stub(rid, MapIfc.RemoveOutput(false))
+    }
+  }
+
+  function apply_to_remove_stub(m: multiset<S.QueryRes>) : multiset<HT.Stub> {
+    Multisets.Apply(to_remove_stub, m)
+  }
+
   lemma UsefulTriggers()
   ensures forall fn: S.QueryRes -> S.QueryRes :: Multisets.Apply(fn, multiset{}) == multiset{};
   ensures forall fn: S.QueryRes -> S.QueryRes, a :: Multisets.Apply(fn, multiset{a}) == multiset{fn(a)}
@@ -1012,27 +1042,16 @@ module Interpretation {
     preserves_2(s.table, s'.table, pos, e);
   }
 
-  function unknown_to_none(q: S.QueryRes) : S.QueryRes {
-    match q {
-      case QueryFound(_, _, _) => q
-      case QueryUnknown(rid, key) => S.QueryFound(rid, key, None)
-    }
-  }
-
-  function apply_unknown_to_none(m: multiset<S.QueryRes>) : multiset<S.QueryRes> {
-    Multisets.Apply(unknown_to_none, m)
-  }
-
   lemma RemoveFoundIt_PreservesInterp(s: Variables, s': Variables, pos: nat)
   requires Inv(s)
   requires HT.RemoveFoundIt(s, s', pos)
   ensures Inv(s')
   ensures interp(s.table).ops == interp(s'.table).ops
   ensures interp(s.table).stubs == interp(s'.table).stubs
-  ensures apply_unknown_to_none(interp(s.table).queries)
-       == apply_unknown_to_none(interp(s'.table).queries)
-  ensures apply_unknown_to_none(interp(s.table).removes)
-       == apply_unknown_to_none(interp(s'.table).removes)
+  ensures apply_to_query_stub(interp(s.table).queries)
+       == apply_to_query_stub(interp(s'.table).queries)
+  ensures apply_to_remove_stub(interp(s.table).removes)
+       == apply_to_remove_stub(interp(s'.table).removes)
   {
     RemoveFoundIt_PreservesInv(s, s', pos);
     var e := get_empty_cell(s.table);
@@ -1075,6 +1094,38 @@ module Interpretation {
     }
 
     preserves_1_right(s.table, s'.table, pos, e, x);
+
+    calc {
+      apply_to_query_stub(interp(s.table).queries);
+      //Multisets.Apply(to_query_stub, interp(s.table).queries);
+      {
+        assert interp(s.table).queries
+            == Multisets.Apply((q) => S.app_query(q, x.ops), interp(s'.table).queries);
+      //}
+      //Multisets.Apply(to_query_stub, Multisets.Apply((q) => S.app_query(q, x.ops), interp(s'.table).queries));
+      //{
+        MultisetLemmas.apply_eq_1_2(
+            interp(s'.table).queries,
+            to_query_stub,
+            (q) => S.app_query(q, x.ops),
+            to_query_stub);
+      }
+      //Multisets.Apply(to_query_stub, interp(s'.table).queries);
+      apply_to_query_stub(interp(s'.table).queries);
+    }
+    calc {
+      apply_to_remove_stub(interp(s.table).removes);
+      {
+        assert interp(s.table).removes
+            == Multisets.Apply((q) => S.app_query(q, x.ops), interp(s'.table).removes);
+        MultisetLemmas.apply_eq_1_2(
+            interp(s'.table).removes,
+            to_remove_stub,
+            (q) => S.app_query(q, x.ops),
+            to_remove_stub);
+      }
+      apply_to_remove_stub(interp(s'.table).removes);
+    }
   }
 
   lemma RemoveTidy_PreservesInterp(s: Variables, s': Variables, pos: nat)
