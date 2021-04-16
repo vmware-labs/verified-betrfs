@@ -1048,30 +1048,30 @@ module Interpretation {
       assert ValidHashInSlot(s.table, e, pos);
       assert ValidHashOrdering(s.table, e, pos, k);
       assert ValidHashInSlot(s.table, pos, k);
-      assert ValidHashInSlot(s'.table, e, pos);
-      assert ValidHashOrdering(s'.table, e, pos, k);
-      assert ValidHashInSlot(s'.table, pos, k);
-      assert !(s.table[k].value.entry.Full? && s.table[k].value.entry.kv.key == 
+      //assert ValidHashInSlot(s'.table, e, pos);
+      //assert ValidHashOrdering(s'.table, e, pos, k);
+      //assert ValidHashInSlot(s'.table, pos, k);
+      /*assert !(s.table[k].value.entry.Full? && s.table[k].value.entry.kv.key == 
           s.table[pos].value.state.key
-          && !s.table[k].value.state.RemoveTidying?);
+          && !s.table[k].value.state.RemoveTidying?);*/
 
       assert ActionNotPastKey(s.table, e, pos, k);
-      assert ActionNotPastKey(s.table, e, k, pos);
+      //assert ActionNotPastKey(s.table, e, k, pos);
 
-      assert !(s.table[k].value.state.Querying? && s.table[k].value.state.key == 
+      /*assert !(s.table[k].value.state.Querying? && s.table[k].value.state.key == 
           s.table[pos].value.state.key
           && !s.table[k].value.state.RemoveTidying?);
 
       assert !(s.table[k].value.state.Removing? && s.table[k].value.state.key == 
           s.table[pos].value.state.key
-          && !s.table[k].value.state.RemoveTidying?);
+          && !s.table[k].value.state.RemoveTidying?);*/
 
-      var m1 := S.add(x, S.f(s.table[k]));
+      /*var m1 := S.add(x, S.f(s.table[k]));
       var m2 := S.add(S.f(s.table[k]), x);
       assert m1.ops == m2.ops;
       assert m1.stubs == m2.stubs;
       assert m1.queries == m2.queries;
-      assert m1.removes == m2.removes;
+      assert m1.removes == m2.removes;*/
     }
 
     preserves_1_right(s.table, s'.table, pos, e, x);
