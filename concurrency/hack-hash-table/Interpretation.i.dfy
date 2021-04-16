@@ -460,10 +460,10 @@ module Interpretation {
         //assert ValidHashOrdering(table, f, i1, j1);
         //assert ValidHashOrdering(table, f, j1, i1);
 
-        //assert InsertionNotPastKey(table, e, i1, j1);
-        //assert InsertionNotPastKey(table, e, j1, i1);
-        //assert InsertionNotPastKey(table, f, i1, j1);
-        //assert InsertionNotPastKey(table, f, j1, i1);
+        //assert ActionNotPastKey(table, e, i1, j1);
+        //assert ActionNotPastKey(table, e, j1, i1);
+        //assert ActionNotPastKey(table, f, i1, j1);
+        //assert ActionNotPastKey(table, f, j1, i1);
 
         /*if table[i1].value.entry.Full? && table[i1].value.entry.kv.key == k {
           if table[j1].value.entry.Full? && table[j1].value.entry.kv.key == k {
@@ -1055,8 +1055,8 @@ module Interpretation {
           s.table[pos].value.state.key
           && !s.table[k].value.state.RemoveTidying?);
 
-      assert InsertionNotPastKey(s.table, e, pos, k);
-      assert InsertionNotPastKey(s.table, e, k, pos);
+      assert ActionNotPastKey(s.table, e, pos, k);
+      assert ActionNotPastKey(s.table, e, k, pos);
 
       assert !(s.table[k].value.state.Querying? && s.table[k].value.state.key == 
           s.table[pos].value.state.key

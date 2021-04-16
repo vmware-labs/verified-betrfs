@@ -136,7 +136,7 @@ module ResourceStateMachine {
     ))
   }
 
-  predicate InsertionNotPastKey(table: seq<Option<HT.Info>>, e: int, j: int, k: int)
+  predicate ActionNotPastKey(table: seq<Option<HT.Info>>, e: int, j: int, k: int)
   requires |table| == HT.FixedSize()
   requires Complete(table)
   requires 0 <= e < |table|
@@ -172,7 +172,7 @@ module ResourceStateMachine {
     && (forall e, j, k | 0 <= e < |table| && 0 <= j < |table| && 0 <= k < |table|
         :: ValidHashOrdering(table, e, j, k))
     && (forall e, j, k | 0 <= e < |table| && 0 <= j < |table| && 0 <= k < |table|
-        :: InsertionNotPastKey(table, e, j, k))
+        :: ActionNotPastKey(table, e, j, k))
   }
 
   function InfoQuantity(s: Option<HT.Info>) : nat {
@@ -287,9 +287,9 @@ module ResourceStateMachine {
       assert ValidHashInSlot(s.table, e, k);
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
-    ensures InsertionNotPastKey(s'.table, e, j, k)
+    ensures ActionNotPastKey(s'.table, e, j, k)
     {
-      assert InsertionNotPastKey(s.table, e, j, k);
+      assert ActionNotPastKey(s.table, e, j, k);
       assert ValidHashInSlot(s.table, e, j);
     }
 
@@ -352,11 +352,11 @@ module ResourceStateMachine {
       }*/
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
-    ensures InsertionNotPastKey(s'.table, e, j, k)
+    ensures ActionNotPastKey(s'.table, e, j, k)
     {
-      assert InsertionNotPastKey(s.table, e, j, pos);
+      assert ActionNotPastKey(s.table, e, j, pos);
 
-      assert InsertionNotPastKey(s.table, e, j, k);
+      assert ActionNotPastKey(s.table, e, j, k);
       assert ValidHashInSlot(s.table, e, j);
     }
 
@@ -391,11 +391,11 @@ module ResourceStateMachine {
       assert ValidHashOrdering(s.table, e, pos, k);
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
-    ensures InsertionNotPastKey(s'.table, e, j, k)
+    ensures ActionNotPastKey(s'.table, e, j, k)
     {
-      assert InsertionNotPastKey(s.table, e, j, pos);
+      assert ActionNotPastKey(s.table, e, j, pos);
 
-      assert InsertionNotPastKey(s.table, e, j, k);
+      assert ActionNotPastKey(s.table, e, j, k);
       assert ValidHashInSlot(s.table, e, j);
 
       assert ValidHashOrdering(s.table, e, j, k);
@@ -409,7 +409,7 @@ module ResourceStateMachine {
       //var e :| 0 <= e < |s.table| && s.table[e].value.entry.Empty?
       //  && !s.table[e].value.state.RemoveTidying?;
       var e := get_empty_cell_other_than_insertion_cell(s);
-      assert InsertionNotPastKey(s.table, e, i, pos);
+      assert ActionNotPastKey(s.table, e, i, pos);
       //assert ValidHashInSlot(s.table, e, i);
       assert ValidHashInSlot(s.table, e, pos);
       assert ValidHashOrdering(s.table, e, pos, i);
@@ -439,10 +439,10 @@ module ResourceStateMachine {
       //assert ValidHashOrdering(s.table, e, j, pos);
       //assert ValidHashOrdering(s.table, e, pos, k);
 
-      //assert InsertionNotPastKey(s.table, e, j, pos);
+      //assert ActionNotPastKey(s.table, e, j, pos);
 
-      //assert InsertionNotPastKey(s.table, pos, j, k);
-      //assert InsertionNotPastKey(s.table, pos, k, j);
+      //assert ActionNotPastKey(s.table, pos, j, k);
+      //assert ActionNotPastKey(s.table, pos, k, j);
 
       //assert ValidHashOrdering(s.table, pos, j, k);
       //assert ValidHashOrdering(s.table, pos, k, j);
@@ -463,15 +463,15 @@ module ResourceStateMachine {
       //var e :| 0 <= e < |s.table| && s'.table[e].value.entry.Empty?
         //&& !s.table[e].value.state.RemoveTidying?;
       var e := get_empty_cell_other_than_insertion_cell(s);
-      assert InsertionNotPastKey(s.table, e, i, pos);
-      //assert InsertionNotPastKey(s.table, e, pos, i);
+      assert ActionNotPastKey(s.table, e, i, pos);
+      //assert ActionNotPastKey(s.table, e, pos, i);
       assert ValidHashInSlot(s.table, e, pos);
       //assert ValidHashInSlot(s.table, e, i);
       //assert ValidHashOrdering(s.table, e, pos, i);
       //assert ValidHashOrdering(s.table, e, i, pos);
 
-      //assert InsertionNotPastKey(s.table, pos, i, pos);
-      //assert InsertionNotPastKey(s.table, pos, pos, i);
+      //assert ActionNotPastKey(s.table, pos, i, pos);
+      //assert ActionNotPastKey(s.table, pos, pos, i);
       //assert ValidHashInSlot(s.table, pos, pos);
       assert ValidHashInSlot(s.table, pos, i);
       //assert ValidHashOrdering(s.table, pos, pos, i);
@@ -479,16 +479,16 @@ module ResourceStateMachine {
     }
 
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
-    ensures InsertionNotPastKey(s'.table, e, j, k)
+    ensures ActionNotPastKey(s'.table, e, j, k)
     {
-      assert InsertionNotPastKey(s.table, e, j, k);
+      assert ActionNotPastKey(s.table, e, j, k);
 
-      //assert InsertionNotPastKey(s.table, e, j, pos);
-      //assert InsertionNotPastKey(s.table, e, k, pos);
-      //assert InsertionNotPastKey(s.table, e, pos, j);
-      //assert InsertionNotPastKey(s.table, e, pos, k);
-      //assert InsertionNotPastKey(s.table, e, j, k);
-      //assert InsertionNotPastKey(s.table, e, k, j);
+      //assert ActionNotPastKey(s.table, e, j, pos);
+      //assert ActionNotPastKey(s.table, e, k, pos);
+      //assert ActionNotPastKey(s.table, e, pos, j);
+      //assert ActionNotPastKey(s.table, e, pos, k);
+      //assert ActionNotPastKey(s.table, e, j, k);
+      //assert ActionNotPastKey(s.table, e, k, j);
       //assert ValidHashInSlot(s.table, e, pos);
       assert ValidHashInSlot(s.table, e, j);
       //assert ValidHashInSlot(s.table, e, k);
@@ -499,12 +499,12 @@ module ResourceStateMachine {
       //assert ValidHashOrdering(s.table, e, j, k);
       //assert ValidHashOrdering(s.table, e, k, j);
 
-      //assert InsertionNotPastKey(s.table, pos, j, pos);
-      //assert InsertionNotPastKey(s.table, pos, pos, j);
-      //assert InsertionNotPastKey(s.table, pos, k, pos);
-      //assert InsertionNotPastKey(s.table, pos, pos, k);
-      //assert InsertionNotPastKey(s.table, pos, k, j);
-      //assert InsertionNotPastKey(s.table, pos, j, k);
+      //assert ActionNotPastKey(s.table, pos, j, pos);
+      //assert ActionNotPastKey(s.table, pos, pos, j);
+      //assert ActionNotPastKey(s.table, pos, k, pos);
+      //assert ActionNotPastKey(s.table, pos, pos, k);
+      //assert ActionNotPastKey(s.table, pos, k, j);
+      //assert ActionNotPastKey(s.table, pos, j, k);
       //assert ValidHashInSlot(s.table, pos, pos);
       //assert ValidHashInSlot(s.table, pos, j);
       assert ValidHashInSlot(s.table, pos, k);
@@ -538,9 +538,9 @@ module ResourceStateMachine {
       assert ValidHashOrdering(s.table, e, j, k);
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
-    ensures InsertionNotPastKey(s'.table, e, j, k)
+    ensures ActionNotPastKey(s'.table, e, j, k)
     {
-      assert InsertionNotPastKey(s.table, e, j, k);
+      assert ActionNotPastKey(s.table, e, j, k);
     }
 
     TableQuantity_replace1(s.table, s'.table, pos);
@@ -566,9 +566,9 @@ module ResourceStateMachine {
       assert ValidHashInSlot(s.table, e, k);
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
-    ensures InsertionNotPastKey(s'.table, e, j, k)
+    ensures ActionNotPastKey(s'.table, e, j, k)
     {
-      assert InsertionNotPastKey(s.table, e, j, k);
+      assert ActionNotPastKey(s.table, e, j, k);
       assert ValidHashInSlot(s.table, e, j);
     }
 
@@ -602,10 +602,10 @@ module ResourceStateMachine {
       assert ValidHashOrdering(s.table, e, pos, k);
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
-    ensures InsertionNotPastKey(s'.table, e, j, k)
+    ensures ActionNotPastKey(s'.table, e, j, k)
     {
-      assert InsertionNotPastKey(s.table, e, j, pos);
-      assert InsertionNotPastKey(s.table, e, j, k);
+      assert ActionNotPastKey(s.table, e, j, pos);
+      assert ActionNotPastKey(s.table, e, j, k);
       assert ValidHashInSlot(s.table, e, j);
     }
 
@@ -630,9 +630,9 @@ module ResourceStateMachine {
       assert ValidHashOrdering(s.table, e, j, k);
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
-    ensures InsertionNotPastKey(s'.table, e, j, k)
+    ensures ActionNotPastKey(s'.table, e, j, k)
     {
-      assert InsertionNotPastKey(s.table, e, j, k);
+      assert ActionNotPastKey(s.table, e, j, k);
     }
 
     TableQuantity_replace2(s.table, s'.table, pos);
@@ -656,9 +656,9 @@ module ResourceStateMachine {
       assert ValidHashOrdering(s.table, e, j, k);
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
-    ensures InsertionNotPastKey(s'.table, e, j, k)
+    ensures ActionNotPastKey(s'.table, e, j, k)
     {
-      assert InsertionNotPastKey(s.table, e, j, k);
+      assert ActionNotPastKey(s.table, e, j, k);
     }
 
     TableQuantity_replace2(s.table, s'.table, pos);
@@ -684,9 +684,9 @@ module ResourceStateMachine {
       assert ValidHashInSlot(s.table, e, k);
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
-    ensures InsertionNotPastKey(s'.table, e, j, k)
+    ensures ActionNotPastKey(s'.table, e, j, k)
     {
-      assert InsertionNotPastKey(s.table, e, j, k);
+      assert ActionNotPastKey(s.table, e, j, k);
       assert ValidHashInSlot(s.table, e, j);
     }
 
@@ -720,10 +720,10 @@ module ResourceStateMachine {
       assert ValidHashOrdering(s.table, e, pos, k);
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
-    ensures InsertionNotPastKey(s'.table, e, j, k)
+    ensures ActionNotPastKey(s'.table, e, j, k)
     {
-      assert InsertionNotPastKey(s.table, e, j, pos);
-      assert InsertionNotPastKey(s.table, e, j, k);
+      assert ActionNotPastKey(s.table, e, j, pos);
+      assert ActionNotPastKey(s.table, e, j, k);
       assert ValidHashInSlot(s.table, e, j);
     }
 
@@ -748,9 +748,9 @@ module ResourceStateMachine {
       assert ValidHashOrdering(s.table, e, j, k);
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
-    ensures InsertionNotPastKey(s'.table, e, j, k)
+    ensures ActionNotPastKey(s'.table, e, j, k)
     {
-      assert InsertionNotPastKey(s.table, e, j, k);
+      assert ActionNotPastKey(s.table, e, j, k);
     }
 
     TableQuantity_replace2(s.table, s'.table, pos);
@@ -774,9 +774,9 @@ module ResourceStateMachine {
       assert ValidHashOrdering(s.table, e, j, k);
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
-    ensures InsertionNotPastKey(s'.table, e, j, k)
+    ensures ActionNotPastKey(s'.table, e, j, k)
     {
-      assert InsertionNotPastKey(s.table, e, j, k);
+      assert ActionNotPastKey(s.table, e, j, k);
     }
 
     TableQuantity_replace2(s.table, s'.table, pos);
@@ -834,11 +834,11 @@ module ResourceStateMachine {
       assert ValidHashOrdering(s.table, e, j, pos');
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
-    ensures InsertionNotPastKey(s'.table, e, j, k)
+    ensures ActionNotPastKey(s'.table, e, j, k)
     {
-      assert InsertionNotPastKey(s.table, e, j, k);
-      assert InsertionNotPastKey(s.table, e, pos', k);
-      assert InsertionNotPastKey(s.table, e, j, pos');
+      assert ActionNotPastKey(s.table, e, j, k);
+      assert ActionNotPastKey(s.table, e, pos', k);
+      assert ActionNotPastKey(s.table, e, j, pos');
     }
 
     TableQuantity_replace2(s.table, s'.table, pos);
@@ -967,11 +967,11 @@ module ResourceStateMachine {
       assert ValidHashInSlot(s.table, e', k);
     }
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
-    ensures InsertionNotPastKey(s'.table, e, j, k)
+    ensures ActionNotPastKey(s'.table, e, j, k)
     {
       var e' := get_empty_cell(s.table);
 
-      assert InsertionNotPastKey(s.table, e, j, k);
+      assert ActionNotPastKey(s.table, e, j, k);
 
       //assert ValidHashOrdering(s.table, e, j, k);
       //assert ValidHashOrdering(s.table, e', j, k);
@@ -979,9 +979,9 @@ module ResourceStateMachine {
       assert ValidHashOrdering(s.table, e', pos', j);
       assert ValidHashInSlot(s.table, e', k);
 
-      //assert InsertionNotPastKey(s.table, e, j, k);
-      assert InsertionNotPastKey(s.table, e', j, k);
-      //assert InsertionNotPastKey(s.table, e', pos', j);
+      //assert ActionNotPastKey(s.table, e, j, k);
+      assert ActionNotPastKey(s.table, e', j, k);
+      //assert ActionNotPastKey(s.table, e', pos', j);
     }
 
     TableQuantity_replace2(s.table, s'.table, pos);
