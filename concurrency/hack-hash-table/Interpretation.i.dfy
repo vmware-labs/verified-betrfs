@@ -1012,17 +1012,69 @@ module Interpretation {
     preserves_2(s.table, s'.table, pos, e);
   }
 
+  function unknown_to_none(q: S.QueryRes) : S.QueryRes {
+    match q {
+      case QueryFound(_, _, _) => q
+      case QueryUnknown(rid, key) => S.QueryFound(rid, key, None)
+    }
+  }
+
+  function apply_unknown_to_none(m: multiset<S.QueryRes>) : multiset<S.QueryRes> {
+    Multisets.Apply(unknown_to_none, m)
+  }
+
   lemma RemoveFoundIt_PreservesInterp(s: Variables, s': Variables, pos: nat)
   requires Inv(s)
   requires HT.RemoveFoundIt(s, s', pos)
   ensures Inv(s')
-  ensures interp(s.table) == interp(s'.table)
+  ensures interp(s.table).ops == interp(s'.table).ops
+  ensures interp(s.table).stubs == interp(s'.table).stubs
+  ensures apply_unknown_to_none(interp(s.table).queries)
+       == apply_unknown_to_none(interp(s'.table).queries)
+  ensures apply_unknown_to_none(interp(s.table).removes)
+       == apply_unknown_to_none(interp(s'.table).removes)
   {
     RemoveFoundIt_PreservesInv(s, s', pos);
     var e := get_empty_cell(s.table);
     S.reveal_app_queries();
     UsefulTriggers();
-    preserves_2(s.table, s'.table, pos, e);
+
+    var x := S.Summary(map[s.table[pos].value.state.key := None],
+        multiset{}, multiset{}, multiset{});
+
+    forall k | 0 <= k < HT.FixedSize() && adjust(pos, e+1) < adjust(k, e+1)
+    ensures S.commutes(x, S.f(s.table[k]))
+    {
+      assert ValidHashInSlot(s.table, e, pos);
+      assert ValidHashOrdering(s.table, e, pos, k);
+      assert ValidHashInSlot(s.table, pos, k);
+      assert ValidHashInSlot(s'.table, e, pos);
+      assert ValidHashOrdering(s'.table, e, pos, k);
+      assert ValidHashInSlot(s'.table, pos, k);
+      assert !(s.table[k].value.entry.Full? && s.table[k].value.entry.kv.key == 
+          s.table[pos].value.state.key
+          && !s.table[k].value.state.RemoveTidying?);
+
+      assert InsertionNotPastKey(s.table, e, pos, k);
+      assert InsertionNotPastKey(s.table, e, k, pos);
+
+      assert !(s.table[k].value.state.Querying? && s.table[k].value.state.key == 
+          s.table[pos].value.state.key
+          && !s.table[k].value.state.RemoveTidying?);
+
+      assert !(s.table[k].value.state.Removing? && s.table[k].value.state.key == 
+          s.table[pos].value.state.key
+          && !s.table[k].value.state.RemoveTidying?);
+
+      var m1 := S.add(x, S.f(s.table[k]));
+      var m2 := S.add(S.f(s.table[k]), x);
+      assert m1.ops == m2.ops;
+      assert m1.stubs == m2.stubs;
+      assert m1.queries == m2.queries;
+      assert m1.removes == m2.removes;
+    }
+
+    preserves_1_right(s.table, s'.table, pos, e, x);
   }
 
   lemma RemoveTidy_PreservesInterp(s: Variables, s': Variables, pos: nat)

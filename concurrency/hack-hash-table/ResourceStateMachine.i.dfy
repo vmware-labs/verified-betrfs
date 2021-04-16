@@ -144,10 +144,13 @@ module ResourceStateMachine {
   requires 0 <= k < |table|
   {
     (table[e].value.entry.Empty? && !table[e].value.state.RemoveTidying? && table[j].value.entry.Full? && adjust(j, e + 1) < adjust(k, e + 1) ==> (
-      // If entry 'k' has an 'Inserting' action on it, then that action must have
+      // If entry 'k' has an 'Inserting' action on it, then that action must not have
       // gotten past entry 'j'.
       && (table[k].value.state.Inserting? ==> (
         table[k].value.state.kv.key != table[j].value.entry.kv.key
+      ))
+      && ((table[k].value.state.Removing? || table[k].value.state.Querying?) ==> (
+        table[k].value.state.key != table[j].value.entry.kv.key
       ))
     ))
   }
@@ -566,6 +569,7 @@ module ResourceStateMachine {
     ensures InsertionNotPastKey(s'.table, e, j, k)
     {
       assert InsertionNotPastKey(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
     }
 
     var h := HT.hash(query_ticket.input.key) as int;
@@ -600,7 +604,9 @@ module ResourceStateMachine {
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
     ensures InsertionNotPastKey(s'.table, e, j, k)
     {
+      assert InsertionNotPastKey(s.table, e, j, pos);
       assert InsertionNotPastKey(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
     }
 
     TableQuantity_replace2(s.table, s'.table, pos);
@@ -681,6 +687,7 @@ module ResourceStateMachine {
     ensures InsertionNotPastKey(s'.table, e, j, k)
     {
       assert InsertionNotPastKey(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
     }
 
     var h := HT.hash(remove_ticket.input.key) as int;
@@ -715,7 +722,9 @@ module ResourceStateMachine {
     forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
     ensures InsertionNotPastKey(s'.table, e, j, k)
     {
+      assert InsertionNotPastKey(s.table, e, j, pos);
       assert InsertionNotPastKey(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
     }
 
     TableQuantity_replace2(s.table, s'.table, pos);
