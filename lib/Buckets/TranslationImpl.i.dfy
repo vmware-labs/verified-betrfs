@@ -377,6 +377,53 @@ module TranslationImpl {
     assume false;
   }
 
+  method ComputeTranslateSingleBucketList(linear bucket: MutBucket, prefix: Key, newPrefix: Key) returns (linear blist: lseq<MutBucket>)
+  requires bucket.Inv()
+  ensures MutBucket.InvLseq(blist)
+  ensures MutBucket.ILseq(blist) == TranslateBuckets([bucket.I()], prefix, newPrefix)
+  {
+    blist := lseq_alloc(1);
+    linear var tbucket := ComputeTranslateBucket(bucket, prefix, newPrefix);
+    var _ := FreeMutBucket(bucket);
+    lseq_give_inout(inout blist, 0, tbucket);
+  }
+
+  // TODO: implement
+  method ComputeTranslateCutOffKeepRightBuckets(shared blist: lseq<MutBucket>, linear bucket: MutBucket, 
+    prefix: Key, newPrefix: Key, cRight: uint64) returns (linear blist': lseq<MutBucket>)
+  requires bucket.Inv()
+  requires MutBucket.InvLseq(blist)
+  requires 0 <= cRight as int < |blist|
+  requires |blist| < 0x1_0000_0000_0000_0000
+  ensures MutBucket.InvLseq(blist')
+  ensures MutBucket.ILseq(blist') == TranslateBuckets([bucket.I()]+ MutBucket.ILseq(blist)[cRight+1..], prefix, newPrefix)
+  {
+    assume false;
+
+    var _ := FreeMutBucket(bucket);
+    blist' := lseq_alloc(0);
+  }
+
+  // TODO:
+  method ComputeTranslateCutOffNodeBuckets(shared blist: lseq<MutBucket>, linear left: MutBucket,  linear right: MutBucket,
+    prefix: Key, newPrefix: Key, cLeft: uint64, cRight: uint64) returns (linear blist': lseq<MutBucket>)
+  requires left.Inv()
+  requires right.Inv()
+  requires MutBucket.InvLseq(blist)
+  requires 0 <= cRight as int < cLeft as int <= |blist|
+  requires |blist| < 0x1_0000_0000_0000_0000
+  ensures MutBucket.InvLseq(blist')
+  ensures MutBucket.ILseq(blist') == 
+    TranslateBuckets([left.I()]+ MutBucket.ILseq(blist)[cRight+1..cLeft] + [right.I()], prefix, newPrefix) 
+  {
+    assume false;
+    var _ := FreeMutBucket(left);
+    var _ := FreeMutBucket(right);
+
+    blist' := lseq_alloc(0);
+  }
+
+
   // TODO: Implement
   method ComputeParentKeysInChildRange(parentpivots: PivotTable, parentedges: EdgeTable, childpivots: PivotTable, slot: uint64)
   returns (b: bool)

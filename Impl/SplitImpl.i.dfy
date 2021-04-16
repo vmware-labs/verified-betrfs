@@ -168,9 +168,8 @@ module SplitImpl {
       var boundedweight := computeSplitChildrenWeight(child.buckets, num_children_left, len);
       if boundedweight {
         SplitModel.lemmaChildrenConditionsSplitChild(s.I(), child.I(), num_children_left as int);
-        linear var left_child := child.SplitChildLeft(num_children_left);
-        linear var right_child := child.SplitChildRight(num_children_left);
 
+        linear var left_child, right_child := child.SplitChild(num_children_left);
         splitBookkeeping(inout s, left_childref, right_childref, parentref,
           fparent_children, left_child, right_child, slot as uint64);
         splitCacheChanges(inout s, left_childref, right_childref, parentref,
@@ -183,12 +182,13 @@ module SplitImpl {
           s.cache.I().Keys;
         }
       } else {
+        var _ := FreeNode(child);
         print "giving up; split can't run because new children will be overweight";
       }
     } else {
+      var _ := FreeNode(child);
       print "giving up; split can't run because new pivots will not be strictly sorted";
     }
-    var _ := FreeNode(child);
   }
 
   method doSplit(linear inout s: ImplVariables, parentref: BT.G.Reference, childref: BT.G.Reference, slot: uint64, refUpperBound: uint64)

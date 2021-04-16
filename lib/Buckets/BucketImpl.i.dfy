@@ -737,6 +737,57 @@ module BucketImpl {
       }
     }
 
+    static method SplitSeq(linear buckets: lseq<MutBucket>, split: uint64)
+    returns (linear left: lseq<MutBucket>, linear right: lseq<MutBucket>)
+    requires InvLseq(buckets)
+    requires 0 <= split as int <= |buckets|
+    requires |buckets| < 0x1_0000_0000_0000_0000
+    ensures InvLseq(left)
+    ensures InvLseq(right)
+    ensures ILseq(left) == ILseq(buckets)[..split]
+    ensures ILseq(right) == ILseq(buckets)[split..]
+    {
+      linear var buckets' := buckets;
+      ghost var gbuckets := ILseq(buckets');
+      var len := lseq_length_as_uint64(buckets');
+
+      left := lseq_alloc(split);
+      right := lseq_alloc(len-split);
+
+      var j := 0 as uint64;
+      while j < len
+      invariant 0 <= j <= len
+      invariant split as int == |left|
+      invariant (len-split) as int == |right|
+      invariant len as int == |buckets'| == |gbuckets|
+      invariant forall i | j as int <= i < |buckets'| :: lseq_has(buckets')[i]
+      invariant forall i | j as int <= i < |buckets'| :: lseqs(buckets')[i].Inv()
+      invariant forall i | j as int <= i < |buckets'| :: lseqs(buckets')[i].I() == gbuckets[i]
+      invariant forall i | j as int <= i < |left| :: !lseq_has(left)[i]
+      invariant j < split ==> (forall i | 0 <= i < |right| :: !lseq_has(right)[i])
+      invariant j >= split ==> (forall i | (j-split) as int <= i < |right| :: !lseq_has(right)[i])
+      invariant forall i | 0 <= i < j as int :: !lseq_has(buckets')[i]
+      invariant forall i | 0 <= i < j as int && i < |left| :: lseq_has(left)[i]
+      invariant forall i | 0 <= i < j as int && i < |left| :: lseqs(left)[i].Inv()
+      invariant forall i | 0 <= i < j as int && i < |left| :: lseqs(left)[i].I() == gbuckets[i]
+      invariant j >= split ==> forall i | 0 <= i < (j-split) as int :: lseq_has(right)[i]
+      invariant j >= split ==> forall i | 0 <= i < (j-split) as int :: lseqs(right)[i].Inv()
+      invariant j >= split ==> forall i | 0 <= i < (j-split) as int :: lseqs(right)[i].I() == gbuckets[i+split as int]
+      {
+        linear var newbucket := lseq_take_inout(inout buckets', j);
+        if j < split {
+          lseq_give_inout(inout left, j, newbucket);
+        } else {
+          lseq_give_inout(inout right, j-split, newbucket);
+        }
+        j := j + 1;
+      }
+
+      assert forall i | 0 <= i < |left| :: lseqs(left)[i].Inv();
+      assert  forall i | 0 <= i < |right| :: lseqs(right)[i].Inv();
+      lseq_free(buckets');
+    }
+
     static method EmptySeq(size: uint64) returns (linear buckets: lseq<MutBucket>)
     ensures InvLseq(buckets)
     ensures |buckets| == size as int
@@ -758,6 +809,33 @@ module BucketImpl {
         j := j + 1;
       }
     }
+
+    // static method SplitAndTranslateSeq(shared buckets: lseq<MutBucket>, start: uint64, end: uint64)
+    // returns (linear buckets': lseq<MutBucket>)
+    // requires InvLseq(buckets)
+    // requires 0 <= start as int <= end as int <= |buckets|
+    // requires |buckets| < 0x1_0000_0000_0000_0000;
+    // ensures InvLseq(buckets')
+    // ensures |buckets'| == (end-start) as int
+    // ensures ILseq(buckets') == ILseq(buckets)[start..end]
+    // {
+    //   buckets' := lseq_alloc(end-start);
+
+    //   var j := start;
+    //   while j < end
+    //   invariant start <= j <= end
+    //   invariant |buckets'| == (end-start) as int
+    //   invariant forall i | (j-start) as int <= i < |buckets'| :: !lseq_has(buckets')[i]
+    //   invariant forall i | 0 <= i < (j-start) as int :: lseq_has(buckets')[i]
+    //   invariant forall i | 0 <= i < (j-start) as int :: lseqs(buckets')[i].Inv()
+    //   invariant forall i | 0 <= i < (j-start) as int :: lseqs(buckets')[i].I() == lseqs(buckets)[i+(start as int)].I()
+    //   {
+    //     linear var newbucket := lseq_peek(buckets, j).Clone();
+    //     buckets' := lseq_give(buckets', j-start, newbucket);
+    //     j := j + 1;
+    //   }
+    // }
+
 
     static method BucketsNoKeyWithPrefix(shared buckets: lseq<MutBucket>, prefix: Key, start: uint64, end: uint64)
     returns (b: bool)
@@ -783,6 +861,8 @@ module BucketImpl {
       //   buckets := lseq_give(buckets, j, newbucket);
       //   j := j + 1;
       // }
+
+      // psa check things with no prefix
     }
 
     static method BucketListConcat(linear left: lseq<MutBucket>, linear right: lseq<MutBucket>)
