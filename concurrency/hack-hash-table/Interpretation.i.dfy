@@ -795,6 +795,10 @@ module Interpretation {
     }
   }
 
+  function map_remove_nones<K, V>(m: map<K, Option<V>>) : map<K, V> {
+    map k | k in m && m[k].Some? :: m[k].value
+  }
+
   function to_query_stub(q: S.QueryRes) : HT.Stub {
     match q {
       case QueryFound(rid, key, Some(value)) =>
@@ -1046,7 +1050,8 @@ module Interpretation {
   requires Inv(s)
   requires HT.RemoveFoundIt(s, s', pos)
   ensures Inv(s')
-  ensures interp(s.table).ops == interp(s'.table).ops
+  ensures map_remove_nones(interp(s.table).ops)
+       == map_remove_nones(interp(s'.table).ops)
   ensures interp(s.table).stubs == interp(s'.table).stubs
   ensures apply_to_query_stub(interp(s.table).queries)
        == apply_to_query_stub(interp(s'.table).queries)
