@@ -827,7 +827,7 @@ module TranslationLib {
   // translated bucket and idxs of corresponding keys
   datatype TBucket = TBucket(b: Bucket, idxs: seq<int>)
 
-  predicate WFTBucket(bucket: Bucket, tbucket: TBucket, prefix: Key, tPrefix: Key, idx: int)
+  predicate {:opaque} WFTBucket(bucket: Bucket, tbucket: TBucket, prefix: Key, tPrefix: Key, idx: int)
   requires 0 <= idx <= |bucket.keys|
   {
     && PreWFBucket(bucket)

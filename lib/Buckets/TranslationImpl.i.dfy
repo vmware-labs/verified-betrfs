@@ -359,7 +359,7 @@ module TranslationImpl {
     TranslateEdgesCondition(et, pt, 0, et');
   }
 
-  function TranslateBucketSimple(bucket: Bucket, prefix: Key, newPrefix: Key, i: nat) : (result: Bucket)
+  function {:opaque} TranslateBucketSimple(bucket: Bucket, prefix: Key, newPrefix: Key, i: nat) : (result: Bucket)
     requires PreWFBucket(bucket)
     requires 0 <= i <= |bucket.keys|
     ensures |result.keys| <= i
@@ -388,6 +388,9 @@ module TranslationImpl {
   {
     && PackedKV.PSA.psaCanAppendSeq(PackedKV.PSA.EmptyPsa(), TranslateBucket(mbucket.I(), prefix, newPrefix).keys)
     && PackedKV.PSA.psaCanAppendSeq(PackedKV.PSA.EmptyPsa(), messageSeq_to_bytestringSeq(TranslateBucket(mbucket.I(), prefix, newPrefix).msgs))
+    && var psaKeys := PackedKV.PSA.psaFromSeq(TranslateBucket(mbucket.I(), prefix, newPrefix).keys);
+    && var psaMsgs := PackedKV.PSA.psaFromSeq(messageSeq_to_bytestringSeq(TranslateBucket(mbucket.I(), prefix, newPrefix).msgs));
+    && PackedKV.WeightPkv(PackedKV.Pkv(psaKeys, psaMsgs)) as nat < Uint32UpperBound()
   }
 
   method ComputeTranslateBucket(shared mbucket: MutBucket, prefix: Key, newPrefix: Key) returns (linear mbucket': MutBucket)
@@ -425,9 +428,28 @@ module TranslationImpl {
         mut_seq_set(inout result_keys, result_len, newPrefix + key[|prefix| as uint64..]);
         mut_seq_set(inout result_msgs, result_len, msg);
         result_len := result_len + 1;
+        calc {
+          result_keys[..result_len];
+          { reveal_TranslateBucketSimple(); }
+          TranslateBucketSimple(bucket, prefix, newPrefix, i as nat + 1).keys;
+        }
+        calc {
+          result_msgs[..result_len];
+          // result_msgs[..result_len-1] + [result_msgs[result_len-1]];
+          // messageSeq_to_bytestringSeq(TranslateBucketSimple(bucket, prefix, newPrefix, i as nat).msgs) + [result_msgs[result_len-1]];
+          // messageSeq_to_bytestringSeq(TranslateBucketSimple(bucket, prefix, newPrefix, i as nat).msgs) + [PackedKV.PSA.psaElement(pkv.messages, i)];
+          messageSeq_to_bytestringSeq(TranslateBucketSimple(bucket, prefix, newPrefix, i as nat).msgs) + [PackedKV.PSA.I(pkv.messages)[i]];
+          // messageSeq_to_bytestringSeq(TranslateBucketSimple(bucket, prefix, newPrefix, i as nat).msgs) + [Message_to_bytestring(bucket.msgs[i])];
+          // messageSeq_to_bytestringSeq(TranslateBucketSimple(bucket, prefix, newPrefix, i as nat).msgs) + messageSeq_to_bytestringSeq([bucket.msgs[i]]);
+          { messageSeq_to_bytestringSeq_Additive(TranslateBucketSimple(bucket, prefix, newPrefix, i as nat).msgs, [bucket.msgs[i]]); }
+          messageSeq_to_bytestringSeq(TranslateBucketSimple(bucket, prefix, newPrefix, i as nat).msgs + [bucket.msgs[i]]);
+          { reveal_TranslateBucketSimple(); }
+          messageSeq_to_bytestringSeq(TranslateBucketSimple(bucket, prefix, newPrefix, i as nat + 1).msgs);
+        }
+      } else {
+        reveal_TranslateBucketSimple();
       }
       i := i + 1;
-      assume false;
     }
 
     var result_keys' := seq_unleash(result_keys);
@@ -437,6 +459,22 @@ module TranslationImpl {
     //assert result_msgs'[..result_len] == messageSeq_to_bytestringSeq(TranslateBucket(mbucket.I(), prefix, newPrefix).msgs);
     var result_keys_psa := PackedKV.PSA.FromSeq(result_keys'[..result_len]);
     var result_msgs_psa := PackedKV.PSA.FromSeq(result_msgs'[..result_len]);
+    calc {
+      result_keys_psa;
+      { PackedKV.PSA.psaCanAppendI(result_keys_psa); }
+    //   PackedKV.PSA.psaFromSeq(result_keys'[..result_len]);
+    //   PackedKV.PSA.psaFromSeq(TranslateBucketSimple(bucket, prefix, newPrefix, i as nat).keys);
+    //   PackedKV.PSA.psaFromSeq(TranslateBucket(bucket, prefix, newPrefix).keys);
+      PackedKV.PSA.psaFromSeq(TranslateBucket(mbucket.I(), prefix, newPrefix).keys);
+    }
+    calc {
+      result_msgs_psa;
+      { PackedKV.PSA.psaCanAppendI(result_msgs_psa); }
+    //   PackedKV.PSA.psaFromSeq(result_msgs'[..result_len]);
+    //   PackedKV.PSA.psaFromSeq(messageSeq_to_bytestringSeq(TranslateBucketSimple(bucket, prefix, newPrefix, i as nat).msgs));
+    //   PackedKV.PSA.psaFromSeq(messageSeq_to_bytestringSeq(TranslateBucket(bucket, prefix, newPrefix).msgs));
+      PackedKV.PSA.psaFromSeq(messageSeq_to_bytestringSeq(TranslateBucket(mbucket.I(), prefix, newPrefix).msgs));
+    }
     mbucket' := MutBucket.AllocPkv(PackedKV.Pkv(result_keys_psa, result_msgs_psa), mbucket.sorted);
   }
 
