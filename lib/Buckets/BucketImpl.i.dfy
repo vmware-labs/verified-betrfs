@@ -810,33 +810,6 @@ module BucketImpl {
       }
     }
 
-    // static method SplitAndTranslateSeq(shared buckets: lseq<MutBucket>, start: uint64, end: uint64)
-    // returns (linear buckets': lseq<MutBucket>)
-    // requires InvLseq(buckets)
-    // requires 0 <= start as int <= end as int <= |buckets|
-    // requires |buckets| < 0x1_0000_0000_0000_0000;
-    // ensures InvLseq(buckets')
-    // ensures |buckets'| == (end-start) as int
-    // ensures ILseq(buckets') == ILseq(buckets)[start..end]
-    // {
-    //   buckets' := lseq_alloc(end-start);
-
-    //   var j := start;
-    //   while j < end
-    //   invariant start <= j <= end
-    //   invariant |buckets'| == (end-start) as int
-    //   invariant forall i | (j-start) as int <= i < |buckets'| :: !lseq_has(buckets')[i]
-    //   invariant forall i | 0 <= i < (j-start) as int :: lseq_has(buckets')[i]
-    //   invariant forall i | 0 <= i < (j-start) as int :: lseqs(buckets')[i].Inv()
-    //   invariant forall i | 0 <= i < (j-start) as int :: lseqs(buckets')[i].I() == lseqs(buckets)[i+(start as int)].I()
-    //   {
-    //     linear var newbucket := lseq_peek(buckets, j).Clone();
-    //     buckets' := lseq_give(buckets', j-start, newbucket);
-    //     j := j + 1;
-    //   }
-    // }
-
-
     static method BucketsNoKeyWithPrefix(shared buckets: lseq<MutBucket>, prefix: Key, start: uint64, end: uint64)
     returns (b: bool)
     requires InvLseq(buckets)
@@ -874,30 +847,60 @@ module BucketImpl {
     ensures InvLseq(buckets)
     ensures ILseq(buckets) == ILseq(left) + [bucket.I()] + ILseq(right)
     {
-      // var leftsize := lseq_length_as_uint64(left);
-      // var rightsize := lseq_length_as_uint64(right);
+      var leftsize := lseq_length_as_uint64(left);
+      var rightsize := lseq_length_as_uint64(right);
+      var size := leftsize + rightsize + 1;
 
-      // var buckets := lseq_alloc(leftsize + rightsize);
-      // var j := 0 as uint64;
+      linear var l := left;
+      linear var r := right;
 
-      // while j < leftsize
-      // invariant 0 <= j <= leftsize
-      // invariant |buckets| == size as int
-      // invariant forall i | j as int <= i < |buckets| :: !lseq_has(buckets)[i]
-      // invariant forall i | 0 <= i < j as int :: lseq_has(buckets)[i]
-      // invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].Inv()
-      // invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].I() == EmptyBucket()
-      // {
-      //   linear var newbucket := MutBucket.Alloc();
-      //   buckets := lseq_give(buckets, j, newbucket);
-      //   j := j + 1;
-      // }
-      var _ := FreeMutBucket(bucket);
-      var _ := FreeMutBucketSeq(left);
-      var _ := FreeMutBucketSeq(right);
+      buckets := lseq_alloc(size);
+      ghost var gbuckets := ILseq(l) + [bucket.I()] + ILseq(r);
 
-      buckets := lseq_alloc(0);
-      assume false;
+      var j := 0 as uint64;
+      while j < leftsize
+      invariant 0 <= j <= leftsize
+      invariant |l| == leftsize as int
+      invariant |l| < |buckets| == |gbuckets|
+      invariant forall i | j as int <= i < |left| :: lseq_has(l)[i]
+      invariant forall i | j as int <= i < |left| :: lseqs(l)[i].Inv()
+      invariant forall i | j as int <= i < |left| :: lseqs(l)[i].I() == gbuckets[i]
+      invariant forall i | j as int <= i < |buckets| :: !lseq_has(buckets)[i]
+      invariant forall i | 0 <= i < j as int :: !lseq_has(l)[i]
+      invariant forall i | 0 <= i < j as int :: lseq_has(buckets)[i]
+      invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].Inv()
+      invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].I() == gbuckets[i]
+      {
+        linear var newbucket := lseq_take_inout(inout l, j);
+        lseq_give_inout(inout buckets, j, newbucket);
+        j := j + 1;
+      }
+
+      lseq_give_inout(inout buckets, leftsize, bucket);
+      assert lseq_has(buckets)[leftsize];
+
+      j := leftsize + 1;
+      while j < size
+      invariant size as int == |buckets|
+      invariant rightsize as int == |r|
+      invariant leftsize < j <= size;
+      invariant size-leftsize-1 == rightsize
+      invariant forall i | 0 <= i < (j-leftsize-1) as int :: !lseq_has(r)[i];
+      invariant forall i | 0 <= i < j as int :: lseq_has(buckets)[i];
+      invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].Inv();
+      invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].I() == gbuckets[i];
+      invariant forall i | (j-leftsize-1) as int <= i < |r| :: lseq_has(r)[i]
+      invariant forall i | (j-leftsize-1) as int <= i < |r| :: lseqs(r)[i].Inv()
+      invariant forall i | (j-leftsize-1) as int <= i < |r| :: lseqs(r)[i].I() == gbuckets[i+leftsize as int+1]
+      invariant forall i | j <= i < size :: !lseq_has(buckets)[i]
+      {
+        linear var newbucket := lseq_take_inout(inout r, j-leftsize-1);
+        lseq_give_inout(inout buckets, j, newbucket);
+        j := j + 1;
+      }
+
+      lseq_free(l);
+      lseq_free(r);
     }
 
     static method BucketListConcat3(linear left: lseq<MutBucket>, linear leftBucket: MutBucket,
@@ -912,14 +915,84 @@ module BucketImpl {
     ensures InvLseq(buckets)
     ensures ILseq(buckets) == ILseq(left) + [leftBucket.I()] + ILseq(mid) + [rightBucket.I()] + ILseq(right)
     {
-      var _ := FreeMutBucketSeq(left);
-      var _ := FreeMutBucketSeq(mid);
-      var _ := FreeMutBucketSeq(right);
-      var _ := FreeMutBucket(leftBucket);
-      var _ := FreeMutBucket(rightBucket);
+      var leftsize := lseq_length_as_uint64(left);
+      var midsize := lseq_length_as_uint64(mid);
+      var rightsize := lseq_length_as_uint64(right);
+      var size := leftsize + rightsize + midsize + 2;
 
-      buckets := lseq_alloc(0);
-      assume false;
+      linear var l := left;
+      linear var m := mid;
+      linear var r := right;
+
+      buckets := lseq_alloc(size);
+      ghost var gbuckets := ILseq(left) + [leftBucket.I()] + ILseq(mid) + [rightBucket.I()] + ILseq(right);
+
+      var j := 0 as uint64;
+      while j < leftsize
+      invariant 0 <= j <= leftsize
+      invariant |l| == leftsize as int
+      invariant |l| < |buckets| == |gbuckets|
+      invariant forall i | j as int <= i < |left| :: lseq_has(l)[i]
+      invariant forall i | j as int <= i < |left| :: lseqs(l)[i].Inv()
+      invariant forall i | j as int <= i < |left| :: lseqs(l)[i].I() == gbuckets[i]
+      invariant forall i | j as int <= i < |buckets| :: !lseq_has(buckets)[i]
+      invariant forall i | 0 <= i < j as int :: !lseq_has(l)[i]
+      invariant forall i | 0 <= i < j as int :: lseq_has(buckets)[i]
+      invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].Inv()
+      invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].I() == gbuckets[i]
+      {
+        linear var newbucket := lseq_take_inout(inout l, j);
+        lseq_give_inout(inout buckets, j, newbucket);
+        j := j + 1;
+      }
+
+      lseq_give_inout(inout buckets, leftsize, leftBucket);
+
+      j := leftsize + 1;
+      while j < leftsize+1+midsize
+      invariant midsize as int == |m|
+      invariant leftsize < j <= leftsize+1+midsize;
+      invariant (leftsize+1+midsize) as int < |buckets| == |gbuckets|
+      invariant forall i | 0 <= i < (j-leftsize-1) as int :: !lseq_has(m)[i];
+      invariant forall i | 0 <= i < j as int :: lseq_has(buckets)[i];
+      invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].Inv();
+      invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].I() == gbuckets[i];
+      invariant forall i | (j-leftsize-1) as int <= i < |m| :: lseq_has(m)[i]
+      invariant forall i | (j-leftsize-1) as int <= i < |m| :: lseqs(m)[i].Inv()
+      invariant forall i | (j-leftsize-1) as int <= i < |m| :: lseqs(m)[i].I() == gbuckets[i+leftsize as int+1]
+      invariant forall i | j as int <= i < |buckets| :: !lseq_has(buckets)[i]
+      {
+        linear var newbucket := lseq_take_inout(inout m, j-leftsize-1);
+        lseq_give_inout(inout buckets, j, newbucket);
+        j := j + 1;
+      }
+
+      assert leftsize+1+midsize == j;
+      lseq_give_inout(inout buckets, j, rightBucket);
+  
+
+      j := j + 1;
+      while j < size
+      invariant size as int == |buckets| == |gbuckets|
+      invariant rightsize as int == |r|
+      invariant leftsize+midsize+2 <= j <= size;
+      invariant forall i | 0 <= i < (j-leftsize-midsize-2) as int :: !lseq_has(r)[i];
+      invariant forall i | 0 <= i < j as int :: lseq_has(buckets)[i];
+      invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].Inv();
+      invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].I() == gbuckets[i];
+      invariant forall i | (j-leftsize-midsize-2) as int <= i < |r| :: lseq_has(r)[i]
+      invariant forall i | (j-leftsize-midsize-2) as int <= i < |r| :: lseqs(r)[i].Inv()
+      invariant forall i | (j-leftsize-midsize-2) as int <= i < |r| :: lseqs(r)[i].I() == gbuckets[i+leftsize as int+2+midsize as int]
+      invariant forall i | j as int <= i < |buckets| :: !lseq_has(buckets)[i]
+      {
+        linear var newbucket := lseq_take_inout(inout r, j-leftsize-midsize-2);
+        lseq_give_inout(inout buckets, j, newbucket);
+        j := j + 1;
+      }
+
+      lseq_free(l);
+      lseq_free(m);
+      lseq_free(r);
     }
   }
 
