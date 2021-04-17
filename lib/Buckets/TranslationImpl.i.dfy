@@ -18,7 +18,9 @@ module TranslationImpl {
   import opened Sequences
   import opened Options
   import opened KeyType
+  import opened ValueMessage
   import opened BucketImpl
+  import opened BucketsLib
   import opened LinearSequence_i
   import opened LinearSequence_s
 
@@ -357,28 +359,118 @@ module TranslationImpl {
     TranslateEdgesCondition(et, pt, 0, et');
   }
 
-  // TODO: implement
-  method ComputeTranslateBucket(shared bucket: MutBucket, prefix: Key, newPrefix: Key) returns (linear bucket': MutBucket)
-  requires bucket.Inv()
-  ensures bucket'.Inv()
-  ensures bucket'.I() == TranslateBucket(bucket.I(), prefix ,newPrefix)
+  function TranslateBucketSimple(bucket: Bucket, prefix: Key, newPrefix: Key, i: nat) : (result: Bucket)
+    requires PreWFBucket(bucket)
+    requires 0 <= i <= |bucket.keys|
+    ensures |result.keys| <= i
+    ensures PreWFBucket(result)
+    ensures EncodableMessageSeq(bucket.msgs) ==> EncodableMessageSeq(result.msgs)
+    decreases i
   {
-    assume false;
-    bucket' := MutBucket.Alloc();
+    if i == 0 then
+      EmptyBucket()
+    else if IsPrefix(prefix, bucket.keys[i - 1]) then
+      var prefixBucket := TranslateBucketSimple(bucket, prefix, newPrefix, i - 1);
+      var oldkey: seq<byte> := bucket.keys[i - 1];
+      assume |newPrefix + oldkey[|prefix|..]| <= 1024;
+      var newKey := newPrefix + oldkey[|prefix|..];
+      Bucket(prefixBucket.keys + [ newKey ], prefixBucket.msgs + [ bucket.msgs[i - 1] ])
+    else
+      TranslateBucketSimple(bucket, prefix, newPrefix, i - 1)
   }
 
-  // TODO: implement
+  lemma TranslateBucketSimpleEquivalence(bucket: Bucket, prefix: Key, newPrefix: Key)
+    requires PreWFBucket(bucket)
+    ensures TranslateBucketSimple(bucket, prefix, newPrefix, |bucket.keys|) == TranslateBucket(bucket, prefix, newPrefix)
+
+  predicate {:opaque} WillFitInPkv(mbucket: MutBucket, prefix: Key, newPrefix: Key)
+    requires mbucket.Inv()
+  {
+    && PackedKV.PSA.psaCanAppendSeq(PackedKV.PSA.EmptyPsa(), TranslateBucket(mbucket.I(), prefix, newPrefix).keys)
+    && PackedKV.PSA.psaCanAppendSeq(PackedKV.PSA.EmptyPsa(), messageSeq_to_bytestringSeq(TranslateBucket(mbucket.I(), prefix, newPrefix).msgs))
+  }
+
+  method ComputeTranslateBucket(shared mbucket: MutBucket, prefix: Key, newPrefix: Key) returns (linear mbucket': MutBucket)
+  requires mbucket.Inv()
+  requires WillFitInPkv(mbucket, prefix, newPrefix);
+  ensures mbucket'.Inv()
+  ensures mbucket'.I() == TranslateBucket(mbucket.I(), prefix, newPrefix)
+  {
+    reveal_WillFitInPkv();
+    ghost var bucket := mbucket.I();
+    assert EncodableMessageSeq(bucket.msgs);
+    TranslateBucketSimpleEquivalence(bucket, prefix, newPrefix);
+    reveal_IsPrefix();
+
+    var pkv := mbucket.GetPkv();
+    var len := PackedKV.NumKVPairs(pkv);
+    linear var result_keys := seq_alloc_init(len, []);
+    linear var result_msgs := seq_alloc_init(len, []);
+    var result_len := 0;
+
+    var i := 0;
+    while i < len
+      invariant 0 <= i <= len
+      invariant 0 <= result_len <= i
+      invariant |result_keys| == len as nat
+      invariant |result_msgs| == len as nat
+      invariant result_keys[..result_len] == TranslateBucketSimple(bucket, prefix, newPrefix, i as nat).keys
+      invariant forall j | 0 <= j < result_len :: |result_msgs[j]| < 0x1_0000_0000
+      invariant result_msgs[..result_len] == messageSeq_to_bytestringSeq(TranslateBucketSimple(bucket, prefix, newPrefix, i as nat).msgs)
+    {
+      var key: seq<byte> := PackedKV.GetKey(pkv, i);
+      var msg := PackedKV.PSA.psaElement(pkv.messages, i);
+      if |prefix| as uint64 <= |key| as uint64 && prefix == key[..|prefix| as uint64] {
+        assume |newPrefix + key[|prefix| as uint64..]| <= 1024;
+        mut_seq_set(inout result_keys, result_len, newPrefix + key[|prefix| as uint64..]);
+        mut_seq_set(inout result_msgs, result_len, msg);
+        result_len := result_len + 1;
+      }
+      i := i + 1;
+      assume false;
+    }
+
+    var result_keys' := seq_unleash(result_keys);
+    var result_msgs' := seq_unleash(result_msgs);
+
+    assert result_keys'[..result_len] == TranslateBucket(mbucket.I(), prefix, newPrefix).keys;
+    //assert result_msgs'[..result_len] == messageSeq_to_bytestringSeq(TranslateBucket(mbucket.I(), prefix, newPrefix).msgs);
+    var result_keys_psa := PackedKV.PSA.FromSeq(result_keys'[..result_len]);
+    var result_msgs_psa := PackedKV.PSA.FromSeq(result_msgs'[..result_len]);
+    mbucket' := MutBucket.AllocPkv(PackedKV.Pkv(result_keys_psa, result_msgs_psa), mbucket.sorted);
+  }
+
   method ComputeTranslateBuckets(shared blist: lseq<MutBucket>, prefix: Key, newPrefix: Key) returns (linear blist': lseq<MutBucket>)
   requires MutBucket.InvLseq(blist)
+  requires forall i | 0 <= i < |blist| :: WillFitInPkv(blist[i], prefix, newPrefix)
   ensures MutBucket.InvLseq(blist')
   ensures MutBucket.ILseq(blist') == TranslateBuckets(MutBucket.ILseq(blist), prefix, newPrefix)
   {
-    blist' := lseq_alloc(0);
-    assume false;
+    ghost var iblist := MutBucket.ILseq(blist);
+
+    blist' := lseq_alloc(lseq_length_as_uint64(blist));
+
+    var i := 0;
+    while i < lseq_length_as_uint64(blist)
+      invariant 0 <= i <= |blist| as uint64
+      invariant |blist'| == |blist|
+      invariant forall j | 0 <= j < |blist| as uint64 :: lseq_has(blist')[j] <==> (j < i)
+      invariant MutBucket.InvSeq(lseqs(blist')[..i])
+      invariant MutBucket.ISeq(lseqs(blist')[..i]) == TranslateBuckets(iblist[..i], prefix, newPrefix)
+    {
+      linear var tmp := ComputeTranslateBucket(lseq_peek(blist, i), prefix, newPrefix);
+      lseq_give_inout(inout blist', i, tmp);
+      i := i + 1;
+
+      assert lseqs(blist')[..i] == lseqs(blist')[..i-1] + [lseqs(blist')[i-1]];
+    }
+    assert lseqs(blist') == lseqs(blist')[..i];
+    assert iblist == iblist[..i];
   }
 
   method ComputeTranslateSingleBucketList(linear bucket: MutBucket, prefix: Key, newPrefix: Key) returns (linear blist: lseq<MutBucket>)
   requires bucket.Inv()
+  requires WillFitInPkv(bucket, prefix, newPrefix)
   ensures MutBucket.InvLseq(blist)
   ensures MutBucket.ILseq(blist) == TranslateBuckets([bucket.I()], prefix, newPrefix)
   {
@@ -393,6 +485,8 @@ module TranslationImpl {
     prefix: Key, newPrefix: Key, cRight: uint64) returns (linear blist': lseq<MutBucket>)
   requires bucket.Inv()
   requires MutBucket.InvLseq(blist)
+  requires WillFitInPkv(bucket, prefix, newPrefix)
+  requires forall i | 0 <= i < |blist| :: WillFitInPkv(blist[i], prefix, newPrefix)
   requires 0 <= cRight as int < |blist|
   requires |blist| < 0x1_0000_0000_0000_0000
   ensures MutBucket.InvLseq(blist')
@@ -405,12 +499,15 @@ module TranslationImpl {
   }
 
   // TODO:
-  method ComputeTranslateCutOffNodeBuckets(shared blist: lseq<MutBucket>, linear left: MutBucket,  linear right: MutBucket,
+  method ComputeTranslateCutOffNodeBuckets(shared blist: lseq<MutBucket>, linear left: MutBucket, linear right: MutBucket,
     prefix: Key, newPrefix: Key, cLeft: uint64, cRight: uint64) returns (linear blist': lseq<MutBucket>)
   requires left.Inv()
   requires right.Inv()
   requires MutBucket.InvLseq(blist)
   requires 0 <= cRight as int < cLeft as int <= |blist|
+  requires WillFitInPkv(left, prefix, newPrefix)
+  requires WillFitInPkv(right, prefix, newPrefix)
+  requires forall i | cRight as int+1 <= i < cLeft as int :: WillFitInPkv(blist[i], prefix, newPrefix)
   requires |blist| < 0x1_0000_0000_0000_0000
   ensures MutBucket.InvLseq(blist')
   ensures MutBucket.ILseq(blist') == 
@@ -423,26 +520,24 @@ module TranslationImpl {
     blist' := lseq_alloc(0);
   }
 
-
-  // TODO: Implement
   method ComputeParentKeysInChildRange(parentpivots: PivotTable, parentedges: EdgeTable, childpivots: PivotTable, slot: uint64)
   returns (b: bool)
   requires WFPivots(parentpivots)
   requires WFPivots(childpivots)
   requires WFEdges(parentedges, parentpivots)
   requires 0 <= slot as int < |parentedges|
+  requires |parentpivots| < Uint64UpperBound()
+  requires |childpivots| < 0x4000_0000_0000_0000
   ensures b == ParentKeysInChildRange(parentpivots, parentedges, childpivots, slot as int)
   {
-    assume false;
-    b := true;
-    // if parentedges[slot].None? {
-    //   ComputeContainsRange();
-    // }
-    // Keyspace.reveal_IsStrictlySorted();
-    // && (parentedges[slot].None? ==> 
-    //     ContainsRange(childpivots, parentpivots[slot], parentpivots[slot+1]))
-    // && (parentedges[slot].Some? ==> 
-    //     && var (left, right) := TranslatePivotPair(parentpivots, parentedges, slot);
-    //     && ContainsRange(childpivots, left, right))
+    Keyspace.reveal_IsStrictlySorted();
+    if parentedges[slot].None? {
+      b := ComputeContainsRange(childpivots, parentpivots[slot], parentpivots[slot+1]);
+    } else {
+      var prefix := ComputePivotLcp(parentpivots[slot], parentpivots[slot + 1]);
+      var newPrefix := parentedges[slot].value;
+      var left, right := ComputeTranslatePivotPair(parentpivots[slot].e, parentpivots[slot + 1], prefix, newPrefix);
+      b := ComputeContainsRange(childpivots, Keyspace.Element(left), right);
+    }
   }
 }

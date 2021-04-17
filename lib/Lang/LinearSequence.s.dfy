@@ -108,10 +108,16 @@ module {:extern "LinearExtern"} LinearSequence_s {
   method {:extern "LinearExtern", "lseq_length_bound"} lseq_length_bound<A>(shared s:lseq<A>)
     ensures |lseqs_raw(s)| < 0xffff_ffff_ffff_ffff
 
+    // TODO(robj): I think this interface is broken and we should kill it.
   method {:extern "LinearExtern", "TrustedRuntimeSeqResize"} TrustedRuntimeSeqResize<A>(linear s: seq<A>, newlen: uint64)
     returns (linear s2: seq<A>)
     ensures |s2| == newlen as nat
     ensures forall j :: 0 <= j < newlen as nat && j < |s| ==> s2[j] == s[j]
+
+  method {:extern "LinearExtern", "TrustedRuntimeSeqTruncate"} TrustedRuntimeSeqTruncate<A>(linear s: seq<A>, newlen: uint64)
+    returns (linear s2: seq<A>)
+    requires newlen as nat <= |s|
+    ensures s2 == s[..newlen]
 
   method {:extern "LinearExtern", "TrustedRuntimeLSeqResize"} TrustedRuntimeLSeqResize<A>(linear s: lseq<A>, newlen: uint64)
     returns (linear s2: lseq<A>)

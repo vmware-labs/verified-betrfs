@@ -308,6 +308,7 @@ module LinearSequence_i {
     }
   }
 
+  // TODO(robj): this interface looks broken to me.
   method {:extern "LinearExtern", "TrustedRuntimeSeqResizeMut"} TrustedRuntimeSeqResizeMut<A>(linear inout s: seq<A>, newlen: uint64)
     ensures |s| == newlen as nat
     ensures forall j :: 0 <= j < newlen as nat && j < |old_s| ==> s[j] == old_s[j]
