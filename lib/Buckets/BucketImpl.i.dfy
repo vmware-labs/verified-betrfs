@@ -865,13 +865,14 @@ module BucketImpl {
       // psa check things with no prefix
     }
 
-    static method BucketListConcat(linear left: lseq<MutBucket>, linear right: lseq<MutBucket>)
+    static method BucketListConcat(linear left: lseq<MutBucket>, linear bucket: MutBucket, linear right: lseq<MutBucket>)
     returns (linear buckets: lseq<MutBucket>)
+    requires bucket.Inv()
     requires InvLseq(left)
     requires InvLseq(right)
-    requires |left| + |right| < 0x1_0000_0000_0000_0000
+    requires |left| + |right| + 1 < 0x1_0000_0000_0000_0000
     ensures InvLseq(buckets)
-    ensures ILseq(buckets) == ILseq(left) + ILseq(right)
+    ensures ILseq(buckets) == ILseq(left) + [bucket.I()] + ILseq(right)
     {
       // var leftsize := lseq_length_as_uint64(left);
       // var rightsize := lseq_length_as_uint64(right);
@@ -891,6 +892,7 @@ module BucketImpl {
       //   buckets := lseq_give(buckets, j, newbucket);
       //   j := j + 1;
       // }
+      var _ := FreeMutBucket(bucket);
       var _ := FreeMutBucketSeq(left);
       var _ := FreeMutBucketSeq(right);
 
@@ -898,18 +900,23 @@ module BucketImpl {
       assume false;
     }
 
-    static method BucketListConcat3(linear left: lseq<MutBucket>, linear mid: lseq<MutBucket>, linear right: lseq<MutBucket>)
+    static method BucketListConcat3(linear left: lseq<MutBucket>, linear leftBucket: MutBucket,
+      linear mid: lseq<MutBucket>, linear rightBucket: MutBucket, linear right: lseq<MutBucket>)
     returns (linear buckets: lseq<MutBucket>)
+    requires leftBucket.Inv()
+    requires rightBucket.Inv()
     requires InvLseq(left)
     requires InvLseq(mid)
     requires InvLseq(right)
-    requires |left| + |right| + |mid| < 0x1_0000_0000_0000_0000
+    requires |left| + |right| + |mid| + 2 < 0x1_0000_0000_0000_0000
     ensures InvLseq(buckets)
-    ensures ILseq(buckets) == ILseq(left) + ILseq(mid) + ILseq(right)
+    ensures ILseq(buckets) == ILseq(left) + [leftBucket.I()] + ILseq(mid) + [rightBucket.I()] + ILseq(right)
     {
       var _ := FreeMutBucketSeq(left);
       var _ := FreeMutBucketSeq(mid);
       var _ := FreeMutBucketSeq(right);
+      var _ := FreeMutBucket(leftBucket);
+      var _ := FreeMutBucket(rightBucket);
 
       buckets := lseq_alloc(0);
       assume false;

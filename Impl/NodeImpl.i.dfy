@@ -291,45 +291,6 @@ module NodeImpl {
       }
     }
 
-    // shared method SplitChildLeft(num_children_left: uint64)
-    // returns (linear node: Node)
-    // requires Inv()
-    // requires |pivotTable| < Uint64UpperBound()
-    // requires 0 <= num_children_left as int - 1 <= |pivotTable| - 2
-    // requires 0 <= num_children_left as int <= |edgeTable|
-    // requires children.Some? ==> 0 <= num_children_left as int <= |children.value|
-    // requires 0 <= num_children_left as int <= |buckets|
-    // ensures node.Inv()
-    // ensures node.I() == BT.SplitChildLeft(I(), num_children_left as int)
-    // {
-    //   linear var slice := MutBucket.CloneSeq(buckets, 0, num_children_left);
-    //   node := Node(
-    //     pivotTable[ .. num_children_left + 1 ],
-    //     edgeTable[ .. num_children_left ],
-    //     if children.Some? then Some(children.value[ .. num_children_left ]) else None,
-    //     slice
-    //   );
-    // }
-
-    // shared method SplitChildRight(num_children_left: uint64)
-    // returns (linear node: Node)
-    // requires Inv()
-    // requires 0 <= num_children_left as int <= |pivotTable| - 1
-    // requires 0 <= num_children_left as int <= |edgeTable|
-    // requires children.Some? ==> 0 <= num_children_left as int <= |children.value|
-    // requires 0 <= num_children_left as int <= |buckets|
-    // ensures node.Inv()
-    // ensures node.I() == BT.SplitChildRight(I(), num_children_left as int)
-    // {
-    //   linear var slice := MutBucket.CloneSeq(buckets, num_children_left, lseq_length_raw(buckets));
-    //   node := Node(
-    //     pivotTable[ num_children_left .. ],
-    //     edgeTable[ num_children_left .. ],
-    //     if children.Some? then Some(children.value[ num_children_left .. ]) else None,
-    //     slice
-    //   );
-    // }
-
     linear method SplitChild(num_children_left: uint64) returns (linear left: Node, linear right: Node)
     requires Inv()
     requires |pivotTable| < Uint64UpperBound()
@@ -516,43 +477,53 @@ module NodeImpl {
       }
     }
 
-    // can probably return separate parts
-    static method RestrictAndTranslateNode(shared node: Node, from: Key, to: Key)
-    returns (linear node': Node)
+    static method RestrictAndTranslateNode(shared node: Node, from: Key, to: Key, fromend: Pivots.Element)
+    returns (pivots: Pivots.PivotTable, edges: Translations.EdgeTable, children: Option<seq<BT.G.Reference>>, linear buckets: lseq<MutBucket>)
     requires node.Inv()
     requires BT.WFNode(node.I())
     requires Pivots.ContainsAllKeys(node.pivotTable)
     requires node.children.Some?
     requires to != []
-    ensures node'.Inv()
-    ensures node'.I() == BT.RestrictAndTranslateNode(node.I(), from, to)
+    requires fromend == Translations.ShortestUncommonPrefix(from, |from|)
+    ensures MutBucket.InvLseq(buckets)
+    ensures pivots == BT.RestrictAndTranslateNode(node.I(), from, to).pivotTable
+    ensures edges == BT.RestrictAndTranslateNode(node.I(), from, to).edgeTable
+    ensures children == BT.RestrictAndTranslateNode(node.I(), from, to).children
+    ensures MutBucket.ILseq(buckets) == BT.RestrictAndTranslateNode(node.I(), from, to).buckets
     {
-      var fromend := ComputeShortestUncommonPrefix(from);
-      var fromendkey := if fromend.Element? then (var k : Key := fromend.e; Some(k)) else None;
+      var toend := ComputeShortestUncommonPrefix(to);
 
+      BT.reveal_CutoffNode();
+      BT.reveal_CutoffNodeAndKeepLeft();
+      BT.reveal_CutoffNodeAndKeepRight();
+
+      var cRight, rightPivots, rightEdges, rightChildren;
       Pivots.ContainsAllKeysImpliesBoundedKey(node.pivotTable, from);
-      node' := node.CutoffNode(from, fromendkey);
+
+      if fromend.Max_Element? {
+        cRight, rightPivots, rightEdges, rightChildren := node.cutoffNodeAndKeepRightInternal(from);        
+      } else {
+        var cLeft, leftPivots, leftEdges, leftChildren := node.cutoffNodeAndKeepLeftInternal(fromend.e);
+        cRight := Pivots.ComputeCutoffForRight(leftPivots, from);
+        rightPivots := Pivots.ComputeSplitRight(leftPivots, from, cRight);
+        rightEdges := ComputeSplitRightEdges(leftEdges, leftPivots, rightPivots, from, cRight);
+        rightChildren := if leftChildren.Some? then Some(leftChildren.value[cRight ..]) else None;
+      }
 
       Translations.PrefixOfLcpIsPrefixOfKeys(Pivots.KeyToElement(from), fromend, from);
       Pivots.Keyspace.reveal_IsStrictlySorted();
 
-      var toend := ComputeShortestUncommonPrefix(to);
-      var toendkey := if toend.Element? then (var k : Key := toend.e; Some(k)) else None;
-
-      ghost var e := Translations.TranslateElement(node'.pivotTable[|node'.pivotTable|-2], from, to);
+      ghost var e := Translations.TranslateElement(rightPivots[|rightPivots|-2], from, to);
       assert Pivots.Keyspace.lt(e, toend) by {
         if toend.Element? {
           Translations.KeyWithPrefixLt(to, toend.e, e.e);
         }
       }
 
-      var topivots := ComputeTranslatePivots(node'.pivotTable, from, to, toend);
-      var toedges := ComputeTranslateEdges(node'.edgeTable, node'.pivotTable);
-      linear var tobuckets := MutBucket.EmptySeq((|topivots|-1) as uint64);
-      var tochildren := node'.children;
-
-      var _ := FreeNode(node');
-      node' := Node.Alloc(topivots, toedges, tochildren, tobuckets);
+      pivots := ComputeTranslatePivots(rightPivots, from, to, toend);
+      edges := ComputeTranslateEdges(rightEdges, rightPivots);
+      children := rightChildren;
+      buckets := MutBucket.EmptySeq((|pivots|-1) as uint64);
     }
 
     static method CloneNewRoot(shared node: Node, from: Key, to: Key)
@@ -586,49 +557,59 @@ module NodeImpl {
       if !validbucketlist {
         rootopt := lNone;
       } else {
-        linear var tonode := RestrictAndTranslateNode(node, from, to);
+        var toPivots, toEdges, toChildren;
+        linear var toBuckets;
+
+        toPivots, toEdges, toChildren, toBuckets := RestrictAndTranslateNode(node, from, to, fromend);
         Pivots.ContainsAllKeysImpliesBoundedKey(node.pivotTable, to);
-        linear var lnode := node.CutoffNodeAndKeepLeft(to);
+        var cLeft, leftPivots, leftEdges, leftChildren := node.cutoffNodeAndKeepLeftInternal(to);
 
-        if tonode.pivotTable[|tonode.pivotTable|-1].Max_Element? {
-          var len := |lnode.children.value + tonode.children.value| as uint64;
-          if len <= MaxNumChildrenUint64() {
-            var newpivots := lnode.pivotTable[..|lnode.pivotTable|-1] + tonode.pivotTable;
-            var newedges := lnode.edgeTable + tonode.edgeTable;
-            var newchildren := Some(lnode.children.value + tonode.children.value);
+        var toend := toPivots[|toPivots|-1];
+        if toend.Max_Element? {
+          if |leftChildren.value + toChildren.value| as uint64 <= MaxNumChildrenUint64() {
+            var newpivots := leftPivots[..|leftPivots|-1] + toPivots;
+            var newedges := leftEdges + toEdges;
+            var newchildren := Some(leftChildren.value + toChildren.value);
 
-            linear var Node(_, _, _, tobuckets) := tonode;
-            linear var Node(_, _, _, lbuckets) := lnode;
+            linear var splitBucket := lseq_peek(node.buckets, cLeft).SplitLeft(to);
+            linear var lbuckets := MutBucket.CloneSeq(node.buckets, 0, cLeft);
+            BT.reveal_CutoffNodeAndKeepLeft();
 
-            linear var newbuckets := MutBucket.BucketListConcat(lbuckets, tobuckets);
+            linear var newbuckets := MutBucket.BucketListConcat(lbuckets, splitBucket, toBuckets);
             linear var node := Alloc(newpivots, newedges, newchildren, newbuckets);
             rootopt := lSome(node);
           } else {
-            var _ := FreeNode(lnode);
-            var _ := FreeNode(tonode);
+            var _ := FreeMutBucketSeq(toBuckets);
             rootopt := lNone;
           }
         } else {
-          var toend : Key := tonode.pivotTable[|tonode.pivotTable|-1].e;
-          linear var rnode := node.CutoffNodeAndKeepRight(toend);
-          var len := |lnode.children.value + tonode.children.value + rnode.children.value| as uint64;
+          var cRight, rightPivots, rightEdges, rightChildren := node.cutoffNodeAndKeepRightInternal(toend.e);
+          if |leftChildren.value + toChildren.value + rightChildren.value| as uint64 <= MaxNumChildrenUint64() {
+            var newpivots := leftPivots[..|leftPivots|-1] + toPivots + rightPivots[1..];
+            var newedges := leftEdges + toEdges + rightEdges;
+            var newchildren := Some(leftChildren.value + toChildren.value + rightChildren.value);
 
-          if len <= MaxNumChildrenUint64() {
-            var newpivots := lnode.pivotTable[..|lnode.pivotTable|-1] + tonode.pivotTable + rnode.pivotTable[1..];
-            var newedges := lnode.edgeTable + tonode.edgeTable + rnode.edgeTable;
-            var newchildren := Some(lnode.children.value + tonode.children.value + rnode.children.value);
+            ghost var lnode := BT.CutoffNodeAndKeepLeft(node.I(), to);
+            ghost var rnode := BT.CutoffNodeAndKeepRight(node.I(), toend.e);
 
-            linear var Node(_, _, _, tobuckets) := tonode;
-            linear var Node(_, _, _, lbuckets) := lnode;
-            linear var Node(_, _, _, rbuckets) := rnode;
+            linear var leftbucket := lseq_peek(node.buckets, cLeft).SplitLeft(to);
+            linear var lbuckets := MutBucket.CloneSeq(node.buckets, 0, cLeft);
+            BT.reveal_CutoffNodeAndKeepLeft(); 
+            assert lnode.buckets == MutBucket.ILseq(lbuckets) + [leftbucket.I()];
 
-            linear var newbuckets := MutBucket.BucketListConcat3(lbuckets, tobuckets, rbuckets);
+            linear var rightbucket := lseq_peek(node.buckets, cRight).SplitRight(toend.e);
+            linear var rbuckets := MutBucket.CloneSeq(node.buckets, cRight + 1, lseq_length_raw(node.buckets));
+            BT.reveal_CutoffNodeAndKeepRight(); 
+
+            assert MutBucket.ILseq(node.buckets)[cRight+1..|node.buckets|] == MutBucket.ILseq(node.buckets)[cRight+1..];
+            assert BT.CloneNewRoot(node.I(), from, to).buckets == 
+              MutBucket.ILseq(lbuckets) + [leftbucket.I()] + MutBucket.ILseq(toBuckets) + [rightbucket.I()] + MutBucket.ILseq(rbuckets);
+            
+            linear var newbuckets := MutBucket.BucketListConcat3(lbuckets, leftbucket, toBuckets, rightbucket, rbuckets);
             linear var node := Alloc(newpivots, newedges, newchildren, newbuckets);
             rootopt := lSome(node);
           } else {
-            var _ := FreeNode(lnode);
-            var _ := FreeNode(tonode);
-            var _ := FreeNode(rnode);
+            var _ := FreeMutBucketSeq(toBuckets);
             rootopt := lNone;
           }
         }
