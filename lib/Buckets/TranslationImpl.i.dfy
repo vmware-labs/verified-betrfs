@@ -480,7 +480,6 @@ module TranslationImpl {
     lseq_give_inout(inout blist, 0, tbucket);
   }
 
-  // TODO: implement
   method ComputeTranslateCutOffKeepRightBuckets(shared blist: lseq<MutBucket>, linear bucket: MutBucket, 
     prefix: Key, newPrefix: Key, cRight: uint64) returns (linear blist': lseq<MutBucket>)
   requires bucket.Inv()
@@ -492,19 +491,40 @@ module TranslationImpl {
   ensures MutBucket.InvLseq(blist')
   ensures MutBucket.ILseq(blist') == TranslateBuckets([bucket.I()]+ MutBucket.ILseq(blist)[cRight+1..], prefix, newPrefix)
   {
-    assume false;
+    ghost var iblist := [bucket.I()] + MutBucket.ILseq(blist)[cRight+1..];
+    blist' := lseq_alloc(lseq_length_as_uint64(blist)-cRight);
 
+    linear var b := ComputeTranslateBucket(bucket, prefix, newPrefix);
+    lseq_give_inout(inout blist', 0, b);
     var _ := FreeMutBucket(bucket);
-    blist' := lseq_alloc(0);
+
+    var i := 1;
+    while i < lseq_length_as_uint64(blist')
+      invariant 1 <= i as int <= |blist'|
+      invariant |blist'| == |iblist|
+      invariant |blist'| + cRight as int == |blist|
+      invariant forall j | 0 as int <= j < |blist| :: lseq_has(blist)[j]
+      invariant forall j | 0 as int <= j < |blist| :: lseqs(blist)[j].Inv()
+      invariant forall j | 1 <= j < |iblist| :: iblist[j] == lseqs(blist)[j+cRight as int].I()
+      invariant forall j | 0 <= j < |blist'| :: lseq_has(blist')[j] <==> j < i as int
+      invariant forall j | 0 <= j < i :: lseqs(blist')[j].Inv()   
+      invariant forall j | 0 <= j < i :: lseqs(blist')[j].I() == TranslateBucket(iblist[j], prefix, newPrefix)
+    {
+      linear var tmp := ComputeTranslateBucket(lseq_peek(blist, i+cRight), prefix, newPrefix);
+      assert lseqs(blist)[i+cRight].I() == iblist[i];
+      assert tmp.I() == TranslateBucket(iblist[i], prefix, newPrefix);
+
+      lseq_give_inout(inout blist', i, tmp);
+      i := i + 1;
+    }
   }
 
-  // TODO:
   method ComputeTranslateCutOffNodeBuckets(shared blist: lseq<MutBucket>, linear left: MutBucket, linear right: MutBucket,
     prefix: Key, newPrefix: Key, cLeft: uint64, cRight: uint64) returns (linear blist': lseq<MutBucket>)
   requires left.Inv()
   requires right.Inv()
   requires MutBucket.InvLseq(blist)
-  requires 0 <= cRight as int < cLeft as int <= |blist|
+  requires 0 <= cRight as int < cLeft as int < |blist|
   requires WillFitInPkv(left, prefix, newPrefix)
   requires WillFitInPkv(right, prefix, newPrefix)
   requires forall i | cRight as int+1 <= i < cLeft as int :: WillFitInPkv(blist[i], prefix, newPrefix)
@@ -513,11 +533,35 @@ module TranslationImpl {
   ensures MutBucket.ILseq(blist') == 
     TranslateBuckets([left.I()]+ MutBucket.ILseq(blist)[cRight+1..cLeft] + [right.I()], prefix, newPrefix) 
   {
-    assume false;
-    var _ := FreeMutBucket(left);
-    var _ := FreeMutBucket(right);
+    ghost var iblist := [left.I()] + MutBucket.ILseq(blist)[cRight+1..cLeft] + [right.I()];
+    blist' := lseq_alloc(cLeft-cRight+1);
 
-    blist' := lseq_alloc(0);
+    linear var b1 := ComputeTranslateBucket(left, prefix, newPrefix);
+    lseq_give_inout(inout blist', 0, b1);
+    var _ := FreeMutBucket(left);
+
+    var i := 1;
+    while i < lseq_length_as_uint64(blist')-1
+      invariant 1 <= i as int < |blist'|
+      invariant |blist'| == |iblist|
+      invariant |blist'| == cLeft as int - cRight as int +1
+      invariant forall j | 0 as int <= j < |blist| :: lseq_has(blist)[j]
+      invariant forall j | 0 as int <= j < |blist| :: lseqs(blist)[j].Inv()
+      invariant forall j | 1 <= j < |iblist|-1 :: iblist[j] == lseqs(blist)[j+cRight as int].I()
+      invariant forall j | 0 <= j < |blist'| :: lseq_has(blist')[j] <==> j < i as int
+      invariant forall j | 0 <= j < i :: lseqs(blist')[j].Inv()   
+      invariant forall j | 0 <= j < i :: lseqs(blist')[j].I() == TranslateBucket(iblist[j], prefix, newPrefix)
+    {
+      linear var tmp := ComputeTranslateBucket(lseq_peek(blist, i+cRight), prefix, newPrefix);
+      assert tmp.I() == TranslateBucket(iblist[i], prefix, newPrefix);
+
+      lseq_give_inout(inout blist', i, tmp);
+      i := i + 1;
+    }
+
+    linear var b2 := ComputeTranslateBucket(right, prefix, newPrefix);
+    lseq_give_inout(inout blist', i, b2);
+    var _ := FreeMutBucket(right);
   }
 
   method ComputeParentKeysInChildRange(parentpivots: PivotTable, parentedges: EdgeTable, childpivots: PivotTable, slot: uint64)
