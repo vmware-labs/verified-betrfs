@@ -1,0 +1,32 @@
+Overall: Fail
+
+Files failing with verification error
+	./lib/Checksums/CRC32C_Lemmas.i.dfy
+
+Files failing with untrusted file contains assumptions
+	./Impl/IndirectionTable.i.dfy
+
+Files failing with exceeded rlimit
+	./Impl/IOImpl.i.dfy
+	./ByteBlockCacheSystem/InterpretationDisk.i.dfy
+	./lib/DataStructures/BtreeModel.i.dfy
+	./PivotBetree/PivotBetreeSpecRefinement.i.dfy
+	./Impl/FlushPolicyImpl.i.dfy
+	./BlockCacheSystem/BlockSystem.i.dfy
+	./lib/DataStructures/LinearContentMutableMap.i.dfy
+	./ByteBlockCacheSystem/ByteSystem.i.dfy
+	./Betree/BetreeInv.i.dfy
+
+Total build time: 11125 seconds
+
+Slowest files:
+	1079.17	./ByteBlockCacheSystem/ByteSystem.i.dfy
+	587.35	./BlockCacheSystem/BlockSystem.i.dfy
+	527.03	./ByteBlockCacheSystem/InterpretationDisk.i.dfy
+	362.92	./Impl/IndirectionTable.i.dfy
+	287.96	./PivotBetree/PivotBetreeSpecRefinement.i.dfy
+	235.42	./BlockCacheSystem/JournalSystem.i.dfy
+	233.79	./Impl/CommitterImpl.i.dfy
+	208.99	./Impl/BookkeepingModel.i.dfy
+	199.59	./Betree/BetreeInv.i.dfy
+	194.13	./Impl/MarshallingImpl.i.dfy
