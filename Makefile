@@ -199,12 +199,6 @@ OTHER_PROVER_FLAGS = /rlimit:$(DEFAULT_RLIMIT)
 build/Betree/BetreeInv.i.verchk: OTHER_PROVER_FLAGS=/proverOpt:O:smt.random_seed=1
 build/lib/DataStructures/LinearDList.i.verchk: OTHER_PROVER_FLAGS=/noNLarith /proverOpt:O:smt.random_seed=1
 
-## Each file that has a timeLimitMultiplier in it gets a whole file rlimit bump
-## Until PR https://github.com/dafny-lang/dafny/pull/1171 is merged
-build/lib/Base/BitsetLemmas.i.verchk: OTHER_PROVER_FLAGS=/rlimit:$$(( 6 * $(DEFAULT_RLIMIT) ))
-build/Marshalling/GenericMarshalling.i.verchk: OTHER_PROVER_FLAGS=/rlimit:$$(( 4 * $(DEFAULT_RLIMIT) ))
-build/Math/div.i.verchk: OTHER_PROVER_FLAGS=/rlimit:$$(( 2 * $(DEFAULT_RLIMIT) ))
-
 # enable nonlinear arithmetic for some files
 # Note: Nonlinear.i.dfy and Math.i.dfy are designed to use nonlinear arith.
 # The other files are legacy'ed in, but it's no big deal as long
