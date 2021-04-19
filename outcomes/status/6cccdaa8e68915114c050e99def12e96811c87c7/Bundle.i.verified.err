@@ -1,0 +1,536 @@
+./Impl/IOImpl.i.dfy
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/../lib/Base/sequences.i.dfy(587,18): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/../lib/DataStructures/../Base/Sets.i.dfy(37,4): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/../lib/Buckets/PackedKV.i.dfy(1059,10): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/../lib/Buckets/PackedKV.i.dfy(1077,10): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/../lib/DataStructures/BitmapModel.i.dfy(57,13): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/../lib/DataStructures/BitmapModel.i.dfy(55,13): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/IndirectionTable.i.dfy(1793,12): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/IndirectionTable.i.dfy(1804,16): Warning: /!\ No terms found to trigger on.
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/IOImpl.i.dfy(423,9): Verification inconclusive (Impl$$IOImpl.__default.PageInNodeResp)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/IOImpl.i.dfy(507,9): Verification inconclusive (Impl$$IOImpl.__default.writeNodeResponse)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/IOImpl.i.dfy(601,9): Verification inconclusive (Impl$$IOImpl.__default.cleanUp)
+	
+	Dafny program verifier finished with 26 verified, 0 errors, 3 inconclusives
+	Command exited with non-zero status 4
+	162.57user 2.99system 1:12.15elapsed 229%CPU (0avgtext+0avgdata 2019208maxresident)k
+	0inputs+0outputs (0major+792403minor)pagefaults 0swaps
+
+./ByteBlockCacheSystem/InterpretationDisk.i.dfy
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/InterpretationDisk.i.dfy(752,8): Verification out of resource (Impl$$InterpretationDisk.__default.RefinesReqReadOp)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/InterpretationDisk.i.dfy(892,8): Verification out of resource (Impl$$InterpretationDisk.__default.RefinesReqWriteOp)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1059,8): Verification out of resource (Impl$$InterpretationDisk.__default.RefinesReqWrite2Op)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1190,8): Verification out of resource (Impl$$InterpretationDisk.__default.RefinesRespReadOp)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1316,8): Verification out of resource (Impl$$InterpretationDisk.__default.RefinesRespWriteOp)
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1367,8): Verification out of resource (Impl$$InterpretationDisk.__default.RefinesProcessRead__Node__1)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1382,8): Verification inconclusive (Impl$$InterpretationDisk.__default.RefinesProcessRead__Node__2)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1400,8): Verification out of resource (Impl$$InterpretationDisk.__default.RefinesProcessRead__IndirectionTable__1)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1415,8): Verification out of resource (Impl$$InterpretationDisk.__default.RefinesProcessRead__IndirectionTable__2)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1433,8): Verification inconclusive (CheckWellformed$$InterpretationDisk.__default.RefinesProcessRead__Journal__1)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1433,8): Verification out of resource (Impl$$InterpretationDisk.__default.RefinesProcessRead__Journal__1)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1448,8): Verification inconclusive (CheckWellformed$$InterpretationDisk.__default.RefinesProcessRead__Journal__2)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1448,8): Verification inconclusive (Impl$$InterpretationDisk.__default.RefinesProcessRead__Journal__2)
+	Prover error: Invalid PING response from the prover: unknown
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1466,8): Verification inconclusive (Impl$$InterpretationDisk.__default.RefinesProcessRead__Superblock__1)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1481,8): Verification out of resource (Impl$$InterpretationDisk.__default.RefinesProcessRead__Superblock__2)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1527,8): Verification out of resource (Impl$$InterpretationDisk.__default.RefinesProcessWrite)
+	Prover error: Invalid PING response from the prover: unknown
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/InterpretationDisk.i.dfy(1727,8): Verification inconclusive (Impl$$InterpretationDisk.__default.RefinesCrash)
+	
+	Dafny program verifier finished with 111 verified, 0 errors, 6 inconclusives, 11 out of resource
+	Command exited with non-zero status 4
+	527.03user 7.40system 3:02.69elapsed 292%CPU (0avgtext+0avgdata 1628924maxresident)k
+	0inputs+0outputs (0major+1798256minor)pagefaults 0swaps
+
+./lib/DataStructures/BtreeModel.i.dfy
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/BtreeModel.i.dfy(348,8): Verification inconclusive (Impl$$BtreeModel.__default.SplitLeafInterpretation)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/BtreeModel.i.dfy(852,8): Verification out of resource (Impl$$BtreeModel.__default.InsertLeafIsCorrect)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/BtreeModel.i.dfy(965,8): Verification inconclusive (Impl$$BtreeModel.__default.GrowPreservesWF)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/BtreeModel.i.dfy(983,8): Verification inconclusive (CheckWellformed$$BtreeModel.__default.GrowPreservesInterpretation)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/BtreeModel.i.dfy(1001,11): Verification inconclusive (CheckWellformed$$BtreeModel.__default.ReplacePivot)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/BtreeModel.i.dfy(1009,11): Verification inconclusive (CheckWellformed$$BtreeModel.__default.NumElementsOfChildren)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/BtreeModel.i.dfy(1023,8): Verification inconclusive (CheckWellformed$$BtreeModel.__default.InterpretationsDisjoint)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/BtreeModel.i.dfy(1052,8): Verification inconclusive (Impl$$BtreeModel.__default.InterpretationsDisjointUnion)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/BtreeModel.i.dfy(1152,8): Verification inconclusive (CheckWellformed$$BtreeModel.__default.NumElementsMatchesInterpretation)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/BtreeModel.i.dfy(1200,11): Verification inconclusive (CheckWellformed$$BtreeModel.__default.ToSeqChildren)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/BtreeModel.i.dfy(1223,8): Verification inconclusive (Impl$$BtreeModel.__default.ToSeqChildrenDecomposition)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/BtreeModel.i.dfy(1246,8): Verification inconclusive (Impl$$BtreeModel.__default.ToSeqChildrenLength)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/BtreeModel.i.dfy(1258,8): Verification inconclusive (Impl$$BtreeModel.__default.ToSeqLength)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/BtreeModel.i.dfy(1292,8): Verification inconclusive (CheckWellformed$$BtreeModel.__default.ToSeqIsStrictlySorted)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/BtreeModel.i.dfy(1325,8): Verification inconclusive (Impl$$BtreeModel.__default.ToSeqInInterpretation)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/BtreeModel.i.dfy(1393,8): Verification inconclusive (CheckWellformed$$BtreeModel.__default.InterpretationNumElements)
+	
+	Dafny program verifier finished with 84 verified, 0 errors, 15 inconclusives, 1 out of resource
+	Command exited with non-zero status 4
+	112.21user 1.99system 0:36.90elapsed 309%CPU (0avgtext+0avgdata 509844maxresident)k
+	0inputs+0outputs (0major+364555minor)pagefaults 0swaps
+
+./lib/Checksums/CRC32C_Lemmas.i.dfy
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/Checksums/CRC32C_Lemmas.i.dfy(293,49): Error: assertion violation
+	Execution trace:
+	    (0,0): anon0
+	
+	Dafny program verifier finished with 32 verified, 1 error
+	Command exited with non-zero status 4
+	27.77user 0.75system 0:19.74elapsed 144%CPU (0avgtext+0avgdata 322564maxresident)k
+	0inputs+0outputs (0major+129986minor)pagefaults 0swaps
+
+./Impl/IndirectionTable.i.dfy
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/IndirectionTable.i.dfy(938,24): Verification out of resource (Impl$$IndirectionTable.IndirectionTable.UpdateAndRemoveLoc)
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/IndirectionTable.i.dfy(1310,18): Verification inconclusive (Impl$$IndirectionTable.IndirectionTable.ComputeRefCountsInnerLoop)
+	Prover error: Invalid PING response from the prover: unknown
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/IndirectionTable.i.dfy(1618,18): Verification out of resource (Impl$$IndirectionTable.IndirectionTable.IndirectionTableToVal)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/IndirectionTable.i.dfy(1827,18): Verification inconclusive (Impl$$IndirectionTable.IndirectionTable.InitLocBitmap)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/IndirectionTable.i.dfy(1972,27): Verification inconclusive (CheckWellformed$$IndirectionTable.IndirectionTable.GetSize)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/IndirectionTable.i.dfy(1981,24): Verification inconclusive (Impl$$IndirectionTable.IndirectionTable.FindRefWithNoLoc)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/IndirectionTable.i.dfy(55,11): Verification inconclusive (CheckWellformed$$IndirectionTable.__default.MapLocs)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/IndirectionTable.i.dfy(71,11): Verification inconclusive (CheckWellformed$$IndirectionTable.__default.Graph)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/IndirectionTable.i.dfy(88,11): Verification inconclusive (CheckWellformed$$IndirectionTable.__default.PredecessorSetRestricted)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/IndirectionTable.i.dfy(113,11): Verification inconclusive (CheckWellformed$$IndirectionTable.__default.IsRoot)
+	
+	Dafny program verifier finished with 103 verified, 0 errors, 8 inconclusives, 2 out of resource
+	Command exited with non-zero status 4
+	362.92user 4.61system 2:05.67elapsed 292%CPU (0avgtext+0avgdata 1515352maxresident)k
+	0inputs+0outputs (0major+761442minor)pagefaults 0swaps
+
+./PivotBetree/PivotBetreeSpecRefinement.i.dfy
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/PivotBetree/PivotBetreeSpecRefinement.i.dfy(669,8): Verification inconclusive (Impl$$PivotBetreeSpecRefinement.__default.RefinesValidFlush)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/PivotBetree/PivotBetreeSpecRefinement.i.dfy(989,8): Verification out of resource (Impl$$PivotBetreeSpecRefinement.__default.RefinesValidMerge)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/PivotBetree/PivotBetreeSpecRefinement.i.dfy(1065,8): Verification inconclusive (Impl$$PivotBetreeSpecRefinement.__default.SplitChildrenConsistent)
+	Prover error: Invalid PING response from the prover: unknown
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/PivotBetree/PivotBetreeSpecRefinement.i.dfy(1111,8): Verification inconclusive (Impl$$PivotBetreeSpecRefinement.__default.SplitRouteNewChild)
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/PivotBetree/PivotBetreeSpecRefinement.i.dfy(1149,8): Verification inconclusive (Impl$$PivotBetreeSpecRefinement.__default.RefinesValidSplit)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/PivotBetree/PivotBetreeSpecRefinement.i.dfy(1227,27): Verification out of resource (Impl$$PivotBetreeSpecRefinement.__default.RefinesReadOps)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/PivotBetree/PivotBetreeSpecRefinement.i.dfy(1299,8): Verification inconclusive (CheckWellformed$$PivotBetreeSpecRefinement.__default.AddMessagesToNodeResult)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/PivotBetree/PivotBetreeSpecRefinement.i.dfy(1299,8): Verification inconclusive (Impl$$PivotBetreeSpecRefinement.__default.AddMessagesToNodeResult)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/PivotBetree/PivotBetreeSpecRefinement.i.dfy(1320,23): Verification inconclusive (Impl$$PivotBetreeSpecRefinement.__default.FlushRefinesOps)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/PivotBetree/PivotBetreeSpecRefinement.i.dfy(1331,23): Verification inconclusive (Impl$$PivotBetreeSpecRefinement.__default.GrowRefinesOps)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/PivotBetree/PivotBetreeSpecRefinement.i.dfy(1357,23): Verification inconclusive (CheckWellformed$$PivotBetreeSpecRefinement.__default.SplitRefinesOps)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/PivotBetree/PivotBetreeSpecRefinement.i.dfy(1393,23): Verification inconclusive (CheckWellformed$$PivotBetreeSpecRefinement.__default.MergeRefinesOps)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/PivotBetree/PivotBetreeSpecRefinement.i.dfy(1393,23): Verification inconclusive (Impl$$PivotBetreeSpecRefinement.__default.MergeRefinesOps)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/PivotBetree/PivotBetreeSpecRefinement.i.dfy(1409,23): Verification inconclusive (CheckWellformed$$PivotBetreeSpecRefinement.__default.RefinesOps)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/PivotBetree/PivotBetreeSpecRefinement.i.dfy(1470,8): Verification inconclusive (Impl$$PivotBetreeSpecRefinement.__default.RepivotPreservesNode)
+	
+	Dafny program verifier finished with 91 verified, 0 errors, 13 inconclusives, 2 out of resource
+	Command exited with non-zero status 4
+	287.96user 4.09system 1:41.97elapsed 286%CPU (0avgtext+0avgdata 1158108maxresident)k
+	0inputs+0outputs (0major+974021minor)pagefaults 0swaps
+
+./Impl/FlushPolicyImpl.i.dfy
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/FlushPolicyImpl.i.dfy(103,9): Verification inconclusive (Impl$$FlushPolicyImpl.__default.getActionToFlush)
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Impl/FlushPolicyImpl.i.dfy(158,9): Verification inconclusive (Impl$$FlushPolicyImpl.__default.runFlushPolicy)
+	
+	Dafny program verifier finished with 4 verified, 0 errors, 2 inconclusives
+	Command exited with non-zero status 4
+	78.00user 1.87system 0:46.94elapsed 170%CPU (0avgtext+0avgdata 1432404maxresident)k
+	0inputs+0outputs (0major+561121minor)pagefaults 0swaps
+
+./BlockCacheSystem/BlockSystem.i.dfy
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(738,8): Verification inconclusive (Impl$$BlockSystem.__default.WriteBackNodeReqStepPreservesGraphs)
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(768,8): Verification inconclusive (Impl$$BlockSystem.__default.WriteBackNodeReqStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(804,8): Verification inconclusive (Impl$$BlockSystem.__default.WriteBackNodeRespStepPreservesGraphs)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(838,8): Verification inconclusive (Impl$$BlockSystem.__default.WriteBackIndirectionTableReqStepPreservesGraphs)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unknown
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(891,8): Verification inconclusive (Impl$$BlockSystem.__default.WriteBackIndirectionTableReqStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(917,8): Verification inconclusive (CheckWellformed$$BlockSystem.__default.WriteBackIndirectionTableRespStepPreservesGraphs)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(917,8): Verification inconclusive (Impl$$BlockSystem.__default.WriteBackIndirectionTableRespStepPreservesGraphs)
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(945,8): Verification inconclusive (Impl$$BlockSystem.__default.WriteBackIndirectionTableRespStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(959,8): Verification inconclusive (CheckWellformed$$BlockSystem.__default.DirtyStepUpdatesGraph)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(959,8): Verification inconclusive (Impl$$BlockSystem.__default.DirtyStepUpdatesGraph)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(982,8): Verification inconclusive (Impl$$BlockSystem.__default.DirtyStepPreservesInv)
+	Prover error: Invalid PING response from the prover: unknown
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(994,8): Verification inconclusive (CheckWellformed$$BlockSystem.__default.AllocStepUpdatesGraph)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unknown
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(994,8): Verification inconclusive (Impl$$BlockSystem.__default.AllocStepUpdatesGraph)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1016,8): Verification inconclusive (Impl$$BlockSystem.__default.AllocStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1028,8): Verification inconclusive (Impl$$BlockSystem.__default.OpPreservesInv)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1040,8): Verification inconclusive (Impl$$BlockSystem.__default.OpTransactionPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1057,8): Verification inconclusive (Impl$$BlockSystem.__default.TransactionStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1071,8): Verification inconclusive (CheckWellformed$$BlockSystem.__default.UnallocStepUpdatesGraph)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1071,8): Verification inconclusive (Impl$$BlockSystem.__default.UnallocStepUpdatesGraph)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unknown
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1094,8): Verification inconclusive (Impl$$BlockSystem.__default.UnallocStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1112,8): Verification inconclusive (Impl$$BlockSystem.__default.PageInNodeReqStepPreservesGraphs)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1133,8): Verification inconclusive (Impl$$BlockSystem.__default.PageInNodeReqStepPreservesInv)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1161,8): Verification inconclusive (Impl$$BlockSystem.__default.PageInNodeRespStepPreservesGraphs)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1182,8): Verification inconclusive (Impl$$BlockSystem.__default.PageInNodeRespStepPreservesInv)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1195,8): Verification inconclusive (Impl$$BlockSystem.__default.PageInIndirectionTableReqStepPreservesGraphs)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1212,8): Verification inconclusive (Impl$$BlockSystem.__default.PageInIndirectionTableReqStepPreservesInv)
+	Prover error: Invalid PING response from the prover: unknown
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1225,8): Verification inconclusive (Impl$$BlockSystem.__default.PageInIndirectionTableRespStepPreservesGraphs)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unknown
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1240,8): Verification inconclusive (Impl$$BlockSystem.__default.PageInIndirectionTableRespStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1253,8): Verification inconclusive (CheckWellformed$$BlockSystem.__default.ReceiveLocStepPreservesGraphs)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1253,8): Verification inconclusive (Impl$$BlockSystem.__default.ReceiveLocStepPreservesGraphs)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1282,8): Verification inconclusive (CheckWellformed$$BlockSystem.__default.ReceiveLocStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1282,8): Verification inconclusive (Impl$$BlockSystem.__default.ReceiveLocStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1296,8): Verification inconclusive (Impl$$BlockSystem.__default.EvictStepPreservesGraphs)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1317,8): Verification inconclusive (Impl$$BlockSystem.__default.EvictStepPreservesInv)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1330,8): Verification inconclusive (Impl$$BlockSystem.__default.FreezeStepPreservesGraphs)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1345,8): Verification inconclusive (Impl$$BlockSystem.__default.FreezeStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1358,8): Verification inconclusive (Impl$$BlockSystem.__default.CleanUpStepPreservesGraphs)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1372,8): Verification inconclusive (Impl$$BlockSystem.__default.CleanUpStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1386,8): Verification inconclusive (Impl$$BlockSystem.__default.NoOpStepPreservesGraphs)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1407,8): Verification inconclusive (Impl$$BlockSystem.__default.NoOpStepPreservesInv)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1420,8): Verification inconclusive (Impl$$BlockSystem.__default.MachineStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1448,8): Verification inconclusive (Impl$$BlockSystem.__default.CrashPreservesGraphs)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1515,8): Verification inconclusive (Impl$$BlockSystem.__default.CrashStepPreservesInv)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unknown
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1526,8): Verification inconclusive (Impl$$BlockSystem.__default.NextStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1537,8): Verification inconclusive (Impl$$BlockSystem.__default.NextPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1557,8): Verification inconclusive (CheckWellformed$$BlockSystem.__default.EphemeralGraphRead)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1557,8): Verification inconclusive (Impl$$BlockSystem.__default.EphemeralGraphRead)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1579,8): Verification inconclusive (CheckWellformed$$BlockSystem.__default.NewRequestReadNodeDoesntOverlap)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1579,8): Verification inconclusive (Impl$$BlockSystem.__default.NewRequestReadNodeDoesntOverlap)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1591,8): Verification inconclusive (CheckWellformed$$BlockSystem.__default.NewRequestReadIndirectionTableDoesntOverlap)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1591,8): Verification inconclusive (Impl$$BlockSystem.__default.NewRequestReadIndirectionTableDoesntOverlap)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1605,8): Verification inconclusive (CheckWellformed$$BlockSystem.__default.NewRequestWriteNodeDoesntOverlap)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1605,8): Verification inconclusive (Impl$$BlockSystem.__default.NewRequestWriteNodeDoesntOverlap)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1617,8): Verification inconclusive (CheckWellformed$$BlockSystem.__default.NewRequestWriteIndirectionTableDoesntOverlap)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1617,8): Verification inconclusive (Impl$$BlockSystem.__default.NewRequestWriteIndirectionTableDoesntOverlap)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1631,8): Verification inconclusive (CheckWellformed$$BlockSystem.__default.NewRequestWriteNodeDoesntOverlapRead)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1631,8): Verification inconclusive (Impl$$BlockSystem.__default.NewRequestWriteNodeDoesntOverlapRead)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1643,8): Verification inconclusive (CheckWellformed$$BlockSystem.__default.NewRequestWriteIndirectionTableDoesntOverlapRead)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1643,8): Verification inconclusive (Impl$$BlockSystem.__default.NewRequestWriteIndirectionTableDoesntOverlapRead)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1652,8): Verification inconclusive (CheckWellformed$$BlockSystem.__default.NewRequestReadNodeIsValid)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1652,8): Verification inconclusive (Impl$$BlockSystem.__default.NewRequestReadNodeIsValid)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1660,8): Verification inconclusive (CheckWellformed$$BlockSystem.__default.NewRequestReadIndirectionTableIsValid)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/BlockCacheSystem/BlockSystem.i.dfy(1660,8): Verification inconclusive (Impl$$BlockSystem.__default.NewRequestReadIndirectionTableIsValid)
+	
+	Dafny program verifier finished with 65 verified, 0 errors, 63 inconclusives
+	Command exited with non-zero status 4
+	587.35user 6.48system 3:16.58elapsed 302%CPU (0avgtext+0avgdata 1709912maxresident)k
+	0inputs+0outputs (0major+1646930minor)pagefaults 0swaps
+
+./lib/DataStructures/LinearContentMutableMap.i.dfy
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/LinearContentMutableMap.i.dfy(173,9): Verification inconclusive (Impl$$LinearContentMutableMap.__default.Probe)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/LinearContentMutableMap.i.dfy(591,9): Verification out of resource (Impl$$LinearContentMutableMap.__default.Realloc)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/LinearContentMutableMap.i.dfy(675,9): Verification inconclusive (CheckWellformed$$LinearContentMutableMap.__default.Insert)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/LinearContentMutableMap.i.dfy(703,9): Verification inconclusive (CheckWellformed$$LinearContentMutableMap.__default.Remove)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/LinearContentMutableMap.i.dfy(703,9): Verification inconclusive (Impl$$LinearContentMutableMap.__default.Remove)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/lib/DataStructures/LinearContentMutableMap.i.dfy(741,9): Verification inconclusive (CheckWellformed$$LinearContentMutableMap.__default.Get)
+	
+	Dafny program verifier finished with 43 verified, 0 errors, 5 inconclusives, 1 out of resource
+	Command exited with non-zero status 4
+	74.32user 1.11system 0:32.79elapsed 230%CPU (0avgtext+0avgdata 351600maxresident)k
+	0inputs+0outputs (0major+174486minor)pagefaults 0swaps
+
+./ByteBlockCacheSystem/ByteSystem.i.dfy
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	Prover error: Invalid PING response from the prover: unknown
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unknown
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unknown
+	
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/AsyncDiskModel.s.dfy[ByteSystem](333,8): Verification inconclusive (Impl$$ByteSystem.__default.InitImpliesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(64,8): Verification inconclusive (Impl$$ByteSystem.__default.ReqReadStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(158,8): Verification inconclusive (Impl$$ByteSystem.__default.ReqWriteStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(343,8): Verification inconclusive (Impl$$ByteSystem.__default.ReqWrite2StepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(452,8): Verification inconclusive (CheckWellformed$$ByteSystem.__default.RespReadStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(452,8): Verification inconclusive (Impl$$ByteSystem.__default.RespReadStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(484,8): Verification inconclusive (CheckWellformed$$ByteSystem.__default.RespWriteStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(484,8): Verification inconclusive (Impl$$ByteSystem.__default.RespWriteStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(516,8): Verification inconclusive (CheckWellformed$$ByteSystem.__default.NoDiskOpStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(516,8): Verification inconclusive (Impl$$ByteSystem.__default.NoDiskOpStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(549,8): Verification inconclusive (CheckWellformed$$ByteSystem.__default.MachineStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(549,8): Verification inconclusive (Impl$$ByteSystem.__default.MachineStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(565,8): Verification inconclusive (CheckWellformed$$ByteSystem.__default.ProcessReadFailurePreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(565,8): Verification inconclusive (Impl$$ByteSystem.__default.ProcessReadFailurePreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(592,8): Verification inconclusive (CheckWellformed$$ByteSystem.__default.ProcessWritePreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(592,8): Verification inconclusive (Impl$$ByteSystem.__default.ProcessWritePreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(629,8): Verification inconclusive (CheckWellformed$$ByteSystem.__default.DiskInternalStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(629,8): Verification inconclusive (Impl$$ByteSystem.__default.DiskInternalStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(643,8): Verification inconclusive (CheckWellformed$$ByteSystem.__default.CrashStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(643,8): Verification inconclusive (Impl$$ByteSystem.__default.CrashStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(668,8): Verification inconclusive (CheckWellformed$$ByteSystem.__default.NextStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/ByteSystem.i.dfy(668,8): Verification inconclusive (Impl$$ByteSystem.__default.NextStepPreservesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/ByteBlockCacheSystem/AsyncDiskModel.s.dfy[ByteSystem](337,8): Verification inconclusive (Impl$$ByteSystem.__default.NextPreservesInv)
+	
+	Dafny program verifier finished with 6 verified, 0 errors, 23 inconclusives
+	Command exited with non-zero status 4
+	1079.17user 4.42system 13:43.33elapsed 131%CPU (0avgtext+0avgdata 1836836maxresident)k
+	0inputs+0outputs (0major+1336294minor)pagefaults 0swaps
+
+./Betree/BetreeInv.i.dfy
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/../lib/Base/sequences.i.dfy(587,18): Warning: /!\ No terms found to trigger on.
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/BetreeInv.i.dfy(346,8): Verification out of resource (Impl$$BetreeInv.__default.RedirectOnlyPredOfChildIsParent)
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/BetreeInv.i.dfy(376,8): Verification inconclusive (Impl$$BetreeInv.__default.RedirectPreservesAcyclic)
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/BetreeInv.i.dfy(439,8): Verification inconclusive (Impl$$BetreeInv.__default.RedirectPreservesRootHasNoPred)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/BetreeInv.i.dfy(562,8): Verification out of resource (Impl$$BetreeInv.__default.FlushPreservesLookups)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/BetreeInv.i.dfy(654,8): Verification out of resource (Impl$$BetreeInv.__default.RedirectPreservesLookups)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/BetreeInv.i.dfy(737,8): Verification inconclusive (Impl$$BetreeInv.__default.InitImpliesInv)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/BetreeInv.i.dfy(757,8): Verification inconclusive (Impl$$BetreeInv.__default.QueryStepPreservesInvariant)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/BetreeInv.i.dfy(764,8): Verification inconclusive (Impl$$BetreeInv.__default.InsertMessagePreservesAcyclicAndReachablePointersValid)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/BetreeInv.i.dfy(774,8): Verification inconclusive (CheckWellformed$$BetreeInv.__default.InsertMessagePreservesLookupsPut)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/BetreeInv.i.dfy(774,8): Verification inconclusive (Impl$$BetreeInv.__default.InsertMessagePreservesLookupsPut)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/BetreeInv.i.dfy(822,8): Verification inconclusive (Impl$$BetreeInv.__default.InsertMessagePreservesNonrootLookups)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/BetreeInv.i.dfy(837,8): Verification inconclusive (Impl$$BetreeInv.__default.InsertMessageStepPreservesInvariant)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/BetreeInv.i.dfy(850,8): Verification inconclusive (Impl$$BetreeInv.__default.FlushStepPreservesInvariant)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/BetreeInv.i.dfy(859,8): Verification inconclusive (Impl$$BetreeInv.__default.GrowStepPreservesInvariant)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/BetreeInv.i.dfy(869,8): Verification inconclusive (Impl$$BetreeInv.__default.RedirectStepPreservesInvariant)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/BetreeInv.i.dfy(921,8): Verification inconclusive (Impl$$BetreeInv.__default.GCStepPreservesAcyclicity)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/BetreeInv.i.dfy(957,8): Verification inconclusive (Impl$$BetreeInv.__default.BetreeStepPreservesInvariant)
+	/root/verichecks-worker/worker-dir/clones/6cccdaa8e68915114c050e99def12e96811c87c7/Betree/BetreeInv.i.dfy(972,8): Verification inconclusive (Impl$$BetreeInv.__default.NextStepPreservesInvariant)
+	
+	Dafny program verifier finished with 49 verified, 0 errors, 15 inconclusives, 3 out of resource
+	Command exited with non-zero status 4
+	199.59user 1.97system 1:01.88elapsed 325%CPU (0avgtext+0avgdata 607220maxresident)k
+	0inputs+0outputs (0major+387244minor)pagefaults 0swaps
+
