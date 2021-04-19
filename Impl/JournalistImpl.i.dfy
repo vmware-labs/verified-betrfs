@@ -408,7 +408,7 @@ module JournalistImpl {
         var idx := basic_mod(
             self.start + self.len1 + self.len2,
             |self.journalEntries| as uint64);
-        inout self.journalEntries := self.journalEntries[idx as int := je];
+        inout self.journalEntries := self.journalEntries[idx := je];
       } else {
         var newLen: uint64 := |self.journalEntries| as uint64 * 2;
         inout self.journalEntries := self.reallocJournalEntries(je, newLen);

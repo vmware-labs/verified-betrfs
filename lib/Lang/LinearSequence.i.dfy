@@ -11,10 +11,10 @@ module LinearSequence_i {
   export
     provides LinearSequence_s
     provides NativeTypes
-    provides seq_alloc_init, lseqs, imagine_lseq, lseq_peek, lseq_free_fun, lseq_take_fun, lseq_swap_inout, lseq_take_inout, lseq_give_inout
+    provides seq_alloc_init, mut_seq_set, lseqs, imagine_lseq, lseq_peek, lseq_free_fun, lseq_take_fun, lseq_swap_inout, lseq_take_inout, lseq_give_inout
     provides lseq_alloc, lseq_free, lseq_swap, lseq_take, lseq_give, lseq_length_uint64, lseq_length_as_uint64, lseq_add
     provides AllocAndCopy, AllocAndMoveLseq, ImagineInverse, SeqResize, SeqResizeMut, InsertSeq, InsertLSeq, Replace1With2Lseq, Replace1With2Lseq_inout
-    reveals lseq_length, lseq_full, linLast, ldroplast, lseq_has_all
+    reveals lseq_length, lseq_full, linLast, ldroplast, lseq_has_all 
     reveals operator'cardinality?lseq, operator'in?lseq, operator'subscript?lseq
 
   function method seq_alloc_init<A>(length:uint64, a:A) : (linear s:seq<A>)
@@ -308,10 +308,9 @@ module LinearSequence_i {
     }
   }
 
-  method {:extern "LinearExtern", "TrustedRuntimeSeqResizeMut"} TrustedRuntimeSeqResizeMut<A>(linear inout s: seq<A>, newlen: uint64)
-    ensures |s| == newlen as nat
-    ensures forall j :: 0 <= j < newlen as nat && j < |old_s| ==> s[j] == old_s[j]
-
+  // method {:extern "LinearExtern", "TrustedRuntimeSeqResizeMut"} TrustedRuntimeSeqResizeMut<A>(linear inout s: seq<A>, newlen: uint64)
+  //   ensures |s| == newlen as nat
+  //   ensures forall j :: 0 <= j < newlen as nat && j < |old_s| ==> s[j] == old_s[j]
 
   method SeqResizeMut<A>(linear inout s: seq<A>, newlen: uint64, a: A)
     ensures |s| == newlen as nat
@@ -319,7 +318,9 @@ module LinearSequence_i {
   {
     shared_seq_length_bound(s);
     var i:uint64 := seq_length(s);
-    TrustedRuntimeSeqResizeMut(inout s, newlen);
+    // TrustedRuntimeSeqResizeMut(inout s, newlen);
+    s := TrustedRuntimeSeqResize(s, newlen);
+
     while (i < newlen)
       invariant |s| == newlen as nat
       invariant |old_s| <= |s| ==> |old_s| <= i as nat <= |s|
@@ -407,5 +408,15 @@ module LinearSequence_i {
     replaced := lseq_swap_inout(inout s, pos, l);
     s := InsertLSeq(s, r, pos+1);
   }
+
+  method mut_seq_set<A>(linear inout s:seq<A>, i:uint64, a:A)
+  requires i as nat < |old_s|
+  ensures s == old_s[i as nat := a]
+  {
+    s := seq_set(s, i, a);
+  }
+
+  //     requires i as nat < |old_s|
+  //     ensures s == old_s[i as nat := a]
 
 } // module LinearSequence_i
