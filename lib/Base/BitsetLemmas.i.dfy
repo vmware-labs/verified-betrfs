@@ -12,7 +12,7 @@ module BitsetLemmas {
   import MathAxioms
   // These first two are slow, but they work:
 
-  lemma bit_ne_expanded(i: uint64, j: uint64)
+  lemma {:timeLimitMultiplier 25} bit_ne_expanded(i: uint64, j: uint64)
   requires i < 64
   requires j < 64
   requires i != j
@@ -20,7 +20,7 @@ module BitsetLemmas {
   {
   }
 
-  lemma {:timeLimitMultiplier 6} bit_comp_ne_expanded(i: uint64, j: uint64)
+  lemma {:timeLimitMultiplier 15} bit_comp_ne_expanded(i: uint64, j: uint64)
   requires i < 64
   requires j < 64
   requires i != j
