@@ -32,7 +32,8 @@ module MapIfc refines InputOutputIfc {
 
 module AsyncIfc {
   import Ifc = MapIfc
-  type {:extern} RequestId(==,!new)
+  //type {:extern} RequestId(==,!new)
+  type RequestId = int
 
   datatype Op =
     | Start(rid: RequestId, input: Ifc.Input)
