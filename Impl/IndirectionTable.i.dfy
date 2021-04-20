@@ -7,7 +7,6 @@ include "../lib/Base/sequences.i.dfy"
 include "../lib/Base/Option.s.dfy"
 include "../lib/Base/LinearOption.i.dfy"
 include "../lib/Lang/NativeTypes.s.dfy"
-// TODO this seems to prevent z3 from timing out somehow: include "../lib/Math/div.i.dfy"
 include "../lib/Lang/LinearMaybe.s.dfy"
 include "../lib/Lang/LinearBox.i.dfy"
 include "../lib/DataStructures/LinearMutableMap.i.dfy"
@@ -29,7 +28,6 @@ module IndirectionTable {
   import opened Options
   import opened LinearOption
   import opened LinearBox
-  // TODO see include ^: import Math__div_i
   import opened Sequences
   import opened NativeTypes
   import ReferenceType`Internal
@@ -243,8 +241,6 @@ module IndirectionTable {
         reveal_PredCounts();
       }
     }
-
-    // TODO useful? var res := IndirectionTableModel.FromHashMap(me.t, MapOption(me.garbageQueue.Option(), x => USeq.I(x)), me.refUpperBound, me.findLoclessIterator);
 
     linear method Free()
     {
@@ -1596,11 +1592,6 @@ module IndirectionTable {
       SectorType.IndirectionTable(MapLocs(m), MapGraph(m)) // TODO: yizhou7
     }
 
-    // TODO remove static function IHashMapAsIndirectionTable(m: HashMap) : SectorType.IndirectionTable
-    // TODO remove {
-    // TODO remove   SectorType.IndirectionTable(Locs(m), Graph(m))
-    // TODO remove }
-
     static function method IndirectionTableGrammar() : G
     ensures ValidGrammar(IndirectionTableGrammar())
     {
@@ -1622,13 +1613,9 @@ module IndirectionTable {
     ensures ValInGrammar(v, IndirectionTableGrammar())
     ensures ValidVal(v)
     ensures Marshalling.valToIndirectionTable(v).Some?
-    // ensures Marshalling.valToIndirectionTable(v).value.locs == this.I().locs
-    // ensures Marshalling.valToIndirectionTable(v).value.graph == this.I().graph
     ensures Marshalling.valToIndirectionTable(v).value == this.I()
     ensures SizeOfV(v) <= MaxIndirectionTableByteSize()
     ensures SizeOfV(v) == size as int
-    // /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v).Some?
-    // /* TODO(andrea) ModelImpl */ ensures valToIndirectionTable(v) == Some(this)
     {
       reveal Inv();
       assert this.t.count <= MaxSizeUint64();
@@ -1848,6 +1835,8 @@ module IndirectionTable {
 
       success := true;
 
+      assert forall i: nat :: IsLocAllocIndirectionTablePartial(i, it.s) <==> IsLocAllocBitmap(bm.I(), i);
+
       while it.next.Next?
       invariant this.t.Inv()
       invariant BC.WFCompleteIndirectionTable(this.I())
@@ -1922,7 +1911,7 @@ module IndirectionTable {
       }
 
       if success {
-        assume BC.AllLocationsForDifferentRefsDontOverlap(I());
+        assert BC.AllLocationsForDifferentRefsDontOverlap(I());
       }
     }
     // 
