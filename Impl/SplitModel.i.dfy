@@ -22,6 +22,7 @@ module SplitModel {
   import opened PivotBetreeSpec`Internal
   import opened BoundedPivotsLib
   import opened TranslationLib
+  import opened TranslationImpl
   import PBSWF = PivotBetreeSpecWFNodes
 
   import opened NativeTypes
@@ -206,28 +207,34 @@ module SplitModel {
       ) then (
         s
       ) else (
-        lemmaChildrenConditionsOfNode(s, parentref);
-        lemmaChildrenConditionsOfNode(s, childref);
+        var lcp := PivotLcp(fused_parent.pivotTable[slot], fused_parent.pivotTable[slot+1]);
+        var prefix := fused_parent.edgeTable[slot];
+        if ( prefix.None? || (prefix.Some? && TranslateBucketsWillFit(fused_child.buckets, prefix.value, lcp))) then (
+          lemmaChildrenConditionsOfNode(s, parentref);
+          lemmaChildrenConditionsOfNode(s, childref);
 
-        var child := RestrictAndTranslateChild(fused_parent, fused_child, slot);
-        if (|child.pivotTable| == 2) then (
-          // TODO there should be an operation which just
-          // cuts off the node and doesn't split it.
-          s
-        ) else (
-          lemmaChildrenConditionsRestrictAndTranslateChild(s, fused_parent, fused_child, slot);
-          var left_childref := getFreeRef(s, refUpperBound);
-          if left_childref.None? then (
+          var child := RestrictAndTranslateChild(fused_parent, fused_child, slot);
+          if (|child.pivotTable| == 2) then (
+            // TODO there should be an operation which just
+            // cuts off the node and doesn't split it.
             s
           ) else (
-            var right_childref := getFreeRef2(s, left_childref.value, refUpperBound);
-            if right_childref.None? then (
+            lemmaChildrenConditionsRestrictAndTranslateChild(s, fused_parent, fused_child, slot);
+            var left_childref := getFreeRef(s, refUpperBound);
+            if left_childref.None? then (
               s
             ) else (
-              splitDoChanges(s, child, left_childref.value, right_childref.value,
-                parentref, fused_parent.children.value, slot)
+              var right_childref := getFreeRef2(s, left_childref.value, refUpperBound);
+              if right_childref.None? then (
+                s
+              ) else (
+                splitDoChanges(s, child, left_childref.value, right_childref.value,
+                  parentref, fused_parent.children.value, slot)
+              )
             )
           )
+        ) else (
+          s
         )
       )
     )
@@ -257,6 +264,13 @@ module SplitModel {
     var fused_child := s.cache[childref];
 
     if !( ParentKeysInChildRange(fused_parent.pivotTable, fused_parent.edgeTable, fused_child.pivotTable, slot)) {
+      assert noop(s, s);
+      return;
+    }
+
+    var lcp := PivotLcp(fused_parent.pivotTable[slot], fused_parent.pivotTable[slot+1]);
+    var prefix := fused_parent.edgeTable[slot];
+    if !(prefix.None? || (prefix.Some? && TranslateBucketsWillFit(fused_child.buckets, prefix.value, lcp))) {
       assert noop(s, s);
       return;
     }

@@ -356,6 +356,7 @@ module NodeImpl {
     requires child.Inv()
     requires BT.WFNode(parent.I())
     requires BT.WFNode(child.I())
+    requires forall i | 0 <= i < |lseqs(child.buckets)| :: WillFitInPkv(lseqs(child.buckets)[i], childprefix, parentprefix)
     requires 0 <= slot as int < Pivots.NumBuckets(parent.pivotTable)
     requires Translations.ParentKeysInChildRange(parent.pivotTable, parent.edgeTable, child.pivotTable, slot as int)
     requires parent.edgeTable[slot].Some?
@@ -383,14 +384,20 @@ module NodeImpl {
         linear var leftbucket := lseq_peek(child.buckets, cLeft).SplitLeft(ubound.e);
         linear var bucket := leftbucket.SplitRight(lbound);
 
+        SplitLeftWillFitInPkv(lseqs(child.buckets)[cLeft], leftbucket, childprefix, parentprefix, ubound.e);
+        SplitRightWillFitInPkv(leftbucket, bucket, childprefix, parentprefix, lbound);
+
         assert |node.buckets| == 1;
         assert node.buckets[0] == bucket.I();
- 
+
         buckets := ComputeTranslateSingleBucketList(bucket, childprefix, parentprefix);
         var _ := FreeMutBucket(leftbucket);
       } else {
         linear var upperbucket := lseq_peek(child.buckets, cLeft).SplitLeft(ubound.e); 
         linear var lowerbucket := lseq_peek(child.buckets, cRight).SplitRight(lbound);
+
+        SplitLeftWillFitInPkv(lseqs(child.buckets)[cLeft], upperbucket, childprefix, parentprefix, ubound.e);
+        SplitRightWillFitInPkv(lseqs(child.buckets)[cRight], lowerbucket, childprefix, parentprefix, lbound);
 
         assert 0 <= cRight+1 <= cLeft;
         assert node1.buckets == child.I().buckets[..cLeft] + [upperbucket.I()];
@@ -417,6 +424,11 @@ module NodeImpl {
     requires BT.WFNode(child.I())
     requires 0 <= slot as int < Pivots.NumBuckets(parent.pivotTable)
     requires Translations.ParentKeysInChildRange(parent.pivotTable, parent.edgeTable, child.pivotTable, slot as int)
+    requires parent.edgeTable[slot].Some? ==> (
+      var lcp := Translations.PivotLcp(parent.pivotTable[slot], parent.pivotTable[slot+1]);
+      var prefix := parent.edgeTable[slot].value;
+      && (forall i | 0 <= i < |lseqs(child.buckets)| :: WillFitInPkv(lseqs(child.buckets)[i], prefix, lcp))
+    )
     ensures newchild.Inv()
     ensures newchild.I() == BT.RestrictAndTranslateChild(parent.I(), child.I(), slot as int)
     {
@@ -443,6 +455,7 @@ module NodeImpl {
           var newedges := ComputeTranslateEdges(rightEdges, rightPivots);
 
           linear var splitBucket := lseq_peek(child.buckets, cRight).SplitRight(lbound);
+          SplitRightWillFitInPkv(lseqs(child.buckets)[cRight], splitBucket, childprefix, parentprefix, lbound);
           linear var translatedbuckets := ComputeTranslateCutOffKeepRightBuckets(child.buckets, splitBucket, childprefix, parentprefix, cRight);
           BT.reveal_CutoffNode();
 

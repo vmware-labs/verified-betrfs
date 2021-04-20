@@ -840,9 +840,8 @@ module TranslationLib {
         && var key : Key := bucket.keys[tbucket.idxs[i]];
         && IsPrefix(prefix, key)
         && tkey == ApplyPrefixSet(Some(PrefixSet(prefix, tPrefix)), key)
-        // && IsPrefix(tPrefix, tkey)
-        // && bkey == prefix + tkey[|tPrefix|..]
         && bucket.msgs[tbucket.idxs[i]] == tbucket.b.msgs[i])
+    && (forall i, j | 0 <= i < j < |tbucket.idxs| :: tbucket.idxs[i] < tbucket.idxs[j])
     && (forall i | idx <= i < |bucket.keys| && i !in tbucket.idxs :: !IsPrefix(prefix, bucket.keys[i]))
   }
 

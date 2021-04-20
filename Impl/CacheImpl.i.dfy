@@ -34,6 +34,7 @@ module CacheImpl {
   import BT = PivotBetreeSpec`Internal
   import Pivots = BoundedPivotsLib
   import opened TranslationLib
+  import opened TranslationImpl
   import BucketsLib
 
   import opened BGI = BucketGeneratorImpl
@@ -429,6 +430,18 @@ module CacheImpl {
     //     b := node.BoundedBucket(pivotsnode.pivotTable, slot);
     //   }
     // }
+    // cache.contents[ref]
+
+    shared method NodeBucketsWillFitInPkv(ref: BT.G.Reference, prefix: Key, newPrefix: Key) returns (b: bool)
+    requires Inv()
+    requires ref in I()
+    ensures b == TranslateBucketsWillFit(I()[ref].buckets, prefix, newPrefix)
+    ensures b ==> (forall i | 0 <= i < |I()[ref].buckets| :: 
+      WillFitInPkv(lseqs(cache.contents[ref].buckets)[i], prefix, newPrefix))
+    {
+      shared var node := Get(ref);
+      b := ComputeTranslateBucketsWillFit(node.buckets, prefix, newPrefix);
+    }
 
     shared method NodeRestrictAndTranslateChild(parentref: BT.G.Reference, childref: BT.G.Reference, slot: uint64)
     returns (linear newchild: Node)
@@ -439,6 +452,12 @@ module CacheImpl {
     requires BT.WFNode(I()[childref])
     requires slot as nat < |I()[parentref].buckets|
     requires ParentKeysInChildRange(I()[parentref].pivotTable, I()[parentref].edgeTable, I()[childref].pivotTable, slot as int)
+    requires I()[parentref].edgeTable[slot].Some? ==> (
+      var lcp := PivotLcp(I()[parentref].pivotTable[slot], I()[parentref].pivotTable[slot+1]);
+      var prefix := I()[parentref].edgeTable[slot].value;
+      var buckets := lseqs(cache.contents[childref].buckets);
+      && (forall i | 0 <= i < |buckets| :: WillFitInPkv(buckets[i], prefix, lcp))
+    )
     ensures newchild.Inv()
     ensures newchild.I() == BT.RestrictAndTranslateChild(I()[parentref], I()[childref], slot as int)
     {
