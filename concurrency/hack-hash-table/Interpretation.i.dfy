@@ -225,6 +225,7 @@ module Interpretation {
   import opened ResourceStateMachine
   import opened Options
   import opened KeyValueType
+  import opened Maps
   import S = SummaryMonoid
   import MultisetLemmas
   import Multisets
@@ -759,6 +760,29 @@ module Interpretation {
     assume false;
   }
 
+  lemma preserves_1_left(table: seq<Option<HT.Info>>,
+      table': seq<Option<HT.Info>>,
+      i: int,
+      f: int,
+      x: S.Summary)
+  requires Complete(table)
+  requires Complete(table')
+  requires InvTable(table)
+  requires InvTable(table')
+  requires TableQuantity(table) < |table|
+  requires TableQuantity(table') < |table'|
+  requires forall j | 0 <= j < |table| && i != j :: table'[j] == table[j]
+  requires 0 <= i < |table|
+  requires S.add(x, S.f(table[i])) == S.f(table'[i])
+  requires is_good_root(table, f);
+  requires is_good_root(table', f);
+  requires forall k | 0 <= k < HT.FixedSize() && adjust(k, f+1) < adjust(i, f+1)
+      :: S.commutes(x, S.f(table[k]))
+  ensures S.add(x, interp(table)) == interp(table')
+  {
+    assume false;
+  }
+
   lemma preserves_2(table: seq<Option<HT.Info>>,
       table': seq<Option<HT.Info>>,
       i: int,
@@ -1282,4 +1306,218 @@ module Interpretation {
     }
   }
 
+  lemma ProcessInsertTicket_ChangesInterp(s: Variables, s': Variables, ticket: HT.Ticket)
+  requires Inv(s)
+  requires HT.ProcessInsertTicket(s, s', ticket)
+  ensures Inv(s')
+  ensures map_remove_nones(interp(s'.table).ops)
+       == map_remove_nones(interp(s.table).ops)[ticket.input.key := ticket.input.value]
+  ensures interp(s'.table).stubs == interp(s.table).stubs
+      + multiset{HT.Stub(ticket.rid, MapIfc.InsertOutput(true))}
+  ensures interp(s'.table).queries == interp(s.table).queries
+  ensures interp(s'.table).removes == interp(s.table).removes
+  {
+    ProcessInsertTicket_PreservesInv(s, s', ticket);
+    var e := get_empty_cell(s.table);
+    S.reveal_app_queries();
+    UsefulTriggers();
+
+    var x := S.Summary(map[ticket.input.key := Some(ticket.input.value)],
+        multiset{HT.Stub(ticket.rid, MapIfc.InsertOutput(true))},
+        multiset{}, multiset{});
+
+    var pos := HT.hash(ticket.input.key) as int;
+
+    /*var a := S.add(x, S.f(s.table[pos]));
+    var b := S.f(s'.table[pos]);
+    assert a.ops == b.ops;
+    assert a.stubs == b.stubs;
+    assert a.queries == b.queries;
+    assert a.removes == b.removes;*/
+
+    forall k | 0 <= k < HT.FixedSize() && adjust(k, e+1) < adjust(pos, e+1)
+    ensures S.commutes(x, S.f(s.table[k]))
+    {
+      assert ValidHashInSlot(s.table, e, k);
+      assert ValidHashOrdering(s.table, e, k, pos);
+      assert ValidHashInSlot(s.table, pos, k);
+      assert ValidHashInSlot(s.table, k, pos);
+      assert ActionNotPastKey(s.table, e, k, pos);
+      assert ActionNotPastKey(s.table, e, pos, k);
+    }
+
+    preserves_1_left(s.table, s'.table, pos, e, x);
+  }
+
+  lemma ProcessQueryTicket_ChangesInterp(s: Variables, s': Variables, ticket: HT.Ticket)
+  requires Inv(s)
+  requires HT.ProcessQueryTicket(s, s', ticket)
+  ensures Inv(s')
+  ensures interp(s'.table).ops == interp(s.table).ops
+  ensures interp(s'.table).stubs == interp(s.table).stubs
+  //ensures interp(s'.table).queries
+  //     == interp(s.table).queries + multiset{S.QueryUnknown(ticket.rid, ticket.input.key)}
+  ensures ticket.input.key !in map_remove_nones(interp(s.table).ops) ==>
+        apply_to_query_stub(interp(s'.table).queries)
+         == apply_to_query_stub(interp(s.table).queries)
+          + multiset{HT.Stub(ticket.rid, MapIfc.QueryOutput(NotFound))}
+  ensures ticket.input.key in map_remove_nones(interp(s.table).ops) ==>
+        apply_to_query_stub(interp(s'.table).queries)
+         == apply_to_query_stub(interp(s.table).queries)
+          + multiset{HT.Stub(ticket.rid, MapIfc.QueryOutput(Found(
+              map_remove_nones(interp(s.table).ops)[ticket.input.key]
+          )))}
+  ensures interp(s'.table).removes == interp(s.table).removes
+  {
+    ProcessQueryTicket_PreservesInv(s, s', ticket);
+    var e := get_empty_cell(s.table);
+    S.reveal_app_queries();
+    UsefulTriggers();
+
+    var x := S.Summary(map[],
+        multiset{},
+        multiset{S.QueryUnknown(ticket.rid, ticket.input.key)},
+        multiset{});
+
+    var pos := HT.hash(ticket.input.key) as int;
+
+    forall k | 0 <= k < HT.FixedSize() && adjust(k, e+1) < adjust(pos, e+1)
+    ensures S.commutes(x, S.f(s.table[k]))
+    {
+      assert ValidHashInSlot(s.table, e, k);
+      assert ValidHashOrdering(s.table, e, k, pos);
+      assert ValidHashInSlot(s.table, pos, k);
+      assert ValidHashInSlot(s.table, k, pos);
+      assert ActionNotPastKey(s.table, e, k, pos);
+      assert ActionNotPastKey(s.table, e, pos, k);
+    }
+
+    preserves_1_left(s.table, s'.table, pos, e, x);
+
+    if ticket.input.key !in map_remove_nones(interp(s.table).ops) {
+      calc {
+        apply_to_query_stub(interp(s'.table).queries);
+        apply_to_query_stub(S.add(x, interp(s.table)).queries);
+        apply_to_query_stub(S.app_queries(x.queries, interp(s.table).ops) + interp(s.table).queries);
+        {
+          Multisets.ApplyAdditive(to_query_stub,
+            S.app_queries(x.queries, interp(s.table).ops), interp(s.table).queries);
+        }
+        apply_to_query_stub(S.app_queries(x.queries, interp(s.table).ops))
+          + apply_to_query_stub(interp(s.table).queries);
+        {
+          //assert to_query_stub(S.app_query(S.QueryUnknown(ticket.rid, ticket.input.key),
+          //    interp(s.table).ops))
+          //  == HT.Stub(ticket.rid, MapIfc.QueryOutput(NotFound));
+          //assert S.app_queries(x.queries, interp(s.table).ops)
+          //    == multiset{S.app_query(S.QueryUnknown(ticket.rid, ticket.input.key),
+          //    interp(s.table).ops)};
+          Multisets.ApplySingleton(to_query_stub, S.app_query(S.QueryUnknown(ticket.rid, ticket.input.key), interp(s.table).ops));
+          //assert apply_to_query_stub(S.app_queries(x.queries, interp(s.table).ops))
+          //    == apply_to_query_stub(multiset{S.app_query(S.QueryUnknown(ticket.rid, ticket.input.key), interp(s.table).ops)})
+          //    == multiset{HT.Stub(ticket.rid, MapIfc.QueryOutput(NotFound))};
+        }
+        apply_to_query_stub(interp(s.table).queries)
+          + multiset{HT.Stub(ticket.rid, MapIfc.QueryOutput(NotFound))};
+      }
+    } else {
+      calc {
+        apply_to_query_stub(interp(s'.table).queries);
+        apply_to_query_stub(S.add(x, interp(s.table)).queries);
+        apply_to_query_stub(S.app_queries(x.queries, interp(s.table).ops) + interp(s.table).queries);
+        {
+          Multisets.ApplyAdditive(to_query_stub,
+            S.app_queries(x.queries, interp(s.table).ops), interp(s.table).queries);
+        }
+        apply_to_query_stub(S.app_queries(x.queries, interp(s.table).ops))
+          + apply_to_query_stub(interp(s.table).queries);
+        {
+          Multisets.ApplySingleton(to_query_stub, S.app_query(S.QueryUnknown(ticket.rid, ticket.input.key), interp(s.table).ops));
+        }
+        apply_to_query_stub(interp(s.table).queries)
+          + multiset{HT.Stub(ticket.rid, MapIfc.QueryOutput(Found(
+              map_remove_nones(interp(s.table).ops)[ticket.input.key]
+          )))};
+      }
+    }
+  }
+
+  lemma ProcessRemoveTicket_ChangesInterp(s: Variables, s': Variables, ticket: HT.Ticket)
+  requires Inv(s)
+  requires HT.ProcessRemoveTicket(s, s', ticket)
+  ensures Inv(s')
+  ensures map_remove_nones(interp(s'.table).ops)
+       == MapRemove1(map_remove_nones(interp(s.table).ops), ticket.input.key)
+  ensures interp(s'.table).stubs == interp(s.table).stubs
+  ensures interp(s'.table).queries == interp(s.table).queries
+  ensures ticket.input.key !in map_remove_nones(interp(s.table).ops) ==>
+        apply_to_remove_stub(interp(s'.table).removes)
+         == apply_to_remove_stub(interp(s.table).removes)
+          + multiset{HT.Stub(ticket.rid, MapIfc.RemoveOutput(false))}
+  ensures ticket.input.key in map_remove_nones(interp(s.table).ops) ==>
+        apply_to_remove_stub(interp(s'.table).removes)
+         == apply_to_remove_stub(interp(s.table).removes)
+          + multiset{HT.Stub(ticket.rid, MapIfc.RemoveOutput(true))}
+  {
+    ProcessRemoveTicket_PreservesInv(s, s', ticket);
+    var e := get_empty_cell(s.table);
+    S.reveal_app_queries();
+    UsefulTriggers();
+
+    var x := S.Summary(map[ticket.input.key := None],
+        multiset{},
+        multiset{},
+        multiset{S.QueryUnknown(ticket.rid, ticket.input.key)});
+
+    var pos := HT.hash(ticket.input.key) as int;
+
+    forall k | 0 <= k < HT.FixedSize() && adjust(k, e+1) < adjust(pos, e+1)
+    ensures S.commutes(x, S.f(s.table[k]))
+    {
+      assert ValidHashInSlot(s.table, e, k);
+      assert ValidHashOrdering(s.table, e, k, pos);
+      assert ValidHashInSlot(s.table, pos, k);
+      assert ValidHashInSlot(s.table, k, pos);
+      assert ActionNotPastKey(s.table, e, k, pos);
+      assert ActionNotPastKey(s.table, e, pos, k);
+    }
+
+    preserves_1_left(s.table, s'.table, pos, e, x);
+
+    if ticket.input.key !in map_remove_nones(interp(s.table).ops) {
+      calc {
+        apply_to_remove_stub(interp(s'.table).removes);
+        apply_to_remove_stub(S.add(x, interp(s.table)).removes);
+        apply_to_remove_stub(S.app_queries(x.removes, interp(s.table).ops) + interp(s.table).removes);
+        {
+          Multisets.ApplyAdditive(to_remove_stub,
+            S.app_queries(x.removes, interp(s.table).ops), interp(s.table).removes);
+        }
+        apply_to_remove_stub(S.app_queries(x.removes, interp(s.table).ops))
+          + apply_to_remove_stub(interp(s.table).removes);
+        {
+          Multisets.ApplySingleton(to_remove_stub, S.app_query(S.QueryUnknown(ticket.rid, ticket.input.key), interp(s.table).ops));
+        }
+        apply_to_remove_stub(interp(s.table).removes)
+          + multiset{HT.Stub(ticket.rid, MapIfc.RemoveOutput(false))};
+      }
+    } else {
+      calc {
+        apply_to_remove_stub(interp(s'.table).removes);
+        apply_to_remove_stub(S.add(x, interp(s.table)).removes);
+        apply_to_remove_stub(S.app_queries(x.removes, interp(s.table).ops) + interp(s.table).removes);
+        {
+          Multisets.ApplyAdditive(to_remove_stub,
+            S.app_queries(x.removes, interp(s.table).ops), interp(s.table).removes);
+        }
+        apply_to_remove_stub(S.app_queries(x.removes, interp(s.table).ops))
+          + apply_to_remove_stub(interp(s.table).removes);
+        {
+          Multisets.ApplySingleton(to_remove_stub, S.app_query(S.QueryUnknown(ticket.rid, ticket.input.key), interp(s.table).ops));
+        }
+        apply_to_remove_stub(interp(s.table).removes)
+          + multiset{HT.Stub(ticket.rid, MapIfc.RemoveOutput(true))};
+      }
+    }
+  }
 }
