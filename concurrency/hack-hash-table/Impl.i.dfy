@@ -14,7 +14,7 @@ module Impl refines Main {
 
   linear datatype Row = Row(
     entry: HTResource.Entry,
-    linear resource: HTResource.R)
+    glinear resource: HTResource.R)
 
   type RowMutex = Mutex<Row>
   type RowMutexTable = seq<RowMutex>
@@ -47,13 +47,13 @@ module Impl refines Main {
     Splitted(r', ri)
   }
 
-  method init(linear in_r: ARS.R)
-  returns (v: Variables, linear out_r: ARS.R)
+  method init(glinear in_r: ARS.R)
+  returns (v: Variables, glinear out_r: ARS.R)
   // requires ARS.Init(i)
   ensures Inv(v)
   ensures out_r == unit()
   {
-    linear var remaining_r := in_r;
+    glinear var remaining_r := in_r;
     var rowMutexes : RowMutexTable:= [];
     var i:uint32 := 0;
     while i < FixedSizeImpl()
@@ -67,7 +67,7 @@ module Impl refines Main {
       invariant remaining_r.insert_capacity == Capacity()
     {
       ghost var splitted := Split(remaining_r, i as int);
-      linear var ri;
+      glinear var ri;
       remaining_r, ri := ARS.split(remaining_r, splitted.r', splitted.ri);
       var m := new_mutex<Row>(Row(Empty, ri), (row) => RowInv(i as nat, row));
       rowMutexes := rowMutexes + [m];
@@ -106,8 +106,8 @@ module Impl refines Main {
       else (dst as int - src as int)
   }
 
-  method doQuery(v: Variables, input: Ifc.Input, rid: int,  /*ghost*/ linear in_r: ARS.R)
-  returns (output: Ifc.Output, linear out_r: ARS.R)
+  method doQuery(v: Variables, input: Ifc.Input, rid: int, glinear in_r: ARS.R)
+  returns (output: Ifc.Output, glinear out_r: ARS.R)
     decreases *
     requires Inv(v)
     requires input.QueryInput?
@@ -123,7 +123,7 @@ module Impl refines Main {
     linear var row; glinear var handle;
     row, handle := rm[slot_idx].acquire();
     linear var Row(entry, row_r) := row;
-    linear var r := ARS.join(in_r, row_r);
+    glinear var r := ARS.join(in_r, row_r);
 
     ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Querying(rid, key)), 0);
     assert ProcessQueryTicket(r, r', query_ticket);
@@ -181,7 +181,7 @@ module Impl refines Main {
       r' := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Querying(rid, key)), 0);
       r := easy_transform_step(r, r', step);
 
-      linear var rmutex;
+      glinear var rmutex;
       ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Querying(rid, key)), 0);
       ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free), 0);
       r, rmutex := ARS.split(r, left, right);
@@ -196,7 +196,7 @@ module Impl refines Main {
     r' := R(oneRowTable(slot_idx as nat, Info(entry, Free)), 0, multiset{}, multiset{Stub(rid, output)}); 
     r := easy_transform_step(r, r', step);
 
-    linear var rmutex;
+    glinear var rmutex;
     r, rmutex := ARS.split(r, 
       ARS.output_stub(rid, output), 
       oneRowResource(slot_idx as nat, Info(entry, Free), 0));
@@ -238,8 +238,8 @@ module Impl refines Main {
     }
   }
 
-  method doInsert(v: Variables, input: Ifc.Input, rid: int, /*ghost*/ linear in_r: ARS.R, thread_id: uint32)
-  returns (output: Ifc.Output, linear out_r: ARS.R)
+  method doInsert(v: Variables, input: Ifc.Input, rid: int, glinear in_r: ARS.R, thread_id: uint32)
+  returns (output: Ifc.Output, glinear out_r: ARS.R)
     requires Inv(v)
     requires input.InsertInput?
     requires isInputResource(in_r, rid, input)
@@ -262,7 +262,7 @@ module Impl refines Main {
     cap, cap_handle, tid := acquireCapacity(v, thread_id);
 
     linear var AllocatorBin(count, cap_r) := cap;
-    linear var r := ARS.join(in_r, cap_r);
+    glinear var r := ARS.join(in_r, cap_r);
 
     linear var row; glinear var handle;
     row, handle := rm[slot_idx].acquire();
@@ -274,7 +274,7 @@ module Impl refines Main {
     var step := ProcessInsertTicketStep(query_ticket);
     ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Inserting(rid, kv, inital_key)), count as nat);
     r := easy_transform_step(r, r', step);
-    linear var rmutex;
+    glinear var rmutex;
 
     while true 
       invariant Inv(v);
@@ -347,7 +347,7 @@ module Impl refines Main {
       oneRowResource(slot_idx as nat, Info(Full(kv), Free), 0));
     rm[slot_idx].release(Row(Full(kv), rmutex), handle);
 
-    linear var rcap;
+    glinear var rcap;
     r, rcap := ARS.split(r,
       ARS.output_stub(rid, output), 
       unit().(insert_capacity := count as nat));

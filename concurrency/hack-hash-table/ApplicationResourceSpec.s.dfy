@@ -1,4 +1,4 @@
-include "../hack-concurrency-framework/ResourceSpec.s.dfy"
+include "ResourceSpec.s.dfy"
 include "MapSpec.s.dfy"
 
 abstract module ApplicationResourceSpec refines ResourceSpec {

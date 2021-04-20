@@ -718,20 +718,20 @@ module HTResource refines ApplicationResourceSpec {
     && NextPos(pos) == hash(state.key) as nat
   ensures false
 
-  method easy_transform(
-      linear b: R,
+  glinear method easy_transform(
+      glinear b: R,
       ghost expected_out: R)
-  returns (linear c: R)
+  returns (glinear c: R)
   requires Update(b, expected_out)
   ensures c == expected_out
   // travis promises to supply this
 
   // Reduce boilerplate by letting caller provide explicit step, which triggers a quantifier for generic Update()
-  method easy_transform_step(
-      linear b: R,
+  glinear method easy_transform_step(
+      glinear b: R,
       ghost expected_out: R,
-      step: Step)
-  returns (linear c: R)
+      ghost step: Step)
+  returns (glinear c: R)
   requires UpdateStep(b, expected_out, step) 
   ensures c == expected_out
   {
