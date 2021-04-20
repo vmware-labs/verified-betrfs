@@ -46,7 +46,7 @@ def write_summary(reportType, verchks, summary_filename, error_filename):
 
         for level in sorted(fails.keys()):
             summary.write("\nFiles failing with %s\n" % failTypes[level])
-            for fail in fails[level]:
+            for fail in sorted(fails[level], key=lambda c : c.filename):
                 summary.write("\t%s\n" % fail)
 
         summary.write("\nTotal build time: %d seconds\n" % int(total_time))
