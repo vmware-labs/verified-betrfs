@@ -63,6 +63,12 @@ module NonlinearLemmas {
   {
   }
 
+  lemma div_denom_ge_1(n: nat, b: nat)
+  requires 1 <= b
+  ensures n / b <= n
+  {
+  }
+
   lemma mod_ge_0(a: int, b: int)
   requires b > 0
   ensures a % b >= 0

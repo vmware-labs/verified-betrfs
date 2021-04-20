@@ -9,6 +9,7 @@ include "../lib/Base/LinearOption.i.dfy"
 include "../lib/Lang/NativeTypes.s.dfy"
 include "../lib/Lang/LinearMaybe.s.dfy"
 include "../lib/Lang/LinearBox.i.dfy"
+include "../lib/Math/Nonlinear.i.dfy"
 include "../lib/DataStructures/LinearMutableMap.i.dfy"
 include "../PivotBetree/PivotBetreeSpec.i.dfy"
 include "../lib/Marshalling/GenericMarshalling.i.dfy"
@@ -44,6 +45,7 @@ module IndirectionTable {
   import USeq
   import SetBijectivity
   import Marshalling
+  import NonlinearLemmas
 
   datatype Entry = Entry(loc: Option<Location>, succs: seq<BT.G.Reference>, predCount: uint64)
   type HashMap = LinearMutableMap.LinearHashMap<Entry>
@@ -1835,8 +1837,6 @@ module IndirectionTable {
 
       success := true;
 
-      assert forall i: nat :: IsLocAllocIndirectionTablePartial(i, it.s) <==> IsLocAllocBitmap(bm.I(), i);
-
       while it.next.Next?
       invariant this.t.Inv()
       invariant BC.WFCompleteIndirectionTable(this.I())
@@ -1850,7 +1850,8 @@ module IndirectionTable {
 
         var loc: uint64 := it.next.value.loc.value.addr;
         assert 0 <= loc as nat / NodeBlockSize() < Uint64UpperBound() by {
-          // TODO see include ^: Math__div_i.lemma_div_basics_forall();
+          NonlinearLemmas.div_ge_0(loc as nat, NodeBlockSize());
+          NonlinearLemmas.div_denom_ge_1(loc as nat, NodeBlockSize());
         }
         var locIndex: uint64 := loc / NodeBlockSizeUint64();
         if locIndex < NumBlocksUint64() {
@@ -1875,7 +1876,7 @@ module IndirectionTable {
                 assert IsLocAllocBitmap(bm.I(), i);
               } else {
                 if !IsLocAllocIndirectionTablePartial(i, it0.s) {
-                  assert IsLocAllocBitmap(bm.I(), i);
+                  assert IsLocAllocBitmap(bm.I(), i); // TODO(andreal)
                 }
               }
             }
@@ -1911,7 +1912,7 @@ module IndirectionTable {
       }
 
       if success {
-        assert BC.AllLocationsForDifferentRefsDontOverlap(I());
+        assert BC.AllLocationsForDifferentRefsDontOverlap(I()); // TODO(andreal)
       }
     }
     // 
