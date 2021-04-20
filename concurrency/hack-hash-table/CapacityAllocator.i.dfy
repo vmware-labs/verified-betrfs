@@ -42,8 +42,7 @@ module CapacityAllocator {
   predicate Inv(o: AllocatorMutexTable)
   {
     && |o| == BinCount()
-    && (forall i | 0 <= i < BinCount()
-      :: o[i].inv == BinInv)
+    && (forall i | 0 <= i < BinCount() :: o[i].inv == BinInv)
   }
 
   datatype Splitted = Splitted(r': HTResource.R, ri: HTResource.R)

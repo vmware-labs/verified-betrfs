@@ -681,43 +681,6 @@ module HTResource refines ApplicationResourceSpec {
   {
   }
 
-  // TODO: the preconditions of the following lemmas might not be sufficient to prove false
-  lemma QueryUnreachableState(s: R, pos: nat)
-  requires Valid(s)
-  requires 0 <= pos < FixedSize()
-  requires s.table[pos].Some?
-  requires var state := s.table[pos].value.state;
-    && state.Querying?
-    && NextPos(pos) == hash(state.key) as nat
-  ensures false
-
-  lemma InsertUnreachableState(s: R, pos: nat)
-  requires Valid(s)
-  requires 0 <= pos < FixedSize()
-  requires s.table[pos].Some?
-  requires var state := s.table[pos].value.state;
-    && state.Inserting?
-    && NextPos(pos) == hash(state.initial_key) as nat
-  ensures false
-
-  lemma RemoveTidyUnreachableState(s: R, pos: nat)
-  requires Valid(s)
-  requires 0 <= pos < FixedSize()
-  requires s.table[pos].Some?
-  requires var state := s.table[pos].value.state;
-    && state.RemoveTidying?
-    && NextPos(pos) == hash(state.initial_key) as nat
-  ensures false
-
-  lemma RemoveUnreachableState(s: R, pos: nat)
-  requires Valid(s)
-  requires 0 <= pos < FixedSize()
-  requires s.table[pos].Some?
-  requires var state := s.table[pos].value.state;
-    && state.Removing?
-    && NextPos(pos) == hash(state.key) as nat
-  ensures false
-
   glinear method easy_transform(
       glinear b: R,
       ghost expected_out: R)
