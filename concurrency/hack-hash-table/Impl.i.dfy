@@ -11,7 +11,7 @@ module Impl refines Main {
 
   linear datatype Row = Row(
     entry: HTResource.Entry,
-    linear resource: HTResource.R)
+    glinear resource: HTResource.R)
 
   type HTMutex = Mutex<Row>
   type MutexTable = seq<HTMutex>
@@ -48,13 +48,13 @@ module Impl refines Main {
     Splitted(r', ri)
   }
 
-  method init(linear in_r: ARS.R)
-  returns (o: MutexTable, linear out_r: ARS.R)
+  method init(glinear in_r: ARS.R)
+  returns (o: MutexTable, glinear out_r: ARS.R)
   // requires ARS.Init(i)
   ensures Inv(o)
   ensures out_r == unit()
   {
-    linear var remaining_r := in_r;
+    glinear var remaining_r := in_r;
     o := [];
     var i:uint32 := 0;
     while i < FixedSizeImpl()
@@ -67,7 +67,7 @@ module Impl refines Main {
       invariant forall l:nat | i as int <= l < |remaining_r.table| :: remaining_r.table[l] == Some(Info(Empty, Free))
     {
       ghost var splitted := Split(remaining_r, i as int);
-      linear var ri;
+      glinear var ri;
       remaining_r, ri := ARS.split(remaining_r, splitted.r', splitted.ri);
       var m := new_mutex<Row>(Row(Empty, ri), (row) => RowInv(i as nat, row));
       o := o + [m];
@@ -103,8 +103,8 @@ module Impl refines Main {
       else (dst as int - src as int)
   }
 
-  method doQuery(mt: MutexTable, input: Ifc.Input, rid: int,  /*ghost*/ linear in_r: ARS.R)
-  returns (output: Ifc.Output, linear out_r: ARS.R)
+  method doQuery(mt: MutexTable, input: Ifc.Input, rid: int,  glinear in_r: ARS.R)
+  returns (output: Ifc.Output, glinear out_r: ARS.R)
     requires Inv(mt)
     requires input.QueryInput?
     requires isInputResource(in_r, rid, input)
@@ -118,7 +118,7 @@ module Impl refines Main {
     linear var row; glinear var handle;
     row, handle := mt[slot_idx].acquire();
     linear var Row(entry, row_r) := row;
-    linear var r := ARS.join(in_r, row_r);
+    glinear var r := ARS.join(in_r, row_r);
 
     ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Querying(rid, key)));
     var step := ProcessQueryTicketStep(query_ticket);
@@ -172,7 +172,7 @@ module Impl refines Main {
       r' := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Querying(rid, key)));
       r := easy_transform_step(r, r', step);
 
-      linear var rmutex;
+      glinear var rmutex;
       ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Querying(rid, key)));
       ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free));
       r, rmutex := ARS.split(r, left, right);
@@ -187,7 +187,7 @@ module Impl refines Main {
     r' := R(oneRowTable(slot_idx as nat, Info(entry, Free)), 0, multiset{}, multiset{Stub(rid, output)}); 
     r := easy_transform_step(r, r', step);
 
-    linear var rmutex;
+    glinear var rmutex;
     r, rmutex := ARS.split(r, 
       ARS.output_stub(rid, output), 
       oneRowResource(slot_idx as nat, Info(entry, Free)));
@@ -196,8 +196,8 @@ module Impl refines Main {
     out_r := r;
   }
 
-  method doInsert(mt: MutexTable, input: Ifc.Input, rid: int, /*ghost*/ linear in_r: ARS.R)
-  returns (output: Ifc.Output, linear out_r: ARS.R)
+  method doInsert(mt: MutexTable, input: Ifc.Input, rid: int, glinear in_r: ARS.R)
+  returns (output: Ifc.Output, glinear out_r: ARS.R)
     requires Inv(mt)
     requires input.InsertInput?
     requires isInputResource(in_r, rid, input)
@@ -215,12 +215,12 @@ module Impl refines Main {
     linear var row; glinear var handle;
     row, handle := mt[slot_idx].acquire();
     linear var Row(entry, row_r) := row;
-    linear var r := ARS.join(in_r, row_r);
+    glinear var r := ARS.join(in_r, row_r);
 
     var step := ProcessInsertTicketStep(query_ticket);
     ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Inserting(rid, kv, inital_key)));
     r := easy_transform_step(r, r', step);
-    linear var rmutex;
+    glinear var rmutex;
 
     while true 
       invariant Inv(mt);
@@ -305,8 +305,8 @@ module Impl refines Main {
     inital_key: Key,
     entry: Entry,
     glinear handle: MutexHandle<Row>,
-    /*ghost*/ linear r: ARS.R)
-  returns (output: Ifc.Output, linear out_r: ARS.R)
+    glinear r: ARS.R)
+  returns (output: Ifc.Output, glinear out_r: ARS.R)
     requires Inv(mt)
     requires 0 <= slot_idx < FixedSizeImpl()
     requires 0 <= hash_idx < FixedSizeImpl()
@@ -320,21 +320,21 @@ module Impl refines Main {
     var slot_idx' := getNextIndex(slot_idx);
 
     glinear var handle := handle;
-    linear var rmutex;
+    glinear var rmutex;
 
     linear var next_row; glinear var next_handle;
     next_row, next_handle := mt[slot_idx'].acquire();
     linear var Row(next_entry, next_row_r) := next_row;
-    linear var r := ARS.join(r, next_row_r);
+    glinear var r := ARS.join(r, next_row_r);
 
     var step := RemoveFoundItStep(slot_idx as nat);
-    var r' := twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key)), slot_idx' as nat, Info(next_entry, Free));
+    var r' := twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key, entry.kv.val)), slot_idx' as nat, Info(next_entry, Free));
     r := easy_transform_step(r, r', step);
 
     while true
       invariant Inv(mt);
       invariant 0 <= slot_idx < FixedSizeImpl()
-      invariant r == twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key)), NextPos(slot_idx as nat), Info(next_entry, Free))
+      invariant r == twoRowsResource(slot_idx as nat, Info(Empty, RemoveTidying(rid, inital_key, entry.kv.val)), NextPos(slot_idx as nat), Info(next_entry, Free))
       invariant handle.m == mt[slot_idx]
       invariant next_handle.m == mt[NextPos(slot_idx as nat)]
       decreases DistanceToSlot(slot_idx, hash_idx)
@@ -353,10 +353,10 @@ module Impl refines Main {
 
       ghost var r' := twoRowsResource(
         slot_idx as nat, Info(next_entry, Free),
-        slot_idx' as nat, Info(Empty, RemoveTidying(rid, inital_key)));
+        slot_idx' as nat, Info(Empty, RemoveTidying(rid, inital_key, entry.kv.val)));
       r := easy_transform_step(r, r', RemoveTidyStep(slot_idx as nat));
 
-      ghost var left := oneRowResource(slot_idx' as nat, Info(Empty, RemoveTidying(rid, inital_key)));
+      ghost var left := oneRowResource(slot_idx' as nat, Info(Empty, RemoveTidying(rid, inital_key, entry.kv.val)));
       ghost var right := oneRowResource(slot_idx as nat, Info(next_entry, Free));
 
       r, rmutex := ARS.split(r, left, right);
@@ -404,8 +404,8 @@ module Impl refines Main {
     out_r := r;
   }
 
-  method doRemove(mt: MutexTable, input: Ifc.Input, rid: int, /*ghost*/ linear in_r: ARS.R)
-    returns (output: Ifc.Output, linear out_r: ARS.R)
+  method doRemove(mt: MutexTable, input: Ifc.Input, rid: int, /*ghost*/ glinear in_r: ARS.R)
+    returns (output: Ifc.Output, glinear out_r: ARS.R)
     requires Inv(mt)
     requires input.RemoveInput?
     requires isInputResource(in_r, rid, input)
@@ -420,10 +420,10 @@ module Impl refines Main {
     row, handle := mt[slot_idx].acquire();
 
     linear var Row(entry, row_r) := row;
-    linear var r := ARS.join(in_r, row_r);
+    glinear var r := ARS.join(in_r, row_r);
 
     var slot_idx' :uint32;
-    linear var rmutex;
+    glinear var rmutex;
 
     ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Removing(rid, key)));
     var step : Step := ProcessRemoveTicketStep(query_ticket);
@@ -505,8 +505,8 @@ module Impl refines Main {
   }
 
   method call(o: MutexTable, input: Ifc.Input,
-      rid: int, linear in_r: ARS.R, thread_id: nat)
-    returns (output: Ifc.Output, linear out_r: ARS.R)
+      rid: int, glinear in_r: ARS.R, thread_id: nat)
+    returns (output: Ifc.Output, glinear out_r: ARS.R)
   // requires Inv(o)
   // requires ticket == ARS.input_ticket(rid, key)
     ensures out_r == ARS.output_stub(rid, output)

@@ -14,7 +14,7 @@ module CapacityAllocator {
 
   linear datatype AllocatorBin = AllocatorBin(
     count: uint32,
-    linear resource: HTResource.R)
+    glinear resource: HTResource.R)
 
   type AllocatorMutex = Mutex<AllocatorBin>
   type AllocatorMutexTable = seq<AllocatorMutex>
@@ -65,13 +65,13 @@ module CapacityAllocator {
     && s.stubs == multiset{}
   }
 
-  method init(linear in_r: ARS.R)
-  returns (mt: AllocatorMutexTable, linear out_r: ARS.R)
+  method init(glinear in_r: ARS.R)
+  returns (mt: AllocatorMutexTable, glinear out_r: ARS.R)
   requires CapPreInit(in_r)
   ensures Inv(mt)
   ensures out_r == unit()
   {
-    linear var remaining_r := in_r;
+    glinear var remaining_r := in_r;
 
     var total_amount :uint32 := AllowedSizeImpl();
     var bin_count := BinCountImpl();
@@ -126,7 +126,7 @@ module CapacityAllocator {
       allocated_sum := allocated_sum + amount as nat;
 
       ghost var splitted := Split(remaining_r, amount as nat);
-      linear var ri;
+      glinear var ri;
       remaining_r, ri := ARS.split(remaining_r, splitted.r', splitted.ri);
       var m := new_mutex(AllocatorBin(amount, ri), BinInv);
       mt := mt + [m];
