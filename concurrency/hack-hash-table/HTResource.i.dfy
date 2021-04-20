@@ -97,10 +97,10 @@ module HTResource refines ApplicationResourceSpec {
     seq(FixedSize(), i => if i == k then Some(info) else None)
   }
 
-  function oneRowResource(k: nat, info: Info) : R 
+  function oneRowResource(k: nat, info: Info, cap: nat) : R 
     requires 0 <= k < FixedSize()
   {
-    R(oneRowTable(k, info), 0, multiset{}, multiset{})
+    R(oneRowTable(k, info), cap, multiset{}, multiset{})
   }
 
   // predicate resourceHasSingleRow(r: R, k: nat, info: Info)
@@ -121,18 +121,19 @@ module HTResource refines ApplicationResourceSpec {
     seq(FixedSize(), i => if i == k1 then Some(info1) else if i == k2 then Some(info2) else None)
   }
 
-  function twoRowsResource(k1: nat, info1: Info, k2: nat, info2: Info) : R 
+  function twoRowsResource(k1: nat, info1: Info, k2: nat, info2: Info, cap: nat) : R 
     requires 0 <= k1 < FixedSize()
     requires 0 <= k2 < FixedSize()
     requires k1 != k2
   {
-    R(twoRowsTable(k1, info1, k2, info2), 0, multiset{}, multiset{})
+    R(twoRowsTable(k1, info1, k2, info2), cap, multiset{}, multiset{})
   }
 
   predicate isInputResource(in_r: R, rid: int, input: Ifc.Input)
   {
     && in_r.R?
     && in_r.table == unitTable()
+    && in_r.insert_capacity == 0
     && in_r.tickets == multiset { Ticket(rid, input) }
     && in_r.stubs == multiset { }
   }
