@@ -1,0 +1,816 @@
+mkdir -p build/.
+echo Impl/Bundle.i.dfy build-tests/test-suite.i.dfy > build/roots
+tools/veridepend.py Impl/Bundle.i.dfy build-tests/test-suite.i.dfy
+mkdir -p build/lib/Lang/.
+mkdir -p build/lib/Base/.
+mkdir -p build/lib/Lang/System/.
+mkdir -p build/MapSpec/.
+mkdir -p build/lib/Checksums/.
+mkdir -p build/ByteBlockCacheSystem/.
+mkdir -p build/Impl/.
+mkdir -p build/lib/DataStructures/.
+touch build/lib/Lang/Inout.i.dummydep
+touch build/lib/Lang/LinearMaybe.s.dummydep
+touch build/lib/Base/SetBijectivity.i.dummydep
+touch build/lib/Lang/LinearBox.s.dummydep
+mkdir -p build/lib/Buckets/.
+mkdir -p build/PivotBetree/.
+mkdir -p build/Betree/.
+mkdir -p build/lib/Marshalling/.
+mkdir -p build/lib/Math/.
+touch build/lib/Base/MathAxioms.s.dummydep
+mkdir -p build/BlockCacheSystem/.
+mkdir -p build/Versions/.
+touch build/lib/Base/NativeBenchmarking.s.dummydep
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Lang/NativeTypes.s.dfy ) 2>&1 | tee build/lib/Lang/NativeTypes.s.verchk-tmp
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/Option.s.dfy ) 2>&1 | tee build/lib/Base/Option.s.verchk-tmp
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/MapRemove.s.dfy ) 2>&1 | tee build/lib/Base/MapRemove.s.verchk-tmp
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/Sets.i.dfy ) 2>&1 | tee build/lib/Base/Sets.i.verchk-tmp
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 ))  /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/mathematics.i.dfy ) 2>&1 | tee build/lib/Base/mathematics.i.verchk-tmp
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Lang/Inout.i.dfy ) 2>&1 | tee build/lib/Lang/Inout.i.verchk-tmp
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Lang/LinearMaybe.s.dfy ) 2>&1 | tee build/lib/Lang/LinearMaybe.s.verchk-tmp
+
+Dafny program verifier finished with 1 verified, 0 errors
+1.42user 0.06system 0:01.43elapsed 103%CPU (0avgtext+0avgdata 89160maxresident)k
+0inputs+0outputs (0major+16638minor)pagefaults 0swaps
+mv build/lib/Lang/Inout.i.verchk-tmp build/lib/Lang/Inout.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 ))  /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/SetBijectivity.i.dfy ) 2>&1 | tee build/lib/Base/SetBijectivity.i.verchk-tmp
+
+Dafny program verifier finished with 1 verified, 0 errors
+1.58user 0.11system 0:01.62elapsed 104%CPU (0avgtext+0avgdata 88644maxresident)k
+336inputs+0outputs (4major+17483minor)pagefaults 0swaps
+mv build/lib/Base/MapRemove.s.verchk-tmp build/lib/Base/MapRemove.s.verchk
+
+Dafny program verifier finished with 2 verified, 0 errors
+1.85user 0.09system 0:01.64elapsed 118%CPU (0avgtext+0avgdata 94872maxresident)k
+40inputs+0outputs (1major+20674minor)pagefaults 0swaps
+mv build/lib/Base/Option.s.verchk-tmp build/lib/Base/Option.s.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Lang/LinearBox.s.dfy ) 2>&1 | tee build/lib/Lang/LinearBox.s.verchk-tmp
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Marshalling/Maps.i.dfy ) 2>&1 | tee build/lib/Marshalling/Maps.i.verchk-tmp
+
+Dafny program verifier finished with 4 verified, 0 errors
+2.35user 0.16system 0:01.75elapsed 143%CPU (0avgtext+0avgdata 103940maxresident)k
+0inputs+0outputs (0major+26552minor)pagefaults 0swaps
+mv build/lib/Base/mathematics.i.verchk-tmp build/lib/Base/mathematics.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 ))  /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Math/Nonlinear.i.dfy ) 2>&1 | tee build/lib/Math/Nonlinear.i.verchk-tmp
+
+Dafny program verifier finished with 6 verified, 0 errors
+2.67user 0.15system 0:01.82elapsed 154%CPU (0avgtext+0avgdata 113672maxresident)k
+0inputs+0outputs (0major+30861minor)pagefaults 0swaps
+mv build/lib/Lang/LinearMaybe.s.verchk-tmp build/lib/Lang/LinearMaybe.s.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/MathAxioms.s.dfy ) 2>&1 | tee build/lib/Base/MathAxioms.s.verchk-tmp
+
+Dafny program verifier finished with 6 verified, 0 errors
+2.65user 0.15system 0:01.90elapsed 147%CPU (0avgtext+0avgdata 105952maxresident)k
+0inputs+0outputs (0major+27928minor)pagefaults 0swaps
+mv build/lib/Base/Sets.i.verchk-tmp build/lib/Base/Sets.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/NativeBenchmarking.s.dfy ) 2>&1 | tee build/lib/Base/NativeBenchmarking.s.verchk-tmp
+
+Dafny program verifier finished with 16 verified, 0 errors
+3.55user 0.17system 0:01.95elapsed 190%CPU (0avgtext+0avgdata 121208maxresident)k
+560inputs+0outputs (3major+31924minor)pagefaults 0swaps
+mv build/lib/Lang/NativeTypes.s.verchk-tmp build/lib/Lang/NativeTypes.s.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 BlockCacheSystem/AsyncSectorDiskModelTypes.i.dfy ) 2>&1 | tee build/BlockCacheSystem/AsyncSectorDiskModelTypes.i.verchk-tmp
+
+Dafny program verifier finished with 0 verified, 0 errors
+0.66user 0.03system 0:00.68elapsed 101%CPU (0avgtext+0avgdata 74360maxresident)k
+0inputs+0outputs (0major+11552minor)pagefaults 0swaps
+mv build/BlockCacheSystem/AsyncSectorDiskModelTypes.i.verchk-tmp build/BlockCacheSystem/AsyncSectorDiskModelTypes.i.verchk
+touch build/lib/Lang/NativeTypes.s.dummydep
+touch build/lib/Base/Option.s.dummydep
+touch build/lib/Lang/System/SeqComparison.s.dummydep
+touch build/lib/Base/KeyType.s.dummydep
+touch build/lib/Base/MapRemove.s.dummydep
+
+Dafny program verifier finished with 0 verified, 0 errors
+touch build/lib/Lang/System/Bits.s.dummydep
+touch build/lib/Base/Sets.i.dummydep
+touch build/lib/Base/mathematics.i.dummydep
+0.72user 0.04system 0:00.74elapsed 101%CPU (0avgtext+0avgdata 74808maxresident)k
+0inputs+0outputs (0major+11678minor)pagefaults 0swaps
+touch build/lib/Lang/LinearSequence.s.dummydep
+mv build/lib/Base/NativeBenchmarking.s.verchk-tmp build/lib/Base/NativeBenchmarking.s.verchk
+touch build/lib/Base/Maps.i.dummydep
+touch build/lib/Lang/System/Arithmetic.s.dummydep
+touch build/lib/Base/LinearOption.i.dummydep
+touch build/lib/Lang/System/NativeArrays.s.dummydep
+touch build/PivotBetree/Bounds.i.dummydep
+touch build/lib/Marshalling/Maps.i.dummydep
+touch build/lib/Marshalling/Seqs.i.dummydep
+touch build/lib/Math/Nonlinear.i.dummydep
+touch build/lib/Lang/System/PackedInts.s.dummydep
+touch build/lib/Base/BitsetLemmas.i.dummydep
+touch build/BlockCacheSystem/DiskLayout.i.dummydep
+touch build/lib/Base/PackedIntsLib.i.dummydep
+touch build/BlockCacheSystem/AsyncSectorDiskModelTypes.i.dummydep
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/DebugAccumulator.i.dfy ) 2>&1 | tee build/lib/Base/DebugAccumulator.i.verchk-tmp
+tools/aggregate-verchk.py --verchk --root build/lib/Lang/NativeTypes.s.verchk --summary build/lib/Lang/NativeTypes.s.verified --error build/lib/Lang/NativeTypes.s.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/Base/Option.s.verchk --summary build/lib/Base/Option.s.verified --error build/lib/Base/Option.s.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Lang/System/SeqComparison.s.dfy ) 2>&1 | tee build/lib/Lang/System/SeqComparison.s.verchk-tmp
+
+Dafny program verifier finished with 1 verified, 0 errors
+1.33user 0.07system 0:01.35elapsed 103%CPU (0avgtext+0avgdata 88568maxresident)k
+0inputs+0outputs (0major+16920minor)pagefaults 0swaps
+mv build/lib/Base/MathAxioms.s.verchk-tmp build/lib/Base/MathAxioms.s.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 MapSpec/UI.s.dfy ) 2>&1 | tee build/MapSpec/UI.s.verchk-tmp
+
+Dafny program verifier finished with 18 verified, 0 errors
+3.44user 0.17system 0:01.91elapsed 188%CPU (0avgtext+0avgdata 119568maxresident)k
+0inputs+0outputs (0major+31264minor)pagefaults 0swaps
+mv build/lib/Math/Nonlinear.i.verchk-tmp build/lib/Math/Nonlinear.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/KeyType.s.dfy ) 2>&1 | tee build/lib/Base/KeyType.s.verchk-tmp
+
+Dafny program verifier finished with 10 verified, 0 errors
+3.46user 0.15system 0:02.18elapsed 165%CPU (0avgtext+0avgdata 116300maxresident)k
+0inputs+0outputs (0major+32311minor)pagefaults 0swaps
+mv build/lib/Marshalling/Maps.i.verchk-tmp build/lib/Marshalling/Maps.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Base/MapRemove.s.verchk --summary build/lib/Base/MapRemove.s.verified --error build/lib/Base/MapRemove.s.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Lang/System/F2_X.s.dfy ) 2>&1 | tee build/lib/Lang/System/F2_X.s.verchk-tmp
+
+Dafny program verifier finished with 11 verified, 0 errors
+3.83user 0.15system 0:02.50elapsed 159%CPU (0avgtext+0avgdata 128760maxresident)k
+0inputs+0outputs (0major+37306minor)pagefaults 0swaps
+mv build/lib/Lang/LinearBox.s.verchk-tmp build/lib/Lang/LinearBox.s.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Lang/System/Bits.s.dfy ) 2>&1 | tee build/lib/Lang/System/Bits.s.verchk-tmp
+
+Dafny program verifier finished with 0 verified, 0 errors
+1.07user 0.02system 0:01.10elapsed 99%CPU (0avgtext+0avgdata 77896maxresident)k
+0inputs+0outputs (0major+12506minor)pagefaults 0swaps
+mv build/MapSpec/UI.s.verchk-tmp build/MapSpec/UI.s.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Base/Sets.i.verchk --summary build/lib/Base/Sets.i.verified --error build/lib/Base/Sets.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 ))  /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/sequences.i.dfy ) 2>&1 | tee build/lib/Base/sequences.i.verchk-tmp
+
+Dafny program verifier finished with 2 verified, 0 errors
+1.97user 0.09system 0:01.75elapsed 118%CPU (0avgtext+0avgdata 97208maxresident)k
+0inputs+0outputs (0major+21140minor)pagefaults 0swaps
+mv build/lib/Lang/System/SeqComparison.s.verchk-tmp build/lib/Lang/System/SeqComparison.s.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Base/mathematics.i.verchk --summary build/lib/Base/mathematics.i.verified --error build/lib/Base/mathematics.i.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/Lang/Inout.i.verchk --summary build/lib/Lang/Inout.i.verified --error build/lib/Lang/Inout.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Lang/LinearSequence.s.dfy ) 2>&1 | tee build/lib/Lang/LinearSequence.s.verchk-tmp
+
+Dafny program verifier finished with 5 verified, 0 errors
+2.58user 0.17system 0:01.97elapsed 139%CPU (0avgtext+0avgdata 109212maxresident)k
+0inputs+0outputs (0major+28408minor)pagefaults 0swaps
+mv build/lib/Base/DebugAccumulator.i.verchk-tmp build/lib/Base/DebugAccumulator.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Lang/LinearMaybe.s.verchk --summary build/lib/Lang/LinearMaybe.s.verified --error build/lib/Lang/LinearMaybe.s.verified.err
+
+Dafny program verifier finished with 2 verified, 0 errors
+3.48user 0.08system 0:03.24elapsed 110%CPU (0avgtext+0avgdata 95948maxresident)k
+0inputs+0outputs (0major+32171minor)pagefaults 0swaps
+mv build/lib/Base/SetBijectivity.i.verchk-tmp build/lib/Base/SetBijectivity.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Lang/LinearSequence.i.dfy ) 2>&1 | tee build/lib/Lang/LinearSequence.i.verchk-tmp
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/Maps.i.dfy ) 2>&1 | tee build/lib/Base/Maps.i.verchk-tmp
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/Base/sequences.i.dfy(587,18): Warning: /!\ No terms found to trigger on.
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/Base/sequences.i.dfy(592,16): Warning: /!\ No terms found to trigger on.
+
+Dafny program verifier finished with 8 verified, 0 errors
+3.15user 0.14system 0:02.20elapsed 149%CPU (0avgtext+0avgdata 115256maxresident)k
+0inputs+0outputs (0major+34723minor)pagefaults 0swaps
+mv build/lib/Base/KeyType.s.verchk-tmp build/lib/Base/KeyType.s.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Lang/System/Arithmetic.s.dfy ) 2>&1 | tee build/lib/Lang/System/Arithmetic.s.verchk-tmp
+
+Dafny program verifier finished with 8 verified, 0 errors
+2.96user 0.18system 0:01.91elapsed 164%CPU (0avgtext+0avgdata 124560maxresident)k
+0inputs+0outputs (0major+34236minor)pagefaults 0swaps
+mv build/lib/Lang/System/Bits.s.verchk-tmp build/lib/Lang/System/Bits.s.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Base/SetBijectivity.i.verchk --summary build/lib/Base/SetBijectivity.i.verified --error build/lib/Base/SetBijectivity.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/LinearOption.i.dfy ) 2>&1 | tee build/lib/Base/LinearOption.i.verchk-tmp
+
+Dafny program verifier finished with 24 verified, 0 errors
+6.60user 0.24system 0:02.95elapsed 231%CPU (0avgtext+0avgdata 159404maxresident)k
+0inputs+0outputs (0major+45737minor)pagefaults 0swaps
+mv build/lib/Lang/System/F2_X.s.verchk-tmp build/lib/Lang/System/F2_X.s.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Lang/LinearBox.i.dfy ) 2>&1 | tee build/lib/Lang/LinearBox.i.verchk-tmp
+
+Dafny program verifier finished with 17 verified, 0 errors
+5.49user 0.18system 0:02.78elapsed 204%CPU (0avgtext+0avgdata 159916maxresident)k
+0inputs+0outputs (0major+45200minor)pagefaults 0swaps
+mv build/lib/Lang/LinearSequence.s.verchk-tmp build/lib/Lang/LinearSequence.s.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Lang/LinearBox.s.verchk --summary build/lib/Lang/LinearBox.s.verified --error build/lib/Lang/LinearBox.s.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Lang/System/NativeArrays.s.dfy ) 2>&1 | tee build/lib/Lang/System/NativeArrays.s.verchk-tmp
+
+Dafny program verifier finished with 1 verified, 0 errors
+1.95user 0.08system 0:02.01elapsed 101%CPU (0avgtext+0avgdata 91468maxresident)k
+0inputs+0outputs (0major+17592minor)pagefaults 0swaps
+mv build/lib/Lang/System/Arithmetic.s.verchk-tmp build/lib/Lang/System/Arithmetic.s.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 ))  /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 PivotBetree/Bounds.i.dfy ) 2>&1 | tee build/PivotBetree/Bounds.i.verchk-tmp
+
+Dafny program verifier finished with 31 verified, 0 errors
+9.70user 0.33system 0:04.28elapsed 234%CPU (0avgtext+0avgdata 165232maxresident)k
+0inputs+0outputs (0major+49375minor)pagefaults 0swaps
+mv build/lib/Base/Maps.i.verchk-tmp build/lib/Base/Maps.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Marshalling/Maps.i.verchk --summary build/lib/Marshalling/Maps.i.verified --error build/lib/Marshalling/Maps.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Marshalling/Seqs.i.dfy ) 2>&1 | tee build/lib/Marshalling/Seqs.i.verchk-tmp
+
+Dafny program verifier finished with 4 verified, 0 errors
+3.33user 0.16system 0:02.89elapsed 121%CPU (0avgtext+0avgdata 109592maxresident)k
+0inputs+0outputs (0major+28996minor)pagefaults 0swaps
+mv build/lib/Base/LinearOption.i.verchk-tmp build/lib/Base/LinearOption.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Math/Math.i.dfy ) 2>&1 | tee build/lib/Math/Math.i.verchk-tmp
+
+Dafny program verifier finished with 5 verified, 0 errors
+3.26user 0.14system 0:02.61elapsed 130%CPU (0avgtext+0avgdata 109548maxresident)k
+0inputs+0outputs (0major+28687minor)pagefaults 0swaps
+mv build/lib/Lang/System/NativeArrays.s.verchk-tmp build/lib/Lang/System/NativeArrays.s.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Math/Nonlinear.i.verchk --summary build/lib/Math/Nonlinear.i.verified --error build/lib/Math/Nonlinear.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Lang/System/PackedInts.s.dfy ) 2>&1 | tee build/lib/Lang/System/PackedInts.s.verchk-tmp
+
+Dafny program verifier finished with 56 verified, 0 errors
+16.49user 0.52system 0:06.49elapsed 262%CPU (0avgtext+0avgdata 192184maxresident)k
+0inputs+0outputs (0major+57403minor)pagefaults 0swaps
+mv build/lib/Lang/LinearSequence.i.verchk-tmp build/lib/Lang/LinearSequence.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/DataStructures/BitmapModel.i.dfy ) 2>&1 | tee build/lib/DataStructures/BitmapModel.i.verchk-tmp
+
+Dafny program verifier finished with 25 verified, 0 errors
+8.90user 0.33system 0:04.58elapsed 201%CPU (0avgtext+0avgdata 160484maxresident)k
+0inputs+0outputs (0major+48265minor)pagefaults 0swaps
+mv build/lib/Lang/LinearBox.i.verchk-tmp build/lib/Lang/LinearBox.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/BitsetLemmas.i.dfy ) 2>&1 | tee build/lib/Base/BitsetLemmas.i.verchk-tmp
+
+Dafny program verifier finished with 29 verified, 0 errors
+6.77user 0.26system 0:03.75elapsed 187%CPU (0avgtext+0avgdata 143864maxresident)k
+0inputs+0outputs (0major+39461minor)pagefaults 0swaps
+mv build/PivotBetree/Bounds.i.verchk-tmp build/PivotBetree/Bounds.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Base/MathAxioms.s.verchk --summary build/lib/Base/MathAxioms.s.verified --error build/lib/Base/MathAxioms.s.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 ))  /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 BlockCacheSystem/DiskLayout.i.dfy ) 2>&1 | tee build/BlockCacheSystem/DiskLayout.i.verchk-tmp
+
+Dafny program verifier finished with 24 verified, 0 errors
+5.69user 0.25system 0:03.34elapsed 177%CPU (0avgtext+0avgdata 127096maxresident)k
+0inputs+0outputs (0major+36755minor)pagefaults 0swaps
+mv build/lib/Math/Math.i.verchk-tmp build/lib/Math/Math.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/PackedIntsLib.i.dfy ) 2>&1 | tee build/lib/Base/PackedIntsLib.i.verchk-tmp
+
+Dafny program verifier finished with 13 verified, 0 errors
+4.10user 0.17system 0:02.84elapsed 150%CPU (0avgtext+0avgdata 125696maxresident)k
+0inputs+0outputs (0major+34876minor)pagefaults 0swaps
+mv build/lib/Lang/System/PackedInts.s.verchk-tmp build/lib/Lang/System/PackedInts.s.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Base/NativeBenchmarking.s.verchk --summary build/lib/Base/NativeBenchmarking.s.verified --error build/lib/Base/NativeBenchmarking.s.verified.err
+tools/aggregate-verchk.py --verchk --root build/BlockCacheSystem/AsyncSectorDiskModelTypes.i.verchk --summary build/BlockCacheSystem/AsyncSectorDiskModelTypes.i.verified --error build/BlockCacheSystem/AsyncSectorDiskModelTypes.i.verified.err
+touch build/lib/Base/DebugAccumulator.i.dummydep
+touch build/MapSpec/UI.s.dummydep
+touch build/lib/Lang/System/F2_X.s.dummydep
+touch build/lib/Base/sequences.i.dummydep
+touch build/lib/Lang/LinearSequence.i.dummydep
+touch build/lib/DataStructures/LinearMutableMapBase.i.dummydep
+touch build/lib/DataStructures/LinearDList.i.dummydep
+touch build/lib/Lang/LinearBox.i.dummydep
+touch build/lib/Base/Message.i.dummydep
+touch build/lib/Base/total_order.i.dummydep
+touch build/lib/Base/Multisets.i.dummydep
+touch build/Betree/Graph.i.dummydep
+touch build/lib/Math/Math.i.dummydep
+touch build/lib/DataStructures/BitmapModel.i.dummydep
+touch build/Betree/Transactable.i.dummydep
+touch build/Versions/VOp.i.dummydep
+touch build/MapSpec/Journal.i.dummydep
+touch build/lib/Base/Arrays.i.dummydep
+touch build/Impl/BlockAllocatorModel.i.dummydep
+touch build/lib/DataStructures/LinearContentMutableMap.i.dummydep
+touch build/lib/Math/ModLemmas.i.dummydep
+touch build/lib/Checksums/CRC32C_PowDef.i.dummydep
+touch build/lib/Checksums/F2_X_Lemmas.i.dummydep
+tools/aggregate-verchk.py --verchk --root build/lib/Base/DebugAccumulator.i.verchk --summary build/lib/Base/DebugAccumulator.i.verified --error build/lib/Base/DebugAccumulator.i.verified.err
+
+Dafny program verifier finished with 11 verified, 0 errors
+5.64user 0.19system 0:04.09elapsed 142%CPU (0avgtext+0avgdata 127304maxresident)k
+0inputs+0outputs (0major+40044minor)pagefaults 0swaps
+mv build/lib/Marshalling/Seqs.i.verchk-tmp build/lib/Marshalling/Seqs.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Lang/System/SeqComparison.s.verchk --summary build/lib/Lang/System/SeqComparison.s.verified --error build/lib/Lang/System/SeqComparison.s.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/Base/KeyType.s.verchk --summary build/lib/Base/KeyType.s.verified --error build/lib/Base/KeyType.s.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 MapSpec/UIStateMachine.s.dfy ) 2>&1 | tee build/MapSpec/UIStateMachine.s.verchk-tmp
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Checksums/CRC32C.s.dfy ) 2>&1 | tee build/lib/Checksums/CRC32C.s.verchk-tmp
+
+Dafny program verifier finished with 15 verified, 0 errors
+5.18user 0.19system 0:03.15elapsed 170%CPU (0avgtext+0avgdata 136636maxresident)k
+0inputs+0outputs (0major+40402minor)pagefaults 0swaps
+mv build/lib/DataStructures/BitmapModel.i.verchk-tmp build/lib/DataStructures/BitmapModel.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Lang/System/Bits.s.verchk --summary build/lib/Lang/System/Bits.s.verified --error build/lib/Lang/System/Bits.s.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/DataStructures/LruModel.i.dfy ) 2>&1 | tee build/lib/DataStructures/LruModel.i.verchk-tmp
+
+Dafny program verifier finished with 0 verified, 0 errors
+1.34user 0.04system 0:01.37elapsed 101%CPU (0avgtext+0avgdata 79772maxresident)k
+0inputs+0outputs (0major+13077minor)pagefaults 0swaps
+mv build/MapSpec/UIStateMachine.s.verchk-tmp build/MapSpec/UIStateMachine.s.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/DataStructures/LinearMutableMap.i.dfy ) 2>&1 | tee build/lib/DataStructures/LinearMutableMap.i.verchk-tmp
+
+Dafny program verifier finished with 1 verified, 0 errors
+2.43user 0.08system 0:02.46elapsed 101%CPU (0avgtext+0avgdata 94460maxresident)k
+0inputs+0outputs (0major+18955minor)pagefaults 0swaps
+mv build/lib/Base/PackedIntsLib.i.verchk-tmp build/lib/Base/PackedIntsLib.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Lang/LinearSequence.s.verchk --summary build/lib/Lang/LinearSequence.s.verified --error build/lib/Lang/LinearSequence.s.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/Base/Maps.i.verchk --summary build/lib/Base/Maps.i.verified --error build/lib/Base/Maps.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/DataStructures/LinearMutableMapBase.i.dfy ) 2>&1 | tee build/lib/DataStructures/LinearMutableMapBase.i.verchk-tmp
+
+Dafny program verifier finished with 36 verified, 0 errors
+9.88user 0.32system 0:04.24elapsed 240%CPU (0avgtext+0avgdata 159932maxresident)k
+0inputs+0outputs (0major+45868minor)pagefaults 0swaps
+mv build/BlockCacheSystem/DiskLayout.i.verchk-tmp build/BlockCacheSystem/DiskLayout.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Lang/System/Arithmetic.s.verchk --summary build/lib/Lang/System/Arithmetic.s.verified --error build/lib/Lang/System/Arithmetic.s.verified.err
+
+Dafny program verifier finished with 4 verified, 0 errors
+4.15user 0.19system 0:02.82elapsed 154%CPU (0avgtext+0avgdata 128700maxresident)k
+0inputs+0outputs (0major+38481minor)pagefaults 0swaps
+mv build/lib/Checksums/CRC32C.s.verchk-tmp build/lib/Checksums/CRC32C.s.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /noNLarith /proverOpt:O:smt.random_seed=1 /compile:0 lib/DataStructures/LinearDList.i.dfy ) 2>&1 | tee build/lib/DataStructures/LinearDList.i.verchk-tmp
+tools/aggregate-verchk.py --verchk --root build/lib/Base/LinearOption.i.verchk --summary build/lib/Base/LinearOption.i.verified --error build/lib/Base/LinearOption.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/Message.i.dfy ) 2>&1 | tee build/lib/Base/Message.i.verchk-tmp
+
+Dafny program verifier finished with 98 verified, 0 errors
+33.24user 0.83system 0:12.44elapsed 273%CPU (0avgtext+0avgdata 221336maxresident)k
+0inputs+0outputs (0major+86252minor)pagefaults 0swaps
+mv build/lib/Base/sequences.i.verchk-tmp build/lib/Base/sequences.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/total_order_impl.i.dfy ) 2>&1 | tee build/lib/Base/total_order_impl.i.verchk-tmp
+
+Dafny program verifier finished with 21 verified, 0 errors
+8.85user 0.29system 0:04.44elapsed 205%CPU (0avgtext+0avgdata 186756maxresident)k
+0inputs+0outputs (0major+54777minor)pagefaults 0swaps
+mv build/lib/DataStructures/LruModel.i.verchk-tmp build/lib/DataStructures/LruModel.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/total_order.i.dfy ) 2>&1 | tee build/lib/Base/total_order.i.verchk-tmp
+
+Dafny program verifier finished with 25 verified, 0 errors
+12.82user 0.53system 0:06.57elapsed 203%CPU (0avgtext+0avgdata 227400maxresident)k
+0inputs+0outputs (0major+80836minor)pagefaults 0swaps
+mv build/lib/Base/Message.i.verchk-tmp build/lib/Base/Message.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Lang/System/NativeArrays.s.verchk --summary build/lib/Lang/System/NativeArrays.s.verified --error build/lib/Lang/System/NativeArrays.s.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/Multisets.i.dfy ) 2>&1 | tee build/lib/Base/Multisets.i.verchk-tmp
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/LinearDList.i.dfy(278,24): Verification out of resource (Impl$$DList.DList.InsertAfter)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/LinearDList.i.dfy(334,24): Verification out of resource (Impl$$DList.DList.InsertBefore)
+
+Dafny program verifier finished with 21 verified, 0 errors, 2 out of resource
+Command exited with non-zero status 4
+27.17user 0.42system 0:12.23elapsed 225%CPU (0avgtext+0avgdata 201760maxresident)k
+0inputs+0outputs (0major+83228minor)pagefaults 0swaps
+mv build/lib/DataStructures/LinearDList.i.verchk-tmp build/lib/DataStructures/LinearDList.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Buckets/MapSeqs.i.dfy ) 2>&1 | tee build/lib/Buckets/MapSeqs.i.verchk-tmp
+
+Dafny program verifier finished with 48 verified, 0 errors
+27.44user 0.70system 0:15.31elapsed 183%CPU (0avgtext+0avgdata 228632maxresident)k
+0inputs+0outputs (0major+100261minor)pagefaults 0swaps
+mv build/lib/DataStructures/LinearMutableMapBase.i.verchk-tmp build/lib/DataStructures/LinearMutableMapBase.i.verchk
+tools/aggregate-verchk.py --verchk --root build/PivotBetree/Bounds.i.verchk --summary build/PivotBetree/Bounds.i.verified --error build/PivotBetree/Bounds.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 Betree/Graph.i.dfy ) 2>&1 | tee build/Betree/Graph.i.verchk-tmp
+
+Dafny program verifier finished with 37 verified, 0 errors
+18.51user 0.48system 0:08.95elapsed 212%CPU (0avgtext+0avgdata 233748maxresident)k
+0inputs+0outputs (0major+77966minor)pagefaults 0swaps
+mv build/lib/Base/Multisets.i.verchk-tmp build/lib/Base/Multisets.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Marshalling/Seqs.i.verchk --summary build/lib/Marshalling/Seqs.i.verified --error build/lib/Marshalling/Seqs.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Marshalling/Util.i.dfy ) 2>&1 | tee build/lib/Marshalling/Util.i.verchk-tmp
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/LinearMutableMap.i.dfy(135,9): Verification out of resource (Impl$$LinearMutableMap.__default.Probe)
+
+Dafny program verifier finished with 14 verified, 0 errors
+6.90user 0.23system 0:05.44elapsed 131%CPU (0avgtext+0avgdata 130552maxresident)k
+0inputs+0outputs (0major+39752minor)pagefaults 0swaps
+mv build/lib/Marshalling/Util.i.verchk-tmp build/lib/Marshalling/Util.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Math/Math.i.verchk --summary build/lib/Math/Math.i.verified --error build/lib/Math/Math.i.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/Lang/System/PackedInts.s.verchk --summary build/lib/Lang/System/PackedInts.s.verified --error build/lib/Lang/System/PackedInts.s.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/DataStructures/BitmapImpl.i.dfy ) 2>&1 | tee build/lib/DataStructures/BitmapImpl.i.verchk-tmp
+
+Dafny program verifier finished with 28 verified, 0 errors
+9.57user 0.50system 0:05.93elapsed 169%CPU (0avgtext+0avgdata 170572maxresident)k
+0inputs+0outputs (0major+49528minor)pagefaults 0swaps
+mv build/lib/DataStructures/BitmapImpl.i.verchk-tmp build/lib/DataStructures/BitmapImpl.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 Betree/BlockInterface.i.dfy ) 2>&1 | tee build/Betree/BlockInterface.i.verchk-tmp
+
+Dafny program verifier finished with 46 verified, 0 errors
+34.28user 0.89system 0:15.75elapsed 223%CPU (0avgtext+0avgdata 386740maxresident)k
+0inputs+0outputs (0major+125220minor)pagefaults 0swaps
+mv build/lib/Buckets/MapSeqs.i.verchk-tmp build/lib/Buckets/MapSeqs.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 Betree/Transactable.i.dfy ) 2>&1 | tee build/Betree/Transactable.i.verchk-tmp
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/LinearMutableMap.i.dfy(623,9): Verification out of resource (Impl$$LinearMutableMap.__default.Realloc)
+
+Dafny program verifier finished with 80 verified, 0 errors, 2 out of resource
+Command exited with non-zero status 4
+87.65user 1.26system 0:30.03elapsed 296%CPU (0avgtext+0avgdata 398400maxresident)k
+0inputs+0outputs (0major+172560minor)pagefaults 0swaps
+mv build/lib/DataStructures/LinearMutableMap.i.verchk-tmp build/lib/DataStructures/LinearMutableMap.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 Versions/VOp.i.dfy ) 2>&1 | tee build/Versions/VOp.i.verchk-tmp
+
+Dafny program verifier finished with 1 verified, 0 errors
+2.46user 0.10system 0:02.51elapsed 102%CPU (0avgtext+0avgdata 103128maxresident)k
+0inputs+0outputs (0major+21574minor)pagefaults 0swaps
+mv build/Versions/VOp.i.verchk-tmp build/Versions/VOp.i.verchk
+tools/aggregate-verchk.py --verchk --root build/BlockCacheSystem/DiskLayout.i.verchk --summary build/BlockCacheSystem/DiskLayout.i.verified --error build/BlockCacheSystem/DiskLayout.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 BlockCacheSystem/JournalRange.i.dfy ) 2>&1 | tee build/BlockCacheSystem/JournalRange.i.verchk-tmp
+
+Dafny program verifier finished with 20 verified, 0 errors
+9.68user 0.37system 0:04.78elapsed 210%CPU (0avgtext+0avgdata 216932maxresident)k
+0inputs+0outputs (0major+63456minor)pagefaults 0swaps
+mv build/Betree/Transactable.i.verchk-tmp build/Betree/Transactable.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 MapSpec/Journal.i.dfy ) 2>&1 | tee build/MapSpec/Journal.i.verchk-tmp
+
+Dafny program verifier finished with 128 verified, 0 errors
+73.88user 2.31system 0:35.31elapsed 215%CPU (0avgtext+0avgdata 598412maxresident)k
+0inputs+0outputs (0major+324015minor)pagefaults 0swaps
+mv build/lib/Base/total_order_impl.i.verchk-tmp build/lib/Base/total_order_impl.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Base/Arrays.i.dfy ) 2>&1 | tee build/lib/Base/Arrays.i.verchk-tmp
+
+Dafny program verifier finished with 3 verified, 0 errors
+5.23user 0.20system 0:04.05elapsed 134%CPU (0avgtext+0avgdata 149440maxresident)k
+0inputs+0outputs (0major+41349minor)pagefaults 0swaps
+mv build/MapSpec/Journal.i.verchk-tmp build/MapSpec/Journal.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 Impl/BlockAllocatorModel.i.dfy ) 2>&1 | tee build/Impl/BlockAllocatorModel.i.verchk-tmp
+
+Dafny program verifier finished with 30 verified, 0 errors
+15.76user 0.41system 0:07.31elapsed 221%CPU (0avgtext+0avgdata 310280maxresident)k
+0inputs+0outputs (0major+91106minor)pagefaults 0swaps
+mv build/BlockCacheSystem/JournalRange.i.verchk-tmp build/BlockCacheSystem/JournalRange.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/DataStructures/LinearContentMutableMap.i.dfy ) 2>&1 | tee build/lib/DataStructures/LinearContentMutableMap.i.verchk-tmp
+
+Dafny program verifier finished with 6 verified, 0 errors
+5.54user 0.23system 0:03.68elapsed 156%CPU (0avgtext+0avgdata 148648maxresident)k
+0inputs+0outputs (0major+44959minor)pagefaults 0swaps
+mv build/lib/Base/Arrays.i.verchk-tmp build/lib/Base/Arrays.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Base/PackedIntsLib.i.verchk --summary build/lib/Base/PackedIntsLib.i.verified --error build/lib/Base/PackedIntsLib.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Math/ModLemmas.i.dfy ) 2>&1 | tee build/lib/Math/ModLemmas.i.verchk-tmp
+
+Dafny program verifier finished with 12 verified, 0 errors
+5.56user 0.21system 0:03.35elapsed 172%CPU (0avgtext+0avgdata 153792maxresident)k
+0inputs+0outputs (0major+44558minor)pagefaults 0swaps
+mv build/Impl/BlockAllocatorModel.i.verchk-tmp build/Impl/BlockAllocatorModel.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Checksums/CRC32C_PowDef.i.dfy ) 2>&1 | tee build/lib/Checksums/CRC32C_PowDef.i.verchk-tmp
+
+Dafny program verifier finished with 4 verified, 0 errors
+2.88user 0.11system 0:02.21elapsed 135%CPU (0avgtext+0avgdata 105244maxresident)k
+0inputs+0outputs (0major+27311minor)pagefaults 0swaps
+mv build/lib/Math/ModLemmas.i.verchk-tmp build/lib/Math/ModLemmas.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Checksums/F2_X_Lemmas.i.dfy ) 2>&1 | tee build/lib/Checksums/F2_X_Lemmas.i.verchk-tmp
+
+Dafny program verifier finished with 1 verified, 0 errors
+2.01user 0.08system 0:02.03elapsed 102%CPU (0avgtext+0avgdata 99160maxresident)k
+0inputs+0outputs (0major+20147minor)pagefaults 0swaps
+mv build/lib/Checksums/CRC32C_PowDef.i.verchk-tmp build/lib/Checksums/CRC32C_PowDef.i.verchk
+touch build/MapSpec/UIStateMachine.s.dummydep
+touch build/lib/Checksums/CRC32C.s.dummydep
+touch build/lib/DataStructures/LruModel.i.dummydep
+touch build/lib/DataStructures/LinearMutableMap.i.dummydep
+touch build/lib/Base/total_order_impl.i.dummydep
+touch build/lib/Buckets/MapSeqs.i.dummydep
+touch build/lib/Marshalling/Util.i.dummydep
+touch build/lib/DataStructures/BitmapImpl.i.dummydep
+touch build/lib/DataStructures/LinearUSeq.i.dummydep
+touch build/Betree/BlockInterface.i.dummydep
+touch build/BlockCacheSystem/JournalRange.i.dummydep
+touch build/lib/Buckets/PackedStringArray.i.dummydep
+touch build/lib/DataStructures/BtreeModel.i.dummydep
+touch build/Impl/BlockAllocatorImpl.i.dummydep
+touch build/lib/Checksums/BitLemmas.i.dummydep
+touch build/Versions/StatesView.i.dummydep
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 MapSpec/MapSpec.s.dfy ) 2>&1 | tee build/MapSpec/MapSpec.s.verchk-tmp
+
+Dafny program verifier finished with 16 verified, 0 errors
+7.66user 0.31system 0:03.92elapsed 203%CPU (0avgtext+0avgdata 174672maxresident)k
+0inputs+0outputs (0major+54169minor)pagefaults 0swaps
+mv build/MapSpec/MapSpec.s.verchk-tmp build/MapSpec/MapSpec.s.verchk
+tools/aggregate-verchk.py --verchk --root build/MapSpec/UI.s.verchk --summary build/MapSpec/UI.s.verified --error build/MapSpec/UI.s.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/Lang/System/F2_X.s.verchk --summary build/lib/Lang/System/F2_X.s.verified --error build/lib/Lang/System/F2_X.s.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/DataStructures/LinearLru.i.dfy ) 2>&1 | tee build/lib/DataStructures/LinearLru.i.verchk-tmp
+
+Dafny program verifier finished with 64 verified, 0 errors
+25.51user 0.73system 0:09.89elapsed 265%CPU (0avgtext+0avgdata 222548maxresident)k
+0inputs+0outputs (0major+90579minor)pagefaults 0swaps
+mv build/lib/Checksums/F2_X_Lemmas.i.verchk-tmp build/lib/Checksums/F2_X_Lemmas.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Base/sequences.i.verchk --summary build/lib/Base/sequences.i.verified --error build/lib/Base/sequences.i.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/Lang/LinearSequence.i.verchk --summary build/lib/Lang/LinearSequence.i.verified --error build/lib/Lang/LinearSequence.i.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/DataStructures/LinearMutableMapBase.i.verchk --summary build/lib/DataStructures/LinearMutableMapBase.i.verified --error build/lib/DataStructures/LinearMutableMapBase.i.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/DataStructures/LinearDList.i.verchk --summary build/lib/DataStructures/LinearDList.i.verified --error build/lib/DataStructures/LinearDList.i.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/Lang/LinearBox.i.verchk --summary build/lib/Lang/LinearBox.i.verified --error build/lib/Lang/LinearBox.i.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/Base/Message.i.verchk --summary build/lib/Base/Message.i.verified --error build/lib/Base/Message.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Buckets/BoundedPivotsLib.i.dfy ) 2>&1 | tee build/lib/Buckets/BoundedPivotsLib.i.verchk-tmp
+
+Dafny program verifier finished with 10 verified, 0 errors
+14.98user 0.50system 0:09.04elapsed 171%CPU (0avgtext+0avgdata 310420maxresident)k
+0inputs+0outputs (0major+109647minor)pagefaults 0swaps
+mv build/lib/DataStructures/LinearLru.i.verchk-tmp build/lib/DataStructures/LinearLru.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Base/Multisets.i.verchk --summary build/lib/Base/Multisets.i.verified --error build/lib/Base/Multisets.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 ))  /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Marshalling/GenericMarshalling.i.dfy ) 2>&1 | tee build/lib/Marshalling/GenericMarshalling.i.verchk-tmp
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/LinearContentMutableMap.i.dfy(173,9): Verification out of resource (Impl$$LinearContentMutableMap.__default.Probe)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/LinearContentMutableMap.i.dfy(272,9): Verification out of resource (Impl$$LinearContentMutableMap.__default.FixedSizeInsertEntry)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/Marshalling/../Base/sequences.i.dfy(587,18): Warning: /!\ No terms found to trigger on.
+
+Dafny program verifier finished with 451 verified, 0 errors
+174.91user 4.43system 1:00.96elapsed 294%CPU (0avgtext+0avgdata 695292maxresident)k
+0inputs+0outputs (0major+407785minor)pagefaults 0swaps
+mv build/lib/Base/total_order.i.verchk-tmp build/lib/Base/total_order.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Marshalling/Util.i.verchk --summary build/lib/Marshalling/Util.i.verified --error build/lib/Marshalling/Util.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/DataStructures/LinearUSeq.i.dfy ) 2>&1 | tee build/lib/DataStructures/LinearUSeq.i.verchk-tmp
+
+Dafny program verifier finished with 56 verified, 0 errors
+36.07user 0.80system 0:14.16elapsed 260%CPU (0avgtext+0avgdata 460864maxresident)k
+0inputs+0outputs (0major+163081minor)pagefaults 0swaps
+mv build/lib/Buckets/BoundedPivotsLib.i.verchk-tmp build/lib/Buckets/BoundedPivotsLib.i.verchk
+tools/aggregate-verchk.py --verchk --root build/Versions/VOp.i.verchk --summary build/Versions/VOp.i.verified --error build/Versions/VOp.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 BlockCacheSystem/JournalInterval.i.dfy ) 2>&1 | tee build/BlockCacheSystem/JournalInterval.i.verchk-tmp
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/LinearContentMutableMap.i.dfy(591,9): Verification out of resource (Impl$$LinearContentMutableMap.__default.Realloc)
+
+Dafny program verifier finished with 46 verified, 0 errors, 3 out of resource
+Command exited with non-zero status 4
+73.98user 0.89system 0:29.49elapsed 253%CPU (0avgtext+0avgdata 358420maxresident)k
+0inputs+0outputs (0major+179576minor)pagefaults 0swaps
+mv build/lib/DataStructures/LinearContentMutableMap.i.verchk-tmp build/lib/DataStructures/LinearContentMutableMap.i.verchk
+tools/aggregate-verchk.py --verchk --root build/MapSpec/Journal.i.verchk --summary build/MapSpec/Journal.i.verified --error build/MapSpec/Journal.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 ))  /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Buckets/PackedStringArray.i.dfy ) 2>&1 | tee build/lib/Buckets/PackedStringArray.i.verchk-tmp
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/BlockInterface.i.dfy(209,8): Verification out of resource (Impl$$BlockInterface.__default.TransactionPreservesInv)
+
+Dafny program verifier finished with 39 verified, 0 errors, 1 out of resource
+Command exited with non-zero status 4
+55.03user 0.81system 0:43.40elapsed 128%CPU (0avgtext+0avgdata 279348maxresident)k
+0inputs+0outputs (0major+186588minor)pagefaults 0swaps
+mv build/Betree/BlockInterface.i.verchk-tmp build/Betree/BlockInterface.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/DataStructures/MutableBtree.i.dfy ) 2>&1 | tee build/lib/DataStructures/MutableBtree.i.verchk-tmp
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/Buckets/../Base/sequences.i.dfy(587,18): Warning: /!\ No terms found to trigger on.
+
+Dafny program verifier finished with 10 verified, 0 errors
+13.62user 0.40system 0:07.27elapsed 192%CPU (0avgtext+0avgdata 302164maxresident)k
+0inputs+0outputs (0major+94442minor)pagefaults 0swaps
+mv build/lib/DataStructures/LinearUSeq.i.verchk-tmp build/lib/DataStructures/LinearUSeq.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Base/Arrays.i.verchk --summary build/lib/Base/Arrays.i.verified --error build/lib/Base/Arrays.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/DataStructures/BtreeModel.i.dfy ) 2>&1 | tee build/lib/DataStructures/BtreeModel.i.verchk-tmp
+
+Dafny program verifier finished with 43 verified, 0 errors
+21.95user 0.58system 0:08.54elapsed 263%CPU (0avgtext+0avgdata 350656maxresident)k
+0inputs+0outputs (0major+107647minor)pagefaults 0swaps
+mv build/BlockCacheSystem/JournalInterval.i.verchk-tmp build/BlockCacheSystem/JournalInterval.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 Impl/BlockAllocatorImpl.i.dfy ) 2>&1 | tee build/Impl/BlockAllocatorImpl.i.verchk-tmp
+
+Dafny program verifier finished with 136 verified, 0 errors
+69.29user 1.09system 0:22.66elapsed 310%CPU (0avgtext+0avgdata 438972maxresident)k
+0inputs+0outputs (0major+158410minor)pagefaults 0swaps
+mv build/lib/Marshalling/GenericMarshalling.i.verchk-tmp build/lib/Marshalling/GenericMarshalling.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/DataStructures/LinearContentMutableMap.i.verchk --summary build/lib/DataStructures/LinearContentMutableMap.i.verified --error build/lib/DataStructures/LinearContentMutableMap.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Checksums/BitLemmas.i.dfy ) 2>&1 | tee build/lib/Checksums/BitLemmas.i.verchk-tmp
+
+Dafny program verifier finished with 22 verified, 0 errors
+9.87user 0.29system 0:04.98elapsed 204%CPU (0avgtext+0avgdata 193212maxresident)k
+0inputs+0outputs (0major+60060minor)pagefaults 0swaps
+mv build/Impl/BlockAllocatorImpl.i.verchk-tmp build/Impl/BlockAllocatorImpl.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Math/ModLemmas.i.verchk --summary build/lib/Math/ModLemmas.i.verified --error build/lib/Math/ModLemmas.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Checksums/CRC32C_Lemmas.i.dfy ) 2>&1 | tee build/lib/Checksums/CRC32C_Lemmas.i.verchk-tmp
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/Graph.i.dfy(161,8): Verification out of resource (Impl$$Graph.__default.LocalEditPreservesAcyclic)
+
+Dafny program verifier finished with 18 verified, 0 errors, 1 out of resource
+Command exited with non-zero status 4
+73.91user 0.60system 1:08.89elapsed 108%CPU (0avgtext+0avgdata 233780maxresident)k
+0inputs+0outputs (0major+166643minor)pagefaults 0swaps
+mv build/Betree/Graph.i.verchk-tmp build/Betree/Graph.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Checksums/CRC32C_PowDef.i.verchk --summary build/lib/Checksums/CRC32C_PowDef.i.verified --error build/lib/Checksums/CRC32C_PowDef.i.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/Checksums/F2_X_Lemmas.i.verchk --summary build/lib/Checksums/F2_X_Lemmas.i.verified --error build/lib/Checksums/F2_X_Lemmas.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 Versions/StatesView.i.dfy ) 2>&1 | tee build/Versions/StatesView.i.verchk-tmp
+
+Dafny program verifier finished with 40 verified, 0 errors
+15.44user 0.61system 0:08.32elapsed 193%CPU (0avgtext+0avgdata 204452maxresident)k
+0inputs+0outputs (0major+65138minor)pagefaults 0swaps
+mv build/lib/Checksums/BitLemmas.i.verchk-tmp build/lib/Checksums/BitLemmas.i.verchk
+touch build/MapSpec/MapSpec.s.dummydep
+touch build/lib/DataStructures/LinearLru.i.dummydep
+touch build/lib/Buckets/BoundedPivotsLib.i.dummydep
+touch build/lib/Marshalling/GenericMarshalling.i.dummydep
+touch build/Betree/BetreeSpec.i.dummydep
+touch build/BlockCacheSystem/JournalInterval.i.dummydep
+touch build/lib/Buckets/PackedStringArrayMarshalling.i.dummydep
+touch build/lib/DataStructures/MutableBtree.i.dummydep
+touch build/lib/Checksums/CRC32C_Lemmas.i.dummydep
+touch build/Versions/StatesViewMap.i.dummydep
+tools/aggregate-verchk.py --verchk --root build/MapSpec/UIStateMachine.s.verchk --summary build/MapSpec/UIStateMachine.s.verified --error build/MapSpec/UIStateMachine.s.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 MapSpec/ThreeStateVersioned.s.dfy ) 2>&1 | tee build/MapSpec/ThreeStateVersioned.s.verchk-tmp
+
+Dafny program verifier finished with 12 verified, 0 errors
+7.55user 0.34system 0:05.85elapsed 134%CPU (0avgtext+0avgdata 170464maxresident)k
+0inputs+0outputs (0major+53269minor)pagefaults 0swaps
+mv build/Versions/StatesView.i.verchk-tmp build/Versions/StatesView.i.verchk
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 ByteBlockCacheSystem/AsyncDiskModel.s.dfy ) 2>&1 | tee build/ByteBlockCacheSystem/AsyncDiskModel.s.verchk-tmp
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/Checksums/CRC32C_Lemmas.i.dfy(293,49): Error: assertion violation
+Execution trace:
+    (0,0): anon0
+
+Dafny program verifier finished with 9 verified, 0 errors
+6.77user 0.23system 0:05.96elapsed 117%CPU (0avgtext+0avgdata 152548maxresident)k
+0inputs+0outputs (0major+49032minor)pagefaults 0swaps
+mv build/MapSpec/ThreeStateVersioned.s.verchk-tmp build/MapSpec/ThreeStateVersioned.s.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Checksums/CRC32C.s.verchk --summary build/lib/Checksums/CRC32C.s.verified --error build/lib/Checksums/CRC32C.s.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/DataStructures/LruModel.i.verchk --summary build/lib/DataStructures/LruModel.i.verified --error build/lib/DataStructures/LruModel.i.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/DataStructures/LinearMutableMap.i.verchk --summary build/lib/DataStructures/LinearMutableMap.i.verified --error build/lib/DataStructures/LinearMutableMap.i.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/Base/total_order.i.verchk --summary build/lib/Base/total_order.i.verified --error build/lib/Base/total_order.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Buckets/BucketMap.i.dfy ) 2>&1 | tee build/lib/Buckets/BucketMap.i.verchk-tmp
+
+Dafny program verifier finished with 55 verified, 0 errors
+51.79user 1.14system 0:24.26elapsed 218%CPU (0avgtext+0avgdata 478616maxresident)k
+0inputs+0outputs (0major+190164minor)pagefaults 0swaps
+mv build/lib/DataStructures/MutableBtree.i.verchk-tmp build/lib/DataStructures/MutableBtree.i.verchk
+tools/aggregate-verchk.py --verchk --root build/Betree/Graph.i.verchk --summary build/Betree/Graph.i.verified --error build/Betree/Graph.i.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/Marshalling/GenericMarshalling.i.verchk --summary build/lib/Marshalling/GenericMarshalling.i.verified --error build/lib/Marshalling/GenericMarshalling.i.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/DataStructures/LinearUSeq.i.verchk --summary build/lib/DataStructures/LinearUSeq.i.verified --error build/lib/DataStructures/LinearUSeq.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 Betree/Betree.i.dfy ) 2>&1 | tee build/Betree/Betree.i.verchk-tmp
+
+Dafny program verifier finished with 24 verified, 0 errors
+13.50user 0.53system 0:07.87elapsed 178%CPU (0avgtext+0avgdata 216392maxresident)k
+0inputs+0outputs (0major+78008minor)pagefaults 0swaps
+mv build/ByteBlockCacheSystem/AsyncDiskModel.s.verchk-tmp build/ByteBlockCacheSystem/AsyncDiskModel.s.verchk
+tools/aggregate-verchk.py --verchk --root build/Betree/Transactable.i.verchk --summary build/Betree/Transactable.i.verified --error build/Betree/Transactable.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 Betree/BetreeSpec.i.dfy ) 2>&1 | tee build/Betree/BetreeSpec.i.verchk-tmp
+Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/BtreeModel.i.dfy(348,8): Verification inconclusive (Impl$$BtreeModel.__default.SplitLeafInterpretation)
+
+Dafny program verifier finished with 32 verified, 1 error
+Command exited with non-zero status 4
+28.09user 0.79system 0:19.50elapsed 148%CPU (0avgtext+0avgdata 319384maxresident)k
+0inputs+0outputs (0major+129491minor)pagefaults 0swaps
+mv build/lib/Checksums/CRC32C_Lemmas.i.verchk-tmp build/lib/Checksums/CRC32C_Lemmas.i.verchk
+tools/aggregate-verchk.py --verchk --root build/BlockCacheSystem/JournalRange.i.verchk --summary build/BlockCacheSystem/JournalRange.i.verified --error build/BlockCacheSystem/JournalRange.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Buckets/PackedStringArrayMarshalling.i.dfy ) 2>&1 | tee build/lib/Buckets/PackedStringArrayMarshalling.i.verchk-tmp
+Prover error: Invalid PING response from the prover: unsat
+
+Prover error: Invalid PING response from the prover: unsat
+
+Prover error: Invalid PING response from the prover: unsat
+
+Prover error: Invalid PING response from the prover: unsat
+
+Prover error: Invalid PING response from the prover: unsat
+
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/Buckets/PackedStringArray.i.dfy(523,9): Verification out of resource (Impl$$PackedStringArray.__default.BinarySearchIndexOfFirstKeyGtePivot)
+
+Dafny program verifier finished with 6 verified, 0 errors
+13.96user 0.53system 0:09.07elapsed 159%CPU (0avgtext+0avgdata 353928maxresident)k
+0inputs+0outputs (0major+110380minor)pagefaults 0swaps
+mv build/Betree/Betree.i.verchk-tmp build/Betree/Betree.i.verchk
+
+Dafny program verifier finished with 94 verified, 0 errors, 1 out of resource
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/DataStructures/KMBtree.i.dfy ) 2>&1 | tee build/lib/DataStructures/KMBtree.i.verchk-tmp
+Command exited with non-zero status 4
+101.48user 1.51system 0:36.37elapsed 283%CPU (0avgtext+0avgdata 487076maxresident)k
+0inputs+0outputs (0major+235980minor)pagefaults 0swaps
+mv build/lib/Buckets/PackedStringArray.i.verchk-tmp build/lib/Buckets/PackedStringArray.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Checksums/BitLemmas.i.verchk --summary build/lib/Checksums/BitLemmas.i.verified --error build/lib/Checksums/BitLemmas.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Checksums/CRC32C_Lut.i.dfy ) 2>&1 | tee build/lib/Checksums/CRC32C_Lut.i.verchk-tmp
+Prover error: Invalid PING response from the prover: unsat
+
+Prover error: Invalid PING response from the prover: unsat
+
+
+Dafny program verifier finished with 22 verified, 0 errors
+27.03user 0.70system 0:12.37elapsed 224%CPU (0avgtext+0avgdata 429684maxresident)k
+0inputs+0outputs (0major+144889minor)pagefaults 0swaps
+mv build/lib/Buckets/BucketMap.i.verchk-tmp build/lib/Buckets/BucketMap.i.verchk
+tools/aggregate-verchk.py --verchk --root build/Versions/StatesView.i.verchk --summary build/Versions/StatesView.i.verified --error build/Versions/StatesView.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 Versions/StatesViewMap.i.dfy ) 2>&1 | tee build/Versions/StatesViewMap.i.verchk-tmp
+Prover error: Invalid PING response from the prover: unsat
+
+Prover error: Invalid PING response from the prover: unsat
+
+Prover error: Invalid PING response from the prover: unsat
+
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/BtreeModel.i.dfy(960,11): Verification inconclusive (CheckWellformed$$BtreeModel.__default.Grow)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/BtreeModel.i.dfy(983,8): Verification inconclusive (CheckWellformed$$BtreeModel.__default.GrowPreservesInterpretation)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/BtreeModel.i.dfy(983,8): Verification inconclusive (Impl$$BtreeModel.__default.GrowPreservesInterpretation)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/BtreeModel.i.dfy(1009,11): Verification inconclusive (CheckWellformed$$BtreeModel.__default.NumElementsOfChildren)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/BtreeModel.i.dfy(1052,8): Verification inconclusive (Impl$$BtreeModel.__default.InterpretationsDisjointUnion)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/BtreeModel.i.dfy(1152,8): Verification inconclusive (CheckWellformed$$BtreeModel.__default.NumElementsMatchesInterpretation)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/BtreeModel.i.dfy(1213,21): Verification inconclusive (CheckWellformed$$BtreeModel.__default.ToSeq)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/BtreeModel.i.dfy(1223,8): Verification inconclusive (Impl$$BtreeModel.__default.ToSeqChildrenDecomposition)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/BtreeModel.i.dfy(1246,8): Verification inconclusive (Impl$$BtreeModel.__default.ToSeqChildrenLength)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/BtreeModel.i.dfy(1258,8): Verification inconclusive (Impl$$BtreeModel.__default.ToSeqLength)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/BtreeModel.i.dfy(1269,8): Verification inconclusive (Impl$$BtreeModel.__default.ToSeqInAllKeys)
+Prover error: Invalid PING response from the prover: unsat
+
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/BtreeModel.i.dfy(1325,8): Verification inconclusive (CheckWellformed$$BtreeModel.__default.ToSeqInInterpretation)
+Prover error: Invalid PING response from the prover: unsat
+
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/lib/DataStructures/BtreeModel.i.dfy(1393,8): Verification inconclusive (CheckWellformed$$BtreeModel.__default.InterpretationNumElements)
+
+Dafny program verifier finished with 86 verified, 0 errors, 14 inconclusives
+Command exited with non-zero status 4
+112.33user 2.02system 0:37.59elapsed 304%CPU (0avgtext+0avgdata 508104maxresident)k
+0inputs+0outputs (0major+331399minor)pagefaults 0swaps
+mv build/lib/DataStructures/BtreeModel.i.verchk-tmp build/lib/DataStructures/BtreeModel.i.verchk
+touch build/MapSpec/ThreeStateVersioned.s.dummydep
+touch build/ByteBlockCacheSystem/AsyncDiskModel.s.dummydep
+touch build/lib/Buckets/BucketMap.i.dummydep
+touch build/Betree/Betree.i.dummydep
+touch build/lib/DataStructures/KMBtree.i.dummydep
+touch build/Betree/BetreeInv.i.dummydep
+touch build/ByteBlockCacheSystem/JournalBytes.i.dummydep
+touch build/lib/Checksums/CRC32C_Lut.i.dummydep
+touch build/Betree/Betree_Refines_Map.i.dummydep
+touch build/Versions/JournalView.i.dummydep
+touch build/MapSpec/TSJ.i.dummydep
+tools/aggregate-verchk.py --verchk --root build/MapSpec/MapSpec.s.verchk --summary build/MapSpec/MapSpec.s.verified --error build/MapSpec/MapSpec.s.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 MapSpec/ThreeStateVersionedMap.s.dfy ) 2>&1 | tee build/MapSpec/ThreeStateVersionedMap.s.verchk-tmp
+
+Dafny program verifier finished with 2 verified, 0 errors
+3.98user 0.15system 0:03.57elapsed 115%CPU (0avgtext+0avgdata 136944maxresident)k
+0inputs+0outputs (0major+34879minor)pagefaults 0swaps
+mv build/Versions/StatesViewMap.i.verchk-tmp build/Versions/StatesViewMap.i.verchk
+tools/aggregate-verchk.py --verchk --root build/MapSpec/ThreeStateVersioned.s.verchk --summary build/MapSpec/ThreeStateVersioned.s.verified --error build/MapSpec/ThreeStateVersioned.s.verified.err
+tools/aggregate-verchk.py --verchk --root build/ByteBlockCacheSystem/AsyncDiskModel.s.verchk --summary build/ByteBlockCacheSystem/AsyncDiskModel.s.verified --error build/ByteBlockCacheSystem/AsyncDiskModel.s.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 Impl/MainDiskIOHandler.s.dfy ) 2>&1 | tee build/Impl/MainDiskIOHandler.s.verchk-tmp
+
+Dafny program verifier finished with 14 verified, 0 errors
+18.70user 0.52system 0:10.83elapsed 177%CPU (0avgtext+0avgdata 410768maxresident)k
+0inputs+0outputs (0major+126822minor)pagefaults 0swaps
+mv build/lib/Buckets/PackedStringArrayMarshalling.i.verchk-tmp build/lib/Buckets/PackedStringArrayMarshalling.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/DataStructures/LinearLru.i.verchk --summary build/lib/DataStructures/LinearLru.i.verified --error build/lib/DataStructures/LinearLru.i.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/Base/total_order_impl.i.verchk --summary build/lib/Base/total_order_impl.i.verified --error build/lib/Base/total_order_impl.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 )) /noNLarith /induction:1 /rlimit:$(( 30 * 545 )) /compile:0 lib/Buckets/BucketsLib.i.dfy ) 2>&1 | tee build/lib/Buckets/BucketsLib.i.verchk-tmp
+
+Dafny program verifier finished with 0 verified, 0 errors
+1.71user 0.07system 0:01.81elapsed 99%CPU (0avgtext+0avgdata 103484maxresident)k
+0inputs+0outputs (0major+18960minor)pagefaults 0swaps
+mv build/MapSpec/ThreeStateVersionedMap.s.verchk-tmp build/MapSpec/ThreeStateVersionedMap.s.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Buckets/MapSeqs.i.verchk --summary build/lib/Buckets/MapSeqs.i.verified --error build/lib/Buckets/MapSeqs.i.verified.err
+tools/aggregate-verchk.py --verchk --root build/Betree/BlockInterface.i.verchk --summary build/Betree/BlockInterface.i.verified --error build/Betree/BlockInterface.i.verified.err
+
+Dafny program verifier finished with 16 verified, 0 errors
+tools/aggregate-verchk.py --verchk --root build/BlockCacheSystem/JournalInterval.i.verchk --summary build/BlockCacheSystem/JournalInterval.i.verified --error build/BlockCacheSystem/JournalInterval.i.verified.err
+13.08user 0.38system 0:06.35elapsed 211%CPU (0avgtext+0avgdata 239584maxresident)k
+0inputs+0outputs (0major+93786minor)pagefaults 0swaps
+mv build/lib/Checksums/CRC32C_Lut.i.verchk-tmp build/lib/Checksums/CRC32C_Lut.i.verchk
+tools/aggregate-verchk.py --verchk --root build/lib/Buckets/PackedStringArray.i.verchk --summary build/lib/Buckets/PackedStringArray.i.verified --error build/lib/Buckets/PackedStringArray.i.verified.err
+tools/aggregate-verchk.py --verchk --root build/lib/DataStructures/BtreeModel.i.verchk --summary build/lib/DataStructures/BtreeModel.i.verified --error build/lib/DataStructures/BtreeModel.i.verified.err
+( /usr/bin/time .dafny/dafny//Scripts/dafny /vcsCores:4 /rlimit:$(( 30 * 545 ))  /induction:1 /proverOpt:O:smt.random_seed=1 /compile:0 Betree/BetreeInv.i.dfy ) 2>&1 | tee build/Betree/BetreeInv.i.verchk-tmp
+Traceback (most recent call last):
+  File "tools/aggregate-verchk.py", line 98, in <module>
+    main()
+  File "tools/aggregate-verchk.py", line 92, in main
+    write_summary(reportType, verchks, args.summary, args.errors)
+  File "tools/aggregate-verchk.py", line 49, in write_summary
+    for fail in sorted(fails[level], key=lambda c : c.filename):
+  File "tools/aggregate-verchk.py", line 49, in <lambda>
+    for fail in sorted(fails[level], key=lambda c : c.filename):
+AttributeError: 'str' object has no attribute 'filename'
+make: *** [Makefile:248: build/lib/DataStructures/BtreeModel.i.verified] Error 1
+make: *** Waiting for unfinished jobs....
+
+Dafny program verifier finished with 5 verified, 0 errors
+4.69user 0.21system 0:03.10elapsed 158%CPU (0avgtext+0avgdata 152112maxresident)k
+0inputs+0outputs (0major+44481minor)pagefaults 0swaps
+mv build/Impl/MainDiskIOHandler.s.verchk-tmp build/Impl/MainDiskIOHandler.s.verchk
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/../lib/Base/sequences.i.dfy(587,18): Warning: /!\ No terms found to trigger on.
+
+Dafny program verifier finished with 65 verified, 0 errors
+235.29user 0.51system 1:59.30elapsed 197%CPU (0avgtext+0avgdata 166440maxresident)k
+0inputs+0outputs (0major+68581minor)pagefaults 0swaps
+mv build/lib/Base/BitsetLemmas.i.verchk-tmp build/lib/Base/BitsetLemmas.i.verchk
+
+Dafny program verifier finished with 60 verified, 0 errors
+43.97user 0.99system 0:18.50elapsed 242%CPU (0avgtext+0avgdata 491976maxresident)k
+0inputs+0outputs (0major+215237minor)pagefaults 0swaps
+mv build/Betree/BetreeSpec.i.verchk-tmp build/Betree/BetreeSpec.i.verchk
+
+Dafny program verifier finished with 71 verified, 0 errors
+55.31user 1.00system 0:18.65elapsed 301%CPU (0avgtext+0avgdata 562844maxresident)k
+0inputs+0outputs (0major+229417minor)pagefaults 0swaps
+mv build/lib/Buckets/BucketsLib.i.verchk-tmp build/lib/Buckets/BucketsLib.i.verchk
+
+Dafny program verifier finished with 123 verified, 0 errors
+78.22user 1.28system 0:28.01elapsed 283%CPU (0avgtext+0avgdata 681416maxresident)k
+0inputs+0outputs (0major+276032minor)pagefaults 0swaps
+mv build/lib/DataStructures/KMBtree.i.verchk-tmp build/lib/DataStructures/KMBtree.i.verchk
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/BetreeInv.i.dfy(346,8): Verification out of resource (Impl$$BetreeInv.__default.RedirectOnlyPredOfChildIsParent)
+Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/BetreeInv.i.dfy(376,8): Verification inconclusive (Impl$$BetreeInv.__default.RedirectPreservesAcyclic)
+Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/BetreeInv.i.dfy(439,8): Verification inconclusive (Impl$$BetreeInv.__default.RedirectPreservesRootHasNoPred)
+Prover error: Invalid PING response from the prover: unsat
+
+Prover error: Invalid PING response from the prover: unsat
+
+Prover error: Invalid PING response from the prover: unsat
+
+Prover error: Invalid PING response from the prover: unsat
+
+Prover error: Invalid PING response from the prover: unsat
+
+Prover error: Invalid PING response from the prover: unsat
+
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/BetreeInv.i.dfy(562,8): Verification out of resource (Impl$$BetreeInv.__default.FlushPreservesLookups)
+Prover error: Invalid PING response from the prover: unsat
+
+Prover error: Invalid PING response from the prover: unsat
+
+Prover error: Invalid PING response from the prover: unsat
+
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/BetreeInv.i.dfy(654,8): Verification out of resource (Impl$$BetreeInv.__default.RedirectPreservesLookups)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/BetreeInv.i.dfy(737,8): Verification inconclusive (Impl$$BetreeInv.__default.InitImpliesInv)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/BetreeInv.i.dfy(757,8): Verification inconclusive (Impl$$BetreeInv.__default.QueryStepPreservesInvariant)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/BetreeInv.i.dfy(764,8): Verification inconclusive (Impl$$BetreeInv.__default.InsertMessagePreservesAcyclicAndReachablePointersValid)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/BetreeInv.i.dfy(774,8): Verification inconclusive (CheckWellformed$$BetreeInv.__default.InsertMessagePreservesLookupsPut)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/BetreeInv.i.dfy(774,8): Verification inconclusive (Impl$$BetreeInv.__default.InsertMessagePreservesLookupsPut)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/BetreeInv.i.dfy(822,8): Verification inconclusive (Impl$$BetreeInv.__default.InsertMessagePreservesNonrootLookups)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/BetreeInv.i.dfy(837,8): Verification inconclusive (Impl$$BetreeInv.__default.InsertMessageStepPreservesInvariant)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/BetreeInv.i.dfy(850,8): Verification inconclusive (Impl$$BetreeInv.__default.FlushStepPreservesInvariant)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/BetreeInv.i.dfy(859,8): Verification inconclusive (Impl$$BetreeInv.__default.GrowStepPreservesInvariant)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/BetreeInv.i.dfy(869,8): Verification inconclusive (Impl$$BetreeInv.__default.RedirectStepPreservesInvariant)
+Prover error: Invalid PING response from the prover: unsat
+
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/BetreeInv.i.dfy(945,8): Verification inconclusive (Impl$$BetreeInv.__default.GCStepPreservesInvariant)
+/root/verichecks-worker/worker-dir/clones/aeb4fb8fa512f7fc1318ba7e0da88b30302bf99c/Betree/BetreeInv.i.dfy(957,8): Verification inconclusive (Impl$$BetreeInv.__default.BetreeStepPreservesInvariant)
+
+Dafny program verifier finished with 50 verified, 0 errors, 14 inconclusives, 3 out of resource
+Command exited with non-zero status 4
+134.48user 1.31system 0:38.62elapsed 351%CPU (0avgtext+0avgdata 607820maxresident)k
+0inputs+0outputs (0major+383172minor)pagefaults 0swaps
+mv build/Betree/BetreeInv.i.verchk-tmp build/Betree/BetreeInv.i.verchk
