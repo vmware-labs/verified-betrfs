@@ -742,22 +742,28 @@ module Interpretation {
       :: S.commutes(x, S.f(table[k]))
   ensures interp(table) == S.add(interp(table'), x)
   {
-    /*calc {
+    calc {
       interp(table);
-      interp_wrt(table, f);
+      { S.add_unit(interp(table)); }
+      S.add(interp(table), S.unit());
+      S.add(interp_wrt(table, f), S.unit());
       { reveal_interp_wrt(); }
-      S.concat_map(table[f+1..] + table[..f+1]);
+      S.add(S.concat_map(table[f+1..] + table[..f+1]), S.unit());
       {
-        S.preserves_1_helper(table[f+1..] + table[..f+1],
+        S.add_unit(S.f(table[i]));
+        var i1 := if i >= f+1 then i - (f+1) else i + |table| - (f+1);
+        S.add_unit(S.concat_map((table[f+1..] + table[..f+1])[i1+1..]));
+        S.commutes_seq(x, (table'[f+1..] + table'[..f+1])[i1+1..]);
+        S.preserves_1_right_helper(table[f+1..] + table[..f+1],
             table'[f+1..] + table'[..f+1],
-            if i >= f+1 then i - (f+1) else i + |table| - (f+1));
+            S.unit(), x,
+            i1);
       }
-      S.concat_map(table'[f+1..] + table'[..f+1]);
+      S.add(S.concat_map(table'[f+1..] + table'[..f+1]), x);
       { reveal_interp_wrt(); }
-      interp_wrt(table', f);
-      interp(table');
-    }*/
-    assume false;
+      S.add(interp_wrt(table', f), x);
+      S.add(interp(table'), x);
+    }
   }
 
   lemma preserves_1_left(table: seq<Option<HT.Info>>,
@@ -780,7 +786,28 @@ module Interpretation {
       :: S.commutes(x, S.f(table[k]))
   ensures S.add(x, interp(table)) == interp(table')
   {
-    assume false;
+    calc {
+      S.add(x, interp(table));
+      S.add(x, interp_wrt(table, f));
+      { reveal_interp_wrt(); }
+      S.add(x, S.concat_map(table[f+1..] + table[..f+1]));
+      {
+        S.add_unit(S.f(table'[i]));
+        var i1 := if i >= f+1 then i - (f+1) else i + |table| - (f+1);
+        S.add_unit(S.concat_map((table'[f+1..] + table'[..f+1])[..i1]));
+        S.commutes_seq(x, (table[f+1..] + table[..f+1])[..i1]);
+        S.preserves_1_left_helper(table[f+1..] + table[..f+1],
+            table'[f+1..] + table'[..f+1],
+            x, S.unit(),
+            i1);
+      }
+      S.add(S.unit(), S.concat_map(table'[f+1..] + table'[..f+1]));
+      { reveal_interp_wrt(); }
+      S.add(S.unit(), interp_wrt(table', f));
+      S.add(S.unit(), interp(table'));
+      { S.add_unit(interp(table')); }
+      interp(table');
+    }
   }
 
   lemma preserves_2(table: seq<Option<HT.Info>>,

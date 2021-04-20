@@ -414,4 +414,18 @@ abstract module MonoidMap {
     }
   }
 
+  lemma commutes_seq(a: M, q: seq<Q>)
+  requires forall elem | elem in q :: commutes(a, f(elem))
+  ensures commutes(concat_map(q), a)
+  {
+    reveal_concat_map();
+    if |q| == 0 {
+      add_unit(a);
+    } else {
+      commutes_seq(a, q[..|q|-1]);
+      associative(concat_map(q[..|q|-1]), a, f(q[|q|-1]));
+      associative(concat_map(q[..|q|-1]), f(q[|q|-1]), a);
+      associative(a, concat_map(q[..|q|-1]), f(q[|q|-1]));
+    }
+  }
 }
