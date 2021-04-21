@@ -196,7 +196,6 @@ OTHER_PROVER_FLAGS = /rlimit:$(DEFAULT_RLIMIT)
 ### Adjust defaults for a couple of files
 # (It would be nice if we could do this in the source instead.)
 
-build/Betree/BetreeInv.i.verchk: OTHER_PROVER_FLAGS=/proverOpt:O:smt.random_seed=1
 build/lib/DataStructures/LinearDList.i.verchk: OTHER_PROVER_FLAGS=/noNLarith /proverOpt:O:smt.random_seed=1
 
 # enable nonlinear arithmetic for some files
@@ -210,7 +209,6 @@ build/Impl/IOImpl.i.verchk: NONLINEAR_FLAGS=
 build/Impl/IOModel.i.verchk: NONLINEAR_FLAGS=
 build/Impl/SyncImpl.i.verchk: NONLINEAR_FLAGS=
 build/Impl/BookkeepingImpl.i.verchk: NONLINEAR_FLAGS=
-build/Betree/BetreeInv.i.verchk: NONLINEAR_FLAGS=
 build/lib/Base/SetBijectivity.i.verchk: NONLINEAR_FLAGS=
 build/lib/Marshalling/GenericMarshalling.i.verchk: NONLINEAR_FLAGS=
 build/lib/Buckets/BucketFlushModel.i.verchk: NONLINEAR_FLAGS=
