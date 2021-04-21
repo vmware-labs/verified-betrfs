@@ -31,4 +31,13 @@ module MultisetLemmas {
   ensures Apply(a_c, s) == Apply(b_c, Apply(a_b, s))
   {
   }
+
+  lemma MultisetSimplificationTriggers<P,Q>()
+  ensures forall fn: P -> Q :: Multisets.Apply(fn, multiset{}) == multiset{};
+  ensures forall fn: P -> Q, a :: Multisets.Apply(fn, multiset{a}) == multiset{fn(a)}
+  ensures forall fn: P -> Q, a, s :: a in s ==> fn(a) in Multisets.Apply(fn, s)
+  ensures forall fn: P -> Q, s, t :: Multisets.Apply(fn, s + t) == Multisets.Apply(fn, s) + Multisets.Apply(fn, t)
+  {
+    Multisets.reveal_Apply();
+  }
 }

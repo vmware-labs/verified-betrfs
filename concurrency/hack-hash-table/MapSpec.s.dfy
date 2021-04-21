@@ -100,6 +100,18 @@ module AsyncSpec {
     && s.resps == multiset{}
   }
 
+  predicate LinearizationPoint(s: Variables, s': Variables,
+      rid: RequestId, input: InnerIfc.Input, output: InnerIfc.Output)
+  {
+    // resolve request step
+    // serialization point: remove 'input' from 'reqs',
+    // add 'output' to 'resps'
+    && Req(rid, input) in s.reqs
+    && s.reqs == s'.reqs + multiset{Req(rid, input)}
+    && s'.resps == s.resps + multiset{Resp(rid, output)}
+    && SM.Next(s.s, s'.s, InnerIfc.Op(input, output))
+  }
+
   predicate Next(s: Variables, s': Variables, op: Ifc.Op)
   {
     match op {
@@ -109,20 +121,16 @@ module AsyncSpec {
       case InternalOp => (
         // stutter step
         || (s' == s)
+
         // resolve request step
-        // serialization point: remove 'input' from 'reqs',
-        // add 'output' to 'resps'
         || (exists rid, input, output ::
-          && Req(rid, input) in s.reqs
-          && s'.reqs == s.reqs - multiset{Req(rid, input)}
-          && s'.resps == s.resps + multiset{Resp(rid, output)}
-          && SM.Next(s.s, s'.s, InnerIfc.Op(input, output))
+          LinearizationPoint(s, s', rid, input, output)
         )
       )
       case End(rid, output) =>
         // remove from 'resps'
         && Resp(rid, output) in s.resps
-        && s' == s.(resps := s'.resps - multiset{Resp(rid, output)})
+        && s' == s.(resps := s.resps - multiset{Resp(rid, output)})
     }
   }
 }
