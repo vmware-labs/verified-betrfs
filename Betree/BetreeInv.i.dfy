@@ -422,7 +422,6 @@ module BetreeInv {
         }
       }
     }
-    assume false;
 
     forall path |
       && IsPath(s'.bcv.view, path)
@@ -431,7 +430,7 @@ module BetreeInv {
     {
       if (IsCycle(s'.bcv.view, path)) {
         RedirectOnlyPredOfChildIsParent(s, s', redirect, Last(path), path[0]);
-        assert false;
+        assert false by { reveal_RedirectReads(); }
         /*
         assert path[0] in redirect.new_children.Keys;
         assert Last(path) in redirect.new_children.Keys;
