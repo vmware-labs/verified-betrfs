@@ -1,0 +1,27 @@
+Overall: Fail
+
+Files failing with verification error
+	./Impl/IndirectionTable.i.dfy
+
+Files failing with untrusted file contains assumptions
+	./Betree/BetreeInv.i.dfy
+
+Files failing with exceeded rlimit
+	./BlockCacheSystem/BlockSystem.i.dfy
+	./ByteBlockCacheSystem/ByteSystem.i.dfy
+	./ByteBlockCacheSystem/InterpretationDisk.i.dfy
+	./lib/DataStructures/KMBtree.i.dfy
+
+Total build time: 11336 seconds
+
+Slowest files:
+	1144.9	./ByteBlockCacheSystem/ByteSystem.i.dfy
+	588.87	./BlockCacheSystem/BlockSystem.i.dfy
+	534.73	./ByteBlockCacheSystem/InterpretationDisk.i.dfy
+	366.84	./Impl/IndirectionTable.i.dfy
+	264.66	./PivotBetree/PivotBetreeSpecRefinement.i.dfy
+	235.11	./Impl/CommitterImpl.i.dfy
+	234.37	./lib/Base/BitsetLemmas.i.dfy
+	234.33	./BlockCacheSystem/JournalSystem.i.dfy
+	208.96	./Impl/BookkeepingModel.i.dfy
+	193.96	./Impl/MarshallingImpl.i.dfy
