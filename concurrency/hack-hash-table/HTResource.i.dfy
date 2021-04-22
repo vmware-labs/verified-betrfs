@@ -754,10 +754,28 @@ module HTResource refines ApplicationResourceSpec {
     assert TableQuantityInv(add(s, unit()));
   }
 
-  lemma TableQuantityDistributive(a: seq<Option<Info>>, b: seq<Option<Info>>)
-    ensures TableQuantity(a + b) == TableQuantity(a) + TableQuantity(b)
+  lemma TableQuantityDistributive(xs: seq<Option<Info>>, ys: seq<Option<Info>>)
+    ensures TableQuantity(xs + ys) == TableQuantity(xs) + TableQuantity(ys)
   {
     reveal_TableQuantity();
+    if |ys| == 0 {
+      assert xs + ys == xs;
+    } else {
+      var zs := xs + ys;
+      var zs', z := zs[..|zs| - 1], zs[ |zs| - 1];
+      var ys', y := ys[..|ys| - 1], ys[ |ys| - 1];
+
+      calc {
+        TableQuantity(zs);
+        TableQuantity(zs') + InfoQuantity(z);
+        TableQuantity(zs') + InfoQuantity(y);
+          { assert zs' == xs + ys'; }
+        TableQuantity(xs + ys') + InfoQuantity(y);
+          { TableQuantityDistributive(xs, ys'); }
+        TableQuantity(xs) +  TableQuantity(ys') + InfoQuantity(y);
+        TableQuantity(xs) +  TableQuantity(ys);
+      }
+    }
   }
 
   lemma ResourceTableQuantityDistributive(x: R, y: R)
