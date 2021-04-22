@@ -566,7 +566,7 @@ module NodeImpl {
         end := end + 1;
       }
 
-      var validbucketlist := MutBucket.BucketsNoKeyWithPrefix(node.buckets, from, start, end);
+      var validbucketlist := MutBucket.SeqNoKeyWithPrefix(node.buckets, from, start, end);
       if !validbucketlist {
         rootopt := lNone;
       } else {

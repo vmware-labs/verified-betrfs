@@ -7,6 +7,7 @@ include "../../PivotBetree/Bounds.i.dfy"
 include "BucketFlushModel.i.dfy"
 include "LKMBPKVOps.i.dfy"
 include "../Lang/Inout.i.dfy"
+include "TranslationLib.i.dfy"
 
 //
 // Collects singleton message insertions efficiently, avoiding repeated
@@ -37,6 +38,7 @@ module BucketImpl {
   import opened LinearSequence_s
   import opened LinearSequence_i
   import opened Inout
+  import opened TranslationLib
 
   type TreeMap = LKMB.Model.Node
 
@@ -810,32 +812,78 @@ module BucketImpl {
       }
     }
 
-    static method BucketsNoKeyWithPrefix(shared buckets: lseq<MutBucket>, prefix: Key, start: uint64, end: uint64)
+    shared method NoKeyWithPrefix(prefix: Key) returns (b: bool)
+    requires Inv()
+    ensures b == BucketNoKeyWithPrefix(this.I(), prefix)
+    {
+      var pkv := GetPkv();
+      var len := PackedKV.PSA.psaNumStrings(pkv.keys);
+      assert len as int == |bucket.keys|;
+
+      if sorted {
+        PackedKV.Keyspace.reveal_IsStrictlySorted();
+        var i := PackedKV.PSA.BinarySearchIndexOfFirstKeyGte(pkv.keys, prefix);
+        if i == len {
+          AllKeysLtPrefix(prefix);
+          return true;
+        }
+
+        var key : Key := PackedKV.GetKey(pkv, i);
+        var isprefix := (|prefix| as uint64 <= |key| as uint64 && prefix == key[..|prefix|]);
+        assert isprefix == IsPrefix(prefix, key) by { reveal_IsPrefix(); }
+        b := !isprefix;
+
+        assert b == BucketNoKeyWithPrefix(I(), prefix) by {
+          if b {
+            AllKeysLtPrefix(prefix);
+            forall j | i as int < j < |bucket.keys| && IsPrefix(prefix, bucket.keys[j])
+            ensures !IsPrefix(prefix, bucket.keys[j]) {
+              KeyWithPrefixLt(prefix, key, bucket.keys[j]);
+              assert false;
+            }
+          }
+        }
+      } else {
+        var i := 0 as uint64;
+        while i < len 
+        invariant 0 <= i <= len
+        invariant len as int <= |bucket.keys|
+        invariant forall j | 0 <= j < i :: !IsPrefix(prefix, bucket.keys[j])
+        {
+          var key : Key := PackedKV.GetKey(pkv, i);
+          assert key == bucket.keys[i];
+
+          var isprefix := (|prefix| as uint64 <= |key| as uint64 && prefix == key[..|prefix|]);
+          assert isprefix == IsPrefix(prefix, key) by { reveal_IsPrefix(); }
+          if isprefix {
+            return false;
+          }
+          i := i + 1;
+        }
+        b := true;
+      }
+    }
+
+    static method SeqNoKeyWithPrefix(shared buckets: lseq<MutBucket>, prefix: Key, start: uint64, end: uint64)
     returns (b: bool)
     requires InvLseq(buckets)
     requires 0 <= start as int < end as int <= |buckets|
     requires |buckets| < 0x1_0000_0000_0000_0000
     ensures b == BucketListNoKeyWithPrefix(ILseq(buckets)[start..end], prefix)
     {
-      assume false;
+      var i := start as uint64;
+      while i < end
+      invariant start <= i <= end
+      invariant end as int <= |buckets|
+      invariant forall j | start <= j < i :: BucketNoKeyWithPrefix(lseqs(buckets)[j].I(), prefix)
+      {
+        b := lseq_peek(buckets, i).NoKeyWithPrefix(prefix);
+        if !b {
+          return false;
+        }
+        i := i + 1;
+      }
       b := true;
-      // buckets := lseq_alloc(size);
-      
-      // var j := 0 as uint64;
-      // while j < size
-      // invariant 0 <= j <= size
-      // invariant |buckets| == size as int
-      // invariant forall i | j as int <= i < |buckets| :: !lseq_has(buckets)[i]
-      // invariant forall i | 0 <= i < j as int :: lseq_has(buckets)[i]
-      // invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].Inv()
-      // invariant forall i | 0 <= i < j as int :: lseqs(buckets)[i].I() == EmptyBucket()
-      // {
-      //   linear var newbucket := MutBucket.Alloc();
-      //   buckets := lseq_give(buckets, j, newbucket);
-      //   j := j + 1;
-      // }
-
-      // psa check things with no prefix
     }
 
     static method BucketListConcat(linear left: lseq<MutBucket>, linear bucket: MutBucket, linear right: lseq<MutBucket>)
