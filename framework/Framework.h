@@ -140,12 +140,12 @@ namespace MainDiskIOHandler_Compile {
   class DiskIOHandler {
     public:
     uint64 write(uint64 addr, DafnySequence<uint8> bytes);
-    Tuple2<uint64, uint64> write2(
+    Tuple<uint64, uint64> write2(
       uint64 addr1, DafnySequence<uint8> bytes1,
       uint64 addr2, DafnySequence<uint8> bytes2);
     uint64 read(uint64 addr, uint64 len);
-    Tuple3<uint64, uint64, uint64> getWriteResult();
-    Tuple3<uint64, uint64, DafnySequence<uint8>> getReadResult();
+    Tuple<uint64, uint64, uint64> getWriteResult();
+    Tuple<uint64, uint64, DafnySequence<uint8>> getReadResult();
 
     DiskIOHandler(std::string filename = ".veribetrfs.img");
     ~DiskIOHandler();
