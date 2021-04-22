@@ -889,35 +889,21 @@ module InterpretationDisk {
     ProveJournalUpdate(journal, journal', interval, newEntries);
   }
 
-  lemma RefinesReqWriteOp(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  lemma ReqWriteWithLocMatchesAtSuperblockLocations(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
   requires Inv(disk)
   requires dop.ReqWriteOp?
   requires ValidDiskOp(dop)
   requires D.RecvWrite(disk, disk', dop)
 
   requires reqWriteDisjointFromCurrent(disk, dop.reqWrite)
-
-  ensures Inv(disk')
-  ensures BlockDisk.Next(
-      IBlockDisk(disk), IBlockDisk(disk'),
-      BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite))
-  ensures JournalDisk.Next(
-      IJournalDisk(disk), IJournalDisk(disk'),
-      JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite))
+  ensures LocOfReqWrite(dop.reqWrite) != Superblock1Location() ==>
+             ReqWriteWithLoc(disk.reqWrites, Superblock1Location())
+          == ReqWriteWithLoc(disk'.reqWrites, Superblock1Location());
+  ensures LocOfReqWrite(dop.reqWrite) != Superblock2Location() ==>
+             ReqWriteWithLoc(disk.reqWrites, Superblock2Location())
+          == ReqWriteWithLoc(disk'.reqWrites, Superblock2Location());
   {
     var loc := LocOfReqWrite(dop.reqWrite);
-
-    assert disk.contents == disk'.contents;
-
-    getReqWriteSelf(disk.contents, disk'.reqWrites, dop.id);
-
-    forall l | !overlap(l, loc)
-    ensures atLocWithWrites(l, disk.contents, disk.reqWrites)
-         == atLocWithWrites(l, disk'.contents, disk'.reqWrites)
-    {
-      newReqWritePreserve(disk.contents, disk.reqWrites,
-          dop.id, dop.reqWrite, l.addr as int, l.len as int);
-    }
 
     if loc != Superblock1Location() {
       assert overlap(Superblock1Location(), Superblock1Location());
@@ -965,94 +951,261 @@ module InterpretationDisk {
       assert ReqWriteWithLoc(disk.reqWrites, Superblock2Location())
           == ReqWriteWithLoc(disk'.reqWrites, Superblock2Location());
     }
+  }
+
+  lemma RefinesReqWriteOp_Node(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  requires Inv(disk)
+  requires dop.ReqWriteOp?
+  requires ValidDiskOp(dop)
+  requires D.RecvWrite(disk, disk', dop)
+
+  requires reqWriteDisjointFromCurrent(disk, dop.reqWrite)
+
+  requires ValidNodeLocation(LocOfReqWrite(dop.reqWrite))
+
+  ensures Inv(disk')
+  ensures BlockDisk.Next(
+      IBlockDisk(disk), IBlockDisk(disk'),
+      BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite))
+  ensures JournalDisk.Next(
+      IJournalDisk(disk), IJournalDisk(disk'),
+      JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite))
+  {
+    var loc := LocOfReqWrite(dop.reqWrite);
+
+    assert disk.contents == disk'.contents;
+
+    getReqWriteSelf(disk.contents, disk'.reqWrites, dop.id);
+
+    forall l | !overlap(l, loc)
+    ensures atLocWithWrites(l, disk.contents, disk.reqWrites)
+         == atLocWithWrites(l, disk'.contents, disk'.reqWrites)
+    {
+      newReqWritePreserve(disk.contents, disk.reqWrites,
+          dop.id, dop.reqWrite, l.addr as int, l.len as int);
+    }
+
+    ReqWriteWithLocMatchesAtSuperblockLocations(disk, disk', dop);
+
+    forall l | ValidLocation(l) && !ValidNodeLocation(l)
+        && overlap(l, loc)
+    ensures false
+    {
+      overlappingLocsSameType(l, loc);
+    }
+
+    assert IBlockDisk(disk').reqWriteNodes[dop.id] == loc;
+
+    assert loc != Superblock1Location();
+    assert loc != Superblock2Location();
+   
+    assert IJournalDisk(disk).superblock1
+        == IJournalDisk(disk').superblock1;
+    assert IJournalDisk(disk).superblock2
+        == IJournalDisk(disk').superblock2;
+    assert IJournalDisk(disk).journal
+        == IJournalDisk(disk').journal;
+    assert IJournalDisk(disk).reqWriteSuperblock1
+        == IJournalDisk(disk').reqWriteSuperblock1;
+    assert IJournalDisk(disk).reqWriteSuperblock2
+        == IJournalDisk(disk').reqWriteSuperblock2;
+    assert IJournalDisk(disk).reqWriteJournals
+        == IJournalDisk(disk').reqWriteJournals;
+
+    assert BlockDisk.Next(
+        IBlockDisk(disk), IBlockDisk(disk'),
+        BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
+    assert JournalDisk.Next(
+        IJournalDisk(disk), IJournalDisk(disk'),
+        JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
+  }
+
+  lemma RefinesReqWriteOp_IndirectionTable(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  requires Inv(disk)
+  requires dop.ReqWriteOp?
+  requires ValidDiskOp(dop)
+  requires D.RecvWrite(disk, disk', dop)
+
+  requires reqWriteDisjointFromCurrent(disk, dop.reqWrite)
+
+  requires ValidIndirectionTableLocation(LocOfReqWrite(dop.reqWrite))
+
+  ensures Inv(disk')
+  ensures BlockDisk.Next(
+      IBlockDisk(disk), IBlockDisk(disk'),
+      BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite))
+  ensures JournalDisk.Next(
+      IJournalDisk(disk), IJournalDisk(disk'),
+      JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite))
+  {
+    var loc := LocOfReqWrite(dop.reqWrite);
+
+    assert disk.contents == disk'.contents;
+
+    getReqWriteSelf(disk.contents, disk'.reqWrites, dop.id);
+
+    forall l | !overlap(l, loc)
+    ensures atLocWithWrites(l, disk.contents, disk.reqWrites)
+         == atLocWithWrites(l, disk'.contents, disk'.reqWrites)
+    {
+      newReqWritePreserve(disk.contents, disk.reqWrites,
+          dop.id, dop.reqWrite, l.addr as int, l.len as int);
+    }
+
+    ReqWriteWithLocMatchesAtSuperblockLocations(disk, disk', dop);
+
+    forall l | ValidLocation(l) && !ValidIndirectionTableLocation(l)
+        && overlap(l, loc)
+    ensures false
+    {
+      overlappingLocsSameType(l, loc);
+    }
+
+    assert BlockDisk.Next(
+        IBlockDisk(disk), IBlockDisk(disk'),
+        BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
+    assert JournalDisk.Next(
+        IJournalDisk(disk), IJournalDisk(disk'),
+        JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
+  }
+
+  lemma RefinesReqWriteOp_Journal(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  requires Inv(disk)
+  requires dop.ReqWriteOp?
+  requires ValidDiskOp(dop)
+  requires D.RecvWrite(disk, disk', dop)
+
+  requires reqWriteDisjointFromCurrent(disk, dop.reqWrite)
+
+  requires ValidJournalLocation(LocOfReqWrite(dop.reqWrite))
+
+  ensures Inv(disk')
+  ensures BlockDisk.Next(
+      IBlockDisk(disk), IBlockDisk(disk'),
+      BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite))
+  ensures JournalDisk.Next(
+      IJournalDisk(disk), IJournalDisk(disk'),
+      JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite))
+  {
+    var loc := LocOfReqWrite(dop.reqWrite);
+
+    assert disk.contents == disk'.contents;
+
+    getReqWriteSelf(disk.contents, disk'.reqWrites, dop.id);
+
+    forall l | !overlap(l, loc)
+    ensures atLocWithWrites(l, disk.contents, disk.reqWrites)
+         == atLocWithWrites(l, disk'.contents, disk'.reqWrites)
+    {
+      newReqWritePreserve(disk.contents, disk.reqWrites,
+          dop.id, dop.reqWrite, l.addr as int, l.len as int);
+    }
+
+    ReqWriteWithLocMatchesAtSuperblockLocations(disk, disk', dop);
+
+    forall l | ValidLocation(l) && !ValidJournalLocation(l)
+        && overlap(l, loc)
+    ensures false
+    {
+      overlappingLocsSameType(l, loc);
+    }
+    
+    var newEntries := IDiskOp(dop).jdop.reqWriteJournal.journal;
+    var interval := JournalInterval(
+        IDiskOp(dop).jdop.reqWriteJournal.start,
+        |IDiskOp(dop).jdop.reqWriteJournal.journal|);
+    var journal := DiskJournal(disk);
+    var journal' := DiskJournal(disk');
+    assert JournalUpdate(journal, journal', interval, newEntries) by {
+      JournalUpdate_of_RefinesReqWriteOp(disk, disk', dop);
+    }
+
+    assert BlockDisk.Next(
+        IBlockDisk(disk), IBlockDisk(disk'),
+        BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
+    assert JournalDisk.Next(
+        IJournalDisk(disk), IJournalDisk(disk'),
+        JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
+  }
+
+  lemma RefinesReqWriteOp_Superblock(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  requires Inv(disk)
+  requires dop.ReqWriteOp?
+  requires ValidDiskOp(dop)
+  requires D.RecvWrite(disk, disk', dop)
+
+  requires reqWriteDisjointFromCurrent(disk, dop.reqWrite)
+
+  requires ValidSuperblockLocation(LocOfReqWrite(dop.reqWrite))
+
+  ensures Inv(disk')
+  ensures BlockDisk.Next(
+      IBlockDisk(disk), IBlockDisk(disk'),
+      BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite))
+  ensures JournalDisk.Next(
+      IJournalDisk(disk), IJournalDisk(disk'),
+      JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite))
+  {
+    var loc := LocOfReqWrite(dop.reqWrite);
+
+    assert disk.contents == disk'.contents;
+
+    getReqWriteSelf(disk.contents, disk'.reqWrites, dop.id);
+
+    forall l | !overlap(l, loc)
+    ensures atLocWithWrites(l, disk.contents, disk.reqWrites)
+         == atLocWithWrites(l, disk'.contents, disk'.reqWrites)
+    {
+      newReqWritePreserve(disk.contents, disk.reqWrites,
+          dop.id, dop.reqWrite, l.addr as int, l.len as int);
+    }
+
+    ReqWriteWithLocMatchesAtSuperblockLocations(disk, disk', dop);
+
+    forall l | ValidLocation(l) && !ValidSuperblockLocation(l)
+        && overlap(l, loc)
+    ensures false
+    {
+      overlappingLocsSameType(l, loc);
+    }
+
+    assert BlockDisk.Next(
+        IBlockDisk(disk), IBlockDisk(disk'),
+        BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
+    assert JournalDisk.Next(
+        IJournalDisk(disk), IJournalDisk(disk'),
+        JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
+  }
+
+  lemma RefinesReqWriteOp(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  requires Inv(disk)
+  requires dop.ReqWriteOp?
+  requires ValidDiskOp(dop)
+  requires D.RecvWrite(disk, disk', dop)
+
+  requires reqWriteDisjointFromCurrent(disk, dop.reqWrite)
+
+  ensures Inv(disk')
+  ensures BlockDisk.Next(
+      IBlockDisk(disk), IBlockDisk(disk'),
+      BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite))
+  ensures JournalDisk.Next(
+      IJournalDisk(disk), IJournalDisk(disk'),
+      JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite))
+  {
+    var loc := LocOfReqWrite(dop.reqWrite);
 
     if ValidNodeLocation(loc) {
-      forall l | ValidLocation(l) && !ValidNodeLocation(l)
-          && overlap(l, loc)
-      ensures false
-      {
-        overlappingLocsSameType(l, loc);
-      }
-
-      assert IBlockDisk(disk').reqWriteNodes[dop.id] == loc;
-
-      assert loc != Superblock1Location();
-      assert loc != Superblock2Location();
-     
-      assert IJournalDisk(disk).superblock1
-          == IJournalDisk(disk').superblock1;
-      assert IJournalDisk(disk).superblock2
-          == IJournalDisk(disk').superblock2;
-      assert IJournalDisk(disk).journal
-          == IJournalDisk(disk').journal;
-      assert IJournalDisk(disk).reqWriteSuperblock1
-          == IJournalDisk(disk').reqWriteSuperblock1;
-      assert IJournalDisk(disk).reqWriteSuperblock2
-          == IJournalDisk(disk').reqWriteSuperblock2;
-      assert IJournalDisk(disk).reqWriteJournals
-          == IJournalDisk(disk').reqWriteJournals;
-
-      assert BlockDisk.Next(
-          IBlockDisk(disk), IBlockDisk(disk'),
-          BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
-      assert JournalDisk.Next(
-          IJournalDisk(disk), IJournalDisk(disk'),
-          JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
+      RefinesReqWriteOp_Node(disk, disk', dop);
     }
     else if ValidIndirectionTableLocation(loc) {
-      forall l | ValidLocation(l) && !ValidIndirectionTableLocation(l)
-          && overlap(l, loc)
-      ensures false
-      {
-        overlappingLocsSameType(l, loc);
-      }
-
-      assert BlockDisk.Next(
-          IBlockDisk(disk), IBlockDisk(disk'),
-          BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
-      assert JournalDisk.Next(
-          IJournalDisk(disk), IJournalDisk(disk'),
-          JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
+      RefinesReqWriteOp_IndirectionTable(disk, disk', dop);
     }
     else if ValidJournalLocation(loc) {
-      forall l | ValidLocation(l) && !ValidJournalLocation(l)
-          && overlap(l, loc)
-      ensures false
-      {
-        overlappingLocsSameType(l, loc);
-      }
-      
-      var newEntries := IDiskOp(dop).jdop.reqWriteJournal.journal;
-      var interval := JournalInterval(
-          IDiskOp(dop).jdop.reqWriteJournal.start,
-          |IDiskOp(dop).jdop.reqWriteJournal.journal|);
-      var journal := DiskJournal(disk);
-      var journal' := DiskJournal(disk');
-      assert JournalUpdate(journal, journal', interval, newEntries) by {
-        JournalUpdate_of_RefinesReqWriteOp(disk, disk', dop);
-      }
-
-      assert BlockDisk.Next(
-          IBlockDisk(disk), IBlockDisk(disk'),
-          BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
-      assert JournalDisk.Next(
-          IJournalDisk(disk), IJournalDisk(disk'),
-          JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
+      RefinesReqWriteOp_Journal(disk, disk', dop);
     }
     else if ValidSuperblockLocation(loc) {
-      forall l | ValidLocation(l) && !ValidSuperblockLocation(l)
-          && overlap(l, loc)
-      ensures false
-      {
-        overlappingLocsSameType(l, loc);
-      }
-
-      assert BlockDisk.Next(
-          IBlockDisk(disk), IBlockDisk(disk'),
-          BlockDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
-      assert JournalDisk.Next(
-          IJournalDisk(disk), IJournalDisk(disk'),
-          JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
+      RefinesReqWriteOp_Superblock(disk, disk', dop);
     }
   }
 
