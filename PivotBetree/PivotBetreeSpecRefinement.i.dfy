@@ -666,7 +666,7 @@ module PivotBetreeSpecRefinement {
   {
   }
 
-  lemma RefinesValidFlush(flush: P.NodeFlush)
+  lemma {:timeLimitMultiplier 4} RefinesValidFlush(flush: P.NodeFlush)
   requires P.ValidFlush(flush)
   requires forall i | 0 <= i < |P.FlushReads(flush)| :: P.InvNode(P.FlushReads(flush)[i].node)
   requires ReadOpsBucketsWellMarshalled(P.FlushReads(flush))
@@ -1146,7 +1146,7 @@ module PivotBetreeSpecRefinement {
     assert key in r.old_parent.children;
   }
 
-  lemma RefinesValidSplit(f: P.NodeFusion)
+  lemma {:timeLimitMultiplier 4} RefinesValidSplit(f: P.NodeFusion)
   requires P.ValidSplit(f)
   requires ReadOpsBucketsWellMarshalled(P.SplitReads(f))
   requires P.InvNode(f.fused_parent)
