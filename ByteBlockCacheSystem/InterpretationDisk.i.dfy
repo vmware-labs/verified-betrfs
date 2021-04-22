@@ -749,7 +749,7 @@ module InterpretationDisk {
     && readIdsDistinct(disk.reqReads, disk.respReads)
   }
 
-  lemma RefinesReqReadOp(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  lemma {:timeLimitMultiplier 32} RefinesReqReadOp(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
   requires Inv(disk)
   requires dop.ReqReadOp?
   requires ValidDiskOp(dop)
@@ -953,7 +953,7 @@ module InterpretationDisk {
     }
   }
 
-  lemma RefinesReqWriteOp_Node(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  lemma {:timeLimitMultiplier 32} RefinesReqWriteOp_Node(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
   requires Inv(disk)
   requires dop.ReqWriteOp?
   requires ValidDiskOp(dop)
@@ -1020,7 +1020,7 @@ module InterpretationDisk {
         JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
   }
 
-  lemma RefinesReqWriteOp_IndirectionTable(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  lemma {:timeLimitMultiplier 32} RefinesReqWriteOp_IndirectionTable(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
   requires Inv(disk)
   requires dop.ReqWriteOp?
   requires ValidDiskOp(dop)
@@ -1069,7 +1069,7 @@ module InterpretationDisk {
         JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
   }
 
-  lemma RefinesReqWriteOp_Journal(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  lemma {:timeLimitMultiplier 32} RefinesReqWriteOp_Journal(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
   requires Inv(disk)
   requires dop.ReqWriteOp?
   requires ValidDiskOp(dop)
@@ -1128,7 +1128,7 @@ module InterpretationDisk {
         JournalDiskOp_of_ReqWrite(dop.id, dop.reqWrite));
   }
 
-  lemma RefinesReqWriteOp_Superblock(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  lemma {:timeLimitMultiplier 32} RefinesReqWriteOp_Superblock(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
   requires Inv(disk)
   requires dop.ReqWriteOp?
   requires ValidDiskOp(dop)
@@ -1209,7 +1209,7 @@ module InterpretationDisk {
     }
   }
 
-  lemma RefinesReqWrite2Op(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  lemma {:timeLimitMultiplier 96} RefinesReqWrite2Op(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
   requires Inv(disk)
   requires dop.ReqWrite2Op?
   requires ValidDiskOp(dop)
@@ -1340,7 +1340,7 @@ module InterpretationDisk {
         JournalDiskOp_of_ReqWrite2(dop.id1, dop.id2, dop.reqWrite1, dop.reqWrite2));
   }
 
-  lemma RefinesRespReadOp(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  lemma {:timeLimitMultiplier 32} RefinesRespReadOp(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
   requires Inv(disk)
   requires dop.RespReadOp?
   requires ValidDiskOp(dop)
@@ -1466,7 +1466,7 @@ module InterpretationDisk {
     }
   }
 
-  lemma RefinesRespWriteOp(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
+  lemma {:timeLimitMultiplier 32} RefinesRespWriteOp(disk: D.Variables, disk': D.Variables, dop: D.DiskOp)
   requires Inv(disk)
   requires dop.RespWriteOp?
   requires ValidDiskOp(dop)
@@ -1517,7 +1517,7 @@ module InterpretationDisk {
     reveal_atLoc();
   }
 
-  lemma RefinesProcessRead_Node_1(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  lemma {:timeLimitMultiplier 32} RefinesProcessRead_Node_1(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
   requires Inv(disk)
   requires D.ProcessReadFailure(disk, disk', id, fakeContents)
   requires Inv(disk')
@@ -1532,7 +1532,7 @@ module InterpretationDisk {
     assert DiskNodes(disk) == DiskNodes(disk');
   }
 
-  lemma RefinesProcessRead_Node_2(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  lemma {:timeLimitMultiplier 32} RefinesProcessRead_Node_2(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
   requires Inv(disk)
   requires D.ProcessReadFailure(disk, disk', id, fakeContents)
   requires Inv(disk')
@@ -1550,7 +1550,7 @@ module InterpretationDisk {
     assert DiskJournal(disk) == DiskJournal(disk');
   }
 
-  lemma RefinesProcessRead_IndirectionTable_1(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  lemma {:timeLimitMultiplier 32} RefinesProcessRead_IndirectionTable_1(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
   requires Inv(disk)
   requires D.ProcessReadFailure(disk, disk', id, fakeContents)
   requires Inv(disk')
@@ -1565,7 +1565,7 @@ module InterpretationDisk {
     assert DiskNodes(disk) == DiskNodes(disk');
   }
 
-  lemma RefinesProcessRead_IndirectionTable_2(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  lemma {:timeLimitMultiplier 32} RefinesProcessRead_IndirectionTable_2(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
   requires Inv(disk)
   requires D.ProcessReadFailure(disk, disk', id, fakeContents)
   requires Inv(disk')
@@ -1583,7 +1583,7 @@ module InterpretationDisk {
     assert DiskJournal(disk) == DiskJournal(disk');
   }
 
-  lemma RefinesProcessRead_Journal_1(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  lemma {:timeLimitMultiplier 32} RefinesProcessRead_Journal_1(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
   requires Inv(disk)
   requires D.ProcessReadFailure(disk, disk', id, fakeContents)
   requires Inv(disk')
@@ -1598,7 +1598,7 @@ module InterpretationDisk {
     assert DiskNodes(disk) == DiskNodes(disk');
   }
 
-  lemma RefinesProcessRead_Journal_2(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  lemma {:timeLimitMultiplier 32} RefinesProcessRead_Journal_2(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
   requires Inv(disk)
   requires D.ProcessReadFailure(disk, disk', id, fakeContents)
   requires Inv(disk')
@@ -1616,7 +1616,7 @@ module InterpretationDisk {
     assert DiskJournal(disk) == DiskJournal(disk');
   }
 
-  lemma RefinesProcessRead_Superblock_1(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  lemma {:timeLimitMultiplier 32} RefinesProcessRead_Superblock_1(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
   requires Inv(disk)
   requires D.ProcessReadFailure(disk, disk', id, fakeContents)
   requires Inv(disk')
@@ -1631,7 +1631,7 @@ module InterpretationDisk {
     assert DiskNodes(disk) == DiskNodes(disk');
   }
 
-  lemma RefinesProcessRead_Superblock_2(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
+  lemma {:timeLimitMultiplier 32} RefinesProcessRead_Superblock_2(disk: D.Variables, disk': D.Variables, id: D.ReqId, fakeContents: seq<byte>)
   requires Inv(disk)
   requires D.ProcessReadFailure(disk, disk', id, fakeContents)
   requires Inv(disk')
@@ -1677,7 +1677,7 @@ module InterpretationDisk {
     else { assert false; }
   }
 
-  lemma RefinesProcessWrite(disk: D.Variables, disk': D.Variables, id: D.ReqId)
+  lemma /*{:timeLimitMultiplier 144}*/ RefinesProcessWrite(disk: D.Variables, disk': D.Variables, id: D.ReqId)
   requires Inv(disk)
   requires D.ProcessWrite(disk, disk', id)
   ensures Inv(disk')
