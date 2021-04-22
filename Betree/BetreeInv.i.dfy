@@ -587,7 +587,7 @@ module BetreeInv {
     InterpretLookupAdditive3(lookup'[..i], middle', lookup'[i+2..], key);
   }
 
-  lemma FlushPreservesLookups(s: Variables, s': Variables, start: Reference, flush:NodeFlush)
+  lemma {:timeLimitMultiplier 4} FlushPreservesLookups(s: Variables, s': Variables, start: Reference, flush:NodeFlush)
   requires Inv(s)
   requires Flush(s.bcv, s'.bcv, flush)
   ensures PreservesLookups(s, s', start)
@@ -679,7 +679,7 @@ module BetreeInv {
   //////// Redirect
   ////////
 
-  lemma RedirectPreservesLookups(s: Variables, s': Variables, start: Reference, redirect: Redirect)
+  lemma {:timeLimitMultiplier 4} RedirectPreservesLookups(s: Variables, s': Variables, start: Reference, redirect: Redirect)
     requires Inv(s)
     requires Redirect(s.bcv, s'.bcv, redirect)
     ensures PreservesLookups(s, s', start)
