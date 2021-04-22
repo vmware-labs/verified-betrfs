@@ -6,4 +6,4 @@
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 set -x
-$DIR/../.dafny/bin/dafny "$@" /trace /induction:1 /noNLarith
+$DIR/../.dafny/bin/dafny "$@" /induction:1 /noNLarith

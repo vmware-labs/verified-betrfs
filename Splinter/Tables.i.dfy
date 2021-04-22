@@ -113,7 +113,7 @@ module IndirectionTableMod refines MarshalledSnapshot {
 
   datatype Superblock = Superblock(snapshot: SnapshotSuperblock)
 
-  type IndirectionTable = map<nat, AU>
+  type IndirectionTable = map<nat, CU>
 
   function parse(b: seq<byte>) : Option<IndirectionTable>
 

@@ -147,11 +147,14 @@ module ProgramMachineMod {
     | CommitCompleteStep()
     
   predicate NextStep(s: Variables, s': Variables, step: Step) {
-    match step {
+    && cacheOps.writeSet !! IReads(s.betree)  // We only wrote fresh or existing stuff
+    && IReads(s'.journal) == IReads(s.journal) + cacheOps.writeSet  // goes down in the journal
+//    && IReads(s'.journal) !! IReads(s'.betree)  // Layer below needs to enforce framing disjointness
+    && match step {
       case RecoverStep() => Recover(s, s')
       case QueryStep(k: Key, v: Value) => Query(s, s', k, v)
       case PutStep(k: Key, v: Value) => Put(s, s', k, v)
-      case JournalInternalStep() => JournalInternal(s, s')
+      case JournalInternalStep() => JournalInternal(s, s', cacheOps)
       case BetreeInternalStep() => BetreeInternal(s, s')
       case ReqSyncStep(syncReqId: SyncReqId) => ReqSync(s, s', syncReqId)
       case CompleteSyncStep(syncReqId: SyncReqId) => CompleteSync(s, s', syncReqId)

@@ -41,7 +41,7 @@ module JournalMachineMod {
 
   // The entire superblock we need to store: Core data plus allocation data
   datatype Superblock = Superblock(
-    allocation: AllocationTableMachineMod.Superblock,
+    allocation: AllocationTableMachineMod.Superblock, // TODO This should go down a layer!
     core: CoreSuperblock)
 
   // On-disk JournalRecords
