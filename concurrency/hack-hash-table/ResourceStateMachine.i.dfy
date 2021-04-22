@@ -175,30 +175,19 @@ module ResourceStateMachine {
         :: ActionNotPastKey(table, e, j, k))
   }
 
-  function InfoQuantity(s: Option<HT.Info>) : nat {
-    if s.None? then 0 else (
-      (if s.value.state.Inserting? then 1 else 0) +
-      (if s.value.state.RemoveTidying? || s.value.entry.Full? then 1 else 0)
-    )
-  }
-
-  function {:opaque} TableQuantity(s: seq<Option<HT.Info>>) : nat {
-    if s == [] then 0 else TableQuantity(s[..|s|-1]) + InfoQuantity(s[|s| - 1])
-  }
-
   predicate Inv(s: Variables)
   {
     && s.R?
     && InvTable(s.table)
-    && TableQuantity(s.table) + s.insert_capacity == HT.Capacity()
+    && HT.TableQuantityInv(s)
   }
 
   lemma TableQuantity_replace1(s: seq<Option<HT.Info>>, s': seq<Option<HT.Info>>, i: int)
   requires 0 <= i < |s| == |s'|
   requires forall j | 0 <= j < |s| :: i != j ==> s[j] == s'[j]
-  ensures TableQuantity(s') == TableQuantity(s) + InfoQuantity(s'[i]) - InfoQuantity(s[i])
+  ensures HT.TableQuantity(s') == HT.TableQuantity(s) + HT.InfoQuantity(s'[i]) - HT.InfoQuantity(s[i])
   {
-    reveal_TableQuantity();
+    HT.reveal_TableQuantity();
     if i == |s| - 1 {
       assert s[..|s|-1] == s'[..|s|-1];
     } else {
@@ -214,9 +203,9 @@ module ResourceStateMachine {
       forall j | 0 <= j < |s| :: i != j && i' != j ==> s[j] == s'[j]
   ensures
       var i' := (if i == |s| - 1 then 0 else i + 1);
-    TableQuantity(s') == TableQuantity(s)
-        + InfoQuantity(s'[i]) - InfoQuantity(s[i])
-        + InfoQuantity(s'[i']) - InfoQuantity(s[i'])
+    HT.TableQuantity(s') == HT.TableQuantity(s)
+        + HT.InfoQuantity(s'[i]) - HT.InfoQuantity(s[i])
+        + HT.InfoQuantity(s'[i']) - HT.InfoQuantity(s[i'])
   {
     var s0 := s[i := s'[i]];
     TableQuantity_replace1(s, s0, i);
@@ -226,7 +215,7 @@ module ResourceStateMachine {
 
   function {:opaque} get_empty_cell(table: seq<Option<HT.Info>>) : (e: int)
   requires InvTable(table)
-  requires TableQuantity(table) < |table|
+  requires HT.TableQuantity(table) < |table|
   ensures 0 <= e < |table| && table[e].Some? && table[e].value.entry.Empty?
         && !table[e].value.state.RemoveTidying?
   {
@@ -242,12 +231,12 @@ module ResourceStateMachine {
   lemma get_empty_cell_other_than_insertion_cell_table(table: seq<Option<HT.Info>>)
   returns (e: int)
   requires Complete(table)
-  requires TableQuantity(table) < |table|
+  requires HT.TableQuantity(table) < |table|
   ensures 0 <= e < |table| && table[e].Some? && table[e].value.entry.Empty?
         && !table[e].value.state.RemoveTidying?
         && !table[e].value.state.Inserting?
   {
-    reveal_TableQuantity();
+    HT.reveal_TableQuantity();
     e := |table| - 1;
     if table[e].value.entry.Empty?
         && !table[e].value.state.RemoveTidying?

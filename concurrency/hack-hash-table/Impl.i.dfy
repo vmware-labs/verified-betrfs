@@ -473,8 +473,6 @@ module Impl refines Main {
       ARS.output_stub(rid, output), 
       unit().(insert_capacity := count as nat + 1));
   
-    assume count < 4;
-
     v.allocator[tid].release(AllocatorBin(count+1, cap_r), cap_handle);
 
     out_r := r;

@@ -633,14 +633,35 @@ module HTResource refines ApplicationResourceSpec {
     exists step :: UpdateStep(s, s', step)
   }
 
+  function InfoQuantity(s: Option<Info>) : nat {
+    if s.None? then 0 else (
+      (if s.value.state.Inserting? then 1 else 0) +
+      (if s.value.state.RemoveTidying? || s.value.entry.Full? then 1 else 0)
+    )
+  }
+
+  function {:opaque} TableQuantity(s: seq<Option<Info>>) : nat {
+    if s == [] then 0 else TableQuantity(s[..|s|-1]) + InfoQuantity(s[|s| - 1])
+  }
+
+  predicate TableQuantityInv(s: R)
+  {
+    && s.R?
+    && TableQuantity(s.table) + s.insert_capacity == Capacity()
+  }
+
   predicate Valid(s: R) {
-    s.R?
+    && s.R?
+    && exists s' :: TableQuantityInv(add(s, s'))
   }
 
   lemma valid_monotonic(x: R, y: R)
   //requires Valid(add(x, y))
   ensures Valid(x)
   {
+    var xy' :| TableQuantityInv(add(add(x, y), xy'));
+    associative(x, y, xy');
+    assert TableQuantityInv(add(x, add(y, xy')));
   }
 
   lemma update_monotonic(x: R, y: R, z: R)
@@ -666,12 +687,33 @@ module HTResource refines ApplicationResourceSpec {
   //requires Valid(r)
   ensures Valid(add(r, input_ticket(id, input)))
   {
+    var r' :| TableQuantityInv(add(r, r'));
+    var out_r := add(r, input_ticket(id, input));
+    assert out_r.table == r.table by { reveal_TableQuantity(); }
+    assert add(out_r, r').table == add(r, r').table by { reveal_TableQuantity(); }
+  }
+
+  lemma EmptyTableQuantityIsZero(infos: seq<Option<Info>>)
+    requires (forall i | 0 <= i < |infos| :: infos[i] == Some(Info(Empty, Free)))
+    ensures TableQuantity(infos) == 0
+  {
+    reveal_TableQuantity();
   }
 
   lemma InitImpliesValid(s: R)
   //requires Init(s)
   //ensures Valid(s)
   {
+    reveal_TableQuantity();
+    EmptyTableQuantityIsZero(s.table);
+    add_unit(s);
+    assert TableQuantityInv(add(s, unit()));
+  }
+
+  lemma TableQuantityDistributive(a: seq<Option<Info>>, b: seq<Option<Info>>)
+    ensures TableQuantity(a + b) == TableQuantity(a) + TableQuantity(b)
+  {
+    reveal_TableQuantity();
   }
 
   lemma UpdatePreservesValid(s: R, t: R)
@@ -679,6 +721,85 @@ module HTResource refines ApplicationResourceSpec {
   //requires Valid(s)
   ensures Valid(t)
   {
+    var step :| UpdateStep(s, t, step);
+    match step {
+      case ProcessInsertTicketStep(insert_ticket) => {
+        reveal_TableQuantity();
+        var h := hash(insert_ticket.input.key) as nat;
+        var spre := s.table[..h];
+        var sat := s.table[h..h+1];
+        var spost := s.table[h+1..];
+        assert spre + (sat + spost) == s.table;
+        var tat := t.table[h..h+1];
+        assert spre + (tat + spost) == t.table;
+        assert sat[0].Some?;
+        var oldAtCount := if sat[0].value.entry.Full? then 1 else 0;
+        //assert InfoQuantity(sat[0]
+        assert TableQuantity(sat) == oldAtCount;
+        var newAtCount := oldAtCount + 1;
+        assert TableQuantity(tat) == oldAtCount+1;
+        calc {
+          TableQuantity(s.table) + 1;
+            { TableQuantityDistributive(spre, sat+spost); }
+          TableQuantity(spre) + TableQuantity(sat+spost) + 1;
+            { TableQuantityDistributive(sat, spost); }
+          TableQuantity(spre) + TableQuantity(sat) + TableQuantity(spost) + 1;
+          TableQuantity(spre) + oldAtCount + TableQuantity(spost) + 1;
+          TableQuantity(spre) + newAtCount + TableQuantity(spost);
+          TableQuantity(spre) + TableQuantity(tat) + TableQuantity(spost);
+            { TableQuantityDistributive(tat, spost); }
+          TableQuantity(spre) + TableQuantity(tat+spost);
+            { TableQuantityDistributive(spre, tat+spost); }
+          TableQuantity(t.table);
+        }
+      }
+      case InsertSkipStep(pos) => {
+        assert s.table == t.table;
+      }
+      case InsertSwapStep(pos) => {
+        assert s.table == t.table;
+      }
+      case InsertDoneStep(pos) => {
+        assert s.table == t.table;
+      }
+      case InsertUpdateStep(pos) => {
+        assert s.table == t.table;
+      }
+
+      case ProcessRemoveTicketStep(remove_ticket) => {
+        assert s.table == t.table;
+      }
+      case RemoveSkipStep(pos) => {
+        assert s.table == t.table;
+      }
+      case RemoveFoundItStep(pos) => {
+        assert s.table == t.table;
+      }
+      case RemoveNotFoundStep(pos) => {
+        assert s.table == t.table;
+      }
+      case RemoveTidyStep(pos) => {
+        assert s.table == t.table;
+      }
+      case RemoveDoneStep(pos) => {
+        assert s.table == t.table;
+      }
+
+      case ProcessQueryTicketStep(query_ticket) => {
+        assert s.table == t.table;
+      }
+      case QuerySkipStep(pos) => {
+        assert s.table == t.table;
+      }
+      case QueryDoneStep(pos) => {
+        assert s.table == t.table;
+      }
+      case QueryNotFoundStep(pos) => {
+        assert s.table == t.table;
+      }
+    }
+    var s' :| TableQuantityInv(add(s, s'));
+    assert TableQuantityInv(add(t, s')) by { reveal_TableQuantity(); }
   }
 
   glinear method easy_transform(
