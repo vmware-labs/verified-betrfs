@@ -136,7 +136,7 @@ Tuple0 seq_free(linear_seq<A> s) {
 template <typename A>
 DafnySequence<A> seq_unleash(linear_seq<A> s) {
   DafnySequence<A> ret(*s);  // TODO: Copies contents of s into ret
-  seq_free(*s);
+  seq_free(s);
   return ret;
 }
 
