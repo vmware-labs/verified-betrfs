@@ -52,16 +52,17 @@ module ByteSystem refines AsyncDiskModel {
     && InterpretationDisk.Inv(s.disk)
     && BetreeJournalSystem.Inv(I(s))
   }
-  
+
   lemma InitImpliesInv(s: Variables)
     // Inherited from abstract module:
     //requires Init(s)
     //ensures Inv(s)
   {
+    InterpretationDisk.InitImpliesInv(s.disk);
     BetreeJournalSystem.InitImpliesInv(I(s));
   }
 
-  lemma ReqReadStepPreservesInv(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+  lemma {:timeLimitMultiplier 32} ReqReadStepPreservesInv(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
     requires Inv(s)
     requires Machine(s, s', uiop, dop)
     requires dop.ReqReadOp?
@@ -155,7 +156,7 @@ module ByteSystem refines AsyncDiskModel {
     BetreeJournalSystem.NextPreservesInv(I(s), I(s'), uiop);
   }
 
-  lemma ReqWriteStepPreservesInv(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+  lemma {:timeLimitMultiplier 32} ReqWriteStepPreservesInv(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
     requires Inv(s)
     requires Machine(s, s', uiop, dop)
     requires dop.ReqWriteOp?
@@ -340,7 +341,7 @@ module ByteSystem refines AsyncDiskModel {
 
   }
 
-  lemma ReqWrite2StepPreservesInv(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+  lemma {:timeLimitMultiplier 32} ReqWrite2StepPreservesInv(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
     requires Inv(s)
     requires Machine(s, s', uiop, dop)
     requires dop.ReqWrite2Op?
@@ -449,7 +450,7 @@ module ByteSystem refines AsyncDiskModel {
     BetreeJournalSystem.NextPreservesInv(I(s), I(s'), uiop);
   }
 
-  lemma RespReadStepPreservesInv(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+  lemma {:timeLimitMultiplier 32} RespReadStepPreservesInv(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
     requires Inv(s)
     requires Machine(s, s', uiop, dop)
     requires dop.RespReadOp?
@@ -481,7 +482,7 @@ module ByteSystem refines AsyncDiskModel {
     BetreeJournalSystem.NextPreservesInv(I(s), I(s'), uiop);
   }
 
-  lemma RespWriteStepPreservesInv(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
+  lemma {:timeLimitMultiplier 32} RespWriteStepPreservesInv(s: Variables, s': Variables, uiop: UIOp, dop: DiskOp)
     requires Inv(s)
     requires Machine(s, s', uiop, dop)
     requires dop.RespWriteOp?
@@ -665,7 +666,7 @@ module ByteSystem refines AsyncDiskModel {
 
   }
 
-  lemma NextStepPreservesInv(s: Variables, s': Variables, uiop: UIOp, step: Step)
+  lemma {:timeLimitMultiplier 4} NextStepPreservesInv(s: Variables, s': Variables, uiop: UIOp, step: Step)
     requires Inv(s)
     requires NextStep(s, s', uiop, step)
     ensures BetreeJournalSystem.Next(I(s), I(s'), uiop)

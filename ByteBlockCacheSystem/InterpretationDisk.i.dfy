@@ -1946,5 +1946,10 @@ module InterpretationDisk {
     }
   }
 
+  lemma InitImpliesInv(disk: D.Variables)
+  requires D.Init(disk)
+  ensures Inv(disk)
+  {
+  }
 }
 
