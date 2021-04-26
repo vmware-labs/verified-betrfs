@@ -14,11 +14,13 @@ module RWLock {
 
     To acquire the exclusive lock:
        1. Atomically set exc from false to true
-       2. Wait until 'rc' is 0.
+       2. Wait until observing 'rc' to be 0.
 
     To acquire the shared lock:
        1. Atomically increment 'rc' by 1
-       2. Wait until 'exc' is set to false.
+       2. Check that 'exc' is set to false.
+        (If 'exc' is true, abort: decrement 'rc' to give exc waiter opportunity
+        to complete exc lock, and try again. This is a liveness concern.)
   */
 
   /*
@@ -58,7 +60,8 @@ module RWLock {
     // The base resource currently "checked into" the lock.
     // None means no value is currently checked in (because a value is
     // exclusively checked out; held_value.None? <==> logical_exc).
-    // Thus, should be None iff logical_exc.
+    // (Yes, this means logical_exc is completely redundant information,
+    // but the structure is kept parallel to clarify the presentation.)
     held_value: Option<Base>
   )
 
@@ -73,15 +76,15 @@ module RWLock {
         exclusive lock; it set phys_exc, but logical_exc isn't true yet)
       - exclusive taken (for when a thread has successfully taken the exclusive lock)
       - shared pending (for when a thread is in the middle of acquiring the
-        shared lock; it incremented phys_rc, but logical_rc is still zero)
+        shared lock; it incremented phys_rc, but it hasn't observed phys_exc
+        false, and hence hasn't ghostily incremented logical_rc)
       - shared taken (for when a thread has successfully taken the shared lock)
 
-     Note that the 'taken' handles will be part of the rwlock specification
-     (i.e., when a client takes the lock in either mode, it gets a 'taken' handle).
-     On the other hand, the 'pending' handles are used only internally.
-     {@jonh I don't know what "internally" means. The handle gets owned by the thread,
-     but doesn't leave the library? The handle is only ever owned by the lock, never
-     by a thread?}
+     Note that the 'taken' handles are part of the library's external interface;
+     when a client takes the lock in either mode, it recieves a 'taken' handle.
+     The pending handles are "internal": they're held by different threads, but
+     only during a call into the library; they're release before the library's
+     stack frame expires.
    */
 
   datatype M = M(
@@ -109,12 +112,10 @@ module RWLock {
     // have an invariant that any reader handler has to match the
     // `held_value`, i.e., there won't be two distinct values b, b'
     // for which these functions are nonzero).
-    // {@jonh: I'm curious why you carefully define the data structure
-    // to allow adding
-    //  {"cat" -> 1} + {"dog"->2} == {"cat" -> 1, "dog"->2}
-    // when it seems like in other situations we'd just say:
-    //  {"cat" -> 1} + {"dog"->2} == \bottom
-    // }
+    // (NB "allowing the handlers to be additive" isn't a design goal;
+    // we could have excluded such conflicting keys from dot_okay.
+    // Travis suspects that would have required sucking the entire invariant
+    // into dot_okay.)
 
     shared_taken_handles: Base -> nat
   )
@@ -145,27 +146,17 @@ module RWLock {
 
   // Defining the 'dot' operation on the monoid M is pretty
   // straightforward.
-  // {@jonh this is called 'add' in the exclusive world. We
-  // should unify the naming. I like the 'add' terminology;
-  // these things "feel" like addition. I know hardcore mathematicians
-  // wouldn't blink at "dot" here, but if "add" works, it might
-  // reduce friction for some future CS-background reader.}
 
   // We'll define dot partially, admitting a "failure" case where
   // adding two Ms fails.
   // Later, we'll show that every transition of the extension monoid
-  // state machine preserves dot_okay {@jonh (locally, or globally?)}.
-  // {@jonh and that's a long list of lemma ensures clauses. What's the
-  // .s condition that demands that we do so? Be nice to mention it
-  // here, as the 'fail' idea can be a bit slippery/suspcious.}
-  // {@jonh so yeah, why can't we exclude conflicting fn Bases here?}
+  // state machine preserves dot_okay (over the fragment it transforms).
   predicate dot_okay(m: M, p: M) {
     && !(m.central.Some? && p.central.Some?)
     && !(m.exc_pending_handle && p.exc_pending_handle)
     && !(m.exc_taken_handle && p.exc_taken_handle)
   }
 
-  // {@jonh well look who brought add back into the house.}
   function add_fns(f: Base -> nat, g: Base -> nat) : Base -> nat {
     (b) => f(b) + g(b)
   }
@@ -184,9 +175,10 @@ module RWLock {
 
   // Define the invariant. Every transition on M maintains this
   // invariant across a "whole" M-state.
-  // It won't necessarily hold for a fragment; for example {@jonh please}.
-  // {@jonh again a pointer to where in the proof tree this invariant's
-  // correctness is employed.}
+  // It won't necessarily hold for a fragment: for example a thread
+  // holds a handle but has no idea what the central state is, so
+  // it has m.central.None?.
+  // The invariant's ultimate job is to prepare for lemma borrow_shared_handle.
 
   predicate Inv(m: M)
   {
@@ -221,7 +213,10 @@ module RWLock {
     if m.central.value.held_value.Some? then
       m.central.value.held_value.value
     else
-      // {@jonh  wait wut? Shouldn't you go ask the thread that has the exc handle?}
+      // Some thread has the exclusive lock, which means that thread has the
+      // fragment of the Base resource that this RWlock protects. So this
+      // RWlock *doesn't* have any non-trivial fragment of the Base resource;
+      // it has the Base unit.
       base_unit()
   }
 
@@ -244,9 +239,8 @@ module RWLock {
 
   // Step 1: atomically set 'exc' flag from false to true
 
-  // {@jonh How should I think about the fact that every transition has m, m',
-  // but also this CentralState thingy? I can see that it's state-machine shaped,
-  // but something is a little different.}
+  // central is a skolemized existential variable: it's a convenience so we can
+  // use the CentralHandle constructor to say "m is just this one fragment".
   predicate acquire_exc_pending_step(m: M, m': M, central: CentralState)
   {
     && central.phys_exc == false
@@ -359,9 +353,10 @@ module RWLock {
   lemma borrow_shared_handle(p: M, b: Base)
   requires dot_okay(p, SharedTakenHandle(b))
   requires Inv(dot(p, SharedTakenHandle(b)))
-    // {@jonh this ensures is another spot where it would be good to tie in
-    // these lemmas to where they're going to be needed (in a .s file?). That
-    // would help me understand what this ensures means, and how it connects.}
+    // TODO(travis): the monoid-extension .s file will have a proof obligation
+    // that explains when it's okay to do borrow-shared; this lemma will satisfy
+    // that obligation, enabling the implementation to borrow-shared.
+    // This is the lemma the Inv serves.
   ensures Interp(dot(p, SharedTakenHandle(b))) == b
   {
     assert dot(p, SharedTakenHandle(b)).shared_taken_handles(b) > 0;
