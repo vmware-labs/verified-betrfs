@@ -1,13 +1,13 @@
 module GhostLoc {
   datatype Loc =
     | BaseLoc(ghost t: nat)
-    | ExtLoc(ghost s: nat, ghost l: Loc)
+    | ExtLoc(ghost s: nat, ghost base_loc: Loc)
 }
 
 abstract module PCM {
   import opened GhostLoc
 
-  type M(==, !new)
+  type M(!new)
 
   type Token {
     function {:extern} loc() : Loc
@@ -74,10 +74,10 @@ abstract module PCM {
   ensures c.get() == expected_out
   ensures c.loc() == s.loc()
 
-  function method {:extern} get_unit(loc: Loc) : (glinear u: Token)
+  function method {:extern} get_unit(ghost loc: Loc) : (glinear u: Token)
   ensures u.get() == unit() && u.loc() == loc
 
-  function method {:extern} get_unit_shared(loc: Loc) : (gshared u: Token)
+  function method {:extern} get_unit_shared(ghost loc: Loc) : (gshared u: Token)
   ensures u.get() == unit() && u.loc() == loc
 
   // This MUST be 'method', as it wouldn't be safe to call this and
@@ -90,8 +90,9 @@ abstract module PCM {
   ensures sum.loc() == a.loc()
 
   // Same as above: must be 'method', not 'function method'
-  glinear method {:extern} is_valid(gshared a: Token, glinear b: Token)
-  requires a.loc() == b.loc()
+  glinear method {:extern} is_valid(gshared a: Token, glinear inout b: Token)
+  requires a.loc() == old_b.loc()
+  ensures b == old_b
   ensures dot_defined(a.get(), b.get())
 
   // The only reason this is a 'method' and not a 'function method'
