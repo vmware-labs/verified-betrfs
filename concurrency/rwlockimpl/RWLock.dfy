@@ -1,9 +1,7 @@
 include "../../lib/Base/Option.s.dfy"
 include "Ext.i.dfy"
+include "SimpleExtToken.i.dfy"
 include "FullMap.i.dfy"
-
-module SomeBase refines PCM {
-}
 
 module RWLockExt refines SimpleExt {
   import opened Options
@@ -35,7 +33,7 @@ module RWLockExt refines SimpleExt {
     abstract over Base.
   */
 
-  import Base = SomeBase
+  //import Base = SomeBase // inherited from SimpleExt
 
   /*
      Now we define our 'extension state' M.
@@ -587,5 +585,28 @@ module RWLockExt refines SimpleExt {
         release_exc_step_preserves(p, f, f', b, b', central, pe);
       }
     }
+  }
+}
+
+module RWLockSimpleExtPCM refines SimpleExtPCM {
+  import SE = RWLockExt
+}
+
+module RWLockExtToken refines SimpleExtToken {
+  import SEPCM = RWLockSimpleExtPCM
+  import opened RWLockExt
+
+  glinear method perform_acquire_pending(glinear pe: Token)
+  returns (glinear pe': Token, glinear handle: Token)
+  requires pe.get() == PhysExcHandle(false)
+  ensures pe'.get() == PhysExcHandle(true)
+  ensures handle.get() == ExcPendingHandle()
+  ensures pe'.loc() == handle.loc() == pe.loc()
+  {
+    ghost var a := PhysExcHandle(true);
+    ghost var b := ExcPendingHandle();
+    assert InternalNextStep(pe.get(), dot(a, b), AcquireExcPendingStep);
+    glinear var t := do_internal_step(pe, dot(a, b));
+    pe', handle := split(t, a, b);
   }
 }
