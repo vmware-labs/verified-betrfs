@@ -219,6 +219,10 @@ impl<T> RWLock<T> {
         }
         release exc_token;
       });
+      
+      if res.is_okay() {
+        break;
+      }
     }
 
     // At this point we've obtained an ExcPendingHandle token.
