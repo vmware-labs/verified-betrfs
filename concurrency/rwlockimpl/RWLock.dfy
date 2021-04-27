@@ -1,12 +1,13 @@
 include "../../lib/Base/Option.s.dfy"
 include "Ext.i.dfy"
+include "FullMap.i.dfy"
 
 module SomeBase refines PCM {
-  type M = nat  
 }
 
 module RWLockExt refines SimpleExt {
   import opened Options
+  import opened FullMaps
 
   /*
     This file defines a 'monoid extension' usable for verifying
@@ -124,36 +125,69 @@ module RWLockExt refines SimpleExt {
     // Travis suspects that would have required sucking the entire invariant
     // into dot_defined.)
 
-    shared_taken_handles: Base.M -> nat
+    shared_taken_handles: FullMap<Base.M, nat>
   )
   type F = M
 
+  function zero_map() : imap<Base.M, nat> {
+    imap k | true :: 0
+  }
+
+  function unit() : F
+  {
+    M(None, None, None, false, false, 0, zero_map())
+  }
+
+  lemma dot_unit(x: F)
+  //ensures dot_defined(x, unit())
+  //ensures dot(x, unit()) == x
+  {
+    //assert forall b :: x.shared_taken_handles(b)
+    //    == dot(x, unit()).shared_taken_handles(b);
+    //assert x.shared_taken_handles
+    //    == dot(x, unit()).shared_taken_handles;
+  }
+
+  lemma commutative(x: F, y: F)
+  //requires dot_defined(x, y)
+  //ensures dot_defined(y, x)
+  //ensures dot(x, y) == dot(y, x)
+  { }
+
+  lemma associative(x: F, y: F, z: F)
+  //requires dot_defined(y, z)
+  //requires dot_defined(x, dot(y, z))
+  //ensures dot_defined(x, y)
+  //ensures dot_defined(dot(x, y), z)
+  //ensures dot(x, dot(y, z)) == dot(dot(x, y), z)
+  { }
+
   function PhysExcHandle(phys_exc: bool) : M {
-    M(Some(phys_exc), None, None, false, false, 0, (b) => 0)
+    M(Some(phys_exc), None, None, false, false, 0, zero_map())
   }
 
   function PhysRcHandle(phys_rc: nat) : M {
-    M(None, Some(phys_rc), None, false, false, 0, (b) => 0)
+    M(None, Some(phys_rc), None, false, false, 0, zero_map())
   }
 
   function CentralHandle(cs: CentralState) : M {
-    M(None, None, Some(cs), false, false, 0, (b) => 0)
+    M(None, None, Some(cs), false, false, 0, zero_map())
   }
 
   function ExcPendingHandle() : M {
-    M(None, None, None, true, false, 0, (b) => 0)
+    M(None, None, None, true, false, 0, zero_map())
   }
 
   function ExcTakenHandle() : M {
-    M(None, None, None, false, true, 0, (b) => 0)
+    M(None, None, None, false, true, 0, zero_map())
   }
 
-  function unit_fn(elem: Base.M) : (Base.M -> nat) {
-    (b) => (if elem == b then 1 else 0)
+  function unit_fn(elem: Base.M) : FullMap<Base.M, nat> {
+    imap b | true :: (if elem == b then 1 else 0)
   }
 
   function SharedPendingHandle() : M  {
-    M(None, None, None, false, false, 1, (b) => 0)
+    M(None, None, None, false, false, 1, zero_map())
   }
 
   function SharedTakenHandle(elem: Base.M) : M  {
@@ -175,8 +209,8 @@ module RWLockExt refines SimpleExt {
     && !(a.exc_taken_handle && b.exc_taken_handle)
   }
 
-  function add_fns(f: Base.M -> nat, g: Base.M -> nat) : Base.M -> nat {
-    (b: nat) => f(b) + g(b)
+  function add_fns(f: FullMap<Base.M, nat>, g: FullMap<Base.M, nat>) : FullMap<Base.M, nat> {
+    imap b | true :: f[b] + g[b]
   }
 
   function dot(a: F, b: F) : F
@@ -202,30 +236,32 @@ module RWLockExt refines SimpleExt {
 
   predicate Inv(a: F)
   {
-    && a.central.Some?
-    && a.phys_exc.Some?
-    && a.phys_rc.Some?
-    && var central := a.central.value;
-    && var phys_exc := a.phys_exc.value;
-    && var phys_rc := a.phys_rc.value;
-    && (central.logical_exc ==> central.logical_rc == 0)
-    && (central.logical_exc ==> phys_exc)
-    && (central.logical_rc <= phys_rc)
-    && (a.exc_pending_handle ==> phys_exc && !central.logical_exc)
-    && (a.exc_taken_handle ==> central.logical_exc)
-    && (!central.logical_exc <==> central.held_value.Some?)
+    a != unit() ==> (
+      && a.central.Some?
+      && a.phys_exc.Some?
+      && a.phys_rc.Some?
+      && var central := a.central.value;
+      && var phys_exc := a.phys_exc.value;
+      && var phys_rc := a.phys_rc.value;
+      && (central.logical_exc ==> central.logical_rc == 0)
+      && (central.logical_exc ==> phys_exc)
+      && (central.logical_rc <= phys_rc)
+      && (a.exc_pending_handle ==> phys_exc && !central.logical_exc)
+      && (a.exc_taken_handle ==> central.logical_exc)
+      && (!central.logical_exc <==> central.held_value.Some?)
 
-    && (central.held_value.None? ==>
-      && (forall b :: a.shared_taken_handles(b) == 0)
-      && phys_rc == a.shared_pending_handles
-      && central.logical_rc == 0
-    )
+      && (central.held_value.None? ==>
+        && (forall b :: a.shared_taken_handles[b] == 0)
+        && phys_rc == a.shared_pending_handles
+        && central.logical_rc == 0
+      )
 
-    && (central.held_value.Some? ==>
-      && (forall b :: b != central.held_value.value ==> a.shared_taken_handles(b) == 0)
-      && phys_rc == a.shared_pending_handles
-          + a.shared_taken_handles(central.held_value.value)
-      && central.logical_rc == a.shared_taken_handles(central.held_value.value)
+      && (central.held_value.Some? ==>
+        && (forall b :: b != central.held_value.value ==> a.shared_taken_handles[b] == 0)
+        && phys_rc == a.shared_pending_handles
+            + a.shared_taken_handles[central.held_value.value]
+        && central.logical_rc == a.shared_taken_handles[central.held_value.value]
+      )
     )
   }
 
@@ -234,7 +270,9 @@ module RWLockExt refines SimpleExt {
   function Interp(a: F) : Base.M
   //requires Inv(m)
   {
-    if a.central.value.held_value.Some? then
+    if a == unit() then
+      Base.unit()
+    else if a.central.value.held_value.Some? then
       a.central.value.held_value.value
     else
       // Some thread has the exclusive lock, which means that thread has the
@@ -281,7 +319,7 @@ module RWLockExt refines SimpleExt {
   ensures Interp(dot(m', p)) == Interp(dot(m, p))
   {
     //assert forall b :: m'.shared_taken_handles(b) == m.shared_taken_handles(b);
-    assert forall b :: dot(m',p).shared_taken_handles(b) == dot(m,p).shared_taken_handles(b);
+    assert forall b :: dot(m',p).shared_taken_handles[b] == dot(m,p).shared_taken_handles[b];
   }
 
   // Step 2: check the 'rc' field
@@ -314,7 +352,7 @@ module RWLockExt refines SimpleExt {
   ensures Interp(dot(m', p)) == b
   ensures Interp(dot(m, p)) == b'
   {
-    assert forall b :: dot(m',p).shared_taken_handles(b) == dot(m,p).shared_taken_handles(b);
+    assert forall b :: dot(m',p).shared_taken_handles[b] == dot(m,p).shared_taken_handles[b];
   }
 
   //////// 'Acquire shared lock' flow
@@ -338,7 +376,7 @@ module RWLockExt refines SimpleExt {
   ensures Inv(dot(m', p))
   ensures Interp(dot(m', p)) == Interp(dot(m, p))
   {
-    assert forall b :: dot(m',p).shared_taken_handles(b) == dot(m,p).shared_taken_handles(b);
+    assert forall b :: dot(m',p).shared_taken_handles[b] == dot(m,p).shared_taken_handles[b];
   }
 
   // Step 2: Check 'exc' is false
@@ -371,7 +409,7 @@ module RWLockExt refines SimpleExt {
   ensures Interp(dot(m', p)) == Interp(dot(m, p))
   {
     assert forall b :: b != central.held_value.value ==>
-        dot(m',p).shared_taken_handles(b) == dot(m,p).shared_taken_handles(b);
+        dot(m',p).shared_taken_handles[b] == dot(m,p).shared_taken_handles[b];
   }
 
   // Ability to borrow state from a ReadingHandle
@@ -385,7 +423,7 @@ module RWLockExt refines SimpleExt {
     // This is the lemma the Inv serves.
   ensures Interp(dot(p, SharedTakenHandle(b))) == b
   {
-    assert dot(p, SharedTakenHandle(b)).shared_taken_handles(b) > 0;
+    assert dot(p, SharedTakenHandle(b)).shared_taken_handles[b] > 0;
   }
 
   //////// 'Release exclusive lock'
@@ -421,7 +459,7 @@ module RWLockExt refines SimpleExt {
   ensures Interp(dot(m', p)) == b
   ensures Interp(dot(m, p)) == b'
   {
-    assert forall b :: dot(m',p).shared_taken_handles(b) == dot(m,p).shared_taken_handles(b);
+    assert forall b :: dot(m',p).shared_taken_handles[b] == dot(m,p).shared_taken_handles[b];
   }
 
   //////// 'Release shared lock'
@@ -455,9 +493,99 @@ module RWLockExt refines SimpleExt {
   ensures Inv(dot(m', p))
   ensures Interp(dot(m', p)) == Interp(dot(m, p))
   {
-    assert dot(m, p).shared_taken_handles(b) > 0;
+    assert dot(m, p).shared_taken_handles[b] > 0;
     assert b == central.held_value.value;
     assert forall b :: b != central.held_value.value ==>
-        dot(m',p).shared_taken_handles(b) == dot(m,p).shared_taken_handles(b);
+        dot(m',p).shared_taken_handles[b] == dot(m,p).shared_taken_handles[b];
+  }
+
+  //// Put it all together
+
+  datatype InternalStep =
+    | AcquireExcPendingStep
+    | AcquireSharedPendingStep(rc: nat)
+    | AcquireSharedFinishStep(central: CentralState)
+    | ReleaseSharedStep(central: CentralState, b: Base.M, rc: nat)
+
+  datatype CrossStep =
+    | AcquireExcFinishStep(central: CentralState)
+    | ReleaseExcStep(central: CentralState, pe: bool)
+
+  predicate InternalNextStep(f: F, f': F, step: InternalStep)
+  {
+    match step {
+      case AcquireExcPendingStep => acquire_exc_pending_step(f, f')
+      case AcquireSharedPendingStep(rc) => acquire_shared_pending_step(f, f', rc)
+      case AcquireSharedFinishStep(central) => acquire_shared_finish_step(f, f', central)
+      case ReleaseSharedStep(central, b, c) => release_shared_step(f, f', central, b, c)
+    }
+  }
+
+  predicate CrossNextStep(f: F, f': F, b: Base.M, b': Base.M, step: CrossStep)
+  {
+    match step {
+      case AcquireExcFinishStep(central) => acquire_exc_finish_step(f, f', b, b', central)
+      case ReleaseExcStep(central, pe) => release_exc_step(f, f', b, b', central, pe)
+    }
+  }
+
+  predicate InternalNext(f: F, f': F)
+  {
+    exists step :: InternalNextStep(f, f', step)
+  }
+
+  predicate CrossNext(f: F, f': F, b: Base.M, b': Base.M)
+  {
+    exists step :: CrossNextStep(f, f', b, b', step)
+  }
+
+  lemma interp_unit()
+  //ensures Inv(unit()) && Interp(unit()) == Base.unit()
+  {
+  }
+
+  lemma internal_step_preserves_interp(p: F, f: F, f': F)
+  //requires InternalNext(f, f')
+  //requires dot_defined(f, p)
+  //requires Inv(dot(f, p))
+  //ensures dot_defined(f', p)
+  //ensures Inv(dot(f', p))
+  //ensures Interp(dot(f', p)) == Interp(dot(f, p))
+  {
+    var step :| InternalNextStep(f, f', step);
+    match step {
+      case AcquireExcPendingStep => acquire_exc_pending_step_preserves(p, f, f');
+      case AcquireSharedPendingStep(rc) => acquire_shared_pending_step_preserves(p, f, f', rc);
+      case AcquireSharedFinishStep(central) => acquire_shared_finish_step_preserves(p, f, f', central);
+      case ReleaseSharedStep(central, b, c) => release_shared_step_preserves(p, f, f', central, b, c);
+    }
+  }
+
+  lemma cross_step_preserves_interp(p: F, f: F, f': F, b: Base.M, b': Base.M)
+  //requires CrossNext(f, f', b, b')
+  //requires dot_defined(f, p)
+  //requires Inv(dot(f, p))
+  //requires Base.dot_defined(Interp(dot(f, p)), b)
+  //ensures dot_defined(f', p)
+  //ensures Inv(dot(f', p))
+  //ensures Base.dot_defined(Interp(dot(f', p)), b')
+  //ensures Base.dot(Interp(dot(f', p)), b')
+  //     == Base.dot(Interp(dot(f, p)), b)
+  {
+    Base.dot_unit(b);
+    Base.commutative(b, Base.unit());
+
+    Base.dot_unit(b');
+    Base.commutative(b', Base.unit());
+
+    var step :| CrossNextStep(f, f', b, b', step);
+    match step {
+      case AcquireExcFinishStep(central) => {
+        acquire_exc_finish_step_preserves(p, f, f', b, b', central);
+      }
+      case ReleaseExcStep(central, pe) => {
+        release_exc_step_preserves(p, f, f', b, b', central, pe);
+      }
+    }
   }
 }

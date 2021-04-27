@@ -3,7 +3,7 @@ include "../framework/PCMExt.s.dfy"
 abstract module SimpleExt {
   import Base : PCM
 
-  type F(!new)
+  type F(!new,==)
 
   function unit() : F
   predicate dot_defined(a: F, b: F)
@@ -31,14 +31,14 @@ abstract module SimpleExt {
   function Interp(a: F) : Base.M
     requires Inv(a)
 
-  predicate InternalStep(f: F, f': F)
-  predicate CrossStep(f: F, f': F, b: Base.M, b': Base.M)
+  predicate InternalNext(f: F, f': F)
+  predicate CrossNext(f: F, f': F, b: Base.M, b': Base.M)
 
   lemma interp_unit()
   ensures Inv(unit()) && Interp(unit()) == Base.unit()
 
   lemma internal_step_preserves_interp(p: F, f: F, f': F)
-  requires InternalStep(f, f')
+  requires InternalNext(f, f')
   requires dot_defined(f, p)
   requires Inv(dot(f, p))
   ensures dot_defined(f', p)
@@ -46,7 +46,7 @@ abstract module SimpleExt {
   ensures Interp(dot(f', p)) == Interp(dot(f, p))
 
   lemma cross_step_preserves_interp(p: F, f: F, f': F, b: Base.M, b': Base.M)
-  requires CrossStep(f, f', b, b')
+  requires CrossNext(f, f', b, b')
   requires dot_defined(f, p)
   requires Inv(dot(f, p))
   requires Base.dot_defined(Interp(dot(f, p)), b)
@@ -155,7 +155,7 @@ abstract module SimpleExtPCM refines PCMExt {
       && SE.dot_defined(y, z)
       && a == SE.dot(x, z)
       && b == SE.dot(y, z)
-      && SE.InternalStep(x, y)
+      && SE.InternalNext(x, y)
   }
 
   lemma transition_is_monotonic(a: M, b: M, c: M)
@@ -169,7 +169,7 @@ abstract module SimpleExtPCM refines PCMExt {
       && SE.dot_defined(y, z)
       && a == SE.dot(x, z)
       && b == SE.dot(y, z)
-      && SE.InternalStep(x, y);
+      && SE.InternalNext(x, y);
 
     var w :| SE.dot_defined(SE.dot(a, c), w) && SE.Inv(SE.dot(SE.dot(a, c), w));
 
@@ -224,7 +224,7 @@ abstract module SimpleExtPCM refines PCMExt {
       && SE.dot_defined(y, z)
       && f == SE.dot(x, z)
       && f' == SE.dot(y, z)
-      && SE.InternalStep(x, y);
+      && SE.InternalNext(x, y);
 
     SE_assoc_general(x, z, p);
     SE_assoc_general(y, z, p);
@@ -258,7 +258,7 @@ abstract module SimpleExtToken {
 
   glinear method do_internal_step(glinear f: Token, ghost f': F)
   returns (glinear f_out: Token)
-  requires SE.InternalStep(f.get(), f')
+  requires SE.InternalNext(f.get(), f')
   ensures f_out.loc() == f.loc()
   ensures f_out.get() == f'
   {
@@ -278,7 +278,7 @@ abstract module SimpleExtToken {
       glinear f: Token, ghost f': F,
       glinear b: Base.Token, ghost b': Base.M)
   returns (glinear f_out: Token, glinear b_out: Base.Token)
-  requires SE.CrossStep(f.get(), f', b.get(), b')
+  requires SE.CrossNext(f.get(), f', b.get(), b')
   requires f.loc().ExtLoc? && f.loc().base_loc == b.loc()
   ensures f_out.loc() == f.loc()
   ensures b_out.loc() == b.loc()
