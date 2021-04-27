@@ -45,8 +45,9 @@ module RWLockExt refines SimpleExt {
   datatype CentralState = CentralState(
     // These values will correspond to the physical values
     // of the 'exc' and 'rc' fields described above
-    phys_exc: bool,
-    phys_rc: nat,
+    // (note: these two fields moved out of CentralState)
+    //phys_exc: bool,
+    //phys_rc: nat,
 
     // 'logical_exc' means that the lock has ACTUALLY been
     // exclusively taken, while 'logical_rc' is the count
@@ -92,6 +93,8 @@ module RWLockExt refines SimpleExt {
    */
 
   datatype M = M(
+    phys_exc: Option<bool>,
+    phys_rc: Option<nat>,
     central: Option<CentralState>,
 
     // We represent these handles with bools, because
@@ -125,16 +128,24 @@ module RWLockExt refines SimpleExt {
   )
   type F = M
 
+  function PhysExcHandle(phys_exc: bool) : M {
+    M(Some(phys_exc), None, None, false, false, 0, (b) => 0)
+  }
+
+  function PhysRcHandle(phys_rc: nat) : M {
+    M(None, Some(phys_rc), None, false, false, 0, (b) => 0)
+  }
+
   function CentralHandle(cs: CentralState) : M {
-    M(Some(cs), false, false, 0, (b) => 0)
+    M(None, None, Some(cs), false, false, 0, (b) => 0)
   }
 
   function ExcPendingHandle() : M {
-    M(None, true, false, 0, (b) => 0)
+    M(None, None, None, true, false, 0, (b) => 0)
   }
 
   function ExcTakenHandle() : M {
-    M(None, false, true, 0, (b) => 0)
+    M(None, None, None, false, true, 0, (b) => 0)
   }
 
   function unit_fn(elem: Base.M) : (Base.M -> nat) {
@@ -142,11 +153,11 @@ module RWLockExt refines SimpleExt {
   }
 
   function SharedPendingHandle() : M  {
-    M(None, false, false, 1, (b) => 0)
+    M(None, None, None, false, false, 1, (b) => 0)
   }
 
   function SharedTakenHandle(elem: Base.M) : M  {
-    M(None, false, false, 0, unit_fn(elem))
+    M(None, None, None, false, false, 0, unit_fn(elem))
   }
 
   // Defining the 'dot' operation on the monoid M is pretty
@@ -157,6 +168,8 @@ module RWLockExt refines SimpleExt {
   // Later, we'll show that every transition of the extension monoid
   // state machine preserves dot_defined (over the fragment it transforms).
   predicate dot_defined(a: F, b: F) {
+    && !(a.phys_exc.Some? && b.phys_exc.Some?)
+    && !(a.phys_rc.Some? && b.phys_rc.Some?)
     && !(a.central.Some? && b.central.Some?)
     && !(a.exc_pending_handle && b.exc_pending_handle)
     && !(a.exc_taken_handle && b.exc_taken_handle)
@@ -170,6 +183,8 @@ module RWLockExt refines SimpleExt {
   //requires dot_defined(a, b)
   {
     M(
+      (if a.phys_exc.Some? then a.phys_exc else b.phys_exc),
+      (if a.phys_rc.Some? then a.phys_rc else b.phys_rc),
       (if a.central.Some? then a.central else b.central),
       a.exc_pending_handle || b.exc_pending_handle,
       a.exc_taken_handle || b.exc_taken_handle,
@@ -188,23 +203,27 @@ module RWLockExt refines SimpleExt {
   predicate Inv(a: F)
   {
     && a.central.Some?
+    && a.phys_exc.Some?
+    && a.phys_rc.Some?
     && var central := a.central.value;
+    && var phys_exc := a.phys_exc.value;
+    && var phys_rc := a.phys_rc.value;
     && (central.logical_exc ==> central.logical_rc == 0)
-    && (central.logical_exc ==> central.phys_exc)
-    && (central.logical_rc <= central.phys_rc)
-    && (a.exc_pending_handle ==> central.phys_exc && !central.logical_exc)
+    && (central.logical_exc ==> phys_exc)
+    && (central.logical_rc <= phys_rc)
+    && (a.exc_pending_handle ==> phys_exc && !central.logical_exc)
     && (a.exc_taken_handle ==> central.logical_exc)
     && (!central.logical_exc <==> central.held_value.Some?)
 
     && (central.held_value.None? ==>
       && (forall b :: a.shared_taken_handles(b) == 0)
-      && central.phys_rc == a.shared_pending_handles
+      && phys_rc == a.shared_pending_handles
       && central.logical_rc == 0
     )
 
     && (central.held_value.Some? ==>
       && (forall b :: b != central.held_value.value ==> a.shared_taken_handles(b) == 0)
-      && central.phys_rc == a.shared_pending_handles
+      && phys_rc == a.shared_pending_handles
           + a.shared_taken_handles(central.held_value.value)
       && central.logical_rc == a.shared_taken_handles(central.held_value.value)
     )
@@ -244,22 +263,19 @@ module RWLockExt refines SimpleExt {
 
   // Step 1: atomically set 'exc' flag from false to true
 
-  // central is a skolemized existential variable: it's a convenience so we can
-  // use the CentralHandle constructor to say "m is just this one fragment".
-  predicate acquire_exc_pending_step(m: M, m': M, central: CentralState)
+  predicate acquire_exc_pending_step(m: M, m': M)
   {
-    && central.phys_exc == false
-    && m == CentralHandle(central)
+    && m == PhysExcHandle(false)
     && m' == dot(
-      CentralHandle(central.(phys_exc := true)),
+      PhysExcHandle(true),
       ExcPendingHandle()
     )
   }
 
-  lemma acquire_exc_pending_step_preserves(p: M, m: M, m': M, central: CentralState)
+  lemma acquire_exc_pending_step_preserves(p: M, m: M, m': M)
   requires dot_defined(m, p)
   requires Inv(dot(m, p))
-  requires acquire_exc_pending_step(m, m', central)
+  requires acquire_exc_pending_step(m, m')
   ensures dot_defined(m', p)
   ensures Inv(dot(m', p))
   ensures Interp(dot(m', p)) == Interp(dot(m, p))
@@ -305,19 +321,19 @@ module RWLockExt refines SimpleExt {
 
   // Step 1: Increment 'rc' field
 
-  predicate acquire_shared_pending_step(m: M, m': M, central: CentralState)
+  predicate acquire_shared_pending_step(m: M, m': M, rc: nat)
   {
-    && m == CentralHandle(central)
+    && m == PhysRcHandle(rc)
     && m' == dot(
-      CentralHandle(central.(phys_rc := central.phys_rc + 1)),
+      PhysRcHandle(rc + 1),
       SharedPendingHandle()
     )
   }
 
-  lemma acquire_shared_pending_step_preserves(p: M, m: M, m': M, central: CentralState)
+  lemma acquire_shared_pending_step_preserves(p: M, m: M, m': M, rc: nat)
   requires dot_defined(m, p)
   requires Inv(dot(m, p))
-  requires acquire_shared_pending_step(m, m', central)
+  requires acquire_shared_pending_step(m, m', rc)
   ensures dot_defined(m', p)
   ensures Inv(dot(m', p))
   ensures Interp(dot(m', p)) == Interp(dot(m, p))
@@ -329,15 +345,20 @@ module RWLockExt refines SimpleExt {
 
   predicate acquire_shared_finish_step(m: M, m': M, central: CentralState)
   {
-    && central.phys_exc == false
     && central.held_value.Some?
     && m == dot(
-      CentralHandle(central),
-      SharedPendingHandle()
+      PhysExcHandle(false),
+      dot(
+        CentralHandle(central),
+        SharedPendingHandle()
+      )
     )
     && m' == dot(
-      CentralHandle(central.(logical_rc := central.logical_rc + 1)),
-      SharedTakenHandle(central.held_value.value)
+      PhysExcHandle(false),
+      dot(
+        CentralHandle(central.(logical_rc := central.logical_rc + 1)),
+        SharedTakenHandle(central.held_value.value)
+      )
     )
   }
 
@@ -371,26 +392,30 @@ module RWLockExt refines SimpleExt {
 
   // Step 'exc' field to 'false'
 
-  predicate release_exc_step(m: M, m': M, b: Base.M, b': Base.M, central: CentralState)
+  predicate release_exc_step(m: M, m': M, b: Base.M, b': Base.M, central: CentralState, pe: bool)
   {
     && b' == Base.unit()
 
     && m == dot(
-      CentralHandle(central),
-      ExcTakenHandle()
+      PhysExcHandle(pe),
+      dot(
+        CentralHandle(central),
+        ExcTakenHandle()
+      )
     )
-    && m' ==
+    && m' == dot(
+      PhysExcHandle(false),
       CentralHandle(central
-        .(phys_exc := false)
         .(logical_exc := false)
         .(held_value := Some(b))
       )
+    )
   }
 
-  lemma release_exc_step_preserves(p: M, m: M, m': M, b: Base.M, b': Base.M, central: CentralState)
+  lemma release_exc_step_preserves(p: M, m: M, m': M, b: Base.M, b': Base.M, central: CentralState, pe: bool)
   requires dot_defined(m, p)
   requires Inv(dot(m, p))
-  requires release_exc_step(m, m', b, b', central)
+  requires release_exc_step(m, m', b, b', central, pe)
   ensures dot_defined(m', p)
   ensures Inv(dot(m', p))
   ensures Interp(dot(m', p)) == b
@@ -403,25 +428,29 @@ module RWLockExt refines SimpleExt {
 
   // Decrement 'rc' field
 
-  predicate release_shared_step(m: M, m': M, central: CentralState, b: Base.M)
+  predicate release_shared_step(m: M, m': M, central: CentralState, b: Base.M, rc: nat)
   {
-    && central.phys_rc >= 1
+    && rc >= 1
     && central.logical_rc >= 1
     && m == dot(
-      CentralHandle(central),
-      SharedTakenHandle(b)
+      PhysRcHandle(rc),
+      dot(
+        CentralHandle(central),
+        SharedTakenHandle(b)
+      )
     )
-    && m' ==
+    && m' == dot(
+      PhysRcHandle(rc - 1),
       CentralHandle(central
-        .(phys_rc := central.phys_rc - 1)
         .(logical_rc := central.logical_rc - 1)
       )
+    )
   }
 
-  lemma release_shared_step_preserves(p: M, m: M, m': M, central: CentralState, b: Base.M)
+  lemma release_shared_step_preserves(p: M, m: M, m': M, central: CentralState, b: Base.M, rc: nat)
   requires dot_defined(m, p)
   requires Inv(dot(m, p))
-  requires release_shared_step(m, m', central, b)
+  requires release_shared_step(m, m', central, b, rc)
   ensures dot_defined(m', p)
   ensures Inv(dot(m', p))
   ensures Interp(dot(m', p)) == Interp(dot(m, p))
