@@ -515,7 +515,7 @@ module RWLockExt refines SimpleExt {
       case AcquireExcPendingStep => acquire_exc_pending_step(f, f')
       case AcquireSharedPendingStep(rc) => acquire_shared_pending_step(f, f', rc)
       case AcquireSharedFinishStep(central) => acquire_shared_finish_step(f, f', central)
-      case ReleaseSharedStep(central, b, c) => release_shared_step(f, f', central, b, c)
+      case ReleaseSharedStep(central, b, rc) => release_shared_step(f, f', central, b, rc)
     }
   }
 
@@ -595,8 +595,9 @@ module RWLockSimpleExtPCM refines SimpleExtPCM {
 module RWLockExtToken refines SimpleExtToken {
   import SEPCM = RWLockSimpleExtPCM
   import opened RWLockExt
+  import opened Options
 
-  glinear method perform_acquire_pending(glinear pe: Token)
+  glinear method perform_exc_pending(glinear pe: Token)
   returns (glinear pe': Token, glinear handle: Token)
   requires pe.get() == PhysExcHandle(false)
   ensures pe'.get() == PhysExcHandle(true)
@@ -608,5 +609,119 @@ module RWLockExtToken refines SimpleExtToken {
     assert InternalNextStep(pe.get(), dot(a, b), AcquireExcPendingStep);
     glinear var t := do_internal_step(pe, dot(a, b));
     pe', handle := split(t, a, b);
+  }
+
+  glinear method perform_exc_finish(glinear ct: Token, glinear handle: Token,
+      ghost central: CentralState)
+  returns (glinear ct': Token, glinear handle': Token, glinear resource': Base.Token)
+  requires ct.get() == CentralHandle(central)
+  requires handle.get() == ExcPendingHandle()
+  requires ct.loc() == handle.loc()
+  requires ct.loc().ExtLoc?
+  requires central.logical_rc == 0
+  ensures central.held_value.Some?
+  ensures ct'.get() == CentralHandle(central.(logical_exc := true).(held_value := None))
+  ensures handle'.get() == ExcTakenHandle()
+  ensures resource'.get() == central.held_value.value
+  ensures ct'.loc() == handle'.loc() == ct.loc()
+  ensures resource'.loc() == ct.loc().base_loc
+  {
+    glinear var x := SEPCM.join(ct, handle);
+    glinear var unit := Base.get_unit(ct.loc().base_loc);
+
+    ghost var a := CentralHandle(central.(logical_exc := true).(held_value := None));
+    ghost var b := ExcTakenHandle();
+
+    assert CrossNextStep(x.get(), dot(a, b), unit.get(), central.held_value.value,
+        AcquireExcFinishStep(central));
+    glinear var t, b' := do_cross_step(x, dot(a, b), unit, central.held_value.value);
+    ct', handle' := split(t, a, b);
+    resource' := b';
+  }
+
+  glinear method perform_shared_pending(glinear pe: Token, ghost rc: nat)
+  returns (glinear pe': Token, glinear handle: Token)
+  requires pe.get() == PhysRcHandle(rc)
+  ensures pe'.get() == PhysRcHandle(rc + 1)
+  ensures handle.get() == SharedPendingHandle()
+  ensures pe'.loc() == handle.loc() == pe.loc()
+  {
+    ghost var a := PhysRcHandle(rc + 1);
+    ghost var b := SharedPendingHandle();
+    assert InternalNextStep(pe.get(), dot(a, b), AcquireSharedPendingStep(rc));
+    glinear var t := do_internal_step(pe, dot(a, b));
+    pe', handle := split(t, a, b);
+  }
+
+  glinear method perform_shared_finish(
+    glinear pe: Token,
+    glinear ct: Token,
+    glinear handle: Token,
+    ghost central: CentralState)
+  returns (glinear pe': Token, glinear ct': Token, glinear handle': Token)
+
+  requires pe.get() == PhysExcHandle(false)
+  requires ct.get() == CentralHandle(central)
+  requires handle.get() == SharedPendingHandle()
+  requires pe.loc() == ct.loc() == handle.loc()
+
+  ensures pe'.get() == PhysExcHandle(false)
+  ensures ct'.get() == CentralHandle(central.(logical_rc := central.logical_rc + 1))
+  ensures central.held_value.Some?
+  ensures handle'.get() == SharedTakenHandle(central.held_value.value)
+  ensures pe'.loc() == ct'.loc() == handle'.loc() == pe.loc()
+  {
+    glinear var x := SEPCM.join(pe, ct);
+    x := SEPCM.join(x, handle);
+
+    assert central.held_value.Some?;
+
+    ghost var a := PhysExcHandle(false);
+    ghost var b := CentralHandle(central.(logical_rc := central.logical_rc + 1));
+    ghost var c := SharedTakenHandle(central.held_value.value);
+
+    assert InternalNextStep(x.get(), dot(a, dot(b, c)), AcquireSharedFinishStep(central));
+    glinear var t := do_internal_step(x, dot(a, dot(b, c)));
+    pe', x := split(t, a, dot(b, c));
+    ct', handle' := split(x, b, c);
+  }
+
+  glinear method perform_shared_release(
+    glinear pe: Token,
+    glinear ct: Token,
+    glinear handle: Token,
+    ghost central: CentralState,
+    ghost b: Base.M,
+    ghost rc: nat)
+  returns (glinear pe': Token, glinear ct': Token)
+
+  requires pe.get() == PhysRcHandle(rc)
+  requires ct.get() == CentralHandle(central)
+  requires handle.get() == SharedTakenHandle(b)
+  requires pe.loc() == ct.loc() == handle.loc()
+
+  ensures rc >= 1
+  ensures central.logical_rc >= 1
+  ensures pe'.get() == PhysRcHandle(rc - 1)
+  ensures ct'.get() == CentralHandle(central.(logical_rc := central.logical_rc - 1))
+  ensures pe'.loc() == ct'.loc() == pe.loc()
+  {
+    glinear var x := SEPCM.join(pe, ct);
+    x := SEPCM.join(x, handle);
+
+    ghost var z, complete := get_completion(inout x);
+
+    assert complete.shared_taken_handles[b] >= 1;
+    assert central.held_value.Some? && central.held_value.value == b;
+    assert complete.shared_taken_handles[central.held_value.value] >= 1;
+    assert central.logical_rc >= 1;
+    assert rc >= 1;
+
+    ghost var a := PhysRcHandle(rc - 1);
+    ghost var b1 := CentralHandle(central.(logical_rc := central.logical_rc - 1));
+
+    assert InternalNextStep(x.get(), dot(a, b1), ReleaseSharedStep(central, b, rc));
+    glinear var t := do_internal_step(x, dot(a, b1));
+    pe', ct' := split(t, a, b1);
   }
 }

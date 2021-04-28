@@ -105,4 +105,17 @@ abstract module SimpleExtToken {
     assert SEPCM.dot_defined(a, b);
     a', b' := SEPCM.split(sum, a, b);
   }
+
+  glinear method get_completion(glinear inout t: Token)
+  returns (ghost a: F, ghost complete: F)
+  ensures t == old_t
+  ensures SEPCM.SE.dot_defined(t.get(), a)
+  ensures SEPCM.SE.dot(t.get(), a) == complete
+  ensures SEPCM.SE.Inv(complete)
+  {
+    assert SEPCM.Valid(t.get());
+    ghost var x :| SEPCM.SE.dot_defined(t.get(), x) && SEPCM.SE.Inv(SEPCM.SE.dot(t.get(), x));
+    a := x;
+    complete := SEPCM.SE.dot(t.get(), a);
+  }
 }
