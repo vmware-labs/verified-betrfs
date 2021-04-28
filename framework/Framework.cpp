@@ -257,13 +257,13 @@ namespace MainDiskIOHandler_Compile {
       close(fd);
   }
 
-  Tuple2<uint64, uint64> DiskIOHandler::write2(
+  Tuple<uint64, uint64> DiskIOHandler::write2(
       uint64 addr1, DafnySequence<uint8> bytes1,
       uint64 addr2, DafnySequence<uint8> bytes2)
   {
     uint64 id1 = write(addr1, bytes1);
     uint64 id2 = write(addr2, bytes2);
-    return Tuple2<uint64, uint64>(id1, id2);
+    return Tuple<uint64, uint64>(id1, id2);
   }
 
   uint64 DiskIOHandler::write(uint64 addr, DafnySequence<uint8> bytes)
@@ -335,15 +335,15 @@ namespace MainDiskIOHandler_Compile {
     return id;
   }
 
-  Tuple3<uint64, uint64, uint64> DiskIOHandler::getWriteResult()
+  Tuple<uint64, uint64, uint64> DiskIOHandler::getWriteResult()
   {
-    return Tuple3<uint64, uint64, uint64>(
+    return Tuple<uint64, uint64, uint64>(
       writeResponseId, responseAddr, responseLen);
   }
 
-  Tuple3<uint64, uint64, DafnySequence<uint8>> DiskIOHandler::getReadResult()
+  Tuple<uint64, uint64, DafnySequence<uint8>> DiskIOHandler::getReadResult()
   {
-    return Tuple3<uint64, uint64, DafnySequence<uint8>>(
+    return Tuple<uint64, uint64, DafnySequence<uint8>>(
       readResponseId, responseAddr, readResponseBytes);
   }
 
