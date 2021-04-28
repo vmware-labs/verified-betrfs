@@ -2,13 +2,12 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "Nonlinear.i.dfy"
-include "../Marshalling/Math.i.dfy"
+include "Math.i.dfy"
 
 // More complicated math lemmas. This file is meant to be run with `/noNLarith`.
 // Call into NonlinearLemmas for basic nonlinear facts rather than relying on Z3.
-// TODO combine with other math lib?
 
-module MathLemmas {
+module ModLemmas {
   import NonlinearLemmas
   import opened Math
 

@@ -666,7 +666,7 @@ module PivotBetreeSpecRefinement {
   {
   }
 
-  lemma RefinesValidFlush(flush: P.NodeFlush)
+  lemma {:timeLimitMultiplier 4} RefinesValidFlush(flush: P.NodeFlush)
   requires P.ValidFlush(flush)
   requires forall i | 0 <= i < |P.FlushReads(flush)| :: P.InvNode(P.FlushReads(flush)[i].node)
   requires ReadOpsBucketsWellMarshalled(P.FlushReads(flush))
@@ -1146,7 +1146,7 @@ module PivotBetreeSpecRefinement {
     assert key in r.old_parent.children;
   }
 
-  lemma RefinesValidSplit(f: P.NodeFusion)
+  lemma {:timeLimitMultiplier 4} RefinesValidSplit(f: P.NodeFusion)
   requires P.ValidSplit(f)
   requires ReadOpsBucketsWellMarshalled(P.SplitReads(f))
   requires P.InvNode(f.fused_parent)
@@ -1232,6 +1232,8 @@ module PivotBetreeSpecRefinement {
   ensures B.ValidBetreeStep(IStep(betreeStep))
   ensures IReadOps(P.BetreeStepReads(betreeStep)) == B.BetreeStepReads(IStep(betreeStep))
   {
+    B.reveal_RedirectReads();
+    B.reveal_RedirectOps();
     RefinesValidBetreeStep(betreeStep);
   }
 
@@ -1363,6 +1365,9 @@ module PivotBetreeSpecRefinement {
       P.InvNode(P.SplitOps(f)[i].node)
   ensures IOps(P.SplitOps(f)) == B.RedirectOps(ISplit(f))
   {
+    B.reveal_RedirectReads();
+    B.reveal_RedirectOps();
+
     PivotBetreeSpecWFNodes.ValidSplitWritesInvNodes(f);
     assert IOp(P.G.AllocOp(f.left_childref, f.left_child)) == B.RedirectOps(ISplit(f))[0];
     assert IOp(P.G.AllocOp(f.right_childref, f.right_child)) == B.RedirectOps(ISplit(f))[1];
@@ -1400,6 +1405,9 @@ module PivotBetreeSpecRefinement {
       P.InvNode(P.MergeOps(f)[i].node)
   ensures IOps(P.MergeOps(f)) == B.RedirectOps(IMerge(f))
   {
+    B.reveal_RedirectReads();
+    B.reveal_RedirectOps();
+
     PivotBetreeSpecWFNodes.ValidMergeWritesInvNodes(f);
   }
 

@@ -281,6 +281,25 @@ module BetreeSpec {
     keys: iset<Key>
   )
 
+  predicate RedirectRefInOldChildren(redirect: Redirect, ref: Reference)
+  {
+    exists key ::
+      && key in redirect.old_parent.children
+      && key in redirect.keys
+      && redirect.old_parent.children[key] == ref
+  }
+
+  predicate RedirectChildChildInOld(redirect: Redirect, 
+      childref: Reference, ref: Reference)
+  requires childref in redirect.new_children
+  {
+    exists key ::
+      && IMapsTo(redirect.new_parent.children, key, childref)
+      && IMapsTo(redirect.new_children[childref].children, key, ref)
+      && key in redirect.keys
+      && key in redirect.old_parent.children
+  }
+
   predicate ValidRedirect(redirect: Redirect) {
     && WFNode(redirect.old_parent)
     && (forall node :: node in redirect.old_children.Values ==> WFNode(node))
@@ -288,22 +307,25 @@ module BetreeSpec {
     && (forall node :: node in redirect.new_children.Values ==> WFNode(node))
 
     // Consistency of old_parent, old_childrefs, old_children, and keys
-    && (forall ref :: ref in IMapRestrict(redirect.old_parent.children, redirect.keys).Values <==> ref in redirect.old_childrefs)
-    && redirect.old_children.Keys == IMapRestrict(redirect.old_parent.children, redirect.keys).Values
+    && (forall key  | key in redirect.old_parent.children && key in redirect.keys :: redirect.old_parent.children[key] in redirect.old_childrefs)
+    && (forall key  | key in redirect.old_parent.children && key in redirect.keys :: redirect.old_parent.children[key] in redirect.old_children)
+    && (forall ref {:trigger RedirectRefInOldChildren(redirect, ref)} | ref in redirect.old_childrefs :: RedirectRefInOldChildren(redirect, ref))
+    && (forall ref {:trigger RedirectRefInOldChildren(redirect, ref)} | ref in redirect.old_children :: RedirectRefInOldChildren(redirect, ref))
+    && (forall ref :: ref in redirect.old_childrefs ==> ref in redirect.old_children)
 
     // Consistency of new_parent, new_childrefs, new_children, and keys
-    && (forall ref :: ref in IMapRestrict(redirect.new_parent.children, redirect.keys).Values ==> ref in redirect.new_childrefs)
-    && redirect.new_children.Keys == (iset ref | ref in redirect.new_childrefs)
+    && (forall key  | key in redirect.new_parent.children && key in redirect.keys :: redirect.new_parent.children[key] in redirect.new_childrefs)
+    && (forall ref | ref in redirect.new_children :: ref in redirect.new_childrefs)
+    && (forall ref | ref in redirect.new_childrefs :: ref in redirect.new_children)
 
     // Defines new_parent
     && redirect.new_parent.buffer == redirect.old_parent.buffer
-    && (forall key :: key in redirect.keys ==> key in redirect.new_parent.children)
-    && (forall key :: key in redirect.keys ==> redirect.new_parent.children[key] in redirect.new_childrefs)
-    && (forall key :: key !in redirect.keys ==> IMapsAgreeOnKey(redirect.new_parent.children, redirect.old_parent.children, key))
-
+    && (forall key  :: key in redirect.keys ==> key in redirect.new_parent.children)
+    && (forall key  :: key in redirect.keys ==> redirect.new_parent.children[key] in redirect.new_childrefs)
+    && (forall key  :: key !in redirect.keys ==> IMapsAgreeOnKey(redirect.new_parent.children, redirect.old_parent.children, key))
 
     // The buffer of the new child has to agree with the buffers of the old children on the keys that were routed to them.
-    && (forall key :: key in redirect.keys * redirect.old_parent.children.Keys ==>
+    && (forall key  :: key in redirect.keys && key in redirect.old_parent.children.Keys ==>
        && redirect.old_parent.children[key] in redirect.old_children
        && redirect.new_parent.children[key] in redirect.new_children
        && IMapsAgreeOnKey(
@@ -312,7 +334,7 @@ module BetreeSpec {
           key))
 
     // The children of the new child must agree with the children of the old children on the keys that were routed to them.
-    && (forall key :: key in redirect.keys * redirect.old_parent.children.Keys ==>
+    && (forall key  :: key in redirect.keys && key in redirect.old_parent.children.Keys ==>
        && redirect.old_parent.children[key] in redirect.old_children
        && redirect.new_parent.children[key] in redirect.new_children
        && IMapsAgreeOnKey(
@@ -323,13 +345,10 @@ module BetreeSpec {
     // The new child can't have any children other than the ones mentioned above.
     //&& (forall new_child | new_child in redirect.new_children.Values ::
     //  new_child.children.Values == IMapRestrict(new_child.children, redirect.keys * redirect.old_parent.children.Keys).Values)
-    && (forall childref, ref | childref in redirect.new_children && ref in redirect.new_children[childref].children.Values ::
-        exists key ::
-          && IMapsTo(redirect.new_parent.children, key, childref)
-          && IMapsTo(redirect.new_children[childref].children, key, ref)
-          && key in redirect.keys
-          && key in redirect.old_parent.children
-       )
+    && (forall childref, ref
+        {:trigger RedirectChildChildInOld(redirect, childref, ref)}
+        | childref in redirect.new_children && ref in redirect.new_children[childref].children.Values
+        :: RedirectChildChildInOld(redirect, childref, ref))
   }
 
   function RedirectChildReads(childrefs: seq<Reference>, children: imap<Reference, Node>) : (readops: seq<ReadOp>)
@@ -341,8 +360,9 @@ module BetreeSpec {
     else RedirectChildReads(DropLast(childrefs), children) + [ ReadOp(Last(childrefs), children[Last(childrefs)]) ]
   }
   
-  function RedirectReads(redirect: Redirect) : seq<ReadOp>
+  function {:opaque} RedirectReads(redirect: Redirect) : (res: seq<ReadOp>)
     requires ValidRedirect(redirect)
+    ensures |res| == |redirect.old_childrefs| + 1
   {
     [ ReadOp(redirect.parentref, redirect.old_parent) ]
       + RedirectChildReads(redirect.old_childrefs, redirect.old_children)
@@ -357,7 +377,7 @@ module BetreeSpec {
     else RedirectChildAllocs(DropLast(childrefs), children) + [ AllocOp(Last(childrefs), children[Last(childrefs)]) ]
   }
 
-  function RedirectOps(redirect: Redirect) : seq<Op>
+  function {:opaque} RedirectOps(redirect: Redirect) : seq<Op>
     requires ValidRedirect(redirect)
   {
     RedirectChildAllocs(redirect.new_childrefs, redirect.new_children)

@@ -129,7 +129,8 @@ def extractCondition(reportType, report, content):
     else:
         raise Exception("build system error: unknown report type %s\n" % reportType)
 
-def summarize(reportType, verchk):
+
+def summarize_verbose(reportType, verchk):
     content = open(verchk).read()
 
     # Extract time
@@ -141,5 +142,11 @@ def summarize(reportType, verchk):
 
     condition = extractCondition(reportType, verchk, content)
     condition.userTimeSec = userTimeSec
+    condition.filename = dafnyFromVerchk(verchk)
     condition.verchk = verchk
+
+    return content, condition
+
+def summarize(reportType, verchk):
+    _, condition = summarize_verbose(reportType, verchk)
     return condition

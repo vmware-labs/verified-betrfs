@@ -11,16 +11,13 @@ DAFNY_ROOT?=.dafny/dafny/
 DAFNY_CMD=$(DAFNY_ROOT)/Scripts/dafny
 DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
 DAFNY_FLAGS=
-DAFNY_GLOBAL_FLAGS=
+# Approximation based on (somewhat dated) F* measurements
+RLIMIT_PER_SECOND=545
+DEFAULT_RLIMIT=$$(( 30 * $(RLIMIT_PER_SECOND) ))
+DAFNY_RLIMIT_FLAG=/rlimit:$(DEFAULT_RLIMIT)
 
-ifndef TL
-	TL=20
-endif
-ifeq "$(TL)" "0"
-  TIMELIMIT=
-else
-  TIMELIMIT=/timeLimit:$(TL)
-endif
+# This is mainly for CI use
+DAFNY_GLOBAL_FLAGS=
 
 POUND_DEFINES=
 ifdef LOG_QUERY_STATS
@@ -130,8 +127,9 @@ status: build/deps build/Impl/Bundle.i.status.pdf
 
 # Longer time-limit for CI
 .PHONY: verichecks-status
-verichecks-status: TIMELIMIT=/timeLimit:60
+
 verichecks-status: DAFNY_GLOBAL_FLAGS=/vcsCores:4
+verichecks-status: DEFAULT_RLIMIT=$$(( 30 * $(RLIMIT_PER_SECOND) ))
 verichecks-status: build/deps build/Impl/Bundle.i.status.pdf
 
 .PHONY: syntax-status
@@ -178,7 +176,7 @@ build/%.synchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 # .verchk: Dafny file-local verification
 build/%.verchk: %.dfy $(DAFNY_BINS) | $$(@D)/.
 	$(eval TMPNAME=$(patsubst %.verchk,%.verchk-tmp,$@))
-	( $(TIME) $(DAFNY_CMD) $(DAFNY_GLOBAL_FLAGS) $(DAFNY_FLAGS) /compile:0 $(TIMELIMIT) $< ) 2>&1 | tee $(TMPNAME)
+	( $(TIME) $(DAFNY_CMD) $(DAFNY_GLOBAL_FLAGS) $(DAFNY_RLIMIT_FLAG) $(DAFNY_FLAGS) /compile:0 $< ) 2>&1 | tee $(TMPNAME)
 	mv $(TMPNAME) $@
 
 ### Establish Dafny flag defaults
@@ -193,27 +191,24 @@ NONLINEAR_FLAGS = /noNLarith
 
 INDUCTION_FLAGS = /induction:1
 
-OTHER_PROVER_FLAGS = 
+OTHER_PROVER_FLAGS = /rlimit:$(DEFAULT_RLIMIT)
 
 ### Adjust defaults for a couple of files
 # (It would be nice if we could do this in the source instead.)
 
-build/Betree/BetreeInv.i.verchk: OTHER_PROVER_FLAGS=/proverOpt:O:smt.random_seed=1
 build/lib/DataStructures/LinearDList.i.verchk: OTHER_PROVER_FLAGS=/noNLarith /proverOpt:O:smt.random_seed=1
 
 # enable nonlinear arithmetic for some files
 # Note: Nonlinear.i.dfy and Math.i.dfy are designed to use nonlinear arith.
 # The other files are legacy'ed in, but it's no big deal as long
 # as they verify.
-build/lib/Checksums/Nonlinear.i.verchk: NONLINEAR_FLAGS=
-build/lib/Marshalling/Math.i.verchk: NONLINEAR_FLAGS=
+build/lib/Math/Nonlinear.i.verchk: NONLINEAR_FLAGS=
 build/lib/Base/mathematics.i.verchk: NONLINEAR_FLAGS=
 build/Impl/BookkeepingModel.i.verchk: NONLINEAR_FLAGS=
 build/Impl/IOImpl.i.verchk: NONLINEAR_FLAGS=
 build/Impl/IOModel.i.verchk: NONLINEAR_FLAGS=
 build/Impl/SyncImpl.i.verchk: NONLINEAR_FLAGS=
 build/Impl/BookkeepingImpl.i.verchk: NONLINEAR_FLAGS=
-build/Betree/BetreeInv.i.verchk: NONLINEAR_FLAGS=
 build/lib/Base/SetBijectivity.i.verchk: NONLINEAR_FLAGS=
 build/lib/Marshalling/GenericMarshalling.i.verchk: NONLINEAR_FLAGS=
 build/lib/Buckets/BucketFlushModel.i.verchk: NONLINEAR_FLAGS=
@@ -249,7 +244,7 @@ build/%.okay: %.dfy | $$(@D)/.
 .PRECIOUS: build/%.verchk
 AGGREGATE_TOOL=tools/aggregate-verchk.py
 build/%.verified: build/%.verchk $(AGGREGATE_TOOL) | $$(@D)/.
-	$(AGGREGATE_TOOL) verchk $< > $@
+	$(AGGREGATE_TOOL) --verchk --root $< --summary $@ --error $@.err
 
 # Syntax is trivial from synchk file, just a marker.
 # (We need the .syntax target to get a recursive dependency computation.)

@@ -735,7 +735,7 @@ module BlockSystem {
     }
   }
 
-  lemma WriteBackNodeReqStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
+  lemma {:timeLimitMultiplier 4} WriteBackNodeReqStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
     requires Inv(s)
     requires M.WriteBackNodeReq(s.machine, s'.machine, dop, vop, ref)
     requires D.RecvWriteNode(s.disk, s'.disk, dop);
@@ -765,7 +765,7 @@ module BlockSystem {
     //    s.machine.persistentIndirectionTableLoc);
   }
 
-  lemma WriteBackNodeReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
+  lemma {:timeLimitMultiplier 6} WriteBackNodeReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
     requires Inv(s)
     requires M.WriteBackNodeReq(s.machine, s'.machine, dop, vop, ref)
     requires D.RecvWriteNode(s.disk, s'.disk, dop);
@@ -801,7 +801,7 @@ module BlockSystem {
   ////////////////////// WriteBackNodeResp
   //////////////////////
 
-  lemma WriteBackNodeRespStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} WriteBackNodeRespStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.WriteBackNodeResp(s.machine, s'.machine, dop, vop)
     requires D.AckWriteNode(s.disk, s'.disk, dop);
@@ -822,7 +822,7 @@ module BlockSystem {
     }
   }
 
-  lemma WriteBackNodeRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} WriteBackNodeRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.WriteBackNodeResp(s.machine, s'.machine, dop, vop)
     requires D.AckWriteNode(s.disk, s'.disk, dop);
@@ -835,7 +835,7 @@ module BlockSystem {
   ////////////////////// WriteBackIndirectionTableReq
   //////////////////////
 
-  lemma WriteBackIndirectionTableReqStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} WriteBackIndirectionTableReqStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.WriteBackIndirectionTableReq(s.machine, s'.machine, dop, vop)
     requires D.RecvWriteIndirectionTable(s.disk, s'.disk, dop);
@@ -864,7 +864,7 @@ module BlockSystem {
     assert WFDiskGraphOfLoc(s', s'.machine.frozenIndirectionTableLoc.value);
   }
 
-  lemma WriteBackIndirectionTableReqStep_WriteRequestsDontOverlap(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} WriteBackIndirectionTableReqStep_WriteRequestsDontOverlap(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.WriteBackIndirectionTableReq(s.machine, s'.machine, dop, vop)
     requires D.RecvWriteIndirectionTable(s.disk, s'.disk, dop);
@@ -888,7 +888,7 @@ module BlockSystem {
     }
   }
 
-  lemma WriteBackIndirectionTableReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} WriteBackIndirectionTableReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.WriteBackIndirectionTableReq(s.machine, s'.machine, dop, vop)
     requires D.RecvWriteIndirectionTable(s.disk, s'.disk, dop);
@@ -914,7 +914,7 @@ module BlockSystem {
   ////////////////////// WriteBackIndirectionTableResp
   //////////////////////
 
-  lemma WriteBackIndirectionTableRespStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} WriteBackIndirectionTableRespStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.WriteBackIndirectionTableResp(s.machine, s'.machine, dop, vop)
     requires D.AckWriteIndirectionTable(s.disk, s'.disk, dop);
@@ -942,7 +942,7 @@ module BlockSystem {
     }
   }
 
-  lemma WriteBackIndirectionTableRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} WriteBackIndirectionTableRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.WriteBackIndirectionTableResp(s.machine, s'.machine, dop, vop)
     requires D.AckWriteIndirectionTable(s.disk, s'.disk, dop);
@@ -956,7 +956,7 @@ module BlockSystem {
   ////////////////////// Dirty
   //////////////////////
 
-  lemma DirtyStepUpdatesGraph(s: Variables, s': Variables, ref: Reference, block: Node)
+  lemma {:timeLimitMultiplier 4} DirtyStepUpdatesGraph(s: Variables, s': Variables, ref: Reference, block: Node)
     requires Inv(s)
     requires M.Dirty(s.machine, s'.machine, ref, block)
     requires s.disk == s'.disk
@@ -979,7 +979,7 @@ module BlockSystem {
     }
   }
 
-  lemma DirtyStepPreservesInv(s: Variables, s': Variables, ref: Reference, block: Node)
+  lemma {:timeLimitMultiplier 4} DirtyStepPreservesInv(s: Variables, s': Variables, ref: Reference, block: Node)
     requires Inv(s)
     requires M.Dirty(s.machine, s'.machine, ref, block)
     requires s.disk == s'.disk
@@ -991,7 +991,7 @@ module BlockSystem {
   ////////////////////// Alloc
   //////////////////////
 
-  lemma AllocStepUpdatesGraph(s: Variables, s': Variables, ref: Reference, block: Node)
+  lemma {:timeLimitMultiplier 4} AllocStepUpdatesGraph(s: Variables, s': Variables, ref: Reference, block: Node)
     requires Inv(s)
     requires M.Alloc(s.machine, s'.machine, ref, block)
     requires s.disk == s'.disk
@@ -1013,7 +1013,7 @@ module BlockSystem {
     }
   }
 
-  lemma AllocStepPreservesInv(s: Variables, s': Variables, ref: Reference, block: Node)
+  lemma {:timeLimitMultiplier 4} AllocStepPreservesInv(s: Variables, s': Variables, ref: Reference, block: Node)
     requires Inv(s)
     requires M.Alloc(s.machine, s'.machine, ref, block)
     requires s.disk == s'.disk
@@ -1025,7 +1025,7 @@ module BlockSystem {
   ////////////////////// Transaction
   //////////////////////
 
-  lemma OpPreservesInv(s: Variables, s': Variables, op: Op)
+  lemma {:timeLimitMultiplier 4} OpPreservesInv(s: Variables, s': Variables, op: Op)
     requires Inv(s)
     requires M.OpStep(s.machine, s'.machine, op)
     requires s.disk == s'.disk
@@ -1037,7 +1037,7 @@ module BlockSystem {
     }
   }
 
-  lemma OpTransactionPreservesInv(s: Variables, s': Variables, ops: seq<Op>)
+  lemma {:timeLimitMultiplier 4} OpTransactionPreservesInv(s: Variables, s': Variables, ops: seq<Op>)
     requires Inv(s)
     requires M.OpTransaction(s.machine, s'.machine, ops)
     requires s.disk == s'.disk
@@ -1054,7 +1054,7 @@ module BlockSystem {
     }
   }
 
-  lemma TransactionStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ops: seq<Op>)
+  lemma {:timeLimitMultiplier 4} TransactionStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ops: seq<Op>)
     requires Inv(s)
     requires M.Transaction(s.machine, s'.machine, dop, vop, ops)
     requires D.Stutter(s.disk, s'.disk, dop);
@@ -1068,7 +1068,7 @@ module BlockSystem {
   ////////////////////// Unalloc
   //////////////////////
 
-  lemma UnallocStepUpdatesGraph(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
+  lemma {:timeLimitMultiplier 4} UnallocStepUpdatesGraph(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
     requires Inv(s)
     requires M.Unalloc(s.machine, s'.machine, dop, vop, ref)
     requires D.Stutter(s.disk, s'.disk, dop);
@@ -1091,7 +1091,7 @@ module BlockSystem {
     }
   }
 
-  lemma UnallocStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
+  lemma {:timeLimitMultiplier 4} UnallocStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
     requires Inv(s)
     requires M.Unalloc(s.machine, s'.machine, dop, vop, ref)
     requires D.Stutter(s.disk, s'.disk, dop);
@@ -1109,7 +1109,7 @@ module BlockSystem {
   ////////////////////// PageInReq
   //////////////////////
 
-  lemma PageInNodeReqStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
+  lemma {:timeLimitMultiplier 4} PageInNodeReqStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
     requires Inv(s)
     requires M.PageInNodeReq(s.machine, s'.machine, dop, vop, ref)
     requires D.RecvReadNode(s.disk, s'.disk, dop);
@@ -1130,7 +1130,7 @@ module BlockSystem {
     }
   }
 
-  lemma PageInNodeReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
+  lemma {:timeLimitMultiplier 4} PageInNodeReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
     requires Inv(s)
     requires M.PageInNodeReq(s.machine, s'.machine, dop, vop, ref)
     requires D.RecvReadNode(s.disk, s'.disk, dop);
@@ -1158,7 +1158,7 @@ module BlockSystem {
   ////////////////////// PageInNodeResp
   //////////////////////
 
-  lemma PageInNodeRespStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} PageInNodeRespStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.PageInNodeResp(s.machine, s'.machine, dop, vop)
     requires D.AckReadNode(s.disk, s'.disk, dop);
@@ -1179,7 +1179,7 @@ module BlockSystem {
     }
   }
 
-  lemma PageInNodeRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} PageInNodeRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.PageInNodeResp(s.machine, s'.machine, dop, vop)
     requires D.AckReadNode(s.disk, s'.disk, dop);
@@ -1192,7 +1192,7 @@ module BlockSystem {
   ////////////////////// PageInIndirectionTableReq
   //////////////////////
 
-  lemma PageInIndirectionTableReqStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} PageInIndirectionTableReqStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.PageInIndirectionTableReq(s.machine, s'.machine, dop, vop)
     requires D.RecvReadIndirectionTable(s.disk, s'.disk, dop);
@@ -1209,7 +1209,7 @@ module BlockSystem {
     }
   }
 
-  lemma PageInIndirectionTableReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} PageInIndirectionTableReqStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.PageInIndirectionTableReq(s.machine, s'.machine, dop, vop)
     requires D.RecvReadIndirectionTable(s.disk, s'.disk, dop);
@@ -1222,7 +1222,7 @@ module BlockSystem {
   ////////////////////// PageInIndirectionTableResp
   //////////////////////
 
-  lemma PageInIndirectionTableRespStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} PageInIndirectionTableRespStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.PageInIndirectionTableResp(s.machine, s'.machine, dop, vop)
     requires D.AckReadIndirectionTable(s.disk, s'.disk, dop);
@@ -1237,7 +1237,7 @@ module BlockSystem {
         == EphemeralGraph(s');
   }
 
-  lemma PageInIndirectionTableRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} PageInIndirectionTableRespStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.PageInIndirectionTableResp(s.machine, s'.machine, dop, vop)
     requires D.AckReadIndirectionTable(s.disk, s'.disk, dop);
@@ -1250,7 +1250,7 @@ module BlockSystem {
   ////////////////////// ReceiveLoc
   //////////////////////
 
-  lemma ReceiveLocStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} ReceiveLocStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.ReceiveLoc(s.machine, s'.machine, dop, vop)
     requires D.Stutter(s.disk, s'.disk, dop);
@@ -1279,7 +1279,7 @@ module BlockSystem {
     }
   }
 
-  lemma ReceiveLocStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} ReceiveLocStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.ReceiveLoc(s.machine, s'.machine, dop, vop)
     requires D.Stutter(s.disk, s'.disk, dop);
@@ -1293,7 +1293,7 @@ module BlockSystem {
   ////////////////////// Evict
   //////////////////////
 
-  lemma EvictStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
+  lemma {:timeLimitMultiplier 4} EvictStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
     requires Inv(s)
     requires M.Evict(s.machine, s'.machine, dop, vop, ref)
     requires D.Stutter(s.disk, s'.disk, dop);
@@ -1314,7 +1314,7 @@ module BlockSystem {
     }
   }
 
-  lemma EvictStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
+  lemma {:timeLimitMultiplier 4} EvictStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, ref: Reference)
     requires Inv(s)
     requires M.Evict(s.machine, s'.machine, dop, vop, ref)
     requires D.Stutter(s.disk, s'.disk, dop);
@@ -1327,7 +1327,7 @@ module BlockSystem {
   ////////////////////// Freeze
   //////////////////////
 
-  lemma FreezeStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} FreezeStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.Freeze(s.machine, s'.machine, dop, vop)
     requires D.Stutter(s.disk, s'.disk, dop);
@@ -1342,7 +1342,7 @@ module BlockSystem {
     M.FreezeStepPreservesInv(s.machine, s'.machine, dop, vop);
   }
 
-  lemma FreezeStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} FreezeStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.Freeze(s.machine, s'.machine, dop, vop)
     requires D.Stutter(s.disk, s'.disk, dop);
@@ -1355,7 +1355,7 @@ module BlockSystem {
   ////////////////////// CleanUp
   //////////////////////
 
-  lemma CleanUpStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} CleanUpStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.CleanUp(s.machine, s'.machine, dop, vop)
     requires D.Stutter(s.disk, s'.disk, dop);
@@ -1369,7 +1369,7 @@ module BlockSystem {
   {
   }
 
-  lemma CleanUpStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} CleanUpStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.CleanUp(s.machine, s'.machine, dop, vop)
     requires D.Stutter(s.disk, s'.disk, dop);
@@ -1383,7 +1383,7 @@ module BlockSystem {
   ////////////////////// No-Op
   //////////////////////
 
-  lemma NoOpStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} NoOpStepPreservesGraphs(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.NoOp(s.machine, s'.machine, dop, vop)
     requires D.Next(s.disk, s'.disk, dop);
@@ -1404,7 +1404,7 @@ module BlockSystem {
     }
   }
 
-  lemma NoOpStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
+  lemma {:timeLimitMultiplier 4} NoOpStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp)
     requires Inv(s)
     requires M.NoOp(s.machine, s'.machine, dop, vop)
     requires D.Next(s.disk, s'.disk, dop);
@@ -1417,7 +1417,7 @@ module BlockSystem {
   ////////////////////// MachineStep
   //////////////////////
 
-  lemma MachineStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, machineStep: M.Step)
+  lemma {:timeLimitMultiplier 4} MachineStepPreservesInv(s: Variables, s': Variables, dop: DiskOp, vop: VOp, machineStep: M.Step)
     requires Inv(s)
     requires Machine(s, s', dop, vop, machineStep)
     ensures Inv(s')
@@ -1445,7 +1445,7 @@ module BlockSystem {
   ////////////////////// Crash
   //////////////////////
 
-  lemma CrashPreservesGraphs(s: Variables, s': Variables, vop: VOp)
+  lemma {:timeLimitMultiplier 4} CrashPreservesGraphs(s: Variables, s': Variables, vop: VOp)
     requires Inv(s)
     requires Crash(s, s', vop)
 
@@ -1512,7 +1512,7 @@ module BlockSystem {
     }
   }
 
-  lemma CrashStepPreservesInv(s: Variables, s': Variables, vop: VOp)
+  lemma {:timeLimitMultiplier 4} CrashStepPreservesInv(s: Variables, s': Variables, vop: VOp)
     requires Inv(s)
     requires Crash(s, s', vop)
     ensures Inv(s')
@@ -1554,7 +1554,7 @@ module BlockSystem {
   ////////////////////// Reads
   //////////////////////
 
-  lemma EphemeralGraphRead(s: Variables, op: M.ReadOp)
+  lemma {:timeLimitMultiplier 4} EphemeralGraphRead(s: Variables, op: M.ReadOp)
   requires Inv(s)
   requires M.ReadStep(s.machine, op)
   ensures EphemeralGraphOpt(s).Some?
@@ -1576,7 +1576,7 @@ module BlockSystem {
   {
   }*/
 
-  lemma NewRequestReadNodeDoesntOverlap(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  lemma {:timeLimitMultiplier 4} NewRequestReadNodeDoesntOverlap(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
   requires Inv(s)
   requires M.NextStep(s.machine, s'.machine, dop, vop, step)
   requires dop.ReqReadNodeOp?
@@ -1588,7 +1588,7 @@ module BlockSystem {
     }
   }
 
-  lemma NewRequestReadIndirectionTableDoesntOverlap(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  lemma {:timeLimitMultiplier 4} NewRequestReadIndirectionTableDoesntOverlap(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
   requires Inv(s)
   requires M.NextStep(s.machine, s'.machine, dop, vop, step)
   requires dop.ReqReadIndirectionTableOp?
@@ -1602,7 +1602,7 @@ module BlockSystem {
     assert !overlap(dop.loc, s'.disk.reqWriteIndirectionTables[id]);*/
   }
 
-  lemma NewRequestWriteNodeDoesntOverlap(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  lemma {:timeLimitMultiplier 4} NewRequestWriteNodeDoesntOverlap(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
   requires Inv(s)
   requires M.NextStep(s.machine, s'.machine, dop, vop, step)
   requires dop.ReqWriteNodeOp?
@@ -1614,7 +1614,7 @@ module BlockSystem {
     }
   }
 
-  lemma NewRequestWriteIndirectionTableDoesntOverlap(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  lemma {:timeLimitMultiplier 4} NewRequestWriteIndirectionTableDoesntOverlap(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
   requires Inv(s)
   requires M.NextStep(s.machine, s'.machine, dop, vop, step)
   requires dop.ReqWriteIndirectionTableOp?
@@ -1640,7 +1640,7 @@ module BlockSystem {
     }
   }
 
-  lemma NewRequestWriteIndirectionTableDoesntOverlapRead(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
+  lemma {:timeLimitMultiplier 4} NewRequestWriteIndirectionTableDoesntOverlapRead(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step, id: D.ReqId)
   requires Inv(s)
   requires M.NextStep(s.machine, s'.machine, dop, vop, step)
   requires dop.ReqWriteIndirectionTableOp?
@@ -1649,7 +1649,7 @@ module BlockSystem {
   {
   }
 
-  lemma NewRequestReadNodeIsValid(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
+  lemma {:timeLimitMultiplier 4} NewRequestReadNodeIsValid(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
   requires Inv(s)
   requires M.NextStep(s.machine, s'.machine, dop, vop, step)
   requires dop.ReqReadNodeOp?
@@ -1657,7 +1657,7 @@ module BlockSystem {
   {
   }
 
-  lemma NewRequestReadIndirectionTableIsValid(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
+  lemma {:timeLimitMultiplier 4} NewRequestReadIndirectionTableIsValid(s: Variables, s': Variables, dop: DiskOp, vop: VOp, step: M.Step)
   requires Inv(s)
   requires M.NextStep(s.machine, s'.machine, dop, vop, step)
   requires dop.ReqReadIndirectionTableOp?

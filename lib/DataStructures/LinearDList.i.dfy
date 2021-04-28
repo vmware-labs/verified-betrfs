@@ -151,7 +151,7 @@ module DList {
       seq_get(this.nodes, p).next
     }
 
-    shared function method Prev<A>(p:uint64):(p':uint64)
+    shared function method Prev(p:uint64):(p':uint64)
       requires this.Inv()
       requires this.MaybePtr(p)
       ensures this.MaybePtr(p')

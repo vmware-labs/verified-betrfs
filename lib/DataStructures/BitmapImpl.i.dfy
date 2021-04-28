@@ -127,7 +127,7 @@ module BitmapImpl {
       var b: uint64 := c % 64;
 
       var word := SetBit(self.bits[i], b);
-      inout self.bits := self.bits[i as int := word];
+      inout self.bits := self.bits[i := word];
 
       ghost var ghosty := true;
       if ghosty {
@@ -173,7 +173,7 @@ module BitmapImpl {
       var b: uint64 := c % 64;
 
       var word := UnsetBit(self.bits[i], b);
-      inout self.bits := self.bits[i as int := word];
+      inout self.bits := self.bits[i := word];
 
       ghost var ghosty := true;
       if ghosty {
