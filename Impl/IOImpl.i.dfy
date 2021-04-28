@@ -234,10 +234,7 @@ module IOImpl {
   {
     if (s.indirectionTableRead.None?) {  
       var id := RequestRead(io, s.indirectionTableLoc);
-
-      linear var Loading(loc, read) := s;
-      s := Loading(loc, Some(id));
-      //inout s.indirectionTableRead := Some(id);
+      inout s.indirectionTableRead := Some(id);
   
       IOModel.RequestReadCorrect(old(IIO(io)), old_s.indirectionTableLoc);
       assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.PageInIndirectionTableReqStep);
@@ -277,32 +274,7 @@ module IOImpl {
       assert DiskLayout.ValidNodeLocation(loc.value);
       var id := RequestRead(io, loc.value);
 
-      linear var Ready(
-        persistentIndirectionTable, 
-        frozenIndirectionTable,
-        ephemeralIndirectionTable,
-        persistentIndirectionTableLoc,
-        frozenIndirectionTableLoc,
-        outstandingIndirectionTableWrite,
-        outstandingBlockWrites,
-        outstandingBlockReads,
-        cache,
-        lru,
-        blockAllocator
-      ) := s;
-
-      s := Ready(persistentIndirectionTable, 
-        frozenIndirectionTable,
-        ephemeralIndirectionTable,
-        persistentIndirectionTableLoc,
-        frozenIndirectionTableLoc,
-        outstandingIndirectionTableWrite,
-        outstandingBlockWrites,
-        outstandingBlockReads[id := BC.OutstandingRead(ref)],
-        cache,
-        lru,
-        blockAllocator);
-      //inout s.outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)];
+      inout s.outstandingBlockReads := s.outstandingBlockReads[id := BC.OutstandingRead(ref)];
 
       assert s.WFBCVars();
       assert BC.PageInNodeReq(old_s.I(), s.I(), IDiskOp(diskOp(IIO(io))).bdop, StatesInternalOp, ref);
