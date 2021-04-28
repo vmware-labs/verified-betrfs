@@ -1,4 +1,8 @@
+include "AppSpec.s.dfy"
+
 abstract module ShardedStateMachine {
+  import Ifc = MapIfc // TODO more module system crime. Wish this were a parameter we could apply later.
+
   // The (shardable) Variables of the state machine. "Shardable" means that the
   // variables are a PCM; below we have a bunch of obligations to make you prove
   // that.
@@ -28,9 +32,14 @@ abstract module ShardedStateMachine {
   lemma associative(x: Variables, y: Variables, z: Variables)
   ensures add(x, add(y, z)) == add(add(x, y), z)
 
+  // state-machine-y stuff
+
   predicate Init(s: Variables)
   predicate Next(s: Variables, s': Variables)
 
+  // A predicate that's true over any 'valid' Variables, even those that are
+  // fragments of the whole system state.  Contrast with Inv, which is an
+  // invariant that's only true over whole system states.
   predicate Valid(s: Variables)
 
   lemma valid_monotonic(x: Variables, y: Variables)
@@ -82,5 +91,30 @@ abstract module ShardedStateMachine {
   requires Next(s, t)
   requires Valid(s)
   ensures Valid(t)
-}
 
+  // IO interface -- explains how your SSM interacts with user-visible IO events.
+
+  function input_ticket(id: int, input: Ifc.Input) : Variables
+  function output_stub(id: int, output: Ifc.Output) : Variables
+
+  lemma NewTicketPreservesValid(r: Variables, id: int, input: Ifc.Input)
+    requires Valid(r)
+    ensures Valid(add(r, input_ticket(id, input)))
+
+  // The resulting IO-enhanced state machine
+  predicate Internal(s: Variables, s': Variables)
+  {
+    Next(s, s')
+  }
+
+  predicate NewTicket(s: Variables, s': Variables, id: int, input: Ifc.Input)
+  {
+    s' == add(s, input_ticket(id, input))
+  }
+
+  predicate ReturnStub(s: Variables, s': Variables, id: int, output: Ifc.Output)
+  {
+    // Note s',s in unusual order to express subtraction
+    s == add(s', output_stub(id, output))
+  }
+}

@@ -1,13 +1,17 @@
+include "AsyncAppSpec.s.dfy"
+include "ConcurrencyModel.s.dfy"
+
 // This is the ultimate verification theorem statement. This module brings
 // together a set of obligations. If the build system verifies a module
 // satisfies these obligations (completely refines this module), then
 // the executable associated with that module implements the system
 // specification.
 
-module VerificationObligation {
+abstract module VerificationObligation {
   import AsyncSpec // The async spec as instantiated with the specific application
+  //import MapSpec	// TODO this should be a module application <A:AppSpec>
   import Ifc = MapIfc
-  import SSM : ShardedStateMachine
+  import SSM : ShardedStateMachine //	from ConcurrencyModel
     // The burger. it's not bread (it's mostly supplied by the .i adversary),
     // but it does have to meet obligations so that it impedance-matches the
     // atomic-model of the AsyncSpec to the concurrent-model of the
@@ -19,6 +23,9 @@ module VerificationObligation {
     // network receieves and sends in a physical ifc event handler.
   import opened NativeTypes
 
+  // Implementer is obliged to provide an interpretation function from SSM
+  // variables TO SPec variables. TODO: how can this not go through SSM!?
+  function I(s: SSM.Variables) : AsyncSpec.Variables
 
   // AsyncSpec refinement (semantics) (top bread)
   //
@@ -31,10 +38,10 @@ module VerificationObligation {
   // the sharded state machine that doesn't affect the interpretation to the
   // AsyncSpec).
   lemma Internal_RefinesMap(s: SSM.Variables, s': SSM.Variables)
-    requires SSM.Inv(s)
+    requires SSM.Valid(s)
     requires SSM.Internal(s, s')  // Transitions of the sharded state machine ...
-    ensures SSM.Inv(s')
-    ensures AsyncSpec.Next(I(s), I(s'), Ifc.InternalOp) // ... induce valid transitions of the AsyncSpec.
+    ensures SSM.Valid(s')
+    ensures AsyncSpec.Next(I(s), I(s'), AsyncSpec.Ifc.InternalOp) // ... induce valid transitions of the AsyncSpec.
 
   // PhysicalIfc (bottom bread)
   //
@@ -43,18 +50,21 @@ module VerificationObligation {
   type Variables(==,!new) // using this name so the impl is more readable
   predicate Inv(v: Variables)
 
-  method init(glinear in_r: SSM.R)
-  returns (v: Variables, glinear out_r: SSM.R)
-  requires SSM.Init(in_r)
+  method init(glinear in_sv: SSM.Variables)
+  returns (v: Variables, glinear out_sv: SSM.Variables)
+  requires SSM.Init(in_sv)
   ensures Inv(v)
 
+  // The whole point of using this VerificationObligations.s file is that, in return
+  // for meeting its constraints, its main() invokes this call() method on many
+  // threads concurrently.
   method call(v: Variables, input: Ifc.Input,
-      rid: int, glinear in_r: SSM.R, thread_id: uint32)
-  returns (output: Ifc.Output, glinear out_r: SSM.R)
+      rid: int, glinear in_sv: SSM.Variables, thread_id: uint32)
+  returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
   decreases * // boi I don't feel bad about this
   requires Inv(v)
-  requires in_r == SSM.input_ticket(rid, input)
-  ensures out_r == SSM.output_stub(rid, output)
+  requires in_sv == SSM.input_ticket(rid, input)
+  ensures out_sv == SSM.output_stub(rid, output)
 
   // Correspondence (toothpick)
   //
@@ -68,26 +78,22 @@ module VerificationObligation {
 
   // Accepting a ticket corresponds to an atomic AsyncSpec step that recognizes
   // the arrival of the request (with the same input value).
-  lemma NewTicket_RefinesMap(s: SSM.Variables, s': SSM.Variables, rid: int, input: MapIfc.Input)
-    requires SSM.Inv(s)
+  lemma NewTicket_RefinesMap(s: SSM.Variables, s': SSM.Variables, rid: int, input: Ifc.Input)
+    requires SSM.Valid(s) // TODO(travis): was Inv, but Valid is correct here, surely?
     requires SSM.NewTicket(s, s', rid, input)
-    ensures SSM.Inv(s')
-    ensures AsyncSpec.Next(I(s), I(s'), Ifc.Start(rid, input))
+    ensures SSM.Valid(s')
+    ensures AsyncSpec.Next(I(s), I(s'), AsyncSpec.Ifc.Start(rid, input))
 
   // Consuming a stub corresponds to an atomic AsyncSpec step that returns the
   // response (with the same input value) to the client.
-  lemma ReturnStub_RefinesMap(s: SSM.Variables, s': SSM.Variables, rid: int, output: MapIfc.Output)
-    requires SSM.Inv(s)
+  lemma ReturnStub_RefinesMap(s: SSM.Variables, s': SSM.Variables, rid: int, output: Ifc.Output)
+    requires SSM.Valid(s)
     requires SSM.ReturnStub(s, s', rid, output)
-    ensures SSM.Inv(s')
-    ensures AsyncSpec.Next(I(s), I(s'), Ifc.End(rid, output))
+    ensures SSM.Valid(s')
+    ensures AsyncSpec.Next(I(s), I(s'), AsyncSpec.Ifc.End(rid, output))
 
-
-// Libraries the app is allowed to use
-//	ConcurrencyModel (ResourceSpec)
+// Libraries the app is allowed to use. Without it, you get concurrency, but no
+// communication between threads. With a Mutex, threads can communicate through
+// lock-protected shared memory.
 //	ConcurrencyTools (Mutex)
-
-	AsyncAppSpec
-	PhysicalInterface // Main
-  Correspondence // Connects phys ifc to AsyncAppIfc
 }
