@@ -639,6 +639,46 @@ module RWLockExtToken refines SimpleExtToken {
     resource' := b';
   }
 
+  glinear method perform_exc_release(
+      glinear pe: Token,
+      glinear ct: Token,
+      glinear handle: Token,
+      glinear resource: Base.Token,
+      ghost central: CentralState,
+      ghost phys_exc: bool)
+  returns (glinear pe': Token, glinear ct': Token)
+  requires pe.get() == PhysExcHandle(phys_exc)
+  requires ct.get() == CentralHandle(central)
+  requires handle.get() == ExcTakenHandle()
+  requires pe.loc() == ct.loc() == handle.loc()
+  requires pe.loc().ExtLoc? && pe.loc().base_loc == resource.loc()
+
+  ensures pe'.get() == PhysExcHandle(false)
+  ensures ct'.get() == CentralHandle(central
+        .(logical_exc := false)
+        .(held_value := Some(resource.get()))
+      )
+  {
+    glinear var x := SEPCM.join(ct, handle);
+    x := SEPCM.join(pe, x);
+
+    ghost var a := PhysExcHandle(false);
+    ghost var b := CentralHandle(central
+        .(logical_exc := false)
+        .(held_value := Some(resource.get()))
+      );
+
+    assert release_exc_step(x.get(), dot(a, b), resource.get(), Base.unit(),
+        central, phys_exc);
+
+    assert CrossNextStep(x.get(), dot(a, b), resource.get(), Base.unit(),
+        ReleaseExcStep(central, phys_exc));
+
+    glinear var t, u := do_cross_step(x, dot(a, b), resource, Base.unit());
+    pe', ct' := split(t, a, b);
+    Base.dispose(u); // dispose of unit
+  }
+
   glinear method perform_shared_pending(glinear pe: Token, ghost rc: nat)
   returns (glinear pe': Token, glinear handle: Token)
   requires pe.get() == PhysRcHandle(rc)
@@ -686,7 +726,7 @@ module RWLockExtToken refines SimpleExtToken {
     ct', handle' := split(x, b, c);
   }
 
-  glinear method perform_shared_release(
+  glinear method perform_release_shared(
     glinear pe: Token,
     glinear ct: Token,
     glinear handle: Token,
@@ -706,8 +746,8 @@ module RWLockExtToken refines SimpleExtToken {
   ensures ct'.get() == CentralHandle(central.(logical_rc := central.logical_rc - 1))
   ensures pe'.loc() == ct'.loc() == pe.loc()
   {
-    glinear var x := SEPCM.join(pe, ct);
-    x := SEPCM.join(x, handle);
+    glinear var x := SEPCM.join(ct, handle);
+    x := SEPCM.join(pe, x);
 
     ghost var z, complete := get_completion(inout x);
 

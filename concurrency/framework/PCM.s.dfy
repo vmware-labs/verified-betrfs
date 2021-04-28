@@ -77,6 +77,8 @@ abstract module PCM {
   function method {:extern} get_unit(ghost loc: Loc) : (glinear u: Token)
   ensures u.get() == unit() && u.loc() == loc
 
+  glinear method {:extern} dispose(glinear u: Token)
+
   function method {:extern} get_unit_shared(ghost loc: Loc) : (gshared u: Token)
   ensures u.get() == unit() && u.loc() == loc
 
