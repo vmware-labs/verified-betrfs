@@ -18,17 +18,21 @@ module {:extern "Atomics"} Atomics {
   method {:extern} new_atomic<V, G>(
       v: V,
       glinear g: G,
-      ghost inv: (V, G) -> bool)
+      ghost inv: (V, G) -> bool,
+      ghost identifiers_to_avoid: set<nat>)
   returns (a: Atomic<V, G>)
   requires inv(v, g)
   ensures forall v1, g1 :: atomic_inv(a, v1, g1) <==> inv(v1, g1)
+  ensures a.identifier() !in identifiers_to_avoid
 
   method {:extern} new_ghost_atomic<G>(
       glinear g: G,
-      ghost inv: (G) -> bool)
+      ghost inv: (G) -> bool,
+      ghost identifiers_to_avoid: set<nat>)
   returns (ghost a: GhostAtomic<G>)
   requires inv(g)
   ensures forall g1 :: atomic_inv(a, (), g1) <==> inv(g1)
+  ensures a.identifier() !in identifiers_to_avoid
 
   glinear method {:extern} finish_atomic<V, G>(
       ghost a: Atomic<V, G>,
