@@ -1,4 +1,4 @@
-include "Base.i.dfy"
+include "Base.s.dfy"
 
 module AllocationMod {
   type AU = nat

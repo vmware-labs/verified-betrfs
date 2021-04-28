@@ -345,7 +345,7 @@ abstract module BtreeModel {
     assert rightleaf.keys == oldleaf.keys[|leftleaf.keys|..|oldleaf.keys|];
   }
 
-  lemma SplitLeafInterpretation(oldleaf: Node, leftleaf: Node, rightleaf: Node, pivot: Key)
+  lemma {:timeLimitMultiplier 4} SplitLeafInterpretation(oldleaf: Node, leftleaf: Node, rightleaf: Node, pivot: Key)
     requires SplitLeaf(oldleaf, leftleaf, rightleaf, pivot)
     requires WF(oldleaf)
     requires WF(leftleaf)
@@ -849,7 +849,7 @@ abstract module BtreeModel {
       Leaf(Seq.insert(leaf.keys, key, llte+1), Seq.insert(leaf.values, value, llte+1))
   }
 
-  lemma InsertLeafIsCorrect(leaf: Node, key: Key, value: Value)
+  lemma {:timeLimitMultiplier 2} InsertLeafIsCorrect(leaf: Node, key: Key, value: Value)
     requires leaf.Leaf?
     requires WF(leaf)
     ensures Interpretation(InsertLeaf(leaf, key, value)) == Interpretation(leaf)[key := value]
@@ -1365,7 +1365,7 @@ abstract module BtreeModel {
     }
   }
 
-  lemma ToSeqCoversInterpretation(node: Node)
+  lemma {:induction true} ToSeqCoversInterpretation(node: Node)
     requires WF(node)
     ensures forall key :: key in Interpretation(node) ==> key in ToSeq(node).0
   {

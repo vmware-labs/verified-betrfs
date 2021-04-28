@@ -4,12 +4,22 @@ module MsgSeqMod {
   import opened MessageMod
   import opened InterpMod
 
-  datatype MsgSeq = MsgSeq(msgs: map<nat, Message>, seqStart: nat, seqEnd: nat)
+  datatype MsgSeq = MsgSeq(msgs: map<LSN, Message>, seqStart: LSN, seqEnd: LSN)
     // seqEnd is exclusive
   {
     predicate WF()
     {
       forall k :: k in msgs <==> seqStart <= k < seqEnd
+    }
+
+    // Add a single message to the end of the sequence. It gets LSN 'seqEnd', since
+    // that's exclusive (points at the next empty slot).
+    function Extend(m: Message) : MsgSeq
+    {
+      MsgSeq(
+        map k | k in Keys + { seqEnd } :: if k == seqEnd then m else msgs[k],
+        seqStart,
+        seqEnd+1)
     }
   }
 

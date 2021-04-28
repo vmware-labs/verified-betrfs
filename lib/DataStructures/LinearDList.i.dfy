@@ -151,7 +151,7 @@ module DList {
       seq_get(this.nodes, p).next
     }
 
-    shared function method Prev<A>(p:uint64):(p':uint64)
+    shared function method Prev(p:uint64):(p':uint64)
       requires this.Inv()
       requires this.MaybePtr(p)
       ensures this.MaybePtr(p')
@@ -313,6 +313,7 @@ module DList {
       var node_next := seq_get(self.nodes, node.next);
       mut_seq_set(inout self.nodes, node.next, node_next.(prev := p'));
       mut_seq_set(inout self.nodes, p', node');
+      inout self.freeStack := freeNode.next;
 
 //      forall i | 0 <= i < |self.f|
 //      ensures PointerInRange(self.nodes, self.f, i)
@@ -369,6 +370,7 @@ module DList {
       var node_prev := seq_get(self.nodes, node.prev);
       mut_seq_set(inout self.nodes, node.prev, node_prev.(next := p'));
       mut_seq_set(inout self.nodes, p', node');
+      inout self.freeStack := freeNode.next;
 
 //      forall i | 0 <= i < |self.f|
 //      ensures PointerInRange(self.nodes, self.f, i)

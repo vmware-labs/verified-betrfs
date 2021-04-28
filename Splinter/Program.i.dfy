@@ -1,19 +1,24 @@
 include "Journal.i.dfy"
 include "Betree.i.dfy"
 
+// TODO first prove that a Program with a simple-policy cache works?
+
 // The "Program" is the complete model of the program state, with all of the components
 // (Journal, Betree, Cache).
 // It has an interface to a disk, but can't actually see inside the disk (that's for the IOSystem).
 
 module ProgramMachineMod {
+  import JournalMachineMod
+  import BetreeMod
+
   datatype Superblock = Superblock(
     serial: nat,
-    journal: JournalMod.Superblock,
+    journal: JournalMachineMod.Superblock,
     betree: BetreeMod.Superblock)
 
   datatype Variables = Variables(
     stableSuperblock: Superblock,
-    journal: JournalMachine.Variables,
+    journal: JournalMachineMod.Variables,
     betree: CachedBetreeMachine.Variables,
     inFlightSuperblock: Option<Superblock>
     )
@@ -25,10 +30,12 @@ module ProgramMachineMod {
 
   predicate Init(s: Variables)
   {
+    false
   }
 
   predicate Recover(s: Variables, s': Variables)
   {
+    false
   }
 
   predicate Query(s: Variables, s': Variables, k: Key, v: Value)
@@ -82,7 +89,7 @@ module ProgramMachineMod {
   //     until sb1 commits, lest sb0 get lost before sb1 is successfully written and the "synced"
   //     data gets lost
   // At this layer, we abbreviate that to "write sb" and "write sb complete".
-  predicate CommitStart(s: Variables, s': Variables, seqBoundary: nat)
+  predicate CommitStart(s: Variables, s': Variables, seqBoundary: LSN)
   {
     && s.inFlightSuperblock.None?
     && var sb := s'.inFlightSuperblock;

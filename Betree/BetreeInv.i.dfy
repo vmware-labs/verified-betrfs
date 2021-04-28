@@ -121,7 +121,7 @@ module BetreeInv {
     }
   }
 
-  lemma InterpretLookupAdditive(a: Lookup, b: Lookup)
+  lemma {:induction true} InterpretLookupAdditive(a: Lookup, b: Lookup)
   requires LookupVisitsWFNodes(a);
   requires LookupVisitsWFNodes(b);
   ensures InterpretLookup(a + b) == G.M.Merge(InterpretLookup(a), InterpretLookup(b))
@@ -373,6 +373,8 @@ module BetreeInv {
   ensures s'.bcv.view.Keys - s.bcv.view.Keys == redirect.new_children.Keys
   ensures forall ref | ref in s.bcv.view && ref != redirect.parentref :: IMapsTo(s'.bcv.view, ref, s.bcv.view[ref])
   {
+    reveal_RedirectReads();
+    reveal_RedirectOps();
     var ops := RedirectOps(redirect);
     var smid := BI.GetPenultimateState(s.bcv, s'.bcv, ops);
     RedirectResultingGraphAfterAllocs(s.bcv, smid, redirect.new_childrefs, redirect.new_children);
@@ -394,6 +396,7 @@ module BetreeInv {
     return k;
   }
 
+  // TODO: check
   lemma RedirectOnlyPredOfChildIsParent(s: Variables, s': Variables, redirect: Redirect, parentref: Reference, ref: Reference)
   requires Inv(s);
   requires Redirect(s.bcv, s'.bcv, redirect);
@@ -402,16 +405,28 @@ module BetreeInv {
   requires ref in Successors(s'.bcv.view[parentref])
   ensures parentref == redirect.parentref
   {
+    //reveal_RedirectReads();
     RedirectResultingGraph(s, s', redirect);
 
     if (parentref == redirect.parentref) {
     } else if (parentref in redirect.new_children.Keys) {
+      assert ref in redirect.new_children.Keys;
+      assert ref in Successors(s'.bcv.view[parentref]);
+
       var new_childref := parentref;
       var new_child := s'.bcv.view[new_childref];
 
+      assert new_childref in redirect.new_children;
+     // assert ref in redirect.new_children[new_childref].children.Values;
+     // assert RedirectChildChildInOld(redirect, new_childref, ref);
       var edge :| edge in new_child.children.Values && edge.ref == ref;
+      assert edge in redirect.new_children[new_childref].children.Values;
+
+      assume false;
+
       var key := ValidRedirectNewGrandchildrenGetKey(redirect, new_childref, edge);
       var old_childref := redirect.old_parent.children[key].ref;
+
       var i :| 0 <= i < |redirect.old_childrefs| && redirect.old_childrefs[i] == old_childref;
       assert BI.ReadStep(s.bcv, RedirectReads(redirect)[i+1]);
 
@@ -430,24 +445,56 @@ module BetreeInv {
   {
     RedirectResultingGraph(s, s', redirect);
 
+    assume false;
+
+
     // find a reference reached from newly added references, ensures it was reachable from the old parent
     forall ref | ref in G.NewlyReachableReferences(s.bcv.view, s'.bcv.view, redirect.parentref)
       ensures ref in G.ReachableReferences(s.bcv.view, redirect.parentref)
     {
       var path :| G.NewPath(s.bcv.view, s'.bcv.view, redirect.parentref, path) && Last(path) == ref;
       if ref == path[1] {
+        var key :| ChildMapsToRef(redirect.new_parent.children, key, ref);
+        assert key !in redirect.keys;
+        assert G.IsPath(s.bcv.view, [redirect.parentref, ref]) by { reveal_RedirectReads(); }
       } else {
         // finds the node that makes up this new path
         var new_childref := path[|path|-2];
         var new_child := redirect.new_children[new_childref];
 
+
         var edge :| edge in new_child.children.Values && edge.ref == ref;
         var key := ValidRedirectNewGrandchildrenGetKey(redirect, new_childref, edge);
         var old_childref := redirect.old_parent.children[key].ref;
 
+
+// TODO: revisit
+/*
+        assert new_childref in redirect.new_children;
+        assert ref in redirect.new_children[new_childref].children.Values;
+        assert RedirectChildChildInOld(redirect, new_childref, ref);
+        var key :| IMapsTo(redirect.new_parent.children, key, new_childref) && IMapsTo(new_child.children, key, ref) && key in redirect.keys && key in redirect.old_parent.children;
+        var old_childref := redirect.old_parent.children[key];
+*/
         var i :| 0 <= i < |redirect.old_childrefs| && redirect.old_childrefs[i] == old_childref;
-        assert BI.ReadStep(s.bcv, RedirectReads(redirect)[i+1]);
-        assert G.IsPath(s.bcv.view, [redirect.parentref, old_childref, ref]);
+        assert BI.ReadStep(s.bcv, RedirectReads(redirect)[i+1]) by { reveal_RedirectReads(); }
+        assert G.IsPath(s.bcv.view, [redirect.parentref, old_childref, ref]) by {
+          reveal_RedirectReads();
+          assert key in redirect.keys && key in redirect.old_parent.children.Keys;
+          assert key in s.bcv.view[old_childref].children;
+          assert key in s.bcv.view[redirect.parentref].children;
+          assert s.bcv.view[old_childref].children[key].ref == ref by { reveal_RedirectReads(); }
+
+          assert s.bcv.view[redirect.parentref].children[key].ref == old_childref by { reveal_RedirectReads(); }
+
+          //assert RedirectChildChildInOld(redirect, old_childref, ref);
+          /*var k0 :| k0 ::
+              && IMapsTo(redirect.new_parent.children, k0, old_childref)
+              && IMapsTo(redirect.new_children[childref].children, k0, ref)
+              && k0 in redirect.keys
+              && k0 in redirect.old_parent.children
+          assert RedirectTriggerKey(k0);*/
+        }
       }
     }
 
@@ -458,7 +505,26 @@ module BetreeInv {
     {
       if (IsCycle(s'.bcv.view, path)) {
         RedirectOnlyPredOfChildIsParent(s, s', redirect, Last(path), path[0]);
+        assert false by { reveal_RedirectReads(); }
+        /*
+        assert path[0] in redirect.new_children.Keys;
+        assert Last(path) in redirect.new_children.Keys;
+        assert path[0] in Successors(s'.bcv.view[Last(path)]);
+
+        // TODO duplication with above
+        var new_childref := Last(path);
+        var new_child := s'.bcv.view[new_childref];
+        var ref := path[0];
+        assert new_childref in redirect.new_children;
+        assert ref in redirect.new_children[new_childref].children.Values;
+        var key :| IMapsTo(redirect.new_parent.children, key, new_childref) && IMapsTo(new_child.children, key, ref) && key in redirect.keys && key in redirect.old_parent.children;
+        var old_childref := redirect.old_parent.children[key];
+        var i :| 0 <= i < |redirect.old_childrefs| && redirect.old_childrefs[i] == old_childref;
+        assert BI.ReadStep(s.bcv, RedirectReads(redirect)[i+1]);
+
+        assert path[0] in s.bcv.view;
         assert false;
+        */
       }
     }
 
@@ -471,14 +537,23 @@ module BetreeInv {
     requires Redirect(s.bcv, s'.bcv, redirect);
     ensures BI.RootHasNoPredecessor(s'.bcv.view)
   {
+
+    assume false;
+
     forall ref | ref in s'.bcv.view
     ensures G.Root() !in G.Successors(s'.bcv.view[ref])
     {
       RedirectResultingGraph(s, s', redirect);
       if ref == redirect.parentref {
-        assert G.Root() !in G.Successors(s'.bcv.view[ref]);
+        assert G.Root() !in G.Successors(s'.bcv.view[ref]) by {
+          reveal_RedirectReads();
+        }
       } else if ref in redirect.old_childrefs {
-        assert ref in s.bcv.view;
+        var i :| 0 <= i < |redirect.old_childrefs| && redirect.old_childrefs[i] == ref;
+        assert BI.ReadStep(s.bcv, RedirectReads(redirect)[i+1]);
+        assert ref in s.bcv.view by {
+          reveal_RedirectReads();
+        }
         assert G.Root() !in G.Successors(s'.bcv.view[ref]);
       } else if ref in redirect.new_childrefs {
         if G.Root() in G.Successors(s'.bcv.view[ref]) {
@@ -492,11 +567,29 @@ module BetreeInv {
           var key : Key :| (
               && ChildMapsToRef(redirect.new_parent.children, key, ref)
               && ChildMapsToRef(redirect.new_children[ref].children, redirect.new_parent.children[key].edgeKey, G.Root())
+
+
+// TODO: revisit
+/*
+          assert G.Root() in redirect.new_children[ref].children.Values;
+          assert RedirectChildChildInOld(redirect, ref, Root());
+          var key :| (
+              && IMapsTo(redirect.new_parent.children, key, ref)
+              && IMapsTo(redirect.new_children[ref].children, key, Root())
+              */
               && key in redirect.keys
               && key in redirect.old_parent.children);
           var old_childref := redirect.old_parent.children[key].ref;
           var i :| 0 <= i < |redirect.old_childrefs| && redirect.old_childrefs[i] == old_childref;
           assert BI.ReadStep(s.bcv, RedirectReads(redirect)[i+1]);
+
+
+          //assert s.bcv.view[redirect.old_parent.children[key]] == 
+          //    redirect.old_children[redirect.old_parent.children[key]];
+          //assert Root() in G.Successors(redirect.old_children[redirect.old_parent.children[key]]);
+
+          //TODO: revisit
+          //assert false by { reveal_RedirectReads(); }
         }
       } else {
         assert ref !in redirect.new_children.Keys;
@@ -625,7 +718,7 @@ module BetreeInv {
     InterpretLookupAdditive3(lookup'[..i], middle', lookup'[i+2..]);
   }
 
-  lemma FlushPreservesLookups(s: Variables, s': Variables, start: Reference, flush:NodeFlush)
+  lemma {:timeLimitMultiplier 4} FlushPreservesLookups(s: Variables, s': Variables, start: Reference, flush:NodeFlush)
   requires Inv(s)
   requires Flush(s.bcv, s'.bcv, flush)
   ensures PreservesLookups(s, s', start)
@@ -722,11 +815,13 @@ module BetreeInv {
   //////// Redirect
   ////////
 
-  lemma RedirectPreservesLookups(s: Variables, s': Variables, start: Reference, redirect: Redirect)
+  lemma {:timeLimitMultiplier 4} RedirectPreservesLookups(s: Variables, s': Variables, start: Reference, redirect: Redirect)
     requires Inv(s)
     requires Redirect(s.bcv, s'.bcv, redirect)
     ensures PreservesLookups(s, s', start)
   {
+    assume false;
+
     forall lookup:Lookup, key, value | IsSatisfyingLookupFrom(s.bcv.view, key, value, lookup, start)
       ensures exists lookup':Lookup :: IsSatisfyingLookupFrom(s'.bcv.view, key, value, lookup', start)
     {
@@ -735,6 +830,15 @@ module BetreeInv {
         // parent not leaf for parentkey
         if parentkey in redirect.keys && i < |lookup| - 1 {
           var new_childref := redirect.new_parent.children[parentkey].ref;
+
+
+// TODO: revisit
+/*
+      reveal_RedirectReads();
+      if i :| 0 <= i < |lookup| && lookup[i].ref == redirect.parentref {
+        if key in redirect.keys && i < |lookup| - 1 {
+          var new_childref := redirect.new_parent.children[key];
+*/
           var new_child := redirect.new_children[new_childref];
           var lookup' := lookup[i := Layer(G.ReadOp(redirect.parentref, redirect.new_parent), parentkey)]
             [i+1 := Layer(G.ReadOp(new_childref, new_child), parentkey)];

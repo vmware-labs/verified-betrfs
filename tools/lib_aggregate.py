@@ -50,6 +50,10 @@ class DafnyTimeoutError(DafnyCondition):
     def __init__(self):
         super().__init__(4, False, "verification timeout", "fillcolor=\"#555555\"; fontcolor=white; shape=octagon")
 
+class DafnyRlimitError(DafnyCondition):
+    def __init__(self):
+        super().__init__(4, False, "exceeded rlimit", "fillcolor=\"#666666\"; fontcolor=white; shape=octagon")
+
 class DafnyDynamicFrames(DafnyCondition):
     def __init__(self):
         super().__init__(5, True, "dynamic frames", "fillcolor=blue; shape=egg")
@@ -64,6 +68,9 @@ class DafnySyntaxOK(DafnyCondition):
 
 def dafnyFromVerchk(verchk):
     return verchk.replace("build/", "./").replace(".verchk", ".dfy").replace(".synchk", ".dfy")
+
+def verchkFromDafny(dafny, reportType):
+    return "build/" + dafny.replace(".dfy", "."+reportType)
 
 def hasDisallowedAssumptions(verchk):
     dfy = dafnyFromVerchk(verchk)
@@ -92,17 +99,23 @@ def extractCondition(reportType, report, content):
         return DafnyParseError()
     if re.compile("resolution/type errors detected in").search(content) != None:
         return DafnyTypeError()
-    mo = re.compile("Dafny program verifier finished with (\d+) verified, (\d+) error(.*(\d+) time out)?").search(content)
+    mo = re.compile("Dafny program verifier finished with (?P<verified>\d+) verified, (?P<err>\d+) error(.*?(?P<timeout>\d+) time out)?(.*?(?P<rlimit>\d+) inconclusives)?").search(content)
     if mo != None:
-        rawVerifCount,rawErrorCount,dummy,rawTimeoutCount = mo.groups()
+        rawVerifCount = mo.group('verified')
+        rawErrorCount = mo.group('err')
+        rawTimeoutCount = mo.group('timeout')
+        rawRlimitCount = mo.group('rlimit')
         verifCount = int(rawVerifCount)
         errorCount = int(rawErrorCount)
+        #print(f"V: {rawVerifCount}, E: {rawErrorCount}, T: {rawTimeoutCount}, R: {rawRlimitCount}")
         if errorCount > 0:
             return DafnyVerificationError()
         if hasDisallowedAssumptions(report):
             return DafnyAssumeError()
         if rawTimeoutCount != None and int(rawTimeoutCount) > 0:
             return DafnyTimeoutError()
+        if rawRlimitCount != None and int(rawRlimitCount) > 0:
+            return DafnyRlimitError()
         return DafnyVerified()
     if reportType==VERCHK:
         raise Exception("build system error: couldn't summarize %s\n" % report)
@@ -116,7 +129,8 @@ def extractCondition(reportType, report, content):
     else:
         raise Exception("build system error: unknown report type %s\n" % reportType)
 
-def summarize(reportType, verchk):
+
+def summarize_verbose(reportType, verchk):
     content = open(verchk).read()
 
     # Extract time
@@ -128,5 +142,11 @@ def summarize(reportType, verchk):
 
     condition = extractCondition(reportType, verchk, content)
     condition.userTimeSec = userTimeSec
+    condition.filename = dafnyFromVerchk(verchk)
     condition.verchk = verchk
+
+    return content, condition
+
+def summarize(reportType, verchk):
+    _, condition = summarize_verbose(reportType, verchk)
     return condition

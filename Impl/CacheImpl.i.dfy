@@ -293,7 +293,7 @@ module CacheImpl {
     ensures self.Inv()
     ensures self.I() == old_self.I()[ref := node.I()]
     {
-      Insert(inout self, ref, node);
+      inout self.Insert(ref, node);
     }
 
     linear inout method NodeUpdateSlot(ref: BT.G.Reference, slot: uint64, 

@@ -415,6 +415,11 @@ abstract module Total_Order refines Total_Preorder {
     ensures idx == IndexOfFirstGte(run, needle)
   {
     reveal_IsSorted();
+    if |run| == 0 {
+    } else if lt(Seq.Last(run), needle) {
+    } else {
+      IndexOfFirstGteIsUnique(Seq.DropLast(run), needle, idx);
+    }
   }
 
   function binarySearchIndexOfFirstKeyGteIter(s: seq<Element>, key: Element, lo: int, hi: int) : (i: int)
@@ -507,6 +512,11 @@ abstract module Total_Order refines Total_Preorder {
     ensures idx == IndexOfFirstGt(run, needle)
   {
     reveal_IsSorted();
+    if |run| == 0 {
+    } else if lte(Seq.Last(run), needle) {
+    } else {
+      IndexOfFirstGtIsUnique(Seq.DropLast(run), needle, idx);
+    }
   }
 
   function binarySearchIndexOfFirstKeyGtIter(s: seq<Element>, key: Element, lo: int, hi: int) : (i: int)
@@ -955,7 +965,7 @@ module Lexicographic_Byte_Order refines Total_Order {
     SeqComparison.lte(a, b)
   }
     
-  lemma totality(a: Element, b: Element)
+  lemma {:induction true} totality(a: Element, b: Element)
   ensures SeqComparison.lte(a, b) || SeqComparison.lte(b, a);
   {
     SeqComparison.reveal_lte();

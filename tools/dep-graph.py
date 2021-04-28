@@ -51,7 +51,7 @@ class Traverser:
         elif self.reportType == "verchk":
             samples = [
                 DafnyParseError(), DafnyTypeError(), DafnyVerificationError(), DafnyAssumeError(),
-                DafnyTimeoutError(), DafnyVerified(), DafnySyntaxOK()
+                DafnyTimeoutError(), DafnyRlimitError(), DafnyVerified(), DafnySyntaxOK()
                 ]
         else:
             assert False

@@ -29,7 +29,7 @@ module BucketMaps {
   requires WFPivots(pivots)
   {
     map key
-    | && (key in (child.Keys + parent.Keys)) // this is technically redundant but allows Dafny to figure out that the domain is finite
+    | && (key in child.Keys + parent.Keys) // this is technically redundant but allows Dafny to figure out that the domain is finite
       && BoundedKey(pivots, key)
       && Route(pivots, key) == i
       && Merge(BucketGet(parent, key), BucketGet(child, key)) != IdentityMessage()
@@ -89,7 +89,7 @@ module BucketMaps {
   function {:opaque} Compose(top: BucketMap, bot: BucketMap) : (res : BucketMap)
   {
     map key
-    | key in (top.Keys + bot.Keys)
+    | key in top.Keys + bot.Keys
     :: Merge(BucketGet(top, key), BucketGet(bot, key))
   }
   
@@ -205,7 +205,7 @@ module BucketMaps {
     }
   }
 
-  lemma SortedSeqOfKeyValueMapHasSortedKeys(m: map<Key, Value>)
+  lemma {:induction true} SortedSeqOfKeyValueMapHasSortedKeys(m: map<Key, Value>)
   ensures var s := SortedSeqOfKeyValueMap(m);
       forall i, j | 0 <= i < j < |s| :: UnboundedKeyspace.lt(s[i].key, s[j].key)
   {

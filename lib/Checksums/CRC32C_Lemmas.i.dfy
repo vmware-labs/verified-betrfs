@@ -285,12 +285,20 @@ module CRC32C_Lemmas {
     }
   }
 
+  lemma four_slices<A>(r: seq<A>, a: int, b: int, c: int, d: int, e: int)
+  requires 0 <= a <= b <= c <= d <= e <= |r|
+  ensures r[a..b] + r[b..c] + r[c..d] + r[d..e] == r[a..e];
+  {
+    // Writing sequence proofs with templates often makes them less flaky.
+    // See https://github.com/dafny-lang/dafny/issues/1162
+  }
+
   lemma bits_of_bytes_additive4_slice(r: seq<byte>, a: int, b: int, c: int, d: int, e: int)
   requires 0 <= a <= b <= c <= d <= e <= |r|
   ensures bits_of_bytes(r[a..e])
       == bits_of_bytes(r[a..b]) + bits_of_bytes(r[b..c]) + bits_of_bytes(r[c..d]) + bits_of_bytes(r[d..e])
   {
-    assert r[a..b] + r[b..c] + r[c..d] + r[d..e] == r[a..e];
+    four_slices(r, a, b, c, d, e);
     bits_of_bytes_additive4(r[a..b], r[b..c], r[c..d], r[d..e]);
   }
 
