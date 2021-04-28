@@ -9,7 +9,7 @@ abstract module PCM {
 
   type M(==,!new)
 
-  type Token {
+  type {:extern} Token(==,!new) {
     function {:extern} loc() : Loc
     function {:extern} get() : M
   }

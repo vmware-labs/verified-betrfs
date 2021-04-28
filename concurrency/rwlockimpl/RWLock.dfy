@@ -326,18 +326,22 @@ module RWLockExt refines SimpleExt {
   predicate acquire_exc_finish_step(m: M, m': M, b: Base.M, b': Base.M, central: CentralState)
   {
     && central.held_value.Some?
-    && central.logical_rc == 0
 
     && b == Base.unit()
     && b' == central.held_value.value
 
     && m == dot(
-      CentralHandle(central),
-      ExcPendingHandle()
-    )
+      PhysRcHandle(0),
+      dot(
+        CentralHandle(central),
+        ExcPendingHandle()
+      ))
     && m' == dot(
-      CentralHandle(central.(logical_exc := true).(held_value := None)),
-      ExcTakenHandle()
+      PhysRcHandle(0),
+      dot(
+        CentralHandle(central.(logical_exc := true).(held_value := None)),
+        ExcTakenHandle()
+      )
     )
   }
 
@@ -611,31 +615,44 @@ module RWLockExtToken refines SimpleExtToken {
     pe', handle := split(t, a, b);
   }
 
-  glinear method perform_exc_finish(glinear ct: Token, glinear handle: Token,
+  glinear method perform_exc_finish(
+      glinear pe: Token,
+      glinear ct: Token,
+      glinear handle: Token,
       ghost central: CentralState)
-  returns (glinear ct': Token, glinear handle': Token, glinear resource': Base.Token)
+  returns (glinear pe': Token, glinear ct': Token, glinear handle': Token, glinear resource': Base.Token)
+  requires pe.get() == PhysRcHandle(0)
   requires ct.get() == CentralHandle(central)
   requires handle.get() == ExcPendingHandle()
-  requires ct.loc() == handle.loc()
+  requires ct.loc() == handle.loc() == pe.loc()
   requires ct.loc().ExtLoc?
-  requires central.logical_rc == 0
   ensures central.held_value.Some?
+  ensures pe'.get() == PhysRcHandle(0)
   ensures ct'.get() == CentralHandle(central.(logical_exc := true).(held_value := None))
   ensures handle'.get() == ExcTakenHandle()
   ensures resource'.get() == central.held_value.value
-  ensures ct'.loc() == handle'.loc() == ct.loc()
+  ensures pe'.loc() == ct'.loc() == handle'.loc() == ct.loc()
   ensures resource'.loc() == ct.loc().base_loc
   {
     glinear var x := SEPCM.join(ct, handle);
+    x := SEPCM.join(pe, x);
     glinear var unit := Base.get_unit(ct.loc().base_loc);
 
-    ghost var a := CentralHandle(central.(logical_exc := true).(held_value := None));
-    ghost var b := ExcTakenHandle();
+    ghost var a := PhysRcHandle(0);
+    ghost var b := CentralHandle(central.(logical_exc := true).(held_value := None));
+    ghost var c := ExcTakenHandle();
 
-    assert CrossNextStep(x.get(), dot(a, b), unit.get(), central.held_value.value,
+    ghost var m := x.get();
+    ghost var m' := dot(a, dot(b, c));
+    ghost var b1 := unit.get();
+    ghost var b2 := central.held_value.value;
+    assert acquire_exc_finish_step(m, m', b1, b2, central);
+
+    assert CrossNextStep(x.get(), dot(a, dot(b, c)), unit.get(), central.held_value.value,
         AcquireExcFinishStep(central));
-    glinear var t, b' := do_cross_step(x, dot(a, b), unit, central.held_value.value);
-    ct', handle' := split(t, a, b);
+    glinear var t, b' := do_cross_step(x, dot(a, dot(b, c)), unit, central.held_value.value);
+    pe', t := split(t, a, dot(b, c));
+    ct', handle' := split(t, b, c);
     resource' := b';
   }
 

@@ -6,7 +6,12 @@ include "../../lib/Lang/NativeTypes.s.dfy"
 module {:extern "Atomics"} Atomics {
   import opened NativeTypes
 
-  type {:extern} Atomic<V, G>
+  type {:extern} Atomic(==,!new)<V, G>
+  {
+    function {:extern} identifier() : nat
+  }
+
+  type GhostAtomic<G> = Atomic<(), G>
 
   predicate {:extern} atomic_inv<V, G>(atomic: Atomic<V, G>, v: V, g: G)
 
@@ -18,9 +23,16 @@ module {:extern "Atomics"} Atomics {
   requires inv(v, g)
   ensures forall v1, g1 :: atomic_inv(a, v1, g1) <==> inv(v1, g1)
 
-  ghost method {:extern} finish_atomic<V, G>(
-      a: Atomic<V, G>,
-      new_value: V,
+  method {:extern} new_ghost_atomic<G>(
+      glinear g: G,
+      ghost inv: (G) -> bool)
+  returns (ghost a: GhostAtomic<G>)
+  requires inv(g)
+  ensures forall g1 :: atomic_inv(a, (), g1) <==> inv(g1)
+
+  glinear method {:extern} finish_atomic<V, G>(
+      ghost a: Atomic<V, G>,
+      ghost new_value: V,
       glinear g: G)
   requires atomic_inv(a, new_value, g)
 
@@ -451,7 +463,7 @@ module {:extern "Atomics"} Atomics {
    */
 
   method {:extern} execute_atomic_noop<V, G>(
-      a: Atomic<V, G>)
+      ghost a: Atomic<V, G>)
   returns (
       ghost ret_value: (),
       ghost orig_value: V,
