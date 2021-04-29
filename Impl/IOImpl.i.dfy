@@ -232,10 +232,10 @@ module IOImpl {
     && IDiskOp(dop).jdop.NoDiskOp?
     && BBC.Next(old_s.I(), s.I(), IDiskOp(dop).bdop, StatesInternalOp)
   {
-    if (s.indirectionTableRead.None?) {
+    if (s.indirectionTableRead.None?) {  
       var id := RequestRead(io, s.indirectionTableLoc);
       inout s.indirectionTableRead := Some(id);
-
+  
       IOModel.RequestReadCorrect(old(IIO(io)), old_s.indirectionTableLoc);
       assert IOModel.stepsBC(old_s.I(), s.I(), StatesInternalOp, IIO(io), BC.PageInIndirectionTableReqStep);
     } else {
