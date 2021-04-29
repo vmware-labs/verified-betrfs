@@ -381,6 +381,29 @@ module RWLockExt refines SimpleExt {
     assert forall b :: dot(m',p).shared_taken_handles[b] == dot(m,p).shared_taken_handles[b];
   }
 
+  // Abort step: Decrement 'rc' field (to try again later)
+
+  predicate abort_shared_step(m: M, m': M, rc: nat)
+  {
+    && rc >= 1
+    && m == dot(
+      PhysRcHandle(rc),
+      SharedPendingHandle()
+    )
+    && m' == PhysRcHandle(rc - 1)
+  }
+
+  lemma abort_shared_step_preserves(p: M, m: M, m': M, rc: nat)
+  requires dot_defined(m, p)
+  requires Inv(dot(m, p))
+  requires abort_shared_step(m, m', rc)
+  ensures dot_defined(m', p)
+  ensures Inv(dot(m', p))
+  ensures Interp(dot(m', p)) == Interp(dot(m, p))
+  {
+    assert forall b :: dot(m',p).shared_taken_handles[b] == dot(m,p).shared_taken_handles[b];
+  }
+
   // Step 2: Check 'exc' is false
 
   predicate acquire_shared_finish_step(m: M, m': M, central: CentralState)
@@ -507,6 +530,7 @@ module RWLockExt refines SimpleExt {
     | AcquireExcPendingStep
     | AcquireSharedPendingStep(rc: nat)
     | AcquireSharedFinishStep(central: CentralState)
+    | AbortSharedStep(rc: nat)
     | ReleaseSharedStep(central: CentralState, b: Base.M, rc: nat)
 
   datatype CrossStep =
@@ -519,6 +543,7 @@ module RWLockExt refines SimpleExt {
       case AcquireExcPendingStep => acquire_exc_pending_step(f, f')
       case AcquireSharedPendingStep(rc) => acquire_shared_pending_step(f, f', rc)
       case AcquireSharedFinishStep(central) => acquire_shared_finish_step(f, f', central)
+      case AbortSharedStep(rc) => abort_shared_step(f, f', rc)
       case ReleaseSharedStep(central, b, rc) => release_shared_step(f, f', central, b, rc)
     }
   }
@@ -559,6 +584,7 @@ module RWLockExt refines SimpleExt {
       case AcquireExcPendingStep => acquire_exc_pending_step_preserves(p, f, f');
       case AcquireSharedPendingStep(rc) => acquire_shared_pending_step_preserves(p, f, f', rc);
       case AcquireSharedFinishStep(central) => acquire_shared_finish_step_preserves(p, f, f', central);
+      case AbortSharedStep(central) => abort_shared_step_preserves(p, f, f', central);
       case ReleaseSharedStep(central, b, c) => release_shared_step_preserves(p, f, f', central, b, c);
     }
   }
@@ -710,6 +736,26 @@ module RWLockExtToken refines SimpleExtToken {
     glinear var t := do_internal_step(pe, dot(a, b));
     pe', handle := split(t, a, b);
   }
+
+  glinear method perform_abort_shared(glinear pe: Token, glinear handle: Token, ghost rc: nat)
+  returns (glinear pe': Token)
+  requires pe.get() == PhysRcHandle(rc)
+  requires handle.get() == SharedPendingHandle()
+  requires pe.loc() == handle.loc()
+  ensures rc >= 1
+  ensures pe'.get() == PhysRcHandle(rc - 1)
+  ensures pe'.loc() == pe.loc()
+  {
+    glinear var x := SEPCM.join(pe, handle);
+
+    ghost var a := PhysRcHandle(rc - 1);
+
+    assert abort_shared_step(x.get(), a, rc);
+    assert InternalNextStep(x.get(), a, AbortSharedStep(rc));
+    glinear var t := do_internal_step(x, a);
+    pe' := t;
+  }
+
 
   glinear method perform_shared_finish(
     glinear pe: Token,
