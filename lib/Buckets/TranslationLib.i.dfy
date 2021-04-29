@@ -136,7 +136,7 @@ module TranslationLib {
     reveal_IsPrefix();
     SeqComparison.reveal_lte();
 
-    if |left| > 0 && left[0] as int == Uint8UpperBound() - 1 then
+    if |left| > 0 && left[0] as int == Uint8UpperBound() as int - 1 then
       [left[0]] + lcpright(left[1..])
     else
       []
@@ -177,7 +177,7 @@ module TranslationLib {
     reveal_IsPrefix();
     SeqComparison.reveal_lte();
 
-    if |left| > 0 && left[0] as int == Uint8UpperBound() - 1 {
+    if |left| > 0 && left[0] as int == Uint8UpperBound() as int - 1 {
       lcprightCorrect(left[1..], prefix[1..], key[1..]);
     }
   }
@@ -191,7 +191,7 @@ module TranslationLib {
     reveal_IsPrefix();
     SeqComparison.reveal_lte();
 
-    if |left| > 0 && left[0] as int == Uint8UpperBound() - 1 {
+    if |left| > 0 && left[0] as int == Uint8UpperBound() as int - 1 {
       lcprightSubRangeRight(left[1..], left'[1..], prefix[1..], prefix'[1..]);
     }
   }
@@ -205,7 +205,7 @@ module TranslationLib {
     reveal_IsPrefix();
     SeqComparison.reveal_lte();
 
-    if |left| > 0 && left[0] as int == Uint8UpperBound() - 1 {
+    if |left| > 0 && left[0] as int == Uint8UpperBound() as int - 1 {
       lcprightSubRangeLeft(left[1..], right[1..], prefix[1..], prefix'[1..]);
     }
   }
@@ -436,7 +436,7 @@ module TranslationLib {
   // given a prefix find its upperbound s.t. lcp(prefix, upper) == prefix
   function {:opaque} ShortestUncommonPrefix(prefix: Key, idx: int): (upper: Element)
   requires 0 <= idx <= |prefix|
-  requires forall i | idx < i < |prefix| :: prefix[i] as int == (Uint8UpperBound() - 1)
+  requires forall i | idx < i < |prefix| :: prefix[i] as int == (Uint8UpperBound() as int - 1)
   ensures upper.Element? ==> (
     && ElementIsKey(upper)
     && lcp(prefix, upper.e) == prefix
@@ -451,7 +451,7 @@ module TranslationLib {
     reveal_IsPrefix();
     SeqComparison.reveal_lte();
 
-    if idx < |prefix| && prefix[idx] as int < Uint8UpperBound() - 1
+    if idx < |prefix| && prefix[idx] as int < Uint8UpperBound() as int - 1
     then (
       var k : Key := prefix[..idx] + [prefix[idx] + 1];
       PrefixLteProperties(prefix[..idx], prefix, k);
@@ -468,7 +468,7 @@ module TranslationLib {
   }
 
   lemma prefixIslcpright(prefix: Key)
-  requires forall i | 0 <= i < |prefix| :: prefix[i] as int == (Uint8UpperBound() - 1)
+  requires forall i | 0 <= i < |prefix| :: prefix[i] as int == (Uint8UpperBound() as int - 1)
   ensures lcpright(prefix) == prefix
   {
   }
@@ -477,7 +477,7 @@ module TranslationLib {
   requires 0 < |upper| <= |prefix|
   requires IsPrefix(prefix[..|upper|-1], upper)
   requires upper[|upper|-1] as int == (prefix[|upper|-1] as int + 1)
-  requires forall i | |upper| <= i < |prefix| :: prefix[i] as int == (Uint8UpperBound() - 1)
+  requires forall i | |upper| <= i < |prefix| :: prefix[i] as int == (Uint8UpperBound() as int - 1)
   ensures lcp(prefix, upper) == prefix
   {
     reveal_IsPrefix();

@@ -88,7 +88,7 @@ module TranslationImpl {
 
     while i < llen && left[i] == 255
       invariant 0 <= i <= llen
-      invariant forall j | 0 <= j < i :: left[j] as int == Uint8UpperBound() - 1
+      invariant forall j | 0 <= j < i :: left[j] as int == Uint8UpperBound() as int - 1
     {
       i := i + 1;
     }
