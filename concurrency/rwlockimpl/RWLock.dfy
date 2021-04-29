@@ -675,6 +675,7 @@ module RWLockExtToken refines SimpleExtToken {
         .(logical_exc := false)
         .(held_value := Some(resource.get()))
       )
+  ensures pe'.loc() == ct'.loc() == pe.loc()
   {
     glinear var x := SEPCM.join(ct, handle);
     x := SEPCM.join(pe, x);
