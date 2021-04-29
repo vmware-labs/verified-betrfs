@@ -156,12 +156,13 @@ module JournalMachineMod {
 
   // advances cleanLSN forward by learning that the cache has written back a contiguous
   // sequence of pages starting at last cleanLSN
-  predicate AdvanceClean(s: Variables, s': Variables, cache: CacheIfc.Variables, newClean: nat)
+  predicate AdvanceClean(s: Variables, s': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, newClean: nat)
   {
     && s.WF()
     && s.cleanLSN < newClean <= s.marshalledLSN
     && (forall lsn | s.cleanLSN <= lsn < newClean :: && CacheIfc.IsClean(cache, s.lsnToCU[lsn]))
     && s' == s.(cleanLSN := newClean)
+    && cacheOps == []
   }
 
   predicate Reallocate(s: Variables, s': Variables)
@@ -414,37 +415,19 @@ module JournalMachineMod {
     && s' == s.(syncReqs := MapRemove1(s.syncReqs, syncReqId))
   }
 
-  datatype Step =
-    | AppendStep(message: Message)
-    | AdvanceMarshalledStep(cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, newCU: CU)
-    | AdvanceCleanStep(cache: CacheIfc.Variables, newClean: nat)
-    | CommitStartStep(cache: CacheIfc.Variables, sb: Superblock, newBoundaryLSN: LSN, alloc: AllocationTableMachineMod.Variables)
-    | CommitCompleteStep(cache: CacheIfc.Variables, sb: Superblock)
-    | ReqSyncStep(syncReqId: SyncReqId)
-    | CompleteSyncStep(syncReqId: SyncReqId)
+  datatype Skolem =
+    | AdvanceMarshalledStep(newCU: CU)
+    | AdvanceCleanStep(newClean: nat)
 
-  predicate NextStep(s: Variables, s': Variables, step: Step) {
-    match step {
-      case AppendStep(message) => Append(s, s', message)
-      case AdvanceMarshalledStep(cache, cacheOps, newCU) => AdvanceMarshalled(s, s', cache, cacheOps, newCU)
-      case AdvanceCleanStep(cache, newClean) => AdvanceClean(s, s', cache, newClean)
-      case CommitStartStep(cache, sb, newBoundaryLSN, alloc) => CommitStart(s, s', cache, sb, newBoundaryLSN, alloc)
-      case CommitCompleteStep(cache, sb) => CommitComplete(s, s', cache, sb)
-      case ReqSyncStep(syncReqId) => ReqSync(s, s', syncReqId)
-      case CompleteSyncStep(syncReqId) => CompleteSync(s, s', syncReqId)
+  predicate Internal(s: Variables, s': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, sk: Skolem) {
+    match sk {
+      case AdvanceMarshalledStep(newCU) => AdvanceMarshalled(s, s', cache, cacheOps, newCU)
+      case AdvanceCleanStep(newClean) => AdvanceClean(s, s', cache, cacheOps, newClean)
+//      case _ => false
     }
   }
 
-  predicate Internal(s: Variables, s': Variables) {
-    exists step ::
-      && NextStep(s, s', step)
-      && (
-        || step.AdvanceMarshalledStep?
-        || step.AdvanceCleanStep?
-        )
-  }
-
-  predicate Next(s: Variables, s': Variables) {
-    exists step :: NextStep(s, s', step)
+  function Alloc(s: Variables) : set<AU> {
+    {} // TODO
   }
 }

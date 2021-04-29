@@ -97,6 +97,10 @@ module AllocationTableMachineMod refines MarshalledSnapshot {
   {
     s1.table !! s2.table
   }
+
+  function Alloc(s: Variables) : set<AU> {
+    {} // TODO
+  }
 }
 
 module AllocationTableMod {

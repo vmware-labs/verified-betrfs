@@ -83,23 +83,15 @@ So Betree.lookup is a series of trunk nodes, their CUs,
 
 */
 
-module MapExtra {
-  import opened Sequences
-  import opened Maps
-
-  // TODO move to library
-  // Collapse a sequence of maps with Map
-}
-
 module BetreeMachineMod {
   import opened Options
   import opened Sequences
   import opened Maps
-  import opened MapExtra
   import opened MessageMod
   import opened InterpMod
   import opened AllocationMod
   import opened MsgSeqMod
+  import AllocationTableMachineMod
   import IndirectionTableMod
   import CacheIfc
 
@@ -107,6 +99,21 @@ module BetreeMachineMod {
     itbl: IndirectionTableMod.Superblock,
     endSeq: LSN)
 
+  // Is it gross that my Betree knows about the three views?
+  // The alternative would be for some outer module to instantiate
+  // me three times, and then maintain allocation information on
+  // my behalf. How would that look?
+  // It would look like Program doing a "Freeze" step that captures the current
+  // (indTbl, nextSeq, alloc).
+  // Alloc would be non-opaque (so Program could protect the allocation against
+  // Journal and ephemeral Btree while freeze gets written to disk).
+  // indTbl must be kinda-visible, because someone has to alloc it and escort the dirty
+  // pages to disk.
+  // Someone has to figure out when this frozen state is all clean (perhaps
+  // using some dirty bits in alloc?)
+  // None of that seems like a great layering economy. Let's leave Frozen in here.
+  //
+  // The result is that, down here, we have to protect two separate allocs, I guess.
   datatype Frozen = Idle | Frozen(
     indTbl: IndirectionTableMod.IndirectionTable,
     endSeq: LSN)
@@ -114,6 +121,8 @@ module BetreeMachineMod {
   datatype Variables = Variables(
     indTbl: IndirectionTableMod.IndirectionTable,
     memBuffer: map<Key, Message>,  // Real Splinter (next layer down? :v) has >1 memBuffers so we can be inserting at the front while flushing at the back.
+    allocation: AllocationTableMachineMod.Variables,
+
     // TODO add a membuffer to record LSN; a frozen-like transition to keep one membuffer available
     // for filling while packing the other into a b+tree in the top trunk.
     // OR just have freeze drain the membuffer, introducing a write hiccup every 20GB.
@@ -147,6 +156,7 @@ module BetreeMachineMod {
   // TODO find in library
   function CombineMessages(newer: Message, older: Message) : Message
   function EvaluateMessage(m: Message) : Value
+  function MakeValueMessage(value:Value) : Message
 
   function MessageFolder(newer: map<Key,Message>, older: map<Key,Message>) : map<Key,Message>
   {
@@ -183,19 +193,26 @@ module BetreeMachineMod {
     }
   }
 
-  predicate Query(v: Variables, v': Variables, cache: CacheIfc.Variables, key: Key, value: Value, trunkPath: TrunkPath)
+  datatype Skolem =
+    | QueryStep(trunkPath: TrunkPath)
+    | PutStep()
+    | FlushStep(flush: FlushRec)
+    | DrainMemBufferStep(oldRoot: NodeAssignment, newRoot: NodeAssignment)
+    | CompactBranchStep(receipt: CompactReceipt)
+
+  predicate Query(v: Variables, v': Variables, cache: CacheIfc.Variables, key: Key, value: Value, sk: Skolem)
   {
+    && sk.QueryStep?
+    && var trunkPath := sk.trunkPath;
     && trunkPath.Valid(cache)
     && trunkPath.k == key
     && trunkPath.Decode() == value
     && v' == v
   }
 
-  function MakeValueMessage(value:Value) : Message
-    // TODO somewhere somehow
-
-  predicate Put(v: Variables, v': Variables, key: Key, value: Value)
+  predicate Put(v: Variables, v': Variables, key: Key, value: Value, sk: Skolem)
   {
+    && sk.PutStep?
     && var newMessage := MakeValueMessage(value);
     && v' == v.(memBuffer := v.memBuffer[key := newMessage], nextSeq := v.nextSeq + 1)
   }
@@ -236,8 +253,10 @@ module BetreeMachineMod {
   }
 
   // Internal operation; noop
-  predicate Flush(v: Variables, v': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, flush: FlushRec)
+  predicate Flush(v: Variables, v': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, sk: Skolem)
   {
+    && sk.FlushStep?
+    && var flush := sk.flush;
     && flush.Valid(cache)
     // TODO keep the parent's trunkId, but move the child, so that other nodes' outbound links
     // to existing child don't change.
@@ -262,8 +281,11 @@ module BetreeMachineMod {
 
   // Internal
   // drain mem buffer into a B+tree in the root trunk node
-  predicate DrainMemBuffer(v: Variables, v': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, oldRoot: NodeAssignment, newRoot: NodeAssignment)
+  predicate DrainMemBuffer(v: Variables, v': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, sk:Skolem)
   {
+    && sk.DrainMemBufferStep?
+    && var oldRoot := sk.oldRoot;
+    && var newRoot := sk.newRoot;
     && oldRoot.id == RootId()
     && oldRoot.Valid(v, cache)
     && newRoot.id == RootId()
@@ -302,8 +324,10 @@ module BetreeMachineMod {
 
   // Internal operation; noop
   // Rearrange mem buffers in some node
-  predicate CompactBranch(v: Variables, v': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, r: CompactReceipt)
+  predicate CompactBranch(v: Variables, v': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, sk: Skolem)
   {
+    && sk.CompactBranchStep?
+    && var r := sk.receipt;
     && r.Valid(cache)
     && CUIsAllocatable(r.newna.cu)
     && EquivalentNodes(r.Oldna().node, r.newna.node)  // Buffer replacements
@@ -322,6 +346,13 @@ module BetreeMachineMod {
   predicate KnowFrozenIsClean(v: Variables, sb: Superblock, cache: CacheIfc.Variables)
   {
     true // TODO
+  }
+
+  predicate Internal(v: Variables, v': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, sk: Skolem)
+  {
+    || Flush(v, v', cache, cacheOps, sk)
+    || DrainMemBuffer(v, v', cache, cacheOps, sk)
+    || CompactBranch(v, v', cache, cacheOps, sk)
   }
 
   predicate CommitStart(v: Variables, v': Variables, cache: CacheIfc.Variables, sb: Superblock, newBoundaryLSN: LSN)
@@ -373,6 +404,10 @@ module BetreeMachineMod {
 
   // And then IReads <= ReachableBlocks == alloc.
   // We can prove this because anything in IReads justifies ReachableTrunk (and maybe BranchMember).
+
+  function Alloc(s: Variables) : set<AU> {
+    AllocationTableMachineMod.Alloc(s.allocation)
+  }
 }
 
 module BetreeInterpMod {
