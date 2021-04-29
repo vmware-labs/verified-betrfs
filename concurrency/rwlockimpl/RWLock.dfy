@@ -756,7 +756,6 @@ module RWLockExtToken refines SimpleExtToken {
     pe' := t;
   }
 
-
   glinear method perform_shared_finish(
     glinear pe: Token,
     glinear ct: Token,
