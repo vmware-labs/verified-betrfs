@@ -30,17 +30,6 @@ module MapIfc refines InputOutputIfc {
     | RemoveOutput(existed: bool) // to Travis: added the possibility that there is nothing to remove
 }
 
-module AsyncIfc {
-  import Ifc = MapIfc
-  //type {:extern} RequestId(==,!new)
-  type RequestId = int
-
-  datatype Op =
-    | Start(rid: RequestId, input: Ifc.Input)
-    | End(rid: RequestId, output: Ifc.Output)
-    | InternalOp
-}
-
 module MapSpec {
   import opened KeyValueType
 

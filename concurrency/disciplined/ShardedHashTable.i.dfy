@@ -1,7 +1,7 @@
-include "ApplicationResourceSpec.s.dfy"
 include "../../lib/Lang/NativeTypes.s.dfy"
 include "../../lib/Base/Option.s.dfy"
-include "MapSpec.s.dfy"
+include "ConcurrencyModel.s.dfy"
+include "AppSpec.s.dfy"
 
 module ShardedSMTransitions  {
   // Extracted from 
@@ -20,7 +20,7 @@ module MonoidalSM {
 }
 
 
-module HTResource refines ApplicationResourceSpec {
+module ShardedHashTable refines ShardedStateMachine {
   import opened NativeTypes
   import opened Options
 
@@ -84,7 +84,7 @@ module HTResource refines ApplicationResourceSpec {
   datatype Info = Info(entry: Entry, state: State)
 
   datatype PreR =
-      | R(table: seq<Option<Info>>,
+      | Variables(table: seq<Option<Info>>,
           insert_capacity: nat,
           tickets: multiset<Ticket>,
           stubs: multiset<Stub>)
@@ -97,15 +97,15 @@ module HTResource refines ApplicationResourceSpec {
         // have to show that add is complete, which would entail sucking
         // the definition of update and proof of UpdatePreservesValid all
         // into the definition of add().
-  type R = r: PreR | (r.R? ==> |r.table| == FixedSize()) witness Fail
+  type Variables = r: PreR | (r.Variables? ==> |r.table| == FixedSize()) witness Fail
 
   function unitTable(): seq<Option<Info>>
   {
     seq(FixedSize(), i => None)
   }
 
-  function unit() : R {
-    R(unitTable(), 0, multiset{}, multiset{})
+  function unit() : Variables {
+    Variables(unitTable(), 0, multiset{}, multiset{})
   }
 
   function oneRowTable(k: nat, info: Info) : seq<Option<Info>>
@@ -114,16 +114,16 @@ module HTResource refines ApplicationResourceSpec {
     seq(FixedSize(), i => if i == k then Some(info) else None)
   }
 
-  function oneRowResource(k: nat, info: Info, cap: nat) : R 
+  function oneRowResource(k: nat, info: Info, cap: nat) : Variables 
     requires 0 <= k < FixedSize()
   {
-    R(oneRowTable(k, info), cap, multiset{}, multiset{})
+    Variables(oneRowTable(k, info), cap, multiset{}, multiset{})
   }
 
-  // predicate resourceHasSingleRow(r: R, k: nat, info: Info)
+  // predicate resourceHasSingleRow(r: Variables, k: nat, info: Info)
   //   requires 0 <= k < FixedSize()
   // {
-  //   && r.R?
+  //   && r.Variables?
   //   && (forall i:nat | i < FixedSize() :: if i == k then r.table[i].Some? else r.table[i].None?)
   //   && r.table[k].value == info
   //   && r.tickets == multiset{}
@@ -138,17 +138,17 @@ module HTResource refines ApplicationResourceSpec {
     seq(FixedSize(), i => if i == k1 then Some(info1) else if i == k2 then Some(info2) else None)
   }
 
-  function twoRowsResource(k1: nat, info1: Info, k2: nat, info2: Info, cap: nat) : R 
+  function twoRowsResource(k1: nat, info1: Info, k2: nat, info2: Info, cap: nat) : Variables 
     requires 0 <= k1 < FixedSize()
     requires 0 <= k2 < FixedSize()
     requires k1 != k2
   {
-    R(twoRowsTable(k1, info1, k2, info2), cap, multiset{}, multiset{})
+    Variables(twoRowsTable(k1, info1, k2, info2), cap, multiset{}, multiset{})
   }
 
-  predicate isInputResource(in_r: R, rid: int, input: Ifc.Input)
+  predicate isInputResource(in_r: Variables, rid: int, input: Ifc.Input)
   {
-    && in_r.R?
+    && in_r.Variables?
     && in_r.table == unitTable()
     && in_r.insert_capacity == 0
     && in_r.tickets == multiset { Ticket(rid, input) }
@@ -175,9 +175,9 @@ module HTResource refines ApplicationResourceSpec {
     seq(FixedSize(), i requires 0 <= i < |a| => fuse(a[i], b[i]))
   }
 
-  function add(x: R, y: R) : R {
-    if x.R? && y.R? && nonoverlapping(x.table, y.table) then (
-      R(fuse_seq(x.table, y.table),
+  function add(x: Variables, y: Variables) : Variables {
+    if x.Variables? && y.Variables? && nonoverlapping(x.table, y.table) then (
+      Variables(fuse_seq(x.table, y.table),
           x.insert_capacity + y.insert_capacity,
           x.tickets + y.tickets,
           x.stubs + y.stubs)
@@ -186,15 +186,15 @@ module HTResource refines ApplicationResourceSpec {
     )
   }
 
-  lemma add_unit(x: R)
+  lemma add_unit(x: Variables)
   ensures add(x, unit()) == x
   {
   }
 
-  lemma commutative(x: R, y: R)
+  lemma commutative(x: Variables, y: Variables)
   ensures add(x, y) == add(y, x)
   {
-    if x.R? && y.R? && nonoverlapping(x.table, y.table) {
+    if x.Variables? && y.Variables? && nonoverlapping(x.table, y.table) {
       /*assert nonoverlapping(y.table, x.table);
       forall i | 0 <= i < FixedSize()
       ensures add(x,y).table[i] == add(y,x).table[i]
@@ -207,10 +207,10 @@ module HTResource refines ApplicationResourceSpec {
     }
   }
 
-  lemma associative(x: R, y: R, z: R)
+  lemma associative(x: Variables, y: Variables, z: Variables)
   ensures add(x, add(y, z)) == add(add(x, y), z)
   {
-    if x.R? && y.R? && z.R? && nonoverlapping(x.table, y.table)
+    if x.Variables? && y.Variables? && z.Variables? && nonoverlapping(x.table, y.table)
         && nonoverlapping(fuse_seq(x.table, y.table), z.table)
     {
       /*forall i | 0 <= i < FixedSize()
@@ -225,8 +225,8 @@ module HTResource refines ApplicationResourceSpec {
     }
   }
 
-  predicate Init(s: R) {
-    && s.R?
+  predicate Init(s: Variables) {
+    && s.Variables?
     && (forall i | 0 <= i < |s.table| :: s.table[i] == Some(Info(Empty, Free)))
     && s.insert_capacity == Capacity()
     && s.tickets == multiset{}
@@ -252,7 +252,7 @@ module HTResource refines ApplicationResourceSpec {
     | QueryDoneStep(pos: nat)
     | QueryNotFoundStep(pos: nat)
 
-  predicate ProcessInsertTicket(s: R, s': R, insert_ticket: Ticket)
+  predicate ProcessInsertTicket(s: Variables, s': Variables, insert_ticket: Ticket)
   {
     && !s.Fail?
     && insert_ticket.input.InsertInput?
@@ -272,12 +272,14 @@ module HTResource refines ApplicationResourceSpec {
               KV(key, insert_ticket.input.value),key)))]))
   }
 
-  lemma ProcessInsertTicketPreservesValid(s: R, t: R, insert_ticket: Ticket)
+  lemma ProcessInsertTicketPreservesValid(s: Variables, t: Variables, insert_ticket: Ticket)
     requires ProcessInsertTicket(s, t, insert_ticket)
     requires Valid(s)
     ensures Valid(t)
   {
-    ProcessInsertTicket_PreservesInv(s, t, insert_ticket);
+// TODO declaration order trouble
+//    ProcessInsertTicket_PreservesInv(s, t, insert_ticket);
+
 //    reveal_TableQuantity();
 //    var h := hash(insert_ticket.input.key) as nat;
 //    var spre := s.table[..h];
@@ -317,7 +319,7 @@ module HTResource refines ApplicationResourceSpec {
 //    assert TableQuantityInv(add(t, s'));
   }
 
-  predicate ProcessInsertTicketFail(s: R, s': R, insert_ticket: Ticket)
+  predicate ProcessInsertTicketFail(s: Variables, s': Variables, insert_ticket: Ticket)
   {
     && !s.Fail?
     && insert_ticket.input.InsertInput?
@@ -341,10 +343,10 @@ module HTResource refines ApplicationResourceSpec {
   // We're trying to insert new_item at pos j
   // where hash(new_item) >= hash(pos j)
   // we skip item i and move to i+1.
-  predicate InsertSkip(s: R, s': R, pos: nat)
+  predicate InsertSkip(s: Variables, s': Variables, pos: nat)
   {
     && !s.Fail?
-    && s'.R?
+    && s'.Variables?
     && 0 <= pos < FixedSize()
     && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
     && s.table[pos].Some?
@@ -369,7 +371,7 @@ module HTResource refines ApplicationResourceSpec {
   // where hash(new_item) < hash(pos j)
   // in this case we do the swap and keep moving forward
   // with the swapped-out item.
-  predicate InsertSwap(s: R, s': R, pos: nat)
+  predicate InsertSwap(s: Variables, s': Variables, pos: nat)
   {
     && !s.Fail?
     && 0 <= pos < FixedSize()
@@ -395,7 +397,7 @@ module HTResource refines ApplicationResourceSpec {
   }
 
   // Slot is empty. Insert our element and finish.
-  predicate InsertDone(s: R, s': R, pos: nat)
+  predicate InsertDone(s: Variables, s': Variables, pos: nat)
   {
     && !s.Fail?
     && 0 <= pos < FixedSize()
@@ -410,7 +412,7 @@ module HTResource refines ApplicationResourceSpec {
       .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput(true))})
   }
 
-  predicate InsertUpdate(s: R, s': R, pos: nat)
+  predicate InsertUpdate(s: Variables, s': Variables, pos: nat)
   {
     && !s.Fail?
     && 0 <= pos < FixedSize()
@@ -431,7 +433,7 @@ module HTResource refines ApplicationResourceSpec {
 
   // We know about row h (our thread is working on it),
   // and we know that it's free (we're not already claiming to do something else with it).
-  predicate KnowRowIsFree(s: R, h: int)
+  predicate KnowRowIsFree(s: Variables, h: int)
     requires !s.Fail?
     requires ValidHashIndex(h)
   {
@@ -439,7 +441,7 @@ module HTResource refines ApplicationResourceSpec {
     && s.table[h].value.state.Free?
   }
 
-  predicate ProcessRemoveTicket(s: R, s': R, remove_ticket: Ticket)
+  predicate ProcessRemoveTicket(s: Variables, s': Variables, remove_ticket: Ticket)
   {
     && !s.Fail?
     && remove_ticket.input.RemoveInput?
@@ -454,7 +456,7 @@ module HTResource refines ApplicationResourceSpec {
               remove_ticket.input.key)))])
   }
 
-  predicate RemoveInspectEnabled(s: R, pos: nat)
+  predicate RemoveInspectEnabled(s: Variables, pos: nat)
   {
     && !s.Fail?
     && 0 <= pos < FixedSize()
@@ -463,7 +465,7 @@ module HTResource refines ApplicationResourceSpec {
     && s.table[pos].value.state.Removing?
   }
 
-  predicate RemoveSkipEnabled(s: R, pos: nat)
+  predicate RemoveSkipEnabled(s: Variables, pos: nat)
   {
     && RemoveInspectEnabled(s, pos)
     && s.table[pos].value.entry.Full?
@@ -475,7 +477,7 @@ module HTResource refines ApplicationResourceSpec {
         hash(s.table[pos].value.entry.kv.key) as int, pos)
   }
 
-  predicate RemoveSkip(s: R, s': R, pos: nat)
+  predicate RemoveSkip(s: Variables, s': Variables, pos: nat)
   {
     && RemoveSkipEnabled(s, pos)
     // The hash is equal, but this isn't the key we're trying to remove.
@@ -488,7 +490,7 @@ module HTResource refines ApplicationResourceSpec {
         [pos' := Some(s.table[pos'].value.(state := s.table[pos].value.state))])
   }
 
-  predicate RemoveNotFound(s: R, s': R, pos: nat)
+  predicate RemoveNotFound(s: Variables, s': Variables, pos: nat)
   {
     && RemoveInspectEnabled(s, pos)
     && (if s.table[pos].value.entry.Full? then // the key we are looking for goes before the one in the slot, so it must be absent
@@ -503,7 +505,7 @@ module HTResource refines ApplicationResourceSpec {
       .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput(false))})
   }
 
-  predicate RemoveFoundIt(s: R, s': R, pos: nat)
+  predicate RemoveFoundIt(s: Variables, s': Variables, pos: nat)
   {
     && RemoveSkipEnabled(s, pos)
     // This IS the key we want to remove!
@@ -519,7 +521,7 @@ module HTResource refines ApplicationResourceSpec {
         RemoveTidying(rid, initial_key, s.table[pos].value.entry.kv.val)))])
   }
 
-  predicate TidyEnabled(s: R, pos: nat)
+  predicate TidyEnabled(s: Variables, pos: nat)
   {
     && !s.Fail?
     && ValidHashIndex(pos)
@@ -530,7 +532,7 @@ module HTResource refines ApplicationResourceSpec {
     && (pos < FixedSize() - 1 ==> s.table[pos+1].Some?) // if a next row, we know it
   }
 
-  predicate DoneTidying(s: R, pos: nat)
+  predicate DoneTidying(s: Variables, pos: nat)
     requires TidyEnabled(s, pos)
   {
     var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
@@ -541,7 +543,7 @@ module HTResource refines ApplicationResourceSpec {
     )
   }
 
-  predicate RemoveTidy(s: R, s': R, pos: nat)
+  predicate RemoveTidy(s: Variables, s': Variables, pos: nat)
   {
     && TidyEnabled(s, pos)
     && !DoneTidying(s, pos)
@@ -556,7 +558,7 @@ module HTResource refines ApplicationResourceSpec {
       )
   }
 
-  predicate RemoveDone(s: R, s': R, pos: nat)
+  predicate RemoveDone(s: Variables, s': Variables, pos: nat)
   {
     && TidyEnabled(s, pos)
     && DoneTidying(s, pos)
@@ -570,7 +572,7 @@ module HTResource refines ApplicationResourceSpec {
 
   // Query
 
-  predicate ProcessQueryTicket(s: R, s': R, query_ticket: Ticket)
+  predicate ProcessQueryTicket(s: Variables, s': Variables, query_ticket: Ticket)
   {
     && !s.Fail?
     && query_ticket.input.QueryInput?
@@ -590,7 +592,7 @@ module HTResource refines ApplicationResourceSpec {
     if pos < FixedSize() - 1 then pos + 1 else 0
   }
 
-  predicate QuerySkipEnabled(s: R, pos: nat)
+  predicate QuerySkipEnabled(s: Variables, pos: nat)
   {
     && !s.Fail?
     && 0 <= pos < FixedSize()
@@ -607,7 +609,7 @@ module HTResource refines ApplicationResourceSpec {
     && s.table[NextPos(pos)].value.state.Free?
   }
 
-  predicate QuerySkip(s: R, s': R, pos: nat)
+  predicate QuerySkip(s: Variables, s': Variables, pos: nat)
   {
     && QuerySkipEnabled(s, pos)
 
@@ -616,7 +618,7 @@ module HTResource refines ApplicationResourceSpec {
         [NextPos(pos) := Some(s.table[NextPos(pos)].value.(state := s.table[pos].value.state))])
   }
 
-  predicate QueryDone(s: R, s': R, pos: nat)
+  predicate QueryDone(s: Variables, s': Variables, pos: nat)
   {
     && !s.Fail?
     && 0 <= pos < FixedSize()
@@ -630,7 +632,7 @@ module HTResource refines ApplicationResourceSpec {
       .(stubs := s.stubs + multiset{stub})
   }
 
-  predicate QueryNotFound(s: R, s': R, pos: nat)
+  predicate QueryNotFound(s: Variables, s': Variables, pos: nat)
   {
     && !s.Fail?
     && 0 <= pos < FixedSize()
@@ -652,7 +654,7 @@ module HTResource refines ApplicationResourceSpec {
        })
   }
 
-  predicate QueryFullHashTable(s: R, s': R, pos: nat)
+  predicate QueryFullHashTable(s: Variables, s': Variables, pos: nat)
   {
     && QuerySkipEnabled(s, pos)
 
@@ -668,7 +670,7 @@ module HTResource refines ApplicationResourceSpec {
        })
   }
 
-  predicate UpdateStep(s: R, s': R, step: Step)
+  predicate UpdateStep(s: Variables, s': Variables, step: Step)
   {
     match step {
       case ProcessInsertTicketStep(insert_ticket) => ProcessInsertTicket(s, s', insert_ticket)
@@ -691,7 +693,7 @@ module HTResource refines ApplicationResourceSpec {
     }
   }
 
-  predicate Update(s: R, s': R) {
+  predicate Update(s: Variables, s': Variables) {
     exists step :: UpdateStep(s, s', step)
   }
 
@@ -706,18 +708,18 @@ module HTResource refines ApplicationResourceSpec {
     if s == [] then 0 else TableQuantity(s[..|s|-1]) + InfoQuantity(s[|s| - 1])
   }
 
-  predicate TableQuantityInv(s: R)
+  predicate TableQuantityInv(s: Variables)
   {
-    && s.R?
+    && s.Variables?
     && TableQuantity(s.table) + s.insert_capacity == Capacity()
   }
 
-  predicate Valid(s: R) {
-    && s.R?
+  predicate Valid(s: Variables) {
+    && s.Variables?
     && exists s' :: TableQuantityInv(add(s, s'))
   }
 
-  lemma valid_monotonic(x: R, y: R)
+  lemma valid_monotonic(x: Variables, y: Variables)
   //requires Valid(add(x, y))
   ensures Valid(x)
   {
@@ -726,7 +728,7 @@ module HTResource refines ApplicationResourceSpec {
     assert TableQuantityInv(add(x, add(y, xy')));
   }
 
-  lemma update_monotonic(x: R, y: R, z: R)
+  lemma update_monotonic(x: Variables, y: Variables, z: Variables)
   //requires Update(x, y)
   //requires Valid(add(x, z))
   ensures Update(add(x, z), add(y, z))
@@ -735,17 +737,17 @@ module HTResource refines ApplicationResourceSpec {
     assert UpdateStep(add(x, z), add(y, z), step);
   }
 
-  function input_ticket(id: int, input: Ifc.Input) : R
+  function input_ticket(id: int, input: Ifc.Input) : Variables
   {
     unit().(tickets := multiset{Ticket(id, input)})
   }
 
-  function output_stub(id: int, output: Ifc.Output) : R
+  function output_stub(id: int, output: Ifc.Output) : Variables
   {
     unit().(stubs := multiset{Stub(id, output)})
   }
 
-  lemma NewTicketPreservesValid(r: R, id: int, input: Ifc.Input)
+  lemma NewTicketPreservesValid(r: Variables, id: int, input: Ifc.Input)
   //requires Valid(r)
   ensures Valid(add(r, input_ticket(id, input)))
   {
@@ -762,7 +764,7 @@ module HTResource refines ApplicationResourceSpec {
     reveal_TableQuantity();
   }
 
-  lemma InitImpliesValid(s: R)
+  lemma InitImpliesValid(s: Variables)
   //requires Init(s)
   //ensures Valid(s)
   {
@@ -796,8 +798,8 @@ module HTResource refines ApplicationResourceSpec {
     }
   }
 
-  lemma ResourceTableQuantityDistributive(x: R, y: R)
-    requires add(x, y).R?
+  lemma ResourceTableQuantityDistributive(x: Variables, y: Variables)
+    requires add(x, y).Variables?
     ensures TableQuantity(add(x, y).table) == TableQuantity(x.table) + TableQuantity(y.table)
   {
     reveal_TableQuantity();
@@ -837,7 +839,7 @@ module HTResource refines ApplicationResourceSpec {
     assert y.table[..i] == y.table;
   }
 
-  lemma UpdatePreservesValid(s: R, t: R)
+  lemma UpdatePreservesValid(s: Variables, t: Variables)
   //requires Update(s, t)
   //requires Valid(s)
   ensures Valid(t)
@@ -898,19 +900,19 @@ module HTResource refines ApplicationResourceSpec {
   }
 
   glinear method easy_transform(
-      glinear b: R,
-      ghost expected_out: R)
-  returns (glinear c: R)
+      glinear b: Variables,
+      ghost expected_out: Variables)
+  returns (glinear c: Variables)
   requires Update(b, expected_out)
   ensures c == expected_out
   // travis promises to supply this
 
   // Reduce boilerplate by letting caller provide explicit step, which triggers a quantifier for generic Update()
   glinear method easy_transform_step(
-      glinear b: R,
-      ghost expected_out: R,
+      glinear b: Variables,
+      ghost expected_out: Variables,
       ghost step: Step)
-  returns (glinear c: R)
+  returns (glinear c: Variables)
   requires UpdateStep(b, expected_out, step) 
   ensures c == expected_out
   {

@@ -345,3 +345,9 @@ access to physical state with the same mutexes; it provides an invariant showing
 the ghost tokens are synchronized when released into the mutex. The implementation also uses a trusted "update()"
 method to transform a bag of tokens according to the protocol state machine; this obligation is the equivalent
 of showing that a handler implements a protocol transition.
+
+# A random note to not forget
+
+The bottom-bread/top-bread correspondence aspect of this methodology has a nice benefit over IronFleet.
+In IronFleet, if you could write an infinite loop (```decreases *``` in Dafny), each host could cheat (once):
+a host could transmit an invalid message to a client ("key K has value Junk")
