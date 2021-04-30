@@ -12,6 +12,8 @@ This directory serves as an introduction to those concepts.
 
 ## Fine-grained locking & sharded state machines
 
+[Introduction: Bank Application](BankIntro.md)
+
 ## Implementing your own lock from atomic primitives
 
 ## Reader-writer locks
