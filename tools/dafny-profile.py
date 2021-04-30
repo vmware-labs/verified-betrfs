@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import argparse
 import os
 import re
@@ -11,12 +12,15 @@ on a particular Boogie procedure.  It reports the quantifiers
 that are triggered most often.
 """)
 
+scriptdir = os.path.dirname(__file__)
+dafny_default = os.path.normpath(os.path.join(scriptdir, "../.dafny/dafny/Binaries/Dafny"))
+
 parser.add_argument("timelimit", help="Time limit for verification, in seconds")
 parser.add_argument("proc", help="Boogie procedure to be verified, i.e., argument to /proc:")
 parser.add_argument("filename", help="Dafny file name")
 parser.add_argument("--metric", default="max", help="Sort by max count in profile output.",
                     choices=["max", "sum", "count"])
-parser.add_argument("--dafny", help="Path for binary binary", default="./.dafny/dafny/Binaries/dafny")
+parser.add_argument("--dafny", help="Path for binary binary", default=dafny_default)
 parser.add_argument("--arg", help="Argument to be passed to Dafny", action='append')
 parser.add_argument("--freq", help="Frequency to sample", default=1000)
 parser.add_argument("--show", help="# number of profiler result shown", type=int, default=30)
