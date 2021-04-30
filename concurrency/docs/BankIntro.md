@@ -143,4 +143,4 @@ module Bank {
 ```
 
 Of course, modeling the bank as a ‘monolithic’ state machine like this won't be helpful for the fine-grained implementation we want.
-On the next page, we'll introduce _shared state machines_.
+On the next page, we'll introduce _sharded state machines_.
