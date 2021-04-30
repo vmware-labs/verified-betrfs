@@ -195,7 +195,16 @@ module BetreeSpec {
 
   //// Flush
 
-  datatype NodeFlush = NodeFlush(parentref: Reference, parent: Node, childref: Reference, child: Node, newchildref: Reference, movedKeys: iset<Key>, flushedKeys: iset<Key>)
+  datatype NodeFlush = NodeFlush(
+      parentref: Reference,
+      parent: Node,
+      newparent: Node,
+      childref: Reference,
+      child: Node,
+      newchildref: Reference,
+      newchild: Node,
+      movedKeys: iset<Key>,
+      flushedKeys: iset<Key>)
 
   predicate ValidFlush(flush: NodeFlush)
   {
@@ -204,6 +213,11 @@ module BetreeSpec {
     // TODO(jonh): replace this with "<="
     && (forall key | key in flush.flushedKeys :: key in flush.movedKeys)
     && (forall key | key in flush.movedKeys :: IMapsTo(flush.parent.children, key, flush.childref))
+    // new nodes state
+    && flush.newparent.children == (imap k | k in flush.parent.children :: (if k in flush.movedKeys then flush.newchildref else flush.parent.children[k]))
+    && flush.newparent.buffer == (imap k : Key :: (if k in flush.flushedKeys then G.M.IdentityMessage() else flush.parent.buffer[k]))
+    && flush.newchild.children == flush.child.children
+    && flush.newchild.buffer == (imap k : Key :: (if k in flush.flushedKeys then G.M.Merge(flush.parent.buffer[k], flush.child.buffer[k]) else flush.child.buffer[k]))
   }
 
   function FlushReads(flush: NodeFlush) : seq<ReadOp>
@@ -218,19 +232,8 @@ module BetreeSpec {
   function FlushOps(flush: NodeFlush) : seq<Op>
   requires ValidFlush(flush)
   {
-    // TODO move all this junk into the NodeFlush object
-    var parentref := flush.parentref;
-    var parent := flush.parent;
-    var childref := flush.childref;
-    var child := flush.child;
-    var newchildref := flush.newchildref;
-    var newbuffer := imap k :: (if k in flush.flushedKeys then G.M.Merge(parent.buffer[k], child.buffer[k]) else child.buffer[k]);
-    var newchild := Node(child.children, newbuffer);
-    var newparentbuffer := imap k :: (if k in flush.flushedKeys then G.M.IdentityMessage() else parent.buffer[k]);
-    var newparentchildren := imap k | k in parent.children :: (if k in flush.movedKeys then newchildref else parent.children[k]);
-    var newparent := Node(newparentchildren, newparentbuffer);
-    var allocop := G.AllocOp(newchildref, newchild);
-    var writeop := G.WriteOp(parentref, newparent);
+    var allocop := G.AllocOp(flush.newchildref, flush.newchild);
+    var writeop := G.WriteOp(flush.parentref, flush.newparent);
     [allocop, writeop]
   }
 

@@ -6,10 +6,12 @@ SYNCHK = "synchk"
 VERCHK = "verchk"
 
 class DafnyCondition:
-    def __init__(self, level, result, style):
+    def __init__(self, level, is_success, result, style):
         self.level = level
         self.result = result
         self.style = style
+        self.verchk = None # to be filled in after
+        self.is_success = is_success
 
     def __lt__(self, other):
         return self.level < other.level
@@ -17,37 +19,45 @@ class DafnyCondition:
     def __repr__(self):
         return self.result
 
+    def json(self):
+        return {
+            'file': self.verchk,
+            'level': self.level,
+            'result': self.result,
+            'is_success': self.is_success,
+        }
+
 class DafnyParseError(DafnyCondition):
     def __init__(self):
-        super().__init__(0, "parse error", "fillcolor=red; shape=trapezium")
+        super().__init__(0, False, "parse error", "fillcolor=red; shape=trapezium")
 
 class DafnyTypeError(DafnyCondition):
     def __init__(self):
-        super().__init__(1, "type error", "fillcolor=orange; shape=parallelogram")
+        super().__init__(1, False, "type error", "fillcolor=orange; shape=parallelogram")
 
 class DafnyVerificationError(DafnyCondition):
     def __init__(self):
-        super().__init__(2, "verification error", "fillcolor=yellow; shape=doubleoctagon")
+        super().__init__(2, False, "verification error", "fillcolor=yellow; shape=doubleoctagon")
 
 class DafnyAssumeError(DafnyCondition):
     def __init__(self):
-        super().__init__(3, "untrusted file contains assumptions", "fillcolor=cyan; shape=octagon")
+        super().__init__(3, False, "untrusted file contains assumptions", "fillcolor=cyan; shape=octagon")
 
 class DafnyTimeoutError(DafnyCondition):
     def __init__(self):
-        super().__init__(4, "verification timeout", "fillcolor=\"#555555\"; fontcolor=white; shape=octagon")
-
-class DafnyVerified(DafnyCondition):
-    def __init__(self):
-        super().__init__(5, "verified successfully", "fillcolor=green; shape=ellipse")
+        super().__init__(4, False, "verification timeout", "fillcolor=\"#555555\"; fontcolor=white; shape=octagon")
 
 class DafnyDynamicFrames(DafnyCondition):
     def __init__(self):
-        super().__init__(6, "dynamic frames", "fillcolor=blue; shape=egg")
+        super().__init__(5, True, "dynamic frames", "fillcolor=blue; shape=egg")
+
+class DafnyVerified(DafnyCondition):
+    def __init__(self):
+        super().__init__(6, True, "verified successfully", "fillcolor=green; shape=ellipse")
 
 class DafnySyntaxOK(DafnyCondition):
     def __init__(self):
-        super().__init__(7, "syntax ok", "fillcolor=green; shape=ellipse")
+        super().__init__(7, True, "syntax ok", "fillcolor=green; shape=ellipse")
 
 def dafnyFromVerchk(verchk):
     return verchk.replace("build/", "./").replace(".verchk", ".dfy").replace(".synchk", ".dfy")

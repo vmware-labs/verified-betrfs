@@ -5,7 +5,7 @@
 DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy
 
 DAFNY_ROOT?=.dafny/dafny/
-DAFNY_CMD=$(DAFNY_ROOT)/Binaries/Dafny
+DAFNY_CMD=$(DAFNY_ROOT)/Scripts/dafny
 DAFNY_BINS=$(wildcard $(DAFNY_ROOT)/Binaries/*)
 DAFNY_FLAGS=
 DAFNY_GLOBAL_FLAGS=
@@ -230,12 +230,12 @@ build/%.okay: %.dfy | $$(@D)/.
 .PRECIOUS: build/%.verchk
 AGGREGATE_TOOL=tools/aggregate-verchk.py
 build/%.verified: build/%.verchk $(AGGREGATE_TOOL) | $$(@D)/.
-	$(call tee_capture,$@,$(AGGREGATE_TOOL) verchk $^)
+	$(AGGREGATE_TOOL) verchk $^ > $@
 
 # Syntax is trivial from synchk file, just a marker.
 # (We need the .syntax target to get a recursive dependency computation.)
 build/%.syntax: build/%.synchk $(AGGREGATE_TOOL) | $$(@D)/.
-	$(call tee_capture,$@,$(AGGREGATE_TOOL) synchk $^)
+	$(AGGREGATE_TOOL) synchk $^ > $@
 
 ##############################################################################
 # .status.pdf: a dependency graph of .dfy files labeled with verification result status.
