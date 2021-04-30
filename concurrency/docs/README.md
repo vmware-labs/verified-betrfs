@@ -4,8 +4,14 @@ Currently, the foundation for the framework is Linear-Dafny. The documentation f
 In this framework, we bring together several concepts, including an extension to Linear-Dafny called 'ghost linear' (or `glinear`) and some concurrency primitives.
 This directory serves as an introduction to those concepts.
 
-# Introduction to concurrent reasoning
+## Introduction to concurrent reasoning
 
 [Basic verification with mutexes](MutexIntro.md)
 
 [Introduction to ghost linear](GhostLinearIntro.md)
+
+## Fine-grained locking & shared state machines
+
+## Implementing your own lock from atomic primitives
+
+## Reader-writer locks
