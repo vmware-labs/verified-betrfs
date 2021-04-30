@@ -7,4 +7,5 @@ This directory serves as an introduction to those concepts.
 # Introduction to concurrent reasoning
 
 [Basic verification with mutexes](MutexIntro.md)
+
 [Introduction to ghost linear](GhostLinearIntro.md)
