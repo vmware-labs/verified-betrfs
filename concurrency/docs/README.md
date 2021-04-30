@@ -10,7 +10,7 @@ This directory serves as an introduction to those concepts.
 
 [Introduction to ghost linear](GhostLinearIntro.md)
 
-## Fine-grained locking & shared state machines
+## Fine-grained locking & sharded state machines
 
 ## Implementing your own lock from atomic primitives
 
