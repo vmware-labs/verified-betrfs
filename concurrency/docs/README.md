@@ -14,6 +14,8 @@ This directory serves as an introduction to those concepts.
 
 [Introduction: Bank Application](BankIntro.md)
 
+[Introduction to sharded state machines](ShardedStateMachines.md)
+
 ## Implementing your own lock from atomic primitives
 
 ## Reader-writer locks
