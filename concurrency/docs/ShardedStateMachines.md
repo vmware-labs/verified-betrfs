@@ -5,17 +5,17 @@ Thus we will define a sharded state machine, a state machine with an explicit no
 
 For example, in our bank application, we can imagine that the array of accounts could be broken into shards, with different accounts in different shards.
 
-[images/bank_sharded_state.png](images/bank_sharded_state.png)
+![images/bank_sharded_state.png](images/bank_sharded_state.png)
 
 (Note that the “shards” don’t have to be contiguous in the sense of the array structure—the sequential nature of the array is unimportant. For example, one of the shards in the picture above has accounts 4 and 7.)
 
 When we define state transitions on this state machine, we will define the transitions on the shards. For example, consider the ‘transfer’ operation: it only needs access to two of the accounts to perform its operation. Therefore, we can define the operation on a shard with only 2 accounts in it:
 
-[images/bank_sharded_transition.png](images/bank_sharded_transition.png)
+![images/bank_sharded_transition.png](images/bank_sharded_transition.png)
 
 Defining transitions on shards gives rise to a state machine on the “complete” state:
 
-[images/bank_simple_state_machine.png](images/bank_simple_state_machine.png)
+![images/bank_simple_state_machine.png](images/bank_simple_state_machine.png)
 
 This is essentially the same state machine we saw on the last page, and we can use all of our usual tricks to deal with this state machine.
 
