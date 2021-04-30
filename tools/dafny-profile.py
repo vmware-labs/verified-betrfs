@@ -1,4 +1,8 @@
 #!/usr/bin/python3
+
+# Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
+# SPDX-License-Identifier: BSD-2-Clause
+
 import argparse
 import os
 import re
@@ -14,6 +18,8 @@ that are triggered most often.
 
 scriptdir = os.path.dirname(__file__)
 dafny_default = os.path.normpath(os.path.join(scriptdir, "../.dafny/dafny/Binaries/Dafny"))
+if not os.path.exists(dafny_default):
+    dafny_default = os.path.normpath(os.path.join(scriptdir, "../.dafny/bin/dafny"))
 
 parser.add_argument("timelimit", help="Time limit for verification, in seconds")
 parser.add_argument("proc", help="Boogie procedure to be verified, i.e., argument to /proc:")
