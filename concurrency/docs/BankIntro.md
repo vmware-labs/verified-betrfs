@@ -21,7 +21,8 @@ their sum should be at most $300.
 
 Intuitively, we should be able to reason out this property as follows:
 any time we do a transfer, we preserve the total amount of money. The total
-amount of money is $300, and nobody has a negative balance.
+amount of money is $300, and nobody has a negative balance. Therefore,
+any balance sum should be at most $300.
 
 Yet, it's not immediately clear how we would formalize this in a proof.
 After all, using the mutex library we explored in the previous section,
@@ -142,3 +143,4 @@ module Bank {
 ```
 
 Of course, modeling the bank as a ‘monolithic’ state machine like this won't be helpful for the fine-grained implementation we want.
+On the next page, we'll introduce _shared state machines_.
