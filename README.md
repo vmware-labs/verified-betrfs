@@ -18,7 +18,7 @@ The proof does not make any guarantees about liveness or performance.  In other 
 
 These guarantees are contingent on the correctness of code in the trusted computing base, which includes the compiler, theorem prover, and scaffolding code for interacting with the OS and disk, among other things.
 
-See [docs/Verification.md] for more details.
+See [docs/Verification.md](docs/Verification.md) for more details.
 
 # Publications
 
