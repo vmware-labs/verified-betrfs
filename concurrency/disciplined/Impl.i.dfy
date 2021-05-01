@@ -5,15 +5,16 @@ include "VerificationObligation.s.dfy"
 
 module Impl refines VerificationObligation {
   import opened Options
-  import opened HTResource
+  import SSM = ShardedHashTable
+  import opened ShardedHashTable
   import opened KeyValueType
   import opened Mutexes
   import opened CapacityAllocatorTypes
   import CAP = CapacityAllocator
 
   linear datatype Row = Row(
-    entry: HTResource.Entry,
-    glinear resource: HTResource.R)
+    entry: SSM.Entry,
+    glinear resource: SSM.Variables)
 
   type RowMutex = Mutex<Row>
   type RowMutexTable = seq<RowMutex>
@@ -22,43 +23,43 @@ module Impl refines VerificationObligation {
 
   function RowInv(index: nat, row: Row): bool
   {
-    && Valid(row.resource)
+    //&& Valid(row.resource)  // valid is tucked into predicate type
     && 0 <= index as nat < FixedSize()
     && row.resource == oneRowResource(index as nat, Info(row.entry, Free), 0)
   }
 
   predicate Inv(v: Variables) {
     && CAP.Inv(v.allocator)
-    && |v.row_mutexes| == HTResource.FixedSize()
+    && |v.row_mutexes| == SSM.FixedSize()
     && (forall i | 0 <= i < FixedSize()
       :: v.row_mutexes[i].inv == ((row) => RowInv(i, row)))
   }
 
-  datatype Splitted = Splitted(r':ARS.R, ri:ARS.R)
+  datatype Splitted = Splitted(r':SSM.Variables, ri:SSM.Variables)
 
-  function Split(r:ARS.R, i:nat) : Splitted
-    requires r.R?;
+  function Split(r:SSM.Variables, i:nat) : Splitted
+    requires r.Variables?;
     requires r.tickets == multiset{}
     requires r.stubs == multiset{}
   {
-    var r' := R(seq(|r.table|, (j) requires 0<=j<|r.table| => if j!=i then r.table[j] else None), r.insert_capacity, multiset{}, multiset{});
-    var ri := R(seq(|r.table|, (j) requires 0<=j<|r.table| => if j==i then r.table[j] else None), 0, multiset{}, multiset{});
+    var r' := SSM.Variables(seq(|r.table|, (j) requires 0<=j<|r.table| => if j!=i then r.table[j] else None), r.insert_capacity, multiset{}, multiset{});
+    var ri := SSM.Variables(seq(|r.table|, (j) requires 0<=j<|r.table| => if j==i then r.table[j] else None), 0, multiset{}, multiset{});
     Splitted(r', ri)
   }
 
-  method init(glinear in_r: ARS.R)
-  returns (v: Variables, glinear out_r: ARS.R)
-  // requires ARS.Init(i)
+  method init(glinear in_sv: SSM.Variables)
+  returns (v: Variables, glinear out_sv: SSM.Variables)
+  // requires SSM.Init(i)
   ensures Inv(v)
-  ensures out_r == unit()
+  ensures out_sv == unit()
   {
-    glinear var remaining_r := in_r;
+    glinear var remaining_r := in_sv;
     var row_mutexes : RowMutexTable:= [];
     var i:uint32 := 0;
     while i < FixedSizeImpl()
       invariant i as int == |row_mutexes| <= FixedSize()
       invariant forall j:nat | j<i as int :: && row_mutexes[j].inv == (row) => RowInv(j, row)
-      invariant remaining_r.R?
+      invariant remaining_r.Variables?
       invariant remaining_r.tickets == multiset{}
       invariant remaining_r.stubs == multiset{} 
       invariant forall k:nat | k < i as int :: remaining_r.table[k].None?
@@ -67,19 +68,19 @@ module Impl refines VerificationObligation {
     {
       ghost var splitted := Split(remaining_r, i as int);
       glinear var ri;
-      remaining_r, ri := ARS.split(remaining_r, splitted.r', splitted.ri);
+      remaining_r, ri := SSM.split(remaining_r, splitted.r', splitted.ri);
       var m := new_mutex<Row>(Row(Empty, ri), (row) => RowInv(i as nat, row));
       row_mutexes := row_mutexes + [m];
       i := i + 1;
     }
 
     var allocator: CAP.AllocatorMutexTable;
-    allocator, out_r := CAP.init(remaining_r);
+    allocator, out_sv := CAP.init(remaining_r);
 
-    v := Variables(row_mutexes, allocator);
+    v := Variables.Variables(row_mutexes, allocator);
 
-    assert forall i:nat | i < FixedSize() :: out_r.table[i].None?;
-    assert out_r == unit();
+    assert forall i:nat | i < FixedSize() :: out_sv.table[i].None?;
+    assert out_sv == unit();
   }
 
   predicate method shouldHashGoBefore(search_h: uint32, slot_h: uint32, slot_idx: uint32) 
@@ -105,13 +106,13 @@ module Impl refines VerificationObligation {
       else (dst as int - src as int)
   }
 
-  method doQuery(v: Variables, input: Ifc.Input, rid: int, glinear in_r: ARS.R)
-  returns (output: Ifc.Output, glinear out_r: ARS.R)
+  method doQuery(v: Variables, input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables)
+  returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
     decreases *
     requires Inv(v)
     requires input.QueryInput?
-    requires isInputResource(in_r, rid, input)
-    ensures out_r == ARS.output_stub(rid, output)
+    requires isInputResource(in_sv, rid, input)
+    ensures out_sv == SSM.output_stub(rid, output)
   {
     var query_ticket := Ticket(rid, input);
     var key := input.key;
@@ -121,7 +122,7 @@ module Impl refines VerificationObligation {
     linear var row; glinear var handle;
     row, handle := v.row_mutexes[slot_idx].acquire();
     linear var Row(entry, row_r) := row;
-    glinear var r := ARS.join(in_r, row_r);
+    glinear var r := SSM.join(in_sv, row_r);
 
     ghost var r' := oneRowResource(hash_idx as nat, Info(entry, Querying(rid, key)), 0);
     assert ProcessQueryTicket(r, r', query_ticket);
@@ -174,7 +175,7 @@ module Impl refines VerificationObligation {
       linear var next_row; glinear var next_handle;
       next_row, next_handle := v.row_mutexes[slot_idx'].acquire();
       linear var Row(next_entry, next_row_r) := next_row;
-      r := ARS.join(r, next_row_r);
+      r := SSM.join(r, next_row_r);
 
       r' := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Querying(rid, key)), 0);
       r := easy_transform_step(r, r', step);
@@ -182,7 +183,7 @@ module Impl refines VerificationObligation {
       glinear var rmutex;
       ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Querying(rid, key)), 0);
       ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free), 0);
-      r, rmutex := ARS.split(r, left, right);
+      r, rmutex := SSM.split(r, left, right);
       v.row_mutexes[slot_idx].release(Row(entry, rmutex), handle);
 
       slot_idx := slot_idx';
@@ -191,16 +192,16 @@ module Impl refines VerificationObligation {
     }
     
     // assert step.QueryNotFoundStep? || step.QueryDoneStep?;
-    r' := R(oneRowTable(slot_idx as nat, Info(entry, Free)), 0, multiset{}, multiset{Stub(rid, output)}); 
+    r' := SSM.Variables(oneRowTable(slot_idx as nat, Info(entry, Free)), 0, multiset{}, multiset{Stub(rid, output)}); 
     r := easy_transform_step(r, r', step);
 
     glinear var rmutex;
-    r, rmutex := ARS.split(r, 
-      ARS.output_stub(rid, output), 
+    r, rmutex := SSM.split(r, 
+      SSM.output_stub(rid, output), 
       oneRowResource(slot_idx as nat, Info(entry, Free), 0));
     v.row_mutexes[slot_idx].release(Row(entry, rmutex), handle);
 
-    out_r := r;
+    out_sv := r;
   }
 
   method acquireCapacity(v: Variables, thread_id: uint32)
@@ -227,6 +228,8 @@ module Impl refines VerificationObligation {
         break;
       }
 
+      // assert exists s' :: TableQuantityInv(add(s, s'))
+      assert CAP.BinInv(cap);
       v.allocator[tid].release(cap, cap_handle);
 
       tid := tid + 1;
@@ -236,12 +239,12 @@ module Impl refines VerificationObligation {
     }
   }
 
-  method doInsert(v: Variables, input: Ifc.Input, rid: int, thread_id: uint32, glinear in_r: ARS.R)
-  returns (output: Ifc.Output, glinear out_r: ARS.R)
+  method doInsert(v: Variables, input: Ifc.Input, rid: int, thread_id: uint32, glinear in_sv: SSM.Variables)
+  returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
     requires Inv(v)
     requires input.InsertInput?
-    requires isInputResource(in_r, rid, input)
-    ensures out_r == ARS.output_stub(rid, output)
+    requires isInputResource(in_sv, rid, input)
+    ensures out_sv == SSM.output_stub(rid, output)
     decreases *
   {
     var allocator := v.allocator;
@@ -258,12 +261,12 @@ module Impl refines VerificationObligation {
     linear var cap; glinear var cap_handle; var tid;
     cap, cap_handle, tid := acquireCapacity(v, thread_id);
     linear var AllocatorBin(count, cap_r) := cap;
-    glinear var r := ARS.join(in_r, cap_r);
+    glinear var r := SSM.join(in_sv, cap_r);
 
     linear var row; glinear var handle;
     row, handle := v.row_mutexes[slot_idx].acquire();
     linear var Row(entry, row_r) := row;
-    r := ARS.join(r, row_r);
+    r := SSM.join(r, row_r);
 
     count := count - 1;
 
@@ -310,7 +313,7 @@ module Impl refines VerificationObligation {
       linear var next_row; glinear var next_handle;
       next_row, next_handle := v.row_mutexes[slot_idx'].acquire();
       linear var Row(next_entry, next_row_r) := next_row;
-      r := ARS.join(r, next_row_r);
+      r := SSM.join(r, next_row_r);
 
       if step.InsertSwapStep? {
         entry := Full(kv);
@@ -324,7 +327,7 @@ module Impl refines VerificationObligation {
       ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Inserting(rid, kv, inital_key)), count as nat);
       ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free), 0);
 
-      r, rmutex := ARS.split(r, left, right);
+      r, rmutex := SSM.split(r, left, right);
       v.row_mutexes[slot_idx].release(Row(entry, rmutex), handle);
 
       slot_idx := slot_idx';
@@ -335,34 +338,34 @@ module Impl refines VerificationObligation {
 
     // assert step.InsertDoneStep? || step.InsertUpdateStep?;
     count := if step.InsertDoneStep? then count else count + 1;
-    r' := R(oneRowTable(slot_idx as nat, Info(Full(kv), Free)), count as nat, multiset{}, multiset{Stub(rid, output)});
+    r' := SSM.Variables(oneRowTable(slot_idx as nat, Info(Full(kv), Free)), count as nat, multiset{}, multiset{Stub(rid, output)});
     r := easy_transform_step(r, r', step);
 
-    r, rmutex := ARS.split(r, 
-      ARS.output_stub(rid, output).(insert_capacity := count as nat), 
+    r, rmutex := SSM.split(r, 
+      SSM.output_stub(rid, output).(insert_capacity := count as nat), 
       oneRowResource(slot_idx as nat, Info(Full(kv), Free), 0));
     v.row_mutexes[slot_idx].release(Row(Full(kv), rmutex), handle);
 
     glinear var rcap;
-    r, rcap := ARS.split(r,
-      ARS.output_stub(rid, output), 
+    r, rcap := SSM.split(r,
+      SSM.output_stub(rid, output), 
       unit().(insert_capacity := count as nat));
 
     allocator[tid].release(AllocatorBin(count, rcap), cap_handle);
 
-    out_r := r;
+    out_sv := r;
   }
 
   method doRemoveFound(v: Variables, rid: int, 
     slot_idx: uint32,
     hash_idx: uint32,
     inital_key: Key,
-    entry: Entry,
+    entry: SSM.Entry,
     thread_id: uint32,
     glinear handle: MutexHandle<Row>,
-    glinear r: ARS.R)
+    glinear r: SSM.Variables)
   
-    returns (output: Ifc.Output, glinear out_r: ARS.R)
+    returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
     decreases *
     requires Inv(v)
     requires 0 <= slot_idx < FixedSizeImpl()
@@ -371,7 +374,7 @@ module Impl refines VerificationObligation {
     requires entry.Full? && entry.kv.key == inital_key
     requires hash(inital_key) == hash_idx
     requires handle.m == v.row_mutexes[slot_idx]
-    ensures out_r == ARS.output_stub(rid, output)
+    ensures out_sv == SSM.output_stub(rid, output)
   {
     var found_value := entry.kv.val;
     // var allocator := v.allocator;
@@ -385,7 +388,7 @@ module Impl refines VerificationObligation {
     linear var next_row; glinear var next_handle;
     next_row, next_handle := v.row_mutexes[slot_idx'].acquire();
     linear var Row(next_entry, next_row_r) := next_row;
-    glinear var r := ARS.join(r, next_row_r);
+    glinear var r := SSM.join(r, next_row_r);
 
     var step := RemoveFoundItStep(slot_idx as nat);
     var r' := twoRowsResource(
@@ -421,7 +424,7 @@ module Impl refines VerificationObligation {
       ghost var left := oneRowResource(slot_idx' as nat, Info(Empty, RemoveTidying(rid, inital_key, found_value)), 0);
       ghost var right := oneRowResource(slot_idx as nat, Info(next_entry, Free), 0);
 
-      r, rmutex := ARS.split(r, left, right);
+      r, rmutex := SSM.split(r, left, right);
       v.row_mutexes[slot_idx].release(Row(next_entry, rmutex), handle);
 
       slot_idx := slot_idx';
@@ -431,7 +434,7 @@ module Impl refines VerificationObligation {
       next_row, next_handle := v.row_mutexes[slot_idx'].acquire();
       linear var Row(next_entry', next_row_r) := next_row;
       next_entry := next_entry';
-      r := ARS.join(r, next_row_r);
+      r := SSM.join(r, next_row_r);
     }
 
     assert DoneTidying(r, slot_idx as nat);
@@ -442,9 +445,9 @@ module Impl refines VerificationObligation {
     linear var cap; glinear var cap_handle; var tid;
     cap, cap_handle, tid := acquireCapacity(v, thread_id);
     linear var AllocatorBin(count, cap_r) := cap;
-    r := ARS.join(r, cap_r);
+    r := SSM.join(r, cap_r);
 
-    r' := R(
+    r' := SSM.Variables(
       twoRowsTable(slot_idx as nat, Info(Empty, Free), slot_idx' as nat, Info(next_entry, Free)),
       count as nat + 1,
       multiset{},
@@ -454,38 +457,38 @@ module Impl refines VerificationObligation {
     step := RemoveDoneStep(slot_idx as nat);
     r := easy_transform_step(r, r', step);
 
-    ghost var left := R(
+    ghost var left := SSM.Variables(
       oneRowTable(slot_idx' as nat, Info(next_entry, Free)),
       count as nat + 1,
       multiset{},
       multiset{ Stub(rid, output) });
     ghost var right := oneRowResource(slot_idx as nat, Info(Empty, Free), 0);
 
-    r, rmutex := ARS.split(r, left, right);
+    r, rmutex := SSM.split(r, left, right);
     v.row_mutexes[slot_idx].release(Row(Empty, rmutex), handle);
 
-    r, rmutex := ARS.split(r, 
-      ARS.output_stub(rid, output).(insert_capacity := count as nat + 1), 
+    r, rmutex := SSM.split(r, 
+      SSM.output_stub(rid, output).(insert_capacity := count as nat + 1), 
       oneRowResource(slot_idx' as nat, Info(next_entry, Free), 0));
     v.row_mutexes[slot_idx'].release(Row(next_entry, rmutex), next_handle);
 
-    r, cap_r := ARS.split(r,
-      ARS.output_stub(rid, output), 
+    r, cap_r := SSM.split(r,
+      SSM.output_stub(rid, output), 
       unit().(insert_capacity := count as nat + 1));
   
     v.allocator[tid].release(AllocatorBin(count+1, cap_r), cap_handle);
 
-    out_r := r;
+    out_sv := r;
   }
 
-  method doRemove(v: Variables, input: Ifc.Input, rid: int, thread_id: uint32, glinear in_r: ARS.R)
-    returns (output: Ifc.Output, glinear out_r: ARS.R)
+  method doRemove(v: Variables, input: Ifc.Input, rid: int, thread_id: uint32, glinear in_sv: SSM.Variables)
+    returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
     decreases *
 
     requires Inv(v)
     requires input.RemoveInput?
-    requires isInputResource(in_r, rid, input)
-    ensures out_r == ARS.output_stub(rid, output)
+    requires isInputResource(in_sv, rid, input)
+    ensures out_sv == SSM.output_stub(rid, output)
   {
     var query_ticket := Ticket(rid, input);
     var key := input.key;
@@ -495,7 +498,7 @@ module Impl refines VerificationObligation {
     row, handle := v.row_mutexes[slot_idx].acquire();
 
     linear var Row(entry, row_r) := row;
-    glinear var r := ARS.join(in_r, row_r);
+    glinear var r := SSM.join(in_sv, row_r);
 
     var slot_idx' :uint32;
     glinear var rmutex;
@@ -544,14 +547,14 @@ module Impl refines VerificationObligation {
       linear var next_row; glinear var next_handle;
       next_row, next_handle := v.row_mutexes[slot_idx'].acquire();
       linear var Row(next_entry, next_row_r) := next_row;
-      r := ARS.join(r, next_row_r);
+      r := SSM.join(r, next_row_r);
 
       r' := twoRowsResource(slot_idx as nat, Info(entry, Free), slot_idx' as nat, Info(next_entry, Removing(rid, key)), 0);
       r := easy_transform_step(r, r', step);
 
       ghost var left := oneRowResource(slot_idx' as nat, Info(next_entry, Removing(rid, key)), 0);
       ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free), 0);
-      r, rmutex := ARS.split(r, left, right);
+      r, rmutex := SSM.split(r, left, right);
       v.row_mutexes[slot_idx].release(Row(entry, rmutex), handle);
 
       slot_idx := slot_idx';
@@ -561,39 +564,48 @@ module Impl refines VerificationObligation {
 
     if step.RemoveNotFoundStep? {
       output := MapIfc.RemoveOutput(false);
-      r' := R(oneRowTable(slot_idx as nat, Info(entry, Free)), 0, multiset{}, multiset{Stub(rid, output)}); 
+      r' := SSM.Variables(oneRowTable(slot_idx as nat, Info(entry, Free)), 0, multiset{}, multiset{Stub(rid, output)}); 
       r := easy_transform_step(r, r', step);
-      ghost var left := ARS.output_stub(rid, output);
+      ghost var left := SSM.output_stub(rid, output);
       ghost var right := oneRowResource(slot_idx as nat, Info(entry, Free), 0);
-      r, rmutex := ARS.split(r, left, right);
+      r, rmutex := SSM.split(r, left, right);
       v.row_mutexes[slot_idx].release(Row(entry, rmutex), handle);
     } else {
       output, r := doRemoveFound(v, rid, slot_idx, hash_idx, key, entry, thread_id, handle, r);
     }
 
-    out_r := r;
+    out_sv := r;
   }
 
-  method call(v: Variables, input: Ifc.Input, rid: int, glinear in_r: ARS.R, thread_id: uint32)
-    returns (output: Ifc.Output, glinear out_r: ARS.R)
+  method call(v: Variables, input: Ifc.Input, rid: int, glinear in_sv: SSM.Variables, thread_id: uint32)
+    returns (output: Ifc.Output, glinear out_sv: SSM.Variables)
     decreases *
   // requires Inv(o)
-  // requires ticket == ARS.input_ticket(rid, key)
-    ensures out_r == ARS.output_stub(rid, output)
+  // requires ticket == SSM.input_ticket(rid, key)
+    ensures out_sv == SSM.output_stub(rid, output)
   {
     // Find the ticket.
-    assert |in_r.tickets| == 1;
-    var the_ticket :| the_ticket in in_r.tickets;
+    assert |in_sv.tickets| == 1;
+    var the_ticket :| the_ticket in in_sv.tickets;
 
     if the_ticket.input.QueryInput? {
-      output, out_r := doQuery(v, input, rid, in_r);
+      output, out_sv := doQuery(v, input, rid, in_sv);
     } else if the_ticket.input.InsertInput? {
-      output, out_r := doInsert(v, input, rid, thread_id, in_r);
+      output, out_sv := doInsert(v, input, rid, thread_id, in_sv);
     } else if the_ticket.input.RemoveInput? {
-      output, out_r := doRemove(v, input, rid, thread_id, in_r);
+      output, out_sv := doRemove(v, input, rid, thread_id, in_sv);
     } else {
-      out_r := in_r;
+      out_sv := in_sv;
       assert false;
     }
   }
+
+  lemma NewTicket_RefinesMap(s: SSM.Variables, s': SSM.Variables, rid: int, input: Ifc.Input)
+  {
+  }
+  
+  lemma ReturnStub_RefinesMap(s: SSM.Variables, s': SSM.Variables, rid: int, output: Ifc.Output)
+  {
+  }
+  
 }

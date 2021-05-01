@@ -1,6 +1,6 @@
 include "AppSpec.s.dfy"
 
-abstract module ShardedStateMachine {
+abstract module ShardedState {
   import Ifc = MapIfc // TODO more module system crime. Wish this were a parameter we could apply later.
 
   // The (shardable) Variables of the state machine. "Shardable" means that the

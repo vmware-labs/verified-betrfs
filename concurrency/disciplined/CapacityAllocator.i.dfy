@@ -23,7 +23,7 @@ module CapacityAllocator {
   import opened KeyValueType
   import opened Mutexes
   import opened NonlinearLemmas
-  import ARS = ShardedHashTable
+  import SHT = ShardedHashTable
   import opened CapacityAllocatorTypes
 
   type AllocatorMutex = Mutex<AllocatorBin>
@@ -73,8 +73,8 @@ module CapacityAllocator {
     && s.stubs == multiset{}
   }
 
-  method {:noNLarith} init(glinear in_r: ARS.Variables)
-  returns (mt: AllocatorMutexTable, glinear out_r: ARS.Variables)
+  method {:noNLarith} init(glinear in_r: SHT.Variables)
+  returns (mt: AllocatorMutexTable, glinear out_r: SHT.Variables)
   requires CapPreInit(in_r)
   ensures Inv(mt)
   ensures out_r == unit()
@@ -135,7 +135,7 @@ module CapacityAllocator {
 
       ghost var splitted := Split(remaining_r, amount as nat);
       glinear var vi;
-      remaining_r, vi := ARS.split(remaining_r, splitted.v', splitted.vi);
+      remaining_r, vi := SHT.split(remaining_r, splitted.v', splitted.vi);
       assert BinInv(AllocatorBin(amount, vi));
       var m := new_mutex(AllocatorBin(amount, vi), BinInv);
       mt := mt + [m];
