@@ -1656,9 +1656,9 @@ module ShardedHashTable refines ShardedStateMachine {
   //requires Valid(add(x, y))
   ensures Valid(x)
   {
-    var xy' :| TableQuantityInv(add(add(x, y), xy'));
+    var xy' :| Inv(add(add(x, y), xy'));
     associative(x, y, xy');
-    assert TableQuantityInv(add(x, add(y, xy')));
+    assert Inv(add(x, add(y, xy')));
   }
 
   lemma update_monotonic(x: Variables, y: Variables, z: Variables)
@@ -1680,16 +1680,6 @@ module ShardedHashTable refines ShardedStateMachine {
     unit().(stubs := multiset{Stub(id, output)})
   }
 
-  lemma NewTicketPreservesValid(r: Variables, id: int, input: Ifc.Input)
-  //requires Valid(r)
-  ensures Valid(add(r, input_ticket(id, input)))
-  {
-    var r' :| TableQuantityInv(add(r, r'));
-    var out_r := add(r, input_ticket(id, input));
-    assert out_r.table == r.table by { reveal_TableQuantity(); }
-    assert add(out_r, r').table == add(r, r').table by { reveal_TableQuantity(); }
-  }
-
   lemma EmptyTableQuantityIsZero(infos: seq<Option<Info>>)
     requires (forall i | 0 <= i < |infos| :: infos[i] == Some(Info(Empty, Free)))
     ensures TableQuantity(infos) == 0
@@ -1707,78 +1697,70 @@ module ShardedHashTable refines ShardedStateMachine {
     assert TableQuantityInv(add(s, unit()));
   }
 
-  lemma TableQuantityDistributive(xs: seq<Option<Info>>, ys: seq<Option<Info>>)
-    ensures TableQuantity(xs + ys) == TableQuantity(xs) + TableQuantity(ys)
-  {
-    reveal_TableQuantity();
-    if |ys| == 0 {
-      assert xs + ys == xs;
-    } else {
-      var zs := xs + ys;
-      var zs', z := zs[..|zs| - 1], zs[ |zs| - 1];
-      var ys', y := ys[..|ys| - 1], ys[ |ys| - 1];
+  // lemma TableQuantityDistributive(xs: seq<Option<Info>>, ys: seq<Option<Info>>)
+  //   ensures TableQuantity(xs + ys) == TableQuantity(xs) + TableQuantity(ys)
+  // {
+  //   reveal_TableQuantity();
+  //   if |ys| == 0 {
+  //     assert xs + ys == xs;
+  //   } else {
+  //     var zs := xs + ys;
+  //     var zs', z := zs[..|zs| - 1], zs[ |zs| - 1];
+  //     var ys', y := ys[..|ys| - 1], ys[ |ys| - 1];
 
-      calc {
-        TableQuantity(zs);
-        TableQuantity(zs') + InfoQuantity(z);
-        TableQuantity(zs') + InfoQuantity(y);
-          { assert zs' == xs + ys'; }
-        TableQuantity(xs + ys') + InfoQuantity(y);
-          { TableQuantityDistributive(xs, ys'); }
-        TableQuantity(xs) +  TableQuantity(ys') + InfoQuantity(y);
-        TableQuantity(xs) +  TableQuantity(ys);
-      }
-    }
-  }
+  //     calc {
+  //       TableQuantity(zs);
+  //       TableQuantity(zs') + InfoQuantity(z);
+  //       TableQuantity(zs') + InfoQuantity(y);
+  //         { assert zs' == xs + ys'; }
+  //       TableQuantity(xs + ys') + InfoQuantity(y);
+  //         { TableQuantityDistributive(xs, ys'); }
+  //       TableQuantity(xs) +  TableQuantity(ys') + InfoQuantity(y);
+  //       TableQuantity(xs) +  TableQuantity(ys);
+  //     }
+  //   }
+  // }
 
-  lemma ResourceTableQuantityDistributive(x: Variables, y: Variables)
-    requires add(x, y).Variables?
-    ensures TableQuantity(add(x, y).table) == TableQuantity(x.table) + TableQuantity(y.table)
-  {
-    reveal_TableQuantity();
-    var t := fuse_seq(x.table, y.table);
-    var i := 0;
-    while i < |x.table|
-      invariant i <= |x.table|
-      invariant TableQuantity(t[..i]) == TableQuantity(x.table[..i]) + TableQuantity(y.table[..i])
-    {
-      calc {
-        TableQuantity(t[..i+1]);
-        {
-          assert t[..i] + t[i..i+1] == t[..i+1];
-          TableQuantityDistributive(t[..i], t[i..i+1]); 
-        }
-        TableQuantity(t[..i]) + TableQuantity(t[i..i+1]);
-        TableQuantity(x.table[..i]) + TableQuantity(y.table[..i]) + TableQuantity(t[i..i+1]);
-        {
-          assert TableQuantity(t[i..i+1]) == TableQuantity(x.table[i..i+1]) + TableQuantity(y.table[i..i+1]);
-        }
-        TableQuantity(x.table[..i]) + TableQuantity(y.table[..i]) + TableQuantity(x.table[i..i+1]) + TableQuantity(y.table[i..i+1]);
-        {
-          assert x.table[..i] + x.table[i..i+1] == x.table[..i+1];
-          TableQuantityDistributive(x.table[..i], x.table[i..i+1]); 
-        }
-        TableQuantity(x.table[..i+1]) + TableQuantity(y.table[..i]) + TableQuantity(y.table[i..i+1]);
-        {
-          assert y.table[..i] + y.table[i..i+1] == y.table[..i+1];
-          TableQuantityDistributive(y.table[..i], y.table[i..i+1]); 
-        }
-        TableQuantity(x.table[..i+1]) + TableQuantity(y.table[..i+1]);
-      }
-      i := i + 1;
-    }
-    assert t[..i] == add(x, y).table;
-    assert x.table[..i] == x.table;
-    assert y.table[..i] == y.table;
-  }
-
-  lemma ExtraResourcesNeverHurtNobody(s: Variables, s': Variables, t: Variables)
-    requires Next(s, s')
-    requires add(s,t).Variables?
-    requires add(s',t).Variables?
-    ensures Next(add(s,t), add(s',t))
-  {
-  }
+  // lemma ResourceTableQuantityDistributive(x: Variables, y: Variables)
+  //   requires add(x, y).Variables?
+  //   ensures TableQuantity(add(x, y).table) == TableQuantity(x.table) + TableQuantity(y.table)
+  // {
+  //   reveal_TableQuantity();
+  //   var t := fuse_seq(x.table, y.table);
+  //   var i := 0;
+  //   while i < |x.table|
+  //     invariant i <= |x.table|
+  //     invariant TableQuantity(t[..i]) == TableQuantity(x.table[..i]) + TableQuantity(y.table[..i])
+  //   {
+  //     calc {
+  //       TableQuantity(t[..i+1]);
+  //       {
+  //         assert t[..i] + t[i..i+1] == t[..i+1];
+  //         TableQuantityDistributive(t[..i], t[i..i+1]); 
+  //       }
+  //       TableQuantity(t[..i]) + TableQuantity(t[i..i+1]);
+  //       TableQuantity(x.table[..i]) + TableQuantity(y.table[..i]) + TableQuantity(t[i..i+1]);
+  //       {
+  //         assert TableQuantity(t[i..i+1]) == TableQuantity(x.table[i..i+1]) + TableQuantity(y.table[i..i+1]);
+  //       }
+  //       TableQuantity(x.table[..i]) + TableQuantity(y.table[..i]) + TableQuantity(x.table[i..i+1]) + TableQuantity(y.table[i..i+1]);
+  //       {
+  //         assert x.table[..i] + x.table[i..i+1] == x.table[..i+1];
+  //         TableQuantityDistributive(x.table[..i], x.table[i..i+1]); 
+  //       }
+  //       TableQuantity(x.table[..i+1]) + TableQuantity(y.table[..i]) + TableQuantity(y.table[i..i+1]);
+  //       {
+  //         assert y.table[..i] + y.table[i..i+1] == y.table[..i+1];
+  //         TableQuantityDistributive(y.table[..i], y.table[i..i+1]); 
+  //       }
+  //       TableQuantity(x.table[..i+1]) + TableQuantity(y.table[..i+1]);
+  //     }
+  //     i := i + 1;
+  //   }
+  //   assert t[..i] == add(x, y).table;
+  //   assert x.table[..i] == x.table;
+  //   assert y.table[..i] == y.table;
+  // }
 
   lemma NextPreservesValid(s: Variables, s': Variables)
   //requires Next(s, s')
@@ -1787,8 +1769,11 @@ module ShardedHashTable refines ShardedStateMachine {
   {
     var t :| Inv(add(s, t));
     assert Next(s, s');
-    //assert Next(t, t);
-    ExtraResourcesNeverHurtNobody(s, s', t);
+
+    var step :| NextStep(s, s', step);
+    assert NextStep(add(s, t), add(s', t), step);
+    // update_monotonic(s, s', t);
+
     assert Next(add(s,t), add(s',t));
     Next_PreservesInv(add(s, t), add(s', t));
     assert Inv(add(s', t));
