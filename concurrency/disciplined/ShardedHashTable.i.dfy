@@ -3,6 +3,37 @@ include "../../lib/Base/Option.s.dfy"
 include "ConcurrencyModel.s.dfy"
 include "AppSpec.s.dfy"
 
+// Build up the insert_capacity monoid first so we can talk about it separately
+// in the CapacityAllocator impl, and not have to cart around an entire ShardedHashTable.
+module Count refines ShardedStateMachine {
+  datatype Variables = Variables(value: nat)
+
+  function unit() : Variables { Variables(0) }
+
+  function add(x: Variables, y: Variables) : Variables {
+    Variables(x.value + y.value)
+  }
+
+/*
+Method Count_Compile._default.add_unit has no body
+Method Count_Compile._default.commutative has no body
+Method Count_Compile._default.associative has no body
+Function Count_Compile._default.Init has no body
+Function Count_Compile._default.Next has no body
+Function Count_Compile._default.Valid has no body
+Method Count_Compile._default.valid_monotonic has no body
+Method Count_Compile._default.update_monotonic has no body
+Method Count_Compile._default.InitImpliesValid has no body
+Method Count_Compile._default.NextPreservesValid has no body
+Function Count_Compile._default.input_ticket has no body
+Function Count_Compile._default.output_stub has no body
+Method Count_Compile._default.NewTicketPreservesValid has no body
+*/
+
+}
+
+// TODO(jonh): refactor ShardedHashTable into this module chain:
+
 module ShardedSMTransitions  {
   // Extracted from 
 }
@@ -19,11 +50,11 @@ module MonoidalSM {
   // Show the validity requirement from ApplicationResourcesSpec
 }
 
-
 module ShardedHashTable refines ShardedStateMachine {
   import opened NativeTypes
   import opened Options
   import MapIfc
+  import Count
 
 //////////////////////////////////////////////////////////////////////////////
 // Data structure definitions & transitions
@@ -90,7 +121,7 @@ module ShardedHashTable refines ShardedStateMachine {
 
   datatype PreR =
       | Variables(table: seq<Option<Info>>,
-          insert_capacity: nat,
+          insert_capacity: Count.Variables,
           tickets: multiset<Ticket>,
           stubs: multiset<Stub>)
       | Fail
@@ -111,7 +142,7 @@ module ShardedHashTable refines ShardedStateMachine {
 
   function unit() : Variables
   {
-    Variables(unitTable(), 0, multiset{}, multiset{})
+    Variables(unitTable(), Count.Variables(0), multiset{}, multiset{})
   }
 
   function input_ticket(id: int, input: Ifc.Input) : Variables
@@ -130,7 +161,7 @@ module ShardedHashTable refines ShardedStateMachine {
     seq(FixedSize(), i => if i == k then Some(info) else None)
   }
 
-  function oneRowResource(k: nat, info: Info, cap: nat) : Variables 
+  function oneRowResource(k: nat, info: Info, cap: Count.Variables) : Variables 
   requires 0 <= k < FixedSize()
   {
     Variables(oneRowTable(k, info), cap, multiset{}, multiset{})
@@ -144,7 +175,7 @@ module ShardedHashTable refines ShardedStateMachine {
     seq(FixedSize(), i => if i == k1 then Some(info1) else if i == k2 then Some(info2) else None)
   }
 
-  function twoRowsResource(k1: nat, info1: Info, k2: nat, info2: Info, cap: nat) : Variables 
+  function twoRowsResource(k1: nat, info1: Info, k2: nat, info2: Info, cap: Count.Variables) : Variables 
   requires 0 <= k1 < FixedSize()
   requires 0 <= k2 < FixedSize()
   requires k1 != k2
@@ -156,7 +187,7 @@ module ShardedHashTable refines ShardedStateMachine {
   {
     && in_r.Variables?
     && in_r.table == unitTable()
-    && in_r.insert_capacity == 0
+    && in_r.insert_capacity.value == 0
     && in_r.tickets == multiset { Ticket(rid, input) }
     && in_r.stubs == multiset { }
   }
@@ -184,7 +215,7 @@ module ShardedHashTable refines ShardedStateMachine {
   function add(x: Variables, y: Variables) : Variables {
     if x.Variables? && y.Variables? && nonoverlapping(x.table, y.table) then (
       Variables(fuse_seq(x.table, y.table),
-          x.insert_capacity + y.insert_capacity,
+          Count.add(x.insert_capacity, y.insert_capacity),
           x.tickets + y.tickets,
           x.stubs + y.stubs)
     ) else (
@@ -235,7 +266,7 @@ module ShardedHashTable refines ShardedStateMachine {
   {
     && s.Variables?
     && (forall i | 0 <= i < |s.table| :: s.table[i] == Some(Info(Empty, Free)))
-    && s.insert_capacity == Capacity()
+    && s.insert_capacity.value == Capacity()
     && s.tickets == multiset{}
     && s.stubs == multiset{}
   }
@@ -269,10 +300,10 @@ module ShardedHashTable refines ShardedStateMachine {
     && 0 <= h as int < |s.table|
     && s.table[h].Some?
     && s.table[h].value.state.Free?
-    && s.insert_capacity >= 1
+    && s.insert_capacity.value >= 1
     && (s' == s
       .(tickets := s.tickets - multiset{insert_ticket})
-      .(insert_capacity := s.insert_capacity - 1)
+      .(insert_capacity := Count.Variables(s.insert_capacity.value - 1))
       .(table := s.table[h := Some(
           s.table[h].value.(
               state := Inserting(insert_ticket.rid,
@@ -385,7 +416,7 @@ module ShardedHashTable refines ShardedStateMachine {
         [pos := Some(Info(
             Full(s.table[pos].value.state.kv),
             Free))])
-      .(insert_capacity := s.insert_capacity + 1) // we reserved the capacity at the begining, but later discover we don't need it
+      .(insert_capacity := Count.Variables(s.insert_capacity.value + 1)) // we reserved the capacity at the begining, but later discover we don't need it
       .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput(true))})
   }
 
@@ -526,7 +557,7 @@ module ShardedHashTable refines ShardedStateMachine {
     // Clear the pointer, return the stub.
     && s' == s
       .(table := s.table[pos := Some(Info(s.table[pos].value.entry, Free))])
-      .(insert_capacity := s.insert_capacity + 1)
+      .(insert_capacity := Count.Variables(s.insert_capacity.value + 1))
       .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput(true))})
   }
 
@@ -785,7 +816,7 @@ module ShardedHashTable refines ShardedStateMachine {
   predicate TableQuantityInv(s: Variables)
   {
     && s.Variables?
-    && TableQuantity(s.table) + s.insert_capacity == Capacity()
+    && TableQuantity(s.table) + s.insert_capacity.value == Capacity()
   }
 
   predicate InvTable(table: seq<Option<Info>>)
@@ -1714,4 +1745,27 @@ module ShardedHashTable refines ShardedStateMachine {
   {
     c := do_transform(b, expected_out);
   }
+
+  lemma NewTicketPreservesValid(r: Variables, id: int, input: Ifc.Input)
+    //requires Valid(r)
+    ensures Valid(add(r, input_ticket(id, input)))
+  {
+    var ticket := input_ticket(id, input);
+    var t :| Inv(add(r, t));
+
+    assert add(add(r, ticket), t).table == add(r, t).table;
+    assert add(add(r, ticket), t).insert_capacity == add(r, t).insert_capacity;
+  }
+
+
+//  // Trusted composition tools. Not sure how to generate them.
+//  glinear method enclose(glinear a: CapacityVars) returns (h: Variables)
+//    requires CapacityVars
+//    ensures h == unit().(insert_capacity == a)
+//
+//  glinear method declose(glinear h: Variables) returns (a: CapacityVars)
+//    requires h.table == unitTable() // h is a unit() except for a
+//    requires h.tickets == multiset{}
+//    requires h.stubs == multiset{}
+//    ensures a == h.insert_capacity
 }

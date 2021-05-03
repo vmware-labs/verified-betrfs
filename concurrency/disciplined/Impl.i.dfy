@@ -351,6 +351,7 @@ module Impl refines VerificationObligation {
       SSM.output_stub(rid, output), 
       unit().(insert_capacity := count as nat));
 
+    assert CAP.BinInv(AllocatorBin(count, rcap)); // ha ha ha
     allocator[tid].release(AllocatorBin(count, rcap), cap_handle);
 
     out_sv := r;
@@ -476,6 +477,7 @@ module Impl refines VerificationObligation {
       SSM.output_stub(rid, output), 
       unit().(insert_capacity := count as nat + 1));
   
+    assert CAP.BinInv(AllocatorBin(count as nat +1, cap_r)); // ha ha ha
     v.allocator[tid].release(AllocatorBin(count+1, cap_r), cap_handle);
 
     out_sv := r;

@@ -8,22 +8,22 @@ module CapacityAllocatorTypes {
   import opened NativeTypes
   import opened ShardedHashTable
 
+  datatype CapacityVar(insert_capacity: int)
+
   linear datatype AllocatorBin = AllocatorBin(
     count: uint32,
-    // NB there's a modularity problem here. Maybe we need to pull the capacity concept
-    // out of the ShardedHashTable so we can refer to it here?
-    glinear resource: ShardedHashTable.Variables)
+    glinear insert_capacity: CapacityVar)
+
+  function unit() : CapacityVar { CapacityVar(0) }
 }
 
 // separate module to avoid name collision
 module CapacityAllocator {
   import opened Options
   import opened NativeTypes
-  import opened ShardedHashTable
   import opened KeyValueType
   import opened Mutexes
   import opened NonlinearLemmas
-  import SHT = ShardedHashTable
   import opened CapacityAllocatorTypes
 
   type AllocatorMutex = Mutex<AllocatorBin>
@@ -47,37 +47,19 @@ module CapacityAllocator {
     && (forall i | 0 <= i < BinCount() :: o[i].inv == BinInv)
   }
 
-  datatype Splitted = Splitted(v': ShardedHashTable.Variables, vi: ShardedHashTable.Variables)
-
-  function Split(v: ShardedHashTable.Variables, amount:nat) : Splitted
-    requires v.Variables?;
-    requires v.table == unitTable()
-    requires v.insert_capacity >= amount
-    requires v.tickets == multiset{}
-    requires v.stubs == multiset{}
-  {
-    var v' := Variables(v.table, v.insert_capacity - amount, multiset{}, multiset{});
-    var vi := Variables(v.table, amount, multiset{}, multiset{});
-    Splitted(v', vi)
-  }
-
   function method CapacityImpl(): (s: uint32)
     ensures s as nat == Capacity()
     
-  predicate CapPreInit(s: ShardedHashTable.Variables)
+  predicate CapPreInit(s: CapacityVar)
   {
-    && s.Variables?
-    && s.table == unitTable()
     && s.insert_capacity == Capacity()
-    && s.tickets == multiset{}
-    && s.stubs == multiset{}
   }
 
-  method {:noNLarith} init(glinear in_r: SHT.Variables)
-  returns (mt: AllocatorMutexTable, glinear out_r: SHT.Variables)
+  method {:noNLarith} init(glinear in_r: CapacityVar)
+  returns (mt: AllocatorMutexTable, glinear out_r: CapacityVar)
   requires CapPreInit(in_r)
   ensures Inv(mt)
-  ensures out_r == unit()
+  ensures out_r == CapacityAllocatorTypes.unit()
   {
     glinear var remaining_r := in_r;
 
@@ -100,11 +82,7 @@ module CapacityAllocator {
 
       invariant i as int == |mt| <= BinCount()
       invariant forall j:nat | j < i as int :: mt[j].inv == BinInv
-      invariant remaining_r.Variables?
       invariant remaining_r.insert_capacity == total_amount as nat - allocated_sum
-      invariant remaining_r.table == unitTable()
-      invariant remaining_r.tickets == multiset{}
-      invariant remaining_r.stubs == multiset{}
     {
       if i > 0 {
         calc >= {
