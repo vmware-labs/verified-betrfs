@@ -46,6 +46,7 @@ module RWLockExt refines SimpleExt {
   // Standard flow for obtaining an 'exclusive' lock
 
   datatype ExcState = 
+    | ExcNone
       // set ExcLock bit:
     | ExcPendingAwaitWriteBack(t: int)
       // check WriteBack bit unset
@@ -60,6 +61,7 @@ module RWLockExt refines SimpleExt {
   // End-game for this flow is to become an ordinary 'shared' lock
 
   datatype ReadState =
+    | ReadNone
     | ReadPending                   // set status bit to ExcLock | Reading
     | ReadPendingCounted(t: int)    // inc refcount
     | ReadObtained(t: int)          // clear ExcLock bit
@@ -70,21 +72,21 @@ module RWLockExt refines SimpleExt {
     refCounts: map<ThreadId, nat>,
 
     sharedState: FullMap<SharedState, nat>,
-    excState: Option<ExcState>,
-    readState: Option<ReadState>,
+    exc: ExcState,
+    read: ReadState,
 
     // Flow for the phase of doing a write-back.
     // Special case in part because it can be initiated by any thread
     // and completed by any thread (not necessarily the same one).
     
-    writeBackObtained: bool              // set WriteBack status bit
+    writeback: bool              // set WriteBack status bit
   )
 
   type F = M
 
   function unit() : F
   {
-    M(None, None, map[], zero_map(), None, None, false)
+    M(None, None, map[], zero_map(), ExcNone, ReadNone, false)
   }
 
   predicate dot_defined(a: F, b: F)
@@ -92,9 +94,9 @@ module RWLockExt refines SimpleExt {
     && !(a.flags.Some? && b.flags.Some?)
     && !(a.stored_value.Some? && b.stored_value.Some?)
     && a.refCounts.Keys !! b.refCounts.Keys
-    && !(a.excState.Some? && b.excState.Some?)
-    && !(a.readState.Some? && b.readState.Some?)
-    && !(a.writeBackObtained && b.writeBackObtained)
+    && (a.exc.ExcNone? || b.exc.ExcNone?)
+    && (a.read.ReadNone? || b.read.ReadNone?)
+    && !(a.writeback && b.writeback)
   }
 
   function dot(a: F, b: F) : F
@@ -106,9 +108,9 @@ module RWLockExt refines SimpleExt {
       (map k | k in a.refCounts.Keys + b.refCounts.Keys ::
           if k in a.refCounts.Keys then a.refCounts[k] else b.refCounts[k]),
       add_fns(a.sharedState, b.sharedState),
-      if a.excState.Some? then a.excState else b.excState,
-      if a.readState.Some? then a.readState else b.readState,
-      a.writeBackObtained || b.writeBackObtained
+      if !a.exc.ExcNone? then a.exc else b.exc,
+      if !a.read.ReadNone? then a.read else b.read,
+      a.writeback || b.writeback
     ) 
   }
 
@@ -132,16 +134,76 @@ module RWLockExt refines SimpleExt {
   ensures dot_defined(dot(x, y), z)
   ensures dot(x, dot(y, z)) == dot(dot(x, y), z)
   {
+    assume false;
   }
 
-  predicate Inv(a: F)
-  /*{
-    && a != unit() ==> (
-      && a.flags.Some?
-      && (forall i | 0 <= i < NUM_THREADS :: i in state.refCounts)
-      && (state.
+  function IsSharedRefFor(t: nat) : (SharedState) -> bool
+  {
+    (ss: SharedState) => ss.t == t
+  }
+
+  function CountSharedRefs(m: FullMap<SharedState, nat>, t: nat) : nat
+  {
+    SumFilter(IsSharedRefFor(t), m)
+  }
+
+  function CountAllRefs(state: F, t: nat) : nat
+  {
+    CountSharedRefs(state.sharedState, t)
+
+      + (if state.exc.ExcPendingAwaitWriteBack?
+            || state.exc.ExcPending?
+            || state.exc.ExcObtained?
+         then 1 else 0)
+
+      + (if state.read.ReadPendingCounted?
+            || state.read.ReadObtained?
+         then 1 else 0)
+  }
+
+  predicate Inv(state: F)
+  {
+    && state != unit() ==> (
+      && state.flags.Some?
+      && (state.exc.ExcPendingAwaitWriteBack? ==>
+        && state.read.ReadNone?
+        && -1 <= state.exc.t < NUM_THREADS
+      )
+      && (state.exc.ExcPending? ==>
+        && state.read == ReadNone
+        && !state.writeback
+        && 0 <= state.exc.visited <= NUM_THREADS
+        && -1 <= state.exc.t < NUM_THREADS
+      )
+      && (state.exc.ExcObtained? ==>
+        && state.read == ReadNone
+        && !state.writeback
+        && -1 <= state.exc.t < NUM_THREADS
+      )
+      && (state.writeback ==>
+        && state.read == ReadNone
+      )
+      && (state.read.ReadPending? ==>
+        && !state.writeback
+      )
+      && (state.read.ReadPendingCounted? ==>
+        && !state.writeback
+        && 0 <= state.read.t < NUM_THREADS
+      )
+      && (
+        state.read.ReadObtained? ==> 0 <= state.read.t < NUM_THREADS
+      )
+      && (state.exc.ExcObtained? ==> state.stored_value.None?)
+      && (!state.read.ReadNone? ==> state.stored_value.None?)
+      && (!state.exc.ExcObtained? && state.read.ReadNone?
+          ==> state.stored_value.Some?)
+      //&& (state.stored_value.Some? ==>
+      //  state.stored_value.value.is_handle(key)
+      //)
+      && (forall t | 0 <= t <= NUM_THREADS
+        :: t in state.refCounts && state.refCounts[t] == CountAllRefs(state, t))
     )
-  }*/
+  }
 
   function Interp(a: F) : Base.M
     //requires Inv(a)

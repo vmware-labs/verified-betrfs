@@ -13,4 +13,6 @@ module FullMaps {
   function add_fns<A(!new)>(f: FullMap<A, nat>, g: FullMap<A, nat>) : FullMap<A, nat> {
     imap b | true :: f[b] + g[b]
   }
+
+  function SumFilter<A(!new)>(fn: (A) -> bool, f: FullMap<A, nat>) : nat
 }

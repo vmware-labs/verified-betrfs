@@ -29,7 +29,7 @@ abstract module SimpleExt {
   ensures dot_defined(dot(x, y), z)
   ensures dot(x, dot(y, z)) == dot(dot(x, y), z)
 
-  predicate Inv(a: F)
+  predicate Inv(state: F)
 
   function Interp(a: F) : Base.M
     requires Inv(a)
