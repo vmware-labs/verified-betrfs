@@ -114,6 +114,16 @@ module ShardedHashTable refines ShardedStateMachine {
     Variables(unitTable(), 0, multiset{}, multiset{})
   }
 
+  function input_ticket(id: int, input: Ifc.Input) : Variables
+  {
+    unit().(tickets := multiset{Ticket(id, input)})
+  }
+
+  function output_stub(id: int, output: Ifc.Output) : Variables
+  {
+    unit().(stubs := multiset{Stub(id, output)})
+  }
+
   function oneRowTable(k: nat, info: Info) : seq<Option<Info>>
   requires 0 <= k < FixedSize()
   {
@@ -1667,16 +1677,6 @@ module ShardedHashTable refines ShardedStateMachine {
     assert NextStep(add(x, z), add(y, z), step);
   }
 
-  function input_ticket(id: int, input: Ifc.Input) : Variables
-  {
-    unit().(tickets := multiset{Ticket(id, input)})
-  }
-
-  function output_stub(id: int, output: Ifc.Output) : Variables
-  {
-    unit().(stubs := multiset{Stub(id, output)})
-  }
-
   lemma EmptyTableQuantityIsZero(infos: seq<Option<Info>>)
     requires (forall i | 0 <= i < |infos| :: infos[i] == Some(Info(Empty, Free)))
     ensures TableQuantity(infos) == 0
@@ -1722,6 +1722,4 @@ module ShardedHashTable refines ShardedStateMachine {
   {
     c := easy_transform(b, expected_out);
   }
-
-
 }
