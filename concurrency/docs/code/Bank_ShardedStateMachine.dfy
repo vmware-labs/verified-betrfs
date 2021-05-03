@@ -88,19 +88,7 @@ module Bank {
   lemma glue_commutative(a: Shard, b: Shard)
   ensures glue(a, b) == glue(b, a)
   {
-    if a == Invalid || b == Invalid {
-      calc {
-        glue(a, b);
-        Invalid;
-        glue(b, a);
-      }
-    } else if maps_overlap(a.account_balances, b.account_balances) {
-      calc {
-        glue(a, b);
-        Invalid;
-        glue(b, a);
-      }
-    } else {
+    if glue(a, b) != Invalid {
       var x := glue(a, b).account_balances;
       var y := glue(b, a).account_balances;
       assert x == y by {
@@ -141,7 +129,6 @@ module Bank {
   predicate Inv(s: Shard)
   {
     && s != Invalid
-    && |s.account_balances| == NumberOfAccounts    
     && ShardHasAllAccounts(s.account_balances)
     && MathUtils.sum(MapToSeq(s.account_balances)) == FixedTotalMoney
   }
@@ -158,15 +145,19 @@ module Bank {
 
   predicate Transfer(shard: Shard, shard': Shard, transfer: AccountTransfer)
   {
+    // Naturally, we won't allow an operation on invalid states.
     && shard != Invalid
     && shard' != Invalid
 
     // Check that the source account and destination account aren't the same,
     // check that account numbers are valid
     && transfer.source_account != transfer.dest_account
-    && 0 <= transfer.source_account < |shard.account_balances|
-    && 0 <= transfer.dest_account < |shard.account_balances|
+    && 0 <= transfer.source_account < NumberOfAccounts
+    && 0 <= transfer.dest_account < NumberOfAccounts
 
+    // Check that the shard we're operating on actually has the two accounts
+    // we care about. (It could have more as well, those don't matter, but we
+    // definitely need these two.)
     && transfer.source_account in shard.account_balances
     && transfer.dest_account in shard.account_balances
 
