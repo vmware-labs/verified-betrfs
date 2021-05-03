@@ -1772,12 +1772,24 @@ module ShardedHashTable refines ShardedStateMachine {
     assert y.table[..i] == y.table;
   }
 
+  lemma ExtraResourcesNeverHurtNobody(s: Variables, s': Variables, t: Variables)
+    requires Next(s, s')
+    requires add(s,t).Variables?
+    requires add(s',t).Variables?
+    ensures Next(add(s,t), add(s',t))
+  {
+  }
+
   lemma NextPreservesValid(s: Variables, s': Variables)
   //requires Next(s, s')
   //requires Valid(s)
   ensures Valid(s')
   {
     var t :| Inv(add(s, t));
+    assert Next(s, s');
+    //assert Next(t, t);
+    ExtraResourcesNeverHurtNobody(s, s', t);
+    assert Next(add(s,t), add(s',t));
     Next_PreservesInv(add(s, t), add(s', t));
     assert Inv(add(s', t));
   }
