@@ -1647,9 +1647,17 @@ module ShardedHashTable refines ShardedStateMachine {
     && TableQuantity(s.table) + s.insert_capacity == Capacity()
   }
 
-  predicate Valid(s: Variables) {
+  predicate Valid(s: Variables)
+  {
     && s.Variables?
     && exists t :: Inv(add(s, t))
+  }
+
+  lemma InvImpliesValid(s: Variables)
+    requires Inv(s)
+    ensures Valid(s)
+  {
+    add_unit(s);
   }
 
   lemma valid_monotonic(x: Variables, y: Variables)
@@ -1691,7 +1699,6 @@ module ShardedHashTable refines ShardedStateMachine {
   //requires Init(s)
   //ensures Valid(s)
   {
-    reveal_TableQuantity();
     EmptyTableQuantityIsZero(s.table);
     add_unit(s);
     assert TableQuantityInv(add(s, unit()));
@@ -1768,15 +1775,9 @@ module ShardedHashTable refines ShardedStateMachine {
   ensures Valid(s')
   {
     var t :| Inv(add(s, t));
-    assert Next(s, s');
-
-    var step :| NextStep(s, s', step);
-    assert NextStep(add(s, t), add(s', t), step);
-    // update_monotonic(s, s', t);
-
-    assert Next(add(s,t), add(s',t));
+    InvImpliesValid(add(s, t));
+    update_monotonic(s, s', t);
     Next_PreservesInv(add(s, t), add(s', t));
-    assert Inv(add(s', t));
   }
 
   glinear method easy_transform(
