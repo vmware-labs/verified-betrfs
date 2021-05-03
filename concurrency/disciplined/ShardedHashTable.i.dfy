@@ -1703,14 +1703,6 @@ module ShardedHashTable refines ShardedStateMachine {
     Next_PreservesInv(add(s, t), add(s', t));
   }
 
-  glinear method easy_transform(
-      glinear b: Variables,
-      ghost expected_out: Variables)
-  returns (glinear c: Variables)
-  requires Next(b, expected_out)
-  ensures c == expected_out
-  // travis promises to supply this
-
   // Reduce boilerplate by letting caller provide explicit step, which triggers a quantifier for generic Next()
   glinear method easy_transform_step(
       glinear b: Variables,
@@ -1720,6 +1712,6 @@ module ShardedHashTable refines ShardedStateMachine {
   requires NextStep(b, expected_out, step) 
   ensures c == expected_out
   {
-    c := easy_transform(b, expected_out);
+    c := do_transform(b, expected_out);
   }
 }

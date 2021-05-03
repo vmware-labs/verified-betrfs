@@ -136,7 +136,11 @@ module CapacityAllocator {
       ghost var splitted := Split(remaining_r, amount as nat);
       glinear var vi;
       remaining_r, vi := SHT.split(remaining_r, splitted.v', splitted.vi);
-      assert BinInv(AllocatorBin(amount, vi));
+      ghost var ab := AllocatorBin(amount, vi);
+      ghost var t := Variables(unitTable(), 0 as nat, multiset{}, multiset{});
+      assert SHT.Inv(add(ab.resource, t));
+      assert Valid(ab.resource);
+      assert BinInv(ab);
       var m := new_mutex(AllocatorBin(amount, vi), BinInv);
       mt := mt + [m];
 

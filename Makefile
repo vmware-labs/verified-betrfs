@@ -214,6 +214,7 @@ build/lib/DataStructures/LinearDList.i.verchk: DAFNY_FLAGS=/noNLarith /proverOpt
 
 build/lib/Checksums/%.i.verchk: DAFNY_FLAGS=/noNLarith
 build/lib/Checksums/Nonlinear.i.verchk: DAFNY_FLAGS=
+build/concurrency/disciplined/CapacityAllocator.i.verchk: DAFNY_FLAGS=/noNLarith
 
 ##############################################################################
 # .okay: Dafny file-level verification, no time limit,
