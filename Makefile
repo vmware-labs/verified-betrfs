@@ -2,7 +2,7 @@
 # System configuration
 
 # You can build anything reachable from these root files.
-DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy
+DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy concurrency/disciplined/Impl.i.dfy
 
 DAFNY_ROOT?=.dafny/dafny/
 DAFNY_CMD=$(DAFNY_ROOT)/Scripts/dafny

@@ -272,51 +272,30 @@ module ShardedHashTable refines ShardedStateMachine {
               KV(key, insert_ticket.input.value),key)))]))
   }
 
+  lemma TableQuantity_replace1(s: seq<Option<Info>>, t: seq<Option<Info>>, i: int)
+  requires 0 <= i < |s| == |t|
+  requires forall j | 0 <= j < |s| :: i != j ==> s[j] == t[j]
+  ensures TableQuantity(t) == TableQuantity(s) + InfoQuantity(t[i]) - InfoQuantity(s[i])
+  {
+    reveal_TableQuantity();
+    if i == |s| - 1 {
+      assert s[..|s|-1] == t[..|s|-1];
+    } else {
+      TableQuantity_replace1(s[..|s|-1], t[..|t|-1], i);
+    }
+  }
+
   lemma ProcessInsertTicketPreservesValid(s: Variables, t: Variables, insert_ticket: Ticket)
     requires ProcessInsertTicket(s, t, insert_ticket)
     requires Valid(s)
     ensures Valid(t)
   {
-// TODO declaration order trouble
-//    ProcessInsertTicket_PreservesInv(s, t, insert_ticket);
+    var h := hash(insert_ticket.input.key) as int;
+    var s' :| TableQuantityInv(add(s, s'));
 
-//    reveal_TableQuantity();
-//    var h := hash(insert_ticket.input.key) as nat;
-//    var spre := s.table[..h];
-//    var sat := s.table[h..h+1];
-//    var spost := s.table[h+1..];
-//    assert spre + (sat + spost) == s.table;
-//    var tat := t.table[h..h+1];
-//    assert spre + (tat + spost) == t.table;
-//    var oldAtCount := if sat[0].value.entry.Full? then 1 else 0;
-//    assert TableQuantity(sat) == oldAtCount;
-//    assert TableQuantity(tat) == oldAtCount+1;
-//    calc {
-//      TableQuantity(s.table) + 1;
-//        { TableQuantityDistributive(spre, sat+spost); }
-//      TableQuantity(spre) + TableQuantity(sat+spost) + 1;
-//        { TableQuantityDistributive(sat, spost); }
-//      TableQuantity(spre) + TableQuantity(sat) + TableQuantity(spost) + 1;
-//      TableQuantity(spre) + oldAtCount + TableQuantity(spost) + 1;
-//      TableQuantity(spre) + TableQuantity(tat) + TableQuantity(spost);
-//        { TableQuantityDistributive(tat, spost); }
-//      TableQuantity(spre) + TableQuantity(tat+spost);
-//        { TableQuantityDistributive(spre, tat+spost); }
-//      TableQuantity(t.table);
-//    }
-//
-//    var s' :| TableQuantityInv(add(s, s'));
-//
-//    calc {
-//      TableQuantity(add(s, s').table) + add(s, s').insert_capacity;
-//        { ResourceTableQuantityDistributive(s, s'); }
-//      TableQuantity(s.table) + TableQuantity(s'.table) + s.insert_capacity + s'.insert_capacity;
-//      TableQuantity(t.table) + TableQuantity(s'.table) + t.insert_capacity + s'.insert_capacity;
-//        { ResourceTableQuantityDistributive(t, s'); }
-//      TableQuantity(add(t, s').table) + add(t, s').insert_capacity;
-//    }
-//
-//    assert TableQuantityInv(add(t, s'));
+    ResourceTableQuantityDistributive(s, s');
+    TableQuantity_replace1(s.table, t.table, h);
+    ResourceTableQuantityDistributive(t, s');
   }
 
   predicate ProcessInsertTicketFail(s: Variables, s': Variables, insert_ticket: Ticket)
@@ -693,7 +672,7 @@ module ShardedHashTable refines ShardedStateMachine {
     }
   }
 
-  predicate Update(s: Variables, s': Variables) {
+  predicate Next(s: Variables, s': Variables) {
     exists step :: UpdateStep(s, s', step)
   }
 
@@ -733,6 +712,8 @@ module ShardedHashTable refines ShardedStateMachine {
   //requires Valid(add(x, z))
   ensures Update(add(x, z), add(y, z))
   {
+  assert Update(x, y);
+  assert Valid(add(x, z));
     var step :| UpdateStep(x, y, step);
     assert UpdateStep(add(x, z), add(y, z), step);
   }

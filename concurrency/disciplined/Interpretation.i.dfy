@@ -9,7 +9,7 @@ module SummaryMonoid refines MonoidMap {
   import opened Options
   import opened Maps
   import MapIfc
-  import HT = ShardedHashTable
+  import H = ShardedHashTable
   import Multisets
   import MultisetLemmas
 
