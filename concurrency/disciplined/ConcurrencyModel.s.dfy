@@ -87,10 +87,10 @@ abstract module ShardedStateMachine {
   requires Init(s)
   ensures Valid(s)
 
-  lemma NextPreservesValid(s: Variables, t: Variables)
-  requires Next(s, t)
+  lemma NextPreservesValid(s: Variables, s': Variables)
+  requires Next(s, s')
   requires Valid(s)
-  ensures Valid(t)
+  ensures Valid(s')
 
   // IO interface -- explains how your SSM interacts with user-visible IO events.
 

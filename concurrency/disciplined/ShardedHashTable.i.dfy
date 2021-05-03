@@ -23,9 +23,13 @@ module MonoidalSM {
 module ShardedHashTable refines ShardedStateMachine {
   import opened NativeTypes
   import opened Options
+  import MapIfc
+
+//////////////////////////////////////////////////////////////////////////////
+// Data structure definitions & transitions
+//////////////////////////////////////////////////////////////////////////////
 
   import opened KeyValueType
-  import MapIfc
 
   datatype Ticket =
     | Ticket(rid: int, input: MapIfc.Input)
@@ -89,7 +93,7 @@ module ShardedHashTable refines ShardedStateMachine {
           tickets: multiset<Ticket>,
           stubs: multiset<Stub>)
       | Fail
-        // The UpdateStep disjunct is complex, but we'll show that as long
+        // The NextStep disjunct is complex, but we'll show that as long
         // as the impl obeys them, it'll never land in Fail.
         // The state is here to "leave slack" in the defenition of add(),
         // so that we can push off the proof that we never end up failing
@@ -272,31 +276,981 @@ module ShardedHashTable refines ShardedStateMachine {
               KV(key, insert_ticket.input.value),key)))]))
   }
 
-  lemma TableQuantity_replace1(s: seq<Option<Info>>, t: seq<Option<Info>>, i: int)
-  requires 0 <= i < |s| == |t|
-  requires forall j | 0 <= j < |s| :: i != j ==> s[j] == t[j]
-  ensures TableQuantity(t) == TableQuantity(s) + InfoQuantity(t[i]) - InfoQuantity(s[i])
+//////////////////////////////////////////////////////////////////////////////
+// global-level Invariant proof
+//////////////////////////////////////////////////////////////////////////////
+
+  ////// Invariant
+
+  predicate Complete(table: seq<Option<Info>>)
+  {
+    && (forall i | 0 <= i < |table| :: table[i].Some?)
+  }
+
+  // unwrapped_index
+  function adjust(i: int, root: int) : int
+  requires 0 <= i < FixedSize()
+  requires 0 <= root <= FixedSize()
+  {
+    if i < root then FixedSize() + i else i
+  }
+
+  // Keys are unique, although we don't count entries being removed
+  predicate KeysUnique(table: seq<Option<Info>>)
+  requires Complete(table)
+  {
+    forall i, j | 0 <= i < |table| && 0 <= j < |table| && i != j
+      && table[i].value.entry.Full? && table[j].value.entry.Full?
+      && !table[i].value.state.RemoveTidying? && !table[j].value.state.RemoveTidying?
+        :: table[i].value.entry.kv.key != table[j].value.entry.kv.key
+  }
+
+  predicate ValidHashInSlot(table: seq<Option<Info>>, e: int, i: int)
+  requires |table| == FixedSize()
+  requires Complete(table)
+  requires 0 <= e < |table|
+  requires 0 <= i < |table|
+  {
+    // No matter which empty pivot cell 'e' we choose, every entry is 'downstream'
+    // of the place that it hashes to.
+    // Likewise for insert pointers and others
+
+    table[e].value.entry.Empty? && !table[e].value.state.RemoveTidying? ==> (
+      && (table[i].value.entry.Full? ==> (
+        var h := hash(table[i].value.entry.kv.key) as int;
+        && adjust(h, e+1) <= adjust(i, e+1)
+      ))
+      && (table[i].value.state.Inserting? ==> (
+        var h := hash(table[i].value.state.kv.key) as int;
+        && adjust(h, e+1) <= adjust(i, e+1)
+      ))
+      && ((table[i].value.state.Removing? || table[i].value.state.Querying?) ==> (
+        var h := hash(table[i].value.state.key) as int;
+        && adjust(h, e+1) <= adjust(i, e+1)
+      ))
+    )
+  }
+
+  // 'Robin Hood' order
+  // It's not enough to say that hash(entry[i]) <= hash(entry[i+1])
+  // because of wraparound. We do a cyclic comparison 'rooted' at an
+  // arbitrary empty element, given by e.
+  predicate ValidHashOrdering(table: seq<Option<Info>>, e: int, j: int, k: int)
+  requires |table| == FixedSize()
+  requires Complete(table)
+  requires 0 <= e < |table|
+  requires 0 <= j < |table|
+  requires 0 <= k < |table|
+  {
+    (table[e].value.entry.Empty? && !table[e].value.state.RemoveTidying? && table[j].value.entry.Full? && adjust(j, e + 1) < adjust(k, e + 1) ==> (
+      var hj := hash(table[j].value.entry.kv.key) as int;
+
+      && (table[k].value.entry.Full? ==> (
+        var hk := hash(table[k].value.entry.kv.key) as int;
+        && adjust(hj, e + 1) <= adjust(hk, e + 1)
+      ))
+
+      // If entry 'k' has an 'Inserting' action on it, then that action must have
+      // gotten past entry 'j'.
+      && (table[k].value.state.Inserting? ==> (
+        var ha := hash(table[k].value.state.kv.key) as int;
+        && adjust(hj, e+1) <= adjust(ha, e+1)
+      ))
+
+      && ((table[k].value.state.Removing? || table[k].value.state.Querying?) ==> (
+        var ha := hash(table[k].value.state.key) as int;
+        && adjust(hj, e+1) <= adjust(ha, e+1)
+      ))
+    ))
+  }
+
+  predicate ActionNotPastKey(table: seq<Option<Info>>, e: int, j: int, k: int)
+  requires |table| == FixedSize()
+  requires Complete(table)
+  requires 0 <= e < |table|
+  requires 0 <= j < |table|
+  requires 0 <= k < |table|
+  {
+    (table[e].value.entry.Empty? && !table[e].value.state.RemoveTidying? && table[j].value.entry.Full? && adjust(j, e + 1) < adjust(k, e + 1) ==> (
+      // If entry 'k' has an 'Inserting' action on it, then that action must not have
+      // gotten past entry 'j'.
+      && (table[k].value.state.Inserting? ==> (
+        table[k].value.state.kv.key != table[j].value.entry.kv.key
+      ))
+      && ((table[k].value.state.Removing? || table[k].value.state.Querying?) ==> (
+        table[k].value.state.key != table[j].value.entry.kv.key
+      ))
+    ))
+  }
+
+  /*predicate ExistsEmptyEntry(table: seq<Option<Info>>)
+  {
+    exists e :: 0 <= e < |table| && table[e].Some? && table[e].value.entry.Empty?
+        && !table[e].value.state.RemoveTidying?
+  }*/
+
+  predicate InvTable(table: seq<Option<Info>>)
+  {
+    && |table| == FixedSize()
+    && Complete(table)
+    //&& ExistsEmptyEntry(table)
+    && KeysUnique(table)
+    && (forall e, i | 0 <= e < |table| && 0 <= i < |table|
+        :: ValidHashInSlot(table, e, i))
+    && (forall e, j, k | 0 <= e < |table| && 0 <= j < |table| && 0 <= k < |table|
+        :: ValidHashOrdering(table, e, j, k))
+    && (forall e, j, k | 0 <= e < |table| && 0 <= j < |table| && 0 <= k < |table|
+        :: ActionNotPastKey(table, e, j, k))
+  }
+
+  predicate Inv(s: Variables)
+  {
+    && s.Variables?
+    && InvTable(s.table)
+    && TableQuantityInv(s)
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Proof that Init && []Next maintains Inv
+  //////////////////////////////////////////////////////////////////////////////
+
+  lemma TableQuantity_replace1(s: seq<Option<Info>>, s': seq<Option<Info>>, i: int)
+  requires 0 <= i < |s| == |s'|
+  requires forall j | 0 <= j < |s| :: i != j ==> s[j] == s'[j]
+  ensures TableQuantity(s') == TableQuantity(s) + InfoQuantity(s'[i]) - InfoQuantity(s[i])
   {
     reveal_TableQuantity();
     if i == |s| - 1 {
-      assert s[..|s|-1] == t[..|s|-1];
+      assert s[..|s|-1] == s'[..|s|-1];
     } else {
-      TableQuantity_replace1(s[..|s|-1], t[..|t|-1], i);
+      TableQuantity_replace1(s[..|s|-1], s'[..|s'|-1], i);
     }
   }
 
-  lemma ProcessInsertTicketPreservesValid(s: Variables, t: Variables, insert_ticket: Ticket)
-    requires ProcessInsertTicket(s, t, insert_ticket)
-    requires Valid(s)
-    ensures Valid(t)
+  lemma TableQuantity_replace2(s: seq<Option<Info>>, s': seq<Option<Info>>, i: int)
+  requires 0 <= i < |s| == |s'|
+  requires |s| > 1
+  requires
+      var i' := (if i == |s| - 1 then 0 else i + 1);
+      forall j | 0 <= j < |s| :: i != j && i' != j ==> s[j] == s'[j]
+  ensures
+      var i' := (if i == |s| - 1 then 0 else i + 1);
+    TableQuantity(s') == TableQuantity(s)
+        + InfoQuantity(s'[i]) - InfoQuantity(s[i])
+        + InfoQuantity(s'[i']) - InfoQuantity(s[i'])
   {
-    var h := hash(insert_ticket.input.key) as int;
-    var s' :| TableQuantityInv(add(s, s'));
-
-    ResourceTableQuantityDistributive(s, s');
-    TableQuantity_replace1(s.table, t.table, h);
-    ResourceTableQuantityDistributive(t, s');
+    var s0 := s[i := s'[i]];
+    TableQuantity_replace1(s, s0, i);
+    var i' := (if i == |s| - 1 then 0 else i + 1);
+    TableQuantity_replace1(s0, s', i');
   }
+
+  function {:opaque} get_empty_cell(table: seq<Option<Info>>) : (e: int)
+  requires InvTable(table)
+  requires TableQuantity(table) < |table|
+  ensures 0 <= e < |table| && table[e].Some? && table[e].value.entry.Empty?
+        && !table[e].value.state.RemoveTidying?
+  {
+    assert exists e' :: 0 <= e' < |table| && table[e'].Some? && table[e'].value.entry.Empty?
+        && !table[e'].value.state.RemoveTidying? by {
+      var t := get_empty_cell_other_than_insertion_cell_table(table);
+    }
+    var e' :| 0 <= e' < |table| && table[e'].Some? && table[e'].value.entry.Empty?
+        && !table[e'].value.state.RemoveTidying?;
+    e'
+  }
+
+  lemma get_empty_cell_other_than_insertion_cell_table(table: seq<Option<Info>>)
+  returns (e: int)
+  requires Complete(table)
+  requires TableQuantity(table) < |table|
+  ensures 0 <= e < |table| && table[e].Some? && table[e].value.entry.Empty?
+        && !table[e].value.state.RemoveTidying?
+        && !table[e].value.state.Inserting?
+  {
+    reveal_TableQuantity();
+    e := |table| - 1;
+    if table[e].value.entry.Empty?
+        && !table[e].value.state.RemoveTidying?
+        && !table[e].value.state.Inserting? {
+      return;
+    } else {
+      e := get_empty_cell_other_than_insertion_cell_table(table[..|table| - 1]);
+    }
+  }
+
+  lemma get_empty_cell_other_than_insertion_cell(s: Variables)
+  returns (e: int)
+  requires Inv(s)
+  ensures 0 <= e < |s.table| && s.table[e].Some? && s.table[e].value.entry.Empty?
+        && !s.table[e].value.state.RemoveTidying?
+        && !s.table[e].value.state.Inserting?
+  {
+    e := get_empty_cell_other_than_insertion_cell_table(s.table);
+  }
+
+  lemma ProcessInsertTicket_PreservesInv(s: Variables, s': Variables, insert_ticket: Ticket)
+  requires Inv(s)
+  requires ProcessInsertTicket(s, s', insert_ticket)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+      assert ValidHashInSlot(s.table, e, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ActionNotPastKey(s'.table, e, j, k)
+    {
+      assert ActionNotPastKey(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+    }
+
+    var h := hash(insert_ticket.input.key) as int;
+    TableQuantity_replace1(s.table, s'.table, h);
+  }
+
+  lemma InsertSkip_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires InsertSkip(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
+    forall e, i | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+
+      var i' := if i > 0 then i - 1 else |s.table| - 1;
+      assert ValidHashInSlot(s.table, e, i');
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+      assert ValidHashInSlot(s.table, e, k);
+
+      //var k' := if k > 0 then k - 1 else |s.table| - 1;
+
+      assert ValidHashInSlot(s.table, e, pos);
+      assert ValidHashOrdering(s.table, e, j, pos);
+      assert ValidHashOrdering(s.table, e, pos, k);
+
+      /*if j == pos && (pos == FixedSize() - 1 ==> k == 0) && (pos < FixedSize() - 1 ==> k == j + 1) {
+        assert ValidHashOrdering(s'.table, e, j, k);
+      } else if j == pos {
+        assert ValidHashOrdering(s'.table, e, j, k);
+      } else if (pos == FixedSize() - 1 ==> k == 0) && (pos < FixedSize() - 1 ==> k == pos + 1) {
+        if s'.table[e].value.entry.Empty? && s'.table[j].value.entry.Full? && adjust(j, e) <= adjust(k, e) && s'.table[k].value.state.Inserting? {
+          if j == k {
+            assert ValidHashOrdering(s'.table, e, j, k);
+          } else {
+            assert hash(s.table[j].value.entry.kv.key)
+                == hash(s'.table[j].value.entry.kv.key);
+            assert hash(s.table[pos].value.state.kv.key)
+                == hash(s'.table[k].value.state.kv.key);
+
+            assert s.table[e].value.entry.Empty?;
+            assert s.table[j].value.entry.Full?;
+            assert adjust(j, e) <= adjust(pos, e);
+            assert s.table[pos].value.state.Inserting?;
+
+            assert ValidHashOrdering(s.table, e, j, pos);
+            assert ValidHashOrdering(s'.table, e, j, k);
+          }
+        }
+      } else {
+        assert ValidHashOrdering(s'.table, e, j, k);
+      }*/
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ActionNotPastKey(s'.table, e, j, k)
+    {
+      assert ActionNotPastKey(s.table, e, j, pos);
+
+      assert ActionNotPastKey(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+    }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
+  }
+
+  lemma InsertSwap_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires InsertSwap(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s.table[i].value.entry.Empty? ==> s'.table[i].value.entry.Empty?;
+    forall e, i | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+
+      var i' := if i > 0 then i - 1 else |s.table| - 1;
+      assert ValidHashInSlot(s.table, e, i');
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+      assert ValidHashInSlot(s.table, e, k);
+
+      var k' := if k > 0 then k - 1 else |s.table| - 1;
+
+      assert ValidHashInSlot(s.table, e, pos);
+      assert ValidHashOrdering(s.table, e, j, pos);
+      assert ValidHashOrdering(s.table, e, pos, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ActionNotPastKey(s'.table, e, j, k)
+    {
+      assert ActionNotPastKey(s.table, e, j, pos);
+
+      assert ActionNotPastKey(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+
+      assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, pos);
+      assert ValidHashOrdering(s.table, e, j, pos);
+    }
+
+    forall i | 0 <= i < |s.table| && s.table[i].value.entry.Full?
+    ensures s.table[i].value.entry.kv.key != s.table[pos].value.state.kv.key
+    {
+      //var e :| 0 <= e < |s.table| && s.table[e].value.entry.Empty?
+      //  && !s.table[e].value.state.RemoveTidying?;
+      var e := get_empty_cell_other_than_insertion_cell(s);
+      assert ActionNotPastKey(s.table, e, i, pos);
+      //assert ValidHashInSlot(s.table, e, i);
+      assert ValidHashInSlot(s.table, e, pos);
+      assert ValidHashOrdering(s.table, e, pos, i);
+      //assert ValidHashOrdering(s.table, e, i, pos);
+    }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
+  }
+
+  lemma InsertDone_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires InsertDone(s, s', pos)
+  ensures Inv(s')
+  {
+    forall e, i | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+      assert ValidHashInSlot(s.table, e, k);
+      //assert ValidHashInSlot(s.table, e, pos);
+      //assert ValidHashOrdering(s.table, e, j, pos);
+      //assert ValidHashOrdering(s.table, e, pos, k);
+
+      //assert ActionNotPastKey(s.table, e, j, pos);
+
+      //assert ActionNotPastKey(s.table, pos, j, k);
+      //assert ActionNotPastKey(s.table, pos, k, j);
+
+      //assert ValidHashOrdering(s.table, pos, j, k);
+      //assert ValidHashOrdering(s.table, pos, k, j);
+
+      //assert ValidHashInSlot(s.table, pos, j);
+      assert ValidHashInSlot(s.table, pos, k);
+    }
+
+    /*assert ExistsEmptyEntry(s'.table) by {
+      var e' := get_empty_cell_other_than_insertion_cell(s);
+      assert 0 <= e' < |s'.table| && s'.table[e'].Some? && s'.table[e'].value.entry.Empty?
+            && !s'.table[e'].value.state.RemoveTidying?;
+    }*/
+
+    forall i | 0 <= i < |s.table| && s.table[i].value.entry.Full?
+    ensures s.table[i].value.entry.kv.key != s.table[pos].value.state.kv.key
+    {
+      //var e :| 0 <= e < |s.table| && s'.table[e].value.entry.Empty?
+        //&& !s.table[e].value.state.RemoveTidying?;
+      var e := get_empty_cell_other_than_insertion_cell(s);
+      assert ActionNotPastKey(s.table, e, i, pos);
+      //assert ActionNotPastKey(s.table, e, pos, i);
+      assert ValidHashInSlot(s.table, e, pos);
+      //assert ValidHashInSlot(s.table, e, i);
+      //assert ValidHashOrdering(s.table, e, pos, i);
+      //assert ValidHashOrdering(s.table, e, i, pos);
+
+      //assert ActionNotPastKey(s.table, pos, i, pos);
+      //assert ActionNotPastKey(s.table, pos, pos, i);
+      //assert ValidHashInSlot(s.table, pos, pos);
+      assert ValidHashInSlot(s.table, pos, i);
+      //assert ValidHashOrdering(s.table, pos, pos, i);
+      //assert ValidHashOrdering(s.table, pos, i, pos);
+    }
+
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ActionNotPastKey(s'.table, e, j, k)
+    {
+      assert ActionNotPastKey(s.table, e, j, k);
+
+      //assert ActionNotPastKey(s.table, e, j, pos);
+      //assert ActionNotPastKey(s.table, e, k, pos);
+      //assert ActionNotPastKey(s.table, e, pos, j);
+      //assert ActionNotPastKey(s.table, e, pos, k);
+      //assert ActionNotPastKey(s.table, e, j, k);
+      //assert ActionNotPastKey(s.table, e, k, j);
+      //assert ValidHashInSlot(s.table, e, pos);
+      assert ValidHashInSlot(s.table, e, j);
+      //assert ValidHashInSlot(s.table, e, k);
+      //assert ValidHashOrdering(s.table, e, pos, j);
+      //assert ValidHashOrdering(s.table, e, j, pos);
+      //assert ValidHashOrdering(s.table, e, pos, k);
+      //assert ValidHashOrdering(s.table, e, k, pos);
+      //assert ValidHashOrdering(s.table, e, j, k);
+      //assert ValidHashOrdering(s.table, e, k, j);
+
+      //assert ActionNotPastKey(s.table, pos, j, pos);
+      //assert ActionNotPastKey(s.table, pos, pos, j);
+      //assert ActionNotPastKey(s.table, pos, k, pos);
+      //assert ActionNotPastKey(s.table, pos, pos, k);
+      //assert ActionNotPastKey(s.table, pos, k, j);
+      //assert ActionNotPastKey(s.table, pos, j, k);
+      //assert ValidHashInSlot(s.table, pos, pos);
+      //assert ValidHashInSlot(s.table, pos, j);
+      assert ValidHashInSlot(s.table, pos, k);
+      //assert ValidHashOrdering(s.table, pos, pos, j);
+      //assert ValidHashOrdering(s.table, pos, j, pos);
+      //assert ValidHashOrdering(s.table, pos, pos, k);
+      //assert ValidHashOrdering(s.table, pos, k, pos);
+      //assert ValidHashOrdering(s.table, pos, j, k);
+      //assert ValidHashOrdering(s.table, pos, k, j);
+
+    }
+
+    TableQuantity_replace1(s.table, s'.table, pos);
+  }
+
+  lemma InsertUpdate_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires InsertUpdate(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s.table[i].value.entry.Empty? ==> s'.table[i].value.entry.Empty?;
+
+    forall e, i | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ActionNotPastKey(s'.table, e, j, k)
+    {
+      assert ActionNotPastKey(s.table, e, j, k);
+    }
+
+    TableQuantity_replace1(s.table, s'.table, pos);
+  }
+
+  lemma ProcessQueryTicket_PreservesInv(s: Variables, s': Variables, query_ticket: Ticket)
+  requires Inv(s)
+  requires ProcessQueryTicket(s, s', query_ticket)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+      assert ValidHashInSlot(s.table, e, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ActionNotPastKey(s'.table, e, j, k)
+    {
+      assert ActionNotPastKey(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+    }
+
+    var h := hash(query_ticket.input.key) as int;
+    TableQuantity_replace1(s.table, s'.table, h);
+  }
+
+  lemma QuerySkip_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires QuerySkip(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+
+      var i' := if i > 0 then i - 1 else |s.table| - 1;
+      assert ValidHashInSlot(s.table, e, i');
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+      assert ValidHashInSlot(s.table, e, k);
+      assert ValidHashInSlot(s.table, e, pos);
+      assert ValidHashOrdering(s.table, e, j, pos);
+      assert ValidHashOrdering(s.table, e, pos, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ActionNotPastKey(s'.table, e, j, k)
+    {
+      assert ActionNotPastKey(s.table, e, j, pos);
+      assert ActionNotPastKey(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+    }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
+  }
+
+  lemma QueryDone_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires QueryDone(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ActionNotPastKey(s'.table, e, j, k)
+    {
+      assert ActionNotPastKey(s.table, e, j, k);
+    }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
+  }
+
+  lemma QueryNotFound_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires QueryNotFound(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ActionNotPastKey(s'.table, e, j, k)
+    {
+      assert ActionNotPastKey(s.table, e, j, k);
+    }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
+  }
+
+  lemma ProcessRemoveTicket_PreservesInv(s: Variables, s': Variables, remove_ticket: Ticket)
+  requires Inv(s)
+  requires ProcessRemoveTicket(s, s', remove_ticket)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+      assert ValidHashInSlot(s.table, e, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ActionNotPastKey(s'.table, e, j, k)
+    {
+      assert ActionNotPastKey(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+    }
+
+    var h := hash(remove_ticket.input.key) as int;
+    TableQuantity_replace1(s.table, s'.table, h);
+  }
+
+  lemma RemoveSkip_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires RemoveSkip(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+
+      var i' := if i > 0 then i - 1 else |s.table| - 1;
+      assert ValidHashInSlot(s.table, e, i');
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+      assert ValidHashInSlot(s.table, e, k);
+      assert ValidHashInSlot(s.table, e, pos);
+      assert ValidHashOrdering(s.table, e, j, pos);
+      assert ValidHashOrdering(s.table, e, pos, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ActionNotPastKey(s'.table, e, j, k)
+    {
+      assert ActionNotPastKey(s.table, e, j, pos);
+      assert ActionNotPastKey(s.table, e, j, k);
+      assert ValidHashInSlot(s.table, e, j);
+    }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
+  }
+
+  lemma RemoveFoundIt_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires RemoveFoundIt(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: i != pos ==> s'.table[i].value.entry == s.table[i].value.entry;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ActionNotPastKey(s'.table, e, j, k)
+    {
+      assert ActionNotPastKey(s.table, e, j, k);
+    }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
+  }
+
+  lemma RemoveNotFound_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires RemoveNotFound(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: i != pos ==> s'.table[i].value.entry == s.table[i].value.entry;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ActionNotPastKey(s'.table, e, j, k)
+    {
+      assert ActionNotPastKey(s.table, e, j, k);
+    }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
+  }
+
+  lemma RemoveTidy_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires RemoveTidy(s, s', pos)
+  ensures Inv(s')
+  {
+    /*assert ExistsEmptyEntry(s'.table) by {
+      var e :| 0 <= e < |s.table| && s.table[e].Some? && s.table[e].value.entry.Empty?
+        && !s.table[e].value.state.RemoveTidying?;
+      assert 0 <= e < |s'.table| && s'.table[e].Some? && s'.table[e].value.entry.Empty?
+        && !s'.table[e].value.state.RemoveTidying?;
+    }*/
+
+    var pos' := if pos < |s.table| - 1 then pos + 1 else 0;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      assert ValidHashInSlot(s.table, e, i);
+      assert ValidHashInSlot(s.table, e, pos');
+      //assert ValidHashOrdering(s.table, e, pos, pos');
+      /*if i == pos {
+        if s'.table[e].value.entry.Empty? && !s'.table[e].value.state.RemoveTidying?
+            && s'.table[i].value.entry.Full? && s.table[pos'].value.entry.Full? {
+          var h := hash(s'.table[i].value.entry.kv.key) as int;
+          assert h == hash(s.table[pos'].value.entry.kv.key) as int;
+
+          assert e < h <= pos'
+           || h <= pos' < e
+           || pos' < e < h;
+
+          assert h != pos';
+
+          assert e < h <= pos
+           || h <= pos < e
+           || pos < e < h;
+
+          assert ValidHashInSlot(s'.table, e, i);
+        }
+
+        assert ValidHashInSlot(s'.table, e, i);
+      } else {
+        assert ValidHashInSlot(s'.table, e, i);
+      }*/
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      assert ValidHashOrdering(s.table, e, j, k);
+      assert ValidHashOrdering(s.table, e, pos', k);
+      assert ValidHashOrdering(s.table, e, j, pos');
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ActionNotPastKey(s'.table, e, j, k)
+    {
+      assert ActionNotPastKey(s.table, e, j, k);
+      assert ActionNotPastKey(s.table, e, pos', k);
+      assert ActionNotPastKey(s.table, e, j, pos');
+    }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
+  }
+
+  lemma RemoveDone_PreservesInv(s: Variables, s': Variables, pos: nat)
+  requires Inv(s)
+  requires RemoveDone(s, s', pos)
+  ensures Inv(s')
+  {
+    assert forall i | 0 <= i < |s'.table| :: s'.table[i].value.entry == s.table[i].value.entry;
+
+    var pos' := if pos < |s.table| - 1 then pos + 1 else 0;
+
+    assert s'.table[pos].value.entry.Empty?;
+
+    forall i, e | 0 <= i < |s'.table| && 0 <= e < |s'.table|
+    ensures ValidHashInSlot(s'.table, e, i)
+    {
+      var e' := get_empty_cell(s.table);
+      
+      assert ValidHashInSlot(s.table, e, i);
+
+      assert ValidHashInSlot(s.table, pos', i);
+      assert ValidHashOrdering(s.table, e', pos', i);
+
+      assert ValidHashInSlot(s.table, e', i);
+
+      assert ValidHashInSlot(s.table, i, e');
+
+      //assert ValidHashInSlot(s.table, e', pos');
+      //assert ValidHashInSlot(s.table, pos', e');
+
+      //assert ValidHashInSlot(s.table, i, e);
+      //assert ValidHashOrdering(s.table, e', i, pos');
+      //assert ValidHashInSlot(s.table, pos, i);
+      //assert ValidHashOrdering(s.table, e', pos, i);
+      //assert ValidHashOrdering(s.table, e', i, pos);
+
+      /*var e1 := if e < |s.table| - 1 then e + 1 else 0;
+ 
+      assert ValidHashInSlot(s.table, e1, i);
+
+      assert ValidHashInSlot(s.table, pos', i);
+      assert ValidHashOrdering(s.table, e1, pos', i);
+
+      assert ValidHashInSlot(s.table, e1, i);
+
+      assert ValidHashInSlot(s.table, i, e1);
+
+      assert ValidHashInSlot(s.table, e1, pos');
+      assert ValidHashInSlot(s.table, pos', e1);
+
+      assert ValidHashInSlot(s.table, i, e);
+      assert ValidHashOrdering(s.table, e1, i, pos');
+      assert ValidHashInSlot(s.table, pos, i);
+      assert ValidHashOrdering(s.table, e1, pos, i);
+      assert ValidHashOrdering(s.table, e1, i, pos);
+
+      assert ValidHashOrdering(s.table, e1, i, e);
+      assert ValidHashOrdering(s.table, e1, e, i);
+      assert ValidHashInSlot(s.table, e1, i);
+
+      assert ValidHashOrdering(s.table, e', e, e1);
+
+      assert ValidHashOrdering(s.table, e', e1, i);
+      assert ValidHashInSlot(s.table, e', e1);
+
+      assert ValidHashInSlot(s.table, e, e);
+      assert ValidHashInSlot(s.table, e', e');
+      assert ValidHashInSlot(s.table, e1, e1);
+
+      assert ValidHashInSlot(s.table, e', i);
+
+      assert ValidHashOrdering(s.table, e', e, i);*/
+
+
+      /*if e == pos {
+        if i == pos' {
+          assert ValidHashInSlot(s'.table, e, i);
+        } else {
+          if s.table[pos'].value.entry.Full? {
+            if adjust(i, pos) < adjust(e', pos) {
+              assert ValidHashInSlot(s'.table, e, i);
+            } else if i == e' {
+              assert s.table[e1].value.entry.Full?  ==>
+                  hash(s.table[e1].value.entry.kv.key) as int
+                == e1;
+              
+              if s.table[e1].value.entry.Full? {
+                if e == e' {
+                  assert ValidHashInSlot(s'.table, e, i);
+                } else {
+                  assert ValidHashInSlot(s'.table, e, i);
+                }
+              } else {
+                assert ValidHashInSlot(s'.table, e, i);
+              }
+            } else {
+              assert ValidHashInSlot(s'.table, e, i);
+            }
+          } else {
+            assert ValidHashInSlot(s'.table, e, i);
+          }
+        }
+      } else {
+        assert ValidHashInSlot(s'.table, e, i);
+      }*/
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ValidHashOrdering(s'.table, e, j, k)
+    {
+      var e' := get_empty_cell(s.table);
+
+      assert ValidHashOrdering(s.table, e, j, k);
+
+      assert ValidHashOrdering(s.table, e', j, k);
+      //assert ValidHashOrdering(s.table, e', k, j);
+
+      assert ValidHashInSlot(s.table, pos', j);
+      assert ValidHashOrdering(s.table, e', pos', j);
+      //assert ValidHashInSlot(s.table, e', j);
+
+      //assert ValidHashInSlot(s.table, pos', k);
+      //assert ValidHashOrdering(s.table, e', pos', k);
+      assert ValidHashInSlot(s.table, e', k);
+    }
+    forall e, j, k | 0 <= e < |s'.table| && 0 <= j < |s'.table| && 0 <= k < |s'.table|
+    ensures ActionNotPastKey(s'.table, e, j, k)
+    {
+      var e' := get_empty_cell(s.table);
+
+      assert ActionNotPastKey(s.table, e, j, k);
+
+      //assert ValidHashOrdering(s.table, e, j, k);
+      //assert ValidHashOrdering(s.table, e', j, k);
+      assert ValidHashInSlot(s.table, pos', j);
+      assert ValidHashOrdering(s.table, e', pos', j);
+      assert ValidHashInSlot(s.table, e', k);
+
+      //assert ActionNotPastKey(s.table, e, j, k);
+      assert ActionNotPastKey(s.table, e', j, k);
+      //assert ActionNotPastKey(s.table, e', pos', j);
+    }
+
+    TableQuantity_replace2(s.table, s'.table, pos);
+  }
+
+  lemma NextStep_PreservesInv(s: Variables, s': Variables, step: Step)
+  requires Inv(s)
+  requires NextStep(s, s', step)
+  ensures Inv(s')
+  {
+    match step {
+      case ProcessInsertTicketStep(insert_ticket) => ProcessInsertTicket_PreservesInv(s, s', insert_ticket);
+      case InsertSkipStep(pos) => InsertSkip_PreservesInv(s, s', pos);
+      case InsertSwapStep(pos) => InsertSwap_PreservesInv(s, s', pos);
+      case InsertDoneStep(pos) => InsertDone_PreservesInv(s, s', pos);
+      case InsertUpdateStep(pos) => InsertUpdate_PreservesInv(s, s', pos);
+
+      case ProcessRemoveTicketStep(remove_ticket) => ProcessRemoveTicket_PreservesInv(s, s', remove_ticket);
+      case RemoveSkipStep(pos) => RemoveSkip_PreservesInv(s, s', pos);
+      case RemoveFoundItStep(pos) => RemoveFoundIt_PreservesInv(s, s', pos);
+      case RemoveNotFoundStep(pos) => RemoveNotFound_PreservesInv(s, s', pos);
+      case RemoveTidyStep(pos) => RemoveTidy_PreservesInv(s, s', pos);
+      case RemoveDoneStep(pos) => RemoveDone_PreservesInv(s, s', pos);
+
+      case ProcessQueryTicketStep(query_ticket) => ProcessQueryTicket_PreservesInv(s, s', query_ticket);
+      case QuerySkipStep(pos) => QuerySkip_PreservesInv(s, s', pos);
+      case QueryDoneStep(pos) => QueryDone_PreservesInv(s, s', pos);
+      case QueryNotFoundStep(pos) => QueryNotFound_PreservesInv(s, s', pos);
+    }
+  }
+
+
+  lemma Update_PreservesInv(s: Variables, s': Variables)
+  requires Inv(s)
+  requires Next(s, s')
+  ensures Inv(s')
+  {
+    var step :| NextStep(s, s', step);
+    NextStep_PreservesInv(s, s', step);
+  }
+
+//////////////////////////////////////////////////////////////////////////////
+// fragment-level validity defined wrt Inv
+//////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////
+// Old crap we need to organize
+//////////////////////////////////////////////////////////////////////////////
 
   predicate ProcessInsertTicketFail(s: Variables, s': Variables, insert_ticket: Ticket)
   {
@@ -649,7 +1603,7 @@ module ShardedHashTable refines ShardedStateMachine {
        })
   }
 
-  predicate UpdateStep(s: Variables, s': Variables, step: Step)
+  predicate NextStep(s: Variables, s': Variables, step: Step)
   {
     match step {
       case ProcessInsertTicketStep(insert_ticket) => ProcessInsertTicket(s, s', insert_ticket)
@@ -673,7 +1627,7 @@ module ShardedHashTable refines ShardedStateMachine {
   }
 
   predicate Next(s: Variables, s': Variables) {
-    exists step :: UpdateStep(s, s', step)
+    exists step :: NextStep(s, s', step)
   }
 
   function InfoQuantity(s: Option<Info>) : nat {
@@ -708,14 +1662,12 @@ module ShardedHashTable refines ShardedStateMachine {
   }
 
   lemma update_monotonic(x: Variables, y: Variables, z: Variables)
-  //requires Update(x, y)
+  //requires Next(x, y)
   //requires Valid(add(x, z))
-  ensures Update(add(x, z), add(y, z))
+  ensures Next(add(x, z), add(y, z))
   {
-  assert Update(x, y);
-  assert Valid(add(x, z));
-    var step :| UpdateStep(x, y, step);
-    assert UpdateStep(add(x, z), add(y, z), step);
+    var step :| NextStep(x, y, step);
+    assert NextStep(add(x, z), add(y, z), step);
   }
 
   function input_ticket(id: int, input: Ifc.Input) : Variables
@@ -820,81 +1772,28 @@ module ShardedHashTable refines ShardedStateMachine {
     assert y.table[..i] == y.table;
   }
 
-  lemma UpdatePreservesValid(s: Variables, t: Variables)
-  //requires Update(s, t)
+  lemma NextPreservesValid(s: Variables, s': Variables)
+  //requires Next(s, s')
   //requires Valid(s)
-  ensures Valid(t)
+  ensures Valid(s')
   {
-    var step :| UpdateStep(s, t, step);
-    match step {
-      case ProcessInsertTicketStep(insert_ticket) => {
-        ProcessInsertTicketPreservesValid(s, t, insert_ticket);
-      }
-      case _ => {
-        assume false;
-      }
-      // case InsertSkipStep(pos) => {
-      //   assert s.table == t.table;
-      // }
-      // case InsertSwapStep(pos) => {
-      //   assert s.table == t.table;
-      // }
-      // case InsertDoneStep(pos) => {
-      //   assert s.table == t.table;
-      // }
-      // case InsertUpdateStep(pos) => {
-      //   assert s.table == t.table;
-      // }
-      // case ProcessRemoveTicketStep(remove_ticket) => {
-      //   assert s.table == t.table;
-      // }
-      // case RemoveSkipStep(pos) => {
-      //   assert s.table == t.table;
-      // }
-      // case RemoveFoundItStep(pos) => {
-      //   assert s.table == t.table;
-      // }
-      // case RemoveNotFoundStep(pos) => {
-      //   assert s.table == t.table;
-      // }
-      // case RemoveTidyStep(pos) => {
-      //   assert s.table == t.table;
-      // }
-      // case RemoveDoneStep(pos) => {
-      //   assert s.table == t.table;
-      // }
-      // case ProcessQueryTicketStep(query_ticket) => {
-      //   assert s.table == t.table;
-      // }
-      // case QuerySkipStep(pos) => {
-      //   assert s.table == t.table;
-      // }
-      // case QueryDoneStep(pos) => {
-      //   assert s.table == t.table;
-      // }
-      // case QueryNotFoundStep(pos) => {
-      //   assert s.table == t.table;
-      // }
-    }
-    // var s' :| TableQuantityInv(add(s, s'));
-    // assert TableQuantityInv(add(t, s')) by { reveal_TableQuantity(); }
   }
 
   glinear method easy_transform(
       glinear b: Variables,
       ghost expected_out: Variables)
   returns (glinear c: Variables)
-  requires Update(b, expected_out)
+  requires Next(b, expected_out)
   ensures c == expected_out
   // travis promises to supply this
 
-  // Reduce boilerplate by letting caller provide explicit step, which triggers a quantifier for generic Update()
+  // Reduce boilerplate by letting caller provide explicit step, which triggers a quantifier for generic Next()
   glinear method easy_transform_step(
       glinear b: Variables,
       ghost expected_out: Variables,
       ghost step: Step)
   returns (glinear c: Variables)
-  requires UpdateStep(b, expected_out, step) 
+  requires NextStep(b, expected_out, step) 
   ensures c == expected_out
   {
     c := easy_transform(b, expected_out);
