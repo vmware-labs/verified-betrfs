@@ -31,7 +31,7 @@ module {:extern "Atomics"} Atomics {
       ghost identifiers_to_avoid: set<nat>)
   returns (ghost a: GhostAtomic<G>)
   requires inv(g)
-  ensures forall g1 :: atomic_inv(a, (), g1) <==> inv(g1)
+  ensures forall v, g1 :: atomic_inv(a, v, g1) <==> inv(g1)
   ensures a.identifier() !in identifiers_to_avoid
 
   glinear method {:extern} finish_atomic<V, G>(

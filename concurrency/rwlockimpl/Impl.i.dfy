@@ -37,7 +37,7 @@ module RWLockImpl {
       && this.loc.ExtLoc?
       && (forall v, g :: atomic_inv(this.exc, v, g) <==> exc_inv(v, g, this.loc))
       && (forall v, g :: atomic_inv(this.rc, v, g) <==> rc_inv(v, g, this.loc))
-      && (forall    g :: atomic_inv(this.central, (), g) <==> central_inv(g, this.loc))
+      && (forall v, g :: atomic_inv(this.central, v, g) <==> central_inv(g, this.loc))
       //&& (this.exc.identifier() != this.rc.identifier()) // strictly speaking we don't need this one
       && (this.exc.identifier() != this.central.identifier())
       && (this.rc.identifier() != this.central.identifier())
@@ -58,20 +58,15 @@ module RWLockImpl {
       invariant got_exc ==> pending_handle.loc() == this.loc
       decreases *
       {
-        var exc_atomic := this.exc;
-        var ret_value: bool;
-        ghost var orig_value: bool, new_value: bool;
-        glinear var g;
-        ret_value, orig_value, new_value, g :=
-            execute_atomic_compare_and_set_strong(exc_atomic, false, true);
-
-        ghost var ghostme := true;
-        if ghostme && ret_value {
-          RWLockExtToken.SEPCM.dispose(pending_handle);
-          g, pending_handle := RWLockExtToken.perform_exc_pending(g);
+        atomic_block ret_value := execute_atomic_compare_and_set_strong(this.exc, false, true) {
+          ghost_acquire g;
+          ghost var ghostme := true;
+          if ghostme && ret_value {
+            RWLockExtToken.SEPCM.dispose(pending_handle);
+            g, pending_handle := RWLockExtToken.perform_exc_pending(g);
+          }
+          ghost_release g;
         }
-
-        finish_atomic(exc_atomic, new_value, g);
 
         got_exc := ret_value;
       }
@@ -88,32 +83,21 @@ module RWLockImpl {
       invariant this.Inv()
       decreases *
       {
-        var rc_atomic := this.rc;
-        ghost var central_atomic := this.central;
+        atomic_block ret_value := execute_atomic_load(this.rc) {
+          ghost_acquire rc_g;
+          atomic_block _ := execute_atomic_noop(this.central) {
+            ghost_acquire central_g;
 
-        var ret_value;
-        ghost var orig_value, new_value;
-        glinear var rc_g;
+            if old_value == 0 {
+              Base.dispose(base_token);
+              rc_g, central_g, pending_handle, base_token :=
+                perform_exc_finish(rc_g, central_g, pending_handle, central_g.get().central.value);
+            }
 
-        ghost var b_orig_value, b_new_value, b_ret_value;
-        glinear var central_g;
-
-        ret_value, orig_value, new_value, rc_g := execute_atomic_load(rc_atomic);
-        assert rc_atomic.identifier() != central_atomic.identifier();
-        b_ret_value, b_orig_value, b_new_value, central_g := execute_atomic_noop(central_atomic);
-
-        assert b_orig_value == ();
-        assert central_inv(central_g, this.loc);
-        assert rc_inv(orig_value, rc_g, this.loc);
-
-        if orig_value == 0 {
-          Base.dispose(base_token);
-          rc_g, central_g, pending_handle, base_token :=
-            perform_exc_finish(rc_g, central_g, pending_handle, central_g.get().central.value);
+            ghost_release central_g;
+          }
+          ghost_release rc_g;
         }
-
-        finish_atomic(central_atomic, b_new_value, central_g);
-        finish_atomic(rc_atomic, new_value, rc_g);
 
         if ret_value == 0 {
           is_rc_zero := true;
@@ -129,35 +113,19 @@ module RWLockImpl {
     requires handle.loc().ExtLoc? && handle.loc().base_loc == base_token.loc()
     requires handle.loc() == this.loc
     {
-      var exc_atomic := this.exc;
-      ghost var ret_value;
-      ghost var orig_value, new_value;
-      glinear var g;
+      atomic_block ret_value := execute_atomic_store(this.exc, false) {
+        ghost_acquire g;
+        atomic_block _ := execute_atomic_noop(this.central) {
+          ghost_acquire central_g;
 
-      ghost var b_orig_value, b_new_value, b_ret_value;
-      glinear var central_g;
+          g, central_g :=
+            RWLockExtToken.perform_exc_release(g, central_g, handle, base_token,
+                central_g.get().central.value, g.get().phys_exc.value);
 
-      ghost var central_atomic := this.central;
-
-      ret_value, orig_value, new_value, g :=
-          execute_atomic_store(exc_atomic, false);
-
-      assert exc_atomic.identifier() != central_atomic.identifier();
-      b_ret_value, b_orig_value, b_new_value, central_g := execute_atomic_noop(central_atomic);
-
-      assert b_orig_value == ();
-      assert central_inv(central_g, this.loc);
-      assert exc_inv(orig_value, g, this.loc);
-
-      g, central_g :=
-        RWLockExtToken.perform_exc_release(g, central_g, handle, base_token,
-            central_g.get().central.value, g.get().phys_exc.value);
-
-      assert central_inv(central_g, this.loc);
-      assert exc_inv(new_value, g, this.loc);
-
-      finish_atomic(central_atomic, b_new_value, central_g);
-      finish_atomic(exc_atomic, new_value, g);
+          ghost_release central_g;
+        }
+        ghost_release g;
+      }
     }
 
     /*private*/ method wait_for_exc_false()
@@ -168,23 +136,17 @@ module RWLockImpl {
       while exc_value
       decreases *
       {
-        var exc_atomic := this.exc;
-        ghost var orig_value, new_value;
-        glinear var g;
-        exc_value, orig_value, new_value, g := execute_atomic_load(exc_atomic);
-        finish_atomic(exc_atomic, new_value, g);
+        atomic_block ret_value := execute_atomic_load(this.exc) { }
+        exc_value := ret_value;
       }
     }
 
-    method load_rc()
+    /*private*/ method load_rc()
     returns (rc: uint32)
     requires Inv()
     {
-      var rc_atomic := this.rc;
-      ghost var orig_value, new_value;
-      glinear var g;
-      rc, orig_value, new_value, g := execute_atomic_load(rc_atomic);
-      finish_atomic(rc_atomic, new_value, g);
+      atomic_block ret_value := execute_atomic_load(this.rc) { }
+      rc := ret_value;
     }
 
     method acquire_shared()
@@ -209,66 +171,44 @@ module RWLockImpl {
         if cur_rc != 0xffff_ffff {
           // increment rc
 
-          var rc_atomic := this.rc;
-          var ret_value: bool;
-          ghost var orig_value: uint32, new_value: uint32;
-          glinear var g;
-          ret_value, orig_value, new_value, g :=
-              execute_atomic_compare_and_set_strong(rc_atomic, cur_rc, cur_rc + 1);
-
-          ghost var ghostme := true;
-          if ghostme && ret_value {
-            RWLockExtToken.SEPCM.dispose(handle);
-            g, handle := RWLockExtToken.perform_shared_pending(g, cur_rc as nat);
+          atomic_block ret_value := execute_atomic_compare_and_set_strong(this.rc, cur_rc, cur_rc + 1) {
+            ghost_acquire g;
+            ghost var ghostme := true;
+            if ghostme && ret_value {
+              RWLockExtToken.SEPCM.dispose(handle);
+              g, handle := RWLockExtToken.perform_shared_pending(g, cur_rc as nat);
+            }
+            ghost_release g;
           }
-
-          finish_atomic(rc_atomic, new_value, g);
 
           if ret_value {
             // check exc is false
 
-            var exc_atomic := this.exc;
-            var exc_value: bool;
-
-            ghost var b_ret_value, b_orig_value, b_new_value;
-            glinear var central_g;
-            ghost var central_atomic := this.central;
-
-            ghost var orig_value: bool, new_value: bool;
-
-            exc_value, orig_value, new_value, g := execute_atomic_load(exc_atomic);
-
-            assert exc_atomic.identifier() != central_atomic.identifier();
-            b_ret_value, b_orig_value, b_new_value, central_g := execute_atomic_noop(central_atomic);
-
-            assert b_orig_value == ();
-            assert central_inv(central_g, this.loc);
-            assert exc_inv(orig_value, g, this.loc);
-
-            ghost var ghostme := true;
-            if ghostme && !exc_value {
-              g, central_g, handle := RWLockExtToken.perform_shared_finish(
-                    g, central_g, handle, central_g.get().central.value);
+            atomic_block exc_value := execute_atomic_load(this.exc) {
+              ghost_acquire g;
+              atomic_block _ := execute_atomic_noop(this.central) {
+                ghost_acquire central_g;
+                ghost var ghostme := true;
+                if ghostme && !exc_value {
+                  g, central_g, handle := RWLockExtToken.perform_shared_finish(
+                        g, central_g, handle, central_g.get().central.value);
+                }
+                ghost_release central_g;
+              }
+              ghost_release g;
             }
-
-            finish_atomic(central_atomic, b_new_value, central_g);
-            finish_atomic(exc_atomic, new_value, g);
 
             if !exc_value {
               done := true;
             } else {
               // abort
 
-              var ret_value;
-              ghost var orig_value, new_value: uint32;
-
-              ret_value, orig_value, new_value, g :=
-                  execute_atomic_fetch_sub_uint32(rc_atomic, 1);
-              
-              g := perform_abort_shared(g, handle, orig_value as nat);
-              handle := RWLockExtToken.SEPCM.get_unit(handle.loc());
-
-              finish_atomic(rc_atomic, new_value, g);
+              atomic_block ret_value := execute_atomic_fetch_sub_uint32(this.rc, 1) {
+                ghost_acquire g;
+                g := perform_abort_shared(g, handle, old_value as nat);
+                handle := RWLockExtToken.SEPCM.get_unit(handle.loc());
+                ghost_release g;
+              }
             }
           }
         }
@@ -280,37 +220,18 @@ module RWLockImpl {
     requires exists a :: handle.get() == RWLockExt.SharedTakenHandle(a)
     requires handle.loc() == this.loc
     {
-      var rc_atomic := this.rc;
-      ghost var ret_value;
-      ghost var orig_value, new_value;
-      glinear var g;
-
-      ghost var b_orig_value, b_new_value, b_ret_value;
-      glinear var central_g;
-
-      ghost var central_atomic := this.central;
-
-      ret_value, orig_value, new_value, g :=
-          execute_atomic_fetch_sub_uint32(rc_atomic, 1);
-
-      assert rc_atomic.identifier() != central_atomic.identifier();
-      b_ret_value, b_orig_value, b_new_value, central_g := execute_atomic_noop(central_atomic);
-
-      assert b_orig_value == ();
-      assert central_inv(central_g, this.loc);
-      assert rc_inv(orig_value, g, this.loc);
-
-      ghost var a :| handle.get() == RWLockExt.SharedTakenHandle(a);
-
-      g, central_g :=
-        RWLockExtToken.perform_release_shared(g, central_g, handle,
-            central_g.get().central.value, a, g.get().phys_rc.value);
-
-      assert central_inv(central_g, this.loc);
-      assert rc_inv(new_value, g, this.loc);
-
-      finish_atomic(central_atomic, b_new_value, central_g);
-      finish_atomic(rc_atomic, new_value, g);
+      atomic_block _ := execute_atomic_fetch_sub_uint32(this.rc, 1) {
+        ghost_acquire g;
+        atomic_block _ := execute_atomic_noop(this.central) {
+          ghost_acquire central_g;
+          ghost var a :| handle.get() == RWLockExt.SharedTakenHandle(a);
+          g, central_g :=
+            RWLockExtToken.perform_release_shared(g, central_g, handle,
+                central_g.get().central.value, a, g.get().phys_rc.value);
+          ghost_release central_g;
+        }
+        ghost_release g;
+      }
     }
   }
 
