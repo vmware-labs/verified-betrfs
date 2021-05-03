@@ -38,7 +38,7 @@ module ShardedHashTable refines ShardedStateMachine {
     | Stub(rid: int, output: MapIfc.Output)
 
   function FixedSize() : (n: nat)
-  ensures n > 1
+    ensures n > 1
 
   function Capacity() : (n: nat)
   {
@@ -48,12 +48,13 @@ module ShardedHashTable refines ShardedStateMachine {
   function method FixedSizeImpl() : (n: uint32)
   ensures n as int == FixedSize()
 
-  predicate ValidHashIndex(h:int) {
+  predicate ValidHashIndex(h:int)
+  {
     0 <= h as int < FixedSize()
   }
 
   function method hash(key: Key) : (h:uint32)
-    ensures ValidHashIndex(h as int)
+  ensures ValidHashIndex(h as int)
 
   datatype KV = KV(key: Key, val: Value)
 
@@ -108,44 +109,35 @@ module ShardedHashTable refines ShardedStateMachine {
     seq(FixedSize(), i => None)
   }
 
-  function unit() : Variables {
+  function unit() : Variables
+  {
     Variables(unitTable(), 0, multiset{}, multiset{})
   }
 
   function oneRowTable(k: nat, info: Info) : seq<Option<Info>>
-    requires 0 <= k < FixedSize()
+  requires 0 <= k < FixedSize()
   {
     seq(FixedSize(), i => if i == k then Some(info) else None)
   }
 
   function oneRowResource(k: nat, info: Info, cap: nat) : Variables 
-    requires 0 <= k < FixedSize()
+  requires 0 <= k < FixedSize()
   {
     Variables(oneRowTable(k, info), cap, multiset{}, multiset{})
   }
 
-  // predicate resourceHasSingleRow(r: Variables, k: nat, info: Info)
-  //   requires 0 <= k < FixedSize()
-  // {
-  //   && r.Variables?
-  //   && (forall i:nat | i < FixedSize() :: if i == k then r.table[i].Some? else r.table[i].None?)
-  //   && r.table[k].value == info
-  //   && r.tickets == multiset{}
-  //   && r.stubs == multiset{}
-  // }
-
   function twoRowsTable(k1: nat, info1: Info, k2: nat, info2: Info) : seq<Option<Info>>
-    requires 0 <= k1 < FixedSize()
-    requires 0 <= k2 < FixedSize()
-    requires k1 != k2
+  requires 0 <= k1 < FixedSize()
+  requires 0 <= k2 < FixedSize()
+  requires k1 != k2
   {
     seq(FixedSize(), i => if i == k1 then Some(info1) else if i == k2 then Some(info2) else None)
   }
 
   function twoRowsResource(k1: nat, info1: Info, k2: nat, info2: Info, cap: nat) : Variables 
-    requires 0 <= k1 < FixedSize()
-    requires 0 <= k2 < FixedSize()
-    requires k1 != k2
+  requires 0 <= k1 < FixedSize()
+  requires 0 <= k2 < FixedSize()
+  requires k1 != k2
   {
     Variables(twoRowsTable(k1, info1, k2, info2), cap, multiset{}, multiset{})
   }
@@ -229,7 +221,8 @@ module ShardedHashTable refines ShardedStateMachine {
     }
   }
 
-  predicate Init(s: Variables) {
+  predicate Init(s: Variables)
+  {
     && s.Variables?
     && (forall i | 0 <= i < |s.table| :: s.table[i] == Some(Info(Empty, Free)))
     && s.insert_capacity == Capacity()
@@ -274,6 +267,385 @@ module ShardedHashTable refines ShardedStateMachine {
           s.table[h].value.(
               state := Inserting(insert_ticket.rid,
               KV(key, insert_ticket.input.value),key)))]))
+  }
+
+  predicate ProcessInsertTicketFail(s: Variables, s': Variables, insert_ticket: Ticket)
+  {
+    && !s.Fail?
+    && insert_ticket.input.InsertInput?
+    && insert_ticket in s.tickets
+    // && s.insert_capacity == 1
+    && (s' == s
+      .(tickets := s.tickets - multiset{insert_ticket})
+      .(stubs := s.stubs + multiset{Stub(insert_ticket.rid, MapIfc.InsertOutput(false))}))
+  }
+
+  // search_h: hash of the key we are trying to insert
+  // slot_h: hash of the key at slot_idx
+  // returns search_h should go before slot_h
+  predicate ShouldHashGoBefore(search_h: int, slot_h: int, slot_idx: int)
+  {
+    || search_h < slot_h <= slot_idx // normal case
+    || slot_h <= slot_idx < search_h // search_h wraps around the end of array
+    || slot_idx < search_h < slot_h// search_h, slot_h wrap around the end of array
+  }
+
+  // We're trying to insert new_item at pos j
+  // where hash(new_item) >= hash(pos j)
+  // we skip item i and move to i+1.
+  predicate InsertSkip(s: Variables, s': Variables, pos: nat)
+  {
+    && !s.Fail?
+    && s'.Variables?
+    && 0 <= pos < FixedSize()
+    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
+    && s.table[pos].Some?
+    && s.table[pos'].Some?
+    && s.table[pos].value.state.Inserting?
+    && s.table[pos].value.entry.Full?
+    // This isn't a matching key...
+    && s.table[pos].value.state.kv.key
+        != s.table[pos].value.entry.kv.key
+    // ...and we need to keep searching because of the Robin Hood rule.
+    && !ShouldHashGoBefore(
+        hash(s.table[pos].value.state.kv.key) as int,
+        hash(s.table[pos].value.entry.kv.key) as int, pos)
+    && s.table[pos'].value.state.Free?
+
+    && s' == s.(table := s.table
+        [pos := Some(s.table[pos].value.(state := Free))]
+        [pos' := Some(s.table[pos'].value.(state := s.table[pos].value.state))])
+  }
+
+  // We're trying to insert new_item at pos j
+  // where hash(new_item) < hash(pos j)
+  // in this case we do the swap and keep moving forward
+  // with the swapped-out item.
+  predicate InsertSwap(s: Variables, s': Variables, pos: nat)
+  {
+    && !s.Fail?
+    && 0 <= pos < FixedSize()
+    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
+    && s.table[pos].Some?
+    && s.table[pos'].Some?
+    && var state := s.table[pos].value.state;
+    && state.Inserting?
+    && s.table[pos].value.entry.Full?
+    && ShouldHashGoBefore(
+        hash(state.kv.key) as int,
+        hash(s.table[pos].value.entry.kv.key) as int, pos)
+    && s.table[pos'].value.state.Free?
+
+    && s' == s.(table := s.table
+        [pos := Some(Info(
+          Full(state.kv),
+          Free))]
+        [pos' := Some(s.table[pos'].value.(state :=
+          Inserting(
+            state.rid,
+            s.table[pos].value.entry.kv, state.initial_key)))])
+  }
+
+  // Slot is empty. Insert our element and finish.
+  predicate InsertDone(s: Variables, s': Variables, pos: nat)
+  {
+    && !s.Fail?
+    && 0 <= pos < FixedSize()
+    && s.table[pos].Some?
+    && s.table[pos].value.state.Inserting?
+    && s.table[pos].value.entry.Empty?
+    && s' == s
+      .(table := s.table
+        [pos := Some(Info(
+            Full(s.table[pos].value.state.kv),
+            Free))])
+      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput(true))})
+  }
+
+  predicate InsertUpdate(s: Variables, s': Variables, pos: nat)
+  {
+    && !s.Fail?
+    && 0 <= pos < FixedSize()
+    && s.table[pos].Some?
+    && s.table[pos].value.state.Inserting?
+    && s.table[pos].value.entry.Full?
+    && s.table[pos].value.entry.kv.key == s.table[pos].value.state.kv.key
+    && s' == s
+      .(table := s.table
+        [pos := Some(Info(
+            Full(s.table[pos].value.state.kv),
+            Free))])
+      .(insert_capacity := s.insert_capacity + 1) // we reserved the capacity at the begining, but later discover we don't need it
+      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput(true))})
+  }
+
+  // Remove
+
+  // We know about row h (our thread is working on it),
+  // and we know that it's free (we're not already claiming to do something else with it).
+  predicate KnowRowIsFree(s: Variables, h: int)
+    requires !s.Fail?
+    requires ValidHashIndex(h)
+  {
+    && s.table[h].Some?
+    && s.table[h].value.state.Free?
+  }
+
+  predicate ProcessRemoveTicket(s: Variables, s': Variables, remove_ticket: Ticket)
+  {
+    && !s.Fail?
+    && remove_ticket.input.RemoveInput?
+    && remove_ticket in s.tickets
+    && var h: uint32 := hash(remove_ticket.input.key);
+    && KnowRowIsFree(s, h as int)
+    && s' == s
+      .(tickets := s.tickets - multiset{remove_ticket})
+      .(table := s.table[h := Some(
+          s.table[h].value.(state :=
+            Removing(remove_ticket.rid,
+              remove_ticket.input.key)))])
+  }
+
+  predicate RemoveInspectEnabled(s: Variables, pos: nat)
+  {
+    && !s.Fail?
+    && 0 <= pos < FixedSize()
+    // Know row pos, and it's the thing we're removing, and it's full...
+    && s.table[pos].Some?
+    && s.table[pos].value.state.Removing?
+  }
+
+  predicate RemoveSkipEnabled(s: Variables, pos: nat)
+  {
+    && RemoveInspectEnabled(s, pos)
+    && s.table[pos].value.entry.Full?
+    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
+    && KnowRowIsFree(s, pos')
+    // ...and the key it's full of sorts before the thing we're looking to remove.
+    && !ShouldHashGoBefore(
+        hash(s.table[pos].value.state.key) as int,
+        hash(s.table[pos].value.entry.kv.key) as int, pos)
+  }
+
+  predicate RemoveSkip(s: Variables, s': Variables, pos: nat)
+  {
+    && RemoveSkipEnabled(s, pos)
+    // The hash is equal, but this isn't the key we're trying to remove.
+    && s.table[pos].value.entry.kv.key != s.table[pos].value.state.key
+    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
+
+    // Advance the pointer to the next row.
+    && s' == s.(table := s.table
+        [pos := Some(s.table[pos].value.(state := Free))]
+        [pos' := Some(s.table[pos'].value.(state := s.table[pos].value.state))])
+  }
+
+  predicate RemoveNotFound(s: Variables, s': Variables, pos: nat)
+  {
+    && RemoveInspectEnabled(s, pos)
+    && (if s.table[pos].value.entry.Full? then // the key we are looking for goes before the one in the slot, so it must be absent
+      && ShouldHashGoBefore(
+        hash(s.table[pos].value.state.key) as int,
+        hash(s.table[pos].value.entry.kv.key) as int, pos)
+      && s.table[pos].value.entry.kv.key != s.table[pos].value.state.key
+      else true // the key would have been in this empty spot
+    )
+    && s' == s
+      .(table := s.table[pos := Some(Info(s.table[pos].value.entry, Free))])
+      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput(false))})
+  }
+
+  predicate RemoveFoundIt(s: Variables, s': Variables, pos: nat)
+  {
+    && RemoveSkipEnabled(s, pos)
+    // This IS the key we want to remove!
+    && var initial_key := s.table[pos].value.state.key;
+    && s.table[pos].value.entry.kv.key == initial_key
+
+    // Change the program counter into RemoveTidying mode
+    && var rid := s.table[pos].value.state.rid;
+    // Note: it doesn't matter what we set the entry to here, since we're going
+    // to overwrite it in the next step either way.
+    // (Might be easier to leave the entry as it is rather than set it to Empty?)
+    && s' == s.(table := s.table[pos := Some(Info(Empty,
+        RemoveTidying(rid, initial_key, s.table[pos].value.entry.kv.val)))])
+  }
+
+  predicate TidyEnabled(s: Variables, pos: nat)
+  {
+    && !s.Fail?
+    && ValidHashIndex(pos)
+    // The row that needs backfilling is known and we're pointing at it
+    && s.table[pos].Some?
+    && s.table[pos].value.state.RemoveTidying?
+    && s.table[pos].value.entry.Empty?  // Should be an invariant, actually
+    && (pos < FixedSize() - 1 ==> s.table[pos+1].Some?) // if a next row, we know it
+  }
+
+  predicate DoneTidying(s: Variables, pos: nat)
+    requires TidyEnabled(s, pos)
+  {
+    var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
+    && KnowRowIsFree(s, pos')
+    && (
+      || s.table[pos'].value.entry.Empty?                     // Next row is empty
+      || pos' == hash(s.table[pos'].value.entry.kv.key) as nat  // Next row's key can't move back
+    )
+  }
+
+  predicate RemoveTidy(s: Variables, s': Variables, pos: nat)
+  {
+    && TidyEnabled(s, pos)
+    && !DoneTidying(s, pos)
+
+    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
+    && KnowRowIsFree(s, pos')
+
+    // Pull the entry back one slot, and push the state pointer forward one slot.
+    && s' == s.(table := s.table
+      [pos := Some(Info(s.table[pos'].value.entry, Free))]
+      [pos' := Some(Info(Empty, s.table[pos].value.state))]
+      )
+  }
+
+  predicate RemoveDone(s: Variables, s': Variables, pos: nat)
+  {
+    && TidyEnabled(s, pos)
+    && DoneTidying(s, pos)
+    && !s'.Fail?
+    // Clear the pointer, return the stub.
+    && s' == s
+      .(table := s.table[pos := Some(Info(s.table[pos].value.entry, Free))])
+      .(insert_capacity := s.insert_capacity + 1)
+      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput(true))})
+  }
+
+  // Query
+
+  predicate ProcessQueryTicket(s: Variables, s': Variables, query_ticket: Ticket)
+  {
+    && !s.Fail?
+    && query_ticket.input.QueryInput?
+    && query_ticket in s.tickets
+    && var h: uint32 := hash(query_ticket.input.key);
+    && 0 <= h as int < FixedSize()
+    && s.table[h].Some?
+    && s.table[h].value.state.Free?
+    && s' == s
+      .(tickets := s.tickets - multiset{query_ticket})
+      .(table := s.table[h := Some(
+          s.table[h].value.(state :=
+            Querying(query_ticket.rid, query_ticket.input.key)))])
+  }
+
+  function NextPos(pos: nat) : nat {
+    if pos < FixedSize() - 1 then pos + 1 else 0
+  }
+
+  predicate QuerySkipEnabled(s: Variables, pos: nat)
+  {
+    && !s.Fail?
+    && 0 <= pos < FixedSize()
+    && s.table[pos].Some?
+    && s.table[NextPos(pos)].Some?
+    && s.table[pos].value.state.Querying?
+    && s.table[pos].value.entry.Full?
+    // Not the key we're looking for
+    && s.table[pos].value.state.key != s.table[pos].value.entry.kv.key
+    // But we haven't passed by the key we want yet (Robin Hood rule)
+    && !ShouldHashGoBefore(
+        hash(s.table[pos].value.state.key) as int,
+        hash(s.table[pos].value.entry.kv.key) as int, pos)
+    && s.table[NextPos(pos)].value.state.Free?
+  }
+
+  predicate QuerySkip(s: Variables, s': Variables, pos: nat)
+  {
+    && QuerySkipEnabled(s, pos)
+
+    && s' == s.(table := s.table
+        [pos := Some(s.table[pos].value.(state := Free))]
+        [NextPos(pos) := Some(s.table[NextPos(pos)].value.(state := s.table[pos].value.state))])
+  }
+
+  predicate QueryDone(s: Variables, s': Variables, pos: nat)
+  {
+    && !s.Fail?
+    && 0 <= pos < FixedSize()
+    && s.table[pos].Some?
+    && s.table[pos].value.state.Querying?
+    && s.table[pos].value.entry.Full?
+    && s.table[pos].value.state.key == s.table[pos].value.entry.kv.key
+    && var stub := Stub(s.table[pos].value.state.rid, MapIfc.QueryOutput(Found(s.table[pos].value.entry.kv.val)));
+    && s' == s
+      .(table := s.table[pos := Some(s.table[pos].value.(state := Free))])
+      .(stubs := s.stubs + multiset{stub})
+  }
+
+  predicate QueryNotFound(s: Variables, s': Variables, pos: nat)
+  {
+    && !s.Fail?
+    && 0 <= pos < FixedSize()
+    && s.table[pos].Some?
+    && s.table[pos].value.state.Querying?
+    // We're allowed to do this step if it's empty, or if the hash value we
+    // find is bigger than the one we're looking for
+    && (s.table[pos].value.entry.Full? ==>
+      ShouldHashGoBefore(
+        hash(s.table[pos].value.state.key) as int,
+        hash(s.table[pos].value.entry.kv.key) as int, pos))
+      // TODO: we have replaced the following predicate, so wrap around is considered
+      // hash(s.table[pos].value.state.key) < hash(s.table[pos].value.entry.kv.key))
+    && s' == s
+      .(table := s.table
+        [pos := Some(s.table[pos].value.(state := Free))])
+      .(stubs := s.stubs + multiset{
+        Stub(s.table[pos].value.state.rid, MapIfc.QueryOutput(NotFound))
+       })
+  }
+
+  predicate QueryFullHashTable(s: Variables, s': Variables, pos: nat)
+  {
+    && QuerySkipEnabled(s, pos)
+
+    // And we've gone in an entire circle; another step would put us
+    // back where we entered the hash table.
+    && NextPos(pos) == hash(s.table[pos].value.state.key) as int
+
+    && s' == s
+      .(table := s.table
+        [pos := Some(s.table[pos].value.(state := Free))])
+      .(stubs := s.stubs + multiset{
+        Stub(s.table[pos].value.state.rid, MapIfc.QueryOutput(NotFound))
+       })
+  }
+
+  predicate NextStep(s: Variables, s': Variables, step: Step)
+  {
+    match step {
+      case ProcessInsertTicketStep(insert_ticket) => ProcessInsertTicket(s, s', insert_ticket)
+      case InsertSkipStep(pos) => InsertSkip(s, s', pos)
+      case InsertSwapStep(pos) => InsertSwap(s, s', pos)
+      case InsertDoneStep(pos) => InsertDone(s, s', pos)
+      case InsertUpdateStep(pos) => InsertUpdate(s, s', pos)
+
+      case ProcessRemoveTicketStep(remove_ticket) => ProcessRemoveTicket(s, s', remove_ticket)
+      case RemoveSkipStep(pos) => RemoveSkip(s, s', pos)
+      case RemoveFoundItStep(pos) => RemoveFoundIt(s, s', pos)
+      case RemoveNotFoundStep(pos) => RemoveNotFound(s, s', pos)
+      case RemoveTidyStep(pos) => RemoveTidy(s, s', pos)
+      case RemoveDoneStep(pos) => RemoveDone(s, s', pos)
+
+      case ProcessQueryTicketStep(query_ticket) => ProcessQueryTicket(s, s', query_ticket)
+      case QuerySkipStep(pos) => QuerySkip(s, s', pos)
+      case QueryDoneStep(pos) => QueryDone(s, s', pos)
+      case QueryNotFoundStep(pos) => QueryNotFound(s, s', pos)
+    }
+  }
+
+  predicate Next(s: Variables, s': Variables)
+  {
+    exists step :: NextStep(s, s', step)
   }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -389,6 +761,23 @@ module ShardedHashTable refines ShardedStateMachine {
         && !table[e].value.state.RemoveTidying?
   }*/
 
+  function InfoQuantity(s: Option<Info>) : nat {
+    if s.None? then 0 else (
+      (if s.value.state.Inserting? then 1 else 0) +
+      (if s.value.state.RemoveTidying? || s.value.entry.Full? then 1 else 0)
+    )
+  }
+
+  function {:opaque} TableQuantity(s: seq<Option<Info>>) : nat {
+    if s == [] then 0 else TableQuantity(s[..|s|-1]) + InfoQuantity(s[|s| - 1])
+  }
+
+  predicate TableQuantityInv(s: Variables)
+  {
+    && s.Variables?
+    && TableQuantity(s.table) + s.insert_capacity == Capacity()
+  }
+
   predicate InvTable(table: seq<Option<Info>>)
   {
     && |table| == FixedSize()
@@ -413,6 +802,7 @@ module ShardedHashTable refines ShardedStateMachine {
   //////////////////////////////////////////////////////////////////////////////
   // Proof that Init && []Next maintains Inv
   //////////////////////////////////////////////////////////////////////////////
+
 
   lemma TableQuantity_replace1(s: seq<Option<Info>>, s': seq<Option<Info>>, i: int)
   requires 0 <= i < |s| == |s'|
@@ -1234,7 +1624,6 @@ module ShardedHashTable refines ShardedStateMachine {
     }
   }
 
-
   lemma Next_PreservesInv(s: Variables, s': Variables)
   requires Inv(s)
   requires Next(s, s')
@@ -1247,406 +1636,6 @@ module ShardedHashTable refines ShardedStateMachine {
 //////////////////////////////////////////////////////////////////////////////
 // fragment-level validity defined wrt Inv
 //////////////////////////////////////////////////////////////////////////////
-
-//////////////////////////////////////////////////////////////////////////////
-// Old crap we need to organize
-//////////////////////////////////////////////////////////////////////////////
-
-  predicate ProcessInsertTicketFail(s: Variables, s': Variables, insert_ticket: Ticket)
-  {
-    && !s.Fail?
-    && insert_ticket.input.InsertInput?
-    && insert_ticket in s.tickets
-    // && s.insert_capacity == 1
-    && (s' == s
-      .(tickets := s.tickets - multiset{insert_ticket})
-      .(stubs := s.stubs + multiset{Stub(insert_ticket.rid, MapIfc.InsertOutput(false))}))
-  }
-
-  // search_h: hash of the key we are trying to insert
-  // slot_h: hash of the key at slot_idx
-  // returns search_h should go before slot_h
-  predicate ShouldHashGoBefore(search_h: int, slot_h: int, slot_idx: int)
-  {
-    || search_h < slot_h <= slot_idx // normal case
-    || slot_h <= slot_idx < search_h // search_h wraps around the end of array
-    || slot_idx < search_h < slot_h// search_h, slot_h wrap around the end of array
-  }
-
-  // We're trying to insert new_item at pos j
-  // where hash(new_item) >= hash(pos j)
-  // we skip item i and move to i+1.
-  predicate InsertSkip(s: Variables, s': Variables, pos: nat)
-  {
-    && !s.Fail?
-    && s'.Variables?
-    && 0 <= pos < FixedSize()
-    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
-    && s.table[pos].Some?
-    && s.table[pos'].Some?
-    && s.table[pos].value.state.Inserting?
-    && s.table[pos].value.entry.Full?
-    // This isn't a matching key...
-    && s.table[pos].value.state.kv.key
-        != s.table[pos].value.entry.kv.key
-    // ...and we need to keep searching because of the Robin Hood rule.
-    && !ShouldHashGoBefore(
-        hash(s.table[pos].value.state.kv.key) as int,
-        hash(s.table[pos].value.entry.kv.key) as int, pos)
-    && s.table[pos'].value.state.Free?
-
-    && s' == s.(table := s.table
-        [pos := Some(s.table[pos].value.(state := Free))]
-        [pos' := Some(s.table[pos'].value.(state := s.table[pos].value.state))])
-  }
-
-  // We're trying to insert new_item at pos j
-  // where hash(new_item) < hash(pos j)
-  // in this case we do the swap and keep moving forward
-  // with the swapped-out item.
-  predicate InsertSwap(s: Variables, s': Variables, pos: nat)
-  {
-    && !s.Fail?
-    && 0 <= pos < FixedSize()
-    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
-    && s.table[pos].Some?
-    && s.table[pos'].Some?
-    && var state := s.table[pos].value.state;
-    && state.Inserting?
-    && s.table[pos].value.entry.Full?
-    && ShouldHashGoBefore(
-        hash(state.kv.key) as int,
-        hash(s.table[pos].value.entry.kv.key) as int, pos)
-    && s.table[pos'].value.state.Free?
-
-    && s' == s.(table := s.table
-        [pos := Some(Info(
-          Full(state.kv),
-          Free))]
-        [pos' := Some(s.table[pos'].value.(state :=
-          Inserting(
-            state.rid,
-            s.table[pos].value.entry.kv, state.initial_key)))])
-  }
-
-  // Slot is empty. Insert our element and finish.
-  predicate InsertDone(s: Variables, s': Variables, pos: nat)
-  {
-    && !s.Fail?
-    && 0 <= pos < FixedSize()
-    && s.table[pos].Some?
-    && s.table[pos].value.state.Inserting?
-    && s.table[pos].value.entry.Empty?
-    && s' == s
-      .(table := s.table
-        [pos := Some(Info(
-            Full(s.table[pos].value.state.kv),
-            Free))])
-      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput(true))})
-  }
-
-  predicate InsertUpdate(s: Variables, s': Variables, pos: nat)
-  {
-    && !s.Fail?
-    && 0 <= pos < FixedSize()
-    && s.table[pos].Some?
-    && s.table[pos].value.state.Inserting?
-    && s.table[pos].value.entry.Full?
-    && s.table[pos].value.entry.kv.key == s.table[pos].value.state.kv.key
-    && s' == s
-      .(table := s.table
-        [pos := Some(Info(
-            Full(s.table[pos].value.state.kv),
-            Free))])
-      .(insert_capacity := s.insert_capacity + 1) // we reserved the capacity at the begining, but later discover we don't need it
-      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.InsertOutput(true))})
-  }
-
-  // Remove
-
-  // We know about row h (our thread is working on it),
-  // and we know that it's free (we're not already claiming to do something else with it).
-  predicate KnowRowIsFree(s: Variables, h: int)
-    requires !s.Fail?
-    requires ValidHashIndex(h)
-  {
-    && s.table[h].Some?
-    && s.table[h].value.state.Free?
-  }
-
-  predicate ProcessRemoveTicket(s: Variables, s': Variables, remove_ticket: Ticket)
-  {
-    && !s.Fail?
-    && remove_ticket.input.RemoveInput?
-    && remove_ticket in s.tickets
-    && var h: uint32 := hash(remove_ticket.input.key);
-    && KnowRowIsFree(s, h as int)
-    && s' == s
-      .(tickets := s.tickets - multiset{remove_ticket})
-      .(table := s.table[h := Some(
-          s.table[h].value.(state :=
-            Removing(remove_ticket.rid,
-              remove_ticket.input.key)))])
-  }
-
-  predicate RemoveInspectEnabled(s: Variables, pos: nat)
-  {
-    && !s.Fail?
-    && 0 <= pos < FixedSize()
-    // Know row pos, and it's the thing we're removing, and it's full...
-    && s.table[pos].Some?
-    && s.table[pos].value.state.Removing?
-  }
-
-  predicate RemoveSkipEnabled(s: Variables, pos: nat)
-  {
-    && RemoveInspectEnabled(s, pos)
-    && s.table[pos].value.entry.Full?
-    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
-    && KnowRowIsFree(s, pos')
-    // ...and the key it's full of sorts before the thing we're looking to remove.
-    && !ShouldHashGoBefore(
-        hash(s.table[pos].value.state.key) as int,
-        hash(s.table[pos].value.entry.kv.key) as int, pos)
-  }
-
-  predicate RemoveSkip(s: Variables, s': Variables, pos: nat)
-  {
-    && RemoveSkipEnabled(s, pos)
-    // The hash is equal, but this isn't the key we're trying to remove.
-    && s.table[pos].value.entry.kv.key != s.table[pos].value.state.key
-    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
-
-    // Advance the pointer to the next row.
-    && s' == s.(table := s.table
-        [pos := Some(s.table[pos].value.(state := Free))]
-        [pos' := Some(s.table[pos'].value.(state := s.table[pos].value.state))])
-  }
-
-  predicate RemoveNotFound(s: Variables, s': Variables, pos: nat)
-  {
-    && RemoveInspectEnabled(s, pos)
-    && (if s.table[pos].value.entry.Full? then // the key we are looking for goes before the one in the slot, so it must be absent
-      && ShouldHashGoBefore(
-        hash(s.table[pos].value.state.key) as int,
-        hash(s.table[pos].value.entry.kv.key) as int, pos)
-      && s.table[pos].value.entry.kv.key != s.table[pos].value.state.key
-      else true // the key would have been in this empty spot
-    )
-    && s' == s
-      .(table := s.table[pos := Some(Info(s.table[pos].value.entry, Free))])
-      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput(false))})
-  }
-
-  predicate RemoveFoundIt(s: Variables, s': Variables, pos: nat)
-  {
-    && RemoveSkipEnabled(s, pos)
-    // This IS the key we want to remove!
-    && var initial_key := s.table[pos].value.state.key;
-    && s.table[pos].value.entry.kv.key == initial_key
-
-    // Change the program counter into RemoveTidying mode
-    && var rid := s.table[pos].value.state.rid;
-    // Note: it doesn't matter what we set the entry to here, since we're going
-    // to overwrite it in the next step either way.
-    // (Might be easier to leave the entry as it is rather than set it to Empty?)
-    && s' == s.(table := s.table[pos := Some(Info(Empty,
-        RemoveTidying(rid, initial_key, s.table[pos].value.entry.kv.val)))])
-  }
-
-  predicate TidyEnabled(s: Variables, pos: nat)
-  {
-    && !s.Fail?
-    && ValidHashIndex(pos)
-    // The row that needs backfilling is known and we're pointing at it
-    && s.table[pos].Some?
-    && s.table[pos].value.state.RemoveTidying?
-    && s.table[pos].value.entry.Empty?  // Should be an invariant, actually
-    && (pos < FixedSize() - 1 ==> s.table[pos+1].Some?) // if a next row, we know it
-  }
-
-  predicate DoneTidying(s: Variables, pos: nat)
-    requires TidyEnabled(s, pos)
-  {
-    var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
-    && KnowRowIsFree(s, pos')
-    && (
-      || s.table[pos'].value.entry.Empty?                     // Next row is empty
-      || pos' == hash(s.table[pos'].value.entry.kv.key) as nat  // Next row's key can't move back
-    )
-  }
-
-  predicate RemoveTidy(s: Variables, s': Variables, pos: nat)
-  {
-    && TidyEnabled(s, pos)
-    && !DoneTidying(s, pos)
-
-    && var pos' := (if pos < FixedSize() - 1 then pos + 1 else 0);
-    && KnowRowIsFree(s, pos')
-
-    // Pull the entry back one slot, and push the state pointer forward one slot.
-    && s' == s.(table := s.table
-      [pos := Some(Info(s.table[pos'].value.entry, Free))]
-      [pos' := Some(Info(Empty, s.table[pos].value.state))]
-      )
-  }
-
-  predicate RemoveDone(s: Variables, s': Variables, pos: nat)
-  {
-    && TidyEnabled(s, pos)
-    && DoneTidying(s, pos)
-    && !s'.Fail?
-    // Clear the pointer, return the stub.
-    && s' == s
-      .(table := s.table[pos := Some(Info(s.table[pos].value.entry, Free))])
-      .(insert_capacity := s.insert_capacity + 1)
-      .(stubs := s.stubs + multiset{Stub(s.table[pos].value.state.rid, MapIfc.RemoveOutput(true))})
-  }
-
-  // Query
-
-  predicate ProcessQueryTicket(s: Variables, s': Variables, query_ticket: Ticket)
-  {
-    && !s.Fail?
-    && query_ticket.input.QueryInput?
-    && query_ticket in s.tickets
-    && var h: uint32 := hash(query_ticket.input.key);
-    && 0 <= h as int < FixedSize()
-    && s.table[h].Some?
-    && s.table[h].value.state.Free?
-    && s' == s
-      .(tickets := s.tickets - multiset{query_ticket})
-      .(table := s.table[h := Some(
-          s.table[h].value.(state :=
-            Querying(query_ticket.rid, query_ticket.input.key)))])
-  }
-
-  function NextPos(pos: nat) : nat {
-    if pos < FixedSize() - 1 then pos + 1 else 0
-  }
-
-  predicate QuerySkipEnabled(s: Variables, pos: nat)
-  {
-    && !s.Fail?
-    && 0 <= pos < FixedSize()
-    && s.table[pos].Some?
-    && s.table[NextPos(pos)].Some?
-    && s.table[pos].value.state.Querying?
-    && s.table[pos].value.entry.Full?
-    // Not the key we're looking for
-    && s.table[pos].value.state.key != s.table[pos].value.entry.kv.key
-    // But we haven't passed by the key we want yet (Robin Hood rule)
-    && !ShouldHashGoBefore(
-        hash(s.table[pos].value.state.key) as int,
-        hash(s.table[pos].value.entry.kv.key) as int, pos)
-    && s.table[NextPos(pos)].value.state.Free?
-  }
-
-  predicate QuerySkip(s: Variables, s': Variables, pos: nat)
-  {
-    && QuerySkipEnabled(s, pos)
-
-    && s' == s.(table := s.table
-        [pos := Some(s.table[pos].value.(state := Free))]
-        [NextPos(pos) := Some(s.table[NextPos(pos)].value.(state := s.table[pos].value.state))])
-  }
-
-  predicate QueryDone(s: Variables, s': Variables, pos: nat)
-  {
-    && !s.Fail?
-    && 0 <= pos < FixedSize()
-    && s.table[pos].Some?
-    && s.table[pos].value.state.Querying?
-    && s.table[pos].value.entry.Full?
-    && s.table[pos].value.state.key == s.table[pos].value.entry.kv.key
-    && var stub := Stub(s.table[pos].value.state.rid, MapIfc.QueryOutput(Found(s.table[pos].value.entry.kv.val)));
-    && s' == s
-      .(table := s.table[pos := Some(s.table[pos].value.(state := Free))])
-      .(stubs := s.stubs + multiset{stub})
-  }
-
-  predicate QueryNotFound(s: Variables, s': Variables, pos: nat)
-  {
-    && !s.Fail?
-    && 0 <= pos < FixedSize()
-    && s.table[pos].Some?
-    && s.table[pos].value.state.Querying?
-    // We're allowed to do this step if it's empty, or if the hash value we
-    // find is bigger than the one we're looking for
-    && (s.table[pos].value.entry.Full? ==>
-      ShouldHashGoBefore(
-        hash(s.table[pos].value.state.key) as int,
-        hash(s.table[pos].value.entry.kv.key) as int, pos))
-      // TODO: we have replaced the following predicate, so wrap around is considered
-      // hash(s.table[pos].value.state.key) < hash(s.table[pos].value.entry.kv.key))
-    && s' == s
-      .(table := s.table
-        [pos := Some(s.table[pos].value.(state := Free))])
-      .(stubs := s.stubs + multiset{
-        Stub(s.table[pos].value.state.rid, MapIfc.QueryOutput(NotFound))
-       })
-  }
-
-  predicate QueryFullHashTable(s: Variables, s': Variables, pos: nat)
-  {
-    && QuerySkipEnabled(s, pos)
-
-    // And we've gone in an entire circle; another step would put us
-    // back where we entered the hash table.
-    && NextPos(pos) == hash(s.table[pos].value.state.key) as int
-
-    && s' == s
-      .(table := s.table
-        [pos := Some(s.table[pos].value.(state := Free))])
-      .(stubs := s.stubs + multiset{
-        Stub(s.table[pos].value.state.rid, MapIfc.QueryOutput(NotFound))
-       })
-  }
-
-  predicate NextStep(s: Variables, s': Variables, step: Step)
-  {
-    match step {
-      case ProcessInsertTicketStep(insert_ticket) => ProcessInsertTicket(s, s', insert_ticket)
-      case InsertSkipStep(pos) => InsertSkip(s, s', pos)
-      case InsertSwapStep(pos) => InsertSwap(s, s', pos)
-      case InsertDoneStep(pos) => InsertDone(s, s', pos)
-      case InsertUpdateStep(pos) => InsertUpdate(s, s', pos)
-
-      case ProcessRemoveTicketStep(remove_ticket) => ProcessRemoveTicket(s, s', remove_ticket)
-      case RemoveSkipStep(pos) => RemoveSkip(s, s', pos)
-      case RemoveFoundItStep(pos) => RemoveFoundIt(s, s', pos)
-      case RemoveNotFoundStep(pos) => RemoveNotFound(s, s', pos)
-      case RemoveTidyStep(pos) => RemoveTidy(s, s', pos)
-      case RemoveDoneStep(pos) => RemoveDone(s, s', pos)
-
-      case ProcessQueryTicketStep(query_ticket) => ProcessQueryTicket(s, s', query_ticket)
-      case QuerySkipStep(pos) => QuerySkip(s, s', pos)
-      case QueryDoneStep(pos) => QueryDone(s, s', pos)
-      case QueryNotFoundStep(pos) => QueryNotFound(s, s', pos)
-    }
-  }
-
-  predicate Next(s: Variables, s': Variables) {
-    exists step :: NextStep(s, s', step)
-  }
-
-  function InfoQuantity(s: Option<Info>) : nat {
-    if s.None? then 0 else (
-      (if s.value.state.Inserting? then 1 else 0) +
-      (if s.value.state.RemoveTidying? || s.value.entry.Full? then 1 else 0)
-    )
-  }
-
-  function {:opaque} TableQuantity(s: seq<Option<Info>>) : nat {
-    if s == [] then 0 else TableQuantity(s[..|s|-1]) + InfoQuantity(s[|s| - 1])
-  }
-
-  predicate TableQuantityInv(s: Variables)
-  {
-    && s.Variables?
-    && TableQuantity(s.table) + s.insert_capacity == Capacity()
-  }
-
   predicate Valid(s: Variables)
   {
     && s.Variables?
@@ -1700,74 +1689,8 @@ module ShardedHashTable refines ShardedStateMachine {
   //ensures Valid(s)
   {
     EmptyTableQuantityIsZero(s.table);
-    add_unit(s);
-    assert TableQuantityInv(add(s, unit()));
+    InvImpliesValid(s);
   }
-
-  // lemma TableQuantityDistributive(xs: seq<Option<Info>>, ys: seq<Option<Info>>)
-  //   ensures TableQuantity(xs + ys) == TableQuantity(xs) + TableQuantity(ys)
-  // {
-  //   reveal_TableQuantity();
-  //   if |ys| == 0 {
-  //     assert xs + ys == xs;
-  //   } else {
-  //     var zs := xs + ys;
-  //     var zs', z := zs[..|zs| - 1], zs[ |zs| - 1];
-  //     var ys', y := ys[..|ys| - 1], ys[ |ys| - 1];
-
-  //     calc {
-  //       TableQuantity(zs);
-  //       TableQuantity(zs') + InfoQuantity(z);
-  //       TableQuantity(zs') + InfoQuantity(y);
-  //         { assert zs' == xs + ys'; }
-  //       TableQuantity(xs + ys') + InfoQuantity(y);
-  //         { TableQuantityDistributive(xs, ys'); }
-  //       TableQuantity(xs) +  TableQuantity(ys') + InfoQuantity(y);
-  //       TableQuantity(xs) +  TableQuantity(ys);
-  //     }
-  //   }
-  // }
-
-  // lemma ResourceTableQuantityDistributive(x: Variables, y: Variables)
-  //   requires add(x, y).Variables?
-  //   ensures TableQuantity(add(x, y).table) == TableQuantity(x.table) + TableQuantity(y.table)
-  // {
-  //   reveal_TableQuantity();
-  //   var t := fuse_seq(x.table, y.table);
-  //   var i := 0;
-  //   while i < |x.table|
-  //     invariant i <= |x.table|
-  //     invariant TableQuantity(t[..i]) == TableQuantity(x.table[..i]) + TableQuantity(y.table[..i])
-  //   {
-  //     calc {
-  //       TableQuantity(t[..i+1]);
-  //       {
-  //         assert t[..i] + t[i..i+1] == t[..i+1];
-  //         TableQuantityDistributive(t[..i], t[i..i+1]); 
-  //       }
-  //       TableQuantity(t[..i]) + TableQuantity(t[i..i+1]);
-  //       TableQuantity(x.table[..i]) + TableQuantity(y.table[..i]) + TableQuantity(t[i..i+1]);
-  //       {
-  //         assert TableQuantity(t[i..i+1]) == TableQuantity(x.table[i..i+1]) + TableQuantity(y.table[i..i+1]);
-  //       }
-  //       TableQuantity(x.table[..i]) + TableQuantity(y.table[..i]) + TableQuantity(x.table[i..i+1]) + TableQuantity(y.table[i..i+1]);
-  //       {
-  //         assert x.table[..i] + x.table[i..i+1] == x.table[..i+1];
-  //         TableQuantityDistributive(x.table[..i], x.table[i..i+1]); 
-  //       }
-  //       TableQuantity(x.table[..i+1]) + TableQuantity(y.table[..i]) + TableQuantity(y.table[i..i+1]);
-  //       {
-  //         assert y.table[..i] + y.table[i..i+1] == y.table[..i+1];
-  //         TableQuantityDistributive(y.table[..i], y.table[i..i+1]); 
-  //       }
-  //       TableQuantity(x.table[..i+1]) + TableQuantity(y.table[..i+1]);
-  //     }
-  //     i := i + 1;
-  //   }
-  //   assert t[..i] == add(x, y).table;
-  //   assert x.table[..i] == x.table;
-  //   assert y.table[..i] == y.table;
-  // }
 
   lemma NextPreservesValid(s: Variables, s': Variables)
   //requires Next(s, s')
@@ -1799,4 +1722,6 @@ module ShardedHashTable refines ShardedStateMachine {
   {
     c := easy_transform(b, expected_out);
   }
+
+
 }
