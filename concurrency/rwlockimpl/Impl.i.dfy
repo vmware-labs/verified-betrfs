@@ -87,16 +87,12 @@ module RWLockImpl {
           ghost_acquire rc_g;
           atomic_block _ := execute_atomic_noop(this.central) {
             ghost_acquire central_g;
-            /*assert b_orig_value == ();
-            assume central_inv(central_g, this.loc);
-            assume rc_inv(old_value, rc_g, this.loc);*/
 
             if old_value == 0 {
               Base.dispose(base_token);
               rc_g, central_g, pending_handle, base_token :=
                 perform_exc_finish(rc_g, central_g, pending_handle, central_g.get().central.value);
             }
-            assume central_inv(central_g, this.loc);
 
             ghost_release central_g;
           }
