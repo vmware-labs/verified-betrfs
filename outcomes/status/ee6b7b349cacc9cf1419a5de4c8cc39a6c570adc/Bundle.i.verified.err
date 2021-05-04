@@ -1,0 +1,177 @@
+./PivotBetree/PivotBetreeSpecWFNodes.i.dfy
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/PivotBetree/PivotBetreeSpecWFNodes.i.dfy(336,41): Error: A precondition for this call might not hold.
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/PivotBetree/../lib/Buckets/BucketsLib.i.dfy(635,11): Related location: This is the precondition that might not hold.
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/PivotBetree/../lib/Buckets/BucketsLib.i.dfy(635,48): Related location
+	Execution trace:
+	    (0,0): anon0
+	    /root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/PivotBetree/PivotBetreeSpecWFNodes.i.dfy(325,5): anon7_Else
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/PivotBetree/PivotBetreeSpecWFNodes.i.dfy(336,41): Error: A precondition for this call might not hold.
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/PivotBetree/../lib/Buckets/BucketsLib.i.dfy(636,80): Related location: This is the precondition that might not hold.
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/PivotBetree/../lib/Buckets/../Base/total_order.i.dfy[Upperbounded_Lexicographic_Byte_Order](820,6): Related location
+	Execution trace:
+	    (0,0): anon0
+	    /root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/PivotBetree/PivotBetreeSpecWFNodes.i.dfy(325,5): anon7_Else
+	
+	Dafny program verifier finished with 51 verified, 2 errors
+	Command exited with non-zero status 4
+	78.49user 1.54system 0:35.14elapsed 227%CPU (0avgtext+0avgdata 896020maxresident)k
+	0inputs+0outputs (0major+327022minor)pagefaults 0swaps
+
+./BlockCacheSystem/JournalInterval.i.dfy
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/BlockCacheSystem/JournalInterval.i.dfy(543,25): Error: assertion violation
+	Execution trace:
+	    (0,0): anon0
+	    (0,0): anon9_Then
+	    (0,0): anon3
+	    (0,0): anon10_Then
+	    (0,0): anon11_Then
+	    (0,0): anon6
+	
+	Dafny program verifier finished with 42 verified, 1 error
+	Command exited with non-zero status 4
+	20.90user 0.54system 0:07.83elapsed 273%CPU (0avgtext+0avgdata 333876maxresident)k
+	0inputs+0outputs (0major+101497minor)pagefaults 0swaps
+
+./lib/DataStructures/KMBtree.i.dfy
+	Prover error: line 122138 column 20: Expected values for parameter rlimit is an unsigned integer. It was given argument '-156856704'
+	
+	Prover error: Prover died
+	
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy[KMBtreeModel](348,33): Verification inconclusive (Impl$$KMBtreeModel.__default.SplitLeafInterpretation)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy[KMBtreeModel](480,8): Verification inconclusive (Impl$$KMBtreeModel.__default.SplitIndexInterpretation2)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy[KMBtreeModel](539,8): Verification inconclusive (Impl$$KMBtreeModel.__default.SplitNodeInterpretation)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy[KMBtreeModel](714,8): Verification inconclusive (Impl$$KMBtreeModel.__default.SplitChildOfIndexPreservesAllKeys)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy[KMBtreeModel](838,11): Verification inconclusive (CheckWellformed$$KMBtreeModel.__default.InsertLeaf)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy[KMBtreeModel](965,8): Verification inconclusive (Impl$$KMBtreeModel.__default.GrowPreservesWF)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy[KMBtreeModel](1009,11): Verification inconclusive (CheckWellformed$$KMBtreeModel.__default.NumElementsOfChildren)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy[KMBtreeModel](1052,8): Verification inconclusive (Impl$$KMBtreeModel.__default.InterpretationsDisjointUnion)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy[KMBtreeModel](1171,8): Verification inconclusive (Impl$$KMBtreeModel.__default.NumElementsOfChildrenNotZero)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy[KMBtreeModel](1246,8): Verification inconclusive (Impl$$KMBtreeModel.__default.ToSeqChildrenLength)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy[KMBtreeModel](1325,8): Verification inconclusive (Impl$$KMBtreeModel.__default.ToSeqInInterpretation)
+	
+	Dafny program verifier finished with 112 verified, 0 errors, 11 inconclusives
+	Command exited with non-zero status 4
+	98.99user 2.28system 0:39.27elapsed 257%CPU (0avgtext+0avgdata 697476maxresident)k
+	0inputs+0outputs (0major+311452minor)pagefaults 0swaps
+
+./Impl/IndirectionTable.i.dfy
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/Impl/IndirectionTable.i.dfy(938,24): Verification out of resource (Impl$$IndirectionTable.IndirectionTable.UpdateAndRemoveLoc)
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/Impl/IndirectionTable.i.dfy(1310,18): Verification inconclusive (Impl$$IndirectionTable.IndirectionTable.ComputeRefCountsInnerLoop)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/Impl/IndirectionTable.i.dfy(1613,43): Verification inconclusive (Impl$$IndirectionTable.IndirectionTable.IndirectionTableToVal)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/Impl/IndirectionTable.i.dfy(1818,18): Verification inconclusive (CheckWellformed$$IndirectionTable.IndirectionTable.InitLocBitmap)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/Impl/IndirectionTable.i.dfy(2027,18): Verification inconclusive (CheckWellformed$$IndirectionTable.IndirectionTable.FindDeallocable)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/Impl/IndirectionTable.i.dfy(2061,27): Verification inconclusive (CheckWellformed$$IndirectionTable.IndirectionTable.GetSize)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/Impl/IndirectionTable.i.dfy(2112,23): Verification inconclusive (CheckWellformed$$IndirectionTable.IndirectionTable.getRefUpperBound)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/Impl/IndirectionTable.i.dfy(63,11): Verification inconclusive (CheckWellformed$$IndirectionTable.__default.Locs)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/Impl/IndirectionTable.i.dfy(78,21): Verification inconclusive (CheckWellformed$$IndirectionTable.__default.PredCounts)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/Impl/IndirectionTable.i.dfy(95,11): Verification inconclusive (CheckWellformed$$IndirectionTable.__default.PredecessorSetRestrictedPartial)
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/Impl/IndirectionTable.i.dfy(115,11): Verification inconclusive (CheckWellformed$$IndirectionTable.__default.IsRoot)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/Impl/IndirectionTable.i.dfy(120,12): Verification inconclusive (CheckWellformed$$IndirectionTable.__default.ValidPredCounts)
+	
+	Dafny program verifier finished with 101 verified, 0 errors, 11 inconclusives, 1 out of resource
+	Command exited with non-zero status 4
+	367.47user 4.52system 1:58.09elapsed 314%CPU (0avgtext+0avgdata 1508248maxresident)k
+	0inputs+0outputs (0major+779990minor)pagefaults 0swaps
+
+./Betree/Betree_Refines_Map.i.dfy
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/Betree/Betree_Refines_Map.i.dfy(100,8): Verification inconclusive (Impl$$Betree__Refines__Map.__default.PreservesLookupsImplInterpsEqual)
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/Betree/Betree_Refines_Map.i.dfy(148,8): Verification inconclusive (Impl$$Betree__Refines__Map.__default.PreservesLookupsPutImplInterpsPut)
+	
+	Dafny program verifier finished with 32 verified, 0 errors, 2 inconclusives
+	Command exited with non-zero status 4
+	97.55user 3.46system 0:40.95elapsed 246%CPU (0avgtext+0avgdata 947336maxresident)k
+	0inputs+0outputs (0major+1244049minor)pagefaults 0swaps
+
+./lib/DataStructures/BtreeModel.i.dfy
+	Prover error: Unexpected prover response (getting info about 'unknown' response): (:reason-unknown unknown)
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	Prover error: Invalid PING response from the prover: unsat
+	
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy(714,8): Verification inconclusive (Impl$$BtreeModel.__default.SplitChildOfIndexPreservesAllKeys)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy(1001,11): Verification inconclusive (CheckWellformed$$BtreeModel.__default.ReplacePivot)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy(1016,11): Verification inconclusive (CheckWellformed$$BtreeModel.__default.NumElements)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy(1023,8): Verification inconclusive (Impl$$BtreeModel.__default.InterpretationsDisjoint)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy(1052,8): Verification inconclusive (Impl$$BtreeModel.__default.InterpretationsDisjointUnion)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy(1152,8): Verification inconclusive (CheckWellformed$$BtreeModel.__default.NumElementsMatchesInterpretation)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy(1171,8): Verification inconclusive (Impl$$BtreeModel.__default.NumElementsOfChildrenNotZero)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy(1187,8): Verification inconclusive (Impl$$BtreeModel.__default.NumElementsOfChildrenDecreases)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy(1213,21): Verification inconclusive (CheckWellformed$$BtreeModel.__default.ToSeq)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy(1232,8): Verification inconclusive (CheckWellformed$$BtreeModel.__default.ToSeqChildrenAdditive)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy(1246,8): Verification inconclusive (CheckWellformed$$BtreeModel.__default.ToSeqChildrenLength)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy(1258,8): Verification inconclusive (Impl$$BtreeModel.__default.ToSeqLength)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy(1269,8): Verification inconclusive (Impl$$BtreeModel.__default.ToSeqInAllKeys)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy(1325,8): Verification inconclusive (CheckWellformed$$BtreeModel.__default.ToSeqInInterpretation)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy(1368,26): Verification inconclusive (CheckWellformed$$BtreeModel.__default.ToSeqCoversInterpretation)
+	/root/verichecks-worker/worker-dir/clones/ee6b7b349cacc9cf1419a5de4c8cc39a6c570adc/lib/DataStructures/BtreeModel.i.dfy(1393,8): Verification inconclusive (CheckWellformed$$BtreeModel.__default.InterpretationNumElements)
+	
+	Dafny program verifier finished with 84 verified, 0 errors, 16 inconclusives
+	Command exited with non-zero status 4
+	126.85user 2.27system 0:42.10elapsed 306%CPU (0avgtext+0avgdata 555828maxresident)k
+	0inputs+0outputs (0major+538817minor)pagefaults 0swaps
+
