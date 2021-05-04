@@ -6,6 +6,7 @@ include "../BlockCacheSystem/DiskLayout.i.dfy"
 include "JournalistMarshallingModel.i.dfy"
 include "../lib/Lang/System/NativeArrays.s.dfy"
 include "../lib/Checksums/CRC32CArrayImpl.i.dfy"
+include "../lib/Lang/LinearSequence.i.dfy"
 
 module JournalistMarshallingImpl {
   import opened JournalRanges`Internal
@@ -17,6 +18,8 @@ module JournalistMarshallingImpl {
   import opened Sequences
   import opened NativePackedInts
   import opened PackedIntsLib
+  import opened LinearSequence_s
+  import opened LinearSequence_i
   import NativeArrays
   import CRC32_C_Array_Impl
 
@@ -89,7 +92,7 @@ module JournalistMarshallingImpl {
 
   method WriteJournalEntries(
       buf: array<byte>, numBlocks: uint64, idx: uint64,
-      entries: seq<JournalEntry>, start: uint64, len: uint64)
+      shared entries: seq<JournalEntry>, start: uint64, len: uint64)
   requires buf.Length == 4096 * numBlocks as int
   requires numBlocks <= NumJournalBlocks()
   requires 0 <= start as int < |entries|
@@ -103,18 +106,19 @@ module JournalistMarshallingImpl {
   {
     JournalistMarshallingModel.reveal_writeJournalEntries();
     if len != 0 {
-      var start' := if start+1 == |entries| as uint64 then 0 else start+1;
+      var start' := if start+1 == seq_length(entries) then 0 else start+1;
       JournalistMarshallingModel.
           lemma_cyclicRange_popFront_Sum(entries[..], start, len);
-
-      WriteIntOnto(buf, numBlocks, idx, |entries[start].key| as uint32);
+     
+      var entry := seq_get(entries, start);
+      WriteIntOnto(buf, numBlocks, idx, |entry.key| as uint32);
       var idx1 := idx + 4;
-      WriteOnto(buf, numBlocks, idx1, entries[start].key);
-      var idx2 := idx1 + |entries[start].key| as uint64;
-      WriteIntOnto(buf, numBlocks, idx2, |entries[start].value| as uint32);
+      WriteOnto(buf, numBlocks, idx1, entry.key);
+      var idx2 := idx1 + |entry.key| as uint64;
+      WriteIntOnto(buf, numBlocks, idx2, |entry.value| as uint32);
       var idx3 := idx2 + 4;
-      WriteOnto(buf, numBlocks, idx3, entries[start].value);
-      var idx4 := idx3 + |entries[start].value| as uint64;
+      WriteOnto(buf, numBlocks, idx3, entry.value);
+      var idx4 := idx3 + |entry.value| as uint64;
       WriteJournalEntries(buf, numBlocks, idx4, entries, start', len - 1);
     }
   }
@@ -141,7 +145,7 @@ module JournalistMarshallingImpl {
   }
 
   method MarshallJournalEntries(
-      entries: seq<JournalEntry>,
+      shared entries: seq<JournalEntry>,
       start: uint64, len: uint64, numBlocks: uint64)
   returns (res: seq<byte>)
   requires 0 <= start as int < |entries|
