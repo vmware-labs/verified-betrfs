@@ -1,0 +1,25 @@
+Overall: Fail
+
+Files failing with verification error
+	./Impl/IndirectionTable.i.dfy
+	./PivotBetree/PivotBetreeSpecWFNodes.i.dfy
+
+Files failing with exceeded rlimit
+	./Betree/Betree_Refines_Map.i.dfy
+	./lib/DataStructures/BtreeModel.i.dfy
+	./lib/DataStructures/KMBtree.i.dfy
+	./lib/DataStructures/LinearContentMutableMap.i.dfy
+
+Total build time: 16860 seconds
+
+Slowest files:
+	3363.24	./ByteBlockCacheSystem/InterpretationDisk.i.dfy
+	1409.48	./Versions/CompositeView_Refines_TSJMap.i.dfy
+	1397.4	./ByteBlockCacheSystem/ByteSystem.i.dfy
+	861.99	./BlockCacheSystem/BlockSystem.i.dfy
+	589.69	./Impl/MarshallingImpl.i.dfy
+	380.05	./Impl/IndirectionTable.i.dfy
+	320.25	./PivotBetree/PivotBetreeSpecRefinement.i.dfy
+	243.32	./Impl/CommitterImpl.i.dfy
+	238.22	./Betree/BetreeInv.i.dfy
+	233.39	./BlockCacheSystem/JournalSystem.i.dfy
