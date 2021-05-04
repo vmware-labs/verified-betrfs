@@ -95,16 +95,4 @@ module NonlinearLemmas {
   {
   }
 
-  lemma mul_invert(a: nat, b: nat, c: nat)
-  requires 0 < b
-  requires a == b * c
-  ensures a / b == c
-  {
-    assert c * b == a;
-    assume a % b == 0; // TODO ??!!!###??
-    assert a == c * b;
-    assert a / b == (c * b) / b;
-    assert a / b == c;
-  }
-
 }

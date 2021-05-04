@@ -165,6 +165,15 @@ module Math {
       lemma_div_multiples_vanish_fancy(b, 0, d);
   }
 
+  lemma lemma_mul_invert(a: nat, b: nat, c: nat)
+  requires 0 < b
+  requires a == b * c
+  ensures a / b == c
+  {
+    mul_comm(b, c);
+    lemma_div_by_multiple(c, b);
+  }
+
   lemma lemma_mod_multiples_basic(x:int, m:int)
       requires m > 0;
       ensures  (x * m) % m == 0;
