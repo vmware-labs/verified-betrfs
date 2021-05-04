@@ -15,20 +15,25 @@ module JournalInterpMod {
         => var mm := journalChain.recs[i].messageSeq; mm)
   }
 
+  function TailAsMsgSeq(v: Variables) : MsgSeq {
+    var asMap := map[]; // aaargh fine i'll do it later TODO
+    MsgSeq(asMap, v.marshalledLSN, v.marshalledLSN + |v.unmarshalledTail|)
+  }
+
   // TODO(jonh): collapse to return MsgSeq
-  function IMinner(dv: DiskView, sb: CoreSuperblock) : seq<MsgSeq>
+  function IMinner(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock) : seq<MsgSeq>
   {
-    var chain := ChainFrom(dv, sb).chain;
+    var chain := ChainFrom(cache.dv, sb).chain;
     if chain.Some?
     then
-      MessageMaps(chain.value)
+      MessageMaps(chain.value) + [TailAsMsgSeq(v)]
     else
       []
   }
 
-  function IM(dv: DiskView, sb: Superblock) : Option<MsgSeq>
+  function IM(v: Variables, cache:CacheIfc.Variables, sb: Superblock) : Option<MsgSeq>
   {
-    CondenseAll(IMinner(dv, sb.core))
+    CondenseAll(IMinner(v, cache, sb.core))
   }
 
   function ReadAt(cus: seq<CU>, i: nat) : AU
@@ -39,9 +44,9 @@ module JournalInterpMod {
 
   // TODO(jonh): Try porting this from recursive style to Travis' suggested
   // repr-state style (see ReprsAsSets.i.dfy).
-  function IReads(dv: DiskView, sb: CoreSuperblock) : seq<AU>
+  function IReads(v: Variables, cache:CacheIfc.Variables, sb: CoreSuperblock) : seq<AU>
   {
-    var cus := ChainFrom(dv, sb).readCUs;
+    var cus := ChainFrom(cache.dv, sb).readCUs;
     // wanted to write:
     // seq(|cus|, i requires 0<=i<|cus| => cus[i].au)
     // but Dafny bug, so:
@@ -53,52 +58,54 @@ module JournalInterpMod {
     forall i | 0<=i<|a| :: a[i] in b
   }
 
-  lemma DiskViewsEquivalentAfterRemove(dv0: DiskView, dv1: DiskView, aus: seq<AU>, removedCU: CU, ausr: seq<AU>)
-    requires DiskViewsEquivalentForSet(dv0, dv1, aus)
+  lemma DiskViewsEquivalentAfterRemove(cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, aus: seq<AU>, removedCU: CU, ausr: seq<AU>)
+    requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, aus)
     requires SequenceSubset(ausr, aus)
-    ensures DiskViewsEquivalentForSet(MapRemove1(dv0, removedCU), MapRemove1(dv1, removedCU), ausr)
+    ensures DiskViewsEquivalentForSet(MapRemove1(cache0.dv, removedCU), MapRemove1(cache1.dv, removedCU), ausr)
   {
   }
 
   // TODO(jonh): delete chain parameter.
-  lemma FrameOneChain(dv0: DiskView, dv1: DiskView, sb: CoreSuperblock, chain: Option<JournalChain>)
-    requires chain == ChainFrom(dv0, sb).chain
-    requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, sb))
-    ensures chain == ChainFrom(dv1, sb).chain
-    // ensures ChainFrom(dv0, sb).chain == ChainFrom(dv1, sb).chain
+  lemma FrameOneChain(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb: CoreSuperblock, chain: Option<JournalChain>)
+    requires chain == ChainFrom(cache0.dv, sb).chain
+    requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, sb))
+    ensures chain == ChainFrom(cache1.dv, sb).chain
+    // ensures ChainFrom(cache0, sb).chain == ChainFrom(cache1, sb).chain
+    decreases |cache0.dv|
   {
     if sb.freshestCU.Some? {
-      assert IReads(dv0, sb)[0] == sb.freshestCU.value.au; // trigger
-      if sb.freshestCU.value in dv0 {
-        var firstRec := parse(dv0[sb.freshestCU.value]);
+      assert IReads(v, cache0, sb)[0] == sb.freshestCU.value.au; // trigger
+      if sb.freshestCU.value in cache0.dv {
+        var firstRec := parse(cache0.dv[sb.freshestCU.value]);
         if firstRec.Some? { // Recurse to follow chain
           if firstRec.value.messageSeq.seqEnd <= sb.boundaryLSN {
           } else if firstRec.value.messageSeq.seqStart == sb.boundaryLSN {
           } else {
-            var dv0r := MapRemove1(dv0, sb.freshestCU.value);
+            // TODO wrapping these back up in CacheIfcs seems clumsy. (and demands the stupid decreases clause)
+            var cache0r := CacheIfc.Variables(MapRemove1(cache0.dv, sb.freshestCU.value));
+            var cache1r := CacheIfc.Variables(MapRemove1(cache1.dv, sb.freshestCU.value));
             var priorCU := firstRec.value.priorCU;
             var priorSB := firstRec.value.priorSB(sb);
-            var aus := IReads(dv0, sb);
+            var aus := IReads(v, cache0, sb);
             var ausr := if priorCU.Some?
-              then IReads(dv0r, priorSB)
+              then IReads(v, cache0r, priorSB)
               else [];
 
             forall i | 0<=i<|ausr| ensures ausr[i] in aus {
               assert aus[i+1] == ausr[i]; // witness to SequenceSubset(ausr, aus)
             }
-            DiskViewsEquivalentAfterRemove(dv0, dv1, aus, sb.freshestCU.value, ausr);
-            FrameOneChain(dv0r, MapRemove1(dv1, sb.freshestCU.value),
-              priorSB, ChainFrom(dv0r, priorSB).chain);
+            DiskViewsEquivalentAfterRemove(cache0, cache1, aus, sb.freshestCU.value, ausr);
+            FrameOneChain(v, cache0r, cache1r, priorSB, ChainFrom(cache0r.dv, priorSB).chain);
           }
         }
       }
     }
   }
 
-  lemma Framing(sb:CoreSuperblock, dv0: DiskView, dv1: DiskView)
-    requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, sb))
-    ensures IMinner(dv0, sb) == IMinner(dv1, sb)
+  lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb:CoreSuperblock)
+    requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, sb))
+    ensures IMinner(v, cache0, sb) == IMinner(v, cache1, sb)
   {
-    FrameOneChain(dv0, dv1, sb, ChainFrom(dv0, sb).chain);
+    FrameOneChain(v, cache0, cache1, sb, ChainFrom(cache0.dv, sb).chain);
   }
 }

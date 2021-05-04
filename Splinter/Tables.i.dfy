@@ -31,6 +31,9 @@ module MarshalledSnapshot {
 // blocks, but it's actually okay: we reserve them in the in-memory
 // representation, then emit them once we've frozen a given view.
 
+// Does this really need to be a "machine"? IndirectionTable is happy just
+// being a little data structure.
+
 module AllocationTableMachineMod refines MarshalledSnapshot {
   import opened Options
   import CacheIfc
@@ -114,6 +117,7 @@ module AllocationTableMod {
 
 module IndirectionTableMod refines MarshalledSnapshot {
   import opened Options
+  import CacheIfc
 
   datatype Superblock = Superblock(snapshot: SnapshotSuperblock)
 
@@ -123,6 +127,13 @@ module IndirectionTableMod refines MarshalledSnapshot {
 
   function I(dv: DiskView, sb: Superblock) : Option<IndirectionTable> {
     parse(IBytes(dv, sb.snapshot))
+  }
+
+  predicate DurableAt(itbl: IndirectionTable, cache: CacheIfc.Variables, sb: Superblock)
+  {
+    // TODO kind of dirty peeking into the entire cache here
+    // ValidSnapshot(cache.dv, sb.snapshot)
+    true
   }
 }
 

@@ -96,7 +96,8 @@ module BetreeMachineMod {
   import CacheIfc
 
   datatype Superblock = Superblock(
-    itbl: IndirectionTableMod.Superblock,
+    indTbl: IndirectionTableMod.Superblock,
+    allocation: AllocationTableMachineMod.Superblock,
     endSeq: LSN)
 
   // Is it gross that my Betree knows about the three views?
@@ -118,7 +119,7 @@ module BetreeMachineMod {
     indTbl: IndirectionTableMod.IndirectionTable,
     endSeq: LSN)
 
-  datatype Variables = Variables(
+  datatype Variables = Starting | Running(
     indTbl: IndirectionTableMod.IndirectionTable,
     memBuffer: map<Key, Message>,  // Real Splinter (next layer down? :v) has >1 memBuffers so we can be inserting at the front while flushing at the back.
     allocation: AllocationTableMachineMod.Variables,
@@ -139,13 +140,30 @@ module BetreeMachineMod {
   function marshalTrunkNode(node: TrunkNode) : UninterpretedDiskPage
     // TODO
 
+  // TODO replay log!
+  predicate Start(v: Variables, v': Variables, cache: CacheIfc.Variables, sb: Superblock)
+  {
+    && v.Starting?
+    // Note predicate-style assignment of some fields of v'
+    && v'.Running?
+    && IndirectionTableMod.DurableAt(v'.indTbl, cache, sb.indTbl) // Parse ind tbl from cache
+    && v'.memBuffer == map[]
+    && AllocationTableMachineMod.DurableAt(v'.allocation, cache, sb.allocation) // Parse ind tbl from cache
+    && v'.nextSeq == sb.endSeq
+    && v'.frozen == Idle
+  }
+
   datatype NodeAssignment = NodeAssignment(id: TrunkId, cu: CU, node: TrunkNode)
   {
-    predicate InIndTable(v: Variables) {
+    predicate InIndTable(v: Variables)
+      requires v.Running?
+    {
       && id in v.indTbl
       && v.indTbl[id] == cu
     }
-    predicate Valid(v: Variables, cache: CacheIfc.Variables) {
+    predicate Valid(v: Variables, cache: CacheIfc.Variables)
+      requires v.Running?
+    {
       && InIndTable(v)
       && var unparsedPage := CacheIfc.ReadValue(cache, cu);
       && unparsedPage.Some?
@@ -202,7 +220,9 @@ module BetreeMachineMod {
 
   predicate Query(v: Variables, v': Variables, cache: CacheIfc.Variables, key: Key, value: Value, sk: Skolem)
   {
+    && v.Running?
     && sk.QueryStep?
+    // TODO check memtable!
     && var trunkPath := sk.trunkPath;
     && trunkPath.Valid(cache)
     && trunkPath.k == key
@@ -212,6 +232,7 @@ module BetreeMachineMod {
 
   predicate Put(v: Variables, v': Variables, key: Key, value: Value, sk: Skolem)
   {
+    && v.Running?
     && sk.PutStep?
     && var newMessage := MakeValueMessage(value);
     && v' == v.(memBuffer := v.memBuffer[key := newMessage], nextSeq := v.nextSeq + 1)
@@ -255,6 +276,7 @@ module BetreeMachineMod {
   // Internal operation; noop
   predicate Flush(v: Variables, v': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, sk: Skolem)
   {
+    && v.Running?
     && sk.FlushStep?
     && var flush := sk.flush;
     && flush.Valid(cache)
@@ -283,6 +305,7 @@ module BetreeMachineMod {
   // drain mem buffer into a B+tree in the root trunk node
   predicate DrainMemBuffer(v: Variables, v': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, sk:Skolem)
   {
+    && v.Running?
     && sk.DrainMemBufferStep?
     && var oldRoot := sk.oldRoot;
     && var newRoot := sk.newRoot;
@@ -326,6 +349,7 @@ module BetreeMachineMod {
   // Rearrange mem buffers in some node
   predicate CompactBranch(v: Variables, v': Variables, cache: CacheIfc.Variables, cacheOps: CacheIfc.Ops, sk: Skolem)
   {
+    && v.Running?
     && sk.CompactBranchStep?
     && var r := sk.receipt;
     && r.Valid(cache)
@@ -338,6 +362,7 @@ module BetreeMachineMod {
 
   predicate Freeze(v: Variables, v': Variables)
   {
+    && v.Running?
     && v.frozen.Idle?
     && v.memBuffer == map[]  // someday we'd like to avoid clogging the memtable during freeze, but...
     && v' == v.(frozen := Frozen(v.indTbl,  v.nextSeq))
@@ -357,6 +382,7 @@ module BetreeMachineMod {
 
   predicate CommitStart(v: Variables, v': Variables, cache: CacheIfc.Variables, sb: Superblock, newBoundaryLSN: LSN)
   {
+    && v.Running?
     && v.frozen.Frozen?
     && KnowFrozenIsClean(v, sb, cache)
     && sb.endSeq == v.frozen.endSeq
@@ -365,6 +391,7 @@ module BetreeMachineMod {
 
   predicate CommitComplete(v: Variables, v': Variables, cache: CacheIfc.Variables, sb: Superblock)
   {
+    && v.Running?
     // TODO need to update the persistent table to keep our allocation set correct
     && v' == v.(frozen := Idle)
   }
@@ -405,8 +432,16 @@ module BetreeMachineMod {
   // And then IReads <= ReachableBlocks == alloc.
   // We can prove this because anything in IReads justifies ReachableTrunk (and maybe BranchMember).
 
-  function Alloc(s: Variables) : set<AU> {
-    AllocationTableMachineMod.Alloc(s.allocation)
+  function Alloc(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : set<AU>
+  {
+    if v.Running?
+    then AllocationTableMachineMod.Alloc(v.allocation)
+    else 
+      // Module hasn't started; use allocation info it will eventually read from disk
+      if exists allocation :: AllocationTableMachineMod.DurableAt(allocation, cache, sb.allocation)
+      then allocation
+        // disk is borked
+      else {}
   }
 }
 
@@ -429,95 +464,102 @@ module BetreeInterpMod {
   function LookupToValue(lookup: Lookup) : Value
     // TODO body
 
-  predicate ValidLookup(dv: DiskView, itbl: IndirectionTableMod.IndirectionTable, key: Key, lookup: Lookup)
+  predicate ValidLookup(v: Variables, cache: CacheIfc.Variables, key: Key, lookup: Lookup)
     // TODO
 
-  function IMKey(dv: DiskView, sb: Superblock, key: Key) : Value
+  // What indirection table would we see if the system were running?
+  function ITbl(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : Option<IndirectionTableMod.IndirectionTable> {
+    match v {
+      case Starting => IndirectionTableMod.I(cache.dv /*TODO change ind tbl to expect cache*/, sb.indTbl)
+      case Running => Some(v.indTbl)
+    }
+  }
+
+  function IMKey(v: Variables, cache: CacheIfc.Variables, sb: Superblock, key: Key) : Value
   {
-    var itbl := IndirectionTableMod.I(dv, sb.itbl);
+    var indTbl := ITbl(v, cache, sb);
     if
-      && itbl.Some?
-      && exists lookup :: ValidLookup(dv, itbl.value, key, lookup)
+      && indTbl.Some?
+      && exists lookup :: ValidLookup(v, cache, key, lookup)
     then
-      var lookup :| ValidLookup(dv, itbl.value, key, lookup);
+      var lookup :| ValidLookup(v, cache, key, lookup);
       LookupToValue(lookup)
     else
       DefaultValue()
   }
 
-  function IM(dv: DiskView, sb: Superblock) : (i:Interp)
+  function IM(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : (i:Interp)
     ensures i.WF()
   {
-    Interp(imap key | key in AllKeys() :: IMKey(dv, sb, key), sb.endSeq)
+    Interp(imap key | key in AllKeys() :: IMKey(v, cache, sb, key), sb.endSeq)
   }
 
-  function IReadsKey(dv: DiskView, itbl: Option<IndirectionTableMod.IndirectionTable>, key: Key) : set<AU> {
-    
+  function IReadsKey(v: Variables, cache: CacheIfc.Variables, sb: Superblock, key: Key) : set<AU> {
+    var indTbl := ITbl(v, cache, sb);
     if
-      && itbl.Some?
-      && exists lookup :: ValidLookup(dv, itbl.value, key, lookup)
+      && indTbl.Some?
+      && exists lookup :: ValidLookup(v, cache, key, lookup)
     then
-      var lookup :| ValidLookup(dv, itbl.value, key, lookup);
+      var lookup :| ValidLookup(v, cache, key, lookup);
       set i | 0<=i<|lookup| :: var lr:LookupRecord := lookup[i]; lr.cu.au
     else
       {}
   }
 
-  function IReadsSet(dv: DiskView, sb: Superblock) : set<AU> {
-    var itbl := IndirectionTableMod.I(dv, sb.itbl);
+  function IReadsSet(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : set<AU> {
     set au:AU |
       && au < AUSizeInCUs()
-      && exists key :: au in IReadsKey(dv, itbl, key)
+      && exists key :: au in IReadsKey(v, cache, sb, key)
   }
 
-  function IReads(dv: DiskView, sb: Superblock) : seq<AU>
-    ensures forall au :: au in IReads(dv, sb) <==> au in IReadsSet(dv, sb)
+  function IReads(v: Variables, cache: CacheIfc.Variables, sb: Superblock) : seq<AU>
+    ensures forall au :: au in IReads(v, cache, sb) <==> au in IReadsSet(v, cache, sb)
   {
-    Nat_Order.SortSet(IReadsSet(dv, sb))
+    Nat_Order.SortSet(IReadsSet(v, cache, sb))
   }
 
-  lemma Framing(sb:Superblock, dv0: DiskView, dv1: DiskView)
-    requires DiskViewsEquivalentForSet(dv0, dv1, IReads(dv0, sb))
-    ensures IM(dv0, sb) == IM(dv1, sb)
+  lemma Framing(v: Variables, cache0: CacheIfc.Variables, cache1: CacheIfc.Variables, sb:Superblock)
+    requires DiskViewsEquivalentForSet(cache0.dv, cache1.dv, IReads(v, cache0, sb))
+    ensures IM(v, cache0, sb) == IM(v, cache1, sb)
   {
     // TODO I'm surprised this proof passes easily.
     // narrator: It doesn't.
     forall key | key in AllKeys()
-      ensures IMKey(dv0, sb, key) == IMKey(dv1, sb, key)
+      ensures IMKey(v, cache0, sb, key) == IMKey(v, cache1, sb, key)
     {
-      var itbl0 := IndirectionTableMod.I(dv0, sb.itbl);
-      var itbl1 := IndirectionTableMod.I(dv1, sb.itbl);
-      if itbl0.Some? && itbl1.Some?
+      var indTbl0 := ITbl(v, cache0, sb);
+      var indTbl1 := ITbl(v, cache1, sb);
+      if indTbl0.Some? && indTbl1.Some?
       {
-        var le0 := exists lookup0 :: ValidLookup(dv0, itbl0.value, key, lookup0);
-        var le1 := exists lookup1 :: ValidLookup(dv1, itbl1.value, key, lookup1);
+        var le0 := exists lookup0 :: ValidLookup(v, cache0, key, lookup0);
+        var le1 := exists lookup1 :: ValidLookup(v, cache1, key, lookup1);
         if le0 {
-          var lookup0 :| ValidLookup(dv0, itbl0.value, key, lookup0);
-          assume ValidLookup(dv1, itbl1.value, key, lookup0);
+          var lookup0 :| ValidLookup(v, cache0, key, lookup0);
+          assume ValidLookup(v, cache1, key, lookup0);
         }
         if le1 {
-          var lookup1 :| ValidLookup(dv1, itbl1.value, key, lookup1);
-          assume ValidLookup(dv0, itbl1.value, key, lookup1);
+          var lookup1 :| ValidLookup(v, cache1, key, lookup1);
+          assume ValidLookup(v, cache0, key, lookup1);
         }
         assert le0 == le1;
         if (le0) {
           // This definitely won't work.
-          var lookup0 :| ValidLookup(dv0, itbl0.value, key, lookup0);
-          var lookup1 :| ValidLookup(dv1, itbl1.value, key, lookup1);
+          var lookup0 :| ValidLookup(v, cache0, key, lookup0);
+          var lookup1 :| ValidLookup(v, cache1, key, lookup1);
           calc {
-            IMKey(dv0, sb, key);
+            IMKey(v, cache0, sb, key);
               { assume false; } // var|
             LookupToValue(lookup0);
               { assume false; } // framing
             LookupToValue(lookup1);
               { assume false; } // var|
-            IMKey(dv1, sb, key);
+            IMKey(v, cache1, sb, key);
           }
         } else {
           calc {
-            IMKey(dv0, sb, key);
+            IMKey(v, cache0, sb, key);
             DefaultValue();
-            IMKey(dv1, sb, key);
+            IMKey(v, cache1, sb, key);
           }
         }
       }
