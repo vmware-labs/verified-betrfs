@@ -5,13 +5,16 @@ include "../lib/Lang/System/NativeArrays.s.dfy"
 include "JournalistMarshallingImpl.i.dfy"
 include "JournalistParsingImpl.i.dfy"
 include "JournalistMarshallingModel.i.dfy"
+include "../lib/Lang/LinearSequence.i.dfy"
 
 module JournalistImpl {
   import opened DiskLayout
   import opened NativeTypes
   import opened Options
   import opened Sequences
-  import NativeArrays
+
+  import opened LinearSequence_s
+  import opened LinearSequence_i
 
   import opened JournalRanges`Internal
   import opened JournalBytes
@@ -71,7 +74,7 @@ module JournalistImpl {
   }
 
   linear datatype Journalist = Journalist(
-    journalEntries: seq<JournalEntry>,
+    linear journalEntries: seq<JournalEntry>,
     start: uint64,
     len1: uint64,
     len2: uint64,
@@ -206,10 +209,10 @@ module JournalistImpl {
       reveal_cyclicSlice();
       reveal_WeightJournalEntries();
 
-      var newArray := NativeArrays.newArrayFill(4096, JournalInsert([], [])); 
+      linear var jes := seq_alloc_init(4096, JournalInsert([], []));
     
       j := Journalist(
-        newArray[..], 0, 0, 0,
+        jes, 0, 0, 0,
         [], 0, None, None, 0, 0, 0);
     }
 
@@ -250,7 +253,7 @@ module JournalistImpl {
         self.frozenJournalBlocks);
 
       inout self.start := basic_mod(self.start + self.len1,
-          |self.journalEntries| as uint64);
+          seq_length(self.journalEntries));
       inout self.len1 := 0;
       inout self.writtenJournalBlocks :=
           self.writtenJournalBlocks + self.frozenJournalBlocks;
@@ -353,46 +356,26 @@ module JournalistImpl {
         <= 4064 * NumJournalBlocks()
     }
 
-    // [yizhou7][TODO] probably not efficient to create arrray and convert into sequence
     shared method reallocJournalEntries(je: JournalEntry, newLen: uint64)
-    returns (x: seq<JournalEntry>)
+    returns (linear newjes: seq<JournalEntry>)
     requires Inv()
     requires newLen == |journalEntries| as uint64 * 2;
-    ensures x == journalEntries[start..]
+    ensures newLen as nat == |newjes|
+    
+    ensures newjes == journalEntries[start..]
       + journalEntries[..start]
       + [je]
       + fill((newLen as int - |journalEntries| - 1),
           JournalInsert([], []));
     {
-      var newArray := NativeArrays.newArrayFill(
-        newLen,
-        JournalInsert([], []));
+      newjes := seq_alloc_init(newLen, JournalInsert([], []));
+      var oldLen := seq_length(journalEntries);
+    
+      SeqCopy(journalEntries, inout newjes, start, oldLen, 0);
+      SeqCopy(journalEntries, inout newjes, 0, start, oldLen-start);
+      assert newjes[..oldLen] == journalEntries[start..] + journalEntries[..start]; // observe
 
-      NativeArrays.CopySeqIntoArray(
-        journalEntries,
-        start,
-        newArray,
-        0,
-        |journalEntries| as uint64 - start);
-
-      NativeArrays.CopySeqIntoArray(
-        journalEntries,
-        0,
-        newArray,
-        |journalEntries| as uint64 - start,
-        start);
-
-      newArray[|journalEntries| as uint64] := je;
-
-      calc {
-        newArray[..];
-        journalEntries[start..]
-          + journalEntries[..start]
-          + [je]
-          + fill((newLen as int - |journalEntries| - 1) as int, JournalInsert([], []));
-      }
-      
-      x := newArray[..];
+      mut_seq_set(inout newjes, oldLen, je);
     }
 
     linear inout method append(je: JournalEntry)
@@ -404,15 +387,24 @@ module JournalistImpl {
       lenTimes8LeWeight(self.InMemoryJournal());
       lenTimes8LeWeight(self.InMemoryJournalFrozen());
 
-      if self.len1 + self.len2 < |self.journalEntries| as uint64 {
+      var len := seq_length(self.journalEntries);
+
+      if self.len1 + self.len2 < len {
         var idx := basic_mod(
             self.start + self.len1 + self.len2,
-            |self.journalEntries| as uint64);
-        inout self.journalEntries := self.journalEntries[idx := je];
+            seq_length(self.journalEntries));
+        mut_seq_set(inout self.journalEntries, idx, je);
       } else {
-        var newLen: uint64 := |self.journalEntries| as uint64 * 2;
-        inout self.journalEntries := self.reallocJournalEntries(je, newLen);
-        inout self.start := 0;
+        var newLen: uint64 := len * 2;
+        linear var newjes := self.reallocJournalEntries(je, newLen);
+
+        linear var Journalist(oldjes, start, len1, len2, replayJournal, replayIdx,
+          journalFront, journalBack, writtenJournalBlocks, frozenJournalBlocks, inMemoryWeight) := self;
+        
+        self := Journalist(newjes, 0, len1, len2, replayJournal, replayIdx,
+          journalFront, journalBack, writtenJournalBlocks, frozenJournalBlocks, inMemoryWeight);
+
+        var _ := seq_free(oldjes);
       }
   
       inout self.inMemoryWeight := self.inMemoryWeight
