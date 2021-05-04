@@ -4,7 +4,7 @@
 include "../Lang/NativeTypes.s.dfy"
 include "../Lang/System/Arithmetic.s.dfy"
 include "../Base/SetBijectivity.i.dfy"
-include "../Base/sequences.i.dfy"
+include "../Base/Sequences.i.dfy"
 include "../Base/Option.s.dfy"
 
 module LinearMutableMapBase {

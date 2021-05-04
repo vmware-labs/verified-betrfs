@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../lib/Base/DebugAccumulator.i.dfy"
-include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/Sequences.i.dfy"
 include "../lib/Lang/LinearBox.i.dfy"
 include "../lib/Lang/LinearBox.s.dfy"
 include "../lib/Lang/LinearSequence.i.dfy"

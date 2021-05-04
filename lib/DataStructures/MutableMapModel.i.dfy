@@ -3,7 +3,7 @@
 
 include "../Lang/NativeTypes.s.dfy"
 include "../Base/Option.s.dfy"
-include "../Base/sequences.i.dfy"
+include "../Base/Sequences.i.dfy"
 include "../Base/Sets.i.dfy"
 include "../Base/Maps.i.dfy"
 include "../Base/SetBijectivity.i.dfy"

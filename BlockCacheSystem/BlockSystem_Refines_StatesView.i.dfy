@@ -4,7 +4,7 @@
 include "../BlockCacheSystem/BlockSystem.i.dfy"
 include "../Versions/StatesView.i.dfy"
 include "../lib/Base/Maps.i.dfy"
-include "../lib/Base/sequences.i.dfy"
+include "../lib/Base/Sequences.i.dfy"
 include "../PivotBetree/PivotBetreeBlockInterface.i.dfy"
 
 module BlockSystem_Refines_StatesView {

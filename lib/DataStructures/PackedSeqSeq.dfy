@@ -1,7 +1,7 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "../Base/sequences.i.dfy"
+include "../Base/Sequences.i.dfy"
 include "../Base/total_order.i.dfy"
   
 module PackedSeqSeq {

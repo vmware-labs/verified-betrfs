@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 include "../Lang/NativeTypes.s.dfy"
-include "sequences.i.dfy"
+include "Sequences.i.dfy"
 
 module Arrays {
   import Seq = Sequences

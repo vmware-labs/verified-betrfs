@@ -15,7 +15,7 @@ module CacheIfc {
 
   function ReadValue(s: Variables, cu: CU) : Option<UninterpretedDiskPage>
   {
-    if CanRead(s, cu) then Some(s.dv[cu]) else None
+    if cu in s.dv then Some(s.dv[cu]) else None
   }
 
   predicate Read(s: Variables, cu: CU, value: UninterpretedDiskPage)
@@ -23,8 +23,13 @@ module CacheIfc {
     && ReadValue(s, cu) == Some(value)
   }
 
+  predicate IsClean(s: Variables, cu: CU)
+  {
+    true // TODO
+  }
+
   datatype Op = Write(cu: CU, value: UninterpretedDiskPage)
-  type Ops == seq<Op>
+  type Ops = seq<Op>
 
   predicate WFOpSeq(ops: Ops) {
     forall i | 0<=i<|ops| :: ValidCU(ops[i].cu)

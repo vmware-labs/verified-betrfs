@@ -1,5 +1,5 @@
 include "Base.s.dfy"
-include "../lib/Base/sequences.i.dfy" // TODO .i from .s, for Last, DropLast
+include "../lib/Base/SequencesLite.s.dfy"
 
 module MapSpecMod {
   import opened MessageMod
@@ -37,7 +37,7 @@ module MapSpecMod {
 // We don't do anything with old snapshots (indeed, no implementation could); I just wrote it
 // this way for greatest simplicity.
 module DeferredWriteMapSpecMod {
-  import opened Sequences // Last, DropLast
+  import opened SequencesLite // Last, DropLast
   import opened MessageMod
   import InterpMod
   import MapSpecMod

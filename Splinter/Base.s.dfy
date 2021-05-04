@@ -5,7 +5,9 @@ include "../lib/Lang/NativeTypes.s.dfy"
 module MessageMod {
   type Key(!new,==)
   type Value(!new)
-  type Message(!new)
+
+  //type Message(!new)
+  datatype Message = MessagePut(k:Key, v:Value)
 
   function AllKeys() : iset<Key> {
     iset key:Key | true

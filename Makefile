@@ -5,7 +5,7 @@
 # System configuration
 
 # You can build anything reachable from these root files.
-DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy
+DAFNY_ROOTS=Impl/Bundle.i.dfy build-tests/test-suite.i.dfy Splinter/Program.i.dfy
 
 DAFNY_ROOT?=.dafny/dafny/
 DAFNY_CMD=$(DAFNY_ROOT)/Scripts/dafny
@@ -214,7 +214,8 @@ build/lib/Marshalling/GenericMarshalling.i.verchk: NONLINEAR_FLAGS=
 build/lib/Buckets/BucketFlushModel.i.verchk: NONLINEAR_FLAGS=
 build/lib/Buckets/PackedKV.i.verchk: NONLINEAR_FLAGS=
 build/lib/Buckets/PackedStringArray.i.verchk: NONLINEAR_FLAGS=
-build/lib/Base/sequences.i.verchk: NONLINEAR_FLAGS=
+build/lib/Base/Sequences.i.verchk: NONLINEAR_FLAGS=
+build/Impl/IndirectionTable.i.verchk: NONLINEAR_FLAGS=
 build/BlockCacheSystem/DiskLayout.i.verchk: NONLINEAR_FLAGS=
 build/ByteBlockCacheSystem/Marshalling.i.verchk: NONLINEAR_FLAGS=
 build/ByteBlockCacheSystem/JournalBytes.i.verchk: NONLINEAR_FLAGS=

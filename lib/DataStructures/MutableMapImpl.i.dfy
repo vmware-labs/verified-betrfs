@@ -4,7 +4,7 @@
 include "../Lang/NativeTypes.s.dfy"
 include "../Lang/System/NativeArrays.s.dfy"
 include "../Base/Option.s.dfy"
-include "../Base/sequences.i.dfy"
+include "../Base/Sequences.i.dfy"
 include "../Base/Sets.i.dfy"
 include "../Base/SetBijectivity.i.dfy"
 include "MutableMapModel.i.dfy"

@@ -1,13 +1,15 @@
 // Copyright 2018-2021 VMware, Inc., Microsoft Inc., Carnegie Mellon University, ETH Zurich, and University of Washington
 // SPDX-License-Identifier: BSD-2-Clause
 
-include "sequences.i.dfy"
+include "Sets.i.dfy"
+include "Sequences.i.dfy"
 include "Maps.i.dfy"
 include "../Lang/NativeTypes.s.dfy"
 include "../Lang/System/NativeArrays.s.dfy"
 include "Option.s.dfy"
 
 abstract module Total_Preorder {
+  import Sets
   import Seq = Sequences
   
   type Element(!new,==)
@@ -181,6 +183,52 @@ abstract module Total_Preorder {
       StrictlySortedSubsequence(run, 0, |run| - 1);
       FilterStrictlySorted(f, Seq.DropLast(run));
     }
+  }
+
+  predicate BiggestInSet(e: Element, s: set<Element>)
+    requires 0 < |s|
+  {
+    e in s && forall e2 | e2 in s && e2 != e :: lt(e2, e)
+  }
+
+  lemma ExistsBiggestInSet(s: set<Element>)
+    requires 0 < |s|
+    ensures exists e :: BiggestInSet(e, s)
+  {
+    var e1 :| e1 in s;
+    if |s| == 1 {
+      forall e2 | e2 in s && e2 != e1 ensures lt(e2, e1)
+      {
+        Sets.SetInclusionImpliesSmallerCardinality({e1, e2}, s);
+      }
+      assert BiggestInSet(e1, s);
+    } else {
+      var rest := s - {e1};
+      ExistsBiggestInSet(rest);
+      var bigE :| BiggestInSet(bigE, rest);
+      if lt(bigE, e1) {
+        // e1 (s-rest) happened to to be the biggest thing in s.
+        assert forall e2 | e2 in s && e2 != e1 :: lt(e2, bigE) || e2==bigE;
+      } else {
+        // bigE is the biggest thing in s, too.
+        assert BiggestInSet(bigE, s);
+      }
+    }
+  }
+
+  function SortSet(s: set<Element>) : seq<Element>
+    ensures |s| == |SortSet(s)|
+    ensures forall t :: t in s <==> t in SortSet(s)
+    ensures IsSorted(SortSet(s))
+  {
+    reveal_IsSorted();
+    if |s|==0
+    then
+      []
+    else
+      ExistsBiggestInSet(s);
+      var e :| BiggestInSet(e, s);
+      SortSet(s - {e}) + [e]
   }
 }
 
@@ -869,6 +917,21 @@ abstract module Upperbounded_Total_Order refines Total_Order {
 
 module Integer_Order refines Total_Order {
   type Element = int
+
+  function SomeElement() : Element { 0 }
+
+  predicate lte(a: Element, b: Element) {
+    reveal_ltedef();
+    ltedef(a, b)
+  }
+
+  predicate {:opaque} ltedef(a: Element, b: Element) {
+    a <= b
+  }
+}
+
+module Nat_Order refines Total_Order {
+  type Element = nat
 
   function SomeElement() : Element { 0 }
 
