@@ -58,17 +58,15 @@ module RWLockImpl {
       invariant got_exc ==> pending_handle.loc() == this.loc
       decreases *
       {
-        atomic_block ret_value := execute_atomic_compare_and_set_strong(this.exc, false, true) {
+        atomic_block got_exc := execute_atomic_compare_and_set_strong(this.exc, false, true) {
           ghost_acquire g;
           ghost var ghostme := true;
-          if ghostme && ret_value {
+          if ghostme && got_exc {
             RWLockExtToken.SEPCM.dispose(pending_handle);
             g, pending_handle := RWLockExtToken.perform_exc_pending(g);
           }
           ghost_release g;
         }
-
-        got_exc := ret_value;
       }
 
       base_token := Base.get_unit(this.loc.base_loc);
@@ -83,9 +81,9 @@ module RWLockImpl {
       invariant this.Inv()
       decreases *
       {
-        atomic_block ret_value := execute_atomic_load(this.rc) {
+        atomic_block var ret_value := execute_atomic_load(this.rc) {
           ghost_acquire rc_g;
-          atomic_block _ := execute_atomic_noop(this.central) {
+          atomic_block var _ := execute_atomic_noop(this.central) {
             ghost_acquire central_g;
 
             if old_value == 0 {
@@ -113,9 +111,9 @@ module RWLockImpl {
     requires handle.loc().ExtLoc? && handle.loc().base_loc == base_token.loc()
     requires handle.loc() == this.loc
     {
-      atomic_block ret_value := execute_atomic_store(this.exc, false) {
+      atomic_block var _ := execute_atomic_store(this.exc, false) {
         ghost_acquire g;
-        atomic_block _ := execute_atomic_noop(this.central) {
+        atomic_block var _ := execute_atomic_noop(this.central) {
           ghost_acquire central_g;
 
           g, central_g :=
@@ -136,8 +134,7 @@ module RWLockImpl {
       while exc_value
       decreases *
       {
-        atomic_block ret_value := execute_atomic_load(this.exc) { }
-        exc_value := ret_value;
+        atomic_block exc_value := execute_atomic_load(this.exc) { }
       }
     }
 
@@ -145,8 +142,7 @@ module RWLockImpl {
     returns (rc: uint32)
     requires Inv()
     {
-      atomic_block ret_value := execute_atomic_load(this.rc) { }
-      rc := ret_value;
+      atomic_block rc := execute_atomic_load(this.rc) { }
     }
 
     method acquire_shared()
@@ -171,7 +167,7 @@ module RWLockImpl {
         if cur_rc != 0xffff_ffff {
           // increment rc
 
-          atomic_block ret_value := execute_atomic_compare_and_set_strong(this.rc, cur_rc, cur_rc + 1) {
+          atomic_block var ret_value := execute_atomic_compare_and_set_strong(this.rc, cur_rc, cur_rc + 1) {
             ghost_acquire g;
             ghost var ghostme := true;
             if ghostme && ret_value {
@@ -184,9 +180,9 @@ module RWLockImpl {
           if ret_value {
             // check exc is false
 
-            atomic_block exc_value := execute_atomic_load(this.exc) {
+            atomic_block var exc_value := execute_atomic_load(this.exc) {
               ghost_acquire g;
-              atomic_block _ := execute_atomic_noop(this.central) {
+              atomic_block var _ := execute_atomic_noop(this.central) {
                 ghost_acquire central_g;
                 ghost var ghostme := true;
                 if ghostme && !exc_value {
@@ -203,7 +199,7 @@ module RWLockImpl {
             } else {
               // abort
 
-              atomic_block ret_value := execute_atomic_fetch_sub_uint32(this.rc, 1) {
+              atomic_block var _ := execute_atomic_fetch_sub_uint32(this.rc, 1) {
                 ghost_acquire g;
                 g := perform_abort_shared(g, handle, old_value as nat);
                 handle := RWLockExtToken.SEPCM.get_unit(handle.loc());
@@ -220,9 +216,9 @@ module RWLockImpl {
     requires exists a :: handle.get() == RWLockExt.SharedTakenHandle(a)
     requires handle.loc() == this.loc
     {
-      atomic_block _ := execute_atomic_fetch_sub_uint32(this.rc, 1) {
+      atomic_block var _ := execute_atomic_fetch_sub_uint32(this.rc, 1) {
         ghost_acquire g;
-        atomic_block _ := execute_atomic_noop(this.central) {
+        atomic_block var _ := execute_atomic_noop(this.central) {
           ghost_acquire central_g;
           ghost var a :| handle.get() == RWLockExt.SharedTakenHandle(a);
           g, central_g :=
