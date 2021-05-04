@@ -9,13 +9,13 @@ module RWLockExt refines SimpleExt {
   import opened FullMaps
 
   /*
-   * We consider two bits of the status field, ExcLock and WriteBack.
+   * We consider two bits of the status field, ExcLock and Writeback.
    *
-   * ExcLock and WriteBack. Of course, 'ExcLock'
-   * and 'WriteBack' should be exclusive operations;
+   * ExcLock and Writeback. Of course, 'ExcLock'
+   * and 'Writeback' should be exclusive operations;
    * When both flags are set,
    * it should be interpreted as the 'ExcLock' being
-   * pending, with the 'WriteBack' being active.
+   * pending, with the 'Writeback' being active.
    *
    * Those 2 bits gives 2x2 = 4 states. We then have 2 more:
    * Unmapped and Reading.
@@ -28,8 +28,8 @@ module RWLockExt refines SimpleExt {
     | Reading
     | Reading_ExcLock
     | Available
-    | WriteBack
-    | WriteBack_PendingExcLock
+    | Writeback
+    | Writeback_PendingExcLock
     | PendingExcLock
     | ExcLock_Clean
     | ExcLock_Dirty
@@ -48,15 +48,15 @@ module RWLockExt refines SimpleExt {
   datatype ExcState = 
     | ExcNone
       // set ExcLock bit:
-    | ExcPendingAwaitWriteBack(t: int)
-      // check WriteBack bit unset
+    | ExcPendingAwaitWriteback(t: int)
+      // check Writeback bit unset
       //   and `visited` of the refcounts
     | ExcPending(t: int, visited: int, clean: bool)
     | ExcObtained(t: int, clean: bool)
 
   datatype WritebackState =
     | WritebackNone
-      // set WriteBack status bit
+      // set Writeback status bit
     | WritebackObtained(value: Base.M)
 
   // Flow for the phase of reading in a page from disk.
@@ -73,7 +73,7 @@ module RWLockExt refines SimpleExt {
 
   datatype CentralState =
     | CentralNone
-    | CentralState(flag: Flag, stored_value: Option<Base.M>)
+    | CentralState(flag: Flag, stored_value: Base.M)
 
   datatype M = M(
     central: CentralState,
@@ -157,7 +157,7 @@ module RWLockExt refines SimpleExt {
   {
     CountSharedRefs(state.sharedState, t)
 
-      + (if (state.exc.ExcPendingAwaitWriteBack?
+      + (if (state.exc.ExcPendingAwaitWriteback?
             || state.exc.ExcPending?
             || state.exc.ExcObtained?) && state.exc.t == t
          then 1 else 0)
@@ -171,7 +171,7 @@ module RWLockExt refines SimpleExt {
   {
     && state != unit() ==> (
       && state.central.CentralState?
-      && (state.exc.ExcPendingAwaitWriteBack? ==>
+      && (state.exc.ExcPendingAwaitWriteback? ==>
         && state.read.ReadNone?
         && -1 <= state.exc.t < NUM_THREADS
       )
@@ -199,10 +199,6 @@ module RWLockExt refines SimpleExt {
       && (
         state.read.ReadObtained? ==> 0 <= state.read.t < NUM_THREADS
       )
-      && (state.exc.ExcObtained? ==> state.central.stored_value.None?)
-      && (!state.read.ReadNone? ==> state.central.stored_value.None?)
-      && (!state.exc.ExcObtained? && state.read.ReadNone?
-          ==> state.central.stored_value.Some?)
       //&& (state.stored_value.Some? ==>
       //  state.stored_value.value.is_handle(key)
       //)
@@ -214,10 +210,10 @@ module RWLockExt refines SimpleExt {
   function Interp(a: F) : Base.M
     //requires Inv(a)
   {
-    if a == unit() || a.central.stored_value.None? then (
+    if a == unit() then (
       Base.unit()
     ) else (
-      a.central.stored_value.value
+      a.central.stored_value
     )
   }
 
@@ -239,10 +235,17 @@ module RWLockExt refines SimpleExt {
 
   ////// Transitions
 
-  /*function TakeWriteback(f: F, f': F)
+  predicate TakeWriteback(f: F, f': F)
   {
-    f == 
-  }*/
+    && f.central.CentralSome?
+    && f.central.flag == Available
+
+    && f == CentralHandle(f)
+    && f' == dot(
+      CentralHandle(f.central.(flag := Writeback))
+      WritebackHandle(WritebackObtained(f.central.stored_value)
+    )
+  }
 
   predicate InternalNext(f: F, f': F)
   predicate CrossNext(f: F, f': F, b: Base.M, b': Base.M)
