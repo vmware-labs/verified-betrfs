@@ -1867,11 +1867,13 @@ module IndirectionTable {
       invariant bm.Inv()
       invariant LinearMutableMap.WFIter(this.t, it)
       invariant BitmapModel.Len(bm.I()) == NumBlocks()
-      invariant success ==> forall r: uint64 | r in this.I().locs :: (
-        var li := this.t.contents[r].loc.value.addr as int / NodeBlockSize();
-        && MinNodeBlockIndex() <= li
-        && (li < NumBlocks() ==> (r in it.s <==> BitmapModel.IsSet(bm.I(), li)))
-      )
+      // invariant success ==> forall r: uint64 | r in this.I().locs :: (
+      //   var li := this.t.contents[r].loc.value.addr as int / NodeBlockSize();
+      //   && MinNodeBlockIndex() <= li
+      //   && (li < NumBlocks() ==> (r in it.s <==> BitmapModel.IsSet(bm.I(), li)))
+      // )
+      // invariant forall r: uint64 | r in this.I().locs && MinNodeBlockIndex() <= this.t.contents[r].loc.value.addr as int / NodeBlockSize() < NumBlocks() ::
+      //     r !in it.s ==> !BitmapModel.IsSet(bm.I(), this.t.contents[r].loc.value.addr as int / NodeBlockSize())
       invariant forall i: nat :: IsLocAllocIndirectionTablePartial(i, it.s) <==> IsLocAllocBitmap(bm.I(), i)
       invariant success ==> forall r1, r2 | r1 in this.I().locs && r2 in this.I().locs ::
           r1 in it.s && r2 in it.s ==>
@@ -1960,44 +1962,6 @@ module IndirectionTable {
               }
             }
 
-            forall r: uint64 | r in this.I().locs
-            ensures (
-              var li := this.t.contents[r].loc.value.addr as int / NodeBlockSize();
-              && MinNodeBlockIndex() <= li
-              && (li < NumBlocks() ==> (r in it.s <==> BitmapModel.IsSet(bm.I(), li)))
-            )
-            {
-              BitmapModel.reveal_IsSet();
-              BitmapModel.reveal_BitSet();
-              assert ValidNodeLocation(this.t.contents[r].loc.value);
-              assert ValidNodeAddr(this.t.contents[r].loc.value.addr);
-              var li := ValidNodeAddrDivisor(this.t.contents[r].loc.value.addr);
-              NonlinearLemmas.mul_invert(this.t.contents[r].loc.value.addr as int, NodeBlockSize(), li);
-              assert li == this.t.contents[r].loc.value.addr as int / NodeBlockSize();
-              assert MinNodeBlockIndex() <= li;
-              if li < NumBlocks() {
-                assert r in it0.s <==> BitmapModel.IsSet(bm0.I(), li);
-                if r == it0.next.key {
-                  assert r in it.s <==> BitmapModel.IsSet(bm.I(), li);
-                } else {
-                  assert it.s == it0.s + { it0.next.key };
-                  if r in it0.s {
-                    assert r in it.s;
-                    assert BitmapModel.IsSet(bm.I(), li);
-                  } else {
-                    assert r !in it0.s;
-                    assert r !in it.s;
-                    assert !BitmapModel.IsSet(bm0.I(), li);
-                    if BitmapModel.IsSet(bm.I(), li) {
-                      assert li == locIndex as int;
-                      assume r == it0.next.key;
-                      assert false;
-                    }
-                  }
-                }
-              }
-            }
-
             forall r1, r2 | r1 in this.I().locs && r2 in this.I().locs && r1 in it.s && r2 in it.s
             ensures BC.LocationsForDifferentRefsDontOverlap(this.I(), r1, r2)
             {
@@ -2007,6 +1971,8 @@ module IndirectionTable {
                 } else {
                   reveal_ValidNodeAddr();
                   if this.I().locs[r1].addr == this.I().locs[r2].addr {
+                    assert ValidNodeLocation(this.t.contents[r1].loc.value);
+                    assert ValidNodeAddr(this.t.contents[r1].loc.value.addr);
                     var j1 := DiskLayout.ValidNodeAddrDivisor(this.I().locs[r1].addr);
                     var j2 := DiskLayout.ValidNodeAddrDivisor(this.I().locs[r2].addr);
                     if r1 !in it0.s {
@@ -2028,6 +1994,60 @@ module IndirectionTable {
                 }
               }
             }
+
+            // forall r: uint64 | r in this.I().locs
+            // ensures (
+            //   var li := this.t.contents[r].loc.value.addr as int / NodeBlockSize();
+            //   && MinNodeBlockIndex() <= li
+            //   && (li < NumBlocks() ==> (r in it.s <==> BitmapModel.IsSet(bm.I(), li)))
+            // )
+            // {
+            //   BitmapModel.reveal_IsSet();
+            //   BitmapModel.reveal_BitSet();
+            //   assert ValidNodeLocation(this.t.contents[r].loc.value);
+            //   assert ValidNodeAddr(this.t.contents[r].loc.value.addr);
+            //   var li := ValidNodeAddrDivisor(this.t.contents[r].loc.value.addr);
+            //   NonlinearLemmas.mul_invert(this.t.contents[r].loc.value.addr as int, NodeBlockSize(), li);
+            //   assert li == this.t.contents[r].loc.value.addr as int / NodeBlockSize();
+            //   assert MinNodeBlockIndex() <= li;
+            //   if li < NumBlocks() {
+            //     assert r in it0.s <==> BitmapModel.IsSet(bm0.I(), li);
+            //     if r == it0.next.key {
+            //       assert r in it.s <==> BitmapModel.IsSet(bm.I(), li);
+            //     } else {
+            //       assert it.s == it0.s + { it0.next.key };
+            //       if r in it.s {
+            //         assert r in it0.s;
+            //         assert BitmapModel.IsSet(bm.I(), li);
+            //       } else {
+            //         assert r !in it0.s;
+            //         assert r !in it.s;
+            //         assert !BitmapModel.IsSet(bm0.I(), li);
+            //         assert this.t.contents[r].loc.value.addr != loc;
+            //         reveal_ValidNodeAddr();
+            //         assert li != locIndex as int by {
+            //           // if r != it0.next.key {
+            //           //   assert false;
+            //           // }
+            //           // if li == locIndex as int {
+            //           //   assert li == it0.next.value.loc.value.addr as int / NodeBlockSize();
+            //           //   // var rr :| rr in it.s && rr != r && this.t.contents[rr] == it0.next.value;
+            //           //   // assert r in this.I().locs && r in it.s;
+            //           //   // assert rr in this.I().locs && rr in it.s;
+            //           //   assert r == it0.next.key by {
+            //           //     if r != it0.next.key {
+            //           //       assert false;
+            //           //     }
+            //           //   }
+            //           //   assert false;
+            //           // }
+            //         }
+            //         assert !BitmapModel.IsSet(bm.I(), li);
+            //       }
+            //     }
+            //   }
+            // }
+
           } else {
             success := false;
             break;
