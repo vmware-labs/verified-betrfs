@@ -1837,13 +1837,45 @@ module IndirectionTable {
 
       success := true;
 
+      assert forall i: nat :: IsLocAllocIndirectionTablePartial(i, it.s) <==> IsLocAllocBitmap(bm.I(), i);
+
+      forall r: uint64 | r in this.I().locs
+      ensures (
+        && var li := this.t.contents[r].loc.value.addr as int / NodeBlockSize();
+        && (MinNodeBlockIndex() <= li)
+        && (li < NumBlocks() ==> (r in it.s <==> BitmapModel.IsSet(bm.I(), li)))
+      )
+      {
+        assert ValidNodeLocation(this.t.contents[r].loc.value);
+        assert ValidNodeAddr(this.t.contents[r].loc.value.addr);
+        var li := ValidNodeAddrDivisor(this.t.contents[r].loc.value.addr);
+        NonlinearLemmas.mul_invert(this.t.contents[r].loc.value.addr as int, NodeBlockSize(), li);
+        assert li == this.t.contents[r].loc.value.addr as int / NodeBlockSize();
+        assert MinNodeBlockIndex() <= li;
+        if li < NumBlocks() {
+          if r in it.s {
+            assert false;
+          } else {
+            assert !BitmapModel.IsSet(bm.I(), li);
+          }
+        }
+      }
+
       while it.next.Next?
       invariant this.t.Inv()
       invariant BC.WFCompleteIndirectionTable(this.I())
       invariant bm.Inv()
       invariant LinearMutableMap.WFIter(this.t, it)
       invariant BitmapModel.Len(bm.I()) == NumBlocks()
+      invariant success ==> forall r: uint64 | r in this.I().locs :: (
+        var li := this.t.contents[r].loc.value.addr as int / NodeBlockSize();
+        && MinNodeBlockIndex() <= li
+        && (li < NumBlocks() ==> (r in it.s <==> BitmapModel.IsSet(bm.I(), li)))
+      )
       invariant forall i: nat :: IsLocAllocIndirectionTablePartial(i, it.s) <==> IsLocAllocBitmap(bm.I(), i)
+      invariant success ==> forall r1, r2 | r1 in this.I().locs && r2 in this.I().locs ::
+          r1 in it.s && r2 in it.s ==>
+          BC.LocationsForDifferentRefsDontOverlap(this.I(), r1, r2)
       decreases it.decreaser
       {
         assert it.next.key in this.I().locs;
@@ -1852,6 +1884,10 @@ module IndirectionTable {
         assert 0 <= loc as nat / NodeBlockSize() < Uint64UpperBound() by {
           NonlinearLemmas.div_ge_0(loc as nat, NodeBlockSize());
           NonlinearLemmas.div_denom_ge_1(loc as nat, NodeBlockSize());
+        }
+        assert loc as int % NodeBlockSize() == 0 by {
+          reveal_ValidNodeAddr();
+          assert ValidNodeLocation(it.next.value.loc.value);
         }
         var locIndex: uint64 := loc / NodeBlockSizeUint64();
         if locIndex < NumBlocksUint64() {
@@ -1870,13 +1906,30 @@ module IndirectionTable {
               BitmapModel.reveal_BitSet();
               BitmapModel.reveal_IsSet();
 
-              if IsLocAllocIndirectionTablePartial(i, it0.s) { }
-
               if i == locIndex as nat {
                 assert IsLocAllocBitmap(bm.I(), i);
               } else {
-                if !IsLocAllocIndirectionTablePartial(i, it0.s) {
-                  assert IsLocAllocBitmap(bm.I(), i); // TODO(andreal)
+                if 0 <= i < MinNodeBlockIndex() {
+                  if IsLocAllocIndirectionTablePartial(i, it0.s) { }
+                } else {
+                  assert MinNodeBlockIndex() <= i;
+                  
+                  assert exists ref | ref in this.locs && ref in it.s ::
+                    !(this.locs[ref].addr as int != i * NodeBlockSize() as int);
+
+                  assert loc as int / NodeBlockSize() == locIndex as int;
+                  assert loc as int / NodeBlockSize() != i;
+
+                  assert loc as int % NodeBlockSize() == 0;
+                  NonlinearLemmas.div_invert(loc as int, NodeBlockSize(), i);
+                  // TODO(andrea) use ValidNodeAddrDivisor?
+                  assert loc as int != i * NodeBlockSize();
+                  assert it.s == it0.s + { it0.next.key };
+
+                  assert IsLocAllocIndirectionTablePartial(i, it0.s) by {
+                    assert exists ref | ref in this.locs && ref in it0.s ::
+                      !(this.locs[ref].addr as int != i * NodeBlockSize() as int);
+                  }
                 }
               }
             }
@@ -1894,11 +1947,85 @@ module IndirectionTable {
                 assert this.t.contents[ref].loc.Some?;
                 assert ref in it.s;
                 assert this.t.contents[ref] == it0.next.value;
+                assert this.t.contents[ref].loc.value.addr as int / NodeBlockSize() == i;
+                assert this.t.contents[ref].loc.value.addr == loc;
+                assert loc as int % NodeBlockSize() == 0;
+                // TODO(andrea) use ValidNodeAddrDivisor?
+                NonlinearLemmas.div_invert(loc as int, NodeBlockSize(), i);
                 assert this.t.contents[ref].loc.value.addr as int == i * NodeBlockSize() as int;
 
                 assert IsLocAllocIndirectionTablePartial(i, it.s);
               } else {
                 assert IsLocAllocIndirectionTablePartial(i, it.s);
+              }
+            }
+
+            forall r: uint64 | r in this.I().locs
+            ensures (
+              var li := this.t.contents[r].loc.value.addr as int / NodeBlockSize();
+              && MinNodeBlockIndex() <= li
+              && (li < NumBlocks() ==> (r in it.s <==> BitmapModel.IsSet(bm.I(), li)))
+            )
+            {
+              BitmapModel.reveal_IsSet();
+              BitmapModel.reveal_BitSet();
+              assert ValidNodeLocation(this.t.contents[r].loc.value);
+              assert ValidNodeAddr(this.t.contents[r].loc.value.addr);
+              var li := ValidNodeAddrDivisor(this.t.contents[r].loc.value.addr);
+              NonlinearLemmas.mul_invert(this.t.contents[r].loc.value.addr as int, NodeBlockSize(), li);
+              assert li == this.t.contents[r].loc.value.addr as int / NodeBlockSize();
+              assert MinNodeBlockIndex() <= li;
+              if li < NumBlocks() {
+                assert r in it0.s <==> BitmapModel.IsSet(bm0.I(), li);
+                if r == it0.next.key {
+                  assert r in it.s <==> BitmapModel.IsSet(bm.I(), li);
+                } else {
+                  assert it.s == it0.s + { it0.next.key };
+                  if r in it0.s {
+                    assert r in it.s;
+                    assert BitmapModel.IsSet(bm.I(), li);
+                  } else {
+                    assert r !in it0.s;
+                    assert r !in it.s;
+                    assert !BitmapModel.IsSet(bm0.I(), li);
+                    if BitmapModel.IsSet(bm.I(), li) {
+                      assert li == locIndex as int;
+                      assume r == it0.next.key;
+                      assert false;
+                    }
+                  }
+                }
+              }
+            }
+
+            forall r1, r2 | r1 in this.I().locs && r2 in this.I().locs && r1 in it.s && r2 in it.s
+            ensures BC.LocationsForDifferentRefsDontOverlap(this.I(), r1, r2)
+            {
+              if r1 != r2 {
+                if r1 in it0.s && r2 in it0.s {
+                  assert BC.LocationsForDifferentRefsDontOverlap(this.I(), r1, r2);
+                } else {
+                  reveal_ValidNodeAddr();
+                  if this.I().locs[r1].addr == this.I().locs[r2].addr {
+                    var j1 := DiskLayout.ValidNodeAddrDivisor(this.I().locs[r1].addr);
+                    var j2 := DiskLayout.ValidNodeAddrDivisor(this.I().locs[r2].addr);
+                    if r1 !in it0.s {
+                      assert r2 in it0.s;
+                      assert !BitmapModel.IsSet(bm0.I(), j1);
+                      assert IsLocAllocBitmap(bm0.I(), j2);
+                      assert BitmapModel.IsSet(bm0.I(), j2);
+                      assert false;
+                    } else {
+                      assert r1 in it0.s;
+                      assert !BitmapModel.IsSet(bm0.I(), j2);
+                      assert IsLocAllocBitmap(bm0.I(), j1);
+                      assert BitmapModel.IsSet(bm0.I(), j1);
+                      assert false;
+                    }
+                  } else {
+                    assert BC.LocationsForDifferentRefsDontOverlap(this.I(), r1, r2);
+                  }
+                }
               }
             }
           } else {
@@ -1909,10 +2036,6 @@ module IndirectionTable {
           success := false;
           break;
         }
-      }
-
-      if success {
-        assert BC.AllLocationsForDifferentRefsDontOverlap(I()); // TODO(andreal)
       }
     }
     // 
