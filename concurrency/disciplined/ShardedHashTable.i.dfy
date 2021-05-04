@@ -5,7 +5,7 @@ include "AppSpec.s.dfy"
 
 // Build up the insert_capacity monoid first so we can talk about it separately
 // in the CapacityAllocator impl, and not have to cart around an entire ShardedHashTable.
-module Count refines ShardedStateMachine {
+module Count refines PartialCommutativeMonoid {
   datatype Variables = Variables(value: nat)
 
   function unit() : Variables { Variables(0) }
@@ -14,22 +14,28 @@ module Count refines ShardedStateMachine {
     Variables(x.value + y.value)
   }
 
-/*
-Method Count_Compile._default.add_unit has no body
-Method Count_Compile._default.commutative has no body
-Method Count_Compile._default.associative has no body
-Function Count_Compile._default.Init has no body
-Function Count_Compile._default.Next has no body
-Function Count_Compile._default.Valid has no body
-Method Count_Compile._default.valid_monotonic has no body
-Method Count_Compile._default.update_monotonic has no body
-Method Count_Compile._default.InitImpliesValid has no body
-Method Count_Compile._default.NextPreservesValid has no body
-Function Count_Compile._default.input_ticket has no body
-Function Count_Compile._default.output_stub has no body
-Method Count_Compile._default.NewTicketPreservesValid has no body
-*/
+  lemma add_unit(x: Variables)
+  ensures add(x, unit()) == x
+  {
+  }
 
+  lemma commutative(x: Variables, y: Variables)
+  ensures add(x, y) == add(y, x)
+  {
+  }
+
+  lemma associative(x: Variables, y: Variables, z: Variables)
+  ensures add(x, add(y, z)) == add(add(x, y), z)
+  {
+  }
+
+  predicate Valid(s: Variables) { true }
+
+  lemma valid_monotonic(x: Variables, y: Variables)
+  //requires Valid(add(x, y))
+  ensures Valid(x)
+  {
+  }
 }
 
 // TODO(jonh): refactor ShardedHashTable into this module chain:
@@ -1758,14 +1764,15 @@ module ShardedHashTable refines ShardedStateMachine {
   }
 
 
-//  // Trusted composition tools. Not sure how to generate them.
-//  glinear method enclose(glinear a: CapacityVars) returns (h: Variables)
-//    requires CapacityVars
-//    ensures h == unit().(insert_capacity == a)
-//
-//  glinear method declose(glinear h: Variables) returns (a: CapacityVars)
-//    requires h.table == unitTable() // h is a unit() except for a
-//    requires h.tickets == multiset{}
-//    requires h.stubs == multiset{}
-//    ensures a == h.insert_capacity
+  // Trusted composition tools. Not sure how to generate them.
+  glinear method enclose(glinear a: Count.Variables) returns (glinear h: Variables)
+    requires Count.Valid(a)
+    ensures h == unit().(insert_capacity := a)
+
+  glinear method declose(glinear h: Variables) returns (glinear a: Count.Variables)
+    requires h.Variables?
+    requires h.table == unitTable() // h is a unit() except for a
+    requires h.tickets == multiset{}
+    requires h.stubs == multiset{}
+    ensures a == h.insert_capacity
 }

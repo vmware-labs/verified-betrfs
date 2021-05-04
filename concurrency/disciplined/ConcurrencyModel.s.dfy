@@ -1,15 +1,10 @@
 include "AppSpec.s.dfy"
 
-abstract module ShardedStateMachine {
-  import Ifc = MapIfc // TODO more module system crime. Wish this were a parameter we could apply later.
-
-  // The (shardable) Variables of the state machine. "Shardable" means that the
-  // variables are a PCM; below we have a bunch of obligations to make you prove
-  // that.
+// You can build your ShardedStateMachine out of smaller monoids. Code holding
+// a glinear monoid can be split and joined, but not transformed until they're
+// upgraded to a ShardedStateMachine resource. The upgrade mechanism isn't clear.
+abstract module PartialCommutativeMonoid {
   type Variables(==, !new) // TODO user can't construct/destruct the Variables?
-
-  // Monoid axioms
-
   function unit() : Variables
   function add(x: Variables, y: Variables) : Variables
 
@@ -32,20 +27,26 @@ abstract module ShardedStateMachine {
   lemma associative(x: Variables, y: Variables, z: Variables)
   ensures add(x, add(y, z)) == add(add(x, y), z)
 
-  // state-machine-y stuff
-
-  predicate Init(s: Variables)
-  predicate Next(s: Variables, s': Variables)
-
-  // A predicate that's true over any 'valid' Variables, even those that are
-  // fragments of the whole system state.  Contrast with Inv, which is an
-  // invariant that's only true over whole system states.
   predicate Valid(s: Variables)
 
   lemma valid_monotonic(x: Variables, y: Variables)
   requires Valid(add(x, y))
   ensures Valid(x)
+}
 
+abstract module ShardedStateMachine refines PartialCommutativeMonoid {
+  import Ifc = MapIfc // TODO more module system crime. Wish this were a parameter we could apply later.
+  
+  // The state machine's variables are the (refined)
+  // PartialCommutativeMonoid.Variables.  Being PCM makes them "shardable", so
+  // we can split them off and cart them around separately.
+
+  predicate Init(s: Variables)
+  predicate Next(s: Variables, s': Variables)
+
+  // The Valid predicate is true over any 'valid' Variables, even those that are
+  // fragments of the whole system state.  Contrast with Inv, which is an
+  // invariant that's only true over whole system states.
   lemma update_monotonic(x: Variables, y: Variables, z: Variables)
   requires Next(x, y)
   requires Valid(add(x, z))
