@@ -54,6 +54,11 @@ module RWLockExt refines SimpleExt {
     | ExcPending(t: int, visited: int, clean: bool)
     | ExcObtained(t: int, clean: bool)
 
+  datatype WritebackState =
+    | WritebackNone
+      // set WriteBack status bit
+    | WritebackObtained(value: Base.M)
+
   // Flow for the phase of reading in a page from disk.
   // This is a special-case flow, because it needs to be performed
   // on the way to obtaining a 'shared' lock, but it requires
@@ -66,9 +71,12 @@ module RWLockExt refines SimpleExt {
     | ReadPendingCounted(t: int)    // inc refcount
     | ReadObtained(t: int)          // clear ExcLock bit
 
+  datatype CentralState =
+    | CentralNone
+    | CentralState(flag: Flag, stored_value: Option<Base.M>)
+
   datatype M = M(
-    flags: Option<Flag>,
-    stored_value: Option<Base.M>,
+    central: CentralState,
     refCounts: map<ThreadId, nat>,
 
     sharedState: FullMap<SharedState, nat>,
@@ -79,38 +87,36 @@ module RWLockExt refines SimpleExt {
     // Special case in part because it can be initiated by any thread
     // and completed by any thread (not necessarily the same one).
     
-    writeback: bool              // set WriteBack status bit
+    writeback: WritebackState
   )
 
   type F = M
 
   function unit() : F
   {
-    M(None, None, map[], zero_map(), ExcNone, ReadNone, false)
+    M(CentralNone, map[], zero_map(), ExcNone, ReadNone, WritebackNone)
   }
 
   predicate dot_defined(a: F, b: F)
   {
-    && !(a.flags.Some? && b.flags.Some?)
-    && !(a.stored_value.Some? && b.stored_value.Some?)
+    && !(a.central.CentralState? && b.central.CentralState?)
     && a.refCounts.Keys !! b.refCounts.Keys
     && (a.exc.ExcNone? || b.exc.ExcNone?)
     && (a.read.ReadNone? || b.read.ReadNone?)
-    && !(a.writeback && b.writeback)
+    && (a.writeback.WritebackNone? || b.writeback.WritebackNone?)
   }
 
   function dot(a: F, b: F) : F
     //requires dot_defined(a, b)
   {
     M(
-      if a.flags.Some? then a.flags else b.flags,
-      if a.stored_value.Some? then a.stored_value else b.stored_value,
+      if a.central.CentralState? then a.central else b.central,
       (map k | k in a.refCounts.Keys + b.refCounts.Keys ::
           if k in a.refCounts.Keys then a.refCounts[k] else b.refCounts[k]),
       add_fns(a.sharedState, b.sharedState),
       if !a.exc.ExcNone? then a.exc else b.exc,
       if !a.read.ReadNone? then a.read else b.read,
-      a.writeback || b.writeback
+      if !a.writeback.WritebackNone? then a.writeback else b.writeback
     ) 
   }
 
@@ -137,66 +143,66 @@ module RWLockExt refines SimpleExt {
     assume false;
   }
 
-  function IsSharedRefFor(t: nat) : (SharedState) -> bool
+  function IsSharedRefFor(t: int) : (SharedState) -> bool
   {
     (ss: SharedState) => ss.t == t
   }
 
-  function CountSharedRefs(m: FullMap<SharedState, nat>, t: nat) : nat
+  function CountSharedRefs(m: FullMap<SharedState, nat>, t: int) : nat
   {
     SumFilter(IsSharedRefFor(t), m)
   }
 
-  function CountAllRefs(state: F, t: nat) : nat
+  function CountAllRefs(state: F, t: int) : nat
   {
     CountSharedRefs(state.sharedState, t)
 
-      + (if state.exc.ExcPendingAwaitWriteBack?
+      + (if (state.exc.ExcPendingAwaitWriteBack?
             || state.exc.ExcPending?
-            || state.exc.ExcObtained?
+            || state.exc.ExcObtained?) && state.exc.t == t
          then 1 else 0)
 
-      + (if state.read.ReadPendingCounted?
-            || state.read.ReadObtained?
+      + (if (state.read.ReadPendingCounted?
+            || state.read.ReadObtained?) && state.read.t == t
          then 1 else 0)
   }
 
   predicate Inv(state: F)
   {
     && state != unit() ==> (
-      && state.flags.Some?
+      && state.central.CentralState?
       && (state.exc.ExcPendingAwaitWriteBack? ==>
         && state.read.ReadNone?
         && -1 <= state.exc.t < NUM_THREADS
       )
       && (state.exc.ExcPending? ==>
         && state.read == ReadNone
-        && !state.writeback
+        && state.writeback.WritebackNone?
         && 0 <= state.exc.visited <= NUM_THREADS
         && -1 <= state.exc.t < NUM_THREADS
       )
       && (state.exc.ExcObtained? ==>
         && state.read == ReadNone
-        && !state.writeback
+        && state.writeback.WritebackNone?
         && -1 <= state.exc.t < NUM_THREADS
       )
-      && (state.writeback ==>
+      && (state.writeback.WritebackObtained? ==>
         && state.read == ReadNone
       )
       && (state.read.ReadPending? ==>
-        && !state.writeback
+        && state.writeback.WritebackNone?
       )
       && (state.read.ReadPendingCounted? ==>
-        && !state.writeback
+        && state.writeback.WritebackNone?
         && 0 <= state.read.t < NUM_THREADS
       )
       && (
         state.read.ReadObtained? ==> 0 <= state.read.t < NUM_THREADS
       )
-      && (state.exc.ExcObtained? ==> state.stored_value.None?)
-      && (!state.read.ReadNone? ==> state.stored_value.None?)
+      && (state.exc.ExcObtained? ==> state.central.stored_value.None?)
+      && (!state.read.ReadNone? ==> state.central.stored_value.None?)
       && (!state.exc.ExcObtained? && state.read.ReadNone?
-          ==> state.stored_value.Some?)
+          ==> state.central.stored_value.Some?)
       //&& (state.stored_value.Some? ==>
       //  state.stored_value.value.is_handle(key)
       //)
@@ -207,12 +213,44 @@ module RWLockExt refines SimpleExt {
 
   function Interp(a: F) : Base.M
     //requires Inv(a)
+  {
+    if a == unit() || a.central.stored_value.None? then (
+      Base.unit()
+    ) else (
+      a.central.stored_value.value
+    )
+  }
+
+  function dot3(a: F, b: F, c: F) : F
+  requires dot_defined(a, b) && dot_defined(dot(a, b), c)
+  {
+    dot(dot(a, b), c)
+  }
+
+  ////// Handlers
+
+  function CentralHandler(central: CentralState) : F {
+    M(central, map[], zero_map(), ExcNone, ReadNone, WritebackNone)
+  }
+
+  function WritebackHandler(wb: WritebackState) : F {
+    M(CentralNone, map[], zero_map(), ExcNone, ReadNone, wb)
+  }
+
+  ////// Transitions
+
+  /*function TakeWriteback(f: F, f': F)
+  {
+    f == 
+  }*/
 
   predicate InternalNext(f: F, f': F)
   predicate CrossNext(f: F, f': F, b: Base.M, b': Base.M)
 
   lemma interp_unit()
   ensures Inv(unit()) && Interp(unit()) == Base.unit()
+  {
+  }
 
   lemma internal_step_preserves_interp(p: F, f: F, f': F)
   //requires InternalNext(f, f')
