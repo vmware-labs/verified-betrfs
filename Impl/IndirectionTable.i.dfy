@@ -1610,7 +1610,7 @@ module IndirectionTable {
     // but it's kind of annoying. However, I think that it won't
     // be a big deal as long as most syncs are journaling syncs?
     // So I've moved back to this one which is slower but cleaner.
-    shared method IndirectionTableToVal()  // HashMapToVal
+    shared method {:timeLimitMultiplier 2} IndirectionTableToVal()  // HashMapToVal
     returns (v : V, size: uint64)
     requires this.Inv()
     requires BC.WFCompleteIndirectionTable(this.I())

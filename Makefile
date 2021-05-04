@@ -215,7 +215,6 @@ build/lib/Buckets/BucketFlushModel.i.verchk: NONLINEAR_FLAGS=
 build/lib/Buckets/PackedKV.i.verchk: NONLINEAR_FLAGS=
 build/lib/Buckets/PackedStringArray.i.verchk: NONLINEAR_FLAGS=
 build/lib/Base/Sequences.i.verchk: NONLINEAR_FLAGS=
-build/Impl/IndirectionTable.i.verchk: NONLINEAR_FLAGS=
 build/BlockCacheSystem/DiskLayout.i.verchk: NONLINEAR_FLAGS=
 build/ByteBlockCacheSystem/Marshalling.i.verchk: NONLINEAR_FLAGS=
 build/ByteBlockCacheSystem/JournalBytes.i.verchk: NONLINEAR_FLAGS=
