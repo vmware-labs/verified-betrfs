@@ -47,9 +47,14 @@ module Impl refines VerificationObligation {
     Splitted(r', ri)
   }
 
-  method init(glinear in_sv: SSM.Variables)
+  method init2(glinear in_sv: SSM.Variables)
   returns (v: Variables, glinear out_sv: SSM.Variables)
-  // requires SSM.Init(i)
+//  requires SSM.Init(in_sv)
+    requires in_sv.Variables?
+//    requires (forall i | 0 <= i < |in_sv.table| :: in_sv.table[i] == Some(Info(Empty, Free)))
+    requires in_sv.insert_capacity.value == Capacity()
+    requires in_sv.tickets == multiset{}
+    requires in_sv.stubs == multiset{}
   // ensures Inv(v)
   // ensures out_sv == unit()
   {
