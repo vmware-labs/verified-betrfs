@@ -23,89 +23,82 @@ module Impl refines VerificationObligation {
 
   function RowInv(index: nat, row: Row): bool
   {
-    //&& Valid(row.resource)  // valid is tucked into predicate type
     && 0 <= index as nat < FixedSize()
     && row.resource == oneRowResource(index as nat, Info(row.entry, Free), 0)
   }
 
-  predicate Inv(v: Variables) {
+  predicate RowMutexInv(row_mutexes: RowMutexTable)
+  {
+    (forall i | 0 <= i < |row_mutexes| :: row_mutexes[i].inv == ((row) => RowInv(i, row)))
+  }
+
+  predicate Inv(v: Variables)
+  {
     && CAP.Inv(v.allocator)
-    && |v.row_mutexes| == SSM.FixedSize()
-    && (forall i | 0 <= i < FixedSize()
-      :: v.row_mutexes[i].inv == ((row) => RowInv(i, row)))
+    && |v.row_mutexes| == FixedSize()
+    && RowMutexInv(v.row_mutexes)
   }
 
   datatype Splitted = Splitted(r':SSM.Variables, ri:SSM.Variables)
 
-  function {:opaque} Split(r:SSM.Variables, i:nat) : (splt:Splitted)
-    requires r.Variables?;
-    requires r.tickets == multiset{}
-    requires r.stubs == multiset{}
-    ensures |splt.r'.table|==|splt.ri.table|==|r.table|
-    ensures forall j | 0<=j<|r.table| :: splt.r'.table[j] == if j==i then None else r.table[j]
-    ensures forall j | 0<=j<|r.table| :: splt.ri.table[j] == if j==i then r.table[j] else None
-    ensures add(splt.r', splt.ri) == r
+  function {:opaque} InitVariablePartial(i: nat): SSM.Variables
+    requires i <= FixedSize()
   {
-    var r' := SSM.Variables(seq(|r.table|, (j) requires 0 <= j < |r.table| => if j!=i then r.table[j] else None), r.insert_capacity, multiset{}, multiset{});
-    var ri := SSM.Variables(seq(|r.table|, (j) requires 0 <= j < |r.table| => if j==i then r.table[j] else None), Count.Variables(0), multiset{}, multiset{});
-    Splitted(r', ri)
+    var table := seq(FixedSize(), j => if j >= i then Some(Info(Empty, Free)) else None);
+    SSM.Variables(table, Count.Variables(Capacity()), multiset{}, multiset{})
   }
 
-//  predicate KnowRowEmpty(table: seq<Option<Info>>, i: nat)
-//    requires i < |table|
-//  {
-//    table[i] == Some(Info(Empty, Free))
-//  }
-//
-//  predicate NoKnowRow(table: seq<Option<Info>>, i: nat)
-//    requires i < |table|
-//  {
-//    table[i].None?
-//  }
+  function Split(r:SSM.Variables, i:nat) : (splt:Splitted)
+    requires i < FixedSize()
+    requires r == InitVariablePartial(i)
+    ensures add(splt.r', splt.ri) == r
+  {
+    var r' := InitVariablePartial(i+1);
+    var ri := oneRowResource(i as nat, Info(Empty, Free), 0);
+    reveal InitVariablePartial();
+    Splitted(r', ri)
+  }
 
   method init2(glinear in_sv: SSM.Variables)
   returns (v: Variables, glinear out_sv: SSM.Variables)
   requires SSM.Init(in_sv)
-//    requires in_sv.Variables?
-//    requires (forall i | 0 <= i < |in_sv.table| :: KnowRowEmpty(in_sv.table, i))
-//    requires in_sv.insert_capacity.value == Capacity()
-//    requires in_sv.tickets == multiset{}
-//    requires in_sv.stubs == multiset{}
   // ensures Inv(v)
   // ensures out_sv == unit()
   {
     glinear var remaining_r := in_sv;
     var row_mutexes : RowMutexTable:= [];
     var i:uint32 := 0;
+
+    assert remaining_r == InitVariablePartial(0) by {
+      reveal InitVariablePartial();
+    }
+
     while i < FixedSizeImpl()
       invariant i as int == |row_mutexes| <= FixedSize()
-      invariant forall j:nat | j<i as int :: && row_mutexes[j].inv == (row) => RowInv(j, row)
-      invariant remaining_r.Variables?
-      invariant remaining_r.tickets == multiset{}
-      invariant remaining_r.stubs == multiset{} 
-      invariant forall k:nat | k < i as int :: remaining_r.table[k].None?
-      invariant forall l:nat | i as int <= l < |remaining_r.table| :: remaining_r.table[l] == Some(Info(Empty, Free))
-      invariant remaining_r.insert_capacity.value == Capacity()
+      invariant remaining_r == InitVariablePartial(i as nat)
+      invariant RowMutexInv(row_mutexes)
     {
       ghost var splitted := Split(remaining_r, i as int);
+      
       glinear var ri;
       remaining_r, ri := SSM.split(remaining_r, splitted.r', splitted.ri);
-      assert RowInv(i as nat, Row(Empty, ri));
+
       var m := new_mutex<Row>(Row(Empty, ri), (row) => RowInv(i as nat, row));
       row_mutexes := row_mutexes + [m];
       i := i + 1;
     }
 
-    assert remaining_r.table == unitTable();
-    glinear var cap := declose(remaining_r);
+    out_sv := remaining_r;
+    // assert remaining_r.table == unitTable();
+    // glinear var cap := declose(remaining_r);
     
-    var allocator; glinear var remaining_cap;
+    // var allocator; glinear var remaining_cap;
 
-    assert cap.value == Capacity();
-    allocator, remaining_cap := CAP.init(cap);
-    v := Variables.Variables(row_mutexes, allocator);
+    // assert cap.value == Capacity();
+    // allocator, remaining_cap := CAP.init(cap);
+    // v := Variables.Variables(row_mutexes, allocator);
 
-    out_sv := enclose(remaining_cap);
+    // out_sv := enclose(remaining_cap);
   }
 
   // predicate method shouldHashGoBefore(search_h: uint32, slot_h: uint32, slot_idx: uint32) 
