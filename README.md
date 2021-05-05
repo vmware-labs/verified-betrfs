@@ -135,4 +135,4 @@ where `<data_dir>` should be an empty (or non-existing) directory that will cont
 
 # Contributing
 
-See CONTRIBUTING.md for our contributing guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for our contributing guidelines.
