@@ -167,7 +167,7 @@ module ShardedHashTable refines ShardedStateMachine {
     seq(FixedSize(), i => if i == k then Some(info) else None)
   }
 
-  function oneRowResource(k: nat, info: Info, cap: int) : Variables 
+  function oneRowResource(k: nat, info: Info, cap: nat) : Variables 
   requires 0 <= k < FixedSize()
   {
     Variables(oneRowTable(k, info), Count.Variables(cap), multiset{}, multiset{})
@@ -181,7 +181,7 @@ module ShardedHashTable refines ShardedStateMachine {
     seq(FixedSize(), i => if i == k1 then Some(info1) else if i == k2 then Some(info2) else None)
   }
 
-  function twoRowsResource(k1: nat, info1: Info, k2: nat, info2: Info, cap: int) : Variables 
+  function twoRowsResource(k1: nat, info1: Info, k2: nat, info2: Info, cap: nat) : Variables 
   requires 0 <= k1 < FixedSize()
   requires 0 <= k2 < FixedSize()
   requires k1 != k2
