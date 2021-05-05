@@ -50,8 +50,8 @@ module Impl refines VerificationObligation {
   method init(glinear in_sv: SSM.Variables)
   returns (v: Variables, glinear out_sv: SSM.Variables)
   // requires SSM.Init(i)
-  ensures Inv(v)
-  ensures out_sv == unit()
+  // ensures Inv(v)
+  // ensures out_sv == unit()
   {
     glinear var remaining_r := in_sv;
     var row_mutexes : RowMutexTable:= [];
@@ -75,9 +75,15 @@ module Impl refines VerificationObligation {
     }
 
     assert remaining_r.table == unitTable();
-    glinear var insert_capacity;
-    out_sv, insert_capacity := declose(remaining_r);
-    init(insert_capacity);
+    glinear var cap := declose(remaining_r);
+    
+    var allocator; glinear var remaining_cap;
+
+    assert cap.value == Capacity();
+    allocator, remaining_cap := CAP.init(cap);
+    v := Variables.Variables(row_mutexes, allocator);
+
+    out_sv := enclose(remaining_cap);
   }
 
   // predicate method shouldHashGoBefore(search_h: uint32, slot_h: uint32, slot_idx: uint32) 

@@ -1769,11 +1769,11 @@ module ShardedHashTable refines ShardedStateMachine {
     requires Count.Valid(a)
     ensures h == unit().(insert_capacity := a)
 
-  glinear method declose(glinear h: Variables) returns (glinear unit_r: Variables, glinear a: Count.Variables)
+  glinear method declose(glinear h: Variables) returns (glinear a: Count.Variables)
     requires h.Variables?
     requires h.table == unitTable() // h is a unit() except for a
     requires h.tickets == multiset{}
     requires h.stubs == multiset{}
     ensures a == h.insert_capacity
-    ensures unit_r == unit()
+    // ensures unit_r == unit()
 }
