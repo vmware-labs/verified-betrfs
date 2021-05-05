@@ -65,7 +65,7 @@ module IndirectionTable {
     map ref | ref in t.contents && t.contents[ref].loc.Some? :: t.contents[ref].loc.value
   }
 
-  function MapGraph(t: map<uint64, Entry>) : map<BT.G.Reference, seq<BT.G.Reference>>
+  function {:timeLimitMultiplier 8} MapGraph(t: map<uint64, Entry>) : map<BT.G.Reference, seq<BT.G.Reference>>
   {
     map ref | ref in t :: t[ref].succs
   }
@@ -82,7 +82,7 @@ module IndirectionTable {
 
   datatype PredecessorEdge = PredecessorEdge(src: BT.G.Reference, ghost idx: int)
 
-  function PredecessorSet(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference) : set<PredecessorEdge>
+  function {:timeLimitMultiplier 8} PredecessorSet(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference) : set<PredecessorEdge>
   {
     set src, idx | src in graph && 0 <= idx < |graph[src]| && graph[src][idx] == dest :: PredecessorEdge(src, idx)
   }
@@ -97,7 +97,7 @@ module IndirectionTable {
     set src, idx | src in graph && 0 <= idx < |graph[src]| && graph[src][idx] == dest && (src in domain || (src == next && idx < j)) :: PredecessorEdge(src, idx)
   }
 
-  predicate GraphClosedRestricted(graph: map<BT.G.Reference, seq<BT.G.Reference>>, domain: set<BT.G.Reference>)
+  predicate {:timeLimitMultiplier 8} GraphClosedRestricted(graph: map<BT.G.Reference, seq<BT.G.Reference>>, domain: set<BT.G.Reference>)
   {
     forall ref | ref in graph && ref in domain ::
       forall i | 0 <= i < |graph[ref]| ::
@@ -117,7 +117,7 @@ module IndirectionTable {
     if ref == BT.G.Root() then 1 else 0
   }
 
-  predicate ValidPredCounts(predCounts: map<BT.G.Reference, int>, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
+  predicate {:timeLimitMultiplier 8} ValidPredCounts(predCounts: map<BT.G.Reference, int>, graph: map<BT.G.Reference, seq<BT.G.Reference>>)
   {
     forall ref | ref in predCounts ::
         predCounts[ref] == |PredecessorSet(graph, ref)| + IsRoot(ref)
@@ -129,7 +129,7 @@ module IndirectionTable {
     IndirectionTableMaxSize()
   }
 
-  function method MaxSizeUint64() : uint64
+  function method {:timeLimitMultiplier 8} MaxSizeUint64() : uint64
   {
     IndirectionTableMaxSizeUint64()
   }
@@ -935,7 +935,7 @@ module IndirectionTable {
       }
     }
 
-    linear inout method UpdateAndRemoveLoc(ref: BT.G.Reference, succs: seq<BT.G.Reference>)
+    linear inout method {:timeLimitMultiplier 8} UpdateAndRemoveLoc(ref: BT.G.Reference, succs: seq<BT.G.Reference>)
     returns (oldLoc : Option<Location>)
     requires old_self.Inv()
     requires old_self.TrackingGarbage()
@@ -1296,7 +1296,7 @@ module IndirectionTable {
           == PredecessorSetRestrictedPartial(graph, dest, domain, next, j) + {PredecessorEdge(next, j)};
     }
 
-    static lemma LemmaPredecessorSetRestrictedPartialAdd1Other(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference, domain: set<BT.G.Reference>, next: BT.G.Reference, j: int)
+    static lemma {:timeLimitMultiplier 8} LemmaPredecessorSetRestrictedPartialAdd1Other(graph: map<BT.G.Reference, seq<BT.G.Reference>>, dest: BT.G.Reference, domain: set<BT.G.Reference>, next: BT.G.Reference, j: int)
     requires next in graph
     requires 0 <= j < |graph[next]|
     requires dest != graph[next][j]
@@ -1307,7 +1307,7 @@ module IndirectionTable {
           == PredecessorSetRestrictedPartial(graph, dest, domain, next, j);
     }
 
-    static method ComputeRefCountsInnerLoop(linear inout tbl': HashMap, shared tbl: HashMap, it: LinearMutableMap.Iterator<Entry>)
+    static method {:timeLimitMultiplier 8} ComputeRefCountsInnerLoop(linear inout tbl': HashMap, shared tbl: HashMap, it: LinearMutableMap.Iterator<Entry>)
     returns (success: bool, it': LinearMutableMap.Iterator<Entry>)
     requires it.next.Next?
     requires ComputeRefCountsOuterLoopInv(old_tbl', tbl, it)
@@ -1384,7 +1384,7 @@ module IndirectionTable {
       }
     }
 
-    static method ComputeRefCounts(shared tbl: HashMap)
+    static method {:timeLimitMultiplier 8} ComputeRefCounts(shared tbl: HashMap)
       returns (linear tbl' : lOption<HashMap>)
       requires tbl.Inv()
       requires forall ref | ref in tbl.contents :: tbl.contents[ref].predCount == 0
@@ -1462,7 +1462,7 @@ module IndirectionTable {
       }
     }
 
-    static method MakeGarbageQueue(shared t: HashMap)
+    static method {:timeLimitMultiplier 8} MakeGarbageQueue(shared t: HashMap)
     returns (linear q : USeq.USeq)
     requires t.Inv()
     requires |t.contents| <= 0x1_0000_0000
@@ -1514,7 +1514,7 @@ module IndirectionTable {
       r := refUpperBound;
     }
 
-    static method ValToIndirectionTable(v: V)
+    static method {:timeLimitMultiplier 8} ValToIndirectionTable(v: V)
     returns (linear s : lOption<IndirectionTable>)
     requires ValidVal(v)
     requires ValInGrammar(v, IndirectionTableGrammar())
@@ -1566,11 +1566,11 @@ module IndirectionTable {
       }
     }
 
-    static function MaxIndirectionTableByteSize() : int {
+    static function {:timeLimitMultiplier 8} MaxIndirectionTableByteSize() : int {
       8 + MaxSize() * (8 + 8 + 8 + (8 + MaxNumChildren() * 8))
     }
 
-    static lemma lemma_SeqSum_prefix_array(a: array<V>, i: int)
+    static lemma {:timeLimitMultiplier 8} lemma_SeqSum_prefix_array(a: array<V>, i: int)
     requires 0 < i <= a.Length
     ensures SeqSum(a[..i-1]) + SizeOfV(a[i-1]) == SeqSum(a[..i])
     {
@@ -1591,7 +1591,7 @@ module IndirectionTable {
       reveal_SeqSum();
     }
 
-    static function IMapAsIndirectionTable(m: map<uint64, Entry>) : SectorType.IndirectionTable
+    static function {:timeLimitMultiplier 8} IMapAsIndirectionTable(m: map<uint64, Entry>) : SectorType.IndirectionTable
     {
       SectorType.IndirectionTable(MapLocs(m), MapGraph(m)) // TODO: yizhou7
     }
@@ -1610,7 +1610,7 @@ module IndirectionTable {
     // but it's kind of annoying. However, I think that it won't
     // be a big deal as long as most syncs are journaling syncs?
     // So I've moved back to this one which is slower but cleaner.
-    shared method {:timeLimitMultiplier 2} IndirectionTableToVal()  // HashMapToVal
+    shared method {:timeLimitMultiplier 8} IndirectionTableToVal()  // HashMapToVal
     returns (v : V, size: uint64)
     requires this.Inv()
     requires BC.WFCompleteIndirectionTable(this.I())
@@ -1776,7 +1776,7 @@ module IndirectionTable {
     //   }
     // }
 
-    static method BitmapInitUpTo(linear inout bm: BitmapImpl.Bitmap, upTo: uint64)
+    static method {:timeLimitMultiplier 8} BitmapInitUpTo(linear inout bm: BitmapImpl.Bitmap, upTo: uint64)
     requires old_bm.Inv()
     requires upTo as int <= BitmapModel.Len(old_bm.I())
     ensures bm.Inv()
@@ -1815,7 +1815,7 @@ module IndirectionTable {
       )
     }
 
-    shared method InitLocBitmap()
+    shared method {:timeLimitMultiplier 8} InitLocBitmap()
     returns (success: bool, linear bm: BitmapImpl.Bitmap)
     requires this.Inv()
     requires BC.WFCompleteIndirectionTable(this.I())
@@ -2024,7 +2024,7 @@ module IndirectionTable {
       && (forall r | r in this.I().graph :: ref !in this.I().graph[r])
     }
 
-    shared method FindDeallocable() returns (ref: Option<BT.G.Reference>)
+    shared method {:timeLimitMultiplier 8} FindDeallocable() returns (ref: Option<BT.G.Reference>)
     requires this.Inv()
     requires this.TrackingGarbage()
     ensures ref.Some? ==> ref.value in this.I().graph
@@ -2109,7 +2109,7 @@ module IndirectionTable {
       reveal self.Inv();
     }
 
-    function {:opaque} getRefUpperBound() : (r: uint64)
+    function {:opaque} {:timeLimitMultiplier 8} getRefUpperBound() : (r: uint64)
     requires Inv()
     ensures forall ref | ref in this.graph :: ref <= r
     {
@@ -2117,7 +2117,7 @@ module IndirectionTable {
       this.refUpperBound
     }
 
-    shared method GetRefUpperBound() returns (r: uint64)
+    shared method {:timeLimitMultiplier 8} GetRefUpperBound() returns (r: uint64)
     requires this.Inv()
     ensures r == this.getRefUpperBound()
     {
