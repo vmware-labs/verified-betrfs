@@ -37,36 +37,40 @@ module Impl refines VerificationObligation {
 
   datatype Splitted = Splitted(r':SSM.Variables, ri:SSM.Variables)
 
-  function Split(r:SSM.Variables, i:nat) : Splitted
+  function {:opaque} Split(r:SSM.Variables, i:nat) : (splt:Splitted)
     requires r.Variables?;
     requires r.tickets == multiset{}
     requires r.stubs == multiset{}
+    ensures |splt.r'.table|==|splt.ri.table|==|r.table|
+    ensures forall j | 0<=j<|r.table| :: splt.r'.table[j] == if j==i then None else r.table[j]
+    ensures forall j | 0<=j<|r.table| :: splt.ri.table[j] == if j==i then r.table[j] else None
+    ensures add(splt.r', splt.ri) == r
   {
     var r' := SSM.Variables(seq(|r.table|, (j) requires 0 <= j < |r.table| => if j!=i then r.table[j] else None), r.insert_capacity, multiset{}, multiset{});
     var ri := SSM.Variables(seq(|r.table|, (j) requires 0 <= j < |r.table| => if j==i then r.table[j] else None), Count.Variables(0), multiset{}, multiset{});
     Splitted(r', ri)
   }
 
-  predicate KnowRowEmpty(table: seq<Option<Info>>, i: nat)
-    requires i < |table|
-  {
-    table[i] == Some(Info(Empty, Free))
-  }
-
-  predicate NoKnowRow(table: seq<Option<Info>>, i: nat)
-    requires i < |table|
-  {
-    table[i].None?
-  }
+//  predicate KnowRowEmpty(table: seq<Option<Info>>, i: nat)
+//    requires i < |table|
+//  {
+//    table[i] == Some(Info(Empty, Free))
+//  }
+//
+//  predicate NoKnowRow(table: seq<Option<Info>>, i: nat)
+//    requires i < |table|
+//  {
+//    table[i].None?
+//  }
 
   method init2(glinear in_sv: SSM.Variables)
   returns (v: Variables, glinear out_sv: SSM.Variables)
-//  requires SSM.Init(in_sv)
-    requires in_sv.Variables?
-    requires (forall i | 0 <= i < |in_sv.table| :: KnowRowEmpty(in_sv.table, i))
-    requires in_sv.insert_capacity.value == Capacity()
-    requires in_sv.tickets == multiset{}
-    requires in_sv.stubs == multiset{}
+  requires SSM.Init(in_sv)
+//    requires in_sv.Variables?
+//    requires (forall i | 0 <= i < |in_sv.table| :: KnowRowEmpty(in_sv.table, i))
+//    requires in_sv.insert_capacity.value == Capacity()
+//    requires in_sv.tickets == multiset{}
+//    requires in_sv.stubs == multiset{}
   // ensures Inv(v)
   // ensures out_sv == unit()
   {
@@ -79,15 +83,13 @@ module Impl refines VerificationObligation {
       invariant remaining_r.Variables?
       invariant remaining_r.tickets == multiset{}
       invariant remaining_r.stubs == multiset{} 
-      invariant forall k:nat | k < i as int :: NoKnowRow(remaining_r.table, k)
-      invariant forall l:nat | i as int <= l < |remaining_r.table| :: KnowRowEmpty(remaining_r.table, l)
+      invariant forall k:nat | k < i as int :: remaining_r.table[k].None?
+      invariant forall l:nat | i as int <= l < |remaining_r.table| :: remaining_r.table[l] == Some(Info(Empty, Free))
       invariant remaining_r.insert_capacity.value == Capacity()
     {
-      assert KnowRowEmpty(remaining_r.table, i as nat);
       ghost var splitted := Split(remaining_r, i as int);
       glinear var ri;
       remaining_r, ri := SSM.split(remaining_r, splitted.r', splitted.ri);
-      assert KnowRowEmpty(ri.table, i as nat);
       assert RowInv(i as nat, Row(Empty, ri));
       var m := new_mutex<Row>(Row(Empty, ri), (row) => RowInv(i as nat, row));
       row_mutexes := row_mutexes + [m];
