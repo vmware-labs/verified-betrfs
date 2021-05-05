@@ -167,10 +167,10 @@ module ShardedHashTable refines ShardedStateMachine {
     seq(FixedSize(), i => if i == k then Some(info) else None)
   }
 
-  function oneRowResource(k: nat, info: Info, cap: Count.Variables) : Variables 
+  function oneRowResource(k: nat, info: Info, cap: int) : Variables 
   requires 0 <= k < FixedSize()
   {
-    Variables(oneRowTable(k, info), cap, multiset{}, multiset{})
+    Variables(oneRowTable(k, info), Count.Variables(cap), multiset{}, multiset{})
   }
 
   function twoRowsTable(k1: nat, info1: Info, k2: nat, info2: Info) : seq<Option<Info>>
@@ -181,12 +181,12 @@ module ShardedHashTable refines ShardedStateMachine {
     seq(FixedSize(), i => if i == k1 then Some(info1) else if i == k2 then Some(info2) else None)
   }
 
-  function twoRowsResource(k1: nat, info1: Info, k2: nat, info2: Info, cap: Count.Variables) : Variables 
+  function twoRowsResource(k1: nat, info1: Info, k2: nat, info2: Info, cap: int) : Variables 
   requires 0 <= k1 < FixedSize()
   requires 0 <= k2 < FixedSize()
   requires k1 != k2
   {
-    Variables(twoRowsTable(k1, info1, k2, info2), cap, multiset{}, multiset{})
+    Variables(twoRowsTable(k1, info1, k2, info2), Count.Variables(cap), multiset{}, multiset{})
   }
 
   predicate isInputResource(in_r: Variables, rid: int, input: Ifc.Input)
@@ -1769,10 +1769,11 @@ module ShardedHashTable refines ShardedStateMachine {
     requires Count.Valid(a)
     ensures h == unit().(insert_capacity := a)
 
-  glinear method declose(glinear h: Variables) returns (glinear a: Count.Variables)
+  glinear method declose(glinear h: Variables) returns (glinear unit_r: Variables, glinear a: Count.Variables)
     requires h.Variables?
     requires h.table == unitTable() // h is a unit() except for a
     requires h.tickets == multiset{}
     requires h.stubs == multiset{}
     ensures a == h.insert_capacity
+    ensures unit_r == unit()
 }

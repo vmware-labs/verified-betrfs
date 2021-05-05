@@ -32,6 +32,15 @@ abstract module PartialCommutativeMonoid {
   lemma valid_monotonic(x: Variables, y: Variables)
   requires Valid(add(x, y))
   ensures Valid(x)
+
+  // the followings are supplied by TCB 
+  function method {:extern} join(glinear a: Variables, glinear b: Variables) : (glinear sum: Variables)
+  ensures sum == add(a, b)
+
+  glinear method {:extern} split(glinear sum: Variables, ghost a: Variables, ghost b: Variables)
+  returns (glinear a': Variables, glinear b': Variables)
+  requires sum == add(a, b)
+  ensures a' == a && b' == b
 }
 
 abstract module ShardedStateMachine refines PartialCommutativeMonoid {
@@ -67,14 +76,6 @@ abstract module ShardedStateMachine refines PartialCommutativeMonoid {
 
   function method {:extern} get_unit_shared() : (gshared u: Variables)
   ensures u == unit()
-
-  function method {:extern} join(glinear a: Variables, glinear b: Variables) : (glinear sum: Variables)
-  ensures sum == add(a, b)
-
-  glinear method {:extern} split(glinear sum: Variables, ghost a: Variables, ghost b: Variables)
-  returns (glinear a': Variables, glinear b': Variables)
-  requires sum == add(a, b)
-  ensures a' == a && b' == b
 
   glinear method {:extern} sub(gshared s: Variables, ghost t: Variables)
   returns (glinear t': Variables)

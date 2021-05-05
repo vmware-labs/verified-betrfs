@@ -8,13 +8,9 @@ module CapacityAllocatorTypes {
   import opened NativeTypes
   import opened ShardedHashTable
 
-  datatype CapacityVar(insert_capacity: int)
-
   linear datatype AllocatorBin = AllocatorBin(
     count: uint32,
-    glinear insert_capacity: CapacityVar)
-
-  function unit() : CapacityVar { CapacityVar(0) }
+    glinear resource: Count.Variables)
 }
 
 // separate module to avoid name collision
@@ -25,48 +21,45 @@ module CapacityAllocator {
   import opened Mutexes
   import opened NonlinearLemmas
   import opened CapacityAllocatorTypes
+  import opened Count
 
   type AllocatorMutex = Mutex<AllocatorBin>
   type AllocatorMutexTable = seq<AllocatorMutex>
 
   function BinInv(bin: AllocatorBin): bool
   {
-    && Valid(bin.resource)
-    && bin.resource == Variables(unitTable(), bin.count as nat, multiset{}, multiset{})
+    && Count.Valid(bin.resource)
+    && bin.resource == Count.Variables(bin.count as nat)
   }
 
-  function BinCount(): (c: nat)
+  function NumberOfBins(): (c: nat)
     ensures c > 0
 
-  function method BinCountImpl(): (c: uint32)
-    ensures c as nat == BinCount()
+  function method NumberOfBinsImpl(): (c: uint32)
+    ensures c as nat == NumberOfBins()
 
   predicate Inv(o: AllocatorMutexTable)
   {
-    && |o| == BinCount()
-    && (forall i | 0 <= i < BinCount() :: o[i].inv == BinInv)
+    && |o| == NumberOfBins()
+    && (forall i | 0 <= i < NumberOfBins() :: o[i].inv == BinInv)
   }
+
+  function Capacity() : nat
 
   function method CapacityImpl(): (s: uint32)
     ensures s as nat == Capacity()
-    
-  predicate CapPreInit(s: CapacityVar)
-  {
-    && s.insert_capacity == Capacity()
-  }
 
-  method {:noNLarith} init(glinear in_r: CapacityVar)
-  returns (mt: AllocatorMutexTable, glinear out_r: CapacityVar)
-  requires CapPreInit(in_r)
+  method {:noNLarith} init(glinear in_r: Count.Variables)
+  returns (mt: AllocatorMutexTable, glinear out_r: Count.Variables)
+  requires in_r.value == Capacity()
   ensures Inv(mt)
-  ensures out_r == CapacityAllocatorTypes.unit()
+  ensures out_r == Count.unit()
   {
     glinear var remaining_r := in_r;
 
     var total_amount :uint32 := CapacityImpl();
-    var bin_count := BinCountImpl();
+    var bin_count := NumberOfBinsImpl();
     mt := [];
-
 
     div_leq_numerator(total_amount as int, bin_count as int);
     var quotient :uint32 := total_amount / bin_count;
@@ -80,13 +73,13 @@ module CapacityAllocator {
       invariant i == 0 ==> allocated_sum == 0;
       invariant i > 0 ==> (allocated_sum == quotient as nat * i as nat + reaminder as nat);
 
-      invariant i as int == |mt| <= BinCount()
+      invariant i as int == |mt| <= NumberOfBins()
       invariant forall j:nat | j < i as int :: mt[j].inv == BinInv
-      invariant remaining_r.insert_capacity == total_amount as nat - allocated_sum
+      invariant remaining_r.value == total_amount as nat - allocated_sum
     {
       if i > 0 {
         calc >= {
-          remaining_r.insert_capacity - quotient as int;
+          remaining_r.value - quotient as int;
           total_amount as int - allocated_sum - quotient as int;
           total_amount as int - quotient as int * i as int - reaminder as int - quotient as int;
           {
@@ -104,22 +97,18 @@ module CapacityAllocator {
           0;
         }
 
-        assert remaining_r.insert_capacity >= quotient as nat;
+        assert remaining_r.value >= quotient as nat;
       }
 
       ghost var prev_sum := allocated_sum;
       var amount := if i == 0 then quotient + reaminder else quotient;
       allocated_sum := allocated_sum + amount as nat;
-
-      ghost var splitted := Split(remaining_r, amount as nat);
+     
       glinear var vi;
-      remaining_r, vi := SHT.split(remaining_r, splitted.v', splitted.vi);
+      remaining_r, vi := Count.split(remaining_r, Count.Variables(total_amount as nat - allocated_sum), Count.Variables(amount as nat));
+
       ghost var ab := AllocatorBin(amount, vi);
-      //ghost var t := Variables(
-      // We need to factor this thing out of the sharded hash table so we're not dependent on it.
-      //assert SHT.Inv(add(ab.resource, t));
-      assume Valid(ab.resource);  // TODO(e): bandaid
-      assert BinInv(ab);
+
       var m := new_mutex(AllocatorBin(amount, vi), BinInv);
       mt := mt + [m];
 
