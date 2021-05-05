@@ -41,7 +41,7 @@ module Impl refines VerificationObligation {
 
   datatype Splitted = Splitted(r':SSM.Variables, ri:SSM.Variables)
 
-  function {:opaque} InitVariablePartial(i: nat): SSM.Variables
+  function {:opaque} InitResoucePartial(i: nat): SSM.Variables
     requires i <= FixedSize()
   {
     var table := seq(FixedSize(), j => if j >= i then Some(Info(Empty, Free)) else None);
@@ -50,12 +50,12 @@ module Impl refines VerificationObligation {
 
   function Split(r:SSM.Variables, i:nat) : (splt:Splitted)
     requires i < FixedSize()
-    requires r == InitVariablePartial(i)
+    requires r == InitResoucePartial(i)
     ensures add(splt.r', splt.ri) == r
   {
-    var r' := InitVariablePartial(i+1);
+    var r' := InitResoucePartial(i+1);
     var ri := oneRowResource(i as nat, Info(Empty, Free), 0);
-    reveal InitVariablePartial();
+    reveal InitResoucePartial();
     Splitted(r', ri)
   }
 
@@ -69,13 +69,13 @@ module Impl refines VerificationObligation {
     var row_mutexes : RowMutexTable:= [];
     var i:uint32 := 0;
 
-    assert remaining_r == InitVariablePartial(0) by {
-      reveal InitVariablePartial();
+    assert remaining_r == InitResoucePartial(0) by {
+      reveal InitResoucePartial();
     }
 
     while i < FixedSizeImpl()
       invariant i as int == |row_mutexes| <= FixedSize()
-      invariant remaining_r == InitVariablePartial(i as nat)
+      invariant remaining_r == InitResoucePartial(i as nat)
       invariant RowMutexInv(row_mutexes)
     {
       ghost var splitted := Split(remaining_r, i as int);
@@ -88,7 +88,7 @@ module Impl refines VerificationObligation {
       i := i + 1;
     }
 
-    reveal InitVariablePartial();
+    reveal InitResoucePartial();
     assert remaining_r.table == unitTable();
     glinear var cap := declose(remaining_r);
 
