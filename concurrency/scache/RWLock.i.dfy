@@ -49,10 +49,10 @@ module RWLockExt refines SimpleExt {
   datatype ExcState = 
     | ExcNone
       // set ExcLock bit:
-    | ExcPendingAwaitWriteback(t: int)
+    | ExcPendingAwaitWriteback(t: int, b: Base.M)
       // check Writeback bit unset
       //   and `visited` of the refcounts
-    | ExcPending(t: int, visited: int, clean: bool)
+    | ExcPending(t: int, visited: int, clean: bool, b: Base.M)
     | ExcObtained(t: int, clean: bool)
 
   datatype WritebackState =
@@ -246,6 +246,9 @@ module RWLockExt refines SimpleExt {
         && state.exc.ExcPendingAwaitWriteback?
         && state.writeback.WritebackNone?
       )
+      && (forall ss: SharedState :: state.sharedState[ss] > 0 ==>
+        0 <= ss.t < NUM_THREADS
+      )
     )
   }
 
@@ -269,6 +272,14 @@ module RWLockExt refines SimpleExt {
 
   function CentralHandle(central: CentralState) : F {
     M(central, map[], zero_map(), ExcNone, ReadNone, WritebackNone)
+  }
+
+  function SharedHandle(ss: SharedState) : F {
+    M(CentralNone, map[], unit_fn(ss), ExcNone, ReadNone, WritebackNone)
+  }
+
+  function ExcHandle(e: ExcState) : F {
+    M(CentralNone, map[], zero_map(), e, ReadNone, WritebackNone)
   }
 
   function WritebackHandle(wb: WritebackState) : F {
@@ -340,63 +351,91 @@ module RWLockExt refines SimpleExt {
     assert dot(m', p).sharedState == dot(m, p).sharedState;
   }
 
-  //predicate ThreadlessExc
+  predicate ThreadlessExc(m: M, m': M)
+  {
+    && m.central.CentralState?
+    && (m.central.flag == Available || m.central.flag == Writeback)
+
+    && m == CentralHandle(m.central)
+    && m' == dot(
+      CentralHandle(m.central.(flag := 
+          if m.central.flag == Available then PendingExcLock else Writeback_PendingExcLock)),
+      ExcHandle(ExcPendingAwaitWriteback(-1, m.central.stored_value))
+    )
+  }
+
+  lemma ThreadlessExc_Preserves(p: M, m: M, m': M)
+  requires dot_defined(m, p)
+  requires Inv(dot(m, p))
+  requires ThreadlessExc(m, m')
+  ensures dot_defined(m', p)
+  ensures Inv(dot(m', p))
+  ensures Interp(dot(m, p)) == Interp(dot(m', p))
+  {
+    assert dot(m', p).sharedState == dot(m, p).sharedState;
+  }
+
+  predicate SharedToExc(m: M, m': M, ss: SharedState)
+  {
+    && m.central.CentralState?
+    && (m.central.flag == Available || m.central.flag == Writeback)
+    && ss.SharedObtained?
+
+    && m == dot(
+      CentralHandle(m.central),
+      SharedHandle(ss)
+    )
+    && m' == dot(
+      CentralHandle(m.central.(flag := 
+          if m.central.flag == Available then PendingExcLock else Writeback_PendingExcLock)),
+      ExcHandle(ExcPendingAwaitWriteback(ss.t, ss.b))
+    )
+  }
+
+  lemma SharedToExc_Preserves(p: M, m: M, m': M, ss: SharedState)
+  requires dot_defined(m, p)
+  requires Inv(dot(m, p))
+  requires SharedToExc(m, m', ss)
+  ensures dot_defined(m', p)
+  ensures Inv(dot(m', p))
+  ensures Interp(dot(m, p)) == Interp(dot(m', p))
+  {
+    SumFilterSimp<SharedState>();
+
+    assert dot(m', p).refCounts == dot(m, p).refCounts;
+    assert forall b | b != ss :: dot(m', p).sharedState[b] == dot(m, p).sharedState[b];
+    assert dot(m', p).sharedState[ss] + 1 == dot(m, p).sharedState[ss];
+    assert CountAllRefs(dot(m', p), ss.t) == CountAllRefs(dot(m, p), ss.t);
+  }
+
+  predicate TakeExcLockFinishWriteback(m: M, m': M, clean: bool)
+  {
+    && m.central.CentralState?
+    && m.exc.ExcPendingAwaitWriteback?
+    && m.central.flag != Writeback && m.central.flag != Writeback_PendingExcLock
+    && m == dot(
+      CentralHandle(m.central),
+      ExcHandle(m.exc)
+    )
+    && m' == dot(
+      CentralHandle(m.central.(flag :=
+        if clean then ExcLock_Clean else ExcLock_Dirty)),
+      ExcHandle(ExcPending(m.exc.t, 0, clean, m.exc.b))
+    )
+  }
+
+  lemma TakeExcLockFinishWriteback_Preserves(p: M, m: M, m': M, clean: bool)
+  requires dot_defined(m, p)
+  requires Inv(dot(m, p))
+  requires TakeExcLockFinishWriteback(m, m', clean)
+  ensures dot_defined(m', p)
+  ensures Inv(dot(m', p))
+  ensures Interp(dot(m, p)) == Interp(dot(m', p))
+  {
+    assert dot(m', p).sharedState == dot(m, p).sharedState;
+  }
 
   /*
-
-  predicate ThreadlessExc(
-    key: Key, state: RWLockState, state': RWLockState,
-    a: multiset<R>, a': multiset<R>,
-    flags: R,
-    flags': R, r': R, handle': R,
-    fl: Flag)
-  {
-    && a == multiset{flags}
-    && a' == multiset{flags', r', handle'}
-    && (fl == Available || fl == WriteBack)
-    && flags == Internal(FlagsField(key, fl))
-    && flags' == Internal(FlagsField(key,
-        if fl == Available then PendingExcLock else WriteBack_PendingExcLock))
-    && r' == Internal(ExcLockPendingAwaitWriteBack(key, -1))
-    && state' == state.(excState := WLSPendingAwaitWriteBack(-1))
-    && (state.handle.Some? ==> handle' == Const(state.handle.value))
-  }
-
-  predicate SharedToExc(
-    key: Key, state: RWLockState, state': RWLockState,
-    a: multiset<R>, a': multiset<R>,
-    flags: R, r: R,
-    flags': R, r': R,
-    t: int, fl: Flag)
-  {
-    && a == multiset{flags, r}
-    && a' == multiset{flags', r'}
-    && (fl == Available || fl == WriteBack)
-    && flags == Internal(FlagsField(key, fl))
-    && flags' == Internal(FlagsField(key,
-        if fl == Available then PendingExcLock else WriteBack_PendingExcLock))
-    && r == Internal(SharedLockObtained(key, t))
-    && r' == Internal(ExcLockPendingAwaitWriteBack(key, t))
-    && state' == state.(excState := WLSPendingAwaitWriteBack(t))
-  }
-
-  predicate TakeExcLockFinishWriteBack(
-    key: Key, state: RWLockState, state': RWLockState,
-    a: multiset<R>, a': multiset<R>,
-    flags: R, r: R,
-    flags': R, r': R,
-    t: int, fl: Flag, clean: bool)
-  {
-    && a == multiset{flags, r}
-    && a' == multiset{flags', r'}
-    && fl != WriteBack && fl != WriteBack_PendingExcLock
-    && state' == state.(excState := WLSPending(t, 0, clean))
-    && flags == Internal(FlagsField(key, fl))
-    && r == Internal(ExcLockPendingAwaitWriteBack(key, t))
-    && flags' == Internal(FlagsField(key,
-          if clean then ExcLock_Clean else ExcLock_Dirty))
-    && r' == Internal(ExcLockPending(key, t, 0, clean))
-  }
 
   predicate TakeExcLockSharedLockZero(
     key: Key, state: RWLockState, state': RWLockState,
@@ -666,10 +705,10 @@ module RWLockExt refines SimpleExt {
 
   ///// 
 
-  predicate InternalNext(f: F, f': F) {
+  predicate InternalNext(f: F, f': F) /*{
     forall p | dot_defined(f, p) && Inv(dot(f, p)) ::
       dot_defined(f', p) && Inv(dot(f', p)) && Interp(dot(f', p)) == Interp(dot(f, p))
-  }
+  }*/
 
   predicate CrossNext(f: F, f': F, b: Base.M, b': Base.M)
 
@@ -685,8 +724,6 @@ module RWLockExt refines SimpleExt {
   ensures dot_defined(f', p)
   ensures Inv(dot(f', p))
   ensures Interp(dot(f', p)) == Interp(dot(f, p))
-  {
-  }
 
   lemma cross_step_preserves_interp(p: F, f: F, f': F, b: Base.M, b': Base.M)
   //requires CrossNext(f, f', b, b')
@@ -701,4 +738,16 @@ module RWLockExt refines SimpleExt {
 
 }
 
-module RWLockExtToken refines SimpleExtToken {
+/*module RWLockExtToken refines SimpleExtToken {
+  import SEPCM = RWLockSimpleExtPCM
+  import opened RWLockExt
+
+  glinear method ReleaseWriteback(central: Token, handle: Token)
+  requires central.loc == handle.loc
+  requires
+    && central.central.CentralState?
+    && handle.writeback.WritebackObtained?
+    && central == CentralHandle(central.central)
+    && handle == WritebackHandle()
+
+}*/
