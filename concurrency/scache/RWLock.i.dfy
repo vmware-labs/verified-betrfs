@@ -80,7 +80,7 @@ module RWLockExt refines SimpleExt {
     central: CentralState,
     refCounts: map<ThreadId, nat>,
 
-    sharedState: FullMap<SharedState, nat>,
+    sharedState: FullMap<SharedState>,
     exc: ExcState,
     read: ReadState,
 
@@ -149,7 +149,7 @@ module RWLockExt refines SimpleExt {
     (ss: SharedState) => ss.t == t
   }
 
-  function CountSharedRefs(m: FullMap<SharedState, nat>, t: int) : nat
+  function CountSharedRefs(m: FullMap<SharedState>, t: int) : nat
   {
     SumFilter(IsSharedRefFor(t), m)
   }
@@ -977,24 +977,6 @@ module RWLockExt refines SimpleExt {
   {
     assert dot(m', p).sharedState == dot(m, p).sharedState;
   }
-
-  /*
-
-  predicate AbandonReadingPending(
-    key: Key, state: RWLockState, state': RWLockState,
-    a: multiset<R>, a': multiset<R>,
-    flags: R, r: R, handle: R, flags': R, fl: Flag)
-  {
-    && a == multiset{flags, handle, r}
-    && a' == multiset{flags'}
-    && r == Internal(ReadingPending(key))
-    && flags == Internal(FlagsField(key, fl))
-    && flags' == Internal(FlagsField(key, Unmapped))
-    && handle.Const? && handle.v.is_handle(key)
-
-    && state' == state.(readState := RSNone)
-  }
-  */
 
   ///// 
 
