@@ -68,9 +68,9 @@ module RWLockExt refines SimpleExt {
 
   datatype ReadState =
     | ReadNone
-    | ReadPending                   // set status bit to ExcLock | Reading
-    | ReadPendingCounted(t: int)    // inc refcount
-    | ReadObtained(t: int)          // clear ExcLock bit
+    | ReadPending                        // set status bit to ExcLock | Reading
+    | ReadPendingCounted(t: ThreadId)    // inc refcount
+    | ReadObtained(t: ThreadId)          // clear ExcLock bit
 
   datatype CentralState =
     | CentralNone
@@ -200,8 +200,8 @@ module RWLockExt refines SimpleExt {
         && state.writeback.WritebackNone?
         && 0 <= state.read.t < NUM_THREADS
       )
-      && (
-        state.read.ReadObtained? ==> 0 <= state.read.t < NUM_THREADS
+      && (state.read.ReadObtained? ==>
+        && 0 <= state.read.t < NUM_THREADS
       )
       //&& (state.stored_value.Some? ==>
       //  state.stored_value.value.is_handle(key)
@@ -216,6 +216,7 @@ module RWLockExt refines SimpleExt {
       )
       && (state.central.flag == Reading ==>
         && state.read.ReadObtained?
+        && state.writeback.WritebackNone?
         && state.writeback.WritebackNone?
       )
       && (state.central.flag == Reading_ExcLock ==>
@@ -256,6 +257,8 @@ module RWLockExt refines SimpleExt {
         && (ss.SharedObtained? ==>
           && ss.b == state.central.stored_value
           && !state.exc.ExcObtained?
+          && state.read.ReadNone?
+          && state.central.flag != Unmapped
           && (state.exc.ExcPending? ==> state.exc.visited <= ss.t)
         )
       )
@@ -612,40 +615,74 @@ module RWLockExt refines SimpleExt {
     }
   }
 
+  predicate ObtainReading(m: M, m': M)
+  {
+    && m.central.CentralState?
+    && m.read.ReadPendingCounted?
+    && m == dot(
+      CentralHandle(m.central),
+      ReadHandle(m.read)
+    )
+    && m' == dot(
+      CentralHandle(m.central.(flag := Reading)),
+      ReadHandle(ReadObtained(m.read.t))
+    )
+  }
+
+  lemma ObtainReading_Preserves(p: M, m: M, m': M)
+  requires dot_defined(m, p)
+  requires Inv(dot(m, p))
+  requires ObtainReading(m, m')
+  ensures dot_defined(m', p)
+  ensures Inv(dot(m', p))
+  ensures Interp(dot(m, p)) == Interp(dot(m', p))
+  {
+  }
+
+  predicate Deposit_ReadingToShared(m: M, m': M, b: Base.M, b': Base.M)
+  {
+    && m.central.CentralState?
+    && m.read.ReadObtained?
+    && m == dot(
+      CentralHandle(m.central),
+      ReadHandle(m.read)
+    )
+    && m' == dot(
+      CentralHandle(m.central.(flag := Available).(stored_value := b)),
+      SharedHandle(SharedObtained(m.read.t, b))
+    )
+    && b' == Base.unit()
+  }
+
+  lemma Deposit_ReadingToShared_Preserves(p: M, m: M, m': M, b: Base.M, b': Base.M)
+  requires dot_defined(m, p)
+  requires Inv(dot(m, p))
+  requires Deposit_ReadingToShared(m, m', b, b')
+  ensures dot_defined(m', p)
+  ensures Inv(dot(m', p))
+  ensures Interp(dot(m, p)) == b'
+  ensures Interp(dot(m', p)) == b
+  {
+    SumFilterSimp<SharedState>();
+    var state := dot(m, p);
+    var state' := dot(m', p);
+    forall ss: SharedState | state'.sharedState[ss] > 0
+    ensures 0 <= ss.t < NUM_THREADS
+    ensures ss.SharedObtained? ==>
+          && ss.b == state'.central.stored_value
+          && !state'.exc.ExcObtained?
+          && (state'.exc.ExcPending? ==> state'.exc.visited <= ss.t)
+    {
+      if ss.SharedObtained? {
+        assert ss.b == state'.central.stored_value;
+        assert !state'.exc.ExcObtained?;
+        assert (state'.exc.ExcPending? ==> state'.exc.visited <= ss.t);
+      }
+    }
+  }
+
+
   /*
-
-  predicate ObtainReading(
-    key: Key, state: RWLockState, state': RWLockState,
-    a: multiset<R>, a': multiset<R>,
-    flags: R, r: R, flags': R, r': R, t: int, fl: Flag)
-  {
-    && a == multiset{flags, r}
-    && a' == multiset{flags', r'}
-    && state' == state.(readState := RSObtained(t))
-    && flags == Internal(FlagsField(key, fl))
-    && r == Internal(ReadingPendingCounted(key, t))
-    && flags' == Internal(FlagsField(key, Reading))
-    && r' == Internal(ReadingObtained(key, t))
-  }
-
-  predicate ReadingToShared(
-    key: Key, state: RWLockState, state': RWLockState,
-    a: multiset<R>, a': multiset<R>,
-    flags: R, r: R, handle: R, flags': R, r': R, handle': R, t: int, fl: Flag)
-  {
-    && a == multiset{flags, r, handle}
-    && a' == multiset{flags', r', handle'}
-    && flags == Internal(FlagsField(key, fl))
-    && r == Internal(ReadingObtained(key, t))
-    && handle.Exc?  && handle.v.is_handle(key)
-    && flags' == Internal(FlagsField(key, Available))
-    && r' == Internal(SharedLockObtained(key, t))
-    && handle'.Const? && handle'.v == handle.v
-
-    && state' == state
-      .(readState := RSNone)
-      .(handle := Some(handle.v))
-  }
 
   predicate SharedIncCount(
     key: Key, state: RWLockState, state': RWLockState,
