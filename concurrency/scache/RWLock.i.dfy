@@ -211,6 +211,8 @@ module RWLockExt refines SimpleExt {
 
       && (state.central.flag == Unmapped ==>
         && state.writeback.WritebackNone?
+        && state.read.ReadNone?
+        && state.exc.ExcNone?
       )
       && (state.central.flag == Reading ==>
         && state.read.ReadObtained?
@@ -263,7 +265,7 @@ module RWLockExt refines SimpleExt {
   function Interp(a: F) : Base.M
     //requires Inv(a)
   {
-    if a == unit() || a.exc.ExcObtained? then (
+    if a == unit() || a.exc.ExcObtained? || !a.read.ReadNone? then (
       Base.unit()
     ) else (
       a.central.stored_value
@@ -288,6 +290,10 @@ module RWLockExt refines SimpleExt {
 
   function SharedHandle(ss: SharedState) : F {
     M(CentralNone, map[], unit_fn(ss), ExcNone, ReadNone, WritebackNone)
+  }
+
+  function ReadHandle(r: ReadState) : F {
+    M(CentralNone, map[], zero_map(), ExcNone, r, WritebackNone)
   }
 
   function ExcHandle(e: ExcState) : F {
@@ -540,47 +546,35 @@ module RWLockExt refines SimpleExt {
     }
   }
 
+  predicate Withdraw_Alloc(m: M, m': M, b: Base.M, b': Base.M)
+  {
+    && m.central.CentralState?
+    && m.central.flag == Unmapped
+    && m == CentralHandle(m.central)
+
+    && m' == dot(
+      CentralHandle(m.central.(flag := Reading_ExcLock)),
+      ReadHandle(ReadPending)
+    )
+
+    && b == Base.unit()
+    && b' == m.central.stored_value
+  }
+
+  lemma Withdraw_Alloc_Preserves(p: M, m: M, m': M, b: Base.M, b': Base.M)
+  requires dot_defined(m, p)
+  requires Inv(dot(m, p))
+  requires Withdraw_Alloc(m, m', b, b')
+  ensures dot_defined(m', p)
+  ensures Inv(dot(m', p))
+  ensures Interp(dot(m, p)) == b'
+  ensures Interp(dot(m', p)) == b
+  {
+    assert dot(m', p).sharedState == dot(m, p).sharedState;
+  }
+
+
   /*
-
-  predicate DowngradeExcLock(
-    key: Key, state: RWLockState, state': RWLockState,
-    a: multiset<R>, a': multiset<R>,
-    r: R, handle: R, flags: R,
-    r': R, handle': R, flags': R,
-    fl: Flag, t: int, clean: bool)
-  {
-    && a == multiset{r, handle, flags}
-    && a' == multiset{r', handle', flags'}
-    && handle.Exc? && handle.v.is_handle(key)
-    && state' == state
-        .(excState := WLSNone)
-        .(handle := Some(handle.v))
-    && r == Internal(ExcLockObtained(key, t, clean))
-    && 0 <= t < NUM_THREADS
-    && flags == Internal(FlagsField(key, fl))
-    && flags' == Internal(FlagsField(key, Available))
-    && r' == Internal(SharedLockObtained(key, t))
-    && handle' == Const(handle.v)
-  }
-
-  predicate Alloc(
-    key: Key, state: RWLockState, state': RWLockState,
-    a: multiset<R>, a': multiset<R>,
-    flags: R,
-    flags': R, r': R, handle': R)
-  {
-    && a == multiset{flags}
-    && a' == multiset{flags', r', handle'}
-    && state' == state
-        .(unmapped := false)
-        .(handle := None)
-        .(readState := RSPending)
-    && flags == Internal(FlagsField(key, Unmapped))
-    && flags' == Internal(FlagsField(key, Reading_ExcLock))
-    && r' == Internal(ReadingPending(key))
-    && (state.handle.Some? ==>
-      handle' == Exc(state.handle.value))
-  }
 
   predicate ReadingIncCount(
     key: Key, state: RWLockState, state': RWLockState,

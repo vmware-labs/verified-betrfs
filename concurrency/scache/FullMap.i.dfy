@@ -7,11 +7,11 @@ module FullMaps {
     witness *
 
   function zero_map<A(!new)>() : imap<A, nat> {
-    imap k | true :: 0
+    imap k {:trigger} | true :: 0
   }
 
   function unit_fn<A(!new)>(a: A) : FullMap<A, nat> {
-    imap k | true :: (if k == a then 1 else 0)
+    imap k {:trigger} | true :: (if k == a then 1 else 0)
   }
 
   function add_fns<A(!new)>(f: FullMap<A, nat>, g: FullMap<A, nat>) : FullMap<A, nat> {
