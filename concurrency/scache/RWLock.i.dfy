@@ -902,24 +902,34 @@ module RWLockExt refines SimpleExt {
     //assert forall t0 | t0 != t :: CountAllRefs(state, t) == CountAllRefs(state', t);
   }
 
-  /*
-
-  predicate Unmap(
-    key: Key, state: RWLockState, state': RWLockState,
-    a: multiset<R>, a': multiset<R>,
-    flags: R, r: R, handle: R, flags': R, fl: Flag, clean: bool)
+  predicate Deposit_Unmap(m: M, m': M, b: Base.M, b': Base.M)
   {
-    && a == multiset{flags, r, handle}
-    && a' == multiset{flags'}
-    && flags == Internal(FlagsField(key, fl))
-    && handle.Exc? && handle.v.is_handle(key)
-    && r == Internal(ExcLockObtained(key, -1, clean))
-    && flags' == Internal(FlagsField(key, Unmapped))
-    && state' == state
-      .(unmapped := true)
-      .(excState := WLSNone)
-      .(handle := Some(handle.v))
+    && m.exc.ExcObtained?
+    && m.exc.t == -1
+    && m.central.CentralState?
+    && m == dot(
+      CentralHandle(m.central),
+      ExcHandle(m.exc)
+    )
+    && m' == CentralHandle(
+      m.central.(flag := Unmapped).(stored_value := b)
+    )
+    && b' == Base.unit()
   }
+
+  lemma Deposit_Unmap_Preserves(p: M, m: M, m': M, b: Base.M, b': Base.M)
+  requires dot_defined(m, p)
+  requires Inv(dot(m, p))
+  requires Deposit_Unmap(m, m', b, b')
+  ensures dot_defined(m', p)
+  ensures Inv(dot(m', p))
+  ensures Interp(dot(m, p)) == b'
+  ensures Interp(dot(m', p)) == b
+  {
+    assert dot(m', p).sharedState == dot(m, p).sharedState;
+  }
+
+  /*
 
   predicate AbandonExcLockPending(
     key: Key, state: RWLockState, state': RWLockState,
