@@ -254,6 +254,11 @@ module RWLockExt refines SimpleExt {
       )
       && (forall ss: SharedState :: state.sharedState[ss] > 0 ==>
         && 0 <= ss.t < NUM_THREADS
+        && (ss.SharedPending2? ==>
+          && !state.exc.ExcObtained?
+          && (state.exc.ExcPending? ==> state.exc.visited <= ss.t)
+          && state.central.flag != Unmapped
+        )
         && (ss.SharedObtained? ==>
           && ss.b == state.central.stored_value
           && !state.exc.ExcObtained?
@@ -724,88 +729,180 @@ module RWLockExt refines SimpleExt {
     }
   }
 
-  /*predicate SharedDecCount(m: M, m': M, t: int)
+  predicate SharedDecCountPending(m: M, m': M, t: int)
   {
     && 0 <= t < NUM_THREADS
     && t in m.refCounts
-    && m == RefCount(t, m.refCounts[t])
-    && m' == dot(
-      RefCount(t, m.refCounts[t] + 1),
+    && m == dot(
+      RefCount(t, m.refCounts[t]),
       SharedHandle(SharedPending(t))
     )
-  }*/
+    && (m.refCounts[t] >= 1 ==>
+      m' == RefCount(t, m.refCounts[t] - 1)
+    )
+  }
 
+  lemma SharedDecCountPending_Preserves(p: M, m: M, m': M, t: int)
+  requires dot_defined(m, p)
+  requires Inv(dot(m, p))
+  requires SharedDecCountPending(m, m', t)
+  ensures dot_defined(m', p)
+  ensures Inv(dot(m', p))
+  ensures Interp(dot(m, p)) == Interp(dot(m', p))
+  {
+    var state := dot(m, p);
+
+    SumFilterSimp<SharedState>();
+
+    assert state.refCounts[t] >= 1 by {
+      if state.refCounts[t] == 0 {
+        assert CountAllRefs(state, t) == 0;
+        assert CountSharedRefs(state.sharedState, t) == 0;
+        UseZeroSum(IsSharedRefFor(t), state.sharedState);
+        assert false;
+      }
+    }
+
+    var state' := dot(m', p);
+
+    forall t0 | 0 <= t0 < NUM_THREADS
+    ensures t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0)
+    {
+      if t == t0 {
+        assert CountSharedRefs(state.sharedState, t)
+            == CountSharedRefs(state'.sharedState, t) + 1;
+        assert CountAllRefs(state, t)
+            == CountAllRefs(state', t) + 1;
+        assert t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0);
+      } else {
+        assert CountSharedRefs(state.sharedState, t0) == CountSharedRefs(state'.sharedState, t0);
+        assert CountAllRefs(state, t0) == CountAllRefs(state', t0);
+        assert t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0);
+      }
+    }
+  } 
+
+  predicate SharedDecCountObtained(m: M, m': M, t: int, b: Base.M)
+  {
+    && 0 <= t < NUM_THREADS
+    && t in m.refCounts
+    && m == dot(
+      RefCount(t, m.refCounts[t]),
+      SharedHandle(SharedObtained(t, b))
+    )
+    && (m.refCounts[t] >= 1 ==>
+      m' == RefCount(t, m.refCounts[t] - 1)
+    )
+  }
+
+  lemma SharedDecCountObtained_Preserves(p: M, m: M, m': M, t: int, b: Base.M)
+  requires dot_defined(m, p)
+  requires Inv(dot(m, p))
+  requires SharedDecCountObtained(m, m', t, b)
+  ensures dot_defined(m', p)
+  ensures Inv(dot(m', p))
+  ensures Interp(dot(m, p)) == Interp(dot(m', p))
+  {
+    var state := dot(m, p);
+
+    SumFilterSimp<SharedState>();
+
+    assert state.refCounts[t] >= 1 by {
+      if state.refCounts[t] == 0 {
+        assert CountAllRefs(state, t) == 0;
+        assert CountSharedRefs(state.sharedState, t) == 0;
+        UseZeroSum(IsSharedRefFor(t), state.sharedState);
+        assert false;
+      }
+    }
+
+    var state' := dot(m', p);
+
+    forall t0 | 0 <= t0 < NUM_THREADS
+    ensures t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0)
+    {
+      if t == t0 {
+        assert CountSharedRefs(state.sharedState, t)
+            == CountSharedRefs(state'.sharedState, t) + 1;
+        assert CountAllRefs(state, t)
+            == CountAllRefs(state', t) + 1;
+        assert t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0);
+      } else {
+        assert CountSharedRefs(state.sharedState, t0) == CountSharedRefs(state'.sharedState, t0);
+        assert CountAllRefs(state, t0) == CountAllRefs(state', t0);
+        assert t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0);
+      }
+    }
+  } 
+
+  predicate SharedCheckExc(m: M, m': M, t: int)
+  {
+    && 0 <= t < NUM_THREADS
+    && m.central.CentralState?
+    && (m.central.flag == Available
+        || m.central.flag == Writeback
+        || m.central.flag == Reading)
+    && m == dot(
+      CentralHandle(m.central),
+      SharedHandle(SharedPending(t))
+    )
+    && m' == dot(
+      CentralHandle(m.central),
+      SharedHandle(SharedPending2(t))
+    )
+  }
+
+  lemma SharedCheckExc_Preserves(p: M, m: M, m': M, t: int)
+  requires dot_defined(m, p)
+  requires Inv(dot(m, p))
+  requires SharedCheckExc(m, m', t)
+  ensures dot_defined(m', p)
+  ensures Inv(dot(m', p))
+  ensures Interp(dot(m, p)) == Interp(dot(m', p))
+  {
+    SumFilterSimp<SharedState>();
+
+    var state := dot(m, p);
+    var state' := dot(m', p);
+
+    assert CountAllRefs(state, t) == CountAllRefs(state', t);
+    //assert forall t0 | t0 != t :: CountAllRefs(state, t) == CountAllRefs(state', t);
+  }
+
+  predicate SharedCheckReading(m: M, m': M, t: int)
+  {
+    && 0 <= t < NUM_THREADS
+    && m.central.CentralState?
+    && m.central.flag != Reading
+    && m.central.flag != Reading_ExcLock
+    && m == dot(
+      CentralHandle(m.central),
+      SharedHandle(SharedPending2(t))
+    )
+    && m' == dot(
+      CentralHandle(m.central),
+      SharedHandle(SharedObtained(t, m.central.stored_value))
+    )
+  }
+
+  lemma SharedCheckReading_Preserves(p: M, m: M, m': M, t: int)
+  requires dot_defined(m, p)
+  requires Inv(dot(m, p))
+  requires SharedCheckReading(m, m', t)
+  ensures dot_defined(m', p)
+  ensures Inv(dot(m', p))
+  ensures Interp(dot(m, p)) == Interp(dot(m', p))
+  {
+    SumFilterSimp<SharedState>();
+
+    var state := dot(m, p);
+    var state' := dot(m', p);
+
+    assert CountAllRefs(state, t) == CountAllRefs(state', t);
+    //assert forall t0 | t0 != t :: CountAllRefs(state, t) == CountAllRefs(state', t);
+  }
 
   /*
-
-  predicate SharedDecCountPending(
-    key: Key, state: RWLockState, state': RWLockState,
-    a: multiset<R>, a': multiset<R>,
-    rc: R, r: R, rc': R, client': R, t: int, refcount: uint8)
-  {
-    && a == multiset{rc, r}
-    && a' == multiset{rc', client'}
-    && rc == Internal(SharedLockRefCount(key, t, refcount))
-    && r == Internal(SharedLockPending(key, t))
-    && rc' == Internal(SharedLockRefCount(key, t,
-        if refcount == 0 then 255 else refcount - 1))
-
-    && (0 <= t < |state.readCounts| ==>
-        state' == state
-          .(readCounts := state.readCounts[t := state.readCounts[t] - 1])
-    )
-    && client' == Internal(Client(t))
-  }
-
-  predicate SharedDecCountObtained(
-    key: Key, state: RWLockState, state': RWLockState,
-    a: multiset<R>, a': multiset<R>,
-    rc: R, r: R, handle: R, rc': R, client': R, t: int, refcount: uint8)
-  {
-    && a == multiset{rc, r, handle}
-    && a' == multiset{rc', client'}
-    && rc == Internal(SharedLockRefCount(key, t, refcount))
-    && r == Internal(SharedLockObtained(key, t))
-    && handle.Const? && handle.v.is_handle(key)
-    && rc' == Internal(SharedLockRefCount(key, t,
-        if refcount == 0 then 255 else refcount - 1))
-
-    && (0 <= t < |state.readCounts| ==>
-        state' == state
-          .(readCounts := state.readCounts[t := state.readCounts[t] - 1])
-    )
-    && client' == Internal(Client(t))
-  }
-
-  predicate SharedCheckExcFree(
-    key: Key, state: RWLockState, state': RWLockState,
-    a: multiset<R>, a': multiset<R>,
-    r: R, flags_flags': R, r': R, t: int, fl: Flag)
-  {
-    && a == multiset{r, flags_flags'}
-    && a' == multiset{r', flags_flags'}
-    && r == Internal(SharedLockPending(key, t))
-    && flags_flags' == Internal(FlagsField(key, fl))
-    && r' == Internal(SharedLockPending2(key, t))
-    && state' == state
-    && (fl == Available || fl == WriteBack || fl == Reading)
-  }
-
-  predicate SharedCheckReading(
-    key: Key, state: RWLockState, state': RWLockState,
-    a: multiset<R>, a': multiset<R>,
-    r: R, flags_flags': R, r': R, handle': R, t: int, fl: Flag)
-  {
-    && a == multiset{r, flags_flags'}
-    && a' == multiset{r', flags_flags', handle'}
-    && r == Internal(SharedLockPending2(key, t))
-    && flags_flags' == Internal(FlagsField(key, fl))
-    && r' == Internal(SharedLockObtained(key, t))
-    && (state.handle.Some? ==>
-        handle' == Const(state.handle.value))
-    && state' == state
-    && fl != Reading && fl != Reading_ExcLock
-  }
 
   predicate Unmap(
     key: Key, state: RWLockState, state': RWLockState,
