@@ -34,4 +34,10 @@ module FullMaps {
       SumFilter(fn, zero_map()) == 0
   {
   }
+
+  lemma UseZeroSum<A(!new)>(fn: (A) -> bool, f: FullMap<A, nat>)
+  requires SumFilter(fn, f) == 0
+  ensures forall x :: fn(x) ==> f[x] == 0
+  {
+  }
 }

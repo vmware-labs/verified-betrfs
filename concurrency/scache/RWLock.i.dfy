@@ -58,7 +58,7 @@ module RWLockExt refines SimpleExt {
   datatype WritebackState =
     | WritebackNone
       // set Writeback status bit
-    | WritebackObtained(value: Base.M)
+    | WritebackObtained(b: Base.M)
 
   // Flow for the phase of reading in a page from disk.
   // This is a special-case flow, because it needs to be performed
@@ -175,12 +175,14 @@ module RWLockExt refines SimpleExt {
       && (state.exc.ExcPendingAwaitWriteback? ==>
         && state.read.ReadNone?
         && -1 <= state.exc.t < NUM_THREADS
+        && state.exc.b == state.central.stored_value
       )
       && (state.exc.ExcPending? ==>
         && state.read == ReadNone
         && state.writeback.WritebackNone?
         && 0 <= state.exc.visited <= NUM_THREADS
         && -1 <= state.exc.t < NUM_THREADS
+        && state.exc.b == state.central.stored_value
       )
       && (state.exc.ExcObtained? ==>
         && state.read == ReadNone
@@ -189,6 +191,7 @@ module RWLockExt refines SimpleExt {
       )
       && (state.writeback.WritebackObtained? ==>
         && state.read == ReadNone
+        && state.writeback.b == state.central.stored_value
       )
       && (state.read.ReadPending? ==>
         && state.writeback.WritebackNone?
@@ -247,7 +250,12 @@ module RWLockExt refines SimpleExt {
         && state.writeback.WritebackNone?
       )
       && (forall ss: SharedState :: state.sharedState[ss] > 0 ==>
-        0 <= ss.t < NUM_THREADS
+        && 0 <= ss.t < NUM_THREADS
+        && (ss.SharedObtained? ==>
+          && ss.b == state.central.stored_value
+          && !state.exc.ExcObtained?
+          && (state.exc.ExcPending? ==> state.exc.visited <= ss.t)
+        )
       )
     )
   }
@@ -255,7 +263,7 @@ module RWLockExt refines SimpleExt {
   function Interp(a: F) : Base.M
     //requires Inv(a)
   {
-    if a == unit() then (
+    if a == unit() || a.exc.ExcObtained? then (
       Base.unit()
     ) else (
       a.central.stored_value
@@ -439,7 +447,7 @@ module RWLockExt refines SimpleExt {
     assert dot(m', p).sharedState == dot(m, p).sharedState;
   }
 
-  predicate TakeExcLockSharedLockZero(m: M, m': M)
+  predicate TakeExcLockCheckRefCount(m: M, m': M)
   {
     && m.exc.ExcPending?
     && m.exc.visited in m.refCounts
@@ -447,28 +455,32 @@ module RWLockExt refines SimpleExt {
 
     && m == dot(
       ExcHandle(m.exc),
-      RefCount(m.exc.visited, m.refCounts[m.exc.visited])
+      RefCount(m.exc.visited, 0)
     )
     && m' == dot(
       ExcHandle(m.exc.(visited := m.exc.visited + 1)),
-      RefCount(m.exc.visited, m.refCounts[m.exc.visited])
+      RefCount(m.exc.visited, 0)
     )
   }
 
-  lemma TakeExcLockSharedLockZero_Preserves(p: M, m: M, m': M)
+  lemma TakeExcLockCheckRefCount_Preserves(p: M, m: M, m': M)
   requires dot_defined(m, p)
   requires Inv(dot(m, p))
-  requires TakeExcLockSharedLockZero(m, m')
+  requires TakeExcLockCheckRefCount(m, m')
   ensures dot_defined(m', p)
   ensures Inv(dot(m', p))
   ensures Interp(dot(m, p)) == Interp(dot(m', p))
   {
     assert dot(m', p).sharedState == dot(m, p).sharedState;
+    //assert dot(m, p).refCounts[m.exc.visited] == 0;
+    assert CountAllRefs(dot(m, p), m.exc.visited) == 0;
+    UseZeroSum(IsSharedRefFor(m.exc.visited), dot(m, p).sharedState);
   }
 
   predicate Withdraw_TakeExcLockFinish(m: M, m': M, b: Base.M, b': Base.M)
   {
     && m.exc.ExcPending?
+    && m.exc.visited == NUM_THREADS
     && m == ExcHandle(m.exc)
     && m' == ExcHandle(ExcObtained(m.exc.t, m.exc.clean))
     && b == Base.unit()
@@ -487,26 +499,48 @@ module RWLockExt refines SimpleExt {
     assert dot(m', p).sharedState == dot(m, p).sharedState;
   }
 
-  /*
-
-  predicate TakeExcLockFinish(
-    key: Key, state: RWLockState, state': RWLockState,
-    a: multiset<R>, a': multiset<R>,
-    r: R, handle: R,
-    r': R, handle': R,
-    t: int, clean: bool)
+  predicate Deposit_DowngradeExcLoc(m: M, m': M, b: Base.M, b': Base.M)
   {
-    && a == multiset{r, handle}
-    && a' == multiset{r',handle'}
-    && state' == state
-        .(excState := WLSObtained(t, clean))
-        .(handle := None)
-    && r == Internal(ExcLockPending(key, t, NUM_THREADS, clean))
-    && r' == Internal(ExcLockObtained(key, t, clean))
-    && handle.Const?
-    && handle.v.is_handle(key)
-    && handle' == Exc(handle.v)
+    && m.exc.ExcObtained?
+    && m.central.CentralState?
+    && 0 <= m.exc.t < NUM_THREADS
+    && m == dot(
+      CentralHandle(m.central),
+      ExcHandle(m.exc)
+    )
+    && m' == dot(
+      CentralHandle(m.central
+        .(flag := Available)
+        .(stored_value := b)
+      ),
+      SharedHandle(SharedObtained(m.exc.t, b))
+    )
+    && b' == Base.unit()
   }
+
+  lemma Deposit_DowngradeExcLoc_Preserves(p: M, m: M, m': M, b: Base.M, b': Base.M)
+  requires dot_defined(m, p)
+  requires Inv(dot(m, p))
+  requires Deposit_DowngradeExcLoc(m, m', b, b')
+  ensures dot_defined(m', p)
+  ensures Inv(dot(m', p))
+  ensures Interp(dot(m, p)) == b'
+  ensures Interp(dot(m', p)) == b
+  {
+    SumFilterSimp<SharedState>();
+    var ss := SharedObtained(m.exc.t, b);
+    assert forall b | b != ss :: dot(m', p).sharedState[b] == dot(m, p).sharedState[b];
+    assert dot(m', p).sharedState[ss] == dot(m, p).sharedState[ss] + 1;
+
+    var state' := dot(m', p);
+    forall ss: SharedState | state'.sharedState[ss] > 0
+    ensures 0 <= ss.t < NUM_THREADS
+    ensures (ss.SharedObtained? ==> ss.b == state'.central.stored_value)
+    {
+    }
+  }
+
+  /*
 
   predicate DowngradeExcLock(
     key: Key, state: RWLockState, state': RWLockState,
