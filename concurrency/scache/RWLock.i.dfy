@@ -681,27 +681,58 @@ module RWLockExt refines SimpleExt {
     }
   }
 
-
-  /*
-
-  predicate SharedIncCount(
-    key: Key, state: RWLockState, state': RWLockState,
-    a: multiset<R>, a': multiset<R>,
-    client: R, rc: R, rc': R, r': R, t: int, refcount: uint8)
+  predicate SharedIncCount(m: M, m': M, t: int)
   {
-    && a == multiset{client, rc}
-    && a' == multiset{rc', r'}
-    && rc == Internal(SharedLockRefCount(key, t, refcount))
-    && client == Internal(Client(t))
-    && rc' == Internal(SharedLockRefCount(key, t,
-        if refcount == 255 then 0 else refcount + 1))
-    && r' == Internal(SharedLockPending(key, t))
-
-    && (0 <= t < |state.readCounts| ==>
-        state' == state
-          .(readCounts := state.readCounts[t := state.readCounts[t] + 1])
+    && 0 <= t < NUM_THREADS
+    && t in m.refCounts
+    && m == RefCount(t, m.refCounts[t])
+    && m' == dot(
+      RefCount(t, m.refCounts[t] + 1),
+      SharedHandle(SharedPending(t))
     )
   }
+
+  lemma SharedIncCount_Preserves(p: M, m: M, m': M, t: int)
+  requires dot_defined(m, p)
+  requires Inv(dot(m, p))
+  requires SharedIncCount(m, m', t)
+  ensures dot_defined(m', p)
+  ensures Inv(dot(m', p))
+  ensures Interp(dot(m, p)) == Interp(dot(m', p))
+  {
+    SumFilterSimp<SharedState>();
+    var state := dot(m, p);
+    var state' := dot(m', p);
+    forall t0 | 0 <= t0 < NUM_THREADS
+    ensures t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0)
+    {
+      if t == t0 {
+        assert CountSharedRefs(state.sharedState, t) + 1
+            == CountSharedRefs(state'.sharedState, t);
+        assert CountAllRefs(state, t) + 1
+            == CountAllRefs(state', t);
+        assert t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0);
+      } else {
+        assert CountSharedRefs(state.sharedState, t0) == CountSharedRefs(state'.sharedState, t0);
+        assert CountAllRefs(state, t0) == CountAllRefs(state', t0);
+        assert t0 in state'.refCounts && state'.refCounts[t0] == CountAllRefs(state', t0);
+      }
+    }
+  }
+
+  /*predicate SharedDecCount(m: M, m': M, t: int)
+  {
+    && 0 <= t < NUM_THREADS
+    && t in m.refCounts
+    && m == RefCount(t, m.refCounts[t])
+    && m' == dot(
+      RefCount(t, m.refCounts[t] + 1),
+      SharedHandle(SharedPending(t))
+    )
+  }*/
+
+
+  /*
 
   predicate SharedDecCountPending(
     key: Key, state: RWLockState, state': RWLockState,
