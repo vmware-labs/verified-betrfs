@@ -462,13 +462,15 @@ module RWLockExt refines SimpleExt {
     && m.exc.visited in m.refCounts
     && 0 <= m.exc.visited < NUM_THREADS
 
+    && var expected_rc := (if m.exc.visited == m.exc.t then 1 else 0);
+
     && m == dot(
       ExcHandle(m.exc),
-      RefCount(m.exc.visited, 0)
+      RefCount(m.exc.visited, expected_rc)
     )
     && m' == dot(
       ExcHandle(m.exc.(visited := m.exc.visited + 1)),
-      RefCount(m.exc.visited, 0)
+      RefCount(m.exc.visited, expected_rc)
     )
   }
 
@@ -482,7 +484,9 @@ module RWLockExt refines SimpleExt {
   {
     assert dot(m', p).sharedState == dot(m, p).sharedState;
     //assert dot(m, p).refCounts[m.exc.visited] == 0;
-    assert CountAllRefs(dot(m, p), m.exc.visited) == 0;
+    var expected_rc := (if m.exc.visited == m.exc.t then 1 else 0);
+    assert CountAllRefs(dot(m, p), m.exc.visited) == expected_rc;
+    assert CountSharedRefs(dot(m, p).sharedState, m.exc.visited) == 0;
     UseZeroSum(IsSharedRefFor(m.exc.visited), dot(m, p).sharedState);
   }
 
