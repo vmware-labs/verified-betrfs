@@ -256,6 +256,8 @@ module RWLockExt refines SimpleExt {
         && 0 <= ss.t < NUM_THREADS
         && (ss.SharedPending2? ==>
           && !state.exc.ExcObtained?
+          && !state.read.ReadPending?
+          && !state.read.ReadPendingCounted?
           && (state.exc.ExcPending? ==> state.exc.visited <= ss.t)
           && state.central.flag != Unmapped
         )
@@ -929,22 +931,54 @@ module RWLockExt refines SimpleExt {
     assert dot(m', p).sharedState == dot(m, p).sharedState;
   }
 
-  /*
-
-  predicate AbandonExcLockPending(
-    key: Key, state: RWLockState, state': RWLockState,
-    a: multiset<R>, a': multiset<R>,
-    flags: R, r: R, handle: R, flags': R, fl: Flag, visited: int, clean: bool)
+  predicate AbandonExcPending(m: M, m': M)
   {
-    && a == multiset{flags, handle, r}
-    && a' == multiset{flags'}
-    && r == Internal(ExcLockPending(key, -1, visited, clean))
-    && flags == Internal(FlagsField(key, fl))
-    && flags' == Internal(FlagsField(key, Available))
-    && handle.Const? && handle.v.is_handle(key)
-
-    && state' == state.(excState := WLSNone)
+    && m.exc.ExcPending?
+    && m.exc.t == -1
+    && m.central.CentralState?
+    && m == dot(
+      CentralHandle(m.central),
+      ExcHandle(m.exc)
+    )
+    && m' == CentralHandle(m.central.(flag := Available))
   }
+
+  lemma AbandonExcPending_Preserves(p: M, m: M, m': M)
+  requires dot_defined(m, p)
+  requires Inv(dot(m, p))
+  requires AbandonExcPending(m, m')
+  ensures dot_defined(m', p)
+  ensures Inv(dot(m', p))
+  ensures Interp(dot(m, p)) == Interp(dot(m', p))
+  {
+    assert dot(m', p).sharedState == dot(m, p).sharedState;
+  }
+
+  predicate Deposit_AbandonReadPending(m: M, m': M, b: Base.M, b': Base.M)
+  {
+    && m.read.ReadPending?
+    && m.central.CentralState?
+    && m == dot(
+      CentralHandle(m.central),
+      ReadHandle(m.read)
+    )
+    && m' == CentralHandle(m.central.(flag := Unmapped).(stored_value := b))
+    && b' == Base.unit()
+  }
+
+  lemma Deposit_AbandonReadPending_Preserves(p: M, m: M, m': M, b: Base.M, b': Base.M)
+  requires dot_defined(m, p)
+  requires Inv(dot(m, p))
+  requires Deposit_AbandonReadPending(m, m', b, b')
+  ensures dot_defined(m', p)
+  ensures Inv(dot(m', p))
+  ensures Interp(dot(m, p)) == b'
+  ensures Interp(dot(m', p)) == b
+  {
+    assert dot(m', p).sharedState == dot(m, p).sharedState;
+  }
+
+  /*
 
   predicate AbandonReadingPending(
     key: Key, state: RWLockState, state': RWLockState,
